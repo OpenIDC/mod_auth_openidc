@@ -1,4 +1,4 @@
-libapache2-auth-openidc (1.0) unstable; urgency=low
+libapache2-mod-auth-openidc (1.0) unstable; urgency=low
 
   * Initial release under new name and flag.
 
