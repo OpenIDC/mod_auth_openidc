@@ -1,0 +1,70 @@
+
+# Source files. mod_auth_openidc.c must be the first file.
+SRC=src/mod_auth_openidc.c \
+	src/cache/file.c \
+	src/cache/memcache.c \
+	src/cache/shm.c \
+	src/oauth.c \
+	src/proto.c \
+	src/crypto.c \
+	src/config.c \
+	src/util.c \
+	src/authz.c \
+	src/session.c \
+	src/metadata.c \
+	src/apr_json_decode.c
+
+# Files to include when making a .tar.gz-file for distribution
+DISTFILES=$(SRC) \
+	src/mod_auth_openidc.h \
+	src/apr_json.h \
+	src/cache/cache.h \
+	configure \
+	configure.ac \
+	Makefile.in \
+	autogen.sh \
+	README \
+	LICENSE.txt \
+	ChangeLog
+
+
+all: src/mod_auth_openidc.la
+
+src/mod_auth_openidc.la: $(SRC) src/mod_auth_openidc.h src/apr_json.h
+	@APXS2@ -Wc,"@OPENSSL_CFLAGS@ @CURL_CFLAGS@" -Wl,"@OPENSSL_LIBS@ @CURL_LIBS@" -Wc,-Wall -Wc,-g -c $(SRC)
+
+
+# Building configure (for distribution)
+configure:	configure.ac
+	./autogen.sh
+
+@NAMEVER@.tar.gz:	 $(DISTFILES)
+	tar -c --transform="s#^#@NAMEVER@/#" -vzf $@ $(DISTFILES)
+
+
+.PHONY:	install
+install: src/mod_auth_openidc.la
+	@APXS2@ -i -n mod_auth_openidc src/mod_auth_openidc.la
+
+.PHONY: distfile
+distfile:	@NAMEVER@.tar.gz
+
+.PHONY:	clean
+clean:
+	rm -f src/mod_auth_openidc.la
+	rm -f src/*.o src/cache/*.o
+	rm -f src/*.lo src/cache/*.lo
+	rm -f src/*.slo src/cache/*.slo
+	rm -rf src/cache/.libs/
+	rm -rf src/.libs/
+
+.PHONY:	distclean
+distclean:	clean
+	rm -f Makefile config.log config.status @NAMEVER@.tar.gz *~ \
+	build-stamp config.guess config.sub
+	rm -rf debian/mod-auth_openidc
+	rm -f debian/files
+
+.PHONY: fullclean
+fullclean:	distclean
+	rm -f configure aclocal.m4

@@ -1,0 +1,5 @@
+libapache2-auth-openidc (1.0) unstable; urgency=low
+
+  * Initial release under new name and flag.
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Wed, 27 Mar 2014 21:00:00 +0100

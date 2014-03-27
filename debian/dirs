@@ -1,0 +1,3 @@
+usr/lib/apache2/modules
+var/cache/apache2/mod_auth_openidc
+var/cache/apache2/mod_auth_openidc/metadata
