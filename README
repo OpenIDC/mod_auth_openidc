@@ -1,43 +1,53 @@
-mod_auth_openidc is an Apache authentication/authorization module that allows an Apache
-server to operate as an OpenID Connect Relying Party.
+mod_auth_openidc is an authentication/authorization module for the Apache 2.x
+HTTP server that allows users to authenticate using an OpenID Connect enabled
+Identity Provider
 
-It requires users to authenticate at an external OpenID Connect Identity Provider
+It enables the Apache web server to operate as an OpenID Connect Relying Party
 using the OpenID Connect Basic Client or Implicit Client profile.
 
-It sets the REMOTE_USER variable to the id_token sub claim, other id_token claims
-are passed in HTTP headers, together with those (optionally) obtained from the user info endpoint
+It sets the REMOTE_USER variable to the id_token sub claim. Other id_token
+claims are passed in HTTP headers together with those (optionally) obtained
+from the user info endpoint
 
-It allows for authorization rules (based on Requires primitive) that be matched against the
-set of claims provided in the id_token/userinfo.
+It allows for authorization rules (based on standard Apache Requires primitives)
+that can be matched against the set of claims provided in the id_token/userinfo.
 
-It supports multiple OpenID Connect Providers by reading provider metadata files from a
-metadata directory (set by OIDCMetadataDir). The provider metadata files must follow the
-naming convention "<urlencoded-issuer>.provider" (with the "https://" prefix stripped).
+It supports multiple OpenID Connect Providers by reading provider metadata files
+from a metadata directory (configured in OIDCMetadataDir).
 
-It supports OpenID Connect Dynamic Client Registration by setting OIDCMetadataDir (which needs
-to be writable for the Apache process in this case), a provider metadata file exists but for the
-specified issuer, it contains a registration_endpoint setting, but no matching valid client
-metadata (cq."<urlencoded-issuer>.client") file can be found in the metadata directory.
+It supports OpenID Connect Dynamic Client Registration and OpenID Provider
+Discovery through domain or account names.
 
-It supports OpenID Provider Discovery through account names (cq. <name>@<domain>) by setting
-OIDCMetadataDir (which needs to be writable for the Apache process in this case), and
-calling (HTTP GET) the Redirect URI with a "oidc_acct" parameter that contains the user account
-name (see sample config for multiple OPs and an external Discovery page below).
+Additionally it can operate as an OAuth 2.0 Resource Server to a PingFederate
+OAuth 2.0 Authorization Server, validating Bearer access_tokens against
+PingFederate. In that case it sets the REMOTE_USER variable to the "Username"
+claim and matches the claims in the intro-spected access_token against the
+Requires primitive.
 
-Additionally it can operate as an OAuth 2.0 Resource Server to a PingFederate OAuth 2.0
-Authorization Server, cq. validate Bearer access_tokens against PingFederate.
-In that case it sets the REMOTE_USER variable to the "Username" claim and matches the claims
-in the intro-spected access_token against the Requires primitive.
-
-It implements server-side caching across different Apache processes through one of the following options:
- a) file storage: in a temp directory - possibly a shared file system across multiple Apache servers
- b) shared memory: shared across a single logical Apache server running in multiple Apache processes (mpm_prefork) on the same machine
- c) memcache: shared across multiple Apache processes and servers, possibly across different memcache servers living on different machines
+It implements server-side caching across different Apache processes through one
+of the following options:
+ a) file storage: in a temp directory - possibly a shared file system across
+    multiple Apache processes and/or servers
+ b) shared memory: shared across a single logical Apache server running as
+    multiple Apache processes (using mpm_prefork) on the same machine
+ c) memcache: shared across multiple Apache processes and/or servers, possibly
+    across different memcache servers living on different machines
 
 
 
-Example config for using Google Apps as your OpenID Connect Provider:
-(running on localhost and https://localhost/example/redirect_uri/ registered as redirect_uri for the client)
+For an exhaustive description of all configuration options, see:
+https://github.com/pingidentity/mod_auth_openidc/blob/master/debian/auth_openidc.conf
+
+
+
+==========================================================
+Sample Config for Google Accounts
+==========================================================
+
+Example config for using Google as your OpenID Connect Provider running on
+localhost and https://localhost/example/redirect_uri/ registered as the
+"redirect_uri" for the client through the Google API Console.
+
 ==========================================================
 OIDCProviderIssuer accounts.google.com
 OIDCProviderAuthorizationEndpoint https://accounts.google.com/o/oauth2/auth?approval_prompt=force&[hd=<your-domain>]
@@ -61,20 +71,27 @@ OIDCCryptoPassphrase <password>
 
 
 
-Another example using multiple OpenID Connect providers, which triggers OP discovery first:
+==========================================================
+Sample Config for multiple OpenID Connect Providers
+==========================================================
 
-OIDCMetadataDir points to a directory that contains files that contain per-provider configuration
-data. For each provider, there are 2 types of files in the directory:
+Another example using multiple OpenID Connect providers, which triggers
+OP discovery first:
+
+OIDCMetadataDir points to a directory that contains files that contain
+per-provider configuration data. For each provider, there are 2 types of
+files in the directory:
   <url-encoded-issuer-value-with-https-prefix-and-trailing-slash-stripped>.provider:
-contains (standard) OpenID Connect Discovery OP JSON metadata where each name of the file is
-the urlencoded issuer name of the OP that is decribed by the metadata in that file.
+contains (standard) OpenID Connect Discovery OP JSON metadata where each
+name of the file is the urlencoded issuer name of the OP that is decribed
+by the metadata in that file.
   <url-encoded-issuer-value-with-https-prefix-and-trailing-slash-stripped>.client:
-contains mod_auth_openidc specific JSON metadata (based on the OpenID Connect Client Registration
-specification, with extensions) and the filename is the urlencoded issuer name of the OP that
-this client is registered with.
+contains mod_auth_openidc specific JSON metadata (based on the OpenID
+Connect Client Registration specification, with extensions) and the filename
+is the urlencoded issuer name of the OP that this client is registered with.
 
-Sample client metdata for issuer https://localhost:9031, so client metadata filename is:
-"https%3a%2f%2fmacbook%3a9031.client"
+Sample client metdata for issuer https://localhost:9031, so the client metadata
+filename is: "macbook%3a9031.client"
 ==========================================================
 {
   "ssl_validate_server" : "Off",
@@ -86,7 +103,7 @@ Sample client metdata for issuer https://localhost:9031, so client metadata file
 
 And the related mod_auth_openidc Apache config section:
 ==========================================================
-OIDCMetadataDir <somewhere>/metadata
+OIDCMetadataDir <somewhere-writable-for-the-apache-process>/metadata
 
 OIDCRedirectURI https://localhost/example/redirect_uri/
 OIDCCryptoPassphrase <password>
@@ -97,21 +114,29 @@ OIDCCryptoPassphrase <password>
 </Location>
 ==========================================================
 
-If you do not want to use the internal discovery page, you can have the user being redirected to
-an external discovery page by setting "OIDCDiscoveryURL". That URL will be accessed with 2 parameters,
-"oidc_callback" and "oidc_return" (both URLs). The "oidc_return" parameter needs to be returned to the
-"oidc_callback" URL (again in the oidc_return parameter) together with an "oidc_provider" parameter that
-contains the URL-encoded issuer value of the selected Provider, or a URL-encoded account name for OpenID
-Connect Discovery purposes (aka. e-mail style identifier), or a domain name.
+If you do not want to use the internal discovery page, you can have the user
+being redirected to an external discovery page by setting "OIDCDiscoveryURL".
+That URL will be accessed with 2 parameters, "oidc_callback" and "oidc_return"
+(both URLs). The "oidc_return" parameter needs to be returned to the
+"oidc_callback" URL (again in the oidc_return parameter) together with an
+"oidc_provider" parameter that contains the URL-encoded issuer value of the
+selected Provider, or a URL-encoded account name for OpenID Connect Discovery
+purposes (aka. e-mail style identifier), or a domain name.
 
 Sample callback:
   ${oidc_callback}?oidc_return=${oidc_return}&oidc_provider=[${issuer}|${domain}|${e-mail-style-account-name}]
 
 
 
-Another example config for using PingFederate as your OpenID OP and/or OAuth 2.0 Authorization
-server, based on the OAuth 2.0 PlayGround 3.x default configuration and doing claims-based authorization.
-(running on localhost and https://localhost/example/redirect_uri/ registerd as redirect_uri for the client "ac_oic_client")
+==========================================================
+Sample Config for PingFederate OpenID Connect & OAuth 2.0
+==========================================================
+
+Another example config for using PingFederate as your OpenID OP and/or
+OAuth 2.0 Authorization server, based on the OAuth 2.0 PlayGround 3.x default
+configuration and doing claims-based authorization. (running on localhost and
+https://localhost/example/redirect_uri/ registered as redirect_uri for the
+client "ac_oic_client")
 
 ==========================================================
 OIDCProviderIssuer https://macbook:9031
