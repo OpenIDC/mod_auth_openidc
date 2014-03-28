@@ -107,6 +107,9 @@
 /* input filter hook name */
 #define OIDC_UTIL_HTTP_SENDSTRING "OIDC_UTIL_HTTP_SENDSTRING"
 
+/* the name of the keyword that follows the Require primitive to indicate claims-based authorization */
+#define OIDC_REQUIRE_NAME "claim"
+
 typedef struct oidc_provider_t {
 	char *issuer;
 	char *authorization_endpoint_url;

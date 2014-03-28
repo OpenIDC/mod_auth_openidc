@@ -57,9 +57,6 @@
 
 #include "mod_auth_openidc.h"
 
-/* the name of the keyword that follows the Require primitive to indicate claims-based authorization */
-#define OIDC_REQUIRE_NAME "claim"
-
 /*
  * see if a the Require value matches with a set of provided claims
  */

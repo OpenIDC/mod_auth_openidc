@@ -1,4 +1,5 @@
 3/28/2014
+- fix Require claim name mismatch for Apache 2.4
 - fix hmac method/printout naming artifacts from earlier
 auto-search-and-replace
 
