@@ -277,7 +277,7 @@ unsigned char *oidc_crypto_aes_encrypt(request_rec *r, oidc_cfg *cfg, unsigned c
 unsigned char *oidc_crypto_aes_decrypt(request_rec *r, oidc_cfg *cfg, unsigned char *ciphertext, int *len);
 char *oidc_crypto_jwt_alg2digest(const char *alg);
 apr_byte_t oidc_crypto_rsa_verify(request_rec *r, const char *alg, unsigned char* sig, int sig_len, unsigned char* msg, int msg_len, unsigned char *mod, int mod_len, unsigned char *exp, int exp_len);
-apr_byte_t oidc_crypto_hoidc_verify(request_rec *r, const char *alg, unsigned char* sig, int sig_len, unsigned char* msg, int msg_len, unsigned char *key, int key_len);
+apr_byte_t oidc_crypto_hmac_verify(request_rec *r, const char *alg, unsigned char* sig, int sig_len, unsigned char* msg, int msg_len, unsigned char *key, int key_len);
 
 // oidc_metadata.c
 apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg *cfg, apr_array_header_t **arr);

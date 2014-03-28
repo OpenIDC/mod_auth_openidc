@@ -519,7 +519,7 @@ static apr_byte_t oidc_proto_idtoken_verify_hmac(request_rec *r, oidc_cfg *cfg, 
 	apr_json_value_t *alg = apr_hash_get(j_header->value.object, "alg",
 			APR_HASH_KEY_STRING);
 
-	return oidc_crypto_hoidc_verify(r, alg->value.string.p, sig, sig_len, (unsigned char *)message, strlen(message), key, key_len);
+	return oidc_crypto_hmac_verify(r, alg->value.string.p, sig, sig_len, (unsigned char *)message, strlen(message), key, key_len);
 }
 
 /*
@@ -636,7 +636,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 
 	apr_json_value_t *algorithm = apr_hash_get(j_header->value.object, "alg", APR_HASH_KEY_STRING);
 	if (strncmp(algorithm->value.string.p, "HS", 2) == 0) {
-		/* verify the HOIDC signature on the id_token */
+		/* verify the HMAC signature on the id_token */
 		if (oidc_proto_idtoken_verify_hmac(r, cfg, provider, j_header, signature, apr_pstrcat(r->pool, header, ".", payload, NULL)) == FALSE) return FALSE;
 	} else {
 		/* verify the RSA signature on the id_token */

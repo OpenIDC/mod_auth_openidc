@@ -330,13 +330,13 @@ end:
 }
 
 /*
- * verify HOIDC signature
+ * verify HMAC signature
  */
-apr_byte_t oidc_crypto_hoidc_verify(request_rec *r, const char *alg, unsigned char* sig, int sig_len, unsigned char* msg,
+apr_byte_t oidc_crypto_hmac_verify(request_rec *r, const char *alg, unsigned char* sig, int sig_len, unsigned char* msg,
 		int msg_len, unsigned char *key, int key_len) {
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_crypto_hoidc_verify: entering (%s)", alg);
+			"oidc_crypto_hmac_verify: entering (%s)", alg);
 
 	const EVP_MD *digest = NULL;
 	if ((digest = oidc_crypto_alg2evp(r, alg)) == NULL) return FALSE;
@@ -346,19 +346,19 @@ apr_byte_t oidc_crypto_hoidc_verify(request_rec *r, const char *alg, unsigned ch
 
 	if (!HMAC(digest, key, key_len, msg, msg_len, md, &md_len)) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-			"oidc_crypto_hoidc_verify: HOIDC failed: %s", ERR_error_string(ERR_get_error(), NULL));
+			"oidc_crypto_hmac_verify: HMAC failed: %s", ERR_error_string(ERR_get_error(), NULL));
 		return FALSE;
 	}
 
 	if (md_len != sig_len) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_crypto_hoidc_verify: hash length does not match signature length");
+				"oidc_crypto_hmac_verify: hash length does not match signature length");
 		return FALSE;
 	}
 
 	if (memcmp(md, sig, md_len) != 0) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_crypto_hoidc_verify: HOIDC verification failed");
+				"oidc_crypto_hmac_verify: HMAC verification failed");
 		return FALSE;
 	}
 
