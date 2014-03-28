@@ -1,2 +1,8 @@
+3/28/2014
+- fix hmac method/printout naming artifacts from earlier
+auto-search-and-replace
+
 3/27/2014
 - initial import named mod_auth_openidc
+- updated README
+- fix debian/changelog
