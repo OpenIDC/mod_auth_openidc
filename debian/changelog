@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.0.1) UNRELEASED; urgency=low
+
+  * fix Require keyword issue for Apache 2.4
+
+ -- Hans Zandbelt <zandbelt@zandbelt.dyndns.org>  Fri, 28 Mar 2014 22:33:07 +0100
+
 libapache2-mod-auth-openidc (1.0) unstable; urgency=low
 
   * Initial release under new name and flag.

@@ -2,6 +2,7 @@
 - fix Require claim name mismatch for Apache 2.4
 - fix hmac method/printout naming artifacts from earlier
 auto-search-and-replace
+- release v1.0.1
 
 3/27/2014
 - initial import named mod_auth_openidc
