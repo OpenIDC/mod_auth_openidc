@@ -139,123 +139,73 @@ apr_byte_t oidc_proto_is_implicit_redirect(request_rec *r, oidc_cfg *cfg) {
 }
 
 /*
- * check whether the provided JSON payload (in the j_payload parameter) is a valid id_token for the specified "provider"
+ * if a nonce was passed in the authorization request (and stored in the browser state),
+ * check that it matches the nonce value in the id_token payload
  */
-static apr_byte_t oidc_proto_is_valid_idtoken(request_rec *r,
-		oidc_provider_t *provider, apr_json_value_t *j_payload, const char *nonce,
-		apr_time_t *expires) {
-
-	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
-			&auth_openidc_module);
-
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_is_valid_idtoken: entering (looking for nonce=%s)", nonce);
+static apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
+		const char *nonce, apr_json_value_t *j_payload) {
 
 	/* if a nonce is not passed, we're doing a ("code") flow where the nonce is optional */
 	if (nonce != NULL) {
 
-		/* see if we've this nonce cached already */
+		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+				"oidc_proto_validate_nonce: looking for nonce: %s", nonce);
+
+		/* see if we have this nonce cached already */
 		const char *replay = NULL;
 		cfg->cache->get(r, nonce, &replay);
 		if (replay != NULL) {
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_proto_is_valid_idtoken: nonce was found in cache already; replay attack!?");
+					"oidc_proto_is_valid_nonce: the nonce value (%s) passed in the browser state was found in the cache already; possible replay attack!?",
+					nonce);
 			return FALSE;
 		}
 
-		apr_json_value_t *j_nonce = apr_hash_get(j_payload->value.object, "nonce",
+		/* get the "nonce" value in the id_token payload */
+		apr_json_value_t *j_nonce = apr_hash_get(j_payload->value.object,
+				"nonce",
 				APR_HASH_KEY_STRING);
 		if ((j_nonce == NULL) || (j_nonce->type != APR_JSON_STRING)) {
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_proto_is_valid_idtoken: response JSON object did not contain a \"nonce\" string");
+					"oidc_proto_is_valid_nonce: id_token JSON payload did not contain a \"nonce\" string");
 			return FALSE;
 		}
-		if (strcmp(nonce, j_nonce->value.string.p) != 0) {
+
+		/* see if the nonce in the id_token matches the one that we sent in the authorization request */
+		if (apr_strnatcmp(nonce, j_nonce->value.string.p) != 0) {
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_proto_is_valid_idtoken: the nonce value in the id_token did not match the one stored in the browser session");
+					"oidc_proto_is_valid_nonce: the nonce value (%s) in the id_token did not match the one stored in the browser session (%s)",
+					j_nonce->value.string.p, nonce);
 			return FALSE;
 		}
 	}
 
-	/* get the "issuer" value from the JSON payload */
-	apr_json_value_t *iss = apr_hash_get(j_payload->value.object, "iss",
-			APR_HASH_KEY_STRING);
-	if ((iss == NULL) || (iss->type != APR_JSON_STRING)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_is_valid_idtoken: response JSON object did not contain an \"iss\" string");
-		return FALSE;
-	}
+	return TRUE;
+}
 
-	/* check if the issuer matches the requested value */
-	if (oidc_util_issuer_match(provider->issuer, iss->value.string.p) == FALSE) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_is_valid_idtoken: configured issuer (%s) does not match received \"iss\" value in id_token (%s)",
-				provider->issuer, iss->value.string.p);
-		return FALSE;
-	}
-
-	/* get the "exp" value from the JSON payload */
-	apr_json_value_t *exp = apr_hash_get(j_payload->value.object, "exp",
-			APR_HASH_KEY_STRING);
-	if ((exp == NULL) || (exp->type != APR_JSON_LONG)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_is_valid_idtoken: response JSON object did not contain an \"exp\" number value");
-		return FALSE;
-	}
-
-	/* check if this id_token has already expired */
-	if (apr_time_sec(apr_time_now()) > exp->value.lnumber) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_is_valid_idtoken: id_token expired");
-		return FALSE;
-	}
-
-	/* return the "exp" value in the "expires" return parameter */
-	*expires = apr_time_from_sec(exp->value.lnumber);
-
-	/* get the "iat" value from the JSON payload */
-	apr_json_value_t *iat = apr_hash_get(j_payload->value.object, "iat",
-			APR_HASH_KEY_STRING);
-	if ((iat == NULL) || (iat->type != APR_JSON_LONG)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_is_valid_idtoken: response JSON object did not contain an \"iat\" number value");
-		return FALSE;
-	}
-
-	/* check if this id_token has been issued just now +- slack (default 10 minutes) */
-	if ((apr_time_sec(apr_time_now()) - provider->idtoken_iat_slack) > iat->value.lnumber) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_is_valid_idtoken: token was issued more than %d seconds ago", provider->idtoken_iat_slack);
-		return FALSE;
-	}
-	if ((apr_time_sec(apr_time_now()) + provider->idtoken_iat_slack) < iat->value.lnumber) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_is_valid_idtoken: token was issued more than %d seconds in the future", provider->idtoken_iat_slack);
-		return FALSE;
-	}
-
-	if (nonce != NULL) {
-		/* cache the nonce for the window time of the token for replay prevention plus 10 seconds for safety */
-		cfg->cache->set(r, nonce, nonce, apr_time_from_sec(provider->idtoken_iat_slack * 2 + 10));
-	}
+/*
+ * validate the "aud" and "azp" claims in the id_token payload
+ */
+static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, apr_json_value_t *j_payload) {
 
 	/* get the "azp" value from the JSON payload, which may be NULL */
 	apr_json_value_t *azp = apr_hash_get(j_payload->value.object, "azp",
 			APR_HASH_KEY_STRING);
 	if ((azp != NULL) && (azp->type != APR_JSON_STRING)) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_is_valid_idtoken: id_token JSON payload contained an \"azp\" value, but it was not a string");
+				"oidc_proto_validate_aud_and_azp: id_token JSON payload contained an \"azp\" value, but it was not a string");
 		return FALSE;
 	}
 
 	/*
-	 * This Claim is only needed when the ID Token has a single audience value and that audience is different than the authorized party.
-	 * It MAY be included even when the authorized party is the same as the sole audience.
+	 * the "azp" claim is only needed when the id_token has a single audience value and that audience
+	 * is different than the authorized party; it MAY be included even when the authorized party is
+	 * the same as the sole audience.
 	 */
 	if ((azp != NULL)
-			&& (strcmp(azp->value.string.p, provider->client_id) != 0)) {
+			&& (apr_strnatcmp(azp->value.string.p, provider->client_id) != 0)) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"\"azp\" claim (%s) is not equal to configured client_id (%s)",
+				"oidc_proto_validate_aud_and_azp: the \"azp\" claim (%s) is present in the id_token, but is not equal to the configured client_id (%s)",
 				azp->value.string.p, provider->client_id);
 		return FALSE;
 	}
@@ -263,17 +213,16 @@ static apr_byte_t oidc_proto_is_valid_idtoken(request_rec *r,
 	/* get the "aud" value from the JSON payload */
 	apr_json_value_t *aud = apr_hash_get(j_payload->value.object, "aud",
 			APR_HASH_KEY_STRING);
-
 	if (aud != NULL) {
 
 		/* check if it is a single-value */
 		if (aud->type == APR_JSON_STRING) {
 
 			/* a single-valued audience must be equal to our client_id */
-			if (strcmp(aud->value.string.p, provider->client_id) != 0) {
+			if (apr_strnatcmp(aud->value.string.p, provider->client_id) != 0) {
 
 				ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-						"oidc_proto_is_valid_idtoken: configured client_id (%s) did not match the JSON \"aud\" entry (%s)",
+						"oidc_proto_validate_aud_and_azp: the configured client_id (%s) did not match the \"aud\" claim value (%s) in the id_token",
 						provider->client_id, aud->value.string.p);
 				return FALSE;
 			}
@@ -283,7 +232,7 @@ static apr_byte_t oidc_proto_is_valid_idtoken(request_rec *r,
 
 			if ((aud->value.array->nelts > 1) && (azp == NULL)) {
 				ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-						"oidc_proto_is_valid_idtoken: \"aud\" is an array with more than 1 element, but \"azp\" claim is not present (a SHOULD in the spec...)");
+						"oidc_proto_validate_aud_and_azp: the \"aud\" claim value in the id_token is an array with more than 1 element, but \"azp\" claim is not present (a SHOULD in the spec...)");
 			}
 
 			/* loop over the audience values */
@@ -296,13 +245,13 @@ static apr_byte_t oidc_proto_is_valid_idtoken(request_rec *r,
 				/* check if it is a string, warn otherwise */
 				if (elem->type != APR_JSON_STRING) {
 					ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-							"oidc_proto_is_valid_idtoken: unhandled in-array JSON object type [%d]",
+							"oidc_proto_validate_aud_and_azp: the \"aud\" claim is an array but it contains an entry with an unhandled JSON object type [%d]",
 							elem->type);
 					continue;
 				}
 
 				/* we're looking for a value in the list that matches our client id */
-				if (strcmp(elem->value.string.p, provider->client_id) == 0) {
+				if (apr_strnatcmp(elem->value.string.p, provider->client_id) == 0) {
 					break;
 				}
 			}
@@ -311,7 +260,7 @@ static apr_byte_t oidc_proto_is_valid_idtoken(request_rec *r,
 			if (i == aud->value.array->nelts) {
 
 				ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-						"oidc_proto_is_valid_idtoken: configured client_id (%s) could not be found in the JSON \"aud\" array object",
+						"oidc_proto_validate_aud_and_azp: our configured client_id (%s) could not be found in the array of values for \"aud\" claim",
 						provider->client_id);
 				return FALSE;
 			}
@@ -319,14 +268,14 @@ static apr_byte_t oidc_proto_is_valid_idtoken(request_rec *r,
 		} else {
 
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_proto_is_valid_idtoken: response JSON \"aud\" object is not a string nor an array");
+					"oidc_proto_validate_aud_and_azp: id_token JSON payload \"aud\" claim is not a string nor an array");
 			return FALSE;
 		}
 
 	} else {
 
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_is_valid_idtoken: response JSON object did not contain an \"aud\" element");
+				"oidc_proto_validate_aud_and_azp: id_token JSON payload did not contain an \"aud\" claim");
 		return FALSE;
 	}
 
@@ -334,20 +283,111 @@ static apr_byte_t oidc_proto_is_valid_idtoken(request_rec *r,
 }
 
 /*
- * check whether the provider string is a valid id_token for the specified "provider"
+ * check whether the provided JSON payload (in the j_payload parameter) is a valid id_token for the specified "provider"
  */
-static apr_byte_t oidc_proto_is_valid_idtoken_payload(request_rec *r,
+static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
+		oidc_provider_t *provider, apr_json_value_t *j_payload, const char *nonce,
+		apr_time_t *expires) {
+
+	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
+
+	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+			"oidc_proto_validate_idtoken: entering");
+
+	/* if present, verify the nonce */
+	if (oidc_proto_validate_nonce(r, cfg, nonce, j_payload) == FALSE) return FALSE;
+
+	/* get the "issuer" value from the JSON payload */
+	apr_json_value_t *iss = apr_hash_get(j_payload->value.object, "iss",
+			APR_HASH_KEY_STRING);
+	if ((iss == NULL) || (iss->type != APR_JSON_STRING)) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_validate_idtoken: response JSON object did not contain an \"iss\" string");
+		return FALSE;
+	}
+
+	/* check if the issuer matches the requested value */
+	if (oidc_util_issuer_match(provider->issuer, iss->value.string.p) == FALSE) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_validate_idtoken: configured issuer (%s) does not match received \"iss\" value in id_token (%s)",
+				provider->issuer, iss->value.string.p);
+		return FALSE;
+	}
+
+	/* get the "exp" value from the JSON payload */
+	apr_json_value_t *exp = apr_hash_get(j_payload->value.object, "exp",
+			APR_HASH_KEY_STRING);
+	if ((exp == NULL) || (exp->type != APR_JSON_LONG)) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_validate_idtoken: response JSON object did not contain an \"exp\" number value");
+		return FALSE;
+	}
+
+	/* check if this id_token has already expired */
+	if (apr_time_sec(apr_time_now()) > exp->value.lnumber) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_validate_idtoken: \"exp\" validation failure (%ld): id_token expired", exp->value.lnumber);
+		return FALSE;
+	}
+
+	/* return the "exp" value in the "expires" return parameter */
+	*expires = apr_time_from_sec(exp->value.lnumber);
+
+	/* get the "iat" value from the JSON payload */
+	apr_json_value_t *iat = apr_hash_get(j_payload->value.object, "iat",
+			APR_HASH_KEY_STRING);
+	if ((iat == NULL) || (iat->type != APR_JSON_LONG)) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_validate_idtoken: id_token JSON payload did not contain an \"iat\" number value");
+		return FALSE;
+	}
+
+	/* check if this id_token has been issued just now +- slack (default 10 minutes) */
+	if ((apr_time_sec(apr_time_now()) - provider->idtoken_iat_slack) > iat->value.lnumber) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_validate_idtoken: \"iat\" validation failure (%ld): id_token was issued more than %d seconds ago", iat->value.lnumber, provider->idtoken_iat_slack);
+		return FALSE;
+	}
+	if ((apr_time_sec(apr_time_now()) + provider->idtoken_iat_slack) < iat->value.lnumber) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_validate_idtoken: \"iat\" validation failure (%ld): id_token was issued more than %d seconds in the future", iat->value.lnumber, provider->idtoken_iat_slack);
+		return FALSE;
+	}
+
+	if (nonce != NULL) {
+		/* cache the nonce for the window time of the token for replay prevention plus 10 seconds for safety */
+		cfg->cache->set(r, nonce, nonce, apr_time_from_sec(provider->idtoken_iat_slack * 2 + 10));
+	}
+
+	apr_json_value_t *username = apr_hash_get(j_payload->value.object, "sub", APR_HASH_KEY_STRING);
+	if ((username == NULL) || (username->type != APR_JSON_STRING)) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_validate_idtoken: id_token JSON payload did not contain the required-by-spec \"sub\" string value");
+		return FALSE;
+	}
+
+	/* verify the "aud" and "azp" values */
+	if (oidc_proto_validate_aud_and_azp(r, cfg, provider, j_payload) == FALSE) return FALSE;
+
+	return TRUE;
+}
+
+/*
+ * check whether the payload in the id_token is valid for the specified "provider"
+ */
+static apr_byte_t oidc_proto_validate_idtoken_payload(request_rec *r,
 		oidc_provider_t *provider, const char *s_idtoken_payload, const char *nonce,
 		apr_json_value_t **result, apr_time_t *expires) {
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_is_valid_idtoken_payload: entering (%s)", s_idtoken_payload);
+			"oidc_proto_validate_idtoken_payload: entering (%s)", s_idtoken_payload);
 
 	/* decode the string in to a JSON structure */
 	if (apr_json_decode(result, s_idtoken_payload, strlen(s_idtoken_payload),
 			r->pool) != APR_SUCCESS) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_is_valid_idtoken_payload: could not decode id_token payload string in to a JSON structure");
+				"oidc_proto_validate_idtoken_payload: could not decode id_token payload string in to a JSON structure");
 		return FALSE;
 	}
 
@@ -357,12 +397,12 @@ static apr_byte_t oidc_proto_is_valid_idtoken_payload(request_rec *r,
 	/* check that we've actually got a JSON object back */
 	if ((j_payload == NULL) || (j_payload->type != APR_JSON_OBJECT)) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_is_valid_idtoken_payload: payload from id_token did not contain a JSON object");
+				"oidc_proto_validate_idtoken_payload: payload from id_token did not contain a JSON object");
 		return FALSE;
 	}
 
 	/* now check if the JSON is a valid id_token */
-	return oidc_proto_is_valid_idtoken(r, provider, j_payload, nonce, expires);
+	return oidc_proto_validate_idtoken(r, provider, j_payload, nonce, expires);
 }
 
 /*
@@ -577,6 +617,41 @@ static apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r, oidc_cfg *
 }
 
 /*
+ * set the unique user identifier that will be propagated in the Apache r->user and REMOTE_USER variables
+ */
+static apr_byte_t oidc_proto_set_remote_user(request_rec *r, oidc_cfg *c,
+		oidc_provider_t *provider, apr_json_value_t *j_payload, char **user) {
+
+	char *claim_name = apr_pstrdup(r->pool, c->remote_user_claim);
+	int n = strlen(claim_name);
+	int post_fix_with_issuer = (claim_name[n - 1] == '@');
+	if (post_fix_with_issuer)
+		claim_name[n - 1] = '\0';
+
+	/* extract the "sub" claim from the id_token payload */
+	apr_json_value_t *username = apr_hash_get(j_payload->value.object,
+			claim_name,
+			APR_HASH_KEY_STRING);
+	if ((username == NULL) || (username->type != APR_JSON_STRING)) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_set_remote_user: OIDCRemoteUserClaim is set to \"%s\", but the id_token JSON payload did not contain a \"%s\" string",
+				c->remote_user_claim, claim_name);
+		return FALSE;
+	}
+
+	/* set the unique username in the session (will propagate to r->user/REMOTE_USER) */
+	*user = post_fix_with_issuer ?
+			apr_psprintf(r->pool, "%s@%s", username->value.string.p,
+					oidc_util_escape_string(r, provider->issuer)) :
+			apr_pstrdup(r->pool, username->value.string.p);
+
+	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+			"oidc_proto_set_remote_user: set remote_user to %s", *user);
+
+	return TRUE;
+}
+
+/*
  * check whether the provided string is a valid id_token and return its parsed contents
  */
 apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
@@ -648,38 +723,11 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 	oidc_base64url_decode(r, s_payload, payload, 1);
 
 	/* this is where the meat is */
-	if (oidc_proto_is_valid_idtoken_payload(r, provider, *s_payload, nonce, j_payload,
+	if (oidc_proto_validate_idtoken_payload(r, provider, *s_payload, nonce, j_payload,
 			expires) == FALSE)
 		return FALSE;
 
-	/* extract and return the user name claim ("sub" or something similar) */
-	apr_json_value_t *username = apr_hash_get((*j_payload)->value.object, "sub",
-			APR_HASH_KEY_STRING);
-	if ((username == NULL) || (username->type != APR_JSON_STRING)) {
-		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-				"oidc_proto_parse_id_token: response JSON object did not contain a \"sub\" string, falback to non-spec compliant (MS) \"unique_name\"");
-
-		username = apr_hash_get((*j_payload)->value.object, "unique_name",
-				APR_HASH_KEY_STRING);
-
-		if ((username == NULL) || (username->type != APR_JSON_STRING)) {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_proto_parse_id_token: response JSON object did not contain a \"unique_name\" string either, second falback to non-spec compliant \"email\"");
-
-			username = apr_hash_get((*j_payload)->value.object, "email",
-					APR_HASH_KEY_STRING);
-
-			if ((username == NULL) || (username->type != APR_JSON_STRING)) {
-				ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-						"oidc_proto_parse_id_token: response JSON object did not contain an \"email\" string either, now fail...");
-
-				return FALSE;
-			}
-		}
-	}
-
-	/* set the unique username in the session (r->user) */
-	*user = apr_pstrdup(r->pool, username->value.string.p);
+	if (oidc_proto_set_remote_user(r, cfg, provider, *j_payload, user) == FALSE) return FALSE;
 
 	/* log our results */
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,

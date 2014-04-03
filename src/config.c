@@ -74,6 +74,8 @@
 #define OIDC_DEFAULT_CLAIM_DELIMITER ","
 /* default prefix for claim names being passed in HTTP headers */
 #define OIDC_DEFAULT_CLAIM_PREFIX "OIDC_CLAIM_"
+/* default name for the claim that will contain the REMOTE_USER value */
+#define OIDC_DEFAULT_CLAIM_REMOTE_USER "sub@"
 /* default name of the session cookie */
 #define OIDC_DEFAULT_COOKIE "mod_auth_openidc_session"
 /* default for the HTTP header name in which the remote user name is passed */
@@ -425,6 +427,8 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->cookie_domain = NULL;
 	c->claim_delimiter = OIDC_DEFAULT_CLAIM_DELIMITER;
 	c->claim_prefix = OIDC_DEFAULT_CLAIM_PREFIX;
+	c->remote_user_claim = OIDC_DEFAULT_CLAIM_REMOTE_USER;
+
 	c->crypto_passphrase = NULL;
 
 	c->scrub_request_headers = OIDC_DEFAULT_SCRUB_REQUEST_HEADERS;
@@ -575,6 +579,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->claim_prefix =
 			strcmp(add->claim_prefix, OIDC_DEFAULT_CLAIM_PREFIX) != 0 ?
 					add->claim_prefix : base->claim_prefix;
+	c->remote_user_claim =
+			strcmp(add->remote_user_claim, OIDC_DEFAULT_CLAIM_REMOTE_USER) != 0 ?
+					add->remote_user_claim : base->remote_user_claim;
+
 	c->crypto_passphrase =
 			add->crypto_passphrase != NULL ?
 					add->crypto_passphrase : base->crypto_passphrase;
@@ -1002,6 +1010,10 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, claim_prefix),
 				RSRC_CONF,
 				"The prefix to use when setting claims in the HTTP headers."),
+		AP_INIT_TAKE1("OIDCRemoteUserClaim", oidc_set_string_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, remote_user_claim),
+				RSRC_CONF,
+				"The claim that is used when setting the REMOTE_USER variable."),
 
 		AP_INIT_TAKE1("OIDCOAuthClientID", oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.client_id),

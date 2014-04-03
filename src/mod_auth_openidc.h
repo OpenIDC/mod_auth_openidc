@@ -182,6 +182,7 @@ typedef struct oidc_cfg {
 	char *cookie_domain;
 	char *claim_delimiter;
 	char *claim_prefix;
+	char *remote_user_claim;
 
 	char *crypto_passphrase;
 
