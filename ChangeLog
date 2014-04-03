@@ -1,6 +1,6 @@
 4/3/2014
-- add configurable claim name for the REMOTE_USER variable, optionally postfixed with the issuer
-  the default for the remote username is "sub@" now, to make it unique across OPs
+- add configurable claim name for the REMOTE_USER variable, optionally postfixed with the  url-encoded
+  issuer value; the default for the remote username is "sub@" now, makeing it unique across OPs
 - some refactoring of id_token validation functions
 
 3/28/2014
