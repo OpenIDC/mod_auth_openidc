@@ -622,11 +622,17 @@ static apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r, oidc_cfg *
 static apr_byte_t oidc_proto_set_remote_user(request_rec *r, oidc_cfg *c,
 		oidc_provider_t *provider, apr_json_value_t *j_payload, char **user) {
 
+	char *issuer = provider->issuer;
 	char *claim_name = apr_pstrdup(r->pool, c->remote_user_claim);
 	int n = strlen(claim_name);
 	int post_fix_with_issuer = (claim_name[n - 1] == '@');
-	if (post_fix_with_issuer)
+	if (post_fix_with_issuer) {
 		claim_name[n - 1] = '\0';
+		issuer =
+				(strstr(issuer, "https://") == NULL) ?
+						apr_pstrdup(r->pool, issuer) :
+						apr_pstrdup(r->pool, issuer + strlen("https://"));
+	}
 
 	/* extract the "sub" claim from the id_token payload */
 	apr_json_value_t *username = apr_hash_get(j_payload->value.object,
@@ -642,8 +648,8 @@ static apr_byte_t oidc_proto_set_remote_user(request_rec *r, oidc_cfg *c,
 	/* set the unique username in the session (will propagate to r->user/REMOTE_USER) */
 	*user = post_fix_with_issuer ?
 			apr_psprintf(r->pool, "%s@%s", username->value.string.p,
-					oidc_util_escape_string(r, provider->issuer)) :
-			apr_pstrdup(r->pool, username->value.string.p);
+					oidc_util_escape_string(r, issuer)) :
+					apr_pstrdup(r->pool, username->value.string.p);
 
 	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 			"oidc_proto_set_remote_user: set remote_user to %s", *user);
