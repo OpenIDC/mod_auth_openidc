@@ -23,7 +23,9 @@ DISTFILES=$(SRC) \
 	configure.ac \
 	Makefile.in \
 	autogen.sh \
+	INSTALL \
 	README \
+	auth_openidc.conf \
 	LICENSE.txt \
 	ChangeLog
 

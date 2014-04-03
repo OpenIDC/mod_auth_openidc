@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.1) unstable; urgency=low
+
+  * add issuer to REMOTE_USER; included INSTALL
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Thu, 03 Apr 2014 19:28:31 +0200
+
 libapache2-mod-auth-openidc (1.0.1) unstable; urgency=low
 
   * fix Require keyword issue for Apache 2.4

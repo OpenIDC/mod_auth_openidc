@@ -35,8 +35,9 @@ of the following options:
 
 
 
-For an exhaustive description of all configuration options, see:
-https://github.com/pingidentity/mod_auth_openidc/blob/master/debian/auth_openidc.conf
+For an exhaustive description of all configuration options, see the file
+  auth_openidc.conf
+in this directory. This file can alse serve as an include file for httpd.conf.
 
 
 

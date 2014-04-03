@@ -2,6 +2,8 @@
 - add configurable claim name for the REMOTE_USER variable, optionally postfixed with the  url-encoded
   issuer value; the default for the remote username is "sub@" now, makeing it unique across OPs
 - some refactoring of id_token validation functions
+- add INSTALL, move auth_openidc.conf to main directory
+- release 1.1
 
 3/28/2014
 - fix Require claim name mismatch for Apache 2.4
