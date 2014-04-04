@@ -25,6 +25,7 @@ DISTFILES=$(SRC) \
 	autogen.sh \
 	INSTALL \
 	README \
+	DISCLAIMER \
 	auth_openidc.conf \
 	LICENSE.txt \
 	ChangeLog

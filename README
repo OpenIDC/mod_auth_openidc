@@ -2,8 +2,16 @@ mod_auth_openidc is an authentication/authorization module for the Apache 2.x
 HTTP server that allows users to authenticate using an OpenID Connect enabled
 Identity Provider
 
-It enables the Apache web server to operate as an OpenID Connect Relying Party
-using the OpenID Connect Basic Client or Implicit Client profile.
+
+Disclaimer:
+This software is open sourced by Ping Identity but not supported commercially
+as such. Any questions/issues should go to the author (hzandbelt@pingidentity.com)
+directly or on to the Github Issues section for this project. See also the 
+DISCLAIMER file in this directory.
+
+
+This module enables an Apache web server to operate as an OpenID Connect Relying
+Party using the OpenID Connect Basic Client or Implicit Client profile.
 
 It sets the REMOTE_USER variable to the id_token sub claim. Other id_token
 claims are passed in HTTP headers together with those (optionally) obtained
