@@ -55,6 +55,7 @@
 #include <http_request.h>
 
 #include "mod_auth_openidc.h"
+#include "jose/apr_jose.h"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -76,11 +77,12 @@ int oidc_proto_authorization_request(request_rec *r,
 					"%s%sresponse_type=%s&scope=%s&client_id=%s&state=%s&redirect_uri=%s",
 					provider->authorization_endpoint_url,
 					(strchr(provider->authorization_endpoint_url, '?') != NULL ?
-							"&" : "?"), oidc_util_escape_string(r, provider->response_type),
-							oidc_util_escape_string(r, provider->scope),
-							oidc_util_escape_string(r, provider->client_id),
-							oidc_util_escape_string(r, state),
-							oidc_util_escape_string(r, redirect_uri));
+							"&" : "?"),
+					oidc_util_escape_string(r, provider->response_type),
+					oidc_util_escape_string(r, provider->scope),
+					oidc_util_escape_string(r, provider->client_id),
+					oidc_util_escape_string(r, state),
+					oidc_util_escape_string(r, redirect_uri));
 
 	/*
 	 * see if the chosen flow requires a nonce parameter
@@ -88,8 +90,10 @@ int oidc_proto_authorization_request(request_rec *r,
 	 * TODO: I'd like to include the nonce in the code flow as well but Google does not allow me to do that:
 	 * Error: invalid_request: Parameter not allowed for this message type: nonce
 	 */
-	if ( (strstr(provider->response_type, "id_token") != NULL) || (strcmp(provider->response_type, "token") == 0) ) {
-		destination = apr_psprintf(r->pool, "%s&nonce=%s", destination, oidc_util_escape_string(r, nonce));
+	if ((strstr(provider->response_type, "id_token") != NULL)
+			|| (strcmp(provider->response_type, "token") == 0)) {
+		destination = apr_psprintf(r->pool, "%s&nonce=%s", destination,
+				oidc_util_escape_string(r, nonce));
 		//destination = apr_psprintf(r->pool, "%s&response_mode=fragment", destination);
 	}
 
@@ -108,7 +112,8 @@ int oidc_proto_authorization_request(request_rec *r,
 /*
  * indicate whether the incoming HTTP request is an OpenID Connect Authorization Response from a Basic Client flow, syntax-wise
  */
-apr_byte_t oidc_proto_is_basic_authorization_response(request_rec *r, oidc_cfg *cfg) {
+apr_byte_t oidc_proto_is_basic_authorization_response(request_rec *r,
+		oidc_cfg *cfg) {
 
 	/* see if this is a call to the configured redirect_uri and the "code" and "state" parameters are present */
 	return ((oidc_util_request_matches_url(r, cfg->redirect_uri) == TRUE)
@@ -143,41 +148,37 @@ apr_byte_t oidc_proto_is_implicit_redirect(request_rec *r, oidc_cfg *cfg) {
  * check that it matches the nonce value in the id_token payload
  */
 static apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
-		const char *nonce, apr_json_value_t *j_payload) {
+		const char *nonce, apr_jwt_t *jwt) {
 
-	/* if a nonce is not passed, we're doing a ("code") flow where the nonce is optional */
-	if (nonce != NULL) {
+	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+			"oidc_proto_validate_nonce: looking for nonce: %s", nonce);
 
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_proto_validate_nonce: looking for nonce: %s", nonce);
+	/* see if we have this nonce cached already */
+	const char *replay = NULL;
+	cfg->cache->get(r, nonce, &replay);
+	if (replay != NULL) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_validate_nonce: the nonce value (%s) passed in the browser state was found in the cache already; possible replay attack!?",
+				nonce);
+		return FALSE;
+	}
 
-		/* see if we have this nonce cached already */
-		const char *replay = NULL;
-		cfg->cache->get(r, nonce, &replay);
-		if (replay != NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_proto_is_valid_nonce: the nonce value (%s) passed in the browser state was found in the cache already; possible replay attack!?",
-					nonce);
-			return FALSE;
-		}
+	/* get the "nonce" value in the id_token payload */
+	char *j_nonce = NULL;
+	apr_jwt_parse_string(r, &jwt->payload.value, "nonce", &j_nonce);
 
-		/* get the "nonce" value in the id_token payload */
-		apr_json_value_t *j_nonce = apr_hash_get(j_payload->value.object,
-				"nonce",
-				APR_HASH_KEY_STRING);
-		if ((j_nonce == NULL) || (j_nonce->type != APR_JSON_STRING)) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_proto_is_valid_nonce: id_token JSON payload did not contain a \"nonce\" string");
-			return FALSE;
-		}
+	if (j_nonce == NULL) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_validate_nonce: id_token JSON payload did not contain a \"nonce\" string");
+		return FALSE;
+	}
 
-		/* see if the nonce in the id_token matches the one that we sent in the authorization request */
-		if (apr_strnatcmp(nonce, j_nonce->value.string.p) != 0) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_proto_is_valid_nonce: the nonce value (%s) in the id_token did not match the one stored in the browser session (%s)",
-					j_nonce->value.string.p, nonce);
-			return FALSE;
-		}
+	/* see if the nonce in the id_token matches the one that we sent in the authorization request */
+	if (apr_strnatcmp(nonce, j_nonce) != 0) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_validate_nonce: the nonce value (%s) in the id_token did not match the one stored in the browser session (%s)",
+				j_nonce, nonce);
+		return FALSE;
 	}
 
 	return TRUE;
@@ -186,11 +187,12 @@ static apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
 /*
  * validate the "aud" and "azp" claims in the id_token payload
  */
-static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, apr_json_value_t *j_payload) {
+static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
+		oidc_provider_t *provider, apr_json_value_t *j_payload) {
 
 	/* get the "azp" value from the JSON payload, which may be NULL */
 	apr_json_value_t *azp = apr_hash_get(j_payload->value.object, "azp",
-			APR_HASH_KEY_STRING);
+	APR_HASH_KEY_STRING);
 	if ((azp != NULL) && (azp->type != APR_JSON_STRING)) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_validate_aud_and_azp: id_token JSON payload contained an \"azp\" value, but it was not a string");
@@ -212,7 +214,7 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 
 	/* get the "aud" value from the JSON payload */
 	apr_json_value_t *aud = apr_hash_get(j_payload->value.object, "aud",
-			APR_HASH_KEY_STRING);
+	APR_HASH_KEY_STRING);
 	if (aud != NULL) {
 
 		/* check if it is a single-value */
@@ -239,8 +241,8 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 			int i;
 			for (i = 0; i < aud->value.array->nelts; i++) {
 
-				apr_json_value_t *elem =
-						APR_ARRAY_IDX(aud->value.array, i, apr_json_value_t *);
+				apr_json_value_t *elem = APR_ARRAY_IDX(aud->value.array, i,
+						apr_json_value_t *);
 
 				/* check if it is a string, warn otherwise */
 				if (elem->type != APR_JSON_STRING) {
@@ -251,7 +253,8 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 				}
 
 				/* we're looking for a value in the list that matches our client id */
-				if (apr_strnatcmp(elem->value.string.p, provider->client_id) == 0) {
+				if (apr_strnatcmp(elem->value.string.p, provider->client_id)
+						== 0) {
 					break;
 				}
 			}
@@ -286,165 +289,84 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
  * check whether the provided JSON payload (in the j_payload parameter) is a valid id_token for the specified "provider"
  */
 static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
-		oidc_provider_t *provider, apr_json_value_t *j_payload, const char *nonce,
-		apr_time_t *expires) {
+		oidc_provider_t *provider, apr_jwt_t *jwt, const char *nonce) {
 
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_validate_idtoken: entering");
+			"oidc_proto_validate_idtoken: entering (nonce=%s)", nonce);
 
-	/* if present, verify the nonce */
-	if (oidc_proto_validate_nonce(r, cfg, nonce, j_payload) == FALSE) return FALSE;
+	/* if a nonce is not passed, we're doing a ("code") flow where the nonce is optional */
+	if (nonce != NULL) {
+		/* if present, verify the nonce */
+		if (oidc_proto_validate_nonce(r, cfg, nonce, jwt) == FALSE)
+			return FALSE;
+	}
 
-	/* get the "issuer" value from the JSON payload */
-	apr_json_value_t *iss = apr_hash_get(j_payload->value.object, "iss",
-			APR_HASH_KEY_STRING);
-	if ((iss == NULL) || (iss->type != APR_JSON_STRING)) {
+	/* issuer is mandatory in id_token */
+	if (jwt->payload.iss == NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_validate_idtoken: response JSON object did not contain an \"iss\" string");
 		return FALSE;
 	}
 
 	/* check if the issuer matches the requested value */
-	if (oidc_util_issuer_match(provider->issuer, iss->value.string.p) == FALSE) {
+	if (oidc_util_issuer_match(provider->issuer, jwt->payload.iss) == FALSE) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_validate_idtoken: configured issuer (%s) does not match received \"iss\" value in id_token (%s)",
-				provider->issuer, iss->value.string.p);
+				provider->issuer, jwt->payload.iss);
 		return FALSE;
 	}
 
-	/* get the "exp" value from the JSON payload */
-	apr_json_value_t *exp = apr_hash_get(j_payload->value.object, "exp",
-			APR_HASH_KEY_STRING);
-	if ((exp == NULL) || (exp->type != APR_JSON_LONG)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_idtoken: response JSON object did not contain an \"exp\" number value");
-		return FALSE;
-	}
+	/* check the "exp" timestamp */
 
 	/* check if this id_token has already expired */
-	if (apr_time_sec(apr_time_now()) > exp->value.lnumber) {
+	if (apr_time_now() > jwt->payload.exp) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_idtoken: \"exp\" validation failure (%ld): id_token expired", exp->value.lnumber);
+				"oidc_proto_validate_idtoken: \"exp\" validation failure (%" APR_TIME_T_FMT "): id_token expired",
+				jwt->payload.exp);
 		return FALSE;
 	}
 
-	/* return the "exp" value in the "expires" return parameter */
-	*expires = apr_time_from_sec(exp->value.lnumber);
-
-	/* get the "iat" value from the JSON payload */
-	apr_json_value_t *iat = apr_hash_get(j_payload->value.object, "iat",
-			APR_HASH_KEY_STRING);
-	if ((iat == NULL) || (iat->type != APR_JSON_LONG)) {
+	if (jwt->payload.iat == -1) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_validate_idtoken: id_token JSON payload did not contain an \"iat\" number value");
 		return FALSE;
 	}
 
 	/* check if this id_token has been issued just now +- slack (default 10 minutes) */
-	if ((apr_time_sec(apr_time_now()) - provider->idtoken_iat_slack) > iat->value.lnumber) {
+	if ((apr_time_now() - apr_time_from_sec(provider->idtoken_iat_slack))
+			> jwt->payload.iat) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_idtoken: \"iat\" validation failure (%ld): id_token was issued more than %d seconds ago", iat->value.lnumber, provider->idtoken_iat_slack);
+				"oidc_proto_validate_idtoken: \"iat\" validation failure (%" APR_TIME_T_FMT "): id_token was issued more than %d seconds ago",
+				jwt->payload.iat, provider->idtoken_iat_slack);
 		return FALSE;
 	}
-	if ((apr_time_sec(apr_time_now()) + provider->idtoken_iat_slack) < iat->value.lnumber) {
+	if ((apr_time_now() + apr_time_from_sec(provider->idtoken_iat_slack))
+			< jwt->payload.iat) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_idtoken: \"iat\" validation failure (%ld): id_token was issued more than %d seconds in the future", iat->value.lnumber, provider->idtoken_iat_slack);
+				"oidc_proto_validate_idtoken: \"iat\" validation failure (%" APR_TIME_T_FMT "): id_token was issued more than %d seconds in the future",
+				jwt->payload.iat, provider->idtoken_iat_slack);
 		return FALSE;
 	}
 
 	if (nonce != NULL) {
 		/* cache the nonce for the window time of the token for replay prevention plus 10 seconds for safety */
-		cfg->cache->set(r, nonce, nonce, apr_time_from_sec(provider->idtoken_iat_slack * 2 + 10));
+		cfg->cache->set(r, nonce, nonce,
+				apr_time_from_sec(provider->idtoken_iat_slack * 2 + 10));
 	}
 
-	apr_json_value_t *username = apr_hash_get(j_payload->value.object, "sub", APR_HASH_KEY_STRING);
-	if ((username == NULL) || (username->type != APR_JSON_STRING)) {
+	if (jwt->payload.sub == NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_validate_idtoken: id_token JSON payload did not contain the required-by-spec \"sub\" string value");
 		return FALSE;
 	}
 
 	/* verify the "aud" and "azp" values */
-	if (oidc_proto_validate_aud_and_azp(r, cfg, provider, j_payload) == FALSE) return FALSE;
-
-	return TRUE;
-}
-
-/*
- * check whether the payload in the id_token is valid for the specified "provider"
- */
-static apr_byte_t oidc_proto_validate_idtoken_payload(request_rec *r,
-		oidc_provider_t *provider, const char *s_idtoken_payload, const char *nonce,
-		apr_json_value_t **result, apr_time_t *expires) {
-
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_validate_idtoken_payload: entering (%s)", s_idtoken_payload);
-
-	/* decode the string in to a JSON structure */
-	if (apr_json_decode(result, s_idtoken_payload, strlen(s_idtoken_payload),
-			r->pool) != APR_SUCCESS) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_idtoken_payload: could not decode id_token payload string in to a JSON structure");
+	if (oidc_proto_validate_aud_and_azp(r, cfg, provider,
+			jwt->payload.value.json) == FALSE)
 		return FALSE;
-	}
-
-	/* a convenient helper pointer */
-	apr_json_value_t *j_payload = *result;
-
-	/* check that we've actually got a JSON object back */
-	if ((j_payload == NULL) || (j_payload->type != APR_JSON_OBJECT)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_idtoken_payload: payload from id_token did not contain a JSON object");
-		return FALSE;
-	}
-
-	/* now check if the JSON is a valid id_token */
-	return oidc_proto_validate_idtoken(r, provider, j_payload, nonce, expires);
-}
-
-/*
- * check whether the provided string is a valid id_token header
- */
-static apr_byte_t oidc_proto_parse_idtoken_header(request_rec *r,
-		const char *s_header, apr_json_value_t **result) {
-
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_parse_idtoken_header: entering (%s)", s_header);
-
-	/* decode the string in to a JSON structure */
-	if (apr_json_decode(result, s_header, strlen(s_header),
-			r->pool) != APR_SUCCESS) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_parse_idtoken_header: could not decode header from id_token successfully");
-		return FALSE;
-	}
-
-	/* a convenient helper pointer */
-	apr_json_value_t *j_header = *result;
-
-	/* check that we've actually got a JSON object back */
-	if ((j_header == NULL) || (j_header->type != APR_JSON_OBJECT)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_parse_idtoken_header: header from id_token did not contain a JSON object");
-		return FALSE;
-	}
-
-	apr_json_value_t *algorithm = apr_hash_get(j_header->value.object, "alg",
-			APR_HASH_KEY_STRING);
-	if ((algorithm == NULL) || (algorithm->type != APR_JSON_STRING)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_parse_idtoken_header: header JSON object did not contain a \"alg\" string");
-		return FALSE;
-	}
-
-	if (oidc_crypto_jwt_alg2digest(algorithm->value.string.p) == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_parse_idtoken_header: unsupported signing algorithm: %s", algorithm->value.string.p);
-		return FALSE;
-	}
 
 	return TRUE;
 }
@@ -452,66 +374,71 @@ static apr_byte_t oidc_proto_parse_idtoken_header(request_rec *r,
 /*
  * get the key from the JWKs that corresponds with the key specified in the header
  */
-static apr_json_value_t *oidc_proto_get_key_from_jwks(request_rec *r, apr_json_value_t *j_header, apr_json_value_t *j_jwks) {
+static apr_jwk_t *oidc_proto_get_key_from_jwks(request_rec *r,
+		apr_jwt_header_t *jwt_hdr, apr_json_value_t *j_jwks) {
 
-	const char *s_kid_match = NULL;
+	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+			"oidc_proto_get_key_from_jwks: search for kid \"%s\"",
+			jwt_hdr->kid);
 
-	apr_json_value_t *kid = apr_hash_get(j_header->value.object, "kid", APR_HASH_KEY_STRING);
-	if (kid != NULL) {
-		if (kid->type != APR_JSON_STRING) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_proto_get_key_from_jwks: \"kid\" is not a string");
-			return NULL;;
-		}
-		s_kid_match = kid->value.string.p;
-	}
+	apr_json_value_t *keys = apr_hash_get(j_jwks->value.object, "keys",
+			APR_HASH_KEY_STRING);
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r, "oidc_proto_get_key_from_jwks: search for kid \"%s\"", s_kid_match);
-
-	apr_json_value_t *keys = apr_hash_get(j_jwks->value.object, "keys", APR_HASH_KEY_STRING);
+	apr_jwk_t *jwk = NULL;
 
 	int i;
 	for (i = 0; i < keys->value.array->nelts; i++) {
 
-		apr_json_value_t *elem = APR_ARRAY_IDX(keys->value.array, i, apr_json_value_t *);
+		apr_json_value_t *elem = APR_ARRAY_IDX(keys->value.array, i,
+				apr_json_value_t *);
 		if (elem->type != APR_JSON_OBJECT) {
 			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
 					"oidc_proto_get_key_from_jwks: \"keys\" array element is not a JSON object, skipping");
 			continue;
 		}
-		apr_json_value_t *kty = apr_hash_get(elem->value.object, "kty", APR_HASH_KEY_STRING);
+		apr_json_value_t *kty = apr_hash_get(elem->value.object, "kty",
+				APR_HASH_KEY_STRING);
 		if (strcmp(kty->value.string.p, "RSA") != 0) {
 			ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-					"oidc_proto_get_key_from_jwks: \"keys\" array element is not an RSA key type (%s), skipping", kty->value.string.p);
+					"oidc_proto_get_key_from_jwks: \"keys\" array element is not an RSA key type (%s), skipping",
+					kty->value.string.p);
 			continue;
 		}
-		if (s_kid_match == NULL) {
-			ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r, "oidc_proto_get_key_from_jwks: no kid to match, return first key found");
-			return elem;
+		if (jwt_hdr->kid == NULL) {
+			ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+					"oidc_proto_get_key_from_jwks: no kid to match, return first key found");
+
+			apr_jwk_parse_json(r, elem, NULL, &jwk);
+			break;
 		}
-		apr_json_value_t *ekid = apr_hash_get(elem->value.object, "kid", APR_HASH_KEY_STRING);
+		apr_json_value_t *ekid = apr_hash_get(elem->value.object, "kid",
+				APR_HASH_KEY_STRING);
 		if (ekid == NULL) {
 			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
 					"oidc_proto_get_key_from_jwks: \"keys\" array element does not have a \"kid\" entry, skipping");
 			continue;
 		}
-		if (strcmp(s_kid_match, ekid->value.string.p) == 0) {
-			ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r, "oidc_proto_get_key_from_jwks: found matching kid: \"%s\"", s_kid_match);
-			return elem;
+		if (apr_strnatcmp(jwt_hdr->kid, ekid->value.string.p) == 0) {
+			ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+					"oidc_proto_get_key_from_jwks: found matching kid: \"%s\"",
+					jwt_hdr->kid);
+
+			apr_jwk_parse_json(r, elem, NULL, &jwk);
+			break;
 		}
 	}
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r, "oidc_proto_get_key_from_jwks: return NULL");
-
-	return NULL;
+	return jwk;
 }
 
 /*
  * get the key from the (possibly cached) set of JWKs on the jwk_uri that corresponds with the key specified in the header
  */
-static apr_json_value_t * oidc_proto_get_key_from_jwk_uri(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, apr_json_value_t *j_header, apr_byte_t *refresh) {
+static apr_jwk_t *oidc_proto_get_key_from_jwk_uri(request_rec *r, oidc_cfg *cfg,
+		oidc_provider_t *provider, apr_jwt_header_t *jwt_hdr,
+		apr_byte_t *refresh) {
 	apr_json_value_t *j_jwks = NULL;
-	apr_json_value_t *key = NULL;
+	apr_jwk_t *jwk = NULL;
 
 	/* get the set of JSON Web Keys for this provider (possibly by downloading them from the specified provider->jwk_uri) */
 	oidc_metadata_jwks_get(r, cfg, provider, &j_jwks, refresh);
@@ -522,10 +449,10 @@ static apr_json_value_t * oidc_proto_get_key_from_jwk_uri(request_rec *r, oidc_c
 	}
 
 	/* get the key corresponding to the kid from the header, referencing the key that was used to sign this message */
-	key = oidc_proto_get_key_from_jwks(r, j_header, j_jwks);
+	jwk = oidc_proto_get_key_from_jwks(r, jwt_hdr, j_jwks);
 
 	/* see what we've got back */
-	if ( (key == NULL) && (refresh == FALSE) ) {
+	if ((jwk == NULL) && (refresh == FALSE)) {
 
 		/* we did not get a key, but we have not refreshed the JWKs from the jwks_uri yet */
 
@@ -541,76 +468,51 @@ static apr_json_value_t * oidc_proto_get_key_from_jwk_uri(request_rec *r, oidc_c
 			return NULL;
 		}
 
-		key = oidc_proto_get_key_from_jwks(r, j_header, j_jwks);
+		jwk = oidc_proto_get_key_from_jwks(r, jwt_hdr, j_jwks);
 
 	}
 
-	return key;
-}
-
-static apr_byte_t oidc_proto_idtoken_verify_hmac(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, apr_json_value_t *j_header, const char *signature, const char *message) {
-
-	unsigned char *key = (unsigned char *)provider->client_secret;
-	int key_len = strlen(provider->client_secret);
-
-	unsigned char *sig = NULL;
-	int sig_len = oidc_base64url_decode(r, (char **)&sig, signature, 1);
-
-	apr_json_value_t *alg = apr_hash_get(j_header->value.object, "alg",
-			APR_HASH_KEY_STRING);
-
-	return oidc_crypto_hmac_verify(r, alg->value.string.p, sig, sig_len, (unsigned char *)message, strlen(message), key, key_len);
+	return jwk;
 }
 
 /*
  * verify the signature on an id_token
  */
-static apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, apr_json_value_t *j_header, const char *signature, const char *message,  apr_byte_t *refresh) {
+static apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r,
+		oidc_cfg *cfg, oidc_provider_t *provider, apr_jwt_t *jwt,
+		apr_byte_t *refresh) {
+
+	// TODO:
+	// TODO: only do this for non-HMAC...
+	// TODO:
 
 	/* get the key from the JWKs that corresponds with the key specified in the header */
-	apr_json_value_t *key = oidc_proto_get_key_from_jwk_uri(r, cfg, provider, j_header, refresh);
-	if (key == NULL) {
+	apr_jwk_t *jwk = oidc_proto_get_key_from_jwk_uri(r, cfg, provider,
+			&jwt->header, refresh);
+
+	if (jwk == NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_idtoken_verify_signature: could not find a key in the JSON Web Keys");
 		if (*refresh == FALSE) {
 			*refresh = TRUE;
-			return oidc_proto_idtoken_verify_signature(r, cfg, provider, j_header, signature, message, refresh);
+			return oidc_proto_idtoken_verify_signature(r, cfg, provider, jwt,
+					refresh);
 		}
 		return FALSE;
 	}
 
-	/* get the modulus */
-	apr_json_value_t *modulus = apr_hash_get(key->value.object, "n", APR_HASH_KEY_STRING);
-	if ((modulus == NULL) || (modulus->type != APR_JSON_STRING)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_idtoken_verify_signature: response JSON object did not contain a \"n\" string");
-		return FALSE;
-	}
-
-	/* get the exponent */
-	apr_json_value_t *exponent = apr_hash_get(key->value.object, "e", APR_HASH_KEY_STRING);
-	if ((exponent == NULL) || (exponent->type != APR_JSON_STRING)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_idtoken_verify_signature: response JSON object did not contain a \"e\" string");
-		return FALSE;
-	}
-
-	/* do the actual signature verification */
-	apr_json_value_t *algorithm = apr_hash_get(j_header->value.object, "alg",
-			APR_HASH_KEY_STRING);
-
-	if (oidc_base64url_decode_rsa_verify(r, algorithm->value.string.p, signature, message, modulus->value.string.p, exponent->value.string.p) != TRUE) {
-		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-				"oidc_proto_idtoken_verify_signature: signature verification on id_token failed");
-
+	if (apr_jws_verify(r, jwt, provider->client_secret, jwk) == FALSE) {
 		if (*refresh == FALSE) {
 			*refresh = TRUE;
-			return oidc_proto_idtoken_verify_signature(r, cfg, provider, j_header, signature, message, refresh);
+			return oidc_proto_idtoken_verify_signature(r, cfg, provider, jwt,
+					refresh);
 		}
 		return FALSE;
 	}
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r, "oidc_proto_idtoken_verify_signature: signature with algorithm \"%s\" verified OK!", algorithm->value.string.p);
+	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+			"oidc_proto_idtoken_verify_signature: signature with algorithm \"%s\" verified OK!",
+			jwt->header.alg);
 
 	/* if we've made it this far, all is OK */
 	return TRUE;
@@ -620,7 +522,7 @@ static apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r, oidc_cfg *
  * set the unique user identifier that will be propagated in the Apache r->user and REMOTE_USER variables
  */
 static apr_byte_t oidc_proto_set_remote_user(request_rec *r, oidc_cfg *c,
-		oidc_provider_t *provider, apr_json_value_t *j_payload, char **user) {
+		oidc_provider_t *provider, apr_jwt_t *jwt, char **user) {
 
 	char *issuer = provider->issuer;
 	char *claim_name = apr_pstrdup(r->pool, c->remote_user_claim);
@@ -634,11 +536,11 @@ static apr_byte_t oidc_proto_set_remote_user(request_rec *r, oidc_cfg *c,
 						apr_pstrdup(r->pool, issuer + strlen("https://"));
 	}
 
-	/* extract the "sub" claim from the id_token payload */
-	apr_json_value_t *username = apr_hash_get(j_payload->value.object,
-			claim_name,
-			APR_HASH_KEY_STRING);
-	if ((username == NULL) || (username->type != APR_JSON_STRING)) {
+	/* extract the username claim (default: "sub") from the id_token payload */
+	char *username = NULL;
+	apr_jwt_parse_string(r, &jwt->payload.value, claim_name, &username);
+
+	if (username == NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_set_remote_user: OIDCRemoteUserClaim is set to \"%s\", but the id_token JSON payload did not contain a \"%s\" string",
 				c->remote_user_claim, claim_name);
@@ -647,9 +549,8 @@ static apr_byte_t oidc_proto_set_remote_user(request_rec *r, oidc_cfg *c,
 
 	/* set the unique username in the session (will propagate to r->user/REMOTE_USER) */
 	*user = post_fix_with_issuer ?
-			apr_psprintf(r->pool, "%s@%s", username->value.string.p,
-					oidc_util_escape_string(r, issuer)) :
-					apr_pstrdup(r->pool, username->value.string.p);
+			apr_psprintf(r->pool, "%s@%s", username, issuer) :
+			apr_pstrdup(r->pool, username);
 
 	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 			"oidc_proto_set_remote_user: set remote_user to %s", *user);
@@ -661,50 +562,14 @@ static apr_byte_t oidc_proto_set_remote_user(request_rec *r, oidc_cfg *c,
  * check whether the provided string is a valid id_token and return its parsed contents
  */
 apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
-		oidc_provider_t *provider, const char *id_token, const char *nonce, char **user,
-		apr_json_value_t **j_payload, char **s_payload, apr_time_t *expires) {
+		oidc_provider_t *provider, const char *id_token, const char *nonce,
+		char **user, apr_jwt_t **jwt) {
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_proto_parse_idtoken: entering");
 
-	/* find the header */
-	const char *s = apr_pstrdup(r->pool, id_token);
-	char *p = strchr(s, '.');
-	if (p == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_parse_id_token: could not find first \".\" in id_token");
+	if (apr_jwt_parse(r, id_token, jwt) == FALSE)
 		return FALSE;
-	}
-	*p = '\0';
-
-	/* add to the message part that is signed */
-	char *header = apr_pstrdup(r->pool, s);
-
-	/* parse the header (base64decode, json_decode) and validate it */
-	char *s_header = NULL;
-	oidc_base64url_decode(r, &s_header, s, 1);
-	apr_json_value_t *j_header = NULL;
-	if (oidc_proto_parse_idtoken_header(r, s_header, &j_header) != TRUE) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_parse_id_token: header parsing failure");
-		return FALSE;
-	}
-
-	/* find the payload */
-	s = ++p;
-	p = strchr(s, '.');
-	if (p == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_parse_id_token: could not find second \".\" in id_token");
-		return FALSE;
-	}
-	*p = '\0';
-
-	char *payload = apr_pstrdup(r->pool, s);
-
-	s = ++p;
-
-	char *signature = apr_pstrdup(r->pool, s);
 
 	// verify signature unless we did 'code' flow and the algorithm is NONE
 	// TODO: should improve "detection": in principle nonce can be used in "code" flow too
@@ -715,30 +580,31 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 //		if (oidc_proto_idtoken_verify_signature(r, cfg, provider, j_header, signature, apr_pstrcat(r->pool, header, ".", payload, NULL), &refresh) == FALSE) return FALSE;
 //	}
 
-	apr_json_value_t *algorithm = apr_hash_get(j_header->value.object, "alg", APR_HASH_KEY_STRING);
-	if (strncmp(algorithm->value.string.p, "HS", 2) == 0) {
-		/* verify the HMAC signature on the id_token */
-		if (oidc_proto_idtoken_verify_hmac(r, cfg, provider, j_header, signature, apr_pstrcat(r->pool, header, ".", payload, NULL)) == FALSE) return FALSE;
-	} else {
-		/* verify the RSA signature on the id_token */
-		apr_byte_t refresh = FALSE;
-		if (oidc_proto_idtoken_verify_signature(r, cfg, provider, j_header, signature, apr_pstrcat(r->pool, header, ".", payload, NULL), &refresh) == FALSE) return FALSE;
+	apr_byte_t refresh = FALSE;
+	if (oidc_proto_idtoken_verify_signature(r, cfg, provider, *jwt,
+			&refresh) == FALSE) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_parse_idtoken: id_token signature could not be validated, aborting");
+		return FALSE;
 	}
 
-	/* parse the payload */
-	oidc_base64url_decode(r, s_payload, payload, 1);
-
 	/* this is where the meat is */
-	if (oidc_proto_validate_idtoken_payload(r, provider, *s_payload, nonce, j_payload,
-			expires) == FALSE)
+	if (oidc_proto_validate_idtoken(r, provider, *jwt, nonce) == FALSE) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_parse_idtoken: id_token payload could not be validated, aborting");
 		return FALSE;
+	}
 
-	if (oidc_proto_set_remote_user(r, cfg, provider, *j_payload, user) == FALSE) return FALSE;
+	if (oidc_proto_set_remote_user(r, cfg, provider, *jwt, user) == FALSE) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_parse_idtoken: remote user could not be set, aborting");
+		return FALSE;
+	}
 
 	/* log our results */
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_proto_parse_idtoken: valid id_token for user \"%s\" (expires in %" APR_TIME_T_FMT " seconds)",
-			*user, *expires - apr_time_sec(apr_time_now()));
+			*user, (*jwt)->payload.exp - apr_time_sec(apr_time_now()));
 
 	/* since we've made it so far, we may as well say it is a valid id_token */
 	return TRUE;
@@ -749,8 +615,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
  */
 apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, char *code, const char *nonce, char **user,
-		apr_json_value_t **j_idtoken_payload, char **s_id_token,
-		char **s_access_token, apr_time_t *expires) {
+		apr_jwt_t **jwt, char **s_access_token) {
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_proto_resolve_code: entering");
@@ -772,14 +637,14 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 		apr_table_addn(params, "client_id", provider->client_id);
 		apr_table_addn(params, "client_secret", provider->client_secret);
 	}
-/*
-	if (strcmp(provider->issuer, "https://sts.windows.net/b4ea3de6-839e-4ad1-ae78-c78e5c0cdc06/") == 0) {
-		apr_table_addn(params, "resource", "https://graph.windows.net");
-	}
-*/
+	/*
+	 if (strcmp(provider->issuer, "https://sts.windows.net/b4ea3de6-839e-4ad1-ae78-c78e5c0cdc06/") == 0) {
+	 apr_table_addn(params, "resource", "https://graph.windows.net");
+	 }
+	 */
 	/* resolve the code against the token endpoint */
 	if (oidc_util_http_call(r, provider->token_endpoint_url,
-			OIDC_HTTP_POST_FORM, params, basic_auth, NULL,
+	OIDC_HTTP_POST_FORM, params, basic_auth, NULL,
 			provider->ssl_validate_server, &response,
 			cfg->http_timeout_long) == FALSE) {
 		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
@@ -828,7 +693,7 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 
 	/* get the id_token from the response */
 	apr_json_value_t *id_token = apr_hash_get(result->value.object, "id_token",
-			APR_HASH_KEY_STRING);
+	APR_HASH_KEY_STRING);
 	if ((id_token == NULL) || (id_token->type != APR_JSON_STRING)) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_resolve_code: response JSON object did not contain an id_token string");
@@ -839,13 +704,10 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_proto_resolve_code: returned id_token: %s",
 			id_token->value.string.p);
-	*s_id_token = apr_pstrdup(r->pool, id_token->value.string.p);
-
-	char *s_payload = NULL;
 
 	/* parse and validate the obtained id_token and return success/failure of that */
-	return oidc_proto_parse_idtoken(r, cfg, provider, id_token->value.string.p, nonce, user,
-			j_idtoken_payload, &s_payload, expires);
+	return oidc_proto_parse_idtoken(r, cfg, provider, id_token->value.string.p,
+			nonce, user, jwt);
 }
 
 /*
@@ -865,7 +727,7 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 
 	/* get the JSON response */
 	if (oidc_util_http_call(r, provider->userinfo_endpoint_url, OIDC_HTTP_GET,
-			NULL, NULL, access_token, provider->ssl_validate_server, response,
+	NULL, NULL, access_token, provider->ssl_validate_server, response,
 			cfg->http_timeout_long) == FALSE)
 		return FALSE;
 
@@ -914,7 +776,7 @@ apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg,
 
 	/* get the links parameter */
 	apr_json_value_t *j_links = apr_hash_get(j_response->value.object, "links",
-			APR_HASH_KEY_STRING);
+	APR_HASH_KEY_STRING);
 	if ((j_links == NULL) || (j_links->type != APR_JSON_ARRAY)) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_account_based_discovery: response JSON object did not contain a \"links\" array");
@@ -932,7 +794,7 @@ apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg,
 
 	/* get the href from that object, which is the issuer value */
 	apr_json_value_t *j_href = apr_hash_get(j_object->value.object, "href",
-			APR_HASH_KEY_STRING);
+	APR_HASH_KEY_STRING);
 	if ((j_href == NULL) || (j_href->type != APR_JSON_STRING)) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_account_based_discovery: response JSON object did not contain a \"href\" element in the first \"links\" array object");
@@ -950,40 +812,41 @@ apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg,
 
 int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg *c) {
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r, "oidc_proto_javascript_implicit: entering");
+	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+			"oidc_proto_javascript_implicit: entering");
 
 //	char *java_script = NULL;
 //	if (oidc_util_file_read(r, "/Users/hzandbelt/eclipse-workspace/mod_auth_openidc/src/implicit_post.html", &java_script) == FALSE) return HTTP_INTERNAL_SERVER_ERROR;
 
 	const char *java_script =
-		"<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
-		"<html xmlns=\"http://www.w3.org/1999/xhtml\" lang=\"en\" xml:lang=\"en\">\n"
-		"  <head>\n"
-		"    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"/>\n"
-		"    <script type=\"text/javascript\">\n"
-		"      function postOnLoad() {\n"
-		"        var params = {}\n"
-		"        encoded = location.hash.substring(1).split(\"&\");\n"
-		"        for (i = 0; i < encoded.length; i++) {\n"
-		"          encoded[i].replace(/\\+/g, \" \");\n"
-		"          var n = encoded[i].indexOf(\"=\");\n"
-		"          var input = document.createElement(\"input\");\n"
-		"          input.type = \"hidden\";\n"
-		"          input.name = decodeURIComponent(encoded[i].substring(0, n));\n"
-		"          input.value = decodeURIComponent(encoded[i].substring(n+1));\n"
-		"          document.forms[0].appendChild(input);\n"
-		"        }\n"
-		"        document.forms[0].action = window.location.href.substr(0, window.location.href.indexOf('#'));\n"
-		"        document.forms[0].submit();\n"
-		"      }\n"
-		"    </script>\n"
-		"    <title>Submitting...</title>\n"
-		"  </head>\n"
-		"  <body onload=\"postOnLoad()\">\n"
-		"    <p>Submitting...</p>\n"
-		"    <form method=\"post\"/>\n"
-		"  </body>\n"
-		"</html>\n";
+			"<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
+					"<html xmlns=\"http://www.w3.org/1999/xhtml\" lang=\"en\" xml:lang=\"en\">\n"
+					"  <head>\n"
+					"    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"/>\n"
+					"    <script type=\"text/javascript\">\n"
+					"      function postOnLoad() {\n"
+					"        var params = {}\n"
+					"        encoded = location.hash.substring(1).split(\"&\");\n"
+					"        for (i = 0; i < encoded.length; i++) {\n"
+					"          encoded[i].replace(/\\+/g, \" \");\n"
+					"          var n = encoded[i].indexOf(\"=\");\n"
+					"          var input = document.createElement(\"input\");\n"
+					"          input.type = \"hidden\";\n"
+					"          input.name = decodeURIComponent(encoded[i].substring(0, n));\n"
+					"          input.value = decodeURIComponent(encoded[i].substring(n+1));\n"
+					"          document.forms[0].appendChild(input);\n"
+					"        }\n"
+					"        document.forms[0].action = window.location.href.substr(0, window.location.href.indexOf('#'));\n"
+					"        document.forms[0].submit();\n"
+					"      }\n"
+					"    </script>\n"
+					"    <title>Submitting...</title>\n"
+					"  </head>\n"
+					"  <body onload=\"postOnLoad()\">\n"
+					"    <p>Submitting...</p>\n"
+					"    <form method=\"post\"/>\n"
+					"  </body>\n"
+					"</html>\n";
 
 	//return oidc_util_http_sendstring(r, apr_psprintf(r->pool, java_script, c->redirect_uri), OK);
 	//return oidc_util_http_sendstring(r, apr_psprintf(r->pool, java_script, c->redirect_uri), HTTP_MOVED_TEMPORARILY);

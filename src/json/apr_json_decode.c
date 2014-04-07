@@ -72,8 +72,8 @@ static apr_status_t apr_json_decode_string(apr_json_scanner_t *self, apr_json_st
 {
     apr_status_t status = APR_SUCCESS;
     apr_json_string_t string;
-    const char *p, *e;
-    char *q;
+    const char *p = NULL, *e = NULL;
+    char *q = NULL;
 
     if (self->p >= self->e) {
         status = APR_EOF;
@@ -280,7 +280,7 @@ static apr_status_t apr_json_decode_string(apr_json_scanner_t *self, apr_json_st
         }
     }
 #undef VALIDATE_UTF8_SUCCEEDING_BYTE
-    *p++; /* eat the trailing '"' */
+    char d = *p++; d = 1; /* eat the trailing '"' and silence compiler warning... */
     *retval = string;
 out:
     self->p = p;
@@ -617,7 +617,7 @@ apr_status_t apr_json_decode_null(apr_json_scanner_t *self)
 static apr_status_t apr_json_decode_value(apr_json_scanner_t *self, apr_json_value_t **retval)
 {
     apr_json_value_t value;
-    apr_status_t status;
+    apr_status_t status = APR_SUCCESS;
 
     while (self->p < self->e && isspace(*(unsigned char *)self->p))
         self->p++;

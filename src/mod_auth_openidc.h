@@ -64,7 +64,8 @@
 #include "apr_shm.h"
 #include "apr_global_mutex.h"
 
-#include "apr_json.h"
+#include "json/apr_json.h"
+#include "jose/apr_jose.h"
 
 #include "cache/cache.h"
 
@@ -213,10 +214,10 @@ int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *pro
 apr_byte_t oidc_proto_is_basic_authorization_response(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_is_implicit_post(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_is_implicit_redirect(request_rec *r, oidc_cfg *cfg);
-apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, char *code, const char *nonce, char **user, apr_json_value_t **j_idtoken_payload, char **s_id_token, char **s_access_token, apr_time_t *expires);
+apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, char *code, const char *nonce, char **user,  apr_jwt_t **jwt, char **s_access_token);
 apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *access_token, const char **response, apr_json_value_t **claims);
 apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg, const char *acct, char **issuer);
-apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *id_token, const char *nonce, char **user, apr_json_value_t **j_payload, char **s_payload, apr_time_t *expires);
+apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *id_token, const char *nonce, char **user, apr_jwt_t **jwt);
 int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg *c);
 
 // oidc_authz.c
@@ -273,15 +274,11 @@ apr_byte_t oidc_util_generate_random_base64url_encoded_value(request_rec *r, int
 apr_byte_t oidc_util_file_read(request_rec *r, const char *path, char **result);
 apr_byte_t oidc_util_issuer_match(const char *a, const char *b);
 int oidc_util_html_send_error(request_rec *r, const char *error, const char *description, int status_code);
-int oidc_base64url_decode_rsa_verify(request_rec *r, const char *alg, const char *signature, const char *message, const char *modulus, const char *exponent);
 apr_byte_t oidc_util_json_array_has_value(request_rec *r, apr_json_value_t *haystack, const char *needle);
 
 // oidc_crypto.c
 unsigned char *oidc_crypto_aes_encrypt(request_rec *r, oidc_cfg *cfg, unsigned char *plaintext, int *len);
 unsigned char *oidc_crypto_aes_decrypt(request_rec *r, oidc_cfg *cfg, unsigned char *ciphertext, int *len);
-char *oidc_crypto_jwt_alg2digest(const char *alg);
-apr_byte_t oidc_crypto_rsa_verify(request_rec *r, const char *alg, unsigned char* sig, int sig_len, unsigned char* msg, int msg_len, unsigned char *mod, int mod_len, unsigned char *exp, int exp_len);
-apr_byte_t oidc_crypto_hmac_verify(request_rec *r, const char *alg, unsigned char* sig, int sig_len, unsigned char* msg, int msg_len, unsigned char *key, int key_len);
 
 // oidc_metadata.c
 apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg *cfg, apr_array_header_t **arr);

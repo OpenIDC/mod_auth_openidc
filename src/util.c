@@ -772,31 +772,6 @@ int oidc_util_http_sendstring(request_rec *r, const char *html, int success_rval
 	return success_rvalue;
 }
 
-int oidc_base64url_decode_rsa_verify(request_rec *r, const char *alg, const char *signature, const char *message, const char *modulus, const char *exponent) {
-
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_base64url_decode_rsa_verify: alg = \"%s\"", alg);
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_base64url_decode_rsa_verify: signature = \"%s\"", signature);
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_base64url_decode_rsa_verify: message = \"%s\"", message);
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_base64url_decode_rsa_verify: modulus = \"%s\"", modulus);
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_base64url_decode_rsa_verify: exponent = \"%s\"", exponent);
-
-	unsigned char *mod = NULL;
-	int mod_len = oidc_base64url_decode(r, (char **)&mod, modulus, 1);
-
-	unsigned char *exp = NULL;
-	int exp_len = oidc_base64url_decode(r, (char **)&exp, exponent, 1);
-
-	unsigned char *sig = NULL;
-	int sig_len = oidc_base64url_decode(r, (char **)&sig, signature, 1);
-
-	return oidc_crypto_rsa_verify(r, alg, sig, sig_len, (unsigned char *)message, strlen(message), mod, mod_len, exp, exp_len);
-}
-
 /*
  * read all bytes from the HTTP request
  */

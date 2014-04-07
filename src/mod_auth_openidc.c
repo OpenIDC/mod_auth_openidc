@@ -78,6 +78,12 @@
 
 #include "mod_auth_openidc.h"
 
+// TODO: use set_remote user claim logic on OAuth 2.0 code path as well
+
+// TODO: documentation:
+//       - write a README.quickstart
+//       - include AUTHORS and contributions
+// TODO: sort out oidc_cfg vs. oidc_dir_cfg stuff
 // TODO: rigid input checking on discovery responses and authorization responses
 
 // TODO: use oidc_get_current_url + configured RedirectURIPath to determine the RedirectURI more dynamically
@@ -171,7 +177,7 @@ static char *oidc_get_browser_state_hash(request_rec *r, const char *state) {
 	/* get the remote client IP address or host name */
 	int remotehost_is_ip;
 	value = ap_get_remote_host(r->connection, r->per_dir_config,
-	REMOTE_NOLOOKUP, &remotehost_is_ip);
+			REMOTE_NOLOOKUP, &remotehost_is_ip);
 	/* concat the remote IP address/hostname to the hash input */
 	apr_sha1_update(&sha1, value, strlen(value));
 
@@ -512,6 +518,40 @@ static void oidc_set_app_headers(request_rec *r,
 	}
 }
 
+static apr_byte_t oidc_set_app_claims(request_rec *r,
+		const oidc_cfg * const cfg, session_rec *session,
+		const char *session_key, const char *authn_header) {
+
+	const char *s_attrs = NULL;
+	apr_json_value_t *j_attrs = NULL;
+
+	/* get the string-encoded id_token from the session */
+	oidc_session_get(r, session, session_key, &s_attrs);
+
+	/* decode the string-encoded attributes in to a JSON structure */
+	if ((s_attrs != NULL)
+			&& (apr_json_decode(&j_attrs, s_attrs, strlen(s_attrs), r->pool)
+					!= APR_SUCCESS)) {
+
+		/* whoops, attributes have been corrupted */
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_handle_existing_session: unable to parse \"%s\" stored in the session, returning internal server error",
+				session_key);
+
+		return FALSE;
+	}
+
+	if (j_attrs != NULL) {
+		oidc_set_app_headers(r, j_attrs, authn_header, cfg->claim_prefix,
+				cfg->claim_delimiter);
+
+		/* set the attributes JSON structure in the request state so it is available for authz purposes later on */
+		oidc_request_state_set(r, session_key, (const char *) j_attrs);
+	}
+
+	return TRUE;
+}
+
 /*
  * handle the case where we have identified an existing authentication session for a user
  */
@@ -520,9 +560,6 @@ static int oidc_handle_existing_session(request_rec *r,
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_handle_existing_session: entering");
-
-	const char *s_attrs = NULL;
-	apr_json_value_t *j_attrs = NULL;
 
 	/* get a handle to the director config */
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
@@ -536,28 +573,15 @@ static int oidc_handle_existing_session(request_rec *r,
 		oidc_scrub_request_headers(r, cfg->claim_prefix, dir_cfg->authn_header);
 	}
 
-	/* get the string-encoded attributes from the session */
-	oidc_session_get(r, session, OIDC_CLAIMS_SESSION_KEY, &s_attrs);
-
-	/* decode the string-encoded attributes in to a JSON structure */
-	if ((s_attrs != NULL)
-			&& (apr_json_decode(&j_attrs, s_attrs, strlen(s_attrs), r->pool)
-					!= APR_SUCCESS)) {
-
-		/* whoops, attributes have been corrupted */
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_handle_existing_session: unable to parse string-encoded claims stored in the session, returning internal server error");
-
+	/* set the claims in the app headers + request state */
+	if (oidc_set_app_claims(r, cfg, session, OIDC_CLAIMS_SESSION_KEY,
+			NULL) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
-	}
 
-	/* pass the user/claims in the session to the application by setting the appropriate headers */
-	// TODO: combine already resolved attrs from id_token with those from user_info endpoint
-	oidc_set_app_headers(r, j_attrs, dir_cfg->authn_header, cfg->claim_prefix,
-			cfg->claim_delimiter);
-
-	/* set the attributes JSON structure in the request state so it is available for authz purposes later on */
-	oidc_request_state_set(r, OIDC_CLAIMS_SESSION_KEY, (const char *) j_attrs);
+	/* set the id_token in the app headers + request state */
+	if (oidc_set_app_claims(r, cfg, session, OIDC_IDTOKEN_SESSION_KEY,
+			NULL) == FALSE)
+		return HTTP_INTERNAL_SERVER_ERROR;
 
 	/* return "user authenticated" status */
 	return OK;
@@ -672,19 +696,18 @@ static int oidc_handle_basic_authorization_response(request_rec *r, oidc_cfg *c,
 		return HTTP_INTERNAL_SERVER_ERROR;
 
 	/* now we've got the metadata for the provider that sent the response to us */
-	char *id_token = NULL, *access_token = NULL;
+	char *access_token = NULL;
 	const char *response = NULL;
 	char *remoteUser = NULL;
-	apr_time_t expires;
-	apr_json_value_t *j_idtoken_payload = NULL;
+	apr_jwt_t *jwt = NULL;
 
 	/*
 	 * resolve the code against the token endpoint of the OP
 	 * TODO: now I'm setting the nonce to NULL since google does not allow using a nonce in the "code" flow...
 	 */
 	nonce = NULL;
-	if (oidc_proto_resolve_code(r, c, provider, code, nonce, &remoteUser,
-			&j_idtoken_payload, &id_token, &access_token, &expires) == FALSE) {
+	if (oidc_proto_resolve_code(r, c, provider, code, nonce, &remoteUser, &jwt,
+			&access_token) == FALSE) {
 		/* errors have already been reported */
 		return HTTP_UNAUTHORIZED;
 	}
@@ -700,8 +723,9 @@ static int oidc_handle_basic_authorization_response(request_rec *r, oidc_cfg *c,
 	}
 
 	/* complete handling of the response by storing stuff in the session and redirecting to the original URL */
-	return oidc_authorization_response_finalize(r, c, session, id_token,
-			response, remoteUser, expires, original_url);
+	return oidc_authorization_response_finalize(r, c, session,
+			jwt->payload.value.str, response, remoteUser, jwt->payload.exp,
+			original_url);
 }
 
 /*
@@ -726,21 +750,15 @@ static int oidc_handle_implicit_authorization_response(request_rec *r,
 
 	/* initialize local variables for the id_token contents */
 	char *remoteUser = NULL;
-	apr_json_value_t *j_idtoken_payload = NULL;
-	apr_time_t expires;
-	char *s_idtoken_payload = NULL;
+	apr_jwt_t *jwt = NULL;
 
 	/* parse and validate the id_token */
 	if (oidc_proto_parse_idtoken(r, c, provider, id_token, nonce, &remoteUser,
-			&j_idtoken_payload, &s_idtoken_payload, &expires) != TRUE) {
+			&jwt) != TRUE) {
 		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
 				"oidc_handle_implicit_authorization_response: could not verify the id_token contents, return HTTP_UNAUTHORIZED");
 		return HTTP_UNAUTHORIZED;
 	}
-
-	// TODO: all id_token stuff in/as claims, should probably filter...?
-
-	const char *s_claims = s_idtoken_payload;
 
 	/* strip empty parameters (eg. connect.openid4.us on response on "id_token" flow) */
 	if ((access_token != NULL) && (strcmp(access_token, "") == 0))
@@ -756,6 +774,7 @@ static int oidc_handle_implicit_authorization_response(request_rec *r,
 		}
 	}
 
+	const char *s_claims = NULL;
 	/*
 	 * if we (still) have an access_token, let's use to resolve claims from the user_info endpoint
 	 * we don't do anything with the optional expires_in, since we don't cache the access_token or re-use
@@ -773,8 +792,8 @@ static int oidc_handle_implicit_authorization_response(request_rec *r,
 	}
 
 	/* complete handling of the response by storing stuff in the session and redirecting to the original URL */
-	return oidc_authorization_response_finalize(r, c, session, id_token,
-			s_claims, remoteUser, expires, original_url);
+	return oidc_authorization_response_finalize(r, c, session, jwt->payload.value.str,
+			s_claims, remoteUser, jwt->payload.exp, original_url);
 }
 
 /*
@@ -799,7 +818,7 @@ static int oidc_handle_implicit_post(request_rec *r, oidc_cfg *c,
 		return oidc_util_http_sendstring(r,
 				apr_psprintf(r->pool,
 						"mod_auth_openidc: you've hit an OpenID Connect callback URL with no parameters; this is an invalid request (you should not open this URL in your browser directly)"),
-				HTTP_INTERNAL_SERVER_ERROR);
+						HTTP_INTERNAL_SERVER_ERROR);
 	}
 
 	/* see if the response is an error response */
@@ -876,9 +895,9 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 		/* yes, assemble the parameters for external discovery */
 		char *url = apr_psprintf(r->pool, "%s%s%s=%s&%s=%s", cfg->discover_url,
 				strchr(cfg->discover_url, '?') != NULL ? "&" : "?",
-				OIDC_DISC_RT_PARAM, oidc_util_escape_string(r, current_url),
-				OIDC_DISC_CB_PARAM,
-				oidc_util_escape_string(r, cfg->redirect_uri));
+						OIDC_DISC_RT_PARAM, oidc_util_escape_string(r, current_url),
+						OIDC_DISC_CB_PARAM,
+						oidc_util_escape_string(r, cfg->redirect_uri));
 
 		/* log what we're about to do */
 		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
@@ -901,14 +920,14 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 	// TODO: yes, we could use some templating here...
 	const char *s =
 			"<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd\">"
-					"<html>\n"
-					"	<head>\n"
-					"		<meta http-equiv=\"Content-Type\" content=\"text/html;charset=UTF-8\"/>\n"
-					"		<title>OpenID Connect Provider Discovery</title>\n"
-					"	</head>\n"
-					"	<body>\n"
-					"		<center>\n"
-					"			<h3>Select your OpenID Connect Identity Provider</h3>\n";
+			"<html>\n"
+			"	<head>\n"
+			"		<meta http-equiv=\"Content-Type\" content=\"text/html;charset=UTF-8\"/>\n"
+			"		<title>OpenID Connect Provider Discovery</title>\n"
+			"	</head>\n"
+			"	<body>\n"
+			"		<center>\n"
+			"			<h3>Select your OpenID Connect Identity Provider</h3>\n";
 
 	/* list all configured providers in there */
 	int i;
@@ -1050,7 +1069,7 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 		issuer = apr_psprintf(r->pool, "%s",
 				((strstr(issuer, "http://") == issuer)
 						|| (strstr(issuer, "https://") == issuer)) ?
-						issuer : apr_psprintf(r->pool, "https://%s", issuer));
+								issuer : apr_psprintf(r->pool, "https://%s", issuer));
 	}
 
 	/* strip trailing '/' */
@@ -1121,7 +1140,7 @@ int oidc_handle_logout(request_rec *r, session_rec *session) {
 /*
  * main routine: handle OpenID Connect authentication
  */
-static int oidc_check_userid_openid_openidc(request_rec *r, oidc_cfg *c) {
+static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 
 	/* check if this is a sub-request or an initial request */
 	if (ap_is_initial_req(r)) {
@@ -1208,7 +1227,8 @@ static int oidc_check_userid_openid_openidc(request_rec *r, oidc_cfg *c) {
  */
 int oidc_check_user_id(request_rec *r) {
 
-	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg *c = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
 
 	/* log some stuff about the incoming HTTP request */
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
@@ -1222,7 +1242,7 @@ int oidc_check_user_id(request_rec *r) {
 	/* see if we've configured OpenID Connect user authentication for this request */
 	if (apr_strnatcasecmp((const char *) ap_auth_type(r), "openid-connect")
 			== 0)
-		return oidc_check_userid_openid_openidc(r, c);
+		return oidc_check_userid_openidc(r, c);
 
 	/* see if we've configured OAuth 2.0 access control for this request */
 	if (apr_strnatcasecmp((const char *) ap_auth_type(r), "oauth20") == 0)
@@ -1242,6 +1262,9 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args, const 
 	/* get the set of claims from the request state (they've been set in the authentication part earlier */
 	apr_json_value_t *attrs = (apr_json_value_t *)oidc_request_state_get(r, OIDC_CLAIMS_SESSION_KEY);
 
+	/* if no claims, use the id_token itself */
+	if (attrs == NULL) attrs = (apr_json_value_t *)oidc_request_state_get(r, OIDC_IDTOKEN_SESSION_KEY);
+
 	/* dispatch to the >=2.4 specific authz routine */
 	return oidc_authz_worker24(r, attrs, require_args);
 }
@@ -1254,7 +1277,12 @@ int oidc_auth_checker(request_rec *r) {
 
 	/* get the set of claims from the request state (they've been set in the authentication part earlier) */
 	apr_json_value_t *attrs = (apr_json_value_t *) oidc_request_state_get(r,
-	OIDC_CLAIMS_SESSION_KEY);
+			OIDC_CLAIMS_SESSION_KEY);
+
+	/* if no claims, use the id_token itself */
+	if (attrs == NULL)
+		attrs = (apr_json_value_t *) oidc_request_state_get(r,
+				OIDC_IDTOKEN_SESSION_KEY);
 
 	/* get the Require statements */
 	const apr_array_header_t * const reqs_arr = ap_requires(r);
@@ -1265,7 +1293,7 @@ int oidc_auth_checker(request_rec *r) {
 	if (!reqs_arr) {
 		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 				"No require statements found, "
-						"so declining to perform authorization.");
+				"so declining to perform authorization.");
 		return DECLINED;
 	}
 
