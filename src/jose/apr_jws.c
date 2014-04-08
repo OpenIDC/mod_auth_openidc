@@ -125,7 +125,7 @@ static const EVP_MD *apr_jws_crypto_alg_to_evp(request_rec *r, const char *alg) 
 /*
  * verify HMAC signature on JWT
  */
-static apr_byte_t apr_jws_verify_hmac(request_rec *r, apr_jwt_t *jwt,
+apr_byte_t apr_jws_verify_hmac(request_rec *r, apr_jwt_t *jwt,
 		const char *secret) {
 
 	/* get the OpenSSL digest function */
@@ -186,7 +186,7 @@ static int apr_jws_alg_to_rsa_openssl_padding(const char *alg) {
 /*
  * verify HMAC signature on JWT
  */
-static apr_byte_t apr_jws_verify_rsa(request_rec *r, apr_jwt_t *jwt,
+apr_byte_t apr_jws_verify_rsa(request_rec *r, apr_jwt_t *jwt,
 		apr_jwk_t *jwk) {
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
@@ -272,38 +272,28 @@ static apr_byte_t apr_jws_verify_rsa(request_rec *r, apr_jwt_t *jwt,
 }
 
 /*
- * verify the signature on a JWT token
+ * helper function to determine the type of signature on a JWT
  */
-apr_byte_t apr_jws_verify(request_rec *r, apr_jwt_t *jwt, const char *secret,
-		apr_jwk_t *jwk) {
+static apr_byte_t apr_jws_signature_starts_with(request_rec *r, const char *alg, const char *match, int n) {
 
-	// TODO: probably move to separate validation function
-	if (jwt->header.alg == NULL) {
+	if (alg == NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jws_verify: JWT header object did not specify an algorithm");
+				"apr_jws_signature_starts_with: JWT header object did not specify an algorithm");
 		return FALSE;
 	}
 
-	if (strncmp(jwt->header.alg, "HS", 2) == 0) {
+	return (strncmp(alg, match, n) == 0);
+}
+/*
+ * check if the signature on the JWT is HMAC-based
+ */
+apr_byte_t apr_jws_signature_is_hmac(request_rec *r, apr_jwt_t *jwt) {
+	return apr_jws_signature_starts_with(r, jwt->header.alg, "HS", 2);
+}
 
-		/* verify the HMAC signature on the JWT */
-		if (apr_jws_verify_hmac(r, jwt, secret) == FALSE)
-			return FALSE;
-
-	} else if (strncmp(jwt->header.alg, "RS", 2) == 0) {
-
-		/* verify the RSA signature on the JWT */
-		if (apr_jws_verify_rsa(r, jwt, jwk) == FALSE)
-			return FALSE;
-
-	} else {
-
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jws_verify: JWT header contains an unsupported algorithm: %s",
-				jwt->header.alg);
-
-		return FALSE;
-	}
-
-	return TRUE;
+/*
+ * check if the signature on the JWT is RSA-based
+ */
+apr_byte_t apr_jws_signature_is_rsa(request_rec *r, apr_jwt_t *jwt) {
+	return apr_jws_signature_starts_with(r, jwt->header.alg, "RS", 2);
 }

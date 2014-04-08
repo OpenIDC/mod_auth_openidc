@@ -134,7 +134,11 @@ apr_byte_t apr_jwk_parse_string(request_rec *r, const char *s_json,
 		apr_jwk_t **j_jwk);
 
 /* JWS */
-apr_byte_t apr_jws_verify(request_rec *r, apr_jwt_t *jwt, const char *secret,
+apr_byte_t apr_jws_signature_is_hmac(request_rec *r, apr_jwt_t *jwt);
+apr_byte_t apr_jws_signature_is_rsa(request_rec *r, apr_jwt_t *jwt);
+apr_byte_t apr_jws_verify_hmac(request_rec *r, apr_jwt_t *jwt,
+		const char *secret);
+apr_byte_t apr_jws_verify_rsa(request_rec *r, apr_jwt_t *jwt,
 		apr_jwk_t *jwk);
 
 #endif /* _APR_JWT_H_ */

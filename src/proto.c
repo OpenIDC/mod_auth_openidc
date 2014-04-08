@@ -482,40 +482,43 @@ static apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r,
 		oidc_cfg *cfg, oidc_provider_t *provider, apr_jwt_t *jwt,
 		apr_byte_t *refresh) {
 
-	// TODO:
-	// TODO: only do this for non-HMAC...
-	// TODO:
+	apr_byte_t result = FALSE;
 
-	/* get the key from the JWKs that corresponds with the key specified in the header */
-	apr_jwk_t *jwk = oidc_proto_get_key_from_jwk_uri(r, cfg, provider,
-			&jwt->header, refresh);
+	if (apr_jws_signature_is_hmac(r, jwt)) {
 
-	if (jwk == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_idtoken_verify_signature: could not find a key in the JSON Web Keys");
-		if (*refresh == FALSE) {
-			*refresh = TRUE;
-			return oidc_proto_idtoken_verify_signature(r, cfg, provider, jwt,
-					refresh);
+		result = apr_jws_verify_hmac(r, jwt, provider->client_secret);
+
+	} else if (apr_jws_signature_is_rsa(r, jwt)) {
+
+		/* get the key from the JWKs that corresponds with the key specified in the header */
+		apr_jwk_t *jwk = oidc_proto_get_key_from_jwk_uri(r, cfg, provider,
+				&jwt->header, refresh);
+
+		if (jwk != NULL) {
+
+			result = apr_jws_verify_rsa(r, jwt, jwk);
+
+		} else {
+
+			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+					"oidc_proto_idtoken_verify_signature: could not find a key in the JSON Web Keys");
+
+			if (*refresh == FALSE) {
+
+				/* do it again, forcing a JWKS refresh */
+				*refresh = TRUE;
+				result = oidc_proto_idtoken_verify_signature(r, cfg, provider, jwt, refresh);
+			}
 		}
-		return FALSE;
 	}
 
-	if (apr_jws_verify(r, jwt, provider->client_secret, jwk) == FALSE) {
-		if (*refresh == FALSE) {
-			*refresh = TRUE;
-			return oidc_proto_idtoken_verify_signature(r, cfg, provider, jwt,
-					refresh);
-		}
-		return FALSE;
+	if (result == TRUE) {
+		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+				"oidc_proto_idtoken_verify_signature: signature with algorithm \"%s\" verified OK!",
+				jwt->header.alg);
 	}
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_idtoken_verify_signature: signature with algorithm \"%s\" verified OK!",
-			jwt->header.alg);
-
-	/* if we've made it this far, all is OK */
-	return TRUE;
+	return result;
 }
 
 /*
