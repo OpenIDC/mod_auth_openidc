@@ -60,85 +60,125 @@
 
 #include "../json/apr_json.h"
 
-/* a parsed JWT "element", header or payload, JSON+raw*/
+/*
+ * JSON Web Token handling
+ */
+
+/* a parsed JWT "element", header or payload */
 typedef struct apr_jwt_value_t {
+	/* parsed JSON struct representation */
 	apr_json_value_t *json;
+	/* string representation */
 	char *str;
 } apr_jwt_value_t;
 
 /* a parsed JWT header */
 typedef struct apr_jwt_header_t {
+	/* parsed header value */
 	apr_jwt_value_t value;
+	/* JWT "alg" claim value; signing algorithm */
 	char *alg;
+	/* JWT "kid" claim value; key identifier */
 	char *kid;
 } apr_jwt_header_t;
 
 /* parsed JWT payload */
 typedef struct apr_jwt_payload_t {
+	/* parsed payload value */
 	apr_jwt_value_t value;
+	/* JWT "iss" claim value; JWT issuer */
 	char *iss;
+	/* JWT "sub" claim value; subject/principal */
 	char *sub;
+	/* parsed JWT "exp" claim value; token expiry */
 	apr_time_t exp;
+	/* parsed JWT "iat" claim value; issued-at timestamp */
 	apr_time_t iat;
 } apr_jwt_payload_t;
 
 /* parsed JWT signature */
 typedef struct apr_jwt_signature_t {
+	/* raw (base64url-decoded) signature value */
 	unsigned char *bytes;
+	/* length of the raw signature value */
 	int length;
 } apr_jwt_signature_t;
 
 /* parsed JWT */
 typedef struct apr_jwt_t {
+	/* parsed JWT header */
 	apr_jwt_header_t header;
+	/* parsed JWT payload */
 	apr_jwt_payload_t payload;
+	/* decoded JWT signature */
 	apr_jwt_signature_t signature;
+	/* base64url-encoded header+payload (for signature verification purposes) */
 	char *message;
 } apr_jwt_t;
-
-/* JWK key type */
-typedef enum apr_jwk_type_e {
-	APR_JWK_KEY_RSA,
-} apr_jwk_type_e;
-
-/* parsed RSA JWK key */
-typedef struct apr_jwk_key_rsa_t {
-	unsigned char *modulus;
-	int modulus_len;
-	unsigned char *exponent;
-	int exponent_len;
-} apr_jwk_key_rsa_t;
-
-/* parsed JWK key */
-typedef struct apr_jwk_t {
-	apr_jwt_value_t value;
-	apr_jwk_type_e type;
-	union {
-		apr_jwk_key_rsa_t *rsa;
-	} key;
-} apr_jwk_t;
 
 /* helper */
 int apr_jwt_base64url_decode(request_rec *r, char **dst, const char *src,
 		int padding);
 
-/* JWT */
-apr_byte_t apr_jwt_parse_string(request_rec *r, apr_jwt_value_t *value,
+/* return a string claim value from a JSON Web Token */
+apr_byte_t apr_jwt_get_string(request_rec *r, apr_jwt_value_t *value,
 		const char *claim_name, char **result);
-apr_byte_t apr_jwt_parse(request_rec *r, const char *s_json, apr_jwt_t **j_jwk);
+/* parse a string in to a JSON Web Token struct */
+apr_byte_t apr_jwt_parse(request_rec *r, const char *s_json, apr_jwt_t **j_jwt);
 
-/* JWK */
+/*
+ * JSON Web Key handling
+ */
+
+/* JWK key type */
+typedef enum apr_jwk_type_e {
+	/* RSA JWT key type */
+	APR_JWK_KEY_RSA,
+} apr_jwk_type_e;
+
+/* parsed RSA JWK key */
+typedef struct apr_jwk_key_rsa_t {
+	/* (binary) RSA modulus */
+	unsigned char *modulus;
+	/* length of the binary RSA modulus */
+	int modulus_len;
+	/* (binary) RSA exponent */
+	unsigned char *exponent;
+	/* length of the binary RSA exponent */
+	int exponent_len;
+} apr_jwk_key_rsa_t;
+
+/* parsed JWK key */
+typedef struct apr_jwk_t {
+	/* parsed JWK/JSON value */
+	apr_jwt_value_t value;
+	/* type of JWK key */
+	apr_jwk_type_e type;
+	/* union/pointer to parsed JWK key */
+	union {
+		apr_jwk_key_rsa_t *rsa;
+	} key;
+} apr_jwk_t;
+
+/* parse a JSON representation in to a JSON Web Key struct (also storing the string representation */
 apr_byte_t apr_jwk_parse_json(request_rec *r, apr_json_value_t *j_json,
 		const char *s_json, apr_jwk_t **j_jwk);
+/* parse a string in to a JSON Web Key struct */
 apr_byte_t apr_jwk_parse_string(request_rec *r, const char *s_json,
 		apr_jwk_t **j_jwk);
 
-/* JWS */
+/*
+ * JSON Web Signature handling
+ */
+
+/* check if the signature on a JWT is of type HMAC */
 apr_byte_t apr_jws_signature_is_hmac(request_rec *r, apr_jwt_t *jwt);
+/* check if the signature on a JWT is of type RSA */
 apr_byte_t apr_jws_signature_is_rsa(request_rec *r, apr_jwt_t *jwt);
+/* verify the HMAC signature on a JWT */
 apr_byte_t apr_jws_verify_hmac(request_rec *r, apr_jwt_t *jwt,
 		const char *secret);
-apr_byte_t apr_jws_verify_rsa(request_rec *r, apr_jwt_t *jwt,
-		apr_jwk_t *jwk);
+/* verify the RSA signature on a JWT */
+apr_byte_t apr_jws_verify_rsa(request_rec *r, apr_jwt_t *jwt, apr_jwk_t *jwk);
 
 #endif /* _APR_JWT_H_ */

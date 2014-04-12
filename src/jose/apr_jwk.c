@@ -72,7 +72,7 @@ static apr_byte_t apr_jwk_parse_rsa(request_rec *r, apr_jwk_t *jwk) {
 
 	/* parse the modulus */
 	char *s_modulus = NULL;
-	apr_jwt_parse_string(r, &jwk->value, "n", &s_modulus);
+	apr_jwt_get_string(r, &jwk->value, "n", &s_modulus);
 	if (s_modulus == NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"apr_jwk_parse_rsa: JWK object did not contain an \"n\" string");
@@ -83,7 +83,7 @@ static apr_byte_t apr_jwk_parse_rsa(request_rec *r, apr_jwk_t *jwk) {
 
 	/* parse the exponent */
 	char *s_exponent = NULL;
-	apr_jwt_parse_string(r, &jwk->value, "e", &s_exponent);
+	apr_jwt_get_string(r, &jwk->value, "e", &s_exponent);
 	if (s_exponent == NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"apr_jwk_parse_rsa: JWK object did not contain an \"e\" string");
@@ -126,7 +126,7 @@ apr_byte_t apr_jwk_parse_json(request_rec *r, apr_json_value_t *j_json,
 
 	/* get the (optional) key type */
 	char *kty = NULL;
-	if (apr_jwt_parse_string(r, &jwk->value, "kty", &kty) == FALSE)
+	if (apr_jwt_get_string(r, &jwk->value, "kty", &kty) == FALSE)
 		return FALSE;
 
 	/* kty is mandatory */

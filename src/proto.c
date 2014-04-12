@@ -165,7 +165,7 @@ static apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
 
 	/* get the "nonce" value in the id_token payload */
 	char *j_nonce = NULL;
-	apr_jwt_parse_string(r, &jwt->payload.value, "nonce", &j_nonce);
+	apr_jwt_get_string(r, &jwt->payload.value, "nonce", &j_nonce);
 
 	if (j_nonce == NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
@@ -541,7 +541,7 @@ static apr_byte_t oidc_proto_set_remote_user(request_rec *r, oidc_cfg *c,
 
 	/* extract the username claim (default: "sub") from the id_token payload */
 	char *username = NULL;
-	apr_jwt_parse_string(r, &jwt->payload.value, claim_name, &username);
+	apr_jwt_get_string(r, &jwt->payload.value, claim_name, &username);
 
 	if (username == NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,

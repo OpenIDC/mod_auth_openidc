@@ -105,7 +105,7 @@ int apr_jwt_base64url_decode(request_rec *r, char **dst, const char *src,
 }
 
 /*
- * parse object from string from
+ * parse JSON object from string in to JWT value
  */
 static apr_byte_t apr_jwt_base64url_decode_object(request_rec *r,
 		const char *str, apr_jwt_value_t *value) {
@@ -143,9 +143,9 @@ static apr_byte_t apr_jwt_base64url_decode_object(request_rec *r,
 }
 
 /*
- * parse (optional) string from JWT
+ * get (optional) string from JWT
  */
-apr_byte_t apr_jwt_parse_string(request_rec *r, apr_jwt_value_t *value,
+apr_byte_t apr_jwt_get_string(request_rec *r, apr_jwt_value_t *value,
 		const char *claim_name, char **result) {
 	*result = NULL;
 	apr_json_value_t *v = apr_hash_get(value->json->value.object, claim_name,
@@ -155,7 +155,7 @@ apr_byte_t apr_jwt_parse_string(request_rec *r, apr_jwt_value_t *value,
 			*result = apr_pstrdup(r->pool, v->value.string.p);
 		} else {
 			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"apr_jwt_parse_string: JWT value contains a \"%s\" value but it is not a string: %s",
+					"apr_jwt_get_string: JWT value contains a \"%s\" value but it is not a string: %s",
 					claim_name, value->str);
 		}
 	}
@@ -196,7 +196,7 @@ static apr_byte_t apr_jwt_parse_header(request_rec *r, const char *s_header,
 		return FALSE;
 
 	/* parse the (optional) signing algorithm */
-	apr_jwt_parse_string(r, &header->value, "alg", &header->alg);
+	apr_jwt_get_string(r, &header->value, "alg", &header->alg);
 
 	/* check that the mandatory algorithm was set */
 	// TODO: do supported algorithm check here?
@@ -208,7 +208,7 @@ static apr_byte_t apr_jwt_parse_header(request_rec *r, const char *s_header,
 	}
 
 	/* parse the (optional) kid */
-	apr_jwt_parse_string(r, &header->value, "kid", &header->kid);
+	apr_jwt_get_string(r, &header->value, "kid", &header->kid);
 
 	return TRUE;
 }
@@ -227,7 +227,7 @@ static apr_byte_t apr_jwt_parse_payload(request_rec *r, const char *s_payload,
 		return FALSE;
 
 	/* get the (optional) "issuer" value from the JSON payload */
-	if (apr_jwt_parse_string(r, &payload->value, "iss", &payload->iss) == FALSE)
+	if (apr_jwt_get_string(r, &payload->value, "iss", &payload->iss) == FALSE)
 		return FALSE;
 
 	/* get the (optional) "exp" value from the JSON payload */
@@ -241,7 +241,7 @@ static apr_byte_t apr_jwt_parse_payload(request_rec *r, const char *s_payload,
 		return FALSE;
 
 	/* get the (optional) "sub" value from the JSON payload */
-	if (apr_jwt_parse_string(r, &payload->value, "sub", &payload->sub) == FALSE)
+	if (apr_jwt_get_string(r, &payload->value, "sub", &payload->sub) == FALSE)
 		return FALSE;
 
 	return TRUE;
