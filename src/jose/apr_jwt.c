@@ -60,7 +60,8 @@
  */
 int apr_jwt_base64url_decode(apr_pool_t *pool, char **dst, const char *src,
 		int padding) {
-	if (src == NULL) return -1;
+	if (src == NULL)
+		return -1;
 	char *dec = apr_pstrdup(pool, src);
 	int i = 0;
 	while (dec[i] != '\0') {
@@ -98,16 +99,21 @@ static apr_byte_t apr_jwt_base64url_decode_object(apr_pool_t *pool,
 		const char *str, apr_jwt_value_t *value) {
 
 	/* base64url-decode the string representation into value->str */
-	if (apr_jwt_base64url_decode(pool, &value->str, str, 1) < 0) return FALSE;
+	if (apr_jwt_base64url_decode(pool, &value->str, str, 1) < 0)
+		return FALSE;
 
 	/* decode the string in to a JSON structure into value->json */
-	if (apr_json_decode(&value->json, value->str, strlen(value->str), pool) != APR_SUCCESS) return FALSE;
+	if (apr_json_decode(&value->json, value->str, strlen(value->str),
+			pool) != APR_SUCCESS)
+		return FALSE;
 
 	/* check that we've actually got a JSON value back */
-	if (value->json == NULL) return FALSE;
+	if (value->json == NULL)
+		return FALSE;
 
 	/* check that the value is a JSON object */
-	if (value->json->type != APR_JSON_OBJECT) return FALSE;
+	if (value->json->type != APR_JSON_OBJECT)
+		return FALSE;
 
 	return TRUE;
 }
@@ -117,7 +123,8 @@ static apr_byte_t apr_jwt_base64url_decode_object(apr_pool_t *pool,
  */
 apr_byte_t apr_jwt_get_string(apr_pool_t *pool, apr_jwt_value_t *value,
 		const char *claim_name, char **result) {
-	apr_json_value_t *v = apr_hash_get(value->json->value.object, claim_name, APR_HASH_KEY_STRING);
+	apr_json_value_t *v = apr_hash_get(value->json->value.object, claim_name,
+			APR_HASH_KEY_STRING);
 	if ((v != NULL) && (v->type == APR_JSON_STRING)) {
 		*result = apr_pstrdup(pool, v->value.string.p);
 	} else {
@@ -155,7 +162,8 @@ static apr_byte_t apr_jwt_parse_header(apr_pool_t *pool, const char *s_header,
 	apr_jwt_get_string(pool, &header->value, "alg", &header->alg);
 
 	/* check that the mandatory algorithm was set */
-	if (header->alg == NULL) return FALSE;
+	if (header->alg == NULL)
+		return FALSE;
 
 	/* parse the (optional) kid */
 	apr_jwt_get_string(pool, &header->value, "kid", &header->kid);
@@ -170,7 +178,8 @@ static apr_byte_t apr_jwt_parse_payload(apr_pool_t *pool, const char *s_payload,
 		apr_jwt_payload_t *payload) {
 
 	/* decode the JWT JSON payload */
-	if (apr_jwt_base64url_decode_object(pool, s_payload, &payload->value) == FALSE)
+	if (apr_jwt_base64url_decode_object(pool, s_payload,
+			&payload->value) == FALSE)
 		return FALSE;
 
 	/* get the (optional) "issuer" value from the JSON payload */
@@ -200,8 +209,8 @@ static apr_byte_t apr_jwt_parse_payload(apr_pool_t *pool, const char *s_payload,
 static apr_byte_t apr_jwt_parse_signature(apr_pool_t *pool,
 		const char *s_signature, apr_jwt_signature_t *signature) {
 
-	signature->length = apr_jwt_base64url_decode(pool, (char **) &signature->bytes,
-			s_signature, 1);
+	signature->length = apr_jwt_base64url_decode(pool,
+			(char **) &signature->bytes, s_signature, 1);
 
 	return (signature->length < 0);
 }
@@ -209,7 +218,8 @@ static apr_byte_t apr_jwt_parse_signature(apr_pool_t *pool,
 /*
  * parse a JSON Web Token
  */
-apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json, apr_jwt_t **j_jwt) {
+apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
+		apr_jwt_t **j_jwt) {
 
 	*j_jwt = apr_pcalloc(pool, sizeof(apr_jwt_t));
 	apr_jwt_t *jwt = *j_jwt;
@@ -217,7 +227,8 @@ apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json, apr_jwt_t **j_jwt
 	/* find the header */
 	char *s = apr_pstrdup(pool, s_json);
 	char *p = strchr(s, '.');
-	if (p == NULL) return FALSE;
+	if (p == NULL)
+		return FALSE;
 	*p = '\0';
 
 	/* store the base64url-encoded header for signature verification purposes */
@@ -230,7 +241,8 @@ apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json, apr_jwt_t **j_jwt
 	/* find the payload */
 	s = ++p;
 	p = strchr(s, '.');
-	if (p == NULL) return FALSE;
+	if (p == NULL)
+		return FALSE;
 	*p = '\0';
 
 	/* concat the base64url-encoded payload to the base64url-encoded header for signature verification purposes */

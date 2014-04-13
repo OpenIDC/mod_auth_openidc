@@ -86,14 +86,17 @@ static char *apr_jwt_alg_to_openssl_digest(const char *alg) {
 /*
  * return an EVP structure for the specified algorithm
  */
-static const EVP_MD *apr_jws_crypto_alg_to_evp(apr_pool_t *pool, const char *alg) {
+static const EVP_MD *apr_jws_crypto_alg_to_evp(apr_pool_t *pool,
+		const char *alg) {
 	const EVP_MD *result = NULL;
 
 	char *digest = apr_jwt_alg_to_openssl_digest(alg);
-	if (digest == NULL) return NULL;
+	if (digest == NULL)
+		return NULL;
 
 	result = EVP_get_digestbyname(digest);
-	if (result == NULL) return NULL;
+	if (result == NULL)
+		return NULL;
 
 	return result;
 }
@@ -122,13 +125,16 @@ apr_byte_t apr_jws_verify_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
 	unsigned char md[EVP_MAX_MD_SIZE];
 
 	/* apply the HMAC function to the message with the provided key */
-	if (!HMAC(digest, key, key_len, msg, msg_len, md, &md_len)) return FALSE;
+	if (!HMAC(digest, key, key_len, msg, msg_len, md, &md_len))
+		return FALSE;
 
 	/* check that the length of the hash matches what was provided to us in the signature */
-	if (md_len != jwt->signature.length) return FALSE;
+	if (md_len != jwt->signature.length)
+		return FALSE;
 
 	/* do a comparison of the provided hash value against calculated hash value */
-	if (memcmp(md, jwt->signature.bytes, md_len) != 0) return FALSE;
+	if (memcmp(md, jwt->signature.bytes, md_len) != 0)
+		return FALSE;
 
 	/* all OK if we got to here */
 	return TRUE;
@@ -149,8 +155,7 @@ static int apr_jws_alg_to_rsa_openssl_padding(const char *alg) {
 /*
  * verify HMAC signature on JWT
  */
-apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt,
-		apr_jwk_t *jwk) {
+apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk) {
 
 	apr_byte_t rc = FALSE;
 
@@ -184,26 +189,23 @@ apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt,
 		goto end;
 	}
 	if (!EVP_PKEY_CTX_set_rsa_padding(ctx.pctx,
-			apr_jws_alg_to_rsa_openssl_padding(jwt->header.alg))) {
+			apr_jws_alg_to_rsa_openssl_padding(jwt->header.alg)))
 		goto end;
-	}
 
-	if (!EVP_VerifyInit_ex(&ctx, digest, NULL)) {
+	if (!EVP_VerifyInit_ex(&ctx, digest, NULL))
 		goto end;
-	}
 
-	if (!EVP_VerifyUpdate(&ctx, jwt->message, strlen(jwt->message))) {
+	if (!EVP_VerifyUpdate(&ctx, jwt->message, strlen(jwt->message)))
 		goto end;
-	}
 
 	if (!EVP_VerifyFinal(&ctx, (const unsigned char *) jwt->signature.bytes,
-			jwt->signature.length, pRsaKey)) {
+			jwt->signature.length, pRsaKey))
 		goto end;
-	}
 
 	rc = TRUE;
 
-	end: if (pRsaKey) {
+end:
+	if (pRsaKey) {
 		EVP_PKEY_free(pRsaKey);
 	} else if (pubkey) {
 		RSA_free(pubkey);
@@ -216,8 +218,10 @@ apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt,
 /*
  * helper function to determine the type of signature on a JWT
  */
-static apr_byte_t apr_jws_signature_starts_with(apr_pool_t *pool, const char *alg, const char *match, int n) {
-	if (alg == NULL) return FALSE;
+static apr_byte_t apr_jws_signature_starts_with(apr_pool_t *pool,
+		const char *alg, const char *match, int n) {
+	if (alg == NULL)
+		return FALSE;
 	return (strncmp(alg, match, n) == 0);
 }
 /*

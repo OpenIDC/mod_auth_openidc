@@ -65,7 +65,8 @@ static apr_byte_t apr_jwk_parse_rsa(apr_pool_t *pool, apr_jwk_t *jwk) {
 	/* parse the modulus */
 	char *s_modulus = NULL;
 	apr_jwt_get_string(pool, &jwk->value, "n", &s_modulus);
-	if (s_modulus == NULL) return FALSE;
+	if (s_modulus == NULL)
+		return FALSE;
 
 	/* parse the modulus size */
 	jwk->key.rsa->modulus_len = apr_jwt_base64url_decode(pool,
@@ -74,7 +75,8 @@ static apr_byte_t apr_jwk_parse_rsa(apr_pool_t *pool, apr_jwk_t *jwk) {
 	/* parse the exponent */
 	char *s_exponent = NULL;
 	apr_jwt_get_string(pool, &jwk->value, "e", &s_exponent);
-	if (s_exponent == NULL) return FALSE;
+	if (s_exponent == NULL)
+		return FALSE;
 
 	/* parse the exponent size */
 	jwk->key.rsa->exponent_len = apr_jwt_base64url_decode(pool,
@@ -91,10 +93,12 @@ apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, apr_json_value_t *j_json,
 		const char *s_json, apr_jwk_t **j_jwk) {
 
 	/* check that we've actually got a JSON value back */
-	if (j_json == NULL) return FALSE;
+	if (j_json == NULL)
+		return FALSE;
 
 	/* check that the value is a JSON object */
-	if (j_json->type != APR_JSON_OBJECT) return FALSE;
+	if (j_json->type != APR_JSON_OBJECT)
+		return FALSE;
 
 	/* allocate memory for the JWK */
 	*j_jwk = apr_pcalloc(pool, sizeof(apr_jwk_t));
@@ -110,10 +114,12 @@ apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, apr_json_value_t *j_json,
 		return FALSE;
 
 	/* kty is mandatory */
-	if (kty == NULL) return FALSE;
+	if (kty == NULL)
+		return FALSE;
 
 	/* parse the key */
-	return (apr_strnatcmp(kty, "RSA") == 0) ? apr_jwk_parse_rsa(pool, jwk) : FALSE;
+	return (apr_strnatcmp(kty, "RSA") == 0) ?
+			apr_jwk_parse_rsa(pool, jwk) : FALSE;
 }
 
 /*
@@ -125,8 +131,8 @@ apr_byte_t apr_jwk_parse_string(apr_pool_t *pool, const char *s_json,
 	apr_json_value_t *j_value = NULL;
 
 	/* decode the string in to a JSON structure */
-	if (apr_json_decode(&j_value, s_json, strlen(s_json),
-			pool) != APR_SUCCESS) return FALSE;
+	if (apr_json_decode(&j_value, s_json, strlen(s_json), pool) != APR_SUCCESS)
+		return FALSE;
 
 	return apr_jwk_parse_json(pool, j_value, s_json, j_jwk);
 }
