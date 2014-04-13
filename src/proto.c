@@ -165,7 +165,7 @@ static apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
 
 	/* get the "nonce" value in the id_token payload */
 	char *j_nonce = NULL;
-	apr_jwt_get_string(r, &jwt->payload.value, "nonce", &j_nonce);
+	apr_jwt_get_string(r->pool, &jwt->payload.value, "nonce", &j_nonce);
 
 	if (j_nonce == NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
@@ -408,7 +408,7 @@ static apr_jwk_t *oidc_proto_get_key_from_jwks(request_rec *r,
 			ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 					"oidc_proto_get_key_from_jwks: no kid to match, return first key found");
 
-			apr_jwk_parse_json(r, elem, NULL, &jwk);
+			apr_jwk_parse_json(r->pool, elem, NULL, &jwk);
 			break;
 		}
 		apr_json_value_t *ekid = apr_hash_get(elem->value.object, "kid",
@@ -423,7 +423,7 @@ static apr_jwk_t *oidc_proto_get_key_from_jwks(request_rec *r,
 					"oidc_proto_get_key_from_jwks: found matching kid: \"%s\"",
 					jwt_hdr->kid);
 
-			apr_jwk_parse_json(r, elem, NULL, &jwk);
+			apr_jwk_parse_json(r->pool, elem, NULL, &jwk);
 			break;
 		}
 	}
@@ -484,11 +484,11 @@ static apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r,
 
 	apr_byte_t result = FALSE;
 
-	if (apr_jws_signature_is_hmac(r, jwt)) {
+	if (apr_jws_signature_is_hmac(r->pool, jwt)) {
 
-		result = apr_jws_verify_hmac(r, jwt, provider->client_secret);
+		result = apr_jws_verify_hmac(r->pool, jwt, provider->client_secret);
 
-	} else if (apr_jws_signature_is_rsa(r, jwt)) {
+	} else if (apr_jws_signature_is_rsa(r->pool, jwt)) {
 
 		/* get the key from the JWKs that corresponds with the key specified in the header */
 		apr_jwk_t *jwk = oidc_proto_get_key_from_jwk_uri(r, cfg, provider,
@@ -496,7 +496,7 @@ static apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r,
 
 		if (jwk != NULL) {
 
-			result = apr_jws_verify_rsa(r, jwt, jwk);
+			result = apr_jws_verify_rsa(r->pool, jwt, jwk);
 
 		} else {
 
@@ -541,7 +541,7 @@ static apr_byte_t oidc_proto_set_remote_user(request_rec *r, oidc_cfg *c,
 
 	/* extract the username claim (default: "sub") from the id_token payload */
 	char *username = NULL;
-	apr_jwt_get_string(r, &jwt->payload.value, claim_name, &username);
+	apr_jwt_get_string(r->pool, &jwt->payload.value, claim_name, &username);
 
 	if (username == NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
@@ -571,7 +571,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_proto_parse_idtoken: entering");
 
-	if (apr_jwt_parse(r, id_token, jwt) == FALSE)
+	if (apr_jwt_parse(r->pool, id_token, jwt) == FALSE)
 		return FALSE;
 
 	// verify signature unless we did 'code' flow and the algorithm is NONE

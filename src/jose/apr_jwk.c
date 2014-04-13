@@ -53,43 +53,31 @@
 
 #include "apr_jose.h"
 
-// TODO: complete separation
-//       a) remove references to OIDC_DEBUG
-//       b) remove references to request_rec (use only pool), so no printouts (comparable to apr_json_decode/encode)
-
-#ifndef OIDC_DEBUG
-#define OIDC_DEBUG APLOG_DEBUG
-#endif
-
 /*
  * parse an RSA JWK
  */
-static apr_byte_t apr_jwk_parse_rsa(request_rec *r, apr_jwk_t *jwk) {
+static apr_byte_t apr_jwk_parse_rsa(apr_pool_t *pool, apr_jwk_t *jwk) {
 
 	/* allocated space and set key type */
 	jwk->type = APR_JWK_KEY_RSA;
-	jwk->key.rsa = apr_pcalloc(r->pool, sizeof(apr_jwk_key_rsa_t));
+	jwk->key.rsa = apr_pcalloc(pool, sizeof(apr_jwk_key_rsa_t));
 
 	/* parse the modulus */
 	char *s_modulus = NULL;
-	apr_jwt_get_string(r, &jwk->value, "n", &s_modulus);
-	if (s_modulus == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jwk_parse_rsa: JWK object did not contain an \"n\" string");
-		return FALSE;
-	}
-	jwk->key.rsa->modulus_len = apr_jwt_base64url_decode(r,
+	apr_jwt_get_string(pool, &jwk->value, "n", &s_modulus);
+	if (s_modulus == NULL) return FALSE;
+
+	/* parse the modulus size */
+	jwk->key.rsa->modulus_len = apr_jwt_base64url_decode(pool,
 			(char **) &jwk->key.rsa->modulus, s_modulus, 1);
 
 	/* parse the exponent */
 	char *s_exponent = NULL;
-	apr_jwt_get_string(r, &jwk->value, "e", &s_exponent);
-	if (s_exponent == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jwk_parse_rsa: JWK object did not contain an \"e\" string");
-		return FALSE;
-	}
-	jwk->key.rsa->exponent_len = apr_jwt_base64url_decode(r,
+	apr_jwt_get_string(pool, &jwk->value, "e", &s_exponent);
+	if (s_exponent == NULL) return FALSE;
+
+	/* parse the exponent size */
+	jwk->key.rsa->exponent_len = apr_jwt_base64url_decode(pool,
 			(char **) &jwk->key.rsa->exponent, s_exponent, 1);
 
 	/* that went well */
@@ -99,25 +87,17 @@ static apr_byte_t apr_jwk_parse_rsa(request_rec *r, apr_jwk_t *jwk) {
 /*
  * parse JSON JWK
  */
-apr_byte_t apr_jwk_parse_json(request_rec *r, apr_json_value_t *j_json,
+apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, apr_json_value_t *j_json,
 		const char *s_json, apr_jwk_t **j_jwk) {
 
 	/* check that we've actually got a JSON value back */
-	if (j_json == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jwk_parse: JWK JSON value is NULL, abort parsing");
-		return FALSE;
-	}
+	if (j_json == NULL) return FALSE;
 
 	/* check that the value is a JSON object */
-	if (j_json->type != APR_JSON_OBJECT) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jwk_parse: JWK JSON value did not contain a JSON object, abort parsing");
-		return FALSE;
-	}
+	if (j_json->type != APR_JSON_OBJECT) return FALSE;
 
 	/* allocate memory for the JWK */
-	*j_jwk = apr_pcalloc(r->pool, sizeof(apr_jwk_t));
+	*j_jwk = apr_pcalloc(pool, sizeof(apr_jwk_t));
 	apr_jwk_t *jwk = *j_jwk;
 
 	/* set the raw JSON/string representations */
@@ -126,42 +106,27 @@ apr_byte_t apr_jwk_parse_json(request_rec *r, apr_json_value_t *j_json,
 
 	/* get the (optional) key type */
 	char *kty = NULL;
-	if (apr_jwt_get_string(r, &jwk->value, "kty", &kty) == FALSE)
+	if (apr_jwt_get_string(pool, &jwk->value, "kty", &kty) == FALSE)
 		return FALSE;
 
 	/* kty is mandatory */
-	if (kty == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jwk_parse: JWK JSON value did not contain a \"kty\" string, abort parsing");
-		return FALSE;
-	}
+	if (kty == NULL) return FALSE;
 
 	/* parse the key */
-	if (apr_strnatcmp(kty, "RSA") == 0) {
-		return apr_jwk_parse_rsa(r, jwk);
-	}
-
-	/* no known key type found */
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"apr_jwk_parse: unsupported key type (%s)", kty);
-	return FALSE;
+	return (apr_strnatcmp(kty, "RSA") == 0) ? apr_jwk_parse_rsa(pool, jwk) : FALSE;
 }
 
 /*
  * parse (JSON) string representation of JWK
  */
-apr_byte_t apr_jwk_parse_string(request_rec *r, const char *s_json,
+apr_byte_t apr_jwk_parse_string(apr_pool_t *pool, const char *s_json,
 		apr_jwk_t **j_jwk) {
 
 	apr_json_value_t *j_value = NULL;
 
 	/* decode the string in to a JSON structure */
 	if (apr_json_decode(&j_value, s_json, strlen(s_json),
-			r->pool) != APR_SUCCESS) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jwk_parse: apr_json_decode on JWK failed: %s", s_json);
-		return FALSE;
-	}
+			pool) != APR_SUCCESS) return FALSE;
 
-	return apr_jwk_parse_json(r, j_value, s_json, j_jwk);
+	return apr_jwk_parse_json(pool, j_value, s_json, j_jwk);
 }

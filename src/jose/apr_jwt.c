@@ -55,26 +55,13 @@
 
 #include "apr_jose.h"
 
-// TODO: complete separation
-//       a) remove references to OIDC_DEBUG
-//       b) remove references to request_rec (use only pool), so no printouts (comparable to apr_json_decode/encode)
-
-#ifndef OIDC_DEBUG
-#define OIDC_DEBUG APLOG_DEBUG
-#endif
-
 /*
  * base64url decode a string
- * TODO: sort out with oidc_util function
  */
-int apr_jwt_base64url_decode(request_rec *r, char **dst, const char *src,
+int apr_jwt_base64url_decode(apr_pool_t *pool, char **dst, const char *src,
 		int padding) {
-	if (src == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_base64url_decode: not decoding anything; src=NULL");
-		return -1;
-	}
-	char *dec = apr_pstrdup(r->pool, src);
+	if (src == NULL) return -1;
+	char *dec = apr_pstrdup(pool, src);
 	int i = 0;
 	while (dec[i] != '\0') {
 		if (dec[i] == '-')
@@ -90,54 +77,37 @@ int apr_jwt_base64url_decode(request_rec *r, char **dst, const char *src,
 		case 0:
 			break;
 		case 2:
-			dec = apr_pstrcat(r->pool, dec, "==", NULL);
+			dec = apr_pstrcat(pool, dec, "==", NULL);
 			break;
 		case 3:
-			dec = apr_pstrcat(r->pool, dec, "=", NULL);
+			dec = apr_pstrcat(pool, dec, "=", NULL);
 			break;
 		default:
 			return 0;
 		}
 	}
 	int dlen = apr_base64_decode_len(dec);
-	*dst = apr_palloc(r->pool, dlen);
+	*dst = apr_palloc(pool, dlen);
 	return apr_base64_decode(*dst, dec);
 }
 
 /*
  * parse JSON object from string in to JWT value
  */
-static apr_byte_t apr_jwt_base64url_decode_object(request_rec *r,
+static apr_byte_t apr_jwt_base64url_decode_object(apr_pool_t *pool,
 		const char *str, apr_jwt_value_t *value) {
 
-	// TODO: error checking/handling
-	apr_jwt_base64url_decode(r, &value->str, str, 1);
+	/* base64url-decode the string representation into value->str */
+	if (apr_jwt_base64url_decode(pool, &value->str, str, 1) < 0) return FALSE;
 
-	/* decode the string in to a JSON structure */
-	if (apr_json_decode(&value->json, value->str, strlen(value->str),
-			r->pool) != APR_SUCCESS) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jwt_decode_object: apr_json_decode on JWT failed: %s",
-				value->str);
-		return FALSE;
-	}
+	/* decode the string in to a JSON structure into value->json */
+	if (apr_json_decode(&value->json, value->str, strlen(value->str), pool) != APR_SUCCESS) return FALSE;
 
 	/* check that we've actually got a JSON value back */
-	if (value->json == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jwt_decode_object: apr_json_decode on JWT did not return valid JSON: %s",
-				value->str);
-		return FALSE;
-
-	}
+	if (value->json == NULL) return FALSE;
 
 	/* check that the value is a JSON object */
-	if (value->json->type != APR_JSON_OBJECT) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jwt_decode_object: JWT value did not contain a JSON object: %s",
-				value->str);
-		return FALSE;
-	}
+	if (value->json->type != APR_JSON_OBJECT) return FALSE;
 
 	return TRUE;
 }
@@ -145,19 +115,13 @@ static apr_byte_t apr_jwt_base64url_decode_object(request_rec *r,
 /*
  * get (optional) string from JWT
  */
-apr_byte_t apr_jwt_get_string(request_rec *r, apr_jwt_value_t *value,
+apr_byte_t apr_jwt_get_string(apr_pool_t *pool, apr_jwt_value_t *value,
 		const char *claim_name, char **result) {
-	*result = NULL;
-	apr_json_value_t *v = apr_hash_get(value->json->value.object, claim_name,
-	APR_HASH_KEY_STRING);
-	if (v != NULL) {
-		if (v->type == APR_JSON_STRING) {
-			*result = apr_pstrdup(r->pool, v->value.string.p);
-		} else {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"apr_jwt_get_string: JWT value contains a \"%s\" value but it is not a string: %s",
-					claim_name, value->str);
-		}
+	apr_json_value_t *v = apr_hash_get(value->json->value.object, claim_name, APR_HASH_KEY_STRING);
+	if ((v != NULL) && (v->type == APR_JSON_STRING)) {
+		*result = apr_pstrdup(pool, v->value.string.p);
+	} else {
+		*result = NULL;
 	}
 	return TRUE;
 }
@@ -165,50 +129,36 @@ apr_byte_t apr_jwt_get_string(request_rec *r, apr_jwt_value_t *value,
 /*
  * parse (optional) timestamp from payload
  */
-static apr_byte_t apr_jwt_parse_timestamp(request_rec *r,
+static apr_byte_t apr_jwt_parse_timestamp(apr_pool_t *pool,
 		apr_jwt_value_t *value, const char *claim_name, apr_time_t *result) {
-	*result = -1;
 	apr_json_value_t *v = apr_hash_get(value->json->value.object, claim_name,
 	APR_HASH_KEY_STRING);
-	if (v != NULL) {
-		if (v->type == APR_JSON_LONG) {
-			*result = apr_time_from_sec(v->value.lnumber);
-		} else {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"apr_jwt_parse_timestamp: JWT value contains a \"%s\" value but it is not a long: %s",
-					claim_name, value->str);
-		}
+	if ((v != NULL) && (v->type == APR_JSON_LONG)) {
+		*result = apr_time_from_sec(v->value.lnumber);
+	} else {
+		*result = -1;
 	}
-	return TRUE;
+	return (*result != -1);
 }
 
 /*
  * parse a JWT header
  */
-static apr_byte_t apr_jwt_parse_header(request_rec *r, const char *s_header,
+static apr_byte_t apr_jwt_parse_header(apr_pool_t *pool, const char *s_header,
 		apr_jwt_header_t *header) {
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"apr_jwt_parse_header: entering (%s)", s_header);
-
 	/* decode the JWT JSON header */
-	if (apr_jwt_base64url_decode_object(r, s_header, &header->value) == FALSE)
+	if (apr_jwt_base64url_decode_object(pool, s_header, &header->value) == FALSE)
 		return FALSE;
 
 	/* parse the (optional) signing algorithm */
-	apr_jwt_get_string(r, &header->value, "alg", &header->alg);
+	apr_jwt_get_string(pool, &header->value, "alg", &header->alg);
 
 	/* check that the mandatory algorithm was set */
-	// TODO: do supported algorithm check here?
-	if (header->alg == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jwt_parse_header: JWT header did not contain an \"alg\" string: %s",
-				header->value.str);
-		return FALSE;
-	}
+	if (header->alg == NULL) return FALSE;
 
 	/* parse the (optional) kid */
-	apr_jwt_get_string(r, &header->value, "kid", &header->kid);
+	apr_jwt_get_string(pool, &header->value, "kid", &header->kid);
 
 	return TRUE;
 }
@@ -216,32 +166,29 @@ static apr_byte_t apr_jwt_parse_header(request_rec *r, const char *s_header,
 /*
  * parse JWT payload
  */
-static apr_byte_t apr_jwt_parse_payload(request_rec *r, const char *s_payload,
+static apr_byte_t apr_jwt_parse_payload(apr_pool_t *pool, const char *s_payload,
 		apr_jwt_payload_t *payload) {
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"apr_jwt_parse_payload: entering: %s", s_payload);
-
 	/* decode the JWT JSON payload */
-	if (apr_jwt_base64url_decode_object(r, s_payload, &payload->value) == FALSE)
+	if (apr_jwt_base64url_decode_object(pool, s_payload, &payload->value) == FALSE)
 		return FALSE;
 
 	/* get the (optional) "issuer" value from the JSON payload */
-	if (apr_jwt_get_string(r, &payload->value, "iss", &payload->iss) == FALSE)
+	if (apr_jwt_get_string(pool, &payload->value, "iss", &payload->iss) == FALSE)
 		return FALSE;
 
 	/* get the (optional) "exp" value from the JSON payload */
-	if (apr_jwt_parse_timestamp(r, &payload->value, "exp",
+	if (apr_jwt_parse_timestamp(pool, &payload->value, "exp",
 			&payload->exp) == FALSE)
 		return FALSE;
 
 	/* get the (optional) "iat" value from the JSON payload */
-	if (apr_jwt_parse_timestamp(r, &payload->value, "iat",
+	if (apr_jwt_parse_timestamp(pool, &payload->value, "iat",
 			&payload->iat) == FALSE)
 		return FALSE;
 
 	/* get the (optional) "sub" value from the JSON payload */
-	if (apr_jwt_get_string(r, &payload->value, "sub", &payload->sub) == FALSE)
+	if (apr_jwt_get_string(pool, &payload->value, "sub", &payload->sub) == FALSE)
 		return FALSE;
 
 	return TRUE;
@@ -250,64 +197,52 @@ static apr_byte_t apr_jwt_parse_payload(request_rec *r, const char *s_payload,
 /*
  * parse JWT signature
  */
-static apr_byte_t apr_jwt_parse_signature(request_rec *r,
+static apr_byte_t apr_jwt_parse_signature(apr_pool_t *pool,
 		const char *s_signature, apr_jwt_signature_t *signature) {
 
-	// TODO: error checking/handling
-	signature->length = apr_jwt_base64url_decode(r, (char **) &signature->bytes,
+	signature->length = apr_jwt_base64url_decode(pool, (char **) &signature->bytes,
 			s_signature, 1);
 
-	return TRUE;
+	return (signature->length < 0);
 }
 
 /*
  * parse a JSON Web Token
  */
-apr_byte_t apr_jwt_parse(request_rec *r, const char *s_json, apr_jwt_t **j_jwt) {
+apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json, apr_jwt_t **j_jwt) {
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r, "apr_jwt_parse: entering");
-
-	*j_jwt = apr_pcalloc(r->pool, sizeof(apr_jwt_t));
+	*j_jwt = apr_pcalloc(pool, sizeof(apr_jwt_t));
 	apr_jwt_t *jwt = *j_jwt;
 
 	/* find the header */
-	char *s = apr_pstrdup(r->pool, s_json);
+	char *s = apr_pstrdup(pool, s_json);
 	char *p = strchr(s, '.');
-	if (p == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jwt_parse: could not find first \".\" in JWT: %s", s_json);
-		return FALSE;
-	}
+	if (p == NULL) return FALSE;
 	*p = '\0';
 
 	/* store the base64url-encoded header for signature verification purposes */
 	jwt->message = s;
 
 	/* parse the header fields */
-	if (apr_jwt_parse_header(r, s, &jwt->header) == FALSE)
+	if (apr_jwt_parse_header(pool, s, &jwt->header) == FALSE)
 		return FALSE;
 
 	/* find the payload */
 	s = ++p;
 	p = strchr(s, '.');
-	if (p == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jwt_parse: could not find second \".\" in JWT: %s",
-				s_json);
-		return FALSE;
-	}
+	if (p == NULL) return FALSE;
 	*p = '\0';
 
 	/* concat the base64url-encoded payload to the base64url-encoded header for signature verification purposes */
-	jwt->message = apr_pstrcat(r->pool, jwt->message, ".", s, NULL);
+	jwt->message = apr_pstrcat(pool, jwt->message, ".", s, NULL);
 
 	/* parse the payload fields */
-	if (apr_jwt_parse_payload(r, s, &jwt->payload) == FALSE)
+	if (apr_jwt_parse_payload(pool, s, &jwt->payload) == FALSE)
 		return FALSE;
 
 	/* remainder is the signature */
 	s = ++p;
-	if (apr_jwt_parse_signature(r, s, &jwt->signature) == FALSE)
+	if (apr_jwt_parse_signature(pool, s, &jwt->signature) == FALSE)
 		return FALSE;
 
 	return TRUE;

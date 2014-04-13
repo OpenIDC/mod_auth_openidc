@@ -57,21 +57,9 @@
 #include <openssl/hmac.h>
 #include <openssl/err.h>
 
-#include <http_core.h>
-#include <http_log.h>
-#include <http_protocol.h>
-
 #include <apr_base64.h>
 
 #include "apr_jose.h"
-
-// TODO: complete separation
-//       a) remove references to OIDC_DEBUG
-//       b) remove references to request_rec (use only pool), so no printouts (comparable to apr_json_decode/encode)
-
-#ifndef OIDC_DEBUG
-#define OIDC_DEBUG APLOG_DEBUG
-#endif
 
 /*
  * return OpenSSL digest for JWK algorithm
@@ -98,26 +86,14 @@ static char *apr_jwt_alg_to_openssl_digest(const char *alg) {
 /*
  * return an EVP structure for the specified algorithm
  */
-static const EVP_MD *apr_jws_crypto_alg_to_evp(request_rec *r, const char *alg) {
+static const EVP_MD *apr_jws_crypto_alg_to_evp(apr_pool_t *pool, const char *alg) {
 	const EVP_MD *result = NULL;
 
 	char *digest = apr_jwt_alg_to_openssl_digest(alg);
-
-	if (digest == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jws_crypto_alg_to_evp: unsupported OpenSSL algorithm: %s",
-				alg);
-		return NULL;
-	}
+	if (digest == NULL) return NULL;
 
 	result = EVP_get_digestbyname(digest);
-
-	if (result == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jws_crypto_alg_to_evp: EVP_get_digestbyname failed: %s",
-				ERR_error_string(ERR_get_error(), NULL));
-		return NULL;
-	}
+	if (result == NULL) return NULL;
 
 	return result;
 }
@@ -125,12 +101,12 @@ static const EVP_MD *apr_jws_crypto_alg_to_evp(request_rec *r, const char *alg) 
 /*
  * verify HMAC signature on JWT
  */
-apr_byte_t apr_jws_verify_hmac(request_rec *r, apr_jwt_t *jwt,
+apr_byte_t apr_jws_verify_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
 		const char *secret) {
 
 	/* get the OpenSSL digest function */
 	const EVP_MD *digest = NULL;
-	if ((digest = apr_jws_crypto_alg_to_evp(r, jwt->header.alg)) == NULL)
+	if ((digest = apr_jws_crypto_alg_to_evp(pool, jwt->header.alg)) == NULL)
 		return FALSE;
 
 	/* prepare the key */
@@ -146,26 +122,13 @@ apr_byte_t apr_jws_verify_hmac(request_rec *r, apr_jwt_t *jwt,
 	unsigned char md[EVP_MAX_MD_SIZE];
 
 	/* apply the HMAC function to the message with the provided key */
-	if (!HMAC(digest, key, key_len, msg, msg_len, md, &md_len)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jws_verify_hmac: HMAC function failed: %s",
-				ERR_error_string(ERR_get_error(), NULL));
-		return FALSE;
-	}
+	if (!HMAC(digest, key, key_len, msg, msg_len, md, &md_len)) return FALSE;
 
 	/* check that the length of the hash matches what was provided to us in the signature */
-	if (md_len != jwt->signature.length) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jws_verify_hmac: hash length does not match signature length");
-		return FALSE;
-	}
+	if (md_len != jwt->signature.length) return FALSE;
 
 	/* do a comparison of the provided hash value against calculated hash value */
-	if (memcmp(md, jwt->signature.bytes, md_len) != 0) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jws_verify_hmac: HMAC verification failed");
-		return FALSE;
-	}
+	if (memcmp(md, jwt->signature.bytes, md_len) != 0) return FALSE;
 
 	/* all OK if we got to here */
 	return TRUE;
@@ -186,17 +149,14 @@ static int apr_jws_alg_to_rsa_openssl_padding(const char *alg) {
 /*
  * verify HMAC signature on JWT
  */
-apr_byte_t apr_jws_verify_rsa(request_rec *r, apr_jwt_t *jwt,
+apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt,
 		apr_jwk_t *jwk) {
-
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"apr_jws_verify_rsa: entering (%s)", jwt->header.alg);
 
 	apr_byte_t rc = FALSE;
 
 	/* get the OpenSSL digest function */
 	const EVP_MD *digest = NULL;
-	if ((digest = apr_jws_crypto_alg_to_evp(r, jwt->header.alg)) == NULL)
+	if ((digest = apr_jws_crypto_alg_to_evp(pool, jwt->header.alg)) == NULL)
 		return FALSE;
 
 	EVP_MD_CTX ctx;
@@ -215,47 +175,29 @@ apr_byte_t apr_jws_verify_rsa(request_rec *r, apr_jwt_t *jwt,
 
 	EVP_PKEY* pRsaKey = EVP_PKEY_new();
 	if (!EVP_PKEY_assign_RSA(pRsaKey, pubkey)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jws_verify_rsa: EVP_PKEY_assign_RSA failed: %s",
-				ERR_error_string(ERR_get_error(), NULL));
 		pRsaKey = NULL;
 		goto end;
 	}
 
 	ctx.pctx = EVP_PKEY_CTX_new(pRsaKey, NULL);
 	if (!EVP_PKEY_verify_init(ctx.pctx)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jws_verify_rsa: EVP_PKEY_verify_init failed: %s",
-				ERR_error_string(ERR_get_error(), NULL));
 		goto end;
 	}
 	if (!EVP_PKEY_CTX_set_rsa_padding(ctx.pctx,
 			apr_jws_alg_to_rsa_openssl_padding(jwt->header.alg))) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jws_verify_rsa: EVP_PKEY_CTX_set_rsa_padding failed: %s",
-				ERR_error_string(ERR_get_error(), NULL));
 		goto end;
 	}
 
 	if (!EVP_VerifyInit_ex(&ctx, digest, NULL)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jws_verify_rsa: EVP_VerifyInit_ex failed: %s",
-				ERR_error_string(ERR_get_error(), NULL));
 		goto end;
 	}
 
 	if (!EVP_VerifyUpdate(&ctx, jwt->message, strlen(jwt->message))) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jws_verify_rsa: EVP_VerifyUpdate failed: %s",
-				ERR_error_string(ERR_get_error(), NULL));
 		goto end;
 	}
 
 	if (!EVP_VerifyFinal(&ctx, (const unsigned char *) jwt->signature.bytes,
 			jwt->signature.length, pRsaKey)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jws_verify_rsa: EVP_VerifyFinal failed: %s",
-				ERR_error_string(ERR_get_error(), NULL));
 		goto end;
 	}
 
@@ -274,26 +216,20 @@ apr_byte_t apr_jws_verify_rsa(request_rec *r, apr_jwt_t *jwt,
 /*
  * helper function to determine the type of signature on a JWT
  */
-static apr_byte_t apr_jws_signature_starts_with(request_rec *r, const char *alg, const char *match, int n) {
-
-	if (alg == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"apr_jws_signature_starts_with: JWT header object did not specify an algorithm");
-		return FALSE;
-	}
-
+static apr_byte_t apr_jws_signature_starts_with(apr_pool_t *pool, const char *alg, const char *match, int n) {
+	if (alg == NULL) return FALSE;
 	return (strncmp(alg, match, n) == 0);
 }
 /*
  * check if the signature on the JWT is HMAC-based
  */
-apr_byte_t apr_jws_signature_is_hmac(request_rec *r, apr_jwt_t *jwt) {
-	return apr_jws_signature_starts_with(r, jwt->header.alg, "HS", 2);
+apr_byte_t apr_jws_signature_is_hmac(apr_pool_t *pool, apr_jwt_t *jwt) {
+	return apr_jws_signature_starts_with(pool, jwt->header.alg, "HS", 2);
 }
 
 /*
  * check if the signature on the JWT is RSA-based
  */
-apr_byte_t apr_jws_signature_is_rsa(request_rec *r, apr_jwt_t *jwt) {
-	return apr_jws_signature_starts_with(r, jwt->header.alg, "RS", 2);
+apr_byte_t apr_jws_signature_is_rsa(apr_pool_t *pool, apr_jwt_t *jwt) {
+	return apr_jws_signature_starts_with(pool, jwt->header.alg, "RS", 2);
 }

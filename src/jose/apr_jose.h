@@ -54,9 +54,7 @@
 #ifndef _APR_JWT_H_
 #define _APR_JWT_H_
 
-#include <http_core.h>
-#include <http_log.h>
-#include <http_protocol.h>
+#include "apr_pools.h"
 
 #include "../json/apr_json.h"
 
@@ -117,14 +115,14 @@ typedef struct apr_jwt_t {
 } apr_jwt_t;
 
 /* helper */
-int apr_jwt_base64url_decode(request_rec *r, char **dst, const char *src,
+int apr_jwt_base64url_decode(apr_pool_t *pool, char **dst, const char *src,
 		int padding);
 
 /* return a string claim value from a JSON Web Token */
-apr_byte_t apr_jwt_get_string(request_rec *r, apr_jwt_value_t *value,
+apr_byte_t apr_jwt_get_string(apr_pool_t *pool, apr_jwt_value_t *value,
 		const char *claim_name, char **result);
 /* parse a string in to a JSON Web Token struct */
-apr_byte_t apr_jwt_parse(request_rec *r, const char *s_json, apr_jwt_t **j_jwt);
+apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json, apr_jwt_t **j_jwt);
 
 /*
  * JSON Web Key handling
@@ -161,10 +159,10 @@ typedef struct apr_jwk_t {
 } apr_jwk_t;
 
 /* parse a JSON representation in to a JSON Web Key struct (also storing the string representation */
-apr_byte_t apr_jwk_parse_json(request_rec *r, apr_json_value_t *j_json,
+apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, apr_json_value_t *j_json,
 		const char *s_json, apr_jwk_t **j_jwk);
 /* parse a string in to a JSON Web Key struct */
-apr_byte_t apr_jwk_parse_string(request_rec *r, const char *s_json,
+apr_byte_t apr_jwk_parse_string(apr_pool_t *pool, const char *s_json,
 		apr_jwk_t **j_jwk);
 
 /*
@@ -172,13 +170,13 @@ apr_byte_t apr_jwk_parse_string(request_rec *r, const char *s_json,
  */
 
 /* check if the signature on a JWT is of type HMAC */
-apr_byte_t apr_jws_signature_is_hmac(request_rec *r, apr_jwt_t *jwt);
+apr_byte_t apr_jws_signature_is_hmac(apr_pool_t *pool, apr_jwt_t *jwt);
 /* check if the signature on a JWT is of type RSA */
-apr_byte_t apr_jws_signature_is_rsa(request_rec *r, apr_jwt_t *jwt);
+apr_byte_t apr_jws_signature_is_rsa(apr_pool_t *pool, apr_jwt_t *jwt);
 /* verify the HMAC signature on a JWT */
-apr_byte_t apr_jws_verify_hmac(request_rec *r, apr_jwt_t *jwt,
+apr_byte_t apr_jws_verify_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
 		const char *secret);
 /* verify the RSA signature on a JWT */
-apr_byte_t apr_jws_verify_rsa(request_rec *r, apr_jwt_t *jwt, apr_jwk_t *jwk);
+apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk);
 
 #endif /* _APR_JWT_H_ */
