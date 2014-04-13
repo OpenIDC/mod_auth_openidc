@@ -577,15 +577,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 		return FALSE;
 	}
 
-	// verify signature unless we did 'code' flow and the algorithm is NONE
-	// TODO: should improve "detection": in principle nonce can be used in "code" flow too
-//	apr_json_value_t *algorithm = apr_hash_get(j_header->value.object, "alg", APR_HASH_KEY_STRING);
-//	if ((strcmp(algorithm->value.string.p, "NONE") != 0) || (nonce != NULL)) {
-//		/* verify the signature on the id_token */
-//		apr_byte_t refresh = FALSE;
-//		if (oidc_proto_idtoken_verify_signature(r, cfg, provider, j_header, signature, apr_pstrcat(r->pool, header, ".", payload, NULL), &refresh) == FALSE) return FALSE;
-//	}
-
+	// TODO: make signature validation exception for 'code' flow and the algorithm NONE
 	apr_byte_t refresh = FALSE;
 	if (oidc_proto_idtoken_verify_signature(r, cfg, provider, *jwt,
 			&refresh) == FALSE) {
