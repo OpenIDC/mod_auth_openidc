@@ -212,7 +212,7 @@ static apr_byte_t apr_jwt_parse_signature(apr_pool_t *pool,
 	signature->length = apr_jwt_base64url_decode(pool,
 			(char **) &signature->bytes, s_signature, 1);
 
-	return (signature->length < 0);
+	return (signature->length > 0);
 }
 
 /*

@@ -571,8 +571,11 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_proto_parse_idtoken: entering");
 
-	if (apr_jwt_parse(r->pool, id_token, jwt) == FALSE)
+	if (apr_jwt_parse(r->pool, id_token, jwt) == FALSE) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_parse_idtoken: could not parse id_token, aborting");
 		return FALSE;
+	}
 
 	// verify signature unless we did 'code' flow and the algorithm is NONE
 	// TODO: should improve "detection": in principle nonce can be used in "code" flow too
