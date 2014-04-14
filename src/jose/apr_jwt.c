@@ -145,7 +145,7 @@ static apr_byte_t apr_jwt_parse_timestamp(apr_pool_t *pool,
 	} else {
 		*result = -1;
 	}
-	return (*result != -1);
+	return TRUE;
 }
 
 /*
@@ -183,22 +183,16 @@ static apr_byte_t apr_jwt_parse_payload(apr_pool_t *pool, const char *s_payload,
 		return FALSE;
 
 	/* get the (optional) "issuer" value from the JSON payload */
-	if (apr_jwt_get_string(pool, &payload->value, "iss", &payload->iss) == FALSE)
-		return FALSE;
+	apr_jwt_get_string(pool, &payload->value, "iss", &payload->iss);
 
 	/* get the (optional) "exp" value from the JSON payload */
-	if (apr_jwt_parse_timestamp(pool, &payload->value, "exp",
-			&payload->exp) == FALSE)
-		return FALSE;
+	apr_jwt_parse_timestamp(pool, &payload->value, "exp", &payload->exp);
 
 	/* get the (optional) "iat" value from the JSON payload */
-	if (apr_jwt_parse_timestamp(pool, &payload->value, "iat",
-			&payload->iat) == FALSE)
-		return FALSE;
+	apr_jwt_parse_timestamp(pool, &payload->value, "iat", &payload->iat);
 
 	/* get the (optional) "sub" value from the JSON payload */
-	if (apr_jwt_get_string(pool, &payload->value, "sub", &payload->sub) == FALSE)
-		return FALSE;
+	apr_jwt_get_string(pool, &payload->value, "sub", &payload->sub);
 
 	return TRUE;
 }
