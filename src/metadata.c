@@ -89,7 +89,8 @@ static const char *oidc_metadata_issuer_to_filename(request_rec *r,
 
 	/* strip trailing '/' */
 	int n = strlen(p);
-	if (p[n - 1] == '/') p[n - 1] = '\0';
+	if (p[n - 1] == '/')
+		p[n - 1] = '\0';
 
 	return oidc_util_escape_string(r, p);
 }
@@ -103,7 +104,8 @@ static const char *oidc_metadata_filename_to_issuer(request_rec *r,
 	char *p = strrchr(result, '.');
 	*p = '\0';
 	p = oidc_util_unescape_string(r, result);
-	return (strcmp(p, "accounts.google.com") == 0) ? p : apr_psprintf(r->pool, "https://%s", p);
+	return (strcmp(p, "accounts.google.com") == 0) ?
+			p : apr_psprintf(r->pool, "https://%s", p);
 }
 
 /*
@@ -194,7 +196,8 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 			"issuer", APR_HASH_KEY_STRING);
 	if ((j_issuer == NULL) || (j_issuer->type != APR_JSON_STRING)) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata did not contain an \"issuer\" string", issuer);
+				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata did not contain an \"issuer\" string",
+				issuer);
 		return FALSE;
 	}
 
@@ -216,17 +219,19 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 				"code") == FALSE)
 				&& (oidc_util_json_array_has_value(r,
 						j_response_types_supported, "id_token") == FALSE)
-						&& (oidc_util_json_array_has_value(r,
-								j_response_types_supported, "token id_token") == FALSE)
-								&& (oidc_util_json_array_has_value(r,
-										j_response_types_supported, "id_token token") == FALSE)) {
+				&& (oidc_util_json_array_has_value(r,
+						j_response_types_supported, "token id_token") == FALSE)
+				&& (oidc_util_json_array_has_value(r,
+						j_response_types_supported, "id_token token") == FALSE)) {
 			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_metadata_provider_is_valid: could not find a supported value [\"code\" | \"id_token\" | \"token id_token\" | \"id_token token\"] in provider metadata (%s) for entry \"response_types_supported\"; assuming that \"code\" flow is supported...", issuer);
+					"oidc_metadata_provider_is_valid: could not find a supported value [\"code\" | \"id_token\" | \"token id_token\" | \"id_token token\"] in provider metadata (%s) for entry \"response_types_supported\"; assuming that \"code\" flow is supported...",
+					issuer);
 			//return FALSE;
 		}
 	} else {
 		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata did not contain a \"response_types_supported\" array; assuming that \"code\" flow is supported...", issuer);
+				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata did not contain a \"response_types_supported\" array; assuming that \"code\" flow is supported...",
+				issuer);
 		// TODO: hey, this is required-by-spec stuff right?
 	}
 
@@ -237,7 +242,8 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 	if ((j_authorization_endpoint == NULL)
 			|| (j_authorization_endpoint->type != APR_JSON_STRING)) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata did not contain an \"authorization_endpoint\" string", issuer);
+				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata did not contain an \"authorization_endpoint\" string",
+				issuer);
 		return FALSE;
 	}
 
@@ -247,7 +253,8 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 	if ((j_token_endpoint == NULL)
 			|| (j_token_endpoint->type != APR_JSON_STRING)) {
 		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata did not contain a \"token_endpoint\" string", issuer);
+				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata did not contain a \"token_endpoint\" string",
+				issuer);
 		//return FALSE;
 	}
 
@@ -257,7 +264,8 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 	if ((j_userinfo_endpoint != NULL)
 			&& (j_userinfo_endpoint->type != APR_JSON_STRING)) {
 		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata contains a \"userinfo_endpoint\" entry, but it is not a string value", issuer);
+				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata contains a \"userinfo_endpoint\" entry, but it is not a string value",
+				issuer);
 	}
 	// TODO: check for valid URL
 
@@ -266,7 +274,8 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 			"jwks_uri", APR_HASH_KEY_STRING);
 	if ((j_jwks_uri == NULL) || (j_jwks_uri->type != APR_JSON_STRING)) {
 		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata did not contain a \"jwks_uri\" string", issuer);
+				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata did not contain a \"jwks_uri\" string",
+				issuer);
 		//return FALSE;
 	}
 
@@ -277,7 +286,8 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 	if ((j_token_endpoint_auth_methods_supported == NULL)
 			|| (j_token_endpoint_auth_methods_supported->type != APR_JSON_ARRAY)) {
 		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata did not contain a \"token_endpoint_auth_methods_supported\" array, assuming \"client_secret_basic\" is supported", issuer);
+				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata did not contain a \"token_endpoint_auth_methods_supported\" array, assuming \"client_secret_basic\" is supported",
+				issuer);
 	} else {
 		int i;
 		for (i = 0;
@@ -301,7 +311,8 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 		}
 		if (i == j_token_endpoint_auth_methods_supported->value.array->nelts) {
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_metadata_provider_is_valid: could not find a supported value [client_secret_post|client_secret_basic] in provider (%s) metadata for entry \"token_endpoint_auth_methods_supported\"", issuer);
+					"oidc_metadata_provider_is_valid: could not find a supported value [client_secret_post|client_secret_basic] in provider (%s) metadata for entry \"token_endpoint_auth_methods_supported\"",
+					issuer);
 			return FALSE;
 		}
 	}
@@ -323,7 +334,8 @@ static apr_byte_t oidc_metadata_client_is_valid(request_rec *r,
 			"client_id", APR_HASH_KEY_STRING);
 	if ((j_client_id == NULL) || (j_client_id->type != APR_JSON_STRING)) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_metadata_client_is_valid: client (%s) JSON metadata did not contain a \"client_id\" string", issuer);
+				"oidc_metadata_client_is_valid: client (%s) JSON metadata did not contain a \"client_id\" string",
+				issuer);
 		return FALSE;
 	}
 
@@ -333,7 +345,8 @@ static apr_byte_t oidc_metadata_client_is_valid(request_rec *r,
 	if ((j_client_secret == NULL)
 			|| (j_client_secret->type != APR_JSON_STRING)) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_metadata_client_is_valid: client (%s) JSON metadata did not contain a \"client_secret\" string", issuer);
+				"oidc_metadata_client_is_valid: client (%s) JSON metadata did not contain a \"client_secret\" string",
+				issuer);
 		return FALSE;
 	}
 
@@ -384,7 +397,8 @@ static apr_byte_t oidc_metadata_jwks_is_valid(request_rec *r,
 	APR_HASH_KEY_STRING);
 	if ((keys == NULL) || (keys->type != APR_JSON_ARRAY)) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_metadata_jwks_is_valid: provider (%s) JWKS JSON metadata did not contain a \"keys\" array", issuer);
+				"oidc_metadata_jwks_is_valid: provider (%s) JWKS JSON metadata did not contain a \"keys\" array",
+				issuer);
 		return FALSE;
 	}
 	return TRUE;
@@ -540,7 +554,7 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_store(request_rec *r,
 	/* no valid provider metadata, get it at the specified URL with the specified parameters */
 	if (oidc_util_http_call(r, provider->jwks_uri, OIDC_HTTP_GET, NULL, NULL,
 			NULL, provider->ssl_validate_server, &response,
-			cfg->http_timeout_short) == FALSE)
+			cfg->http_timeout_long) == FALSE)
 		return FALSE;
 
 	/* decode and see if it is not an error response somehow */
@@ -678,9 +692,12 @@ static apr_byte_t oidc_metadata_client_get(request_rec *r, oidc_cfg *cfg,
 
 	} else {
 
-		// TODO also hacky, we need arrays for the next two values
+		// TODO: also hacky, we need arrays for the next three values
 		apr_table_addn(params, "redirect_uris",
 				apr_psprintf(r->pool, "[\"%s\"]", cfg->redirect_uri));
+		apr_table_addn(params, "response_types",
+				apr_psprintf(r->pool,
+						"[\"code\", \"id_token\", \"token id_token\"]"));
 		if (cfg->provider.client_contact != NULL) {
 			apr_table_addn(params, "contacts",
 					apr_psprintf(r->pool, "[\"%s\"]",
@@ -910,15 +927,20 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *issuer,
 	/* get the flow to use, client defined takes priority over provider defined */
 	const char *response_type = cfg->provider.response_type;
 
-	/* this is an array as by spec but we'll default to the first element */
+	/* "response_types" is an array as by spec */
 	apr_json_value_t *j_response_types = apr_hash_get(j_client->value.object,
 			"response_types", APR_HASH_KEY_STRING);
 	if ((j_response_types != NULL)
 			&& (j_response_types->type == APR_JSON_ARRAY)) {
-		apr_json_value_t *j_response_type = APR_ARRAY_IDX(
-				j_response_types->value.array, 0, apr_json_value_t *);
-		if (j_response_type->type == APR_JSON_STRING) {
-			response_type = j_response_type->value.string.p;
+		/* if there's an array we'll prefer the configured response_type if supported */
+		if (oidc_util_json_array_has_value(r, j_response_types,
+				response_type) == FALSE) {
+			/* if the configured response_type is not supported, we'll fallback to the first one that is listed */
+			apr_json_value_t *j_response_type = APR_ARRAY_IDX(
+					j_response_types->value.array, 0, apr_json_value_t *);
+			if (j_response_type->type == APR_JSON_STRING) {
+				response_type = j_response_type->value.string.p;
+			}
 		}
 	}
 
@@ -970,17 +992,21 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *issuer,
 
 	/* see if we've got a custom JWKs refresh interval */
 	int jwks_refresh_interval = cfg->provider.jwks_refresh_interval;
-	apr_json_value_t *j_jwks_refresh_interval = apr_hash_get(j_client->value.object, "jwks_refresh_interval",
+	apr_json_value_t *j_jwks_refresh_interval = apr_hash_get(
+			j_client->value.object, "jwks_refresh_interval",
 			APR_HASH_KEY_STRING);
-	if ((j_jwks_refresh_interval != NULL) && (j_jwks_refresh_interval->type == APR_JSON_LONG)) {
+	if ((j_jwks_refresh_interval != NULL)
+			&& (j_jwks_refresh_interval->type == APR_JSON_LONG)) {
 		jwks_refresh_interval = j_jwks_refresh_interval->value.lnumber;
 	}
 
 	/* see if we've got a custom IAT slack interval */
 	int idtoken_iat_slack = cfg->provider.idtoken_iat_slack;
-	apr_json_value_t *j_idtoken_iat_slack = apr_hash_get(j_client->value.object, "idtoken_iat_slack",
+	apr_json_value_t *j_idtoken_iat_slack = apr_hash_get(j_client->value.object,
+			"idtoken_iat_slack",
 			APR_HASH_KEY_STRING);
-	if ((j_idtoken_iat_slack != NULL) && (j_idtoken_iat_slack->type == APR_JSON_LONG)) {
+	if ((j_idtoken_iat_slack != NULL)
+			&& (j_idtoken_iat_slack->type == APR_JSON_LONG)) {
 		idtoken_iat_slack = j_idtoken_iat_slack->value.lnumber;
 	}
 
