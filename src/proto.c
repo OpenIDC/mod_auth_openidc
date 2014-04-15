@@ -148,7 +148,7 @@ apr_byte_t oidc_proto_is_implicit_redirect(request_rec *r, oidc_cfg *cfg) {
  * check that it matches the nonce value in the id_token payload
  */
 static apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
-		const char *nonce, apr_jwt_t *jwt) {
+		oidc_provider_t *provider, const char *nonce, apr_jwt_t *jwt) {
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_proto_validate_nonce: looking for nonce: %s", nonce);
@@ -181,6 +181,10 @@ static apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
 		return FALSE;
 	}
 
+	/* cache the nonce for the window time of the token for replay prevention plus 10 seconds for safety */
+	cfg->cache->set(r, nonce, nonce,
+			apr_time_from_sec(provider->idtoken_iat_slack * 2 + 10));
+
 	return TRUE;
 }
 
@@ -188,33 +192,27 @@ static apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
  * validate the "aud" and "azp" claims in the id_token payload
  */
 static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
-		oidc_provider_t *provider, apr_json_value_t *j_payload) {
+		oidc_provider_t *provider, apr_jwt_payload_t *id_token_payload) {
 
-	/* get the "azp" value from the JSON payload, which may be NULL */
-	apr_json_value_t *azp = apr_hash_get(j_payload->value.object, "azp",
-	APR_HASH_KEY_STRING);
-	if ((azp != NULL) && (azp->type != APR_JSON_STRING)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_aud_and_azp: id_token JSON payload contained an \"azp\" value, but it was not a string");
-		return FALSE;
-	}
+	char *azp = NULL;
+	apr_jwt_get_string(r->pool, &id_token_payload->value, "azp", &azp);
 
 	/*
 	 * the "azp" claim is only needed when the id_token has a single audience value and that audience
 	 * is different than the authorized party; it MAY be included even when the authorized party is
 	 * the same as the sole audience.
 	 */
-	if ((azp != NULL)
-			&& (apr_strnatcmp(azp->value.string.p, provider->client_id) != 0)) {
+	if ((azp != NULL) && (apr_strnatcmp(azp, provider->client_id) != 0)) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_validate_aud_and_azp: the \"azp\" claim (%s) is present in the id_token, but is not equal to the configured client_id (%s)",
-				azp->value.string.p, provider->client_id);
+				azp, provider->client_id);
 		return FALSE;
 	}
 
 	/* get the "aud" value from the JSON payload */
-	apr_json_value_t *aud = apr_hash_get(j_payload->value.object, "aud",
-	APR_HASH_KEY_STRING);
+	apr_json_value_t *aud = apr_hash_get(id_token_payload->value.json->value.object,
+			"aud",
+			APR_HASH_KEY_STRING);
 	if (aud != NULL) {
 
 		/* check if it is a single-value */
@@ -222,7 +220,6 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 
 			/* a single-valued audience must be equal to our client_id */
 			if (apr_strnatcmp(aud->value.string.p, provider->client_id) != 0) {
-
 				ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 						"oidc_proto_validate_aud_and_azp: the configured client_id (%s) did not match the \"aud\" claim value (%s) in the id_token",
 						provider->client_id, aud->value.string.p);
@@ -237,46 +234,20 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 						"oidc_proto_validate_aud_and_azp: the \"aud\" claim value in the id_token is an array with more than 1 element, but \"azp\" claim is not present (a SHOULD in the spec...)");
 			}
 
-			/* loop over the audience values */
-			int i;
-			for (i = 0; i < aud->value.array->nelts; i++) {
-
-				apr_json_value_t *elem = APR_ARRAY_IDX(aud->value.array, i,
-						apr_json_value_t *);
-
-				/* check if it is a string, warn otherwise */
-				if (elem->type != APR_JSON_STRING) {
-					ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-							"oidc_proto_validate_aud_and_azp: the \"aud\" claim is an array but it contains an entry with an unhandled JSON object type [%d]",
-							elem->type);
-					continue;
-				}
-
-				/* we're looking for a value in the list that matches our client id */
-				if (apr_strnatcmp(elem->value.string.p, provider->client_id)
-						== 0) {
-					break;
-				}
-			}
-
-			/* check if we've found a match or not */
-			if (i == aud->value.array->nelts) {
-
+			if (oidc_util_json_array_has_value(r, aud,
+					provider->client_id) == FALSE) {
 				ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 						"oidc_proto_validate_aud_and_azp: our configured client_id (%s) could not be found in the array of values for \"aud\" claim",
 						provider->client_id);
 				return FALSE;
 			}
-
 		} else {
-
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 					"oidc_proto_validate_aud_and_azp: id_token JSON payload \"aud\" claim is not a string nor an array");
 			return FALSE;
 		}
 
 	} else {
-
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_validate_aud_and_azp: id_token JSON payload did not contain an \"aud\" claim");
 		return FALSE;
@@ -300,7 +271,7 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
 	/* if a nonce is not passed, we're doing a ("code") flow where the nonce is optional */
 	if (nonce != NULL) {
 		/* if present, verify the nonce */
-		if (oidc_proto_validate_nonce(r, cfg, nonce, jwt) == FALSE)
+		if (oidc_proto_validate_nonce(r, cfg, provider, nonce, jwt) == FALSE)
 			return FALSE;
 	}
 
@@ -351,12 +322,6 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
 		return FALSE;
 	}
 
-	if (nonce != NULL) {
-		/* cache the nonce for the window time of the token for replay prevention plus 10 seconds for safety */
-		cfg->cache->set(r, nonce, nonce,
-				apr_time_from_sec(provider->idtoken_iat_slack * 2 + 10));
-	}
-
 	if (jwt->payload.sub == NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_validate_idtoken: id_token JSON payload did not contain the required-by-spec \"sub\" string value");
@@ -365,7 +330,7 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
 
 	/* verify the "aud" and "azp" values */
 	if (oidc_proto_validate_aud_and_azp(r, cfg, provider,
-			jwt->payload.value.json) == FALSE)
+			&jwt->payload) == FALSE)
 		return FALSE;
 
 	return TRUE;
@@ -507,7 +472,8 @@ static apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r,
 
 				/* do it again, forcing a JWKS refresh */
 				*refresh = TRUE;
-				result = oidc_proto_idtoken_verify_signature(r, cfg, provider, jwt, refresh);
+				result = oidc_proto_idtoken_verify_signature(r, cfg, provider,
+						jwt, refresh);
 			}
 		}
 	}
