@@ -761,11 +761,11 @@ static int oidc_handle_implicit_authorization_response(request_rec *r,
 	}
 
 	/* strip empty parameters (eg. connect.openid4.us on response on "id_token" flow) */
-	if ((access_token != NULL) && (strcmp(access_token, "") == 0))
+	if ((access_token != NULL) && (apr_strnatcmp(access_token, "") == 0))
 		access_token = NULL;
 
 	/* assert that the token_type is Bearer before using it */
-	if ((token_type != NULL) && (strcmp(token_type, "") != 0)) {
+	if ((token_type != NULL) && (apr_strnatcmp(token_type, "") != 0)) {
 		if (apr_strnatcasecmp(token_type, "Bearer") != 0) {
 			ap_log_rerror(APLOG_MARK, APLOG_NOTICE, 0, r,
 					"oidc_handle_implicit_authorization_response: dropping unsupported (cq. non \"Bearer\") token_type: \"%s\"",
@@ -1063,7 +1063,7 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 
 		/* issuer is set now, so let's continue as planned */
 
-	} else if (strcmp(issuer, "accounts.google.com") != 0) {
+	} else if (apr_strnatcmp(issuer, "accounts.google.com") != 0) {
 
 		/* allow issuer/domain entries that don't start with https */
 		issuer = apr_psprintf(r->pool, "%s",
@@ -1095,7 +1095,7 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
  * handle "all other" requests to the redirect_uri
  */
 int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c) {
-	if (r->args == NULL)
+	if ( (r->args == NULL) || (apr_strnatcmp(r->args, "") == 0) )
 		/* this is a "bare" request to the redirect URI, indicating implicit flow using the fragment response_mode */
 		return oidc_proto_javascript_implicit(r, c);
 
