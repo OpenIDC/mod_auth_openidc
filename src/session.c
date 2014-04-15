@@ -64,9 +64,9 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 /* the name of the remote-user attribute in the session  */
 #define OIDC_SESSION_REMOTE_USER_KEY "remote-user"
 /* the name of the session expiry attribute in the session */
-#define OIDC_SESSION_EXPIRY_KEY      "mac-expiry"
+#define OIDC_SESSION_EXPIRY_KEY      "oidc-expiry"
 /* the name of the uuid attribute in the session */
-#define OIDC_SESSION_UUID_KEY        "mac-uuid"
+#define OIDC_SESSION_UUID_KEY        "oidc-uuid"
 
 static apr_status_t (*ap_session_load_fn)(request_rec *r, session_rec **z) = NULL;
 static apr_status_t (*ap_session_get_fn)(request_rec *r, session_rec *z, const char *key, const char **value) = NULL;
@@ -430,10 +430,10 @@ static apr_status_t oidc_session_load_22(request_rec *r, session_rec **zz) {
 	z->entries = apr_table_make(z->pool, 10);
 
 	apr_status_t rc = APR_SUCCESS;
-	if (c->session_type == OIDC_SESSION_TYPE_22_CACHE_FILE) {
+	if (c->session_type == OIDC_SESSION_TYPE_22_SERVER_CACHE) {
 		/* load the session from the cache */
 		rc = oidc_session_load_cache(r, z);
-	} else if (c->session_type == OIDC_SESSION_TYPE_22_COOKIE) {
+	} else if (c->session_type == OIDC_SESSION_TYPE_22_CLIENT_COOKIE) {
 		/* load the session from a self-contained cookie */
 		rc = oidc_session_load_cookie(r, z);
 	} else {
@@ -480,10 +480,10 @@ static apr_status_t oidc_session_save_22(request_rec *r, session_rec *z) {
 	oidc_request_state_set(r, "session", (const char *) z);
 
 	apr_status_t rc = APR_SUCCESS;
-	if (c->session_type == OIDC_SESSION_TYPE_22_CACHE_FILE) {
+	if (c->session_type == OIDC_SESSION_TYPE_22_SERVER_CACHE) {
 		/* store the session in the cache */
 		rc = oidc_session_save_cache(r, z);
-	} else if (c->session_type == OIDC_SESSION_TYPE_22_COOKIE) {
+	} else if (c->session_type == OIDC_SESSION_TYPE_22_CLIENT_COOKIE) {
 		/* store the session in a self-contained cookie */
 		rc = oidc_session_save_cookie(r, z);
 	} else {

@@ -89,9 +89,11 @@
 /* timeouts in seconds for HTTP calls that should take a short time (registry/discovery related) */
 #define OIDC_DEFAULT_HTTP_TIMEOUT_SHORT  5
 /* default session storage type */
-#define OIDC_DEFAULT_SESSION_TYPE OIDC_SESSION_TYPE_22_CACHE_FILE
+#define OIDC_DEFAULT_SESSION_TYPE OIDC_SESSION_TYPE_22_SERVER_CACHE
 /* timeout in seconds after which state expires */
 #define OIDC_DEFAULT_STATE_TIMEOUT 300
+/* default session inactivity timeout */
+#define OIDC_DEFAULT_SESSION_INACTIVITY_TIMEOUT 900
 /* default OpenID Connect authorization response type */
 #define OIDC_DEFAULT_RESPONSE_TYPE "code"
 /* default duration in seconds after which retrieved JWS should be refreshed */
@@ -246,13 +248,13 @@ const char *oidc_set_session_type(cmd_parms *cmd, void *ptr, const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
 
-	if (strcmp(arg, "file") == 0) {
-		cfg->session_type = OIDC_SESSION_TYPE_22_CACHE_FILE;
-	} else if (strcmp(arg, "cookie") == 0) {
-		cfg->session_type = OIDC_SESSION_TYPE_22_COOKIE;
+	if (strcmp(arg, "server-cache") == 0) {
+		cfg->session_type = OIDC_SESSION_TYPE_22_SERVER_CACHE;
+	} else if (strcmp(arg, "client-cookie") == 0) {
+		cfg->session_type = OIDC_SESSION_TYPE_22_CLIENT_COOKIE;
 	} else {
 		return (apr_psprintf(cmd->pool,
-				"oidc_set_session_type: invalid value for OIDCSessionType (%s); must be one of \"file\" or \"cookie\"",
+				"oidc_set_session_type: invalid value for OIDCSessionType (%s); must be one of \"server-cache\" or \"client-cookie\"",
 				arg));
 	}
 
@@ -423,6 +425,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->http_timeout_long = OIDC_DEFAULT_HTTP_TIMEOUT_LONG;
 	c->http_timeout_short = OIDC_DEFAULT_HTTP_TIMEOUT_SHORT;
 	c->state_timeout = OIDC_DEFAULT_STATE_TIMEOUT;
+	c->session_inactivity_timeout = OIDC_DEFAULT_SESSION_INACTIVITY_TIMEOUT;
 
 	c->cookie_domain = NULL;
 	c->claim_delimiter = OIDC_DEFAULT_CLAIM_DELIMITER;
@@ -539,6 +542,9 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->state_timeout =
 			add->state_timeout != OIDC_DEFAULT_STATE_TIMEOUT ?
 					add->state_timeout : base->state_timeout;
+	c->session_inactivity_timeout =
+			add->session_inactivity_timeout != OIDC_DEFAULT_SESSION_INACTIVITY_TIMEOUT ?
+					add->session_inactivity_timeout : base->session_inactivity_timeout;
 
 	if (add->cache != &oidc_cache_file) {
 		c->cache = add->cache;
@@ -1051,6 +1057,10 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, state_timeout),
 				RSRC_CONF,
 				"Time to live in seconds for state parameter (cq. interval in which the authorization request and the corresponding response need to be completed)."),
+		AP_INIT_TAKE1("OIDCSessionInactivityTimeout", oidc_set_int_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, session_inactivity_timeout),
+				RSRC_CONF,
+				"Inactivity interval after which the session is invalidated when no interaction has occurred."),
 
 		AP_INIT_TAKE1("OIDCMetadataDir", oidc_set_dir_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, metadata_dir),

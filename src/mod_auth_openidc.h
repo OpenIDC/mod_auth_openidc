@@ -85,10 +85,10 @@
 /* parameter name of the original URL in the discovery response */
 #define OIDC_DISC_RT_PARAM "oidc_return"
 
-/* value that indicates to use cache-file based session tracking */
-#define OIDC_SESSION_TYPE_22_CACHE_FILE 0
-/* value that indicates to use cookie based session tracking */
-#define OIDC_SESSION_TYPE_22_COOKIE 1
+/* value that indicates to use server-side cache based session tracking */
+#define OIDC_SESSION_TYPE_22_SERVER_CACHE 0
+/* value that indicates to use client cookie based session tracking */
+#define OIDC_SESSION_TYPE_22_CLIENT_COOKIE 1
 
 /* name of the cookie that binds the state in the authorization request/response to the browser */
 #define OIDCStateCookieName  "mod_auth_openidc_state"
@@ -179,6 +179,7 @@ typedef struct oidc_cfg {
 	int http_timeout_long;
 	int http_timeout_short;
 	int state_timeout;
+	int session_inactivity_timeout;
 
 	char *cookie_domain;
 	char *claim_delimiter;

@@ -535,7 +535,7 @@ static apr_byte_t oidc_set_app_claims(request_rec *r,
 
 		/* whoops, attributes have been corrupted */
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_handle_existing_session: unable to parse \"%s\" stored in the session, returning internal server error",
+				"oidc_set_app_claims: unable to parse \"%s\" stored in the session, returning internal server error",
 				session_key);
 
 		return FALSE;
@@ -582,6 +582,10 @@ static int oidc_handle_existing_session(request_rec *r,
 	if (oidc_set_app_claims(r, cfg, session, OIDC_IDTOKEN_SESSION_KEY,
 			NULL) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
+
+	/* reset the session inactivity timer */
+	session->expiry = apr_time_now() + apr_time_from_sec(cfg->session_inactivity_timeout);
+	oidc_session_save(r, session);
 
 	/* return "user authenticated" status */
 	return OK;
@@ -638,7 +642,7 @@ static int oidc_authorization_response_finalize(request_rec *r, oidc_cfg *c,
 	session->remote_user = remoteUser;
 
 	/* expires is the value from the id_token */
-	session->expiry = expires;
+	session->expiry = apr_time_now() + apr_time_from_sec(c->session_inactivity_timeout);
 
 	/* store the whole contents of the id_token for later reference too */
 	oidc_session_set(r, session, OIDC_IDTOKEN_SESSION_KEY, id_token);
