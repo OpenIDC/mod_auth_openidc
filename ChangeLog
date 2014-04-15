@@ -1,3 +1,16 @@
+
+4/15/2014
+- add session inactivity timeout
+- register all supported response_types during client registration and try
+  to pick the one that matches the configured default
+- use long timeouts on JWK retrieval calls
+- allow for non-null but empty query parameters on implicit authorization response
+- simplify azp/aud and nonce handling
+- change session_type naming (to "server-cache"/"client-cookie")
+
+4/14/2014
+- factor out JOSE related code
+
 4/3/2014
 - add configurable claim name for the REMOTE_USER variable, optionally postfixed with the  url-encoded
   issuer value; the default for the remote username is "sub@" now, makeing it unique across OPs
