@@ -74,8 +74,10 @@
 #define OIDC_DEFAULT_CLAIM_DELIMITER ","
 /* default prefix for claim names being passed in HTTP headers */
 #define OIDC_DEFAULT_CLAIM_PREFIX "OIDC_CLAIM_"
-/* default name for the claim that will contain the REMOTE_USER value */
+/* default name for the claim that will contain the REMOTE_USER value for OpenID Connect protected paths */
 #define OIDC_DEFAULT_CLAIM_REMOTE_USER "sub@"
+/* default name for the claim that will contain the REMOTE_USER value for OAuth 2.0 protected paths */
+#define OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER "Username"
 /* default name of the session cookie */
 #define OIDC_DEFAULT_COOKIE "mod_auth_openidc_session"
 /* default for the HTTP header name in which the remote user name is passed */
@@ -411,6 +413,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->oauth.client_secret = NULL;
 	c->oauth.validate_endpoint_url = NULL;
 	c->oauth.validate_endpoint_auth = OIDC_DEFAULT_ENDPOINT_AUTH;
+	c->oauth.remote_user_claim = OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER;
 
 	c->cache = &oidc_cache_file;
 	c->cache_cfg = c->cache->create_config? c->cache->create_config(pool) : NULL;
@@ -532,6 +535,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			OIDC_DEFAULT_ENDPOINT_AUTH) != 0 ?
 					add->oauth.validate_endpoint_auth :
 					base->oauth.validate_endpoint_auth;
+	c->oauth.remote_user_claim =
+			add->oauth.remote_user_claim != OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER ?
+					add->oauth.remote_user_claim :
+					base->oauth.remote_user_claim;
 
 	c->http_timeout_long =
 			add->http_timeout_long != OIDC_DEFAULT_HTTP_TIMEOUT_LONG ?
@@ -1019,7 +1026,7 @@ const command_rec oidc_config_cmds[] = {
 		AP_INIT_TAKE1("OIDCRemoteUserClaim", oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, remote_user_claim),
 				RSRC_CONF,
-				"The claim that is used when setting the REMOTE_USER variable."),
+				"The claim that is used when setting the REMOTE_USER variable for OpenID Connect protected paths."),
 
 		AP_INIT_TAKE1("OIDCOAuthClientID", oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.client_id),
@@ -1044,6 +1051,10 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.ssl_validate_server),
 				RSRC_CONF,
 				"Require validation of the OAuth 2.0 AS Validation Endpoint SSL server certificate for successful authentication (On or Off)"),
+		AP_INIT_TAKE1("OIDCOAuthRemoteUserClaim", oidc_set_string_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, oauth.remote_user_claim),
+				RSRC_CONF,
+				"The claim that is used when setting the REMOTE_USER variable for OAuth 2.0 protected paths."),
 
 		AP_INIT_TAKE1("OIDCHTTPTimeoutLong", oidc_set_int_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, http_timeout_long),

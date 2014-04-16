@@ -62,7 +62,7 @@
 #define OIDC_OAUTH_VALIDATION_GRANT_TYPE "urn:pingidentity.com:oauth2:grant_type:validate_bearer"
 
 /*
- * validates an access token against the validation endpoint of the Authorization server and gets a response back
+ * validate an access token against the validation endpoint of the Authorization server and gets a response back
  */
 static int oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 		const char *token, const char **response) {
@@ -85,8 +85,8 @@ static int oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 
 	/* call the endpoint with the constructed parameter set and return the resulting response */
 	return oidc_util_http_call(r, c->oauth.validate_endpoint_url,
-			OIDC_HTTP_POST_FORM, params, basic_auth, NULL,
-			c->oauth.ssl_validate_server, response, c->http_timeout_long);
+			OIDC_HTTP_POST_FORM, params, basic_auth, NULL, c->oauth.ssl_validate_server,
+			response, c->http_timeout_long);
 }
 
 /*
@@ -127,6 +127,9 @@ static apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 	return TRUE;
 }
 
+/*
+ * resolve and validate an access_token against the configured Authorization Server
+ */
 static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 		const char *access_token, apr_json_value_t **token) {
 
@@ -191,6 +194,37 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 	return TRUE;
 }
 
+/*
+ * set the unique user identifier that will be propagated in the Apache r->user and REMOTE_USER variables
+ */
+static apr_byte_t oidc_oauth_set_remote_user(request_rec *r, oidc_cfg *c,
+		apr_json_value_t *token) {
+
+	/* get the configured claim name to populate REMOTE_USER with (defaults to "Username") */
+	char *claim_name = apr_pstrdup(r->pool, c->oauth.remote_user_claim);
+
+	/* get the claim value from the resolved token JSON response to use as the REMOTE_USER key */
+	apr_json_value_t *username = apr_hash_get(token->value.object, claim_name,
+				APR_HASH_KEY_STRING);
+	if ((username == NULL) || (username->type != APR_JSON_STRING)) {
+		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
+				"oidc_oauth_set_remote_user: response JSON object did not contain a \"%s\" string",
+				claim_name);
+		return FALSE;
+	}
+
+	r->user = apr_pstrdup(r->pool, username->value.string.p);
+
+	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+			"oidc_oauth_set_remote_user: set REMOTE_USER to claim %s=%s",
+			claim_name, username->value.string.p);
+
+	return TRUE;
+}
+
+/*
+ * main routine: handle OAuth 2.0 authentication/authorization
+ */
 int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 
 	/* check if this is a sub-request or an initial request */
@@ -229,17 +263,10 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 
 	// TODO: user attribute header settings & scrubbing ?
 
-	/* get the username from the response to use as the REMOTE_USER key */
-	apr_json_value_t *username = apr_hash_get(token->value.object, "Username",
-			APR_HASH_KEY_STRING);
-	if ((username == NULL) || (username->type != APR_JSON_STRING)) {
-		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-				"oidc_oauth_check_userid: response JSON object did not contain a Username string");
-	} else {
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_oauth_check_userid: returned username: %s",
-				username->value.string.p);
-		r->user = apr_pstrdup(r->pool, username->value.string.p);
+	if (oidc_oauth_set_remote_user(r, c, token) == FALSE) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_oauth_check_userid: remote user could not be set, aborting with HTTP_UNAUTHORIZED");
+		return HTTP_UNAUTHORIZED;
 	}
 
 	return OK;

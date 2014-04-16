@@ -137,6 +137,7 @@ typedef struct oidc_oauth_t {
 	char *client_secret;
 	char *validate_endpoint_url;
 	char *validate_endpoint_auth;
+	char *remote_user_claim;
 } oidc_oauth_t;
 
 typedef struct oidc_cfg {
