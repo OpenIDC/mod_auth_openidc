@@ -521,7 +521,7 @@ static apr_byte_t oidc_proto_set_remote_user(request_rec *r, oidc_cfg *c,
 			apr_psprintf(r->pool, "%s@%s", username, issuer) :
 			apr_pstrdup(r->pool, username);
 
-	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_proto_set_remote_user: set remote_user to %s", *user);
 
 	return TRUE;
