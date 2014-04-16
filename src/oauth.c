@@ -58,6 +58,8 @@
 
 #include "mod_auth_openidc.h"
 
+extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
+
 /* the grant type string that the Authorization server expects when validating access tokens */
 #define OIDC_OAUTH_VALIDATION_GRANT_TYPE "urn:pingidentity.com:oauth2:grant_type:validate_bearer"
 
@@ -205,7 +207,7 @@ static apr_byte_t oidc_oauth_set_remote_user(request_rec *r, oidc_cfg *c,
 
 	/* get the claim value from the resolved token JSON response to use as the REMOTE_USER key */
 	apr_json_value_t *username = apr_hash_get(token->value.object, claim_name,
-				APR_HASH_KEY_STRING);
+			APR_HASH_KEY_STRING);
 	if ((username == NULL) || (username->type != APR_JSON_STRING)) {
 		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
 				"oidc_oauth_set_remote_user: response JSON object did not contain a \"%s\" string",
@@ -258,16 +260,30 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 	if (oidc_oauth_resolve_access_token(r, c, access_token, &token) == FALSE)
 		return HTTP_UNAUTHORIZED;
 
+	/* check that we've got something back */
+	if (token == NULL) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_oauth_check_userid: could not resolve claims (token == NULL)");
+		return HTTP_UNAUTHORIZED;
+	}
+
 	/* store the parsed token (cq. the claims from the response) in the request state so it can be accessed by the authz routines */
 	oidc_request_state_set(r, OIDC_CLAIMS_SESSION_KEY, (const char *) token);
 
-	// TODO: user attribute header settings & scrubbing ?
-
+	/* set the REMOTE_USER variable */
 	if (oidc_oauth_set_remote_user(r, c, token) == FALSE) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_oauth_check_userid: remote user could not be set, aborting with HTTP_UNAUTHORIZED");
 		return HTTP_UNAUTHORIZED;
 	}
+
+	/* get a handle to the director config */
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+
+	/* set the resolved claims in the HTTP headers for the target application */
+	oidc_util_set_app_headers(r, token, dir_cfg->authn_header, c->claim_prefix,
+			c->claim_delimiter);
 
 	return OK;
 }

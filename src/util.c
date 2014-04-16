@@ -997,3 +997,142 @@ apr_byte_t oidc_util_json_array_has_value(request_rec *r,
 
 	return (i == haystack->value.array->nelts) ? FALSE : TRUE;
 }
+
+/*
+ * set an HTTP header to pass information to the application
+ */
+static void oidc_util_set_app_header(request_rec *r, const char *s_key,
+		const char *s_value, const char *claim_prefix) {
+
+	/* construct the header name, cq. put the prefix in front of a normalized key name */
+	const char *s_name = apr_psprintf(r->pool, "%s%s", claim_prefix,
+			oidc_normalize_header_name(r, s_key));
+
+	/* do some logging about this event */
+	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+			"oidc_util_set_app_header: setting header \"%s: %s\"", s_name, s_value);
+
+	/* now set the actual header name/value */
+	apr_table_set(r->headers_in, s_name, s_value);
+}
+
+/*
+ * set the user/claims information from the session in HTTP headers passed on to the application
+ */
+void oidc_util_set_app_headers(request_rec *r,
+		const apr_json_value_t *j_attrs, const char *authn_header,
+		const char *claim_prefix, const char *claim_delimiter) {
+
+	apr_json_value_t *j_value = NULL;
+	apr_hash_index_t *hi = NULL;
+	const char *s_key = NULL;
+
+	/* set the user authentication HTTP header if set and required */
+	if ((r->user != NULL) && (authn_header != NULL))
+		apr_table_set(r->headers_in, authn_header, r->user);
+
+	/* if not attributes are set, nothing needs to be done */
+	if (j_attrs == NULL) {
+		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+				"oidc_util_set_app_headers: no attributes to set");
+		return;
+	}
+
+	/* loop over the claims in the JSON structure */
+	for (hi = apr_hash_first(r->pool, j_attrs->value.object); hi; hi =
+			apr_hash_next(hi)) {
+
+		/* get the next key/value entry */
+		apr_hash_this(hi, (const void**) &s_key, NULL, (void**) &j_value);
+
+		/* check if it is a single value string */
+		if (j_value->type == APR_JSON_STRING) {
+
+			/* set the single string in the application header whose name is based on the key and the prefix */
+			oidc_util_set_app_header(r, s_key, j_value->value.string.p,
+					claim_prefix);
+
+		} else if (j_value->type == APR_JSON_BOOLEAN) {
+
+			/* set boolean value in the application header whose name is based on the key and the prefix */
+			oidc_util_set_app_header(r, s_key, j_value->value.boolean ? "1" : "0",
+					claim_prefix);
+
+		} else if (j_value->type == APR_JSON_LONG) {
+
+			/* set long value in the application header whose name is based on the key and the prefix */
+			oidc_util_set_app_header(r, s_key,
+					apr_psprintf(r->pool, "%ld", j_value->value.lnumber),
+					claim_prefix);
+
+		} else if (j_value->type == APR_JSON_DOUBLE) {
+
+			/* set float value in the application header whose name is based on the key and the prefix */
+			oidc_util_set_app_header(r, s_key,
+					apr_psprintf(r->pool, "%lf", j_value->value.dnumber),
+					claim_prefix);
+
+			/* check if it is a multi-value string */
+		} else if (j_value->type == APR_JSON_ARRAY) {
+
+			/* some logging about what we're going to do */
+			ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+					"oidc_util_set_app_headers: parsing attribute array for key \"%s\" (#nr-of-elems: %d)",
+					s_key, j_value->value.array->nelts);
+
+			/* string to hold the concatenated array string values */
+			char *s_concat = apr_pstrdup(r->pool, "");
+			int i = 0;
+
+			/* loop over the array */
+			for (i = 0; i < j_value->value.array->nelts; i++) {
+
+				/* get the current element */
+				apr_json_value_t *elem = APR_ARRAY_IDX(j_value->value.array, i,
+						apr_json_value_t *);
+
+				/* check if it is a string */
+				if (elem->type == APR_JSON_STRING) {
+
+					/* concatenate the string to the s_concat value using the configured separator char */
+					// TODO: escape the delimiter in the values (maybe reuse/extract url-formatted code from oidc_session_identity_encode)
+					if (apr_strnatcmp(s_concat, "") != 0) {
+						s_concat = apr_psprintf(r->pool, "%s%s%s", s_concat,
+								claim_delimiter, elem->value.string.p);
+					} else {
+						s_concat = apr_psprintf(r->pool, "%s",
+								elem->value.string.p);
+					}
+
+				} else if (elem->type == APR_JSON_BOOLEAN) {
+
+					if (apr_strnatcmp(s_concat, "") != 0) {
+						s_concat = apr_psprintf(r->pool, "%s%s%s", s_concat,
+								claim_delimiter,
+								j_value->value.boolean ? "1" : "0");
+					} else {
+						s_concat = apr_psprintf(r->pool, "%s",
+								j_value->value.boolean ? "1" : "0");
+					}
+
+				} else {
+
+					/* don't know how to handle a non-string array element */
+					ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
+							"oidc_util_set_app_headers: unhandled in-array JSON object type [%d] for key \"%s\" when parsing claims array elements",
+							elem->type, s_key);
+				}
+			}
+
+			/* set the concatenated string */
+			oidc_util_set_app_header(r, s_key, s_concat, claim_prefix);
+
+		} else {
+
+			/* no string and no array, so unclear how to handle this */
+			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
+					"oidc_util_set_app_headers: unhandled JSON object type [%d] for key \"%s\" when parsing claims",
+					j_value->type, s_key);
+		}
+	}
+}

@@ -277,6 +277,7 @@ apr_byte_t oidc_util_file_read(request_rec *r, const char *path, char **result);
 apr_byte_t oidc_util_issuer_match(const char *a, const char *b);
 int oidc_util_html_send_error(request_rec *r, const char *error, const char *description, int status_code);
 apr_byte_t oidc_util_json_array_has_value(request_rec *r, apr_json_value_t *haystack, const char *needle);
+void oidc_util_set_app_headers(request_rec *r, const apr_json_value_t *j_attrs, const char *authn_header, const char *claim_prefix, const char *claim_delimiter);
 
 // oidc_crypto.c
 unsigned char *oidc_crypto_aes_encrypt(request_rec *r, oidc_cfg *cfg, unsigned char *plaintext, int *len);
