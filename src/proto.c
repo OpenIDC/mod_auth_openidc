@@ -210,8 +210,8 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 	}
 
 	/* get the "aud" value from the JSON payload */
-	apr_json_value_t *aud = apr_hash_get(id_token_payload->value.json->value.object,
-			"aud",
+	apr_json_value_t *aud = apr_hash_get(
+			id_token_payload->value.json->value.object, "aud",
 			APR_HASH_KEY_STRING);
 	if (aud != NULL) {
 
@@ -451,7 +451,11 @@ static apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r,
 
 	if (apr_jws_signature_is_hmac(r->pool, jwt)) {
 
-		result = apr_jws_verify_hmac(r->pool, jwt, provider->client_secret);
+		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+				"oidc_proto_idtoken_verify_signature: verifying HMAC signature on id_token: header=%s, message=%s",
+				jwt->header.value.str, jwt->message);
+
+		result = apr_jws_verify_hmac(r, r->pool, jwt, provider->client_secret);
 
 	} else if (apr_jws_signature_is_rsa(r->pool, jwt)) {
 
@@ -465,10 +469,14 @@ static apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r,
 
 		} else {
 
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
 					"oidc_proto_idtoken_verify_signature: could not find a key in the JSON Web Keys");
 
 			if (*refresh == FALSE) {
+
+				ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+						"oidc_proto_idtoken_verify_signature: verifying RSA signature on id_token: header=%s, message=%s",
+						jwt->header.value.str, jwt->message);
 
 				/* do it again, forcing a JWKS refresh */
 				*refresh = TRUE;
