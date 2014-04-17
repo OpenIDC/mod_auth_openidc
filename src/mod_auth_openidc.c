@@ -78,8 +78,6 @@
 
 #include "mod_auth_openidc.h"
 
-// TODO: use set_remote user claim logic on OAuth 2.0 code path as well
-
 // TODO: documentation:
 //       - write a README.quickstart
 //       - include AUTHORS and contributions
@@ -443,9 +441,27 @@ static int oidc_handle_existing_session(request_rec *r,
 			NULL) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
-	/* reset the session inactivity timer */
-	session->expiry = apr_time_now() + apr_time_from_sec(cfg->session_inactivity_timeout);
-	oidc_session_save(r, session);
+	/*
+	 * reset the session inactivity timer
+	 * but only do this once per 10% of the inactivity timeout interval (with a max to 60 seconds)
+	 * for performance reasons
+	 *
+	 * now there's a small chance that the session ends 10% (or a minute) earlier than configured/expected
+	 * cq. when there's a request after a recent save (so no update) and then no activity happens until
+	 * a request comes in just before the session should expire
+	 * ("recent" and "just before" refer to 10%-with-a-max-of-60-seconds of the inactivity interval after
+	 * the start/last-update and before the expiry of the session respectively)
+	 *
+	 * this is be deemed acceptable here because of performance gain
+	 */
+	apr_time_t interval = apr_time_from_sec(cfg->session_inactivity_timeout);
+	apr_time_t now = apr_time_now();
+	apr_time_t slack = interval/10;
+	if (slack > apr_time_from_sec(60)) slack = apr_time_from_sec(60);
+	if (session->expiry - now < interval - slack) {
+		session->expiry = now + interval;
+		oidc_session_save(r, session);
+	}
 
 	/* return "user authenticated" status */
 	return OK;

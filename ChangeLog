@@ -1,3 +1,6 @@
+4/17/2014
+- improve session inactivity timeout handling
+
 4/16/2014
 - set REMOTE_USER and HTTP headers on OAuth 2.0 protected paths
 

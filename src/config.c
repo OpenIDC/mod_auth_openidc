@@ -95,7 +95,7 @@
 /* timeout in seconds after which state expires */
 #define OIDC_DEFAULT_STATE_TIMEOUT 300
 /* default session inactivity timeout */
-#define OIDC_DEFAULT_SESSION_INACTIVITY_TIMEOUT 900
+#define OIDC_DEFAULT_SESSION_INACTIVITY_TIMEOUT 300
 /* default OpenID Connect authorization response type */
 #define OIDC_DEFAULT_RESPONSE_TYPE "code"
 /* default duration in seconds after which retrieved JWS should be refreshed */
@@ -342,6 +342,34 @@ const char *oidc_set_id_token_alg(cmd_parms *cmd, void *struct_ptr,
 		return ap_set_string_slot(cmd, cfg, arg);
 	}
 	return "parameter must be one of 'RS256', 'RS384', 'RS512', 'HS256', 'HS384', 'HS512', 'PS256', 'PS384' or 'PS512'";
+}
+
+/*
+ * set the session inactivity timeout
+ */
+static const char *oidc_set_session_inactivity_timeout(cmd_parms *cmd,
+		void *struct_ptr, const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+	char *endptr = NULL;
+	long n = strtol(arg, &endptr, 10);
+	if ((*arg == '\0') || (*endptr != '\0')) {
+		return apr_psprintf(cmd->pool,
+				"Invalid value for directive %s, expected integer",
+				cmd->directive->directive);
+	}
+	if (n < 10) {
+		return apr_psprintf(cmd->pool,
+				"Invalid value for directive %s, must not be less than 10 seconds",
+				cmd->directive->directive);
+	}
+	if (n > 86400) {
+		return apr_psprintf(cmd->pool,
+				"Invalid value for directive %s, must not be greater than 86400 seconds (24 hours)",
+				cmd->directive->directive);
+	}
+	cfg->session_inactivity_timeout = n;
+	return NULL;
 }
 
 /*
@@ -1068,7 +1096,7 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, state_timeout),
 				RSRC_CONF,
 				"Time to live in seconds for state parameter (cq. interval in which the authorization request and the corresponding response need to be completed)."),
-		AP_INIT_TAKE1("OIDCSessionInactivityTimeout", oidc_set_int_slot,
+		AP_INIT_TAKE1("OIDCSessionInactivityTimeout", oidc_set_session_inactivity_timeout,
 				(void*)APR_OFFSETOF(oidc_cfg, session_inactivity_timeout),
 				RSRC_CONF,
 				"Inactivity interval after which the session is invalidated when no interaction has occurred."),
@@ -1080,7 +1108,7 @@ const command_rec oidc_config_cmds[] = {
 		AP_INIT_TAKE1("OIDCSessionType", oidc_set_session_type,
 				(void*)APR_OFFSETOF(oidc_cfg, session_type),
 				RSRC_CONF,
-				"OpenID Connect session storage type (Apache 2.0/2.2 only). Must be one of \"file\" or \"cookie\"."),
+				"OpenID Connect session storage type (Apache 2.0/2.2 only). Must be one of \"server-cache\" or \"client-cookie\"."),
 		AP_INIT_FLAG("OIDCScrubRequestHeaders",
 				oidc_set_flag_slot,
 				(void *) APR_OFFSETOF(oidc_cfg, scrub_request_headers),
