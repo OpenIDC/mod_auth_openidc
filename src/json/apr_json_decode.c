@@ -637,6 +637,7 @@ static apr_status_t apr_json_decode_value(apr_json_scanner_t *self, apr_json_val
         break;
     case 'n':
         value.type = APR_JSON_NULL;
+        status = apr_json_decode_null(self);
         break;
     case 't':  
     case 'f':
