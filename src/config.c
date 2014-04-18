@@ -988,7 +988,7 @@ const command_rec oidc_config_cmds[] = {
 		AP_INIT_TAKE1("OIDCIDTokenAlg", oidc_set_id_token_alg,
 				(void *)APR_OFFSETOF(oidc_cfg, id_token_alg),
 				RSRC_CONF,
-				"The algorithm that the OP should use to sign the id_token (used only in dynamic client registration); must be one of [RS256|RS384|RS512|PS256|PS384|PS512]"),
+				"The algorithm that the OP should use to sign the id_token (used only in dynamic client registration); must be one of [RS256|RS384|RS512|PS256|PS384|PS512|HS256|HS384|HS512]"),
 		AP_INIT_FLAG("OIDCSSLValidateServer",
 				oidc_set_flag_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.ssl_validate_server),

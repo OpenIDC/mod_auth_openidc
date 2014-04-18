@@ -484,6 +484,12 @@ static apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r,
 						jwt, refresh);
 			}
 		}
+
+	} else {
+
+		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
+				"oidc_proto_idtoken_verify_signature: cannot verify id_token; unsupported algorithm (%s) != RSA or HMAC", jwt->header.alg);
+
 	}
 
 	if (result == TRUE) {

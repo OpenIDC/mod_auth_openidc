@@ -62,6 +62,16 @@
 #include "apr_jose.h"
 
 /*
+ * helper function to determine the type of signature on a JWT
+ */
+static apr_byte_t apr_jws_signature_starts_with(apr_pool_t *pool,
+		const char *alg, const char *match, int n) {
+	if (alg == NULL)
+		return FALSE;
+	return (strncmp(alg, match, n) == 0);
+}
+
+/*
  * return OpenSSL digest for JWK algorithm
  */
 static char *apr_jwt_alg_to_openssl_digest(const char *alg) {
@@ -184,28 +194,56 @@ apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk) 
 		goto end;
 	}
 
-	ctx.pctx = EVP_PKEY_CTX_new(pRsaKey, NULL);
-	if (!EVP_PKEY_verify_init(ctx.pctx)) {
-		goto end;
+	if (apr_jws_signature_starts_with(pool, jwt->header.alg, "PS", 2) == TRUE) {
+
+		int status = 0;
+		unsigned char *pDecrypted = apr_pcalloc(pool, jwt->signature.length);
+		status = RSA_public_decrypt(jwt->signature.length, jwt->signature.bytes,
+				pDecrypted, pubkey, RSA_NO_PADDING);
+		if (status == -1)
+			goto end;
+
+		unsigned char *pDigest = apr_pcalloc(pool, RSA_size(pubkey));
+		unsigned int uDigestLen = RSA_size(pubkey);
+
+		EVP_DigestInit(&ctx, digest);
+		EVP_DigestUpdate(&ctx, jwt->message, strlen(jwt->message));
+		EVP_DigestFinal(&ctx, pDigest, &uDigestLen);
+
+		/* verify the data */
+		status = RSA_verify_PKCS1_PSS(pubkey, pDigest, digest, pDecrypted,
+				-2 /* salt length recovered from signature*/);
+		if (status != 1)
+			goto end;
+
+		rc = TRUE;
+
+	} else if (apr_jws_signature_starts_with(pool, jwt->header.alg, "RS",
+			2) == TRUE) {
+
+		ctx.pctx = EVP_PKEY_CTX_new(pRsaKey, NULL);
+		if (!EVP_PKEY_verify_init(ctx.pctx)) {
+			goto end;
+		}
+		if (!EVP_PKEY_CTX_set_rsa_padding(ctx.pctx,
+				apr_jws_alg_to_rsa_openssl_padding(jwt->header.alg)))
+			goto end;
+
+		if (!EVP_VerifyInit_ex(&ctx, digest, NULL))
+			goto end;
+
+		if (!EVP_VerifyUpdate(&ctx, jwt->message, strlen(jwt->message)))
+			goto end;
+
+		if (!EVP_VerifyFinal(&ctx, (const unsigned char *) jwt->signature.bytes,
+				jwt->signature.length, pRsaKey))
+			goto end;
+
+		rc = TRUE;
+
 	}
-	if (!EVP_PKEY_CTX_set_rsa_padding(ctx.pctx,
-			apr_jws_alg_to_rsa_openssl_padding(jwt->header.alg)))
-		goto end;
 
-	if (!EVP_VerifyInit_ex(&ctx, digest, NULL))
-		goto end;
-
-	if (!EVP_VerifyUpdate(&ctx, jwt->message, strlen(jwt->message)))
-		goto end;
-
-	if (!EVP_VerifyFinal(&ctx, (const unsigned char *) jwt->signature.bytes,
-			jwt->signature.length, pRsaKey))
-		goto end;
-
-	rc = TRUE;
-
-end:
-	if (pRsaKey) {
+	end: if (pRsaKey) {
 		EVP_PKEY_free(pRsaKey);
 	} else if (pubkey) {
 		RSA_free(pubkey);
@@ -215,15 +253,6 @@ end:
 	return rc;
 }
 
-/*
- * helper function to determine the type of signature on a JWT
- */
-static apr_byte_t apr_jws_signature_starts_with(apr_pool_t *pool,
-		const char *alg, const char *match, int n) {
-	if (alg == NULL)
-		return FALSE;
-	return (strncmp(alg, match, n) == 0);
-}
 /*
  * check if the signature on the JWT is HMAC-based
  */
@@ -235,5 +264,6 @@ apr_byte_t apr_jws_signature_is_hmac(apr_pool_t *pool, apr_jwt_t *jwt) {
  * check if the signature on the JWT is RSA-based
  */
 apr_byte_t apr_jws_signature_is_rsa(apr_pool_t *pool, apr_jwt_t *jwt) {
-	return apr_jws_signature_starts_with(pool, jwt->header.alg, "RS", 2);
+	return apr_jws_signature_starts_with(pool, jwt->header.alg, "RS", 2)
+			|| apr_jws_signature_starts_with(pool, jwt->header.alg, "PS", 2);
 }
