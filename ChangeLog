@@ -1,3 +1,6 @@
+4/19/2014
+- store response_type in state and make state a JSON object
+
 4/18/2014
 - support RSASSA-PSS token signing algorithms (PS256,PS384,PS512)
 

@@ -200,9 +200,11 @@ static char *oidc_get_browser_state_hash(request_rec *r, const char *state) {
  * see if the state that came back from the OP matches what we've stored in the cookie
  */
 static int oidc_check_state(request_rec *r, oidc_cfg *c, const char *state,
-		char **original_url, char **issuer, char **nonce) {
+		char **original_url, char **issuer, char **nonce, char **response_type) {
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r, "oidc_check_state: entering");
+
+	apr_json_value_t *v = NULL;
 
 	/* get the state cookie value first */
 	char *cookieValue = oidc_get_cookie(r, OIDCStateCookieName);
@@ -217,25 +219,24 @@ static int oidc_check_state(request_rec *r, oidc_cfg *c, const char *state,
 	oidc_set_cookie(r, OIDCStateCookieName, "");
 
 	/* decrypt the state obtained from the cookie */
-	char *svalue;
+	char *svalue = NULL;
 	if (oidc_base64url_decode_decrypt_string(r, &svalue, cookieValue) <= 0)
 		return FALSE;
 
-	/* context to iterate over the entries in the decrypted state cookie value */
-	char *ctx = NULL;
+	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+			"oidc_check_state: restored state: %s", svalue);
 
-	/* first get the base64-encoded random value */
-	*nonce = apr_strtok(svalue, OIDCStateCookieSep, &ctx);
-	if (*nonce == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_check_state: no nonce element found in \"%s\" cookie (%s)",
-				OIDCStateCookieName, cookieValue);
+	apr_json_value_t *json = NULL;
+	/* decode the string in to a JSON structure into value->json */
+	if (apr_json_decode(&json, svalue, strlen(svalue), r->pool) != APR_SUCCESS)
 		return FALSE;
-	}
+
+	/* 1. restore the nonce from the cookie */
+	v = apr_hash_get(json->value.object, "nonce", APR_HASH_KEY_STRING);
+	*nonce = apr_pstrdup(r->pool, v->value.string.p);
 
 	/* calculate the hash of the browser fingerprint concatenated with the nonce */
 	char *calc = oidc_get_browser_state_hash(r, *nonce);
-
 	/* compare the calculated hash with the value provided in the authorization response */
 	if (apr_strnatcmp(calc, state) != 0) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
@@ -244,55 +245,33 @@ static int oidc_check_state(request_rec *r, oidc_cfg *c, const char *state,
 		return FALSE;
 	}
 
-	/* since we're OK, get the original URL as the next value in the decrypted cookie */
-	*original_url = apr_strtok(NULL, OIDCStateCookieSep, &ctx);
-	if (*original_url == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_check_state: no separator (%s) found in \"%s\" cookie (%s)",
-				OIDCStateCookieSep, OIDCStateCookieName, cookieValue);
-		return FALSE;
-	}
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_check_state: \"original_url\" restored from cookie: %s",
-			*original_url);
+	/* 2. since we're OK, get the original URL as the next value in the decrypted cookie */
+	v = apr_hash_get(json->value.object, "original_url", APR_HASH_KEY_STRING);
+	*original_url = apr_pstrdup(r->pool, v->value.string.p);
 
-	/* thirdly, get the issuer value stored in the cookie */
-	*issuer = apr_strtok(NULL, OIDCStateCookieSep, &ctx);
-	if (*issuer == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_check_state: no second separator (%s) found in \"%s\" cookie (%s)",
-				OIDCStateCookieSep, OIDCStateCookieName, cookieValue);
-		return FALSE;
-	}
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_check_state: \"issuer\" restored from cookie: %s", *issuer);
+	/* 3. get the issuer value stored in the cookie */
+	v = apr_hash_get(json->value.object, "issuer", APR_HASH_KEY_STRING);
+	*issuer = apr_pstrdup(r->pool, v->value.string.p);
 
-	/* lastly, get the timestamp value stored in the cookie */
-	char *timestamp = apr_strtok(NULL, OIDCStateCookieSep, &ctx);
-	if (timestamp == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_check_state: no third separator (%s) found in \"%s\" cookie (%s)",
-				OIDCStateCookieSep, OIDCStateCookieName, cookieValue);
-		return FALSE;
-	}
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_check_state: \"timestamp\" restored from cookie: %s",
-			timestamp);
+	/* 4. get the response_type value stored in the cookie */
+	v = apr_hash_get(json->value.object, "response_type", APR_HASH_KEY_STRING);
+	*response_type = apr_pstrdup(r->pool, v->value.string.p);
 
-	apr_time_t then;
-	if (sscanf(timestamp, "%" APR_TIME_T_FMT, &then) != 1) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_check_state: could not parse timestamp restored from state cookie (%s)",
-				timestamp);
-		return FALSE;
-	}
+	/* 5. get the timestamp value stored in the cookie */
+	v = apr_hash_get(json->value.object, "timestamp", APR_HASH_KEY_STRING);
+	apr_time_t then = v->value.lnumber;
 
+	/* check that the timestamp is not beyond the valid interval */
 	apr_time_t now = apr_time_sec(apr_time_now());
 	if (now > then + c->state_timeout) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_check_state: state has expired");
 		return FALSE;
 	}
+
+	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+			"oidc_check_state: restored state: nonce=\"%s\", original_url=\"%s\", issuer=\"%s\", response_type=\%s\", timestamp=%" APR_TIME_T_FMT,
+			*nonce, *original_url, *issuer, *response_type, then);
 
 	/* we've made it */
 	return TRUE;
@@ -303,7 +282,7 @@ static int oidc_check_state(request_rec *r, oidc_cfg *c, const char *state,
  * and set a cookie in the browser that is cryptographically bound to that
  */
 static char *oidc_create_state_and_set_cookie(request_rec *r, const char *url,
-		const char *issuer, const char *nonce) {
+		const char *issuer, const char *nonce, const char *response_type) {
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_create_state_and_set_cookie: entering");
@@ -311,14 +290,18 @@ static char *oidc_create_state_and_set_cookie(request_rec *r, const char *url,
 	char *cookieValue = NULL;
 
 	/*
-	 * create a cookie consisting of 4 elements:
-	 * random value, original URL, issuer and timestamp separated by a defined separator
+	 * create a cookie consisting of 5 elements:
+	 * random value, original URL, issuer, response_type and timestamp separated by a defined separator
 	 */
 	apr_time_t now = apr_time_sec(apr_time_now());
-	char *rvalue = apr_psprintf(r->pool, "%s%s%s%s%s%s%" APR_TIME_T_FMT "",
-			nonce,
-			OIDCStateCookieSep, url, OIDCStateCookieSep, issuer,
-			OIDCStateCookieSep, now);
+
+	char *rvalue = apr_psprintf(r->pool, "{"
+			"\"nonce\": \"%s\","
+			"\"original_url\": \"%s\","
+			"\"issuer\": \"%s\","
+			"\"response_type\": \"%s\","
+			"\"timestamp\": %" APR_TIME_T_FMT "}", nonce, url, issuer,
+			response_type, now);
 
 	/* encrypt the resulting value and set it as a cookie */
 	oidc_encrypt_base64url_encode_string(r, &cookieValue, rvalue);
@@ -376,7 +359,6 @@ const char*oidc_request_state_get(request_rec *r, const char *key) {
 	/* return the value from the table */
 	return apr_table_get(state, key);
 }
-
 
 static apr_byte_t oidc_set_app_claims(request_rec *r,
 		const oidc_cfg * const cfg, session_rec *session,
@@ -459,8 +441,9 @@ static int oidc_handle_existing_session(request_rec *r,
 	 */
 	apr_time_t interval = apr_time_from_sec(cfg->session_inactivity_timeout);
 	apr_time_t now = apr_time_now();
-	apr_time_t slack = interval/10;
-	if (slack > apr_time_from_sec(60)) slack = apr_time_from_sec(60);
+	apr_time_t slack = interval / 10;
+	if (slack > apr_time_from_sec(60))
+		slack = apr_time_from_sec(60);
 	if (session->expiry - now < interval - slack) {
 		session->expiry = now + interval;
 		oidc_session_save(r, session);
@@ -477,11 +460,12 @@ static int oidc_handle_existing_session(request_rec *r,
  */
 static apr_byte_t oidc_authorization_response_match_state(request_rec *r,
 		oidc_cfg *c, const char *state, char **original_url,
-		struct oidc_provider_t **provider, char **nonce) {
+		struct oidc_provider_t **provider, char **nonce, char **response_type) {
 	char *issuer = NULL;
 
 	/* check the state parameter against what we stored in a cookie */
-	if (oidc_check_state(r, c, state, original_url, &issuer, nonce) == FALSE) {
+	if (oidc_check_state(r, c, state, original_url, &issuer, nonce,
+			response_type) == FALSE) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_authorization_response_match_state: unable to restore state");
 		return FALSE;
@@ -521,7 +505,8 @@ static int oidc_authorization_response_finalize(request_rec *r, oidc_cfg *c,
 	session->remote_user = remoteUser;
 
 	/* expires is the value from the id_token */
-	session->expiry = apr_time_now() + apr_time_from_sec(c->session_inactivity_timeout);
+	session->expiry =
+			apr_time_now() + apr_time_from_sec(c->session_inactivity_timeout);
 
 	/* store the whole contents of the id_token for later reference too */
 	oidc_session_set(r, session, OIDC_IDTOKEN_SESSION_KEY, id_token);
@@ -574,8 +559,9 @@ static int oidc_handle_basic_authorization_response(request_rec *r, oidc_cfg *c,
 	struct oidc_provider_t *provider = NULL;
 	char *original_url = NULL;
 	char *nonce = NULL;
+	char *response_type = NULL;
 	if (oidc_authorization_response_match_state(r, c, state, &original_url,
-			&provider, &nonce) == FALSE)
+			&provider, &nonce, &response_type) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
 	/* now we've got the metadata for the provider that sent the response to us */
@@ -627,8 +613,9 @@ static int oidc_handle_implicit_authorization_response(request_rec *r,
 	struct oidc_provider_t *provider = NULL;
 	char *original_url = NULL;
 	char *nonce = NULL;
+	char *response_type = NULL;
 	if (oidc_authorization_response_match_state(r, c, state, &original_url,
-			&provider, &nonce) == FALSE)
+			&provider, &nonce, &response_type) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
 	/* initialize local variables for the id_token contents */
@@ -675,8 +662,9 @@ static int oidc_handle_implicit_authorization_response(request_rec *r,
 	}
 
 	/* complete handling of the response by storing stuff in the session and redirecting to the original URL */
-	return oidc_authorization_response_finalize(r, c, session, jwt->payload.value.str,
-			s_claims, remoteUser, jwt->payload.exp, original_url);
+	return oidc_authorization_response_finalize(r, c, session,
+			jwt->payload.value.str, s_claims, remoteUser, jwt->payload.exp,
+			original_url);
 }
 
 /*
@@ -778,9 +766,9 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 		/* yes, assemble the parameters for external discovery */
 		char *url = apr_psprintf(r->pool, "%s%s%s=%s&%s=%s", cfg->discover_url,
 				strchr(cfg->discover_url, '?') != NULL ? "&" : "?",
-						OIDC_DISC_RT_PARAM, oidc_util_escape_string(r, current_url),
-						OIDC_DISC_CB_PARAM,
-						oidc_util_escape_string(r, cfg->redirect_uri));
+				OIDC_DISC_RT_PARAM, oidc_util_escape_string(r, current_url),
+				OIDC_DISC_CB_PARAM,
+				oidc_util_escape_string(r, cfg->redirect_uri));
 
 		/* log what we're about to do */
 		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
@@ -803,14 +791,14 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 	// TODO: yes, we could use some templating here...
 	const char *s =
 			"<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd\">"
-			"<html>\n"
-			"	<head>\n"
-			"		<meta http-equiv=\"Content-Type\" content=\"text/html;charset=UTF-8\"/>\n"
-			"		<title>OpenID Connect Provider Discovery</title>\n"
-			"	</head>\n"
-			"	<body>\n"
-			"		<center>\n"
-			"			<h3>Select your OpenID Connect Identity Provider</h3>\n";
+					"<html>\n"
+					"	<head>\n"
+					"		<meta http-equiv=\"Content-Type\" content=\"text/html;charset=UTF-8\"/>\n"
+					"		<title>OpenID Connect Provider Discovery</title>\n"
+					"	</head>\n"
+					"	<body>\n"
+					"		<center>\n"
+					"			<h3>Select your OpenID Connect Identity Provider</h3>\n";
 
 	/* list all configured providers in there */
 	int i;
@@ -885,7 +873,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 
 	/* create state that restores the context when the authorization response comes in; cryptographically bind it to the browser */
 	const char *state = oidc_create_state_and_set_cookie(r, original_url,
-			provider->issuer, nonce);
+			provider->issuer, nonce, provider->response_type);
 
 	// TODO: maybe show intermediate/progress screen "redirecting to"
 
@@ -952,7 +940,7 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 		issuer = apr_psprintf(r->pool, "%s",
 				((strstr(issuer, "http://") == issuer)
 						|| (strstr(issuer, "https://") == issuer)) ?
-								issuer : apr_psprintf(r->pool, "https://%s", issuer));
+						issuer : apr_psprintf(r->pool, "https://%s", issuer));
 	}
 
 	/* strip trailing '/' */
@@ -978,7 +966,7 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
  * handle "all other" requests to the redirect_uri
  */
 int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c) {
-	if ( (r->args == NULL) || (apr_strnatcmp(r->args, "") == 0) )
+	if ((r->args == NULL) || (apr_strnatcmp(r->args, "") == 0))
 		/* this is a "bare" request to the redirect URI, indicating implicit flow using the fragment response_mode */
 		return oidc_proto_javascript_implicit(r, c);
 
