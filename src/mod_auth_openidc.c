@@ -78,7 +78,8 @@
 
 #include "mod_auth_openidc.h"
 
-// TOD: check at_hash if present and require it for "token id_token" flow
+// TODO: harmonize user facing error handling
+// TODO: check at_hash if present and require it for "token id_token" flow
 
 // TODO: documentation:
 //       - write a README.quickstart
@@ -708,7 +709,7 @@ static int oidc_handle_implicit_post(request_rec *r, oidc_cfg *c,
 	char *error_description = (char *) apr_table_get(params,
 			"error_description");
 	if (error != NULL)
-		return oidc_util_html_send_error(r, error, error_description, OK);
+		return oidc_util_html_send_error(r, error, error_description, DONE);
 
 	/* get the state */
 	char *state = (char *) apr_table_get(params, "state");
@@ -988,7 +989,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c) {
 		oidc_util_get_request_parameter(r, "error", &error);
 		oidc_util_get_request_parameter(r, "error_description", &descr);
 
-		return oidc_util_html_send_error(r, error, descr, OK);
+		return oidc_util_html_send_error(r, error, descr, DONE);
 	}
 
 	/* something went wrong */

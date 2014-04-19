@@ -826,8 +826,6 @@ int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg *c) {
 					"  </body>\n"
 					"</html>\n";
 
-	//return oidc_util_http_sendstring(r, apr_psprintf(r->pool, java_script, c->redirect_uri), OK);
-	//return oidc_util_http_sendstring(r, apr_psprintf(r->pool, java_script, c->redirect_uri), HTTP_MOVED_TEMPORARILY);
-	return oidc_util_http_sendstring(r, java_script, HTTP_UNAUTHORIZED);
+	return oidc_util_http_sendstring(r, java_script, DONE);
 }
 
