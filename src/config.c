@@ -158,13 +158,13 @@ static const char *oidc_set_url_slot_type(cmd_parms *cmd, void *ptr,
 	}
 
 	if (type == NULL) {
-		if ((strcmp(url.scheme, "http") != 0)
-				&& (strcmp(url.scheme, "https") != 0)) {
+		if ((apr_strnatcmp(url.scheme, "http") != 0)
+				&& (apr_strnatcmp(url.scheme, "https") != 0)) {
 			return apr_psprintf(cmd->pool,
 					"oidc_set_url_slot_type: configuration value '%s' could not be parsed as a HTTP/HTTPs URL (scheme != http/https)!",
 					arg);
 		}
-	} else if (strcmp(url.scheme, type) != 0) {
+	} else if (apr_strnatcmp(url.scheme, type) != 0) {
 		return apr_psprintf(cmd->pool,
 				"oidc_set_url_slot_type: configuration value '%s' could not be parsed as a \"%s\" URL (scheme == %s != \"%s\")!",
 				arg, type, url.scheme, type);
@@ -250,9 +250,9 @@ const char *oidc_set_session_type(cmd_parms *cmd, void *ptr, const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
 
-	if (strcmp(arg, "server-cache") == 0) {
+	if (apr_strnatcmp(arg, "server-cache") == 0) {
 		cfg->session_type = OIDC_SESSION_TYPE_22_SERVER_CACHE;
-	} else if (strcmp(arg, "client-cookie") == 0) {
+	} else if (apr_strnatcmp(arg, "client-cookie") == 0) {
 		cfg->session_type = OIDC_SESSION_TYPE_22_CLIENT_COOKIE;
 	} else {
 		return (apr_psprintf(cmd->pool,
@@ -270,11 +270,11 @@ const char *oidc_set_cache_type(cmd_parms *cmd, void *ptr, const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
 
-	if (strcmp(arg, "file") == 0) {
+	if (apr_strnatcmp(arg, "file") == 0) {
 		cfg->cache = &oidc_cache_file;
-	} else if (strcmp(arg, "memcache") == 0) {
+	} else if (apr_strnatcmp(arg, "memcache") == 0) {
 		cfg->cache = &oidc_cache_memcache;
-	} else if (strcmp(arg, "shm") == 0) {
+	} else if (apr_strnatcmp(arg, "shm") == 0) {
 		cfg->cache = &oidc_cache_shm;
 	} else {
 		return (apr_psprintf(cmd->pool,
@@ -282,7 +282,10 @@ const char *oidc_set_cache_type(cmd_parms *cmd, void *ptr, const char *arg) {
 				arg));
 	}
 
-	cfg->cache_cfg = cfg->cache->create_config ? cfg->cache->create_config(cmd->server->process->pool) : NULL;
+	cfg->cache_cfg =
+			cfg->cache->create_config ?
+					cfg->cache->create_config(cmd->server->process->pool) :
+					NULL;
 
 	return NULL;
 }
@@ -392,7 +395,8 @@ static char *oidc_get_path(request_rec *r) {
  */
 char *oidc_get_cookie_path(request_rec *r) {
 	char *rv = NULL, *requestPath = oidc_get_path(r);
-	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
 	if (d->cookie_path != NULL) {
 		if (strncmp(d->cookie_path, requestPath, strlen(d->cookie_path)) == 0)
 			rv = d->cookie_path;
@@ -444,7 +448,8 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->oauth.remote_user_claim = OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER;
 
 	c->cache = &oidc_cache_file;
-	c->cache_cfg = c->cache->create_config? c->cache->create_config(pool) : NULL;
+	c->cache_cfg =
+			c->cache->create_config ? c->cache->create_config(pool) : NULL;
 	c->cache_file_dir = NULL;
 	c->cache_file_clean_interval = OIDC_DEFAULT_CACHE_FILE_CLEAN_INTERVAL;
 	c->cache_memcache_servers = NULL;
@@ -499,7 +504,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->provider.token_endpoint_url :
 					base->provider.token_endpoint_url;
 	c->provider.token_endpoint_auth =
-			strcmp(add->provider.token_endpoint_auth,
+			apr_strnatcmp(add->provider.token_endpoint_auth,
 			OIDC_DEFAULT_ENDPOINT_AUTH) != 0 ?
 					add->provider.token_endpoint_auth :
 					base->provider.token_endpoint_auth;
@@ -520,18 +525,19 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->provider.ssl_validate_server :
 					base->provider.ssl_validate_server;
 	c->provider.client_name =
-			strcmp(add->provider.client_name, OIDC_DEFAULT_CLIENT_NAME) != 0 ?
+			apr_strnatcmp(add->provider.client_name, OIDC_DEFAULT_CLIENT_NAME)
+					!= 0 ?
 					add->provider.client_name : base->provider.client_name;
 	c->provider.client_contact =
 			add->provider.client_contact != NULL ?
 					add->provider.client_contact :
 					base->provider.client_contact;
 	c->provider.scope =
-			strcmp(add->provider.scope, OIDC_DEFAULT_SCOPE) != 0 ?
+			apr_strnatcmp(add->provider.scope, OIDC_DEFAULT_SCOPE) != 0 ?
 					add->provider.scope : base->provider.scope;
 	c->provider.response_type =
-			strcmp(add->provider.response_type, OIDC_DEFAULT_RESPONSE_TYPE)
-					!= 0 ?
+			apr_strnatcmp(add->provider.response_type,
+					OIDC_DEFAULT_RESPONSE_TYPE) != 0 ?
 					add->provider.response_type : base->provider.response_type;
 	c->provider.jwks_refresh_interval =
 			add->provider.jwks_refresh_interval
@@ -542,7 +548,6 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->provider.idtoken_iat_slack != OIDC_DEFAULT_IDTOKEN_IAT_SLACK ?
 					add->provider.idtoken_iat_slack :
 					base->provider.idtoken_iat_slack;
-
 
 	c->oauth.ssl_validate_server =
 			add->oauth.ssl_validate_server != OIDC_DEFAULT_SSL_VALIDATE_SERVER ?
@@ -559,12 +564,13 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->oauth.validate_endpoint_url :
 					base->oauth.validate_endpoint_url;
 	c->oauth.validate_endpoint_auth =
-			strcmp(add->oauth.validate_endpoint_auth,
+			apr_strnatcmp(add->oauth.validate_endpoint_auth,
 			OIDC_DEFAULT_ENDPOINT_AUTH) != 0 ?
 					add->oauth.validate_endpoint_auth :
 					base->oauth.validate_endpoint_auth;
 	c->oauth.remote_user_claim =
-			add->oauth.remote_user_claim != OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER ?
+			apr_strnatcmp(add->oauth.remote_user_claim,
+					OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER) != 0 ?
 					add->oauth.remote_user_claim :
 					base->oauth.remote_user_claim;
 
@@ -578,8 +584,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->state_timeout != OIDC_DEFAULT_STATE_TIMEOUT ?
 					add->state_timeout : base->state_timeout;
 	c->session_inactivity_timeout =
-			add->session_inactivity_timeout != OIDC_DEFAULT_SESSION_INACTIVITY_TIMEOUT ?
-					add->session_inactivity_timeout : base->session_inactivity_timeout;
+			add->session_inactivity_timeout
+					!= OIDC_DEFAULT_SESSION_INACTIVITY_TIMEOUT ?
+					add->session_inactivity_timeout :
+					base->session_inactivity_timeout;
 
 	if (add->cache != &oidc_cache_file) {
 		c->cache = add->cache;
@@ -594,7 +602,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->cache_file_dir : base->cache_file_dir;
 	c->cache_file_clean_interval =
 			add->cache_file_clean_interval
-			!= OIDC_DEFAULT_CACHE_FILE_CLEAN_INTERVAL ?
+					!= OIDC_DEFAULT_CACHE_FILE_CLEAN_INTERVAL ?
 					add->cache_file_clean_interval :
 					base->cache_file_clean_interval;
 
@@ -615,13 +623,14 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->cookie_domain != NULL ?
 					add->cookie_domain : base->cookie_domain;
 	c->claim_delimiter =
-			strcmp(add->claim_delimiter, OIDC_DEFAULT_CLAIM_DELIMITER) != 0 ?
-					add->claim_delimiter : base->claim_delimiter;
+			apr_strnatcmp(add->claim_delimiter, OIDC_DEFAULT_CLAIM_DELIMITER)
+					!= 0 ? add->claim_delimiter : base->claim_delimiter;
 	c->claim_prefix =
-			strcmp(add->claim_prefix, OIDC_DEFAULT_CLAIM_PREFIX) != 0 ?
+			apr_strnatcmp(add->claim_prefix, OIDC_DEFAULT_CLAIM_PREFIX) != 0 ?
 					add->claim_prefix : base->claim_prefix;
 	c->remote_user_claim =
-			strcmp(add->remote_user_claim, OIDC_DEFAULT_CLAIM_REMOTE_USER) != 0 ?
+			apr_strnatcmp(add->remote_user_claim,
+					OIDC_DEFAULT_CLAIM_REMOTE_USER) != 0 ?
 					add->remote_user_claim : base->remote_user_claim;
 
 	c->crypto_passphrase =
@@ -730,7 +739,8 @@ static int oidc_check_config_oauth(server_rec *s, oidc_cfg *c) {
  * check the config of a vhost
  */
 static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s) {
-	oidc_cfg *cfg = ap_get_module_config(s->module_config, &auth_openidc_module);
+	oidc_cfg *cfg = ap_get_module_config(s->module_config,
+			&auth_openidc_module);
 
 	ap_log_error(APLOG_MARK, OIDC_DEBUG, 0, s,
 			"oidc_config_check_vhost_config: entering");
@@ -758,7 +768,8 @@ static int oidc_config_check_merged_vhost_configs(apr_pool_t *pool,
 		server_rec *s) {
 	int status = OK;
 	while (s != NULL && status == OK) {
-		oidc_cfg *cfg = ap_get_module_config(s->module_config, &auth_openidc_module);
+		oidc_cfg *cfg = ap_get_module_config(s->module_config,
+				&auth_openidc_module);
 		if (cfg->merged) {
 			status = oidc_config_check_vhost_config(pool, s);
 		}
@@ -772,7 +783,8 @@ static int oidc_config_check_merged_vhost_configs(apr_pool_t *pool,
  */
 static int oidc_config_merged_vhost_configs_exist(server_rec *s) {
 	while (s != NULL) {
-		oidc_cfg *cfg = ap_get_module_config(s->module_config, &auth_openidc_module);
+		oidc_cfg *cfg = ap_get_module_config(s->module_config,
+				&auth_openidc_module);
 		if (cfg->merged) {
 			return TRUE;
 		}
@@ -882,7 +894,8 @@ int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 		oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(sp->module_config,
 				&auth_openidc_module);
 		if (cfg->cache->post_config != NULL) {
-			if (cfg->cache->post_config(sp) != OK) return HTTP_INTERNAL_SERVER_ERROR;
+			if (cfg->cache->post_config(sp) != OK)
+				return HTTP_INTERNAL_SERVER_ERROR;
 		}
 		sp = sp->next;
 	}
