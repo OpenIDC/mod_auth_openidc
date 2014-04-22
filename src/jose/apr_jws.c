@@ -74,7 +74,7 @@ static apr_byte_t apr_jws_signature_starts_with(apr_pool_t *pool,
 /*
  * return OpenSSL digest for JWK algorithm
  */
-static char *apr_jwt_alg_to_openssl_digest(const char *alg) {
+static char *apr_jws_alg_to_openssl_digest(const char *alg) {
 	if ((strcmp(alg, "RS256") == 0) || (strcmp(alg, "PS256") == 0)
 			|| (strcmp(alg, "HS256") == 0)) {
 		return "sha256";
@@ -100,7 +100,7 @@ static const EVP_MD *apr_jws_crypto_alg_to_evp(apr_pool_t *pool,
 		const char *alg) {
 	const EVP_MD *result = NULL;
 
-	char *digest = apr_jwt_alg_to_openssl_digest(alg);
+	char *digest = apr_jws_alg_to_openssl_digest(alg);
 	if (digest == NULL)
 		return NULL;
 
@@ -150,16 +150,49 @@ apr_byte_t apr_jws_verify_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
 	return TRUE;
 }
 
-static int apr_jws_alg_to_rsa_openssl_padding(const char *alg) {
-	if ((strcmp(alg, "RS256") == 0) || (strcmp(alg, "RS384") == 0)
-			|| (strcmp(alg, "RS512") == 0)) {
-		return RSA_PKCS1_PADDING;
+/*
+ * hash a string value with the specified algorithm
+ */
+apr_byte_t apr_jws_hash_string(apr_pool_t *pool, const char *alg,
+		const char *msg, char **hash, unsigned int *hash_len) {
+	unsigned char md_value[EVP_MAX_MD_SIZE];
+
+	EVP_MD_CTX ctx;
+	EVP_MD_CTX_init(&ctx);
+
+	const EVP_MD *digest = NULL;
+	if ((digest = apr_jws_crypto_alg_to_evp(pool, alg)) == NULL)
+		return FALSE;
+
+	EVP_DigestInit_ex(&ctx, digest, NULL);
+	EVP_DigestUpdate(&ctx, msg, strlen(msg));
+	EVP_DigestFinal_ex(&ctx, md_value, hash_len);
+
+	EVP_MD_CTX_cleanup(&ctx);
+
+	*hash = apr_pcalloc(pool, *hash_len);
+	memcpy(*hash, md_value, *hash_len);
+
+	return TRUE;
+}
+
+/*
+ * return hash length
+ */
+int apr_jws_hash_length(const char *alg) {
+	if ((strcmp(alg, "RS256") == 0) || (strcmp(alg, "PS256") == 0)
+			|| (strcmp(alg, "HS256") == 0)) {
+		return 32;
 	}
-	if ((strcmp(alg, "PS256") == 0) || (strcmp(alg, "PS384") == 0)
-			|| (strcmp(alg, "PS512") == 0)) {
-		return RSA_PKCS1_PSS_PADDING;
+	if ((strcmp(alg, "RS384") == 0) || (strcmp(alg, "PS384") == 0)
+			|| (strcmp(alg, "HS384") == 0)) {
+		return 48;
 	}
-	return -1;
+	if ((strcmp(alg, "RS512") == 0) || (strcmp(alg, "PS512") == 0)
+			|| (strcmp(alg, "HS512") == 0)) {
+		return 64;
+	}
+	return 0;
 }
 
 /*
@@ -225,8 +258,8 @@ apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk) 
 		if (!EVP_PKEY_verify_init(ctx.pctx)) {
 			goto end;
 		}
-		if (!EVP_PKEY_CTX_set_rsa_padding(ctx.pctx,
-				apr_jws_alg_to_rsa_openssl_padding(jwt->header.alg)))
+
+		if (!EVP_PKEY_CTX_set_rsa_padding(ctx.pctx, RSA_PKCS1_PADDING))
 			goto end;
 
 		if (!EVP_VerifyInit_ex(&ctx, digest, NULL))

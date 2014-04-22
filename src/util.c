@@ -1136,3 +1136,16 @@ void oidc_util_set_app_headers(request_rec *r,
 		}
 	}
 }
+
+/*
+ * check if a certain value is part of a response_type tuple
+ */
+apr_byte_t oidc_util_response_type_includes(request_rec *r,
+		const char *response_type, const char *match) {
+	char *val = NULL;
+	while (response_type && (val = ap_getword_white(r->pool, &response_type))) {
+		if (apr_strnatcmp(val, match) == 0)
+			return TRUE;
+	}
+	return FALSE;
+}

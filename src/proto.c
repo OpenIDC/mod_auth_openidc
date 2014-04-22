@@ -266,7 +266,8 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
 			&auth_openidc_module);
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_validate_idtoken: entering (nonce=%s)", nonce);
+			"oidc_proto_validate_idtoken: entering jwt.header=\"%s\", jwt.payload=\%s\", nonce=%s",
+			jwt->header.value.str, jwt->payload.value.str, nonce);
 
 	/* if a nonce is not passed, we're doing a ("code") flow where the nonce is optional */
 	if (nonce != NULL) {
@@ -622,7 +623,7 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 	 */
 	/* resolve the code against the token endpoint */
 	if (oidc_util_http_call(r, provider->token_endpoint_url,
-	OIDC_HTTP_POST_FORM, params, basic_auth, NULL,
+			OIDC_HTTP_POST_FORM, params, basic_auth, NULL,
 			provider->ssl_validate_server, &response,
 			cfg->http_timeout_long) == FALSE) {
 		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,

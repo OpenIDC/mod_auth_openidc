@@ -122,7 +122,8 @@ int apr_jwt_base64url_decode(apr_pool_t *pool, char **dst, const char *src,
 apr_byte_t apr_jwt_get_string(apr_pool_t *pool, apr_jwt_value_t *value,
 		const char *claim_name, char **result);
 /* parse a string in to a JSON Web Token struct */
-apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json, apr_jwt_t **j_jwt);
+apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
+		apr_jwt_t **j_jwt);
 
 /*
  * JSON Web Key handling
@@ -178,5 +179,10 @@ apr_byte_t apr_jws_verify_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
 		const char *secret);
 /* verify the RSA signature on a JWT */
 apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk);
+/* hash a string */
+apr_byte_t apr_jws_hash_string(apr_pool_t *pool, const char *alg,
+		const char *msg, char **hash, unsigned int *hash_len);
+/* length of hash */
+int apr_jws_hash_length(const char *alg);
 
 #endif /* _APR_JWT_H_ */

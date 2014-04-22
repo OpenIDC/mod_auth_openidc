@@ -79,7 +79,6 @@
 #include "mod_auth_openidc.h"
 
 // TODO: harmonize user facing error handling
-// TODO: check at_hash if present and require it for "token id_token" flow
 
 // TODO: documentation:
 //       - write a README.quickstart
@@ -564,6 +563,14 @@ static int oidc_handle_basic_authorization_response(request_rec *r, oidc_cfg *c,
 			&provider, &nonce, &response_type) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
+	/* check that the response type matches the type sent in the request */
+	if (oidc_util_response_type_includes(r, response_type, "code") == FALSE) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_handle_basic_authorization_response: authorization response is basic but the request was not sent using the \"%s\" flow: %s",
+				"code", response_type);
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
 	/* now we've got the metadata for the provider that sent the response to us */
 	char *access_token = NULL;
 	const char *response = NULL;
@@ -618,6 +625,14 @@ static int oidc_handle_implicit_authorization_response(request_rec *r,
 			&provider, &nonce, &response_type) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
+	/* check that the response type matches the type sent in the request */
+	if (oidc_util_response_type_includes(r, response_type, "id_token") == FALSE) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_handle_basic_authorization_response: authorization response is basic but the request was not sent using the \"%s\" flow: %s",
+				"id_token", response_type);
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
 	/* initialize local variables for the id_token contents */
 	char *remoteUser = NULL;
 	apr_jwt_t *jwt = NULL;
@@ -653,12 +668,65 @@ static int oidc_handle_implicit_authorization_response(request_rec *r,
 	 */
 	if (access_token != NULL) {
 
-		/* parsed claims are not actually used here but need to be parsed anyway for error checking purposes */
-		apr_json_value_t *claims = NULL;
-		if (oidc_proto_resolve_userinfo(r, c, provider, access_token, &s_claims,
-				&claims) == FALSE) {
-			s_claims = NULL;
+		if (oidc_util_response_type_includes(r, response_type, "token") == TRUE) {
+
+			/* get the \"at_hash\" value for validating the access_token */
+			char *at_hash = NULL;
+			apr_jwt_get_string(r->pool, &jwt->payload.value, "at_hash",
+					&at_hash);
+
+			if (at_hash != NULL) {
+
+				char *hash = NULL;
+				unsigned int hash_len = 0;
+				apr_jws_hash_string(r->pool, jwt->header.alg, access_token,
+						&hash, &hash_len);
+
+				char *encoded = NULL;
+				int enc_len = oidc_base64url_encode(r, &encoded, hash,
+						apr_jws_hash_length(jwt->header.alg) / 2);
+				/* remove /0 and padding */
+				enc_len--;
+				if (encoded[enc_len - 1] == ',')
+					enc_len--;
+				if (encoded[enc_len - 1] == ',')
+					enc_len--;
+
+				if (strncmp(encoded, at_hash, enc_len) == 0) {
+
+					ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+							"oidc_handle_implicit_authorization_response: at_hash validated successfully; now resolving user_info");
+
+					/* parsed claims are not actually used here but need to be parsed anyway for error checking purposes */
+					apr_json_value_t *claims = NULL;
+					if (oidc_proto_resolve_userinfo(r, c, provider,
+							access_token, &s_claims, &claims) == FALSE) {
+						s_claims = NULL;
+					}
+
+				} else {
+
+					ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+							"oidc_handle_implicit_authorization_response: \"at_hash\" value (%s) does not match the calculated value (%s)",
+							at_hash, encoded);
+
+				}
+
+			} else {
+
+				ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+						"oidc_handle_implicit_authorization_response: required \"at_hash\" value was not found in id_token; ignoring access_token and not resolving additinal user_info");
+
+			}
+
+		} else {
+
+			ap_log_rerror(APLOG_MARK, APLOG_NOTICE, 0, r,
+					"oidc_handle_implicit_authorization_response: dropping access token since the response_type \"%s\" did not include \"token\"",
+					response_type);
+
 		}
+
 	}
 
 	/* complete handling of the response by storing stuff in the session and redirecting to the original URL */

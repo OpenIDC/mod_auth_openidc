@@ -92,8 +92,6 @@
 
 /* name of the cookie that binds the state in the authorization request/response to the browser */
 #define OIDCStateCookieName  "mod_auth_openidc_state"
-/* separator used to distinguish different values in the state cookie */
-#define OIDCStateCookieSep  " "
 
 /* the (global) key for the mod_auth_openidc related state that is stored in the request userdata context */
 #define OIDC_USERDATA_KEY "mod_auth_openidc_state"
@@ -278,6 +276,7 @@ apr_byte_t oidc_util_issuer_match(const char *a, const char *b);
 int oidc_util_html_send_error(request_rec *r, const char *error, const char *description, int status_code);
 apr_byte_t oidc_util_json_array_has_value(request_rec *r, apr_json_value_t *haystack, const char *needle);
 void oidc_util_set_app_headers(request_rec *r, const apr_json_value_t *j_attrs, const char *authn_header, const char *claim_prefix, const char *claim_delimiter);
+apr_byte_t oidc_util_response_type_includes(request_rec *r, const char *response_type, const char *match);
 
 // oidc_crypto.c
 unsigned char *oidc_crypto_aes_encrypt(request_rec *r, oidc_cfg *cfg, unsigned char *plaintext, int *len);
