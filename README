@@ -34,10 +34,10 @@ Requires primitive.
 
 It implements server-side caching across different Apache processes through one
 of the following options:
- a) file storage: in a temp directory - possibly a shared file system across
+ a) shared memory (default): shared across a single logical Apache server running
+    as multiple Apache processes (using mpm_prefork) on the same machine
+ b) file storage: in a temp directory - possibly a shared file system across
     multiple Apache processes and/or servers
- b) shared memory: shared across a single logical Apache server running as
-    multiple Apache processes (using mpm_prefork) on the same machine
  c) memcache: shared across multiple Apache processes and/or servers, possibly
     across different memcache servers living on different machines
 
@@ -100,7 +100,7 @@ Connect Client Registration specification, with extensions) and the filename
 is the urlencoded issuer name of the OP that this client is registered with.
 
 Sample client metdata for issuer https://localhost:9031, so the client metadata
-filename is: "macbook%3a9031.client"
+filename is: "localhost%3A9031.client"
 ==========================================================
 {
   "ssl_validate_server" : "Off",

@@ -447,7 +447,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->oauth.validate_endpoint_auth = OIDC_DEFAULT_ENDPOINT_AUTH;
 	c->oauth.remote_user_claim = OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER;
 
-	c->cache = &oidc_cache_file;
+	c->cache = &oidc_cache_shm;
 	c->cache_cfg =
 			c->cache->create_config ? c->cache->create_config(pool) : NULL;
 	c->cache_file_dir = NULL;
@@ -589,7 +589,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->session_inactivity_timeout :
 					base->session_inactivity_timeout;
 
-	if (add->cache != &oidc_cache_file) {
+	if (add->cache != &oidc_cache_shm) {
 		c->cache = add->cache;
 		c->cache_cfg = add->cache_cfg;
 	} else {
