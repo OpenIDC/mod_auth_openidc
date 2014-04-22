@@ -2,6 +2,7 @@
 - match request and response type 
 - check at_hash value on "token id_token" implicit flow
 - use shared memory caching by default
+- release 1.2
 
 4/19/2014
 - store response_type in state and make state a JSON object

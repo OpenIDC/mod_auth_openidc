@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.2) unstable; urgency=medium
+
+  * session timeout handling, use shared memory as cache by default
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Tue, 22 Apr 2014 13:54:07 +0200
+
 libapache2-mod-auth-openidc (1.1) unstable; urgency=low
 
   * add issuer to REMOTE_USER; included INSTALL
