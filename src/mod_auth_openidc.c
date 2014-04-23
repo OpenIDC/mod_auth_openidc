@@ -290,7 +290,8 @@ static char *oidc_create_state_and_set_cookie(request_rec *r, const char *url,
 
 	/*
 	 * create a cookie consisting of 5 elements:
-	 * random value, original URL, issuer, response_type and timestamp separated by a defined separator
+	 * random value, original URL, issuer, response_type and timestamp
+	 * encoded as JSON
 	 */
 	apr_time_t now = apr_time_sec(apr_time_now());
 
