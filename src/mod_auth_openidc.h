@@ -123,6 +123,7 @@ typedef struct oidc_provider_t {
 	int ssl_validate_server;
 	char *client_name;
 	char *client_contact;
+	char *registration_token;
 	char *scope;
 	char *response_type;
 	int jwks_refresh_interval;

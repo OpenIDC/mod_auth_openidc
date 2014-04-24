@@ -435,6 +435,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->provider.ssl_validate_server = OIDC_DEFAULT_SSL_VALIDATE_SERVER;
 	c->provider.client_name = OIDC_DEFAULT_CLIENT_NAME;
 	c->provider.client_contact = NULL;
+	c->provider.registration_token = NULL;
 	c->provider.scope = OIDC_DEFAULT_SCOPE;
 	c->provider.response_type = OIDC_DEFAULT_RESPONSE_TYPE;
 	c->provider.jwks_refresh_interval = OIDC_DEFAULT_JWKS_REFRESH_INTERVAL;
@@ -532,6 +533,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->provider.client_contact != NULL ?
 					add->provider.client_contact :
 					base->provider.client_contact;
+	c->provider.registration_token =
+			add->provider.registration_token != NULL ?
+					add->provider.registration_token :
+					base->provider.registration_token;
 	c->provider.scope =
 			apr_strnatcmp(add->provider.scope, OIDC_DEFAULT_SCOPE) != 0 ?
 					add->provider.scope : base->provider.scope;
@@ -1015,6 +1020,10 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_cfg, provider.client_contact),
 				RSRC_CONF,
 				"Define the contact that the client registers in dynamic registration with the OP."),
+		AP_INIT_TAKE1("OIDCClientRegistrationToken", oidc_set_string_slot,
+				(void *) APR_OFFSETOF(oidc_cfg, provider.registration_token),
+				RSRC_CONF,
+				"Define the OAuth 2.0 Bearer token that the client uses in the dynamic registration call to the OP."),
 		AP_INIT_TAKE1("OIDCScope", oidc_set_string_slot,
 				(void *) APR_OFFSETOF(oidc_cfg, provider.scope),
 				RSRC_CONF,

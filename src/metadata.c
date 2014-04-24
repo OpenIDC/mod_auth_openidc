@@ -519,11 +519,11 @@ static apr_byte_t oidc_metadata_retrieve_and_store(request_rec *r,
 		oidc_cfg *cfg, const char *url, int action, apr_table_t *params,
 		int ssl_validate_server, const char *issuer,
 		oidc_is_valid_function_t f_is_valid, const char *path,
-		apr_json_value_t **j_metadata) {
+		apr_json_value_t **j_metadata, const char *bearer_token) {
 	const char *response = NULL;
 
 	/* no valid provider metadata, get it at the specified URL with the specified parameters */
-	if (oidc_util_http_call(r, url, action, params, NULL, NULL,
+	if (oidc_util_http_call(r, url, action, params, NULL, bearer_token,
 			ssl_validate_server, &response, cfg->http_timeout_short) == FALSE)
 		return FALSE;
 
@@ -641,7 +641,7 @@ static apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
 	/* try and get it from there, checking it and storing it if successful */
 	return oidc_metadata_retrieve_and_store(r, cfg, url, OIDC_HTTP_GET, NULL,
 			cfg->provider.ssl_validate_server, issuer,
-			oidc_metadata_provider_is_valid, provider_path, j_provider);
+			oidc_metadata_provider_is_valid, provider_path, j_provider, NULL);
 }
 
 /*
@@ -708,7 +708,7 @@ static apr_byte_t oidc_metadata_client_get(request_rec *r, oidc_cfg *cfg,
 	/* try and get it from there, checking it and storing it if successful */
 	return oidc_metadata_retrieve_and_store(r, cfg, registration_url, action,
 			params, cfg->provider.ssl_validate_server, issuer,
-			oidc_metadata_client_is_valid, client_path, j_client);
+			oidc_metadata_client_is_valid, client_path, j_client, cfg->provider.registration_token);
 }
 
 /*
