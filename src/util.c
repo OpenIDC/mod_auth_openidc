@@ -422,11 +422,9 @@ apr_byte_t oidc_util_http_call(request_rec *r, const char *url, int action,
 
 	/* see if we need to add token in the Bearer Authorization header */
 	if (bearer_token != NULL) {
-		struct curl_slist *headers = NULL;
-		headers = curl_slist_append(headers,
+		h_list = curl_slist_append(h_list,
 				apr_psprintf(r->pool, "Authorization: Bearer %s",
 						bearer_token));
-		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 	}
 
 	/* see if we need to perform HTTP basic authentication to the remote site */
