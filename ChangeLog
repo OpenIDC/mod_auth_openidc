@@ -1,3 +1,7 @@
+4/24/2014
+- fix using Bearer token Authorization header on JSON POST calls
+- support using a Bearer token on client registration calls
+
 4/22/2014
 - match request and response type 
 - check at_hash value on "token id_token" implicit flow
