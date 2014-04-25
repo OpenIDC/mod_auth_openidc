@@ -1,3 +1,6 @@
+4/25/2014
+- support Hybrid flows
+
 4/24/2014
 - fix using Bearer token Authorization header on JSON POST calls
 - support using a Bearer token on client registration calls

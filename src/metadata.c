@@ -215,16 +215,23 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 			APR_HASH_KEY_STRING);
 	if ((j_response_types_supported != NULL)
 			&& (j_response_types_supported->type == APR_JSON_ARRAY)) {
-		if ((oidc_util_json_array_has_value(r, j_response_types_supported,
-				"code") == FALSE)
-				&& (oidc_util_json_array_has_value(r,
-						j_response_types_supported, "id_token") == FALSE)
-				&& (oidc_util_json_array_has_value(r,
-						j_response_types_supported, "token id_token") == FALSE)
-				&& (oidc_util_json_array_has_value(r,
-						j_response_types_supported, "id_token token") == FALSE)) {
+		int i = 0;
+		for (i = 0; i < j_response_types_supported->value.array->nelts; i++) {
+			apr_json_value_t *elem = APR_ARRAY_IDX(
+					j_response_types_supported->value.array, i,
+					apr_json_value_t *);
+			if (elem->type != APR_JSON_STRING) {
+				ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+						"oidc_util_json_array_has_value: unhandled in-array JSON non-string object type [%d]",
+						elem->type);
+				continue;
+			}
+			if (oidc_proto_flow_is_supported(r->pool, elem->value.string.p))
+				break;
+		}
+		if (i == j_response_types_supported->value.array->nelts) {
 			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_metadata_provider_is_valid: could not find a supported value [\"code\" | \"id_token\" | \"token id_token\" | \"id_token token\"] in provider metadata (%s) for entry \"response_types_supported\"; assuming that \"code\" flow is supported...",
+					"oidc_metadata_provider_is_valid: could not find a supported response type in provider metadata (%s) for entry \"response_types_supported\"; assuming that \"code\" flow is supported...",
 					issuer);
 			//return FALSE;
 		}
@@ -695,9 +702,17 @@ static apr_byte_t oidc_metadata_client_get(request_rec *r, oidc_cfg *cfg,
 		// TODO: also hacky, we need arrays for the next three values
 		apr_table_addn(params, "redirect_uris",
 				apr_psprintf(r->pool, "[\"%s\"]", cfg->redirect_uri));
-		apr_table_addn(params, "response_types",
-				apr_psprintf(r->pool,
-						"[\"code\", \"id_token\", \"token id_token\"]"));
+
+		apr_array_header_t *flows = oidc_proto_supported_flows(r->pool);
+		char *response_types = apr_pstrdup(r->pool, "[");
+		int i;
+		for (i = 0; i < flows->nelts; i++) {
+			response_types = apr_psprintf(r->pool, "%s\"%s\"%s", response_types,
+					((const char**) flows->elts)[i],
+					(i < flows->nelts - 1) ? "," : "]");
+		}
+		apr_table_addn(params, "response_types", response_types);
+
 		if (cfg->provider.client_contact != NULL) {
 			apr_table_addn(params, "contacts",
 					apr_psprintf(r->pool, "[\"%s\"]",

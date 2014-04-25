@@ -212,14 +212,18 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c);
 
 // oidc_proto.c
 int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *redirect_uri, const char *state, const char *original_url, const char *nonce);
-apr_byte_t oidc_proto_is_basic_authorization_response(request_rec *r, oidc_cfg *cfg);
-apr_byte_t oidc_proto_is_implicit_post(request_rec *r, oidc_cfg *cfg);
-apr_byte_t oidc_proto_is_implicit_redirect(request_rec *r, oidc_cfg *cfg);
-apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, char *code, const char *nonce, char **user,  apr_jwt_t **jwt, char **s_access_token);
+apr_byte_t oidc_proto_is_post_authorization_response(request_rec *r, oidc_cfg *cfg);
+apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r, oidc_cfg *cfg);
+apr_byte_t oidc_proto_check_token_type(request_rec *r, oidc_provider_t *provider, const char *token_type);
+apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *code, char **s_id_token, char **s_access_token, char **s_token_type);
 apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *access_token, const char **response, apr_json_value_t **claims);
 apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg, const char *acct, char **issuer);
 apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *id_token, const char *nonce, char **user, apr_jwt_t **jwt);
+apr_byte_t oidc_proto_validate_access_token(request_rec *r, oidc_provider_t *provider, apr_jwt_t *jwt, const char *response_type, const char *access_token, const char *token_type);
+apr_byte_t oidc_proto_validate_code(request_rec *r, oidc_provider_t *provider, apr_jwt_t *jwt, const char *response_type, const char *code);
 int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg *c);
+apr_array_header_t *oidc_proto_supported_flows(apr_pool_t *pool);
+apr_byte_t oidc_proto_flow_is_supported(apr_pool_t *pool, const char *flow);
 
 // oidc_authz.c
 int oidc_authz_worker(request_rec *r, const apr_json_value_t *const claims, const require_line *const reqs, int nelts);
@@ -277,7 +281,9 @@ apr_byte_t oidc_util_issuer_match(const char *a, const char *b);
 int oidc_util_html_send_error(request_rec *r, const char *error, const char *description, int status_code);
 apr_byte_t oidc_util_json_array_has_value(request_rec *r, apr_json_value_t *haystack, const char *needle);
 void oidc_util_set_app_headers(request_rec *r, const apr_json_value_t *j_attrs, const char *authn_header, const char *claim_prefix, const char *claim_delimiter);
-apr_byte_t oidc_util_response_type_includes(request_rec *r, const char *response_type, const char *match);
+apr_hash_t *oidc_util_spaced_string_to_hashtable(apr_pool_t *pool, const char *str);
+apr_byte_t oidc_util_spaced_string_equals(apr_pool_t *pool, const char *a, const char *b);
+apr_byte_t oidc_util_spaced_string_contains(apr_pool_t *pool, const char *response_type, const char *match);
 
 // oidc_crypto.c
 unsigned char *oidc_crypto_aes_encrypt(request_rec *r, oidc_cfg *cfg, unsigned char *plaintext, int *len);

@@ -1136,14 +1136,52 @@ void oidc_util_set_app_headers(request_rec *r,
 }
 
 /*
- * check if a certain value is part of a response_type tuple
+ * parse a space separated string in to a hash table
  */
-apr_byte_t oidc_util_response_type_includes(request_rec *r,
-		const char *response_type, const char *match) {
-	char *val = NULL;
-	while (response_type && (val = ap_getword_white(r->pool, &response_type))) {
-		if (apr_strnatcmp(val, match) == 0)
-			return TRUE;
+apr_hash_t *oidc_util_spaced_string_to_hashtable(apr_pool_t *pool,
+		const char *str) {
+	char *val;
+	const char *data = apr_pstrdup(pool, str);
+	apr_hash_t *result = apr_hash_make(pool);
+	while (*data && (val = ap_getword_white(pool, &data))) {
+		apr_hash_set(result, val, APR_HASH_KEY_STRING, val);
 	}
-	return FALSE;
+	return result;
+}
+
+/*
+ * compare two space separated value types
+ */
+apr_byte_t oidc_util_spaced_string_equals(apr_pool_t *pool, const char *a,
+		const char *b) {
+
+	/* parse both entries as hash tables */
+	apr_hash_t *ht_a = oidc_util_spaced_string_to_hashtable(pool, a);
+	apr_hash_t *ht_b = oidc_util_spaced_string_to_hashtable(pool, b);
+
+	/* first compare the length of both response_types */
+	if (apr_hash_count(ht_a) != apr_hash_count(ht_b))
+		return FALSE;
+
+	/* then loop over all entries */
+	apr_hash_index_t *hi;
+	for (hi = apr_hash_first(NULL, ht_a); hi; hi = apr_hash_next(hi)) {
+		const char *k;
+		const char *v;
+		apr_hash_this(hi, (const void**) &k, NULL, (void**) &v);
+		if (apr_hash_get(ht_b, k, APR_HASH_KEY_STRING) == NULL)
+			return FALSE;
+	}
+
+	/* if we've made it this far, a an b are equal in length and every element in a is in b */
+	return TRUE;
+}
+
+/*
+ * see if a particular value is part of a space separated value
+ */
+apr_byte_t oidc_util_spaced_string_contains(apr_pool_t *pool,
+		const char *response_type, const char *match) {
+	apr_hash_t *ht = oidc_util_spaced_string_to_hashtable(pool, response_type);
+	return (apr_hash_get(ht, match, APR_HASH_KEY_STRING) != NULL);
 }

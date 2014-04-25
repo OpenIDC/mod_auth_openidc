@@ -314,14 +314,13 @@ const char *oidc_set_response_type(cmd_parms *cmd, void *struct_ptr,
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
 
-	if ((apr_strnatcmp(arg, "code") == 0)
-			|| (apr_strnatcmp(arg, "id_token") == 0)
-			|| (apr_strnatcmp(arg, "id_token token") == 0)
-			|| (apr_strnatcmp(arg, "token id_token") == 0)) {
-
+	if (oidc_proto_flow_is_supported(cmd->pool, arg)) {
 		return ap_set_string_slot(cmd, cfg, arg);
 	}
-	return "parameter must be one of 'code', 'id_token', 'id_token token' or 'token id_token'";
+
+	return apr_psprintf(cmd->pool, "parameter must be one of %s",
+			apr_array_pstrcat(cmd->pool, oidc_proto_supported_flows(cmd->pool),
+					'|'));
 }
 
 /*
@@ -1002,7 +1001,7 @@ const command_rec oidc_config_cmds[] = {
 				oidc_set_response_type,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.response_type),
 				RSRC_CONF,
-				"The response type (or OpenID Connect Flow) used; must be one of \"code\", \"id_token\", \"id_token token\" or \"token id_token\" (serves as default value for discovered OPs too)"),
+				"The response type (or OpenID Connect Flow) used; must be one of \"code\", \"id_token\", \"id_token token\", \"code id_token\", \"code token\" or \"code id_token token\" (serves as default value for discovered OPs too)"),
 		AP_INIT_TAKE1("OIDCIDTokenAlg", oidc_set_id_token_alg,
 				(void *)APR_OFFSETOF(oidc_cfg, id_token_alg),
 				RSRC_CONF,

@@ -110,37 +110,26 @@ int oidc_proto_authorization_request(request_rec *r,
 }
 
 /*
- * indicate whether the incoming HTTP request is an OpenID Connect Authorization Response from a Basic Client flow, syntax-wise
+ * indicate whether the incoming HTTP POST request is an OpenID Connect Authorization Response
  */
-apr_byte_t oidc_proto_is_basic_authorization_response(request_rec *r,
+apr_byte_t oidc_proto_is_post_authorization_response(request_rec *r,
 		oidc_cfg *cfg) {
 
-	/* see if this is a call to the configured redirect_uri and the "code" and "state" parameters are present */
-	return ((oidc_util_request_matches_url(r, cfg->redirect_uri) == TRUE)
-			&& oidc_util_request_has_parameter(r, "code")
-			&& oidc_util_request_has_parameter(r, "state"));
+	/* see if this is a call to the configured redirect_uri and it is a POST */
+	return (r->method_number == M_POST);
 }
 
 /*
- * indicate whether the incoming HTTP request is an OpenID Connect Authorization Response from an Implicit Client flow, syntax-wise
+ * indicate whether the incoming HTTP GET request is an OpenID Connect Authorization Response
  */
-apr_byte_t oidc_proto_is_implicit_post(request_rec *r, oidc_cfg *cfg) {
+apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r,
+		oidc_cfg *cfg) {
 
 	/* see if this is a call to the configured redirect_uri and it is a POST */
-	return ((oidc_util_request_matches_url(r, cfg->redirect_uri) == TRUE)
-			&& (r->method_number == M_POST));
-}
-
-/*
- * indicate whether the incoming HTTP request is an OpenID Connect Authorization Response from an Implicit Client flow using the query parameter response type, syntax-wise
- */
-apr_byte_t oidc_proto_is_implicit_redirect(request_rec *r, oidc_cfg *cfg) {
-
-	/* see if this is a call to the configured redirect_uri and it is a POST */
-	return ((oidc_util_request_matches_url(r, cfg->redirect_uri) == TRUE)
-			&& (r->method_number == M_GET)
+	return ((r->method_number == M_GET)
 			&& oidc_util_request_has_parameter(r, "state")
-			&& oidc_util_request_has_parameter(r, "id_token"));
+			&& (oidc_util_request_has_parameter(r, "id_token")
+					|| oidc_util_request_has_parameter(r, "code")));
 }
 
 /*
@@ -149,9 +138,6 @@ apr_byte_t oidc_proto_is_implicit_redirect(request_rec *r, oidc_cfg *cfg) {
  */
 static apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char *nonce, apr_jwt_t *jwt) {
-
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_validate_nonce: looking for nonce: %s", nonce);
 
 	/* see if we have this nonce cached already */
 	const char *replay = NULL;
@@ -184,6 +170,10 @@ static apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
 	/* cache the nonce for the window time of the token for replay prevention plus 10 seconds for safety */
 	cfg->cache->set(r, nonce, nonce,
 			apr_time_from_sec(provider->idtoken_iat_slack * 2 + 10));
+
+	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+			"oidc_proto_validate_nonce: nonce \"%s\" validated successfully and cached",
+			nonce);
 
 	return TRUE;
 }
@@ -489,7 +479,8 @@ static apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r,
 	} else {
 
 		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-				"oidc_proto_idtoken_verify_signature: cannot verify id_token; unsupported algorithm (%s) != RSA or HMAC", jwt->header.alg);
+				"oidc_proto_idtoken_verify_signature: cannot verify id_token; unsupported algorithm (%s) != RSA or HMAC",
+				jwt->header.alg);
 
 	}
 
@@ -590,11 +581,27 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 }
 
 /*
+ * check that the access_token type is supported
+ */
+apr_byte_t oidc_proto_check_token_type(request_rec *r,
+		oidc_provider_t *provider, const char *token_type) {
+	/*  we only support bearer/Bearer  */
+	if ((token_type != NULL) && (apr_strnatcasecmp(token_type, "Bearer") != 0)
+			&& (provider->userinfo_endpoint_url != NULL)) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_check_token_type: token_type is \"%s\" and UserInfo endpoint (%s) for issuer \"%s\" is set: can only deal with Bearer authentication against a UserInfo endpoint!",
+				token_type, provider->userinfo_endpoint_url, provider->issuer);
+		return FALSE;
+	}
+	return TRUE;
+}
+
+/*
  * resolves the code received from the OP in to an access_token and id_token and returns the parsed contents
  */
 apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
-		oidc_provider_t *provider, char *code, const char *nonce, char **user,
-		apr_jwt_t **jwt, char **s_access_token) {
+		oidc_provider_t *provider, const char *code, char **s_idtoken,
+		char **s_access_token, char **s_token_type) {
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_proto_resolve_code: entering");
@@ -616,11 +623,13 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 		apr_table_addn(params, "client_id", provider->client_id);
 		apr_table_addn(params, "client_secret", provider->client_secret);
 	}
+
 	/*
 	 if (strcmp(provider->issuer, "https://sts.windows.net/b4ea3de6-839e-4ad1-ae78-c78e5c0cdc06/") == 0) {
 	 apr_table_addn(params, "resource", "https://graph.windows.net");
 	 }
 	 */
+
 	/* resolve the code against the token endpoint */
 	if (oidc_util_http_call(r, provider->token_endpoint_url,
 			OIDC_HTTP_POST_FORM, params, basic_auth, NULL,
@@ -640,53 +649,43 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 	/* get the access_token from the parsed response */
 	apr_json_value_t *access_token = apr_hash_get(result->value.object,
 			"access_token", APR_HASH_KEY_STRING);
-	if ((access_token == NULL) || (access_token->type != APR_JSON_STRING)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+	if ((access_token != NULL) || (access_token->type == APR_JSON_STRING)) {
+
+		*s_access_token = apr_pstrdup(r->pool, access_token->value.string.p);
+
+		/* log and set the obtained acces_token */
+		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+				"oidc_proto_resolve_code: returned access_token: %s",
+				*s_access_token);
+
+		/* the provider must return the token type */
+		apr_json_value_t *token_type = apr_hash_get(result->value.object,
+				"token_type", APR_HASH_KEY_STRING);
+		if ((token_type == NULL) || (token_type->type != APR_JSON_STRING)) {
+			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+					"oidc_proto_resolve_code: response JSON object did not contain a token_type string");
+			return FALSE;
+		}
+
+		*s_token_type = apr_pstrdup(r->pool, token_type->value.string.p);
+
+	} else {
+		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 				"oidc_proto_resolve_code: response JSON object did not contain an access_token string");
-		return FALSE;
-	}
-
-	/* log and set the obtained acces_token */
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_resolve_code: returned access_token: %s",
-			access_token->value.string.p);
-	*s_access_token = apr_pstrdup(r->pool, access_token->value.string.p);
-
-	/* the provider must the token type */
-	apr_json_value_t *token_type = apr_hash_get(result->value.object,
-			"token_type", APR_HASH_KEY_STRING);
-	if ((token_type == NULL) || (token_type->type != APR_JSON_STRING)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_resolve_code: response JSON object did not contain a token_type string");
-		return FALSE;
-	}
-
-	/* we got the type, we only support bearer/Bearer, check that */
-	if ((apr_strnatcasecmp(token_type->value.string.p, "Bearer") != 0)
-			&& (provider->userinfo_endpoint_url != NULL)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_resolve_code: token_type is \"%s\" and UserInfo endpoint is set: can only deal with Bearer authentication against the UserInfo endpoint!",
-				token_type->value.string.p);
-		return FALSE;
 	}
 
 	/* get the id_token from the response */
 	apr_json_value_t *id_token = apr_hash_get(result->value.object, "id_token",
-	APR_HASH_KEY_STRING);
-	if ((id_token == NULL) || (id_token->type != APR_JSON_STRING)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_resolve_code: response JSON object did not contain an id_token string");
-		return FALSE;
+			APR_HASH_KEY_STRING);
+	if ((id_token != NULL) && (id_token->type == APR_JSON_STRING)) {
+		*s_idtoken = apr_pstrdup(r->pool, id_token->value.string.p);
+
+		/* log and set the obtained id_token */
+		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+				"oidc_proto_resolve_code: returned id_token: %s", *s_idtoken);
 	}
 
-	/* log and set the obtained id_token */
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_resolve_code: returned id_token: %s",
-			id_token->value.string.p);
-
-	/* parse and validate the obtained id_token and return success/failure of that */
-	return oidc_proto_parse_idtoken(r, cfg, provider, id_token->value.string.p,
-			nonce, user, jwt);
+	return TRUE;
 }
 
 /*
@@ -702,6 +701,10 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 
 	/* only do this if an actual endpoint was set */
 	if (provider->userinfo_endpoint_url == NULL)
+		return FALSE;
+
+	/* only do this if we have an access_token */
+	if (access_token == NULL)
 		return FALSE;
 
 	/* get the JSON response */
@@ -830,3 +833,134 @@ int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg *c) {
 	return oidc_util_http_sendstring(r, java_script, DONE);
 }
 
+/*
+ * check the hash value in the id_token against the value
+ */
+static apr_byte_t oidc_proto_validate_hash(request_rec *r, const char *alg,
+		const char *hash, const char *value, const char *type) {
+
+	/* hash the provided access_token */
+	char *calc = NULL;
+	unsigned int hash_len = 0;
+	apr_jws_hash_string(r->pool, alg, value, &calc, &hash_len);
+
+	/* calculate the base64url-encoded value of the hash */
+	char *encoded = NULL;
+	int enc_len = oidc_base64url_encode(r, &encoded, calc,
+			apr_jws_hash_length(alg) / 2);
+
+	/* remove /0 and padding */
+	enc_len--;
+	if (encoded[enc_len - 1] == ',')
+		enc_len--;
+	if (encoded[enc_len - 1] == ',')
+		enc_len--;
+
+	/* compare the calculated hash against the at_hash */
+	if ((strncmp(encoded, hash, enc_len) != 0)) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_validate_hash: provided %s value (%s) does not match the calculated value (%s)",
+				type, hash, encoded);
+		return FALSE;
+	}
+
+	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+			"oidc_proto_validate_hash: successfully validated the %s value (%s) against the calculated value (%s)",
+			type, hash, encoded);
+
+	return TRUE;
+}
+
+/*
+ * check a hash value in the id_token against the provided value
+ */
+static apr_byte_t oidc_proto_validate_hash_value(request_rec *r,
+		oidc_provider_t *provider, apr_jwt_t *jwt, const char *response_type,
+		const char *value, const char *key,
+		apr_array_header_t *required_for_flows) {
+
+	/*
+	 * get the hash value from the id_token
+	 */
+	char *hash = NULL;
+	apr_jwt_get_string(r->pool, &jwt->payload.value, key, &hash);
+
+	/*
+	 * check if the hash was present
+	 */
+	if (hash == NULL) {
+
+		/* no hash..., now see if the flow required it */
+		int i;
+		for (i = 0; i < required_for_flows->nelts; i++) {
+			if (oidc_util_spaced_string_equals(r->pool, response_type,
+					((const char**) required_for_flows->elts)[i])) {
+				ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
+						"oidc_proto_validate_hash_value: flow is \"%s\", but no %s found in id_token",
+						response_type, key);
+				return FALSE;
+			}
+		}
+
+		/* no hash but it was not required anyway */
+		return TRUE;
+	}
+
+	/*
+	 * we have a hash, validate it and return the result
+	 */
+	return oidc_proto_validate_hash(r, jwt->header.alg, hash, value, key);
+}
+
+/*
+ * check the c_hash value in the id_token against the code
+ */
+apr_byte_t oidc_proto_validate_code(request_rec *r, oidc_provider_t *provider,
+		apr_jwt_t *jwt, const char *response_type, const char *code) {
+	apr_array_header_t *flows = apr_array_make(r->pool, 2, sizeof(const char*));
+	*(const char**) apr_array_push(flows) = "code id_token";
+	*(const char**) apr_array_push(flows) = "code id_token token";
+	return oidc_proto_validate_hash_value(r, provider, jwt, response_type, code,
+			"c_hash", flows);
+}
+
+/*
+ * check the at_hash value in the id_token against the access_token
+ */
+apr_byte_t oidc_proto_validate_access_token(request_rec *r,
+		oidc_provider_t *provider, apr_jwt_t *jwt, const char *response_type,
+		const char *access_token, const char *token_type) {
+	apr_array_header_t *flows = apr_array_make(r->pool, 2, sizeof(const char*));
+	*(const char**) apr_array_push(flows) = "id_token token";
+	*(const char**) apr_array_push(flows) = "code id_token token";
+	return oidc_proto_validate_hash_value(r, provider, jwt, response_type,
+			access_token, "at_hash", flows);
+}
+
+/*
+ * return the supported flows
+ */
+apr_array_header_t *oidc_proto_supported_flows(apr_pool_t *pool) {
+	apr_array_header_t *result = apr_array_make(pool, 6, sizeof(const char*));
+	*(const char**) apr_array_push(result) = "code";
+	*(const char**) apr_array_push(result) = "id_token";
+	*(const char**) apr_array_push(result) = "id_token token";
+	*(const char**) apr_array_push(result) = "code id_token";
+	*(const char**) apr_array_push(result) = "code token";
+	*(const char**) apr_array_push(result) = "code id_token token";
+	return result;
+}
+
+/*
+ * check if a particular OpenID Connect flow is supported
+ */
+apr_byte_t oidc_proto_flow_is_supported(apr_pool_t *pool, const char *flow) {
+	apr_array_header_t *flows = oidc_proto_supported_flows(pool);
+	int i;
+	for (i = 0; i < flows->nelts; i++) {
+		if (oidc_util_spaced_string_equals(pool, flow,
+				((const char**) flows->elts)[i]))
+			return TRUE;
+	}
+	return FALSE;
+}
