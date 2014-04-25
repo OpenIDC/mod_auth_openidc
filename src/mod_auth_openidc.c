@@ -879,7 +879,7 @@ static int oidc_handle_post_authorization_response(request_rec *r, oidc_cfg *c,
 static int oidc_handle_redirect_authorization_response(request_rec *r,
 		oidc_cfg *c, session_rec *session) {
 
-	ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
+	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_handle_redirect_authorization_response: entering");
 
 	/* initialize local variables */
