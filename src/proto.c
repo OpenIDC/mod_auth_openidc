@@ -64,12 +64,13 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
  */
 int oidc_proto_authorization_request(request_rec *r,
 		struct oidc_provider_t *provider, const char *redirect_uri,
-		const char *state, const char *original_url, const char *nonce) {
+		const char *state, oidc_proto_state *proto_state) {
 
 	/* log some stuff */
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_proto_authorization_request: entering (issuer=%s, redirect_uri=%s, original_url=%s, state=%s, nonce=%s)",
-			provider->issuer, redirect_uri, original_url, state, nonce);
+			provider->issuer, redirect_uri, proto_state->original_url, state,
+			proto_state->nonce);
 
 	/* assemble the full URL as the authorization request to the OP where we want to redirect to */
 	char *destination =
@@ -78,22 +79,24 @@ int oidc_proto_authorization_request(request_rec *r,
 					provider->authorization_endpoint_url,
 					(strchr(provider->authorization_endpoint_url, '?') != NULL ?
 							"&" : "?"),
-					oidc_util_escape_string(r, provider->response_type),
-					oidc_util_escape_string(r, provider->scope),
-					oidc_util_escape_string(r, provider->client_id),
-					oidc_util_escape_string(r, state),
-					oidc_util_escape_string(r, redirect_uri));
+							oidc_util_escape_string(r, proto_state->response_type),
+							oidc_util_escape_string(r, provider->scope),
+							oidc_util_escape_string(r, provider->client_id),
+							oidc_util_escape_string(r, state),
+							oidc_util_escape_string(r, redirect_uri));
 
 	/*
 	 * see if the chosen flow requires a nonce parameter
 	 *
-	 * TODO: I'd like to include the nonce in the code flow as well but Google does not allow me to do that:
+	 * TODO: I'd like to include the nonce in the "code" and "code token" flows as well but Google does not allow me to do that:
 	 * Error: invalid_request: Parameter not allowed for this message type: nonce
 	 */
-	if ((strstr(provider->response_type, "id_token") != NULL)
-			|| (strcmp(provider->response_type, "token") == 0)) {
+	if ((oidc_util_spaced_string_equals(r->pool, proto_state->response_type,
+			"code") == FALSE)
+			&& (oidc_util_spaced_string_equals(r->pool,
+					proto_state->response_type, "code token") == FALSE)) {
 		destination = apr_psprintf(r->pool, "%s&nonce=%s", destination,
-				oidc_util_escape_string(r, nonce));
+				oidc_util_escape_string(r, proto_state->nonce));
 		//destination = apr_psprintf(r->pool, "%s&response_mode=fragment", destination);
 	}
 

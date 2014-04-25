@@ -211,7 +211,16 @@ const char*oidc_request_state_get(request_rec *r, const char *key);
 int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c);
 
 // oidc_proto.c
-int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *redirect_uri, const char *state, const char *original_url, const char *nonce);
+
+typedef struct oidc_proto_state {
+	const char *nonce;
+	const char *original_url;
+	const char *issuer;
+	const char *response_type;
+	apr_time_t timestamp;
+} oidc_proto_state;
+
+int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *redirect_uri, const char *state, oidc_proto_state *proto_state);
 apr_byte_t oidc_proto_is_post_authorization_response(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_check_token_type(request_rec *r, oidc_provider_t *provider, const char *token_type);

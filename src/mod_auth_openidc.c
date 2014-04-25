@@ -194,22 +194,14 @@ static char *oidc_get_browser_state_hash(request_rec *r, const char *state) {
 	return result;
 }
 
-typedef struct oidc_authrr_state {
-	const char *nonce;
-	const char *original_url;
-	const char *issuer;
-	const char *response_type;
-	apr_time_t timestamp;
-} oidc_authrr_state;
-
 /*
  * restore the state that was maintained between authorization request and response in an encrypted cookie
  */
-static apr_byte_t oidc_restore_authrr_state(request_rec *r, oidc_cfg *c,
-		const char *state, oidc_authrr_state **auth_rr_state) {
+static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
+		const char *state, oidc_proto_state **proto_state) {
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_restore_authrr_state: entering");
+			"oidc_restore_proto_state: entering");
 
 	apr_json_value_t *v = NULL;
 
@@ -217,7 +209,7 @@ static apr_byte_t oidc_restore_authrr_state(request_rec *r, oidc_cfg *c,
 	char *cookieValue = oidc_get_cookie(r, OIDCStateCookieName);
 	if (cookieValue == NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_restore_authrr_state: no \"%s\" state cookie found",
+				"oidc_restore_proto_state: no \"%s\" state cookie found",
 				OIDCStateCookieName);
 		return FALSE;
 	}
@@ -231,7 +223,7 @@ static apr_byte_t oidc_restore_authrr_state(request_rec *r, oidc_cfg *c,
 		return FALSE;
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_restore_authrr_state: restored JSON state cookie value: %s",
+			"oidc_restore_proto_state: restored JSON state cookie value: %s",
 			svalue);
 
 	apr_json_value_t *json = NULL;
@@ -239,8 +231,8 @@ static apr_byte_t oidc_restore_authrr_state(request_rec *r, oidc_cfg *c,
 	if (apr_json_decode(&json, svalue, strlen(svalue), r->pool) != APR_SUCCESS)
 		return FALSE;
 
-	*auth_rr_state = apr_pcalloc(r->pool, sizeof(oidc_authrr_state));
-	oidc_authrr_state *res = *auth_rr_state;
+	*proto_state = apr_pcalloc(r->pool, sizeof(oidc_proto_state));
+	oidc_proto_state *res = *proto_state;
 
 	/* 1. restore the nonce from the cookie */
 	v = apr_hash_get(json->value.object, "nonce", APR_HASH_KEY_STRING);
@@ -251,7 +243,7 @@ static apr_byte_t oidc_restore_authrr_state(request_rec *r, oidc_cfg *c,
 	/* compare the calculated hash with the value provided in the authorization response */
 	if (apr_strnatcmp(calc, state) != 0) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_restore_authrr_state: calculated state from cookie does not match state parameter passed back in URL: \"%s\" != \"%s\"",
+				"oidc_restore_proto_state: calculated state from cookie does not match state parameter passed back in URL: \"%s\" != \"%s\"",
 				state, calc);
 		return FALSE;
 	}
@@ -276,12 +268,12 @@ static apr_byte_t oidc_restore_authrr_state(request_rec *r, oidc_cfg *c,
 	apr_time_t now = apr_time_sec(apr_time_now());
 	if (now > res->timestamp + c->state_timeout) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_restore_authrr_state: state has expired");
+				"oidc_restore_proto_state: state has expired");
 		return FALSE;
 	}
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_restore_authrr_state: restored state: nonce=\"%s\", original_url=\"%s\", issuer=\"%s\", response_type=\%s\", timestamp=%" APR_TIME_T_FMT,
+			"oidc_restore_proto_state: restored state: nonce=\"%s\", original_url=\"%s\", issuer=\"%s\", response_type=\%s\", timestamp=%" APR_TIME_T_FMT,
 			res->nonce, res->original_url, res->issuer, res->response_type,
 			res->timestamp);
 
@@ -294,7 +286,7 @@ static apr_byte_t oidc_restore_authrr_state(request_rec *r, oidc_cfg *c,
  * in a cookie in the browser that is cryptographically bound to that state
  */
 static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
-		oidc_authrr_state *authz_rr_state) {
+		oidc_proto_state *proto_state) {
 	/*
 	 * create a cookie consisting of 5 elements:
 	 * random value, original URL, issuer, response_type and timestamp
@@ -305,9 +297,9 @@ static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
 			"\"original_url\": \"%s\","
 			"\"issuer\": \"%s\","
 			"\"response_type\": \"%s\","
-			"\"timestamp\": %" APR_TIME_T_FMT "}", authz_rr_state->nonce,
-			authz_rr_state->original_url, authz_rr_state->issuer,
-			authz_rr_state->response_type, authz_rr_state->timestamp);
+			"\"timestamp\": %" APR_TIME_T_FMT "}", proto_state->nonce,
+			proto_state->original_url, proto_state->issuer,
+			proto_state->response_type, proto_state->timestamp);
 
 	/* encrypt the resulting JSON value  */
 	char *cookieValue = NULL;
@@ -472,7 +464,7 @@ static int oidc_handle_existing_session(request_rec *r,
  */
 static apr_byte_t oidc_authorization_response_match_state(request_rec *r,
 		oidc_cfg *c, const char *state, struct oidc_provider_t **provider,
-		oidc_authrr_state **auth_rr_state) {
+		oidc_proto_state **proto_state) {
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_authorization_response_match_state: entering (state=%s)",
@@ -485,7 +477,7 @@ static apr_byte_t oidc_authorization_response_match_state(request_rec *r,
 	}
 
 	/* check the state parameter against what we stored in a cookie */
-	if (oidc_restore_authrr_state(r, c, state, auth_rr_state) == FALSE) {
+	if (oidc_restore_proto_state(r, c, state, proto_state) == FALSE) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_authorization_response_match_state: unable to restore state");
 		return FALSE;
@@ -498,13 +490,13 @@ static apr_byte_t oidc_authorization_response_match_state(request_rec *r,
 	if (c->metadata_dir != NULL) {
 
 		/* try and get metadata from the metadata directory for the OP that sent this response */
-		if ((oidc_metadata_get(r, c, (*auth_rr_state)->issuer, provider)
+		if ((oidc_metadata_get(r, c, (*proto_state)->issuer, provider)
 				== FALSE) || (provider == NULL)) {
 
 			// something went wrong here between sending the request and receiving the response
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 					"oidc_authorization_response_match_state: no provider metadata found for provider \"%s\"",
-					(*auth_rr_state)->issuer);
+					(*proto_state)->issuer);
 			return FALSE;
 		}
 	}
@@ -693,17 +685,17 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 			"oidc_handle_authorization_response: entering");
 
 	struct oidc_provider_t *provider = NULL;
-	oidc_authrr_state *authz_rr_state = NULL;
+	oidc_proto_state *proto_state = NULL;
 
 	/* match the returned state parameter against the state stored in the browser */
 	if (oidc_authorization_response_match_state(r, c, state, &provider,
-			&authz_rr_state) == FALSE) {
+			&proto_state) == FALSE) {
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
 	/* check the required response parameters for the requested flow */
 	if (oidc_check_authorization_response_parameters(r,
-			authz_rr_state->response_type, &code, &id_token, &access_token,
+			proto_state->response_type, &code, &id_token, &access_token,
 			&token_type) == FALSE) {
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
@@ -714,7 +706,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	/* parse and validate the obtained id_token */
 	if (id_token != NULL) {
 		if (oidc_proto_parse_idtoken(r, c, provider, id_token,
-				authz_rr_state->nonce, &remoteUser, &jwt) == FALSE) {
+				proto_state->nonce, &remoteUser, &jwt) == FALSE) {
 			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
 					"oidc_handle_authorization_response: could not verify the id_token contents, return HTTP_UNAUTHORIZED");
 			return HTTP_UNAUTHORIZED;
@@ -726,7 +718,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 
 		if (jwt != NULL) {
 			if (oidc_proto_validate_code(r, provider, jwt,
-					authz_rr_state->response_type, code) == FALSE) {
+					proto_state->response_type, code) == FALSE) {
 				return HTTP_UNAUTHORIZED;
 			}
 		}
@@ -739,7 +731,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		}
 
 		if (oidc_check_code_response_parameters(r,
-				authz_rr_state->response_type, &c_id_token, &c_access_token,
+				proto_state->response_type, &c_id_token, &c_access_token,
 				&c_token_type) == FALSE) {
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
@@ -752,9 +744,16 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 			token_type = c_token_type;
 		}
 
+		/* TODO: Google does not allow nonce in "code" or "code token" flows... */
+		const char *nonce =
+				(oidc_util_spaced_string_equals(r->pool,
+						proto_state->response_type, "code")
+						|| oidc_util_spaced_string_equals(r->pool,
+								proto_state->response_type, "code token")) ?
+										NULL : proto_state->nonce;
+
 		if (jwt == NULL) {
-			/* TODO: now I'm setting the nonce to NULL since google does not allow using a nonce in the "code" flow... */
-			if (oidc_proto_parse_idtoken(r, c, provider, id_token, NULL,
+			if (oidc_proto_parse_idtoken(r, c, provider, id_token, nonce,
 					&remoteUser, &jwt) == FALSE) {
 				ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
 						"oidc_handle_authorization_response: could not verify the id_token contents, return HTTP_UNAUTHORIZED");
@@ -766,7 +765,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	/* validate the access token */
 	if (access_token != NULL) {
 		if (oidc_proto_validate_access_token(r, provider, jwt,
-				authz_rr_state->response_type, access_token,
+				proto_state->response_type, access_token,
 				token_type) == FALSE) {
 			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
 					"oidc_handle_authorization_response: access_token did not validate, dropping it");
@@ -813,12 +812,12 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	r->user = remoteUser;
 
 	/* now we've authenticated the user so go back to the URL that he originally tried to access */
-	apr_table_add(r->headers_out, "Location", authz_rr_state->original_url);
+	apr_table_add(r->headers_out, "Location", proto_state->original_url);
 
 	/* log the successful response */
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_handle_authorization_response: session created and stored, redirecting to original url: %s",
-			authz_rr_state->original_url);
+			proto_state->original_url);
 
 	/* do the actual redirect to the original URL */
 	return HTTP_MOVED_TEMPORARILY;
@@ -1022,20 +1021,19 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	oidc_util_generate_random_base64url_encoded_value(r, 32, &nonce);
 
 	/* create the state between request/response */
-	oidc_authrr_state authz_rr_state = { nonce, original_url, provider->issuer,
+	oidc_proto_state proto_state = { nonce, original_url, provider->issuer,
 			provider->response_type, apr_time_sec(apr_time_now()) };
 
 	/* create state that restores the context when the authorization response comes in; cryptographically bind it to the browser */
-	oidc_authorization_request_set_cookie(r, &authz_rr_state);
+	oidc_authorization_request_set_cookie(r, &proto_state);
 
 	/* get a hash value that fingerprints the browser concatenated with the random input */
-	char *state = oidc_get_browser_state_hash(r, authz_rr_state.nonce);
+	char *state = oidc_get_browser_state_hash(r, proto_state.nonce);
 
 	// TODO: maybe show intermediate/progress screen "redirecting to"
 
 	/* send off to the OpenID Connect Provider */
-	return oidc_proto_authorization_request(r, provider, c->redirect_uri, state,
-			original_url, nonce);
+	return oidc_proto_authorization_request(r, provider, c->redirect_uri, state, &proto_state);
 }
 
 /*
