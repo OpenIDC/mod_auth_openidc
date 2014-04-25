@@ -520,7 +520,8 @@ static apr_byte_t oidc_check_authorization_response_parameters(request_rec *r,
 		char **access_token, char **token_type) {
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_check_authorization_response_parameters: entering");
+			"oidc_check_authorization_response_parameters: entering, response_type=%s, code=%s, id_token=%s, access_token=%s, token_type=%s",
+			response_type, *code, *id_token, *access_token, *token_type);
 
 	/*
 	 * check code parameter
@@ -723,9 +724,11 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	/* resolve the code against the token endpoint of the OP */
 	if (code != NULL) {
 
-		if (oidc_proto_validate_code(r, provider, jwt,
-				authz_rr_state->response_type, code) == FALSE) {
-			return HTTP_UNAUTHORIZED;
+		if (jwt != NULL) {
+			if (oidc_proto_validate_code(r, provider, jwt,
+					authz_rr_state->response_type, code) == FALSE) {
+				return HTTP_UNAUTHORIZED;
+			}
 		}
 
 		char *c_id_token = NULL, *c_access_token = NULL, *c_token_type = NULL;
