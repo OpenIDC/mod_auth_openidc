@@ -1,3 +1,6 @@
+4/26/2014
+- make client secret optional (support self-issued OP)
+
 4/25/2014
 - support Hybrid flows
 

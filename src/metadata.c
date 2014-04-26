@@ -351,10 +351,10 @@ static apr_byte_t oidc_metadata_client_is_valid(request_rec *r,
 			"client_secret", APR_HASH_KEY_STRING);
 	if ((j_client_secret == NULL)
 			|| (j_client_secret->type != APR_JSON_STRING)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
 				"oidc_metadata_client_is_valid: client (%s) JSON metadata did not contain a \"client_secret\" string",
 				issuer);
-		return FALSE;
+		//return FALSE;
 	}
 
 	/* the expiry timestamp from the JSON object */
@@ -982,8 +982,10 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *issuer,
 			"client_id", APR_HASH_KEY_STRING);
 
 	/* get a handle to the client_secret we need to use for this provider */
+	const char *client_secret = NULL;
 	apr_json_value_t *j_client_secret = apr_hash_get(j_client->value.object,
 			"client_secret", APR_HASH_KEY_STRING);
+	if (j_client_secret != NULL) client_secret = j_client_secret->value.string.p;
 
 	/* find out if we need to perform SSL server certificate validation on the token_endpoint and user_info_endpoint for this provider */
 	int validate = cfg->provider.ssl_validate_server;
@@ -1028,8 +1030,7 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *issuer,
 	/* put whatever we've found out about the provider in (the client part of) the metadata struct */
 	provider->ssl_validate_server = validate;
 	provider->client_id = apr_pstrdup(r->pool, j_client_id->value.string.p);
-	provider->client_secret = apr_pstrdup(r->pool,
-			j_client_secret->value.string.p);
+	provider->client_secret = apr_pstrdup(r->pool, client_secret);
 	provider->scope = apr_pstrdup(r->pool, scope);
 	provider->jwks_refresh_interval = jwks_refresh_interval;
 	provider->idtoken_iat_slack = idtoken_iat_slack;
