@@ -364,6 +364,10 @@ const char*oidc_request_state_get(request_rec *r, const char *key) {
 	return apr_table_get(state, key);
 }
 
+/*
+ * set the claims from a JSON object (c.q. id_token or user_info response) stored
+ * in the session in to HTTP headers passed on to the application
+ */
 static apr_byte_t oidc_set_app_claims(request_rec *r,
 		const oidc_cfg * const cfg, session_rec *session,
 		const char *session_key, const char *authn_header) {
@@ -371,7 +375,7 @@ static apr_byte_t oidc_set_app_claims(request_rec *r,
 	const char *s_attrs = NULL;
 	apr_json_value_t *j_attrs = NULL;
 
-	/* get the string-encoded id_token from the session */
+	/* get the string-encoded JSON object from the session */
 	oidc_session_get(r, session, session_key, &s_attrs);
 
 	/* decode the string-encoded attributes in to a JSON structure */
@@ -379,9 +383,9 @@ static apr_byte_t oidc_set_app_claims(request_rec *r,
 			&& (apr_json_decode(&j_attrs, s_attrs, strlen(s_attrs), r->pool)
 					!= APR_SUCCESS)) {
 
-		/* whoops, attributes have been corrupted */
+		/* whoops, JSON has been corrupted */
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_set_app_claims: unable to parse \"%s\" stored in the session, returning internal server error",
+				"oidc_set_app_claims: unable to parse \"%s\" JSON stored in the session, returning internal server error",
 				session_key);
 
 		return FALSE;
@@ -682,7 +686,8 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		char *access_token, char *token_type) {
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_handle_authorization_response: entering");
+			"oidc_handle_authorization_response: entering, state=%s, code=%s, id_token=%s, access_token=%s, token_type=%s",
+			state, code, id_token, access_token, token_type);
 
 	struct oidc_provider_t *provider = NULL;
 	oidc_proto_state *proto_state = NULL;
@@ -716,6 +721,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	/* resolve the code against the token endpoint of the OP */
 	if (code != NULL) {
 
+		/* if an id_token was provided in the authorization response: validate the code against the c_hash claim */
 		if (jwt != NULL) {
 			if (oidc_proto_validate_code(r, provider, jwt,
 					proto_state->response_type, code) == FALSE) {
@@ -725,17 +731,20 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 
 		char *c_id_token = NULL, *c_access_token = NULL, *c_token_type = NULL;
 
+		/* resolve the code against the token endpoint */
 		if (oidc_proto_resolve_code(r, c, provider, code, &c_id_token,
 				&c_access_token, &c_token_type) == FALSE) {
 			return HTTP_UNAUTHORIZED;
 		}
 
+		/* validate the response */
 		if (oidc_check_code_response_parameters(r,
 				proto_state->response_type, &c_id_token, &c_access_token,
 				&c_token_type) == FALSE) {
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 
+		/* use from the response whatever we still need */
 		if (c_id_token != NULL) {
 			id_token = c_id_token;
 		}
@@ -752,6 +761,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 								proto_state->response_type, "code token")) ?
 										NULL : proto_state->nonce;
 
+		/* if we had no id_token yet, we must have one now (by flow) */
 		if (jwt == NULL) {
 			if (oidc_proto_parse_idtoken(r, c, provider, id_token, nonce,
 					&remoteUser, &jwt) == FALSE) {
@@ -787,7 +797,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	/* set the resolved stuff in the session */
 	session->remote_user = remoteUser;
 
-	/* expires is the value from the id_token */
+	/* set the session expiry to the inactivity timeout */
 	session->expiry =
 			apr_time_now() + apr_time_from_sec(c->session_inactivity_timeout);
 
@@ -1041,7 +1051,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
  */
 static apr_byte_t oidc_is_discovery_response(request_rec *r, oidc_cfg *cfg) {
 	/*
-	 * see if this is a call to the configured redirect_uri and
+	 * prereq: this is a call to the configured redirect_uri, now see if:
 	 * the OIDC_RT_PARAM_NAME parameter is present and
 	 * the OIDC_DISC_ACCT_PARAM or OIDC_DISC_OP_PARAM is present
 	 */
@@ -1161,21 +1171,23 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 
 		/* handle logout */
 		return oidc_handle_logout(r, session);
-	}
 
-	/* this is not an authorization response  or logout request */
+	}  else if ((r->args == NULL) || (apr_strnatcmp(r->args, "") == 0)) {
 
-	if ((r->args == NULL) || (apr_strnatcmp(r->args, "") == 0))
 		/* this is a "bare" request to the redirect URI, indicating implicit flow using the fragment response_mode */
 		return oidc_proto_javascript_implicit(r, c);
+	}
 
-	/* TODO: check for "error" response */
+	/* this is not an authorization response or logout request */
+
+	/* check for "error" response */
 	if (oidc_util_request_has_parameter(r, "error")) {
 
 		char *error = NULL, *descr = NULL;
 		oidc_util_get_request_parameter(r, "error", &error);
 		oidc_util_get_request_parameter(r, "error_description", &descr);
 
+		/* send user facing error to browser */
 		return oidc_util_html_send_error(r, error, descr, DONE);
 	}
 
@@ -1198,7 +1210,7 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 		session_rec *session = NULL;
 		oidc_session_load(r, &session);
 
-		/* see if the initial request is to the redirect URI */
+		/* see if the initial request is to the redirect URI; this handles potential logout too */
 		if (oidc_util_request_matches_url(r, c->redirect_uri)) {
 
 			/* handle request to the redirect_uri */
