@@ -118,7 +118,7 @@ int oidc_proto_authorization_request(request_rec *r,
 apr_byte_t oidc_proto_is_post_authorization_response(request_rec *r,
 		oidc_cfg *cfg) {
 
-	/* see if this is a call to the configured redirect_uri and it is a POST */
+	/* prereq: this is a call to the configured redirect_uri; see if it is a POST */
 	return (r->method_number == M_POST);
 }
 
@@ -128,7 +128,7 @@ apr_byte_t oidc_proto_is_post_authorization_response(request_rec *r,
 apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r,
 		oidc_cfg *cfg) {
 
-	/* see if this is a call to the configured redirect_uri and it is a POST */
+	/* prereq: this is a call to the configured redirect_uri; see if it is a GET with state and id_token or code parameters */
 	return ((r->method_number == M_GET)
 			&& oidc_util_request_has_parameter(r, "state")
 			&& (oidc_util_request_has_parameter(r, "id_token")
@@ -170,13 +170,16 @@ static apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
 		return FALSE;
 	}
 
-	/* cache the nonce for the window time of the token for replay prevention plus 10 seconds for safety */
-	cfg->cache->set(r, nonce, nonce,
-			apr_time_from_sec(provider->idtoken_iat_slack * 2 + 10));
+	/* nonce cache duration is the configured replay prevention window for token issuance plus 10 seconds for safety */
+	int nonce_cache_duration = apr_time_from_sec(
+			provider->idtoken_iat_slack * 2 + 10);
+
+	/* store it in the cache for the calculated duration */
+	cfg->cache->set(r, nonce, nonce, nonce_cache_duration);
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_validate_nonce: nonce \"%s\" validated successfully and cached",
-			nonce);
+			"oidc_proto_validate_nonce: nonce \"%s\" validated successfully and is now cached for %d seconds",
+			nonce, nonce_cache_duration);
 
 	return TRUE;
 }
@@ -250,7 +253,7 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 }
 
 /*
- * check whether the provided JSON payload (in the j_payload parameter) is a valid id_token for the specified "provider"
+ * check whether the provided JWT is a valid id_token for the specified "provider"
  */
 static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
 		oidc_provider_t *provider, apr_jwt_t *jwt, const char *nonce) {
@@ -316,6 +319,7 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
 		return FALSE;
 	}
 
+	/* check if the required-by-spec "sub" claim is present */
 	if (jwt->payload.sub == NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_validate_idtoken: id_token JSON payload did not contain the required-by-spec \"sub\" string value");
@@ -837,7 +841,7 @@ int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg *c) {
 }
 
 /*
- * check the hash value in the id_token against the value
+ * check a provided hash value (at_hash|c_hash) against a corresponding hash calculated for a specified value and algorithm
  */
 static apr_byte_t oidc_proto_validate_hash(request_rec *r, const char *alg,
 		const char *hash, const char *value, const char *type) {
@@ -859,23 +863,23 @@ static apr_byte_t oidc_proto_validate_hash(request_rec *r, const char *alg,
 	if (encoded[enc_len - 1] == ',')
 		enc_len--;
 
-	/* compare the calculated hash against the at_hash */
+	/* compare the calculated hash against the provided hash */
 	if ((strncmp(encoded, hash, enc_len) != 0)) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_hash: provided %s value (%s) does not match the calculated value (%s)",
+				"oidc_proto_validate_hash: provided \"%s\" hash value (%s) does not match the calculated value (%s)",
 				type, hash, encoded);
 		return FALSE;
 	}
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_validate_hash: successfully validated the %s value (%s) against the calculated value (%s)",
+			"oidc_proto_validate_hash: successfully validated the provided \"%s\" hash value (%s) against the calculated value (%s)",
 			type, hash, encoded);
 
 	return TRUE;
 }
 
 /*
- * check a hash value in the id_token against the provided value
+ * check a hash value in the id_token against the corresponding hash calculated over a provided value
  */
 static apr_byte_t oidc_proto_validate_hash_value(request_rec *r,
 		oidc_provider_t *provider, apr_jwt_t *jwt, const char *response_type,
@@ -920,11 +924,11 @@ static apr_byte_t oidc_proto_validate_hash_value(request_rec *r,
  */
 apr_byte_t oidc_proto_validate_code(request_rec *r, oidc_provider_t *provider,
 		apr_jwt_t *jwt, const char *response_type, const char *code) {
-	apr_array_header_t *flows = apr_array_make(r->pool, 2, sizeof(const char*));
-	*(const char**) apr_array_push(flows) = "code id_token";
-	*(const char**) apr_array_push(flows) = "code id_token token";
+	apr_array_header_t *required_for_flows = apr_array_make(r->pool, 2, sizeof(const char*));
+	*(const char**) apr_array_push(required_for_flows) = "code id_token";
+	*(const char**) apr_array_push(required_for_flows) = "code id_token token";
 	return oidc_proto_validate_hash_value(r, provider, jwt, response_type, code,
-			"c_hash", flows);
+			"c_hash", required_for_flows);
 }
 
 /*
@@ -933,11 +937,11 @@ apr_byte_t oidc_proto_validate_code(request_rec *r, oidc_provider_t *provider,
 apr_byte_t oidc_proto_validate_access_token(request_rec *r,
 		oidc_provider_t *provider, apr_jwt_t *jwt, const char *response_type,
 		const char *access_token, const char *token_type) {
-	apr_array_header_t *flows = apr_array_make(r->pool, 2, sizeof(const char*));
-	*(const char**) apr_array_push(flows) = "id_token token";
-	*(const char**) apr_array_push(flows) = "code id_token token";
+	apr_array_header_t *required_for_flows = apr_array_make(r->pool, 2, sizeof(const char*));
+	*(const char**) apr_array_push(required_for_flows) = "id_token token";
+	*(const char**) apr_array_push(required_for_flows) = "code id_token token";
 	return oidc_proto_validate_hash_value(r, provider, jwt, response_type,
-			access_token, "at_hash", flows);
+			access_token, "at_hash", required_for_flows);
 }
 
 /*
