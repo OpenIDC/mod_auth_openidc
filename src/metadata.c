@@ -222,7 +222,7 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 					apr_json_value_t *);
 			if (elem->type != APR_JSON_STRING) {
 				ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-						"oidc_util_json_array_has_value: unhandled in-array JSON non-string object type [%d]",
+						"oidc_metadata_provider_is_valid: unhandled in-array JSON non-string object type [%d]",
 						elem->type);
 				continue;
 			}
@@ -240,6 +240,40 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata did not contain a \"response_types_supported\" array; assuming that \"code\" flow is supported...",
 				issuer);
 		// TODO: hey, this is required-by-spec stuff right?
+	}
+
+	/* verify that the provider supports a response_mode that we implement */
+	apr_json_value_t *response_modes_supported = apr_hash_get(
+			j_provider->value.object, "response_modes_supported",
+			APR_HASH_KEY_STRING);
+	if ((response_modes_supported != NULL)
+			&& (response_modes_supported->type == APR_JSON_ARRAY)) {
+		int i = 0;
+		for (i = 0; i < response_modes_supported->value.array->nelts; i++) {
+			apr_json_value_t *elem = APR_ARRAY_IDX(
+					response_modes_supported->value.array, i,
+					apr_json_value_t *);
+			if (elem->type != APR_JSON_STRING) {
+				ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+						"oidc_metadata_provider_is_valid: unhandled in-array JSON non-string object type [%d]",
+						elem->type);
+				continue;
+			}
+			if ((apr_strnatcmp(elem->value.string.p, "fragment") == 0)
+					|| (apr_strnatcmp(elem->value.string.p, "query") == 0)
+					|| (apr_strnatcmp(elem->value.string.p, "form_post") == 0))
+				break;
+		}
+		if (i == response_modes_supported->value.array->nelts) {
+			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
+					"oidc_metadata_provider_is_valid: could not find a supported response mode in provider metadata (%s) for entry \"response_modes_supported\"",
+					issuer);
+			return FALSE;
+		}
+	} else {
+		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata did not contain a \"response_modes_supported\" array; assuming that \"fragment\" and \"query\" are supported",
+				issuer);
 	}
 
 	/* get a handle to the authorization endpoint */
@@ -1027,6 +1061,15 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *issuer,
 		idtoken_iat_slack = j_idtoken_iat_slack->value.lnumber;
 	}
 
+	/* get the response mode to use */
+	const char *response_mode = cfg->provider.response_mode;
+	apr_json_value_t *j_response_mode = apr_hash_get(j_client->value.object,
+			"response_mode", APR_HASH_KEY_STRING);
+	if ((j_response_mode != NULL)
+			&& (j_response_mode->type == APR_JSON_STRING)) {
+		response_mode = j_response_mode->value.string.p;
+	}
+
 	/* put whatever we've found out about the provider in (the client part of) the metadata struct */
 	provider->ssl_validate_server = validate;
 	provider->client_id = apr_pstrdup(r->pool, j_client_id->value.string.p);
@@ -1034,6 +1077,7 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *issuer,
 	provider->scope = apr_pstrdup(r->pool, scope);
 	provider->jwks_refresh_interval = jwks_refresh_interval;
 	provider->idtoken_iat_slack = idtoken_iat_slack;
+	provider->response_mode = apr_pstrdup(r->pool, response_mode);
 
 	return TRUE;
 }

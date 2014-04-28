@@ -73,40 +73,40 @@ int oidc_proto_authorization_request(request_rec *r,
 			proto_state->nonce);
 
 	/* assemble the full URL as the authorization request to the OP where we want to redirect to */
-	char *destination =
-			apr_psprintf(r->pool,
-					"%s%sresponse_type=%s&scope=%s&client_id=%s&state=%s&redirect_uri=%s",
-					provider->authorization_endpoint_url,
-					(strchr(provider->authorization_endpoint_url, '?') != NULL ?
-							"&" : "?"),
-							oidc_util_escape_string(r, proto_state->response_type),
-							oidc_util_escape_string(r, provider->scope),
-							oidc_util_escape_string(r, provider->client_id),
-							oidc_util_escape_string(r, state),
-							oidc_util_escape_string(r, redirect_uri));
+	char *authorization_request = apr_psprintf(r->pool, "%s%s",
+			provider->authorization_endpoint_url,
+			strchr(provider->authorization_endpoint_url, '?') != NULL ?
+					"&" : "?");
+	authorization_request = apr_psprintf(r->pool, "%sresponse_type=%s",
+			authorization_request,
+			oidc_util_escape_string(r, proto_state->response_type));
+	authorization_request = apr_psprintf(r->pool, "%s&scope=%s",
+			authorization_request, oidc_util_escape_string(r, provider->scope));
+	authorization_request = apr_psprintf(r->pool, "%s&client_id=%s",
+			authorization_request,
+			oidc_util_escape_string(r, provider->client_id));
+	authorization_request = apr_psprintf(r->pool, "%s&state=%s",
+			authorization_request, oidc_util_escape_string(r, state));
+	authorization_request = apr_psprintf(r->pool, "%s&redirect_uri=%s",
+			authorization_request, oidc_util_escape_string(r, redirect_uri));
 
-	/*
-	 * see if the chosen flow requires a nonce parameter
-	 *
-	 * TODO: I'd like to include the nonce in the "code" and "code token" flows as well but Google does not allow me to do that:
-	 * Error: invalid_request: Parameter not allowed for this message type: nonce
-	 */
-	if ((oidc_util_spaced_string_equals(r->pool, proto_state->response_type,
-			"code") == FALSE)
-			&& (oidc_util_spaced_string_equals(r->pool,
-					proto_state->response_type, "code token") == FALSE)) {
-		destination = apr_psprintf(r->pool, "%s&nonce=%s", destination,
+	/* add the nonce if set */
+	if (proto_state->nonce != NULL)
+		authorization_request = apr_psprintf(r->pool, "%s&nonce=%s", authorization_request,
 				oidc_util_escape_string(r, proto_state->nonce));
-		//destination = apr_psprintf(r->pool, "%s&response_mode=fragment", destination);
-	}
+
+	/* add the response_mode if explicitly set */
+	if (proto_state->response_mode != NULL)
+		authorization_request = apr_psprintf(r->pool, "%s&response_mode=%s", authorization_request,
+				oidc_util_escape_string(r, proto_state->response_mode));
 
 	/* add the redirect location header */
-	apr_table_add(r->headers_out, "Location", destination);
+	apr_table_add(r->headers_out, "Location", authorization_request);
 
 	/* some more logging */
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_proto_authorization_request: adding outgoing header: Location: %s",
-			destination);
+			authorization_request);
 
 	/* and tell Apache to return an HTTP Redirect (302) message */
 	return HTTP_MOVED_TEMPORARILY;

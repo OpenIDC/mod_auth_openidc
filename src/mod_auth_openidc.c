@@ -79,6 +79,7 @@
 #include "mod_auth_openidc.h"
 
 // TODO: harmonize user facing error handling
+// TODO: do we need to check response_mode on the authorization response?
 
 // TODO: documentation:
 //       - write a README.quickstart
@@ -146,9 +147,9 @@ static void oidc_scrub_request_headers(request_rec *r, const char *claim_prefix,
 }
 
 /*
- * calculates a hash value based on request fingerprint plus a provided state string.
+ * calculates a hash value based on request fingerprint plus a provided nonce string.
  */
-static char *oidc_get_browser_state_hash(request_rec *r, const char *state) {
+static char *oidc_get_browser_state_hash(request_rec *r, const char *nonce) {
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_get_browser_state_hash: entering");
@@ -180,8 +181,8 @@ static char *oidc_get_browser_state_hash(request_rec *r, const char *state) {
 	/* concat the remote IP address/hostname to the hash input */
 	apr_sha1_update(&sha1, value, strlen(value));
 
-	/* concat the state parameter to the hash input */
-	apr_sha1_update(&sha1, state, strlen(state));
+	/* concat the nonce parameter to the hash input */
+	apr_sha1_update(&sha1, nonce, strlen(nonce));
 
 	/* finalize the hash input and calculate the resulting hash output */
 	const int sha1_len = 20;
@@ -297,9 +298,12 @@ static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
 			"\"original_url\": \"%s\","
 			"\"issuer\": \"%s\","
 			"\"response_type\": \"%s\","
+			"\"response_mode\": \"%s\","
 			"\"timestamp\": %" APR_TIME_T_FMT "}", proto_state->nonce,
 			proto_state->original_url, proto_state->issuer,
-			proto_state->response_type, proto_state->timestamp);
+			proto_state->response_type,
+			proto_state->response_mode ? proto_state->response_mode : "null",
+			proto_state->timestamp);
 
 	/* encrypt the resulting JSON value  */
 	char *cookieValue = NULL;
@@ -754,12 +758,13 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		}
 
 		/* TODO: Google does not allow nonce in "code" or "code token" flows... */
-		const char *nonce =
-				(oidc_util_spaced_string_equals(r->pool,
-						proto_state->response_type, "code")
-						|| oidc_util_spaced_string_equals(r->pool,
-								proto_state->response_type, "code token")) ?
-										NULL : proto_state->nonce;
+		const char *nonce = proto_state->nonce;
+		if ((strcmp(provider->issuer, "accounts.google.com") == 0)
+				&& ((oidc_util_spaced_string_equals(r->pool,
+						provider->response_type, "code"))
+						|| (oidc_util_spaced_string_equals(r->pool,
+								provider->response_type, "code token"))))
+			nonce = NULL;
 
 		/* if we had no id_token yet, we must have one now (by flow) */
 		if (jwt == NULL) {
@@ -1026,13 +1031,13 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 		provider = &c->provider;
 	}
 
-	/* generate a nonce */
+	/* generate a random value to correlate request/response through browser state */
 	char *nonce = NULL;
 	oidc_util_generate_random_base64url_encoded_value(r, 32, &nonce);
 
 	/* create the state between request/response */
 	oidc_proto_state proto_state = { nonce, original_url, provider->issuer,
-			provider->response_type, apr_time_sec(apr_time_now()) };
+			provider->response_type, provider->response_mode, apr_time_sec(apr_time_now()) };
 
 	/* create state that restores the context when the authorization response comes in; cryptographically bind it to the browser */
 	oidc_authorization_request_set_cookie(r, &proto_state);
@@ -1040,9 +1045,20 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	/* get a hash value that fingerprints the browser concatenated with the random input */
 	char *state = oidc_get_browser_state_hash(r, proto_state.nonce);
 
-	// TODO: maybe show intermediate/progress screen "redirecting to"
+	/*
+	 * TODO: I'd like to include the nonce all flows, including the "code" and "code token" flows
+	 * but Google does not allow me to do that:
+	 * Error: invalid_request: Parameter not allowed for this message type: nonce
+	 */
+	if ((strcmp(provider->issuer, "accounts.google.com") == 0)
+			&& ((oidc_util_spaced_string_equals(r->pool,
+					provider->response_type, "code"))
+					|| (oidc_util_spaced_string_equals(r->pool,
+							provider->response_type, "code token"))))
+		proto_state.nonce = NULL;
 
 	/* send off to the OpenID Connect Provider */
+	// TODO: maybe show intermediate/progress screen "redirecting to"
 	return oidc_proto_authorization_request(r, provider, c->redirect_uri, state, &proto_state);
 }
 

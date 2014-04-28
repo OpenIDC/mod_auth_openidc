@@ -126,6 +126,7 @@ typedef struct oidc_provider_t {
 	char *registration_token;
 	char *scope;
 	char *response_type;
+	char *response_mode;
 	int jwks_refresh_interval;
 	int idtoken_iat_slack;
 } oidc_provider_t ;
@@ -217,6 +218,7 @@ typedef struct oidc_proto_state {
 	const char *original_url;
 	const char *issuer;
 	const char *response_type;
+	const char *response_mode;
 	apr_time_t timestamp;
 } oidc_proto_state;
 
@@ -258,6 +260,7 @@ const char *oidc_set_dir_slot(cmd_parms *cmd, void *ptr, const char *arg);
 const char *oidc_set_session_type(cmd_parms *cmd, void *ptr, const char *arg);
 const char *oidc_set_cache_type(cmd_parms *cmd, void *ptr, const char *arg);
 const char *oidc_set_response_type(cmd_parms *cmd, void *struct_ptr, const char *arg);
+const char *oidc_set_response_mode(cmd_parms *cmd, void *struct_ptr, const char *arg);
 const char *oidc_set_id_token_alg(cmd_parms *cmd, void *struct_ptr, const char *arg);
 const char *oidc_set_cache_shm_max(cmd_parms *cmd, void *ptr, const char *arg);
 

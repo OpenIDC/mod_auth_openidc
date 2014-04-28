@@ -1,3 +1,7 @@
+4/28/2014
+- support configurable response_mode (fragment, query or form_post)
+- use nonce in all flows except for OP Google and flows "code" or "code token"
+
 4/26/2014
 - make client secret optional (support self-issued OP)
 

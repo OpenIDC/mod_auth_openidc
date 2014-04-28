@@ -324,6 +324,22 @@ const char *oidc_set_response_type(cmd_parms *cmd, void *struct_ptr,
 }
 
 /*
+ * set the response mode used
+ */
+const char *oidc_set_response_mode(cmd_parms *cmd, void *struct_ptr,
+		const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+
+	if ((apr_strnatcmp(arg, "fragment") == 0)
+			|| (apr_strnatcmp(arg, "query") == 0) || (apr_strnatcmp(arg, "form_post") == 0)) {
+
+		return ap_set_string_slot(cmd, cfg, arg);
+	}
+	return "parameter must be 'fragment', 'query' or 'form_post'";
+}
+
+/*
  * set the id_token signing algorithm to be used by the OP
  * TODO: align supported functions with oidc_crypto_jwt_alg2padding and metadata_is_valid function
  */
@@ -437,6 +453,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->provider.registration_token = NULL;
 	c->provider.scope = OIDC_DEFAULT_SCOPE;
 	c->provider.response_type = OIDC_DEFAULT_RESPONSE_TYPE;
+	c->provider.response_mode = NULL;
 	c->provider.jwks_refresh_interval = OIDC_DEFAULT_JWKS_REFRESH_INTERVAL;
 	c->provider.idtoken_iat_slack = OIDC_DEFAULT_IDTOKEN_IAT_SLACK;
 
@@ -543,6 +560,9 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			apr_strnatcmp(add->provider.response_type,
 					OIDC_DEFAULT_RESPONSE_TYPE) != 0 ?
 					add->provider.response_type : base->provider.response_type;
+	c->provider.response_mode =
+			add->provider.response_mode != NULL ?
+					add->provider.response_mode : base->provider.response_mode;
 	c->provider.jwks_refresh_interval =
 			add->provider.jwks_refresh_interval
 					!= OIDC_DEFAULT_JWKS_REFRESH_INTERVAL ?
@@ -1002,6 +1022,11 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, provider.response_type),
 				RSRC_CONF,
 				"The response type (or OpenID Connect Flow) used; must be one of \"code\", \"id_token\", \"id_token token\", \"code id_token\", \"code token\" or \"code id_token token\" (serves as default value for discovered OPs too)"),
+		AP_INIT_TAKE1("OIDCResponseMode",
+				oidc_set_response_mode,
+				(void *)APR_OFFSETOF(oidc_cfg, provider.response_mode),
+				RSRC_CONF,
+				"The response mode used; must be one of \"fragment\", \"query\" or \"form_post\" (serves as default value for discovered OPs too)"),
 		AP_INIT_TAKE1("OIDCIDTokenAlg", oidc_set_id_token_alg,
 				(void *)APR_OFFSETOF(oidc_cfg, id_token_alg),
 				RSRC_CONF,
