@@ -79,7 +79,7 @@
 #include "mod_auth_openidc.h"
 
 // TODO: harmonize user facing error handling
-// TODO: do we need to check response_mode on the authorization response?
+// TODO: separate non-standard client metadata entries in to its own file?
 
 // TODO: documentation:
 //       - write a README.quickstart
@@ -261,7 +261,13 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 	v = apr_hash_get(json->value.object, "response_type", APR_HASH_KEY_STRING);
 	res->response_type = apr_pstrdup(r->pool, v->value.string.p);
 
-	/* 5. get the timestamp value stored in the cookie */
+	/* 5. get the response_mode value stored in the cookie */
+	v = apr_hash_get(json->value.object, "response_mode", APR_HASH_KEY_STRING);
+	res->response_mode =
+			(v && v->value.string.p) ?
+					apr_pstrdup(r->pool, v->value.string.p) : NULL;
+
+	/* 6. get the timestamp value stored in the cookie */
 	v = apr_hash_get(json->value.object, "timestamp", APR_HASH_KEY_STRING);
 	res->timestamp = v->value.lnumber;
 
@@ -274,9 +280,9 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 	}
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_restore_proto_state: restored state: nonce=\"%s\", original_url=\"%s\", issuer=\"%s\", response_type=\%s\", timestamp=%" APR_TIME_T_FMT,
+			"oidc_restore_proto_state: restored state: nonce=\"%s\", original_url=\"%s\", issuer=\"%s\", response_type=\%s\", response_mode=\"%s\", timestamp=%" APR_TIME_T_FMT,
 			res->nonce, res->original_url, res->issuer, res->response_type,
-			res->timestamp);
+			res->response_mode, res->timestamp);
 
 	/* we've made it */
 	return TRUE;
@@ -512,174 +518,6 @@ static apr_byte_t oidc_authorization_response_match_state(request_rec *r,
 	return TRUE;
 }
 
-/*
- * check the required parameters for the various flows on receipt of the authorization response
- */
-static apr_byte_t oidc_check_authorization_response_parameters(request_rec *r,
-		const char *response_type, char **code, char **id_token,
-		char **access_token, char **token_type) {
-
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_check_authorization_response_parameters: entering, response_type=%s, code=%s, id_token=%s, access_token=%s, token_type=%s",
-			response_type, *code, *id_token, *access_token, *token_type);
-
-	/*
-	 * check code parameter
-	 */
-	if (oidc_util_spaced_string_contains(r->pool, response_type, "code")) {
-
-		if (*code == NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_check_authorization_response_parameters: requested flow is \"%s\" but no \"code\" parameter found in the authorization response",
-					response_type);
-			return FALSE;
-		}
-
-	} else {
-
-		if (*code != NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_check_authorization_response_parameters: requested flow is \"%s\" but there is a \"code\" parameter in the authorization response that will be dropped",
-					response_type);
-			*code = NULL;
-		}
-	}
-
-	/*
-	 * check id_token parameter
-	 */
-	if (oidc_util_spaced_string_contains(r->pool, response_type, "id_token")) {
-
-		if (*id_token == NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_check_authorization_response_parameters: requested flow is \"%s\" but no \"id_token\" parameter found in the authorization response",
-					response_type);
-			return FALSE;
-		}
-
-	} else {
-
-		if (*id_token != NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_check_authorization_response_parameters: requested flow is \"%s\" but there is an \"id_token\" parameter in the authorization response that will be dropped",
-					response_type);
-			*id_token = NULL;
-		}
-
-	}
-
-	/*
-	 * check access_token parameter
-	 */
-	if (oidc_util_spaced_string_contains(r->pool, response_type, "token")) {
-
-		if (*access_token == NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_check_authorization_response_parameters: requested flow is \"%s\" but no \"access_token\" parameter found in the authorization response",
-					response_type);
-			return FALSE;
-		}
-
-		if (*token_type == NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_check_authorization_response_parameters: requested flow is \"%s\" but no \"token_type\" parameter found in the authorization response",
-					response_type);
-			return FALSE;
-		}
-
-	} else {
-
-		if (*access_token != NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_check_authorization_response_parameters: requested flow is \"%s\" but there is an \"access_token\" parameter in the authorization response that will be dropped",
-					response_type);
-			*access_token = NULL;
-		}
-
-		if (*token_type != NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_check_authorization_response_parameters: requested flow is \"%s\" but there is a \"token_type\" parameter in the authorization response that will be dropped",
-					response_type);
-			*token_type = NULL;
-		}
-
-	}
-
-	return TRUE;
-}
-
-/*
- * check the required parameters for the various flows after resolving the authorization code
- */
-static apr_byte_t oidc_check_code_response_parameters(request_rec *r,
-		const char *response_type, char **id_token, char **access_token,
-		char **token_type) {
-
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_check_code_response_parameters: entering");
-
-	/*
-	 * check id_token parameter
-	 */
-	if (!oidc_util_spaced_string_contains(r->pool, response_type, "id_token")) {
-
-		if (*id_token == NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_check_code_response_parameters: requested flow is \"%s\" but no \"id_token\" parameter found in the code response",
-					response_type);
-			return FALSE;
-		}
-
-	} else {
-
-		if (*id_token != NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_check_code_response_parameters: requested flow is \"%s\" but there is an \"id_token\" parameter in the code response that will be dropped",
-					response_type);
-			*id_token = NULL;
-		}
-
-	}
-
-	/*
-	 * check access_token parameter
-	 */
-	if (!oidc_util_spaced_string_contains(r->pool, response_type, "token")) {
-
-		if (*access_token == NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_check_code_response_parameters: requested flow is \"%s\" but no \"access_token\" parameter found in the code response",
-					response_type);
-			return FALSE;
-		}
-
-		if (*token_type == NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_check_code_response_parameters: requested flow is \"%s\" but no \"token_type\" parameter found in the code response",
-					response_type);
-			return FALSE;
-		}
-
-	} else {
-
-		if (*access_token != NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_check_code_response_parameters: requested flow is \"%s\" but there is an \"access_token\" parameter in the authorization response that will be dropped",
-					response_type);
-			*access_token = NULL;
-		}
-
-		if (*token_type != NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_check_code_response_parameters: requested flow is \"%s\" but there is a \"token_type\" parameter in the authorization response that will be dropped",
-					response_type);
-			*token_type = NULL;
-		}
-
-	}
-
-	return TRUE;
-}
 
 /*
  * complete the handling of an authorization response by obtaining, parsing and verifying the
@@ -687,7 +525,7 @@ static apr_byte_t oidc_check_code_response_parameters(request_rec *r,
  */
 static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		session_rec *session, const char *state, char *code, char *id_token,
-		char *access_token, char *token_type) {
+		char *access_token, char *token_type, const char *response_mode) {
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_handle_authorization_response: entering, state=%s, code=%s, id_token=%s, access_token=%s, token_type=%s",
@@ -703,9 +541,9 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	}
 
 	/* check the required response parameters for the requested flow */
-	if (oidc_check_authorization_response_parameters(r,
-			proto_state->response_type, &code, &id_token, &access_token,
-			&token_type) == FALSE) {
+	if (oidc_validate_authorization_response(r, proto_state->response_type,
+			proto_state->response_mode, &code, &id_token, &access_token,
+			&token_type, response_mode) == FALSE) {
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -741,8 +579,8 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 			return HTTP_UNAUTHORIZED;
 		}
 
-		/* validate the response */
-		if (oidc_check_code_response_parameters(r,
+		/* validate the response on exchanging the code at the token endpoint */
+		if (oidc_proto_validate_code_response(r,
 				proto_state->response_type, &c_id_token, &c_access_token,
 				&c_token_type) == FALSE) {
 			return HTTP_INTERNAL_SERVER_ERROR;
@@ -849,8 +687,7 @@ static int oidc_handle_post_authorization_response(request_rec *r, oidc_cfg *c,
 
 	/* initialize local variables */
 	char *code = NULL, *state = NULL, *id_token = NULL, *access_token = NULL,
-			*token_type =
-			NULL;
+			*token_type = NULL, *response_mode = NULL;
 
 	/* read the parameters that are POST-ed to us */
 	apr_table_t *params = apr_table_make(r->pool, 8);
@@ -881,10 +718,11 @@ static int oidc_handle_post_authorization_response(request_rec *r, oidc_cfg *c,
 	id_token = (char *) apr_table_get(params, "id_token");
 	access_token = (char *) apr_table_get(params, "access_token");
 	token_type = (char *) apr_table_get(params, "token_type");
+	response_mode = (char *) apr_table_get(params, "response_mode");
 
 	/* do the actual implicit work */
 	return oidc_handle_authorization_response(r, c, session, state, code,
-			id_token, access_token, token_type);
+			id_token, access_token, token_type, response_mode ? response_mode : "form_post");
 }
 
 /*
@@ -898,8 +736,7 @@ static int oidc_handle_redirect_authorization_response(request_rec *r,
 
 	/* initialize local variables */
 	char *code = NULL, *state = NULL, *id_token = NULL, *access_token = NULL,
-			*token_type =
-			NULL;
+			*token_type = NULL;
 
 	/* get the parameters */
 	oidc_util_get_request_parameter(r, "code", &code);
@@ -910,7 +747,7 @@ static int oidc_handle_redirect_authorization_response(request_rec *r,
 
 	/* do the actual work */
 	return oidc_handle_authorization_response(r, c, session, state, code,
-			id_token, access_token, token_type);
+			id_token, access_token, token_type, "query");
 }
 
 /*
