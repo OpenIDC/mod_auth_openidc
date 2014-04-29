@@ -87,6 +87,39 @@ static apr_byte_t apr_jwk_parse_rsa(apr_pool_t *pool, apr_jwk_t *jwk) {
 }
 
 /*
+ * parse an EC JWK
+ */
+static apr_byte_t apr_jwk_parse_ec(apr_pool_t *pool, apr_jwk_t *jwk) {
+
+	/* allocated space and set key type */
+	jwk->type = APR_JWK_KEY_EC;
+	jwk->key.ec = apr_pcalloc(pool, sizeof(apr_jwk_key_ec_t));
+
+	/* parse x */
+	char *s_x = NULL;
+	apr_jwt_get_string(pool, &jwk->value, "x", &s_x);
+	if (s_x == NULL)
+		return FALSE;
+
+	/* parse x size */
+	jwk->key.ec->x_len = apr_jwt_base64url_decode(pool,
+			(char **) &jwk->key.ec->x, s_x, 1);
+
+	/* parse y */
+	char *s_y = NULL;
+	apr_jwt_get_string(pool, &jwk->value, "y", &s_y);
+	if (s_y == NULL)
+		return FALSE;
+
+	/* parse y size */
+	jwk->key.ec->y_len = apr_jwt_base64url_decode(pool,
+			(char **) &jwk->key.ec->y, s_y, 1);
+
+	/* that went well */
+	return TRUE;
+}
+
+/*
  * parse JSON JWK
  */
 apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, apr_json_value_t *j_json,
@@ -106,9 +139,9 @@ apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, apr_json_value_t *j_json,
 
 	/* set the raw JSON/string representations */
 	jwk->value.json = j_json;
-	jwk->value.str = (char *) s_json;
+	jwk->value.str = apr_pstrdup(pool, s_json);
 
-	/* get the (optional) key type */
+	/* get the key type */
 	char *kty = NULL;
 	if (apr_jwt_get_string(pool, &jwk->value, "kty", &kty) == FALSE)
 		return FALSE;
@@ -118,8 +151,13 @@ apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, apr_json_value_t *j_json,
 		return FALSE;
 
 	/* parse the key */
-	return (apr_strnatcmp(kty, "RSA") == 0) ?
-			apr_jwk_parse_rsa(pool, jwk) : FALSE;
+	if (apr_strnatcmp(kty, "RSA") == 0)
+		return apr_jwk_parse_rsa(pool, jwk);
+
+	if (apr_strnatcmp(kty, "EC") == 0)
+		return apr_jwk_parse_ec(pool, jwk);
+
+	return FALSE;
 }
 
 /*

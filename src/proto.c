@@ -338,7 +338,8 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
  * get the key from the JWKs that corresponds with the key specified in the header
  */
 static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
-		apr_jwt_header_t *jwt_hdr, apr_json_value_t *j_jwks, apr_jwk_t **result) {
+		apr_jwt_header_t *jwt_hdr, apr_json_value_t *j_jwks, const char *type,
+		apr_jwk_t **result) {
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_proto_get_key_from_jwks: search for kid \"%s\"",
@@ -370,7 +371,7 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 		/* get the key type and see if it is the RSA type that we are looking for */
 		apr_json_value_t *kty = apr_hash_get(elem->value.object, "kty",
 				APR_HASH_KEY_STRING);
-		if (strcmp(kty->value.string.p, "RSA") != 0) continue;
+		if (strcmp(kty->value.string.p, type) != 0) continue;
 
 		/* see if we were looking for a specific kid, if not we'll return the first one found */
 		if (jwt_hdr->kid == NULL) {
@@ -408,7 +409,7 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
  * get the key from the (possibly cached) set of JWKs on the jwk_uri that corresponds with the key specified in the header
  */
 static apr_jwk_t *oidc_proto_get_key_from_jwk_uri(request_rec *r, oidc_cfg *cfg,
-		oidc_provider_t *provider, apr_jwt_header_t *jwt_hdr,
+		oidc_provider_t *provider, apr_jwt_header_t *jwt_hdr, const char *type,
 		apr_byte_t *refresh) {
 	apr_json_value_t *j_jwks = NULL;
 	apr_jwk_t *jwk = NULL;
@@ -422,7 +423,8 @@ static apr_jwk_t *oidc_proto_get_key_from_jwk_uri(request_rec *r, oidc_cfg *cfg,
 	}
 
 	/* get the key corresponding to the kid from the header, referencing the key that was used to sign this message */
-	if (oidc_proto_get_key_from_jwks(r, jwt_hdr, j_jwks, &jwk) == FALSE) return NULL;
+	if (oidc_proto_get_key_from_jwks(r, jwt_hdr, j_jwks, type, &jwk) == FALSE)
+		return NULL;
 
 	/* see what we've got back */
 	if ((jwk == NULL) && (refresh == FALSE)) {
@@ -442,7 +444,9 @@ static apr_jwk_t *oidc_proto_get_key_from_jwk_uri(request_rec *r, oidc_cfg *cfg,
 		}
 
 		/* get the key from the refreshed set of JWKs */
-		if (oidc_proto_get_key_from_jwks(r, jwt_hdr, j_jwks, &jwk) == FALSE) return NULL;
+		if (oidc_proto_get_key_from_jwks(r, jwt_hdr, j_jwks, type,
+				&jwk) == FALSE)
+			return NULL;
 	}
 
 	return jwk;
@@ -465,19 +469,24 @@ static apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r,
 
 		result = apr_jws_verify_hmac(r->pool, jwt, provider->client_secret);
 
-	} else if (apr_jws_signature_is_rsa(r->pool, jwt)) {
+	} else if (apr_jws_signature_is_rsa(r->pool, jwt)
+			|| apr_jws_signature_is_ec(r->pool, jwt)) {
 
 		/* get the key from the JWKs that corresponds with the key specified in the header */
 		apr_jwk_t *jwk = oidc_proto_get_key_from_jwk_uri(r, cfg, provider,
-				&jwt->header, refresh);
+				&jwt->header,
+				apr_jws_signature_is_rsa(r->pool, jwt) ? "RSA" : "EC", refresh);
 
 		if (jwk != NULL) {
 
 			ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-					"oidc_proto_idtoken_verify_signature: verifying RSA signature on id_token: header=%s, message=%s",
+					"oidc_proto_idtoken_verify_signature: verifying RSA/EC signature on id_token: header=%s, message=%s",
 					jwt->header.value.str, jwt->message);
 
-			result = apr_jws_verify_rsa(r->pool, jwt, jwk);
+			result =
+					apr_jws_signature_is_rsa(r->pool, jwt) ?
+							apr_jws_verify_rsa(r->pool, jwt, jwk) :
+							apr_jws_verify_ec(r->pool, jwt, jwk);
 
 		} else {
 
@@ -505,8 +514,8 @@ static apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r,
 	}
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_proto_idtoken_verify_signature: verification result of signature with algorithm \"%s\": %s",
-				jwt->header.alg, (result == TRUE) ? "TRUE" : "FALSE");
+			"oidc_proto_idtoken_verify_signature: verification result of signature with algorithm \"%s\": %s",
+			jwt->header.alg, (result == TRUE) ? "TRUE" : "FALSE");
 
 	return result;
 }

@@ -133,6 +133,8 @@ apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
 typedef enum apr_jwk_type_e {
 	/* RSA JWT key type */
 	APR_JWK_KEY_RSA,
+	/* EC JWT key type */
+	APR_JWK_KEY_EC,
 } apr_jwk_type_e;
 
 /* parsed RSA JWK key */
@@ -147,6 +149,18 @@ typedef struct apr_jwk_key_rsa_t {
 	int exponent_len;
 } apr_jwk_key_rsa_t;
 
+/* parsed EC JWK key */
+typedef struct apr_jwk_key_ec_t {
+	/* x */
+	unsigned char *x;
+	/* length of x */
+	int x_len;
+	/* y */
+	unsigned char *y;
+	/* length of y */
+	int y_len;
+} apr_jwk_key_ec_t;
+
 /* parsed JWK key */
 typedef struct apr_jwk_t {
 	/* parsed JWK/JSON value */
@@ -156,6 +170,7 @@ typedef struct apr_jwk_t {
 	/* union/pointer to parsed JWK key */
 	union {
 		apr_jwk_key_rsa_t *rsa;
+		apr_jwk_key_ec_t *ec;
 	} key;
 } apr_jwk_t;
 
@@ -174,11 +189,16 @@ apr_byte_t apr_jwk_parse_string(apr_pool_t *pool, const char *s_json,
 apr_byte_t apr_jws_signature_is_hmac(apr_pool_t *pool, apr_jwt_t *jwt);
 /* check if the signature on a JWT is of type RSA */
 apr_byte_t apr_jws_signature_is_rsa(apr_pool_t *pool, apr_jwt_t *jwt);
+/* check if the signature on a JWT is of type Elliptic Curve */
+apr_byte_t apr_jws_signature_is_ec(apr_pool_t *pool, apr_jwt_t *jwt);
 /* verify the HMAC signature on a JWT */
 apr_byte_t apr_jws_verify_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
 		const char *secret);
 /* verify the RSA signature on a JWT */
 apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk);
+/* verify the Elliptic Curve signature on a JWT */
+apr_byte_t apr_jws_verify_ec(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk);
+
 /* hash a string */
 apr_byte_t apr_jws_hash_string(apr_pool_t *pool, const char *alg,
 		const char *msg, char **hash, unsigned int *hash_len);

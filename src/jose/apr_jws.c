@@ -54,6 +54,7 @@
 #include <openssl/evp.h>
 #include <openssl/aes.h>
 #include <openssl/rsa.h>
+#include <openssl/ec.h>
 #include <openssl/hmac.h>
 #include <openssl/err.h>
 
@@ -76,15 +77,15 @@ static apr_byte_t apr_jws_signature_starts_with(apr_pool_t *pool,
  */
 static char *apr_jws_alg_to_openssl_digest(const char *alg) {
 	if ((strcmp(alg, "RS256") == 0) || (strcmp(alg, "PS256") == 0)
-			|| (strcmp(alg, "HS256") == 0)) {
+			|| (strcmp(alg, "HS256") == 0) || (strcmp(alg, "ES256") == 0)) {
 		return "sha256";
 	}
 	if ((strcmp(alg, "RS384") == 0) || (strcmp(alg, "PS384") == 0)
-			|| (strcmp(alg, "HS384") == 0)) {
+			|| (strcmp(alg, "HS384") == 0) || (strcmp(alg, "ES384") == 0)) {
 		return "sha384";
 	}
 	if ((strcmp(alg, "RS512") == 0) || (strcmp(alg, "PS512") == 0)
-			|| (strcmp(alg, "HS512") == 0)) {
+			|| (strcmp(alg, "HS512") == 0) || (strcmp(alg, "ES512") == 0)) {
 		return "sha512";
 	}
 	if (strcmp(alg, "NONE") == 0) {
@@ -96,7 +97,7 @@ static char *apr_jws_alg_to_openssl_digest(const char *alg) {
 /*
  * return an EVP structure for the specified algorithm
  */
-static const EVP_MD *apr_jws_crypto_alg_to_evp(apr_pool_t *pool,
+const EVP_MD *apr_jws_crypto_alg_to_evp(apr_pool_t *pool,
 		const char *alg) {
 	const EVP_MD *result = NULL;
 
@@ -287,6 +288,86 @@ apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk) 
 }
 
 /*
+ * return the OpenSSL Elliptic Curve NID for a JWT algorithm
+ */
+static int apr_jws_ec_alg_to_curve(const char *alg) {
+	if (strcmp(alg, "ES256") == 0)
+		return NID_X9_62_prime256v1;
+	if (strcmp(alg, "ES384") == 0)
+		return NID_secp384r1;
+	if (strcmp(alg, "ES512") == 0)
+		return NID_secp521r1;
+	return -1;
+}
+
+/*
+ * verify EC signature on JWT
+ */
+apr_byte_t apr_jws_verify_ec(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk) {
+
+	int nid = apr_jws_ec_alg_to_curve(jwt->header.alg);
+	if (nid == -1)
+		return FALSE;
+
+	EC_GROUP *curve = EC_GROUP_new_by_curve_name(nid);
+	if (curve == NULL)
+		return FALSE;
+
+	apr_byte_t rc = FALSE;
+
+	/* get the OpenSSL digest function */
+	const EVP_MD *digest = NULL;
+	if ((digest = apr_jws_crypto_alg_to_evp(pool, jwt->header.alg)) == NULL)
+		return FALSE;
+
+	EVP_MD_CTX ctx;
+	EVP_MD_CTX_init(&ctx);
+
+	EC_KEY * pubkey = EC_KEY_new();
+	EC_KEY_set_group(pubkey, curve);
+
+	BIGNUM * x = BN_new();
+	BIGNUM * y = BN_new();
+
+	BN_bin2bn(jwk->key.ec->x, jwk->key.ec->x_len, x);
+	BN_bin2bn(jwk->key.ec->y, jwk->key.ec->y_len, y);
+
+	if (!EC_KEY_set_public_key_affine_coordinates(pubkey, x, y))
+		return FALSE;
+
+	EVP_PKEY* pEcKey = EVP_PKEY_new();
+	if (!EVP_PKEY_assign_EC_KEY(pEcKey, pubkey)) {
+		pEcKey = NULL;
+		goto end;
+	}
+
+	ctx.pctx = EVP_PKEY_CTX_new(pEcKey, NULL);
+	if (!EVP_PKEY_verify_init(ctx.pctx))
+		goto end;
+
+	if (!EVP_VerifyInit_ex(&ctx, digest, NULL))
+		goto end;
+
+	if (!EVP_VerifyUpdate(&ctx, jwt->message, strlen(jwt->message)))
+		goto end;
+
+	if (!EVP_VerifyFinal(&ctx, (const unsigned char *) jwt->signature.bytes,
+			jwt->signature.length, pEcKey))
+		goto end;
+
+	rc = TRUE;
+
+	end: if (pEcKey) {
+		EVP_PKEY_free(pEcKey);
+	} else if (pubkey) {
+		EC_KEY_free(pubkey);
+	}
+	EVP_MD_CTX_cleanup(&ctx);
+
+	return rc;
+}
+
+/*
  * check if the signature on the JWT is HMAC-based
  */
 apr_byte_t apr_jws_signature_is_hmac(apr_pool_t *pool, apr_jwt_t *jwt) {
@@ -299,4 +380,11 @@ apr_byte_t apr_jws_signature_is_hmac(apr_pool_t *pool, apr_jwt_t *jwt) {
 apr_byte_t apr_jws_signature_is_rsa(apr_pool_t *pool, apr_jwt_t *jwt) {
 	return apr_jws_signature_starts_with(pool, jwt->header.alg, "RS", 2)
 			|| apr_jws_signature_starts_with(pool, jwt->header.alg, "PS", 2);
+}
+
+/*
+ * check if the signature on the JWT is Elliptic Curve based
+ */
+apr_byte_t apr_jws_signature_is_ec(apr_pool_t *pool, apr_jwt_t *jwt) {
+	return apr_jws_signature_starts_with(pool, jwt->header.alg, "ES", 2);
 }
