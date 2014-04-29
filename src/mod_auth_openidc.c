@@ -264,7 +264,7 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 	/* 5. get the response_mode value stored in the cookie */
 	v = apr_hash_get(json->value.object, "response_mode", APR_HASH_KEY_STRING);
 	res->response_mode =
-			(v && v->value.string.p) ?
+			(v && v->value.string.p && (strcmp(v->value.string.p, "") != 0)) ?
 					apr_pstrdup(r->pool, v->value.string.p) : NULL;
 
 	/* 6. get the timestamp value stored in the cookie */
@@ -308,7 +308,7 @@ static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
 			"\"timestamp\": %" APR_TIME_T_FMT "}", proto_state->nonce,
 			proto_state->original_url, proto_state->issuer,
 			proto_state->response_type,
-			proto_state->response_mode ? proto_state->response_mode : "null",
+			proto_state->response_mode ? proto_state->response_mode : "",
 			proto_state->timestamp);
 
 	/* encrypt the resulting JSON value  */
