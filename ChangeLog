@@ -1,3 +1,6 @@
+4/29/2014
+- support JWT verification of ES256, ES384 and ES512 algorithms
+
 4/28/2014
 - support configurable response_mode (fragment, query or form_post)
 - use nonce in all flows except for OP Google and flows "code" or "code token"
