@@ -1020,54 +1020,52 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *issuer,
 
 	// CONF
 
-	/* find out if we need to perform SSL server certificate validation on the token_endpoint and user_info_endpoint for this provider */
-	oidc_json_object_get_int(r->pool, j_conf, "ssl_validate_server",
-			&provider->ssl_validate_server, cfg->provider.ssl_validate_server);
+	if (j_conf) {
 
-	/* find out what scopes we should be requesting from this provider */
-	// TODO: use the provider "scopes_supported" to mix-and-match with what we've configured for the client
-	// TODO: check that "openid" is always included in the configured scopes, right?
-	oidc_json_object_get_string(r->pool, j_conf, "scope", &provider->scope,
-			cfg->provider.scope);
+		/* find out if we need to perform SSL server certificate validation on the token_endpoint and user_info_endpoint for this provider */
+		oidc_json_object_get_int(r->pool, j_conf, "ssl_validate_server",
+				&provider->ssl_validate_server, cfg->provider.ssl_validate_server);
 
-	/* see if we've got a custom JWKs refresh interval */
-	oidc_json_object_get_int(r->pool, j_conf, "jwks_refresh_interval",
-			&provider->jwks_refresh_interval,
-			cfg->provider.jwks_refresh_interval);
+		/* find out what scopes we should be requesting from this provider */
+		// TODO: use the provider "scopes_supported" to mix-and-match with what we've configured for the client
+		// TODO: check that "openid" is always included in the configured scopes, right?
+		oidc_json_object_get_string(r->pool, j_conf, "scope", &provider->scope,
+				cfg->provider.scope);
 
-	/* see if we've got a custom IAT slack interval */
-	oidc_json_object_get_int(r->pool, j_conf, "idtoken_iat_slack",
-			&provider->idtoken_iat_slack, cfg->provider.idtoken_iat_slack);
+		/* see if we've got a custom JWKs refresh interval */
+		oidc_json_object_get_int(r->pool, j_conf, "jwks_refresh_interval",
+				&provider->jwks_refresh_interval,
+				cfg->provider.jwks_refresh_interval);
 
-	/* get the response mode to use */
-	oidc_json_object_get_string(r->pool, j_conf, "response_mode",
-			&provider->response_mode, cfg->provider.response_mode);
+		/* see if we've got a custom IAT slack interval */
+		oidc_json_object_get_int(r->pool, j_conf, "idtoken_iat_slack",
+				&provider->idtoken_iat_slack, cfg->provider.idtoken_iat_slack);
 
-	/* get the client name */
-	oidc_json_object_get_string(r->pool, j_conf, "client_name",
-			&provider->client_name, cfg->provider.client_name);
+		/* get the response mode to use */
+		oidc_json_object_get_string(r->pool, j_conf, "response_mode",
+				&provider->response_mode, cfg->provider.response_mode);
 
-	/* get the client contact */
-	oidc_json_object_get_string(r->pool, j_conf, "client_contact",
-			&provider->client_contact, cfg->provider.client_contact);
+		/* get the client name */
+		oidc_json_object_get_string(r->pool, j_conf, "client_name",
+				&provider->client_name, cfg->provider.client_name);
 
-	/* get the dynamic client registration token */
-	oidc_json_object_get_string(r->pool, j_conf, "registration_token",
-			&provider->registration_token, cfg->provider.registration_token);
+		/* get the client contact */
+		oidc_json_object_get_string(r->pool, j_conf, "client_contact",
+				&provider->client_contact, cfg->provider.client_contact);
 
-	/* get the flow to use */
-	provider->response_type = cfg->provider.response_type;
+		/* get the dynamic client registration token */
+		oidc_json_object_get_string(r->pool, j_conf, "registration_token",
+				&provider->registration_token, cfg->provider.registration_token);
 
-	/*
-	 * get the response_type to use conf defined takes priority over provider or client defined
-	 */
-	apr_json_value_t *j_conf_response_type = apr_hash_get(j_conf->value.object,
-			"response_type", APR_HASH_KEY_STRING);
-	if ((j_conf_response_type != NULL)
-			&& (j_conf_response_type->type == APR_JSON_STRING)) {
-		provider->response_type = apr_pstrdup(r->pool,
-				j_conf_response_type->value.string.p);
-	} else {
+		/* get the flow to use */
+		oidc_json_object_get_string(r->pool, j_conf, "response_type",
+				&provider->response_type, NULL);
+	}
+
+	if (provider->response_type == NULL) {
+
+		provider->response_type = cfg->provider.response_type;
+
 		/* "response_types" is an array in the client metadata as by spec */
 		apr_json_value_t *j_response_types = apr_hash_get(
 				j_client->value.object, "response_types", APR_HASH_KEY_STRING);
