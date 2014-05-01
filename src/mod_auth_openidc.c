@@ -79,7 +79,6 @@
 #include "mod_auth_openidc.h"
 
 // TODO: harmonize user facing error handling
-// TODO: separate non-standard client metadata entries in to its own file?
 
 // TODO: documentation:
 //       - write a README.quickstart
@@ -88,8 +87,6 @@
 // TODO: rigid input checking on discovery responses and authorization responses
 
 // TODO: use oidc_get_current_url + configured RedirectURIPath to determine the RedirectURI more dynamically
-// TODO: support EC algorithms
-// TODO: override more stuff (eg. client_name) using client metadata
 
 // TODO: do we always want to refresh keys when signature does not validate? (risking DOS attacks, or does the nonce help against that?)
 //       do we now still want to refresh jkws once per hour (it helps to reduce the number of failed verifications, at the cost of too-many-downloads overhead)

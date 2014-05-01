@@ -1185,3 +1185,33 @@ apr_byte_t oidc_util_spaced_string_contains(apr_pool_t *pool,
 	apr_hash_t *ht = oidc_util_spaced_string_to_hashtable(pool, response_type);
 	return (apr_hash_get(ht, match, APR_HASH_KEY_STRING) != NULL);
 }
+
+/*
+ * get (optional) string from a JSON object
+ */
+apr_byte_t oidc_json_object_get_string(apr_pool_t *pool, apr_json_value_t *json,
+		const char *name, char **value, const char *default_value) {
+	apr_json_value_t *v = apr_hash_get(json->value.object, name,
+			APR_HASH_KEY_STRING);
+	if ((v != NULL) && (v->type == APR_JSON_STRING)) {
+		*value = apr_pstrdup(pool, v->value.string.p);
+	} else {
+		*value = default_value ? apr_pstrdup(pool, default_value) : NULL;
+	}
+	return TRUE;
+}
+
+/*
+ * get (optional) int from a JSON object
+ */
+apr_byte_t oidc_json_object_get_int(apr_pool_t *pool, apr_json_value_t *json,
+		const char *name, int *value, const int default_value) {
+	apr_json_value_t *v = apr_hash_get(json->value.object, name,
+			APR_HASH_KEY_STRING);
+	if ((v != NULL) && (v->type == APR_JSON_LONG)) {
+		*value = v->value.lnumber;
+	} else {
+		*value = default_value;
+	}
+	return TRUE;
+}

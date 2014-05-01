@@ -71,7 +71,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 #define OIDC_METADATA_SUFFIX_PROVIDER "provider"
 #define OIDC_METADATA_SUFFIX_CLIENT "client"
-#define OIDC_METADATA_SUFFIX_JWKS "jwks"
+#define OIDC_METADATA_SUFFIX_CONF "conf"
 
 /*
  * get the metadata filename for a specified issuer (cq. urlencode it)
@@ -136,6 +136,15 @@ static const char *oidc_metadata_client_file_path(request_rec *r,
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	return oidc_metadata_file_path(r, cfg, issuer, OIDC_METADATA_SUFFIX_CLIENT);
+}
+
+/*
+ * get the full path to the custom config file for a specified issuer
+ */
+static const char *oidc_metadata_conf_path(request_rec *r, const char *issuer) {
+	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
+	return oidc_metadata_file_path(r, cfg, issuer, OIDC_METADATA_SUFFIX_CONF);
 }
 
 /*
@@ -362,7 +371,7 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 }
 
 /*
- * check to see if dynamically registered JSON client metadata has not expired
+ * check to see if dynamically registered JSON client metadata is valid and has not expired
  */
 static apr_byte_t oidc_metadata_client_is_valid(request_rec *r,
 		apr_json_value_t *j_client, const char *issuer) {
@@ -524,9 +533,11 @@ static apr_byte_t oidc_metadata_get_and_check(request_rec *r, const char *path,
 	if (oidc_metadata_file_read_json(r, path, j_metadata) == FALSE)
 		goto error_delete;
 
-	/* we've got metadata that is JSON and no error-JSON, but now we check provider/client validity */
-	if (metadata_is_valid(r, *j_metadata, issuer) == FALSE)
-		goto error_delete;
+	if (metadata_is_valid) {
+		/* we've got metadata that is JSON and no error-JSON, but now we check provider/client validity */
+		if (metadata_is_valid(r, *j_metadata, issuer) == FALSE)
+			goto error_delete;
+	}
 
 	/* all OK if we got here */
 	return TRUE;
@@ -686,6 +697,22 @@ static apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
 }
 
 /*
+ * see if we have config metadata
+ */
+static apr_byte_t oidc_metadata_conf_get(request_rec *r, oidc_cfg *cfg,
+		const char *issuer, apr_json_value_t **j_conf) {
+
+	if (j_conf == NULL)
+		return TRUE;
+
+	/* get the full file path to the conf metadata for this issuer */
+	const char *conf_path = oidc_metadata_conf_path(r, issuer);
+
+	/* see if we have valid metadata already, if so, return it */
+	return oidc_metadata_get_and_check(r, conf_path, issuer, NULL, j_conf);
+}
+
+/*
  * see if we have client metadata and check its validity
  * if not, use OpenID Connect Client Registration to get it, check it and store it
  */
@@ -757,7 +784,8 @@ static apr_byte_t oidc_metadata_client_get(request_rec *r, oidc_cfg *cfg,
 	/* try and get it from there, checking it and storing it if successful */
 	return oidc_metadata_retrieve_and_store(r, cfg, registration_url, action,
 			params, cfg->provider.ssl_validate_server, issuer,
-			oidc_metadata_client_is_valid, client_path, j_client, cfg->provider.registration_token);
+			oidc_metadata_client_is_valid, client_path, j_client,
+			cfg->provider.registration_token);
 }
 
 /*
@@ -771,7 +799,7 @@ static apr_byte_t oidc_metadata_client_get(request_rec *r, oidc_cfg *cfg,
  */
 static apr_byte_t oidc_metadata_get_provider_and_client(request_rec *r,
 		oidc_cfg *cfg, const char *issuer, apr_json_value_t **j_provider,
-		apr_json_value_t **j_client) {
+		apr_json_value_t **j_client, apr_json_value_t **j_conf) {
 
 	const char *registration_url = NULL;
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
@@ -794,6 +822,9 @@ static apr_byte_t oidc_metadata_get_provider_and_client(request_rec *r,
 	if (oidc_metadata_client_get(r, cfg, issuer, registration_url,
 			j_client) == FALSE)
 		return FALSE;
+
+	/* see if we can get valid config metadata, if not, that's not a problem */
+	oidc_metadata_conf_get(r, cfg, issuer, j_conf);
 
 	/* all OK */
 	return TRUE;
@@ -845,7 +876,7 @@ apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg *cfg,
 
 		/* get the provider and client metadata, do all checks and registration if possible */
 		if (oidc_metadata_get_provider_and_client(r, cfg, issuer, &j_provider,
-				&j_client) == FALSE)
+				&j_client, NULL) == FALSE)
 			continue;
 
 		/* push the decoded issuer filename in to the array */
@@ -939,10 +970,12 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *issuer,
 	apr_json_value_t *j_provider = NULL;
 	/* pointer to the parsed JSON metadata for the client */
 	apr_json_value_t *j_client = NULL;
+	/* pointer to the parsed conf metadata for the client */
+	apr_json_value_t *j_conf = NULL;
 
 	/* get the provider and client metadata */
 	if (oidc_metadata_get_provider_and_client(r, cfg, issuer, &j_provider,
-			&j_client) == FALSE)
+			&j_client, &j_conf) == FALSE)
 		return FALSE;
 
 	/* allocate space for a parsed-and-merged metadata struct */
@@ -952,132 +985,107 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *issuer,
 
 	// PROVIDER
 
-	/* get the "issuer" from the provider metadata and double-check that it matches what we looked for */
-	apr_json_value_t *j_issuer = apr_hash_get(j_provider->value.object,
-			"issuer", APR_HASH_KEY_STRING);
+	/* get the "issuer" from the provider metadata */
+	oidc_json_object_get_string(r->pool, j_provider, "issuer",
+			&provider->issuer, NULL);
 
 	/* get a handle to the authorization endpoint */
-	apr_json_value_t *j_authorization_endpoint = apr_hash_get(
-			j_provider->value.object, "authorization_endpoint",
-			APR_HASH_KEY_STRING);
+	oidc_json_object_get_string(r->pool, j_provider, "authorization_endpoint",
+			&provider->authorization_endpoint_url, NULL);
 
 	/* get a handle to the token endpoint */
-	apr_json_value_t *j_token_endpoint = apr_hash_get(j_provider->value.object,
-			"token_endpoint", APR_HASH_KEY_STRING);
-
-	/* get a handle to the user_info endpoint */
-	apr_json_value_t *j_userinfo_endpoint = apr_hash_get(
-			j_provider->value.object, "userinfo_endpoint", APR_HASH_KEY_STRING);
-
-	/* get a handle to the jwks_uri endpoint */
-	apr_json_value_t *j_jwks_uri = apr_hash_get(j_provider->value.object,
-			"jwks_uri", APR_HASH_KEY_STRING);
-
-	/* get the flow to use, client defined takes priority over provider defined */
-	const char *response_type = cfg->provider.response_type;
-
-	/* "response_types" is an array as by spec */
-	apr_json_value_t *j_response_types = apr_hash_get(j_client->value.object,
-			"response_types", APR_HASH_KEY_STRING);
-	if ((j_response_types != NULL)
-			&& (j_response_types->type == APR_JSON_ARRAY)) {
-		/* if there's an array we'll prefer the configured response_type if supported */
-		if (oidc_util_json_array_has_value(r, j_response_types,
-				response_type) == FALSE) {
-			/* if the configured response_type is not supported, we'll fallback to the first one that is listed */
-			apr_json_value_t *j_response_type = APR_ARRAY_IDX(
-					j_response_types->value.array, 0, apr_json_value_t *);
-			if (j_response_type->type == APR_JSON_STRING) {
-				response_type = j_response_type->value.string.p;
-			}
-		}
-	}
-
-	/* put whatever we've found out about the provider in (the provider part of) the metadata struct */
-	provider->issuer = apr_pstrdup(r->pool, j_issuer->value.string.p);
-	provider->authorization_endpoint_url = apr_pstrdup(r->pool,
-			j_authorization_endpoint->value.string.p);
-	if (j_token_endpoint != NULL)
-		provider->token_endpoint_url = apr_pstrdup(r->pool,
-				j_token_endpoint->value.string.p);
+	oidc_json_object_get_string(r->pool, j_provider, "token_endpoint",
+			&provider->token_endpoint_url, NULL);
+	/* get the authentication method for the token endpoint */
 	provider->token_endpoint_auth = apr_pstrdup(r->pool,
 			oidc_metadata_token_endpoint_auth(r, j_client, j_provider));
-	if (j_userinfo_endpoint != NULL)
-		provider->userinfo_endpoint_url = apr_pstrdup(r->pool,
-				j_userinfo_endpoint->value.string.p);
-	if (j_jwks_uri != NULL)
-		provider->jwks_uri = apr_pstrdup(r->pool, j_jwks_uri->value.string.p);
-	provider->response_type = apr_pstrdup(r->pool, response_type);
+
+	/* get a handle to the user_info endpoint */
+	oidc_json_object_get_string(r->pool, j_provider, "userinfo_endpoint",
+			&provider->userinfo_endpoint_url, NULL);
+
+	/* get a handle to the jwks_uri endpoint */
+	oidc_json_object_get_string(r->pool, j_provider, "jwks_uri",
+			&provider->jwks_uri, NULL);
 
 	// CLIENT
 
 	/* get a handle to the client_id we need to use for this provider */
-	apr_json_value_t *j_client_id = apr_hash_get(j_client->value.object,
-			"client_id", APR_HASH_KEY_STRING);
+	oidc_json_object_get_string(r->pool, j_client, "client_id",
+			&provider->client_id, NULL);
 
 	/* get a handle to the client_secret we need to use for this provider */
-	const char *client_secret = NULL;
-	apr_json_value_t *j_client_secret = apr_hash_get(j_client->value.object,
-			"client_secret", APR_HASH_KEY_STRING);
-	if (j_client_secret != NULL) client_secret = j_client_secret->value.string.p;
+	oidc_json_object_get_string(r->pool, j_client, "client_secret",
+			&provider->client_secret, NULL);
+
+	// CONF
 
 	/* find out if we need to perform SSL server certificate validation on the token_endpoint and user_info_endpoint for this provider */
-	int validate = cfg->provider.ssl_validate_server;
-	apr_json_value_t *j_ssl_validate_server = apr_hash_get(
-			j_client->value.object, "ssl_validate_server", APR_HASH_KEY_STRING);
-	if ((j_ssl_validate_server != NULL)
-			&& (j_ssl_validate_server->type == APR_JSON_STRING)
-			&& (strcmp(j_ssl_validate_server->value.string.p, "Off") == 0)) {
-		validate = 0;
-	}
+	oidc_json_object_get_int(r->pool, j_conf, "ssl_validate_server",
+			&provider->ssl_validate_server, cfg->provider.ssl_validate_server);
 
 	/* find out what scopes we should be requesting from this provider */
 	// TODO: use the provider "scopes_supported" to mix-and-match with what we've configured for the client
 	// TODO: check that "openid" is always included in the configured scopes, right?
-	const char *scope = cfg->provider.scope;
-	apr_json_value_t *j_scope = apr_hash_get(j_client->value.object, "scope",
-	APR_HASH_KEY_STRING);
-	if ((j_scope != NULL) && (j_scope->type == APR_JSON_STRING)) {
-		scope = j_scope->value.string.p;
-	}
+	oidc_json_object_get_string(r->pool, j_conf, "scope", &provider->scope,
+			cfg->provider.scope);
 
 	/* see if we've got a custom JWKs refresh interval */
-	int jwks_refresh_interval = cfg->provider.jwks_refresh_interval;
-	apr_json_value_t *j_jwks_refresh_interval = apr_hash_get(
-			j_client->value.object, "jwks_refresh_interval",
-			APR_HASH_KEY_STRING);
-	if ((j_jwks_refresh_interval != NULL)
-			&& (j_jwks_refresh_interval->type == APR_JSON_LONG)) {
-		jwks_refresh_interval = j_jwks_refresh_interval->value.lnumber;
-	}
+	oidc_json_object_get_int(r->pool, j_conf, "jwks_refresh_interval",
+			&provider->jwks_refresh_interval,
+			cfg->provider.jwks_refresh_interval);
 
 	/* see if we've got a custom IAT slack interval */
-	int idtoken_iat_slack = cfg->provider.idtoken_iat_slack;
-	apr_json_value_t *j_idtoken_iat_slack = apr_hash_get(j_client->value.object,
-			"idtoken_iat_slack",
-			APR_HASH_KEY_STRING);
-	if ((j_idtoken_iat_slack != NULL)
-			&& (j_idtoken_iat_slack->type == APR_JSON_LONG)) {
-		idtoken_iat_slack = j_idtoken_iat_slack->value.lnumber;
-	}
+	oidc_json_object_get_int(r->pool, j_conf, "idtoken_iat_slack",
+			&provider->idtoken_iat_slack, cfg->provider.idtoken_iat_slack);
 
 	/* get the response mode to use */
-	const char *response_mode = cfg->provider.response_mode;
-	apr_json_value_t *j_response_mode = apr_hash_get(j_client->value.object,
-			"response_mode", APR_HASH_KEY_STRING);
-	if ((j_response_mode != NULL)
-			&& (j_response_mode->type == APR_JSON_STRING)) {
-		response_mode = j_response_mode->value.string.p;
-	}
+	oidc_json_object_get_string(r->pool, j_conf, "response_mode",
+			&provider->response_mode, cfg->provider.response_mode);
 
-	/* put whatever we've found out about the provider in (the client part of) the metadata struct */
-	provider->ssl_validate_server = validate;
-	provider->client_id = apr_pstrdup(r->pool, j_client_id->value.string.p);
-	provider->client_secret = apr_pstrdup(r->pool, client_secret);
-	provider->scope = apr_pstrdup(r->pool, scope);
-	provider->jwks_refresh_interval = jwks_refresh_interval;
-	provider->idtoken_iat_slack = idtoken_iat_slack;
-	provider->response_mode = apr_pstrdup(r->pool, response_mode);
+	/* get the client name */
+	oidc_json_object_get_string(r->pool, j_conf, "client_name",
+			&provider->client_name, cfg->provider.client_name);
+
+	/* get the client contact */
+	oidc_json_object_get_string(r->pool, j_conf, "client_contact",
+			&provider->client_contact, cfg->provider.client_contact);
+
+	/* get the dynamic client registration token */
+	oidc_json_object_get_string(r->pool, j_conf, "registration_token",
+			&provider->registration_token, cfg->provider.registration_token);
+
+	/* get the flow to use */
+	provider->response_type = cfg->provider.response_type;
+
+	/*
+	 * get the response_type to use conf defined takes priority over provider or client defined
+	 */
+	apr_json_value_t *j_conf_response_type = apr_hash_get(j_conf->value.object,
+			"response_type", APR_HASH_KEY_STRING);
+	if ((j_conf_response_type != NULL)
+			&& (j_conf_response_type->type == APR_JSON_STRING)) {
+		provider->response_type = apr_pstrdup(r->pool,
+				j_conf_response_type->value.string.p);
+	} else {
+		/* "response_types" is an array in the client metadata as by spec */
+		apr_json_value_t *j_response_types = apr_hash_get(
+				j_client->value.object, "response_types", APR_HASH_KEY_STRING);
+		if ((j_response_types != NULL)
+				&& (j_response_types->type == APR_JSON_ARRAY)) {
+			/* if there's an array we'll prefer the configured response_type if supported */
+			if (oidc_util_json_array_has_value(r, j_response_types,
+					provider->response_type) == FALSE) {
+				/* if the configured response_type is not supported, we'll fallback to the first one that is listed */
+				apr_json_value_t *j_response_type = APR_ARRAY_IDX(
+						j_response_types->value.array, 0, apr_json_value_t *);
+				if (j_response_type->type == APR_JSON_STRING) {
+					provider->response_type = apr_pstrdup(r->pool,
+							j_response_type->value.string.p);
+				}
+			}
+		}
+	}
 
 	return TRUE;
 }

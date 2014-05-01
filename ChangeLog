@@ -1,3 +1,8 @@
+5/1/2014
+- split out custom client config into separate <issuer>.conf file
+- allow to override client_contact, client_name and registration_token in .conf file
+- remove OIDCRegistrationToken command for the static OP config
+
 4/29/2014
 - support JWT verification of ES256, ES384 and ES512 algorithms
 

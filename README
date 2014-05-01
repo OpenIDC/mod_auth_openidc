@@ -88,26 +88,51 @@ Another example using multiple OpenID Connect providers, which triggers
 OP discovery first:
 
 OIDCMetadataDir points to a directory that contains files that contain
-per-provider configuration data. For each provider, there are 2 types of
+per-provider configuration data. For each provider, there are 3 types of
 files in the directory:
-  <url-encoded-issuer-value-with-https-prefix-and-trailing-slash-stripped>.provider:
-contains (standard) OpenID Connect Discovery OP JSON metadata where each
-name of the file is the urlencoded issuer name of the OP that is decribed
+
+1.  <url-encoded-issuer-value-with-https-prefix-and-trailing-slash-stripped>.provider:
+contains (standardized) OpenID Connect Discovery OP JSON metadata where each
+name of the file is the url-encoded issuer name of the OP that is described
 by the metadata in that file.
-  <url-encoded-issuer-value-with-https-prefix-and-trailing-slash-stripped>.client:
-contains mod_auth_openidc specific JSON metadata (based on the OpenID
-Connect Client Registration specification, with extensions) and the filename
-is the urlencoded issuer name of the OP that this client is registered with.
+
+2.  <url-encoded-issuer-value-with-https-prefix-and-trailing-slash-stripped>.client:
+contains Dynamic Client Registration specific JSON metadata (based on the OpenID
+Connect Client Registration specification) and the filename
+is the url-encoded issuer name of the OP that this client is registered with.
 
 Sample client metdata for issuer https://localhost:9031, so the client metadata
 filename is: "localhost%3A9031.client"
 ==========================================================
 {
-  "ssl_validate_server" : "Off",
   "client_id" : "ac_oic_client",
   "client_secret" : "abc123DEFghijklmnop4567rstuvwxyzZYXWUT8910SRQPOnmlijhoauthplaygroundapplication",
+}
+
+3.  <url-encoded-issuer-value-with-https-prefix-and-trailing-slash-stripped>.conf:
+contains mod_auth_openidc specific JSON custom metadata that can be used to overrule
+some of the settings defined in auth_openidc.conf on a per-client basis. The filename
+is the urlencoded issuer name of the OP that this client is registered with.
+
+Entries that can be included in the .conf file are:
+  "ssl_validate_server"     which overrides OIDCSSLValidateServer on a per-client basis (value is integer 0 or 1 in this case...)
+  "scope"                   which overrides OIDCScope on a per-client basis 
+  "response_type"           which overrides OIDCResponseType on a per-client basis 
+  "response_mode"           which overrides OIDCResponseMode on a per-client basis 
+  "client_name"             which overrides OIDCClientName on a per-client basis 
+  "client_contact"          which overrides OIDCClientContact on a per-client basis 
+  "idtoken_iat_slack"       which overrides OIDCIDTokenIatSlack on a per-client basis
+  "jwks_refresh_interval"   which overrides OIDCJWKSRefreshInterval on a per-client basis
+  "registration_token"      an access_token that will be used on client registration calls for this OP
+
+Sample client metdata for issuer https://localhost:9031, so the client metadata
+filename is: "localhost%3A9031.conf"
+==========================================================
+{
+  "ssl_validate_server" : 0,
   "scope" : "openid email profile",
 }
+  
 ==========================================================
 
 And the related mod_auth_openidc Apache config section:
