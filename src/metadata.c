@@ -1020,47 +1020,44 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *issuer,
 
 	// CONF
 
-	if (j_conf) {
+	/* find out if we need to perform SSL server certificate validation on the token_endpoint and user_info_endpoint for this provider */
+	oidc_json_object_get_int(r->pool, j_conf, "ssl_validate_server",
+			&provider->ssl_validate_server, cfg->provider.ssl_validate_server);
 
-		/* find out if we need to perform SSL server certificate validation on the token_endpoint and user_info_endpoint for this provider */
-		oidc_json_object_get_int(r->pool, j_conf, "ssl_validate_server",
-				&provider->ssl_validate_server, cfg->provider.ssl_validate_server);
+	/* find out what scopes we should be requesting from this provider */
+	// TODO: use the provider "scopes_supported" to mix-and-match with what we've configured for the client
+	// TODO: check that "openid" is always included in the configured scopes, right?
+	oidc_json_object_get_string(r->pool, j_conf, "scope", &provider->scope,
+			cfg->provider.scope);
 
-		/* find out what scopes we should be requesting from this provider */
-		// TODO: use the provider "scopes_supported" to mix-and-match with what we've configured for the client
-		// TODO: check that "openid" is always included in the configured scopes, right?
-		oidc_json_object_get_string(r->pool, j_conf, "scope", &provider->scope,
-				cfg->provider.scope);
+	/* see if we've got a custom JWKs refresh interval */
+	oidc_json_object_get_int(r->pool, j_conf, "jwks_refresh_interval",
+			&provider->jwks_refresh_interval,
+			cfg->provider.jwks_refresh_interval);
 
-		/* see if we've got a custom JWKs refresh interval */
-		oidc_json_object_get_int(r->pool, j_conf, "jwks_refresh_interval",
-				&provider->jwks_refresh_interval,
-				cfg->provider.jwks_refresh_interval);
+	/* see if we've got a custom IAT slack interval */
+	oidc_json_object_get_int(r->pool, j_conf, "idtoken_iat_slack",
+			&provider->idtoken_iat_slack, cfg->provider.idtoken_iat_slack);
 
-		/* see if we've got a custom IAT slack interval */
-		oidc_json_object_get_int(r->pool, j_conf, "idtoken_iat_slack",
-				&provider->idtoken_iat_slack, cfg->provider.idtoken_iat_slack);
+	/* get the response mode to use */
+	oidc_json_object_get_string(r->pool, j_conf, "response_mode",
+			&provider->response_mode, cfg->provider.response_mode);
 
-		/* get the response mode to use */
-		oidc_json_object_get_string(r->pool, j_conf, "response_mode",
-				&provider->response_mode, cfg->provider.response_mode);
+	/* get the client name */
+	oidc_json_object_get_string(r->pool, j_conf, "client_name",
+			&provider->client_name, cfg->provider.client_name);
 
-		/* get the client name */
-		oidc_json_object_get_string(r->pool, j_conf, "client_name",
-				&provider->client_name, cfg->provider.client_name);
+	/* get the client contact */
+	oidc_json_object_get_string(r->pool, j_conf, "client_contact",
+			&provider->client_contact, cfg->provider.client_contact);
 
-		/* get the client contact */
-		oidc_json_object_get_string(r->pool, j_conf, "client_contact",
-				&provider->client_contact, cfg->provider.client_contact);
+	/* get the dynamic client registration token */
+	oidc_json_object_get_string(r->pool, j_conf, "registration_token",
+			&provider->registration_token, cfg->provider.registration_token);
 
-		/* get the dynamic client registration token */
-		oidc_json_object_get_string(r->pool, j_conf, "registration_token",
-				&provider->registration_token, cfg->provider.registration_token);
-
-		/* get the flow to use */
-		oidc_json_object_get_string(r->pool, j_conf, "response_type",
-				&provider->response_type, NULL);
-	}
+	/* get the flow to use */
+	oidc_json_object_get_string(r->pool, j_conf, "response_type",
+			&provider->response_type, NULL);
 
 	if (provider->response_type == NULL) {
 
