@@ -172,11 +172,12 @@ static char *oidc_get_browser_state_hash(request_rec *r, const char *nonce) {
 		apr_sha1_update(&sha1, value, strlen(value));
 
 	/* get the remote client IP address or host name */
+	/*
 	int remotehost_is_ip;
 	value = ap_get_remote_host(r->connection, r->per_dir_config,
 			REMOTE_NOLOOKUP, &remotehost_is_ip);
-	/* concat the remote IP address/hostname to the hash input */
 	apr_sha1_update(&sha1, value, strlen(value));
+	*/
 
 	/* concat the nonce parameter to the hash input */
 	apr_sha1_update(&sha1, nonce, strlen(nonce));

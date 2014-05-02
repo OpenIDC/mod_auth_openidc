@@ -1,3 +1,6 @@
+5/2/2014
+- do not use ap_get_remote_host for browser fingerprinting
+
 5/1/2014
 - split out custom client config into separate <issuer>.conf file
 - allow to override client_contact, client_name and registration_token in .conf file
