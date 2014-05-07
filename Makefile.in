@@ -15,7 +15,8 @@ SRC=src/mod_auth_openidc.c \
 	src/json/apr_json_decode.c \
 	src/jose/apr_jwt.c \
 	src/jose/apr_jwk.c \
-	src/jose/apr_jws.c
+	src/jose/apr_jws.c \
+	src/jose/apr_jwe.c
 
 # Files to include when making a .tar.gz-file for distribution
 DISTFILES=$(SRC) \

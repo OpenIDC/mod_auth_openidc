@@ -55,7 +55,6 @@
 #include <http_request.h>
 
 #include "mod_auth_openidc.h"
-#include "jose/apr_jose.h"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -570,9 +569,23 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_proto_parse_idtoken: entering");
 
-	if (apr_jwt_parse(r->pool, id_token, jwt) == FALSE) {
+	if (apr_jwt_parse(r->pool, id_token, jwt, cfg->private_keys) == FALSE) {
+		if ((*jwt) && ((*jwt)->header.alg)
+				&& (apr_jwe_algorithm_is_supported(r->pool, (*jwt)->header.alg)
+						== FALSE)) {
+			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+					"oidc_proto_parse_idtoken: JWE content key encryption algorithm is not supported: %s",
+					(*jwt)->header.alg);
+		}
+		if ((*jwt) && ((*jwt)->header.enc)
+				&& (apr_jwe_encryption_is_supported(r->pool, (*jwt)->header.enc)
+						== FALSE)) {
+			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+					"oidc_proto_parse_idtoken: JWE encryption type is not supported: %s",
+					(*jwt)->header.enc);
+		}
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_parse_idtoken: could not parse id_token, aborting");
+				"oidc_proto_parse_idtoken: apr_jwt_parse failed, aborting");
 		return FALSE;
 	}
 
@@ -995,12 +1008,12 @@ apr_byte_t oidc_proto_flow_is_supported(apr_pool_t *pool, const char *flow) {
 /*
  * check the required parameters for the various flows on receipt of the authorization response
  */
-apr_byte_t oidc_validate_authorization_response(request_rec *r,
+apr_byte_t oidc_proto_validate_authorization_response(request_rec *r,
 		const char *response_type, const char *requested_response_mode, char **code, char **id_token,
 		char **access_token, char **token_type, const char *used_response_mode) {
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_validate_authorization_response: entering, response_type=%s, requested_response_mode=%s, code=%s, id_token=%s, access_token=%s, token_type=%s, used_response_mode=%s",
+			"oidc_proto_validate_authorization_response: entering, response_type=%s, requested_response_mode=%s, code=%s, id_token=%s, access_token=%s, token_type=%s, used_response_mode=%s",
 			response_type, requested_response_mode, *code, *id_token, *access_token, *token_type, used_response_mode);
 
 	/* check the requested response mode against the one used by the OP */
@@ -1010,7 +1023,7 @@ apr_byte_t oidc_validate_authorization_response(request_rec *r,
 		 * response_mode and rather use the default for the flow
 		 */
 		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-				"oidc_validate_authorization_response: requested response_mode is \"%s\" the provider used \"%s\" for the authorization response...",
+				"oidc_proto_validate_authorization_response: requested response_mode is \"%s\" the provider used \"%s\" for the authorization response...",
 				requested_response_mode, used_response_mode);
 	}
 
@@ -1021,7 +1034,7 @@ apr_byte_t oidc_validate_authorization_response(request_rec *r,
 
 		if (*code == NULL) {
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_validate_authorization_response: requested flow is \"%s\" but no \"code\" parameter found in the authorization response",
+					"oidc_proto_validate_authorization_response: requested flow is \"%s\" but no \"code\" parameter found in the authorization response",
 					response_type);
 			return FALSE;
 		}
@@ -1030,7 +1043,7 @@ apr_byte_t oidc_validate_authorization_response(request_rec *r,
 
 		if (*code != NULL) {
 			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_validate_authorization_response: requested flow is \"%s\" but there is a \"code\" parameter in the authorization response that will be dropped",
+					"oidc_proto_validate_authorization_response: requested flow is \"%s\" but there is a \"code\" parameter in the authorization response that will be dropped",
 					response_type);
 			*code = NULL;
 		}
@@ -1043,7 +1056,7 @@ apr_byte_t oidc_validate_authorization_response(request_rec *r,
 
 		if (*id_token == NULL) {
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_validate_authorization_response: requested flow is \"%s\" but no \"id_token\" parameter found in the authorization response",
+					"oidc_proto_validate_authorization_response: requested flow is \"%s\" but no \"id_token\" parameter found in the authorization response",
 					response_type);
 			return FALSE;
 		}
@@ -1052,7 +1065,7 @@ apr_byte_t oidc_validate_authorization_response(request_rec *r,
 
 		if (*id_token != NULL) {
 			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_validate_authorization_response: requested flow is \"%s\" but there is an \"id_token\" parameter in the authorization response that will be dropped",
+					"oidc_proto_validate_authorization_response: requested flow is \"%s\" but there is an \"id_token\" parameter in the authorization response that will be dropped",
 					response_type);
 			*id_token = NULL;
 		}
@@ -1066,14 +1079,14 @@ apr_byte_t oidc_validate_authorization_response(request_rec *r,
 
 		if (*access_token == NULL) {
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_validate_authorization_response: requested flow is \"%s\" but no \"access_token\" parameter found in the authorization response",
+					"oidc_proto_validate_authorization_response: requested flow is \"%s\" but no \"access_token\" parameter found in the authorization response",
 					response_type);
 			return FALSE;
 		}
 
 		if (*token_type == NULL) {
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_validate_authorization_response: requested flow is \"%s\" but no \"token_type\" parameter found in the authorization response",
+					"oidc_proto_validate_authorization_response: requested flow is \"%s\" but no \"token_type\" parameter found in the authorization response",
 					response_type);
 			return FALSE;
 		}
@@ -1082,14 +1095,14 @@ apr_byte_t oidc_validate_authorization_response(request_rec *r,
 
 		if (*access_token != NULL) {
 			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_validate_authorization_response: requested flow is \"%s\" but there is an \"access_token\" parameter in the authorization response that will be dropped",
+					"oidc_proto_validate_authorization_response: requested flow is \"%s\" but there is an \"access_token\" parameter in the authorization response that will be dropped",
 					response_type);
 			*access_token = NULL;
 		}
 
 		if (*token_type != NULL) {
 			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_validate_authorization_response: requested flow is \"%s\" but there is a \"token_type\" parameter in the authorization response that will be dropped",
+					"oidc_proto_validate_authorization_response: requested flow is \"%s\" but there is a \"token_type\" parameter in the authorization response that will be dropped",
 					response_type);
 			*token_type = NULL;
 		}

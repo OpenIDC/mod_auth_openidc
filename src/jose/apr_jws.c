@@ -63,6 +63,33 @@
 #include "apr_jose.h"
 
 /*
+ * return all supported signing algorithms
+ */
+apr_array_header_t *apr_jws_supported_algorithms(apr_pool_t *pool) {
+	apr_array_header_t *result = apr_array_make(pool, 12, sizeof(const char*));
+	*(const char**) apr_array_push(result) = "RS256";
+	*(const char**) apr_array_push(result) = "RS384";
+	*(const char**) apr_array_push(result) = "RS512";
+	*(const char**) apr_array_push(result) = "PS256";
+	*(const char**) apr_array_push(result) = "PS384";
+	*(const char**) apr_array_push(result) = "PS512";
+	*(const char**) apr_array_push(result) = "ES256";
+	*(const char**) apr_array_push(result) = "ES384";
+	*(const char**) apr_array_push(result) = "ES512";
+	*(const char**) apr_array_push(result) = "HS256";
+	*(const char**) apr_array_push(result) = "HS384";
+	*(const char**) apr_array_push(result) = "HS512";
+	return result;
+}
+
+/*
+ * check if the provided signing algorithm is supported
+ */
+apr_byte_t apr_jws_algorithm_is_supported(apr_pool_t *pool, const char *alg) {
+	return apr_jwt_array_has_string(apr_jws_supported_algorithms(pool), alg);
+}
+
+/*
  * helper function to determine the type of signature on a JWT
  */
 static apr_byte_t apr_jws_signature_starts_with(apr_pool_t *pool,
@@ -97,8 +124,7 @@ static char *apr_jws_alg_to_openssl_digest(const char *alg) {
 /*
  * return an EVP structure for the specified algorithm
  */
-const EVP_MD *apr_jws_crypto_alg_to_evp(apr_pool_t *pool,
-		const char *alg) {
+const EVP_MD *apr_jws_crypto_alg_to_evp(apr_pool_t *pool, const char *alg) {
 	const EVP_MD *result = NULL;
 
 	char *digest = apr_jws_alg_to_openssl_digest(alg);

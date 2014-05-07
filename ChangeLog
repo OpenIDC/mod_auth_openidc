@@ -1,3 +1,6 @@
+5/8/2014
+- support encrypted JWTs using RSA1_5 and A128CBC-HS256
+
 5/2/2014
 - do not use ap_get_remote_host for browser fingerprinting
 

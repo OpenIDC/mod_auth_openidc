@@ -140,7 +140,8 @@ int oidc_base64url_decode(request_rec *r, char **dst, const char *src,
  */
 int oidc_encrypt_base64url_encode_string(request_rec *r, char **dst,
 		const char *src) {
-	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg *c = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
 	int crypted_len = strlen(src) + 1;
 	unsigned char *crypted = oidc_crypto_aes_encrypt(r, c,
 			(unsigned char *) src, &crypted_len);
@@ -157,7 +158,8 @@ int oidc_encrypt_base64url_encode_string(request_rec *r, char **dst,
  */
 int oidc_base64url_decode_decrypt_string(request_rec *r, char **dst,
 		const char *src) {
-	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg *c = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
 	char *decbuf = NULL;
 	int dec_len = oidc_base64url_decode(r, &decbuf, src, 0);
 	if (dec_len <= 0) {
@@ -312,7 +314,7 @@ size_t oidc_curl_write(const void *ptr, size_t size, size_t nmemb, void *stream)
 	if ((nmemb * size) + curlBuffer->written >= OIDC_CURL_MAX_RESPONSE_SIZE)
 		return 0;
 
-	memcpy((curlBuffer->buf + curlBuffer->written), ptr, (nmemb*size));
+	memcpy((curlBuffer->buf + curlBuffer->written), ptr, (nmemb * size));
 	curlBuffer->written += (nmemb * size);
 
 	return (nmemb * size);
@@ -351,7 +353,7 @@ static int oidc_http_add_json_param(void* rec, const char* key,
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, ctx->r,
 			"oidc_http_add_json_param: adding parameter: %s=%s to %s", key,
 			value, ctx->encoded_params);
-	if (value[0] == '[') {
+	if ( (value[0] == '[') || (value[0] == '{') ) {
 		// TODO hacky hacky, we need an array so we already encoded it :-)
 		ctx->encoded_params = apr_psprintf(ctx->r->pool, "%s%s\"%s\" : %s",
 				ctx->encoded_params, sep, key, value);
@@ -461,8 +463,7 @@ apr_byte_t oidc_util_http_call(request_rec *r, const char *url, int action,
 		/* and overwrite the default url-form-encoded content-type */
 //		h_list = curl_slist_append(h_list,
 //				"Content-type: application/json; charset=UTF-8");
-		h_list = curl_slist_append(h_list,
-						"Content-type: application/json");
+		h_list = curl_slist_append(h_list, "Content-type: application/json");
 
 	} else if (action == OIDC_HTTP_POST_FORM) {
 
@@ -529,16 +530,55 @@ apr_byte_t oidc_util_http_call(request_rec *r, const char *url, int action,
 }
 
 /*
+ * get the current path from the request in a normalized way
+ */
+static char *oidc_util_get_path(request_rec *r) {
+	size_t i;
+	char *p;
+	p = r->parsed_uri.path;
+	if (p[0] == '\0')
+		return apr_pstrdup(r->pool, "/");
+	for (i = strlen(p) - 1; i > 0; i--)
+		if (p[i] == '/')
+			break;
+	return apr_pstrndup(r->pool, p, i + 1);
+}
+
+/*
+ * get the cookie path setting and check that it matches the request path; cook it up if it is not set
+ */
+static char *oidc_util_get_cookie_path(request_rec *r) {
+	char *rv = NULL, *requestPath = oidc_util_get_path(r);
+	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+	if (d->cookie_path != NULL) {
+		if (strncmp(d->cookie_path, requestPath, strlen(d->cookie_path)) == 0)
+			rv = d->cookie_path;
+		else {
+			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
+					"oidc_util_get_cookie_path: OIDCCookiePath (%s) not a substring of request path, using request path (%s) for cookie",
+					d->cookie_path, requestPath);
+			rv = requestPath;
+		}
+	} else {
+		rv = requestPath;
+	}
+	return (rv);
+}
+
+/*
  * set a cookie in the HTTP response headers
  */
-void oidc_set_cookie(request_rec *r, const char *cookieName, const char *cookieValue) {
+void oidc_util_set_cookie(request_rec *r, const char *cookieName,
+		const char *cookieValue) {
 
-	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg *c = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
 	char *headerString, *currentCookies;
 
 	/* construct the cookie value */
 	headerString = apr_psprintf(r->pool, "%s=%s;Secure;Path=%s%s", cookieName,
-			cookieValue, oidc_get_cookie_path(r),
+			cookieValue, oidc_util_get_cookie_path(r),
 			c->cookie_domain != NULL ?
 					apr_psprintf(r->pool, ";Domain=%s", c->cookie_domain) : "");
 
@@ -560,14 +600,14 @@ void oidc_set_cookie(request_rec *r, const char *cookieName, const char *cookieV
 
 	/* do some logging */
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_set_cookie: adding outgoing header: Set-Cookie: %s",
+			"oidc_util_set_cookie: adding outgoing header: Set-Cookie: %s",
 			headerString);
 }
 
 /*
  * get a cookie from the HTTP request
  */
-char *oidc_get_cookie(request_rec *r, char *cookieName) {
+char *oidc_util_get_cookie(request_rec *r, char *cookieName) {
 	char *cookie, *tokenizerCtx, *rv = NULL;
 
 	/* get the Cookie value */
@@ -757,10 +797,13 @@ apr_byte_t oidc_util_decode_json_and_check_error(request_rec *r,
 /*
  * sends HTML content to the user agent
  */
-int oidc_util_http_sendstring(request_rec *r, const char *html, int success_rvalue) {
+int oidc_util_http_sendstring(request_rec *r, const char *html,
+		int success_rvalue) {
 	ap_set_content_type(r, "text/html");
-	apr_bucket_brigade *bb = apr_brigade_create(r->pool, r->connection->bucket_alloc);
-	apr_bucket *b = apr_bucket_transient_create(html, strlen(html), r->connection->bucket_alloc);
+	apr_bucket_brigade *bb = apr_brigade_create(r->pool,
+			r->connection->bucket_alloc);
+	apr_bucket *b = apr_bucket_transient_create(html, strlen(html),
+			r->connection->bucket_alloc);
 	APR_BRIGADE_INSERT_TAIL(bb, b);
 	b = apr_bucket_eos_create(r->connection->bucket_alloc);
 	APR_BRIGADE_INSERT_TAIL(bb, b);
@@ -792,7 +835,7 @@ static apr_byte_t oidc_util_read(request_rec *r, const char **rbuf) {
 			} else {
 				rsize = len_read;
 			}
-			memcpy((char*)*rbuf + rpos, argsbuffer, rsize);
+			memcpy((char*) *rbuf + rpos, argsbuffer, rsize);
 			rpos += rsize;
 		}
 	}
@@ -803,7 +846,7 @@ static apr_byte_t oidc_util_read(request_rec *r, const char **rbuf) {
 /*
  * read the POST parameters in to a table
  */
- apr_byte_t oidc_util_read_post(request_rec *r, apr_table_t *table) {
+apr_byte_t oidc_util_read_post(request_rec *r, apr_table_t *table) {
 	const char *data = NULL;
 	const char *key, *val;
 
@@ -825,8 +868,9 @@ static apr_byte_t oidc_util_read(request_rec *r, const char **rbuf) {
 	return TRUE;
 }
 
- // TODO: check return values
- apr_byte_t oidc_util_generate_random_base64url_encoded_value(request_rec *r, int randomLen, char **randomB64) {
+// TODO: check return values
+apr_byte_t oidc_util_generate_random_base64url_encoded_value(request_rec *r,
+		int randomLen, char **randomB64) {
 	unsigned char *brnd = apr_pcalloc(r->pool, randomLen);
 	apr_generate_random_bytes((unsigned char *) brnd, randomLen);
 	*randomB64 = apr_palloc(r->pool, apr_base64_encode_len(randomLen) + 1);
@@ -843,83 +887,81 @@ static apr_byte_t oidc_util_read(request_rec *r, const char **rbuf) {
 		i++;
 	}
 	return TRUE;
- }
+}
 
 /*
  * read a file from a path on disk
  */
-apr_byte_t oidc_util_file_read(request_rec *r, const char *path,
- 		char **result) {
- 	apr_file_t *fd = NULL;
- 	apr_status_t rc = APR_SUCCESS;
- 	char s_err[128];
- 	apr_finfo_t finfo;
+apr_byte_t oidc_util_file_read(request_rec *r, const char *path, char **result) {
+	apr_file_t *fd = NULL;
+	apr_status_t rc = APR_SUCCESS;
+	char s_err[128];
+	apr_finfo_t finfo;
 
- 	/* open the file if it exists */
- 	if ((rc = apr_file_open(&fd, path, APR_FOPEN_READ | APR_FOPEN_BUFFERED,
- 			APR_OS_DEFAULT, r->pool)) != APR_SUCCESS) {
- 		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
- 				"oidc_util_file_read: no file found at: \"%s\"",
- 				path);
- 		return FALSE;
- 	}
+	/* open the file if it exists */
+	if ((rc = apr_file_open(&fd, path, APR_FOPEN_READ | APR_FOPEN_BUFFERED,
+	APR_OS_DEFAULT, r->pool)) != APR_SUCCESS) {
+		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
+				"oidc_util_file_read: no file found at: \"%s\"", path);
+		return FALSE;
+	}
 
- 	/* the file exists, now lock it */
- 	apr_file_lock(fd, APR_FLOCK_EXCLUSIVE);
+	/* the file exists, now lock it */
+	apr_file_lock(fd, APR_FLOCK_EXCLUSIVE);
 
- 	/* move the read pointer to the very start of the cache file */
- 	apr_off_t begin = 0;
- 	apr_file_seek(fd, APR_SET, &begin);
+	/* move the read pointer to the very start of the cache file */
+	apr_off_t begin = 0;
+	apr_file_seek(fd, APR_SET, &begin);
 
- 	/* get the file info so we know its size */
- 	if ((rc = apr_file_info_get(&finfo, APR_FINFO_SIZE, fd)) != APR_SUCCESS) {
- 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
- 				"oidc_util_file_read: error calling apr_file_info_get on file: \"%s\" (%s)",
- 				path, apr_strerror(rc, s_err, sizeof(s_err)));
- 		goto error_close;
- 	}
+	/* get the file info so we know its size */
+	if ((rc = apr_file_info_get(&finfo, APR_FINFO_SIZE, fd)) != APR_SUCCESS) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_util_file_read: error calling apr_file_info_get on file: \"%s\" (%s)",
+				path, apr_strerror(rc, s_err, sizeof(s_err)));
+		goto error_close;
+	}
 
- 	/* now that we have the size of the file, allocate a buffer that can contain its contents */
- 	*result = apr_palloc(r->pool, finfo.size + 1);
+	/* now that we have the size of the file, allocate a buffer that can contain its contents */
+	*result = apr_palloc(r->pool, finfo.size + 1);
 
- 	/* read the file in to the buffer */
- 	apr_size_t bytes_read = 0;
- 	if ((rc = apr_file_read_full(fd, *result, finfo.size, &bytes_read))
- 			!= APR_SUCCESS) {
- 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
- 				"oidc_util_file_read: apr_file_read_full on (%s) returned an error: %s",
- 				path, apr_strerror(rc, s_err, sizeof(s_err)));
- 		goto error_close;
- 	}
+	/* read the file in to the buffer */
+	apr_size_t bytes_read = 0;
+	if ((rc = apr_file_read_full(fd, *result, finfo.size, &bytes_read))
+			!= APR_SUCCESS) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_util_file_read: apr_file_read_full on (%s) returned an error: %s",
+				path, apr_strerror(rc, s_err, sizeof(s_err)));
+		goto error_close;
+	}
 
 	/* just to be sure, we set a \0 (we allocated space for it anyway) */
- 	(*result)[bytes_read] = '\0';
+	(*result)[bytes_read] = '\0';
 
- 	/* check that we've got all of it */
- 	if (bytes_read != finfo.size) {
- 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
- 				"oidc_util_file_read: apr_file_read_full on (%s) returned less bytes (%" APR_SIZE_T_FMT ") than expected: (%" APR_OFF_T_FMT ")",
- 				path, bytes_read, finfo.size);
- 		goto error_close;
- 	}
+	/* check that we've got all of it */
+	if (bytes_read != finfo.size) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_util_file_read: apr_file_read_full on (%s) returned less bytes (%" APR_SIZE_T_FMT ") than expected: (%" APR_OFF_T_FMT ")",
+				path, bytes_read, finfo.size);
+		goto error_close;
+	}
 
- 	/* we're done, unlock and close the file */
- 	apr_file_unlock(fd);
- 	apr_file_close(fd);
+	/* we're done, unlock and close the file */
+	apr_file_unlock(fd);
+	apr_file_close(fd);
 
- 	/* log successful content retrieval */
- 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
- 			"oidc_util_file_read: file read successfully \"%s\"", path);
+	/* log successful content retrieval */
+	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+			"oidc_util_file_read: file read successfully \"%s\"", path);
 
- 	return TRUE;
+	return TRUE;
 
 error_close:
 
 	apr_file_unlock(fd);
- 	apr_file_close(fd);
+	apr_file_close(fd);
 
- 	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
- 			"oidc_util_file_read: returning error");
+	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+			"oidc_util_file_read: returning error");
 
 	return FALSE;
 }
@@ -948,7 +990,8 @@ apr_byte_t oidc_util_issuer_match(const char *a, const char *b) {
  * send a user-facing error to the browser
  * TODO: more templating
  */
-int oidc_util_html_send_error(request_rec *r, const char *error, const char *description, int status_code) {
+int oidc_util_html_send_error(request_rec *r, const char *error,
+		const char *description, int status_code) {
 	char *msg = "<p>the OpenID Connect Provider returned an error:</p><p>";
 
 	if (error != NULL) {
@@ -956,8 +999,8 @@ int oidc_util_html_send_error(request_rec *r, const char *error, const char *des
 				error);
 	}
 	if (description != NULL) {
-		msg = apr_psprintf(r->pool, "%s<p>Description: <pre>%s</pre></p>",
-				msg, description);
+		msg = apr_psprintf(r->pool, "%s<p>Description: <pre>%s</pre></p>", msg,
+				description);
 	}
 
 	return oidc_util_http_sendstring(r, msg, status_code);
@@ -972,7 +1015,8 @@ apr_byte_t oidc_util_json_array_has_value(request_rec *r,
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_util_json_array_has_value: entering (%s)", needle);
 
-	if ( (haystack == NULL) || (haystack->type != APR_JSON_ARRAY) ) return FALSE;
+	if ((haystack == NULL) || (haystack->type != APR_JSON_ARRAY))
+		return FALSE;
 
 	int i;
 	for (i = 0; i < haystack->value.array->nelts; i++) {
@@ -1008,7 +1052,8 @@ static void oidc_util_set_app_header(request_rec *r, const char *s_key,
 
 	/* do some logging about this event */
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_util_set_app_header: setting header \"%s: %s\"", s_name, s_value);
+			"oidc_util_set_app_header: setting header \"%s: %s\"", s_name,
+			s_value);
 
 	/* now set the actual header name/value */
 	apr_table_set(r->headers_in, s_name, s_value);
@@ -1017,9 +1062,9 @@ static void oidc_util_set_app_header(request_rec *r, const char *s_key,
 /*
  * set the user/claims information from the session in HTTP headers passed on to the application
  */
-void oidc_util_set_app_headers(request_rec *r,
-		const apr_json_value_t *j_attrs, const char *authn_header,
-		const char *claim_prefix, const char *claim_delimiter) {
+void oidc_util_set_app_headers(request_rec *r, const apr_json_value_t *j_attrs,
+		const char *authn_header, const char *claim_prefix,
+		const char *claim_delimiter) {
 
 	apr_json_value_t *j_value = NULL;
 	apr_hash_index_t *hi = NULL;
@@ -1053,8 +1098,8 @@ void oidc_util_set_app_headers(request_rec *r,
 		} else if (j_value->type == APR_JSON_BOOLEAN) {
 
 			/* set boolean value in the application header whose name is based on the key and the prefix */
-			oidc_util_set_app_header(r, s_key, j_value->value.boolean ? "1" : "0",
-					claim_prefix);
+			oidc_util_set_app_header(r, s_key,
+					j_value->value.boolean ? "1" : "0", claim_prefix);
 
 		} else if (j_value->type == APR_JSON_LONG) {
 
@@ -1191,7 +1236,7 @@ apr_byte_t oidc_util_spaced_string_contains(apr_pool_t *pool,
  */
 apr_byte_t oidc_json_object_get_string(apr_pool_t *pool, apr_json_value_t *json,
 		const char *name, char **value, const char *default_value) {
-	*value = default_value ? apr_pstrdup(pool, default_value) : NULL;;
+	*value = default_value ? apr_pstrdup(pool, default_value) : NULL;
 	if (json != NULL) {
 		apr_json_value_t *v = apr_hash_get(json->value.object, name,
 				APR_HASH_KEY_STRING);

@@ -51,6 +51,10 @@
  * @Author: Hans Zandbelt - hzandbelt@pingidentity.com
  */
 
+#include <openssl/pem.h>
+#include <openssl/evp.h>
+#include <openssl/rsa.h>
+
 #include "apr_jose.h"
 
 /*
@@ -81,6 +85,16 @@ static apr_byte_t apr_jwk_parse_rsa(apr_pool_t *pool, apr_jwk_t *jwk) {
 	/* parse the exponent size */
 	jwk->key.rsa->exponent_len = apr_jwt_base64url_decode(pool,
 			(char **) &jwk->key.rsa->exponent, s_exponent, 1);
+
+	/* parse the private exponent */
+	char *s_private_exponent = NULL;
+	apr_jwt_get_string(pool, &jwk->value, "d", &s_private_exponent);
+	if (s_private_exponent != NULL) {
+		/* parse the private exponent size */
+		jwk->key.rsa->private_exponent_len = apr_jwt_base64url_decode(pool,
+				(char **) &jwk->key.rsa->private_exponent, s_private_exponent,
+				1);
+	}
 
 	/* that went well */
 	return TRUE;
@@ -173,4 +187,113 @@ apr_byte_t apr_jwk_parse_string(apr_pool_t *pool, const char *s_json,
 		return FALSE;
 
 	return apr_jwk_parse_json(pool, j_value, s_json, j_jwk);
+}
+
+/*
+ * convert the RSA public key in the X.509 certificate in the file pointed to
+ * by "filename" to a JSON Web Key object
+ */
+apr_byte_t apr_jwk_x509_to_rsa_jwk(apr_pool_t *pool, const char *filename,
+		char **jwk, char**kid) {
+
+	X509 *x509 = NULL;
+	BIO *input = BIO_new(BIO_s_file());
+
+	if ((BIO_read_filename(input, filename) <= 0) || ((x509 =
+			PEM_read_bio_X509_AUX(input, NULL, NULL, NULL)) == NULL)) {
+		return FALSE;
+	}
+
+	EVP_PKEY *pubkey = X509_get_pubkey(x509);
+	RSA *rsa = EVP_PKEY_get1_RSA(pubkey);
+
+	int n_len = BN_num_bytes(rsa->n);
+	unsigned char *n = apr_pcalloc(pool, n_len);
+	BN_bn2bin(rsa->n, n);
+	char *n_enc = NULL;
+	apr_jwt_base64url_encode(pool, &n_enc, (const char *) n, n_len);
+
+	int e_len = BN_num_bytes(rsa->e);
+	unsigned char *e = apr_pcalloc(pool, e_len);
+	BN_bn2bin(rsa->e, e);
+	char *e_enc = NULL;
+	apr_jwt_base64url_encode(pool, &e_enc, (const char *) e, e_len);
+
+	/*
+	 unsigned int fp_len;
+	 unsigned char fp[EVP_MAX_MD_SIZE];
+	 if (!X509_digest(x509, EVP_sha1(), fp, &fp_len)) return FALSE;
+	 char *fp_enc = NULL;
+	 apr_jwt_base64url_encode(pool, &fp_enc, (const char *)fp, fp_len);
+	 */
+	unsigned int fp_len = SHA_DIGEST_LENGTH;
+	unsigned char fp[SHA_DIGEST_LENGTH];
+	if (!SHA1(n, n_len, fp))
+		return FALSE;
+	char *fp_enc = NULL;
+	apr_jwt_base64url_encode(pool, &fp_enc, (const char *) fp, fp_len);
+
+	*jwk =
+			apr_psprintf(pool,
+					"{ \"kty\" : \"RSA\", \"n\": \"%s\", \"e\": \"%s\", \"kid\" : \"%s\" }",
+					n_enc, e_enc, fp_enc);
+	*kid = fp_enc;
+
+	EVP_PKEY_free(pubkey);
+	X509_free(x509);
+	BIO_free(input);
+
+	return TRUE;
+}
+
+/*
+ * convert the RSA private key in the PEM file pointed to by "filename" to a JSON Web Key object
+ */
+apr_byte_t apr_jwk_private_key_to_rsa_jwk(apr_pool_t *pool,
+		const char *filename, char **jwk, char**kid) {
+
+	EVP_PKEY *pkey;
+	BIO *input = BIO_new(BIO_s_file());
+
+	if ((BIO_read_filename(input, filename) <= 0) || ((pkey =
+			PEM_read_bio_PrivateKey(input, NULL, NULL, NULL)) == NULL)) {
+		return FALSE;
+	}
+	RSA *rsa = EVP_PKEY_get1_RSA(pkey);
+
+	int n_len = BN_num_bytes(rsa->n);
+	unsigned char *n = apr_pcalloc(pool, n_len);
+	BN_bn2bin(rsa->n, n);
+	char *n_enc = NULL;
+	apr_jwt_base64url_encode(pool, &n_enc, (const char *) n, n_len);
+
+	int e_len = BN_num_bytes(rsa->e);
+	unsigned char *e = apr_pcalloc(pool, e_len);
+	BN_bn2bin(rsa->e, e);
+	char *e_enc = NULL;
+	apr_jwt_base64url_encode(pool, &e_enc, (const char *) e, e_len);
+
+	int d_len = BN_num_bytes(rsa->d);
+	unsigned char *d = apr_pcalloc(pool, d_len);
+	BN_bn2bin(rsa->d, d);
+	char *d_enc = NULL;
+	apr_jwt_base64url_encode(pool, &d_enc, (const char *) d, d_len);
+
+	unsigned int fp_len = SHA_DIGEST_LENGTH;
+	unsigned char fp[SHA_DIGEST_LENGTH];
+	if (!SHA1(n, n_len, fp))
+		return FALSE;
+	char *fp_enc = NULL;
+	apr_jwt_base64url_encode(pool, &fp_enc, (const char *) fp, fp_len);
+
+	*jwk =
+			apr_psprintf(pool,
+					"{ \"kty\" : \"RSA\", \"n\": \"%s\", \"e\": \"%s\", \"d\": \"%s\", \"kid\" : \"%s\" }",
+					n_enc, e_enc, d_enc, fp_enc);
+	*kid = fp_enc;
+
+	EVP_PKEY_free(pkey);
+	BIO_free(input);
+
+	return TRUE;
 }

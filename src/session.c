@@ -341,7 +341,7 @@ static apr_status_t oidc_session_load_cache(request_rec *r, session_rec *z) {
 	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
 
 	/* get the cookie that should be our uuid/key */
-	char *uuid = oidc_get_cookie(r, d->cookie);
+	char *uuid = oidc_util_get_cookie(r, d->cookie);
 
 	/* get the string-encoded session from the cache based on the key */
 	if (uuid != NULL)
@@ -363,7 +363,7 @@ static apr_status_t oidc_session_save_cache(request_rec *r, session_rec *z) {
 	if (z->encoded && z->encoded[0]) {
 
 		/* set the uuid in the cookie */
-		oidc_set_cookie(r, d->cookie, key);
+		oidc_util_set_cookie(r, d->cookie, key);
 
 		/* store the string-encoded session in the cache */
 		c->cache->set(r, key, z->encoded, z->expiry);
@@ -371,7 +371,7 @@ static apr_status_t oidc_session_save_cache(request_rec *r, session_rec *z) {
 	} else {
 
 		/* clear the cookie */
-		oidc_set_cookie(r, d->cookie, "");
+		oidc_util_set_cookie(r, d->cookie, "");
 
 		/* remove the session from the cache */
 		c->cache->set(r, key, NULL, 0);
@@ -383,7 +383,7 @@ static apr_status_t oidc_session_save_cache(request_rec *r, session_rec *z) {
 static apr_status_t oidc_session_load_cookie(request_rec *r, session_rec *z) {
 	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
 
-	char *cookieValue = oidc_get_cookie(r, d->cookie);
+	char *cookieValue = oidc_util_get_cookie(r, d->cookie);
 	if (cookieValue != NULL) {
 		if (oidc_base64url_decode_decrypt_string(r, (char **)&z->encoded, cookieValue) <= 0) return APR_EGENERAL;
 	}
@@ -398,7 +398,7 @@ static apr_status_t oidc_session_save_cookie(request_rec *r, session_rec *z) {
 	if (z->encoded && z->encoded[0]) {
 		oidc_encrypt_base64url_encode_string(r, &cookieValue, z->encoded);
 	}
-	oidc_set_cookie(r, d->cookie, cookieValue);
+	oidc_util_set_cookie(r, d->cookie, cookieValue);
 
 	return APR_SUCCESS;
 }

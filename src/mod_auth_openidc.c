@@ -205,7 +205,7 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 	apr_json_value_t *v = NULL;
 
 	/* get the state cookie value first */
-	char *cookieValue = oidc_get_cookie(r, OIDCStateCookieName);
+	char *cookieValue = oidc_util_get_cookie(r, OIDCStateCookieName);
 	if (cookieValue == NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_restore_proto_state: no \"%s\" state cookie found",
@@ -214,7 +214,7 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 	}
 
 	/* clear state cookie because we don't need it anymore */
-	oidc_set_cookie(r, OIDCStateCookieName, "");
+	oidc_util_set_cookie(r, OIDCStateCookieName, "");
 
 	/* decrypt the state obtained from the cookie */
 	char *svalue = NULL;
@@ -318,7 +318,7 @@ static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
 	}
 
 	/* set it as a cookie */
-	oidc_set_cookie(r, OIDCStateCookieName, cookieValue);
+	oidc_util_set_cookie(r, OIDCStateCookieName, cookieValue);
 
 	return TRUE;
 }
@@ -539,7 +539,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	}
 
 	/* check the required response parameters for the requested flow */
-	if (oidc_validate_authorization_response(r, proto_state->response_type,
+	if (oidc_proto_validate_authorization_response(r, proto_state->response_type,
 			proto_state->response_mode, &code, &id_token, &access_token,
 			&token_type, response_mode) == FALSE) {
 		return HTTP_INTERNAL_SERVER_ERROR;
@@ -553,7 +553,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		if (oidc_proto_parse_idtoken(r, c, provider, id_token,
 				proto_state->nonce, &remoteUser, &jwt) == FALSE) {
 			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_handle_authorization_response: could not verify the id_token contents, return HTTP_UNAUTHORIZED");
+					"oidc_handle_authorization_response: could not parse or verify the id_token contents, return HTTP_UNAUTHORIZED");
 			return HTTP_UNAUTHORIZED;
 		}
 	}
@@ -607,7 +607,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 			if (oidc_proto_parse_idtoken(r, c, provider, id_token, nonce,
 					&remoteUser, &jwt) == FALSE) {
 				ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-						"oidc_handle_authorization_response: could not verify the id_token contents, return HTTP_UNAUTHORIZED");
+						"oidc_handle_authorization_response: could not parse or verify the id_token contents, return HTTP_UNAUTHORIZED");
 				return HTTP_UNAUTHORIZED;
 			}
 		}
@@ -998,6 +998,35 @@ int oidc_handle_logout(request_rec *r, session_rec *session) {
 }
 
 /*
+ * handle request for JWKs
+ */
+int oidc_handle_jwks(request_rec *r, oidc_cfg *c) {
+
+	/* pickup requested JWKs type */
+//	char *jwks_type = NULL;
+//	oidc_util_get_request_parameter(r, "jwks", &jwks_type);
+
+	char *jwks = apr_pstrdup(r->pool, "{ \"keys\" : [");
+	apr_hash_index_t *hi = NULL;
+	apr_byte_t first = TRUE;
+	/* loop over the claims in the JSON structure */
+	if (c->public_keys != NULL) {
+		for (hi = apr_hash_first(r->pool, c->public_keys); hi; hi = apr_hash_next(hi)) {
+			const char *s_kid = NULL;
+			const char *s_jwk = NULL;
+			apr_hash_this(hi, (const void**) &s_kid, NULL, (void**) &s_jwk);
+			jwks = apr_psprintf(r->pool, "%s%s %s ", jwks, first ? "" : ",", s_jwk);
+			first = FALSE;
+		}
+	}
+
+	// TODO: send stuff if first == FALSE?
+	jwks = apr_psprintf(r->pool, "%s ] }", jwks);
+
+	return oidc_util_http_sendstring(r, jwks, DONE);
+}
+
+/*
  * handle all requests to the redirect_uri
  */
 int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
@@ -1022,6 +1051,11 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 
 		/* handle logout */
 		return oidc_handle_logout(r, session);
+
+	} else if (oidc_util_request_has_parameter(r, "jwks")) {
+
+		/* handle JWKs request */
+		return oidc_handle_jwks(r, c);
 
 	}  else if ((r->args == NULL) || (apr_strnatcmp(r->args, "") == 0)) {
 

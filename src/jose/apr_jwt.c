@@ -56,6 +56,44 @@
 #include "apr_jose.h"
 
 /*
+ * check if a string is an element of an array of strings
+ */
+apr_byte_t apr_jwt_array_has_string(apr_array_header_t *haystack,
+		const char *needle) {
+	int i;
+	for (i = 0; i < haystack->nelts; i++) {
+		if (apr_strnatcmp(((const char**) haystack->elts)[i], needle) == 0)
+			return TRUE;
+	}
+	return FALSE;
+}
+
+/*
+ * base64url encode a string
+ */
+int apr_jwt_base64url_encode(apr_pool_t *pool, char **dst, const char *src,
+		int src_len) {
+	// TODO: always padded now, do we need an option to remove the padding?
+	if ((src == NULL) || (src_len <= 0))
+		return -1;
+	int enc_len = apr_base64_encode_len(src_len);
+	char *enc = apr_palloc(pool, enc_len);
+	apr_base64_encode(enc, (const char *) src, src_len);
+	int i = 0;
+	while (enc[i] != '\0') {
+		if (enc[i] == '+')
+			enc[i] = '-';
+		if (enc[i] == '/')
+			enc[i] = '_';
+		if (enc[i] == '=')
+			enc[i] = ',';
+		i++;
+	}
+	*dst = enc;
+	return enc_len;
+}
+
+/*
  * base64url decode a string
  */
 int apr_jwt_base64url_decode(apr_pool_t *pool, char **dst, const char *src,
@@ -168,6 +206,9 @@ static apr_byte_t apr_jwt_parse_header(apr_pool_t *pool, const char *s_header,
 	/* parse the (optional) kid */
 	apr_jwt_get_string(pool, &header->value, "kid", &header->kid);
 
+	/* parse the (optional) enc */
+	apr_jwt_get_string(pool, &header->value, "enc", &header->enc);
+
 	return TRUE;
 }
 
@@ -210,45 +251,64 @@ static apr_byte_t apr_jwt_parse_signature(apr_pool_t *pool,
 }
 
 /*
+ * parse a JWT that uses compact serialization (i.e. elements separated by dots) in to an array of strings
+ */
+static apr_array_header_t *apr_jwt_compact_deserialize(apr_pool_t *pool,
+		const char *str) {
+	apr_array_header_t *result = apr_array_make(pool, 6, sizeof(const char*));
+	char *s = apr_pstrdup(pool, str);
+	while (s) {
+		char *p = strchr(s, '.');
+		if (p != NULL) *p = '\0';
+		*(const char**) apr_array_push(result) = apr_pstrdup(pool, s);
+		if (p == NULL) break;
+		s = ++p;
+	}
+	return result;
+}
+
+/*
  * parse a JSON Web Token
  */
 apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
-		apr_jwt_t **j_jwt) {
+		apr_jwt_t **j_jwt, apr_hash_t *private_keys) {
 
 	*j_jwt = apr_pcalloc(pool, sizeof(apr_jwt_t));
 	apr_jwt_t *jwt = *j_jwt;
 
-	/* find the header */
-	char *s = apr_pstrdup(pool, s_json);
-	char *p = strchr(s, '.');
-	if (p == NULL)
-		return FALSE;
-	*p = '\0';
-
-	/* store the base64url-encoded header for signature verification purposes */
-	jwt->message = s;
+	apr_array_header_t *unpacked = apr_jwt_compact_deserialize(pool, s_json);
 
 	/* parse the header fields */
-	if (apr_jwt_parse_header(pool, s, &jwt->header) == FALSE)
+	if (apr_jwt_parse_header(pool, ((const char**) unpacked->elts)[0],
+			&jwt->header) == FALSE)
 		return FALSE;
 
-	/* find the payload */
-	s = ++p;
-	p = strchr(s, '.');
-	if (p == NULL)
-		return FALSE;
-	*p = '\0';
+	if (apr_jwe_is_encrypted_jwt(pool, &jwt->header)) {
+		char *decrypted = NULL;
+		if ((apr_jwe_decrypt_jwt(pool, &jwt->header, unpacked, private_keys,
+				&decrypted) == TRUE) && (decrypted != NULL)) {
+			apr_array_clear(unpacked);
+			unpacked = apr_jwt_compact_deserialize(pool,
+					(const char *) decrypted);
+			/* parse the nested header fields */
+			if (apr_jwt_parse_header(pool, ((const char**) unpacked->elts)[0],
+					&jwt->header) == FALSE)
+				return FALSE;
+		}
+	}
 
 	/* concat the base64url-encoded payload to the base64url-encoded header for signature verification purposes */
-	jwt->message = apr_pstrcat(pool, jwt->message, ".", s, NULL);
+	jwt->message = apr_pstrcat(pool, ((const char**) unpacked->elts)[0], ".",
+			((const char**) unpacked->elts)[1], NULL);
 
 	/* parse the payload fields */
-	if (apr_jwt_parse_payload(pool, s, &jwt->payload) == FALSE)
+	if (apr_jwt_parse_payload(pool, ((const char**) unpacked->elts)[1],
+			&jwt->payload) == FALSE)
 		return FALSE;
 
 	/* remainder is the signature */
-	s = ++p;
-	if (apr_jwt_parse_signature(pool, s, &jwt->signature) == FALSE)
+	if (apr_jwt_parse_signature(pool, ((const char**) unpacked->elts)[2],
+			&jwt->signature) == FALSE)
 		return FALSE;
 
 	return TRUE;

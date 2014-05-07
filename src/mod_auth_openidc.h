@@ -49,8 +49,8 @@
  * @Author: Hans Zandbelt - hzandbelt@pingidentity.com
  */
 
-#ifndef MOD_AUTH_CONNECT_H_
-#define MOD_AUTH_CONNECT_H_
+#ifndef MOD_AUTH_OPENIDC_H_
+#define MOD_AUTH_OPENIDC_H_
 
 #include <openssl/evp.h>
 #include <apr_uri.h>
@@ -115,6 +115,7 @@ typedef struct oidc_provider_t {
 	char *token_endpoint_url;
 	char *token_endpoint_auth;
 	char *userinfo_endpoint_url;
+	char *registration_endpoint_url;
 	char *jwks_uri;
 	char *client_id;
 	char *client_secret;
@@ -129,6 +130,13 @@ typedef struct oidc_provider_t {
 	char *response_mode;
 	int jwks_refresh_interval;
 	int idtoken_iat_slack;
+
+	char *id_token_signed_response_alg;
+	char *id_token_encrypted_response_alg;
+	char *id_token_encrypted_response_enc;
+	char *userinfo_signed_response_alg;
+	char *userinfo_encrypted_response_alg;
+	char *userinfo_encrypted_response_enc;
 } oidc_provider_t ;
 
 typedef struct oidc_oauth_t {
@@ -148,8 +156,11 @@ typedef struct oidc_cfg {
 	char *redirect_uri;
 	/* (optional) external OP discovery page */
 	char *discover_url;
-	/* (optional) the signing algorithm the OP should use (used in dynamic client registration only) */
-	char *id_token_alg;
+
+	/* public keys in JWK format, used by parters for encrypting JWTs sent to us */
+	apr_hash_t *public_keys;
+	/* private keys in JWK format used for decrypting encrypted JWTs sent to us */
+	apr_hash_t *private_keys;
 
 	/* a pointer to the (single) provider that we connect to */
 	/* NB: if metadata_dir is set, these settings will function as defaults for the metadata read from there) */
@@ -235,7 +246,7 @@ apr_byte_t oidc_proto_validate_code(request_rec *r, oidc_provider_t *provider, a
 int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg *c);
 apr_array_header_t *oidc_proto_supported_flows(apr_pool_t *pool);
 apr_byte_t oidc_proto_flow_is_supported(apr_pool_t *pool, const char *flow);
-apr_byte_t oidc_validate_authorization_response(request_rec *r, const char *response_type, const char *requested_response_mode, char **code, char **id_token, char **access_token, char **token_type, const char *used_response_mode);
+apr_byte_t oidc_proto_validate_authorization_response(request_rec *r, const char *response_type, const char *requested_response_mode, char **code, char **id_token, char **access_token, char **token_type, const char *used_response_mode);
 apr_byte_t oidc_proto_validate_code_response(request_rec *r, const char *response_type, char **id_token, char **access_token, char **token_type);
 
 // oidc_authz.c
@@ -251,35 +262,18 @@ void *oidc_create_dir_config(apr_pool_t *pool, char *path);
 void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD);
 void oidc_register_hooks(apr_pool_t *pool);
 
-const char *oidc_set_flag_slot(cmd_parms *cmd, void *struct_ptr, int arg);
-const char *oidc_set_int_slot(cmd_parms *cmd, void *struct_ptr, const char *arg);
-const char *oidc_set_string_slot(cmd_parms *cmd, void *struct_ptr, const char *arg);
-const char *oidc_set_https_slot(cmd_parms *cmd, void *struct_ptr, const char *arg);
-const char *oidc_set_url_slot(cmd_parms *cmd, void *struct_ptr, const char *arg);
-const char *oidc_set_endpoint_auth_slot(cmd_parms *cmd, void *struct_ptr, const char *arg);
-const char *oidc_set_cookie_domain(cmd_parms *cmd, void *ptr, const char *value);
-const char *oidc_set_dir_slot(cmd_parms *cmd, void *ptr, const char *arg);
-const char *oidc_set_session_type(cmd_parms *cmd, void *ptr, const char *arg);
-const char *oidc_set_cache_type(cmd_parms *cmd, void *ptr, const char *arg);
-const char *oidc_set_response_type(cmd_parms *cmd, void *struct_ptr, const char *arg);
-const char *oidc_set_response_mode(cmd_parms *cmd, void *struct_ptr, const char *arg);
-const char *oidc_set_id_token_alg(cmd_parms *cmd, void *struct_ptr, const char *arg);
-const char *oidc_set_cache_shm_max(cmd_parms *cmd, void *ptr, const char *arg);
-
-char *oidc_get_cookie_path(request_rec *r);
-
 // oidc_util.c
 int oidc_strnenvcmp(const char *a, const char *b, int len);
 int oidc_base64url_encode(request_rec *r, char **dst, const char *src, int src_len);
 int oidc_base64url_decode(request_rec *r, char **dst, const char *src, int padding);
-void oidc_set_cookie(request_rec *r, const char *cookieName, const char *cookieValue);
-char *oidc_get_cookie(request_rec *r, char *cookieName);
 int oidc_encrypt_base64url_encode_string(request_rec *r, char **dst, const char *src);
 int oidc_base64url_decode_decrypt_string(request_rec *r, char **dst, const char *src);
 char *oidc_get_current_url(const request_rec *r, const oidc_cfg *c);
 char *oidc_url_encode(const request_rec *r, const char *str, const char *charsToEncode);
 char *oidc_normalize_header_name(const request_rec *r, const char *str);
 
+void oidc_util_set_cookie(request_rec *r, const char *cookieName, const char *cookieValue);
+char *oidc_util_get_cookie(request_rec *r, char *cookieName);
 apr_byte_t oidc_util_http_call(request_rec *r, const char *url, int action, const apr_table_t *params, const char *basic_auth, const char *bearer_token, int ssl_validate_server, const char **response, int timeout);
 apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url);
 apr_byte_t oidc_util_request_has_parameter(request_rec *r, const char* param);
@@ -339,4 +333,4 @@ apr_status_t oidc_session_set(request_rec *r, session_rec *z, const char *key, c
 apr_status_t oidc_session_save(request_rec *r, session_rec *z);
 apr_status_t oidc_session_kill(request_rec *r, session_rec *z);
 
-#endif /* MOD_AUTH_CONNECT_H_ */
+#endif /* MOD_AUTH_OPENIDC_H_ */

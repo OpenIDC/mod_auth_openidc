@@ -51,8 +51,8 @@
  * @Author: Hans Zandbelt - hzandbelt@pingidentity.com
  */
 
-#ifndef _APR_JWT_H_
-#define _APR_JWT_H_
+#ifndef _APR_JOSE_H_
+#define _APR_JOSE_H_
 
 #include "apr_pools.h"
 
@@ -78,6 +78,8 @@ typedef struct apr_jwt_header_t {
 	char *alg;
 	/* JWT "kid" claim value; key identifier */
 	char *kid;
+	/* JWT "enc" claim value; encryption algorithm */
+	char *enc;
 } apr_jwt_header_t;
 
 /* parsed JWT payload */
@@ -114,7 +116,12 @@ typedef struct apr_jwt_t {
 	char *message;
 } apr_jwt_t;
 
-/* helper */
+/* helpers */
+typedef apr_byte_t (*apr_jose_is_supported_function_t)(apr_pool_t *, const char *);
+apr_byte_t apr_jwt_array_has_string(apr_array_header_t *haystack,
+		const char *needle);
+int apr_jwt_base64url_encode(apr_pool_t *pool, char **dst, const char *src,
+		int src_len);
 int apr_jwt_base64url_decode(apr_pool_t *pool, char **dst, const char *src,
 		int padding);
 
@@ -123,7 +130,7 @@ apr_byte_t apr_jwt_get_string(apr_pool_t *pool, apr_jwt_value_t *value,
 		const char *claim_name, char **result);
 /* parse a string in to a JSON Web Token struct */
 apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
-		apr_jwt_t **j_jwt);
+		apr_jwt_t **j_jwt, apr_hash_t *private_keys);
 
 /*
  * JSON Web Key handling
@@ -147,6 +154,10 @@ typedef struct apr_jwk_key_rsa_t {
 	unsigned char *exponent;
 	/* length of the binary RSA exponent */
 	int exponent_len;
+	/* (binary) RSA private exponent */
+	unsigned char *private_exponent;
+	/* length of the binary private RSA exponent */
+	int private_exponent_len;
 } apr_jwk_key_rsa_t;
 
 /* parsed EC JWK key */
@@ -180,10 +191,19 @@ apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, apr_json_value_t *j_json,
 /* parse a string in to a JSON Web Key struct */
 apr_byte_t apr_jwk_parse_string(apr_pool_t *pool, const char *s_json,
 		apr_jwk_t **j_jwk);
+/* convert the RSA public key in a PEM formatted file with an X.509 cert in to an RSA JWK */
+apr_byte_t apr_jwk_x509_to_rsa_jwk(apr_pool_t *pool, const char *filename, char **jwk, char**kid);
+/* convert the RSA private key in a PEM formatted file in to an RSA JWK */
+apr_byte_t apr_jwk_private_key_to_rsa_jwk(apr_pool_t *pool, const char *filename, char **jwk, char**kid);
 
 /*
- * JSON Web Signature handling
+ * JSON Web Token Signature handling
  */
+
+/* return all supported signing algorithms */
+apr_array_header_t *apr_jws_supported_algorithms(apr_pool_t *pool);
+/* check if the provided signing algorithm is supported */
+apr_byte_t apr_jws_algorithm_is_supported(apr_pool_t *pool, const char *alg);
 
 /* check if the signature on a JWT is of type HMAC */
 apr_byte_t apr_jws_signature_is_hmac(apr_pool_t *pool, apr_jwt_t *jwt);
@@ -205,4 +225,20 @@ apr_byte_t apr_jws_hash_string(apr_pool_t *pool, const char *alg,
 /* length of hash */
 int apr_jws_hash_length(const char *alg);
 
-#endif /* _APR_JWT_H_ */
+/*
+ * JSON Web Token Encryption handling
+ */
+
+/* return all supported content encryption key algorithms */
+apr_array_header_t *apr_jwe_supported_algorithms(apr_pool_t *pool);
+/* check if the provided content encryption key algorithm is supported */
+apr_byte_t apr_jwe_algorithm_is_supported(apr_pool_t *pool, const char *alg);
+/* return all supported encryption algorithms */
+apr_array_header_t *apr_jwe_supported_encryptions(apr_pool_t *pool);
+/* check if the provided encryption algorithm is supported */
+apr_byte_t apr_jwe_encryption_is_supported(apr_pool_t *pool, const char *enc);
+
+apr_byte_t apr_jwe_is_encrypted_jwt(apr_pool_t *pool, apr_jwt_header_t *hdr);
+apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header, apr_array_header_t *unpacked, apr_hash_t *private_keys, char **decrypted);
+
+#endif /* _APR_JOSE_H_ */
