@@ -156,6 +156,8 @@ apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header,
 		apr_array_header_t *unpacked, apr_hash_t *private_keys,
 		char **decrypted) {
 
+	if (unpacked->nelts != 5) return FALSE;
+
 	/* extract the encryption key */
 	char *encrypted_key = NULL;
 	int encrypted_key_len = apr_jwt_base64url_decode(pool, &encrypted_key,
@@ -175,6 +177,13 @@ apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header,
 	int ciphertext_len = apr_jwt_base64url_decode(pool, &ciphertext,
 			((const char**) unpacked->elts)[3], 1);
 	if (ciphertext_len < 0)
+		return FALSE;
+
+	/* extract the authentication tag */
+	char *tag = NULL;
+	int tag_len = apr_jwt_base64url_decode(pool, &tag,
+			((const char**) unpacked->elts)[4], 1);
+	if (tag_len < 0)
 		return FALSE;
 
 	if (private_keys == NULL)
@@ -204,11 +213,46 @@ apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header,
 	if (cek_len < 0)
 		return FALSE;
 
+	unsigned char *mac_key = apr_pcalloc(pool, cek_len / 2);
+	memcpy(mac_key, cek, cek_len / 2);
 	unsigned char *enc_key = apr_pcalloc(pool, cek_len / 2);
 	memcpy(enc_key, cek + cek_len / 2, cek_len / 2);
 
+	char *aad = NULL;
+	apr_jwt_base64url_encode(pool, &aad, (const char *) header->value.str, strlen( header->value.str), 0);
+	int aad_len = strlen(aad);
+	int64_t al = aad_len * 8;
+
+	int msg_len = aad_len + iv_len + ciphertext_len + sizeof(int64_t);
+	const unsigned char *msg = apr_pcalloc(pool, msg_len);
+	char *p = (char*)msg;
+	memcpy(p, aad, aad_len);
+	p += aad_len;
+	memcpy(p, iv, iv_len);
+	p += iv_len;
+	memcpy(p, ciphertext, ciphertext_len);
+	p += ciphertext_len;
+
+	int i;
+	char *src = (char *)&al;
+	// big endian
+	for (i=0; i < sizeof(int64_t); ++i) p[sizeof(int64_t)-1-i] = src[i];
+
+	unsigned int md_len = 0;
+	unsigned char md[EVP_MAX_MD_SIZE];
+	if (!HMAC(EVP_sha256(), mac_key, cek_len / 2, msg, msg_len, md, &md_len))
+			return FALSE;
+
+	/* use only the first half (128) of the 256 bits */
+	md_len = md_len / 2;
+
+	if (md_len != tag_len)
+		return FALSE;
+
+	if (memcmp(md, tag, md_len) != 0)
+		return FALSE;
+
 	EVP_CIPHER_CTX decrypt_ctx;
-	/* initialize the decoding context */
 	EVP_CIPHER_CTX_init(&decrypt_ctx);
 	if (!EVP_DecryptInit_ex(&decrypt_ctx, EVP_aes_128_cbc(), NULL, enc_key,
 			(const unsigned char *) iv))

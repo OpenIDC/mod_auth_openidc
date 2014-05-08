@@ -121,7 +121,7 @@ typedef apr_byte_t (*apr_jose_is_supported_function_t)(apr_pool_t *, const char 
 apr_byte_t apr_jwt_array_has_string(apr_array_header_t *haystack,
 		const char *needle);
 int apr_jwt_base64url_encode(apr_pool_t *pool, char **dst, const char *src,
-		int src_len);
+		int src_len, int padding);
 int apr_jwt_base64url_decode(apr_pool_t *pool, char **dst, const char *src,
 		int padding);
 

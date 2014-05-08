@@ -211,13 +211,13 @@ apr_byte_t apr_jwk_x509_to_rsa_jwk(apr_pool_t *pool, const char *filename,
 	unsigned char *n = apr_pcalloc(pool, n_len);
 	BN_bn2bin(rsa->n, n);
 	char *n_enc = NULL;
-	apr_jwt_base64url_encode(pool, &n_enc, (const char *) n, n_len);
+	apr_jwt_base64url_encode(pool, &n_enc, (const char *) n, n_len, 0);
 
 	int e_len = BN_num_bytes(rsa->e);
 	unsigned char *e = apr_pcalloc(pool, e_len);
 	BN_bn2bin(rsa->e, e);
 	char *e_enc = NULL;
-	apr_jwt_base64url_encode(pool, &e_enc, (const char *) e, e_len);
+	apr_jwt_base64url_encode(pool, &e_enc, (const char *) e, e_len, 0);
 
 	/*
 	 unsigned int fp_len;
@@ -231,7 +231,7 @@ apr_byte_t apr_jwk_x509_to_rsa_jwk(apr_pool_t *pool, const char *filename,
 	if (!SHA1(n, n_len, fp))
 		return FALSE;
 	char *fp_enc = NULL;
-	apr_jwt_base64url_encode(pool, &fp_enc, (const char *) fp, fp_len);
+	apr_jwt_base64url_encode(pool, &fp_enc, (const char *) fp, fp_len, 0);
 
 	*jwk =
 			apr_psprintf(pool,
@@ -265,26 +265,26 @@ apr_byte_t apr_jwk_private_key_to_rsa_jwk(apr_pool_t *pool,
 	unsigned char *n = apr_pcalloc(pool, n_len);
 	BN_bn2bin(rsa->n, n);
 	char *n_enc = NULL;
-	apr_jwt_base64url_encode(pool, &n_enc, (const char *) n, n_len);
+	apr_jwt_base64url_encode(pool, &n_enc, (const char *) n, n_len, 0);
 
 	int e_len = BN_num_bytes(rsa->e);
 	unsigned char *e = apr_pcalloc(pool, e_len);
 	BN_bn2bin(rsa->e, e);
 	char *e_enc = NULL;
-	apr_jwt_base64url_encode(pool, &e_enc, (const char *) e, e_len);
+	apr_jwt_base64url_encode(pool, &e_enc, (const char *) e, e_len, 0);
 
 	int d_len = BN_num_bytes(rsa->d);
 	unsigned char *d = apr_pcalloc(pool, d_len);
 	BN_bn2bin(rsa->d, d);
 	char *d_enc = NULL;
-	apr_jwt_base64url_encode(pool, &d_enc, (const char *) d, d_len);
+	apr_jwt_base64url_encode(pool, &d_enc, (const char *) d, d_len, 0);
 
 	unsigned int fp_len = SHA_DIGEST_LENGTH;
 	unsigned char fp[SHA_DIGEST_LENGTH];
 	if (!SHA1(n, n_len, fp))
 		return FALSE;
 	char *fp_enc = NULL;
-	apr_jwt_base64url_encode(pool, &fp_enc, (const char *) fp, fp_len);
+	apr_jwt_base64url_encode(pool, &fp_enc, (const char *) fp, fp_len, 0);
 
 	*jwk =
 			apr_psprintf(pool,

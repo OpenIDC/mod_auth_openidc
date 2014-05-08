@@ -72,8 +72,7 @@ apr_byte_t apr_jwt_array_has_string(apr_array_header_t *haystack,
  * base64url encode a string
  */
 int apr_jwt_base64url_encode(apr_pool_t *pool, char **dst, const char *src,
-		int src_len) {
-	// TODO: always padded now, do we need an option to remove the padding?
+		int src_len, int padding) {
 	if ((src == NULL) || (src_len <= 0))
 		return -1;
 	int enc_len = apr_base64_encode_len(src_len);
@@ -85,8 +84,14 @@ int apr_jwt_base64url_encode(apr_pool_t *pool, char **dst, const char *src,
 			enc[i] = '-';
 		if (enc[i] == '/')
 			enc[i] = '_';
-		if (enc[i] == '=')
-			enc[i] = ',';
+		if (enc[i] == '=') {
+			if (padding == 1) {
+				enc[i] = ',';
+			} else {
+				enc[i] = '\0';
+				enc_len--;
+			}
+		}
 		i++;
 	}
 	*dst = enc;
