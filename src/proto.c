@@ -59,6 +59,51 @@
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 /*
+ * send an OpenID Connect authorization request to the specified provider preserving POST parameters using HTML5 storage
+ */
+int oidc_proto_authorization_request_post_preserve(request_rec *r,
+		const char *authorization_request) {
+	/* read the parameters that are POST-ed to us */
+	apr_table_t *params = apr_table_make(r->pool, 8);
+	if (oidc_util_read_post(r, params) == FALSE) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_authorization_request: something went wrong when reading the POST parameters");
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	// TODO: html encode names/values
+	const apr_array_header_t *arr = apr_table_elts(params);
+	const apr_table_entry_t *elts = (const apr_table_entry_t*) arr->elts;
+	int i;
+	char *json = "";
+	for (i = 0; i < arr->nelts; i++) {
+		json = apr_psprintf(r->pool, "%s'%s': '%s'%s", json, elts[i].key,
+				elts[i].val, i < arr->nelts - 1 ? "," : "");
+	}
+	json = apr_psprintf(r->pool, "{ %s }", json);
+
+	char *java_script = apr_psprintf(r->pool,
+					"<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
+					"<html xmlns=\"http://www.w3.org/1999/xhtml\" lang=\"en\" xml:lang=\"en\">\n"
+					"  <head>\n"
+					"    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"/>\n"
+					"    <script type=\"text/javascript\">\n"
+					"      function preserveOnLoad() {\n"
+					"        localStorage.setItem('mod_auth_openidc_preserve_post_params', JSON.stringify(%s));\n"
+					"        window.location='%s';\n"
+					"      }\n"
+					"    </script>\n"
+					"    <title>Preserving...</title>\n"
+					"  </head>\n"
+					"  <body onload=\"preserveOnLoad()\">\n"
+					"    <p>Preserving...</p>\n"
+					"  </body>\n"
+					"</html>\n", json, authorization_request);
+
+	return oidc_util_http_sendstring(r, java_script, DONE);
+}
+
+/*
  * send an OpenID Connect authorization request to the specified provider
  */
 int oidc_proto_authorization_request(request_rec *r,
@@ -91,13 +136,19 @@ int oidc_proto_authorization_request(request_rec *r,
 
 	/* add the nonce if set */
 	if (proto_state->nonce != NULL)
-		authorization_request = apr_psprintf(r->pool, "%s&nonce=%s", authorization_request,
+		authorization_request = apr_psprintf(r->pool, "%s&nonce=%s",
+				authorization_request,
 				oidc_util_escape_string(r, proto_state->nonce));
 
 	/* add the response_mode if explicitly set */
 	if (proto_state->response_mode != NULL)
-		authorization_request = apr_psprintf(r->pool, "%s&response_mode=%s", authorization_request,
+		authorization_request = apr_psprintf(r->pool, "%s&response_mode=%s",
+				authorization_request,
 				oidc_util_escape_string(r, proto_state->response_mode));
+
+	if (apr_strnatcmp(proto_state->original_method, "form_post") == 0)
+		return oidc_proto_authorization_request_post_preserve(r,
+				authorization_request);
 
 	/* add the redirect location header */
 	apr_table_add(r->headers_out, "Location", authorization_request);

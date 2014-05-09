@@ -251,21 +251,25 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 	v = apr_hash_get(json->value.object, "original_url", APR_HASH_KEY_STRING);
 	res->original_url = apr_pstrdup(r->pool, v->value.string.p);
 
-	/* 3. get the issuer value stored in the cookie */
+	/* 3. get the original method as the next value in the decrypted cookie */
+	v = apr_hash_get(json->value.object, "original_method", APR_HASH_KEY_STRING);
+	res->original_method = apr_pstrdup(r->pool, v->value.string.p);
+
+	/* 4. get the issuer value stored in the cookie */
 	v = apr_hash_get(json->value.object, "issuer", APR_HASH_KEY_STRING);
 	res->issuer = apr_pstrdup(r->pool, v->value.string.p);
 
-	/* 4. get the response_type value stored in the cookie */
+	/* 5. get the response_type value stored in the cookie */
 	v = apr_hash_get(json->value.object, "response_type", APR_HASH_KEY_STRING);
 	res->response_type = apr_pstrdup(r->pool, v->value.string.p);
 
-	/* 5. get the response_mode value stored in the cookie */
+	/* 6. get the response_mode value stored in the cookie */
 	v = apr_hash_get(json->value.object, "response_mode", APR_HASH_KEY_STRING);
 	res->response_mode =
 			(v && v->value.string.p && (strcmp(v->value.string.p, "") != 0)) ?
 					apr_pstrdup(r->pool, v->value.string.p) : NULL;
 
-	/* 6. get the timestamp value stored in the cookie */
+	/* 7. get the timestamp value stored in the cookie */
 	v = apr_hash_get(json->value.object, "timestamp", APR_HASH_KEY_STRING);
 	res->timestamp = v->value.lnumber;
 
@@ -278,8 +282,8 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 	}
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_restore_proto_state: restored state: nonce=\"%s\", original_url=\"%s\", issuer=\"%s\", response_type=\%s\", response_mode=\"%s\", timestamp=%" APR_TIME_T_FMT,
-			res->nonce, res->original_url, res->issuer, res->response_type,
+			"oidc_restore_proto_state: restored state: nonce=\"%s\", original_url=\"%s\", original_method=\"%s\", issuer=\"%s\", response_type=\%s\", response_mode=\"%s\", timestamp=%" APR_TIME_T_FMT,
+			res->nonce, res->original_url, res->original_method, res->issuer, res->response_type,
 			res->response_mode, res->timestamp);
 
 	/* we've made it */
@@ -300,11 +304,12 @@ static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
 	char *plainText = apr_psprintf(r->pool, "{"
 			"\"nonce\": \"%s\","
 			"\"original_url\": \"%s\","
+			"\"original_method\": \"%s\","
 			"\"issuer\": \"%s\","
 			"\"response_type\": \"%s\","
 			"\"response_mode\": \"%s\","
 			"\"timestamp\": %" APR_TIME_T_FMT "}", proto_state->nonce,
-			proto_state->original_url, proto_state->issuer,
+			proto_state->original_url, proto_state->original_method, proto_state->issuer,
 			proto_state->response_type,
 			proto_state->response_mode ? proto_state->response_mode : "",
 			proto_state->timestamp);
@@ -516,6 +521,41 @@ static apr_byte_t oidc_authorization_response_match_state(request_rec *r,
 	return TRUE;
 }
 
+/*
+ * restore POST parameters on original_url from HTML5 local storage
+ */
+static int oidc_restore_preserved_post(request_rec *r, const char *original_url) {
+	const char *java_script =
+			"<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
+					"<html xmlns=\"http://www.w3.org/1999/xhtml\" lang=\"en\" xml:lang=\"en\">\n"
+					"  <head>\n"
+					"    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"/>\n"
+					"    <script type=\"text/javascript\">\n"
+					"      function postOnLoad() {\n"
+					"        var mod_auth_openidc_preserve_post_params = JSON.parse(localStorage.getItem('mod_auth_openidc_preserve_post_params'));\n"
+					"		 localStorage.removeItem('mod_auth_openidc_preserve_post_params');\n"
+					"        for (var key in mod_auth_openidc_preserve_post_params) {\n"
+					"          var input = document.createElement(\"input\");\n"
+					"          input.name = key;\n"
+					"          input.value = mod_auth_openidc_preserve_post_params[key];\n"
+					"          input.type = \"hidden\";\n"
+					"          document.forms[0].appendChild(input);\n"
+					"        }\n"
+					"        document.forms[0].action = '%s';\n"
+					"        document.forms[0].submit();\n"
+					"      }\n"
+					"    </script>\n"
+					"    <title>Restoring...</title>\n"
+					"  </head>\n"
+					"  <body onload=\"postOnLoad()\">\n"
+					"    <p>Restoring...</p>\n"
+					"    <form method=\"post\"></form>\n"
+					"  </body>\n"
+					"</html>\n";
+	java_script = apr_psprintf(r->pool, java_script, original_url);
+	return oidc_util_http_sendstring(r, java_script, DONE);
+}
+
 
 /*
  * complete the handling of an authorization response by obtaining, parsing and verifying the
@@ -661,6 +701,10 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 
 	/* not sure whether this is required, but it won't hurt */
 	r->user = remoteUser;
+
+	/* check whether form post data was preserved; if so restore it */
+	if (apr_strnatcmp(proto_state->original_method, "form_post") == 0)
+		return oidc_restore_preserved_post(r, proto_state->original_url);
 
 	/* now we've authenticated the user so go back to the URL that he originally tried to access */
 	apr_table_add(r->headers_out, "Location", proto_state->original_url);
@@ -870,8 +914,19 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	char *nonce = NULL;
 	oidc_util_generate_random_base64url_encoded_value(r, 32, &nonce);
 
+	char *method = "redirect";
+	// TODO: restore method from discovery too or generate state before doing discover (and losing startSSO effect)
+	/*
+	const char *content_type = apr_table_get(r->headers_in, "Content-Type");
+	char *method =
+			((r->method_number == M_POST)
+					&& (apr_strnatcmp(content_type,
+							"application/x-www-form-urlencoded") == 0)) ?
+					"form_post" : "redirect";
+	*/
+
 	/* create the state between request/response */
-	oidc_proto_state proto_state = { nonce, original_url, provider->issuer,
+	oidc_proto_state proto_state = { nonce, original_url, method, provider->issuer,
 			provider->response_type, provider->response_mode, apr_time_sec(apr_time_now()) };
 
 	/* create state that restores the context when the authorization response comes in; cryptographically bind it to the browser */

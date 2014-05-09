@@ -227,6 +227,7 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c);
 typedef struct oidc_proto_state {
 	const char *nonce;
 	const char *original_url;
+	const char *original_method;
 	const char *issuer;
 	const char *response_type;
 	const char *response_mode;
