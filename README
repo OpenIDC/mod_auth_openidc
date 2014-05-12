@@ -124,6 +124,7 @@ Entries that can be included in the .conf file are:
   "idtoken_iat_slack"                  overrides OIDCIDTokenIatSlack on a per-client basis
   "jwks_refresh_interval"              overrides OIDCJWKSRefreshInterval on a per-client basis
   "registration_token"                 an access_token that will be used on client registration calls for this OP
+  "client_jwks_uri"                    overrides OIDCClientJwksUri on a per client-basis
   "id_token_signed_response_alg"       overrides OIDCIDTokenSignedResponseAlg on a per-client basis
   "id_token_encrypted_response_alg"    overrides OIDCIDTokenEncryptedResponseAlg on a per-client basis
   "id_token_encrypted_response_enc"    overrides OIDCIDTokenEncryptedResponseEnc on a per-client basis

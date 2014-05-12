@@ -488,6 +488,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->provider.jwks_refresh_interval = OIDC_DEFAULT_JWKS_REFRESH_INTERVAL;
 	c->provider.idtoken_iat_slack = OIDC_DEFAULT_IDTOKEN_IAT_SLACK;
 
+	c->provider.client_jwks_uri = NULL;
 	c->provider.id_token_signed_response_alg = NULL;
 	c->provider.id_token_encrypted_response_alg = NULL;
 	c->provider.id_token_encrypted_response_enc = NULL;
@@ -617,6 +618,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->provider.idtoken_iat_slack :
 					base->provider.idtoken_iat_slack;
 
+	c->provider.client_jwks_uri =
+			add->provider.client_jwks_uri != NULL ?
+					add->provider.client_jwks_uri :
+					base->provider.client_jwks_uri;
 	c->provider.id_token_signed_response_alg =
 			add->provider.id_token_signed_response_alg != NULL ?
 					add->provider.id_token_signed_response_alg :
@@ -1106,8 +1111,13 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF,
 				"The fully qualified names of the files that contain the RSA private keys that can be used to decrypt content sent to us by the OP."),
 
-		AP_INIT_TAKE1("OIDCIDTokenSignedResponseAlg",
+		AP_INIT_TAKE1("OIDCClientJwksUri",
 				oidc_set_signed_response_alg,
+				(void *)APR_OFFSETOF(oidc_cfg, provider.client_jwks_uri),
+				RSRC_CONF,
+				"Define the Client JWKS URL (e.g.: https://localhost/protected/?jwks=rsa)"),
+		AP_INIT_TAKE1("OIDCIDTokenSignedResponseAlg",
+				oidc_set_https_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.id_token_signed_response_alg),
 				RSRC_CONF,
 				"The algorithm that the OP should use to sign the id_token (used only in dynamic client registration); must be one of [RS256|RS384|RS512|PS256|PS384|PS512|HS256|HS384|HS512]"),

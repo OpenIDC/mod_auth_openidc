@@ -131,6 +131,7 @@ typedef struct oidc_provider_t {
 	int jwks_refresh_interval;
 	int idtoken_iat_slack;
 
+	char *client_jwks_uri;
 	char *id_token_signed_response_alg;
 	char *id_token_encrypted_response_alg;
 	char *id_token_encrypted_response_enc;

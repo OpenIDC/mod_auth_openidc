@@ -834,12 +834,13 @@ static apr_byte_t oidc_metadata_client_get(request_rec *r, oidc_cfg *cfg,
 							provider->client_contact));
 		}
 
-		if (cfg->public_keys != NULL) {
-//			apr_table_addn(params, "jwks_uri",
-//					apr_psprintf(r->pool, "%s?jwks=rsa", cfg->redirect_uri));
+		if (provider->client_jwks_uri) {
+			apr_table_addn(params, "jwks_uri", provider->client_jwks_uri);
+		} else if (cfg->public_keys != NULL) {
 			apr_table_addn(params, "jwks_uri",
-					"https://www.pingidentity.nl/jwks");
+					apr_psprintf(r->pool, "%s?jwks=rsa", cfg->redirect_uri));
 		}
+
 		if (provider->id_token_signed_response_alg != NULL) {
 			apr_table_addn(params, "id_token_signed_response_alg",
 					provider->id_token_signed_response_alg);
@@ -1050,6 +1051,10 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *issuer,
 	/* see if we can get valid config metadata */
 	if (oidc_metadata_conf_get(r, cfg, issuer, &j_conf) == FALSE)
 		return FALSE;
+
+	oidc_json_object_get_string(r->pool, j_conf, "client_jwks_uri",
+			&provider->client_jwks_uri,
+			cfg->provider.client_jwks_uri);
 
 	oidc_json_object_get_string(r->pool, j_conf, "id_token_signed_response_alg",
 			&provider->id_token_signed_response_alg,
