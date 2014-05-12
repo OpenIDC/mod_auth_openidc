@@ -178,29 +178,42 @@ apr_byte_t apr_jws_verify_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
 }
 
 /*
- * hash a string value with the specified algorithm
+ * hash a byte sequence with the specified algorithm
  */
-apr_byte_t apr_jws_hash_string(apr_pool_t *pool, const char *alg,
-		const char *msg, char **hash, unsigned int *hash_len) {
+apr_byte_t apr_jws_hash_bytes(apr_pool_t *pool, const char *s_digest,
+		const unsigned char *input, unsigned int input_len, unsigned char **output, unsigned int *output_len) {
 	unsigned char md_value[EVP_MAX_MD_SIZE];
 
 	EVP_MD_CTX ctx;
 	EVP_MD_CTX_init(&ctx);
 
-	const EVP_MD *digest = NULL;
-	if ((digest = apr_jws_crypto_alg_to_evp(pool, alg)) == NULL)
+	const EVP_MD *evp_digest = NULL;
+	if ((evp_digest = EVP_get_digestbyname(s_digest)) == NULL)
 		return FALSE;
 
-	EVP_DigestInit_ex(&ctx, digest, NULL);
-	EVP_DigestUpdate(&ctx, msg, strlen(msg));
-	EVP_DigestFinal_ex(&ctx, md_value, hash_len);
+	EVP_DigestInit_ex(&ctx, evp_digest, NULL);
+	EVP_DigestUpdate(&ctx, input, input_len);
+	EVP_DigestFinal_ex(&ctx, md_value, output_len);
 
 	EVP_MD_CTX_cleanup(&ctx);
 
-	*hash = apr_pcalloc(pool, *hash_len);
-	memcpy(*hash, md_value, *hash_len);
+	*output = apr_pcalloc(pool, *output_len);
+	memcpy(*output, md_value, *output_len);
 
 	return TRUE;
+}
+
+/*
+ * hash a string value with the specified algorithm
+ */
+apr_byte_t apr_jws_hash_string(apr_pool_t *pool, const char *alg,
+		const char *msg, char **hash, unsigned int *hash_len) {
+
+	char *s_digest = apr_jws_alg_to_openssl_digest(alg);
+	if (s_digest == NULL)
+		return FALSE;
+
+	return apr_jws_hash_bytes(pool, s_digest, (const unsigned char *)msg, strlen(msg), (unsigned char **)hash, hash_len);
 }
 
 /*
@@ -288,13 +301,10 @@ apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk) 
 
 		if (!EVP_PKEY_CTX_set_rsa_padding(ctx.pctx, RSA_PKCS1_PADDING))
 			goto end;
-
 		if (!EVP_VerifyInit_ex(&ctx, digest, NULL))
 			goto end;
-
 		if (!EVP_VerifyUpdate(&ctx, jwt->message, strlen(jwt->message)))
 			goto end;
-
 		if (!EVP_VerifyFinal(&ctx, (const unsigned char *) jwt->signature.bytes,
 				jwt->signature.length, pRsaKey))
 			goto end;
@@ -303,7 +313,8 @@ apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk) 
 
 	}
 
-	end: if (pRsaKey) {
+end:
+	if (pRsaKey) {
 		EVP_PKEY_free(pRsaKey);
 	} else if (pubkey) {
 		RSA_free(pubkey);
@@ -368,22 +379,21 @@ apr_byte_t apr_jws_verify_ec(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk) {
 	}
 
 	ctx.pctx = EVP_PKEY_CTX_new(pEcKey, NULL);
+
 	if (!EVP_PKEY_verify_init(ctx.pctx))
 		goto end;
-
 	if (!EVP_VerifyInit_ex(&ctx, digest, NULL))
 		goto end;
-
 	if (!EVP_VerifyUpdate(&ctx, jwt->message, strlen(jwt->message)))
 		goto end;
-
 	if (!EVP_VerifyFinal(&ctx, (const unsigned char *) jwt->signature.bytes,
 			jwt->signature.length, pEcKey))
 		goto end;
 
 	rc = TRUE;
 
-	end: if (pEcKey) {
+end:
+	if (pEcKey) {
 		EVP_PKEY_free(pEcKey);
 	} else if (pubkey) {
 		EC_KEY_free(pubkey);

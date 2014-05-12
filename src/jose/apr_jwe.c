@@ -68,10 +68,8 @@
 apr_array_header_t *apr_jwe_supported_algorithms(apr_pool_t *pool) {
 	apr_array_header_t *result = apr_array_make(pool, 3, sizeof(const char*));
 	*(const char**) apr_array_push(result) = "RSA1_5";
-	/*
-	 *(const char**) apr_array_push(result) = "A128KW";
-	 *(const char**) apr_array_push(result) = "A256KW";
-	 */
+	*(const char**) apr_array_push(result) = "A128KW";
+	*(const char**) apr_array_push(result) = "A256KW";
 	return result;
 }
 
@@ -88,9 +86,7 @@ apr_byte_t apr_jwe_algorithm_is_supported(apr_pool_t *pool, const char *alg) {
 apr_array_header_t *apr_jwe_supported_encryptions(apr_pool_t *pool) {
 	apr_array_header_t *result = apr_array_make(pool, 3, sizeof(const char*));
 	*(const char**) apr_array_push(result) = "A128CBC-HS256";
-	/*
-	 *(const char**) apr_array_push(result) = "A256CBC-HS512";
-	 */
+	*(const char**) apr_array_push(result) = "A256CBC-HS512";
 	return result;
 }
 
@@ -110,23 +106,35 @@ apr_byte_t apr_jwe_is_encrypted_jwt(apr_pool_t *pool, apr_jwt_header_t *hdr) {
 }
 
 /*
+ * return OpenSSL cipher for JWE encryption algorithm
+ */
+static const EVP_CIPHER *apr_jwe_enc_to_openssl_cipher(const char *enc) {
+	if (apr_strnatcmp(enc, "A128CBC-HS256") == 0) {
+		return EVP_aes_128_cbc();
+	}
+	if (apr_strnatcmp(enc, "A256CBC-HS512") == 0) {
+		return EVP_aes_256_cbc();
+	}
+	return NULL;
+}
+
+/*
+ * return OpenSSL hash for JWE encryption algorithm
+ */
+static const EVP_MD *apr_jwe_enc_to_openssl_hash(const char *enc) {
+	if (apr_strnatcmp(enc, "A128CBC-HS256") == 0) {
+		return EVP_sha256();
+	}
+	if (apr_strnatcmp(enc, "A256CBC-HS512") == 0) {
+		return EVP_sha512();
+	}
+	return NULL;
+}
+
+/*
  * convert a JWK (RSA) key to an OpenSSL RSA key
  */
-static RSA * apr_jwe_jwk_to_openssl_rsa_key(apr_pool_t *pool,
-		const char *public_key_jwk) {
-
-	apr_json_value_t *j_jwk = NULL;
-	if (apr_json_decode(&j_jwk, public_key_jwk, strlen(public_key_jwk),
-			pool) != APR_SUCCESS)
-		return NULL;
-
-	if ((j_jwk == NULL) || (j_jwk->type != APR_JSON_OBJECT))
-		return NULL;
-
-	apr_jwk_t *jwk = NULL;
-	if (apr_jwk_parse_json(pool, j_jwk, public_key_jwk, &jwk) == FALSE)
-		return NULL;
-
+static RSA* apr_jwe_jwk_to_openssl_rsa_key(apr_jwk_t *jwk) {
 	RSA * key = RSA_new();
 
 	BIGNUM * modulus = BN_new();
@@ -136,17 +144,151 @@ static RSA * apr_jwe_jwk_to_openssl_rsa_key(apr_pool_t *pool,
 	BN_bin2bn(jwk->key.rsa->exponent, jwk->key.rsa->exponent_len, exponent);
 
 	BIGNUM * private = NULL;
+	/* check if there's a private_exponent component, i.e. this is a private key */
 	if (jwk->key.rsa->private_exponent != NULL) {
-	private = BN_new();
-		BN_bin2bn(jwk->key.rsa->private_exponent,
-				jwk->key.rsa->private_exponent_len, private);
+		private = BN_new();
+			BN_bin2bn(jwk->key.rsa->private_exponent,
+					jwk->key.rsa->private_exponent_len, private);
 	}
 
 	key->n = modulus;
 	key->e = exponent;
+	/* private is NULL for public keys */
 	key->d = private;
 
 	return key;
+}
+
+/*
+ * convert a JSON JWK key to an OpenSSL RSA key
+ */
+static RSA * apr_jwe_jwk_json_to_openssl_rsa_key(apr_pool_t *pool,
+		const char *jwk_json) {
+
+	apr_json_value_t *j_jwk = NULL;
+	if (apr_json_decode(&j_jwk, jwk_json, strlen(jwk_json),
+			pool) != APR_SUCCESS)
+		return NULL;
+
+	if ((j_jwk == NULL) || (j_jwk->type != APR_JSON_OBJECT))
+		return NULL;
+
+	apr_jwk_t *jwk = NULL;
+	if (apr_jwk_parse_json(pool, j_jwk, jwk_json, &jwk) == FALSE)
+		return NULL;
+
+	return apr_jwe_jwk_to_openssl_rsa_key(jwk);
+}
+
+/*
+ * pointer to base64url decoded JWT elements
+ */
+typedef struct apr_jwe_unpacked_t {
+	char *value;
+	int len;
+} apr_jwe_unpacked_t;
+
+/*
+ * base64url decode deserialized JWT elements
+ */
+static apr_array_header_t *apr_jwe_unpacked_base64url_decode(apr_pool_t *pool, apr_array_header_t *unpacked) {
+	apr_array_header_t *result = apr_array_make(pool, unpacked->nelts, sizeof(const char*));
+	int i;
+	for (i = 0; i < unpacked->nelts; i++) {
+		apr_jwe_unpacked_t *elem = apr_pcalloc(pool, sizeof(apr_jwe_unpacked_t));
+		elem->len = apr_jwt_base64url_decode(pool, &elem->value, ((const char**) unpacked->elts)[i], 1);
+		if (elem->len <= 0) continue;
+		APR_ARRAY_PUSH(result, apr_jwe_unpacked_t *) = elem;
+	}
+	return result;
+}
+
+/* indexes in to a compact serialized JSON element */
+#define APR_JWE_ENCRYPTED_KEY_INDEX         1
+#define APR_JWE_INITIALIZATION_VECTOR_INDEX 2
+#define APR_JWE_CIPHER_TEXT_INDEX           3
+#define APR_JWE_AUTHENTICATION_TAG_INDEX    4
+
+/*
+ * decrypt RSA encrypted Content Encryption Key
+ */
+static apr_byte_t apr_jwe_decrypt_cek_rsa(apr_pool_t *pool, apr_jwt_header_t *header, apr_array_header_t *unpacked_decoded, apr_hash_t *private_keys, unsigned char **cek, int *cek_len) {
+
+	RSA *pkey = NULL;
+	const char *private_key_jwk = NULL;
+	apr_byte_t rv = FALSE;
+
+	/* need RSA private keys set to decrypt */
+	if (private_keys == NULL)
+		goto end;
+
+	/*
+	 * if there's a key identifier set, try and find the corresponding private
+	 * key or else just use the first key in the list of private keys (JWKs)
+	 */
+	if (header->kid != NULL) {
+		private_key_jwk = apr_hash_get(private_keys, header->kid, APR_HASH_KEY_STRING);
+	} else {
+		apr_hash_index_t *hi = apr_hash_first(NULL, private_keys);
+		apr_hash_this(hi, NULL, NULL, (void**) &private_key_jwk);
+	}
+
+	/* by now we should really have a private key set */
+	if (private_key_jwk == NULL)
+		goto end;
+
+	/* convert the private key to an OpenSSL RSA representation */
+	if ((pkey = apr_jwe_jwk_json_to_openssl_rsa_key(pool, private_key_jwk)) == NULL)
+		goto end;
+
+	/* find and decrypt Content Encryption Key */
+	apr_jwe_unpacked_t *encrypted_key = ((apr_jwe_unpacked_t **) unpacked_decoded->elts)[APR_JWE_ENCRYPTED_KEY_INDEX];
+	*cek = apr_pcalloc(pool, RSA_size(pkey));
+	*cek_len = RSA_private_decrypt(encrypted_key->len,
+			(const unsigned char *) encrypted_key->value, *cek, pkey,
+			RSA_PKCS1_PADDING);
+
+	/* set return value based on decrypt result */
+	rv = (cek_len > 0);
+
+end:
+	if (pkey) RSA_free(pkey);
+
+	return rv;
+}
+
+/*
+ * decrypt AES wrapped Content Encryption Key
+ */
+static apr_byte_t apr_jwe_cek_aes_unwrap_key(apr_pool_t *pool, apr_jwt_header_t *header, apr_array_header_t *unpacked_decoded, const char *shared_key, unsigned char **cek, int *cek_len) {
+
+	/* sha256 hash the client_secret first */
+	unsigned char *hashed_key = NULL;
+	unsigned int hashed_key_len = 0;
+	apr_jws_hash_bytes(pool, "sha256", (const unsigned char *)shared_key, strlen(shared_key), &hashed_key, &hashed_key_len);
+
+	/* determine key length in bits */
+	int key_bits_len = (apr_strnatcmp(header->alg, "A128KW") == 0) ? 128 : 256;
+	/* set the hashed secret as the AES decryption key */
+	AES_KEY akey;
+	AES_set_decrypt_key((const unsigned char *)hashed_key, key_bits_len, &akey);
+
+	/* determine the Content Encryption Key key length based on the content encryption algorithm */
+	*cek_len = (apr_strnatcmp(header->enc, "A128CBC-HS256") == 0) ? 32 : 64;
+
+	/* get the encrypted key from the compact serialized JSON representation */
+	apr_jwe_unpacked_t *encrypted_key = APR_ARRAY_IDX(unpacked_decoded, APR_JWE_ENCRYPTED_KEY_INDEX, apr_jwe_unpacked_t *);
+
+	/* get the Initialization Vector from the compact serialized JSON representation */
+	//apr_jwe_unpacked_t *iv = APR_ARRAY_IDX(unpacked_decoded, APR_JWE_INITIALIZATION_VECTOR_INDEX, apr_jwe_unpacked_t *);
+	//ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r, "iv_len: %d, (should be 16)", iv->len);
+
+	/* unwrap the AES key */
+	*cek = apr_pcalloc(pool, *cek_len);
+	int rv = AES_unwrap_key(&akey, (const unsigned char*)NULL, *cek, (const unsigned char *)encrypted_key->value, encrypted_key->len);
+
+	/* return success based on the return value of AES_unwrap_key */
+	return (rv > 0);
 }
 
 /*
@@ -154,128 +296,106 @@ static RSA * apr_jwe_jwk_to_openssl_rsa_key(apr_pool_t *pool,
  */
 apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header,
 		apr_array_header_t *unpacked, apr_hash_t *private_keys,
-		char **decrypted) {
+		const char *shared_key, char **decrypted) {
 
-	if (unpacked->nelts != 5) return FALSE;
+	unsigned char *cek = NULL;
+	int cek_len = 0;
 
-	/* extract the encryption key */
-	char *encrypted_key = NULL;
-	int encrypted_key_len = apr_jwt_base64url_decode(pool, &encrypted_key,
-			((const char**) unpacked->elts)[1], 1);
-	if (encrypted_key_len < 0)
+	/* base64url decode all elements of the compact serialized JSON representation */
+	apr_array_header_t *unpacked_decoded = apr_jwe_unpacked_base64url_decode(pool, unpacked);
+
+	/* since this is an encrypted JWT it must have 5 elements */
+	if (unpacked_decoded->nelts != 5)
 		return FALSE;
 
-	/* extract the initialization vector */
-	char *iv = NULL;
-	int iv_len = apr_jwt_base64url_decode(pool, &iv,
-			((const char**) unpacked->elts)[2], 1);
-	if (iv_len < 0)
-		return FALSE;
-
-	/* extract the ciphertext */
-	char *ciphertext = NULL;
-	int ciphertext_len = apr_jwt_base64url_decode(pool, &ciphertext,
-			((const char**) unpacked->elts)[3], 1);
-	if (ciphertext_len < 0)
-		return FALSE;
-
-	/* extract the authentication tag */
-	char *tag = NULL;
-	int tag_len = apr_jwt_base64url_decode(pool, &tag,
-			((const char**) unpacked->elts)[4], 1);
-	if (tag_len < 0)
-		return FALSE;
-
-	if (private_keys == NULL)
-		return FALSE;
-
-	const char *private_key_jwk = NULL;
-	if (private_keys != NULL) {
-		if (header->kid != NULL) {
-			apr_hash_get(private_keys, header->kid, APR_HASH_KEY_STRING);
-		} else {
-			apr_hash_index_t *hi = apr_hash_first(NULL, private_keys);
-			apr_hash_this(hi, NULL, NULL, (void**) &private_key_jwk);
-		}
+	/* decrypt the Content Encryption Key based on the content key encryption algorithm in the header */
+	if (apr_strnatcmp(header->alg, "RSA1_5") == 0) {
+		if (apr_jwe_decrypt_cek_rsa(pool, header, unpacked_decoded, private_keys,
+				&cek, &cek_len) == FALSE)
+			return FALSE;
+	} else if ((apr_strnatcmp(header->alg, "A128KW") == 0)
+			|| (apr_strnatcmp(header->alg, "A256KW") == 0)) {
+		if (apr_jwe_cek_aes_unwrap_key(pool, header, unpacked_decoded,
+				shared_key, &cek, &cek_len) == FALSE)
+			return FALSE;
 	}
 
-	if (private_key_jwk == NULL)
-		return FALSE;
+	/* get the other elements (Initialization Vector, encrypted text and Authentication Tag) from the compact serialized JSON representation */
+	apr_jwe_unpacked_t *iv = APR_ARRAY_IDX(unpacked_decoded, APR_JWE_INITIALIZATION_VECTOR_INDEX, apr_jwe_unpacked_t *);
+	apr_jwe_unpacked_t *cipher_text = APR_ARRAY_IDX(unpacked_decoded, APR_JWE_CIPHER_TEXT_INDEX, apr_jwe_unpacked_t *);
+	apr_jwe_unpacked_t *auth_tag = APR_ARRAY_IDX(unpacked_decoded, APR_JWE_AUTHENTICATION_TAG_INDEX, apr_jwe_unpacked_t *);
 
-	RSA *pkey = apr_jwe_jwk_to_openssl_rsa_key(pool, private_key_jwk);
-	if (pkey == NULL)
-		return FALSE;
-
-	unsigned char *cek = apr_pcalloc(pool, RSA_size(pkey));
-	int cek_len = RSA_private_decrypt(encrypted_key_len,
-			(const unsigned char *) encrypted_key, cek, pkey,
-			RSA_PKCS1_PADDING);
-	if (cek_len < 0)
-		return FALSE;
-
+	/* extract MAC key from CEK: second half of CEK bits */
 	unsigned char *mac_key = apr_pcalloc(pool, cek_len / 2);
 	memcpy(mac_key, cek, cek_len / 2);
+	/* extract encryption key from CEK: first half of CEK bits */
 	unsigned char *enc_key = apr_pcalloc(pool, cek_len / 2);
 	memcpy(enc_key, cek + cek_len / 2, cek_len / 2);
 
+	/* determine the Additional Authentication Data: the protected JSON header */
 	char *aad = NULL;
 	apr_jwt_base64url_encode(pool, &aad, (const char *) header->value.str, strlen( header->value.str), 0);
 	int aad_len = strlen(aad);
+
+	/* Additional Authentication Data length in # of bits in 64 bit length field */
 	int64_t al = aad_len * 8;
 
-	int msg_len = aad_len + iv_len + ciphertext_len + sizeof(int64_t);
+	/* concatenate AAD + IV + ciphertext + AAD length field */
+	int msg_len = aad_len + iv->len + cipher_text->len + sizeof(int64_t);
 	const unsigned char *msg = apr_pcalloc(pool, msg_len);
 	char *p = (char*)msg;
 	memcpy(p, aad, aad_len);
 	p += aad_len;
-	memcpy(p, iv, iv_len);
-	p += iv_len;
-	memcpy(p, ciphertext, ciphertext_len);
-	p += ciphertext_len;
-
-	int i;
+	memcpy(p, iv->value, iv->len);
+	p += iv->len;
+	memcpy(p, cipher_text->value, cipher_text->len);
+	p += cipher_text->len;
 	char *src = (char *)&al;
-	// big endian
+	// reverse AAD length for big endian representation
+	int i;
 	for (i=0; i < sizeof(int64_t); ++i) p[sizeof(int64_t)-1-i] = src[i];
 
+	/* calculate the Authentication Tag value over AAD + IV + ciphertext + AAD length */
 	unsigned int md_len = 0;
 	unsigned char md[EVP_MAX_MD_SIZE];
-	if (!HMAC(EVP_sha256(), mac_key, cek_len / 2, msg, msg_len, md, &md_len))
+	if (!HMAC(apr_jwe_enc_to_openssl_hash(header->enc), mac_key, cek_len / 2, msg, msg_len, md, &md_len))
 			return FALSE;
-
-	/* use only the first half (128) of the 256 bits */
+	/* use only the first half of the bits */
 	md_len = md_len / 2;
 
-	if (md_len != tag_len)
+	/* verify the provided Authentication Tag against what we've calculated ourselves */
+	if (md_len != auth_tag->len)
+		return FALSE;
+	if (memcmp(md, auth_tag->value, md_len) != 0)
 		return FALSE;
 
-	if (memcmp(md, tag, md_len) != 0)
-		return FALSE;
+	/* if everything still OK, now AES (128/256) decrypt the ciphertext */
 
-	EVP_CIPHER_CTX decrypt_ctx;
-	EVP_CIPHER_CTX_init(&decrypt_ctx);
-	if (!EVP_DecryptInit_ex(&decrypt_ctx, EVP_aes_128_cbc(), NULL, enc_key,
-			(const unsigned char *) iv))
-		return FALSE;
-
-	int p_len = ciphertext_len, f_len = 0;
+	int p_len = cipher_text->len, f_len = 0;
+	/* allocate ciphertext length + one block padding for plaintext */
 	unsigned char *plaintext = apr_palloc(pool, p_len + AES_BLOCK_SIZE);
 
-	if (!EVP_DecryptUpdate(&decrypt_ctx, plaintext, &p_len,
-			(const unsigned char *) ciphertext, ciphertext_len))
+	/* initialize decryption context */
+	EVP_CIPHER_CTX decrypt_ctx;
+	EVP_CIPHER_CTX_init(&decrypt_ctx);
+	/* pass the extracted encryption key and Initialization Vector */
+	if (!EVP_DecryptInit_ex(&decrypt_ctx, apr_jwe_enc_to_openssl_cipher(header->enc), NULL, enc_key,
+			(const unsigned char *) iv->value))
 		return FALSE;
-
-	/* update plaintext with the final remaining bytes */
+	/* decrypt the ciphertext in to the plaintext */
+	if (!EVP_DecryptUpdate(&decrypt_ctx, plaintext, &p_len,
+			(const unsigned char *) cipher_text->value, cipher_text->len))
+		return FALSE;
+	/* decrypt the remaining bits/padding */
 	if (!EVP_DecryptFinal_ex(&decrypt_ctx, plaintext + p_len, &f_len))
 		return FALSE;
 
-	int len = p_len + f_len;
-	plaintext[len] = '\0';
-
-	EVP_CIPHER_CTX_cleanup(&decrypt_ctx);
-	RSA_free(pkey);
-
+	plaintext[p_len + f_len] = '\0';
 	*decrypted = (char *) plaintext;
 
+	/* cleanup */
+	EVP_CIPHER_CTX_cleanup(&decrypt_ctx);
+
+	/* if we got here, all must be fine */
 	return TRUE;
 }

@@ -620,7 +620,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_proto_parse_idtoken: entering");
 
-	if (apr_jwt_parse(r->pool, id_token, jwt, cfg->private_keys) == FALSE) {
+	if (apr_jwt_parse(r->pool, id_token, jwt, cfg->private_keys, provider->client_secret) == FALSE) {
 		if ((*jwt) && ((*jwt)->header.alg)
 				&& (apr_jwe_algorithm_is_supported(r->pool, (*jwt)->header.alg)
 						== FALSE)) {
@@ -636,9 +636,12 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 					(*jwt)->header.enc);
 		}
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_parse_idtoken: apr_jwt_parse failed, aborting");
+				"oidc_proto_parse_idtoken: apr_jwt_parse failed for JWT with header: \"%s\"", apr_jwt_header_to_string(r->pool, id_token));
 		return FALSE;
 	}
+
+	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+			"oidc_proto_parse_idtoken: successfully parsed (and possibly decrypted) JWT with header: \"%s\"", apr_jwt_header_to_string(r->pool, id_token));
 
 	// TODO: make signature validation exception for 'code' flow and the algorithm NONE
 	apr_byte_t refresh = FALSE;

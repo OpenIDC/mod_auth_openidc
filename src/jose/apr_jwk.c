@@ -190,60 +190,101 @@ apr_byte_t apr_jwk_parse_string(apr_pool_t *pool, const char *s_json,
 }
 
 /*
+ * convert OpenSSL BIGNUM type to base64url-encoded raw bytes value
+ */
+static apr_byte_t apr_jwk_bignum_base64enc(apr_pool_t *pool, BIGNUM *v,
+		unsigned char **v_enc, int *v_len) {
+	*v_len = BN_num_bytes(v);
+	unsigned char *v_bytes = apr_pcalloc(pool, *v_len);
+	BN_bn2bin(v, v_bytes);
+	return apr_jwt_base64url_encode(pool, (char **) v_enc,
+			(const char *) v_bytes, *v_len, 0);
+}
+
+/*
+ * convert OpenSSL EVP public/private key to JWK JSON and kid
+ */
+static apr_byte_t apr_jwk_openssl_evp_pkey_rsa_to_json(apr_pool_t *pool,
+		EVP_PKEY *pkey, char **jwk, char**kid) {
+
+	RSA *rsa = EVP_PKEY_get1_RSA(pkey);
+
+	unsigned char *n_enc = NULL;
+	int n_len = 0;
+	if (apr_jwk_bignum_base64enc(pool, rsa->n, &n_enc, &n_len) == FALSE)
+		return FALSE;
+
+	unsigned char *e_enc = NULL;
+	int e_len = 0;
+	if (apr_jwk_bignum_base64enc(pool, rsa->e, &e_enc, &e_len) == FALSE)
+		return FALSE;
+
+	unsigned char *d_enc = NULL;
+	int d_len = 0;
+	if (rsa->d) {
+		if (apr_jwk_bignum_base64enc(pool, rsa->d, &d_enc, &d_len) == FALSE)
+			return FALSE;
+	}
+
+	/* calculate a unique key identifier (kid) by fingerprinting the key params */
+	// TODO: based just on sha1 hash of baseurl-encoded "n" now...
+	unsigned int fp_len = SHA_DIGEST_LENGTH;
+	unsigned char fp[SHA_DIGEST_LENGTH];
+	if (!SHA1(n_enc, n_len, fp))
+		return FALSE;
+	char *fp_enc = NULL;
+	if (apr_jwt_base64url_encode(pool, &fp_enc, (const char *) fp, fp_len,
+			0) == FALSE)
+		return FALSE;
+
+	char *p = apr_psprintf(pool, "{ \"kty\" : \"RSA\"");
+	p = apr_psprintf(pool, "%s, \"n\": \"%s\"", p, n_enc);
+	p = apr_psprintf(pool, "%s, \"e\": \"%s\"", p, e_enc);
+	if (d_enc != NULL)
+		p = apr_psprintf(pool, "%s, \"d\": \"%s\"", p, d_enc);
+	p = apr_psprintf(pool, "%s, \"kid\" : \"%s\"", p, fp_enc);
+	p = apr_psprintf(pool, "%s }", p);
+
+	*jwk = p;
+	*kid = fp_enc;
+
+	return TRUE;
+}
+
+/*
  * convert the RSA public key in the X.509 certificate in the file pointed to
  * by "filename" to a JSON Web Key object
  */
 apr_byte_t apr_jwk_x509_to_rsa_jwk(apr_pool_t *pool, const char *filename,
 		char **jwk, char**kid) {
 
+	BIO *input = NULL;
 	X509 *x509 = NULL;
-	BIO *input = BIO_new(BIO_s_file());
+	EVP_PKEY *pkey = NULL;
 
-	if ((BIO_read_filename(input, filename) <= 0) || ((x509 =
-			PEM_read_bio_X509_AUX(input, NULL, NULL, NULL)) == NULL)) {
-		return FALSE;
-	}
+	apr_byte_t rv = FALSE;
 
-	EVP_PKEY *pubkey = X509_get_pubkey(x509);
-	RSA *rsa = EVP_PKEY_get1_RSA(pubkey);
+	if ((input = BIO_new(BIO_s_file())) == NULL)
+		goto end;
+	if (BIO_read_filename(input, filename) <= 0)
+		goto end;
+	if ((x509 = PEM_read_bio_X509_AUX(input, NULL, NULL, NULL)) == NULL)
+		goto end;
+	if ((pkey = X509_get_pubkey(x509)) == NULL)
+		goto end;
 
-	int n_len = BN_num_bytes(rsa->n);
-	unsigned char *n = apr_pcalloc(pool, n_len);
-	BN_bn2bin(rsa->n, n);
-	char *n_enc = NULL;
-	apr_jwt_base64url_encode(pool, &n_enc, (const char *) n, n_len, 0);
+	rv = apr_jwk_openssl_evp_pkey_rsa_to_json(pool, pkey, jwk, kid);
 
-	int e_len = BN_num_bytes(rsa->e);
-	unsigned char *e = apr_pcalloc(pool, e_len);
-	BN_bn2bin(rsa->e, e);
-	char *e_enc = NULL;
-	apr_jwt_base64url_encode(pool, &e_enc, (const char *) e, e_len, 0);
+end:
 
-	/*
-	 unsigned int fp_len;
-	 unsigned char fp[EVP_MAX_MD_SIZE];
-	 if (!X509_digest(x509, EVP_sha1(), fp, &fp_len)) return FALSE;
-	 char *fp_enc = NULL;
-	 apr_jwt_base64url_encode(pool, &fp_enc, (const char *)fp, fp_len);
-	 */
-	unsigned int fp_len = SHA_DIGEST_LENGTH;
-	unsigned char fp[SHA_DIGEST_LENGTH];
-	if (!SHA1(n, n_len, fp))
-		return FALSE;
-	char *fp_enc = NULL;
-	apr_jwt_base64url_encode(pool, &fp_enc, (const char *) fp, fp_len, 0);
+	if (pkey)
+		EVP_PKEY_free(pkey);
+	if (x509)
+		X509_free(x509);
+	if (input)
+		BIO_free(input);
 
-	*jwk =
-			apr_psprintf(pool,
-					"{ \"kty\" : \"RSA\", \"n\": \"%s\", \"e\": \"%s\", \"kid\" : \"%s\" }",
-					n_enc, e_enc, fp_enc);
-	*kid = fp_enc;
-
-	EVP_PKEY_free(pubkey);
-	X509_free(x509);
-	BIO_free(input);
-
-	return TRUE;
+	return rv;
 }
 
 /*
@@ -252,48 +293,24 @@ apr_byte_t apr_jwk_x509_to_rsa_jwk(apr_pool_t *pool, const char *filename,
 apr_byte_t apr_jwk_private_key_to_rsa_jwk(apr_pool_t *pool,
 		const char *filename, char **jwk, char**kid) {
 
-	EVP_PKEY *pkey;
-	BIO *input = BIO_new(BIO_s_file());
+	BIO *input = NULL;
+	EVP_PKEY *pkey = NULL;
 
-	if ((BIO_read_filename(input, filename) <= 0) || ((pkey =
-			PEM_read_bio_PrivateKey(input, NULL, NULL, NULL)) == NULL)) {
-		return FALSE;
-	}
-	RSA *rsa = EVP_PKEY_get1_RSA(pkey);
+	apr_byte_t rv = FALSE;
 
-	int n_len = BN_num_bytes(rsa->n);
-	unsigned char *n = apr_pcalloc(pool, n_len);
-	BN_bn2bin(rsa->n, n);
-	char *n_enc = NULL;
-	apr_jwt_base64url_encode(pool, &n_enc, (const char *) n, n_len, 0);
+	if ((input = BIO_new(BIO_s_file())) == NULL)
+		goto end;
+	if (BIO_read_filename(input, filename) <= 0)
+		goto end;
+	if ((pkey = PEM_read_bio_PrivateKey(input, NULL, NULL, NULL)) == NULL)
+		goto end;
 
-	int e_len = BN_num_bytes(rsa->e);
-	unsigned char *e = apr_pcalloc(pool, e_len);
-	BN_bn2bin(rsa->e, e);
-	char *e_enc = NULL;
-	apr_jwt_base64url_encode(pool, &e_enc, (const char *) e, e_len, 0);
+	rv = apr_jwk_openssl_evp_pkey_rsa_to_json(pool, pkey, jwk, kid);
 
-	int d_len = BN_num_bytes(rsa->d);
-	unsigned char *d = apr_pcalloc(pool, d_len);
-	BN_bn2bin(rsa->d, d);
-	char *d_enc = NULL;
-	apr_jwt_base64url_encode(pool, &d_enc, (const char *) d, d_len, 0);
+end: if (pkey)
+		EVP_PKEY_free(pkey);
+	if (input)
+		BIO_free(input);
 
-	unsigned int fp_len = SHA_DIGEST_LENGTH;
-	unsigned char fp[SHA_DIGEST_LENGTH];
-	if (!SHA1(n, n_len, fp))
-		return FALSE;
-	char *fp_enc = NULL;
-	apr_jwt_base64url_encode(pool, &fp_enc, (const char *) fp, fp_len, 0);
-
-	*jwk =
-			apr_psprintf(pool,
-					"{ \"kty\" : \"RSA\", \"n\": \"%s\", \"e\": \"%s\", \"d\": \"%s\", \"kid\" : \"%s\" }",
-					n_enc, e_enc, d_enc, fp_enc);
-	*kid = fp_enc;
-
-	EVP_PKEY_free(pkey);
-	BIO_free(input);
-
-	return TRUE;
+	return rv;
 }

@@ -1,3 +1,8 @@
+5/12/2014
+- support encrypted JWTs using A128KW and A256KW for the Content Encryption Key
+- support A256CBC-HS512 encrypted JWTs
+- support custom client JWKs URI
+
 5/8/2014
 - support encrypted JWTs using RSA1_5 and A128CBC-HS256
 

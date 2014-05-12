@@ -273,10 +273,21 @@ static apr_array_header_t *apr_jwt_compact_deserialize(apr_pool_t *pool,
 }
 
 /*
+ * return plain deserialized header text
+ */
+const char *apr_jwt_header_to_string(apr_pool_t *pool, const char *s_json) {
+	apr_array_header_t *unpacked = apr_jwt_compact_deserialize(pool, s_json);
+	apr_jwt_header_t header;
+	if (apr_jwt_parse_header(pool, ((const char**) unpacked->elts)[0],
+			&header) == FALSE) return NULL;
+	return header.value.str;
+}
+
+/*
  * parse a JSON Web Token
  */
 apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
-		apr_jwt_t **j_jwt, apr_hash_t *private_keys) {
+		apr_jwt_t **j_jwt, apr_hash_t *private_keys, const char *shared_key) {
 
 	*j_jwt = apr_pcalloc(pool, sizeof(apr_jwt_t));
 	apr_jwt_t *jwt = *j_jwt;
@@ -291,7 +302,7 @@ apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
 	if (apr_jwe_is_encrypted_jwt(pool, &jwt->header)) {
 		char *decrypted = NULL;
 		if ((apr_jwe_decrypt_jwt(pool, &jwt->header, unpacked, private_keys,
-				&decrypted) == TRUE) && (decrypted != NULL)) {
+				shared_key, &decrypted) == TRUE) && (decrypted != NULL)) {
 			apr_array_clear(unpacked);
 			unpacked = apr_jwt_compact_deserialize(pool,
 					(const char *) decrypted);

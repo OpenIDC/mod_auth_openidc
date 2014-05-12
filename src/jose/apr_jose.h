@@ -124,13 +124,14 @@ int apr_jwt_base64url_encode(apr_pool_t *pool, char **dst, const char *src,
 		int src_len, int padding);
 int apr_jwt_base64url_decode(apr_pool_t *pool, char **dst, const char *src,
 		int padding);
+const char *apr_jwt_header_to_string(apr_pool_t *pool, const char *s_json);
 
 /* return a string claim value from a JSON Web Token */
 apr_byte_t apr_jwt_get_string(apr_pool_t *pool, apr_jwt_value_t *value,
 		const char *claim_name, char **result);
 /* parse a string in to a JSON Web Token struct */
 apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
-		apr_jwt_t **j_jwt, apr_hash_t *private_keys);
+		apr_jwt_t **j_jwt, apr_hash_t *private_keys, const char *shared_key);
 
 /*
  * JSON Web Key handling
@@ -219,6 +220,9 @@ apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk);
 /* verify the Elliptic Curve signature on a JWT */
 apr_byte_t apr_jws_verify_ec(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk);
 
+/* hash byte sequence */
+apr_byte_t apr_jws_hash_bytes(apr_pool_t *pool, const char *s_digest,
+		const unsigned char *input, unsigned int input_len, unsigned char **output, unsigned int *output_len);
 /* hash a string */
 apr_byte_t apr_jws_hash_string(apr_pool_t *pool, const char *alg,
 		const char *msg, char **hash, unsigned int *hash_len);
@@ -239,6 +243,6 @@ apr_array_header_t *apr_jwe_supported_encryptions(apr_pool_t *pool);
 apr_byte_t apr_jwe_encryption_is_supported(apr_pool_t *pool, const char *enc);
 
 apr_byte_t apr_jwe_is_encrypted_jwt(apr_pool_t *pool, apr_jwt_header_t *hdr);
-apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header, apr_array_header_t *unpacked, apr_hash_t *private_keys, char **decrypted);
+apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header, apr_array_header_t *unpacked, apr_hash_t *private_keys, const char *shared_key, char **decrypted);
 
 #endif /* _APR_JOSE_H_ */
