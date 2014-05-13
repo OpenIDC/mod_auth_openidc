@@ -146,9 +146,17 @@ int oidc_proto_authorization_request(request_rec *r,
 				authorization_request,
 				oidc_util_escape_string(r, proto_state->response_mode));
 
+	/* preserve POSTed form parameters if enabled */
 	if (apr_strnatcmp(proto_state->original_method, "form_post") == 0)
 		return oidc_proto_authorization_request_post_preserve(r,
 				authorization_request);
+
+	/* add any custom authorization request parameters if configured */
+	if (provider->auth_request_params != NULL) {
+		authorization_request = apr_psprintf(r->pool, "%s&%s",
+				authorization_request,
+				provider->auth_request_params);
+	}
 
 	/* add the redirect location header */
 	apr_table_add(r->headers_out, "Location", authorization_request);

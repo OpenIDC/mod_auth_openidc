@@ -28,9 +28,9 @@ Discovery through domain or account names.
 
 Additionally it can operate as an OAuth 2.0 Resource Server to a PingFederate
 OAuth 2.0 Authorization Server, validating Bearer access_tokens against
-PingFederate. In that case it sets the REMOTE_USER variable to the "Username"
-claim and matches the claims in the intro-spected access_token against the
-Requires primitive.
+PingFederate. In that case it sets the REMOTE_USER variable to a configured 
+claim (the default is "Username") and matches the claims in the resolved for
+the access_token against the Requires primitive.
 
 It implements server-side caching across different Apache processes through one
 of the following options:
@@ -45,7 +45,7 @@ of the following options:
 
 For an exhaustive description of all configuration options, see the file
   auth_openidc.conf
-in this directory. This file can alse serve as an include file for httpd.conf.
+in this directory. This file can also serve as an include file for httpd.conf.
 
 
 
@@ -101,7 +101,7 @@ contains Dynamic Client Registration specific JSON metadata (based on the OpenID
 Connect Client Registration specification) and the filename
 is the url-encoded issuer name of the OP that this client is registered with.
 
-Sample client metdata for issuer https://localhost:9031, so the client metadata
+Sample client metadata for issuer https://localhost:9031, so the client metadata
 filename is: "localhost%3A9031.client"
 ==========================================================
 {
@@ -131,6 +131,7 @@ Entries that can be included in the .conf file are:
   "userinfo_signed_response_alg"       overrides OIDCUserInfoSignedResponseAlg on a per-client basis
   "userinfo_encrypted_response_alg"    overrides OIDCUserInfoEncryptedResponseAlg on a per-client basis
   "userinfo_encrypted_response_enc"    overrides OIDCUserInfoEncryptedResponseEnc on a per-client basis
+  "auth_request_params"                overrides OIDCAuthRequestParams on a per-client basis
 
 Sample client metdata for issuer https://localhost:9031, so the client metadata
 filename is: "localhost%3A9031.conf"

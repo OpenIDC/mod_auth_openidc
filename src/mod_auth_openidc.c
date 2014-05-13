@@ -78,6 +78,7 @@
 
 #include "mod_auth_openidc.h"
 
+// TODO: improve redirect_uri = content handling
 // TODO: harmonize user facing error handling
 
 // TODO: documentation:

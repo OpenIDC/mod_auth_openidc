@@ -1,3 +1,6 @@
+5/13/2014
+- support configurable (custom) query parameters in the authorization request
+
 5/12/2014
 - support encrypted JWTs using A128KW and A256KW for the Content Encryption Key
 - support A256CBC-HS512 encrypted JWTs
