@@ -1,3 +1,8 @@
+5/17/2014
+- support outgoing proxy using OIDCOutgoingProxy
+- correct sample configs in documentation for missing OIDCCookiePath
+- support OIDCCookiePath in server-wide config as well
+
 5/13/2014
 - support configurable (custom) query parameters in the authorization request
 

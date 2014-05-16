@@ -525,6 +525,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->claim_prefix = OIDC_DEFAULT_CLAIM_PREFIX;
 	c->remote_user_claim = OIDC_DEFAULT_CLAIM_REMOTE_USER;
 
+	c->outgoing_proxy = NULL;
 	c->crypto_passphrase = NULL;
 
 	c->scrub_request_headers = OIDC_DEFAULT_SCRUB_REQUEST_HEADERS;
@@ -735,6 +736,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			apr_strnatcmp(add->remote_user_claim,
 					OIDC_DEFAULT_CLAIM_REMOTE_USER) != 0 ?
 					add->remote_user_claim : base->remote_user_claim;
+
+	c->outgoing_proxy =
+			add->outgoing_proxy != NULL ?
+					add->outgoing_proxy : base->outgoing_proxy;
 
 	c->crypto_passphrase =
 			add->crypto_passphrase != NULL ?
@@ -1203,6 +1208,11 @@ const command_rec oidc_config_cmds[] = {
 		AP_INIT_TAKE1("OIDCCookieDomain",
 				oidc_set_cookie_domain, NULL, RSRC_CONF,
 				"Specify domain element for OIDC session cookie."),
+		AP_INIT_TAKE1("OIDCOutgoingProxy",
+				oidc_set_string_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, outgoing_proxy),
+				RSRC_CONF,
+				"Specify an outgoing proxy for your network (<host>[:<port>]."),
 		AP_INIT_TAKE1("OIDCCryptoPassphrase",
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, crypto_passphrase),
@@ -1290,7 +1300,7 @@ const command_rec oidc_config_cmds[] = {
 				"Specify the HTTP header variable to set with the name of the authenticated user. By default no headers are added."),
 		AP_INIT_TAKE1("OIDCCookiePath", ap_set_string_slot,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, cookie_path),
-				ACCESS_CONF|OR_AUTHCFG,
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Define the cookie path for the session cookie."),
 		AP_INIT_TAKE1("OIDCCookie", ap_set_string_slot,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, cookie),

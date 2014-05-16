@@ -88,7 +88,7 @@ static int oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 	/* call the endpoint with the constructed parameter set and return the resulting response */
 	return oidc_util_http_call(r, c->oauth.validate_endpoint_url,
 			OIDC_HTTP_POST_FORM, params, basic_auth, NULL, c->oauth.ssl_validate_server,
-			response, c->http_timeout_long);
+			response, c->http_timeout_long, c->outgoing_proxy);
 }
 
 /*

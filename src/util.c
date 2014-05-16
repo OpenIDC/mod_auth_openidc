@@ -370,7 +370,7 @@ static int oidc_http_add_json_param(void* rec, const char* key,
 apr_byte_t oidc_util_http_call(request_rec *r, const char *url, int action,
 		const apr_table_t *params, const char *basic_auth,
 		const char *bearer_token, int ssl_validate_server,
-		const char **response, int timeout) {
+		const char **response, int timeout, const char *outgoing_proxy) {
 	char curlError[CURL_ERROR_SIZE];
 	oidc_curl_buffer curlBuffer;
 	CURL *curl;
@@ -421,6 +421,11 @@ apr_byte_t oidc_util_http_call(request_rec *r, const char *url, int action,
 
 	/* identify this HTTP client */
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, "mod_auth_openidc");
+
+	/* set optional outgoing proxy for the local network */
+	if (outgoing_proxy) {
+		curl_easy_setopt(curl, CURLOPT_PROXY, outgoing_proxy);
+	}
 
 	/* see if we need to add token in the Bearer Authorization header */
 	if (bearer_token != NULL) {

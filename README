@@ -71,6 +71,7 @@ OIDCClientSecret <your-client-secret-administered-through-the-google-api-console
 OIDCScope "openid email profile"
 OIDCRedirectURI https://localhost/example/redirect_uri/
 OIDCCryptoPassphrase <password>
+OIDCCookiePath /example/
 
 <Location /example/>
    Authtype openid-connect
@@ -149,6 +150,7 @@ OIDCMetadataDir <somewhere-writable-for-the-apache-process>/metadata
 
 OIDCRedirectURI https://localhost/example/redirect_uri/
 OIDCCryptoPassphrase <password>
+OIDCCookiePath /example/
 
 <Location /example/>
    Authtype openid-connect
@@ -195,6 +197,7 @@ OIDCClientSecret abc123DEFghijklmnop4567rstuvwxyzZYXWUT8910SRQPOnmlijhoauthplayg
 OIDCRedirectURI https://localhost/example/redirect_uri/
 OIDCCryptoPassphrase <password>
 OIDCScope "openid email profile"
+OIDCCookiePath /example/
 
 OIDCOAuthEndpoint https://macbook:9031/as/token.oauth2
 OIDCOAuthEndpointAuth client_secret_basic

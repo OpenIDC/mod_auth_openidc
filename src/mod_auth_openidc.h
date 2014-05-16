@@ -200,6 +200,8 @@ typedef struct oidc_cfg {
 	char *claim_prefix;
 	char *remote_user_claim;
 
+	char *outgoing_proxy;
+
 	char *crypto_passphrase;
 
 	EVP_CIPHER_CTX *encrypt_ctx;
@@ -277,7 +279,7 @@ char *oidc_normalize_header_name(const request_rec *r, const char *str);
 
 void oidc_util_set_cookie(request_rec *r, const char *cookieName, const char *cookieValue);
 char *oidc_util_get_cookie(request_rec *r, char *cookieName);
-apr_byte_t oidc_util_http_call(request_rec *r, const char *url, int action, const apr_table_t *params, const char *basic_auth, const char *bearer_token, int ssl_validate_server, const char **response, int timeout);
+apr_byte_t oidc_util_http_call(request_rec *r, const char *url, int action, const apr_table_t *params, const char *basic_auth, const char *bearer_token, int ssl_validate_server, const char **response, int timeout, const char *outgoing_proxy);
 apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url);
 apr_byte_t oidc_util_request_has_parameter(request_rec *r, const char* param);
 apr_byte_t oidc_util_get_request_parameter(request_rec *r, char *name, char **value);

@@ -633,7 +633,7 @@ static apr_byte_t oidc_metadata_retrieve_and_store(request_rec *r,
 
 	/* no valid provider metadata, get it at the specified URL with the specified parameters */
 	if (oidc_util_http_call(r, url, action, params, NULL, bearer_token,
-			ssl_validate_server, &response, cfg->http_timeout_short) == FALSE)
+			ssl_validate_server, &response, cfg->http_timeout_short, cfg->outgoing_proxy) == FALSE)
 		return FALSE;
 
 	/* decode and see if it is not an error response somehow */
@@ -663,7 +663,7 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_store(request_rec *r,
 	/* no valid provider metadata, get it at the specified URL with the specified parameters */
 	if (oidc_util_http_call(r, provider->jwks_uri, OIDC_HTTP_GET, NULL, NULL,
 			NULL, provider->ssl_validate_server, &response,
-			cfg->http_timeout_long) == FALSE)
+			cfg->http_timeout_long, cfg->outgoing_proxy) == FALSE)
 		return FALSE;
 
 	/* decode and see if it is not an error response somehow */
