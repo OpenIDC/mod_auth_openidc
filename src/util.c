@@ -271,7 +271,6 @@ char *oidc_util_unescape_string(const request_rec *r, const char *str) {
 
 /*
  * get the URL that is currently being accessed
- * TODO: seems hard enough, maybe look for other existing code...?
  */
 char *oidc_get_current_url(const request_rec *r, const oidc_cfg *c) {
 	const apr_port_t port = r->connection->local_addr->port;
@@ -288,8 +287,11 @@ char *oidc_get_current_url(const request_rec *r, const oidc_cfg *c) {
 		print_port = FALSE;
 	if (print_port)
 		port_str = apr_psprintf(r->pool, ":%u", port);
-	url = apr_pstrcat(r->pool, scheme, "://",
-			apr_table_get(r->headers_in, "Host"), port_str, r->uri,
+	const char *host_str = apr_table_get(r->headers_in, "Host");
+	char *p = strchr(host_str, ':');
+	if (p != NULL)
+		*p = '\0';
+	url = apr_pstrcat(r->pool, scheme, "://", host_str, port_str, r->uri,
 			(r->args != NULL && *r->args != '\0' ? "?" : ""), r->args, NULL);
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_get_current_url: current URL '%s'", url);
