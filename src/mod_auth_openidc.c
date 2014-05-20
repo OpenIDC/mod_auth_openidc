@@ -80,12 +80,13 @@
 
 // TODO: improve redirect_uri = content handling
 // TODO: harmonize user facing error handling
+// TODO: sort out oidc_cfg vs. oidc_dir_cfg stuff
+// TODO: rigid input checking on discovery responses and authorization responses
+// TODO: check self-issued support
 
 // TODO: documentation:
 //       - write a README.quickstart
 //       - include AUTHORS and contributions
-// TODO: sort out oidc_cfg vs. oidc_dir_cfg stuff
-// TODO: rigid input checking on discovery responses and authorization responses
 
 // TODO: use oidc_get_current_url + configured RedirectURIPath to determine the RedirectURI more dynamically
 
