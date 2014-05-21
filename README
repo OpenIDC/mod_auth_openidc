@@ -55,7 +55,8 @@ Sample Config for Google Accounts
 
 Example config for using Google as your OpenID Connect Provider running on
 localhost and https://localhost/example/redirect_uri/ registered as the
-"redirect_uri" for the client through the Google API Console.
+"redirect_uri" for the client through the Google API Console. You will also
+have to enable the "Google+ API" under "APIs & auth" in the Google API console.
 
 ==========================================================
 OIDCProviderIssuer accounts.google.com
