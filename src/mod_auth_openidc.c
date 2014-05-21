@@ -385,7 +385,7 @@ const char*oidc_request_state_get(request_rec *r, const char *key) {
  */
 static apr_byte_t oidc_set_app_claims(request_rec *r,
 		const oidc_cfg * const cfg, session_rec *session,
-		const char *session_key, const char *authn_header) {
+		const char *session_key) {
 
 	const char *s_attrs = NULL;
 	apr_json_value_t *j_attrs = NULL;
@@ -408,7 +408,7 @@ static apr_byte_t oidc_set_app_claims(request_rec *r,
 
 	/* set the resolved claims a HTTP headers for the application */
 	if (j_attrs != NULL) {
-		oidc_util_set_app_headers(r, j_attrs, authn_header, cfg->claim_prefix,
+		oidc_util_set_app_headers(r, j_attrs, cfg->claim_prefix,
 				cfg->claim_delimiter);
 
 		/* set the attributes JSON structure in the request state so it is available for authz purposes later on */
@@ -439,14 +439,19 @@ static int oidc_handle_existing_session(request_rec *r,
 		oidc_scrub_request_headers(r, cfg->claim_prefix, dir_cfg->authn_header);
 	}
 
+	/* set the user authentication HTTP header if set and required */
+	if ((r->user != NULL) && (dir_cfg->authn_header != NULL)) {
+		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+				"oidc_handle_existing_session: setting authn header (%s) to: %s", dir_cfg->authn_header, r->user);
+		apr_table_set(r->headers_in, dir_cfg->authn_header, r->user);
+	}
+
 	/* set the claims in the app headers + request state */
-	if (oidc_set_app_claims(r, cfg, session, OIDC_CLAIMS_SESSION_KEY,
-			NULL) == FALSE)
+	if (oidc_set_app_claims(r, cfg, session, OIDC_CLAIMS_SESSION_KEY) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
 	/* set the id_token in the app headers + request state */
-	if (oidc_set_app_claims(r, cfg, session, OIDC_IDTOKEN_SESSION_KEY,
-			NULL) == FALSE)
+	if (oidc_set_app_claims(r, cfg, session, OIDC_IDTOKEN_SESSION_KEY) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
 	/*

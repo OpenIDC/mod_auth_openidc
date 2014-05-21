@@ -281,9 +281,15 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 
+	/* set the user authentication HTTP header if set and required */
+	if ((r->user != NULL) && (dir_cfg->authn_header != NULL)) {
+		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+				"oidc_oauth_check_userid: setting authn header (%s) to: %s", dir_cfg->authn_header, r->user);
+		apr_table_set(r->headers_in, dir_cfg->authn_header, r->user);
+	}
+
 	/* set the resolved claims in the HTTP headers for the target application */
-	oidc_util_set_app_headers(r, token, dir_cfg->authn_header, c->claim_prefix,
-			c->claim_delimiter);
+	oidc_util_set_app_headers(r, token, c->claim_prefix, c->claim_delimiter);
 
 	return OK;
 }

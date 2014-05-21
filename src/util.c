@@ -1069,17 +1069,12 @@ static void oidc_util_set_app_header(request_rec *r, const char *s_key,
 /*
  * set the user/claims information from the session in HTTP headers passed on to the application
  */
-void oidc_util_set_app_headers(request_rec *r, const apr_json_value_t *j_attrs,
-		const char *authn_header, const char *claim_prefix,
+void oidc_util_set_app_headers(request_rec *r, const apr_json_value_t *j_attrs, const char *claim_prefix,
 		const char *claim_delimiter) {
 
 	apr_json_value_t *j_value = NULL;
 	apr_hash_index_t *hi = NULL;
 	const char *s_key = NULL;
-
-	/* set the user authentication HTTP header if set and required */
-	if ((r->user != NULL) && (authn_header != NULL))
-		apr_table_set(r->headers_in, authn_header, r->user);
 
 	/* if not attributes are set, nothing needs to be done */
 	if (j_attrs == NULL) {

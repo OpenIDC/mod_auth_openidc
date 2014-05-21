@@ -1296,8 +1296,8 @@ const command_rec oidc_config_cmds[] = {
 
 		AP_INIT_TAKE1("OIDCAuthNHeader", ap_set_string_slot,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, authn_header),
-				ACCESS_CONF|OR_AUTHCFG,
-				"Specify the HTTP header variable to set with the name of the authenticated user. By default no headers are added."),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Specify the HTTP header variable to set with the name of the authenticated user. By default no explicit header is added but Apache's default REMOTE_USER will be set."),
 		AP_INIT_TAKE1("OIDCCookiePath", ap_set_string_slot,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, cookie_path),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
