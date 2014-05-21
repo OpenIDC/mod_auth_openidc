@@ -293,6 +293,7 @@ apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
 	apr_jwt_t *jwt = *j_jwt;
 
 	apr_array_header_t *unpacked = apr_jwt_compact_deserialize(pool, s_json);
+	if (unpacked->nelts < 2) return FALSE;
 
 	/* parse the header fields */
 	if (apr_jwt_parse_header(pool, ((const char**) unpacked->elts)[0],
@@ -306,6 +307,7 @@ apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
 			apr_array_clear(unpacked);
 			unpacked = apr_jwt_compact_deserialize(pool,
 					(const char *) decrypted);
+			if (unpacked->nelts < 2) return FALSE;
 			/* parse the nested header fields */
 			if (apr_jwt_parse_header(pool, ((const char**) unpacked->elts)[0],
 					&jwt->header) == FALSE)
@@ -322,10 +324,12 @@ apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
 			&jwt->payload) == FALSE)
 		return FALSE;
 
-	/* remainder is the signature */
-	if (apr_jwt_parse_signature(pool, ((const char**) unpacked->elts)[2],
-			&jwt->signature) == FALSE)
-		return FALSE;
+	if (unpacked->nelts > 2) {
+		/* remainder is the signature */
+		if (apr_jwt_parse_signature(pool, ((const char**) unpacked->elts)[2],
+				&jwt->signature) == FALSE)
+			return FALSE;
+	}
 
 	return TRUE;
 }
