@@ -1,5 +1,11 @@
+5/22/2014
+- add first implementation of OP-initiated-SSO based on:
+  http://tools.ietf.org/html/draft-bradley-oauth-jwt-encoded-state-00
+
 5/21/2014
 - correct README on enabling Google+ APIs before applying the sample Google configs
+- fix AuthNHeader setting and allow server-wide config too
+- avoid segfault on corrupted/non- JSON/JWT input
 
 5/20/2014
 - fix URL assembly when running on non-standard port

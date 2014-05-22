@@ -513,7 +513,7 @@ static apr_jwk_t *oidc_proto_get_key_from_jwk_uri(request_rec *r, oidc_cfg *cfg,
 /*
  * verify the signature on an id_token
  */
-static apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r,
+apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r,
 		oidc_cfg *cfg, oidc_provider_t *provider, apr_jwt_t *jwt,
 		apr_byte_t *refresh) {
 
