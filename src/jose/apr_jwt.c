@@ -186,7 +186,7 @@ static apr_byte_t apr_jwt_parse_timestamp(apr_pool_t *pool,
 	if ((v != NULL) && (v->type == APR_JSON_LONG)) {
 		*result = apr_time_from_sec(v->value.lnumber);
 	} else {
-		*result = -1;
+		*result = APR_JWT_CLAIM_TIME_EMPTY;
 	}
 	return TRUE;
 }

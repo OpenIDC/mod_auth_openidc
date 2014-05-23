@@ -1,6 +1,7 @@
 5/22/2014
-- add first implementation of OP-initiated-SSO based on:
-  http://tools.ietf.org/html/draft-bradley-oauth-jwt-encoded-state-00
+- add implementation of OP-initiated-SSO based on:
+  http://tools.ietf.org/html/draft-bradley-oauth-jwt-encoded-state-01
+- fix nonce caching for replay prevention
 
 5/21/2014
 - correct README on enabling Google+ APIs before applying the sample Google configs

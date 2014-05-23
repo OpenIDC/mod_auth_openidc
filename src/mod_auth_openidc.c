@@ -198,17 +198,45 @@ static char *oidc_get_browser_state_hash(request_rec *r, const char *nonce) {
 }
 
 /*
+ * return the oidc_provider_t struct for the specified issuer
+ */
+static oidc_provider_t *oidc_get_provider_for_issuer(request_rec *r, oidc_cfg *c, const char *issuer) {
+
+	/* by default we'll assume that we're dealing with a single statically configured OP */
+	oidc_provider_t *provider = &c->provider;
+
+	/* unless a metadata directory was configured, so we'll try and get the provider settings from there */
+	if (c->metadata_dir != NULL) {
+
+		/* try and get metadata from the metadata directory for the OP that sent this response */
+		if ((oidc_metadata_get(r, c, issuer, &provider)
+				== FALSE) || (provider == NULL)) {
+
+			/* don't know nothing about this OP/issuer */
+			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+					"oidc_get_provider_for_issuer: no provider metadata found for issuer \"%s\"",
+					issuer);
+
+			return NULL;
+		}
+	}
+
+	return provider;
+}
+
+/*
  * parse state that was sent to us by the issuer
  */
 static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 		const char *state, oidc_proto_state **proto_state) {
 
-	apr_jwt_t *jwt = NULL;
+	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+			"oidc_unsolicited_proto_state: entering");
 
-	// TODO: parse just the header and get a client_secret to pass in for JWTs using symmetric encryption
+	apr_jwt_t *jwt = NULL;
 	if (apr_jwt_parse(r->pool, state, &jwt, c->private_keys,
 			c->provider.client_secret) == FALSE) {
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_unsolicited_proto_state: could not parse JWT from state: invalid unsolicited response");
 		return FALSE;
 	}
@@ -221,6 +249,11 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 				"oidc_unsolicited_proto_state: no \"iss\" could be retrieved from JWT state, aborting");
 		return FALSE;
 	}
+
+	oidc_provider_t *provider = oidc_get_provider_for_issuer(r, c,
+			jwt->payload.iss);
+	if (provider == NULL)
+		return FALSE;
 
 	char *rfp = NULL;
 	apr_jwt_get_string(r->pool, &jwt->payload.value, "rfp", &rfp);
@@ -245,8 +278,6 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 		return FALSE;
 	}
 
-	// TODO: share code with match_state
-	oidc_provider_t *provider = &c->provider;
 	if (c->metadata_dir != NULL) {
 		if ((oidc_metadata_get(r, c, jwt->payload.iss, &provider) == FALSE)
 				|| (provider == NULL)) {
@@ -257,42 +288,66 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 		}
 	}
 
-	// TODO: share code with proto.c
-	/********/
-	if (jwt->payload.iat == -1) {
+	if ((jwt->payload.exp != APR_JWT_CLAIM_TIME_EMPTY)
+			&& (oidc_proto_validate_exp(r, jwt) == FALSE))
+		return FALSE;
+
+	if ((jwt->payload.iat != APR_JWT_CLAIM_TIME_EMPTY)
+			&& (oidc_proto_validate_iat(r, provider, jwt) == FALSE))
+		return FALSE;
+
+	char *jti = NULL;
+	apr_jwt_get_string(r->pool, &jwt->payload.value, "jti", &jti);
+	if (jti == NULL) {
+		apr_jwt_base64url_encode(r->pool, &jti,
+				(const char *) jwt->signature.bytes, jwt->signature.length, 0);
+	}
+
+	const char *replay = NULL;
+	c->cache->get(r, jti, &replay);
+	if (replay != NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_idtoken: id_token JSON payload did not contain an \"iat\" number value");
+				"oidc_unsolicited_proto_state: the jti value (%s) passed in the browser state was found in the cache already; possible replay attack!?",
+				jti);
 		return FALSE;
 	}
 
-	/* check if this id_token has been issued just now +- slack (default 10 minutes) */
-	if ((apr_time_now() - apr_time_from_sec(provider->idtoken_iat_slack))
-			> jwt->payload.iat) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_idtoken: \"iat\" validation failure (%" APR_TIME_T_FMT "): id_token was issued more than %d seconds ago",
-				jwt->payload.iat, provider->idtoken_iat_slack);
-		return FALSE;
-	}
-	if ((apr_time_now() + apr_time_from_sec(provider->idtoken_iat_slack))
-			< jwt->payload.iat) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_idtoken: \"iat\" validation failure (%" APR_TIME_T_FMT "): id_token was issued more than %d seconds in the future",
-				jwt->payload.iat, provider->idtoken_iat_slack);
-		return FALSE;
-	}
-	/********/
+	/* jti cache duration is the configured replay prevention window for token issuance plus 10 seconds for safety */
+	apr_time_t jti_cache_duration = apr_time_from_sec(
+			provider->idtoken_iat_slack * 2 + 10);
 
-	// TODO: "iat" enough for the client to define validity one-sided or do we need issuer-based "exp" as well?
-	// TODO: cache for replay prevention on which value? no nonce; may use signature base64enc value? spec needs text on that
-	// TODO: issuer for encrypted JWTs should be in header when using symmetric encryption
-	// TODO: at_hash and/or c_hash unless implicit
+	/* store it in the cache for the calculated duration */
+	c->cache->set(r, jti, jti, apr_time_now() + jti_cache_duration);
+
+	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+			"oidc_unsolicited_proto_state: jti \"%s\" validated successfully and is now cached for %" APR_TIME_T_FMT " seconds",
+			jti, apr_time_sec(jti_cache_duration));
+
+	/*
+	 * TODO: pass in 'code' if code flow (no c_hash or at_hash required for)
+	 * TODO: John: now "code" *requires* c_hash??
+	 */
+	/*
+	 char *c_hash = NULL;
+	 apr_jwt_get_string(r->pool, &jwt->payload.value, "c_hash", &c_hash);
+	 if (c_hash != NULL) {
+	 apr_array_header_t *required_for_flows = apr_array_make(r->pool, 2, sizeof(const char*));
+	 *(const char**) apr_array_push(required_for_flows) = "code";
+	 if (oidc_proto_validate_hash_value(r, provider, jwt, "code", code,
+	 "c_hash", required_for_flows) == FALSE) return FALSE;
+	 }
+	 */
+
+	// TODO: perhaps support encrypted state using shared secret? (issuer for encrypted JWTs must be in JWT header?)
+	//       (now we always use the statically configured provider client_secret...)
+	// TODO: check c_hash unless implicit (no at_hash because oidc > oauth, right?)
 	// TODO: move this code somehow to jose/ ?
 
 	apr_byte_t refresh = FALSE;
 	if (oidc_proto_idtoken_verify_signature(r, c, provider, jwt,
 			&refresh) == FALSE) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_unsolicited_proto_state: id_token signature could not be validated, aborting");
+				"oidc_unsolicited_proto_state: state JWT signature could not be validated, aborting");
 		return FALSE;
 	}
 
@@ -626,25 +681,9 @@ static apr_byte_t oidc_authorization_response_match_state(request_rec *r,
 		return FALSE;
 	}
 
-	/* by default we'll assume that we're dealing with a single statically configured OP */
-	*provider = &c->provider;
+	*provider = oidc_get_provider_for_issuer(r, c,  (*proto_state)->issuer);
 
-	/* unless a metadata directory was configured, so we'll try and get the provider settings from there */
-	if (c->metadata_dir != NULL) {
-
-		/* try and get metadata from the metadata directory for the OP that sent this response */
-		if ((oidc_metadata_get(r, c, (*proto_state)->issuer, provider)
-				== FALSE) || (provider == NULL)) {
-
-			// something went wrong here between sending the request and receiving the response
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_authorization_response_match_state: no provider metadata found for provider \"%s\"",
-					(*proto_state)->issuer);
-			return FALSE;
-		}
-	}
-
-	return TRUE;
+	return (*provider != NULL);
 }
 
 /*

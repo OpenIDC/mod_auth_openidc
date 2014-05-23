@@ -254,6 +254,8 @@ apr_byte_t oidc_proto_flow_is_supported(apr_pool_t *pool, const char *flow);
 apr_byte_t oidc_proto_validate_authorization_response(request_rec *r, const char *response_type, const char *requested_response_mode, char **code, char **id_token, char **access_token, char **token_type, const char *used_response_mode);
 apr_byte_t oidc_proto_validate_code_response(request_rec *r, const char *response_type, char **id_token, char **access_token, char **token_type);
 apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, apr_jwt_t *jwt, apr_byte_t *refresh);
+apr_byte_t oidc_proto_validate_iat(request_rec *r, oidc_provider_t *provider, apr_jwt_t *jwt);
+apr_byte_t oidc_proto_validate_exp(request_rec *r, apr_jwt_t *jwt);
 
 // oidc_authz.c
 int oidc_authz_worker(request_rec *r, const apr_json_value_t *const claims, const require_line *const reqs, int nelts);

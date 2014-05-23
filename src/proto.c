@@ -228,12 +228,15 @@ static apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
 		return FALSE;
 	}
 
-	/* nonce cache duration is the configured replay prevention window for token issuance plus 10 seconds for safety */
+	/*
+	 * nonce cache duration (replay prevention window) is the 2x the configured
+	 * slack on the timestamp (+-) for token issuance plus 10 seconds for safety
+	 */
 	apr_time_t nonce_cache_duration = apr_time_from_sec(
 			provider->idtoken_iat_slack * 2 + 10);
 
 	/* store it in the cache for the calculated duration */
-	cfg->cache->set(r, nonce, nonce, nonce_cache_duration);
+	cfg->cache->set(r, nonce, nonce, apr_time_now() + nonce_cache_duration);
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_proto_validate_nonce: nonce \"%s\" validated successfully and is now cached for %" APR_TIME_T_FMT " seconds",
@@ -311,6 +314,49 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 }
 
 /*
+ * validate "iat" claim in JWT
+ */
+apr_byte_t oidc_proto_validate_iat(request_rec *r,
+		oidc_provider_t *provider, apr_jwt_t *jwt) {
+	if (jwt->payload.iat == APR_JWT_CLAIM_TIME_EMPTY) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_validate_iat: id_token JSON payload did not contain an \"iat\" number value");
+		return FALSE;
+	}
+
+	/* check if this id_token has been issued just now +- slack (default 10 minutes) */
+	if ((apr_time_now() - apr_time_from_sec(provider->idtoken_iat_slack))
+			> jwt->payload.iat) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_validate_iat: \"iat\" validation failure (%" APR_TIME_T_FMT "): JWT was issued more than %d seconds ago",
+				jwt->payload.iat, provider->idtoken_iat_slack);
+		return FALSE;
+	}
+	if ((apr_time_now() + apr_time_from_sec(provider->idtoken_iat_slack))
+			< jwt->payload.iat) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_validate_iat: \"iat\" validation failure (%" APR_TIME_T_FMT "): JWT was issued more than %d seconds in the future",
+				jwt->payload.iat, provider->idtoken_iat_slack);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/*
+ * validate "exp" claim in JWT
+ */
+apr_byte_t oidc_proto_validate_exp(request_rec *r, apr_jwt_t *jwt) {
+	if (apr_time_now() > jwt->payload.exp) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_proto_validate_exp: \"exp\" validation failure (%" APR_TIME_T_FMT "): JWT expired",
+				jwt->payload.exp);
+		return FALSE;
+	}
+	return TRUE;
+}
+
+/*
  * check whether the provided JWT is a valid id_token for the specified "provider"
  */
 static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
@@ -345,37 +391,13 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
 		return FALSE;
 	}
 
-	/* check the "exp" timestamp */
+	/* check exp */
+	if (oidc_proto_validate_exp(r, jwt) == FALSE)
+		return FALSE;
 
-	/* check if this id_token has already expired */
-	if (apr_time_now() > jwt->payload.exp) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_idtoken: \"exp\" validation failure (%" APR_TIME_T_FMT "): id_token expired",
-				jwt->payload.exp);
+	/* check iat */
+	if (oidc_proto_validate_iat(r, provider, jwt) == FALSE)
 		return FALSE;
-	}
-
-	if (jwt->payload.iat == -1) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_idtoken: id_token JSON payload did not contain an \"iat\" number value");
-		return FALSE;
-	}
-
-	/* check if this id_token has been issued just now +- slack (default 10 minutes) */
-	if ((apr_time_now() - apr_time_from_sec(provider->idtoken_iat_slack))
-			> jwt->payload.iat) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_idtoken: \"iat\" validation failure (%" APR_TIME_T_FMT "): id_token was issued more than %d seconds ago",
-				jwt->payload.iat, provider->idtoken_iat_slack);
-		return FALSE;
-	}
-	if ((apr_time_now() + apr_time_from_sec(provider->idtoken_iat_slack))
-			< jwt->payload.iat) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_idtoken: \"iat\" validation failure (%" APR_TIME_T_FMT "): id_token was issued more than %d seconds in the future",
-				jwt->payload.iat, provider->idtoken_iat_slack);
-		return FALSE;
-	}
 
 	/* check if the required-by-spec "sub" claim is present */
 	if (jwt->payload.sub == NULL) {
@@ -811,7 +833,7 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 
 	/* get the JSON response */
 	if (oidc_util_http_call(r, provider->userinfo_endpoint_url, OIDC_HTTP_GET,
-	NULL, NULL, access_token, provider->ssl_validate_server, response,
+			NULL, NULL, access_token, provider->ssl_validate_server, response,
 			cfg->http_timeout_long, cfg->outgoing_proxy) == FALSE)
 		return FALSE;
 

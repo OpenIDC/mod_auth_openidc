@@ -58,6 +58,8 @@
 
 #include "../json/apr_json.h"
 
+#define APR_JWT_CLAIM_TIME_EMPTY -1
+
 /*
  * JSON Web Token handling
  */
