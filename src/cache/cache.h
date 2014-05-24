@@ -59,6 +59,7 @@ typedef int (*oidc_cache_post_config_function)(server_rec *s);
 typedef int (*oidc_cache_child_init_function)(apr_pool_t *p, server_rec *s);
 typedef apr_byte_t (*oidc_cache_get_function)(request_rec *r, const char *key, const char **value);
 typedef apr_byte_t (*oidc_cache_set_function)(request_rec *r, const char *key, const char *value, apr_time_t expiry);
+typedef int (*oidc_cache_destroy_function)(server_rec *s);
 
 typedef struct oidc_cache_t {
 	oidc_cache_cfg_create create_config;
@@ -66,6 +67,7 @@ typedef struct oidc_cache_t {
 	oidc_cache_child_init_function child_init;
 	oidc_cache_get_function get;
 	oidc_cache_set_function set;
+	oidc_cache_destroy_function destroy;
 } oidc_cache_t;
 
 extern oidc_cache_t oidc_cache_file;

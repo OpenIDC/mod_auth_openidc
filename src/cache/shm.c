@@ -341,10 +341,34 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *key,
 	return TRUE;
 }
 
+static int oidc_cache_shm_destroy(server_rec *s) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			s->module_config, &auth_openidc_module);
+	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *)cfg->cache_cfg;
+	apr_status_t rv = APR_SUCCESS;
+
+    if (context->shm) {
+        rv = apr_shm_destroy(context->shm);
+    	ap_log_error(APLOG_MARK, OIDC_DEBUG, rv, s,
+    			"oidc_cache_shm_destroy: apr_shm_destroy returned: %d", rv);
+        context->shm = NULL;
+    }
+
+    if (context->mutex) {
+        rv = apr_global_mutex_destroy(context->mutex);
+    	ap_log_error(APLOG_MARK, OIDC_DEBUG, rv, s,
+    			"oidc_cache_shm_destroy: apr_global_mutex_destroy returned: %d", rv);
+        context->mutex = NULL;
+    }
+
+	return rv;
+}
+
 oidc_cache_t oidc_cache_shm = {
 		oidc_cache_shm_cfg_create,
 		oidc_cache_shm_post_config,
 		oidc_cache_shm_child_init,
 		oidc_cache_shm_get,
-		oidc_cache_shm_set
+		oidc_cache_shm_set,
+		oidc_cache_shm_destroy
 };

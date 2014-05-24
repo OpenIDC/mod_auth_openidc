@@ -470,5 +470,6 @@ oidc_cache_t oidc_cache_file = {
 		oidc_cache_file_post_config,
 		NULL,
 		oidc_cache_file_get,
-		oidc_cache_file_set
+		oidc_cache_file_set,
+		NULL
 };

@@ -932,6 +932,19 @@ static void oidc_ssl_id_callback(CRYPTO_THREADID *id) {
 #endif /* defined(OPENSSL_THREADS) && APR_HAS_THREADS */
 
 static apr_status_t oidc_cleanup(void *data) {
+
+	server_rec *sp = (server_rec *)data;
+	while (sp != NULL) {
+		oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(sp->module_config,
+				&auth_openidc_module);
+		if (cfg->cache->destroy != NULL) {
+			if (cfg->cache->destroy(sp) != APR_SUCCESS) {
+				ap_log_error(APLOG_MARK, APLOG_ERR, 0, sp, "oidc_cleanup: cache destroy function failed");
+			}
+		}
+		sp = sp->next;
+	}
+
 #if (defined (OPENSSL_THREADS) && APR_HAS_THREADS)
 	if (CRYPTO_get_locking_callback() == oidc_ssl_locking_callback)
 		CRYPTO_set_locking_callback(NULL);

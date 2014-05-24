@@ -255,5 +255,6 @@ oidc_cache_t oidc_cache_memcache = {
 		oidc_cache_memcache_post_config,
 		NULL,
 		oidc_cache_memcache_get,
-		oidc_cache_memcache_set
+		oidc_cache_memcache_set,
+		NULL
 };

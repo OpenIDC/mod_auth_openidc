@@ -1,3 +1,6 @@
+5/24/2014
+- add cache destroy function and destroy shm cache resources on shutdown
+
 5/23/2014
 - doc corrections to auth_openidc.conf
 
