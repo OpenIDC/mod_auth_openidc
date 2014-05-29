@@ -421,9 +421,12 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 		apr_jwt_header_t *jwt_hdr, apr_json_value_t *j_jwks, const char *type,
 		apr_jwk_t **result) {
 
+	char *x5t = NULL;
+	apr_jwt_get_string(r->pool, &jwt_hdr->value, "x5t", &x5t);
+
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_get_key_from_jwks: search for kid \"%s\"",
-			jwt_hdr->kid);
+			"oidc_proto_get_key_from_jwks: search for kid \"%s\" or thumbprint x5t \"%s\"",
+			jwt_hdr->kid, x5t);
 
 	/* get the "keys" JSON array from the JWKs object */
 	apr_json_value_t *keys = apr_hash_get(j_jwks->value.object, "keys",
@@ -454,9 +457,9 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 		if (strcmp(kty->value.string.p, type) != 0) continue;
 
 		/* see if we were looking for a specific kid, if not we'll return the first one found */
-		if (jwt_hdr->kid == NULL) {
+		if ( (jwt_hdr->kid == NULL) && (x5t == NULL) ) {
 			ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-					"oidc_proto_get_key_from_jwks: no kid to match, return first key found");
+					"oidc_proto_get_key_from_jwks: no kid/x5t to match, return first key found");
 
 			apr_jwk_parse_json(r->pool, elem, NULL, result);
 			break;
@@ -465,21 +468,33 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 		/* we are looking for a specific kid, get the kid from the current element */
 		apr_json_value_t *ekid = apr_hash_get(elem->value.object, "kid",
 				APR_HASH_KEY_STRING);
-		if (ekid == NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_proto_get_key_from_jwks: \"keys\" array element does not have a \"kid\" entry, skipping");
-			continue;
+		if ( (ekid != NULL) && (jwt_hdr->kid != NULL) ) {
+			/* compare the requested kid against the current element */
+			if (apr_strnatcmp(jwt_hdr->kid, ekid->value.string.p) == 0) {
+				ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+						"oidc_proto_get_key_from_jwks: found matching kid: \"%s\"",
+						jwt_hdr->kid);
+
+				apr_jwk_parse_json(r->pool, elem, NULL, result);
+				break;
+			}
 		}
 
-		/* compare the requested kid against the current element */
-		if (apr_strnatcmp(jwt_hdr->kid, ekid->value.string.p) == 0) {
-			ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-					"oidc_proto_get_key_from_jwks: found matching kid: \"%s\"",
-					jwt_hdr->kid);
+		/* we are looking for a specific x5t, get the x5t from the current element */
+		apr_json_value_t *ex5t = apr_hash_get(elem->value.object, "x5t",
+				APR_HASH_KEY_STRING);
+		if ( (ex5t != NULL) && (x5t != NULL) ) {
+			/* compare the requested kid against the current element */
+			if (apr_strnatcmp(x5t, ex5t->value.string.p) == 0) {
+				ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+						"oidc_proto_get_key_from_jwks: found matching x5t: \"%s\"",
+						x5t);
 
-			apr_jwk_parse_json(r->pool, elem, NULL, result);
-			break;
+				apr_jwk_parse_json(r->pool, elem, NULL, result);
+				break;
+			}
 		}
+
 	}
 
 	return TRUE;
