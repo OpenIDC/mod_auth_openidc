@@ -338,10 +338,10 @@ apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header,
 	int aad_len = strlen(aad);
 
 	/* Additional Authentication Data length in # of bits in 64 bit length field */
-	int64_t al = aad_len * 8;
+	uint64_t al = aad_len * 8;
 
 	/* concatenate AAD + IV + ciphertext + AAD length field */
-	int msg_len = aad_len + iv->len + cipher_text->len + sizeof(int64_t);
+	int msg_len = aad_len + iv->len + cipher_text->len + sizeof(uint64_t);
 	const unsigned char *msg = apr_pcalloc(pool, msg_len);
 	char *p = (char*)msg;
 	memcpy(p, aad, aad_len);
@@ -350,10 +350,17 @@ apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header,
 	p += iv->len;
 	memcpy(p, cipher_text->value, cipher_text->len);
 	p += cipher_text->len;
+
 	char *src = (char *)&al;
-	// reverse AAD length for big endian representation
-	int i;
-	for (i=0; i < sizeof(int64_t); ++i) p[sizeof(int64_t)-1-i] = src[i];
+	unsigned int i = 1;
+	char *c = (char*)&i;
+	if (*c) {
+		// little endian machine: reverse AAD length for big endian representation
+		for (i=0; i < sizeof(int64_t); ++i) p[sizeof(uint64_t)-1-i] = src[i];
+	}
+
+//	uint64_t big_endian = htobe64(al);
+//	memcpy(p, &big_endian, sizeof(int64_t));
 
 	/* calculate the Authentication Tag value over AAD + IV + ciphertext + AAD length */
 	unsigned int md_len = 0;
