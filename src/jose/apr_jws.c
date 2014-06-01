@@ -62,6 +62,9 @@
 
 #include "apr_jose.h"
 
+#include <openssl/opensslconf.h>
+#include <openssl/opensslv.h>
+
 /*
  * return all supported signing algorithms
  */
@@ -73,12 +76,14 @@ apr_array_header_t *apr_jws_supported_algorithms(apr_pool_t *pool) {
 	*(const char**) apr_array_push(result) = "PS256";
 	*(const char**) apr_array_push(result) = "PS384";
 	*(const char**) apr_array_push(result) = "PS512";
-	*(const char**) apr_array_push(result) = "ES256";
-	*(const char**) apr_array_push(result) = "ES384";
-	*(const char**) apr_array_push(result) = "ES512";
 	*(const char**) apr_array_push(result) = "HS256";
 	*(const char**) apr_array_push(result) = "HS384";
 	*(const char**) apr_array_push(result) = "HS512";
+#if (OPENSSL_VERSION_NUMBER >= 0x01000000)
+	*(const char**) apr_array_push(result) = "ES256";
+	*(const char**) apr_array_push(result) = "ES384";
+	*(const char**) apr_array_push(result) = "ES512";
+#endif
 	return result;
 }
 
@@ -294,13 +299,6 @@ apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk) 
 	} else if (apr_jws_signature_starts_with(pool, jwt->header.alg, "RS",
 			2) == TRUE) {
 
-		ctx.pctx = EVP_PKEY_CTX_new(pRsaKey, NULL);
-		if (!EVP_PKEY_verify_init(ctx.pctx)) {
-			goto end;
-		}
-
-		if (!EVP_PKEY_CTX_set_rsa_padding(ctx.pctx, RSA_PKCS1_PADDING))
-			goto end;
 		if (!EVP_VerifyInit_ex(&ctx, digest, NULL))
 			goto end;
 		if (!EVP_VerifyUpdate(&ctx, jwt->message, strlen(jwt->message)))
@@ -323,6 +321,8 @@ end:
 
 	return rc;
 }
+
+#if (OPENSSL_VERSION_NUMBER >= 0x01000000)
 
 /*
  * return the OpenSSL Elliptic Curve NID for a JWT algorithm
@@ -403,6 +403,8 @@ end:
 	return rc;
 }
 
+#endif
+
 /*
  * check if the signature on the JWT is HMAC-based
  */
@@ -418,9 +420,13 @@ apr_byte_t apr_jws_signature_is_rsa(apr_pool_t *pool, apr_jwt_t *jwt) {
 			|| apr_jws_signature_starts_with(pool, jwt->header.alg, "PS", 2);
 }
 
+#if (OPENSSL_VERSION_NUMBER >= 0x01000000)
+
 /*
  * check if the signature on the JWT is Elliptic Curve based
  */
 apr_byte_t apr_jws_signature_is_ec(apr_pool_t *pool, apr_jwt_t *jwt) {
 	return apr_jws_signature_starts_with(pool, jwt->header.alg, "ES", 2);
 }
+
+#endif

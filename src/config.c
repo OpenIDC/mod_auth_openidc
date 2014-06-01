@@ -64,6 +64,13 @@
 
 #include "mod_auth_openidc.h"
 
+#define OPENSSL_THREAD_DEFINES
+#include <openssl/opensslconf.h>
+#include <openssl/opensslv.h>
+#if (OPENSSL_VERSION_NUMBER < 0x01000000)
+#define OPENSSL_NO_THREADID
+#endif
+
 /* validate SSL server certificates by default */
 #define OIDC_DEFAULT_SSL_VALIDATE_SERVER 1
 /* default token endpoint authentication method */
@@ -477,6 +484,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->provider.client_id = NULL;
 	c->provider.client_secret = NULL;
 	c->provider.registration_endpoint_url = NULL;
+	c->provider.jwks_uri = NULL;
 
 	c->provider.ssl_validate_server = OIDC_DEFAULT_SSL_VALIDATE_SERVER;
 	c->provider.client_name = OIDC_DEFAULT_CLIENT_NAME;
@@ -572,6 +580,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->provider.userinfo_endpoint_url != NULL ?
 					add->provider.userinfo_endpoint_url :
 					base->provider.userinfo_endpoint_url;
+	c->provider.jwks_uri =
+			add->provider.jwks_uri != NULL ?
+					add->provider.jwks_uri :
+					base->provider.jwks_uri;
 	c->provider.client_id =
 			add->provider.client_id != NULL ?
 					add->provider.client_id : base->provider.client_id;

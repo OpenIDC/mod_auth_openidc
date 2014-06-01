@@ -56,6 +56,9 @@
 
 #include "mod_auth_openidc.h"
 
+#include <openssl/opensslconf.h>
+#include <openssl/opensslv.h>
+
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 /*
@@ -565,7 +568,10 @@ apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r,
 		result = apr_jws_verify_hmac(r->pool, jwt, provider->client_secret);
 
 	} else if (apr_jws_signature_is_rsa(r->pool, jwt)
-			|| apr_jws_signature_is_ec(r->pool, jwt)) {
+#if (OPENSSL_VERSION_NUMBER >= 0x01000000)
+			|| apr_jws_signature_is_ec(r->pool, jwt)
+#endif
+			) {
 
 		/* get the key from the JWKs that corresponds with the key specified in the header */
 		apr_jwk_t *jwk = oidc_proto_get_key_from_jwk_uri(r, cfg, provider,
@@ -581,7 +587,11 @@ apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r,
 			result =
 					apr_jws_signature_is_rsa(r->pool, jwt) ?
 							apr_jws_verify_rsa(r->pool, jwt, jwk) :
+#if (OPENSSL_VERSION_NUMBER >= 0x01000000)
 							apr_jws_verify_ec(r->pool, jwt, jwk);
+#else
+							FALSE;
+#endif
 
 		} else {
 

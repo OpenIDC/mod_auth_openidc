@@ -1,3 +1,7 @@
+6/1/2014
+- compile with OpenSSL <1.0 and but then disable Elliptic Curve verification
+- fix jwks_uri setting in nested vhosts
+
 5/31/2014
 - README additions/improvements
 
