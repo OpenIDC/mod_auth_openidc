@@ -969,6 +969,7 @@ static apr_status_t oidc_cleanup(void *data) {
 #endif /* OPENSSL_NO_THREADID */
 
 #endif /* defined(OPENSSL_THREADS) && APR_HAS_THREADS */
+	EVP_cleanup();
 	curl_global_cleanup();
 	return APR_SUCCESS;
 }
@@ -995,6 +996,7 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 	}
 
 	curl_global_init(CURL_GLOBAL_ALL);
+	OpenSSL_add_all_digests();
 
 #if (defined(OPENSSL_THREADS) && APR_HAS_THREADS)
 	ssl_num_locks = CRYPTO_num_locks();
