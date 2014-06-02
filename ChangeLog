@@ -1,3 +1,6 @@
+6/2/2014
+- handle X-Forwarded-Proto/X-Forwarded-Port when running behind a proxy/load-balancer
+
 6/1/2014
 - compile with OpenSSL <1.0 and but then disable Elliptic Curve verification
 - fix jwks_uri setting in nested vhosts

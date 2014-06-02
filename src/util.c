@@ -270,31 +270,70 @@ char *oidc_util_unescape_string(const request_rec *r, const char *str) {
 }
 
 /*
+ * get the URL scheme that is currently being accessed
+ */
+const char *oidc_get_current_url_scheme(const request_rec *r, const oidc_cfg *c) {
+	/* first see if there's a proxy/load-balancer in front of us */
+	const char *scheme_str = apr_table_get(r->headers_in, "X-Forwarded-Proto");
+	/* if not we'll determine the scheme used to connect to this server */
+	if (scheme_str == NULL) {
+#ifdef APACHE2_0
+		scheme_str = (char *) ap_http_method(r);
+#else
+		scheme_str = (char *) ap_http_scheme(r);
+#endif
+	}
+	return scheme_str;
+}
+
+/*
+ * get the URL port that is currently being accessed
+ */
+const char *oidc_get_current_url_port(const request_rec *r, const oidc_cfg *c, const char *scheme_str) {
+	/* first see if there's a proxy/load-balancer in front of us */
+	const char *port_str = apr_table_get(r->headers_in, "X-Forwarded-Port");
+	if (port_str == NULL) {
+		/* if not we'll take the port from the Host header (as set by the client or ProxyPreserveHost) */
+		const char *host_hdr = apr_table_get(r->headers_in, "Host");
+		port_str = strchr(host_hdr, ':');
+		if (port_str == NULL) {
+			/* if no port was set in the Host header we'll determine it locally */
+			const apr_port_t port = r->connection->local_addr->port;
+			apr_byte_t print_port = TRUE;
+			if ((apr_strnatcmp(scheme_str, "https") == 0) && port == 443)
+				print_port = FALSE;
+			else if ((apr_strnatcmp(scheme_str, "http") == 0) && port == 80)
+				print_port = FALSE;
+			if (print_port)
+				port_str = apr_psprintf(r->pool, "%u", port);
+		} else {
+			port_str++;
+		}
+	}
+	return port_str;
+}
+
+/*
  * get the URL that is currently being accessed
  */
 char *oidc_get_current_url(const request_rec *r, const oidc_cfg *c) {
-	const apr_port_t port = r->connection->local_addr->port;
-	char *scheme, *port_str = "", *url;
-	apr_byte_t print_port = TRUE;
-#ifdef APACHE2_0
-	scheme = (char *) ap_http_method(r);
-#else
-	scheme = (char *) ap_http_scheme(r);
-#endif
-	if ((apr_strnatcmp(scheme, "https") == 0) && port == 443)
-		print_port = FALSE;
-	else if ((apr_strnatcmp(scheme, "http") == 0) && port == 80)
-		print_port = FALSE;
-	if (print_port)
-		port_str = apr_psprintf(r->pool, ":%u", port);
+
+	const char *scheme_str = oidc_get_current_url_scheme(r, c);
+
+	const char *port_str = oidc_get_current_url_port(r, c, scheme_str);
+	port_str = port_str ? apr_psprintf(r->pool, ":%s", port_str) : "";
+
 	const char *host_str = apr_table_get(r->headers_in, "Host");
 	char *p = strchr(host_str, ':');
 	if (p != NULL)
 		*p = '\0';
-	url = apr_pstrcat(r->pool, scheme, "://", host_str, port_str, r->uri,
+
+	char *url = apr_pstrcat(r->pool, scheme_str, "://", host_str, port_str, r->uri,
 			(r->args != NULL && *r->args != '\0' ? "?" : ""), r->args, NULL);
+
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_get_current_url: current URL '%s'", url);
+
 	return url;
 }
 
