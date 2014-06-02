@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.4) unstable; urgency=medium
+
+  * OpenSSL fixes
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Mon, 02 Jun 2014 13:43:50 +0200
+
 libapache2-mod-auth-openidc (1.3) unstable; urgency=medium
 
   * fix running on non-standard port
