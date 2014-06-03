@@ -249,7 +249,7 @@ int oidc_authz_worker(request_rec *r, const json_t * const claims,
 /*
  * Apache >=2.4 authorization routine: match the claims from the authenticated user against the Require primitive
  */
-authz_status oidc_authz_worker24(request_rec *r, const apr_json_value_t * const claims, const char *require_args) {
+authz_status oidc_authz_worker24(request_rec *r, const json_t * const claims, const char *require_args) {
 
 	int count_oauth_claims = 0;
 	const char *t, *w;

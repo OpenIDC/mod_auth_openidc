@@ -599,8 +599,6 @@ static apr_byte_t oidc_set_app_claims(request_rec *r,
 
 		/* set the attributes JSON structure in the request state so it is available for authz purposes later on */
 		oidc_request_state_set(r, session_key, (const char *) j_attrs);
-
-		json_decref(j_attrs);
 	}
 
 	return TRUE;
@@ -1420,13 +1418,17 @@ int oidc_check_user_id(request_rec *r) {
 authz_status oidc_authz_checker(request_rec *r, const char *require_args, const void *parsed_require_args) {
 
 	/* get the set of claims from the request state (they've been set in the authentication part earlier */
-	apr_json_value_t *attrs = (apr_json_value_t *)oidc_request_state_get(r, OIDC_CLAIMS_SESSION_KEY);
-
-	/* if no claims, use the id_token itself */
-	if (attrs == NULL) attrs = (apr_json_value_t *)oidc_request_state_get(r, OIDC_IDTOKEN_SESSION_KEY);
+	json_t *claims = (json_t *) oidc_request_state_get(r, OIDC_CLAIMS_SESSION_KEY);
+	json_t *id_token  = (json_t *) oidc_request_state_get(r, OIDC_IDTOKEN_SESSION_KEY);
 
 	/* dispatch to the >=2.4 specific authz routine */
-	return oidc_authz_worker24(r, attrs, require_args);
+	authz_status rc = oidc_authz_worker24(r, claims ? claims : id_token, require_args);
+
+	/* cleanup */
+	if (claims) json_decref(claims);
+	if (id_token) json_decref(id_token);
+
+	return rc;
 }
 #else
 /*
@@ -1436,13 +1438,8 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args, const 
 int oidc_auth_checker(request_rec *r) {
 
 	/* get the set of claims from the request state (they've been set in the authentication part earlier) */
-	json_t *attrs = (json_t *) oidc_request_state_get(r,
-			OIDC_CLAIMS_SESSION_KEY);
-
-	/* if no claims, use the id_token itself */
-	if (attrs == NULL)
-		attrs = (json_t *) oidc_request_state_get(r,
-				OIDC_IDTOKEN_SESSION_KEY);
+	json_t *claims = (json_t *) oidc_request_state_get(r, OIDC_CLAIMS_SESSION_KEY);
+	json_t *id_token  = (json_t *) oidc_request_state_get(r, OIDC_IDTOKEN_SESSION_KEY);
 
 	/* get the Require statements */
 	const apr_array_header_t * const reqs_arr = ap_requires(r);
@@ -1458,7 +1455,13 @@ int oidc_auth_checker(request_rec *r) {
 	}
 
 	/* dispatch to the <2.4 specific authz routine */
-	return oidc_authz_worker(r, attrs, reqs, reqs_arr->nelts);
+	int rc = oidc_authz_worker(r, claims ? claims : id_token, reqs, reqs_arr->nelts);
+
+	/* cleanup */
+	if (claims) json_decref(claims);
+	if (id_token) json_decref(id_token);
+
+	return rc;
 }
 #endif
 
