@@ -1166,7 +1166,7 @@ void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs, const char
 
 			/* some logging about what we're going to do */
 			ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-					"oidc_util_set_app_headers: parsing attribute array for key \"%s\" (#nr-of-elems: %ld)",
+					"oidc_util_set_app_headers: parsing attribute array for key \"%s\" (#nr-of-elems: %zu)",
 					s_key, json_array_size(j_value));
 
 			/* string to hold the concatenated array string values */
