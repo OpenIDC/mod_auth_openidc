@@ -600,6 +600,9 @@ static apr_byte_t oidc_set_app_claims(request_rec *r,
 
 		/* set the claims JSON string in the request state so it is available for authz purposes later on */
 		oidc_request_state_set(r, session_key, s_claims);
+
+		/* release resources */
+		json_decref(j_claims);
 	}
 
 	return TRUE;
