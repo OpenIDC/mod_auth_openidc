@@ -780,14 +780,13 @@ apr_byte_t oidc_util_get_request_parameter(request_rec *r, char *name,
  * printout a JSON string value
  */
 static apr_byte_t oidc_util_json_string_print(request_rec *r,
-		apr_json_value_t *result, const char *key, const char *log) {
-	apr_json_value_t *value = apr_hash_get(result->value.object, key,
-			APR_HASH_KEY_STRING);
+		json_t *result, const char *key, const char *log) {
+	json_t *value = json_object_get(result, key);
 	if (value != NULL) {
-		if (value->type == APR_JSON_STRING) {
+		if (json_is_string(value)) {
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 					"%s: response contained a \"%s\" key with string value: \"%s\"",
-					log, key, value->value.string.p);
+					log, key, json_string_value(value));
 		} else {
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 					"%s: response contained an \"%s\" key but no string value",
@@ -802,7 +801,7 @@ static apr_byte_t oidc_util_json_string_print(request_rec *r,
  * check a JSON object for "error" results and printout
  */
 static apr_byte_t oidc_util_check_json_error(request_rec *r,
-		apr_json_value_t *json) {
+		json_t *json) {
 	if (oidc_util_json_string_print(r, json, "error",
 			"oidc_util_check_json_error") == TRUE) {
 		oidc_util_json_string_print(r, json, "error_description",
@@ -816,26 +815,34 @@ static apr_byte_t oidc_util_check_json_error(request_rec *r,
  * decode a JSON string, check for "error" results and printout
  */
 apr_byte_t oidc_util_decode_json_and_check_error(request_rec *r,
-		const char *str, apr_json_value_t **json) {
+		const char *str, json_t **json) {
+
+	json_error_t json_error;
+	*json = json_loads(str, 0, &json_error);
 
 	/* decode the JSON contents of the buffer */
-	if (apr_json_decode(json, str, strlen(str), r->pool) != APR_SUCCESS) {
+	if (*json == NULL) {
 		/* something went wrong */
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_util_check_json_error: JSON parsing returned an error");
+				"oidc_util_check_json_error: JSON parsing returned an error: %s", json_error.text);
 		return FALSE;
 	}
 
-	if ((*json == NULL) || ((*json)->type != APR_JSON_OBJECT)) {
+	if (!json_is_object(*json)) {
 		/* oops, no JSON */
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_util_check_json_error: parsed JSON did not contain a JSON object");
+		json_decref(*json);
+		*json = NULL;
 		return FALSE;
 	}
 
 	// see if it is not an error response somehow
-	if (oidc_util_check_json_error(r, *json) == TRUE)
+	if (oidc_util_check_json_error(r, *json) == TRUE) {
+		json_decref(*json);
+		*json = NULL;
 		return FALSE;
+	}
 
 	return TRUE;
 }
@@ -1056,25 +1063,23 @@ int oidc_util_html_send_error(request_rec *r, const char *error,
  * see if a certain string value is part of a JSON array with string elements
  */
 apr_byte_t oidc_util_json_array_has_value(request_rec *r,
-		apr_json_value_t *haystack, const char *needle) {
+		json_t *haystack, const char *needle) {
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_util_json_array_has_value: entering (%s)", needle);
 
-	if ((haystack == NULL) || (haystack->type != APR_JSON_ARRAY))
+	if ((haystack == NULL) || (!json_is_array(haystack)))
 		return FALSE;
 
 	int i;
-	for (i = 0; i < haystack->value.array->nelts; i++) {
-		apr_json_value_t *elem = APR_ARRAY_IDX(haystack->value.array, i,
-				apr_json_value_t *);
-		if (elem->type != APR_JSON_STRING) {
+	for (i = 0; i < json_array_size(haystack); i++) {
+		json_t *elem = json_array_get(haystack, i);
+		if (!json_is_string(elem)) {
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_util_json_array_has_value: unhandled in-array JSON non-string object type [%d]",
-					elem->type);
+					"oidc_util_json_array_has_value: unhandled in-array JSON non-string object type [%d]", elem->type);
 			continue;
 		}
-		if (strcmp(elem->value.string.p, needle) == 0) {
+		if (strcmp(json_string_value(elem), needle) == 0) {
 			break;
 		}
 	}
@@ -1083,7 +1088,7 @@ apr_byte_t oidc_util_json_array_has_value(request_rec *r,
 //			"oidc_util_json_array_has_value: returning (%d=%d)", i,
 //			haystack->value.array->nelts);
 
-	return (i == haystack->value.array->nelts) ? FALSE : TRUE;
+	return (i == json_array_size(haystack)) ? FALSE : TRUE;
 }
 
 /*
@@ -1108,11 +1113,10 @@ static void oidc_util_set_app_header(request_rec *r, const char *s_key,
 /*
  * set the user/claims information from the session in HTTP headers passed on to the application
  */
-void oidc_util_set_app_headers(request_rec *r, const apr_json_value_t *j_attrs, const char *claim_prefix,
+void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs, const char *claim_prefix,
 		const char *claim_delimiter) {
 
-	apr_json_value_t *j_value = NULL;
-	apr_hash_index_t *hi = NULL;
+	json_t *j_value = NULL;
 	const char *s_key = NULL;
 
 	/* if not attributes are set, nothing needs to be done */
@@ -1123,80 +1127,80 @@ void oidc_util_set_app_headers(request_rec *r, const apr_json_value_t *j_attrs, 
 	}
 
 	/* loop over the claims in the JSON structure */
-	for (hi = apr_hash_first(r->pool, j_attrs->value.object); hi; hi =
-			apr_hash_next(hi)) {
+	void *iter = json_object_iter((json_t*)j_attrs);
+	while (iter) {
 
 		/* get the next key/value entry */
-		apr_hash_this(hi, (const void**) &s_key, NULL, (void**) &j_value);
+		s_key = json_object_iter_key(iter);
+		j_value = json_object_iter_value(iter);
 
 		/* check if it is a single value string */
-		if (j_value->type == APR_JSON_STRING) {
+		if (json_is_string(j_value)) {
 
 			/* set the single string in the application header whose name is based on the key and the prefix */
-			oidc_util_set_app_header(r, s_key, j_value->value.string.p,
+			oidc_util_set_app_header(r, s_key, json_string_value(j_value),
 					claim_prefix);
 
-		} else if (j_value->type == APR_JSON_BOOLEAN) {
+		} else if (json_is_boolean(j_value)) {
 
 			/* set boolean value in the application header whose name is based on the key and the prefix */
 			oidc_util_set_app_header(r, s_key,
-					j_value->value.boolean ? "1" : "0", claim_prefix);
+					json_is_true(j_value) ? "1" : "0", claim_prefix);
 
-		} else if (j_value->type == APR_JSON_LONG) {
+		} else if (json_is_integer(j_value)) {
 
 			/* set long value in the application header whose name is based on the key and the prefix */
 			oidc_util_set_app_header(r, s_key,
-					apr_psprintf(r->pool, "%ld", j_value->value.lnumber),
+					apr_psprintf(r->pool, "%" JSON_INTEGER_FORMAT "", json_integer_value(j_value)),
 					claim_prefix);
 
-		} else if (j_value->type == APR_JSON_DOUBLE) {
+		} else if (json_is_real(j_value)) {
 
 			/* set float value in the application header whose name is based on the key and the prefix */
 			oidc_util_set_app_header(r, s_key,
-					apr_psprintf(r->pool, "%lf", j_value->value.dnumber),
+					apr_psprintf(r->pool, "%lf", json_real_value(j_value)),
 					claim_prefix);
 
 			/* check if it is a multi-value string */
-		} else if (j_value->type == APR_JSON_ARRAY) {
+		} else if (json_is_array(j_value)) {
 
 			/* some logging about what we're going to do */
 			ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-					"oidc_util_set_app_headers: parsing attribute array for key \"%s\" (#nr-of-elems: %d)",
-					s_key, j_value->value.array->nelts);
+					"oidc_util_set_app_headers: parsing attribute array for key \"%s\" (#nr-of-elems: %ld)",
+					s_key, json_array_size(j_value));
 
 			/* string to hold the concatenated array string values */
 			char *s_concat = apr_pstrdup(r->pool, "");
 			int i = 0;
 
 			/* loop over the array */
-			for (i = 0; i < j_value->value.array->nelts; i++) {
+			for (i = 0; i < json_array_size(j_value); i++) {
 
 				/* get the current element */
-				apr_json_value_t *elem = APR_ARRAY_IDX(j_value->value.array, i,
-						apr_json_value_t *);
+				json_t *elem = json_array_get(j_value, i);
 
 				/* check if it is a string */
-				if (elem->type == APR_JSON_STRING) {
+				if (json_is_string(elem)) {
 
 					/* concatenate the string to the s_concat value using the configured separator char */
 					// TODO: escape the delimiter in the values (maybe reuse/extract url-formatted code from oidc_session_identity_encode)
 					if (apr_strnatcmp(s_concat, "") != 0) {
 						s_concat = apr_psprintf(r->pool, "%s%s%s", s_concat,
-								claim_delimiter, elem->value.string.p);
+								claim_delimiter, json_string_value(elem));
 					} else {
 						s_concat = apr_psprintf(r->pool, "%s",
-								elem->value.string.p);
+								json_string_value(elem));
 					}
 
-				} else if (elem->type == APR_JSON_BOOLEAN) {
+				} else if (json_is_boolean(elem)) {
 
 					if (apr_strnatcmp(s_concat, "") != 0) {
 						s_concat = apr_psprintf(r->pool, "%s%s%s", s_concat,
 								claim_delimiter,
-								j_value->value.boolean ? "1" : "0");
+								json_is_true(elem) ? "1" : "0");
 					} else {
 						s_concat = apr_psprintf(r->pool, "%s",
-								j_value->value.boolean ? "1" : "0");
+								json_is_true(elem) ? "1" : "0");
 					}
 
 				} else {
@@ -1218,6 +1222,8 @@ void oidc_util_set_app_headers(request_rec *r, const apr_json_value_t *j_attrs, 
 					"oidc_util_set_app_headers: unhandled JSON object type [%d] for key \"%s\" when parsing claims",
 					j_value->type, s_key);
 		}
+
+		iter = json_object_iter_next((json_t *)j_attrs, iter);
 	}
 }
 
@@ -1275,14 +1281,13 @@ apr_byte_t oidc_util_spaced_string_contains(apr_pool_t *pool,
 /*
  * get (optional) string from a JSON object
  */
-apr_byte_t oidc_json_object_get_string(apr_pool_t *pool, apr_json_value_t *json,
+apr_byte_t oidc_json_object_get_string(apr_pool_t *pool, json_t *json,
 		const char *name, char **value, const char *default_value) {
 	*value = default_value ? apr_pstrdup(pool, default_value) : NULL;
 	if (json != NULL) {
-		apr_json_value_t *v = apr_hash_get(json->value.object, name,
-				APR_HASH_KEY_STRING);
-		if ((v != NULL) && (v->type == APR_JSON_STRING)) {
-			*value = apr_pstrdup(pool, v->value.string.p);
+		json_t *v = json_object_get(json, name);
+		if ((v != NULL) && (json_is_string(v))) {
+			*value = apr_pstrdup(pool, json_string_value(v));
 		}
 	}
 	return TRUE;
@@ -1291,14 +1296,13 @@ apr_byte_t oidc_json_object_get_string(apr_pool_t *pool, apr_json_value_t *json,
 /*
  * get (optional) int from a JSON object
  */
-apr_byte_t oidc_json_object_get_int(apr_pool_t *pool, apr_json_value_t *json,
+apr_byte_t oidc_json_object_get_int(apr_pool_t *pool, json_t *json,
 		const char *name, int *value, const int default_value) {
 	*value = default_value;
 	if (json != NULL) {
-		apr_json_value_t *v = apr_hash_get(json->value.object, name,
-				APR_HASH_KEY_STRING);
-		if ((v != NULL) && (v->type == APR_JSON_LONG)) {
-			*value = v->value.lnumber;
+		json_t *v = json_object_get(json, name);
+		if ((v != NULL) && (json_is_integer(v))) {
+			*value = json_integer_value(v);
 		}
 	}
 	return TRUE;

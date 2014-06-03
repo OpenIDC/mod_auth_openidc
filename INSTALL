@@ -9,7 +9,11 @@ Installation from source
 ========================
 
 You will require development headers and tools for the following
-dependencies: Apache (>=2.0), OpenSSL and Curl.
+dependencies:
+ Apache (>=2.0),
+ OpenSSL (>=0.9.8) (>=1.0 for Elliptic Curve support)
+ Curl (>=?)
+ Jansson (>=2.0) (JSON parser for C)
 
 Configure, make and install with:
 

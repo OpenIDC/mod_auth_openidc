@@ -50,7 +50,6 @@
  * https://github.com/Jasig/mod_auth_cas
  *
  * Other code copied/borrowed/adapted:
- * JSON decoding: apr_json.h apr_json_decode.c: https://github.com/moriyoshi/apr-json/
  * AES crypto: http://saju.net.in/code/misc/openssl_aes.c.txt
  * session handling: Apache 2.4 mod_session.c
  * session handling backport: http://contribsoft.caixamagica.pt/browser/internals/2012/apachecc/trunk/mod_session-port/src/util_port_compat.c
@@ -77,6 +76,8 @@
 #include "http_request.h"
 
 #include "mod_auth_openidc.h"
+
+// TODO: improve JSON handling
 
 // TODO: do response_mode "cookie"?
 
@@ -247,19 +248,23 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	if (jwt->payload.iss == NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_unsolicited_proto_state: no \"iss\" could be retrieved from JWT state, aborting");
+		apr_jwt_destroy(jwt);
 		return FALSE;
 	}
 
 	oidc_provider_t *provider = oidc_get_provider_for_issuer(r, c,
 			jwt->payload.iss);
-	if (provider == NULL)
+	if (provider == NULL) {
+		apr_jwt_destroy(jwt);
 		return FALSE;
+	}
 
 	char *rfp = NULL;
 	apr_jwt_get_string(r->pool, &jwt->payload.value, "rfp", &rfp);
 	if (rfp == NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_unsolicited_proto_state: no \"rfp\" claim could be retrieved from JWT state, aborting");
+		apr_jwt_destroy(jwt);
 		return FALSE;
 	}
 
@@ -267,6 +272,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_unsolicited_proto_state: \"rfp\" (%s) does not match \"iss\", aborting",
 				rfp);
+		apr_jwt_destroy(jwt);
 		return FALSE;
 	}
 
@@ -275,6 +281,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	if (target_uri == NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_unsolicited_proto_state: no \"target_uri\" claim could be retrieved from JWT state, aborting");
+		apr_jwt_destroy(jwt);
 		return FALSE;
 	}
 
@@ -284,17 +291,21 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 					"oidc_unsolicited_proto_state: no provider metadata found for provider \"%s\"",
 					jwt->payload.iss);
+			apr_jwt_destroy(jwt);
 			return FALSE;
 		}
 	}
 
 	if ((jwt->payload.exp != APR_JWT_CLAIM_TIME_EMPTY)
 			&& (oidc_proto_validate_exp(r, jwt) == FALSE))
+		apr_jwt_destroy(jwt);
 		return FALSE;
 
 	if ((jwt->payload.iat != APR_JWT_CLAIM_TIME_EMPTY)
-			&& (oidc_proto_validate_iat(r, provider, jwt) == FALSE))
+			&& (oidc_proto_validate_iat(r, provider, jwt) == FALSE)) {
+		apr_jwt_destroy(jwt);
 		return FALSE;
+	}
 
 	char *jti = NULL;
 	apr_jwt_get_string(r->pool, &jwt->payload.value, "jti", &jti);
@@ -309,6 +320,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_unsolicited_proto_state: the jti value (%s) passed in the browser state was found in the cache already; possible replay attack!?",
 				jti);
+		apr_jwt_destroy(jwt);
 		return FALSE;
 	}
 
@@ -348,6 +360,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 			&refresh) == FALSE) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_unsolicited_proto_state: state JWT signature could not be validated, aborting");
+		apr_jwt_destroy(jwt);
 		return FALSE;
 	}
 
@@ -366,6 +379,8 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	res->response_type = provider->response_type;
 	res->timestamp = apr_time_sec(apr_time_now());
 
+	apr_jwt_destroy(jwt);
+
 	return TRUE;
 }
 
@@ -377,8 +392,6 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_restore_proto_state: entering");
-
-	apr_json_value_t *v = NULL;
 
 	/* get the state cookie value first */
 	char *cookieValue = oidc_util_get_cookie(r, OIDCStateCookieName);
@@ -401,17 +414,18 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 			"oidc_restore_proto_state: restored JSON state cookie value: %s",
 			svalue);
 
-	apr_json_value_t *json = NULL;
-	/* decode the string in to a JSON structure into value->json */
-	if (apr_json_decode(&json, svalue, strlen(svalue), r->pool) != APR_SUCCESS)
-		return FALSE;
-
 	*proto_state = apr_pcalloc(r->pool, sizeof(oidc_proto_state));
 	oidc_proto_state *res = *proto_state;
 
-	/* 1. restore the nonce from the cookie */
-	v = apr_hash_get(json->value.object, "nonce", APR_HASH_KEY_STRING);
-	res->nonce = apr_pstrdup(r->pool, v->value.string.p);
+	json_error_t json_error;
+	json_t *v, *json = json_loads(svalue, 0, &json_error);
+	if (json == NULL) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "oidc_restore_proto_state: parsing JSON (json_loads) failed: %s", json_error.text);
+		return FALSE;
+	}
+
+	v = json_object_get(json, "nonce");
+	res->nonce = apr_pstrdup(r->pool, json_string_value(v));
 
 	/* calculate the hash of the browser fingerprint concatenated with the nonce */
 	char *calc = oidc_get_browser_state_hash(r, res->nonce);
@@ -420,40 +434,34 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_restore_proto_state: calculated state from cookie does not match state parameter passed back in URL: \"%s\" != \"%s\"",
 				state, calc);
+		json_decref(json);
 		return FALSE;
 	}
 
-	/* 2. since we're OK, get the original URL as the next value in the decrypted cookie */
-	v = apr_hash_get(json->value.object, "original_url", APR_HASH_KEY_STRING);
-	res->original_url = apr_pstrdup(r->pool, v->value.string.p);
+	v = json_object_get(json, "original_url");
+	res->original_url = apr_pstrdup(r->pool, json_string_value(v));
 
-	/* 3. get the original method as the next value in the decrypted cookie */
-	v = apr_hash_get(json->value.object, "original_method", APR_HASH_KEY_STRING);
-	res->original_method = apr_pstrdup(r->pool, v->value.string.p);
+	v = json_object_get(json, "original_method");
+	res->original_method = apr_pstrdup(r->pool, json_string_value(v));
 
-	/* 4. get the issuer value stored in the cookie */
-	v = apr_hash_get(json->value.object, "issuer", APR_HASH_KEY_STRING);
-	res->issuer = apr_pstrdup(r->pool, v->value.string.p);
+	v = json_object_get(json, "issuer");
+	res->issuer = apr_pstrdup(r->pool, json_string_value(v));
 
-	/* 5. get the response_type value stored in the cookie */
-	v = apr_hash_get(json->value.object, "response_type", APR_HASH_KEY_STRING);
-	res->response_type = apr_pstrdup(r->pool, v->value.string.p);
+	v = json_object_get(json, "response_type");
+	res->response_type = apr_pstrdup(r->pool, json_string_value(v));
 
-	/* 6. get the response_mode value stored in the cookie */
-	v = apr_hash_get(json->value.object, "response_mode", APR_HASH_KEY_STRING);
-	res->response_mode =
-			(v && v->value.string.p && (strcmp(v->value.string.p, "") != 0)) ?
-					apr_pstrdup(r->pool, v->value.string.p) : NULL;
+	v = json_object_get(json, "response_mode");
+	res->response_mode = (strcmp(json_string_value(v), "") != 0) ? apr_pstrdup(r->pool, json_string_value(v)) : NULL;
 
-	/* 7. get the timestamp value stored in the cookie */
-	v = apr_hash_get(json->value.object, "timestamp", APR_HASH_KEY_STRING);
-	res->timestamp = v->value.lnumber;
+	v = json_object_get(json, "timestamp");
+	res->timestamp = json_integer_value(v);
 
 	/* check that the timestamp is not beyond the valid interval */
 	apr_time_t now = apr_time_sec(apr_time_now());
 	if (now > res->timestamp + c->state_timeout) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_restore_proto_state: state has expired");
+		json_decref(json);
 		return FALSE;
 	}
 
@@ -461,6 +469,8 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 			"oidc_restore_proto_state: restored state: nonce=\"%s\", original_url=\"%s\", original_method=\"%s\", issuer=\"%s\", response_type=\%s\", response_mode=\"%s\", timestamp=%" APR_TIME_T_FMT,
 			res->nonce, res->original_url, res->original_method, res->issuer, res->response_type,
 			res->response_mode, res->timestamp);
+
+	json_decref(json);
 
 	/* we've made it */
 	return TRUE;
@@ -562,22 +572,24 @@ static apr_byte_t oidc_set_app_claims(request_rec *r,
 		const char *session_key) {
 
 	const char *s_attrs = NULL;
-	apr_json_value_t *j_attrs = NULL;
+	json_t *j_attrs = NULL;
 
 	/* get the string-encoded JSON object from the session */
 	oidc_session_get(r, session, session_key, &s_attrs);
 
 	/* decode the string-encoded attributes in to a JSON structure */
-	if ((s_attrs != NULL)
-			&& (apr_json_decode(&j_attrs, s_attrs, strlen(s_attrs), r->pool)
-					!= APR_SUCCESS)) {
+	if (s_attrs != NULL) {
+		json_error_t json_error;
+		j_attrs = json_loads(s_attrs, 0, &json_error);
 
-		/* whoops, JSON has been corrupted */
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_set_app_claims: unable to parse \"%s\" JSON stored in the session, returning internal server error",
-				session_key);
+		if (j_attrs == NULL) {
+			/* whoops, JSON has been corrupted */
+			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+					"oidc_set_app_claims: unable to parse \"%s\" JSON stored in the session (%s), returning internal server error",
+					json_error.text, session_key);
 
-		return FALSE;
+			return FALSE;
+		}
 	}
 
 	/* set the resolved claims a HTTP headers for the application */
@@ -587,6 +599,8 @@ static apr_byte_t oidc_set_app_claims(request_rec *r,
 
 		/* set the attributes JSON structure in the request state so it is available for authz purposes later on */
 		oidc_request_state_set(r, session_key, (const char *) j_attrs);
+
+		json_decref(j_attrs);
 	}
 
 	return TRUE;
@@ -770,6 +784,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		if (jwt != NULL) {
 			if (oidc_proto_validate_code(r, provider, jwt,
 					proto_state->response_type, code) == FALSE) {
+				apr_jwt_destroy(jwt);
 				return HTTP_UNAUTHORIZED;
 			}
 		}
@@ -779,6 +794,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		/* resolve the code against the token endpoint */
 		if (oidc_proto_resolve_code(r, c, provider, code, &c_id_token,
 				&c_access_token, &c_token_type) == FALSE) {
+			apr_jwt_destroy(jwt);
 			return HTTP_UNAUTHORIZED;
 		}
 
@@ -786,6 +802,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		if (oidc_proto_validate_code_response(r,
 				proto_state->response_type, &c_id_token, &c_access_token,
 				&c_token_type) == FALSE) {
+			apr_jwt_destroy(jwt);
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 
@@ -834,7 +851,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	 * parsed claims are not actually used here but need to be parsed anyway for error checking purposes
 	 */
 	const char *claims = NULL;
-	apr_json_value_t *j_claims = NULL;
+	json_t *j_claims = NULL;
 	if (oidc_proto_resolve_userinfo(r, c, provider, access_token, &claims,
 			&j_claims) == FALSE) {
 		claims = NULL;
@@ -878,6 +895,9 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_handle_authorization_response: session created and stored, redirecting to original url: %s",
 			proto_state->original_url);
+
+	apr_jwt_destroy(jwt);
+	if (j_claims != NULL) json_decref(j_claims);
 
 	/* do the actual redirect to the original URL */
 	return HTTP_MOVED_TEMPORARILY;
@@ -1416,12 +1436,12 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args, const 
 int oidc_auth_checker(request_rec *r) {
 
 	/* get the set of claims from the request state (they've been set in the authentication part earlier) */
-	apr_json_value_t *attrs = (apr_json_value_t *) oidc_request_state_get(r,
+	json_t *attrs = (json_t *) oidc_request_state_get(r,
 			OIDC_CLAIMS_SESSION_KEY);
 
 	/* if no claims, use the id_token itself */
 	if (attrs == NULL)
-		attrs = (apr_json_value_t *) oidc_request_state_get(r,
+		attrs = (json_t *) oidc_request_state_get(r,
 				OIDC_IDTOKEN_SESSION_KEY);
 
 	/* get the Require statements */

@@ -55,8 +55,12 @@
 #define _APR_JOSE_H_
 
 #include "apr_pools.h"
+#include "apr_time.h"
+#include "apr_tables.h"
+#include "apr_hash.h"
+#include "apr_strings.h"
 
-#include "../json/apr_json.h"
+#include "jansson.h"
 
 #define APR_JWT_CLAIM_TIME_EMPTY -1
 
@@ -67,7 +71,7 @@
 /* a parsed JWT "element", header or payload */
 typedef struct apr_jwt_value_t {
 	/* parsed JSON struct representation */
-	apr_json_value_t *json;
+	json_t *json;
 	/* string representation */
 	char *str;
 } apr_jwt_value_t;
@@ -134,6 +138,8 @@ apr_byte_t apr_jwt_get_string(apr_pool_t *pool, apr_jwt_value_t *value,
 /* parse a string in to a JSON Web Token struct */
 apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
 		apr_jwt_t **j_jwt, apr_hash_t *private_keys, const char *shared_key);
+/* destroy resources allocated for JWT */
+void apr_jwt_destroy(apr_jwt_t *);
 
 /*
  * JSON Web Key handling
@@ -189,11 +195,8 @@ typedef struct apr_jwk_t {
 } apr_jwk_t;
 
 /* parse a JSON representation in to a JSON Web Key struct (also storing the string representation */
-apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, apr_json_value_t *j_json,
+apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, json_t *j_json,
 		const char *s_json, apr_jwk_t **j_jwk);
-/* parse a string in to a JSON Web Key struct */
-apr_byte_t apr_jwk_parse_string(apr_pool_t *pool, const char *s_json,
-		apr_jwk_t **j_jwk);
 /* convert the RSA public key in a PEM formatted file with an X.509 cert in to an RSA JWK */
 apr_byte_t apr_jwk_x509_to_rsa_jwk(apr_pool_t *pool, const char *filename, char **jwk, char**kid);
 /* convert the RSA private key in a PEM formatted file in to an RSA JWK */

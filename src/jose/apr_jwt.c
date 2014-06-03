@@ -146,8 +146,10 @@ static apr_byte_t apr_jwt_base64url_decode_object(apr_pool_t *pool,
 		return FALSE;
 
 	/* decode the string in to a JSON structure into value->json */
-	if (apr_json_decode(&value->json, value->str, strlen(value->str),
-			pool) != APR_SUCCESS)
+	json_error_t json_error;
+	value->json = json_loads(value->str, 0, &json_error);
+
+	if (value->json == NULL)
 		return FALSE;
 
 	/* check that we've actually got a JSON value back */
@@ -155,7 +157,7 @@ static apr_byte_t apr_jwt_base64url_decode_object(apr_pool_t *pool,
 		return FALSE;
 
 	/* check that the value is a JSON object */
-	if (value->json->type != APR_JSON_OBJECT)
+	if (!json_is_object(value->json))
 		return FALSE;
 
 	return TRUE;
@@ -166,10 +168,9 @@ static apr_byte_t apr_jwt_base64url_decode_object(apr_pool_t *pool,
  */
 apr_byte_t apr_jwt_get_string(apr_pool_t *pool, apr_jwt_value_t *value,
 		const char *claim_name, char **result) {
-	apr_json_value_t *v = apr_hash_get(value->json->value.object, claim_name,
-			APR_HASH_KEY_STRING);
-	if ((v != NULL) && (v->type == APR_JSON_STRING)) {
-		*result = apr_pstrdup(pool, v->value.string.p);
+	json_t *v = json_object_get(value->json, claim_name);
+	if ((v != NULL) && (json_is_string(v))) {
+		*result = apr_pstrdup(pool, json_string_value(v));
 	} else {
 		*result = NULL;
 	}
@@ -181,10 +182,9 @@ apr_byte_t apr_jwt_get_string(apr_pool_t *pool, apr_jwt_value_t *value,
  */
 static apr_byte_t apr_jwt_parse_timestamp(apr_pool_t *pool,
 		apr_jwt_value_t *value, const char *claim_name, apr_time_t *result) {
-	apr_json_value_t *v = apr_hash_get(value->json->value.object, claim_name,
-	APR_HASH_KEY_STRING);
-	if ((v != NULL) && (v->type == APR_JSON_LONG)) {
-		*result = apr_time_from_sec(v->value.lnumber);
+	json_t *v = json_object_get(value->json, claim_name);
+	if ((v != NULL) && (json_is_integer(v))) {
+		*result = apr_time_from_sec(json_integer_value(v));
 	} else {
 		*result = APR_JWT_CLAIM_TIME_EMPTY;
 	}
@@ -280,6 +280,7 @@ const char *apr_jwt_header_to_string(apr_pool_t *pool, const char *s_json) {
 	apr_jwt_header_t header;
 	if (apr_jwt_parse_header(pool, ((const char**) unpacked->elts)[0],
 			&header) == FALSE) return NULL;
+	json_decref(header.value.json);
 	return header.value.str;
 }
 
@@ -307,6 +308,7 @@ apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
 			apr_array_clear(unpacked);
 			unpacked = apr_jwt_compact_deserialize(pool,
 					(const char *) decrypted);
+			json_decref(jwt->header.value.json);
 			if (unpacked->nelts < 2) return FALSE;
 			/* parse the nested header fields */
 			if (apr_jwt_parse_header(pool, ((const char**) unpacked->elts)[0],
@@ -321,15 +323,28 @@ apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
 
 	/* parse the payload fields */
 	if (apr_jwt_parse_payload(pool, ((const char**) unpacked->elts)[1],
-			&jwt->payload) == FALSE)
+			&jwt->payload) == FALSE) {
+		json_decref(jwt->header.value.json);
 		return FALSE;
+	}
 
 	if (unpacked->nelts > 2) {
 		/* remainder is the signature */
 		if (apr_jwt_parse_signature(pool, ((const char**) unpacked->elts)[2],
-				&jwt->signature) == FALSE)
+				&jwt->signature) == FALSE) {
+			json_decref(jwt->header.value.json);
+			json_decref(jwt->payload.value.json);
 			return FALSE;
+		}
 	}
 
 	return TRUE;
+}
+
+/* destroy resources allocated for JWT */
+void apr_jwt_destroy(apr_jwt_t *jwt) {
+	if (jwt) {
+		if (jwt->header.value.json) json_decref(jwt->header.value.json);
+		if (jwt->payload.value.json) json_decref(jwt->payload.value.json);
+	}
 }

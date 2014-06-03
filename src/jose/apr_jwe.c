@@ -165,19 +165,23 @@ static RSA* apr_jwe_jwk_to_openssl_rsa_key(apr_jwk_t *jwk) {
 static RSA * apr_jwe_jwk_json_to_openssl_rsa_key(apr_pool_t *pool,
 		const char *jwk_json) {
 
-	apr_json_value_t *j_jwk = NULL;
-	if (apr_json_decode(&j_jwk, jwk_json, strlen(jwk_json),
-			pool) != APR_SUCCESS)
+	json_t *j_jwk = NULL;
+
+	json_error_t json_error;
+	j_jwk = json_loads(jwk_json, 0, &json_error);
+
+	if (j_jwk == NULL)
 		return NULL;
 
-	if ((j_jwk == NULL) || (j_jwk->type != APR_JSON_OBJECT))
+	if ((j_jwk == NULL) || (!json_is_object(j_jwk)))
 		return NULL;
 
 	apr_jwk_t *jwk = NULL;
-	if (apr_jwk_parse_json(pool, j_jwk, jwk_json, &jwk) == FALSE)
-		return NULL;
+	apr_byte_t rc = apr_jwk_parse_json(pool, j_jwk, jwk_json, &jwk);
 
-	return apr_jwe_jwk_to_openssl_rsa_key(jwk);
+	json_decref(j_jwk);
+
+	return (rc == TRUE) ? apr_jwe_jwk_to_openssl_rsa_key(jwk) : NULL;
 }
 
 /*

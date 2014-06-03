@@ -61,21 +61,21 @@
  * see if a the Require value matches with a set of provided claims
  */
 static apr_byte_t oidc_authz_match_claim(request_rec *r,
-		const char * const attr_spec, const apr_json_value_t * const claims) {
+		const char * const attr_spec, const json_t * const claims) {
 
-	apr_hash_index_t *hi;
-	const void *key;
-	apr_ssize_t klen;
-	void *hval;
+	const char *key;
+	json_t *val;
 
 	/* if we don't have any claims, they can never match any Require claim primitive */
 	if (claims == NULL)
 		return FALSE;
 
 	/* loop over all of the user claims */
-	for (hi = apr_hash_first(r->pool, claims->value.object); hi; hi =
-			apr_hash_next(hi)) {
-		apr_hash_this(hi, &key, &klen, &hval);
+	void *iter = json_object_iter((json_t*)claims);
+	while (iter) {
+
+	    key = json_object_iter_key(iter);
+	    val = json_object_iter_value(iter);
 
 		const char *attr_c = (const char *) key;
 		const char *spec_c = attr_spec;
@@ -88,52 +88,48 @@ static apr_byte_t oidc_authz_match_claim(request_rec *r,
 
 		/* The match is a success if we walked the whole claim name and the attr_spec is at a colon. */
 		if (!(*attr_c) && (*spec_c) == ':') {
-			const apr_json_value_t *val;
-
-			val = ((apr_json_value_t *) hval);
 
 			/* skip the colon */
 			spec_c++;
 
 			/* see if it is a string and it (case-insensitively) matches the Require'd value */
-			if (val->type == APR_JSON_STRING) {
+			if (json_is_string(val)) {
 
-				if (apr_strnatcmp(val->value.string.p, spec_c) == 0) {
+				if (apr_strnatcmp(json_string_value(val), spec_c) == 0) {
 					return TRUE;
 				}
 
 				/* see if it is a boolean and it (case-insensitively) matches the Require'd value */
-			} else if (val->type == APR_JSON_BOOLEAN) {
+			} else if (json_is_boolean(val)) {
 
-				if (apr_strnatcmp(val->value.boolean ? "true" : "false", spec_c)
+				if (apr_strnatcmp(json_is_true(val) ? "true" : "false", spec_c)
 						== 0) {
 					return TRUE;
 				}
 
 				/* if it is an array, we'll walk it */
-			} else if (val->type == APR_JSON_ARRAY) {
+			} else if (json_is_array(val)) {
 
 				/* compare the claim values */
 				int i = 0;
-				for (i = 0; i < val->value.array->nelts; i++) {
+				for (i = 0; i < json_array_size(val); i++) {
 
-					apr_json_value_t *elem =
-							APR_ARRAY_IDX(val->value.array, i, apr_json_value_t *);
+					json_t *elem = json_array_get(val, i);
 
-					if (elem->type == APR_JSON_STRING) {
+					if (json_is_string(elem)) {
 						/*
 						 * approximately compare the claim value (ignoring
 						 * whitespace). At this point, spec_c points to the
 						 * NULL-terminated value pattern.
 						 */
-						if (apr_strnatcmp(elem->value.string.p, spec_c) == 0) {
+						if (apr_strnatcmp(json_string_value(elem), spec_c) == 0) {
 							return TRUE;
 						}
 
-					} else if (elem->type == APR_JSON_BOOLEAN) {
+					} else if (json_is_boolean(elem)) {
 
 						if (apr_strnatcmp(
-								elem->value.boolean ? "true" : "false", spec_c)
+								json_is_true(elem) ? "true" : "false", spec_c)
 								== 0) {
 							return TRUE;
 						}
@@ -155,16 +151,19 @@ static apr_byte_t oidc_authz_match_claim(request_rec *r,
 			}
 
 		}
+
 		/* TODO: a tilde (denotes a PCRE match). */
 		//else if (!(*attr_c) && (*spec_c) == '~') {
+
+		iter = json_object_iter_next((json_t *)claims, iter);
 	}
 	return FALSE;
 }
 
 /*
- * Apache <2.4 authorizatio routine: match the claims from the authenticated user against the Require primitive
+ * Apache <2.4 authorization routine: match the claims from the authenticated user against the Require primitive
  */
-int oidc_authz_worker(request_rec *r, const apr_json_value_t * const claims,
+int oidc_authz_worker(request_rec *r, const json_t * const claims,
 		const require_line * const reqs, int nelts) {
 	const int m = r->method_number;
 	const char *token;

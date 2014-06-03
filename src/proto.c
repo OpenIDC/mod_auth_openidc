@@ -270,26 +270,24 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 	}
 
 	/* get the "aud" value from the JSON payload */
-	apr_json_value_t *aud = apr_hash_get(
-			id_token_payload->value.json->value.object, "aud",
-			APR_HASH_KEY_STRING);
+	json_t *aud = json_object_get(id_token_payload->value.json, "aud");
 	if (aud != NULL) {
 
 		/* check if it is a single-value */
-		if (aud->type == APR_JSON_STRING) {
+		if (json_is_string(aud)) {
 
 			/* a single-valued audience must be equal to our client_id */
-			if (apr_strnatcmp(aud->value.string.p, provider->client_id) != 0) {
+			if (apr_strnatcmp(json_string_value(aud), provider->client_id) != 0) {
 				ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 						"oidc_proto_validate_aud_and_azp: the configured client_id (%s) did not match the \"aud\" claim value (%s) in the id_token",
-						provider->client_id, aud->value.string.p);
+						provider->client_id, json_string_value(aud));
 				return FALSE;
 			}
 
 			/* check if this is a multi-valued audience */
-		} else if (aud->type == APR_JSON_ARRAY) {
+		} else if (json_is_array(aud)) {
 
-			if ((aud->value.array->nelts > 1) && (azp == NULL)) {
+			if ((json_array_size(aud) > 1) && (azp == NULL)) {
 				ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 						"oidc_proto_validate_aud_and_azp: the \"aud\" claim value in the id_token is an array with more than 1 element, but \"azp\" claim is not present (a SHOULD in the spec...)");
 			}
@@ -421,7 +419,7 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
  * get the key from the JWKs that corresponds with the key specified in the header
  */
 static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
-		apr_jwt_header_t *jwt_hdr, apr_json_value_t *j_jwks, const char *type,
+		apr_jwt_header_t *jwt_hdr, json_t *j_jwks, const char *type,
 		apr_jwk_t **result) {
 
 	char *x5t = NULL;
@@ -432,32 +430,29 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 			jwt_hdr->kid, x5t);
 
 	/* get the "keys" JSON array from the JWKs object */
-	apr_json_value_t *keys = apr_hash_get(j_jwks->value.object, "keys",
-			APR_HASH_KEY_STRING);
-	if ( (keys == NULL) || (keys->type != APR_JSON_ARRAY) ) {
+	json_t *keys = json_object_get(j_jwks, "keys");
+	if ( (keys == NULL) || !(json_is_array(keys)) ) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_get_key_from_jwks: \"keys\" array element is not a JSON array");
 		return FALSE;
 	}
 
 	int i;
-	for (i = 0; i < keys->value.array->nelts; i++) {
+	for (i = 0; i < json_array_size(keys); i++) {
 
 		/* get the next element in the array */
-		apr_json_value_t *elem = APR_ARRAY_IDX(keys->value.array, i,
-				apr_json_value_t *);
+		json_t *elem = json_array_get(keys, i);
 
 		/* check that it is a JSON object */
-		if (elem->type != APR_JSON_OBJECT) {
+		if (!json_is_object(elem)) {
 			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
 					"oidc_proto_get_key_from_jwks: \"keys\" array element is not a JSON object, skipping");
 			continue;
 		}
 
 		/* get the key type and see if it is the RSA type that we are looking for */
-		apr_json_value_t *kty = apr_hash_get(elem->value.object, "kty",
-				APR_HASH_KEY_STRING);
-		if (strcmp(kty->value.string.p, type) != 0) continue;
+		json_t *kty = json_object_get(elem, "kty");
+		if ( (!json_is_string(kty)) || (strcmp(json_string_value(kty), type) != 0)) continue;
 
 		/* see if we were looking for a specific kid, if not we'll return the first one found */
 		if ( (jwt_hdr->kid == NULL) && (x5t == NULL) ) {
@@ -469,11 +464,10 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 		}
 
 		/* we are looking for a specific kid, get the kid from the current element */
-		apr_json_value_t *ekid = apr_hash_get(elem->value.object, "kid",
-				APR_HASH_KEY_STRING);
-		if ( (ekid != NULL) && (jwt_hdr->kid != NULL) ) {
+		json_t *ekid = json_object_get(elem, "kid");
+		if ( (ekid != NULL) && json_is_string(ekid) && (jwt_hdr->kid != NULL) ) {
 			/* compare the requested kid against the current element */
-			if (apr_strnatcmp(jwt_hdr->kid, ekid->value.string.p) == 0) {
+			if (apr_strnatcmp(jwt_hdr->kid, json_string_value(ekid)) == 0) {
 				ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 						"oidc_proto_get_key_from_jwks: found matching kid: \"%s\"",
 						jwt_hdr->kid);
@@ -484,11 +478,10 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 		}
 
 		/* we are looking for a specific x5t, get the x5t from the current element */
-		apr_json_value_t *ex5t = apr_hash_get(elem->value.object, "x5t",
-				APR_HASH_KEY_STRING);
-		if ( (ex5t != NULL) && (x5t != NULL) ) {
+		json_t *ex5t = json_object_get(elem, "kid");
+		if ( (ex5t != NULL) && json_is_string(ex5t) && (x5t != NULL) ) {
 			/* compare the requested kid against the current element */
-			if (apr_strnatcmp(x5t, ex5t->value.string.p) == 0) {
+			if (apr_strnatcmp(x5t, json_string_value(ex5t)) == 0) {
 				ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 						"oidc_proto_get_key_from_jwks: found matching x5t: \"%s\"",
 						x5t);
@@ -509,7 +502,7 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 static apr_jwk_t *oidc_proto_get_key_from_jwk_uri(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, apr_jwt_header_t *jwt_hdr, const char *type,
 		apr_byte_t *refresh) {
-	apr_json_value_t *j_jwks = NULL;
+	json_t *j_jwks = NULL;
 	apr_jwk_t *jwk = NULL;
 
 	/* get the set of JSON Web Keys for this provider (possibly by downloading them from the specified provider->jwk_uri) */
@@ -521,8 +514,10 @@ static apr_jwk_t *oidc_proto_get_key_from_jwk_uri(request_rec *r, oidc_cfg *cfg,
 	}
 
 	/* get the key corresponding to the kid from the header, referencing the key that was used to sign this message */
-	if (oidc_proto_get_key_from_jwks(r, jwt_hdr, j_jwks, type, &jwk) == FALSE)
+	if (oidc_proto_get_key_from_jwks(r, jwt_hdr, j_jwks, type, &jwk) == FALSE) {
+		json_decref(j_jwks);
 		return NULL;
+	}
 
 	/* see what we've got back */
 	if ((jwk == NULL) && (refresh == FALSE)) {
@@ -543,9 +538,13 @@ static apr_jwk_t *oidc_proto_get_key_from_jwk_uri(request_rec *r, oidc_cfg *cfg,
 
 		/* get the key from the refreshed set of JWKs */
 		if (oidc_proto_get_key_from_jwks(r, jwt_hdr, j_jwks, type,
-				&jwk) == FALSE)
+				&jwk) == FALSE) {
+			json_decref(j_jwks);
 			return NULL;
+		}
 	}
+
+	json_decref(j_jwks);
 
 	return jwk;
 }
@@ -692,6 +691,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 		}
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_parse_idtoken: apr_jwt_parse failed for JWT with header: \"%s\"", apr_jwt_header_to_string(r->pool, id_token));
+		apr_jwt_destroy(*jwt);
 		return FALSE;
 	}
 
@@ -704,6 +704,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 			&refresh) == FALSE) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_parse_idtoken: id_token signature could not be validated, aborting");
+		apr_jwt_destroy(*jwt);
 		return FALSE;
 	}
 
@@ -711,12 +712,14 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 	if (oidc_proto_validate_idtoken(r, provider, *jwt, nonce) == FALSE) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_parse_idtoken: id_token payload could not be validated, aborting");
+		apr_jwt_destroy(*jwt);
 		return FALSE;
 	}
 
 	if (oidc_proto_set_remote_user(r, cfg, provider, *jwt, user) == FALSE) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_parse_idtoken: remote user could not be set, aborting");
+		apr_jwt_destroy(*jwt);
 		return FALSE;
 	}
 
@@ -791,16 +794,15 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 	}
 
 	/* check for errors, the response itself will have been logged already */
-	apr_json_value_t *result = NULL;
+	json_t *result = NULL;
 	if (oidc_util_decode_json_and_check_error(r, response, &result) == FALSE)
 		return FALSE;
 
 	/* get the access_token from the parsed response */
-	apr_json_value_t *access_token = apr_hash_get(result->value.object,
-			"access_token", APR_HASH_KEY_STRING);
-	if ((access_token != NULL) || (access_token->type == APR_JSON_STRING)) {
+	json_t *access_token = json_object_get(result, "access_token");
+	if ((access_token != NULL) && (json_is_string(access_token))) {
 
-		*s_access_token = apr_pstrdup(r->pool, access_token->value.string.p);
+		*s_access_token = apr_pstrdup(r->pool, json_string_value(access_token));
 
 		/* log and set the obtained acces_token */
 		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
@@ -808,15 +810,15 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 				*s_access_token);
 
 		/* the provider must return the token type */
-		apr_json_value_t *token_type = apr_hash_get(result->value.object,
-				"token_type", APR_HASH_KEY_STRING);
-		if ((token_type == NULL) || (token_type->type != APR_JSON_STRING)) {
+		json_t *token_type = json_object_get(result, "token_type");
+		if ((token_type == NULL) || (!json_is_string(token_type))) {
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 					"oidc_proto_resolve_code: response JSON object did not contain a token_type string");
+			json_decref(result);
 			return FALSE;
 		}
 
-		*s_token_type = apr_pstrdup(r->pool, token_type->value.string.p);
+		*s_token_type = apr_pstrdup(r->pool, json_string_value(token_type));
 
 	} else {
 		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
@@ -824,15 +826,16 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 	}
 
 	/* get the id_token from the response */
-	apr_json_value_t *id_token = apr_hash_get(result->value.object, "id_token",
-			APR_HASH_KEY_STRING);
-	if ((id_token != NULL) && (id_token->type == APR_JSON_STRING)) {
-		*s_idtoken = apr_pstrdup(r->pool, id_token->value.string.p);
+	json_t *id_token = json_object_get(result, "id_token");
+	if ((id_token != NULL) && (json_is_string(id_token))) {
+		*s_idtoken = apr_pstrdup(r->pool, json_string_value(id_token));
 
 		/* log and set the obtained id_token */
 		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 				"oidc_proto_resolve_code: returned id_token: %s", *s_idtoken);
 	}
+
+	json_decref(result);
 
 	return TRUE;
 }
@@ -842,7 +845,7 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
  */
 apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char *access_token,
-		const char **response, apr_json_value_t **claims) {
+		const char **response, json_t **claims) {
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_resolve_userinfo: entering, endpoint=%s, access_token=%s",
@@ -901,42 +904,44 @@ apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg,
 	}
 
 	/* decode and see if it is not an error response somehow */
-	apr_json_value_t *j_response = NULL;
+	json_t *j_response = NULL;
 	if (oidc_util_decode_json_and_check_error(r, response, &j_response) == FALSE)
 		return FALSE;
 
 	/* get the links parameter */
-	apr_json_value_t *j_links = apr_hash_get(j_response->value.object, "links",
-	APR_HASH_KEY_STRING);
-	if ((j_links == NULL) || (j_links->type != APR_JSON_ARRAY)) {
+	json_t *j_links = json_object_get(j_response, "links");
+	if ((j_links == NULL) || (!json_is_array(j_links))) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_account_based_discovery: response JSON object did not contain a \"links\" array");
+		json_decref(j_response);
 		return FALSE;
 	}
 
 	/* get the one-and-only object in the "links" array */
-	apr_json_value_t *j_object =
-			((apr_json_value_t**) j_links->value.array->elts)[0];
-	if ((j_object == NULL) || (j_object->type != APR_JSON_OBJECT)) {
+	json_t *j_object = json_array_get(j_links, 0);
+	if ((j_object == NULL) || (!json_is_object(j_object))) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_account_based_discovery: response JSON object did not contain a JSON object as the first element in the \"links\" array");
+		json_decref(j_response);
 		return FALSE;
 	}
 
 	/* get the href from that object, which is the issuer value */
-	apr_json_value_t *j_href = apr_hash_get(j_object->value.object, "href",
-	APR_HASH_KEY_STRING);
-	if ((j_href == NULL) || (j_href->type != APR_JSON_STRING)) {
+	json_t *j_href = json_object_get(j_object, "href");
+	if ((j_href == NULL) || (!json_is_string(j_href))) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_account_based_discovery: response JSON object did not contain a \"href\" element in the first \"links\" array object");
+		json_decref(j_response);
 		return FALSE;
 	}
 
-	*issuer = (char *) j_href->value.string.p;
+	*issuer = apr_pstrdup(r->pool, json_string_value(j_href));
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_account_based_discovery: returning issuer \"%s\" for account \"%s\" after doing succesful webfinger-based discovery",
+			"oidc_proto_account_based_discovery: returning issuer \"%s\" for account \"%s\" after doing successful webfinger-based discovery",
 			*issuer, acct);
+
+	json_decref(j_response);
 
 	return TRUE;
 }

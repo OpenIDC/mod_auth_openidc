@@ -136,7 +136,7 @@ static apr_byte_t apr_jwk_parse_ec(apr_pool_t *pool, apr_jwk_t *jwk) {
 /*
  * parse JSON JWK
  */
-apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, apr_json_value_t *j_json,
+apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, json_t *j_json,
 		const char *s_json, apr_jwk_t **j_jwk) {
 
 	/* check that we've actually got a JSON value back */
@@ -144,7 +144,7 @@ apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, apr_json_value_t *j_json,
 		return FALSE;
 
 	/* check that the value is a JSON object */
-	if (j_json->type != APR_JSON_OBJECT)
+	if (!json_is_object(j_json))
 		return FALSE;
 
 	/* allocate memory for the JWK */
@@ -172,21 +172,6 @@ apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, apr_json_value_t *j_json,
 		return apr_jwk_parse_ec(pool, jwk);
 
 	return FALSE;
-}
-
-/*
- * parse (JSON) string representation of JWK
- */
-apr_byte_t apr_jwk_parse_string(apr_pool_t *pool, const char *s_json,
-		apr_jwk_t **j_jwk) {
-
-	apr_json_value_t *j_value = NULL;
-
-	/* decode the string in to a JSON structure */
-	if (apr_json_decode(&j_value, s_json, strlen(s_json), pool) != APR_SUCCESS)
-		return FALSE;
-
-	return apr_jwk_parse_json(pool, j_value, s_json, j_jwk);
 }
 
 /*

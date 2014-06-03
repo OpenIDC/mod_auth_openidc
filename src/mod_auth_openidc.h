@@ -64,7 +64,6 @@
 #include "apr_shm.h"
 #include "apr_global_mutex.h"
 
-#include "json/apr_json.h"
 #include "jose/apr_jose.h"
 
 #include "cache/cache.h"
@@ -243,7 +242,7 @@ apr_byte_t oidc_proto_is_post_authorization_response(request_rec *r, oidc_cfg *c
 apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_check_token_type(request_rec *r, oidc_provider_t *provider, const char *token_type);
 apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *code, char **s_id_token, char **s_access_token, char **s_token_type);
-apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *access_token, const char **response, apr_json_value_t **claims);
+apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *access_token, const char **response, json_t **claims);
 apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg, const char *acct, char **issuer);
 apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *id_token, const char *nonce, char **user, apr_jwt_t **jwt);
 apr_byte_t oidc_proto_validate_access_token(request_rec *r, oidc_provider_t *provider, apr_jwt_t *jwt, const char *response_type, const char *access_token, const char *token_type);
@@ -258,9 +257,9 @@ apr_byte_t oidc_proto_validate_iat(request_rec *r, oidc_provider_t *provider, ap
 apr_byte_t oidc_proto_validate_exp(request_rec *r, apr_jwt_t *jwt);
 
 // oidc_authz.c
-int oidc_authz_worker(request_rec *r, const apr_json_value_t *const claims, const require_line *const reqs, int nelts);
+int oidc_authz_worker(request_rec *r, const json_t *const claims, const require_line *const reqs, int nelts);
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-authz_status oidc_authz_worker24(request_rec *r, const apr_json_value_t * const claims, const char *require_line);
+authz_status oidc_authz_worker24(request_rec *r, const json_t * const claims, const char *require_line);
 #endif
 
 // oidc_config.c
@@ -286,7 +285,7 @@ apr_byte_t oidc_util_http_call(request_rec *r, const char *url, int action, cons
 apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url);
 apr_byte_t oidc_util_request_has_parameter(request_rec *r, const char* param);
 apr_byte_t oidc_util_get_request_parameter(request_rec *r, char *name, char **value);
-apr_byte_t oidc_util_decode_json_and_check_error(request_rec *r, const char *str, apr_json_value_t **json);
+apr_byte_t oidc_util_decode_json_and_check_error(request_rec *r, const char *str, json_t **json);
 int oidc_util_http_sendstring(request_rec *r, const char *html, int success_rvalue);
 char *oidc_util_escape_string(const request_rec *r, const char *str);
 char *oidc_util_unescape_string(const request_rec *r, const char *str);
@@ -295,13 +294,13 @@ apr_byte_t oidc_util_generate_random_base64url_encoded_value(request_rec *r, int
 apr_byte_t oidc_util_file_read(request_rec *r, const char *path, char **result);
 apr_byte_t oidc_util_issuer_match(const char *a, const char *b);
 int oidc_util_html_send_error(request_rec *r, const char *error, const char *description, int status_code);
-apr_byte_t oidc_util_json_array_has_value(request_rec *r, apr_json_value_t *haystack, const char *needle);
-void oidc_util_set_app_headers(request_rec *r, const apr_json_value_t *j_attrs, const char *claim_prefix, const char *claim_delimiter);
+apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack, const char *needle);
+void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs, const char *claim_prefix, const char *claim_delimiter);
 apr_hash_t *oidc_util_spaced_string_to_hashtable(apr_pool_t *pool, const char *str);
 apr_byte_t oidc_util_spaced_string_equals(apr_pool_t *pool, const char *a, const char *b);
 apr_byte_t oidc_util_spaced_string_contains(apr_pool_t *pool, const char *response_type, const char *match);
-apr_byte_t oidc_json_object_get_string(apr_pool_t *pool, apr_json_value_t *json, const char *name, char **value, const char *default_value);
-apr_byte_t oidc_json_object_get_int(apr_pool_t *pool, apr_json_value_t *json, const char *name, int *value, const int default_value);
+apr_byte_t oidc_json_object_get_string(apr_pool_t *pool, json_t *json, const char *name, char **value, const char *default_value);
+apr_byte_t oidc_json_object_get_int(apr_pool_t *pool, json_t *json, const char *name, int *value, const int default_value);
 
 // oidc_crypto.c
 unsigned char *oidc_crypto_aes_encrypt(request_rec *r, oidc_cfg *cfg, unsigned char *plaintext, int *len);
@@ -310,7 +309,7 @@ unsigned char *oidc_crypto_aes_decrypt(request_rec *r, oidc_cfg *cfg, unsigned c
 // oidc_metadata.c
 apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg *cfg, apr_array_header_t **arr);
 apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *selected, oidc_provider_t **provider);
-apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, apr_json_value_t **j_jwks, apr_byte_t *refresh);
+apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, json_t **j_jwks, apr_byte_t *refresh);
 
 // oidc_session.c
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20081201

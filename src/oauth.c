@@ -133,9 +133,9 @@ static apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
  * resolve and validate an access_token against the configured Authorization Server
  */
 static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
-		const char *access_token, apr_json_value_t **token) {
+		const char *access_token, json_t **token) {
 
-	apr_json_value_t *result = NULL;
+	json_t *result = NULL;
 	const char *json = NULL;
 
 	/* see if we've got the claims for this access_token cached already */
@@ -155,44 +155,46 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 			return FALSE;
 
 		/* get and check the expiry timestamp */
-		apr_json_value_t *expires_in = apr_hash_get(result->value.object,
-				"expires_in", APR_HASH_KEY_STRING);
-		if ((expires_in == NULL) || (expires_in->type != APR_JSON_LONG)) {
+		json_t *expires_in = json_object_get(result, "expires_in");
+		if ((expires_in == NULL) || (!json_is_number(expires_in))) {
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 					"oidc_oauth_resolve_access_token: response JSON object did not contain an \"expires_in\" number");
 			return FALSE;
 		}
-		if (expires_in->value.lnumber <= 0) {
+		if (json_integer_value(expires_in) <= 0) {
 			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_oauth_resolve_access_token: \"expires_in\" number <= 0 (%ld); token already expired...",
-					expires_in->value.lnumber);
+					"oidc_oauth_resolve_access_token: \"expires_in\" number <= 0 (%" JSON_INTEGER_FORMAT "); token already expired...",
+					json_integer_value(expires_in));
 			return FALSE;
 		}
 
 		/* set it in the cache so subsequent request don't need to validate the access_token and get the claims anymore */
 		c->cache->set(r, access_token, json,
-				apr_time_now() + apr_time_from_sec(expires_in->value.lnumber));
+				apr_time_now() + apr_time_from_sec(json_integer_value(expires_in)));
 
 	} else {
 
 		/* we got the claims for this access_token in our cache, decode it in to a JSON structure */
-		if (apr_json_decode(&result, json, strlen(json), r->pool) != APR_SUCCESS) {
+		json_error_t json_error;
+		result = json_loads(json, 0, &json_error);
+		if (result == NULL) {
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_oauth_resolve_access_token: cached JSON was corrupted");
+					"oidc_oauth_resolve_access_token: cached JSON was corrupted: %s", json_error.text);
 			return FALSE;
 		}
 		/* the NULL and APR_JSON_OBJECT checks really are superfluous here */
 	}
 
 	/* return the access_token JSON object */
-	*token = apr_hash_get(result->value.object, "access_token",
-			APR_HASH_KEY_STRING);
-	if ((*token == NULL) || ((*token)->type != APR_JSON_OBJECT)) {
+	*token = json_object_get(result, "access_token");
+	if ((*token == NULL) || (!json_is_object(*token))) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_oauth_resolve_access_token: response JSON object did not contain an access_token object");
+		json_decref(result);
 		return FALSE;
 	}
 
+	json_decref(result);
 	return TRUE;
 }
 
@@ -200,26 +202,25 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
  * set the unique user identifier that will be propagated in the Apache r->user and REMOTE_USER variables
  */
 static apr_byte_t oidc_oauth_set_remote_user(request_rec *r, oidc_cfg *c,
-		apr_json_value_t *token) {
+		json_t *token) {
 
 	/* get the configured claim name to populate REMOTE_USER with (defaults to "Username") */
 	char *claim_name = apr_pstrdup(r->pool, c->oauth.remote_user_claim);
 
 	/* get the claim value from the resolved token JSON response to use as the REMOTE_USER key */
-	apr_json_value_t *username = apr_hash_get(token->value.object, claim_name,
-			APR_HASH_KEY_STRING);
-	if ((username == NULL) || (username->type != APR_JSON_STRING)) {
+	json_t *username = json_object_get(token, claim_name);
+	if ((username == NULL) || (!json_is_string(username))) {
 		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
 				"oidc_oauth_set_remote_user: response JSON object did not contain a \"%s\" string",
 				claim_name);
 		return FALSE;
 	}
 
-	r->user = apr_pstrdup(r->pool, username->value.string.p);
+	r->user = apr_pstrdup(r->pool, json_string_value(username));
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_oauth_set_remote_user: set REMOTE_USER to claim %s=%s",
-			claim_name, username->value.string.p);
+			claim_name, json_string_value(username));
 
 	return TRUE;
 }
@@ -256,7 +257,7 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 		return HTTP_UNAUTHORIZED;
 
 	/* validate the obtained access token against the OAuth AS validation endpoint */
-	apr_json_value_t *token = NULL;
+	json_t *token = NULL;
 	if (oidc_oauth_resolve_access_token(r, c, access_token, &token) == FALSE)
 		return HTTP_UNAUTHORIZED;
 
