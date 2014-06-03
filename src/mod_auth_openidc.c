@@ -78,6 +78,7 @@
 #include "mod_auth_openidc.h"
 
 // TODO: improve JSON handling
+// TODO: cleanup crypto.c on shutdown
 
 // TODO: do response_mode "cookie"?
 
@@ -571,18 +572,18 @@ static apr_byte_t oidc_set_app_claims(request_rec *r,
 		const oidc_cfg * const cfg, session_rec *session,
 		const char *session_key) {
 
-	const char *s_attrs = NULL;
-	json_t *j_attrs = NULL;
+	const char *s_claims = NULL;
+	json_t *j_claims = NULL;
 
 	/* get the string-encoded JSON object from the session */
-	oidc_session_get(r, session, session_key, &s_attrs);
+	oidc_session_get(r, session, session_key, &s_claims);
 
 	/* decode the string-encoded attributes in to a JSON structure */
-	if (s_attrs != NULL) {
+	if (s_claims != NULL) {
 		json_error_t json_error;
-		j_attrs = json_loads(s_attrs, 0, &json_error);
+		j_claims = json_loads(s_claims, 0, &json_error);
 
-		if (j_attrs == NULL) {
+		if (j_claims == NULL) {
 			/* whoops, JSON has been corrupted */
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 					"oidc_set_app_claims: unable to parse \"%s\" JSON stored in the session (%s), returning internal server error",
@@ -593,12 +594,12 @@ static apr_byte_t oidc_set_app_claims(request_rec *r,
 	}
 
 	/* set the resolved claims a HTTP headers for the application */
-	if (j_attrs != NULL) {
-		oidc_util_set_app_headers(r, j_attrs, cfg->claim_prefix,
+	if (j_claims != NULL) {
+		oidc_util_set_app_headers(r, j_claims, cfg->claim_prefix,
 				cfg->claim_delimiter);
 
-		/* set the attributes JSON structure in the request state so it is available for authz purposes later on */
-		oidc_request_state_set(r, session_key, (const char *) j_attrs);
+		/* set the claims JSON string in the request state so it is available for authz purposes later on */
+		oidc_request_state_set(r, session_key, s_claims);
 	}
 
 	return TRUE;
@@ -1410,6 +1411,29 @@ int oidc_check_user_id(request_rec *r) {
 	return DECLINED;
 }
 
+/*
+ * get the claims and id_token from request state
+ */
+static void oidc_authz_get_claims_and_idtoken(request_rec *r, json_t **claims, json_t **id_token) {
+	const char *s_claims = oidc_request_state_get(r, OIDC_CLAIMS_SESSION_KEY);
+	const char *s_id_token = oidc_request_state_get(r, OIDC_IDTOKEN_SESSION_KEY);
+	json_error_t json_error;
+	if (s_claims != NULL) {
+		*claims = json_loads(s_claims, 0, &json_error);
+		if (*claims == NULL) {
+			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+					"oidc_authz_get_claims_and_idtoken: could not restore claims from request state: %s", json_error.text);
+		}
+	}
+	if (id_token != NULL) {
+		*id_token = json_loads(s_id_token, 0, &json_error);
+		if (*id_token == NULL) {
+			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+					"oidc_authz_get_claims_and_idtoken: could not restore id_token from request state: %s", json_error.text);
+		}
+	}
+}
+
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 /*
  * generic Apache >=2.4 authorization hook for this module
@@ -1418,8 +1442,8 @@ int oidc_check_user_id(request_rec *r) {
 authz_status oidc_authz_checker(request_rec *r, const char *require_args, const void *parsed_require_args) {
 
 	/* get the set of claims from the request state (they've been set in the authentication part earlier */
-	json_t *claims = (json_t *) oidc_request_state_get(r, OIDC_CLAIMS_SESSION_KEY);
-	json_t *id_token  = (json_t *) oidc_request_state_get(r, OIDC_IDTOKEN_SESSION_KEY);
+	json_t *claims = NULL, *id_token = NULL;
+	oidc_authz_get_claims_and_idtoken(r, &claims, &id_token);
 
 	/* dispatch to the >=2.4 specific authz routine */
 	authz_status rc = oidc_authz_worker24(r, claims ? claims : id_token, require_args);
@@ -1437,9 +1461,9 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args, const 
  */
 int oidc_auth_checker(request_rec *r) {
 
-	/* get the set of claims from the request state (they've been set in the authentication part earlier) */
-	json_t *claims = (json_t *) oidc_request_state_get(r, OIDC_CLAIMS_SESSION_KEY);
-	json_t *id_token  = (json_t *) oidc_request_state_get(r, OIDC_IDTOKEN_SESSION_KEY);
+	/* get the set of claims from the request state (they've been set in the authentication part earlier */
+	json_t *claims = NULL, *id_token = NULL;
+	oidc_authz_get_claims_and_idtoken(r, &claims, &id_token);
 
 	/* get the Require statements */
 	const apr_array_header_t * const reqs_arr = ap_requires(r);

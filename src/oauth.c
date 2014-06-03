@@ -133,7 +133,7 @@ static apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
  * resolve and validate an access_token against the configured Authorization Server
  */
 static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
-		const char *access_token, json_t **token) {
+		const char *access_token, json_t **token, char **response) {
 
 	json_t *result = NULL;
 	const char *json = NULL;
@@ -159,12 +159,14 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 		if ((expires_in == NULL) || (!json_is_number(expires_in))) {
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 					"oidc_oauth_resolve_access_token: response JSON object did not contain an \"expires_in\" number");
+			json_decref(result);
 			return FALSE;
 		}
 		if (json_integer_value(expires_in) <= 0) {
 			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
 					"oidc_oauth_resolve_access_token: \"expires_in\" number <= 0 (%" JSON_INTEGER_FORMAT "); token already expired...",
 					json_integer_value(expires_in));
+			json_decref(result);
 			return FALSE;
 		}
 
@@ -182,17 +184,19 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 					"oidc_oauth_resolve_access_token: cached JSON was corrupted: %s", json_error.text);
 			return FALSE;
 		}
-		/* the NULL and APR_JSON_OBJECT checks really are superfluous here */
 	}
 
 	/* return the access_token JSON object */
-	*token = json_object_get(result, "access_token");
-	if ((*token == NULL) || (!json_is_object(*token))) {
+	json_t *tkn = json_object_get(result, "access_token");
+	if (tkn || (!json_is_object(tkn))) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_oauth_resolve_access_token: response JSON object did not contain an access_token object");
 		json_decref(result);
 		return FALSE;
 	}
+
+	*token = json_deep_copy(tkn);
+	*response = (char *)json;
 
 	json_decref(result);
 	return TRUE;
@@ -258,7 +262,8 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 
 	/* validate the obtained access token against the OAuth AS validation endpoint */
 	json_t *token = NULL;
-	if (oidc_oauth_resolve_access_token(r, c, access_token, &token) == FALSE)
+	char *s_token = NULL;
+	if (oidc_oauth_resolve_access_token(r, c, access_token, &token, &s_token) == FALSE)
 		return HTTP_UNAUTHORIZED;
 
 	/* check that we've got something back */
@@ -269,7 +274,7 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 	}
 
 	/* store the parsed token (cq. the claims from the response) in the request state so it can be accessed by the authz routines */
-	oidc_request_state_set(r, OIDC_CLAIMS_SESSION_KEY, (const char *) token);
+	oidc_request_state_set(r, OIDC_CLAIMS_SESSION_KEY, (const char *) s_token);
 
 	/* set the REMOTE_USER variable */
 	if (oidc_oauth_set_remote_user(r, c, token) == FALSE) {
