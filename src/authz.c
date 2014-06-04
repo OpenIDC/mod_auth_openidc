@@ -99,7 +99,14 @@ static apr_byte_t oidc_authz_match_claim(request_rec *r,
 					return TRUE;
 				}
 
-				/* see if it is a boolean and it (case-insensitively) matches the Require'd value */
+			/* see if it is a integer and it equals the Require'd value */
+			} else if (json_is_integer(val)) {
+
+				if (json_integer_value(val) == atoi(spec_c)) {
+					return TRUE;
+				}
+
+			/* see if it is a boolean and it (case-insensitively) matches the Require'd value */
 			} else if (json_is_boolean(val)) {
 
 				if (apr_strnatcmp(json_is_true(val) ? "true" : "false", spec_c)
@@ -107,7 +114,7 @@ static apr_byte_t oidc_authz_match_claim(request_rec *r,
 					return TRUE;
 				}
 
-				/* if it is an array, we'll walk it */
+			/* if it is an array, we'll walk it */
 			} else if (json_is_array(val)) {
 
 				/* compare the claim values */
@@ -139,7 +146,6 @@ static apr_byte_t oidc_authz_match_claim(request_rec *r,
 						ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
 								"oidc_authz_match_claim: unhandled in-array JSON object type [%d] for key \"%s\"",
 								elem->type, (const char *) key);
-						continue;
 					}
 				}
 
@@ -147,7 +153,6 @@ static apr_byte_t oidc_authz_match_claim(request_rec *r,
 				ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
 						"oidc_authz_match_claim: unhandled JSON object type [%d] for key \"%s\"",
 						val->type, (const char *) key);
-				continue;
 			}
 
 		}
