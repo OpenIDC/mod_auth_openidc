@@ -1,3 +1,6 @@
+6/4/2014
+- fix passing integer claims on non-Mac OS X systems
+
 6/3/2014
 - change JSON parser from https://github.com/moriyoshi/apr-json to http://www.digip.org/jansson/
 

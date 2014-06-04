@@ -1116,6 +1116,7 @@ static void oidc_util_set_app_header(request_rec *r, const char *s_key,
 void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs, const char *claim_prefix,
 		const char *claim_delimiter) {
 
+	char s_int[255];
 	json_t *j_value = NULL;
 	const char *s_key = NULL;
 
@@ -1149,10 +1150,15 @@ void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs, const char
 
 		} else if (json_is_integer(j_value)) {
 
-			/* set long value in the application header whose name is based on the key and the prefix */
-			oidc_util_set_app_header(r, s_key,
-					apr_psprintf(r->pool, "%" JSON_INTEGER_FORMAT "", json_integer_value(j_value)),
-					claim_prefix);
+			if (sprintf(s_int, "%" JSON_INTEGER_FORMAT, json_integer_value(j_value)) > 0) {
+				/* set long value in the application header whose name is based on the key and the prefix */
+				oidc_util_set_app_header(r, s_key,
+						s_int,
+						claim_prefix);
+			} else {
+				ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
+						"oidc_util_set_app_headers: could not convert JSON number to string (> 255 characters?), skipping");
+			}
 
 		} else if (json_is_real(j_value)) {
 
