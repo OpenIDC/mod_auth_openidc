@@ -2,6 +2,8 @@
 - fix passing integer claims on non-Mac OS X systems
 - fix claims-based authorization with integer values (@martinsrom)
 - fix getting the id_token from request state and error logging
+- add AUTHORS file with credits
+- migrate README to Markdown README.md
 
 6/3/2014
 - change JSON parser from https://github.com/moriyoshi/apr-json to http://www.digip.org/jansson/

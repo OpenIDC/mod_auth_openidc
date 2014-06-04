@@ -27,7 +27,8 @@ DISTFILES=$(SRC) \
 	Makefile.in \
 	autogen.sh \
 	INSTALL \
-	README \
+	README.md \
+	AUTHORS \
 	DISCLAIMER \
 	auth_openidc.conf \
 	LICENSE.txt \
