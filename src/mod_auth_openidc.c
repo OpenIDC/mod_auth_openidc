@@ -1424,14 +1424,14 @@ static void oidc_authz_get_claims_and_idtoken(request_rec *r, json_t **claims, j
 	if (s_claims != NULL) {
 		*claims = json_loads(s_claims, 0, &json_error);
 		if (*claims == NULL) {
-			ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 					"oidc_authz_get_claims_and_idtoken: could not restore claims from request state: %s", json_error.text);
 		}
 	}
 	if (s_id_token != NULL) {
 		*id_token = json_loads(s_id_token, 0, &json_error);
 		if (*id_token == NULL) {
-			ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 					"oidc_authz_get_claims_and_idtoken: could not restore id_token from request state: %s", json_error.text);
 		}
 	}
