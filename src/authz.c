@@ -141,6 +141,12 @@ static apr_byte_t oidc_authz_match_claim(request_rec *r,
 							return TRUE;
 						}
 
+					} else if (json_is_integer(elem)) {
+
+						if (json_integer_value(elem) == atoi(spec_c)) {
+							return TRUE;
+						}
+
 					} else {
 
 						ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
