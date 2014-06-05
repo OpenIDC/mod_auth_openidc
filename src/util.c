@@ -272,7 +272,7 @@ char *oidc_util_unescape_string(const request_rec *r, const char *str) {
 /*
  * get the URL scheme that is currently being accessed
  */
-const char *oidc_get_current_url_scheme(const request_rec *r, const oidc_cfg *c) {
+static const char *oidc_get_current_url_scheme(const request_rec *r) {
 	/* first see if there's a proxy/load-balancer in front of us */
 	const char *scheme_str = apr_table_get(r->headers_in, "X-Forwarded-Proto");
 	/* if not we'll determine the scheme used to connect to this server */
@@ -289,7 +289,7 @@ const char *oidc_get_current_url_scheme(const request_rec *r, const oidc_cfg *c)
 /*
  * get the URL port that is currently being accessed
  */
-const char *oidc_get_current_url_port(const request_rec *r, const oidc_cfg *c, const char *scheme_str) {
+static const char *oidc_get_current_url_port(const request_rec *r, const oidc_cfg *c, const char *scheme_str) {
 	/* first see if there's a proxy/load-balancer in front of us */
 	const char *port_str = apr_table_get(r->headers_in, "X-Forwarded-Port");
 	if (port_str == NULL) {
@@ -318,7 +318,7 @@ const char *oidc_get_current_url_port(const request_rec *r, const oidc_cfg *c, c
  */
 char *oidc_get_current_url(const request_rec *r, const oidc_cfg *c) {
 
-	const char *scheme_str = oidc_get_current_url_scheme(r, c);
+	const char *scheme_str = oidc_get_current_url_scheme(r);
 
 	const char *port_str = oidc_get_current_url_port(r, c, scheme_str);
 	port_str = port_str ? apr_psprintf(r->pool, ":%s", port_str) : "";
@@ -621,12 +621,14 @@ void oidc_util_set_cookie(request_rec *r, const char *cookieName,
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	char *headerString, *currentCookies;
-
 	/* construct the cookie value */
-	headerString = apr_psprintf(r->pool, "%s=%s;Secure;Path=%s%s", cookieName,
-			cookieValue, oidc_util_get_cookie_path(r),
-			c->cookie_domain != NULL ?
-					apr_psprintf(r->pool, ";Domain=%s", c->cookie_domain) : "");
+	headerString = apr_psprintf(r->pool, "%s=%s;%s;Path=%s%s",
+			cookieName,
+			cookieValue,
+			((apr_strnatcasecmp("https", oidc_get_current_url_scheme(r)) == 0) ? ";Secure" : ""),
+			oidc_util_get_cookie_path(r),
+			c->cookie_domain != NULL ? apr_psprintf(r->pool, ";Domain=%s", c->cookie_domain) : ""
+		);
 
 	/* see if we need to clear the cookie */
 	if (apr_strnatcmp(cookieValue, "") == 0)
