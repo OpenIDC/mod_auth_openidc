@@ -770,7 +770,7 @@ static apr_byte_t oidc_metadata_client_get(request_rec *r, oidc_cfg *cfg,
 	/* at this point we have no valid client metadata, see if there's a registration endpoint for this provider */
 	if (provider->registration_endpoint_url == NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_metadata_client_get: no (valid) client metadata exists and provider JSON object did not contain a (valid) \"registration_endpoint\" string");
+				"oidc_metadata_client_get: no (valid) client metadata exists for provider (%s) and provider JSON object did not contain a (valid) \"registration_endpoint\" string", issuer);
 		return FALSE;
 	}
 

@@ -835,6 +835,24 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 			return oidc_check_config_error(s, "OIDCClientSecret");
 	}
 
+	apr_uri_t r_uri;
+	apr_uri_parse(s->process->pconf, c->redirect_uri, &r_uri);
+	if (apr_strnatcmp(r_uri.scheme, "https") != 0) {
+		ap_log_error(APLOG_MARK, APLOG_WARNING, 0, s,
+				"oidc_check_config_openid_openidc: the URL scheme (%s) of the configured OIDCRedirectURI SHOULD be \"https\" for security reasons (moreover: some Providers may reject non-HTTPS URLs)",
+				r_uri.scheme);
+	}
+
+	if (c->cookie_domain != NULL) {
+		char *p = strstr(r_uri.hostname, c->cookie_domain);
+		if ((p == NULL) || (apr_strnatcmp(c->cookie_domain, p) != 0)) {
+			ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
+					"oidc_check_config_openid_openidc: the domain (%s) configured in OIDCCookieDomain does not match the URL hostname (%s) of the configured OIDCRedirectURI (%s): setting \"state\" and \"session\" cookies will not work!",
+					c->cookie_domain, r_uri.hostname, c->redirect_uri);
+			return HTTP_INTERNAL_SERVER_ERROR;
+		}
+	}
+
 	return OK;
 }
 

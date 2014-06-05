@@ -1134,6 +1134,31 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 							provider->response_type, "code token"))))
 		proto_state.nonce = NULL;
 
+	/*
+	 * printout errors if Cookie settings are not going to work
+	 */
+	apr_uri_t o_uri;
+	apr_uri_t r_uri;
+	apr_uri_parse(r->pool, original_url, &o_uri);
+	apr_uri_parse(r->pool, c->redirect_uri, &r_uri);
+	if ( (apr_strnatcmp(o_uri.scheme, r_uri.scheme) != 0) && (apr_strnatcmp(r_uri.scheme, "https") == 0) ) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "oidc_authenticate_user: the URL scheme (%s) of the configured OIDCRedirectURI does not match the URL scheme of the URL being accessed (%s): the \"state\" and \"session\" cookies will not be shared between the two!", r_uri.scheme, o_uri.scheme);
+	}
+
+	if (c->cookie_domain == NULL) {
+		if (apr_strnatcmp(o_uri.hostname, r_uri.hostname) != 0) {
+			char *p = strstr(o_uri.hostname, r_uri.hostname);
+			if ( (p == NULL) || (apr_strnatcmp(r_uri.hostname, p) != 0)) {
+				ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "oidc_authenticate_user: the URL hostname (%s) of the configured OIDCRedirectURI does not match the URL hostname of the URL being accessed (%s): the \"state\" and \"session\" cookies will not be shared between the two!", r_uri.hostname, o_uri.hostname);
+			}
+		}
+	} else {
+		char *p = strstr(o_uri.hostname, c->cookie_domain);
+		if ( (p == NULL) || (apr_strnatcmp(c->cookie_domain, p) != 0)) {
+			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "oidc_authenticate_user: the domain (%s) configured in OIDCCookieDomain does not match the URL hostname (%s) of the URL being accessed (%s): setting \"state\" and \"session\" cookies will not work!!", c->cookie_domain, o_uri.hostname, original_url);
+		}
+	}
+
 	/* send off to the OpenID Connect Provider */
 	// TODO: maybe show intermediate/progress screen "redirecting to"
 	return oidc_proto_authorization_request(r, provider, c->redirect_uri, state, &proto_state);
