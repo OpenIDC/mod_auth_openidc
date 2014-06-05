@@ -1089,8 +1089,7 @@ static void oidc_child_init(apr_pool_t *p, server_rec *s) {
 				&auth_openidc_module);
 		if (cfg->cache->child_init != NULL) {
 			if (cfg->cache->child_init(p, s) != APR_SUCCESS) {
-				// TODO: ehrm...
-				exit(-1);
+				ap_log_error(APLOG_MARK, APLOG_ERR, 0, s, "oidc_child_init: cfg->cache->child_init failed");
 			}
 		}
 		s = s->next;

@@ -2,7 +2,7 @@ Source: libapache2-mod-auth-openidc
 Priority: extra
 Maintainer: Hans Zandbelt <hzandbelt@pingidentity.com>
 Build-Depends: debhelper (>= 8.0.0), autotools-dev, dh-apache2, apache2-dev, libcurl3-dev, libjansson-dev
-Standards-Version: 3.9.4
+Standards-Version: 3.9.5
 Section: web
 Homepage: https://github.com/pingidentity/mod_auth_openidc
 #Vcs-Git: https://github.com/pingidentity/mod_auth_openidc.git

@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.5-1) unstable; urgency=medium
+
+  * use Debian non-native packaging
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Thu, 05 Jun 2014 20:32:44 +0200
+
 libapache2-mod-auth-openidc (1.5) unstable; urgency=medium
 
   * switch to JSON parser jansson
