@@ -1,6 +1,7 @@
 6/5/2014
 - do not set Secure cookies for plain HTTP
 - add warning/errors when configured hosts/domains do not match
+- release 1.5
 
 6/4/2014
 - fix passing integer claims on non-Mac OS X systems
