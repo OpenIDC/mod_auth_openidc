@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.5-2) unstable; urgency=medium
+
+  * include original source
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Thu, 05 Jun 2014 21:05:12 +0200
+
 libapache2-mod-auth-openidc (1.5-1) unstable; urgency=medium
 
   * use Debian non-native packaging
