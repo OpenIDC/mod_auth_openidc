@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.5-5) stable; urgency=medium
+
+  * support both Apache 2.2 and 2.4 config layouts
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Fri, 06 Jun 2014 19:05:59 +0200
+
 libapache2-mod-auth-openidc (1.5-4) unstable; urgency=medium
 
   * include .postinst script for setting permissions
