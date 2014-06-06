@@ -12,8 +12,8 @@
 %:
 	dh $@ --with apache2
 
-installchangelogs:
-	dh_installchangelogs -k ChangeLog
+override_dh_installchangelogs:
+        dh_installchangelogs ChangeLog
 
 override_dh_apache2:
 	dh_apache2 --noscripts
