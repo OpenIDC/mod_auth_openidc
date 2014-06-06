@@ -19,8 +19,3 @@ override_dh_apache2:
 	dh_apache2 --noscripts
 
 override_dh_auto_install:
-
-postinst:
-	dh_fixperms
-	chown -R www-data debian/libapache2-mod-auth-openidc/var/cache/apache2/mod_auth_openidc
-	chmod -R go= debian/libapache2-mod-auth-openidc/var/cache/apache2/mod_auth_openidc
