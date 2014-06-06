@@ -13,7 +13,7 @@
 	dh $@ --with apache2
 
 override_dh_installchangelogs:
-        dh_installchangelogs ChangeLog
+	dh_installchangelogs ChangeLog
 
 override_dh_apache2:
 	dh_apache2 --noscripts
