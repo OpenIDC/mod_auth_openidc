@@ -68,6 +68,10 @@
 
 #include "cache/cache.h"
 
+#ifdef APLOG_USE_MODULE
+APLOG_USE_MODULE(auth_openidc);
+#endif
+
 #ifndef OIDC_DEBUG
 #define OIDC_DEBUG APLOG_DEBUG
 #endif
