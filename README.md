@@ -1,24 +1,12 @@
+mod_auth_openidc
+================
+
 **mod_auth_openidc** is an authentication/authorization module for the Apache 2.x
 HTTP server that allows users to authenticate using an OpenID Connect enabled
 Identity Provider.
-- - -
-
-####Support/Help
-
-There is a (recently created) Google Group/mailing list at:  
-  [mod_auth_openidc@googlegroups.com](mailto:mod_auth_openidc@googlegroups.com)  
-The corresponding forum/archive is at:  
-  https://groups.google.com/forum/#!forum/mod_auth_openidc
-
-####Disclaimer
-
-*This software is open sourced by Ping Identity but not supported commercially
-as such. Any questions/issues should go to the mailing list, the Github issues
-tracker or the author [hzandbelt@pingidentity.com](mailto:hzandbelt@pingidentity.com)
-directly See also the DISCLAIMER file in this directory.*
-- - -  
   
-####Overview  
+Overview
+--------
 
 This module enables an Apache 2.x web server to operate as an [OpenID Connect]
 (http://openid.net/specs/openid-connect-core-1_0.html) *Relying Party*. The module
@@ -67,10 +55,11 @@ of the following options:
 
 For an exhaustive description of all configuration options, see the file `libapache2-mod-auth-openidc.conf`
 in this directory. This file can also serve as an include file for `httpd.conf`.
-- - -
 
+How to Use It  
+-------------
 
-####Sample Config for Google Accounts
+###Sample Config for Google Accounts
 
 Sample configuration for using Google as your OpenID Connect Provider running on
 `localhost` and `https://localhost/example/redirect_uri/` registered
@@ -97,10 +86,9 @@ have to enable the `Google+ API` under `APIs & auth` in the [Google API console]
        AuthType openid-connect
        Require valid-user
     </Location>
-- - -
 
 
-####Sample Config for multiple OpenID Connect Providers
+###Sample Config for Multiple OpenID Connect Providers
 
 Sample configuration for multiple OpenID Connect providers, which triggers OP
 discovery first.
@@ -186,10 +174,9 @@ Sample callback:
 
 This is also the way of kicking off SSO to a specific provider from an
 external application/site when multiple OPs have been configured.
-- - -
 
 
-####Sample Config for PingFederate OpenID Connect & OAuth 2.0
+###Sample Config for PingFederate OpenID Connect & OAuth 2.0
 
 Another example config for using PingFederate as your OpenID Connect OP and/or
 OAuth 2.0 Authorization server, based on the OAuth 2.0 PlayGround 3.x default
@@ -231,3 +218,20 @@ client `ac_oic_client`)
        #Require valid-user
        Require claim Username:joe
     </Location>
+
+Support
+-------
+
+There is a (recently created) Google Group/mailing list at:  
+  [mod_auth_openidc@googlegroups.com](mailto:mod_auth_openidc@googlegroups.com)  
+The corresponding forum/archive is at:  
+  https://groups.google.com/forum/#!forum/mod_auth_openidc
+
+Disclaimer
+----------
+
+*This software is open sourced by Ping Identity but not supported commercially
+as such. Any questions/issues should go to the mailing list, the Github issues
+tracker or the author [hzandbelt@pingidentity.com](mailto:hzandbelt@pingidentity.com)
+directly See also the DISCLAIMER file in this directory.*
+    
