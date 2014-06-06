@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.5-3) unstable; urgency=medium
+
+  * more Debian packaging fixes
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Fri, 06 Jun 2014 13:46:56 +0200
+
 libapache2-mod-auth-openidc (1.5-2) unstable; urgency=medium
 
   * include original source

@@ -43,4 +43,4 @@ After you have added the LoadModule directive, you must add the configuration
 for mod_auth_openidc. For a quickstart doing so, see the provided samples
 in the README file.
 
-For an exhaustive overview of all configuration primitives, see: libapache2-mod-auth-openidc.conf
+For an exhaustive overview of all configuration primitives, see: auth_openidc.conf

@@ -53,7 +53,7 @@ of the following options:
    shared across multiple Apache processes and/or servers, possibly
    across different memcache servers living on different machines
 
-For an exhaustive description of all configuration options, see the file `libapache2-mod-auth-openidc.conf`
+For an exhaustive description of all configuration options, see the file `auth_openidc.conf`
 in this directory. This file can also serve as an include file for `httpd.conf`.
 
 How to Use It  
@@ -115,7 +115,7 @@ filename is `localhost%3A9031.client`:
 
 3. `<urlencoded-issuer-value-with-https-prefix-and-trailing-slash-stripped>.conf`  
 contains **mod_auth_openidc** specific custom JSON metadata that can be used to overrule
-some of the settings defined in `libapache2-mod-auth-openidc.conf` on a per-client basis. The filename
+some of the settings defined in `auth_openidc.conf` on a per-client basis. The filename
 is the URL-encoded issuer name of the OP that this client is registered with.
 
 Entries that can be included in the .conf file are:

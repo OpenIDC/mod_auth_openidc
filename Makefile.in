@@ -30,7 +30,7 @@ DISTFILES=$(SRC) \
 	README.md \
 	AUTHORS \
 	DISCLAIMER \
-	libapache2-mod-auth-openidc.conf \
+	auth_openidc.conf \
 	LICENSE.txt \
 	ChangeLog
 
