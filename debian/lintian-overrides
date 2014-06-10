@@ -1,2 +1,0 @@
-libapache2-mod-auth-openidc: non-standard-dir-perm var/cache/apache2/mod_auth_openidc/ 0700 != 0755
-libapache2-mod-auth-openidc: non-standard-dir-perm var/cache/apache2/mod_auth_openidc/metadata/ 0700 != 0755
