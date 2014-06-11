@@ -147,16 +147,12 @@ const EVP_MD *apr_jws_crypto_alg_to_evp(apr_pool_t *pool, const char *alg) {
  * verify HMAC signature on JWT
  */
 apr_byte_t apr_jws_verify_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
-		const char *secret) {
+		const char *key, const unsigned int key_len) {
 
 	/* get the OpenSSL digest function */
 	const EVP_MD *digest = NULL;
 	if ((digest = apr_jws_crypto_alg_to_evp(pool, jwt->header.alg)) == NULL)
 		return FALSE;
-
-	/* prepare the key */
-	unsigned char *key = (unsigned char *) secret;
-	int key_len = strlen(secret);
 
 	/* prepare the message */
 	unsigned char *msg = (unsigned char *) jwt->message;

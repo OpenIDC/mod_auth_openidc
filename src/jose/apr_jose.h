@@ -219,7 +219,7 @@ apr_byte_t apr_jws_signature_is_rsa(apr_pool_t *pool, apr_jwt_t *jwt);
 apr_byte_t apr_jws_signature_is_ec(apr_pool_t *pool, apr_jwt_t *jwt);
 /* verify the HMAC signature on a JWT */
 apr_byte_t apr_jws_verify_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
-		const char *secret);
+		const char *key, const unsigned int key_len);
 /* verify the RSA signature on a JWT */
 apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk);
 /* verify the Elliptic Curve signature on a JWT */

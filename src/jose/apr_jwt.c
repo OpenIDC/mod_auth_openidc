@@ -261,13 +261,15 @@ static apr_byte_t apr_jwt_parse_signature(apr_pool_t *pool,
 static apr_array_header_t *apr_jwt_compact_deserialize(apr_pool_t *pool,
 		const char *str) {
 	apr_array_header_t *result = apr_array_make(pool, 6, sizeof(const char*));
-	char *s = apr_pstrdup(pool, str);
-	while (s) {
-		char *p = strchr(s, '.');
-		if (p != NULL) *p = '\0';
-		*(const char**) apr_array_push(result) = apr_pstrdup(pool, s);
-		if (p == NULL) break;
-		s = ++p;
+	if ( (str != NULL) && (strlen(str) > 0) ) {
+		char *s = apr_pstrdup(pool, str);
+		while (s) {
+			char *p = strchr(s, '.');
+			if (p != NULL) *p = '\0';
+			*(const char**) apr_array_push(result) = apr_pstrdup(pool, s);
+			if (p == NULL) break;
+			s = ++p;
+		}
 	}
 	return result;
 }
@@ -277,6 +279,7 @@ static apr_array_header_t *apr_jwt_compact_deserialize(apr_pool_t *pool,
  */
 const char *apr_jwt_header_to_string(apr_pool_t *pool, const char *s_json) {
 	apr_array_header_t *unpacked = apr_jwt_compact_deserialize(pool, s_json);
+	if (unpacked->nelts < 1) return NULL;
 	apr_jwt_header_t header;
 	if (apr_jwt_parse_header(pool, ((const char**) unpacked->elts)[0],
 			&header) == FALSE) return NULL;

@@ -564,7 +564,7 @@ apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r,
 				"oidc_proto_idtoken_verify_signature: verifying HMAC signature on id_token: header=%s, message=%s",
 				jwt->header.value.str, jwt->message);
 
-		result = apr_jws_verify_hmac(r->pool, jwt, provider->client_secret);
+		result = apr_jws_verify_hmac(r->pool, jwt, provider->client_secret, strlen(provider->client_secret));
 
 	} else if (apr_jws_signature_is_rsa(r->pool, jwt)
 #if (OPENSSL_VERSION_NUMBER >= 0x01000000)
