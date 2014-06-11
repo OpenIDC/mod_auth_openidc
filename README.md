@@ -222,6 +222,8 @@ client `ac_oic_client`)
 Support
 -------
 
+See the Wiki pages with Frequently Asked Questions at:  
+  https://github.com/pingidentity/mod_auth_openidc/wiki   
 There is a (recently created) Google Group/mailing list at:  
   [mod_auth_openidc@googlegroups.com](mailto:mod_auth_openidc@googlegroups.com)  
 The corresponding forum/archive is at:  
