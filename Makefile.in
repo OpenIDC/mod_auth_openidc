@@ -31,7 +31,6 @@ HDRS = \
 # Files to include when making a .tar.gz-file for distribution
 DISTFILES=$(SRC) \
 	$(HDRS) \
-	test/test.c \
 	configure \
 	configure.ac \
 	Makefile.in \
@@ -58,13 +57,13 @@ configure:	configure.ac
 @NAMEVER@.tar.gz:	 $(DISTFILES)
 	tar -c --transform="s#^#@NAMEVER@/#" -vzf $@ $(DISTFILES)
 
-test/test: test/*.c $(JWT_SRC) $(JWT_HDRS)
-	`@APXS2@ -q CC` @OPENSSL_CFLAGS@ @JANSSON_CFLAGS@ -I/opt/local/include/apr-1 -Isrc -o $@ test/*.c $(JWT_SRC) -L/opt/local/lib -lapr-1 -laprutil-1 @OPENSSL_LIBS@ @JANSSON_LIBS@
+#test/test: test/*.c $(JWT_SRC) $(JWT_HDRS)
+#	`@APXS2@ -q CC` @OPENSSL_CFLAGS@ @JANSSON_CFLAGS@ -I/opt/local/include/apr-1 -Isrc -o $@ test/*.c $(JWT_SRC) -L/opt/local/lib -lapr-1 -laprutil-1 @OPENSSL_LIBS@ @JANSSON_LIBS@
 
-test-compile: test/test
+#test-compile: test/test
 
-test: test-compile
-	test/test
+#test: test-compile
+#	test/test
 
 .PHONY:	install
 install: src/mod_auth_openidc.la
