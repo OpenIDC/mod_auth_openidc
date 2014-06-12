@@ -1,5 +1,6 @@
 6/12/2014
 - support third-party-initiated login as defined in the spec
+- release 1.5.1
 
 6/6/2014
 - more changes for Debian packaging (1.5-3)
