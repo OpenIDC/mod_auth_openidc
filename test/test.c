@@ -46,15 +46,6 @@
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * Initially based on mod_auth_cas.c:
- * https://github.com/Jasig/mod_auth_cas
- *
- * Other code copied/borrowed/adapted:
- * AES crypto: http://saju.net.in/code/misc/openssl_aes.c.txt
- * session handling: Apache 2.4 mod_session.c
- * session handling backport: http://contribsoft.caixamagica.pt/browser/internals/2012/apachecc/trunk/mod_session-port/src/util_port_compat.c
- * shared memory caching: mod_auth_mellon
- *
  * @Author: Hans Zandbelt - hzandbelt@pingidentity.com
  *
  **************************************************************************/
