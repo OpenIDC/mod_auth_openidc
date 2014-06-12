@@ -77,6 +77,9 @@ static apr_byte_t oidc_authz_match_claim(request_rec *r,
 	    key = json_object_iter_key(iter);
 	    val = json_object_iter_value(iter);
 
+		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
+				"oidc_authz_match_claim: evaluating key \"%s\"", (const char *) key);
+
 		const char *attr_c = (const char *) key;
 		const char *spec_c = attr_spec;
 

@@ -188,7 +188,7 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 
 	/* return the access_token JSON object */
 	json_t *tkn = json_object_get(result, "access_token");
-	if (tkn || (!json_is_object(tkn))) {
+	if ((tkn == NULL) || (!json_is_object(tkn))) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_oauth_resolve_access_token: response JSON object did not contain an access_token object");
 		json_decref(result);
@@ -196,7 +196,9 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 	}
 
 	*token = json_deep_copy(tkn);
-	*response = (char *)json;
+	char *s_token = json_dumps(*token, 0);
+	*response = apr_pstrdup(r->pool, s_token);
+	free(s_token);
 
 	json_decref(result);
 	return TRUE;
