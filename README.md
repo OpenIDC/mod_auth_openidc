@@ -162,18 +162,19 @@ And the related **mod_auth_openidc** Apache config section:
 If you do not want to use the internal discovery page (you really shouldn't...), you
 can have the user being redirected to an external discovery page by setting
 `OIDCDiscoveryURL`. That URL will be accessed with 2 parameters, `oidc_callback` and
-`oidc_return` (both URLs). The `oidc_return` parameter value needs to be returned to the
-`oidc_callback` URL (again in the `oidc_return parameter`) together with an
-`oidc_provider` parameter that contains the URL-encoded issuer value of the
+`target_link_uri` (both URLs). The `target_link_uri` parameter value needs to be returned to the
+`oidc_callback` URL (again in the `target_link_uri parameter`) together with an
+`iss` parameter that contains the URL-encoded issuer value of the
 selected Provider, or a URL-encoded account name for OpenID Connect Discovery
 purposes (aka. e-mail style identifier), or a domain name.
 
 Sample callback:
 
-    ${oidc_callback}?oidc_return=${oidc_return}&oidc_provider=[${issuer}|${domain}|${e-mail-style-account-name}]
+    <oidc_callback>?target_link_uri=<target_link_uri>&iss=[<issuer>|<domain>|<e-mail-style-account-name>]
 
-This is also the way of kicking off SSO to a specific provider from an
-external application/site when multiple OPs have been configured.
+This is also the OpenID Connect specified way of triggering 3rd party initiated SSO 
+to a specific provider when multiple OPs have been configured. In that case the callback
+may also contain a "login_hint" parameter with the login identifier the user might use to log in.
 
 
 ###Sample Config for PingFederate OpenID Connect & OAuth 2.0

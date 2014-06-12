@@ -473,6 +473,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 
 	c->redirect_uri = NULL;
 	c->discover_url = NULL;
+	c->default_url = NULL;
 	c->public_keys = NULL;
 	c->private_keys = NULL;
 
@@ -555,6 +556,8 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->redirect_uri != NULL ? add->redirect_uri : base->redirect_uri;
 	c->discover_url =
 			add->discover_url != NULL ? add->discover_url : base->discover_url;
+	c->default_url =
+			add->default_url != NULL ? add->default_url : base->default_url;
 	c->public_keys =
 			add->public_keys != NULL ? add->public_keys : base->public_keys;
 	c->private_keys =
@@ -1249,6 +1252,10 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, discover_url),
 				RSRC_CONF,
 				"Defines an external IDP Discovery page"),
+		AP_INIT_TAKE1("OIDCDefaultURL", oidc_set_string_slot,
+				(void *)APR_OFFSETOF(oidc_cfg, default_url),
+				RSRC_CONF,
+				"Defines the default URL where the user is directed to in case of 3rd-party initiated SSO."),
 		AP_INIT_TAKE1("OIDCCookieDomain",
 				oidc_set_cookie_domain, NULL, RSRC_CONF,
 				"Specify domain element for OIDC session cookie."),

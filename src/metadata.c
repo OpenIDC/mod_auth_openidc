@@ -848,6 +848,8 @@ static apr_byte_t oidc_metadata_client_get(request_rec *r, oidc_cfg *cfg,
 					provider->userinfo_encrypted_response_enc);
 		}
 
+		apr_table_addn(params, "initiate_login_uri",
+				cfg->redirect_uri);
 	}
 
 	/* try and get it from there, checking it and storing it if successful */

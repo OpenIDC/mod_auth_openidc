@@ -84,9 +84,11 @@ APLOG_USE_MODULE(auth_openidc);
 /* parameter name of the callback URL in the discovery response */
 #define OIDC_DISC_CB_PARAM "oidc_callback"
 /* parameter name of the OP provider selection in the discovery response */
-#define OIDC_DISC_OP_PARAM "oidc_provider"
+#define OIDC_DISC_OP_PARAM "iss"
 /* parameter name of the original URL in the discovery response */
-#define OIDC_DISC_RT_PARAM "oidc_return"
+#define OIDC_DISC_RT_PARAM "target_link_uri"
+/* parameter name of login hint in the discovery response */
+#define OIDC_DISC_LH_PARAM "login_hint"
 
 /* value that indicates to use server-side cache based session tracking */
 #define OIDC_SESSION_TYPE_22_SERVER_CACHE 0
@@ -161,6 +163,8 @@ typedef struct oidc_cfg {
 	char *redirect_uri;
 	/* (optional) external OP discovery page */
 	char *discover_url;
+	/* (optional) default URL for 3rd-party initiated SSO */
+	char *default_url;
 
 	/* public keys in JWK format, used by parters for encrypting JWTs sent to us */
 	apr_hash_t *public_keys;
@@ -241,7 +245,7 @@ typedef struct oidc_proto_state {
 	apr_time_t timestamp;
 } oidc_proto_state;
 
-int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *redirect_uri, const char *state, oidc_proto_state *proto_state);
+int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *login_hint, const char *redirect_uri, const char *state, oidc_proto_state *proto_state);
 apr_byte_t oidc_proto_is_post_authorization_response(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_check_token_type(request_rec *r, oidc_provider_t *provider, const char *token_type);

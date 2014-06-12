@@ -280,10 +280,13 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	char *target_uri = NULL;
 	apr_jwt_get_string(r->pool, &jwt->payload.value, "target_uri", &target_uri);
 	if (target_uri == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_unsolicited_proto_state: no \"target_uri\" claim could be retrieved from JWT state, aborting");
-		apr_jwt_destroy(jwt);
-		return FALSE;
+		if (c->default_url == NULL) {
+			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_unsolicited_proto_state: no \"target_uri\" claim could be retrieved from JWT state and no OIDCDefaultURL is set, aborting");
+			apr_jwt_destroy(jwt);
+			return FALSE;
+		}
+		target_uri = c->default_url;
 	}
 
 	if (c->metadata_dir != NULL) {
@@ -1082,7 +1085,7 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
  * authenticate the user to the selected OP, if the OP is not selected yet perform discovery first
  */
 static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
-		oidc_provider_t *provider, const char *original_url) {
+		oidc_provider_t *provider, const char *original_url, const char *login_hint) {
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_authenticate_user: entering");
@@ -1161,7 +1164,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 
 	/* send off to the OpenID Connect Provider */
 	// TODO: maybe show intermediate/progress screen "redirecting to"
-	return oidc_proto_authorization_request(r, provider, c->redirect_uri, state, &proto_state);
+	return oidc_proto_authorization_request(r, provider, login_hint, c->redirect_uri, state, &proto_state);
 }
 
 /*
@@ -1170,11 +1173,9 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 static apr_byte_t oidc_is_discovery_response(request_rec *r, oidc_cfg *cfg) {
 	/*
 	 * prereq: this is a call to the configured redirect_uri, now see if:
-	 * the OIDC_RT_PARAM_NAME parameter is present and
-	 * the OIDC_DISC_ACCT_PARAM or OIDC_DISC_OP_PARAM is present
+	 * the OIDC_DISC_OP_PARAM is present
 	 */
-	return (oidc_util_request_has_parameter(r, OIDC_DISC_RT_PARAM)
-			&& (oidc_util_request_has_parameter(r, OIDC_DISC_OP_PARAM)));
+	return oidc_util_request_has_parameter(r, OIDC_DISC_OP_PARAM);
 }
 
 /*
@@ -1182,27 +1183,45 @@ static apr_byte_t oidc_is_discovery_response(request_rec *r, oidc_cfg *cfg) {
  */
 static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 
-	/* variables to hold the values (original_url+issuer or original_url+acct) returned in the response */
-	char *issuer = NULL, *original_url = NULL;
+	/* variables to hold the values returned in the response */
+	char *issuer = NULL, *target_link_uri = NULL, *login_hint = NULL;
 	oidc_provider_t *provider = NULL;
 
 	oidc_util_get_request_parameter(r, OIDC_DISC_OP_PARAM, &issuer);
-	oidc_util_get_request_parameter(r, OIDC_DISC_RT_PARAM, &original_url);
+	oidc_util_get_request_parameter(r, OIDC_DISC_RT_PARAM, &target_link_uri);
+	oidc_util_get_request_parameter(r, OIDC_DISC_LH_PARAM, &login_hint);
 
 	// TODO: trim issuer/accountname/domain input and do more input validation
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_handle_discovery_response: issuer=\"%s\", original_url=\"%s\"",
-			issuer, original_url);
+			"oidc_handle_discovery_response: issuer=\"%s\", target_link_uri=\"%s\", login_hint=\"%s\"",
+			issuer, target_link_uri, login_hint);
 
-	if ((issuer == NULL) || (original_url == NULL)) {
+	if (issuer == NULL) {
 		return oidc_util_http_sendstring(r,
 				"mod_auth_openidc: wherever you came from, it sent you here with the wrong parameters...",
 				HTTP_INTERNAL_SERVER_ERROR);
 	}
 
+	if (target_link_uri == NULL) {
+		if (c->default_url == NULL) {
+			return oidc_util_http_sendstring(r,
+					"mod_auth_openidc: 3rd party initiated SSO to this module without specifying a \"target_link_uri\" parameter is not possible because OIDCDefaultURL is not set.",
+					HTTP_INTERNAL_SERVER_ERROR);
+		}
+		target_link_uri = c->default_url;
+	}
+
+	// TODO: check that target_link_uri matches OIDCCookieDomain and/or OIDCRedirectURI
+
 	/* find out if the user entered an account name or selected an OP manually */
 	if (strstr(issuer, "@") != NULL) {
+
+		if (login_hint == NULL) {
+			login_hint = apr_pstrdup(r->pool, issuer);
+			//char *p = strstr(issuer, "@");
+			//*p = '\0';
+		}
 
 		/* got an account name as input, perform OP discovery with that */
 		if (oidc_proto_account_based_discovery(r, c, issuer, &issuer) == FALSE) {
@@ -1234,7 +1253,7 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 			&& (provider != NULL)) {
 
 		/* now we've got a selected OP, send the user there to authenticate */
-		return oidc_authenticate_user(r, c, provider, original_url);
+		return oidc_authenticate_user(r, c, provider, target_link_uri, login_hint);
 	}
 
 	/* something went wrong */
@@ -1406,7 +1425,7 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 	}
 
 	/* no session (regardless of whether it is main or sub-request), go and authenticate the user */
-	return oidc_authenticate_user(r, c, NULL, oidc_get_current_url(r, c));
+	return oidc_authenticate_user(r, c, NULL, oidc_get_current_url(r, c), NULL);
 }
 
 /*
