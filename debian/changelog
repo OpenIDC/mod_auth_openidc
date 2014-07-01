@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.5.2-1) unstable; urgency=medium
+
+  * new upstream that fixes OAuth 2.0 authorization and passes JSON claims in HTTP headers
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Tue, 1 Jul 2014 15:22:38 +0200
+
 libapache2-mod-auth-openidc (1.5.1-1) unstable; urgency=medium
 
   * add pkg-config to Build-Depends

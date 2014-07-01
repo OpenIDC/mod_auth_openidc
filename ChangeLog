@@ -1,3 +1,9 @@
+7/1/2014
+- pass JSON objects in app HTTP headers as plain JSON
+- correct printout in id_token hash comparisons
+- add more tests
+- release 1.5.2
+
 6/12/2014
 - support third-party-initiated login as defined in the spec
 - release 1.5.1
