@@ -316,11 +316,13 @@ apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header,
 	if (apr_strnatcmp(header->alg, "RSA1_5") == 0) {
 		if (apr_jwe_decrypt_cek_rsa(pool, header, unpacked_decoded, private_keys,
 				&cek, &cek_len) == FALSE)
+			// TODO: substitute dummy CEK to avoid timing attacks
 			return FALSE;
 	} else if ((apr_strnatcmp(header->alg, "A128KW") == 0)
 			|| (apr_strnatcmp(header->alg, "A256KW") == 0)) {
 		if (apr_jwe_cek_aes_unwrap_key(pool, header, unpacked_decoded,
 				shared_key, &cek, &cek_len) == FALSE)
+			// TODO: substitute dummy CEK to avoid timing attacks
 			return FALSE;
 	}
 
