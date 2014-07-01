@@ -1015,9 +1015,10 @@ static apr_byte_t oidc_proto_validate_hash(request_rec *r, const char *alg,
 		enc_len--;
 	if (encoded[enc_len - 1] == ',')
 		enc_len--;
+	encoded[enc_len] = '\0';
 
 	/* compare the calculated hash against the provided hash */
-	if ((strncmp(encoded, hash, enc_len) != 0)) {
+	if ((apr_strnatcmp(encoded, hash) != 0)) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_validate_hash: provided \"%s\" hash value (%s) does not match the calculated value (%s)",
 				type, hash, encoded);
