@@ -1137,6 +1137,11 @@ void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs, const char
 		s_key = json_object_iter_key(iter);
 		j_value = json_object_iter_value(iter);
 
+//		char *s_value= json_dumps(j_value, JSON_ENCODE_ANY);
+//		oidc_util_set_app_header(r, s_key, s_value, claim_prefix);
+//		free(s_value);
+
+
 		/* check if it is a single value string */
 		if (json_is_string(j_value)) {
 
@@ -1168,6 +1173,13 @@ void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs, const char
 			oidc_util_set_app_header(r, s_key,
 					apr_psprintf(r->pool, "%lf", json_real_value(j_value)),
 					claim_prefix);
+
+		} else if (json_is_object(j_value)) {
+
+			/* set json value in the application header whose name is based on the key and the prefix */
+			char *s_value= json_dumps(j_value, 0);
+			oidc_util_set_app_header(r, s_key, s_value, claim_prefix);
+			free(s_value);
 
 			/* check if it is a multi-value string */
 		} else if (json_is_array(j_value)) {
