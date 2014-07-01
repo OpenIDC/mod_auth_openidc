@@ -88,9 +88,41 @@ static int TST_RC;
 		return TST_ERR_MSG; \
 	}
 
-#define TST_RUN(test, pool) char *message = test(pool); test_nr_run++; if (message) return message;
+#define TST_RUN(test, pool) message = test(pool); test_nr_run++; if (message) return message;
 
-static char * test_jwt_parse(apr_pool_t *pool) {
+static char *test_jwt_array_has_string(apr_pool_t *pool) {
+	apr_array_header_t *haystack = apr_array_make(pool, 3, sizeof(const char*));
+	*(const char**) apr_array_push(haystack) = "a";
+	*(const char**) apr_array_push(haystack) = "b";
+	*(const char**) apr_array_push(haystack) = "c";
+	TST_ASSERT("jwt_array_has_string (1)", apr_jwt_array_has_string(haystack, "a"));
+	TST_ASSERT("jwt_array_has_string (2)", apr_jwt_array_has_string(haystack, "d") == FALSE);
+	return 0;
+}
+
+static char *test_jwt_url_encode_decode(apr_pool_t *pool) {
+	char *dst = NULL;
+	char *src = "abcd";
+
+	TST_ASSERT("apr_jwt_base64url_encode (1)", apr_jwt_base64url_encode(pool, &dst, src, strlen(src), 0));
+	TST_ASSERT_STR("apr_jwt_base64url_encode (2)", dst, "YWJjZA");
+
+	src = dst;
+
+	TST_ASSERT("apr_jwt_base64url_decode (1)", apr_jwt_base64url_decode(pool, &dst, src, 1));
+	TST_ASSERT_STR("apr_jwt_base64url_decode (2)", dst, "abcd");
+
+	return 0;
+}
+
+static char *test_jwt_header_to_string(apr_pool_t *pool) {
+	const char * s = "eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9";
+	const char *dst = apr_jwt_header_to_string(pool, s);
+	TST_ASSERT_STR("apr_jwt_header_to_string", dst, "{\"typ\":\"JWT\",\r\n \"alg\":\"HS256\"}");
+	return 0;
+}
+
+static char *test_jwt_parse(apr_pool_t *pool) {
 
 	// from http://tools.ietf.org/html/draft-ietf-oauth-json-web-token-20
 	// 3.1.  Example JWT
@@ -100,7 +132,6 @@ static char * test_jwt_parse(apr_pool_t *pool) {
 			".dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk");
 
 	apr_jwt_t *jwt = NULL;
-
 	TST_ASSERT("apr_jwt_parse", apr_jwt_parse(pool, s, &jwt, NULL, NULL));
 
 	TST_ASSERT_STR("header.alg", jwt->header.alg, "HS256");
@@ -125,8 +156,58 @@ static char * test_jwt_parse(apr_pool_t *pool) {
 	return 0;
 }
 
+static char *test_jwt_get_string(apr_pool_t *pool) {
+	//apr_jwt_get_string
+
+	const char *s = "eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9" \
+	".eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ" \
+	".dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+
+	apr_jwt_t *jwt = NULL;
+	TST_ASSERT("apr_jwt_parse", apr_jwt_parse(pool, s, &jwt, NULL, NULL));
+
+	char *dst = NULL;
+
+	TST_ASSERT("apr_jwt_get_string (1a)", apr_jwt_get_string(pool, &jwt->header.value, "typ", &dst));
+	TST_ASSERT_STR("apr_jwt_get_string (1b)", dst, "JWT");
+
+	TST_ASSERT("apr_jwt_get_string (2a)", apr_jwt_get_string(pool, &jwt->header.value, "alg", &dst));
+	TST_ASSERT_STR("apr_jwt_get_string (2b)", dst, "HS256");
+
+	TST_ASSERT("apr_jwt_get_string (3a)", apr_jwt_get_string(pool, &jwt->header.value, "dummy", &dst));
+	TST_ASSERT_STR("apr_jwt_get_string (3b)", dst, NULL);
+
+	return 0;
+}
+
+static char *test_jwk_parse_json(apr_pool_t *pool) {
+	const char *s = "{\"kty\":\"EC\",\"use\":\"sig\"," \
+             "\"kid\":\"the key\"," \
+             "\"x\":\"amuk6RkDZi-48mKrzgBN_zUZ_9qupIwTZHJjM03qL-4\"," \
+             "\"y\":\"ZOESj6_dpPiZZR-fJ-XVszQta28Cjgti7JudooQJ0co\",\"crv\":\"P-256\"}";
+
+	json_t *j_jwk = NULL;
+	json_error_t json_error;
+	j_jwk = json_loads(s, 0, &json_error);
+
+	TST_ASSERT("json_loads", ((j_jwk != NULL) && (json_is_object(j_jwk))));
+
+	apr_jwk_t *jwk = NULL;
+	TST_ASSERT("apr_jwk_parse_json", apr_jwk_parse_json(pool, j_jwk, s, &jwk));
+
+	return 0;
+}
+
 static char * all_tests(apr_pool_t *pool) {
+	char *message;
+	TST_RUN(test_jwt_array_has_string, pool);
+	TST_RUN(test_jwt_url_encode_decode, pool);
+	TST_RUN(test_jwt_header_to_string, pool);
 	TST_RUN(test_jwt_parse, pool);
+	TST_RUN(test_jwt_get_string, pool);
+
+	TST_RUN(test_jwk_parse_json, pool);
+
 	return 0;
 }
 
