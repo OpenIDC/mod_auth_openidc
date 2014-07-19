@@ -198,6 +198,42 @@ static char *test_jwk_parse_json(apr_pool_t *pool) {
 	return 0;
 }
 
+static char *test_jwt_decryption(apr_pool_t *pool) {
+
+	// from http://tools.ietf.org/html/draft-ietf-jose-json-web-encryption-30
+	// A.2.  Example JWE using RSAES-PKCS1-V1_5 and AES_128_CBC_HMAC_SHA_256
+	char *s = apr_pstrdup(pool,
+			"eyJhbGciOiJSU0ExXzUiLCJlbmMiOiJBMTI4Q0JDLUhTMjU2In0" \
+			".UGhIOguC7IuEvf_NPVaXsGMoLOmwvc1GyqlIKOK1nN94nHPoltGRhWhw7Zx0-kFm1NJn8LE9XShH59_i8J0PH5ZZyNfGy2xGdULU7sHNF6Gp2vPLgNZ__deLKxGHZ7PcHALUzoOegEI-8E66jX2E4zyJKx-YxzZIItRzC5hlRirb6Y5Cl_p-ko3YvkkysZIFNPccxRU7qve1WYPxqbb2Yw8kZqa2rMWI5ng8OtvzlV7elprCbuPhcCdZ6XDP0_F8rkXds2vE4X-ncOIM8hAYHHi29NX0mcKiRaD0-D-ljQTP-cFPgwCp6X-nZZd9OHBv-B3oWh2TbqmScqXMR4gp_A" \
+			".AxY8DCtDaGlsbGljb3RoZQ" \
+		    ".KDlTtXchhZTGufMYmOYGS4HffxPSUrfmqCHXaI9wOGY" \
+		    ".9hH0vgRfYgPnAHOd8stkvw");
+
+	char * k = "{\"kty\":\"RSA\"," \
+      "\"n\":\"sXchDaQebHnPiGvyDOAT4saGEUetSyo9MKLOoWFsueri23bOdgWp4Dy1WlUzewbgBHod5pcM9H95GQRV3JDXboIRROSBigeC5yjU1hGzHHyXss8UDprecbAYxknTcQkhslANGRUZmdTOQ5qTRsLAt6BTYuyvVRdhS8exSZEy_c4gs_7svlJJQ4H9_NxsiIoLwAEk7-Q3UXERGYw_75IDrGA84-lA_-Ct4eTlXHBIY2EaV7t7LjJaynVJCpkv4LKjTTAumiGUIuQhrNhZLuF_RJLqHpM2kgWFLU7-VTdL1VbC2tejvcI2BlMkEpk1BzBZI0KQB0GaDWFLN-aEAw3vRw\"," \
+      "\"e\":\"AQAB\"," \
+      "\"d\":\"VFCWOqXr8nvZNyaaJLXdnNPXZKRaWCjkU5Q2egQQpTBMwhprMzWzpR8Sxq1OPThh_J6MUD8Z35wky9b8eEO0pwNS8xlh1lOFRRBoNqDIKVOku0aZb-rynq8cxjDTLZQ6Fz7jSjR1Klop-YKaUHc9GsEofQqYruPhzSA-QgajZGPbE_0ZaVDJHfyd7UUBUKunFMScbflYAAOYJqVIVwaYR5zWEEceUjNnTNo_CVSj-VvXLO5VZfCUAVLgW4dpf1SrtZjSt34YLsRarSb127reG_DUwg9Ch-KyvjT1SkHgUWRVGcyly7uvVGRSDwsXypdrNinPA4jlhoNdizK2zF2CWQ\"" \
+      "}";
+
+	apr_hash_t *keys = apr_hash_make(pool);
+	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, k);
+
+	apr_array_header_t *unpacked = apr_jwt_compact_deserialize(pool, s);
+	TST_ASSERT("apr_jwt_compact_deserialize", unpacked != NULL);
+	TST_ASSERT_LONG("unpacked->nelts", (long)unpacked->nelts, 5L);
+
+	apr_jwt_t *jwt = apr_pcalloc(pool, sizeof(apr_jwt_t));
+	TST_ASSERT("apr_jwt_parse_header", apr_jwt_parse_header(pool, ((const char**) unpacked->elts)[0], &jwt->header));
+
+	char *decrypted = NULL;
+	TST_ASSERT("apr_jwe_decrypt_jwt", apr_jwe_decrypt_jwt(pool, &jwt->header, unpacked, keys, NULL, &decrypted));
+
+	TST_ASSERT_STR("apr_jwe_decrypt_jwt (2)", decrypted, "Live long and prosper.");
+
+	return 0;
+}
+
+
 static char * all_tests(apr_pool_t *pool) {
 	char *message;
 	TST_RUN(test_jwt_array_has_string, pool);
@@ -207,6 +243,7 @@ static char * all_tests(apr_pool_t *pool) {
 	TST_RUN(test_jwt_get_string, pool);
 
 	TST_RUN(test_jwk_parse_json, pool);
+	TST_RUN(test_jwt_decryption, pool);
 
 	return 0;
 }

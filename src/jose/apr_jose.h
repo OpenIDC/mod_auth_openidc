@@ -141,6 +141,10 @@ apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
 /* destroy resources allocated for JWT */
 void apr_jwt_destroy(apr_jwt_t *);
 
+/* exported for the purpose of the test suite */
+apr_array_header_t *apr_jwt_compact_deserialize(apr_pool_t *pool, const char *str);
+apr_byte_t apr_jwt_parse_header(apr_pool_t *pool, const char *s_header, apr_jwt_header_t *header);
+
 /*
  * JSON Web Key handling
  */

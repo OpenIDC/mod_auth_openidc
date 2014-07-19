@@ -194,7 +194,7 @@ static apr_byte_t apr_jwt_parse_timestamp(apr_pool_t *pool,
 /*
  * parse a JWT header
  */
-static apr_byte_t apr_jwt_parse_header(apr_pool_t *pool, const char *s_header,
+apr_byte_t apr_jwt_parse_header(apr_pool_t *pool, const char *s_header,
 		apr_jwt_header_t *header) {
 
 	/* decode the JWT JSON header */
@@ -258,16 +258,18 @@ static apr_byte_t apr_jwt_parse_signature(apr_pool_t *pool,
 /*
  * parse a JWT that uses compact serialization (i.e. elements separated by dots) in to an array of strings
  */
-static apr_array_header_t *apr_jwt_compact_deserialize(apr_pool_t *pool,
+apr_array_header_t *apr_jwt_compact_deserialize(apr_pool_t *pool,
 		const char *str) {
 	apr_array_header_t *result = apr_array_make(pool, 6, sizeof(const char*));
-	if ( (str != NULL) && (strlen(str) > 0) ) {
+	if ((str != NULL) && (strlen(str) > 0)) {
 		char *s = apr_pstrdup(pool, str);
 		while (s) {
 			char *p = strchr(s, '.');
-			if (p != NULL) *p = '\0';
+			if (p != NULL)
+				*p = '\0';
 			*(const char**) apr_array_push(result) = apr_pstrdup(pool, s);
-			if (p == NULL) break;
+			if (p == NULL)
+				break;
 			s = ++p;
 		}
 	}
@@ -279,10 +281,12 @@ static apr_array_header_t *apr_jwt_compact_deserialize(apr_pool_t *pool,
  */
 const char *apr_jwt_header_to_string(apr_pool_t *pool, const char *s_json) {
 	apr_array_header_t *unpacked = apr_jwt_compact_deserialize(pool, s_json);
-	if (unpacked->nelts < 1) return NULL;
+	if (unpacked->nelts < 1)
+		return NULL;
 	apr_jwt_header_t header;
 	if (apr_jwt_parse_header(pool, ((const char**) unpacked->elts)[0],
-			&header) == FALSE) return NULL;
+			&header) == FALSE)
+		return NULL;
 	json_decref(header.value.json);
 	return header.value.str;
 }
@@ -297,7 +301,8 @@ apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
 	apr_jwt_t *jwt = *j_jwt;
 
 	apr_array_header_t *unpacked = apr_jwt_compact_deserialize(pool, s_json);
-	if (unpacked->nelts < 2) return FALSE;
+	if (unpacked->nelts < 2)
+		return FALSE;
 
 	/* parse the header fields */
 	if (apr_jwt_parse_header(pool, ((const char**) unpacked->elts)[0],
@@ -307,17 +312,17 @@ apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
 	if (apr_jwe_is_encrypted_jwt(pool, &jwt->header)) {
 		char *decrypted = NULL;
 		if ((apr_jwe_decrypt_jwt(pool, &jwt->header, unpacked, private_keys,
-				shared_key, &decrypted) == TRUE) && (decrypted != NULL)) {
-			apr_array_clear(unpacked);
-			unpacked = apr_jwt_compact_deserialize(pool,
-					(const char *) decrypted);
-			json_decref(jwt->header.value.json);
-			if (unpacked->nelts < 2) return FALSE;
-			/* parse the nested header fields */
-			if (apr_jwt_parse_header(pool, ((const char**) unpacked->elts)[0],
-					&jwt->header) == FALSE)
-				return FALSE;
-		}
+				shared_key, &decrypted) == FALSE) || (decrypted == NULL))
+			return FALSE;
+		apr_array_clear(unpacked);
+		unpacked = apr_jwt_compact_deserialize(pool, (const char *) decrypted);
+		json_decref(jwt->header.value.json);
+		if (unpacked->nelts < 2)
+			return FALSE;
+		/* parse the nested header fields */
+		if (apr_jwt_parse_header(pool, ((const char**) unpacked->elts)[0],
+				&jwt->header) == FALSE)
+			return FALSE;
 	}
 
 	/* concat the base64url-encoded payload to the base64url-encoded header for signature verification purposes */
@@ -347,7 +352,9 @@ apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
 /* destroy resources allocated for JWT */
 void apr_jwt_destroy(apr_jwt_t *jwt) {
 	if (jwt) {
-		if (jwt->header.value.json) json_decref(jwt->header.value.json);
-		if (jwt->payload.value.json) json_decref(jwt->payload.value.json);
+		if (jwt->header.value.json)
+			json_decref(jwt->header.value.json);
+		if (jwt->payload.value.json)
+			json_decref(jwt->payload.value.json);
 	}
 }

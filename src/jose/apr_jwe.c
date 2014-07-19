@@ -295,6 +295,9 @@ static apr_byte_t apr_jwe_cek_aes_unwrap_key(apr_pool_t *pool, apr_jwt_header_t 
 	return (rv > 0);
 }
 
+static unsigned char *apr_jwe_cek_dummy = (unsigned char *)"01234567890123456789012345678901";
+static int apr_jwe_cek_len_dummy = 32;
+
 /*
  * decrypt encrypted JWT
  */
@@ -315,15 +318,19 @@ apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header,
 	/* decrypt the Content Encryption Key based on the content key encryption algorithm in the header */
 	if (apr_strnatcmp(header->alg, "RSA1_5") == 0) {
 		if (apr_jwe_decrypt_cek_rsa(pool, header, unpacked_decoded, private_keys,
-				&cek, &cek_len) == FALSE)
-			// TODO: substitute dummy CEK to avoid timing attacks
-			return FALSE;
+				&cek, &cek_len) == FALSE) {
+			/* substitute dummy CEK to avoid timing attacks */
+			cek = apr_jwe_cek_dummy;
+			cek_len = apr_jwe_cek_len_dummy;
+		}
 	} else if ((apr_strnatcmp(header->alg, "A128KW") == 0)
 			|| (apr_strnatcmp(header->alg, "A256KW") == 0)) {
 		if (apr_jwe_cek_aes_unwrap_key(pool, header, unpacked_decoded,
-				shared_key, &cek, &cek_len) == FALSE)
-			// TODO: substitute dummy CEK to avoid timing attacks
-			return FALSE;
+				shared_key, &cek, &cek_len) == FALSE) {
+			/* substitute dummy CEK to avoid timing attacks */
+			cek = apr_jwe_cek_dummy;
+			cek_len = apr_jwe_cek_len_dummy;
+		}
 	}
 
 	/* get the other elements (Initialization Vector, encrypted text and Authentication Tag) from the compact serialized JSON representation */
