@@ -1179,7 +1179,64 @@ static apr_byte_t oidc_is_discovery_response(request_rec *r, oidc_cfg *cfg) {
 }
 
 /*
- * handle a response from an IDP discovery page
+ * check if the target_link_uri matches to configuration settings to prevent an open redirect
+ */
+static int oidc_target_link_uri_matches_configuration(request_rec *r,
+		oidc_cfg *cfg, const char *target_link_uri) {
+	apr_uri_t o_uri;
+	apr_uri_t r_uri;
+	apr_uri_parse(r->pool, target_link_uri, &o_uri);
+	apr_uri_parse(r->pool, cfg->redirect_uri, &r_uri);
+
+	if (cfg->cookie_domain == NULL) {
+		/* cookie_domain set: see if the target_link_uri matches the redirect_uri host (because the session cookie will be set host-wide) */
+		if (apr_strnatcmp(o_uri.hostname, r_uri.hostname) != 0) {
+			char *p = strstr(o_uri.hostname, r_uri.hostname);
+			if ((p == NULL) || (apr_strnatcmp(r_uri.hostname, p) != 0)) {
+				ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+						"oidc_target_link_uri_matches_configuration: the URL hostname (%s) of the configured OIDCRedirectURI does not match the URL hostname of the \"target_link_uri\" (%s): aborting to prevent an open redirect.",
+						r_uri.hostname, o_uri.hostname);
+				return FALSE;
+			}
+		}
+	} else {
+		/* cookie_domain set: see if the target_link_uri is within the cookie_domain */
+		char *p = strstr(o_uri.hostname, cfg->cookie_domain);
+		if ((p == NULL) || (apr_strnatcmp(cfg->cookie_domain, p) != 0)) {
+			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+					"oidc_target_link_uri_matches_configuration: the domain (%s) configured in OIDCCookieDomain does not match the URL hostname (%s) of the \"target_link_uri\" (%s): aborting to prevent an open redirect.",
+					cfg->cookie_domain, o_uri.hostname, target_link_uri);
+			return FALSE;
+		}
+	}
+
+	/* see if the cookie_path setting matches the target_link_uri path */
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+	if (dir_cfg->cookie_path != NULL) {
+		char *p = strstr(o_uri.path, dir_cfg->cookie_path);
+		if ((p == NULL) || (p != o_uri.path)) {
+			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+					"oidc_target_link_uri_matches_configuration: the path (%s) configured in OIDCCookiePath does not match the URL hostname (%s) of the \"target_link_uri\" (%s): aborting to prevent an open redirect.",
+					cfg->cookie_domain, o_uri.hostname, target_link_uri);
+			return FALSE;
+		} else if (strlen(o_uri.path) > strlen(dir_cfg->cookie_path)) {
+			int n = strlen(dir_cfg->cookie_path);
+			if (dir_cfg->cookie_path[n - 1] == '/')
+				n--;
+			if (o_uri.path[n] != '/') {
+				ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+						"oidc_target_link_uri_matches_configuration: the path (%s) configured in OIDCCookiePath does not match the URL hostname (%s) of the \"target_link_uri\" (%s): aborting to prevent an open redirect.",
+						cfg->cookie_domain, o_uri.hostname, target_link_uri);
+				return FALSE;
+			}
+		}
+	}
+	return TRUE;
+}
+
+/*
+ * handle a response from an IDP discovery page and/or handle 3rd-party initiated SSO
  */
 static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 
@@ -1212,7 +1269,13 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 		target_link_uri = c->default_url;
 	}
 
-	// TODO: check that target_link_uri matches OIDCCookieDomain and/or OIDCRedirectURI
+	/* do open redirect prevention */
+	if (oidc_target_link_uri_matches_configuration(r, c,
+			target_link_uri) == FALSE) {
+		return oidc_util_http_sendstring(r,
+				"mod_auth_openidc: \"target_link_uri\" parameter does not match configuration settings, aborting to prevent an open redirect.",
+				HTTP_UNAUTHORIZED);
+	}
 
 	/* find out if the user entered an account name or selected an OP manually */
 	if (strstr(issuer, "@") != NULL) {
