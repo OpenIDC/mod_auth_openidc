@@ -195,6 +195,20 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 		return FALSE;
 	}
 
+	/* copy over client_id from resolved token in to access_token to apply authorization on that */
+	json_object_set(tkn, "client_id", json_object_get(result, "client_id"));
+	//json_object_set(tkn, "scope", json_object_get(result, "scope"));
+
+	/* copy over space separated scope value but do it in an array for authorization purposes */
+	char *val;
+	const char *data = apr_pstrdup(r->pool, json_string_value(json_object_get(result, "scope")));
+	json_t *a_scopes = json_array();
+	while (*data && (val = ap_getword_white(r->pool, &data))) {
+		json_array_append_new(a_scopes, json_string(val));
+	}
+	json_object_set(tkn, "scope", a_scopes);
+
+	/* return only the pimped access_token results */
 	*token = json_deep_copy(tkn);
 	char *s_token = json_dumps(*token, 0);
 	*response = apr_pstrdup(r->pool, s_token);
@@ -298,6 +312,9 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 
 	/* set the resolved claims in the HTTP headers for the target application */
 	oidc_util_set_app_headers(r, token, c->claim_prefix, c->claim_delimiter);
+
+	/* free JSON resources */
+	json_decref(token);
 
 	return OK;
 }
