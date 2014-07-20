@@ -87,6 +87,11 @@ have to enable the `Google+ API` under `APIs & auth` in the [Google API console]
        Require valid-user
     </Location>
 
+Note if you want to securely restrict logins to a specific Google Apps domain you would not only
+use the `hd` parameter to the `OIDCProviderAuthorizationEndpoint` for skipping the Google Account
+Chooser screen, but you **must** also use the following authorization setting in the `Location` primitive:
+
+    Require claim hd:<your-domain>
 
 ###Sample Config for Multiple OpenID Connect Providers
 
