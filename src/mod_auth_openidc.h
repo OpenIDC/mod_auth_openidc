@@ -101,13 +101,6 @@ APLOG_USE_MODULE(auth_openidc);
 /* the (global) key for the mod_auth_openidc related state that is stored in the request userdata context */
 #define OIDC_USERDATA_KEY "mod_auth_openidc_state"
 
-/* use for plain GET in HTTP calls to endpoints */
-#define OIDC_HTTP_GET 0
-/* use for url-form-encoded HTTP POST calls to endpoints */
-#define OIDC_HTTP_POST_FORM 1
-/* use for JSON encoded POST calls to endpoints */
-#define OIDC_HTTP_POST_JSON 2
-
 /* input filter hook name */
 #define OIDC_UTIL_HTTP_SENDSTRING "OIDC_UTIL_HTTP_SENDSTRING"
 
@@ -289,7 +282,9 @@ char *oidc_normalize_header_name(const request_rec *r, const char *str);
 
 void oidc_util_set_cookie(request_rec *r, const char *cookieName, const char *cookieValue);
 char *oidc_util_get_cookie(request_rec *r, char *cookieName);
-apr_byte_t oidc_util_http_call(request_rec *r, const char *url, int action, const apr_table_t *params, const char *basic_auth, const char *bearer_token, int ssl_validate_server, const char **response, int timeout, const char *outgoing_proxy);
+apr_byte_t oidc_util_http_get(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth, const char *bearer_token, int ssl_validate_server, const char **response, int timeout, const char *outgoing_proxy);
+apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth, const char *bearer_token, int ssl_validate_server, const char **response, int timeout, const char *outgoing_proxy);
+apr_byte_t oidc_util_http_post_json(request_rec *r, const char *url, const json_t *data, const char *basic_auth, const char *bearer_token, int ssl_validate_server, const char **response, int timeout, const char *outgoing_proxy);
 apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url);
 apr_byte_t oidc_util_request_has_parameter(request_rec *r, const char* param);
 apr_byte_t oidc_util_get_request_parameter(request_rec *r, char *name, char **value);

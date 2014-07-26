@@ -289,7 +289,8 @@ static const char *oidc_get_current_url_scheme(const request_rec *r) {
 /*
  * get the URL port that is currently being accessed
  */
-static const char *oidc_get_current_url_port(const request_rec *r, const oidc_cfg *c, const char *scheme_str) {
+static const char *oidc_get_current_url_port(const request_rec *r,
+		const oidc_cfg *c, const char *scheme_str) {
 	/* first see if there's a proxy/load-balancer in front of us */
 	const char *port_str = apr_table_get(r->headers_in, "X-Forwarded-Port");
 	if (port_str == NULL) {
@@ -328,8 +329,9 @@ char *oidc_get_current_url(const request_rec *r, const oidc_cfg *c) {
 	if (p != NULL)
 		*p = '\0';
 
-	char *url = apr_pstrcat(r->pool, scheme_str, "://", host_str, port_str, r->uri,
-			(r->args != NULL && *r->args != '\0' ? "?" : ""), r->args, NULL);
+	char *url = apr_pstrcat(r->pool, scheme_str, "://", host_str, port_str,
+			r->uri, (r->args != NULL && *r->args != '\0' ? "?" : ""), r->args,
+			NULL);
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_get_current_url: current URL '%s'", url);
@@ -375,9 +377,6 @@ static int oidc_http_add_form_url_encoded_param(void* rec, const char* key,
 	// TODO: handle arrays of strings?
 	oidc_http_encode_t *ctx = (oidc_http_encode_t*) rec;
 	const char *sep = apr_strnatcmp(ctx->encoded_params, "") == 0 ? "" : "&";
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, ctx->r,
-			"oidc_http_add_post_param: adding parameter: %s=%s to %s (sep=%s)",
-			key, value, ctx->encoded_params, sep);
 	ctx->encoded_params = apr_psprintf(ctx->r->pool, "%s%s%s=%s",
 			ctx->encoded_params, sep, oidc_util_escape_string(ctx->r, key),
 			oidc_util_escape_string(ctx->r, value));
@@ -385,43 +384,21 @@ static int oidc_http_add_form_url_encoded_param(void* rec, const char* key,
 }
 
 /*
- * add a JSON name/value pair
- */
-static int oidc_http_add_json_param(void* rec, const char* key,
-		const char* value) {
-	oidc_http_encode_t *ctx = (oidc_http_encode_t*) rec;
-	const char *sep = apr_strnatcmp(ctx->encoded_params, "") == 0 ? "" : ",";
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, ctx->r,
-			"oidc_http_add_json_param: adding parameter: %s=%s to %s", key,
-			value, ctx->encoded_params);
-	if ( (value[0] == '[') || (value[0] == '{') ) {
-		// TODO hacky hacky, we need an array so we already encoded it :-)
-		ctx->encoded_params = apr_psprintf(ctx->r->pool, "%s%s\"%s\" : %s",
-				ctx->encoded_params, sep, key, value);
-	} else {
-		ctx->encoded_params = apr_psprintf(ctx->r->pool, "%s%s\"%s\": \"%s\"",
-				ctx->encoded_params, sep, key, value);
-	}
-	return 1;
-}
-
-/*
  * execute a HTTP (GET or POST) request
  */
-apr_byte_t oidc_util_http_call(request_rec *r, const char *url, int action,
-		const apr_table_t *params, const char *basic_auth,
+static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
+		const char *data, const char *content_type, const char *basic_auth,
 		const char *bearer_token, int ssl_validate_server,
 		const char **response, int timeout, const char *outgoing_proxy) {
 	char curlError[CURL_ERROR_SIZE];
 	oidc_curl_buffer curlBuffer;
 	CURL *curl;
 	struct curl_slist *h_list = NULL;
-	int nr_of_params = (params != NULL) ? apr_table_elts(params)->nelts : 0;
 
 	/* do some logging about the inputs */
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_util_http_call: entering, url=%s, action=%d, #params=%d, basic_auth=%s, bearer_token=%s, ssl_validate_server=%d",
-			url, action, nr_of_params, basic_auth, bearer_token,
+			"oidc_util_http_call: url=%s, data=%s, content_type=%s, basic_auth=%s, bearer_token=%s, ssl_validate_server=%d",
+			url, data, content_type, basic_auth, bearer_token,
 			ssl_validate_server);
 
 	curl = curl_easy_init();
@@ -481,65 +458,17 @@ apr_byte_t oidc_util_http_call(request_rec *r, const char *url, int action,
 		curl_easy_setopt(curl, CURLOPT_USERPWD, basic_auth);
 	}
 
-	/* the POST contents */
-	oidc_http_encode_t data = { r, "" };
-
-	if (action == OIDC_HTTP_POST_JSON) {
-
-		/* POST JSON data */
-
-		if (nr_of_params > 0) {
-
-			/* add the parameters in JSON formatting */
-			apr_table_do(oidc_http_add_json_param, &data, params, NULL);
-			/* surround it by brackets to make it a valid JSON object */
-			data.encoded_params = apr_psprintf(r->pool, "{ %s }",
-					data.encoded_params);
-
-			/* set the data and log the event */
-			ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-					"oidc_util_http_call: setting JSON parameters: %s",
-					data.encoded_params);
-			curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data.encoded_params);
-		}
-
+	if (data != NULL) {
+		/* set POST data */
+		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
 		/* set HTTP method to POST */
 		curl_easy_setopt(curl, CURLOPT_POST, 1);
+	}
 
-		/* and overwrite the default url-form-encoded content-type */
-//		h_list = curl_slist_append(h_list,
-//				"Content-type: application/json; charset=UTF-8");
-		h_list = curl_slist_append(h_list, "Content-type: application/json");
-
-	} else if (action == OIDC_HTTP_POST_FORM) {
-
-		/* POST url-form-encoded data */
-
-		if (nr_of_params > 0) {
-
-			apr_table_do(oidc_http_add_form_url_encoded_param, &data, params,
-					NULL);
-
-			ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-					"oidc_util_http_call: setting post parameters: %s",
-					data.encoded_params);
-			curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data.encoded_params);
-		} // else: probably should warn here...
-
-		/* CURLOPT_POST needed at least to set: Content-Type: application/x-www-form-urlencoded */
-		curl_easy_setopt(curl, CURLOPT_POST, 1);
-
-	} else if (nr_of_params > 0) {
-
-		/* HTTP GET with #params > 0 */
-
-		apr_table_do(oidc_http_add_form_url_encoded_param, &data, params, NULL);
-		const char *sep = strchr(url, '?') != NULL ? "&" : "?";
-		url = apr_psprintf(r->pool, "%s%s%s", url, sep, data.encoded_params);
-
-		/* log that the URL has changed now */
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_util_http_call: added query parameters to URL: %s", url);
+	if (content_type != NULL) {
+		/* set content type */
+		h_list = curl_slist_append(h_list,
+				apr_psprintf(r->pool, "Content-type: %s", content_type));
 	}
 
 	/* see if we need to add any custom headers */
@@ -573,6 +502,70 @@ apr_byte_t oidc_util_http_call(request_rec *r, const char *url, int action,
 	curl_easy_cleanup(curl);
 
 	return rv;
+}
+
+/*
+ * execute HTTP GET request
+ */
+apr_byte_t oidc_util_http_get(request_rec *r, const char *url,
+		const apr_table_t *params, const char *basic_auth,
+		const char *bearer_token, int ssl_validate_server,
+		const char **response, int timeout, const char *outgoing_proxy) {
+
+	if ((params != NULL) && (apr_table_elts(params)->nelts > 0)) {
+		oidc_http_encode_t data = { r, "" };
+		apr_table_do(oidc_http_add_form_url_encoded_param, &data, params, NULL);
+		const char *sep = strchr(url, '?') != NULL ? "&" : "?";
+		url = apr_psprintf(r->pool, "%s%s%s", url, sep, data.encoded_params);
+		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+				"oidc_util_http_get: get URL=\"%s\"", url);
+	}
+
+	return oidc_util_http_call(r, url, NULL, NULL, basic_auth, bearer_token,
+			ssl_validate_server, response, timeout, outgoing_proxy);
+}
+
+/*
+ * execute HTTP POST request with form-encoded data
+ */
+apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url,
+		const apr_table_t *params, const char *basic_auth,
+		const char *bearer_token, int ssl_validate_server,
+		const char **response, int timeout, const char *outgoing_proxy) {
+
+	const char *data = NULL;
+	if ((params != NULL) && (apr_table_elts(params)->nelts > 0)) {
+		oidc_http_encode_t encode_data = { r, "" };
+		apr_table_do(oidc_http_add_form_url_encoded_param, &encode_data, params,
+				NULL);
+		data = encode_data.encoded_params;
+		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+				"oidc_util_http_post_form: post data=\"%s\"", data);
+	}
+
+	return oidc_util_http_call(r, url, data,
+			"application/x-www-form-urlencoded", basic_auth, bearer_token,
+			ssl_validate_server, response, timeout, outgoing_proxy);
+}
+
+/*
+ * execute HTTP POST request with JSON-encoded data
+ */
+apr_byte_t oidc_util_http_post_json(request_rec *r, const char *url,
+		const json_t *json, const char *basic_auth, const char *bearer_token,
+		int ssl_validate_server, const char **response, int timeout,
+		const char *outgoing_proxy) {
+
+	char *data = NULL;
+	if (json != NULL) {
+		char *s_value = json_dumps(json, 0);
+		data = apr_pstrdup(r->pool, s_value);
+		free(s_value);
+	}
+
+	return oidc_util_http_call(r, url, data, "application/json", basic_auth,
+			bearer_token, ssl_validate_server, response, timeout,
+			outgoing_proxy);
 }
 
 /*
@@ -622,13 +615,12 @@ void oidc_util_set_cookie(request_rec *r, const char *cookieName,
 			&auth_openidc_module);
 	char *headerString, *currentCookies;
 	/* construct the cookie value */
-	headerString = apr_psprintf(r->pool, "%s=%s;%s;Path=%s%s",
-			cookieName,
+	headerString = apr_psprintf(r->pool, "%s=%s;%s;Path=%s%s", cookieName,
 			cookieValue,
-			((apr_strnatcasecmp("https", oidc_get_current_url_scheme(r)) == 0) ? ";Secure" : ""),
-			oidc_util_get_cookie_path(r),
-			c->cookie_domain != NULL ? apr_psprintf(r->pool, ";Domain=%s", c->cookie_domain) : ""
-		);
+			((apr_strnatcasecmp("https", oidc_get_current_url_scheme(r)) == 0) ?
+					";Secure" : ""), oidc_util_get_cookie_path(r),
+			c->cookie_domain != NULL ?
+					apr_psprintf(r->pool, ";Domain=%s", c->cookie_domain) : "");
 
 	/* see if we need to clear the cookie */
 	if (apr_strnatcmp(cookieValue, "") == 0)
@@ -781,8 +773,8 @@ apr_byte_t oidc_util_get_request_parameter(request_rec *r, char *name,
 /*
  * printout a JSON string value
  */
-static apr_byte_t oidc_util_json_string_print(request_rec *r,
-		json_t *result, const char *key, const char *log) {
+static apr_byte_t oidc_util_json_string_print(request_rec *r, json_t *result,
+		const char *key, const char *log) {
 	json_t *value = json_object_get(result, key);
 	if (value != NULL) {
 		if (json_is_string(value)) {
@@ -802,8 +794,7 @@ static apr_byte_t oidc_util_json_string_print(request_rec *r,
 /*
  * check a JSON object for "error" results and printout
  */
-static apr_byte_t oidc_util_check_json_error(request_rec *r,
-		json_t *json) {
+static apr_byte_t oidc_util_check_json_error(request_rec *r, json_t *json) {
 	if (oidc_util_json_string_print(r, json, "error",
 			"oidc_util_check_json_error") == TRUE) {
 		oidc_util_json_string_print(r, json, "error_description",
@@ -826,7 +817,8 @@ apr_byte_t oidc_util_decode_json_and_check_error(request_rec *r,
 	if (*json == NULL) {
 		/* something went wrong */
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_util_check_json_error: JSON parsing returned an error: %s", json_error.text);
+				"oidc_util_check_json_error: JSON parsing returned an error: %s",
+				json_error.text);
 		return FALSE;
 	}
 
@@ -1010,7 +1002,7 @@ apr_byte_t oidc_util_file_read(request_rec *r, const char *path, char **result) 
 
 	return TRUE;
 
-error_close:
+	error_close:
 
 	apr_file_unlock(fd);
 	apr_file_close(fd);
@@ -1064,11 +1056,8 @@ int oidc_util_html_send_error(request_rec *r, const char *error,
 /*
  * see if a certain string value is part of a JSON array with string elements
  */
-apr_byte_t oidc_util_json_array_has_value(request_rec *r,
-		json_t *haystack, const char *needle) {
-
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_util_json_array_has_value: entering (%s)", needle);
+apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack,
+		const char *needle) {
 
 	if ((haystack == NULL) || (!json_is_array(haystack)))
 		return FALSE;
@@ -1078,7 +1067,8 @@ apr_byte_t oidc_util_json_array_has_value(request_rec *r,
 		json_t *elem = json_array_get(haystack, i);
 		if (!json_is_string(elem)) {
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_util_json_array_has_value: unhandled in-array JSON non-string object type [%d]", elem->type);
+					"oidc_util_json_array_has_value: unhandled in-array JSON non-string object type [%d]",
+					elem->type);
 			continue;
 		}
 		if (strcmp(json_string_value(elem), needle) == 0) {
@@ -1115,8 +1105,8 @@ static void oidc_util_set_app_header(request_rec *r, const char *s_key,
 /*
  * set the user/claims information from the session in HTTP headers passed on to the application
  */
-void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs, const char *claim_prefix,
-		const char *claim_delimiter) {
+void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs,
+		const char *claim_prefix, const char *claim_delimiter) {
 
 	char s_int[255];
 	json_t *j_value = NULL;
@@ -1130,7 +1120,7 @@ void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs, const char
 	}
 
 	/* loop over the claims in the JSON structure */
-	void *iter = json_object_iter((json_t*)j_attrs);
+	void *iter = json_object_iter((json_t*) j_attrs);
 	while (iter) {
 
 		/* get the next key/value entry */
@@ -1140,7 +1130,6 @@ void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs, const char
 //		char *s_value= json_dumps(j_value, JSON_ENCODE_ANY);
 //		oidc_util_set_app_header(r, s_key, s_value, claim_prefix);
 //		free(s_value);
-
 
 		/* check if it is a single value string */
 		if (json_is_string(j_value)) {
@@ -1153,15 +1142,14 @@ void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs, const char
 
 			/* set boolean value in the application header whose name is based on the key and the prefix */
 			oidc_util_set_app_header(r, s_key,
-					json_is_true(j_value) ? "1" : "0", claim_prefix);
+			json_is_true(j_value) ? "1" : "0", claim_prefix);
 
 		} else if (json_is_integer(j_value)) {
 
-			if (sprintf(s_int, "%" JSON_INTEGER_FORMAT, json_integer_value(j_value)) > 0) {
+			if (sprintf(s_int, "%" JSON_INTEGER_FORMAT,
+					json_integer_value(j_value)) > 0) {
 				/* set long value in the application header whose name is based on the key and the prefix */
-				oidc_util_set_app_header(r, s_key,
-						s_int,
-						claim_prefix);
+				oidc_util_set_app_header(r, s_key, s_int, claim_prefix);
 			} else {
 				ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
 						"oidc_util_set_app_headers: could not convert JSON number to string (> 255 characters?), skipping");
@@ -1177,7 +1165,7 @@ void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs, const char
 		} else if (json_is_object(j_value)) {
 
 			/* set json value in the application header whose name is based on the key and the prefix */
-			char *s_value= json_dumps(j_value, 0);
+			char *s_value = json_dumps(j_value, 0);
 			oidc_util_set_app_header(r, s_key, s_value, claim_prefix);
 			free(s_value);
 
@@ -1220,7 +1208,7 @@ void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs, const char
 								json_is_true(elem) ? "1" : "0");
 					} else {
 						s_concat = apr_psprintf(r->pool, "%s",
-								json_is_true(elem) ? "1" : "0");
+						json_is_true(elem) ? "1" : "0");
 					}
 
 				} else {
@@ -1243,7 +1231,7 @@ void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs, const char
 					j_value->type, s_key);
 		}
 
-		iter = json_object_iter_next((json_t *)j_attrs, iter);
+		iter = json_object_iter_next((json_t *) j_attrs, iter);
 	}
 }
 

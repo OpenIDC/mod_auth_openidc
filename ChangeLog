@@ -1,3 +1,11 @@
+7/26/2014
+- refactor http code; cleanup JSON encoding in client registration
+
+7/20/2014
+- check for open redirect on passed target_link_uri
+- prevent JWE timing attacks on CEK; add JWE test
+- include client_id and scope values in resolved access_token
+
 7/1/2014
 - pass JSON objects in app HTTP headers as plain JSON
 - correct printout in id_token hash comparisons

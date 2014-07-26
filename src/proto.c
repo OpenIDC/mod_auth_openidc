@@ -85,23 +85,24 @@ int oidc_proto_authorization_request_post_preserve(request_rec *r,
 	}
 	json = apr_psprintf(r->pool, "{ %s }", json);
 
-	char *java_script = apr_psprintf(r->pool,
+	char *java_script =
+			apr_psprintf(r->pool,
 					"<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
-					"<html xmlns=\"http://www.w3.org/1999/xhtml\" lang=\"en\" xml:lang=\"en\">\n"
-					"  <head>\n"
-					"    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"/>\n"
-					"    <script type=\"text/javascript\">\n"
-					"      function preserveOnLoad() {\n"
-					"        localStorage.setItem('mod_auth_openidc_preserve_post_params', JSON.stringify(%s));\n"
-					"        window.location='%s';\n"
-					"      }\n"
-					"    </script>\n"
-					"    <title>Preserving...</title>\n"
-					"  </head>\n"
-					"  <body onload=\"preserveOnLoad()\">\n"
-					"    <p>Preserving...</p>\n"
-					"  </body>\n"
-					"</html>\n", json, authorization_request);
+							"<html xmlns=\"http://www.w3.org/1999/xhtml\" lang=\"en\" xml:lang=\"en\">\n"
+							"  <head>\n"
+							"    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"/>\n"
+							"    <script type=\"text/javascript\">\n"
+							"      function preserveOnLoad() {\n"
+							"        localStorage.setItem('mod_auth_openidc_preserve_post_params', JSON.stringify(%s));\n"
+							"        window.location='%s';\n"
+							"      }\n"
+							"    </script>\n"
+							"    <title>Preserving...</title>\n"
+							"  </head>\n"
+							"  <body onload=\"preserveOnLoad()\">\n"
+							"    <p>Preserving...</p>\n"
+							"  </body>\n"
+							"</html>\n", json, authorization_request);
 
 	return oidc_util_http_sendstring(r, java_script, DONE);
 }
@@ -110,8 +111,9 @@ int oidc_proto_authorization_request_post_preserve(request_rec *r,
  * send an OpenID Connect authorization request to the specified provider
  */
 int oidc_proto_authorization_request(request_rec *r,
-		struct oidc_provider_t *provider, const char *login_hint, const char *redirect_uri,
-		const char *state, oidc_proto_state *proto_state) {
+		struct oidc_provider_t *provider, const char *login_hint,
+		const char *redirect_uri, const char *state,
+		oidc_proto_state *proto_state) {
 
 	/* log some stuff */
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
@@ -152,14 +154,12 @@ int oidc_proto_authorization_request(request_rec *r,
 	/* add the login_hint if provided */
 	if (login_hint != NULL)
 		authorization_request = apr_psprintf(r->pool, "%s&login_hint=%s",
-				authorization_request,
-				oidc_util_escape_string(r, login_hint));
+				authorization_request, oidc_util_escape_string(r, login_hint));
 
 	/* add any custom authorization request parameters if configured */
 	if (provider->auth_request_params != NULL) {
 		authorization_request = apr_psprintf(r->pool, "%s&%s",
-				authorization_request,
-				provider->auth_request_params);
+				authorization_request, provider->auth_request_params);
 	}
 
 	/* preserve POSTed form parameters if enabled */
@@ -283,7 +283,8 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 		if (json_is_string(aud)) {
 
 			/* a single-valued audience must be equal to our client_id */
-			if (apr_strnatcmp(json_string_value(aud), provider->client_id) != 0) {
+			if (apr_strnatcmp(json_string_value(aud), provider->client_id)
+					!= 0) {
 				ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 						"oidc_proto_validate_aud_and_azp: the configured client_id (%s) did not match the \"aud\" claim value (%s) in the id_token",
 						provider->client_id, json_string_value(aud));
@@ -323,8 +324,8 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 /*
  * validate "iat" claim in JWT
  */
-apr_byte_t oidc_proto_validate_iat(request_rec *r,
-		oidc_provider_t *provider, apr_jwt_t *jwt) {
+apr_byte_t oidc_proto_validate_iat(request_rec *r, oidc_provider_t *provider,
+		apr_jwt_t *jwt) {
 	if (jwt->payload.iat == APR_JWT_CLAIM_TIME_EMPTY) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_validate_iat: id_token JSON payload did not contain an \"iat\" number value");
@@ -437,7 +438,7 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 
 	/* get the "keys" JSON array from the JWKs object */
 	json_t *keys = json_object_get(j_jwks, "keys");
-	if ( (keys == NULL) || !(json_is_array(keys)) ) {
+	if ((keys == NULL) || !(json_is_array(keys))) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_proto_get_key_from_jwks: \"keys\" array element is not a JSON array");
 		return FALSE;
@@ -458,10 +459,12 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 
 		/* get the key type and see if it is the RSA type that we are looking for */
 		json_t *kty = json_object_get(elem, "kty");
-		if ( (!json_is_string(kty)) || (strcmp(json_string_value(kty), type) != 0)) continue;
+		if ((!json_is_string(kty))
+				|| (strcmp(json_string_value(kty), type) != 0))
+			continue;
 
 		/* see if we were looking for a specific kid, if not we'll return the first one found */
-		if ( (jwt_hdr->kid == NULL) && (x5t == NULL) ) {
+		if ((jwt_hdr->kid == NULL) && (x5t == NULL)) {
 			ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 					"oidc_proto_get_key_from_jwks: no kid/x5t to match, return first key found");
 
@@ -471,7 +474,7 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 
 		/* we are looking for a specific kid, get the kid from the current element */
 		json_t *ekid = json_object_get(elem, "kid");
-		if ( (ekid != NULL) && json_is_string(ekid) && (jwt_hdr->kid != NULL) ) {
+		if ((ekid != NULL) && json_is_string(ekid) && (jwt_hdr->kid != NULL)) {
 			/* compare the requested kid against the current element */
 			if (apr_strnatcmp(jwt_hdr->kid, json_string_value(ekid)) == 0) {
 				ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
@@ -485,7 +488,7 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 
 		/* we are looking for a specific x5t, get the x5t from the current element */
 		json_t *ex5t = json_object_get(elem, "kid");
-		if ( (ex5t != NULL) && json_is_string(ex5t) && (x5t != NULL) ) {
+		if ((ex5t != NULL) && json_is_string(ex5t) && (x5t != NULL)) {
 			/* compare the requested kid against the current element */
 			if (apr_strnatcmp(x5t, json_string_value(ex5t)) == 0) {
 				ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
@@ -558,9 +561,8 @@ static apr_jwk_t *oidc_proto_get_key_from_jwk_uri(request_rec *r, oidc_cfg *cfg,
 /*
  * verify the signature on an id_token
  */
-apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r,
-		oidc_cfg *cfg, oidc_provider_t *provider, apr_jwt_t *jwt,
-		apr_byte_t *refresh) {
+apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r, oidc_cfg *cfg,
+		oidc_provider_t *provider, apr_jwt_t *jwt, apr_byte_t *refresh) {
 
 	apr_byte_t result = FALSE;
 
@@ -570,13 +572,14 @@ apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r,
 				"oidc_proto_idtoken_verify_signature: verifying HMAC signature on id_token: header=%s, message=%s",
 				jwt->header.value.str, jwt->message);
 
-		result = apr_jws_verify_hmac(r->pool, jwt, provider->client_secret, strlen(provider->client_secret));
+		result = apr_jws_verify_hmac(r->pool, jwt, provider->client_secret,
+				strlen(provider->client_secret));
 
 	} else if (apr_jws_signature_is_rsa(r->pool, jwt)
 #if (OPENSSL_VERSION_NUMBER >= 0x01000000)
 			|| apr_jws_signature_is_ec(r->pool, jwt)
 #endif
-			) {
+					) {
 
 		/* get the key from the JWKs that corresponds with the key specified in the header */
 		apr_jwk_t *jwk = oidc_proto_get_key_from_jwk_uri(r, cfg, provider,
@@ -595,7 +598,7 @@ apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r,
 #if (OPENSSL_VERSION_NUMBER >= 0x01000000)
 							apr_jws_verify_ec(r->pool, jwt, jwk);
 #else
-							FALSE;
+			FALSE;
 #endif
 
 		} else {
@@ -680,7 +683,8 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_proto_parse_idtoken: entering");
 
-	if (apr_jwt_parse(r->pool, id_token, jwt, cfg->private_keys, provider->client_secret) == FALSE) {
+	if (apr_jwt_parse(r->pool, id_token, jwt, cfg->private_keys,
+			provider->client_secret) == FALSE) {
 		if ((*jwt) && ((*jwt)->header.alg)
 				&& (apr_jwe_algorithm_is_supported(r->pool, (*jwt)->header.alg)
 						== FALSE)) {
@@ -696,13 +700,15 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 					(*jwt)->header.enc);
 		}
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_parse_idtoken: apr_jwt_parse failed for JWT with header: \"%s\"", apr_jwt_header_to_string(r->pool, id_token));
+				"oidc_proto_parse_idtoken: apr_jwt_parse failed for JWT with header: \"%s\"",
+				apr_jwt_header_to_string(r->pool, id_token));
 		apr_jwt_destroy(*jwt);
 		return FALSE;
 	}
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_parse_idtoken: successfully parsed (and possibly decrypted) JWT with header: \"%s\"", apr_jwt_header_to_string(r->pool, id_token));
+			"oidc_proto_parse_idtoken: successfully parsed (and possibly decrypted) JWT with header: \"%s\"",
+			apr_jwt_header_to_string(r->pool, id_token));
 
 	// TODO: make signature validation exception for 'code' flow and the algorithm NONE
 	apr_byte_t refresh = FALSE;
@@ -789,9 +795,8 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 	 */
 
 	/* resolve the code against the token endpoint */
-	if (oidc_util_http_call(r, provider->token_endpoint_url,
-			OIDC_HTTP_POST_FORM, params, basic_auth, NULL,
-			provider->ssl_validate_server, &response,
+	if (oidc_util_http_post_form(r, provider->token_endpoint_url, params,
+			basic_auth, NULL, provider->ssl_validate_server, &response,
 			cfg->http_timeout_long, cfg->outgoing_proxy) == FALSE) {
 		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 				"oidc_proto_resolve_code: could not successfully resolve the \"code\" (%s) against the token endpoint (%s)",
@@ -866,7 +871,7 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 		return FALSE;
 
 	/* get the JSON response */
-	if (oidc_util_http_call(r, provider->userinfo_endpoint_url, OIDC_HTTP_GET,
+	if (oidc_util_http_get(r, provider->userinfo_endpoint_url,
 			NULL, NULL, access_token, provider->ssl_validate_server, response,
 			cfg->http_timeout_long, cfg->outgoing_proxy) == FALSE)
 		return FALSE;
@@ -902,7 +907,7 @@ apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg,
 	apr_table_addn(params, "rel", "http://openid.net/specs/connect/1.0/issuer");
 
 	const char *response = NULL;
-	if (oidc_util_http_call(r, url, OIDC_HTTP_GET, params, NULL, NULL,
+	if (oidc_util_http_get(r, url, params, NULL, NULL,
 			cfg->provider.ssl_validate_server, &response,
 			cfg->http_timeout_short, cfg->outgoing_proxy) == FALSE) {
 		/* errors will have been logged by now */
@@ -1078,7 +1083,8 @@ static apr_byte_t oidc_proto_validate_hash_value(request_rec *r,
  */
 apr_byte_t oidc_proto_validate_code(request_rec *r, oidc_provider_t *provider,
 		apr_jwt_t *jwt, const char *response_type, const char *code) {
-	apr_array_header_t *required_for_flows = apr_array_make(r->pool, 2, sizeof(const char*));
+	apr_array_header_t *required_for_flows = apr_array_make(r->pool, 2,
+			sizeof(const char*));
 	*(const char**) apr_array_push(required_for_flows) = "code id_token";
 	*(const char**) apr_array_push(required_for_flows) = "code id_token token";
 	return oidc_proto_validate_hash_value(r, provider, jwt, response_type, code,
@@ -1091,7 +1097,8 @@ apr_byte_t oidc_proto_validate_code(request_rec *r, oidc_provider_t *provider,
 apr_byte_t oidc_proto_validate_access_token(request_rec *r,
 		oidc_provider_t *provider, apr_jwt_t *jwt, const char *response_type,
 		const char *access_token, const char *token_type) {
-	apr_array_header_t *required_for_flows = apr_array_make(r->pool, 2, sizeof(const char*));
+	apr_array_header_t *required_for_flows = apr_array_make(r->pool, 2,
+			sizeof(const char*));
 	*(const char**) apr_array_push(required_for_flows) = "id_token token";
 	*(const char**) apr_array_push(required_for_flows) = "code id_token token";
 	return oidc_proto_validate_hash_value(r, provider, jwt, response_type,
@@ -1130,15 +1137,18 @@ apr_byte_t oidc_proto_flow_is_supported(apr_pool_t *pool, const char *flow) {
  * check the required parameters for the various flows on receipt of the authorization response
  */
 apr_byte_t oidc_proto_validate_authorization_response(request_rec *r,
-		const char *response_type, const char *requested_response_mode, char **code, char **id_token,
-		char **access_token, char **token_type, const char *used_response_mode) {
+		const char *response_type, const char *requested_response_mode,
+		char **code, char **id_token, char **access_token, char **token_type,
+		const char *used_response_mode) {
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_proto_validate_authorization_response: entering, response_type=%s, requested_response_mode=%s, code=%s, id_token=%s, access_token=%s, token_type=%s, used_response_mode=%s",
-			response_type, requested_response_mode, *code, *id_token, *access_token, *token_type, used_response_mode);
+			response_type, requested_response_mode, *code, *id_token,
+			*access_token, *token_type, used_response_mode);
 
 	/* check the requested response mode against the one used by the OP */
-	if ((requested_response_mode != NULL) && (strcmp(requested_response_mode, used_response_mode)) != 0) {
+	if ((requested_response_mode != NULL)
+			&& (strcmp(requested_response_mode, used_response_mode)) != 0) {
 		/*
 		 * only warn because I'm not sure that most OPs will respect a requested
 		 * response_mode and rather use the default for the flow

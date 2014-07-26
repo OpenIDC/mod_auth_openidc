@@ -86,9 +86,9 @@ static int oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 	}
 
 	/* call the endpoint with the constructed parameter set and return the resulting response */
-	return oidc_util_http_call(r, c->oauth.validate_endpoint_url,
-			OIDC_HTTP_POST_FORM, params, basic_auth, NULL, c->oauth.ssl_validate_server,
-			response, c->http_timeout_long, c->outgoing_proxy);
+	return oidc_util_http_post_form(r, c->oauth.validate_endpoint_url, params,
+			basic_auth, NULL, c->oauth.ssl_validate_server, response,
+			c->http_timeout_long, c->outgoing_proxy);
 }
 
 /*
@@ -181,7 +181,8 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 		result = json_loads(json, 0, &json_error);
 		if (result == NULL) {
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_oauth_resolve_access_token: cached JSON was corrupted: %s", json_error.text);
+					"oidc_oauth_resolve_access_token: cached JSON was corrupted: %s",
+					json_error.text);
 			return FALSE;
 		}
 	}
@@ -201,7 +202,8 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 
 	/* copy over space separated scope value but do it in an array for authorization purposes */
 	char *val;
-	const char *data = apr_pstrdup(r->pool, json_string_value(json_object_get(result, "scope")));
+	const char *data = apr_pstrdup(r->pool,
+			json_string_value(json_object_get(result, "scope")));
 	json_t *a_scopes = json_array();
 	while (*data && (val = ap_getword_white(r->pool, &data))) {
 		json_array_append_new(a_scopes, json_string(val));
@@ -279,7 +281,8 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 	/* validate the obtained access token against the OAuth AS validation endpoint */
 	json_t *token = NULL;
 	char *s_token = NULL;
-	if (oidc_oauth_resolve_access_token(r, c, access_token, &token, &s_token) == FALSE)
+	if (oidc_oauth_resolve_access_token(r, c, access_token, &token,
+			&s_token) == FALSE)
 		return HTTP_UNAUTHORIZED;
 
 	/* check that we've got something back */
@@ -306,7 +309,8 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 	/* set the user authentication HTTP header if set and required */
 	if ((r->user != NULL) && (dir_cfg->authn_header != NULL)) {
 		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_oauth_check_userid: setting authn header (%s) to: %s", dir_cfg->authn_header, r->user);
+				"oidc_oauth_check_userid: setting authn header (%s) to: %s",
+				dir_cfg->authn_header, r->user);
 		apr_table_set(r->headers_in, dir_cfg->authn_header, r->user);
 	}
 
