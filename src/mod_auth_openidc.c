@@ -277,16 +277,16 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 		return FALSE;
 	}
 
-	char *target_uri = NULL;
-	apr_jwt_get_string(r->pool, &jwt->payload.value, "target_uri", &target_uri);
-	if (target_uri == NULL) {
+	char *target_link_uri = NULL;
+	apr_jwt_get_string(r->pool, &jwt->payload.value, "target_uri", &target_link_uri);
+	if (target_link_uri == NULL) {
 		if (c->default_url == NULL) {
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_unsolicited_proto_state: no \"target_uri\" claim could be retrieved from JWT state and no OIDCDefaultURL is set, aborting");
 			apr_jwt_destroy(jwt);
 			return FALSE;
 		}
-		target_uri = c->default_url;
+		target_link_uri = c->default_url;
 	}
 
 	if (c->metadata_dir != NULL) {
@@ -378,7 +378,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	res->nonce = NULL;
 	// TODO: seems a bit hacky, but "" serves as "unspecified" right now
 	res->original_method = "";
-	res->original_url = target_uri;
+	res->original_url = target_link_uri;
 	res->response_mode = provider->response_mode;
 	res->response_type = provider->response_type;
 	res->timestamp = apr_time_sec(apr_time_now());
