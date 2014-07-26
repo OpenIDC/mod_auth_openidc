@@ -1,5 +1,6 @@
 7/26/2014
 - refactor http code; cleanup JSON encoding in client registration
+- refactor padding handling in base64url encoding/decoding
 
 7/20/2014
 - check for open redirect on passed target_link_uri

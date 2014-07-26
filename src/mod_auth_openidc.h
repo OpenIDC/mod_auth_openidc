@@ -272,8 +272,8 @@ void oidc_register_hooks(apr_pool_t *pool);
 
 // oidc_util.c
 int oidc_strnenvcmp(const char *a, const char *b, int len);
-int oidc_base64url_encode(request_rec *r, char **dst, const char *src, int src_len);
-int oidc_base64url_decode(request_rec *r, char **dst, const char *src, int padding);
+int oidc_base64url_encode(request_rec *r, char **dst, const char *src, int src_len, int remove_padding);
+int oidc_base64url_decode(request_rec *r, char **dst, const char *src, int add_padding);
 int oidc_encrypt_base64url_encode_string(request_rec *r, char **dst, const char *src);
 int oidc_base64url_decode_decrypt_string(request_rec *r, char **dst, const char *src);
 char *oidc_get_current_url(const request_rec *r, const oidc_cfg *c);

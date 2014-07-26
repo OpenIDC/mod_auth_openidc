@@ -1011,16 +1011,8 @@ static apr_byte_t oidc_proto_validate_hash(request_rec *r, const char *alg,
 
 	/* calculate the base64url-encoded value of the hash */
 	char *encoded = NULL;
-	int enc_len = oidc_base64url_encode(r, &encoded, calc,
-			apr_jws_hash_length(alg) / 2);
-
-	/* remove /0 and padding */
-	enc_len--;
-	if (encoded[enc_len - 1] == ',')
-		enc_len--;
-	if (encoded[enc_len - 1] == ',')
-		enc_len--;
-	encoded[enc_len] = '\0';
+	oidc_base64url_encode(r, &encoded, calc,
+			apr_jws_hash_length(alg) / 2, 1);
 
 	/* compare the calculated hash against the provided hash */
 	if ((apr_strnatcmp(encoded, hash) != 0)) {

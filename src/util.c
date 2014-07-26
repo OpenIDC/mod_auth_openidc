@@ -70,8 +70,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
  * base64url encode a string
  */
 int oidc_base64url_encode(request_rec *r, char **dst, const char *src,
-		int src_len) {
-	// TODO: always padded now, do we need an option to remove the padding?
+		int src_len, int remove_padding) {
 	if ((src == NULL) || (src_len <= 0)) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_base64url_encode: not encoding anything; src=NULL and/or src_len<1");
@@ -90,6 +89,15 @@ int oidc_base64url_encode(request_rec *r, char **dst, const char *src,
 			enc[i] = ',';
 		i++;
 	}
+	if (remove_padding) {
+		/* remove /0 and padding */
+		enc_len--;
+		if (enc[enc_len - 1] == ',')
+			enc_len--;
+		if (enc[enc_len - 1] == ',')
+			enc_len--;
+		enc[enc_len] = '\0';
+	}
 	*dst = enc;
 	return enc_len;
 }
@@ -98,8 +106,7 @@ int oidc_base64url_encode(request_rec *r, char **dst, const char *src,
  * base64url decode a string
  */
 int oidc_base64url_decode(request_rec *r, char **dst, const char *src,
-		int padding) {
-	// TODO: check base64url decoding/encoding code and look for alternatives?
+		int add_padding) {
 	if (src == NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_base64url_decode: not decoding anything; src=NULL");
@@ -116,7 +123,7 @@ int oidc_base64url_decode(request_rec *r, char **dst, const char *src,
 			dec[i] = '=';
 		i++;
 	}
-	if (padding == 1) {
+	if (add_padding == 1) {
 		switch (strlen(dec) % 4) {
 		case 0:
 			break;
@@ -150,7 +157,7 @@ int oidc_encrypt_base64url_encode_string(request_rec *r, char **dst,
 				"oidc_encrypt_base64url_encode_string: oidc_crypto_aes_encrypt failed");
 		return -1;
 	}
-	return oidc_base64url_encode(r, dst, (const char *) crypted, crypted_len);
+	return oidc_base64url_encode(r, dst, (const char *) crypted, crypted_len, 1);
 }
 
 /*
@@ -161,7 +168,7 @@ int oidc_base64url_decode_decrypt_string(request_rec *r, char **dst,
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	char *decbuf = NULL;
-	int dec_len = oidc_base64url_decode(r, &decbuf, src, 0);
+	int dec_len = oidc_base64url_decode(r, &decbuf, src, 1);
 	if (dec_len <= 0) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"oidc_base64url_decode_decrypt_string: oidc_base64url_decode failed");
@@ -374,7 +381,6 @@ typedef struct oidc_http_encode_t {
  */
 static int oidc_http_add_form_url_encoded_param(void* rec, const char* key,
 		const char* value) {
-	// TODO: handle arrays of strings?
 	oidc_http_encode_t *ctx = (oidc_http_encode_t*) rec;
 	const char *sep = apr_strnatcmp(ctx->encoded_params, "") == 0 ? "" : "&";
 	ctx->encoded_params = apr_psprintf(ctx->r->pool, "%s%s%s=%s",
