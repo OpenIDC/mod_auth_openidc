@@ -1,5 +1,6 @@
 8/1/2014
 - fix cache initialization/destroy leak
+- release 1.5.3
 
 7/26/2014
 - refactor http code; cleanup JSON encoding in client registration

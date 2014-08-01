@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.5.3-1) unstable; urgency=medium
+
+  * fix initialization leak
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Fri, 1 Aug 2014 12:37:53 +0200
+
 libapache2-mod-auth-openidc (1.5.2-1) unstable; urgency=medium
 
   * fix OAuth 2.0 authorization and passes JSON claims in HTTP headers
