@@ -104,7 +104,10 @@ static void *oidc_cache_shm_cfg_create(apr_pool_t *pool) {
 int oidc_cache_shm_post_config(server_rec *s) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(s->module_config,
 			&auth_openidc_module);
-	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *)cfg->cache_cfg;
+
+	if (cfg->cache_cfg != NULL) return APR_SUCCESS;
+	oidc_cache_cfg_shm_t *context = oidc_cache_shm_cfg_create(s->process->pool);
+	cfg->cache_cfg = context;
 
 	/* create the shared memory segment */
 	apr_status_t rv = apr_shm_create(&context->shm,

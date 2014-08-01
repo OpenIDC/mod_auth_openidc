@@ -294,11 +294,6 @@ static const char *oidc_set_cache_type(cmd_parms *cmd, void *ptr,
 				arg));
 	}
 
-	cfg->cache_cfg =
-			cfg->cache->create_config ?
-					cfg->cache->create_config(cmd->server->process->pool) :
-					NULL;
-
 	return NULL;
 }
 
@@ -514,8 +509,8 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->oauth.remote_user_claim = OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER;
 
 	c->cache = &oidc_cache_shm;
-	c->cache_cfg =
-			c->cache->create_config ? c->cache->create_config(pool) : NULL;
+	c->cache_cfg = NULL;
+
 	c->cache_file_dir = NULL;
 	c->cache_file_clean_interval = OIDC_DEFAULT_CACHE_FILE_CLEAN_INTERVAL;
 	c->cache_memcache_servers = NULL;
@@ -710,11 +705,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 
 	if (add->cache != &oidc_cache_shm) {
 		c->cache = add->cache;
-		c->cache_cfg = add->cache_cfg;
 	} else {
 		c->cache = base->cache;
-		c->cache_cfg = base->cache_cfg;
 	}
+	c->cache_cfg = NULL;
 
 	c->cache_file_dir =
 			add->cache_file_dir != NULL ?
