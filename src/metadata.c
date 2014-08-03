@@ -829,7 +829,8 @@ static apr_byte_t oidc_metadata_client_get(request_rec *r, oidc_cfg *cfg,
 
 	json_t *response_types = json_array();
 	apr_array_header_t *flows = oidc_proto_supported_flows(r->pool);
-	for (int i = 0; i < flows->nelts; i++) {
+	int i;
+	for (i = 0; i < flows->nelts; i++) {
 		json_array_append_new(response_types,
 				json_string(((const char**) flows->elts)[i]));
 	}
