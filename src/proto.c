@@ -678,7 +678,7 @@ static apr_byte_t oidc_proto_set_remote_user(request_rec *r, oidc_cfg *c,
  */
 apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char *id_token, const char *nonce,
-		char **user, apr_jwt_t **jwt) {
+		char **user, apr_jwt_t **jwt, apr_byte_t is_code_flow) {
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 			"oidc_proto_parse_idtoken: entering");
@@ -710,14 +710,17 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 			"oidc_proto_parse_idtoken: successfully parsed (and possibly decrypted) JWT with header: \"%s\"",
 			apr_jwt_header_to_string(r->pool, id_token));
 
-	// TODO: make signature validation exception for 'code' flow and the algorithm NONE
-	apr_byte_t refresh = FALSE;
-	if (oidc_proto_idtoken_verify_signature(r, cfg, provider, *jwt,
-			&refresh) == FALSE) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_parse_idtoken: id_token signature could not be validated, aborting");
-		apr_jwt_destroy(*jwt);
-		return FALSE;
+	// make signature validation exception for 'code' flow and the algorithm NONE
+	if (is_code_flow == FALSE || strcmp((*jwt)->header.alg, "none") != 0) {
+
+		apr_byte_t refresh = FALSE;
+		if (oidc_proto_idtoken_verify_signature(r, cfg, provider, *jwt,
+				&refresh) == FALSE) {
+			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+					"oidc_proto_parse_idtoken: id_token signature could not be validated, aborting");
+			apr_jwt_destroy(*jwt);
+			return FALSE;
+		}
 	}
 
 	/* this is where the meat is */
