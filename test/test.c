@@ -243,7 +243,7 @@ static char * all_tests(apr_pool_t *pool) {
 	TST_RUN(test_jwt_get_string, pool);
 
 	TST_RUN(test_jwk_parse_json, pool);
-	//TST_RUN(test_jwt_decryption, pool);
+	TST_RUN(test_jwt_decryption, pool);
 
 	return 0;
 }

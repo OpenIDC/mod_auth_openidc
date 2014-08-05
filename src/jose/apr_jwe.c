@@ -371,6 +371,8 @@ apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header,
 		// little endian machine: reverse AAD length for big endian representation
 		for (i=0; i < sizeof(int64_t); ++i) p[sizeof(uint64_t)-1-i] = src[i];
 	}
+	else
+		memcpy(p, &al, sizeof(uint64_t));
 
 //	uint64_t big_endian = htobe64(al);
 //	memcpy(p, &big_endian, sizeof(int64_t));
