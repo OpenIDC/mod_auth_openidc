@@ -1,3 +1,6 @@
+8/9/2014
+- merge #21 (Latinovic) to close #18 (big endian JWE issue)
+
 8/1/2014
 - fix cache initialization/destroy leak
 - release 1.5.3
