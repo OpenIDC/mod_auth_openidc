@@ -244,7 +244,7 @@ apr_byte_t oidc_proto_check_token_type(request_rec *r, oidc_provider_t *provider
 apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *code, char **s_id_token, char **s_access_token, char **s_token_type);
 apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *access_token, const char **response, json_t **claims);
 apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg, const char *acct, char **issuer);
-apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *id_token, const char *nonce, char **user, apr_jwt_t **jwt);
+apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *id_token, const char *nonce, char **user, apr_jwt_t **jwt, apr_byte_t is_code_flow);
 apr_byte_t oidc_proto_validate_access_token(request_rec *r, oidc_provider_t *provider, apr_jwt_t *jwt, const char *response_type, const char *access_token, const char *token_type);
 apr_byte_t oidc_proto_validate_code(request_rec *r, oidc_provider_t *provider, apr_jwt_t *jwt, const char *response_type, const char *code);
 int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg *c);

@@ -155,6 +155,26 @@ static char *test_jwt_parse(apr_pool_t *pool) {
 	return 0;
 }
 
+static char *test_plaintext_jwt_parse(apr_pool_t *pool) {
+
+	// from http://tools.ietf.org/html/draft-ietf-oauth-json-web-token-20
+	// 6.1.  Example Plaintext JWT
+	char *s = apr_pstrdup(pool,
+			"eyJhbGciOiJub25lIn0" \
+			".eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ" \
+			".");
+
+	apr_jwt_t *jwt = NULL;
+	TST_ASSERT("apr_jwt_parse", apr_jwt_parse(pool, s, &jwt, NULL, NULL));
+
+	TST_ASSERT_STR("header.alg", jwt->header.alg, "none");
+
+	TST_ASSERT_STR("payload.iss", jwt->payload.iss, "joe");
+	TST_ASSERT_LONG("payload.exp", (long)apr_time_sec(jwt->payload.exp), 1300819380L);
+
+	return 0;
+}
+
 static char *test_jwt_get_string(apr_pool_t *pool) {
 	//apr_jwt_get_string
 
@@ -239,6 +259,7 @@ static char * all_tests(apr_pool_t *pool) {
 	TST_RUN(test_jwt_url_encode_decode, pool);
 	TST_RUN(test_jwt_header_to_string, pool);
 	TST_RUN(test_jwt_parse, pool);
+	TST_RUN(test_plaintext_jwt_parse, pool);
 	TST_RUN(test_jwt_get_string, pool);
 
 	TST_RUN(test_jwk_parse_json, pool);

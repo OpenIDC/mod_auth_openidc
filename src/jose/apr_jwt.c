@@ -335,7 +335,7 @@ apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
 		return FALSE;
 	}
 
-	if (unpacked->nelts > 2) {
+	if (unpacked->nelts > 2 && strcmp(jwt->header.alg, "none") != 0) {
 		/* remainder is the signature */
 		if (apr_jwt_parse_signature(pool, ((const char**) unpacked->elts)[2],
 				&jwt->signature) == FALSE) {

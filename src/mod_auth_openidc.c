@@ -774,7 +774,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	/* parse and validate the obtained id_token */
 	if (id_token != NULL) {
 		if (oidc_proto_parse_idtoken(r, c, provider, id_token,
-				proto_state->nonce, &remoteUser, &jwt) == FALSE) {
+				proto_state->nonce, &remoteUser, &jwt, FALSE) == FALSE) {
 			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
 					"oidc_handle_authorization_response: could not parse or verify the id_token contents, return HTTP_UNAUTHORIZED");
 			return HTTP_UNAUTHORIZED;
@@ -831,7 +831,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		/* if we had no id_token yet, we must have one now (by flow) */
 		if (jwt == NULL) {
 			if (oidc_proto_parse_idtoken(r, c, provider, id_token, nonce,
-					&remoteUser, &jwt) == FALSE) {
+					&remoteUser, &jwt, TRUE) == FALSE) {
 				ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
 						"oidc_handle_authorization_response: could not parse or verify the id_token contents, return HTTP_UNAUTHORIZED");
 				return HTTP_UNAUTHORIZED;
