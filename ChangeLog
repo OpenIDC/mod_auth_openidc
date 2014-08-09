@@ -1,5 +1,6 @@
 8/9/2014
 - merge #21 (Latinovic) to close #18 (big endian JWE issue)
+- merge #20 (wadahiro), support for "none" JWT signing algorithm
 
 8/1/2014
 - fix cache initialization/destroy leak
