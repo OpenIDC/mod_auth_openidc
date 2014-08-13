@@ -79,6 +79,8 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_CLAIMS_SESSION_KEY "claims"
 /* key for storing the id_token in the session context */
 #define OIDC_IDTOKEN_SESSION_KEY "id_token"
+/* key for storing the access_token in the session context */
+#define OIDC_ACCESSTOKEN_SESSION_KEY "access_token"
 
 /* parameter name of the callback URL in the discovery response */
 #define OIDC_DISC_CB_PARAM "oidc_callback"
@@ -297,6 +299,7 @@ apr_byte_t oidc_util_file_read(request_rec *r, const char *path, char **result);
 apr_byte_t oidc_util_issuer_match(const char *a, const char *b);
 int oidc_util_html_send_error(request_rec *r, const char *error, const char *description, int status_code);
 apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack, const char *needle);
+void oidc_util_set_app_header(request_rec *r, const char *s_key, const char *s_value, const char *claim_prefix);
 void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs, const char *claim_prefix, const char *claim_delimiter);
 apr_hash_t *oidc_util_spaced_string_to_hashtable(apr_pool_t *pool, const char *str);
 apr_byte_t oidc_util_spaced_string_equals(apr_pool_t *pool, const char *a, const char *b);

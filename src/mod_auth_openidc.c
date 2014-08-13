@@ -646,6 +646,13 @@ static int oidc_handle_existing_session(request_rec *r,
 	if (oidc_set_app_claims(r, cfg, session, OIDC_IDTOKEN_SESSION_KEY) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
+	/* set the access_token in the app headers */
+	const char *access_token = NULL;
+	oidc_session_get(r, session, OIDC_ACCESSTOKEN_SESSION_KEY, &access_token);
+	if (access_token != NULL) {
+		oidc_util_set_app_header(r, "access_token", access_token, "OIDC_");
+	}
+
 	/*
 	 * reset the session inactivity timer
 	 * but only do this once per 10% of the inactivity timeout interval (with a max to 60 seconds)
@@ -880,6 +887,12 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		 * in the session context safely now
 		 */
 		oidc_session_set(r, session, OIDC_CLAIMS_SESSION_KEY, claims);
+	}
+
+	/* see if we have an access_token */
+	if (access_token != NULL) {
+		/* store the access_token in the session context */
+		oidc_session_set(r, session, OIDC_ACCESSTOKEN_SESSION_KEY, access_token);
 	}
 
 	/* store the session */

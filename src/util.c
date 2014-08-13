@@ -1091,7 +1091,7 @@ apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack,
 /*
  * set an HTTP header to pass information to the application
  */
-static void oidc_util_set_app_header(request_rec *r, const char *s_key,
+void oidc_util_set_app_header(request_rec *r, const char *s_key,
 		const char *s_value, const char *claim_prefix) {
 
 	/* construct the header name, cq. put the prefix in front of a normalized key name */

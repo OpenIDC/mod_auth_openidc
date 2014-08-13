@@ -316,6 +316,11 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 	/* set the resolved claims in the HTTP headers for the target application */
 	oidc_util_set_app_headers(r, token, c->claim_prefix, c->claim_delimiter);
 
+	/* set the access_token in the app headers */
+	if (access_token != NULL) {
+		oidc_util_set_app_header(r, "access_token", access_token, "OIDC_");
+	}
+
 	/* free JSON resources */
 	json_decref(token);
 

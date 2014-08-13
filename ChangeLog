@@ -1,3 +1,6 @@
+8/13/2014
+- pass the access_token in OIDC_access_token header to the application
+
 8/9/2014
 - merge #21 (Latinovic) to close #18 (big endian JWE issue)
 - merge #20 (wadahiro), support for "none" JWT signing algorithm
