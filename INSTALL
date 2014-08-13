@@ -17,6 +17,7 @@ dependencies:
 
 Configure, make and install with:
 
+(run ./autogen.sh first if you work straight from the github source tree)
 ./configure --with-apxs2=/opt/apache2/bin/apxs2
 make
 make install
