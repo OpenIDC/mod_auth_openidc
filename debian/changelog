@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.5.4-1) unstable; urgency=medium
+
+  * fix big endian issue
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Thu, 14 Aug 2014 12:59:11 +0200
+
 libapache2-mod-auth-openidc (1.5.3-2) unstable; urgency=medium
 
   * build/test on big endian arch
