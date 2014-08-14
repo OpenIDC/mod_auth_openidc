@@ -642,14 +642,37 @@ static int oidc_handle_existing_session(request_rec *r,
 	if (oidc_set_app_claims(r, cfg, session, OIDC_CLAIMS_SESSION_KEY) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
-	/* set the id_token in the app headers + request state */
-	if (oidc_set_app_claims(r, cfg, session, OIDC_IDTOKEN_SESSION_KEY) == FALSE)
-		return HTTP_INTERNAL_SERVER_ERROR;
+	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_CLAIMS)) {
+		/* set the id_token in the app headers + request state */
+		if (oidc_set_app_claims(r, cfg, session, OIDC_IDTOKEN_CLAIMS_SESSION_KEY) == FALSE)
+			return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_PAYLOAD)) {
+		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+				"oidc_handle_existing_session: setting OIDC_id_token_payload header");
+		const char *s_id_token = NULL;
+		/* get the string-encoded JSON object from the session */
+		oidc_session_get(r, session, OIDC_IDTOKEN_CLAIMS_SESSION_KEY, &s_id_token);
+		/* pass it to the app in a header */
+		oidc_util_set_app_header(r, "id_token_payload", s_id_token, "OIDC_");
+	}
+
+	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_SERIALIZED)) {
+		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+				"oidc_handle_existing_session: setting OIDC_id_token header");
+		const char *s_id_token = NULL;
+		/* get the compact serialized JWT from the session */
+		oidc_session_get(r, session, OIDC_IDTOKEN_SESSION_KEY, &s_id_token);
+		/* pass it to the app in a header */
+		oidc_util_set_app_header(r, "id_token", s_id_token, "OIDC_");
+	}
 
 	/* set the access_token in the app headers */
 	const char *access_token = NULL;
 	oidc_session_get(r, session, OIDC_ACCESSTOKEN_SESSION_KEY, &access_token);
 	if (access_token != NULL) {
+		/* pass it to the app in a header */
 		oidc_util_set_app_header(r, "access_token", access_token, "OIDC_");
 	}
 
@@ -875,9 +898,12 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	session->expiry =
 			apr_time_now() + apr_time_from_sec(c->session_inactivity_timeout);
 
-	/* store the whole contents of the id_token for later reference too */
-	oidc_session_set(r, session, OIDC_IDTOKEN_SESSION_KEY,
+	/* store the claims payload in the id_token for later reference */
+	oidc_session_set(r, session, OIDC_IDTOKEN_CLAIMS_SESSION_KEY,
 			jwt->payload.value.str);
+
+	/* store the compact serialized representation of the id_token for later reference  */
+	oidc_session_set(r, session, OIDC_IDTOKEN_SESSION_KEY, id_token);
 
 	/* see if we've resolved any claims */
 	if (claims != NULL) {
@@ -1538,7 +1564,7 @@ int oidc_check_user_id(request_rec *r) {
  */
 static void oidc_authz_get_claims_and_idtoken(request_rec *r, json_t **claims, json_t **id_token) {
 	const char *s_claims = oidc_request_state_get(r, OIDC_CLAIMS_SESSION_KEY);
-	const char *s_id_token = oidc_request_state_get(r, OIDC_IDTOKEN_SESSION_KEY);
+	const char *s_id_token = oidc_request_state_get(r, OIDC_IDTOKEN_CLAIMS_SESSION_KEY);
 	json_error_t json_error;
 	if (s_claims != NULL) {
 		*claims = json_loads(s_claims, 0, &json_error);

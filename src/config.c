@@ -457,6 +457,52 @@ static const char *oidc_set_private_key_files_enc(cmd_parms *cmd, void *dummy, c
     return NULL;
 }
 
+static int oidc_pass_idtoken_as_str2int(const char *v) {
+	if (apr_strnatcmp(v, "claims") == 0) return OIDC_PASS_IDTOKEN_AS_CLAIMS;
+	if (apr_strnatcmp(v, "payload") == 0) return OIDC_PASS_IDTOKEN_AS_PAYLOAD;
+	if (apr_strnatcmp(v, "serialized") == 0) return OIDC_PASS_IDTOKEN_AS_SERIALIZED;
+	return -1;
+}
+
+/*
+ * define how to pass the id_token/claims in HTTP headers
+ */
+static const char * oidc_set_pass_idtoken_as(cmd_parms *cmd, void *dummy,
+		const char *v1, const char *v2, const char *v3) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+
+	int b = oidc_pass_idtoken_as_str2int(v1);
+	if (b != -1) {
+		cfg->pass_idtoken_as = b;
+	} else {
+		return apr_psprintf(cmd->pool, "Invalid value \"%s\" for directive %s",
+				v1, cmd->directive->directive);
+	}
+	if (v2) {
+		b = oidc_pass_idtoken_as_str2int(v2);
+		if (b != -1) {
+			cfg->pass_idtoken_as |= b;
+		} else {
+			return apr_psprintf(cmd->pool,
+					"Invalid value \"%s\" for directive %s", v2,
+					cmd->directive->directive);
+		}
+		if (v3) {
+			b = oidc_pass_idtoken_as_str2int(v3);
+			if (b != -1) {
+				cfg->pass_idtoken_as |= b;
+			} else {
+				return apr_psprintf(cmd->pool,
+						"Invalid value \"%s\" for directive %s", v3,
+						cmd->directive->directive);
+			}
+		}
+	}
+
+	return NULL;
+}
+
 /*
  * create a new server config record with defaults
  */
@@ -527,6 +573,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->claim_delimiter = OIDC_DEFAULT_CLAIM_DELIMITER;
 	c->claim_prefix = OIDC_DEFAULT_CLAIM_PREFIX;
 	c->remote_user_claim = OIDC_DEFAULT_CLAIM_REMOTE_USER;
+	c->pass_idtoken_as = OIDC_PASS_IDTOKEN_AS_CLAIMS;
 
 	c->outgoing_proxy = NULL;
 	c->crypto_passphrase = NULL;
@@ -744,6 +791,9 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			apr_strnatcmp(add->remote_user_claim,
 					OIDC_DEFAULT_CLAIM_REMOTE_USER) != 0 ?
 					add->remote_user_claim : base->remote_user_claim;
+	c->pass_idtoken_as =
+			add->pass_idtoken_as != OIDC_PASS_IDTOKEN_AS_CLAIMS ?
+					add->pass_idtoken_as : base->pass_idtoken_as;
 
 	c->outgoing_proxy =
 			add->outgoing_proxy != NULL ?
@@ -1276,6 +1326,11 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, remote_user_claim),
 				RSRC_CONF,
 				"The claim that is used when setting the REMOTE_USER variable for OpenID Connect protected paths."),
+		AP_INIT_TAKE123("OIDCPassIDTokenAs",
+				oidc_set_pass_idtoken_as,
+				NULL,
+				RSRC_CONF,
+				"The format in which the id_token is passed in (a) header(s); must be one or more of: claims|payload|serialized"),
 
 		AP_INIT_TAKE1("OIDCOAuthClientID", oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.client_id),

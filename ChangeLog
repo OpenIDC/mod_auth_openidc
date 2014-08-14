@@ -1,3 +1,6 @@
+8/14/2014
+- support for passing the id_token in multiple formats (claims|payload|serialized)
+
 8/13/2014
 - pass the access_token in OIDC_access_token header to the application
 

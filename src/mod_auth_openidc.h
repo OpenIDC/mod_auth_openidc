@@ -78,6 +78,8 @@ APLOG_USE_MODULE(auth_openidc);
 /* key for storing the claims in the session context */
 #define OIDC_CLAIMS_SESSION_KEY "claims"
 /* key for storing the id_token in the session context */
+#define OIDC_IDTOKEN_CLAIMS_SESSION_KEY "id_token_claims"
+/* key for storing the raw id_token in the session context */
 #define OIDC_IDTOKEN_SESSION_KEY "id_token"
 /* key for storing the access_token in the session context */
 #define OIDC_ACCESSTOKEN_SESSION_KEY "access_token"
@@ -95,6 +97,13 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_SESSION_TYPE_22_SERVER_CACHE 0
 /* value that indicates to use client cookie based session tracking */
 #define OIDC_SESSION_TYPE_22_CLIENT_COOKIE 1
+
+/* pass id_token as individual claims in headers (default) */
+#define OIDC_PASS_IDTOKEN_AS_CLAIMS     1
+/* pass id_token payload as JSON object in header*/
+#define OIDC_PASS_IDTOKEN_AS_PAYLOAD    2
+/* pass id_token in compact serialized format in header*/
+#define OIDC_PASS_IDTOKEN_AS_SERIALIZED 4
 
 /* name of the cookie that binds the state in the authorization request/response to the browser */
 #define OIDCStateCookieName  "mod_auth_openidc_state"
@@ -200,6 +209,7 @@ typedef struct oidc_cfg {
 	char *claim_delimiter;
 	char *claim_prefix;
 	char *remote_user_claim;
+	int pass_idtoken_as;
 
 	char *outgoing_proxy;
 
