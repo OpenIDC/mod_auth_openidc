@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.5.4-2) unstable; urgency=medium
+
+  * correct debian directory for wheezy/jessie; correct watch file for .orig.tar.gz
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Thu, 14 Aug 2014 15:03:52 +0200
+
 libapache2-mod-auth-openidc (1.5.4-1) unstable; urgency=medium
 
   * fix big endian issue
