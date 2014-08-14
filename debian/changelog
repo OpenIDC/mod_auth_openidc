@@ -1,6 +1,12 @@
+libapache2-mod-auth-openidc (1.5.4-3) unstable; urgency=medium
+
+  * changelog line was too long; correct/simplify watch file
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Thu, 14 Aug 2014 15:51:02 +0200
+
 libapache2-mod-auth-openidc (1.5.4-2) unstable; urgency=medium
 
-  * correct debian directory for wheezy/jessie; correct watch file for .orig.tar.gz
+  * correct debian directory for wheezy/jessie; watch file check .orig.tar.gz
 
  -- Hans Zandbelt <hzandbelt@pingidentity.com>  Thu, 14 Aug 2014 15:03:52 +0200
 
