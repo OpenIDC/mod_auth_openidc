@@ -1,3 +1,6 @@
+8/18/2014
+- add HttpOnly flag to cookies by default; can be disabled by config
+
 8/14/2014
 - support for passing the id_token in multiple formats (claims|payload|serialized)
 - release 1.5.4

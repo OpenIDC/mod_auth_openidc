@@ -620,12 +620,13 @@ void oidc_util_set_cookie(request_rec *r, const char *cookieName,
 			&auth_openidc_module);
 	char *headerString, *currentCookies;
 	/* construct the cookie value */
-	headerString = apr_psprintf(r->pool, "%s=%s;%s;Path=%s%s", cookieName,
+	headerString = apr_psprintf(r->pool, "%s=%s;%s;Path=%s%s%s", cookieName,
 			cookieValue,
 			((apr_strnatcasecmp("https", oidc_get_current_url_scheme(r)) == 0) ?
 					";Secure" : ""), oidc_util_get_cookie_path(r),
 			c->cookie_domain != NULL ?
-					apr_psprintf(r->pool, ";Domain=%s", c->cookie_domain) : "");
+					apr_psprintf(r->pool, ";Domain=%s", c->cookie_domain) : "",
+			c->cookie_http_only != FALSE ? ";HttpOnly" : "");
 
 	/* see if we need to clear the cookie */
 	if (apr_strnatcmp(cookieValue, "") == 0)

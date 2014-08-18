@@ -112,6 +112,8 @@
 #define OIDC_DEFAULT_IDTOKEN_IAT_SLACK 600
 /* for file-based caching: clean interval in seconds */
 #define OIDC_DEFAULT_CACHE_FILE_CLEAN_INTERVAL 60
+/* set httponly flag on cookies */
+#define OIDC_DEFAULT_COOKIE_HTTPONLY 1
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -574,6 +576,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->claim_prefix = OIDC_DEFAULT_CLAIM_PREFIX;
 	c->remote_user_claim = OIDC_DEFAULT_CLAIM_REMOTE_USER;
 	c->pass_idtoken_as = OIDC_PASS_IDTOKEN_AS_CLAIMS;
+	c->cookie_http_only = OIDC_DEFAULT_COOKIE_HTTPONLY;
 
 	c->outgoing_proxy = NULL;
 	c->crypto_passphrase = NULL;
@@ -794,6 +797,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->pass_idtoken_as =
 			add->pass_idtoken_as != OIDC_PASS_IDTOKEN_AS_CLAIMS ?
 					add->pass_idtoken_as : base->pass_idtoken_as;
+	c->cookie_http_only =
+			add->cookie_http_only != OIDC_DEFAULT_COOKIE_HTTPONLY ?
+					add->cookie_http_only : base->cookie_http_only;
+
 
 	c->outgoing_proxy =
 			add->outgoing_proxy != NULL ?
@@ -1302,6 +1309,11 @@ const command_rec oidc_config_cmds[] = {
 		AP_INIT_TAKE1("OIDCCookieDomain",
 				oidc_set_cookie_domain, NULL, RSRC_CONF,
 				"Specify domain element for OIDC session cookie."),
+		AP_INIT_FLAG("OIDCCookieHTTPOnly",
+				oidc_set_flag_slot,
+				(void *) APR_OFFSETOF(oidc_cfg, cookie_http_only),
+				RSRC_CONF,
+				"Defines whether or not the cookie httponly flag is set on cookies."),
 		AP_INIT_TAKE1("OIDCOutgoingProxy",
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, outgoing_proxy),

@@ -210,6 +210,7 @@ typedef struct oidc_cfg {
 	char *claim_prefix;
 	char *remote_user_claim;
 	int pass_idtoken_as;
+	int cookie_http_only;
 
 	char *outgoing_proxy;
 
