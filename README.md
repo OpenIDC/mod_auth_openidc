@@ -80,7 +80,6 @@ have to enable the `Google+ API` under `APIs & auth` in the [Google API console]
     OIDCScope "openid email profile"
     OIDCRedirectURI https://localhost/example/redirect_uri/
     OIDCCryptoPassphrase <password>
-    OIDCCookiePath /example/
 
     <Location /example/>
        AuthType openid-connect

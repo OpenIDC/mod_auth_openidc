@@ -114,6 +114,8 @@
 #define OIDC_DEFAULT_CACHE_FILE_CLEAN_INTERVAL 60
 /* set httponly flag on cookies */
 #define OIDC_DEFAULT_COOKIE_HTTPONLY 1
+/* default cookie path */
+#define OIDC_DEFAULT_COOKIE_PATH "/"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -823,7 +825,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	oidc_dir_cfg *c = apr_pcalloc(pool, sizeof(oidc_dir_cfg));
 	c->cookie = OIDC_DEFAULT_COOKIE;
-	c->cookie_path = NULL;
+	c->cookie_path = OIDC_DEFAULT_COOKIE_PATH;
 	c->authn_header = OIDC_DEFAULT_AUTHN_HEADER;
 	return (c);
 }
@@ -839,7 +841,8 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			apr_strnatcasecmp(add->cookie, OIDC_DEFAULT_COOKIE) != 0 ?
 					add->cookie : base->cookie);
 	c->cookie_path = (
-			add->cookie_path != NULL ? add->cookie_path : base->cookie_path);
+			add->cookie_path != OIDC_DEFAULT_COOKIE_PATH ?
+					add->cookie_path : base->cookie_path);
 	c->authn_header = (
 			add->authn_header != OIDC_DEFAULT_AUTHN_HEADER ?
 					add->authn_header : base->authn_header);
