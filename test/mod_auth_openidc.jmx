@@ -475,7 +475,7 @@
           <stringProp name="HTTPSampler.protocol">https</stringProp>
           <stringProp name="HTTPSampler.contentEncoding"></stringProp>
           <stringProp name="HTTPSampler.path">/${LocationPath}</stringProp>
-          <stringProp name="HTTPSampler.method">POST</stringProp>
+          <stringProp name="HTTPSampler.method">GET</stringProp>
           <boolProp name="HTTPSampler.follow_redirects">false</boolProp>
           <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
           <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
@@ -532,7 +532,7 @@
           <hashTree>
             <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="Assert User Logged In" enabled="true">
               <collectionProp name="Asserion.test_strings">
-                <stringProp name="1813208642">\[OIDC_CLAIM_sub\] =&gt; ${USERNAME}</stringProp>
+                <stringProp name="-1682027846">\[OIDC_CLAIM_sub\] =&gt; ${USERNAME}</stringProp>
               </collectionProp>
               <stringProp name="Assertion.test_field">Assertion.response_data</stringProp>
               <boolProp name="Assertion.assume_success">false</boolProp>
@@ -541,7 +541,7 @@
             <hashTree/>
             <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="Assert Fake Header Removal" enabled="true">
               <collectionProp name="Asserion.test_strings">
-                <stringProp name="-900078798">\[OIDC_CLAIM_BOGUS\] =&gt; bogus</stringProp>
+                <stringProp name="-2019701846">\[OIDC_CLAIM_BOGUS\] =&gt; bogus</stringProp>
               </collectionProp>
               <stringProp name="Assertion.test_field">Assertion.response_data</stringProp>
               <boolProp name="Assertion.assume_success">false</boolProp>
