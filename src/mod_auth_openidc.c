@@ -87,9 +87,7 @@
 // TODO: rigid input checking on discovery responses and authorization responses
 // TODO: check self-issued support
 
-// TODO: documentation:
-//       - write a README.quickstart
-//       - include AUTHORS and contributions
+// TODO: README.quickstart
 
 // TODO: use oidc_get_current_url + configured RedirectURIPath to determine the RedirectURI more dynamically
 
@@ -1255,8 +1253,8 @@ static int oidc_target_link_uri_matches_configuration(request_rec *r,
 		char *p = strstr(o_uri.path, dir_cfg->cookie_path);
 		if ((p == NULL) || (p != o_uri.path)) {
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_target_link_uri_matches_configuration: the path (%s) configured in OIDCCookiePath does not match the URL hostname (%s) of the \"target_link_uri\" (%s): aborting to prevent an open redirect.",
-					cfg->cookie_domain, o_uri.hostname, target_link_uri);
+					"oidc_target_link_uri_matches_configuration: the path (%s) configured in OIDCCookiePath does not match the URL path (%s) of the \"target_link_uri\" (%s): aborting to prevent an open redirect.",
+					cfg->cookie_domain, o_uri.path, target_link_uri);
 			return FALSE;
 		} else if (strlen(o_uri.path) > strlen(dir_cfg->cookie_path)) {
 			int n = strlen(dir_cfg->cookie_path);
@@ -1264,8 +1262,8 @@ static int oidc_target_link_uri_matches_configuration(request_rec *r,
 				n--;
 			if (o_uri.path[n] != '/') {
 				ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-						"oidc_target_link_uri_matches_configuration: the path (%s) configured in OIDCCookiePath does not match the URL hostname (%s) of the \"target_link_uri\" (%s): aborting to prevent an open redirect.",
-						cfg->cookie_domain, o_uri.hostname, target_link_uri);
+						"oidc_target_link_uri_matches_configuration: the path (%s) configured in OIDCCookiePath does not match the URL path (%s) of the \"target_link_uri\" (%s): aborting to prevent an open redirect.",
+						cfg->cookie_domain, o_uri.path, target_link_uri);
 				return FALSE;
 			}
 		}
