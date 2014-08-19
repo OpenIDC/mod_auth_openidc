@@ -386,7 +386,10 @@ static apr_status_t oidc_session_load_cookie(request_rec *r, session_rec *z) {
 
 	char *cookieValue = oidc_util_get_cookie(r, d->cookie);
 	if (cookieValue != NULL) {
-		if (oidc_base64url_decode_decrypt_string(r, (char **)&z->encoded, cookieValue) <= 0) return APR_EGENERAL;
+		if (oidc_base64url_decode_decrypt_string(r, (char **)&z->encoded, cookieValue) <= 0) {
+			oidc_util_set_cookie(r, d->cookie, "");
+			return APR_EGENERAL;
+		}
 	}
 
 	return APR_SUCCESS;
