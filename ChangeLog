@@ -2,6 +2,8 @@
 - fix debug printout on open redirect prevention
 - cleanup in-memory crypto context on shutdown
 - use default of "/" for OIDCCookiePath to simplify quickstart/simple deployments
+- disable OIDCMetadataDir in sample/default config file
+- clear session cookie after cache miss
 
 8/18/2014
 - add HttpOnly flag to cookies by default; can be disabled by config

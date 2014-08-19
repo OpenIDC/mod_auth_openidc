@@ -343,8 +343,10 @@ static apr_status_t oidc_session_load_cache(request_rec *r, session_rec *z) {
 	char *uuid = oidc_util_get_cookie(r, d->cookie);
 
 	/* get the string-encoded session from the cache based on the key */
-	if (uuid != NULL)
+	if (uuid != NULL) {
 		if (c->cache->get(r, uuid, &z->encoded) == TRUE) return APR_SUCCESS;
+		oidc_util_set_cookie(r, d->cookie, "");
+	}
 
 	return APR_EGENERAL;
 }
