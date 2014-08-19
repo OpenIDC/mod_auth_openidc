@@ -194,3 +194,20 @@ unsigned char *oidc_crypto_aes_decrypt(request_rec *r, oidc_cfg *cfg,
 
 	return plaintext;
 }
+
+/*
+ * cleanup the crypto context in the server configuration record
+ */
+apr_byte_t oidc_crypto_destroy(oidc_cfg *cfg, server_rec *s) {
+
+	if (cfg->encrypt_ctx == NULL)
+		return TRUE;
+
+	EVP_CIPHER_CTX_cleanup(cfg->encrypt_ctx);
+	EVP_CIPHER_CTX_cleanup(cfg->decrypt_ctx);
+
+	cfg->encrypt_ctx = NULL;
+	cfg->decrypt_ctx = NULL;
+
+	return TRUE;
+}

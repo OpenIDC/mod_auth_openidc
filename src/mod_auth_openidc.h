@@ -321,6 +321,7 @@ apr_byte_t oidc_json_object_get_int(apr_pool_t *pool, json_t *json, const char *
 // oidc_crypto.c
 unsigned char *oidc_crypto_aes_encrypt(request_rec *r, oidc_cfg *cfg, unsigned char *plaintext, int *len);
 unsigned char *oidc_crypto_aes_decrypt(request_rec *r, oidc_cfg *cfg, unsigned char *ciphertext, int *len);
+apr_byte_t oidc_crypto_destroy(oidc_cfg *cfg, server_rec *s);
 
 // oidc_metadata.c
 apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg *cfg, apr_array_header_t **arr);

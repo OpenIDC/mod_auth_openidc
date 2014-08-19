@@ -77,9 +77,6 @@
 #include "mod_auth_openidc.h"
 
 // TODO: improve JSON handling
-// TODO: cleanup crypto.c on shutdown
-
-// TODO: do response_mode "cookie"?
 
 // TODO: improve redirect_uri = content handling
 // TODO: harmonize user facing error handling
