@@ -62,7 +62,7 @@ How to Use It
 ###Sample Config for Google Accounts
 
 Sample configuration for using Google as your OpenID Connect Provider running on
-`localhost` and `https://localhost/example/redirect_uri/` registered
+`www.example.com` and `https://www.example.com/example/redirect_uri` registered
 as the *redirect_uri* for the client through the Google API Console. You will also
 have to enable the `Google+ API` under `APIs & auth` in the [Google API console]
 (https://console.developers.google.com).
@@ -78,7 +78,7 @@ have to enable the `Google+ API` under `APIs & auth` in the [Google API console]
     OIDCClientSecret <your-client-secret-administered-through-the-google-api-console>
 
     OIDCScope "openid email profile"
-    OIDCRedirectURI https://localhost/example/redirect_uri/
+    OIDCRedirectURI https://www.example.com/example/redirect_uri
     OIDCCryptoPassphrase <password>
 
     <Location /example/>
@@ -154,9 +154,8 @@ And the related **mod_auth_openidc** Apache config section:
 
     OIDCMetadataDir <somewhere-writable-for-the-apache-process>/metadata
 
-    OIDCRedirectURI https://localhost/example/redirect_uri/
+    OIDCRedirectURI https://www.example.com/example/redirect_uri/
     OIDCCryptoPassphrase <password>
-    OIDCCookiePath /example/
 
     <Location /example/>
        AuthType openid-connect
