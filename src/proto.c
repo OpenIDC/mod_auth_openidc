@@ -1293,14 +1293,14 @@ apr_byte_t oidc_proto_validate_code_response(request_rec *r,
 
 		if (*access_token != NULL) {
 			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_proto_validate_code_response: requested flow is \"%s\" but there is an \"access_token\" parameter in the authorization response that will be dropped",
+					"oidc_proto_validate_code_response: requested flow is \"%s\" but there is an \"access_token\" parameter in the code response that will be dropped",
 					response_type);
 			*access_token = NULL;
 		}
 
 		if (*token_type != NULL) {
 			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_proto_validate_code_response: requested flow is \"%s\" but there is a \"token_type\" parameter in the authorization response that will be dropped",
+					"oidc_proto_validate_code_response: requested flow is \"%s\" but there is a \"token_type\" parameter in the code response that will be dropped",
 					response_type);
 			*token_type = NULL;
 		}
