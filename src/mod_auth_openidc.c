@@ -864,6 +864,12 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		}
 	}
 
+	if (jwt == NULL) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+				"oidc_handle_authorization_response: no id_token was provided, return HTTP_UNAUTHORIZED");
+		return HTTP_UNAUTHORIZED;
+	}
+
 	/* validate the access token */
 	if (access_token != NULL) {
 		if (oidc_proto_validate_access_token(r, provider, jwt,
