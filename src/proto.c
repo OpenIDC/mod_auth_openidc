@@ -968,18 +968,17 @@ int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg *c) {
 //	if (oidc_util_file_read(r, "/Users/hzandbelt/eclipse-workspace/mod_auth_openidc/src/implicit_post.html", &java_script) == FALSE) return HTTP_INTERNAL_SERVER_ERROR;
 
 	const char *java_script =
-			"<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
-					"<html xmlns=\"http://www.w3.org/1999/xhtml\" lang=\"en\" xml:lang=\"en\">\n"
+			"<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\" \"http://www.w3.org/TR/html4/strict.dtd\">\n"
 					"  <head>\n"
-					"    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"/>\n"
+					"  <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n"
 					"    <script type=\"text/javascript\">\n"
 					"      function postOnLoad() {\n"
-					"        encoded = location.hash.substring(1).split(\"&\");\n"
+					"        encoded = location.hash.substring(1).split('&');\n"
 					"        for (i = 0; i < encoded.length; i++) {\n"
-					"          encoded[i].replace(/\\+/g, \" \");\n"
-					"          var n = encoded[i].indexOf(\"=\");\n"
-					"          var input = document.createElement(\"input\");\n"
-					"          input.type = \"hidden\";\n"
+					"          encoded[i].replace(/\\+/g, ' ');\n"
+					"          var n = encoded[i].indexOf('=');\n"
+					"          var input = document.createElement('input');\n"
+					"          input.type = 'hidden';\n"
 					"          input.name = decodeURIComponent(encoded[i].substring(0, n));\n"
 					"          input.value = decodeURIComponent(encoded[i].substring(n+1));\n"
 					"          document.forms[0].appendChild(input);\n"
@@ -992,7 +991,7 @@ int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg *c) {
 					"  </head>\n"
 					"  <body onload=\"postOnLoad()\">\n"
 					"    <p>Submitting...</p>\n"
-					"    <form method=\"post\"><input type=\"hidden\" name=\"response_mode\" value=\"fragment\"></form>\n"
+					"    <form method=\"post\" action=\"\"><p><input type=\"hidden\" name=\"response_mode\" value=\"fragment\"></p></form>\n"
 					"  </body>\n"
 					"</html>\n";
 
