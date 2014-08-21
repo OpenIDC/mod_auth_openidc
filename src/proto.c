@@ -974,7 +974,6 @@ int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg *c) {
 					"    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"/>\n"
 					"    <script type=\"text/javascript\">\n"
 					"      function postOnLoad() {\n"
-					"        var params = {}\n"
 					"        encoded = location.hash.substring(1).split(\"&\");\n"
 					"        for (i = 0; i < encoded.length; i++) {\n"
 					"          encoded[i].replace(/\\+/g, \" \");\n"
