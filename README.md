@@ -80,6 +80,7 @@ have to enable the `Google+ API` under `APIs & auth` in the [Google API console]
     OIDCScope "openid email profile"
     OIDCRedirectURI https://www.example.com/example/redirect_uri
     OIDCCryptoPassphrase <password>
+    OIDCCookiePath /example/
 
     <Location /example/>
        AuthType openid-connect
@@ -156,6 +157,7 @@ And the related **mod_auth_openidc** Apache config section:
 
     OIDCRedirectURI https://www.example.com/example/redirect_uri/
     OIDCCryptoPassphrase <password>
+    OIDCCookiePath /example/
 
     <Location /example/>
        AuthType openid-connect
