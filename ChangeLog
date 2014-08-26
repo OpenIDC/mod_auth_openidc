@@ -1,3 +1,6 @@
+8/26/2014
+- release 1.5.5
+
 8/20/2014
 - correctly error out on flows where no id_token was provided ("token")
 

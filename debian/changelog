@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.5.5-1) unstable; urgency=medium
+
+  * use HttpOnly on cookies; set OIDCCookiePath to /
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Tue, 26 Aug 2014 09:23:43 +0200
+
 libapache2-mod-auth-openidc (1.5.4-3) unstable; urgency=medium
 
   * changelog line was too long; correct/simplify watch file
