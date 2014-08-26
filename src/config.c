@@ -841,7 +841,7 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			apr_strnatcasecmp(add->cookie, OIDC_DEFAULT_COOKIE) != 0 ?
 					add->cookie : base->cookie);
 	c->cookie_path = (
-			add->cookie_path != OIDC_DEFAULT_COOKIE_PATH ?
+			apr_strnatcasecmp(add->cookie_path, OIDC_DEFAULT_COOKIE_PATH) != 0 ?
 					add->cookie_path : base->cookie_path);
 	c->authn_header = (
 			add->authn_header != OIDC_DEFAULT_AUTHN_HEADER ?
