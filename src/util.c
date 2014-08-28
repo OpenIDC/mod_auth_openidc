@@ -537,18 +537,35 @@ apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url,
 		const apr_table_t *params, const char *basic_auth,
 		const char *bearer_token, int ssl_validate_server,
 		const char **response, int timeout, const char *outgoing_proxy) {
+          
+        /* Estimated maximum size of parameters allowed. (Enhance this) */
+        #define INIT_TABLE_SIZE      12
 
-	const char *data = NULL;
-	if ((params != NULL) && (apr_table_elts(params)->nelts > 0)) {
+        const char *data = NULL;
+        const char *key, *val;
+       /* Let's add the URL parameters as posted data */
+        apr_table_t *tab = apr_table_make(r->pool, INIT_TABLE_SIZE);
+        const char *endpoint = ap_getword(r->pool, &url, '?');
+
+        while(*url && (val = ap_getword(r->pool, &url, '&'))) {
+            key = ap_getword(r->pool,&val, '=');
+            ap_unescape_url((char *)key);
+            ap_unescape_url((char *)val);
+            apr_table_merge(tab, key, val);
+        }
+        
+        apr_table_overlap(tab, params, APR_OVERLAP_TABLES_MERGE);
+        
+	if ((tab != NULL) && (apr_table_elts(tab)->nelts > 0)) {
 		oidc_http_encode_t encode_data = { r, "" };
-		apr_table_do(oidc_http_add_form_url_encoded_param, &encode_data, params,
+		apr_table_do(oidc_http_add_form_url_encoded_param, &encode_data, tab,
 				NULL);
 		data = encode_data.encoded_params;
 		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
 				"oidc_util_http_post_form: post data=\"%s\"", data);
 	}
 
-	return oidc_util_http_call(r, url, data,
+	return oidc_util_http_call(r, endpoint, data,
 			"application/x-www-form-urlencoded", basic_auth, bearer_token,
 			ssl_validate_server, response, timeout, outgoing_proxy);
 }
