@@ -1,3 +1,6 @@
+8/29/2014
+- add configuration option to POST extra parameters to the token endpoint
+
 8/26/2014
 - correct cookie_path comparison
 - release 1.5.5

@@ -122,6 +122,7 @@ typedef struct oidc_provider_t {
 	char *authorization_endpoint_url;
 	char *token_endpoint_url;
 	char *token_endpoint_auth;
+	char *token_endpoint_params;
 	char *userinfo_endpoint_url;
 	char *registration_endpoint_url;
 	char *jwks_uri;

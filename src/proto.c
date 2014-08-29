@@ -790,11 +790,17 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 		apr_table_addn(params, "client_secret", provider->client_secret);
 	}
 
-	/*
-	 if (strcmp(provider->issuer, "https://sts.windows.net/b4ea3de6-839e-4ad1-ae78-c78e5c0cdc06/") == 0) {
-	 apr_table_addn(params, "resource", "https://graph.windows.net");
-	 }
-	 */
+	/* see if we've configured any extra static parameters to the token endpoint */
+	if (provider->token_endpoint_params != NULL) {
+		const char *key, *val;
+		const char *p = provider->token_endpoint_params;
+		while (*p && (val = ap_getword(r->pool, &p, '&'))) {
+			key = ap_getword(r->pool, &val, '=');
+			ap_unescape_url((char *) key);
+			ap_unescape_url((char *) val);
+			apr_table_addn(params, key, val);
+		}
+	}
 
 	/* resolve the code against the token endpoint */
 	if (oidc_util_http_post_form(r, provider->token_endpoint_url, params,
@@ -1011,8 +1017,7 @@ static apr_byte_t oidc_proto_validate_hash(request_rec *r, const char *alg,
 
 	/* calculate the base64url-encoded value of the hash */
 	char *encoded = NULL;
-	oidc_base64url_encode(r, &encoded, calc,
-			apr_jws_hash_length(alg) / 2, 1);
+	oidc_base64url_encode(r, &encoded, calc, apr_jws_hash_length(alg) / 2, 1);
 
 	/* compare the calculated hash against the provided hash */
 	if ((apr_strnatcmp(encoded, hash) != 0)) {

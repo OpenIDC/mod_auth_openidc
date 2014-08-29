@@ -1117,6 +1117,11 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *issuer,
 	oidc_json_object_get_string(r->pool, j_conf, "auth_request_params",
 			&provider->auth_request_params, cfg->provider.auth_request_params);
 
+	/* see if we've got custom token endpoint parameter values */
+	oidc_json_object_get_string(r->pool, j_conf, "token_endpoint_params",
+			&provider->token_endpoint_params,
+			cfg->provider.token_endpoint_params);
+
 	/* get the response mode to use */
 	oidc_json_object_get_string(r->pool, j_conf, "response_mode",
 			&provider->response_mode, cfg->provider.response_mode);

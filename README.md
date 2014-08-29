@@ -141,6 +141,7 @@ Entries that can be included in the .conf file are:
     "userinfo_encrypted_response_alg"    overrides OIDCUserInfoEncryptedResponseAlg
     "userinfo_encrypted_response_enc"    overrides OIDCUserInfoEncryptedResponseEnc
     "auth_request_params"                overrides OIDCAuthRequestParams
+    "token_endpoint_params"              overrides OIDCProviderTokenEndpointParams
     "registration_token"                 an access_token that will be used on client registration calls for the associated OP
 
 Sample client metadata for issuer `https://localhost:9031`, so the **mod_auth_openidc**
