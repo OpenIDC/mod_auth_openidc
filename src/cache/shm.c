@@ -243,8 +243,8 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *key,
 	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *)cfg->cache_cfg;
 
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_cache_shm_set: entering \"%s\" (value size=(%zu)", key,
-			value ? strlen(value) : 0);
+			"oidc_cache_shm_set: entering \"%s\" (value size=(%llu)", key,
+			value ? (unsigned long long)strlen(value) : 0);
 
 	oidc_cache_shm_entry_t *match, *free, *lru;
 	oidc_cache_shm_entry_t *table;
