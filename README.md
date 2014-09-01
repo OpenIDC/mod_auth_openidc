@@ -34,6 +34,11 @@ It supports [OpenID Connect Dynamic Client Registration]
 Discovery] (http://openid.net/specs/openid-connect-discovery-1_0.html) through domain
 or account names.
 
+It supports [OpenID Connect Session Management draft 21]
+(http://openid.net/specs/openid-connect-session-1_0.html). See the [Wiki]
+(https://github.com/pingidentity/mod_auth_openidc/wiki) for information
+on how to configure it.
+
 Additionally it can operate as an OAuth 2.0 Resource Server to a [PingFederate]
 (https://www.pingidentity.com/products/pingfederate/) OAuth 2.0 Authorization Server,
 validating Bearer access_tokens against [PingFederate](https://www.pingidentity.com/products/pingfederate/).

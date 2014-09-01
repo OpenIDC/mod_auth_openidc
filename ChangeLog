@@ -1,3 +1,6 @@
+9/1/2014
+- add session management based on http://openid.net/specs/openid-connect-session-1_0.html (draft 21)
+
 8/29/2014
 - add configuration option to POST extra parameters to the token endpoint
 

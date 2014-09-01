@@ -526,7 +526,8 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 
 	c->redirect_uri = NULL;
 	c->discover_url = NULL;
-	c->default_url = NULL;
+	c->default_sso_url = NULL;
+	c->default_slo_url = NULL;
 	c->public_keys = NULL;
 	c->private_keys = NULL;
 
@@ -539,6 +540,8 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->provider.client_id = NULL;
 	c->provider.client_secret = NULL;
 	c->provider.registration_endpoint_url = NULL;
+	c->provider.check_session_iframe = NULL;
+	c->provider.end_session_endpoint = NULL;
 	c->provider.jwks_uri = NULL;
 
 	c->provider.ssl_validate_server = OIDC_DEFAULT_SSL_VALIDATE_SERVER;
@@ -612,8 +615,12 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->redirect_uri != NULL ? add->redirect_uri : base->redirect_uri;
 	c->discover_url =
 			add->discover_url != NULL ? add->discover_url : base->discover_url;
-	c->default_url =
-			add->default_url != NULL ? add->default_url : base->default_url;
+	c->default_sso_url =
+			add->default_sso_url != NULL ?
+					add->default_sso_url : base->default_sso_url;
+	c->default_slo_url =
+			add->default_slo_url != NULL ?
+					add->default_slo_url : base->default_slo_url;
 	c->public_keys =
 			add->public_keys != NULL ? add->public_keys : base->public_keys;
 	c->private_keys =
@@ -632,9 +639,9 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					base->provider.token_endpoint_url;
 	c->provider.token_endpoint_auth =
 			apr_strnatcmp(add->provider.token_endpoint_auth,
-			OIDC_DEFAULT_ENDPOINT_AUTH) != 0 ?
-					add->provider.token_endpoint_auth :
-					base->provider.token_endpoint_auth;
+					OIDC_DEFAULT_ENDPOINT_AUTH) != 0 ?
+							add->provider.token_endpoint_auth :
+							base->provider.token_endpoint_auth;
 	c->provider.token_endpoint_params =
 			add->provider.token_endpoint_params != NULL ?
 					add->provider.token_endpoint_params :
@@ -656,15 +663,23 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->provider.registration_endpoint_url != NULL ?
 					add->provider.registration_endpoint_url :
 					base->provider.registration_endpoint_url;
+	c->provider.check_session_iframe =
+			add->provider.check_session_iframe != NULL ?
+					add->provider.check_session_iframe :
+					base->provider.check_session_iframe;
+	c->provider.end_session_endpoint =
+			add->provider.end_session_endpoint != NULL ?
+					add->provider.end_session_endpoint :
+					base->provider.end_session_endpoint;
 
 	c->provider.ssl_validate_server =
 			add->provider.ssl_validate_server
-					!= OIDC_DEFAULT_SSL_VALIDATE_SERVER ?
+			!= OIDC_DEFAULT_SSL_VALIDATE_SERVER ?
 					add->provider.ssl_validate_server :
 					base->provider.ssl_validate_server;
 	c->provider.client_name =
 			apr_strnatcmp(add->provider.client_name, OIDC_DEFAULT_CLIENT_NAME)
-					!= 0 ?
+			!= 0 ?
 					add->provider.client_name : base->provider.client_name;
 	c->provider.client_contact =
 			add->provider.client_contact != NULL ?
@@ -679,14 +694,14 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->provider.scope : base->provider.scope;
 	c->provider.response_type =
 			apr_strnatcmp(add->provider.response_type,
-			OIDC_DEFAULT_RESPONSE_TYPE) != 0 ?
-					add->provider.response_type : base->provider.response_type;
+					OIDC_DEFAULT_RESPONSE_TYPE) != 0 ?
+							add->provider.response_type : base->provider.response_type;
 	c->provider.response_mode =
 			add->provider.response_mode != NULL ?
 					add->provider.response_mode : base->provider.response_mode;
 	c->provider.jwks_refresh_interval =
 			add->provider.jwks_refresh_interval
-					!= OIDC_DEFAULT_JWKS_REFRESH_INTERVAL ?
+			!= OIDC_DEFAULT_JWKS_REFRESH_INTERVAL ?
 					add->provider.jwks_refresh_interval :
 					base->provider.jwks_refresh_interval;
 	c->provider.idtoken_iat_slack =
@@ -743,14 +758,14 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					base->oauth.validate_endpoint_url;
 	c->oauth.validate_endpoint_auth =
 			apr_strnatcmp(add->oauth.validate_endpoint_auth,
-			OIDC_DEFAULT_ENDPOINT_AUTH) != 0 ?
-					add->oauth.validate_endpoint_auth :
-					base->oauth.validate_endpoint_auth;
+					OIDC_DEFAULT_ENDPOINT_AUTH) != 0 ?
+							add->oauth.validate_endpoint_auth :
+							base->oauth.validate_endpoint_auth;
 	c->oauth.remote_user_claim =
 			apr_strnatcmp(add->oauth.remote_user_claim,
-			OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER) != 0 ?
-					add->oauth.remote_user_claim :
-					base->oauth.remote_user_claim;
+					OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER) != 0 ?
+							add->oauth.remote_user_claim :
+							base->oauth.remote_user_claim;
 
 	c->http_timeout_long =
 			add->http_timeout_long != OIDC_DEFAULT_HTTP_TIMEOUT_LONG ?
@@ -763,7 +778,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->state_timeout : base->state_timeout;
 	c->session_inactivity_timeout =
 			add->session_inactivity_timeout
-					!= OIDC_DEFAULT_SESSION_INACTIVITY_TIMEOUT ?
+			!= OIDC_DEFAULT_SESSION_INACTIVITY_TIMEOUT ?
 					add->session_inactivity_timeout :
 					base->session_inactivity_timeout;
 
@@ -779,7 +794,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->cache_file_dir : base->cache_file_dir;
 	c->cache_file_clean_interval =
 			add->cache_file_clean_interval
-					!= OIDC_DEFAULT_CACHE_FILE_CLEAN_INTERVAL ?
+			!= OIDC_DEFAULT_CACHE_FILE_CLEAN_INTERVAL ?
 					add->cache_file_clean_interval :
 					base->cache_file_clean_interval;
 
@@ -801,14 +816,14 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->cookie_domain : base->cookie_domain;
 	c->claim_delimiter =
 			apr_strnatcmp(add->claim_delimiter, OIDC_DEFAULT_CLAIM_DELIMITER)
-					!= 0 ? add->claim_delimiter : base->claim_delimiter;
+			!= 0 ? add->claim_delimiter : base->claim_delimiter;
 	c->claim_prefix =
 			apr_strnatcmp(add->claim_prefix, OIDC_DEFAULT_CLAIM_PREFIX) != 0 ?
 					add->claim_prefix : base->claim_prefix;
 	c->remote_user_claim =
 			apr_strnatcmp(add->remote_user_claim,
-			OIDC_DEFAULT_CLAIM_REMOTE_USER) != 0 ?
-					add->remote_user_claim : base->remote_user_claim;
+					OIDC_DEFAULT_CLAIM_REMOTE_USER) != 0 ?
+							add->remote_user_claim : base->remote_user_claim;
 	c->pass_idtoken_as =
 			add->pass_idtoken_as != OIDC_PASS_IDTOKEN_AS_CLAIMS ?
 					add->pass_idtoken_as : base->pass_idtoken_as;
@@ -1050,7 +1065,7 @@ static apr_status_t oidc_cleanup(void *data) {
 		CRYPTO_set_locking_callback(NULL);
 #ifdef OPENSSL_NO_THREADID
 	if (CRYPTO_get_id_callback() == oidc_ssl_id_callback)
-	CRYPTO_set_id_callback(NULL);
+		CRYPTO_set_id_callback(NULL);
 #else
 	if (CRYPTO_THREADID_get_callback() == oidc_ssl_id_callback)
 		CRYPTO_THREADID_set_callback(NULL);
@@ -1145,8 +1160,8 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 static const authz_provider authz_oidc_provider = {
-	&oidc_authz_checker,
-	NULL,
+		&oidc_authz_checker,
+		NULL,
 };
 #endif
 
@@ -1216,11 +1231,21 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, provider.userinfo_endpoint_url),
 				RSRC_CONF,
 				"Define the OpenID OP UserInfo Endpoint URL (e.g.: https://localhost:9031/idp/userinfo.openid)"),
+		AP_INIT_TAKE1("OIDCProviderCheckSessionIFrame",
+				oidc_set_url_slot,
+				(void *)APR_OFFSETOF(oidc_cfg, provider.check_session_iframe),
+				RSRC_CONF,
+				"Define the OpenID OP Check Session iFrame URL."),
+		AP_INIT_TAKE1("OIDCProviderEndSessionEndpoint",
+				oidc_set_url_slot,
+				(void *)APR_OFFSETOF(oidc_cfg, provider.end_session_endpoint),
+				RSRC_CONF,
+				"Define the OpenID OP End Session Endpoint URL."),
 		AP_INIT_TAKE1("OIDCProviderJwksUri",
 				oidc_set_https_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.jwks_uri),
 				RSRC_CONF,
-				"Define the OpenID OP JWKS URL (e.g.: https://macbook:9031/pf/JWKS)"),
+				"Define the OpenID OP JWKS URL (e.g.: https://localhost:9031/pf/JWKS)"),
 		AP_INIT_TAKE1("OIDCResponseType",
 				oidc_set_response_type,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.response_type),
@@ -1325,10 +1350,14 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, discover_url),
 				RSRC_CONF,
 				"Defines an external IDP Discovery page"),
-		AP_INIT_TAKE1("OIDCDefaultURL", oidc_set_string_slot,
-				(void *)APR_OFFSETOF(oidc_cfg, default_url),
+		AP_INIT_TAKE1("OIDCDefaultURL", oidc_set_url_slot,
+				(void *)APR_OFFSETOF(oidc_cfg, default_sso_url),
 				RSRC_CONF,
 				"Defines the default URL where the user is directed to in case of 3rd-party initiated SSO."),
+		AP_INIT_TAKE1("OIDCDefaultLoggedOutURL", oidc_set_url_slot,
+				(void *)APR_OFFSETOF(oidc_cfg, default_slo_url),
+				RSRC_CONF,
+				"Defines the default URL where the user is directed to after logout."),
 		AP_INIT_TAKE1("OIDCCookieDomain",
 				oidc_set_cookie_domain, NULL, RSRC_CONF,
 				"Specify domain element for OIDC session cookie."),

@@ -84,6 +84,17 @@ APLOG_USE_MODULE(auth_openidc);
 /* key for storing the access_token in the session context */
 #define OIDC_ACCESSTOKEN_SESSION_KEY "access_token"
 
+/* key for storing the session_state in the session context */
+#define OIDC_SESSION_STATE_SESSION_KEY "session_state"
+/* key for storing the issuer in the session context */
+#define OIDC_ISSUER_SESSION_KEY "issuer"
+/* key for storing the client_id in the session context */
+#define OIDC_CLIENTID_SESSION_KEY "client_id"
+/* key for storing the check_session_iframe in the session context */
+#define OIDC_CHECK_IFRAME_SESSION_KEY "check_session_iframe"
+/* key for storing the end_session_endpoint in the session context */
+#define OIDC_LOGOUT_ENDPOINT_SESSION_KEY "end_session_endpoint"
+
 /* parameter name of the callback URL in the discovery response */
 #define OIDC_DISC_CB_PARAM "oidc_callback"
 /* parameter name of the OP provider selection in the discovery response */
@@ -105,8 +116,8 @@ APLOG_USE_MODULE(auth_openidc);
 /* pass id_token in compact serialized format in header*/
 #define OIDC_PASS_IDTOKEN_AS_SERIALIZED 4
 
-/* name of the cookie that binds the state in the authorization request/response to the browser */
-#define OIDCStateCookieName  "mod_auth_openidc_state"
+/* prefix of the cookie that binds the state in the authorization request/response to the browser */
+#define OIDCStateCookiePrefix  "mod_auth_openidc_state"
 
 /* the (global) key for the mod_auth_openidc related state that is stored in the request userdata context */
 #define OIDC_USERDATA_KEY "mod_auth_openidc_state"
@@ -125,6 +136,8 @@ typedef struct oidc_provider_t {
 	char *token_endpoint_params;
 	char *userinfo_endpoint_url;
 	char *registration_endpoint_url;
+	char *check_session_iframe;
+	char *end_session_endpoint;
 	char *jwks_uri;
 	char *client_id;
 	char *client_secret;
@@ -168,7 +181,9 @@ typedef struct oidc_cfg {
 	/* (optional) external OP discovery page */
 	char *discover_url;
 	/* (optional) default URL for 3rd-party initiated SSO */
-	char *default_url;
+	char *default_sso_url;
+	/* (optional) default URL to go to after logout */
+	char *default_slo_url;
 
 	/* public keys in JWK format, used by parters for encrypting JWTs sent to us */
 	apr_hash_t *public_keys;
@@ -248,10 +263,11 @@ typedef struct oidc_proto_state {
 	const char *issuer;
 	const char *response_type;
 	const char *response_mode;
+	const char *prompt;
 	apr_time_t timestamp;
 } oidc_proto_state;
 
-int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *login_hint, const char *redirect_uri, const char *state, oidc_proto_state *proto_state);
+int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *login_hint, const char *redirect_uri, const char *state, oidc_proto_state *proto_state, const char *id_token_hint);
 apr_byte_t oidc_proto_is_post_authorization_response(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_check_token_type(request_rec *r, oidc_provider_t *provider, const char *token_type);
@@ -294,7 +310,7 @@ char *oidc_url_encode(const request_rec *r, const char *str, const char *charsTo
 char *oidc_normalize_header_name(const request_rec *r, const char *str);
 
 void oidc_util_set_cookie(request_rec *r, const char *cookieName, const char *cookieValue);
-char *oidc_util_get_cookie(request_rec *r, char *cookieName);
+char *oidc_util_get_cookie(request_rec *r, const char *cookieName);
 apr_byte_t oidc_util_http_get(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth, const char *bearer_token, int ssl_validate_server, const char **response, int timeout, const char *outgoing_proxy);
 apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth, const char *bearer_token, int ssl_validate_server, const char **response, int timeout, const char *outgoing_proxy);
 apr_byte_t oidc_util_http_post_json(request_rec *r, const char *url, const json_t *data, const char *basic_auth, const char *bearer_token, int ssl_validate_server, const char **response, int timeout, const char *outgoing_proxy);

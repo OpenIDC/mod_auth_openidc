@@ -112,7 +112,7 @@ int oidc_proto_authorization_request_post_preserve(request_rec *r,
 int oidc_proto_authorization_request(request_rec *r,
 		struct oidc_provider_t *provider, const char *login_hint,
 		const char *redirect_uri, const char *state,
-		oidc_proto_state *proto_state) {
+		oidc_proto_state *proto_state, const char *id_token_hint) {
 
 	/* log some stuff */
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
@@ -154,6 +154,16 @@ int oidc_proto_authorization_request(request_rec *r,
 	if (login_hint != NULL)
 		authorization_request = apr_psprintf(r->pool, "%s&login_hint=%s",
 				authorization_request, oidc_util_escape_string(r, login_hint));
+
+	/* add the id_token_hint if provided */
+	if (id_token_hint != NULL)
+		authorization_request = apr_psprintf(r->pool, "%s&id_token_hint=%s",
+				authorization_request, oidc_util_escape_string(r, id_token_hint));
+
+	/* add the prompt setting if provided (e.g. "none" for no-GUI checks) */
+	if (proto_state->prompt != NULL)
+		authorization_request = apr_psprintf(r->pool, "%s&prompt=%s",
+				authorization_request, oidc_util_escape_string(r, proto_state->prompt));
 
 	/* add any custom authorization request parameters if configured */
 	if (provider->auth_request_params != NULL) {
@@ -975,8 +985,9 @@ int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg *c) {
 
 	const char *java_script =
 			"<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\" \"http://www.w3.org/TR/html4/strict.dtd\">\n"
+					"<html>\n"
 					"  <head>\n"
-					"  <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n"
+					"    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n"
 					"    <script type=\"text/javascript\">\n"
 					"      function postOnLoad() {\n"
 					"        encoded = location.hash.substring(1).split('&');\n"

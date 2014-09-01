@@ -653,7 +653,7 @@ void oidc_util_set_cookie(request_rec *r, const char *cookieName,
 /*
  * get a cookie from the HTTP request
  */
-char *oidc_util_get_cookie(request_rec *r, char *cookieName) {
+char *oidc_util_get_cookie(request_rec *r, const char *cookieName) {
 	char *cookie, *tokenizerCtx, *rv = NULL;
 
 	/* get the Cookie value */
@@ -687,7 +687,7 @@ char *oidc_util_get_cookie(request_rec *r, char *cookieName) {
 	}
 
 	/* log what we've found */
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r, "oidc_get_cookie: returning %s",
+	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r, "oidc_util_get_cookie: returning %s",
 			rv);
 
 	return rv;

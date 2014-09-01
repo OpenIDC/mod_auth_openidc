@@ -1057,6 +1057,14 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *issuer,
 	oidc_json_object_get_string(r->pool, j_provider, "registration_endpoint",
 			&provider->registration_endpoint_url, NULL);
 
+	/* get a handle to the check session iframe */
+	oidc_json_object_get_string(r->pool, j_provider, "check_session_iframe",
+			&provider->check_session_iframe, NULL);
+
+	/* get a handle to the end session endpoint */
+	oidc_json_object_get_string(r->pool, j_provider, "end_session_endpoint",
+			&provider->end_session_endpoint, NULL);
+
 	/* see if we can get valid config metadata */
 	if (oidc_metadata_conf_get(r, cfg, issuer, &j_conf) == FALSE) {
 		if (j_provider)
