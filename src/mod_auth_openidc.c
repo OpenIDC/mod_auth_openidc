@@ -1004,10 +1004,11 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		oidc_session_set(r, session, OIDC_ISSUER_SESSION_KEY, provider->issuer);
 		oidc_session_set(r, session, OIDC_CLIENTID_SESSION_KEY,
 				provider->client_id);
-		if (provider->end_session_endpoint != NULL)
-			oidc_session_set(r, session, OIDC_LOGOUT_ENDPOINT_SESSION_KEY,
-					provider->end_session_endpoint);
 	}
+
+	if (provider->end_session_endpoint != NULL)
+		oidc_session_set(r, session, OIDC_LOGOUT_ENDPOINT_SESSION_KEY,
+				provider->end_session_endpoint);
 
 	/* see if we've resolved any claims */
 	if (claims != NULL) {
