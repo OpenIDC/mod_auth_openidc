@@ -117,7 +117,7 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_PASS_IDTOKEN_AS_SERIALIZED 4
 
 /* prefix of the cookie that binds the state in the authorization request/response to the browser */
-#define OIDCStateCookiePrefix  "mod_auth_openidc_state"
+#define OIDCStateCookiePrefix  "mod_auth_openidc_state_"
 
 /* the (global) key for the mod_auth_openidc related state that is stored in the request userdata context */
 #define OIDC_USERDATA_KEY "mod_auth_openidc_state"
