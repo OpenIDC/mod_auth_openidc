@@ -1076,10 +1076,12 @@ static int oidc_handle_post_authorization_response(request_rec *r, oidc_cfg *c,
 	}
 
 	/* see if we've got any POST-ed data at all */
-	if (apr_is_empty_table(params)) {
+	if ((apr_table_elts(params)->nelts < 1)
+			|| ((apr_table_elts(params)->nelts == 1)
+					&& (apr_strnatcmp(apr_table_get(params, "response_mode"),
+							"fragment") == 0))) {
 		return oidc_util_http_sendstring(r,
-				apr_psprintf(r->pool,
-						"mod_auth_openidc: you've hit an OpenID Connect callback URL with no parameters; this is an invalid request (you should not open this URL in your browser directly)"),
+				"mod_auth_openidc: you've hit an OpenID Connect Redirect URI with no parameters, this is an invalid request; you should not open this URL in your browser directly, or have the server administrator use a different OIDCRedirectURI setting.",
 				HTTP_INTERNAL_SERVER_ERROR);
 	}
 
