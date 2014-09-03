@@ -187,9 +187,9 @@ static char *oidc_get_browser_state_hash(request_rec *r, const char *nonce) {
 	unsigned char hash[sha1_len];
 	apr_sha1_final(hash, &sha1);
 
-	/* base64 encode the resulting hash and return it */
-	char *result = apr_palloc(r->pool, apr_base64_encode_len(sha1_len) + 1);
-	apr_base64_encode(result, (const char *) hash, sha1_len);
+	/* base64url-encode the resulting hash and return it */
+	char *result = NULL;
+	oidc_base64url_encode(r, &result, (const char *)hash, sha1_len, TRUE);
 	return result;
 }
 
