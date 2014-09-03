@@ -1,3 +1,6 @@
+9/3/2014
+- improve error handling on hitting the redirect URI directly
+
 9/1/2014
 - add session management based on http://openid.net/specs/openid-connect-session-1_0.html (draft 21)
 
