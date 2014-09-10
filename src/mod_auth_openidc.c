@@ -1653,7 +1653,7 @@ static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c,
 					"        }\n"
 					"        if (e.data != 'unchanged') {\n"
 					"          clearInterval(timerID);\n"
-					"          if (e.data = 'changed') {\n"
+					"          if (e.data == 'changed') {\n"
 					"		     window.location.href = '%s?session=check';\n"
 					"          } else {\n"
 					"		     window.location.href = '%s?session=logout';\n"
