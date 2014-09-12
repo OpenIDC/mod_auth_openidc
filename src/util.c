@@ -614,24 +614,35 @@ static char *oidc_util_get_cookie_path(request_rec *r) {
  * set a cookie in the HTTP response headers
  */
 void oidc_util_set_cookie(request_rec *r, const char *cookieName,
-		const char *cookieValue) {
+		const char *cookieValue, apr_time_t expires) {
 
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
-	char *headerString, *currentCookies;
+	char *headerString, *currentCookies, *expiresString = NULL;
+
+	/* see if we need to clear the cookie */
+	if (apr_strnatcmp(cookieValue, "") == 0)
+		expires = 0;
+
+	/* construct the expire value */
+	if (expires != -1) {
+		expiresString = (char *) apr_pcalloc(r->pool, APR_RFC822_DATE_LEN);
+		if (apr_rfc822_date(expiresString, expires) != APR_SUCCESS) {
+			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+					"oidc_util_set_cookie: could not set cookie expiry date");
+		}
+	}
+
 	/* construct the cookie value */
-	headerString = apr_psprintf(r->pool, "%s=%s;%s;Path=%s%s%s", cookieName,
+	headerString = apr_psprintf(r->pool, "%s=%s;%s;Path=%s%s%s%s", cookieName,
 			cookieValue,
 			((apr_strnatcasecmp("https", oidc_get_current_url_scheme(r)) == 0) ?
 					";Secure" : ""), oidc_util_get_cookie_path(r),
 			c->cookie_domain != NULL ?
 					apr_psprintf(r->pool, ";Domain=%s", c->cookie_domain) : "",
-			c->cookie_http_only != FALSE ? ";HttpOnly" : "");
-
-	/* see if we need to clear the cookie */
-	if (apr_strnatcmp(cookieValue, "") == 0)
-		headerString = apr_psprintf(r->pool, "%s;expires=0;Max-Age=0",
-				headerString);
+			c->cookie_http_only != FALSE ? ";HttpOnly" : "",
+			(expiresString == NULL) ?
+					"" : apr_psprintf(r->pool, "; expires=%s", expiresString));
 
 	/* use r->err_headers_out so we always print our headers (even on 302 redirect) - headers_out only prints on 2xx responses */
 	apr_table_add(r->err_headers_out, "Set-Cookie", headerString);
@@ -687,8 +698,8 @@ char *oidc_util_get_cookie(request_rec *r, const char *cookieName) {
 	}
 
 	/* log what we've found */
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r, "oidc_util_get_cookie: returning %s",
-			rv);
+	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
+			"oidc_util_get_cookie: returning %s", rv);
 
 	return rv;
 }

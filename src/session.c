@@ -67,16 +67,21 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 /* the name of the uuid attribute in the session */
 #define OIDC_SESSION_UUID_KEY        "oidc-uuid"
 
-static apr_status_t (*ap_session_load_fn)(request_rec *r, session_rec **z) = NULL;
-static apr_status_t (*ap_session_get_fn)(request_rec *r, session_rec *z, const char *key, const char **value) = NULL;
-static apr_status_t (*ap_session_set_fn)(request_rec *r, session_rec *z, const char *key, const char *value) = NULL;
+static apr_status_t (*ap_session_load_fn)(request_rec *r, session_rec **z) =
+		NULL;
+static apr_status_t (*ap_session_get_fn)(request_rec *r, session_rec *z,
+		const char *key, const char **value) = NULL;
+static apr_status_t (*ap_session_set_fn)(request_rec *r, session_rec *z,
+		const char *key, const char *value) = NULL;
 static apr_status_t (*ap_session_save_fn)(request_rec *r, session_rec *z) = NULL;
 
 apr_status_t oidc_session_load(request_rec *r, session_rec **zz) {
 	apr_status_t rc = ap_session_load_fn(r, zz);
-	(*zz)->remote_user = apr_table_get((*zz)->entries, OIDC_SESSION_REMOTE_USER_KEY);
+	(*zz)->remote_user = apr_table_get((*zz)->entries,
+			OIDC_SESSION_REMOTE_USER_KEY);
 	const char *uuid = apr_table_get((*zz)->entries, OIDC_SESSION_UUID_KEY);
-	if (uuid != NULL) apr_uuid_parse((*zz)->uuid, uuid);
+	if (uuid != NULL)
+		apr_uuid_parse((*zz)->uuid, uuid);
 	return rc;
 }
 
@@ -88,11 +93,13 @@ apr_status_t oidc_session_save(request_rec *r, session_rec *z) {
 	return ap_session_save_fn(r, z);
 }
 
-apr_status_t oidc_session_get(request_rec *r, session_rec *z, const char *key, const char **value) {
+apr_status_t oidc_session_get(request_rec *r, session_rec *z, const char *key,
+		const char **value) {
 	return ap_session_get_fn(r, z, key, value);
 }
 
-apr_status_t oidc_session_set(request_rec *r, session_rec *z, const char *key, const char *value) {
+apr_status_t oidc_session_set(request_rec *r, session_rec *z, const char *key,
+		const char *value) {
 	return ap_session_set_fn(r, z, key, value);
 }
 
@@ -336,16 +343,19 @@ static apr_status_t oidc_session_identity_encode(request_rec * r,
 
 /* load the session from the cache using the cookie as the index */
 static apr_status_t oidc_session_load_cache(request_rec *r, session_rec *z) {
-	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
-	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	oidc_cfg *c = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
+	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
 
 	/* get the cookie that should be our uuid/key */
 	char *uuid = oidc_util_get_cookie(r, d->cookie);
 
 	/* get the string-encoded session from the cache based on the key */
 	if (uuid != NULL) {
-		if (c->cache->get(r, uuid, &z->encoded) == TRUE) return APR_SUCCESS;
-		oidc_util_set_cookie(r, d->cookie, "");
+		if (c->cache->get(r, uuid, &z->encoded) == TRUE)
+			return APR_SUCCESS;
+		//oidc_util_set_cookie(r, d->cookie, "");
 	}
 
 	return APR_EGENERAL;
@@ -355,8 +365,10 @@ static apr_status_t oidc_session_load_cache(request_rec *r, session_rec *z) {
  * save the session to the cache using a cookie for the index
  */
 static apr_status_t oidc_session_save_cache(request_rec *r, session_rec *z) {
-	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
-	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	oidc_cfg *c = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
+	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
 
 	char key[APR_UUID_FORMATTED_LENGTH + 1];
 	apr_uuid_format((char *) &key, z->uuid);
@@ -364,7 +376,7 @@ static apr_status_t oidc_session_save_cache(request_rec *r, session_rec *z) {
 	if (z->encoded && z->encoded[0]) {
 
 		/* set the uuid in the cookie */
-		oidc_util_set_cookie(r, d->cookie, key);
+		oidc_util_set_cookie(r, d->cookie, key, -1);
 
 		/* store the string-encoded session in the cache */
 		c->cache->set(r, key, z->encoded, z->expiry);
@@ -372,7 +384,7 @@ static apr_status_t oidc_session_save_cache(request_rec *r, session_rec *z) {
 	} else {
 
 		/* clear the cookie */
-		oidc_util_set_cookie(r, d->cookie, "");
+		oidc_util_set_cookie(r, d->cookie, "", 0);
 
 		/* remove the session from the cache */
 		c->cache->set(r, key, NULL, 0);
@@ -382,12 +394,16 @@ static apr_status_t oidc_session_save_cache(request_rec *r, session_rec *z) {
 }
 
 static apr_status_t oidc_session_load_cookie(request_rec *r, session_rec *z) {
-	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
 
 	char *cookieValue = oidc_util_get_cookie(r, d->cookie);
 	if (cookieValue != NULL) {
-		if (oidc_base64url_decode_decrypt_string(r, (char **)&z->encoded, cookieValue) <= 0) {
-			oidc_util_set_cookie(r, d->cookie, "");
+		if (oidc_base64url_decode_decrypt_string(r, (char **) &z->encoded,
+				cookieValue) <= 0) {
+			//oidc_util_set_cookie(r, d->cookie, "");
+			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
+					"oidc_session_load_cookie: cookie value possibly corrupted");
 			return APR_EGENERAL;
 		}
 	}
@@ -396,13 +412,14 @@ static apr_status_t oidc_session_load_cookie(request_rec *r, session_rec *z) {
 }
 
 static apr_status_t oidc_session_save_cookie(request_rec *r, session_rec *z) {
-	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
 
 	char *cookieValue = "";
 	if (z->encoded && z->encoded[0]) {
 		oidc_encrypt_base64url_encode_string(r, &cookieValue, z->encoded);
 	}
-	oidc_util_set_cookie(r, d->cookie, cookieValue);
+	oidc_util_set_cookie(r, d->cookie, cookieValue, -1);
 
 	return APR_SUCCESS;
 }
@@ -412,7 +429,8 @@ static apr_status_t oidc_session_save_cookie(request_rec *r, session_rec *z) {
  */
 static apr_status_t oidc_session_load_22(request_rec *r, session_rec **zz) {
 
-	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg *c = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
 
 	/* first see if this is a sub-request and it was set already in the main request */
 	if (((*zz) = (session_rec *) oidc_request_state_get(r, "session")) != NULL) {
@@ -475,7 +493,8 @@ static apr_status_t oidc_session_load_22(request_rec *r, session_rec **zz) {
  */
 static apr_status_t oidc_session_save_22(request_rec *r, session_rec *z) {
 
-	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg *c = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
 
 	/* encode the actual state in to the encoded string */
 	oidc_session_identity_encode(r, z);
@@ -492,7 +511,8 @@ static apr_status_t oidc_session_save_22(request_rec *r, session_rec *z) {
 		rc = oidc_session_save_cookie(r, z);
 	} else {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_session_save_22: unknown session type: %d", c->session_type);
+				"oidc_session_save_22: unknown session type: %d",
+				c->session_type);
 		rc = APR_EGENERAL;
 	}
 
@@ -502,8 +522,8 @@ static apr_status_t oidc_session_save_22(request_rec *r, session_rec *z) {
 /*
  * get a value from the session based on the name from a name/value pair
  */
-static apr_status_t oidc_session_get_22(request_rec *r, session_rec *z, const char *key,
-		const char **value) {
+static apr_status_t oidc_session_get_22(request_rec *r, session_rec *z,
+		const char *key, const char **value) {
 
 	/* just return the value for the key */
 	*value = apr_table_get(z->entries, key);
@@ -514,8 +534,8 @@ static apr_status_t oidc_session_get_22(request_rec *r, session_rec *z, const ch
 /*
  * set a name/value key pair in the session
  */
-static apr_status_t oidc_session_set_22(request_rec *r, session_rec *z, const char *key,
-		const char *value) {
+static apr_status_t oidc_session_set_22(request_rec *r, session_rec *z,
+		const char *key, const char *value) {
 
 	/* only set it if non-NULL, otherwise delete the entry */
 	if (value) {
@@ -530,7 +550,8 @@ static apr_status_t oidc_session_set_22(request_rec *r, session_rec *z, const ch
  * session initialization for pre-2.4
  */
 apr_status_t oidc_session_init() {
-	if (!ap_session_load_fn || !ap_session_get_fn || !ap_session_set_fn || !ap_session_save_fn) {
+	if (!ap_session_load_fn || !ap_session_get_fn || !ap_session_set_fn
+			|| !ap_session_save_fn) {
 		ap_session_load_fn = oidc_session_load_22;
 		ap_session_get_fn = oidc_session_get_22;
 		ap_session_set_fn = oidc_session_set_22;

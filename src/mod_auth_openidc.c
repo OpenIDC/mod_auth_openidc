@@ -189,7 +189,7 @@ static char *oidc_get_browser_state_hash(request_rec *r, const char *nonce) {
 
 	/* base64url-encode the resulting hash and return it */
 	char *result = NULL;
-	oidc_base64url_encode(r, &result, (const char *)hash, sha1_len, TRUE);
+	oidc_base64url_encode(r, &result, (const char *) hash, sha1_len, TRUE);
 	return result;
 }
 
@@ -414,7 +414,7 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 	}
 
 	/* clear state cookie because we don't need it anymore */
-	oidc_util_set_cookie(r, cookieName, "");
+	oidc_util_set_cookie(r, cookieName, "", 0);
 
 	/* decrypt the state obtained from the cookie */
 	char *svalue = NULL;
@@ -501,7 +501,7 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
  * in a cookie in the browser that is cryptographically bound to that state
  */
 static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
-		const char *state, oidc_proto_state *proto_state) {
+		oidc_cfg *c, const char *state, oidc_proto_state *proto_state) {
 	/*
 	 * create a cookie consisting of 5 elements:
 	 * random value, original URL, issuer, response_type and timestamp
@@ -534,7 +534,8 @@ static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
 	const char *cookieName = oidc_get_state_cookie_name(r, state);
 
 	/* set it as a cookie */
-	oidc_util_set_cookie(r, cookieName, cookieValue);
+	oidc_util_set_cookie(r, cookieName, cookieValue,
+			apr_time_now() + apr_time_from_sec(c->state_timeout));
 
 	return TRUE;
 }
@@ -1275,7 +1276,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	char *state = oidc_get_browser_state_hash(r, proto_state.nonce);
 
 	/* create state that restores the context when the authorization response comes in; cryptographically bind it to the browser */
-	oidc_authorization_request_set_cookie(r, state, &proto_state);
+	oidc_authorization_request_set_cookie(r, c, state, &proto_state);
 
 	/*
 	 * TODO: I'd like to include the nonce all flows, including the "code" and "code token" flows
