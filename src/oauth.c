@@ -207,7 +207,7 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 	while (*data && (val = ap_getword_white(r->pool, &data))) {
 		json_array_append_new(a_scopes, json_string(val));
 	}
-	json_object_set(tkn, "scope", a_scopes);
+	json_object_set_new(tkn, "scope", a_scopes);
 
 	/* return only the pimped access_token results */
 	*token = json_deep_copy(tkn);

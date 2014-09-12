@@ -1,5 +1,6 @@
 9/12/2014
 - set expiry on state cookies; don't clear session cookie after cache miss or corruption
+- fix JSON array memory leak in oauth.c
 
 9/10/2014
 - merge #34 (g10f), fix session management Javascript bug
