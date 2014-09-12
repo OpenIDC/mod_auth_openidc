@@ -503,8 +503,8 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
 		oidc_cfg *c, const char *state, oidc_proto_state *proto_state) {
 	/*
-	 * create a cookie consisting of 5 elements:
-	 * random value, original URL, issuer, response_type and timestamp
+	 * create a cookie consisting of 8 elements:
+	 * random value, original URL, original method, issuer, response_type, response_mod, prompt and timestamp
 	 * encoded as JSON
 	 */
 	char *plainText = apr_psprintf(r->pool, "{"
@@ -1294,7 +1294,9 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	 * printout errors if Cookie settings are not going to work
 	 */
 	apr_uri_t o_uri;
+	memset(&o_uri, 0, sizeof(apr_uri_t));
 	apr_uri_t r_uri;
+	memset(&r_uri, 0, sizeof(apr_uri_t));
 	apr_uri_parse(r->pool, original_url, &o_uri);
 	apr_uri_parse(r->pool, c->redirect_uri, &r_uri);
 	if ((apr_strnatcmp(o_uri.scheme, r_uri.scheme) != 0)
