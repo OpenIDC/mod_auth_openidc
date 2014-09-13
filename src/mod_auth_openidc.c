@@ -1327,7 +1327,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	/* send off to the OpenID Connect Provider */
 	// TODO: maybe show intermediate/progress screen "redirecting to"
 	return oidc_proto_authorization_request(r, provider, login_hint,
-			c->redirect_uri, state, &proto_state, id_token_hint);
+			c->redirect_uri, state, &proto_state, id_token_hint, c->x_frame_options);
 }
 
 /*

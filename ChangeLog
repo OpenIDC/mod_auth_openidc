@@ -1,3 +1,6 @@
+9/13/2014
+- add support for the X-Frame-Options header as recommended by the spec
+
 9/12/2014
 - set expiry on state cookies; don't clear session cookie after cache miss or corruption
 - fix JSON array memory leak in oauth.c

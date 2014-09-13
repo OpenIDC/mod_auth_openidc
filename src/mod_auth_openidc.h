@@ -227,6 +227,7 @@ typedef struct oidc_cfg {
 	char *remote_user_claim;
 	int pass_idtoken_as;
 	int cookie_http_only;
+	char *x_frame_options;
 
 	char *outgoing_proxy;
 
@@ -267,7 +268,7 @@ typedef struct oidc_proto_state {
 	apr_time_t timestamp;
 } oidc_proto_state;
 
-int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *login_hint, const char *redirect_uri, const char *state, oidc_proto_state *proto_state, const char *id_token_hint);
+int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *login_hint, const char *redirect_uri, const char *state, oidc_proto_state *proto_state, const char *id_token_hint, const char *x_frame_options);
 apr_byte_t oidc_proto_is_post_authorization_response(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_check_token_type(request_rec *r, oidc_provider_t *provider, const char *token_type);

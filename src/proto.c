@@ -112,7 +112,7 @@ int oidc_proto_authorization_request_post_preserve(request_rec *r,
 int oidc_proto_authorization_request(request_rec *r,
 		struct oidc_provider_t *provider, const char *login_hint,
 		const char *redirect_uri, const char *state,
-		oidc_proto_state *proto_state, const char *id_token_hint) {
+		oidc_proto_state *proto_state, const char *id_token_hint, const char *x_frame_options) {
 
 	/* log some stuff */
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
@@ -175,6 +175,9 @@ int oidc_proto_authorization_request(request_rec *r,
 	if (apr_strnatcmp(proto_state->original_method, "form_post") == 0)
 		return oidc_proto_authorization_request_post_preserve(r,
 				authorization_request);
+
+	/* apply frame busting as recommended by spec, needs to go in err_headers_out because of 302 */
+	apr_table_add(r->err_headers_out, "X-Frame-Options", x_frame_options);
 
 	/* add the redirect location header */
 	apr_table_add(r->headers_out, "Location", authorization_request);
