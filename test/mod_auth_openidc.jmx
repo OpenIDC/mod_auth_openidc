@@ -9,7 +9,7 @@
         <collectionProp name="Arguments.arguments">
           <elementProp name="APP_SERVER" elementType="Argument">
             <stringProp name="Argument.name">APP_SERVER</stringProp>
-            <stringProp name="Argument.value">localhost.pingidentity.nl</stringProp>
+            <stringProp name="Argument.value">debian-jessie.pingidentity.nl</stringProp>
             <stringProp name="Argument.metadata">=</stringProp>
           </elementProp>
           <elementProp name="APP_PORT" elementType="Argument">
@@ -24,7 +24,7 @@
           </elementProp>
           <elementProp name="AS_HOST" elementType="Argument">
             <stringProp name="Argument.name">AS_HOST</stringProp>
-            <stringProp name="Argument.value">localhost</stringProp>
+            <stringProp name="Argument.value">macbook</stringProp>
             <stringProp name="Argument.metadata">=</stringProp>
           </elementProp>
           <elementProp name="AS_PORT" elementType="Argument">
@@ -69,9 +69,9 @@
         <stringProp name="ThreadGroup.on_sample_error">stoptest</stringProp>
         <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
           <boolProp name="LoopController.continue_forever">false</boolProp>
-          <stringProp name="LoopController.loops">10</stringProp>
+          <stringProp name="LoopController.loops">5</stringProp>
         </elementProp>
-        <stringProp name="ThreadGroup.num_threads">25</stringProp>
+        <stringProp name="ThreadGroup.num_threads">5</stringProp>
         <stringProp name="ThreadGroup.ramp_time">0</stringProp>
         <longProp name="ThreadGroup.start_time">1299167831000</longProp>
         <longProp name="ThreadGroup.end_time">1299167831000</longProp>
@@ -143,14 +143,14 @@
           <RegexExtractor guiclass="RegexExtractorGui" testclass="RegexExtractor" testname="Grab AuthzResumePath" enabled="true">
             <stringProp name="RegexExtractor.useHeaders">false</stringProp>
             <stringProp name="RegexExtractor.refname">AuthzResumePath</stringProp>
-            <stringProp name="RegexExtractor.regex">&lt;form method=\&quot;GET\&quot; action=\&quot;(.+)\&quot;&gt;</stringProp>
+            <stringProp name="RegexExtractor.regex">&lt;form method=&quot;POST&quot; action=\&quot;(.+)\&quot; autocomplete=&quot;off&quot;&gt;</stringProp>
             <stringProp name="RegexExtractor.template">$1$</stringProp>
             <stringProp name="RegexExtractor.default">REGEX_FAILED</stringProp>
             <stringProp name="RegexExtractor.match_number">1</stringProp>
           </RegexExtractor>
           <hashTree/>
         </hashTree>
-        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="OP Adapter Selection" enabled="true">
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="OP Adapter Selection" enabled="false">
           <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
             <collectionProp name="Arguments.arguments">
               <elementProp name="pfidpadapterid" elementType="HTTPArgument">
@@ -340,26 +340,19 @@
         <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Basic: OP User Login Consent" enabled="true">
           <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
             <collectionProp name="Arguments.arguments">
-              <elementProp name="resume" elementType="HTTPArgument">
-                <boolProp name="HTTPArgument.always_encode">true</boolProp>
-                <stringProp name="Argument.value">${ResumeParam}</stringProp>
-                <stringProp name="Argument.metadata">=</stringProp>
-                <boolProp name="HTTPArgument.use_equals">true</boolProp>
-                <stringProp name="Argument.name">resume</stringProp>
-              </elementProp>
-              <elementProp name="userName" elementType="HTTPArgument">
+              <elementProp name="pf.username" elementType="HTTPArgument">
                 <boolProp name="HTTPArgument.always_encode">true</boolProp>
                 <stringProp name="Argument.value">${USERNAME}</stringProp>
                 <stringProp name="Argument.metadata">=</stringProp>
                 <boolProp name="HTTPArgument.use_equals">true</boolProp>
-                <stringProp name="Argument.name">userName</stringProp>
+                <stringProp name="Argument.name">pf.username</stringProp>
               </elementProp>
-              <elementProp name="password" elementType="HTTPArgument">
+              <elementProp name="pf.pass" elementType="HTTPArgument">
                 <boolProp name="HTTPArgument.always_encode">true</boolProp>
                 <stringProp name="Argument.value">${PASSWORD}</stringProp>
                 <stringProp name="Argument.metadata">=</stringProp>
                 <boolProp name="HTTPArgument.use_equals">true</boolProp>
-                <stringProp name="Argument.name">password</stringProp>
+                <stringProp name="Argument.name">pf.pass</stringProp>
               </elementProp>
             </collectionProp>
           </elementProp>
@@ -369,7 +362,7 @@
           <stringProp name="HTTPSampler.response_timeout"></stringProp>
           <stringProp name="HTTPSampler.protocol">https</stringProp>
           <stringProp name="HTTPSampler.contentEncoding"></stringProp>
-          <stringProp name="HTTPSampler.path">/IdpSample/MainPage?cmd=login</stringProp>
+          <stringProp name="HTTPSampler.path">${AuthzResumePath}</stringProp>
           <stringProp name="HTTPSampler.method">POST</stringProp>
           <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
           <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
@@ -495,7 +488,7 @@
           </RegexExtractor>
           <hashTree/>
         </hashTree>
-        <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Set Malicious Header" enabled="true">
+        <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Set Malicious Header" enabled="false">
           <collectionProp name="HeaderManager.headers">
             <elementProp name="" elementType="Header">
               <stringProp name="Header.name">OIDC_CLAIM_BOGUS</stringProp>
@@ -506,7 +499,7 @@
         <hashTree/>
         <LoopController guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Authenticated Application Access" enabled="true">
           <boolProp name="LoopController.continue_forever">true</boolProp>
-          <stringProp name="LoopController.loops">10</stringProp>
+          <stringProp name="LoopController.loops">5</stringProp>
         </LoopController>
         <hashTree>
           <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Authenticated Application Access" enabled="true">
@@ -572,9 +565,9 @@
         <stringProp name="ThreadGroup.on_sample_error">stoptest</stringProp>
         <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
           <boolProp name="LoopController.continue_forever">false</boolProp>
-          <stringProp name="LoopController.loops">10</stringProp>
+          <stringProp name="LoopController.loops">5</stringProp>
         </elementProp>
-        <stringProp name="ThreadGroup.num_threads">25</stringProp>
+        <stringProp name="ThreadGroup.num_threads">5</stringProp>
         <stringProp name="ThreadGroup.ramp_time">0</stringProp>
         <longProp name="ThreadGroup.start_time">1388176686000</longProp>
         <longProp name="ThreadGroup.end_time">1388176686000</longProp>
@@ -653,7 +646,7 @@
         <hashTree/>
         <LoopController guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Resource Access Requests" enabled="true">
           <boolProp name="LoopController.continue_forever">true</boolProp>
-          <stringProp name="LoopController.loops">10</stringProp>
+          <stringProp name="LoopController.loops">5</stringProp>
         </LoopController>
         <hashTree>
           <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Resource Access" enabled="true">
