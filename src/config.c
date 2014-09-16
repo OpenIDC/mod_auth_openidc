@@ -1080,6 +1080,9 @@ static apr_status_t oidc_cleanup(void *data) {
 #endif /* defined(OPENSSL_THREADS) && APR_HAS_THREADS */
 	EVP_cleanup();
 	curl_global_cleanup();
+
+	ap_log_error(APLOG_MARK, APLOG_INFO, 0, (server_rec *) data, "%s - shutdown", NAMEVERSION);
+
 	return APR_SUCCESS;
 }
 
@@ -1103,6 +1106,8 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 				apr_pool_cleanup_null, s->process->pool);
 		return OK;
 	}
+
+	ap_log_error(APLOG_MARK, APLOG_INFO, 0, s, "%s - init", NAMEVERSION);
 
 	curl_global_init(CURL_GLOBAL_ALL);
 	OpenSSL_add_all_digests();

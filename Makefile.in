@@ -48,7 +48,7 @@ DISTFILES=$(SRC) \
 all: src/mod_auth_openidc.la
 
 src/mod_auth_openidc.la: $(SRC) $(HDRS)
-	@APXS2@ -Wc,"@OPENSSL_CFLAGS@ @CURL_CFLAGS@ @JANSSON_CFLAGS@" -Wl,"@OPENSSL_LIBS@ @CURL_LIBS@ @JANSSON_LIBS@" -Wc,-Wall -Wc,-g -c $(SRC)
+	@APXS2@ -Wc,"-DNAMEVER=\"@NAMEVER@\" @OPENSSL_CFLAGS@ @CURL_CFLAGS@ @JANSSON_CFLAGS@" -Wl,"@OPENSSL_LIBS@ @CURL_LIBS@ @JANSSON_LIBS@" -Wc,-Wall -Wc,-g -c $(SRC)
 
 
 # Building configure (for distribution)

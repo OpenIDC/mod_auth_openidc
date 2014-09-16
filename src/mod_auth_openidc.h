@@ -75,6 +75,14 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_DEBUG APLOG_DEBUG
 #endif
 
+#ifndef NAMEVER
+#define NAMEVERSION "mod_auth_openidc-0.0.0"
+#else
+#define STRINGIFY(x) #x
+#define TOSTRING(x) STRINGIFY(x)
+#define NAMEVERSION TOSTRING(NAMEVER)
+#endif
+
 /* key for storing the claims in the session context */
 #define OIDC_CLAIMS_SESSION_KEY "claims"
 /* key for storing the id_token in the session context */
