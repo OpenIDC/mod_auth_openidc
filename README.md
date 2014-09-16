@@ -181,11 +181,20 @@ purposes (aka. e-mail style identifier), or a domain name.
 
 Sample callback:
 
-    <oidc_callback>?target_link_uri=<target_link_uri>&iss=[<issuer>|<domain>|<e-mail-style-account-name>]
+    <oidc_callback>?target_link_uri=<target_link_uri>&iss=[<issuer>|<domain>|<e-mail-style-account-name>][&login_hint=<name>][&auth_request_params=<urlencoded-query-string>]
 
 This is also the OpenID Connect specified way of triggering 3rd party initiated SSO 
 to a specific provider when multiple OPs have been configured. In that case the callback
 may also contain a "login_hint" parameter with the login identifier the user might use to log in.
+
+An additional **mod_auth_openidc** specific parameter named `auth_request_params` may also be passed in.
+Its value would contain dynamically determined custom parameters that need to be passed in the
+authorization requests and as such it is the runtime equivalent of the static OIDCAuthRequestParams
+configuration value and the `auth_request_params` in the `.conf` file. If you use more than one of the
+previous settings you'll need to make sure they do not conflict. Note that nested URL encoding is required
+e.g. passing both prompt=consent and max_auth_age=0 would result in:
+
+    auth_request_params=prompt%3Dconsent%26max_auth_age%3D0
 
 
 ###Sample Config for PingFederate OpenID Connect & OAuth 2.0

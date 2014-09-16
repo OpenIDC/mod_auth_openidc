@@ -112,7 +112,8 @@ int oidc_proto_authorization_request_post_preserve(request_rec *r,
 int oidc_proto_authorization_request(request_rec *r,
 		struct oidc_provider_t *provider, const char *login_hint,
 		const char *redirect_uri, const char *state,
-		oidc_proto_state *proto_state, const char *id_token_hint, const char *x_frame_options) {
+		oidc_proto_state *proto_state, const char *id_token_hint,
+		const char *auth_request_params, const char *x_frame_options) {
 
 	/* log some stuff */
 	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
@@ -158,17 +159,25 @@ int oidc_proto_authorization_request(request_rec *r,
 	/* add the id_token_hint if provided */
 	if (id_token_hint != NULL)
 		authorization_request = apr_psprintf(r->pool, "%s&id_token_hint=%s",
-				authorization_request, oidc_util_escape_string(r, id_token_hint));
+				authorization_request,
+				oidc_util_escape_string(r, id_token_hint));
 
 	/* add the prompt setting if provided (e.g. "none" for no-GUI checks) */
 	if (proto_state->prompt != NULL)
 		authorization_request = apr_psprintf(r->pool, "%s&prompt=%s",
-				authorization_request, oidc_util_escape_string(r, proto_state->prompt));
+				authorization_request,
+				oidc_util_escape_string(r, proto_state->prompt));
 
-	/* add any custom authorization request parameters if configured */
+	/* add any statically configured custom authorization request parameters */
 	if (provider->auth_request_params != NULL) {
 		authorization_request = apr_psprintf(r->pool, "%s&%s",
 				authorization_request, provider->auth_request_params);
+	}
+
+	/* add any dynamically configured custom authorization request parameters */
+	if (auth_request_params != NULL) {
+		authorization_request = apr_psprintf(r->pool, "%s&%s",
+				authorization_request, auth_request_params);
 	}
 
 	/* preserve POSTed form parameters if enabled */

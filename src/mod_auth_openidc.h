@@ -103,6 +103,8 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_DISC_RT_PARAM "target_link_uri"
 /* parameter name of login hint in the discovery response */
 #define OIDC_DISC_LH_PARAM "login_hint"
+/* parameter name of parameters that need to be passed in the authentication request */
+#define OIDC_DISC_AR_PARAM "auth_request_params"
 
 /* value that indicates to use server-side cache based session tracking */
 #define OIDC_SESSION_TYPE_22_SERVER_CACHE 0
@@ -268,7 +270,7 @@ typedef struct oidc_proto_state {
 	apr_time_t timestamp;
 } oidc_proto_state;
 
-int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *login_hint, const char *redirect_uri, const char *state, oidc_proto_state *proto_state, const char *id_token_hint, const char *x_frame_options);
+int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *login_hint, const char *redirect_uri, const char *state, oidc_proto_state *proto_state, const char *id_token_hint, const char *auth_request_params, const char *x_frame_options);
 apr_byte_t oidc_proto_is_post_authorization_response(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_check_token_type(request_rec *r, oidc_provider_t *provider, const char *token_type);
