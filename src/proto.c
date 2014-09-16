@@ -186,7 +186,9 @@ int oidc_proto_authorization_request(request_rec *r,
 				authorization_request);
 
 	/* apply frame busting as recommended by spec, needs to go in err_headers_out because of 302 */
-	apr_table_add(r->err_headers_out, "X-Frame-Options", x_frame_options);
+	if (x_frame_options != NULL) {
+		apr_table_add(r->err_headers_out, "X-Frame-Options", x_frame_options);
+	}
 
 	/* add the redirect location header */
 	apr_table_add(r->headers_out, "Location", authorization_request);

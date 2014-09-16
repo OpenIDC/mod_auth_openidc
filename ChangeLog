@@ -1,6 +1,7 @@
 9/16/2014
 - support for passing runtime determined authentication request parameters in the discovery response
 - include name/version in logs and bump to 1.6.0rc1
+- don't use the X-Frame-Options by default
 
 9/13/2014
 - add support for the X-Frame-Options header as recommended by the spec

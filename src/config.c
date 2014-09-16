@@ -116,8 +116,6 @@
 #define OIDC_DEFAULT_COOKIE_HTTPONLY 1
 /* default cookie path */
 #define OIDC_DEFAULT_COOKIE_PATH "/"
-/* default value for X-Frame-Options header */
-#define OIDC_DEFAULT_X_FRAME_OPTIONS "SAMEORIGIN"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -594,7 +592,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->remote_user_claim = OIDC_DEFAULT_CLAIM_REMOTE_USER;
 	c->pass_idtoken_as = OIDC_PASS_IDTOKEN_AS_CLAIMS;
 	c->cookie_http_only = OIDC_DEFAULT_COOKIE_HTTPONLY;
-	c->x_frame_options = OIDC_DEFAULT_X_FRAME_OPTIONS;
+	c->x_frame_options = NULL;
 
 	c->outgoing_proxy = NULL;
 	c->crypto_passphrase = NULL;
@@ -834,7 +832,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->cookie_http_only != OIDC_DEFAULT_COOKIE_HTTPONLY ?
 					add->cookie_http_only : base->cookie_http_only;
 	c->x_frame_options =
-			apr_strnatcmp(add->x_frame_options, OIDC_DEFAULT_X_FRAME_OPTIONS) != 0 ?
+			add->x_frame_options != NULL ?
 					add->x_frame_options : base->x_frame_options;
 
 	c->outgoing_proxy =
