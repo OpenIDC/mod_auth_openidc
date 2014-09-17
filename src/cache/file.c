@@ -121,15 +121,14 @@ static apr_status_t oidc_cache_file_read(request_rec *r, const char *path,
 
 	/* test for system errors */
 	if (rc != APR_SUCCESS) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_cache_file_read: could not read from: %s (%s)", path,
+		oidc_error(r, "could not read from: %s (%s)", path,
 				apr_strerror(rc, s_err, sizeof(s_err)));
 	}
 
 	/* ensure that we've got the requested number of bytes */
 	if (bytes_read != len) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_cache_file_read: could not read enough bytes from: \"%s\", bytes_read (%" APR_SIZE_T_FMT ") != len (%" APR_SIZE_T_FMT ")",
+		oidc_error(r,
+				"could not read enough bytes from: \"%s\", bytes_read (%" APR_SIZE_T_FMT ") != len (%" APR_SIZE_T_FMT ")",
 				path, bytes_read, len);
 		rc = APR_EGENERAL;
 	}
@@ -152,16 +151,15 @@ static apr_status_t oidc_cache_file_write(request_rec *r, const char *path,
 
 	/* check for a system error */
 	if (rc != APR_SUCCESS) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_cache_file_write: could not write to: \"%s\" (%s)", path,
+		oidc_error(r, "could not write to: \"%s\" (%s)", path,
 				apr_strerror(rc, s_err, sizeof(s_err)));
 		return rc;
 	}
 
 	/* check that all bytes from the header were written */
 	if (bytes_written != len) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_cache_file_write: could not write enough bytes to: \"%s\", bytes_written (%" APR_SIZE_T_FMT ") != len (%" APR_SIZE_T_FMT ")",
+		oidc_error(r,
+				"could not write enough bytes to: \"%s\", bytes_written (%" APR_SIZE_T_FMT ") != len (%" APR_SIZE_T_FMT ")",
 				path, bytes_written, len);
 		return APR_EGENERAL;
 	}
@@ -184,8 +182,7 @@ static apr_byte_t oidc_cache_file_get(request_rec *r, const char *key,
 	/* open the cache file if it exists, otherwise we just have a "regular" cache miss */
 	if (apr_file_open(&fd, path, APR_FOPEN_READ | APR_FOPEN_BUFFERED,
 	APR_OS_DEFAULT, r->pool) != APR_SUCCESS) {
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_cache_file_get: cache miss for key \"%s\"", key);
+		oidc_debug(r, "cache miss for key \"%s\"", key);
 		return TRUE;
 	}
 
@@ -210,15 +207,13 @@ static apr_byte_t oidc_cache_file_get(request_rec *r, const char *key,
 		apr_file_close(fd);
 
 		/* log this event */
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_cache_file_get: cache entry \"%s\" expired, removing file \"%s\"",
-				key, path);
+		oidc_debug(r, "cache entry \"%s\" expired, removing file \"%s\"", key,
+				path);
 
 		/* and kill it */
 		if ((rc = apr_file_remove(path, r->pool)) != APR_SUCCESS) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_cache_file_get: could not delete cache file \"%s\" (%s)",
-					path, apr_strerror(rc, s_err, sizeof(s_err)));
+			oidc_error(r, "could not delete cache file \"%s\" (%s)", path,
+					apr_strerror(rc, s_err, sizeof(s_err)));
 		}
 
 		/* nothing strange happened really */
@@ -233,9 +228,7 @@ static apr_byte_t oidc_cache_file_get(request_rec *r, const char *key,
 
 	/* barf on failure */
 	if (rc != APR_SUCCESS) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_cache_file_get: could not read cache value from \"%s\"",
-				path);
+		oidc_error(r, "could not read cache value from \"%s\"", path);
 		goto error_close;
 	}
 
@@ -244,8 +237,8 @@ static apr_byte_t oidc_cache_file_get(request_rec *r, const char *key,
 	apr_file_close(fd);
 
 	/* log a successful cache hit */
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_cache_file_get: cache hit for key \"%s\" (%" APR_SIZE_T_FMT " bytes, expiring in: %" APR_TIME_T_FMT ")",
+	oidc_debug(r,
+			"cache hit for key \"%s\" (%" APR_SIZE_T_FMT " bytes, expiring in: %" APR_TIME_T_FMT ")",
 			key, info.len, apr_time_sec(info.expire - apr_time_now()));
 
 	return TRUE;
@@ -255,8 +248,7 @@ error_close:
 	apr_file_unlock(fd);
 	apr_file_close(fd);
 
-	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-			"oidc_cache_file_get: return error status %d (%s)", rc,
+	oidc_error(r, "return error status %d (%s)", rc,
 			apr_strerror(rc, s_err, sizeof(s_err)));
 
 	return FALSE;
@@ -290,11 +282,10 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 
 		/* really only clean once per so much time, check that we haven not recently run */
 		if (apr_time_now() < fi.mtime + apr_time_from_sec(cfg->cache_file_clean_interval)) {
-			ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-					"oidc_cache_clean: last cleanup call was less than %d seconds ago (next one as early as in %" APR_TIME_T_FMT " secs)",
+			oidc_debug(r,
+					"last cleanup call was less than %d seconds ago (next one as early as in %" APR_TIME_T_FMT " secs)",
 					cfg->cache_file_clean_interval,
-					apr_time_sec(
-							fi.mtime + apr_time_from_sec(cfg->cache_file_clean_interval) - apr_time_now()));
+					apr_time_sec( fi.mtime + apr_time_from_sec(cfg->cache_file_clean_interval) - apr_time_now()));
 			return APR_SUCCESS;
 		}
 
@@ -307,24 +298,21 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 		if ((rc = apr_file_open(&fd, metadata_path,
 				(APR_FOPEN_WRITE | APR_FOPEN_CREATE), APR_OS_DEFAULT, r->pool))
 				!= APR_SUCCESS) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_cache_file_clean: error creating cache timestamp file '%s' (%s)",
+			oidc_error(r, "error creating cache timestamp file '%s' (%s)",
 					metadata_path, apr_strerror(rc, s_err, sizeof(s_err)));
 			return rc;
 		}
 
 		/* and cleanup... */
 		if ((rc = apr_file_close(fd)) != APR_SUCCESS) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_cache_file_clean: error closing cache timestamp file '%s' (%s)",
+			oidc_error(r, "error closing cache timestamp file '%s' (%s)",
 					metadata_path, apr_strerror(rc, s_err, sizeof(s_err)));
 		}
 	}
 
 	/* time to clean, open the cache directory */
 	if ((rc = apr_dir_open(&dir, cfg->cache_file_dir, r->pool)) != APR_SUCCESS) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_cache_file_clean: error opening cache directory '%s' for cleaning (%s)",
+		oidc_error(r, "error opening cache directory '%s' for cleaning (%s)",
 				cfg->cache_file_dir, apr_strerror(rc, s_err, sizeof(s_err)));
 		return rc;
 	}
@@ -349,9 +337,8 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 					cfg->cache_file_dir, fi.name);
 			if ((rc = apr_file_open(&fd, path, APR_FOPEN_READ, APR_OS_DEFAULT,
 					r->pool)) != APR_SUCCESS) {
-				ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-						"oidc_cache_file_clean: unable to open cache entry \"%s\" (%s)",
-						path, apr_strerror(rc, s_err, sizeof(s_err)));
+				oidc_error(r, "unable to open cache entry \"%s\" (%s)", path,
+						apr_strerror(rc, s_err, sizeof(s_err)));
 				continue;
 			}
 
@@ -367,15 +354,14 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 					continue;
 
 				/* the cache entry expired, we're going to remove it so log that event */
-				ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-						"oidc_cache_file_clean: cache entry (%s) expired, removing file \"%s\")",
+				oidc_debug(r, "cache entry (%s) expired, removing file \"%s\")",
 						fi.name, path);
 
 			} else {
 
 				/* file open returned an error, log that */
-				ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-						"oidc_cache_file_clean: cache entry (%s) corrupted (%s), removing file \"%s\"",
+				oidc_error(r,
+						"cache entry (%s) corrupted (%s), removing file \"%s\"",
 						fi.name, apr_strerror(rc, s_err, sizeof(s_err)), path);
 
 			}
@@ -384,9 +370,8 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 			if ((rc = apr_file_remove(path, r->pool)) != APR_SUCCESS) {
 
 				/* hrm, this will most probably happen again on the next run... */
-				ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-						"oidc_cache_file_clean: could not delete cache file \"%s\" (%s)",
-						path, apr_strerror(rc, s_err, sizeof(s_err)));
+				oidc_error(r, "could not delete cache file \"%s\" (%s)", path,
+						apr_strerror(rc, s_err, sizeof(s_err)));
 			}
 
 		}
@@ -416,9 +401,8 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *key,
 	/* just remove cache file if value is NULL */
 	if (value == NULL) {
 		if ((rc = apr_file_remove(path, r->pool)) != APR_SUCCESS) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_cache_file_set: could not delete cache file \"%s\" (%s)",
-					path, apr_strerror(rc, s_err, sizeof(s_err)));
+			oidc_error(r, "could not delete cache file \"%s\" (%s)", path,
+					apr_strerror(rc, s_err, sizeof(s_err)));
 		}
 		return TRUE;
 	}
@@ -426,9 +410,8 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *key,
 	/* try to open the cache file for writing, creating it if it does not exist */
 	if ((rc = apr_file_open(&fd, path, (APR_FOPEN_WRITE | APR_FOPEN_CREATE),
 	APR_OS_DEFAULT, r->pool)) != APR_SUCCESS) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_cache_file_set: cache file \"%s\" could not be opened (%s)",
-				path, apr_strerror(rc, s_err, sizeof(s_err)));
+		oidc_error(r, "cache file \"%s\" could not be opened (%s)", path,
+				apr_strerror(rc, s_err, sizeof(s_err)));
 		return FALSE;
 	}
 
@@ -457,8 +440,8 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *key,
 	apr_file_close(fd);
 
 	/* log our success */
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_cache_file_set: set entry for key \"%s\" (%" APR_SIZE_T_FMT " bytes, expires in: %" APR_TIME_T_FMT ")",
+	oidc_debug(r,
+			"set entry for key \"%s\" (%" APR_SIZE_T_FMT " bytes, expires in: %" APR_TIME_T_FMT ")",
 			key, info.len, apr_time_sec(expiry - apr_time_now()));
 
 	return TRUE;

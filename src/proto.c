@@ -68,8 +68,7 @@ int oidc_proto_authorization_request_post_preserve(request_rec *r,
 	/* read the parameters that are POST-ed to us */
 	apr_table_t *params = apr_table_make(r->pool, 8);
 	if (oidc_util_read_post(r, params) == FALSE) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_authorization_request: something went wrong when reading the POST parameters");
+		oidc_error(r, "something went wrong when reading the POST parameters");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -116,8 +115,8 @@ int oidc_proto_authorization_request(request_rec *r,
 		const char *auth_request_params) {
 
 	/* log some stuff */
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_authorization_request: entering (issuer=%s, redirect_uri=%s, original_url=%s, state=%s, nonce=%s)",
+	oidc_debug(r,
+			"enter, issuer=%s, redirect_uri=%s, original_url=%s, state=%s, nonce=%s",
 			provider->issuer, redirect_uri, proto_state->original_url, state,
 			proto_state->nonce);
 
@@ -189,8 +188,7 @@ int oidc_proto_authorization_request(request_rec *r,
 	apr_table_add(r->headers_out, "Location", authorization_request);
 
 	/* some more logging */
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_authorization_request: adding outgoing header: Location: %s",
+	oidc_debug(r, "adding outgoing header: Location: %s",
 			authorization_request);
 
 	/* and tell Apache to return an HTTP Redirect (302) message */
@@ -231,8 +229,8 @@ static apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
 	const char *replay = NULL;
 	cfg->cache->get(r, nonce, &replay);
 	if (replay != NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_nonce: the nonce value (%s) passed in the browser state was found in the cache already; possible replay attack!?",
+		oidc_error(r,
+				"the nonce value (%s) passed in the browser state was found in the cache already; possible replay attack!?",
 				nonce);
 		return FALSE;
 	}
@@ -242,15 +240,15 @@ static apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
 	apr_jwt_get_string(r->pool, &jwt->payload.value, "nonce", &j_nonce);
 
 	if (j_nonce == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_nonce: id_token JSON payload did not contain a \"nonce\" string");
+		oidc_error(r,
+				"id_token JSON payload did not contain a \"nonce\" string");
 		return FALSE;
 	}
 
 	/* see if the nonce in the id_token matches the one that we sent in the authorization request */
 	if (apr_strnatcmp(nonce, j_nonce) != 0) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_nonce: the nonce value (%s) in the id_token did not match the one stored in the browser session (%s)",
+		oidc_error(r,
+				"the nonce value (%s) in the id_token did not match the one stored in the browser session (%s)",
 				j_nonce, nonce);
 		return FALSE;
 	}
@@ -265,8 +263,8 @@ static apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
 	/* store it in the cache for the calculated duration */
 	cfg->cache->set(r, nonce, nonce, apr_time_now() + nonce_cache_duration);
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_validate_nonce: nonce \"%s\" validated successfully and is now cached for %" APR_TIME_T_FMT " seconds",
+	oidc_debug(r,
+			"nonce \"%s\" validated successfully and is now cached for %" APR_TIME_T_FMT " seconds",
 			nonce, apr_time_sec(nonce_cache_duration));
 
 	return TRUE;
@@ -287,8 +285,8 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 	 * the same as the sole audience.
 	 */
 	if ((azp != NULL) && (apr_strnatcmp(azp, provider->client_id) != 0)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_aud_and_azp: the \"azp\" claim (%s) is present in the id_token, but is not equal to the configured client_id (%s)",
+		oidc_error(r,
+				"the \"azp\" claim (%s) is present in the id_token, but is not equal to the configured client_id (%s)",
 				azp, provider->client_id);
 		return FALSE;
 	}
@@ -303,8 +301,8 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 			/* a single-valued audience must be equal to our client_id */
 			if (apr_strnatcmp(json_string_value(aud), provider->client_id)
 					!= 0) {
-				ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-						"oidc_proto_validate_aud_and_azp: the configured client_id (%s) did not match the \"aud\" claim value (%s) in the id_token",
+				oidc_error(r,
+						"the configured client_id (%s) did not match the \"aud\" claim value (%s) in the id_token",
 						provider->client_id, json_string_value(aud));
 				return FALSE;
 			}
@@ -313,26 +311,25 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 		} else if (json_is_array(aud)) {
 
 			if ((json_array_size(aud) > 1) && (azp == NULL)) {
-				ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-						"oidc_proto_validate_aud_and_azp: the \"aud\" claim value in the id_token is an array with more than 1 element, but \"azp\" claim is not present (a SHOULD in the spec...)");
+				oidc_debug(r,
+						"the \"aud\" claim value in the id_token is an array with more than 1 element, but \"azp\" claim is not present (a SHOULD in the spec...)");
 			}
 
 			if (oidc_util_json_array_has_value(r, aud,
 					provider->client_id) == FALSE) {
-				ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-						"oidc_proto_validate_aud_and_azp: our configured client_id (%s) could not be found in the array of values for \"aud\" claim",
+				oidc_error(r,
+						"our configured client_id (%s) could not be found in the array of values for \"aud\" claim",
 						provider->client_id);
 				return FALSE;
 			}
 		} else {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_proto_validate_aud_and_azp: id_token JSON payload \"aud\" claim is not a string nor an array");
+			oidc_error(r,
+					"id_token JSON payload \"aud\" claim is not a string nor an array");
 			return FALSE;
 		}
 
 	} else {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_aud_and_azp: id_token JSON payload did not contain an \"aud\" claim");
+		oidc_error(r, "id_token JSON payload did not contain an \"aud\" claim");
 		return FALSE;
 	}
 
@@ -345,23 +342,23 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 apr_byte_t oidc_proto_validate_iat(request_rec *r, oidc_provider_t *provider,
 		apr_jwt_t *jwt) {
 	if (jwt->payload.iat == APR_JWT_CLAIM_TIME_EMPTY) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_iat: id_token JSON payload did not contain an \"iat\" number value");
+		oidc_error(r,
+				"id_token JSON payload did not contain an \"iat\" number value");
 		return FALSE;
 	}
 
 	/* check if this id_token has been issued just now +- slack (default 10 minutes) */
 	if ((apr_time_now() - apr_time_from_sec(provider->idtoken_iat_slack))
 			> jwt->payload.iat) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_iat: \"iat\" validation failure (%" APR_TIME_T_FMT "): JWT was issued more than %d seconds ago",
+		oidc_error(r,
+				"\"iat\" validation failure (%" APR_TIME_T_FMT "): JWT was issued more than %d seconds ago",
 				jwt->payload.iat, provider->idtoken_iat_slack);
 		return FALSE;
 	}
 	if ((apr_time_now() + apr_time_from_sec(provider->idtoken_iat_slack))
 			< jwt->payload.iat) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_iat: \"iat\" validation failure (%" APR_TIME_T_FMT "): JWT was issued more than %d seconds in the future",
+		oidc_error(r,
+				"\"iat\" validation failure (%" APR_TIME_T_FMT "): JWT was issued more than %d seconds in the future",
 				jwt->payload.iat, provider->idtoken_iat_slack);
 		return FALSE;
 	}
@@ -374,8 +371,8 @@ apr_byte_t oidc_proto_validate_iat(request_rec *r, oidc_provider_t *provider,
  */
 apr_byte_t oidc_proto_validate_exp(request_rec *r, apr_jwt_t *jwt) {
 	if (apr_time_now() > jwt->payload.exp) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_exp: \"exp\" validation failure (%" APR_TIME_T_FMT "): JWT expired",
+		oidc_error(r,
+				"\"exp\" validation failure (%" APR_TIME_T_FMT "): JWT expired",
 				jwt->payload.exp);
 		return FALSE;
 	}
@@ -391,8 +388,7 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_validate_idtoken: entering jwt.header=\"%s\", jwt.payload=\%s\", nonce=%s",
+	oidc_debug(r, "enter, jwt.header=\"%s\", jwt.payload=\%s\", nonce=%s",
 			jwt->header.value.str, jwt->payload.value.str, nonce);
 
 	/* if a nonce is not passed, we're doing a ("code") flow where the nonce is optional */
@@ -404,15 +400,14 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
 
 	/* issuer is mandatory in id_token */
 	if (jwt->payload.iss == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_idtoken: response JSON object did not contain an \"iss\" string");
+		oidc_error(r, "response JSON object did not contain an \"iss\" string");
 		return FALSE;
 	}
 
 	/* check if the issuer matches the requested value */
 	if (oidc_util_issuer_match(provider->issuer, jwt->payload.iss) == FALSE) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_idtoken: configured issuer (%s) does not match received \"iss\" value in id_token (%s)",
+		oidc_error(r,
+				"configured issuer (%s) does not match received \"iss\" value in id_token (%s)",
 				provider->issuer, jwt->payload.iss);
 		return FALSE;
 	}
@@ -427,8 +422,8 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
 
 	/* check if the required-by-spec "sub" claim is present */
 	if (jwt->payload.sub == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_idtoken: id_token JSON payload did not contain the required-by-spec \"sub\" string value");
+		oidc_error(r,
+				"id_token JSON payload did not contain the required-by-spec \"sub\" string value");
 		return FALSE;
 	}
 
@@ -450,15 +445,13 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 	char *x5t = NULL;
 	apr_jwt_get_string(r->pool, &jwt_hdr->value, "x5t", &x5t);
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_get_key_from_jwks: search for kid \"%s\" or thumbprint x5t \"%s\"",
+	oidc_debug(r, "search for kid \"%s\" or thumbprint x5t \"%s\"",
 			jwt_hdr->kid, x5t);
 
 	/* get the "keys" JSON array from the JWKs object */
 	json_t *keys = json_object_get(j_jwks, "keys");
 	if ((keys == NULL) || !(json_is_array(keys))) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_get_key_from_jwks: \"keys\" array element is not a JSON array");
+		oidc_error(r, "\"keys\" array element is not a JSON array");
 		return FALSE;
 	}
 
@@ -470,8 +463,8 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 
 		/* check that it is a JSON object */
 		if (!json_is_object(elem)) {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_proto_get_key_from_jwks: \"keys\" array element is not a JSON object, skipping");
+			oidc_warn(r,
+					"\"keys\" array element is not a JSON object, skipping");
 			continue;
 		}
 
@@ -483,8 +476,7 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 
 		/* see if we were looking for a specific kid, if not we'll return the first one found */
 		if ((jwt_hdr->kid == NULL) && (x5t == NULL)) {
-			ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-					"oidc_proto_get_key_from_jwks: no kid/x5t to match, return first key found");
+			oidc_debug(r, "no kid/x5t to match, return first key found");
 
 			apr_jwk_parse_json(r->pool, elem, NULL, result);
 			break;
@@ -495,9 +487,7 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 		if ((ekid != NULL) && json_is_string(ekid) && (jwt_hdr->kid != NULL)) {
 			/* compare the requested kid against the current element */
 			if (apr_strnatcmp(jwt_hdr->kid, json_string_value(ekid)) == 0) {
-				ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-						"oidc_proto_get_key_from_jwks: found matching kid: \"%s\"",
-						jwt_hdr->kid);
+				oidc_debug(r, "found matching kid: \"%s\"", jwt_hdr->kid);
 
 				apr_jwk_parse_json(r->pool, elem, NULL, result);
 				break;
@@ -509,9 +499,7 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 		if ((ex5t != NULL) && json_is_string(ex5t) && (x5t != NULL)) {
 			/* compare the requested kid against the current element */
 			if (apr_strnatcmp(x5t, json_string_value(ex5t)) == 0) {
-				ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-						"oidc_proto_get_key_from_jwks: found matching x5t: \"%s\"",
-						x5t);
+				oidc_debug(r, "found matching x5t: \"%s\"", x5t);
 
 				apr_jwk_parse_json(r->pool, elem, NULL, result);
 				break;
@@ -535,8 +523,7 @@ static apr_jwk_t *oidc_proto_get_key_from_jwk_uri(request_rec *r, oidc_cfg *cfg,
 	/* get the set of JSON Web Keys for this provider (possibly by downloading them from the specified provider->jwk_uri) */
 	oidc_metadata_jwks_get(r, cfg, provider, &j_jwks, refresh);
 	if (j_jwks == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_get_key_from_jwk_uri: could not resolve JSON Web Keys");
+		oidc_error(r, "could not resolve JSON Web Keys");
 		return NULL;
 	}
 
@@ -551,15 +538,14 @@ static apr_jwk_t *oidc_proto_get_key_from_jwk_uri(request_rec *r, oidc_cfg *cfg,
 
 		/* we did not get a key, but we have not refreshed the JWKs from the jwks_uri yet */
 
-		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-				"oidc_proto_get_key_from_jwk_uri: could not find a key in the cached JSON Web Keys, doing a forced refresh");
+		oidc_warn(r,
+				"could not find a key in the cached JSON Web Keys, doing a forced refresh");
 
 		/* get the set of JSON Web Keys for this provider forcing a fresh download from the specified provider->jwk_uri) */
 		*refresh = TRUE;
 		oidc_metadata_jwks_get(r, cfg, provider, &j_jwks, refresh);
 		if (j_jwks == NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_proto_get_key_from_jwk_uri: could not refresh JSON Web Keys");
+			oidc_error(r, "could not refresh JSON Web Keys");
 			return NULL;
 		}
 
@@ -586,8 +572,8 @@ apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r, oidc_cfg *cfg,
 
 	if (apr_jws_signature_is_hmac(r->pool, jwt)) {
 
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_proto_idtoken_verify_signature: verifying HMAC signature on id_token: header=%s, message=%s",
+		oidc_debug(r,
+				"verifying HMAC signature on id_token: header=%s, message=%s",
 				jwt->header.value.str, jwt->message);
 
 		result = apr_jws_verify_hmac(r->pool, jwt, provider->client_secret,
@@ -606,8 +592,8 @@ apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r, oidc_cfg *cfg,
 
 		if (jwk != NULL) {
 
-			ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-					"oidc_proto_idtoken_verify_signature: verifying RSA/EC signature on id_token: header=%s, message=%s",
+			oidc_debug(r,
+					"verifying RSA/EC signature on id_token: header=%s, message=%s",
 					jwt->header.value.str, jwt->message);
 
 			result =
@@ -621,13 +607,11 @@ apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r, oidc_cfg *cfg,
 
 		} else {
 
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_proto_idtoken_verify_signature: could not find a key in the JSON Web Keys");
+			oidc_warn(r, "could not find a key in the JSON Web Keys");
 
 			if (*refresh == FALSE) {
 
-				ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-						"oidc_proto_idtoken_verify_signature: force refresh of the JWKS");
+				oidc_debug(r, "force refresh of the JWKS");
 
 				/* do it again, forcing a JWKS refresh */
 				*refresh = TRUE;
@@ -638,14 +622,13 @@ apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r, oidc_cfg *cfg,
 
 	} else {
 
-		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-				"oidc_proto_idtoken_verify_signature: cannot verify id_token; unsupported algorithm \"%s\", must be RSA or HMAC",
+		oidc_warn(r,
+				"cannot verify id_token; unsupported algorithm \"%s\", must be RSA or HMAC",
 				jwt->header.alg);
 
 	}
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_idtoken_verify_signature: verification result of signature with algorithm \"%s\": %s",
+	oidc_debug(r, "verification result of signature with algorithm \"%s\": %s",
 			jwt->header.alg, (result == TRUE) ? "TRUE" : "FALSE");
 
 	return result;
@@ -674,8 +657,8 @@ static apr_byte_t oidc_proto_set_remote_user(request_rec *r, oidc_cfg *c,
 	apr_jwt_get_string(r->pool, &jwt->payload.value, claim_name, &username);
 
 	if (username == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_set_remote_user: OIDCRemoteUserClaim is set to \"%s\", but the id_token JSON payload did not contain a \"%s\" string",
+		oidc_error(r,
+				"OIDCRemoteUserClaim is set to \"%s\", but the id_token JSON payload did not contain a \"%s\" string",
 				c->remote_user_claim, claim_name);
 		return FALSE;
 	}
@@ -685,8 +668,7 @@ static apr_byte_t oidc_proto_set_remote_user(request_rec *r, oidc_cfg *c,
 			apr_psprintf(r->pool, "%s@%s", username, issuer) :
 			apr_pstrdup(r->pool, username);
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_set_remote_user: set remote_user to %s", *user);
+	oidc_debug(r, "set remote_user to \"%s\"", *user);
 
 	return TRUE;
 }
@@ -698,34 +680,31 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char *id_token, const char *nonce,
 		char **user, apr_jwt_t **jwt, apr_byte_t is_code_flow) {
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_parse_idtoken: entering");
+	oidc_debug(r, "enter");
 
 	if (apr_jwt_parse(r->pool, id_token, jwt, cfg->private_keys,
 			provider->client_secret) == FALSE) {
 		if ((*jwt) && ((*jwt)->header.alg)
 				&& (apr_jwe_algorithm_is_supported(r->pool, (*jwt)->header.alg)
 						== FALSE)) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_proto_parse_idtoken: JWE content key encryption algorithm is not supported: %s",
+			oidc_error(r,
+					"JWE content key encryption algorithm is not supported: %s",
 					(*jwt)->header.alg);
 		}
 		if ((*jwt) && ((*jwt)->header.enc)
 				&& (apr_jwe_encryption_is_supported(r->pool, (*jwt)->header.enc)
 						== FALSE)) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_proto_parse_idtoken: JWE encryption type is not supported: %s",
+			oidc_error(r, "JWE encryption type is not supported: %s",
 					(*jwt)->header.enc);
 		}
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_parse_idtoken: apr_jwt_parse failed for JWT with header: \"%s\"",
+		oidc_error(r, "apr_jwt_parse failed for JWT with header: \"%s\"",
 				apr_jwt_header_to_string(r->pool, id_token));
 		apr_jwt_destroy(*jwt);
 		return FALSE;
 	}
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_parse_idtoken: successfully parsed (and possibly decrypted) JWT with header: \"%s\"",
+	oidc_debug(r,
+			"successfully parsed (and possibly decrypted) JWT with header: \"%s\"",
 			apr_jwt_header_to_string(r->pool, id_token));
 
 	// make signature validation exception for 'code' flow and the algorithm NONE
@@ -734,8 +713,8 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 		apr_byte_t refresh = FALSE;
 		if (oidc_proto_idtoken_verify_signature(r, cfg, provider, *jwt,
 				&refresh) == FALSE) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_proto_parse_idtoken: id_token signature could not be validated, aborting");
+			oidc_error(r,
+					"id_token signature could not be validated, aborting");
 			apr_jwt_destroy(*jwt);
 			return FALSE;
 		}
@@ -743,22 +722,20 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 
 	/* this is where the meat is */
 	if (oidc_proto_validate_idtoken(r, provider, *jwt, nonce) == FALSE) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_parse_idtoken: id_token payload could not be validated, aborting");
+		oidc_error(r, "id_token payload could not be validated, aborting");
 		apr_jwt_destroy(*jwt);
 		return FALSE;
 	}
 
 	if (oidc_proto_set_remote_user(r, cfg, provider, *jwt, user) == FALSE) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_parse_idtoken: remote user could not be set, aborting");
+		oidc_error(r, "remote user could not be set, aborting");
 		apr_jwt_destroy(*jwt);
 		return FALSE;
 	}
 
 	/* log our results */
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_parse_idtoken: valid id_token for user \"%s\" (expires in %" APR_TIME_T_FMT " seconds)",
+	oidc_debug(r,
+			"valid id_token for user \"%s\" (expires in %" APR_TIME_T_FMT " seconds)",
 			*user, (*jwt)->payload.exp - apr_time_sec(apr_time_now()));
 
 	/* since we've made it so far, we may as well say it is a valid id_token */
@@ -773,8 +750,8 @@ apr_byte_t oidc_proto_check_token_type(request_rec *r,
 	/*  we only support bearer/Bearer  */
 	if ((token_type != NULL) && (apr_strnatcasecmp(token_type, "Bearer") != 0)
 			&& (provider->userinfo_endpoint_url != NULL)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_check_token_type: token_type is \"%s\" and UserInfo endpoint (%s) for issuer \"%s\" is set: can only deal with Bearer authentication against a UserInfo endpoint!",
+		oidc_error(r,
+				"token_type is \"%s\" and UserInfo endpoint (%s) for issuer \"%s\" is set: can only deal with Bearer authentication against a UserInfo endpoint!",
 				token_type, provider->userinfo_endpoint_url, provider->issuer);
 		return FALSE;
 	}
@@ -788,8 +765,7 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char *code, char **s_idtoken,
 		char **s_access_token, char **s_token_type) {
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_resolve_code: entering");
+	oidc_debug(r, "enter");
 	const char *response = NULL;
 
 	/* assemble the parameters for a call to the token endpoint */
@@ -825,8 +801,8 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 	if (oidc_util_http_post_form(r, provider->token_endpoint_url, params,
 			basic_auth, NULL, provider->ssl_validate_server, &response,
 			cfg->http_timeout_long, cfg->outgoing_proxy) == FALSE) {
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_proto_resolve_code: could not successfully resolve the \"code\" (%s) against the token endpoint (%s)",
+		oidc_warn(r,
+				"could not successfully resolve the \"code\" (%s) against the token endpoint (%s)",
 				code, provider->token_endpoint_url);
 		return FALSE;
 	}
@@ -843,15 +819,13 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 		*s_access_token = apr_pstrdup(r->pool, json_string_value(access_token));
 
 		/* log and set the obtained acces_token */
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_proto_resolve_code: returned access_token: %s",
-				*s_access_token);
+		oidc_debug(r, "returned access_token: %s", *s_access_token);
 
 		/* the provider must return the token type */
 		json_t *token_type = json_object_get(result, "token_type");
 		if ((token_type == NULL) || (!json_is_string(token_type))) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_proto_resolve_code: response JSON object did not contain a token_type string");
+			oidc_error(r,
+					"response JSON object did not contain a token_type string");
 			json_decref(result);
 			return FALSE;
 		}
@@ -859,8 +833,8 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 		*s_token_type = apr_pstrdup(r->pool, json_string_value(token_type));
 
 	} else {
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_proto_resolve_code: response JSON object did not contain an access_token string");
+		oidc_debug(r,
+				"response JSON object did not contain an access_token string");
 	}
 
 	/* get the id_token from the response */
@@ -869,8 +843,7 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 		*s_idtoken = apr_pstrdup(r->pool, json_string_value(id_token));
 
 		/* log and set the obtained id_token */
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_proto_resolve_code: returned id_token: %s", *s_idtoken);
+		oidc_debug(r, "returned id_token: %s", *s_idtoken);
 	}
 
 	json_decref(result);
@@ -885,8 +858,7 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char *access_token,
 		const char **response, json_t **claims) {
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_resolve_userinfo: entering, endpoint=%s, access_token=%s",
+	oidc_debug(r, "enter, endpoint=%s, access_token=%s",
 			provider->userinfo_endpoint_url, access_token);
 
 	/* only do this if an actual endpoint was set */
@@ -915,14 +887,12 @@ apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg,
 
 	// TODO: maybe show intermediate/progress screen "discovering..."
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_account_based_discovery: entering, acct=%s", acct);
+	oidc_debug(r, "enter, acct=%s", acct);
 
 	const char *resource = apr_psprintf(r->pool, "acct:%s", acct);
 	const char *domain = strrchr(acct, '@');
 	if (domain == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_account_based_discovery: invalid account name");
+		oidc_error(r, "invalid account name");
 		return FALSE;
 	}
 	domain++;
@@ -949,8 +919,7 @@ apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg,
 	/* get the links parameter */
 	json_t *j_links = json_object_get(j_response, "links");
 	if ((j_links == NULL) || (!json_is_array(j_links))) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_account_based_discovery: response JSON object did not contain a \"links\" array");
+		oidc_error(r, "response JSON object did not contain a \"links\" array");
 		json_decref(j_response);
 		return FALSE;
 	}
@@ -958,8 +927,8 @@ apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg,
 	/* get the one-and-only object in the "links" array */
 	json_t *j_object = json_array_get(j_links, 0);
 	if ((j_object == NULL) || (!json_is_object(j_object))) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_account_based_discovery: response JSON object did not contain a JSON object as the first element in the \"links\" array");
+		oidc_error(r,
+				"response JSON object did not contain a JSON object as the first element in the \"links\" array");
 		json_decref(j_response);
 		return FALSE;
 	}
@@ -967,16 +936,16 @@ apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg,
 	/* get the href from that object, which is the issuer value */
 	json_t *j_href = json_object_get(j_object, "href");
 	if ((j_href == NULL) || (!json_is_string(j_href))) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_account_based_discovery: response JSON object did not contain a \"href\" element in the first \"links\" array object");
+		oidc_error(r,
+				"response JSON object did not contain a \"href\" element in the first \"links\" array object");
 		json_decref(j_response);
 		return FALSE;
 	}
 
 	*issuer = apr_pstrdup(r->pool, json_string_value(j_href));
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_account_based_discovery: returning issuer \"%s\" for account \"%s\" after doing successful webfinger-based discovery",
+	oidc_debug(r,
+			"returning issuer \"%s\" for account \"%s\" after doing successful webfinger-based discovery",
 			*issuer, acct);
 
 	json_decref(j_response);
@@ -986,8 +955,7 @@ apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg,
 
 int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg *c) {
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_javascript_implicit: entering");
+	oidc_debug(r, "enter");
 
 //	char *java_script = NULL;
 //	if (oidc_util_file_read(r, "/Users/hzandbelt/eclipse-workspace/mod_auth_openidc/src/implicit_post.html", &java_script) == FALSE) return HTTP_INTERNAL_SERVER_ERROR;
@@ -1041,14 +1009,14 @@ static apr_byte_t oidc_proto_validate_hash(request_rec *r, const char *alg,
 
 	/* compare the calculated hash against the provided hash */
 	if ((apr_strnatcmp(encoded, hash) != 0)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_proto_validate_hash: provided \"%s\" hash value (%s) does not match the calculated value (%s)",
+		oidc_error(r,
+				"provided \"%s\" hash value (%s) does not match the calculated value (%s)",
 				type, hash, encoded);
 		return FALSE;
 	}
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_validate_hash: successfully validated the provided \"%s\" hash value (%s) against the calculated value (%s)",
+	oidc_debug(r,
+			"successfully validated the provided \"%s\" hash value (%s) against the calculated value (%s)",
 			type, hash, encoded);
 
 	return TRUE;
@@ -1078,8 +1046,7 @@ static apr_byte_t oidc_proto_validate_hash_value(request_rec *r,
 		for (i = 0; i < required_for_flows->nelts; i++) {
 			if (oidc_util_spaced_string_equals(r->pool, response_type,
 					((const char**) required_for_flows->elts)[i])) {
-				ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-						"oidc_proto_validate_hash_value: flow is \"%s\", but no %s found in id_token",
+				oidc_warn(r, "flow is \"%s\", but no %s found in id_token",
 						response_type, key);
 				return FALSE;
 			}
@@ -1158,8 +1125,8 @@ apr_byte_t oidc_proto_validate_authorization_response(request_rec *r,
 		char **code, char **id_token, char **access_token, char **token_type,
 		const char *used_response_mode) {
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_validate_authorization_response: entering, response_type=%s, requested_response_mode=%s, code=%s, id_token=%s, access_token=%s, token_type=%s, used_response_mode=%s",
+	oidc_debug(r,
+			"enter, response_type=%s, requested_response_mode=%s, code=%s, id_token=%s, access_token=%s, token_type=%s, used_response_mode=%s",
 			response_type, requested_response_mode, *code, *id_token,
 			*access_token, *token_type, used_response_mode);
 
@@ -1170,8 +1137,8 @@ apr_byte_t oidc_proto_validate_authorization_response(request_rec *r,
 		 * only warn because I'm not sure that most OPs will respect a requested
 		 * response_mode and rather use the default for the flow
 		 */
-		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-				"oidc_proto_validate_authorization_response: requested response_mode is \"%s\" the provider used \"%s\" for the authorization response...",
+		oidc_warn(r,
+				"requested response_mode is \"%s\" the provider used \"%s\" for the authorization response...",
 				requested_response_mode, used_response_mode);
 	}
 
@@ -1181,8 +1148,8 @@ apr_byte_t oidc_proto_validate_authorization_response(request_rec *r,
 	if (oidc_util_spaced_string_contains(r->pool, response_type, "code")) {
 
 		if (*code == NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_proto_validate_authorization_response: requested flow is \"%s\" but no \"code\" parameter found in the authorization response",
+			oidc_error(r,
+					"requested flow is \"%s\" but no \"code\" parameter found in the authorization response",
 					response_type);
 			return FALSE;
 		}
@@ -1190,8 +1157,8 @@ apr_byte_t oidc_proto_validate_authorization_response(request_rec *r,
 	} else {
 
 		if (*code != NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_proto_validate_authorization_response: requested flow is \"%s\" but there is a \"code\" parameter in the authorization response that will be dropped",
+			oidc_warn(r,
+					"requested flow is \"%s\" but there is a \"code\" parameter in the authorization response that will be dropped",
 					response_type);
 			*code = NULL;
 		}
@@ -1203,8 +1170,8 @@ apr_byte_t oidc_proto_validate_authorization_response(request_rec *r,
 	if (oidc_util_spaced_string_contains(r->pool, response_type, "id_token")) {
 
 		if (*id_token == NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_proto_validate_authorization_response: requested flow is \"%s\" but no \"id_token\" parameter found in the authorization response",
+			oidc_error(r,
+					"requested flow is \"%s\" but no \"id_token\" parameter found in the authorization response",
 					response_type);
 			return FALSE;
 		}
@@ -1212,8 +1179,8 @@ apr_byte_t oidc_proto_validate_authorization_response(request_rec *r,
 	} else {
 
 		if (*id_token != NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_proto_validate_authorization_response: requested flow is \"%s\" but there is an \"id_token\" parameter in the authorization response that will be dropped",
+			oidc_warn(r,
+					"requested flow is \"%s\" but there is an \"id_token\" parameter in the authorization response that will be dropped",
 					response_type);
 			*id_token = NULL;
 		}
@@ -1226,15 +1193,15 @@ apr_byte_t oidc_proto_validate_authorization_response(request_rec *r,
 	if (oidc_util_spaced_string_contains(r->pool, response_type, "token")) {
 
 		if (*access_token == NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_proto_validate_authorization_response: requested flow is \"%s\" but no \"access_token\" parameter found in the authorization response",
+			oidc_error(r,
+					"requested flow is \"%s\" but no \"access_token\" parameter found in the authorization response",
 					response_type);
 			return FALSE;
 		}
 
 		if (*token_type == NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_proto_validate_authorization_response: requested flow is \"%s\" but no \"token_type\" parameter found in the authorization response",
+			oidc_error(r,
+					"requested flow is \"%s\" but no \"token_type\" parameter found in the authorization response",
 					response_type);
 			return FALSE;
 		}
@@ -1242,15 +1209,15 @@ apr_byte_t oidc_proto_validate_authorization_response(request_rec *r,
 	} else {
 
 		if (*access_token != NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_proto_validate_authorization_response: requested flow is \"%s\" but there is an \"access_token\" parameter in the authorization response that will be dropped",
+			oidc_warn(r,
+					"requested flow is \"%s\" but there is an \"access_token\" parameter in the authorization response that will be dropped",
 					response_type);
 			*access_token = NULL;
 		}
 
 		if (*token_type != NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_proto_validate_authorization_response: requested flow is \"%s\" but there is a \"token_type\" parameter in the authorization response that will be dropped",
+			oidc_warn(r,
+					"requested flow is \"%s\" but there is a \"token_type\" parameter in the authorization response that will be dropped",
 					response_type);
 			*token_type = NULL;
 		}
@@ -1267,8 +1234,7 @@ apr_byte_t oidc_proto_validate_code_response(request_rec *r,
 		const char *response_type, char **id_token, char **access_token,
 		char **token_type) {
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_proto_validate_code_response: entering");
+	oidc_debug(r, "enter");
 
 	/*
 	 * check id_token parameter
@@ -1276,8 +1242,8 @@ apr_byte_t oidc_proto_validate_code_response(request_rec *r,
 	if (!oidc_util_spaced_string_contains(r->pool, response_type, "id_token")) {
 
 		if (*id_token == NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_proto_validate_code_response: requested flow is \"%s\" but no \"id_token\" parameter found in the code response",
+			oidc_error(r,
+					"requested flow is \"%s\" but no \"id_token\" parameter found in the code response",
 					response_type);
 			return FALSE;
 		}
@@ -1285,8 +1251,8 @@ apr_byte_t oidc_proto_validate_code_response(request_rec *r,
 	} else {
 
 		if (*id_token != NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_proto_validate_code_response: requested flow is \"%s\" but there is an \"id_token\" parameter in the code response that will be dropped",
+			oidc_warn(r,
+					"requested flow is \"%s\" but there is an \"id_token\" parameter in the code response that will be dropped",
 					response_type);
 			*id_token = NULL;
 		}
@@ -1299,15 +1265,15 @@ apr_byte_t oidc_proto_validate_code_response(request_rec *r,
 	if (!oidc_util_spaced_string_contains(r->pool, response_type, "token")) {
 
 		if (*access_token == NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_proto_validate_code_response: requested flow is \"%s\" but no \"access_token\" parameter found in the code response",
+			oidc_error(r,
+					"requested flow is \"%s\" but no \"access_token\" parameter found in the code response",
 					response_type);
 			return FALSE;
 		}
 
 		if (*token_type == NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_proto_validate_code_response: requested flow is \"%s\" but no \"token_type\" parameter found in the code response",
+			oidc_error(r,
+					"requested flow is \"%s\" but no \"token_type\" parameter found in the code response",
 					response_type);
 			return FALSE;
 		}
@@ -1315,15 +1281,15 @@ apr_byte_t oidc_proto_validate_code_response(request_rec *r,
 	} else {
 
 		if (*access_token != NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_proto_validate_code_response: requested flow is \"%s\" but there is an \"access_token\" parameter in the code response that will be dropped",
+			oidc_warn(r,
+					"requested flow is \"%s\" but there is an \"access_token\" parameter in the code response that will be dropped",
 					response_type);
 			*access_token = NULL;
 		}
 
 		if (*token_type != NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_proto_validate_code_response: requested flow is \"%s\" but there is a \"token_type\" parameter in the code response that will be dropped",
+			oidc_warn(r,
+					"requested flow is \"%s\" but there is a \"token_type\" parameter in the code response that will be dropped",
 					response_type);
 			*token_type = NULL;
 		}

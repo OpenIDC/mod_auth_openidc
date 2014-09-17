@@ -72,7 +72,8 @@ typedef struct oidc_cache_cfg_memcache_t {
 
 /* create the cache context */
 static void *oidc_cache_memcache_cfg_create(apr_pool_t *pool) {
-	oidc_cache_cfg_memcache_t *context = apr_pcalloc(pool, sizeof(oidc_cache_cfg_memcache_t));
+	oidc_cache_cfg_memcache_t *context = apr_pcalloc(pool,
+			sizeof(oidc_cache_cfg_memcache_t));
 	context->cache_memcache = NULL;
 	return context;
 }
@@ -81,11 +82,13 @@ static void *oidc_cache_memcache_cfg_create(apr_pool_t *pool) {
  * initialize the memcache struct to a number of memcache servers
  */
 static int oidc_cache_memcache_post_config(server_rec *s) {
-	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
-			s->module_config, &auth_openidc_module);
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(s->module_config,
+			&auth_openidc_module);
 
-	if (cfg->cache_cfg != NULL) return APR_SUCCESS;
-	oidc_cache_cfg_memcache_t *context = oidc_cache_memcache_cfg_create(s->process->pool);
+	if (cfg->cache_cfg != NULL)
+		return APR_SUCCESS;
+	oidc_cache_cfg_memcache_t *context = oidc_cache_memcache_cfg_create(
+			s->process->pool);
 	cfg->cache_cfg = context;
 
 	apr_status_t rv = APR_SUCCESS;
@@ -95,8 +98,8 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 	apr_pool_t *p = s->process->pool;
 
 	if (cfg->cache_memcache_servers == NULL) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
-				"oidc_cache_memcache_post_config: cache type is set to \"memcache\", but no valid OIDCMemCacheServers setting was found");
+		oidc_serror(s,
+				"cache type is set to \"memcache\", but no valid OIDCMemCacheServers setting was found");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -111,8 +114,7 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 	/* allocated space for the number of servers */
 	rv = apr_memcache_create(p, nservers, 0, &context->cache_memcache);
 	if (rv != APR_SUCCESS) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, rv, s,
-				"oidc_cache_memcache_init: failed to create memcache object of '%d' size",
+		oidc_serror(s, "failed to create memcache object of '%d' size",
 				nservers);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
@@ -129,16 +131,12 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 		/* parse out host and port */
 		rv = apr_parse_addr_port(&host_str, &scope_id, &port, split, p);
 		if (rv != APR_SUCCESS) {
-			ap_log_error(APLOG_MARK, APLOG_ERR, rv, s,
-					"oidc_cache_memcache_init: failed to parse cache server: '%s'",
-					split);
+			oidc_serror(s, "failed to parse cache server: '%s'", split);
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 
 		if (host_str == NULL) {
-			ap_log_error(APLOG_MARK, APLOG_ERR, rv, s,
-					"oidc_cache_memcache_init: failed to parse cache server, "
-							"no hostname specified: '%s'", split);
+			oidc_serror(s, "failed to parse cache server, no hostname specified: '%s'", split);
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 
@@ -149,17 +147,16 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 		// TODO: tune this
 		rv = apr_memcache_server_create(p, host_str, port, 0, 1, 1, 60, &st);
 		if (rv != APR_SUCCESS) {
-			ap_log_error(APLOG_MARK, APLOG_ERR, rv, s,
-					"oidc_cache_memcache_init: failed to create cache server: %s:%d",
-					host_str, port);
+			oidc_serror(s, "failed to create cache server: %s:%d", host_str,
+					port);
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 
 		/* add the memcache server struct to the list */
 		rv = apr_memcache_add_server(context->cache_memcache, st);
 		if (rv != APR_SUCCESS) {
-			ap_log_error(APLOG_MARK, APLOG_ERR, rv, s,
-					"oidc_cache_memcache_init: failed to add cache server: %s:%d",
+			oidc_serror(s,
+					"failed to add cache server: %s:%d",
 					host_str, port);
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
@@ -177,30 +174,30 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 static apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *key,
 		const char **value) {
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_cache_memcache_get: entering \"%s\"", key);
+	oidc_debug(r, "enter, key=\"%s\"", key);
 
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
-	oidc_cache_cfg_memcache_t *context = (oidc_cache_cfg_memcache_t *)cfg->cache_cfg;
+	oidc_cache_cfg_memcache_t *context =
+			(oidc_cache_cfg_memcache_t *) cfg->cache_cfg;
 
 	apr_size_t len = 0;
 
 	/* get it */
 	apr_status_t rv = apr_memcache_getp(context->cache_memcache, r->pool, key,
-			(char **)value, &len, NULL);
+			(char **) value, &len, NULL);
 
 	// TODO: error strings ?
 	if (rv != APR_SUCCESS) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, rv, r,
-				"oidc_cache_memcache_get: apr_memcache_getp returned an error");
+		oidc_error(r, "apr_memcache_getp returned an error");
 		return FALSE;
 	}
 
 	/* do sanity checking on the string value */
-	if ( (*value) && (strlen(*value) != len) ) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, rv, r,
-				"oidc_cache_memcache_get: apr_memcache_getp returned less bytes than expected: strlen(value) [%zu] != len [%" APR_SIZE_T_FMT "]", strlen(*value), len);
+	if ((*value) && (strlen(*value) != len)) {
+		oidc_error(r,
+				"apr_memcache_getp returned less bytes than expected: strlen(value) [%zu] != len [%" APR_SIZE_T_FMT "]",
+				strlen(*value), len);
 		return FALSE;
 	}
 
@@ -213,12 +210,12 @@ static apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *key,
 static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *key,
 		const char *value, apr_time_t expiry) {
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_cache_memcache_set: entering \"%s\"", key);
+	oidc_debug(r, "enter, key=\"%s\"", key);
 
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
-	oidc_cache_cfg_memcache_t *context = (oidc_cache_cfg_memcache_t *)cfg->cache_cfg;
+	oidc_cache_cfg_memcache_t *context =
+			(oidc_cache_cfg_memcache_t *) cfg->cache_cfg;
 
 	apr_status_t rv = APR_SUCCESS;
 
@@ -229,8 +226,7 @@ static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *key,
 
 		// TODO: error strings ?
 		if (rv != APR_SUCCESS) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, rv, r,
-					"oidc_cache_memcache_set: apr_memcache_delete returned an error");
+			oidc_error(r, "apr_memcache_delete returned an error");
 		}
 
 	} else {
@@ -239,13 +235,12 @@ static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *key,
 		apr_uint32_t timeout = apr_time_sec(expiry - apr_time_now());
 
 		/* store it */
-		rv = apr_memcache_set(context->cache_memcache, key, (char *)value,
+		rv = apr_memcache_set(context->cache_memcache, key, (char *) value,
 				strlen(value), timeout, 0);
 
 		// TODO: error strings ?
 		if (rv != APR_SUCCESS) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, rv, r,
-					"oidc_cache_memcache_set: apr_memcache_set returned an error");
+			oidc_error(r, "apr_memcache_set returned an error");
 		}
 	}
 

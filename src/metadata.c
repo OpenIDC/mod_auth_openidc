@@ -171,24 +171,21 @@ static apr_byte_t oidc_metadata_file_read_json(request_rec *r, const char *path,
 
 	if (*result == NULL) {
 		/* something went wrong */
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_metadata_file_read_json: JSON parsing (%s) returned an error: %s",
-				path, json_error.text);
+		oidc_error(r, "JSON parsing (%s) returned an error: %s", path,
+				json_error.text);
 		return FALSE;
 	}
 
 	if (!json_is_object(*result)) {
 		/* oops, no JSON */
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_metadata_file_read_json: parsed JSON from (%s) did not contain a JSON object",
+		oidc_error(r, "parsed JSON from (%s) did not contain a JSON object",
 				path);
 		json_decref(*result);
 		return FALSE;
 	}
 
 	/* log successful metadata retrieval */
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_metadata_file_read_json: JSON parsed from file \"%s\"", path);
+	oidc_debug(r, "JSON parsed from file \"%s\"", path);
 
 	return TRUE;
 }
@@ -202,16 +199,16 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 	/* get the "issuer" from the provider metadata and double-check that it matches what we looked for */
 	json_t *j_issuer = json_object_get(j_provider, "issuer");
 	if ((j_issuer == NULL) || (!json_is_string(j_issuer))) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata did not contain an \"issuer\" string",
+		oidc_error(r,
+				"provider (%s) JSON metadata did not contain an \"issuer\" string",
 				issuer);
 		return FALSE;
 	}
 
 	/* check that the issuer matches */
 	if (oidc_util_issuer_match(issuer, json_string_value(j_issuer)) == FALSE) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_metadata_provider_is_valid: requested issuer (%s) does not match the \"issuer\" value in the provider metadata file: %s",
+		oidc_error(r,
+				"requested issuer (%s) does not match the \"issuer\" value in the provider metadata file: %s",
 				issuer, json_string_value(j_issuer));
 		return FALSE;
 	}
@@ -225,8 +222,8 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 		for (i = 0; i < json_array_size(j_response_types_supported); i++) {
 			json_t *elem = json_array_get(j_response_types_supported, i);
 			if (!json_is_string(elem)) {
-				ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-						"oidc_metadata_provider_is_valid: unhandled in-array JSON non-string object type [%d]",
+				oidc_error(r,
+						"unhandled in-array JSON non-string object type [%d]",
 						elem->type);
 				continue;
 			}
@@ -234,14 +231,14 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 				break;
 		}
 		if (i == json_array_size(j_response_types_supported)) {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_metadata_provider_is_valid: could not find a supported response type in provider metadata (%s) for entry \"response_types_supported\"; assuming that \"code\" flow is supported...",
+			oidc_warn(r,
+					"could not find a supported response type in provider metadata (%s) for entry \"response_types_supported\"; assuming that \"code\" flow is supported...",
 					issuer);
 			//return FALSE;
 		}
 	} else {
-		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata did not contain a \"response_types_supported\" array; assuming that \"code\" flow is supported...",
+		oidc_warn(r,
+				"provider (%s) JSON metadata did not contain a \"response_types_supported\" array; assuming that \"code\" flow is supported...",
 				issuer);
 		// TODO: hey, this is required-by-spec stuff right?
 	}
@@ -255,8 +252,8 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 		for (i = 0; i < json_array_size(response_modes_supported); i++) {
 			json_t *elem = json_array_get(response_modes_supported, i);
 			if (!json_is_string(elem)) {
-				ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-						"oidc_metadata_provider_is_valid: unhandled in-array JSON non-string object type [%d]",
+				oidc_error(r,
+						"unhandled in-array JSON non-string object type [%d]",
 						elem->type);
 				continue;
 			}
@@ -266,14 +263,14 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 				break;
 		}
 		if (i == json_array_size(response_modes_supported)) {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_metadata_provider_is_valid: could not find a supported response mode in provider metadata (%s) for entry \"response_modes_supported\"",
+			oidc_warn(r,
+					"could not find a supported response mode in provider metadata (%s) for entry \"response_modes_supported\"",
 					issuer);
 			return FALSE;
 		}
 	} else {
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata did not contain a \"response_modes_supported\" array; assuming that \"fragment\" and \"query\" are supported",
+		oidc_debug(r,
+				"provider (%s) JSON metadata did not contain a \"response_modes_supported\" array; assuming that \"fragment\" and \"query\" are supported",
 				issuer);
 	}
 
@@ -282,8 +279,8 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 			"authorization_endpoint");
 	if ((j_authorization_endpoint == NULL)
 			|| (!json_is_string(j_authorization_endpoint))) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata did not contain an \"authorization_endpoint\" string",
+		oidc_error(r,
+				"provider (%s) JSON metadata did not contain an \"authorization_endpoint\" string",
 				issuer);
 		return FALSE;
 	}
@@ -291,8 +288,8 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 	/* get a handle to the token endpoint */
 	json_t *j_token_endpoint = json_object_get(j_provider, "token_endpoint");
 	if ((j_token_endpoint == NULL) || (!json_is_string(j_token_endpoint))) {
-		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata did not contain a \"token_endpoint\" string",
+		oidc_warn(r,
+				"provider (%s) JSON metadata did not contain a \"token_endpoint\" string",
 				issuer);
 		//return FALSE;
 	}
@@ -302,8 +299,8 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 			"userinfo_endpoint");
 	if ((j_userinfo_endpoint != NULL)
 			&& (!json_is_string(j_userinfo_endpoint))) {
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata contains a \"userinfo_endpoint\" entry, but it is not a string value",
+		oidc_debug(r,
+				"provider (%s) JSON metadata contains a \"userinfo_endpoint\" entry, but it is not a string value",
 				issuer);
 	}
 	// TODO: check for valid URL
@@ -311,8 +308,8 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 	/* get a handle to the jwks_uri */
 	json_t *j_jwks_uri = json_object_get(j_provider, "jwks_uri");
 	if ((j_jwks_uri == NULL) || (!json_is_string(j_jwks_uri))) {
-		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata did not contain a \"jwks_uri\" string",
+		oidc_warn(r,
+				"provider (%s) JSON metadata did not contain a \"jwks_uri\" string",
 				issuer);
 		//return FALSE;
 	}
@@ -322,8 +319,8 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 			j_provider, "token_endpoint_auth_methods_supported");
 	if ((j_token_endpoint_auth_methods_supported == NULL)
 			|| (!json_is_array(j_token_endpoint_auth_methods_supported))) {
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_metadata_provider_is_valid: provider (%s) JSON metadata did not contain a \"token_endpoint_auth_methods_supported\" array, assuming \"client_secret_basic\" is supported",
+		oidc_debug(r,
+				"provider (%s) JSON metadata did not contain a \"token_endpoint_auth_methods_supported\" array, assuming \"client_secret_basic\" is supported",
 				issuer);
 	} else {
 		int i;
@@ -333,8 +330,8 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 			json_t *elem = json_array_get(
 					j_token_endpoint_auth_methods_supported, i);
 			if (!json_is_string(elem)) {
-				ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-						"oidc_metadata_provider_is_valid: unhandled in-array JSON object type [%d] in provider (%s) metadata for entry \"token_endpoint_auth_methods_supported\"",
+				oidc_warn(r,
+						"unhandled in-array JSON object type [%d] in provider (%s) metadata for entry \"token_endpoint_auth_methods_supported\"",
 						elem->type, issuer);
 				continue;
 			}
@@ -346,8 +343,8 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 			}
 		}
 		if (i == json_array_size(j_token_endpoint_auth_methods_supported)) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_metadata_provider_is_valid: could not find a supported value [client_secret_post|client_secret_basic] in provider (%s) metadata for entry \"token_endpoint_auth_methods_supported\"",
+			oidc_error(r,
+					"could not find a supported value [client_secret_post|client_secret_basic] in provider (%s) metadata for entry \"token_endpoint_auth_methods_supported\"",
 					issuer);
 			return FALSE;
 		}
@@ -365,8 +362,8 @@ static apr_byte_t oidc_metadata_client_is_valid(request_rec *r,
 	/* get a handle to the client_id we need to use for this provider */
 	json_t *j_client_id = json_object_get(j_client, "client_id");
 	if ((j_client_id == NULL) || (!json_is_string(j_client_id))) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_metadata_client_is_valid: client (%s) JSON metadata did not contain a \"client_id\" string",
+		oidc_error(r,
+				"client (%s) JSON metadata did not contain a \"client_id\" string",
 				issuer);
 		return FALSE;
 	}
@@ -374,8 +371,8 @@ static apr_byte_t oidc_metadata_client_is_valid(request_rec *r,
 	/* get a handle to the client_secret we need to use for this provider */
 	json_t *j_client_secret = json_object_get(j_client, "client_secret");
 	if ((j_client_secret == NULL) || (!json_is_string(j_client_secret))) {
-		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-				"oidc_metadata_client_is_valid: client (%s) JSON metadata did not contain a \"client_secret\" string",
+		oidc_warn(r,
+				"client (%s) JSON metadata did not contain a \"client_secret\" string",
 				issuer);
 		//return FALSE;
 	}
@@ -383,8 +380,8 @@ static apr_byte_t oidc_metadata_client_is_valid(request_rec *r,
 	/* the expiry timestamp from the JSON object */
 	json_t *expires_at = json_object_get(j_client, "client_secret_expires_at");
 	if ((expires_at == NULL) || (!json_is_integer(expires_at))) {
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_metadata_client_is_valid: client (%s) metadata did not contain a \"client_secret_expires_at\" setting",
+		oidc_debug(r,
+				"client (%s) metadata did not contain a \"client_secret_expires_at\" setting",
 				issuer);
 		/* assume that it never expires */
 		return TRUE;
@@ -392,23 +389,19 @@ static apr_byte_t oidc_metadata_client_is_valid(request_rec *r,
 
 	/* see if it is unrestricted */
 	if (json_integer_value(expires_at) == 0) {
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_metadata_client_is_valid: client (%s) metadata never expires (client_secret_expires_at=0)",
+		oidc_debug(r,
+				"client (%s) metadata never expires (client_secret_expires_at=0)",
 				issuer);
 		return TRUE;
 	}
 
 	/* check if the value >= now */
 	if (apr_time_sec(apr_time_now()) > json_integer_value(expires_at)) {
-		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-				"oidc_metadata_client_is_valid: client (%s) secret expired",
-				issuer);
+		oidc_warn(r, "client (%s) secret expired", issuer);
 		return FALSE;
 	}
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_metadata_client_is_valid: client (%s) metadata is valid",
-			issuer);
+	oidc_debug(r, "client (%s) metadata is valid", issuer);
 
 	return TRUE;
 }
@@ -421,8 +414,8 @@ static apr_byte_t oidc_metadata_jwks_is_valid(request_rec *r, json_t *j_jwks,
 
 	json_t *keys = json_object_get(j_jwks, "keys");
 	if ((keys == NULL) || (!json_is_array(keys))) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_metadata_jwks_is_valid: provider (%s) JWKS JSON metadata did not contain a \"keys\" array",
+		oidc_error(r,
+				"provider (%s) JWKS JSON metadata did not contain a \"keys\" array",
 				issuer);
 		return FALSE;
 	}
@@ -435,15 +428,15 @@ static apr_byte_t oidc_metadata_conf_jose_is_supported(request_rec *r,
 	json_t *value = json_object_get(j_conf, key);
 	if (value != NULL) {
 		if (!json_is_string(value)) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_metadata_conf_jose_is_supported: (%s) JSON conf data has \"%s\" entry but it is not a string",
+			oidc_error(r,
+					"(%s) JSON conf data has \"%s\" entry but it is not a string",
 					issuer, key);
 			return FALSE;
 		}
 		if (jose_is_supported_function(r->pool,
 				json_string_value(value)) == FALSE) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_metadata_conf_jose_is_supported: (%s) JSON conf data has \"%s\" entry but it contains an unsupported algorithm or encryption type: \"%s\"",
+			oidc_error(r,
+					"(%s) JSON conf data has \"%s\" entry but it contains an unsupported algorithm or encryption type: \"%s\"",
 					issuer, key, json_string_value(value));
 			return FALSE;
 		}
@@ -502,9 +495,8 @@ static apr_byte_t oidc_metadata_file_write(request_rec *r, const char *path,
 	/* try to open the metadata file for writing, creating it if it does not exist */
 	if ((rc = apr_file_open(&fd, path, (APR_FOPEN_WRITE | APR_FOPEN_CREATE),
 	APR_OS_DEFAULT, r->pool)) != APR_SUCCESS) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_metadata_file_write: file \"%s\" could not be opened (%s)",
-				path, apr_strerror(rc, s_err, sizeof(s_err)));
+		oidc_error(r, "file \"%s\" could not be opened (%s)", path,
+				apr_strerror(rc, s_err, sizeof(s_err)));
 		return FALSE;
 	}
 
@@ -521,16 +513,15 @@ static apr_byte_t oidc_metadata_file_write(request_rec *r, const char *path,
 
 	/* check for a system error */
 	if (rc != APR_SUCCESS) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_metadata_file_write: could not write to: \"%s\" (%s)",
-				path, apr_strerror(rc, s_err, sizeof(s_err)));
+		oidc_error(r, "could not write to: \"%s\" (%s)", path,
+				apr_strerror(rc, s_err, sizeof(s_err)));
 		return FALSE;
 	}
 
 	/* check that all bytes from the header were written */
 	if (bytes_written != len) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_metadata_file_write: could not write enough bytes to: \"%s\", bytes_written (%" APR_SIZE_T_FMT ") != len (%" APR_SIZE_T_FMT ")",
+		oidc_error(r,
+				"could not write enough bytes to: \"%s\", bytes_written (%" APR_SIZE_T_FMT ") != len (%" APR_SIZE_T_FMT ")",
 				path, bytes_written, len);
 		return FALSE;
 	}
@@ -539,8 +530,7 @@ static apr_byte_t oidc_metadata_file_write(request_rec *r, const char *path,
 	apr_file_unlock(fd);
 	apr_file_close(fd);
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_metadata_file_write: file \"%s\" written; number of bytes (%" APR_SIZE_T_FMT ")",
+	oidc_debug(r, "file \"%s\" written; number of bytes (%" APR_SIZE_T_FMT ")",
 			path, len);
 
 	return TRUE;
@@ -584,13 +574,10 @@ error_delete:
 			&& (apr_stat(&fi, path, APR_FINFO_MTIME, r->pool) == APR_SUCCESS)) {
 
 		if ((rc = apr_file_remove(path, r->pool)) != APR_SUCCESS) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_metadata_get_and_check: could not delete invalid metadata file %s (%s)",
+			oidc_error(r, "could not delete invalid metadata file %s (%s)",
 					path, apr_strerror(rc, s_err, sizeof(s_err)));
 		} else {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_metadata_get_and_check: removed invalid metadata file %s",
-					path);
+			oidc_error(r, "removed invalid metadata file %s", path);
 		}
 	}
 
@@ -714,14 +701,11 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_store(request_rec *r,
 apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, json_t **j_jwks, apr_byte_t *refresh) {
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_metadata_jwks_get: entering (issuer=%s, refresh=%d)",
-			provider->issuer, *refresh);
+	oidc_debug(r, "enter, issuer=%s, refresh=%d", provider->issuer, *refresh);
 
 	/* see if we need to do a forced refresh */
 	if (*refresh == TRUE) {
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_metadata_jwks_get: doing a forced refresh of the JWKs for issuer \"%s\"",
+		oidc_debug(r, "doing a forced refresh of the JWKs for issuer \"%s\"",
 				provider->issuer);
 		if (oidc_metadata_jwks_retrieve_and_store(r, cfg, provider,
 				j_jwks) == TRUE)
@@ -813,8 +797,8 @@ static apr_byte_t oidc_metadata_client_get(request_rec *r, oidc_cfg *cfg,
 
 	/* at this point we have no valid client metadata, see if there's a registration endpoint for this provider */
 	if (provider->registration_endpoint_url == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_metadata_client_get: no (valid) client metadata exists for provider (%s) and provider JSON object did not contain a (valid) \"registration_endpoint\" string",
+		oidc_error(r,
+				"no (valid) client metadata exists for provider (%s) and provider JSON object did not contain a (valid) \"registration_endpoint\" string",
 				issuer);
 		return FALSE;
 	}
@@ -896,12 +880,11 @@ apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg *cfg,
 	apr_finfo_t fi;
 	char s_err[128];
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r, "oidc_metadata_list: entering");
+	oidc_debug(r, "enter");
 
 	/* open the metadata directory */
 	if ((rc = apr_dir_open(&dir, cfg->metadata_dir, r->pool)) != APR_SUCCESS) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_metadata_list: error opening metadata directory '%s' (%s)",
+		oidc_error(r, "error opening metadata directory '%s' (%s)",
 				cfg->metadata_dir, apr_strerror(rc, s_err, sizeof(s_err)));
 		return FALSE;
 	}
@@ -963,12 +946,12 @@ static const char * oidc_metadata_token_endpoint_auth(request_rec *r,
 				result = "client_secret_basic";
 				return result;
 			}
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_metadata_token_endpoint_auth: unsupported client auth method \"%s\" in client metadata for entry \"token_endpoint_auth_method\"",
+			oidc_warn(r,
+					"unsupported client auth method \"%s\" in client metadata for entry \"token_endpoint_auth_method\"",
 					json_string_value(token_endpoint_auth_method));
 		} else {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_metadata_token_endpoint_auth: unexpected JSON object type [%d] (!= APR_JSON_STRING) in client metadata for entry \"token_endpoint_auth_method\"",
+			oidc_warn(r,
+					"unexpected JSON object type [%d] (!= APR_JSON_STRING) in client metadata for entry \"token_endpoint_auth_method\"",
 					token_endpoint_auth_method->type);
 		}
 	}
@@ -986,8 +969,8 @@ static const char * oidc_metadata_token_endpoint_auth(request_rec *r,
 			json_t *elem = json_array_get(
 					j_token_endpoint_auth_methods_supported, i);
 			if (!json_is_string(elem)) {
-				ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-						"oidc_metadata_token_endpoint_auth: unhandled in-array JSON object type [%d] in provider metadata for entry \"token_endpoint_auth_methods_supported\"",
+				oidc_error(r,
+						"unhandled in-array JSON object type [%d] in provider metadata for entry \"token_endpoint_auth_methods_supported\"",
 						elem->type);
 				continue;
 			}

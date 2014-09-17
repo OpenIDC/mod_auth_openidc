@@ -88,8 +88,7 @@ static apr_byte_t oidc_crypto_init(oidc_cfg *cfg, server_rec *s) {
 	i = EVP_BytesToKey(EVP_aes_256_cbc(), EVP_sha1(), salt, key_data,
 			key_data_len, nrounds, key, iv);
 	if (i != 32) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
-				"oidc_crypto_init: key size must be 256 bits!");
+		oidc_serror(s, "key size must be 256 bits!");
 		return FALSE;
 	}
 
@@ -100,8 +99,8 @@ static apr_byte_t oidc_crypto_init(oidc_cfg *cfg, server_rec *s) {
 	EVP_CIPHER_CTX_init(cfg->encrypt_ctx);
 	if (!EVP_EncryptInit_ex(cfg->encrypt_ctx, EVP_aes_256_cbc(), NULL, key,
 			iv)) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
-				"oidc_crypto_init: EVP_EncryptInit_ex on the encrypt context failed: %s", ERR_error_string(ERR_get_error(), NULL));
+		oidc_serror(s, "EVP_EncryptInit_ex on the encrypt context failed: %s",
+				ERR_error_string(ERR_get_error(), NULL));
 		return FALSE;
 	}
 
@@ -109,8 +108,8 @@ static apr_byte_t oidc_crypto_init(oidc_cfg *cfg, server_rec *s) {
 	EVP_CIPHER_CTX_init(cfg->decrypt_ctx);
 	if (!EVP_DecryptInit_ex(cfg->decrypt_ctx, EVP_aes_256_cbc(), NULL, key,
 			iv)) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
-				"oidc_crypto_init: EVP_DecryptInit_ex on the decrypt context failed: %s", ERR_error_string(ERR_get_error(), NULL));
+		oidc_serror(s, "EVP_DecryptInit_ex on the decrypt context failed: %s",
+				ERR_error_string(ERR_get_error(), NULL));
 		return FALSE;
 	}
 
@@ -123,7 +122,8 @@ static apr_byte_t oidc_crypto_init(oidc_cfg *cfg, server_rec *s) {
 unsigned char *oidc_crypto_aes_encrypt(request_rec *r, oidc_cfg *cfg,
 		unsigned char *plaintext, int *len) {
 
-	if (oidc_crypto_init(cfg, r->server) == FALSE) return NULL;
+	if (oidc_crypto_init(cfg, r->server) == FALSE)
+		return NULL;
 
 	/* max ciphertext len for a n bytes of plaintext is n + AES_BLOCK_SIZE -1 bytes */
 	int c_len = *len + AES_BLOCK_SIZE, f_len = 0;
@@ -131,23 +131,23 @@ unsigned char *oidc_crypto_aes_encrypt(request_rec *r, oidc_cfg *cfg,
 
 	/* allows reusing of 'e' for multiple encryption cycles */
 	if (!EVP_EncryptInit_ex(cfg->encrypt_ctx, NULL, NULL, NULL, NULL)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_crypto_aes_encrypt: EVP_EncryptInit_ex failed: %s", ERR_error_string(ERR_get_error(), NULL));
+		oidc_error(r, "EVP_EncryptInit_ex failed: %s",
+				ERR_error_string(ERR_get_error(), NULL));
 		return NULL;
 	}
 
 	/* update ciphertext, c_len is filled with the length of ciphertext generated, len is the size of plaintext in bytes */
 	if (!EVP_EncryptUpdate(cfg->encrypt_ctx, ciphertext, &c_len, plaintext,
 			*len)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_crypto_aes_encrypt: EVP_EncryptUpdate failed: %s", ERR_error_string(ERR_get_error(), NULL));
+		oidc_error(r, "EVP_EncryptUpdate failed: %s",
+				ERR_error_string(ERR_get_error(), NULL));
 		return NULL;
 	}
 
 	/* update ciphertext with the final remaining bytes */
 	if (!EVP_EncryptFinal_ex(cfg->encrypt_ctx, ciphertext + c_len, &f_len)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_crypto_aes_encrypt: EVP_EncryptFinal_ex failed: %s", ERR_error_string(ERR_get_error(), NULL));
+		oidc_error(r, "EVP_EncryptFinal_ex failed: %s",
+				ERR_error_string(ERR_get_error(), NULL));
 		return NULL;
 	}
 
@@ -162,7 +162,8 @@ unsigned char *oidc_crypto_aes_encrypt(request_rec *r, oidc_cfg *cfg,
 unsigned char *oidc_crypto_aes_decrypt(request_rec *r, oidc_cfg *cfg,
 		unsigned char *ciphertext, int *len) {
 
-	if (oidc_crypto_init(cfg, r->server) == FALSE) return NULL;
+	if (oidc_crypto_init(cfg, r->server) == FALSE)
+		return NULL;
 
 	/* because we have padding ON, we must allocate an extra cipher block size of memory */
 	int p_len = *len, f_len = 0;
@@ -170,23 +171,23 @@ unsigned char *oidc_crypto_aes_decrypt(request_rec *r, oidc_cfg *cfg,
 
 	/* allows reusing of 'e' for multiple encryption cycles */
 	if (!EVP_DecryptInit_ex(cfg->decrypt_ctx, NULL, NULL, NULL, NULL)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_crypto_aes_decrypt: EVP_DecryptInit_ex failed: %s", ERR_error_string(ERR_get_error(), NULL));
+		oidc_error(r, "EVP_DecryptInit_ex failed: %s",
+				ERR_error_string(ERR_get_error(), NULL));
 		return NULL;
 	}
 
 	/* update plaintext, p_len is filled with the length of plaintext generated, len is the size of ciphertext in bytes */
 	if (!EVP_DecryptUpdate(cfg->decrypt_ctx, plaintext, &p_len, ciphertext,
 			*len)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_crypto_aes_decrypt: EVP_DecryptUpdate failed: %s", ERR_error_string(ERR_get_error(), NULL));
+		oidc_error(r, "EVP_DecryptUpdate failed: %s",
+				ERR_error_string(ERR_get_error(), NULL));
 		return NULL;
 	}
 
 	/* update plaintext with the final remaining bytes */
 	if (!EVP_DecryptFinal_ex(cfg->decrypt_ctx, plaintext + p_len, &f_len)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_crypto_aes_decrypt: EVP_DecryptFinal_ex failed: %s", ERR_error_string(ERR_get_error(), NULL));
+		oidc_error(r, "EVP_DecryptFinal_ex failed: %s",
+				ERR_error_string(ERR_get_error(), NULL));
 		return NULL;
 	}
 

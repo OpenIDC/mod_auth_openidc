@@ -674,12 +674,12 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 
 	c->provider.ssl_validate_server =
 			add->provider.ssl_validate_server
-			!= OIDC_DEFAULT_SSL_VALIDATE_SERVER ?
+					!= OIDC_DEFAULT_SSL_VALIDATE_SERVER ?
 					add->provider.ssl_validate_server :
 					base->provider.ssl_validate_server;
 	c->provider.client_name =
 			apr_strnatcmp(add->provider.client_name, OIDC_DEFAULT_CLIENT_NAME)
-			!= 0 ?
+					!= 0 ?
 					add->provider.client_name : base->provider.client_name;
 	c->provider.client_contact =
 			add->provider.client_contact != NULL ?
@@ -701,7 +701,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->provider.response_mode : base->provider.response_mode;
 	c->provider.jwks_refresh_interval =
 			add->provider.jwks_refresh_interval
-			!= OIDC_DEFAULT_JWKS_REFRESH_INTERVAL ?
+					!= OIDC_DEFAULT_JWKS_REFRESH_INTERVAL ?
 					add->provider.jwks_refresh_interval :
 					base->provider.jwks_refresh_interval;
 	c->provider.idtoken_iat_slack =
@@ -778,7 +778,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->state_timeout : base->state_timeout;
 	c->session_inactivity_timeout =
 			add->session_inactivity_timeout
-			!= OIDC_DEFAULT_SESSION_INACTIVITY_TIMEOUT ?
+					!= OIDC_DEFAULT_SESSION_INACTIVITY_TIMEOUT ?
 					add->session_inactivity_timeout :
 					base->session_inactivity_timeout;
 
@@ -794,7 +794,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->cache_file_dir : base->cache_file_dir;
 	c->cache_file_clean_interval =
 			add->cache_file_clean_interval
-			!= OIDC_DEFAULT_CACHE_FILE_CLEAN_INTERVAL ?
+					!= OIDC_DEFAULT_CACHE_FILE_CLEAN_INTERVAL ?
 					add->cache_file_clean_interval :
 					base->cache_file_clean_interval;
 
@@ -816,7 +816,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->cookie_domain : base->cookie_domain;
 	c->claim_delimiter =
 			apr_strnatcmp(add->claim_delimiter, OIDC_DEFAULT_CLAIM_DELIMITER)
-			!= 0 ? add->claim_delimiter : base->claim_delimiter;
+					!= 0 ? add->claim_delimiter : base->claim_delimiter;
 	c->claim_prefix =
 			apr_strnatcmp(add->claim_prefix, OIDC_DEFAULT_CLAIM_PREFIX) != 0 ?
 					add->claim_prefix : base->claim_prefix;
@@ -880,9 +880,7 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
  * report a config error
  */
 static int oidc_check_config_error(server_rec *s, const char *config_str) {
-	ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
-			"oidc_check_config_error: mandatory parameter '%s' is not set",
-			config_str);
+	oidc_serror(s, "mandatory parameter '%s' is not set", config_str);
 	return HTTP_INTERNAL_SERVER_ERROR;
 }
 
@@ -892,8 +890,8 @@ static int oidc_check_config_error(server_rec *s, const char *config_str) {
 static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 
 	if ((c->metadata_dir == NULL) && (c->provider.issuer == NULL)) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
-				"oidc_check_config_openid_openidc: one of 'OIDCProviderIssuer' or 'OIDCMetadataDir' must be set");
+		oidc_serror(s,
+				"one of 'OIDCProviderIssuer' or 'OIDCMetadataDir' must be set");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -921,16 +919,16 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 	apr_uri_t r_uri;
 	apr_uri_parse(s->process->pconf, c->redirect_uri, &r_uri);
 	if (apr_strnatcmp(r_uri.scheme, "https") != 0) {
-		ap_log_error(APLOG_MARK, APLOG_WARNING, 0, s,
-				"oidc_check_config_openid_openidc: the URL scheme (%s) of the configured OIDCRedirectURI SHOULD be \"https\" for security reasons (moreover: some Providers may reject non-HTTPS URLs)",
+		oidc_swarn(s,
+				"the URL scheme (%s) of the configured OIDCRedirectURI SHOULD be \"https\" for security reasons (moreover: some Providers may reject non-HTTPS URLs)",
 				r_uri.scheme);
 	}
 
 	if (c->cookie_domain != NULL) {
 		char *p = strstr(r_uri.hostname, c->cookie_domain);
 		if ((p == NULL) || (apr_strnatcmp(c->cookie_domain, p) != 0)) {
-			ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
-					"oidc_check_config_openid_openidc: the domain (%s) configured in OIDCCookieDomain does not match the URL hostname (%s) of the configured OIDCRedirectURI (%s): setting \"state\" and \"session\" cookies will not work!",
+			oidc_serror(s,
+					"the domain (%s) configured in OIDCCookieDomain does not match the URL hostname (%s) of the configured OIDCRedirectURI (%s): setting \"state\" and \"session\" cookies will not work!",
 					c->cookie_domain, r_uri.hostname, c->redirect_uri);
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
@@ -963,8 +961,7 @@ static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s) {
 	oidc_cfg *cfg = ap_get_module_config(s->module_config,
 			&auth_openidc_module);
 
-	ap_log_error(APLOG_MARK, OIDC_DEBUG, 0, s,
-			"oidc_config_check_vhost_config: entering");
+	oidc_sdebug(s, "enter");
 
 	if ((cfg->metadata_dir != NULL) || (cfg->provider.issuer == NULL)
 			|| (cfg->redirect_uri != NULL)
@@ -1053,8 +1050,7 @@ static apr_status_t oidc_cleanup(void *data) {
 		oidc_crypto_destroy(cfg, sp);
 		if (cfg->cache->destroy != NULL) {
 			if (cfg->cache->destroy(sp) != APR_SUCCESS) {
-				ap_log_error(APLOG_MARK, APLOG_ERR, 0, sp,
-						"oidc_cleanup: cache destroy function failed");
+				oidc_serror(sp, "cache destroy function failed");
 			}
 		}
 		sp = sp->next;
@@ -1075,7 +1071,8 @@ static apr_status_t oidc_cleanup(void *data) {
 	EVP_cleanup();
 	curl_global_cleanup();
 
-	ap_log_error(APLOG_MARK, APLOG_INFO, 0, (server_rec *) data, "%s - shutdown", NAMEVERSION);
+	ap_log_error(APLOG_MARK, APLOG_INFO, 0, (server_rec *) data,
+			"%s - shutdown", NAMEVERSION);
 
 	return APR_SUCCESS;
 }
@@ -1165,8 +1162,8 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 static const authz_provider authz_oidc_provider = {
-		&oidc_authz_checker,
-		NULL,
+	&oidc_authz_checker,
+	NULL,
 };
 #endif
 
@@ -1179,8 +1176,7 @@ static void oidc_child_init(apr_pool_t *p, server_rec *s) {
 				&auth_openidc_module);
 		if (cfg->cache->child_init != NULL) {
 			if (cfg->cache->child_init(p, s) != APR_SUCCESS) {
-				ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
-						"oidc_child_init: cfg->cache->child_init failed");
+				oidc_serror(s, "cfg->cache->child_init failed");
 			}
 		}
 		s = s->next;

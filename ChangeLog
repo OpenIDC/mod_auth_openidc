@@ -1,5 +1,6 @@
 9/17/2014
 - remove support for the X-Frame-Options as it is not needed in 302s
+- create and use log macros that printout function name
 
 9/16/2014
 - support for passing runtime determined authentication request parameters in the discovery response

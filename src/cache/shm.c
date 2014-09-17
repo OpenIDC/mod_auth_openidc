@@ -90,7 +90,8 @@ typedef struct oidc_cache_shm_entry_t {
 
 /* create the cache context */
 static void *oidc_cache_shm_cfg_create(apr_pool_t *pool) {
-	oidc_cache_cfg_shm_t *context = apr_pcalloc(pool, sizeof(oidc_cache_cfg_shm_t));
+	oidc_cache_cfg_shm_t *context = apr_pcalloc(pool,
+			sizeof(oidc_cache_cfg_shm_t));
 	context->mutex_filename = NULL;
 	context->shm = NULL;
 	context->mutex = NULL;
@@ -104,7 +105,8 @@ int oidc_cache_shm_post_config(server_rec *s) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(s->module_config,
 			&auth_openidc_module);
 
-	if (cfg->cache_cfg != NULL) return APR_SUCCESS;
+	if (cfg->cache_cfg != NULL)
+		return APR_SUCCESS;
 	oidc_cache_cfg_shm_t *context = oidc_cache_shm_cfg_create(s->process->pool);
 	cfg->cache_cfg = context;
 
@@ -113,8 +115,7 @@ int oidc_cache_shm_post_config(server_rec *s) {
 			sizeof(oidc_cache_shm_entry_t) * cfg->cache_shm_size_max,
 			NULL, s->process->pool);
 	if (rv != APR_SUCCESS) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, rv, s,
-				"oidc_cache_shm_post_config: apr_shm_create failed to create shared memory segment");
+		oidc_serror(s, "apr_shm_create failed to create shared memory segment");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -137,8 +138,8 @@ int oidc_cache_shm_post_config(server_rec *s) {
 			(const char *) context->mutex_filename, APR_LOCK_DEFAULT,
 			s->process->pool);
 	if (rv != APR_SUCCESS) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, rv, s,
-				"oidc_cache_shm_post_config: apr_global_mutex_create failed to create mutex on file %s",
+		oidc_serror(s,
+				"apr_global_mutex_create failed to create mutex on file %s",
 				context->mutex_filename);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
@@ -151,8 +152,8 @@ int oidc_cache_shm_post_config(server_rec *s) {
 	rv = unixd_set_global_mutex_perms(context->mutex);
 #endif
 	if (rv != APR_SUCCESS) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, rv, s,
-				"oidc_cache_shm_post_config: unixd_set_global_mutex_perms failed; could not set permissions ");
+		oidc_serror(s,
+				"unixd_set_global_mutex_perms failed; could not set permissions ");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 #endif
@@ -164,16 +165,17 @@ int oidc_cache_shm_post_config(server_rec *s) {
  * initialize the shared memory segment in a child process
  */
 int oidc_cache_shm_child_init(apr_pool_t *p, server_rec *s) {
-	oidc_cfg *cfg = ap_get_module_config(s->module_config, &auth_openidc_module);
-	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *)cfg->cache_cfg;
+	oidc_cfg *cfg = ap_get_module_config(s->module_config,
+			&auth_openidc_module);
+	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *) cfg->cache_cfg;
 
 	/* initialize the lock for the child process */
 	apr_status_t rv = apr_global_mutex_child_init(&context->mutex,
 			(const char *) context->mutex_filename, p);
 
 	if (rv != APR_SUCCESS) {
-		ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s,
-				"oic_cache_shm_child_init: apr_global_mutex_child_init failed to reopen mutex on file %s",
+		oidc_serror(s,
+				"apr_global_mutex_child_init failed to reopen mutex on file %s",
 				context->mutex_filename);
 	}
 
@@ -186,12 +188,11 @@ int oidc_cache_shm_child_init(apr_pool_t *p, server_rec *s) {
 static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *key,
 		const char **value) {
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_cache_shm_get: entering \"%s\"", key);
+	oidc_debug(r, "enter, key=\"%s\"", key);
 
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
-	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *)cfg->cache_cfg;
+	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *) cfg->cache_cfg;
 
 	apr_status_t rv;
 	int i;
@@ -199,8 +200,7 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *key,
 
 	/* grab the global lock */
 	if ((rv = apr_global_mutex_lock(context->mutex)) != APR_SUCCESS) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, rv, r,
-				"oidc_cache_shm_get: apr_global_mutex_lock() failed [%d]", rv);
+		oidc_error(r, "apr_global_mutex_lock() failed [%d]", rv);
 		return FALSE;
 	}
 
@@ -240,11 +240,10 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *key,
 
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
-	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *)cfg->cache_cfg;
+	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *) cfg->cache_cfg;
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_cache_shm_set: entering \"%s\" (value size=(%llu)", key,
-			value ? (unsigned long long)strlen(value) : 0);
+	oidc_debug(r, "enter, key=\"%s\" (value size=(%llu)", key,
+			value ? (unsigned long long )strlen(value) : 0);
 
 	oidc_cache_shm_entry_t *match, *free, *lru;
 	oidc_cache_shm_entry_t *table;
@@ -254,24 +253,21 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *key,
 
 	/* check that the passed in key is valid */
 	if (key == NULL || strlen(key) > OIDC_CACHE_SHM_KEY_MAX) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_cache_shm_set: could not set value since key is NULL or too long (%s)",
+		oidc_error(r, "could not set value since key is NULL or too long (%s)",
 				key);
 		return FALSE;
 	}
 
 	/* check that the passed in value is valid */
-	if ( (value != NULL) && strlen(value) > OIDC_CACHE_SHM_VALUE_MAX) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_cache_shm_set: could not set value since value is too long (%zu > %d)",
+	if ((value != NULL) && strlen(value) > OIDC_CACHE_SHM_VALUE_MAX) {
+		oidc_error(r, "could not set value since value is too long (%zu > %d)",
 				strlen(value), OIDC_CACHE_SHM_VALUE_MAX);
 		return FALSE;
 	}
 
 	/* grab the global lock */
 	if (apr_global_mutex_lock(context->mutex) != APR_SUCCESS) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_cache_shm_set: apr_global_mutex_lock() failed");
+		oidc_error(r, "apr_global_mutex_lock() failed");
 		return FALSE;
 	}
 
@@ -289,7 +285,8 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *key,
 
 		/* see if this slot is free */
 		if (table[i].key[0] == '\0') {
-			if (free == NULL) free = &table[i];
+			if (free == NULL)
+				free = &table[i];
 			continue;
 		}
 
@@ -301,7 +298,8 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *key,
 
 		/* see if this slot has expired */
 		if (table[i].expires <= current_time) {
-			if (free == NULL) free = &table[i];
+			if (free == NULL)
+				free = &table[i];
 			continue;
 		}
 
@@ -316,8 +314,8 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *key,
 	if (match == NULL && free == NULL) {
 		age = (current_time - lru->access) / 1000000;
 		if (age < 3600) {
-			ap_log_rerror(APLOG_MARK, APLOG_NOTICE, 0, r,
-					"oidc_cache_shm_set: dropping LRU entry with age = %" APR_TIME_T_FMT "s, which is less than one hour; consider increasing the shared memory caching space (which is %d now) with the (global) OIDCCacheShmMax setting.",
+			oidc_warn(r,
+					"dropping LRU entry with age = %" APR_TIME_T_FMT "s, which is less than one hour; consider increasing the shared memory caching space (which is %d now) with the (global) OIDCCacheShmMax setting.",
 					age, cfg->cache_shm_size_max);
 		}
 	}
@@ -344,24 +342,22 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *key,
 }
 
 static int oidc_cache_shm_destroy(server_rec *s) {
-	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
-			s->module_config, &auth_openidc_module);
-	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *)cfg->cache_cfg;
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(s->module_config,
+			&auth_openidc_module);
+	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *) cfg->cache_cfg;
 	apr_status_t rv = APR_SUCCESS;
 
-    if (context->shm) {
-        rv = apr_shm_destroy(context->shm);
-    	ap_log_error(APLOG_MARK, OIDC_DEBUG, rv, s,
-    			"oidc_cache_shm_destroy: apr_shm_destroy returned: %d", rv);
-        context->shm = NULL;
-    }
+	if (context->shm) {
+		rv = apr_shm_destroy(context->shm);
+		oidc_sdebug(s, "apr_shm_destroy returned: %d", rv);
+		context->shm = NULL;
+	}
 
-    if (context->mutex) {
-        rv = apr_global_mutex_destroy(context->mutex);
-    	ap_log_error(APLOG_MARK, OIDC_DEBUG, rv, s,
-    			"oidc_cache_shm_destroy: apr_global_mutex_destroy returned: %d", rv);
-        context->mutex = NULL;
-    }
+	if (context->mutex) {
+		rv = apr_global_mutex_destroy(context->mutex);
+		oidc_sdebug(s, "apr_global_mutex_destroy returned: %d", rv);
+		context->mutex = NULL;
+	}
 
 	return rv;
 }

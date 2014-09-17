@@ -71,8 +71,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 int oidc_base64url_encode(request_rec *r, char **dst, const char *src,
 		int src_len, int remove_padding) {
 	if ((src == NULL) || (src_len <= 0)) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_base64url_encode: not encoding anything; src=NULL and/or src_len<1");
+		oidc_error(r, "not encoding anything; src=NULL and/or src_len<1");
 		return -1;
 	}
 	int enc_len = apr_base64_encode_len(src_len);
@@ -107,8 +106,7 @@ int oidc_base64url_encode(request_rec *r, char **dst, const char *src,
 int oidc_base64url_decode(request_rec *r, char **dst, const char *src,
 		int add_padding) {
 	if (src == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_base64url_decode: not decoding anything; src=NULL");
+		oidc_error(r, "not decoding anything; src=NULL");
 		return -1;
 	}
 	char *dec = apr_pstrdup(r->pool, src);
@@ -152,8 +150,7 @@ int oidc_encrypt_base64url_encode_string(request_rec *r, char **dst,
 	unsigned char *crypted = oidc_crypto_aes_encrypt(r, c,
 			(unsigned char *) src, &crypted_len);
 	if (crypted == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_encrypt_base64url_encode_string: oidc_crypto_aes_encrypt failed");
+		oidc_error(r, "oidc_crypto_aes_encrypt failed");
 		return -1;
 	}
 	return oidc_base64url_encode(r, dst, (const char *) crypted, crypted_len, 1);
@@ -169,15 +166,13 @@ int oidc_base64url_decode_decrypt_string(request_rec *r, char **dst,
 	char *decbuf = NULL;
 	int dec_len = oidc_base64url_decode(r, &decbuf, src, 1);
 	if (dec_len <= 0) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_base64url_decode_decrypt_string: oidc_base64url_decode failed");
+		oidc_error(r, "oidc_base64url_decode failed");
 		return -1;
 	}
 	*dst = (char *) oidc_crypto_aes_decrypt(r, c, (unsigned char *) decbuf,
 			&dec_len);
 	if (*dst == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_base64url_decode_decrypt_string: oidc_crypto_aes_decrypt failed");
+		oidc_error(r, "oidc_crypto_aes_decrypt failed");
 		return -1;
 	}
 	return dec_len;
@@ -236,14 +231,12 @@ int oidc_strnenvcmp(const char *a, const char *b, int len) {
 char *oidc_util_escape_string(const request_rec *r, const char *str) {
 	CURL *curl = curl_easy_init();
 	if (curl == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_escape_string: curl_easy_init() error");
+		oidc_error(r, "curl_easy_init() error");
 		return NULL;
 	}
 	char *result = curl_easy_escape(curl, str, 0);
 	if (result == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_escape_string: curl_easy_escape() error");
+		oidc_error(r, "curl_easy_escape() error");
 		return NULL;
 	}
 	char *rv = apr_pstrdup(r->pool, result);
@@ -258,20 +251,18 @@ char *oidc_util_escape_string(const request_rec *r, const char *str) {
 char *oidc_util_unescape_string(const request_rec *r, const char *str) {
 	CURL *curl = curl_easy_init();
 	if (curl == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_util_unescape_string: curl_easy_init() error");
+		oidc_error(r, "curl_easy_init() error");
 		return NULL;
 	}
 	char *result = curl_easy_unescape(curl, str, 0, 0);
 	if (result == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_util_unescape_string: curl_easy_unescape() error");
+		oidc_error(r, "curl_easy_unescape() error");
 		return NULL;
 	}
 	char *rv = apr_pstrdup(r->pool, result);
 	curl_free(result);
 	curl_easy_cleanup(curl);
-	//ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r, "oidc_util_unescape_string: input=\"%s\", output=\"%s\"", str, rv);
+	//oidc_debug(r, "input=\"%s\", output=\"%s\"", str, rv);
 	return rv;
 }
 
@@ -339,8 +330,7 @@ char *oidc_get_current_url(const request_rec *r, const oidc_cfg *c) {
 			r->uri, (r->args != NULL && *r->args != '\0' ? "?" : ""), r->args,
 			NULL);
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_get_current_url: current URL '%s'", url);
+	oidc_debug(r, "current URL '%s'", url);
 
 	return url;
 }
@@ -401,15 +391,14 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 	struct curl_slist *h_list = NULL;
 
 	/* do some logging about the inputs */
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_util_http_call: url=%s, data=%s, content_type=%s, basic_auth=%s, bearer_token=%s, ssl_validate_server=%d",
+	oidc_debug(r,
+			"url=%s, data=%s, content_type=%s, basic_auth=%s, bearer_token=%s, ssl_validate_server=%d",
 			url, data, content_type, basic_auth, bearer_token,
 			ssl_validate_server);
 
 	curl = curl_easy_init();
 	if (curl == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_util_http_call: curl_easy_init() error");
+		oidc_error(r, "curl_easy_init() error");
 		return FALSE;
 	}
 
@@ -486,9 +475,7 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 	/* call it and record the result */
 	int rv = TRUE;
 	if (curl_easy_perform(curl) != CURLE_OK) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_util_http_call: curl_easy_perform() failed on: %s (%s)",
-				url, curlError);
+		oidc_error(r, "curl_easy_perform() failed on: %s (%s)", url, curlError);
 		rv = FALSE;
 		goto out;
 	}
@@ -496,8 +483,7 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 	*response = apr_pstrndup(r->pool, curlBuffer.buf, curlBuffer.written);
 
 	/* set and log the response */
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_util_http_call: response=%s", *response);
+	oidc_debug(r, "response=%s", *response);
 
 	out:
 
@@ -522,8 +508,7 @@ apr_byte_t oidc_util_http_get(request_rec *r, const char *url,
 		apr_table_do(oidc_http_add_form_url_encoded_param, &data, params, NULL);
 		const char *sep = strchr(url, '?') != NULL ? "&" : "?";
 		url = apr_psprintf(r->pool, "%s%s%s", url, sep, data.encoded_params);
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_util_http_get: get URL=\"%s\"", url);
+		oidc_debug(r, "get URL=\"%s\"", url);
 	}
 
 	return oidc_util_http_call(r, url, NULL, NULL, basic_auth, bearer_token,
@@ -544,8 +529,7 @@ apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url,
 		apr_table_do(oidc_http_add_form_url_encoded_param, &encode_data, params,
 				NULL);
 		data = encode_data.encoded_params;
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_util_http_post_form: post data=\"%s\"", data);
+		oidc_debug(r, "post data=\"%s\"", data);
 	}
 
 	return oidc_util_http_call(r, url, data,
@@ -599,8 +583,8 @@ static char *oidc_util_get_cookie_path(request_rec *r) {
 		if (strncmp(d->cookie_path, requestPath, strlen(d->cookie_path)) == 0)
 			rv = d->cookie_path;
 		else {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_util_get_cookie_path: OIDCCookiePath (%s) not a substring of request path, using request path (%s) for cookie",
+			oidc_warn(r,
+					"OIDCCookiePath (%s) not a substring of request path, using request path (%s) for cookie",
 					d->cookie_path, requestPath);
 			rv = requestPath;
 		}
@@ -628,8 +612,7 @@ void oidc_util_set_cookie(request_rec *r, const char *cookieName,
 	if (expires != -1) {
 		expiresString = (char *) apr_pcalloc(r->pool, APR_RFC822_DATE_LEN);
 		if (apr_rfc822_date(expiresString, expires) != APR_SUCCESS) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_util_set_cookie: could not set cookie expiry date");
+			oidc_error(r, "could not set cookie expiry date");
 		}
 	}
 
@@ -656,9 +639,7 @@ void oidc_util_set_cookie(request_rec *r, const char *cookieName,
 				(apr_pstrcat(r->pool, headerString, ";", currentCookies, NULL)));
 
 	/* do some logging */
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_util_set_cookie: adding outgoing header: Set-Cookie: %s",
-			headerString);
+	oidc_debug(r, "adding outgoing header: Set-Cookie: %s", headerString);
 }
 
 /*
@@ -698,8 +679,7 @@ char *oidc_util_get_cookie(request_rec *r, const char *cookieName) {
 	}
 
 	/* log what we've found */
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_util_get_cookie: returning %s", rv);
+	oidc_debug(r, "returning %s", rv);
 
 	return rv;
 }
@@ -740,9 +720,8 @@ apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url) {
 	apr_uri_parse(r->pool, url, &uri);
 	apr_byte_t rc =
 			(apr_strnatcmp(r->parsed_uri.path, uri.path) == 0) ? TRUE : FALSE;
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_request_matches_url: comparing \"%s\"==\"%s\" (%d)",
-			r->parsed_uri.path, uri.path, rc);
+	oidc_debug(r, "comparing \"%s\"==\"%s\" (%d)", r->parsed_uri.path, uri.path,
+			rc);
 	return rc;
 }
 
@@ -796,11 +775,11 @@ static apr_byte_t oidc_util_json_string_print(request_rec *r, json_t *result,
 	json_t *value = json_object_get(result, key);
 	if (value != NULL) {
 		if (json_is_string(value)) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+			oidc_error(r,
 					"%s: response contained a \"%s\" key with string value: \"%s\"",
 					log, key, json_string_value(value));
 		} else {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+			oidc_error(r,
 					"%s: response contained an \"%s\" key but no string value",
 					log, key);
 		}
@@ -834,16 +813,13 @@ apr_byte_t oidc_util_decode_json_and_check_error(request_rec *r,
 	/* decode the JSON contents of the buffer */
 	if (*json == NULL) {
 		/* something went wrong */
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_util_check_json_error: JSON parsing returned an error: %s",
-				json_error.text);
+		oidc_error(r, "JSON parsing returned an error: %s", json_error.text);
 		return FALSE;
 	}
 
 	if (!json_is_object(*json)) {
 		/* oops, no JSON */
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_util_check_json_error: parsed JSON did not contain a JSON object");
+		oidc_error(r, "parsed JSON did not contain a JSON object");
 		json_decref(*json);
 		*json = NULL;
 		return FALSE;
@@ -966,8 +942,7 @@ apr_byte_t oidc_util_file_read(request_rec *r, const char *path, char **result) 
 	/* open the file if it exists */
 	if ((rc = apr_file_open(&fd, path, APR_FOPEN_READ | APR_FOPEN_BUFFERED,
 	APR_OS_DEFAULT, r->pool)) != APR_SUCCESS) {
-		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-				"oidc_util_file_read: no file found at: \"%s\"", path);
+		oidc_warn(r, "no file found at: \"%s\"", path);
 		return FALSE;
 	}
 
@@ -980,8 +955,7 @@ apr_byte_t oidc_util_file_read(request_rec *r, const char *path, char **result) 
 
 	/* get the file info so we know its size */
 	if ((rc = apr_file_info_get(&finfo, APR_FINFO_SIZE, fd)) != APR_SUCCESS) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_util_file_read: error calling apr_file_info_get on file: \"%s\" (%s)",
+		oidc_error(r, "error calling apr_file_info_get on file: \"%s\" (%s)",
 				path, apr_strerror(rc, s_err, sizeof(s_err)));
 		goto error_close;
 	}
@@ -993,9 +967,8 @@ apr_byte_t oidc_util_file_read(request_rec *r, const char *path, char **result) 
 	apr_size_t bytes_read = 0;
 	if ((rc = apr_file_read_full(fd, *result, finfo.size, &bytes_read))
 			!= APR_SUCCESS) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_util_file_read: apr_file_read_full on (%s) returned an error: %s",
-				path, apr_strerror(rc, s_err, sizeof(s_err)));
+		oidc_error(r, "apr_file_read_full on (%s) returned an error: %s", path,
+				apr_strerror(rc, s_err, sizeof(s_err)));
 		goto error_close;
 	}
 
@@ -1004,8 +977,8 @@ apr_byte_t oidc_util_file_read(request_rec *r, const char *path, char **result) 
 
 	/* check that we've got all of it */
 	if (bytes_read != finfo.size) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_util_file_read: apr_file_read_full on (%s) returned less bytes (%" APR_SIZE_T_FMT ") than expected: (%" APR_OFF_T_FMT ")",
+		oidc_error(r,
+				"apr_file_read_full on (%s) returned less bytes (%" APR_SIZE_T_FMT ") than expected: (%" APR_OFF_T_FMT ")",
 				path, bytes_read, finfo.size);
 		goto error_close;
 	}
@@ -1015,8 +988,7 @@ apr_byte_t oidc_util_file_read(request_rec *r, const char *path, char **result) 
 	apr_file_close(fd);
 
 	/* log successful content retrieval */
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_util_file_read: file read successfully \"%s\"", path);
+	oidc_debug(r, "file read successfully \"%s\"", path);
 
 	return TRUE;
 
@@ -1025,8 +997,7 @@ apr_byte_t oidc_util_file_read(request_rec *r, const char *path, char **result) 
 	apr_file_unlock(fd);
 	apr_file_close(fd);
 
-	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-			"oidc_util_file_read: returning error");
+	oidc_error(r, "return error");
 
 	return FALSE;
 }
@@ -1084,8 +1055,7 @@ apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack,
 	for (i = 0; i < json_array_size(haystack); i++) {
 		json_t *elem = json_array_get(haystack, i);
 		if (!json_is_string(elem)) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_util_json_array_has_value: unhandled in-array JSON non-string object type [%d]",
+			oidc_error(r, "unhandled in-array JSON non-string object type [%d]",
 					elem->type);
 			continue;
 		}
@@ -1094,8 +1064,8 @@ apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack,
 		}
 	}
 
-//	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-//			"oidc_util_json_array_has_value: returning (%d=%d)", i,
+//	oidc_debug(r,
+//			"returning (%d=%d)", i,
 //			haystack->value.array->nelts);
 
 	return (i == json_array_size(haystack)) ? FALSE : TRUE;
@@ -1112,9 +1082,7 @@ void oidc_util_set_app_header(request_rec *r, const char *s_key,
 			oidc_normalize_header_name(r, s_key));
 
 	/* do some logging about this event */
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_util_set_app_header: setting header \"%s: %s\"", s_name,
-			s_value);
+	oidc_debug(r, "setting header \"%s: %s\"", s_name, s_value);
 
 	/* now set the actual header name/value */
 	apr_table_set(r->headers_in, s_name, s_value);
@@ -1132,8 +1100,7 @@ void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs,
 
 	/* if not attributes are set, nothing needs to be done */
 	if (j_attrs == NULL) {
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_util_set_app_headers: no attributes to set");
+		oidc_debug(r, "no attributes to set");
 		return;
 	}
 
@@ -1169,8 +1136,8 @@ void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs,
 				/* set long value in the application header whose name is based on the key and the prefix */
 				oidc_util_set_app_header(r, s_key, s_int, claim_prefix);
 			} else {
-				ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-						"oidc_util_set_app_headers: could not convert JSON number to string (> 255 characters?), skipping");
+				oidc_warn(r,
+						"could not convert JSON number to string (> 255 characters?), skipping");
 			}
 
 		} else if (json_is_real(j_value)) {
@@ -1191,8 +1158,8 @@ void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs,
 		} else if (json_is_array(j_value)) {
 
 			/* some logging about what we're going to do */
-			ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-					"oidc_util_set_app_headers: parsing attribute array for key \"%s\" (#nr-of-elems: %zu)",
+			oidc_debug(r,
+					"parsing attribute array for key \"%s\" (#nr-of-elems: %zu)",
 					s_key, json_array_size(j_value));
 
 			/* string to hold the concatenated array string values */
@@ -1232,8 +1199,8 @@ void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs,
 				} else {
 
 					/* don't know how to handle a non-string array element */
-					ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-							"oidc_util_set_app_headers: unhandled in-array JSON object type [%d] for key \"%s\" when parsing claims array elements",
+					oidc_warn(r,
+							"unhandled in-array JSON object type [%d] for key \"%s\" when parsing claims array elements",
 							elem->type, s_key);
 				}
 			}
@@ -1244,8 +1211,8 @@ void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs,
 		} else {
 
 			/* no string and no array, so unclear how to handle this */
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_util_set_app_headers: unhandled JSON object type [%d] for key \"%s\" when parsing claims",
+			oidc_warn(r,
+					"unhandled JSON object type [%d] for key \"%s\" when parsing claims",
 					j_value->type, s_key);
 		}
 

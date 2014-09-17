@@ -100,15 +100,13 @@ static apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 	const char *auth_line;
 	auth_line = apr_table_get(r->headers_in, "Authorization");
 	if (!auth_line) {
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_oauth_get_bearer_token: no authorization header found");
+		oidc_debug(r, "no authorization header found");
 		return FALSE;
 	}
 
 	/* look for the Bearer keyword */
 	if (apr_strnatcasecmp(ap_getword(r->pool, &auth_line, ' '), "Bearer")) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_oauth_get_bearer_token: client used unsupported authentication scheme: %s",
+		oidc_error(r, "client used unsupported authentication scheme: %s",
 				r->uri);
 		return FALSE;
 	}
@@ -122,8 +120,7 @@ static apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 	*access_token = apr_pstrdup(r->pool, auth_line);
 
 	/* log some stuff */
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_oauth_get_bearer_token: bearer token: %s", *access_token);
+	oidc_debug(r, "bearer token: %s", *access_token);
 
 	return TRUE;
 }
@@ -144,8 +141,8 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 
 		/* not cached, go out and validate the access_token against the Authorization server and get the JSON claims back */
 		if (oidc_oauth_validate_access_token(r, c, access_token, &json) == FALSE) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_oauth_resolve_access_token: could not get a validation response from the Authorization server");
+			oidc_error(r,
+					"could not get a validation response from the Authorization server");
 			return FALSE;
 		}
 
@@ -156,14 +153,14 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 		/* get and check the expiry timestamp */
 		json_t *expires_in = json_object_get(result, "expires_in");
 		if ((expires_in == NULL) || (!json_is_number(expires_in))) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_oauth_resolve_access_token: response JSON object did not contain an \"expires_in\" number");
+			oidc_error(r,
+					"response JSON object did not contain an \"expires_in\" number");
 			json_decref(result);
 			return FALSE;
 		}
 		if (json_integer_value(expires_in) <= 0) {
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_oauth_resolve_access_token: \"expires_in\" number <= 0 (%" JSON_INTEGER_FORMAT "); token already expired...",
+			oidc_warn(r,
+					"\"expires_in\" number <= 0 (%" JSON_INTEGER_FORMAT "); token already expired...",
 					json_integer_value(expires_in));
 			json_decref(result);
 			return FALSE;
@@ -179,9 +176,7 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 		json_error_t json_error;
 		result = json_loads(json, 0, &json_error);
 		if (result == NULL) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"oidc_oauth_resolve_access_token: cached JSON was corrupted: %s",
-					json_error.text);
+			oidc_error(r, "cached JSON was corrupted: %s", json_error.text);
 			return FALSE;
 		}
 	}
@@ -189,8 +184,8 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 	/* return the access_token JSON object */
 	json_t *tkn = json_object_get(result, "access_token");
 	if ((tkn == NULL) || (!json_is_object(tkn))) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_oauth_resolve_access_token: response JSON object did not contain an access_token object");
+		oidc_error(r,
+				"response JSON object did not contain an access_token object");
 		json_decref(result);
 		return FALSE;
 	}
@@ -231,17 +226,15 @@ static apr_byte_t oidc_oauth_set_remote_user(request_rec *r, oidc_cfg *c,
 	/* get the claim value from the resolved token JSON response to use as the REMOTE_USER key */
 	json_t *username = json_object_get(token, claim_name);
 	if ((username == NULL) || (!json_is_string(username))) {
-		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-				"oidc_oauth_set_remote_user: response JSON object did not contain a \"%s\" string",
+		oidc_warn(r, "response JSON object did not contain a \"%s\" string",
 				claim_name);
 		return FALSE;
 	}
 
 	r->user = apr_pstrdup(r->pool, json_string_value(username));
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_oauth_set_remote_user: set REMOTE_USER to claim %s=%s",
-			claim_name, json_string_value(username));
+	oidc_debug(r, "set REMOTE_USER to claim %s=%s", claim_name,
+			json_string_value(username));
 
 	return TRUE;
 }
@@ -262,8 +255,8 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 		if (r->user != NULL) {
 
 			/* this is a sub-request and we have a session */
-			ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-					"oidc_oauth_check_userid: recycling user '%s' from initial request for sub-request",
+			oidc_debug(r,
+					"recycling user '%s' from initial request for sub-request",
 					r->user);
 
 			return OK;
@@ -286,8 +279,7 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 
 	/* check that we've got something back */
 	if (token == NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_oauth_check_userid: could not resolve claims (token == NULL)");
+		oidc_error(r, "could not resolve claims (token == NULL)");
 		return HTTP_UNAUTHORIZED;
 	}
 
@@ -296,8 +288,8 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 
 	/* set the REMOTE_USER variable */
 	if (oidc_oauth_set_remote_user(r, c, token) == FALSE) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_oauth_check_userid: remote user could not be set, aborting with HTTP_UNAUTHORIZED");
+		oidc_error(r,
+				"remote user could not be set, aborting with HTTP_UNAUTHORIZED");
 		return HTTP_UNAUTHORIZED;
 	}
 
@@ -307,9 +299,8 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 
 	/* set the user authentication HTTP header if set and required */
 	if ((r->user != NULL) && (dir_cfg->authn_header != NULL)) {
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_oauth_check_userid: setting authn header (%s) to: %s",
-				dir_cfg->authn_header, r->user);
+		oidc_debug(r, "setting authn header (%s) to: %s", dir_cfg->authn_header,
+				r->user);
 		apr_table_set(r->headers_in, dir_cfg->authn_header, r->user);
 	}
 

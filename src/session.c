@@ -259,8 +259,7 @@ static apr_status_t oidc_session_identity_decode(request_rec * r,
 	char *encoded, *pair;
 	const char *sep = "&";
 
-	ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-			"oidc_session_identity_decode: decoding %s", z->encoded);
+	oidc_debug(r, "decoding %s", z->encoded);
 
 	/* sanity check - anything to decode? */
 	if (!z->encoded) {
@@ -276,8 +275,7 @@ static apr_status_t oidc_session_identity_decode(request_rec * r,
 		char *key = apr_strtok(pair, psep, &plast);
 		char *val = apr_strtok(NULL, psep, &plast);
 
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_session_identity_decode: decoding %s=%s", key, val);
+		oidc_debug(r, "decoding %s=%s", key, val);
 
 		if (key && *key) {
 			if (!val || !*val) {
@@ -402,8 +400,7 @@ static apr_status_t oidc_session_load_cookie(request_rec *r, session_rec *z) {
 		if (oidc_base64url_decode_decrypt_string(r, (char **) &z->encoded,
 				cookieValue) <= 0) {
 			//oidc_util_set_cookie(r, d->cookie, "");
-			ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-					"oidc_session_load_cookie: cookie value possibly corrupted");
+			oidc_warn(r, "cookie value possibly corrupted");
 			return APR_EGENERAL;
 		}
 	}
@@ -434,8 +431,7 @@ static apr_status_t oidc_session_load_22(request_rec *r, session_rec **zz) {
 
 	/* first see if this is a sub-request and it was set already in the main request */
 	if (((*zz) = (session_rec *) oidc_request_state_get(r, "session")) != NULL) {
-		ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r,
-				"oidc_session_load: loading session from request state");
+		oidc_debug(r, "loading session from request state");
 		return APR_SUCCESS;
 	}
 
@@ -459,8 +455,7 @@ static apr_status_t oidc_session_load_22(request_rec *r, session_rec **zz) {
 		/* load the session from a self-contained cookie */
 		rc = oidc_session_load_cookie(r, z);
 	} else {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_session_load_22: unknown session type: %d",
+		oidc_error(r, "oidc_session_load_22: unknown session type: %d",
 				c->session_type);
 		rc = APR_EGENERAL;
 	}
@@ -476,8 +471,7 @@ static apr_status_t oidc_session_load_22(request_rec *r, session_rec **zz) {
 	/* check whether it has expired */
 	if (apr_time_now() > z->expiry) {
 
-		ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, r,
-				"oidc_session_load_22: session restored from cache has expired");
+		oidc_warn(r, "session restored from cache has expired");
 		apr_table_clear(z->entries);
 		return APR_EGENERAL;
 	}
@@ -510,9 +504,7 @@ static apr_status_t oidc_session_save_22(request_rec *r, session_rec *z) {
 		/* store the session in a self-contained cookie */
 		rc = oidc_session_save_cookie(r, z);
 	} else {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-				"oidc_session_save_22: unknown session type: %d",
-				c->session_type);
+		oidc_error(r, "unknown session type: %d", c->session_type);
 		rc = APR_EGENERAL;
 	}
 
