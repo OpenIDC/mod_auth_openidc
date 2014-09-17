@@ -1,3 +1,6 @@
+9/17/2014
+- remove support for the X-Frame-Options as it is not needed in 302s
+
 9/16/2014
 - support for passing runtime determined authentication request parameters in the discovery response
 - include name/version in logs and bump to 1.6.0rc1

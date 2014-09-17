@@ -592,7 +592,6 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->remote_user_claim = OIDC_DEFAULT_CLAIM_REMOTE_USER;
 	c->pass_idtoken_as = OIDC_PASS_IDTOKEN_AS_CLAIMS;
 	c->cookie_http_only = OIDC_DEFAULT_COOKIE_HTTPONLY;
-	c->x_frame_options = NULL;
 
 	c->outgoing_proxy = NULL;
 	c->crypto_passphrase = NULL;
@@ -831,9 +830,6 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->cookie_http_only =
 			add->cookie_http_only != OIDC_DEFAULT_COOKIE_HTTPONLY ?
 					add->cookie_http_only : base->cookie_http_only;
-	c->x_frame_options =
-			add->x_frame_options != NULL ?
-					add->x_frame_options : base->x_frame_options;
 
 	c->outgoing_proxy =
 			add->outgoing_proxy != NULL ?
@@ -1404,11 +1400,6 @@ const command_rec oidc_config_cmds[] = {
 				NULL,
 				RSRC_CONF,
 				"The format in which the id_token is passed in (a) header(s); must be one or more of: claims|payload|serialized"),
-		AP_INIT_TAKE1("OIDCXFrameOptions",
-				oidc_set_string_slot,
-				(void*)APR_OFFSETOF(oidc_cfg, x_frame_options),
-				RSRC_CONF,
-				"The value for the X_FRAME_OPTIONS header that is set for the authentication request."),
 
 		AP_INIT_TAKE1("OIDCOAuthClientID", oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.client_id),

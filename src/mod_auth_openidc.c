@@ -1329,7 +1329,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	// TODO: maybe show intermediate/progress screen "redirecting to"
 	return oidc_proto_authorization_request(r, provider, login_hint,
 			c->redirect_uri, state, &proto_state, id_token_hint,
-			auth_request_params, c->x_frame_options);
+			auth_request_params);
 }
 
 /*
