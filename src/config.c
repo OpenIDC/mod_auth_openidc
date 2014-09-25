@@ -438,8 +438,8 @@ static const char *oidc_set_public_key_files_enc(cmd_parms *cmd, void *dummy,
 			cmd->server->module_config, &auth_openidc_module);
 	char *jwk = NULL;
 	char *kid = NULL;
-	if (apr_jwk_x509_to_rsa_jwk(cmd->pool, arg, &jwk, &kid) == FALSE) {
-		return apr_psprintf(cmd->pool, "apr_jwk_x509_to_rsa_jwk failed for: %s",
+	if (apr_jwk_pem_to_json(cmd->pool, arg, &jwk, &kid) == FALSE) {
+		return apr_psprintf(cmd->pool, "apr_jwk_pem_to_json failed for: %s",
 				arg);
 	}
 	if (cfg->public_keys == NULL)

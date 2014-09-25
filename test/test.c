@@ -155,6 +155,56 @@ static char *test_jwt_parse(apr_pool_t *pool) {
 	return 0;
 }
 
+static char *test_jwt_parse_pkey(apr_pool_t *pool) {
+	/*
+	 * {
+	 *   "typ": "JWT",
+	 *   "alg": "RS256",
+	 *   "x5t": "Z1NCjojeiHAib-Gm8vFE6ya6lPM"
+	 * }
+	 * {
+	 *   "nonce": "avSk7S69G4kEE8Km4bPiOjrfChHt6nO4Z397Lp_bQnc,",
+	 *   "iat": 1411580876,
+	 *   "at_hash": "yTqsoONZbuWbN6TbgevuDQ",
+	 *   "sub": "6343a29c-5399-44a7-9b35-4990f4377c96",
+	 *   "amr": "password",
+	 *   "auth_time": 1411577267,
+	 *   "idp": "idsrv",
+	 *   "name": "ksonaty",
+	 *   "iss": "https://agsync.com",
+	 *   "aud": "agsync_implicit",
+	 *   "exp": 1411584475,
+	 *   "nbf": 1411580875
+	 * }
+	 */
+	char *s_jwt = apr_pstrdup(pool, "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IloxTkNqb2plaUhBaWItR204dkZFNnlhNmxQTSJ9.eyJub25jZSI6ImF2U2s3UzY5RzRrRUU4S200YlBpT2pyZkNoSHQ2bk80WjM5N0xwX2JRbmMsIiwiaWF0IjoxNDExNTgwODc2LCJhdF9oYXNoIjoieVRxc29PTlpidVdiTjZUYmdldnVEUSIsInN1YiI6IjYzNDNhMjljLTUzOTktNDRhNy05YjM1LTQ5OTBmNDM3N2M5NiIsImFtciI6InBhc3N3b3JkIiwiYXV0aF90aW1lIjoxNDExNTc3MjY3LCJpZHAiOiJpZHNydiIsIm5hbWUiOiJrc29uYXR5IiwiaXNzIjoiaHR0cHM6Ly9hZ3N5bmMuY29tIiwiYXVkIjoiYWdzeW5jX2ltcGxpY2l0IiwiZXhwIjoxNDExNTg0NDc1LCJuYmYiOjE0MTE1ODA4NzV9.lEG-DgHHa0JuOEuOTBvCqyexjRVcKXBnJJm289o2HyTgclpH80DsOMED9RlXCFfuDY7nw9i2cxUmIMAV42AdTxkMPomK3chytcajvpAZJirlk653bo9GTDXJSKZr5fwyEu--qahsoT5t9qvoWyFdYkvmMHFw1-mAHDGgVe23voc9jPuFFIhRRqIn4e8ikzN4VQeEV1UXJD02kYYFn2TRWURgiFyVeTr2r0MTn-auCEsFS_AfR1Bl_kmpMfqwrsicf5MTBvfPJeuSMt3t3d3LOGBkg36_z21X-ZRN7wy1KTjagr7iQ_y5csIpmtqs_QM55TTB9dW1HIosJPhiuMEJEA");
+	apr_jwt_t *jwt = NULL;
+	TST_ASSERT("apr_jwt_parse", apr_jwt_parse(pool, s_jwt, &jwt, NULL, NULL));
+
+	char *s_key = "{"
+			"\"kty\": \"RSA\","
+			"\"use\": \"sig\","
+			"\"kid\": \"Z1NCjojeiHAib-Gm8vFE6ya6lPM\","
+			"\"x5t\": \"Z1NCjojeiHAib-Gm8vFE6ya6lPM\","
+			"\"x5c\": ["
+			"\"MIIFHTCCBAWgAwIBAgIHJ9VlLewUkDANBgkqhkiG9w0BAQsFADCBtDELMAkGA1UEBhMCVVMxEDAOBgNVBAgTB0FyaXpvbmExEzARBgNVBAcTClNjb3R0c2RhbGUxGjAYBgNVBAoTEUdvRGFkZHkuY29tLCBJbmMuMS0wKwYDVQQLEyRodHRwOi8vY2VydHMuZ29kYWRkeS5jb20vcmVwb3NpdG9yeS8xMzAxBgNVBAMTKkdvIERhZGR5IFNlY3VyZSBDZXJ0aWZpY2F0ZSBBdXRob3JpdHkgLSBHMjAeFw0xNDA4MTIxNzE0MDdaFw0xNzA4MTgxODI5MjJaMDoxITAfBgNVBAsTGERvbWFpbiBDb250cm9sIFZhbGlkYXRlZDEVMBMGA1UEAwwMKi5hZ3N5bmMuY29tMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3lDyn/ZvG32Pw5kYbRuVxHsPfe9Xt8s9vOXnt8z7/T+hZZvealNhCxz9VEwTJ7TsZ9CLi5c30FjoEJYFkKddLAdxKo0oOXWc/AWrQvPwht9a+o6dX2fL/9CmXW1hGHXMH0qiLMrFqMSzZeh+GUY6F1woE/eKsAo6LOhP8X77FlEQT2Eu71wu8KC4B3sH/9QTco50KNw14+bRY5j2V2TZelvsXJnvrN4lXtEVYWFkREKeXzMH8DhDyZzh0NcHa7dFBa7rDusyfIHjuP6uAju/Ao6hhdOGjlKePMVtfusWBAI7MWDChLTqiCTvlZnCpkpTTh5m+i7TbE1TwmdbLceq1wIDAQABo4IBqzCCAacwDAYDVR0TAQH/BAIwADAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwDgYDVR0PAQH/BAQDAgWgMDYGA1UdHwQvMC0wK6ApoCeGJWh0dHA6Ly9jcmwuZ29kYWRkeS5jb20vZ2RpZzJzMS04Ny5jcmwwUwYDVR0gBEwwSjBIBgtghkgBhv1tAQcXATA5MDcGCCsGAQUFBwIBFitodHRwOi8vY2VydGlmaWNhdGVzLmdvZGFkZHkuY29tL3JlcG9zaXRvcnkvMHYGCCsGAQUFBwEBBGowaDAkBggrBgEFBQcwAYYYaHR0cDovL29jc3AuZ29kYWRkeS5jb20vMEAGCCsGAQUFBzAChjRodHRwOi8vY2VydGlmaWNhdGVzLmdvZGFkZHkuY29tL3JlcG9zaXRvcnkvZ2RpZzIuY3J0MB8GA1UdIwQYMBaAFEDCvSeOzDSDMKIz1/tss/C0LIDOMCMGA1UdEQQcMBqCDCouYWdzeW5jLmNvbYIKYWdzeW5jLmNvbTAdBgNVHQ4EFgQUxqwQ5mJfzESbA5InigohAq4lhIYwDQYJKoZIhvcNAQELBQADggEBADXv4q7iw3yCDuVS+edPcyWQJPWo3X7xx83g2omcsqDIoEMgsRLGidiINttAhSIAlUyd9Nsp5cGsT/2ZJMbjRFhhVhRHf61O+F60ZYuKPUKWlXB1Nkk4f48/6PGc5Tu/MXdXttpuIP4Jlbpc0dtv59wrrFs9Sf1V7NuHS96IhxfnBO3J1s3ipudoUwjNtBxN/7vUFzfRuHl1+/oQxhmKDxBDpk0v1iLJTeMkMgc+wPGO55gLR6+5l9qWuuE+fIHeS+LHMzchkBBYJMtbmf/KZfwMA8AOsnGXQOXzpf7Sg8VIiVdeaB0NY1eWyRBisQkivk6wm+7G2VYKh9OeVdX4XqQ=\""
+			"]"
+		"}";
+
+	json_t *j_jwk = json_loads(s_key, 0, NULL);
+	TST_ASSERT("json_loads", ((j_jwk != NULL) && (json_is_object(j_jwk))));
+
+	apr_jwk_t *jwk = NULL;
+	TST_ASSERT("apr_jwk_parse_json", apr_jwk_parse_json(pool, j_jwk, s_key, &jwk));
+
+	TST_ASSERT("apr_jws_verify_rsa", apr_jws_verify_rsa(pool, jwt, jwk));
+
+	json_decref(j_jwk);
+
+	return 0;
+}
+
+
 static char *test_plaintext_jwt_parse(apr_pool_t *pool) {
 
 	// from http://tools.ietf.org/html/draft-ietf-oauth-json-web-token-20
@@ -206,13 +256,13 @@ static char *test_jwk_parse_json(apr_pool_t *pool) {
              "\"y\":\"ZOESj6_dpPiZZR-fJ-XVszQta28Cjgti7JudooQJ0co\",\"crv\":\"P-256\"}";
 
 	json_t *j_jwk = NULL;
-	json_error_t json_error;
-	j_jwk = json_loads(s, 0, &json_error);
-
+	j_jwk = json_loads(s, 0, NULL);
 	TST_ASSERT("json_loads", ((j_jwk != NULL) && (json_is_object(j_jwk))));
 
 	apr_jwk_t *jwk = NULL;
 	TST_ASSERT("apr_jwk_parse_json", apr_jwk_parse_json(pool, j_jwk, s, &jwk));
+
+	json_decref(j_jwk);
 
 	return 0;
 }
@@ -264,6 +314,8 @@ static char * all_tests(apr_pool_t *pool) {
 
 	TST_RUN(test_jwk_parse_json, pool);
 	TST_RUN(test_jwt_decryption, pool);
+
+	TST_RUN(test_jwt_parse_pkey, pool);
 
 	return 0;
 }

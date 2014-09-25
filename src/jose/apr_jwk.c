@@ -57,46 +57,174 @@
 #include "apr_jose.h"
 
 /*
- * parse an RSA JWK
+ * parse an RSA JWK in raw format (n,e,d)
  */
-static apr_byte_t apr_jwk_parse_rsa(apr_pool_t *pool, apr_jwk_t *jwk) {
+static apr_byte_t apr_jwk_parse_rsa_raw(apr_pool_t *pool, apr_jwt_value_t *jwk,
+		apr_jwk_key_rsa_t **jwk_key_rsa) {
 
-	/* allocated space and set key type */
-	jwk->type = APR_JWK_KEY_RSA;
-	jwk->key.rsa = apr_pcalloc(pool, sizeof(apr_jwk_key_rsa_t));
+	/* allocate space */
+	*jwk_key_rsa = apr_pcalloc(pool, sizeof(apr_jwk_key_rsa_t));
+	apr_jwk_key_rsa_t *key = *jwk_key_rsa;
 
 	/* parse the modulus */
 	char *s_modulus = NULL;
-	apr_jwt_get_string(pool, &jwk->value, "n", &s_modulus);
+	apr_jwt_get_string(pool, jwk, "n", &s_modulus);
 	if (s_modulus == NULL)
 		return FALSE;
 
 	/* parse the modulus size */
-	jwk->key.rsa->modulus_len = apr_jwt_base64url_decode(pool,
-			(char **) &jwk->key.rsa->modulus, s_modulus, 1);
+	key->modulus_len = apr_jwt_base64url_decode(pool, (char **) &key->modulus,
+			s_modulus, 1);
 
 	/* parse the exponent */
 	char *s_exponent = NULL;
-	apr_jwt_get_string(pool, &jwk->value, "e", &s_exponent);
+	apr_jwt_get_string(pool, jwk, "e", &s_exponent);
 	if (s_exponent == NULL)
 		return FALSE;
 
 	/* parse the exponent size */
-	jwk->key.rsa->exponent_len = apr_jwt_base64url_decode(pool,
-			(char **) &jwk->key.rsa->exponent, s_exponent, 1);
+	key->exponent_len = apr_jwt_base64url_decode(pool, (char **) &key->exponent,
+			s_exponent, 1);
 
 	/* parse the private exponent */
 	char *s_private_exponent = NULL;
-	apr_jwt_get_string(pool, &jwk->value, "d", &s_private_exponent);
+	apr_jwt_get_string(pool, jwk, "d", &s_private_exponent);
 	if (s_private_exponent != NULL) {
 		/* parse the private exponent size */
-		jwk->key.rsa->private_exponent_len = apr_jwt_base64url_decode(pool,
-				(char **) &jwk->key.rsa->private_exponent, s_private_exponent,
-				1);
+		key->private_exponent_len = apr_jwt_base64url_decode(pool,
+				(char **) &key->private_exponent, s_private_exponent, 1);
 	}
 
 	/* that went well */
 	return TRUE;
+}
+
+/*
+ * convert the RSA public key in the X.509 certificate in the BIO pointed to
+ * by "input" to a JSON Web Key object
+ */
+static apr_byte_t apr_jwk_rsa_bio_to_key(apr_pool_t *pool, BIO *input,
+		apr_jwk_key_rsa_t **jwk_key_rsa, int is_private_key) {
+
+	X509 *x509 = NULL;
+	EVP_PKEY *pkey = NULL;
+	apr_byte_t rv = FALSE;
+
+	if (is_private_key) {
+		/* get the private key struct from the BIO */
+		if ((pkey = PEM_read_bio_PrivateKey(input, NULL, NULL, NULL)) == NULL)
+			goto end;
+	} else {
+		/* read the X.509 struct */
+		if ((x509 = PEM_read_bio_X509_AUX(input, NULL, NULL, NULL)) == NULL)
+			goto end;
+		/* get the public key struct from the X.509 struct */
+		if ((pkey = X509_get_pubkey(x509)) == NULL)
+			goto end;
+	}
+
+	/* allocate space */
+	*jwk_key_rsa = apr_pcalloc(pool, sizeof(apr_jwk_key_rsa_t));
+	apr_jwk_key_rsa_t *key = *jwk_key_rsa;
+
+	/* get the RSA key from the public key struct */
+	RSA *rsa = EVP_PKEY_get1_RSA(pkey);
+	if (rsa == NULL)
+		goto end;
+
+	/* convert the modulus bignum in to a key/len */
+	key->modulus_len = BN_num_bytes(rsa->n);
+	key->modulus = apr_pcalloc(pool, key->modulus_len);
+	BN_bn2bin(rsa->n, key->modulus);
+
+	/* convert the exponent bignum in to a key/len */
+	key->exponent_len = BN_num_bytes(rsa->e);
+	key->exponent = apr_pcalloc(pool, key->exponent_len);
+	BN_bn2bin(rsa->e, key->exponent);
+
+	/* convert the private exponent bignum in to a key/len */
+	if (rsa->d != NULL) {
+		key->private_exponent_len = BN_num_bytes(rsa->d);
+		key->private_exponent = apr_pcalloc(pool, key->private_exponent_len);
+		BN_bn2bin(rsa->d, key->private_exponent);
+	}
+
+	rv = TRUE;
+
+end:
+
+	if (pkey)
+		EVP_PKEY_free(pkey);
+	if (x509)
+		X509_free(x509);
+
+	return rv;
+}
+
+/*
+ * parse an RSA JWK in X.509 format (x5c)
+ */
+static apr_byte_t apr_jwk_parse_rsa_x5c(apr_pool_t *pool, apr_jwk_t *jwk) {
+
+	apr_byte_t rv = FALSE;
+
+	/* get the "x5c" array element from the JSON object */
+	json_t *v = json_object_get(jwk->value.json, "x5c");
+	if ((v == NULL) || (!json_is_array(v)))
+		return FALSE;
+
+	/* take the first element of the array */
+	v = json_array_get(v, 0);
+	if ((v == NULL) || (!json_is_string(v)))
+		return FALSE;
+	const char *s_x5c = json_string_value(v);
+
+	/* PEM-format it */
+	const int len = 75;
+	int i = 0;
+	char *s = apr_psprintf(pool, "-----BEGIN CERTIFICATE-----\n");
+	while (i < strlen(s_x5c)) {
+		s = apr_psprintf(pool, "%s%s\n", s, apr_pstrndup(pool, s_x5c + i, len));
+		i += len;
+	}
+	s = apr_psprintf(pool, "%s-----END CERTIFICATE-----\n", s);
+
+	BIO *input = NULL;
+
+	/* put it in BIO memory */
+	if ((input = BIO_new(BIO_s_mem())) == NULL)
+		return FALSE;
+
+	if (BIO_puts(input, s) <= 0) {
+		BIO_free(input);
+		return FALSE;
+	}
+
+	/* do the actual parsing */
+	rv = apr_jwk_rsa_bio_to_key(pool, input, &jwk->key.rsa, FALSE);
+
+	BIO_free(input);
+
+	return rv;
+}
+
+/*
+ * parse an RSA JWK
+ */
+static apr_byte_t apr_jwk_parse_rsa(apr_pool_t *pool, apr_jwk_t *jwk) {
+
+	jwk->type = APR_JWK_KEY_RSA;
+
+	char *s_test = NULL;
+	apr_jwt_get_string(pool, &jwk->value, "n", &s_test);
+	if (s_test != NULL)
+		return apr_jwk_parse_rsa_raw(pool, &jwk->value, &jwk->key.rsa);
+
+	json_t *v = json_object_get(jwk->value.json, "x5c");
+	if (v != NULL)
+		return apr_jwk_parse_rsa_x5c(pool, jwk);
+
+	return FALSE;
 }
 
 /*
@@ -174,41 +302,24 @@ apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, json_t *j_json,
 }
 
 /*
- * convert OpenSSL BIGNUM type to base64url-encoded raw bytes value
+ * convert RSA key to JWK JSON string representation and kid
  */
-static apr_byte_t apr_jwk_bignum_base64enc(apr_pool_t *pool, BIGNUM *v,
-		unsigned char **v_enc, int *v_len) {
-	*v_len = BN_num_bytes(v);
-	unsigned char *v_bytes = apr_pcalloc(pool, *v_len);
-	BN_bn2bin(v, v_bytes);
-	return apr_jwt_base64url_encode(pool, (char **) v_enc,
-			(const char *) v_bytes, *v_len, 0);
-}
-
-/*
- * convert OpenSSL EVP public/private key to JWK JSON and kid
- */
-static apr_byte_t apr_jwk_openssl_evp_pkey_rsa_to_json(apr_pool_t *pool,
-		EVP_PKEY *pkey, char **jwk, char**kid) {
-
-	RSA *rsa = EVP_PKEY_get1_RSA(pkey);
+static apr_byte_t apr_jwk_rsa_to_json(apr_pool_t *pool, apr_jwk_key_rsa_t *key,
+		char **jwk, char**kid) {
 
 	unsigned char *n_enc = NULL;
-	int n_len = 0;
-	if (apr_jwk_bignum_base64enc(pool, rsa->n, &n_enc, &n_len) == FALSE)
-		return FALSE;
+	int n_len = apr_jwt_base64url_encode(pool, (char **) &n_enc,
+			(const char *) key->modulus, key->modulus_len, 0);
 
 	unsigned char *e_enc = NULL;
-	int e_len = 0;
-	if (apr_jwk_bignum_base64enc(pool, rsa->e, &e_enc, &e_len) == FALSE)
-		return FALSE;
+	apr_jwt_base64url_encode(pool, (char **) &e_enc,
+			(const char *) key->exponent, key->exponent_len, 0);
 
 	unsigned char *d_enc = NULL;
-	int d_len = 0;
-	if (rsa->d) {
-		if (apr_jwk_bignum_base64enc(pool, rsa->d, &d_enc, &d_len) == FALSE)
-			return FALSE;
-	}
+	if (key->private_exponent_len > 0)
+		apr_jwt_base64url_encode(pool, (char **) &d_enc,
+				(const char *) key->private_exponent, key->private_exponent_len,
+				0);
 
 	/* calculate a unique key identifier (kid) by fingerprinting the key params */
 	// TODO: based just on sha1 hash of baseurl-encoded "n" now...
@@ -236,35 +347,27 @@ static apr_byte_t apr_jwk_openssl_evp_pkey_rsa_to_json(apr_pool_t *pool,
 }
 
 /*
- * convert the RSA public key in the X.509 certificate in the file pointed to
- * by "filename" to a JSON Web Key object
+ * convert PEM formatted public/private key file to JSON string representation
  */
-apr_byte_t apr_jwk_x509_to_rsa_jwk(apr_pool_t *pool, const char *filename,
-		char **jwk, char**kid) {
-
+static apr_byte_t apr_jwk_pem_to_json_impl(apr_pool_t *pool,
+		const char *filename, char **s_jwk, char**s_kid, int is_private_key) {
 	BIO *input = NULL;
-	X509 *x509 = NULL;
-	EVP_PKEY *pkey = NULL;
-
+	apr_jwk_key_rsa_t *key = NULL;
 	apr_byte_t rv = FALSE;
 
 	if ((input = BIO_new(BIO_s_file())) == NULL)
 		goto end;
+
 	if (BIO_read_filename(input, filename) <= 0)
 		goto end;
-	if ((x509 = PEM_read_bio_X509_AUX(input, NULL, NULL, NULL)) == NULL)
-		goto end;
-	if ((pkey = X509_get_pubkey(x509)) == NULL)
+
+	if (apr_jwk_rsa_bio_to_key(pool, input, &key, is_private_key) == FALSE)
 		goto end;
 
-	rv = apr_jwk_openssl_evp_pkey_rsa_to_json(pool, pkey, jwk, kid);
+	rv = apr_jwk_rsa_to_json(pool, key, s_jwk, s_kid);
 
 end:
 
-	if (pkey)
-		EVP_PKEY_free(pkey);
-	if (x509)
-		X509_free(x509);
 	if (input)
 		BIO_free(input);
 
@@ -272,29 +375,19 @@ end:
 }
 
 /*
- * convert the RSA private key in the PEM file pointed to by "filename" to a JSON Web Key object
+ * convert the RSA public key in the X.509 certificate in the file pointed to
+ * by "filename" to a JSON Web Key string representation
+ */
+apr_byte_t apr_jwk_pem_to_json(apr_pool_t *pool, const char *filename,
+		char **s_jwk, char**s_kid) {
+	return apr_jwk_pem_to_json_impl(pool, filename, s_jwk, s_kid, FALSE);
+}
+
+/*
+ * convert the RSA private key in the PEM file pointed to by "filename"
+ * to a JSON Web Key string representation
  */
 apr_byte_t apr_jwk_private_key_to_rsa_jwk(apr_pool_t *pool,
-		const char *filename, char **jwk, char**kid) {
-
-	BIO *input = NULL;
-	EVP_PKEY *pkey = NULL;
-
-	apr_byte_t rv = FALSE;
-
-	if ((input = BIO_new(BIO_s_file())) == NULL)
-		goto end;
-	if (BIO_read_filename(input, filename) <= 0)
-		goto end;
-	if ((pkey = PEM_read_bio_PrivateKey(input, NULL, NULL, NULL)) == NULL)
-		goto end;
-
-	rv = apr_jwk_openssl_evp_pkey_rsa_to_json(pool, pkey, jwk, kid);
-
-end: if (pkey)
-		EVP_PKEY_free(pkey);
-	if (input)
-		BIO_free(input);
-
-	return rv;
+		const char *filename, char **s_jwk, char**s_kid) {
+	return apr_jwk_pem_to_json_impl(pool, filename, s_jwk, s_kid, TRUE);
 }

@@ -1,3 +1,6 @@
+9/25/2014
+- add support for "x5c" JWK representation
+
 9/17/2014
 - remove support for the X-Frame-Options as it is not needed in 302s
 - create and use log macros that printout function name

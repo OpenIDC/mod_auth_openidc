@@ -201,7 +201,7 @@ typedef struct apr_jwk_t {
 apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, json_t *j_json,
 		const char *s_json, apr_jwk_t **j_jwk);
 /* convert the RSA public key in a PEM formatted file with an X.509 cert in to an RSA JWK */
-apr_byte_t apr_jwk_x509_to_rsa_jwk(apr_pool_t *pool, const char *filename, char **jwk, char**kid);
+apr_byte_t apr_jwk_pem_to_json(apr_pool_t *pool, const char *filename, char **jwk, char**kid);
 /* convert the RSA private key in a PEM formatted file in to an RSA JWK */
 apr_byte_t apr_jwk_private_key_to_rsa_jwk(apr_pool_t *pool, const char *filename, char **jwk, char**kid);
 
