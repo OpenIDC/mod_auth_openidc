@@ -77,7 +77,7 @@ static int TST_RC;
 #define TST_ASSERT_STR(message, result, expected) \
 	TST_RC = ((!result) || (!expected)) ? (result != expected) : strcmp(result, expected); \
 	if (TST_RC) { \
-		sprintf(TST_ERR_MSG, TST_FORMAT("%s"), __FUNCTION__, message, result, expected); \
+		sprintf(TST_ERR_MSG, TST_FORMAT("%s"), __FUNCTION__, message, result ? result : "(null)", expected ? expected : "(null)"); \
 		return TST_ERR_MSG; \
 	}
 
