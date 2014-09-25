@@ -102,7 +102,7 @@ int oidc_proto_authorization_request_post_preserve(request_rec *r,
 							"  </body>\n"
 							"</html>\n", json, authorization_request);
 
-	return oidc_util_http_sendstring(r, java_script, DONE);
+	return oidc_util_html_send(r, java_script, DONE);
 }
 
 /*
@@ -989,7 +989,7 @@ int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg *c) {
 					"  </body>\n"
 					"</html>\n";
 
-	return oidc_util_http_sendstring(r, java_script, DONE);
+	return oidc_util_html_send(r, java_script, DONE);
 }
 
 /*

@@ -1,5 +1,6 @@
 9/25/2014
 - add support for "x5c" JWK representation
+- return JWKS on jwks_uri with content-type "application/json"
 
 9/17/2014
 - remove support for the X-Frame-Options as it is not needed in 302s

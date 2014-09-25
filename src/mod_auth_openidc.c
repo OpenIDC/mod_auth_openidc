@@ -763,7 +763,7 @@ static int oidc_restore_preserved_post(request_rec *r, const char *original_url)
 					"  </body>\n"
 					"</html>\n";
 	java_script = apr_psprintf(r->pool, java_script, original_url);
-	return oidc_util_http_sendstring(r, java_script, DONE);
+	return oidc_util_html_send(r, java_script, DONE);
 }
 
 /*
@@ -784,7 +784,7 @@ static int oidc_session_redirect_parent_window_to_logout(request_rec *r,
 							"  </head>\n"
 							"  <body></body>\n"
 							"</html>\n", c->redirect_uri);
-	return oidc_util_http_sendstring(r, html, DONE);
+	return oidc_util_html_send(r, html, DONE);
 }
 
 /*
@@ -1046,7 +1046,7 @@ static int oidc_handle_post_authorization_response(request_rec *r, oidc_cfg *c,
 			|| ((apr_table_elts(params)->nelts == 1)
 					&& (apr_strnatcmp(apr_table_get(params, "response_mode"),
 							"fragment") == 0))) {
-		return oidc_util_http_sendstring(r,
+		return oidc_util_html_send(r,
 				"mod_auth_openidc: you've hit an OpenID Connect Redirect URI with no parameters, this is an invalid request; you should not open this URL in your browser directly, or have the server administrator use a different OIDCRedirectURI setting.",
 				HTTP_INTERNAL_SERVER_ERROR);
 	}
@@ -1128,7 +1128,7 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 	/* get a list of all providers configured in the metadata directory */
 	apr_array_header_t *arr = NULL;
 	if (oidc_metadata_list(r, cfg, &arr) == FALSE)
-		return oidc_util_http_sendstring(r,
+		return oidc_util_html_send(r,
 				"mod_auth_openidc: no configured providers found, contact your administrator",
 				HTTP_UNAUTHORIZED);
 
@@ -1191,7 +1191,7 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 			"</html>\n", s);
 
 	/* now send the HTML contents to the user agent */
-	return oidc_util_http_sendstring(r, s, HTTP_UNAUTHORIZED);
+	return oidc_util_html_send(r, s, HTTP_UNAUTHORIZED);
 }
 
 /*
@@ -1383,14 +1383,14 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 			issuer, target_link_uri, login_hint);
 
 	if (issuer == NULL) {
-		return oidc_util_http_sendstring(r,
+		return oidc_util_html_send(r,
 				"mod_auth_openidc: wherever you came from, it sent you here with the wrong parameters...",
 				HTTP_INTERNAL_SERVER_ERROR);
 	}
 
 	if (target_link_uri == NULL) {
 		if (c->default_sso_url == NULL) {
-			return oidc_util_http_sendstring(r,
+			return oidc_util_html_send(r,
 					"mod_auth_openidc: SSO to this module without specifying a \"target_link_uri\" parameter is not possible because OIDCDefaultURL is not set.",
 					HTTP_INTERNAL_SERVER_ERROR);
 		}
@@ -1400,7 +1400,7 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 	/* do open redirect prevention */
 	if (oidc_target_link_uri_matches_configuration(r, c,
 			target_link_uri) == FALSE) {
-		return oidc_util_http_sendstring(r,
+		return oidc_util_html_send(r,
 				"mod_auth_openidc: \"target_link_uri\" parameter does not match configuration settings, aborting to prevent an open redirect.",
 				HTTP_UNAUTHORIZED);
 	}
@@ -1418,7 +1418,7 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 		if (oidc_proto_account_based_discovery(r, c, issuer, &issuer) == FALSE) {
 
 			/* something did not work out, show a user facing error */
-			return oidc_util_http_sendstring(r,
+			return oidc_util_html_send(r,
 					"mod_auth_openidc: could not resolve the provided account name to an OpenID Connect provider; check your syntax",
 					HTTP_NOT_FOUND);
 		}
@@ -1449,7 +1449,7 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 	}
 
 	/* something went wrong */
-	return oidc_util_http_sendstring(r,
+	return oidc_util_html_send(r,
 			"mod_auth_openidc: could not find valid provider metadata for the selected OpenID Connect provider; contact the administrator",
 			HTTP_NOT_FOUND);
 }
@@ -1480,7 +1480,7 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 						"    <p>Logged Out</p>\n"
 						"  </body>\n"
 						"</html>\n";
-		return oidc_util_http_sendstring(r, html, DONE);
+		return oidc_util_html_send(r, html, DONE);
 	}
 
 	/* send the user to the specified where-to-go-after-logout URL */
@@ -1563,7 +1563,7 @@ static int oidc_handle_jwks(request_rec *r, oidc_cfg *c) {
 	// TODO: send stuff if first == FALSE?
 	jwks = apr_psprintf(r->pool, "%s ] }", jwks);
 
-	return oidc_util_http_sendstring(r, jwks, DONE);
+	return oidc_util_http_send(r, jwks, strlen(jwks), "application/json", DONE);
 }
 
 static int oidc_handle_session_management_iframe_op(request_rec *r, oidc_cfg *c,
@@ -1658,7 +1658,7 @@ static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c,
 			session_state, op_iframe_id, s_poll_interval, c->redirect_uri,
 			c->redirect_uri);
 
-	return oidc_util_http_sendstring(r, iframe_contents, DONE);
+	return oidc_util_html_send(r, iframe_contents, DONE);
 }
 
 /*
@@ -1787,7 +1787,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 	}
 
 	/* something went wrong */
-	return oidc_util_http_sendstring(r,
+	return oidc_util_html_send(r,
 			apr_psprintf(r->pool,
 					"mod_auth_openidc: the OpenID Connect callback URL received an invalid request: %s",
 					r->args), HTTP_INTERNAL_SERVER_ERROR);

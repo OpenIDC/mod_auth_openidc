@@ -836,14 +836,14 @@ apr_byte_t oidc_util_decode_json_and_check_error(request_rec *r,
 }
 
 /*
- * sends HTML content to the user agent
+ * sends content to the user agent
  */
-int oidc_util_http_sendstring(request_rec *r, const char *html,
+int oidc_util_http_send(request_rec *r, const char *data, int data_len, const char *content_type,
 		int success_rvalue) {
-	ap_set_content_type(r, "text/html");
+	ap_set_content_type(r, content_type);
 	apr_bucket_brigade *bb = apr_brigade_create(r->pool,
 			r->connection->bucket_alloc);
-	apr_bucket *b = apr_bucket_transient_create(html, strlen(html),
+	apr_bucket *b = apr_bucket_transient_create(data, data_len,
 			r->connection->bucket_alloc);
 	APR_BRIGADE_INSERT_TAIL(bb, b);
 	b = apr_bucket_eos_create(r->connection->bucket_alloc);
@@ -852,6 +852,14 @@ int oidc_util_http_sendstring(request_rec *r, const char *html,
 		return HTTP_INTERNAL_SERVER_ERROR;
 	//r->status = success_rvalue;
 	return success_rvalue;
+}
+
+/*
+ * sends HTML content to the user agent
+ */
+int oidc_util_html_send(request_rec *r, const char *html,
+		int success_rvalue) {
+	return oidc_util_http_send(r, html, strlen(html), "text/html", success_rvalue);
 }
 
 /*
@@ -1039,7 +1047,7 @@ int oidc_util_html_send_error(request_rec *r, const char *error,
 				description);
 	}
 
-	return oidc_util_http_sendstring(r, msg, status_code);
+	return oidc_util_html_send(r, msg, status_code);
 }
 
 /*
