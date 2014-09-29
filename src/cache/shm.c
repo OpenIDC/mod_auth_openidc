@@ -79,7 +79,7 @@ typedef struct oidc_cache_cfg_shm_t {
 /* represents one (fixed size) cache entry, cq. name/value string pair */
 typedef struct oidc_cache_shm_entry_t {
 	/* name of the cache entry */
-	char key[OIDC_CACHE_SHM_KEY_MAX];
+	char section_key[OIDC_CACHE_SHM_KEY_MAX];
 	/* value of the cache entry */
 	char value[OIDC_CACHE_SHM_VALUE_MAX];
 	/* last (read) access timestamp */
@@ -123,7 +123,7 @@ int oidc_cache_shm_post_config(server_rec *s) {
 	int i;
 	oidc_cache_shm_entry_t *table = apr_shm_baseaddr_get(context->shm);
 	for (i = 0; i < cfg->cache_shm_size_max; i++) {
-		table[i].key[0] = '\0';
+		table[i].section_key[0] = '\0';
 		table[i].access = 0;
 	}
 
@@ -183,12 +183,20 @@ int oidc_cache_shm_child_init(apr_pool_t *p, server_rec *s) {
 }
 
 /*
+ * assemble single key name based on section/key input
+ */
+static char *oidc_cache_shm_get_key(apr_pool_t *pool, const char *section,
+		const char *key) {
+	return apr_psprintf(pool, "%s:%s", section, key);
+}
+
+/*
  * get a value from the shared memory cache
  */
-static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *key,
-		const char **value) {
+static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section,
+		const char *key, const char **value) {
 
-	oidc_debug(r, "enter, key=\"%s\"", key);
+	oidc_debug(r, "enter, section=\"%s\", key=\"%s\"", section, key);
 
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
@@ -196,6 +204,8 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *key,
 
 	apr_status_t rv;
 	int i;
+	const char *section_key = oidc_cache_shm_get_key(r->pool, section, key);
+
 	*value = NULL;
 
 	/* grab the global lock */
@@ -209,12 +219,12 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *key,
 
 	/* loop over the block, looking for the key */
 	for (i = 0; i < cfg->cache_shm_size_max; i++) {
-		const char *tablekey = table[i].key;
+		const char *tablekey = table[i].section_key;
 
 		if (tablekey == NULL)
 			continue;
 
-		if (strcmp(tablekey, key) == 0) {
+		if (apr_strnatcmp(tablekey, section_key) == 0) {
 
 			/* found a match, check if it has expired */
 			if (table[i].expires > apr_time_now()) {
@@ -235,15 +245,15 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *key,
 /*
  * store a value in the shared memory cache
  */
-static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *key,
-		const char *value, apr_time_t expiry) {
+static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
+		const char *key, const char *value, apr_time_t expiry) {
+
+	oidc_debug(r, "enter, section=\"%s\", key=\"%s\", value size=%llu", section,
+			key, value ? (unsigned long long )strlen(value) : 0);
 
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *) cfg->cache_cfg;
-
-	oidc_debug(r, "enter, key=\"%s\" (value size=(%llu)", key,
-			value ? (unsigned long long )strlen(value) : 0);
 
 	oidc_cache_shm_entry_t *match, *free, *lru;
 	oidc_cache_shm_entry_t *table;
@@ -251,10 +261,12 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *key,
 	int i;
 	apr_time_t age;
 
+	const char *section_key = oidc_cache_shm_get_key(r->pool, section, key);
+
 	/* check that the passed in key is valid */
-	if (key == NULL || strlen(key) > OIDC_CACHE_SHM_KEY_MAX) {
-		oidc_error(r, "could not set value since key is NULL or too long (%s)",
-				key);
+	if (strlen(section_key) > OIDC_CACHE_SHM_KEY_MAX) {
+		oidc_error(r, "could not set value since key is too long (%s)",
+				section_key);
 		return FALSE;
 	}
 
@@ -284,14 +296,14 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *key,
 	for (i = 0; i < cfg->cache_shm_size_max; i++) {
 
 		/* see if this slot is free */
-		if (table[i].key[0] == '\0') {
+		if (table[i].section_key[0] == '\0') {
 			if (free == NULL)
 				free = &table[i];
 			continue;
 		}
 
 		/* see if a value already exists for this key */
-		if (strcmp(table[i].key, key) == 0) {
+		if (apr_strnatcmp(table[i].section_key, section_key) == 0) {
 			match = &table[i];
 			break;
 		}
@@ -325,14 +337,14 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *key,
 	if (value != NULL) {
 
 		/* fill out the entry with the provided data */
-		strcpy(t->key, key);
+		strcpy(t->section_key, section_key);
 		strcpy(t->value, value);
 		t->expires = expiry;
 		t->access = current_time;
 
 	} else {
 
-		t->key[0] = '\0';
+		t->section_key[0] = '\0';
 	}
 
 	/* release the global lock */

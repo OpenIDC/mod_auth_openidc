@@ -688,8 +688,8 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_store(request_rec *r,
 		return FALSE;
 
 	/* store the JWKs in the cache */
-	cfg->cache->set(r, oidc_metadata_jwks_cache_key(r, provider->issuer),
-			response,
+	cfg->cache->set(r, OIDC_CACHE_SECTION_JWKS,
+			oidc_metadata_jwks_cache_key(r, provider->issuer), response,
 			apr_time_now() + apr_time_from_sec(provider->jwks_refresh_interval));
 
 	return TRUE;
@@ -715,8 +715,8 @@ apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg,
 
 	/* see if the JWKs is cached */
 	const char *value = NULL;
-	cfg->cache->get(r, oidc_metadata_jwks_cache_key(r, provider->issuer),
-			&value);
+	cfg->cache->get(r, OIDC_CACHE_SECTION_JWKS,
+			oidc_metadata_jwks_cache_key(r, provider->issuer), &value);
 
 	if (value == NULL) {
 		/* it is non-existing or expired: do a forced refresh */

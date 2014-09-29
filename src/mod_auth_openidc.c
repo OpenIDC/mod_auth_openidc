@@ -314,7 +314,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	}
 
 	const char *replay = NULL;
-	c->cache->get(r, jti, &replay);
+	c->cache->get(r, OIDC_CACHE_SECTION_JTI, jti, &replay);
 	if (replay != NULL) {
 		oidc_error(r,
 				"the jti value (%s) passed in the browser state was found in the cache already; possible replay attack!?",
@@ -328,7 +328,8 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 			provider->idtoken_iat_slack * 2 + 10);
 
 	/* store it in the cache for the calculated duration */
-	c->cache->set(r, jti, jti, apr_time_now() + jti_cache_duration);
+	c->cache->set(r, OIDC_CACHE_SECTION_JTI, jti, jti,
+			apr_time_now() + jti_cache_duration);
 
 	oidc_debug(r,
 			"jti \"%s\" validated successfully and is now cached for %" APR_TIME_T_FMT " seconds",

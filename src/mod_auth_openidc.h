@@ -149,6 +149,13 @@ APLOG_USE_MODULE(auth_openidc);
 /* the name of the keyword that follows the Require primitive to indicate claims-based authorization */
 #define OIDC_REQUIRE_NAME "claim"
 
+/* cache sections */
+#define OIDC_CACHE_SECTION_JTI "jti"
+#define OIDC_CACHE_SECTION_SESSION "session"
+#define OIDC_CACHE_SECTION_NONCE "nonce"
+#define OIDC_CACHE_SECTION_JWKS "jwks"
+#define OIDC_CACHE_SECTION_ACCESS_TOKEN "access_token"
+
 typedef struct oidc_provider_t {
 	char *issuer;
 	char *authorization_endpoint_url;

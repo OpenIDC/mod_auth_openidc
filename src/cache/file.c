@@ -92,18 +92,21 @@ int oidc_cache_file_post_config(server_rec *s) {
 /*
  * return the cache file name for a specified key
  */
-static const char *oidc_cache_file_name(request_rec *r, const char *key) {
-	return apr_psprintf(r->pool, "%s%s", OIDC_CACHE_FILE_PREFIX, key);
+static const char *oidc_cache_file_name(request_rec *r, const char *section,
+		const char *key) {
+	return apr_psprintf(r->pool, "%s%s-%s", OIDC_CACHE_FILE_PREFIX, section,
+			key);
 }
 
 /*
  * return the fully qualified path name to a cache file for a specified key
  */
-static const char *oidc_cache_file_path(request_rec *r, const char *key) {
+static const char *oidc_cache_file_path(request_rec *r, const char *section,
+		const char *key) {
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	return apr_psprintf(r->pool, "%s/%s", cfg->cache_file_dir,
-			oidc_cache_file_name(r, key));
+			oidc_cache_file_name(r, section, key));
 }
 
 /*
@@ -170,14 +173,14 @@ static apr_status_t oidc_cache_file_write(request_rec *r, const char *path,
 /*
  * get a value for the specified key from the cache
  */
-static apr_byte_t oidc_cache_file_get(request_rec *r, const char *key,
-		const char **value) {
+static apr_byte_t oidc_cache_file_get(request_rec *r, const char *section,
+		const char *key, const char **value) {
 	apr_file_t *fd = NULL;
 	apr_status_t rc = APR_SUCCESS;
 	char s_err[128];
 
 	/* get the fully qualified path to the cache file based on the key name */
-	const char *path = oidc_cache_file_path(r, key);
+	const char *path = oidc_cache_file_path(r, section, key);
 
 	/* open the cache file if it exists, otherwise we just have a "regular" cache miss */
 	if (apr_file_open(&fd, path, APR_FOPEN_READ | APR_FOPEN_BUFFERED,
@@ -273,8 +276,8 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 			&auth_openidc_module);
 
 	/* get the path to the metadata file that holds "last cleaned" metadata info */
-	const char *metadata_path = oidc_cache_file_path(r,
-	OIDC_CACHE_FILE_LAST_CLEANED);
+	const char *metadata_path = oidc_cache_file_path(r, "cache-file",
+			OIDC_CACHE_FILE_LAST_CLEANED);
 
 	/* open the metadata file if it exists */
 	if ((rc = apr_stat(&fi, metadata_path, APR_FINFO_MTIME, r->pool))
@@ -328,8 +331,9 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 			/* skip non-cache entries, cq. the ".", ".." and the metadata file */
 			if ((fi.name[0] == '.')
 					|| (strstr(fi.name, OIDC_CACHE_FILE_PREFIX) != fi.name)
-					|| ((apr_strnatcmp(fi.name, oidc_cache_file_name(r,
-					OIDC_CACHE_FILE_LAST_CLEANED)) == 0)))
+					|| ((apr_strnatcmp(fi.name,
+							oidc_cache_file_name(r, "cache-file",
+									OIDC_CACHE_FILE_LAST_CLEANED)) == 0)))
 				continue;
 
 			/* get the fully qualified path to the cache file and open it */
@@ -386,14 +390,14 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 /*
  * write a value for the specified key to the cache
  */
-static apr_byte_t oidc_cache_file_set(request_rec *r, const char *key,
-		const char *value, apr_time_t expiry) {
+static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section,
+		const char *key, const char *value, apr_time_t expiry) {
 	apr_file_t *fd = NULL;
 	apr_status_t rc = APR_SUCCESS;
 	char s_err[128];
 
 	/* get the fully qualified path to the cache file based on the key name */
-	const char *path = oidc_cache_file_path(r, key);
+	const char *path = oidc_cache_file_path(r, section, key);
 
 	/* only on writes (not on reads) we clean the cache first (if not done recently) */
 	oidc_cache_file_clean(r);

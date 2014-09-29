@@ -50,14 +50,17 @@
  * @Author: Hans Zandbelt - hzandbelt@pingidentity.com
  */
 
-#ifndef _MOD_AUTH_CONNECT_CACHE_H_
-#define _MOD_AUTH_CONNECT_CACHE_H_
+#ifndef _MOD_AUTH_OPENIDC_CACHE_H_
+#define _MOD_AUTH_OPENIDC_CACHE_H_
 
 typedef void * (*oidc_cache_cfg_create)(apr_pool_t *pool);
 typedef int (*oidc_cache_post_config_function)(server_rec *s);
 typedef int (*oidc_cache_child_init_function)(apr_pool_t *p, server_rec *s);
-typedef apr_byte_t (*oidc_cache_get_function)(request_rec *r, const char *key, const char **value);
-typedef apr_byte_t (*oidc_cache_set_function)(request_rec *r, const char *key, const char *value, apr_time_t expiry);
+typedef apr_byte_t (*oidc_cache_get_function)(request_rec *r,
+		const char *section, const char *key, const char **value);
+typedef apr_byte_t (*oidc_cache_set_function)(request_rec *r,
+		const char *section, const char *key, const char *value,
+		apr_time_t expiry);
 typedef int (*oidc_cache_destroy_function)(server_rec *s);
 
 typedef struct oidc_cache_t {
@@ -73,4 +76,4 @@ extern oidc_cache_t oidc_cache_file;
 extern oidc_cache_t oidc_cache_memcache;
 extern oidc_cache_t oidc_cache_shm;
 
-#endif /* _MOD_AUTH_CONNECT_CACHE_H_ */
+#endif /* _MOD_AUTH_OPENIDC_CACHE_H_ */

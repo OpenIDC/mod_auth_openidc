@@ -227,7 +227,7 @@ static apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
 
 	/* see if we have this nonce cached already */
 	const char *replay = NULL;
-	cfg->cache->get(r, nonce, &replay);
+	cfg->cache->get(r, OIDC_CACHE_SECTION_NONCE, nonce, &replay);
 	if (replay != NULL) {
 		oidc_error(r,
 				"the nonce value (%s) passed in the browser state was found in the cache already; possible replay attack!?",
@@ -261,7 +261,8 @@ static apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
 			provider->idtoken_iat_slack * 2 + 10);
 
 	/* store it in the cache for the calculated duration */
-	cfg->cache->set(r, nonce, nonce, apr_time_now() + nonce_cache_duration);
+	cfg->cache->set(r, OIDC_CACHE_SECTION_NONCE, nonce, nonce,
+			apr_time_now() + nonce_cache_duration);
 
 	oidc_debug(r,
 			"nonce \"%s\" validated successfully and is now cached for %" APR_TIME_T_FMT " seconds",

@@ -136,7 +136,9 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 		}
 
 		if (host_str == NULL) {
-			oidc_serror(s, "failed to parse cache server, no hostname specified: '%s'", split);
+			oidc_serror(s,
+					"failed to parse cache server, no hostname specified: '%s'",
+					split);
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 
@@ -155,9 +157,7 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 		/* add the memcache server struct to the list */
 		rv = apr_memcache_add_server(context->cache_memcache, st);
 		if (rv != APR_SUCCESS) {
-			oidc_serror(s,
-					"failed to add cache server: %s:%d",
-					host_str, port);
+			oidc_serror(s, "failed to add cache server: %s:%d", host_str, port);
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 
@@ -169,12 +169,20 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 }
 
 /*
+ * assemble single key name based on section/key input
+ */
+static char *oidc_cache_memcache_get_key(apr_pool_t *pool, const char *section,
+		const char *key) {
+	return apr_psprintf(pool, "%s:%s", section, key);
+}
+
+/*
  * get a name/value pair from memcache
  */
-static apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *key,
-		const char **value) {
+static apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *section,
+		const char *key, const char **value) {
 
-	oidc_debug(r, "enter, key=\"%s\"", key);
+	oidc_debug(r, "enter, section=\"%s\", key=\"%s\"", section, key);
 
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
@@ -184,8 +192,9 @@ static apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *key,
 	apr_size_t len = 0;
 
 	/* get it */
-	apr_status_t rv = apr_memcache_getp(context->cache_memcache, r->pool, key,
-			(char **) value, &len, NULL);
+	apr_status_t rv = apr_memcache_getp(context->cache_memcache, r->pool,
+			oidc_cache_memcache_get_key(r->pool, section, key), (char **) value,
+			&len, NULL);
 
 	// TODO: error strings ?
 	if (rv != APR_SUCCESS) {
@@ -207,10 +216,10 @@ static apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *key,
 /*
  * store a name/value pair in memcache
  */
-static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *key,
-		const char *value, apr_time_t expiry) {
+static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *section,
+		const char *key, const char *value, apr_time_t expiry) {
 
-	oidc_debug(r, "enter, key=\"%s\"", key);
+	oidc_debug(r, "enter, section=\"%s\", key=\"%s\"", section, key);
 
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
@@ -222,7 +231,8 @@ static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *key,
 	/* see if we should be clearing this entry */
 	if (value == NULL) {
 
-		rv = apr_memcache_delete(context->cache_memcache, key, 0);
+		rv = apr_memcache_delete(context->cache_memcache,
+				oidc_cache_memcache_get_key(r->pool, section, key), 0);
 
 		// TODO: error strings ?
 		if (rv != APR_SUCCESS) {
@@ -235,8 +245,9 @@ static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *key,
 		apr_uint32_t timeout = apr_time_sec(expiry - apr_time_now());
 
 		/* store it */
-		rv = apr_memcache_set(context->cache_memcache, key, (char *) value,
-				strlen(value), timeout, 0);
+		rv = apr_memcache_set(context->cache_memcache,
+				oidc_cache_memcache_get_key(r->pool, section, key),
+				(char *) value, strlen(value), timeout, 0);
 
 		// TODO: error strings ?
 		if (rv != APR_SUCCESS) {

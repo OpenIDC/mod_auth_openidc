@@ -351,7 +351,8 @@ static apr_status_t oidc_session_load_cache(request_rec *r, session_rec *z) {
 
 	/* get the string-encoded session from the cache based on the key */
 	if (uuid != NULL) {
-		if (c->cache->get(r, uuid, &z->encoded) == TRUE)
+		if (c->cache->get(r, OIDC_CACHE_SECTION_SESSION, uuid,
+				&z->encoded) == TRUE)
 			return APR_SUCCESS;
 		//oidc_util_set_cookie(r, d->cookie, "");
 	}
@@ -377,7 +378,8 @@ static apr_status_t oidc_session_save_cache(request_rec *r, session_rec *z) {
 		oidc_util_set_cookie(r, d->cookie, key, -1);
 
 		/* store the string-encoded session in the cache */
-		c->cache->set(r, key, z->encoded, z->expiry);
+		c->cache->set(r, OIDC_CACHE_SECTION_SESSION, key, z->encoded,
+				z->expiry);
 
 	} else {
 
@@ -385,7 +387,7 @@ static apr_status_t oidc_session_save_cache(request_rec *r, session_rec *z) {
 		oidc_util_set_cookie(r, d->cookie, "", 0);
 
 		/* remove the session from the cache */
-		c->cache->set(r, key, NULL, 0);
+		c->cache->set(r, OIDC_CACHE_SECTION_SESSION, key, NULL, 0);
 	}
 
 	return APR_SUCCESS;

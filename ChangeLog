@@ -1,3 +1,6 @@
+9/29/2014
+- refactor cache so it is partitioned in to sections (i.e. avoid future key collisions)
+
 9/25/2014
 - add support for "x5c" JWK representation
 - return JWKS on jwks_uri with content-type "application/json"
