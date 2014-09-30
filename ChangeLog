@@ -1,3 +1,6 @@
+9/30/2014
+- be less strict about issuer validation in metadata
+
 9/29/2014
 - refactor cache so it is partitioned in to sections (i.e. avoid future key collisions)
 

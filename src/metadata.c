@@ -83,7 +83,12 @@ static const char *oidc_metadata_issuer_to_filename(request_rec *r,
 	if (p == issuer) {
 		p = apr_pstrdup(r->pool, issuer + strlen("https://"));
 	} else {
-		p = apr_pstrdup(r->pool, issuer);
+		p = strstr(issuer, "http://");
+		if (p == issuer) {
+			p = apr_pstrdup(r->pool, issuer + strlen("http://"));
+		} else {
+			p = apr_pstrdup(r->pool, issuer);
+		}
 	}
 
 	/* strip trailing '/' */
@@ -207,10 +212,10 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 
 	/* check that the issuer matches */
 	if (oidc_util_issuer_match(issuer, json_string_value(j_issuer)) == FALSE) {
-		oidc_error(r,
+		oidc_warn(r,
 				"requested issuer (%s) does not match the \"issuer\" value in the provider metadata file: %s",
 				issuer, json_string_value(j_issuer));
-		return FALSE;
+		//return FALSE;
 	}
 
 	/* verify that the provider supports the a flow that we implement */
@@ -910,11 +915,10 @@ apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg *cfg,
 
 		/* get the provider and client metadata, do all checks and registration if possible */
 		oidc_provider_t *provider = NULL;
-		if (oidc_metadata_get(r, cfg, issuer, &provider) == FALSE)
-			continue;
-
-		/* push the decoded issuer filename in to the array */
-		*(const char**) apr_array_push(*list) = issuer;
+		if (oidc_metadata_get(r, cfg, issuer, &provider) == TRUE) {
+			/* push the decoded issuer filename in to the array */
+			*(const char**) apr_array_push(*list) = provider->issuer;
+		}
 	}
 
 	/* we're done, cleanup now */
