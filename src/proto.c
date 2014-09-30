@@ -862,14 +862,6 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 	oidc_debug(r, "enter, endpoint=%s, access_token=%s",
 			provider->userinfo_endpoint_url, access_token);
 
-	/* only do this if an actual endpoint was set */
-	if (provider->userinfo_endpoint_url == NULL)
-		return FALSE;
-
-	/* only do this if we have an access_token */
-	if (access_token == NULL)
-		return FALSE;
-
 	/* get the JSON response */
 	if (oidc_util_http_get(r, provider->userinfo_endpoint_url,
 			NULL, NULL, access_token, provider->ssl_validate_server, response,

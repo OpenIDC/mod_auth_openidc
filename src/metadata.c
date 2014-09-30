@@ -208,14 +208,14 @@ static apr_byte_t oidc_metadata_is_valid_uri(request_rec *r, const char *type,
 	}
 
 	if (!json_is_string(entry)) {
-		oidc_warn(r,
+		oidc_error(r,
 				"%s (%s) JSON metadata contains a \"%s\" entry, but it is not a string value",
 				type, issuer, key);
 		return FALSE;
 	}
 
 	if (apr_uri_parse(r->pool, json_string_value(entry), &uri) != APR_SUCCESS) {
-		oidc_warn(r,
+		oidc_error(r,
 				"%s (%s) JSON metadata contains a \"%s\" entry, but it is not a valid URI",
 				type, issuer, key);
 		return FALSE;

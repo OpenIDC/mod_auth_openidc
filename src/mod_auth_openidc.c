@@ -934,8 +934,13 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	 */
 	const char *claims = NULL;
 	json_t *j_claims = NULL;
-	if (oidc_proto_resolve_userinfo(r, c, provider, access_token, &claims,
-			&j_claims) == FALSE) {
+	if (provider->userinfo_endpoint_url == NULL) {
+		oidc_debug(r, "not resolving user info claims because userinfo_endpoint is not set");
+	} else if (access_token == NULL) {
+		oidc_debug(r, "not resolving user info claims because access_token is not provided");
+	} else if (oidc_proto_resolve_userinfo(r, c, provider, access_token, &claims,
+				&j_claims) == FALSE) {
+		oidc_debug(r, "resolving user info claims failed, nothing will be stored in the session");
 		claims = NULL;
 	}
 
