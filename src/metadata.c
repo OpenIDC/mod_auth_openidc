@@ -187,6 +187,44 @@ static apr_byte_t oidc_metadata_file_read_json(request_rec *r, const char *path,
 }
 
 /*
+ * check if the specified entry in metadata is a valid URI
+ */
+static apr_byte_t oidc_metadata_is_valid_uri(request_rec *r, const char *type,
+		const char *issuer, const json_t *json, const char *key,
+		apr_byte_t is_mandatory) {
+
+	apr_uri_t uri;
+	json_t *entry = NULL;
+
+	entry = json_object_get(json, key);
+
+	if (entry == NULL) {
+		if (is_mandatory) {
+			oidc_error(r,
+					"%s (%s) JSON metadata does not contain the mandatory \"%s\" entry",
+					type, issuer, key);
+		}
+		return (!is_mandatory);
+	}
+
+	if (!json_is_string(entry)) {
+		oidc_warn(r,
+				"%s (%s) JSON metadata contains a \"%s\" entry, but it is not a string value",
+				type, issuer, key);
+		return FALSE;
+	}
+
+	if (apr_uri_parse(r->pool, json_string_value(entry), &uri) != APR_SUCCESS) {
+		oidc_warn(r,
+				"%s (%s) JSON metadata contains a \"%s\" entry, but it is not a valid URI",
+				type, issuer, key);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/*
  * check to see if JSON provider metadata is valid
  */
 static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
@@ -272,45 +310,25 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 				issuer);
 	}
 
-	/* get a handle to the authorization endpoint */
-	json_t *j_authorization_endpoint = json_object_get(j_provider,
-			"authorization_endpoint");
-	if ((j_authorization_endpoint == NULL)
-			|| (!json_is_string(j_authorization_endpoint))) {
-		oidc_error(r,
-				"provider (%s) JSON metadata did not contain an \"authorization_endpoint\" string",
-				issuer);
+	/* check the required authorization endpoint */
+	if (oidc_metadata_is_valid_uri(r, "provider", issuer, j_provider,
+			"authorization_endpoint", TRUE) == FALSE)
 		return FALSE;
-	}
 
-	/* get a handle to the token endpoint */
-	json_t *j_token_endpoint = json_object_get(j_provider, "token_endpoint");
-	if ((j_token_endpoint == NULL) || (!json_is_string(j_token_endpoint))) {
-		oidc_warn(r,
-				"provider (%s) JSON metadata did not contain a \"token_endpoint\" string",
-				issuer);
-		//return FALSE;
-	}
+	/* check the optional token endpoint */
+	if (oidc_metadata_is_valid_uri(r, "provider", issuer, j_provider,
+			"token_endpoint", FALSE) == FALSE)
+		return FALSE;
 
-	/* get a handle to the user_info endpoint */
-	json_t *j_userinfo_endpoint = json_object_get(j_provider,
-			"userinfo_endpoint");
-	if ((j_userinfo_endpoint != NULL)
-			&& (!json_is_string(j_userinfo_endpoint))) {
-		oidc_debug(r,
-				"provider (%s) JSON metadata contains a \"userinfo_endpoint\" entry, but it is not a string value",
-				issuer);
-	}
-	// TODO: check for valid URL
+	/* check the optional user info endpoint */
+	if (oidc_metadata_is_valid_uri(r, "provider", issuer, j_provider,
+			"userinfo_endpoint", FALSE) == FALSE)
+		return FALSE;
 
-	/* get a handle to the jwks_uri */
-	json_t *j_jwks_uri = json_object_get(j_provider, "jwks_uri");
-	if ((j_jwks_uri == NULL) || (!json_is_string(j_jwks_uri))) {
-		oidc_warn(r,
-				"provider (%s) JSON metadata did not contain a \"jwks_uri\" string",
-				issuer);
-		//return FALSE;
-	}
+	/* check the optional JWKs URI */
+	if (oidc_metadata_is_valid_uri(r, "provider", issuer, j_provider,
+			"jwks_uri", FALSE) == FALSE)
+		return FALSE;
 
 	/* find out what type of authentication the token endpoint supports (we only support post or basic) */
 	json_t *j_token_endpoint_auth_methods_supported = json_object_get(
