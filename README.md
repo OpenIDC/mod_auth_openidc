@@ -204,18 +204,13 @@ e.g. passing both prompt=consent and max_auth_age=0 would result in:
 
 ###Sample Config for PingFederate OpenID Connect & OAuth 2.0
 
-Another example config for using PingFederate as your OpenID Connect OP and/or
+Another example config*) for using PingFederate as your OpenID Connect OP and/or
 OAuth 2.0 Authorization server, based on the OAuth 2.0 PlayGround 3.x default
 configuration and doing claims-based authorization. (running on `localhost` and
 `https://localhost/example/redirect_uri/` registered as *redirect_uri* for the
 client `ac_oic_client`)
 
-    OIDCProviderIssuer https://macbook:9031
-    OIDCProviderAuthorizationEndpoint https://macbook:9031/as/authorization.oauth2
-    OIDCProviderTokenEndpoint https://macbook:9031/as/token.oauth2
-    OIDCProviderTokenEndpointAuth client_secret_basic
-    OIDCProviderUserInfoEndpoint https://macbook:9031/idp/userinfo.openid
-    OIDCProviderJwksUri https://macbook:9031/pf/JWKS
+    OIDCProviderMetadataURL https://macbook:9031/.well-known/openid-configuration
 
     OIDCSSLValidateServer Off
     OIDCClientID ac_oic_client
@@ -244,6 +239,16 @@ client `ac_oic_client`)
        #Require valid-user
        Require claim Username:joe
     </Location>
+
+*) for versions older than 1.6.0rc2 you cannot use `OIDCProviderMetadataURL` and you'll need to
+specify the provider configuration entries manually, as in:
+
+    OIDCProviderIssuer https://macbook:9031
+    OIDCProviderAuthorizationEndpoint https://macbook:9031/as/authorization.oauth2
+    OIDCProviderTokenEndpoint https://macbook:9031/as/token.oauth2
+    OIDCProviderTokenEndpointAuth client_secret_basic
+    OIDCProviderUserInfoEndpoint https://macbook:9031/idp/userinfo.openid
+    OIDCProviderJwksUri https://macbook:9031/pf/JWKS
 
 Support
 -------
