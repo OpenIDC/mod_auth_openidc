@@ -9,25 +9,25 @@ Overview
 --------
 
 This module enables an Apache 2.x web server to operate as an [OpenID Connect]
-(http://openid.net/specs/openid-connect-core-1_0.html) *Relying Party*. The module
-supports all defined OpenID Connect flows, including *Basic Client Profile*,
-*Implicit Client Profile* and *Hybrid flows*. 
+(http://openid.net/specs/openid-connect-core-1_0.html) *Relying Party* to an
+OpenID Connect *Provider*.
 
 The protected content and/or applications can be served by the Apache server
 itself or it can be served from elsewhere when Apache is configured as a reverse
 proxy in front of the origin server(s).
 
-By default it sets the `REMOTE_USER` variable to the `id_token` `[sub]` claim,
-concatenated with the OP's Issuer identifier (`[sub]@[iss]`). Other
-`id_token` claims are passed in HTTP headers together with those
-(optionally) obtained from the UserInfo endpoint.
+By default the module sets the `REMOTE_USER` variable to the `id_token` `[sub]` claim,
+concatenated with the OP's Issuer identifier (`[sub]@[iss]`). Other `id_token`
+claims are passed in HTTP headers together with those (optionally) obtained from
+the UserInfo endpoint.
 
 It allows for authorization rules (based on standard Apache `Require` primitives)
 that can be matched against the set of claims provided in the `id_token`/
-`userinfo`.
+`userinfo` claims.
 
-It supports connecting to multiple OpenID Connect Providers through reading/writing
-provider metadata files in a specified metadata directory.
+This module supports all defined OpenID Connect flows, including *Basic Client Profile*,
+*Implicit Client Profile* and *Hybrid flows*. It supports connecting to multiple OpenID
+Connect Providers through reading/writing provider metadata files in a specified metadata directory.
 
 It supports [OpenID Connect Dynamic Client Registration]
 (http://openid.net/specs/openid-connect-registration-1_0.html) and [OpenID Provider
@@ -66,11 +66,29 @@ How to Use It
 
 ###Sample Config for Google Accounts
 
-Sample configuration for using Google as your OpenID Connect Provider running on
+Sample configuration*) for using Google as your OpenID Connect Provider running on
 `www.example.com` and `https://www.example.com/example/redirect_uri` registered
 as the *redirect_uri* for the client through the Google API Console. You will also
 have to enable the `Google+ API` under `APIs & auth` in the [Google API console]
 (https://console.developers.google.com).
+
+    OIDCProviderMetadataURL https://accounts.google.com/.well-known/openid-configuration
+    OIDCClientID <your-client-id-administered-through-the-google-api-console>
+    OIDCClientSecret <your-client-secret-administered-through-the-google-api-console>
+
+    OIDCScope "openid email profile"
+    OIDCRedirectURI https://www.example.com/example/redirect_uri
+    OIDCCryptoPassphrase <password>
+
+    OIDCCookiePath /example/
+
+    <Location /example/>
+       AuthType openid-connect
+       Require valid-user
+    </Location>
+
+*) OIDCProviderMetadataURL is supported from version 1.6.0rc2 onwards. For older versions you'll 
+need to specify individual provider configuration entries manually, as in:
 
     OIDCProviderIssuer accounts.google.com
     OIDCProviderAuthorizationEndpoint https://accounts.google.com/o/oauth2/auth[?hd=<your-domain>]
@@ -79,21 +97,8 @@ have to enable the `Google+ API` under `APIs & auth` in the [Google API console]
     OIDCProviderUserInfoEndpoint https://www.googleapis.com/plus/v1/people/me/openIdConnect
     OIDCProviderJwksUri https://www.googleapis.com/oauth2/v2/certs
 
-    OIDCClientID <your-client-id-administered-through-the-google-api-console>
-    OIDCClientSecret <your-client-secret-administered-through-the-google-api-console>
-
-    OIDCScope "openid email profile"
-    OIDCRedirectURI https://www.example.com/example/redirect_uri
-    OIDCCryptoPassphrase <password>
-    OIDCCookiePath /example/
-
-    <Location /example/>
-       AuthType openid-connect
-       Require valid-user
-    </Location>
-
 Note if you want to securely restrict logins to a specific Google Apps domain you would not only
-use the `hd` parameter to the `OIDCProviderAuthorizationEndpoint` for skipping the Google Account
+add the `hd=<your-domain>` setting to the `OIDCAuthRequestParams` primitive for skipping the Google Account
 Chooser screen, but you **must** also use the following authorization setting in the `Location` primitive:
 
     Require claim hd:<your-domain>

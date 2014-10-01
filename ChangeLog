@@ -1,3 +1,7 @@
+10/1/2014
+- support provider configuration from a metadata URL (OIDCProviderMetadataURL)
+- bump version number to 1.6.0rc2
+
 9/30/2014
 - be less strict about issuer validation in metadata
 - refactor metadata.c

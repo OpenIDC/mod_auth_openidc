@@ -72,8 +72,6 @@
 
 /* validate SSL server certificates by default */
 #define OIDC_DEFAULT_SSL_VALIDATE_SERVER 1
-/* default token endpoint authentication method */
-#define OIDC_DEFAULT_ENDPOINT_AUTH "client_secret_basic"
 /* default scope requested from the OP */
 #define OIDC_DEFAULT_SCOPE "openid"
 /* default claim delimiter for multi-valued claims passed in a HTTP header */
@@ -531,10 +529,11 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->public_keys = NULL;
 	c->private_keys = NULL;
 
+	c->provider.metadata_url = NULL;
 	c->provider.issuer = NULL;
 	c->provider.authorization_endpoint_url = NULL;
 	c->provider.token_endpoint_url = NULL;
-	c->provider.token_endpoint_auth = OIDC_DEFAULT_ENDPOINT_AUTH;
+	c->provider.token_endpoint_auth = NULL;
 	c->provider.token_endpoint_params = NULL;
 	c->provider.userinfo_endpoint_url = NULL;
 	c->provider.client_id = NULL;
@@ -567,7 +566,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->oauth.client_id = NULL;
 	c->oauth.client_secret = NULL;
 	c->oauth.validate_endpoint_url = NULL;
-	c->oauth.validate_endpoint_auth = OIDC_DEFAULT_ENDPOINT_AUTH;
+	c->oauth.validate_endpoint_auth = NULL;
 	c->oauth.remote_user_claim = OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER;
 
 	c->cache = &oidc_cache_shm;
@@ -626,6 +625,9 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->private_keys =
 			add->private_keys != NULL ? add->private_keys : base->private_keys;
 
+	c->provider.metadata_url =
+			add->provider.metadata_url != NULL ?
+					add->provider.metadata_url : base->provider.metadata_url;
 	c->provider.issuer =
 			add->provider.issuer != NULL ?
 					add->provider.issuer : base->provider.issuer;
@@ -638,10 +640,9 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->provider.token_endpoint_url :
 					base->provider.token_endpoint_url;
 	c->provider.token_endpoint_auth =
-			apr_strnatcmp(add->provider.token_endpoint_auth,
-					OIDC_DEFAULT_ENDPOINT_AUTH) != 0 ?
-							add->provider.token_endpoint_auth :
-							base->provider.token_endpoint_auth;
+			add->provider.token_endpoint_auth != NULL ?
+					add->provider.token_endpoint_auth :
+					base->provider.token_endpoint_auth;
 	c->provider.token_endpoint_params =
 			add->provider.token_endpoint_params != NULL ?
 					add->provider.token_endpoint_params :
@@ -757,10 +758,9 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->oauth.validate_endpoint_url :
 					base->oauth.validate_endpoint_url;
 	c->oauth.validate_endpoint_auth =
-			apr_strnatcmp(add->oauth.validate_endpoint_auth,
-					OIDC_DEFAULT_ENDPOINT_AUTH) != 0 ?
-							add->oauth.validate_endpoint_auth :
-							base->oauth.validate_endpoint_auth;
+			add->oauth.validate_endpoint_auth != NULL ?
+					add->oauth.validate_endpoint_auth :
+					base->oauth.validate_endpoint_auth;
 	c->oauth.remote_user_claim =
 			apr_strnatcmp(add->oauth.remote_user_claim,
 					OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER) != 0 ?
@@ -889,9 +889,12 @@ static int oidc_check_config_error(server_rec *s, const char *config_str) {
  */
 static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 
-	if ((c->metadata_dir == NULL) && (c->provider.issuer == NULL)) {
+	apr_uri_t r_uri;
+
+	if ((c->metadata_dir == NULL) && (c->provider.issuer == NULL)
+			&& (c->provider.metadata_url == NULL)) {
 		oidc_serror(s,
-				"one of 'OIDCProviderIssuer' or 'OIDCMetadataDir' must be set");
+				"one of 'OIDCProviderIssuer', 'OIDCProviderMetadataURL' or 'OIDCMetadataDir' must be set");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -901,14 +904,23 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 		return oidc_check_config_error(s, "OIDCCryptoPassphrase");
 
 	if (c->metadata_dir == NULL) {
-		if (c->provider.issuer == NULL)
-			return oidc_check_config_error(s, "OIDCProviderIssuer");
-		if (c->provider.authorization_endpoint_url == NULL)
-			return oidc_check_config_error(s,
-					"OIDCProviderAuthorizationEndpoint");
-		// TODO: this depends on the configured OIDCResponseType now
-		if (c->provider.token_endpoint_url == NULL)
-			return oidc_check_config_error(s, "OIDCProviderTokenEndpoint");
+		if (c->provider.metadata_url == NULL) {
+			if (c->provider.issuer == NULL)
+				return oidc_check_config_error(s, "OIDCProviderIssuer");
+			if (c->provider.authorization_endpoint_url == NULL)
+				return oidc_check_config_error(s,
+						"OIDCProviderAuthorizationEndpoint");
+			// TODO: this depends on the configured OIDCResponseType now
+			//			if (c->provider.token_endpoint_url == NULL)
+			//				return oidc_check_config_error(s, "OIDCProviderTokenEndpoint");
+		} else {
+			apr_uri_parse(s->process->pconf, c->provider.metadata_url, &r_uri);
+			if (apr_strnatcmp(r_uri.scheme, "http") == 0) {
+				oidc_swarn(s,
+						"the URL scheme (%s) of the configured OIDCProviderMetadataURL SHOULD be \"https\" for security reasons!",
+						r_uri.scheme);
+			}
+		}
 		if (c->provider.client_id == NULL)
 			return oidc_check_config_error(s, "OIDCClientID");
 		// TODO: this depends on the configured OIDCResponseType now
@@ -916,7 +928,6 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 			return oidc_check_config_error(s, "OIDCClientSecret");
 	}
 
-	apr_uri_t r_uri;
 	apr_uri_parse(s->process->pconf, c->redirect_uri, &r_uri);
 	if (apr_strnatcmp(r_uri.scheme, "https") != 0) {
 		oidc_swarn(s,
@@ -1162,8 +1173,8 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 static const authz_provider authz_oidc_provider = {
-	&oidc_authz_checker,
-	NULL,
+		&oidc_authz_checker,
+		NULL,
 };
 #endif
 
@@ -1204,9 +1215,14 @@ void oidc_register_hooks(apr_pool_t *pool) {
  */
 const command_rec oidc_config_cmds[] = {
 
+		AP_INIT_TAKE1("OIDCProviderMetadataURL", oidc_set_string_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, provider.metadata_url),
+				RSRC_CONF,
+				"OpenID Connect OP configuration metadata URL."),
 		AP_INIT_TAKE1("OIDCProviderIssuer", oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.issuer),
-				RSRC_CONF, "OpenID Connect OP issuer identifier."),
+				RSRC_CONF,
+				"OpenID Connect OP issuer identifier."),
 		AP_INIT_TAKE1("OIDCProviderAuthorizationEndpoint",
 				oidc_set_https_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.authorization_endpoint_url),

@@ -887,78 +887,102 @@ apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg *cfg,
 }
 
 /*
- * parse the JSON provider metadata in to a oidc_provider_t struct
+ * parse the JSON provider metadata in to a oidc_provider_t struct but do not override values already set
  */
 apr_byte_t oidc_metadata_provider_parse(request_rec *r, json_t *j_provider,
 		oidc_provider_t *provider) {
 
-	/* get the "issuer" from the provider metadata */
-	oidc_json_object_get_string(r->pool, j_provider, "issuer",
-			&provider->issuer, NULL);
-
-	/* get a handle to the authorization endpoint */
-	oidc_json_object_get_string(r->pool, j_provider, "authorization_endpoint",
-			&provider->authorization_endpoint_url, NULL);
-
-	/* get a handle to the token endpoint */
-	oidc_json_object_get_string(r->pool, j_provider, "token_endpoint",
-			&provider->token_endpoint_url, NULL);
-
-	/* get a handle to the user_info endpoint */
-	oidc_json_object_get_string(r->pool, j_provider, "userinfo_endpoint",
-			&provider->userinfo_endpoint_url, NULL);
-
-	/* get a handle to the jwks_uri endpoint */
-	oidc_json_object_get_string(r->pool, j_provider, "jwks_uri",
-			&provider->jwks_uri, NULL);
-
-	/* get a handle to the client registration endpoint */
-	oidc_json_object_get_string(r->pool, j_provider, "registration_endpoint",
-			&provider->registration_endpoint_url, NULL);
-
-	/* get a handle to the check session iframe */
-	oidc_json_object_get_string(r->pool, j_provider, "check_session_iframe",
-			&provider->check_session_iframe, NULL);
-
-	/* get a handle to the end session endpoint */
-	oidc_json_object_get_string(r->pool, j_provider, "end_session_endpoint",
-			&provider->end_session_endpoint, NULL);
-
-	/* find a supported token_endpoint_auth_method in the provider metadata */
-	json_t *j_token_endpoint_auth_methods_supported = json_object_get(
-			j_provider, "token_endpoint_auth_methods_supported");
-
-	/* set the spec default */
-	const char *token_endpoint_auth = "client_secret_basic";
-
-	/* loop through the array provided by the issuer and see if there's a supported method */
-	if ((j_token_endpoint_auth_methods_supported != NULL)
-			&& (json_is_array(j_token_endpoint_auth_methods_supported))) {
-		int i;
-		for (i = 0;
-				i < json_array_size(j_token_endpoint_auth_methods_supported);
-				i++) {
-			json_t *elem = json_array_get(
-					j_token_endpoint_auth_methods_supported, i);
-			if (!json_is_string(elem)) {
-				oidc_error(r,
-						"unhandled in-array JSON object type [%d] in provider metadata for entry \"token_endpoint_auth_methods_supported\"",
-						elem->type);
-				continue;
-			}
-			/* take first supported method and prefer post over basic */
-			if ((apr_strnatcmp(json_string_value(elem), "client_secret_post")
-					== 0)
-					|| (apr_strnatcmp(json_string_value(elem),
-							"client_secret_basic") == 0)) {
-				token_endpoint_auth = json_string_value(elem);
-				break;
-			}
-		}
+	if (provider->issuer == NULL) {
+		/* get the "issuer" from the provider metadata */
+		oidc_json_object_get_string(r->pool, j_provider, "issuer",
+				&provider->issuer, NULL);
 	}
 
-	/* store the found method */
-	provider->token_endpoint_auth = apr_pstrdup(r->pool, token_endpoint_auth);
+	if (provider->authorization_endpoint_url == NULL) {
+		/* get a handle to the authorization endpoint */
+		oidc_json_object_get_string(r->pool, j_provider,
+				"authorization_endpoint", &provider->authorization_endpoint_url,
+				NULL);
+	}
+
+	if (provider->token_endpoint_url == NULL) {
+		/* get a handle to the token endpoint */
+		oidc_json_object_get_string(r->pool, j_provider, "token_endpoint",
+				&provider->token_endpoint_url, NULL);
+	}
+
+	if (provider->userinfo_endpoint_url == NULL) {
+		/* get a handle to the user_info endpoint */
+		oidc_json_object_get_string(r->pool, j_provider, "userinfo_endpoint",
+				&provider->userinfo_endpoint_url, NULL);
+	}
+
+	if (provider->jwks_uri == NULL) {
+		/* get a handle to the jwks_uri endpoint */
+		oidc_json_object_get_string(r->pool, j_provider, "jwks_uri",
+				&provider->jwks_uri, NULL);
+	}
+
+	if (provider->registration_endpoint_url == NULL) {
+		/* get a handle to the client registration endpoint */
+		oidc_json_object_get_string(r->pool, j_provider,
+				"registration_endpoint", &provider->registration_endpoint_url,
+				NULL);
+	}
+
+	if (provider->check_session_iframe == NULL) {
+		/* get a handle to the check session iframe */
+		oidc_json_object_get_string(r->pool, j_provider, "check_session_iframe",
+				&provider->check_session_iframe, NULL);
+	}
+
+	if (provider->end_session_endpoint == NULL) {
+		/* get a handle to the end session endpoint */
+		oidc_json_object_get_string(r->pool, j_provider, "end_session_endpoint",
+				&provider->end_session_endpoint, NULL);
+	}
+
+	if (provider->token_endpoint_auth == NULL) {
+
+		/* find a supported token_endpoint_auth_method in the provider metadata */
+		json_t *j_token_endpoint_auth_methods_supported = json_object_get(
+				j_provider, "token_endpoint_auth_methods_supported");
+
+		const char *token_endpoint_auth = NULL;
+
+		/* loop through the array provided by the issuer and see if there's a supported method */
+		if ((j_token_endpoint_auth_methods_supported != NULL)
+				&& (json_is_array(j_token_endpoint_auth_methods_supported))) {
+			int i;
+			for (i = 0;
+					i < json_array_size(j_token_endpoint_auth_methods_supported);
+					i++) {
+				json_t *elem = json_array_get(
+						j_token_endpoint_auth_methods_supported, i);
+				if (!json_is_string(elem)) {
+					oidc_error(r,
+							"unhandled in-array JSON object type [%d] in provider metadata for entry \"token_endpoint_auth_methods_supported\"",
+							elem->type);
+					continue;
+				}
+
+				/* take first supported method and prefer post over basic */
+				if ((apr_strnatcmp(json_string_value(elem),
+						"client_secret_post") == 0)
+						|| (apr_strnatcmp(json_string_value(elem),
+								"client_secret_basic") == 0)) {
+					token_endpoint_auth = json_string_value(elem);
+					break;
+				}
+			}
+		}
+
+		/* store the method if found */
+		if (token_endpoint_auth != NULL) {
+			provider->token_endpoint_auth = apr_pstrdup(r->pool,
+					token_endpoint_auth);
+		}
+	}
 
 	return TRUE;
 }

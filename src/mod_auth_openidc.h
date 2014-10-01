@@ -149,14 +149,19 @@ APLOG_USE_MODULE(auth_openidc);
 /* the name of the keyword that follows the Require primitive to indicate claims-based authorization */
 #define OIDC_REQUIRE_NAME "claim"
 
+/* defines for how long provider metadata will be cached */
+#define OIDC_CACHE_PROVIDER_METADATA_EXPIRY_DEFAULT 14400
+
 /* cache sections */
 #define OIDC_CACHE_SECTION_JTI "jti"
 #define OIDC_CACHE_SECTION_SESSION "session"
 #define OIDC_CACHE_SECTION_NONCE "nonce"
 #define OIDC_CACHE_SECTION_JWKS "jwks"
 #define OIDC_CACHE_SECTION_ACCESS_TOKEN "access_token"
+#define OIDC_CACHE_SECTION_PROVIDER "provider"
 
 typedef struct oidc_provider_t {
+	char *metadata_url;
 	char *issuer;
 	char *authorization_endpoint_url;
 	char *token_endpoint_url;

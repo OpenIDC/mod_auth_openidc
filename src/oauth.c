@@ -75,8 +75,9 @@ static int oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 
 	/* see if we want to do basic auth or post-param-based auth */
 	const char *basic_auth = NULL;
-	if ((apr_strnatcmp(c->oauth.validate_endpoint_auth, "client_secret_post"))
-			== 0) {
+	if ((c->oauth.validate_endpoint_auth != NULL)
+			&& (apr_strnatcmp(c->oauth.validate_endpoint_auth,
+					"client_secret_post") == 0)) {
 		apr_table_addn(params, "client_id", c->oauth.client_id);
 		apr_table_addn(params, "client_secret", c->oauth.client_secret);
 	} else {

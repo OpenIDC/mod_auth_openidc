@@ -777,8 +777,9 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 
 	/* see if we need to do basic auth or auth-through-post-params (both applied through the HTTP POST method though) */
 	const char *basic_auth = NULL;
-	if ((apr_strnatcmp(provider->token_endpoint_auth, "client_secret_basic"))
-			== 0) {
+	if ((provider->token_endpoint_auth == NULL)
+			|| (apr_strnatcmp(provider->token_endpoint_auth,
+					"client_secret_basic") == 0)) {
 		basic_auth = apr_psprintf(r->pool, "%s:%s", provider->client_id,
 				provider->client_secret);
 	} else {

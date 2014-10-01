@@ -199,13 +199,66 @@ static char *oidc_get_state_cookie_name(request_rec *r, const char *state) {
 }
 
 /*
+ * return the static provider configuration, i.e. from a metadata URL or configuration primitives
+ */
+static oidc_provider_t *oidc_provider_static_config(request_rec *r, oidc_cfg *c) {
+
+	json_t *j_provider = NULL;
+	const char *s_json = NULL;
+
+	/* see if we should configure a static provider based on external (cached) metadata */
+	if ((c->metadata_dir != NULL) || (c->provider.metadata_url == NULL))
+		return &c->provider;
+
+	c->cache->get(r, OIDC_CACHE_SECTION_PROVIDER, c->provider.metadata_url,
+			&s_json);
+
+	if (s_json == NULL) {
+
+		if (oidc_metadata_provider_retrieve(r, c, NULL,
+				c->provider.metadata_url, &j_provider, &s_json) == FALSE) {
+			oidc_error(r, "could not retrieve metadata from url: %s",
+					c->provider.metadata_url);
+			return NULL;
+		}
+
+		// TODO: make the expiry configurable
+		c->cache->set(r, OIDC_CACHE_SECTION_PROVIDER, c->provider.metadata_url,
+				s_json,
+				apr_time_now() + apr_time_from_sec(OIDC_CACHE_PROVIDER_METADATA_EXPIRY_DEFAULT));
+
+	} else {
+
+		/* correct parsing and validation was already done when it was put in the cache */
+		j_provider = json_loads(s_json, 0, 0);
+	}
+
+	oidc_debug(r, " # got metadata: %s", s_json);
+
+	oidc_provider_t *provider = apr_pcalloc(r->pool, sizeof(oidc_provider_t));
+	memcpy(provider, &c->provider, sizeof(oidc_provider_t));
+
+	if (oidc_metadata_provider_parse(r, j_provider, provider) == FALSE) {
+		oidc_error(r, "could not parse metadata from url: %s",
+				c->provider.metadata_url);
+		if (j_provider)
+			json_decref(j_provider);
+		return NULL;
+	}
+
+	json_decref(j_provider);
+
+	return provider;
+}
+
+/*
  * return the oidc_provider_t struct for the specified issuer
  */
 static oidc_provider_t *oidc_get_provider_for_issuer(request_rec *r,
 		oidc_cfg *c, const char *issuer) {
 
 	/* by default we'll assume that we're dealing with a single statically configured OP */
-	oidc_provider_t *provider = &c->provider;
+	oidc_provider_t *provider = oidc_provider_static_config(r, c);
 
 	/* unless a metadata directory was configured, so we'll try and get the provider settings from there */
 	if (c->metadata_dir != NULL) {
@@ -935,12 +988,15 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	const char *claims = NULL;
 	json_t *j_claims = NULL;
 	if (provider->userinfo_endpoint_url == NULL) {
-		oidc_debug(r, "not resolving user info claims because userinfo_endpoint is not set");
+		oidc_debug(r,
+				"not resolving user info claims because userinfo_endpoint is not set");
 	} else if (access_token == NULL) {
-		oidc_debug(r, "not resolving user info claims because access_token is not provided");
-	} else if (oidc_proto_resolve_userinfo(r, c, provider, access_token, &claims,
-				&j_claims) == FALSE) {
-		oidc_debug(r, "resolving user info claims failed, nothing will be stored in the session");
+		oidc_debug(r,
+				"not resolving user info claims because access_token is not provided");
+	} else if (oidc_proto_resolve_userinfo(r, c, provider, access_token,
+			&claims, &j_claims) == FALSE) {
+		oidc_debug(r,
+				"resolving user info claims failed, nothing will be stored in the session");
 		claims = NULL;
 	}
 
@@ -1217,7 +1273,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 			return oidc_discovery(r, c);
 
 		/* we're not using multiple OP's configured in a metadata directory, pick the statically configured OP */
-		provider = &c->provider;
+		provider = oidc_provider_static_config(r, c);
 	}
 
 	/* generate a random value to correlate request/response through browser state */
@@ -1251,7 +1307,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	 * but Google does not allow me to do that:
 	 * Error: invalid_request: Parameter not allowed for this message type: nonce
 	 */
-	if ((strcmp(provider->issuer, "accounts.google.com") == 0)
+	if ((apr_strnatcmp(provider->issuer, "accounts.google.com") == 0)
 			&& ((oidc_util_spaced_string_equals(r->pool,
 					provider->response_type, "code"))
 					|| (oidc_util_spaced_string_equals(r->pool,
