@@ -1,3 +1,9 @@
+10/2/2014
+- avoid crash when downloading metadata from OIDCProviderMetadataURL fails
+- set OIDCProviderMetadataURL retrieval interval to 24 hours
+- return error on configurations mixing OIDCProviderMetadataURL and OIDCMetadataDir
+- bump version number to 1.6.0rc3
+
 10/1/2014
 - support provider configuration from a metadata URL (OIDCProviderMetadataURL)
 - bump version number to 1.6.0rc2

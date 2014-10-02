@@ -9,8 +9,11 @@ Overview
 --------
 
 This module enables an Apache 2.x web server to operate as an [OpenID Connect]
-(http://openid.net/specs/openid-connect-core-1_0.html) *Relying Party* to an
-OpenID Connect *Provider*.
+(http://openid.net/specs/openid-connect-core-1_0.html) *Relying Party* (RP) to an
+OpenID Connect *Provider* (OP). It will enable users to authenticate at an OpenID
+Connect Provider, receive user identity information from the OP in a so called ID
+Token and pass the identity information (a.k.a. claims) in the ID Token to applications
+hosted and protected by the Apache web server.
 
 The protected content and/or applications can be served by the Apache server
 itself or it can be served from elsewhere when Apache is configured as a reverse
@@ -91,7 +94,7 @@ have to enable the `Google+ API` under `APIs & auth` in the [Google API console]
 need to specify individual provider configuration entries manually, as in:
 
     OIDCProviderIssuer accounts.google.com
-    OIDCProviderAuthorizationEndpoint https://accounts.google.com/o/oauth2/auth[?hd=<your-domain>]
+    OIDCProviderAuthorizationEndpoint https://accounts.google.com/o/oauth2/auth
     OIDCProviderTokenEndpoint https://accounts.google.com/o/oauth2/token
     OIDCProviderTokenEndpointAuth client_secret_post
     OIDCProviderUserInfoEndpoint https://www.googleapis.com/plus/v1/people/me/openIdConnect
@@ -192,15 +195,9 @@ This is also the OpenID Connect specified way of triggering 3rd party initiated 
 to a specific provider when multiple OPs have been configured. In that case the callback
 may also contain a "login_hint" parameter with the login identifier the user might use to log in.
 
-An additional **mod_auth_openidc** specific parameter named `auth_request_params` may also be passed in.
-Its value would contain dynamically determined custom parameters that need to be passed in the
-authorization requests and as such it is the runtime equivalent of the static OIDCAuthRequestParams
-configuration value and the `auth_request_params` in the `.conf` file. If you use more than one of the
-previous settings you'll need to make sure they do not conflict. Note that nested URL encoding is required
-e.g. passing both prompt=consent and max_auth_age=0 would result in:
-
-    auth_request_params=prompt%3Dconsent%26max_auth_age%3D0
-
+An additional **mod_auth_openidc** specific parameter named `auth_request_params` may also be passed
+in, see the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki#10-how-can-i-add-custom-parameters-to-the-authorization-request)
+for its usage.
 
 ###Sample Config for PingFederate OpenID Connect & OAuth 2.0
 

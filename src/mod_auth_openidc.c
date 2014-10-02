@@ -201,14 +201,16 @@ static char *oidc_get_state_cookie_name(request_rec *r, const char *state) {
 /*
  * return the static provider configuration, i.e. from a metadata URL or configuration primitives
  */
-static oidc_provider_t *oidc_provider_static_config(request_rec *r, oidc_cfg *c) {
+static apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg *c, oidc_provider_t **provider) {
 
 	json_t *j_provider = NULL;
 	const char *s_json = NULL;
 
 	/* see if we should configure a static provider based on external (cached) metadata */
-	if ((c->metadata_dir != NULL) || (c->provider.metadata_url == NULL))
-		return &c->provider;
+	if ((c->metadata_dir != NULL) || (c->provider.metadata_url == NULL)) {
+		*provider = &c->provider;
+		return TRUE;
+	}
 
 	c->cache->get(r, OIDC_CACHE_SECTION_PROVIDER, c->provider.metadata_url,
 			&s_json);
@@ -219,7 +221,7 @@ static oidc_provider_t *oidc_provider_static_config(request_rec *r, oidc_cfg *c)
 				c->provider.metadata_url, &j_provider, &s_json) == FALSE) {
 			oidc_error(r, "could not retrieve metadata from url: %s",
 					c->provider.metadata_url);
-			return NULL;
+			return FALSE;
 		}
 
 		// TODO: make the expiry configurable
@@ -233,22 +235,20 @@ static oidc_provider_t *oidc_provider_static_config(request_rec *r, oidc_cfg *c)
 		j_provider = json_loads(s_json, 0, 0);
 	}
 
-	oidc_debug(r, " # got metadata: %s", s_json);
+	*provider = apr_pcalloc(r->pool, sizeof(oidc_provider_t));
+	memcpy(*provider, &c->provider, sizeof(oidc_provider_t));
 
-	oidc_provider_t *provider = apr_pcalloc(r->pool, sizeof(oidc_provider_t));
-	memcpy(provider, &c->provider, sizeof(oidc_provider_t));
-
-	if (oidc_metadata_provider_parse(r, j_provider, provider) == FALSE) {
+	if (oidc_metadata_provider_parse(r, j_provider, *provider) == FALSE) {
 		oidc_error(r, "could not parse metadata from url: %s",
 				c->provider.metadata_url);
 		if (j_provider)
 			json_decref(j_provider);
-		return NULL;
+		return FALSE;
 	}
 
 	json_decref(j_provider);
 
-	return provider;
+	return TRUE;
 }
 
 /*
@@ -258,7 +258,9 @@ static oidc_provider_t *oidc_get_provider_for_issuer(request_rec *r,
 		oidc_cfg *c, const char *issuer) {
 
 	/* by default we'll assume that we're dealing with a single statically configured OP */
-	oidc_provider_t *provider = oidc_provider_static_config(r, c);
+	oidc_provider_t *provider = NULL;
+	if (oidc_provider_static_config(r, c, &provider) == FALSE)
+		return NULL;
 
 	/* unless a metadata directory was configured, so we'll try and get the provider settings from there */
 	if (c->metadata_dir != NULL) {
@@ -1273,7 +1275,8 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 			return oidc_discovery(r, c);
 
 		/* we're not using multiple OP's configured in a metadata directory, pick the statically configured OP */
-		provider = oidc_provider_static_config(r, c);
+		if (oidc_provider_static_config(r, c, &provider) == FALSE)
+			return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
 	/* generate a random value to correlate request/response through browser state */

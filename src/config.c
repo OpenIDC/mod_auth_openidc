@@ -926,6 +926,12 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 		// TODO: this depends on the configured OIDCResponseType now
 		if (c->provider.client_secret == NULL)
 			return oidc_check_config_error(s, "OIDCClientSecret");
+	} else {
+		if (c->provider.metadata_url != NULL) {
+			oidc_serror(s,
+					"only one of 'OIDCProviderMetadataURL' or 'OIDCMetadataDir' should be set");
+			return HTTP_INTERNAL_SERVER_ERROR;
+		}
 	}
 
 	apr_uri_parse(s->process->pconf, c->redirect_uri, &r_uri);

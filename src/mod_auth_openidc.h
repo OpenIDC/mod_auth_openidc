@@ -150,7 +150,7 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_REQUIRE_NAME "claim"
 
 /* defines for how long provider metadata will be cached */
-#define OIDC_CACHE_PROVIDER_METADATA_EXPIRY_DEFAULT 14400
+#define OIDC_CACHE_PROVIDER_METADATA_EXPIRY_DEFAULT 86400
 
 /* cache sections */
 #define OIDC_CACHE_SECTION_JTI "jti"
