@@ -368,6 +368,7 @@ apr_byte_t oidc_util_spaced_string_equals(apr_pool_t *pool, const char *a, const
 apr_byte_t oidc_util_spaced_string_contains(apr_pool_t *pool, const char *response_type, const char *match);
 apr_byte_t oidc_json_object_get_string(apr_pool_t *pool, json_t *json, const char *name, char **value, const char *default_value);
 apr_byte_t oidc_json_object_get_int(apr_pool_t *pool, json_t *json, const char *name, int *value, const int default_value);
+char *oidc_util_html_escape(apr_pool_t *pool, const char *input);
 
 // oidc_crypto.c
 unsigned char *oidc_crypto_aes_encrypt(request_rec *r, oidc_cfg *cfg, unsigned char *plaintext, int *len);

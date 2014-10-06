@@ -267,6 +267,36 @@ char *oidc_util_unescape_string(const request_rec *r, const char *str) {
 }
 
 /*
+ * HTML escape a string
+ */
+char *oidc_util_html_escape(apr_pool_t *pool, const char *s) {
+	const char chars[6] = { '&', '\'', '\"', '>', '<', '\0' };
+	const char * const replace[] =
+	{ "&amp;", "&apos;", "&quot;", "&gt;", "&lt;", };
+	unsigned int i, j = 0, k, n = 0, len = strlen(chars);
+	int m = 0;
+	char *r = apr_pcalloc(pool, strlen(s) * 6);
+	for (i = 0; i < strlen(s); i++) {
+		for (n = 0; n < len; n++) {
+			if (s[i] == chars[n]) {
+				m = strlen(replace[n]);
+				for (k = 0; k < m; k++)
+					r[j + k] = replace[n][k];
+				j += m;
+				break;
+			}
+		}
+		if (n == len) {
+			r[j] = s[i];
+			j++;
+		}
+	}
+	r[j] = '\0';
+	return apr_pstrdup(pool, r);
+}
+
+
+/*
  * get the URL scheme that is currently being accessed
  */
 static const char *oidc_get_current_url_scheme(const request_rec *r) {
@@ -1036,16 +1066,19 @@ apr_byte_t oidc_util_issuer_match(const char *a, const char *b) {
  */
 int oidc_util_html_send_error(request_rec *r, const char *error,
 		const char *description, int status_code) {
-	char *msg = "<p>the OpenID Connect Provider returned an error:</p><p>";
+	char *msg =
+			"<html><body><p>the OpenID Connect Provider returned an error:</p>";
 
 	if (error != NULL) {
 		msg = apr_psprintf(r->pool, "%s<p>Error: <pre>%s</pre></p>", msg,
-				error);
+				oidc_util_html_escape(r->pool, error));
 	}
 	if (description != NULL) {
 		msg = apr_psprintf(r->pool, "%s<p>Description: <pre>%s</pre></p>", msg,
-				description);
+				oidc_util_html_escape(r->pool, description));
 	}
+
+	msg = apr_psprintf(r->pool, "%s</body></html>", msg);
 
 	return oidc_util_html_send(r, msg, status_code);
 }

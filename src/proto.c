@@ -72,14 +72,15 @@ int oidc_proto_authorization_request_post_preserve(request_rec *r,
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	// TODO: html encode names/values
 	const apr_array_header_t *arr = apr_table_elts(params);
 	const apr_table_entry_t *elts = (const apr_table_entry_t*) arr->elts;
 	int i;
 	char *json = "";
 	for (i = 0; i < arr->nelts; i++) {
-		json = apr_psprintf(r->pool, "%s'%s': '%s'%s", json, elts[i].key,
-				elts[i].val, i < arr->nelts - 1 ? "," : "");
+		json = apr_psprintf(r->pool, "%s'%s': '%s'%s", json,
+				oidc_util_html_escape(r->pool, elts[i].key),
+				oidc_util_html_escape(r->pool, elts[i].val),
+				i < arr->nelts - 1 ? "," : "");
 	}
 	json = apr_psprintf(r->pool, "{ %s }", json);
 
