@@ -90,7 +90,7 @@ have to enable the `Google+ API` under `APIs & auth` in the [Google API console]
        Require valid-user
     </Location>
 
-*) OIDCProviderMetadataURL is supported from version 1.6.0rc2 onwards. For older versions you'll 
+*) OIDCProviderMetadataURL is supported from version 1.6.0 onwards. For older versions you'll 
 need to specify individual provider configuration entries manually, as in:
 
     OIDCProviderIssuer accounts.google.com
@@ -237,7 +237,7 @@ client `ac_oic_client`)
        Require claim Username:joe
     </Location>
 
-*) for versions older than 1.6.0rc2 you cannot use `OIDCProviderMetadataURL` and you'll need to
+*) for versions older than 1.6.0 you cannot use `OIDCProviderMetadataURL` and you'll need to
 specify the provider configuration entries manually, as in:
 
     OIDCProviderIssuer https://macbook:9031
@@ -252,7 +252,7 @@ Support
 
 See the Wiki pages with Frequently Asked Questions at:  
   https://github.com/pingidentity/mod_auth_openidc/wiki   
-There is a (recently created) Google Group/mailing list at:  
+There is a Google Group/mailing list at:  
   [mod_auth_openidc@googlegroups.com](mailto:mod_auth_openidc@googlegroups.com)  
 The corresponding forum/archive is at:  
   https://groups.google.com/forum/#!forum/mod_auth_openidc
