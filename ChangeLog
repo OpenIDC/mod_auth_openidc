@@ -1,3 +1,7 @@
+10/13/2014
+- add libssl-dev to Debian control build dependencies
+- release 1.6.0
+
 10/6/2014
 - apply html encoding to error display
 - bump version number to 1.6.0rc4

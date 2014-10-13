@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.6.0-1) unstable; urgency=medium
+
+  * new upstream release; add libssl-dev dependency
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Mon, 13 Oct 2014 12:23:35 +0200
+
 libapache2-mod-auth-openidc (1.5.5-1) unstable; urgency=medium
 
   * use HttpOnly on cookies; set OIDCCookiePath to /
