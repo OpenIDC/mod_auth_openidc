@@ -772,7 +772,6 @@ apr_byte_t oidc_util_request_has_parameter(request_rec *r, const char* param) {
  */
 apr_byte_t oidc_util_get_request_parameter(request_rec *r, char *name,
 		char **value) {
-	// TODO: we should really check with ? and & and avoid any <bogus>code= stuff to trigger true
 	char *tokenizer_ctx, *p, *args;
 	const char *k_param = apr_psprintf(r->pool, "%s=", name);
 	const size_t k_param_sz = strlen(k_param);
@@ -944,27 +943,6 @@ apr_byte_t oidc_util_read_post(request_rec *r, apr_table_t *table) {
 		apr_table_set(table, key, val);
 	}
 
-	return TRUE;
-}
-
-// TODO: check return values
-apr_byte_t oidc_util_generate_random_base64url_encoded_value(request_rec *r,
-		int randomLen, char **randomB64) {
-	unsigned char *brnd = apr_pcalloc(r->pool, randomLen);
-	apr_generate_random_bytes((unsigned char *) brnd, randomLen);
-	*randomB64 = apr_palloc(r->pool, apr_base64_encode_len(randomLen) + 1);
-	char *enc = *randomB64;
-	apr_base64_encode(enc, (const char *) brnd, randomLen);
-	int i = 0;
-	while (enc[i] != '\0') {
-		if (enc[i] == '+')
-			enc[i] = '-';
-		if (enc[i] == '/')
-			enc[i] = '_';
-		if (enc[i] == '=')
-			enc[i] = ',';
-		i++;
-	}
 	return TRUE;
 }
 

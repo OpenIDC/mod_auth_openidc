@@ -1279,9 +1279,10 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	/* generate a random value to correlate request/response through browser state */
+	/* generate the random nonce value that correlates requests and responses */
 	char *nonce = NULL;
-	oidc_util_generate_random_base64url_encoded_value(r, 32, &nonce);
+	if (oidc_proto_generate_nonce(r, &nonce) == FALSE)
+		return HTTP_INTERNAL_SERVER_ERROR;
 
 	char *method = "redirect";
 	// TODO: restore method from discovery too or generate state before doing discover (and losing startSSO effect)

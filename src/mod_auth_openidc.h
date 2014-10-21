@@ -318,6 +318,7 @@ apr_byte_t oidc_proto_validate_code_response(request_rec *r, const char *respons
 apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, apr_jwt_t *jwt, apr_byte_t *refresh);
 apr_byte_t oidc_proto_validate_iat(request_rec *r, oidc_provider_t *provider, apr_jwt_t *jwt);
 apr_byte_t oidc_proto_validate_exp(request_rec *r, apr_jwt_t *jwt);
+apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce);
 
 // oidc_authz.c
 int oidc_authz_worker(request_rec *r, const json_t *const claims, const require_line *const reqs, int nelts);
@@ -356,7 +357,6 @@ int oidc_util_html_send(request_rec *r, const char *html, int success_rvalue);
 char *oidc_util_escape_string(const request_rec *r, const char *str);
 char *oidc_util_unescape_string(const request_rec *r, const char *str);
 apr_byte_t oidc_util_read_post(request_rec *r, apr_table_t *table);
-apr_byte_t oidc_util_generate_random_base64url_encoded_value(request_rec *r, int randomLen, char **randomB64);
 apr_byte_t oidc_util_file_read(request_rec *r, const char *path, char **result);
 apr_byte_t oidc_util_issuer_match(const char *a, const char *b);
 int oidc_util_html_send_error(request_rec *r, const char *error, const char *description, int status_code);

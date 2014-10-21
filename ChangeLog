@@ -1,3 +1,6 @@
+10/21/2014
+- refactor nonce generation and remove base64url padding from value
+
 10/13/2014
 - add libssl-dev to Debian control build dependencies
 - release 1.6.0
