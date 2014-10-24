@@ -289,9 +289,11 @@ static const char *oidc_set_cache_type(cmd_parms *cmd, void *ptr,
 		cfg->cache = &oidc_cache_memcache;
 	} else if (apr_strnatcmp(arg, "shm") == 0) {
 		cfg->cache = &oidc_cache_shm;
+	} else if (apr_strnatcmp(arg, "redis") == 0) {
+		cfg->cache = &oidc_cache_redis;
 	} else {
 		return (apr_psprintf(cmd->pool,
-				"oidc_set_cache_type: invalid value for OIDCCacheType (%s); must be one of \"file\", \"memcache\" or \"shm\"",
+				"oidc_set_cache_type: invalid value for OIDCCacheType (%s); must be one of \"shm\", \"memcache\", \"redis\" or \"file\"",
 				arg));
 	}
 
@@ -576,6 +578,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->cache_file_clean_interval = OIDC_DEFAULT_CACHE_FILE_CLEAN_INTERVAL;
 	c->cache_memcache_servers = NULL;
 	c->cache_shm_size_max = OIDC_DEFAULT_CACHE_SHM_SIZE;
+	c->cache_redis_server = NULL;
 
 	c->metadata_dir = NULL;
 	c->session_type = OIDC_DEFAULT_SESSION_TYPE;
@@ -1515,6 +1518,11 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, cache_shm_size_max),
 				RSRC_CONF,
 				"Maximum number of cache entries to use for \"shm\" caching."),
+		AP_INIT_TAKE1("OIDCRedisCacheServer",
+				oidc_set_string_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, cache_redis_server),
+				RSRC_CONF,
+				"Redis server used for caching (<hostname>[:<port>])"),
 
 		{ NULL }
 };

@@ -60,6 +60,10 @@ of the following options:
 3. *memcache*  
    shared across multiple Apache processes and/or servers, possibly
    across different memcache servers living on different machines
+4. *Redis*  
+   shared across multiple Apache processes and/or servers, possibly
+   across different Redis servers living on different machines, with
+   an option for persistency across reboots and upgrades
 
 For an exhaustive description of all configuration options, see the file `auth_openidc.conf`
 in this directory. This file can also serve as an include file for `httpd.conf`.

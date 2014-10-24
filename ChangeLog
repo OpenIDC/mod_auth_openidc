@@ -1,3 +1,6 @@
+10/24/2014
+- add support for Redis cache backend; there's a dependency on hiredis headers/library now
+
 10/21/2014
 - refactor nonce generation and remove base64url padding from value
 

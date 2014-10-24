@@ -13,6 +13,7 @@ SRC=src/mod_auth_openidc.c \
 	src/cache/file.c \
 	src/cache/memcache.c \
 	src/cache/shm.c \
+	src/cache/redis.c \
 	src/oauth.c \
 	src/proto.c \
 	src/crypto.c \
@@ -47,8 +48,11 @@ DISTFILES=$(SRC) \
 
 all: src/mod_auth_openidc.la
 
+REDIS_CFLAGS=@HIREDIS_CFLAGS@
+REDIS_LIBS=@HIREDIS_LIBS@
+
 src/mod_auth_openidc.la: $(SRC) $(HDRS)
-	@APXS2@ -Wc,"-DNAMEVER=\"@NAMEVER@\" @OPENSSL_CFLAGS@ @CURL_CFLAGS@ @JANSSON_CFLAGS@" -Wl,"@OPENSSL_LIBS@ @CURL_LIBS@ @JANSSON_LIBS@" -Wc,-Wall -Wc,-g -c $(SRC)
+	@APXS2@ -Wc,"-DNAMEVER=\"@NAMEVER@\" @OPENSSL_CFLAGS@ @CURL_CFLAGS@ @JANSSON_CFLAGS@ $(REDIS_CFLAGS)" -Wl,"@OPENSSL_LIBS@ @CURL_LIBS@ @JANSSON_LIBS@ $(REDIS_LIBS)" -Wc,-Wall -Wc,-g -c $(SRC)
 
 
 # Building configure (for distribution)

@@ -1,4 +1,4 @@
-AC_INIT([mod_auth_openidc],[1.6.1rc0],[hzandbelt@pingidentity.com])
+AC_INIT([mod_auth_openidc],[1.6.1rc1],[hzandbelt@pingidentity.com])
 
 AC_SUBST(NAMEVER, AC_PACKAGE_TARNAME()-AC_PACKAGE_VERSION())
 
@@ -58,6 +58,14 @@ AC_SUBST(APR_LIBS)
 PKG_CHECK_MODULES(JANSSON, jansson)
 AC_SUBST(JANSSON_CFLAGS)
 AC_SUBST(JANSSON_LIBS)
+
+# Redis
+if test "$HIREDIS_LIBS" == ""; then
+	PKG_CHECK_MODULES(HIREDIS, hiredis)
+fi
+AM_CONDITIONAL(HIREDIS, test -n "$HIREDIS_LIBS")
+AC_SUBST(HIREDIS_CFLAGS)
+AC_SUBST(HIREDIS_LIBS)
 
 # Create Makefile from Makefile.in
 AC_CONFIG_FILES([Makefile])
