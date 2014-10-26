@@ -116,7 +116,7 @@ The above is an authorization example of matching a string literal against a pro
 
     Require claim "name~\w+ Jones$"
 
-to match all users with last name Jones (in this case the equivalent of `Require claim family_name:Jones`).
+to match all users with last name Jones and a single first name (i.e. roughly equivalent to `Require claim family_name:Jones`).
 
 ###Sample Config for Multiple OpenID Connect Providers
 
