@@ -110,6 +110,14 @@ Chooser screen, but you **must** also use the following authorization setting in
 
     Require claim hd:<your-domain>
 
+The above is an authorization example of matching a string literal against a provided claim. Since version
+1.6.1rc2 you can also use regular expressions to match claim values by using `claim~<expression>` instead of
+`claim:<literal>`, e.g.:
+
+    Require claim "name~\w+ Jones$"
+
+to match all users with last name Jones (in this case the equivalent of `Require claim family_name:Jones`).
+
 ###Sample Config for Multiple OpenID Connect Providers
 
 Sample configuration for multiple OpenID Connect providers, which triggers OP

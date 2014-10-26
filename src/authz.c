@@ -56,6 +56,127 @@
 
 #include "mod_auth_openidc.h"
 
+#include <pcre.h>
+
+static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c,
+		json_t *val, const char *key) {
+
+	int i = 0;
+
+	/* see if it is a string and it (case-insensitively) matches the Require'd value */
+	if (json_is_string(val)) {
+
+		if (apr_strnatcmp(json_string_value(val), spec_c) == 0)
+			return TRUE;
+
+		/* see if it is a integer and it equals the Require'd value */
+	} else if (json_is_integer(val)) {
+
+		if (json_integer_value(val) == atoi(spec_c))
+			return TRUE;
+
+		/* see if it is a boolean and it (case-insensitively) matches the Require'd value */
+	} else if (json_is_boolean(val)) {
+
+		if (apr_strnatcmp(json_is_true(val) ? "true" : "false", spec_c) == 0)
+			return TRUE;
+
+		/* if it is an array, we'll walk it */
+	} else if (json_is_array(val)) {
+
+		/* compare the claim values */
+		for (i = 0; i < json_array_size(val); i++) {
+
+			json_t *elem = json_array_get(val, i);
+
+			if (json_is_string(elem)) {
+				/*
+				 * approximately compare the claim value (ignoring
+				 * whitespace). At this point, spec_c points to the
+				 * NULL-terminated value pattern.
+				 */
+				if (apr_strnatcmp(json_string_value(elem), spec_c) == 0)
+					return TRUE;
+
+			} else if (json_is_boolean(elem)) {
+
+				if (apr_strnatcmp(
+				json_is_true(elem) ? "true" : "false", spec_c) == 0)
+					return TRUE;
+
+			} else if (json_is_integer(elem)) {
+
+				if (json_integer_value(elem) == atoi(spec_c))
+					return TRUE;
+
+			} else {
+
+				oidc_warn(r,
+						"unhandled in-array JSON object type [%d] for key \"%s\"",
+						elem->type, (const char * ) key);
+			}
+
+		}
+
+	} else {
+		oidc_warn(r, "unhandled JSON object type [%d] for key \"%s\"",
+				val->type, (const char * ) key);
+	}
+
+	return FALSE;
+}
+
+static apr_byte_t oidc_authz_match_expression(request_rec *r,
+		const char *spec_c, json_t *val) {
+	const char *errorptr;
+	int erroffset;
+	pcre *preg;
+	int i = 0;
+
+	/* setup the regex; spec_c points to the NULL-terminated value pattern */
+	preg = pcre_compile(spec_c, 0, &errorptr, &erroffset, NULL);
+
+	if (preg == NULL) {
+		oidc_error(r, "pattern [%s] is not a valid regular expression", spec_c);
+		pcre_free(preg);
+		return FALSE;
+	}
+
+	/* see if the claim is a literal string */
+	if (json_is_string(val)) {
+
+		/* PCRE-compare the string value against the expression */
+		if (pcre_exec(preg, NULL, json_string_value(val),
+				(int) strlen(json_string_value(val)), 0, 0, NULL, 0) == 0) {
+			pcre_free(preg);
+			return TRUE;
+		}
+
+		/* see if the claim value is an array */
+	} else if (json_is_array(val)) {
+
+		/* compare the claim values in the array against the expression */
+		for (i = 0; i < json_array_size(val); i++) {
+
+			json_t *elem = json_array_get(val, i);
+			if (json_is_string(elem)) {
+
+				/* PCRE-compare the string value against the expression */
+				if (pcre_exec(preg, NULL, json_string_value(elem),
+						(int) strlen(json_string_value(elem)), 0, 0,
+						NULL, 0) == 0) {
+					pcre_free(preg);
+					return TRUE;
+				}
+			}
+		}
+	}
+
+	pcre_free(preg);
+
+	return FALSE;
+}
+
 /*
  * see if a the Require value matches with a set of provided claims
  */
@@ -93,81 +214,22 @@ static apr_byte_t oidc_authz_match_claim(request_rec *r,
 			/* skip the colon */
 			spec_c++;
 
-			/* see if it is a string and it (case-insensitively) matches the Require'd value */
-			if (json_is_string(val)) {
+			if (oidc_authz_match_value(r, spec_c, val, key) == TRUE)
+				return TRUE;
 
-				if (apr_strnatcmp(json_string_value(val), spec_c) == 0) {
-					return TRUE;
-				}
+			/* a tilde denotes a string PCRE match */
+		} else if (!(*attr_c) && (*spec_c) == '~') {
 
-				/* see if it is a integer and it equals the Require'd value */
-			} else if (json_is_integer(val)) {
+			/* skip the tilde */
+			spec_c++;
 
-				if (json_integer_value(val) == atoi(spec_c)) {
-					return TRUE;
-				}
-
-				/* see if it is a boolean and it (case-insensitively) matches the Require'd value */
-			} else if (json_is_boolean(val)) {
-
-				if (apr_strnatcmp(json_is_true(val) ? "true" : "false", spec_c)
-						== 0) {
-					return TRUE;
-				}
-
-				/* if it is an array, we'll walk it */
-			} else if (json_is_array(val)) {
-
-				/* compare the claim values */
-				int i = 0;
-				for (i = 0; i < json_array_size(val); i++) {
-
-					json_t *elem = json_array_get(val, i);
-
-					if (json_is_string(elem)) {
-						/*
-						 * approximately compare the claim value (ignoring
-						 * whitespace). At this point, spec_c points to the
-						 * NULL-terminated value pattern.
-						 */
-						if (apr_strnatcmp(json_string_value(elem), spec_c)
-								== 0) {
-							return TRUE;
-						}
-
-					} else if (json_is_boolean(elem)) {
-
-						if (apr_strnatcmp(
-								json_is_true(elem) ? "true" : "false", spec_c)
-								== 0) {
-							return TRUE;
-						}
-
-					} else if (json_is_integer(elem)) {
-
-						if (json_integer_value(elem) == atoi(spec_c)) {
-							return TRUE;
-						}
-
-					} else {
-
-						oidc_warn(r,
-								"unhandled in-array JSON object type [%d] for key \"%s\"",
-								elem->type, (const char * ) key);
-					}
-				}
-
-			} else {
-				oidc_warn(r, "unhandled JSON object type [%d] for key \"%s\"",
-						val->type, (const char * ) key);
-			}
-
+			if (oidc_authz_match_expression(r, spec_c, val) == TRUE)
+				return TRUE;
 		}
 
-		/* TODO: a tilde (denotes a PCRE match). */
-		//else if (!(*attr_c) && (*spec_c) == '~') {
 		iter = json_object_iter_next((json_t *) claims, iter);
 	}
+
 	return FALSE;
 }
 

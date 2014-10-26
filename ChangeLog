@@ -1,3 +1,6 @@
+10/26/2014
+- support regular expressions in Require statements
+
 10/24/2014
 - add support for Redis cache backend; there's a dependency on hiredis headers/library now
 
