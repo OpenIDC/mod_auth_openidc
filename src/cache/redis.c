@@ -166,7 +166,6 @@ static apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section,
 
 	/* check that we got a string back */
 	if (reply->type != REDIS_REPLY_STRING) {
-		oidc_error(r, "redisCommand reply != string: '%s'", reply->str);
 		freeReplyObject(reply);
 		/* this is a normal cache miss, so we'll return OK */
 		return TRUE;
