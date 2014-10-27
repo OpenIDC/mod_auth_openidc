@@ -812,6 +812,9 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->cache_shm_size_max =
 			add->cache_shm_size_max != OIDC_DEFAULT_CACHE_SHM_SIZE ?
 					add->cache_shm_size_max : base->cache_shm_size_max;
+	c->cache_redis_server =
+			add->cache_redis_server != NULL ?
+					add->cache_redis_server : base->cache_redis_server;
 
 	c->metadata_dir =
 			add->metadata_dir != NULL ? add->metadata_dir : base->metadata_dir;
