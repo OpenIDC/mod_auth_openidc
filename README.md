@@ -42,14 +42,16 @@ It supports [OpenID Connect Session Management draft 21]
 (https://github.com/pingidentity/mod_auth_openidc/wiki) for information
 on how to configure it.
 
-Additionally it can operate as an OAuth 2.0 Resource Server to a [PingFederate]
-(https://www.pingidentity.com/products/pingfederate/) OAuth 2.0 Authorization Server,
-validating Bearer access_tokens against [PingFederate](https://www.pingidentity.com/products/pingfederate/).
-The `REMOTE_USER` variable setting, passing claims in HTTP headers and authorization based on Require
-primitives works in the same way as described for OpenID Connect above.
+Additionally it can operate as an OAuth 2.0 Resource Server to an OAuth 2.0 Authorization Server,
+introspecting/validating bearer Access Tokens conforming to [OAuth Token Introspection]
+(https://tools.ietf.org/html/draft-ietf-oauth-introspection-00) or similar. The `REMOTE_USER`
+variable setting, passing claims in HTTP headers and authorization based on Require primitives
+works in the same way as described for OpenID Connect above.
 
-It implements server-side caching across different Apache processes through one
-of the following options:
+###Caching
+
+**mod_auth_openidc** implements server-side caching across different Apache processes through
+one of the following options:
 
 1. *shared memory* (default)  
    shared across a single logical Apache server running
@@ -111,7 +113,7 @@ Chooser screen, but you **must** also use the following authorization setting in
     Require claim hd:<your-domain>
 
 The above is an authorization example of matching a string literal against a provided claim. Since version
-1.6.1rc2 you can also use regular expressions to match claim values by using `claim~<expression>` instead of
+1.7.0 you can also use regular expressions to match claim values by using `claim~<expression>` instead of
 `claim:<literal>`, e.g.:
 
     Require claim "name~\w+ Jones$"
@@ -211,7 +213,7 @@ An additional **mod_auth_openidc** specific parameter named `auth_request_params
 in, see the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki#10-how-can-i-add-custom-parameters-to-the-authorization-request)
 for its usage.
 
-###Sample Config for PingFederate OpenID Connect & OAuth 2.0
+###Sample Config for PingFederate OpenID Connect & OAuth 2.0 Token Introspection
 
 Another example config*) for using PingFederate as your OpenID Connect OP and/or
 OAuth 2.0 Authorization server, based on the OAuth 2.0 PlayGround 3.x default
@@ -230,9 +232,11 @@ client `ac_oic_client`)
     OIDCScope "openid email profile"
     OIDCCookiePath /example/
 
-    OIDCOAuthEndpoint https://macbook:9031/as/token.oauth2
-    OIDCOAuthEndpointAuth client_secret_basic
-
+    OIDCOAuthIntrospectionEndpoint https://macbook:9031/as/token.oauth2
+	OIDCOAuthIntrospectionEndpointParams grant_type=urn%3Apingidentity.com%3Aoauth2%3Agrant_type%3Avalidate_bearer
+    OIDCOAuthIntrospectionEndpointAuth client_secret_basic
+    OIDCOAuthRemoteUserClaim Username
+	
     OIDCOAuthSSLValidateServer Off
     OIDCOAuthClientID rs_client
     OIDCOAuthClientSecret 2Federate
@@ -247,6 +251,7 @@ client `ac_oic_client`)
        AuthType oauth20
        #Require valid-user
        Require claim Username:joe
+       #Require claim scope~[^profile$|^profile\s+|\s+profile\s+|\s+profile$]
     </Location>
 
 *) for versions older than 1.6.0 you cannot use `OIDCProviderMetadataURL` and you'll need to

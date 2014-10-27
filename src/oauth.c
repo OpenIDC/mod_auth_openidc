@@ -59,9 +59,6 @@
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
-/* the grant type string that the Authorization server expects when validating access tokens */
-#define OIDC_OAUTH_VALIDATION_GRANT_TYPE "urn:pingidentity.com:oauth2:grant_type:validate_bearer"
-
 /*
  * validate an access token against the validation endpoint of the Authorization server and gets a response back
  */
@@ -70,13 +67,17 @@ static int oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 
 	/* assemble parameters to call the token endpoint for validation */
 	apr_table_t *params = apr_table_make(r->pool, 4);
-	apr_table_addn(params, "grant_type", OIDC_OAUTH_VALIDATION_GRANT_TYPE);
+
+	/* add any configured extra static parameters to the introspection endpoint */
+	oidc_util_table_add_query_encoded_params(r->pool, params, c->oauth.introspection_endpoint_params);
+
+	/* add the access_token itself */
 	apr_table_addn(params, "token", token);
 
 	/* see if we want to do basic auth or post-param-based auth */
 	const char *basic_auth = NULL;
-	if ((c->oauth.validate_endpoint_auth != NULL)
-			&& (apr_strnatcmp(c->oauth.validate_endpoint_auth,
+	if ((c->oauth.introspection_endpoint_auth != NULL)
+			&& (apr_strnatcmp(c->oauth.introspection_endpoint_auth,
 					"client_secret_post") == 0)) {
 		apr_table_addn(params, "client_id", c->oauth.client_id);
 		apr_table_addn(params, "client_secret", c->oauth.client_secret);
@@ -86,7 +87,7 @@ static int oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 	}
 
 	/* call the endpoint with the constructed parameter set and return the resulting response */
-	return oidc_util_http_post_form(r, c->oauth.validate_endpoint_url, params,
+	return oidc_util_http_post_form(r, c->oauth.introspection_endpoint_url, params,
 			basic_auth, NULL, c->oauth.ssl_validate_server, response,
 			c->http_timeout_long, c->outgoing_proxy);
 }
@@ -127,6 +128,35 @@ static apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 }
 
 /*
+ * copy over space separated scope value but do it in an array for authorization purposes
+ */
+/*
+static void oidc_oauth_spaced_string_to_array(request_rec *r, json_t *src,
+		const char *src_key, json_t *dst, const char *dst_key) {
+	apr_hash_t *ht = NULL;
+	apr_hash_index_t *hi = NULL;
+	json_t *arr = NULL;
+
+	json_t *src_val = json_object_get(src, src_key);
+
+	if (src_val != NULL)
+		ht = oidc_util_spaced_string_to_hashtable(r->pool,
+				json_string_value(src_val));
+
+	if (ht != NULL) {
+		arr = json_array();
+		for (hi = apr_hash_first(NULL, ht); hi; hi = apr_hash_next(hi)) {
+			const char *k;
+			const char *v;
+			apr_hash_this(hi, (const void**) &k, NULL, (void**) &v);
+			json_array_append_new(arr, json_string(v));
+		}
+		json_object_set_new(dst, dst_key, arr);
+	}
+}
+*/
+
+/*
  * resolve and validate an access_token against the configured Authorization Server
  */
 static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
@@ -151,25 +181,49 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 		if (oidc_util_decode_json_and_check_error(r, json, &result) == FALSE)
 			return FALSE;
 
-		/* get and check the expiry timestamp */
-		json_t *expires_in = json_object_get(result, "expires_in");
-		if ((expires_in == NULL) || (!json_is_number(expires_in))) {
-			oidc_error(r,
-					"response JSON object did not contain an \"expires_in\" number");
-			json_decref(result);
-			return FALSE;
-		}
-		if (json_integer_value(expires_in) <= 0) {
-			oidc_warn(r,
-					"\"expires_in\" number <= 0 (%" JSON_INTEGER_FORMAT "); token already expired...",
-					json_integer_value(expires_in));
-			json_decref(result);
-			return FALSE;
+		json_t *active = json_object_get(result, "active");
+		if (active != NULL) {
+
+			if ((!json_is_boolean(active)) || (!json_is_true(active))) {
+				oidc_debug(r,
+						"no \"active\" boolean object with value \"true\" found in response JSON object");
+				json_decref(result);
+				return FALSE;
+			}
+
+			json_t *exp = json_object_get(result, "exp");
+			if ((exp != NULL) && (json_is_number(exp))) {
+				/* set it in the cache so subsequent request don't need to validate the access_token and get the claims anymore */
+				c->cache->set(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, access_token, json,
+						apr_time_from_sec(json_integer_value(exp)));
+			} else if (json_integer_value(exp) <= 0) {
+				oidc_debug(r,
+						"response JSON object did not contain an \"exp\" integer number; introspection result will not be cached");
+			}
+
+		} else {
+
+			/* assume PingFederate validation: get and check the expiry timestamp */
+			json_t *expires_in = json_object_get(result, "expires_in");
+			if ((expires_in == NULL) || (!json_is_number(expires_in))) {
+				oidc_error(r,
+						"response JSON object did not contain an \"expires_in\" number");
+				json_decref(result);
+				return FALSE;
+			}
+			if (json_integer_value(expires_in) <= 0) {
+				oidc_warn(r,
+						"\"expires_in\" number <= 0 (%" JSON_INTEGER_FORMAT "); token already expired...",
+						json_integer_value(expires_in));
+				json_decref(result);
+				return FALSE;
+			}
+
+			/* set it in the cache so subsequent request don't need to validate the access_token and get the claims anymore */
+			c->cache->set(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, access_token, json,
+					apr_time_now() + apr_time_from_sec(json_integer_value(expires_in)));
 		}
 
-		/* set it in the cache so subsequent request don't need to validate the access_token and get the claims anymore */
-		c->cache->set(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, access_token, json,
-				apr_time_now() + apr_time_from_sec(json_integer_value(expires_in)));
 
 	} else {
 
@@ -184,34 +238,35 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 
 	/* return the access_token JSON object */
 	json_t *tkn = json_object_get(result, "access_token");
-	if ((tkn == NULL) || (!json_is_object(tkn))) {
-		oidc_error(r,
-				"response JSON object did not contain an access_token object");
+	if ((tkn != NULL) && (json_is_object(tkn))) {
+
+		/*
+		 * assume PingFederate validation: copy over those claims from the access_token
+		 * that are relevant for authorization purposes
+		 */
+		json_object_set(tkn, "client_id", json_object_get(result, "client_id"));
+		json_object_set(tkn, "scope", json_object_get(result, "scope"));
+
+		//oidc_oauth_spaced_string_to_array(r, result, "scope", tkn, "scopes");
+
+		/* return only the pimped access_token results */
+		*token = json_deep_copy(tkn);
+		char *s_token = json_dumps(*token, 0);
+		*response = apr_pstrdup(r->pool, s_token);
+		free(s_token);
+
 		json_decref(result);
-		return FALSE;
+
+	} else  {
+
+		//oidc_oauth_spaced_string_to_array(r, result, "scope", result, "scopes");
+
+		/* assume spec compliant introspection */
+		*token = result;
+		*response = apr_pstrdup(r->pool, json);
+
 	}
 
-	/* copy over client_id from resolved token in to access_token to apply authorization on that */
-	json_object_set(tkn, "client_id", json_object_get(result, "client_id"));
-	//json_object_set(tkn, "scope", json_object_get(result, "scope"));
-
-	/* copy over space separated scope value but do it in an array for authorization purposes */
-	char *val;
-	const char *data = apr_pstrdup(r->pool,
-			json_string_value(json_object_get(result, "scope")));
-	json_t *a_scopes = json_array();
-	while (*data && (val = ap_getword_white(r->pool, &data))) {
-		json_array_append_new(a_scopes, json_string(val));
-	}
-	json_object_set_new(tkn, "scope", a_scopes);
-
-	/* return only the pimped access_token results */
-	*token = json_deep_copy(tkn);
-	char *s_token = json_dumps(*token, 0);
-	*response = apr_pstrdup(r->pool, s_token);
-	free(s_token);
-
-	json_decref(result);
 	return TRUE;
 }
 

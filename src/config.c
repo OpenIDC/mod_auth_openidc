@@ -81,7 +81,7 @@
 /* default name for the claim that will contain the REMOTE_USER value for OpenID Connect protected paths */
 #define OIDC_DEFAULT_CLAIM_REMOTE_USER "sub@"
 /* default name for the claim that will contain the REMOTE_USER value for OAuth 2.0 protected paths */
-#define OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER "Username"
+#define OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER "sub"
 /* default name of the session cookie */
 #define OIDC_DEFAULT_COOKIE "mod_auth_openidc_session"
 /* default for the HTTP header name in which the remote user name is passed */
@@ -567,8 +567,9 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->oauth.ssl_validate_server = OIDC_DEFAULT_SSL_VALIDATE_SERVER;
 	c->oauth.client_id = NULL;
 	c->oauth.client_secret = NULL;
-	c->oauth.validate_endpoint_url = NULL;
-	c->oauth.validate_endpoint_auth = NULL;
+	c->oauth.introspection_endpoint_url = NULL;
+	c->oauth.introspection_endpoint_params = NULL;
+	c->oauth.introspection_endpoint_auth = NULL;
 	c->oauth.remote_user_claim = OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER;
 
 	c->cache = &oidc_cache_shm;
@@ -756,14 +757,18 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->oauth.client_secret =
 			add->oauth.client_secret != NULL ?
 					add->oauth.client_secret : base->oauth.client_secret;
-	c->oauth.validate_endpoint_url =
-			add->oauth.validate_endpoint_url != NULL ?
-					add->oauth.validate_endpoint_url :
-					base->oauth.validate_endpoint_url;
-	c->oauth.validate_endpoint_auth =
-			add->oauth.validate_endpoint_auth != NULL ?
-					add->oauth.validate_endpoint_auth :
-					base->oauth.validate_endpoint_auth;
+	c->oauth.introspection_endpoint_url =
+			add->oauth.introspection_endpoint_url != NULL ?
+					add->oauth.introspection_endpoint_url :
+					base->oauth.introspection_endpoint_url;
+	c->oauth.introspection_endpoint_params =
+			add->oauth.introspection_endpoint_params != NULL ?
+					add->oauth.introspection_endpoint_params :
+					base->oauth.introspection_endpoint_params;
+	c->oauth.introspection_endpoint_auth =
+			add->oauth.introspection_endpoint_auth != NULL ?
+					add->oauth.introspection_endpoint_auth :
+					base->oauth.introspection_endpoint_auth;
 	c->oauth.remote_user_claim =
 			apr_strnatcmp(add->oauth.remote_user_claim,
 					OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER) != 0 ?
@@ -968,8 +973,8 @@ static int oidc_check_config_oauth(server_rec *s, oidc_cfg *c) {
 	if (c->oauth.client_secret == NULL)
 		return oidc_check_config_error(s, "OIDCOAuthClientSecret");
 
-	if (c->oauth.validate_endpoint_url == NULL)
-		return oidc_check_config_error(s, "OIDCOAuthEndpoint");
+	if (c->oauth.introspection_endpoint_url == NULL)
+		return oidc_check_config_error(s, "OIDCOAuthIntrospectionEndpoint");
 
 	return OK;
 }
@@ -991,7 +996,7 @@ static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s) {
 	}
 
 	if ((cfg->oauth.client_id != NULL) || (cfg->oauth.client_secret != NULL)
-			|| (cfg->oauth.validate_endpoint_url != NULL)) {
+			|| (cfg->oauth.introspection_endpoint_url != NULL)) {
 		if (oidc_check_config_oauth(s, cfg) != OK)
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
@@ -1333,11 +1338,13 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, provider.ssl_validate_server),
 				RSRC_CONF,
 				"Require validation of the OpenID Connect OP SSL server certificate for successful authentication (On or Off)"),
-		AP_INIT_TAKE1("OIDCClientName", oidc_set_string_slot,
+		AP_INIT_TAKE1("OIDCClientName",
+				oidc_set_string_slot,
 				(void *) APR_OFFSETOF(oidc_cfg, provider.client_name),
 				RSRC_CONF,
 				"Define the (client_name) name that the client uses for dynamic registration to the OP."),
-		AP_INIT_TAKE1("OIDCClientContact", oidc_set_string_slot,
+		AP_INIT_TAKE1("OIDCClientContact",
+				oidc_set_string_slot,
 				(void *) APR_OFFSETOF(oidc_cfg, provider.client_contact),
 				RSRC_CONF,
 				"Define the contact that the client registers in dynamic registration with the OP."),
@@ -1350,11 +1357,13 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, provider.jwks_refresh_interval),
 				RSRC_CONF,
 				"Duration in seconds after which retrieved JWS should be refreshed."),
-		AP_INIT_TAKE1("OIDCIDTokenIatSlack", oidc_set_int_slot,
+		AP_INIT_TAKE1("OIDCIDTokenIatSlack",
+				oidc_set_int_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.idtoken_iat_slack),
 				RSRC_CONF,
 				"Acceptable offset (both before and after) for checking the \"iat\" (= issued at) timestamp in the id_token."),
-		AP_INIT_TAKE1("OIDCAuthRequestParams", oidc_set_string_slot,
+		AP_INIT_TAKE1("OIDCAuthRequestParams",
+				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.auth_request_params),
 				RSRC_CONF,
 				"Extra parameters that need to be sent in the Authorization Request (must be query-encoded like \"display=popup&prompt=consent\"."),
@@ -1431,15 +1440,21 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.client_secret),
 				RSRC_CONF,
 				"Client secret used in calls to OAuth 2.0 Authorization server validation calls."),
-		AP_INIT_TAKE1("OIDCOAuthEndpoint", oidc_set_https_slot,
-				(void *)APR_OFFSETOF(oidc_cfg, oauth.validate_endpoint_url),
+		AP_INIT_TAKE1("OIDCOAuthIntrospectionEndpoint",
+				oidc_set_https_slot,
+				(void *)APR_OFFSETOF(oidc_cfg, oauth.introspection_endpoint_url),
 				RSRC_CONF,
-				"Define the OAuth AS Validation Endpoint URL (e.g.: https://localhost:9031/as/token.oauth2)"),
-		AP_INIT_TAKE1("OIDCOAuthEndpointAuth",
+				"Define the OAuth AS Introspection Endpoint URL (e.g.: https://localhost:9031/as/token.oauth2)"),
+		AP_INIT_TAKE1("OIDCOAuthIntrospectionEndpointParams",
+				oidc_set_string_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, oauth.introspection_endpoint_params),
+				RSRC_CONF,
+				"Extra parameters that need to be sent in the token introspection request (must be query-encoded like \"grant_type=urn%3Apingidentity.com%3Aoauth2%3Agrant_type%3Avalidate_bearer\"."),
+		AP_INIT_TAKE1("OIDCOAuthIntrospectionEndpointAuth",
 				oidc_set_endpoint_auth_slot,
-				(void *)APR_OFFSETOF(oidc_cfg, oauth.validate_endpoint_auth),
+				(void *)APR_OFFSETOF(oidc_cfg, oauth.introspection_endpoint_auth),
 				RSRC_CONF,
-				"Specify an authentication method for the OAuth AS Validation Endpoint (e.g.: client_auth_basic)"),
+				"Specify an authentication method for the OAuth AS Introspection Endpoint (e.g.: client_auth_basic)"),
 		AP_INIT_FLAG("OIDCOAuthSSLValidateServer",
 				oidc_set_flag_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.ssl_validate_server),

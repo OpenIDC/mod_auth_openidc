@@ -808,17 +808,8 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 		apr_table_addn(params, "client_secret", provider->client_secret);
 	}
 
-	/* see if we've configured any extra static parameters to the token endpoint */
-	if (provider->token_endpoint_params != NULL) {
-		const char *key, *val;
-		const char *p = provider->token_endpoint_params;
-		while (*p && (val = ap_getword(r->pool, &p, '&'))) {
-			key = ap_getword(r->pool, &val, '=');
-			ap_unescape_url((char *) key);
-			ap_unescape_url((char *) val);
-			apr_table_addn(params, key, val);
-		}
-	}
+	/* add any configured extra static parameters to the token endpoint */
+	oidc_util_table_add_query_encoded_params(r->pool, params, provider->token_endpoint_params);
 
 	/* resolve the code against the token endpoint */
 	if (oidc_util_http_post_form(r, provider->token_endpoint_url, params,

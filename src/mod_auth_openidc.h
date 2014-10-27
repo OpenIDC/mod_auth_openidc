@@ -200,8 +200,9 @@ typedef struct oidc_oauth_t {
 	int ssl_validate_server;
 	char *client_id;
 	char *client_secret;
-	char *validate_endpoint_url;
-	char *validate_endpoint_auth;
+	char *introspection_endpoint_url;
+	char *introspection_endpoint_params;
+	char *introspection_endpoint_auth;
 	char *remote_user_claim;
 } oidc_oauth_t;
 
@@ -371,6 +372,7 @@ apr_byte_t oidc_util_spaced_string_contains(apr_pool_t *pool, const char *respon
 apr_byte_t oidc_json_object_get_string(apr_pool_t *pool, json_t *json, const char *name, char **value, const char *default_value);
 apr_byte_t oidc_json_object_get_int(apr_pool_t *pool, json_t *json, const char *name, int *value, const int default_value);
 char *oidc_util_html_escape(apr_pool_t *pool, const char *input);
+void oidc_util_table_add_query_encoded_params(apr_pool_t *pool, apr_table_t *table, const char *params);
 
 // oidc_crypto.c
 unsigned char *oidc_crypto_aes_encrypt(request_rec *r, oidc_cfg *cfg, unsigned char *plaintext, int *len);

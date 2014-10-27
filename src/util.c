@@ -1178,8 +1178,8 @@ void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs,
 
 			/* some logging about what we're going to do */
 			oidc_debug(r,
-					"parsing attribute array for key \"%s\" (#nr-of-elems: %zu)",
-					s_key, json_array_size(j_value));
+					"parsing attribute array for key \"%s\" (#nr-of-elems: %llu)",
+					s_key, (unsigned long long)json_array_size(j_value));
 
 			/* string to hold the concatenated array string values */
 			char *s_concat = apr_pstrdup(r->pool, "");
@@ -1318,4 +1318,20 @@ apr_byte_t oidc_json_object_get_int(apr_pool_t *pool, json_t *json,
 		}
 	}
 	return TRUE;
+}
+
+/*
+ * add query encoded parameters to a table
+ */
+void oidc_util_table_add_query_encoded_params(apr_pool_t *pool, apr_table_t *table, const char *params) {
+	if (params != NULL) {
+		const char *key, *val;
+		const char *p = params;
+		while (*p && (val = ap_getword(pool, &p, '&'))) {
+			key = ap_getword(pool, &val, '=');
+			ap_unescape_url((char *) key);
+			ap_unescape_url((char *) val);
+			apr_table_addn(table, key, val);
+		}
+	}
 }

@@ -1,3 +1,7 @@
+10/27/2014
+- generalize support for OAuth 2.0 token introspection and conform to:
+  https://tools.ietf.org/html/draft-ietf-oauth-introspection-00
+
 10/26/2014
 - support regular expressions in Require statements
 
