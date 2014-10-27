@@ -11,6 +11,7 @@ Package: libapache2-mod-auth-openidc
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: OpenID Connect authentication module for Apache
- mod_auth_openidc is an Apache module that enables you to authenticate
- users of a web site against an OpenID Connect Identity Provider. It can grant
- access to paths and provide attributes to other modules and applications.
+ mod_auth_openidc is an Apache module that authenticates users
+ of a web site against an OpenID Connect Identity Provider or an
+ OAuth 2.0 Authorization Server. It provides access control based
+ on claims and passes those claims to other modules and applications.

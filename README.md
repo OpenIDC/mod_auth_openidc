@@ -2,18 +2,23 @@ mod_auth_openidc
 ================
 
 **mod_auth_openidc** is an authentication/authorization module for the Apache 2.x
-HTTP server that allows users to authenticate using an OpenID Connect enabled
-Identity Provider.
+HTTP server that authenticates users against an OpenID Connect Provider. It can also
+function as an OAuth 2.0 Resource Server, validating access tokens presented by
+OAuth 2.0 clients against an OAuth 2.0 Authorization Server.
   
 Overview
 --------
 
 This module enables an Apache 2.x web server to operate as an [OpenID Connect]
 (http://openid.net/specs/openid-connect-core-1_0.html) *Relying Party* (RP) to an
-OpenID Connect *Provider* (OP). It will enable users to authenticate at an OpenID
-Connect Provider, receive user identity information from the OP in a so called ID
-Token and pass the identity information (a.k.a. claims) in the ID Token to applications
-hosted and protected by the Apache web server.
+OpenID Connect *Provider* (OP). It authenticates users against an OpenID Connect Provider,
+receives user identity information from the OP in a so called ID Token and passes the
+identity information (a.k.a. claims) in the ID Token to applications hosted and protected
+by the Apache web server.
+
+It can also be configured as an OAuth 2.0 Resource Server, consuming bearer access
+tokens and introspecting/validating them against a token introspection endpoint of an
+OAuth 2.0 Authorization Server, authorizing clients based on the introspection results.
 
 The protected content and/or applications can be served by the Apache server
 itself or it can be served from elsewhere when Apache is configured as a reverse
