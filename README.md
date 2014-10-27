@@ -256,7 +256,7 @@ client `ac_oic_client`)
        AuthType oauth20
        #Require valid-user
        Require claim Username:joe
-       #Require claim scope~^profile$|^profile\s+|\s+profile\s+|\s+profile$
+       #Require claim scope~\bprofile\b
     </Location>
 
 *) for versions older than 1.6.0 you cannot use `OIDCProviderMetadataURL` and you'll need to
