@@ -767,7 +767,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 /*
  * check that the access_token type is supported
  */
-apr_byte_t oidc_proto_validate_token_type(request_rec *r,
+static apr_byte_t oidc_proto_validate_token_type(request_rec *r,
 		oidc_provider_t *provider, const char *token_type) {
 	/*  we only support bearer/Bearer  */
 	if ((token_type != NULL) && (apr_strnatcasecmp(token_type, "Bearer") != 0)
@@ -781,20 +781,14 @@ apr_byte_t oidc_proto_validate_token_type(request_rec *r,
 }
 
 /*
- * resolves the code received from the OP in to an access_token and id_token and returns the parsed contents
+ * send a code/refresh request to the token endpoint and return the parsed contents
  */
-apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
-		oidc_provider_t *provider, const char *code, char **s_idtoken,
-		char **s_access_token, char **s_token_type, char **s_refresh_token) {
+static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
+		oidc_cfg *cfg, oidc_provider_t *provider, apr_table_t *params,
+		char **id_token, char **access_token, char **token_type,
+		char **refresh_token) {
 
-	oidc_debug(r, "enter");
 	const char *response = NULL;
-
-	/* assemble the parameters for a call to the token endpoint */
-	apr_table_t *params = apr_table_make(r->pool, 5);
-	apr_table_addn(params, "grant_type", "authorization_code");
-	apr_table_addn(params, "code", code);
-	apr_table_addn(params, "redirect_uri", cfg->redirect_uri);
 
 	/* see if we need to do basic auth or auth-through-post-params (both applied through the HTTP POST method though) */
 	const char *basic_auth = NULL;
@@ -809,15 +803,15 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 	}
 
 	/* add any configured extra static parameters to the token endpoint */
-	oidc_util_table_add_query_encoded_params(r->pool, params, provider->token_endpoint_params);
+	oidc_util_table_add_query_encoded_params(r->pool, params,
+			provider->token_endpoint_params);
 
-	/* resolve the code against the token endpoint */
+	/* send the refresh request to the token endpoint */
 	if (oidc_util_http_post_form(r, provider->token_endpoint_url, params,
 			basic_auth, NULL, provider->ssl_validate_server, &response,
 			cfg->http_timeout_long, cfg->outgoing_proxy) == FALSE) {
-		oidc_warn(r,
-				"could not successfully resolve the \"code\" (%s) against the token endpoint (%s)",
-				code, provider->token_endpoint_url);
+		oidc_warn(r, "error when calling the token endpoint (%s)",
+				provider->token_endpoint_url);
 		return FALSE;
 	}
 
@@ -826,21 +820,70 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 	if (oidc_util_decode_json_and_check_error(r, response, &result) == FALSE)
 		return FALSE;
 
+	/* get the id_token from the parsed response */
+	oidc_json_object_get_string(r->pool, result, "id_token", id_token, NULL);
+
 	/* get the access_token from the parsed response */
-	oidc_json_object_get_string(r->pool, result, "access_token", s_access_token, NULL);
+	oidc_json_object_get_string(r->pool, result, "access_token", access_token,
+			NULL);
 
 	/* get the token type from the parsed response */
-	oidc_json_object_get_string(r->pool, result, "token_type", s_token_type, NULL);
+	oidc_json_object_get_string(r->pool, result, "token_type", token_type,
+			NULL);
 
-	/* get the id_token from the parsed response */
-	oidc_json_object_get_string(r->pool, result, "id_token", s_idtoken, NULL);
+	/* check the new token type */
+	if (token_type != NULL) {
+		if (oidc_proto_validate_token_type(r, provider, *token_type) == FALSE) {
+			oidc_warn(r, "access token type did not validate, dropping it");
+			*access_token = NULL;
+		}
+	}
 
 	/* get the refresh_token from the parsed response */
-	oidc_json_object_get_string(r->pool, result, "refresh_token", s_refresh_token, NULL);
+	oidc_json_object_get_string(r->pool, result, "refresh_token", refresh_token,
+			NULL);
 
 	json_decref(result);
 
 	return TRUE;
+}
+
+/*
+ * resolves the code received from the OP in to an id_token, access_token and refresh_token
+ */
+apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
+		oidc_provider_t *provider, const char *code, char **id_token,
+		char **access_token, char **token_type, char **refresh_token) {
+
+	oidc_debug(r, "enter");
+
+	/* assemble the parameters for a call to the token endpoint */
+	apr_table_t *params = apr_table_make(r->pool, 5);
+	apr_table_addn(params, "grant_type", "authorization_code");
+	apr_table_addn(params, "code", code);
+	apr_table_addn(params, "redirect_uri", cfg->redirect_uri);
+
+	return oidc_proto_token_endpoint_request(r, cfg, provider, params, id_token,
+			access_token, token_type, refresh_token);
+}
+
+/*
+ * refreshes the access_token/id_token /refresh_token received from the OP using the refresh_token
+ */
+apr_byte_t oidc_proto_refresh_request(request_rec *r, oidc_cfg *cfg,
+		oidc_provider_t *provider, const char *rtoken, char **id_token,
+		char **access_token, char **token_type, char **refresh_token) {
+
+	oidc_debug(r, "enter");
+
+	/* assemble the parameters for a call to the token endpoint */
+	apr_table_t *params = apr_table_make(r->pool, 5);
+	apr_table_addn(params, "grant_type", "refresh_token");
+	apr_table_addn(params, "refresh_token", rtoken);
+	apr_table_addn(params, "scope", provider->scope);
+
+	return oidc_proto_token_endpoint_request(r, cfg, provider, params, id_token,
+			access_token, token_type, refresh_token);
 }
 
 /*

@@ -993,10 +993,6 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 			oidc_warn(r, "access_token did not validate, dropping it");
 			access_token = NULL;
 		}
-		if (oidc_proto_validate_token_type(r, provider, token_type) == FALSE) {
-			oidc_warn(r, "access token type did not validate, dropping it");
-			access_token = NULL;
-		}
 	}
 
 	/*
@@ -1044,13 +1040,15 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	/* store the compact serialized representation of the id_token for later reference  */
 	oidc_session_set(r, session, OIDC_IDTOKEN_SESSION_KEY, id_token);
 
+	/* store the issuer in the session (at least needed for session mgmt and token refresh */
+	oidc_session_set(r, session, OIDC_ISSUER_SESSION_KEY, provider->issuer);
+
 	if ((session_state != NULL) && (provider->check_session_iframe != NULL)) {
 		/* store the session state and required parameters session management  */
 		oidc_session_set(r, session, OIDC_SESSION_STATE_SESSION_KEY,
 				session_state);
 		oidc_session_set(r, session, OIDC_CHECK_IFRAME_SESSION_KEY,
 				provider->check_session_iframe);
-		oidc_session_set(r, session, OIDC_ISSUER_SESSION_KEY, provider->issuer);
 		oidc_session_set(r, session, OIDC_CLIENTID_SESSION_KEY,
 				provider->client_id);
 	}
@@ -1820,6 +1818,80 @@ static int oidc_handle_session_management(request_rec *r, oidc_cfg *c,
 }
 
 /*
+ * handle refresh token request
+ */
+static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
+		session_rec *session) {
+
+	char *return_to = NULL;
+
+	/* get the command passed to the session management handler */
+	oidc_util_get_request_parameter(r, "refresh", &return_to);
+	if (return_to == NULL) {
+		oidc_error(r,
+				"refresh token request handler called with no URL to return to");
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	/* get the refresh token that was stored in the session */
+	const char *refresh_token = NULL;
+	oidc_session_get(r, session, OIDC_REFRESHTOKEN_SESSION_KEY, &refresh_token);
+	if (refresh_token == NULL) {
+		oidc_warn(r,
+				"refresh token request handler called but no refresh_token was found in the session");
+		goto end;
+	}
+
+	/* get a handle to the provider configuration */
+	const char *issuer = NULL;
+	oidc_provider_t *provider = NULL;
+	oidc_session_get(r, session, OIDC_ISSUER_SESSION_KEY, &issuer);
+	if (issuer == NULL) {
+		oidc_warn(r, "corrupted session, no issuer found in session");
+		goto end;
+	}
+	provider = oidc_get_provider_for_issuer(r, c, issuer);
+	if (provider == NULL) {
+		oidc_warn(r, "corrupted session, no provider found for issuer: %s", issuer);
+		goto end;
+	}
+
+	/* elements returned in the refresh response */
+	char *s_id_token = NULL;
+	char *s_access_token = NULL;
+	char *s_token_type = NULL;
+	char *s_refresh_token = NULL;
+
+	/* refresh the tokens by calling the token endpoint */
+	if (oidc_proto_refresh_request(r, c, provider, refresh_token, &s_id_token,
+			&s_access_token, &s_token_type, &s_refresh_token) == FALSE) {
+		oidc_warn(r, "refreshing the access_token failed");
+	}
+
+	/* store the new access_token in the session and discard the old one */
+	oidc_session_set(r, session, OIDC_ACCESSTOKEN_SESSION_KEY, s_access_token);
+
+	/* if we have a new refresh token (rolling refresh), store it in the session and overwrite the old one */
+	if (s_refresh_token != NULL)
+		oidc_session_set(r, session, OIDC_REFRESHTOKEN_SESSION_KEY,
+				s_refresh_token);
+
+	// TODO: validate the id_token (this time against the old one) and do:
+	// oidc_session_set(r, session, OIDC_IDTOKEN_SESSION_KEY, id_token);
+	// TODO: also need to parse out claims and possibly call the user info endpoint again
+
+	/* store the session */
+	oidc_session_save(r, session);
+
+end:
+
+	/* add the redirect location header */
+	apr_table_add(r->headers_out, "Location", return_to);
+
+	return HTTP_MOVED_TEMPORARILY;
+}
+
+/*
  * handle all requests to the redirect_uri
  */
 int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
@@ -1854,6 +1926,11 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 
 		/* handle session management request */
 		return oidc_handle_session_management(r, c, session);
+
+	} else if (oidc_util_request_has_parameter(r, "refresh")) {
+
+		/* handle refresh token request */
+		return oidc_handle_refresh_token_request(r, c, session);
 
 	} else if ((r->args == NULL) || (apr_strnatcmp(r->args, "") == 0)) {
 

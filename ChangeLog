@@ -1,8 +1,8 @@
 10/28/2014
 - scrub all OIDC_ headers
-- store the refresh token in the session if returned from the token endpoint
+- add support for the refresh_token flow + hook
 - use a global mutex for the Redis cache
-- bump to 1.7.0rc1
+- bump to 1.7.0rc2
 
 10/27/2014
 - generalize support for OAuth 2.0 token introspection and conform to:
