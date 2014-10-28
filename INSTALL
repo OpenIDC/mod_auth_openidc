@@ -1,9 +1,9 @@
-You can download binaries for the latest release from:
+If your looking for binary packages, please see:
+  https://github.com/pingidentity/mod_auth_openidc/wiki#8-where-can-i-get-binary-packages
+and proceed with the Configuration section below.
 
-https://github.com/pingidentity/mod_auth_openidc/releases
-
-If your platform is not supported you can build from source as
-described below.
+If your platform is not supported or you want to run the latest code,
+you can build from source as described below.
 
 Installation from source
 ========================
@@ -27,6 +27,9 @@ make install
 
 Note that, depending on your distribution,  apxs2 may be named apxs.
 
+Configuration
+=============
+
 Edit the configuration file for your web server. Depending on
 your distribution, it may be named '/etc/apache/httpd.conf' or something
 different.
@@ -45,6 +48,6 @@ will be stored in that directory.
 
 After you have added the LoadModule directive, you must add the configuration
 for mod_auth_openidc. For a quickstart doing so, see the provided samples
-in the README file.
+in the README.md file.
 
 For an exhaustive overview of all configuration primitives, see: auth_openidc.conf
