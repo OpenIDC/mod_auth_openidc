@@ -50,12 +50,18 @@
  * @Author: Hans Zandbelt - hzandbelt@pingidentity.com
  */
 
+#include <unistd.h>
+
 #include "apr_general.h"
 #include "apr_strings.h"
 
 #include <httpd.h>
 #include <http_config.h>
 #include <http_log.h>
+
+#ifdef AP_NEED_SET_MUTEX_PERMS
+#include "unixd.h"
+#endif
 
 #include "../mod_auth_openidc.h"
 
@@ -68,6 +74,8 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 typedef struct oidc_cache_cfg_redis_t {
 	/* cache_type = redis: Redis ptr */
 	redisContext *ctx;
+	apr_global_mutex_t *mutex;
+	char *mutex_filename;
 } oidc_cache_cfg_redis_t;
 
 /* create the cache context */
@@ -75,6 +83,8 @@ static void *oidc_cache_redis_cfg_create(apr_pool_t *pool) {
 	oidc_cache_cfg_redis_t *context = apr_pcalloc(pool,
 			sizeof(oidc_cache_cfg_redis_t));
 	context->ctx = NULL;
+	context->mutex = NULL;
+	context->mutex_filename = NULL;
 	return context;
 }
 
@@ -130,7 +140,59 @@ static int oidc_cache_redis_post_config(server_rec *s) {
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
+	const char *dir;
+	apr_temp_dir_get(&dir, s->process->pool);
+	/* construct the mutex filename */
+	context->mutex_filename = apr_psprintf(s->process->pool,
+			"%s/httpd_mutex.%ld.%pp", dir, (long int) getpid(), s);
+
+	/* create the mutex lock */
+	rv = apr_global_mutex_create(&context->mutex,
+			(const char *) context->mutex_filename, APR_LOCK_DEFAULT,
+			s->process->pool);
+	if (rv != APR_SUCCESS) {
+		oidc_serror(s,
+				"apr_global_mutex_create failed to create mutex on file %s",
+				context->mutex_filename);
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	/* need this on Linux */
+#ifdef AP_NEED_SET_MUTEX_PERMS
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20081201
+	rv = ap_unixd_set_global_mutex_perms(context->mutex);
+#else
+	rv = unixd_set_global_mutex_perms(context->mutex);
+#endif
+	if (rv != APR_SUCCESS) {
+		oidc_serror(s,
+				"unixd_set_global_mutex_perms failed; could not set permissions ");
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+#endif
+
 	return OK;
+}
+
+/*
+ * initialize the Redis cache in a child process
+ */
+int oidc_cache_redis_child_init(apr_pool_t *p, server_rec *s) {
+	oidc_cfg *cfg = ap_get_module_config(s->module_config,
+			&auth_openidc_module);
+	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *) cfg->cache_cfg;
+
+	/* initialize the lock for the child process */
+	apr_status_t rv = apr_global_mutex_child_init(&context->mutex,
+			(const char *) context->mutex_filename, p);
+
+	if (rv != APR_SUCCESS) {
+		oidc_serror(s,
+				"apr_global_mutex_child_init failed to reopen mutex on file %s",
+				context->mutex_filename);
+	}
+
+	return rv;
 }
 
 /*
@@ -152,6 +214,13 @@ static apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section,
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *) cfg->cache_cfg;
+	apr_status_t rv;
+
+	/* grab the global lock */
+	if ((rv = apr_global_mutex_lock(context->mutex)) != APR_SUCCESS) {
+		oidc_error(r, "apr_global_mutex_lock() failed [%d]", rv);
+		return FALSE;
+	}
 
 	/* get */
 	redisReply *reply = redisCommand(context->ctx, "GET %s",
@@ -183,6 +252,9 @@ static apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section,
 	*value = apr_pstrdup(r->pool, reply->str);
 	freeReplyObject(reply);
 
+	/* release the global lock */
+	apr_global_mutex_unlock(context->mutex);
+
 	return TRUE;
 }
 
@@ -197,6 +269,12 @@ static apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section,
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *) cfg->cache_cfg;
+
+	/* grab the global lock */
+	if (apr_global_mutex_lock(context->mutex) != APR_SUCCESS) {
+		oidc_error(r, "apr_global_mutex_lock() failed");
+		return FALSE;
+	}
 
 	/* see if we should be clearing this entry */
 	if (value == NULL) {
@@ -233,6 +311,9 @@ static apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section,
 
 	}
 
+	/* release the global lock */
+	apr_global_mutex_unlock(context->mutex);
+
 	return TRUE;
 }
 
@@ -240,9 +321,16 @@ static int oidc_cache_redis_destroy(server_rec *s) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(s->module_config,
 			&auth_openidc_module);
 	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *) cfg->cache_cfg;
+	apr_status_t rv = APR_SUCCESS;
+
 	if (context->ctx) {
 		redisFree(context->ctx);
 		context->ctx = NULL;
+	}
+	if (context->mutex) {
+		rv = apr_global_mutex_destroy(context->mutex);
+		oidc_sdebug(s, "apr_global_mutex_destroy returned: %d", rv);
+		context->mutex = NULL;
 	}
 	return APR_SUCCESS;
 }
@@ -250,7 +338,7 @@ static int oidc_cache_redis_destroy(server_rec *s) {
 oidc_cache_t oidc_cache_redis = {
 		oidc_cache_redis_cfg_create,
 		oidc_cache_redis_post_config,
-		NULL,
+		oidc_cache_redis_child_init,
 		oidc_cache_redis_get,
 		oidc_cache_redis_set,
 		oidc_cache_redis_destroy
