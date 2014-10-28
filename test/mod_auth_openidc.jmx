@@ -9,7 +9,7 @@
         <collectionProp name="Arguments.arguments">
           <elementProp name="APP_SERVER" elementType="Argument">
             <stringProp name="Argument.name">APP_SERVER</stringProp>
-            <stringProp name="Argument.value">debian-jessie.pingidentity.nl</stringProp>
+            <stringProp name="Argument.value">localhost.pingidentity.nl</stringProp>
             <stringProp name="Argument.metadata">=</stringProp>
           </elementProp>
           <elementProp name="APP_PORT" elementType="Argument">
@@ -24,7 +24,7 @@
           </elementProp>
           <elementProp name="AS_HOST" elementType="Argument">
             <stringProp name="Argument.name">AS_HOST</stringProp>
-            <stringProp name="Argument.value">macbook</stringProp>
+            <stringProp name="Argument.value">localhost</stringProp>
             <stringProp name="Argument.metadata">=</stringProp>
           </elementProp>
           <elementProp name="AS_PORT" elementType="Argument">
@@ -69,9 +69,9 @@
         <stringProp name="ThreadGroup.on_sample_error">stoptest</stringProp>
         <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
           <boolProp name="LoopController.continue_forever">false</boolProp>
-          <stringProp name="LoopController.loops">5</stringProp>
+          <stringProp name="LoopController.loops">10</stringProp>
         </elementProp>
-        <stringProp name="ThreadGroup.num_threads">5</stringProp>
+        <stringProp name="ThreadGroup.num_threads">25</stringProp>
         <stringProp name="ThreadGroup.ramp_time">0</stringProp>
         <longProp name="ThreadGroup.start_time">1299167831000</longProp>
         <longProp name="ThreadGroup.end_time">1299167831000</longProp>
@@ -143,7 +143,7 @@
           <RegexExtractor guiclass="RegexExtractorGui" testclass="RegexExtractor" testname="Grab AuthzResumePath" enabled="true">
             <stringProp name="RegexExtractor.useHeaders">false</stringProp>
             <stringProp name="RegexExtractor.refname">AuthzResumePath</stringProp>
-            <stringProp name="RegexExtractor.regex">&lt;form method=&quot;POST&quot; action=\&quot;(.+)\&quot; autocomplete=&quot;off&quot;&gt;</stringProp>
+            <stringProp name="RegexExtractor.regex">&lt;form method=\&quot;POST&quot;\ action=\&quot;(.+)&quot; autocomplete=&quot;off&quot;&gt;</stringProp>
             <stringProp name="RegexExtractor.template">$1$</stringProp>
             <stringProp name="RegexExtractor.default">REGEX_FAILED</stringProp>
             <stringProp name="RegexExtractor.match_number">1</stringProp>
@@ -183,6 +183,15 @@
             <stringProp name="RegexExtractor.useHeaders">false</stringProp>
             <stringProp name="RegexExtractor.refname">ResumeParam</stringProp>
             <stringProp name="RegexExtractor.regex">&lt;input type=\&quot;hidden\&quot; name=\&quot;resume\&quot; value=\&quot;(.+)\&quot;&gt;</stringProp>
+            <stringProp name="RegexExtractor.template">$1$</stringProp>
+            <stringProp name="RegexExtractor.default">REGEX_FAILED</stringProp>
+            <stringProp name="RegexExtractor.match_number">1</stringProp>
+          </RegexExtractor>
+          <hashTree/>
+          <RegexExtractor guiclass="RegexExtractorGui" testclass="RegexExtractor" testname="Grab LoginPath" enabled="true">
+            <stringProp name="RegexExtractor.useHeaders">false</stringProp>
+            <stringProp name="RegexExtractor.refname">LoginPath</stringProp>
+            <stringProp name="RegexExtractor.regex">form method=\&quot;post\&quot; action=\&quot;(.+)\&quot;&gt;</stringProp>
             <stringProp name="RegexExtractor.template">$1$</stringProp>
             <stringProp name="RegexExtractor.default">REGEX_FAILED</stringProp>
             <stringProp name="RegexExtractor.match_number">1</stringProp>
@@ -499,7 +508,7 @@
         <hashTree/>
         <LoopController guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Authenticated Application Access" enabled="true">
           <boolProp name="LoopController.continue_forever">true</boolProp>
-          <stringProp name="LoopController.loops">5</stringProp>
+          <stringProp name="LoopController.loops">10</stringProp>
         </LoopController>
         <hashTree>
           <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Authenticated Application Access" enabled="true">
@@ -565,9 +574,9 @@
         <stringProp name="ThreadGroup.on_sample_error">stoptest</stringProp>
         <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
           <boolProp name="LoopController.continue_forever">false</boolProp>
-          <stringProp name="LoopController.loops">5</stringProp>
+          <stringProp name="LoopController.loops">10</stringProp>
         </elementProp>
-        <stringProp name="ThreadGroup.num_threads">5</stringProp>
+        <stringProp name="ThreadGroup.num_threads">25</stringProp>
         <stringProp name="ThreadGroup.ramp_time">0</stringProp>
         <longProp name="ThreadGroup.start_time">1388176686000</longProp>
         <longProp name="ThreadGroup.end_time">1388176686000</longProp>
@@ -646,7 +655,7 @@
         <hashTree/>
         <LoopController guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Resource Access Requests" enabled="true">
           <boolProp name="LoopController.continue_forever">true</boolProp>
-          <stringProp name="LoopController.loops">5</stringProp>
+          <stringProp name="LoopController.loops">10</stringProp>
         </LoopController>
         <hashTree>
           <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Resource Access" enabled="true">
