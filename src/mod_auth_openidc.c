@@ -741,6 +741,16 @@ static int oidc_handle_existing_session(request_rec *r,
 		oidc_util_set_app_header(r, "access_token", access_token, OIDC_DEFAULT_HEADER_PREFIX);
 	}
 
+	/* set the expiry timestamp in the app headers */
+	const char *expires = NULL;
+	oidc_session_get(r, session, OIDC_ACCESSTOKEN_EXPIRES_SESSION_KEY,
+			&expires);
+	if (expires != NULL) {
+		/* pass it to the app in a header */
+		oidc_util_set_app_header(r, "access_token_expires", expires,
+				OIDC_DEFAULT_HEADER_PREFIX);
+	}
+
 	/*
 	 * reset the session inactivity timer
 	 * but only do this once per 10% of the inactivity timeout interval (with a max to 60 seconds)
@@ -865,23 +875,36 @@ static int oidc_authorization_response_error(request_rec *r, oidc_cfg *c,
 }
 
 /*
+ * store the access token expiry timestamp in the session, based on the expires_in
+ */
+static void oidc_store_access_token_expiry(request_rec *r, session_rec *session,
+		int expires_in) {
+	if (expires_in != -1) {
+		oidc_session_set(r, session, OIDC_ACCESSTOKEN_EXPIRES_SESSION_KEY,
+				apr_psprintf(r->pool, "%" APR_TIME_T_FMT,
+						apr_time_sec(apr_time_now()) + expires_in));
+	}
+}
+
+/*
  * complete the handling of an authorization response by obtaining, parsing and verifying the
  * id_token and storing the authenticated user state in the session
  */
 static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		session_rec *session, const char *state, char *code, char *id_token,
-		char *access_token, char *token_type, char *session_state,
-		const char *error, const char *error_description,
+		char *access_token, char *token_type, char *s_expires_in,
+		char *session_state, const char *error, const char *error_description,
 		const char *response_mode) {
 
 	oidc_debug(r,
-			"enter, state=%s, code=%s, id_token=%s, access_token=%s, token_type=%s, session_state=%s, error=%s, error_description=%s, response_mode=%s",
-			state, code, id_token, access_token, token_type, session_state,
-			error, error_description, response_mode);
+			"enter, state=%s, code=%s, id_token=%s, access_token=%s, token_type=%s, expires_in=%s, session_state=%s, error=%s, error_description=%s, response_mode=%s",
+			state, code, id_token, access_token, token_type, s_expires_in,
+			session_state, error, error_description, response_mode);
 
 	struct oidc_provider_t *provider = NULL;
 	oidc_proto_state *proto_state = NULL;
 	char *refresh_token = NULL;
+	int expires_in = -1;
 
 	/* match the returned state parameter against the state stored in the browser */
 	if (oidc_authorization_response_match_state(r, c, state, &provider,
@@ -900,6 +923,20 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 			&id_token, &access_token, &token_type, response_mode) == FALSE) {
 		return oidc_authorization_response_error(r, c, proto_state,
 				"HTTP_INTERNAL_SERVER_ERROR", NULL);
+	}
+
+	/* parse the expires_in */
+	if (s_expires_in != NULL) {
+		char *errp = NULL;
+		apr_off_t number;
+		if ((apr_strtoff(&number, s_expires_in, &errp, 10) == 0)
+				&& (errp == NULL)) {
+			expires_in = number;
+		} else {
+			oidc_warn(r,
+					"could not convert \"expires_in\" value (%s) to number",
+					s_expires_in);
+		}
 	}
 
 	char *remoteUser = NULL;
@@ -929,11 +966,14 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 			}
 		}
 
-		char *c_id_token = NULL, *c_access_token = NULL, *c_token_type = NULL, *c_refresh_token;
+		char *c_id_token = NULL, *c_access_token = NULL, *c_token_type = NULL,
+				*c_refresh_token = NULL;
+		int c_expires_in = -1;
 
 		/* resolve the code against the token endpoint */
 		if (oidc_proto_resolve_code(r, c, provider, code, &c_id_token,
-				&c_access_token, &c_token_type, &c_refresh_token) == FALSE) {
+				&c_access_token, &c_token_type, &c_expires_in,
+				&c_refresh_token) == FALSE) {
 			apr_jwt_destroy(jwt);
 			return oidc_authorization_response_error(r, c, proto_state,
 					"HTTP_UNAUTHORIZED", NULL);
@@ -954,6 +994,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		if (access_token == NULL) {
 			access_token = c_access_token;
 			token_type = c_token_type;
+			expires_in = c_expires_in;
 		}
 		if (refresh_token == NULL) {
 			refresh_token = c_refresh_token;
@@ -1072,6 +1113,8 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		/* store the access_token in the session context */
 		oidc_session_set(r, session, OIDC_ACCESSTOKEN_SESSION_KEY,
 				access_token);
+		/* store the associated expires_in value */
+		oidc_store_access_token_expiry(r, session, expires_in);
 	}
 
 	/* see if we have a refresh_token */
@@ -1117,7 +1160,7 @@ static int oidc_handle_post_authorization_response(request_rec *r, oidc_cfg *c,
 	/* initialize local variables */
 	char *code = NULL, *state = NULL, *id_token = NULL, *access_token = NULL,
 			*token_type = NULL, *response_mode = NULL, *session_state = NULL,
-			*error = NULL, *error_description = NULL;
+			*error = NULL, *error_description = NULL, *expires_in = NULL;
 
 	/* read the parameters that are POST-ed to us */
 	apr_table_t *params = apr_table_make(r->pool, 8);
@@ -1142,6 +1185,7 @@ static int oidc_handle_post_authorization_response(request_rec *r, oidc_cfg *c,
 	id_token = (char *) apr_table_get(params, "id_token");
 	access_token = (char *) apr_table_get(params, "access_token");
 	token_type = (char *) apr_table_get(params, "token_type");
+	expires_in = (char *) apr_table_get(params, "expires_in");
 	response_mode = (char *) apr_table_get(params, "response_mode");
 	session_state = (char *) apr_table_get(params, "session_state");
 	error = (char *) apr_table_get(params, "error");
@@ -1149,8 +1193,9 @@ static int oidc_handle_post_authorization_response(request_rec *r, oidc_cfg *c,
 
 	/* do the actual implicit work */
 	return oidc_handle_authorization_response(r, c, session, state, code,
-			id_token, access_token, token_type, session_state, error,
-			error_description, response_mode ? response_mode : "form_post");
+			id_token, access_token, token_type, expires_in, session_state,
+			error, error_description,
+			response_mode ? response_mode : "form_post");
 }
 
 /*
@@ -1164,7 +1209,7 @@ static int oidc_handle_redirect_authorization_response(request_rec *r,
 	/* initialize local variables */
 	char *code = NULL, *state = NULL, *id_token = NULL, *access_token = NULL,
 			*token_type = NULL, *session_state = NULL, *error = NULL,
-			*error_description = NULL;
+			*error_description = NULL, *expires_in = NULL;
 
 	/* get the parameters */
 	oidc_util_get_request_parameter(r, "code", &code);
@@ -1172,14 +1217,15 @@ static int oidc_handle_redirect_authorization_response(request_rec *r,
 	oidc_util_get_request_parameter(r, "id_token", &id_token);
 	oidc_util_get_request_parameter(r, "access_token", &access_token);
 	oidc_util_get_request_parameter(r, "token_type", &token_type);
+	oidc_util_get_request_parameter(r, "expires_in", &expires_in);
 	oidc_util_get_request_parameter(r, "session_state", &session_state);
 	oidc_util_get_request_parameter(r, "error", &error);
 	oidc_util_get_request_parameter(r, "error_description", &error_description);
 
 	/* do the actual work */
 	return oidc_handle_authorization_response(r, c, session, state, code,
-			id_token, access_token, token_type, session_state, error,
-			error_description, "query");
+			id_token, access_token, token_type, expires_in, session_state,
+			error, error_description, "query");
 }
 
 /*
@@ -1852,24 +1898,28 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
 	}
 	provider = oidc_get_provider_for_issuer(r, c, issuer);
 	if (provider == NULL) {
-		oidc_warn(r, "corrupted session, no provider found for issuer: %s", issuer);
+		oidc_warn(r, "corrupted session, no provider found for issuer: %s",
+				issuer);
 		goto end;
 	}
 
 	/* elements returned in the refresh response */
 	char *s_id_token = NULL;
 	char *s_access_token = NULL;
+	int expires_in = -1;
 	char *s_token_type = NULL;
 	char *s_refresh_token = NULL;
 
 	/* refresh the tokens by calling the token endpoint */
 	if (oidc_proto_refresh_request(r, c, provider, refresh_token, &s_id_token,
-			&s_access_token, &s_token_type, &s_refresh_token) == FALSE) {
+			&s_access_token, &s_token_type, &expires_in,
+			&s_refresh_token) == FALSE) {
 		oidc_warn(r, "refreshing the access_token failed");
 	}
 
 	/* store the new access_token in the session and discard the old one */
 	oidc_session_set(r, session, OIDC_ACCESSTOKEN_SESSION_KEY, s_access_token);
+	oidc_store_access_token_expiry(r, session, expires_in);
 
 	/* if we have a new refresh token (rolling refresh), store it in the session and overwrite the old one */
 	if (s_refresh_token != NULL)
@@ -1883,7 +1933,7 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
 	/* store the session */
 	oidc_session_save(r, session);
 
-end:
+	end:
 
 	/* add the redirect location header */
 	apr_table_add(r->headers_out, "Location", return_to);

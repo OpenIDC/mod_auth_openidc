@@ -1,8 +1,9 @@
 10/28/2014
 - scrub all OIDC_ headers
 - add support for the refresh_token flow + hook
+- pass the expires_in as an absolute timestamp in OIDC_access_token_expires
 - use a global mutex for the Redis cache
-- bump to 1.7.0rc2
+- bump to 1.7.0rc3
 
 10/27/2014
 - generalize support for OAuth 2.0 token introspection and conform to:

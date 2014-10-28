@@ -102,6 +102,8 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_IDTOKEN_SESSION_KEY "id_token"
 /* key for storing the access_token in the session context */
 #define OIDC_ACCESSTOKEN_SESSION_KEY "access_token"
+/* key for storing the access_token expiry in the session context */
+#define OIDC_ACCESSTOKEN_EXPIRES_SESSION_KEY "access_token_expires"
 /* key for storing the refresh_token in the session context */
 #define OIDC_REFRESHTOKEN_SESSION_KEY "refresh_token"
 
@@ -311,8 +313,8 @@ typedef struct oidc_proto_state {
 int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *login_hint, const char *redirect_uri, const char *state, oidc_proto_state *proto_state, const char *id_token_hint, const char *auth_request_params);
 apr_byte_t oidc_proto_is_post_authorization_response(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r, oidc_cfg *cfg);
-apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *code, char **id_token, char **access_token, char **token_type, char **refresh_token);
-apr_byte_t oidc_proto_refresh_request(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *rtoken, char **id_token, char **access_token, char **token_type, char **refresh_token);
+apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *code, char **id_token, char **access_token, char **token_type, int *expires_in, char **refresh_token);
+apr_byte_t oidc_proto_refresh_request(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *rtoken, char **id_token, char **access_token, char **token_type, int *expires_in, char **refresh_token);
 apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *access_token, const char **response, json_t **claims);
 apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg, const char *acct, char **issuer);
 apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *id_token, const char *nonce, char **user, apr_jwt_t **jwt, apr_byte_t is_code_flow);

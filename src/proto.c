@@ -786,7 +786,7 @@ static apr_byte_t oidc_proto_validate_token_type(request_rec *r,
 static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 		oidc_cfg *cfg, oidc_provider_t *provider, apr_table_t *params,
 		char **id_token, char **access_token, char **token_type,
-		char **refresh_token) {
+		int *expires_in, char **refresh_token) {
 
 	const char *response = NULL;
 
@@ -839,6 +839,9 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 		}
 	}
 
+	/* get the expires_in value */
+	oidc_json_object_get_int(r->pool, result, "expires_in", expires_in, -1);
+
 	/* get the refresh_token from the parsed response */
 	oidc_json_object_get_string(r->pool, result, "refresh_token", refresh_token,
 			NULL);
@@ -853,7 +856,8 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
  */
 apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char *code, char **id_token,
-		char **access_token, char **token_type, char **refresh_token) {
+		char **access_token, char **token_type, int *expires_in,
+		char **refresh_token) {
 
 	oidc_debug(r, "enter");
 
@@ -864,7 +868,7 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 	apr_table_addn(params, "redirect_uri", cfg->redirect_uri);
 
 	return oidc_proto_token_endpoint_request(r, cfg, provider, params, id_token,
-			access_token, token_type, refresh_token);
+			access_token, token_type, expires_in, refresh_token);
 }
 
 /*
@@ -872,7 +876,8 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
  */
 apr_byte_t oidc_proto_refresh_request(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char *rtoken, char **id_token,
-		char **access_token, char **token_type, char **refresh_token) {
+		char **access_token, char **token_type, int *expires_in,
+		char **refresh_token) {
 
 	oidc_debug(r, "enter");
 
@@ -883,7 +888,7 @@ apr_byte_t oidc_proto_refresh_request(request_rec *r, oidc_cfg *cfg,
 	apr_table_addn(params, "scope", provider->scope);
 
 	return oidc_proto_token_endpoint_request(r, cfg, provider, params, id_token,
-			access_token, token_type, refresh_token);
+			access_token, token_type, expires_in, refresh_token);
 }
 
 /*
