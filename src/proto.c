@@ -767,7 +767,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 /*
  * check that the access_token type is supported
  */
-apr_byte_t oidc_proto_check_token_type(request_rec *r,
+apr_byte_t oidc_proto_validate_token_type(request_rec *r,
 		oidc_provider_t *provider, const char *token_type) {
 	/*  we only support bearer/Bearer  */
 	if ((token_type != NULL) && (apr_strnatcasecmp(token_type, "Bearer") != 0)
@@ -785,7 +785,7 @@ apr_byte_t oidc_proto_check_token_type(request_rec *r,
  */
 apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char *code, char **s_idtoken,
-		char **s_access_token, char **s_token_type) {
+		char **s_access_token, char **s_token_type, char **s_refresh_token) {
 
 	oidc_debug(r, "enter");
 	const char *response = NULL;
@@ -827,38 +827,16 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 		return FALSE;
 
 	/* get the access_token from the parsed response */
-	json_t *access_token = json_object_get(result, "access_token");
-	if ((access_token != NULL) && (json_is_string(access_token))) {
+	oidc_json_object_get_string(r->pool, result, "access_token", s_access_token, NULL);
 
-		*s_access_token = apr_pstrdup(r->pool, json_string_value(access_token));
+	/* get the token type from the parsed response */
+	oidc_json_object_get_string(r->pool, result, "token_type", s_token_type, NULL);
 
-		/* log and set the obtained acces_token */
-		oidc_debug(r, "returned access_token: %s", *s_access_token);
+	/* get the id_token from the parsed response */
+	oidc_json_object_get_string(r->pool, result, "id_token", s_idtoken, NULL);
 
-		/* the provider must return the token type */
-		json_t *token_type = json_object_get(result, "token_type");
-		if ((token_type == NULL) || (!json_is_string(token_type))) {
-			oidc_error(r,
-					"response JSON object did not contain a token_type string");
-			json_decref(result);
-			return FALSE;
-		}
-
-		*s_token_type = apr_pstrdup(r->pool, json_string_value(token_type));
-
-	} else {
-		oidc_debug(r,
-				"response JSON object did not contain an access_token string");
-	}
-
-	/* get the id_token from the response */
-	json_t *id_token = json_object_get(result, "id_token");
-	if ((id_token != NULL) && (json_is_string(id_token))) {
-		*s_idtoken = apr_pstrdup(r->pool, json_string_value(id_token));
-
-		/* log and set the obtained id_token */
-		oidc_debug(r, "returned id_token: %s", *s_idtoken);
-	}
+	/* get the refresh_token from the parsed response */
+	oidc_json_object_get_string(r->pool, result, "refresh_token", s_refresh_token, NULL);
 
 	json_decref(result);
 

@@ -881,6 +881,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 
 	struct oidc_provider_t *provider = NULL;
 	oidc_proto_state *proto_state = NULL;
+	char *refresh_token = NULL;
 
 	/* match the returned state parameter against the state stored in the browser */
 	if (oidc_authorization_response_match_state(r, c, state, &provider,
@@ -928,11 +929,11 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 			}
 		}
 
-		char *c_id_token = NULL, *c_access_token = NULL, *c_token_type = NULL;
+		char *c_id_token = NULL, *c_access_token = NULL, *c_token_type = NULL, *c_refresh_token;
 
 		/* resolve the code against the token endpoint */
 		if (oidc_proto_resolve_code(r, c, provider, code, &c_id_token,
-				&c_access_token, &c_token_type) == FALSE) {
+				&c_access_token, &c_token_type, &c_refresh_token) == FALSE) {
 			apr_jwt_destroy(jwt);
 			return oidc_authorization_response_error(r, c, proto_state,
 					"HTTP_UNAUTHORIZED", NULL);
@@ -947,12 +948,15 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		}
 
 		/* use from the response whatever we still need */
-		if (c_id_token != NULL) {
+		if (id_token == NULL) {
 			id_token = c_id_token;
 		}
-		if (c_access_token != NULL) {
+		if (access_token == NULL) {
 			access_token = c_access_token;
 			token_type = c_token_type;
+		}
+		if (refresh_token == NULL) {
+			refresh_token = c_refresh_token;
 		}
 
 		/* TODO: Google does not allow nonce in "code" or "code token" flows... */
@@ -987,6 +991,10 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		if (oidc_proto_validate_access_token(r, provider, jwt,
 				proto_state->response_type, access_token, token_type) == FALSE) {
 			oidc_warn(r, "access_token did not validate, dropping it");
+			access_token = NULL;
+		}
+		if (oidc_proto_validate_token_type(r, provider, token_type) == FALSE) {
+			oidc_warn(r, "access token type did not validate, dropping it");
 			access_token = NULL;
 		}
 	}
@@ -1066,6 +1074,13 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		/* store the access_token in the session context */
 		oidc_session_set(r, session, OIDC_ACCESSTOKEN_SESSION_KEY,
 				access_token);
+	}
+
+	/* see if we have a refresh_token */
+	if (refresh_token != NULL) {
+		/* store the refresh_token in the session context */
+		oidc_session_set(r, session, OIDC_REFRESHTOKEN_SESSION_KEY,
+				refresh_token);
 	}
 
 	/* store the session */
