@@ -685,7 +685,17 @@ static int oidc_handle_existing_session(request_rec *r,
 	 * but first we need to scrub the headers that we're going to use for security reasons
 	 */
 	if (cfg->scrub_request_headers != 0) {
-		oidc_scrub_request_headers(r, cfg->claim_prefix, dir_cfg->authn_header);
+
+		/* scrub all headers starting with OIDC_ first */
+		oidc_scrub_request_headers(r, OIDC_DEFAULT_HEADER_PREFIX, dir_cfg->authn_header);
+
+		/*
+		 * then see if the claim headers need to be removed on top of that
+		 * (i.e. the prefix does not start with the default OIDC_)
+		 */
+		if ((strstr(cfg->claim_prefix, OIDC_DEFAULT_HEADER_PREFIX) != cfg->claim_prefix) ) {
+			oidc_scrub_request_headers(r, cfg->claim_prefix, NULL);
+		}
 	}
 
 	/* set the user authentication HTTP header if set and required */
@@ -707,22 +717,20 @@ static int oidc_handle_existing_session(request_rec *r,
 	}
 
 	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_PAYLOAD)) {
-		oidc_debug(r, "setting OIDC_id_token_payload header");
 		const char *s_id_token = NULL;
 		/* get the string-encoded JSON object from the session */
 		oidc_session_get(r, session, OIDC_IDTOKEN_CLAIMS_SESSION_KEY,
 				&s_id_token);
 		/* pass it to the app in a header */
-		oidc_util_set_app_header(r, "id_token_payload", s_id_token, "OIDC_");
+		oidc_util_set_app_header(r, "id_token_payload", s_id_token, OIDC_DEFAULT_HEADER_PREFIX);
 	}
 
 	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_SERIALIZED)) {
-		oidc_debug(r, "setting OIDC_id_token header");
 		const char *s_id_token = NULL;
 		/* get the compact serialized JWT from the session */
 		oidc_session_get(r, session, OIDC_IDTOKEN_SESSION_KEY, &s_id_token);
 		/* pass it to the app in a header */
-		oidc_util_set_app_header(r, "id_token", s_id_token, "OIDC_");
+		oidc_util_set_app_header(r, "id_token", s_id_token, OIDC_DEFAULT_HEADER_PREFIX);
 	}
 
 	/* set the access_token in the app headers */
@@ -730,7 +738,7 @@ static int oidc_handle_existing_session(request_rec *r,
 	oidc_session_get(r, session, OIDC_ACCESSTOKEN_SESSION_KEY, &access_token);
 	if (access_token != NULL) {
 		/* pass it to the app in a header */
-		oidc_util_set_app_header(r, "access_token", access_token, "OIDC_");
+		oidc_util_set_app_header(r, "access_token", access_token, OIDC_DEFAULT_HEADER_PREFIX);
 	}
 
 	/*

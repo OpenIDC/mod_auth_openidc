@@ -365,7 +365,7 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 
 	/* set the access_token in the app headers */
 	if (access_token != NULL) {
-		oidc_util_set_app_header(r, "access_token", access_token, "OIDC_");
+		oidc_util_set_app_header(r, "access_token", access_token, OIDC_DEFAULT_HEADER_PREFIX);
 	}
 
 	/* free JSON resources */
