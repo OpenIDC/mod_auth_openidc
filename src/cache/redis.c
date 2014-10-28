@@ -230,6 +230,7 @@ static apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section,
 	if (reply == NULL) {
 		oidc_error(r, "redisCommand failed, reply == NULL: '%s'",
 				context->ctx->errstr);
+		apr_global_mutex_unlock(context->mutex);
 		return FALSE;
 	}
 
@@ -237,6 +238,7 @@ static apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section,
 	if (reply->type != REDIS_REPLY_STRING) {
 		freeReplyObject(reply);
 		/* this is a normal cache miss, so we'll return OK */
+		apr_global_mutex_unlock(context->mutex);
 		return TRUE;
 	}
 
@@ -245,6 +247,7 @@ static apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section,
 		oidc_error(r, "redisCommand reply->len != strlen(reply->str): '%s'",
 				reply->str);
 		freeReplyObject(reply);
+		apr_global_mutex_unlock(context->mutex);
 		return FALSE;
 	}
 
@@ -286,6 +289,10 @@ static apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section,
 		if (reply == NULL) {
 			oidc_error(r, "redisCommand failed, reply == NULL: '%s'",
 					context->ctx->errstr);
+
+			/* release the global lock */
+			apr_global_mutex_unlock(context->mutex);
+
 			return FALSE;
 		}
 
@@ -304,6 +311,10 @@ static apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section,
 		if (reply == NULL) {
 			oidc_error(r, "redisCommand failed, reply == NULL: '%s'",
 					context->ctx->errstr);
+
+			/* release the global lock */
+			apr_global_mutex_unlock(context->mutex);
+
 			return FALSE;
 		}
 
