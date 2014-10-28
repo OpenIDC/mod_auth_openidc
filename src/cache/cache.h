@@ -72,6 +72,20 @@ typedef struct oidc_cache_t {
 	oidc_cache_destroy_function destroy;
 } oidc_cache_t;
 
+typedef struct oidc_cache_mutex_t {
+	apr_global_mutex_t *mutex;
+	char *mutex_filename;
+} oidc_cache_mutex_t;
+
+oidc_cache_mutex_t *oidc_cache_mutex_create(apr_pool_t *pool);
+apr_byte_t oidc_cache_mutex_post_config(server_rec *s, oidc_cache_mutex_t *m,
+		const char *type);
+apr_status_t oidc_cache_mutex_child_init(apr_pool_t *p, server_rec *s,
+		oidc_cache_mutex_t *m);
+apr_byte_t oidc_cache_mutex_lock(request_rec *r, oidc_cache_mutex_t *m);
+apr_byte_t oidc_cache_mutex_unlock(request_rec *r, oidc_cache_mutex_t *m);
+apr_byte_t oidc_cache_mutex_destroy(server_rec *s, oidc_cache_mutex_t *m);
+
 extern oidc_cache_t oidc_cache_file;
 extern oidc_cache_t oidc_cache_memcache;
 extern oidc_cache_t oidc_cache_shm;

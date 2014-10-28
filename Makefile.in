@@ -14,6 +14,7 @@ SRC=src/mod_auth_openidc.c \
 	src/cache/memcache.c \
 	src/cache/shm.c \
 	src/cache/redis.c \
+	src/cache/lock.c \
 	src/oauth.c \
 	src/proto.c \
 	src/crypto.c \

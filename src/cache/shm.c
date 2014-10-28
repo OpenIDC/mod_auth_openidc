@@ -51,24 +51,17 @@
  * @Author: Hans Zandbelt - hzandbelt@pingidentity.com
  */
 
-#include <unistd.h>
-
 #include <httpd.h>
 #include <http_config.h>
 #include <http_log.h>
-
-#ifdef AP_NEED_SET_MUTEX_PERMS
-#include "unixd.h"
-#endif
 
 #include "../mod_auth_openidc.h"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 typedef struct oidc_cache_cfg_shm_t {
-	char *mutex_filename;
 	apr_shm_t *shm;
-	apr_global_mutex_t *mutex;
+	oidc_cache_mutex_t *mutex;
 } oidc_cache_cfg_shm_t;
 
 /* size of key in cached key/value pairs */
@@ -92,9 +85,8 @@ typedef struct oidc_cache_shm_entry_t {
 static void *oidc_cache_shm_cfg_create(apr_pool_t *pool) {
 	oidc_cache_cfg_shm_t *context = apr_pcalloc(pool,
 			sizeof(oidc_cache_cfg_shm_t));
-	context->mutex_filename = NULL;
 	context->shm = NULL;
-	context->mutex = NULL;
+	context->mutex = oidc_cache_mutex_create(pool);
 	return context;
 }
 
@@ -127,36 +119,8 @@ int oidc_cache_shm_post_config(server_rec *s) {
 		table[i].access = 0;
 	}
 
-	const char *dir;
-	apr_temp_dir_get(&dir, s->process->pool);
-	/* construct the mutex filename */
-	context->mutex_filename = apr_psprintf(s->process->pool,
-			"%s/httpd_mutex.%ld.%pp", dir, (long int) getpid(), s);
-
-	/* create the mutex lock */
-	rv = apr_global_mutex_create(&context->mutex,
-			(const char *) context->mutex_filename, APR_LOCK_DEFAULT,
-			s->process->pool);
-	if (rv != APR_SUCCESS) {
-		oidc_serror(s,
-				"apr_global_mutex_create failed to create mutex on file %s",
-				context->mutex_filename);
+	if (oidc_cache_mutex_post_config(s, context->mutex, "shm") == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
-	}
-
-	/* need this on Linux */
-#ifdef AP_NEED_SET_MUTEX_PERMS
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20081201
-	rv = ap_unixd_set_global_mutex_perms(context->mutex);
-#else
-	rv = unixd_set_global_mutex_perms(context->mutex);
-#endif
-	if (rv != APR_SUCCESS) {
-		oidc_serror(s,
-				"unixd_set_global_mutex_perms failed; could not set permissions ");
-		return HTTP_INTERNAL_SERVER_ERROR;
-	}
-#endif
 
 	return OK;
 }
@@ -170,16 +134,7 @@ int oidc_cache_shm_child_init(apr_pool_t *p, server_rec *s) {
 	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *) cfg->cache_cfg;
 
 	/* initialize the lock for the child process */
-	apr_status_t rv = apr_global_mutex_child_init(&context->mutex,
-			(const char *) context->mutex_filename, p);
-
-	if (rv != APR_SUCCESS) {
-		oidc_serror(s,
-				"apr_global_mutex_child_init failed to reopen mutex on file %s",
-				context->mutex_filename);
-	}
-
-	return rv;
+	return oidc_cache_mutex_child_init(p, s, context->mutex);
 }
 
 /*
@@ -202,17 +157,14 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section,
 			&auth_openidc_module);
 	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *) cfg->cache_cfg;
 
-	apr_status_t rv;
 	int i;
 	const char *section_key = oidc_cache_shm_get_key(r->pool, section, key);
 
 	*value = NULL;
 
 	/* grab the global lock */
-	if ((rv = apr_global_mutex_lock(context->mutex)) != APR_SUCCESS) {
-		oidc_error(r, "apr_global_mutex_lock() failed [%d]", rv);
+	if (oidc_cache_mutex_lock(r, context->mutex) == FALSE)
 		return FALSE;
-	}
 
 	/* get the pointer to the start of the shared memory block */
 	oidc_cache_shm_entry_t *table = apr_shm_baseaddr_get(context->shm);
@@ -237,7 +189,7 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section,
 	}
 
 	/* release the global lock */
-	apr_global_mutex_unlock(context->mutex);
+	oidc_cache_mutex_unlock(r, context->mutex);
 
 	return (*value == NULL) ? FALSE : TRUE;
 }
@@ -278,10 +230,8 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 	}
 
 	/* grab the global lock */
-	if (apr_global_mutex_lock(context->mutex) != APR_SUCCESS) {
-		oidc_error(r, "apr_global_mutex_lock() failed");
+	if (oidc_cache_mutex_lock(r, context->mutex) == FALSE)
 		return FALSE;
-	}
 
 	/* get a pointer to the shared memory block */
 	table = apr_shm_baseaddr_get(context->shm);
@@ -348,7 +298,7 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 	}
 
 	/* release the global lock */
-	apr_global_mutex_unlock(context->mutex);
+	oidc_cache_mutex_unlock(r, context->mutex);
 
 	return TRUE;
 }
@@ -365,11 +315,7 @@ static int oidc_cache_shm_destroy(server_rec *s) {
 		context->shm = NULL;
 	}
 
-	if (context->mutex) {
-		rv = apr_global_mutex_destroy(context->mutex);
-		oidc_sdebug(s, "apr_global_mutex_destroy returned: %d", rv);
-		context->mutex = NULL;
-	}
+	oidc_cache_mutex_destroy(s, context->mutex);
 
 	return rv;
 }
