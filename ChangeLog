@@ -1,5 +1,6 @@
 10/28/2014
 - scrub all OIDC_ headers
+- store the refresh token in the session if returned from the token endpoint
 - bump to 1.7.0rc1
 
 10/27/2014
