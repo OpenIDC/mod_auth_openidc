@@ -887,187 +887,15 @@ static void oidc_store_access_token_expiry(request_rec *r, session_rec *session,
 }
 
 /*
- * complete the handling of an authorization response by obtaining, parsing and verifying the
- * id_token and storing the authenticated user state in the session
+ * store resolved information in the session
  */
-static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
-		session_rec *session, const char *state, char *code, char *id_token,
-		char *access_token, char *token_type, char *s_expires_in,
-		char *session_state, const char *error, const char *error_description,
-		const char *response_mode) {
+static void oidc_save_in_session(request_rec *r, oidc_cfg *c,
+		session_rec *session, oidc_provider_t *provider, const char *remoteUser,
+		const char *id_token, apr_jwt_t *id_token_jwt, const char *claims,
+		const char *access_token, const int expires_in,
+		const char *refresh_token, const char *session_state) {
 
-	oidc_debug(r,
-			"enter, state=%s, code=%s, id_token=%s, access_token=%s, token_type=%s, expires_in=%s, session_state=%s, error=%s, error_description=%s, response_mode=%s",
-			state, code, id_token, access_token, token_type, s_expires_in,
-			session_state, error, error_description, response_mode);
-
-	struct oidc_provider_t *provider = NULL;
-	oidc_proto_state *proto_state = NULL;
-	char *refresh_token = NULL;
-	int expires_in = -1;
-
-	/* match the returned state parameter against the state stored in the browser */
-	if (oidc_authorization_response_match_state(r, c, state, &provider,
-			&proto_state) == FALSE) {
-		return HTTP_INTERNAL_SERVER_ERROR;
-	}
-
-	/* see if the response is an error response */
-	if (error != NULL)
-		return oidc_authorization_response_error(r, c, proto_state, error,
-				error_description);
-
-	/* check the required response parameters for the requested flow */
-	if (oidc_proto_validate_authorization_response(r,
-			proto_state->response_type, proto_state->response_mode, &code,
-			&id_token, &access_token, &token_type, response_mode) == FALSE) {
-		return oidc_authorization_response_error(r, c, proto_state,
-				"HTTP_INTERNAL_SERVER_ERROR", NULL);
-	}
-
-	/* parse the expires_in */
-	if (s_expires_in != NULL) {
-		char *errp = NULL;
-		apr_off_t number;
-		if ((apr_strtoff(&number, s_expires_in, &errp, 10) == 0)
-				&& (errp == NULL)) {
-			expires_in = number;
-		} else {
-			oidc_warn(r,
-					"could not convert \"expires_in\" value (%s) to number",
-					s_expires_in);
-		}
-	}
-
-	char *remoteUser = NULL;
-	apr_jwt_t *jwt = NULL;
-
-	/* parse and validate the obtained id_token */
-	if (id_token != NULL) {
-		if (oidc_proto_parse_idtoken(r, c, provider, id_token,
-				proto_state->nonce, &remoteUser, &jwt, FALSE) == FALSE) {
-			oidc_warn(r,
-					"could not parse or verify the id_token contents, return HTTP_UNAUTHORIZED");
-			return oidc_authorization_response_error(r, c, proto_state,
-					"HTTP_UNAUTHORIZED", NULL);
-		}
-	}
-
-	/* resolve the code against the token endpoint of the OP */
-	if (code != NULL) {
-
-		/* if an id_token was provided in the authorization response: validate the code against the c_hash claim */
-		if (jwt != NULL) {
-			if (oidc_proto_validate_code(r, provider, jwt,
-					proto_state->response_type, code) == FALSE) {
-				apr_jwt_destroy(jwt);
-				return oidc_authorization_response_error(r, c, proto_state,
-						"HTTP_UNAUTHORIZED", NULL);
-			}
-		}
-
-		char *c_id_token = NULL, *c_access_token = NULL, *c_token_type = NULL,
-				*c_refresh_token = NULL;
-		int c_expires_in = -1;
-
-		/* resolve the code against the token endpoint */
-		if (oidc_proto_resolve_code(r, c, provider, code, &c_id_token,
-				&c_access_token, &c_token_type, &c_expires_in,
-				&c_refresh_token) == FALSE) {
-			apr_jwt_destroy(jwt);
-			return oidc_authorization_response_error(r, c, proto_state,
-					"HTTP_UNAUTHORIZED", NULL);
-		}
-
-		/* validate the response on exchanging the code at the token endpoint */
-		if (oidc_proto_validate_code_response(r, proto_state->response_type,
-				&c_id_token, &c_access_token, &c_token_type) == FALSE) {
-			apr_jwt_destroy(jwt);
-			return oidc_authorization_response_error(r, c, proto_state,
-					"HTTP_INTERNAL_SERVER_ERROR", NULL);
-		}
-
-		/* use from the response whatever we still need */
-		if (id_token == NULL) {
-			id_token = c_id_token;
-		}
-		if (access_token == NULL) {
-			access_token = c_access_token;
-			token_type = c_token_type;
-			expires_in = c_expires_in;
-		}
-		if (refresh_token == NULL) {
-			refresh_token = c_refresh_token;
-		}
-
-		/* TODO: Google does not allow nonce in "code" or "code token" flows... */
-		const char *nonce = proto_state->nonce;
-		if ((strcmp(provider->issuer, "accounts.google.com") == 0)
-				&& ((oidc_util_spaced_string_equals(r->pool,
-						provider->response_type, "code"))
-						|| (oidc_util_spaced_string_equals(r->pool,
-								provider->response_type, "code token"))))
-			nonce = NULL;
-
-		/* if we had no id_token yet, we must have one now (by flow) */
-		if (jwt == NULL) {
-			if (oidc_proto_parse_idtoken(r, c, provider, id_token, nonce,
-					&remoteUser, &jwt, TRUE) == FALSE) {
-				oidc_warn(r,
-						"could not parse or verify the id_token contents, return HTTP_UNAUTHORIZED");
-				return oidc_authorization_response_error(r, c, proto_state,
-						"HTTP_UNAUTHORIZED", NULL);
-			}
-		}
-	}
-
-	if (jwt == NULL) {
-		oidc_error(r, "no id_token was provided, return HTTP_UNAUTHORIZED");
-		return oidc_authorization_response_error(r, c, proto_state,
-				"HTTP_UNAUTHORIZED", NULL);
-	}
-
-	/* validate the access token */
-	if (access_token != NULL) {
-		if (oidc_proto_validate_access_token(r, provider, jwt,
-				proto_state->response_type, access_token, token_type) == FALSE) {
-			oidc_warn(r, "access_token did not validate, dropping it");
-			access_token = NULL;
-		}
-	}
-
-	/*
-	 * optionally resolve additional claims against the userinfo endpoint
-	 * parsed claims are not actually used here but need to be parsed anyway for error checking purposes
-	 */
-	const char *claims = NULL;
-	json_t *j_claims = NULL;
-	if (provider->userinfo_endpoint_url == NULL) {
-		oidc_debug(r,
-				"not resolving user info claims because userinfo_endpoint is not set");
-	} else if (access_token == NULL) {
-		oidc_debug(r,
-				"not resolving user info claims because access_token is not provided");
-	} else if (oidc_proto_resolve_userinfo(r, c, provider, access_token,
-			&claims, &j_claims) == FALSE) {
-		oidc_debug(r,
-				"resolving user info claims failed, nothing will be stored in the session");
-		claims = NULL;
-	}
-
-	if ((proto_state->prompt != NULL)
-			&& (apr_strnatcmp(proto_state->prompt, "none") == 0)) {
-		// TOOD: actually need to compare sub? (need to store it in the session separately then
-		//const char *sub = NULL;
-		//oidc_session_get(r, session, "sub", &sub);
-		//if (apr_strnatcmp(sub, jwt->payload.sub) != 0) {
-		if (apr_strnatcmp(session->remote_user, remoteUser) != 0) {
-			return oidc_authorization_response_error(r, c, proto_state,
-					"sub changed!", NULL);
-		}
-	}
-
-	/* set the resolved stuff in the session */
+	/* store the user in the session */
 	session->remote_user = remoteUser;
 
 	/* set the session expiry to the inactivity timeout */
@@ -1076,7 +904,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 
 	/* store the claims payload in the id_token for later reference */
 	oidc_session_set(r, session, OIDC_IDTOKEN_CLAIMS_SESSION_KEY,
-			jwt->payload.value.str);
+			id_token_jwt->payload.value.str);
 
 	/* store the compact serialized representation of the id_token for later reference  */
 	oidc_session_set(r, session, OIDC_IDTOKEN_SESSION_KEY, id_token);
@@ -1126,6 +954,213 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 
 	/* store the session */
 	oidc_session_save(r, session);
+}
+
+/*
+ * handle the flow where a "code" was provided in the response
+ */
+static apr_byte_t oidc_handle_code_flow(request_rec *r, oidc_cfg *c,
+		oidc_proto_state *proto_state, oidc_provider_t *provider,
+		const char *code, apr_jwt_t **id_token_jwt, char **id_token,
+		char **access_token, char **token_type, int *expires_in,
+		char **refresh_token, char **remoteUser, char **s_error) {
+
+	/* if an id_token was provided in the authorization response: validate the code against the c_hash claim */
+	if (*id_token_jwt != NULL) {
+		if (oidc_proto_validate_code(r, provider, *id_token_jwt,
+				proto_state->response_type, code) == FALSE) {
+			apr_jwt_destroy(*id_token_jwt);
+			*s_error = "Code validation failed.";
+			return FALSE;
+		}
+	}
+
+	char *c_id_token = NULL, *c_access_token = NULL, *c_token_type = NULL,
+			*c_refresh_token = NULL;
+	int c_expires_in = -1;
+
+	/* resolve the code against the token endpoint */
+	if (oidc_proto_resolve_code(r, c, provider, code, &c_id_token,
+			&c_access_token, &c_token_type, &c_expires_in,
+			&c_refresh_token) == FALSE) {
+		apr_jwt_destroy(*id_token_jwt);
+		*s_error = "Failed to resolve code.";
+		return FALSE;
+	}
+
+	/* validate the response on exchanging the code at the token endpoint */
+	if (oidc_proto_validate_code_response(r, proto_state->response_type,
+			&c_id_token, &c_access_token, &c_token_type) == FALSE) {
+		apr_jwt_destroy(*id_token_jwt);
+		*s_error = "Code response validation failed.";
+		return FALSE;
+	}
+
+	/* use from the response whatever we still need */
+	if (*id_token == NULL) {
+		*id_token = c_id_token;
+	}
+	if (*access_token == NULL) {
+		*access_token = c_access_token;
+		*token_type = c_token_type;
+		*expires_in = c_expires_in;
+	}
+	if (*refresh_token == NULL) {
+		*refresh_token = c_refresh_token;
+	}
+
+	/* TODO: Google does not allow nonce in "code" or "code token" flows... */
+	const char *nonce = proto_state->nonce;
+	if ((strcmp(provider->issuer, "accounts.google.com") == 0)
+			&& ((oidc_util_spaced_string_equals(r->pool,
+					provider->response_type, "code"))
+					|| (oidc_util_spaced_string_equals(r->pool,
+							provider->response_type, "code token"))))
+		nonce = NULL;
+
+	/* if we had no id_token yet, we must have one now (by flow) */
+	if (*id_token_jwt == NULL) {
+		if (oidc_proto_parse_idtoken(r, c, provider, *id_token, nonce,
+				remoteUser, id_token_jwt, TRUE) == FALSE) {
+			oidc_warn(r,
+					"could not parse or verify the id_token contents, return HTTP_UNAUTHORIZED");
+			*s_error = "Failed to parse id_token.";
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
+/*
+ * complete the handling of an authorization response by obtaining, parsing and verifying the
+ * id_token and storing the authenticated user state in the session
+ */
+static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
+		session_rec *session, const char *state, char *code, char *id_token,
+		char *access_token, char *token_type, char *s_expires_in,
+		char *session_state, const char *error, const char *error_description,
+		const char *response_mode) {
+
+	oidc_debug(r,
+			"enter, state=%s, code=%s, id_token=%s, access_token=%s, token_type=%s, expires_in=%s, session_state=%s, error=%s, error_description=%s, response_mode=%s",
+			state, code, id_token, access_token, token_type, s_expires_in,
+			session_state, error, error_description, response_mode);
+
+	struct oidc_provider_t *provider = NULL;
+	oidc_proto_state *proto_state = NULL;
+	char *refresh_token = NULL;
+	int expires_in = -1;
+
+	/* match the returned state parameter against the state stored in the browser */
+	if (oidc_authorization_response_match_state(r, c, state, &provider,
+			&proto_state) == FALSE) {
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	/* see if the response is an error response */
+	if (error != NULL)
+		return oidc_authorization_response_error(r, c, proto_state, error,
+				error_description);
+
+	/* check the required response parameters for the requested flow */
+	if (oidc_proto_validate_authorization_response(r,
+			proto_state->response_type, proto_state->response_mode, &code,
+			&id_token, &access_token, &token_type, response_mode) == FALSE) {
+		return oidc_authorization_response_error(r, c, proto_state,
+				"Could not validate authorization response.", NULL);
+	}
+
+	/* parse the expires_in */
+	if (s_expires_in != NULL) {
+		char *errp = NULL;
+		apr_off_t number;
+		if ((apr_strtoff(&number, s_expires_in, &errp, 10) == 0)
+				&& (errp == NULL)) {
+			expires_in = number;
+		} else {
+			oidc_warn(r,
+					"could not convert \"expires_in\" value (%s) to number",
+					s_expires_in);
+		}
+	}
+
+	char *remoteUser = NULL;
+	apr_jwt_t *jwt = NULL;
+
+	/* parse and validate the obtained id_token */
+	if (id_token != NULL) {
+		if (oidc_proto_parse_idtoken(r, c, provider, id_token,
+				proto_state->nonce, &remoteUser, &jwt, FALSE) == FALSE) {
+			oidc_warn(r, "could not parse or verify the id_token contents");
+			return oidc_authorization_response_error(r, c, proto_state,
+					"Could not parse id_token.", NULL);
+		}
+	}
+
+	/* resolve the code against the token endpoint of the OP */
+	if (code != NULL) {
+		char *s_error = NULL;
+		if (oidc_handle_code_flow(r, c, proto_state, provider, code, &jwt,
+				&id_token, &access_token, &token_type, &expires_in,
+				&refresh_token, &remoteUser, &s_error) == FALSE) {
+			return oidc_authorization_response_error(r, c, proto_state, s_error,
+					NULL);
+		}
+	}
+
+	if (jwt == NULL) {
+		oidc_error(r, "no id_token was provided");
+		return oidc_authorization_response_error(r, c, proto_state,
+				"No id_token was provided.", NULL);
+	}
+
+	/* validate the access token */
+	if (access_token != NULL) {
+		if (oidc_proto_validate_access_token(r, provider, jwt,
+				proto_state->response_type, access_token, token_type) == FALSE) {
+			oidc_warn(r, "access_token did not validate, dropping it");
+			access_token = NULL;
+		}
+	}
+
+	/*
+	 * optionally resolve additional claims against the userinfo endpoint
+	 * parsed claims are not actually used here but need to be parsed anyway for error checking purposes
+	 */
+	const char *claims = NULL;
+	json_t *j_claims = NULL;
+	if (provider->userinfo_endpoint_url == NULL) {
+		oidc_debug(r,
+				"not resolving user info claims because userinfo_endpoint is not set");
+	} else if (access_token == NULL) {
+		oidc_debug(r,
+				"not resolving user info claims because access_token is not provided");
+	} else if (oidc_proto_resolve_userinfo(r, c, provider, access_token,
+			&claims, &j_claims) == FALSE) {
+		oidc_debug(r,
+				"resolving user info claims failed, nothing will be stored in the session");
+		claims = NULL;
+	}
+
+	/* session management: if the user in the new response is not equal to the old one, error out */
+	if ((proto_state->prompt != NULL)
+			&& (apr_strnatcmp(proto_state->prompt, "none") == 0)) {
+		// TOOD: actually need to compare sub? (need to store it in the session separately then
+		//const char *sub = NULL;
+		//oidc_session_get(r, session, "sub", &sub);
+		//if (apr_strnatcmp(sub, jwt->payload.sub) != 0) {
+		if (apr_strnatcmp(session->remote_user, remoteUser) != 0) {
+			oidc_warn(r,
+					"remoteUser in new id_token is different from current one");
+			return oidc_authorization_response_error(r, c, proto_state,
+					"User changed!", NULL);
+		}
+	}
+
+	/* store resolved information in the session */
+	oidc_save_in_session(r, c, session, provider, remoteUser, id_token, jwt,
+			claims, access_token, expires_in, refresh_token, session_state);
 
 	/* not sure whether this is required, but it won't hurt */
 	r->user = remoteUser;
