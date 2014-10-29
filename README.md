@@ -76,7 +76,7 @@ one of the following options:
    across different Redis servers living on different machines, with
    an option for persistency across reboots and upgrades
 
-##Access Tokens and Refresh Tokens
+###Access Tokens and Refresh Tokens
 
 The `access_token` that **mod_auth_openidc** receives from the OP will be used by the module
 itself against the `user_info` endpoint of the OP (if configured) to resolve extra claims about
