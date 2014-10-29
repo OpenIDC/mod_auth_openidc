@@ -1,3 +1,6 @@
+10/29/2014
+- document refresh flow
+
 10/28/2014
 - scrub all OIDC_ headers
 - add support for the refresh_token flow + hook
