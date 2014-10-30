@@ -272,7 +272,7 @@ char *oidc_util_unescape_string(const request_rec *r, const char *str) {
 char *oidc_util_html_escape(apr_pool_t *pool, const char *s) {
 	const char chars[6] = { '&', '\'', '\"', '>', '<', '\0' };
 	const char * const replace[] =
-	{ "&amp;", "&apos;", "&quot;", "&gt;", "&lt;", };
+			{ "&amp;", "&apos;", "&quot;", "&gt;", "&lt;", };
 	unsigned int i, j = 0, k, n = 0, len = strlen(chars);
 	int m = 0;
 	char *r = apr_pcalloc(pool, strlen(s) * 6);
@@ -294,7 +294,6 @@ char *oidc_util_html_escape(apr_pool_t *pool, const char *s) {
 	r[j] = '\0';
 	return apr_pstrdup(pool, r);
 }
-
 
 /*
  * get the URL scheme that is currently being accessed
@@ -867,8 +866,8 @@ apr_byte_t oidc_util_decode_json_and_check_error(request_rec *r,
 /*
  * sends content to the user agent
  */
-int oidc_util_http_send(request_rec *r, const char *data, int data_len, const char *content_type,
-		int success_rvalue) {
+int oidc_util_http_send(request_rec *r, const char *data, int data_len,
+		const char *content_type, int success_rvalue) {
 	ap_set_content_type(r, content_type);
 	apr_bucket_brigade *bb = apr_brigade_create(r->pool,
 			r->connection->bucket_alloc);
@@ -884,11 +883,52 @@ int oidc_util_http_send(request_rec *r, const char *data, int data_len, const ch
 }
 
 /*
- * sends HTML content to the user agent
+ * send HTML content to the user agent
  */
-int oidc_util_html_send(request_rec *r, const char *html,
-		int success_rvalue) {
-	return oidc_util_http_send(r, html, strlen(html), "text/html", success_rvalue);
+int oidc_util_html_send(request_rec *r, const char *title,
+		const char *html_head, const char *on_load, const char *html_body,
+		int status_code) {
+
+	char *html =
+			"<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\" \"http://www.w3.org/TR/html4/strict.dtd\">\n"
+					"<html>\n"
+					"  <head>\n"
+					"    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n"
+					"    <title>%s</title>\n"
+					"    %s\n"
+					"  </head>\n"
+					"  <body%s>\n"
+					"%s\n"
+					"  </body>\n"
+					"</html>\n";
+
+	html = apr_psprintf(r->pool, html,
+			title ? oidc_util_html_escape(r->pool, title) : "",
+			html_head ? html_head : "",
+			on_load ? apr_psprintf(r->pool, " onload=\"%s()\"", on_load) : "",
+			html_body ? html_body : "");
+
+	return oidc_util_http_send(r, html, strlen(html), "text/html", status_code);
+}
+
+/*
+ * send a user-facing error to the browser
+ */
+int oidc_util_html_send_error(request_rec *r, const char *error,
+		const char *description, int status_code) {
+
+	char *html_body = "<p>the OpenID Connect Provider returned an error:</p>";
+
+	if (error != NULL) {
+		html_body = apr_psprintf(r->pool, "%s<p>Error: <pre>%s</pre></p>",
+				html_body, oidc_util_html_escape(r->pool, error));
+	}
+	if (description != NULL) {
+		html_body = apr_psprintf(r->pool, "%s<p>Description: <pre>%s</pre></p>",
+				html_body, oidc_util_html_escape(r->pool, description));
+	}
+
+	return oidc_util_html_send(r, "Error", NULL, NULL, html_body, status_code);
 }
 
 /*
@@ -1039,29 +1079,6 @@ apr_byte_t oidc_util_issuer_match(const char *a, const char *b) {
 }
 
 /*
- * send a user-facing error to the browser
- * TODO: more templating
- */
-int oidc_util_html_send_error(request_rec *r, const char *error,
-		const char *description, int status_code) {
-	char *msg =
-			"<html><body><p>the OpenID Connect Provider returned an error:</p>";
-
-	if (error != NULL) {
-		msg = apr_psprintf(r->pool, "%s<p>Error: <pre>%s</pre></p>", msg,
-				oidc_util_html_escape(r->pool, error));
-	}
-	if (description != NULL) {
-		msg = apr_psprintf(r->pool, "%s<p>Description: <pre>%s</pre></p>", msg,
-				oidc_util_html_escape(r->pool, description));
-	}
-
-	msg = apr_psprintf(r->pool, "%s</body></html>", msg);
-
-	return oidc_util_html_send(r, msg, status_code);
-}
-
-/*
  * see if a certain string value is part of a JSON array with string elements
  */
 apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack,
@@ -1179,7 +1196,7 @@ void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs,
 			/* some logging about what we're going to do */
 			oidc_debug(r,
 					"parsing attribute array for key \"%s\" (#nr-of-elems: %llu)",
-					s_key, (unsigned long long)json_array_size(j_value));
+					s_key, (unsigned long long )json_array_size(j_value));
 
 			/* string to hold the concatenated array string values */
 			char *s_concat = apr_pstrdup(r->pool, "");
@@ -1323,7 +1340,8 @@ apr_byte_t oidc_json_object_get_int(apr_pool_t *pool, json_t *json,
 /*
  * add query encoded parameters to a table
  */
-void oidc_util_table_add_query_encoded_params(apr_pool_t *pool, apr_table_t *table, const char *params) {
+void oidc_util_table_add_query_encoded_params(apr_pool_t *pool,
+		apr_table_t *table, const char *params) {
 	if (params != NULL) {
 		const char *key, *val;
 		const char *p = params;

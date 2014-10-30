@@ -86,24 +86,15 @@ int oidc_proto_authorization_request_post_preserve(request_rec *r,
 
 	char *java_script =
 			apr_psprintf(r->pool,
-					"<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
-							"<html xmlns=\"http://www.w3.org/1999/xhtml\" lang=\"en\" xml:lang=\"en\">\n"
-							"  <head>\n"
-							"    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"/>\n"
-							"    <script type=\"text/javascript\">\n"
+					"    <script type=\"text/javascript\">\n"
 							"      function preserveOnLoad() {\n"
 							"        localStorage.setItem('mod_auth_openidc_preserve_post_params', JSON.stringify(%s));\n"
 							"        window.location='%s';\n"
 							"      }\n"
-							"    </script>\n"
-							"    <title>Preserving...</title>\n"
-							"  </head>\n"
-							"  <body onload=\"preserveOnLoad()\">\n"
-							"    <p>Preserving...</p>\n"
-							"  </body>\n"
-							"</html>\n", json, authorization_request);
+							"    </script>\n", json, authorization_request);
 
-	return oidc_util_html_send(r, java_script, DONE);
+	return oidc_util_html_send(r, "Preserving...", java_script,
+			"preserveOnLoad", "<p>Preserving...</p>", DONE);
 }
 
 /*
@@ -989,15 +980,8 @@ int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg *c) {
 
 	oidc_debug(r, "enter");
 
-//	char *java_script = NULL;
-//	if (oidc_util_file_read(r, "/Users/hzandbelt/eclipse-workspace/mod_auth_openidc/src/implicit_post.html", &java_script) == FALSE) return HTTP_INTERNAL_SERVER_ERROR;
-
 	const char *java_script =
-			"<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\" \"http://www.w3.org/TR/html4/strict.dtd\">\n"
-					"<html>\n"
-					"  <head>\n"
-					"    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n"
-					"    <script type=\"text/javascript\">\n"
+			"    <script type=\"text/javascript\">\n"
 					"      function postOnLoad() {\n"
 					"        encoded = location.hash.substring(1).split('&');\n"
 					"        for (i = 0; i < encoded.length; i++) {\n"
@@ -1012,16 +996,18 @@ int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg *c) {
 					"        document.forms[0].action = window.location.href.substr(0, window.location.href.indexOf('#'));\n"
 					"        document.forms[0].submit();\n"
 					"      }\n"
-					"    </script>\n"
-					"    <title>Submitting...</title>\n"
-					"  </head>\n"
-					"  <body onload=\"postOnLoad()\">\n"
-					"    <p>Submitting...</p>\n"
-					"    <form method=\"post\" action=\"\"><p><input type=\"hidden\" name=\"response_mode\" value=\"fragment\"></p></form>\n"
-					"  </body>\n"
-					"</html>\n";
+					"    </script>\n";
 
-	return oidc_util_html_send(r, java_script, DONE);
+	const char *html_body =
+			"    <p>Submitting...</p>\n"
+					"    <form method=\"post\" action=\"\">\n"
+					"      <p>\n"
+					"        <input type=\"hidden\" name=\"response_mode\" value=\"fragment\">\n"
+					"      </p>\n"
+					"    </form>\n";
+
+	return oidc_util_html_send(r, "Submitting...", java_script, "postOnLoad",
+			html_body, DONE);
 }
 
 /*

@@ -201,7 +201,8 @@ static char *oidc_get_state_cookie_name(request_rec *r, const char *state) {
 /*
  * return the static provider configuration, i.e. from a metadata URL or configuration primitives
  */
-static apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg *c, oidc_provider_t **provider) {
+static apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg *c,
+		oidc_provider_t **provider) {
 
 	json_t *j_provider = NULL;
 	const char *s_json = NULL;
@@ -687,13 +688,15 @@ static int oidc_handle_existing_session(request_rec *r,
 	if (cfg->scrub_request_headers != 0) {
 
 		/* scrub all headers starting with OIDC_ first */
-		oidc_scrub_request_headers(r, OIDC_DEFAULT_HEADER_PREFIX, dir_cfg->authn_header);
+		oidc_scrub_request_headers(r, OIDC_DEFAULT_HEADER_PREFIX,
+				dir_cfg->authn_header);
 
 		/*
 		 * then see if the claim headers need to be removed on top of that
 		 * (i.e. the prefix does not start with the default OIDC_)
 		 */
-		if ((strstr(cfg->claim_prefix, OIDC_DEFAULT_HEADER_PREFIX) != cfg->claim_prefix) ) {
+		if ((strstr(cfg->claim_prefix, OIDC_DEFAULT_HEADER_PREFIX)
+				!= cfg->claim_prefix)) {
 			oidc_scrub_request_headers(r, cfg->claim_prefix, NULL);
 		}
 	}
@@ -722,7 +725,8 @@ static int oidc_handle_existing_session(request_rec *r,
 		oidc_session_get(r, session, OIDC_IDTOKEN_CLAIMS_SESSION_KEY,
 				&s_id_token);
 		/* pass it to the app in a header */
-		oidc_util_set_app_header(r, "id_token_payload", s_id_token, OIDC_DEFAULT_HEADER_PREFIX);
+		oidc_util_set_app_header(r, "id_token_payload", s_id_token,
+				OIDC_DEFAULT_HEADER_PREFIX);
 	}
 
 	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_SERIALIZED)) {
@@ -730,7 +734,8 @@ static int oidc_handle_existing_session(request_rec *r,
 		/* get the compact serialized JWT from the session */
 		oidc_session_get(r, session, OIDC_IDTOKEN_SESSION_KEY, &s_id_token);
 		/* pass it to the app in a header */
-		oidc_util_set_app_header(r, "id_token", s_id_token, OIDC_DEFAULT_HEADER_PREFIX);
+		oidc_util_set_app_header(r, "id_token", s_id_token,
+				OIDC_DEFAULT_HEADER_PREFIX);
 	}
 
 	/* set the access_token in the app headers */
@@ -738,7 +743,8 @@ static int oidc_handle_existing_session(request_rec *r,
 	oidc_session_get(r, session, OIDC_ACCESSTOKEN_SESSION_KEY, &access_token);
 	if (access_token != NULL) {
 		/* pass it to the app in a header */
-		oidc_util_set_app_header(r, "access_token", access_token, OIDC_DEFAULT_HEADER_PREFIX);
+		oidc_util_set_app_header(r, "access_token", access_token,
+				OIDC_DEFAULT_HEADER_PREFIX);
 	}
 
 	/* set the expiry timestamp in the app headers */
@@ -810,34 +816,28 @@ static apr_byte_t oidc_authorization_response_match_state(request_rec *r,
  */
 static int oidc_restore_preserved_post(request_rec *r, const char *original_url) {
 	const char *java_script =
-			"<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
-					"<html xmlns=\"http://www.w3.org/1999/xhtml\" lang=\"en\" xml:lang=\"en\">\n"
-					"  <head>\n"
-					"    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"/>\n"
+			apr_psprintf(r->pool,
 					"    <script type=\"text/javascript\">\n"
-					"      function postOnLoad() {\n"
-					"        var mod_auth_openidc_preserve_post_params = JSON.parse(localStorage.getItem('mod_auth_openidc_preserve_post_params'));\n"
-					"		 localStorage.removeItem('mod_auth_openidc_preserve_post_params');\n"
-					"        for (var key in mod_auth_openidc_preserve_post_params) {\n"
-					"          var input = document.createElement(\"input\");\n"
-					"          input.name = key;\n"
-					"          input.value = mod_auth_openidc_preserve_post_params[key];\n"
-					"          input.type = \"hidden\";\n"
-					"          document.forms[0].appendChild(input);\n"
-					"        }\n"
-					"        document.forms[0].action = '%s';\n"
-					"        document.forms[0].submit();\n"
-					"      }\n"
-					"    </script>\n"
-					"    <title>Restoring...</title>\n"
-					"  </head>\n"
-					"  <body onload=\"postOnLoad()\">\n"
-					"    <p>Restoring...</p>\n"
-					"    <form method=\"post\"></form>\n"
-					"  </body>\n"
-					"</html>\n";
-	java_script = apr_psprintf(r->pool, java_script, original_url);
-	return oidc_util_html_send(r, java_script, DONE);
+							"      function postOnLoad() {\n"
+							"        var mod_auth_openidc_preserve_post_params = JSON.parse(localStorage.getItem('mod_auth_openidc_preserve_post_params'));\n"
+							"		 localStorage.removeItem('mod_auth_openidc_preserve_post_params');\n"
+							"        for (var key in mod_auth_openidc_preserve_post_params) {\n"
+							"          var input = document.createElement(\"input\");\n"
+							"          input.name = key;\n"
+							"          input.value = mod_auth_openidc_preserve_post_params[key];\n"
+							"          input.type = \"hidden\";\n"
+							"          document.forms[0].appendChild(input);\n"
+							"        }\n"
+							"        document.forms[0].action = '%s';\n"
+							"        document.forms[0].submit();\n"
+							"      }\n"
+							"    </script>\n", original_url);
+
+	const char *html_body = "    <p>Restoring...</p>\n"
+			"    <form method=\"post\"></form>\n";
+
+	return oidc_util_html_send(r, "Restoring...", java_script, "postOnLoad",
+			html_body, DONE);
 }
 
 /*
@@ -845,20 +845,16 @@ static int oidc_restore_preserved_post(request_rec *r, const char *original_url)
  */
 static int oidc_session_redirect_parent_window_to_logout(request_rec *r,
 		oidc_cfg *c) {
+
 	oidc_debug(r, "enter");
-	char *html =
-			apr_psprintf(r->pool,
-					"<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\" \"http://www.w3.org/TR/html4/strict.dtd\">\n"
-							"<html>\n"
-							"  <head>\n"
-							"    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n"
-							"    <script type=\"text/javascript\">\n"
-							"      window.top.location.href = '%s?session=logout';\n"
-							"    </script>\n"
-							"  </head>\n"
-							"  <body></body>\n"
-							"</html>\n", c->redirect_uri);
-	return oidc_util_html_send(r, html, DONE);
+
+	char *java_script = apr_psprintf(r->pool,
+			"    <script type=\"text/javascript\">\n"
+					"      window.top.location.href = '%s?session=logout';\n"
+					"    </script>\n", c->redirect_uri);
+
+	return oidc_util_html_send(r, "Redirecting...", java_script, NULL, NULL,
+			DONE);
 }
 
 /*
@@ -882,7 +878,7 @@ static void oidc_store_access_token_expiry(request_rec *r, session_rec *session,
 	if (expires_in != -1) {
 		oidc_session_set(r, session, OIDC_ACCESSTOKEN_EXPIRES_SESSION_KEY,
 				apr_psprintf(r->pool, "%" APR_TIME_T_FMT,
-						apr_time_sec(apr_time_now()) + expires_in));
+				apr_time_sec(apr_time_now()) + expires_in));
 	}
 }
 
@@ -1073,16 +1069,15 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 
 	/* parse the expires_in */
 	if (s_expires_in != NULL) {
-		char *errp = NULL;
-		apr_off_t number;
-		if ((apr_strtoff(&number, s_expires_in, &errp, 10) == 0)
-				&& (errp == NULL)) {
-			expires_in = number;
-		} else {
+		char *ptr = NULL;
+		long number = strtol(s_expires_in, &ptr, 10);
+		if (number <= 0) {
 			oidc_warn(r,
-					"could not convert \"expires_in\" value (%s) to number",
+					"could not convert \"expires_in\" value (%s) to a number",
 					s_expires_in);
+			number = -1;
 		}
+		expires_in = number;
 	}
 
 	char *remoteUser = NULL;
@@ -1209,8 +1204,8 @@ static int oidc_handle_post_authorization_response(request_rec *r, oidc_cfg *c,
 			|| ((apr_table_elts(params)->nelts == 1)
 					&& (apr_strnatcmp(apr_table_get(params, "response_mode"),
 							"fragment") == 0))) {
-		return oidc_util_html_send(r,
-				"mod_auth_openidc: you've hit an OpenID Connect Redirect URI with no parameters, this is an invalid request; you should not open this URL in your browser directly, or have the server administrator use a different OIDCRedirectURI setting.",
+		return oidc_util_html_send_error(r, "mod_auth_openidc",
+				"You've hit an OpenID Connect Redirect URI with no parameters, this is an invalid request; you should not open this URL in your browser directly, or have the server administrator use a different OIDCRedirectURI setting.",
 				HTTP_INTERNAL_SERVER_ERROR);
 	}
 
@@ -1294,22 +1289,12 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 	/* get a list of all providers configured in the metadata directory */
 	apr_array_header_t *arr = NULL;
 	if (oidc_metadata_list(r, cfg, &arr) == FALSE)
-		return oidc_util_html_send(r,
-				"mod_auth_openidc: no configured providers found, contact your administrator",
+		return oidc_util_html_send_error(r, "mod_auth_openidc",
+				"No configured providers found, contact your administrator",
 				HTTP_UNAUTHORIZED);
 
 	/* assemble a where-are-you-from IDP discovery HTML page */
-	// TODO: yes, we could use some templating here...
-	const char *s =
-			"<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd\">"
-					"<html>\n"
-					"	<head>\n"
-					"		<meta http-equiv=\"Content-Type\" content=\"text/html;charset=UTF-8\"/>\n"
-					"		<title>OpenID Connect Provider Discovery</title>\n"
-					"	</head>\n"
-					"	<body>\n"
-					"		<center>\n"
-					"			<h3>Select your OpenID Connect Identity Provider</h3>\n";
+	const char *s = "			<h3>Select your OpenID Connect Identity Provider</h3>\n";
 
 	/* list all configured providers in there */
 	int i;
@@ -1337,27 +1322,23 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 	s = apr_psprintf(r->pool, "%s<form method=\"get\" action=\"%s\">\n", s,
 			cfg->redirect_uri);
 	s = apr_psprintf(r->pool,
-			"%s<input type=\"hidden\" name=\"%s\" value=\"%s\"><br>\n", s,
+			"%s<p><input type=\"hidden\" name=\"%s\" value=\"%s\"><p>\n", s,
 			OIDC_DISC_RT_PARAM, current_url);
 	s =
 			apr_psprintf(r->pool,
-					"%sOr enter your account name (eg. \"mike@seed.gluu.org\", or an IDP identifier (eg. \"mitreid.org\"):<br>\n",
+					"%s<p>Or enter your account name (eg. &quot;mike@seed.gluu.org&quot;, or an IDP identifier (eg. &quot;mitreid.org&quot;):</p>\n",
 					s);
 	s = apr_psprintf(r->pool,
 			"%s<p><input type=\"text\" name=\"%s\" value=\"%s\"></p>\n", s,
 			OIDC_DISC_OP_PARAM, "");
-	s = apr_psprintf(r->pool, "%s<input type=\"submit\" value=\"Submit\">\n",
-			s);
+	s = apr_psprintf(r->pool,
+			"%s<p><input type=\"submit\" value=\"Submit\"></p>\n", s);
 	s = apr_psprintf(r->pool, "%s</form>\n", s);
 
-	/* footer */
-	s = apr_psprintf(r->pool, "%s"
-			"		</center>\n"
-			"	</body>\n"
-			"</html>\n", s);
-
 	/* now send the HTML contents to the user agent */
-	return oidc_util_html_send(r, s, HTTP_UNAUTHORIZED);
+	return oidc_util_html_send(r, "OpenID Connect Provider Discovery",
+			"<style type=\"text/css\">body {text-align: center}</style>", NULL,
+			s, HTTP_UNAUTHORIZED);
 }
 
 /*
@@ -1551,15 +1532,15 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 			issuer, target_link_uri, login_hint);
 
 	if (issuer == NULL) {
-		return oidc_util_html_send(r,
-				"mod_auth_openidc: wherever you came from, it sent you here with the wrong parameters...",
+		return oidc_util_html_send_error(r, "mod_auth_openidc",
+				"Wherever you came from, it sent you here with the wrong parameters...",
 				HTTP_INTERNAL_SERVER_ERROR);
 	}
 
 	if (target_link_uri == NULL) {
 		if (c->default_sso_url == NULL) {
-			return oidc_util_html_send(r,
-					"mod_auth_openidc: SSO to this module without specifying a \"target_link_uri\" parameter is not possible because OIDCDefaultURL is not set.",
+			return oidc_util_html_send_error(r, "mod_auth_openidc",
+					"SSO to this module without specifying a \"target_link_uri\" parameter is not possible because OIDCDefaultURL is not set.",
 					HTTP_INTERNAL_SERVER_ERROR);
 		}
 		target_link_uri = c->default_sso_url;
@@ -1568,8 +1549,8 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 	/* do open redirect prevention */
 	if (oidc_target_link_uri_matches_configuration(r, c,
 			target_link_uri) == FALSE) {
-		return oidc_util_html_send(r,
-				"mod_auth_openidc: \"target_link_uri\" parameter does not match configuration settings, aborting to prevent an open redirect.",
+		return oidc_util_html_send_error(r, "mod_auth_openidc",
+				"\"target_link_uri\" parameter does not match configuration settings, aborting to prevent an open redirect.",
 				HTTP_UNAUTHORIZED);
 	}
 
@@ -1586,8 +1567,8 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 		if (oidc_proto_account_based_discovery(r, c, issuer, &issuer) == FALSE) {
 
 			/* something did not work out, show a user facing error */
-			return oidc_util_html_send(r,
-					"mod_auth_openidc: could not resolve the provided account name to an OpenID Connect provider; check your syntax",
+			return oidc_util_html_send_error(r, "mod_auth_openidc",
+					"could not resolve the provided account name to an OpenID Connect provider; check your syntax",
 					HTTP_NOT_FOUND);
 		}
 
@@ -1617,8 +1598,8 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 	}
 
 	/* something went wrong */
-	return oidc_util_html_send(r,
-			"mod_auth_openidc: could not find valid provider metadata for the selected OpenID Connect provider; contact the administrator",
+	return oidc_util_html_send_error(r, "mod_auth_openidc",
+			"Could not find valid provider metadata for the selected OpenID Connect provider; contact the administrator",
 			HTTP_NOT_FOUND);
 }
 
@@ -1637,19 +1618,9 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 		oidc_session_kill(r, session);
 	}
 
-	if (url == NULL) {
-		char *html =
-				"<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\" \"http://www.w3.org/TR/html4/strict.dtd\">\n"
-						"<html>\n"
-						"  <head>\n"
-						"    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n"
-						"  </head>\n"
-						"  <body>\n"
-						"    <p>Logged Out</p>\n"
-						"  </body>\n"
-						"</html>\n";
-		return oidc_util_html_send(r, html, DONE);
-	}
+	if (url == NULL)
+		return oidc_util_html_send(r, "Logged Out", NULL, NULL,
+				"<p>Logged Out</p>", DONE);
 
 	/* send the user to the specified where-to-go-after-logout URL */
 	apr_table_add(r->headers_out, "Location", url);
@@ -1754,12 +1725,8 @@ static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c,
 
 	oidc_debug(r, "enter");
 
-	const char *iframe_contents =
-			"<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\" \"http://www.w3.org/TR/html4/strict.dtd\">\n"
-					"<html>\n"
-					"  <head>\n"
-					"   <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n"
-					"    <script type=\"text/javascript\">\n"
+	const char *java_script =
+			"    <script type=\"text/javascript\">\n"
 					"      var targetOrigin  = '%s';\n"
 					"      var message = '%s' + ' ' + '%s';\n"
 					"	   var timerID;\n"
@@ -1793,10 +1760,7 @@ static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c,
 					"\n"
 					"      window.addEventListener('message', receiveMessage, false);\n"
 					"\n"
-					"    </script>\n"
-					"  </head>\n"
-					"  <body onload=\"setTimer()\"><p></p></body>\n"
-					"</html>\n";
+					"    </script>\n";
 
 	/* determine the origin for the check_session_iframe endpoint */
 	char *origin = apr_pstrdup(r->pool, check_session_iframe);
@@ -1822,11 +1786,12 @@ static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c,
 	oidc_util_get_request_parameter(r, "poll", &s_poll_interval);
 	if (s_poll_interval == NULL)
 		s_poll_interval = "3000";
-	iframe_contents = apr_psprintf(r->pool, iframe_contents, origin, client_id,
+
+	java_script = apr_psprintf(r->pool, java_script, origin, client_id,
 			session_state, op_iframe_id, s_poll_interval, c->redirect_uri,
 			c->redirect_uri);
 
-	return oidc_util_html_send(r, iframe_contents, DONE);
+	return oidc_util_html_send(r, NULL, java_script, "setTimer", NULL, DONE);
 }
 
 /*
@@ -2038,9 +2003,9 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 	}
 
 	/* something went wrong */
-	return oidc_util_html_send(r,
+	return oidc_util_html_send_error(r, "mod_auth_openidc",
 			apr_psprintf(r->pool,
-					"mod_auth_openidc: the OpenID Connect callback URL received an invalid request: %s",
+					"The OpenID Connect callback URL received an invalid request: %s",
 					r->args), HTTP_INTERNAL_SERVER_ERROR);
 }
 

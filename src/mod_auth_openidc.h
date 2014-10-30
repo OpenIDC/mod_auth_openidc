@@ -363,7 +363,7 @@ apr_byte_t oidc_util_request_has_parameter(request_rec *r, const char* param);
 apr_byte_t oidc_util_get_request_parameter(request_rec *r, char *name, char **value);
 apr_byte_t oidc_util_decode_json_and_check_error(request_rec *r, const char *str, json_t **json);
 int oidc_util_http_send(request_rec *r, const char *data, int data_len, const char *content_type, int success_rvalue);
-int oidc_util_html_send(request_rec *r, const char *html, int success_rvalue);
+int oidc_util_html_send(request_rec *r, const char *title, const char *html_head, const char *on_load, const char *html_body, int status_code);
 char *oidc_util_escape_string(const request_rec *r, const char *str);
 char *oidc_util_unescape_string(const request_rec *r, const char *str);
 apr_byte_t oidc_util_read_post(request_rec *r, apr_table_t *table);

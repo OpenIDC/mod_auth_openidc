@@ -1,3 +1,8 @@
+10/30/2014
+- correct expires_in conversion
+- first stab at HTML templating and make all html HTML 4.01 Strict compliant
+- bump to 1.7.0rc4
+
 10/29/2014
 - document refresh flow
 
