@@ -867,7 +867,10 @@ static int oidc_authorization_response_error(request_rec *r, oidc_cfg *c,
 			&& (apr_strnatcmp(proto_state->prompt, "none") == 0)) {
 		return oidc_session_redirect_parent_window_to_logout(r, c);
 	}
-	return oidc_util_html_send_error(r, error, error_description, DONE);
+	return oidc_util_html_send_error(r,
+			apr_psprintf(r->pool,
+					"The OpenID Connect Provider returned an error: %s", error),
+					error_description, DONE);
 }
 
 /*

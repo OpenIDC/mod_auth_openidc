@@ -906,7 +906,7 @@ int oidc_util_html_send(request_rec *r, const char *title,
 			title ? oidc_util_html_escape(r->pool, title) : "",
 			html_head ? html_head : "",
 			on_load ? apr_psprintf(r->pool, " onload=\"%s()\"", on_load) : "",
-			html_body ? html_body : "");
+			html_body ? html_body : "<p></p>");
 
 	return oidc_util_http_send(r, html, strlen(html), "text/html", status_code);
 }
@@ -917,7 +917,7 @@ int oidc_util_html_send(request_rec *r, const char *title,
 int oidc_util_html_send_error(request_rec *r, const char *error,
 		const char *description, int status_code) {
 
-	char *html_body = "<p>the OpenID Connect Provider returned an error:</p>";
+	char *html_body = "";
 
 	if (error != NULL) {
 		html_body = apr_psprintf(r->pool, "%s<p>Error: <pre>%s</pre></p>",
