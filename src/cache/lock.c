@@ -45,7 +45,7 @@
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * caching using a Redis backend
+ * global lock implementation
  *
  * @Author: Hans Zandbelt - hzandbelt@pingidentity.com
  */
