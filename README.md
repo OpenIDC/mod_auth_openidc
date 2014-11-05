@@ -110,7 +110,7 @@ How to Use It
 
 ###Sample Config for Google Accounts
 
-Sample configuration*) for using Google as your OpenID Connect Provider running on
+Sample configuration for using Google as your OpenID Connect Provider running on
 `www.example.com` and `https://www.example.com/example/redirect_uri` registered
 as the *redirect_uri* for the client through the Google API Console. You will also
 have to enable the `Google+ API` under `APIs & auth` in the [Google API console]
@@ -131,24 +131,14 @@ have to enable the `Google+ API` under `APIs & auth` in the [Google API console]
        Require valid-user
     </Location>
 
-*) OIDCProviderMetadataURL is supported from version 1.6.0 onwards. For older versions you'll 
-need to specify individual provider configuration entries manually, as in:
-
-    OIDCProviderIssuer accounts.google.com
-    OIDCProviderAuthorizationEndpoint https://accounts.google.com/o/oauth2/auth
-    OIDCProviderTokenEndpoint https://accounts.google.com/o/oauth2/token
-    OIDCProviderTokenEndpointAuth client_secret_post
-    OIDCProviderUserInfoEndpoint https://www.googleapis.com/plus/v1/people/me/openIdConnect
-    OIDCProviderJwksUri https://www.googleapis.com/oauth2/v2/certs
-
 Note if you want to securely restrict logins to a specific Google Apps domain you would not only
 add the `hd=<your-domain>` setting to the `OIDCAuthRequestParams` primitive for skipping the Google Account
 Chooser screen, but you **must** also use the following authorization setting in the `Location` primitive:
 
     Require claim hd:<your-domain>
 
-The above is an authorization example of matching a string literal against a provided claim. Since version
-1.7.0 you can also use regular expressions to match claim values by using `claim~<expression>` instead of
+The above is an authorization example of an exact match of a provided claim against a string value.
+You can also match claim values against regular expressions by using `claim~<expression>` instead of
 `claim:<literal>`, e.g.:
 
     Require claim "name~\w+ Jones$"
@@ -250,7 +240,7 @@ for its usage.
 
 ###Sample Config for PingFederate OpenID Connect & OAuth 2.0 Token Introspection
 
-Another example config*) for using PingFederate as your OpenID Connect OP and/or
+Another example config for using PingFederate as your OpenID Connect OP and/or
 OAuth 2.0 Authorization server, based on the OAuth 2.0 PlayGround 3.x default
 configuration and doing claims-based authorization. (running on `localhost` and
 `https://localhost/example/redirect_uri/` registered as *redirect_uri* for the
@@ -288,16 +278,6 @@ client `ac_oic_client`)
        Require claim Username:joe
        #Require claim scope~\bprofile\b
     </Location>
-
-*) for versions older than 1.6.0 you cannot use `OIDCProviderMetadataURL` and you'll need to
-specify the provider configuration entries manually, as in:
-
-    OIDCProviderIssuer https://macbook:9031
-    OIDCProviderAuthorizationEndpoint https://macbook:9031/as/authorization.oauth2
-    OIDCProviderTokenEndpoint https://macbook:9031/as/token.oauth2
-    OIDCProviderTokenEndpointAuth client_secret_basic
-    OIDCProviderUserInfoEndpoint https://macbook:9031/idp/userinfo.openid
-    OIDCProviderJwksUri https://macbook:9031/pf/JWKS
 
 Support
 -------
