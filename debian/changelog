@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.7.0-1) unstable; urgency=medium
+
+  * Redis caching, refresh flow, token introspection
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Wed, 05 Nov 2014 12:09:52 +0100
+
 libapache2-mod-auth-openidc (1.6.0-1) unstable; urgency=medium
 
   * new upstream release; add libssl-dev dependency
