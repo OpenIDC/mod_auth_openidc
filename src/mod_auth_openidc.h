@@ -187,6 +187,7 @@ typedef struct oidc_provider_t {
 	char *client_name;
 	char *client_contact;
 	char *registration_token;
+	char *registration_endpoint_json;
 	char *scope;
 	char *response_type;
 	char *response_mode;

@@ -621,6 +621,37 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 	json_object_set_new(data, "initiate_login_uri",
 			json_string(cfg->redirect_uri));
 
+	if (provider->registration_endpoint_json != NULL) {
+
+		json_error_t json_error;
+		json_t *json = json_loads(provider->registration_endpoint_json, 0,
+				&json_error);
+
+		if (json == NULL) {
+
+			oidc_error(r, "JSON parsing returned an error: %s",
+					json_error.text);
+
+		} else {
+
+			if (!json_is_object(json)) {
+
+				oidc_error(r, "parsed JSON did not contain a JSON object");
+
+			} else {
+
+				const char *key;
+				json_t *value;
+				json_object_foreach(json, key, value) {
+					json_object_set(data, key, value);
+				}
+
+			}
+
+			json_decref(json);
+		}
+	}
+
 	/* dynamically register the client with the specified parameters */
 	if (oidc_util_http_post_json(r, provider->registration_endpoint_url, data,
 			NULL, provider->registration_token, provider->ssl_validate_server, response,
@@ -1064,6 +1095,10 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 	/* get the dynamic client registration token */
 	oidc_json_object_get_string(r->pool, j_conf, "registration_token",
 			&provider->registration_token, cfg->provider.registration_token);
+
+	/* see if we've got custom registration request parameter values */
+	oidc_json_object_get_string(r->pool, j_conf, "registration_endpoint_json",
+			&provider->registration_endpoint_json, cfg->provider.registration_endpoint_json);
 
 	/* get the flow to use */
 	oidc_json_object_get_string(r->pool, j_conf, "response_type",

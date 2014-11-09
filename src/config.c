@@ -541,6 +541,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->provider.client_id = NULL;
 	c->provider.client_secret = NULL;
 	c->provider.registration_endpoint_url = NULL;
+	c->provider.registration_endpoint_json = NULL;
 	c->provider.check_session_iframe = NULL;
 	c->provider.end_session_endpoint = NULL;
 	c->provider.jwks_uri = NULL;
@@ -668,6 +669,11 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->provider.registration_endpoint_url != NULL ?
 					add->provider.registration_endpoint_url :
 					base->provider.registration_endpoint_url;
+	c->provider.registration_endpoint_json =
+			add->provider.registration_endpoint_json != NULL ?
+					add->provider.registration_endpoint_json :
+					base->provider.registration_endpoint_json;
+
 	c->provider.check_session_iframe =
 			add->provider.check_session_iframe != NULL ?
 					add->provider.check_session_iframe :
@@ -1260,6 +1266,11 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, provider.token_endpoint_params),
 				RSRC_CONF,
 				"Define extra parameters that will be posted to the OpenID OP Token Endpoint (e.g.: param1=value1&param2=value2, all urlencoded)."),
+		AP_INIT_TAKE1("OIDCProviderRegistrationEndpointJson",
+				oidc_set_string_slot,
+				(void *)APR_OFFSETOF(oidc_cfg, provider.registration_endpoint_json),
+				RSRC_CONF,
+				"Define a JSON object with parameters that will be merged into the client registration request to the OpenID OP Registration Endpoint (e.g.: { \"request_uris\" : [ \"https://example.com/uri\"] })."),
 		AP_INIT_TAKE1("OIDCProviderUserInfoEndpoint",
 				oidc_set_https_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.userinfo_endpoint_url),
