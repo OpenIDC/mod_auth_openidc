@@ -72,11 +72,8 @@ have to enable the `Google+ API` under `APIs & auth` in the [Google API console]
     OIDCClientID <your-client-id-administered-through-the-google-api-console>
     OIDCClientSecret <your-client-secret-administered-through-the-google-api-console>
 
-    OIDCScope "openid email profile"
     OIDCRedirectURI https://www.example.com/example/redirect_uri
     OIDCCryptoPassphrase <password>
-
-    OIDCCookiePath /example/
 
     <Location /example/>
        AuthType openid-connect
@@ -163,7 +160,6 @@ And the related **mod_auth_openidc** Apache config section:
 
     OIDCRedirectURI https://www.example.com/example/redirect_uri/
     OIDCCryptoPassphrase <password>
-    OIDCCookiePath /example/
 
     <Location /example/>
        AuthType openid-connect
@@ -208,7 +204,6 @@ client `ac_oic_client`)
     OIDCRedirectURI https://localhost/example/redirect_uri/
     OIDCCryptoPassphrase <password>
     OIDCScope "openid email profile"
-    OIDCCookiePath /example/
 
     OIDCOAuthIntrospectionEndpoint https://macbook:9031/as/token.oauth2
 	OIDCOAuthIntrospectionEndpointParams grant_type=urn%3Apingidentity.com%3Aoauth2%3Agrant_type%3Avalidate_bearer
