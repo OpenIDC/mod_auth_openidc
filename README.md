@@ -57,54 +57,6 @@ works in the same way as described for OpenID Connect above.
 For an exhaustive description of all configuration options, see the file `auth_openidc.conf`
 in this directory. This file can also serve as an include file for `httpd.conf`.
 
-###Caching
-
-**mod_auth_openidc** implements server-side caching across different Apache processes through
-one of the following options:
-
-1. *shared memory* (default)  
-   shared across a single logical Apache server running
-   as multiple Apache processes (using mpm_prefork) on the same machine
-2. *file storage*  
-   in a temp directory - possibly a shared file system across
-   multiple Apache processes and/or servers
-3. *memcache*  
-   shared across multiple Apache processes and/or servers, possibly
-   across different memcache servers living on different machines
-4. *Redis*  
-   shared across multiple Apache processes and/or servers, possibly
-   across different Redis servers living on different machines, with
-   an option for persistency across reboots and upgrades
-
-###Access Tokens and Refresh Tokens
-
-The `access_token` that **mod_auth_openidc** receives from the OP will be used by the module
-itself against the `user_info` endpoint of the OP (if configured) to resolve extra claims about
-the user. Besides that an application may be interested in the `access_token` to use it against
-other OAuth 2.0 protected APIs, typically when additional scopes have been requested in addition
-to the OpenID Connect scopes (using `OIDCScope`).
-
-For that purpose **mod_auth_openidc** passes the `access_token` that it receives from the OP to
-applications in a header named `OIDC_access_token`. If there's a hint from the OP about the
-`access_token`'s expiry time (`expires_in`) then an additional header named `OIDC_access_token_expires`
-will be set with an absolute Unix timestamp that indicates when the `access_token` expires.
-
-If a `refresh_token` is returned by the OP, the module stores the `refresh_token` in the
-user session. When the application wants to refresh the access_token, it may call the module
-on the following hook:
-
-    <redirect_uri>?refresh=<return_to>
-
-When called on this hook **mod_auth_openidc** will refresh the `access_token` using the stored
-`refresh_token` as described in the OpenID Connect specification in section [12. Using Refresh Tokens]
-(http://openid.net/specs/openid-connect-core-1_0.html#RefreshTokens).
-
-The `redirect_uri` parameter value needs to be set to the URL set in the `OIDCRedirectUri`
-configuration primitive and the `return_to` value of the `refresh` parameter is the URL that the
-module will redirect the browser to after refreshing the `access_token`. When the `access_token`
-is successfully refreshed, the `OIDC_access_token` and `OIDC_access_token_expires` headers will
-have been set with the new values obtained from the OP.
-
 How to Use It  
 -------------
 
