@@ -747,11 +747,10 @@ apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url) {
 	apr_uri_t uri;
 	memset(&uri, 0, sizeof(apr_uri_t));
 	apr_uri_parse(r->pool, url, &uri);
-	apr_byte_t rc =
-			(apr_strnatcmp(r->parsed_uri.path, uri.path) == 0) ? TRUE : FALSE;
-	oidc_debug(r, "comparing \"%s\"==\"%s\" (%d)", r->parsed_uri.path, uri.path,
-			rc);
-	return rc;
+	oidc_debug(r, "comparing \"%s\"==\"%s\"", r->parsed_uri.path, uri.path);
+	if ((r->parsed_uri.path == NULL) || (uri.path == NULL))
+		return (r->parsed_uri.path == uri.path);
+	return (apr_strnatcmp(r->parsed_uri.path, uri.path) == 0);
 }
 
 /*
