@@ -82,8 +82,10 @@ have to enable the `Google+ API` under `APIs & auth` in the [Google API console]
 
 Note if you want to securely restrict logins to a specific Google Apps domain you would not only
 add the `hd=<your-domain>` setting to the `OIDCAuthRequestParams` primitive for skipping the Google Account
-Chooser screen, but you **must** also use the following authorization setting in the `Location` primitive:
+Chooser screen, but you must also ask for the `profile` scope using `OIDCScope` and use a `Require claim`
+authorization setting in the `Location` primitive similar to:
 
+    OIDCScope "openid profile"
     Require claim hd:<your-domain>
 
 The above is an authorization example of an exact match of a provided claim against a string value.
