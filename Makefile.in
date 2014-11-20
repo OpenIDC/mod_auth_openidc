@@ -13,7 +13,6 @@ SRC=src/mod_auth_openidc.c \
 	src/cache/file.c \
 	src/cache/memcache.c \
 	src/cache/shm.c \
-	src/cache/redis.c \
 	src/cache/lock.c \
 	src/oauth.c \
 	src/proto.c \
@@ -24,6 +23,13 @@ SRC=src/mod_auth_openidc.c \
 	src/session.c \
 	src/metadata.c \
 	$(JWT_SRC)
+
+ifeq (@HAVE_LIBHIREDIS@, 1)
+SRC += \
+	src/cache/redis.c	
+REDIS_CFLAGS=-DUSE_LIBHIREDIS @HIREDIS_CFLAGS@
+REDIS_LIBS=@HIREDIS_LIBS@
+endif
 
 HDRS = \
 	$(JWT_HDRS) \
@@ -46,15 +52,10 @@ DISTFILES=$(SRC) \
 	LICENSE.txt \
 	ChangeLog
 
-
 all: src/mod_auth_openidc.la
-
-REDIS_CFLAGS=@HIREDIS_CFLAGS@
-REDIS_LIBS=@HIREDIS_LIBS@
 
 src/mod_auth_openidc.la: $(SRC) $(HDRS)
 	@APXS2@ -Wc,"-DNAMEVER=\"@NAMEVER@\" @OPENSSL_CFLAGS@ @CURL_CFLAGS@ @JANSSON_CFLAGS@ @PCRE_CFLAGS@ $(REDIS_CFLAGS)" -Wl,"@OPENSSL_LIBS@ @CURL_LIBS@ @JANSSON_LIBS@ @PCRE_LIBS@ $(REDIS_LIBS)" -Wc,-Wall -Wc,-g -c $(SRC)
-
 
 # Building configure (for distribution)
 configure:	configure.ac

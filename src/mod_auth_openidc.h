@@ -254,8 +254,11 @@ typedef struct oidc_cfg {
 	char *cache_memcache_servers;
 	/* cache_type = shm: size of the shared memory segment (cq. max number of cached entries) */
 	int cache_shm_size_max;
+
+#ifdef USE_LIBHIREDIS
 	/* cache_type= redis: Redis host/port server to use */
 	char *cache_redis_server;
+#endif
 
 	/* tell the module to strip any mod_auth_openidc related headers that already have been set by the user-agent, normally required for secure operation */
 	int scrub_request_headers;

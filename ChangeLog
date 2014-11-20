@@ -1,3 +1,7 @@
+11/20/2014
+- make compiled in Redis support optional
+- bump to 1.7.1rc1
+
 11/11/2014
 - allow OIDCRedirectURI's with an empty path and fix crash; thanks to @CedricCabessa
 

@@ -289,11 +289,17 @@ static const char *oidc_set_cache_type(cmd_parms *cmd, void *ptr,
 		cfg->cache = &oidc_cache_memcache;
 	} else if (apr_strnatcmp(arg, "shm") == 0) {
 		cfg->cache = &oidc_cache_shm;
+#ifdef USE_LIBHIREDIS
 	} else if (apr_strnatcmp(arg, "redis") == 0) {
 		cfg->cache = &oidc_cache_redis;
+#endif
 	} else {
 		return (apr_psprintf(cmd->pool,
+#ifdef USE_LIBHIREDIS
 				"oidc_set_cache_type: invalid value for OIDCCacheType (%s); must be one of \"shm\", \"memcache\", \"redis\" or \"file\"",
+#else
+				"oidc_set_cache_type: invalid value for OIDCCacheType (%s); must be one of \"shm\", \"memcache\" or \"file\"",
+#endif
 				arg));
 	}
 
@@ -580,7 +586,9 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->cache_file_clean_interval = OIDC_DEFAULT_CACHE_FILE_CLEAN_INTERVAL;
 	c->cache_memcache_servers = NULL;
 	c->cache_shm_size_max = OIDC_DEFAULT_CACHE_SHM_SIZE;
+#ifdef USE_LIBHIREDIS
 	c->cache_redis_server = NULL;
+#endif
 
 	c->metadata_dir = NULL;
 	c->session_type = OIDC_DEFAULT_SESSION_TYPE;
@@ -818,9 +826,12 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->cache_shm_size_max =
 			add->cache_shm_size_max != OIDC_DEFAULT_CACHE_SHM_SIZE ?
 					add->cache_shm_size_max : base->cache_shm_size_max;
+
+#ifdef USE_LIBHIREDIS
 	c->cache_redis_server =
 			add->cache_redis_server != NULL ?
 					add->cache_redis_server : base->cache_redis_server;
+#endif
 
 	c->metadata_dir =
 			add->metadata_dir != NULL ? add->metadata_dir : base->metadata_dir;
@@ -1547,11 +1558,12 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, cache_shm_size_max),
 				RSRC_CONF,
 				"Maximum number of cache entries to use for \"shm\" caching."),
+#ifdef USE_LIBHIREDIS
 		AP_INIT_TAKE1("OIDCRedisCacheServer",
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, cache_redis_server),
 				RSRC_CONF,
 				"Redis server used for caching (<hostname>[:<port>])"),
-
+#endif
 		{ NULL }
 };
