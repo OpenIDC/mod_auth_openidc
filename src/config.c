@@ -901,6 +901,7 @@ void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->cookie = OIDC_DEFAULT_COOKIE;
 	c->cookie_path = OIDC_DEFAULT_COOKIE_PATH;
 	c->authn_header = OIDC_DEFAULT_AUTHN_HEADER;
+	c->return401 = FALSE;
 	return (c);
 }
 
@@ -920,6 +921,9 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->authn_header = (
 			add->authn_header != OIDC_DEFAULT_AUTHN_HEADER ?
 					add->authn_header : base->authn_header);
+	c->return401 = (
+			add->return401 != FALSE ?
+					add->return401 : base->return401);
 	return (c);
 }
 
@@ -1554,6 +1558,10 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_dir_cfg, cookie),
 				ACCESS_CONF|OR_AUTHCFG,
 				"Define the cookie name for the session cookie."),
+		AP_INIT_FLAG("OIDCReturn401", ap_set_flag_slot,
+				(void *) APR_OFFSETOF(oidc_dir_cfg, return401),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Indicates whether a user will be redirected to the Provider when not authenticated (Off) or a 401 will be returned (On)."),
 
 		AP_INIT_TAKE1("OIDCCacheType", oidc_set_cache_type,
 				(void*)APR_OFFSETOF(oidc_cfg, cache), RSRC_CONF,

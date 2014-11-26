@@ -1,5 +1,6 @@
 11/26/2014
 - make shared memory cache entry max size configurable through OIDCCacheShmEntrySizeMax
+- add OIDCReturn401 configuration primitive
 - bump to 1.7.1rc1
 
 11/11/2014

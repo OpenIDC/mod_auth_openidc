@@ -286,6 +286,7 @@ typedef struct oidc_dir_cfg {
 	char *cookie_path;
 	char *cookie;
 	char *authn_header;
+	int return401;
 } oidc_dir_cfg;
 
 int oidc_check_user_id(request_rec *r);
