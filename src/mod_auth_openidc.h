@@ -254,6 +254,8 @@ typedef struct oidc_cfg {
 	char *cache_memcache_servers;
 	/* cache_type = shm: size of the shared memory segment (cq. max number of cached entries) */
 	int cache_shm_size_max;
+	/* cache_type = shm: maximum size in bytes of a cache entry */
+	int cache_shm_entry_size_max;
 	/* cache_type= redis: Redis host/port server to use */
 	char *cache_redis_server;
 
