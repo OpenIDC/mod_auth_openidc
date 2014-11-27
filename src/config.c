@@ -106,6 +106,10 @@
 #define OIDC_DEFAULT_JWKS_REFRESH_INTERVAL 3600
 /* default max cache size for shm */
 #define OIDC_DEFAULT_CACHE_SHM_SIZE 500
+/* default max cache entry size for shm: # value + # key + # overhead */
+#define OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX 16384 + 255 + 17
+/* minimum size of a cache entry */
+#define OIDC_MINIMUM_CACHE_SHM_ENTRY_SIZE_MAX 8192 + 255 + 17
 /* for issued-at timestamp (iat) checking */
 #define OIDC_DEFAULT_IDTOKEN_IAT_SLACK 600
 /* for file-based caching: clean interval in seconds */
@@ -246,8 +250,8 @@ static const char *oidc_set_cookie_domain(cmd_parms *cmd, void *ptr,
 		if ((d < '0' || d > '9') && (d < 'a' || d > 'z') && (d < 'A' || d > 'Z')
 				&& d != '.' && d != '-') {
 			return (apr_psprintf(cmd->pool,
-					"oidc_set_cookie_domain: invalid character (%c) in OIDCCookieDomain",
-					d));
+					"oidc_set_cookie_domain: invalid character (%c) in %s",
+					d, cmd->directive->directive));
 		}
 	}
 	cfg->cookie_domain = apr_pstrdup(cmd->pool, value);
@@ -268,9 +272,31 @@ static const char *oidc_set_session_type(cmd_parms *cmd, void *ptr,
 		cfg->session_type = OIDC_SESSION_TYPE_22_CLIENT_COOKIE;
 	} else {
 		return (apr_psprintf(cmd->pool,
-				"oidc_set_session_type: invalid value for OIDCSessionType (%s); must be one of \"server-cache\" or \"client-cookie\"",
-				arg));
+				"oidc_set_session_type: invalid value for %s (%s); must be one of \"server-cache\" or \"client-cookie\"",
+				cmd->directive->directive, arg));
 	}
+
+	return NULL;
+}
+
+/*
+ * set the maximum size of a shared memory cache entry and enforces a minimum
+ */
+static const char *oidc_set_cache_shm_entry_size_max(cmd_parms *cmd, void *ptr,
+		const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+
+	char *endptr;
+	int v = strtol(arg, &endptr, 10);
+	if ((*arg == '\0') || (*endptr != '\0')) {
+		return apr_psprintf(cmd->pool,
+				"Invalid value for directive %s, expected integer",
+				cmd->directive->directive);
+	}
+	cfg->cache_shm_entry_size_max =
+			v > OIDC_MINIMUM_CACHE_SHM_ENTRY_SIZE_MAX ?
+					v : OIDC_MINIMUM_CACHE_SHM_ENTRY_SIZE_MAX;
 
 	return NULL;
 }
@@ -296,11 +322,12 @@ static const char *oidc_set_cache_type(cmd_parms *cmd, void *ptr,
 	} else {
 		return (apr_psprintf(cmd->pool,
 #ifdef USE_LIBHIREDIS
-				"oidc_set_cache_type: invalid value for OIDCCacheType (%s); must be one of \"shm\", \"memcache\", \"redis\" or \"file\"",
+				"oidc_set_cache_type: invalid value for %s (%s); must be one of \"shm\", \"memcache\", \"redis\" or \"file\"",
+				cmd->directive->directive, arg));
 #else
-				"oidc_set_cache_type: invalid value for OIDCCacheType (%s); must be one of \"shm\", \"memcache\" or \"file\"",
+				"oidc_set_cache_type: invalid value for %s (%s); must be one of \"shm\", \"memcache\" or \"file\"",
+				cmd->directive->directive, arg));
 #endif
-				arg));
 	}
 
 	return NULL;
@@ -586,6 +613,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->cache_file_clean_interval = OIDC_DEFAULT_CACHE_FILE_CLEAN_INTERVAL;
 	c->cache_memcache_servers = NULL;
 	c->cache_shm_size_max = OIDC_DEFAULT_CACHE_SHM_SIZE;
+	c->cache_shm_entry_size_max = OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX;
 #ifdef USE_LIBHIREDIS
 	c->cache_redis_server = NULL;
 #endif
@@ -826,6 +854,9 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->cache_shm_size_max =
 			add->cache_shm_size_max != OIDC_DEFAULT_CACHE_SHM_SIZE ?
 					add->cache_shm_size_max : base->cache_shm_size_max;
+	c->cache_shm_entry_size_max =
+			add->cache_shm_entry_size_max != OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX ?
+					add->cache_shm_entry_size_max : base->cache_shm_entry_size_max;
 
 #ifdef USE_LIBHIREDIS
 	c->cache_redis_server =
@@ -882,6 +913,7 @@ void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->cookie = OIDC_DEFAULT_COOKIE;
 	c->cookie_path = OIDC_DEFAULT_COOKIE_PATH;
 	c->authn_header = OIDC_DEFAULT_AUTHN_HEADER;
+	c->return401 = FALSE;
 	return (c);
 }
 
@@ -901,6 +933,9 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->authn_header = (
 			add->authn_header != OIDC_DEFAULT_AUTHN_HEADER ?
 					add->authn_header : base->authn_header);
+	c->return401 = (
+			add->return401 != FALSE ?
+					add->return401 : base->return401);
 	return (c);
 }
 
@@ -1535,6 +1570,10 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_dir_cfg, cookie),
 				ACCESS_CONF|OR_AUTHCFG,
 				"Define the cookie name for the session cookie."),
+		AP_INIT_FLAG("OIDCReturn401", ap_set_flag_slot,
+				(void *) APR_OFFSETOF(oidc_dir_cfg, return401),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Indicates whether a user will be redirected to the Provider when not authenticated (Off) or a 401 will be returned (On)."),
 
 		AP_INIT_TAKE1("OIDCCacheType", oidc_set_cache_type,
 				(void*)APR_OFFSETOF(oidc_cfg, cache), RSRC_CONF,
@@ -1558,6 +1597,10 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, cache_shm_size_max),
 				RSRC_CONF,
 				"Maximum number of cache entries to use for \"shm\" caching."),
+		AP_INIT_TAKE1("OIDCCacheShmEntrySizeMax", oidc_set_cache_shm_entry_size_max,
+				(void*)APR_OFFSETOF(oidc_cfg, cache_shm_entry_size_max),
+				RSRC_CONF,
+				"Maximum size of a single cache entry used for \"shm\" caching."),
 #ifdef USE_LIBHIREDIS
 		AP_INIT_TAKE1("OIDCRedisCacheServer",
 				oidc_set_string_slot,

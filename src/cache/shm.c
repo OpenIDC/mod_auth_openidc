@@ -65,20 +65,18 @@ typedef struct oidc_cache_cfg_shm_t {
 } oidc_cache_cfg_shm_t;
 
 /* size of key in cached key/value pairs */
-#define OIDC_CACHE_SHM_KEY_MAX 128
-/* max value size */
-#define OIDC_CACHE_SHM_VALUE_MAX 16384
+#define OIDC_CACHE_SHM_KEY_MAX 255
 
 /* represents one (fixed size) cache entry, cq. name/value string pair */
 typedef struct oidc_cache_shm_entry_t {
 	/* name of the cache entry */
 	char section_key[OIDC_CACHE_SHM_KEY_MAX];
-	/* value of the cache entry */
-	char value[OIDC_CACHE_SHM_VALUE_MAX];
 	/* last (read) access timestamp */
 	apr_time_t access;
 	/* expiry timestamp */
 	apr_time_t expires;
+	/* value of the cache entry */
+	char value[];
 } oidc_cache_shm_entry_t;
 
 /* create the cache context */
@@ -89,6 +87,8 @@ static void *oidc_cache_shm_cfg_create(apr_pool_t *pool) {
 	context->mutex = oidc_cache_mutex_create(pool);
 	return context;
 }
+
+#define OIDC_CACHE_SHM_ADD_OFFSET(t, size) t = (oidc_cache_shm_entry_t *)((uint8_t *)t + size)
 
 /*
  * initialized the shared memory block in the parent process
@@ -104,7 +104,7 @@ int oidc_cache_shm_post_config(server_rec *s) {
 
 	/* create the shared memory segment */
 	apr_status_t rv = apr_shm_create(&context->shm,
-			sizeof(oidc_cache_shm_entry_t) * cfg->cache_shm_size_max,
+			cfg->cache_shm_entry_size_max * cfg->cache_shm_size_max,
 			NULL, s->process->pool);
 	if (rv != APR_SUCCESS) {
 		oidc_serror(s, "apr_shm_create failed to create shared memory segment");
@@ -113,14 +113,16 @@ int oidc_cache_shm_post_config(server_rec *s) {
 
 	/* initialize the whole segment to '/0' */
 	int i;
-	oidc_cache_shm_entry_t *table = apr_shm_baseaddr_get(context->shm);
-	for (i = 0; i < cfg->cache_shm_size_max; i++) {
-		table[i].section_key[0] = '\0';
-		table[i].access = 0;
+	oidc_cache_shm_entry_t *t = apr_shm_baseaddr_get(context->shm);
+	for (i = 0; i < cfg->cache_shm_size_max; i++, OIDC_CACHE_SHM_ADD_OFFSET(t, cfg->cache_shm_entry_size_max)) {
+		t->section_key[0] = '\0';
+		t->access = 0;
 	}
 
 	if (oidc_cache_mutex_post_config(s, context->mutex, "shm") == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
+
+	oidc_sdebug(s, "initialized shared memory with a cache size (# entries) of: %d, and a max (single) entry size of: %d", cfg->cache_shm_size_max, cfg->cache_shm_entry_size_max);
 
 	return OK;
 }
@@ -167,24 +169,31 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section,
 		return FALSE;
 
 	/* get the pointer to the start of the shared memory block */
-	oidc_cache_shm_entry_t *table = apr_shm_baseaddr_get(context->shm);
+	oidc_cache_shm_entry_t *t = apr_shm_baseaddr_get(context->shm);
 
 	/* loop over the block, looking for the key */
-	for (i = 0; i < cfg->cache_shm_size_max; i++) {
-		const char *tablekey = table[i].section_key;
+	for (i = 0; i < cfg->cache_shm_size_max; i++, OIDC_CACHE_SHM_ADD_OFFSET(t, cfg->cache_shm_entry_size_max)) {
+		const char *tablekey = t->section_key;
 
-		if (tablekey == NULL)
-			continue;
-
-		if (apr_strnatcmp(tablekey, section_key) == 0) {
+		if ( (tablekey != NULL) && (apr_strnatcmp(tablekey, section_key) == 0) ) {
 
 			/* found a match, check if it has expired */
-			if (table[i].expires > apr_time_now()) {
+			if (t->expires > apr_time_now()) {
 
 				/* update access timestamp */
-				table[i].access = apr_time_now();
-				*value = table[i].value;
+				t->access = apr_time_now();
+				*value = t->value;
+
+			} else {
+
+				/* clear the expired entry */
+				t->section_key[0] = '\0';
+				t->access = 0;
+
 			}
+
+			/* we safely can break now since we would not have found an expired match twice */
+			break;
 		}
 	}
 
@@ -208,7 +217,7 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *) cfg->cache_cfg;
 
 	oidc_cache_shm_entry_t *match, *free, *lru;
-	oidc_cache_shm_entry_t *table;
+	oidc_cache_shm_entry_t *t;
 	apr_time_t current_time;
 	int i;
 	apr_time_t age;
@@ -217,15 +226,15 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 
 	/* check that the passed in key is valid */
 	if (strlen(section_key) > OIDC_CACHE_SHM_KEY_MAX) {
-		oidc_error(r, "could not set value since key is too long (%s)",
+		oidc_error(r, "could not store value since key size is too large (%s)",
 				section_key);
 		return FALSE;
 	}
 
 	/* check that the passed in value is valid */
-	if ((value != NULL) && strlen(value) > OIDC_CACHE_SHM_VALUE_MAX) {
-		oidc_error(r, "could not set value since value is too long (%zu > %d)",
-				strlen(value), OIDC_CACHE_SHM_VALUE_MAX);
+	if ((value != NULL) && (strlen(value) > (cfg->cache_shm_entry_size_max - sizeof(oidc_cache_shm_entry_t)))) {
+		oidc_error(r, "could not store value since value size is too large (%llu > %lu); consider increasing OIDCCacheShmEntrySizeMax",
+				(unsigned long long)strlen(value), (cfg->cache_shm_entry_size_max - sizeof(oidc_cache_shm_entry_t)));
 		return FALSE;
 	}
 
@@ -234,7 +243,7 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 		return FALSE;
 
 	/* get a pointer to the shared memory block */
-	table = apr_shm_baseaddr_get(context->shm);
+	t = apr_shm_baseaddr_get(context->shm);
 
 	/* get the current time */
 	current_time = apr_time_now();
@@ -242,32 +251,32 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 	/* loop over the block, looking for the key */
 	match = NULL;
 	free = NULL;
-	lru = &table[0];
-	for (i = 0; i < cfg->cache_shm_size_max; i++) {
+	lru = t;
+	for (i = 0; i < cfg->cache_shm_size_max; i++, OIDC_CACHE_SHM_ADD_OFFSET(t, cfg->cache_shm_entry_size_max)) {
 
 		/* see if this slot is free */
-		if (table[i].section_key[0] == '\0') {
+		if (t->section_key[0] == '\0') {
 			if (free == NULL)
-				free = &table[i];
+				free = t;
 			continue;
 		}
 
 		/* see if a value already exists for this key */
-		if (apr_strnatcmp(table[i].section_key, section_key) == 0) {
-			match = &table[i];
+		if (apr_strnatcmp(t->section_key, section_key) == 0) {
+			match = t;
 			break;
 		}
 
 		/* see if this slot has expired */
-		if (table[i].expires <= current_time) {
+		if (t->expires <= current_time) {
 			if (free == NULL)
-				free = &table[i];
+				free = t;
 			continue;
 		}
 
 		/* see if this slot was less recently used than the current pointer */
-		if (table[i].access < lru->access) {
-			lru = &table[i];
+		if (t->access < lru->access) {
+			lru = t;
 		}
 
 	}
@@ -282,8 +291,10 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 		}
 	}
 
-	oidc_cache_shm_entry_t *t = match ? match : (free ? free : lru);
+	/* pick the best slot: choose one with a matching key over a free slot, over a least-recently-used one */
+	t = match ? match : (free ? free : lru);
 
+	/* see if we need to clear or set the value */
 	if (value != NULL) {
 
 		/* fill out the entry with the provided data */
@@ -295,6 +306,8 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 	} else {
 
 		t->section_key[0] = '\0';
+		t->access = 0;
+
 	}
 
 	/* release the global lock */
