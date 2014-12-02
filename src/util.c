@@ -801,15 +801,10 @@ static apr_byte_t oidc_util_json_string_print(request_rec *r, json_t *result,
 		const char *key, const char *log) {
 	json_t *value = json_object_get(result, key);
 	if (value != NULL) {
-		if (json_is_string(value)) {
-			oidc_error(r,
-					"%s: response contained a \"%s\" key with string value: \"%s\"",
-					log, key, json_string_value(value));
-		} else {
-			oidc_error(r,
-					"%s: response contained an \"%s\" key but no string value",
-					log, key);
-		}
+		char *s_value = json_dumps(value, 0);
+		oidc_error(r, "%s: response contained an \"%s\" entry with value: \"%s\"",
+				log, key, s_value);
+		free(s_value);
 		return TRUE;
 	}
 	return FALSE;

@@ -1,3 +1,6 @@
+12/2/2014
+- improve handling of non-string (=non-compliant) error responses
+
 11/26/2014
 - make shared memory cache entry max size configurable through OIDCCacheShmEntrySizeMax
 - add OIDCReturn401 configuration primitive
