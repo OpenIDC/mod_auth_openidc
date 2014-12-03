@@ -1,3 +1,8 @@
+12/3/2014
+- require the expiring access_token on the refresh hook for XSRF protection
+- pass error codes back to the caller when the refresh hook fails
+- bump to 1.7.1rc2
+
 12/2/2014
 - improve handling of non-string (=non-compliant) error responses
 

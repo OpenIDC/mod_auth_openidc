@@ -1873,14 +1873,45 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
 		session_rec *session) {
 
 	char *return_to = NULL;
+	char *r_access_token = NULL;
+	char *error_code = NULL;
 
 	/* get the command passed to the session management handler */
 	oidc_util_get_request_parameter(r, "refresh", &return_to);
+	oidc_util_get_request_parameter(r, "access_token", &r_access_token);
+
+	/* check the input parameters */
 	if (return_to == NULL) {
 		oidc_error(r,
 				"refresh token request handler called with no URL to return to");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
+
+	if (r_access_token == NULL) {
+		oidc_error(r,
+				"refresh token request handler called with no access_token parameter");
+		error_code = "no_access_token";
+		goto end;
+	}
+
+	char *s_access_token = NULL;
+	oidc_session_get(r, session, OIDC_ACCESSTOKEN_SESSION_KEY,
+			(const char **) &s_access_token);
+	if (s_access_token == NULL) {
+		oidc_error(r,
+				"no existing access_token found in the session, nothing to refresh");
+		error_code = "no_access_token_exists";
+		goto end;
+	}
+
+	/* compare the access_token parameter used for XSRF protection */
+	if (apr_strnatcmp(s_access_token, r_access_token) != 0) {
+		oidc_error(r,
+				"access_token passed in refresh request does not match the one stored in the session");
+		error_code = "no_access_token_match";
+		goto end;
+	}
+	s_access_token = NULL;
 
 	/* get the refresh token that was stored in the session */
 	const char *refresh_token = NULL;
@@ -1888,6 +1919,7 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
 	if (refresh_token == NULL) {
 		oidc_warn(r,
 				"refresh token request handler called but no refresh_token was found in the session");
+		error_code = "no_refresh_token_exists";
 		goto end;
 	}
 
@@ -1896,19 +1928,20 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
 	oidc_provider_t *provider = NULL;
 	oidc_session_get(r, session, OIDC_ISSUER_SESSION_KEY, &issuer);
 	if (issuer == NULL) {
-		oidc_warn(r, "corrupted session, no issuer found in session");
+		oidc_error(r, "session corrupted: no issuer found in session");
+		error_code = "session_corruption";
 		goto end;
 	}
 	provider = oidc_get_provider_for_issuer(r, c, issuer);
 	if (provider == NULL) {
-		oidc_warn(r, "corrupted session, no provider found for issuer: %s",
+		oidc_error(r, "session corrupted: no provider found for issuer: %s",
 				issuer);
+		error_code = "session_corruption";
 		goto end;
 	}
 
 	/* elements returned in the refresh response */
 	char *s_id_token = NULL;
-	char *s_access_token = NULL;
 	int expires_in = -1;
 	char *s_token_type = NULL;
 	char *s_refresh_token = NULL;
@@ -1917,7 +1950,9 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
 	if (oidc_proto_refresh_request(r, c, provider, refresh_token, &s_id_token,
 			&s_access_token, &s_token_type, &expires_in,
 			&s_refresh_token) == FALSE) {
-		oidc_warn(r, "refreshing the access_token failed");
+		oidc_error(r, "access_token could not be refreshed");
+		error_code = "refresh_failed";
+		goto end;
 	}
 
 	/* store the new access_token in the session and discard the old one */
@@ -1929,14 +1964,16 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
 		oidc_session_set(r, session, OIDC_REFRESHTOKEN_SESSION_KEY,
 				s_refresh_token);
 
-	// TODO: validate the id_token (this time against the old one) and do:
-	// oidc_session_set(r, session, OIDC_IDTOKEN_SESSION_KEY, id_token);
-	// TODO: also need to parse out claims and possibly call the user info endpoint again
-
 	/* store the session */
 	oidc_session_save(r, session);
 
-	end:
+end:
+
+	/* pass optional error message to the return URL */
+	if (error_code != NULL)
+		return_to = apr_psprintf(r->pool, "%s%serror_code=%s", return_to,
+				strchr(return_to, '?') ? "&" : "?",
+						oidc_util_escape_string(r, error_code));
 
 	/* add the redirect location header */
 	apr_table_add(r->headers_out, "Location", return_to);
