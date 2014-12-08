@@ -1418,6 +1418,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 		oidc_error(r,
 				"the URL scheme (%s) of the configured OIDCRedirectURI does not match the URL scheme of the URL being accessed (%s): the \"state\" and \"session\" cookies will not be shared between the two!",
 				r_uri.scheme, o_uri.scheme);
+		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
 	if (c->cookie_domain == NULL) {
@@ -1427,6 +1428,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 				oidc_error(r,
 						"the URL hostname (%s) of the configured OIDCRedirectURI does not match the URL hostname of the URL being accessed (%s): the \"state\" and \"session\" cookies will not be shared between the two!",
 						r_uri.hostname, o_uri.hostname);
+				return HTTP_INTERNAL_SERVER_ERROR;
 			}
 		}
 	} else {
@@ -1435,6 +1437,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 			oidc_error(r,
 					"the domain (%s) configured in OIDCCookieDomain does not match the URL hostname (%s) of the URL being accessed (%s): setting \"state\" and \"session\" cookies will not work!!",
 					c->cookie_domain, o_uri.hostname, original_url);
+			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 	}
 
