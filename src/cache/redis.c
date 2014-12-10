@@ -195,7 +195,7 @@ static redisReply* oidc_cache_redis_command(request_rec *r,
 
 			/* check if re-connecting worked, if not we'll error out */
 			if ((context->ctx == NULL) || (context->ctx->err != 0)) {
-				oidc_error(r, "failed to connect to Redis server (%s:%s): '%s'",
+				oidc_error(r, "failed to connect to Redis server (%s:%d): '%s'",
 						context->host_str, context->port, context->ctx->errstr);
 				break;
 			}
