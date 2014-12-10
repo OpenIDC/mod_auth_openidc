@@ -69,6 +69,8 @@ typedef struct oidc_cache_cfg_redis_t {
 	/* cache_type = redis: Redis ptr */
 	redisContext *ctx;
 	oidc_cache_mutex_t *mutex;
+	char *host_str;
+	apr_port_t port;
 } oidc_cache_cfg_redis_t;
 
 /* create the cache context */
@@ -102,10 +104,8 @@ static int oidc_cache_redis_post_config(server_rec *s) {
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	char* host_str;
 	char* scope_id;
-	apr_port_t port;
-	rv = apr_parse_addr_port(&host_str, &scope_id, &port,
+	rv = apr_parse_addr_port(&context->host_str, &scope_id, &context->port,
 			cfg->cache_redis_server, s->process->pool);
 	if (rv != APR_SUCCESS) {
 		oidc_serror(s, "failed to parse cache server: '%s'",
@@ -113,20 +113,20 @@ static int oidc_cache_redis_post_config(server_rec *s) {
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	if (host_str == NULL) {
+	if (context->host_str == NULL) {
 		oidc_serror(s,
 				"failed to parse cache server, no hostname specified: '%s'",
 				cfg->cache_redis_server);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	if (port == 0)
-		port = 6379;
+	if (context->port == 0)
+		context->port = 6379;
 
 	/* connect to the configured Redis server */
-	context->ctx = redisConnect(host_str, port);
+	context->ctx = redisConnect(context->host_str, context->port);
 
-	if ((context->ctx != NULL) && (context->ctx->err)) {
+	if ((context->ctx == NULL) || (context->ctx->err != 0)) {
 		oidc_serror(s, "failed to connect to Redis server: '%s'",
 				context->ctx->errstr);
 		return HTTP_INTERNAL_SERVER_ERROR;
@@ -159,6 +159,58 @@ static char *oidc_cache_redis_get_key(apr_pool_t *pool, const char *section,
 }
 
 /*
+ * execute Redis command and deal with return value
+ */
+static redisReply* oidc_cache_redis_command(request_rec *r,
+		oidc_cache_cfg_redis_t *context, const char *format, ...) {
+
+	redisReply *reply = NULL;
+
+	/* try to execute a command at max 2 times while reconnecting */
+	for (int i = 0; i < 2; i++) {
+
+		va_list args;
+		va_start(args, format);
+		reply = redisvCommand(context->ctx, format, args);
+		va_end(args);
+
+		/* errors will result in an empty reply */
+		if (reply != NULL)
+			break;
+
+		/* something went wrong */
+		oidc_error(r, "redisvCommand failed, reply == NULL: '%s'",
+				context->ctx->errstr);
+
+		/* check if it looks like something related to a broken connection */
+		if ((context->ctx->err == REDIS_ERR_EOF)
+				|| (context->ctx->err == REDIS_ERR_IO)) {
+
+			/* free the old context */
+			redisFree(context->ctx);
+			context->ctx = NULL;
+
+			/* re-connect to the configured Redis server */
+			context->ctx = redisConnect(context->host_str, context->port);
+
+			/* check if re-connecting worked, if not we'll error out */
+			if ((context->ctx == NULL) || (context->ctx->err != 0)) {
+				oidc_error(r, "failed to connect to Redis server (%s:%s): '%s'",
+						context->host_str, context->port, context->ctx->errstr);
+				break;
+			}
+
+			/* log that we re-connected ok */
+			oidc_debug(r,
+					"reconnected succesfully to Redis server (%s:%d), now trying to execute command again",
+					context->host_str, context->port);
+		}
+	}
+
+	return reply;
+}
+
+/*
  * get a name/value pair from Redis
  */
 static apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section,
@@ -169,19 +221,16 @@ static apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section,
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *) cfg->cache_cfg;
+	redisReply *reply = NULL;
 
 	/* grab the global lock */
 	if (oidc_cache_mutex_lock(r, context->mutex) == FALSE)
 		return FALSE;
 
 	/* get */
-	redisReply *reply = redisCommand(context->ctx, "GET %s",
+	reply = oidc_cache_redis_command(r, context, "GET %s",
 			oidc_cache_redis_get_key(r->pool, section, key));
-
-	/* errors should result in an empty reply */
 	if (reply == NULL) {
-		oidc_error(r, "redisCommand failed, reply == NULL: '%s'",
-				context->ctx->errstr);
 		oidc_cache_mutex_unlock(r, context->mutex);
 		return FALSE;
 	}
@@ -224,6 +273,7 @@ static apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section,
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *) cfg->cache_cfg;
+	redisReply *reply = NULL;
 
 	/* grab the global lock */
 	if (oidc_cache_mutex_lock(r, context->mutex) == FALSE)
@@ -233,16 +283,10 @@ static apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section,
 	if (value == NULL) {
 
 		/* delete it */
-		redisReply *reply = redisCommand(context->ctx, "DEL %s",
+		reply = oidc_cache_redis_command(r, context, "DEL %s",
 				oidc_cache_redis_get_key(r->pool, section, key));
-
 		if (reply == NULL) {
-			oidc_error(r, "redisCommand failed, reply == NULL: '%s'",
-					context->ctx->errstr);
-
-			/* release the global lock */
 			oidc_cache_mutex_unlock(r, context->mutex);
-
 			return FALSE;
 		}
 
@@ -254,17 +298,11 @@ static apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section,
 		apr_uint32_t timeout = apr_time_sec(expiry - apr_time_now());
 
 		/* store it */
-		redisReply *reply = redisCommand(context->ctx, "SETEX %s %d %s",
+		reply = oidc_cache_redis_command(r, context, "SETEX %s %d %s",
 				oidc_cache_redis_get_key(r->pool, section, key), timeout,
 				value);
-
 		if (reply == NULL) {
-			oidc_error(r, "redisCommand failed, reply == NULL: '%s'",
-					context->ctx->errstr);
-
-			/* release the global lock */
 			oidc_cache_mutex_unlock(r, context->mutex);
-
 			return FALSE;
 		}
 

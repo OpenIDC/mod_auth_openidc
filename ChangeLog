@@ -1,3 +1,7 @@
+12/10/2014
+- reconnect to the Redis server after I/O failure as raised in #43
+- bump to 1.7.1rc4
+
 12/8/2014
 - return http 500 when detecting requests that will loop on return
 - bump to 1.7.1rc3
