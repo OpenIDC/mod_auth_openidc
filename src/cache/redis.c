@@ -165,9 +165,10 @@ static redisReply* oidc_cache_redis_command(request_rec *r,
 		oidc_cache_cfg_redis_t *context, const char *format, ...) {
 
 	redisReply *reply = NULL;
+	int i = 0;
 
 	/* try to execute a command at max 2 times while reconnecting */
-	for (int i = 0; i < 2; i++) {
+	for (i = 0; i < 2; i++) {
 
 		va_list args;
 		va_start(args, format);
