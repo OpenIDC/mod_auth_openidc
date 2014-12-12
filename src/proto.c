@@ -779,6 +779,10 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 		char **id_token, char **access_token, char **token_type,
 		int *expires_in, char **refresh_token) {
 
+	/* get a handle to the directory config */
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+
 	const char *response = NULL;
 
 	/* see if we need to do basic auth or auth-through-post-params (both applied through the HTTP POST method though) */
@@ -800,7 +804,8 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 	/* send the refresh request to the token endpoint */
 	if (oidc_util_http_post_form(r, provider->token_endpoint_url, params,
 			basic_auth, NULL, provider->ssl_validate_server, &response,
-			cfg->http_timeout_long, cfg->outgoing_proxy) == FALSE) {
+			cfg->http_timeout_long, cfg->outgoing_proxy,
+			dir_cfg->pass_cookies) == FALSE) {
 		oidc_warn(r, "error when calling the token endpoint (%s)",
 				provider->token_endpoint_url);
 		return FALSE;
@@ -889,13 +894,18 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char *access_token,
 		const char **response, json_t **claims) {
 
+	/* get a handle to the directory config */
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+
 	oidc_debug(r, "enter, endpoint=%s, access_token=%s",
 			provider->userinfo_endpoint_url, access_token);
 
 	/* get the JSON response */
 	if (oidc_util_http_get(r, provider->userinfo_endpoint_url,
 			NULL, NULL, access_token, provider->ssl_validate_server, response,
-			cfg->http_timeout_long, cfg->outgoing_proxy) == FALSE)
+			cfg->http_timeout_long, cfg->outgoing_proxy,
+			dir_cfg->pass_cookies) == FALSE)
 		return FALSE;
 
 	/* decode and check for an "error" response */
@@ -907,6 +917,10 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
  */
 apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg,
 		const char *acct, char **issuer) {
+
+	/* get a handle to the directory config */
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
 
 	// TODO: maybe show intermediate/progress screen "discovering..."
 
@@ -929,7 +943,8 @@ apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg,
 	const char *response = NULL;
 	if (oidc_util_http_get(r, url, params, NULL, NULL,
 			cfg->provider.ssl_validate_server, &response,
-			cfg->http_timeout_short, cfg->outgoing_proxy) == FALSE) {
+			cfg->http_timeout_short, cfg->outgoing_proxy,
+			dir_cfg->pass_cookies) == FALSE) {
 		/* errors will have been logged by now */
 		return FALSE;
 	}

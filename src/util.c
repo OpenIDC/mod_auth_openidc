@@ -413,11 +413,13 @@ static int oidc_http_add_form_url_encoded_param(void* rec, const char* key,
 static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 		const char *data, const char *content_type, const char *basic_auth,
 		const char *bearer_token, int ssl_validate_server,
-		const char **response, int timeout, const char *outgoing_proxy) {
+		const char **response, int timeout, const char *outgoing_proxy,
+		apr_array_header_t *pass_cookies) {
 	char curlError[CURL_ERROR_SIZE];
 	oidc_curl_buffer curlBuffer;
 	CURL *curl;
 	struct curl_slist *h_list = NULL;
+	int i;
 
 	/* do some logging about the inputs */
 	oidc_debug(r,
@@ -498,6 +500,28 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 	if (h_list != NULL)
 		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, h_list);
 
+	/* gather cookies that we need to pass on from the incoming request */
+	char *cookie_string = NULL;
+	for (i = 0; i < pass_cookies->nelts; i++) {
+		const char *cookie_name = ((const char**) pass_cookies->elts)[i];
+		char *cookie_value = oidc_util_get_cookie(r, cookie_name);
+		if (cookie_value != NULL) {
+			cookie_string =
+					(cookie_string == NULL) ?
+							apr_psprintf(r->pool, "%s=%s", cookie_name,
+									cookie_value) :
+									apr_psprintf(r->pool, "%s; %s=%s", cookie_string,
+											cookie_name, cookie_value);
+		}
+	}
+
+	/* see if we need to pass any cookies */
+	if (cookie_string != NULL) {
+		oidc_debug(r, "passing browser cookies on backend call: %s",
+				cookie_string);
+		curl_easy_setopt(curl, CURLOPT_COOKIE, cookie_string);
+	}
+
 	/* set the target URL */
 	curl_easy_setopt(curl, CURLOPT_URL, url);
 
@@ -514,7 +538,7 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 	/* set and log the response */
 	oidc_debug(r, "response=%s", *response);
 
-	out:
+out:
 
 	/* cleanup and return the result */
 	if (h_list != NULL)
@@ -530,7 +554,8 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 apr_byte_t oidc_util_http_get(request_rec *r, const char *url,
 		const apr_table_t *params, const char *basic_auth,
 		const char *bearer_token, int ssl_validate_server,
-		const char **response, int timeout, const char *outgoing_proxy) {
+		const char **response, int timeout, const char *outgoing_proxy,
+		apr_array_header_t *pass_cookies) {
 
 	if ((params != NULL) && (apr_table_elts(params)->nelts > 0)) {
 		oidc_http_encode_t data = { r, "" };
@@ -541,7 +566,8 @@ apr_byte_t oidc_util_http_get(request_rec *r, const char *url,
 	}
 
 	return oidc_util_http_call(r, url, NULL, NULL, basic_auth, bearer_token,
-			ssl_validate_server, response, timeout, outgoing_proxy);
+			ssl_validate_server, response, timeout, outgoing_proxy,
+			pass_cookies);
 }
 
 /*
@@ -550,7 +576,8 @@ apr_byte_t oidc_util_http_get(request_rec *r, const char *url,
 apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url,
 		const apr_table_t *params, const char *basic_auth,
 		const char *bearer_token, int ssl_validate_server,
-		const char **response, int timeout, const char *outgoing_proxy) {
+		const char **response, int timeout, const char *outgoing_proxy,
+		apr_array_header_t *pass_cookies) {
 
 	const char *data = NULL;
 	if ((params != NULL) && (apr_table_elts(params)->nelts > 0)) {
@@ -563,7 +590,8 @@ apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url,
 
 	return oidc_util_http_call(r, url, data,
 			"application/x-www-form-urlencoded", basic_auth, bearer_token,
-			ssl_validate_server, response, timeout, outgoing_proxy);
+			ssl_validate_server, response, timeout, outgoing_proxy,
+			pass_cookies);
 }
 
 /*
@@ -572,7 +600,7 @@ apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url,
 apr_byte_t oidc_util_http_post_json(request_rec *r, const char *url,
 		const json_t *json, const char *basic_auth, const char *bearer_token,
 		int ssl_validate_server, const char **response, int timeout,
-		const char *outgoing_proxy) {
+		const char *outgoing_proxy, apr_array_header_t *pass_cookies) {
 
 	char *data = NULL;
 	if (json != NULL) {
@@ -583,7 +611,7 @@ apr_byte_t oidc_util_http_post_json(request_rec *r, const char *url,
 
 	return oidc_util_http_call(r, url, data, "application/json", basic_auth,
 			bearer_token, ssl_validate_server, response, timeout,
-			outgoing_proxy);
+			outgoing_proxy, pass_cookies);
 }
 
 /*

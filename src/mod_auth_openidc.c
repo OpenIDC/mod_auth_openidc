@@ -677,7 +677,7 @@ static int oidc_handle_existing_session(request_rec *r,
 
 	oidc_debug(r, "enter");
 
-	/* get a handle to the director config */
+	/* get a handle to the directory config */
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 

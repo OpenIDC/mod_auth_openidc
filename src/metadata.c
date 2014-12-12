@@ -561,6 +561,10 @@ static apr_byte_t oidc_metadata_file_write(request_rec *r, const char *path,
 static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, json_t **j_client, const char **response) {
 
+	/* get a handle to the directory config */
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+
 	/* assemble the JSON registration request */
 	json_t *data = json_object();
 	json_object_set_new(data, "client_name",
@@ -655,7 +659,8 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 	/* dynamically register the client with the specified parameters */
 	if (oidc_util_http_post_json(r, provider->registration_endpoint_url, data,
 			NULL, provider->registration_token, provider->ssl_validate_server, response,
-			cfg->http_timeout_short, cfg->outgoing_proxy) == FALSE) {
+			cfg->http_timeout_short, cfg->outgoing_proxy,
+			dir_cfg->pass_cookies) == FALSE) {
 		json_decref(data);
 		return FALSE;
 	}
@@ -673,10 +678,14 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
 
 	const char *response = NULL;
 
+	/* get a handle to the directory config */
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+
 	/* no valid provider metadata, get it at the specified URL with the specified parameters */
 	if (oidc_util_http_get(r, provider->jwks_uri, NULL, NULL,
 			NULL, provider->ssl_validate_server, &response, cfg->http_timeout_long,
-			cfg->outgoing_proxy) == FALSE)
+			cfg->outgoing_proxy, dir_cfg->pass_cookies) == FALSE)
 		return FALSE;
 
 	/* decode and see if it is not an error response somehow */
@@ -738,10 +747,15 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg,
 		const char *issuer, const char *url, json_t **j_metadata,
 		const char **response) {
 
+	/* get a handle to the directory config */
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+
 	/* get provider metadata from the specified URL with the specified parameters */
 	if (oidc_util_http_get(r, url, NULL, NULL, NULL,
 			cfg->provider.ssl_validate_server, response,
-			cfg->http_timeout_short, cfg->outgoing_proxy) == FALSE)
+			cfg->http_timeout_short, cfg->outgoing_proxy,
+			dir_cfg->pass_cookies) == FALSE)
 		return FALSE;
 
 	/* decode and see if it is not an error response somehow */
