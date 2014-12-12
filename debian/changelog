@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.7.1-1) unstable; urgency=medium
+
+  * Redis reconnect, OIDCCacheShmEntrySizeMax, OIDCReturn401, OIDCPassCookies
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Fri, 12 Dec 2014 13:19:43 +0100
+
 libapache2-mod-auth-openidc (1.7.0-1) unstable; urgency=medium
 
   * Redis caching, refresh flow, token introspection

@@ -1,5 +1,6 @@
 12/12/2014
 - support passing cookies specified in OIDCPassCookies from browser on to OP/AS calls (for loadbalancing purposes)
+- release 1.7.1
 
 12/10/2014
 - reconnect to the Redis server after I/O failure as raised in #43
