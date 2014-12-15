@@ -67,7 +67,6 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 typedef struct oidc_cache_cfg_redis_t {
 	/* cache_type = redis: Redis ptr */
-	redisContext *ctx;
 	oidc_cache_mutex_t *mutex;
 	char *host_str;
 	apr_port_t port;
@@ -77,7 +76,6 @@ typedef struct oidc_cache_cfg_redis_t {
 static void *oidc_cache_redis_cfg_create(apr_pool_t *pool) {
 	oidc_cache_cfg_redis_t *context = apr_pcalloc(pool,
 			sizeof(oidc_cache_cfg_redis_t));
-	context->ctx = NULL;
 	context->mutex = oidc_cache_mutex_create(pool);
 	return context;
 }
@@ -123,15 +121,6 @@ static int oidc_cache_redis_post_config(server_rec *s) {
 	if (context->port == 0)
 		context->port = 6379;
 
-	/* connect to the configured Redis server */
-	context->ctx = redisConnect(context->host_str, context->port);
-
-	if ((context->ctx == NULL) || (context->ctx->err != 0)) {
-		oidc_serror(s, "failed to connect to Redis server: '%s'",
-				context->ctx->errstr);
-		return HTTP_INTERNAL_SERVER_ERROR;
-	}
-
 	if (oidc_cache_mutex_post_config(s, context->mutex, "redis") == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
@@ -158,54 +147,79 @@ static char *oidc_cache_redis_get_key(apr_pool_t *pool, const char *section,
 	return apr_psprintf(pool, "%s:%s", section, key);
 }
 
+/* key for storing data in the process pool */
+#define OIDC_CACHE_REDIS_CONTEXT "oidc_cache_redis_context"
+
+/*
+ * connect to Redis server
+ */
+static redisContext * oidc_cache_redis_connect(request_rec *r,
+		oidc_cache_cfg_redis_t *context) {
+
+	/* see if we already have a connection by looking it up in the process context */
+	redisContext *ctx = NULL;
+	apr_pool_userdata_get((void **) &ctx, OIDC_CACHE_REDIS_CONTEXT,
+			r->server->process->pool);
+
+	if (ctx == NULL) {
+
+		/* no connection, connect to the configured Redis server */
+		ctx = redisConnect(context->host_str, context->port);
+
+		/* check for errors */
+		if ((ctx == NULL) || (ctx->err != 0)) {
+			oidc_error(r, "failed to connect to Redis server (%s:%d): '%s'",
+					context->host_str, context->port, ctx->errstr);
+			return NULL;
+		}
+
+		/* store the connection in the process context */
+		apr_pool_userdata_set(ctx, OIDC_CACHE_REDIS_CONTEXT,
+				(apr_status_t (*)(void *)) redisFree, r->server->process->pool);
+
+		/* log the connection */
+		oidc_debug(r, "successfully connected to Redis server (%s:%d)",
+				context->host_str, context->port);
+	}
+
+	return ctx;
+}
+
 /*
  * execute Redis command and deal with return value
  */
 static redisReply* oidc_cache_redis_command(request_rec *r,
 		oidc_cache_cfg_redis_t *context, const char *format, ...) {
 
+	redisContext *ctx = NULL;
 	redisReply *reply = NULL;
 	int i = 0;
 
 	/* try to execute a command at max 2 times while reconnecting */
 	for (i = 0; i < 2; i++) {
 
+		/* connect */
+		ctx = oidc_cache_redis_connect(r, context);
+		if (ctx == NULL)
+			break;
+
+		/* execute the command */
 		va_list args;
 		va_start(args, format);
-		reply = redisvCommand(context->ctx, format, args);
+		reply = redisvCommand(ctx, format, args);
 		va_end(args);
 
 		/* errors will result in an empty reply */
 		if (reply != NULL)
 			break;
 
-		/* something went wrong */
-		oidc_error(r, "redisvCommand failed, reply == NULL: '%s'",
-				context->ctx->errstr);
+		/* something went wrong, log it */
+		oidc_error(r, "redisvCommand (%d) failed, disconnecting: '%s'", i, ctx->errstr);
 
-		/* check if it looks like something related to a broken connection */
-		if ((context->ctx->err == REDIS_ERR_EOF)
-				|| (context->ctx->err == REDIS_ERR_IO)) {
-
-			/* free the old context */
-			redisFree(context->ctx);
-			context->ctx = NULL;
-
-			/* re-connect to the configured Redis server */
-			context->ctx = redisConnect(context->host_str, context->port);
-
-			/* check if re-connecting worked, if not we'll error out */
-			if ((context->ctx == NULL) || (context->ctx->err != 0)) {
-				oidc_error(r, "failed to connect to Redis server (%s:%d): '%s'",
-						context->host_str, context->port, context->ctx->errstr);
-				break;
-			}
-
-			/* log that we re-connected ok */
-			oidc_debug(r,
-					"reconnected succesfully to Redis server (%s:%d), now trying to execute command again",
-					context->host_str, context->port);
-		}
+		/* cleanup, we may try again (once) after reconnecting */
+		redisFree(ctx);
+		apr_pool_userdata_set(NULL, OIDC_CACHE_REDIS_CONTEXT,
+				apr_pool_cleanup_null, r->server->process->pool);
 	}
 
 	return reply;
@@ -321,11 +335,6 @@ static int oidc_cache_redis_destroy(server_rec *s) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(s->module_config,
 			&auth_openidc_module);
 	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *) cfg->cache_cfg;
-
-	if (context->ctx) {
-		redisFree(context->ctx);
-		context->ctx = NULL;
-	}
 
 	oidc_cache_mutex_destroy(s, context->mutex);
 
