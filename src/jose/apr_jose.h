@@ -54,7 +54,6 @@
 #define _APR_JOSE_H_
 
 #include "apr_pools.h"
-#include "apr_time.h"
 #include "apr_tables.h"
 #include "apr_hash.h"
 #include "apr_strings.h"
@@ -96,9 +95,9 @@ typedef struct apr_jwt_payload_t {
 	/* JWT "sub" claim value; subject/principal */
 	char *sub;
 	/* parsed JWT "exp" claim value; token expiry */
-	apr_time_t exp;
+	json_int_t exp;
 	/* parsed JWT "iat" claim value; issued-at timestamp */
-	apr_time_t iat;
+	json_int_t iat;
 } apr_jwt_payload_t;
 
 /* parsed JWT signature */

@@ -180,10 +180,10 @@ apr_byte_t apr_jwt_get_string(apr_pool_t *pool, apr_jwt_value_t *value,
  * parse (optional) timestamp from payload
  */
 static apr_byte_t apr_jwt_parse_timestamp(apr_pool_t *pool,
-		apr_jwt_value_t *value, const char *claim_name, apr_time_t *result) {
+		apr_jwt_value_t *value, const char *claim_name, json_int_t *result) {
 	json_t *v = json_object_get(value->json, claim_name);
 	if ((v != NULL) && (json_is_integer(v))) {
-		*result = apr_time_from_sec(json_integer_value(v));
+		*result = json_integer_value(v);
 	} else {
 		*result = APR_JWT_CLAIM_TIME_EMPTY;
 	}

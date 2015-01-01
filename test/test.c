@@ -138,7 +138,7 @@ static char *test_jwt_parse(apr_pool_t *pool) {
 	TST_ASSERT_STR("header.kid", jwt->header.kid, NULL);
 
 	TST_ASSERT_STR("payload.iss", jwt->payload.iss, "joe");
-	TST_ASSERT_LONG("payload.exp", (long)apr_time_sec(jwt->payload.exp), 1300819380L);
+	TST_ASSERT_LONG("payload.exp", (long)jwt->payload.exp, 1300819380L);
 
 	char *str_key = "AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow";
 	char *raw_key = NULL;
@@ -220,7 +220,7 @@ static char *test_plaintext_jwt_parse(apr_pool_t *pool) {
 	TST_ASSERT_STR("header.alg", jwt->header.alg, "none");
 
 	TST_ASSERT_STR("payload.iss", jwt->payload.iss, "joe");
-	TST_ASSERT_LONG("payload.exp", (long)apr_time_sec(jwt->payload.exp), 1300819380L);
+	TST_ASSERT_LONG("payload.exp", (long)jwt->payload.exp, 1300819380L);
 
 	return 0;
 }

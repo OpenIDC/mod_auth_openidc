@@ -354,24 +354,26 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
  */
 apr_byte_t oidc_proto_validate_iat(request_rec *r, oidc_provider_t *provider,
 		apr_jwt_t *jwt) {
+
+	/* get the current time */
+	apr_time_t now = apr_time_sec(apr_time_now());
+
+	/* sanity check for iat being set */
 	if (jwt->payload.iat == APR_JWT_CLAIM_TIME_EMPTY) {
-		oidc_error(r,
-				"id_token JSON payload did not contain an \"iat\" number value");
+		oidc_error(r, "JWT did not contain an \"iat\" number value");
 		return FALSE;
 	}
 
 	/* check if this id_token has been issued just now +- slack (default 10 minutes) */
-	if ((apr_time_now() - apr_time_from_sec(provider->idtoken_iat_slack))
-			> jwt->payload.iat) {
+	if ((now - provider->idtoken_iat_slack) > jwt->payload.iat) {
 		oidc_error(r,
-				"\"iat\" validation failure (%" APR_TIME_T_FMT "): JWT was issued more than %d seconds ago",
+				"\"iat\" validation failure (%" JSON_INTEGER_FORMAT "): JWT was issued more than %d seconds ago",
 				jwt->payload.iat, provider->idtoken_iat_slack);
 		return FALSE;
 	}
-	if ((apr_time_now() + apr_time_from_sec(provider->idtoken_iat_slack))
-			< jwt->payload.iat) {
+	if ((now + provider->idtoken_iat_slack) < jwt->payload.iat) {
 		oidc_error(r,
-				"\"iat\" validation failure (%" APR_TIME_T_FMT "): JWT was issued more than %d seconds in the future",
+				"\"iat\" validation failure (%" JSON_INTEGER_FORMAT "): JWT was issued more than %d seconds in the future",
 				jwt->payload.iat, provider->idtoken_iat_slack);
 		return FALSE;
 	}
@@ -383,12 +385,24 @@ apr_byte_t oidc_proto_validate_iat(request_rec *r, oidc_provider_t *provider,
  * validate "exp" claim in JWT
  */
 apr_byte_t oidc_proto_validate_exp(request_rec *r, apr_jwt_t *jwt) {
-	if (apr_time_now() > jwt->payload.exp) {
-		oidc_error(r,
-				"\"exp\" validation failure (%" APR_TIME_T_FMT "): JWT expired",
-				jwt->payload.exp);
+
+	/* get the current time */
+	apr_time_t now = apr_time_sec(apr_time_now());
+
+	/* sanity check for exp being set */
+	if (jwt->payload.exp == APR_JWT_CLAIM_TIME_EMPTY) {
+		oidc_error(r, "JWT did not contain an \"exp\" number value");
 		return FALSE;
 	}
+
+	/* see if now is beyond the JWT expiry timestamp */
+	if (now > jwt->payload.exp) {
+		oidc_error(r,
+				"\"exp\" validation failure (%" JSON_INTEGER_FORMAT "): JWT expired %" JSON_INTEGER_FORMAT " seconds ago",
+				jwt->payload.exp, now - jwt->payload.exp);
+		return FALSE;
+	}
+
 	return TRUE;
 }
 
@@ -693,6 +707,8 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char *id_token, const char *nonce,
 		char **user, apr_jwt_t **jwt, apr_byte_t is_code_flow) {
 
+	char buf[APR_RFC822_DATE_LEN + 1];
+
 	oidc_debug(r, "enter");
 
 	if (apr_jwt_parse(r->pool, id_token, jwt, cfg->private_keys,
@@ -747,9 +763,11 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 	}
 
 	/* log our results */
+
+	apr_rfc822_date(buf, apr_time_from_sec((*jwt)->payload.exp));
 	oidc_debug(r,
-			"valid id_token for user \"%s\" (expires in %" APR_TIME_T_FMT " seconds)",
-			*user, (*jwt)->payload.exp - apr_time_sec(apr_time_now()));
+			"valid id_token for user \"%s\" expires: [%s], in %" JSON_INTEGER_FORMAT " secs from now)",
+			*user, buf, (*jwt)->payload.exp - apr_time_sec(apr_time_now()));
 
 	/* since we've made it so far, we may as well say it is a valid id_token */
 	return TRUE;

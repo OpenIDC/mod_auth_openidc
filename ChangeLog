@@ -1,5 +1,8 @@
 1/1/2015
 - update copyright to 2015
+- use json_int_t (seconds) for "exp" and "iat" fields, instead of apr_time_t (microseconds) 
+- correct expiry debug printout
+- bump to 1.7.2rc1
 
 12/15/2014
 - fix Redis reconnect behavior: avoid keep reconnecting after first failure
