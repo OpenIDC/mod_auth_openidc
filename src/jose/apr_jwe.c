@@ -363,18 +363,15 @@ apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header,
 	memcpy(p, cipher_text->value, cipher_text->len);
 	p += cipher_text->len;
 
-	char *src = (char *)&al;
-	unsigned int i = 1;
-	char *c = (char*)&i;
-	if (*c) {
+	/* check if we are on a big endian or little endian machine */
+	int c = 1;
+	if (*(char *) &c == 1) {
 		// little endian machine: reverse AAD length for big endian representation
-		for (i=0; i < sizeof(int64_t); ++i) p[sizeof(uint64_t)-1-i] = src[i];
+		al = (al & 0x00000000FFFFFFFF) << 32 | (al & 0xFFFFFFFF00000000) >> 32;
+		al = (al & 0x0000FFFF0000FFFF) << 16 | (al & 0xFFFF0000FFFF0000) >> 16;
+		al = (al & 0x00FF00FF00FF00FF) << 8 | (al & 0xFF00FF00FF00FF00) >> 8;
 	}
-	else
-		memcpy(p, &al, sizeof(uint64_t));
-
-//	uint64_t big_endian = htobe64(al);
-//	memcpy(p, &big_endian, sizeof(int64_t));
+	memcpy(p, &al, sizeof(uint64_t));
 
 	/* calculate the Authentication Tag value over AAD + IV + ciphertext + AAD length */
 	unsigned int md_len = 0;
