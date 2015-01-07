@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2013-2014 Ping Identity Corporation
+ * Copyright (C) 2013-2015 Ping Identity Corporation
  * All rights reserved.
  *
  * For further information please contact:
@@ -550,6 +550,16 @@ static const char * oidc_set_pass_idtoken_as(cmd_parms *cmd, void *dummy,
 }
 
 /*
+ * specify cookies to pass on to the OP/AS
+ */
+static const char * oidc_set_pass_cookies(cmd_parms *cmd, void *m,
+		const char *arg) {
+	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg *) m;
+	*(const char**) apr_array_push(dir_cfg->pass_cookies) = arg;
+	return NULL;
+}
+
+/*
  * create a new server config record with defaults
  */
 void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
@@ -914,6 +924,7 @@ void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->cookie_path = OIDC_DEFAULT_COOKIE_PATH;
 	c->authn_header = OIDC_DEFAULT_AUTHN_HEADER;
 	c->return401 = FALSE;
+	c->pass_cookies = apr_array_make(pool, 0, sizeof(const char *));
 	return (c);
 }
 
@@ -933,9 +944,10 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->authn_header = (
 			add->authn_header != OIDC_DEFAULT_AUTHN_HEADER ?
 					add->authn_header : base->authn_header);
-	c->return401 = (
-			add->return401 != FALSE ?
-					add->return401 : base->return401);
+	c->return401 = (add->return401 != FALSE ? add->return401 : base->return401);
+	c->pass_cookies = (
+			apr_is_empty_array(add->pass_cookies) != 0 ?
+					add->pass_cookies : base->pass_cookies);
 	return (c);
 }
 
@@ -1608,5 +1620,10 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF,
 				"Redis server used for caching (<hostname>[:<port>])"),
 #endif
+		AP_INIT_ITERATE("OIDCPassCookies",
+				oidc_set_pass_cookies,
+				(void *) APR_OFFSETOF(oidc_dir_cfg, pass_cookies),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Specify cookies that need to be passed from the browser on to the backend to the OP/AS."),
 		{ NULL }
 };

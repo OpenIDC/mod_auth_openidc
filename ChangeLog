@@ -1,5 +1,36 @@
-11/27/2014
+1/7/2014
 - make compiled in Redis support optional
+
+1/1/2015
+- update copyright to 2015
+- use json_int_t (seconds) for "exp" and "iat" fields, instead of apr_time_t (microseconds) 
+- correct expiry debug printout
+- bump to 1.7.2rc1
+
+12/15/2014
+- fix Redis reconnect behavior: avoid keep reconnecting after first failure
+- bump to 1.7.2rc0
+
+12/12/2014
+- support passing cookies specified in OIDCPassCookies from browser on to OP/AS calls (for loadbalancing purposes)
+- release 1.7.1
+- document OIDCPassCookies in auth_openidc.conf
+
+12/10/2014
+- reconnect to the Redis server after I/O failure as raised in #43
+- bump to 1.7.1rc4
+
+12/8/2014
+- return http 500 when detecting requests that will loop on return
+- bump to 1.7.1rc3
+
+12/3/2014
+- require the expiring access_token on the refresh hook for XSRF protection
+- pass error codes back to the caller when the refresh hook fails
+- bump to 1.7.1rc2
+
+12/2/2014
+- improve handling of non-string (=non-compliant) error responses
 
 11/26/2014
 - make shared memory cache entry max size configurable through OIDCCacheShmEntrySizeMax

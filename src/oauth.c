@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2013-2014 Ping Identity Corporation
+ * Copyright (C) 2013-2015 Ping Identity Corporation
  * All rights reserved.
  *
  * For further information please contact:
@@ -65,11 +65,16 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 static int oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 		const char *token, const char **response) {
 
+	/* get a handle to the directory config */
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+
 	/* assemble parameters to call the token endpoint for validation */
 	apr_table_t *params = apr_table_make(r->pool, 4);
 
 	/* add any configured extra static parameters to the introspection endpoint */
-	oidc_util_table_add_query_encoded_params(r->pool, params, c->oauth.introspection_endpoint_params);
+	oidc_util_table_add_query_encoded_params(r->pool, params,
+			c->oauth.introspection_endpoint_params);
 
 	/* add the access_token itself */
 	apr_table_addn(params, "token", token);
@@ -87,9 +92,9 @@ static int oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 	}
 
 	/* call the endpoint with the constructed parameter set and return the resulting response */
-	return oidc_util_http_post_form(r, c->oauth.introspection_endpoint_url, params,
-			basic_auth, NULL, c->oauth.ssl_validate_server, response,
-			c->http_timeout_long, c->outgoing_proxy);
+	return oidc_util_http_post_form(r, c->oauth.introspection_endpoint_url,
+			params, basic_auth, NULL, c->oauth.ssl_validate_server, response,
+			c->http_timeout_long, c->outgoing_proxy, dir_cfg->pass_cookies);
 }
 
 /*

@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2013-2014 Ping Identity Corporation
+ * Copyright (C) 2013-2015 Ping Identity Corporation
  * All rights reserved.
  *
  * For further information please contact:
@@ -234,7 +234,7 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 	/* check that the passed in value is valid */
 	if ((value != NULL) && (strlen(value) > (cfg->cache_shm_entry_size_max - sizeof(oidc_cache_shm_entry_t)))) {
 		oidc_error(r, "could not store value since value size is too large (%llu > %lu); consider increasing OIDCCacheShmEntrySizeMax",
-				(unsigned long long)strlen(value), (cfg->cache_shm_entry_size_max - sizeof(oidc_cache_shm_entry_t)));
+				(unsigned long long)strlen(value), (unsigned long)(cfg->cache_shm_entry_size_max - sizeof(oidc_cache_shm_entry_t)));
 		return FALSE;
 	}
 
