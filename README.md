@@ -45,12 +45,12 @@ or account names.
 
 It supports [OpenID Connect Session Management draft 21]
 (http://openid.net/specs/openid-connect-session-1_0.html). See the [Wiki]
-(https://github.com/pingidentity/mod_auth_openidc/wiki) for information
+(https://github.com/pingidentity/mod_auth_openidc/wiki/Session-Management) for information
 on how to configure it.
 
 Additionally it can operate as an OAuth 2.0 Resource Server to an OAuth 2.0 Authorization Server,
 introspecting/validating bearer Access Tokens conforming to [OAuth Token Introspection]
-(https://tools.ietf.org/html/draft-ietf-oauth-introspection-00) or similar. The `REMOTE_USER`
+(https://tools.ietf.org/html/draft-ietf-oauth-introspection-04) or similar. The `REMOTE_USER`
 variable setting, passing claims in HTTP headers and authorization based on Require primitives
 works in the same way as described for OpenID Connect above.
 
@@ -186,7 +186,7 @@ to a specific provider when multiple OPs have been configured. In that case the 
 may also contain a "login_hint" parameter with the login identifier the user might use to log in.
 
 An additional **mod_auth_openidc** specific parameter named `auth_request_params` may also be passed
-in, see the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki#10-how-can-i-add-custom-parameters-to-the-authorization-request)
+in, see the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki#13-how-can-i-add-custom-parameters-to-the-authorization-request)
 for its usage.
 
 ###Sample Config for PingFederate OpenID Connect & OAuth 2.0 Token Introspection
