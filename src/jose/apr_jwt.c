@@ -55,6 +55,22 @@
 #include "apr_jose.h"
 
 /*
+ * assemble an error report
+ */
+void _apr_jwt_error_set(apr_jwt_error_t *error, const char *source,
+		const int line, const char *function, const char *msg, ...) {
+	if (error == NULL)
+		return;
+	snprintf(error->source, APR_JWT_ERROR_SOURCE_LENGTH, "%s", source);
+	error->line = line;
+	snprintf(error->function, APR_JWT_ERROR_FUNCTION_LENGTH, "%s", function);
+	va_list ap;
+	va_start(ap, msg);
+	vsnprintf(error->text, APR_JWT_ERROR_TEXT_LENGTH, msg, ap);
+	va_end(ap);
+}
+
+/*
  * check if a string is an element of an array of strings
  */
 apr_byte_t apr_jwt_array_has_string(apr_array_header_t *haystack,
@@ -138,26 +154,30 @@ int apr_jwt_base64url_decode(apr_pool_t *pool, char **dst, const char *src,
  * parse JSON object from string in to JWT value
  */
 static apr_byte_t apr_jwt_base64url_decode_object(apr_pool_t *pool,
-		const char *str, apr_jwt_value_t *value) {
+		const char *str, apr_jwt_value_t *value, apr_jwt_error_t *err) {
 
 	/* base64url-decode the string representation into value->str */
-	if (apr_jwt_base64url_decode(pool, &value->str, str, 1) < 0)
+	if (apr_jwt_base64url_decode(pool, &value->str, str, 1) <= 0) {
+		apr_jwt_error(err, "apr_jwt_base64url_decode of (%s) failed", str);
 		return FALSE;
+	}
 
 	/* decode the string in to a JSON structure into value->json */
 	json_error_t json_error;
 	value->json = json_loads(value->str, 0, &json_error);
 
-	if (value->json == NULL)
-		return FALSE;
-
 	/* check that we've actually got a JSON value back */
-	if (value->json == NULL)
+	if (value->json == NULL) {
+		apr_jwt_error(err, "JSON parsing (json_loads) failed: %s (%s)",
+				json_error.text, value->str);
 		return FALSE;
+	}
 
 	/* check that the value is a JSON object */
-	if (!json_is_object(value->json))
+	if (!json_is_object(value->json)) {
+		apr_jwt_error(err, "JSON value is not an object");
 		return FALSE;
+	}
 
 	return TRUE;
 }
@@ -166,12 +186,22 @@ static apr_byte_t apr_jwt_base64url_decode_object(apr_pool_t *pool,
  * get (optional) string from JWT
  */
 apr_byte_t apr_jwt_get_string(apr_pool_t *pool, apr_jwt_value_t *value,
-		const char *claim_name, char **result) {
+		const char *claim_name, apr_byte_t is_mandatory, char **result,
+		apr_jwt_error_t *err) {
 	json_t *v = json_object_get(value->json, claim_name);
-	if ((v != NULL) && (json_is_string(v))) {
-		*result = apr_pstrdup(pool, json_string_value(v));
-	} else {
-		*result = NULL;
+	if (v != NULL) {
+		if (json_is_string(v)) {
+			*result = apr_pstrdup(pool, json_string_value(v));
+		} else if (is_mandatory) {
+			apr_jwt_error(err,
+					"mandatory JSON key \"%s\" was found but the type is not a string",
+					claim_name);
+			return FALSE;
+		}
+	} else if (is_mandatory) {
+		apr_jwt_error(err, "mandatory JSON key \"%s\" could not be found",
+				claim_name);
+		return FALSE;
 	}
 	return TRUE;
 }
@@ -179,13 +209,25 @@ apr_byte_t apr_jwt_get_string(apr_pool_t *pool, apr_jwt_value_t *value,
 /*
  * parse (optional) timestamp from payload
  */
-static apr_byte_t apr_jwt_parse_timestamp(apr_pool_t *pool,
-		apr_jwt_value_t *value, const char *claim_name, json_int_t *result) {
+static apr_byte_t apr_jwt_get_timestamp(apr_pool_t *pool,
+		apr_jwt_value_t *value, const char *claim_name, apr_byte_t is_mandatory,
+		json_int_t *result, apr_jwt_error_t *err) {
 	json_t *v = json_object_get(value->json, claim_name);
-	if ((v != NULL) && (json_is_integer(v))) {
-		*result = json_integer_value(v);
-	} else {
+	if (v != NULL) {
+		if (json_is_integer(v)) {
+			*result = json_integer_value(v);
+		} else if (is_mandatory) {
+			apr_jwt_error(err,
+					"mandatory JSON key \"%s\" was found but the type is not a number",
+					claim_name);
+			*result = APR_JWT_CLAIM_TIME_EMPTY;
+			return FALSE;
+		}
+	} else if (is_mandatory) {
+		apr_jwt_error(err, "mandatory JSON key \"%s\" could not be found",
+				claim_name);
 		*result = APR_JWT_CLAIM_TIME_EMPTY;
+		return FALSE;
 	}
 	return TRUE;
 }
@@ -194,24 +236,23 @@ static apr_byte_t apr_jwt_parse_timestamp(apr_pool_t *pool,
  * parse a JWT header
  */
 apr_byte_t apr_jwt_parse_header(apr_pool_t *pool, const char *s_header,
-		apr_jwt_header_t *header) {
+		apr_jwt_header_t *header, apr_jwt_error_t *err) {
 
 	/* decode the JWT JSON header */
-	if (apr_jwt_base64url_decode_object(pool, s_header, &header->value) == FALSE)
+	if (apr_jwt_base64url_decode_object(pool, s_header, &header->value,
+			err) == FALSE)
 		return FALSE;
 
-	/* parse the (optional) signing algorithm */
-	apr_jwt_get_string(pool, &header->value, "alg", &header->alg);
-
-	/* check that the mandatory algorithm was set */
-	if (header->alg == NULL)
+	/* parse the (mandatory) signing algorithm */
+	if (apr_jwt_get_string(pool, &header->value, "alg", TRUE, &header->alg,
+			err) == FALSE)
 		return FALSE;
 
 	/* parse the (optional) kid */
-	apr_jwt_get_string(pool, &header->value, "kid", &header->kid);
+	apr_jwt_get_string(pool, &header->value, "kid", FALSE, &header->kid, NULL);
 
 	/* parse the (optional) enc */
-	apr_jwt_get_string(pool, &header->value, "enc", &header->enc);
+	apr_jwt_get_string(pool, &header->value, "enc", FALSE, &header->enc, NULL);
 
 	return TRUE;
 }
@@ -220,24 +261,28 @@ apr_byte_t apr_jwt_parse_header(apr_pool_t *pool, const char *s_header,
  * parse JWT payload
  */
 static apr_byte_t apr_jwt_parse_payload(apr_pool_t *pool, const char *s_payload,
-		apr_jwt_payload_t *payload) {
+		apr_jwt_payload_t *payload, apr_jwt_error_t *err) {
 
 	/* decode the JWT JSON payload */
-	if (apr_jwt_base64url_decode_object(pool, s_payload,
-			&payload->value) == FALSE)
+	if (apr_jwt_base64url_decode_object(pool, s_payload, &payload->value,
+			err) == FALSE)
 		return FALSE;
 
 	/* get the (optional) "issuer" value from the JSON payload */
-	apr_jwt_get_string(pool, &payload->value, "iss", &payload->iss);
+	apr_jwt_get_string(pool, &payload->value, "iss", FALSE, &payload->iss,
+			NULL);
 
 	/* get the (optional) "exp" value from the JSON payload */
-	apr_jwt_parse_timestamp(pool, &payload->value, "exp", &payload->exp);
+	apr_jwt_get_timestamp(pool, &payload->value, "exp", FALSE, &payload->exp,
+			NULL);
 
 	/* get the (optional) "iat" value from the JSON payload */
-	apr_jwt_parse_timestamp(pool, &payload->value, "iat", &payload->iat);
+	apr_jwt_get_timestamp(pool, &payload->value, "iat", FALSE, &payload->iat,
+			NULL);
 
 	/* get the (optional) "sub" value from the JSON payload */
-	apr_jwt_get_string(pool, &payload->value, "sub", &payload->sub);
+	apr_jwt_get_string(pool, &payload->value, "sub", FALSE, &payload->sub,
+			NULL);
 
 	return TRUE;
 }
@@ -278,13 +323,14 @@ apr_array_header_t *apr_jwt_compact_deserialize(apr_pool_t *pool,
 /*
  * return plain deserialized header text
  */
-const char *apr_jwt_header_to_string(apr_pool_t *pool, const char *s_json) {
+const char *apr_jwt_header_to_string(apr_pool_t *pool, const char *s_json,
+		apr_jwt_error_t *err) {
 	apr_array_header_t *unpacked = apr_jwt_compact_deserialize(pool, s_json);
 	if (unpacked->nelts < 1)
 		return NULL;
 	apr_jwt_header_t header;
-	if (apr_jwt_parse_header(pool, ((const char**) unpacked->elts)[0],
-			&header) == FALSE)
+	if (apr_jwt_parse_header(pool, ((const char**) unpacked->elts)[0], &header,
+			err) == FALSE)
 		return NULL;
 	json_decref(header.value.json);
 	return header.value.str;
@@ -294,33 +340,40 @@ const char *apr_jwt_header_to_string(apr_pool_t *pool, const char *s_json) {
  * parse a JSON Web Token
  */
 apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
-		apr_jwt_t **j_jwt, apr_hash_t *private_keys, const char *shared_key) {
+		apr_jwt_t **j_jwt, apr_hash_t *private_keys, const char *shared_key,
+		apr_jwt_error_t *err) {
 
 	*j_jwt = apr_pcalloc(pool, sizeof(apr_jwt_t));
 	apr_jwt_t *jwt = *j_jwt;
 
 	apr_array_header_t *unpacked = apr_jwt_compact_deserialize(pool, s_json);
-	if (unpacked->nelts < 2)
+	if (unpacked->nelts < 2) {
+		apr_jwt_error(err,
+				"could not successfully deserialize 2 or more elements from JWT header");
 		return FALSE;
+	}
 
 	/* parse the header fields */
 	if (apr_jwt_parse_header(pool, ((const char**) unpacked->elts)[0],
-			&jwt->header) == FALSE)
+			&jwt->header, err) == FALSE)
 		return FALSE;
 
 	if (apr_jwe_is_encrypted_jwt(pool, &jwt->header)) {
 		char *decrypted = NULL;
 		if ((apr_jwe_decrypt_jwt(pool, &jwt->header, unpacked, private_keys,
-				shared_key, &decrypted) == FALSE) || (decrypted == NULL))
+				shared_key, &decrypted, err) == FALSE) || (decrypted == NULL))
 			return FALSE;
 		apr_array_clear(unpacked);
 		unpacked = apr_jwt_compact_deserialize(pool, (const char *) decrypted);
 		json_decref(jwt->header.value.json);
-		if (unpacked->nelts < 2)
+		if (unpacked->nelts < 2) {
+			apr_jwt_error(err,
+					"could not successfully deserialize 2 or more elements from decrypted JWT header");
 			return FALSE;
+		}
 		/* parse the nested header fields */
 		if (apr_jwt_parse_header(pool, ((const char**) unpacked->elts)[0],
-				&jwt->header) == FALSE)
+				&jwt->header, err) == FALSE)
 			return FALSE;
 	}
 
@@ -330,7 +383,7 @@ apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
 
 	/* parse the payload fields */
 	if (apr_jwt_parse_payload(pool, ((const char**) unpacked->elts)[1],
-			&jwt->payload) == FALSE) {
+			&jwt->payload, err) == FALSE) {
 		json_decref(jwt->header.value.json);
 		return FALSE;
 	}
@@ -341,6 +394,8 @@ apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
 				&jwt->signature) == FALSE) {
 			json_decref(jwt->header.value.json);
 			json_decref(jwt->payload.value.json);
+			apr_jwt_error(err,
+					"could not successfully parse (base64urldecode) JWT signature");
 			return FALSE;
 		}
 	}

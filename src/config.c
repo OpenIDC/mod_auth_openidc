@@ -464,9 +464,11 @@ static const char *oidc_set_public_key_files_enc(cmd_parms *cmd, void *dummy,
 			cmd->server->module_config, &auth_openidc_module);
 	char *jwk = NULL;
 	char *kid = NULL;
-	if (apr_jwk_pem_to_json(cmd->pool, arg, &jwk, &kid) == FALSE) {
-		return apr_psprintf(cmd->pool, "apr_jwk_pem_to_json failed for: %s",
-				arg);
+	apr_jwt_error_t err;
+	if (apr_jwk_pem_to_json(cmd->pool, arg, &jwk, &kid, &err) == FALSE) {
+		return apr_psprintf(cmd->pool,
+				"apr_jwk_pem_to_json failed for \"%s\": %s", arg,
+				apr_jwt_e2s(cmd->pool, err));
 	}
 	if (cfg->public_keys == NULL)
 		cfg->public_keys = apr_hash_make(cmd->pool);
@@ -483,9 +485,12 @@ static const char *oidc_set_private_key_files_enc(cmd_parms *cmd, void *dummy,
 			cmd->server->module_config, &auth_openidc_module);
 	char *jwk = NULL;
 	char *kid = NULL;
-	if (apr_jwk_private_key_to_rsa_jwk(cmd->pool, arg, &jwk, &kid) == FALSE) {
+	apr_jwt_error_t err;
+	if (apr_jwk_private_key_to_rsa_jwk(cmd->pool, arg, &jwk, &kid,
+			&err) == FALSE) {
 		return apr_psprintf(cmd->pool,
-				"apr_jwk_private_key_to_rsa_jwk failed for: %s", arg);
+				"apr_jwk_private_key_to_rsa_jwk failed for \"%s\": %s", arg,
+				apr_jwt_e2s(cmd->pool, err));
 	}
 	if (cfg->private_keys == NULL)
 		cfg->private_keys = apr_hash_make(cmd->pool);

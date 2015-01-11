@@ -290,10 +290,12 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	oidc_debug(r, "enter");
 
 	apr_jwt_t *jwt = NULL;
+	apr_jwt_error_t err;
 	if (apr_jwt_parse(r->pool, state, &jwt, c->private_keys,
-			c->provider.client_secret) == FALSE) {
+			c->provider.client_secret, &err) == FALSE) {
 		oidc_error(r,
-				"could not parse JWT from state: invalid unsolicited response");
+				"could not parse JWT from state: invalid unsolicited response: %s",
+				apr_jwt_e2s(r->pool, err));
 		return FALSE;
 	}
 
@@ -313,10 +315,9 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	}
 
 	char *rfp = NULL;
-	apr_jwt_get_string(r->pool, &jwt->payload.value, "rfp", &rfp);
-	if (rfp == NULL) {
+	if (apr_jwt_get_string(r->pool, &jwt->payload.value, "rfp", TRUE, &rfp, &err) == FALSE) {
 		oidc_error(r,
-				"no \"rfp\" claim could be retrieved from JWT state, aborting");
+				"no \"rfp\" claim could be retrieved from JWT state, aborting: %s", apr_jwt_e2s(r->pool, err));
 		apr_jwt_destroy(jwt);
 		return FALSE;
 	}
@@ -328,8 +329,8 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	}
 
 	char *target_link_uri = NULL;
-	apr_jwt_get_string(r->pool, &jwt->payload.value, "target_uri",
-			&target_link_uri);
+	apr_jwt_get_string(r->pool, &jwt->payload.value, "target_uri", FALSE,
+			&target_link_uri, NULL);
 	if (target_link_uri == NULL) {
 		if (c->default_sso_url == NULL) {
 			oidc_error(r,
@@ -363,7 +364,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	}
 
 	char *jti = NULL;
-	apr_jwt_get_string(r->pool, &jwt->payload.value, "jti", &jti);
+	apr_jwt_get_string(r->pool, &jwt->payload.value, "jti", FALSE, &jti, NULL);
 	if (jti == NULL) {
 		apr_jwt_base64url_encode(r->pool, &jti,
 				(const char *) jwt->signature.bytes, jwt->signature.length, 0);

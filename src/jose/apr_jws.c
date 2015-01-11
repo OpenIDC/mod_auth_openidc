@@ -128,16 +128,25 @@ static char *apr_jws_alg_to_openssl_digest(const char *alg) {
 /*
  * return an EVP structure for the specified algorithm
  */
-const EVP_MD *apr_jws_crypto_alg_to_evp(apr_pool_t *pool, const char *alg) {
+const EVP_MD *apr_jws_crypto_alg_to_evp(apr_pool_t *pool, const char *alg,
+		apr_jwt_error_t *err) {
 	const EVP_MD *result = NULL;
 
 	char *digest = apr_jws_alg_to_openssl_digest(alg);
-	if (digest == NULL)
+	if (digest == NULL) {
+		apr_jwt_error(err,
+				"no OpenSSL digest algorithm name found for algorithm \"%s\"",
+				alg);
 		return NULL;
+	}
 
 	result = EVP_get_digestbyname(digest);
-	if (result == NULL)
+	if (result == NULL) {
+		apr_jwt_error(err,
+				"no OpenSSL digest algorithm found for algorithm \"%s\"",
+				digest);
 		return NULL;
+	}
 
 	return result;
 }
@@ -146,11 +155,11 @@ const EVP_MD *apr_jws_crypto_alg_to_evp(apr_pool_t *pool, const char *alg) {
  * verify HMAC signature on JWT
  */
 apr_byte_t apr_jws_verify_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
-		const char *key, const unsigned int key_len) {
+		const char *key, const unsigned int key_len, apr_jwt_error_t *err) {
 
 	/* get the OpenSSL digest function */
 	const EVP_MD *digest = NULL;
-	if ((digest = apr_jws_crypto_alg_to_evp(pool, jwt->header.alg)) == NULL)
+	if ((digest = apr_jws_crypto_alg_to_evp(pool, jwt->header.alg, err)) == NULL)
 		return FALSE;
 
 	/* prepare the message */
@@ -162,16 +171,24 @@ apr_byte_t apr_jws_verify_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
 	unsigned char md[EVP_MAX_MD_SIZE];
 
 	/* apply the HMAC function to the message with the provided key */
-	if (!HMAC(digest, key, key_len, msg, msg_len, md, &md_len))
+	if (!HMAC(digest, key, key_len, msg, msg_len, md, &md_len)) {
+		apr_jwt_error_openssl(err, "HMAC");
 		return FALSE;
+	}
 
 	/* check that the length of the hash matches what was provided to us in the signature */
-	if (md_len != jwt->signature.length)
+	if (md_len != jwt->signature.length) {
+		apr_jwt_error(err,
+				"calculated hash length differs from the length of the signature provided in the JWT");
 		return FALSE;
+	}
 
 	/* do a comparison of the provided hash value against calculated hash value */
-	if (memcmp(md, jwt->signature.bytes, md_len) != 0)
+	if (memcmp(md, jwt->signature.bytes, md_len) != 0) {
+		apr_jwt_error(err,
+				"calculated hash  differs from the signature provided in the JWT");
 		return FALSE;
+	}
 
 	/* all OK if we got to here */
 	return TRUE;
@@ -181,19 +198,33 @@ apr_byte_t apr_jws_verify_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
  * hash a byte sequence with the specified algorithm
  */
 apr_byte_t apr_jws_hash_bytes(apr_pool_t *pool, const char *s_digest,
-		const unsigned char *input, unsigned int input_len, unsigned char **output, unsigned int *output_len) {
+		const unsigned char *input, unsigned int input_len,
+		unsigned char **output, unsigned int *output_len, apr_jwt_error_t *err) {
 	unsigned char md_value[EVP_MAX_MD_SIZE];
 
 	EVP_MD_CTX ctx;
 	EVP_MD_CTX_init(&ctx);
 
 	const EVP_MD *evp_digest = NULL;
-	if ((evp_digest = EVP_get_digestbyname(s_digest)) == NULL)
+	if ((evp_digest = EVP_get_digestbyname(s_digest)) == NULL) {
+		apr_jwt_error(err,
+				"no OpenSSL digest algorithm found for algorithm \"%s\"",
+				s_digest);
 		return FALSE;
+	}
 
-	EVP_DigestInit_ex(&ctx, evp_digest, NULL);
-	EVP_DigestUpdate(&ctx, input, input_len);
-	EVP_DigestFinal_ex(&ctx, md_value, output_len);
+	if (!EVP_DigestInit_ex(&ctx, evp_digest, NULL)) {
+		apr_jwt_error_openssl(err, "EVP_DigestInit_ex");
+		return FALSE;
+	}
+	if (!EVP_DigestUpdate(&ctx, input, input_len)) {
+		apr_jwt_error_openssl(err, "EVP_DigestUpdate");
+		return FALSE;
+	}
+	if (!EVP_DigestFinal_ex(&ctx, md_value, output_len)) {
+		apr_jwt_error_openssl(err, "EVP_DigestFinal_ex");
+		return FALSE;
+	}
 
 	EVP_MD_CTX_cleanup(&ctx);
 
@@ -207,13 +238,19 @@ apr_byte_t apr_jws_hash_bytes(apr_pool_t *pool, const char *s_digest,
  * hash a string value with the specified algorithm
  */
 apr_byte_t apr_jws_hash_string(apr_pool_t *pool, const char *alg,
-		const char *msg, char **hash, unsigned int *hash_len) {
+		const char *msg, char **hash, unsigned int *hash_len,
+		apr_jwt_error_t *err) {
 
 	char *s_digest = apr_jws_alg_to_openssl_digest(alg);
-	if (s_digest == NULL)
+	if (s_digest == NULL) {
+		apr_jwt_error(err,
+				"no OpenSSL digest algorithm name found for algorithm \"%s\"",
+				alg);
 		return FALSE;
+	}
 
-	return apr_jws_hash_bytes(pool, s_digest, (const unsigned char *)msg, strlen(msg), (unsigned char **)hash, hash_len);
+	return apr_jws_hash_bytes(pool, s_digest, (const unsigned char *) msg,
+			strlen(msg), (unsigned char **) hash, hash_len, err);
 }
 
 /*
@@ -238,13 +275,14 @@ int apr_jws_hash_length(const char *alg) {
 /*
  * verify HMAC signature on JWT
  */
-apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk) {
+apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk,
+		apr_jwt_error_t *err) {
 
 	apr_byte_t rc = FALSE;
 
 	/* get the OpenSSL digest function */
 	const EVP_MD *digest = NULL;
-	if ((digest = apr_jws_crypto_alg_to_evp(pool, jwt->header.alg)) == NULL)
+	if ((digest = apr_jws_crypto_alg_to_evp(pool, jwt->header.alg, err)) == NULL)
 		return FALSE;
 
 	EVP_MD_CTX ctx;
@@ -264,6 +302,7 @@ apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk) 
 	EVP_PKEY* pRsaKey = EVP_PKEY_new();
 	if (!EVP_PKEY_assign_RSA(pRsaKey, pubkey)) {
 		pRsaKey = NULL;
+		apr_jwt_error_openssl(err, "EVP_PKEY_assign_RSA");
 		goto end;
 	}
 
@@ -273,40 +312,60 @@ apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk) 
 		unsigned char *pDecrypted = apr_pcalloc(pool, jwt->signature.length);
 		status = RSA_public_decrypt(jwt->signature.length, jwt->signature.bytes,
 				pDecrypted, pubkey, RSA_NO_PADDING);
-		if (status == -1)
+		if (status == -1) {
+			apr_jwt_error_openssl(err, "RSA_public_decrypt");
 			goto end;
+		}
 
 		unsigned char *pDigest = apr_pcalloc(pool, RSA_size(pubkey));
 		unsigned int uDigestLen = RSA_size(pubkey);
 
-		EVP_DigestInit(&ctx, digest);
-		EVP_DigestUpdate(&ctx, jwt->message, strlen(jwt->message));
-		EVP_DigestFinal(&ctx, pDigest, &uDigestLen);
+		if (!EVP_DigestInit(&ctx, digest)) {
+			apr_jwt_error_openssl(err, "EVP_DigestInit");
+			goto end;
+		}
+		if (!EVP_DigestUpdate(&ctx, jwt->message, strlen(jwt->message))) {
+			apr_jwt_error_openssl(err, "EVP_DigestUpdate");
+			goto end;
+		}
+		if (!EVP_DigestFinal(&ctx, pDigest, &uDigestLen)) {
+			apr_jwt_error_openssl(err, "wrong key? EVP_DigestFinal");
+			goto end;
+		}
 
 		/* verify the data */
 		status = RSA_verify_PKCS1_PSS(pubkey, pDigest, digest, pDecrypted,
 				-2 /* salt length recovered from signature*/);
-		if (status != 1)
+		if (status != 1) {
+			apr_jwt_error_openssl(err, "RSA_verify_PKCS1_PSS");
 			goto end;
+		}
 
 		rc = TRUE;
 
 	} else if (apr_jws_signature_starts_with(pool, jwt->header.alg, "RS",
 			2) == TRUE) {
 
-		if (!EVP_VerifyInit_ex(&ctx, digest, NULL))
+		if (!EVP_VerifyInit_ex(&ctx, digest, NULL)) {
+			apr_jwt_error_openssl(err, "EVP_VerifyInit_ex");
 			goto end;
-		if (!EVP_VerifyUpdate(&ctx, jwt->message, strlen(jwt->message)))
+		}
+		if (!EVP_VerifyUpdate(&ctx, jwt->message, strlen(jwt->message))) {
+			apr_jwt_error_openssl(err, "EVP_VerifyUpdate");
 			goto end;
+		}
 		if (!EVP_VerifyFinal(&ctx, (const unsigned char *) jwt->signature.bytes,
-				jwt->signature.length, pRsaKey))
+				jwt->signature.length, pRsaKey)) {
+			apr_jwt_error_openssl(err, "wrong key? EVP_VerifyFinal");
 			goto end;
+		}
 
 		rc = TRUE;
 
 	}
 
 end:
+
 	if (pRsaKey) {
 		EVP_PKEY_free(pRsaKey);
 	} else if (pubkey) {
@@ -335,21 +394,30 @@ static int apr_jws_ec_alg_to_curve(const char *alg) {
 /*
  * verify EC signature on JWT
  */
-apr_byte_t apr_jws_verify_ec(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk) {
+apr_byte_t apr_jws_verify_ec(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk,
+		apr_jwt_error_t *err) {
 
 	int nid = apr_jws_ec_alg_to_curve(jwt->header.alg);
-	if (nid == -1)
+	if (nid == -1) {
+		apr_jwt_error(err,
+				"no OpenSSL Elliptic Curve identifier found for algorithm \"%s\"",
+				jwt->header.alg);
 		return FALSE;
+	}
 
 	EC_GROUP *curve = EC_GROUP_new_by_curve_name(nid);
-	if (curve == NULL)
+	if (curve == NULL) {
+		apr_jwt_error(err,
+				"no OpenSSL Elliptic Curve found for algorithm \"%s\"",
+				jwt->header.alg);
 		return FALSE;
+	}
 
 	apr_byte_t rc = FALSE;
 
 	/* get the OpenSSL digest function */
 	const EVP_MD *digest = NULL;
-	if ((digest = apr_jws_crypto_alg_to_evp(pool, jwt->header.alg)) == NULL)
+	if ((digest = apr_jws_crypto_alg_to_evp(pool, jwt->header.alg, err)) == NULL)
 		return FALSE;
 
 	EVP_MD_CTX ctx;
@@ -364,30 +432,42 @@ apr_byte_t apr_jws_verify_ec(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk) {
 	BN_bin2bn(jwk->key.ec->x, jwk->key.ec->x_len, x);
 	BN_bin2bn(jwk->key.ec->y, jwk->key.ec->y_len, y);
 
-	if (!EC_KEY_set_public_key_affine_coordinates(pubkey, x, y))
+	if (!EC_KEY_set_public_key_affine_coordinates(pubkey, x, y)) {
+		apr_jwt_error_openssl(err, "EC_KEY_set_public_key_affine_coordinates");
 		return FALSE;
+	}
 
 	EVP_PKEY* pEcKey = EVP_PKEY_new();
 	if (!EVP_PKEY_assign_EC_KEY(pEcKey, pubkey)) {
 		pEcKey = NULL;
+		apr_jwt_error_openssl(err, "EVP_PKEY_assign_EC_KEY");
 		goto end;
 	}
 
 	ctx.pctx = EVP_PKEY_CTX_new(pEcKey, NULL);
 
-	if (!EVP_PKEY_verify_init(ctx.pctx))
+	if (!EVP_PKEY_verify_init(ctx.pctx)) {
+		apr_jwt_error_openssl(err, "EVP_PKEY_verify_init");
 		goto end;
-	if (!EVP_VerifyInit_ex(&ctx, digest, NULL))
+	}
+	if (!EVP_VerifyInit_ex(&ctx, digest, NULL)) {
+		apr_jwt_error_openssl(err, "EVP_VerifyInit_ex");
 		goto end;
-	if (!EVP_VerifyUpdate(&ctx, jwt->message, strlen(jwt->message)))
+	}
+	if (!EVP_VerifyUpdate(&ctx, jwt->message, strlen(jwt->message))) {
+		apr_jwt_error_openssl(err, "EVP_VerifyUpdate");
 		goto end;
+	}
 	if (!EVP_VerifyFinal(&ctx, (const unsigned char *) jwt->signature.bytes,
-			jwt->signature.length, pEcKey))
+			jwt->signature.length, pEcKey)) {
+		apr_jwt_error_openssl(err, "wrong key? EVP_VerifyFinal");
 		goto end;
+	}
 
 	rc = TRUE;
 
 end:
+
 	if (pEcKey) {
 		EVP_PKEY_free(pEcKey);
 	} else if (pubkey) {

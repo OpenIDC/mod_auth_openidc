@@ -45,7 +45,7 @@
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * JSON Web Tokens Signing and Encryption
+ * JSON Object Signing and Encryption
  *
  * @Author: Hans Zandbelt - hzandbelt@pingidentity.com
  */
@@ -61,6 +61,25 @@
 #include "jansson.h"
 
 #define APR_JWT_CLAIM_TIME_EMPTY -1
+
+#define APR_JWT_ERROR_TEXT_LENGTH    200
+#define APR_JWT_ERROR_SOURCE_LENGTH   80
+#define APR_JWT_ERROR_FUNCTION_LENGTH 80
+
+/* struct for returning errors to the caller */
+typedef struct {
+	char source[JSON_ERROR_SOURCE_LENGTH];
+	int line;
+	char function[APR_JWT_ERROR_FUNCTION_LENGTH];
+	char text[APR_JWT_ERROR_TEXT_LENGTH];
+} apr_jwt_error_t;
+
+void _apr_jwt_error_set(apr_jwt_error_t *, const char *, const int,
+		const char *, const char *msg, ...);
+#define apr_jwt_error(err, msg, ...) _apr_jwt_error_set(err, __FILE__, __LINE__, __FUNCTION__, msg, ##__VA_ARGS__)
+#define apr_jwt_error_openssl(err, msg, ...) _apr_jwt_error_set(err, __FILE__, __LINE__, __FUNCTION__, "%s() failed: %s", msg, ERR_error_string(ERR_get_error(), NULL), ##__VA_ARGS__)
+
+#define apr_jwt_e2s(pool, err) apr_psprintf(pool, "[%s:%d: %s]: %s\n", err.source, err.line, err.function, err.text)
 
 /*
  * JSON Web Token handling
@@ -121,27 +140,33 @@ typedef struct apr_jwt_t {
 } apr_jwt_t;
 
 /* helpers */
-typedef apr_byte_t (*apr_jose_is_supported_function_t)(apr_pool_t *, const char *);
+typedef apr_byte_t (*apr_jose_is_supported_function_t)(apr_pool_t *,
+		const char *);
 apr_byte_t apr_jwt_array_has_string(apr_array_header_t *haystack,
 		const char *needle);
 int apr_jwt_base64url_encode(apr_pool_t *pool, char **dst, const char *src,
 		int src_len, int padding);
 int apr_jwt_base64url_decode(apr_pool_t *pool, char **dst, const char *src,
 		int padding);
-const char *apr_jwt_header_to_string(apr_pool_t *pool, const char *s_json);
+const char *apr_jwt_header_to_string(apr_pool_t *pool, const char *s_json,
+		apr_jwt_error_t *err);
 
 /* return a string claim value from a JSON Web Token */
 apr_byte_t apr_jwt_get_string(apr_pool_t *pool, apr_jwt_value_t *value,
-		const char *claim_name, char **result);
+		const char *claim_name, apr_byte_t is_mandatory, char **result,
+		apr_jwt_error_t *err);
 /* parse a string in to a JSON Web Token struct */
 apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
-		apr_jwt_t **j_jwt, apr_hash_t *private_keys, const char *shared_key);
+		apr_jwt_t **j_jwt, apr_hash_t *private_keys, const char *shared_key,
+		apr_jwt_error_t *err);
 /* destroy resources allocated for JWT */
 void apr_jwt_destroy(apr_jwt_t *);
 
 /* exported for the purpose of the test suite */
-apr_array_header_t *apr_jwt_compact_deserialize(apr_pool_t *pool, const char *str);
-apr_byte_t apr_jwt_parse_header(apr_pool_t *pool, const char *s_header, apr_jwt_header_t *header);
+apr_array_header_t *apr_jwt_compact_deserialize(apr_pool_t *pool,
+		const char *str);
+apr_byte_t apr_jwt_parse_header(apr_pool_t *pool, const char *s_header,
+		apr_jwt_header_t *header, apr_jwt_error_t *err);
 
 /*
  * JSON Web Key handling
@@ -198,11 +223,13 @@ typedef struct apr_jwk_t {
 
 /* parse a JSON representation in to a JSON Web Key struct (also storing the string representation */
 apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, json_t *j_json,
-		const char *s_json, apr_jwk_t **j_jwk);
+		const char *s_json, apr_jwk_t **j_jwk, apr_jwt_error_t *err);
 /* convert the RSA public key in a PEM formatted file with an X.509 cert in to an RSA JWK */
-apr_byte_t apr_jwk_pem_to_json(apr_pool_t *pool, const char *filename, char **jwk, char**kid);
+apr_byte_t apr_jwk_pem_to_json(apr_pool_t *pool, const char *filename,
+		char **jwk, char**kid, apr_jwt_error_t *err);
 /* convert the RSA private key in a PEM formatted file in to an RSA JWK */
-apr_byte_t apr_jwk_private_key_to_rsa_jwk(apr_pool_t *pool, const char *filename, char **jwk, char**kid);
+apr_byte_t apr_jwk_private_key_to_rsa_jwk(apr_pool_t *pool,
+		const char *filename, char **jwk, char**kid, apr_jwt_error_t *err);
 
 /*
  * JSON Web Token Signature handling
@@ -221,18 +248,22 @@ apr_byte_t apr_jws_signature_is_rsa(apr_pool_t *pool, apr_jwt_t *jwt);
 apr_byte_t apr_jws_signature_is_ec(apr_pool_t *pool, apr_jwt_t *jwt);
 /* verify the HMAC signature on a JWT */
 apr_byte_t apr_jws_verify_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
-		const char *key, const unsigned int key_len);
+		const char *key, const unsigned int key_len, apr_jwt_error_t *err);
 /* verify the RSA signature on a JWT */
-apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk);
+apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk,
+		apr_jwt_error_t *err);
 /* verify the Elliptic Curve signature on a JWT */
-apr_byte_t apr_jws_verify_ec(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk);
+apr_byte_t apr_jws_verify_ec(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk,
+		apr_jwt_error_t *err);
 
 /* hash byte sequence */
 apr_byte_t apr_jws_hash_bytes(apr_pool_t *pool, const char *s_digest,
-		const unsigned char *input, unsigned int input_len, unsigned char **output, unsigned int *output_len);
+		const unsigned char *input, unsigned int input_len,
+		unsigned char **output, unsigned int *output_len, apr_jwt_error_t *err);
 /* hash a string */
 apr_byte_t apr_jws_hash_string(apr_pool_t *pool, const char *alg,
-		const char *msg, char **hash, unsigned int *hash_len);
+		const char *msg, char **hash, unsigned int *hash_len,
+		apr_jwt_error_t *err);
 /* length of hash */
 int apr_jws_hash_length(const char *alg);
 
@@ -250,6 +281,8 @@ apr_array_header_t *apr_jwe_supported_encryptions(apr_pool_t *pool);
 apr_byte_t apr_jwe_encryption_is_supported(apr_pool_t *pool, const char *enc);
 
 apr_byte_t apr_jwe_is_encrypted_jwt(apr_pool_t *pool, apr_jwt_header_t *hdr);
-apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header, apr_array_header_t *unpacked, apr_hash_t *private_keys, const char *shared_key, char **decrypted);
+apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header,
+		apr_array_header_t *unpacked, apr_hash_t *private_keys,
+		const char *shared_key, char **decrypted, apr_jwt_error_t *err);
 
 #endif /* _APR_JOSE_H_ */
