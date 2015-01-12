@@ -41,9 +41,7 @@ in a specified metadata directory.
 It supports [OpenID Connect Dynamic Client Registration]
 (http://openid.net/specs/openid-connect-registration-1_0.html) and [OpenID Provider
 Discovery] (http://openid.net/specs/openid-connect-discovery-1_0.html) through domain
-or account names.
-
-It supports [OpenID Connect Session Management draft 21]
+or account names. It also supports [OpenID Connect Session Management draft 21]
 (http://openid.net/specs/openid-connect-session-1_0.html). See the [Wiki]
 (https://github.com/pingidentity/mod_auth_openidc/wiki/Session-Management) for information
 on how to configure it.
@@ -89,12 +87,7 @@ authorization setting in the `Location` primitive similar to:
     Require claim hd:<your-domain>
 
 The above is an authorization example of an exact match of a provided claim against a string value.
-You can also match claim values against regular expressions by using `claim~<expression>` instead of
-`claim:<literal>`, e.g.:
-
-    Require claim "name~\w+ Jones$"
-
-to match all users with last name Jones and a single first name (i.e. roughly equivalent to `Require claim family_name:Jones`).
+For more authorization options see the [Wiki page on Authorization] (https://github.com/pingidentity/mod_auth_openidc/wiki/Authorization).
 
 ###Sample Config for Multiple OpenID Connect Providers
 
