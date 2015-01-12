@@ -1,3 +1,6 @@
+1/12/2015
+- improve accuracy of expired/invalid session handling
+
 1/11/2015
 - add error type and return values to JOSE functions
 - fix return result on error in function that decrypts CEK

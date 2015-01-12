@@ -351,13 +351,11 @@ static apr_status_t oidc_session_load_cache(request_rec *r, session_rec *z) {
 
 	/* get the string-encoded session from the cache based on the key */
 	if (uuid != NULL) {
-		if (c->cache->get(r, OIDC_CACHE_SECTION_SESSION, uuid,
-				&z->encoded) == TRUE)
-			return APR_SUCCESS;
+		c->cache->get(r, OIDC_CACHE_SECTION_SESSION, uuid, &z->encoded);
 		//oidc_util_set_cookie(r, d->cookie, "");
 	}
 
-	return APR_EGENERAL;
+	return (z->encoded != NULL) ? APR_SUCCESS : APR_EGENERAL;
 }
 
 /*
@@ -475,6 +473,9 @@ static apr_status_t oidc_session_load_22(request_rec *r, session_rec **zz) {
 
 		oidc_warn(r, "session restored from cache has expired");
 		apr_table_clear(z->entries);
+		z->expiry = 0;
+		z->encoded = NULL;
+
 		return APR_EGENERAL;
 	}
 
