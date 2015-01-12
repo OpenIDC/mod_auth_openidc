@@ -164,12 +164,12 @@ static char *test_jwt_parse(apr_pool_t *pool) {
 			apr_jws_verify_hmac(pool, jwt, raw_key, raw_key_len, &err));
 
 	s[5] = '.';
-	TST_ASSERT("corrupted header (1) apr_jwt_parse",
-			apr_jwt_parse(pool, s, &jwt, NULL, NULL, &err) == FALSE);
+	TST_ASSERT_ERR("corrupted header (1) apr_jwt_parse",
+			apr_jwt_parse(pool, s, &jwt, NULL, NULL, &err) == FALSE, pool, err);
 
 	s[0] = '\0';
-	TST_ASSERT("corrupted header (2) apr_jwt_parse",
-			apr_jwt_parse(pool, s, &jwt, NULL, NULL, &err) == FALSE);
+	TST_ASSERT_ERR("corrupted header (2) apr_jwt_parse",
+			apr_jwt_parse(pool, s, &jwt, NULL, NULL, &err) == FALSE, pool, err);
 
 	return 0;
 }
@@ -201,8 +201,8 @@ static char *test_jwt_parse_pkey(apr_pool_t *pool) {
 					"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IloxTkNqb2plaUhBaWItR204dkZFNnlhNmxQTSJ9.eyJub25jZSI6ImF2U2s3UzY5RzRrRUU4S200YlBpT2pyZkNoSHQ2bk80WjM5N0xwX2JRbmMsIiwiaWF0IjoxNDExNTgwODc2LCJhdF9oYXNoIjoieVRxc29PTlpidVdiTjZUYmdldnVEUSIsInN1YiI6IjYzNDNhMjljLTUzOTktNDRhNy05YjM1LTQ5OTBmNDM3N2M5NiIsImFtciI6InBhc3N3b3JkIiwiYXV0aF90aW1lIjoxNDExNTc3MjY3LCJpZHAiOiJpZHNydiIsIm5hbWUiOiJrc29uYXR5IiwiaXNzIjoiaHR0cHM6Ly9hZ3N5bmMuY29tIiwiYXVkIjoiYWdzeW5jX2ltcGxpY2l0IiwiZXhwIjoxNDExNTg0NDc1LCJuYmYiOjE0MTE1ODA4NzV9.lEG-DgHHa0JuOEuOTBvCqyexjRVcKXBnJJm289o2HyTgclpH80DsOMED9RlXCFfuDY7nw9i2cxUmIMAV42AdTxkMPomK3chytcajvpAZJirlk653bo9GTDXJSKZr5fwyEu--qahsoT5t9qvoWyFdYkvmMHFw1-mAHDGgVe23voc9jPuFFIhRRqIn4e8ikzN4VQeEV1UXJD02kYYFn2TRWURgiFyVeTr2r0MTn-auCEsFS_AfR1Bl_kmpMfqwrsicf5MTBvfPJeuSMt3t3d3LOGBkg36_z21X-ZRN7wy1KTjagr7iQ_y5csIpmtqs_QM55TTB9dW1HIosJPhiuMEJEA");
 	apr_jwt_t *jwt = NULL;
 	apr_jwt_error_t err;
-	TST_ASSERT("apr_jwt_parse",
-			apr_jwt_parse(pool, s_jwt, &jwt, NULL, NULL, &err));
+	TST_ASSERT_ERR("apr_jwt_parse",
+			apr_jwt_parse(pool, s_jwt, &jwt, NULL, NULL, &err), pool, err);
 
 	char *s_key =
 			"{"
@@ -219,8 +219,8 @@ static char *test_jwt_parse_pkey(apr_pool_t *pool) {
 	TST_ASSERT("json_loads", ((j_jwk != NULL) && (json_is_object(j_jwk))));
 
 	apr_jwk_t *jwk = NULL;
-	TST_ASSERT("apr_jwk_parse_json",
-			apr_jwk_parse_json(pool, j_jwk, s_key, &jwk, &err));
+	TST_ASSERT_ERR("apr_jwk_parse_json",
+			apr_jwk_parse_json(pool, j_jwk, s_key, &jwk, &err), pool, err);
 
 	TST_ASSERT("apr_jws_verify_rsa", apr_jws_verify_rsa(pool, jwt, jwk, &err));
 
@@ -239,8 +239,10 @@ static char *test_plaintext_jwt_parse(apr_pool_t *pool) {
 					".eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ"
 					".");
 
+	apr_jwt_error_t err;
 	apr_jwt_t *jwt = NULL;
-	TST_ASSERT("apr_jwt_parse", apr_jwt_parse(pool, s, &jwt, NULL, NULL, NULL));
+	TST_ASSERT_ERR("apr_jwt_parse",
+			apr_jwt_parse(pool, s, &jwt, NULL, NULL, &err), pool, err);
 
 	TST_ASSERT_STR("header.alg", jwt->header.alg, "none");
 
@@ -260,7 +262,8 @@ static char *test_jwt_get_string(apr_pool_t *pool) {
 
 	apr_jwt_t *jwt = NULL;
 	apr_jwt_error_t err;
-	TST_ASSERT("apr_jwt_parse", apr_jwt_parse(pool, s, &jwt, NULL, NULL, &err));
+	TST_ASSERT_ERR("apr_jwt_parse",
+			apr_jwt_parse(pool, s, &jwt, NULL, NULL, &err), pool, err);
 
 	char *dst;
 
@@ -295,8 +298,8 @@ static char *test_jwk_parse_json(apr_pool_t *pool) {
 	TST_ASSERT("json_loads", ((j_jwk != NULL) && (json_is_object(j_jwk))));
 
 	apr_jwk_t *jwk = NULL;
-	TST_ASSERT("apr_jwk_parse_json",
-			apr_jwk_parse_json(pool, j_jwk, s, &jwk, &err));
+	TST_ASSERT_ERR("apr_jwk_parse_json",
+			apr_jwk_parse_json(pool, j_jwk, s, &jwk, &err), pool, err);
 
 	json_decref(j_jwk);
 
@@ -331,9 +334,9 @@ static char *test_jwt_decryption(apr_pool_t *pool) {
 	TST_ASSERT_LONG("unpacked->nelts", (long )unpacked->nelts, 5L);
 
 	apr_jwt_t *jwt = apr_pcalloc(pool, sizeof(apr_jwt_t));
-	TST_ASSERT("apr_jwt_parse_header",
+	TST_ASSERT_ERR("apr_jwt_parse_header",
 			apr_jwt_parse_header(pool, ((const char** ) unpacked->elts)[0],
-					&jwt->header, &err));
+					&jwt->header, &err), pool, err);
 
 	char *decrypted = NULL;
 	TST_ASSERT("apr_jwe_decrypt_jwt",
