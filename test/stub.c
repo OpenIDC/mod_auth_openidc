@@ -4,6 +4,27 @@
 #include <apr_global_mutex.h>
 #include <http_log.h>
 
+#define ap_HOOK_check_user_id_t void
+
+AP_DECLARE(void) ap_hook_check_authn(ap_HOOK_check_user_id_t *pf,
+                                     const char * const *aszPre,
+                                     const char * const *aszSucc,
+                                     int nOrder, int type) {
+}
+
+AP_DECLARE(apr_status_t) ap_register_auth_provider(apr_pool_t *pool,
+                                                   const char *provider_group,
+                                                   const char *provider_name,
+                                                   const char *provider_version,
+                                                   const void *provider,
+                                                   int type) {
+       return 0;
+}
+
+AP_DECLARE(apr_status_t) ap_unixd_set_global_mutex_perms(apr_global_mutex_t *gmutex) {
+	return 0;
+}
+
 AP_DECLARE(const char *) ap_auth_type(request_rec *r) {
 	return "openid-connect";
 }
@@ -48,12 +69,22 @@ AP_DECLARE(int) ap_is_initial_req(request_rec *r) {
 	return 0;
 }
 
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+AP_DECLARE(void) ap_log_error_(const char *file, int line, int module_index, int level,
+		apr_status_t status, const server_rec *s, const char *fmt, ...) {
+#else
 AP_DECLARE(void) ap_log_error(const char *file, int line, int level,
 		apr_status_t status, const server_rec *s, const char *fmt, ...) {
+#endif
 }
 
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+AP_DECLARE(void) ap_log_rerror_(const char *file, int line, int module_index, int level,
+		apr_status_t status, const request_rec *r, const char *fmt, ...) {
+#else
 AP_DECLARE(void) ap_log_rerror(const char *file, int line, int level,
 		apr_status_t status, const request_rec *r, const char *fmt, ...) {
+#endif
 	if (level < APLOG_DEBUG) {
 		fprintf(stderr, "%s:%d [%d] [%d] ", file, line, level, status);
 		va_list ap;
