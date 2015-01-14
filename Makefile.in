@@ -46,29 +46,27 @@ DISTFILES=$(SRC) \
 	LICENSE.txt \
 	ChangeLog
 
-
 all: src/mod_auth_openidc.la
 
 REDIS_CFLAGS=@HIREDIS_CFLAGS@
 REDIS_LIBS=@HIREDIS_LIBS@
 
+CFLAGS=@OPENSSL_CFLAGS@ @CURL_CFLAGS@ @JANSSON_CFLAGS@ @PCRE_CFLAGS@ $(REDIS_CFLAGS)
+LIBS=@OPENSSL_LIBS@ @CURL_LIBS@ @JANSSON_LIBS@ @PCRE_LIBS@ $(REDIS_LIBS)
+
 src/mod_auth_openidc.la: $(SRC) $(HDRS)
-	@APXS2@ -Wc,"-DNAMEVER=\"@NAMEVER@\" @OPENSSL_CFLAGS@ @CURL_CFLAGS@ @JANSSON_CFLAGS@ @PCRE_CFLAGS@ $(REDIS_CFLAGS)" -Wl,"@OPENSSL_LIBS@ @CURL_LIBS@ @JANSSON_LIBS@ @PCRE_LIBS@ $(REDIS_LIBS)" -Wc,-Wall -Wc,-g -c $(SRC)
+	@APXS2@ -Wc,"-DNAMEVER=\"@NAMEVER@\" $(CFLAGS)" -Wl,"$(LIBS)" -Wc,-Wall -Wc,-g -c $(SRC)
 
-
-# Building configure (for distribution)
 configure:	configure.ac
 	./autogen.sh
 
 @NAMEVER@.tar.gz:	 $(DISTFILES)
 	tar -c --transform="s#^#@NAMEVER@/#" -vzf $@ $(DISTFILES)
 
-test/test: test/*.c $(JWT_SRC) $(JWT_HDRS)
-	`@APXS2@ -q CC` @OPENSSL_CFLAGS@ @APR_CFLAGS@ @JANSSON_CFLAGS@ -Isrc -o $@ test/*.c $(JWT_SRC) @APR_LIBS@ @OPENSSL_LIBS@ @JANSSON_LIBS@
+test/test: test/*.c src/mod_auth_openidc.la
+	@APXS2@ -Wc,-Wall -Wc,-g -c $(CFLAGS) -Isrc -o $@ test/*.c $(SRC:.c=.o) $(LIBS) @APR_LIBS@
 
-test-compile: test/test
-
-test: test-compile
+test: test/test
 	test/test
 
 .PHONY:	install
