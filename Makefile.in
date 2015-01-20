@@ -66,7 +66,9 @@ configure:	configure.ac
 test/test: test/*.c src/mod_auth_openidc.la
 	@APXS2@ -Wc,-Wall -Wc,-g -c $(CFLAGS) -Isrc -o $@ test/*.c $(SRC:.c=.lo) $(LIBS) @APR_LIBS@
 
-test: test/test
+test-compile: test/test
+
+test: test-compile
 	test/test
 
 .PHONY:	install
