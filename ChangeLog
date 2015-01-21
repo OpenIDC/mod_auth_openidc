@@ -3,6 +3,9 @@
 - add a sample OAuth 2.0 config for Google access tokens to README.md
 - release 1.7.2
 
+- add APXS2_OPTS to configure.ac to accommodate RPM builds
+- bump to 1.7.3rc0
+
 1/14/2015
 - add Apache function stubs to enable extending the scope of tests
 - add tests for oidc_proto_validate_access_token and oidc_proto_validate_code
