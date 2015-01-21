@@ -5,6 +5,7 @@
 
 - add APXS2_OPTS to configure.ac to accommodate RPM builds
 - bump to 1.7.3rc0
+- fix JWT timestamp (iat/exp) initialization issue
 
 1/14/2015
 - add Apache function stubs to enable extending the scope of tests

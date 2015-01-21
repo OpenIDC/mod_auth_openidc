@@ -212,6 +212,7 @@ apr_byte_t apr_jwt_get_string(apr_pool_t *pool, apr_jwt_value_t *value,
 static apr_byte_t apr_jwt_get_timestamp(apr_pool_t *pool,
 		apr_jwt_value_t *value, const char *claim_name, apr_byte_t is_mandatory,
 		json_int_t *result, apr_jwt_error_t *err) {
+	*result = APR_JWT_CLAIM_TIME_EMPTY;
 	json_t *v = json_object_get(value->json, claim_name);
 	if (v != NULL) {
 		if (json_is_integer(v)) {
@@ -220,13 +221,11 @@ static apr_byte_t apr_jwt_get_timestamp(apr_pool_t *pool,
 			apr_jwt_error(err,
 					"mandatory JSON key \"%s\" was found but the type is not a number",
 					claim_name);
-			*result = APR_JWT_CLAIM_TIME_EMPTY;
 			return FALSE;
 		}
 	} else if (is_mandatory) {
 		apr_jwt_error(err, "mandatory JSON key \"%s\" could not be found",
 				claim_name);
-		*result = APR_JWT_CLAIM_TIME_EMPTY;
 		return FALSE;
 	}
 	return TRUE;
