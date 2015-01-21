@@ -63,8 +63,8 @@ configure:	configure.ac
 @NAMEVER@.tar.gz:	 $(DISTFILES)
 	tar -c --transform="s#^#@NAMEVER@/#" -vzf $@ $(DISTFILES)
 
-test/test: test/*.c src/mod_auth_openidc.la
-	@APXS2@ -Wc,-Wall -Wc,-g -c $(CFLAGS) -Isrc -o $@ test/*.c $(SRC:.c=.lo) $(LIBS) @APR_LIBS@
+test/test: test/test.c $(JWT_SRC)
+	@APXS2@ -Wc,-Wall -Wc,-g -c $(CFLAGS) -Isrc -o $@ test/test.c $(JWT_SRC) $(LIBS) @APR_LIBS@
 
 test-compile: test/test
 
