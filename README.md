@@ -58,7 +58,7 @@ in this directory. This file can also serve as an include file for `httpd.conf`.
 How to Use It  
 -------------
 
-###Sample Config for Google+ Sign-In
+### OpenID Connect SSO with Google+ Sign-In
 
 Sample configuration for using Google as your OpenID Connect Provider running on
 `www.example.com` and `https://www.example.com/example/redirect_uri` registered
@@ -89,25 +89,31 @@ authorization setting in the `Location` primitive similar to:
 The above is an authorization example of an exact match of a provided claim against a string value.
 For more authorization options see the [Wiki page on Authorization] (https://github.com/pingidentity/mod_auth_openidc/wiki/Authorization).
 
-###Sample Config for Google OAuth 2.0
+### Access Control with Google OAuth 2.0
 
-Sample configuration for using Google as an Authorization Server, allowing access to your resources
-to the client `412063239660.apps.googleusercontent.com` presenting a valid `access_token` obtained through
-Google. **mod_auth_openidc** will validate the `access_token` against the Google token info endpoint.
+Sample configuration where **mod_auth_openidc** acts as an OAuth 2.0 Resource Server using Google as the
+Authorization Server. This allows us to expose protected resources only to (non-browser/in-browser/native) clients
+that are able to present a valid access token obtained from Google. **mod_auth_openidc** will validate the
+`access_token` against Google's token info endpoint and use the claims returned in the response for
+authorization purposes. The following configuration allows access only to a specific client:
 
     OIDCOAuthIntrospectionEndpoint https://www.googleapis.com/oauth2/v1/tokeninfo
     OIDCOAuthIntrospectionTokenParamName access_token
     OIDCOAuthRemoteUserClaim user_id
 
-    <Location /example_api/>
+    <Location /example/api/v2/>
         Authtype oauth20
         Require claim issued_to:412063239660.apps.googleusercontent.com
     </Location>
 
-###Sample Config for Multiple OpenID Connect Providers
+Note that this is not an OpenID Connect SSO scenario where users are authenticated but rather a "pure" OAuth 2.0
+scenario where **mod_auth_openidc** is the OAuth 2.0 Resource Server instead of the RP/client. How the actual
+client accessing the protected resources got its access token not relevant to this Apache Resource Server setup.
 
-Sample configuration for multiple OpenID Connect providers, which triggers OP
-discovery first.
+###OpenID Connect SSO with multiple OpenID Connect Providers
+
+Sample configuration for multiple OpenID Connect providers, which triggers OpenID
+Connect Discovery first to find the user's OP.
 
 `OIDCMetadataDir` points to a directory that contains files that contain per-provider
 configuration data. For each provider, there are 3 types of files in the directory:
@@ -197,7 +203,7 @@ An additional **mod_auth_openidc** specific parameter named `auth_request_params
 in, see the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki#13-how-can-i-add-custom-parameters-to-the-authorization-request)
 for its usage.
 
-###Sample Config for PingFederate OpenID Connect & OAuth 2.0 Token Introspection
+###OpenID Connect SSO & OAuth 2.0 Access Control with PingFederate
 
 Another example config for using PingFederate as your OpenID Connect OP and/or
 OAuth 2.0 Authorization server, based on the OAuth 2.0 PlayGround 3.x default
