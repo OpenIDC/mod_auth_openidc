@@ -118,6 +118,8 @@
 #define OIDC_DEFAULT_COOKIE_HTTPONLY 1
 /* default cookie path */
 #define OIDC_DEFAULT_COOKIE_PATH "/"
+/* default OAuth 2.0 introspection token parameter name */
+#define OIDC_DEFAULT_OAUTH_TOKEN_PARAM_NAME "token"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -612,6 +614,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->oauth.introspection_endpoint_url = NULL;
 	c->oauth.introspection_endpoint_params = NULL;
 	c->oauth.introspection_endpoint_auth = NULL;
+	c->oauth.introspection_token_param_name = OIDC_DEFAULT_OAUTH_TOKEN_PARAM_NAME;
 	c->oauth.remote_user_claim = OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER;
 
 	c->cache = &oidc_cache_shm;
@@ -817,6 +820,11 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->oauth.introspection_endpoint_auth != NULL ?
 					add->oauth.introspection_endpoint_auth :
 					base->oauth.introspection_endpoint_auth;
+	c->oauth.introspection_token_param_name =
+			apr_strnatcmp(add->oauth.introspection_token_param_name,
+					OIDC_DEFAULT_OAUTH_TOKEN_PARAM_NAME) != 0 ?
+							add->oauth.introspection_token_param_name :
+							base->oauth.introspection_token_param_name;
 	c->oauth.remote_user_claim =
 			apr_strnatcmp(add->oauth.remote_user_claim,
 					OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER) != 0 ?
@@ -1026,12 +1034,6 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
  * check the config required for the OAuth 2.0 RS role
  */
 static int oidc_check_config_oauth(server_rec *s, oidc_cfg *c) {
-
-	if (c->oauth.client_id == NULL)
-		return oidc_check_config_error(s, "OIDCOAuthClientID");
-
-	if (c->oauth.client_secret == NULL)
-		return oidc_check_config_error(s, "OIDCOAuthClientSecret");
 
 	if (c->oauth.introspection_endpoint_url == NULL)
 		return oidc_check_config_error(s, "OIDCOAuthIntrospectionEndpoint");
@@ -1520,6 +1522,11 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, oauth.introspection_endpoint_auth),
 				RSRC_CONF,
 				"Specify an authentication method for the OAuth AS Introspection Endpoint (e.g.: client_auth_basic)"),
+		AP_INIT_TAKE1("OIDCOAuthIntrospectionTokenParamName",
+				oidc_set_string_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, oauth.introspection_token_param_name),
+				RSRC_CONF,
+				"Name of the parameter whose value carries the access token value in an validation request to the token introspection endpoint."),
 		AP_INIT_FLAG("OIDCOAuthSSLValidateServer",
 				oidc_set_flag_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.ssl_validate_server),

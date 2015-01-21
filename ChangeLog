@@ -1,3 +1,8 @@
+1/21/2015
+- add support for OIDCOAuthIntrospectionTokenParamName (incl. Google OAuth 2.0 access token validation)
+- add a sample OAuth 2.0 config for Google access tokens to README.md
+- bump to 1.7.2rc4
+
 1/14/2015
 - add Apache function stubs to enable extending the scope of tests
 - add tests for oidc_proto_validate_access_token and oidc_proto_validate_code

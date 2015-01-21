@@ -58,7 +58,7 @@ in this directory. This file can also serve as an include file for `httpd.conf`.
 How to Use It  
 -------------
 
-###Sample Config for Google Accounts
+###Sample Config for Google+ Sign-In
 
 Sample configuration for using Google as your OpenID Connect Provider running on
 `www.example.com` and `https://www.example.com/example/redirect_uri` registered
@@ -88,6 +88,21 @@ authorization setting in the `Location` primitive similar to:
 
 The above is an authorization example of an exact match of a provided claim against a string value.
 For more authorization options see the [Wiki page on Authorization] (https://github.com/pingidentity/mod_auth_openidc/wiki/Authorization).
+
+###Sample Config for Google OAuth 2.0
+
+Sample configuration for using Google as an Authorization Server, allowing access to your resources
+to the client `412063239660.apps.googleusercontent.com` presenting a valid `access_token` obtained through
+Google. **mod_auth_openidc** will validate the `access_token` against the Google token info endpoint.
+
+    OIDCOAuthIntrospectionEndpoint https://www.googleapis.com/oauth2/v1/tokeninfo
+    OIDCOAuthIntrospectionTokenParamName access_token
+    OIDCOAuthRemoteUserClaim user_id
+
+    <Location /example_api/>
+        Authtype oauth20
+        Require claim issued_to:412063239660.apps.googleusercontent.com
+    </Location>
 
 ###Sample Config for Multiple OpenID Connect Providers
 

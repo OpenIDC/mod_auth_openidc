@@ -211,6 +211,7 @@ typedef struct oidc_oauth_t {
 	char *introspection_endpoint_url;
 	char *introspection_endpoint_params;
 	char *introspection_endpoint_auth;
+	char *introspection_token_param_name;
 	char *remote_user_claim;
 } oidc_oauth_t;
 
