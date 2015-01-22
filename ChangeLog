@@ -1,6 +1,8 @@
 1/22/2015
 - fix configuration validation check where no config would be checked if OIDCProviderIssuer is set
   but both OIDRedirectURI and OIDCCryptoPassphrase are not set
+- add preliminary support for local JWT access token validation
+- bump to 1.7.3rc1
 
 1/21/2015
 - add support for OIDCOAuthIntrospectionTokenParamName (incl. Google OAuth 2.0 access token validation)

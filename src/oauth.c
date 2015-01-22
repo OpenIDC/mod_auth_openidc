@@ -62,7 +62,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 /*
  * validate an access token against the validation endpoint of the Authorization server and gets a response back
  */
-static int oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
+static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 		const char *token, const char **response) {
 
 	/* get a handle to the directory config */
@@ -165,6 +165,8 @@ static void oidc_oauth_spaced_string_to_array(request_rec *r, json_t *src,
 
 /*
  * resolve and validate an access_token against the configured Authorization Server
+ *
+ * TODO: add validation type
  */
 static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 		const char *access_token, json_t **token, char **response) {
@@ -303,6 +305,60 @@ static apr_byte_t oidc_oauth_set_remote_user(request_rec *r, oidc_cfg *c,
 }
 
 /*
+ * validate a JWT access token (locally)
+ *
+ * TODO: for now I'm re-/abusing the OIDC config section incl. caching and iat slack:
+ *       separate out JWK caching/parsing and share between proto.c and oauth.c
+ *
+ * OIDCOAuthRemoteUserClaim client_id
+ * # 64x 61 hex
+ * OIDCClientSecret aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ * # need to import pkcs12 and use the generated key id
+ * OIDCProviderJwksUri https://localhost/protected/?jwks=rsa
+ */
+static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
+		oidc_cfg *c, const char *access_token, json_t **token, char **response) {
+
+	apr_jwt_error_t err;
+	apr_jwt_t *jwt = NULL;
+	if (apr_jwt_parse(r->pool, access_token, &jwt, c->private_keys,
+			c->oauth.client_secret, &err) == FALSE) {
+		oidc_error(r, "could not parse JWT from access_token: %s",
+				apr_jwt_e2s(r->pool, err));
+		return FALSE;
+	}
+
+	if ((jwt->payload.exp != APR_JWT_CLAIM_TIME_EMPTY)
+			&& (oidc_proto_validate_exp(r, jwt) == FALSE)) {
+		apr_jwt_destroy(jwt);
+		return FALSE;
+	}
+
+	if ((jwt->payload.iat != APR_JWT_CLAIM_TIME_EMPTY)
+			&& (oidc_proto_validate_iat(r, &c->provider, jwt) == FALSE)) {
+		apr_jwt_destroy(jwt);
+		return FALSE;
+	}
+
+	apr_byte_t refresh = FALSE;
+	if (oidc_proto_idtoken_verify_signature(r, c, &c->provider, jwt,
+			&refresh) == FALSE) {
+		oidc_error(r,
+				"JWT access token signature could not be validated, aborting");
+		apr_jwt_destroy(jwt);
+		return FALSE;
+	}
+
+	oidc_debug(r, "successfully verified JWT access token: %s",
+			jwt->payload.value.str);
+
+	*token = jwt->payload.value.json;
+	*response = jwt->payload.value.str;
+
+	return TRUE;
+}
+
+/*
  * main routine: handle OAuth 2.0 authentication/authorization
  */
 int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
@@ -336,9 +392,18 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 	/* validate the obtained access token against the OAuth AS validation endpoint */
 	json_t *token = NULL;
 	char *s_token = NULL;
-	if (oidc_oauth_resolve_access_token(r, c, access_token, &token,
-			&s_token) == FALSE)
-		return HTTP_UNAUTHORIZED;
+
+	/* check if an introspection endpoint is set */
+	if (c->oauth.introspection_endpoint_url != NULL) {
+		/* we'll validate the token remotely */
+		if (oidc_oauth_resolve_access_token(r, c, access_token, &token,
+				&s_token) == FALSE)
+			return HTTP_UNAUTHORIZED;
+	} else {
+		/* no introspection endpoint is set, assume the token is a JWT and validate it locally */
+		if (oidc_oauth_validate_jwt_access_token(r, c, access_token, &token, &s_token) == FALSE)
+			return HTTP_UNAUTHORIZED;
+	}
 
 	/* check that we've got something back */
 	if (token == NULL) {

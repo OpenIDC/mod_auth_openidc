@@ -1035,8 +1035,8 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
  */
 static int oidc_check_config_oauth(server_rec *s, oidc_cfg *c) {
 
-	if (c->oauth.introspection_endpoint_url == NULL)
-		return oidc_check_config_error(s, "OIDCOAuthIntrospectionEndpoint");
+//	if (c->oauth.introspection_endpoint_url == NULL)
+//		return oidc_check_config_error(s, "OIDCOAuthIntrospectionEndpoint");
 
 	return OK;
 }
