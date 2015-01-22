@@ -674,15 +674,16 @@ void oidc_util_set_cookie(request_rec *r, const char *cookieName,
 	}
 
 	/* construct the cookie value */
-	headerString = apr_psprintf(r->pool, "%s=%s;%s;Path=%s%s%s%s", cookieName,
+	headerString = apr_psprintf(r->pool, "%s=%s;Path=%s%s%s%s%s", cookieName,
 			cookieValue,
-			((apr_strnatcasecmp("https", oidc_get_current_url_scheme(r)) == 0) ?
-					";Secure" : ""), oidc_util_get_cookie_path(r),
+			oidc_util_get_cookie_path(r),
+			(expiresString == NULL) ?
+					"" : apr_psprintf(r->pool, "; expires=%s", expiresString),
 			c->cookie_domain != NULL ?
 					apr_psprintf(r->pool, ";Domain=%s", c->cookie_domain) : "",
-			c->cookie_http_only != FALSE ? ";HttpOnly" : "",
-			(expiresString == NULL) ?
-					"" : apr_psprintf(r->pool, "; expires=%s", expiresString));
+			((apr_strnatcasecmp("https", oidc_get_current_url_scheme(r)) == 0) ?
+					";Secure" : ""),
+			c->cookie_http_only != FALSE ? ";HttpOnly" : "");
 
 	/* use r->err_headers_out so we always print our headers (even on 302 redirect) - headers_out only prints on 2xx responses */
 	apr_table_add(r->err_headers_out, "Set-Cookie", headerString);
@@ -736,7 +737,7 @@ char *oidc_util_get_cookie(request_rec *r, const char *cookieName) {
 	}
 
 	/* log what we've found */
-	oidc_debug(r, "returning %s", rv);
+	oidc_debug(r, "returning \"%s\" = %s", cookieName, rv ? apr_psprintf(r->pool, "\"%s\"", rv) : "<null>");
 
 	return rv;
 }
