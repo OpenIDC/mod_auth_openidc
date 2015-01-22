@@ -80,6 +80,7 @@ apr_status_t oidc_session_load(request_rec *r, session_rec **zz) {
 	(*zz)->remote_user = apr_table_get((*zz)->entries,
 			OIDC_SESSION_REMOTE_USER_KEY);
 	const char *uuid = apr_table_get((*zz)->entries, OIDC_SESSION_UUID_KEY);
+	oidc_debug(r, "%s", uuid ? uuid : "<null>");
 	if (uuid != NULL)
 		apr_uuid_parse((*zz)->uuid, uuid);
 	return rc;
@@ -89,6 +90,7 @@ apr_status_t oidc_session_save(request_rec *r, session_rec *z) {
 	oidc_session_set(r, z, OIDC_SESSION_REMOTE_USER_KEY, z->remote_user);
 	char key[APR_UUID_FORMATTED_LENGTH + 1];
 	apr_uuid_format((char *) &key, z->uuid);
+	oidc_debug(r, "%s", key);
 	oidc_session_set(r, z, OIDC_SESSION_UUID_KEY, key);
 	return ap_session_save_fn(r, z);
 }
