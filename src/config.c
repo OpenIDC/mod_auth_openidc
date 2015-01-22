@@ -1050,7 +1050,8 @@ static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s) {
 
 	oidc_sdebug(s, "enter");
 
-	if ((cfg->metadata_dir != NULL) || (cfg->provider.issuer == NULL)
+	if ((cfg->metadata_dir != NULL) || (cfg->provider.issuer != NULL)
+			|| (cfg->provider.metadata_url != NULL)
 			|| (cfg->redirect_uri != NULL)
 			|| (cfg->crypto_passphrase != NULL)) {
 		if (oidc_check_config_openid_openidc(s, cfg) != OK)
