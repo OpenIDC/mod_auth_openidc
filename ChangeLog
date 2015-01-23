@@ -3,6 +3,7 @@
   but both OIDRedirectURI and OIDCCryptoPassphrase are not set
 - add preliminary support for local JWT access token validation
 - bump to 1.7.3rc1
+- sanitize set cookie syntax (get rid of extraneous ";")
 
 1/21/2015
 - add support for OIDCOAuthIntrospectionTokenParamName (incl. Google OAuth 2.0 access token validation)
