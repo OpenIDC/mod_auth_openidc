@@ -829,7 +829,7 @@ apr_byte_t oidc_util_get_request_parameter(request_rec *r, char *name,
 static apr_byte_t oidc_util_json_string_print(request_rec *r, json_t *result,
 		const char *key, const char *log) {
 	json_t *value = json_object_get(result, key);
-	if (value != NULL) {
+	if (value != NULL && !json_is_null(value)) {
 		char *s_value = json_dumps(value, 0);
 		oidc_error(r, "%s: response contained an \"%s\" entry with value: \"%s\"",
 				log, key, s_value);
