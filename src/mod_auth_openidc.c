@@ -332,12 +332,12 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	}
 
 	char *target_link_uri = NULL;
-	apr_jwt_get_string(r->pool, jwt->payload.value.json, "target_uri", FALSE,
+	apr_jwt_get_string(r->pool, jwt->payload.value.json, "target_link_uri", FALSE,
 			&target_link_uri, NULL);
 	if (target_link_uri == NULL) {
 		if (c->default_sso_url == NULL) {
 			oidc_error(r,
-					"no \"target_uri\" claim could be retrieved from JWT state and no OIDCDefaultURL is set, aborting");
+					"no \"target_link_uri\" claim could be retrieved from JWT state and no OIDCDefaultURL is set, aborting");
 			apr_jwt_destroy(jwt);
 			return FALSE;
 		}
