@@ -1,7 +1,8 @@
 2/4/2015
 - revise JOSE JWK handling part 1
-- bump to 1.7.3rc2
 - change change target_uri parameter name to target_link_uri following draft-bradley-oauth-jwt-encoded-state-03
+- extended tests with stubs
+- bump to 1.7.3rc3
 
 1/25/2015
 - Allow {... "error": null ...} in JSON responses. (@fatlotus)
