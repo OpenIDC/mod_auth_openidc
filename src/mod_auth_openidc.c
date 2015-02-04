@@ -315,6 +315,13 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 		return FALSE;
 	}
 
+	/* validate the state JWT, validating optional exp + iat */
+	if (oidc_proto_validate_jwt(r, jwt, provider->issuer, FALSE, FALSE,
+			provider->idtoken_iat_slack) == FALSE) {
+		apr_jwt_destroy(jwt);
+		return FALSE;
+	}
+
 	char *rfp = NULL;
 	if (apr_jwt_get_string(r->pool, jwt->payload.value.json, "rfp", TRUE, &rfp,
 			&err) == FALSE) {
@@ -352,18 +359,6 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 			apr_jwt_destroy(jwt);
 			return FALSE;
 		}
-	}
-
-	if ((jwt->payload.exp != APR_JWT_CLAIM_TIME_EMPTY)
-			&& (oidc_proto_validate_exp(r, jwt) == FALSE)) {
-		apr_jwt_destroy(jwt);
-		return FALSE;
-	}
-
-	if ((jwt->payload.iat != APR_JWT_CLAIM_TIME_EMPTY)
-			&& (oidc_proto_validate_iat(r, provider, jwt) == FALSE)) {
-		apr_jwt_destroy(jwt);
-		return FALSE;
 	}
 
 	char *jti = NULL;

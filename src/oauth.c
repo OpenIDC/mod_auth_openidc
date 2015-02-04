@@ -307,8 +307,12 @@ static apr_byte_t oidc_oauth_set_remote_user(request_rec *r, oidc_cfg *c,
 /*
  * validate a JWT access token (locally)
  *
- * TODO: for now I'm re-/abusing the OIDC config section incl. caching and iat slack:
- *       separate out JWK caching/parsing and share between proto.c and oauth.c
+ * TODO: for now I'm re-/abusing the OIDC config section wrt.
+ *       - signature validation (JWKs URI)
+ *       - encryption key material (c->private_keys)
+ *       - iat slack (idtoken_iat_slack)
+ *       but the config for the OAuth 2.0 RS should really be separate and most probably not (only) have
+ *       a JWKS URI setting, but rather point to a PEM file
  *
  * OIDCOAuthRemoteUserClaim client_id
  * # 64x 61 hex
@@ -329,14 +333,9 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 		return FALSE;
 	}
 
-	if ((jwt->payload.exp != APR_JWT_CLAIM_TIME_EMPTY)
-			&& (oidc_proto_validate_exp(r, jwt) == FALSE)) {
-		apr_jwt_destroy(jwt);
-		return FALSE;
-	}
-
-	if ((jwt->payload.iat != APR_JWT_CLAIM_TIME_EMPTY)
-			&& (oidc_proto_validate_iat(r, &c->provider, jwt) == FALSE)) {
+	/* validate the access token JWT, validating optional exp + iat */
+	if (oidc_proto_validate_jwt(r, jwt, NULL, FALSE, FALSE,
+			c->provider.idtoken_iat_slack) == FALSE) {
 		apr_jwt_destroy(jwt);
 		return FALSE;
 	}

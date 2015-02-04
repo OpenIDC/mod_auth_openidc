@@ -356,29 +356,32 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 /*
  * validate "iat" claim in JWT
  */
-apr_byte_t oidc_proto_validate_iat(request_rec *r, oidc_provider_t *provider,
-		apr_jwt_t *jwt) {
+static apr_byte_t oidc_proto_validate_iat(request_rec *r, apr_jwt_t *jwt,
+		apr_byte_t is_mandatory, int slack) {
 
 	/* get the current time */
 	apr_time_t now = apr_time_sec(apr_time_now());
 
 	/* sanity check for iat being set */
 	if (jwt->payload.iat == APR_JWT_CLAIM_TIME_EMPTY) {
-		oidc_error(r, "JWT did not contain an \"iat\" number value");
-		return FALSE;
+		if (is_mandatory) {
+			oidc_error(r, "JWT did not contain an \"iat\" number value");
+			return FALSE;
+		}
+		return TRUE;
 	}
 
 	/* check if this id_token has been issued just now +- slack (default 10 minutes) */
-	if ((now - provider->idtoken_iat_slack) > jwt->payload.iat) {
+	if ((now - slack) > jwt->payload.iat) {
 		oidc_error(r,
 				"\"iat\" validation failure (%" JSON_INTEGER_FORMAT "): JWT was issued more than %d seconds ago",
-				jwt->payload.iat, provider->idtoken_iat_slack);
+				jwt->payload.iat, slack);
 		return FALSE;
 	}
-	if ((now + provider->idtoken_iat_slack) < jwt->payload.iat) {
+	if ((now + slack) < jwt->payload.iat) {
 		oidc_error(r,
 				"\"iat\" validation failure (%" JSON_INTEGER_FORMAT "): JWT was issued more than %d seconds in the future",
-				jwt->payload.iat, provider->idtoken_iat_slack);
+				jwt->payload.iat, slack);
 		return FALSE;
 	}
 
@@ -388,15 +391,19 @@ apr_byte_t oidc_proto_validate_iat(request_rec *r, oidc_provider_t *provider,
 /*
  * validate "exp" claim in JWT
  */
-apr_byte_t oidc_proto_validate_exp(request_rec *r, apr_jwt_t *jwt) {
+static apr_byte_t oidc_proto_validate_exp(request_rec *r, apr_jwt_t *jwt,
+		apr_byte_t is_mandatory) {
 
 	/* get the current time */
 	apr_time_t now = apr_time_sec(apr_time_now());
 
 	/* sanity check for exp being set */
 	if (jwt->payload.exp == APR_JWT_CLAIM_TIME_EMPTY) {
-		oidc_error(r, "JWT did not contain an \"exp\" number value");
-		return FALSE;
+		if (is_mandatory) {
+			oidc_error(r, "JWT did not contain an \"exp\" number value");
+			return FALSE;
+		}
+		return TRUE;
 	}
 
 	/* see if now is beyond the JWT expiry timestamp */
@@ -406,6 +413,43 @@ apr_byte_t oidc_proto_validate_exp(request_rec *r, apr_jwt_t *jwt) {
 				jwt->payload.exp, now - jwt->payload.exp);
 		return FALSE;
 	}
+
+	return TRUE;
+}
+
+/*
+ * validate a JSON Web token
+ */
+apr_byte_t oidc_proto_validate_jwt(request_rec *r, apr_jwt_t *jwt,
+		const char *iss, apr_byte_t exp_is_mandatory,
+		apr_byte_t iat_is_mandatory, int iat_slack) {
+
+	if (iss != NULL) {
+
+		/* issuer is set and must match */
+		if (jwt->payload.iss == NULL) {
+			oidc_error(r,
+					"JWT did not contain an \"iss\" string (requested value: %s)",
+					iss);
+			return FALSE;
+		}
+
+		/* check if the issuer matches the requested value */
+		if (oidc_util_issuer_match(iss, jwt->payload.iss) == FALSE) {
+			oidc_error(r,
+					"requested issuer (%s) does not match received \"iss\" value in id_token (%s)",
+					iss, jwt->payload.iss);
+			return FALSE;
+		}
+	}
+
+	/* check exp */
+	if (oidc_proto_validate_exp(r, jwt, exp_is_mandatory) == FALSE)
+		return FALSE;
+
+	/* check iat */
+	if (oidc_proto_validate_iat(r, jwt, iat_is_mandatory, iat_slack) == FALSE)
+		return FALSE;
 
 	return TRUE;
 }
@@ -429,26 +473,9 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
 			return FALSE;
 	}
 
-	/* issuer is mandatory in id_token */
-	if (jwt->payload.iss == NULL) {
-		oidc_error(r, "response JSON object did not contain an \"iss\" string");
-		return FALSE;
-	}
-
-	/* check if the issuer matches the requested value */
-	if (oidc_util_issuer_match(provider->issuer, jwt->payload.iss) == FALSE) {
-		oidc_error(r,
-				"configured issuer (%s) does not match received \"iss\" value in id_token (%s)",
-				provider->issuer, jwt->payload.iss);
-		return FALSE;
-	}
-
-	/* check exp */
-	if (oidc_proto_validate_exp(r, jwt) == FALSE)
-		return FALSE;
-
-	/* check iat */
-	if (oidc_proto_validate_iat(r, provider, jwt) == FALSE)
+	/* validate the ID Token JWT, requiring iss match, and valid exp + iat */
+	if (oidc_proto_validate_jwt(r, jwt, provider->issuer, TRUE, TRUE,
+			provider->idtoken_iat_slack) == FALSE)
 		return FALSE;
 
 	/* check if the required-by-spec "sub" claim is present */
@@ -631,7 +658,7 @@ apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r, oidc_cfg *cfg,
 #if (OPENSSL_VERSION_NUMBER >= 0x01000000)
 			|| apr_jws_signature_is_ec(r->pool, jwt)
 #endif
-					) {
+	) {
 
 		/* get the key from the JWKs that corresponds with the key specified in the header */
 		apr_jwk_t *jwk = oidc_proto_get_key_from_jwk_uri(r, cfg, provider,

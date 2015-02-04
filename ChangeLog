@@ -3,6 +3,7 @@
 - change change target_uri parameter name to target_link_uri following draft-bradley-oauth-jwt-encoded-state-03
 - extended tests with stubs
 - bump to 1.7.3rc3
+- refactor JWT validation (iss, exp, iat)
 
 1/25/2015
 - Allow {... "error": null ...} in JSON responses. (@fatlotus)
