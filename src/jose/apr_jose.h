@@ -152,13 +152,12 @@ const char *apr_jwt_header_to_string(apr_pool_t *pool, const char *s_json,
 		apr_jwt_error_t *err);
 
 /* return a string claim value from a JSON Web Token */
-apr_byte_t apr_jwt_get_string(apr_pool_t *pool, apr_jwt_value_t *value,
+apr_byte_t apr_jwt_get_string(apr_pool_t *pool, json_t *json,
 		const char *claim_name, apr_byte_t is_mandatory, char **result,
 		apr_jwt_error_t *err);
-/* parse a string in to a JSON Web Token struct */
+/* parse a string into a JSON Web Token struct and (optionally) decrypt it */
 apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
-		apr_jwt_t **j_jwt, apr_hash_t *private_keys, const char *shared_key,
-		apr_jwt_error_t *err);
+		apr_jwt_t **j_jwt, apr_hash_t *keys, apr_jwt_error_t *err);
 /* destroy resources allocated for JWT */
 void apr_jwt_destroy(apr_jwt_t *);
 
@@ -178,6 +177,8 @@ typedef enum apr_jwk_type_e {
 	APR_JWK_KEY_RSA,
 	/* EC JWT key type */
 	APR_JWK_KEY_EC,
+	/* oct JWT key type */
+	APR_JWK_KEY_OCT,
 } apr_jwk_type_e;
 
 /* parsed RSA JWK key */
@@ -208,28 +209,42 @@ typedef struct apr_jwk_key_ec_t {
 	int y_len;
 } apr_jwk_key_ec_t;
 
+/* parsed oct JWK key */
+typedef struct apr_jwk_key_oct_t {
+	/* k octets */
+	unsigned char *k;
+	/* length of k */
+	int k_len;
+} apr_jwk_key_oct_t;
+
 /* parsed JWK key */
 typedef struct apr_jwk_t {
-	/* parsed JWK/JSON value */
-	apr_jwt_value_t value;
+	/* key identifier */
+	char *kid;
 	/* type of JWK key */
 	apr_jwk_type_e type;
 	/* union/pointer to parsed JWK key */
 	union {
 		apr_jwk_key_rsa_t *rsa;
 		apr_jwk_key_ec_t *ec;
+		apr_jwk_key_oct_t *oct;
 	} key;
 } apr_jwk_t;
 
 /* parse a JSON representation in to a JSON Web Key struct (also storing the string representation */
 apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, json_t *j_json,
-		const char *s_json, apr_jwk_t **j_jwk, apr_jwt_error_t *err);
-/* convert the RSA public key in a PEM formatted file with an X.509 cert in to an RSA JWK */
-apr_byte_t apr_jwk_pem_to_json(apr_pool_t *pool, const char *filename,
-		char **jwk, char**kid, apr_jwt_error_t *err);
-/* convert the RSA private key in a PEM formatted file in to an RSA JWK */
-apr_byte_t apr_jwk_private_key_to_rsa_jwk(apr_pool_t *pool,
-		const char *filename, char **jwk, char**kid, apr_jwt_error_t *err);
+		apr_jwk_t **j_jwk, apr_jwt_error_t *err);
+/* parse a shared key in to a JSON Web Key (oct) struct */
+apr_byte_t apr_jwk_parse_shared_secret(apr_pool_t *pool, const char *secret,
+		apr_jwk_t **j_jwk, apr_jwt_error_t *err);
+/* parse an RSA private key from a PEM formatted file */
+apr_byte_t apr_jwk_parse_rsa_private_key(apr_pool_t *pool, const char *filename,
+		apr_jwk_t **j_jwk, apr_jwt_error_t *err);
+/* parse an RSA public key from a PEM formatted file */
+apr_byte_t apr_jwk_parse_rsa_public_key(apr_pool_t *pool, const char *filename,
+		apr_jwk_t **j_jwk, apr_jwt_error_t *err);
+apr_byte_t apr_jwk_to_json(apr_pool_t *pool, apr_jwk_t *jwk, char **s_json,
+		apr_jwt_error_t *err);
 
 /*
  * JSON Web Token Signature handling
@@ -282,7 +297,7 @@ apr_byte_t apr_jwe_encryption_is_supported(apr_pool_t *pool, const char *enc);
 
 apr_byte_t apr_jwe_is_encrypted_jwt(apr_pool_t *pool, apr_jwt_header_t *hdr);
 apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header,
-		apr_array_header_t *unpacked, apr_hash_t *private_keys,
-		const char *shared_key, char **decrypted, apr_jwt_error_t *err);
+		apr_array_header_t *unpacked, apr_hash_t *keys, char **decrypted,
+		apr_jwt_error_t *err);
 
 #endif /* _APR_JOSE_H_ */

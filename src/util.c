@@ -1376,3 +1376,19 @@ void oidc_util_table_add_query_encoded_params(apr_pool_t *pool,
 		}
 	}
 }
+
+/*
+ * merge RSA private keys and shared keys in to a single hashtable
+ */
+apr_hash_t * oidc_util_get_keys_table(apr_pool_t *pool,
+		apr_hash_t *private_keys, const char *secret) {
+	apr_jwt_error_t err;
+	apr_jwk_t *jwk = NULL;
+	apr_hash_t *result =
+			(private_keys != NULL) ?
+					apr_hash_copy(pool, private_keys) : apr_hash_make(pool);
+	if (apr_jwk_parse_shared_secret(pool, secret, &jwk, &err) == TRUE) {
+		apr_hash_set(result, jwk->kid, APR_HASH_KEY_STRING, jwk);
+	}
+	return result;
+}

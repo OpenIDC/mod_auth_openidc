@@ -185,10 +185,10 @@ static apr_byte_t apr_jwt_base64url_decode_object(apr_pool_t *pool,
 /*
  * get (optional) string from JWT
  */
-apr_byte_t apr_jwt_get_string(apr_pool_t *pool, apr_jwt_value_t *value,
+apr_byte_t apr_jwt_get_string(apr_pool_t *pool, json_t *json,
 		const char *claim_name, apr_byte_t is_mandatory, char **result,
 		apr_jwt_error_t *err) {
-	json_t *v = json_object_get(value->json, claim_name);
+	json_t *v = json_object_get(json, claim_name);
 	if (v != NULL) {
 		if (json_is_string(v)) {
 			*result = apr_pstrdup(pool, json_string_value(v));
@@ -209,11 +209,11 @@ apr_byte_t apr_jwt_get_string(apr_pool_t *pool, apr_jwt_value_t *value,
 /*
  * parse (optional) timestamp from payload
  */
-static apr_byte_t apr_jwt_get_timestamp(apr_pool_t *pool,
-		apr_jwt_value_t *value, const char *claim_name, apr_byte_t is_mandatory,
-		json_int_t *result, apr_jwt_error_t *err) {
+static apr_byte_t apr_jwt_get_timestamp(apr_pool_t *pool, json_t *json,
+		const char *claim_name, apr_byte_t is_mandatory, json_int_t *result,
+		apr_jwt_error_t *err) {
 	*result = APR_JWT_CLAIM_TIME_EMPTY;
-	json_t *v = json_object_get(value->json, claim_name);
+	json_t *v = json_object_get(json, claim_name);
 	if (v != NULL) {
 		if (json_is_integer(v)) {
 			*result = json_integer_value(v);
@@ -243,15 +243,17 @@ apr_byte_t apr_jwt_parse_header(apr_pool_t *pool, const char *s_header,
 		return FALSE;
 
 	/* parse the (mandatory) signing algorithm */
-	if (apr_jwt_get_string(pool, &header->value, "alg", TRUE, &header->alg,
+	if (apr_jwt_get_string(pool, header->value.json, "alg", TRUE, &header->alg,
 			err) == FALSE)
 		return FALSE;
 
 	/* parse the (optional) kid */
-	apr_jwt_get_string(pool, &header->value, "kid", FALSE, &header->kid, NULL);
+	apr_jwt_get_string(pool, header->value.json, "kid", FALSE, &header->kid,
+			NULL);
 
 	/* parse the (optional) enc */
-	apr_jwt_get_string(pool, &header->value, "enc", FALSE, &header->enc, NULL);
+	apr_jwt_get_string(pool, header->value.json, "enc", FALSE, &header->enc,
+			NULL);
 
 	return TRUE;
 }
@@ -268,19 +270,21 @@ static apr_byte_t apr_jwt_parse_payload(apr_pool_t *pool, const char *s_payload,
 		return FALSE;
 
 	/* get the (optional) "issuer" value from the JSON payload */
-	apr_jwt_get_string(pool, &payload->value, "iss", FALSE, &payload->iss,
+	apr_jwt_get_string(pool, payload->value.json, "iss", FALSE, &payload->iss,
 			NULL);
 
 	/* get the (optional) "exp" value from the JSON payload */
-	apr_jwt_get_timestamp(pool, &payload->value, "exp", FALSE, &payload->exp,
+	apr_jwt_get_timestamp(pool, payload->value.json, "exp", FALSE,
+			&payload->exp,
 			NULL);
 
 	/* get the (optional) "iat" value from the JSON payload */
-	apr_jwt_get_timestamp(pool, &payload->value, "iat", FALSE, &payload->iat,
+	apr_jwt_get_timestamp(pool, payload->value.json, "iat", FALSE,
+			&payload->iat,
 			NULL);
 
 	/* get the (optional) "sub" value from the JSON payload */
-	apr_jwt_get_string(pool, &payload->value, "sub", FALSE, &payload->sub,
+	apr_jwt_get_string(pool, payload->value.json, "sub", FALSE, &payload->sub,
 			NULL);
 
 	return TRUE;
@@ -336,11 +340,10 @@ const char *apr_jwt_header_to_string(apr_pool_t *pool, const char *s_json,
 }
 
 /*
- * parse a JSON Web Token
+ * parse and (optionally) decrypt a JSON Web Token
  */
 apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
-		apr_jwt_t **j_jwt, apr_hash_t *private_keys, const char *shared_key,
-		apr_jwt_error_t *err) {
+		apr_jwt_t **j_jwt, apr_hash_t *keys, apr_jwt_error_t *err) {
 
 	*j_jwt = apr_pcalloc(pool, sizeof(apr_jwt_t));
 	apr_jwt_t *jwt = *j_jwt;
@@ -359,8 +362,8 @@ apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
 
 	if (apr_jwe_is_encrypted_jwt(pool, &jwt->header)) {
 		char *decrypted = NULL;
-		if ((apr_jwe_decrypt_jwt(pool, &jwt->header, unpacked, private_keys,
-				shared_key, &decrypted, err) == FALSE) || (decrypted == NULL))
+		if ((apr_jwe_decrypt_jwt(pool, &jwt->header, unpacked, keys, &decrypted,
+				err) == FALSE) || (decrypted == NULL))
 			return FALSE;
 		apr_array_clear(unpacked);
 		unpacked = apr_jwt_compact_deserialize(pool, (const char *) decrypted);

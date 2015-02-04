@@ -60,7 +60,7 @@
 /*
  * parse an RSA JWK in raw format (n,e,d)
  */
-static apr_byte_t apr_jwk_parse_rsa_raw(apr_pool_t *pool, apr_jwt_value_t *jwk,
+static apr_byte_t apr_jwk_parse_rsa_raw(apr_pool_t *pool, json_t *json,
 		apr_jwk_key_rsa_t **jwk_key_rsa, apr_jwt_error_t *err) {
 
 	/* allocate space */
@@ -69,7 +69,7 @@ static apr_byte_t apr_jwk_parse_rsa_raw(apr_pool_t *pool, apr_jwt_value_t *jwk,
 
 	/* parse the mandatory modulus */
 	char *s_modulus = NULL;
-	if (apr_jwt_get_string(pool, jwk, "n", TRUE, &s_modulus, err) == FALSE)
+	if (apr_jwt_get_string(pool, json, "n", TRUE, &s_modulus, err) == FALSE)
 		return FALSE;
 
 	/* base64url decode the modulus and get its size */
@@ -82,7 +82,7 @@ static apr_byte_t apr_jwk_parse_rsa_raw(apr_pool_t *pool, apr_jwt_value_t *jwk,
 
 	/* parse the mandatory exponent */
 	char *s_exponent = NULL;
-	if (apr_jwt_get_string(pool, jwk, "e", TRUE, &s_exponent, err) == FALSE)
+	if (apr_jwt_get_string(pool, json, "e", TRUE, &s_exponent, err) == FALSE)
 		return FALSE;
 
 	/* base64url decode the exponent and get its size */
@@ -95,7 +95,7 @@ static apr_byte_t apr_jwk_parse_rsa_raw(apr_pool_t *pool, apr_jwt_value_t *jwk,
 
 	/* parse the optional private exponent */
 	char *s_private_exponent = NULL;
-	apr_jwt_get_string(pool, jwk, "d", FALSE, &s_private_exponent, NULL);
+	apr_jwt_get_string(pool, json, "d", FALSE, &s_private_exponent, NULL);
 	if (s_private_exponent != NULL) {
 		/* base64url decode the private exponent and get its size */
 		key->private_exponent_len = apr_jwt_base64url_decode(pool,
@@ -185,13 +185,13 @@ end:
 /*
  * parse an RSA JWK in X.509 format (x5c)
  */
-static apr_byte_t apr_jwk_parse_rsa_x5c(apr_pool_t *pool, apr_jwk_t *jwk,
-		apr_jwt_error_t *err) {
+static apr_byte_t apr_jwk_parse_rsa_x5c(apr_pool_t *pool, json_t *json,
+		apr_jwk_t *jwk, apr_jwt_error_t *err) {
 
 	apr_byte_t rv = FALSE;
 
 	/* get the "x5c" array element from the JSON object */
-	json_t *v = json_object_get(jwk->value.json, "x5c");
+	json_t *v = json_object_get(json, "x5c");
 	if (v == NULL) {
 		apr_jwt_error(err, "JSON key \"%s\" could not be found", "x5c");
 		return FALSE;
@@ -251,19 +251,19 @@ static apr_byte_t apr_jwk_parse_rsa_x5c(apr_pool_t *pool, apr_jwk_t *jwk,
 /*
  * parse an RSA JWK
  */
-static apr_byte_t apr_jwk_parse_rsa(apr_pool_t *pool, apr_jwk_t *jwk,
-		apr_jwt_error_t *err) {
+static apr_byte_t apr_jwk_parse_rsa(apr_pool_t *pool, json_t *json,
+		apr_jwk_t *jwk, apr_jwt_error_t *err) {
 
 	jwk->type = APR_JWK_KEY_RSA;
 
 	char *s_test = NULL;
-	apr_jwt_get_string(pool, &jwk->value, "n", FALSE, &s_test, NULL);
+	apr_jwt_get_string(pool, json, "n", FALSE, &s_test, NULL);
 	if (s_test != NULL)
-		return apr_jwk_parse_rsa_raw(pool, &jwk->value, &jwk->key.rsa, err);
+		return apr_jwk_parse_rsa_raw(pool, json, &jwk->key.rsa, err);
 
-	json_t *v = json_object_get(jwk->value.json, "x5c");
+	json_t *v = json_object_get(json, "x5c");
 	if (v != NULL)
-		return apr_jwk_parse_rsa_x5c(pool, jwk, err);
+		return apr_jwk_parse_rsa_x5c(pool, json, jwk, err);
 
 	apr_jwt_error(err,
 			"wrong or unsupported RSA key representation, no \"n\" or \"x5c\" key found in JWK JSON value");
@@ -273,8 +273,8 @@ static apr_byte_t apr_jwk_parse_rsa(apr_pool_t *pool, apr_jwk_t *jwk,
 /*
  * parse an EC JWK
  */
-static apr_byte_t apr_jwk_parse_ec(apr_pool_t *pool, apr_jwk_t *jwk,
-		apr_jwt_error_t *err) {
+static apr_byte_t apr_jwk_parse_ec(apr_pool_t *pool, json_t *json,
+		apr_jwk_t *jwk, apr_jwt_error_t *err) {
 
 	/* allocated space and set key type */
 	jwk->type = APR_JWK_KEY_EC;
@@ -282,7 +282,7 @@ static apr_byte_t apr_jwk_parse_ec(apr_pool_t *pool, apr_jwk_t *jwk,
 
 	/* parse x */
 	char *s_x = NULL;
-	if (apr_jwt_get_string(pool, &jwk->value, "x", TRUE, &s_x, err) == FALSE)
+	if (apr_jwt_get_string(pool, json, "x", TRUE, &s_x, err) == FALSE)
 		return FALSE;
 
 	/* base64url decode x and get its size */
@@ -295,7 +295,7 @@ static apr_byte_t apr_jwk_parse_ec(apr_pool_t *pool, apr_jwk_t *jwk,
 
 	/* parse y */
 	char *s_y = NULL;
-	if (apr_jwt_get_string(pool, &jwk->value, "y", TRUE, &s_y, err) == FALSE)
+	if (apr_jwt_get_string(pool, json, "y", TRUE, &s_y, err) == FALSE)
 		return FALSE;
 
 	/* base64url decode y and get its size */
@@ -311,19 +311,100 @@ static apr_byte_t apr_jwk_parse_ec(apr_pool_t *pool, apr_jwk_t *jwk,
 }
 
 /*
+ * parse a an octet sequence used to represent a symmetric key
+ */
+static apr_byte_t apr_jwk_parse_oct(apr_pool_t *pool, json_t *json,
+		apr_jwk_t *jwk, apr_jwt_error_t *err) {
+
+	/* allocated space and set key type */
+	jwk->type = APR_JWK_KEY_OCT;
+	jwk->key.oct = apr_pcalloc(pool, sizeof(apr_jwk_key_oct_t));
+
+	/* parse k */
+	char *s_k = NULL;
+	if (apr_jwt_get_string(pool, json, "k", TRUE, &s_k, err) == FALSE)
+		return FALSE;
+
+	/* base64url decode k and get its size */
+	jwk->key.oct->k_len = apr_jwt_base64url_decode(pool,
+			(char **) &jwk->key.oct->k, s_k, 1);
+	if (jwk->key.oct->k_len <= 0) {
+		apr_jwt_error(err, "apr_jwt_base64url_decode of k length failed");
+		return FALSE;
+	}
+
+	/* that went well */
+	return TRUE;
+}
+
+/*
+ * calculate a hash and base64url encode the result
+ */
+static apr_byte_t apr_jwk_hash_and_base64urlencode(apr_pool_t *pool,
+		const unsigned char *input, const int input_len, char **output,
+		apr_jwt_error_t *err) {
+
+	unsigned int hash_len = SHA_DIGEST_LENGTH;
+	unsigned char hash[SHA_DIGEST_LENGTH];
+
+	// TODO: upgrade to SHA2?
+
+	/* hash it */
+	if (!SHA1(input, input_len, hash)) {
+		apr_jwt_error_openssl(err, "SHA1");
+		return FALSE;
+	}
+
+	/* base64url encode the key fingerprint */
+	if (apr_jwt_base64url_encode(pool, output, (const char *) hash, hash_len, 0)
+			<= 0) {
+		apr_jwt_error(err, "apr_jwt_base64url_encode of hash failed");
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/*
+ * parse a shared symmetric key in to an "oct" JWK
+ */
+apr_byte_t apr_jwk_parse_shared_secret(apr_pool_t *pool, const char *secret,
+		apr_jwk_t **j_jwk, apr_jwt_error_t *err) {
+
+	/* allocate memory for the JWK */
+	*j_jwk = apr_pcalloc(pool, sizeof(apr_jwk_t));
+	apr_jwk_t *jwk = *j_jwk;
+
+	/* allocated space and set key type */
+	jwk->type = APR_JWK_KEY_OCT;
+	jwk->key.oct = apr_pcalloc(pool, sizeof(apr_jwk_key_oct_t));
+
+	/* set the values */
+	jwk->key.oct->k = (unsigned char *) apr_pstrdup(pool, secret);
+	jwk->key.oct->k_len = strlen(secret);
+
+	/* calculate a unique key identifier (kid) by fingerprinting the key params */
+	if (apr_jwk_hash_and_base64urlencode(pool, jwk->key.oct->k,
+			jwk->key.oct->k_len, &jwk->kid, err) == FALSE)
+		return FALSE;
+
+	return TRUE;
+}
+
+/*
  * parse JSON JWK
  */
-apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, json_t *j_json,
-		const char *s_json, apr_jwk_t **j_jwk, apr_jwt_error_t *err) {
+apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, json_t *json, apr_jwk_t **j_jwk,
+		apr_jwt_error_t *err) {
 
 	/* check that we've actually got a JSON value back */
-	if (j_json == NULL) {
+	if (json == NULL) {
 		apr_jwt_error(err, "JWK JSON is NULL");
 		return FALSE;
 	}
 
 	/* check that the value is a JSON object */
-	if (!json_is_object(j_json)) {
+	if (!json_is_object(json)) {
 		apr_jwt_error(err, "JWK JSON is not a JSON object");
 		return FALSE;
 	}
@@ -332,24 +413,26 @@ apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, json_t *j_json,
 	*j_jwk = apr_pcalloc(pool, sizeof(apr_jwk_t));
 	apr_jwk_t *jwk = *j_jwk;
 
-	/* set the raw JSON/string representations */
-	jwk->value.json = j_json;
-	jwk->value.str = apr_pstrdup(pool, s_json);
-
 	/* get the mandatory key type */
 	char *kty = NULL;
-	if (apr_jwt_get_string(pool, &jwk->value, "kty", TRUE, &kty, err) == FALSE)
+	if (apr_jwt_get_string(pool, json, "kty", TRUE, &kty, err) == FALSE)
 		return FALSE;
+
+	/* get the optional kid */
+	apr_jwt_get_string(pool, json, "kid", FALSE, &jwk->kid, NULL);
 
 	/* parse the key */
 	if (apr_strnatcmp(kty, "RSA") == 0)
-		return apr_jwk_parse_rsa(pool, jwk, err);
+		return apr_jwk_parse_rsa(pool, json, jwk, err);
 
 	if (apr_strnatcmp(kty, "EC") == 0)
-		return apr_jwk_parse_ec(pool, jwk, err);
+		return apr_jwk_parse_ec(pool, json, jwk, err);
+
+	if (apr_strnatcmp(kty, "oct") == 0)
+		return apr_jwk_parse_oct(pool, json, jwk, err);
 
 	apr_jwt_error(err,
-			"wrong or unsupported JWK key representation \"%s\" (only \"RSA\" and \"EC\" are supported)",
+			"wrong or unsupported JWK key representation \"%s\" (\"RSA\", \"EC\" and \"oct\" are supported key types)",
 			kty);
 
 	return FALSE;
@@ -358,8 +441,15 @@ apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, json_t *j_json,
 /*
  * convert RSA key to JWK JSON string representation and kid
  */
-static apr_byte_t apr_jwk_rsa_to_json(apr_pool_t *pool, apr_jwk_key_rsa_t *key,
-		char **jwk, char**kid, apr_jwt_error_t *err) {
+apr_byte_t apr_jwk_to_json(apr_pool_t *pool, apr_jwk_t *jwk, char **s_json,
+		apr_jwt_error_t *err) {
+
+	if (jwk->type != APR_JWK_KEY_RSA) {
+		apr_jwt_error(err, "non RSA keys (%d) not yet supported", jwk->type);
+		return FALSE;
+	}
+
+	apr_jwk_key_rsa_t *key = jwk->key.rsa;
 
 	unsigned char *n_enc = NULL;
 	int n_len = apr_jwt_base64url_encode(pool, (char **) &n_enc,
@@ -388,41 +478,21 @@ static apr_byte_t apr_jwk_rsa_to_json(apr_pool_t *pool, apr_jwk_key_rsa_t *key,
 		}
 	}
 
-	/* calculate a unique key identifier (kid) by fingerprinting the key params */
-	// TODO: based just on sha1 hash of baseurl-encoded "n" now...
-	unsigned int fp_len = SHA_DIGEST_LENGTH;
-	unsigned char fp[SHA_DIGEST_LENGTH];
-	if (!SHA1(n_enc, n_len, fp)) {
-		apr_jwt_error_openssl(err, "SHA1");
-		return FALSE;
-	}
-	char *fp_enc = NULL;
-	if (apr_jwt_base64url_encode(pool, &fp_enc, (const char *) fp, fp_len, 0)
-			<= 0) {
-		apr_jwt_error(err, "apr_jwt_base64url_encode of fp_enc failed");
-		return FALSE;
-	}
-
 	char *p = apr_psprintf(pool, "{ \"kty\" : \"RSA\"");
 	p = apr_psprintf(pool, "%s, \"n\": \"%s\"", p, n_enc);
 	p = apr_psprintf(pool, "%s, \"e\": \"%s\"", p, e_enc);
 	if (d_enc != NULL)
 		p = apr_psprintf(pool, "%s, \"d\": \"%s\"", p, d_enc);
-	p = apr_psprintf(pool, "%s, \"kid\" : \"%s\"", p, fp_enc);
+	p = apr_psprintf(pool, "%s, \"kid\" : \"%s\"", p, jwk->kid);
 	p = apr_psprintf(pool, "%s }", p);
 
-	*jwk = p;
-	*kid = fp_enc;
+	*s_json = p;
 
 	return TRUE;
 }
 
-/*
- * convert PEM formatted public/private key file to JSON string representation
- */
-static apr_byte_t apr_jwk_pem_to_json_impl(apr_pool_t *pool,
-		const char *filename, char **s_jwk, char**s_kid, int is_private_key,
-		apr_jwt_error_t *err) {
+static apr_byte_t apr_jwk_parse_rsa_key(apr_pool_t *pool, int is_private_key,
+		const char *filename, apr_jwk_t **j_jwk, apr_jwt_error_t *err) {
 	BIO *input = NULL;
 	apr_jwk_key_rsa_t *key = NULL;
 	apr_byte_t rv = FALSE;
@@ -440,7 +510,20 @@ static apr_byte_t apr_jwk_pem_to_json_impl(apr_pool_t *pool,
 	if (apr_jwk_rsa_bio_to_key(pool, input, &key, is_private_key, err) == FALSE)
 		goto end;
 
-	rv = apr_jwk_rsa_to_json(pool, key, s_jwk, s_kid, err);
+	/* allocate memory for the JWK */
+	*j_jwk = apr_pcalloc(pool, sizeof(apr_jwk_t));
+	apr_jwk_t *jwk = *j_jwk;
+
+	jwk->type = APR_JWK_KEY_RSA;
+	jwk->key.rsa = key;
+
+	/* calculate a unique key identifier (kid) by fingerprinting the key params */
+	// TODO: based just on sha1 hash of modulus "n" now..., could do this based on jwk->value.str
+	if (apr_jwk_hash_and_base64urlencode(pool, key->modulus, key->modulus_len,
+			&jwk->kid, err) == FALSE)
+		goto end;
+
+	rv = TRUE;
 
 end:
 
@@ -450,20 +533,12 @@ end:
 	return rv;
 }
 
-/*
- * convert the RSA public key in the X.509 certificate in the file pointed to
- * by "filename" to a JSON Web Key string representation
- */
-apr_byte_t apr_jwk_pem_to_json(apr_pool_t *pool, const char *filename,
-		char **s_jwk, char**s_kid, apr_jwt_error_t *err) {
-	return apr_jwk_pem_to_json_impl(pool, filename, s_jwk, s_kid, FALSE, err);
+apr_byte_t apr_jwk_parse_rsa_private_key(apr_pool_t *pool, const char *filename,
+		apr_jwk_t **j_jwk, apr_jwt_error_t *err) {
+	return apr_jwk_parse_rsa_key(pool, TRUE, filename, j_jwk, err);
 }
 
-/*
- * convert the RSA private key in the PEM file pointed to by "filename"
- * to a JSON Web Key string representation
- */
-apr_byte_t apr_jwk_private_key_to_rsa_jwk(apr_pool_t *pool,
-		const char *filename, char **s_jwk, char**s_kid, apr_jwt_error_t *err) {
-	return apr_jwk_pem_to_json_impl(pool, filename, s_jwk, s_kid, TRUE, err);
+apr_byte_t apr_jwk_parse_rsa_public_key(apr_pool_t *pool, const char *filename,
+		apr_jwk_t **j_jwk, apr_jwt_error_t *err) {
+	return apr_jwk_parse_rsa_key(pool, FALSE, filename, j_jwk, err);
 }

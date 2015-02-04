@@ -321,8 +321,9 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 
 	apr_jwt_error_t err;
 	apr_jwt_t *jwt = NULL;
-	if (apr_jwt_parse(r->pool, access_token, &jwt, c->private_keys,
-			c->oauth.client_secret, &err) == FALSE) {
+	if (apr_jwt_parse(r->pool, access_token, &jwt,
+			oidc_util_get_keys_table(r->pool, c->private_keys,
+					c->oauth.client_secret), &err) == FALSE) {
 		oidc_error(r, "could not parse JWT from access_token: %s",
 				apr_jwt_e2s(r->pool, err));
 		return FALSE;

@@ -159,36 +159,6 @@ static RSA* apr_jwe_jwk_to_openssl_rsa_key(apr_jwk_t *jwk) {
 }
 
 /*
- * convert a JSON JWK key to an OpenSSL RSA key
- */
-static RSA * apr_jwe_jwk_json_to_openssl_rsa_key(apr_pool_t *pool,
-		const char *jwk_json, apr_jwt_error_t *err) {
-
-	json_t *j_jwk = NULL;
-
-	json_error_t json_error;
-	j_jwk = json_loads(jwk_json, 0, &json_error);
-
-	if (j_jwk == NULL) {
-		apr_jwt_error(err, "JWK JSON parsing (json_loads) failed: %s",
-				json_error.text);
-		return NULL;
-	}
-
-	if (!json_is_object(j_jwk)) {
-		apr_jwt_error(err, "JWK JSON is not an object");
-		return NULL;
-	}
-
-	apr_jwk_t *jwk = NULL;
-	apr_byte_t rc = apr_jwk_parse_json(pool, j_jwk, jwk_json, &jwk, err);
-
-	json_decref(j_jwk);
-
-	return (rc == TRUE) ? apr_jwe_jwk_to_openssl_rsa_key(jwk) : NULL;
-}
-
-/*
  * pointer to base64url decoded JWT elements
  */
 typedef struct apr_jwe_unpacked_t {
@@ -227,41 +197,14 @@ static apr_array_header_t *apr_jwe_unpacked_base64url_decode(apr_pool_t *pool,
  */
 static apr_byte_t apr_jwe_decrypt_cek_rsa(apr_pool_t *pool,
 		apr_jwt_header_t *header, apr_array_header_t *unpacked_decoded,
-		apr_hash_t *private_keys, unsigned char **cek, int *cek_len,
+		apr_jwk_t *jwk_rsa, unsigned char **cek, int *cek_len,
 		apr_jwt_error_t *err) {
 
-	RSA *pkey = NULL;
-	const char *private_key_jwk = NULL;
-	apr_byte_t rv = FALSE;
-
-	/* need RSA private keys set to decrypt */
-	if (private_keys == NULL) {
-		apr_jwt_error(err, "private keys not set");
-		goto end;
+	RSA *pkey = apr_jwe_jwk_to_openssl_rsa_key(jwk_rsa);
+	if (pkey == NULL) {
+		apr_jwt_error(err, "apr_jwe_jwk_to_openssl_rsa_key failed");
+		return FALSE;
 	}
-
-	/*
-	 * if there's a key identifier set, try and find the corresponding private
-	 * key or else just use the first key in the list of private keys (JWKs)
-	 */
-	if (header->kid != NULL) {
-		private_key_jwk = apr_hash_get(private_keys, header->kid,
-				APR_HASH_KEY_STRING);
-	} else {
-		apr_hash_index_t *hi = apr_hash_first(NULL, private_keys);
-		apr_hash_this(hi, NULL, NULL, (void**) &private_key_jwk);
-	}
-
-	/* by now we should really have a private key set */
-	if (private_key_jwk == NULL) {
-		apr_jwt_error(err, "could not find private key");
-		goto end;
-	}
-
-	/* convert the private key to an OpenSSL RSA representation */
-	if ((pkey = apr_jwe_jwk_json_to_openssl_rsa_key(pool, private_key_jwk, err))
-			== NULL)
-		goto end;
 
 	/* find and decrypt Content Encryption Key */
 	apr_jwe_unpacked_t *encrypted_key =
@@ -273,29 +216,26 @@ static apr_byte_t apr_jwe_decrypt_cek_rsa(apr_pool_t *pool,
 	if (*cek_len < 0)
 		apr_jwt_error_openssl(err, "RSA_private_decrypt");
 
+	/* free allocated resources */
+	RSA_free(pkey);
+
 	/* set return value based on decrypt result */
-	rv = (*cek_len > 0);
-
-end:
-	if (pkey)
-		RSA_free(pkey);
-
-	return rv;
+	return (*cek_len > 0);
 }
 
 /*
- * decrypt AES wrapped Content Encryption Key
+ * decrypt AES wrapped Content Encryption Key with the provided symmetric key
  */
-static apr_byte_t apr_jwe_cek_aes_unwrap_key(apr_pool_t *pool,
+static apr_byte_t apr_jwe_decrypt_cek_oct_aes(apr_pool_t *pool,
 		apr_jwt_header_t *header, apr_array_header_t *unpacked_decoded,
-		const char *shared_key, unsigned char **cek, int *cek_len,
-		apr_jwt_error_t *err) {
+		const unsigned char *shared_key, const int shared_key_len,
+		unsigned char **cek, int *cek_len, apr_jwt_error_t *err) {
 
 	/* sha256 hash the client_secret first */
 	unsigned char *hashed_key = NULL;
 	unsigned int hashed_key_len = 0;
-	if (apr_jws_hash_bytes(pool, "sha256", (const unsigned char *) shared_key,
-			strlen(shared_key), &hashed_key, &hashed_key_len, err) == FALSE)
+	if (apr_jws_hash_bytes(pool, "sha256", shared_key, shared_key_len,
+			&hashed_key, &hashed_key_len, err) == FALSE)
 		return FALSE;
 
 	/* determine key length in bits */
@@ -330,6 +270,73 @@ static apr_byte_t apr_jwe_cek_aes_unwrap_key(apr_pool_t *pool,
 	return (rv > 0);
 }
 
+/*
+ * try to decrypt the Content Encryption key with the specified JWK
+ */
+static apr_byte_t apr_jwe_decrypt_cek_with_jwk(apr_pool_t *pool,
+		apr_jwt_header_t *header, apr_array_header_t *unpacked_decoded,
+		apr_jwk_t *jwk, unsigned char **cek, int *cek_len, apr_jwt_error_t *err) {
+
+	apr_byte_t rc = FALSE;
+
+	if (apr_strnatcmp(header->alg, "RSA1_5") == 0) {
+
+		rc = (jwk->type == APR_JWK_KEY_RSA)
+				&& apr_jwe_decrypt_cek_rsa(pool, header, unpacked_decoded, jwk,
+						cek, cek_len, err);
+
+	} else if ((apr_strnatcmp(header->alg, "A128KW") == 0)
+			|| (apr_strnatcmp(header->alg, "A256KW") == 0)) {
+
+		rc = (jwk->type == APR_JWK_KEY_OCT)
+				&& apr_jwe_decrypt_cek_oct_aes(pool, header, unpacked_decoded,
+						jwk->key.oct->k, jwk->key.oct->k_len, cek, cek_len,
+						err);
+	}
+
+	return rc;
+}
+
+/*
+ * decrypt the Content Encryption Key with one out of a list of keys
+ * based on the content key encryption algorithm in the header
+ */
+static apr_byte_t apr_jwe_decrypt_cek(apr_pool_t *pool,
+		apr_jwt_header_t *header, apr_array_header_t *unpacked_decoded,
+		apr_hash_t *keys, unsigned char **cek, int *cek_len,
+		apr_jwt_error_t *err) {
+
+	apr_byte_t rc = FALSE;
+
+	apr_jwk_t *jwk = NULL;
+	apr_hash_index_t *hi;
+
+	if (header->kid != NULL) {
+
+		jwk = apr_hash_get(keys, header->kid,
+		APR_HASH_KEY_STRING);
+		if (jwk != NULL) {
+			rc = apr_jwe_decrypt_cek_with_jwk(pool, header, unpacked_decoded,
+					jwk, cek, cek_len, err);
+		} else {
+			apr_jwt_error(err, "could not find key with kid: %s", header->kid);
+			rc = FALSE;
+		}
+
+	} else {
+
+		for (hi = apr_hash_first(pool, keys); hi; hi = apr_hash_next(hi)) {
+			apr_hash_this(hi, NULL, NULL, (void **) &jwk);
+			rc = apr_jwe_decrypt_cek_with_jwk(pool, header, unpacked_decoded,
+					jwk, cek, cek_len, err);
+			if (rc == TRUE)
+				break;
+		}
+	}
+
+	return rc;
+}
+
 static unsigned char *apr_jwe_cek_dummy =
 		(unsigned char *) "01234567890123456789012345678901";
 static int apr_jwe_cek_len_dummy = 32;
@@ -338,9 +345,10 @@ static int apr_jwe_cek_len_dummy = 32;
  * decrypt encrypted JWT
  */
 apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header,
-		apr_array_header_t *unpacked, apr_hash_t *private_keys,
-		const char *shared_key, char **decrypted, apr_jwt_error_t *err) {
+		apr_array_header_t *unpacked, apr_hash_t *keys, char **decrypted,
+		apr_jwt_error_t *err_r) {
 
+	apr_jwt_error_t err_dummy, *err = err_r;
 	unsigned char *cek = NULL;
 	int cek_len = 0;
 
@@ -356,22 +364,14 @@ apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header,
 		return FALSE;
 	}
 
-	/* decrypt the Content Encryption Key based on the content key encryption algorithm in the header */
-	if (apr_strnatcmp(header->alg, "RSA1_5") == 0) {
-		if (apr_jwe_decrypt_cek_rsa(pool, header, unpacked_decoded,
-				private_keys, &cek, &cek_len, err) == FALSE) {
-			/* substitute dummy CEK to avoid timing attacks */
-			cek = apr_jwe_cek_dummy;
-			cek_len = apr_jwe_cek_len_dummy;
-		}
-	} else if ((apr_strnatcmp(header->alg, "A128KW") == 0)
-			|| (apr_strnatcmp(header->alg, "A256KW") == 0)) {
-		if (apr_jwe_cek_aes_unwrap_key(pool, header, unpacked_decoded,
-				shared_key, &cek, &cek_len, err) == FALSE) {
-			/* substitute dummy CEK to avoid timing attacks */
-			cek = apr_jwe_cek_dummy;
-			cek_len = apr_jwe_cek_len_dummy;
-		}
+	/* decrypt the Content Encryption Key */
+	if (apr_jwe_decrypt_cek(pool, header, unpacked_decoded, keys, &cek,
+			&cek_len, err) == FALSE) {
+		/* substitute dummy CEK to avoid timing attacks */
+		cek = apr_jwe_cek_dummy;
+		cek_len = apr_jwe_cek_len_dummy;
+		/* save the original error, now in err_r */
+		err = &err_dummy;
 	}
 
 	/* get the other elements (Initialization Vector, encrypted text and Authentication Tag) from the compact serialized JSON representation */

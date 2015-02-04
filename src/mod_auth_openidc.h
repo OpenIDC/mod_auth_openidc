@@ -386,6 +386,7 @@ apr_byte_t oidc_json_object_get_string(apr_pool_t *pool, json_t *json, const cha
 apr_byte_t oidc_json_object_get_int(apr_pool_t *pool, json_t *json, const char *name, int *value, const int default_value);
 char *oidc_util_html_escape(apr_pool_t *pool, const char *input);
 void oidc_util_table_add_query_encoded_params(apr_pool_t *pool, apr_table_t *table, const char *params);
+apr_hash_t * oidc_util_get_keys_table(apr_pool_t *pool, apr_hash_t *private_keys, const char *secret);
 
 // oidc_crypto.c
 unsigned char *oidc_crypto_aes_encrypt(request_rec *r, oidc_cfg *cfg, unsigned char *plaintext, int *len);

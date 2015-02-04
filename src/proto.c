@@ -251,7 +251,7 @@ static apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
 
 	/* get the "nonce" value in the id_token payload */
 	char *j_nonce = NULL;
-	if (apr_jwt_get_string(r->pool, &jwt->payload.value, "nonce", TRUE,
+	if (apr_jwt_get_string(r->pool, jwt->payload.value.json, "nonce", TRUE,
 			&j_nonce, &err) == FALSE) {
 		oidc_error(r,
 				"id_token JSON payload did not contain a \"nonce\" string: %s",
@@ -292,7 +292,8 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, apr_jwt_payload_t *id_token_payload) {
 
 	char *azp = NULL;
-	apr_jwt_get_string(r->pool, &id_token_payload->value, "azp", FALSE, &azp,
+	apr_jwt_get_string(r->pool, id_token_payload->value.json, "azp", FALSE,
+			&azp,
 			NULL);
 
 	/*
@@ -475,7 +476,7 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 	apr_byte_t rc = FALSE;
 	apr_jwt_error_t err;
 	char *x5t = NULL;
-	apr_jwt_get_string(r->pool, &jwt_hdr->value, "x5t", FALSE, &x5t, NULL);
+	apr_jwt_get_string(r->pool, jwt_hdr->value.json, "x5t", FALSE, &x5t, NULL);
 
 	oidc_debug(r, "search for kid \"%s\" or thumbprint x5t \"%s\"",
 			jwt_hdr->kid, x5t);
@@ -510,7 +511,7 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 		if ((jwt_hdr->kid == NULL) && (x5t == NULL)) {
 			oidc_debug(r, "no kid/x5t to match, return first key found");
 
-			rc = apr_jwk_parse_json(r->pool, elem, NULL, result, &err);
+			rc = apr_jwk_parse_json(r->pool, elem, result, &err);
 			if (rc == FALSE)
 				oidc_error(r, "JWK parsing failed: %s",
 						apr_jwt_e2s(r->pool, err));
@@ -524,7 +525,7 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 			if (apr_strnatcmp(jwt_hdr->kid, json_string_value(ekid)) == 0) {
 				oidc_debug(r, "found matching kid: \"%s\"", jwt_hdr->kid);
 
-				rc = apr_jwk_parse_json(r->pool, elem, NULL, result, &err);
+				rc = apr_jwk_parse_json(r->pool, elem, result, &err);
 				if (rc == FALSE)
 					oidc_error(r, "JWK parsing failed: %s",
 							apr_jwt_e2s(r->pool, err));
@@ -539,7 +540,7 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 			if (apr_strnatcmp(x5t, json_string_value(ex5t)) == 0) {
 				oidc_debug(r, "found matching x5t: \"%s\"", x5t);
 
-				rc = apr_jwk_parse_json(r->pool, elem, NULL, result, &err);
+				rc = apr_jwk_parse_json(r->pool, elem, result, &err);
 				if (rc == FALSE)
 					oidc_error(r, "JWK parsing failed: %s",
 							apr_jwt_e2s(r->pool, err));
@@ -706,7 +707,7 @@ static apr_byte_t oidc_proto_set_remote_user(request_rec *r, oidc_cfg *c,
 
 	/* extract the username claim (default: "sub") from the id_token payload */
 	char *username = NULL;
-	if (apr_jwt_get_string(r->pool, &jwt->payload.value, claim_name, TRUE,
+	if (apr_jwt_get_string(r->pool, jwt->payload.value.json, claim_name, TRUE,
 			&username, NULL) == FALSE) {
 		oidc_error(r,
 				"OIDCRemoteUserClaim is set to \"%s\", but the id_token JSON payload did not contain a \"%s\" string",
@@ -736,8 +737,9 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 
 	oidc_debug(r, "enter");
 
-	if (apr_jwt_parse(r->pool, id_token, jwt, cfg->private_keys,
-			provider->client_secret, &err) == FALSE) {
+	if (apr_jwt_parse(r->pool, id_token, jwt,
+			oidc_util_get_keys_table(r->pool, cfg->private_keys,
+					provider->client_secret), &err) == FALSE) {
 		if ((*jwt) && ((*jwt)->header.alg)
 				&& (apr_jwe_algorithm_is_supported(r->pool, (*jwt)->header.alg)
 						== FALSE)) {
@@ -1118,7 +1120,8 @@ static apr_byte_t oidc_proto_validate_hash_value(request_rec *r,
 	 * get the hash value from the id_token
 	 */
 	char *hash = NULL;
-	apr_jwt_get_string(r->pool, &jwt->payload.value, key, FALSE, &hash, NULL);
+	apr_jwt_get_string(r->pool, jwt->payload.value.json, key, FALSE, &hash,
+			NULL);
 
 	/*
 	 * check if the hash was present

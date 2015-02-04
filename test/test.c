@@ -152,7 +152,7 @@ static char *test_jwt_parse(apr_pool_t *pool) {
 	apr_jwt_error_t err;
 	apr_jwt_t *jwt = NULL;
 	TST_ASSERT_ERR("apr_jwt_parse",
-			apr_jwt_parse(pool, s, &jwt, NULL, NULL, &err), pool, err);
+			apr_jwt_parse(pool, s, &jwt, NULL, &err), pool, err);
 
 	TST_ASSERT_STR("header.alg", jwt->header.alg, "HS256");
 	TST_ASSERT_STR("header.enc", jwt->header.enc, NULL);
@@ -169,13 +169,19 @@ static char *test_jwt_parse(apr_pool_t *pool) {
 	TST_ASSERT("apr_jws_verify_hmac",
 			apr_jws_verify_hmac(pool, jwt, raw_key, raw_key_len, &err));
 
+	apr_jwt_destroy(jwt);
+
 	s[5] = '.';
 	TST_ASSERT_ERR("corrupted header (1) apr_jwt_parse",
-			apr_jwt_parse(pool, s, &jwt, NULL, NULL, &err) == FALSE, pool, err);
+			apr_jwt_parse(pool, s, &jwt, NULL, &err) == FALSE, pool, err);
+
+	apr_jwt_destroy(jwt);
 
 	s[0] = '\0';
 	TST_ASSERT_ERR("corrupted header (2) apr_jwt_parse",
-			apr_jwt_parse(pool, s, &jwt, NULL, NULL, &err) == FALSE, pool, err);
+			apr_jwt_parse(pool, s, &jwt, NULL, &err) == FALSE, pool, err);
+
+	apr_jwt_destroy(jwt);
 
 	return 0;
 }
@@ -186,7 +192,7 @@ static char *_jwk_parse(apr_pool_t *pool, const char *s, apr_jwk_t **jwk, apr_jw
 	TST_ASSERT("json_loads", ((j_jwk != NULL) && (json_is_object(j_jwk))));
 
 	TST_ASSERT_ERR("apr_jwk_parse_json",
-			apr_jwk_parse_json(pool, j_jwk, s, jwk, err), pool, (*err));
+			apr_jwk_parse_json(pool, j_jwk, jwk, err), pool, (*err));
 
 	return 0;
 }
@@ -219,7 +225,7 @@ static char *test_jwt_verify_rsa(apr_pool_t *pool) {
 	apr_jwt_t *jwt = NULL;
 	apr_jwt_error_t err;
 	TST_ASSERT_ERR("apr_jwt_parse",
-			apr_jwt_parse(pool, s_jwt, &jwt, NULL, NULL, &err), pool, err);
+			apr_jwt_parse(pool, s_jwt, &jwt, NULL, &err), pool, err);
 
 	char *s_key =
 			"{"
@@ -237,7 +243,7 @@ static char *test_jwt_verify_rsa(apr_pool_t *pool) {
 
 	TST_ASSERT("apr_jws_verify_rsa", apr_jws_verify_rsa(pool, jwt, jwk, &err));
 
-	json_decref(jwk->value.json);
+	apr_jwt_destroy(jwt);
 
 	return 0;
 }
@@ -255,12 +261,14 @@ static char *test_plaintext_jwt_parse(apr_pool_t *pool) {
 	apr_jwt_error_t err;
 	apr_jwt_t *jwt = NULL;
 	TST_ASSERT_ERR("apr_jwt_parse",
-			apr_jwt_parse(pool, s, &jwt, NULL, NULL, &err), pool, err);
+			apr_jwt_parse(pool, s, &jwt, NULL, &err), pool, err);
 
 	TST_ASSERT_STR("header.alg", jwt->header.alg, "none");
 
 	TST_ASSERT_STR("payload.iss", jwt->payload.iss, "joe");
 	TST_ASSERT_LONG("payload.exp", (long )jwt->payload.exp, 1300819380L);
+
+	apr_jwt_destroy(jwt);
 
 	return 0;
 }
@@ -276,24 +284,26 @@ static char *test_jwt_get_string(apr_pool_t *pool) {
 	apr_jwt_t *jwt = NULL;
 	apr_jwt_error_t err;
 	TST_ASSERT_ERR("apr_jwt_parse",
-			apr_jwt_parse(pool, s, &jwt, NULL, NULL, &err), pool, err);
+			apr_jwt_parse(pool, s, &jwt, NULL, &err), pool, err);
 
 	char *dst;
 
 	dst = NULL;
 	TST_ASSERT("apr_jwt_get_string (1a)",
-			apr_jwt_get_string(pool, &jwt->header.value, "typ", TRUE, &dst, &err));
+			apr_jwt_get_string(pool, jwt->header.value.json, "typ", TRUE, &dst, &err));
 	TST_ASSERT_STR("apr_jwt_get_string (1b)", dst, "JWT");
 
 	dst = NULL;
 	TST_ASSERT("apr_jwt_get_string (2a)",
-			apr_jwt_get_string(pool, &jwt->header.value, "alg", TRUE, &dst, &err));
+			apr_jwt_get_string(pool, jwt->header.value.json, "alg", TRUE, &dst, &err));
 	TST_ASSERT_STR("apr_jwt_get_string (2b)", dst, "HS256");
 
 	dst = NULL;
 	TST_ASSERT("apr_jwt_get_string (3a)",
-			apr_jwt_get_string(pool, &jwt->header.value, "dummy", FALSE, &dst, &err));
+			apr_jwt_get_string(pool, jwt->header.value.json, "dummy", FALSE, &dst, &err));
 	TST_ASSERT_STR("apr_jwt_get_string (3b)", dst, NULL);
+
+	apr_jwt_destroy(jwt);
 
 	return 0;
 }
@@ -310,8 +320,32 @@ static char *test_jwk_parse_json(apr_pool_t *pool) {
 
 	jwk = NULL;
 	TST_ASSERT_ERR("apr_jwk_parse_json (1)", _jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
-	json_decref(jwk->value.json);
 
+	// https://tools.ietf.org/html/draft-ietf-jose-json-web-key-41#appendix-A.3
+	// A.3.  Example Symmetric Keys #1
+	s = "{"
+		"\"kty\":\"oct\","
+		"\"alg\":\"A128KW\","
+		"\"k\"  :\"GawgguFyGrWKav7AX4VKUg\""
+		"}";
+
+	jwk = NULL;
+	TST_ASSERT_ERR("apr_jwk_parse_json (draft-ietf-jose-json-web-key-41#appendix-A.3 #1)", _jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
+	TST_ASSERT_LONG("#1 jwk->type",  (long)jwk->type, (long)APR_JWK_KEY_OCT);
+	TST_ASSERT_LONG("#1 jwk->key.oct->k_len", (long)jwk->key.oct->k_len, 16L);
+
+	// https://tools.ietf.org/html/draft-ietf-jose-json-web-key-41#appendix-A.3
+	// A.3.  Example Symmetric Keys #2
+	s = "{"
+		"\"kty\":\"oct\","
+		"\"k\"  :\"AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow\","
+		"\"kid\":\"HMAC key used in JWS A.1 example\""
+		"}";
+
+	jwk = NULL;
+	TST_ASSERT_ERR("apr_jwk_parse_json (draft-ietf-jose-json-web-key-41#appendix-A.3 #2)", _jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
+	TST_ASSERT_LONG("#2 jwk->type",  (long)jwk->type, (long)APR_JWK_KEY_OCT);
+	TST_ASSERT_LONG("#2 jwk->key.oct->k_len", (long)jwk->key.oct->k_len, 64L);
 
 	// https://tools.ietf.org/html/draft-ietf-jose-cookbook-08#section-3.1
 	// 3.1.  EC Public Key
@@ -326,7 +360,6 @@ static char *test_jwk_parse_json(apr_pool_t *pool) {
 
 	jwk = NULL;
 	TST_ASSERT_ERR("apr_jwk_parse_json (draft-ietf-jose-cookbook-08#section-3.1, EC Public Key)", _jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
-	json_decref(jwk->value.json);
 
 	// https://tools.ietf.org/html/draft-ietf-jose-cookbook-08#section-3.2
 	// 3.2.  EC Private Key
@@ -342,7 +375,6 @@ static char *test_jwk_parse_json(apr_pool_t *pool) {
 
 	jwk = NULL;
 	TST_ASSERT_ERR("apr_jwk_parse_json (draft-ietf-jose-cookbook-08#section-3.2, EC Private Key)", _jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
-	json_decref(jwk->value.json);
 
 	// https://tools.ietf.org/html/draft-ietf-jose-cookbook-08#section-3.3
 	// 3.3.  RSA Public Key
@@ -362,7 +394,6 @@ static char *test_jwk_parse_json(apr_pool_t *pool) {
 
 	jwk = NULL;
 	TST_ASSERT_ERR("apr_jwk_parse_json (draft-ietf-jose-cookbook-08#section-3.3, RSA Public Key)", _jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
-	json_decref(jwk->value.json);
 
 	// https://tools.ietf.org/html/draft-ietf-jose-cookbook-08#section-3.4
 	// 3.4.  RSA Private Key
@@ -409,7 +440,6 @@ static char *test_jwk_parse_json(apr_pool_t *pool) {
 
 	jwk = NULL;
 	TST_ASSERT_ERR("apr_jwk_parse_json (draft-ietf-jose-cookbook-08#section-3.4, RSA Private Key)", _jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
-	json_decref(jwk->value.json);
 
 	return 0;
 }
@@ -435,7 +465,10 @@ static char *test_jwt_decryption(apr_pool_t *pool) {
 
 	apr_jwt_error_t err;
 	apr_hash_t *keys = apr_hash_make(pool);
-	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, k);
+	apr_jwk_t *jwk = NULL;
+
+	TST_ASSERT_ERR("apr_jwk_parse_json", _jwk_parse(pool, k, &jwk, &err) == 0, pool, err);
+	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
 
 	apr_array_header_t *unpacked = apr_jwt_compact_deserialize(pool, s);
 	TST_ASSERT("apr_jwt_compact_deserialize", unpacked != NULL);
@@ -448,10 +481,12 @@ static char *test_jwt_decryption(apr_pool_t *pool) {
 
 	char *decrypted = NULL;
 	TST_ASSERT("apr_jwe_decrypt_jwt",
-			apr_jwe_decrypt_jwt(pool, &jwt->header, unpacked, keys, NULL, &decrypted, &err));
+			apr_jwe_decrypt_jwt(pool, &jwt->header, unpacked, keys, &decrypted, &err));
 
 	TST_ASSERT_STR("apr_jwe_decrypt_jwt (2)", decrypted,
 			"Live long and prosper.");
+
+	apr_jwt_destroy(jwt);
 
 	return 0;
 }
@@ -481,6 +516,8 @@ static char *test_proto_validate_access_token(request_rec *r) {
 	TST_ASSERT("oidc_proto_validate_access_token",
 			oidc_proto_validate_access_token(r, NULL, jwt, "id_token token", access_token, NULL));
 
+	apr_jwt_destroy(jwt);
+
 	return 0;
 }
 
@@ -509,6 +546,8 @@ static char *test_proto_validate_code(request_rec *r) {
 			"Qcb0Orv1zh30vL1MPRsbm-diHiMwcLyZvn1arpZv-Jxf_11jnpEX3Tgfvk";
 	TST_ASSERT("oidc_proto_validate_access_token",
 			oidc_proto_validate_code(r, NULL, jwt, "code id_token", code));
+
+	apr_jwt_destroy(jwt);
 
 	return 0;
 }

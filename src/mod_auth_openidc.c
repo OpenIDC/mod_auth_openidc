@@ -291,8 +291,9 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 
 	apr_jwt_t *jwt = NULL;
 	apr_jwt_error_t err;
-	if (apr_jwt_parse(r->pool, state, &jwt, c->private_keys,
-			c->provider.client_secret, &err) == FALSE) {
+	if (apr_jwt_parse(r->pool, state, &jwt,
+			oidc_util_get_keys_table(r->pool, c->private_keys,
+					c->provider.client_secret), &err) == FALSE) {
 		oidc_error(r,
 				"could not parse JWT from state: invalid unsolicited response: %s",
 				apr_jwt_e2s(r->pool, err));
@@ -315,9 +316,11 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	}
 
 	char *rfp = NULL;
-	if (apr_jwt_get_string(r->pool, &jwt->payload.value, "rfp", TRUE, &rfp, &err) == FALSE) {
+	if (apr_jwt_get_string(r->pool, jwt->payload.value.json, "rfp", TRUE, &rfp,
+			&err) == FALSE) {
 		oidc_error(r,
-				"no \"rfp\" claim could be retrieved from JWT state, aborting: %s", apr_jwt_e2s(r->pool, err));
+				"no \"rfp\" claim could be retrieved from JWT state, aborting: %s",
+				apr_jwt_e2s(r->pool, err));
 		apr_jwt_destroy(jwt);
 		return FALSE;
 	}
@@ -329,7 +332,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	}
 
 	char *target_link_uri = NULL;
-	apr_jwt_get_string(r->pool, &jwt->payload.value, "target_uri", FALSE,
+	apr_jwt_get_string(r->pool, jwt->payload.value.json, "target_uri", FALSE,
 			&target_link_uri, NULL);
 	if (target_link_uri == NULL) {
 		if (c->default_sso_url == NULL) {
@@ -364,7 +367,8 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	}
 
 	char *jti = NULL;
-	apr_jwt_get_string(r->pool, &jwt->payload.value, "jti", FALSE, &jti, NULL);
+	apr_jwt_get_string(r->pool, jwt->payload.value.json, "jti", FALSE, &jti,
+			NULL);
 	if (jti == NULL) {
 		apr_jwt_base64url_encode(r->pool, &jti,
 				(const char *) jwt->signature.bytes, jwt->signature.length, 0);
@@ -1688,21 +1692,34 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c, session_rec *session)
 static int oidc_handle_jwks(request_rec *r, oidc_cfg *c) {
 
 	/* pickup requested JWKs type */
-//	char *jwks_type = NULL;
-//	oidc_util_get_request_parameter(r, "jwks", &jwks_type);
+	//	char *jwks_type = NULL;
+	//	oidc_util_get_request_parameter(r, "jwks", &jwks_type);
 	char *jwks = apr_pstrdup(r->pool, "{ \"keys\" : [");
 	apr_hash_index_t *hi = NULL;
 	apr_byte_t first = TRUE;
-	/* loop over the claims in the JSON structure */
+	apr_jwt_error_t err;
+
 	if (c->public_keys != NULL) {
+
+		/* loop over the RSA public keys */
 		for (hi = apr_hash_first(r->pool, c->public_keys); hi; hi =
 				apr_hash_next(hi)) {
+
 			const char *s_kid = NULL;
-			const char *s_jwk = NULL;
-			apr_hash_this(hi, (const void**) &s_kid, NULL, (void**) &s_jwk);
-			jwks = apr_psprintf(r->pool, "%s%s %s ", jwks, first ? "" : ",",
-					s_jwk);
-			first = FALSE;
+			apr_jwk_t *jwk = NULL;
+			char *s_json = NULL;
+
+			apr_hash_this(hi, (const void**) &s_kid, NULL, (void**) &jwk);
+
+			if (apr_jwk_to_json(r->pool, jwk, &s_json, &err) == TRUE) {
+				jwks = apr_psprintf(r->pool, "%s%s %s ", jwks, first ? "" : ",",
+						s_json);
+				first = FALSE;
+			} else {
+				oidc_error(r,
+						"could not convert RSA JWK to JSON using apr_jwk_to_json: %s",
+						apr_jwt_e2s(r->pool, err));
+			}
 		}
 	}
 

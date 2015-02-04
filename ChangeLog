@@ -1,3 +1,7 @@
+2/4/2015
+- revise JOSE JWK handling part 1
+- bump to 1.7.3rc2
+
 1/25/2015
 - Allow {... "error": null ...} in JSON responses. (@fatlotus)
 
