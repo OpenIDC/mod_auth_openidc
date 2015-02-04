@@ -61,11 +61,9 @@
 #include "jose/apr_jose.h"
 #include "apr_base64.h"
 
-/*
 #include "mod_auth_openidc.h"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
-*/
 
 static int test_nr_run = 0;
 static char TST_ERR_MSG[512];
@@ -490,7 +488,7 @@ static char *test_jwt_decryption(apr_pool_t *pool) {
 
 	return 0;
 }
-/*
+
 static char *test_proto_validate_access_token(request_rec *r) {
 
 	// from http://openid.net/specs/openid-connect-core-1_0.html#id_token-tokenExample
@@ -510,7 +508,7 @@ static char *test_proto_validate_access_token(request_rec *r) {
 	apr_jwt_error_t err;
 	apr_jwt_t *jwt = NULL;
 	TST_ASSERT_ERR("apr_jwt_parse",
-			apr_jwt_parse(r->pool, s, &jwt, NULL, NULL, &err), r->pool, err);
+			apr_jwt_parse(r->pool, s, &jwt, NULL, &err), r->pool, err);
 
 	const char *access_token = "jHkWEdUXMU1BwAsC4vtUsZwnNvTIxEl0z9K3vx5KF0Y";
 	TST_ASSERT("oidc_proto_validate_access_token",
@@ -540,7 +538,7 @@ static char *test_proto_validate_code(request_rec *r) {
 	apr_jwt_error_t err;
 	apr_jwt_t *jwt = NULL;
 	TST_ASSERT_ERR("apr_jwt_parse",
-			apr_jwt_parse(r->pool, s, &jwt, NULL, NULL, &err), r->pool, err);
+			apr_jwt_parse(r->pool, s, &jwt, NULL, &err), r->pool, err);
 
 	const char *code =
 			"Qcb0Orv1zh30vL1MPRsbm-diHiMwcLyZvn1arpZv-Jxf_11jnpEX3Tgfvk";
@@ -551,8 +549,8 @@ static char *test_proto_validate_code(request_rec *r) {
 
 	return 0;
 }
-*/
-static char * all_tests(apr_pool_t *pool/*, request_rec *r*/) {
+
+static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	char *message;
 	TST_RUN(test_jwt_array_has_string, pool);
 	TST_RUN(test_jwt_url_encode_decode, pool);
@@ -566,12 +564,12 @@ static char * all_tests(apr_pool_t *pool/*, request_rec *r*/) {
 
 	TST_RUN(test_jwt_verify_rsa, pool);
 
-	//TST_RUN(test_proto_validate_access_token, r);
-	//TST_RUN(test_proto_validate_code, r);
+	TST_RUN(test_proto_validate_access_token, r);
+	TST_RUN(test_proto_validate_code, r);
 
 	return 0;
 }
-/*
+
 static request_rec * test_core_setup(apr_pool_t *pool) {
 	const unsigned int kIdx = 0;
 	const unsigned int kEls = kIdx + 1;
@@ -626,7 +624,7 @@ static request_rec * test_core_setup(apr_pool_t *pool) {
 static void test_core_teardown(request_rec *request) {
 	free(request);
 }
-*/
+
 int main(int argc, char **argv, char **env) {
 	if (apr_app_initialize(&argc, (const char * const **) argv,
 			(const char * const **) env) != APR_SUCCESS) {
@@ -637,18 +635,18 @@ int main(int argc, char **argv, char **env) {
 	apr_pool_t *pool = NULL;
 	apr_pool_create(&pool, NULL);
 
-	//request_rec *r = test_core_setup(pool);
+	request_rec *r = test_core_setup(pool);
 
 	OpenSSL_add_all_digests();
 
-	char *result = all_tests(pool/*, r*/);
+	char *result = all_tests(pool, r);
 	if (result != 0) {
 		printf("Failed: %s\n", result);
 	} else {
 		printf("All %d tests passed!\n", test_nr_run);
 	}
 
-	//test_core_teardown(r);
+	test_core_teardown(r);
 
 	EVP_cleanup();
 	apr_pool_destroy(pool);

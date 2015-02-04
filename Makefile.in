@@ -64,7 +64,7 @@ configure:	configure.ac
 	tar -c --transform="s#^#@NAMEVER@/#" -vzf $@ $(DISTFILES)
 
 test/test: test/test.c $(JWT_SRC)
-	`@APXS2@ -q CC`  @APR_CFLAGS@ $(CFLAGS) -Isrc -o $@ test/test.c $(JWT_SRC) $(LIBS) @APR_LIBS@
+	@APXS2@ @APXS2_OPTS@ $(CFLAGS) -Wl,"$(LIBS)" -Isrc -Wc,-Wall -Wc,-g -c -o $@ test/test.c test/stub.c $(SRC) @APR_LIBS@
 
 test-compile: test/test
 
