@@ -170,6 +170,8 @@ static apr_byte_t apr_jwk_rsa_bio_to_key(apr_pool_t *pool, BIO *input,
 		BN_bn2bin(rsa->d, key->private_exponent);
 	}
 
+	RSA_free(rsa);
+
 	rv = TRUE;
 
 end:

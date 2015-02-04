@@ -2,8 +2,9 @@
 - revise JOSE JWK handling part 1
 - change change target_uri parameter name to target_link_uri following draft-bradley-oauth-jwt-encoded-state-03
 - extended tests with stubs
-- bump to 1.7.3rc3
 - refactor JWT validation (iss, exp, iat)
+- fix memory leak with RSA key conversion in apr_jwk.c - apr_jwk_rsa_bio_to_key
+- bump to 1.7.3rc4
 
 1/25/2015
 - Allow {... "error": null ...} in JSON responses. (@fatlotus)

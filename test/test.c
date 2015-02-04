@@ -192,6 +192,8 @@ static char *_jwk_parse(apr_pool_t *pool, const char *s, apr_jwk_t **jwk, apr_jw
 	TST_ASSERT_ERR("apr_jwk_parse_json",
 			apr_jwk_parse_json(pool, j_jwk, jwk, err), pool, (*err));
 
+	json_decref(j_jwk);
+
 	return 0;
 }
 
@@ -570,11 +572,11 @@ static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	return 0;
 }
 
-static request_rec * test_core_setup(apr_pool_t *pool) {
+static request_rec * test_setup(apr_pool_t *pool) {
 	const unsigned int kIdx = 0;
 	const unsigned int kEls = kIdx + 1;
 	apr_uri_t url;
-	request_rec *request = (request_rec *) malloc(sizeof(request_rec));
+	request_rec *request = (request_rec *) apr_pcalloc(pool, sizeof(request_rec));
 
 	request->pool = pool;
 
@@ -621,10 +623,6 @@ static request_rec * test_core_setup(apr_pool_t *pool) {
 	return request;
 }
 
-static void test_core_teardown(request_rec *request) {
-	free(request);
-}
-
 int main(int argc, char **argv, char **env) {
 	if (apr_app_initialize(&argc, (const char * const **) argv,
 			(const char * const **) env) != APR_SUCCESS) {
@@ -635,7 +633,7 @@ int main(int argc, char **argv, char **env) {
 	apr_pool_t *pool = NULL;
 	apr_pool_create(&pool, NULL);
 
-	request_rec *r = test_core_setup(pool);
+	request_rec *r = test_setup(pool);
 
 	OpenSSL_add_all_digests();
 
@@ -645,8 +643,6 @@ int main(int argc, char **argv, char **env) {
 	} else {
 		printf("All %d tests passed!\n", test_nr_run);
 	}
-
-	test_core_teardown(r);
 
 	EVP_cleanup();
 	apr_pool_destroy(pool);
