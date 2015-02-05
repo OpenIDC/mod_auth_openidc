@@ -325,6 +325,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 
 	apr_jwt_error_t err;
 	apr_jwt_t *jwt = NULL;
+	// TODO: oauth.client_secret will be hashed now for decryption purposes but that is OIDC specific...
 	if (apr_jwt_parse(r->pool, access_token, &jwt,
 			oidc_util_get_keys_table(r->pool, c->private_keys,
 					c->oauth.client_secret), &err) == FALSE) {

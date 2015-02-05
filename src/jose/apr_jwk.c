@@ -368,10 +368,10 @@ static apr_byte_t apr_jwk_hash_and_base64urlencode(apr_pool_t *pool,
 }
 
 /*
- * parse a shared symmetric key in to an "oct" JWK
+ * parse a symmetric key in to an "oct" JWK
  */
-apr_byte_t apr_jwk_parse_shared_secret(apr_pool_t *pool, const char *secret,
-		apr_jwk_t **j_jwk, apr_jwt_error_t *err) {
+apr_byte_t apr_jwk_parse_symmetric_key(apr_pool_t *pool, const unsigned char *key,
+		unsigned int key_len, apr_jwk_t **j_jwk, apr_jwt_error_t *err) {
 
 	/* allocate memory for the JWK */
 	*j_jwk = apr_pcalloc(pool, sizeof(apr_jwk_t));
@@ -381,9 +381,10 @@ apr_byte_t apr_jwk_parse_shared_secret(apr_pool_t *pool, const char *secret,
 	jwk->type = APR_JWK_KEY_OCT;
 	jwk->key.oct = apr_pcalloc(pool, sizeof(apr_jwk_key_oct_t));
 
-	/* set the values */
-	jwk->key.oct->k = (unsigned char *) apr_pstrdup(pool, secret);
-	jwk->key.oct->k_len = strlen(secret);
+	//	/* set the values */
+	jwk->key.oct->k = apr_pcalloc(pool, key_len);
+	memcpy(jwk->key.oct->k, key, key_len);
+	jwk->key.oct->k_len = key_len;
 
 	/* calculate a unique key identifier (kid) by fingerprinting the key params */
 	if (apr_jwk_hash_and_base64urlencode(pool, jwk->key.oct->k,

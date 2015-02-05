@@ -162,10 +162,9 @@ apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
 void apr_jwt_destroy(apr_jwt_t *);
 
 /* exported for the purpose of the test suite */
-apr_array_header_t *apr_jwt_compact_deserialize(apr_pool_t *pool,
-		const char *str);
-apr_byte_t apr_jwt_parse_header(apr_pool_t *pool, const char *s_header,
-		apr_jwt_header_t *header, apr_jwt_error_t *err);
+apr_byte_t apr_jwt_header_parse(apr_pool_t *pool, const char *s_json,
+		apr_array_header_t **unpacked, apr_jwt_header_t *header,
+		apr_jwt_error_t *err);
 
 /*
  * JSON Web Key handling
@@ -234,8 +233,8 @@ typedef struct apr_jwk_t {
 /* parse a JSON representation in to a JSON Web Key struct (also storing the string representation */
 apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, json_t *j_json,
 		apr_jwk_t **j_jwk, apr_jwt_error_t *err);
-/* parse a shared key in to a JSON Web Key (oct) struct */
-apr_byte_t apr_jwk_parse_shared_secret(apr_pool_t *pool, const char *secret,
+/* parse a symmetric key in to a JSON Web Key (oct) struct */
+apr_byte_t apr_jwk_parse_symmetric_key(apr_pool_t *pool, const unsigned char *key, unsigned int key_len,
 		apr_jwk_t **j_jwk, apr_jwt_error_t *err);
 /* parse an RSA private key from a PEM formatted file */
 apr_byte_t apr_jwk_parse_rsa_private_key(apr_pool_t *pool, const char *filename,

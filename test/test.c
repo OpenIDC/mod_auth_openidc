@@ -78,9 +78,10 @@ static int TST_RC;
 			return TST_ERR_MSG; \
 		}
 
-#define TST_ASSERT_ERR(message, test, pool, err) \
-		if (!(test)) { \
-			sprintf(TST_ERR_MSG, TST_FORMAT("%d") " %s", __FUNCTION__, message, test, 1, apr_jwt_e2s(pool, err)); \
+#define TST_ASSERT_ERR(message, expression, pool, err) \
+		TST_RC = (expression); \
+		if (!TST_RC) { \
+			sprintf(TST_ERR_MSG, TST_FORMAT("%d") " %s", __FUNCTION__, message, TST_RC, 1, apr_jwt_e2s(pool, err)); \
 			return TST_ERR_MSG; \
 		}
 
@@ -149,8 +150,8 @@ static char *test_jwt_parse(apr_pool_t *pool) {
 
 	apr_jwt_error_t err;
 	apr_jwt_t *jwt = NULL;
-	TST_ASSERT_ERR("apr_jwt_parse",
-			apr_jwt_parse(pool, s, &jwt, NULL, &err), pool, err);
+	TST_ASSERT_ERR("apr_jwt_parse", apr_jwt_parse(pool, s, &jwt, NULL, &err),
+			pool, err);
 
 	TST_ASSERT_STR("header.alg", jwt->header.alg, "HS256");
 	TST_ASSERT_STR("header.enc", jwt->header.enc, NULL);
@@ -184,7 +185,8 @@ static char *test_jwt_parse(apr_pool_t *pool) {
 	return 0;
 }
 
-static char *_jwk_parse(apr_pool_t *pool, const char *s, apr_jwk_t **jwk, apr_jwt_error_t *err) {
+static char *_jwk_parse(apr_pool_t *pool, const char *s, apr_jwk_t **jwk,
+		apr_jwt_error_t *err) {
 
 	json_t *j_jwk = json_loads(s, 0, NULL);
 	TST_ASSERT("json_loads", ((j_jwk != NULL) && (json_is_object(j_jwk))));
@@ -239,7 +241,8 @@ static char *test_jwt_verify_rsa(apr_pool_t *pool) {
 			"}";
 
 	apr_jwk_t *jwk = NULL;
-	TST_ASSERT_ERR("apr_jwk_parse_json", _jwk_parse(pool, s_key, &jwk, &err) == 0, pool, err);
+	TST_ASSERT_ERR("apr_jwk_parse_json",
+			_jwk_parse(pool, s_key, &jwk, &err) == 0, pool, err);
 
 	TST_ASSERT("apr_jws_verify_rsa", apr_jws_verify_rsa(pool, jwt, jwk, &err));
 
@@ -260,8 +263,8 @@ static char *test_plaintext_jwt_parse(apr_pool_t *pool) {
 
 	apr_jwt_error_t err;
 	apr_jwt_t *jwt = NULL;
-	TST_ASSERT_ERR("apr_jwt_parse",
-			apr_jwt_parse(pool, s, &jwt, NULL, &err), pool, err);
+	TST_ASSERT_ERR("apr_jwt_parse", apr_jwt_parse(pool, s, &jwt, NULL, &err),
+			pool, err);
 
 	TST_ASSERT_STR("header.alg", jwt->header.alg, "none");
 
@@ -283,8 +286,8 @@ static char *test_jwt_get_string(apr_pool_t *pool) {
 
 	apr_jwt_t *jwt = NULL;
 	apr_jwt_error_t err;
-	TST_ASSERT_ERR("apr_jwt_parse",
-			apr_jwt_parse(pool, s, &jwt, NULL, &err), pool, err);
+	TST_ASSERT_ERR("apr_jwt_parse", apr_jwt_parse(pool, s, &jwt, NULL, &err),
+			pool, err);
 
 	char *dst;
 
@@ -319,132 +322,148 @@ static char *test_jwk_parse_json(apr_pool_t *pool) {
 	apr_jwk_t *jwk;
 
 	jwk = NULL;
-	TST_ASSERT_ERR("apr_jwk_parse_json (1)", _jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
+	TST_ASSERT_ERR("apr_jwk_parse_json (1)",
+			_jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
 
 	// https://tools.ietf.org/html/draft-ietf-jose-json-web-key-41#appendix-A.3
 	// A.3.  Example Symmetric Keys #1
 	s = "{"
-		"\"kty\":\"oct\","
-		"\"alg\":\"A128KW\","
-		"\"k\"  :\"GawgguFyGrWKav7AX4VKUg\""
-		"}";
+			"\"kty\":\"oct\","
+			"\"alg\":\"A128KW\","
+			"\"k\"  :\"GawgguFyGrWKav7AX4VKUg\""
+			"}";
 
 	jwk = NULL;
-	TST_ASSERT_ERR("apr_jwk_parse_json (draft-ietf-jose-json-web-key-41#appendix-A.3 #1)", _jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
-	TST_ASSERT_LONG("#1 jwk->type",  (long)jwk->type, (long)APR_JWK_KEY_OCT);
-	TST_ASSERT_LONG("#1 jwk->key.oct->k_len", (long)jwk->key.oct->k_len, 16L);
+	TST_ASSERT_ERR(
+			"apr_jwk_parse_json (draft-ietf-jose-json-web-key-41#appendix-A.3 #1)",
+			_jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
+	TST_ASSERT_LONG("#1 jwk->type", (long )jwk->type, (long )APR_JWK_KEY_OCT);
+	TST_ASSERT_LONG("#1 jwk->key.oct->k_len", (long )jwk->key.oct->k_len, 16L);
 
 	// https://tools.ietf.org/html/draft-ietf-jose-json-web-key-41#appendix-A.3
 	// A.3.  Example Symmetric Keys #2
-	s = "{"
-		"\"kty\":\"oct\","
-		"\"k\"  :\"AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow\","
-		"\"kid\":\"HMAC key used in JWS A.1 example\""
-		"}";
+	s =
+			"{"
+			"\"kty\":\"oct\","
+			"\"k\"  :\"AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow\","
+			"\"kid\":\"HMAC key used in JWS A.1 example\""
+			"}";
 
 	jwk = NULL;
-	TST_ASSERT_ERR("apr_jwk_parse_json (draft-ietf-jose-json-web-key-41#appendix-A.3 #2)", _jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
-	TST_ASSERT_LONG("#2 jwk->type",  (long)jwk->type, (long)APR_JWK_KEY_OCT);
-	TST_ASSERT_LONG("#2 jwk->key.oct->k_len", (long)jwk->key.oct->k_len, 64L);
+	TST_ASSERT_ERR(
+			"apr_jwk_parse_json (draft-ietf-jose-json-web-key-41#appendix-A.3 #2)",
+			_jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
+	TST_ASSERT_LONG("#2 jwk->type", (long )jwk->type, (long )APR_JWK_KEY_OCT);
+	TST_ASSERT_LONG("#2 jwk->key.oct->k_len", (long )jwk->key.oct->k_len, 64L);
 
 	// https://tools.ietf.org/html/draft-ietf-jose-cookbook-08#section-3.1
 	// 3.1.  EC Public Key
-	s = "{"
-     "\"kty\": \"EC\","
-     "\"kid\": \"bilbo.baggins@hobbiton.example\","
-     "\"use\": \"sig\","
-     "\"crv\": \"P-521\","
-     "\"x\": \"AHKZLLOsCOzz5cY97ewNUajB957y-C-U88c3v13nmGZx6sYl_oJXu9A5RkTKqjqvjyekWF-7ytDyRXYgCF5cj0Kt\","
-     "\"y\": \"AdymlHvOiLxXkEhayXQnNCvDX4h9htZaCJN34kfmC6pV5OhQHiraVySsUdaQkAgDPrwQrJmbnX9cwlGfP-HqHZR1\""
-    "}";
+	s =
+			"{"
+			"\"kty\": \"EC\","
+			"\"kid\": \"bilbo.baggins@hobbiton.example\","
+			"\"use\": \"sig\","
+			"\"crv\": \"P-521\","
+			"\"x\": \"AHKZLLOsCOzz5cY97ewNUajB957y-C-U88c3v13nmGZx6sYl_oJXu9A5RkTKqjqvjyekWF-7ytDyRXYgCF5cj0Kt\","
+			"\"y\": \"AdymlHvOiLxXkEhayXQnNCvDX4h9htZaCJN34kfmC6pV5OhQHiraVySsUdaQkAgDPrwQrJmbnX9cwlGfP-HqHZR1\""
+			"}";
 
 	jwk = NULL;
-	TST_ASSERT_ERR("apr_jwk_parse_json (draft-ietf-jose-cookbook-08#section-3.1, EC Public Key)", _jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
+	TST_ASSERT_ERR(
+			"apr_jwk_parse_json (draft-ietf-jose-cookbook-08#section-3.1, EC Public Key)",
+			_jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
 
 	// https://tools.ietf.org/html/draft-ietf-jose-cookbook-08#section-3.2
 	// 3.2.  EC Private Key
-	s = "{"
-     "\"kty\": \"EC\","
-     "\"kid\": \"bilbo.baggins@hobbiton.example\","
-     "\"use\": \"sig\","
-     "\"crv\": \"P-521\","
-     "\"x\": \"AHKZLLOsCOzz5cY97ewNUajB957y-C-U88c3v13nmGZx6sYl_oJXu9A5RkTKqjqvjyekWF-7ytDyRXYgCF5cj0Kt\","
-     "\"y\": \"AdymlHvOiLxXkEhayXQnNCvDX4h9htZaCJN34kfmC6pV5OhQHiraVySsUdaQkAgDPrwQrJmbnX9cwlGfP-HqHZR1\","
-     "\"d\": \"AAhRON2r9cqXX1hg-RoI6R1tX5p2rUAYdmpHZoC1XNM56KtscrX6zbKipQrCW9CGZH3T4ubpnoTKLDYJ_fF3_rJt\""
-     "}";
+	s =
+			"{"
+			"\"kty\": \"EC\","
+			"\"kid\": \"bilbo.baggins@hobbiton.example\","
+			"\"use\": \"sig\","
+			"\"crv\": \"P-521\","
+			"\"x\": \"AHKZLLOsCOzz5cY97ewNUajB957y-C-U88c3v13nmGZx6sYl_oJXu9A5RkTKqjqvjyekWF-7ytDyRXYgCF5cj0Kt\","
+			"\"y\": \"AdymlHvOiLxXkEhayXQnNCvDX4h9htZaCJN34kfmC6pV5OhQHiraVySsUdaQkAgDPrwQrJmbnX9cwlGfP-HqHZR1\","
+			"\"d\": \"AAhRON2r9cqXX1hg-RoI6R1tX5p2rUAYdmpHZoC1XNM56KtscrX6zbKipQrCW9CGZH3T4ubpnoTKLDYJ_fF3_rJt\""
+			"}";
 
 	jwk = NULL;
-	TST_ASSERT_ERR("apr_jwk_parse_json (draft-ietf-jose-cookbook-08#section-3.2, EC Private Key)", _jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
+	TST_ASSERT_ERR(
+			"apr_jwk_parse_json (draft-ietf-jose-cookbook-08#section-3.2, EC Private Key)",
+			_jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
 
 	// https://tools.ietf.org/html/draft-ietf-jose-cookbook-08#section-3.3
 	// 3.3.  RSA Public Key
 	s = "{"
-     "\"kty\": \"RSA\","
-     "\"kid\": \"bilbo.baggins@hobbiton.example\","
-     "\"use\": \"sig\","
-     "\"n\": \"n4EPtAOCc9AlkeQHPzHStgAbgs7bTZLwUBZdR8_KuKPEHLd4rHVTeT"
-         "-O-XV2jRojdNhxJWTDvNd7nqQ0VEiZQHz_AJmSCpMaJMRBSFKrKb2wqV"
-         "wGU_NsYOYL-QtiWN2lbzcEe6XC0dApr5ydQLrHqkHHig3RBordaZ6Aj-"
-         "oBHqFEHYpPe7Tpe-OfVfHd1E6cS6M1FZcD1NNLYD5lFHpPI9bTwJlsde"
-         "3uhGqC0ZCuEHg8lhzwOHrtIQbS0FVbb9k3-tVTU4fg_3L_vniUFAKwuC"
-         "LqKnS2BYwdq_mzSnbLY7h_qixoR7jig3__kRhuaxwUkRz5iaiQkqgc5g"
-         "HdrNP5zw\","
-     "\"e\": \"AQAB\""
-   	 "}";
+			"\"kty\": \"RSA\","
+			"\"kid\": \"bilbo.baggins@hobbiton.example\","
+			"\"use\": \"sig\","
+			"\"n\": \"n4EPtAOCc9AlkeQHPzHStgAbgs7bTZLwUBZdR8_KuKPEHLd4rHVTeT"
+			"-O-XV2jRojdNhxJWTDvNd7nqQ0VEiZQHz_AJmSCpMaJMRBSFKrKb2wqV"
+			"wGU_NsYOYL-QtiWN2lbzcEe6XC0dApr5ydQLrHqkHHig3RBordaZ6Aj-"
+			"oBHqFEHYpPe7Tpe-OfVfHd1E6cS6M1FZcD1NNLYD5lFHpPI9bTwJlsde"
+			"3uhGqC0ZCuEHg8lhzwOHrtIQbS0FVbb9k3-tVTU4fg_3L_vniUFAKwuC"
+			"LqKnS2BYwdq_mzSnbLY7h_qixoR7jig3__kRhuaxwUkRz5iaiQkqgc5g"
+			"HdrNP5zw\","
+			"\"e\": \"AQAB\""
+			"}";
 
 	jwk = NULL;
-	TST_ASSERT_ERR("apr_jwk_parse_json (draft-ietf-jose-cookbook-08#section-3.3, RSA Public Key)", _jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
+	TST_ASSERT_ERR(
+			"apr_jwk_parse_json (draft-ietf-jose-cookbook-08#section-3.3, RSA Public Key)",
+			_jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
 
 	// https://tools.ietf.org/html/draft-ietf-jose-cookbook-08#section-3.4
 	// 3.4.  RSA Private Key
 	s = "{"
-     "\"kty\": \"RSA\","
-     "\"kid\": \"bilbo.baggins@hobbiton.example\","
-     "\"use\": \"sig\","
-     "\"n\": \"n4EPtAOCc9AlkeQHPzHStgAbgs7bTZLwUBZdR8_KuKPEHLd4rHVTeT"
-         "-O-XV2jRojdNhxJWTDvNd7nqQ0VEiZQHz_AJmSCpMaJMRBSFKrKb2wqV"
-         "wGU_NsYOYL-QtiWN2lbzcEe6XC0dApr5ydQLrHqkHHig3RBordaZ6Aj-"
-         "oBHqFEHYpPe7Tpe-OfVfHd1E6cS6M1FZcD1NNLYD5lFHpPI9bTwJlsde"
-         "3uhGqC0ZCuEHg8lhzwOHrtIQbS0FVbb9k3-tVTU4fg_3L_vniUFAKwuC"
-         "LqKnS2BYwdq_mzSnbLY7h_qixoR7jig3__kRhuaxwUkRz5iaiQkqgc5g"
-         "HdrNP5zw\","
-     "\"e\": \"AQAB\","
-     "\"d\": \"bWUC9B-EFRIo8kpGfh0ZuyGPvMNKvYWNtB_ikiH9k20eT-O1q_I78e"
-         "iZkpXxXQ0UTEs2LsNRS-8uJbvQ-A1irkwMSMkK1J3XTGgdrhCku9gRld"
-         "Y7sNA_AKZGh-Q661_42rINLRCe8W-nZ34ui_qOfkLnK9QWDDqpaIsA-b"
-         "MwWWSDFu2MUBYwkHTMEzLYGqOe04noqeq1hExBTHBOBdkMXiuFhUq1BU"
-         "6l-DqEiWxqg82sXt2h-LMnT3046AOYJoRioz75tSUQfGCshWTBnP5uDj"
-         "d18kKhyv07lhfSJdrPdM5Plyl21hsFf4L_mHCuoFau7gdsPfHPxxjVOc"
-         "OpBrQzwQ\","
-     "\"p\": \"3Slxg_DwTXJcb6095RoXygQCAZ5RnAvZlno1yhHtnUex_fp7AZ_9nR"
-         "aO7HX_-SFfGQeutao2TDjDAWU4Vupk8rw9JR0AzZ0N2fvuIAmr_WCsmG"
-         "peNqQnev1T7IyEsnh8UMt-n5CafhkikzhEsrmndH6LxOrvRJlsPp6Zv8"
-         "bUq0k\","
-     "\"q\": \"uKE2dh-cTf6ERF4k4e_jy78GfPYUIaUyoSSJuBzp3Cubk3OCqs6grT"
-         "8bR_cu0Dm1MZwWmtdqDyI95HrUeq3MP15vMMON8lHTeZu2lmKvwqW7an"
-         "V5UzhM1iZ7z4yMkuUwFWoBvyY898EXvRD-hdqRxHlSqAZ192zB3pVFJ0"
-         "s7pFc\","
-     "\"dp\": \"B8PVvXkvJrj2L-GYQ7v3y9r6Kw5g9SahXBwsWUzp19TVlgI-YV85q"
-         "1NIb1rxQtD-IsXXR3-TanevuRPRt5OBOdiMGQp8pbt26gljYfKU_E9xn"
-         "-RULHz0-ed9E9gXLKD4VGngpz-PfQ_q29pk5xWHoJp009Qf1HvChixRX"
-         "59ehik\","
-     "\"dq\": \"CLDmDGduhylc9o7r84rEUVn7pzQ6PF83Y-iBZx5NT-TpnOZKF1pEr"
-         "AMVeKzFEl41DlHHqqBLSM0W1sOFbwTxYWZDm6sI6og5iTbwQGIC3gnJK"
-         "bi_7k_vJgGHwHxgPaX2PnvP-zyEkDERuf-ry4c_Z11Cq9AqC2yeL6kdK"
-         "T1cYF8\","
-     "\"qi\": \"3PiqvXQN0zwMeE-sBvZgi289XP9XCQF3VWqPzMKnIgQp7_Tugo6-N"
-         "ZBKCQsMf3HaEGBjTVJs_jcK8-TRXvaKe-7ZMaQj8VfBdYkssbu0NKDDh"
-         "jJ-GtiseaDVWt7dcH0cfwxgFUHpQh7FoCrjFJ6h6ZEpMF6xmujs4qMpP"
-         "z8aaI4\""
-      "}";
+			"\"kty\": \"RSA\","
+			"\"kid\": \"bilbo.baggins@hobbiton.example\","
+			"\"use\": \"sig\","
+			"\"n\": \"n4EPtAOCc9AlkeQHPzHStgAbgs7bTZLwUBZdR8_KuKPEHLd4rHVTeT"
+			"-O-XV2jRojdNhxJWTDvNd7nqQ0VEiZQHz_AJmSCpMaJMRBSFKrKb2wqV"
+			"wGU_NsYOYL-QtiWN2lbzcEe6XC0dApr5ydQLrHqkHHig3RBordaZ6Aj-"
+			"oBHqFEHYpPe7Tpe-OfVfHd1E6cS6M1FZcD1NNLYD5lFHpPI9bTwJlsde"
+			"3uhGqC0ZCuEHg8lhzwOHrtIQbS0FVbb9k3-tVTU4fg_3L_vniUFAKwuC"
+			"LqKnS2BYwdq_mzSnbLY7h_qixoR7jig3__kRhuaxwUkRz5iaiQkqgc5g"
+			"HdrNP5zw\","
+			"\"e\": \"AQAB\","
+			"\"d\": \"bWUC9B-EFRIo8kpGfh0ZuyGPvMNKvYWNtB_ikiH9k20eT-O1q_I78e"
+			"iZkpXxXQ0UTEs2LsNRS-8uJbvQ-A1irkwMSMkK1J3XTGgdrhCku9gRld"
+			"Y7sNA_AKZGh-Q661_42rINLRCe8W-nZ34ui_qOfkLnK9QWDDqpaIsA-b"
+			"MwWWSDFu2MUBYwkHTMEzLYGqOe04noqeq1hExBTHBOBdkMXiuFhUq1BU"
+			"6l-DqEiWxqg82sXt2h-LMnT3046AOYJoRioz75tSUQfGCshWTBnP5uDj"
+			"d18kKhyv07lhfSJdrPdM5Plyl21hsFf4L_mHCuoFau7gdsPfHPxxjVOc"
+			"OpBrQzwQ\","
+			"\"p\": \"3Slxg_DwTXJcb6095RoXygQCAZ5RnAvZlno1yhHtnUex_fp7AZ_9nR"
+			"aO7HX_-SFfGQeutao2TDjDAWU4Vupk8rw9JR0AzZ0N2fvuIAmr_WCsmG"
+			"peNqQnev1T7IyEsnh8UMt-n5CafhkikzhEsrmndH6LxOrvRJlsPp6Zv8"
+			"bUq0k\","
+			"\"q\": \"uKE2dh-cTf6ERF4k4e_jy78GfPYUIaUyoSSJuBzp3Cubk3OCqs6grT"
+			"8bR_cu0Dm1MZwWmtdqDyI95HrUeq3MP15vMMON8lHTeZu2lmKvwqW7an"
+			"V5UzhM1iZ7z4yMkuUwFWoBvyY898EXvRD-hdqRxHlSqAZ192zB3pVFJ0"
+			"s7pFc\","
+			"\"dp\": \"B8PVvXkvJrj2L-GYQ7v3y9r6Kw5g9SahXBwsWUzp19TVlgI-YV85q"
+			"1NIb1rxQtD-IsXXR3-TanevuRPRt5OBOdiMGQp8pbt26gljYfKU_E9xn"
+			"-RULHz0-ed9E9gXLKD4VGngpz-PfQ_q29pk5xWHoJp009Qf1HvChixRX"
+			"59ehik\","
+			"\"dq\": \"CLDmDGduhylc9o7r84rEUVn7pzQ6PF83Y-iBZx5NT-TpnOZKF1pEr"
+			"AMVeKzFEl41DlHHqqBLSM0W1sOFbwTxYWZDm6sI6og5iTbwQGIC3gnJK"
+			"bi_7k_vJgGHwHxgPaX2PnvP-zyEkDERuf-ry4c_Z11Cq9AqC2yeL6kdK"
+			"T1cYF8\","
+			"\"qi\": \"3PiqvXQN0zwMeE-sBvZgi289XP9XCQF3VWqPzMKnIgQp7_Tugo6-N"
+			"ZBKCQsMf3HaEGBjTVJs_jcK8-TRXvaKe-7ZMaQj8VfBdYkssbu0NKDDh"
+			"jJ-GtiseaDVWt7dcH0cfwxgFUHpQh7FoCrjFJ6h6ZEpMF6xmujs4qMpP"
+			"z8aaI4\""
+			"}";
 
 	jwk = NULL;
-	TST_ASSERT_ERR("apr_jwk_parse_json (draft-ietf-jose-cookbook-08#section-3.4, RSA Private Key)", _jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
+	TST_ASSERT_ERR(
+			"apr_jwk_parse_json (draft-ietf-jose-cookbook-08#section-3.4, RSA Private Key)",
+			_jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
 
 	return 0;
 }
 
-static char *test_jwt_decryption(apr_pool_t *pool) {
+static char *test_plaintext_decrypt(apr_pool_t *pool) {
 
 	// from http://tools.ietf.org/html/draft-ietf-jose-json-web-encryption-30
 	// A.2.  Example JWE using RSAES-PKCS1-V1_5 and AES_128_CBC_HMAC_SHA_256
@@ -467,24 +486,247 @@ static char *test_jwt_decryption(apr_pool_t *pool) {
 	apr_hash_t *keys = apr_hash_make(pool);
 	apr_jwk_t *jwk = NULL;
 
-	TST_ASSERT_ERR("apr_jwk_parse_json", _jwk_parse(pool, k, &jwk, &err) == 0, pool, err);
+	TST_ASSERT_ERR("apr_jwk_parse_json", _jwk_parse(pool, k, &jwk, &err) == 0,
+			pool, err);
 	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
 
-	apr_array_header_t *unpacked = apr_jwt_compact_deserialize(pool, s);
-	TST_ASSERT("apr_jwt_compact_deserialize", unpacked != NULL);
-	TST_ASSERT_LONG("unpacked->nelts", (long )unpacked->nelts, 5L);
-
-	apr_jwt_t *jwt = apr_pcalloc(pool, sizeof(apr_jwt_t));
-	TST_ASSERT_ERR("apr_jwt_parse_header",
-			apr_jwt_parse_header(pool, ((const char** ) unpacked->elts)[0],
-					&jwt->header, &err), pool, err);
+	apr_array_header_t *unpacked = NULL;
+	apr_jwt_header_t header;
+	TST_ASSERT_ERR("apr_jwt_header_parse",
+			apr_jwt_header_parse(pool, s, &unpacked, &header, &err), pool, err);
 
 	char *decrypted = NULL;
-	TST_ASSERT("apr_jwe_decrypt_jwt",
-			apr_jwe_decrypt_jwt(pool, &jwt->header, unpacked, keys, &decrypted, &err));
+	TST_ASSERT_ERR("apr_jwe_decrypt_jwt",
+			apr_jwe_decrypt_jwt(pool, &header, unpacked, keys, &decrypted,
+					&err), pool, err);
 
-	TST_ASSERT_STR("apr_jwe_decrypt_jwt (2)", decrypted,
-			"Live long and prosper.");
+	TST_ASSERT_STR("decrypted", decrypted, "Live long and prosper.");
+
+	json_decref(header.value.json);
+
+	return 0;
+}
+
+static char *test_plaintext_decrypt2(apr_pool_t *pool) {
+
+	// http://tools.ietf.org/html/draft-ietf-jose-cookbook-08#section-5.1.5
+	// 5.1.  Key Encryption using RSA v1.5 and AES-HMAC-SHA2
+	char *s =
+			apr_pstrdup(pool,
+					"eyJhbGciOiJSU0ExXzUiLCJraWQiOiJmcm9kby5iYWdnaW5zQGhvYmJpdG9uLm"
+					"V4YW1wbGUiLCJlbmMiOiJBMTI4Q0JDLUhTMjU2In0"
+					"."
+					"laLxI0j-nLH-_BgLOXMozKxmy9gffy2gTdvqzfTihJBuuzxg0V7yk1WClnQePF"
+					"vG2K-pvSlWc9BRIazDrn50RcRai__3TDON395H3c62tIouJJ4XaRvYHFjZTZ2G"
+					"Xfz8YAImcc91Tfk0WXC2F5Xbb71ClQ1DDH151tlpH77f2ff7xiSxh9oSewYrcG"
+					"TSLUeeCt36r1Kt3OSj7EyBQXoZlN7IxbyhMAfgIe7Mv1rOTOI5I8NQqeXXW8Vl"
+					"zNmoxaGMny3YnGir5Wf6Qt2nBq4qDaPdnaAuuGUGEecelIO1wx1BpyIfgvfjOh"
+					"MBs9M8XL223Fg47xlGsMXdfuY-4jaqVw"
+					"."
+					"bbd5sTkYwhAIqfHsx8DayA"
+					"."
+					"0fys_TY_na7f8dwSfXLiYdHaA2DxUjD67ieF7fcVbIR62JhJvGZ4_FNVSiGc_r"
+					"aa0HnLQ6s1P2sv3Xzl1p1l_o5wR_RsSzrS8Z-wnI3Jvo0mkpEEnlDmZvDu_k8O"
+					"WzJv7eZVEqiWKdyVzFhPpiyQU28GLOpRc2VbVbK4dQKPdNTjPPEmRqcaGeTWZV"
+					"yeSUvf5k59yJZxRuSvWFf6KrNtmRdZ8R4mDOjHSrM_s8uwIFcqt4r5GX8TKaI0"
+					"zT5CbL5Qlw3sRc7u_hg0yKVOiRytEAEs3vZkcfLkP6nbXdC_PkMdNS-ohP78T2"
+					"O6_7uInMGhFeX4ctHG7VelHGiT93JfWDEQi5_V9UN1rhXNrYu-0fVMkZAKX3VW"
+					"i7lzA6BP430m"
+					"."
+					"kvKuFBXHe5mQr4lqgobAUg");
+
+	char * k = "{"
+			"\"kty\": \"RSA\","
+			"\"kid\": \"frodo.baggins@hobbiton.example\","
+			"\"use\": \"enc\","
+			"\"n\": \"maxhbsmBtdQ3CNrKvprUE6n9lYcregDMLYNeTAWcLj8NnPU9XIYegT"
+			"HVHQjxKDSHP2l-F5jS7sppG1wgdAqZyhnWvXhYNvcM7RfgKxqNx_xAHx"
+			"6f3yy7s-M9PSNCwPC2lh6UAkR4I00EhV9lrypM9Pi4lBUop9t5fS9W5U"
+			"NwaAllhrd-osQGPjIeI1deHTwx-ZTHu3C60Pu_LJIl6hKn9wbwaUmA4c"
+			"R5Bd2pgbaY7ASgsjCUbtYJaNIHSoHXprUdJZKUMAzV0WOKPfA6OPI4oy"
+			"pBadjvMZ4ZAj3BnXaSYsEZhaueTXvZB4eZOAjIyh2e_VOIKVMsnDrJYA"
+			"VotGlvMQ\","
+			"\"e\": \"AQAB\","
+			"\"d\": \"Kn9tgoHfiTVi8uPu5b9TnwyHwG5dK6RE0uFdlpCGnJN7ZEi963R7wy"
+			"bQ1PLAHmpIbNTztfrheoAniRV1NCIqXaW_qS461xiDTp4ntEPnqcKsyO"
+			"5jMAji7-CL8vhpYYowNFvIesgMoVaPRYMYT9TW63hNM0aWs7USZ_hLg6"
+			"Oe1mY0vHTI3FucjSM86Nff4oIENt43r2fspgEPGRrdE6fpLc9Oaq-qeP"
+			"1GFULimrRdndm-P8q8kvN3KHlNAtEgrQAgTTgz80S-3VD0FgWfgnb1PN"
+			"miuPUxO8OpI9KDIfu_acc6fg14nsNaJqXe6RESvhGPH2afjHqSy_Fd2v"
+			"pzj85bQQ\","
+			"\"p\": \"2DwQmZ43FoTnQ8IkUj3BmKRf5Eh2mizZA5xEJ2MinUE3sdTYKSLtaE"
+			"oekX9vbBZuWxHdVhM6UnKCJ_2iNk8Z0ayLYHL0_G21aXf9-unynEpUsH"
+			"7HHTklLpYAzOOx1ZgVljoxAdWNn3hiEFrjZLZGS7lOH-a3QQlDDQoJOJ"
+			"2VFmU\","
+			"\"q\": \"te8LY4-W7IyaqH1ExujjMqkTAlTeRbv0VLQnfLY2xINnrWdwiQ93_V"
+			"F099aP1ESeLja2nw-6iKIe-qT7mtCPozKfVtUYfz5HrJ_XY2kfexJINb"
+			"9lhZHMv5p1skZpeIS-GPHCC6gRlKo1q-idn_qxyusfWv7WAxlSVfQfk8"
+			"d6Et0\","
+			"\"dp\": \"UfYKcL_or492vVc0PzwLSplbg4L3-Z5wL48mwiswbpzOyIgd2xHTH"
+			"QmjJpFAIZ8q-zf9RmgJXkDrFs9rkdxPtAsL1WYdeCT5c125Fkdg317JV"
+			"RDo1inX7x2Kdh8ERCreW8_4zXItuTl_KiXZNU5lvMQjWbIw2eTx1lpsf"
+			"lo0rYU\","
+			"\"dq\": \"iEgcO-QfpepdH8FWd7mUFyrXdnOkXJBCogChY6YKuIHGc_p8Le9Mb"
+			"pFKESzEaLlN1Ehf3B6oGBl5Iz_ayUlZj2IoQZ82znoUrpa9fVYNot87A"
+			"CfzIG7q9Mv7RiPAderZi03tkVXAdaBau_9vs5rS-7HMtxkVrxSUvJY14"
+			"TkXlHE\","
+			"\"qi\": \"kC-lzZOqoFaZCr5l0tOVtREKoVqaAYhQiqIRGL-MzS4sCmRkxm5vZ"
+			"lXYx6RtE1n_AagjqajlkjieGlxTTThHD8Iga6foGBMaAr5uR1hGQpSc7"
+			"Gl7CF1DZkBJMTQN6EshYzZfxW08mIO8M6Rzuh0beL6fG9mkDcIyPrBXx"
+			"2bQ_mM\""
+			"}";
+
+	apr_jwt_error_t err;
+	apr_hash_t *keys = apr_hash_make(pool);
+	apr_jwk_t *jwk = NULL;
+
+	TST_ASSERT_ERR("apr_jwk_parse_json", _jwk_parse(pool, k, &jwk, &err) == 0,
+			pool, err);
+	apr_hash_set(keys, jwk->kid, APR_HASH_KEY_STRING, jwk);
+
+	apr_array_header_t *unpacked = NULL;
+	apr_jwt_header_t header;
+	TST_ASSERT_ERR("apr_jwt_header_parse",
+			apr_jwt_header_parse(pool, s, &unpacked, &header, &err), pool, err);
+
+	char *decrypted = NULL;
+	TST_ASSERT_ERR("apr_jwe_decrypt_jwt",
+			apr_jwe_decrypt_jwt(pool, &header, unpacked, keys, &decrypted,
+					&err), pool, err);
+
+	TST_ASSERT_STR("decrypted", decrypted,
+			"You can trust us to stick with you through thick and "
+			"thin\u2013to the bitter end. And you can trust us to "
+			"keep any secret of yours\u2013closer than you keep it "
+			"yourself. But you cannot trust us to let you face trouble "
+			"alone, and go off without a word. We are your friends, Frodo.");
+
+	json_decref(header.value.json);
+
+	return 0;
+}
+
+static char *test_plaintext_decrypt_symmetric(apr_pool_t *pool) {
+	apr_jwt_error_t err;
+	apr_hash_t *keys = apr_hash_make(pool);
+	apr_jwk_t *jwk;
+
+	// http://tools.ietf.org/html/draft-ietf-jose-json-web-encryption-40#appendix-A.3
+	// A.3.  Example JWE using AES Key Wrap and AES_128_CBC_HMAC_SHA_256
+	const char * k = "{\"kty\":\"oct\", \"k\":\"GawgguFyGrWKav7AX4VKUg\"}";
+	jwk = NULL;
+	TST_ASSERT_ERR("apr_jwk_parse_json", _jwk_parse(pool, k, &jwk, &err) == 0,
+			pool, err);
+	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
+
+	const char *s = "eyJhbGciOiJBMTI4S1ciLCJlbmMiOiJBMTI4Q0JDLUhTMjU2In0."
+			"6KB707dM9YTIgHtLvtgWQ8mKwboJW3of9locizkDTHzBC2IlrT1oOQ."
+			"AxY8DCtDaGlsbGljb3RoZQ."
+			"KDlTtXchhZTGufMYmOYGS4HffxPSUrfmqCHXaI9wOGY."
+			"U0m_YmjN04DJvceFICbCVQ";
+
+	apr_array_header_t *unpacked = NULL;
+	apr_jwt_header_t header;
+	TST_ASSERT_ERR("apr_jwt_header_parse",
+			apr_jwt_header_parse(pool, s, &unpacked, &header, &err), pool, err);
+
+	char *decrypted = NULL;
+	TST_ASSERT_ERR("apr_jwe_decrypt_jwt",
+			apr_jwe_decrypt_jwt(pool, &header, unpacked, keys, &decrypted,
+					&err), pool, err);
+
+	TST_ASSERT_STR("decrypted", decrypted, "Live long and prosper.");
+
+	json_decref(header.value.json);
+
+	return 0;
+}
+
+static char *test_jwt_decrypt(apr_pool_t *pool) {
+
+	// https://tools.ietf.org/html/draft-ietf-oauth-json-web-token-32#appendix-A.1
+	// A.2.  Example Nested JWT
+	char * s =
+			apr_pstrdup(pool,
+					"eyJhbGciOiJSU0ExXzUiLCJlbmMiOiJBMTI4Q0JDLUhTMjU2IiwiY3R5IjoiSldU"
+					"In0."
+					"g_hEwksO1Ax8Qn7HoN-BVeBoa8FXe0kpyk_XdcSmxvcM5_P296JXXtoHISr_DD_M"
+					"qewaQSH4dZOQHoUgKLeFly-9RI11TG-_Ge1bZFazBPwKC5lJ6OLANLMd0QSL4fYE"
+					"b9ERe-epKYE3xb2jfY1AltHqBO-PM6j23Guj2yDKnFv6WO72tteVzm_2n17SBFvh"
+					"DuR9a2nHTE67pe0XGBUS_TK7ecA-iVq5COeVdJR4U4VZGGlxRGPLRHvolVLEHx6D"
+					"YyLpw30Ay9R6d68YCLi9FYTq3hIXPK_-dmPlOUlKvPr1GgJzRoeC9G5qCvdcHWsq"
+					"JGTO_z3Wfo5zsqwkxruxwA."
+					"UmVkbW9uZCBXQSA5ODA1Mg."
+					"VwHERHPvCNcHHpTjkoigx3_ExK0Qc71RMEParpatm0X_qpg-w8kozSjfNIPPXiTB"
+					"BLXR65CIPkFqz4l1Ae9w_uowKiwyi9acgVztAi-pSL8GQSXnaamh9kX1mdh3M_TT"
+					"-FZGQFQsFhu0Z72gJKGdfGE-OE7hS1zuBD5oEUfk0Dmb0VzWEzpxxiSSBbBAzP10"
+					"l56pPfAtrjEYw-7ygeMkwBl6Z_mLS6w6xUgKlvW6ULmkV-uLC4FUiyKECK4e3WZY"
+					"Kw1bpgIqGYsw2v_grHjszJZ-_I5uM-9RA8ycX9KqPRp9gc6pXmoU_-27ATs9XCvr"
+					"ZXUtK2902AUzqpeEUJYjWWxSNsS-r1TJ1I-FMJ4XyAiGrfmo9hQPcNBYxPz3GQb2"
+					"8Y5CLSQfNgKSGt0A4isp1hBUXBHAndgtcslt7ZoQJaKe_nNJgNliWtWpJ_ebuOpE"
+					"l8jdhehdccnRMIwAmU1n7SPkmhIl1HlSOpvcvDfhUN5wuqU955vOBvfkBOh5A11U"
+					"zBuo2WlgZ6hYi9-e3w29bR0C2-pp3jbqxEDw3iWaf2dc5b-LnR0FEYXvI_tYk5rd"
+					"_J9N0mg0tQ6RbpxNEMNoA9QWk5lgdPvbh9BaO195abQ."
+					"AVO9iT5AV4CzvDJCdhSFlQ");
+
+	char * ek =
+			"{\"kty\":\"RSA\","
+			"\"n\":\"sXchDaQebHnPiGvyDOAT4saGEUetSyo9MKLOoWFsueri23bOdgWp4Dy1WlUzewbgBHod5pcM9H95GQRV3JDXboIRROSBigeC5yjU1hGzHHyXss8UDprecbAYxknTcQkhslANGRUZmdTOQ5qTRsLAt6BTYuyvVRdhS8exSZEy_c4gs_7svlJJQ4H9_NxsiIoLwAEk7-Q3UXERGYw_75IDrGA84-lA_-Ct4eTlXHBIY2EaV7t7LjJaynVJCpkv4LKjTTAumiGUIuQhrNhZLuF_RJLqHpM2kgWFLU7-VTdL1VbC2tejvcI2BlMkEpk1BzBZI0KQB0GaDWFLN-aEAw3vRw\","
+			"\"e\":\"AQAB\","
+			"\"d\":\"VFCWOqXr8nvZNyaaJLXdnNPXZKRaWCjkU5Q2egQQpTBMwhprMzWzpR8Sxq1OPThh_J6MUD8Z35wky9b8eEO0pwNS8xlh1lOFRRBoNqDIKVOku0aZb-rynq8cxjDTLZQ6Fz7jSjR1Klop-YKaUHc9GsEofQqYruPhzSA-QgajZGPbE_0ZaVDJHfyd7UUBUKunFMScbflYAAOYJqVIVwaYR5zWEEceUjNnTNo_CVSj-VvXLO5VZfCUAVLgW4dpf1SrtZjSt34YLsRarSb127reG_DUwg9Ch-KyvjT1SkHgUWRVGcyly7uvVGRSDwsXypdrNinPA4jlhoNdizK2zF2CWQ\""
+			"}";
+
+	char * sk = "{"
+			"\"kty\":\"RSA\","
+			"\"n\":\"ofgWCuLjybRlzo0tZWJjNiuSfb4p4fAkd_wWJcyQoTbji9k0l8W26mPddx"
+			"HmfHQp-Vaw-4qPCJrcS2mJPMEzP1Pt0Bm4d4QlL-yRT-SFd2lZS-pCgNMs"
+			"D1W_YpRPEwOWvG6b32690r2jZ47soMZo9wGzjb_7OMg0LOL-bSf63kpaSH"
+			"SXndS5z5rexMdbBYUsLA9e-KXBdQOS-UTo7WTBEMa2R2CapHg665xsmtdV"
+			"MTBQY4uDZlxvb3qCo5ZwKh9kG4LT6_I5IhlJH7aGhyxXFvUK-DWNmoudF8"
+			"NAco9_h9iaGNj8q2ethFkMLs91kzk2PAcDTW9gb54h4FRWyuXpoQ\","
+			"\"e\":\"AQAB\","
+			"\"d\":\"Eq5xpGnNCivDflJsRQBXHx1hdR1k6Ulwe2JZD50LpXyWPEAeP88vLNO97I"
+			"jlA7_GQ5sLKMgvfTeXZx9SE-7YwVol2NXOoAJe46sui395IW_GO-pWJ1O0"
+			"BkTGoVEn2bKVRUCgu-GjBVaYLU6f3l9kJfFNS3E0QbVdxzubSu3Mkqzjkn"
+			"439X0M_V51gfpRLI9JYanrC4D4qAdGcopV_0ZHHzQlBjudU2QvXt4ehNYT"
+			"CBr6XCLQUShb1juUO1ZdiYoFaFQT5Tw8bGUl_x_jTj3ccPDVZFD9pIuhLh"
+			"BOneufuBiB4cS98l2SR_RQyGWSeWjnczT0QU91p1DhOVRuOopznQ\","
+			"\"p\":\"4BzEEOtIpmVdVEZNCqS7baC4crd0pqnRH_5IB3jw3bcxGn6QLvnEtfdUdi"
+			"YrqBdss1l58BQ3KhooKeQTa9AB0Hw_Py5PJdTJNPY8cQn7ouZ2KKDcmnPG"
+			"BY5t7yLc1QlQ5xHdwW1VhvKn-nXqhJTBgIPgtldC-KDV5z-y2XDwGUc\","
+			"\"q\":\"uQPEfgmVtjL0Uyyx88GZFF1fOunH3-7cepKmtH4pxhtCoHqpWmT8YAmZxa"
+			"ewHgHAjLYsp1ZSe7zFYHj7C6ul7TjeLQeZD_YwD66t62wDmpe_HlB-TnBA"
+			"-njbglfIsRLtXlnDzQkv5dTltRJ11BKBBypeeF6689rjcJIDEz9RWdc\","
+			"\"dp\":\"BwKfV3Akq5_MFZDFZCnW-wzl-CCo83WoZvnLQwCTeDv8uzluRSnm71I3Q"
+			"CLdhrqE2e9YkxvuxdBfpT_PI7Yz-FOKnu1R6HsJeDCjn12Sk3vmAktV2zb"
+			"34MCdy7cpdTh_YVr7tss2u6vneTwrA86rZtu5Mbr1C1XsmvkxHQAdYo0\","
+			"\"dq\":\"h_96-mK1R_7glhsum81dZxjTnYynPbZpHziZjeeHcXYsXaaMwkOlODsWa"
+			"7I9xXDoRwbKgB719rrmI2oKr6N3Do9U0ajaHF-NKJnwgjMd2w9cjz3_-ky"
+			"NlxAr2v4IKhGNpmM5iIgOS1VZnOZ68m6_pbLBSp3nssTdlqvd0tIiTHU\","
+			"\"qi\":\"IYd7DHOhrWvxkwPQsRM2tOgrjbcrfvtQJipd-DlcxyVuuM9sQLdgjVk2o"
+			"y26F0EmpScGLq2MowX7fhd_QJQ3ydy5cY7YIBi87w93IKLEdfnbJtoOPLU"
+			"W0ITrJReOgo1cq9SbsxYawBgfp_gh6A5603k2-ZQwVK0JKSHuLFkuQ3U\""
+			"}";
+
+	apr_jwt_error_t err;
+	apr_hash_t *keys = apr_hash_make(pool);
+	apr_jwk_t *jwk = NULL;
+	apr_jwt_t *jwt = NULL;
+
+	TST_ASSERT_ERR("apr_jwk_parse_json (encryption key)",
+			_jwk_parse(pool, ek, &jwk, &err) == 0, pool, err);
+	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
+
+	TST_ASSERT_ERR("apr_jwt_parse", apr_jwt_parse(pool, s, &jwt, keys, &err),
+			pool, err);
+
+	TST_ASSERT_ERR("apr_jwk_parse_json (signing key)",
+			_jwk_parse(pool, sk, &jwk, &err) == 0, pool, err);
+	TST_ASSERT("apr_jws_verify_rsa", apr_jws_verify_rsa(pool, jwt, jwk, &err));
+
+	TST_ASSERT_STR("header.alg", jwt->header.alg, "RS256");
+	TST_ASSERT_STR("payload.iss", jwt->payload.iss, "joe");
+	TST_ASSERT_LONG("payload.exp", (long )jwt->payload.exp, 1300819380L);
 
 	apr_jwt_destroy(jwt);
 
@@ -509,8 +751,8 @@ static char *test_proto_validate_access_token(request_rec *r) {
 
 	apr_jwt_error_t err;
 	apr_jwt_t *jwt = NULL;
-	TST_ASSERT_ERR("apr_jwt_parse",
-			apr_jwt_parse(r->pool, s, &jwt, NULL, &err), r->pool, err);
+	TST_ASSERT_ERR("apr_jwt_parse", apr_jwt_parse(r->pool, s, &jwt, NULL, &err),
+			r->pool, err);
 
 	const char *access_token = "jHkWEdUXMU1BwAsC4vtUsZwnNvTIxEl0z9K3vx5KF0Y";
 	TST_ASSERT("oidc_proto_validate_access_token",
@@ -539,8 +781,8 @@ static char *test_proto_validate_code(request_rec *r) {
 
 	apr_jwt_error_t err;
 	apr_jwt_t *jwt = NULL;
-	TST_ASSERT_ERR("apr_jwt_parse",
-			apr_jwt_parse(r->pool, s, &jwt, NULL, &err), r->pool, err);
+	TST_ASSERT_ERR("apr_jwt_parse", apr_jwt_parse(r->pool, s, &jwt, NULL, &err),
+			r->pool, err);
 
 	const char *code =
 			"Qcb0Orv1zh30vL1MPRsbm-diHiMwcLyZvn1arpZv-Jxf_11jnpEX3Tgfvk";
@@ -562,8 +804,11 @@ static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	TST_RUN(test_jwt_get_string, pool);
 
 	TST_RUN(test_jwk_parse_json, pool);
-	TST_RUN(test_jwt_decryption, pool);
+	TST_RUN(test_plaintext_decrypt, pool);
+	TST_RUN(test_plaintext_decrypt2, pool);
+	TST_RUN(test_plaintext_decrypt_symmetric, pool);
 
+	TST_RUN(test_jwt_decrypt, pool);
 	TST_RUN(test_jwt_verify_rsa, pool);
 
 	TST_RUN(test_proto_validate_access_token, r);
@@ -576,7 +821,8 @@ static request_rec * test_setup(apr_pool_t *pool) {
 	const unsigned int kIdx = 0;
 	const unsigned int kEls = kIdx + 1;
 	apr_uri_t url;
-	request_rec *request = (request_rec *) apr_pcalloc(pool, sizeof(request_rec));
+	request_rec *request = (request_rec *) apr_pcalloc(pool,
+			sizeof(request_rec));
 
 	request->pool = pool;
 

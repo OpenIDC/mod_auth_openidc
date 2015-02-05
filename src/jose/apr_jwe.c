@@ -213,7 +213,7 @@ static apr_byte_t apr_jwe_decrypt_cek_rsa(apr_pool_t *pool,
 	*cek_len = RSA_private_decrypt(encrypted_key->len,
 			(const unsigned char *) encrypted_key->value, *cek, pkey,
 			RSA_PKCS1_PADDING);
-	if (*cek_len < 0)
+	if (*cek_len <= 0)
 		apr_jwt_error_openssl(err, "RSA_private_decrypt");
 
 	/* free allocated resources */
@@ -223,6 +223,7 @@ static apr_byte_t apr_jwe_decrypt_cek_rsa(apr_pool_t *pool,
 	return (*cek_len > 0);
 }
 
+
 /*
  * decrypt AES wrapped Content Encryption Key with the provided symmetric key
  */
@@ -231,18 +232,19 @@ static apr_byte_t apr_jwe_decrypt_cek_oct_aes(apr_pool_t *pool,
 		const unsigned char *shared_key, const int shared_key_len,
 		unsigned char **cek, int *cek_len, apr_jwt_error_t *err) {
 
-	/* sha256 hash the client_secret first */
-	unsigned char *hashed_key = NULL;
-	unsigned int hashed_key_len = 0;
-	if (apr_jws_hash_bytes(pool, "sha256", shared_key, shared_key_len,
-			&hashed_key, &hashed_key_len, err) == FALSE)
-		return FALSE;
-
 	/* determine key length in bits */
 	int key_bits_len = (apr_strnatcmp(header->alg, "A128KW") == 0) ? 128 : 256;
-	/* set the hashed secret as the AES decryption key */
+
+	if (shared_key_len * 8 < key_bits_len) {
+		apr_jwt_error(err,
+				"symmetric key length is too short: %d (should be at least %d)",
+				shared_key_len * 8, key_bits_len);
+		return FALSE;
+	}
+
+	/* create the AES decryption key from the shared key */
 	AES_KEY akey;
-	if (AES_set_decrypt_key((const unsigned char *) hashed_key, key_bits_len,
+	if (AES_set_decrypt_key((const unsigned char *) shared_key, key_bits_len,
 			&akey) < 0) {
 		apr_jwt_error_openssl(err, "AES_set_decrypt_key");
 		return FALSE;
@@ -255,11 +257,9 @@ static apr_byte_t apr_jwe_decrypt_cek_oct_aes(apr_pool_t *pool,
 	apr_jwe_unpacked_t *encrypted_key = APR_ARRAY_IDX(unpacked_decoded,
 			APR_JWE_ENCRYPTED_KEY_INDEX, apr_jwe_unpacked_t *);
 
-	/* get the Initialization Vector from the compact serialized JSON representation */
-	//apr_jwe_unpacked_t *iv = APR_ARRAY_IDX(unpacked_decoded, APR_JWE_INITIALIZATION_VECTOR_INDEX, apr_jwe_unpacked_t *);
-	//ap_log_rerror(APLOG_MARK, OIDC_DEBUG, 0, r, "iv_len: %d, (should be 16)", iv->len);
 	/* unwrap the AES key */
 	*cek = apr_pcalloc(pool, *cek_len);
+
 	int rv = AES_unwrap_key(&akey, (const unsigned char*) NULL, *cek,
 			(const unsigned char *) encrypted_key->value, encrypted_key->len);
 

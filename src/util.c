@@ -1378,17 +1378,30 @@ void oidc_util_table_add_query_encoded_params(apr_pool_t *pool,
 }
 
 /*
- * merge RSA private keys and shared keys in to a single hashtable
+ * merge RSA private keys and client secret in to a single hashtable
  */
 apr_hash_t * oidc_util_get_keys_table(apr_pool_t *pool,
-		apr_hash_t *private_keys, const char *secret) {
+		apr_hash_t *private_keys, const char *client_secret) {
 	apr_jwt_error_t err;
 	apr_jwk_t *jwk = NULL;
 	apr_hash_t *result =
 			(private_keys != NULL) ?
 					apr_hash_copy(pool, private_keys) : apr_hash_make(pool);
-	if (apr_jwk_parse_shared_secret(pool, secret, &jwk, &err) == TRUE) {
-		apr_hash_set(result, jwk->kid, APR_HASH_KEY_STRING, jwk);
+
+	if (client_secret != NULL) {
+
+		/* sha256 hash the client_secret first, this is OpenID Connect specific */
+		unsigned char *hashed_key = NULL;
+		unsigned int hashed_key_len = 0;
+		if (apr_jws_hash_bytes(pool, "sha256",
+				(const unsigned char *) client_secret, strlen(client_secret),
+				&hashed_key, &hashed_key_len, &err) == TRUE) {
+
+			if (apr_jwk_parse_symmetric_key(pool, hashed_key, hashed_key_len,
+					&jwk, &err) == TRUE)
+				apr_hash_set(result, jwk->kid, APR_HASH_KEY_STRING, jwk);
+		}
 	}
+
 	return result;
 }
