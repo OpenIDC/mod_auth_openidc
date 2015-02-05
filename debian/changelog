@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.7.3-1) unstable; urgency=medium
+
+  * fix symmetric key decryption of JWTs
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Thu, 05 Feb 2015 18:28:15 +0100
+
 libapache2-mod-auth-openidc (1.7.2-1) unstable; urgency=medium
 
   * add support for OIDCOAuthIntrospectionTokenParamName

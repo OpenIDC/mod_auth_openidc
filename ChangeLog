@@ -4,7 +4,7 @@
 - extended decryption test coverage; avoid double printouts on error
 - refactor JWT header parsing
 - simplify JWK URI refresh handling
-- bump to 1.7.3rc5
+- release 1.7.3
 
 2/4/2015
 - revise JOSE JWK handling part 1
