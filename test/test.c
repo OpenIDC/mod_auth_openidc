@@ -492,6 +492,7 @@ static char *test_plaintext_decrypt(apr_pool_t *pool) {
 
 	apr_array_header_t *unpacked = NULL;
 	apr_jwt_header_t header;
+	memset(header, 0, sizeof(header));
 	TST_ASSERT_ERR("apr_jwt_header_parse",
 			apr_jwt_header_parse(pool, s, &unpacked, &header, &err), pool, err);
 
@@ -586,6 +587,7 @@ static char *test_plaintext_decrypt2(apr_pool_t *pool) {
 
 	apr_array_header_t *unpacked = NULL;
 	apr_jwt_header_t header;
+	memset(header, 0, sizeof(header));
 	TST_ASSERT_ERR("apr_jwt_header_parse",
 			apr_jwt_header_parse(pool, s, &unpacked, &header, &err), pool, err);
 
@@ -627,6 +629,7 @@ static char *test_plaintext_decrypt_symmetric(apr_pool_t *pool) {
 
 	apr_array_header_t *unpacked = NULL;
 	apr_jwt_header_t header;
+	memset(header, 0, sizeof(header));
 	TST_ASSERT_ERR("apr_jwt_header_parse",
 			apr_jwt_header_parse(pool, s, &unpacked, &header, &err), pool, err);
 
