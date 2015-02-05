@@ -392,8 +392,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 			jti, apr_time_sec(jti_cache_duration));
 
 	/*
-	 * TODO: pass in 'code' if code flow (no c_hash or at_hash required for)
-	 * TODO: John: now "code" *requires* c_hash??
+	 * TODO: pass in 'code' if code flow and check c_hash
 	 */
 	/*
 	 char *c_hash = NULL;
@@ -408,11 +407,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 
 	// TODO: perhaps support encrypted state using shared secret? (issuer for encrypted JWTs must be in JWT header?)
 	//       (now we always use the statically configured provider client_secret...)
-	// TODO: check c_hash unless implicit (no at_hash because oidc > oauth, right?)
-	// TODO: move this code somehow to jose/ ?
-	apr_byte_t refresh = FALSE;
-	if (oidc_proto_idtoken_verify_signature(r, c, provider, jwt,
-			&refresh) == FALSE) {
+	if (oidc_proto_idtoken_verify_signature(r, c, provider, jwt) == FALSE) {
 		oidc_error(r, "state JWT signature could not be validated, aborting");
 		apr_jwt_destroy(jwt);
 		return FALSE;

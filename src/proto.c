@@ -500,7 +500,7 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 		apr_jwt_header_t *jwt_hdr, json_t *j_jwks, const char *type,
 		apr_jwk_t **result) {
 
-	apr_byte_t rc = FALSE;
+	apr_byte_t rc = TRUE;
 	apr_jwt_error_t err;
 	char *x5t = NULL;
 	apr_jwt_get_string(r->pool, jwt_hdr->value.json, "x5t", FALSE, &x5t, NULL);
@@ -585,45 +585,38 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
  */
 static apr_jwk_t *oidc_proto_get_key_from_jwk_uri(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, apr_jwt_header_t *jwt_hdr, const char *type,
-		apr_byte_t *refresh) {
+		apr_byte_t *force_refresh) {
 	json_t *j_jwks = NULL;
 	apr_jwk_t *jwk = NULL;
 
 	/* get the set of JSON Web Keys for this provider (possibly by downloading them from the specified provider->jwk_uri) */
-	oidc_metadata_jwks_get(r, cfg, provider, &j_jwks, refresh);
+	oidc_metadata_jwks_get(r, cfg, provider, &j_jwks, force_refresh);
 	if (j_jwks == NULL) {
-		oidc_error(r, "could not resolve JSON Web Keys");
+		oidc_error(r, "could not %s JSON Web Keys",
+				*force_refresh ? "refresh" : "get");
 		return NULL;
 	}
 
-	/* get the key corresponding to the kid from the header, referencing the key that was used to sign this message */
-	if (oidc_proto_get_key_from_jwks(r, jwt_hdr, j_jwks, type, &jwk) == FALSE) {
-		json_decref(j_jwks);
-		return NULL;
-	}
+	/*
+	 * get the key corresponding to the kid from the header, referencing the key that
+	 * was used to sign this message
+	 *
+	 * we don't check the error return value because we'll treat "error" in the same
+	 * way as "key not found" i.e. by refreshing the keys from the JWKs URI if not
+	 * already done
+	 */
+	oidc_proto_get_key_from_jwks(r, jwt_hdr, j_jwks, type, &jwk);
 
 	/* see what we've got back */
-	if ((jwk == NULL) && (refresh == FALSE)) {
+	if ((jwk == NULL) && (*force_refresh == FALSE)) {
 
 		/* we did not get a key, but we have not refreshed the JWKs from the jwks_uri yet */
-
 		oidc_warn(r,
 				"could not find a key in the cached JSON Web Keys, doing a forced refresh");
-
 		/* get the set of JSON Web Keys for this provider forcing a fresh download from the specified provider->jwk_uri) */
-		*refresh = TRUE;
-		oidc_metadata_jwks_get(r, cfg, provider, &j_jwks, refresh);
-		if (j_jwks == NULL) {
-			oidc_error(r, "could not refresh JSON Web Keys");
-			return NULL;
-		}
-
-		/* get the key from the refreshed set of JWKs */
-		if (oidc_proto_get_key_from_jwks(r, jwt_hdr, j_jwks, type,
-				&jwk) == FALSE) {
-			json_decref(j_jwks);
-			return NULL;
-		}
+		*force_refresh = TRUE;
+		jwk = oidc_proto_get_key_from_jwk_uri(r, cfg, provider, jwt_hdr, type,
+				force_refresh);
 	}
 
 	json_decref(j_jwks);
@@ -635,7 +628,7 @@ static apr_jwk_t *oidc_proto_get_key_from_jwk_uri(request_rec *r, oidc_cfg *cfg,
  * verify the signature on an id_token
  */
 apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r, oidc_cfg *cfg,
-		oidc_provider_t *provider, apr_jwt_t *jwt, apr_byte_t *refresh) {
+		oidc_provider_t *provider, apr_jwt_t *jwt) {
 
 	apr_byte_t result = FALSE;
 	apr_jwt_error_t err;
@@ -660,10 +653,12 @@ apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r, oidc_cfg *cfg,
 #endif
 	) {
 
+		apr_byte_t force_refresh = FALSE;
+
 		/* get the key from the JWKs that corresponds with the key specified in the header */
 		apr_jwk_t *jwk = oidc_proto_get_key_from_jwk_uri(r, cfg, provider,
 				&jwt->header,
-				apr_jws_signature_is_rsa(r->pool, jwt) ? "RSA" : "EC", refresh);
+				apr_jws_signature_is_rsa(r->pool, jwt) ? "RSA" : "EC", &force_refresh);
 
 		if (jwk != NULL) {
 
@@ -687,17 +682,9 @@ apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r, oidc_cfg *cfg,
 
 		} else {
 
-			oidc_warn(r, "could not find a key in the JSON Web Keys");
+			oidc_error(r, "could not find a key in the JSON Web Keys");
+			result = FALSE;
 
-			if (*refresh == FALSE) {
-
-				oidc_debug(r, "force refresh of the JWKS");
-
-				/* do it again, forcing a JWKS refresh */
-				*refresh = TRUE;
-				result = oidc_proto_idtoken_verify_signature(r, cfg, provider,
-						jwt, refresh);
-			}
 		}
 
 	} else {
@@ -794,9 +781,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 	// make signature validation exception for 'code' flow and the algorithm NONE
 	if (is_code_flow == FALSE || strcmp((*jwt)->header.alg, "none") != 0) {
 
-		apr_byte_t refresh = FALSE;
-		if (oidc_proto_idtoken_verify_signature(r, cfg, provider, *jwt,
-				&refresh) == FALSE) {
+		if (oidc_proto_idtoken_verify_signature(r, cfg, provider, *jwt) == FALSE) {
 			oidc_error(r,
 					"id_token signature could not be validated, aborting");
 			apr_jwt_destroy(*jwt);

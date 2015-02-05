@@ -308,9 +308,9 @@ static apr_byte_t oidc_oauth_set_remote_user(request_rec *r, oidc_cfg *c,
  * validate a JWT access token (locally)
  *
  * TODO: for now I'm re-/abusing the OIDC config section wrt.
- *       - signature validation (JWKs URI)
- *       - encryption key material (c->private_keys)
- *       - iat slack (idtoken_iat_slack)
+ *       - signature validation (OIDCProviderJwksUri and OIDCClientSecret)
+ *       - encryption key material (OIDCPrivateKeyFiles)
+ *       - iat slack (OIDCIDTokenIatSlack)
  *       but the config for the OAuth 2.0 RS should really be separate and most probably not (only) have
  *       a JWKS URI setting, but rather point to a PEM file
  *
@@ -341,9 +341,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 		return FALSE;
 	}
 
-	apr_byte_t refresh = FALSE;
-	if (oidc_proto_idtoken_verify_signature(r, c, &c->provider, jwt,
-			&refresh) == FALSE) {
+	if (oidc_proto_idtoken_verify_signature(r, c, &c->provider, jwt) == FALSE) {
 		oidc_error(r,
 				"JWT access token signature could not be validated, aborting");
 		apr_jwt_destroy(jwt);

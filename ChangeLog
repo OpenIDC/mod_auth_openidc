@@ -3,6 +3,7 @@
 - sha256 client secrets before using them as symmetric keys for decryption
 - extended decryption test coverage; avoid double printouts on error
 - refactor JWT header parsing
+- simplify JWK URI refresh handling
 - bump to 1.7.3rc5
 
 2/4/2015
