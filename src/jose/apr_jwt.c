@@ -354,6 +354,22 @@ const char *apr_jwt_header_to_string(apr_pool_t *pool, const char *s_json,
 }
 
 /*
+ * return the JWK type for the JWT signature verification
+ */
+const char *apr_jwt_signature_to_jwk_type(apr_pool_t *pool, apr_jwt_t *jwt) {
+	if (apr_jws_signature_is_rsa(pool, jwt)) {
+		return "RSA";
+	}
+	if (apr_jws_signature_is_ec(pool, jwt)) {
+		return "EC";
+	}
+	if (apr_jws_signature_is_hmac(pool, jwt)) {
+		return "oct";
+	}
+	return NULL;
+}
+
+/*
  * parse and (optionally) decrypt a JSON Web Token
  */
 apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,

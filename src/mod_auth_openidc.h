@@ -167,6 +167,12 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_CACHE_SECTION_ACCESS_TOKEN "access_token"
 #define OIDC_CACHE_SECTION_PROVIDER "provider"
 
+typedef struct oidc_jwks_uri_t {
+	const char *url;
+	int refresh_interval;
+	int ssl_validate_server;
+} oidc_jwks_uri_t;
+
 typedef struct oidc_provider_t {
 	char *metadata_url;
 	char *issuer;
@@ -331,7 +337,7 @@ apr_array_header_t *oidc_proto_supported_flows(apr_pool_t *pool);
 apr_byte_t oidc_proto_flow_is_supported(apr_pool_t *pool, const char *flow);
 apr_byte_t oidc_proto_validate_authorization_response(request_rec *r, const char *response_type, const char *requested_response_mode, char **code, char **id_token, char **access_token, char **token_type, const char *used_response_mode);
 apr_byte_t oidc_proto_validate_code_response(request_rec *r, const char *response_type, char **id_token, char **access_token, char **token_type);
-apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, apr_jwt_t *jwt);
+apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, apr_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri, apr_hash_t *symmetric_keys);
 apr_byte_t oidc_proto_validate_jwt(request_rec *r, apr_jwt_t *jwt, const char *iss, apr_byte_t exp_is_mandatory, apr_byte_t iat_is_mandatory, int iat_slack);
 apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce);
 
@@ -385,7 +391,7 @@ apr_byte_t oidc_json_object_get_string(apr_pool_t *pool, json_t *json, const cha
 apr_byte_t oidc_json_object_get_int(apr_pool_t *pool, json_t *json, const char *name, int *value, const int default_value);
 char *oidc_util_html_escape(apr_pool_t *pool, const char *input);
 void oidc_util_table_add_query_encoded_params(apr_pool_t *pool, apr_table_t *table, const char *params);
-apr_hash_t * oidc_util_get_keys_table(apr_pool_t *pool, apr_hash_t *private_keys, const char *secret);
+apr_hash_t * oidc_util_merge_symmetric_key(apr_pool_t *pool, apr_hash_t *private_keys, const char *secret, const char *hash_algo);
 
 // oidc_crypto.c
 unsigned char *oidc_crypto_aes_encrypt(request_rec *r, oidc_cfg *cfg, unsigned char *plaintext, int *len);
@@ -397,7 +403,7 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg, const 
 apr_byte_t oidc_metadata_provider_parse(request_rec *r, json_t *j_provider, oidc_provider_t *provider);
 apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg *cfg, apr_array_header_t **arr);
 apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *selected, oidc_provider_t **provider);
-apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, json_t **j_jwks, apr_byte_t *refresh);
+apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg, const oidc_jwks_uri_t *jwks_uri, json_t **j_jwks, apr_byte_t *refresh);
 
 // oidc_session.c
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20081201

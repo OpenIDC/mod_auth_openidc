@@ -496,17 +496,26 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
 /*
  * get the key from the JWKs that corresponds with the key specified in the header
  */
-static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
-		apr_jwt_header_t *jwt_hdr, json_t *j_jwks, const char *type,
-		apr_jwk_t **result) {
+static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, apr_jwt_t *jwt,
+		json_t *j_jwks, apr_hash_t *result) {
 
 	apr_byte_t rc = TRUE;
 	apr_jwt_error_t err;
 	char *x5t = NULL;
-	apr_jwt_get_string(r->pool, jwt_hdr->value.json, "x5t", FALSE, &x5t, NULL);
+	apr_jwk_t *jwk = NULL;
+
+	const char *key_type = apr_jwt_signature_to_jwk_type(r->pool, jwt);
+	if (key_type == NULL) {
+		oidc_error(r, "unsupported signing algorithm in JWT header: %s",
+				jwt->header.alg);
+		return FALSE;
+	}
+
+	apr_jwt_get_string(r->pool, jwt->header.value.json, "x5t", FALSE, &x5t,
+			NULL);
 
 	oidc_debug(r, "search for kid \"%s\" or thumbprint x5t \"%s\"",
-			jwt_hdr->kid, x5t);
+			jwt->header.kid, x5t);
 
 	/* get the "keys" JSON array from the JWKs object */
 	json_t *keys = json_object_get(j_jwks, "keys");
@@ -528,34 +537,39 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 			continue;
 		}
 
-		/* get the key type and see if it is the RSA type that we are looking for */
+		/* get the key type and see if it is the type that we are looking for */
 		json_t *kty = json_object_get(elem, "kty");
 		if ((!json_is_string(kty))
-				|| (strcmp(json_string_value(kty), type) != 0))
+				|| (strcmp(json_string_value(kty), key_type) != 0))
 			continue;
 
-		/* see if we were looking for a specific kid, if not we'll return the first one found */
-		if ((jwt_hdr->kid == NULL) && (x5t == NULL)) {
-			oidc_debug(r, "no kid/x5t to match, return first key found");
+		/* see if we were looking for a specific kid, if not we'll include any key that matches the type */
+		if ((jwt->header.kid == NULL) && (x5t == NULL)) {
+			oidc_debug(r, "no kid/x5t to match, include matching key type");
 
-			rc = apr_jwk_parse_json(r->pool, elem, result, &err);
+			rc = apr_jwk_parse_json(r->pool, elem, &jwk, &err);
 			if (rc == FALSE)
 				oidc_error(r, "JWK parsing failed: %s",
 						apr_jwt_e2s(r->pool, err));
-			break;
+			else
+				apr_hash_set(result, jwk->kid, APR_HASH_KEY_STRING, jwk);
+			continue;
 		}
 
 		/* we are looking for a specific kid, get the kid from the current element */
 		json_t *ekid = json_object_get(elem, "kid");
-		if ((ekid != NULL) && json_is_string(ekid) && (jwt_hdr->kid != NULL)) {
+		if ((ekid != NULL) && json_is_string(ekid)
+				&& (jwt->header.kid != NULL)) {
 			/* compare the requested kid against the current element */
-			if (apr_strnatcmp(jwt_hdr->kid, json_string_value(ekid)) == 0) {
-				oidc_debug(r, "found matching kid: \"%s\"", jwt_hdr->kid);
+			if (apr_strnatcmp(jwt->header.kid, json_string_value(ekid)) == 0) {
+				oidc_debug(r, "found matching kid: \"%s\"", jwt->header.kid);
 
-				rc = apr_jwk_parse_json(r->pool, elem, result, &err);
+				rc = apr_jwk_parse_json(r->pool, elem, &jwk, &err);
 				if (rc == FALSE)
 					oidc_error(r, "JWK parsing failed: %s",
 							apr_jwt_e2s(r->pool, err));
+				else
+					apr_hash_set(result, jwk->kid, APR_HASH_KEY_STRING, jwk);
 				break;
 			}
 		}
@@ -567,10 +581,12 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 			if (apr_strnatcmp(x5t, json_string_value(ex5t)) == 0) {
 				oidc_debug(r, "found matching x5t: \"%s\"", x5t);
 
-				rc = apr_jwk_parse_json(r->pool, elem, result, &err);
+				rc = apr_jwk_parse_json(r->pool, elem, &jwk, &err);
 				if (rc == FALSE)
 					oidc_error(r, "JWK parsing failed: %s",
 							apr_jwt_e2s(r->pool, err));
+				else
+					apr_hash_set(result, jwk->kid, APR_HASH_KEY_STRING, jwk);
 				break;
 			}
 		}
@@ -581,124 +597,93 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r,
 }
 
 /*
- * get the key from the (possibly cached) set of JWKs on the jwk_uri that corresponds with the key specified in the header
+ * get the keys from the (possibly cached) set of JWKs on the jwk_uri that corresponds with the key specified in the header
  */
-static apr_jwk_t *oidc_proto_get_key_from_jwk_uri(request_rec *r, oidc_cfg *cfg,
-		oidc_provider_t *provider, apr_jwt_header_t *jwt_hdr, const char *type,
+apr_byte_t oidc_proto_get_keys_from_jwks_uri(request_rec *r, oidc_cfg *cfg,
+		apr_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri, apr_hash_t *keys,
 		apr_byte_t *force_refresh) {
+
 	json_t *j_jwks = NULL;
-	apr_jwk_t *jwk = NULL;
 
 	/* get the set of JSON Web Keys for this provider (possibly by downloading them from the specified provider->jwk_uri) */
-	oidc_metadata_jwks_get(r, cfg, provider, &j_jwks, force_refresh);
+	oidc_metadata_jwks_get(r, cfg, jwks_uri, &j_jwks, force_refresh);
 	if (j_jwks == NULL) {
 		oidc_error(r, "could not %s JSON Web Keys",
 				*force_refresh ? "refresh" : "get");
-		return NULL;
+		return FALSE;
 	}
 
 	/*
 	 * get the key corresponding to the kid from the header, referencing the key that
-	 * was used to sign this message
+	 * was used to sign this message (or get all keys in case no kid was set)
 	 *
 	 * we don't check the error return value because we'll treat "error" in the same
 	 * way as "key not found" i.e. by refreshing the keys from the JWKs URI if not
 	 * already done
 	 */
-	oidc_proto_get_key_from_jwks(r, jwt_hdr, j_jwks, type, &jwk);
+	oidc_proto_get_key_from_jwks(r, jwt, j_jwks, keys);
 
-	/* see what we've got back */
-	if ((jwk == NULL) && (*force_refresh == FALSE)) {
+	/* no need anymore for the parsed json_t contents, release the it */
+	json_decref(j_jwks);
+
+	/* if we've got no keys and we did not do a fresh download, then the cache may be stale */
+	if ((apr_hash_count(keys) < 1) && (*force_refresh == FALSE)) {
 
 		/* we did not get a key, but we have not refreshed the JWKs from the jwks_uri yet */
 		oidc_warn(r,
-				"could not find a key in the cached JSON Web Keys, doing a forced refresh");
-		/* get the set of JSON Web Keys for this provider forcing a fresh download from the specified provider->jwk_uri) */
+				"could not find a key in the cached JSON Web Keys, doing a forced refresh in case keys were rolled over");
+		/* get the set of JSON Web Keys forcing a fresh download from the specified JWKs URI */
 		*force_refresh = TRUE;
-		jwk = oidc_proto_get_key_from_jwk_uri(r, cfg, provider, jwt_hdr, type,
+		return oidc_proto_get_keys_from_jwks_uri(r, cfg, jwt, jwks_uri, keys,
 				force_refresh);
 	}
 
-	json_decref(j_jwks);
+	oidc_debug(r,
+			"returning %d key(s) obtained from the (possibly cached) JWKs URI",
+			apr_hash_count(keys));
 
-	return jwk;
+	return TRUE;
 }
 
 /*
- * verify the signature on an id_token
+ * verify the signature on a JWT using the dynamically obtained and statically configured keys
  */
-apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r, oidc_cfg *cfg,
-		oidc_provider_t *provider, apr_jwt_t *jwt) {
+apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, apr_jwt_t *jwt,
+		const oidc_jwks_uri_t *jwks_uri, apr_hash_t *static_keys) {
 
-	apr_byte_t result = FALSE;
 	apr_jwt_error_t err;
+	apr_hash_t *dynamic_keys = apr_hash_make(r->pool);
 
-	if (apr_jws_signature_is_hmac(r->pool, jwt)) {
-
+	/* see if we've got a JWKs URI set for signature validation with dynamically obtained asymmetric keys */
+	if (jwks_uri == NULL) {
 		oidc_debug(r,
-				"verifying HMAC signature on id_token: header=%s, message=%s",
-				jwt->header.value.str, jwt->message);
-
-		result = apr_jws_verify_hmac(r->pool, jwt, provider->client_secret,
-				strlen(provider->client_secret), &err);
-
-		if (result == FALSE) {
-			oidc_error(r, "apr_jws_verify_hmac failed: %s",
-					apr_jwt_e2s(r->pool, err));
-		}
-
-	} else if (apr_jws_signature_is_rsa(r->pool, jwt)
-#if (OPENSSL_VERSION_NUMBER >= 0x01000000)
-			|| apr_jws_signature_is_ec(r->pool, jwt)
-#endif
-	) {
-
-		apr_byte_t force_refresh = FALSE;
-
-		/* get the key from the JWKs that corresponds with the key specified in the header */
-		apr_jwk_t *jwk = oidc_proto_get_key_from_jwk_uri(r, cfg, provider,
-				&jwt->header,
-				apr_jws_signature_is_rsa(r->pool, jwt) ? "RSA" : "EC", &force_refresh);
-
-		if (jwk != NULL) {
-
-			oidc_debug(r,
-					"verifying RSA/EC signature on id_token: header=%s, message=%s",
-					jwt->header.value.str, jwt->message);
-
-			result =
-					apr_jws_signature_is_rsa(r->pool, jwt) ?
-							apr_jws_verify_rsa(r->pool, jwt, jwk, &err) :
-#if (OPENSSL_VERSION_NUMBER >= 0x01000000)
-							apr_jws_verify_ec(r->pool, jwt, jwk, &err);
-#else
-			FALSE;
-#endif
-
-			if (result == FALSE) {
-				oidc_error(r, "apr_jws_verify_rsa/apr_jws_verify_ec failed: %s",
-						apr_jwt_e2s(r->pool, err));
-			}
-
-		} else {
-
-			oidc_error(r, "could not find a key in the JSON Web Keys");
-			result = FALSE;
-
-		}
-
+				"\"jwks_uri\" is not set, signature validation can only be performed with statically configured keys");
+		/* the JWKs URI was provided, but let's see if it makes sense to pull down keys, i.e. if it is an asymmetric signature */
+	} else if (apr_jws_signature_is_hmac(r->pool, jwt)) {
+		oidc_debug(r,
+				"\"jwks_uri\" is set, but the JWT has a symmetric signature so we won't pull/use keys from there");
 	} else {
-
-		oidc_warn(r,
-				"cannot verify id_token; unsupported algorithm \"%s\", must be RSA or HMAC",
-				jwt->header.alg);
-
+		apr_byte_t force_refresh = FALSE;
+		/* get the key from the JWKs that corresponds with the key specified in the header */
+		if (oidc_proto_get_keys_from_jwks_uri(r, cfg, jwt, jwks_uri,
+				dynamic_keys, &force_refresh) == FALSE)
+			return FALSE;
 	}
 
-	oidc_debug(r, "verification result of signature with algorithm \"%s\": %s",
-			jwt->header.alg, (result == TRUE) ? "TRUE" : "FALSE");
+	/* do the actual JWS verification with the locally and remotely provided key material */
+	// TODO: now static keys "win" if the same `kid` was used in both local and remote key sets
+	if (apr_jws_verify(r->pool, jwt,
+			apr_hash_overlay(r->pool, static_keys, dynamic_keys), &err) == FALSE) {
+		oidc_error(r, "JWT signature verification failed: %s",
+				apr_jwt_e2s(r->pool, err));
+		return FALSE;
+	}
 
-	return result;
+	oidc_debug(r,
+			"JWT signature verification with algorithm \"%s\" was successful",
+			jwt->header.alg);
+
+	return TRUE;
 }
 
 /*
@@ -752,21 +737,8 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 	oidc_debug(r, "enter");
 
 	if (apr_jwt_parse(r->pool, id_token, jwt,
-			oidc_util_get_keys_table(r->pool, cfg->private_keys,
-					provider->client_secret), &err) == FALSE) {
-		if ((*jwt) && ((*jwt)->header.alg)
-				&& (apr_jwe_algorithm_is_supported(r->pool, (*jwt)->header.alg)
-						== FALSE)) {
-			oidc_error(r,
-					"JWE content key encryption algorithm is not supported: %s",
-					(*jwt)->header.alg);
-		}
-		if ((*jwt) && ((*jwt)->header.enc)
-				&& (apr_jwe_encryption_is_supported(r->pool, (*jwt)->header.enc)
-						== FALSE)) {
-			oidc_error(r, "JWE encryption type is not supported: %s",
-					(*jwt)->header.enc);
-		}
+			oidc_util_merge_symmetric_key(r->pool, cfg->private_keys,
+					provider->client_secret, "sha256"), &err) == FALSE) {
 		oidc_error(r, "apr_jwt_parse failed for JWT with header \"%s\": %s",
 				apr_jwt_header_to_string(r->pool, id_token, NULL),
 				apr_jwt_e2s(r->pool, err));
@@ -781,7 +753,12 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 	// make signature validation exception for 'code' flow and the algorithm NONE
 	if (is_code_flow == FALSE || strcmp((*jwt)->header.alg, "none") != 0) {
 
-		if (oidc_proto_idtoken_verify_signature(r, cfg, provider, *jwt) == FALSE) {
+		oidc_jwks_uri_t jwks_uri = { provider->jwks_uri,
+				provider->jwks_refresh_interval, provider->ssl_validate_server };
+		if (oidc_proto_jwt_verify(r, cfg, *jwt, &jwks_uri,
+				oidc_util_merge_symmetric_key(r->pool, NULL,
+						provider->client_secret, NULL)) == FALSE) {
+
 			oidc_error(r,
 					"id_token signature could not be validated, aborting");
 			apr_jwt_destroy(*jwt);

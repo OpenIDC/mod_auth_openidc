@@ -138,6 +138,20 @@ static char *test_jwt_header_to_string(apr_pool_t *pool) {
 	return 0;
 }
 
+static char *_jwk_parse(apr_pool_t *pool, const char *s, apr_jwk_t **jwk,
+		apr_jwt_error_t *err) {
+
+	json_t *j_jwk = json_loads(s, 0, NULL);
+	TST_ASSERT("json_loads", ((j_jwk != NULL) && (json_is_object(j_jwk))));
+
+	TST_ASSERT_ERR("apr_jwk_parse_json",
+			apr_jwk_parse_json(pool, j_jwk, jwk, err), pool, (*err));
+
+	json_decref(j_jwk);
+
+	return 0;
+}
+
 static char *test_jwt_parse(apr_pool_t *pool) {
 
 	// from http://tools.ietf.org/html/draft-ietf-oauth-json-web-token-20
@@ -160,14 +174,16 @@ static char *test_jwt_parse(apr_pool_t *pool) {
 	TST_ASSERT_STR("payload.iss", jwt->payload.iss, "joe");
 	TST_ASSERT_LONG("payload.exp", (long )jwt->payload.exp, 1300819380L);
 
-	char *str_key =
-			"AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow";
-	char *raw_key = NULL;
-	int raw_key_len = apr_jwt_base64url_decode(pool, &raw_key, str_key, 1);
-
-	TST_ASSERT("apr_jws_verify_hmac",
-			apr_jws_verify_hmac(pool, jwt, raw_key, raw_key_len, &err));
-
+	apr_hash_t *keys = apr_hash_make(pool);
+	apr_jwk_t *jwk;
+	const char * k =
+			"{\"kty\":\"oct\", \"k\":\"AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow\"}";
+	jwk = NULL;
+	TST_ASSERT_ERR("apr_jwk_parse_json", _jwk_parse(pool, k, &jwk, &err) == 0,
+			pool, err);
+	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
+	TST_ASSERT_ERR("apr_jws_verify", apr_jws_verify(pool, jwt, keys, &err),
+			pool, err);
 	apr_jwt_destroy(jwt);
 
 	s[5] = '.';
@@ -181,20 +197,6 @@ static char *test_jwt_parse(apr_pool_t *pool) {
 			apr_jwt_parse(pool, s, &jwt, NULL, &err) == FALSE, pool, err);
 
 	apr_jwt_destroy(jwt);
-
-	return 0;
-}
-
-static char *_jwk_parse(apr_pool_t *pool, const char *s, apr_jwk_t **jwk,
-		apr_jwt_error_t *err) {
-
-	json_t *j_jwk = json_loads(s, 0, NULL);
-	TST_ASSERT("json_loads", ((j_jwk != NULL) && (json_is_object(j_jwk))));
-
-	TST_ASSERT_ERR("apr_jwk_parse_json",
-			apr_jwk_parse_json(pool, j_jwk, jwk, err), pool, (*err));
-
-	json_decref(j_jwk);
 
 	return 0;
 }
@@ -240,11 +242,14 @@ static char *test_jwt_verify_rsa(apr_pool_t *pool) {
 			"]"
 			"}";
 
+	apr_hash_t *keys = apr_hash_make(pool);
 	apr_jwk_t *jwk = NULL;
 	TST_ASSERT_ERR("apr_jwk_parse_json",
 			_jwk_parse(pool, s_key, &jwk, &err) == 0, pool, err);
+	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
 
-	TST_ASSERT("apr_jws_verify_rsa", apr_jws_verify_rsa(pool, jwt, jwk, &err));
+	TST_ASSERT_ERR("apr_jws_verify", apr_jws_verify(pool, jwt, keys, &err),
+			pool, err);
 
 	apr_jwt_destroy(jwt);
 
@@ -725,7 +730,9 @@ static char *test_jwt_decrypt(apr_pool_t *pool) {
 
 	TST_ASSERT_ERR("apr_jwk_parse_json (signing key)",
 			_jwk_parse(pool, sk, &jwk, &err) == 0, pool, err);
-	TST_ASSERT("apr_jws_verify_rsa", apr_jws_verify_rsa(pool, jwt, jwk, &err));
+	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
+	TST_ASSERT_ERR("apr_jws_verify", apr_jws_verify(pool, jwt, keys, &err),
+			pool, err);
 
 	TST_ASSERT_STR("header.alg", jwt->header.alg, "RS256");
 	TST_ASSERT_STR("payload.iss", jwt->payload.iss, "joe");

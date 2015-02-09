@@ -81,7 +81,7 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 
 	/* see if we want to do basic auth or post-param-based auth */
 	const char *basic_auth = NULL;
-	if ( (c->oauth.client_id != NULL) && (c->oauth.client_secret != NULL) ) {
+	if ((c->oauth.client_id != NULL) && (c->oauth.client_secret != NULL)) {
 		if ((c->oauth.introspection_endpoint_auth != NULL)
 				&& (apr_strnatcmp(c->oauth.introspection_endpoint_auth,
 						"client_secret_post") == 0)) {
@@ -203,8 +203,8 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 			json_t *exp = json_object_get(result, "exp");
 			if ((exp != NULL) && (json_is_number(exp))) {
 				/* set it in the cache so subsequent request don't need to validate the access_token and get the claims anymore */
-				c->cache->set(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, access_token, json,
-						apr_time_from_sec(json_integer_value(exp)));
+				c->cache->set(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, access_token,
+						json, apr_time_from_sec(json_integer_value(exp)));
 			} else if (json_integer_value(exp) <= 0) {
 				oidc_debug(r,
 						"response JSON object did not contain an \"exp\" integer number; introspection result will not be cached");
@@ -229,10 +229,10 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 			}
 
 			/* set it in the cache so subsequent request don't need to validate the access_token and get the claims anymore */
-			c->cache->set(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, access_token, json,
+			c->cache->set(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, access_token,
+					json,
 					apr_time_now() + apr_time_from_sec(json_integer_value(expires_in)));
 		}
-
 
 	} else {
 
@@ -266,7 +266,7 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 
 		json_decref(result);
 
-	} else  {
+	} else {
 
 		//oidc_oauth_spaced_string_to_array(r, result, "scope", result, "scopes");
 
@@ -327,8 +327,8 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 	apr_jwt_t *jwt = NULL;
 	// TODO: oauth.client_secret will be hashed now for decryption purposes but that is OIDC specific...
 	if (apr_jwt_parse(r->pool, access_token, &jwt,
-			oidc_util_get_keys_table(r->pool, c->private_keys,
-					c->oauth.client_secret), &err) == FALSE) {
+			oidc_util_merge_symmetric_key(r->pool, c->private_keys,
+					c->oauth.client_secret, "sha256"), &err) == FALSE) {
 		oidc_error(r, "could not parse JWT from access_token: %s",
 				apr_jwt_e2s(r->pool, err));
 		return FALSE;
@@ -341,7 +341,11 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 		return FALSE;
 	}
 
-	if (oidc_proto_idtoken_verify_signature(r, c, &c->provider, jwt) == FALSE) {
+	oidc_jwks_uri_t jwks_uri = { c->provider.jwks_uri,
+			c->provider.jwks_refresh_interval, c->provider.ssl_validate_server };
+	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri,
+			oidc_util_merge_symmetric_key(r->pool, NULL,
+					c->provider.client_secret, NULL)) == FALSE) {
 		oidc_error(r,
 				"JWT access token signature could not be validated, aborting");
 		apr_jwt_destroy(jwt);
@@ -400,7 +404,8 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 			return HTTP_UNAUTHORIZED;
 	} else {
 		/* no introspection endpoint is set, assume the token is a JWT and validate it locally */
-		if (oidc_oauth_validate_jwt_access_token(r, c, access_token, &token, &s_token) == FALSE)
+		if (oidc_oauth_validate_jwt_access_token(r, c, access_token, &token,
+				&s_token) == FALSE)
 			return HTTP_UNAUTHORIZED;
 	}
 
@@ -436,7 +441,8 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 
 	/* set the access_token in the app headers */
 	if (access_token != NULL) {
-		oidc_util_set_app_header(r, "access_token", access_token, OIDC_DEFAULT_HEADER_PREFIX);
+		oidc_util_set_app_header(r, "access_token", access_token,
+				OIDC_DEFAULT_HEADER_PREFIX);
 	}
 
 	/* free JSON resources */

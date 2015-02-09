@@ -223,7 +223,6 @@ static apr_byte_t apr_jwe_decrypt_cek_rsa(apr_pool_t *pool,
 	return (*cek_len > 0);
 }
 
-
 /*
  * decrypt AES wrapped Content Encryption Key with the provided symmetric key
  */
@@ -314,7 +313,7 @@ static apr_byte_t apr_jwe_decrypt_cek(apr_pool_t *pool,
 	if (header->kid != NULL) {
 
 		jwk = apr_hash_get(keys, header->kid,
-		APR_HASH_KEY_STRING);
+			APR_HASH_KEY_STRING);
 		if (jwk != NULL) {
 			rc = apr_jwe_decrypt_cek_with_jwk(pool, header, unpacked_decoded,
 					jwk, cek, cek_len, err);

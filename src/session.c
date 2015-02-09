@@ -261,7 +261,7 @@ static apr_status_t oidc_session_identity_decode(request_rec * r,
 	char *encoded, *pair;
 	const char *sep = "&";
 
-	oidc_debug(r, "decoding %s", z->encoded);
+	//oidc_debug(r, "decoding %s", z->encoded);
 
 	/* sanity check - anything to decode? */
 	if (!z->encoded) {
@@ -277,7 +277,7 @@ static apr_status_t oidc_session_identity_decode(request_rec * r,
 		char *key = apr_strtok(pair, psep, &plast);
 		char *val = apr_strtok(NULL, psep, &plast);
 
-		oidc_debug(r, "decoding %s=%s", key, val);
+		//oidc_debug(r, "decoding %s=%s", key, val);
 
 		if (key && *key) {
 			if (!val || !*val) {

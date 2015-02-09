@@ -166,6 +166,9 @@ apr_byte_t apr_jwt_header_parse(apr_pool_t *pool, const char *s_json,
 		apr_array_header_t **unpacked, apr_jwt_header_t *header,
 		apr_jwt_error_t *err);
 
+/* return the JWK type for the JWT signature verification */
+const char *apr_jwt_signature_to_jwk_type(apr_pool_t *pool, apr_jwt_t *jwt);
+
 /*
  * JSON Web Key handling
  */
@@ -234,8 +237,9 @@ typedef struct apr_jwk_t {
 apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, json_t *j_json,
 		apr_jwk_t **j_jwk, apr_jwt_error_t *err);
 /* parse a symmetric key in to a JSON Web Key (oct) struct */
-apr_byte_t apr_jwk_parse_symmetric_key(apr_pool_t *pool, const unsigned char *key, unsigned int key_len,
-		apr_jwk_t **j_jwk, apr_jwt_error_t *err);
+apr_byte_t apr_jwk_parse_symmetric_key(apr_pool_t *pool,
+		const unsigned char *key, unsigned int key_len, apr_jwk_t **j_jwk,
+		apr_jwt_error_t *err);
 /* parse an RSA private key from a PEM formatted file */
 apr_byte_t apr_jwk_parse_rsa_private_key(apr_pool_t *pool, const char *filename,
 		apr_jwk_t **j_jwk, apr_jwt_error_t *err);
@@ -260,14 +264,9 @@ apr_byte_t apr_jws_signature_is_hmac(apr_pool_t *pool, apr_jwt_t *jwt);
 apr_byte_t apr_jws_signature_is_rsa(apr_pool_t *pool, apr_jwt_t *jwt);
 /* check if the signature on a JWT is of type Elliptic Curve */
 apr_byte_t apr_jws_signature_is_ec(apr_pool_t *pool, apr_jwt_t *jwt);
-/* verify the HMAC signature on a JWT */
-apr_byte_t apr_jws_verify_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
-		const char *key, const unsigned int key_len, apr_jwt_error_t *err);
-/* verify the RSA signature on a JWT */
-apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk,
-		apr_jwt_error_t *err);
-/* verify the Elliptic Curve signature on a JWT */
-apr_byte_t apr_jws_verify_ec(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk,
+
+/* verify the signature on a JWT */
+apr_byte_t apr_jws_verify(apr_pool_t *pool, apr_jwt_t *jwt, apr_hash_t *keys,
 		apr_jwt_error_t *err);
 
 /* hash byte sequence */

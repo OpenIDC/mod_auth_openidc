@@ -1378,28 +1378,32 @@ void oidc_util_table_add_query_encoded_params(apr_pool_t *pool,
 }
 
 /*
- * merge RSA private keys and client secret in to a single hashtable
+ * merge provided keys and client secret in to a single hashtable
  */
-apr_hash_t * oidc_util_get_keys_table(apr_pool_t *pool,
-		apr_hash_t *private_keys, const char *client_secret) {
+apr_hash_t * oidc_util_merge_symmetric_key(apr_pool_t *pool, apr_hash_t *keys,
+		const char *client_secret, const char *hash_algo) {
 	apr_jwt_error_t err;
 	apr_jwk_t *jwk = NULL;
-	apr_hash_t *result =
-			(private_keys != NULL) ?
-					apr_hash_copy(pool, private_keys) : apr_hash_make(pool);
+	unsigned char *key = NULL;
+	unsigned int key_len;
+	apr_hash_t *result = NULL;
+
+	result = (keys != NULL) ? apr_hash_copy(pool, keys) : apr_hash_make(pool);
 
 	if (client_secret != NULL) {
 
-		/* sha256 hash the client_secret first, this is OpenID Connect specific */
-		unsigned char *hashed_key = NULL;
-		unsigned int hashed_key_len = 0;
-		if (apr_jws_hash_bytes(pool, "sha256",
-				(const unsigned char *) client_secret, strlen(client_secret),
-				&hashed_key, &hashed_key_len, &err) == TRUE) {
+		if (hash_algo == NULL) {
+			key = (unsigned char *)client_secret;
+			key_len = strlen(client_secret);
+		} else {
+			/* hash the client_secret first, this is OpenID Connect specific */
+			apr_jws_hash_bytes(pool, hash_algo,
+					(const unsigned char *) client_secret,
+					strlen(client_secret), &key, &key_len, &err);
+		}
 
-			if (apr_jwk_parse_symmetric_key(pool, hashed_key, hashed_key_len,
-					&jwk, &err) == TRUE)
-				apr_hash_set(result, jwk->kid, APR_HASH_KEY_STRING, jwk);
+		if (apr_jwk_parse_symmetric_key(pool, key, key_len, &jwk, &err) == TRUE) {
+			apr_hash_set(result, jwk->kid, APR_HASH_KEY_STRING, jwk);
 		}
 	}
 

@@ -292,8 +292,8 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	apr_jwt_t *jwt = NULL;
 	apr_jwt_error_t err;
 	if (apr_jwt_parse(r->pool, state, &jwt,
-			oidc_util_get_keys_table(r->pool, c->private_keys,
-					c->provider.client_secret), &err) == FALSE) {
+			oidc_util_merge_symmetric_key(r->pool, c->private_keys,
+					c->provider.client_secret, "sha256"), &err) == FALSE) {
 		oidc_error(r,
 				"could not parse JWT from state: invalid unsolicited response: %s",
 				apr_jwt_e2s(r->pool, err));
@@ -339,8 +339,8 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	}
 
 	char *target_link_uri = NULL;
-	apr_jwt_get_string(r->pool, jwt->payload.value.json, "target_link_uri", FALSE,
-			&target_link_uri, NULL);
+	apr_jwt_get_string(r->pool, jwt->payload.value.json, "target_link_uri",
+			FALSE, &target_link_uri, NULL);
 	if (target_link_uri == NULL) {
 		if (c->default_sso_url == NULL) {
 			oidc_error(r,
@@ -407,7 +407,11 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 
 	// TODO: perhaps support encrypted state using shared secret? (issuer for encrypted JWTs must be in JWT header?)
 	//       (now we always use the statically configured provider client_secret...)
-	if (oidc_proto_idtoken_verify_signature(r, c, provider, jwt) == FALSE) {
+	oidc_jwks_uri_t jwks_uri = { provider->jwks_uri,
+			provider->jwks_refresh_interval, provider->ssl_validate_server };
+	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri,
+			oidc_util_merge_symmetric_key(r->pool, NULL,
+					provider->client_secret, NULL)) == FALSE) {
 		oidc_error(r, "state JWT signature could not be validated, aborting");
 		apr_jwt_destroy(jwt);
 		return FALSE;
@@ -1984,7 +1988,7 @@ end:
 	if (error_code != NULL)
 		return_to = apr_psprintf(r->pool, "%s%serror_code=%s", return_to,
 				strchr(return_to, '?') ? "&" : "?",
-						oidc_util_escape_string(r, error_code));
+				oidc_util_escape_string(r, error_code));
 
 	/* add the redirect location header */
 	apr_table_add(r->headers_out, "Location", return_to);
@@ -2117,7 +2121,8 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
-	if (dir_cfg->return401) return HTTP_UNAUTHORIZED;
+	if (dir_cfg->return401)
+		return HTTP_UNAUTHORIZED;
 
 	/* no session (regardless of whether it is main or sub-request), go and authenticate the user */
 	return oidc_authenticate_user(r, c, NULL, oidc_get_current_url(r, c), NULL,
