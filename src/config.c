@@ -460,12 +460,16 @@ static const char *oidc_set_session_inactivity_timeout(cmd_parms *cmd,
 /*
  * add a public key from an X.509 file to our list of JWKs with public keys
  */
-static const char *oidc_set_public_key_files_enc(cmd_parms *cmd, void *dummy,
+static const char *oidc_set_public_key_files(cmd_parms *cmd, void *struct_ptr,
 		const char *arg) {
-	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
-			cmd->server->module_config, &auth_openidc_module);
 	apr_jwk_t *jwk = NULL;
 	apr_jwt_error_t err;
+
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+
+	int offset = (int) (long) cmd->info;
+	apr_hash_t **public_keys = (apr_hash_t **) ((void *) cfg + offset);
 
 	if (apr_jwk_parse_rsa_public_key(cmd->pool, arg, &jwk, &err) == FALSE) {
 		return apr_psprintf(cmd->pool,
@@ -473,9 +477,24 @@ static const char *oidc_set_public_key_files_enc(cmd_parms *cmd, void *dummy,
 				apr_jwt_e2s(cmd->pool, err));
 	}
 
-	if (cfg->public_keys == NULL)
-		cfg->public_keys = apr_hash_make(cmd->pool);
-	apr_hash_set(cfg->public_keys, jwk->kid, APR_HASH_KEY_STRING, jwk);
+	if (*public_keys == NULL)
+		*public_keys = apr_hash_make(cmd->pool);
+	apr_hash_set(*public_keys, jwk->kid, APR_HASH_KEY_STRING, jwk);
+
+	return NULL;
+}
+
+/*
+ * add a shared key to a list of JWKs with shared keys
+ */
+static const char *oidc_set_shared_keys(cmd_parms *cmd, void *struct_ptr,
+		const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+	int offset = (int) (long) cmd->info;
+	apr_hash_t **shared_keys = (apr_hash_t **) ((void *) cfg + offset);
+	*shared_keys = oidc_util_merge_symmetric_key(cmd->pool, *shared_keys, arg,
+			NULL);
 	return NULL;
 }
 
@@ -617,6 +636,9 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->oauth.introspection_endpoint_auth = NULL;
 	c->oauth.introspection_token_param_name = OIDC_DEFAULT_OAUTH_TOKEN_PARAM_NAME;
 	c->oauth.remote_user_claim = OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER;
+	c->oauth.verify_jwks_uri = NULL;
+	c->oauth.verify_public_keys = NULL;
+	c->oauth.verify_shared_keys = NULL;
 
 	c->cache = &oidc_cache_shm;
 	c->cache_cfg = NULL;
@@ -832,6 +854,18 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 							add->oauth.remote_user_claim :
 							base->oauth.remote_user_claim;
 
+	c->oauth.verify_jwks_uri =
+			add->oauth.verify_jwks_uri != NULL ?
+					add->oauth.verify_jwks_uri : base->oauth.verify_jwks_uri;
+	c->oauth.verify_public_keys =
+			add->oauth.verify_public_keys != NULL ?
+					add->oauth.verify_public_keys :
+					base->oauth.verify_public_keys;
+	c->oauth.verify_shared_keys =
+			add->oauth.verify_shared_keys != NULL ?
+					add->oauth.verify_shared_keys :
+					base->oauth.verify_shared_keys;
+
 	c->http_timeout_long =
 			add->http_timeout_long != OIDC_DEFAULT_HTTP_TIMEOUT_LONG ?
 					add->http_timeout_long : base->http_timeout_long;
@@ -1036,8 +1070,24 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
  */
 static int oidc_check_config_oauth(server_rec *s, oidc_cfg *c) {
 
-//	if (c->oauth.introspection_endpoint_url == NULL)
-//		return oidc_check_config_error(s, "OIDCOAuthIntrospectionEndpoint");
+	if (c->oauth.introspection_endpoint_url == NULL) {
+
+		if ((c->oauth.verify_jwks_uri == NULL)
+				&& (c->oauth.verify_public_keys == NULL)
+				&& (c->oauth.verify_shared_keys == NULL)) {
+			oidc_serror(s,
+					"one of 'OIDCOAuthIntrospectionEndpoint', 'OIDCOAuthVerifyJwksUri', 'OIDCOAuthVerifySharedKeys' or 'OIDCOAuthVerifyCertFiles' must be set");
+			return HTTP_INTERNAL_SERVER_ERROR;
+		}
+
+	} else if ((c->oauth.verify_jwks_uri != NULL)
+			|| (c->oauth.verify_public_keys != NULL)
+			|| (c->oauth.verify_shared_keys != NULL)) {
+		oidc_serror(s,
+				"only 'OIDCOAuthIntrospectionEndpoint' OR one (or more) out of ('OIDCOAuthVerifyJwksUri', 'OIDCOAuthVerifySharedKeys' or 'OIDCOAuthVerifyCertFiles') must be set");
+		return HTTP_INTERNAL_SERVER_ERROR;
+
+	}
 
 	return OK;
 }
@@ -1060,7 +1110,10 @@ static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s) {
 	}
 
 	if ((cfg->oauth.client_id != NULL) || (cfg->oauth.client_secret != NULL)
-			|| (cfg->oauth.introspection_endpoint_url != NULL)) {
+			|| (cfg->oauth.introspection_endpoint_url != NULL)
+			|| (cfg->oauth.verify_jwks_uri != NULL)
+			|| (cfg->oauth.verify_public_keys != NULL)
+			|| (cfg->oauth.verify_shared_keys != NULL)) {
 		if (oidc_check_config_oauth(s, cfg) != OK)
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
@@ -1357,8 +1410,9 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF,
 				"The response mode used; must be one of \"fragment\", \"query\" or \"form_post\" (serves as default value for discovered OPs too)"),
 
-		AP_INIT_ITERATE("OIDCPublicKeyFiles", oidc_set_public_key_files_enc,
-				NULL,
+		AP_INIT_ITERATE("OIDCPublicKeyFiles",
+				oidc_set_public_key_files,
+				(void *)APR_OFFSETOF(oidc_cfg, public_keys),
 				RSRC_CONF,
 				"The fully qualified names of the files that contain the X.509 certificates that contains the RSA public keys that can be used for encryption by the OP."),
 		AP_INIT_ITERATE("OIDCPrivateKeyFiles", oidc_set_private_key_files_enc,
@@ -1539,6 +1593,21 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.remote_user_claim),
 				RSRC_CONF,
 				"The claim that is used when setting the REMOTE_USER variable for OAuth 2.0 protected paths."),
+		AP_INIT_ITERATE("OIDCOAuthVerifyCertFiles",
+				oidc_set_public_key_files,
+				(void*)APR_OFFSETOF(oidc_cfg, oauth.verify_public_keys),
+				RSRC_CONF,
+				"The fully qualified names of the files that contain the X.509 certificates that contains the RSA public keys that can be used for access token validation."),
+		AP_INIT_ITERATE("OIDCOAuthVerifySharedKeys",
+				oidc_set_shared_keys,
+				(void*)APR_OFFSETOF(oidc_cfg, oauth.verify_shared_keys),
+				RSRC_CONF,
+				"Shared secret(s) that is/are used to verify signed JWT access tokens locally."),
+		AP_INIT_TAKE1("OIDCOAuthVerifyJwksUri",
+				oidc_set_https_slot,
+				(void *)APR_OFFSETOF(oidc_cfg, oauth.verify_jwks_uri),
+				RSRC_CONF,
+				"The JWKs URL on which the Authorization publishes the keys used to sign its JWT access tokens."),
 
 		AP_INIT_TAKE1("OIDCHTTPTimeoutLong", oidc_set_int_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, http_timeout_long),

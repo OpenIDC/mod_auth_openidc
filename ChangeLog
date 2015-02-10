@@ -1,7 +1,8 @@
 2/9/2015
 - check JWT signature against all configured keys (jwks_uri) if no "kid" is provided, not just the first one
 - revise JOSE JWS handling part 2
-- bump to 1.7.4rc0
+- complete support for local JWT access token validation
+- bump to 1.8.0rc0
 
 2/5/2015
 - fix symmetric key decryption of JWTs (A128CBC-HS256/A256CBC-HS512)

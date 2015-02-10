@@ -219,6 +219,9 @@ typedef struct oidc_oauth_t {
 	char *introspection_endpoint_auth;
 	char *introspection_token_param_name;
 	char *remote_user_claim;
+	apr_hash_t *verify_shared_keys;
+	char *verify_jwks_uri;
+	apr_hash_t *verify_public_keys;
 } oidc_oauth_t;
 
 typedef struct oidc_cfg {
@@ -392,6 +395,7 @@ apr_byte_t oidc_json_object_get_int(apr_pool_t *pool, json_t *json, const char *
 char *oidc_util_html_escape(apr_pool_t *pool, const char *input);
 void oidc_util_table_add_query_encoded_params(apr_pool_t *pool, apr_table_t *table, const char *params);
 apr_hash_t * oidc_util_merge_symmetric_key(apr_pool_t *pool, apr_hash_t *private_keys, const char *secret, const char *hash_algo);
+apr_hash_t * oidc_util_merge_key_sets(apr_pool_t *pool, apr_hash_t *k1, apr_hash_t *k2);
 
 // oidc_crypto.c
 unsigned char *oidc_crypto_aes_encrypt(request_rec *r, oidc_cfg *cfg, unsigned char *plaintext, int *len);

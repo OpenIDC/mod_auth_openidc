@@ -655,9 +655,9 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, apr_jwt_t *jwt,
 	apr_hash_t *dynamic_keys = apr_hash_make(r->pool);
 
 	/* see if we've got a JWKs URI set for signature validation with dynamically obtained asymmetric keys */
-	if (jwks_uri == NULL) {
+	if (jwks_uri->url == NULL) {
 		oidc_debug(r,
-				"\"jwks_uri\" is not set, signature validation can only be performed with statically configured keys");
+				"\"jwks_uri\" is not set, signature validation will only be performed against statically configured keys");
 		/* the JWKs URI was provided, but let's see if it makes sense to pull down keys, i.e. if it is an asymmetric signature */
 	} else if (apr_jws_signature_is_hmac(r->pool, jwt)) {
 		oidc_debug(r,
@@ -673,7 +673,8 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, apr_jwt_t *jwt,
 	/* do the actual JWS verification with the locally and remotely provided key material */
 	// TODO: now static keys "win" if the same `kid` was used in both local and remote key sets
 	if (apr_jws_verify(r->pool, jwt,
-			apr_hash_overlay(r->pool, static_keys, dynamic_keys), &err) == FALSE) {
+			oidc_util_merge_key_sets(r->pool, static_keys, dynamic_keys),
+			&err) == FALSE) {
 		oidc_error(r, "JWT signature verification failed: %s",
 				apr_jwt_e2s(r->pool, err));
 		return FALSE;

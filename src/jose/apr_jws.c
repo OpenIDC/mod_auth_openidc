@@ -557,7 +557,7 @@ apr_byte_t apr_jws_verify(apr_pool_t *pool, apr_jwt_t *jwt, apr_hash_t *keys,
 	if (jwt->header.kid != NULL) {
 
 		jwk = apr_hash_get(keys, jwt->header.kid,
-		APR_HASH_KEY_STRING);
+				APR_HASH_KEY_STRING);
 		if (jwk != NULL) {
 			rc = apr_jws_verify_with_jwk(pool, jwt, jwk, err);
 		} else {
@@ -574,6 +574,16 @@ apr_byte_t apr_jws_verify(apr_pool_t *pool, apr_jwt_t *jwt, apr_hash_t *keys,
 			if (rc == TRUE)
 				break;
 		}
+
+		if (rc == FALSE)
+			apr_jwt_error(err,
+					"could not verify signature against any of the (%d) provided keys%s",
+					apr_hash_count(keys),
+					apr_hash_count(keys) > 0 ?
+							"" :
+							apr_psprintf(pool,
+									"; you have probably provided no or incorrect keys/key-types for algorithm: %s",
+									jwt->header.alg));
 	}
 
 	return rc;

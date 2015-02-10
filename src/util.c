@@ -1393,7 +1393,7 @@ apr_hash_t * oidc_util_merge_symmetric_key(apr_pool_t *pool, apr_hash_t *keys,
 	if (client_secret != NULL) {
 
 		if (hash_algo == NULL) {
-			key = (unsigned char *)client_secret;
+			key = (unsigned char *) client_secret;
 			key_len = strlen(client_secret);
 		} else {
 			/* hash the client_secret first, this is OpenID Connect specific */
@@ -1408,4 +1408,19 @@ apr_hash_t * oidc_util_merge_symmetric_key(apr_pool_t *pool, apr_hash_t *keys,
 	}
 
 	return result;
+}
+
+/*
+ * merge two key sets
+ */
+apr_hash_t * oidc_util_merge_key_sets(apr_pool_t *pool, apr_hash_t *k1,
+		apr_hash_t *k2) {
+	if (k1 == NULL) {
+		if (k2 == NULL)
+			return apr_hash_make(pool);
+		return k2;
+	}
+	if (k2 == NULL)
+		return k1;
+	return apr_hash_overlay(pool, k1, k2);
 }

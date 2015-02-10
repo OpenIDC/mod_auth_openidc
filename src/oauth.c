@@ -307,28 +307,24 @@ static apr_byte_t oidc_oauth_set_remote_user(request_rec *r, oidc_cfg *c,
 /*
  * validate a JWT access token (locally)
  *
- * TODO: for now I'm re-/abusing the OIDC config section wrt.
- *       - signature validation (OIDCProviderJwksUri and OIDCClientSecret)
+ * TODO: document that we're reusing the following settings from the OIDC config section:
+ *       - JWKs URI refresh interval
+ *       - SSL server certificate validation
  *       - encryption key material (OIDCPrivateKeyFiles)
  *       - iat slack (OIDCIDTokenIatSlack)
- *       but the config for the OAuth 2.0 RS should really be separate and most probably not (only) have
- *       a JWKS URI setting, but rather point to a PEM file
  *
  * OIDCOAuthRemoteUserClaim client_id
- * # 64x 61 hex
- * OIDCClientSecret aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
- * # need to import pkcs12 and use the generated key id
- * OIDCProviderJwksUri https://localhost/protected/?jwks=rsa
+ * # 32x 61 hex
+ * OIDCOAuthVerifySharedKeys aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
  */
 static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 		oidc_cfg *c, const char *access_token, json_t **token, char **response) {
 
 	apr_jwt_error_t err;
 	apr_jwt_t *jwt = NULL;
-	// TODO: oauth.client_secret will be hashed now for decryption purposes but that is OIDC specific...
 	if (apr_jwt_parse(r->pool, access_token, &jwt,
 			oidc_util_merge_symmetric_key(r->pool, c->private_keys,
-					c->oauth.client_secret, "sha256"), &err) == FALSE) {
+					c->oauth.client_secret, NULL), &err) == FALSE) {
 		oidc_error(r, "could not parse JWT from access_token: %s",
 				apr_jwt_e2s(r->pool, err));
 		return FALSE;
@@ -341,11 +337,19 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 		return FALSE;
 	}
 
-	oidc_jwks_uri_t jwks_uri = { c->provider.jwks_uri,
+	oidc_debug(r,
+			"verify JWT against %d statically configured public keys and %d shared keys, with JWKs URI set to %s",
+			c->oauth.verify_public_keys ?
+					apr_hash_count(c->oauth.verify_public_keys) : 0,
+					c->oauth.verify_shared_keys ?
+							apr_hash_count(c->oauth.verify_shared_keys) : 0,
+							c->oauth.verify_jwks_uri);
+
+	oidc_jwks_uri_t jwks_uri = { c->oauth.verify_jwks_uri,
 			c->provider.jwks_refresh_interval, c->provider.ssl_validate_server };
 	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri,
-			oidc_util_merge_symmetric_key(r->pool, NULL,
-					c->provider.client_secret, NULL)) == FALSE) {
+			oidc_util_merge_key_sets(r->pool, c->oauth.verify_public_keys,
+					c->oauth.verify_shared_keys)) == FALSE) {
 		oidc_error(r,
 				"JWT access token signature could not be validated, aborting");
 		apr_jwt_destroy(jwt);
