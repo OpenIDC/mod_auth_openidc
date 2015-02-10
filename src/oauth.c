@@ -309,7 +309,6 @@ static apr_byte_t oidc_oauth_set_remote_user(request_rec *r, oidc_cfg *c,
  *
  * TODO: document that we're reusing the following settings from the OIDC config section:
  *       - JWKs URI refresh interval
- *       - SSL server certificate validation
  *       - encryption key material (OIDCPrivateKeyFiles)
  *       - iat slack (OIDCIDTokenIatSlack)
  *
@@ -346,7 +345,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 							c->oauth.verify_jwks_uri);
 
 	oidc_jwks_uri_t jwks_uri = { c->oauth.verify_jwks_uri,
-			c->provider.jwks_refresh_interval, c->provider.ssl_validate_server };
+			c->provider.jwks_refresh_interval, c->oauth.ssl_validate_server };
 	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri,
 			oidc_util_merge_key_sets(r->pool, c->oauth.verify_public_keys,
 					c->oauth.verify_shared_keys)) == FALSE) {
