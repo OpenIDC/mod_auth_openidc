@@ -343,6 +343,8 @@ apr_byte_t oidc_proto_validate_code_response(request_rec *r, const char *respons
 apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, apr_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri, apr_hash_t *symmetric_keys);
 apr_byte_t oidc_proto_validate_jwt(request_rec *r, apr_jwt_t *jwt, const char *iss, apr_byte_t exp_is_mandatory, apr_byte_t iat_is_mandatory, int iat_slack);
 apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce);
+// non-static for test.c
+apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *nonce, apr_jwt_t *jwt);
 
 // oidc_authz.c
 int oidc_authz_worker(request_rec *r, const json_t *const claims, const require_line *const reqs, int nelts);

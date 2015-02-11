@@ -234,7 +234,8 @@ apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce) {
  * if a nonce was passed in the authorization request (and stored in the browser state),
  * check that it matches the nonce value in the id_token payload
  */
-static apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
+// non-static for test.c
+apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char *nonce, apr_jwt_t *jwt) {
 
 	apr_jwt_error_t err;

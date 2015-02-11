@@ -72,9 +72,10 @@ static int TST_RC;
 #define TST_FORMAT(fmt) \
 		" # %s: error in %s: result \"" fmt "\" != expected \"" fmt "\""
 
-#define TST_ASSERT(message, test) \
-		if (!(test)) { \
-			sprintf(TST_ERR_MSG, TST_FORMAT("%d"), __FUNCTION__, message, test, 1); \
+#define TST_ASSERT(message, expression) \
+		TST_RC = (expression); \
+		if (!TST_RC) { \
+			sprintf(TST_ERR_MSG, TST_FORMAT("%d"), __FUNCTION__, message, TST_RC, 1); \
 			return TST_ERR_MSG; \
 		}
 
@@ -804,6 +805,76 @@ static char *test_proto_validate_code(request_rec *r) {
 	return 0;
 }
 
+static char * test_proto_authorization_request(request_rec *r) {
+
+	oidc_provider_t provider;
+	provider.issuer = "https://idp.example.com";
+	provider.authorization_endpoint_url = "https://idp.example.com/authorize";
+	provider.scope = "openid";
+	provider.client_id = "client_id";
+	provider.response_type = "code";
+	provider.auth_request_params = NULL;
+	const char *redirect_uri = "https://www.example.com/protected/";
+	const char *state = "12345";
+
+	oidc_proto_state proto_state = { "anonce",
+			"https://localhost/protected/index.php", "redirect",
+			provider.issuer, provider.response_type, provider.response_mode,
+			NULL, apr_time_sec(apr_time_now()) };
+
+	TST_ASSERT("oidc_proto_authorization_request (1)",
+			oidc_proto_authorization_request(r, &provider, NULL, redirect_uri, state, &proto_state, NULL, NULL) == HTTP_MOVED_TEMPORARILY);
+
+	TST_ASSERT_STR("oidc_proto_authorization_request (2)",
+			apr_table_get(r->headers_out, "Location"),
+			"https://idp.example.com/authorize?response_type=code&scope=openid&client_id=client_id&state=12345&redirect_uri=https%3A%2F%2Fwww.example.com%2Fprotected%2F&nonce=anonce");
+
+	return 0;
+}
+
+static char * test_proto_validate_nonce(request_rec *r) {
+
+	oidc_cfg *c = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
+	const char *nonce = "avSk7S69G4kEE8Km4bPiOjrfChHt6nO4Z397Lp_bQnc,";
+
+	/*
+	 * {
+	 *   "typ": "JWT",
+	 *   "alg": "RS256",
+	 *   "x5t": "Z1NCjojeiHAib-Gm8vFE6ya6lPM"
+	 * }
+	 * {
+	 *   "nonce": "avSk7S69G4kEE8Km4bPiOjrfChHt6nO4Z397Lp_bQnc,",
+	 *   "iat": 1411580876,
+	 *   "at_hash": "yTqsoONZbuWbN6TbgevuDQ",
+	 *   "sub": "6343a29c-5399-44a7-9b35-4990f4377c96",
+	 *   "amr": "password",
+	 *   "auth_time": 1411577267,
+	 *   "idp": "idsrv",
+	 *   "name": "ksonaty",
+	 *   "iss": "https://agsync.com",
+	 *   "aud": "agsync_implicit",
+	 *   "exp": 1411584475,
+	 *   "nbf": 1411580875
+	 * }
+	 */
+	char *s_jwt =
+			apr_pstrdup(r->pool,
+					"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IloxTkNqb2plaUhBaWItR204dkZFNnlhNmxQTSJ9.eyJub25jZSI6ImF2U2s3UzY5RzRrRUU4S200YlBpT2pyZkNoSHQ2bk80WjM5N0xwX2JRbmMsIiwiaWF0IjoxNDExNTgwODc2LCJhdF9oYXNoIjoieVRxc29PTlpidVdiTjZUYmdldnVEUSIsInN1YiI6IjYzNDNhMjljLTUzOTktNDRhNy05YjM1LTQ5OTBmNDM3N2M5NiIsImFtciI6InBhc3N3b3JkIiwiYXV0aF90aW1lIjoxNDExNTc3MjY3LCJpZHAiOiJpZHNydiIsIm5hbWUiOiJrc29uYXR5IiwiaXNzIjoiaHR0cHM6Ly9hZ3N5bmMuY29tIiwiYXVkIjoiYWdzeW5jX2ltcGxpY2l0IiwiZXhwIjoxNDExNTg0NDc1LCJuYmYiOjE0MTE1ODA4NzV9.lEG-DgHHa0JuOEuOTBvCqyexjRVcKXBnJJm289o2HyTgclpH80DsOMED9RlXCFfuDY7nw9i2cxUmIMAV42AdTxkMPomK3chytcajvpAZJirlk653bo9GTDXJSKZr5fwyEu--qahsoT5t9qvoWyFdYkvmMHFw1-mAHDGgVe23voc9jPuFFIhRRqIn4e8ikzN4VQeEV1UXJD02kYYFn2TRWURgiFyVeTr2r0MTn-auCEsFS_AfR1Bl_kmpMfqwrsicf5MTBvfPJeuSMt3t3d3LOGBkg36_z21X-ZRN7wy1KTjagr7iQ_y5csIpmtqs_QM55TTB9dW1HIosJPhiuMEJEA");
+	apr_jwt_t *jwt = NULL;
+	apr_jwt_error_t err;
+	TST_ASSERT_ERR("apr_jwt_parse",
+			apr_jwt_parse(r->pool, s_jwt, &jwt, NULL, &err), r->pool, err);
+
+	TST_ASSERT("oidc_proto_validate_nonce (1)",
+			oidc_proto_validate_nonce(r, c, &c->provider, nonce, jwt));
+	TST_ASSERT("oidc_proto_validate_nonce (2)",
+			oidc_proto_validate_nonce( r, c, &c->provider, nonce, jwt) == FALSE);
+
+	return 0;
+}
+
 static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	char *message;
 	TST_RUN(test_jwt_array_has_string, pool);
@@ -824,13 +895,15 @@ static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	TST_RUN(test_proto_validate_access_token, r);
 	TST_RUN(test_proto_validate_code, r);
 
+	TST_RUN(test_proto_authorization_request, r);
+	TST_RUN(test_proto_validate_nonce, r);
+
 	return 0;
 }
 
 static request_rec * test_setup(apr_pool_t *pool) {
 	const unsigned int kIdx = 0;
 	const unsigned int kEls = kIdx + 1;
-	apr_uri_t url;
 	request_rec *request = (request_rec *) apr_pcalloc(pool,
 			sizeof(request_rec));
 
@@ -846,6 +919,9 @@ static request_rec * test_setup(apr_pool_t *pool) {
 			"mod_auth_openidc_session" "=0123456789abcdef; baz=zot");
 
 	request->server = apr_pcalloc(request->pool, sizeof(struct server_rec));
+	request->server->process = apr_pcalloc(request->pool,
+			sizeof(struct process_rec));
+	request->server->process->pool = request->pool;
 	request->connection = apr_pcalloc(request->pool, sizeof(struct conn_rec));
 	request->connection->local_addr = apr_pcalloc(request->pool,
 			sizeof(apr_sockaddr_t));
@@ -861,10 +937,12 @@ static request_rec * test_setup(apr_pool_t *pool) {
 
 	auth_openidc_module.module_index = kIdx;
 	oidc_cfg *cfg = oidc_create_server_config(request->pool, request->server);
-	url.scheme = "https";
-	url.hostname = "www.example.com";
-	url.path = "/protected/";
-	memcpy(&cfg->redirect_uri, &url, sizeof(apr_uri_t));
+	cfg->provider.issuer = "https://idp.example.com";
+	cfg->provider.authorization_endpoint_url =
+			"https://idp.example.com/authorize";
+	cfg->provider.scope = "openid";
+	cfg->provider.client_id = "client_id";
+	cfg->redirect_uri = "https://www.example.com/protected/";
 
 	oidc_dir_cfg *d_cfg = oidc_create_dir_config(request->pool, NULL);
 
@@ -875,6 +953,12 @@ static request_rec * test_setup(apr_pool_t *pool) {
 	ap_set_module_config(request->server->module_config, &auth_openidc_module,
 			cfg);
 	ap_set_module_config(request->per_dir_config, &auth_openidc_module, d_cfg);
+
+	cfg->cache = &oidc_cache_shm;
+	cfg->cache_cfg = NULL;
+	cfg->cache_shm_size_max = 500;
+	cfg->cache_shm_entry_size_max = 16384 + 255 + 17;
+	cfg->cache->post_config(request->server);
 
 	return request;
 }
