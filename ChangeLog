@@ -1,3 +1,7 @@
+2/12/2015
+- add support for configuration of maximum session duration
+- bump to 1.8.0rc1
+
 2/9/2015
 - check JWT signature against all configured keys (jwks_uri) if no "kid" is provided, not just the first one
 - revise JOSE JWS handling part 2

@@ -100,6 +100,8 @@
 #define OIDC_DEFAULT_STATE_TIMEOUT 300
 /* default session inactivity timeout */
 #define OIDC_DEFAULT_SESSION_INACTIVITY_TIMEOUT 300
+/* default session max duration */
+#define OIDC_DEFAULT_SESSION_MAX_DURATION 3600 * 8
 /* default OpenID Connect authorization response type */
 #define OIDC_DEFAULT_RESPONSE_TYPE "code"
 /* default duration in seconds after which retrieved JWS should be refreshed */
@@ -458,6 +460,38 @@ static const char *oidc_set_session_inactivity_timeout(cmd_parms *cmd,
 }
 
 /*
+ * set the maximum session duration; 0 means take it from the ID token expiry time
+ */
+static const char *oidc_set_session_max_duration(cmd_parms *cmd,
+		void *struct_ptr, const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+	char *endptr = NULL;
+	long n = strtol(arg, &endptr, 10);
+	if ((*arg == '\0') || (*endptr != '\0')) {
+		return apr_psprintf(cmd->pool,
+				"Invalid value for directive %s, expected integer",
+				cmd->directive->directive);
+	}
+	if (n == 0) {
+		cfg->provider.session_max_duration = 0;
+		return NULL;
+	}
+	if (n < 300) {
+		return apr_psprintf(cmd->pool,
+				"Invalid value for directive %s, must not be less than 5 minutes (300 seconds)",
+				cmd->directive->directive);
+	}
+	if (n > 86400 * 365) {
+		return apr_psprintf(cmd->pool,
+				"Invalid value for directive %s, must not be greater than 1 year (31536000 seconds)",
+				cmd->directive->directive);
+	}
+	cfg->provider.session_max_duration = n;
+	return NULL;
+}
+
+/*
  * add a public key from an X.509 file to our list of JWKs with public keys
  */
 static const char *oidc_set_public_key_files(cmd_parms *cmd, void *struct_ptr,
@@ -618,6 +652,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->provider.response_mode = NULL;
 	c->provider.jwks_refresh_interval = OIDC_DEFAULT_JWKS_REFRESH_INTERVAL;
 	c->provider.idtoken_iat_slack = OIDC_DEFAULT_IDTOKEN_IAT_SLACK;
+	c->provider.session_max_duration = OIDC_DEFAULT_SESSION_MAX_DURATION;
 	c->provider.auth_request_params = NULL;
 
 	c->provider.client_jwks_uri = NULL;
@@ -787,6 +822,11 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->provider.idtoken_iat_slack != OIDC_DEFAULT_IDTOKEN_IAT_SLACK ?
 					add->provider.idtoken_iat_slack :
 					base->provider.idtoken_iat_slack;
+	c->provider.session_max_duration =
+			add->provider.session_max_duration
+				!= OIDC_DEFAULT_SESSION_MAX_DURATION ?
+					add->provider.session_max_duration :
+					base->provider.session_max_duration;
 	c->provider.auth_request_params =
 			add->provider.auth_request_params != NULL ?
 					add->provider.auth_request_params :
@@ -1485,6 +1525,11 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, provider.idtoken_iat_slack),
 				RSRC_CONF,
 				"Acceptable offset (both before and after) for checking the \"iat\" (= issued at) timestamp in the id_token."),
+		AP_INIT_TAKE1("OIDCSessionMaxDuration",
+				oidc_set_session_max_duration,
+				(void*)APR_OFFSETOF(oidc_cfg, provider.session_max_duration),
+				RSRC_CONF,
+				"Maximum duration of a session in seconds."),
 		AP_INIT_TAKE1("OIDCAuthRequestParams",
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.auth_request_params),

@@ -106,6 +106,8 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_ACCESSTOKEN_EXPIRES_SESSION_KEY "access_token_expires"
 /* key for storing the refresh_token in the session context */
 #define OIDC_REFRESHTOKEN_SESSION_KEY "refresh_token"
+/* key for storing maximum session duration in the session context */
+#define OIDC_SESSION_EXPIRES_SESSION_KEY "session_expires"
 
 /* key for storing the session_state in the session context */
 #define OIDC_SESSION_STATE_SESSION_KEY "session_state"
@@ -200,6 +202,7 @@ typedef struct oidc_provider_t {
 	int jwks_refresh_interval;
 	int idtoken_iat_slack;
 	char *auth_request_params;
+	int session_max_duration;
 
 	char *client_jwks_uri;
 	char *id_token_signed_response_alg;

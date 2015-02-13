@@ -668,17 +668,68 @@ static apr_byte_t oidc_set_app_claims(request_rec *r,
 	return TRUE;
 }
 
+static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
+		oidc_provider_t *provider, const char *original_url,
+		const char *login_hint, const char *id_token_hint, const char *prompt,
+		const char *auth_request_params);
+
+/*
+ * log message about max session duration
+ */
+static void oidc_log_session_expires(request_rec *r,
+		apr_time_t session_expires) {
+	char buf[APR_RFC822_DATE_LEN + 1];
+	apr_rfc822_date(buf, session_expires);
+	oidc_debug(r, "session expires %s (in %" APR_TIME_T_FMT " secs from now)",
+			buf, apr_time_sec(session_expires - apr_time_now()));
+}
+
+/*
+ * check if maximum session duration was exceeded
+ */
+static int oidc_check_max_session_duration(request_rec *r, oidc_cfg *cfg,
+		session_rec *session) {
+	const char *s_session_expires = NULL;
+	apr_time_t session_expires;
+
+	/* get the session expiry from the session data */
+	oidc_session_get(r, session, OIDC_SESSION_EXPIRES_SESSION_KEY,
+			&s_session_expires);
+
+	/* convert the string to a timestamp */
+	sscanf(s_session_expires, "%" APR_TIME_T_FMT, &session_expires);
+
+	/* check the expire timestamp against the current time */
+	if (apr_time_now() > session_expires) {
+		oidc_warn(r, "maximum session duration exceeded for user: %s", session->remote_user);
+		oidc_session_kill(r, session);
+		return oidc_authenticate_user(r, cfg, NULL,
+				oidc_get_current_url(r, cfg), NULL,
+				NULL, NULL, NULL);
+	}
+
+	/* log message about max session duration */
+	oidc_log_session_expires(r, session_expires);
+
+	return OK;
+}
+
 /*
  * handle the case where we have identified an existing authentication session for a user
  */
-static int oidc_handle_existing_session(request_rec *r,
-		const oidc_cfg * const cfg, session_rec *session) {
+static int oidc_handle_existing_session(request_rec *r, oidc_cfg * cfg,
+		session_rec *session) {
 
 	oidc_debug(r, "enter");
 
 	/* get a handle to the directory config */
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
+
+	/* check if the maximum session duration was exceeded */
+	int rc = oidc_check_max_session_duration(r, cfg, session);
+	if (rc != OK)
+		return rc;
 
 	/*
 	 * we're going to pass the information that we have to the application,
@@ -747,12 +798,13 @@ static int oidc_handle_existing_session(request_rec *r,
 	}
 
 	/* set the expiry timestamp in the app headers */
-	const char *expires = NULL;
+	const char *access_token_expires = NULL;
 	oidc_session_get(r, session, OIDC_ACCESSTOKEN_EXPIRES_SESSION_KEY,
-			&expires);
-	if (expires != NULL) {
+			&access_token_expires);
+	if (access_token_expires != NULL) {
 		/* pass it to the app in a header */
-		oidc_util_set_app_header(r, "access_token_expires", expires,
+		oidc_util_set_app_header(r, "access_token_expires",
+				access_token_expires,
 				OIDC_DEFAULT_HEADER_PREFIX);
 	}
 
@@ -949,6 +1001,18 @@ static void oidc_save_in_session(request_rec *r, oidc_cfg *c,
 		oidc_session_set(r, session, OIDC_REFRESHTOKEN_SESSION_KEY,
 				refresh_token);
 	}
+
+	/* store max session duration in the session as a hard cut-off expiry timestamp */
+	apr_time_t session_expires =
+			(provider->session_max_duration == 0) ?
+					apr_time_from_sec(id_token_jwt->payload.exp) :
+					(apr_time_now()
+							+ apr_time_from_sec(provider->session_max_duration));
+	oidc_session_set(r, session, OIDC_SESSION_EXPIRES_SESSION_KEY,
+			apr_psprintf(r->pool, "%" APR_TIME_T_FMT, session_expires));
+
+	/* log message about max session duration */
+	oidc_log_session_expires(r, session_expires);
 
 	/* store the session */
 	oidc_session_save(r, session);

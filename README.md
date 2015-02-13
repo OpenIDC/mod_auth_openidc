@@ -149,6 +149,7 @@ Entries that can be included in the .conf file are:
     "client_name"                        overrides OIDCClientName 
     "client_contact"                     overrides OIDCClientContact 
     "idtoken_iat_slack"                  overrides OIDCIDTokenIatSlack
+    "session_max_duration"               overrides OIDCSessionMaxDuration
     "jwks_refresh_interval"              overrides OIDCJWKSRefreshInterval
     "client_jwks_uri"                    overrides OIDCClientJwksUri
     "id_token_signed_response_alg"       overrides OIDCIDTokenSignedResponseAlg

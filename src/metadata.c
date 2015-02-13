@@ -1085,6 +1085,11 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 	oidc_json_object_get_int(r->pool, j_conf, "idtoken_iat_slack",
 			&provider->idtoken_iat_slack, cfg->provider.idtoken_iat_slack);
 
+	/* see if we've got a custom max session duration */
+	oidc_json_object_get_int(r->pool, j_conf, "session_max_duration",
+			&provider->session_max_duration,
+			cfg->provider.session_max_duration);
+
 	/* see if we've got custom authentication request parameter values */
 	oidc_json_object_get_string(r->pool, j_conf, "auth_request_params",
 			&provider->auth_request_params, cfg->provider.auth_request_params);
