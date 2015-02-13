@@ -817,13 +817,16 @@ static char * test_proto_authorization_request(request_rec *r) {
 	const char *redirect_uri = "https://www.example.com/protected/";
 	const char *state = "12345";
 
-	oidc_proto_state proto_state = { "anonce",
-			"https://localhost/protected/index.php", "redirect",
-			provider.issuer, provider.response_type, provider.response_mode,
-			NULL, apr_time_sec(apr_time_now()) };
+	json_t * proto_state = json_object();
+	json_object_set_new(proto_state, "nonce", json_string("anonce"));
+	json_object_set_new(proto_state, "original_url", json_string("https://localhost/protected/index.php"));
+	json_object_set_new(proto_state, "original_method", json_string("get"));
+	json_object_set_new(proto_state, "issuer", json_string(provider.issuer));
+	json_object_set_new(proto_state, "response_type", json_string(provider.response_type));
+	json_object_set_new(proto_state, "timestamp", json_integer(apr_time_sec(apr_time_now())));
 
 	TST_ASSERT("oidc_proto_authorization_request (1)",
-			oidc_proto_authorization_request(r, &provider, NULL, redirect_uri, state, &proto_state, NULL, NULL) == HTTP_MOVED_TEMPORARILY);
+			oidc_proto_authorization_request(r, &provider, NULL, redirect_uri, state, proto_state, NULL, NULL) == HTTP_MOVED_TEMPORARILY);
 
 	TST_ASSERT_STR("oidc_proto_authorization_request (2)",
 			apr_table_get(r->headers_out, "Location"),
@@ -871,6 +874,8 @@ static char * test_proto_validate_nonce(request_rec *r) {
 			oidc_proto_validate_nonce(r, c, &c->provider, nonce, jwt));
 	TST_ASSERT("oidc_proto_validate_nonce (2)",
 			oidc_proto_validate_nonce( r, c, &c->provider, nonce, jwt) == FALSE);
+
+	apr_jwt_destroy(jwt);
 
 	return 0;
 }

@@ -285,7 +285,7 @@ static oidc_provider_t *oidc_get_provider_for_issuer(request_rec *r,
  * parse state that was sent to us by the issuer
  */
 static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
-		const char *state, oidc_proto_state **proto_state) {
+		const char *state, json_t **proto_state) {
 
 	oidc_debug(r, "enter");
 
@@ -419,18 +419,17 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 
 	oidc_debug(r, "successfully verified state JWT");
 
-	*proto_state = apr_pcalloc(r->pool, sizeof(oidc_proto_state));
-	oidc_proto_state *res = *proto_state;
-
-	res->issuer = jwt->payload.iss;
-	res->nonce = NULL;
-	// TODO: seems a bit hacky, but "" serves as "unspecified" right now
-	res->original_method = "";
-	res->original_url = target_link_uri;
-	res->response_mode = provider->response_mode;
-	res->response_type = provider->response_type;
-	res->prompt = NULL;
-	res->timestamp = apr_time_sec(apr_time_now());
+	*proto_state = json_object();
+	json_object_set_new(*proto_state, "issuer", json_string(jwt->payload.iss));
+	json_object_set_new(*proto_state, "original_url",
+			json_string(target_link_uri));
+	json_object_set_new(*proto_state, "original_method", json_string("get"));
+	json_object_set_new(*proto_state, "response_mode",
+			json_string(provider->response_mode));
+	json_object_set_new(*proto_state, "response_type",
+			json_string(provider->response_type));
+	json_object_set_new(*proto_state, "timestamp",
+			json_integer(apr_time_sec(apr_time_now())));
 
 	apr_jwt_destroy(jwt);
 
@@ -441,7 +440,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
  * restore the state that was maintained between authorization request and response in an encrypted cookie
  */
 static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
-		const char *state, oidc_proto_state **proto_state) {
+		const char *state, json_t **proto_state) {
 
 	oidc_debug(r, "enter");
 
@@ -464,69 +463,39 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 
 	oidc_debug(r, "restored JSON state cookie value: %s", svalue);
 
-	*proto_state = apr_pcalloc(r->pool, sizeof(oidc_proto_state));
-	oidc_proto_state *res = *proto_state;
-
 	json_error_t json_error;
-	json_t *v, *json = json_loads(svalue, 0, &json_error);
-	if (json == NULL) {
+	*proto_state = json_loads(svalue, 0, &json_error);
+	if (*proto_state == NULL) {
 		oidc_error(r, "parsing JSON (json_loads) failed: %s", json_error.text);
 		return FALSE;
 	}
 
-	v = json_object_get(json, "nonce");
-	res->nonce = apr_pstrdup(r->pool, json_string_value(v));
+	json_t *v = json_object_get(*proto_state, "nonce");
 
 	/* calculate the hash of the browser fingerprint concatenated with the nonce */
-	char *calc = oidc_get_browser_state_hash(r, res->nonce);
+	char *calc = oidc_get_browser_state_hash(r, json_string_value(v));
 	/* compare the calculated hash with the value provided in the authorization response */
 	if (apr_strnatcmp(calc, state) != 0) {
 		oidc_error(r,
 				"calculated state from cookie does not match state parameter passed back in URL: \"%s\" != \"%s\"",
 				state, calc);
-		json_decref(json);
+		json_decref(*proto_state);
 		return FALSE;
 	}
 
-	v = json_object_get(json, "original_url");
-	res->original_url = apr_pstrdup(r->pool, json_string_value(v));
-
-	v = json_object_get(json, "original_method");
-	res->original_method = apr_pstrdup(r->pool, json_string_value(v));
-
-	v = json_object_get(json, "issuer");
-	res->issuer = apr_pstrdup(r->pool, json_string_value(v));
-
-	v = json_object_get(json, "response_type");
-	res->response_type = apr_pstrdup(r->pool, json_string_value(v));
-
-	v = json_object_get(json, "response_mode");
-	res->response_mode =
-			(strcmp(json_string_value(v), "") != 0) ?
-					apr_pstrdup(r->pool, json_string_value(v)) : NULL;
-
-	v = json_object_get(json, "prompt");
-	res->prompt =
-			(strcmp(json_string_value(v), "") != 0) ?
-					apr_pstrdup(r->pool, json_string_value(v)) : NULL;
-
-	v = json_object_get(json, "timestamp");
-	res->timestamp = json_integer_value(v);
+	v = json_object_get(*proto_state, "timestamp");
+	apr_time_t now = apr_time_sec(apr_time_now());
 
 	/* check that the timestamp is not beyond the valid interval */
-	apr_time_t now = apr_time_sec(apr_time_now());
-	if (now > res->timestamp + c->state_timeout) {
+	if (now > json_integer_value(v) + c->state_timeout) {
 		oidc_error(r, "state has expired");
-		json_decref(json);
+		json_decref(*proto_state);
 		return FALSE;
 	}
 
-	oidc_debug(r,
-			"restored state: nonce=\"%s\", original_url=\"%s\", original_method=\"%s\", issuer=\"%s\", response_type=\%s\", response_mode=\"%s\", timestamp=%" APR_TIME_T_FMT,
-			res->nonce, res->original_url, res->original_method, res->issuer,
-			res->response_type, res->response_mode, res->timestamp);
-
-	json_decref(json);
+	char *s_value = json_dumps(*proto_state, JSON_ENCODE_ANY);
+	oidc_debug(r, "restored state: %s", s_value);
+	free(s_value);
 
 	/* we've made it */
 	return TRUE;
@@ -537,30 +506,18 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
  * in a cookie in the browser that is cryptographically bound to that state
  */
 static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
-		oidc_cfg *c, const char *state, oidc_proto_state *proto_state) {
+		oidc_cfg *c, const char *state, json_t *proto_state) {
 	/*
 	 * create a cookie consisting of 8 elements:
 	 * random value, original URL, original method, issuer, response_type, response_mod, prompt and timestamp
 	 * encoded as JSON
 	 */
-	char *plainText = apr_psprintf(r->pool, "{"
-			"\"nonce\": \"%s\","
-			"\"original_url\": \"%s\","
-			"\"original_method\": \"%s\","
-			"\"issuer\": \"%s\","
-			"\"response_type\": \"%s\","
-			"\"response_mode\": \"%s\","
-			"\"prompt\": \"%s\","
-			"\"timestamp\": %" APR_TIME_T_FMT "}", proto_state->nonce,
-			proto_state->original_url, proto_state->original_method,
-			proto_state->issuer, proto_state->response_type,
-			proto_state->response_mode ? proto_state->response_mode : "",
-			proto_state->prompt ? proto_state->prompt : "",
-			proto_state->timestamp);
+	char *s_value = json_dumps(proto_state, JSON_ENCODE_ANY);
 
 	/* encrypt the resulting JSON value  */
 	char *cookieValue = NULL;
-	if (oidc_encrypt_base64url_encode_string(r, &cookieValue, plainText) <= 0) {
+	if (oidc_encrypt_base64url_encode_string(r, &cookieValue, s_value) <= 0) {
+		free(s_value);
 		oidc_error(r, "oidc_encrypt_base64url_encode_string failed");
 		return FALSE;
 	}
@@ -571,6 +528,8 @@ static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
 	/* set it as a cookie */
 	oidc_util_set_cookie(r, cookieName, cookieValue,
 			apr_time_now() + apr_time_from_sec(c->state_timeout));
+
+	free(s_value);
 
 	return TRUE;
 }
@@ -676,8 +635,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 /*
  * log message about max session duration
  */
-static void oidc_log_session_expires(request_rec *r,
-		apr_time_t session_expires) {
+static void oidc_log_session_expires(request_rec *r, apr_time_t session_expires) {
 	char buf[APR_RFC822_DATE_LEN + 1];
 	apr_rfc822_date(buf, session_expires);
 	oidc_debug(r, "session expires %s (in %" APR_TIME_T_FMT " secs from now)",
@@ -701,7 +659,8 @@ static int oidc_check_max_session_duration(request_rec *r, oidc_cfg *cfg,
 
 	/* check the expire timestamp against the current time */
 	if (apr_time_now() > session_expires) {
-		oidc_warn(r, "maximum session duration exceeded for user: %s", session->remote_user);
+		oidc_warn(r, "maximum session duration exceeded for user: %s",
+				session->remote_user);
 		oidc_session_kill(r, session);
 		return oidc_authenticate_user(r, cfg, NULL,
 				oidc_get_current_url(r, cfg), NULL,
@@ -842,7 +801,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg * cfg,
  */
 static apr_byte_t oidc_authorization_response_match_state(request_rec *r,
 		oidc_cfg *c, const char *state, struct oidc_provider_t **provider,
-		oidc_proto_state **proto_state) {
+		json_t **proto_state) {
 
 	oidc_debug(r, "enter (state=%s)", state);
 
@@ -857,7 +816,8 @@ static apr_byte_t oidc_authorization_response_match_state(request_rec *r,
 		return FALSE;
 	}
 
-	*provider = oidc_get_provider_for_issuer(r, c, (*proto_state)->issuer);
+	*provider = oidc_get_provider_for_issuer(r, c,
+			json_string_value(json_object_get(*proto_state, "issuer")));
 
 	return (*provider != NULL);
 }
@@ -912,10 +872,15 @@ static int oidc_session_redirect_parent_window_to_logout(request_rec *r,
  * handle an error returned by the OP
  */
 static int oidc_authorization_response_error(request_rec *r, oidc_cfg *c,
-		oidc_proto_state *proto_state, const char *error,
-		const char *error_description) {
-	if ((proto_state->prompt != NULL)
-			&& (apr_strnatcmp(proto_state->prompt, "none") == 0)) {
+		json_t *proto_state, const char *error, const char *error_description) {
+	const char *prompt =
+			json_object_get(proto_state, "prompt") ?
+					apr_pstrdup(r->pool,
+							json_string_value(
+									json_object_get(proto_state, "prompt"))) :
+									NULL;
+	json_decref(proto_state);
+	if ((prompt != NULL) && (apr_strnatcmp(prompt, "none") == 0)) {
 		return oidc_session_redirect_parent_window_to_logout(r, c);
 	}
 	return oidc_util_html_send_error(r,
@@ -932,7 +897,7 @@ static void oidc_store_access_token_expiry(request_rec *r, session_rec *session,
 	if (expires_in != -1) {
 		oidc_session_set(r, session, OIDC_ACCESSTOKEN_EXPIRES_SESSION_KEY,
 				apr_psprintf(r->pool, "%" APR_TIME_T_FMT,
-				apr_time_sec(apr_time_now()) + expires_in));
+						apr_time_sec(apr_time_now()) + expires_in));
 	}
 }
 
@@ -1022,15 +987,18 @@ static void oidc_save_in_session(request_rec *r, oidc_cfg *c,
  * handle the flow where a "code" was provided in the response
  */
 static apr_byte_t oidc_handle_code_flow(request_rec *r, oidc_cfg *c,
-		oidc_proto_state *proto_state, oidc_provider_t *provider,
-		const char *code, apr_jwt_t **id_token_jwt, char **id_token,
-		char **access_token, char **token_type, int *expires_in,
-		char **refresh_token, char **remoteUser, char **s_error) {
+		json_t *proto_state, oidc_provider_t *provider, const char *code,
+		apr_jwt_t **id_token_jwt, char **id_token, char **access_token,
+		char **token_type, int *expires_in, char **refresh_token,
+		char **remoteUser, char **s_error) {
+
+	const char *response_type = json_string_value(
+			json_object_get(proto_state, "response_type"));
 
 	/* if an id_token was provided in the authorization response: validate the code against the c_hash claim */
 	if (*id_token_jwt != NULL) {
-		if (oidc_proto_validate_code(r, provider, *id_token_jwt,
-				proto_state->response_type, code) == FALSE) {
+		if (oidc_proto_validate_code(r, provider, *id_token_jwt, response_type,
+				code) == FALSE) {
 			apr_jwt_destroy(*id_token_jwt);
 			*s_error = "Code validation failed.";
 			return FALSE;
@@ -1051,8 +1019,8 @@ static apr_byte_t oidc_handle_code_flow(request_rec *r, oidc_cfg *c,
 	}
 
 	/* validate the response on exchanging the code at the token endpoint */
-	if (oidc_proto_validate_code_response(r, proto_state->response_type,
-			&c_id_token, &c_access_token, &c_token_type) == FALSE) {
+	if (oidc_proto_validate_code_response(r, response_type, &c_id_token,
+			&c_access_token, &c_token_type) == FALSE) {
 		apr_jwt_destroy(*id_token_jwt);
 		*s_error = "Code response validation failed.";
 		return FALSE;
@@ -1072,7 +1040,7 @@ static apr_byte_t oidc_handle_code_flow(request_rec *r, oidc_cfg *c,
 	}
 
 	/* TODO: Google does not allow nonce in "code" or "code token" flows... */
-	const char *nonce = proto_state->nonce;
+	json_t *nonce = json_object_get(proto_state, "nonce");
 	if ((strcmp(provider->issuer, "accounts.google.com") == 0)
 			&& ((oidc_util_spaced_string_equals(r->pool,
 					provider->response_type, "code"))
@@ -1082,8 +1050,9 @@ static apr_byte_t oidc_handle_code_flow(request_rec *r, oidc_cfg *c,
 
 	/* if we had no id_token yet, we must have one now (by flow) */
 	if (*id_token_jwt == NULL) {
-		if (oidc_proto_parse_idtoken(r, c, provider, *id_token, nonce,
-				remoteUser, id_token_jwt, TRUE) == FALSE) {
+		if (oidc_proto_parse_idtoken(r, c, provider, *id_token,
+				nonce ? json_string_value(nonce) : NULL, remoteUser,
+						id_token_jwt, TRUE) == FALSE) {
 			oidc_warn(r,
 					"could not parse or verify the id_token contents, return HTTP_UNAUTHORIZED");
 			*s_error = "Failed to parse id_token.";
@@ -1110,9 +1079,13 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 			session_state, error, error_description, response_mode);
 
 	struct oidc_provider_t *provider = NULL;
-	oidc_proto_state *proto_state = NULL;
 	char *refresh_token = NULL;
 	int expires_in = -1;
+	json_t *proto_state = NULL;
+	const char *response_type = NULL;
+	const char *requested_response_mode = NULL;
+	const char *nonce = NULL;
+	const char *prompt = NULL;
 
 	/* match the returned state parameter against the state stored in the browser */
 	if (oidc_authorization_response_match_state(r, c, state, &provider,
@@ -1120,15 +1093,26 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
+	response_type = json_string_value(
+			json_object_get(proto_state, "response_type"));
+	requested_response_mode = json_string_value(
+			json_object_get(proto_state, "response_mode"));
+	nonce = json_object_get(proto_state, "nonce") ?
+			json_string_value(json_object_get(proto_state, "nonce")) : NULL;
+	prompt =
+			json_object_get(proto_state, "prompt") ?
+					json_string_value(json_object_get(proto_state, "prompt")) :
+					NULL;
+
 	/* see if the response is an error response */
 	if (error != NULL)
 		return oidc_authorization_response_error(r, c, proto_state, error,
 				error_description);
 
 	/* check the required response parameters for the requested flow */
-	if (oidc_proto_validate_authorization_response(r,
-			proto_state->response_type, proto_state->response_mode, &code,
-			&id_token, &access_token, &token_type, response_mode) == FALSE) {
+	if (oidc_proto_validate_authorization_response(r, response_type,
+			requested_response_mode, &code, &id_token, &access_token,
+			&token_type, response_mode) == FALSE) {
 		return oidc_authorization_response_error(r, c, proto_state,
 				"Could not validate authorization response.", NULL);
 	}
@@ -1151,8 +1135,8 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 
 	/* parse and validate the obtained id_token */
 	if (id_token != NULL) {
-		if (oidc_proto_parse_idtoken(r, c, provider, id_token,
-				proto_state->nonce, &remoteUser, &jwt, FALSE) == FALSE) {
+		if (oidc_proto_parse_idtoken(r, c, provider, id_token, nonce,
+				&remoteUser, &jwt, FALSE) == FALSE) {
 			oidc_warn(r, "could not parse or verify the id_token contents");
 			return oidc_authorization_response_error(r, c, proto_state,
 					"Could not parse id_token.", NULL);
@@ -1178,8 +1162,8 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 
 	/* validate the access token */
 	if (access_token != NULL) {
-		if (oidc_proto_validate_access_token(r, provider, jwt,
-				proto_state->response_type, access_token, token_type) == FALSE) {
+		if (oidc_proto_validate_access_token(r, provider, jwt, response_type,
+				access_token, token_type) == FALSE) {
 			oidc_warn(r, "access_token did not validate, dropping it");
 			access_token = NULL;
 		}
@@ -1205,8 +1189,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	}
 
 	/* session management: if the user in the new response is not equal to the old one, error out */
-	if ((proto_state->prompt != NULL)
-			&& (apr_strnatcmp(proto_state->prompt, "none") == 0)) {
+	if ((prompt != NULL) && (apr_strnatcmp(prompt, "none") == 0)) {
 		// TOOD: actually need to compare sub? (need to store it in the session separately then
 		//const char *sub = NULL;
 		//oidc_session_get(r, session, "sub", &sub);
@@ -1226,20 +1209,30 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	/* not sure whether this is required, but it won't hurt */
 	r->user = remoteUser;
 
+	/* restore the original protected URL that the user was trying to access */
+	const char *original_url = apr_pstrdup(r->pool,
+			json_string_value(json_object_get(proto_state, "original_url")));
+
 	/* check whether form post data was preserved; if so restore it */
-	if (apr_strnatcmp(proto_state->original_method, "form_post") == 0)
-		return oidc_restore_preserved_post(r, proto_state->original_url);
+	if (apr_strnatcmp(
+			json_string_value(json_object_get(proto_state, "original_method")),
+			"form_post") == 0) {
+		json_decref(proto_state);
+		return oidc_restore_preserved_post(r, original_url);
+	}
 
 	/* log the successful response */
 	oidc_debug(r, "session created and stored, redirecting to original url: %s",
-			proto_state->original_url);
+			original_url);
 
+	/* cleanup */
 	apr_jwt_destroy(jwt);
+	json_decref(proto_state);
 	if (j_claims != NULL)
 		json_decref(j_claims);
 
 	/* now we've authenticated the user so go back to the URL that he originally tried to access */
-	apr_table_add(r->headers_out, "Location", proto_state->original_url);
+	apr_table_add(r->headers_out, "Location", original_url);
 
 	/* do the actual redirect to the original URL */
 	return HTTP_MOVED_TEMPORARILY;
@@ -1433,7 +1426,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	if (oidc_proto_generate_nonce(r, &nonce) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
-	char *method = "redirect";
+	char *method = "get";
 	// TODO: restore method from discovery too or generate state before doing discover (and losing startSSO effect)
 	/*
 	const char *content_type = apr_table_get(r->headers_in, "Content-Type");
@@ -1445,15 +1438,26 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	*/
 
 	/* create the state between request/response */
-	oidc_proto_state proto_state = { nonce, original_url, method,
-			provider->issuer, provider->response_type, provider->response_mode,
-			prompt, apr_time_sec(apr_time_now()) };
+	json_t *proto_state = json_object();
+	json_object_set_new(proto_state, "original_url", json_string(original_url));
+	json_object_set_new(proto_state, "original_method", json_string(method));
+	json_object_set_new(proto_state, "issuer", json_string(provider->issuer));
+	json_object_set_new(proto_state, "response_type",
+			json_string(provider->response_type));
+	json_object_set_new(proto_state, "nonce", json_string(nonce));
+	json_object_set_new(proto_state, "timestamp",
+			json_integer(apr_time_sec(apr_time_now())));
+	if (provider->response_mode)
+		json_object_set_new(proto_state, "response_mode",
+				json_string(provider->response_mode));
+	if (prompt)
+		json_object_set_new(proto_state, "prompt", json_string(prompt));
 
 	/* get a hash value that fingerprints the browser concatenated with the random input */
-	char *state = oidc_get_browser_state_hash(r, proto_state.nonce);
+	char *state = oidc_get_browser_state_hash(r, nonce);
 
 	/* create state that restores the context when the authorization response comes in; cryptographically bind it to the browser */
-	oidc_authorization_request_set_cookie(r, c, state, &proto_state);
+	oidc_authorization_request_set_cookie(r, c, state, proto_state);
 
 	/*
 	 * TODO: I'd like to include the nonce all flows, including the "code" and "code token" flows
@@ -1465,7 +1469,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 					provider->response_type, "code"))
 					|| (oidc_util_spaced_string_equals(r->pool,
 							provider->response_type, "code token"))))
-		proto_state.nonce = NULL;
+		json_object_del(proto_state, "nonce");
 
 	/*
 	 * printout errors if Cookie settings are not going to work
@@ -1507,7 +1511,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	/* send off to the OpenID Connect Provider */
 	// TODO: maybe show intermediate/progress screen "redirecting to"
 	return oidc_proto_authorization_request(r, provider, login_hint,
-			c->redirect_uri, state, &proto_state, id_token_hint,
+			c->redirect_uri, state, proto_state, id_token_hint,
 			auth_request_params);
 }
 

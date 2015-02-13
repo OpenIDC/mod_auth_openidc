@@ -102,15 +102,14 @@ int oidc_proto_authorization_request_post_preserve(request_rec *r,
  */
 int oidc_proto_authorization_request(request_rec *r,
 		struct oidc_provider_t *provider, const char *login_hint,
-		const char *redirect_uri, const char *state,
-		oidc_proto_state *proto_state, const char *id_token_hint,
-		const char *auth_request_params) {
+		const char *redirect_uri, const char *state, json_t *proto_state,
+		const char *id_token_hint, const char *auth_request_params) {
 
 	/* log some stuff */
-	oidc_debug(r,
-			"enter, issuer=%s, redirect_uri=%s, original_url=%s, state=%s, nonce=%s",
-			provider->issuer, redirect_uri, proto_state->original_url, state,
-			proto_state->nonce);
+	char *s_value = json_dumps(proto_state, JSON_ENCODE_ANY);
+	oidc_debug(r, "enter, issuer=%s, redirect_uri=%s, state=%s, proto_state=%s",
+			provider->issuer, redirect_uri, state, s_value);
+	free(s_value);
 
 	/* assemble the full URL as the authorization request to the OP where we want to redirect to */
 	char *authorization_request = apr_psprintf(r->pool, "%s%s",
@@ -119,7 +118,9 @@ int oidc_proto_authorization_request(request_rec *r,
 					"&" : "?");
 	authorization_request = apr_psprintf(r->pool, "%sresponse_type=%s",
 			authorization_request,
-			oidc_util_escape_string(r, proto_state->response_type));
+			oidc_util_escape_string(r,
+					json_string_value(
+							json_object_get(proto_state, "response_type"))));
 	authorization_request = apr_psprintf(r->pool, "%s&scope=%s",
 			authorization_request, oidc_util_escape_string(r, provider->scope));
 	authorization_request = apr_psprintf(r->pool, "%s&client_id=%s",
@@ -131,16 +132,21 @@ int oidc_proto_authorization_request(request_rec *r,
 			authorization_request, oidc_util_escape_string(r, redirect_uri));
 
 	/* add the nonce if set */
-	if (proto_state->nonce != NULL)
+	if (json_object_get(proto_state, "nonce") != NULL)
 		authorization_request = apr_psprintf(r->pool, "%s&nonce=%s",
 				authorization_request,
-				oidc_util_escape_string(r, proto_state->nonce));
+				oidc_util_escape_string(r,
+						json_string_value(
+								json_object_get(proto_state, "nonce"))));
 
 	/* add the response_mode if explicitly set */
-	if (proto_state->response_mode != NULL)
+	if (json_object_get(proto_state, "response_mode") != NULL)
 		authorization_request = apr_psprintf(r->pool, "%s&response_mode=%s",
 				authorization_request,
-				oidc_util_escape_string(r, proto_state->response_mode));
+				oidc_util_escape_string(r,
+						json_string_value(
+								json_object_get(proto_state,
+										"response_mode"))));
 
 	/* add the login_hint if provided */
 	if (login_hint != NULL)
@@ -154,10 +160,12 @@ int oidc_proto_authorization_request(request_rec *r,
 				oidc_util_escape_string(r, id_token_hint));
 
 	/* add the prompt setting if provided (e.g. "none" for no-GUI checks) */
-	if (proto_state->prompt != NULL)
+	if (json_object_get(proto_state, "prompt") != NULL)
 		authorization_request = apr_psprintf(r->pool, "%s&prompt=%s",
 				authorization_request,
-				oidc_util_escape_string(r, proto_state->prompt));
+				oidc_util_escape_string(r,
+						json_string_value(
+								json_object_get(proto_state, "prompt"))));
 
 	/* add any statically configured custom authorization request parameters */
 	if (provider->auth_request_params != NULL) {
@@ -172,9 +180,14 @@ int oidc_proto_authorization_request(request_rec *r,
 	}
 
 	/* preserve POSTed form parameters if enabled */
-	if (apr_strnatcmp(proto_state->original_method, "form_post") == 0)
+	if (apr_strnatcmp(
+			json_string_value(json_object_get(proto_state, "original_method")),
+			"form_post") == 0)
 		return oidc_proto_authorization_request_post_preserve(r,
 				authorization_request);
+
+	/* cleanup */
+	json_decref(proto_state);
 
 	/* add the redirect location header */
 	apr_table_add(r->headers_out, "Location", authorization_request);
