@@ -1676,6 +1676,18 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 			HTTP_NOT_FOUND);
 }
 
+static apr_uint32_t oidc_transparent_pixel[17] = {
+		0x474e5089, 0x0a1a0a0d, 0x0d000000, 0x52444849,
+		0x01000000, 0x01000000, 0x00000408, 0x0c1cb500,
+		0x00000002, 0x4144490b, 0x639c7854, 0x0000cffa,
+		0x02010702, 0x71311c9a, 0x00000000, 0x444e4549,
+		0x826042ae
+};
+
+static apr_byte_t oidc_is_get_style_logout(const char *logout_param_value) {
+	return ((logout_param_value != NULL) && (apr_strnatcmp(logout_param_value, OIDC_GET_STYLE_LOGOUT_PARAM_VALUE) == 0));
+}
+
 /*
  * handle a local logout
  */
@@ -1691,6 +1703,11 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 		oidc_session_kill(r, session);
 	}
 
+	/* see if this is the OP calling us, in which case we return HTTP 200 and a transparent pixel */
+	if (oidc_is_get_style_logout(url))
+		return oidc_util_http_send(r, (const char *)&oidc_transparent_pixel, sizeof(oidc_transparent_pixel), "image/png", DONE);
+
+	/* see if we don't need to go somewhere special after killing the session locally */
 	if (url == NULL)
 		return oidc_util_html_send(r, "Logged Out", NULL, NULL,
 				"<p>Logged Out</p>", DONE);
@@ -1709,10 +1726,15 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c, session_rec *session)
 	/* pickup the command or URL where the user wants to go after logout */
 	char *url = NULL;
 	oidc_util_get_request_parameter(r, "logout", &url);
-	if ((url == NULL) || (apr_strnatcmp(url, "") == 0))
-		url = c->default_sso_url;
 
 	oidc_debug(r, "enter (url=%s)", url);
+
+	if (oidc_is_get_style_logout(url)) {
+		return oidc_handle_logout_request(r, c, session, url);
+	}
+
+	if ((url == NULL) || (apr_strnatcmp(url, "") == 0))
+		url = c->default_sso_url;
 
 	apr_uri_t uri;
 	if ((url != NULL) && (apr_uri_parse(r->pool, url, &uri) != APR_SUCCESS)) {

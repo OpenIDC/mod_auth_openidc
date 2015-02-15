@@ -161,6 +161,9 @@ APLOG_USE_MODULE(auth_openidc);
 /* defines for how long provider metadata will be cached */
 #define OIDC_CACHE_PROVIDER_METADATA_EXPIRY_DEFAULT 86400
 
+/* define the parameter value for the "logout" request that indicates a GET-style logout call from the OP */
+#define OIDC_GET_STYLE_LOGOUT_PARAM_VALUE "get"
+
 /* cache sections */
 #define OIDC_CACHE_SECTION_JTI "jti"
 #define OIDC_CACHE_SECTION_SESSION "session"

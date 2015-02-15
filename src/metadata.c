@@ -625,6 +625,16 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 	json_object_set_new(data, "initiate_login_uri",
 			json_string(cfg->redirect_uri));
 
+	json_object_set_new(data, "logout_uri",
+			json_string(
+					apr_psprintf(r->pool, "%s?logout=%s", cfg->redirect_uri,
+							OIDC_GET_STYLE_LOGOUT_PARAM_VALUE)));
+
+	if (cfg->default_slo_url != NULL) {
+		json_object_set_new(data, "post_logout_redirect_uris",
+				json_pack("[s]", cfg->default_slo_url));
+	}
+
 	if (provider->registration_endpoint_json != NULL) {
 
 		json_error_t json_error;
