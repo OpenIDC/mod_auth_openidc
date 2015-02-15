@@ -146,11 +146,11 @@ static const char *oidc_metadata_conf_path(request_rec *r, const char *issuer) {
 }
 
 /*
- * get the full path to the jwks metadata file for a specified issuer
+ * get cache key for the JWKs file for a specified URI
  */
 static const char *oidc_metadata_jwks_cache_key(request_rec *r,
-		const char *issuer) {
-	return apr_psprintf(r->pool, "%s.jwks", issuer);
+		const char *jwks_uri) {
+	return jwks_uri;
 }
 
 /*
@@ -425,14 +425,14 @@ static apr_byte_t oidc_metadata_client_is_valid(request_rec *r,
 /*
  * checks if a parsed JWKs file is a valid one, cq. contains "keys"
  */
-static apr_byte_t oidc_metadata_jwks_is_valid(request_rec *r, json_t *j_jwks,
-		const char *issuer) {
+static apr_byte_t oidc_metadata_jwks_is_valid(request_rec *r,
+		const oidc_jwks_uri_t *jwks_uri, json_t *j_jwks) {
 
 	json_t *keys = json_object_get(j_jwks, "keys");
 	if ((keys == NULL) || (!json_is_array(keys))) {
 		oidc_error(r,
-				"provider (%s) JWKS JSON metadata did not contain a \"keys\" array",
-				issuer);
+				"JWKs JSON metadata obtained from URL \"%s\" did not contain a \"keys\" array",
+				jwks_uri->url);
 		return FALSE;
 	}
 	return TRUE;
@@ -625,6 +625,16 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 	json_object_set_new(data, "initiate_login_uri",
 			json_string(cfg->redirect_uri));
 
+	json_object_set_new(data, "logout_uri",
+			json_string(
+					apr_psprintf(r->pool, "%s?logout=%s", cfg->redirect_uri,
+							OIDC_GET_STYLE_LOGOUT_PARAM_VALUE)));
+
+	if (cfg->default_slo_url != NULL) {
+		json_object_set_new(data, "post_logout_redirect_uris",
+				json_pack("[s]", cfg->default_slo_url));
+	}
+
 	if (provider->registration_endpoint_json != NULL) {
 
 		json_error_t json_error;
@@ -674,7 +684,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
  * helper function to get the JWKs for the specified issuer
  */
 static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
-		oidc_cfg *cfg, oidc_provider_t *provider, json_t **j_jwks) {
+		oidc_cfg *cfg, const oidc_jwks_uri_t *jwks_uri, json_t **j_jwks) {
 
 	const char *response = NULL;
 
@@ -683,8 +693,8 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
 			&auth_openidc_module);
 
 	/* no valid provider metadata, get it at the specified URL with the specified parameters */
-	if (oidc_util_http_get(r, provider->jwks_uri, NULL, NULL,
-			NULL, provider->ssl_validate_server, &response, cfg->http_timeout_long,
+	if (oidc_util_http_get(r, jwks_uri->url, NULL, NULL,
+			NULL, jwks_uri->ssl_validate_server, &response, cfg->http_timeout_long,
 			cfg->outgoing_proxy, dir_cfg->pass_cookies) == FALSE)
 		return FALSE;
 
@@ -693,13 +703,13 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
 		return FALSE;
 
 	/* check to see if it is valid metadata */
-	if (oidc_metadata_jwks_is_valid(r, *j_jwks, provider->issuer) == FALSE)
+	if (oidc_metadata_jwks_is_valid(r, jwks_uri, *j_jwks) == FALSE)
 		return FALSE;
 
 	/* store the JWKs in the cache */
 	cfg->cache->set(r, OIDC_CACHE_SECTION_JWKS,
-			oidc_metadata_jwks_cache_key(r, provider->issuer), response,
-			apr_time_now() + apr_time_from_sec(provider->jwks_refresh_interval));
+			oidc_metadata_jwks_cache_key(r, jwks_uri->url), response,
+			apr_time_now() + apr_time_from_sec(jwks_uri->refresh_interval));
 
 	return TRUE;
 }
@@ -708,15 +718,15 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
  * return JWKs for the specified issuer
  */
 apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg,
-		oidc_provider_t *provider, json_t **j_jwks, apr_byte_t *refresh) {
+		const oidc_jwks_uri_t *jwks_uri, json_t **j_jwks, apr_byte_t *refresh) {
 
-	oidc_debug(r, "enter, issuer=%s, refresh=%d", provider->issuer, *refresh);
+	oidc_debug(r, "enter, jwks_uri=%s, refresh=%d", jwks_uri->url, *refresh);
 
 	/* see if we need to do a forced refresh */
 	if (*refresh == TRUE) {
-		oidc_debug(r, "doing a forced refresh of the JWKs for issuer \"%s\"",
-				provider->issuer);
-		if (oidc_metadata_jwks_retrieve_and_cache(r, cfg, provider,
+		oidc_debug(r, "doing a forced refresh of the JWKs from URI \"%s\"",
+				jwks_uri->url);
+		if (oidc_metadata_jwks_retrieve_and_cache(r, cfg, jwks_uri,
 				j_jwks) == TRUE)
 			return TRUE;
 		// else: fallback on any cached JWKs
@@ -725,12 +735,12 @@ apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg,
 	/* see if the JWKs is cached */
 	const char *value = NULL;
 	cfg->cache->get(r, OIDC_CACHE_SECTION_JWKS,
-			oidc_metadata_jwks_cache_key(r, provider->issuer), &value);
+			oidc_metadata_jwks_cache_key(r, jwks_uri->url), &value);
 
 	if (value == NULL) {
 		/* it is non-existing or expired: do a forced refresh */
 		*refresh = TRUE;
-		return oidc_metadata_jwks_retrieve_and_cache(r, cfg, provider, j_jwks);
+		return oidc_metadata_jwks_retrieve_and_cache(r, cfg, jwks_uri, j_jwks);
 	}
 
 	/* decode and see if it is not an error response somehow */
@@ -796,7 +806,7 @@ static apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
 	const char *url = apr_psprintf(r->pool, "%s",
 			((strstr(issuer, "http://") == issuer)
 					|| (strstr(issuer, "https://") == issuer)) ?
-							issuer : apr_psprintf(r->pool, "https://%s", issuer));
+					issuer : apr_psprintf(r->pool, "https://%s", issuer));
 	url = apr_psprintf(r->pool, "%s%s.well-known/openid-configuration", url,
 			url[strlen(url) - 1] != '/' ? "/" : "");
 
@@ -1085,6 +1095,11 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 	oidc_json_object_get_int(r->pool, j_conf, "idtoken_iat_slack",
 			&provider->idtoken_iat_slack, cfg->provider.idtoken_iat_slack);
 
+	/* see if we've got a custom max session duration */
+	oidc_json_object_get_int(r->pool, j_conf, "session_max_duration",
+			&provider->session_max_duration,
+			cfg->provider.session_max_duration);
+
 	/* see if we've got custom authentication request parameter values */
 	oidc_json_object_get_string(r->pool, j_conf, "auth_request_params",
 			&provider->auth_request_params, cfg->provider.auth_request_params);
@@ -1112,7 +1127,8 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 
 	/* see if we've got custom registration request parameter values */
 	oidc_json_object_get_string(r->pool, j_conf, "registration_endpoint_json",
-			&provider->registration_endpoint_json, cfg->provider.registration_endpoint_json);
+			&provider->registration_endpoint_json,
+			cfg->provider.registration_endpoint_json);
 
 	/* get the flow to use */
 	oidc_json_object_get_string(r->pool, j_conf, "response_type",

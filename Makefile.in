@@ -40,6 +40,7 @@ HDRS = \
 DISTFILES=$(SRC) \
 	$(HDRS) \
 	test/test.c \
+	test/stub.c \
 	configure \
 	configure.ac \
 	Makefile.in \
@@ -54,18 +55,20 @@ DISTFILES=$(SRC) \
 
 all: src/mod_auth_openidc.la
 
-src/mod_auth_openidc.la: $(SRC) $(HDRS)
-	@APXS2@ -Wc,"-DNAMEVER=\"@NAMEVER@\" @OPENSSL_CFLAGS@ @CURL_CFLAGS@ @JANSSON_CFLAGS@ @PCRE_CFLAGS@ $(REDIS_CFLAGS)" -Wl,"@OPENSSL_LIBS@ @CURL_LIBS@ @JANSSON_LIBS@ @PCRE_LIBS@ $(REDIS_LIBS)" -Wc,-Wall -Wc,-g -c $(SRC)
+CFLAGS=@OPENSSL_CFLAGS@ @CURL_CFLAGS@ @JANSSON_CFLAGS@ @PCRE_CFLAGS@ $(REDIS_CFLAGS)
+LIBS=@OPENSSL_LIBS@ @CURL_LIBS@ @JANSSON_LIBS@ @PCRE_LIBS@ $(REDIS_LIBS)
 
-# Building configure (for distribution)
+src/mod_auth_openidc.la: $(SRC) $(HDRS)
+	@APXS2@ @APXS2_OPTS@ -Wc,"-DNAMEVER=\"@NAMEVER@\" $(CFLAGS)" -Wl,"$(LIBS)" -Wc,-Wall -Wc,-g -c $(SRC)
+
 configure:	configure.ac
 	./autogen.sh
 
 @NAMEVER@.tar.gz:	 $(DISTFILES)
 	tar -c --transform="s#^#@NAMEVER@/#" -vzf $@ $(DISTFILES)
 
-test/test: test/*.c $(JWT_SRC) $(JWT_HDRS)
-	`@APXS2@ -q CC` @OPENSSL_CFLAGS@ @APR_CFLAGS@ @JANSSON_CFLAGS@ -Isrc -o $@ test/*.c $(JWT_SRC) @APR_LIBS@ @OPENSSL_LIBS@ @JANSSON_LIBS@
+test/test: test/*.c src/mod_auth_openidc.la
+	@APXS2@ @APXS2_OPTS@ $(CFLAGS) -Wl,"$(LIBS)" -Isrc -Wc,-Wall -Wc,-g -c -o $@ test/*.c $(SRC:.c=.lo) @APR_LIBS@
 
 test-compile: test/test
 
@@ -74,7 +77,7 @@ test: test-compile
 
 .PHONY:	install
 install: src/mod_auth_openidc.la
-	@APXS2@ -i -n mod_auth_openidc src/mod_auth_openidc.la
+	@APXS2@ @APXS2_OPTS@ -i -n mod_auth_openidc src/mod_auth_openidc.la
 
 .PHONY: distfile
 distfile:	@NAMEVER@.tar.gz
@@ -82,11 +85,11 @@ distfile:	@NAMEVER@.tar.gz
 .PHONY:	clean
 clean:
 	rm -f src/mod_auth_openidc.la
-	rm -f src/*.o src/cache/*.o src/jose/*.o
-	rm -f src/*.lo src/cache/*.lo src/jose/*.lo
-	rm -f src/*.slo src/cache/*.slo src/jose/*.slo
-	rm -rf src/.libs/ src/cache/.libs/ src/jose/.libs/
-	rm -rf test/.libs/ test/test
+	rm -f src/*.o src/cache/*.o src/jose/*.o test/*.o
+	rm -f src/*.lo src/cache/*.lo src/jose/*.lo test/*.lo
+	rm -f src/*.slo src/cache/*.slo src/jose/*.slo test/*.slo
+	rm -rf src/.libs/ src/cache/.libs/ src/jose/.libs/ test/.libs
+	rm -rf test/test
 
 .PHONY:	distclean
 distclean:	clean

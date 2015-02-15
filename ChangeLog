@@ -1,5 +1,67 @@
-1/7/2014
+2/15/2015
+- add support for configurable introspection HTTP method (OIDCOAuthIntrospectionEndpointMethod)
+- add preliminary support for GET-style logout
+- bump to 1.8.0rc2
 - make compiled in Redis support optional
+
+2/12/2015
+- add support for configuration of maximum session duration
+- bump to 1.8.0rc1
+
+2/9/2015
+- check JWT signature against all configured keys (jwks_uri) if no "kid" is provided, not just the first one
+- revise JOSE JWS handling part 2
+- complete support for local JWT access token validation
+- bump to 1.8.0rc0
+
+2/5/2015
+- fix symmetric key decryption of JWTs (A128CBC-HS256/A256CBC-HS512)
+- sha256 client secrets before using them as symmetric keys for decryption
+- extended decryption test coverage; avoid double printouts on error
+- refactor JWT header parsing
+- simplify JWK URI refresh handling
+- release 1.7.3
+
+2/4/2015
+- revise JOSE JWK handling part 1
+- change change target_uri parameter name to target_link_uri following draft-bradley-oauth-jwt-encoded-state-03
+- extended tests with stubs
+- refactor JWT validation (iss, exp, iat)
+- fix memory leak with RSA key conversion in apr_jwk.c - apr_jwk_rsa_bio_to_key
+- bump to 1.7.3rc4
+
+1/25/2015
+- Allow {... "error": null ...} in JSON responses. (@fatlotus)
+
+1/22/2015
+- fix configuration validation check where no config would be checked if OIDCProviderIssuer is set
+  but both OIDRedirectURI and OIDCCryptoPassphrase are not set
+- add preliminary support for local JWT access token validation
+- bump to 1.7.3rc1
+- sanitize set cookie syntax (get rid of extraneous ";")
+
+1/21/2015
+- add support for OIDCOAuthIntrospectionTokenParamName (incl. Google OAuth 2.0 access token validation)
+- add a sample OAuth 2.0 config for Google access tokens to README.md
+- release 1.7.2
+
+- add APXS2_OPTS to configure.ac to accommodate RPM builds
+- bump to 1.7.3rc0
+- fix JWT timestamp (iat/exp) initialization issue
+- fix README.md on Google's scope required for returning the "hd" claim
+
+1/14/2015
+- add Apache function stubs to enable extending the scope of tests
+- add tests for oidc_proto_validate_access_token and oidc_proto_validate_code
+- bump to 1.7.2rc3
+
+1/12/2015
+- improve accuracy of expired/invalid session handling
+
+1/11/2015
+- add error type and return values to JOSE functions
+- fix return result on error in function that decrypts CEK
+- bump to 1.7.2rc2
 
 1/1/2015
 - update copyright to 2015

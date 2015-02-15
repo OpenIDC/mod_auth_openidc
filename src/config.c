@@ -100,6 +100,8 @@
 #define OIDC_DEFAULT_STATE_TIMEOUT 300
 /* default session inactivity timeout */
 #define OIDC_DEFAULT_SESSION_INACTIVITY_TIMEOUT 300
+/* default session max duration */
+#define OIDC_DEFAULT_SESSION_MAX_DURATION 3600 * 8
 /* default OpenID Connect authorization response type */
 #define OIDC_DEFAULT_RESPONSE_TYPE "code"
 /* default duration in seconds after which retrieved JWS should be refreshed */
@@ -118,6 +120,10 @@
 #define OIDC_DEFAULT_COOKIE_HTTPONLY 1
 /* default cookie path */
 #define OIDC_DEFAULT_COOKIE_PATH "/"
+/* default OAuth 2.0 introspection token parameter name */
+#define OIDC_DEFAULT_OAUTH_TOKEN_PARAM_NAME "token"
+/* default OAuth 2.0 introspection call HTTP method */
+#define OIDC_DEFAULT_OAUTH_ENDPOINT_METHOD "POST"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -463,21 +469,75 @@ static const char *oidc_set_session_inactivity_timeout(cmd_parms *cmd,
 }
 
 /*
+ * set the maximum session duration; 0 means take it from the ID token expiry time
+ */
+static const char *oidc_set_session_max_duration(cmd_parms *cmd,
+		void *struct_ptr, const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+	char *endptr = NULL;
+	long n = strtol(arg, &endptr, 10);
+	if ((*arg == '\0') || (*endptr != '\0')) {
+		return apr_psprintf(cmd->pool,
+				"Invalid value for directive %s, expected integer",
+				cmd->directive->directive);
+	}
+	if (n == 0) {
+		cfg->provider.session_max_duration = 0;
+		return NULL;
+	}
+	if (n < 300) {
+		return apr_psprintf(cmd->pool,
+				"Invalid value for directive %s, must not be less than 5 minutes (300 seconds)",
+				cmd->directive->directive);
+	}
+	if (n > 86400 * 365) {
+		return apr_psprintf(cmd->pool,
+				"Invalid value for directive %s, must not be greater than 1 year (31536000 seconds)",
+				cmd->directive->directive);
+	}
+	cfg->provider.session_max_duration = n;
+	return NULL;
+}
+
+/*
  * add a public key from an X.509 file to our list of JWKs with public keys
  */
-static const char *oidc_set_public_key_files_enc(cmd_parms *cmd, void *dummy,
+static const char *oidc_set_public_key_files(cmd_parms *cmd, void *struct_ptr,
+		const char *arg) {
+	apr_jwk_t *jwk = NULL;
+	apr_jwt_error_t err;
+
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+
+	int offset = (int) (long) cmd->info;
+	apr_hash_t **public_keys = (apr_hash_t **) ((void *) cfg + offset);
+
+	if (apr_jwk_parse_rsa_public_key(cmd->pool, arg, &jwk, &err) == FALSE) {
+		return apr_psprintf(cmd->pool,
+				"apr_jwk_parse_rsa_public_key failed for \"%s\": %s", arg,
+				apr_jwt_e2s(cmd->pool, err));
+	}
+
+	if (*public_keys == NULL)
+		*public_keys = apr_hash_make(cmd->pool);
+	apr_hash_set(*public_keys, jwk->kid, APR_HASH_KEY_STRING, jwk);
+
+	return NULL;
+}
+
+/*
+ * add a shared key to a list of JWKs with shared keys
+ */
+static const char *oidc_set_shared_keys(cmd_parms *cmd, void *struct_ptr,
 		const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
-	char *jwk = NULL;
-	char *kid = NULL;
-	if (apr_jwk_pem_to_json(cmd->pool, arg, &jwk, &kid) == FALSE) {
-		return apr_psprintf(cmd->pool, "apr_jwk_pem_to_json failed for: %s",
-				arg);
-	}
-	if (cfg->public_keys == NULL)
-		cfg->public_keys = apr_hash_make(cmd->pool);
-	apr_hash_set(cfg->public_keys, kid, APR_HASH_KEY_STRING, jwk);
+	int offset = (int) (long) cmd->info;
+	apr_hash_t **shared_keys = (apr_hash_t **) ((void *) cfg + offset);
+	*shared_keys = oidc_util_merge_symmetric_key(cmd->pool, *shared_keys, arg,
+			NULL);
 	return NULL;
 }
 
@@ -488,15 +548,18 @@ static const char *oidc_set_private_key_files_enc(cmd_parms *cmd, void *dummy,
 		const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
-	char *jwk = NULL;
-	char *kid = NULL;
-	if (apr_jwk_private_key_to_rsa_jwk(cmd->pool, arg, &jwk, &kid) == FALSE) {
+	apr_jwk_t *jwk = NULL;
+	apr_jwt_error_t err;
+
+	if (apr_jwk_parse_rsa_private_key(cmd->pool, arg, &jwk, &err) == FALSE) {
 		return apr_psprintf(cmd->pool,
-				"apr_jwk_private_key_to_rsa_jwk failed for: %s", arg);
+				"apr_jwk_parse_rsa_private_key failed for \"%s\": %s", arg,
+				apr_jwt_e2s(cmd->pool, err));
 	}
+
 	if (cfg->private_keys == NULL)
 		cfg->private_keys = apr_hash_make(cmd->pool);
-	apr_hash_set(cfg->private_keys, kid, APR_HASH_KEY_STRING, jwk);
+	apr_hash_set(cfg->private_keys, jwk->kid, APR_HASH_KEY_STRING, jwk);
 	return NULL;
 }
 
@@ -560,6 +623,21 @@ static const char * oidc_set_pass_cookies(cmd_parms *cmd, void *m,
 }
 
 /*
+ * set the HTTP method to use in an OAuth 2.0 token introspection/validation call
+ */
+static const char * oidc_set_introspection_method(cmd_parms *cmd, void *m,
+		const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+
+	if ((apr_strnatcmp(arg, "GET") == 0) || (apr_strnatcmp(arg, "POST") == 0)) {
+		return ap_set_string_slot(cmd, cfg, arg);
+	}
+
+	return "parameter must be 'GET' or 'POST'";
+}
+
+/*
  * create a new server config record with defaults
  */
 void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
@@ -598,6 +676,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->provider.response_mode = NULL;
 	c->provider.jwks_refresh_interval = OIDC_DEFAULT_JWKS_REFRESH_INTERVAL;
 	c->provider.idtoken_iat_slack = OIDC_DEFAULT_IDTOKEN_IAT_SLACK;
+	c->provider.session_max_duration = OIDC_DEFAULT_SESSION_MAX_DURATION;
 	c->provider.auth_request_params = NULL;
 
 	c->provider.client_jwks_uri = NULL;
@@ -612,9 +691,14 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->oauth.client_id = NULL;
 	c->oauth.client_secret = NULL;
 	c->oauth.introspection_endpoint_url = NULL;
+	c->oauth.introspection_endpoint_method = OIDC_DEFAULT_OAUTH_ENDPOINT_METHOD;
 	c->oauth.introspection_endpoint_params = NULL;
 	c->oauth.introspection_endpoint_auth = NULL;
+	c->oauth.introspection_token_param_name = OIDC_DEFAULT_OAUTH_TOKEN_PARAM_NAME;
 	c->oauth.remote_user_claim = OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER;
+	c->oauth.verify_jwks_uri = NULL;
+	c->oauth.verify_public_keys = NULL;
+	c->oauth.verify_shared_keys = NULL;
 
 	c->cache = &oidc_cache_shm;
 	c->cache_cfg = NULL;
@@ -765,6 +849,11 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->provider.idtoken_iat_slack != OIDC_DEFAULT_IDTOKEN_IAT_SLACK ?
 					add->provider.idtoken_iat_slack :
 					base->provider.idtoken_iat_slack;
+	c->provider.session_max_duration =
+			add->provider.session_max_duration
+				!= OIDC_DEFAULT_SESSION_MAX_DURATION ?
+					add->provider.session_max_duration :
+					base->provider.session_max_duration;
 	c->provider.auth_request_params =
 			add->provider.auth_request_params != NULL ?
 					add->provider.auth_request_params :
@@ -813,6 +902,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->oauth.introspection_endpoint_url != NULL ?
 					add->oauth.introspection_endpoint_url :
 					base->oauth.introspection_endpoint_url;
+	c->oauth.introspection_endpoint_method =
+			add->oauth.introspection_endpoint_method != OIDC_DEFAULT_OAUTH_ENDPOINT_METHOD ?
+					add->oauth.introspection_endpoint_method :
+					base->oauth.introspection_endpoint_method;
 	c->oauth.introspection_endpoint_params =
 			add->oauth.introspection_endpoint_params != NULL ?
 					add->oauth.introspection_endpoint_params :
@@ -821,11 +914,28 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->oauth.introspection_endpoint_auth != NULL ?
 					add->oauth.introspection_endpoint_auth :
 					base->oauth.introspection_endpoint_auth;
+	c->oauth.introspection_token_param_name =
+			apr_strnatcmp(add->oauth.introspection_token_param_name,
+					OIDC_DEFAULT_OAUTH_TOKEN_PARAM_NAME) != 0 ?
+							add->oauth.introspection_token_param_name :
+							base->oauth.introspection_token_param_name;
 	c->oauth.remote_user_claim =
 			apr_strnatcmp(add->oauth.remote_user_claim,
 					OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER) != 0 ?
 							add->oauth.remote_user_claim :
 							base->oauth.remote_user_claim;
+
+	c->oauth.verify_jwks_uri =
+			add->oauth.verify_jwks_uri != NULL ?
+					add->oauth.verify_jwks_uri : base->oauth.verify_jwks_uri;
+	c->oauth.verify_public_keys =
+			add->oauth.verify_public_keys != NULL ?
+					add->oauth.verify_public_keys :
+					base->oauth.verify_public_keys;
+	c->oauth.verify_shared_keys =
+			add->oauth.verify_shared_keys != NULL ?
+					add->oauth.verify_shared_keys :
+					base->oauth.verify_shared_keys;
 
 	c->http_timeout_long =
 			add->http_timeout_long != OIDC_DEFAULT_HTTP_TIMEOUT_LONG ?
@@ -1034,14 +1144,24 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
  */
 static int oidc_check_config_oauth(server_rec *s, oidc_cfg *c) {
 
-	if (c->oauth.client_id == NULL)
-		return oidc_check_config_error(s, "OIDCOAuthClientID");
+	if (c->oauth.introspection_endpoint_url == NULL) {
 
-	if (c->oauth.client_secret == NULL)
-		return oidc_check_config_error(s, "OIDCOAuthClientSecret");
+		if ((c->oauth.verify_jwks_uri == NULL)
+				&& (c->oauth.verify_public_keys == NULL)
+				&& (c->oauth.verify_shared_keys == NULL)) {
+			oidc_serror(s,
+					"one of 'OIDCOAuthIntrospectionEndpoint', 'OIDCOAuthVerifyJwksUri', 'OIDCOAuthVerifySharedKeys' or 'OIDCOAuthVerifyCertFiles' must be set");
+			return HTTP_INTERNAL_SERVER_ERROR;
+		}
 
-	if (c->oauth.introspection_endpoint_url == NULL)
-		return oidc_check_config_error(s, "OIDCOAuthIntrospectionEndpoint");
+	} else if ((c->oauth.verify_jwks_uri != NULL)
+			|| (c->oauth.verify_public_keys != NULL)
+			|| (c->oauth.verify_shared_keys != NULL)) {
+		oidc_serror(s,
+				"only 'OIDCOAuthIntrospectionEndpoint' OR one (or more) out of ('OIDCOAuthVerifyJwksUri', 'OIDCOAuthVerifySharedKeys' or 'OIDCOAuthVerifyCertFiles') must be set");
+		return HTTP_INTERNAL_SERVER_ERROR;
+
+	}
 
 	return OK;
 }
@@ -1055,7 +1175,8 @@ static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s) {
 
 	oidc_sdebug(s, "enter");
 
-	if ((cfg->metadata_dir != NULL) || (cfg->provider.issuer == NULL)
+	if ((cfg->metadata_dir != NULL) || (cfg->provider.issuer != NULL)
+			|| (cfg->provider.metadata_url != NULL)
 			|| (cfg->redirect_uri != NULL)
 			|| (cfg->crypto_passphrase != NULL)) {
 		if (oidc_check_config_openid_openidc(s, cfg) != OK)
@@ -1063,7 +1184,10 @@ static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s) {
 	}
 
 	if ((cfg->oauth.client_id != NULL) || (cfg->oauth.client_secret != NULL)
-			|| (cfg->oauth.introspection_endpoint_url != NULL)) {
+			|| (cfg->oauth.introspection_endpoint_url != NULL)
+			|| (cfg->oauth.verify_jwks_uri != NULL)
+			|| (cfg->oauth.verify_public_keys != NULL)
+			|| (cfg->oauth.verify_shared_keys != NULL)) {
 		if (oidc_check_config_oauth(s, cfg) != OK)
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
@@ -1360,8 +1484,9 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF,
 				"The response mode used; must be one of \"fragment\", \"query\" or \"form_post\" (serves as default value for discovered OPs too)"),
 
-		AP_INIT_ITERATE("OIDCPublicKeyFiles", oidc_set_public_key_files_enc,
-				NULL,
+		AP_INIT_ITERATE("OIDCPublicKeyFiles",
+				oidc_set_public_key_files,
+				(void *)APR_OFFSETOF(oidc_cfg, public_keys),
 				RSRC_CONF,
 				"The fully qualified names of the files that contain the X.509 certificates that contains the RSA public keys that can be used for encryption by the OP."),
 		AP_INIT_ITERATE("OIDCPrivateKeyFiles", oidc_set_private_key_files_enc,
@@ -1434,6 +1559,11 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, provider.idtoken_iat_slack),
 				RSRC_CONF,
 				"Acceptable offset (both before and after) for checking the \"iat\" (= issued at) timestamp in the id_token."),
+		AP_INIT_TAKE1("OIDCSessionMaxDuration",
+				oidc_set_session_max_duration,
+				(void*)APR_OFFSETOF(oidc_cfg, provider.session_max_duration),
+				RSRC_CONF,
+				"Maximum duration of a session in seconds."),
 		AP_INIT_TAKE1("OIDCAuthRequestParams",
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.auth_request_params),
@@ -1517,6 +1647,11 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, oauth.introspection_endpoint_url),
 				RSRC_CONF,
 				"Define the OAuth AS Introspection Endpoint URL (e.g.: https://localhost:9031/as/token.oauth2)"),
+		AP_INIT_TAKE1("OIDCOAuthIntrospectionEndpointMethod",
+				oidc_set_introspection_method,
+				(void *)APR_OFFSETOF(oidc_cfg, oauth.introspection_endpoint_method),
+				RSRC_CONF,
+				"Define the HTTP method to use for the introspection call: one of \"GET\" or \"POST\" (default)"),
 		AP_INIT_TAKE1("OIDCOAuthIntrospectionEndpointParams",
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.introspection_endpoint_params),
@@ -1527,6 +1662,11 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, oauth.introspection_endpoint_auth),
 				RSRC_CONF,
 				"Specify an authentication method for the OAuth AS Introspection Endpoint (e.g.: client_auth_basic)"),
+		AP_INIT_TAKE1("OIDCOAuthIntrospectionTokenParamName",
+				oidc_set_string_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, oauth.introspection_token_param_name),
+				RSRC_CONF,
+				"Name of the parameter whose value carries the access token value in an validation request to the token introspection endpoint."),
 		AP_INIT_FLAG("OIDCOAuthSSLValidateServer",
 				oidc_set_flag_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.ssl_validate_server),
@@ -1537,6 +1677,21 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.remote_user_claim),
 				RSRC_CONF,
 				"The claim that is used when setting the REMOTE_USER variable for OAuth 2.0 protected paths."),
+		AP_INIT_ITERATE("OIDCOAuthVerifyCertFiles",
+				oidc_set_public_key_files,
+				(void*)APR_OFFSETOF(oidc_cfg, oauth.verify_public_keys),
+				RSRC_CONF,
+				"The fully qualified names of the files that contain the X.509 certificates that contains the RSA public keys that can be used for access token validation."),
+		AP_INIT_ITERATE("OIDCOAuthVerifySharedKeys",
+				oidc_set_shared_keys,
+				(void*)APR_OFFSETOF(oidc_cfg, oauth.verify_shared_keys),
+				RSRC_CONF,
+				"Shared secret(s) that is/are used to verify signed JWT access tokens locally."),
+		AP_INIT_TAKE1("OIDCOAuthVerifyJwksUri",
+				oidc_set_https_slot,
+				(void *)APR_OFFSETOF(oidc_cfg, oauth.verify_jwks_uri),
+				RSRC_CONF,
+				"The JWKs URL on which the Authorization publishes the keys used to sign its JWT access tokens."),
 
 		AP_INIT_TAKE1("OIDCHTTPTimeoutLong", oidc_set_int_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, http_timeout_long),

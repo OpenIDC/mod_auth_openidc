@@ -80,6 +80,7 @@ apr_status_t oidc_session_load(request_rec *r, session_rec **zz) {
 	(*zz)->remote_user = apr_table_get((*zz)->entries,
 			OIDC_SESSION_REMOTE_USER_KEY);
 	const char *uuid = apr_table_get((*zz)->entries, OIDC_SESSION_UUID_KEY);
+	oidc_debug(r, "%s", uuid ? uuid : "<null>");
 	if (uuid != NULL)
 		apr_uuid_parse((*zz)->uuid, uuid);
 	return rc;
@@ -89,6 +90,7 @@ apr_status_t oidc_session_save(request_rec *r, session_rec *z) {
 	oidc_session_set(r, z, OIDC_SESSION_REMOTE_USER_KEY, z->remote_user);
 	char key[APR_UUID_FORMATTED_LENGTH + 1];
 	apr_uuid_format((char *) &key, z->uuid);
+	oidc_debug(r, "%s", key);
 	oidc_session_set(r, z, OIDC_SESSION_UUID_KEY, key);
 	return ap_session_save_fn(r, z);
 }
@@ -259,7 +261,7 @@ static apr_status_t oidc_session_identity_decode(request_rec * r,
 	char *encoded, *pair;
 	const char *sep = "&";
 
-	oidc_debug(r, "decoding %s", z->encoded);
+	//oidc_debug(r, "decoding %s", z->encoded);
 
 	/* sanity check - anything to decode? */
 	if (!z->encoded) {
@@ -275,7 +277,7 @@ static apr_status_t oidc_session_identity_decode(request_rec * r,
 		char *key = apr_strtok(pair, psep, &plast);
 		char *val = apr_strtok(NULL, psep, &plast);
 
-		oidc_debug(r, "decoding %s=%s", key, val);
+		//oidc_debug(r, "decoding %s=%s", key, val);
 
 		if (key && *key) {
 			if (!val || !*val) {
@@ -351,13 +353,11 @@ static apr_status_t oidc_session_load_cache(request_rec *r, session_rec *z) {
 
 	/* get the string-encoded session from the cache based on the key */
 	if (uuid != NULL) {
-		if (c->cache->get(r, OIDC_CACHE_SECTION_SESSION, uuid,
-				&z->encoded) == TRUE)
-			return APR_SUCCESS;
+		c->cache->get(r, OIDC_CACHE_SECTION_SESSION, uuid, &z->encoded);
 		//oidc_util_set_cookie(r, d->cookie, "");
 	}
 
-	return APR_EGENERAL;
+	return (z->encoded != NULL) ? APR_SUCCESS : APR_EGENERAL;
 }
 
 /*
@@ -475,6 +475,9 @@ static apr_status_t oidc_session_load_22(request_rec *r, session_rec **zz) {
 
 		oidc_warn(r, "session restored from cache has expired");
 		apr_table_clear(z->entries);
+		z->expiry = 0;
+		z->encoded = NULL;
+
 		return APR_EGENERAL;
 	}
 

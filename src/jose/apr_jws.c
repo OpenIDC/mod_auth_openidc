@@ -97,10 +97,10 @@ apr_byte_t apr_jws_algorithm_is_supported(apr_pool_t *pool, const char *alg) {
  * helper function to determine the type of signature on a JWT
  */
 static apr_byte_t apr_jws_signature_starts_with(apr_pool_t *pool,
-		const char *alg, const char *match, int n) {
+		const char *alg, const char *match) {
 	if (alg == NULL)
 		return FALSE;
-	return (strncmp(alg, match, n) == 0);
+	return (strncmp(alg, match, strlen(match)) == 0);
 }
 
 /*
@@ -128,16 +128,25 @@ static char *apr_jws_alg_to_openssl_digest(const char *alg) {
 /*
  * return an EVP structure for the specified algorithm
  */
-const EVP_MD *apr_jws_crypto_alg_to_evp(apr_pool_t *pool, const char *alg) {
+const EVP_MD *apr_jws_crypto_alg_to_evp(apr_pool_t *pool, const char *alg,
+		apr_jwt_error_t *err) {
 	const EVP_MD *result = NULL;
 
 	char *digest = apr_jws_alg_to_openssl_digest(alg);
-	if (digest == NULL)
+	if (digest == NULL) {
+		apr_jwt_error(err,
+				"no OpenSSL digest algorithm name found for algorithm \"%s\"",
+				alg);
 		return NULL;
+	}
 
 	result = EVP_get_digestbyname(digest);
-	if (result == NULL)
+	if (result == NULL) {
+		apr_jwt_error(err,
+				"no OpenSSL digest algorithm found for algorithm \"%s\"",
+				digest);
 		return NULL;
+	}
 
 	return result;
 }
@@ -145,12 +154,19 @@ const EVP_MD *apr_jws_crypto_alg_to_evp(apr_pool_t *pool, const char *alg) {
 /*
  * verify HMAC signature on JWT
  */
-apr_byte_t apr_jws_verify_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
-		const char *key, const unsigned int key_len) {
+static apr_byte_t apr_jws_verify_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
+		apr_jwk_t *jwk, apr_jwt_error_t *err) {
+
+	if (jwk->type != APR_JWK_KEY_OCT) {
+		apr_jwt_error(err,
+				"key type of provided JWK cannot be used for HMAC verification: %d",
+				jwk->type);
+		return FALSE;
+	}
 
 	/* get the OpenSSL digest function */
 	const EVP_MD *digest = NULL;
-	if ((digest = apr_jws_crypto_alg_to_evp(pool, jwt->header.alg)) == NULL)
+	if ((digest = apr_jws_crypto_alg_to_evp(pool, jwt->header.alg, err)) == NULL)
 		return FALSE;
 
 	/* prepare the message */
@@ -162,16 +178,25 @@ apr_byte_t apr_jws_verify_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
 	unsigned char md[EVP_MAX_MD_SIZE];
 
 	/* apply the HMAC function to the message with the provided key */
-	if (!HMAC(digest, key, key_len, msg, msg_len, md, &md_len))
+	if (!HMAC(digest, jwk->key.oct->k, jwk->key.oct->k_len, msg, msg_len, md,
+			&md_len)) {
+		apr_jwt_error_openssl(err, "HMAC");
 		return FALSE;
+	}
 
 	/* check that the length of the hash matches what was provided to us in the signature */
-	if (md_len != jwt->signature.length)
+	if (md_len != jwt->signature.length) {
+		apr_jwt_error(err,
+				"calculated hash length (%d) differs from the length of the signature provided in the JWT (%d)", md_len, jwt->signature.length);
 		return FALSE;
+	}
 
 	/* do a comparison of the provided hash value against calculated hash value */
-	if (memcmp(md, jwt->signature.bytes, md_len) != 0)
+	if (memcmp(md, jwt->signature.bytes, md_len) != 0) {
+		apr_jwt_error(err,
+				"calculated hash differs from the signature provided in the JWT");
 		return FALSE;
+	}
 
 	/* all OK if we got to here */
 	return TRUE;
@@ -181,19 +206,33 @@ apr_byte_t apr_jws_verify_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
  * hash a byte sequence with the specified algorithm
  */
 apr_byte_t apr_jws_hash_bytes(apr_pool_t *pool, const char *s_digest,
-		const unsigned char *input, unsigned int input_len, unsigned char **output, unsigned int *output_len) {
+		const unsigned char *input, unsigned int input_len,
+		unsigned char **output, unsigned int *output_len, apr_jwt_error_t *err) {
 	unsigned char md_value[EVP_MAX_MD_SIZE];
 
 	EVP_MD_CTX ctx;
 	EVP_MD_CTX_init(&ctx);
 
 	const EVP_MD *evp_digest = NULL;
-	if ((evp_digest = EVP_get_digestbyname(s_digest)) == NULL)
+	if ((evp_digest = EVP_get_digestbyname(s_digest)) == NULL) {
+		apr_jwt_error(err,
+				"no OpenSSL digest algorithm found for algorithm \"%s\"",
+				s_digest);
 		return FALSE;
+	}
 
-	EVP_DigestInit_ex(&ctx, evp_digest, NULL);
-	EVP_DigestUpdate(&ctx, input, input_len);
-	EVP_DigestFinal_ex(&ctx, md_value, output_len);
+	if (!EVP_DigestInit_ex(&ctx, evp_digest, NULL)) {
+		apr_jwt_error_openssl(err, "EVP_DigestInit_ex");
+		return FALSE;
+	}
+	if (!EVP_DigestUpdate(&ctx, input, input_len)) {
+		apr_jwt_error_openssl(err, "EVP_DigestUpdate");
+		return FALSE;
+	}
+	if (!EVP_DigestFinal_ex(&ctx, md_value, output_len)) {
+		apr_jwt_error_openssl(err, "EVP_DigestFinal_ex");
+		return FALSE;
+	}
 
 	EVP_MD_CTX_cleanup(&ctx);
 
@@ -207,13 +246,19 @@ apr_byte_t apr_jws_hash_bytes(apr_pool_t *pool, const char *s_digest,
  * hash a string value with the specified algorithm
  */
 apr_byte_t apr_jws_hash_string(apr_pool_t *pool, const char *alg,
-		const char *msg, char **hash, unsigned int *hash_len) {
+		const char *msg, char **hash, unsigned int *hash_len,
+		apr_jwt_error_t *err) {
 
 	char *s_digest = apr_jws_alg_to_openssl_digest(alg);
-	if (s_digest == NULL)
+	if (s_digest == NULL) {
+		apr_jwt_error(err,
+				"no OpenSSL digest algorithm name found for algorithm \"%s\"",
+				alg);
 		return FALSE;
+	}
 
-	return apr_jws_hash_bytes(pool, s_digest, (const unsigned char *)msg, strlen(msg), (unsigned char **)hash, hash_len);
+	return apr_jws_hash_bytes(pool, s_digest, (const unsigned char *) msg,
+			strlen(msg), (unsigned char **) hash, hash_len, err);
 }
 
 /*
@@ -238,13 +283,14 @@ int apr_jws_hash_length(const char *alg) {
 /*
  * verify HMAC signature on JWT
  */
-apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk) {
+static apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt,
+		apr_jwk_t *jwk, apr_jwt_error_t *err) {
 
 	apr_byte_t rc = FALSE;
 
 	/* get the OpenSSL digest function */
 	const EVP_MD *digest = NULL;
-	if ((digest = apr_jws_crypto_alg_to_evp(pool, jwt->header.alg)) == NULL)
+	if ((digest = apr_jws_crypto_alg_to_evp(pool, jwt->header.alg, err)) == NULL)
 		return FALSE;
 
 	EVP_MD_CTX ctx;
@@ -264,49 +310,70 @@ apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk) 
 	EVP_PKEY* pRsaKey = EVP_PKEY_new();
 	if (!EVP_PKEY_assign_RSA(pRsaKey, pubkey)) {
 		pRsaKey = NULL;
+		apr_jwt_error_openssl(err, "EVP_PKEY_assign_RSA");
 		goto end;
 	}
 
-	if (apr_jws_signature_starts_with(pool, jwt->header.alg, "PS", 2) == TRUE) {
+	if (apr_jws_signature_starts_with(pool, jwt->header.alg, "PS") == TRUE) {
 
 		int status = 0;
 		unsigned char *pDecrypted = apr_pcalloc(pool, jwt->signature.length);
 		status = RSA_public_decrypt(jwt->signature.length, jwt->signature.bytes,
 				pDecrypted, pubkey, RSA_NO_PADDING);
-		if (status == -1)
+		if (status == -1) {
+			apr_jwt_error_openssl(err, "RSA_public_decrypt");
 			goto end;
+		}
 
 		unsigned char *pDigest = apr_pcalloc(pool, RSA_size(pubkey));
 		unsigned int uDigestLen = RSA_size(pubkey);
 
-		EVP_DigestInit(&ctx, digest);
-		EVP_DigestUpdate(&ctx, jwt->message, strlen(jwt->message));
-		EVP_DigestFinal(&ctx, pDigest, &uDigestLen);
+		if (!EVP_DigestInit(&ctx, digest)) {
+			apr_jwt_error_openssl(err, "EVP_DigestInit");
+			goto end;
+		}
+		if (!EVP_DigestUpdate(&ctx, jwt->message, strlen(jwt->message))) {
+			apr_jwt_error_openssl(err, "EVP_DigestUpdate");
+			goto end;
+		}
+		if (!EVP_DigestFinal(&ctx, pDigest, &uDigestLen)) {
+			apr_jwt_error_openssl(err, "wrong key? EVP_DigestFinal");
+			goto end;
+		}
 
 		/* verify the data */
 		status = RSA_verify_PKCS1_PSS(pubkey, pDigest, digest, pDecrypted,
 				-2 /* salt length recovered from signature*/);
-		if (status != 1)
+		if (status != 1) {
+			apr_jwt_error_openssl(err, "RSA_verify_PKCS1_PSS");
 			goto end;
+		}
 
 		rc = TRUE;
 
-	} else if (apr_jws_signature_starts_with(pool, jwt->header.alg, "RS",
-			2) == TRUE) {
+	} else if (apr_jws_signature_starts_with(pool, jwt->header.alg,
+			"RS") == TRUE) {
 
-		if (!EVP_VerifyInit_ex(&ctx, digest, NULL))
+		if (!EVP_VerifyInit_ex(&ctx, digest, NULL)) {
+			apr_jwt_error_openssl(err, "EVP_VerifyInit_ex");
 			goto end;
-		if (!EVP_VerifyUpdate(&ctx, jwt->message, strlen(jwt->message)))
+		}
+		if (!EVP_VerifyUpdate(&ctx, jwt->message, strlen(jwt->message))) {
+			apr_jwt_error_openssl(err, "EVP_VerifyUpdate");
 			goto end;
+		}
 		if (!EVP_VerifyFinal(&ctx, (const unsigned char *) jwt->signature.bytes,
-				jwt->signature.length, pRsaKey))
+				jwt->signature.length, pRsaKey)) {
+			apr_jwt_error_openssl(err, "wrong key? EVP_VerifyFinal");
 			goto end;
+		}
 
 		rc = TRUE;
 
 	}
 
 end:
+
 	if (pRsaKey) {
 		EVP_PKEY_free(pRsaKey);
 	} else if (pubkey) {
@@ -335,21 +402,30 @@ static int apr_jws_ec_alg_to_curve(const char *alg) {
 /*
  * verify EC signature on JWT
  */
-apr_byte_t apr_jws_verify_ec(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk) {
+static apr_byte_t apr_jws_verify_ec(apr_pool_t *pool, apr_jwt_t *jwt,
+		apr_jwk_t *jwk, apr_jwt_error_t *err) {
 
 	int nid = apr_jws_ec_alg_to_curve(jwt->header.alg);
-	if (nid == -1)
+	if (nid == -1) {
+		apr_jwt_error(err,
+				"no OpenSSL Elliptic Curve identifier found for algorithm \"%s\"",
+				jwt->header.alg);
 		return FALSE;
+	}
 
 	EC_GROUP *curve = EC_GROUP_new_by_curve_name(nid);
-	if (curve == NULL)
+	if (curve == NULL) {
+		apr_jwt_error(err,
+				"no OpenSSL Elliptic Curve found for algorithm \"%s\"",
+				jwt->header.alg);
 		return FALSE;
+	}
 
 	apr_byte_t rc = FALSE;
 
 	/* get the OpenSSL digest function */
 	const EVP_MD *digest = NULL;
-	if ((digest = apr_jws_crypto_alg_to_evp(pool, jwt->header.alg)) == NULL)
+	if ((digest = apr_jws_crypto_alg_to_evp(pool, jwt->header.alg, err)) == NULL)
 		return FALSE;
 
 	EVP_MD_CTX ctx;
@@ -364,30 +440,42 @@ apr_byte_t apr_jws_verify_ec(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk) {
 	BN_bin2bn(jwk->key.ec->x, jwk->key.ec->x_len, x);
 	BN_bin2bn(jwk->key.ec->y, jwk->key.ec->y_len, y);
 
-	if (!EC_KEY_set_public_key_affine_coordinates(pubkey, x, y))
+	if (!EC_KEY_set_public_key_affine_coordinates(pubkey, x, y)) {
+		apr_jwt_error_openssl(err, "EC_KEY_set_public_key_affine_coordinates");
 		return FALSE;
+	}
 
 	EVP_PKEY* pEcKey = EVP_PKEY_new();
 	if (!EVP_PKEY_assign_EC_KEY(pEcKey, pubkey)) {
 		pEcKey = NULL;
+		apr_jwt_error_openssl(err, "EVP_PKEY_assign_EC_KEY");
 		goto end;
 	}
 
 	ctx.pctx = EVP_PKEY_CTX_new(pEcKey, NULL);
 
-	if (!EVP_PKEY_verify_init(ctx.pctx))
+	if (!EVP_PKEY_verify_init(ctx.pctx)) {
+		apr_jwt_error_openssl(err, "EVP_PKEY_verify_init");
 		goto end;
-	if (!EVP_VerifyInit_ex(&ctx, digest, NULL))
+	}
+	if (!EVP_VerifyInit_ex(&ctx, digest, NULL)) {
+		apr_jwt_error_openssl(err, "EVP_VerifyInit_ex");
 		goto end;
-	if (!EVP_VerifyUpdate(&ctx, jwt->message, strlen(jwt->message)))
+	}
+	if (!EVP_VerifyUpdate(&ctx, jwt->message, strlen(jwt->message))) {
+		apr_jwt_error_openssl(err, "EVP_VerifyUpdate");
 		goto end;
+	}
 	if (!EVP_VerifyFinal(&ctx, (const unsigned char *) jwt->signature.bytes,
-			jwt->signature.length, pEcKey))
+			jwt->signature.length, pEcKey)) {
+		apr_jwt_error_openssl(err, "wrong key? EVP_VerifyFinal");
 		goto end;
+	}
 
 	rc = TRUE;
 
 end:
+
 	if (pEcKey) {
 		EVP_PKEY_free(pEcKey);
 	} else if (pubkey) {
@@ -404,15 +492,15 @@ end:
  * check if the signature on the JWT is HMAC-based
  */
 apr_byte_t apr_jws_signature_is_hmac(apr_pool_t *pool, apr_jwt_t *jwt) {
-	return apr_jws_signature_starts_with(pool, jwt->header.alg, "HS", 2);
+	return apr_jws_signature_starts_with(pool, jwt->header.alg, "HS");
 }
 
 /*
  * check if the signature on the JWT is RSA-based
  */
 apr_byte_t apr_jws_signature_is_rsa(apr_pool_t *pool, apr_jwt_t *jwt) {
-	return apr_jws_signature_starts_with(pool, jwt->header.alg, "RS", 2)
-			|| apr_jws_signature_starts_with(pool, jwt->header.alg, "PS", 2);
+	return apr_jws_signature_starts_with(pool, jwt->header.alg, "RS")
+			|| apr_jws_signature_starts_with(pool, jwt->header.alg, "PS");
 }
 
 #if (OPENSSL_VERSION_NUMBER >= 0x01000000)
@@ -421,7 +509,82 @@ apr_byte_t apr_jws_signature_is_rsa(apr_pool_t *pool, apr_jwt_t *jwt) {
  * check if the signature on the JWT is Elliptic Curve based
  */
 apr_byte_t apr_jws_signature_is_ec(apr_pool_t *pool, apr_jwt_t *jwt) {
-	return apr_jws_signature_starts_with(pool, jwt->header.alg, "ES", 2);
+	return apr_jws_signature_starts_with(pool, jwt->header.alg, "ES");
 }
 
 #endif
+
+/*
+ * check the signature on a JWT against the provided keys
+ */
+static apr_byte_t apr_jws_verify_with_jwk(apr_pool_t *pool, apr_jwt_t *jwt,
+		apr_jwk_t *jwk, apr_jwt_error_t *err) {
+
+	apr_byte_t rc = FALSE;
+
+	if (apr_jws_signature_is_hmac(pool, jwt)) {
+
+		rc = (jwk->type == APR_JWK_KEY_OCT)
+				&& apr_jws_verify_hmac(pool, jwt, jwk, err);
+
+	} else if (apr_jws_signature_is_rsa(pool, jwt)) {
+
+		rc = (jwk->type == APR_JWK_KEY_RSA)
+				&& apr_jws_verify_rsa(pool, jwt, jwk, err);
+
+#if (OPENSSL_VERSION_NUMBER >= 0x01000000)
+	} else if (apr_jws_signature_is_ec(pool, jwt)) {
+
+		rc = (jwk->type == APR_JWK_KEY_EC)
+				&& apr_jws_verify_ec(pool, jwt, jwk, err);
+
+#endif
+	}
+
+	return rc;
+}
+
+/*
+ * verify the signature on a JWT
+ */
+apr_byte_t apr_jws_verify(apr_pool_t *pool, apr_jwt_t *jwt, apr_hash_t *keys,
+		apr_jwt_error_t *err) {
+	apr_byte_t rc = FALSE;
+
+	apr_jwk_t *jwk = NULL;
+	apr_hash_index_t *hi;
+
+	if (jwt->header.kid != NULL) {
+
+		jwk = apr_hash_get(keys, jwt->header.kid,
+				APR_HASH_KEY_STRING);
+		if (jwk != NULL) {
+			rc = apr_jws_verify_with_jwk(pool, jwt, jwk, err);
+		} else {
+			apr_jwt_error(err, "could not find key with kid: %s",
+					jwt->header.kid);
+			rc = FALSE;
+		}
+
+	} else {
+
+		for (hi = apr_hash_first(pool, keys); hi; hi = apr_hash_next(hi)) {
+			apr_hash_this(hi, NULL, NULL, (void **) &jwk);
+			rc = apr_jws_verify_with_jwk(pool, jwt, jwk, err);
+			if (rc == TRUE)
+				break;
+		}
+
+		if (rc == FALSE)
+			apr_jwt_error(err,
+					"could not verify signature against any of the (%d) provided keys%s",
+					apr_hash_count(keys),
+					apr_hash_count(keys) > 0 ?
+							"" :
+							apr_psprintf(pool,
+									"; you have probably provided no or incorrect keys/key-types for algorithm: %s",
+									jwt->header.alg));
+	}
+
+	return rc;
+}

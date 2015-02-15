@@ -1,4 +1,4 @@
-AC_INIT([mod_auth_openidc],[1.7.2rc1],[hzandbelt@pingidentity.com])
+AC_INIT([mod_auth_openidc],[1.8.0rc2],[hzandbelt@pingidentity.com])
 
 AC_SUBST(NAMEVER, AC_PACKAGE_TARNAME()-AC_PACKAGE_VERSION())
 
@@ -39,6 +39,9 @@ fi
 
 # Replace any occurrences of @APXS2@ with the value of $APXS2 in the Makefile.
 AC_SUBST(APXS2)
+
+# Use environment varilable APXS2_OPTS to pass params to APXS2 command
+AC_ARG_VAR(APXS2_OPTS, [Additional command line options to pass to apxs2.])
 
 # We need the curl library for HTTP callouts.
 PKG_CHECK_MODULES(CURL, libcurl)

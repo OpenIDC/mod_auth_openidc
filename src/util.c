@@ -674,15 +674,16 @@ void oidc_util_set_cookie(request_rec *r, const char *cookieName,
 	}
 
 	/* construct the cookie value */
-	headerString = apr_psprintf(r->pool, "%s=%s;%s;Path=%s%s%s%s", cookieName,
+	headerString = apr_psprintf(r->pool, "%s=%s;Path=%s%s%s%s%s", cookieName,
 			cookieValue,
-			((apr_strnatcasecmp("https", oidc_get_current_url_scheme(r)) == 0) ?
-					";Secure" : ""), oidc_util_get_cookie_path(r),
+			oidc_util_get_cookie_path(r),
+			(expiresString == NULL) ?
+					"" : apr_psprintf(r->pool, "; expires=%s", expiresString),
 			c->cookie_domain != NULL ?
 					apr_psprintf(r->pool, ";Domain=%s", c->cookie_domain) : "",
-			c->cookie_http_only != FALSE ? ";HttpOnly" : "",
-			(expiresString == NULL) ?
-					"" : apr_psprintf(r->pool, "; expires=%s", expiresString));
+			((apr_strnatcasecmp("https", oidc_get_current_url_scheme(r)) == 0) ?
+					";Secure" : ""),
+			c->cookie_http_only != FALSE ? ";HttpOnly" : "");
 
 	/* use r->err_headers_out so we always print our headers (even on 302 redirect) - headers_out only prints on 2xx responses */
 	apr_table_add(r->err_headers_out, "Set-Cookie", headerString);
@@ -736,7 +737,7 @@ char *oidc_util_get_cookie(request_rec *r, const char *cookieName) {
 	}
 
 	/* log what we've found */
-	oidc_debug(r, "returning %s", rv);
+	oidc_debug(r, "returning \"%s\" = %s", cookieName, rv ? apr_psprintf(r->pool, "\"%s\"", rv) : "<null>");
 
 	return rv;
 }
@@ -828,7 +829,7 @@ apr_byte_t oidc_util_get_request_parameter(request_rec *r, char *name,
 static apr_byte_t oidc_util_json_string_print(request_rec *r, json_t *result,
 		const char *key, const char *log) {
 	json_t *value = json_object_get(result, key);
-	if (value != NULL) {
+	if (value != NULL && !json_is_null(value)) {
 		char *s_value = json_dumps(value, 0);
 		oidc_error(r, "%s: response contained an \"%s\" entry with value: \"%s\"",
 				log, key, s_value);
@@ -1374,4 +1375,52 @@ void oidc_util_table_add_query_encoded_params(apr_pool_t *pool,
 			apr_table_addn(table, key, val);
 		}
 	}
+}
+
+/*
+ * merge provided keys and client secret in to a single hashtable
+ */
+apr_hash_t * oidc_util_merge_symmetric_key(apr_pool_t *pool, apr_hash_t *keys,
+		const char *client_secret, const char *hash_algo) {
+	apr_jwt_error_t err;
+	apr_jwk_t *jwk = NULL;
+	unsigned char *key = NULL;
+	unsigned int key_len;
+	apr_hash_t *result = NULL;
+
+	result = (keys != NULL) ? apr_hash_copy(pool, keys) : apr_hash_make(pool);
+
+	if (client_secret != NULL) {
+
+		if (hash_algo == NULL) {
+			key = (unsigned char *) client_secret;
+			key_len = strlen(client_secret);
+		} else {
+			/* hash the client_secret first, this is OpenID Connect specific */
+			apr_jws_hash_bytes(pool, hash_algo,
+					(const unsigned char *) client_secret,
+					strlen(client_secret), &key, &key_len, &err);
+		}
+
+		if (apr_jwk_parse_symmetric_key(pool, key, key_len, &jwk, &err) == TRUE) {
+			apr_hash_set(result, jwk->kid, APR_HASH_KEY_STRING, jwk);
+		}
+	}
+
+	return result;
+}
+
+/*
+ * merge two key sets
+ */
+apr_hash_t * oidc_util_merge_key_sets(apr_pool_t *pool, apr_hash_t *k1,
+		apr_hash_t *k2) {
+	if (k1 == NULL) {
+		if (k2 == NULL)
+			return apr_hash_make(pool);
+		return k2;
+	}
+	if (k2 == NULL)
+		return k1;
+	return apr_hash_overlay(pool, k1, k2);
 }

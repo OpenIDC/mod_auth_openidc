@@ -106,6 +106,8 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_ACCESSTOKEN_EXPIRES_SESSION_KEY "access_token_expires"
 /* key for storing the refresh_token in the session context */
 #define OIDC_REFRESHTOKEN_SESSION_KEY "refresh_token"
+/* key for storing maximum session duration in the session context */
+#define OIDC_SESSION_EXPIRES_SESSION_KEY "session_expires"
 
 /* key for storing the session_state in the session context */
 #define OIDC_SESSION_STATE_SESSION_KEY "session_state"
@@ -159,6 +161,9 @@ APLOG_USE_MODULE(auth_openidc);
 /* defines for how long provider metadata will be cached */
 #define OIDC_CACHE_PROVIDER_METADATA_EXPIRY_DEFAULT 86400
 
+/* define the parameter value for the "logout" request that indicates a GET-style logout call from the OP */
+#define OIDC_GET_STYLE_LOGOUT_PARAM_VALUE "get"
+
 /* cache sections */
 #define OIDC_CACHE_SECTION_JTI "jti"
 #define OIDC_CACHE_SECTION_SESSION "session"
@@ -166,6 +171,12 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_CACHE_SECTION_JWKS "jwks"
 #define OIDC_CACHE_SECTION_ACCESS_TOKEN "access_token"
 #define OIDC_CACHE_SECTION_PROVIDER "provider"
+
+typedef struct oidc_jwks_uri_t {
+	const char *url;
+	int refresh_interval;
+	int ssl_validate_server;
+} oidc_jwks_uri_t;
 
 typedef struct oidc_provider_t {
 	char *metadata_url;
@@ -194,6 +205,7 @@ typedef struct oidc_provider_t {
 	int jwks_refresh_interval;
 	int idtoken_iat_slack;
 	char *auth_request_params;
+	int session_max_duration;
 
 	char *client_jwks_uri;
 	char *id_token_signed_response_alg;
@@ -209,9 +221,14 @@ typedef struct oidc_oauth_t {
 	char *client_id;
 	char *client_secret;
 	char *introspection_endpoint_url;
+	char *introspection_endpoint_method;
 	char *introspection_endpoint_params;
 	char *introspection_endpoint_auth;
+	char *introspection_token_param_name;
 	char *remote_user_claim;
+	apr_hash_t *verify_shared_keys;
+	char *verify_jwks_uri;
+	apr_hash_t *verify_public_keys;
 } oidc_oauth_t;
 
 typedef struct oidc_cfg {
@@ -306,18 +323,7 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c);
 
 // oidc_proto.c
 
-typedef struct oidc_proto_state {
-	const char *nonce;
-	const char *original_url;
-	const char *original_method;
-	const char *issuer;
-	const char *response_type;
-	const char *response_mode;
-	const char *prompt;
-	apr_time_t timestamp;
-} oidc_proto_state;
-
-int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *login_hint, const char *redirect_uri, const char *state, oidc_proto_state *proto_state, const char *id_token_hint, const char *auth_request_params);
+int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *login_hint, const char *redirect_uri, const char *state, json_t *proto_state, const char *id_token_hint, const char *auth_request_params);
 apr_byte_t oidc_proto_is_post_authorization_response(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *code, char **id_token, char **access_token, char **token_type, int *expires_in, char **refresh_token);
@@ -332,10 +338,11 @@ apr_array_header_t *oidc_proto_supported_flows(apr_pool_t *pool);
 apr_byte_t oidc_proto_flow_is_supported(apr_pool_t *pool, const char *flow);
 apr_byte_t oidc_proto_validate_authorization_response(request_rec *r, const char *response_type, const char *requested_response_mode, char **code, char **id_token, char **access_token, char **token_type, const char *used_response_mode);
 apr_byte_t oidc_proto_validate_code_response(request_rec *r, const char *response_type, char **id_token, char **access_token, char **token_type);
-apr_byte_t oidc_proto_idtoken_verify_signature(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, apr_jwt_t *jwt, apr_byte_t *refresh);
-apr_byte_t oidc_proto_validate_iat(request_rec *r, oidc_provider_t *provider, apr_jwt_t *jwt);
-apr_byte_t oidc_proto_validate_exp(request_rec *r, apr_jwt_t *jwt);
+apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, apr_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri, apr_hash_t *symmetric_keys);
+apr_byte_t oidc_proto_validate_jwt(request_rec *r, apr_jwt_t *jwt, const char *iss, apr_byte_t exp_is_mandatory, apr_byte_t iat_is_mandatory, int iat_slack);
 apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce);
+// non-static for test.c
+apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *nonce, apr_jwt_t *jwt);
 
 // oidc_authz.c
 int oidc_authz_worker(request_rec *r, const json_t *const claims, const require_line *const reqs, int nelts);
@@ -387,6 +394,8 @@ apr_byte_t oidc_json_object_get_string(apr_pool_t *pool, json_t *json, const cha
 apr_byte_t oidc_json_object_get_int(apr_pool_t *pool, json_t *json, const char *name, int *value, const int default_value);
 char *oidc_util_html_escape(apr_pool_t *pool, const char *input);
 void oidc_util_table_add_query_encoded_params(apr_pool_t *pool, apr_table_t *table, const char *params);
+apr_hash_t * oidc_util_merge_symmetric_key(apr_pool_t *pool, apr_hash_t *private_keys, const char *secret, const char *hash_algo);
+apr_hash_t * oidc_util_merge_key_sets(apr_pool_t *pool, apr_hash_t *k1, apr_hash_t *k2);
 
 // oidc_crypto.c
 unsigned char *oidc_crypto_aes_encrypt(request_rec *r, oidc_cfg *cfg, unsigned char *plaintext, int *len);
@@ -398,7 +407,7 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg, const 
 apr_byte_t oidc_metadata_provider_parse(request_rec *r, json_t *j_provider, oidc_provider_t *provider);
 apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg *cfg, apr_array_header_t **arr);
 apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *selected, oidc_provider_t **provider);
-apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, json_t **j_jwks, apr_byte_t *refresh);
+apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg, const oidc_jwks_uri_t *jwks_uri, json_t **j_jwks, apr_byte_t *refresh);
 
 // oidc_session.c
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20081201
