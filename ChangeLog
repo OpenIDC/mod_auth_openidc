@@ -1,3 +1,6 @@
+2/15/2015
+- add support for configurable introspection HTTP method (OIDCOAuthIntrospectionEndpointMethod)
+
 2/12/2015
 - add support for configuration of maximum session duration
 - bump to 1.8.0rc1

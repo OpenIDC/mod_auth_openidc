@@ -218,6 +218,7 @@ typedef struct oidc_oauth_t {
 	char *client_id;
 	char *client_secret;
 	char *introspection_endpoint_url;
+	char *introspection_endpoint_method;
 	char *introspection_endpoint_params;
 	char *introspection_endpoint_auth;
 	char *introspection_token_param_name;

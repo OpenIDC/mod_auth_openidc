@@ -122,6 +122,8 @@
 #define OIDC_DEFAULT_COOKIE_PATH "/"
 /* default OAuth 2.0 introspection token parameter name */
 #define OIDC_DEFAULT_OAUTH_TOKEN_PARAM_NAME "token"
+/* default OAuth 2.0 introspection call HTTP method */
+#define OIDC_DEFAULT_OAUTH_ENDPOINT_METHOD "POST"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -614,6 +616,21 @@ static const char * oidc_set_pass_cookies(cmd_parms *cmd, void *m,
 }
 
 /*
+ * set the HTTP method to use in an OAuth 2.0 token introspection/validation call
+ */
+static const char * oidc_set_introspection_method(cmd_parms *cmd, void *m,
+		const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+
+	if ((apr_strnatcmp(arg, "GET") == 0) || (apr_strnatcmp(arg, "POST") == 0)) {
+		return ap_set_string_slot(cmd, cfg, arg);
+	}
+
+	return "parameter must be 'GET' or 'POST'";
+}
+
+/*
  * create a new server config record with defaults
  */
 void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
@@ -667,6 +684,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->oauth.client_id = NULL;
 	c->oauth.client_secret = NULL;
 	c->oauth.introspection_endpoint_url = NULL;
+	c->oauth.introspection_endpoint_method = OIDC_DEFAULT_OAUTH_ENDPOINT_METHOD;
 	c->oauth.introspection_endpoint_params = NULL;
 	c->oauth.introspection_endpoint_auth = NULL;
 	c->oauth.introspection_token_param_name = OIDC_DEFAULT_OAUTH_TOKEN_PARAM_NAME;
@@ -875,6 +893,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->oauth.introspection_endpoint_url != NULL ?
 					add->oauth.introspection_endpoint_url :
 					base->oauth.introspection_endpoint_url;
+	c->oauth.introspection_endpoint_method =
+			add->oauth.introspection_endpoint_method != OIDC_DEFAULT_OAUTH_ENDPOINT_METHOD ?
+					add->oauth.introspection_endpoint_method :
+					base->oauth.introspection_endpoint_method;
 	c->oauth.introspection_endpoint_params =
 			add->oauth.introspection_endpoint_params != NULL ?
 					add->oauth.introspection_endpoint_params :
@@ -1613,6 +1635,11 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, oauth.introspection_endpoint_url),
 				RSRC_CONF,
 				"Define the OAuth AS Introspection Endpoint URL (e.g.: https://localhost:9031/as/token.oauth2)"),
+		AP_INIT_TAKE1("OIDCOAuthIntrospectionEndpointMethod",
+				oidc_set_introspection_method,
+				(void *)APR_OFFSETOF(oidc_cfg, oauth.introspection_endpoint_method),
+				RSRC_CONF,
+				"Define the HTTP method to use for the introspection call: one of \"GET\" or \"POST\" (default)"),
 		AP_INIT_TAKE1("OIDCOAuthIntrospectionEndpointParams",
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.introspection_endpoint_params),
