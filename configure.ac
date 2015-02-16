@@ -1,4 +1,4 @@
-AC_INIT([mod_auth_openidc],[1.8.0rc3],[hzandbelt@pingidentity.com])
+AC_INIT([mod_auth_openidc],[1.8.0rc4],[hzandbelt@pingidentity.com])
 
 AC_SUBST(NAMEVER, AC_PACKAGE_TARNAME()-AC_PACKAGE_VERSION())
 
@@ -72,7 +72,7 @@ AC_ARG_WITH([libhiredis],
   [AS_HELP_STRING([--with-libhiredis],
     [support Redis @<:@default=check@:>@])],
   [],
-  [with_libhiredis=check])
+  [with_libhiredis=yes])
 AS_CASE(["$with_libhiredis"],
   [yes], [if test "$HIREDIS_LIBS" == ""; then PKG_CHECK_MODULES([HIREDIS], [libhiredis], [HAVE_LIBHIREDIS=1], [HAVE_LIBHIREDIS=0]) ; else [HAVE_LIBHIREDIS=1] ; fi],
   [no], [HAVE_LIBHIREDIS=0],
