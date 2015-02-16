@@ -903,7 +903,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->oauth.introspection_endpoint_url :
 					base->oauth.introspection_endpoint_url;
 	c->oauth.introspection_endpoint_method =
-			add->oauth.introspection_endpoint_method != OIDC_DEFAULT_OAUTH_ENDPOINT_METHOD ?
+			apr_strnatcmp(add->oauth.introspection_endpoint_method, OIDC_DEFAULT_OAUTH_ENDPOINT_METHOD) != 0 ?
 					add->oauth.introspection_endpoint_method :
 					base->oauth.introspection_endpoint_method;
 	c->oauth.introspection_endpoint_params =

@@ -4,6 +4,7 @@
 - fix searching for keys with a "x5t" thumbprint
 - refactor response type handling; more strict matching of requested response type
 - make compiled in Redis support optional
+- fix oauth.introspection_endpoint_method in initialization
 - bump to 1.8.0rc4
 
 2/15/2015
