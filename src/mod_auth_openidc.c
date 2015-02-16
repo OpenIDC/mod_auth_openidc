@@ -76,22 +76,13 @@
 
 #include "mod_auth_openidc.h"
 
-// TODO: improve JSON handling
-
-// TODO: improve redirect_uri = content handling
-// TODO: harmonize user facing error handling
-// TODO: sort out oidc_cfg vs. oidc_dir_cfg stuff
-// TODO: rigid input checking on discovery responses and authorization responses
-// TODO: check self-issued support
-
-// TODO: README.quickstart
-
-// TODO: use oidc_get_current_url + configured RedirectURIPath to determine the RedirectURI more dynamically
-
-// TODO: do we always want to refresh keys when signature does not validate? (risking DOS attacks, or does the nonce help against that?)
-//       do we now still want to refresh jkws once per hour (it helps to reduce the number of failed verifications, at the cost of too-many-downloads overhead)
-//       refresh metadata once-per too? (for non-signing key changes)
-// TODO: check the Apache 2.4 compilation/#defines
+// TODO:
+// - sort out oidc_cfg vs. oidc_dir_cfg stuff
+// - rigid input checking on discovery responses
+// - check self-issued support
+// - README.quickstart
+// - refresh metadata once-per too? (for non-signing key changes)
+// - check the Apache 2.4 compilation/#defines
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -902,6 +893,45 @@ static void oidc_store_access_token_expiry(request_rec *r, session_rec *session,
 }
 
 /*
+ * set the unique user identifier that will be propagated in the Apache r->user and REMOTE_USER variables
+ */
+static apr_byte_t oidc_get_remote_user(request_rec *r, oidc_cfg *c,
+		oidc_provider_t *provider, apr_jwt_t *jwt, char **user) {
+
+	char *issuer = provider->issuer;
+	char *claim_name = apr_pstrdup(r->pool, c->remote_user_claim);
+	int n = strlen(claim_name);
+	int post_fix_with_issuer = (claim_name[n - 1] == '@');
+	if (post_fix_with_issuer) {
+		claim_name[n - 1] = '\0';
+		issuer =
+				(strstr(issuer, "https://") == NULL) ?
+						apr_pstrdup(r->pool, issuer) :
+						apr_pstrdup(r->pool, issuer + strlen("https://"));
+	}
+
+	/* extract the username claim (default: "sub") from the id_token payload */
+	char *username = NULL;
+	if (apr_jwt_get_string(r->pool, jwt->payload.value.json, claim_name, TRUE,
+			&username, NULL) == FALSE) {
+		oidc_error(r,
+				"OIDCRemoteUserClaim is set to \"%s\", but the id_token JSON payload did not contain a \"%s\" string",
+				c->remote_user_claim, claim_name);
+		*user = NULL;
+		return FALSE;
+	}
+
+	/* set the unique username in the session (will propagate to r->user/REMOTE_USER) */
+	*user = post_fix_with_issuer ?
+			apr_psprintf(r->pool, "%s@%s", username, issuer) :
+			apr_pstrdup(r->pool, username);
+
+	oidc_debug(r, "set user to \"%s\"", *user);
+
+	return TRUE;
+}
+
+/*
  * store resolved information in the session
  */
 static void oidc_save_in_session(request_rec *r, oidc_cfg *c,
@@ -984,83 +1014,92 @@ static void oidc_save_in_session(request_rec *r, oidc_cfg *c,
 }
 
 /*
- * handle the flow where a "code" was provided in the response
+ * parse the expiry for the access token
  */
-static apr_byte_t oidc_handle_code_flow(request_rec *r, oidc_cfg *c,
-		json_t *proto_state, oidc_provider_t *provider, const char *code,
-		apr_jwt_t **id_token_jwt, char **id_token, char **access_token,
-		char **token_type, int *expires_in, char **refresh_token,
-		char **remoteUser, char **s_error) {
+static int oidc_parse_expires_in(request_rec *r, const char *expires_in) {
+	if (expires_in != NULL) {
+		char *ptr = NULL;
+		long number = strtol(expires_in, &ptr, 10);
+		if (number <= 0) {
+			oidc_warn(r,
+					"could not convert \"expires_in\" value (%s) to a number",
+					expires_in);
+			return -1;
+		}
+		return number;
+	}
+	return -1;
+}
 
-	const char *response_type = json_string_value(
+/*
+ * handle the different flows (hybrid, implicit, Authorization Code)
+ */
+static apr_byte_t oidc_handle_flows(request_rec *r, oidc_cfg *c,
+		json_t *proto_state, oidc_provider_t *provider, apr_table_t *params,
+		const char *response_mode, apr_jwt_t **jwt) {
+
+	apr_byte_t rc = FALSE;
+
+	const char *requested_response_type = json_string_value(
 			json_object_get(proto_state, "response_type"));
 
-	/* if an id_token was provided in the authorization response: validate the code against the c_hash claim */
-	if (*id_token_jwt != NULL) {
-		if (oidc_proto_validate_code(r, provider, *id_token_jwt, response_type,
-				code) == FALSE) {
-			apr_jwt_destroy(*id_token_jwt);
-			*s_error = "Code validation failed.";
-			return FALSE;
-		}
+	/* handle the requested response type/mode */
+	if (oidc_util_spaced_string_equals(r->pool, requested_response_type,
+			"code id_token token")) {
+		rc = oidc_proto_authorization_response_code_idtoken_token(r, c,
+				proto_state, provider, params, response_mode, jwt);
+	} else if (oidc_util_spaced_string_equals(r->pool, requested_response_type,
+			"code id_token")) {
+		rc = oidc_proto_authorization_response_code_idtoken(r, c, proto_state,
+				provider, params, response_mode, jwt);
+	} else if (oidc_util_spaced_string_equals(r->pool, requested_response_type,
+			"code token")) {
+		rc = oidc_proto_handle_authorization_response_code_token(r, c,
+				proto_state, provider, params, response_mode, jwt);
+	} else if (oidc_util_spaced_string_equals(r->pool, requested_response_type,
+			"code")) {
+		rc = oidc_proto_handle_authorization_response_code(r, c, proto_state,
+				provider, params, response_mode, jwt);
+	} else if (oidc_util_spaced_string_equals(r->pool, requested_response_type,
+			"id_token token")) {
+		rc = oidc_proto_handle_authorization_response_idtoken_token(r, c,
+				proto_state, provider, params, response_mode, jwt);
+	} else if (oidc_util_spaced_string_equals(r->pool, requested_response_type,
+			"id_token")) {
+		rc = oidc_proto_handle_authorization_response_idtoken(r, c, proto_state,
+				provider, params, response_mode, jwt);
+	} else {
+		oidc_error(r, "unsupported response type: \"%s\"",
+				requested_response_type);
 	}
 
-	char *c_id_token = NULL, *c_access_token = NULL, *c_token_type = NULL,
-			*c_refresh_token = NULL;
-	int c_expires_in = -1;
-
-	/* resolve the code against the token endpoint */
-	if (oidc_proto_resolve_code(r, c, provider, code, &c_id_token,
-			&c_access_token, &c_token_type, &c_expires_in,
-			&c_refresh_token) == FALSE) {
-		apr_jwt_destroy(*id_token_jwt);
-		*s_error = "Failed to resolve code.";
-		return FALSE;
+	if ((rc == FALSE) && (*jwt != NULL)) {
+		apr_jwt_destroy(*jwt);
+		*jwt = NULL;
 	}
 
-	/* validate the response on exchanging the code at the token endpoint */
-	if (oidc_proto_validate_code_response(r, response_type, &c_id_token,
-			&c_access_token, &c_token_type) == FALSE) {
-		apr_jwt_destroy(*id_token_jwt);
-		*s_error = "Code response validation failed.";
-		return FALSE;
-	}
+	return rc;
+}
 
-	/* use from the response whatever we still need */
-	if (*id_token == NULL) {
-		*id_token = c_id_token;
+/*
+ * resolves claims from the user info endpoint and returns the stringified response
+ */
+static const char *oidc_resolve_claims_from_user_info_endpoint(request_rec *r,
+		oidc_cfg *c, oidc_provider_t *provider, apr_table_t *params) {
+	const char *result = NULL;
+	if (provider->userinfo_endpoint_url == NULL) {
+		oidc_debug(r,
+				"not resolving user info claims because userinfo_endpoint is not set");
+	} else if (apr_table_get(params, "access_token") == NULL) {
+		oidc_debug(r,
+				"not resolving user info claims because access_token is not provided");
+	} else if (oidc_proto_resolve_userinfo(r, c, provider,
+			apr_table_get(params, "access_token"), &result) == FALSE) {
+		oidc_debug(r,
+				"resolving user info claims failed, nothing will be stored in the session");
+		result = NULL;
 	}
-	if (*access_token == NULL) {
-		*access_token = c_access_token;
-		*token_type = c_token_type;
-		*expires_in = c_expires_in;
-	}
-	if (*refresh_token == NULL) {
-		*refresh_token = c_refresh_token;
-	}
-
-	/* TODO: Google does not allow nonce in "code" or "code token" flows... */
-	json_t *nonce = json_object_get(proto_state, "nonce");
-	if ((strcmp(provider->issuer, "accounts.google.com") == 0)
-			&& ((oidc_util_spaced_string_equals(r->pool,
-					provider->response_type, "code"))
-					|| (oidc_util_spaced_string_equals(r->pool,
-							provider->response_type, "code token"))))
-		nonce = NULL;
-
-	/* if we had no id_token yet, we must have one now (by flow) */
-	if (*id_token_jwt == NULL) {
-		if (oidc_proto_parse_idtoken(r, c, provider, *id_token,
-				nonce ? json_string_value(nonce) : NULL, remoteUser,
-						id_token_jwt, TRUE) == FALSE) {
-			oidc_warn(r,
-					"could not parse or verify the id_token contents, return HTTP_UNAUTHORIZED");
-			*s_error = "Failed to parse id_token.";
-			return FALSE;
-		}
-	}
-
-	return TRUE;
+	return result;
 }
 
 /*
@@ -1068,91 +1107,31 @@ static apr_byte_t oidc_handle_code_flow(request_rec *r, oidc_cfg *c,
  * id_token and storing the authenticated user state in the session
  */
 static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
-		session_rec *session, const char *state, char *code, char *id_token,
-		char *access_token, char *token_type, char *s_expires_in,
-		char *session_state, const char *error, const char *error_description,
-		const char *response_mode) {
+		session_rec *session, apr_table_t *params, const char *response_mode) {
 
-	oidc_debug(r,
-			"enter, state=%s, code=%s, id_token=%s, access_token=%s, token_type=%s, expires_in=%s, session_state=%s, error=%s, error_description=%s, response_mode=%s",
-			state, code, id_token, access_token, token_type, s_expires_in,
-			session_state, error, error_description, response_mode);
+	oidc_debug(r, "enter, response_mode=%s", response_mode);
 
-	struct oidc_provider_t *provider = NULL;
-	char *refresh_token = NULL;
-	int expires_in = -1;
+	oidc_provider_t *provider = NULL;
 	json_t *proto_state = NULL;
-	const char *response_type = NULL;
-	const char *requested_response_mode = NULL;
-	const char *nonce = NULL;
-	const char *prompt = NULL;
+	apr_jwt_t *jwt = NULL;
 
 	/* match the returned state parameter against the state stored in the browser */
-	if (oidc_authorization_response_match_state(r, c, state, &provider,
-			&proto_state) == FALSE) {
+	if (oidc_authorization_response_match_state(r, c,
+			apr_table_get(params, "state"), &provider, &proto_state) == FALSE) {
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	response_type = json_string_value(
-			json_object_get(proto_state, "response_type"));
-	requested_response_mode = json_string_value(
-			json_object_get(proto_state, "response_mode"));
-	nonce = json_object_get(proto_state, "nonce") ?
-			json_string_value(json_object_get(proto_state, "nonce")) : NULL;
-	prompt =
-			json_object_get(proto_state, "prompt") ?
-					json_string_value(json_object_get(proto_state, "prompt")) :
-					NULL;
-
 	/* see if the response is an error response */
-	if (error != NULL)
-		return oidc_authorization_response_error(r, c, proto_state, error,
-				error_description);
-
-	/* check the required response parameters for the requested flow */
-	if (oidc_proto_validate_authorization_response(r, response_type,
-			requested_response_mode, &code, &id_token, &access_token,
-			&token_type, response_mode) == FALSE) {
+	if (apr_table_get(params, "error") != NULL)
 		return oidc_authorization_response_error(r, c, proto_state,
-				"Could not validate authorization response.", NULL);
-	}
+				apr_table_get(params, "error"),
+				apr_table_get(params, "error_description"));
 
-	/* parse the expires_in */
-	if (s_expires_in != NULL) {
-		char *ptr = NULL;
-		long number = strtol(s_expires_in, &ptr, 10);
-		if (number <= 0) {
-			oidc_warn(r,
-					"could not convert \"expires_in\" value (%s) to a number",
-					s_expires_in);
-			number = -1;
-		}
-		expires_in = number;
-	}
-
-	char *remoteUser = NULL;
-	apr_jwt_t *jwt = NULL;
-
-	/* parse and validate the obtained id_token */
-	if (id_token != NULL) {
-		if (oidc_proto_parse_idtoken(r, c, provider, id_token, nonce,
-				&remoteUser, &jwt, FALSE) == FALSE) {
-			oidc_warn(r, "could not parse or verify the id_token contents");
-			return oidc_authorization_response_error(r, c, proto_state,
-					"Could not parse id_token.", NULL);
-		}
-	}
-
-	/* resolve the code against the token endpoint of the OP */
-	if (code != NULL) {
-		char *s_error = NULL;
-		if (oidc_handle_code_flow(r, c, proto_state, provider, code, &jwt,
-				&id_token, &access_token, &token_type, &expires_in,
-				&refresh_token, &remoteUser, &s_error) == FALSE) {
-			return oidc_authorization_response_error(r, c, proto_state, s_error,
-					NULL);
-		}
-	}
+	/* handle the code, implicit or hybrid flow */
+	if (oidc_handle_flows(r, c, proto_state, provider, params, response_mode,
+			&jwt) == FALSE)
+		return oidc_authorization_response_error(r, c, proto_state,
+				"Error in handling response type.", NULL);
 
 	if (jwt == NULL) {
 		oidc_error(r, "no id_token was provided");
@@ -1160,76 +1139,68 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 				"No id_token was provided.", NULL);
 	}
 
-	/* validate the access token */
-	if (access_token != NULL) {
-		if (oidc_proto_validate_access_token(r, provider, jwt, response_type,
-				access_token, token_type) == FALSE) {
-			oidc_warn(r, "access_token did not validate, dropping it");
-			access_token = NULL;
-		}
-	}
+	int expires_in = oidc_parse_expires_in(r,
+			apr_table_get(params, "expires_in"));
 
 	/*
 	 * optionally resolve additional claims against the userinfo endpoint
 	 * parsed claims are not actually used here but need to be parsed anyway for error checking purposes
 	 */
-	const char *claims = NULL;
-	json_t *j_claims = NULL;
-	if (provider->userinfo_endpoint_url == NULL) {
-		oidc_debug(r,
-				"not resolving user info claims because userinfo_endpoint is not set");
-	} else if (access_token == NULL) {
-		oidc_debug(r,
-				"not resolving user info claims because access_token is not provided");
-	} else if (oidc_proto_resolve_userinfo(r, c, provider, access_token,
-			&claims, &j_claims) == FALSE) {
-		oidc_debug(r,
-				"resolving user info claims failed, nothing will be stored in the session");
-		claims = NULL;
-	}
+	const char *claims = oidc_resolve_claims_from_user_info_endpoint(r, c,
+			provider, params);
 
-	/* session management: if the user in the new response is not equal to the old one, error out */
-	if ((prompt != NULL) && (apr_strnatcmp(prompt, "none") == 0)) {
-		// TOOD: actually need to compare sub? (need to store it in the session separately then
-		//const char *sub = NULL;
-		//oidc_session_get(r, session, "sub", &sub);
-		//if (apr_strnatcmp(sub, jwt->payload.sub) != 0) {
-		if (apr_strnatcmp(session->remote_user, remoteUser) != 0) {
-			oidc_warn(r,
-					"remoteUser in new id_token is different from current one");
-			return oidc_authorization_response_error(r, c, proto_state,
-					"User changed!", NULL);
+	/* set the user */
+	if (oidc_get_remote_user(r, c, provider, jwt, &r->user) == TRUE) {
+
+		/* session management: if the user in the new response is not equal to the old one, error out */
+		if ((json_object_get(proto_state, "prompt") != NULL)
+				&& (apr_strnatcmp(
+						json_string_value(
+								json_object_get(proto_state, "prompt")), "none")
+						== 0)) {
+			// TOOD: actually need to compare sub? (need to store it in the session separately then
+			//const char *sub = NULL;
+			//oidc_session_get(r, session, "sub", &sub);
+			//if (apr_strnatcmp(sub, jwt->payload.sub) != 0) {
+			if (apr_strnatcmp(session->remote_user, r->user) != 0) {
+				oidc_warn(r,
+						"user set from new id_token is different from current one");
+				apr_jwt_destroy(jwt);
+				return oidc_authorization_response_error(r, c, proto_state,
+						"User changed!", NULL);
+			}
 		}
+
+		/* store resolved information in the session */
+		oidc_save_in_session(r, c, session, provider, r->user,
+				apr_table_get(params, "id_token"), jwt, claims,
+				apr_table_get(params, "access_token"), expires_in,
+				apr_table_get(params, "refresh_token"),
+				apr_table_get(params, "session_state"));
 	}
-
-	/* store resolved information in the session */
-	oidc_save_in_session(r, c, session, provider, remoteUser, id_token, jwt,
-			claims, access_token, expires_in, refresh_token, session_state);
-
-	/* not sure whether this is required, but it won't hurt */
-	r->user = remoteUser;
 
 	/* restore the original protected URL that the user was trying to access */
 	const char *original_url = apr_pstrdup(r->pool,
 			json_string_value(json_object_get(proto_state, "original_url")));
+	const char *original_method = apr_pstrdup(r->pool,
+			json_string_value(json_object_get(proto_state, "original_method")));
+
+	/* cleanup */
+	json_decref(proto_state);
+	apr_jwt_destroy(jwt);
+
+	/* check that we've actually authenticated a user; functions as error handling for oidc_get_remote_user */
+	if (r->user == NULL)
+		return HTTP_UNAUTHORIZED;
 
 	/* check whether form post data was preserved; if so restore it */
-	if (apr_strnatcmp(
-			json_string_value(json_object_get(proto_state, "original_method")),
-			"form_post") == 0) {
-		json_decref(proto_state);
+	if (apr_strnatcmp(original_method, "form_post") == 0) {
 		return oidc_restore_preserved_post(r, original_url);
 	}
 
 	/* log the successful response */
-	oidc_debug(r, "session created and stored, redirecting to original url: %s",
+	oidc_debug(r, "session created and stored, redirecting to original URL: %s",
 			original_url);
-
-	/* cleanup */
-	apr_jwt_destroy(jwt);
-	json_decref(proto_state);
-	if (j_claims != NULL)
-		json_decref(j_claims);
 
 	/* now we've authenticated the user so go back to the URL that he originally tried to access */
 	apr_table_add(r->headers_out, "Location", original_url);
@@ -1247,9 +1218,7 @@ static int oidc_handle_post_authorization_response(request_rec *r, oidc_cfg *c,
 	oidc_debug(r, "enter");
 
 	/* initialize local variables */
-	char *code = NULL, *state = NULL, *id_token = NULL, *access_token = NULL,
-			*token_type = NULL, *response_mode = NULL, *session_state = NULL,
-			*error = NULL, *error_description = NULL, *expires_in = NULL;
+	char *response_mode = NULL;
 
 	/* read the parameters that are POST-ed to us */
 	apr_table_t *params = apr_table_make(r->pool, 8);
@@ -1269,21 +1238,10 @@ static int oidc_handle_post_authorization_response(request_rec *r, oidc_cfg *c,
 	}
 
 	/* get the parameters */
-	code = (char *) apr_table_get(params, "code");
-	state = (char *) apr_table_get(params, "state");
-	id_token = (char *) apr_table_get(params, "id_token");
-	access_token = (char *) apr_table_get(params, "access_token");
-	token_type = (char *) apr_table_get(params, "token_type");
-	expires_in = (char *) apr_table_get(params, "expires_in");
 	response_mode = (char *) apr_table_get(params, "response_mode");
-	session_state = (char *) apr_table_get(params, "session_state");
-	error = (char *) apr_table_get(params, "error");
-	error_description = (char *) apr_table_get(params, "error_description");
 
 	/* do the actual implicit work */
-	return oidc_handle_authorization_response(r, c, session, state, code,
-			id_token, access_token, token_type, expires_in, session_state,
-			error, error_description,
+	return oidc_handle_authorization_response(r, c, session, params,
 			response_mode ? response_mode : "form_post");
 }
 
@@ -1295,26 +1253,28 @@ static int oidc_handle_redirect_authorization_response(request_rec *r,
 
 	oidc_debug(r, "enter");
 
-	/* initialize local variables */
-	char *code = NULL, *state = NULL, *id_token = NULL, *access_token = NULL,
-			*token_type = NULL, *session_state = NULL, *error = NULL,
-			*error_description = NULL, *expires_in = NULL;
+	apr_table_t *params = apr_table_make(r->pool, 8);
+	char *last, *p, *q;
+	const char *key, *val;
 
-	/* get the parameters */
-	oidc_util_get_request_parameter(r, "code", &code);
-	oidc_util_get_request_parameter(r, "state", &state);
-	oidc_util_get_request_parameter(r, "id_token", &id_token);
-	oidc_util_get_request_parameter(r, "access_token", &access_token);
-	oidc_util_get_request_parameter(r, "token_type", &token_type);
-	oidc_util_get_request_parameter(r, "expires_in", &expires_in);
-	oidc_util_get_request_parameter(r, "session_state", &session_state);
-	oidc_util_get_request_parameter(r, "error", &error);
-	oidc_util_get_request_parameter(r, "error_description", &error_description);
+	if (r->args != NULL || strlen(r->args) > 0) {
+		p = apr_strtok(apr_pstrdup(r->pool, r->args), "&", &last);
+		do {
+			if ((p) && ((q = strchr(p, '=')))) {
+				*q = '\0';
+				key = oidc_util_unescape_string(r, p);
+				val = oidc_util_unescape_string(r, q + 1);
+				apr_table_set(params, key, val);
+			}
+			p = apr_strtok(NULL, "&", &last);
+		} while (p);
+	}
+
+	oidc_debug(r, "parsed: \"%s\" in to %d elements", r->args,
+			apr_table_elts(params)->nelts);
 
 	/* do the actual work */
-	return oidc_handle_authorization_response(r, c, session, state, code,
-			id_token, access_token, token_type, expires_in, session_state,
-			error, error_description, "query");
+	return oidc_handle_authorization_response(r, c, session, params, "query");
 }
 
 /*
@@ -1685,7 +1645,9 @@ static apr_uint32_t oidc_transparent_pixel[17] = {
 };
 
 static apr_byte_t oidc_is_get_style_logout(const char *logout_param_value) {
-	return ((logout_param_value != NULL) && (apr_strnatcmp(logout_param_value, OIDC_GET_STYLE_LOGOUT_PARAM_VALUE) == 0));
+	return ((logout_param_value != NULL)
+			&& (apr_strnatcmp(logout_param_value,
+					OIDC_GET_STYLE_LOGOUT_PARAM_VALUE) == 0));
 }
 
 /*
@@ -1705,7 +1667,8 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 
 	/* see if this is the OP calling us, in which case we return HTTP 200 and a transparent pixel */
 	if (oidc_is_get_style_logout(url))
-		return oidc_util_http_send(r, (const char *)&oidc_transparent_pixel, sizeof(oidc_transparent_pixel), "image/png", DONE);
+		return oidc_util_http_send(r, (const char *) &oidc_transparent_pixel,
+				sizeof(oidc_transparent_pixel), "image/png", DONE);
 
 	/* see if we don't need to go somewhere special after killing the session locally */
 	if (url == NULL)

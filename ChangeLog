@@ -2,6 +2,8 @@
 - fix free() crash on simple-valued error printouts
 - fix returning keys without a "kid"
 - fix searching for keys with a "x5t" thumbprint
+- refactor response type handling; more strict matching of requested response type
+- bump to 1.8.0rc3
 
 2/15/2015
 - add support for configurable introspection HTTP method (OIDCOAuthIntrospectionEndpointMethod)

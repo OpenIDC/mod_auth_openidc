@@ -704,49 +704,11 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, apr_jwt_t *jwt,
 }
 
 /*
- * set the unique user identifier that will be propagated in the Apache r->user and REMOTE_USER variables
- */
-static apr_byte_t oidc_proto_set_remote_user(request_rec *r, oidc_cfg *c,
-		oidc_provider_t *provider, apr_jwt_t *jwt, char **user) {
-
-	char *issuer = provider->issuer;
-	char *claim_name = apr_pstrdup(r->pool, c->remote_user_claim);
-	int n = strlen(claim_name);
-	int post_fix_with_issuer = (claim_name[n - 1] == '@');
-	if (post_fix_with_issuer) {
-		claim_name[n - 1] = '\0';
-		issuer =
-				(strstr(issuer, "https://") == NULL) ?
-						apr_pstrdup(r->pool, issuer) :
-						apr_pstrdup(r->pool, issuer + strlen("https://"));
-	}
-
-	/* extract the username claim (default: "sub") from the id_token payload */
-	char *username = NULL;
-	if (apr_jwt_get_string(r->pool, jwt->payload.value.json, claim_name, TRUE,
-			&username, NULL) == FALSE) {
-		oidc_error(r,
-				"OIDCRemoteUserClaim is set to \"%s\", but the id_token JSON payload did not contain a \"%s\" string",
-				c->remote_user_claim, claim_name);
-		return FALSE;
-	}
-
-	/* set the unique username in the session (will propagate to r->user/REMOTE_USER) */
-	*user = post_fix_with_issuer ?
-			apr_psprintf(r->pool, "%s@%s", username, issuer) :
-			apr_pstrdup(r->pool, username);
-
-	oidc_debug(r, "set remote_user to \"%s\"", *user);
-
-	return TRUE;
-}
-
-/*
  * check whether the provided string is a valid id_token and return its parsed contents
  */
 apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char *id_token, const char *nonce,
-		char **user, apr_jwt_t **jwt, apr_byte_t is_code_flow) {
+		apr_jwt_t **jwt, apr_byte_t is_code_flow) {
 
 	char buf[APR_RFC822_DATE_LEN + 1];
 	apr_jwt_error_t err;
@@ -790,18 +752,13 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 		return FALSE;
 	}
 
-	if (oidc_proto_set_remote_user(r, cfg, provider, *jwt, user) == FALSE) {
-		oidc_error(r, "remote user could not be set, aborting");
-		apr_jwt_destroy(*jwt);
-		return FALSE;
-	}
-
 	/* log our results */
 
 	apr_rfc822_date(buf, apr_time_from_sec((*jwt)->payload.exp));
 	oidc_debug(r,
 			"valid id_token for user \"%s\" expires: [%s], in %" JSON_INTEGER_FORMAT " secs from now)",
-			*user, buf, (*jwt)->payload.exp - apr_time_sec(apr_time_now()));
+			(*jwt)->payload.sub, buf,
+			(*jwt)->payload.exp - apr_time_sec(apr_time_now()));
 
 	/* since we've made it so far, we may as well say it is a valid id_token */
 	return TRUE;
@@ -944,7 +901,7 @@ apr_byte_t oidc_proto_refresh_request(request_rec *r, oidc_cfg *cfg,
  */
 apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char *access_token,
-		const char **response, json_t **claims) {
+		const char **response) {
 
 	/* get a handle to the directory config */
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
@@ -961,7 +918,12 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 		return FALSE;
 
 	/* decode and check for an "error" response */
-	return oidc_util_decode_json_and_check_error(r, *response, claims);
+	json_t *claims = NULL;
+	if (oidc_util_decode_json_and_check_error(r, *response, &claims) == FALSE)
+		return FALSE;
+	json_decref(claims);
+
+	return TRUE;
 }
 
 /*
@@ -1164,8 +1126,12 @@ apr_byte_t oidc_proto_validate_code(request_rec *r, oidc_provider_t *provider,
 			sizeof(const char*));
 	*(const char**) apr_array_push(required_for_flows) = "code id_token";
 	*(const char**) apr_array_push(required_for_flows) = "code id_token token";
-	return oidc_proto_validate_hash_value(r, provider, jwt, response_type, code,
-			"c_hash", required_for_flows);
+	if (oidc_proto_validate_hash_value(r, provider, jwt, response_type, code,
+			"c_hash", required_for_flows) == FALSE) {
+		oidc_error(r, "could not validate code against c_hash");
+		return FALSE;
+	}
+	return TRUE;
 }
 
 /*
@@ -1173,13 +1139,17 @@ apr_byte_t oidc_proto_validate_code(request_rec *r, oidc_provider_t *provider,
  */
 apr_byte_t oidc_proto_validate_access_token(request_rec *r,
 		oidc_provider_t *provider, apr_jwt_t *jwt, const char *response_type,
-		const char *access_token, const char *token_type) {
+		const char *access_token) {
 	apr_array_header_t *required_for_flows = apr_array_make(r->pool, 2,
 			sizeof(const char*));
 	*(const char**) apr_array_push(required_for_flows) = "id_token token";
 	*(const char**) apr_array_push(required_for_flows) = "code id_token token";
-	return oidc_proto_validate_hash_value(r, provider, jwt, response_type,
-			access_token, "at_hash", required_for_flows);
+	if (oidc_proto_validate_hash_value(r, provider, jwt, response_type,
+			access_token, "at_hash", required_for_flows) == FALSE) {
+		oidc_error(r, "could not validate access token against at_hash");
+		return FALSE;
+	}
+	return TRUE;
 }
 
 /*
@@ -1211,121 +1181,11 @@ apr_byte_t oidc_proto_flow_is_supported(apr_pool_t *pool, const char *flow) {
 }
 
 /*
- * check the required parameters for the various flows on receipt of the authorization response
- */
-apr_byte_t oidc_proto_validate_authorization_response(request_rec *r,
-		const char *response_type, const char *requested_response_mode,
-		char **code, char **id_token, char **access_token, char **token_type,
-		const char *used_response_mode) {
-
-	oidc_debug(r,
-			"enter, response_type=%s, requested_response_mode=%s, code=%s, id_token=%s, access_token=%s, token_type=%s, used_response_mode=%s",
-			response_type, requested_response_mode, *code, *id_token,
-			*access_token, *token_type, used_response_mode);
-
-	/* check the requested response mode against the one used by the OP */
-	if ((requested_response_mode != NULL)
-			&& (strcmp(requested_response_mode, used_response_mode)) != 0) {
-		/*
-		 * only warn because I'm not sure that most OPs will respect a requested
-		 * response_mode and rather use the default for the flow
-		 */
-		oidc_warn(r,
-				"requested response_mode is \"%s\" the provider used \"%s\" for the authorization response...",
-				requested_response_mode, used_response_mode);
-	}
-
-	/*
-	 * check code parameter
-	 */
-	if (oidc_util_spaced_string_contains(r->pool, response_type, "code")) {
-
-		if (*code == NULL) {
-			oidc_error(r,
-					"requested flow is \"%s\" but no \"code\" parameter found in the authorization response",
-					response_type);
-			return FALSE;
-		}
-
-	} else {
-
-		if (*code != NULL) {
-			oidc_warn(r,
-					"requested flow is \"%s\" but there is a \"code\" parameter in the authorization response that will be dropped",
-					response_type);
-			*code = NULL;
-		}
-	}
-
-	/*
-	 * check id_token parameter
-	 */
-	if (oidc_util_spaced_string_contains(r->pool, response_type, "id_token")) {
-
-		if (*id_token == NULL) {
-			oidc_error(r,
-					"requested flow is \"%s\" but no \"id_token\" parameter found in the authorization response",
-					response_type);
-			return FALSE;
-		}
-
-	} else {
-
-		if (*id_token != NULL) {
-			oidc_warn(r,
-					"requested flow is \"%s\" but there is an \"id_token\" parameter in the authorization response that will be dropped",
-					response_type);
-			*id_token = NULL;
-		}
-
-	}
-
-	/*
-	 * check access_token parameter
-	 */
-	if (oidc_util_spaced_string_contains(r->pool, response_type, "token")) {
-
-		if (*access_token == NULL) {
-			oidc_error(r,
-					"requested flow is \"%s\" but no \"access_token\" parameter found in the authorization response",
-					response_type);
-			return FALSE;
-		}
-
-		if (*token_type == NULL) {
-			oidc_error(r,
-					"requested flow is \"%s\" but no \"token_type\" parameter found in the authorization response",
-					response_type);
-			return FALSE;
-		}
-
-	} else {
-
-		if (*access_token != NULL) {
-			oidc_warn(r,
-					"requested flow is \"%s\" but there is an \"access_token\" parameter in the authorization response that will be dropped",
-					response_type);
-			*access_token = NULL;
-		}
-
-		if (*token_type != NULL) {
-			oidc_warn(r,
-					"requested flow is \"%s\" but there is a \"token_type\" parameter in the authorization response that will be dropped",
-					response_type);
-			*token_type = NULL;
-		}
-
-	}
-
-	return TRUE;
-}
-
-/*
  * check the required parameters for the various flows after resolving the authorization code
  */
-apr_byte_t oidc_proto_validate_code_response(request_rec *r,
-		const char *response_type, char **id_token, char **access_token,
-		char **token_type) {
+static apr_byte_t oidc_proto_validate_code_response(request_rec *r,
+		const char *response_type, char *id_token, char *access_token,
+		char *token_type) {
 
 	oidc_debug(r, "enter");
 
@@ -1333,61 +1193,438 @@ apr_byte_t oidc_proto_validate_code_response(request_rec *r,
 	 * check id_token parameter
 	 */
 	if (!oidc_util_spaced_string_contains(r->pool, response_type, "id_token")) {
-
-		if (*id_token == NULL) {
+		if (id_token == NULL) {
 			oidc_error(r,
 					"requested flow is \"%s\" but no \"id_token\" parameter found in the code response",
 					response_type);
 			return FALSE;
 		}
-
 	} else {
-
-		if (*id_token != NULL) {
+		if (id_token != NULL) {
 			oidc_warn(r,
 					"requested flow is \"%s\" but there is an \"id_token\" parameter in the code response that will be dropped",
 					response_type);
-			*id_token = NULL;
 		}
-
 	}
 
 	/*
 	 * check access_token parameter
 	 */
 	if (!oidc_util_spaced_string_contains(r->pool, response_type, "token")) {
-
-		if (*access_token == NULL) {
+		if (access_token == NULL) {
 			oidc_error(r,
 					"requested flow is \"%s\" but no \"access_token\" parameter found in the code response",
 					response_type);
 			return FALSE;
 		}
-
-		if (*token_type == NULL) {
+		if (token_type == NULL) {
 			oidc_error(r,
 					"requested flow is \"%s\" but no \"token_type\" parameter found in the code response",
 					response_type);
 			return FALSE;
 		}
-
 	} else {
-
-		if (*access_token != NULL) {
+		if (access_token != NULL) {
 			oidc_warn(r,
 					"requested flow is \"%s\" but there is an \"access_token\" parameter in the code response that will be dropped",
 					response_type);
-			*access_token = NULL;
 		}
 
-		if (*token_type != NULL) {
+		if (token_type != NULL) {
 			oidc_warn(r,
 					"requested flow is \"%s\" but there is a \"token_type\" parameter in the code response that will be dropped",
 					response_type);
-			*token_type = NULL;
 		}
-
 	}
+
+	return TRUE;
+}
+
+/*
+ * validate the response parameters provided by the OP against the requested response type
+ */
+static apr_byte_t oidc_proto_validate_response_type(request_rec *r,
+		const char *requested_response_type, const char *code,
+		const char *id_token, const char *access_token) {
+
+	if (oidc_util_spaced_string_contains(r->pool, requested_response_type,
+			"code")) {
+		if (code == NULL) {
+			oidc_error(r,
+					"the requested response type was (%s) but the response does not contain a \"code\" parameter",
+					requested_response_type);
+			return FALSE;
+		}
+	} else if (code != NULL) {
+		oidc_error(r,
+				"the requested response type was (%s) but the response contains a \"code\" parameter",
+				requested_response_type);
+		return FALSE;
+	}
+
+	if (oidc_util_spaced_string_contains(r->pool, requested_response_type,
+			"id_token")) {
+		if (id_token == NULL) {
+			oidc_error(r,
+					"the requested response type was (%s) but the response does not contain an \"id_token\" parameter",
+					requested_response_type);
+			return FALSE;
+		}
+	} else if (id_token != NULL) {
+		oidc_error(r,
+				"the requested response type was (%s) but the response contains an \"id_token\" parameter",
+				requested_response_type);
+		return FALSE;
+	}
+
+	if (oidc_util_spaced_string_contains(r->pool, requested_response_type,
+			"token")) {
+		if (access_token == NULL) {
+			oidc_error(r,
+					"the requested response type was (%s) but the response does not contain an \"access_token\" parameter",
+					requested_response_type);
+			return FALSE;
+		}
+	} else if (access_token != NULL) {
+		oidc_error(r,
+				"the requested response type was (%s) but the response contains an \"access_token\" parameter",
+				requested_response_type);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/*
+ * validate the response mode used by the OP against the requested response mode
+ */
+static apr_byte_t oidc_proto_validate_response_mode(request_rec *r,
+		json_t *proto_state, const char *response_mode,
+		const char *default_response_mode) {
+
+	const char *requested_response_mode =
+			json_object_get(proto_state, "response_mode") ?
+					json_string_value(
+							json_object_get(proto_state, "response_mode")) :
+					default_response_mode;
+
+	if (apr_strnatcmp(requested_response_mode, response_mode) != 0) {
+		oidc_error(r,
+				"requested response mode (%s) does not match the response mode used by the OP (%s)",
+				requested_response_mode, response_mode);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/*
+ * helper function to validate both the response type and the response mode in a single function call
+ */
+static apr_byte_t oidc_proto_validate_response_type_and_response_mode(
+		request_rec *r, const char *requested_response_type,
+		apr_table_t *params, json_t *proto_state, const char *response_mode,
+		const char *default_response_mode) {
+
+	const char *code = apr_table_get(params, "code");
+	const char *id_token = apr_table_get(params, "id_token");
+	const char *access_token = apr_table_get(params, "access_token");
+
+	if (oidc_proto_validate_response_type(r, requested_response_type, code,
+			id_token, access_token) == FALSE)
+		return FALSE;
+
+	if (oidc_proto_validate_response_mode(r, proto_state, response_mode,
+			default_response_mode) == FALSE)
+		return FALSE;
+
+	return TRUE;
+}
+
+/*
+ * parse and id_token and check the c_hash if the code is provided
+ */
+static apr_byte_t oidc_proto_parse_idtoken_and_validate_code(request_rec *r,
+		oidc_cfg *c, json_t *proto_state, oidc_provider_t *provider,
+		const char *response_type, apr_table_t *params, apr_jwt_t **jwt,
+		apr_byte_t must_validate_code) {
+
+	const char *code = apr_table_get(params, "code");
+	const char *id_token = apr_table_get(params, "id_token");
+
+	apr_byte_t is_code_flow = (oidc_util_spaced_string_contains(r->pool,
+			response_type, "code") == TRUE)
+			&& (oidc_util_spaced_string_contains(r->pool, response_type,
+					"id_token") == FALSE);
+
+	json_t *nonce = json_object_get(proto_state, "nonce");
+
+	/* TODO: Google does not allow nonce in "code" or "code token" flows... */
+	if ((is_code_flow)
+			&& (strcmp(provider->issuer, "accounts.google.com") == 0))
+		nonce = NULL;
+
+	if (oidc_proto_parse_idtoken(r, c, provider, id_token,
+			nonce ? json_string_value(nonce) : NULL, jwt, is_code_flow) == FALSE)
+		return FALSE;
+
+	if ((must_validate_code == TRUE)
+			&& (oidc_proto_validate_code(r, provider, *jwt, response_type, code)
+					== FALSE))
+		return FALSE;
+
+	return TRUE;
+}
+
+/*
+ * resolve the code against the token endpoint and validate the response that is returned by the OP
+ */
+static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r,
+		oidc_cfg *c, oidc_provider_t *provider, const char *response_type,
+		apr_table_t *params) {
+
+	char *id_token = NULL;
+	char *access_token = NULL;
+	char *token_type = NULL;
+	int expires_in = -1;
+	char *refresh_token = NULL;
+
+	if (oidc_proto_resolve_code(r, c, provider, apr_table_get(params, "code"),
+			&id_token, &access_token, &token_type, &expires_in,
+			&refresh_token) == FALSE) {
+		oidc_error(r, "failed to resolve the code");
+		return FALSE;
+	}
+
+	if (oidc_proto_validate_code_response(r, response_type, id_token,
+			access_token, token_type) == FALSE) {
+		oidc_error(r, "code response validation failed");
+		return FALSE;
+	}
+
+	/* don't override parameters that may already have been (rightfully) set in the authorization response */
+	if ((apr_table_get(params, "id_token") == NULL) && (id_token != NULL)) {
+		apr_table_set(params, "id_token", id_token);
+	}
+
+	if ((apr_table_get(params, "access_token") == NULL)
+			&& (access_token != NULL)) {
+		apr_table_set(params, "access_token", access_token);
+		if (token_type != NULL)
+			apr_table_set(params, "token_type", token_type);
+		if (expires_in != -1)
+			apr_table_set(params, "expires_in",
+					apr_psprintf(r->pool, "%d", expires_in));
+	}
+
+	/* refresh token should not have been set before */
+	if (refresh_token != NULL) {
+		apr_table_set(params, "refresh_token", refresh_token);
+	}
+
+	return TRUE;
+}
+
+/*
+ * handle the "code id_token" response type
+ */
+apr_byte_t oidc_proto_authorization_response_code_idtoken(request_rec *r,
+		oidc_cfg *c, json_t *proto_state, oidc_provider_t *provider,
+		apr_table_t *params, const char *response_mode, apr_jwt_t **jwt) {
+
+	oidc_debug(r, "enter");
+
+	static const char *response_type = "code id_token";
+
+	if (oidc_proto_validate_response_type_and_response_mode(r, response_type,
+			params, proto_state, response_mode, "fragment") == FALSE)
+		return FALSE;
+
+	if (oidc_proto_parse_idtoken_and_validate_code(r, c, proto_state, provider,
+			response_type, params, jwt, TRUE) == FALSE)
+		return FALSE;
+
+	/* clear parameters that should only be set from the token endpoint */
+	apr_table_unset(params, "access_token");
+	apr_table_unset(params, "token_type");
+	apr_table_unset(params, "expires_in");
+	apr_table_unset(params, "refresh_token");
+
+	if (oidc_proto_resolve_code_and_validate_response(r, c, provider,
+			response_type, params) == FALSE)
+		return FALSE;
+
+	return TRUE;
+}
+
+/*
+ * handle the "code token" response type
+ */
+apr_byte_t oidc_proto_handle_authorization_response_code_token(request_rec *r,
+		oidc_cfg *c, json_t *proto_state, oidc_provider_t *provider,
+		apr_table_t *params, const char *response_mode, apr_jwt_t **jwt) {
+
+	oidc_debug(r, "enter");
+
+	static const char *response_type = "code token";
+
+	if (oidc_proto_validate_response_type_and_response_mode(r, response_type,
+			params, proto_state, response_mode, "fragment") == FALSE)
+		return FALSE;
+
+	/* clear parameters that should only be set from the token endpoint */
+	apr_table_unset(params, "id_token");
+	apr_table_unset(params, "refresh_token");
+
+	if (oidc_proto_resolve_code_and_validate_response(r, c, provider,
+			response_type, params) == FALSE)
+		return FALSE;
+
+	if (oidc_proto_parse_idtoken_and_validate_code(r, c, proto_state, provider,
+			response_type, params, jwt, FALSE) == FALSE)
+		return FALSE;
+
+	return TRUE;
+}
+
+/*
+ * handle the "code" response type
+ */
+apr_byte_t oidc_proto_handle_authorization_response_code(request_rec *r,
+		oidc_cfg *c, json_t *proto_state, oidc_provider_t *provider,
+		apr_table_t *params, const char *response_mode, apr_jwt_t **jwt) {
+
+	oidc_debug(r, "enter");
+
+	static const char *response_type = "code";
+
+	if (oidc_proto_validate_response_type_and_response_mode(r, response_type,
+			params, proto_state, response_mode, "query") == FALSE)
+		return FALSE;
+
+	/* clear parameters that should only be set from the token endpoint */
+	apr_table_unset(params, "access_token");
+	apr_table_unset(params, "token_type");
+	apr_table_unset(params, "expires_in");
+	apr_table_unset(params, "id_token");
+	apr_table_unset(params, "refresh_token");
+
+	if (oidc_proto_resolve_code_and_validate_response(r, c, provider,
+			response_type, params) == FALSE)
+		return FALSE;
+
+	/*
+	 * in this flow it is actually optional to check the code token against the c_hash
+	 */
+	if (oidc_proto_parse_idtoken_and_validate_code(r, c, proto_state, provider,
+			response_type, params, jwt, TRUE) == FALSE)
+		return FALSE;
+
+	/*
+	 * in this flow it is actually optional to check the access token against the at_hash
+	 */
+	if ((apr_table_get(params, "access_token") != NULL)
+			&& (oidc_proto_validate_access_token(r, provider, *jwt,
+					response_type, apr_table_get(params, "access_token"))
+					== FALSE))
+		return FALSE;
+
+	return TRUE;
+}
+
+/*
+ * helper function for implicit flows: shared code for "id_token token" and "id_token"
+ */
+static apr_byte_t oidc_proto_handle_implicit_flow(request_rec *r, oidc_cfg *c,
+		const char *response_type, json_t *proto_state,
+		oidc_provider_t *provider, apr_table_t *params,
+		const char *response_mode, apr_jwt_t **jwt) {
+
+	if (oidc_proto_validate_response_type_and_response_mode(r, response_type,
+			params, proto_state, response_mode, "fragment") == FALSE)
+		return FALSE;
+
+	if (oidc_proto_parse_idtoken_and_validate_code(r, c, proto_state, provider,
+			response_type, params, jwt, TRUE) == FALSE)
+		return FALSE;
+
+	return TRUE;
+}
+
+/*
+ * handle the "code id_token token" response type
+ */
+apr_byte_t oidc_proto_authorization_response_code_idtoken_token(request_rec *r,
+		oidc_cfg *c, json_t *proto_state, oidc_provider_t *provider,
+		apr_table_t *params, const char *response_mode, apr_jwt_t **jwt) {
+
+	oidc_debug(r, "enter");
+
+	static const char *response_type = "code id_token token";
+
+	if (oidc_proto_handle_implicit_flow(r, c, response_type, proto_state,
+			provider, params, response_mode, jwt) == FALSE)
+		return FALSE;
+
+	if (oidc_proto_validate_access_token(r, provider, *jwt, response_type,
+			apr_table_get(params, "access_token")) == FALSE)
+		return FALSE;
+
+	/* clear parameters that should only be set from the token endpoint */
+	apr_table_unset(params, "refresh_token");
+
+	if (oidc_proto_resolve_code_and_validate_response(r, c, provider,
+			response_type, params) == FALSE)
+		return FALSE;
+
+	return TRUE;
+}
+
+/*
+ * handle the "id_token token" response type
+ */
+apr_byte_t oidc_proto_handle_authorization_response_idtoken_token(
+		request_rec *r, oidc_cfg *c, json_t *proto_state,
+		oidc_provider_t *provider, apr_table_t *params,
+		const char *response_mode, apr_jwt_t **jwt) {
+
+	oidc_debug(r, "enter");
+
+	static const char *response_type = "id_token token";
+
+	if (oidc_proto_handle_implicit_flow(r, c, response_type, proto_state,
+			provider, params, response_mode, jwt) == FALSE)
+		return FALSE;
+
+	if (oidc_proto_validate_access_token(r, provider, *jwt, response_type,
+			apr_table_get(params, "access_token")) == FALSE)
+		return FALSE;
+
+	/* clear parameters that should not be part of this flow */
+	apr_table_unset(params, "refresh_token");
+
+	return TRUE;
+}
+
+/*
+ * handle the "id_token" response type
+ */
+apr_byte_t oidc_proto_handle_authorization_response_idtoken(request_rec *r,
+		oidc_cfg *c, json_t *proto_state, oidc_provider_t *provider,
+		apr_table_t *params, const char *response_mode, apr_jwt_t **jwt) {
+
+	oidc_debug(r, "enter");
+
+	static const char *response_type = "id_token";
+
+	if (oidc_proto_handle_implicit_flow(r, c, response_type, proto_state,
+			provider, params, response_mode, jwt) == FALSE)
+		return FALSE;
+
+	/* clear parameters that should not be part of this flow */
+	apr_table_unset(params, "token_type");
+	apr_table_unset(params, "expires_in");
+	apr_table_unset(params, "refresh_token");
 
 	return TRUE;
 }

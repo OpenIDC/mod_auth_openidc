@@ -767,7 +767,7 @@ static char *test_proto_validate_access_token(request_rec *r) {
 
 	const char *access_token = "jHkWEdUXMU1BwAsC4vtUsZwnNvTIxEl0z9K3vx5KF0Y";
 	TST_ASSERT("oidc_proto_validate_access_token",
-			oidc_proto_validate_access_token(r, NULL, jwt, "id_token token", access_token, NULL));
+			oidc_proto_validate_access_token(r, NULL, jwt, "id_token token", access_token));
 
 	apr_jwt_destroy(jwt);
 
@@ -797,7 +797,7 @@ static char *test_proto_validate_code(request_rec *r) {
 
 	const char *code =
 			"Qcb0Orv1zh30vL1MPRsbm-diHiMwcLyZvn1arpZv-Jxf_11jnpEX3Tgfvk";
-	TST_ASSERT("oidc_proto_validate_access_token",
+	TST_ASSERT("oidc_proto_validate_code",
 			oidc_proto_validate_code(r, NULL, jwt, "code id_token", code));
 
 	apr_jwt_destroy(jwt);
