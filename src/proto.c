@@ -565,8 +565,10 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, apr_jwt_t *jwt,
 			if (rc == FALSE)
 				oidc_error(r, "JWK parsing failed: %s",
 						apr_jwt_e2s(r->pool, err));
-			else
+			else if (jwk->kid)
 				apr_hash_set(result, jwk->kid, APR_HASH_KEY_STRING, jwk);
+			else
+				apr_hash_set(result, apr_psprintf(r->pool, "%d", i), APR_HASH_KEY_STRING, jwk);
 			continue;
 		}
 
