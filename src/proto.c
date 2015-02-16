@@ -591,7 +591,7 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, apr_jwt_t *jwt,
 		}
 
 		/* we are looking for a specific x5t, get the x5t from the current element */
-		json_t *ex5t = json_object_get(elem, "kid");
+		json_t *ex5t = json_object_get(elem, "x5t");
 		if ((ex5t != NULL) && json_is_string(ex5t) && (x5t != NULL)) {
 			/* compare the requested kid against the current element */
 			if (apr_strnatcmp(x5t, json_string_value(ex5t)) == 0) {

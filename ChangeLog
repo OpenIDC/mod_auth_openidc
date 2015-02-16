@@ -1,6 +1,7 @@
 2/16/2015
 - fix free() crash on simple-valued error printouts
 - fix returning keys without a "kid"
+- fix searching for keys with a "x5t" thumbprint
 
 2/15/2015
 - add support for configurable introspection HTTP method (OIDCOAuthIntrospectionEndpointMethod)
