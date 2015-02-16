@@ -602,7 +602,7 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, apr_jwt_t *jwt,
 					oidc_error(r, "JWK parsing failed: %s",
 							apr_jwt_e2s(r->pool, err));
 				else
-					apr_hash_set(result, jwk->kid, APR_HASH_KEY_STRING, jwk);
+					apr_hash_set(result, x5t, APR_HASH_KEY_STRING, jwk);
 				break;
 			}
 		}
