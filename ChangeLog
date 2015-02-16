@@ -1,3 +1,6 @@
+2/16/2015
+- fix free() crash on simple-valued error printouts
+
 2/15/2015
 - add support for configurable introspection HTTP method (OIDCOAuthIntrospectionEndpointMethod)
 - add preliminary support for GET-style logout
