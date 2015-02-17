@@ -998,7 +998,7 @@ apr_byte_t oidc_util_read_form_encoded_params(request_rec *r,
 		apr_table_set(table, key, val);
 	}
 
-	oidc_debug(r, "parsed: \"%s\" in to %d elements", r->args,
+	oidc_debug(r, "parsed: \"%s\" in to %d elements", data,
 			apr_table_elts(table)->nelts);
 
 	return TRUE;
