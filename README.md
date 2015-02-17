@@ -39,9 +39,11 @@ to multiple OpenID Connect Providers through reading/writing provider metadata f
 in a specified metadata directory.
 
 It supports [OpenID Connect Dynamic Client Registration]
-(http://openid.net/specs/openid-connect-registration-1_0.html) and [OpenID Provider
+(http://openid.net/specs/openid-connect-registration-1_0.html), [OpenID Provider
 Discovery] (http://openid.net/specs/openid-connect-discovery-1_0.html) through domain
-or account names. It also supports [OpenID Connect Session Management draft 21]
+or account names and [OAuth 2.0 Form Post Response Mode]
+(http://openid.net/specs/oauth-v2-form-post-response-mode-1_0.html).
+It also supports [OpenID Connect Session Management draft 21]
 (http://openid.net/specs/openid-connect-session-1_0.html). See the [Wiki]
 (https://github.com/pingidentity/mod_auth_openidc/wiki/Session-Management) for information
 on how to configure it.
