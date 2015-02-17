@@ -1222,7 +1222,7 @@ static int oidc_handle_post_authorization_response(request_rec *r, oidc_cfg *c,
 
 	/* read the parameters that are POST-ed to us */
 	apr_table_t *params = apr_table_make(r->pool, 8);
-	if (oidc_util_read_post(r, params) == FALSE) {
+	if (oidc_util_read_post_params(r, params) == FALSE) {
 		oidc_error(r, "something went wrong when reading the POST parameters");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
@@ -1253,25 +1253,9 @@ static int oidc_handle_redirect_authorization_response(request_rec *r,
 
 	oidc_debug(r, "enter");
 
+	/* read the parameters from the query string */
 	apr_table_t *params = apr_table_make(r->pool, 8);
-	char *last, *p, *q;
-	const char *key, *val;
-
-	if (r->args != NULL || strlen(r->args) > 0) {
-		p = apr_strtok(apr_pstrdup(r->pool, r->args), "&", &last);
-		do {
-			if ((p) && ((q = strchr(p, '=')))) {
-				*q = '\0';
-				key = oidc_util_unescape_string(r, p);
-				val = oidc_util_unescape_string(r, q + 1);
-				apr_table_set(params, key, val);
-			}
-			p = apr_strtok(NULL, "&", &last);
-		} while (p);
-	}
-
-	oidc_debug(r, "parsed: \"%s\" in to %d elements", r->args,
-			apr_table_elts(params)->nelts);
+	oidc_util_read_form_encoded_params(r, params, r->args);
 
 	/* do the actual work */
 	return oidc_handle_authorization_response(r, c, session, params, "query");

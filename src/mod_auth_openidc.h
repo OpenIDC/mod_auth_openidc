@@ -387,7 +387,8 @@ int oidc_util_http_send(request_rec *r, const char *data, int data_len, const ch
 int oidc_util_html_send(request_rec *r, const char *title, const char *html_head, const char *on_load, const char *html_body, int status_code);
 char *oidc_util_escape_string(const request_rec *r, const char *str);
 char *oidc_util_unescape_string(const request_rec *r, const char *str);
-apr_byte_t oidc_util_read_post(request_rec *r, apr_table_t *table);
+apr_byte_t oidc_util_read_form_encoded_params(request_rec *r, apr_table_t *table, const char *data);
+apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table);
 apr_byte_t oidc_util_file_read(request_rec *r, const char *path, char **result);
 apr_byte_t oidc_util_issuer_match(const char *a, const char *b);
 int oidc_util_html_send_error(request_rec *r, const char *error, const char *description, int status_code);

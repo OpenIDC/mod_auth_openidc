@@ -67,7 +67,7 @@ int oidc_proto_authorization_request_post_preserve(request_rec *r,
 		const char *authorization_request) {
 	/* read the parameters that are POST-ed to us */
 	apr_table_t *params = apr_table_make(r->pool, 8);
-	if (oidc_util_read_post(r, params) == FALSE) {
+	if (oidc_util_read_post_params(r, params) == FALSE) {
 		oidc_error(r, "something went wrong when reading the POST parameters");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}

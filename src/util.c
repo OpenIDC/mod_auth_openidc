@@ -985,11 +985,30 @@ static apr_byte_t oidc_util_read(request_rec *r, const char **rbuf) {
 }
 
 /*
+ * read form-encoded parameters from a string in to a table
+ */
+apr_byte_t oidc_util_read_form_encoded_params(request_rec *r,
+		apr_table_t *table, const char *data) {
+	const char *key, *val;
+
+	while (data && *data && (val = ap_getword(r->pool, &data, '&'))) {
+		key = ap_getword(r->pool, &val, '=');
+		key = oidc_util_unescape_string(r, key);
+		val = oidc_util_unescape_string(r, val);
+		apr_table_set(table, key, val);
+	}
+
+	oidc_debug(r, "parsed: \"%s\" in to %d elements", r->args,
+			apr_table_elts(table)->nelts);
+
+	return TRUE;
+}
+
+/*
  * read the POST parameters in to a table
  */
-apr_byte_t oidc_util_read_post(request_rec *r, apr_table_t *table) {
+apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table) {
 	const char *data = NULL;
-	const char *key, *val;
 
 	if (r->method_number != M_POST)
 		return FALSE;
@@ -997,16 +1016,7 @@ apr_byte_t oidc_util_read_post(request_rec *r, apr_table_t *table) {
 	if (oidc_util_read(r, &data) != TRUE)
 		return FALSE;
 
-	while (data && *data && (val = ap_getword(r->pool, &data, '&'))) {
-		key = ap_getword(r->pool, &val, '=');
-		key = oidc_util_unescape_string(r, key);
-		val = oidc_util_unescape_string(r, val);
-		//ap_unescape_url((char*) key);
-		//ap_unescape_url((char*) val);
-		apr_table_set(table, key, val);
-	}
-
-	return TRUE;
+	return oidc_util_read_form_encoded_params(r, table, data);
 }
 
 /*
