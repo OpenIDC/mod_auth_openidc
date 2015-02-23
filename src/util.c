@@ -1081,7 +1081,7 @@ apr_byte_t oidc_util_file_read(request_rec *r, const char *path, char **result) 
 
 	return TRUE;
 
-	error_close:
+error_close:
 
 	apr_file_unlock(fd);
 	apr_file_close(fd);
@@ -1149,6 +1149,18 @@ void oidc_util_set_app_header(request_rec *r, const char *s_key,
 	/* construct the header name, cq. put the prefix in front of a normalized key name */
 	const char *s_name = apr_psprintf(r->pool, "%s%s", claim_prefix,
 			oidc_normalize_header_name(r, s_key));
+
+	/*
+	 * sanitize the header value by replacing line feeds with spaces
+	 * just like the Apache header input algorithms do for incoming headers
+	 *
+	 * this makes it impossible to have line feeds in values but that is
+	 * compliant with RFC 7230 (and impossible for regular headers due to Apache's
+	 * parsing of headers anyway) and fixes a security vulnerability on
+	 * overwriting/setting outgoing headers when used in proxy mode
+	 */
+	char *p = NULL;
+	while ((p = strchr(s_value, '\n'))) *p = ' ';
 
 	/* do some logging about this event */
 	oidc_debug(r, "setting header \"%s: %s\"", s_name, s_value);
