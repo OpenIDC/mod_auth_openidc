@@ -50,7 +50,7 @@ on how to configure it.
 
 Additionally it can operate as an OAuth 2.0 Resource Server to an OAuth 2.0 Authorization Server,
 introspecting/validating bearer Access Tokens conforming to [OAuth Token Introspection]
-(https://tools.ietf.org/html/draft-ietf-oauth-introspection-04) or similar. The `REMOTE_USER`
+(https://tools.ietf.org/html/draft-ietf-oauth-introspection-05) or similar. The `REMOTE_USER`
 variable setting, passing claims in HTTP headers and authorization based on Require primitives
 works in the same way as described for OpenID Connect above.
 
