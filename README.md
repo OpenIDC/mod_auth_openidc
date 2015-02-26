@@ -110,7 +110,7 @@ authorization purposes. The following configuration allows access only to a spec
 
 Note that this is not an OpenID Connect SSO scenario where users are authenticated but rather a "pure" OAuth 2.0
 scenario where **mod_auth_openidc** is the OAuth 2.0 Resource Server instead of the RP/client. How the actual
-client accessing the protected resources got its access token not relevant to this Apache Resource Server setup.
+client accessing the protected resources got its access token is not relevant to this Apache Resource Server setup.
 
 ###OpenID Connect SSO with multiple OpenID Connect Providers
 
