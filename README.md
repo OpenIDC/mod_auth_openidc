@@ -52,7 +52,9 @@ Additionally it can operate as an OAuth 2.0 Resource Server to an OAuth 2.0 Auth
 introspecting/validating bearer Access Tokens conforming to [OAuth Token Introspection]
 (https://tools.ietf.org/html/draft-ietf-oauth-introspection-05) or similar. The `REMOTE_USER`
 variable setting, passing claims in HTTP headers and authorization based on Require primitives
-works in the same way as described for OpenID Connect above.
+works in the same way as described for OpenID Connect above. See the [Wiki]
+(https://github.com/pingidentity/mod_auth_openidc/wiki/OAuth-2.0-Resource-Server) for information
+on how to configure it.
 
 For an exhaustive description of all configuration options, see the file `auth_openidc.conf`
 in this directory. This file can also serve as an include file for `httpd.conf`.
