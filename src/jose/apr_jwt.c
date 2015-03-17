@@ -360,9 +360,11 @@ const char *apr_jwt_signature_to_jwk_type(apr_pool_t *pool, apr_jwt_t *jwt) {
 	if (apr_jws_signature_is_rsa(pool, jwt)) {
 		return "RSA";
 	}
+#if (OPENSSL_VERSION_NUMBER >= 0x01000000)
 	if (apr_jws_signature_is_ec(pool, jwt)) {
 		return "EC";
 	}
+#endif
 	if (apr_jws_signature_is_hmac(pool, jwt)) {
 		return "oct";
 	}
