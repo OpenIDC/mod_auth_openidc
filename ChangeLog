@@ -1,3 +1,6 @@
+3/19/2015
+- merge #57: fix build with OpenSSL <1.0 re. apr_jws_signature_is_ec (thanks to @szakharchenko)
+
 2/26/2015
 - release 1.8.0
 
@@ -223,7 +226,7 @@
 - cleanup in-memory crypto context on shutdown
 - use default of "/" for OIDCCookiePath to simplify quickstart/simple deployments
 - disable OIDCMetadataDir in sample/default config file
-- clear session cookie after cache miss or corruptoin
+- clear session cookie after cache miss or corruption
 
 8/18/2014
 - add HttpOnly flag to cookies by default; can be disabled by config
