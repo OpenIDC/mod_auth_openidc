@@ -1,3 +1,6 @@
+3/27/2015
+- add support for applying regular expressions to OIDCRemoteUserClaim and OIDCOAuthRemoteUserClaim
+
 3/19/2015
 - merge #57: fix build with OpenSSL <1.0 re. apr_jws_signature_is_ec (thanks to @szakharchenko)
 

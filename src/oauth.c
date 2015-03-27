@@ -292,7 +292,7 @@ static apr_byte_t oidc_oauth_set_remote_user(request_rec *r, oidc_cfg *c,
 		json_t *token) {
 
 	/* get the configured claim name to populate REMOTE_USER with (defaults to "Username") */
-	char *claim_name = apr_pstrdup(r->pool, c->oauth.remote_user_claim);
+	char *claim_name = apr_pstrdup(r->pool, c->oauth.remote_user_claim.claim_name);
 
 	/* get the claim value from the resolved token JSON response to use as the REMOTE_USER key */
 	json_t *username = json_object_get(token, claim_name);
@@ -303,6 +303,16 @@ static apr_byte_t oidc_oauth_set_remote_user(request_rec *r, oidc_cfg *c,
 	}
 
 	r->user = apr_pstrdup(r->pool, json_string_value(username));
+
+	if (c->oauth.remote_user_claim.reg_exp != NULL) {
+
+		char *error_str = NULL;
+		if (oidc_util_regexp_first_match(r->pool, r->user, c->oauth.remote_user_claim.reg_exp, &r->user, &error_str) == FALSE) {
+			oidc_error(r, "oidc_util_regexp_first_match failed: %s", error_str);
+			r->user = NULL;
+			return FALSE;
+		}
+	}
 
 	oidc_debug(r, "set REMOTE_USER to claim %s=%s", claim_name,
 			json_string_value(username));

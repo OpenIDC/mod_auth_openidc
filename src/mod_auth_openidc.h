@@ -216,6 +216,11 @@ typedef struct oidc_provider_t {
 	char *userinfo_encrypted_response_enc;
 } oidc_provider_t ;
 
+typedef struct oidc_remote_user_claim_t {
+	const char *claim_name;
+	const char *reg_exp;
+} oidc_remote_user_claim_t;
+
 typedef struct oidc_oauth_t {
 	int ssl_validate_server;
 	char *client_id;
@@ -225,7 +230,7 @@ typedef struct oidc_oauth_t {
 	char *introspection_endpoint_params;
 	char *introspection_endpoint_auth;
 	char *introspection_token_param_name;
-	char *remote_user_claim;
+	oidc_remote_user_claim_t remote_user_claim;
 	apr_hash_t *verify_shared_keys;
 	char *verify_jwks_uri;
 	apr_hash_t *verify_public_keys;
@@ -289,7 +294,7 @@ typedef struct oidc_cfg {
 	char *cookie_domain;
 	char *claim_delimiter;
 	char *claim_prefix;
-	char *remote_user_claim;
+	oidc_remote_user_claim_t remote_user_claim;
 	int pass_idtoken_as;
 	int cookie_http_only;
 
@@ -404,6 +409,7 @@ char *oidc_util_html_escape(apr_pool_t *pool, const char *input);
 void oidc_util_table_add_query_encoded_params(apr_pool_t *pool, apr_table_t *table, const char *params);
 apr_hash_t * oidc_util_merge_symmetric_key(apr_pool_t *pool, apr_hash_t *private_keys, const char *secret, const char *hash_algo);
 apr_hash_t * oidc_util_merge_key_sets(apr_pool_t *pool, apr_hash_t *k1, apr_hash_t *k2);
+apr_byte_t oidc_util_regexp_first_match(apr_pool_t *pool, const char *input, const char *regexp, char **output, char **error_str);
 
 // oidc_crypto.c
 unsigned char *oidc_crypto_aes_encrypt(request_rec *r, oidc_cfg *cfg, unsigned char *plaintext, int *len);

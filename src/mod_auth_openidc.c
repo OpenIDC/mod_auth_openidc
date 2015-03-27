@@ -899,7 +899,7 @@ static apr_byte_t oidc_get_remote_user(request_rec *r, oidc_cfg *c,
 		oidc_provider_t *provider, apr_jwt_t *jwt, char **user) {
 
 	char *issuer = provider->issuer;
-	char *claim_name = apr_pstrdup(r->pool, c->remote_user_claim);
+	char *claim_name = apr_pstrdup(r->pool, c->remote_user_claim.claim_name);
 	int n = strlen(claim_name);
 	int post_fix_with_issuer = (claim_name[n - 1] == '@');
 	if (post_fix_with_issuer) {
@@ -916,7 +916,7 @@ static apr_byte_t oidc_get_remote_user(request_rec *r, oidc_cfg *c,
 			&username, NULL) == FALSE) {
 		oidc_error(r,
 				"OIDCRemoteUserClaim is set to \"%s\", but the id_token JSON payload did not contain a \"%s\" string",
-				c->remote_user_claim, claim_name);
+				c->remote_user_claim.claim_name, claim_name);
 		*user = NULL;
 		return FALSE;
 	}
@@ -925,6 +925,16 @@ static apr_byte_t oidc_get_remote_user(request_rec *r, oidc_cfg *c,
 	*user = post_fix_with_issuer ?
 			apr_psprintf(r->pool, "%s@%s", username, issuer) :
 			apr_pstrdup(r->pool, username);
+
+	if (c->remote_user_claim.reg_exp != NULL) {
+
+		char *error_str = NULL;
+		if (oidc_util_regexp_first_match(r->pool, *user, c->remote_user_claim.reg_exp, user, &error_str) == FALSE) {
+			oidc_error(r, "oidc_util_regexp_first_match failed: %s", error_str);
+			*user = NULL;
+			return FALSE;
+		}
+	}
 
 	oidc_debug(r, "set user to \"%s\"", *user);
 
@@ -1177,6 +1187,11 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 				apr_table_get(params, "access_token"), expires_in,
 				apr_table_get(params, "refresh_token"),
 				apr_table_get(params, "session_state"));
+	} else {
+		oidc_error(r, "remote user could not be set");
+		return oidc_authorization_response_error(r, c, proto_state,
+				"Remote user could not be set: contact the website administrator",
+				NULL);
 	}
 
 	/* restore the original protected URL that the user was trying to access */

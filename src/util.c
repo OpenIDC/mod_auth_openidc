@@ -62,6 +62,8 @@
 
 #include "mod_auth_openidc.h"
 
+#include <pcre.h>
+
 /* hrm, should we get rid of this by adding parameters to the (3) functions? */
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -1445,4 +1447,75 @@ apr_hash_t * oidc_util_merge_key_sets(apr_pool_t *pool, apr_hash_t *k1,
 	if (k2 == NULL)
 		return k1;
 	return apr_hash_overlay(pool, k1, k2);
+}
+
+/*
+ * regexp match
+ */
+#define OIDC_UTIL_REGEXP_MATCH_SIZE 30
+#define OIDC_UTIL_REGEXP_MATCH_NR 1
+
+apr_byte_t oidc_util_regexp_first_match(apr_pool_t *pool, const char *input,
+		const char *regexp, char **output, char **error_str) {
+	const char *errorptr;
+	int erroffset;
+	pcre *preg;
+	int subStr[OIDC_UTIL_REGEXP_MATCH_SIZE];
+	const char *psubStrMatchStr;
+
+	preg = pcre_compile(regexp, 0, &errorptr, &erroffset, NULL);
+
+	if (preg == NULL) {
+		*error_str = apr_psprintf(pool,
+				"pattern [%s] is not a valid regular expression", regexp);
+		pcre_free(preg);
+		return FALSE;
+	}
+
+	int rc = 0;
+	if ((rc = pcre_exec(preg, NULL, input, (int) strlen(input), 0, 0, subStr,
+			OIDC_UTIL_REGEXP_MATCH_SIZE)) < 0) {
+		switch (rc) {
+		case PCRE_ERROR_NOMATCH:
+			*error_str = apr_pstrdup(pool, "string did not match the pattern");
+			break;
+		case PCRE_ERROR_NULL:
+			*error_str = apr_pstrdup(pool, "something was null");
+			break;
+		case PCRE_ERROR_BADOPTION:
+			*error_str = apr_pstrdup(pool, "a bad option was passed");
+			break;
+		case PCRE_ERROR_BADMAGIC:
+			*error_str = apr_pstrdup(pool,
+					"magic number bad (compiled re corrupt?)");
+			break;
+		case PCRE_ERROR_UNKNOWN_NODE:
+			*error_str = apr_pstrdup(pool,
+					"something kooky in the compiled re");
+			break;
+		case PCRE_ERROR_NOMEMORY:
+			*error_str = apr_pstrdup(pool, "ran out of memory");
+			break;
+		default:
+			*error_str = apr_psprintf(pool, "unknown error: %d", rc);
+			break;
+		}
+		pcre_free(preg);
+		return FALSE;
+	}
+
+	if (pcre_get_substring(input, subStr, rc, OIDC_UTIL_REGEXP_MATCH_NR,
+			&(psubStrMatchStr)) <= 0) {
+		*error_str = apr_psprintf(pool, "pcre_get_substring failed (rc=%d)",
+				rc);
+		pcre_free(preg);
+		return FALSE;
+	}
+
+	*output = apr_pstrdup(pool, psubStrMatchStr);
+
+	pcre_free_substring(psubStrMatchStr);
+	pcre_free(preg);
+
+	return TRUE;
 }

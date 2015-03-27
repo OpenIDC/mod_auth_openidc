@@ -638,6 +638,25 @@ static const char * oidc_set_introspection_method(cmd_parms *cmd, void *m,
 }
 
 /*
+ * set the remote user name claims, optionally plus the regular expression applied to it
+ */
+static const char *oidc_set_remote_user_claim(cmd_parms *cmd, void *struct_ptr,
+		const char *v1, const char *v2) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+
+	int offset = (int) (long) cmd->info;
+	oidc_remote_user_claim_t *remote_user_claim =
+			(oidc_remote_user_claim_t *) ((void *) cfg + offset);
+
+	remote_user_claim->claim_name = v1;
+	if (v2)
+		remote_user_claim->reg_exp = v2;
+
+	return NULL;
+}
+
+/*
  * create a new server config record with defaults
  */
 void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
@@ -695,7 +714,8 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->oauth.introspection_endpoint_params = NULL;
 	c->oauth.introspection_endpoint_auth = NULL;
 	c->oauth.introspection_token_param_name = OIDC_DEFAULT_OAUTH_TOKEN_PARAM_NAME;
-	c->oauth.remote_user_claim = OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER;
+	c->oauth.remote_user_claim.claim_name = OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER;
+	c->oauth.remote_user_claim.reg_exp = NULL;
 	c->oauth.verify_jwks_uri = NULL;
 	c->oauth.verify_public_keys = NULL;
 	c->oauth.verify_shared_keys = NULL;
@@ -723,7 +743,8 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->cookie_domain = NULL;
 	c->claim_delimiter = OIDC_DEFAULT_CLAIM_DELIMITER;
 	c->claim_prefix = OIDC_DEFAULT_CLAIM_PREFIX;
-	c->remote_user_claim = OIDC_DEFAULT_CLAIM_REMOTE_USER;
+	c->remote_user_claim.claim_name = OIDC_DEFAULT_CLAIM_REMOTE_USER;
+	c->remote_user_claim.reg_exp = NULL;
 	c->pass_idtoken_as = OIDC_PASS_IDTOKEN_AS_CLAIMS;
 	c->cookie_http_only = OIDC_DEFAULT_COOKIE_HTTPONLY;
 
@@ -919,11 +940,15 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					OIDC_DEFAULT_OAUTH_TOKEN_PARAM_NAME) != 0 ?
 							add->oauth.introspection_token_param_name :
 							base->oauth.introspection_token_param_name;
-	c->oauth.remote_user_claim =
-			apr_strnatcmp(add->oauth.remote_user_claim,
+	c->oauth.remote_user_claim.claim_name =
+			apr_strnatcmp(add->oauth.remote_user_claim.claim_name,
 					OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER) != 0 ?
-							add->oauth.remote_user_claim :
-							base->oauth.remote_user_claim;
+							add->oauth.remote_user_claim.claim_name :
+							base->oauth.remote_user_claim.claim_name;
+	c->oauth.remote_user_claim.reg_exp =
+			add->oauth.remote_user_claim.reg_exp != NULL ?
+					add->oauth.remote_user_claim.reg_exp :
+					base->oauth.remote_user_claim.reg_exp;
 
 	c->oauth.verify_jwks_uri =
 			add->oauth.verify_jwks_uri != NULL ?
@@ -999,10 +1024,15 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->claim_prefix =
 			apr_strnatcmp(add->claim_prefix, OIDC_DEFAULT_CLAIM_PREFIX) != 0 ?
 					add->claim_prefix : base->claim_prefix;
-	c->remote_user_claim =
-			apr_strnatcmp(add->remote_user_claim,
+	c->remote_user_claim.claim_name =
+			apr_strnatcmp(add->remote_user_claim.claim_name,
 					OIDC_DEFAULT_CLAIM_REMOTE_USER) != 0 ?
-							add->remote_user_claim : base->remote_user_claim;
+							add->remote_user_claim.claim_name :
+							base->remote_user_claim.claim_name;
+	c->remote_user_claim.reg_exp =
+			add->remote_user_claim.reg_exp != NULL ?
+					add->remote_user_claim.reg_exp :
+					base->remote_user_claim.reg_exp;
 	c->pass_idtoken_as =
 			add->pass_idtoken_as != OIDC_PASS_IDTOKEN_AS_CLAIMS ?
 					add->pass_idtoken_as : base->pass_idtoken_as;
@@ -1622,8 +1652,8 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, claim_prefix),
 				RSRC_CONF,
 				"The prefix to use when setting claims in the HTTP headers."),
-		AP_INIT_TAKE1("OIDCRemoteUserClaim",
-				oidc_set_string_slot,
+		AP_INIT_TAKE12("OIDCRemoteUserClaim",
+				oidc_set_remote_user_claim,
 				(void*)APR_OFFSETOF(oidc_cfg, remote_user_claim),
 				RSRC_CONF,
 				"The claim that is used when setting the REMOTE_USER variable for OpenID Connect protected paths."),
@@ -1672,8 +1702,8 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.ssl_validate_server),
 				RSRC_CONF,
 				"Require validation of the OAuth 2.0 AS Validation Endpoint SSL server certificate for successful authentication (On or Off)"),
-		AP_INIT_TAKE1("OIDCOAuthRemoteUserClaim",
-				oidc_set_string_slot,
+		AP_INIT_TAKE12("OIDCOAuthRemoteUserClaim",
+				oidc_set_remote_user_claim,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.remote_user_claim),
 				RSRC_CONF,
 				"The claim that is used when setting the REMOTE_USER variable for OAuth 2.0 protected paths."),
