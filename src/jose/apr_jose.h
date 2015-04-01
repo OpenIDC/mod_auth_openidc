@@ -298,4 +298,6 @@ apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header,
 		apr_array_header_t *unpacked, apr_hash_t *keys, char **decrypted,
 		apr_jwt_error_t *err);
 
+apr_byte_t apr_jwt_memcmp(const void *in_a, const void *in_b, size_t len);
+
 #endif /* _APR_JOSE_H_ */

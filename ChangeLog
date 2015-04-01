@@ -1,3 +1,7 @@
+4/1/2015
+- avoid timing attacks on symmetric key signature/hash comparisons as pointed out by @timmclean
+- bump to 1.8.1rc1
+
 3/19/2015
 - merge #57: fix build with OpenSSL <1.0 re. apr_jws_signature_is_ec (thanks to @szakharchenko)
 
