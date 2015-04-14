@@ -225,6 +225,9 @@ typedef struct oidc_oauth_t {
 	char *introspection_endpoint_params;
 	char *introspection_endpoint_auth;
 	char *introspection_token_param_name;
+	char *introspection_token_expiry_claim_name;
+	char *introspection_token_expiry_claim_format;
+	int introspection_token_expiry_claim_required;
 	char *remote_user_claim;
 	apr_hash_t *verify_shared_keys;
 	char *verify_jwks_uri;

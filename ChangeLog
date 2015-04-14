@@ -1,3 +1,8 @@
+4/12/2015
+- make token expiry parsing of introspection result configurable (OIDCOAuthTokenExpiryClaim)
+- increase SHM cache key size from 255 to 512 (allows for JWT access tokens cache keys for introspection result)
+- bump to 1.8.1rc2
+
 4/1/2015
 - avoid timing attacks on symmetric key signature/hash comparisons as pointed out by @timmclean
 - bump to 1.8.1rc1

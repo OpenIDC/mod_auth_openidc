@@ -109,9 +109,9 @@
 /* default max cache size for shm */
 #define OIDC_DEFAULT_CACHE_SHM_SIZE 500
 /* default max cache entry size for shm: # value + # key + # overhead */
-#define OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX 16384 + 255 + 17
+#define OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX 16384 + 512 + 17
 /* minimum size of a cache entry */
-#define OIDC_MINIMUM_CACHE_SHM_ENTRY_SIZE_MAX 8192 + 255 + 17
+#define OIDC_MINIMUM_CACHE_SHM_ENTRY_SIZE_MAX 8192 + 512 + 17
 /* for issued-at timestamp (iat) checking */
 #define OIDC_DEFAULT_IDTOKEN_IAT_SLACK 600
 /* for file-based caching: clean interval in seconds */
@@ -124,6 +124,12 @@
 #define OIDC_DEFAULT_OAUTH_TOKEN_PARAM_NAME "token"
 /* default OAuth 2.0 introspection call HTTP method */
 #define OIDC_DEFAULT_OAUTH_ENDPOINT_METHOD "POST"
+/* default OAuth 2.0 non-spec compliant introspection expiry claim name */
+#define OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_NAME "expires_in"
+/* default OAuth 2.0 non-spec compliant introspection expiry claim format */
+#define OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_FORMAT "relative"
+/* default OAuth 2.0 non-spec compliant introspection expiry claim required */
+#define OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_REQUIRED TRUE
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -613,6 +619,45 @@ static const char * oidc_set_pass_idtoken_as(cmd_parms *cmd, void *dummy,
 }
 
 /*
+ * set the syntax of the token expiry claim in the introspection response
+ */
+static const char * oidc_set_token_expiry_claim(cmd_parms *cmd,
+		void *dummy, const char *claim_name, const char *claim_format,
+		const char *claim_required) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+
+	cfg->oauth.introspection_token_expiry_claim_name = apr_pstrdup(cmd->pool,
+			claim_name);
+
+	if (claim_format) {
+		if ((apr_strnatcmp(claim_required, "absolute") == 0)
+				|| (apr_strnatcmp(claim_required, "relative") == 0)) {
+			cfg->oauth.introspection_token_expiry_claim_format = apr_pstrdup(
+					cmd->pool, claim_format);
+		} else {
+			return apr_psprintf(cmd->pool,
+					"Invalid value \"%s\" for directive %s; must be either \"absolute\" or \"relative\"",
+					claim_required, cmd->directive->directive);
+		}
+	}
+
+	if (claim_required) {
+		if (apr_strnatcmp(claim_required, "mandatory") == 0)
+			cfg->oauth.introspection_token_expiry_claim_required = TRUE;
+		else if (apr_strnatcmp(claim_required, "optional") == 0) {
+			cfg->oauth.introspection_token_expiry_claim_required = FALSE;
+		} else {
+			return apr_psprintf(cmd->pool,
+					"Invalid value \"%s\" for directive %s; must be either \"mandatory\" or \"optional\"",
+					claim_required, cmd->directive->directive);
+		}
+	}
+
+	return NULL;
+}
+
+/*
  * specify cookies to pass on to the OP/AS
  */
 static const char * oidc_set_pass_cookies(cmd_parms *cmd, void *m,
@@ -695,6 +740,11 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->oauth.introspection_endpoint_params = NULL;
 	c->oauth.introspection_endpoint_auth = NULL;
 	c->oauth.introspection_token_param_name = OIDC_DEFAULT_OAUTH_TOKEN_PARAM_NAME;
+
+	c->oauth.introspection_token_expiry_claim_name = OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_NAME;
+	c->oauth.introspection_token_expiry_claim_format = OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_FORMAT;
+	c->oauth.introspection_token_expiry_claim_required = OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_REQUIRED;
+
 	c->oauth.remote_user_claim = OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER;
 	c->oauth.verify_jwks_uri = NULL;
 	c->oauth.verify_public_keys = NULL;
@@ -919,6 +969,23 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					OIDC_DEFAULT_OAUTH_TOKEN_PARAM_NAME) != 0 ?
 							add->oauth.introspection_token_param_name :
 							base->oauth.introspection_token_param_name;
+
+	c->oauth.introspection_token_expiry_claim_name =
+			apr_strnatcmp(add->oauth.introspection_token_expiry_claim_name,
+					OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_NAME) != 0 ?
+							add->oauth.introspection_token_expiry_claim_name :
+							base->oauth.introspection_token_expiry_claim_name;
+	c->oauth.introspection_token_expiry_claim_format =
+			apr_strnatcmp(add->oauth.introspection_token_expiry_claim_format,
+					OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_FORMAT) != 0 ?
+							add->oauth.introspection_token_expiry_claim_format :
+							base->oauth.introspection_token_expiry_claim_format;
+	c->oauth.introspection_token_expiry_claim_required =
+			add->oauth.introspection_token_expiry_claim_required
+			!= OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_REQUIRED ?
+					add->oauth.introspection_token_expiry_claim_required :
+					base->oauth.introspection_token_expiry_claim_required;
+
 	c->oauth.remote_user_claim =
 			apr_strnatcmp(add->oauth.remote_user_claim,
 					OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER) != 0 ?
@@ -1667,6 +1734,11 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.introspection_token_param_name),
 				RSRC_CONF,
 				"Name of the parameter whose value carries the access token value in an validation request to the token introspection endpoint."),
+		AP_INIT_TAKE123("OIDCOAuthTokenExpiryClaim",
+				oidc_set_token_expiry_claim,
+				NULL,
+				RSRC_CONF,
+				"Name of the claim that carries the token expiry value in the introspection result, optionally followed by absolute|relative, optionally followed by optional|mandatory"),
 		AP_INIT_FLAG("OIDCOAuthSSLValidateServer",
 				oidc_set_flag_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.ssl_validate_server),
