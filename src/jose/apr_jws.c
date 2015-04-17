@@ -192,7 +192,7 @@ static apr_byte_t apr_jws_verify_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
 	}
 
 	/* do a comparison of the provided hash value against calculated hash value */
-	if (memcmp(md, jwt->signature.bytes, md_len) != 0) {
+	if (apr_jwt_memcmp(md, jwt->signature.bytes, md_len) == FALSE) {
 		apr_jwt_error(err,
 				"calculated hash differs from the signature provided in the JWT");
 		return FALSE;

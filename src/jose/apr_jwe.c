@@ -439,7 +439,7 @@ apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header,
 		return FALSE;
 	}
 
-	if (memcmp(md, auth_tag->value, md_len) != 0) {
+	if (apr_jwt_memcmp(md, auth_tag->value, md_len) == FALSE) {
 		apr_jwt_error(err,
 				"calculated Authentication Tag hash differs from the Authentication Tag in the encrypted JWT");
 		return FALSE;

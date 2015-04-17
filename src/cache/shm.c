@@ -65,7 +65,7 @@ typedef struct oidc_cache_cfg_shm_t {
 } oidc_cache_cfg_shm_t;
 
 /* size of key in cached key/value pairs */
-#define OIDC_CACHE_SHM_KEY_MAX 255
+#define OIDC_CACHE_SHM_KEY_MAX 512
 
 /* represents one (fixed size) cache entry, cq. name/value string pair */
 typedef struct oidc_cache_shm_entry_t {

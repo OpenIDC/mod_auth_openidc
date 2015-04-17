@@ -170,9 +170,57 @@ static void oidc_oauth_spaced_string_to_array(request_rec *r, json_t *src,
 */
 
 /*
+ * parse (custom/configurable) token expiry claim in introspection result
+ */
+static apr_byte_t oidc_oauth_parse_and_cache_token_expiry(request_rec *r,
+		oidc_cfg *c, json_t *introspection_response,
+		const char *expiry_claim_name, int expiry_format_absolute,
+		int expiry_claim_is_mandatory, apr_time_t *cache_until) {
+
+	oidc_debug(r, "expiry_claim_name=%s, expiry_format_absolute=%d, expiry_claim_is_mandatory=%d", expiry_claim_name, expiry_format_absolute, expiry_claim_is_mandatory);
+
+	json_t *expiry = json_object_get(introspection_response, expiry_claim_name);
+
+	if (expiry == NULL) {
+		if (expiry_claim_is_mandatory) {
+			oidc_error(r,
+					"introspection response JSON object did not contain an \"%s\" claim",
+					expiry_claim_name);
+			return FALSE;
+		}
+		return TRUE;
+	}
+
+	if (!json_is_integer(expiry)) {
+		if (expiry_claim_is_mandatory) {
+			oidc_error(r,
+					"introspection response JSON object contains a \"%s\" claim but it is not a JSON integer",
+					expiry_claim_name);
+			return FALSE;
+		}
+		oidc_warn(r,
+				"introspection response JSON object contains a \"%s\" claim that is not an (optional) JSON integer: the introspection result will NOT be cached",
+				expiry_claim_name);
+		return TRUE;
+	}
+
+	json_int_t value = json_integer_value(expiry);
+	if (value <= 0) {
+		oidc_warn(r,
+				"introspection response JSON object integer number value <= 0 (%" JSON_INTEGER_FORMAT "); introspection result will not be cached",
+				value);
+		return TRUE;
+	}
+
+	*cache_until = apr_time_from_sec(value);
+	if (expiry_format_absolute == FALSE)
+		(*cache_until) += apr_time_now();
+
+	return TRUE;
+}
+
+/*
  * resolve and validate an access_token against the configured Authorization Server
- *
- * TODO: add validation type
  */
 static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 		const char *access_token, json_t **token, char **response) {
@@ -197,6 +245,7 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 			return FALSE;
 
 		json_t *active = json_object_get(result, "active");
+		apr_time_t cache_until;
 		if (active != NULL) {
 
 			if ((!json_is_boolean(active)) || (!json_is_true(active))) {
@@ -206,38 +255,33 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 				return FALSE;
 			}
 
-			json_t *exp = json_object_get(result, "exp");
-			if ((exp != NULL) && (json_is_number(exp))) {
-				/* set it in the cache so subsequent request don't need to validate the access_token and get the claims anymore */
-				c->cache->set(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, access_token,
-						json, apr_time_from_sec(json_integer_value(exp)));
-			} else if (json_integer_value(exp) <= 0) {
-				oidc_debug(r,
-						"response JSON object did not contain an \"exp\" integer number; introspection result will not be cached");
-			}
-
-		} else {
-
-			/* assume PingFederate validation: get and check the expiry timestamp */
-			json_t *expires_in = json_object_get(result, "expires_in");
-			if ((expires_in == NULL) || (!json_is_number(expires_in))) {
-				oidc_error(r,
-						"response JSON object did not contain an \"expires_in\" number");
-				json_decref(result);
-				return FALSE;
-			}
-			if (json_integer_value(expires_in) <= 0) {
-				oidc_warn(r,
-						"\"expires_in\" number <= 0 (%" JSON_INTEGER_FORMAT "); token already expired...",
-						json_integer_value(expires_in));
+			if (oidc_oauth_parse_and_cache_token_expiry(r, c, result, "exp",
+					TRUE, FALSE, &cache_until) == FALSE) {
 				json_decref(result);
 				return FALSE;
 			}
 
 			/* set it in the cache so subsequent request don't need to validate the access_token and get the claims anymore */
 			c->cache->set(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, access_token,
-					json,
-					apr_time_now() + apr_time_from_sec(json_integer_value(expires_in)));
+					json, cache_until);
+
+		} else {
+
+			if (oidc_oauth_parse_and_cache_token_expiry(r, c, result,
+					c->oauth.introspection_token_expiry_claim_name,
+					apr_strnatcmp(
+							c->oauth.introspection_token_expiry_claim_format,
+							"absolute") == 0,
+							c->oauth.introspection_token_expiry_claim_required,
+							&cache_until) == FALSE) {
+				json_decref(result);
+				return FALSE;
+			}
+
+			/* set it in the cache so subsequent request don't need to validate the access_token and get the claims anymore */
+			c->cache->set(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, access_token,
+					json, cache_until);
+
 		}
 
 	} else {

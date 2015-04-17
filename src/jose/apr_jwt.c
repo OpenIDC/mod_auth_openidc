@@ -448,3 +448,18 @@ void apr_jwt_destroy(apr_jwt_t *jwt) {
 			json_decref(jwt->payload.value.json);
 	}
 }
+
+/* timing-safe byte sequence comparison */
+apr_byte_t apr_jwt_memcmp(const void *in_a, const void *in_b, size_t len) {
+	// TODO: this is copied from OpenSSL 1.0.1 to avoid version issues on various platforms
+	//       we could use #ifdef's to use OpenSSL where possible
+	size_t i;
+	const unsigned char *a = in_a;
+	const unsigned char *b = in_b;
+	unsigned char x = 0;
+
+	for (i = 0; i < len; i++)
+		x |= a[i] ^ b[i];
+
+	return x ? FALSE : TRUE;
+}
