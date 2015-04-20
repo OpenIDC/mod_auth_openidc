@@ -1,3 +1,6 @@
+4/20/2015
+- allow setting OIDCCookie outside of Directory and Location directives as well
+
 4/17/2015
 - add support for applying regular expressions to OIDCRemoteUserClaim and OIDCOAuthRemoteUserClaim
 

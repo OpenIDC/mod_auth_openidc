@@ -1838,7 +1838,7 @@ const command_rec oidc_config_cmds[] = {
 				"Define the cookie path for the session cookie."),
 		AP_INIT_TAKE1("OIDCCookie", ap_set_string_slot,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, cookie),
-				ACCESS_CONF|OR_AUTHCFG,
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Define the cookie name for the session cookie."),
 		AP_INIT_FLAG("OIDCReturn401", ap_set_flag_slot,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, return401),
