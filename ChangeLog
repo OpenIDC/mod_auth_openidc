@@ -1,11 +1,14 @@
 4/21/2015
 - allow setting OIDCDiscoverURL inside of Directory and Location directives as well
+- bump to 1.8.1rc5
 
 4/20/2015
 - allow setting OIDCCookie outside of Directory and Location directives as well
+- bump to 1.8.1rc4
 
 4/17/2015
 - add support for applying regular expressions to OIDCRemoteUserClaim and OIDCOAuthRemoteUserClaim
+- bump to 1.8.1rc3
 
 4/12/2015
 - make token expiry parsing of introspection result configurable (OIDCOAuthTokenExpiryClaim)
