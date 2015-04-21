@@ -1283,15 +1283,18 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 
 	oidc_debug(r, "enter");
 
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+
 	/* obtain the URL we're currently accessing, to be stored in the state/session */
 	char *current_url = oidc_get_current_url(r, cfg);
 
 	/* see if there's an external discovery page configured */
-	if (cfg->discover_url != NULL) {
+	if (dir_cfg->discover_url != NULL) {
 
 		/* yes, assemble the parameters for external discovery */
-		char *url = apr_psprintf(r->pool, "%s%s%s=%s&%s=%s", cfg->discover_url,
-				strchr(cfg->discover_url, '?') != NULL ? "&" : "?",
+		char *url = apr_psprintf(r->pool, "%s%s%s=%s&%s=%s", dir_cfg->discover_url,
+				strchr(dir_cfg->discover_url, '?') != NULL ? "&" : "?",
 				OIDC_DISC_RT_PARAM, oidc_util_escape_string(r, current_url),
 				OIDC_DISC_CB_PARAM,
 				oidc_util_escape_string(r, cfg->redirect_uri));

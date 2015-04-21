@@ -1,3 +1,6 @@
+4/21/2015
+- allow setting OIDCDiscoverURL inside of Directory and Location directives as well
+
 4/20/2015
 - allow setting OIDCCookie outside of Directory and Location directives as well
 

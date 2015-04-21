@@ -163,12 +163,10 @@ static const char *oidc_set_int_slot(cmd_parms *cmd, void *struct_ptr,
 }
 
 /*
- * set a URL value in the server config
+ * set a URL value in a config record
  */
 static const char *oidc_set_url_slot_type(cmd_parms *cmd, void *ptr,
 		const char *arg, const char *type) {
-	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
-			cmd->server->module_config, &auth_openidc_module);
 	apr_uri_t url;
 	if (apr_uri_parse(cmd->pool, arg, &url) != APR_SUCCESS) {
 		return apr_psprintf(cmd->pool,
@@ -200,7 +198,7 @@ static const char *oidc_set_url_slot_type(cmd_parms *cmd, void *ptr,
 				"oidc_set_url_slot_type: configuration value '%s' could not be parsed as a HTTP/HTTPs URL (no hostname set, check your slashes)!",
 				arg);
 	}
-	return ap_set_string_slot(cmd, cfg, arg);
+	return ap_set_string_slot(cmd, ptr, arg);
 }
 
 /*
@@ -208,13 +206,24 @@ static const char *oidc_set_url_slot_type(cmd_parms *cmd, void *ptr,
  */
 static const char *oidc_set_https_slot(cmd_parms *cmd, void *ptr,
 		const char *arg) {
-	return oidc_set_url_slot_type(cmd, ptr, arg, "https");
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+	return oidc_set_url_slot_type(cmd, cfg, arg, "https");
 }
 
 /*
  * set a HTTPS/HTTP value in the server config
  */
 static const char *oidc_set_url_slot(cmd_parms *cmd, void *ptr, const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+	return oidc_set_url_slot_type(cmd, cfg, arg, NULL);
+}
+
+/*
+ * set a HTTPS/HTTP value in the directory config
+ */
+static const char *oidc_set_url_slot_dir_cfg(cmd_parms *cmd, void *ptr, const char *arg) {
 	return oidc_set_url_slot_type(cmd, ptr, arg, NULL);
 }
 
@@ -710,7 +719,6 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->merged = FALSE;
 
 	c->redirect_uri = NULL;
-	c->discover_url = NULL;
 	c->default_sso_url = NULL;
 	c->default_slo_url = NULL;
 	c->public_keys = NULL;
@@ -819,8 +827,6 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 
 	c->redirect_uri =
 			add->redirect_uri != NULL ? add->redirect_uri : base->redirect_uri;
-	c->discover_url =
-			add->discover_url != NULL ? add->discover_url : base->discover_url;
 	c->default_sso_url =
 			add->default_sso_url != NULL ?
 					add->default_sso_url : base->default_sso_url;
@@ -1128,6 +1134,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
  */
 void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	oidc_dir_cfg *c = apr_pcalloc(pool, sizeof(oidc_dir_cfg));
+	c->discover_url = NULL;
 	c->cookie = OIDC_DEFAULT_COOKIE;
 	c->cookie_path = OIDC_DEFAULT_COOKIE_PATH;
 	c->authn_header = OIDC_DEFAULT_AUTHN_HEADER;
@@ -1143,6 +1150,8 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	oidc_dir_cfg *c = apr_pcalloc(pool, sizeof(oidc_dir_cfg));
 	oidc_dir_cfg *base = BASE;
 	oidc_dir_cfg *add = ADD;
+	c->discover_url =
+			add->discover_url != NULL ? add->discover_url : base->discover_url;
 	c->cookie = (
 			apr_strnatcasecmp(add->cookie, OIDC_DEFAULT_COOKIE) != 0 ?
 					add->cookie : base->cookie);
@@ -1681,10 +1690,6 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, redirect_uri),
 				RSRC_CONF,
 				"Define the Redirect URI (e.g.: https://localhost:9031/protected/example/)"),
-		AP_INIT_TAKE1("OIDCDiscoverURL", oidc_set_url_slot,
-				(void *)APR_OFFSETOF(oidc_cfg, discover_url),
-				RSRC_CONF,
-				"Defines an external IDP Discovery page"),
 		AP_INIT_TAKE1("OIDCDefaultURL", oidc_set_url_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, default_sso_url),
 				RSRC_CONF,
@@ -1828,23 +1833,6 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF,
 				"Scrub user name and claim headers from the user's request."),
 
-		AP_INIT_TAKE1("OIDCAuthNHeader", ap_set_string_slot,
-				(void *) APR_OFFSETOF(oidc_dir_cfg, authn_header),
-				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
-				"Specify the HTTP header variable to set with the name of the authenticated user. By default no explicit header is added but Apache's default REMOTE_USER will be set."),
-		AP_INIT_TAKE1("OIDCCookiePath", ap_set_string_slot,
-				(void *) APR_OFFSETOF(oidc_dir_cfg, cookie_path),
-				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
-				"Define the cookie path for the session cookie."),
-		AP_INIT_TAKE1("OIDCCookie", ap_set_string_slot,
-				(void *) APR_OFFSETOF(oidc_dir_cfg, cookie),
-				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
-				"Define the cookie name for the session cookie."),
-		AP_INIT_FLAG("OIDCReturn401", ap_set_flag_slot,
-				(void *) APR_OFFSETOF(oidc_dir_cfg, return401),
-				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
-				"Indicates whether a user will be redirected to the Provider when not authenticated (Off) or a 401 will be returned (On)."),
-
 		AP_INIT_TAKE1("OIDCCacheType", oidc_set_cache_type,
 				(void*)APR_OFFSETOF(oidc_cfg, cache), RSRC_CONF,
 				"Cache type; must be one of \"file\", \"memcache\" or \"shm\"."),
@@ -1878,10 +1866,32 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF,
 				"Redis server used for caching (<hostname>[:<port>])"),
 #endif
+
+		AP_INIT_TAKE1("OIDCDiscoverURL", oidc_set_url_slot_dir_cfg,
+				(void *)APR_OFFSETOF(oidc_dir_cfg, discover_url),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Defines an external IDP Discovery page"),
 		AP_INIT_ITERATE("OIDCPassCookies",
 				oidc_set_pass_cookies,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, pass_cookies),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Specify cookies that need to be passed from the browser on to the backend to the OP/AS."),
+		AP_INIT_TAKE1("OIDCAuthNHeader", ap_set_string_slot,
+				(void *) APR_OFFSETOF(oidc_dir_cfg, authn_header),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Specify the HTTP header variable to set with the name of the authenticated user. By default no explicit header is added but Apache's default REMOTE_USER will be set."),
+		AP_INIT_TAKE1("OIDCCookiePath", ap_set_string_slot,
+				(void *) APR_OFFSETOF(oidc_dir_cfg, cookie_path),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Define the cookie path for the session cookie."),
+		AP_INIT_TAKE1("OIDCCookie", ap_set_string_slot,
+				(void *) APR_OFFSETOF(oidc_dir_cfg, cookie),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Define the cookie name for the session cookie."),
+		AP_INIT_FLAG("OIDCReturn401", ap_set_flag_slot,
+				(void *) APR_OFFSETOF(oidc_dir_cfg, return401),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Indicates whether a user will be redirected to the Provider when not authenticated (Off) or a 401 will be returned (On)."),
+
 		{ NULL }
 };

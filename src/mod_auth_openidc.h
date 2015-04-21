@@ -245,8 +245,6 @@ typedef struct oidc_cfg {
 
 	/* the redirect URI as configured with the OpenID Connect OP's that we talk to */
 	char *redirect_uri;
-	/* (optional) external OP discovery page */
-	char *discover_url;
 	/* (optional) default URL for 3rd-party initiated SSO */
 	char *default_sso_url;
 	/* (optional) default URL to go to after logout */
@@ -310,6 +308,8 @@ typedef struct oidc_cfg {
 } oidc_cfg;
 
 typedef struct oidc_dir_cfg {
+	/* (optional) external OP discovery page */
+	char *discover_url;
 	char *cookie_path;
 	char *cookie;
 	char *authn_header;
