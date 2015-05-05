@@ -2,7 +2,7 @@ libapache2-mod-auth-openidc (1.8.1-1) unstable; urgency=medium
 
   * avoid timing attacks; build with OpenSSL < 1.0
 
- -- Hans Zandbelt <zandbelt@zandbelt.net>  Tue, 05 May 2015 11:40:13 +0200
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Tue, 05 May 2015 11:40:13 +0200
 
 libapache2-mod-auth-openidc (1.8.0-1) unstable; urgency=medium
 
