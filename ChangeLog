@@ -1,3 +1,8 @@
+5/17/2015
+- fix OpenSSL version detection for Elliptic Curve support in apr_jwt_signature_to_jwk_type: include opensslv.h
+- fix hash length calculation for Elliptic Curve algorithms
+- bump to 1.8.2rc0
+
 5/5/2015
 - release 1.8.1
 

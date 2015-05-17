@@ -53,6 +53,7 @@
 #include <apr_base64.h>
 
 #include "apr_jose.h"
+#include <openssl/opensslv.h>
 
 /*
  * assemble an error report

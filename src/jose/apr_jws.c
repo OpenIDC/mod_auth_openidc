@@ -266,15 +266,15 @@ apr_byte_t apr_jws_hash_string(apr_pool_t *pool, const char *alg,
  */
 int apr_jws_hash_length(const char *alg) {
 	if ((strcmp(alg, "RS256") == 0) || (strcmp(alg, "PS256") == 0)
-			|| (strcmp(alg, "HS256") == 0)) {
+			|| (strcmp(alg, "HS256") == 0) || (strcmp(alg, "ES256") == 0)) {
 		return 32;
 	}
 	if ((strcmp(alg, "RS384") == 0) || (strcmp(alg, "PS384") == 0)
-			|| (strcmp(alg, "HS384") == 0)) {
+			|| (strcmp(alg, "HS384") == 0) || (strcmp(alg, "ES384") == 0)) {
 		return 48;
 	}
 	if ((strcmp(alg, "RS512") == 0) || (strcmp(alg, "PS512") == 0)
-			|| (strcmp(alg, "HS512") == 0)) {
+			|| (strcmp(alg, "HS512") == 0) || (strcmp(alg, "ES512") == 0)) {
 		return 64;
 	}
 	return 0;
