@@ -1059,7 +1059,11 @@ static apr_byte_t oidc_proto_validate_hash(request_rec *r, const char *alg,
 
 	/* calculate the base64url-encoded value of the hash */
 	char *encoded = NULL;
-	oidc_base64url_encode(r, &encoded, calc, apr_jws_hash_length(alg) / 2, 1);
+	if (oidc_base64url_encode(r, &encoded, calc, apr_jws_hash_length(alg) / 2,
+			1) <= 0) {
+		oidc_error(r, "oidc_base64url_encode returned an error");
+		return FALSE;
+	}
 
 	/* compare the calculated hash against the provided hash */
 	if ((apr_strnatcmp(encoded, hash) != 0)) {
