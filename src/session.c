@@ -416,7 +416,10 @@ static apr_status_t oidc_session_save_cookie(request_rec *r, session_rec *z) {
 
 	char *cookieValue = "";
 	if (z->encoded && z->encoded[0]) {
-		oidc_encrypt_base64url_encode_string(r, &cookieValue, z->encoded);
+		if (oidc_encrypt_base64url_encode_string(r, &cookieValue, z->encoded) <= 0) {
+			oidc_error(r, "oidc_encrypt_base64url_encode_string failed");
+			return APR_EGENERAL;
+		}
 	}
 	oidc_util_set_cookie(r, d->cookie, cookieValue, -1);
 
