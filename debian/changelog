@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.8.2-1) unstable; urgency=medium
+
+  * Elliptic Curve fixes
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Mon, 18 May 2015 09:40:08 +0200
+
 libapache2-mod-auth-openidc (1.8.1-1) unstable; urgency=medium
 
   * avoid timing attacks; build with OpenSSL < 1.0
