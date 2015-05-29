@@ -1,6 +1,8 @@
 5/29/2015
 - fix hash comparison when padded, thanks to @steverc as mentioned in #65
-- bump to 1.8.3rc0
+- fix post-logout URL being set to SSO URL
+- add post-logout URL validation, thanks to @davidbernick
+- bump to 1.8.3rc1
 
 5/18/2015
 - fix OpenSSL version detection for Elliptic Curve support in apr_jwt_signature_to_jwk_type: include opensslv.h

@@ -1698,16 +1698,47 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c, session_rec *session)
 		return oidc_handle_logout_request(r, c, session, url);
 	}
 
-	if ((url == NULL) || (apr_strnatcmp(url, "") == 0))
-		url = c->default_sso_url;
+	if ((url == NULL) || (apr_strnatcmp(url, "") == 0)) {
 
-	apr_uri_t uri;
-	if ((url != NULL) && (apr_uri_parse(r->pool, url, &uri) != APR_SUCCESS)) {
-		const char *error_description = apr_psprintf(r->pool,
-				"Logout URL malformed: %s", url);
-		oidc_error(r, "%s", error_description);
-		return oidc_util_html_send_error(r, url, error_description,
-				HTTP_INTERNAL_SERVER_ERROR);
+		url = c->default_slo_url;
+
+	} else {
+
+		/* do input validation on the logout parameter value */
+
+		const char *error_description = NULL;
+		apr_uri_t uri;
+
+		if (apr_uri_parse(r->pool, url, &uri) != APR_SUCCESS) {
+			const char *error_description = apr_psprintf(r->pool,
+					"Logout URL malformed: %s", url);
+			oidc_error(r, "%s", error_description);
+			return oidc_util_html_send_error(r, url, error_description,
+					HTTP_INTERNAL_SERVER_ERROR);
+
+		}
+
+		if ((strstr(r->hostname, uri.hostname) == NULL)
+				|| (strstr(uri.hostname, r->hostname) == NULL)) {
+			error_description =
+					apr_psprintf(r->pool,
+							"logout value \"%s\" does not match the hostname of the current request \"%s\"",
+							apr_uri_unparse(r->pool, &uri, 0), r->hostname);
+			oidc_error(r, "%s", error_description);
+			return oidc_util_html_send_error(r, url, error_description,
+					HTTP_INTERNAL_SERVER_ERROR);
+		}
+
+		/* validate the URL to prevent HTTP header splitting */
+		if (((strstr(url, "\n") != NULL) || strstr(url, "\r") != NULL)) {
+			error_description =
+					apr_psprintf(r->pool,
+							"logout value \"%s\" contains illegal \"\n\" or \"\r\" character(s)",
+							url);
+			oidc_error(r, "%s", error_description);
+			return oidc_util_html_send_error(r, url, error_description,
+					HTTP_INTERNAL_SERVER_ERROR);
+		}
 	}
 
 	const char *end_session_endpoint = NULL;
