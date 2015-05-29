@@ -1,3 +1,7 @@
+5/29/2015
+- fix hash comparison when padded, thanks to @steverc as mentioned in #65
+- bump to 1.8.3rc0
+
 5/18/2015
 - fix OpenSSL version detection for Elliptic Curve support in apr_jwt_signature_to_jwk_type: include opensslv.h
 - fix hash length calculation for Elliptic Curve algorithms

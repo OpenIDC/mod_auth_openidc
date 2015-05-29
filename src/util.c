@@ -105,8 +105,7 @@ int oidc_base64url_encode(request_rec *r, char **dst, const char *src,
 /*
  * base64url decode a string
  */
-int oidc_base64url_decode(request_rec *r, char **dst, const char *src,
-		int add_padding) {
+int oidc_base64url_decode(request_rec *r, char **dst, const char *src) {
 	if (src == NULL) {
 		oidc_error(r, "not decoding anything; src=NULL");
 		return -1;
@@ -122,19 +121,17 @@ int oidc_base64url_decode(request_rec *r, char **dst, const char *src,
 			dec[i] = '=';
 		i++;
 	}
-	if (add_padding == 1) {
-		switch (strlen(dec) % 4) {
-		case 0:
-			break;
-		case 2:
-			dec = apr_pstrcat(r->pool, dec, "==", NULL);
-			break;
-		case 3:
-			dec = apr_pstrcat(r->pool, dec, "=", NULL);
-			break;
-		default:
-			return 0;
-		}
+	switch (strlen(dec) % 4) {
+	case 0:
+		break;
+	case 2:
+		dec = apr_pstrcat(r->pool, dec, "==", NULL);
+		break;
+	case 3:
+		dec = apr_pstrcat(r->pool, dec, "=", NULL);
+		break;
+	default:
+		return 0;
 	}
 	int dlen = apr_base64_decode_len(dec);
 	*dst = apr_palloc(r->pool, dlen);
@@ -166,7 +163,7 @@ int oidc_base64url_decode_decrypt_string(request_rec *r, char **dst,
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	char *decbuf = NULL;
-	int dec_len = oidc_base64url_decode(r, &decbuf, src, 1);
+	int dec_len = oidc_base64url_decode(r, &decbuf, src);
 	if (dec_len <= 0) {
 		oidc_error(r, "oidc_base64url_decode failed");
 		return -1;

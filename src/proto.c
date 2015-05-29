@@ -1046,11 +1046,12 @@ static apr_byte_t oidc_proto_validate_hash(request_rec *r, const char *alg,
 		const char *hash, const char *value, const char *type) {
 
 	char *calc = NULL;
-	unsigned int hash_len = 0;
+	unsigned int calc_len = 0;
+	unsigned int hash_len = apr_jws_hash_length(alg) / 2;
 	apr_jwt_error_t err;
 
 	/* hash the provided access_token */
-	if (apr_jws_hash_string(r->pool, alg, value, &calc, &hash_len,
+	if (apr_jws_hash_string(r->pool, alg, value, &calc, &calc_len,
 			&err) == FALSE) {
 		oidc_error(r, "apr_jws_hash_string failed: %s",
 				apr_jwt_e2s(r->pool, err));
@@ -1058,24 +1059,28 @@ static apr_byte_t oidc_proto_validate_hash(request_rec *r, const char *alg,
 	}
 
 	/* calculate the base64url-encoded value of the hash */
-	char *encoded = NULL;
-	if (oidc_base64url_encode(r, &encoded, calc, apr_jws_hash_length(alg) / 2,
-			1) <= 0) {
-		oidc_error(r, "oidc_base64url_encode returned an error");
+	char *decoded = NULL;
+	unsigned int decoded_len = oidc_base64url_decode(r, &decoded, hash);
+	if (decoded_len <= 0) {
+		oidc_error(r, "oidc_base64url_decode returned an error");
 		return FALSE;
 	}
 
+	oidc_debug(r, "hash_len=%d, decoded_len=%d, calc_len=%d", hash_len,
+			decoded_len, calc_len);
+
 	/* compare the calculated hash against the provided hash */
-	if ((apr_strnatcmp(encoded, hash) != 0)) {
+	if ((decoded_len < hash_len) || (calc_len < hash_len)
+			|| (memcmp(decoded, calc, hash_len) != 0)) {
 		oidc_error(r,
-				"provided \"%s\" hash value (%s) does not match the calculated value (%s)",
-				type, hash, encoded);
+				"provided \"%s\" hash value (%s) does not match the calculated value",
+				type, hash);
 		return FALSE;
 	}
 
 	oidc_debug(r,
-			"successfully validated the provided \"%s\" hash value (%s) against the calculated value (%s)",
-			type, hash, encoded);
+			"successfully validated the provided \"%s\" hash value (%s) against the calculated value",
+			type, hash);
 
 	return TRUE;
 }
