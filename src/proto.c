@@ -1067,10 +1067,17 @@ static apr_byte_t oidc_proto_validate_hash(request_rec *r, const char *alg,
 
 	/* compare the calculated hash against the provided hash */
 	if ((apr_strnatcmp(encoded, hash) != 0)) {
-		oidc_error(r,
+		if (oidc_base64url_encode(r, &encoded, calc, apr_jws_hash_length(alg) / 2,
+				0) <= 0) {
+			oidc_error(r, "oidc_base64url_encode returned an error");
+			return FALSE;
+		}
+		if ((apr_strnatcmp(encoded, hash) != 0)) {
+			oidc_error(r,
 				"provided \"%s\" hash value (%s) does not match the calculated value (%s)",
 				type, hash, encoded);
-		return FALSE;
+			return FALSE;
+		}
 	}
 
 	oidc_debug(r,

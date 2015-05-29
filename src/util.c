@@ -85,16 +85,14 @@ int oidc_base64url_encode(request_rec *r, char **dst, const char *src,
 			enc[i] = '-';
 		if (enc[i] == '/')
 			enc[i] = '_';
-		if (enc[i] == '=')
-			enc[i] = ',';
 		i++;
 	}
 	if (remove_padding) {
 		/* remove /0 and padding */
 		enc_len--;
-		if (enc[enc_len - 1] == ',')
+		if (enc[enc_len - 1] == '=')
 			enc_len--;
-		if (enc[enc_len - 1] == ',')
+		if (enc[enc_len - 1] == '=')
 			enc_len--;
 		enc[enc_len] = '\0';
 	}
