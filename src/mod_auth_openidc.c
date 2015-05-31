@@ -2313,18 +2313,8 @@ int oidc_auth_checker(request_rec *r) {
 	}
 
 	/* merge id_token claims (e.g. "iss") in to claims json object */
-	const char *key;
-	json_t *value;
-	void *iter;
-	if (claims) {
-		iter = json_object_iter(id_token);
-		while(iter) {
-			key = json_object_iter_key(iter);
-			value = json_object_iter_value(iter);
-			json_object_set(claims, key, value);
-			iter = json_object_iter_next(id_token, iter);
-		}
-	}
+	if (claims)
+		oidc_util_json_merge(id_token, claims);
 
 	/* dispatch to the <2.4 specific authz routine */
 	int rc = oidc_authz_worker(r, claims ? claims : id_token, reqs,

@@ -654,16 +654,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 
 			} else {
 
-				const char *key;
-				json_t *value;
-
-				void *iter = json_object_iter(json);
-				while(iter) {
-					key = json_object_iter_key(iter);
-					value = json_object_iter_value(iter);
-					json_object_set(data, key, value);
-					iter = json_object_iter_next(json, iter);
-				}
+				oidc_util_json_merge(json, data);
 
 			}
 

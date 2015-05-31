@@ -1382,6 +1382,28 @@ apr_byte_t oidc_json_object_get_int(apr_pool_t *pool, json_t *json,
 }
 
 /*
+ * merge two JSON objects
+ */
+ apr_byte_t oidc_util_json_merge(json_t *src, json_t *dst) {
+
+	const char *key;
+	json_t *value = NULL;
+	void *iter = NULL;
+
+	if ((src == NULL) || (dst == NULL)) return FALSE;
+
+	iter = json_object_iter(src);
+	while(iter) {
+		key = json_object_iter_key(iter);
+		value = json_object_iter_value(iter);
+		json_object_set(dst, key, value);
+		iter = json_object_iter_next(src, iter);
+	}
+
+	return TRUE;
+}
+
+/*
  * add query encoded parameters to a table
  */
 void oidc_util_table_add_query_encoded_params(apr_pool_t *pool,
