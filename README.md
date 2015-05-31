@@ -70,25 +70,29 @@ as the *redirect_uri* for the client through the Google API Console. You will al
 have to enable the `Google+ API` under `APIs & auth` in the [Google API console]
 (https://console.developers.google.com).
 
-    OIDCProviderMetadataURL https://accounts.google.com/.well-known/openid-configuration
-    OIDCClientID <your-client-id-administered-through-the-google-api-console>
-    OIDCClientSecret <your-client-secret-administered-through-the-google-api-console>
+```apache
+OIDCProviderMetadataURL https://accounts.google.com/.well-known/openid-configuration
+OIDCClientID <your-client-id-administered-through-the-google-api-console>
+OIDCClientSecret <your-client-secret-administered-through-the-google-api-console>
 
-    OIDCRedirectURI https://www.example.com/example/redirect_uri
-    OIDCCryptoPassphrase <password>
+OIDCRedirectURI https://www.example.com/example/redirect_uri
+OIDCCryptoPassphrase <password>
 
-    <Location /example/>
-       AuthType openid-connect
-       Require valid-user
-    </Location>
+<Location /example/>
+   AuthType openid-connect
+   Require valid-user
+</Location>
+```
 
 Note if you want to securely restrict logins to a specific Google Apps domain you would not only
 add the `hd=<your-domain>` setting to the `OIDCAuthRequestParams` primitive for skipping the Google Account
 Chooser screen, but you must also ask for the `email` scope using `OIDCScope` and use a `Require claim`
 authorization setting in the `Location` primitive similar to:
 
-    OIDCScope "openid email"
-    Require claim hd:<your-domain>
+```apache
+OIDCScope "openid email"
+Require claim hd:<your-domain>
+```
 
 The above is an authorization example of an exact match of a provided claim against a string value.
 For more authorization options see the [Wiki page on Authorization] (https://github.com/pingidentity/mod_auth_openidc/wiki/Authorization).
@@ -101,14 +105,16 @@ that are able to present a valid access token obtained from Google. **mod_auth_o
 `access_token` against Google's token info endpoint and use the claims returned in the response for
 authorization purposes. The following configuration allows access only to a specific client:
 
-    OIDCOAuthIntrospectionEndpoint https://www.googleapis.com/oauth2/v1/tokeninfo
-    OIDCOAuthIntrospectionTokenParamName access_token
-    OIDCOAuthRemoteUserClaim user_id
+```apache
+OIDCOAuthIntrospectionEndpoint https://www.googleapis.com/oauth2/v1/tokeninfo
+OIDCOAuthIntrospectionTokenParamName access_token
+OIDCOAuthRemoteUserClaim user_id
 
-    <Location /example/api/v2/>
-        Authtype oauth20
-        Require claim issued_to:412063239660.apps.googleusercontent.com
-    </Location>
+<Location /example/api/v2/>
+    Authtype oauth20
+    Require claim issued_to:412063239660.apps.googleusercontent.com
+</Location>
+```
 
 Note that this is not an OpenID Connect SSO scenario where users are authenticated but rather a "pure" OAuth 2.0
 scenario where **mod_auth_openidc** is the OAuth 2.0 Resource Server instead of the RP/client. How the actual
@@ -177,15 +183,17 @@ configuration filename is `localhost%3A9031.conf`:
   
 And the related **mod_auth_openidc** Apache config section:
 
-    OIDCMetadataDir <somewhere-writable-for-the-apache-process>/metadata
+```apache
+OIDCMetadataDir <somewhere-writable-for-the-apache-process>/metadata
 
-    OIDCRedirectURI https://www.example.com/example/redirect_uri/
-    OIDCCryptoPassphrase <password>
+OIDCRedirectURI https://www.example.com/example/redirect_uri/
+OIDCCryptoPassphrase <password>
 
-    <Location /example/>
-       AuthType openid-connect
-       Require valid-user
-    </Location>
+<Location /example/>
+   AuthType openid-connect
+   Require valid-user
+</Location>
+```
 
 If you do not want to use the internal discovery page (you really shouldn't...), you
 can have the user being redirected to an external discovery page by setting
@@ -216,37 +224,39 @@ configuration and doing claims-based authorization. (running on `localhost` and
 `https://localhost/example/redirect_uri/` registered as *redirect_uri* for the
 client `ac_oic_client`)
 
-    OIDCProviderMetadataURL https://macbook:9031/.well-known/openid-configuration
+```apache
+OIDCProviderMetadataURL https://macbook:9031/.well-known/openid-configuration
 
-    OIDCSSLValidateServer Off
-    OIDCClientID ac_oic_client
-    OIDCClientSecret abc123DEFghijklmnop4567rstuvwxyzZYXWUT8910SRQPOnmlijhoauthplaygroundapplication
+OIDCSSLValidateServer Off
+OIDCClientID ac_oic_client
+OIDCClientSecret abc123DEFghijklmnop4567rstuvwxyzZYXWUT8910SRQPOnmlijhoauthplaygroundapplication
 
-    OIDCRedirectURI https://localhost/example/redirect_uri/
-    OIDCCryptoPassphrase <password>
-    OIDCScope "openid email profile"
+OIDCRedirectURI https://localhost/example/redirect_uri/
+OIDCCryptoPassphrase <password>
+OIDCScope "openid email profile"
 
-    OIDCOAuthIntrospectionEndpoint https://macbook:9031/as/token.oauth2
-	OIDCOAuthIntrospectionEndpointParams grant_type=urn%3Apingidentity.com%3Aoauth2%3Agrant_type%3Avalidate_bearer
-    OIDCOAuthIntrospectionEndpointAuth client_secret_basic
-    OIDCOAuthRemoteUserClaim Username
+OIDCOAuthIntrospectionEndpoint https://macbook:9031/as/token.oauth2
+OIDCOAuthIntrospectionEndpointParams grant_type=urn%3Apingidentity.com%3Aoauth2%3Agrant_type%3Avalidate_bearer
+OIDCOAuthIntrospectionEndpointAuth client_secret_basic
+OIDCOAuthRemoteUserClaim Username
 	
-    OIDCOAuthSSLValidateServer Off
-    OIDCOAuthClientID rs_client
-    OIDCOAuthClientSecret 2Federate
+OIDCOAuthSSLValidateServer Off
+OIDCOAuthClientID rs_client
+OIDCOAuthClientSecret 2Federate
 
-    <Location /example/>
-       AuthType openid-connect
-       #Require valid-user
-       Require claim sub:joe
-    </Location>
+<Location /example/>
+   AuthType openid-connect
+   #Require valid-user
+   Require claim sub:joe
+</Location>
 
-    <Location /example2>
-       AuthType oauth20
-       #Require valid-user
-       Require claim Username:joe
-       #Require claim scope~\bprofile\b
-    </Location>
+<Location /example-api>
+   AuthType oauth20
+   #Require valid-user
+   Require claim Username:joe
+   #Require claim scope~\bprofile\b
+</Location>
+```
 
 Support
 -------
