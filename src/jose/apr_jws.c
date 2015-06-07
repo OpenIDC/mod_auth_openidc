@@ -83,6 +83,7 @@ apr_array_header_t *apr_jws_supported_algorithms(apr_pool_t *pool) {
 	*(const char**) apr_array_push(result) = "ES384";
 	*(const char**) apr_array_push(result) = "ES512";
 #endif
+	*(const char**) apr_array_push(result) = "none";
 	return result;
 }
 

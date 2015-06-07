@@ -372,6 +372,25 @@ const char *apr_jwt_signature_to_jwk_type(apr_pool_t *pool, apr_jwt_t *jwt) {
 	return NULL;
 }
 
+/* see if we can deal with this type of JWT (JWS/JWE) */
+static apr_byte_t apr_jwt_is_supported(apr_pool_t *pool, apr_jwt_t *jwt,
+		apr_jwt_error_t *err) {
+	if (apr_jws_algorithm_is_supported(pool, jwt->header.alg) == FALSE) {
+		if (apr_jwe_algorithm_is_supported(pool, jwt->header.alg) == FALSE) {
+			apr_jwt_error(err, "unsupported algorithm in JWT header: \"%s\"",
+					jwt->header.alg);
+			return FALSE;
+		}
+		if (apr_jwe_encryption_is_supported(pool, jwt->header.enc) == FALSE) {
+			apr_jwt_error(err,
+					"unsupported content encryption algorithm in (%s) encrypted JWT header: \"%s\"",
+					jwt->header.alg, jwt->header.enc);
+			return FALSE;
+		}
+	}
+	return TRUE;
+}
+
 /*
  * parse and (optionally) decrypt a JSON Web Token
  */
@@ -391,6 +410,9 @@ apr_byte_t apr_jwt_parse(apr_pool_t *pool, const char *s_json,
 				"could not successfully deserialize 2 or more elements from JWT header");
 		return FALSE;
 	}
+
+	if (apr_jwt_is_supported(pool, jwt, err) == FALSE)
+		return FALSE;
 
 	if (apr_jwe_is_encrypted_jwt(pool, &jwt->header)) {
 
