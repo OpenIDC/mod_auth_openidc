@@ -248,9 +248,22 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 		apr_time_t cache_until;
 		if (active != NULL) {
 
-			if ((!json_is_boolean(active)) || (!json_is_true(active))) {
+			if (json_is_boolean(active) && (!json_is_true(active))) {
 				oidc_debug(r,
-						"no \"active\" boolean object with value \"true\" found in response JSON object");
+						"\"active\" boolean object with value \"false\" found in response JSON object");
+				json_decref(result);
+				return FALSE;
+			} else if (json_is_string(active)
+					&& (apr_strnatcasecmp(json_string_value(active), "true")
+							== 0)) {
+				oidc_debug(r,
+						"\"active\" string object with value that is not equal to \"true\" found in response JSON object: %s",
+						json_string_value(active));
+				json_decref(result);
+				return FALSE;
+			} else {
+				oidc_debug(r,
+						"no \"active\" boolean or string object with value \"true\" found in response JSON object");
 				json_decref(result);
 				return FALSE;
 			}

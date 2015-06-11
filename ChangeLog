@@ -1,3 +1,7 @@
+6/10/2015
+- allow JSON string values for the "active" claim in access token validation responses
+- bump to 1.8.3rc4
+
 6/7/2015
 - improve error logging on non-supported JWT signing/encryption algorithms
 - bump to 1.8.3rc3
