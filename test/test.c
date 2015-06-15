@@ -53,6 +53,7 @@
 #include <errno.h>
 
 #include <openssl/evp.h>
+#include <openssl/hmac.h>
 
 #include "apr.h"
 #include "apr_errno.h"
@@ -880,6 +881,73 @@ static char * test_proto_validate_nonce(request_rec *r) {
 	return 0;
 }
 
+static char * test_proto_validate_jwt(request_rec *r) {
+
+	apr_jwt_t *jwt = NULL;
+	apr_jwt_error_t err;
+
+	const char *s_secret = "secret";
+	const char *s_issuer = "https://localhost";
+	apr_time_t now = apr_time_sec(apr_time_now());
+
+	const char *s_jwt_header = "{"
+			"\"alg\": \"HS256\""
+			"}";
+
+	const char *s_jwt_payload = "{"
+			"\"nonce\": \"543210,\","
+			"\"iat\": %" APR_TIME_T_FMT ","
+			"\"sub\": \"alice\","
+			"\"iss\": \"%s\","
+			"\"aud\": \"bob\","
+			"\"exp\": %" APR_TIME_T_FMT
+			"}";
+	s_jwt_payload = apr_psprintf(r->pool, s_jwt_payload, now, s_issuer,
+			now + 600);
+
+	char *s_jwt_header_encoded = NULL;
+	oidc_base64url_encode(r, &s_jwt_header_encoded, s_jwt_header,
+			strlen(s_jwt_header), 1);
+
+	char *s_jwt_payload_encoded = NULL;
+	oidc_base64url_encode(r, &s_jwt_payload_encoded, s_jwt_payload,
+			strlen(s_jwt_payload), 1);
+
+	char *s_jwt_message = apr_psprintf(r->pool, "%s.%s", s_jwt_header_encoded,
+			s_jwt_payload_encoded);
+
+	unsigned int md_len = 0;
+	unsigned char md[EVP_MAX_MD_SIZE];
+	const EVP_MD *digest = EVP_get_digestbyname("sha256");
+
+	TST_ASSERT("HMAC",
+			HMAC(digest, (const unsigned char * )s_secret, strlen(s_secret),
+					(const unsigned char * )s_jwt_message,
+					strlen(s_jwt_message), md, &md_len) != 0);
+
+	char *s_jwt_signature_encoded = NULL;
+	oidc_base64url_encode(r, &s_jwt_signature_encoded, (const char *) md,
+			md_len, 1);
+
+	char *s_jwt = apr_psprintf(r->pool, "%s.%s.%s", s_jwt_header_encoded,
+			s_jwt_payload_encoded, s_jwt_signature_encoded);
+
+	TST_ASSERT_ERR("apr_jwt_parse",
+			apr_jwt_parse(r->pool, s_jwt, &jwt, NULL, &err), r->pool, err);
+
+	TST_ASSERT_ERR("apr_jws_verify",
+			apr_jws_verify(r->pool, jwt, oidc_util_merge_symmetric_key(r->pool, NULL, s_secret, NULL), &err),
+			r->pool, err);
+
+	TST_ASSERT_ERR("oidc_proto_validate_jwt",
+			oidc_proto_validate_jwt(r, jwt, s_issuer, TRUE, TRUE, 10), r->pool,
+			err);
+
+	apr_jwt_destroy(jwt);
+
+	return 0;
+}
+
 static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	char *message;
 	TST_RUN(test_jwt_array_has_string, pool);
@@ -902,6 +970,7 @@ static char * all_tests(apr_pool_t *pool, request_rec *r) {
 
 	TST_RUN(test_proto_authorization_request, r);
 	TST_RUN(test_proto_validate_nonce, r);
+	TST_RUN(test_proto_validate_jwt, r);
 
 	return 0;
 }

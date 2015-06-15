@@ -1,3 +1,6 @@
+6/15/2015
+- add a complete JWT sample that includes validation of "exp" and "iat" to the test suite
+
 6/10/2015
 - allow JSON string values for the "active" claim in access token validation responses
 - bump to 1.8.3rc4
