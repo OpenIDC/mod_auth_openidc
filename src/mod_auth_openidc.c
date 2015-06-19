@@ -1422,18 +1422,6 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	oidc_authorization_request_set_cookie(r, c, state, proto_state);
 
 	/*
-	 * TODO: I'd like to include the nonce all flows, including the "code" and "code token" flows
-	 * but Google does not allow me to do that:
-	 * Error: invalid_request: Parameter not allowed for this message type: nonce
-	 */
-	if ((apr_strnatcmp(provider->issuer, "accounts.google.com") == 0)
-			&& ((oidc_util_spaced_string_equals(r->pool,
-					provider->response_type, "code"))
-					|| (oidc_util_spaced_string_equals(r->pool,
-							provider->response_type, "code token"))))
-		json_object_del(proto_state, "nonce");
-
-	/*
 	 * printout errors if Cookie settings are not going to work
 	 */
 	apr_uri_t o_uri;
@@ -1609,13 +1597,6 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 
 		/* issuer is set now, so let's continue as planned */
 
-	} else if (apr_strnatcmp(issuer, "accounts.google.com") != 0) {
-
-		/* allow issuer/domain entries that don't start with https */
-		issuer = apr_psprintf(r->pool, "%s",
-				((strstr(issuer, "http://") == issuer)
-						|| (strstr(issuer, "https://") == issuer)) ?
-						issuer : apr_psprintf(r->pool, "https://%s", issuer));
 	}
 
 	/* strip trailing '/' */

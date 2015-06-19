@@ -1,5 +1,7 @@
 6/19/2015
 - make public keys for encrypted access tokens available in OAuth-only configurations; fixes #74
+- remove exceptions for accounts.google.com since Google is OpenID Connect compliant now
+- release 1.8.3
 
 6/15/2015
 - add a complete JWT sample that includes validation of "exp" and "iat" to the test suite

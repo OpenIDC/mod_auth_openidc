@@ -102,8 +102,7 @@ static const char *oidc_metadata_filename_to_issuer(request_rec *r,
 	char *p = strrchr(result, '.');
 	*p = '\0';
 	p = oidc_util_unescape_string(r, result);
-	return (strcmp(p, "accounts.google.com") == 0) ?
-			p : apr_psprintf(r->pool, "https://%s", p);
+	return apr_psprintf(r->pool, "https://%s", p);
 }
 
 /*

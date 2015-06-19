@@ -1368,11 +1368,6 @@ static apr_byte_t oidc_proto_parse_idtoken_and_validate_code(request_rec *r,
 
 	json_t *nonce = json_object_get(proto_state, "nonce");
 
-	/* TODO: Google does not allow nonce in "code" or "code token" flows... */
-	if ((is_code_flow)
-			&& (strcmp(provider->issuer, "accounts.google.com") == 0))
-		nonce = NULL;
-
 	if (oidc_proto_parse_idtoken(r, c, provider, id_token,
 			nonce ? json_string_value(nonce) : NULL, jwt, is_code_flow) == FALSE)
 		return FALSE;

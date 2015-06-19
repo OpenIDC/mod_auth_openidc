@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.8.3-1) unstable; urgency=medium
+
+  * remove accounts.google.com exceptions
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Fri, 19 Jun 2015 19:15:02 +0200
+
 libapache2-mod-auth-openidc (1.8.2-1) unstable; urgency=medium
 
   * Elliptic Curve fixes
