@@ -1769,7 +1769,7 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c, session_rec *session)
 /*
  * handle request for JWKs
  */
-static int oidc_handle_jwks(request_rec *r, oidc_cfg *c) {
+int oidc_handle_jwks(request_rec *r, oidc_cfg *c) {
 
 	/* pickup requested JWKs type */
 	//	char *jwks_type = NULL;

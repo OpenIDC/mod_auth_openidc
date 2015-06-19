@@ -461,6 +461,16 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 
 			return OK;
 		}
+
+	/* check if this is a request for the public (encryption) keys */
+	} else if ((c->redirect_uri != NULL) && (oidc_util_request_matches_url(r, c->redirect_uri))) {
+
+		if (oidc_util_request_has_parameter(r, "jwks")) {
+
+			return oidc_handle_jwks(r, c);
+
+		}
+
 	}
 
 	/* we don't have a session yet */
