@@ -722,6 +722,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 				apr_jwt_header_to_string(r->pool, id_token, NULL),
 				apr_jwt_e2s(r->pool, err));
 		apr_jwt_destroy(*jwt);
+		*jwt = NULL;
 		return FALSE;
 	}
 
@@ -741,6 +742,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 			oidc_error(r,
 					"id_token signature could not be validated, aborting");
 			apr_jwt_destroy(*jwt);
+			*jwt = NULL;
 			return FALSE;
 		}
 	}
@@ -749,6 +751,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 	if (oidc_proto_validate_idtoken(r, provider, *jwt, nonce) == FALSE) {
 		oidc_error(r, "id_token payload could not be validated, aborting");
 		apr_jwt_destroy(*jwt);
+		*jwt = NULL;
 		return FALSE;
 	}
 

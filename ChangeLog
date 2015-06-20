@@ -1,3 +1,7 @@
+6/20/2015
+- avoid double free of JWT after parsing errors have been encountered
+- bump to 1.8.4rc0
+
 6/19/2015
 - make public keys for encrypted access tokens available in OAuth-only configurations; fixes #74
 - remove exceptions for accounts.google.com since Google is OpenID Connect compliant now
