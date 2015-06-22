@@ -988,9 +988,9 @@ static apr_byte_t oidc_util_read(request_rec *r, const char **rbuf) {
  */
 apr_byte_t oidc_util_read_form_encoded_params(request_rec *r,
 		apr_table_t *table, const char *data) {
-	const char *key, *val;
+	const char *key, *val, *p = data;
 
-	while (data && *data && (val = ap_getword(r->pool, &data, '&'))) {
+	while (p && *p && (val = ap_getword(r->pool, &p, '&'))) {
 		key = ap_getword(r->pool, &val, '=');
 		key = oidc_util_unescape_string(r, key);
 		val = oidc_util_unescape_string(r, val);
