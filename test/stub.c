@@ -54,6 +54,10 @@ AP_DECLARE(int) ap_hook_auth_checker(request_rec *r) {
 	return 0;
 }
 
+AP_DECLARE(int) ap_hook_fixups(request_rec *r) {
+	return 0;
+}
+
 AP_DECLARE(void) ap_hook_post_config(
 		int (*post_config)(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 				server_rec *s), const char * const *aszPre,

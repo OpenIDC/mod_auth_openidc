@@ -582,6 +582,10 @@ static apr_byte_t oidc_set_app_claims(request_rec *r,
 		const oidc_cfg * const cfg, session_rec *session,
 		const char *session_key) {
 
+	/* get a handle to the directory config */
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+
 	const char *s_claims = NULL;
 	json_t *j_claims = NULL;
 
@@ -605,8 +609,9 @@ static apr_byte_t oidc_set_app_claims(request_rec *r,
 
 	/* set the resolved claims a HTTP headers for the application */
 	if (j_claims != NULL) {
-		oidc_util_set_app_headers(r, j_claims, cfg->claim_prefix,
-				cfg->claim_delimiter);
+		oidc_util_set_app_infos(r, j_claims, cfg->claim_prefix,
+				cfg->claim_delimiter, dir_cfg->pass_info_in_headers,
+				dir_cfg->pass_info_in_env_vars);
 
 		/* set the claims JSON string in the request state so it is available for authz purposes later on */
 		oidc_request_state_set(r, session_key, s_claims);
@@ -724,27 +729,27 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg * cfg,
 		/* get the string-encoded JSON object from the session */
 		oidc_session_get(r, session, OIDC_IDTOKEN_CLAIMS_SESSION_KEY,
 				&s_id_token);
-		/* pass it to the app in a header */
-		oidc_util_set_app_header(r, "id_token_payload", s_id_token,
-				OIDC_DEFAULT_HEADER_PREFIX);
+		/* pass it to the app in a header or environment variable */
+		oidc_util_set_app_info(r, "id_token_payload", s_id_token,
+				OIDC_DEFAULT_HEADER_PREFIX, dir_cfg->pass_info_in_headers, dir_cfg->pass_info_in_env_vars);
 	}
 
 	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_SERIALIZED)) {
 		const char *s_id_token = NULL;
 		/* get the compact serialized JWT from the session */
 		oidc_session_get(r, session, OIDC_IDTOKEN_SESSION_KEY, &s_id_token);
-		/* pass it to the app in a header */
-		oidc_util_set_app_header(r, "id_token", s_id_token,
-				OIDC_DEFAULT_HEADER_PREFIX);
+		/* pass it to the app in a header or environment variable */
+		oidc_util_set_app_info(r, "id_token", s_id_token,
+				OIDC_DEFAULT_HEADER_PREFIX, dir_cfg->pass_info_in_headers, dir_cfg->pass_info_in_env_vars);
 	}
 
 	/* set the access_token in the app headers */
 	const char *access_token = NULL;
 	oidc_session_get(r, session, OIDC_ACCESSTOKEN_SESSION_KEY, &access_token);
 	if (access_token != NULL) {
-		/* pass it to the app in a header */
-		oidc_util_set_app_header(r, "access_token", access_token,
-				OIDC_DEFAULT_HEADER_PREFIX);
+		/* pass it to the app in a header or environment variable */
+		oidc_util_set_app_info(r, "access_token", access_token,
+				OIDC_DEFAULT_HEADER_PREFIX, dir_cfg->pass_info_in_headers, dir_cfg->pass_info_in_env_vars);
 	}
 
 	/* set the expiry timestamp in the app headers */
@@ -752,10 +757,10 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg * cfg,
 	oidc_session_get(r, session, OIDC_ACCESSTOKEN_EXPIRES_SESSION_KEY,
 			&access_token_expires);
 	if (access_token_expires != NULL) {
-		/* pass it to the app in a header */
-		oidc_util_set_app_header(r, "access_token_expires",
+		/* pass it to the app in a header or environment variable */
+		oidc_util_set_app_info(r, "access_token_expires",
 				access_token_expires,
-				OIDC_DEFAULT_HEADER_PREFIX);
+				OIDC_DEFAULT_HEADER_PREFIX, dir_cfg->pass_info_in_headers, dir_cfg->pass_info_in_env_vars);
 	}
 
 	/*

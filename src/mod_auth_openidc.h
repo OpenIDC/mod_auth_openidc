@@ -152,6 +152,8 @@ APLOG_USE_MODULE(auth_openidc);
 /* the (global) key for the mod_auth_openidc related state that is stored in the request userdata context */
 #define OIDC_USERDATA_KEY "mod_auth_openidc_state"
 
+#define OIDC_USERDATA_ENV_KEY "mod_auth_openidc_env"
+
 /* input filter hook name */
 #define OIDC_UTIL_HTTP_SENDSTRING "OIDC_UTIL_HTTP_SENDSTRING"
 
@@ -315,6 +317,8 @@ typedef struct oidc_dir_cfg {
 	char *authn_header;
 	int return401;
 	apr_array_header_t *pass_cookies;
+	apr_byte_t pass_info_in_headers;
+	apr_byte_t pass_info_in_env_vars;
 } oidc_dir_cfg;
 
 int oidc_check_user_id(request_rec *r);
@@ -402,8 +406,8 @@ apr_byte_t oidc_util_file_read(request_rec *r, const char *path, char **result);
 apr_byte_t oidc_util_issuer_match(const char *a, const char *b);
 int oidc_util_html_send_error(request_rec *r, const char *error, const char *description, int status_code);
 apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack, const char *needle);
-void oidc_util_set_app_header(request_rec *r, const char *s_key, const char *s_value, const char *claim_prefix);
-void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs, const char *claim_prefix, const char *claim_delimiter);
+void oidc_util_set_app_info(request_rec *r, const char *s_key, const char *s_value, const char *claim_prefix, apr_byte_t as_header, apr_byte_t as_env_var);
+void oidc_util_set_app_infos(request_rec *r, const json_t *j_attrs, const char *claim_prefix, const char *claim_delimiter, apr_byte_t as_header, apr_byte_t as_env_var);
 apr_hash_t *oidc_util_spaced_string_to_hashtable(apr_pool_t *pool, const char *str);
 apr_byte_t oidc_util_spaced_string_equals(apr_pool_t *pool, const char *a, const char *b);
 apr_byte_t oidc_util_spaced_string_contains(apr_pool_t *pool, const char *response_type, const char *match);

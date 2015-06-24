@@ -1142,37 +1142,57 @@ apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack,
 /*
  * set an HTTP header to pass information to the application
  */
-void oidc_util_set_app_header(request_rec *r, const char *s_key,
-		const char *s_value, const char *claim_prefix) {
+void oidc_util_set_app_info(request_rec *r, const char *s_key,
+		const char *s_value, const char *claim_prefix, apr_byte_t as_header,
+		apr_byte_t as_env_var) {
+
+	apr_table_t *env = NULL;
 
 	/* construct the header name, cq. put the prefix in front of a normalized key name */
 	const char *s_name = apr_psprintf(r->pool, "%s%s", claim_prefix,
 			oidc_normalize_header_name(r, s_key));
 
-	/*
-	 * sanitize the header value by replacing line feeds with spaces
-	 * just like the Apache header input algorithms do for incoming headers
-	 *
-	 * this makes it impossible to have line feeds in values but that is
-	 * compliant with RFC 7230 (and impossible for regular headers due to Apache's
-	 * parsing of headers anyway) and fixes a security vulnerability on
-	 * overwriting/setting outgoing headers when used in proxy mode
-	 */
-	char *p = NULL;
-	while ((p = strchr(s_value, '\n'))) *p = ' ';
+	if (as_header) {
+		/*
+		 * sanitize the header value by replacing line feeds with spaces
+		 * just like the Apache header input algorithms do for incoming headers
+		 *
+		 * this makes it impossible to have line feeds in values but that is
+		 * compliant with RFC 7230 (and impossible for regular headers due to Apache's
+		 * parsing of headers anyway) and fixes a security vulnerability on
+		 * overwriting/setting outgoing headers when used in proxy mode
+		 */
+		char *p = NULL;
+		while ((p = strchr(s_value, '\n')))
+			*p = ' ';
 
-	/* do some logging about this event */
-	oidc_debug(r, "setting header \"%s: %s\"", s_name, s_value);
+		/* do some logging about this event */
+		oidc_debug(r, "setting header \"%s: %s\"", s_name, s_value);
 
-	/* now set the actual header name/value */
-	apr_table_set(r->headers_in, s_name, s_value);
+		/* now set the actual header name/value */
+		apr_table_set(r->headers_in, s_name, s_value);
+	}
+
+	if (as_env_var) {
+
+		/* do some logging about this event */
+		oidc_debug(r, "setting environment variable \"%s: %s\"", s_name,
+				s_value);
+
+		apr_pool_userdata_get((void **) &env, OIDC_USERDATA_ENV_KEY, r->pool);
+		if (env == NULL)
+			env = apr_table_make(r->pool, 10);
+		apr_table_set(env, s_name, s_value);
+		apr_pool_userdata_set(env, OIDC_USERDATA_ENV_KEY, NULL, r->pool);
+	}
 }
 
 /*
  * set the user/claims information from the session in HTTP headers passed on to the application
  */
-void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs,
-		const char *claim_prefix, const char *claim_delimiter) {
+void oidc_util_set_app_infos(request_rec *r, const json_t *j_attrs,
+		const char *claim_prefix, const char *claim_delimiter,
+		apr_byte_t as_header, apr_byte_t as_env_var) {
 
 	char s_int[255];
 	json_t *j_value = NULL;
@@ -1192,29 +1212,31 @@ void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs,
 		s_key = json_object_iter_key(iter);
 		j_value = json_object_iter_value(iter);
 
-//		char *s_value= json_dumps(j_value, JSON_ENCODE_ANY);
-//		oidc_util_set_app_header(r, s_key, s_value, claim_prefix);
-//		free(s_value);
+		//		char *s_value= json_dumps(j_value, JSON_ENCODE_ANY);
+		//		oidc_util_set_app_info(r, s_key, s_value, claim_prefix);
+		//		free(s_value);
 
 		/* check if it is a single value string */
 		if (json_is_string(j_value)) {
 
 			/* set the single string in the application header whose name is based on the key and the prefix */
-			oidc_util_set_app_header(r, s_key, json_string_value(j_value),
-					claim_prefix);
+			oidc_util_set_app_info(r, s_key, json_string_value(j_value),
+					claim_prefix, as_header, as_env_var);
 
 		} else if (json_is_boolean(j_value)) {
 
 			/* set boolean value in the application header whose name is based on the key and the prefix */
-			oidc_util_set_app_header(r, s_key,
-			json_is_true(j_value) ? "1" : "0", claim_prefix);
+			oidc_util_set_app_info(r, s_key,
+					(json_is_true(j_value) ? "1" : "0"), claim_prefix,
+					as_header, as_env_var);
 
 		} else if (json_is_integer(j_value)) {
 
 			if (sprintf(s_int, "%" JSON_INTEGER_FORMAT,
 					json_integer_value(j_value)) > 0) {
 				/* set long value in the application header whose name is based on the key and the prefix */
-				oidc_util_set_app_header(r, s_key, s_int, claim_prefix);
+				oidc_util_set_app_info(r, s_key, s_int, claim_prefix, as_header,
+						as_env_var);
 			} else {
 				oidc_warn(r,
 						"could not convert JSON number to string (> 255 characters?), skipping");
@@ -1223,15 +1245,16 @@ void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs,
 		} else if (json_is_real(j_value)) {
 
 			/* set float value in the application header whose name is based on the key and the prefix */
-			oidc_util_set_app_header(r, s_key,
+			oidc_util_set_app_info(r, s_key,
 					apr_psprintf(r->pool, "%lf", json_real_value(j_value)),
-					claim_prefix);
+					claim_prefix, as_header, as_env_var);
 
 		} else if (json_is_object(j_value)) {
 
 			/* set json value in the application header whose name is based on the key and the prefix */
 			char *s_value = json_dumps(j_value, 0);
-			oidc_util_set_app_header(r, s_key, s_value, claim_prefix);
+			oidc_util_set_app_info(r, s_key, s_value, claim_prefix, as_header,
+					as_env_var);
 			free(s_value);
 
 			/* check if it is a multi-value string */
@@ -1273,7 +1296,7 @@ void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs,
 								json_is_true(elem) ? "1" : "0");
 					} else {
 						s_concat = apr_psprintf(r->pool, "%s",
-						json_is_true(elem) ? "1" : "0");
+								json_is_true(elem) ? "1" : "0");
 					}
 
 				} else {
@@ -1286,7 +1309,8 @@ void oidc_util_set_app_headers(request_rec *r, const json_t *j_attrs,
 			}
 
 			/* set the concatenated string */
-			oidc_util_set_app_header(r, s_key, s_concat, claim_prefix);
+			oidc_util_set_app_info(r, s_key, s_concat, claim_prefix, as_header,
+					as_env_var);
 
 		} else {
 

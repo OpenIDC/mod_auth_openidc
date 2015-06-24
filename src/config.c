@@ -223,7 +223,8 @@ static const char *oidc_set_url_slot(cmd_parms *cmd, void *ptr, const char *arg)
 /*
  * set a HTTPS/HTTP value in the directory config
  */
-static const char *oidc_set_url_slot_dir_cfg(cmd_parms *cmd, void *ptr, const char *arg) {
+static const char *oidc_set_url_slot_dir_cfg(cmd_parms *cmd, void *ptr,
+		const char *arg) {
 	return oidc_set_url_slot_type(cmd, ptr, arg, NULL);
 }
 
@@ -630,8 +631,8 @@ static const char * oidc_set_pass_idtoken_as(cmd_parms *cmd, void *dummy,
 /*
  * set the syntax of the token expiry claim in the introspection response
  */
-static const char * oidc_set_token_expiry_claim(cmd_parms *cmd,
-		void *dummy, const char *claim_name, const char *claim_format,
+static const char * oidc_set_token_expiry_claim(cmd_parms *cmd, void *dummy,
+		const char *claim_name, const char *claim_format,
 		const char *claim_required) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
@@ -711,6 +712,40 @@ static const char *oidc_set_remote_user_claim(cmd_parms *cmd, void *struct_ptr,
 }
 
 /*
+ * define how to pass claims information to the application: in headers and/or environment variables
+ */
+static const char * oidc_set_pass_claims_as(cmd_parms *cmd, void *m,
+		const char *arg) {
+	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg *) m;
+
+	if (apr_strnatcmp(arg, "both") == 0) {
+		dir_cfg->pass_info_in_headers = 1;
+		dir_cfg->pass_info_in_env_vars = 1;
+		return NULL;
+	}
+
+	if (apr_strnatcmp(arg, "headers") == 0) {
+		dir_cfg->pass_info_in_headers = 1;
+		dir_cfg->pass_info_in_env_vars = 0;
+		return NULL;
+	}
+
+	if (apr_strnatcmp(arg, "environment") == 0) {
+		dir_cfg->pass_info_in_headers = 0;
+		dir_cfg->pass_info_in_env_vars = 1;
+		return NULL;
+	}
+
+	if (apr_strnatcmp(arg, "none") == 0) {
+		dir_cfg->pass_info_in_headers = 0;
+		dir_cfg->pass_info_in_env_vars = 0;
+		return NULL;
+	}
+
+	return "parameter must be one of 'both', 'headers', 'environment' or 'none";
+}
+
+/*
  * create a new server config record with defaults
  */
 void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
@@ -766,13 +801,18 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->oauth.introspection_endpoint_method = OIDC_DEFAULT_OAUTH_ENDPOINT_METHOD;
 	c->oauth.introspection_endpoint_params = NULL;
 	c->oauth.introspection_endpoint_auth = NULL;
-	c->oauth.introspection_token_param_name = OIDC_DEFAULT_OAUTH_TOKEN_PARAM_NAME;
+	c->oauth.introspection_token_param_name =
+			OIDC_DEFAULT_OAUTH_TOKEN_PARAM_NAME;
 
-	c->oauth.introspection_token_expiry_claim_name = OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_NAME;
-	c->oauth.introspection_token_expiry_claim_format = OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_FORMAT;
-	c->oauth.introspection_token_expiry_claim_required = OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_REQUIRED;
+	c->oauth.introspection_token_expiry_claim_name =
+			OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_NAME;
+	c->oauth.introspection_token_expiry_claim_format =
+			OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_FORMAT;
+	c->oauth.introspection_token_expiry_claim_required =
+			OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_REQUIRED;
 
-	c->oauth.remote_user_claim.claim_name = OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER;
+	c->oauth.remote_user_claim.claim_name =
+			OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER;
 	c->oauth.remote_user_claim.reg_exp = NULL;
 
 	c->oauth.verify_jwks_uri = NULL;
@@ -981,9 +1021,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->oauth.introspection_endpoint_url :
 					base->oauth.introspection_endpoint_url;
 	c->oauth.introspection_endpoint_method =
-			apr_strnatcmp(add->oauth.introspection_endpoint_method, OIDC_DEFAULT_OAUTH_ENDPOINT_METHOD) != 0 ?
-					add->oauth.introspection_endpoint_method :
-					base->oauth.introspection_endpoint_method;
+			apr_strnatcmp(add->oauth.introspection_endpoint_method,
+					OIDC_DEFAULT_OAUTH_ENDPOINT_METHOD) != 0 ?
+							add->oauth.introspection_endpoint_method :
+							base->oauth.introspection_endpoint_method;
 	c->oauth.introspection_endpoint_params =
 			add->oauth.introspection_endpoint_params != NULL ?
 					add->oauth.introspection_endpoint_params :
@@ -1140,6 +1181,8 @@ void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->authn_header = OIDC_DEFAULT_AUTHN_HEADER;
 	c->return401 = FALSE;
 	c->pass_cookies = apr_array_make(pool, 0, sizeof(const char *));
+	c->pass_info_in_headers = 1;
+	c->pass_info_in_env_vars = 1;
 	return (c);
 }
 
@@ -1165,6 +1208,12 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->pass_cookies = (
 			apr_is_empty_array(add->pass_cookies) != 0 ?
 					add->pass_cookies : base->pass_cookies);
+	c->pass_info_in_headers = (
+			add->pass_info_in_headers != 1 ?
+					add->pass_info_in_headers : base->pass_info_in_headers);
+	c->pass_info_in_env_vars = (
+			add->pass_info_in_env_vars != 1 ?
+					add->pass_info_in_env_vars : base->pass_info_in_env_vars);
 	return (c);
 }
 
@@ -1507,11 +1556,29 @@ static void oidc_child_init(apr_pool_t *p, server_rec *s) {
 }
 
 /*
+ * fixup handler: be authoritative for environment variables at late processing
+ */
+static int oidc_auth_fixups(request_rec *r) {
+	apr_table_t *env = NULL;
+	apr_pool_userdata_get((void **) &env, OIDC_USERDATA_ENV_KEY, r->pool);
+	if ((env == NULL) || apr_is_empty_table(env))
+		return DECLINED;
+
+	oidc_debug(r, "overlaying env with %d elements",
+			apr_table_elts(env)->nelts);
+
+	r->subprocess_env = apr_table_overlay(r->pool, r->subprocess_env, env);
+
+	return OK;
+}
+
+/*
  * register our authentication and authorization functions
  */
 void oidc_register_hooks(apr_pool_t *pool) {
 	ap_hook_post_config(oidc_post_config, NULL, NULL, APR_HOOK_LAST);
 	ap_hook_child_init(oidc_child_init, NULL, NULL, APR_HOOK_MIDDLE);
+	ap_hook_fixups(oidc_auth_fixups, NULL, NULL, APR_HOOK_MIDDLE);
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	ap_hook_check_authn(oidc_check_user_id, NULL, NULL, APR_HOOK_MIDDLE, AP_AUTH_INTERNAL_PER_CONF);
 	ap_register_auth_provider(pool, AUTHZ_PROVIDER_GROUP, OIDC_REQUIRE_NAME, "0", &authz_oidc_provider, AP_AUTH_INTERNAL_PER_CONF);
@@ -1892,6 +1959,9 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_dir_cfg, return401),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Indicates whether a user will be redirected to the Provider when not authenticated (Off) or a 401 will be returned (On)."),
-
+		AP_INIT_TAKE1("OIDCPassClaimsAs",
+				oidc_set_pass_claims_as, NULL,
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Specify how claims are passed to the application(s); must be one of \"none\", \"headers\", \"environment\" or \"both\" (default)."),
 		{ NULL }
 };

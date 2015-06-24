@@ -462,8 +462,9 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 			return OK;
 		}
 
-	/* check if this is a request for the public (encryption) keys */
-	} else if ((c->redirect_uri != NULL) && (oidc_util_request_matches_url(r, c->redirect_uri))) {
+		/* check if this is a request for the public (encryption) keys */
+	} else if ((c->redirect_uri != NULL)
+			&& (oidc_util_request_matches_url(r, c->redirect_uri))) {
 
 		if (oidc_util_request_has_parameter(r, "jwks")) {
 
@@ -525,12 +526,14 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 	}
 
 	/* set the resolved claims in the HTTP headers for the target application */
-	oidc_util_set_app_headers(r, token, c->claim_prefix, c->claim_delimiter);
+	oidc_util_set_app_infos(r, token, c->claim_prefix, c->claim_delimiter,
+			dir_cfg->pass_info_in_headers, dir_cfg->pass_info_in_env_vars);
 
 	/* set the access_token in the app headers */
 	if (access_token != NULL) {
-		oidc_util_set_app_header(r, "access_token", access_token,
-				OIDC_DEFAULT_HEADER_PREFIX);
+		oidc_util_set_app_info(r, "access_token", access_token,
+				OIDC_DEFAULT_HEADER_PREFIX, dir_cfg->pass_info_in_headers,
+				dir_cfg->pass_info_in_env_vars);
 	}
 
 	/* free JSON resources */
