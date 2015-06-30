@@ -1,6 +1,7 @@
 6/30/2015
 - improve memcache logging: don't report cache misses as an error, thanks to @scottdear
-- bump to 1.8.4rc2
+- work around JSON timestamp print modifier issue (%lld) on some platforms, thanks to @ralphvanetten
+- bump to 1.8.4rc3
 
 6/24/2015
 - support passing claims as environment variables (OIDCPassClaimsAs)

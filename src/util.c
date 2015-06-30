@@ -1232,8 +1232,8 @@ void oidc_util_set_app_infos(request_rec *r, const json_t *j_attrs,
 
 		} else if (json_is_integer(j_value)) {
 
-			if (sprintf(s_int, "%" JSON_INTEGER_FORMAT,
-					json_integer_value(j_value)) > 0) {
+			if (sprintf(s_int, "%ld",
+					(long)json_integer_value(j_value)) > 0) {
 				/* set long value in the application header whose name is based on the key and the prefix */
 				oidc_util_set_app_info(r, s_key, s_int, claim_prefix, as_header,
 						as_env_var);

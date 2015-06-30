@@ -207,8 +207,8 @@ static apr_byte_t oidc_oauth_parse_and_cache_token_expiry(request_rec *r,
 	json_int_t value = json_integer_value(expiry);
 	if (value <= 0) {
 		oidc_warn(r,
-				"introspection response JSON object integer number value <= 0 (%" JSON_INTEGER_FORMAT "); introspection result will not be cached",
-				value);
+				"introspection response JSON object integer number value <= 0 (%ld); introspection result will not be cached",
+				(long)value);
 		return TRUE;
 	}
 
