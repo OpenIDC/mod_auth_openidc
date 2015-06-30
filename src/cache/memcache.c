@@ -196,9 +196,13 @@ static apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *section,
 			oidc_cache_memcache_get_key(r->pool, section, key), (char **) value,
 			&len, NULL);
 
-	// TODO: error strings ?
-	if (rv != APR_SUCCESS) {
-		oidc_error(r, "apr_memcache_getp returned an error");
+	if (rv == APR_NOTFOUND) {
+		oidc_debug(r, "apr_memcache_getp: key %s not found in cache",
+				oidc_cache_memcache_get_key(r->pool, section, key));
+		return FALSE;
+	} else if (rv != APR_SUCCESS) {
+		// TODO: error strings ?
+		oidc_error(r, "apr_memcache_getp returned an error; perhaps your memcache server is not available?");
 		return FALSE;
 	}
 
@@ -234,9 +238,13 @@ static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *section,
 		rv = apr_memcache_delete(context->cache_memcache,
 				oidc_cache_memcache_get_key(r->pool, section, key), 0);
 
-		// TODO: error strings ?
-		if (rv != APR_SUCCESS) {
-			oidc_error(r, "apr_memcache_delete returned an error");
+		if (rv == APR_NOTFOUND) {
+			oidc_debug(r, "apr_memcache_delete: key %s not found in cache",
+					oidc_cache_memcache_get_key(r->pool, section, key));
+		} else if (rv != APR_SUCCESS) {
+			// TODO: error strings ?
+			oidc_error(r,
+					"apr_memcache_delete returned an error; perhaps your memcache server is not available?");
 		}
 
 	} else {
@@ -251,7 +259,7 @@ static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *section,
 
 		// TODO: error strings ?
 		if (rv != APR_SUCCESS) {
-			oidc_error(r, "apr_memcache_set returned an error");
+			oidc_error(r, "apr_memcache_set returned an error; perhaps your memcache server is not available?");
 		}
 	}
 
