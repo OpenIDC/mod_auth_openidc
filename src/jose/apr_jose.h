@@ -53,6 +53,7 @@
 #ifndef _APR_JOSE_H_
 #define _APR_JOSE_H_
 
+#include <stdint.h>
 #include "apr_pools.h"
 #include "apr_tables.h"
 #include "apr_hash.h"

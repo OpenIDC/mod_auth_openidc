@@ -461,6 +461,19 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST,
 			(ssl_validate_server != FALSE ? 2L : 0L));
 
+#ifdef WIN32
+	DWORD buflen;
+	char *ptr = NULL;
+	char *retval = (char *) malloc(sizeof (TCHAR) * (MAX_PATH + 1));
+	retval[0] = '\0';
+	buflen = SearchPath(NULL, "curl-ca-bundle.crt", NULL, MAX_PATH+1, retval, &ptr);
+	if (buflen > 0)
+		curl_easy_setopt(curl, CURLOPT_CAINFO, retval);
+	else
+		oidc_warn(r, "no curl-ca-bundle.crt file found in path");
+	free(retval);
+#endif
+
 	/* identify this HTTP client */
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, "mod_auth_openidc");
 

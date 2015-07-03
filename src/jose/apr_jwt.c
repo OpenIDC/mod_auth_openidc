@@ -55,6 +55,10 @@
 #include "apr_jose.h"
 #include <openssl/opensslv.h>
 
+#ifdef WIN32
+#define snprintf _snprintf
+#endif
+
 /*
  * assemble an error report
  */

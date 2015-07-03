@@ -133,6 +133,8 @@ static void oidc_scrub_request_headers(request_rec *r, const char *claim_prefix,
 	r->headers_in = clean_headers;
 }
 
+#define OIDC_SHA1_LEN 20
+
 /*
  * calculates a hash value based on request fingerprint plus a provided nonce string.
  */
@@ -172,13 +174,12 @@ static char *oidc_get_browser_state_hash(request_rec *r, const char *nonce) {
 	apr_sha1_update(&sha1, nonce, strlen(nonce));
 
 	/* finalize the hash input and calculate the resulting hash output */
-	const int sha1_len = 20;
-	unsigned char hash[sha1_len];
+	unsigned char hash[OIDC_SHA1_LEN];
 	apr_sha1_final(hash, &sha1);
 
 	/* base64url-encode the resulting hash and return it */
 	char *result = NULL;
-	oidc_base64url_encode(r, &result, (const char *) hash, sha1_len, TRUE);
+	oidc_base64url_encode(r, &result, (const char *) hash, OIDC_SHA1_LEN, TRUE);
 	return result;
 }
 

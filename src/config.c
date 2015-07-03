@@ -528,7 +528,7 @@ static const char *oidc_set_public_key_files(cmd_parms *cmd, void *struct_ptr,
 			cmd->server->module_config, &auth_openidc_module);
 
 	int offset = (int) (long) cmd->info;
-	apr_hash_t **public_keys = (apr_hash_t **) ((void *) cfg + offset);
+	apr_hash_t **public_keys = (apr_hash_t **) ((char *) cfg + offset);
 
 	if (apr_jwk_parse_rsa_public_key(cmd->pool, arg, &jwk, &err) == FALSE) {
 		return apr_psprintf(cmd->pool,
@@ -551,7 +551,7 @@ static const char *oidc_set_shared_keys(cmd_parms *cmd, void *struct_ptr,
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
 	int offset = (int) (long) cmd->info;
-	apr_hash_t **shared_keys = (apr_hash_t **) ((void *) cfg + offset);
+	apr_hash_t **shared_keys = (apr_hash_t **) ((char *) cfg + offset);
 	*shared_keys = oidc_util_merge_symmetric_key(cmd->pool, *shared_keys, arg,
 			NULL);
 	return NULL;
@@ -702,7 +702,7 @@ static const char *oidc_set_remote_user_claim(cmd_parms *cmd, void *struct_ptr,
 
 	int offset = (int) (long) cmd->info;
 	oidc_remote_user_claim_t *remote_user_claim =
-			(oidc_remote_user_claim_t *) ((void *) cfg + offset);
+			(oidc_remote_user_claim_t *) ((char *) cfg + offset);
 
 	remote_user_claim->claim_name = v1;
 	if (v2)

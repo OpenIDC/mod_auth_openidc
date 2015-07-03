@@ -172,6 +172,7 @@ static char x2c(const char *what) {
 	return (digit);
 }
 
+#ifndef WIN32
 AP_DECLARE(char *) ap_escape_urlencoded_buffer(char *copy, const char *buffer) {
 	const unsigned char *s = (const unsigned char *) buffer;
 	unsigned char *d = (unsigned char *) copy;
@@ -190,6 +191,7 @@ AP_DECLARE(char *) ap_escape_urlencoded_buffer(char *copy, const char *buffer) {
 	*d = '\0';
 	return copy;
 }
+#endif
 
 static int oidc_session_unescape_url(char *url, const char *forbid,
 		const char *reserved) {
@@ -240,6 +242,7 @@ static int oidc_session_unescape_url(char *url, const char *forbid,
 	}
 }
 
+#ifndef WIN32
 AP_DECLARE(int) ap_unescape_urlencoded(char *query) {
 	char *slider;
 	/* replace plus with a space */
@@ -253,6 +256,7 @@ AP_DECLARE(int) ap_unescape_urlencoded(char *query) {
 	/* unescape everything else */
 	return oidc_session_unescape_url(query, NULL, NULL);
 }
+#endif
 
 // copied from mod_session.c
 static apr_status_t oidc_session_identity_decode(request_rec * r,

@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.8.4-1) unstable; urgency=medium
+
+  * allow for compilation on MS Windows
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Fri, 03 Jul 2015 19:39:11 +0200
+
 libapache2-mod-auth-openidc (1.8.3-1) unstable; urgency=medium
 
   * remove accounts.google.com exceptions

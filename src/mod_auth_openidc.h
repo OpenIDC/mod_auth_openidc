@@ -51,6 +51,7 @@
 #ifndef MOD_AUTH_OPENIDC_H_
 #define MOD_AUTH_OPENIDC_H_
 
+#include <stdint.h>
 #include <openssl/evp.h>
 #include <apr_uri.h>
 #include <apr_uuid.h>
@@ -433,9 +434,10 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *selected
 apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg, const oidc_jwks_uri_t *jwks_uri, json_t **j_jwks, apr_byte_t *refresh);
 
 // oidc_session.c
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20081201
+#if MODULE_MAGIC_NUMBER_MAJOR_NOT_WORKING_YET >= 20081201
 // this stuff should make it easy to migrate to the post 2.3 mod_session infrastructure
 #include "mod_session.h"
+//#define OIDC_SESSION_USE_APACHE_SESSIONS 1
 #else
 typedef struct {
     apr_pool_t *pool;             /* pool to be used for this session */

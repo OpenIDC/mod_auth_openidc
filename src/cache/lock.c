@@ -50,7 +50,9 @@
  * @Author: Hans Zandbelt - hzandbelt@pingidentity.com
  */
 
+#ifndef WIN32
 #include <unistd.h>
+#endif
 
 #include "apr_general.h"
 
