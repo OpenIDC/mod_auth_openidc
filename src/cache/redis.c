@@ -70,6 +70,7 @@ typedef struct oidc_cache_cfg_redis_t {
 	oidc_cache_mutex_t *mutex;
 	char *host_str;
 	apr_port_t port;
+	char *passwd;
 } oidc_cache_cfg_redis_t;
 
 /* create the cache context */
@@ -77,6 +78,7 @@ static void *oidc_cache_redis_cfg_create(apr_pool_t *pool) {
 	oidc_cache_cfg_redis_t *context = apr_pcalloc(pool,
 			sizeof(oidc_cache_cfg_redis_t));
 	context->mutex = oidc_cache_mutex_create(pool);
+	context->passwd = NULL;
 	return context;
 }
 
@@ -120,6 +122,10 @@ static int oidc_cache_redis_post_config(server_rec *s) {
 
 	if (context->port == 0)
 		context->port = 6379;
+
+	if (cfg->cache_redis_password != NULL) {
+		context->passwd = apr_pstrdup(s->process->pool, cfg->cache_redis_password);
+	}
 
 	if (oidc_cache_mutex_post_config(s, context->mutex, "redis") == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
@@ -203,18 +209,44 @@ static redisReply* oidc_cache_redis_command(request_rec *r,
 		if (ctx == NULL)
 			break;
 
+		if (context->passwd != NULL) {
+			redisAppendCommand(ctx, apr_psprintf(r->pool, "AUTH %s", context->passwd));
+		}
+
 		/* execute the command */
 		va_list args;
 		va_start(args, format);
-		reply = redisvCommand(ctx, format, args);
+		redisvAppendCommand(ctx, format, args);
 		va_end(args);
 
+		if (context->passwd != NULL) {
+			/* get the reply for the AUTH command */
+			redisGetReply(ctx, (void **)&reply);
+			if (reply == NULL) {
+				oidc_error(r, "authentication to the Redis server (%s:%d) failed, reply == NULL",
+						context->host_str, context->port);
+			} else if (reply->type == REDIS_REPLY_ERROR) {
+				oidc_error(r, "authentication to the Redis server (%s:%d) failed, reply.status = %s",
+						context->host_str, context->port, reply->str);
+			}
+		}
+
+		/* get the reply for the actual command */
+		reply = NULL;
+		redisGetReply(ctx, (void **)&reply);
+
 		/* errors will result in an empty reply */
-		if (reply != NULL)
+		if (reply != NULL) {
+			if (reply->type == REDIS_REPLY_ERROR) {
+				oidc_error(r,
+						"command to the Redis server (%s:%d) returned an error, reply.status = %s",
+						context->host_str, context->port, reply->str);
+			}
 			break;
+		}
 
 		/* something went wrong, log it */
-		oidc_error(r, "redisvCommand (%d) failed, disconnecting: '%s'", i, ctx->errstr);
+		oidc_error(r, "redisvAppendCommand/redisGetReply (%d) failed, disconnecting: '%s'", i, ctx->errstr);
 
 		/* cleanup, we may try again (once) after reconnecting */
 		redisFree(ctx);

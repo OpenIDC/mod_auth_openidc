@@ -829,6 +829,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->cache_shm_entry_size_max = OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX;
 #ifdef USE_LIBHIREDIS
 	c->cache_redis_server = NULL;
+	c->cache_redis_password = NULL;
 #endif
 
 	c->metadata_dir = NULL;
@@ -1122,6 +1123,9 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->cache_redis_server =
 			add->cache_redis_server != NULL ?
 					add->cache_redis_server : base->cache_redis_server;
+	c->cache_redis_password =
+			add->cache_redis_password != NULL ?
+					add->cache_redis_password : base->cache_redis_password;
 #endif
 
 	c->metadata_dir =
@@ -1932,6 +1936,11 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, cache_redis_server),
 				RSRC_CONF,
 				"Redis server used for caching (<hostname>[:<port>])"),
+		AP_INIT_TAKE1("OIDCRedisCachePassword",
+				oidc_set_string_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, cache_redis_password),
+				RSRC_CONF,
+				"Password for authentication to the Redis servers."),
 #endif
 
 		AP_INIT_TAKE1("OIDCDiscoverURL", oidc_set_url_slot_dir_cfg,
