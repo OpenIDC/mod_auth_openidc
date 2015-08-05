@@ -1,3 +1,7 @@
+8/4/2015
+- support for OIDCUnAuthAction: how to act on unauthenticated requests (OIDCReturn401 is deprecated)
+- bump to 1.8.5rc1
+
 7/15/2015
 - add authentication option for Redis server with OIDCRedisCachePassword
 - bump to 1.8.5rc0
