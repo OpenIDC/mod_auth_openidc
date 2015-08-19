@@ -68,6 +68,7 @@ apr_array_header_t *apr_jwe_supported_algorithms(apr_pool_t *pool) {
 	apr_array_header_t *result = apr_array_make(pool, 4, sizeof(const char*));
 	*(const char**) apr_array_push(result) = "RSA1_5";
 	*(const char**) apr_array_push(result) = "A128KW";
+	*(const char**) apr_array_push(result) = "A192KW";
 	*(const char**) apr_array_push(result) = "A256KW";
 	*(const char**) apr_array_push(result) = "RSA-OAEP";
 	return result;
@@ -86,6 +87,7 @@ apr_byte_t apr_jwe_algorithm_is_supported(apr_pool_t *pool, const char *alg) {
 apr_array_header_t *apr_jwe_supported_encryptions(apr_pool_t *pool) {
 	apr_array_header_t *result = apr_array_make(pool, 5, sizeof(const char*));
 	*(const char**) apr_array_push(result) = "A128CBC-HS256";
+	*(const char**) apr_array_push(result) = "A192CBC-HS384";
 	*(const char**) apr_array_push(result) = "A256CBC-HS512";
 #if (OPENSSL_VERSION_NUMBER >= 0x1000100f)
 	*(const char**) apr_array_push(result) = "A128GCM";
@@ -117,6 +119,9 @@ static const EVP_CIPHER *apr_jwe_enc_to_openssl_cipher(const char *enc) {
 	if (apr_strnatcmp(enc, "A128CBC-HS256") == 0) {
 		return EVP_aes_128_cbc();
 	}
+	if (apr_strnatcmp(enc, "A192CBC-HS384") == 0) {
+		return EVP_aes_192_cbc();
+	}
 	if (apr_strnatcmp(enc, "A256CBC-HS512") == 0) {
 		return EVP_aes_256_cbc();
 	}
@@ -140,6 +145,9 @@ static const EVP_CIPHER *apr_jwe_enc_to_openssl_cipher(const char *enc) {
 static const EVP_MD *apr_jwe_enc_to_openssl_hash(const char *enc) {
 	if (apr_strnatcmp(enc, "A128CBC-HS256") == 0) {
 		return EVP_sha256();
+	}
+	if (apr_strnatcmp(enc, "A192CBC-HS384") == 0) {
+		return EVP_sha384();
 	}
 	if (apr_strnatcmp(enc, "A256CBC-HS512") == 0) {
 		return EVP_sha512();
@@ -248,7 +256,10 @@ static apr_byte_t apr_jwe_decrypt_cek_oct_aes(apr_pool_t *pool,
 		unsigned char **cek, int *cek_len, apr_jwt_error_t *err) {
 
 	/* determine key length in bits */
-	int key_bits_len = (apr_strnatcmp(header->alg, "A128KW") == 0) ? 128 : 256;
+	int key_bits_len = 0;
+	if (apr_strnatcmp(header->alg, "A128KW") == 0) key_bits_len = 128;
+	if (apr_strnatcmp(header->alg, "A192KW") == 0) key_bits_len = 192;
+	if (apr_strnatcmp(header->alg, "A256KW") == 0) key_bits_len = 256;
 
 	if (shared_key_len * 8 < key_bits_len) {
 		apr_jwt_error(err,
@@ -301,6 +312,7 @@ static apr_byte_t apr_jwe_decrypt_cek_with_jwk(apr_pool_t *pool,
 						unpacked_decoded, jwk, cek, cek_len, err);
 
 	} else if ((apr_strnatcmp(header->alg, "A128KW") == 0)
+			|| (apr_strnatcmp(header->alg, "A192KW") == 0)
 			|| (apr_strnatcmp(header->alg, "A256KW") == 0)) {
 
 		rc = (jwk->type == APR_JWK_KEY_OCT)
@@ -429,7 +441,7 @@ apr_byte_t apr_jwe_decrypt_content_aesgcm(apr_pool_t *pool,
 #endif
 
 /*
- * Decrypt A128CBC-HS256 and A256CBC-HS512 content
+ * Decrypt A128CBC-HS256, A192CBC-HS384 and A256CBC-HS512 content
  */
 apr_byte_t apr_jwe_decrypt_content_aescbc(apr_pool_t *pool,
 		apr_jwt_header_t *header, const unsigned char *msg, int msg_len,
@@ -468,7 +480,7 @@ apr_byte_t apr_jwe_decrypt_content_aescbc(apr_pool_t *pool,
 		return FALSE;
 	}
 
-	/* if everything still OK, now AES (128/256) decrypt the ciphertext */
+	/* if everything still OK, now AES (128/192/256) decrypt the ciphertext */
 
 	int p_len = cipher_text->len, f_len = 0;
 	/* allocate ciphertext length + one block padding for plaintext */
@@ -587,11 +599,12 @@ apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header,
 	memcpy(p, &al, sizeof(uint64_t));
 
 	if ((apr_strnatcmp(header->enc, "A128CBC-HS256") == 0)
+			|| (apr_strnatcmp(header->enc, "A192CBC-HS384") == 0)
 			|| (apr_strnatcmp(header->enc, "A256CBC-HS512") == 0)) {
 
 		return apr_jwe_decrypt_content_aescbc(pool, header, msg, msg_len,
-			cipher_text, cek, cek_len, iv, aad, aad_len, auth_tag,
-			decrypted, err_r);
+				cipher_text, cek, cek_len, iv, aad, aad_len, auth_tag,
+				decrypted, err_r);
 
 #if (OPENSSL_VERSION_NUMBER >= 0x1000100f)
 
@@ -600,7 +613,7 @@ apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header,
 			|| (apr_strnatcmp(header->enc, "A256GCM") == 0)) {
 
 		return apr_jwe_decrypt_content_aesgcm(pool, header, cipher_text, cek,
-					cek_len, iv, aad, aad_len, auth_tag, decrypted, err_r);
+				cek_len, iv, aad, aad_len, auth_tag, decrypted, err_r);
 
 #endif
 
