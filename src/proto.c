@@ -223,20 +223,17 @@ apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r,
 					|| oidc_util_request_has_parameter(r, "code")));
 }
 
-#define OIDC_PROTO_NONCE_LENGTH 32
-
 /*
  * generate a random value (nonce) to correlate request/response through browser state
  */
-apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce) {
-	unsigned char *nonce_bytes = apr_pcalloc(r->pool, OIDC_PROTO_NONCE_LENGTH);
-	if (apr_generate_random_bytes(nonce_bytes,
-			OIDC_PROTO_NONCE_LENGTH) != APR_SUCCESS) {
+apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce, int len) {
+	unsigned char *nonce_bytes = apr_pcalloc(r->pool, len);
+	if (apr_generate_random_bytes(nonce_bytes, len) != APR_SUCCESS) {
 		oidc_error(r, "apr_generate_random_bytes returned an error");
 		return FALSE;
 	}
-	if (oidc_base64url_encode(r, nonce, (const char *) nonce_bytes,
-			OIDC_PROTO_NONCE_LENGTH, TRUE) <= 0) {
+	if (oidc_base64url_encode(r, nonce, (const char *) nonce_bytes, len, TRUE)
+			<= 0) {
 		oidc_error(r, "oidc_base64url_encode returned an error");
 		return FALSE;
 	}

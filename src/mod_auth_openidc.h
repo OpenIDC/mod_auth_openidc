@@ -137,6 +137,9 @@ APLOG_USE_MODULE(auth_openidc);
 /* value that indicates to use client cookie based session tracking */
 #define OIDC_SESSION_TYPE_22_CLIENT_COOKIE 1
 
+/* nonce bytes length */
+#define OIDC_PROTO_NONCE_LENGTH 32
+
 /* pass id_token as individual claims in headers (default) */
 #define OIDC_PASS_IDTOKEN_AS_CLAIMS     1
 /* pass id_token payload as JSON object in header*/
@@ -166,6 +169,9 @@ APLOG_USE_MODULE(auth_openidc);
 
 /* define the parameter value for the "logout" request that indicates a GET-style logout call from the OP */
 #define OIDC_GET_STYLE_LOGOUT_PARAM_VALUE "get"
+
+/* define the name of the cookie/parameter for CSRF protection */
+#define OIDC_CSRF_NAME "x_csrf"
 
 /* cache sections */
 #define OIDC_CACHE_SECTION_JTI "jti"
@@ -356,7 +362,7 @@ apr_byte_t oidc_proto_flow_is_supported(apr_pool_t *pool, const char *flow);
 apr_byte_t oidc_proto_validate_authorization_response(request_rec *r, const char *response_type, const char *requested_response_mode, char **code, char **id_token, char **access_token, char **token_type, const char *used_response_mode);
 apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, apr_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri, apr_hash_t *symmetric_keys);
 apr_byte_t oidc_proto_validate_jwt(request_rec *r, apr_jwt_t *jwt, const char *iss, apr_byte_t exp_is_mandatory, apr_byte_t iat_is_mandatory, int iat_slack);
-apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce);
+apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce, int len);
 
 apr_byte_t oidc_proto_authorization_response_code_idtoken_token(request_rec *r, oidc_cfg *c, json_t *proto_state, oidc_provider_t *provider, apr_table_t *params, const char *response_mode, apr_jwt_t **jwt);
 apr_byte_t oidc_proto_authorization_response_code_idtoken(request_rec *r, oidc_cfg *c, json_t *proto_state, oidc_provider_t *provider, apr_table_t *params, const char *response_mode, apr_jwt_t **jwt);
@@ -435,7 +441,7 @@ apr_byte_t oidc_crypto_destroy(oidc_cfg *cfg, server_rec *s);
 apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg, const char *issuer, const char *url, json_t **j_metadata, const char **response);
 apr_byte_t oidc_metadata_provider_parse(request_rec *r, json_t *j_provider, oidc_provider_t *provider);
 apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg *cfg, apr_array_header_t **arr);
-apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *selected, oidc_provider_t **provider);
+apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *selected, oidc_provider_t **provider, apr_byte_t allow_discovery);
 apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg, const oidc_jwks_uri_t *jwks_uri, json_t **j_jwks, apr_byte_t *refresh);
 
 // oidc_session.c

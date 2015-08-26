@@ -780,7 +780,7 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg,
  * if not, use OpenID Connect Discovery to get it, check it and store it
  */
 static apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
-		const char *issuer, json_t **j_provider) {
+		const char *issuer, json_t **j_provider, apr_byte_t allow_discovery) {
 
 	/* holds the response data/string/JSON from the OP */
 	const char *response = NULL;
@@ -795,13 +795,20 @@ static apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
 		return oidc_metadata_provider_is_valid(r, *j_provider, issuer);
 	}
 
+	if (!allow_discovery) {
+		oidc_warn(r,
+				"no metadata found for the requested issuer (%s), and Discovery is not allowed",
+				issuer);
+		return FALSE;
+	}
+
 	// TODO: how to do validity/expiry checks on provider metadata
 
 	/* assemble the URL to the .well-known OpenID metadata */
 	const char *url = apr_psprintf(r->pool, "%s",
 			((strstr(issuer, "http://") == issuer)
 					|| (strstr(issuer, "https://") == issuer)) ?
-					issuer : apr_psprintf(r->pool, "https://%s", issuer));
+							issuer : apr_psprintf(r->pool, "https://%s", issuer));
 	url = apr_psprintf(r->pool, "%s%s.well-known/openid-configuration", url,
 			url[strlen(url) - 1] != '/' ? "/" : "");
 
@@ -924,7 +931,7 @@ apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg *cfg,
 
 		/* get the provider and client metadata, do all checks and registration if possible */
 		oidc_provider_t *provider = NULL;
-		if (oidc_metadata_get(r, cfg, issuer, &provider) == TRUE) {
+		if (oidc_metadata_get(r, cfg, issuer, &provider, FALSE) == TRUE) {
 			/* push the decoded issuer filename in to the array */
 			*(const char**) apr_array_push(*list) = provider->issuer;
 		}
@@ -1195,7 +1202,7 @@ apr_byte_t oidc_metadata_client_parse(request_rec *r, oidc_cfg *cfg,
  * contents from both provider metadata directory and client metadata directory
  */
 apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *issuer,
-		oidc_provider_t **provider) {
+		oidc_provider_t **provider, apr_byte_t allow_discovery) {
 
 	apr_byte_t rc = FALSE;
 
@@ -1212,7 +1219,8 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *issuer,
 	 * NB: order is important here
 	 */
 
-	if (oidc_metadata_provider_get(r, cfg, issuer, &j_provider) == FALSE)
+	if (oidc_metadata_provider_get(r, cfg, issuer, &j_provider,
+			allow_discovery) == FALSE)
 		goto end;
 	if (oidc_metadata_provider_parse(r, j_provider, *provider) == FALSE)
 		goto end;
@@ -1239,4 +1247,3 @@ end:
 
 	return rc;
 }
-
