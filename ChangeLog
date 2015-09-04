@@ -1,6 +1,7 @@
 9/4/2015
 - add CSRF protection to external Discovery as well
 - allow browser back after authorization response, see #89
+- handle invalid (expired) authorization response state by sending the user to OIDCDefaultURL, see #86
 - bump to 1.8.5rc5
 
 8/26/2015

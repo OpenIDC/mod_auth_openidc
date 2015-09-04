@@ -1171,12 +1171,22 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	apr_jwt_t *jwt = NULL;
 
 	/* see if this response came from a browser-back event */
-	if (oidc_handle_browser_back(r, apr_table_get(params, "state"), session) == TRUE)
+	if (oidc_handle_browser_back(r, apr_table_get(params, "state"),
+			session) == TRUE)
 		return HTTP_MOVED_TEMPORARILY;
 
 	/* match the returned state parameter against the state stored in the browser */
 	if (oidc_authorization_response_match_state(r, c,
 			apr_table_get(params, "state"), &provider, &proto_state) == FALSE) {
+		if (c->default_sso_url != NULL) {
+			oidc_warn(r,
+					"invalid authorization response state; a default SSO URL is set, sending the user there: %s",
+					c->default_sso_url);
+			apr_table_add(r->headers_out, "Location", c->default_sso_url);
+			return HTTP_MOVED_TEMPORARILY;
+		}
+		oidc_error(r,
+				"invalid authorization response state and default SSO URL is set, sending an error...");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
