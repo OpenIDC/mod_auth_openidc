@@ -958,7 +958,8 @@ static void oidc_save_in_session(request_rec *r, oidc_cfg *c,
 		session_rec *session, oidc_provider_t *provider, const char *remoteUser,
 		const char *id_token, apr_jwt_t *id_token_jwt, const char *claims,
 		const char *access_token, const int expires_in,
-		const char *refresh_token, const char *session_state) {
+		const char *refresh_token, const char *session_state, const char *state,
+		const char *original_url) {
 
 	/* store the user in the session */
 	session->remote_user = remoteUser;
@@ -976,6 +977,10 @@ static void oidc_save_in_session(request_rec *r, oidc_cfg *c,
 
 	/* store the issuer in the session (at least needed for session mgmt and token refresh */
 	oidc_session_set(r, session, OIDC_ISSUER_SESSION_KEY, provider->issuer);
+
+	/* store the state and original URL in the session for handling browser-back more elegantly */
+	oidc_session_set(r, session, OIDC_REQUEST_STATE_SESSION_KEY, state);
+	oidc_session_set(r, session, OIDC_REQUEST_ORIGINAL_URL, original_url);
 
 	if ((session_state != NULL) && (provider->check_session_iframe != NULL)) {
 		/* store the session state and required parameters session management  */
@@ -1122,6 +1127,36 @@ static const char *oidc_resolve_claims_from_user_info_endpoint(request_rec *r,
 	return result;
 }
 
+/* handle the browser back on an authorization response */
+static apr_byte_t oidc_handle_browser_back(request_rec *r, const char *r_state,
+		session_rec *session) {
+
+	/*  see if we have an existing session and browser-back was used */
+	const char *s_state = NULL, *o_url = NULL;
+
+	if (session->remote_user != NULL) {
+
+		oidc_session_get(r, session, OIDC_REQUEST_STATE_SESSION_KEY, &s_state);
+		oidc_session_get(r, session, OIDC_REQUEST_ORIGINAL_URL, &o_url);
+
+		if ((r_state != NULL) && (s_state != NULL)
+				&& (apr_strnatcmp(r_state, s_state) == 0)) {
+
+			/* log the browser back event detection */
+			oidc_warn(r,
+					"browser back detected, redirecting to original URL: %s",
+					o_url);
+
+			/* go back to the URL that he originally tried to access */
+			apr_table_add(r->headers_out, "Location", o_url);
+
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
 /*
  * complete the handling of an authorization response by obtaining, parsing and verifying the
  * id_token and storing the authenticated user state in the session
@@ -1134,6 +1169,10 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	oidc_provider_t *provider = NULL;
 	json_t *proto_state = NULL;
 	apr_jwt_t *jwt = NULL;
+
+	/* see if this response came from a browser-back event */
+	if (oidc_handle_browser_back(r, apr_table_get(params, "state"), session) == TRUE)
+		return HTTP_MOVED_TEMPORARILY;
 
 	/* match the returned state parameter against the state stored in the browser */
 	if (oidc_authorization_response_match_state(r, c,
@@ -1169,6 +1208,12 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	const char *claims = oidc_resolve_claims_from_user_info_endpoint(r, c,
 			provider, params);
 
+	/* restore the original protected URL that the user was trying to access */
+	const char *original_url = apr_pstrdup(r->pool,
+			json_string_value(json_object_get(proto_state, "original_url")));
+	const char *original_method = apr_pstrdup(r->pool,
+			json_string_value(json_object_get(proto_state, "original_method")));
+
 	/* set the user */
 	if (oidc_get_remote_user(r, c, provider, jwt, &r->user) == TRUE) {
 
@@ -1196,19 +1241,14 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 				apr_table_get(params, "id_token"), jwt, claims,
 				apr_table_get(params, "access_token"), expires_in,
 				apr_table_get(params, "refresh_token"),
-				apr_table_get(params, "session_state"));
+				apr_table_get(params, "session_state"),
+				apr_table_get(params, "state"), original_url);
 	} else {
 		oidc_error(r, "remote user could not be set");
 		return oidc_authorization_response_error(r, c, proto_state,
 				"Remote user could not be set: contact the website administrator",
 				NULL);
 	}
-
-	/* restore the original protected URL that the user was trying to access */
-	const char *original_url = apr_pstrdup(r->pool,
-			json_string_value(json_object_get(proto_state, "original_url")));
-	const char *original_method = apr_pstrdup(r->pool,
-			json_string_value(json_object_get(proto_state, "original_method")));
 
 	/* cleanup */
 	json_decref(proto_state);

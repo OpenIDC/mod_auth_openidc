@@ -109,6 +109,10 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_REFRESHTOKEN_SESSION_KEY "refresh_token"
 /* key for storing maximum session duration in the session context */
 #define OIDC_SESSION_EXPIRES_SESSION_KEY "session_expires"
+/* key for storing request state */
+#define OIDC_REQUEST_STATE_SESSION_KEY "request_state"
+/* key for storing the original URL */
+#define OIDC_REQUEST_ORIGINAL_URL "original_url"
 
 /* key for storing the session_state in the session context */
 #define OIDC_SESSION_STATE_SESSION_KEY "session_state"
