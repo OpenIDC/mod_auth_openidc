@@ -1299,19 +1299,28 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 	/* obtain the URL we're currently accessing, to be stored in the state/session */
 	char *current_url = oidc_get_current_url(r, cfg);
 
+	/* generate CSRF token */
+	char *csrf = NULL;
+	if (oidc_proto_generate_nonce(r, &csrf, 8) == FALSE)
+		return HTTP_INTERNAL_SERVER_ERROR;
+
 	/* see if there's an external discovery page configured */
 	if (dir_cfg->discover_url != NULL) {
 
 		/* yes, assemble the parameters for external discovery */
-		char *url = apr_psprintf(r->pool, "%s%s%s=%s&%s=%s",
+		char *url = apr_psprintf(r->pool, "%s%s%s=%s&%s=%s&%s=%s",
 				dir_cfg->discover_url,
 				strchr(dir_cfg->discover_url, '?') != NULL ? "&" : "?",
 						OIDC_DISC_RT_PARAM, oidc_util_escape_string(r, current_url),
 						OIDC_DISC_CB_PARAM,
-						oidc_util_escape_string(r, cfg->redirect_uri));
+						oidc_util_escape_string(r, cfg->redirect_uri),
+						OIDC_CSRF_NAME, oidc_util_escape_string(r, csrf));
 
 		/* log what we're about to do */
 		oidc_debug(r, "redirecting to external discovery page: %s", url);
+
+		/* set CSRF cookie */
+		oidc_util_set_cookie(r, OIDC_CSRF_NAME, csrf, -1);
 
 		/* do the actual redirect to an external discovery page */
 		apr_table_add(r->headers_out, "Location", url);
@@ -1324,11 +1333,6 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 		return oidc_util_html_send_error(r, "mod_auth_openidc",
 				"No configured providers found, contact your administrator",
 				HTTP_UNAUTHORIZED);
-
-	/* generate CSRF token */
-	char *csrf = NULL;
-	if (oidc_proto_generate_nonce(r, &csrf, 8) == FALSE)
-		return HTTP_INTERNAL_SERVER_ERROR;
 
 	/* assemble a where-are-you-from IDP discovery HTML page */
 	const char *s = "			<h3>Select your OpenID Connect Identity Provider</h3>\n";
@@ -1573,18 +1577,18 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 	oidc_util_get_request_parameter(r, OIDC_CSRF_NAME, &csrf_query);
 	csrf_cookie = oidc_util_get_cookie(r, OIDC_CSRF_NAME);
 
-	/* do CSRF protection if not 3-rd party initiated SSO */
+	/* do CSRF protection if not 3rd party initiated SSO */
 	if (csrf_cookie) {
 
 		/* clean CSRF cookie */
 		oidc_util_set_cookie(r, OIDC_CSRF_NAME, "", 0);
 
-		/* compare CSRF cookie value with query paramter value */
+		/* compare CSRF cookie value with query parameter value */
 		if ((csrf_query == NULL)
 				|| apr_strnatcmp(csrf_query, csrf_cookie) != 0) {
-			return oidc_util_html_send_error(r, "mod_auth_openidc",
-					"CSRF protection failed...",
-					HTTP_INTERNAL_SERVER_ERROR);
+			oidc_warn(r,
+					"CSRF protection failed, no Discovery and dynamic client registration will be allowed");
+			csrf_cookie = NULL;
 		}
 	}
 

@@ -1,3 +1,6 @@
+9/4/2015
+- add CSRF protection to external Discovery as well
+
 8/26/2015
 - add CSRF protection to Discovery
 - bump to 1.8.5rc4
