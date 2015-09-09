@@ -323,6 +323,16 @@ static const char *oidc_set_cache_shm_entry_size_max(cmd_parms *cmd, void *ptr,
 	return NULL;
 }
 
+#if USE_MEMCACHE && USE_LIBHIREDIS
+#define OIDC_CACHE_TYPE_VALUE_STRINGS "\"shm\", \"memcache\", \"redis\" or \"file\""
+#elif USE_MEMCACHE
+#define OIDC_CACHE_TYPE_VALUE_STRINGS "\"shm\", \"memcache\" or \"file\""
+#elif USE_LIBHIREDIS
+#define OIDC_CACHE_TYPE_VALUE_STRINGS "\"shm\", \"redis\" or \"file\""
+#else
+#define OIDC_CACHE_TYPE_VALUE_STRINGS "\"shm\" or \"file\""
+#endif
+
 /*
  * set the cache type
  */
@@ -330,11 +340,12 @@ static const char *oidc_set_cache_type(cmd_parms *cmd, void *ptr,
 		const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
-
 	if (apr_strnatcmp(arg, "file") == 0) {
 		cfg->cache = &oidc_cache_file;
+#if USE_MEMCACHE
 	} else if (apr_strnatcmp(arg, "memcache") == 0) {
 		cfg->cache = &oidc_cache_memcache;
+#endif
 	} else if (apr_strnatcmp(arg, "shm") == 0) {
 		cfg->cache = &oidc_cache_shm;
 #ifdef USE_LIBHIREDIS
@@ -343,13 +354,8 @@ static const char *oidc_set_cache_type(cmd_parms *cmd, void *ptr,
 #endif
 	} else {
 		return (apr_psprintf(cmd->pool,
-#ifdef USE_LIBHIREDIS
-				"oidc_set_cache_type: invalid value for %s (%s); must be one of \"shm\", \"memcache\", \"redis\" or \"file\"",
+				"oidc_set_cache_type: invalid value for %s (%s); must be one of " OIDC_CACHE_TYPE_VALUE_STRINGS,
 				cmd->directive->directive, arg));
-#else
-				"oidc_set_cache_type: invalid value for %s (%s); must be one of \"shm\", \"memcache\" or \"file\"",
-				cmd->directive->directive, arg));
-#endif
 	}
 
 	return NULL;
@@ -856,7 +862,9 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 
 	c->cache_file_dir = NULL;
 	c->cache_file_clean_interval = OIDC_DEFAULT_CACHE_FILE_CLEAN_INTERVAL;
+#ifdef USE_MEMCACHE
 	c->cache_memcache_servers = NULL;
+#endif
 	c->cache_shm_size_max = OIDC_DEFAULT_CACHE_SHM_SIZE;
 	c->cache_shm_entry_size_max = OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX;
 #ifdef USE_LIBHIREDIS
@@ -1141,9 +1149,11 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->cache_file_clean_interval :
 					base->cache_file_clean_interval;
 
+#ifdef USE_MEMCACHE
 	c->cache_memcache_servers =
 			add->cache_memcache_servers != NULL ?
 					add->cache_memcache_servers : base->cache_memcache_servers;
+#endif
 	c->cache_shm_size_max =
 			add->cache_shm_size_max != OIDC_DEFAULT_CACHE_SHM_SIZE ?
 					add->cache_shm_size_max : base->cache_shm_size_max;
@@ -1940,7 +1950,7 @@ const command_rec oidc_config_cmds[] = {
 
 		AP_INIT_TAKE1("OIDCCacheType", oidc_set_cache_type,
 				(void*)APR_OFFSETOF(oidc_cfg, cache), RSRC_CONF,
-				"Cache type; must be one of \"file\", \"memcache\" or \"shm\"."),
+				"Cache type; must be one of "OIDC_CACHE_TYPE_VALUE_STRINGS),
 
 		AP_INIT_TAKE1("OIDCCacheDir", oidc_set_dir_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, cache_file_dir),
@@ -1951,11 +1961,13 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, cache_file_clean_interval),
 				RSRC_CONF,
 				"Cache file clean interval in seconds."),
+#ifdef USE_MEMCACHE
 		AP_INIT_TAKE1("OIDCMemCacheServers",
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, cache_memcache_servers),
 				RSRC_CONF,
 				"Memcache servers used for caching (space separated list of <hostname>[:<port>] tuples)"),
+#endif
 		AP_INIT_TAKE1("OIDCCacheShmMax", oidc_set_int_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, cache_shm_size_max),
 				RSRC_CONF,

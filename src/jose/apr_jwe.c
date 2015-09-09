@@ -53,13 +53,70 @@
 #include <openssl/evp.h>
 #include <openssl/aes.h>
 #include <openssl/rsa.h>
+#ifndef OPENSSL_NO_EC
 #include <openssl/ec.h>
+#endif
 #include <openssl/hmac.h>
 #include <openssl/err.h>
 
 #include <apr_base64.h>
 
 #include "apr_jose.h"
+
+#ifndef APR_ARRAY_PUSH
+#define APR_ARRAY_PUSH(ary,type) (*((type *)apr_array_push(ary)))
+#endif
+#ifndef APR_ARRAY_IDX
+#define APR_ARRAY_IDX(ary,i,type) (((type *)(ary)->elts)[i])
+#endif
+
+#if OPENSSL_VERSION < 0x0090809fL
+static const unsigned char default_iv[] = {
+  0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6,
+};
+
+int AES_unwrap_key(AES_KEY *key, const unsigned char *iv,
+		unsigned char *out,
+		const unsigned char *in, unsigned int inlen)
+	{
+	unsigned char *A, B[16], *R;
+	unsigned int i, j, t;
+	inlen -= 8;
+	if (inlen & 0x7)
+		return -1;
+	if (inlen < 8)
+		return -1;
+	A = B;
+	t =  6 * (inlen >> 3);
+	memcpy(A, in, 8);
+	memcpy(out, in + 8, inlen);
+	for (j = 0; j < 6; j++)
+		{
+		R = out + inlen - 8;
+		for (i = 0; i < inlen; i += 8, t--, R -= 8)
+			{
+			A[7] ^= (unsigned char)(t & 0xff);
+			if (t > 0xff)
+				{
+				A[6] ^= (unsigned char)((t >> 8) & 0xff);
+				A[5] ^= (unsigned char)((t >> 16) & 0xff);
+				A[4] ^= (unsigned char)((t >> 24) & 0xff);
+				}
+			memcpy(B + 8, R, 8);
+			AES_decrypt(B, B, key);
+			memcpy(R, B + 8, 8);
+			}
+		}
+	if (!iv)
+		iv = default_iv;
+	if (memcmp(A, iv, 8))
+		{
+		OPENSSL_cleanse(out, inlen);
+		return 0;
+		}
+	return inlen;
+	}
+#endif
 
 /*
  * return all supported content encryption key algorithms
