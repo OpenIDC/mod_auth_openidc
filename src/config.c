@@ -647,14 +647,14 @@ static const char * oidc_set_token_expiry_claim(cmd_parms *cmd, void *dummy,
 			claim_name);
 
 	if (claim_format) {
-		if ((apr_strnatcmp(claim_required, "absolute") == 0)
-				|| (apr_strnatcmp(claim_required, "relative") == 0)) {
+		if ((apr_strnatcmp(claim_format, "absolute") == 0)
+				|| (apr_strnatcmp(claim_format, "relative") == 0)) {
 			cfg->oauth.introspection_token_expiry_claim_format = apr_pstrdup(
 					cmd->pool, claim_format);
 		} else {
 			return apr_psprintf(cmd->pool,
 					"Invalid value \"%s\" for directive %s; must be either \"absolute\" or \"relative\"",
-					claim_required, cmd->directive->directive);
+					claim_format, cmd->directive->directive);
 		}
 	}
 
