@@ -1,3 +1,7 @@
+9/9/2015
+- fix parsing of OIDCOAuthTokenExpiryClaim, thanks to @bester #90
+- bump to 1.8.5rc6
+
 9/4/2015
 - add CSRF protection to external Discovery as well
 - allow browser back after authorization response, see #89
