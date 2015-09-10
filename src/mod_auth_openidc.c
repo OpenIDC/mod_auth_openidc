@@ -383,22 +383,6 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 			"jti \"%s\" validated successfully and is now cached for %" APR_TIME_T_FMT " seconds",
 			jti, apr_time_sec(jti_cache_duration));
 
-	/*
-	 * TODO: pass in 'code' if code flow and check c_hash
-	 */
-	/*
-	 char *c_hash = NULL;
-	 apr_jwt_get_string(r->pool, &jwt->payload.value, "c_hash", &c_hash);
-	 if (c_hash != NULL) {
-	 apr_array_header_t *required_for_flows = apr_array_make(r->pool, 2, sizeof(const char*));
-	 *(const char**) apr_array_push(required_for_flows) = "code";
-	 if (oidc_proto_validate_hash_value(r, provider, jwt, "code", code,
-	 "c_hash", required_for_flows) == FALSE) return FALSE;
-	 }
-	 */
-
-	// TODO: perhaps support encrypted state using shared secret? (issuer for encrypted JWTs must be in JWT header?)
-	//       (now we always use the statically configured provider client_secret...)
 	oidc_jwks_uri_t jwks_uri = { provider->jwks_uri,
 			provider->jwks_refresh_interval, provider->ssl_validate_server };
 	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri,
@@ -1186,7 +1170,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 			return HTTP_MOVED_TEMPORARILY;
 		}
 		oidc_error(r,
-				"invalid authorization response state and default SSO URL is set, sending an error...");
+				"invalid authorization response state and no default SSO URL is set, sending an error...");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
