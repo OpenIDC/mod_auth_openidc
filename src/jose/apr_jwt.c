@@ -50,6 +50,7 @@
  * @Author: Hans Zandbelt - hzandbelt@pingidentity.com
  */
 
+#include <apr_version.h>
 #include <apr_base64.h>
 
 #include "apr_jose.h"
@@ -59,14 +60,12 @@
 #define snprintf _snprintf
 #endif
 
-#if APU_MAJOR_VERSION == 1 && APU_MINOR_VERSION < 3
+#if APR_MAJOR_VERSION == 1 && APR_MINOR_VERSION < 3
 static void
 apr_array_clear(apr_array_header_t *unpacked)
 {
 	if (unpacked) {
-		while (!apr_is_empty_array(unpacked)) {
-			apr_array_pop(unpacked);
-		}
+		unpacked->nelts = 0;
 	}
 }
 #endif
