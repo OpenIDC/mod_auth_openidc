@@ -1,5 +1,6 @@
 
 JWT_SRC = \
+	src/jose/aes_wrap.c \
 	src/jose/apr_jwt.c \
 	src/jose/apr_jwk.c \
 	src/jose/apr_jws.c \

@@ -63,6 +63,33 @@
 
 #include "apr_jose.h"
 
+/* The APR_ARRAY_PUSH and APR_ARRAY_IDX macros are from apr_tables.h from
+ * apr-1.5.2.tar.bz2
+ */
+/* It is distributed under the following license */
+/* Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/* The contents of the NOTICE which pertain to apr_tables.h follow */
+/*
+ * Apache Portable Runtime
+ * Copyright (c) 2000-2015 The Apache Software Foundation.
+ * 
+ * This product includes software developed at
+ * The Apache Software Foundation (http://www.apache.org/).
+ */
 #ifndef APR_ARRAY_PUSH
 #define APR_ARRAY_PUSH(ary,type) (*((type *)apr_array_push(ary)))
 #endif
@@ -71,51 +98,10 @@
 #endif
 
 #if OPENSSL_VERSION < 0x0090809fL
-static const unsigned char default_iv[] = {
-  0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6,
-};
-
+/* See src/jose/aes_wrap.c */
 int AES_unwrap_key(AES_KEY *key, const unsigned char *iv,
 		unsigned char *out,
-		const unsigned char *in, unsigned int inlen)
-	{
-	unsigned char *A, B[16], *R;
-	unsigned int i, j, t;
-	inlen -= 8;
-	if (inlen & 0x7)
-		return -1;
-	if (inlen < 8)
-		return -1;
-	A = B;
-	t =  6 * (inlen >> 3);
-	memcpy(A, in, 8);
-	memcpy(out, in + 8, inlen);
-	for (j = 0; j < 6; j++)
-		{
-		R = out + inlen - 8;
-		for (i = 0; i < inlen; i += 8, t--, R -= 8)
-			{
-			A[7] ^= (unsigned char)(t & 0xff);
-			if (t > 0xff)
-				{
-				A[6] ^= (unsigned char)((t >> 8) & 0xff);
-				A[5] ^= (unsigned char)((t >> 16) & 0xff);
-				A[4] ^= (unsigned char)((t >> 24) & 0xff);
-				}
-			memcpy(B + 8, R, 8);
-			AES_decrypt(B, B, key);
-			memcpy(R, B + 8, 8);
-			}
-		}
-	if (!iv)
-		iv = default_iv;
-	if (memcmp(A, iv, 8))
-		{
-		OPENSSL_cleanse(out, inlen);
-		return 0;
-		}
-	return inlen;
-	}
+		const unsigned char *in, unsigned int inlen);
 #endif
 
 /*
