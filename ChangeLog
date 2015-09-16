@@ -1,3 +1,7 @@
+9/16/2015
+- improve logging on provider/client/conf metadata parsing failures; closes #94
+- bump to 1.8.5rc7
+
 9/9/2015
 - fix parsing of OIDCOAuthTokenExpiryClaim, thanks to @bester #90
 - bump to 1.8.5rc6

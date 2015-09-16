@@ -672,7 +672,13 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 	json_decref(data);
 
 	/* decode and see if it is not an error response somehow */
-	return oidc_util_decode_json_and_check_error(r, *response, j_client);
+	if (oidc_util_decode_json_and_check_error(r, *response, j_client) == FALSE) {
+		oidc_error(r,
+				"JSON parsing of dynamic client registration response failed");
+		return FALSE;
+	}
+
+	return TRUE;
 }
 
 /*
@@ -694,8 +700,10 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
 		return FALSE;
 
 	/* decode and see if it is not an error response somehow */
-	if (oidc_util_decode_json_and_check_error(r, response, j_jwks) == FALSE)
+	if (oidc_util_decode_json_and_check_error(r, response, j_jwks) == FALSE) {
+		oidc_error(r, "JSON parsing of JWKs published at the jwks_uri failed");
 		return FALSE;
+	}
 
 	/* check to see if it is valid metadata */
 	if (oidc_metadata_jwks_is_valid(r, jwks_uri, *j_jwks) == FALSE)
@@ -739,8 +747,10 @@ apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg,
 	}
 
 	/* decode and see if it is not an error response somehow */
-	if (oidc_util_decode_json_and_check_error(r, value, j_jwks) == FALSE)
+	if (oidc_util_decode_json_and_check_error(r, value, j_jwks) == FALSE) {
+		oidc_error(r, "JSON parsing of cached JWKs data failed");
 		return FALSE;
+	}
 
 	return TRUE;
 }
@@ -764,8 +774,10 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg,
 		return FALSE;
 
 	/* decode and see if it is not an error response somehow */
-	if (oidc_util_decode_json_and_check_error(r, *response, j_metadata) == FALSE)
+	if (oidc_util_decode_json_and_check_error(r, *response, j_metadata) == FALSE) {
+		oidc_error(r, "JSON parsing of retrieved Discovery document failed");
 		return FALSE;
+	}
 
 	/* check to see if it is valid metadata */
 	if (oidc_metadata_provider_is_valid(r, *j_metadata, issuer) == FALSE)
