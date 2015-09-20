@@ -1,3 +1,7 @@
+9/20/2015
+- support (non-sid-based) HTTP logout: http://openid.net/specs/openid-connect-logout-1_0.html
+- bump to 1.8.5rc8
+
 9/16/2015
 - improve logging on provider/client/conf metadata parsing failures; closes #94
 - bump to 1.8.5rc7
