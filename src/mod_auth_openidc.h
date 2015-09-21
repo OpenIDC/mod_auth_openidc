@@ -60,7 +60,11 @@
 #include <http_config.h>
 #include <mod_auth.h>
 
+#include "apu_version.h"
+#if APU_MAJOR_VERSION > 1 || (APU_MAJOR_VERSION == 1 && APU_MINOR_VERSION > 2)
 #include "apr_memcache.h"
+#define USE_MEMCACHE 1
+#endif
 #include "apr_shm.h"
 #include "apr_global_mutex.h"
 
@@ -290,8 +294,10 @@ typedef struct oidc_cfg {
 	char *cache_file_dir;
 	/* cache_type = file: clean interval */
 	int cache_file_clean_interval;
+#ifdef USE_MEMCACHE
 	/* cache_type= memcache: list of memcache host/port servers to use */
 	char *cache_memcache_servers;
+#endif
 	/* cache_type = shm: size of the shared memory segment (cq. max number of cached entries) */
 	int cache_shm_size_max;
 	/* cache_type = shm: maximum size in bytes of a cache entry */

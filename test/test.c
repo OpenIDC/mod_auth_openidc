@@ -605,8 +605,8 @@ static char *test_plaintext_decrypt2(apr_pool_t *pool) {
 
 	TST_ASSERT_STR("decrypted", decrypted,
 			"You can trust us to stick with you through thick and "
-			"thin\u2013to the bitter end. And you can trust us to "
-			"keep any secret of yours\u2013closer than you keep it "
+			"thin\342\200\223to the bitter end. And you can trust us to "
+			"keep any secret of yours\342\200\223closer than you keep it "
 			"yourself. But you cannot trust us to let you face trouble "
 			"alone, and go off without a word. We are your friends, Frodo.");
 

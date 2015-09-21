@@ -21,3 +21,11 @@ reporting bugs, providing fixes, suggesting useful features or other:
 	Stefano Vercelli <https://github.com/steverc>
 	David Bernick <https://github.com/davidbernick>
 	Joseph Bester <https://github.com/bester>
+
+This product includes software developed by the OpenSSL Project
+for use in the OpenSSL Toolkit. (http://www.OpenSSL.org/)
+See src/jose/aes_wrap.c for copyright and licensing details.
+
+Portions of this product are 
+Copyright (c) 2000-2015 The Apache Software Foundation.
+See src/jose/apr_jwe.c for copyright and licensing details.

@@ -87,7 +87,9 @@ apr_byte_t oidc_cache_mutex_unlock(request_rec *r, oidc_cache_mutex_t *m);
 apr_byte_t oidc_cache_mutex_destroy(server_rec *s, oidc_cache_mutex_t *m);
 
 extern oidc_cache_t oidc_cache_file;
+#if USE_MEMCACHE
 extern oidc_cache_t oidc_cache_memcache;
+#endif
 extern oidc_cache_t oidc_cache_shm;
 
 #ifdef USE_LIBHIREDIS

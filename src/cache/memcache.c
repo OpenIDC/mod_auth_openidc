@@ -50,16 +50,19 @@
  * @Author: Hans Zandbelt - hzandbelt@pingidentity.com
  */
 
+#include "apu_version.h"
 #include "apr_general.h"
 #include "apr_strings.h"
 #include "apr_hash.h"
-#include "apr_memcache.h"
 
 #include <httpd.h>
 #include <http_config.h>
 #include <http_log.h>
 
 #include "../mod_auth_openidc.h"
+
+#if USE_MEMCACHE
+#include "apr_memcache.h"
 
 // TODO: proper memcache error reporting (server unreachable etc.)
 
@@ -274,3 +277,4 @@ oidc_cache_t oidc_cache_memcache = {
 		oidc_cache_memcache_set,
 		NULL
 };
+#endif /* USE_MEMCACHE */
