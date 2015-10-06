@@ -1,3 +1,7 @@
+10/6/2015
+- add key identifier ("kid") option to `OIDCOAuthVerifySharedKeys`, `OIDCOAuthVerifyCertFiles` and `OIDCPublicKeyFiles` configs
+- bump to 1.8.6rc0
+
 9/21/2015
 - support (non-sid-based) HTTP logout: http://openid.net/specs/openid-connect-logout-1_0.html
 - release 1.8.5

@@ -1482,7 +1482,8 @@ apr_hash_t * oidc_util_merge_symmetric_key(apr_pool_t *pool, apr_hash_t *keys,
 					strlen(client_secret), &key, &key_len, &err);
 		}
 
-		if (apr_jwk_parse_symmetric_key(pool, key, key_len, &jwk, &err) == TRUE) {
+		if (apr_jwk_parse_symmetric_key(pool, NULL, key, key_len, &jwk,
+				&err) == TRUE) {
 			apr_hash_set(result, jwk->kid, APR_HASH_KEY_STRING, jwk);
 		}
 	}

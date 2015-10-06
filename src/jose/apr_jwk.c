@@ -370,8 +370,9 @@ static apr_byte_t apr_jwk_hash_and_base64urlencode(apr_pool_t *pool,
 /*
  * parse a symmetric key in to an "oct" JWK
  */
-apr_byte_t apr_jwk_parse_symmetric_key(apr_pool_t *pool, const unsigned char *key,
-		unsigned int key_len, apr_jwk_t **j_jwk, apr_jwt_error_t *err) {
+apr_byte_t apr_jwk_parse_symmetric_key(apr_pool_t *pool, const char *kid,
+		const unsigned char *key, unsigned int key_len, apr_jwk_t **j_jwk,
+		apr_jwt_error_t *err) {
 
 	/* allocate memory for the JWK */
 	*j_jwk = apr_pcalloc(pool, sizeof(apr_jwk_t));
@@ -386,10 +387,14 @@ apr_byte_t apr_jwk_parse_symmetric_key(apr_pool_t *pool, const unsigned char *ke
 	memcpy(jwk->key.oct->k, key, key_len);
 	jwk->key.oct->k_len = key_len;
 
-	/* calculate a unique key identifier (kid) by fingerprinting the key params */
-	if (apr_jwk_hash_and_base64urlencode(pool, jwk->key.oct->k,
-			jwk->key.oct->k_len, &jwk->kid, err) == FALSE)
-		return FALSE;
+	if (kid != NULL) {
+		jwk->kid = apr_pstrdup(pool, kid);
+	} else {
+		/* calculate a unique key identifier (kid) by fingerprinting the key params */
+		if (apr_jwk_hash_and_base64urlencode(pool, jwk->key.oct->k,
+				jwk->key.oct->k_len, &jwk->kid, err) == FALSE)
+			return FALSE;
+	}
 
 	return TRUE;
 }
@@ -495,7 +500,7 @@ apr_byte_t apr_jwk_to_json(apr_pool_t *pool, apr_jwk_t *jwk, char **s_json,
 }
 
 static apr_byte_t apr_jwk_parse_rsa_key(apr_pool_t *pool, int is_private_key,
-		const char *filename, apr_jwk_t **j_jwk, apr_jwt_error_t *err) {
+		const char *kid, const char *filename, apr_jwk_t **j_jwk, apr_jwt_error_t *err) {
 	BIO *input = NULL;
 	apr_jwk_key_rsa_t *key = NULL;
 	apr_byte_t rv = FALSE;
@@ -520,11 +525,15 @@ static apr_byte_t apr_jwk_parse_rsa_key(apr_pool_t *pool, int is_private_key,
 	jwk->type = APR_JWK_KEY_RSA;
 	jwk->key.rsa = key;
 
-	/* calculate a unique key identifier (kid) by fingerprinting the key params */
-	// TODO: based just on sha1 hash of modulus "n" now..., could do this based on jwk->value.str
-	if (apr_jwk_hash_and_base64urlencode(pool, key->modulus, key->modulus_len,
-			&jwk->kid, err) == FALSE)
-		goto end;
+	if (kid != NULL) {
+		jwk->kid = apr_pstrdup(pool, kid);
+	} else {
+		/* calculate a unique key identifier (kid) by fingerprinting the key params */
+		// TODO: based just on sha1 hash of modulus "n" now..., could do this based on jwk->value.str
+		if (apr_jwk_hash_and_base64urlencode(pool, key->modulus, key->modulus_len,
+				&jwk->kid, err) == FALSE)
+			goto end;
+	}
 
 	rv = TRUE;
 
@@ -538,10 +547,10 @@ end:
 
 apr_byte_t apr_jwk_parse_rsa_private_key(apr_pool_t *pool, const char *filename,
 		apr_jwk_t **j_jwk, apr_jwt_error_t *err) {
-	return apr_jwk_parse_rsa_key(pool, TRUE, filename, j_jwk, err);
+	return apr_jwk_parse_rsa_key(pool, TRUE, NULL, filename, j_jwk, err);
 }
 
-apr_byte_t apr_jwk_parse_rsa_public_key(apr_pool_t *pool, const char *filename,
+apr_byte_t apr_jwk_parse_rsa_public_key(apr_pool_t *pool, const char *kid, const char *filename,
 		apr_jwk_t **j_jwk, apr_jwt_error_t *err) {
-	return apr_jwk_parse_rsa_key(pool, FALSE, filename, j_jwk, err);
+	return apr_jwk_parse_rsa_key(pool, FALSE, kid, filename, j_jwk, err);
 }

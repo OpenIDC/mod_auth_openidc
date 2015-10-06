@@ -404,6 +404,8 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 		return FALSE;
 	}
 
+	oidc_debug(r, "successfully parsed JWT with header: %s", jwt->header.value.str);
+
 	/* validate the access token JWT, validating optional exp + iat */
 	if (oidc_proto_validate_jwt(r, jwt, NULL, FALSE, FALSE,
 			c->provider.idtoken_iat_slack) == FALSE) {

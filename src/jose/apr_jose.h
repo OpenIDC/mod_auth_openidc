@@ -238,15 +238,15 @@ typedef struct apr_jwk_t {
 apr_byte_t apr_jwk_parse_json(apr_pool_t *pool, json_t *j_json,
 		apr_jwk_t **j_jwk, apr_jwt_error_t *err);
 /* parse a symmetric key in to a JSON Web Key (oct) struct */
-apr_byte_t apr_jwk_parse_symmetric_key(apr_pool_t *pool,
+apr_byte_t apr_jwk_parse_symmetric_key(apr_pool_t *pool, const char *kid,
 		const unsigned char *key, unsigned int key_len, apr_jwk_t **j_jwk,
 		apr_jwt_error_t *err);
 /* parse an RSA private key from a PEM formatted file */
 apr_byte_t apr_jwk_parse_rsa_private_key(apr_pool_t *pool, const char *filename,
 		apr_jwk_t **j_jwk, apr_jwt_error_t *err);
 /* parse an RSA public key from a PEM formatted file */
-apr_byte_t apr_jwk_parse_rsa_public_key(apr_pool_t *pool, const char *filename,
-		apr_jwk_t **j_jwk, apr_jwt_error_t *err);
+apr_byte_t apr_jwk_parse_rsa_public_key(apr_pool_t *pool, const char *kid,
+		const char *filename, apr_jwk_t **j_jwk, apr_jwt_error_t *err);
 apr_byte_t apr_jwk_to_json(apr_pool_t *pool, apr_jwk_t *jwk, char **s_json,
 		apr_jwt_error_t *err);
 

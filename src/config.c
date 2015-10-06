@@ -52,6 +52,7 @@
 #include <apr_errno.h>
 #include <apr_strings.h>
 #include <apr_portable.h>
+#include <apr_base64.h>
 
 #include <httpd.h>
 #include <http_config.h>
@@ -517,6 +518,86 @@ static const char *oidc_set_session_max_duration(cmd_parms *cmd,
 }
 
 /*
+ * decode a key value based on the provided encoding b64|b64url|hex|plain
+ */
+static char * oidc_config_decode_key(apr_pool_t *pool, const char *enc,
+		const char *input, char **key, int *key_len) {
+	if (apr_strnatcmp(enc, "b64") == 0) {
+		int len = apr_base64_decode_len(input);
+		*key = apr_palloc(pool, len);
+		*key_len = apr_base64_decode(*key, input);
+		if (key_len <= 0) {
+			return "base64 decoding failed";
+		}
+		return NULL;
+	} else if (apr_strnatcmp(enc, "b64url") == 0) {
+		*key_len = apr_jwt_base64url_decode(pool, key, input, 1);
+		return NULL;
+	} else if (apr_strnatcmp(enc, "hex") == 0) {
+		*key_len = strlen(input) / 2;
+		const char *pos = input;
+		unsigned char *val = apr_palloc(pool, *key_len);
+		size_t count = 0;
+		for (count = 0; count < (*key_len) / sizeof(unsigned char); count++) {
+			sscanf(pos, "%2hhx", &val[count]);
+			pos += 2;
+		}
+		*key = (char*) val;
+		return NULL;
+	} else if (apr_strnatcmp(enc, "plain") == 0) {
+		*key = apr_pstrdup(pool, input);
+		*key_len = strlen(*key);
+		return NULL;
+	}
+	return apr_psprintf(pool,
+			"unknown encoding: %s; must be one of b64|b64url|hex|plain", enc);
+}
+
+#define OIDC_KEY_TUPLE_SEPARATOR "#"
+
+/*
+ * set a <encoding>#<key-identifier>#<key> tuple
+ */
+static char * oidc_config_get_id_key_tuple(apr_pool_t *pool, const char *tuple,
+		char **kid, char **key, int *key_len, apr_byte_t triplet) {
+	char *s = NULL, *p = NULL, *q = NULL;
+	char *enc = NULL, *err = NULL;
+
+	if ((tuple == NULL) || (apr_strnatcmp(tuple, "") == 0))
+		return "tuple value not set";
+
+	s = apr_pstrdup(pool, tuple);
+	p = strstr(s, OIDC_KEY_TUPLE_SEPARATOR);
+	if (p && triplet)
+		q = strstr(p + 1, OIDC_KEY_TUPLE_SEPARATOR);
+
+	if (p) {
+		if (q) {
+			*p = '\0';
+			*q = '\0';
+			enc = s;
+			p++;
+			if (p != q)
+				*kid = apr_pstrdup(pool, p);
+			err = oidc_config_decode_key(pool, enc, q + 1, key, key_len);
+			if (err)
+				return err;
+		} else {
+			*p = '\0';
+			*kid = s;
+			*key = p + 1;
+			*key_len = strlen(*key);
+		}
+	} else {
+		*kid = NULL;
+		*key = s;
+		*key_len = strlen(*key);
+	}
+
+	return NULL;
+}
+
+/*
  * add a public key from an X.509 file to our list of JWKs with public keys
  */
 static const char *oidc_set_public_key_files(cmd_parms *cmd, void *struct_ptr,
@@ -530,10 +611,17 @@ static const char *oidc_set_public_key_files(cmd_parms *cmd, void *struct_ptr,
 	int offset = (int) (long) cmd->info;
 	apr_hash_t **public_keys = (apr_hash_t **) ((char *) cfg + offset);
 
-	if (apr_jwk_parse_rsa_public_key(cmd->pool, arg, &jwk, &err) == FALSE) {
+	char *kid = NULL, *fname = NULL;
+	int fname_len;
+	char *rv = oidc_config_get_id_key_tuple(cmd->pool, arg, &kid, &fname,
+			&fname_len, FALSE);
+	if (rv != NULL)
+		return rv;
+
+	if (apr_jwk_parse_rsa_public_key(cmd->pool, kid, fname, &jwk, &err) == FALSE) {
 		return apr_psprintf(cmd->pool,
-				"apr_jwk_parse_rsa_public_key failed for \"%s\": %s", arg,
-				apr_jwt_e2s(cmd->pool, err));
+				"apr_jwk_parse_rsa_public_key failed for (kid=%s) \"%s\": %s",
+				kid, fname, apr_jwt_e2s(cmd->pool, err));
 	}
 
 	if (*public_keys == NULL)
@@ -548,12 +636,33 @@ static const char *oidc_set_public_key_files(cmd_parms *cmd, void *struct_ptr,
  */
 static const char *oidc_set_shared_keys(cmd_parms *cmd, void *struct_ptr,
 		const char *arg) {
+	apr_jwt_error_t err;
+	apr_jwk_t *jwk = NULL;
+
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
 	int offset = (int) (long) cmd->info;
 	apr_hash_t **shared_keys = (apr_hash_t **) ((char *) cfg + offset);
-	*shared_keys = oidc_util_merge_symmetric_key(cmd->pool, *shared_keys, arg,
-			NULL);
+
+	char *kid = NULL, *secret = NULL;
+	int key_len = 0;
+	char *rv = oidc_config_get_id_key_tuple(cmd->pool, arg, &kid, &secret,
+			&key_len, TRUE);
+	if (rv != NULL)
+		return rv;
+
+	if (apr_jwk_parse_symmetric_key(cmd->pool, kid,
+			(const unsigned char *) secret, key_len, &jwk, &err) == FALSE) {
+		return apr_psprintf(cmd->pool,
+				"apr_jwk_parse_symmetric_key failed for (kid=%s) \"%s\": %s",
+				kid, secret, apr_jwt_e2s(cmd->pool, err));
+	}
+
+	if (*shared_keys == NULL)
+		*shared_keys = apr_hash_make(cmd->pool);
+	apr_hash_set(*shared_keys, jwk->kid,
+			APR_HASH_KEY_STRING, jwk);
+
 	return NULL;
 }
 
