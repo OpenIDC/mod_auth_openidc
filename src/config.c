@@ -1430,18 +1430,10 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 	}
 
 	if (c->cookie_domain != NULL) {
-		char *p = NULL;
-		// Skip past a cookie_domain that starts with a ".", ASCII 46
-		char *check_cookie = c->cookie_domain;
-		if (check_cookie[0] == 46) {
-			p = strstr(r_uri.hostname, ++check_cookie);
-		} else {
-			p = strstr(r_uri.hostname, check_cookie);
-		}
-		if ((p == NULL) || (apr_strnatcmp(check_cookie, p) != 0)) {
+		if (!oidc_util_cookie_domain_valid(r_uri.hostname, c->cookie_domain)) {
 			oidc_serror(s,
-					"the domain (%s) configured in OIDCCookieDomain does not match the URL hostname (%s) of the configured OIDCRedirectURI (%s): setting \"state\" and \"session\" cookies will not work!",
-					check_cookie, r_uri.hostname, c->redirect_uri);
+				"the domain (%s) configured in OIDCCookieDomain does not match the URL hostname (%s) of the configured OIDCRedirectURI (%s): setting \"state\" and \"session\" cookies will not work!",
+				c->cookie_domain, r_uri.hostname, c->redirect_uri);
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 	}

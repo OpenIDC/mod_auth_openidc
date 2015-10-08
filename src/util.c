@@ -1576,3 +1576,19 @@ apr_byte_t oidc_util_regexp_first_match(apr_pool_t *pool, const char *input,
 
 	return TRUE;
 }
+
+int oidc_util_cookie_domain_valid(const char *hostname, char *cookie_domain) {
+	char *p = NULL;
+	char *check_cookie = cookie_domain;
+	// Skip past the first char of a cookie_domain that starts
+	// with a ".", ASCII 46
+	if (check_cookie[0] == 46) {
+		p = strstr(hostname, ++check_cookie);
+	} else {
+		p = strstr(hostname, check_cookie);
+	}
+	if ((p == NULL) || (apr_strnatcmp(check_cookie, p) != 0)) {
+		return FALSE;
+	}
+	return TRUE;
+}
