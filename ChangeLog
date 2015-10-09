@@ -1,3 +1,7 @@
+10/9/2015
+- support subdomain cookies in OIDCCookieDomain checks; PR #96, thanks @pfiled
+- bump to 1.8.6rc1
+
 10/6/2015
 - add key identifier ("kid") option to `OIDCOAuthVerifySharedKeys`, `OIDCOAuthVerifyCertFiles` and `OIDCPublicKeyFiles` configs
 - bump to 1.8.6rc0
