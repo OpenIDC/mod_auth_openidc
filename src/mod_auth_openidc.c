@@ -1509,11 +1509,10 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 			}
 		}
 	} else {
-		char *p = strstr(o_uri.hostname, c->cookie_domain);
-		if ((p == NULL) || (apr_strnatcmp(c->cookie_domain, p) != 0)) {
+		if (!oidc_util_cookie_domain_valid(r_uri.hostname, c->cookie_domain)) {
 			oidc_error(r,
-					"the domain (%s) configured in OIDCCookieDomain does not match the URL hostname (%s) of the URL being accessed (%s): setting \"state\" and \"session\" cookies will not work!!",
-					c->cookie_domain, o_uri.hostname, original_url);
+				"the domain (%s) configured in OIDCCookieDomain does not match the URL hostname (%s) of the URL being accessed (%s): setting \"state\" and \"session\" cookies will not work!!",
+				c->cookie_domain, o_uri.hostname, original_url);
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 	}
