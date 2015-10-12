@@ -697,6 +697,13 @@ void oidc_util_set_cookie(request_rec *r, const char *cookieName,
 					";Secure" : ""),
 			c->cookie_http_only != FALSE ? ";HttpOnly" : "");
 
+	/* sanity check on overall cookie value size */
+	if (strlen(headerString) > 4093) {
+		oidc_warn(r,
+				"the length of the cookie value (%s) is greater than 4093(!) bytes, this may not work with all browsers/server combinations: consider switching to a server side caching!",
+				strlen(headerString));
+	}
+
 	/* use r->err_headers_out so we always print our headers (even on 302 redirect) - headers_out only prints on 2xx responses */
 	apr_table_add(r->err_headers_out, "Set-Cookie", headerString);
 

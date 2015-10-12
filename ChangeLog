@@ -1,4 +1,5 @@
 10/12/2015
+- log a warning if the Set-Cookie value length is greater than 4093 bytes
 - use apr_strnatcmp instead of strcmp in util.c and mod_auth_openidc.c
 
 10/9/2015
