@@ -109,6 +109,8 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_REFRESHTOKEN_SESSION_KEY "refresh_token"
 /* key for storing maximum session duration in the session context */
 #define OIDC_SESSION_EXPIRES_SESSION_KEY "session_expires"
+/* key for storing the cookie domain in the session context */
+#define OIDC_COOKIE_DOMAIN_SESSION_KEY "cookie_domain"
 /* key for storing request state */
 #define OIDC_REQUEST_STATE_SESSION_KEY "request_state"
 /* key for storing the original URL */
@@ -399,7 +401,8 @@ int oidc_base64url_encode(request_rec *r, char **dst, const char *src, int src_l
 int oidc_base64url_decode(request_rec *r, char **dst, const char *src);
 int oidc_encrypt_base64url_encode_string(request_rec *r, char **dst, const char *src);
 int oidc_base64url_decode_decrypt_string(request_rec *r, char **dst, const char *src);
-char *oidc_get_current_url(const request_rec *r, const oidc_cfg *c);
+const char *oidc_get_current_url_host(request_rec *r);
+char *oidc_get_current_url(request_rec *r);
 char *oidc_url_encode(const request_rec *r, const char *str, const char *charsToEncode);
 char *oidc_normalize_header_name(const request_rec *r, const char *str);
 

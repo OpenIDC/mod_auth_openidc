@@ -155,3 +155,7 @@ AP_DECLARE(apr_status_t) unixd_set_global_mutex_perms(
 		apr_global_mutex_t *gmutex) {
 	return APR_SUCCESS;
 }
+
+AP_DECLARE(const char *) ap_get_server_name(request_rec *r) {
+	return "www.example.com";
+}

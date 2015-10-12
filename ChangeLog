@@ -1,7 +1,11 @@
 10/12/2015
+- check the cookie domain that the session was created for against the configured domain
 - log a warning if the Set-Cookie value length is greater than 4093 bytes
+- include and prioritize the X-Forwarded-Host header in hostname determination
+- allow for missing Host header i.e. HTTP 1.0
 - return DONE instead of HTTP_UNAUTHORIZED with Discovery page (prevent double HTML in HTTP 1.0)
 - use apr_strnatcmp instead of strcmp in util.c and mod_auth_openidc.c
+- bump to 1.8.6rc2
 
 10/9/2015
 - support subdomain cookies in OIDCCookieDomain checks; PR #96, thanks @pfiled

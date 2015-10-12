@@ -314,14 +314,13 @@ static const char *oidc_get_current_url_scheme(const request_rec *r) {
 /*
  * get the URL port that is currently being accessed
  */
-static const char *oidc_get_current_url_port(const request_rec *r,
-		const oidc_cfg *c, const char *scheme_str) {
+static const char *oidc_get_current_url_port(const request_rec *r, const char *scheme_str) {
 	/* first see if there's a proxy/load-balancer in front of us */
 	const char *port_str = apr_table_get(r->headers_in, "X-Forwarded-Port");
 	if (port_str == NULL) {
 		/* if not we'll take the port from the Host header (as set by the client or ProxyPreserveHost) */
 		const char *host_hdr = apr_table_get(r->headers_in, "Host");
-		port_str = strchr(host_hdr, ':');
+		if (host_hdr) port_str = strchr(host_hdr, ':');
 		if (port_str == NULL) {
 			/* if no port was set in the Host header we'll determine it locally */
 			const apr_port_t port = r->connection->local_addr->port;
@@ -340,19 +339,33 @@ static const char *oidc_get_current_url_port(const request_rec *r,
 }
 
 /*
+ * get the hostname part of the URL that is currently being accessed
+ */
+const char *oidc_get_current_url_host(request_rec *r) {
+	const char *host_str = apr_table_get(r->headers_in, "X-Forwarded-Host");
+	if (host_str == NULL) {
+		host_str = apr_table_get(r->headers_in, "Host");
+		if (host_str) {
+			char *p = strchr(host_str, ':');
+			if (p != NULL)
+				*p = '\0';
+		} else {
+			/* no Host header, HTTP 1.0 */
+			host_str = ap_get_server_name(r);
+		}
+	}
+	return host_str;
+}
+
+/*
  * get the URL that is currently being accessed
  */
-char *oidc_get_current_url(const request_rec *r, const oidc_cfg *c) {
+char *oidc_get_current_url(request_rec *r) {
 
 	const char *scheme_str = oidc_get_current_url_scheme(r);
-
-	const char *port_str = oidc_get_current_url_port(r, c, scheme_str);
+	const char *host_str = oidc_get_current_url_host(r);
+	const char *port_str = oidc_get_current_url_port(r, scheme_str);
 	port_str = port_str ? apr_psprintf(r->pool, ":%s", port_str) : "";
-
-	const char *host_str = apr_table_get(r->headers_in, "Host");
-	char *p = strchr(host_str, ':');
-	if (p != NULL)
-		*p = '\0';
 
 	char *url = apr_pstrcat(r->pool, scheme_str, "://", host_str, port_str,
 			r->uri, (r->args != NULL && *r->args != '\0' ? "?" : ""), r->args,

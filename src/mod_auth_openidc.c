@@ -643,8 +643,8 @@ static int oidc_check_max_session_duration(request_rec *r, oidc_cfg *cfg,
 		oidc_warn(r, "maximum session duration exceeded for user: %s",
 				session->remote_user);
 		oidc_session_kill(r, session);
-		return oidc_authenticate_user(r, cfg, NULL,
-				oidc_get_current_url(r, cfg), NULL,
+		return oidc_authenticate_user(r, cfg, NULL, oidc_get_current_url(r),
+				NULL,
 				NULL, NULL, NULL);
 	}
 
@@ -655,9 +655,37 @@ static int oidc_check_max_session_duration(request_rec *r, oidc_cfg *cfg,
 }
 
 /*
+ * validate received session cookie against the domain it was issued for:
+ *
+ * this handles the case where the cache configured is a the same single memcache, Redis, or file
+ * backend for different (virtual) hosts, or a client-side cookie protected with the same secret
+ *
+ * it also handles the case that a cookie is unexpectedly shared across multiple hosts in
+ * name-based virtual hosting even though the OP(s) would be the same
+ */
+static apr_byte_t oidc_check_cookie_domain(request_rec *r, oidc_cfg *cfg,
+		session_rec *session) {
+	const char *c_cookie_domain =
+			cfg->cookie_domain ?
+					cfg->cookie_domain : oidc_get_current_url_host(r);
+	const char *s_cookie_domain = NULL;
+	oidc_session_get(r, session, OIDC_COOKIE_DOMAIN_SESSION_KEY,
+			&s_cookie_domain);
+	if ((s_cookie_domain == NULL)
+			|| (apr_strnatcmp(c_cookie_domain, s_cookie_domain) != 0)) {
+		oidc_warn(r,
+				"aborting: detected attempt to play cookie against a different domain/host than issued for! (issued=%s, current=%s)",
+				s_cookie_domain, c_cookie_domain);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/*
  * handle the case where we have identified an existing authentication session for a user
  */
-static int oidc_handle_existing_session(request_rec *r, oidc_cfg * cfg,
+static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 		session_rec *session) {
 
 	oidc_debug(r, "enter");
@@ -665,6 +693,10 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg * cfg,
 	/* get a handle to the directory config */
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
+
+	/* verify current cookie domain against issued cookie domain */
+	if (oidc_check_cookie_domain(r, cfg, session) == FALSE)
+		return HTTP_UNAUTHORIZED;
 
 	/* check if the maximum session duration was exceeded */
 	int rc = oidc_check_max_session_duration(r, cfg, session);
@@ -1018,6 +1050,10 @@ static void oidc_save_in_session(request_rec *r, oidc_cfg *c,
 	/* log message about max session duration */
 	oidc_log_session_expires(r, session_expires);
 
+	/* store the domain for which this session is valid */
+	oidc_session_set(r, session, OIDC_COOKIE_DOMAIN_SESSION_KEY,
+			c->cookie_domain ? c->cookie_domain : oidc_get_current_url_host(r));
+
 	/* store the session */
 	oidc_session_save(r, session);
 }
@@ -1331,7 +1367,7 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 			&auth_openidc_module);
 
 	/* obtain the URL we're currently accessing, to be stored in the state/session */
-	char *current_url = oidc_get_current_url(r, cfg);
+	char *current_url = oidc_get_current_url(r);
 
 	/* generate CSRF token */
 	char *csrf = NULL;
@@ -2294,7 +2330,7 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 	}
 
 	/* else: no session (regardless of whether it is main or sub-request), go and authenticate the user */
-	return oidc_authenticate_user(r, c, NULL, oidc_get_current_url(r, c), NULL,
+	return oidc_authenticate_user(r, c, NULL, oidc_get_current_url(r), NULL,
 			NULL, NULL, NULL);
 }
 
