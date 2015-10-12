@@ -1419,7 +1419,7 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 	/* now send the HTML contents to the user agent */
 	return oidc_util_html_send(r, "OpenID Connect Provider Discovery",
 			"<style type=\"text/css\">body {text-align: center}</style>", NULL,
-			s, HTTP_UNAUTHORIZED);
+			s, DONE);
 }
 
 /*
