@@ -1109,7 +1109,7 @@ error_close:
 apr_byte_t oidc_util_issuer_match(const char *a, const char *b) {
 
 	/* check the "issuer" value against the one configure for the provider we got this id_token from */
-	if (strcmp(a, b) != 0) {
+	if (apr_strnatcmp(a, b) != 0) {
 
 		/* no strict match, but we are going to accept if the difference is only a trailing slash */
 		int n1 = strlen(a);
@@ -1140,7 +1140,7 @@ apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack,
 					elem->type);
 			continue;
 		}
-		if (strcmp(json_string_value(elem), needle) == 0) {
+		if (apr_strnatcmp(json_string_value(elem), needle) == 0) {
 			break;
 		}
 	}

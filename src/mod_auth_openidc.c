@@ -324,7 +324,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 		return FALSE;
 	}
 
-	if (strcmp(rfp, "iss") != 0) {
+	if (apr_strnatcmp(rfp, "iss") != 0) {
 		oidc_error(r, "\"rfp\" (%s) does not match \"iss\", aborting", rfp);
 		apr_jwt_destroy(jwt);
 		return FALSE;

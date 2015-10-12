@@ -1,3 +1,6 @@
+10/12/2015
+- use apr_strnatcmp instead of strcmp in util.c and mod_auth_openidc.c
+
 10/9/2015
 - support subdomain cookies in OIDCCookieDomain checks; PR #96, thanks @pfiled
 - bump to 1.8.6rc1
