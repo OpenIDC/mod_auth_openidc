@@ -262,6 +262,9 @@ typedef struct oidc_cfg {
 	/* indicates whether this is a derived config, merged from a base one */
 	unsigned int merged;
 
+	/* HTML to display error messages+description */
+	char *error_template;
+
 	/* the redirect URI as configured with the OpenID Connect OP's that we talk to */
 	char *redirect_uri;
 	/* (optional) default URL for 3rd-party initiated SSO */
@@ -423,7 +426,7 @@ apr_byte_t oidc_util_read_form_encoded_params(request_rec *r, apr_table_t *table
 apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table);
 apr_byte_t oidc_util_file_read(request_rec *r, const char *path, char **result);
 apr_byte_t oidc_util_issuer_match(const char *a, const char *b);
-int oidc_util_html_send_error(request_rec *r, const char *error, const char *description, int status_code);
+int oidc_util_html_send_error(request_rec *r, const char *html_template, const char *error, const char *description, int status_code);
 apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack, const char *needle);
 void oidc_util_set_app_info(request_rec *r, const char *s_key, const char *s_value, const char *claim_prefix, apr_byte_t as_header, apr_byte_t as_env_var);
 void oidc_util_set_app_infos(request_rec *r, const json_t *j_attrs, const char *claim_prefix, const char *claim_delimiter, apr_byte_t as_header, apr_byte_t as_env_var);

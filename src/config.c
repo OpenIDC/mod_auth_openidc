@@ -2084,6 +2084,10 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF,
 				"Password for authentication to the Redis servers."),
 #endif
+		AP_INIT_TAKE1("OIDCHTMLErrorTemplate", oidc_set_string_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, error_template),
+				RSRC_CONF,
+				"Name of a HTML error template: needs to contain two \"%s\" characters, one for the error message, one for the description."),
 
 		AP_INIT_TAKE1("OIDCDiscoverURL", oidc_set_url_slot_dir_cfg,
 				(void *)APR_OFFSETOF(oidc_dir_cfg, discover_url),

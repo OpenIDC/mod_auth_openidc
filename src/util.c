@@ -966,24 +966,42 @@ int oidc_util_html_send(request_rec *r, const char *title,
 	return oidc_util_http_send(r, html, strlen(html), "text/html", status_code);
 }
 
+static char *html_error_template_contents = NULL;
+
 /*
  * send a user-facing error to the browser
  */
-int oidc_util_html_send_error(request_rec *r, const char *error,
-		const char *description, int status_code) {
+int oidc_util_html_send_error(request_rec *r, const char *html_template,
+		const char *error, const char *description, int status_code) {
 
-	char *html_body = "";
+	char *html = "";
+
+	if (html_template != NULL) {
+
+		if (html_error_template_contents == NULL)
+			oidc_util_file_read(r, html_template,
+					&html_error_template_contents);
+
+		if (html_error_template_contents) {
+			html = apr_psprintf(r->pool, html_error_template_contents,
+					oidc_util_html_escape(r->pool, error),
+					oidc_util_html_escape(r->pool, description));
+
+			return oidc_util_http_send(r, html, strlen(html), "text/html",
+					status_code);
+		}
+	}
 
 	if (error != NULL) {
-		html_body = apr_psprintf(r->pool, "%s<p>Error: <pre>%s</pre></p>",
-				html_body, oidc_util_html_escape(r->pool, error));
+		html = apr_psprintf(r->pool, "%s<p>Error: <pre>%s</pre></p>", html,
+				oidc_util_html_escape(r->pool, error));
 	}
 	if (description != NULL) {
-		html_body = apr_psprintf(r->pool, "%s<p>Description: <pre>%s</pre></p>",
-				html_body, oidc_util_html_escape(r->pool, description));
+		html = apr_psprintf(r->pool, "%s<p>Description: <pre>%s</pre></p>",
+				html, oidc_util_html_escape(r->pool, description));
 	}
 
-	return oidc_util_html_send(r, "Error", NULL, NULL, html_body, status_code);
+	return oidc_util_html_send(r, "Error", NULL, NULL, html, status_code);
 }
 
 /*

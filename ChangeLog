@@ -1,3 +1,7 @@
+10/19/2015
+- add support for applying a custom HTML error template with OIDCHTMLErrorTemplate
+- bump to 1.8.6rc3
+
 10/12/2015
 - check the cookie domain that the session was created for against the configured domain
 - log a warning if the Set-Cookie value length is greater than 4093 bytes
