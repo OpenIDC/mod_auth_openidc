@@ -43,7 +43,7 @@ It supports [OpenID Connect Dynamic Client Registration]
 Discovery] (http://openid.net/specs/openid-connect-discovery-1_0.html) through domain
 or account names and [OAuth 2.0 Form Post Response Mode]
 (http://openid.net/specs/oauth-v2-form-post-response-mode-1_0.html).
-It also supports [OpenID Connect Session Management draft 22]
+It also supports [OpenID Connect Session Management]
 (http://openid.net/specs/openid-connect-session-1_0.html). See the [Wiki]
 (https://github.com/pingidentity/mod_auth_openidc/wiki/Session-Management) for information
 on how to configure it.
