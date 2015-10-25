@@ -287,6 +287,8 @@ typedef struct oidc_cfg {
 	char *metadata_dir;
 	/* type of session management/storage */
 	int session_type;
+	/* session cookie or persistent cookie */
+	int persistent_session_cookie;
 
 	/* pointer to cache functions */
 	oidc_cache_t *cache;

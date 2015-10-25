@@ -289,9 +289,22 @@ static const char *oidc_set_session_type(cmd_parms *cmd, void *ptr,
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
 
-	if (apr_strnatcmp(arg, "server-cache") == 0) {
+	char *s = apr_pstrdup(cmd->pool, arg);
+	char *p = strstr(s, ":");
+
+	if (p) {
+		if (apr_strnatcmp(p, ":persistent") != 0) {
+			return (apr_psprintf(cmd->pool,
+					"oidc_set_session_type: invalid suffix value for %s (%s); only \":persistent\" is allowed",
+					cmd->directive->directive, arg));
+		}
+		cfg->persistent_session_cookie = 1;
+		*p = '\0';
+	}
+
+	if (apr_strnatcmp(s, "server-cache") == 0) {
 		cfg->session_type = OIDC_SESSION_TYPE_22_SERVER_CACHE;
-	} else if (apr_strnatcmp(arg, "client-cookie") == 0) {
+	} else if (apr_strnatcmp(s, "client-cookie") == 0) {
 		cfg->session_type = OIDC_SESSION_TYPE_22_CLIENT_COOKIE;
 	} else {
 		return (apr_psprintf(cmd->pool,
@@ -975,6 +988,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 
 	c->metadata_dir = NULL;
 	c->session_type = OIDC_DEFAULT_SESSION_TYPE;
+	c->persistent_session_cookie = 0;
 
 	c->http_timeout_long = OIDC_DEFAULT_HTTP_TIMEOUT_LONG;
 	c->http_timeout_short = OIDC_DEFAULT_HTTP_TIMEOUT_SHORT;
@@ -1274,6 +1288,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->session_type =
 			add->session_type != OIDC_DEFAULT_SESSION_TYPE ?
 					add->session_type : base->session_type;
+	c->persistent_session_cookie =
+			add->persistent_session_cookie != 0 ?
+					add->persistent_session_cookie :
+					base->persistent_session_cookie;
 
 	c->cookie_domain =
 			add->cookie_domain != NULL ?
@@ -2039,7 +2057,7 @@ const command_rec oidc_config_cmds[] = {
 		AP_INIT_TAKE1("OIDCSessionType", oidc_set_session_type,
 				(void*)APR_OFFSETOF(oidc_cfg, session_type),
 				RSRC_CONF,
-				"OpenID Connect session storage type (Apache 2.0/2.2 only). Must be one of \"server-cache\" or \"client-cookie\"."),
+				"OpenID Connect session storage type (Apache 2.0/2.2 only). Must be one of \"server-cache\" or \"client-cookie\" with an optional suffix \":persistent\"."),
 		AP_INIT_FLAG("OIDCScrubRequestHeaders",
 				oidc_set_flag_slot,
 				(void *) APR_OFFSETOF(oidc_cfg, scrub_request_headers),

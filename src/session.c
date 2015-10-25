@@ -379,7 +379,8 @@ static apr_status_t oidc_session_save_cache(request_rec *r, session_rec *z) {
 	if (z->encoded && z->encoded[0]) {
 
 		/* set the uuid in the cookie */
-		oidc_util_set_cookie(r, d->cookie, key, -1);
+		oidc_util_set_cookie(r, d->cookie, key,
+				c->persistent_session_cookie ? z->expiry : -1);
 
 		/* store the string-encoded session in the cache */
 		c->cache->set(r, OIDC_CACHE_SECTION_SESSION, key, z->encoded,
@@ -415,17 +416,21 @@ static apr_status_t oidc_session_load_cookie(request_rec *r, session_rec *z) {
 }
 
 static apr_status_t oidc_session_save_cookie(request_rec *r, session_rec *z) {
+	oidc_cfg *c = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
 	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 
 	char *cookieValue = "";
 	if (z->encoded && z->encoded[0]) {
-		if (oidc_encrypt_base64url_encode_string(r, &cookieValue, z->encoded) <= 0) {
+		if (oidc_encrypt_base64url_encode_string(r, &cookieValue, z->encoded)
+				<= 0) {
 			oidc_error(r, "oidc_encrypt_base64url_encode_string failed");
 			return APR_EGENERAL;
 		}
 	}
-	oidc_util_set_cookie(r, d->cookie, cookieValue, -1);
+	oidc_util_set_cookie(r, d->cookie, cookieValue,
+			c->persistent_session_cookie ? z->expiry : -1);
 
 	return APR_SUCCESS;
 }
