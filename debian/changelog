@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.8.6-1) unstable; urgency=medium
+
+  * add cookie-domain check
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Mon, 26 Oct 2015 08:43:15 +0100
+
 libapache2-mod-auth-openidc (1.8.5-1) unstable; urgency=medium
 
   * HTTP-based logout

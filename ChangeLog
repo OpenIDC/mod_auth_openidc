@@ -1,6 +1,6 @@
-10/25/2015
+10/26/2015
 - add option to make session cookie persistent; closes #97
-- bump to 1.8.6rc4
+- release 1.8.6
 
 10/19/2015
 - add support for applying a custom HTML error template with OIDCHTMLErrorTemplate
