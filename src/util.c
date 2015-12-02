@@ -984,8 +984,8 @@ int oidc_util_html_send_error(request_rec *r, const char *html_template,
 
 		if (html_error_template_contents) {
 			html = apr_psprintf(r->pool, html_error_template_contents,
-					oidc_util_html_escape(r->pool, error),
-					oidc_util_html_escape(r->pool, description));
+					oidc_util_html_escape(r->pool, error ? error : ""),
+					oidc_util_html_escape(r->pool, description ? description : ""));
 
 			return oidc_util_http_send(r, html, strlen(html), "text/html",
 					status_code);
