@@ -1577,9 +1577,17 @@ static apr_byte_t oidc_is_discovery_response(request_rec *r, oidc_cfg *cfg) {
  */
 static int oidc_target_link_uri_matches_configuration(request_rec *r,
 		oidc_cfg *cfg, const char *target_link_uri) {
+
 	apr_uri_t o_uri;
-	apr_uri_t r_uri;
 	apr_uri_parse(r->pool, target_link_uri, &o_uri);
+	if (o_uri.hostname == NULL) {
+		oidc_error(r,
+				"could not parse the \"target_link_uri\" (%s) in to a valid URL: aborting.",
+				target_link_uri);
+		return FALSE;
+	}
+
+	apr_uri_t r_uri;
 	apr_uri_parse(r->pool, cfg->redirect_uri, &r_uri);
 
 	if (cfg->cookie_domain == NULL) {
@@ -1608,7 +1616,9 @@ static int oidc_target_link_uri_matches_configuration(request_rec *r,
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 	if (dir_cfg->cookie_path != NULL) {
-		char *p = strstr(o_uri.path, dir_cfg->cookie_path);
+		char *p =
+				(o_uri.path != NULL) ?
+						strstr(o_uri.path, dir_cfg->cookie_path) : NULL;
 		if ((p == NULL) || (p != o_uri.path)) {
 			oidc_error(r,
 					"the path (%s) configured in OIDCCookiePath does not match the URL path (%s) of the \"target_link_uri\" (%s): aborting to prevent an open redirect.",
