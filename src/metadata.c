@@ -160,7 +160,7 @@ static apr_byte_t oidc_metadata_file_read_json(request_rec *r, const char *path,
 	char *buf = NULL;
 
 	/* read the file contents */
-	if (oidc_util_file_read(r, path, &buf) == FALSE)
+	if (oidc_util_file_read(r, path, r->pool, &buf) == FALSE)
 		return FALSE;
 
 	/* decode the JSON contents of the buffer */

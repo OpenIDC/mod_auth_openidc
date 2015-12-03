@@ -1,6 +1,7 @@
 12/3/2015
 - fix crash when using a custom error template and the error description is NULL
 - fix crash when target_link_uri is not a valid URI or parts are empty
+- fix memory corruption when using custom html template across different server requests; closes #106
 - bump to 1.8.7rc1
 
 11/18/2015

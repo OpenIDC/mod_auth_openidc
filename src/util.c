@@ -978,14 +978,21 @@ int oidc_util_html_send_error(request_rec *r, const char *html_template,
 
 	if (html_template != NULL) {
 
-		if (html_error_template_contents == NULL)
-			oidc_util_file_read(r, html_template,
-					&html_error_template_contents);
+		if (html_error_template_contents == NULL) {
+			int rc = oidc_util_file_read(r, html_template,
+					r->server->process->pool, &html_error_template_contents);
+			if (rc == FALSE) {
+				oidc_error(r, "could not read HTML error template: %s",
+						html_template);
+				html_error_template_contents = NULL;
+			}
+		}
 
 		if (html_error_template_contents) {
 			html = apr_psprintf(r->pool, html_error_template_contents,
 					oidc_util_html_escape(r->pool, error ? error : ""),
-					oidc_util_html_escape(r->pool, description ? description : ""));
+					oidc_util_html_escape(r->pool,
+							description ? description : ""));
 
 			return oidc_util_http_send(r, html, strlen(html), "text/html",
 					status_code);
@@ -1072,15 +1079,14 @@ apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table) {
 /*
  * read a file from a path on disk
  */
-apr_byte_t oidc_util_file_read(request_rec *r, const char *path, char **result) {
+apr_byte_t oidc_util_file_read(request_rec *r, const char *path, apr_pool_t *pool, char **result) {
 	apr_file_t *fd = NULL;
 	apr_status_t rc = APR_SUCCESS;
 	char s_err[128];
 	apr_finfo_t finfo;
 
 	/* open the file if it exists */
-	if ((rc = apr_file_open(&fd, path, APR_FOPEN_READ | APR_FOPEN_BUFFERED,
-	APR_OS_DEFAULT, r->pool)) != APR_SUCCESS) {
+	if ((rc = apr_file_open(&fd, path, APR_FOPEN_READ | APR_FOPEN_BUFFERED, APR_OS_DEFAULT, r->pool)) != APR_SUCCESS) {
 		oidc_warn(r, "no file found at: \"%s\"", path);
 		return FALSE;
 	}
@@ -1100,7 +1106,7 @@ apr_byte_t oidc_util_file_read(request_rec *r, const char *path, char **result) 
 	}
 
 	/* now that we have the size of the file, allocate a buffer that can contain its contents */
-	*result = apr_palloc(r->pool, finfo.size + 1);
+	*result = apr_palloc(pool, finfo.size + 1);
 
 	/* read the file in to the buffer */
 	apr_size_t bytes_read = 0;
