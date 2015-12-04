@@ -403,6 +403,20 @@ static const char *oidc_set_response_type(cmd_parms *cmd, void *struct_ptr,
 }
 
 /*
+ * define the PCKE method to use
+ */
+static const char *oidc_set_pkce_method(cmd_parms *cmd, void *ptr,
+		const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+
+	if ((apr_strnatcmp(arg, "plain") == 0) || (apr_strnatcmp(arg, "S256") == 0))
+		return ap_set_string_slot(cmd, cfg, arg);
+
+	return "parameter must be 'plain' or 'S256'";
+}
+
+/*
  * set the response mode used
  */
 static const char *oidc_set_response_mode(cmd_parms *cmd, void *struct_ptr,
@@ -939,6 +953,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->provider.idtoken_iat_slack = OIDC_DEFAULT_IDTOKEN_IAT_SLACK;
 	c->provider.session_max_duration = OIDC_DEFAULT_SESSION_MAX_DURATION;
 	c->provider.auth_request_params = NULL;
+	c->provider.pkce_method = NULL;
 
 	c->provider.client_jwks_uri = NULL;
 	c->provider.id_token_signed_response_alg = NULL;
@@ -1132,6 +1147,9 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->provider.auth_request_params != NULL ?
 					add->provider.auth_request_params :
 					base->provider.auth_request_params;
+	c->provider.pkce_method =
+			add->provider.pkce_method != NULL ?
+					add->provider.pkce_method : base->provider.pkce_method;
 
 	c->provider.client_jwks_uri =
 			add->provider.client_jwks_uri != NULL ?
@@ -1271,8 +1289,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->cache_shm_size_max != OIDC_DEFAULT_CACHE_SHM_SIZE ?
 					add->cache_shm_size_max : base->cache_shm_size_max;
 	c->cache_shm_entry_size_max =
-			add->cache_shm_entry_size_max != OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX ?
-					add->cache_shm_entry_size_max : base->cache_shm_entry_size_max;
+			add->cache_shm_entry_size_max
+					!= OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX ?
+					add->cache_shm_entry_size_max :
+					base->cache_shm_entry_size_max;
 
 #ifdef USE_LIBHIREDIS
 	c->cache_redis_server =
@@ -1907,6 +1927,11 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, provider.auth_request_params),
 				RSRC_CONF,
 				"Extra parameters that need to be sent in the Authorization Request (must be query-encoded like \"display=popup&prompt=consent\"."),
+		AP_INIT_TAKE1("OIDCPKCEMethod",
+				oidc_set_pkce_method,
+				(void *)APR_OFFSETOF(oidc_cfg, provider.pkce_method),
+				RSRC_CONF,
+				"The RFC 7636 PCKE mode used; must be one of \"plain\", \"S256\""),
 
 		AP_INIT_TAKE1("OIDCClientID", oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.client_id),
@@ -1925,7 +1950,8 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, default_sso_url),
 				RSRC_CONF,
 				"Defines the default URL where the user is directed to in case of 3rd-party initiated SSO."),
-		AP_INIT_TAKE1("OIDCDefaultLoggedOutURL", oidc_set_url_slot,
+		AP_INIT_TAKE1("OIDCDefaultLoggedOutURL",
+				oidc_set_url_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, default_slo_url),
 				RSRC_CONF,
 				"Defines the default URL where the user is directed to after logout."),
@@ -2086,7 +2112,8 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, cache_shm_size_max),
 				RSRC_CONF,
 				"Maximum number of cache entries to use for \"shm\" caching."),
-		AP_INIT_TAKE1("OIDCCacheShmEntrySizeMax", oidc_set_cache_shm_entry_size_max,
+		AP_INIT_TAKE1("OIDCCacheShmEntrySizeMax",
+				oidc_set_cache_shm_entry_size_max,
 				(void*)APR_OFFSETOF(oidc_cfg, cache_shm_entry_size_max),
 				RSRC_CONF,
 				"Maximum size of a single cache entry used for \"shm\" caching."),
@@ -2102,7 +2129,8 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF,
 				"Password for authentication to the Redis servers."),
 #endif
-		AP_INIT_TAKE1("OIDCHTMLErrorTemplate", oidc_set_string_slot,
+		AP_INIT_TAKE1("OIDCHTMLErrorTemplate",
+				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, error_template),
 				RSRC_CONF,
 				"Name of a HTML error template: needs to contain two \"%s\" characters, one for the error message, one for the description."),
@@ -2132,7 +2160,8 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_dir_cfg, unauth_action),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Indicates whether a user will be redirected to the Provider when not authenticated (Off) or a 401 will be returned (On)."),
-		AP_INIT_TAKE1("OIDCUnAuthAction", oidc_set_unauth_action,
+		AP_INIT_TAKE1("OIDCUnAuthAction",
+				oidc_set_unauth_action,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, unauth_action),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Sets the action taken when an unauthenticated request occurs: \"auth\" (default) means redirect to OP for authentication, \"pass\" means always allow the request but pass claims when authenticated, \"401\" means return HTTP 401."),

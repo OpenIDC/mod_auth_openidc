@@ -1485,6 +1485,23 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	if (oidc_proto_generate_nonce(r, &nonce, OIDC_PROTO_NONCE_LENGTH) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
+	char *code_verifier = NULL;
+	char *code_challenge = NULL;
+
+	if ((oidc_util_spaced_string_contains(r->pool, provider->response_type,
+			"code") == TRUE) && (provider->pkce_method != NULL)) {
+
+		/* generate the code verifier value that correlates authorization requests and code exchange requests */
+		if (oidc_proto_generate_code_verifier(r, &code_verifier,
+				OIDC_PROTO_CODE_VERIFIER_LENGTH) == FALSE)
+			return HTTP_INTERNAL_SERVER_ERROR;
+
+		/* generate the PKCE code challenge */
+		if (oidc_proto_generate_code_challenge(r, code_verifier,
+				&code_challenge, provider->pkce_method) == FALSE)
+			return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
 	char *method = "get";
 	// TODO: restore method from discovery too or generate state before doing discover (and losing startSSO effect)
 	/*
@@ -1511,6 +1528,9 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 				json_string(provider->response_mode));
 	if (prompt)
 		json_object_set_new(proto_state, "prompt", json_string(prompt));
+	if (code_verifier)
+		json_object_set_new(proto_state, "code_verifier",
+				json_string(code_verifier));
 
 	/* get a hash value that fingerprints the browser concatenated with the random input */
 	char *state = oidc_get_browser_state_hash(r, nonce);
@@ -1557,7 +1577,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	/* send off to the OpenID Connect Provider */
 	// TODO: maybe show intermediate/progress screen "redirecting to"
 	return oidc_proto_authorization_request(r, provider, login_hint,
-			c->redirect_uri, state, proto_state, id_token_hint,
+			c->redirect_uri, state, proto_state, id_token_hint, code_challenge,
 			auth_request_params);
 }
 

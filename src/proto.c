@@ -103,12 +103,14 @@ int oidc_proto_authorization_request_post_preserve(request_rec *r,
 int oidc_proto_authorization_request(request_rec *r,
 		struct oidc_provider_t *provider, const char *login_hint,
 		const char *redirect_uri, const char *state, json_t *proto_state,
-		const char *id_token_hint, const char *auth_request_params) {
+		const char *id_token_hint, const char *code_challenge,
+		const char *auth_request_params) {
 
 	/* log some stuff */
 	char *s_value = json_dumps(proto_state, JSON_ENCODE_ANY);
-	oidc_debug(r, "enter, issuer=%s, redirect_uri=%s, state=%s, proto_state=%s",
-			provider->issuer, redirect_uri, state, s_value);
+	oidc_debug(r,
+			"enter, issuer=%s, redirect_uri=%s, state=%s, proto_state=%s, code_challenge=%s",
+			provider->issuer, redirect_uri, state, s_value, code_challenge);
 	free(s_value);
 
 	/* assemble the full URL as the authorization request to the OP where we want to redirect to */
@@ -138,6 +140,14 @@ int oidc_proto_authorization_request(request_rec *r,
 				oidc_util_escape_string(r,
 						json_string_value(
 								json_object_get(proto_state, "nonce"))));
+
+	/* add PKCE code challenge if set */
+	if (code_challenge != NULL)
+		authorization_request = apr_psprintf(r->pool,
+				"%s&code_challenge=%s&code_challenge_method=%s",
+				authorization_request,
+				oidc_util_escape_string(r, code_challenge),
+				provider->pkce_method);
 
 	/* add the response_mode if explicitly set */
 	if (json_object_get(proto_state, "response_mode") != NULL)
@@ -226,17 +236,78 @@ apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r,
 /*
  * generate a random value (nonce) to correlate request/response through browser state
  */
-apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce, int len) {
-	unsigned char *nonce_bytes = apr_pcalloc(r->pool, len);
-	if (apr_generate_random_bytes(nonce_bytes, len) != APR_SUCCESS) {
+static apr_byte_t oidc_proto_generate_random_string(request_rec *r,
+		char **output, int len) {
+	unsigned char *bytes = apr_pcalloc(r->pool, len);
+	if (apr_generate_random_bytes(bytes, len) != APR_SUCCESS) {
 		oidc_error(r, "apr_generate_random_bytes returned an error");
 		return FALSE;
 	}
-	if (oidc_base64url_encode(r, nonce, (const char *) nonce_bytes, len, TRUE)
+	if (oidc_base64url_encode(r, output, (const char *) bytes, len, TRUE)
 			<= 0) {
 		oidc_error(r, "oidc_base64url_encode returned an error");
 		return FALSE;
 	}
+	return TRUE;
+}
+
+/*
+ * generate a random value (nonce) to correlate request/response through browser state
+ */
+apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce, int len) {
+	return oidc_proto_generate_random_string(r, nonce, len);
+}
+
+/*
+ * generate a random value (code_verifier) to correlate authorization request and token exchange request through browser state
+ */
+apr_byte_t oidc_proto_generate_code_verifier(request_rec *r,
+		char **code_verifier, int len) {
+	//*code_verifier = apr_pstrdup(r->pool, "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"); return TRUE;
+	return oidc_proto_generate_random_string(r, code_verifier, len);
+}
+
+/*
+ * generate the PKCE code challenge for a given code verifier and method
+ */
+apr_byte_t oidc_proto_generate_code_challenge(request_rec *r,
+		const char *code_verifier, char **code_challenge,
+		const char *challenge_method) {
+
+	oidc_debug(r, "enter: method=%s", challenge_method);
+
+	if (code_verifier != NULL) {
+
+		if (apr_strnatcmp(challenge_method, "plain") == 0) {
+
+			*code_challenge = apr_pstrdup(r->pool, code_verifier);
+
+		} else if (apr_strnatcmp(challenge_method, "S256") == 0) {
+
+			apr_jwt_error_t err;
+			unsigned char *hashed_verifier = NULL;
+			unsigned int hashed_verifier_len = 0;
+			if (apr_jws_hash_bytes(r->pool, "sha256",
+					(const unsigned char *) code_verifier,
+					strlen(code_verifier), &hashed_verifier,
+					&hashed_verifier_len, &err) == FALSE) {
+				oidc_error(r,
+						"apr_jws_hash_bytes returned an error for the code verifier");
+				return FALSE;
+			}
+
+			if (oidc_base64url_encode(r, code_challenge,
+					(const char *) hashed_verifier, hashed_verifier_len, TRUE)
+					<= 0) {
+				oidc_error(r,
+						"oidc_base64url_encode returned an error for the code challenge");
+				return FALSE;
+			}
+
+		}
+
+	}
+
 	return TRUE;
 }
 
@@ -565,7 +636,8 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, apr_jwt_t *jwt,
 			else if (jwk->kid)
 				apr_hash_set(result, jwk->kid, APR_HASH_KEY_STRING, jwk);
 			else
-				apr_hash_set(result, apr_psprintf(r->pool, "%d", i), APR_HASH_KEY_STRING, jwk);
+				apr_hash_set(result, apr_psprintf(r->pool, "%d", i),
+						APR_HASH_KEY_STRING, jwk);
 			continue;
 		}
 
@@ -859,10 +931,10 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 /*
  * resolves the code received from the OP in to an id_token, access_token and refresh_token
  */
-apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
-		oidc_provider_t *provider, const char *code, char **id_token,
-		char **access_token, char **token_type, int *expires_in,
-		char **refresh_token) {
+static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
+		oidc_provider_t *provider, const char *code, const char *code_verifier,
+		char **id_token, char **access_token, char **token_type,
+		int *expires_in, char **refresh_token) {
 
 	oidc_debug(r, "enter");
 
@@ -871,6 +943,9 @@ apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 	apr_table_addn(params, "grant_type", "authorization_code");
 	apr_table_addn(params, "code", code);
 	apr_table_addn(params, "redirect_uri", cfg->redirect_uri);
+
+	if (code_verifier)
+		apr_table_addn(params, "code_verifier", code_verifier);
 
 	return oidc_proto_token_endpoint_request(r, cfg, provider, params, id_token,
 			access_token, token_type, expires_in, refresh_token);
@@ -1385,7 +1460,7 @@ static apr_byte_t oidc_proto_parse_idtoken_and_validate_code(request_rec *r,
  */
 static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r,
 		oidc_cfg *c, oidc_provider_t *provider, const char *response_type,
-		apr_table_t *params) {
+		apr_table_t *params, json_t *proto_state) {
 
 	char *id_token = NULL;
 	char *access_token = NULL;
@@ -1393,8 +1468,14 @@ static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r,
 	int expires_in = -1;
 	char *refresh_token = NULL;
 
+	const char *code_verifier =
+			json_object_get(proto_state, "code_verifier") ?
+					json_string_value(
+							json_object_get(proto_state, "code_verifier")) :
+					NULL;
+
 	if (oidc_proto_resolve_code(r, c, provider, apr_table_get(params, "code"),
-			&id_token, &access_token, &token_type, &expires_in,
+			code_verifier, &id_token, &access_token, &token_type, &expires_in,
 			&refresh_token) == FALSE) {
 		oidc_error(r, "failed to resolve the code");
 		return FALSE;
@@ -1455,7 +1536,7 @@ apr_byte_t oidc_proto_authorization_response_code_idtoken(request_rec *r,
 	apr_table_unset(params, "refresh_token");
 
 	if (oidc_proto_resolve_code_and_validate_response(r, c, provider,
-			response_type, params) == FALSE)
+			response_type, params, proto_state) == FALSE)
 		return FALSE;
 
 	return TRUE;
@@ -1481,7 +1562,7 @@ apr_byte_t oidc_proto_handle_authorization_response_code_token(request_rec *r,
 	apr_table_unset(params, "refresh_token");
 
 	if (oidc_proto_resolve_code_and_validate_response(r, c, provider,
-			response_type, params) == FALSE)
+			response_type, params, proto_state) == FALSE)
 		return FALSE;
 
 	if (oidc_proto_parse_idtoken_and_validate_code(r, c, proto_state, provider,
@@ -1514,7 +1595,7 @@ apr_byte_t oidc_proto_handle_authorization_response_code(request_rec *r,
 	apr_table_unset(params, "refresh_token");
 
 	if (oidc_proto_resolve_code_and_validate_response(r, c, provider,
-			response_type, params) == FALSE)
+			response_type, params, proto_state) == FALSE)
 		return FALSE;
 
 	/*
@@ -1578,7 +1659,7 @@ apr_byte_t oidc_proto_authorization_response_code_idtoken_token(request_rec *r,
 	apr_table_unset(params, "refresh_token");
 
 	if (oidc_proto_resolve_code_and_validate_response(r, c, provider,
-			response_type, params) == FALSE)
+			response_type, params, proto_state) == FALSE)
 		return FALSE;
 
 	return TRUE;

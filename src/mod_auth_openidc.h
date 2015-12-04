@@ -146,6 +146,9 @@ APLOG_USE_MODULE(auth_openidc);
 /* nonce bytes length */
 #define OIDC_PROTO_NONCE_LENGTH 32
 
+/* code verifier length */
+#define OIDC_PROTO_CODE_VERIFIER_LENGTH 32
+
 /* pass id_token as individual claims in headers (default) */
 #define OIDC_PASS_IDTOKEN_AS_CLAIMS     1
 /* pass id_token payload as JSON object in header*/
@@ -225,6 +228,7 @@ typedef struct oidc_provider_t {
 	int idtoken_iat_slack;
 	char *auth_request_params;
 	int session_max_duration;
+	char *pkce_method;
 
 	char *client_jwks_uri;
 	char *id_token_signed_response_alg;
@@ -359,10 +363,9 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c);
 
 // oidc_proto.c
 
-int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *login_hint, const char *redirect_uri, const char *state, json_t *proto_state, const char *id_token_hint, const char *auth_request_params);
+int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *login_hint, const char *redirect_uri, const char *state, json_t *proto_state, const char *id_token_hint, const char *code_challenge, const char *auth_request_params);
 apr_byte_t oidc_proto_is_post_authorization_response(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r, oidc_cfg *cfg);
-apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *code, char **id_token, char **access_token, char **token_type, int *expires_in, char **refresh_token);
 apr_byte_t oidc_proto_refresh_request(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *rtoken, char **id_token, char **access_token, char **token_type, int *expires_in, char **refresh_token);
 apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *access_token, const char **response);
 apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg, const char *acct, char **issuer);
@@ -374,6 +377,8 @@ apr_byte_t oidc_proto_validate_authorization_response(request_rec *r, const char
 apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, apr_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri, apr_hash_t *symmetric_keys);
 apr_byte_t oidc_proto_validate_jwt(request_rec *r, apr_jwt_t *jwt, const char *iss, apr_byte_t exp_is_mandatory, apr_byte_t iat_is_mandatory, int iat_slack);
 apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce, int len);
+apr_byte_t oidc_proto_generate_code_verifier(request_rec *r, char **code_verifier, int len);
+apr_byte_t oidc_proto_generate_code_challenge(request_rec *r, const char *code_verifier, char **code_challenge, const char *challenge_method);
 
 apr_byte_t oidc_proto_authorization_response_code_idtoken_token(request_rec *r, oidc_cfg *c, json_t *proto_state, oidc_provider_t *provider, apr_table_t *params, const char *response_mode, apr_jwt_t **jwt);
 apr_byte_t oidc_proto_authorization_response_code_idtoken(request_rec *r, oidc_cfg *c, json_t *proto_state, oidc_provider_t *provider, apr_table_t *params, const char *response_mode, apr_jwt_t **jwt);

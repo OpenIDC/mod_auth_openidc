@@ -907,7 +907,7 @@ static char * test_proto_authorization_request(request_rec *r) {
 	json_object_set_new(proto_state, "timestamp", json_integer(apr_time_sec(apr_time_now())));
 
 	TST_ASSERT("oidc_proto_authorization_request (1)",
-			oidc_proto_authorization_request(r, &provider, NULL, redirect_uri, state, proto_state, NULL, NULL) == HTTP_MOVED_TEMPORARILY);
+			oidc_proto_authorization_request(r, &provider, NULL, redirect_uri, state, proto_state, NULL, NULL, NULL) == HTTP_MOVED_TEMPORARILY);
 
 	TST_ASSERT_STR("oidc_proto_authorization_request (2)",
 			apr_table_get(r->headers_out, "Location"),

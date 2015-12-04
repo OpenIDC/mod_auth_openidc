@@ -156,6 +156,7 @@ Entries that can be included in the .conf file are:
     "scope"                              overrides OIDCScope 
     "response_type"                      overrides OIDCResponseType 
     "response_mode"                      overrides OIDCResponseMode 
+    "pkce_method"                        overrides OIDCPKCEMethod
     "client_name"                        overrides OIDCClientName 
     "client_contact"                     overrides OIDCClientContact 
     "idtoken_iat_slack"                  overrides OIDCIDTokenIatSlack

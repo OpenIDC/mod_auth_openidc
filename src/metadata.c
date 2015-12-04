@@ -1127,6 +1127,10 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 	oidc_json_object_get_string(r->pool, j_conf, "response_mode",
 			&provider->response_mode, cfg->provider.response_mode);
 
+	/* get the PKCE method to use */
+	oidc_json_object_get_string(r->pool, j_conf, "pkce_method",
+			&provider->pkce_method, cfg->provider.pkce_method);
+
 	/* get the client name */
 	oidc_json_object_get_string(r->pool, j_conf, "client_name",
 			&provider->client_name, cfg->provider.client_name);
