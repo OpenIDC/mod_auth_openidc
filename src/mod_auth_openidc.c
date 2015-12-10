@@ -1005,8 +1005,11 @@ static void oidc_save_in_session(request_rec *r, oidc_cfg *c,
 				provider->check_session_iframe);
 		oidc_session_set(r, session, OIDC_CLIENTID_SESSION_KEY,
 				provider->client_id);
+		oidc_debug(r, "session management enabled: stored session_state (%s), check_session_iframe (%s) and client_id (%s) in the session", session_state, provider->check_session_iframe, provider->client_id);
+	} else {
+		oidc_debug(r, "session management disabled: session_state (%s) and/or check_session_iframe (%s) is not provided", session_state, provider->check_session_iframe);
 	}
-
+	
 	if (provider->end_session_endpoint != NULL)
 		oidc_session_set(r, session, OIDC_LOGOUT_ENDPOINT_SESSION_KEY,
 				provider->end_session_endpoint);
@@ -1960,14 +1963,7 @@ int oidc_handle_jwks(request_rec *r, oidc_cfg *c) {
 
 static int oidc_handle_session_management_iframe_op(request_rec *r, oidc_cfg *c,
 		session_rec *session, const char *check_session_iframe) {
-
 	oidc_debug(r, "enter");
-
-	if (check_session_iframe == NULL) {
-		oidc_debug(r, "no check_session_iframe configured for current OP");
-		return DONE;
-	}
-
 	apr_table_add(r->headers_out, "Location", check_session_iframe);
 	return HTTP_MOVED_TEMPORARILY;
 }
@@ -2079,7 +2075,7 @@ static int oidc_handle_session_management(request_rec *r, oidc_cfg *c,
 			return oidc_handle_session_management_iframe_op(r, c, session,
 					check_session_iframe);
 		}
-		return DONE;
+		return HTTP_NOT_FOUND;
 	}
 
 	/* see if this is a request for the RP iframe */
@@ -2091,7 +2087,8 @@ static int oidc_handle_session_management(request_rec *r, oidc_cfg *c,
 			return oidc_handle_session_management_iframe_rp(r, c, session,
 					client_id, check_session_iframe);
 		}
-		return DONE;
+		oidc_debug(r, "iframe_rp command issued but no client (%s) and/or no check_session_iframe (%s) set", client_id, check_session_iframe);
+		return HTTP_NOT_FOUND;
 	}
 
 	/* see if this is a request check the login state with the OP */
