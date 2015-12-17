@@ -469,6 +469,16 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 		return FALSE;
 	}
 
+	/* add the hash of the state */
+	char *state_hash = NULL;
+	if (oidc_util_hash_string_and_base64url_encode(r, "sha256", state,
+			&state_hash) == FALSE) {
+		oidc_error(r, "could not hash state");
+		json_decref(*proto_state);
+		return FALSE;
+	}
+	json_object_set_new(*proto_state, "state_hash", json_string(state_hash));
+
 	char *s_value = json_dumps(*proto_state, JSON_ENCODE_ANY);
 	oidc_debug(r, "restored state: %s", s_value);
 	free(s_value);

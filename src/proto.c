@@ -284,26 +284,12 @@ apr_byte_t oidc_proto_generate_code_challenge(request_rec *r,
 
 		} else if (apr_strnatcmp(challenge_method, "S256") == 0) {
 
-			apr_jwt_error_t err;
-			unsigned char *hashed_verifier = NULL;
-			unsigned int hashed_verifier_len = 0;
-			if (apr_jws_hash_bytes(r->pool, "sha256",
-					(const unsigned char *) code_verifier,
-					strlen(code_verifier), &hashed_verifier,
-					&hashed_verifier_len, &err) == FALSE) {
+			if (oidc_util_hash_string_and_base64url_encode(r, "sha256",
+					code_verifier, code_challenge) == FALSE) {
 				oidc_error(r,
-						"apr_jws_hash_bytes returned an error for the code verifier");
+						"oidc_util_hash_string_and_base64url_encode returned an error for the code verifier");
 				return FALSE;
 			}
-
-			if (oidc_base64url_encode(r, code_challenge,
-					(const char *) hashed_verifier, hashed_verifier_len, TRUE)
-					<= 0) {
-				oidc_error(r,
-						"oidc_base64url_encode returned an error for the code challenge");
-				return FALSE;
-			}
-
 		}
 
 	}
@@ -934,7 +920,7 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char *code, const char *code_verifier,
 		char **id_token, char **access_token, char **token_type,
-		int *expires_in, char **refresh_token) {
+		int *expires_in, char **refresh_token, const char *state_hash) {
 
 	oidc_debug(r, "enter");
 
@@ -946,6 +932,9 @@ static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 
 	if (code_verifier)
 		apr_table_addn(params, "code_verifier", code_verifier);
+
+	if (state_hash)
+		apr_table_addn(params, "state_hash", state_hash);
 
 	return oidc_proto_token_endpoint_request(r, cfg, provider, params, id_token,
 			access_token, token_type, expires_in, refresh_token);
@@ -1498,9 +1487,15 @@ static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r,
 							json_object_get(proto_state, "code_verifier")) :
 					NULL;
 
+	const char *state_hash =
+			json_object_get(proto_state, "state_hash") ?
+					json_string_value(
+							json_object_get(proto_state, "state_hash")) :
+					NULL;
+
 	if (oidc_proto_resolve_code(r, c, provider, apr_table_get(params, "code"),
 			code_verifier, &id_token, &access_token, &token_type, &expires_in,
-			&refresh_token) == FALSE) {
+			&refresh_token, state_hash) == FALSE) {
 		oidc_error(r, "failed to resolve the code");
 		return FALSE;
 	}

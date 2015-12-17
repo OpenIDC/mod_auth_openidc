@@ -1536,6 +1536,31 @@ apr_hash_t * oidc_util_merge_symmetric_key(apr_pool_t *pool, apr_hash_t *keys,
 }
 
 /*
+ * openssl hash and base64 encode
+ */
+apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r,
+		const char *openssl_hash_algo, const char *input, char **output) {
+	apr_jwt_error_t err;
+	unsigned char *hashed = NULL;
+	unsigned int hashed_len = 0;
+	if (apr_jws_hash_bytes(r->pool, openssl_hash_algo,
+			(const unsigned char *) input, strlen(input), &hashed, &hashed_len,
+			&err) == FALSE) {
+		oidc_error(r,
+				"oidc_util_hash_string_and_base64url_encode returned an error: %s", err.text);
+		return FALSE;
+	}
+
+	if (oidc_base64url_encode(r, output, (const char *) hashed, hashed_len,
+			TRUE) <= 0) {
+		oidc_error(r,
+				"oidc_util_hash_string_and_base64url_encode returned an error: %s", err.text);
+		return FALSE;
+	}
+	return TRUE;
+}
+
+/*
  * merge two key sets
  */
 apr_hash_t * oidc_util_merge_key_sets(apr_pool_t *pool, apr_hash_t *k1,
