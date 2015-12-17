@@ -1392,20 +1392,28 @@ static apr_byte_t oidc_proto_validate_response_mode(request_rec *r,
 }
 
 /*
- * validate the client_id provided by the OP against the client_id registered with the provider that the request was sent to
+ * validate the client_id/iss provided by the OP against the client_id/iss registered with the provider that the request was sent to
  */
-static apr_byte_t oidc_proto_validate_issuer(request_rec *r,
-		const char *configured_issuer, const char *response_issuer) {
+static apr_byte_t oidc_proto_validate_issuer_client_id(request_rec *r,
+		const char *configured_issuer, const char *response_issuer,
+		const char *configured_client_id, const char *response_client_id) {
 
-	// pre-have-iss-in-response flow
-	if (response_issuer == NULL)
-		return TRUE;
+	if (response_issuer != NULL) {
+		if (apr_strnatcmp(configured_issuer, response_issuer) != 0) {
+			oidc_error(r,
+					"configured issuer (%s) does not match the issuer provided in the response by the OP (%s)",
+					configured_issuer, response_issuer);
+			return FALSE;
+		}
+	}
 
-	if (apr_strnatcmp(configured_issuer, response_issuer) != 0) {
-		oidc_error(r,
-				"configured issuer (%s) does not match the issuer provided in the response by the OP (%s)",
-				configured_issuer, response_issuer);
-		return FALSE;
+	if (response_client_id != NULL) {
+		if (apr_strnatcmp(configured_client_id, response_client_id) != 0) {
+			oidc_error(r,
+					"configured client_id (%s) does not match the client_id provided in the response by the OP (%s)",
+					configured_client_id, response_client_id);
+			return FALSE;
+		}
 	}
 
 	return TRUE;
@@ -1417,14 +1425,15 @@ static apr_byte_t oidc_proto_validate_issuer(request_rec *r,
 static apr_byte_t oidc_proto_validate_response_type_mode_issuer(request_rec *r,
 		const char *requested_response_type, apr_table_t *params,
 		json_t *proto_state, const char *response_mode,
-		const char *default_response_mode, const char *issuer) {
+		const char *default_response_mode, const char *issuer, const char *c_client_id) {
 
 	const char *code = apr_table_get(params, "code");
 	const char *id_token = apr_table_get(params, "id_token");
 	const char *access_token = apr_table_get(params, "access_token");
 	const char *iss = apr_table_get(params, "iss");
+	const char *client_id = apr_table_get(params, "client_id");
 
-	if (oidc_proto_validate_issuer(r, issuer, iss) == FALSE)
+	if (oidc_proto_validate_issuer_client_id(r, issuer, iss, c_client_id, client_id) == FALSE)
 		return FALSE;
 
 	if (oidc_proto_validate_response_type(r, requested_response_type, code,
@@ -1542,7 +1551,7 @@ apr_byte_t oidc_proto_authorization_response_code_idtoken(request_rec *r,
 
 	if (oidc_proto_validate_response_type_mode_issuer(r, response_type, params,
 			proto_state, response_mode, "fragment",
-			provider->issuer) == FALSE)
+			provider->issuer, provider->client_id) == FALSE)
 		return FALSE;
 
 	if (oidc_proto_parse_idtoken_and_validate_code(r, c, proto_state, provider,
@@ -1575,7 +1584,7 @@ apr_byte_t oidc_proto_handle_authorization_response_code_token(request_rec *r,
 
 	if (oidc_proto_validate_response_type_mode_issuer(r, response_type, params,
 			proto_state, response_mode, "fragment",
-			provider->issuer) == FALSE)
+			provider->issuer, provider->client_id) == FALSE)
 		return FALSE;
 
 	/* clear parameters that should only be set from the token endpoint */
@@ -1605,7 +1614,7 @@ apr_byte_t oidc_proto_handle_authorization_response_code(request_rec *r,
 	static const char *response_type = "code";
 
 	if (oidc_proto_validate_response_type_mode_issuer(r, response_type, params,
-			proto_state, response_mode, "query", provider->issuer) == FALSE)
+			proto_state, response_mode, "query", provider->issuer, provider->client_id) == FALSE)
 		return FALSE;
 
 	/* clear parameters that should only be set from the token endpoint */
@@ -1648,7 +1657,7 @@ static apr_byte_t oidc_proto_handle_implicit_flow(request_rec *r, oidc_cfg *c,
 
 	if (oidc_proto_validate_response_type_mode_issuer(r, response_type, params,
 			proto_state, response_mode, "fragment",
-			provider->issuer) == FALSE)
+			provider->issuer, provider->client_id) == FALSE)
 		return FALSE;
 
 	if (oidc_proto_parse_idtoken_and_validate_code(r, c, proto_state, provider,
