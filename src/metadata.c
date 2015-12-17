@@ -241,10 +241,10 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 	/* check that the issuer matches */
 	if (issuer != NULL) {
 		if (oidc_util_issuer_match(issuer, json_string_value(j_issuer)) == FALSE) {
-			oidc_warn(r,
+			oidc_error(r,
 					"requested issuer (%s) does not match the \"issuer\" value in the provider metadata file: %s",
 					issuer, json_string_value(j_issuer));
-			//return FALSE;
+			return FALSE;
 		}
 	}
 

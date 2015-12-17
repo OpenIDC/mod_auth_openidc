@@ -1,3 +1,7 @@
+12/17/2015
+- enforce strict matching of issuer in Discovery document against the originally requested issuer
+- bump to 1.8.7rc4
+
 12/9/2015
 - improve debug logging around session management capabilities (i.e. enabled/disabled)
 - return 404 for op/rp iframes if session management is not enabled
