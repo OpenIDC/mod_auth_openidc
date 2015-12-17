@@ -1416,6 +1416,8 @@ static apr_byte_t oidc_proto_validate_issuer_client_id(request_rec *r,
 		}
 	}
 
+	oidc_debug(r, "iss and/or client_id matched OK: %s, %s, %s, %s", response_issuer, configured_issuer, response_client_id, configured_client_id);
+
 	return TRUE;
 }
 
