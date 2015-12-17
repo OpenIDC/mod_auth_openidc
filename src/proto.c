@@ -1403,16 +1403,40 @@ static apr_byte_t oidc_proto_validate_response_mode(request_rec *r,
 }
 
 /*
+ * validate the client_id provided by the OP against the client_id registered with the provider that the request was sent to
+ */
+static apr_byte_t oidc_proto_validate_issuer(request_rec *r,
+		const char *configured_issuer, const char *response_issuer) {
+
+	// pre-have-iss-in-response flow
+	if (response_issuer == NULL)
+		return TRUE;
+
+	if (apr_strnatcmp(configured_issuer, response_issuer) != 0) {
+		oidc_error(r,
+				"configured issuer (%s) does not match the issuer provided in the response by the OP (%s)",
+				configured_issuer, response_issuer);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/*
  * helper function to validate both the response type and the response mode in a single function call
  */
-static apr_byte_t oidc_proto_validate_response_type_and_response_mode(
-		request_rec *r, const char *requested_response_type,
-		apr_table_t *params, json_t *proto_state, const char *response_mode,
-		const char *default_response_mode) {
+static apr_byte_t oidc_proto_validate_response_type_mode_issuer(request_rec *r,
+		const char *requested_response_type, apr_table_t *params,
+		json_t *proto_state, const char *response_mode,
+		const char *default_response_mode, const char *issuer) {
 
 	const char *code = apr_table_get(params, "code");
 	const char *id_token = apr_table_get(params, "id_token");
 	const char *access_token = apr_table_get(params, "access_token");
+	const char *iss = apr_table_get(params, "iss");
+
+	if (oidc_proto_validate_issuer(r, issuer, iss) == FALSE)
+		return FALSE;
 
 	if (oidc_proto_validate_response_type(r, requested_response_type, code,
 			id_token, access_token) == FALSE)
@@ -1521,8 +1545,9 @@ apr_byte_t oidc_proto_authorization_response_code_idtoken(request_rec *r,
 
 	static const char *response_type = "code id_token";
 
-	if (oidc_proto_validate_response_type_and_response_mode(r, response_type,
-			params, proto_state, response_mode, "fragment") == FALSE)
+	if (oidc_proto_validate_response_type_mode_issuer(r, response_type, params,
+			proto_state, response_mode, "fragment",
+			provider->issuer) == FALSE)
 		return FALSE;
 
 	if (oidc_proto_parse_idtoken_and_validate_code(r, c, proto_state, provider,
@@ -1553,8 +1578,9 @@ apr_byte_t oidc_proto_handle_authorization_response_code_token(request_rec *r,
 
 	static const char *response_type = "code token";
 
-	if (oidc_proto_validate_response_type_and_response_mode(r, response_type,
-			params, proto_state, response_mode, "fragment") == FALSE)
+	if (oidc_proto_validate_response_type_mode_issuer(r, response_type, params,
+			proto_state, response_mode, "fragment",
+			provider->issuer) == FALSE)
 		return FALSE;
 
 	/* clear parameters that should only be set from the token endpoint */
@@ -1583,8 +1609,8 @@ apr_byte_t oidc_proto_handle_authorization_response_code(request_rec *r,
 
 	static const char *response_type = "code";
 
-	if (oidc_proto_validate_response_type_and_response_mode(r, response_type,
-			params, proto_state, response_mode, "query") == FALSE)
+	if (oidc_proto_validate_response_type_mode_issuer(r, response_type, params,
+			proto_state, response_mode, "query", provider->issuer) == FALSE)
 		return FALSE;
 
 	/* clear parameters that should only be set from the token endpoint */
@@ -1625,8 +1651,9 @@ static apr_byte_t oidc_proto_handle_implicit_flow(request_rec *r, oidc_cfg *c,
 		oidc_provider_t *provider, apr_table_t *params,
 		const char *response_mode, apr_jwt_t **jwt) {
 
-	if (oidc_proto_validate_response_type_and_response_mode(r, response_type,
-			params, proto_state, response_mode, "fragment") == FALSE)
+	if (oidc_proto_validate_response_type_mode_issuer(r, response_type, params,
+			proto_state, response_mode, "fragment",
+			provider->issuer) == FALSE)
 		return FALSE;
 
 	if (oidc_proto_parse_idtoken_and_validate_code(r, c, proto_state, provider,
