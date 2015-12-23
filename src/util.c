@@ -1547,14 +1547,14 @@ apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r,
 			(const unsigned char *) input, strlen(input), &hashed, &hashed_len,
 			&err) == FALSE) {
 		oidc_error(r,
-				"oidc_util_hash_string_and_base64url_encode returned an error: %s", err.text);
+				"apr_jws_hash_bytes returned an error: %s", err.text);
 		return FALSE;
 	}
 
 	if (oidc_base64url_encode(r, output, (const char *) hashed, hashed_len,
 			TRUE) <= 0) {
 		oidc_error(r,
-				"oidc_util_hash_string_and_base64url_encode returned an error: %s", err.text);
+				"oidc_base64url_encode returned an error: %s", err.text);
 		return FALSE;
 	}
 	return TRUE;
