@@ -4,11 +4,11 @@ Upstream-Contact: Hans Zandbelt <hzandbelt@pingidentity.com>
 Source: https://github.com/pingidentity/mod_auth_openidc
 
 Files: *
-Copyright: 2013-2015 Hans Zandbelt <hzandbelt@pingidentity.com>
+Copyright: 2013-2016 Hans Zandbelt <hzandbelt@pingidentity.com>
 License: Apache-2.0
 
 Files: debian/*
-Copyright: 2014-2015 Hans Zandbelt <hzandbelt@pingidentity.com>
+Copyright: 2014-2016 Hans Zandbelt <hzandbelt@pingidentity.com>
 License: Apache-2.0
 
 License: Apache-2.0

@@ -1,3 +1,6 @@
+1/7/2015
+- update copyright year
+
 12/17/2015
 - enforce strict matching of issuer in Discovery document against the originally requested issuer
 - check iss/client_id if present in an authentication response
