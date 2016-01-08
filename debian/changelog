@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.8.7-1) unstable; urgency=medium
+
+  * tighten up protocol checks
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Fri, 08 Jan 2016 21:50:25 +0100
+
 libapache2-mod-auth-openidc (1.8.6-1) unstable; urgency=medium
 
   * add cookie-domain check
