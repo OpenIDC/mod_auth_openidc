@@ -114,25 +114,36 @@ static apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 	/* get the authorization header */
 	const char *auth_line;
 	auth_line = apr_table_get(r->headers_in, "Authorization");
-	if (!auth_line) {
-		oidc_debug(r, "no authorization header found");
-		return FALSE;
-	}
+	if (auth_line) {
+		oidc_debug(r, "authorization header found");
 
-	/* look for the Bearer keyword */
-	if (apr_strnatcasecmp(ap_getword(r->pool, &auth_line, ' '), "Bearer")) {
-		oidc_error(r, "client used unsupported authentication scheme: %s",
-				r->uri);
-		return FALSE;
-	}
+		/* look for the Bearer keyword */
+		if (apr_strnatcasecmp(ap_getword(r->pool, &auth_line, ' '), "Bearer")) {
+			oidc_error(r, "client used unsupported authentication scheme: %s",
+					r->uri);
+			return FALSE;
+		}
 
-	/* skip any spaces after the Bearer keyword */
-	while (apr_isspace(*auth_line)) {
-		auth_line++;
-	}
+		/* skip any spaces after the Bearer keyword */
+		while (apr_isspace(*auth_line)) {
+			auth_line++;
+		}
 
-	/* copy the result in to the access_token */
-	*access_token = apr_pstrdup(r->pool, auth_line);
+		/* copy the result in to the access_token */
+		*access_token = apr_pstrdup(r->pool, auth_line);
+
+	} else {
+
+		apr_table_t *params = apr_table_make(r->pool, 8);
+		oidc_util_read_form_encoded_params(r, params, r->args);
+
+		*access_token = apr_table_get(params, "access_token");
+
+		if (*access_token == NULL) {
+			oidc_debug(r, "no authorization header found and no authorization query parameter found");
+			return FALSE;
+		}
+	}
 
 	/* log some stuff */
 	oidc_debug(r, "bearer token: %s", *access_token);
