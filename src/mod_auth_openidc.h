@@ -156,6 +156,13 @@ APLOG_USE_MODULE(auth_openidc);
 /* pass id_token in compact serialized format in header*/
 #define OIDC_PASS_IDTOKEN_AS_SERIALIZED 4
 
+/* accept bearer token in header (default) */
+#define OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER  1
+/* accept bearer token as a post parameter */
+#define OIDC_OAUTH_ACCEPT_TOKEN_IN_POST    2
+/* accept bearer token as a query parameter */
+#define OIDC_OAUTH_ACCEPT_TOKEN_IN_QUERY   4
+
 /* prefix of the cookie that binds the state in the authorization request/response to the browser */
 #define OIDCStateCookiePrefix  "mod_auth_openidc_state_"
 
@@ -346,6 +353,7 @@ typedef struct oidc_dir_cfg {
 	apr_array_header_t *pass_cookies;
 	apr_byte_t pass_info_in_headers;
 	apr_byte_t pass_info_in_env_vars;
+	apr_byte_t oauth_accept_token_in;
 } oidc_dir_cfg;
 
 int oidc_check_user_id(request_rec *r);

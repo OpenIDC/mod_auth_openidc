@@ -111,43 +111,64 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 static apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 		const char **access_token) {
 
-	/* get the authorization header */
-	const char *auth_line;
-	auth_line = apr_table_get(r->headers_in, "Authorization");
-	if (auth_line) {
-		oidc_debug(r, "authorization header found");
+	/* get a handle to the directory config */
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
 
-		/* look for the Bearer keyword */
-		if (apr_strnatcasecmp(ap_getword(r->pool, &auth_line, ' '), "Bearer")) {
-			oidc_error(r, "client used unsupported authentication scheme: %s",
-					r->uri);
-			return FALSE;
+	*access_token = NULL;
+
+	if (dir_cfg->oauth_accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER) {
+
+		/* get the authorization header */
+		const char *auth_line;
+		auth_line = apr_table_get(r->headers_in, "Authorization");
+		if (auth_line) {
+			oidc_debug(r, "authorization header found");
+
+			/* look for the Bearer keyword */
+			if (apr_strnatcasecmp(ap_getword(r->pool, &auth_line, ' '),
+					"Bearer") == 0) {
+
+				/* skip any spaces after the Bearer keyword */
+				while (apr_isspace(*auth_line)) {
+					auth_line++;
+				}
+
+				/* copy the result in to the access_token */
+				*access_token = apr_pstrdup(r->pool, auth_line);
+
+			} else {
+				oidc_warn(r,
+						"client used unsupported authentication scheme: %s",
+						r->uri);
+			}
 		}
+	}
 
-		/* skip any spaces after the Bearer keyword */
-		while (apr_isspace(*auth_line)) {
-			auth_line++;
+	if ((*access_token == NULL) && (r->method_number == M_POST)
+			&& (dir_cfg->oauth_accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_POST)) {
+		apr_table_t *params = apr_table_make(r->pool, 8);
+		if (oidc_util_read_post_params(r, params) == TRUE) {
+			*access_token = apr_table_get(params, "access_token");
 		}
+	}
 
-		/* copy the result in to the access_token */
-		*access_token = apr_pstrdup(r->pool, auth_line);
-
-	} else {
-
+	if ((*access_token == NULL)
+			&& (dir_cfg->oauth_accept_token_in
+					& OIDC_OAUTH_ACCEPT_TOKEN_IN_QUERY)) {
 		apr_table_t *params = apr_table_make(r->pool, 8);
 		oidc_util_read_form_encoded_params(r, params, r->args);
-
 		*access_token = apr_table_get(params, "access_token");
+	}
 
-		if (*access_token == NULL) {
-			oidc_debug(r, "no authorization header found and no authorization query parameter found");
-			return FALSE;
-		}
+	if (*access_token == NULL) {
+		oidc_debug(r,
+				"no bearer token found in authorization header, post or query parameter");
+		return FALSE;
 	}
 
 	/* log some stuff */
 	oidc_debug(r, "bearer token: %s", *access_token);
-
 	return TRUE;
 }
 

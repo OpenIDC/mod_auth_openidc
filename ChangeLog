@@ -1,3 +1,7 @@
+1/14/2015
+- add support for passing in OAuth bearer tokens as one or more of: header, post param or query param (OIDCOAuthAcceptTokenAs)
+- bump to 1.8.8rc0
+
 1/8/2015
 - release 1.8.7
 

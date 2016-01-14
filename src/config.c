@@ -764,6 +764,54 @@ static const char * oidc_set_pass_idtoken_as(cmd_parms *cmd, void *dummy,
 	return NULL;
 }
 
+static int oidc_oauth_accept_token_as_str2int(const char *v) {
+	if (apr_strnatcmp(v, "header") == 0)
+		return OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER;
+	if (apr_strnatcmp(v, "post") == 0)
+		return OIDC_OAUTH_ACCEPT_TOKEN_IN_POST;
+	if (apr_strnatcmp(v, "query") == 0)
+		return OIDC_OAUTH_ACCEPT_TOKEN_IN_QUERY;
+	return -1;
+}
+
+/*
+ * define which method of pass an OAuth Bearer token is accepted
+ */
+static const char * oidc_set_accept_oauth_token_in(cmd_parms *cmd, void *m,
+		const char *v1, const char *v2, const char *v3) {
+	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg *) m;
+
+	int b = oidc_oauth_accept_token_as_str2int(v1);
+	if (b != -1) {
+		dir_cfg->oauth_accept_token_in = b;
+	} else {
+		return apr_psprintf(cmd->pool, "Invalid value \"%s\" for directive %s",
+				v1, cmd->directive->directive);
+	}
+	if (v2) {
+		b = oidc_oauth_accept_token_as_str2int(v2);
+		if (b != -1) {
+			dir_cfg->oauth_accept_token_in |= b;
+		} else {
+			return apr_psprintf(cmd->pool,
+					"Invalid value \"%s\" for directive %s", v2,
+					cmd->directive->directive);
+		}
+		if (v3) {
+			b = oidc_oauth_accept_token_as_str2int(v3);
+			if (b != -1) {
+				dir_cfg->oauth_accept_token_in |= b;
+			} else {
+				return apr_psprintf(cmd->pool,
+						"Invalid value \"%s\" for directive %s", v3,
+						cmd->directive->directive);
+			}
+		}
+	}
+
+	return NULL;
+}
+
 /*
  * set the syntax of the token expiry claim in the introspection response
  */
@@ -1366,6 +1414,7 @@ void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->pass_cookies = apr_array_make(pool, 0, sizeof(const char *));
 	c->pass_info_in_headers = 1;
 	c->pass_info_in_env_vars = 1;
+	c->oauth_accept_token_in = OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER;
 	return (c);
 }
 
@@ -1399,6 +1448,9 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->pass_info_in_env_vars = (
 			add->pass_info_in_env_vars != 1 ?
 					add->pass_info_in_env_vars : base->pass_info_in_env_vars);
+	c->oauth_accept_token_in = (
+			add->oauth_accept_token_in != OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER ?
+					add->oauth_accept_token_in : base->oauth_accept_token_in);
 	return (c);
 }
 
@@ -2169,5 +2221,10 @@ const command_rec oidc_config_cmds[] = {
 				oidc_set_pass_claims_as, NULL,
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Specify how claims are passed to the application(s); must be one of \"none\", \"headers\", \"environment\" or \"both\" (default)."),
+		AP_INIT_TAKE123("OIDCOAuthAcceptTokenAs",
+				oidc_set_accept_oauth_token_in,
+				NULL,
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"The method in which an OAuth token can be presented; must be one or more of: header|post|query"),
 		{ NULL }
 };
