@@ -78,7 +78,7 @@ apr_array_header_t *apr_jws_supported_algorithms(apr_pool_t *pool) {
 	*(const char**) apr_array_push(result) = "HS256";
 	*(const char**) apr_array_push(result) = "HS384";
 	*(const char**) apr_array_push(result) = "HS512";
-#if (OPENSSL_VERSION_NUMBER >= 0x01000000)
+#if (APR_JWS_EC_SUPPORT)
 	*(const char**) apr_array_push(result) = "ES256";
 	*(const char**) apr_array_push(result) = "ES384";
 	*(const char**) apr_array_push(result) = "ES512";
@@ -385,7 +385,7 @@ end:
 	return rc;
 }
 
-#if (OPENSSL_VERSION_NUMBER >= 0x01000000)
+#if (APR_JWS_EC_SUPPORT)
 
 /*
  * return the OpenSSL Elliptic Curve NID for a JWT algorithm
@@ -504,7 +504,7 @@ apr_byte_t apr_jws_signature_is_rsa(apr_pool_t *pool, apr_jwt_t *jwt) {
 			|| apr_jws_signature_starts_with(pool, jwt->header.alg, "PS");
 }
 
-#if (OPENSSL_VERSION_NUMBER >= 0x01000000)
+#if (APR_JWS_EC_SUPPORT)
 
 /*
  * check if the signature on the JWT is Elliptic Curve based
@@ -533,7 +533,7 @@ static apr_byte_t apr_jws_verify_with_jwk(apr_pool_t *pool, apr_jwt_t *jwt,
 		rc = (jwk->type == APR_JWK_KEY_RSA)
 				&& apr_jws_verify_rsa(pool, jwt, jwk, err);
 
-#if (OPENSSL_VERSION_NUMBER >= 0x01000000)
+#if (APR_JWS_EC_SUPPORT)
 	} else if (apr_jws_signature_is_ec(pool, jwt)) {
 
 		rc = (jwk->type == APR_JWK_KEY_EC)

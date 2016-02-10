@@ -89,7 +89,7 @@ apr_array_header_t *apr_jwe_supported_encryptions(apr_pool_t *pool) {
 	*(const char**) apr_array_push(result) = "A128CBC-HS256";
 	*(const char**) apr_array_push(result) = "A192CBC-HS384";
 	*(const char**) apr_array_push(result) = "A256CBC-HS512";
-#if (OPENSSL_VERSION_NUMBER >= 0x1000100f)
+#if (APR_JWE_GCM_SUPPORT)
 	*(const char**) apr_array_push(result) = "A128GCM";
 	*(const char**) apr_array_push(result) = "A192GCM";
 	*(const char**) apr_array_push(result) = "A256GCM";
@@ -125,7 +125,7 @@ static const EVP_CIPHER *apr_jwe_enc_to_openssl_cipher(const char *enc) {
 	if (apr_strnatcmp(enc, "A256CBC-HS512") == 0) {
 		return EVP_aes_256_cbc();
 	}
-#if (OPENSSL_VERSION_NUMBER >= 0x1000100f)
+#if (APR_JWE_GCM_SUPPORT)
 	if (apr_strnatcmp(enc, "A128CM") == 0) {
 		return EVP_aes_128_gcm();
 	}
@@ -371,7 +371,7 @@ static apr_byte_t apr_jwe_decrypt_cek(apr_pool_t *pool,
 	return rc;
 }
 
-#if (OPENSSL_VERSION_NUMBER >= 0x1000100f)
+#if (APR_JWE_GCM_SUPPORT)
 /*
  * Decrypt AES-GCM content
  */
@@ -606,7 +606,7 @@ apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header,
 				cipher_text, cek, cek_len, iv, aad, aad_len, auth_tag,
 				decrypted, err_r);
 
-#if (OPENSSL_VERSION_NUMBER >= 0x1000100f)
+#if (APR_JWE_GCM_SUPPORT)
 
 	} else if ((apr_strnatcmp(header->enc, "A128GCM") == 0)
 			|| (apr_strnatcmp(header->enc, "A192GCM") == 0)
