@@ -1,3 +1,6 @@
+2/11/2016
+- include token_endpoint_auth_method in dynamic client registration request, set to selected method from provider
+
 2/10/2016
 - Elliptic Curve support now requires OpenSSL 1.0.1 detection
 - bump to 1.8.8rc1

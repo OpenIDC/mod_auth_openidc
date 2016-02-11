@@ -580,6 +580,10 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 	}
 	json_object_set_new(data, "response_types", response_types);
 
+	if (provider->token_endpoint_auth != NULL) {
+		json_object_set_new(data, "token_endpoint_auth_method", json_string(provider->token_endpoint_auth));
+	}
+
 	if (provider->client_contact != NULL) {
 		json_object_set_new(data, "contacts",
 				json_pack("[s]", provider->client_contact));
