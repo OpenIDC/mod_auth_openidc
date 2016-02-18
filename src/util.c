@@ -753,7 +753,7 @@ char *oidc_util_get_cookie(request_rec *r, const char *cookieName) {
 				cookie++;
 
 			/* see if we've found the cookie that we're looking for */
-			if (strncmp(cookie, cookieName, strlen(cookieName)) == 0) {
+			if ((strncmp(cookie, cookieName, strlen(cookieName)) == 0)  && (cookie[strlen(cookieName)] == '=')) {
 
 				/* skip to the meat of the parameter (the value after the '=') */
 				cookie += (strlen(cookieName) + 1);
