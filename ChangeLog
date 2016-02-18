@@ -1,3 +1,7 @@
+2/18/2016
+- pass plain state to the token endpoint on code flows: https://tools.ietf.org/html/draft-jones-oauth-mix-up-mitigation-01
+- bump to 1.8.8rc2
+
 2/11/2016
 - include token_endpoint_auth_method in dynamic client registration request, set to selected method from provider
 

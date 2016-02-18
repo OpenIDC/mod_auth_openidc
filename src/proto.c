@@ -920,7 +920,7 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char *code, const char *code_verifier,
 		char **id_token, char **access_token, char **token_type,
-		int *expires_in, char **refresh_token, const char *state_hash) {
+		int *expires_in, char **refresh_token, const char *state) {
 
 	oidc_debug(r, "enter");
 
@@ -933,8 +933,8 @@ static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 	if (code_verifier)
 		apr_table_addn(params, "code_verifier", code_verifier);
 
-	if (state_hash)
-		apr_table_addn(params, "state_hash", state_hash);
+	if (state)
+		apr_table_addn(params, "state", state);
 
 	return oidc_proto_token_endpoint_request(r, cfg, provider, params, id_token,
 			access_token, token_type, expires_in, refresh_token);
@@ -1498,15 +1498,15 @@ static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r,
 							json_object_get(proto_state, "code_verifier")) :
 					NULL;
 
-	const char *state_hash =
-			json_object_get(proto_state, "state_hash") ?
+	const char *state =
+			json_object_get(proto_state, "state") ?
 					json_string_value(
-							json_object_get(proto_state, "state_hash")) :
+							json_object_get(proto_state, "state")) :
 					NULL;
 
 	if (oidc_proto_resolve_code(r, c, provider, apr_table_get(params, "code"),
 			code_verifier, &id_token, &access_token, &token_type, &expires_in,
-			&refresh_token, state_hash) == FALSE) {
+			&refresh_token, state) == FALSE) {
 		oidc_error(r, "failed to resolve the code");
 		return FALSE;
 	}
