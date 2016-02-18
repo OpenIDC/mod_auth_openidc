@@ -1,6 +1,7 @@
 2/18/2016
 - pass plain state to the token endpoint on code flows: https://tools.ietf.org/html/draft-jones-oauth-mix-up-mitigation-01
 - fix loose (prefix-only) matching of cookie names
+- allow passing OAuth bearer token as a cookie (OIDCOAuthAcceptTokenAs extension for PingAccess)
 - bump to 1.8.8rc2
 
 2/11/2016

@@ -764,13 +764,23 @@ static const char * oidc_set_pass_idtoken_as(cmd_parms *cmd, void *dummy,
 	return NULL;
 }
 
-static int oidc_oauth_accept_token_as_str2int(const char *v) {
+static int oidc_oauth_accept_token_as_str2int(oidc_dir_cfg *dir_cfg, const char *v) {
 	if (apr_strnatcmp(v, "header") == 0)
 		return OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER;
 	if (apr_strnatcmp(v, "post") == 0)
 		return OIDC_OAUTH_ACCEPT_TOKEN_IN_POST;
 	if (apr_strnatcmp(v, "query") == 0)
 		return OIDC_OAUTH_ACCEPT_TOKEN_IN_QUERY;
+	if (strstr(v, "cookie") == v) {
+		const char *p = strstr(v, ":");
+		if (p) {
+			p++;
+		} else {
+			p = "PA.global";
+		}
+		apr_hash_set(dir_cfg->oauth_accept_token_options, "cookie-name", APR_HASH_KEY_STRING, p);
+		return OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE;
+	}
 	return -1;
 }
 
@@ -778,35 +788,15 @@ static int oidc_oauth_accept_token_as_str2int(const char *v) {
  * define which method of pass an OAuth Bearer token is accepted
  */
 static const char * oidc_set_accept_oauth_token_in(cmd_parms *cmd, void *m,
-		const char *v1, const char *v2, const char *v3) {
+		const char *arg) {
 	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg *) m;
 
-	int b = oidc_oauth_accept_token_as_str2int(v1);
+	int b = oidc_oauth_accept_token_as_str2int(dir_cfg, arg);
 	if (b != -1) {
-		dir_cfg->oauth_accept_token_in = b;
+		dir_cfg->oauth_accept_token_in |= b;
 	} else {
 		return apr_psprintf(cmd->pool, "Invalid value \"%s\" for directive %s",
-				v1, cmd->directive->directive);
-	}
-	if (v2) {
-		b = oidc_oauth_accept_token_as_str2int(v2);
-		if (b != -1) {
-			dir_cfg->oauth_accept_token_in |= b;
-		} else {
-			return apr_psprintf(cmd->pool,
-					"Invalid value \"%s\" for directive %s", v2,
-					cmd->directive->directive);
-		}
-		if (v3) {
-			b = oidc_oauth_accept_token_as_str2int(v3);
-			if (b != -1) {
-				dir_cfg->oauth_accept_token_in |= b;
-			} else {
-				return apr_psprintf(cmd->pool,
-						"Invalid value \"%s\" for directive %s", v3,
-						cmd->directive->directive);
-			}
-		}
+				arg, cmd->directive->directive);
 	}
 
 	return NULL;
@@ -1414,7 +1404,8 @@ void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->pass_cookies = apr_array_make(pool, 0, sizeof(const char *));
 	c->pass_info_in_headers = 1;
 	c->pass_info_in_env_vars = 1;
-	c->oauth_accept_token_in = OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER;
+	c->oauth_accept_token_in = OIDC_OAUTH_ACCEPT_TOKEN_IN_DEFAULT;
+	c->oauth_accept_token_options = apr_hash_make(pool);
 	return (c);
 }
 
@@ -1449,8 +1440,11 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->pass_info_in_env_vars != 1 ?
 					add->pass_info_in_env_vars : base->pass_info_in_env_vars);
 	c->oauth_accept_token_in = (
-			add->oauth_accept_token_in != OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER ?
+			add->oauth_accept_token_in != OIDC_OAUTH_ACCEPT_TOKEN_IN_DEFAULT ?
 					add->oauth_accept_token_in : base->oauth_accept_token_in);
+	c->oauth_accept_token_options = apr_hash_merge(pool,
+			add->oauth_accept_token_options, base->oauth_accept_token_options,
+			NULL, NULL);
 	return (c);
 }
 
@@ -2221,10 +2215,10 @@ const command_rec oidc_config_cmds[] = {
 				oidc_set_pass_claims_as, NULL,
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Specify how claims are passed to the application(s); must be one of \"none\", \"headers\", \"environment\" or \"both\" (default)."),
-		AP_INIT_TAKE123("OIDCOAuthAcceptTokenAs",
+		AP_INIT_ITERATE("OIDCOAuthAcceptTokenAs",
 				oidc_set_accept_oauth_token_in,
 				NULL,
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
-				"The method in which an OAuth token can be presented; must be one or more of: header|post|query"),
+				"The method in which an OAuth token can be presented; must be one or more of: header|post|query|cookie"),
 		{ NULL }
 };

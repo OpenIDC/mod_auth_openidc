@@ -117,7 +117,9 @@ static apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 
 	*access_token = NULL;
 
-	if (dir_cfg->oauth_accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER) {
+	if ((dir_cfg->oauth_accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER)
+			|| (dir_cfg->oauth_accept_token_in
+					& OIDC_OAUTH_ACCEPT_TOKEN_IN_DEFAULT)) {
 
 		/* get the authorization header */
 		const char *auth_line;
@@ -161,9 +163,27 @@ static apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 		*access_token = apr_table_get(params, "access_token");
 	}
 
+	if ((*access_token == NULL)
+			&& (dir_cfg->oauth_accept_token_in
+					& OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE)) {
+
+		const char *cookie_name = apr_hash_get(
+				dir_cfg->oauth_accept_token_options, "cookie-name",
+				APR_HASH_KEY_STRING);
+		const char *auth_line = oidc_util_get_cookie(r, cookie_name);
+		if (auth_line != NULL) {
+
+			/* copy the result in to the access_token */
+			*access_token = apr_pstrdup(r->pool, auth_line);
+
+		} else {
+			oidc_warn(r, "no cookie found with name: %s", cookie_name);
+		}
+	}
+
 	if (*access_token == NULL) {
 		oidc_debug(r,
-				"no bearer token found in authorization header, post or query parameter");
+				"no bearer token found in the allowed methods (authorization header, post, query parameter or cookie)");
 		return FALSE;
 	}
 
