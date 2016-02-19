@@ -119,7 +119,7 @@ static apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 
 	if ((dir_cfg->oauth_accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER)
 			|| (dir_cfg->oauth_accept_token_in
-					& OIDC_OAUTH_ACCEPT_TOKEN_IN_DEFAULT)) {
+					== OIDC_OAUTH_ACCEPT_TOKEN_IN_DEFAULT)) {
 
 		/* get the authorization header */
 		const char *auth_line;
