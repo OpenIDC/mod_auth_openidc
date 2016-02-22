@@ -941,11 +941,6 @@ static const char * oidc_set_unauth_action(cmd_parms *cmd, void *m,
 		return NULL;
 	}
 
-	if (apr_strnatcmp(arg, "401xrw") == 0) {
-		dir_cfg->unauth_action = XREQWITH401;
-		return NULL;
-	}
-
 	return "parameter must be one of 'auth', 'pass', '401' or '401xrw'";
 }
 
