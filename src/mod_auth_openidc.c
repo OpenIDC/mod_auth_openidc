@@ -2364,6 +2364,8 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 		case PASS:
 			return OK;
 		case AUTHENTICATE:
+			/* if this is a Javascript path we won't redirect the user and create a state cookie */
+			if (apr_table_get(r->headers_in, "X-Requested-With") != NULL) return HTTP_UNAUTHORIZED;
 			break;
 	}
 
