@@ -1,4 +1,8 @@
 2/23/2016
+- make state cookie a session cookie and clean expired cookies on entry (merge of fix-firefox-cookie-storage)
+- bump to 1.8.8rc4
+
+2/22/2016
 - don't authenticate (redirect/state) when X-Requested-With header exists; as suggested in #113
 - bump to 1.8.8rc3
 

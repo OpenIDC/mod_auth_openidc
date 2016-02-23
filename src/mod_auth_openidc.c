@@ -412,6 +412,59 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	return TRUE;
 }
 
+static json_t * oidc_get_state_from_cookie(request_rec *r, const char *cookieValue) {
+	json_t *result = NULL;
+
+	/* decrypt the state obtained from the cookie */
+	char *svalue = NULL;
+	if (oidc_base64url_decode_decrypt_string(r, &svalue, cookieValue) <= 0)
+		return NULL;
+
+	oidc_debug(r, "restored JSON state cookie value: %s", svalue);
+
+	json_error_t json_error;
+	result = json_loads(svalue, 0, &json_error);
+	if (result == NULL) {
+		oidc_error(r, "parsing JSON (json_loads) failed: %s", json_error.text);
+		return NULL;
+	}
+
+	return result;
+}
+
+static void oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c) {
+	char *cookie, *tokenizerCtx;
+	char *cookies = apr_pstrdup(r->pool,
+			(char *) apr_table_get(r->headers_in, "Cookie"));
+	if (cookies != NULL) {
+		cookie = apr_strtok(cookies, ";", &tokenizerCtx);
+		do {
+			while (cookie != NULL && *cookie == ' ')
+				cookie++;
+			if (strstr(cookie, OIDCStateCookiePrefix) == cookie) {
+				char *cookieName = cookie;
+				while (cookie != NULL && *cookie != '=')
+					cookie++;
+				if (*cookie == '=') {
+					*cookie = '\0';
+					cookie++;
+					json_t *state = oidc_get_state_from_cookie(r, cookie);
+					if (state != NULL) {
+						json_t *v = json_object_get(state, "timestamp");
+						apr_time_t now = apr_time_sec(apr_time_now());
+						if (now > json_integer_value(v) + c->state_timeout) {
+							oidc_error(r, "state has expired");
+							oidc_util_set_cookie(r, cookieName, "", 0);
+						}
+						json_decref(state);
+					}
+				}
+			}
+			cookie = apr_strtok(NULL, ";", &tokenizerCtx);
+		} while (cookie != NULL);
+	}
+}
+
 /*
  * restore the state that was maintained between authorization request and response in an encrypted cookie
  */
@@ -419,6 +472,9 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 		const char *state, json_t **proto_state) {
 
 	oidc_debug(r, "enter");
+
+	/* clean expired state cookies to avoid pollution */
+	oidc_clean_expired_state_cookies(r, c);
 
 	const char *cookieName = oidc_get_state_cookie_name(r, state);
 
@@ -432,19 +488,8 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 	/* clear state cookie because we don't need it anymore */
 	oidc_util_set_cookie(r, cookieName, "", 0);
 
-	/* decrypt the state obtained from the cookie */
-	char *svalue = NULL;
-	if (oidc_base64url_decode_decrypt_string(r, &svalue, cookieValue) <= 0)
-		return FALSE;
-
-	oidc_debug(r, "restored JSON state cookie value: %s", svalue);
-
-	json_error_t json_error;
-	*proto_state = json_loads(svalue, 0, &json_error);
-	if (*proto_state == NULL) {
-		oidc_error(r, "parsing JSON (json_loads) failed: %s", json_error.text);
-		return FALSE;
-	}
+	*proto_state = oidc_get_state_from_cookie(r, cookieValue);
+	if (*proto_state == NULL) return FALSE;
 
 	json_t *v = json_object_get(*proto_state, "nonce");
 
@@ -501,12 +546,14 @@ static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
 		return FALSE;
 	}
 
+	/* clean expired state cookies to avoid pollution */
+	oidc_clean_expired_state_cookies(r, c);
+
 	/* assemble the cookie name for the state cookie */
 	const char *cookieName = oidc_get_state_cookie_name(r, state);
 
 	/* set it as a cookie */
-	oidc_util_set_cookie(r, cookieName, cookieValue,
-			apr_time_now() + apr_time_from_sec(c->state_timeout));
+	oidc_util_set_cookie(r, cookieName, cookieValue, -1);
 
 	free(s_value);
 
