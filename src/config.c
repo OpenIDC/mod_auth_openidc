@@ -1053,6 +1053,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->crypto_passphrase = NULL;
 
 	c->scrub_request_headers = OIDC_DEFAULT_SCRUB_REQUEST_HEADERS;
+	c->error_template = NULL;
 
 	return c;
 }
@@ -1380,6 +1381,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->scrub_request_headers =
 			add->scrub_request_headers != OIDC_DEFAULT_SCRUB_REQUEST_HEADERS ?
 					add->scrub_request_headers : base->scrub_request_headers;
+
+	c->error_template =
+			add->error_template != NULL ?
+					add->error_template : base->error_template;
 
 	return c;
 }
