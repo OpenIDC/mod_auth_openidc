@@ -2640,6 +2640,10 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args, const 
 	json_t *claims = NULL, *id_token = NULL;
 	oidc_authz_get_claims_and_idtoken(r, &claims, &id_token);
 
+	/* merge id_token claims (e.g. "iss") in to claims json object */
+	if (claims)
+		oidc_util_json_merge(id_token, claims);
+
 	/* dispatch to the >=2.4 specific authz routine */
 	authz_status rc = oidc_authz_worker24(r, claims ? claims : id_token, require_args);
 
