@@ -733,6 +733,233 @@ static apr_byte_t oidc_check_cookie_domain(request_rec *r, oidc_cfg *cfg,
 }
 
 /*
+ * get a handle to the provider configuration via the "issuer" stored in the session
+ */
+apr_byte_t oidc_get_provider_from_session(request_rec *r, oidc_cfg *c, session_rec *session, oidc_provider_t **provider) {
+
+	oidc_debug(r, "enter");
+
+	/* get the issuer value from the session state */
+	const char *issuer = NULL;
+	oidc_session_get(r, session, OIDC_ISSUER_SESSION_KEY, &issuer);
+	if (issuer == NULL) {
+		oidc_error(r, "session corrupted: no issuer found in session");
+		return FALSE;
+	}
+
+	/* get the provider info associated with the issuer value */
+	oidc_provider_t *p = oidc_get_provider_for_issuer(r, c, issuer, FALSE);
+	if (p == NULL) {
+		oidc_error(r, "session corrupted: no provider found for issuer: %s",
+				issuer);
+		return FALSE;
+	}
+
+	*provider = p;
+
+	return TRUE;
+}
+
+/*
+ * store the access token expiry timestamp in the session, based on the expires_in
+ */
+static void oidc_store_access_token_expiry(request_rec *r, session_rec *session,
+		int expires_in) {
+	if (expires_in != -1) {
+		oidc_session_set(r, session, OIDC_ACCESSTOKEN_EXPIRES_SESSION_KEY,
+				apr_psprintf(r->pool, "%" APR_TIME_T_FMT,
+						apr_time_sec(apr_time_now()) + expires_in));
+	}
+}
+
+/*
+ * store claims resolved from the userinfo endpoint in the session
+ */
+static void oidc_store_userinfo_claims(request_rec *r, session_rec *session,
+		oidc_provider_t *provider, const char *claims) {
+	/* see if we've resolved any claims */
+	if (claims != NULL) {
+		/*
+		 * Successfully decoded a set claims from the response so we can store them
+		 * (well actually the stringified representation in the response)
+		 * in the session context safely now
+		 */
+		oidc_session_set(r, session, OIDC_CLAIMS_SESSION_KEY, claims);
+
+		/* store the last refresh time if we've configured a userinfo refresh interval */
+		if (provider->userinfo_refresh_interval > 0)
+			oidc_session_set(r, session, OIDC_USERINFO_LAST_REFRESH_SESSION_KEY,
+					apr_psprintf(r->pool, "%" APR_TIME_T_FMT, apr_time_now()));
+	}
+}
+
+/*
+ * execute refresh token grant to refresh the existing access token
+ */
+static apr_byte_t oidc_refresh_access_token(request_rec *r, oidc_cfg *c,
+		session_rec *session, oidc_provider_t *provider,
+		char **new_access_token) {
+
+	oidc_debug(r, "enter");
+
+	/* get the refresh token that was stored in the session */
+	const char *refresh_token = NULL;
+	oidc_session_get(r, session, OIDC_REFRESHTOKEN_SESSION_KEY, &refresh_token);
+	if (refresh_token == NULL) {
+		oidc_warn(r,
+				"refresh token routine called but no refresh_token found in the session");
+		return FALSE;
+	}
+
+	/* elements returned in the refresh response */
+	char *s_id_token = NULL;
+	int expires_in = -1;
+	char *s_token_type = NULL;
+	char *s_access_token = NULL;
+	char *s_refresh_token = NULL;
+
+	/* refresh the tokens by calling the token endpoint */
+	if (oidc_proto_refresh_request(r, c, provider, refresh_token, &s_id_token,
+			&s_access_token, &s_token_type, &expires_in,
+			&s_refresh_token) == FALSE) {
+		oidc_error(r, "access_token could not be refreshed");
+		return FALSE;
+	}
+
+	/* store the new access_token in the session and discard the old one */
+	oidc_session_set(r, session, OIDC_ACCESSTOKEN_SESSION_KEY, s_access_token);
+	oidc_store_access_token_expiry(r, session, expires_in);
+
+	/* see if we need to return it as a parameter */
+	if (new_access_token != NULL)
+		*new_access_token = s_access_token;
+
+	/* if we have a new refresh token (rolling refresh), store it in the session and overwrite the old one */
+	if (s_refresh_token != NULL)
+		oidc_session_set(r, session, OIDC_REFRESHTOKEN_SESSION_KEY,
+				s_refresh_token);
+
+	return TRUE;
+}
+
+/*
+ * retrieve claims from the userinfo endpoint and return the stringified response
+ */
+static const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r,
+		oidc_cfg *c, oidc_provider_t *provider, const char *access_token, session_rec *session) {
+
+	oidc_debug(r, "enter");
+
+	/* see if a userinfo endpoint is set, otherwise there's nothing to do for us */
+	if (provider->userinfo_endpoint_url == NULL) {
+		oidc_debug(r,
+				"not retrieving userinfo claims because userinfo_endpoint is not set");
+		return NULL;
+	}
+
+	/* see if there's an access token, otherwise we can't call the userinfo endpoint at all */
+	if (access_token == NULL) {
+		oidc_debug(r,
+				"not retrieving userinfo claims because access_token is not provided");
+		return NULL;
+	}
+
+	// TODO: return code should indicate whether the token expired or some other error occurred
+	// TODO: long-term: session storage should be JSON (with explicit types and less conversion, using standard routines)
+
+	/* try to get claims from the userinfo endpoint using the provided access token */
+	const char *result = NULL;
+	if (oidc_proto_resolve_userinfo(r, c, provider, access_token, &result) == FALSE) {
+
+		/* see if we have an existing session and we are refreshing the user info claims */
+		if (session != NULL) {
+
+			/* first call to user info endpoint failed, but the access token may have just expired, so refresh it */
+			char *access_token = NULL;
+			if (oidc_refresh_access_token(r, c, session, provider, &access_token) == TRUE) {
+
+				/* try again with the new access token */
+				if (oidc_proto_resolve_userinfo(r, c, provider, access_token, &result) == FALSE) {
+
+					oidc_error(r,
+						"resolving user info claims with the refreshed access token failed, nothing will be stored in the session");
+					result = NULL;
+
+				}
+
+			} else {
+
+				oidc_warn(r,
+					"refreshing access token failed, claims will not be retrieved/refreshed from the userinfo endpoint");
+				result = NULL;
+
+			}
+
+		} else {
+
+			oidc_error(r,
+				"resolving user info claims with the existing/provided access token failed, nothing will be stored in the session");
+			result = NULL;
+
+		}
+	}
+
+	return result;
+}
+
+/*
+ * get (new) claims from the userinfo endpoint
+ */
+static apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r,
+		oidc_cfg *cfg, session_rec *session) {
+
+	oidc_provider_t *provider = NULL;
+	const char *claims = NULL;
+	char *access_token = NULL;
+
+	/* get the current provider info */
+	if (oidc_get_provider_from_session(r, cfg, session, &provider) == FALSE)
+		return FALSE;
+
+	/* see if we can do anything here, i.e. we have a userinfo endpoint and a refresh interval is configured */
+	apr_time_t interval = apr_time_from_sec(
+			provider->userinfo_refresh_interval);
+
+	oidc_debug(r, "userinfo_endpoint=%s, interval=%d", provider->userinfo_endpoint_url, provider->userinfo_refresh_interval);
+
+	if ((provider->userinfo_endpoint_url != NULL) && (interval > 0)) {
+
+		/* get the last refresh timestamp from the session info */
+		apr_time_t last_refresh;
+		const char *s_last_refresh = NULL;
+		oidc_session_get(r, session, OIDC_USERINFO_LAST_REFRESH_SESSION_KEY,
+				&s_last_refresh);
+		sscanf(s_last_refresh, "%" APR_TIME_T_FMT, &last_refresh);
+
+		oidc_debug(r, "refresh needed in: %" APR_TIME_T_FMT " seconds", apr_time_sec(last_refresh + interval - apr_time_now()));
+
+		/* see if we need to refresh again */
+		if (last_refresh + interval < apr_time_now()) {
+
+			/* get the current access token */
+			oidc_session_get(r, session, OIDC_ACCESSTOKEN_SESSION_KEY,
+					(const char **) &access_token);
+
+			/* retrieve the current claims */
+			claims = oidc_retrieve_claims_from_userinfo_endpoint(r, cfg,
+					provider, access_token, session);
+
+			/* store claims resolved from userinfo endpoint */
+			oidc_store_userinfo_claims(r, session, provider, claims);
+
+			/* indicated something changed */
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+/*
  * handle the case where we have identified an existing authentication session for a user
  */
 static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
@@ -752,6 +979,10 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	int rc = oidc_check_max_session_duration(r, cfg, session);
 	if (rc != OK)
 		return rc;
+
+	/* if needed, refresh claims from the user info endpoint */
+	apr_byte_t needs_save = oidc_refresh_claims_from_userinfo_endpoint(r, cfg,
+			session);
 
 	/*
 	 * we're going to pass the information that we have to the application,
@@ -853,8 +1084,12 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 		slack = apr_time_from_sec(60);
 	if (session->expiry - now < interval - slack) {
 		session->expiry = now + interval;
-		oidc_session_save(r, session);
+		needs_save = TRUE;
 	}
+
+	/* check if something was updated in the session and we need to save it again */
+	if (needs_save)
+		oidc_session_save(r, session);
 
 	/* return "user authenticated" status */
 	return OK;
@@ -955,18 +1190,6 @@ static int oidc_authorization_response_error(request_rec *r, oidc_cfg *c,
 }
 
 /*
- * store the access token expiry timestamp in the session, based on the expires_in
- */
-static void oidc_store_access_token_expiry(request_rec *r, session_rec *session,
-		int expires_in) {
-	if (expires_in != -1) {
-		oidc_session_set(r, session, OIDC_ACCESSTOKEN_EXPIRES_SESSION_KEY,
-				apr_psprintf(r->pool, "%" APR_TIME_T_FMT,
-						apr_time_sec(apr_time_now()) + expires_in));
-	}
-}
-
-/*
  * set the unique user identifier that will be propagated in the Apache r->user and REMOTE_USER variables
  */
 static apr_byte_t oidc_get_remote_user(request_rec *r, oidc_cfg *c,
@@ -1064,15 +1287,8 @@ static void oidc_save_in_session(request_rec *r, oidc_cfg *c,
 		oidc_session_set(r, session, OIDC_LOGOUT_ENDPOINT_SESSION_KEY,
 				provider->end_session_endpoint);
 
-	/* see if we've resolved any claims */
-	if (claims != NULL) {
-		/*
-		 * Successfully decoded a set claims from the response so we can store them
-		 * (well actually the stringified representation in the response)
-		 * in the session context safely now
-		 */
-		oidc_session_set(r, session, OIDC_CLAIMS_SESSION_KEY, claims);
-	}
+	/* store claims resolved from userinfo endpoint */
+	oidc_store_userinfo_claims(r, session, provider, claims);
 
 	/* see if we have an access_token */
 	if (access_token != NULL) {
@@ -1178,27 +1394,6 @@ static apr_byte_t oidc_handle_flows(request_rec *r, oidc_cfg *c,
 	return rc;
 }
 
-/*
- * resolves claims from the user info endpoint and returns the stringified response
- */
-static const char *oidc_resolve_claims_from_user_info_endpoint(request_rec *r,
-		oidc_cfg *c, oidc_provider_t *provider, apr_table_t *params) {
-	const char *result = NULL;
-	if (provider->userinfo_endpoint_url == NULL) {
-		oidc_debug(r,
-				"not resolving user info claims because userinfo_endpoint is not set");
-	} else if (apr_table_get(params, "access_token") == NULL) {
-		oidc_debug(r,
-				"not resolving user info claims because access_token is not provided");
-	} else if (oidc_proto_resolve_userinfo(r, c, provider,
-			apr_table_get(params, "access_token"), &result) == FALSE) {
-		oidc_debug(r,
-				"resolving user info claims failed, nothing will be stored in the session");
-		result = NULL;
-	}
-	return result;
-}
-
 /* handle the browser back on an authorization response */
 static apr_byte_t oidc_handle_browser_back(request_rec *r, const char *r_state,
 		session_rec *session) {
@@ -1287,8 +1482,8 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	 * optionally resolve additional claims against the userinfo endpoint
 	 * parsed claims are not actually used here but need to be parsed anyway for error checking purposes
 	 */
-	const char *claims = oidc_resolve_claims_from_user_info_endpoint(r, c,
-			provider, params);
+	const char *claims = oidc_retrieve_claims_from_userinfo_endpoint(r,
+			c, provider, apr_table_get(params, "access_token"), NULL);
 
 	/* restore the original protected URL that the user was trying to access */
 	const char *original_url = apr_pstrdup(r->pool,
@@ -2099,8 +2294,7 @@ static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c,
 static int oidc_handle_session_management(request_rec *r, oidc_cfg *c,
 		session_rec *session) {
 	char *cmd = NULL;
-	const char *issuer = NULL, *id_token_hint = NULL, *client_id = NULL,
-			*check_session_iframe = NULL;
+	const char *id_token_hint = NULL, *client_id = NULL, *check_session_iframe = NULL;
 	oidc_provider_t *provider = NULL;
 
 	/* get the command passed to the session management handler */
@@ -2144,9 +2338,7 @@ static int oidc_handle_session_management(request_rec *r, oidc_cfg *c,
 	/* see if this is a request check the login state with the OP */
 	if (apr_strnatcmp("check", cmd) == 0) {
 		oidc_session_get(r, session, OIDC_IDTOKEN_SESSION_KEY, &id_token_hint);
-		oidc_session_get(r, session, OIDC_ISSUER_SESSION_KEY, &issuer);
-		if (issuer != NULL)
-			provider = oidc_get_provider_for_issuer(r, c, issuer, FALSE);
+		oidc_get_provider_from_session(r, c, session, &provider);
 		if ((id_token_hint != NULL) && (provider != NULL)) {
 			return oidc_authenticate_user(r, c, provider,
 					apr_psprintf(r->pool, "%s?session=iframe_rp",
@@ -2208,58 +2400,20 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
 		error_code = "no_access_token_match";
 		goto end;
 	}
-	s_access_token = NULL;
-
-	/* get the refresh token that was stored in the session */
-	const char *refresh_token = NULL;
-	oidc_session_get(r, session, OIDC_REFRESHTOKEN_SESSION_KEY, &refresh_token);
-	if (refresh_token == NULL) {
-		oidc_warn(r,
-				"refresh token request handler called but no refresh_token was found in the session");
-		error_code = "no_refresh_token_exists";
-		goto end;
-	}
 
 	/* get a handle to the provider configuration */
-	const char *issuer = NULL;
 	oidc_provider_t *provider = NULL;
-	oidc_session_get(r, session, OIDC_ISSUER_SESSION_KEY, &issuer);
-	if (issuer == NULL) {
-		oidc_error(r, "session corrupted: no issuer found in session");
-		error_code = "session_corruption";
-		goto end;
-	}
-	provider = oidc_get_provider_for_issuer(r, c, issuer, FALSE);
-	if (provider == NULL) {
-		oidc_error(r, "session corrupted: no provider found for issuer: %s",
-				issuer);
+	if (oidc_get_provider_from_session(r, c, session, &provider) == FALSE) {
 		error_code = "session_corruption";
 		goto end;
 	}
 
-	/* elements returned in the refresh response */
-	char *s_id_token = NULL;
-	int expires_in = -1;
-	char *s_token_type = NULL;
-	char *s_refresh_token = NULL;
-
-	/* refresh the tokens by calling the token endpoint */
-	if (oidc_proto_refresh_request(r, c, provider, refresh_token, &s_id_token,
-			&s_access_token, &s_token_type, &expires_in,
-			&s_refresh_token) == FALSE) {
+	/* execute the actual refresh grant */
+	if (oidc_refresh_access_token(r, c, session, provider, NULL) == FALSE) {
 		oidc_error(r, "access_token could not be refreshed");
 		error_code = "refresh_failed";
 		goto end;
 	}
-
-	/* store the new access_token in the session and discard the old one */
-	oidc_session_set(r, session, OIDC_ACCESSTOKEN_SESSION_KEY, s_access_token);
-	oidc_store_access_token_expiry(r, session, expires_in);
-
-	/* if we have a new refresh token (rolling refresh), store it in the session and overwrite the old one */
-	if (s_refresh_token != NULL)
-		oidc_session_set(r, session, OIDC_REFRESHTOKEN_SESSION_KEY,
-				s_refresh_token);
 
 	/* store the session */
 	oidc_session_save(r, session);

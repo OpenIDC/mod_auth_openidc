@@ -131,6 +131,8 @@
 #define OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_FORMAT "relative"
 /* default OAuth 2.0 non-spec compliant introspection expiry claim required */
 #define OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_REQUIRED TRUE
+/* default refresh interval in seconds after which claims from the user info endpoint should be refreshed */
+#define OIDC_DEFAULT_USERINFO_REFRESH_INTERVAL 0
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -1055,6 +1057,8 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->scrub_request_headers = OIDC_DEFAULT_SCRUB_REQUEST_HEADERS;
 	c->error_template = NULL;
 
+	c->provider.userinfo_refresh_interval = OIDC_DEFAULT_USERINFO_REFRESH_INTERVAL;
+
 	return c;
 }
 
@@ -1385,6 +1389,12 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->error_template =
 			add->error_template != NULL ?
 					add->error_template : base->error_template;
+
+	c->provider.userinfo_refresh_interval =
+			add->provider.userinfo_refresh_interval
+				!= OIDC_DEFAULT_USERINFO_REFRESH_INTERVAL ?
+					add->provider.userinfo_refresh_interval :
+					base->provider.userinfo_refresh_interval;
 
 	return c;
 }
@@ -2214,5 +2224,10 @@ const command_rec oidc_config_cmds[] = {
 				NULL,
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"The method in which an OAuth token can be presented; must be one or more of: header|post|query|cookie"),
+		AP_INIT_TAKE1("OIDCUserInfoRefreshInterval",
+				oidc_set_int_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, provider.userinfo_refresh_interval),
+				RSRC_CONF,
+				"Duration in seconds after which retrieved claims from the userinfo endpoint should be refreshed."),
 		{ NULL }
 };

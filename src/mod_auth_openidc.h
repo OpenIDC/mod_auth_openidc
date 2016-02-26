@@ -111,6 +111,8 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_SESSION_EXPIRES_SESSION_KEY "session_expires"
 /* key for storing the cookie domain in the session context */
 #define OIDC_COOKIE_DOMAIN_SESSION_KEY "cookie_domain"
+/* key for storing last user info refresh timestamp in the session context */
+#define OIDC_USERINFO_LAST_REFRESH_SESSION_KEY "userinfo_last_refresh"
 /* key for storing request state */
 #define OIDC_REQUEST_STATE_SESSION_KEY "request_state"
 /* key for storing the original URL */
@@ -239,6 +241,7 @@ typedef struct oidc_provider_t {
 	char *auth_request_params;
 	int session_max_duration;
 	char *pkce_method;
+	int userinfo_refresh_interval;
 
 	char *client_jwks_uri;
 	char *id_token_signed_response_alg;

@@ -1,6 +1,10 @@
+2/26/2016
+- add option to refresh claims from the userinfo endpoint using OIDCUserInfoRefreshInterval; see #119
+- bump to 1.8.8rc5
+
 2/23/2016
 - make state cookie a session cookie and clean expired cookies on entry (merge of fix-firefox-cookie-storage)
-- fix HTML error templatate initialization in vhosts
+- fix HTML error template initialization in vhosts
 - bump to 1.8.8rc4
 
 2/22/2016

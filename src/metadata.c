@@ -1156,6 +1156,11 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 	oidc_json_object_get_string(r->pool, j_conf, "response_type",
 			&provider->response_type, NULL);
 
+	/* see if we've got a custom user info refresh interval */
+	oidc_json_object_get_int(r->pool, j_conf, "userinfo_refresh_interval",
+			&provider->userinfo_refresh_interval,
+			cfg->provider.userinfo_refresh_interval);
+
 	return TRUE;
 }
 
