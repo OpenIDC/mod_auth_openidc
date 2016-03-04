@@ -1708,7 +1708,16 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 		return OK;
 	}
 
-	ap_log_error(APLOG_MARK, APLOG_INFO, 0, s, "%s - init", NAMEVERSION);
+	ap_log_error(APLOG_MARK, APLOG_INFO, 0, s,
+			"%s - init - %s, OPENSSL_THREADS=%s, APR_HAS_THREADS=%s",
+			NAMEVERSION,
+			OPENSSL_VERSION_TEXT,
+#if defined(OPENSSL_THREADS)
+			"yes"
+#else
+			"no"
+#endif
+			,APR_HAS_THREADS ? "yes" : "no");
 
 	curl_global_init(CURL_GLOBAL_ALL);
 	OpenSSL_add_all_digests();

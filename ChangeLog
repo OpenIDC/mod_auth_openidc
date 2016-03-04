@@ -1,3 +1,7 @@
+3/4/2016
+- log exact version of OpenSSL
+- bump to 1.8.8rc6
+
 2/26/2016
 - add option to refresh claims from the userinfo endpoint using OIDCUserInfoRefreshInterval; see #119
 - merge id_token claims in to the set of claims used for authorization for Apache >=2.4; see #120
