@@ -1,5 +1,6 @@
 3/5/2016
 - log exact version of OpenSSL and EC/GCM/Redis support
+- tidy up auth_openidc.conf docs
 - bump to 1.8.8rc6
 
 2/26/2016
