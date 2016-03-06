@@ -1,5 +1,5 @@
 3/6/2016
-- sanitize the OIDCAuthNHeader value before setting the header; thanks Ryan Kelly
+- sanitize the OIDCAuthNHeader value before setting the header; thanks @rfk
 - bump to 1.8.8rc7
 
 3/5/2016
