@@ -1,3 +1,7 @@
+3/6/2016
+- sanitize the OIDCAuthNHeader value before setting the header; thanks Ryan Kelly
+- bump to 1.8.8rc7
+
 3/5/2016
 - log exact version of OpenSSL and EC/GCM/Redis support
 - tidy up auth_openidc.conf docs

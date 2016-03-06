@@ -450,6 +450,7 @@ apr_byte_t oidc_util_file_read(request_rec *r, const char *path, apr_pool_t *poo
 apr_byte_t oidc_util_issuer_match(const char *a, const char *b);
 int oidc_util_html_send_error(request_rec *r, const char *html_template, const char *error, const char *description, int status_code);
 apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack, const char *needle);
+void oidc_util_set_header(request_rec *r, const char *s_name, const char *s_value);
 void oidc_util_set_app_info(request_rec *r, const char *s_key, const char *s_value, const char *claim_prefix, apr_byte_t as_header, apr_byte_t as_env_var);
 void oidc_util_set_app_infos(request_rec *r, const json_t *j_attrs, const char *claim_prefix, const char *claim_delimiter, apr_byte_t as_header, apr_byte_t as_env_var);
 apr_hash_t *oidc_util_spaced_string_to_hashtable(apr_pool_t *pool, const char *str);

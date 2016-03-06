@@ -1197,7 +1197,31 @@ apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack,
 }
 
 /*
- * set an HTTP header to pass information to the application
+ * set a HTTP header
+ */
+void oidc_util_set_header(request_rec *r, const char *s_name, const char *s_value) {
+	/*
+	 * sanitize the header value by replacing line feeds with spaces
+	 * just like the Apache header input algorithms do for incoming headers
+	 *
+	 * this makes it impossible to have line feeds in values but that is
+	 * compliant with RFC 7230 (and impossible for regular headers due to Apache's
+	 * parsing of headers anyway) and fixes a security vulnerability on
+	 * overwriting/setting outgoing headers when used in proxy mode
+	 */
+	char *p = NULL;
+	while ((p = strchr(s_value, '\n')))
+		*p = ' ';
+
+	/* do some logging about this event */
+	oidc_debug(r, "setting header \"%s: %s\"", s_name, s_value);
+
+	/* now set the actual header name/value */
+	apr_table_set(r->headers_in, s_name, s_value);
+}
+
+/*
+ * set a HTTP header and/or environment variable to pass information to the application
  */
 void oidc_util_set_app_info(request_rec *r, const char *s_key,
 		const char *s_value, const char *claim_prefix, apr_byte_t as_header,
@@ -1209,26 +1233,8 @@ void oidc_util_set_app_info(request_rec *r, const char *s_key,
 	const char *s_name = apr_psprintf(r->pool, "%s%s", claim_prefix,
 			oidc_normalize_header_name(r, s_key));
 
-	if (as_header) {
-		/*
-		 * sanitize the header value by replacing line feeds with spaces
-		 * just like the Apache header input algorithms do for incoming headers
-		 *
-		 * this makes it impossible to have line feeds in values but that is
-		 * compliant with RFC 7230 (and impossible for regular headers due to Apache's
-		 * parsing of headers anyway) and fixes a security vulnerability on
-		 * overwriting/setting outgoing headers when used in proxy mode
-		 */
-		char *p = NULL;
-		while ((p = strchr(s_value, '\n')))
-			*p = ' ';
-
-		/* do some logging about this event */
-		oidc_debug(r, "setting header \"%s: %s\"", s_name, s_value);
-
-		/* now set the actual header name/value */
-		apr_table_set(r->headers_in, s_name, s_value);
-	}
+	if (as_header)
+		oidc_util_set_header(r, s_name, s_value);
 
 	if (as_env_var) {
 

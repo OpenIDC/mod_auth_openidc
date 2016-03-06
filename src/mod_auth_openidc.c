@@ -1005,11 +1005,8 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	}
 
 	/* set the user authentication HTTP header if set and required */
-	if ((r->user != NULL) && (dir_cfg->authn_header != NULL)) {
-		oidc_debug(r, "setting authn header (%s) to: %s", dir_cfg->authn_header,
-				r->user);
-		apr_table_set(r->headers_in, dir_cfg->authn_header, r->user);
-	}
+	if ((r->user != NULL) && (dir_cfg->authn_header != NULL))
+		oidc_util_set_header(r, dir_cfg->authn_header, r->user);
 
 	/* set the claims in the app headers + request state */
 	if (oidc_set_app_claims(r, cfg, session, OIDC_CLAIMS_SESSION_KEY) == FALSE)
