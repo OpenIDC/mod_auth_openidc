@@ -43,7 +43,7 @@ AP_DECLARE(char *) ap_getword_conf(apr_pool_t *p, const char **line) {
 }
 
 AP_DECLARE(char *) ap_getword_white(apr_pool_t *p, const char **line) {
-	return "";
+	return 0;
 }
 
 AP_DECLARE(int) ap_hook_check_user_id(request_rec *r) {
