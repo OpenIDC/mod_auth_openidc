@@ -1,3 +1,6 @@
+3/7/2016
+- issue a warning if the "openid" scope is not requested
+
 3/6/2016
 - sanitize the OIDCAuthNHeader value before setting the header; thanks @rfk
 - bump to 1.8.8rc7

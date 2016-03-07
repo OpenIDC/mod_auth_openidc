@@ -123,8 +123,21 @@ int oidc_proto_authorization_request(request_rec *r,
 			oidc_util_escape_string(r,
 					json_string_value(
 							json_object_get(proto_state, "response_type"))));
-	authorization_request = apr_psprintf(r->pool, "%s&scope=%s",
-			authorization_request, oidc_util_escape_string(r, provider->scope));
+
+	if (provider->scope != NULL) {
+
+		if (!oidc_util_spaced_string_contains(r->pool, provider->scope,
+				"openid")) {
+			oidc_warn(r,
+					"the configuration for the \"scope\" parameter does not include the \"openid\" scope, your provider may not return an \"id_token\": %s",
+					provider->scope);
+		}
+
+		authorization_request = apr_psprintf(r->pool, "%s&scope=%s",
+				authorization_request,
+				oidc_util_escape_string(r, provider->scope));
+	}
+
 	authorization_request = apr_psprintf(r->pool, "%s&client_id=%s",
 			authorization_request,
 			oidc_util_escape_string(r, provider->client_id));
