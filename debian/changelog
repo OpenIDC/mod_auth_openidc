@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.8.8-1) unstable; urgency=medium
+
+  * pass bearer token in alternative ways
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Thu, 10 Mar 2016 12:22:38 +0100
+
 libapache2-mod-auth-openidc (1.8.7-1) unstable; urgency=medium
 
   * tighten up protocol checks
