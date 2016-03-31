@@ -382,7 +382,7 @@ apr_byte_t apr_jwe_decrypt_content_aesgcm(apr_pool_t *pool,
 		apr_jwt_error_t *err) {
 
 	EVP_CIPHER_CTX *ctx;
-	int outlen, rv;
+	int rv;
 
 	ctx = EVP_CIPHER_CTX_new();
 	if (!EVP_DecryptInit_ex(ctx, apr_jwe_enc_to_openssl_cipher(header->enc),
@@ -391,8 +391,9 @@ apr_byte_t apr_jwe_decrypt_content_aesgcm(apr_pool_t *pool,
 		return FALSE;
 	}
 
+	int p_len = cipher_text->len, f_len = 0;
 	unsigned char *plaintext = apr_palloc(pool,
-			cipher_text->len
+			p_len
 			+ EVP_CIPHER_block_size(
 					apr_jwe_enc_to_openssl_cipher(header->enc)));
 
@@ -407,13 +408,13 @@ apr_byte_t apr_jwe_decrypt_content_aesgcm(apr_pool_t *pool,
 		return FALSE;
 	}
 	/* zero or more calls to specify any AAD */
-	if (!EVP_DecryptUpdate(ctx, NULL, &outlen, (unsigned char *) aad,
+	if (!EVP_DecryptUpdate(ctx, NULL, &p_len, (unsigned char *) aad,
 			aad_len)) {
 		apr_jwt_error_openssl(err, "EVP_DecryptUpdate (aad)");
 		return FALSE;
 	}
 	/* decrypt plaintext */
-	if (!EVP_DecryptUpdate(ctx, plaintext, &outlen,
+	if (!EVP_DecryptUpdate(ctx, plaintext, &p_len,
 			(unsigned char *) cipher_text->value, cipher_text->len)) {
 		apr_jwt_error_openssl(err, "EVP_DecryptUpdate (ciphertext)");
 		return FALSE;
@@ -425,7 +426,8 @@ apr_byte_t apr_jwe_decrypt_content_aesgcm(apr_pool_t *pool,
 	}
 
 	/* finalise: note get no output for GCM */
-	rv = EVP_DecryptFinal_ex(ctx, plaintext, &outlen);
+	rv = EVP_DecryptFinal_ex(ctx, plaintext, &f_len);
+	plaintext[p_len + f_len] = '\0';
 
 	EVP_CIPHER_CTX_free(ctx);
 
