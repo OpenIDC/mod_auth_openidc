@@ -1,3 +1,7 @@
+4/1/2016
+- apr_jwe_decrypt_content_aesgcm() null terminate string, #128, thanks @jdennis
+- bump to 1.8.9rc0
+
 3/10/2016
 - release 1.8.8
 
