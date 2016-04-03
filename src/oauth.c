@@ -494,6 +494,21 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 }
 
 /*
+ * set the WWW-Authenticate response header according to https://tools.ietf.org/html/rfc6750#section-3
+ */
+int oidc_oauth_return_www_authenticate(request_rec *r, const char *error, const char *error_description) {
+	char *hdr = apr_psprintf(r->pool, "Bearer");
+	if (ap_auth_name(r) != NULL)
+		hdr = apr_psprintf(r->pool, "%s realm=\"%s\"", hdr, ap_auth_name(r));
+	if (error != NULL)
+		hdr = apr_psprintf(r->pool, "%s%s error=\"%s\"", hdr, (ap_auth_name(r) ? "," : ""), error);
+	if (error_description != NULL)
+		hdr = apr_psprintf(r->pool, "%s, error_description=\"%s\"", hdr, error_description);
+	apr_table_setn(r->err_headers_out, "WWW-Authenticate", hdr);
+	return HTTP_UNAUTHORIZED;
+}
+
+/*
  * main routine: handle OAuth 2.0 authentication/authorization
  */
 int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
@@ -533,7 +548,7 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 	/* get the bearer access token from the Authorization header */
 	const char *access_token = NULL;
 	if (oidc_oauth_get_bearer_token(r, &access_token) == FALSE)
-		return HTTP_UNAUTHORIZED;
+		return oidc_oauth_return_www_authenticate(r, "invalid_request", "No bearer token found in the request");
 
 	/* validate the obtained access token against the OAuth AS validation endpoint */
 	json_t *token = NULL;
@@ -544,18 +559,18 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 		/* we'll validate the token remotely */
 		if (oidc_oauth_resolve_access_token(r, c, access_token, &token,
 				&s_token) == FALSE)
-			return HTTP_UNAUTHORIZED;
+			return oidc_oauth_return_www_authenticate(r, "invalid_token", "Reference token could not be introspected");
 	} else {
 		/* no introspection endpoint is set, assume the token is a JWT and validate it locally */
 		if (oidc_oauth_validate_jwt_access_token(r, c, access_token, &token,
 				&s_token) == FALSE)
-			return HTTP_UNAUTHORIZED;
+			return oidc_oauth_return_www_authenticate(r, "invalid_token", "JWT token could not be validated");
 	}
 
 	/* check that we've got something back */
 	if (token == NULL) {
 		oidc_error(r, "could not resolve claims (token == NULL)");
-		return HTTP_UNAUTHORIZED;
+		return oidc_oauth_return_www_authenticate(r, "invalid_token", "No claims could be parsed from the token");
 	}
 
 	/* store the parsed token (cq. the claims from the response) in the request state so it can be accessed by the authz routines */
@@ -565,7 +580,7 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 	if (oidc_oauth_set_remote_user(r, c, token) == FALSE) {
 		oidc_error(r,
 				"remote user could not be set, aborting with HTTP_UNAUTHORIZED");
-		return HTTP_UNAUTHORIZED;
+		return oidc_oauth_return_www_authenticate(r, "invalid_token", "Could not set remote user");
 	}
 
 	/* get a handle to the director config */

@@ -1,3 +1,7 @@
+4/3/2016
+- return WWW-Authenticate header and error messages on OAuth paths where access is not granted; closes #124; thanks @spinto
+- bump to 1.8.9rc1
+
 4/1/2016
 - apr_jwe_decrypt_content_aesgcm() null terminate string, #128, thanks @jdennis
 - bump to 1.8.9rc0

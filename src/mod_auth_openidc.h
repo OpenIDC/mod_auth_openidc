@@ -412,6 +412,7 @@ int oidc_authz_worker(request_rec *r, const json_t *const claims, const require_
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 authz_status oidc_authz_worker24(request_rec *r, const json_t * const claims, const char *require_line);
 #endif
+int oidc_oauth_return_www_authenticate(request_rec *r, const char *error, const char *error_description);
 
 // oidc_config.c
 void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr);
