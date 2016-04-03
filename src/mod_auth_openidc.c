@@ -2651,7 +2651,7 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args, const 
 	if ((rc == HTTP_UNAUTHORIZED) && ap_auth_type(r)
 			&& (apr_strnatcasecmp((const char *) ap_auth_type(r), "oauth20")
 					== 0))
-		oidc_oauth_return_www_authenticate(r, "insufficient_scope", NULL);
+		oidc_oauth_return_www_authenticate(r, "insufficient_scope", "Different scope(s) or other claims required");
 
 	return rc;
 }

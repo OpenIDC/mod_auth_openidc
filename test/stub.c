@@ -29,6 +29,10 @@ AP_DECLARE(const char *) ap_auth_type(request_rec *r) {
 	return "openid-connect";
 }
 
+AP_DECLARE(const char *) ap_auth_name(request_rec *r) {
+	return NULL;
+}
+
 AP_DECLARE(long) ap_get_client_block(request_rec * r, char * buffer,
 		apr_size_t bufsiz) {
 	return 0;
