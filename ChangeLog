@@ -1,3 +1,7 @@
+4/9/2016
+- ensure that claims from id_token are available for authz also when OIDCPassIDTokenAs does not contain "claims"; closes #129
+- bump to 1.8.9rc2
+
 4/3/2016
 - return WWW-Authenticate header and error messages on OAuth paths where access is not granted; closes #124; thanks @spinto
 - bump to 1.8.9rc1

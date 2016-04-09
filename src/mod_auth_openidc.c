@@ -614,18 +614,13 @@ const char*oidc_request_state_get(request_rec *r, const char *key) {
  * in the session in to HTTP headers passed on to the application
  */
 static apr_byte_t oidc_set_app_claims(request_rec *r,
-		const oidc_cfg * const cfg, session_rec *session,
-		const char *session_key) {
+		const oidc_cfg * const cfg, session_rec *session, const char *s_claims) {
 
 	/* get a handle to the directory config */
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 
-	const char *s_claims = NULL;
 	json_t *j_claims = NULL;
-
-	/* get the string-encoded JSON object from the session */
-	oidc_session_get(r, session, session_key, &s_claims);
 
 	/* decode the string-encoded attributes in to a JSON structure */
 	if (s_claims != NULL) {
@@ -635,8 +630,8 @@ static apr_byte_t oidc_set_app_claims(request_rec *r,
 		if (j_claims == NULL) {
 			/* whoops, JSON has been corrupted */
 			oidc_error(r,
-					"unable to parse \"%s\" JSON stored in the session (%s), returning internal server error",
-					json_error.text, session_key);
+					"unable to parse \"%s\" JSON stored in the session: %s",
+					s_claims, json_error.text);
 
 			return FALSE;
 		}
@@ -647,9 +642,6 @@ static apr_byte_t oidc_set_app_claims(request_rec *r,
 		oidc_util_set_app_infos(r, j_claims, cfg->claim_prefix,
 				cfg->claim_delimiter, dir_cfg->pass_info_in_headers,
 				dir_cfg->pass_info_in_env_vars);
-
-		/* set the claims JSON string in the request state so it is available for authz purposes later on */
-		oidc_request_state_set(r, session_key, s_claims);
 
 		/* release resources */
 		json_decref(j_claims);
@@ -1008,23 +1000,31 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	if ((r->user != NULL) && (dir_cfg->authn_header != NULL))
 		oidc_util_set_header(r, dir_cfg->authn_header, r->user);
 
-	/* set the claims in the app headers + request state */
-	if (oidc_set_app_claims(r, cfg, session, OIDC_CLAIMS_SESSION_KEY) == FALSE)
+	const char *s_claims = NULL;
+	const char *s_id_token = NULL;
+
+	/* get the string-encoded claims JSON object from the session */
+	oidc_session_get(r, session, OIDC_CLAIMS_SESSION_KEY, &s_claims);
+	/* set the claims JSON string in the request state so it is available for authz purposes later on */
+	oidc_request_state_set(r, OIDC_CLAIMS_SESSION_KEY, s_claims);
+
+	/* set the claims in the app headers  */
+	if (oidc_set_app_claims(r, cfg, session, s_claims) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
+	/* get the string-encoded id_token JSON object from the session */
+	oidc_session_get(r, session, OIDC_IDTOKEN_CLAIMS_SESSION_KEY, &s_id_token);
+	/* set the claims JSON string in the request state so it is available for authz purposes later on */
+	oidc_request_state_set(r, OIDC_IDTOKEN_CLAIMS_SESSION_KEY, s_id_token);
+
 	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_CLAIMS)) {
-		/* set the id_token in the app headers + request state */
-		if (oidc_set_app_claims(r, cfg, session,
-				OIDC_IDTOKEN_CLAIMS_SESSION_KEY) == FALSE)
+		/* set the id_token in the app headers */
+		if (oidc_set_app_claims(r, cfg, session, s_id_token) == FALSE)
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
 	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_PAYLOAD)) {
-		const char *s_id_token = NULL;
-		/* get the string-encoded JSON object from the session */
-		oidc_session_get(r, session, OIDC_IDTOKEN_CLAIMS_SESSION_KEY,
-				&s_id_token);
-		/* pass it to the app in a header or environment variable */
+		/* pass the id_token JSON object to the app in a header or environment variable */
 		oidc_util_set_app_info(r, "id_token_payload", s_id_token,
 				OIDC_DEFAULT_HEADER_PREFIX, dir_cfg->pass_info_in_headers,
 				dir_cfg->pass_info_in_env_vars);
@@ -1034,7 +1034,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 		const char *s_id_token = NULL;
 		/* get the compact serialized JWT from the session */
 		oidc_session_get(r, session, OIDC_IDTOKEN_SESSION_KEY, &s_id_token);
-		/* pass it to the app in a header or environment variable */
+		/* pass the compact serialized JWT to the app in a header or environment variable */
 		oidc_util_set_app_info(r, "id_token", s_id_token,
 				OIDC_DEFAULT_HEADER_PREFIX, dir_cfg->pass_info_in_headers,
 				dir_cfg->pass_info_in_env_vars);
