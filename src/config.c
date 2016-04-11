@@ -1490,9 +1490,6 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 			if (c->provider.authorization_endpoint_url == NULL)
 				return oidc_check_config_error(s,
 						"OIDCProviderAuthorizationEndpoint");
-			// TODO: this depends on the configured OIDCResponseType now
-			//			if (c->provider.token_endpoint_url == NULL)
-			//				return oidc_check_config_error(s, "OIDCProviderTokenEndpoint");
 		} else {
 			apr_uri_parse(s->process->pconf, c->provider.metadata_url, &r_uri);
 			if (apr_strnatcmp(r_uri.scheme, "http") == 0) {
@@ -1503,9 +1500,6 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 		}
 		if (c->provider.client_id == NULL)
 			return oidc_check_config_error(s, "OIDCClientID");
-		// TODO: this depends on the configured OIDCResponseType now
-		if (c->provider.client_secret == NULL)
-			return oidc_check_config_error(s, "OIDCClientSecret");
 	} else {
 		if (c->provider.metadata_url != NULL) {
 			oidc_serror(s,
@@ -1524,8 +1518,8 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 	if (c->cookie_domain != NULL) {
 		if (!oidc_util_cookie_domain_valid(r_uri.hostname, c->cookie_domain)) {
 			oidc_serror(s,
-				"the domain (%s) configured in OIDCCookieDomain does not match the URL hostname (%s) of the configured OIDCRedirectURI (%s): setting \"state\" and \"session\" cookies will not work!",
-				c->cookie_domain, r_uri.hostname, c->redirect_uri);
+					"the domain (%s) configured in OIDCCookieDomain does not match the URL hostname (%s) of the configured OIDCRedirectURI (%s): setting \"state\" and \"session\" cookies will not work!",
+					c->cookie_domain, r_uri.hostname, c->redirect_uri);
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 	}

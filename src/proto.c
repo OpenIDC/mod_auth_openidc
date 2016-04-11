@@ -865,16 +865,22 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 
 	const char *response = NULL;
 
-	/* see if we need to do basic auth or auth-through-post-params (both applied through the HTTP POST method though) */
 	const char *basic_auth = NULL;
-	if ((provider->token_endpoint_auth == NULL)
-			|| (apr_strnatcmp(provider->token_endpoint_auth,
-					"client_secret_basic") == 0)) {
-		basic_auth = apr_psprintf(r->pool, "%s:%s", provider->client_id,
-				provider->client_secret);
+	if (provider->client_secret != NULL) {
+		/* see if we need to do basic auth or auth-through-post-params (both applied through the HTTP POST method though) */
+		if ((provider->token_endpoint_auth == NULL)
+				|| (apr_strnatcmp(provider->token_endpoint_auth,
+						"client_secret_basic") == 0)) {
+			basic_auth = apr_psprintf(r->pool, "%s:%s", provider->client_id,
+					provider->client_secret);
+		} else {
+			apr_table_addn(params, "client_id", provider->client_id);
+			apr_table_addn(params, "client_secret", provider->client_secret);
+		}
 	} else {
+		oidc_debug(r,
+				"no client secret is configured; calling the token endpoint without client authentication; only public clients are supported");
 		apr_table_addn(params, "client_id", provider->client_id);
-		apr_table_addn(params, "client_secret", provider->client_secret);
 	}
 
 	/* add any configured extra static parameters to the token endpoint */

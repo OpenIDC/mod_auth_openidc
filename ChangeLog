@@ -1,3 +1,8 @@
+4/10/2016
+- do not require OIDCClientSecret in configs; allows for Implicit grant without setting a dummy client secret; closes #130
+- allow for public clients calling the token endpoint
+- bump to 1.8.9rc3
+
 4/9/2016
 - ensure that claims from id_token are available for authz also when OIDCPassIDTokenAs does not contain "claims"; closes #129
 - bump to 1.8.9rc2
