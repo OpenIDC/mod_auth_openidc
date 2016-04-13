@@ -1,3 +1,7 @@
+4/13/2016
+- improve X-Forwarded-Host handling over Host in a) port detection and b) remove port from host value
+- bump to 1.8.9rc4
+
 4/10/2016
 - do not require OIDCClientSecret in configs; allows for Implicit grant without setting a dummy client secret; closes #130
 - allow for public clients calling the token endpoint
