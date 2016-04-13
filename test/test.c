@@ -1028,6 +1028,31 @@ static char * test_proto_validate_jwt(request_rec *r) {
 	return 0;
 }
 
+static char * test_current_url(request_rec *r) {
+
+	char *url = oidc_get_current_url(r);
+	TST_ASSERT_STR("test_headers (1)", url, "https://www.example.com");
+
+	apr_table_set(r->headers_in, "X-Forwarded-Host", "www.outer.com");
+	url = oidc_get_current_url(r);
+	TST_ASSERT_STR("test_headers (2)", url, "https://www.outer.com");
+
+	apr_table_set(r->headers_in, "X-Forwarded-Host", "www.outer.com:654");
+	url = oidc_get_current_url(r);
+	TST_ASSERT_STR("test_headers (3)", url, "https://www.outer.com:654");
+
+	apr_table_set(r->headers_in, "X-Forwarded-Port", "321");
+	url = oidc_get_current_url(r);
+	TST_ASSERT_STR("test_headers (4)", url, "https://www.outer.com:321");
+
+	apr_table_set(r->headers_in, "X-Forwarded-Proto", "http");
+	url = oidc_get_current_url(r);
+	TST_ASSERT_STR("test_headers (5)", url, "http://www.outer.com:321");
+
+	return 0;
+}
+
+
 static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	char *message;
 	TST_RUN(test_jwt_array_has_string, pool);
@@ -1054,6 +1079,8 @@ static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	TST_RUN(test_proto_authorization_request, r);
 	TST_RUN(test_proto_validate_nonce, r);
 	TST_RUN(test_proto_validate_jwt, r);
+
+	TST_RUN(test_current_url, r);
 
 	return 0;
 }
@@ -1085,7 +1112,7 @@ static request_rec * test_setup(apr_pool_t *pool) {
 
 	apr_pool_userdata_set("https", "scheme", NULL, request->pool);
 	request->server->server_hostname = "www.example.com";
-	request->connection->local_addr->port = 80;
+	request->connection->local_addr->port = 443;
 	request->unparsed_uri = "/bla?foo=bar&param1=value1";
 	request->args = "foo=bar&param1=value1";
 	apr_uri_parse(request->pool,
