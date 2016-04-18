@@ -1,3 +1,6 @@
+4/18/2016
+- fix get_current_url (proxy) case where r->parsed_uri.path would be null
+
 4/13/2016
 - improve X-Forwarded-Host handling over Host in a) port detection and b) remove port from host value
 - bump to 1.8.9rc4

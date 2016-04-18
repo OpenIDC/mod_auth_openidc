@@ -648,7 +648,7 @@ static char *oidc_util_get_path(request_rec *r) {
 	size_t i;
 	char *p;
 	p = r->parsed_uri.path;
-	if (p[0] == '\0')
+	if ((p == NULL) || (p[0] == '\0'))
 		return apr_pstrdup(r->pool, "/");
 	for (i = strlen(p) - 1; i > 0; i--)
 		if (p[i] == '/')
