@@ -1116,7 +1116,7 @@ static request_rec * test_setup(apr_pool_t *pool) {
 	request->unparsed_uri = "/bla?foo=bar&param1=value1";
 	request->args = "foo=bar&param1=value1";
 	apr_uri_parse(request->pool,
-			"http://www.example.com/bla?foo=bar&param1=value1",
+			"https://www.example.com/bla?foo=bar&param1=value1",
 			&request->parsed_uri);
 
 	auth_openidc_module.module_index = kIdx;
