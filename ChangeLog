@@ -1,3 +1,7 @@
+5/1/2016
+- avoid segmentation fault on invalid OIDC configuration when OIDCRedirectURI is not set; fixes #138; thanks @brianwcook
+- bump to 1.8.9rc5
+
 4/18/2016
 - fix get_current_url (proxy) case where r->parsed_uri.path would be null
 
