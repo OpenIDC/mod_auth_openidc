@@ -943,7 +943,12 @@ static const char * oidc_set_unauth_action(cmd_parms *cmd, void *m,
 		return NULL;
 	}
 
-	return "parameter must be one of 'auth', 'pass', or '401'";
+	if (apr_strnatcmp(arg, "410") == 0) {
+		dir_cfg->unauth_action = RETURN410;
+		return NULL;
+	}
+
+	return "parameter must be one of 'auth', 'pass', '401' or '410'";
 }
 
 /*
@@ -2220,7 +2225,7 @@ const command_rec oidc_config_cmds[] = {
 				oidc_set_unauth_action,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, unauth_action),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
-				"Sets the action taken when an unauthenticated request occurs: must be one of \"auth\" (default), \"pass\" , \"401\" or \"401xrw\"."),
+				"Sets the action taken when an unauthenticated request occurs: must be one of \"auth\" (default), \"pass\" , \"401\" or \"410\"."),
 		AP_INIT_TAKE1("OIDCPassClaimsAs",
 				oidc_set_pass_claims_as, NULL,
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,

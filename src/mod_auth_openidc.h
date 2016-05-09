@@ -203,7 +203,7 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_CACHE_SECTION_PROVIDER "provider"
 
 typedef enum {
-	AUTHENTICATE, PASS, RETURN401
+	AUTHENTICATE, PASS, RETURN401, RETURN410
 } unauthenticated_action;
 
 typedef struct oidc_jwks_uri_t {

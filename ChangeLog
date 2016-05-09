@@ -1,3 +1,7 @@
+5/9/2016
+- support 410 option on OIDCUnAuthAction; closes #141
+- bump to 1.8.9rc6
+
 5/1/2016
 - avoid segmentation fault on invalid OIDC configuration when OIDCRedirectURI is not set; fixes #138; thanks @brianwcook
 - bump to 1.8.9rc5

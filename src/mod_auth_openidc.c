@@ -2564,6 +2564,8 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 
 	/* find out which action we need to take when encountering an unauthenticated request */
 	switch (dir_cfg->unauth_action) {
+		case RETURN410:
+			return HTTP_GONE;
 		case RETURN401:
 			return HTTP_UNAUTHORIZED;
 		case PASS:
