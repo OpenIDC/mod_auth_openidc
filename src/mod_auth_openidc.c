@@ -922,11 +922,13 @@ static apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r,
 	if ((provider->userinfo_endpoint_url != NULL) && (interval > 0)) {
 
 		/* get the last refresh timestamp from the session info */
-		apr_time_t last_refresh;
+		apr_time_t last_refresh = 0;
 		const char *s_last_refresh = NULL;
 		oidc_session_get(r, session, OIDC_USERINFO_LAST_REFRESH_SESSION_KEY,
 				&s_last_refresh);
-		sscanf(s_last_refresh, "%" APR_TIME_T_FMT, &last_refresh);
+		if (s_last_refresh != NULL) {
+			sscanf(s_last_refresh, "%" APR_TIME_T_FMT, &last_refresh);
+		}
 
 		oidc_debug(r, "refresh needed in: %" APR_TIME_T_FMT " seconds", apr_time_sec(last_refresh + interval - apr_time_now()));
 
