@@ -1,3 +1,7 @@
+6/9/2016
+- add per-path configurable token introspection result cache expiry with OIDCOAuthTokenIntrospectionInterval
+- bump to 1.8.10rc0
+
 6/5/2016
 - release 1.8.9
 

@@ -271,6 +271,82 @@ static apr_byte_t oidc_oauth_parse_and_cache_token_expiry(request_rec *r,
 	return TRUE;
 }
 
+static apr_byte_t oidc_oauth_cache_access_token(request_rec *r, oidc_cfg *c,
+		apr_time_t cache_until, const char *access_token, json_t *json) {
+
+	oidc_debug(r, "caching introspection result");
+
+	json_t *cache_entry = json_object();
+	json_object_set(cache_entry, "response", json);
+	json_object_set_new(cache_entry, "timestamp",
+			json_integer(apr_time_sec(apr_time_now())));
+	char *cache_value = json_dumps(cache_entry, 0);
+
+	/* set it in the cache so subsequent request don't need to validate the access_token and get the claims anymore */
+	c->cache->set(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, access_token, cache_value,
+			cache_until);
+
+	json_decref(cache_entry);
+
+	return TRUE;
+}
+
+static apr_byte_t oidc_oauth_get_cached_access_token(request_rec *r,
+		oidc_cfg *c, const char *access_token, json_t **json) {
+	json_t *cache_entry = NULL;
+	const char *s_cache_entry = NULL;
+	json_error_t json_error;
+
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+
+	/* see if we've got the claims for this access_token cached already */
+	c->cache->get(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, access_token,
+			&s_cache_entry);
+
+	if (s_cache_entry == NULL)
+		return FALSE;
+
+	/* json decode the cache entry */
+	cache_entry = json_loads(s_cache_entry, 0, &json_error);
+	if (cache_entry == NULL) {
+		oidc_error(r, "cached JSON was corrupted: %s", json_error.text);
+		*json = NULL;
+		return FALSE;
+	}
+
+	/* compare the timestamp against the freshness requirement */
+	json_t *v = json_object_get(cache_entry, "timestamp");
+	apr_time_t now = apr_time_sec(apr_time_now());
+	if ((dir_cfg->oauth_token_introspect_interval > 0)
+			&& (now
+					> json_integer_value(v)
+					+ dir_cfg->oauth_token_introspect_interval)) {
+
+		/* printout info about the event */
+		char buf[APR_RFC822_DATE_LEN + 1];
+		apr_rfc822_date(buf, apr_time_from_sec(json_integer_value(v)));
+		oidc_debug(r,
+				"token that was validated/cached at: [%s], does not meet token freshness requirement: %d)",
+				buf, dir_cfg->oauth_token_introspect_interval);
+
+		/* invalidate the cache entry */
+		*json = NULL;
+		json_decref(cache_entry);
+		return FALSE;
+	}
+
+	oidc_debug(r,
+			"returning cached introspection result that meets freshness requirements: %s",
+			s_cache_entry);
+
+	/* we've got a cached introspection result that is still valid for this path's requirements */
+	*json = json_deep_copy(json_object_get(cache_entry, "response"));
+
+	json_decref(cache_entry);
+	return TRUE;
+}
+
 /*
  * resolve and validate an access_token against the configured Authorization Server
  */
@@ -278,22 +354,24 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 		const char *access_token, json_t **token, char **response) {
 
 	json_t *result = NULL;
-	const char *json = NULL;
 
 	/* see if we've got the claims for this access_token cached already */
-	c->cache->get(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, access_token, &json);
+	oidc_oauth_get_cached_access_token(r, c, access_token, &result);
 
-	if (json == NULL) {
+	if (result == NULL) {
+
+		const char *s_json = NULL;
 
 		/* not cached, go out and validate the access_token against the Authorization server and get the JSON claims back */
-		if (oidc_oauth_validate_access_token(r, c, access_token, &json) == FALSE) {
+		if (oidc_oauth_validate_access_token(r, c, access_token,
+				&s_json) == FALSE) {
 			oidc_error(r,
 					"could not get a validation response from the Authorization server");
 			return FALSE;
 		}
 
 		/* decode and see if it is not an error response somehow */
-		if (oidc_util_decode_json_and_check_error(r, json, &result) == FALSE)
+		if (oidc_util_decode_json_and_check_error(r, s_json, &result) == FALSE)
 			return FALSE;
 
 		json_t *active = json_object_get(result, "active");
@@ -329,8 +407,8 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 			}
 
 			/* set it in the cache so subsequent request don't need to validate the access_token and get the claims anymore */
-			c->cache->set(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, access_token,
-					json, cache_until);
+			oidc_oauth_cache_access_token(r, c, cache_until, access_token,
+					result);
 
 		} else {
 
@@ -346,20 +424,11 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 			}
 
 			/* set it in the cache so subsequent request don't need to validate the access_token and get the claims anymore */
-			c->cache->set(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, access_token,
-					json, cache_until);
+			oidc_oauth_cache_access_token(r, c, cache_until, access_token,
+					result);
 
 		}
 
-	} else {
-
-		/* we got the claims for this access_token in our cache, decode it in to a JSON structure */
-		json_error_t json_error;
-		result = json_loads(json, 0, &json_error);
-		if (result == NULL) {
-			oidc_error(r, "cached JSON was corrupted: %s", json_error.text);
-			return FALSE;
-		}
 	}
 
 	/* return the access_token JSON object */
@@ -377,9 +446,6 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 
 		/* return only the pimped access_token results */
 		*token = json_deep_copy(tkn);
-		char *s_token = json_dumps(*token, 0);
-		*response = apr_pstrdup(r->pool, s_token);
-		free(s_token);
 
 		json_decref(result);
 
@@ -389,9 +455,12 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 
 		/* assume spec compliant introspection */
 		*token = result;
-		*response = apr_pstrdup(r->pool, json);
 
 	}
+
+	char *s_token = json_dumps(*token, 0);
+	*response = apr_pstrdup(r->pool, s_token);
+	free(s_token);
 
 	return TRUE;
 }

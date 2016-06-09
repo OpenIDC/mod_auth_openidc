@@ -1419,6 +1419,7 @@ void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->pass_info_in_env_vars = 1;
 	c->oauth_accept_token_in = OIDC_OAUTH_ACCEPT_TOKEN_IN_DEFAULT;
 	c->oauth_accept_token_options = apr_hash_make(pool);
+	c->oauth_token_introspect_interval = 0;
 	return (c);
 }
 
@@ -1458,6 +1459,10 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->oauth_accept_token_options = apr_hash_merge(pool,
 			add->oauth_accept_token_options, base->oauth_accept_token_options,
 			NULL, NULL);
+	c->oauth_token_introspect_interval = (
+			add->oauth_token_introspect_interval != 0 ?
+					add->oauth_token_introspect_interval :
+					base->oauth_token_introspect_interval);
 	return (c);
 }
 
@@ -2240,5 +2245,10 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, provider.userinfo_refresh_interval),
 				RSRC_CONF,
 				"Duration in seconds after which retrieved claims from the userinfo endpoint should be refreshed."),
+		AP_INIT_TAKE1("OIDCOAuthTokenIntrospectionInterval",
+				ap_set_int_slot,
+				(void *) APR_OFFSETOF(oidc_dir_cfg, oauth_token_introspect_interval),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Sets the token introspection refresh interval."),
 		{ NULL }
 };
