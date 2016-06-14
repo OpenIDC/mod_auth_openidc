@@ -153,17 +153,9 @@ const EVP_MD *apr_jws_crypto_alg_to_evp(apr_pool_t *pool, const char *alg,
 }
 
 /*
- * verify HMAC signature on JWT
+ * calculate JWT HMAC signature
  */
-static apr_byte_t apr_jws_verify_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
-		apr_jwk_t *jwk, apr_jwt_error_t *err) {
-
-	if (jwk->type != APR_JWK_KEY_OCT) {
-		apr_jwt_error(err,
-				"key type of provided JWK cannot be used for HMAC verification: %d",
-				jwk->type);
-		return FALSE;
-	}
+apr_byte_t apr_jws_calculate_hmac(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk, unsigned char *md, unsigned int *md_len, apr_jwt_error_t *err) {
 
 	/* get the OpenSSL digest function */
 	const EVP_MD *digest = NULL;
@@ -174,14 +166,28 @@ static apr_byte_t apr_jws_verify_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
 	unsigned char *msg = (unsigned char *) jwt->message;
 	unsigned int msg_len = strlen(jwt->message);
 
+	/* apply the HMAC function to the message with the provided key */
+	if (!HMAC(digest, jwk->key.oct->k, jwk->key.oct->k_len, msg, msg_len, md,
+			md_len)) {
+		apr_jwt_error_openssl(err, "HMAC");
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/*
+ * verify HMAC signature on JWT
+ */
+static apr_byte_t apr_jws_verify_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
+		apr_jwk_t *jwk, apr_jwt_error_t *err) {
+
 	/* prepare the hash */
 	unsigned int md_len = 0;
 	unsigned char md[EVP_MAX_MD_SIZE];
 
-	/* apply the HMAC function to the message with the provided key */
-	if (!HMAC(digest, jwk->key.oct->k, jwk->key.oct->k_len, msg, msg_len, md,
-			&md_len)) {
-		apr_jwt_error_openssl(err, "HMAC");
+	/* calculate the HMAC hash */
+	if (apr_jws_calculate_hmac(pool, jwt, jwk, (unsigned char *)&md, &md_len, err) == FALSE) {
 		return FALSE;
 	}
 

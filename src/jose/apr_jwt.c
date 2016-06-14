@@ -53,6 +53,9 @@
 #include <apr_base64.h>
 
 #include "apr_jose.h"
+
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
 #include <openssl/opensslv.h>
 
 #ifdef WIN32
@@ -489,4 +492,44 @@ apr_byte_t apr_jwt_memcmp(const void *in_a, const void *in_b, size_t len) {
 		x |= a[i] ^ b[i];
 
 	return x ? FALSE : TRUE;
+}
+
+/*
+ * sign JWT with HMAC
+ */
+apr_byte_t apr_jwt_sign_hmac(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk, apr_jwt_error_t *err) {
+	if (jwk->type != APR_JWK_KEY_OCT) {
+		apr_jwt_error(err,
+				"key type of provided JWK cannot be used for HMAC signatures: %d",
+				jwk->type);
+		return FALSE;
+	}
+
+	jwt->header.alg = apr_pstrdup(pool, json_string_value(json_object_get(jwt->header.value.json, "alg")));
+	jwt->signature.bytes = apr_pcalloc(pool, EVP_MAX_MD_SIZE);
+
+	char *s_hdr = json_dumps(jwt->header.value.json, JSON_ENCODE_ANY);
+	apr_jwt_base64url_encode(pool, &jwt->header.value.str, s_hdr, strlen(s_hdr), 1);
+	free(s_hdr);
+
+	char *s_payload = json_dumps(jwt->payload.value.json, JSON_ENCODE_ANY);
+	apr_jwt_base64url_encode(pool, &jwt->payload.value.str, s_payload, strlen(s_payload), 1);
+	free(s_payload);
+
+	jwt->message = apr_psprintf(pool, "%s.%s", jwt->header.value.str, jwt->payload.value.str);
+
+	if (apr_jws_calculate_hmac(pool, jwt, jwk, jwt->signature.bytes, (unsigned int *)&jwt->signature.length, err) == FALSE) {
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/*
+ * serialize the JWT in compact encoding; this assumes signing was done previously
+ */
+char *apr_jwt_serialize(apr_pool_t *pool, apr_jwt_t *jwt) {
+	char *b64sig = NULL;
+	apr_jwt_base64url_encode(pool, &b64sig, (const char *)jwt->signature.bytes, jwt->signature.length, 1);
+	return apr_psprintf(pool, "%s.%s", jwt->message, b64sig);
 }

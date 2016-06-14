@@ -873,6 +873,54 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 						"client_secret_basic") == 0)) {
 			basic_auth = apr_psprintf(r->pool, "%s:%s", provider->client_id,
 					provider->client_secret);
+		} else if ((provider->token_endpoint_auth != NULL)
+				&& (apr_strnatcmp(provider->token_endpoint_auth,
+						"client_secret_jwt") == 0)) {
+
+			apr_jwt_t jwt;
+			jwt.header.value.json = json_object();
+			json_object_set_new(jwt.header.value.json, "typ",
+					json_string("JWT"));
+			json_object_set_new(jwt.header.value.json, "alg",
+					json_string("HS256"));
+
+			char *jti = NULL;
+			oidc_proto_generate_random_string(r, &jti, 16);
+			jwt.payload.value.json = json_object();
+			json_object_set_new(jwt.payload.value.json, "iss",
+					json_string(provider->client_id));
+			json_object_set_new(jwt.payload.value.json, "sub",
+					json_string(provider->client_id));
+			json_object_set_new(jwt.payload.value.json, "aud",
+					json_string(provider->token_endpoint_url));
+			json_object_set_new(jwt.payload.value.json, "jti",
+					json_string(jti));
+			json_object_set_new(jwt.payload.value.json, "exp",
+					json_integer(apr_time_sec(apr_time_now()) + 60));
+
+			apr_jwk_t *jwk = NULL;
+			apr_jwt_error_t err;
+			if (apr_jwk_parse_symmetric_key(r->pool, NULL,
+					(const unsigned char *) provider->client_secret,
+					strlen(provider->client_secret), &jwk, &err) == FALSE) {
+				oidc_error(r, "parsing of client secret into JWK failed: %s",
+						apr_jwt_e2s(r->pool, err));
+				return FALSE;
+			}
+
+			if (apr_jwt_sign_hmac(r->pool, &jwt, jwk, &err) == FALSE) {
+				oidc_error(r, "signing JWT failed: %s",
+						apr_jwt_e2s(r->pool, err));
+				return FALSE;
+			}
+
+			apr_table_addn(params, "client_assertion_type",
+					"urn:ietf:params:oauth:client-assertion-type:jwt-bearer");
+			apr_table_addn(params, "client_assertion",
+					apr_jwt_serialize(r->pool, &jwt));
+
+			apr_jwt_destroy(&jwt);
+
 		} else {
 			apr_table_addn(params, "client_id", provider->client_id);
 			apr_table_addn(params, "client_secret", provider->client_secret);
