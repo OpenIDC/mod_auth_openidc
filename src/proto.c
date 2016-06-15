@@ -932,7 +932,7 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 				apr_hash_this(hi, (const void **) &kid, &klen, (void **) &jwk);
 
 				json_object_set_new(jwt.header.value.json, "alg",
-						json_string("PS256"));
+						json_string("RS256"));
 				json_object_set_new(jwt.header.value.json, "kid",
 						json_string(kid));
 

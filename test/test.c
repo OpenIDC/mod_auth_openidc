@@ -258,6 +258,69 @@ static char *test_jwt_verify_rsa(apr_pool_t *pool) {
 	return 0;
 }
 
+static char *test_jwt_sign_verify(apr_pool_t *pool) {
+
+	apr_jwt_t jwt;
+	apr_jwk_t *jwk = NULL;
+	apr_jwt_error_t err;
+
+	char *s_key =
+			"{"
+			"\"kty\" : \"RSA\","
+			"\"n\": \"ym7jipmB37CgdonwGFVRuZmRfCl3lVh91fmm5CXHcNlUFZNR3D6Q9r63PpGRnfSsX3dOweh8BXd2AJ3mxvcE4z9xH--tA5EaOGI7IVF0Ip_i3flGg85xOADlb8rX3ez1NqkqMVJeeJypKhCCDNfvu_MXSdPLglU969YQF5xKAK8VFRfI6EfxxrZ_3Dvt2CKDV4LTPPJe9KI2_LuLQFBJ3MzlCTVxY6gyaljrWaDq7q5Lt3GB1KYS0Yd8COEQwsclOLm0Tddhg4cle-DfaTMi7xsTZsPKyac5x17Y4N4isHhZULuWHX7o1bs809xcj-_-YCRq6C61je_mzFhuF4pczw\","
+			"\"e\": \"AQAB\","
+			"\"d\": \"qvxW_e8DoCnUn8uLHUKTsS1hkXqFI4SHZYFl0jeG6m7ncwHolxvR3ljg9tyGHuFX55sizu7MMuHgrkyxbUWgv0ILD2qmvOiHOTDfuRjP-58JRW0UfqiVQTSgl3jCNRW9WdoxZU-ptD6_NGSVNLwAJsUB2r4mm4PctaMuHINKjp_TnuD-5vfi9Tj88hbqvX_0j8T62ZaLRdERb1KGDM_8bnqQpnLZ0MZQnpLQ8cKIcjj7p0II6pzvqgdO1RqfYx7qG0cbcIRh26rnB9X4rp5BrbvDzKe6NOqacZUcNUmbPzI01-hiT0HgJvV592CBOxt2T31ltQ4wCEdzhQeT3n9_wQ\""
+			"}";
+
+	apr_hash_t *keys = apr_hash_make(pool);
+
+	TST_ASSERT_ERR("apr_jwk_parse_json",
+			_jwk_parse(pool, s_key, &jwk, &err) == 0, pool, err);
+
+	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
+
+	jwt.payload.value.json = json_object();
+	json_object_set_new(jwt.payload.value.json, "iss",
+			json_string("https://example.org"));
+	json_object_set_new(jwt.payload.value.json, "sub",
+			json_string("https://example.org"));
+	json_object_set_new(jwt.payload.value.json, "aud",
+			json_string("sample_client"));
+	json_object_set_new(jwt.payload.value.json, "exp",
+			json_integer(apr_time_sec(apr_time_now()) + 60));
+	json_object_set_new(jwt.payload.value.json, "iat",
+			json_integer(apr_time_sec(apr_time_now())));
+
+	jwt.header.value.json = json_object();
+	json_object_set_new(jwt.header.value.json, "typ", json_string("JWT"));
+
+	json_object_set_new(jwt.header.value.json, "alg", json_string("RS256"));
+
+	TST_ASSERT_ERR("apr_jwt_sign (rsa)", apr_jwt_sign(pool, &jwt, jwk, &err),
+			pool, err);
+
+	TST_ASSERT_ERR("apr_jws_verify (rsa)",
+			apr_jws_verify(pool, &jwt, keys, &err), pool, err);
+
+	const char *secret = "my_secret4321";
+	TST_ASSERT_ERR("apr_jwk_parse_symmetric_key",
+			apr_jwk_parse_symmetric_key(pool, NULL, (const unsigned char *)secret, strlen(secret), &jwk, &err),
+			pool, err);
+	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
+
+	json_object_set_new(jwt.header.value.json, "alg", json_string("HS256"));
+
+	TST_ASSERT_ERR("apr_jwt_sign (hmac)", apr_jwt_sign(pool, &jwt, jwk, &err),
+			pool, err);
+
+	TST_ASSERT_ERR("apr_jws_verify (hmac)",
+			apr_jws_verify(pool, &jwt, keys, &err), pool, err);
+
+	apr_jwt_destroy(&jwt);
+
+	return 0;
+}
+
 static char *test_plaintext_jwt_parse(apr_pool_t *pool) {
 
 	// from http://tools.ietf.org/html/draft-ietf-oauth-json-web-token-20
@@ -1072,6 +1135,7 @@ static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	TST_RUN(test_jwt_decrypt_gcm, pool);
 #endif
 	TST_RUN(test_jwt_verify_rsa, pool);
+	TST_RUN(test_jwt_sign_verify, pool);
 
 	TST_RUN(test_proto_validate_access_token, r);
 	TST_RUN(test_proto_validate_code, r);
