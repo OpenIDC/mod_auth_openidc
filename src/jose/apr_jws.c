@@ -288,6 +288,120 @@ int apr_jws_hash_length(const char *alg) {
 }
 
 /*
+ * calculate JWT RSA signature
+ */
+apr_byte_t apr_jws_calculate_rsa(apr_pool_t *pool, apr_jwt_t *jwt,
+		apr_jwk_t *jwk, unsigned char *md, unsigned int *md_len,
+		apr_jwt_error_t *err) {
+
+	apr_byte_t rc = FALSE;
+
+	/* get the OpenSSL digest function */
+	const EVP_MD *digest = NULL;
+	if ((digest = apr_jws_crypto_alg_to_evp(pool, jwt->header.alg, err)) == NULL)
+		return FALSE;
+
+	EVP_MD_CTX ctx;
+	EVP_MD_CTX_init(&ctx);
+
+	RSA * privkey = RSA_new();
+
+	BIGNUM * modulus = BN_new();
+	BIGNUM * exponent = BN_new();
+	BIGNUM * private_exponent = BN_new();
+
+	BN_bin2bn(jwk->key.rsa->modulus, jwk->key.rsa->modulus_len, modulus);
+	BN_bin2bn(jwk->key.rsa->exponent, jwk->key.rsa->exponent_len, exponent);
+	BN_bin2bn(jwk->key.rsa->private_exponent,
+			jwk->key.rsa->private_exponent_len, private_exponent);
+
+	privkey->n = modulus;
+	privkey->e = exponent;
+	privkey->d = private_exponent;
+
+	EVP_PKEY* pRsaKey = EVP_PKEY_new();
+	if (!EVP_PKEY_assign_RSA(pRsaKey, privkey)) {
+		pRsaKey = NULL;
+		apr_jwt_error_openssl(err, "EVP_PKEY_assign_RSA");
+		goto end;
+	}
+
+	if (apr_jws_signature_starts_with(pool, jwt->header.alg, "PS") == TRUE) {
+
+		unsigned char *pDigest = apr_pcalloc(pool, RSA_size(privkey));
+		unsigned int uDigestLen = RSA_size(privkey);
+
+		if (!EVP_DigestInit(&ctx, digest)) {
+			apr_jwt_error_openssl(err, "EVP_DigestInit");
+			goto end;
+		}
+		if (!EVP_DigestUpdate(&ctx, jwt->message, strlen(jwt->message))) {
+			apr_jwt_error_openssl(err, "EVP_DigestUpdate");
+			goto end;
+		}
+		if (!EVP_DigestFinal(&ctx, pDigest, &uDigestLen)) {
+			apr_jwt_error_openssl(err, "wrong key? EVP_DigestFinal");
+			goto end;
+		}
+
+		unsigned char *pPadded = apr_pcalloc(pool, RSA_size(privkey));
+
+		int status = 0;
+		status = RSA_padding_add_PKCS1_PSS(privkey, pPadded, pDigest, digest,
+				-2 /* maximum salt length*/);
+		if (!status) {
+			apr_jwt_error_openssl(err, "RSA_padding_add_PKCS1_PSS");
+			goto end;
+		}
+
+		jwt->signature.length = RSA_size(privkey);
+		status = RSA_private_encrypt(jwt->signature.length, pPadded,
+				jwt->signature.bytes, privkey, RSA_NO_PADDING);
+		if (status == -1) {
+			apr_jwt_error_openssl(err,
+					apr_psprintf(pool,
+							"RSA_private_encrypt: digest_len=%d, sig_len=%d",
+							uDigestLen, jwt->signature.length));
+			goto end;
+		}
+
+		rc = TRUE;
+
+	} else {
+
+		if (!EVP_SignInit_ex(&ctx, digest, NULL)) {
+			apr_jwt_error_openssl(err, "EVP_SignInit_ex");
+			goto end;
+		}
+
+		if (!EVP_SignUpdate(&ctx, jwt->message, strlen(jwt->message))) {
+			apr_jwt_error_openssl(err, "EVP_SignUpdate");
+			goto end;
+		}
+
+		if (!EVP_SignFinal(&ctx, (unsigned char *) jwt->signature.bytes,
+				(unsigned int *) &jwt->signature.length, pRsaKey)) {
+			apr_jwt_error_openssl(err, "wrong key? EVP_SignFinal");
+			goto end;
+		}
+
+		rc = TRUE;
+
+	}
+
+	end:
+
+	if (pRsaKey) {
+		EVP_PKEY_free(pRsaKey);
+	} else if (privkey) {
+		RSA_free(privkey);
+	}
+	EVP_MD_CTX_cleanup(&ctx);
+
+	return rc;
+}
+
+/*
  * verify HMAC signature on JWT
  */
 static apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt,

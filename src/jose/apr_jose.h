@@ -288,9 +288,13 @@ int apr_jws_hash_length(const char *alg);
 apr_byte_t apr_jws_calculate_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
 		apr_jwk_t *jwk, unsigned char *md, unsigned int *md_len,
 		apr_jwt_error_t *err);
+/* calculate the RSA signature on a JWS */
+apr_byte_t apr_jws_calculate_rsa(apr_pool_t *pool, apr_jwt_t *jwt,
+		apr_jwk_t *jwk, unsigned char *md, unsigned int *md_len,
+		apr_jwt_error_t *err);
 
 /* sign a JWT */
-apr_byte_t apr_jwt_sign_hmac(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk, apr_jwt_error_t *err);
+apr_byte_t apr_jwt_sign(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk, apr_jwt_error_t *err);
 /* serialize a JWT */
 char *apr_jwt_serialize(apr_pool_t *pool, apr_jwt_t *jwt);
 

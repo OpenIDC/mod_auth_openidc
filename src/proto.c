@@ -874,15 +874,14 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 			basic_auth = apr_psprintf(r->pool, "%s:%s", provider->client_id,
 					provider->client_secret);
 		} else if ((provider->token_endpoint_auth != NULL)
-				&& (apr_strnatcmp(provider->token_endpoint_auth,
-						"client_secret_jwt") == 0)) {
+				&& ((apr_strnatcmp(provider->token_endpoint_auth,
+						"client_secret_jwt") == 0) || (apr_strnatcmp(provider->token_endpoint_auth,
+								"private_key_jwt") == 0))) {
 
 			apr_jwt_t jwt;
 			jwt.header.value.json = json_object();
 			json_object_set_new(jwt.header.value.json, "typ",
 					json_string("JWT"));
-			json_object_set_new(jwt.header.value.json, "alg",
-					json_string("HS256"));
 
 			char *jti = NULL;
 			oidc_proto_generate_random_string(r, &jti, 16);
@@ -897,18 +896,49 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 					json_string(jti));
 			json_object_set_new(jwt.payload.value.json, "exp",
 					json_integer(apr_time_sec(apr_time_now()) + 60));
+			json_object_set_new(jwt.payload.value.json, "iat",
+					json_integer(apr_time_sec(apr_time_now())));
 
 			apr_jwk_t *jwk = NULL;
 			apr_jwt_error_t err;
-			if (apr_jwk_parse_symmetric_key(r->pool, NULL,
-					(const unsigned char *) provider->client_secret,
-					strlen(provider->client_secret), &jwk, &err) == FALSE) {
-				oidc_error(r, "parsing of client secret into JWK failed: %s",
-						apr_jwt_e2s(r->pool, err));
-				return FALSE;
+
+			if (apr_strnatcmp(provider->token_endpoint_auth,
+					"client_secret_jwt") == 0) {
+
+				if (apr_jwk_parse_symmetric_key(r->pool, NULL,
+						(const unsigned char *) provider->client_secret,
+						strlen(provider->client_secret), &jwk, &err) == FALSE) {
+					oidc_error(r,
+							"parsing of client secret into JWK failed: %s",
+							apr_jwt_e2s(r->pool, err));
+					return FALSE;
+				}
+
+				json_object_set_new(jwt.header.value.json, "alg",
+						json_string("HS256"));
+
+			} else {
+
+				if (cfg->private_keys == NULL) {
+					oidc_error(r,
+							"no private keys have been configured to use for private_key_jwt client authentication (OIDCPrivateKeyFiles)");
+					return FALSE;
+				}
+
+				char *kid = NULL;
+				apr_ssize_t klen = 0;
+				apr_hash_index_t *hi = apr_hash_first(r->pool,
+						cfg->private_keys);
+				apr_hash_this(hi, (const void **) &kid, &klen, (void **) &jwk);
+
+				json_object_set_new(jwt.header.value.json, "alg",
+						json_string("PS256"));
+				json_object_set_new(jwt.header.value.json, "kid",
+						json_string(kid));
+
 			}
 
-			if (apr_jwt_sign_hmac(r->pool, &jwt, jwk, &err) == FALSE) {
+			if (apr_jwt_sign(r->pool, &jwt, jwk, &err) == FALSE) {
 				oidc_error(r, "signing JWT failed: %s",
 						apr_jwt_e2s(r->pool, err));
 				return FALSE;

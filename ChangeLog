@@ -1,5 +1,5 @@
-6/14/2016
-- add support for JWT based client authentication to the token endpoint (client_secret_jwt)
+6/15/2016
+- add support for JWT based client authentication to the token endpoint (client_secret_jwt, private_key_jwt)
 - bump to 1.8.10rc1
 
 6/9/2016

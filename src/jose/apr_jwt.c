@@ -494,10 +494,27 @@ apr_byte_t apr_jwt_memcmp(const void *in_a, const void *in_b, size_t len) {
 	return x ? FALSE : TRUE;
 }
 
+static void apr_jwt_serialize_message(apr_pool_t *pool, apr_jwt_t *jwt) {
+
+	char *s_hdr = json_dumps(jwt->header.value.json, JSON_ENCODE_ANY);
+	apr_jwt_base64url_encode(pool, &jwt->header.value.str, s_hdr, strlen(s_hdr),
+			0);
+	free(s_hdr);
+
+	char *s_payload = json_dumps(jwt->payload.value.json, JSON_ENCODE_ANY);
+	apr_jwt_base64url_encode(pool, &jwt->payload.value.str, s_payload,
+			strlen(s_payload), 0);
+	free(s_payload);
+
+	jwt->message = apr_psprintf(pool, "%s.%s", jwt->header.value.str,
+			jwt->payload.value.str);
+}
+
 /*
  * sign JWT with HMAC
  */
-apr_byte_t apr_jwt_sign_hmac(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk, apr_jwt_error_t *err) {
+static apr_byte_t apr_jwt_sign_hmac(apr_pool_t *pool, apr_jwt_t *jwt,
+		apr_jwk_t *jwk, apr_jwt_error_t *err) {
 	if (jwk->type != APR_JWK_KEY_OCT) {
 		apr_jwt_error(err,
 				"key type of provided JWK cannot be used for HMAC signatures: %d",
@@ -505,20 +522,10 @@ apr_byte_t apr_jwt_sign_hmac(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk, a
 		return FALSE;
 	}
 
-	jwt->header.alg = apr_pstrdup(pool, json_string_value(json_object_get(jwt->header.value.json, "alg")));
-	jwt->signature.bytes = apr_pcalloc(pool, EVP_MAX_MD_SIZE);
+	apr_jwt_serialize_message(pool, jwt);
 
-	char *s_hdr = json_dumps(jwt->header.value.json, JSON_ENCODE_ANY);
-	apr_jwt_base64url_encode(pool, &jwt->header.value.str, s_hdr, strlen(s_hdr), 1);
-	free(s_hdr);
-
-	char *s_payload = json_dumps(jwt->payload.value.json, JSON_ENCODE_ANY);
-	apr_jwt_base64url_encode(pool, &jwt->payload.value.str, s_payload, strlen(s_payload), 1);
-	free(s_payload);
-
-	jwt->message = apr_psprintf(pool, "%s.%s", jwt->header.value.str, jwt->payload.value.str);
-
-	if (apr_jws_calculate_hmac(pool, jwt, jwk, jwt->signature.bytes, (unsigned int *)&jwt->signature.length, err) == FALSE) {
+	if (apr_jws_calculate_hmac(pool, jwt, jwk, jwt->signature.bytes,
+			(unsigned int *) &jwt->signature.length, err) == FALSE) {
 		return FALSE;
 	}
 
@@ -526,10 +533,59 @@ apr_byte_t apr_jwt_sign_hmac(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk, a
 }
 
 /*
+ * sign JWT with HMAC
+ */
+static apr_byte_t apr_jwt_sign_rsa(apr_pool_t *pool, apr_jwt_t *jwt,
+		apr_jwk_t *jwk, apr_jwt_error_t *err) {
+	if (jwk->type != APR_JWK_KEY_RSA) {
+		apr_jwt_error(err,
+				"key type of provided JWK cannot be used for RSA signatures: %d",
+				jwk->type);
+		return FALSE;
+	}
+
+	apr_jwt_serialize_message(pool, jwt);
+
+	if (apr_jws_calculate_rsa(pool, jwt, jwk, jwt->signature.bytes,
+			(unsigned int *) &jwt->signature.length, err) == FALSE) {
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/*
+ * sign JWT
+ */
+apr_byte_t apr_jwt_sign(apr_pool_t *pool, apr_jwt_t *jwt, apr_jwk_t *jwk,
+		apr_jwt_error_t *err) {
+
+	jwt->header.alg = apr_pstrdup(pool,
+			json_string_value(json_object_get(jwt->header.value.json, "alg")));
+	jwt->signature.bytes = apr_pcalloc(pool, EVP_MAX_MD_SIZE);
+	jwt->signature.length = EVP_MAX_MD_SIZE;
+
+	if (apr_jws_signature_is_hmac(pool, jwt)) {
+		return apr_jwt_sign_hmac(pool, jwt, jwk, err);
+	}
+
+	if (apr_jws_signature_is_rsa(pool, jwt)) {
+		return apr_jwt_sign_rsa(pool, jwt, jwk, err);
+	}
+
+	apr_jwt_error(err,
+			"unsupported signing algorithm: %s, only RSA (RS*, PS*) and HMAC (HS*) are supported",
+			jwt->header.alg);
+
+	return FALSE;
+}
+
+/*
  * serialize the JWT in compact encoding; this assumes signing was done previously
  */
 char *apr_jwt_serialize(apr_pool_t *pool, apr_jwt_t *jwt) {
 	char *b64sig = NULL;
-	apr_jwt_base64url_encode(pool, &b64sig, (const char *)jwt->signature.bytes, jwt->signature.length, 1);
+	apr_jwt_base64url_encode(pool, &b64sig, (const char *) jwt->signature.bytes,
+			jwt->signature.length, 0);
 	return apr_psprintf(pool, "%s.%s", jwt->message, b64sig);
 }

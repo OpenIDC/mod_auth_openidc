@@ -359,10 +359,13 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 			if (strcmp(json_string_value(elem), "client_secret_jwt") == 0) {
 				break;
 			}
+			if (strcmp(json_string_value(elem), "private_key_jwt") == 0) {
+				break;
+			}
 		}
 		if (i == json_array_size(j_token_endpoint_auth_methods_supported)) {
 			oidc_error(r,
-					"could not find a supported value [client_secret_post|client_secret_basic|client_secret_jwt] in provider (%s) metadata for entry \"token_endpoint_auth_methods_supported\"",
+					"could not find a supported value [client_secret_post|client_secret_basic|client_secret_jwt|private_key_jwt] in provider (%s) metadata for entry \"token_endpoint_auth_methods_supported\"",
 					issuer);
 			return FALSE;
 		}
@@ -1048,7 +1051,8 @@ apr_byte_t oidc_metadata_provider_parse(request_rec *r, json_t *j_provider,
 						|| (apr_strnatcmp(json_string_value(elem),
 								"client_secret_basic") == 0)
 								|| (apr_strnatcmp(json_string_value(elem),
-										"client_secret_jwt") == 0)) {
+										"client_secret_jwt") == 0) || (apr_strnatcmp(json_string_value(elem),
+												"private_key_jwt") == 0)) {
 					token_endpoint_auth = json_string_value(elem);
 					break;
 				}
@@ -1192,7 +1196,8 @@ apr_byte_t oidc_metadata_client_parse(request_rec *r, oidc_cfg *cfg,
 		if ((apr_strnatcmp(token_endpoint_auth, "client_secret_post") == 0)
 				|| (apr_strnatcmp(token_endpoint_auth, "client_secret_basic")
 						== 0)
-						|| (apr_strnatcmp(token_endpoint_auth, "client_secret_jwt") == 0)) {
+						|| (apr_strnatcmp(token_endpoint_auth, "client_secret_jwt") == 0)
+						|| (apr_strnatcmp(token_endpoint_auth, "private_key_jwt") == 0)) {
 			provider->token_endpoint_auth = apr_pstrdup(r->pool,
 					token_endpoint_auth);
 		} else {
