@@ -2579,6 +2579,7 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 		case RETURN401:
 			return HTTP_UNAUTHORIZED;
 		case PASS:
+			r->user = "";
 			return OK;
 		case AUTHENTICATE:
 			/* if this is a Javascript path we won't redirect the user and create a state cookie */
@@ -2652,6 +2653,15 @@ static void oidc_authz_get_claims_and_idtoken(request_rec *r, json_t **claims,
  */
 authz_status oidc_authz_checker(request_rec *r, const char *require_args, const void *parsed_require_args) {
 
+	/* check for anonymous access and PASS mode */
+	if (r->user != NULL && strlen(r->user) == 0) {
+		r->user = NULL;
+		/* get a handle to the directory config */
+		oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+				&auth_openidc_module);
+		if (dir_cfg->unauth_action == PASS) return AUTHZ_GRANTED;
+	}
+
 	/* get the set of claims from the request state (they've been set in the authentication part earlier */
 	json_t *claims = NULL, *id_token = NULL;
 	oidc_authz_get_claims_and_idtoken(r, &claims, &id_token);
@@ -2680,6 +2690,15 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args, const 
  * handles both OpenID Connect and OAuth 2.0 in the same way, based on the claims stored in the request context
  */
 int oidc_auth_checker(request_rec *r) {
+
+	/* check for anonymous access and PASS mode */
+	if (r->user != NULL && strlen(r->user) == 0) {
+		r->user = NULL;
+		/* get a handle to the directory config */
+		oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+				&auth_openidc_module);
+		if (dir_cfg->unauth_action == PASS) return OK;
+	}
 
 	/* get the set of claims from the request state (they've been set in the authentication part earlier */
 	json_t *claims = NULL, *id_token = NULL;
