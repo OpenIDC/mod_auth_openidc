@@ -1192,7 +1192,8 @@ static int oidc_authorization_response_error(request_rec *r, oidc_cfg *c,
  * set the unique user identifier that will be propagated in the Apache r->user and REMOTE_USER variables
  */
 static apr_byte_t oidc_get_remote_user(request_rec *r, oidc_cfg *c,
-		oidc_provider_t *provider, apr_jwt_t *jwt, char **user) {
+		oidc_provider_t *provider, apr_jwt_t *jwt, char **user,
+		const char *s_claims) {
 
 	char *issuer = provider->issuer;
 	char *claim_name = apr_pstrdup(r->pool, c->remote_user_claim.claim_name);
@@ -1206,12 +1207,21 @@ static apr_byte_t oidc_get_remote_user(request_rec *r, oidc_cfg *c,
 						apr_pstrdup(r->pool, issuer + strlen("https://"));
 	}
 
-	/* extract the username claim (default: "sub") from the id_token payload */
+	/* extract the username claim (default: "sub") from the id_token payload or user claims */
 	char *username = NULL;
-	if (apr_jwt_get_string(r->pool, jwt->payload.value.json, claim_name, TRUE,
-			&username, NULL) == FALSE) {
+	json_error_t json_error;
+	json_t *claims = json_loads(s_claims, 0, &json_error);
+	if (claims == NULL) {
+		username = apr_pstrdup(r->pool, json_string_value(json_object_get(jwt->payload.value.json, claim_name)));
+	} else {
+		oidc_util_json_merge(jwt->payload.value.json, claims);
+		username = apr_pstrdup(r->pool, json_string_value(json_object_get(claims, claim_name)));
+		json_decref(claims);
+	}
+
+	if (username == NULL) {
 		oidc_error(r,
-				"OIDCRemoteUserClaim is set to \"%s\", but the id_token JSON payload did not contain a \"%s\" string",
+				"OIDCRemoteUserClaim is set to \"%s\", but the id_token JSON payload and user claims did not contain a \"%s\" string",
 				c->remote_user_claim.claim_name, claim_name);
 		*user = NULL;
 		return FALSE;
@@ -1220,7 +1230,7 @@ static apr_byte_t oidc_get_remote_user(request_rec *r, oidc_cfg *c,
 	/* set the unique username in the session (will propagate to r->user/REMOTE_USER) */
 	*user = post_fix_with_issuer ?
 			apr_psprintf(r->pool, "%s@%s", username, issuer) :
-			apr_pstrdup(r->pool, username);
+			username;
 
 	if (c->remote_user_claim.reg_exp != NULL) {
 
@@ -1491,7 +1501,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 			json_string_value(json_object_get(proto_state, "original_method")));
 
 	/* set the user */
-	if (oidc_get_remote_user(r, c, provider, jwt, &r->user) == TRUE) {
+	if (oidc_get_remote_user(r, c, provider, jwt, &r->user, claims) == TRUE) {
 
 		/* session management: if the user in the new response is not equal to the old one, error out */
 		if ((json_object_get(proto_state, "prompt") != NULL)
