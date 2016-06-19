@@ -1,3 +1,6 @@
+6/19/2016
+- allow setting OIDCRemoteUserClaim with values obtained from the userinfo endpoint; thanks @steve-dave
+
 6/15/2016
 - add support for JWT based client authentication to the token endpoint (client_secret_jwt, private_key_jwt)
 - bump to 1.8.10rc1
