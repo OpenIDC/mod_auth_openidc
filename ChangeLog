@@ -1,5 +1,7 @@
 6/19/2016
 - allow setting OIDCRemoteUserClaim with values obtained from the userinfo endpoint; thanks @steve-dave
+- fix OIDCUnAuthAction pass mode for Apache 2.4 and in case `Require claim` primitives used for 2.4 and 2.2; thanks @steve-dave
+- bump to 1.8.10rc2
 
 6/15/2016
 - add support for JWT based client authentication to the token endpoint (client_secret_jwt, private_key_jwt)
