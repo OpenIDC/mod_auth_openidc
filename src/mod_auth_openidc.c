@@ -2681,6 +2681,15 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args, const 
  */
 int oidc_auth_checker(request_rec *r) {
 
+	/* check for anonymous access and PASS mode */
+	if (r->user != NULL && strlen(r->user) == 0) {
+		r->user = NULL;
+		/* get a handle to the directory config */
+		oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+				&auth_openidc_module);
+		if (dir_cfg->unauth_action == PASS) return OK;
+	}
+
 	/* get the set of claims from the request state (they've been set in the authentication part earlier */
 	json_t *claims = NULL, *id_token = NULL;
 	oidc_authz_get_claims_and_idtoken(r, &claims, &id_token);
