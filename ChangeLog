@@ -1,6 +1,7 @@
 6/20/2016
 - fix memory leak in OAuth access token introspection result caching (introduced only in 1.8.10rc0)
 - fix setting private_key_jwt or client_secret_jwt with OIDCProviderTokenEndpointAuth
+- bump to 1.8.10rc3
 
 6/19/2016
 - allow setting OIDCRemoteUserClaim with values obtained from the userinfo endpoint; thanks @steve-dave
