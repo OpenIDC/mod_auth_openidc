@@ -1,3 +1,6 @@
+6/20/2016
+- fix memory leak in OAuth access token introspection result caching
+
 6/19/2016
 - allow setting OIDCRemoteUserClaim with values obtained from the userinfo endpoint; thanks @steve-dave
 - fix OIDCUnAuthAction pass mode for Apache 2.4 and in case `Require claim` primitives used for 2.4 and 2.2; thanks @steve-dave

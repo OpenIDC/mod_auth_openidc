@@ -287,6 +287,7 @@ static apr_byte_t oidc_oauth_cache_access_token(request_rec *r, oidc_cfg *c,
 			cache_until);
 
 	json_decref(cache_entry);
+	free(cache_value);
 
 	return TRUE;
 }
