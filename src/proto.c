@@ -914,6 +914,7 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 					oidc_error(r,
 							"parsing of client secret into JWK failed: %s",
 							apr_jwt_e2s(r->pool, err));
+					apr_jwt_destroy(&jwt);
 					return FALSE;
 				}
 
@@ -925,6 +926,7 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 				if (cfg->private_keys == NULL) {
 					oidc_error(r,
 							"no private keys have been configured to use for private_key_jwt client authentication (OIDCPrivateKeyFiles)");
+					apr_jwt_destroy(&jwt);
 					return FALSE;
 				}
 
@@ -944,6 +946,7 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 			if (apr_jwt_sign(r->pool, &jwt, jwk, &err) == FALSE) {
 				oidc_error(r, "signing JWT failed: %s",
 						apr_jwt_e2s(r->pool, err));
+				apr_jwt_destroy(&jwt);
 				return FALSE;
 			}
 
