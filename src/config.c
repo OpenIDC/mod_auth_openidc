@@ -380,11 +380,13 @@ static const char *oidc_set_endpoint_auth_slot(cmd_parms *cmd, void *struct_ptr,
 			cmd->server->module_config, &auth_openidc_module);
 
 	if ((apr_strnatcmp(arg, "client_secret_post") == 0)
-			|| (apr_strnatcmp(arg, "client_secret_basic") == 0)) {
+			|| (apr_strnatcmp(arg, "client_secret_basic") == 0)
+			|| (apr_strnatcmp(arg, "client_secret_jwt") == 0)
+			|| (apr_strnatcmp(arg, "private_key_jwt") == 0)) {
 
 		return ap_set_string_slot(cmd, cfg, arg);
 	}
-	return "parameter must be 'client_secret_post' or 'client_secret_basic'";
+	return "parameter must be 'client_secret_post', 'client_secret_basic', 'client_secret_jwt' or 'private_key_jwt'";
 }
 
 /*
