@@ -291,6 +291,9 @@ static char *test_jwt_sign_verify(apr_pool_t *pool) {
 	json_object_set_new(jwt.payload.value.json, "iat",
 			json_integer(apr_time_sec(apr_time_now())));
 
+	jwt.header.kid = NULL;
+	jwt.header.alg = NULL;
+	jwt.header.enc = NULL;
 	jwt.header.value.json = json_object();
 	json_object_set_new(jwt.header.value.json, "typ", json_string("JWT"));
 
