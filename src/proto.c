@@ -879,6 +879,9 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 								"private_key_jwt") == 0))) {
 
 			apr_jwt_t jwt;
+			jwt.header.kid = NULL;
+			jwt.header.alg = NULL;
+			jwt.header.enc = NULL;
 			jwt.header.value.json = json_object();
 			json_object_set_new(jwt.header.value.json, "typ",
 					json_string("JWT"));
