@@ -314,27 +314,34 @@ static const char *oidc_get_current_url_scheme(const request_rec *r) {
 /*
  * get the URL port that is currently being accessed
  */
-static const char *oidc_get_current_url_port(const request_rec *r, const char *scheme_str) {
+static const char *oidc_get_current_url_port(const request_rec *r,
+		const char *scheme_str) {
 	/* first see if there's a proxy/load-balancer in front of us */
 	const char *port_str = apr_table_get(r->headers_in, "X-Forwarded-Port");
 	if (port_str == NULL) {
 		/* see if we can get the port from the "X-Forwarded-Host" header */
 		const char *host_hdr = apr_table_get(r->headers_in, "X-Forwarded-Host");
-		/* if not we'll take the port from the Host header (as set by the client or ProxyPreserveHost) */
-		if (host_hdr == NULL) host_hdr =  apr_table_get(r->headers_in, "Host");
-		if (host_hdr) port_str = strchr(host_hdr, ':');
-		if (port_str == NULL) {
-			/* if no port was set in the X-Forwarded-Host/Host header we'll determine it locally */
-			const apr_port_t port = r->connection->local_addr->port;
-			apr_byte_t print_port = TRUE;
-			if ((apr_strnatcmp(scheme_str, "https") == 0) && port == 443)
-				print_port = FALSE;
-			else if ((apr_strnatcmp(scheme_str, "http") == 0) && port == 80)
-				print_port = FALSE;
-			if (print_port)
-				port_str = apr_psprintf(r->pool, "%u", port);
+		if (host_hdr) {
+			port_str = strchr(host_hdr, ':');
+			if (port_str)
+				port_str++;
 		} else {
-			port_str++;
+			host_hdr = apr_table_get(r->headers_in, "Host");
+			if (host_hdr)
+				port_str = strchr(host_hdr, ':');
+			if (port_str == NULL) {
+				/* if no port was set in the Host header we'll determine it locally */
+				const apr_port_t port = r->connection->local_addr->port;
+				apr_byte_t print_port = TRUE;
+				if ((apr_strnatcmp(scheme_str, "https") == 0) && port == 443)
+					print_port = FALSE;
+				else if ((apr_strnatcmp(scheme_str, "http") == 0) && port == 80)
+					print_port = FALSE;
+				if (print_port)
+					port_str = apr_psprintf(r->pool, "%u", port);
+			} else {
+				port_str++;
+			}
 		}
 	}
 	return port_str;

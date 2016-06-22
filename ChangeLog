@@ -1,3 +1,7 @@
+6/22/2016
+- don't use local port setting for current URL determination when X-Forwarded-Host has been set
+- bump to 1.8.10rc4
+
 6/20/2016
 - fix memory leak in OAuth access token introspection result caching (introduced only in 1.8.10rc0)
 - fix setting private_key_jwt or client_secret_jwt with OIDCProviderTokenEndpointAuth
