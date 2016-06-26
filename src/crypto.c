@@ -92,8 +92,8 @@ static apr_byte_t oidc_crypto_init(oidc_cfg *cfg, server_rec *s) {
 		return FALSE;
 	}
 
-	cfg->encrypt_ctx = apr_palloc(s->process->pool, sizeof(EVP_CIPHER_CTX));
-	cfg->decrypt_ctx = apr_palloc(s->process->pool, sizeof(EVP_CIPHER_CTX));
+	cfg->encrypt_ctx = EVP_CIPHER_CTX_new();
+	cfg->decrypt_ctx = EVP_CIPHER_CTX_new();
 
 	/* initialize the encoding context */
 	EVP_CIPHER_CTX_init(cfg->encrypt_ctx);
@@ -206,6 +206,9 @@ apr_byte_t oidc_crypto_destroy(oidc_cfg *cfg, server_rec *s) {
 
 	EVP_CIPHER_CTX_cleanup(cfg->encrypt_ctx);
 	EVP_CIPHER_CTX_cleanup(cfg->decrypt_ctx);
+
+	EVP_CIPHER_CTX_free(cfg->encrypt_ctx);
+	EVP_CIPHER_CTX_free(cfg->decrypt_ctx);
 
 	cfg->encrypt_ctx = NULL;
 	cfg->decrypt_ctx = NULL;
