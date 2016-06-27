@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.8.10-1) unstable; urgency=medium
+
+  * build with OpenSSL 1.1.0
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Mon, 27 Jun 2016 08:49:31 +0200
+
 libapache2-mod-auth-openidc (1.8.9-1) unstable; urgency=medium
 
   * improve X-Forwarded-Host handling over Host
