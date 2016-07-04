@@ -496,12 +496,12 @@ apr_byte_t apr_jwt_memcmp(const void *in_a, const void *in_b, size_t len) {
 
 static void apr_jwt_serialize_message(apr_pool_t *pool, apr_jwt_t *jwt) {
 
-	char *s_hdr = json_dumps(jwt->header.value.json, JSON_ENCODE_ANY);
+	char *s_hdr = json_dumps(jwt->header.value.json, JSON_COMPACT);
 	apr_jwt_base64url_encode(pool, &jwt->header.value.str, s_hdr, strlen(s_hdr),
 			0);
 	free(s_hdr);
 
-	char *s_payload = json_dumps(jwt->payload.value.json, JSON_ENCODE_ANY);
+	char *s_payload = json_dumps(jwt->payload.value.json, JSON_COMPACT);
 	apr_jwt_base64url_encode(pool, &jwt->payload.value.str, s_payload,
 			strlen(s_payload), 0);
 	free(s_payload);

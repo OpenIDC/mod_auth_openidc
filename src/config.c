@@ -1663,7 +1663,6 @@ static apr_status_t oidc_cleanup(void *data) {
 	while (sp != NULL) {
 		oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(sp->module_config,
 				&auth_openidc_module);
-		oidc_crypto_destroy(cfg, sp);
 		if (cfg->cache->destroy != NULL) {
 			if (cfg->cache->destroy(sp) != APR_SUCCESS) {
 				oidc_serror(sp, "cache destroy function failed");

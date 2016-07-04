@@ -324,6 +324,11 @@ static int oidc_identity_concat(char *buffer, const char *key, const char *val) 
 	return 1;
 }
 
+static int oidc_identity_json(json_t *json, const char *key, const char *val) {
+	json_object_set_new(json, key, json_string(val));
+	return 1;
+}
+
 // copied from mod_session.c
 static apr_status_t oidc_session_identity_encode(request_rec * r,
 		session_rec * z) {
@@ -398,18 +403,37 @@ static apr_status_t oidc_session_save_cache(request_rec *r, session_rec *z) {
 	return APR_SUCCESS;
 }
 
-static apr_status_t oidc_session_load_cookie(request_rec *r, session_rec *z) {
+static apr_status_t oidc_session_load_cookie(request_rec *r, oidc_cfg *c, session_rec *z) {
 	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 
 	char *cookieValue = oidc_util_get_cookie(r, d->cookie);
 	if (cookieValue != NULL) {
-		if (oidc_base64url_decode_decrypt_string(r, (char **) &z->encoded,
-				cookieValue) <= 0) {
+		json_t *json = NULL;
+		if (oidc_util_jwt_hs256_verify(r, c->crypto_passphrase, cookieValue, &json) == FALSE) {
 			//oidc_util_set_cookie(r, d->cookie, "");
 			oidc_warn(r, "cookie value possibly corrupted");
 			return APR_EGENERAL;
 		}
+		
+		int length = 0;
+
+		const char *key;
+		json_t *value;
+		json_object_foreach(json, key, value) {
+			oidc_identity_count(&length, key, json_string_value(value));
+		}
+
+		char *buffer = buffer = apr_pcalloc(r->pool, length + 1);
+
+		json_object_foreach(json, key, value) {
+			oidc_identity_concat(buffer, key, json_string_value(value));
+		}
+
+		json_decref(json);
+
+		z->encoded = buffer;
+
 	}
 
 	return APR_SUCCESS;
@@ -423,11 +447,17 @@ static apr_status_t oidc_session_save_cookie(request_rec *r, session_rec *z) {
 
 	char *cookieValue = "";
 	if (z->encoded && z->encoded[0]) {
-		if (oidc_encrypt_base64url_encode_string(r, &cookieValue, z->encoded)
-				<= 0) {
-			oidc_error(r, "oidc_encrypt_base64url_encode_string failed");
+		json_t *json = json_object();
+		apr_table_do(
+			(int (*)(void *, const char *, const char *)) oidc_identity_json,
+			json, z->entries, NULL);
+		if (oidc_util_jwt_hs256_sign(r, c->crypto_passphrase, json,
+				&cookieValue) == FALSE) {
+			oidc_error(r, "oidc_util_jwt_hs256_sign failed");
+			json_decref(json);
 			return APR_EGENERAL;
 		}
+		json_decref(json);
 	}
 	oidc_util_set_cookie(r, d->cookie, cookieValue,
 			c->persistent_session_cookie ? z->expiry : -1);
@@ -467,7 +497,7 @@ static apr_status_t oidc_session_load_22(request_rec *r, session_rec **zz) {
 		rc = oidc_session_load_cache(r, z);
 	} else if (c->session_type == OIDC_SESSION_TYPE_22_CLIENT_COOKIE) {
 		/* load the session from a self-contained cookie */
-		rc = oidc_session_load_cookie(r, z);
+		rc = oidc_session_load_cookie(r, c, z);
 	} else {
 		oidc_error(r, "oidc_session_load_22: unknown session type: %d",
 				c->session_type);

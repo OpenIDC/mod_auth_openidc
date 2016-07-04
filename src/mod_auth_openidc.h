@@ -426,8 +426,6 @@ void oidc_register_hooks(apr_pool_t *pool);
 int oidc_strnenvcmp(const char *a, const char *b, int len);
 int oidc_base64url_encode(request_rec *r, char **dst, const char *src, int src_len, int remove_padding);
 int oidc_base64url_decode(request_rec *r, char **dst, const char *src);
-int oidc_encrypt_base64url_encode_string(request_rec *r, char **dst, const char *src);
-int oidc_base64url_decode_decrypt_string(request_rec *r, char **dst, const char *src);
 const char *oidc_get_current_url_host(request_rec *r);
 char *oidc_get_current_url(request_rec *r);
 char *oidc_url_encode(const request_rec *r, const char *str, const char *charsToEncode);
@@ -468,11 +466,8 @@ apr_byte_t oidc_util_regexp_first_match(apr_pool_t *pool, const char *input, con
 apr_byte_t oidc_util_json_merge(json_t *src, json_t *dst);
 int oidc_util_cookie_domain_valid(const char *hostname, char *cookie_domain);
 apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char *openssl_hash_algo, const char *input, char **output);
-
-// oidc_crypto.c
-unsigned char *oidc_crypto_aes_encrypt(request_rec *r, oidc_cfg *cfg, unsigned char *plaintext, int *len);
-unsigned char *oidc_crypto_aes_decrypt(request_rec *r, oidc_cfg *cfg, unsigned char *ciphertext, int *len);
-apr_byte_t oidc_crypto_destroy(oidc_cfg *cfg, server_rec *s);
+apr_byte_t oidc_util_jwt_hs256_sign(request_rec *r, const char *secret, json_t *payload, char **compact_encoded_jwt);
+apr_byte_t oidc_util_jwt_hs256_verify(request_rec *r, const char *secret, const char *compact_encoded_jwt, json_t **result);
 
 // oidc_metadata.c
 apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg, const char *issuer, const char *url, json_t **j_metadata, const char **response);

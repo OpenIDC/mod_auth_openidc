@@ -412,23 +412,10 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	return TRUE;
 }
 
-static json_t * oidc_get_state_from_cookie(request_rec *r, const char *cookieValue) {
+/* obtain the state from the cookie value */
+static json_t * oidc_get_state_from_cookie(request_rec *r, oidc_cfg *c, const char *cookieValue) {
 	json_t *result = NULL;
-
-	/* decrypt the state obtained from the cookie */
-	char *svalue = NULL;
-	if (oidc_base64url_decode_decrypt_string(r, &svalue, cookieValue) <= 0)
-		return NULL;
-
-	oidc_debug(r, "restored JSON state cookie value: %s", svalue);
-
-	json_error_t json_error;
-	result = json_loads(svalue, 0, &json_error);
-	if (result == NULL) {
-		oidc_error(r, "parsing JSON (json_loads) failed: %s", json_error.text);
-		return NULL;
-	}
-
+	oidc_util_jwt_hs256_verify(r, c->crypto_passphrase, cookieValue, &result);
 	return result;
 }
 
@@ -448,7 +435,7 @@ static void oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c) {
 				if (*cookie == '=') {
 					*cookie = '\0';
 					cookie++;
-					json_t *state = oidc_get_state_from_cookie(r, cookie);
+					json_t *state = oidc_get_state_from_cookie(r, c, cookie);
 					if (state != NULL) {
 						json_t *v = json_object_get(state, "timestamp");
 						apr_time_t now = apr_time_sec(apr_time_now());
@@ -488,7 +475,7 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 	/* clear state cookie because we don't need it anymore */
 	oidc_util_set_cookie(r, cookieName, "", 0);
 
-	*proto_state = oidc_get_state_from_cookie(r, cookieValue);
+	*proto_state = oidc_get_state_from_cookie(r, c, cookieValue);
 	if (*proto_state == NULL) return FALSE;
 
 	json_t *v = json_object_get(*proto_state, "nonce");
@@ -536,15 +523,20 @@ static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
 	 * random value, original URL, original method, issuer, response_type, response_mod, prompt and timestamp
 	 * encoded as JSON
 	 */
-	char *s_value = json_dumps(proto_state, JSON_ENCODE_ANY);
+	//char *s_value = json_dumps(proto_state, JSON_ENCODE_ANY);
 
 	/* encrypt the resulting JSON value  */
 	char *cookieValue = NULL;
-	if (oidc_encrypt_base64url_encode_string(r, &cookieValue, s_value) <= 0) {
-		free(s_value);
-		oidc_error(r, "oidc_encrypt_base64url_encode_string failed");
+
+//	if (oidc_encrypt_base64url_encode_string(r, &cookieValue, s_value) <= 0) {
+//		free(s_value);
+//		oidc_error(r, "oidc_encrypt_base64url_encode_string failed");
+//		return FALSE;
+//	}
+
+	if (oidc_util_jwt_hs256_sign(r, c->crypto_passphrase, proto_state,
+			&cookieValue) == FALSE)
 		return FALSE;
-	}
 
 	/* clean expired state cookies to avoid pollution */
 	oidc_clean_expired_state_cookies(r, c);
@@ -555,7 +547,7 @@ static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
 	/* set it as a cookie */
 	oidc_util_set_cookie(r, cookieName, cookieValue, -1);
 
-	free(s_value);
+	//free(s_value);
 
 	return TRUE;
 }
