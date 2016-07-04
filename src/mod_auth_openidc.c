@@ -606,7 +606,7 @@ const char*oidc_request_state_get(request_rec *r, const char *key) {
  * in the session in to HTTP headers passed on to the application
  */
 static apr_byte_t oidc_set_app_claims(request_rec *r,
-		const oidc_cfg * const cfg, session_rec *session, const char *s_claims) {
+		const oidc_cfg * const cfg, oidc_session_t *session, const char *s_claims) {
 
 	/* get a handle to the directory config */
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
@@ -661,7 +661,7 @@ static void oidc_log_session_expires(request_rec *r, apr_time_t session_expires)
  * check if maximum session duration was exceeded
  */
 static int oidc_check_max_session_duration(request_rec *r, oidc_cfg *cfg,
-		session_rec *session) {
+		oidc_session_t *session) {
 	const char *s_session_expires = NULL;
 	apr_time_t session_expires;
 
@@ -698,7 +698,7 @@ static int oidc_check_max_session_duration(request_rec *r, oidc_cfg *cfg,
  * name-based virtual hosting even though the OP(s) would be the same
  */
 static apr_byte_t oidc_check_cookie_domain(request_rec *r, oidc_cfg *cfg,
-		session_rec *session) {
+		oidc_session_t *session) {
 	const char *c_cookie_domain =
 			cfg->cookie_domain ?
 					cfg->cookie_domain : oidc_get_current_url_host(r);
@@ -719,7 +719,7 @@ static apr_byte_t oidc_check_cookie_domain(request_rec *r, oidc_cfg *cfg,
 /*
  * get a handle to the provider configuration via the "issuer" stored in the session
  */
-apr_byte_t oidc_get_provider_from_session(request_rec *r, oidc_cfg *c, session_rec *session, oidc_provider_t **provider) {
+apr_byte_t oidc_get_provider_from_session(request_rec *r, oidc_cfg *c, oidc_session_t *session, oidc_provider_t **provider) {
 
 	oidc_debug(r, "enter");
 
@@ -747,7 +747,7 @@ apr_byte_t oidc_get_provider_from_session(request_rec *r, oidc_cfg *c, session_r
 /*
  * store the access token expiry timestamp in the session, based on the expires_in
  */
-static void oidc_store_access_token_expiry(request_rec *r, session_rec *session,
+static void oidc_store_access_token_expiry(request_rec *r, oidc_session_t *session,
 		int expires_in) {
 	if (expires_in != -1) {
 		oidc_session_set(r, session, OIDC_ACCESSTOKEN_EXPIRES_SESSION_KEY,
@@ -759,7 +759,7 @@ static void oidc_store_access_token_expiry(request_rec *r, session_rec *session,
 /*
  * store claims resolved from the userinfo endpoint in the session
  */
-static void oidc_store_userinfo_claims(request_rec *r, session_rec *session,
+static void oidc_store_userinfo_claims(request_rec *r, oidc_session_t *session,
 		oidc_provider_t *provider, const char *claims) {
 	/* see if we've resolved any claims */
 	if (claims != NULL) {
@@ -781,7 +781,7 @@ static void oidc_store_userinfo_claims(request_rec *r, session_rec *session,
  * execute refresh token grant to refresh the existing access token
  */
 static apr_byte_t oidc_refresh_access_token(request_rec *r, oidc_cfg *c,
-		session_rec *session, oidc_provider_t *provider,
+		oidc_session_t *session, oidc_provider_t *provider,
 		char **new_access_token) {
 
 	oidc_debug(r, "enter");
@@ -830,7 +830,7 @@ static apr_byte_t oidc_refresh_access_token(request_rec *r, oidc_cfg *c,
  * retrieve claims from the userinfo endpoint and return the stringified response
  */
 static const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r,
-		oidc_cfg *c, oidc_provider_t *provider, const char *access_token, session_rec *session) {
+		oidc_cfg *c, oidc_provider_t *provider, const char *access_token, oidc_session_t *session) {
 
 	oidc_debug(r, "enter");
 
@@ -895,7 +895,7 @@ static const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r,
  * get (new) claims from the userinfo endpoint
  */
 static apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r,
-		oidc_cfg *cfg, session_rec *session) {
+		oidc_cfg *cfg, oidc_session_t *session) {
 
 	oidc_provider_t *provider = NULL;
 	const char *claims = NULL;
@@ -949,7 +949,7 @@ static apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r,
  * handle the case where we have identified an existing authentication session for a user
  */
 static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
-		session_rec *session) {
+		oidc_session_t *session) {
 
 	oidc_debug(r, "enter");
 
@@ -1244,7 +1244,7 @@ static apr_byte_t oidc_get_remote_user(request_rec *r, oidc_cfg *c,
  * store resolved information in the session
  */
 static void oidc_save_in_session(request_rec *r, oidc_cfg *c,
-		session_rec *session, oidc_provider_t *provider, const char *remoteUser,
+		oidc_session_t *session, oidc_provider_t *provider, const char *remoteUser,
 		const char *id_token, apr_jwt_t *id_token_jwt, const char *claims,
 		const char *access_token, const int expires_in,
 		const char *refresh_token, const char *session_state, const char *state,
@@ -1397,7 +1397,7 @@ static apr_byte_t oidc_handle_flows(request_rec *r, oidc_cfg *c,
 
 /* handle the browser back on an authorization response */
 static apr_byte_t oidc_handle_browser_back(request_rec *r, const char *r_state,
-		session_rec *session) {
+		oidc_session_t *session) {
 
 	/*  see if we have an existing session and browser-back was used */
 	const char *s_state = NULL, *o_url = NULL;
@@ -1430,7 +1430,7 @@ static apr_byte_t oidc_handle_browser_back(request_rec *r, const char *r_state,
  * id_token and storing the authenticated user state in the session
  */
 static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
-		session_rec *session, apr_table_t *params, const char *response_mode) {
+		oidc_session_t *session, apr_table_t *params, const char *response_mode) {
 
 	oidc_debug(r, "enter, response_mode=%s", response_mode);
 
@@ -1556,7 +1556,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
  * handle an OpenID Connect Authorization Response using the POST (+fragment->POST) response_mode
  */
 static int oidc_handle_post_authorization_response(request_rec *r, oidc_cfg *c,
-		session_rec *session) {
+		oidc_session_t *session) {
 
 	oidc_debug(r, "enter");
 
@@ -1593,7 +1593,7 @@ static int oidc_handle_post_authorization_response(request_rec *r, oidc_cfg *c,
  * handle an OpenID Connect Authorization Response using the redirect response_mode
  */
 static int oidc_handle_redirect_authorization_response(request_rec *r,
-		oidc_cfg *c, session_rec *session) {
+		oidc_cfg *c, oidc_session_t *session) {
 
 	oidc_debug(r, "enter");
 
@@ -2032,7 +2032,7 @@ static apr_byte_t oidc_is_get_style_logout(const char *logout_param_value) {
  * handle a local logout
  */
 static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
-		session_rec *session, const char *url) {
+		oidc_session_t *session, const char *url) {
 
 	oidc_debug(r, "enter (url=%s)", url);
 
@@ -2081,7 +2081,7 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 /*
  * perform (single) logout
  */
-static int oidc_handle_logout(request_rec *r, oidc_cfg *c, session_rec *session) {
+static int oidc_handle_logout(request_rec *r, oidc_cfg *c, oidc_session_t *session) {
 
 	/* pickup the command or URL where the user wants to go after logout */
 	char *url = NULL;
@@ -2208,14 +2208,14 @@ int oidc_handle_jwks(request_rec *r, oidc_cfg *c) {
 }
 
 static int oidc_handle_session_management_iframe_op(request_rec *r, oidc_cfg *c,
-		session_rec *session, const char *check_session_iframe) {
+		oidc_session_t *session, const char *check_session_iframe) {
 	oidc_debug(r, "enter");
 	apr_table_add(r->headers_out, "Location", check_session_iframe);
 	return HTTP_MOVED_TEMPORARILY;
 }
 
 static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c,
-		session_rec *session, const char *client_id,
+		oidc_session_t *session, const char *client_id,
 		const char *check_session_iframe) {
 
 	oidc_debug(r, "enter");
@@ -2293,7 +2293,7 @@ static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c,
  * handle session management request
  */
 static int oidc_handle_session_management(request_rec *r, oidc_cfg *c,
-		session_rec *session) {
+		oidc_session_t *session) {
 	char *cmd = NULL;
 	const char *id_token_hint = NULL, *client_id = NULL, *check_session_iframe = NULL;
 	oidc_provider_t *provider = NULL;
@@ -2360,7 +2360,7 @@ static int oidc_handle_session_management(request_rec *r, oidc_cfg *c,
  * handle refresh token request
  */
 static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
-		session_rec *session) {
+		oidc_session_t *session) {
 
 	char *return_to = NULL;
 	char *r_access_token = NULL;
@@ -2437,7 +2437,7 @@ end:
  * handle all requests to the redirect_uri
  */
 int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
-		session_rec *session) {
+		oidc_session_t *session) {
 
 	if (oidc_proto_is_redirect_authorization_response(r, c)) {
 
@@ -2514,26 +2514,44 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 	/* check if this is a sub-request or an initial request */
 	if (ap_is_initial_req(r)) {
 
+		int rc = OK;
+
 		/* load the session from the request state; this will be a new "empty" session if no state exists */
-		session_rec *session = NULL;
+		oidc_session_t *session = NULL;
 		oidc_session_load(r, &session);
 
 		/* see if the initial request is to the redirect URI; this handles potential logout too */
 		if (oidc_util_request_matches_url(r, c->redirect_uri)) {
 
 			/* handle request to the redirect_uri */
-			return oidc_handle_redirect_uri_request(r, c, session);
+			rc = oidc_handle_redirect_uri_request(r, c, session);
 
-			/* initial request to non-redirect URI, check if we have an existing session */
+			// TODO: cleanup function
+			if (session->state != NULL)
+				json_decref(session->state);
+
+			return rc;
+
+		/* initial request to non-redirect URI, check if we have an existing session */
 		} else if (session->remote_user != NULL) {
 
 			/* set the user in the main request for further (incl. sub-request) processing */
 			r->user = (char *) session->remote_user;
 
 			/* this is initial request and we already have a session */
-			return oidc_handle_existing_session(r, c, session);
+			rc = oidc_handle_existing_session(r, c, session);
 
+			// TODO: cleanup function
+			if (session->state != NULL)
+				json_decref(session->state);
+
+			return rc;
 		}
+
+		// TODO: cleanup function
+		if (session->state != NULL)
+			json_decref(session->state);
+
 		/*
 		 * else: initial request, we have no session and it is not an authorization or
 		 *       discovery response: just hit the default flow for unauthenticated users

@@ -1754,8 +1754,6 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 #endif /* defined(OPENSSL_THREADS) && APR_HAS_THREADS */
 	apr_pool_cleanup_register(pool, s, oidc_cleanup, apr_pool_cleanup_null);
 
-	oidc_session_init();
-
 	server_rec *sp = s;
 	while (sp != NULL) {
 		oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(sp->module_config,
