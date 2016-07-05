@@ -2696,7 +2696,7 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args, const 
 	if (claims) json_decref(claims);
 	if (id_token) json_decref(id_token);
 
-	if ((rc == HTTP_UNAUTHORIZED) && ap_auth_type(r)
+	if ((rc == AUTHZ_DENIED) && ap_auth_type(r)
 			&& (apr_strnatcasecmp((const char *) ap_auth_type(r), "oauth20")
 					== 0))
 		oidc_oauth_return_www_authenticate(r, "insufficient_scope", "Different scope(s) or other claims required");
