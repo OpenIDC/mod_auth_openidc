@@ -68,7 +68,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 /*
  * load the session from the cache using the cookie as the index
  */
-static apr_status_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
+static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config,
@@ -81,18 +81,24 @@ static apr_status_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 	if (uuid != NULL) {
 		const char *s_json = NULL;
 		c->cache->get(r, OIDC_CACHE_SECTION_SESSION, uuid, &s_json);
-		if (s_json != NULL)
+		if (s_json != NULL) {
 			z->state = json_loads(s_json, 0, 0);
+			if (z->state == NULL) {
+				oidc_error(r, "cached JSON parsing (json_loads) failed: (%s)",
+						s_json);
+				return FALSE;
+			}
+		}
 		//oidc_util_set_cookie(r, d->cookie, "");
 	}
 
-	return (z->state != NULL) ? APR_SUCCESS : APR_EGENERAL;
+	return TRUE;
 }
 
 /*
  * save the session to the cache using a cookie for the index
  */
-static apr_status_t oidc_session_save_cache(request_rec *r, oidc_session_t *z) {
+static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config,
@@ -124,13 +130,13 @@ static apr_status_t oidc_session_save_cache(request_rec *r, oidc_session_t *z) {
 		c->cache->set(r, OIDC_CACHE_SECTION_SESSION, key, NULL, 0);
 	}
 
-	return APR_SUCCESS;
+	return TRUE;
 }
 
 /*
  * load the session from a self-contained client-side cookie
  */
-static apr_status_t oidc_session_load_cookie(request_rec *r, oidc_cfg *c,
+static apr_byte_t oidc_session_load_cookie(request_rec *r, oidc_cfg *c,
 		oidc_session_t *z) {
 	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
@@ -142,18 +148,18 @@ static apr_status_t oidc_session_load_cookie(request_rec *r, oidc_cfg *c,
 				&json) == FALSE) {
 			//oidc_util_set_cookie(r, d->cookie, "");
 			oidc_warn(r, "cookie value possibly corrupted");
-			return APR_EGENERAL;
+			return FALSE;
 		}
 		z->state = json;
 	}
 
-	return APR_SUCCESS;
+	return TRUE;
 }
 
 /*
  * store the session in a self-contained client-side-only cookie storage
  */
-static apr_status_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z) {
+static apr_byte_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config,
@@ -164,20 +170,20 @@ static apr_status_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z) 
 		if (oidc_util_jwt_hs256_sign(r, c->crypto_passphrase, z->state,
 				&cookieValue) == FALSE) {
 			oidc_error(r, "oidc_util_jwt_hs256_sign failed");
-			return APR_EGENERAL;
+			return FALSE;
 		}
 	}
 
 	oidc_util_set_cookie(r, d->cookie, cookieValue,
 			c->persistent_session_cookie ? z->expiry : -1);
 
-	return APR_SUCCESS;
+	return TRUE;
 }
 
 /*
  * load a session from the cache/cookie
  */
-apr_status_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
+apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 
@@ -185,7 +191,7 @@ apr_status_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 	if (((*zz) = (oidc_session_t *) oidc_request_state_get(r, "session"))
 			!= NULL) {
 		oidc_debug(r, "loading session from request state");
-		return APR_SUCCESS;
+		return TRUE;
 	}
 
 	/* allocate space for the session object and fill it */
@@ -194,21 +200,15 @@ apr_status_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 	z->remote_user = NULL;
 	z->state = NULL;
 
-	apr_status_t rc = APR_SUCCESS;
 	if (c->session_type == OIDC_SESSION_TYPE_SERVER_CACHE) {
 		/* load the session from the cache */
-		rc = oidc_session_load_cache(r, z);
+		oidc_session_load_cache(r, z);
 	} else if (c->session_type == OIDC_SESSION_TYPE_CLIENT_COOKIE) {
 		/* load the session from a self-contained cookie */
-		rc = oidc_session_load_cookie(r, c, z);
+		oidc_session_load_cookie(r, c, z);
 	} else {
 		oidc_error(r, "unknown session type: %d", c->session_type);
-		rc = APR_EGENERAL;
 	}
-
-	/* see if it worked out */
-	if (rc != APR_SUCCESS)
-		return rc;
 
 	if (z->state != NULL) {
 
@@ -223,27 +223,27 @@ apr_status_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 			json_decref(z->state);
 			z->state = json_object();
 			z->expiry = 0;
-			z->remote_user = NULL;
 
-			return APR_EGENERAL;
+		} else {
+
+			oidc_session_get(r, z, OIDC_SESSION_REMOTE_USER_KEY,
+					&z->remote_user);
 		}
 	} else {
+
 		z->state = json_object();
 	}
 
 	/* store this session in the request context, so it is available to sub-requests */
 	oidc_request_state_set(r, "session", (const char *) z);
 
-	oidc_session_get(r, *zz, OIDC_SESSION_REMOTE_USER_KEY,
-			&((*zz)->remote_user));
-
-	return APR_SUCCESS;
+	return TRUE;
 }
 
 /*
  * save a session to cache/cookie
  */
-apr_status_t oidc_session_save(request_rec *r, oidc_session_t *z) {
+apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 
@@ -256,25 +256,23 @@ apr_status_t oidc_session_save(request_rec *r, oidc_session_t *z) {
 	/* store this session in the request context, so it is available to sub-requests as a quicker-than-file-backend cache */
 	oidc_request_state_set(r, "session", (const char *) z);
 
-	apr_status_t rc = APR_SUCCESS;
 	if (c->session_type == OIDC_SESSION_TYPE_SERVER_CACHE) {
 		/* store the session in the cache */
-		rc = oidc_session_save_cache(r, z);
+		oidc_session_save_cache(r, z);
 	} else if (c->session_type == OIDC_SESSION_TYPE_CLIENT_COOKIE) {
 		/* store the session in a self-contained cookie */
-		rc = oidc_session_save_cookie(r, z);
+		oidc_session_save_cookie(r, z);
 	} else {
 		oidc_error(r, "unknown session type: %d", c->session_type);
-		rc = APR_EGENERAL;
 	}
 
-	return rc;
+	return TRUE;
 }
 
 /*
  * terminate a session
  */
-apr_status_t oidc_session_kill(request_rec *r, oidc_session_t *z) {
+apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z) {
 	if (z->state) {
 		json_decref(z->state);
 		z->state = NULL;
@@ -286,20 +284,20 @@ apr_status_t oidc_session_kill(request_rec *r, oidc_session_t *z) {
 /*
  * get a value from the session based on the name from a name/value pair
  */
-apr_status_t oidc_session_get(request_rec *r, oidc_session_t *z,
-		const char *key, const char **value) {
+apr_byte_t oidc_session_get(request_rec *r, oidc_session_t *z, const char *key,
+		const char **value) {
 
 	/* just return the value for the key */
 	oidc_json_object_get_string(r->pool, z->state, key, (char **) value, NULL);
 
-	return OK;
+	return TRUE;
 }
 
 /*
  * set a name/value key pair in the session
  */
-apr_status_t oidc_session_set(request_rec *r, oidc_session_t *z,
-		const char *key, const char *value) {
+apr_byte_t oidc_session_set(request_rec *r, oidc_session_t *z, const char *key,
+		const char *value) {
 
 	/* only set it if non-NULL, otherwise delete the entry */
 	if (value) {
@@ -307,5 +305,5 @@ apr_status_t oidc_session_set(request_rec *r, oidc_session_t *z,
 	} else {
 		json_object_del(z->state, key);
 	}
-	return OK;
+	return TRUE;
 }

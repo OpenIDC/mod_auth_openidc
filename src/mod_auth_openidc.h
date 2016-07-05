@@ -483,10 +483,10 @@ typedef struct {
     apr_time_t expiry;            /* if > 0, the time of expiry of this session */
 } oidc_session_t;
 
-apr_status_t oidc_session_load(request_rec *r, oidc_session_t **z);
-apr_status_t oidc_session_get(request_rec *r, oidc_session_t *z, const char *key, const char **value);
-apr_status_t oidc_session_set(request_rec *r, oidc_session_t *z, const char *key, const char *value);
-apr_status_t oidc_session_save(request_rec *r, oidc_session_t *z);
-apr_status_t oidc_session_kill(request_rec *r, oidc_session_t *z);
+apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **z);
+apr_byte_t oidc_session_get(request_rec *r, oidc_session_t *z, const char *key, const char **value);
+apr_byte_t oidc_session_set(request_rec *r, oidc_session_t *z, const char *key, const char *value);
+apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z);
+apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z);
 
 #endif /* MOD_AUTH_OPENIDC_H_ */
