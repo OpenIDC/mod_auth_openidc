@@ -1209,7 +1209,10 @@ static request_rec * test_setup(apr_pool_t *pool) {
 	cfg->cache_cfg = NULL;
 	cfg->cache_shm_size_max = 500;
 	cfg->cache_shm_entry_size_max = 16384 + 255 + 17;
-	cfg->cache->post_config(request->server);
+	if (cfg->cache->post_config(request->server) != OK) {
+		printf("cfg->cache->post_config failed!\n");
+		exit(-1);
+	}
 
 	return request;
 }

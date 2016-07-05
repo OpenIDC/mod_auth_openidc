@@ -84,6 +84,14 @@ AP_DECLARE(void) ap_log_error_(const char *file, int line, int module_index, int
 AP_DECLARE(void) ap_log_error(const char *file, int line, int level,
 		apr_status_t status, const server_rec *s, const char *fmt, ...) {
 #endif
+	if (level < APLOG_DEBUG) {
+		fprintf(stderr, "%s:%d [%d] [%d] ", file, line, level, status);
+		va_list ap;
+		va_start(ap, fmt);
+		vfprintf(stderr, fmt, ap);
+		va_end(ap);
+		fprintf(stderr, "\n");
+	}
 }
 
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
