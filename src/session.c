@@ -222,7 +222,6 @@ apr_status_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 			oidc_warn(r, "session restored from cache has expired");
 			json_decref(z->state);
 			z->state = json_object();
-			;
 			z->expiry = 0;
 			z->remote_user = NULL;
 
