@@ -1,4 +1,5 @@
 7/5/2016
+- use AUTHZ_DENIED instead of HTTP_UNAUTHORIZED in oidc_authz_checker; closes #135; thanks @gwollman
 - use signed JWTs for state/session cookies
 - achieve smaller client-cookie sizes for regular cases; no id_token is stored in the session:
   - (optional) id_token_hint no longer available in session management calls (logout/prompt=none) with "OIDCSessionType client-cookie"
