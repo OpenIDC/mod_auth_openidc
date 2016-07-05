@@ -96,7 +96,7 @@
 /* timeouts in seconds for HTTP calls that should take a short time (registry/discovery related) */
 #define OIDC_DEFAULT_HTTP_TIMEOUT_SHORT  5
 /* default session storage type */
-#define OIDC_DEFAULT_SESSION_TYPE OIDC_SESSION_TYPE_22_SERVER_CACHE
+#define OIDC_DEFAULT_SESSION_TYPE OIDC_SESSION_TYPE_SERVER_CACHE
 /* timeout in seconds after which state expires */
 #define OIDC_DEFAULT_STATE_TIMEOUT 300
 /* default session inactivity timeout */
@@ -305,9 +305,9 @@ static const char *oidc_set_session_type(cmd_parms *cmd, void *ptr,
 	}
 
 	if (apr_strnatcmp(s, "server-cache") == 0) {
-		cfg->session_type = OIDC_SESSION_TYPE_22_SERVER_CACHE;
+		cfg->session_type = OIDC_SESSION_TYPE_SERVER_CACHE;
 	} else if (apr_strnatcmp(s, "client-cookie") == 0) {
-		cfg->session_type = OIDC_SESSION_TYPE_22_CLIENT_COOKIE;
+		cfg->session_type = OIDC_SESSION_TYPE_CLIENT_COOKIE;
 	} else {
 		return (apr_psprintf(cmd->pool,
 				"oidc_set_session_type: invalid value for %s (%s); must be one of \"server-cache\" or \"client-cookie\"",

@@ -1024,14 +1024,18 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 				dir_cfg->pass_info_in_env_vars);
 	}
 
-	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_SERIALIZED)) {
-		const char *s_id_token = NULL;
-		/* get the compact serialized JWT from the session */
-		oidc_session_get(r, session, OIDC_IDTOKEN_SESSION_KEY, &s_id_token);
-		/* pass the compact serialized JWT to the app in a header or environment variable */
-		oidc_util_set_app_info(r, "id_token", s_id_token,
-				OIDC_DEFAULT_HEADER_PREFIX, dir_cfg->pass_info_in_headers,
-				dir_cfg->pass_info_in_env_vars);
+	if (cfg->session_type != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
+		if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_SERIALIZED)) {
+			const char *s_id_token = NULL;
+			/* get the compact serialized JWT from the session */
+			oidc_session_get(r, session, OIDC_IDTOKEN_SESSION_KEY, &s_id_token);
+			/* pass the compact serialized JWT to the app in a header or environment variable */
+			oidc_util_set_app_info(r, "id_token", s_id_token,
+					OIDC_DEFAULT_HEADER_PREFIX, dir_cfg->pass_info_in_headers,
+					dir_cfg->pass_info_in_env_vars);
+		}
+	} else {
+		oidc_error(r, "session type \"client-cookie\" does not allow storing/passing the id_token; use \"OIDCSessionType server-cache\" for that");
 	}
 
 	/* set the access_token in the app headers */
@@ -1261,8 +1265,10 @@ static void oidc_save_in_session(request_rec *r, oidc_cfg *c,
 	oidc_session_set(r, session, OIDC_IDTOKEN_CLAIMS_SESSION_KEY,
 			id_token_jwt->payload.value.str);
 
-	/* store the compact serialized representation of the id_token for later reference  */
-	oidc_session_set(r, session, OIDC_IDTOKEN_SESSION_KEY, id_token);
+	if (c->session_type != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
+		/* store the compact serialized representation of the id_token for later reference  */
+		oidc_session_set(r, session, OIDC_IDTOKEN_SESSION_KEY, id_token);
+	}
 
 	/* store the issuer in the session (at least needed for session mgmt and token refresh */
 	oidc_session_set(r, session, OIDC_ISSUER_SESSION_KEY, provider->issuer);
@@ -2147,16 +2153,19 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c, oidc_session_t *sessi
 		const char *id_token_hint = NULL;
 		oidc_session_get(r, session, OIDC_IDTOKEN_SESSION_KEY, &id_token_hint);
 
-		char *logout_request = apr_psprintf(r->pool, "%s%s",
-				end_session_endpoint,
-				strchr(end_session_endpoint, '?') != NULL ? "&" : "?");
-		logout_request = apr_psprintf(r->pool, "%sid_token_hint=%s",
-				logout_request, oidc_util_escape_string(r, id_token_hint));
+		char *logout_request = apr_pstrdup(r->pool, end_session_endpoint);
+		if (id_token_hint != NULL) {
+			logout_request = apr_psprintf(r->pool, "%s%sid_token_hint=%s",
+					logout_request,
+					strchr(logout_request, '?') != NULL ? "&" : "?",
+							oidc_util_escape_string(r, id_token_hint));
+		}
 
 		if (url != NULL) {
 			logout_request = apr_psprintf(r->pool,
-					"%s&post_logout_redirect_uri=%s", logout_request,
-					oidc_util_escape_string(r, url));
+					"%s%spost_logout_redirect_uri=%s", logout_request,
+					strchr(logout_request, '?') != NULL ? "&" : "?",
+							oidc_util_escape_string(r, url));
 		}
 		url = logout_request;
 	}
@@ -2340,7 +2349,7 @@ static int oidc_handle_session_management(request_rec *r, oidc_cfg *c,
 	if (apr_strnatcmp("check", cmd) == 0) {
 		oidc_session_get(r, session, OIDC_IDTOKEN_SESSION_KEY, &id_token_hint);
 		oidc_get_provider_from_session(r, c, session, &provider);
-		if ((id_token_hint != NULL) && (provider != NULL)) {
+		if ((session->remote_user != NULL) && (provider != NULL)) {
 			return oidc_authenticate_user(r, c, provider,
 					apr_psprintf(r->pool, "%s?session=iframe_rp",
 							c->redirect_uri), NULL, id_token_hint, "none", NULL);

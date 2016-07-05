@@ -1,5 +1,8 @@
-7/4/2016
+7/5/2016
 - use signed JWTs for state/session cookies
+- smaller client-cookie sizes for regular cases; no id_token stored in session:
+  - no id_token_hint available in session management calls when client-cookie is used
+  - can no longer use "OIDCPassIDTokenAs serialized" when client-cookie is used
 - bump to 1.9.0rc0
 
 6/27/2016

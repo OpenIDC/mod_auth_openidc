@@ -61,11 +61,9 @@
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 /* the name of the remote-user attribute in the session  */
-#define OIDC_SESSION_REMOTE_USER_KEY "remote-user"
+#define OIDC_SESSION_REMOTE_USER_KEY "r"
 /* the name of the session expiry attribute in the session */
-#define OIDC_SESSION_EXPIRY_KEY      "oidc-expiry"
-/* the name of the uuid attribute in the session */
-#define OIDC_SESSION_UUID_KEY        "oidc-uuid"
+#define OIDC_SESSION_EXPIRY_KEY      "e"
 
 /*
  * load the session from the cache using the cookie as the index
@@ -100,8 +98,11 @@ static apr_status_t oidc_session_save_cache(request_rec *r, oidc_session_t *z) {
 	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 
+	/* get a new uuid for this session */
+	apr_uuid_t uuid;
+	apr_uuid_get(&uuid);
 	char key[APR_UUID_FORMATTED_LENGTH + 1];
-	apr_uuid_format((char *) &key, z->uuid);
+	apr_uuid_format((char *) &key, &uuid);
 
 	if (z->state != NULL) {
 
@@ -174,10 +175,9 @@ static apr_status_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z) 
 }
 
 /*
- * load the session from the request context, create a new one if no luck
+ * load a session from the cache/cookie
  */
-static apr_status_t oidc_session_load_impl(request_rec *r, oidc_session_t **zz) {
-
+apr_status_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 
@@ -190,20 +190,15 @@ static apr_status_t oidc_session_load_impl(request_rec *r, oidc_session_t **zz) 
 
 	/* allocate space for the session object and fill it */
 	oidc_session_t *z = (*zz = apr_pcalloc(r->pool, sizeof(oidc_session_t)));
-	z->pool = r->pool;
-
-	/* get a new uuid for this session */
-	z->uuid = (apr_uuid_t *) apr_pcalloc(z->pool, sizeof(apr_uuid_t));
-	apr_uuid_get(z->uuid);
 
 	z->remote_user = NULL;
 	z->state = NULL;
 
 	apr_status_t rc = APR_SUCCESS;
-	if (c->session_type == OIDC_SESSION_TYPE_22_SERVER_CACHE) {
+	if (c->session_type == OIDC_SESSION_TYPE_SERVER_CACHE) {
 		/* load the session from the cache */
 		rc = oidc_session_load_cache(r, z);
-	} else if (c->session_type == OIDC_SESSION_TYPE_22_CLIENT_COOKIE) {
+	} else if (c->session_type == OIDC_SESSION_TYPE_CLIENT_COOKIE) {
 		/* load the session from a self-contained cookie */
 		rc = oidc_session_load_cookie(r, c, z);
 	} else {
@@ -240,28 +235,33 @@ static apr_status_t oidc_session_load_impl(request_rec *r, oidc_session_t **zz) 
 	/* store this session in the request context, so it is available to sub-requests */
 	oidc_request_state_set(r, "session", (const char *) z);
 
+	oidc_session_get(r, *zz, OIDC_SESSION_REMOTE_USER_KEY,
+			&((*zz)->remote_user));
+
 	return APR_SUCCESS;
 }
 
 /*
  * save a session to cache/cookie
  */
-static apr_status_t oidc_session_save_impl(request_rec *r, oidc_session_t *z) {
-
+apr_status_t oidc_session_save(request_rec *r, oidc_session_t *z) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 
-	json_object_set_new(z->state, OIDC_SESSION_EXPIRY_KEY,
-			json_integer(apr_time_sec(z->expiry)));
+	if (z->state != NULL) {
+		oidc_session_set(r, z, OIDC_SESSION_REMOTE_USER_KEY, z->remote_user);
+		json_object_set_new(z->state, OIDC_SESSION_EXPIRY_KEY,
+				json_integer(apr_time_sec(z->expiry)));
+	}
 
 	/* store this session in the request context, so it is available to sub-requests as a quicker-than-file-backend cache */
 	oidc_request_state_set(r, "session", (const char *) z);
 
 	apr_status_t rc = APR_SUCCESS;
-	if (c->session_type == OIDC_SESSION_TYPE_22_SERVER_CACHE) {
+	if (c->session_type == OIDC_SESSION_TYPE_SERVER_CACHE) {
 		/* store the session in the cache */
 		rc = oidc_session_save_cache(r, z);
-	} else if (c->session_type == OIDC_SESSION_TYPE_22_CLIENT_COOKIE) {
+	} else if (c->session_type == OIDC_SESSION_TYPE_CLIENT_COOKIE) {
 		/* store the session in a self-contained cookie */
 		rc = oidc_session_save_cookie(r, z);
 	} else {
@@ -273,35 +273,6 @@ static apr_status_t oidc_session_save_impl(request_rec *r, oidc_session_t *z) {
 }
 
 /*
- * load a session from the cache/cookie
- */
-apr_status_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
-	apr_status_t rc = oidc_session_load_impl(r, zz);
-	oidc_json_object_get_string(r->pool, (*zz)->state,
-	OIDC_SESSION_REMOTE_USER_KEY, (char **) &((*zz)->remote_user),
-	NULL);
-	char *uuid = NULL;
-	oidc_json_object_get_string(r->pool, (*zz)->state, OIDC_SESSION_UUID_KEY,
-			&uuid, NULL);
-	oidc_debug(r, "%s", uuid ? uuid : "<null>");
-	if (uuid != NULL)
-		apr_uuid_parse((*zz)->uuid, uuid);
-	return rc;
-}
-
-/*
- * save a session to cache/cookie
- */
-apr_status_t oidc_session_save(request_rec *r, oidc_session_t *z) {
-	oidc_session_set(r, z, OIDC_SESSION_REMOTE_USER_KEY, z->remote_user);
-	char key[APR_UUID_FORMATTED_LENGTH + 1];
-	apr_uuid_format((char *) &key, z->uuid);
-	oidc_debug(r, "%s", key);
-	oidc_session_set(r, z, OIDC_SESSION_UUID_KEY, key);
-	return oidc_session_save_impl(r, z);
-}
-
-/*
  * terminate a session
  */
 apr_status_t oidc_session_kill(request_rec *r, oidc_session_t *z) {
@@ -310,7 +281,7 @@ apr_status_t oidc_session_kill(request_rec *r, oidc_session_t *z) {
 		z->state = NULL;
 	}
 	z->expiry = 0;
-	return oidc_session_save_impl(r, z);
+	return oidc_session_save(r, z);
 }
 
 /*

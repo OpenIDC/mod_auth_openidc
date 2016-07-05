@@ -141,9 +141,9 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_DISC_AR_PARAM "auth_request_params"
 
 /* value that indicates to use server-side cache based session tracking */
-#define OIDC_SESSION_TYPE_22_SERVER_CACHE 0
+#define OIDC_SESSION_TYPE_SERVER_CACHE 0
 /* value that indicates to use client cookie based session tracking */
-#define OIDC_SESSION_TYPE_22_CLIENT_COOKIE 1
+#define OIDC_SESSION_TYPE_CLIENT_COOKIE 1
 
 /* nonce bytes length */
 #define OIDC_PROTO_NONCE_LENGTH 32
@@ -478,8 +478,6 @@ apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg, const oidc_jwks
 
 // oidc_session.c
 typedef struct {
-    apr_pool_t *pool;             /* pool to be used for this session */
-    apr_uuid_t *uuid;             /* anonymous uuid of this particular session */
     const char *remote_user;      /* user who owns this particular session */
     json_t *state;
     apr_time_t expiry;            /* if > 0, the time of expiry of this session */
