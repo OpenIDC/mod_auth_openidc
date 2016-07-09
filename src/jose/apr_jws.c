@@ -219,8 +219,8 @@ apr_byte_t apr_jws_hash_bytes(apr_pool_t *pool, const char *s_digest,
 		unsigned char **output, unsigned int *output_len, apr_jwt_error_t *err) {
 	unsigned char md_value[EVP_MAX_MD_SIZE];
 
-	EVP_MD_CTX ctx;
-	EVP_MD_CTX_init(&ctx);
+	EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+	EVP_MD_CTX_init(ctx);
 
 	const EVP_MD *evp_digest = NULL;
 	if ((evp_digest = EVP_get_digestbyname(s_digest)) == NULL) {
@@ -230,20 +230,20 @@ apr_byte_t apr_jws_hash_bytes(apr_pool_t *pool, const char *s_digest,
 		return FALSE;
 	}
 
-	if (!EVP_DigestInit_ex(&ctx, evp_digest, NULL)) {
+	if (!EVP_DigestInit_ex(ctx, evp_digest, NULL)) {
 		apr_jwt_error_openssl(err, "EVP_DigestInit_ex");
 		return FALSE;
 	}
-	if (!EVP_DigestUpdate(&ctx, input, input_len)) {
+	if (!EVP_DigestUpdate(ctx, input, input_len)) {
 		apr_jwt_error_openssl(err, "EVP_DigestUpdate");
 		return FALSE;
 	}
-	if (!EVP_DigestFinal_ex(&ctx, md_value, output_len)) {
+	if (!EVP_DigestFinal_ex(ctx, md_value, output_len)) {
 		apr_jwt_error_openssl(err, "EVP_DigestFinal_ex");
 		return FALSE;
 	}
 
-	EVP_MD_CTX_cleanup(&ctx);
+	EVP_MD_CTX_free(ctx);
 
 	*output = apr_pcalloc(pool, *output_len);
 	memcpy(*output, md_value, *output_len);
@@ -303,8 +303,8 @@ apr_byte_t apr_jws_calculate_rsa(apr_pool_t *pool, apr_jwt_t *jwt,
 	if ((digest = apr_jws_crypto_alg_to_evp(pool, jwt->header.alg, err)) == NULL)
 		return FALSE;
 
-	EVP_MD_CTX ctx;
-	EVP_MD_CTX_init(&ctx);
+	EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+	EVP_MD_CTX_init(ctx);
 
 	RSA * privkey = RSA_new();
 
@@ -317,9 +317,13 @@ apr_byte_t apr_jws_calculate_rsa(apr_pool_t *pool, apr_jwt_t *jwt,
 	BN_bin2bn(jwk->key.rsa->private_exponent,
 			jwk->key.rsa->private_exponent_len, private_exponent);
 
+#if OPENSSL_VERSION_NUMBER >= 0x10100005L
+	RSA_set0_key(privkey, modulus, exponent, private_exponent);
+#else
 	privkey->n = modulus;
 	privkey->e = exponent;
 	privkey->d = private_exponent;
+#endif
 
 	EVP_PKEY* pRsaKey = EVP_PKEY_new();
 	if (!EVP_PKEY_assign_RSA(pRsaKey, privkey)) {
@@ -333,15 +337,15 @@ apr_byte_t apr_jws_calculate_rsa(apr_pool_t *pool, apr_jwt_t *jwt,
 		unsigned char *pDigest = apr_pcalloc(pool, RSA_size(privkey));
 		unsigned int uDigestLen = RSA_size(privkey);
 
-		if (!EVP_DigestInit(&ctx, digest)) {
+		if (!EVP_DigestInit(ctx, digest)) {
 			apr_jwt_error_openssl(err, "EVP_DigestInit");
 			goto end;
 		}
-		if (!EVP_DigestUpdate(&ctx, jwt->message, strlen(jwt->message))) {
+		if (!EVP_DigestUpdate(ctx, jwt->message, strlen(jwt->message))) {
 			apr_jwt_error_openssl(err, "EVP_DigestUpdate");
 			goto end;
 		}
-		if (!EVP_DigestFinal(&ctx, pDigest, &uDigestLen)) {
+		if (!EVP_DigestFinal(ctx, pDigest, &uDigestLen)) {
 			apr_jwt_error_openssl(err, "wrong key? EVP_DigestFinal");
 			goto end;
 		}
@@ -371,17 +375,17 @@ apr_byte_t apr_jws_calculate_rsa(apr_pool_t *pool, apr_jwt_t *jwt,
 
 	} else {
 
-		if (!EVP_SignInit_ex(&ctx, digest, NULL)) {
+		if (!EVP_SignInit_ex(ctx, digest, NULL)) {
 			apr_jwt_error_openssl(err, "EVP_SignInit_ex");
 			goto end;
 		}
 
-		if (!EVP_SignUpdate(&ctx, jwt->message, strlen(jwt->message))) {
+		if (!EVP_SignUpdate(ctx, jwt->message, strlen(jwt->message))) {
 			apr_jwt_error_openssl(err, "EVP_SignUpdate");
 			goto end;
 		}
 
-		if (!EVP_SignFinal(&ctx, (unsigned char *) jwt->signature.bytes,
+		if (!EVP_SignFinal(ctx, (unsigned char *) jwt->signature.bytes,
 				(unsigned int *) &jwt->signature.length, pRsaKey)) {
 			apr_jwt_error_openssl(err, "wrong key? EVP_SignFinal");
 			goto end;
@@ -398,7 +402,7 @@ apr_byte_t apr_jws_calculate_rsa(apr_pool_t *pool, apr_jwt_t *jwt,
 	} else if (privkey) {
 		RSA_free(privkey);
 	}
-	EVP_MD_CTX_cleanup(&ctx);
+	EVP_MD_CTX_free(ctx);
 
 	return rc;
 }
@@ -416,8 +420,8 @@ static apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt,
 	if ((digest = apr_jws_crypto_alg_to_evp(pool, jwt->header.alg, err)) == NULL)
 		return FALSE;
 
-	EVP_MD_CTX ctx;
-	EVP_MD_CTX_init(&ctx);
+	EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+	EVP_MD_CTX_init(ctx);
 
 	RSA * pubkey = RSA_new();
 
@@ -427,8 +431,12 @@ static apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt,
 	BN_bin2bn(jwk->key.rsa->modulus, jwk->key.rsa->modulus_len, modulus);
 	BN_bin2bn(jwk->key.rsa->exponent, jwk->key.rsa->exponent_len, exponent);
 
+#if OPENSSL_VERSION_NUMBER >= 0x10100005L
+	RSA_set0_key(pubkey, modulus, exponent, NULL);
+#else
 	pubkey->n = modulus;
 	pubkey->e = exponent;
+#endif
 
 	EVP_PKEY* pRsaKey = EVP_PKEY_new();
 	if (!EVP_PKEY_assign_RSA(pRsaKey, pubkey)) {
@@ -451,15 +459,15 @@ static apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt,
 		unsigned char *pDigest = apr_pcalloc(pool, RSA_size(pubkey));
 		unsigned int uDigestLen = RSA_size(pubkey);
 
-		if (!EVP_DigestInit(&ctx, digest)) {
+		if (!EVP_DigestInit(ctx, digest)) {
 			apr_jwt_error_openssl(err, "EVP_DigestInit");
 			goto end;
 		}
-		if (!EVP_DigestUpdate(&ctx, jwt->message, strlen(jwt->message))) {
+		if (!EVP_DigestUpdate(ctx, jwt->message, strlen(jwt->message))) {
 			apr_jwt_error_openssl(err, "EVP_DigestUpdate");
 			goto end;
 		}
-		if (!EVP_DigestFinal(&ctx, pDigest, &uDigestLen)) {
+		if (!EVP_DigestFinal(ctx, pDigest, &uDigestLen)) {
 			apr_jwt_error_openssl(err, "wrong key? EVP_DigestFinal");
 			goto end;
 		}
@@ -477,15 +485,16 @@ static apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt,
 	} else if (apr_jws_signature_starts_with(pool, jwt->header.alg,
 			"RS") == TRUE) {
 
-		if (!EVP_VerifyInit_ex(&ctx, digest, NULL)) {
+		if (!EVP_VerifyInit_ex(ctx, digest, NULL)) {
 			apr_jwt_error_openssl(err, "EVP_VerifyInit_ex");
 			goto end;
 		}
-		if (!EVP_VerifyUpdate(&ctx, jwt->message, strlen(jwt->message))) {
+		if (!EVP_VerifyUpdate(ctx, jwt->message, strlen(jwt->message))) {
 			apr_jwt_error_openssl(err, "EVP_VerifyUpdate");
 			goto end;
 		}
-		int rv = EVP_VerifyFinal(&ctx, (const unsigned char *) jwt->signature.bytes,
+		
+		int rv = EVP_VerifyFinal(ctx, (const unsigned char *) jwt->signature.bytes,
 				jwt->signature.length, pRsaKey);
 
 		if (rv < 0) {
@@ -507,7 +516,7 @@ end:
 	} else if (pubkey) {
 		RSA_free(pubkey);
 	}
-	EVP_MD_CTX_cleanup(&ctx);
+	EVP_MD_CTX_free(ctx);
 
 	return rc;
 }
@@ -577,8 +586,16 @@ static apr_byte_t apr_jws_verify_ec(apr_pool_t *pool, apr_jwt_t *jwt,
 	ECDSA_SIG *ecdsa_sig = NULL;
 	ecdsa_sig = ECDSA_SIG_new();
 
+#if OPENSSL_VERSION_NUMBER >= 0x10100005L
+	BIGNUM *r = BN_new();
+	BIGNUM *s = BN_new();
+	BN_bin2bn(jwt->signature.bytes, key_len, r);
+	BN_bin2bn(jwt->signature.bytes + key_len, key_len, s);
+	ECDSA_SIG_set0(ecdsa_sig, r, s);
+#else
 	BN_bin2bn(jwt->signature.bytes, key_len, ecdsa_sig->r);
 	BN_bin2bn(jwt->signature.bytes + key_len, key_len, ecdsa_sig->s);
+#endif
 
 	char *hash = NULL;
 	int hash_len = 0;

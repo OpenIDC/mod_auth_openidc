@@ -175,10 +175,14 @@ static RSA* apr_jwe_jwk_to_openssl_rsa_key(apr_jwk_t *jwk) {
 				jwk->key.rsa->private_exponent_len, private_exp);
 	}
 
+	/* private_exp is NULL for public keys */
+#if OPENSSL_VERSION_NUMBER >= 0x10100005L
+	RSA_set0_key(key, modulus, exponent, private_exp);
+#else
 	key->n = modulus;
 	key->e = exponent;
-	/* private_exp is NULL for public keys */
 	key->d = private_exp;
+#endif
 
 	return key;
 }
@@ -489,10 +493,10 @@ apr_byte_t apr_jwe_decrypt_content_aescbc(apr_pool_t *pool,
 	unsigned char *plaintext = apr_palloc(pool, p_len + AES_BLOCK_SIZE);
 
 	/* initialize decryption context */
-	EVP_CIPHER_CTX decrypt_ctx;
-	EVP_CIPHER_CTX_init(&decrypt_ctx);
+	EVP_CIPHER_CTX *decrypt_ctx = EVP_CIPHER_CTX_new();
+	EVP_CIPHER_CTX_init(decrypt_ctx);
 	/* pass the extracted encryption key and Initialization Vector */
-	if (!EVP_DecryptInit_ex(&decrypt_ctx,
+	if (!EVP_DecryptInit_ex(decrypt_ctx,
 			apr_jwe_enc_to_openssl_cipher(header->enc), NULL, enc_key,
 			(const unsigned char *) iv->value)) {
 		apr_jwt_error_openssl(err, "EVP_DecryptInit_ex");
@@ -500,14 +504,14 @@ apr_byte_t apr_jwe_decrypt_content_aescbc(apr_pool_t *pool,
 	}
 
 	/* decrypt the ciphertext in to the plaintext */
-	if (!EVP_DecryptUpdate(&decrypt_ctx, plaintext, &p_len,
+	if (!EVP_DecryptUpdate(decrypt_ctx, plaintext, &p_len,
 			(const unsigned char *) cipher_text->value, cipher_text->len)) {
 		apr_jwt_error_openssl(err, "EVP_DecryptUpdate");
 		return FALSE;
 	}
 
 	/* decrypt the remaining bits/padding */
-	if (!EVP_DecryptFinal_ex(&decrypt_ctx, plaintext + p_len, &f_len)) {
+	if (!EVP_DecryptFinal_ex(decrypt_ctx, plaintext + p_len, &f_len)) {
 		apr_jwt_error_openssl(err, "EVP_DecryptFinal_ex");
 		return FALSE;
 	}
@@ -516,7 +520,7 @@ apr_byte_t apr_jwe_decrypt_content_aescbc(apr_pool_t *pool,
 	*decrypted = (char *) plaintext;
 
 	/* cleanup */
-	EVP_CIPHER_CTX_cleanup(&decrypt_ctx);
+	EVP_CIPHER_CTX_free(decrypt_ctx);
 
 	/* if we got here, all must be fine */
 	return TRUE;

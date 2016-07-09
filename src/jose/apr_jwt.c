@@ -589,3 +589,13 @@ char *apr_jwt_serialize(apr_pool_t *pool, apr_jwt_t *jwt) {
 			jwt->signature.length, 0);
 	return apr_psprintf(pool, "%s.%s", jwt->message, b64sig);
 }
+
+#if (OPENSSL_VERSION_NUMBER < 0x10100000)
+EVP_MD_CTX * EVP_MD_CTX_new() {
+	return malloc(sizeof(EVP_MD_CTX));
+}
+void EVP_MD_CTX_free(EVP_MD_CTX *ctx) {
+	if (ctx) free(ctx);
+}
+
+#endif

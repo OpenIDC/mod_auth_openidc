@@ -1,5 +1,7 @@
 7/9/2016
 - fix Elliptic Curve signature verification for corrupted input
+- support OpenSSL 1.1.x
+- bump to 1.9.0rc1
 
 7/5/2016
 - use AUTHZ_DENIED instead of HTTP_UNAUTHORIZED in oidc_authz_checker; closes #151; thanks @gwollman

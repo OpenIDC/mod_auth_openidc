@@ -153,21 +153,30 @@ static apr_byte_t apr_jwk_rsa_bio_to_key(apr_pool_t *pool, BIO *input,
 		goto end;
 	}
 
+	const BIGNUM *rsa_n, *rsa_e, *rsa_d;
+#if OPENSSL_VERSION_NUMBER >= 0x10100005L
+	RSA_get0_key(rsa, &rsa_n, &rsa_e, &rsa_d);
+#else
+	rsa_n=rsa->n;
+	rsa_e=rsa->e;
+	rsa_d=rsa->d;
+#endif
+
 	/* convert the modulus bignum in to a key/len */
-	key->modulus_len = BN_num_bytes(rsa->n);
+	key->modulus_len = BN_num_bytes(rsa_n);
 	key->modulus = apr_pcalloc(pool, key->modulus_len);
-	BN_bn2bin(rsa->n, key->modulus);
+	BN_bn2bin(rsa_n, key->modulus);
 
 	/* convert the exponent bignum in to a key/len */
-	key->exponent_len = BN_num_bytes(rsa->e);
+	key->exponent_len = BN_num_bytes(rsa_e);
 	key->exponent = apr_pcalloc(pool, key->exponent_len);
-	BN_bn2bin(rsa->e, key->exponent);
+	BN_bn2bin(rsa_e, key->exponent);
 
 	/* convert the private exponent bignum in to a key/len */
-	if (rsa->d != NULL) {
-		key->private_exponent_len = BN_num_bytes(rsa->d);
+	if (rsa_d != NULL) {
+		key->private_exponent_len = BN_num_bytes(rsa_d);
 		key->private_exponent = apr_pcalloc(pool, key->private_exponent_len);
-		BN_bn2bin(rsa->d, key->private_exponent);
+		BN_bn2bin(rsa_d, key->private_exponent);
 	}
 
 	RSA_free(rsa);

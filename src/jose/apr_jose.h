@@ -319,4 +319,10 @@ apr_byte_t apr_jwe_decrypt_jwt(apr_pool_t *pool, apr_jwt_header_t *header,
 
 apr_byte_t apr_jwt_memcmp(const void *in_a, const void *in_b, size_t len);
 
+#if (OPENSSL_VERSION_NUMBER < 0x10100000)
+#include <openssl/ec.h>
+	EVP_MD_CTX * EVP_MD_CTX_new();
+	void EVP_MD_CTX_free(EVP_MD_CTX *);
+#endif
+
 #endif /* _APR_JOSE_H_ */
