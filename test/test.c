@@ -203,6 +203,72 @@ static char *test_jwt_parse(apr_pool_t *pool) {
 	return 0;
 }
 
+#if (APR_JWS_EC_SUPPORT)
+
+static char *test_jwt_verify_ec(apr_pool_t *pool) {
+
+	/*
+	 * {
+	 *   "sub": "joe",
+	 *   "aud": "ac_oic_client",
+	 *   "jti": "oDWivWPJB47zkjOm2cygDv",
+	 *   "iss": "https://localhost:9031",
+	 *   "iat": 1467997207,
+	 *   "exp": 1467997507,
+	 *   "nonce": "WLxmv5StYyUk9JlWI8SaXTLPkGZ0Vs8aSTdj_VQ6rao"
+	 * }
+	 */
+	char *s_jwt = apr_pstrdup(pool, "eyJhbGciOiJFUzI1NiIsImtpZCI6ImY2cXRqIn0.eyJzdWIiOiJqb2UiLCJhdWQiOiJhY19vaWNfY2xpZW50IiwianRpIjoib0RXaXZXUEpCNDd6a2pPbTJjeWdEdiIsImlzcyI6Imh0dHBzOlwvXC9sb2NhbGhvc3Q6OTAzMSIsImlhdCI6MTQ2Nzk5NzIwNywiZXhwIjoxNDY3OTk3NTA3LCJub25jZSI6IldMeG12NVN0WXlVazlKbFdJOFNhWFRMUGtHWjBWczhhU1Rkal9WUTZyYW8ifQ.2kqX56QNow37gOlnfLn0SIzwie4mLLIUx_p9OSQa0hiUXKQWQLmMYBjIp5qGh2-R-KPHwNEBxqXwuPgXG4Y7Eg");
+	apr_jwt_t *jwt = NULL;
+	apr_jwt_error_t err;
+	TST_ASSERT_ERR("apr_jwt_parse",
+			apr_jwt_parse(pool, s_jwt, &jwt, NULL, &err), pool, err);
+
+	char *s_key = "{"
+		      "\"kty\": \"EC\","
+		      "\"kid\": \"f6qtj\","
+		      "\"use\": \"sig\","
+		      "\"x\": \"iARwFlN3B3xa8Zn_O-CVfqry68tXIhO9DckKo1yrNg0\","
+		      "\"y\": \"583S_mPS7YVZtLCjx2O69G_JzQPnMxjieOli-9cc_6Q\","
+		      "\"crv\": \"P-256\""
+		    "}";
+
+	apr_hash_t *keys = apr_hash_make(pool);
+	apr_jwk_t *jwk = NULL;
+	TST_ASSERT_ERR("apr_jwk_parse_json",
+			_jwk_parse(pool, s_key, &jwk, &err) == 0, pool, err);
+	apr_hash_set(keys, "f6qtj", APR_HASH_KEY_STRING, jwk);
+
+	TST_ASSERT_ERR("apr_jws_verify (ec0)", apr_jws_verify(pool, jwt, keys, &err),
+			pool, err);
+
+//	apr_jwt_destroy(jwt);
+//	jwt = NULL;
+//	TST_ASSERT_ERR("apr_jwt_parse (ec1)",
+//			apr_jwt_parse(pool, s_jwt, &jwt, NULL, &err), pool, err);
+
+	jwt->message[5] = 0xFF;
+
+	TST_ASSERT_ERR("apr_jws_verify (ec1)", apr_jws_verify(pool, jwt, keys, &err) == FALSE,
+			pool, err);
+
+	apr_jwt_destroy(jwt);
+	jwt = NULL;
+	TST_ASSERT_ERR("apr_jwt_parse (ec2)",
+			apr_jwt_parse(pool, s_jwt, &jwt, NULL, &err), pool, err);
+
+	jwt->signature.bytes[5] = 0xFF;
+
+	TST_ASSERT_ERR("apr_jws_verify (ec2)", apr_jws_verify(pool, jwt, keys, &err) == FALSE,
+			pool, err);
+
+	apr_jwt_destroy(jwt);
+
+	return 0;
+}
+
+#endif
+
 static char *test_jwt_verify_rsa(apr_pool_t *pool) {
 	/*
 	 * {
@@ -251,6 +317,26 @@ static char *test_jwt_verify_rsa(apr_pool_t *pool) {
 	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
 
 	TST_ASSERT_ERR("apr_jws_verify", apr_jws_verify(pool, jwt, keys, &err),
+			pool, err);
+
+	apr_jwt_destroy(jwt);
+	jwt = NULL;
+	TST_ASSERT_ERR("apr_jwt_parse (rsa1)",
+			apr_jwt_parse(pool, s_jwt, &jwt, NULL, &err), pool, err);
+
+	jwt->message[5] = 0xFF;
+
+	TST_ASSERT_ERR("apr_jws_verify (rsa1)", apr_jws_verify(pool, jwt, keys, &err) == FALSE,
+			pool, err);
+
+	apr_jwt_destroy(jwt);
+	jwt = NULL;
+	TST_ASSERT_ERR("apr_jwt_parse (rsa2)",
+			apr_jwt_parse(pool, s_jwt, &jwt, NULL, &err), pool, err);
+
+	jwt->signature.bytes[5] = 0xFF;
+
+	TST_ASSERT_ERR("apr_jws_verify (rsa2)", apr_jws_verify(pool, jwt, keys, &err) == FALSE,
 			pool, err);
 
 	apr_jwt_destroy(jwt);
@@ -1137,6 +1223,10 @@ static char * all_tests(apr_pool_t *pool, request_rec *r) {
 #if (OPENSSL_VERSION_NUMBER >= 0x1000100f)	
 	TST_RUN(test_jwt_decrypt_gcm, pool);
 #endif
+#if (APR_JWS_EC_SUPPORT)
+	TST_RUN(test_jwt_verify_ec, pool);
+#endif
+
 	TST_RUN(test_jwt_verify_rsa, pool);
 	TST_RUN(test_jwt_sign_verify, pool);
 

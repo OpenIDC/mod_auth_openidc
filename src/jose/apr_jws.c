@@ -57,6 +57,8 @@
 #include <openssl/hmac.h>
 #include <openssl/err.h>
 
+#include <openssl/ecdsa.h>
+
 #include <apr_base64.h>
 
 #include "apr_jose.h"
@@ -483,9 +485,14 @@ static apr_byte_t apr_jws_verify_rsa(apr_pool_t *pool, apr_jwt_t *jwt,
 			apr_jwt_error_openssl(err, "EVP_VerifyUpdate");
 			goto end;
 		}
-		if (!EVP_VerifyFinal(&ctx, (const unsigned char *) jwt->signature.bytes,
-				jwt->signature.length, pRsaKey)) {
-			apr_jwt_error_openssl(err, "wrong key? EVP_VerifyFinal");
+		int rv = EVP_VerifyFinal(&ctx, (const unsigned char *) jwt->signature.bytes,
+				jwt->signature.length, pRsaKey);
+
+		if (rv < 0) {
+			apr_jwt_error_openssl(err, "EVP_VerifyFinal");
+			goto end;
+		} else if (rv == 0) {
+			apr_jwt_error(err, "wrong key");
 			goto end;
 		}
 
@@ -545,12 +552,8 @@ static apr_byte_t apr_jws_verify_ec(apr_pool_t *pool, apr_jwt_t *jwt,
 	apr_byte_t rc = FALSE;
 
 	/* get the OpenSSL digest function */
-	const EVP_MD *digest = NULL;
-	if ((digest = apr_jws_crypto_alg_to_evp(pool, jwt->header.alg, err)) == NULL)
-		return FALSE;
-
-	EVP_MD_CTX ctx;
-	EVP_MD_CTX_init(&ctx);
+	const char *digest = apr_jws_alg_to_openssl_digest(jwt->header.alg);
+	if (digest == NULL) return FALSE;
 
 	EC_KEY * pubkey = EC_KEY_new();
 	EC_KEY_set_group(pubkey, curve);
@@ -566,43 +569,42 @@ static apr_byte_t apr_jws_verify_ec(apr_pool_t *pool, apr_jwt_t *jwt,
 		return FALSE;
 	}
 
-	EVP_PKEY* pEcKey = EVP_PKEY_new();
-	if (!EVP_PKEY_assign_EC_KEY(pEcKey, pubkey)) {
-		pEcKey = NULL;
-		apr_jwt_error_openssl(err, "EVP_PKEY_assign_EC_KEY");
+	//P-256:  64 byte signature
+	//P-384:  96 byte signature
+	//P-521: 132 byte signature
+	int key_len = jwt->signature.length / 2;
+
+	ECDSA_SIG *ecdsa_sig = NULL;
+	ecdsa_sig = ECDSA_SIG_new();
+
+	BN_bin2bn(jwt->signature.bytes, key_len, ecdsa_sig->r);
+	BN_bin2bn(jwt->signature.bytes + key_len, key_len, ecdsa_sig->s);
+
+	char *hash = NULL;
+	int hash_len = 0;
+	if (apr_jws_hash_bytes(pool, digest, (const unsigned char *)jwt->message, (unsigned int)strlen(jwt->message), (unsigned char **)&hash, (unsigned int *)&hash_len, err) == FALSE) {
+ 		apr_jwt_error(err, "apr_jws_hash_bytes");
 		goto end;
 	}
 
-	ctx.pctx = EVP_PKEY_CTX_new(pEcKey, NULL);
-
-	if (!EVP_PKEY_verify_init(ctx.pctx)) {
-		apr_jwt_error_openssl(err, "EVP_PKEY_verify_init");
+    int rv = ECDSA_do_verify((const unsigned char *)hash, hash_len, ecdsa_sig, pubkey);
+ 	if (rv < 0) {
+ 		apr_jwt_error_openssl(err, "ECDSA_do_verify");
 		goto end;
-	}
-	if (!EVP_VerifyInit_ex(&ctx, digest, NULL)) {
-		apr_jwt_error_openssl(err, "EVP_VerifyInit_ex");
+ 	} else if (rv == 0) {
+ 		apr_jwt_error(err, "wrong key");
 		goto end;
-	}
-	if (!EVP_VerifyUpdate(&ctx, jwt->message, strlen(jwt->message))) {
-		apr_jwt_error_openssl(err, "EVP_VerifyUpdate");
-		goto end;
-	}
-	if (!EVP_VerifyFinal(&ctx, (const unsigned char *) jwt->signature.bytes,
-			jwt->signature.length, pEcKey)) {
-		apr_jwt_error_openssl(err, "wrong key? EVP_VerifyFinal");
-		goto end;
-	}
+ 	}
 
 	rc = TRUE;
 
 end:
 
-	if (pEcKey) {
-		EVP_PKEY_free(pEcKey);
-	} else if (pubkey) {
+	if (ecdsa_sig)
+		ECDSA_SIG_free(ecdsa_sig);
+	if (pubkey) {
 		EC_KEY_free(pubkey);
 	}
-	EVP_MD_CTX_cleanup(&ctx);
 
 	return rc;
 }
