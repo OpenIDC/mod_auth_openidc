@@ -1,3 +1,7 @@
+7/11/2016
+- fix Elliptic Curve signature verification for corrupted input
+- release 1.8.10.1
+
 6/27/2016
 - use EVP_CIPHER_CTX_new to avoid compilation errors with OpenSSL 1.1.0
 - release 1.8.10

@@ -1,3 +1,9 @@
+libapache2-mod-auth-openidc (1.8.10.1-1) unstable; urgency=medium
+
+  * fix Elliptic Curve signature verification
+
+ -- Hans Zandbelt <hzandbelt@pingidentity.com>  Mon, 11 Jul 2016 15:12:50 +0200
+
 libapache2-mod-auth-openidc (1.8.10-1) unstable; urgency=medium
 
   * build with OpenSSL 1.1.0
