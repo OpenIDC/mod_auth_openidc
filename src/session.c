@@ -141,7 +141,7 @@ static apr_byte_t oidc_session_load_cookie(request_rec *r, oidc_cfg *c,
 	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 
-	char *cookieValue = oidc_util_get_cookie(r, d->cookie);
+	char *cookieValue = oidc_util_get_chunked_cookie(r, d->cookie, c->session_cookie_chunk_size);
 	if (cookieValue != NULL) {
 		json_t *json = NULL;
 		if (oidc_util_jwt_hs256_verify(r, c->crypto_passphrase, cookieValue,
@@ -174,8 +174,36 @@ static apr_byte_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z) {
 		}
 	}
 
-	oidc_util_set_cookie(r, d->cookie, cookieValue,
+	int cookieLength = strlen(cookieValue);
+	int chunkSize = c->session_cookie_chunk_size;
+
+	if (chunkSize == 0 || cookieLength < chunkSize)
+	{
+		oidc_util_set_cookie(r, d->cookie, cookieValue,
 			c->persistent_session_cookie ? z->expiry : -1);
+	}
+
+	// split the cookie into chunks
+	else {
+		int chunks = cookieLength / chunkSize + 1;
+		char *ptr = cookieValue;
+		char *cookieName = d->cookie;
+
+		for(int i = 0; i < chunks; i++) {
+			char *chunk;
+			char *chunkName;
+
+			chunkName = apr_psprintf(r->pool, "%s_%d", cookieName, i);
+			chunk = apr_pstrndup(r->pool, ptr, chunkSize);
+			ptr += chunkSize;
+
+			oidc_util_set_cookie(r, chunkName, chunk,
+				c->persistent_session_cookie ? z->expiry : -1);
+		};
+
+		char * counterCookieName = apr_psprintf(r->pool, "%s_chunks", cookieName);
+		oidc_util_set_cookie(r, counterCookieName, apr_psprintf(r->pool, "%d", chunks), c->persistent_session_cookie ? z->expiry : -1);
+	}
 
 	return TRUE;
 }

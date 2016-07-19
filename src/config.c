@@ -97,6 +97,8 @@
 #define OIDC_DEFAULT_HTTP_TIMEOUT_SHORT  5
 /* default session storage type */
 #define OIDC_DEFAULT_SESSION_TYPE OIDC_SESSION_TYPE_SERVER_CACHE
+/* default client-cookie chunking size */
+#define OIDC_DEFAULT_SESSION_CLIENT_COOKIE_CHUNK_SIZE 4000
 /* timeout in seconds after which state expires */
 #define OIDC_DEFAULT_STATE_TIMEOUT 300
 /* default session inactivity timeout */
@@ -1044,6 +1046,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->metadata_dir = NULL;
 	c->session_type = OIDC_DEFAULT_SESSION_TYPE;
 	c->persistent_session_cookie = 0;
+	c->session_cookie_chunk_size = OIDC_DEFAULT_SESSION_CLIENT_COOKIE_CHUNK_SIZE;
 
 	c->http_timeout_long = OIDC_DEFAULT_HTTP_TIMEOUT_LONG;
 	c->http_timeout_short = OIDC_DEFAULT_HTTP_TIMEOUT_SHORT;
@@ -1355,6 +1358,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->persistent_session_cookie != 0 ?
 					add->persistent_session_cookie :
 					base->persistent_session_cookie;
+	c->session_cookie_chunk_size =
+			add->session_cookie_chunk_size != OIDC_DEFAULT_SESSION_CLIENT_COOKIE_CHUNK_SIZE ?
+					add->session_cookie_chunk_size :
+					base->session_cookie_chunk_size;
 
 	c->cookie_domain =
 			add->cookie_domain != NULL ?
@@ -2153,6 +2160,10 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, session_type),
 				RSRC_CONF,
 				"OpenID Connect session storage type (Apache 2.0/2.2 only). Must be one of \"server-cache\" or \"client-cookie\" with an optional suffix \":persistent\"."),
+		AP_INIT_TAKE1("OIDCSessionCookieChunkSize", oidc_set_int_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, session_cookie_chunk_size),
+				RSRC_CONF,
+				"Chunk size for client-cookie session storage type in bytes. Defaults to 4k. Set 0 to suppress chunking."),
 		AP_INIT_FLAG("OIDCScrubRequestHeaders",
 				oidc_set_flag_slot,
 				(void *) APR_OFFSETOF(oidc_cfg, scrub_request_headers),

@@ -813,6 +813,68 @@ char *oidc_util_get_cookie(request_rec *r, const char *cookieName) {
 	return rv;
 }
 
+#define OIDC_COOKIE_CHUNKS_SEPARATOR "_"
+#define OIDC_COOKIE_CHUNKS_POSTFIX "chunks"
+
+/*
+ * get a cookie value that is split over a number of chunked cookies
+ */
+char *oidc_util_get_chunked_cookie(request_rec *r, const char *cookieName,
+		int chunkSize) {
+	char *cookieValue = NULL;
+	if (chunkSize == 0) {
+		cookieValue = oidc_util_get_cookie(r, cookieName);
+	} else {
+		char *chunkCountName = apr_psprintf(r->pool, "%s%s%s", cookieName,
+				OIDC_COOKIE_CHUNKS_SEPARATOR,
+				OIDC_COOKIE_CHUNKS_POSTFIX);
+		char* chunkCountValue = oidc_util_get_cookie(r, chunkCountName);
+		if (chunkCountValue != NULL) {
+			cookieValue = NULL;
+			char *endptr = NULL;
+			long chunkCount = strtol(chunkCountValue, &endptr, 10);
+			if ((*chunkCountValue != '\0') && (*endptr == '\0')) {
+				cookieValue = "";
+				for (int i = 0; i < chunkCount; i++) {
+					char *chunkName = apr_psprintf(r->pool, "%s%s%d",
+							cookieName, OIDC_COOKIE_CHUNKS_SEPARATOR, i);
+					char *chunkValue = oidc_util_get_cookie(r, chunkName);
+					cookieValue = apr_psprintf(r->pool, "%s%s", cookieValue,
+							chunkValue);
+				}
+			}
+		} else {
+			cookieValue = oidc_util_get_cookie(r, cookieName);
+		}
+	}
+	return cookieValue;
+}
+
+/*
+ * set a cookie value that is split over a number of chunked cookies
+ */
+void oidc_util_set_chunked_cookie(request_rec *r, const char *cookieName,
+		const char *cookieValue, apr_time_t expires, int chunkSize) {
+	int cookieLength = strlen(cookieValue);
+	if ((chunkSize == 0) || (cookieLength < chunkSize)) {
+		oidc_util_set_cookie(r, cookieName, cookieValue, expires);
+	} else {
+		int chunkCountValue = cookieLength / chunkSize + 1;
+		const char *ptr = cookieValue;
+		for (int i = 0; i < chunkCountValue; i++) {
+			char *chunkName = apr_psprintf(r->pool, "%s%s%d", cookieName,
+					OIDC_COOKIE_CHUNKS_SEPARATOR, i);
+			char *chunkValue = apr_pstrndup(r->pool, ptr, chunkSize);
+			ptr += chunkSize;
+			oidc_util_set_cookie(r, chunkName, chunkValue, expires);
+		};
+		char *chunkCountName = apr_psprintf(r->pool, "%s%s%s", cookieName,
+				OIDC_COOKIE_CHUNKS_SEPARATOR, OIDC_COOKIE_CHUNKS_POSTFIX);
+		oidc_util_set_cookie(r, chunkCountName,
+				apr_psprintf(r->pool, "%d", chunkCountValue), expires);
+	}
+}
+
 /*
  * normalize a string for use as an HTTP Header Name.  Any invalid
  * characters (per http://tools.ietf.org/html/rfc2616#section-4.2 and

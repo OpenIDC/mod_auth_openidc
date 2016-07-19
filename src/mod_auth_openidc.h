@@ -306,6 +306,8 @@ typedef struct oidc_cfg {
 	int session_type;
 	/* session cookie or persistent cookie */
 	int persistent_session_cookie;
+	/* session cookie chunk size */
+	int session_cookie_chunk_size;
 
 	/* pointer to cache functions */
 	oidc_cache_t *cache;
@@ -468,6 +470,8 @@ int oidc_util_cookie_domain_valid(const char *hostname, char *cookie_domain);
 apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char *openssl_hash_algo, const char *input, char **output);
 apr_byte_t oidc_util_jwt_hs256_sign(request_rec *r, const char *secret, json_t *payload, char **compact_encoded_jwt);
 apr_byte_t oidc_util_jwt_hs256_verify(request_rec *r, const char *secret, const char *compact_encoded_jwt, json_t **result);
+char *oidc_util_get_chunked_cookie(request_rec *r, const char *cookieName, int cookie_chunk_size);
+void oidc_util_set_chunked_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires, int chunkSize);
 
 // oidc_metadata.c
 apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg, const char *issuer, const char *url, json_t **j_metadata, const char **response);
