@@ -175,8 +175,8 @@ static apr_byte_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z) {
 	}
 
 	oidc_util_set_chunked_cookie(r, d->cookie, cookieValue,
-			c->session_cookie_chunk_size,
-			c->persistent_session_cookie ? z->expiry : -1);
+			c->persistent_session_cookie ? z->expiry : -1,
+					c->session_cookie_chunk_size);
 
 	return TRUE;
 }
