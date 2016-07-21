@@ -226,6 +226,8 @@ typedef struct oidc_provider_t {
 	char *jwks_uri;
 	char *client_id;
 	char *client_secret;
+	char *token_endpoint_tls_client_key;
+	char *token_endpoint_tls_client_cert;
 
 	// the next ones function as global default settings too
 	int ssl_validate_server;
@@ -261,6 +263,8 @@ typedef struct oidc_oauth_t {
 	int ssl_validate_server;
 	char *client_id;
 	char *client_secret;
+	char *introspection_endpoint_tls_client_key;
+	char *introspection_endpoint_tls_client_cert;
 	char *introspection_endpoint_url;
 	char *introspection_endpoint_method;
 	char *introspection_endpoint_params;
@@ -435,9 +439,9 @@ char *oidc_normalize_header_name(const request_rec *r, const char *str);
 
 void oidc_util_set_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires);
 char *oidc_util_get_cookie(request_rec *r, const char *cookieName);
-apr_byte_t oidc_util_http_get(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth, const char *bearer_token, int ssl_validate_server, const char **response, int timeout, const char *outgoing_proxy, apr_array_header_t *pass_cookies);
-apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth, const char *bearer_token, int ssl_validate_server, const char **response, int timeout, const char *outgoing_proxy, apr_array_header_t *pass_cookies);
-apr_byte_t oidc_util_http_post_json(request_rec *r, const char *url, const json_t *data, const char *basic_auth, const char *bearer_token, int ssl_validate_server, const char **response, int timeout, const char *outgoing_proxy, apr_array_header_t *pass_cookies);
+apr_byte_t oidc_util_http_get(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth, const char *bearer_token, int ssl_validate_server, const char **response, int timeout, const char *outgoing_proxy, apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key);
+apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth, const char *bearer_token, int ssl_validate_server, const char **response, int timeout, const char *outgoing_proxy, apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key);
+apr_byte_t oidc_util_http_post_json(request_rec *r, const char *url, const json_t *data, const char *basic_auth, const char *bearer_token, int ssl_validate_server, const char **response, int timeout, const char *outgoing_proxy, apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key);
 apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url);
 apr_byte_t oidc_util_request_has_parameter(request_rec *r, const char* param);
 apr_byte_t oidc_util_get_request_parameter(request_rec *r, char *name, char **value);

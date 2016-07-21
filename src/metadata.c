@@ -675,7 +675,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 	if (oidc_util_http_post_json(r, provider->registration_endpoint_url, data,
 			NULL, provider->registration_token, provider->ssl_validate_server, response,
 			cfg->http_timeout_short, cfg->outgoing_proxy,
-			dir_cfg->pass_cookies) == FALSE) {
+			dir_cfg->pass_cookies, NULL, NULL) == FALSE) {
 		json_decref(data);
 		return FALSE;
 	}
@@ -706,7 +706,7 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
 	/* no valid provider metadata, get it at the specified URL with the specified parameters */
 	if (oidc_util_http_get(r, jwks_uri->url, NULL, NULL,
 			NULL, jwks_uri->ssl_validate_server, &response, cfg->http_timeout_long,
-			cfg->outgoing_proxy, dir_cfg->pass_cookies) == FALSE)
+			cfg->outgoing_proxy, dir_cfg->pass_cookies, NULL, NULL) == FALSE)
 		return FALSE;
 
 	/* decode and see if it is not an error response somehow */
@@ -780,7 +780,7 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg,
 	if (oidc_util_http_get(r, url, NULL, NULL, NULL,
 			cfg->provider.ssl_validate_server, response,
 			cfg->http_timeout_short, cfg->outgoing_proxy,
-			dir_cfg->pass_cookies) == FALSE)
+			dir_cfg->pass_cookies, NULL, NULL) == FALSE)
 		return FALSE;
 
 	/* decode and see if it is not an error response somehow */
@@ -1169,6 +1169,12 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 	oidc_json_object_get_int(r->pool, j_conf, "userinfo_refresh_interval",
 			&provider->userinfo_refresh_interval,
 			cfg->provider.userinfo_refresh_interval);
+
+	/* TLS client cert auth settings */
+	oidc_json_object_get_string(r->pool, j_conf, "token_endpoint_tls_client_cert",
+			&provider->token_endpoint_tls_client_cert, cfg->provider.token_endpoint_tls_client_cert);
+	oidc_json_object_get_string(r->pool, j_conf, "token_endpoint_tls_client_key",
+			&provider->token_endpoint_tls_client_key, cfg->provider.token_endpoint_tls_client_key);
 
 	return TRUE;
 }

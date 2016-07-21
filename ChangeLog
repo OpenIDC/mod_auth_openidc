@@ -1,3 +1,7 @@
+7/21/2016
+- support TLS client authentication to token and introspection endpoints
+- bump to 1.9.0rc3
+
 7/19/2016
 - add support for chunked session cookies; closes #153; thanks @glatzert 
 - bump to 1.9.0rc2

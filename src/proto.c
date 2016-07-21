@@ -975,7 +975,7 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 	if (oidc_util_http_post_form(r, provider->token_endpoint_url, params,
 			basic_auth, NULL, provider->ssl_validate_server, &response,
 			cfg->http_timeout_long, cfg->outgoing_proxy,
-			dir_cfg->pass_cookies) == FALSE) {
+			dir_cfg->pass_cookies, provider->token_endpoint_tls_client_cert, provider->token_endpoint_tls_client_key) == FALSE) {
 		oidc_warn(r, "error when calling the token endpoint (%s)",
 				provider->token_endpoint_url);
 		return FALSE;
@@ -1081,7 +1081,7 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 	if (oidc_util_http_get(r, provider->userinfo_endpoint_url,
 			NULL, NULL, access_token, provider->ssl_validate_server, response,
 			cfg->http_timeout_long, cfg->outgoing_proxy,
-			dir_cfg->pass_cookies) == FALSE)
+			dir_cfg->pass_cookies, NULL, NULL) == FALSE)
 		return FALSE;
 
 	/* decode and check for an "error" response */
@@ -1125,7 +1125,7 @@ apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg,
 	if (oidc_util_http_get(r, url, params, NULL, NULL,
 			cfg->provider.ssl_validate_server, &response,
 			cfg->http_timeout_short, cfg->outgoing_proxy,
-			dir_cfg->pass_cookies) == FALSE) {
+			dir_cfg->pass_cookies, NULL, NULL) == FALSE) {
 		/* errors will have been logged by now */
 		return FALSE;
 	}

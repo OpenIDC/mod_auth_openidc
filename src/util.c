@@ -465,7 +465,7 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 		const char *data, const char *content_type, const char *basic_auth,
 		const char *bearer_token, int ssl_validate_server,
 		const char **response, int timeout, const char *outgoing_proxy,
-		apr_array_header_t *pass_cookies) {
+		apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key) {
 	char curlError[CURL_ERROR_SIZE];
 	oidc_curl_buffer curlBuffer;
 	CURL *curl;
@@ -547,6 +547,11 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 		curl_easy_setopt(curl, CURLOPT_USERPWD, basic_auth);
 	}
 
+	if (ssl_cert != NULL)
+		curl_easy_setopt(curl, CURLOPT_SSLCERT, ssl_cert);
+	if (ssl_key != NULL)
+		curl_easy_setopt(curl, CURLOPT_SSLKEY,  ssl_key);
+
 	if (data != NULL) {
 		/* set POST data */
 		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
@@ -619,7 +624,7 @@ apr_byte_t oidc_util_http_get(request_rec *r, const char *url,
 		const apr_table_t *params, const char *basic_auth,
 		const char *bearer_token, int ssl_validate_server,
 		const char **response, int timeout, const char *outgoing_proxy,
-		apr_array_header_t *pass_cookies) {
+		apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key) {
 
 	if ((params != NULL) && (apr_table_elts(params)->nelts > 0)) {
 		oidc_http_encode_t data = { r, "" };
@@ -631,7 +636,7 @@ apr_byte_t oidc_util_http_get(request_rec *r, const char *url,
 
 	return oidc_util_http_call(r, url, NULL, NULL, basic_auth, bearer_token,
 			ssl_validate_server, response, timeout, outgoing_proxy,
-			pass_cookies);
+			pass_cookies, ssl_cert, ssl_key);
 }
 
 /*
@@ -641,7 +646,7 @@ apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url,
 		const apr_table_t *params, const char *basic_auth,
 		const char *bearer_token, int ssl_validate_server,
 		const char **response, int timeout, const char *outgoing_proxy,
-		apr_array_header_t *pass_cookies) {
+		apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key) {
 
 	const char *data = NULL;
 	if ((params != NULL) && (apr_table_elts(params)->nelts > 0)) {
@@ -655,7 +660,7 @@ apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url,
 	return oidc_util_http_call(r, url, data,
 			"application/x-www-form-urlencoded", basic_auth, bearer_token,
 			ssl_validate_server, response, timeout, outgoing_proxy,
-			pass_cookies);
+			pass_cookies, ssl_cert, ssl_key);
 }
 
 /*
@@ -664,7 +669,8 @@ apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url,
 apr_byte_t oidc_util_http_post_json(request_rec *r, const char *url,
 		const json_t *json, const char *basic_auth, const char *bearer_token,
 		int ssl_validate_server, const char **response, int timeout,
-		const char *outgoing_proxy, apr_array_header_t *pass_cookies) {
+		const char *outgoing_proxy, apr_array_header_t *pass_cookies,
+		const char *ssl_cert, const char *ssl_key) {
 
 	char *data = NULL;
 	if (json != NULL) {
@@ -675,7 +681,7 @@ apr_byte_t oidc_util_http_post_json(request_rec *r, const char *url,
 
 	return oidc_util_http_call(r, url, data, "application/json", basic_auth,
 			bearer_token, ssl_validate_server, response, timeout,
-			outgoing_proxy, pass_cookies);
+			outgoing_proxy, pass_cookies, ssl_cert, ssl_key);
 }
 
 /*

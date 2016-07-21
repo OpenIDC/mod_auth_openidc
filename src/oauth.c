@@ -98,11 +98,11 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 			oidc_util_http_get(r, c->oauth.introspection_endpoint_url, params,
 					basic_auth, NULL, c->oauth.ssl_validate_server, response,
 					c->http_timeout_long, c->outgoing_proxy,
-					dir_cfg->pass_cookies) :
+					dir_cfg->pass_cookies, c->oauth.introspection_endpoint_tls_client_cert, c->oauth.introspection_endpoint_tls_client_key):
 			oidc_util_http_post_form(r, c->oauth.introspection_endpoint_url,
 					params, basic_auth, NULL, c->oauth.ssl_validate_server,
 					response, c->http_timeout_long, c->outgoing_proxy,
-					dir_cfg->pass_cookies);
+					dir_cfg->pass_cookies, c->oauth.introspection_endpoint_tls_client_cert, c->oauth.introspection_endpoint_tls_client_key);
 }
 
 /*

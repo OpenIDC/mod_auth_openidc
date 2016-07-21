@@ -978,6 +978,8 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->provider.userinfo_endpoint_url = NULL;
 	c->provider.client_id = NULL;
 	c->provider.client_secret = NULL;
+	c->provider.token_endpoint_tls_client_cert = NULL;
+	c->provider.token_endpoint_tls_client_key = NULL;
 	c->provider.registration_endpoint_url = NULL;
 	c->provider.registration_endpoint_json = NULL;
 	c->provider.check_session_iframe = NULL;
@@ -1008,6 +1010,8 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->oauth.ssl_validate_server = OIDC_DEFAULT_SSL_VALIDATE_SERVER;
 	c->oauth.client_id = NULL;
 	c->oauth.client_secret = NULL;
+	c->oauth.introspection_endpoint_tls_client_cert = NULL;
+	c->oauth.introspection_endpoint_tls_client_key = NULL;
 	c->oauth.introspection_endpoint_url = NULL;
 	c->oauth.introspection_endpoint_method = OIDC_DEFAULT_OAUTH_ENDPOINT_METHOD;
 	c->oauth.introspection_endpoint_params = NULL;
@@ -1130,6 +1134,14 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->provider.client_secret =
 			add->provider.client_secret != NULL ?
 					add->provider.client_secret : base->provider.client_secret;
+
+	c->provider.token_endpoint_tls_client_key =
+			add->provider.token_endpoint_tls_client_key != NULL ?
+					add->provider.token_endpoint_tls_client_key : base->provider.token_endpoint_tls_client_key;
+	c->provider.token_endpoint_tls_client_cert =
+			add->provider.token_endpoint_tls_client_cert != NULL ?
+					add->provider.token_endpoint_tls_client_cert : base->provider.token_endpoint_tls_client_cert;
+
 	c->provider.registration_endpoint_url =
 			add->provider.registration_endpoint_url != NULL ?
 					add->provider.registration_endpoint_url :
@@ -1236,6 +1248,14 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->oauth.client_secret =
 			add->oauth.client_secret != NULL ?
 					add->oauth.client_secret : base->oauth.client_secret;
+
+	c->oauth.introspection_endpoint_tls_client_key =
+			add->oauth.introspection_endpoint_tls_client_key != NULL ?
+					add->oauth.introspection_endpoint_tls_client_key : base->oauth.introspection_endpoint_tls_client_key;
+	c->oauth.introspection_endpoint_tls_client_cert =
+			add->oauth.introspection_endpoint_tls_client_cert != NULL ?
+					add->oauth.introspection_endpoint_tls_client_cert : base->oauth.introspection_endpoint_tls_client_cert;
+
 	c->oauth.introspection_endpoint_url =
 			add->oauth.introspection_endpoint_url != NULL ?
 					add->oauth.introspection_endpoint_url :
@@ -2018,6 +2038,15 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF,
 				"Client secret used in calls to OpenID Connect OP."),
 
+		AP_INIT_TAKE1("OIDCClientTokenEndpointCert", oidc_set_string_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, provider.token_endpoint_tls_client_cert),
+				RSRC_CONF,
+				"TLS client certificate used for calls to OpenID Connect OP token endpoint."),
+		AP_INIT_TAKE1("OIDCClientTokenEndpointKey", oidc_set_string_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, provider.token_endpoint_tls_client_key),
+				RSRC_CONF,
+				"TLS client certificate private key used for calls to OpenID Connect OP token endpoint."),
+
 		AP_INIT_TAKE1("OIDCRedirectURI", oidc_set_url_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, redirect_uri),
 				RSRC_CONF,
@@ -2078,6 +2107,16 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.client_secret),
 				RSRC_CONF,
 				"Client secret used in calls to OAuth 2.0 Authorization server validation calls."),
+
+		AP_INIT_TAKE1("OIDCOAuthTokenEndpointCert", oidc_set_string_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, oauth.introspection_endpoint_tls_client_cert),
+				RSRC_CONF,
+				"TLS client certificate used for calls to the OAuth 2.0 Authorization server token endpoint."),
+		AP_INIT_TAKE1("OIDCOAuthTokenEndpointKey", oidc_set_string_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, oauth.introspection_endpoint_tls_client_key),
+				RSRC_CONF,
+				"TLS client certificate private key used for calls to the OAuth 2.0 Authorization server token endpoint."),
+
 		AP_INIT_TAKE1("OIDCOAuthIntrospectionEndpoint",
 				oidc_set_https_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, oauth.introspection_endpoint_url),
