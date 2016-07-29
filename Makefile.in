@@ -11,7 +11,8 @@ SRC=src/mod_auth_openidc.c \
 	src/authz.c \
 	src/session.c \
 	src/metadata.c \
-	src/jose.c
+	src/jose.c \
+	src/parse.c
 
 ifeq (@HAVE_LIBHIREDIS@, 1)
 SRC += \
@@ -24,6 +25,7 @@ HDRS = \
 	$(JWT_HDRS) \
 	src/mod_auth_openidc.h \
 	src/jose.h \
+	src/parse.h \
 	src/cache/cache.h
 
 # Files to include when making a .tar.gz-file for distribution

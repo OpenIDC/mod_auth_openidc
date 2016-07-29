@@ -59,6 +59,7 @@
 #include <http_log.h>
 
 #include "mod_auth_openidc.h"
+#include "parse.h"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -966,6 +967,54 @@ apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg *cfg,
 }
 
 /*
+ * parse boolean value from JSON configuration
+ */
+static apr_byte_t oidc_metadata_parse_boolean(request_rec *r, json_t *json,
+		const char *key, int *value, int default_value) {
+	char *s_value = NULL;
+	oidc_json_object_get_string(r->pool, json, key, &s_value,
+			NULL);
+
+	if (s_value != NULL) {
+		const char *rv = oidc_parse_boolean(r->pool, s_value, value);
+		if (rv != NULL) {
+			*value = default_value;
+			oidc_error(r, "%s", rv);
+			return FALSE;
+		}
+	} else {
+		oidc_json_object_get_int(r->pool, json, key, value, default_value);
+	}
+	return TRUE;
+}
+
+/*
+ * parse URL value from JSON configuration
+ */
+static apr_byte_t oidc_metadata_parse_url(request_rec *r, json_t *json,
+		const char *key, char **value, const char *default_value) {
+
+	char *s_value = NULL;
+	oidc_json_object_get_string(r->pool, json, key, &s_value, NULL);
+
+	if (s_value == NULL) {
+		*value = apr_pstrdup(r->pool, default_value);
+		return TRUE;
+	}
+
+	const char *rv = oidc_valid_http_url(r->pool, s_value);
+	if (rv != NULL) {
+		*value = apr_pstrdup(r->pool, default_value);
+		oidc_error(r, "%s", rv);
+		return FALSE;
+	}
+
+	*value = s_value;
+
+	return TRUE;
+}
+
+/*
  * parse the JSON provider metadata in to a oidc_provider_t struct but do not override values already set
  */
 apr_byte_t oidc_metadata_provider_parse(request_rec *r, json_t *j_provider,
@@ -979,45 +1028,45 @@ apr_byte_t oidc_metadata_provider_parse(request_rec *r, json_t *j_provider,
 
 	if (provider->authorization_endpoint_url == NULL) {
 		/* get a handle to the authorization endpoint */
-		oidc_json_object_get_string(r->pool, j_provider,
-				"authorization_endpoint", &provider->authorization_endpoint_url,
+		oidc_metadata_parse_url(r, j_provider, "authorization_endpoint",
+				&provider->authorization_endpoint_url,
 				NULL);
 	}
 
 	if (provider->token_endpoint_url == NULL) {
 		/* get a handle to the token endpoint */
-		oidc_json_object_get_string(r->pool, j_provider, "token_endpoint",
+		oidc_metadata_parse_url(r, j_provider, "token_endpoint",
 				&provider->token_endpoint_url, NULL);
 	}
 
 	if (provider->userinfo_endpoint_url == NULL) {
 		/* get a handle to the user_info endpoint */
-		oidc_json_object_get_string(r->pool, j_provider, "userinfo_endpoint",
+		oidc_metadata_parse_url(r, j_provider, "userinfo_endpoint",
 				&provider->userinfo_endpoint_url, NULL);
 	}
 
 	if (provider->jwks_uri == NULL) {
 		/* get a handle to the jwks_uri endpoint */
-		oidc_json_object_get_string(r->pool, j_provider, "jwks_uri",
-				&provider->jwks_uri, NULL);
+		oidc_metadata_parse_url(r, j_provider, "jwks_uri", &provider->jwks_uri,
+				NULL);
 	}
 
 	if (provider->registration_endpoint_url == NULL) {
 		/* get a handle to the client registration endpoint */
-		oidc_json_object_get_string(r->pool, j_provider,
-				"registration_endpoint", &provider->registration_endpoint_url,
+		oidc_metadata_parse_url(r, j_provider, "registration_endpoint",
+				&provider->registration_endpoint_url,
 				NULL);
 	}
 
 	if (provider->check_session_iframe == NULL) {
 		/* get a handle to the check session iframe */
-		oidc_json_object_get_string(r->pool, j_provider, "check_session_iframe",
+		oidc_metadata_parse_url(r, j_provider, "check_session_iframe",
 				&provider->check_session_iframe, NULL);
 	}
 
 	if (provider->end_session_endpoint == NULL) {
 		/* get a handle to the end session endpoint */
-		oidc_json_object_get_string(r->pool, j_provider, "end_session_endpoint",
+		oidc_metadata_parse_url(r, j_provider, "end_session_endpoint",
 				&provider->end_session_endpoint, NULL);
 	}
 
@@ -1075,7 +1124,7 @@ apr_byte_t oidc_metadata_provider_parse(request_rec *r, json_t *j_provider,
 apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 		json_t *j_conf, oidc_provider_t *provider) {
 
-	oidc_json_object_get_string(r->pool, j_conf, "client_jwks_uri",
+	oidc_metadata_parse_url(r, j_conf, "client_jwks_uri",
 			&provider->client_jwks_uri, cfg->provider.client_jwks_uri);
 
 	oidc_json_object_get_string(r->pool, j_conf, "id_token_signed_response_alg",
@@ -1104,7 +1153,7 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 			cfg->provider.userinfo_encrypted_response_enc);
 
 	/* find out if we need to perform SSL server certificate validation on the token_endpoint and user_info_endpoint for this provider */
-	oidc_json_object_get_int(r->pool, j_conf, "ssl_validate_server",
+	oidc_metadata_parse_boolean(r, j_conf, "ssl_validate_server",
 			&provider->ssl_validate_server, cfg->provider.ssl_validate_server);
 
 	/* find out what scopes we should be requesting from this provider */

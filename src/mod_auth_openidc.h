@@ -160,6 +160,13 @@ APLOG_USE_MODULE(auth_openidc);
 /* accept bearer token as a cookie parameter (PingAccess) */
 #define OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE  8
 
+/* the hash key of the cookie name value in the list of options */
+#define OIDC_OAUTH_ACCEPT_TOKEN_IN_OPTION_COOKIE_NAME "cookie-name"
+
+/* introspection method options */
+#define OIDC_INTROSPECTION_METHOD_GET  "GET"
+#define OIDC_INTROSPECTION_METHOD_POST "POST"
+
 /* prefix of the cookie that binds the state in the authorization request/response to the browser */
 #define OIDCStateCookiePrefix  "mod_auth_openidc_state_"
 

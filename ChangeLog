@@ -1,5 +1,6 @@
 7/29/2016
 - use cjose - https://github.com/cisco/cjose (master) - for JOSE functions
+- use stricter input parsing functions for configuration values
 - bump to 2.0.0rc0
 
 7/21/2016

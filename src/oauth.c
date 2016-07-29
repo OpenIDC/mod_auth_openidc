@@ -94,7 +94,7 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 	}
 
 	/* call the endpoint with the constructed parameter set and return the resulting response */
-	return apr_strnatcmp(c->oauth.introspection_endpoint_method, "GET") == 0 ?
+	return apr_strnatcmp(c->oauth.introspection_endpoint_method, OIDC_INTROSPECTION_METHOD_GET) == 0 ?
 			oidc_util_http_get(r, c->oauth.introspection_endpoint_url, params,
 					basic_auth, NULL, c->oauth.ssl_validate_server, response,
 					c->http_timeout_long, c->outgoing_proxy,
@@ -168,7 +168,7 @@ static apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 					& OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE)) {
 
 		const char *cookie_name = apr_hash_get(
-				dir_cfg->oauth_accept_token_options, "cookie-name",
+				dir_cfg->oauth_accept_token_options, OIDC_OAUTH_ACCEPT_TOKEN_IN_OPTION_COOKIE_NAME,
 				APR_HASH_KEY_STRING);
 		const char *auth_line = oidc_util_get_cookie(r, cookie_name);
 		if (auth_line != NULL) {
