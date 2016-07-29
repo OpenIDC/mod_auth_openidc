@@ -1,3 +1,7 @@
+7/29/2016
+- use cjose - https://github.com/cisco/cjose (master) - for JOSE functions
+- bump to 2.0.0rc0
+
 7/21/2016
 - support TLS client authentication to token and introspection endpoints
 - bump to 1.9.0rc3

@@ -516,22 +516,31 @@ static apr_byte_t oidc_oauth_set_remote_user(request_rec *r, oidc_cfg *c,
 static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 		oidc_cfg *c, const char *access_token, json_t **token, char **response) {
 
-	apr_jwt_error_t err;
-	apr_jwt_t *jwt = NULL;
-	if (apr_jwt_parse(r->pool, access_token, &jwt,
-			oidc_util_merge_symmetric_key(r->pool, c->private_keys,
-					c->oauth.client_secret, NULL), &err) == FALSE) {
-		oidc_error(r, "could not parse JWT from access_token: %s",
-				apr_jwt_e2s(r->pool, err));
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = oidc_util_create_symmetric_key(r->pool,
+			c->provider.client_secret, NULL, &err);
+	if (jwk == NULL) {
+		oidc_error(r, "could not parse create JWK from the client_secret: %s",
+				oidc_jose_e2s(r->pool, err));
 		return FALSE;
 	}
 
+	oidc_jwt_t *jwt = NULL;
+	if (oidc_jwt_parse(r->pool, access_token, &jwt,
+			oidc_util_merge_symmetric_key(r->pool, c->private_keys, jwk),
+			&err) == FALSE) {
+		oidc_error(r, "could not parse JWT from access_token: %s",
+				oidc_jose_e2s(r->pool, err));
+		return FALSE;
+	}
+
+	oidc_jwk_destroy(jwk);
 	oidc_debug(r, "successfully parsed JWT with header: %s", jwt->header.value.str);
 
 	/* validate the access token JWT, validating optional exp + iat */
 	if (oidc_proto_validate_jwt(r, jwt, NULL, FALSE, FALSE,
 			c->provider.idtoken_iat_slack) == FALSE) {
-		apr_jwt_destroy(jwt);
+		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
 
@@ -550,7 +559,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 					c->oauth.verify_shared_keys)) == FALSE) {
 		oidc_error(r,
 				"JWT access token signature could not be validated, aborting");
-		apr_jwt_destroy(jwt);
+		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
 

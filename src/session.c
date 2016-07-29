@@ -49,6 +49,7 @@
  */
 
 #include <apr_base64.h>
+#include <apr_uuid.h>
 #include <apr_lib.h>
 
 #include <httpd.h>

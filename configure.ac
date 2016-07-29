@@ -1,4 +1,4 @@
-AC_INIT([mod_auth_openidc],[1.9.0rc2],[hzandbelt@pingidentity.com])
+AC_INIT([mod_auth_openidc],[2.0.0rc0],[hzandbelt@pingidentity.com])
 
 AC_SUBST(NAMEVER, AC_PACKAGE_TARNAME()-AC_PACKAGE_VERSION())
 
@@ -61,6 +61,11 @@ AC_SUBST(APR_LIBS)
 PKG_CHECK_MODULES(JANSSON, jansson)
 AC_SUBST(JANSSON_CFLAGS)
 AC_SUBST(JANSSON_LIBS)
+
+# cjose
+PKG_CHECK_MODULES(CJOSE, cjose)
+AC_SUBST(CJOSE_CFLAGS)
+AC_SUBST(CJOSE_LIBS)
 
 # PCRE
 PKG_CHECK_MODULES(PCRE, libpcre)

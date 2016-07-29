@@ -448,7 +448,7 @@ static apr_byte_t oidc_metadata_jwks_is_valid(request_rec *r,
  */
 static apr_byte_t oidc_metadata_conf_jose_is_supported(request_rec *r,
 		json_t *j_conf, const char *issuer, const char *key,
-		apr_jose_is_supported_function_t jose_is_supported_function) {
+		oidc_jose_is_supported_function_t jose_is_supported_function) {
 	json_t *value = json_object_get(j_conf, key);
 	if (value != NULL) {
 		if (!json_is_string(value)) {
@@ -477,27 +477,27 @@ static apr_byte_t oidc_metadata_conf_is_valid(request_rec *r, json_t *j_conf,
 
 	if (oidc_metadata_conf_jose_is_supported(r, j_conf, issuer,
 			"id_token_signed_response_alg",
-			apr_jws_algorithm_is_supported) == FALSE)
+			oidc_jose_jws_algorithm_is_supported) == FALSE)
 		return FALSE;
 	if (oidc_metadata_conf_jose_is_supported(r, j_conf, issuer,
 			"id_token_encrypted_response_alg",
-			apr_jwe_algorithm_is_supported) == FALSE)
+			oidc_jose_jwe_algorithm_is_supported) == FALSE)
 		return FALSE;
 	if (oidc_metadata_conf_jose_is_supported(r, j_conf, issuer,
 			"id_token_encrypted_response_enc",
-			apr_jwe_encryption_is_supported) == FALSE)
+			oidc_jose_jwe_encryption_is_supported) == FALSE)
 		return FALSE;
 	if (oidc_metadata_conf_jose_is_supported(r, j_conf, issuer,
 			"userinfo_signed_response_alg",
-			apr_jws_algorithm_is_supported) == FALSE)
+			oidc_jose_jws_algorithm_is_supported) == FALSE)
 		return FALSE;
 	if (oidc_metadata_conf_jose_is_supported(r, j_conf, issuer,
 			"userinfo_encrypted_response_alg",
-			apr_jwe_algorithm_is_supported) == FALSE)
+			oidc_jose_jwe_algorithm_is_supported) == FALSE)
 		return FALSE;
 	if (oidc_metadata_conf_jose_is_supported(r, j_conf, issuer,
 			"userinfo_encrypted_response_enc",
-			apr_jwe_encryption_is_supported) == FALSE)
+			oidc_jose_jwe_encryption_is_supported) == FALSE)
 		return FALSE;
 
 	return TRUE;

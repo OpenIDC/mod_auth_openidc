@@ -67,6 +67,7 @@
 #define OPENSSL_THREAD_DEFINES
 #include <openssl/opensslconf.h>
 #include <openssl/opensslv.h>
+#include <openssl/evp.h>
 #if (OPENSSL_VERSION_NUMBER < 0x01000000)
 #define OPENSSL_NO_THREADID
 #endif
@@ -447,13 +448,13 @@ static const char *oidc_set_signed_response_alg(cmd_parms *cmd,
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
 
-	if (apr_jws_algorithm_is_supported(cmd->pool, arg)) {
+	if (oidc_jose_jws_algorithm_is_supported(cmd->pool, arg)) {
 		return ap_set_string_slot(cmd, cfg, arg);
 	}
 
 	return apr_psprintf(cmd->pool, "parameter must be one of %s",
 			apr_array_pstrcat(cmd->pool,
-					apr_jws_supported_algorithms(cmd->pool), '|'));
+					oidc_jose_jws_supported_algorithms(cmd->pool), '|'));
 }
 
 /*
@@ -464,13 +465,13 @@ static const char *oidc_set_encrypted_response_alg(cmd_parms *cmd,
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
 
-	if (apr_jwe_algorithm_is_supported(cmd->pool, arg)) {
+	if (oidc_jose_jwe_algorithm_is_supported(cmd->pool, arg)) {
 		return ap_set_string_slot(cmd, cfg, arg);
 	}
 
 	return apr_psprintf(cmd->pool, "parameter must be one of %s",
 			apr_array_pstrcat(cmd->pool,
-					apr_jwe_supported_algorithms(cmd->pool), '|'));
+					oidc_jose_jwe_supported_algorithms(cmd->pool), '|'));
 }
 
 /*
@@ -481,13 +482,13 @@ static const char *oidc_set_encrypted_response_enc(cmd_parms *cmd,
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
 
-	if (apr_jwe_encryption_is_supported(cmd->pool, arg)) {
+	if (oidc_jose_jwe_encryption_is_supported(cmd->pool, arg)) {
 		return ap_set_string_slot(cmd, cfg, arg);
 	}
 
 	return apr_psprintf(cmd->pool, "parameter must be one of %s",
 			apr_array_pstrcat(cmd->pool,
-					apr_jwe_supported_encryptions(cmd->pool), '|'));
+					oidc_jose_jwe_supported_encryptions(cmd->pool), '|'));
 }
 
 /*
@@ -559,12 +560,15 @@ static char * oidc_config_decode_key(apr_pool_t *pool, const char *enc,
 		int len = apr_base64_decode_len(input);
 		*key = apr_palloc(pool, len);
 		*key_len = apr_base64_decode(*key, input);
-		if (key_len <= 0) {
+		if (*key_len <= 0) {
 			return "base64 decoding failed";
 		}
 		return NULL;
 	} else if (apr_strnatcmp(enc, "b64url") == 0) {
-		*key_len = apr_jwt_base64url_decode(pool, key, input, 1);
+		*key_len = oidc_base64url_decode(pool, key, input);
+		if (*key_len <= 0) {
+			return "base64url decoding failed";
+		}
 		return NULL;
 	} else if (apr_strnatcmp(enc, "hex") == 0) {
 		*key_len = strlen(input) / 2;
@@ -635,8 +639,8 @@ static char * oidc_config_get_id_key_tuple(apr_pool_t *pool, const char *tuple,
  */
 static const char *oidc_set_public_key_files(cmd_parms *cmd, void *struct_ptr,
 		const char *arg) {
-	apr_jwk_t *jwk = NULL;
-	apr_jwt_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	oidc_jose_error_t err;
 
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
@@ -651,10 +655,10 @@ static const char *oidc_set_public_key_files(cmd_parms *cmd, void *struct_ptr,
 	if (rv != NULL)
 		return rv;
 
-	if (apr_jwk_parse_rsa_public_key(cmd->pool, kid, fname, &jwk, &err) == FALSE) {
+	if (oidc_jwk_parse_rsa_public_key(cmd->pool, kid, fname, &jwk, &err) == FALSE) {
 		return apr_psprintf(cmd->pool,
-				"apr_jwk_parse_rsa_public_key failed for (kid=%s) \"%s\": %s",
-				kid, fname, apr_jwt_e2s(cmd->pool, err));
+				"oidc_jwk_parse_rsa_public_key failed for (kid=%s) \"%s\": %s",
+				kid, fname, oidc_jose_e2s(cmd->pool, err));
 	}
 
 	if (*public_keys == NULL)
@@ -669,8 +673,8 @@ static const char *oidc_set_public_key_files(cmd_parms *cmd, void *struct_ptr,
  */
 static const char *oidc_set_shared_keys(cmd_parms *cmd, void *struct_ptr,
 		const char *arg) {
-	apr_jwt_error_t err;
-	apr_jwk_t *jwk = NULL;
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
 
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
@@ -684,11 +688,12 @@ static const char *oidc_set_shared_keys(cmd_parms *cmd, void *struct_ptr,
 	if (rv != NULL)
 		return rv;
 
-	if (apr_jwk_parse_symmetric_key(cmd->pool, kid,
-			(const unsigned char *) secret, key_len, &jwk, &err) == FALSE) {
+	jwk = oidc_jwk_create_symmetric_key(cmd->pool, kid,
+			(const unsigned char *) secret, key_len, &err);
+	if (jwk == NULL) {
 		return apr_psprintf(cmd->pool,
-				"apr_jwk_parse_symmetric_key failed for (kid=%s) \"%s\": %s",
-				kid, secret, apr_jwt_e2s(cmd->pool, err));
+				"oidc_jwk_create_symmetric_key failed for (kid=%s) \"%s\": %s",
+				kid, secret, oidc_jose_e2s(cmd->pool, err));
 	}
 
 	if (*shared_keys == NULL)
@@ -706,13 +711,13 @@ static const char *oidc_set_private_key_files_enc(cmd_parms *cmd, void *dummy,
 		const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
-	apr_jwk_t *jwk = NULL;
-	apr_jwt_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	oidc_jose_error_t err;
 
-	if (apr_jwk_parse_rsa_private_key(cmd->pool, arg, &jwk, &err) == FALSE) {
+	if (oidc_jwk_parse_rsa_private_key(cmd->pool, arg, &jwk, &err) == FALSE) {
 		return apr_psprintf(cmd->pool,
-				"apr_jwk_parse_rsa_private_key failed for \"%s\": %s", arg,
-				apr_jwt_e2s(cmd->pool, err));
+				"oidc_jwk_parse_rsa_private_key failed for \"%s\": %s", arg,
+				oidc_jose_e2s(cmd->pool, err));
 	}
 
 	if (cfg->private_keys == NULL)
@@ -1695,6 +1700,14 @@ static apr_status_t oidc_cleanup(void *data) {
 				oidc_serror(sp, "cache destroy function failed");
 			}
 		}
+
+		// can do this even though we haven't got a deep copy
+		// since references within the object will be set to NULL
+		oidc_jwk_list_destroy(sp->process->pool, cfg->oauth.verify_public_keys);
+		oidc_jwk_list_destroy(sp->process->pool, cfg->oauth.verify_shared_keys);
+		oidc_jwk_list_destroy(sp->process->pool, cfg->public_keys);
+		oidc_jwk_list_destroy(sp->process->pool, cfg->private_keys);
+
 		sp = sp->next;
 	}
 
@@ -1744,8 +1757,8 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 			"%s - init - %s, Elliptic Curve (EC)=%s, Galois Counter Mode (GCM)=%s, Redis=%s",
 			NAMEVERSION,
 			OPENSSL_VERSION_TEXT,
-			APR_JWS_EC_SUPPORT  ? "yes" : "no",
-			APR_JWE_GCM_SUPPORT ? "yes" : "no",
+			OIDC_JOSE_EC_SUPPORT  ? "yes" : "no",
+			OIDC_JOSE_GCM_SUPPORT ? "yes" : "no",
 #ifdef USE_LIBHIREDIS
 			"yes"
 #else

@@ -281,63 +281,72 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 
 	oidc_debug(r, "enter");
 
-	apr_jwt_t *jwt = NULL;
-	apr_jwt_error_t err;
-	if (apr_jwt_parse(r->pool, state, &jwt,
-			oidc_util_merge_symmetric_key(r->pool, c->private_keys,
-					c->provider.client_secret, "sha256"), &err) == FALSE) {
-		oidc_error(r,
-				"could not parse JWT from state: invalid unsolicited response: %s",
-				apr_jwt_e2s(r->pool, err));
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = oidc_util_create_symmetric_key(r->pool,
+			c->provider.client_secret, "sha256", &err);
+	if (jwk == NULL) {
+		oidc_error(r, "could not parse create JWK from the client_secret: %s",
+				oidc_jose_e2s(r->pool, err));
 		return FALSE;
 	}
 
+	oidc_jwt_t *jwt = NULL;
+	if (oidc_jwt_parse(r->pool, state, &jwt,
+			oidc_util_merge_symmetric_key(r->pool, c->private_keys, jwk),
+			&err) == FALSE) {
+		oidc_error(r,
+				"could not parse JWT from state: invalid unsolicited response: %s",
+				oidc_jose_e2s(r->pool, err));
+		return FALSE;
+	}
+
+	oidc_jwk_destroy(jwk);
 	oidc_debug(r, "successfully parsed JWT from state");
 
 	if (jwt->payload.iss == NULL) {
 		oidc_error(r, "no \"iss\" could be retrieved from JWT state, aborting");
-		apr_jwt_destroy(jwt);
+		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
 
 	oidc_provider_t *provider = oidc_get_provider_for_issuer(r, c,
 			jwt->payload.iss, FALSE);
 	if (provider == NULL) {
-		apr_jwt_destroy(jwt);
+		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
 
 	/* validate the state JWT, validating optional exp + iat */
 	if (oidc_proto_validate_jwt(r, jwt, provider->issuer, FALSE, FALSE,
 			provider->idtoken_iat_slack) == FALSE) {
-		apr_jwt_destroy(jwt);
+		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
 
 	char *rfp = NULL;
-	if (apr_jwt_get_string(r->pool, jwt->payload.value.json, "rfp", TRUE, &rfp,
+	if (oidc_jose_get_string(r->pool, jwt->payload.value.json, "rfp", TRUE, &rfp,
 			&err) == FALSE) {
 		oidc_error(r,
 				"no \"rfp\" claim could be retrieved from JWT state, aborting: %s",
-				apr_jwt_e2s(r->pool, err));
-		apr_jwt_destroy(jwt);
+				oidc_jose_e2s(r->pool, err));
+		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
 
 	if (apr_strnatcmp(rfp, "iss") != 0) {
 		oidc_error(r, "\"rfp\" (%s) does not match \"iss\", aborting", rfp);
-		apr_jwt_destroy(jwt);
+		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
 
 	char *target_link_uri = NULL;
-	apr_jwt_get_string(r->pool, jwt->payload.value.json, "target_link_uri",
+	oidc_jose_get_string(r->pool, jwt->payload.value.json, "target_link_uri",
 			FALSE, &target_link_uri, NULL);
 	if (target_link_uri == NULL) {
 		if (c->default_sso_url == NULL) {
 			oidc_error(r,
 					"no \"target_link_uri\" claim could be retrieved from JWT state and no OIDCDefaultURL is set, aborting");
-			apr_jwt_destroy(jwt);
+			oidc_jwt_destroy(jwt);
 			return FALSE;
 		}
 		target_link_uri = c->default_sso_url;
@@ -348,17 +357,21 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 				== FALSE) || (provider == NULL)) {
 			oidc_error(r, "no provider metadata found for provider \"%s\"",
 					jwt->payload.iss);
-			apr_jwt_destroy(jwt);
+			oidc_jwt_destroy(jwt);
 			return FALSE;
 		}
 	}
 
 	char *jti = NULL;
-	apr_jwt_get_string(r->pool, jwt->payload.value.json, "jti", FALSE, &jti,
+	oidc_jose_get_string(r->pool, jwt->payload.value.json, "jti", FALSE, &jti,
 			NULL);
 	if (jti == NULL) {
-		apr_jwt_base64url_encode(r->pool, &jti,
-				(const char *) jwt->signature.bytes, jwt->signature.length, 0);
+		char *cser = oidc_jwt_serialize(r->pool, jwt, &err);
+		if (cser == NULL) return FALSE;
+		if (oidc_util_hash_string_and_base64url_encode(r, "sha256", cser, &jti) == FALSE) {
+			oidc_error(r, "oidc_util_hash_string_and_base64url_encode returned an error");
+			return FALSE;
+		}
 	}
 
 	const char *replay = NULL;
@@ -367,7 +380,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 		oidc_error(r,
 				"the jti value (%s) passed in the browser state was found in the cache already; possible replay attack!?",
 				jti);
-		apr_jwt_destroy(jwt);
+		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
 
@@ -383,16 +396,24 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 			"jti \"%s\" validated successfully and is now cached for %" APR_TIME_T_FMT " seconds",
 			jti, apr_time_sec(jti_cache_duration));
 
-	oidc_jwks_uri_t jwks_uri = { provider->jwks_uri,
-			provider->jwks_refresh_interval, provider->ssl_validate_server };
-	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri,
-			oidc_util_merge_symmetric_key(r->pool, NULL,
-					provider->client_secret, NULL)) == FALSE) {
-		oidc_error(r, "state JWT signature could not be validated, aborting");
-		apr_jwt_destroy(jwt);
+	 jwk = oidc_util_create_symmetric_key(r->pool,
+			c->provider.client_secret, NULL, &err);
+	if (jwk == NULL) {
+		oidc_error(r, "could not parse create JWK from the client_secret: %s",
+				oidc_jose_e2s(r->pool, err));
 		return FALSE;
 	}
 
+	oidc_jwks_uri_t jwks_uri = { provider->jwks_uri,
+			provider->jwks_refresh_interval, provider->ssl_validate_server };
+	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri,
+			oidc_util_merge_symmetric_key(r->pool, NULL, jwk)) == FALSE) {
+		oidc_error(r, "state JWT signature could not be validated, aborting");
+		oidc_jwt_destroy(jwt);
+		return FALSE;
+	}
+
+	oidc_jwk_destroy(jwk);
 	oidc_debug(r, "successfully verified state JWT");
 
 	*proto_state = json_object();
@@ -407,7 +428,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	json_object_set_new(*proto_state, "timestamp",
 			json_integer(apr_time_sec(apr_time_now())));
 
-	apr_jwt_destroy(jwt);
+	oidc_jwt_destroy(jwt);
 
 	return TRUE;
 }
@@ -535,8 +556,10 @@ static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
 //	}
 
 	if (oidc_util_jwt_hs256_sign(r, c->crypto_passphrase, proto_state,
-			&cookieValue) == FALSE)
-		return FALSE;
+			&cookieValue) == FALSE) {
+		oidc_error(r, "oidc_util_jwt_hs256_sign failed");
+ 		return FALSE;
+	}
 
 	/* clean expired state cookies to avoid pollution */
 	oidc_clean_expired_state_cookies(r, c);
@@ -1188,7 +1211,7 @@ static int oidc_authorization_response_error(request_rec *r, oidc_cfg *c,
  * set the unique user identifier that will be propagated in the Apache r->user and REMOTE_USER variables
  */
 static apr_byte_t oidc_get_remote_user(request_rec *r, oidc_cfg *c,
-		oidc_provider_t *provider, apr_jwt_t *jwt, char **user,
+		oidc_provider_t *provider, oidc_jwt_t *jwt, char **user,
 		const char *s_claims) {
 
 	char *issuer = provider->issuer;
@@ -1249,7 +1272,7 @@ static apr_byte_t oidc_get_remote_user(request_rec *r, oidc_cfg *c,
  */
 static void oidc_save_in_session(request_rec *r, oidc_cfg *c,
 		oidc_session_t *session, oidc_provider_t *provider, const char *remoteUser,
-		const char *id_token, apr_jwt_t *id_token_jwt, const char *claims,
+		const char *id_token, oidc_jwt_t *id_token_jwt, const char *claims,
 		const char *access_token, const int expires_in,
 		const char *refresh_token, const char *session_state, const char *state,
 		const char *original_url) {
@@ -1356,7 +1379,7 @@ static int oidc_parse_expires_in(request_rec *r, const char *expires_in) {
  */
 static apr_byte_t oidc_handle_flows(request_rec *r, oidc_cfg *c,
 		json_t *proto_state, oidc_provider_t *provider, apr_table_t *params,
-		const char *response_mode, apr_jwt_t **jwt) {
+		const char *response_mode, oidc_jwt_t **jwt) {
 
 	apr_byte_t rc = FALSE;
 
@@ -1394,7 +1417,7 @@ static apr_byte_t oidc_handle_flows(request_rec *r, oidc_cfg *c,
 	}
 
 	if ((rc == FALSE) && (*jwt != NULL)) {
-		apr_jwt_destroy(*jwt);
+		oidc_jwt_destroy(*jwt);
 		*jwt = NULL;
 	}
 
@@ -1442,7 +1465,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 
 	oidc_provider_t *provider = NULL;
 	json_t *proto_state = NULL;
-	apr_jwt_t *jwt = NULL;
+	oidc_jwt_t *jwt = NULL;
 
 	/* see if this response came from a browser-back event */
 	if (oidc_handle_browser_back(r, apr_table_get(params, "state"),
@@ -1514,7 +1537,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 			if (apr_strnatcmp(session->remote_user, r->user) != 0) {
 				oidc_warn(r,
 						"user set from new id_token is different from current one");
-				apr_jwt_destroy(jwt);
+				oidc_jwt_destroy(jwt);
 				return oidc_authorization_response_error(r, c, proto_state,
 						"User changed!", NULL);
 			}
@@ -1536,7 +1559,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 
 	/* cleanup */
 	json_decref(proto_state);
-	apr_jwt_destroy(jwt);
+	oidc_jwt_destroy(jwt);
 
 	/* check that we've actually authenticated a user; functions as error handling for oidc_get_remote_user */
 	if (r->user == NULL)
@@ -2184,7 +2207,7 @@ int oidc_handle_jwks(request_rec *r, oidc_cfg *c) {
 	char *jwks = apr_pstrdup(r->pool, "{ \"keys\" : [");
 	apr_hash_index_t *hi = NULL;
 	apr_byte_t first = TRUE;
-	apr_jwt_error_t err;
+	oidc_jose_error_t err;
 
 	if (c->public_keys != NULL) {
 
@@ -2193,19 +2216,19 @@ int oidc_handle_jwks(request_rec *r, oidc_cfg *c) {
 				apr_hash_next(hi)) {
 
 			const char *s_kid = NULL;
-			apr_jwk_t *jwk = NULL;
+			oidc_jwk_t *jwk = NULL;
 			char *s_json = NULL;
 
 			apr_hash_this(hi, (const void**) &s_kid, NULL, (void**) &jwk);
 
-			if (apr_jwk_to_json(r->pool, jwk, &s_json, &err) == TRUE) {
+			if (oidc_jwk_to_json(r->pool, jwk, &s_json, &err) == TRUE) {
 				jwks = apr_psprintf(r->pool, "%s%s %s ", jwks, first ? "" : ",",
 						s_json);
 				first = FALSE;
 			} else {
 				oidc_error(r,
-						"could not convert RSA JWK to JSON using apr_jwk_to_json: %s",
-						apr_jwt_e2s(r->pool, err));
+						"could not convert RSA JWK to JSON using oidc_jwk_to_json: %s",
+						oidc_jose_e2s(r->pool, err));
 			}
 		}
 	}

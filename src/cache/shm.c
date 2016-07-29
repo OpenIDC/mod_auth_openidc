@@ -55,6 +55,8 @@
 #include <http_config.h>
 #include <http_log.h>
 
+#include "apr_shm.h"
+
 #include "../mod_auth_openidc.h"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
