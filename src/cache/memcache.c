@@ -267,6 +267,7 @@ static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *section,
 }
 
 oidc_cache_t oidc_cache_memcache = {
+		1,
 		oidc_cache_memcache_cfg_create,
 		oidc_cache_memcache_post_config,
 		NULL,

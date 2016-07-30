@@ -452,6 +452,7 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section,
 }
 
 oidc_cache_t oidc_cache_file = {
+		1,
 		NULL,
 		oidc_cache_file_post_config,
 		NULL,

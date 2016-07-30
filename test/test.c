@@ -1144,7 +1144,7 @@ static char * test_proto_validate_jwt(request_rec *r) {
 	TST_ASSERT_ERR("oidc_jwt_parse",
 			oidc_jwt_parse(r->pool, s_jwt, &jwt, NULL, &err), r->pool, err);
 
-	oidc_jwk_t *jwk = oidc_util_create_symmetric_key(r->pool, s_secret, NULL, &err);
+	oidc_jwk_t *jwk = oidc_util_create_symmetric_key(r->pool, s_secret, NULL, TRUE, &err);
 	TST_ASSERT_ERR("oidc_util_create_symmetric_key", jwk != NULL, r->pool, err);
 
 	TST_ASSERT_ERR("oidc_jwt_verify",

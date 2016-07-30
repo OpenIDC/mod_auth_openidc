@@ -283,7 +283,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = oidc_util_create_symmetric_key(r->pool,
-			c->provider.client_secret, "sha256", &err);
+			c->provider.client_secret, "sha256", TRUE, &err);
 	if (jwk == NULL) {
 		oidc_error(r, "could not parse create JWK from the client_secret: %s",
 				oidc_jose_e2s(r->pool, err));
@@ -397,7 +397,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 			jti, apr_time_sec(jti_cache_duration));
 
 	 jwk = oidc_util_create_symmetric_key(r->pool,
-			c->provider.client_secret, NULL, &err);
+			c->provider.client_secret, NULL, TRUE, &err);
 	if (jwk == NULL) {
 		oidc_error(r, "could not parse create JWK from the client_secret: %s",
 				oidc_jose_e2s(r->pool, err));
@@ -549,10 +549,8 @@ static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
 	char *cookieValue = NULL;
 
 	if (oidc_util_jwt_create(r, c->crypto_passphrase, proto_state,
-			&cookieValue) == FALSE) {
-		oidc_error(r, "oidc_util_jwt_create failed");
+			&cookieValue) == FALSE)
  		return FALSE;
-	}
 
 	/* clean expired state cookies to avoid pollution */
 	oidc_clean_expired_state_cookies(r, c);

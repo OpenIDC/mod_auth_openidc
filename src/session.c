@@ -66,6 +66,43 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 /* the name of the session expiry attribute in the session */
 #define OIDC_SESSION_EXPIRY_KEY      "e"
 
+static apr_byte_t oidc_session_encode(request_rec *r, oidc_cfg *c,
+		oidc_session_t *z, char **s_value, apr_byte_t secure) {
+	if (secure == FALSE) {
+		char *s = json_dumps(z->state, JSON_COMPACT);
+		*s_value = apr_pstrdup(r->pool, s);
+		free(s);
+		return TRUE;
+	}
+
+	if (oidc_util_jwt_create(r, c->crypto_passphrase, z->state,
+			s_value) == FALSE)
+		return FALSE;
+
+	return TRUE;
+}
+
+static apr_byte_t oidc_session_decode(request_rec *r, oidc_cfg *c,
+		oidc_session_t *z, const char *s_json, apr_byte_t secure) {
+	if (secure == FALSE) {
+		z->state = json_loads(s_json, 0, 0);
+		if (z->state == NULL) {
+			oidc_error(r, "cached JSON parsing (json_loads) failed: (%s)",
+					s_json);
+			return FALSE;
+		}
+		return TRUE;
+	}
+
+	if (oidc_util_jwt_verify(r, c->crypto_passphrase, s_json,
+			&z->state) == FALSE) {
+		oidc_error(r,
+				"could not verify secure JWT: cache value possibly corrupted");
+		return FALSE;
+	}
+	return TRUE;
+}
+
 /*
  * load the session from the cache using the cookie as the index
  */
@@ -82,14 +119,10 @@ static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 	if (uuid != NULL) {
 		const char *s_json = NULL;
 		c->cache->get(r, OIDC_CACHE_SECTION_SESSION, uuid, &s_json);
-		if (s_json != NULL) {
-			if (oidc_util_jwt_verify(r, c->crypto_passphrase, s_json,
-					&z->state) == FALSE) {
-				oidc_error(r, "cache value possibly corrupted");
-				return FALSE;
-			}
-		}
-		//oidc_util_set_cookie(r, d->cookie, "");
+		if ((s_json != NULL)
+				&& (oidc_session_decode(r, c, z, s_json, c->cache->secure)
+						== FALSE))
+			return FALSE;
 	}
 
 	return TRUE;
@@ -112,18 +145,15 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z) {
 
 	if (z->state != NULL) {
 
+		/* store the string-encoded session in the cache */
+		char *s_value = NULL;
+		if (oidc_session_encode(r, c, z, &s_value, c->cache->secure) == FALSE)
+			return FALSE;
+		c->cache->set(r, OIDC_CACHE_SECTION_SESSION, key, s_value, z->expiry);
+
 		/* set the uuid in the cookie */
 		oidc_util_set_cookie(r, d->cookie, key,
 				c->persistent_session_cookie ? z->expiry : -1);
-
-		/* store the string-encoded session in the cache */
-		char *s_value = NULL;
-		if (oidc_util_jwt_create(r, c->crypto_passphrase, z->state,
-				&s_value) == FALSE) {
-			oidc_error(r, "oidc_util_jwt_create failed");
-			return FALSE;
-		}
-		c->cache->set(r, OIDC_CACHE_SECTION_SESSION, key, s_value, z->expiry);
 
 	} else {
 
@@ -145,18 +175,11 @@ static apr_byte_t oidc_session_load_cookie(request_rec *r, oidc_cfg *c,
 	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 
-	char *cookieValue = oidc_util_get_chunked_cookie(r, d->cookie, c->session_cookie_chunk_size);
-	if (cookieValue != NULL) {
-		json_t *json = NULL;
-		if (oidc_util_jwt_verify(r, c->crypto_passphrase, cookieValue,
-				&json) == FALSE) {
-			//oidc_util_set_cookie(r, d->cookie, "");
-			oidc_warn(r, "cookie value possibly corrupted");
-			return FALSE;
-		}
-		z->state = json;
-	}
-
+	char *cookieValue = oidc_util_get_chunked_cookie(r, d->cookie,
+			c->session_cookie_chunk_size);
+	if ((cookieValue != NULL)
+			&& (oidc_session_decode(r, c, z, cookieValue, TRUE) == FALSE))
+		return FALSE;
 	return TRUE;
 }
 
@@ -170,13 +193,9 @@ static apr_byte_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z) {
 			&auth_openidc_module);
 
 	char *cookieValue = "";
-	if (z->state != NULL) {
-		if (oidc_util_jwt_create(r, c->crypto_passphrase, z->state,
-				&cookieValue) == FALSE) {
-			oidc_error(r, "oidc_util_jwt_create failed");
-			return FALSE;
-		}
-	}
+	if ((z->state != NULL)
+			&& (oidc_session_encode(r, c, z, &cookieValue, TRUE) == FALSE))
+		return FALSE;
 
 	oidc_util_set_chunked_cookie(r, d->cookie, cookieValue,
 			c->persistent_session_cookie ? z->expiry : -1,

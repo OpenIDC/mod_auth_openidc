@@ -1,5 +1,5 @@
 7/30/2016
-- encrypt state/session JWT cookies and session JWT cache values
+- encrypt state/session JWT cookies and session JWT cache values for non-shm storages
 
 7/29/2016
 - use cjose - https://github.com/cisco/cjose (master) - for JOSE functions

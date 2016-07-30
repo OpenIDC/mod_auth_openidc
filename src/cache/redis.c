@@ -374,6 +374,7 @@ static int oidc_cache_redis_destroy(server_rec *s) {
 }
 
 oidc_cache_t oidc_cache_redis = {
+		1,
 		oidc_cache_redis_cfg_create,
 		oidc_cache_redis_post_config,
 		oidc_cache_redis_child_init,

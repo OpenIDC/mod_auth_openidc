@@ -751,7 +751,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 	oidc_debug(r, "enter");
 
 	oidc_jwk_t *jwk = oidc_util_create_symmetric_key(r->pool,
-			provider->client_secret, "sha256", &err);
+			provider->client_secret, "sha256", TRUE, &err);
 	if (jwk == NULL) {
 		oidc_error(r, "oidc_util_create_symmetric_key failed: %s",
 				oidc_jose_e2s(r->pool, err));
@@ -776,7 +776,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 	if (is_code_flow == FALSE || strcmp((*jwt)->header.alg, "none") != 0) {
 
 		jwk = oidc_util_create_symmetric_key(r->pool, provider->client_secret,
-				NULL, &err);
+				NULL, TRUE, &err);
 		if (jwk == NULL) {
 			oidc_error(r, "oidc_util_create_symmetric_key failed: %s",
 					oidc_jose_e2s(r->pool, err));

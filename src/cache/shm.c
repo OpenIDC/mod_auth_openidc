@@ -336,6 +336,7 @@ static int oidc_cache_shm_destroy(server_rec *s) {
 }
 
 oidc_cache_t oidc_cache_shm = {
+		0,
 		oidc_cache_shm_cfg_create,
 		oidc_cache_shm_post_config,
 		oidc_cache_shm_child_init,
