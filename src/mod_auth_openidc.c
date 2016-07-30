@@ -408,7 +408,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 			provider->jwks_refresh_interval, provider->ssl_validate_server };
 	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri,
 			oidc_util_merge_symmetric_key(r->pool, NULL, jwk)) == FALSE) {
-		oidc_error(r, "state JWT signature could not be validated, aborting");
+		oidc_error(r, "state JWT could not be validated, aborting");
 		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
@@ -436,7 +436,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 /* obtain the state from the cookie value */
 static json_t * oidc_get_state_from_cookie(request_rec *r, oidc_cfg *c, const char *cookieValue) {
 	json_t *result = NULL;
-	oidc_util_jwt_hs256_verify(r, c->crypto_passphrase, cookieValue, &result);
+	oidc_util_jwt_verify(r, c->crypto_passphrase, cookieValue, &result);
 	return result;
 }
 
@@ -544,20 +544,13 @@ static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
 	 * random value, original URL, original method, issuer, response_type, response_mod, prompt and timestamp
 	 * encoded as JSON
 	 */
-	//char *s_value = json_dumps(proto_state, JSON_ENCODE_ANY);
 
 	/* encrypt the resulting JSON value  */
 	char *cookieValue = NULL;
 
-//	if (oidc_encrypt_base64url_encode_string(r, &cookieValue, s_value) <= 0) {
-//		free(s_value);
-//		oidc_error(r, "oidc_encrypt_base64url_encode_string failed");
-//		return FALSE;
-//	}
-
-	if (oidc_util_jwt_hs256_sign(r, c->crypto_passphrase, proto_state,
+	if (oidc_util_jwt_create(r, c->crypto_passphrase, proto_state,
 			&cookieValue) == FALSE) {
-		oidc_error(r, "oidc_util_jwt_hs256_sign failed");
+		oidc_error(r, "oidc_util_jwt_create failed");
  		return FALSE;
 	}
 
@@ -1814,7 +1807,8 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	char *state = oidc_get_browser_state_hash(r, nonce);
 
 	/* create state that restores the context when the authorization response comes in; cryptographically bind it to the browser */
-	oidc_authorization_request_set_cookie(r, c, state, proto_state);
+	if (oidc_authorization_request_set_cookie(r, c, state, proto_state) == FALSE)
+		return HTTP_INTERNAL_SERVER_ERROR;
 
 	/*
 	 * printout errors if Cookie settings are not going to work

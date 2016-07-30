@@ -358,7 +358,7 @@ static char *test_jwt_sign_verify(apr_pool_t *pool) {
 	oidc_jwk_destroy(jwk);
 
 	const char *secret = "my_secret4321";
-	jwk = oidc_jwk_create_symmetric_key(pool, NULL, (const unsigned char *)secret, strlen(secret), &err);
+	jwk = oidc_jwk_create_symmetric_key(pool, NULL, (const unsigned char *)secret, strlen(secret), FALSE, &err);
 	TST_ASSERT_ERR("oidc_jwk_create_symmetric_key", jwk != NULL, pool, err);
 	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
 

@@ -888,7 +888,7 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 
 				jwk = oidc_jwk_create_symmetric_key(r->pool, NULL,
 						(const unsigned char *) provider->client_secret,
-						strlen(provider->client_secret), &err);
+						strlen(provider->client_secret), FALSE, &err);
 				if (jwk == NULL) {
 					oidc_error(r,
 							"parsing of client secret into JWK failed: %s",

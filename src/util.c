@@ -137,14 +137,25 @@ int oidc_base64url_decode(apr_pool_t *pool, char **dst, const char *src) {
 	return apr_base64_decode(*dst, dec);
 }
 
-apr_byte_t oidc_util_jwt_hs256_sign(request_rec *r, const char *secret,
+apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret,
 		json_t *payload, char **compact_encoded_jwt) {
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
 
-	jwk = oidc_jwk_create_symmetric_key(r->pool, NULL,	(const unsigned char *) secret, strlen(secret), &err);
+	unsigned char *key = NULL;
+	unsigned int key_len = 0;
+
+	if (oidc_jose_hash_bytes(r->pool, "sha256", (const unsigned char *) secret,
+			strlen(secret), &key, &key_len, &err) == FALSE) {
+		oidc_error(r, "hashing of client secret failed: %s",
+				oidc_jose_e2s(r->pool, err));
+		return FALSE;
+	}
+
+	jwk = oidc_jwk_create_symmetric_key(r->pool, NULL,
+			(const unsigned char *) key, key_len, FALSE, &err);
 	if (jwk == NULL) {
-		oidc_error(r, "parsing of client secret into JWK failed: %s",
+		oidc_error(r, "parsing of hashed client secret into JWK failed: %s",
 				oidc_jose_e2s(r->pool, err));
 		return FALSE;
 	}
@@ -159,8 +170,21 @@ apr_byte_t oidc_util_jwt_hs256_sign(request_rec *r, const char *secret,
 		return FALSE;
 	}
 
-	*compact_encoded_jwt = oidc_jwt_serialize(r->pool, jwt, &err);
+	oidc_jwt_t *jwe = oidc_jwt_new(r->pool, TRUE, FALSE);
+	jwe->header.alg = "dir";
+	jwe->header.enc = "A256GCM";
 
+	const char *cser = oidc_jwt_serialize(r->pool, jwt, &err);
+
+	if (oidc_jwt_encrypt(r->pool, jwe, jwk, cser, compact_encoded_jwt,
+			&err) == FALSE) {
+		oidc_error(r, "encrypting JWT failed: %s", oidc_jose_e2s(r->pool, err));
+		oidc_jwt_destroy(jwe);
+		oidc_jwt_destroy(jwt);
+		return FALSE;
+	}
+
+	oidc_jwt_destroy(jwe);
 	jwt->payload.value.json = NULL;
 	oidc_jwt_destroy(jwt);
 	oidc_jwk_destroy(jwk);
@@ -168,30 +192,38 @@ apr_byte_t oidc_util_jwt_hs256_sign(request_rec *r, const char *secret,
 	return TRUE;
 }
 
-apr_byte_t oidc_util_jwt_hs256_verify(request_rec *r, const char *secret, const char *compact_encoded_jwt, json_t **result) {
+apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret,
+		const char *compact_encoded_jwt, json_t **result) {
 	apr_hash_t *keys = apr_hash_make(r->pool);
 	oidc_jwt_t *jwt = NULL;
 	oidc_jwk_t *jwk = NULL;
 	oidc_jose_error_t err;
 
-	if (oidc_jwt_parse(r->pool, compact_encoded_jwt, &jwt, keys, &err) == FALSE) {
-		oidc_error(r, "oidc_jwt_parse failed: %s",
+	unsigned char *key = NULL;
+	unsigned int key_len = 0;
+
+	if (oidc_jose_hash_bytes(r->pool, "sha256", (const unsigned char *) secret,
+			strlen(secret), &key, &key_len, &err) == FALSE) {
+		oidc_error(r, "hashing of client secret failed: %s",
 				oidc_jose_e2s(r->pool, err));
-		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
 
 	jwk = oidc_jwk_create_symmetric_key(r->pool, NULL,
-			(const unsigned char *) secret,
-			strlen(secret), &err);
-
+			(const unsigned char *) key, key_len, FALSE, &err);
 	if (jwk == NULL) {
-		oidc_error(r, "parsing of client secret into JWK failed: %s",
+		oidc_error(r, "parsing of hashed client secret into JWK failed: %s",
 				oidc_jose_e2s(r->pool, err));
 		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
 	apr_hash_set(keys, "", APR_HASH_KEY_STRING, jwk);
+
+	if (oidc_jwt_parse(r->pool, compact_encoded_jwt, &jwt, keys, &err) == FALSE) {
+		oidc_error(r, "oidc_jwt_parse failed: %s", oidc_jose_e2s(r->pool, err));
+		oidc_jwt_destroy(jwt);
+		return FALSE;
+	}
 
 	if (oidc_jwt_verify(r->pool, jwt, keys, &err) == FALSE) {
 		oidc_error(r, "JWT signature verification failed: %s",
@@ -1636,7 +1668,7 @@ oidc_jwk_t * oidc_util_create_symmetric_key(apr_pool_t *pool,
 		}
 
 		if ((key != NULL) && (key_len > 0))
-			jwk = oidc_jwk_create_symmetric_key(pool, NULL, key, key_len, err);
+			jwk = oidc_jwk_create_symmetric_key(pool, NULL, key, key_len, TRUE, err);
 	}
 
 	return jwk;

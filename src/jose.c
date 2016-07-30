@@ -97,7 +97,7 @@ oidc_jwt_t *oidc_jwt_new(apr_pool_t *pool, int create_header,
 	oidc_jwt_t *jwt = apr_pcalloc(pool, sizeof(oidc_jwt_t));
 	if (create_header) {
 		jwt->header.value.json = json_object();
-		oidc_jwt_hdr_set(jwt, "typ", "JWT");
+		//oidc_jwt_hdr_set(jwt, "typ", "JWT");
 	}
 	if (create_payload) {
 		jwt->payload.value.json = json_object();
@@ -346,7 +346,7 @@ static apr_byte_t oidc_jwk_set_or_generate_kid(apr_pool_t *pool,
  * create an "oct" symmetric JWK
  */
 oidc_jwk_t *oidc_jwk_create_symmetric_key(apr_pool_t *pool, const char *skid,
-		const unsigned char *key, unsigned int key_len, oidc_jose_error_t *err) {
+		const unsigned char *key, unsigned int key_len, apr_byte_t set_kid, oidc_jose_error_t *err) {
 
 	cjose_err cjose_err;
 	cjose_jwk_t *cjose_jwk = cjose_jwk_create_oct_spec(key, key_len,
@@ -357,10 +357,12 @@ oidc_jwk_t *oidc_jwk_create_symmetric_key(apr_pool_t *pool, const char *skid,
 		return FALSE;
 	}
 
-	if (oidc_jwk_set_or_generate_kid(pool, cjose_jwk, skid, (const char *) key,
-			key_len, err) == FALSE) {
-		cjose_jwk_release(cjose_jwk);
-		return FALSE;
+	if (set_kid == TRUE) {
+		if (oidc_jwk_set_or_generate_kid(pool, cjose_jwk, skid,
+				(const char *) key, key_len, err) == FALSE) {
+			cjose_jwk_release(cjose_jwk);
+			return FALSE;
+		}
 	}
 
 	oidc_jwk_t *jwk = oidc_jwk_new(pool);
@@ -598,7 +600,7 @@ static uint8_t *oidc_jwe_decrypt(apr_pool_t *pool, cjose_jwe_t *jwe,
 		if (decrypted == NULL)
 			oidc_jose_error(err,
 					"encrypted JWT could not be decrypted with any of the %d keys: error for last tried key is: %s",
-					oidc_cjose_e2s(pool, cjose_err));
+					apr_hash_count(keys), oidc_cjose_e2s(pool, cjose_err));
 
 	}
 
@@ -741,6 +743,43 @@ void EVP_MD_CTX_free(EVP_MD_CTX *ctx) {
 		free(ctx);
 }
 #endif
+
+/*
+ * encrypt JWT
+ */
+apr_byte_t oidc_jwt_encrypt(apr_pool_t *pool, oidc_jwt_t *jwe, oidc_jwk_t *jwk,
+		const char *payload, char **serialized, oidc_jose_error_t *err) {
+
+	cjose_header_t *hdr = jwe->header.value.json;
+
+	if (jwe->header.alg)
+		oidc_jwt_hdr_set(jwe, CJOSE_HDR_ALG, jwe->header.alg);
+	if (jwe->header.kid)
+		oidc_jwt_hdr_set(jwe, CJOSE_HDR_KID, jwe->header.kid);
+	if (jwe->header.enc)
+		oidc_jwt_hdr_set(jwe, CJOSE_HDR_ENC, jwe->header.enc);
+
+	cjose_err cjose_err;
+	cjose_jwe_t *cjose_jwe = cjose_jwe_encrypt(jwk->cjose_jwk, hdr,
+			(const uint8_t *) payload, strlen(payload), &cjose_err);
+	if (cjose_jwe == NULL) {
+		oidc_jose_error(err, "cjose_jwe_encrypt failed: %s",
+				oidc_cjose_e2s(pool, cjose_err));
+		return FALSE;
+	}
+
+	const char *cser = cjose_jwe_export(cjose_jwe, &cjose_err);
+	if (cser == NULL) {
+		oidc_jose_error(err, "cjose_jwe_export failed: %s",
+				oidc_cjose_e2s(pool, cjose_err));
+		return FALSE;
+	}
+
+	*serialized = apr_pstrdup(pool, cser);
+	cjose_jwe_release(cjose_jwe);
+
+	return TRUE;
+}
 
 /*
  * verify the signature on a JWT

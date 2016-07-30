@@ -83,10 +83,9 @@ static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 		const char *s_json = NULL;
 		c->cache->get(r, OIDC_CACHE_SECTION_SESSION, uuid, &s_json);
 		if (s_json != NULL) {
-			z->state = json_loads(s_json, 0, 0);
-			if (z->state == NULL) {
-				oidc_error(r, "cached JSON parsing (json_loads) failed: (%s)",
-						s_json);
+			if (oidc_util_jwt_verify(r, c->crypto_passphrase, s_json,
+					&z->state) == FALSE) {
+				oidc_error(r, "cache value possibly corrupted");
 				return FALSE;
 			}
 		}
@@ -118,9 +117,13 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z) {
 				c->persistent_session_cookie ? z->expiry : -1);
 
 		/* store the string-encoded session in the cache */
-		char *s_value = json_dumps(z->state, JSON_COMPACT);
+		char *s_value = NULL;
+		if (oidc_util_jwt_create(r, c->crypto_passphrase, z->state,
+				&s_value) == FALSE) {
+			oidc_error(r, "oidc_util_jwt_create failed");
+			return FALSE;
+		}
 		c->cache->set(r, OIDC_CACHE_SECTION_SESSION, key, s_value, z->expiry);
-		free(s_value);
 
 	} else {
 
@@ -145,7 +148,7 @@ static apr_byte_t oidc_session_load_cookie(request_rec *r, oidc_cfg *c,
 	char *cookieValue = oidc_util_get_chunked_cookie(r, d->cookie, c->session_cookie_chunk_size);
 	if (cookieValue != NULL) {
 		json_t *json = NULL;
-		if (oidc_util_jwt_hs256_verify(r, c->crypto_passphrase, cookieValue,
+		if (oidc_util_jwt_verify(r, c->crypto_passphrase, cookieValue,
 				&json) == FALSE) {
 			//oidc_util_set_cookie(r, d->cookie, "");
 			oidc_warn(r, "cookie value possibly corrupted");
@@ -168,9 +171,9 @@ static apr_byte_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z) {
 
 	char *cookieValue = "";
 	if (z->state != NULL) {
-		if (oidc_util_jwt_hs256_sign(r, c->crypto_passphrase, z->state,
+		if (oidc_util_jwt_create(r, c->crypto_passphrase, z->state,
 				&cookieValue) == FALSE) {
-			oidc_error(r, "oidc_util_jwt_hs256_sign failed");
+			oidc_error(r, "oidc_util_jwt_create failed");
 			return FALSE;
 		}
 	}

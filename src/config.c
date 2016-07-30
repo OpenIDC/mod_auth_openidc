@@ -461,7 +461,7 @@ static const char *oidc_set_shared_keys(cmd_parms *cmd, void *struct_ptr,
 		return rv;
 
 	jwk = oidc_jwk_create_symmetric_key(cmd->pool, kid,
-			(const unsigned char *) secret, key_len, &err);
+			(const unsigned char *) secret, key_len, TRUE, &err);
 	if (jwk == NULL) {
 		return apr_psprintf(cmd->pool,
 				"oidc_jwk_create_symmetric_key failed for (kid=%s) \"%s\": %s",
