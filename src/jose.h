@@ -95,8 +95,6 @@ void _oidc_jose_error_set(oidc_jose_error_t *, const char *, const int,
  */
 
 /* helpers to find out about the supported ala/enc algorithms */
-typedef apr_byte_t (*oidc_jose_is_supported_function_t)(apr_pool_t *,
-		const char *);
 apr_array_header_t *oidc_jose_jws_supported_algorithms(apr_pool_t *pool);
 apr_byte_t oidc_jose_jws_algorithm_is_supported(apr_pool_t *pool,
 		const char *alg);

@@ -118,7 +118,7 @@ static int TST_RC;
 static char *_jwk_parse(apr_pool_t *pool, const char *s, oidc_jwk_t **jwk,
 		oidc_jose_error_t *err) {
 	oidc_jwk_t *k = oidc_jwk_parse(pool, s, err);
-	TST_ASSERT_ERR("cjose_jwk_import", k != NULL, pool, (*err));
+	TST_ASSERT_ERR("oidc_jwk_parse", k != NULL, pool, (*err));
 	*jwk = k;
 	return 0;
 }

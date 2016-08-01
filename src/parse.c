@@ -236,8 +236,7 @@ static const char *oidc_valid_string_option(apr_pool_t *pool, const char *arg,
 		i++;
 	}
 	if (options[i] == NULL) {
-		return apr_psprintf(pool,
-				"invalid value %s%s%s, must be one of %s",
+		return apr_psprintf(pool, "invalid value %s%s%s, must be one of %s",
 				OIDC_LIST_OPTIONS_QUOTE, arg, OIDC_LIST_OPTIONS_QUOTE,
 				oidc_flatten_list_options(pool, options));
 	}
@@ -339,14 +338,16 @@ const char *oidc_parse_boolean(apr_pool_t *pool, const char *arg,
 		int *bool_value) {
 	if ((apr_strnatcasecmp(arg, "true") == 0)
 			|| (apr_strnatcasecmp(arg, "on") == 0)
+			|| (apr_strnatcasecmp(arg, "yes") == 0)
 			|| (apr_strnatcasecmp(arg, "1") == 0)) {
-		*bool_value = 1;
+		*bool_value = TRUE;
 		return NULL;
 	}
 	if ((apr_strnatcasecmp(arg, "false") == 0)
 			|| (apr_strnatcasecmp(arg, "off") == 0)
+			|| (apr_strnatcasecmp(arg, "no") == 0)
 			|| (apr_strnatcasecmp(arg, "0") == 0)) {
-		*bool_value = 0;
+		*bool_value = FALSE;
 		return NULL;
 	}
 	return apr_psprintf(pool,
@@ -473,17 +474,10 @@ const char *oidc_parse_session_inactivity_timeout(apr_pool_t *pool,
 #define OIDC_SESSION_MAX_DURATION_MAX 86400 * 365
 
 /*
- * parse a session max duration value from the provided string
+ * check the boundaries for session max lifetime
  */
-const char *oidc_parse_session_max_duration(apr_pool_t *pool, const char *arg,
-		int *int_value) {
-	int v = 0;
-	const char *rv = NULL;
-	rv = oidc_parse_int(pool, arg, &v);
-	if (rv != NULL)
-		return rv;
+const char *oidc_valid_session_max_duration(apr_pool_t *pool, int v) {
 	if (v == 0) {
-		*int_value = 0;
 		return NULL;
 	}
 	if (v < OIDC_SESSION_MAX_DURATION_MIN) {
@@ -498,6 +492,23 @@ const char *oidc_parse_session_max_duration(apr_pool_t *pool, const char *arg,
 }
 
 /*
+ * parse a session max duration value from the provided string
+ */
+const char *oidc_parse_session_max_duration(apr_pool_t *pool, const char *arg,
+		int *int_value) {
+	int v = 0;
+	const char *rv = NULL;
+	rv = oidc_parse_int(pool, arg, &v);
+	if (rv != NULL)
+		return rv;
+	rv = oidc_valid_session_max_duration(pool, v);
+	if (rv != NULL)
+		return rv;
+	*int_value = v;
+	return NULL;
+}
+
+/*
  * parse a base64 encoded binary value from the provided string
  */
 static char *oidc_parse_base64(apr_pool_t *pool, const char *input,
@@ -506,8 +517,7 @@ static char *oidc_parse_base64(apr_pool_t *pool, const char *input,
 	*output = apr_palloc(pool, len);
 	*output_len = apr_base64_decode(*output, input);
 	if (*output_len <= 0)
-		return apr_psprintf(pool,
-				"base64-decoding of \"%s\" failed", input);
+		return apr_psprintf(pool, "base64-decoding of \"%s\" failed", input);
 	return NULL;
 }
 
@@ -518,9 +528,7 @@ static char *oidc_parse_base64url(apr_pool_t *pool, const char *input,
 		char **output, int *output_len) {
 	*output_len = oidc_base64url_decode(pool, output, input);
 	if (*output_len <= 0)
-		return apr_psprintf(pool,
-				"base64url-decoding of \"%s\" failed",
-				input);
+		return apr_psprintf(pool, "base64url-decoding of \"%s\" failed", input);
 	return NULL;
 }
 
@@ -823,5 +831,40 @@ const char *oidc_parse_unauth_action(apr_pool_t *pool, const char *arg,
 	else if (apr_strnatcmp(arg, OIDC_UNAUTH_ACTION_410_STR) == 0)
 		*action = RETURN410;
 
+	return NULL;
+}
+
+/*
+ * check if there's one valid entry in a string of arrays
+ */
+const char *oidc_valid_string_in_array(apr_pool_t *pool, json_t *json,
+		const char *key, oidc_valid_function_t valid_function, char **value,
+		apr_byte_t optional) {
+	int i = 0;
+	json_t *json_arr = json_object_get(json, key);
+	if ((json_arr != NULL) && (json_is_array(json_arr))) {
+		for (i = 0; i < json_array_size(json_arr); i++) {
+			json_t *elem = json_array_get(json_arr, i);
+			if (!json_is_string(elem)) {
+				return apr_psprintf(pool,
+						"unhandled in-array JSON non-string object type [%d]",
+						elem->type);
+				continue;
+			}
+			if (valid_function(pool, json_string_value(elem)) == NULL) {
+				if (value != NULL)
+					*value = apr_pstrdup(pool, json_string_value(elem));
+				break;
+			}
+		}
+		if (i == json_array_size(json_arr)) {
+			return apr_psprintf(pool,
+					"could not find a valid array string element for entry \"%s\"",
+					key);
+		}
+	} else if (optional == FALSE) {
+		return apr_psprintf(pool, "JSON object did not contain a \"%s\" array",
+				key);
+	}
 	return NULL;
 }

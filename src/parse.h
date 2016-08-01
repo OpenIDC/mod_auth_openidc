@@ -73,6 +73,7 @@ const char *oidc_valid_encrypted_response_alg(apr_pool_t *pool, const char *arg)
 const char *oidc_valid_encrypted_response_enc(apr_pool_t *pool, const char *arg);
 const char *oidc_valid_claim_format(apr_pool_t *pool, const char *arg);
 const char *oidc_valid_introspection_method(apr_pool_t *pool, const char *arg);
+const char *oidc_valid_session_max_duration(apr_pool_t *pool,  int v);
 
 const char *oidc_parse_int(apr_pool_t *pool, const char *arg, int *int_value);
 const char *oidc_parse_boolean(apr_pool_t *pool, const char *arg, int *bool_value);
@@ -88,5 +89,9 @@ const char *oidc_parse_accept_oauth_token_in(apr_pool_t *pool, const char *arg, 
 const char *oidc_parse_claim_required(apr_pool_t *pool, const char *arg, int *is_required);
 const char *oidc_parse_set_claims_as(apr_pool_t *pool, const char *arg, apr_byte_t *in_headers, apr_byte_t *in_env_vars);
 const char *oidc_parse_unauth_action(apr_pool_t *pool, const char *arg, unauthenticated_action *action);
+
+typedef const char *(*oidc_valid_int_function_t)(apr_pool_t *, int);
+typedef const char *(*oidc_valid_function_t)(apr_pool_t *, const char *);
+const char *oidc_valid_string_in_array(apr_pool_t *pool, json_t *json, const char *key, oidc_valid_function_t valid_function, char **value, apr_byte_t optional);
 
 #endif /* MOD_AUTH_OPENIDC_PARSE_H_ */
