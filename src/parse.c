@@ -182,6 +182,23 @@ static const char *oidc_valid_int_min_max(apr_pool_t *pool, int value,
 }
 
 /*
+ * parse an integer and check validity
+ */
+static const char *oidc_parse_int_valid(apr_pool_t *pool, const char *arg,
+		int *int_value, oidc_valid_int_function_t valid_int_function) {
+	int v = 0;
+	const char *rv = NULL;
+	rv = oidc_parse_int(pool, arg, &v);
+	if (rv != NULL)
+		return rv;
+	rv = valid_int_function(pool, v);
+	if (rv != NULL)
+		return rv;
+	*int_value = v;
+	return NULL;
+}
+
+/*
  * parse an integer value from a string that must be between a specified minimum and maximum
  */
 static const char *oidc_parse_int_min_max(apr_pool_t *pool, const char *arg,
@@ -471,7 +488,7 @@ const char *oidc_parse_session_inactivity_timeout(apr_pool_t *pool,
 }
 
 #define OIDC_SESSION_MAX_DURATION_MIN 300
-#define OIDC_SESSION_MAX_DURATION_MAX 86400 * 365
+#define OIDC_SESSION_MAX_DURATION_MAX 3600 * 24 * 365
 
 /*
  * check the boundaries for session max lifetime
@@ -484,7 +501,7 @@ const char *oidc_valid_session_max_duration(apr_pool_t *pool, int v) {
 		return apr_psprintf(pool, "value must not be less than %d seconds",
 				OIDC_SESSION_MAX_DURATION_MIN);
 	}
-	if (v > 86400 * 365) {
+	if (v > OIDC_SESSION_MAX_DURATION_MAX) {
 		return apr_psprintf(pool, "value must not be greater than %d seconds",
 				OIDC_SESSION_MAX_DURATION_MAX);
 	}
@@ -496,16 +513,7 @@ const char *oidc_valid_session_max_duration(apr_pool_t *pool, int v) {
  */
 const char *oidc_parse_session_max_duration(apr_pool_t *pool, const char *arg,
 		int *int_value) {
-	int v = 0;
-	const char *rv = NULL;
-	rv = oidc_parse_int(pool, arg, &v);
-	if (rv != NULL)
-		return rv;
-	rv = oidc_valid_session_max_duration(pool, v);
-	if (rv != NULL)
-		return rv;
-	*int_value = v;
-	return NULL;
+	return oidc_parse_int_valid(pool, arg, int_value, oidc_valid_session_max_duration);
 }
 
 /*
@@ -868,3 +876,58 @@ const char *oidc_valid_string_in_array(apr_pool_t *pool, json_t *json,
 	}
 	return NULL;
 }
+
+#define OIDC_JWKS_REFRESH_INTERVAL_MIN 300
+#define OIDC_JWKS_REFRESH_INTERVAL_MAX 3600 * 24 * 365
+
+/*
+ * check the boundaries for JWKs refresh interval
+ */
+const char *oidc_valid_jwks_refresh_interval(apr_pool_t *pool, int v) {
+	return oidc_valid_int_min_max(pool, v, OIDC_JWKS_REFRESH_INTERVAL_MIN, OIDC_JWKS_REFRESH_INTERVAL_MAX);
+}
+
+/*
+ * parse a JWKs refresh interval from the provided string
+ */
+const char *oidc_parse_jwks_refresh_interval(apr_pool_t *pool, const char *arg,
+		int *int_value) {
+	return oidc_parse_int_valid(pool, arg, int_value, oidc_valid_jwks_refresh_interval);
+}
+
+#define OIDC_IDTOKEN_IAT_SLACK_MIN 0
+#define OIDC_IDTOKEN_IAT_SLACK_MAX 3600
+
+/*
+ * check the boundaries for ID token "issued-at" (iat) timestamp slack
+ */
+const char *oidc_valid_idtoken_iat_slack(apr_pool_t *pool, int v) {
+	return oidc_valid_int_min_max(pool, v, OIDC_IDTOKEN_IAT_SLACK_MIN, OIDC_IDTOKEN_IAT_SLACK_MAX);
+}
+
+/*
+ * parse an ID token "iat" slack interval
+ */
+const char *oidc_parse_idtoken_iat_slack(apr_pool_t *pool, const char *arg,
+		int *int_value) {
+	return oidc_parse_int_valid(pool, arg, int_value, oidc_valid_idtoken_iat_slack);
+}
+
+#define OIDC_USERINFO_REFRESH_INTERVAL_MIN 0
+#define OIDC_USERINFO_REFRESH_INTERVAL_MAX 3600 * 24 * 365
+
+/*
+ * check the boundaries for the userinfo refresh interval
+ */
+const char *oidc_valid_userinfo_refresh_interval(apr_pool_t *pool, int v) {
+	return oidc_valid_int_min_max(pool, v, OIDC_USERINFO_REFRESH_INTERVAL_MIN, OIDC_USERINFO_REFRESH_INTERVAL_MAX);
+}
+
+/*
+ * parse a userinfo refresh interval from the provided string
+ */
+const char *oidc_parse_userinfo_refresh_interval(apr_pool_t *pool, const char *arg,
+		int *int_value) {
+	return oidc_parse_int_valid(pool, arg, int_value, oidc_valid_userinfo_refresh_interval);
+}
+

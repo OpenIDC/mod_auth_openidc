@@ -1078,13 +1078,14 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 			cfg->provider.scope);
 
 	/* see if we've got a custom JWKs refresh interval */
-	oidc_json_object_get_int(r->pool, j_conf, "jwks_refresh_interval",
-			&provider->jwks_refresh_interval,
+	oidc_metadata_get_valid_int(r, j_conf, "jwks_refresh_interval",
+			oidc_valid_jwks_refresh_interval, &provider->jwks_refresh_interval,
 			cfg->provider.jwks_refresh_interval);
 
 	/* see if we've got a custom IAT slack interval */
-	oidc_json_object_get_int(r->pool, j_conf, "idtoken_iat_slack",
-			&provider->idtoken_iat_slack, cfg->provider.idtoken_iat_slack);
+	oidc_metadata_get_valid_int(r, j_conf, "idtoken_iat_slack",
+			oidc_valid_idtoken_iat_slack, &provider->idtoken_iat_slack,
+			cfg->provider.idtoken_iat_slack);
 
 	/* see if we've got a custom max session duration */
 	oidc_metadata_get_valid_int(r, j_conf, "session_max_duration",
@@ -1133,7 +1134,8 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 			NULL);
 
 	/* see if we've got a custom user info refresh interval */
-	oidc_json_object_get_int(r->pool, j_conf, "userinfo_refresh_interval",
+	oidc_metadata_get_valid_int(r, j_conf, "userinfo_refresh_interval",
+			oidc_valid_userinfo_refresh_interval,
 			&provider->userinfo_refresh_interval,
 			cfg->provider.userinfo_refresh_interval);
 

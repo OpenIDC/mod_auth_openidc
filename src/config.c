@@ -616,6 +616,42 @@ static const char * oidc_set_unauth_action(cmd_parms *cmd, void *m,
 }
 
 /*
+ * set the JWKS refresh interval
+ */
+static const char *oidc_set_jwks_refresh_interval(cmd_parms *cmd,
+		void *struct_ptr, const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+	const char *rv = oidc_parse_jwks_refresh_interval(cmd->pool, arg,
+			&cfg->provider.jwks_refresh_interval);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
+/*
+ * set the ID token "iat" slack
+ */
+static const char *oidc_set_idtoken_iat_slack(cmd_parms *cmd,
+		void *struct_ptr, const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+	const char *rv = oidc_parse_idtoken_iat_slack(cmd->pool, arg,
+			&cfg->provider.idtoken_iat_slack);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
+/*
+ * set the userinfo refresh interval
+ */
+static const char *oidc_set_userinfo_refresh_interval(cmd_parms *cmd,
+		void *struct_ptr, const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+	const char *rv = oidc_parse_userinfo_refresh_interval(cmd->pool, arg,
+			&cfg->provider.userinfo_refresh_interval);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
+/*
  * create a new server config record with defaults
  */
 void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
@@ -1672,12 +1708,12 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF,
 				"Define the OpenID Connect scope that is requested from the OP."),
 		AP_INIT_TAKE1("OIDCJWKSRefreshInterval",
-				oidc_set_int_slot,
+				oidc_set_jwks_refresh_interval,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.jwks_refresh_interval),
 				RSRC_CONF,
 				"Duration in seconds after which retrieved JWS should be refreshed."),
 		AP_INIT_TAKE1("OIDCIDTokenIatSlack",
-				oidc_set_int_slot,
+				oidc_set_idtoken_iat_slack,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.idtoken_iat_slack),
 				RSRC_CONF,
 				"Acceptable offset (both before and after) for checking the \"iat\" (= issued at) timestamp in the id_token."),
@@ -1958,7 +1994,7 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"The method in which an OAuth token can be presented; must be one or more of: header|post|query|cookie"),
 		AP_INIT_TAKE1("OIDCUserInfoRefreshInterval",
-				oidc_set_int_slot,
+				oidc_set_userinfo_refresh_interval,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.userinfo_refresh_interval),
 				RSRC_CONF,
 				"Duration in seconds after which retrieved claims from the userinfo endpoint should be refreshed."),
