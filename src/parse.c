@@ -721,7 +721,7 @@ const char *oidc_parse_accept_oauth_token_in(apr_pool_t *pool, const char *arg,
 		return NULL;
 
 	const char *p = strstr(arg, OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE_SEPARATOR);
-	p = p ? p++ : OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE_NAME_DEFAULT;
+	p = (p != NULL) ? p+1 : OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE_NAME_DEFAULT;
 	apr_hash_set(list_options, OIDC_OAUTH_ACCEPT_TOKEN_IN_OPTION_COOKIE_NAME,
 			APR_HASH_KEY_STRING, p);
 	return NULL;

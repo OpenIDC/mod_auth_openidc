@@ -612,6 +612,7 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, oidc_jwt_t *jwt,
 			oidc_debug(r,
 					"skipping non matching kty=%d for kid=%s because it doesn't match requested kty=%d, kid=%s",
 					jwk->kty, jwk->kid, oidc_jwt_alg2kty(jwt), jwt->header.kid);
+			oidc_jwk_destroy(jwk);
 			continue;
 		}
 
@@ -642,6 +643,9 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, oidc_jwt_t *jwt,
 			apr_hash_set(result, x5t, APR_HASH_KEY_STRING, jwk);
 			break;
 		}
+
+		/* the right key type but no matching kid/x5t */
+		oidc_jwk_destroy(jwk);
 	}
 
 	return rc;
@@ -717,8 +721,10 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt,
 		apr_byte_t force_refresh = FALSE;
 		/* get the key from the JWKs that corresponds with the key specified in the header */
 		if (oidc_proto_get_keys_from_jwks_uri(r, cfg, jwt, jwks_uri,
-				dynamic_keys, &force_refresh) == FALSE)
+				dynamic_keys, &force_refresh) == FALSE) {
+			oidc_jwk_list_destroy(r->pool, dynamic_keys);
 			return FALSE;
+		}
 	}
 
 	/* do the actual JWS verification with the locally and remotely provided key material */
@@ -728,6 +734,7 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt,
 			&err) == FALSE) {
 		oidc_error(r, "JWT signature verification failed: %s",
 				oidc_jose_e2s(r->pool, err));
+		oidc_jwk_list_destroy(r->pool, dynamic_keys);
 		return FALSE;
 	}
 
@@ -735,6 +742,7 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt,
 			"JWT signature verification with algorithm \"%s\" was successful",
 			jwt->header.alg);
 
+	oidc_jwk_list_destroy(r->pool, dynamic_keys);
 	return TRUE;
 }
 

@@ -768,7 +768,7 @@ apr_byte_t oidc_jwt_encrypt(apr_pool_t *pool, oidc_jwt_t *jwe, oidc_jwk_t *jwk,
 		return FALSE;
 	}
 
-	const char *cser = cjose_jwe_export(cjose_jwe, &cjose_err);
+	char *cser = cjose_jwe_export(cjose_jwe, &cjose_err);
 	if (cser == NULL) {
 		oidc_jose_error(err, "cjose_jwe_export failed: %s",
 				oidc_cjose_e2s(pool, cjose_err));
@@ -776,6 +776,7 @@ apr_byte_t oidc_jwt_encrypt(apr_pool_t *pool, oidc_jwt_t *jwe, oidc_jwk_t *jwk,
 	}
 
 	*serialized = apr_pstrdup(pool, cser);
+	cjose_get_dealloc()(cser);
 	cjose_jwe_release(cjose_jwe);
 
 	return TRUE;
