@@ -862,6 +862,7 @@ char *oidc_util_get_cookie(request_rec *r, const char *cookieName) {
 char *oidc_util_get_chunked_cookie(request_rec *r, const char *cookieName,
 		int chunkSize) {
 	char *cookieValue = NULL;
+	int i = 0;
 	if (chunkSize == 0) {
 		cookieValue = oidc_util_get_cookie(r, cookieName);
 	} else {
@@ -875,7 +876,7 @@ char *oidc_util_get_chunked_cookie(request_rec *r, const char *cookieName,
 			long chunkCount = strtol(chunkCountValue, &endptr, 10);
 			if ((*chunkCountValue != '\0') && (*endptr == '\0')) {
 				cookieValue = "";
-				for (int i = 0; i < chunkCount; i++) {
+				for (i = 0; i < chunkCount; i++) {
 					char *chunkName = apr_psprintf(r->pool, "%s%s%d",
 							cookieName, OIDC_COOKIE_CHUNKS_SEPARATOR, i);
 					char *chunkValue = oidc_util_get_cookie(r, chunkName);
@@ -895,13 +896,14 @@ char *oidc_util_get_chunked_cookie(request_rec *r, const char *cookieName,
  */
 void oidc_util_set_chunked_cookie(request_rec *r, const char *cookieName,
 		const char *cookieValue, apr_time_t expires, int chunkSize) {
+	int i = 0;
 	int cookieLength = strlen(cookieValue);
 	if ((chunkSize == 0) || (cookieLength < chunkSize)) {
 		oidc_util_set_cookie(r, cookieName, cookieValue, expires);
 	} else {
 		int chunkCountValue = cookieLength / chunkSize + 1;
 		const char *ptr = cookieValue;
-		for (int i = 0; i < chunkCountValue; i++) {
+		for (i = 0; i < chunkCountValue; i++) {
 			char *chunkName = apr_psprintf(r->pool, "%s%s%d", cookieName,
 					OIDC_COOKIE_CHUNKS_SEPARATOR, i);
 			char *chunkValue = apr_pstrndup(r->pool, ptr, chunkSize);
