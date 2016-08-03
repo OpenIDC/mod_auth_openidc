@@ -77,7 +77,7 @@ static const char * oidc_valid_url_scheme(apr_pool_t *pool, const char *arg,
 			return apr_psprintf(pool,
 					"'%s' cannot be parsed as a \"%s\" or \"%s\" URL (scheme == %s)!",
 					arg, scheme1, scheme2, uri.scheme);
-		} else {
+		} else if (scheme2 == NULL) {
 			return apr_psprintf(pool,
 					"'%s' cannot be parsed as a \"%s\" URL (scheme == %s)!",
 					arg, scheme1, uri.scheme);
@@ -487,7 +487,7 @@ const char *oidc_parse_session_inactivity_timeout(apr_pool_t *pool,
 			OIDC_SESSION_INACTIVITY_TIMEOUT_MAX);
 }
 
-#define OIDC_SESSION_MAX_DURATION_MIN 300
+#define OIDC_SESSION_MAX_DURATION_MIN 15
 #define OIDC_SESSION_MAX_DURATION_MAX 3600 * 24 * 365
 
 /*
