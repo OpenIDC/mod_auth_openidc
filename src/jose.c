@@ -649,7 +649,7 @@ apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json,
 	}
 
 	cjose_header_t *hdr = cjose_jws_get_protected(jwt->cjose_jws);
-	jwt->header.value.json = json_deep_copy(hdr);
+	jwt->header.value.json = json_deep_copy((json_t *)hdr);
 	char *str = json_dumps(jwt->header.value.json,
 			JSON_PRESERVE_ORDER | JSON_COMPACT);
 	jwt->header.value.str = apr_pstrdup(pool, str);
@@ -706,7 +706,7 @@ void oidc_jwt_destroy(oidc_jwt_t *jwt) {
 apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk,
 		oidc_jose_error_t *err) {
 
-	cjose_header_t *hdr = jwt->header.value.json;
+	cjose_header_t *hdr = (cjose_header_t *)jwt->header.value.json;
 
 	if (jwt->header.alg)
 		oidc_jwt_hdr_set(jwt, CJOSE_HDR_ALG, jwt->header.alg);
@@ -751,7 +751,7 @@ void EVP_MD_CTX_free(EVP_MD_CTX *ctx) {
 apr_byte_t oidc_jwt_encrypt(apr_pool_t *pool, oidc_jwt_t *jwe, oidc_jwk_t *jwk,
 		const char *payload, char **serialized, oidc_jose_error_t *err) {
 
-	cjose_header_t *hdr = jwe->header.value.json;
+	cjose_header_t *hdr = (cjose_header_t *)jwe->header.value.json;
 
 	if (jwe->header.alg)
 		oidc_jwt_hdr_set(jwe, CJOSE_HDR_ALG, jwe->header.alg);
