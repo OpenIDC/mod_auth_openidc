@@ -1,2 +1,0 @@
-version=3
-https://github.com/pingidentity/mod_auth_openidc/releases .*/download/v?(\d\S*)/.*\.orig\.tar\.gz

@@ -1,3 +1,8 @@
+8/5/2016
+- delete the debian directory
+- rename OIDCOAuthTokenEndpointCert/Key to OIDCOAuthIntrospectionEndpointCert/Key
+- pre-release 2.0.0rc1
+
 7/30/2016
 - encrypt state/session JWT cookies and session JWT cache values for non-shm storages
 

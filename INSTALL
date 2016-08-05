@@ -11,6 +11,7 @@ Installation from source
 You will require development headers and tools for the following
 dependencies:
  Apache (>=2.0)
+ cjose (>=0.4.1)
  OpenSSL (>=0.9.8) (>=1.0.1 for Elliptic Curve support)
  Curl (>=?)
  Jansson (>=2.0) (JSON parser for C)
