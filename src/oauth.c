@@ -56,6 +56,7 @@
 #include <http_request.h>
 
 #include "mod_auth_openidc.h"
+#include "parse.h"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -182,8 +183,9 @@ static apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 	}
 
 	if (*access_token == NULL) {
-		oidc_debug(r,
-				"no bearer token found in the allowed methods (authorization header, post, query parameter or cookie)");
+		oidc_debug(r, "no bearer token found in the allowed methods: %s",
+				oidc_accept_oauth_token_in2str(r->pool,
+						dir_cfg->oauth_accept_token_in));
 		return FALSE;
 	}
 

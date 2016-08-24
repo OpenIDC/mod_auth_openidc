@@ -89,6 +89,7 @@ const char *oidc_parse_session_max_duration(apr_pool_t *pool, const char *arg, i
 const char *oidc_parse_enc_kid_key_tuple(apr_pool_t *pool, const char *tuple, char **kid, char **key, int *key_len, apr_byte_t triplet);
 const char *oidc_parse_pass_idtoken_as(apr_pool_t *pool, const char *v1, const char *v2, const char *v3, int *int_value);
 const char *oidc_parse_accept_oauth_token_in(apr_pool_t *pool, const char *arg, apr_byte_t *b_value, apr_hash_t *list_options);
+const char *oidc_accept_oauth_token_in2str(apr_pool_t *pool, apr_byte_t v);
 const char *oidc_parse_claim_required(apr_pool_t *pool, const char *arg, int *is_required);
 const char *oidc_parse_set_claims_as(apr_pool_t *pool, const char *arg, apr_byte_t *in_headers, apr_byte_t *in_env_vars);
 const char *oidc_parse_unauth_action(apr_pool_t *pool, const char *arg, unauthenticated_action *action);

@@ -689,6 +689,31 @@ const char *oidc_parse_pass_idtoken_as(apr_pool_t *pool, const char *v1,
 #define OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE_STR "cookie"
 
 /*
+ * convert an "accept OAuth 2.0 token in" byte value to a string representation
+ */
+const char *oidc_accept_oauth_token_in2str(apr_pool_t *pool, apr_byte_t v) {
+	static char *options[] = { NULL, NULL, NULL, NULL, NULL };
+	int i = 0;
+	if (v & OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER) {
+		options[i] = OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER_STR;
+		i++;
+	}
+	if (v & OIDC_OAUTH_ACCEPT_TOKEN_IN_POST) {
+		options[i] = OIDC_OAUTH_ACCEPT_TOKEN_IN_POST_STR;
+		i++;
+	}
+	if (v & OIDC_OAUTH_ACCEPT_TOKEN_IN_QUERY) {
+		options[i] = OIDC_OAUTH_ACCEPT_TOKEN_IN_QUERY_STR;
+		i++;
+	}
+	if (v & OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE) {
+		options[i] = OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE_STR;
+		i++;
+	}
+	return oidc_flatten_list_options(pool, options);
+}
+
+/*
  * convert an "accept OAuth 2.0 token in" value to an integer
  */
 static apr_byte_t oidc_parse_oauth_accept_token_in_str2byte(const char *v) {
@@ -718,20 +743,26 @@ const char *oidc_parse_accept_oauth_token_in(apr_pool_t *pool, const char *arg,
 			OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE_STR,
 			NULL };
 	const char *rv = NULL;
-	rv = oidc_valid_string_option(pool, arg, options);
+
+	const char *s = apr_pstrdup(pool, arg);
+	char *p = strstr(s, OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE_SEPARATOR);
+
+	if (p != NULL) {
+		*p = '\0';
+		p++;
+	} else {
+		p = OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE_NAME_DEFAULT;
+	}
+	apr_hash_set(list_options, OIDC_OAUTH_ACCEPT_TOKEN_IN_OPTION_COOKIE_NAME,
+			APR_HASH_KEY_STRING, p);
+
+	rv = oidc_valid_string_option(pool, s, options);
 	if (rv != NULL)
 		return rv;
 
-	int v = oidc_parse_oauth_accept_token_in_str2byte(arg);
+	int v = oidc_parse_oauth_accept_token_in_str2byte(s);
 	*b_value |= v;
 
-	if (v != OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE)
-		return NULL;
-
-	const char *p = strstr(arg, OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE_SEPARATOR);
-	p = (p != NULL) ? p+1 : OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE_NAME_DEFAULT;
-	apr_hash_set(list_options, OIDC_OAUTH_ACCEPT_TOKEN_IN_OPTION_COOKIE_NAME,
-			APR_HASH_KEY_STRING, p);
 	return NULL;
 }
 
