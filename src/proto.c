@@ -61,43 +61,6 @@
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 /*
- * send an OpenID Connect authorization request to the specified provider preserving POST parameters using HTML5 storage
- */
-int oidc_proto_authorization_request_post_preserve(request_rec *r,
-		const char *authorization_request) {
-	/* read the parameters that are POST-ed to us */
-	apr_table_t *params = apr_table_make(r->pool, 8);
-	if (oidc_util_read_post_params(r, params) == FALSE) {
-		oidc_error(r, "something went wrong when reading the POST parameters");
-		return HTTP_INTERNAL_SERVER_ERROR;
-	}
-
-	const apr_array_header_t *arr = apr_table_elts(params);
-	const apr_table_entry_t *elts = (const apr_table_entry_t*) arr->elts;
-	int i;
-	char *json = "";
-	for (i = 0; i < arr->nelts; i++) {
-		json = apr_psprintf(r->pool, "%s'%s': '%s'%s", json,
-				oidc_util_html_escape(r->pool, elts[i].key),
-				oidc_util_html_escape(r->pool, elts[i].val),
-				i < arr->nelts - 1 ? "," : "");
-	}
-	json = apr_psprintf(r->pool, "{ %s }", json);
-
-	char *java_script =
-			apr_psprintf(r->pool,
-					"    <script type=\"text/javascript\">\n"
-					"      function preserveOnLoad() {\n"
-					"        localStorage.setItem('mod_auth_openidc_preserve_post_params', JSON.stringify(%s));\n"
-					"        window.location='%s';\n"
-					"      }\n"
-					"    </script>\n", json, authorization_request);
-
-	return oidc_util_html_send(r, "Preserving...", java_script,
-			"preserveOnLoad", "<p>Preserving...</p>", DONE);
-}
-
-/*
  * send an OpenID Connect authorization request to the specified provider
  */
 int oidc_proto_authorization_request(request_rec *r,
@@ -202,15 +165,13 @@ int oidc_proto_authorization_request(request_rec *r,
 				authorization_request, auth_request_params);
 	}
 
-	/* preserve POSTed form parameters if enabled */
-	if (apr_strnatcmp(
-			json_string_value(json_object_get(proto_state, "original_method")),
-			"form_post") == 0)
-		return oidc_proto_authorization_request_post_preserve(r,
-				authorization_request);
-
 	/* cleanup */
 	json_decref(proto_state);
+
+	/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
+	if (oidc_post_preserve_javascript(r, authorization_request, NULL,
+			NULL) == TRUE)
+		return DONE;
 
 	/* add the redirect location header */
 	apr_table_add(r->headers_out, "Location", authorization_request);

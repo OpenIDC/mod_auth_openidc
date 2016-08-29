@@ -127,6 +127,8 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_DISC_OP_PARAM "iss"
 /* parameter name of the original URL in the discovery response */
 #define OIDC_DISC_RT_PARAM "target_link_uri"
+/* parameter name of the original method in the discovery response */
+#define OIDC_DISC_RM_PARAM "method"
 /* parameter name of login hint in the discovery response */
 #define OIDC_DISC_LH_PARAM "login_hint"
 /* parameter name of parameters that need to be passed in the authentication request */
@@ -200,6 +202,10 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_CACHE_SECTION_JWKS "jwks"
 #define OIDC_CACHE_SECTION_ACCESS_TOKEN "access_token"
 #define OIDC_CACHE_SECTION_PROVIDER "provider"
+
+/* http methods */
+#define OIDC_METHOD_GET       "get"
+#define OIDC_METHOD_FORM_POST "form_post"
 
 typedef enum {
 	AUTHENTICATE, PASS, RETURN401, RETURN410
@@ -364,6 +370,7 @@ typedef struct oidc_dir_cfg {
 	apr_byte_t oauth_accept_token_in;
 	apr_hash_t *oauth_accept_token_options;
 	int oauth_token_introspect_interval;
+	int preserve_post;
 } oidc_dir_cfg;
 
 int oidc_check_user_id(request_rec *r);
@@ -375,6 +382,7 @@ int oidc_auth_checker(request_rec *r);
 void oidc_request_state_set(request_rec *r, const char *key, const char *value);
 const char*oidc_request_state_get(request_rec *r, const char *key);
 int oidc_handle_jwks(request_rec *r, oidc_cfg *c);
+apr_byte_t oidc_post_preserve_javascript(request_rec *r, const char *location, char **javascript, char **javascript_method);
 
 // oidc_oauth
 int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c);

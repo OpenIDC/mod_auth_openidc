@@ -137,6 +137,8 @@
 #define OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_REQUIRED TRUE
 /* default refresh interval in seconds after which claims from the user info endpoint should be refreshed */
 #define OIDC_DEFAULT_USERINFO_REFRESH_INTERVAL 0
+/* default for preserving POST parameters across authentication requests */
+#define OIDC_DEFAULT_PRESERVE_POST 0
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -571,6 +573,18 @@ static const char * oidc_set_introspection_method(cmd_parms *cmd, void *m,
 	const char *rv = oidc_valid_introspection_method(cmd->pool, arg);
 	if (rv == NULL)
 		rv = ap_set_string_slot(cmd, cfg, arg);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
+/*
+ * set POST preservation behavior
+ */
+static const char *oidc_set_preserve_post(cmd_parms *cmd, void *m, const char *arg) {
+	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg *) m;
+	int b = 0;
+	const char *rv = oidc_parse_boolean(cmd->pool, arg, &b);
+	if (rv == NULL)
+		rv = ap_set_flag_slot(cmd, dir_cfg, b);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -1145,6 +1159,7 @@ void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->oauth_accept_token_in = OIDC_OAUTH_ACCEPT_TOKEN_IN_DEFAULT;
 	c->oauth_accept_token_options = apr_hash_make(pool);
 	c->oauth_token_introspect_interval = 0;
+	c->preserve_post = OIDC_DEFAULT_PRESERVE_POST;
 	return (c);
 }
 
@@ -1188,6 +1203,9 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->oauth_token_introspect_interval != 0 ?
 					add->oauth_token_introspect_interval :
 					base->oauth_token_introspect_interval);
+	c->preserve_post = (
+			add->preserve_post != OIDC_DEFAULT_PRESERVE_POST ?
+					add->preserve_post : base->preserve_post);
 	return (c);
 }
 
@@ -2004,5 +2022,10 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_dir_cfg, oauth_token_introspect_interval),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Sets the token introspection refresh interval."),
+		AP_INIT_TAKE1("OIDCPreservePost",
+				oidc_set_preserve_post,
+				(void *) APR_OFFSETOF(oidc_dir_cfg, preserve_post),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Indicates whether POST parameters will be preserved across authentication requests."),
 		{ NULL }
 };

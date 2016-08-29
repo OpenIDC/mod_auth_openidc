@@ -274,6 +274,158 @@ static oidc_provider_t *oidc_get_provider_for_issuer(request_rec *r,
 }
 
 /*
+ * find out whether the request is a response from an IDP discovery page
+ */
+static apr_byte_t oidc_is_discovery_response(request_rec *r, oidc_cfg *cfg) {
+	/*
+	 * prereq: this is a call to the configured redirect_uri, now see if:
+	 * the OIDC_DISC_OP_PARAM is present
+	 */
+	return oidc_util_request_has_parameter(r, OIDC_DISC_OP_PARAM);
+}
+
+/*
+ * return the HTTP method being called: only for POST data persistence purposes
+ */
+static const char *oidc_original_request_method(request_rec *r, oidc_cfg *cfg,
+		apr_byte_t handle_discovery_response) {
+	const char *method = OIDC_METHOD_GET;
+
+	/* get a handle to the directory config */
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+
+	char *m = NULL;
+	if ((handle_discovery_response == TRUE)
+			&& (oidc_util_request_matches_url(r, cfg->redirect_uri))
+			&& (oidc_is_discovery_response(r, cfg))) {
+		oidc_util_get_request_parameter(r, OIDC_DISC_RM_PARAM, &m);
+		if (m != NULL)
+			method = apr_pstrdup(r->pool, m);
+	} else {
+
+		/*
+		 * if POST preserve is not enabled for this location, there's no point in preserving
+		 * the method either which would result in POSTing empty data on return;
+		 * so we revert to legacy behavior
+		 */
+		if (dir_cfg->preserve_post == 0)
+			return OIDC_METHOD_GET;
+
+		const char *content_type = apr_table_get(r->headers_in, "Content-Type");
+		if ((r->method_number == M_POST)
+				&& (apr_strnatcmp(content_type,
+						"application/x-www-form-urlencoded") == 0))
+			method = OIDC_METHOD_FORM_POST;
+	}
+
+	oidc_debug(r, "return: %s", method);
+
+	return method;
+}
+
+/*
+ * send an OpenID Connect authorization request to the specified provider preserving POST parameters using HTML5 storage
+ */
+apr_byte_t oidc_post_preserve_javascript(request_rec *r, const char *location,
+		char **javascript, char **javascript_method) {
+
+	/* get a handle to the directory config */
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+	if (dir_cfg->preserve_post == 0)
+		return FALSE;
+
+	oidc_debug(r, "enter");
+
+	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
+
+	const char *method = oidc_original_request_method(r, cfg, FALSE);
+
+	if (apr_strnatcmp(method, OIDC_METHOD_FORM_POST) != 0)
+		return FALSE;
+
+	/* read the parameters that are POST-ed to us */
+	apr_table_t *params = apr_table_make(r->pool, 8);
+	if (oidc_util_read_post_params(r, params) == FALSE) {
+		oidc_error(r, "something went wrong when reading the POST parameters");
+		return FALSE;
+	}
+
+	const apr_array_header_t *arr = apr_table_elts(params);
+	const apr_table_entry_t *elts = (const apr_table_entry_t*) arr->elts;
+	int i;
+	char *json = "";
+	for (i = 0; i < arr->nelts; i++) {
+		json = apr_psprintf(r->pool, "%s'%s': '%s'%s", json,
+				oidc_util_html_escape(r->pool, elts[i].key),
+				oidc_util_html_escape(r->pool, elts[i].val),
+				i < arr->nelts - 1 ? "," : "");
+	}
+	json = apr_psprintf(r->pool, "{ %s }", json);
+
+	const char *jmethod = "preserveOnLoad";
+	const char *jscript =
+			apr_psprintf(r->pool,
+					"    <script type=\"text/javascript\">\n"
+					"      function %s() {\n"
+					"        localStorage.setItem('mod_auth_openidc_preserve_post_params', JSON.stringify(%s));\n"
+					"        %s"
+					"      }\n"
+					"    </script>\n", jmethod, json,
+					location ?
+							apr_psprintf(r->pool, "window.location='%s';\n",
+									location) :
+									"");
+	if (location == NULL) {
+		if (javascript_method)
+			*javascript_method = apr_pstrdup(r->pool, jmethod);
+		if (javascript)
+			*javascript = apr_pstrdup(r->pool, jscript);
+	} else {
+		oidc_util_html_send(r, "Preserving...", jscript, jmethod,
+				"<p>Preserving...</p>", DONE);
+	}
+
+	return TRUE;
+}
+
+/*
+ * restore POST parameters on original_url from HTML5 local storage
+ */
+static int oidc_request_post_preserved_restore(request_rec *r,
+		const char *original_url) {
+
+	oidc_debug(r, "enter: original_url=%s", original_url);
+
+	const char *method = "postOnLoad";
+	const char *script =
+			apr_psprintf(r->pool,
+					"    <script type=\"text/javascript\">\n"
+					"      function %s() {\n"
+					"        var mod_auth_openidc_preserve_post_params = JSON.parse(localStorage.getItem('mod_auth_openidc_preserve_post_params'));\n"
+					"		 localStorage.removeItem('mod_auth_openidc_preserve_post_params');\n"
+					"        for (var key in mod_auth_openidc_preserve_post_params) {\n"
+					"          var input = document.createElement(\"input\");\n"
+					"          input.name = key;\n"
+					"          input.value = mod_auth_openidc_preserve_post_params[key];\n"
+					"          input.type = \"hidden\";\n"
+					"          document.forms[0].appendChild(input);\n"
+					"        }\n"
+					"        document.forms[0].action = '%s';\n"
+					"        document.forms[0].submit();\n"
+					"      }\n"
+					"    </script>\n", method, original_url);
+
+	const char *body = "    <p>Restoring...</p>\n"
+			"    <form method=\"post\"></form>\n";
+
+	return oidc_util_html_send(r, "Restoring...", script, method, body,
+			DONE);
+}
+
+/*
  * parse state that was sent to us by the issuer
  */
 static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
@@ -1133,35 +1285,6 @@ static apr_byte_t oidc_authorization_response_match_state(request_rec *r,
 }
 
 /*
- * restore POST parameters on original_url from HTML5 local storage
- */
-static int oidc_restore_preserved_post(request_rec *r, const char *original_url) {
-	const char *java_script =
-			apr_psprintf(r->pool,
-					"    <script type=\"text/javascript\">\n"
-							"      function postOnLoad() {\n"
-							"        var mod_auth_openidc_preserve_post_params = JSON.parse(localStorage.getItem('mod_auth_openidc_preserve_post_params'));\n"
-							"		 localStorage.removeItem('mod_auth_openidc_preserve_post_params');\n"
-							"        for (var key in mod_auth_openidc_preserve_post_params) {\n"
-							"          var input = document.createElement(\"input\");\n"
-							"          input.name = key;\n"
-							"          input.value = mod_auth_openidc_preserve_post_params[key];\n"
-							"          input.type = \"hidden\";\n"
-							"          document.forms[0].appendChild(input);\n"
-							"        }\n"
-							"        document.forms[0].action = '%s';\n"
-							"        document.forms[0].submit();\n"
-							"      }\n"
-							"    </script>\n", original_url);
-
-	const char *html_body = "    <p>Restoring...</p>\n"
-			"    <form method=\"post\"></form>\n";
-
-	return oidc_util_html_send(r, "Restoring...", java_script, "postOnLoad",
-			html_body, DONE);
-}
-
-/*
  * redirect the browser to the session logout endpoint
  */
 static int oidc_session_redirect_parent_window_to_logout(request_rec *r,
@@ -1556,14 +1679,15 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	if (r->user == NULL)
 		return HTTP_UNAUTHORIZED;
 
-	/* check whether form post data was preserved; if so restore it */
-	if (apr_strnatcmp(original_method, "form_post") == 0) {
-		return oidc_restore_preserved_post(r, original_url);
-	}
-
 	/* log the successful response */
-	oidc_debug(r, "session created and stored, redirecting to original URL: %s",
-			original_url);
+	oidc_debug(r,
+			"session created and stored, returning to original URL: %s, original method: %s",
+			original_url, original_method);
+
+	/* check whether form post data was preserved; if so restore it */
+	if (apr_strnatcmp(original_method, OIDC_METHOD_FORM_POST) == 0) {
+		return oidc_request_post_preserved_restore(r, original_url);
+	}
 
 	/* now we've authenticated the user so go back to the URL that he originally tried to access */
 	apr_table_add(r->headers_out, "Location", original_url);
@@ -1637,6 +1761,7 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 
 	/* obtain the URL we're currently accessing, to be stored in the state/session */
 	char *current_url = oidc_get_current_url(r);
+	const char *method = oidc_original_request_method(r, cfg, FALSE);
 
 	/* generate CSRF token */
 	char *csrf = NULL;
@@ -1647,10 +1772,11 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 	if (dir_cfg->discover_url != NULL) {
 
 		/* yes, assemble the parameters for external discovery */
-		char *url = apr_psprintf(r->pool, "%s%s%s=%s&%s=%s&%s=%s",
+		char *url = apr_psprintf(r->pool, "%s%s%s=%s&%s=%s&%s=%s&%s=%s",
 				dir_cfg->discover_url,
 				strchr(dir_cfg->discover_url, '?') != NULL ? "&" : "?",
 						OIDC_DISC_RT_PARAM, oidc_util_escape_string(r, current_url),
+						OIDC_DISC_RM_PARAM, method,
 						OIDC_DISC_CB_PARAM,
 						oidc_util_escape_string(r, cfg->redirect_uri),
 						OIDC_CSRF_NAME, oidc_util_escape_string(r, csrf));
@@ -1660,6 +1786,10 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 
 		/* set CSRF cookie */
 		oidc_util_set_cookie(r, OIDC_CSRF_NAME, csrf, -1);
+
+		/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
+		if (oidc_post_preserve_javascript(r, url, NULL, NULL) == TRUE)
+			return DONE;
 
 		/* do the actual redirect to an external discovery page */
 		apr_table_add(r->headers_out, "Location", url);
@@ -1692,12 +1822,15 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 		//char *p = strstr(display, ":");
 		//if (p != NULL) *p = '\0';
 		/* point back to the redirect_uri, where the selection is handled, with an IDP selection and return_to URL */
-		s = apr_psprintf(r->pool,
-				"%s<p><a href=\"%s?%s=%s&amp;%s=%s&amp;%s=%s\">%s</a></p>\n", s,
-				cfg->redirect_uri, OIDC_DISC_OP_PARAM,
-				oidc_util_escape_string(r, issuer), OIDC_DISC_RT_PARAM,
-				oidc_util_escape_string(r, current_url), OIDC_CSRF_NAME, csrf,
-				display);
+		s =
+				apr_psprintf(r->pool,
+						"%s<p><a href=\"%s?%s=%s&amp;%s=%s&amp;%s=%s&amp;%s=%s\">%s</a></p>\n",
+						s, cfg->redirect_uri, OIDC_DISC_OP_PARAM,
+						oidc_util_escape_string(r, issuer),
+						OIDC_DISC_RT_PARAM,
+						oidc_util_escape_string(r, current_url),
+						OIDC_DISC_RM_PARAM, method,
+						OIDC_CSRF_NAME, csrf, display);
 	}
 
 	/* add an option to enter an account or issuer name for dynamic OP discovery */
@@ -1706,6 +1839,9 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 	s = apr_psprintf(r->pool,
 			"%s<p><input type=\"hidden\" name=\"%s\" value=\"%s\"><p>\n", s,
 			OIDC_DISC_RT_PARAM, current_url);
+	s = apr_psprintf(r->pool,
+			"%s<p><input type=\"hidden\" name=\"%s\" value=\"%s\"><p>\n", s,
+			OIDC_DISC_RM_PARAM, method);
 	s = apr_psprintf(r->pool,
 			"%s<p><input type=\"hidden\" name=\"%s\" value=\"%s\"><p>\n", s,
 			OIDC_CSRF_NAME, csrf);
@@ -1722,10 +1858,16 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 
 	oidc_util_set_cookie(r, OIDC_CSRF_NAME, csrf, -1);
 
+	char *javascript = NULL, *javascript_method = NULL;
+	char *html_head =
+			"<style type=\"text/css\">body {text-align: center}</style>";
+	if (oidc_post_preserve_javascript(r, NULL, &javascript,
+			&javascript_method) == TRUE)
+		html_head = apr_psprintf(r->pool, "%s%s", html_head, javascript);
+
 	/* now send the HTML contents to the user agent */
 	return oidc_util_html_send(r, "OpenID Connect Provider Discovery",
-			"<style type=\"text/css\">body {text-align: center}</style>", NULL,
-			s, DONE);
+			html_head, javascript_method, s, DONE);
 }
 
 /*
@@ -1771,21 +1913,11 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	char *method = "get";
-	// TODO: restore method from discovery too or generate state before doing discover (and losing startSSO effect)
-	/*
-	const char *content_type = apr_table_get(r->headers_in, "Content-Type");
-	char *method =
-			((r->method_number == M_POST)
-					&& (apr_strnatcmp(content_type,
-							"application/x-www-form-urlencoded") == 0)) ?
-					"form_post" : "redirect";
-	*/
-
 	/* create the state between request/response */
 	json_t *proto_state = json_object();
 	json_object_set_new(proto_state, "original_url", json_string(original_url));
-	json_object_set_new(proto_state, "original_method", json_string(method));
+	json_object_set_new(proto_state, "original_method",
+			json_string(oidc_original_request_method(r, c, TRUE)));
 	json_object_set_new(proto_state, "issuer", json_string(provider->issuer));
 	json_object_set_new(proto_state, "response_type",
 			json_string(provider->response_type));
@@ -1849,17 +1981,6 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	return oidc_proto_authorization_request(r, provider, login_hint,
 			c->redirect_uri, state, proto_state, id_token_hint, code_challenge,
 			auth_request_params);
-}
-
-/*
- * find out whether the request is a response from an IDP discovery page
- */
-static apr_byte_t oidc_is_discovery_response(request_rec *r, oidc_cfg *cfg) {
-	/*
-	 * prereq: this is a call to the configured redirect_uri, now see if:
-	 * the OIDC_DISC_OP_PARAM is present
-	 */
-	return oidc_util_request_has_parameter(r, OIDC_DISC_OP_PARAM);
 }
 
 /*
