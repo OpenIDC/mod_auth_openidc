@@ -2175,9 +2175,12 @@ static apr_uint32_t oidc_transparent_pixel[17] = {
 		0x826042ae
 };
 
-static apr_byte_t oidc_is_get_style_logout(const char *logout_param_value) {
-	return ((logout_param_value != NULL) && (apr_strnatcmp(logout_param_value,
-			OIDC_GET_STYLE_LOGOUT_PARAM_VALUE) == 0));
+static apr_byte_t oidc_is_front_channel_logout(const char *logout_param_value) {
+	return ((logout_param_value != NULL)
+			&& ((apr_strnatcmp(logout_param_value,
+					OIDC_GET_STYLE_LOGOUT_PARAM_VALUE) == 0)
+					|| (apr_strnatcmp(logout_param_value,
+							OIDC_IMG_STYLE_LOGOUT_PARAM_VALUE) == 0)));
 }
 
 /*
@@ -2196,7 +2199,7 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 	}
 
 	/* see if this is the OP calling us */
-	if (oidc_is_get_style_logout(url)) {
+	if (oidc_is_front_channel_logout(url)) {
 
 		/* set recommended cache control headers */
 		apr_table_add(r->err_headers_out, "Cache-Control",
@@ -2208,7 +2211,8 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 
 		/* see if this is PF-PA style logout in which case we return a transparent pixel */
 		const char *accept = apr_table_get(r->headers_in, "Accept");
-		if ((accept) && strstr(accept, "image/png")) {
+		if ((apr_strnatcmp(url, OIDC_IMG_STYLE_LOGOUT_PARAM_VALUE) == 0)
+				|| ((accept) && strstr(accept, "image/png"))) {
 			return oidc_util_http_send(r,
 					(const char *) &oidc_transparent_pixel,
 					sizeof(oidc_transparent_pixel), "image/png", DONE);
@@ -2241,7 +2245,7 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c, oidc_session_t *sessi
 
 	oidc_debug(r, "enter (url=%s)", url);
 
-	if (oidc_is_get_style_logout(url)) {
+	if (oidc_is_front_channel_logout(url)) {
 		return oidc_handle_logout_request(r, c, session, url);
 	}
 

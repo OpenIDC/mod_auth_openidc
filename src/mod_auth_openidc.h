@@ -191,6 +191,7 @@ APLOG_USE_MODULE(auth_openidc);
 
 /* define the parameter value for the "logout" request that indicates a GET-style logout call from the OP */
 #define OIDC_GET_STYLE_LOGOUT_PARAM_VALUE "get"
+#define OIDC_IMG_STYLE_LOGOUT_PARAM_VALUE "img"
 
 /* define the name of the cookie/parameter for CSRF protection */
 #define OIDC_CSRF_NAME "x_csrf"
