@@ -371,6 +371,7 @@ typedef struct oidc_dir_cfg {
 	apr_hash_t *oauth_accept_token_options;
 	int oauth_token_introspect_interval;
 	int preserve_post;
+	int pass_refresh_token;
 } oidc_dir_cfg;
 
 int oidc_check_user_id(request_rec *r);

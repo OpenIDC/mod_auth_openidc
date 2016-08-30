@@ -1,3 +1,6 @@
+8/30/2016
+- pass refresh token in header/environment variable with OIDCPassRefreshToken; thanks Amit Joshi
+
 8/29/2016
 - preserve POST data across authentication requests and discovery with OIDCPreservePost
 - bump to 2.0.0rc3

@@ -1204,7 +1204,17 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 		oidc_error(r, "session type \"client-cookie\" does not allow storing/passing the id_token; use \"OIDCSessionType server-cache\" for that");
 	}
 
-	/* set the access_token in the app headers */
+	/* set the refresh_token in the app headers/variables, if enabled for this location/directory */
+	const char *refresh_token = NULL;
+	oidc_session_get(r, session, OIDC_REFRESHTOKEN_SESSION_KEY, &refresh_token);
+	if (dir_cfg->pass_refresh_token != 0 && refresh_token != NULL) {
+		/* pass it to the app in a header or environment variable */
+		oidc_util_set_app_info(r, "refresh_token", refresh_token,
+				OIDC_DEFAULT_HEADER_PREFIX, dir_cfg->pass_info_in_headers,
+				dir_cfg->pass_info_in_env_vars);
+	}
+
+	/* set the access_token in the app headers/variables */
 	const char *access_token = NULL;
 	oidc_session_get(r, session, OIDC_ACCESSTOKEN_SESSION_KEY, &access_token);
 	if (access_token != NULL) {
@@ -1214,7 +1224,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 				dir_cfg->pass_info_in_env_vars);
 	}
 
-	/* set the expiry timestamp in the app headers */
+	/* set the expiry timestamp in the app headers/variables */
 	const char *access_token_expires = NULL;
 	oidc_session_get(r, session, OIDC_ACCESSTOKEN_EXPIRES_SESSION_KEY,
 			&access_token_expires);
