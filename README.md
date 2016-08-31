@@ -171,6 +171,7 @@ Entries that can be included in the .conf file are:
     "userinfo_encrypted_response_enc"    overrides OIDCUserInfoEncryptedResponseEnc
     "auth_request_params"                overrides OIDCAuthRequestParams
     "token_endpoint_params"              overrides OIDCProviderTokenEndpointParams
+    "token_endpoint_auth"                overrides OIDCProviderTokenEndpointAuth
     "registration_endpoint_json"         overrides OIDCProviderRegistrationEndpointJson
     "userinfo_refresh_interval"          overrides OIDCUserInfoRefreshInterval
     "registration_token"                 an access_token that will be used on client registration calls for the associated OP

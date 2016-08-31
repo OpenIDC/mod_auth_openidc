@@ -1,3 +1,6 @@
+8/31/2016
+- allow setting the token endpoint authentication method in the .conf file (for dynamic client registration that sets the .client)
+
 8/30/2016
 - pass refresh token in header/environment variable with OIDCPassRefreshToken; thanks Amit Joshi
 - fix front-channel img-style logout with newer versions of PingFederate that don't send an Accept: image/png header
