@@ -200,12 +200,10 @@ OIDCCryptoPassphrase <password>
 
 If you do not want to use the internal discovery page (you really shouldn't...), you
 can have the user being redirected to an external discovery page by setting
-`OIDCDiscoverURL`. That URL will be accessed with 2 parameters, `oidc_callback` and
-`target_link_uri` (both URLs). The `target_link_uri` parameter value needs to be returned to the
-`oidc_callback` URL (again in the `target_link_uri parameter`) together with an
-`iss` parameter that contains the URL-encoded issuer value of the
-selected Provider, or a URL-encoded account name for OpenID Connect Discovery
-purposes (aka. e-mail style identifier), or a domain name.
+`OIDCDiscoverURL`. That URL will be accessed with a number parameters: `oidc_callback`, `target_link_uri`,
+`method` and `x_csrf`. All parameters (except `oidc_callback`) need to be returned to the `oidc_callback` URL
+together with an `iss` parameter that contains the URL-encoded issuer value of the selected Provider, or a
+URL-encoded account name for OpenID Connect Discovery purposes (aka. e-mail style identifier), or a domain name.
 
 Sample callback:
 
