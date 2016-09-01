@@ -359,8 +359,8 @@ apr_byte_t oidc_post_preserve_javascript(request_rec *r, const char *location,
 	char *json = "";
 	for (i = 0; i < arr->nelts; i++) {
 		json = apr_psprintf(r->pool, "%s'%s': '%s'%s", json,
-				oidc_util_html_escape(r->pool, elts[i].key),
-				oidc_util_html_escape(r->pool, elts[i].val),
+				oidc_util_escape_string(r, elts[i].key),
+				oidc_util_escape_string(r, elts[i].val),
 				i < arr->nelts - 1 ? "," : "");
 	}
 	json = apr_psprintf(r->pool, "{ %s }", json);
@@ -403,18 +403,13 @@ static int oidc_request_post_preserved_restore(request_rec *r,
 	const char *script =
 			apr_psprintf(r->pool,
 					"    <script type=\"text/javascript\">\n"
-					"      function htmlDecode(input) {\n"
-					"        var doc = new DOMParser().parseFromString(input, \"text/html\");\n"
-					"        return doc.documentElement.textContent;\n"
-					"      }\n"
-					"\n"
 					"      function %s() {\n"
 					"        var mod_auth_openidc_preserve_post_params = JSON.parse(localStorage.getItem('mod_auth_openidc_preserve_post_params'));\n"
 					"		 localStorage.removeItem('mod_auth_openidc_preserve_post_params');\n"
 					"        for (var key in mod_auth_openidc_preserve_post_params) {\n"
 					"          var input = document.createElement(\"input\");\n"
-					"          input.name = htmlDecode(key);\n"
-					"          input.value = htmlDecode(mod_auth_openidc_preserve_post_params[key]);\n"
+					"          input.name = decodeURIComponent(key);\n"
+					"          input.value = decodeURIComponent(mod_auth_openidc_preserve_post_params[key]);\n"
 					"          input.type = \"hidden\";\n"
 					"          document.forms[0].appendChild(input);\n"
 					"        }\n"

@@ -333,6 +333,7 @@ char *oidc_util_unescape_string(const request_rec *r, const char *str) {
  * HTML escape a string
  */
 char *oidc_util_html_escape(apr_pool_t *pool, const char *s) {
+	// TODO: this has performance/memory issues for large chunks of HTML
 	const char chars[6] = { '&', '\'', '\"', '>', '<', '\0' };
 	const char * const replace[] =
 			{ "&amp;", "&apos;", "&quot;", "&gt;", "&lt;", };
@@ -1157,28 +1158,45 @@ int oidc_util_html_send_error(request_rec *r, const char *html_template,
 /*
  * read all bytes from the HTTP request
  */
-static apr_byte_t oidc_util_read(request_rec *r, const char **rbuf) {
+static apr_byte_t oidc_util_read(request_rec *r, char **rbuf) {
+	apr_size_t bytes_read;
+	apr_size_t bytes_left;
+	apr_size_t len;
+	long read_length;
 
-	if (ap_setup_client_block(r, REQUEST_CHUNKED_ERROR) != OK)
+	if (ap_setup_client_block(r, REQUEST_CHUNKED_DECHUNK) != OK)
 		return FALSE;
 
-	if (ap_should_client_block(r)) {
+	len = ap_should_client_block(r) ? r->remaining : 0;
 
-		char argsbuffer[HUGE_STRING_LEN];
-		int rsize, len_read, rpos = 0;
-		long length = r->remaining;
-		*rbuf = apr_pcalloc(r->pool, length + 1);
+	if (len > OIDC_MAX_POST_DATA_LEN) {
+		oidc_error(r, "POST parameter value is too large: %lu bytes (max=%d)",
+				(unsigned long ) len, OIDC_MAX_POST_DATA_LEN);
+		return FALSE;
+	}
 
-		while ((len_read = ap_get_client_block(r, argsbuffer,
-				sizeof(argsbuffer))) > 0) {
-			if ((rpos + len_read) > length) {
-				rsize = length - rpos;
-			} else {
-				rsize = len_read;
-			}
-			memcpy((char*) *rbuf + rpos, argsbuffer, rsize);
-			rpos += rsize;
+	*rbuf = (char *) apr_palloc(r->pool, len + 1);
+	if (*rbuf == NULL) {
+		oidc_error(r, "could not allocate memory for %lu bytes of POST data.",
+				(unsigned long )len);
+		return FALSE;
+	}
+	(*rbuf)[len] = '\0';
+
+	bytes_read = 0;
+	bytes_left = len;
+	while (bytes_left > 0) {
+		read_length = ap_get_client_block(r, &(*rbuf)[bytes_read], bytes_left);
+		if (read_length == 0) {
+			(*rbuf)[bytes_read] = '\0';
+			break;
+		} else if (read_length < 0) {
+			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+					"Failed to read POST data from client.");
+			return FALSE;
 		}
+		bytes_read += read_length;
+		bytes_left -= read_length;
 	}
 
 	return TRUE;
@@ -1188,7 +1206,7 @@ static apr_byte_t oidc_util_read(request_rec *r, const char **rbuf) {
  * read form-encoded parameters from a string in to a table
  */
 apr_byte_t oidc_util_read_form_encoded_params(request_rec *r,
-		apr_table_t *table, const char *data) {
+		apr_table_t *table, char *data) {
 	const char *key, *val, *p = data;
 
 	while (p && *p && (val = ap_getword(r->pool, &p, '&'))) {
@@ -1198,7 +1216,7 @@ apr_byte_t oidc_util_read_form_encoded_params(request_rec *r,
 		apr_table_set(table, key, val);
 	}
 
-	oidc_debug(r, "parsed: \"%s\" in to %d elements", data,
+	oidc_debug(r, "parsed: %lu bytes in to %d elements", (unsigned long)strlen(data),
 			apr_table_elts(table)->nelts);
 
 	return TRUE;
@@ -1208,7 +1226,7 @@ apr_byte_t oidc_util_read_form_encoded_params(request_rec *r,
  * read the POST parameters in to a table
  */
 apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table) {
-	const char *data = NULL;
+	char *data = NULL;
 
 	if (r->method_number != M_POST)
 		return FALSE;

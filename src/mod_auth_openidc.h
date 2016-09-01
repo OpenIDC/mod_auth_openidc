@@ -208,6 +208,9 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_METHOD_GET       "get"
 #define OIDC_METHOD_FORM_POST "form_post"
 
+/* the maximum size of data that we accept in a single POST value: 1MB */
+#define OIDC_MAX_POST_DATA_LEN 1024 * 1024
+
 typedef enum {
 	AUTHENTICATE, PASS, RETURN401, RETURN410
 } unauthenticated_action;
@@ -454,7 +457,7 @@ int oidc_util_http_send(request_rec *r, const char *data, int data_len, const ch
 int oidc_util_html_send(request_rec *r, const char *title, const char *html_head, const char *on_load, const char *html_body, int status_code);
 char *oidc_util_escape_string(const request_rec *r, const char *str);
 char *oidc_util_unescape_string(const request_rec *r, const char *str);
-apr_byte_t oidc_util_read_form_encoded_params(request_rec *r, apr_table_t *table, const char *data);
+apr_byte_t oidc_util_read_form_encoded_params(request_rec *r, apr_table_t *table, char *data);
 apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table);
 apr_byte_t oidc_util_file_read(request_rec *r, const char *path, apr_pool_t *pool, char **result);
 apr_byte_t oidc_util_issuer_match(const char *a, const char *b);

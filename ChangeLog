@@ -1,5 +1,8 @@
 9/1/2016
 - fix HTML decoding of OIDCPreservePost data; closes #165
+- limit max POST data size to 1Mb
+- allow chunked data in POST handling; revise handler
+- change preserve POST JSON data format to urlencoded for performance reasons
 
 8/31/2016
 - allow setting the token endpoint authentication method in the .conf file (for dynamic client registration that sets the .client)
