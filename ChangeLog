@@ -1,3 +1,6 @@
+9/1/2016
+- fix HTML decoding of OIDCPreservePost data; closes #165
+
 8/31/2016
 - allow setting the token endpoint authentication method in the .conf file (for dynamic client registration that sets the .client)
 
