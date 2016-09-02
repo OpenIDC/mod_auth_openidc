@@ -719,13 +719,10 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 
 	oidc_debug(r, "enter");
 
-	oidc_jwk_t *jwk = oidc_util_create_symmetric_key(r->pool,
-			provider->client_secret, "sha256", TRUE, &err);
-	if (jwk == NULL) {
-		oidc_error(r, "oidc_util_create_symmetric_key failed: %s",
-				oidc_jose_e2s(r->pool, err));
+	oidc_jwk_t *jwk = NULL;
+	if (oidc_util_create_symmetric_key(r, provider->client_secret, "sha256",
+			TRUE, &jwk) == FALSE)
 		return FALSE;
-	}
 
 	if (oidc_jwt_parse(r->pool, id_token, jwt,
 			oidc_util_merge_symmetric_key(r->pool, cfg->private_keys, jwk),
@@ -744,13 +741,10 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 	// make signature validation exception for 'code' flow and the algorithm NONE
 	if (is_code_flow == FALSE || strcmp((*jwt)->header.alg, "none") != 0) {
 
-		jwk = oidc_util_create_symmetric_key(r->pool, provider->client_secret,
-				NULL, TRUE, &err);
-		if (jwk == NULL) {
-			oidc_error(r, "oidc_util_create_symmetric_key failed: %s",
-					oidc_jose_e2s(r->pool, err));
+		jwk = NULL;
+		if (oidc_util_create_symmetric_key(r, provider->client_secret,
+				NULL, TRUE, &jwk) == FALSE)
 			return FALSE;
-		}
 
 		oidc_jwks_uri_t jwks_uri = { provider->jwks_uri,
 				provider->jwks_refresh_interval, provider->ssl_validate_server };

@@ -482,7 +482,7 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret, json_t *payl
 apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret, const char *compact_encoded_jwt, json_t **result);
 char *oidc_util_get_chunked_cookie(request_rec *r, const char *cookieName, int cookie_chunk_size);
 void oidc_util_set_chunked_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires, int chunkSize);
-oidc_jwk_t * oidc_util_create_symmetric_key(apr_pool_t *pool, const char *client_secret, const char *hash_algo, apr_byte_t set_kid, oidc_jose_error_t *);
+apr_byte_t oidc_util_create_symmetric_key(request_rec *r, const char *client_secret, const char *hash_algo, apr_byte_t set_kid, oidc_jwk_t **jwk);
 apr_hash_t * oidc_util_merge_symmetric_key(apr_pool_t *pool, apr_hash_t *private_keys, oidc_jwk_t *jwk);
 
 // oidc_metadata.c

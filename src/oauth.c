@@ -519,13 +519,11 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 		oidc_cfg *c, const char *access_token, json_t **token, char **response) {
 
 	oidc_jose_error_t err;
-	oidc_jwk_t *jwk = oidc_util_create_symmetric_key(r->pool,
-			c->provider.client_secret, NULL, TRUE, &err);
-	if (jwk == NULL) {
-		oidc_error(r, "could not parse create JWK from the client_secret: %s",
-				oidc_jose_e2s(r->pool, err));
+
+	oidc_jwk_t *jwk = NULL;
+	if (oidc_util_create_symmetric_key(r, c->provider.client_secret, NULL,
+			TRUE, &jwk) == FALSE)
 		return FALSE;
-	}
 
 	oidc_jwt_t *jwt = NULL;
 	if (oidc_jwt_parse(r->pool, access_token, &jwt,

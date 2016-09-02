@@ -434,13 +434,11 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	oidc_debug(r, "enter");
 
 	oidc_jose_error_t err;
-	oidc_jwk_t *jwk = oidc_util_create_symmetric_key(r->pool,
-			c->provider.client_secret, "sha256", TRUE, &err);
-	if (jwk == NULL) {
-		oidc_error(r, "could not parse create JWK from the client_secret: %s",
-				oidc_jose_e2s(r->pool, err));
+
+	oidc_jwk_t *jwk = NULL;
+	if (oidc_util_create_symmetric_key(r, c->provider.client_secret, "sha256",
+			TRUE, &jwk) == FALSE)
 		return FALSE;
-	}
 
 	oidc_jwt_t *jwt = NULL;
 	if (oidc_jwt_parse(r->pool, state, &jwt,
@@ -548,13 +546,10 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 			"jti \"%s\" validated successfully and is now cached for %" APR_TIME_T_FMT " seconds",
 			jti, apr_time_sec(jti_cache_duration));
 
-	 jwk = oidc_util_create_symmetric_key(r->pool,
-			c->provider.client_secret, NULL, TRUE, &err);
-	if (jwk == NULL) {
-		oidc_error(r, "could not parse create JWK from the client_secret: %s",
-				oidc_jose_e2s(r->pool, err));
+	jwk = NULL;
+	if (oidc_util_create_symmetric_key(r, c->provider.client_secret,
+			NULL, TRUE, &jwk) == FALSE)
 		return FALSE;
-	}
 
 	oidc_jwks_uri_t jwks_uri = { provider->jwks_uri,
 			provider->jwks_refresh_interval, provider->ssl_validate_server };

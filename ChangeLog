@@ -1,3 +1,7 @@
+9/2/2016
+- fix JWK creation when no client secret is set e.g. in Implicit flows; closes #168; thanks @asc1
+- bump to 2.0.0rc4
+
 9/1/2016
 - fix HTML decoding of OIDCPreservePost data; closes #165
 - limit max POST data size to 1Mb

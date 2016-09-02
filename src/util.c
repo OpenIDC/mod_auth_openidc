@@ -147,11 +147,8 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret,
 	oidc_jwt_t *jwt = NULL;
 	oidc_jwt_t *jwe = NULL;
 
-	jwk = oidc_util_create_symmetric_key(r->pool, secret, "sha256", FALSE, &err);
-	if (jwk == NULL) {
-		oidc_error(r, "creating JWK failed: %s", oidc_jose_e2s(r->pool, err));
+	if (oidc_util_create_symmetric_key(r, secret, "sha256", FALSE, &jwk) == FALSE)
 		goto end;
-	}
 
 	jwt = oidc_jwt_new(r->pool, TRUE, FALSE);
 	if (jwt == NULL) {
@@ -208,11 +205,8 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret,
 	oidc_jwk_t *jwk = NULL;
 	oidc_jwt_t *jwt = NULL;
 
-	jwk = oidc_util_create_symmetric_key(r->pool, secret, "sha256", FALSE, &err);
-	if (jwk == NULL) {
-		oidc_error(r, "creating JWK failed: %s", oidc_jose_e2s(r->pool, err));
+	if (oidc_util_create_symmetric_key(r, secret, "sha256", FALSE, &jwk) == FALSE)
 		goto end;
-	}
 
 	apr_hash_t *keys = apr_hash_make(r->pool);
 	apr_hash_set(keys, "", APR_HASH_KEY_STRING, jwk);
@@ -1671,9 +1665,10 @@ void oidc_util_table_add_query_encoded_params(apr_pool_t *pool,
 /*
  * create a symmetric key from a client_secret
  */
-oidc_jwk_t * oidc_util_create_symmetric_key(apr_pool_t *pool,
-		const char *client_secret, const char *hash_algo, apr_byte_t set_kid, oidc_jose_error_t *err) {
-	oidc_jwk_t *jwk = NULL;
+apr_byte_t oidc_util_create_symmetric_key(request_rec *r,
+		const char *client_secret, const char *hash_algo, apr_byte_t set_kid,
+		oidc_jwk_t **jwk) {
+	oidc_jose_error_t err;
 	unsigned char *key = NULL;
 	unsigned int key_len;
 
@@ -1684,16 +1679,24 @@ oidc_jwk_t * oidc_util_create_symmetric_key(apr_pool_t *pool,
 			key_len = strlen(client_secret);
 		} else {
 			/* hash the client_secret first, this is OpenID Connect specific */
-			oidc_jose_hash_bytes(pool, hash_algo,
+			oidc_jose_hash_bytes(r->pool, hash_algo,
 					(const unsigned char *) client_secret,
-					strlen(client_secret), &key, &key_len, err);
+					strlen(client_secret), &key, &key_len, &err);
 		}
 
 		if ((key != NULL) && (key_len > 0))
-			jwk = oidc_jwk_create_symmetric_key(pool, NULL, key, key_len, set_kid, err);
+			*jwk = oidc_jwk_create_symmetric_key(r->pool, NULL, key, key_len,
+					set_kid, &err);
+
+		if (*jwk == NULL) {
+			oidc_error(r,
+					"could not create JWK from the provided secret %s: %s",
+					client_secret, oidc_jose_e2s(r->pool, err));
+			return FALSE;
+		}
 	}
 
-	return jwk;
+	return TRUE;
 }
 
 /*
