@@ -108,11 +108,12 @@ const char *oidc_valid_http_url(apr_pool_t *pool, const char *arg) {
 	return oidc_valid_url_scheme(pool, arg, "https", "http");
 }
 
+#define STR_ERROR_MAX 128
+
 /*
  * check if arg is a valid directory on the file system
  */
 const char *oidc_valid_dir(apr_pool_t *pool, const char *arg) {
-	static const int STR_ERROR_MAX = 128;
 	char s_err[STR_ERROR_MAX];
 	apr_dir_t *dir = NULL;
 	apr_status_t rc = APR_SUCCESS;
