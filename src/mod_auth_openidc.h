@@ -212,7 +212,7 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_MAX_POST_DATA_LEN 1024 * 1024
 
 typedef enum {
-	AUTHENTICATE, PASS, RETURN401, RETURN410
+	OIDC_UNAUTH_UNSET = -1, OIDC_UNAUTH_AUTHENTICATE, OIDC_UNAUTH_PASS, OIDC_UNAUTH_RETURN401, OIDC_UNAUTH_RETURN410
 } unauthenticated_action;
 
 typedef struct oidc_jwks_uri_t {
@@ -361,23 +361,6 @@ typedef struct oidc_cfg {
 	char *crypto_passphrase;
 } oidc_cfg;
 
-typedef struct oidc_dir_cfg {
-	/* (optional) external OP discovery page */
-	char *discover_url;
-	char *cookie_path;
-	char *cookie;
-	char *authn_header;
-	unauthenticated_action unauth_action;
-	apr_array_header_t *pass_cookies;
-	apr_byte_t pass_info_in_headers;
-	apr_byte_t pass_info_in_env_vars;
-	apr_byte_t oauth_accept_token_in;
-	apr_hash_t *oauth_accept_token_options;
-	int oauth_token_introspect_interval;
-	int preserve_post;
-	int pass_refresh_token;
-} oidc_dir_cfg;
-
 int oidc_check_user_id(request_rec *r);
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 authz_status oidc_authz_checker(request_rec *r, const char *require_args, const void *parsed_require_args);
@@ -435,6 +418,19 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD);
 void *oidc_create_dir_config(apr_pool_t *pool, char *path);
 void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD);
 void oidc_register_hooks(apr_pool_t *pool);
+char *oidc_cfg_dir_discover_url(request_rec *r);
+char *oidc_cfg_dir_cookie(request_rec *r);
+char *oidc_cfg_dir_cookie_path(request_rec *r);
+char *oidc_cfg_dir_authn_header(request_rec *r);
+int oidc_cfg_dir_pass_info_in_headers(request_rec *r);
+int oidc_cfg_dir_pass_info_in_envvars(request_rec *r);
+int oidc_cfg_dir_pass_refresh_token(request_rec *r);
+int oidc_cfg_dir_accept_token_in(request_rec *r);
+char *oidc_cfg_dir_accept_token_in_option(request_rec *r, const char *key);
+int oidc_cfg_token_introspection_interval(request_rec *r);
+int oidc_cfg_dir_preserve_post(request_rec *r);
+apr_array_header_t *oidc_dir_cfg_pass_cookies(request_rec *r);
+int oidc_dir_cfg_unauth_action(request_rec *r);
 
 // oidc_util.c
 int oidc_strnenvcmp(const char *a, const char *b, int len);

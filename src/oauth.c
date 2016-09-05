@@ -66,10 +66,6 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 		const char *token, const char **response) {
 
-	/* get a handle to the directory config */
-	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
-			&auth_openidc_module);
-
 	/* assemble parameters to call the token endpoint for validation */
 	apr_table_t *params = apr_table_make(r->pool, 4);
 
@@ -99,11 +95,11 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 			oidc_util_http_get(r, c->oauth.introspection_endpoint_url, params,
 					basic_auth, NULL, c->oauth.ssl_validate_server, response,
 					c->http_timeout_long, c->outgoing_proxy,
-					dir_cfg->pass_cookies, c->oauth.introspection_endpoint_tls_client_cert, c->oauth.introspection_endpoint_tls_client_key):
+					oidc_dir_cfg_pass_cookies(r), c->oauth.introspection_endpoint_tls_client_cert, c->oauth.introspection_endpoint_tls_client_key):
 			oidc_util_http_post_form(r, c->oauth.introspection_endpoint_url,
 					params, basic_auth, NULL, c->oauth.ssl_validate_server,
 					response, c->http_timeout_long, c->outgoing_proxy,
-					dir_cfg->pass_cookies, c->oauth.introspection_endpoint_tls_client_cert, c->oauth.introspection_endpoint_tls_client_key);
+					oidc_dir_cfg_pass_cookies(r), c->oauth.introspection_endpoint_tls_client_cert, c->oauth.introspection_endpoint_tls_client_key);
 }
 
 /*
@@ -112,15 +108,15 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 static apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 		const char **access_token) {
 
-	/* get a handle to the directory config */
-	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
-			&auth_openidc_module);
+	/* get the directory specific setting on how the token can be passed in */
+	int accept_token_in = oidc_cfg_dir_accept_token_in(r);
+	const char *cookie_name = oidc_cfg_dir_accept_token_in_option(r,
+			OIDC_OAUTH_ACCEPT_TOKEN_IN_OPTION_COOKIE_NAME);
 
 	*access_token = NULL;
 
-	if ((dir_cfg->oauth_accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER)
-			|| (dir_cfg->oauth_accept_token_in
-					== OIDC_OAUTH_ACCEPT_TOKEN_IN_DEFAULT)) {
+	if ((accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER)
+			|| (accept_token_in == OIDC_OAUTH_ACCEPT_TOKEN_IN_DEFAULT)) {
 
 		/* get the authorization header */
 		const char *auth_line;
@@ -149,7 +145,7 @@ static apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 	}
 
 	if ((*access_token == NULL) && (r->method_number == M_POST)
-			&& (dir_cfg->oauth_accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_POST)) {
+			&& (accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_POST)) {
 		apr_table_t *params = apr_table_make(r->pool, 8);
 		if (oidc_util_read_post_params(r, params) == TRUE) {
 			*access_token = apr_table_get(params, "access_token");
@@ -157,20 +153,14 @@ static apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 	}
 
 	if ((*access_token == NULL)
-			&& (dir_cfg->oauth_accept_token_in
-					& OIDC_OAUTH_ACCEPT_TOKEN_IN_QUERY)) {
+			&& (accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_QUERY)) {
 		apr_table_t *params = apr_table_make(r->pool, 8);
 		oidc_util_read_form_encoded_params(r, params, r->args);
 		*access_token = apr_table_get(params, "access_token");
 	}
 
 	if ((*access_token == NULL)
-			&& (dir_cfg->oauth_accept_token_in
-					& OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE)) {
-
-		const char *cookie_name = apr_hash_get(
-				dir_cfg->oauth_accept_token_options, OIDC_OAUTH_ACCEPT_TOKEN_IN_OPTION_COOKIE_NAME,
-				APR_HASH_KEY_STRING);
+			&& (accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE)) {
 		const char *auth_line = oidc_util_get_cookie(r, cookie_name);
 		if (auth_line != NULL) {
 
@@ -184,8 +174,7 @@ static apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 
 	if (*access_token == NULL) {
 		oidc_debug(r, "no bearer token found in the allowed methods: %s",
-				oidc_accept_oauth_token_in2str(r->pool,
-						dir_cfg->oauth_accept_token_in));
+				oidc_accept_oauth_token_in2str(r->pool, accept_token_in));
 		return FALSE;
 	}
 
@@ -231,7 +220,10 @@ static apr_byte_t oidc_oauth_parse_and_cache_token_expiry(request_rec *r,
 		const char *expiry_claim_name, int expiry_format_absolute,
 		int expiry_claim_is_mandatory, apr_time_t *cache_until) {
 
-	oidc_debug(r, "expiry_claim_name=%s, expiry_format_absolute=%d, expiry_claim_is_mandatory=%d", expiry_claim_name, expiry_format_absolute, expiry_claim_is_mandatory);
+	oidc_debug(r,
+			"expiry_claim_name=%s, expiry_format_absolute=%d, expiry_claim_is_mandatory=%d",
+			expiry_claim_name, expiry_format_absolute,
+			expiry_claim_is_mandatory);
 
 	json_t *expiry = json_object_get(introspection_response, expiry_claim_name);
 
@@ -262,7 +254,7 @@ static apr_byte_t oidc_oauth_parse_and_cache_token_expiry(request_rec *r,
 	if (value <= 0) {
 		oidc_warn(r,
 				"introspection response JSON object integer number value <= 0 (%ld); introspection result will not be cached",
-				(long)value);
+				(long )value);
 		return TRUE;
 	}
 
@@ -300,9 +292,6 @@ static apr_byte_t oidc_oauth_get_cached_access_token(request_rec *r,
 	const char *s_cache_entry = NULL;
 	json_error_t json_error;
 
-	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
-			&auth_openidc_module);
-
 	/* see if we've got the claims for this access_token cached already */
 	c->cache->get(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, access_token,
 			&s_cache_entry);
@@ -321,17 +310,16 @@ static apr_byte_t oidc_oauth_get_cached_access_token(request_rec *r,
 	/* compare the timestamp against the freshness requirement */
 	json_t *v = json_object_get(cache_entry, "timestamp");
 	apr_time_t now = apr_time_sec(apr_time_now());
-	if ((dir_cfg->oauth_token_introspect_interval > 0)
-			&& (now
-					> json_integer_value(v)
-					+ dir_cfg->oauth_token_introspect_interval)) {
+	int token_introspection_interval = oidc_cfg_token_introspection_interval(r);
+	if ((token_introspection_interval > 0)
+			&& (now > json_integer_value(v) + token_introspection_interval)) {
 
 		/* printout info about the event */
 		char buf[APR_RFC822_DATE_LEN + 1];
 		apr_rfc822_date(buf, apr_time_from_sec(json_integer_value(v)));
 		oidc_debug(r,
 				"token that was validated/cached at: [%s], does not meet token freshness requirement: %d)",
-				buf, dir_cfg->oauth_token_introspect_interval);
+				buf, token_introspection_interval);
 
 		/* invalidate the cache entry */
 		*json = NULL;
@@ -475,7 +463,8 @@ static apr_byte_t oidc_oauth_set_remote_user(request_rec *r, oidc_cfg *c,
 		json_t *token) {
 
 	/* get the configured claim name to populate REMOTE_USER with (defaults to "Username") */
-	char *claim_name = apr_pstrdup(r->pool, c->oauth.remote_user_claim.claim_name);
+	char *claim_name = apr_pstrdup(r->pool,
+			c->oauth.remote_user_claim.claim_name);
 
 	/* get the claim value from the resolved token JSON response to use as the REMOTE_USER key */
 	json_t *username = json_object_get(token, claim_name);
@@ -490,7 +479,9 @@ static apr_byte_t oidc_oauth_set_remote_user(request_rec *r, oidc_cfg *c,
 	if (c->oauth.remote_user_claim.reg_exp != NULL) {
 
 		char *error_str = NULL;
-		if (oidc_util_regexp_first_match(r->pool, r->user, c->oauth.remote_user_claim.reg_exp, &r->user, &error_str) == FALSE) {
+		if (oidc_util_regexp_first_match(r->pool, r->user,
+				c->oauth.remote_user_claim.reg_exp, &r->user,
+				&error_str) == FALSE) {
 			oidc_error(r, "oidc_util_regexp_first_match failed: %s", error_str);
 			r->user = NULL;
 			return FALSE;
@@ -535,7 +526,8 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 	}
 
 	oidc_jwk_destroy(jwk);
-	oidc_debug(r, "successfully parsed JWT with header: %s", jwt->header.value.str);
+	oidc_debug(r, "successfully parsed JWT with header: %s",
+			jwt->header.value.str);
 
 	/* validate the access token JWT, validating optional exp + iat */
 	if (oidc_proto_validate_jwt(r, jwt, NULL, FALSE, FALSE,
@@ -575,14 +567,17 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 /*
  * set the WWW-Authenticate response header according to https://tools.ietf.org/html/rfc6750#section-3
  */
-int oidc_oauth_return_www_authenticate(request_rec *r, const char *error, const char *error_description) {
+int oidc_oauth_return_www_authenticate(request_rec *r, const char *error,
+		const char *error_description) {
 	char *hdr = apr_psprintf(r->pool, "Bearer");
 	if (ap_auth_name(r) != NULL)
 		hdr = apr_psprintf(r->pool, "%s realm=\"%s\"", hdr, ap_auth_name(r));
 	if (error != NULL)
-		hdr = apr_psprintf(r->pool, "%s%s error=\"%s\"", hdr, (ap_auth_name(r) ? "," : ""), error);
+		hdr = apr_psprintf(r->pool, "%s%s error=\"%s\"", hdr,
+				(ap_auth_name(r) ? "," : ""), error);
 	if (error_description != NULL)
-		hdr = apr_psprintf(r->pool, "%s, error_description=\"%s\"", hdr, error_description);
+		hdr = apr_psprintf(r->pool, "%s, error_description=\"%s\"", hdr,
+				error_description);
 	apr_table_setn(r->err_headers_out, "WWW-Authenticate", hdr);
 	return HTTP_UNAUTHORIZED;
 }
@@ -627,7 +622,8 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 	/* get the bearer access token from the Authorization header */
 	const char *access_token = NULL;
 	if (oidc_oauth_get_bearer_token(r, &access_token) == FALSE)
-		return oidc_oauth_return_www_authenticate(r, "invalid_request", "No bearer token found in the request");
+		return oidc_oauth_return_www_authenticate(r, "invalid_request",
+				"No bearer token found in the request");
 
 	/* validate the obtained access token against the OAuth AS validation endpoint */
 	json_t *token = NULL;
@@ -638,18 +634,21 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 		/* we'll validate the token remotely */
 		if (oidc_oauth_resolve_access_token(r, c, access_token, &token,
 				&s_token) == FALSE)
-			return oidc_oauth_return_www_authenticate(r, "invalid_token", "Reference token could not be introspected");
+			return oidc_oauth_return_www_authenticate(r, "invalid_token",
+					"Reference token could not be introspected");
 	} else {
 		/* no introspection endpoint is set, assume the token is a JWT and validate it locally */
 		if (oidc_oauth_validate_jwt_access_token(r, c, access_token, &token,
 				&s_token) == FALSE)
-			return oidc_oauth_return_www_authenticate(r, "invalid_token", "JWT token could not be validated");
+			return oidc_oauth_return_www_authenticate(r, "invalid_token",
+					"JWT token could not be validated");
 	}
 
 	/* check that we've got something back */
 	if (token == NULL) {
 		oidc_error(r, "could not resolve claims (token == NULL)");
-		return oidc_oauth_return_www_authenticate(r, "invalid_token", "No claims could be parsed from the token");
+		return oidc_oauth_return_www_authenticate(r, "invalid_token",
+				"No claims could be parsed from the token");
 	}
 
 	/* store the parsed token (cq. the claims from the response) in the request state so it can be accessed by the authz routines */
@@ -659,29 +658,29 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 	if (oidc_oauth_set_remote_user(r, c, token) == FALSE) {
 		oidc_error(r,
 				"remote user could not be set, aborting with HTTP_UNAUTHORIZED");
-		return oidc_oauth_return_www_authenticate(r, "invalid_token", "Could not set remote user");
+		return oidc_oauth_return_www_authenticate(r, "invalid_token",
+				"Could not set remote user");
 	}
 
-	/* get a handle to the director config */
-	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
-			&auth_openidc_module);
-
 	/* set the user authentication HTTP header if set and required */
-	if ((r->user != NULL) && (dir_cfg->authn_header != NULL)) {
-		oidc_debug(r, "setting authn header (%s) to: %s", dir_cfg->authn_header,
+	char *authn_header = oidc_cfg_dir_authn_header(r);
+	int pass_headers = oidc_cfg_dir_pass_info_in_headers(r);
+	int pass_envvars = oidc_cfg_dir_pass_info_in_envvars(r);
+
+	if ((r->user != NULL) && (authn_header != NULL)) {
+		oidc_debug(r, "setting authn header (%s) to: %s", authn_header,
 				r->user);
-		apr_table_set(r->headers_in, dir_cfg->authn_header, r->user);
+		apr_table_set(r->headers_in, authn_header, r->user);
 	}
 
 	/* set the resolved claims in the HTTP headers for the target application */
 	oidc_util_set_app_infos(r, token, c->claim_prefix, c->claim_delimiter,
-			dir_cfg->pass_info_in_headers, dir_cfg->pass_info_in_env_vars);
+			pass_headers, pass_envvars);
 
 	/* set the access_token in the app headers */
 	if (access_token != NULL) {
 		oidc_util_set_app_info(r, "access_token", access_token,
-				OIDC_DEFAULT_HEADER_PREFIX, dir_cfg->pass_info_in_headers,
-				dir_cfg->pass_info_in_env_vars);
+				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars);
 	}
 
 	/* free JSON resources */

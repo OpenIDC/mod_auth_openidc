@@ -1,3 +1,7 @@
+9/5/2016
+- encapsulate (sub-)directory config handling and fix merging so values can be set back to default values in subdirs
+- bump to 2.0.0rc5
+
 9/2/2016
 - fix JWK creation when no client secret is set e.g. in Implicit flows; closes #168; thanks @asc1
 - bump to 2.0.0rc4

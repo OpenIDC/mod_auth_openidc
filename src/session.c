@@ -109,11 +109,9 @@ static apr_byte_t oidc_session_decode(request_rec *r, oidc_cfg *c,
 static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
-	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config,
-			&auth_openidc_module);
 
 	/* get the cookie that should be our uuid/key */
-	char *uuid = oidc_util_get_cookie(r, d->cookie);
+	char *uuid = oidc_util_get_cookie(r, oidc_cfg_dir_cookie(r));
 
 	/* get the string-encoded session from the cache based on the key */
 	if (uuid != NULL) {
@@ -134,8 +132,6 @@ static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
-	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config,
-			&auth_openidc_module);
 
 	/* get a new uuid for this session */
 	apr_uuid_t uuid;
@@ -152,13 +148,13 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z) {
 		c->cache->set(r, OIDC_CACHE_SECTION_SESSION, key, s_value, z->expiry);
 
 		/* set the uuid in the cookie */
-		oidc_util_set_cookie(r, d->cookie, key,
+		oidc_util_set_cookie(r, oidc_cfg_dir_cookie(r), key,
 				c->persistent_session_cookie ? z->expiry : -1);
 
 	} else {
 
 		/* clear the cookie */
-		oidc_util_set_cookie(r, d->cookie, "", 0);
+		oidc_util_set_cookie(r, oidc_cfg_dir_cookie(r), "", 0);
 
 		/* remove the session from the cache */
 		c->cache->set(r, OIDC_CACHE_SECTION_SESSION, key, NULL, 0);
@@ -172,10 +168,7 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z) {
  */
 static apr_byte_t oidc_session_load_cookie(request_rec *r, oidc_cfg *c,
 		oidc_session_t *z) {
-	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config,
-			&auth_openidc_module);
-
-	char *cookieValue = oidc_util_get_chunked_cookie(r, d->cookie,
+	char *cookieValue = oidc_util_get_chunked_cookie(r, oidc_cfg_dir_cookie(r),
 			c->session_cookie_chunk_size);
 	if ((cookieValue != NULL)
 			&& (oidc_session_decode(r, c, z, cookieValue, TRUE) == FALSE))
@@ -189,15 +182,12 @@ static apr_byte_t oidc_session_load_cookie(request_rec *r, oidc_cfg *c,
 static apr_byte_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
-	oidc_dir_cfg *d = ap_get_module_config(r->per_dir_config,
-			&auth_openidc_module);
-
 	char *cookieValue = "";
 	if ((z->state != NULL)
 			&& (oidc_session_encode(r, c, z, &cookieValue, TRUE) == FALSE))
 		return FALSE;
 
-	oidc_util_set_chunked_cookie(r, d->cookie, cookieValue,
+	oidc_util_set_chunked_cookie(r, oidc_cfg_dir_cookie(r), cookieValue,
 			c->persistent_session_cookie ? z->expiry : -1,
 					c->session_cookie_chunk_size);
 

@@ -1220,6 +1220,8 @@ static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	return 0;
 }
 
+typedef struct oidc_dir_cfg oidc_dir_cfg;
+
 static request_rec * test_setup(apr_pool_t *pool) {
 	const unsigned int kIdx = 0;
 	const unsigned int kEls = kIdx + 1;

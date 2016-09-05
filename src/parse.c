@@ -514,7 +514,8 @@ const char *oidc_valid_session_max_duration(apr_pool_t *pool, int v) {
  */
 const char *oidc_parse_session_max_duration(apr_pool_t *pool, const char *arg,
 		int *int_value) {
-	return oidc_parse_int_valid(pool, arg, int_value, oidc_valid_session_max_duration);
+	return oidc_parse_int_valid(pool, arg, int_value,
+			oidc_valid_session_max_duration);
 }
 
 /*
@@ -736,7 +737,7 @@ static apr_byte_t oidc_parse_oauth_accept_token_in_str2byte(const char *v) {
  * parse an "accept OAuth 2.0 token in" value from the provided string
  */
 const char *oidc_parse_accept_oauth_token_in(apr_pool_t *pool, const char *arg,
-		apr_byte_t *b_value, apr_hash_t *list_options) {
+		int *b_value, apr_hash_t *list_options) {
 	static char *options[] = {
 			OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER_STR,
 			OIDC_OAUTH_ACCEPT_TOKEN_IN_POST_STR,
@@ -814,7 +815,7 @@ const char *oidc_valid_introspection_method(apr_pool_t *pool, const char *arg) {
  * parse a "set claims as" value from the provided string
  */
 const char *oidc_parse_set_claims_as(apr_pool_t *pool, const char *arg,
-		apr_byte_t *in_headers, apr_byte_t *in_env_vars) {
+		int *in_headers, int *in_env_vars) {
 	static char *options[] = {
 			OIDC_PASS_CLAIMS_AS_BOTH,
 			OIDC_PASS_CLAIMS_AS_HEADERS,
@@ -863,13 +864,13 @@ const char *oidc_parse_unauth_action(apr_pool_t *pool, const char *arg,
 		return rv;
 
 	if (apr_strnatcmp(arg, OIDC_UNAUTH_ACTION_AUTH_STR) == 0)
-		*action = AUTHENTICATE;
+		*action = OIDC_UNAUTH_AUTHENTICATE;
 	else if (apr_strnatcmp(arg, OIDC_UNAUTH_ACTION_PASS_STR) == 0)
-		*action = PASS;
+		*action = OIDC_UNAUTH_PASS;
 	else if (apr_strnatcmp(arg, OIDC_UNAUTH_ACTION_401_STR) == 0)
-		*action = RETURN401;
+		*action = OIDC_UNAUTH_RETURN401;
 	else if (apr_strnatcmp(arg, OIDC_UNAUTH_ACTION_410_STR) == 0)
-		*action = RETURN410;
+		*action = OIDC_UNAUTH_RETURN410;
 
 	return NULL;
 }
@@ -916,7 +917,8 @@ const char *oidc_valid_string_in_array(apr_pool_t *pool, json_t *json,
  * check the boundaries for JWKs refresh interval
  */
 const char *oidc_valid_jwks_refresh_interval(apr_pool_t *pool, int v) {
-	return oidc_valid_int_min_max(pool, v, OIDC_JWKS_REFRESH_INTERVAL_MIN, OIDC_JWKS_REFRESH_INTERVAL_MAX);
+	return oidc_valid_int_min_max(pool, v, OIDC_JWKS_REFRESH_INTERVAL_MIN,
+			OIDC_JWKS_REFRESH_INTERVAL_MAX);
 }
 
 /*
@@ -924,7 +926,8 @@ const char *oidc_valid_jwks_refresh_interval(apr_pool_t *pool, int v) {
  */
 const char *oidc_parse_jwks_refresh_interval(apr_pool_t *pool, const char *arg,
 		int *int_value) {
-	return oidc_parse_int_valid(pool, arg, int_value, oidc_valid_jwks_refresh_interval);
+	return oidc_parse_int_valid(pool, arg, int_value,
+			oidc_valid_jwks_refresh_interval);
 }
 
 #define OIDC_IDTOKEN_IAT_SLACK_MIN 0
@@ -934,7 +937,8 @@ const char *oidc_parse_jwks_refresh_interval(apr_pool_t *pool, const char *arg,
  * check the boundaries for ID token "issued-at" (iat) timestamp slack
  */
 const char *oidc_valid_idtoken_iat_slack(apr_pool_t *pool, int v) {
-	return oidc_valid_int_min_max(pool, v, OIDC_IDTOKEN_IAT_SLACK_MIN, OIDC_IDTOKEN_IAT_SLACK_MAX);
+	return oidc_valid_int_min_max(pool, v, OIDC_IDTOKEN_IAT_SLACK_MIN,
+			OIDC_IDTOKEN_IAT_SLACK_MAX);
 }
 
 /*
@@ -942,7 +946,8 @@ const char *oidc_valid_idtoken_iat_slack(apr_pool_t *pool, int v) {
  */
 const char *oidc_parse_idtoken_iat_slack(apr_pool_t *pool, const char *arg,
 		int *int_value) {
-	return oidc_parse_int_valid(pool, arg, int_value, oidc_valid_idtoken_iat_slack);
+	return oidc_parse_int_valid(pool, arg, int_value,
+			oidc_valid_idtoken_iat_slack);
 }
 
 #define OIDC_USERINFO_REFRESH_INTERVAL_MIN 0
@@ -952,14 +957,16 @@ const char *oidc_parse_idtoken_iat_slack(apr_pool_t *pool, const char *arg,
  * check the boundaries for the userinfo refresh interval
  */
 const char *oidc_valid_userinfo_refresh_interval(apr_pool_t *pool, int v) {
-	return oidc_valid_int_min_max(pool, v, OIDC_USERINFO_REFRESH_INTERVAL_MIN, OIDC_USERINFO_REFRESH_INTERVAL_MAX);
+	return oidc_valid_int_min_max(pool, v, OIDC_USERINFO_REFRESH_INTERVAL_MIN,
+			OIDC_USERINFO_REFRESH_INTERVAL_MAX);
 }
 
 /*
  * parse a userinfo refresh interval from the provided string
  */
-const char *oidc_parse_userinfo_refresh_interval(apr_pool_t *pool, const char *arg,
-		int *int_value) {
-	return oidc_parse_int_valid(pool, arg, int_value, oidc_valid_userinfo_refresh_interval);
+const char *oidc_parse_userinfo_refresh_interval(apr_pool_t *pool,
+		const char *arg, int *int_value) {
+	return oidc_parse_int_valid(pool, arg, int_value,
+			oidc_valid_userinfo_refresh_interval);
 }
 
