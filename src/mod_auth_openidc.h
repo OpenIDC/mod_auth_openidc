@@ -211,9 +211,10 @@ APLOG_USE_MODULE(auth_openidc);
 /* the maximum size of data that we accept in a single POST value: 1MB */
 #define OIDC_MAX_POST_DATA_LEN 1024 * 1024
 
-typedef enum {
-	OIDC_UNAUTH_UNSET = -1, OIDC_UNAUTH_AUTHENTICATE, OIDC_UNAUTH_PASS, OIDC_UNAUTH_RETURN401, OIDC_UNAUTH_RETURN410
-} unauthenticated_action;
+#define OIDC_UNAUTH_AUTHENTICATE 1
+#define OIDC_UNAUTH_PASS         2
+#define OIDC_UNAUTH_RETURN401    3
+#define OIDC_UNAUTH_RETURN410    4
 
 typedef struct oidc_jwks_uri_t {
 	const char *url;

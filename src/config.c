@@ -160,7 +160,7 @@ typedef struct oidc_dir_cfg {
 	char *cookie_path;
 	char *cookie;
 	char *authn_header;
-	unauthenticated_action unauth_action;
+	int unauth_action;
 	apr_array_header_t *pass_cookies;
 	int pass_info_in_headers;
 	int pass_info_in_env_vars;
@@ -1185,7 +1185,7 @@ void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->cookie = OIDC_CONFIG_STRING_UNSET;
 	c->cookie_path = OIDC_CONFIG_STRING_UNSET;
 	c->authn_header = OIDC_CONFIG_STRING_UNSET;
-	c->unauth_action = OIDC_UNAUTH_UNSET;
+	c->unauth_action = OIDC_CONFIG_POS_INT_UNSET;
 	c->pass_cookies = apr_array_make(pool, 0, sizeof(const char *));
 	c->pass_info_in_headers = OIDC_CONFIG_POS_INT_UNSET;
 	c->pass_info_in_env_vars = OIDC_CONFIG_POS_INT_UNSET;
@@ -1316,7 +1316,7 @@ int oidc_dir_cfg_unauth_action(request_rec *r) {
 	oidc_debug(r, "enter");
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
-	if (dir_cfg->unauth_action == OIDC_UNAUTH_UNSET)
+	if (dir_cfg->unauth_action == OIDC_CONFIG_POS_INT_UNSET)
 		return OIDC_DEFAULT_UNAUTH_ACTION;
 	return dir_cfg->unauth_action;
 }
@@ -1340,7 +1340,7 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			(apr_strnatcmp(add->authn_header, OIDC_CONFIG_STRING_UNSET) != 0) ?
 					add->authn_header : base->authn_header;
 	c->unauth_action =
-			add->unauth_action != OIDC_UNAUTH_UNSET ?
+			add->unauth_action != OIDC_CONFIG_POS_INT_UNSET ?
 					add->unauth_action : base->unauth_action;
 
 	// allow explicit reset to empty in sub directories

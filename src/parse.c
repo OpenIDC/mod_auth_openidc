@@ -852,7 +852,7 @@ const char *oidc_parse_set_claims_as(apr_pool_t *pool, const char *arg,
  * parse an "unauthenticated action" value from the provided string
  */
 const char *oidc_parse_unauth_action(apr_pool_t *pool, const char *arg,
-		unauthenticated_action *action) {
+		int *action) {
 	static char *options[] = {
 			OIDC_UNAUTH_ACTION_AUTH_STR,
 			OIDC_UNAUTH_ACTION_PASS_STR,
