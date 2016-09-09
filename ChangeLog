@@ -2,6 +2,7 @@
 - fix overriding provider token endpoint auth with static config when not set in .conf file
 - don't add our own cookies to the incoming headers
 - allow stripping cookies from the Cookie header sent to the application/backend with OIDCStripCookies
+- release 2.0.0
 
 9/5/2016
 - encapsulate (sub-)directory config handling and fix merging so values can be set back to default values in subdirs

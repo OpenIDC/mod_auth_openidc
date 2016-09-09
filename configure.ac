@@ -1,4 +1,4 @@
-AC_INIT([mod_auth_openidc],[2.0.0rc5],[hzandbelt@pingidentity.com])
+AC_INIT([mod_auth_openidc],[2.0.0],[hzandbelt@pingidentity.com])
 
 AC_SUBST(NAMEVER, AC_PACKAGE_TARNAME()-AC_PACKAGE_VERSION())
 
