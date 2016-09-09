@@ -162,6 +162,7 @@ typedef struct oidc_dir_cfg {
 	char *authn_header;
 	int unauth_action;
 	apr_array_header_t *pass_cookies;
+	apr_array_header_t *strip_cookies;
 	int pass_info_in_headers;
 	int pass_info_in_env_vars;
 	int oauth_accept_token_in;
@@ -583,12 +584,17 @@ static const char * oidc_set_token_expiry_claim(cmd_parms *cmd, void *dummy,
 }
 
 /*
- * specify cookies to pass on to the OP/AS
+ * specify cookies names to pass/strip
  */
-static const char * oidc_set_pass_cookies(cmd_parms *cmd, void *m,
+static const char * oidc_set_cookie_names(cmd_parms *cmd, void *m,
 		const char *arg) {
 	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg *) m;
-	*(const char**) apr_array_push(dir_cfg->pass_cookies) = arg;
+	int offset = (int) (long) cmd->info;
+	apr_array_header_t **cookie_names =
+			(apr_array_header_t **) ((char *) dir_cfg + offset);
+	if (*cookie_names == NULL)
+		*cookie_names = apr_array_make(cmd->pool, 3, sizeof(const char *));
+	*(const char**) apr_array_push((*cookie_names)) = arg;
 	return NULL;
 }
 
@@ -1186,7 +1192,8 @@ void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->cookie_path = OIDC_CONFIG_STRING_UNSET;
 	c->authn_header = OIDC_CONFIG_STRING_UNSET;
 	c->unauth_action = OIDC_CONFIG_POS_INT_UNSET;
-	c->pass_cookies = apr_array_make(pool, 0, sizeof(const char *));
+	c->pass_cookies = NULL;
+	c->strip_cookies = NULL;
 	c->pass_info_in_headers = OIDC_CONFIG_POS_INT_UNSET;
 	c->pass_info_in_env_vars = OIDC_CONFIG_POS_INT_UNSET;
 	c->oauth_accept_token_in = OIDC_CONFIG_POS_INT_UNSET;
@@ -1198,7 +1205,6 @@ void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 }
 
 char *oidc_cfg_dir_discover_url(request_rec *r) {
-	oidc_debug(r, "enter");
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 	if ((dir_cfg->discover_url != NULL) && (apr_strnatcmp(dir_cfg->discover_url,
@@ -1208,7 +1214,6 @@ char *oidc_cfg_dir_discover_url(request_rec *r) {
 }
 
 char *oidc_cfg_dir_cookie(request_rec *r) {
-	oidc_debug(r, "enter");
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 	if ((dir_cfg->cookie == NULL)
@@ -1220,7 +1225,6 @@ char *oidc_cfg_dir_cookie(request_rec *r) {
 }
 
 char *oidc_cfg_dir_cookie_path(request_rec *r) {
-	oidc_debug(r, "enter");
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 	if ((dir_cfg->cookie_path == NULL)
@@ -1232,7 +1236,6 @@ char *oidc_cfg_dir_cookie_path(request_rec *r) {
 }
 
 char *oidc_cfg_dir_authn_header(request_rec *r) {
-	oidc_debug(r, "enter");
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 	if ((dir_cfg->authn_header == NULL)
@@ -1244,7 +1247,6 @@ char *oidc_cfg_dir_authn_header(request_rec *r) {
 }
 
 int oidc_cfg_dir_pass_info_in_headers(request_rec *r) {
-	oidc_debug(r, "enter");
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 	if (dir_cfg->pass_info_in_headers == OIDC_CONFIG_POS_INT_UNSET)
@@ -1253,7 +1255,6 @@ int oidc_cfg_dir_pass_info_in_headers(request_rec *r) {
 }
 
 int oidc_cfg_dir_pass_info_in_envvars(request_rec *r) {
-	oidc_debug(r, "enter");
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 	if (dir_cfg->pass_info_in_env_vars == OIDC_CONFIG_POS_INT_UNSET)
@@ -1262,7 +1263,6 @@ int oidc_cfg_dir_pass_info_in_envvars(request_rec *r) {
 }
 
 int oidc_cfg_dir_pass_refresh_token(request_rec *r) {
-	oidc_debug(r, "enter");
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 	if (dir_cfg->pass_refresh_token == OIDC_CONFIG_POS_INT_UNSET)
@@ -1271,7 +1271,6 @@ int oidc_cfg_dir_pass_refresh_token(request_rec *r) {
 }
 
 int oidc_cfg_dir_accept_token_in(request_rec *r) {
-	oidc_debug(r, "enter");
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 	if (dir_cfg->oauth_accept_token_in == OIDC_CONFIG_POS_INT_UNSET)
@@ -1280,7 +1279,6 @@ int oidc_cfg_dir_accept_token_in(request_rec *r) {
 }
 
 char *oidc_cfg_dir_accept_token_in_option(request_rec *r, const char *key) {
-	oidc_debug(r, "enter");
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 	return apr_hash_get(dir_cfg->oauth_accept_token_options, key,
@@ -1288,7 +1286,6 @@ char *oidc_cfg_dir_accept_token_in_option(request_rec *r, const char *key) {
 }
 
 int oidc_cfg_token_introspection_interval(request_rec *r) {
-	oidc_debug(r, "enter");
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 	if (dir_cfg->oauth_token_introspect_interval == OIDC_CONFIG_POS_INT_UNSET)
@@ -1297,7 +1294,6 @@ int oidc_cfg_token_introspection_interval(request_rec *r) {
 }
 
 int oidc_cfg_dir_preserve_post(request_rec *r) {
-	oidc_debug(r, "enter");
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 	if (dir_cfg->preserve_post == OIDC_CONFIG_POS_INT_UNSET)
@@ -1306,20 +1302,25 @@ int oidc_cfg_dir_preserve_post(request_rec *r) {
 }
 
 apr_array_header_t *oidc_dir_cfg_pass_cookies(request_rec *r) {
-	oidc_debug(r, "enter");
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 	return dir_cfg->pass_cookies;
 }
 
+apr_array_header_t *oidc_dir_cfg_strip_cookies(request_rec *r) {
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+	return dir_cfg->strip_cookies;
+}
+
 int oidc_dir_cfg_unauth_action(request_rec *r) {
-	oidc_debug(r, "enter");
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 	if (dir_cfg->unauth_action == OIDC_CONFIG_POS_INT_UNSET)
 		return OIDC_DEFAULT_UNAUTH_ACTION;
 	return dir_cfg->unauth_action;
 }
+
 /*
  * merge a new directory config with a base one
  */
@@ -1343,16 +1344,11 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->unauth_action != OIDC_CONFIG_POS_INT_UNSET ?
 					add->unauth_action : base->unauth_action;
 
-	// allow explicit reset to empty in sub directories
-	if (apr_is_empty_array(add->pass_cookies) != 0)
-		if ((add->pass_cookies->nelts == 1)
-				&& (apr_strnatcmp(((const char**) add->pass_cookies->elts)[0],
-						OIDC_CONFIG_STRING_EMPTY) == 0))
-			c->pass_cookies = apr_array_make(pool, 0, sizeof(const char *));
-		else
-			c->pass_cookies = add->pass_cookies;
-	else
-		c->pass_cookies = base->pass_cookies;
+	c->pass_cookies =
+			add->pass_cookies != NULL ? add->pass_cookies : base->pass_cookies;
+	c->strip_cookies =
+			add->strip_cookies != NULL ?
+					add->strip_cookies : base->strip_cookies;
 
 	c->pass_info_in_headers =
 			add->pass_info_in_headers != OIDC_CONFIG_POS_INT_UNSET ?
@@ -2153,10 +2149,15 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Defines an external IDP Discovery page"),
 		AP_INIT_ITERATE("OIDCPassCookies",
-				oidc_set_pass_cookies,
+				oidc_set_cookie_names,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, pass_cookies),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Specify cookies that need to be passed from the browser on to the backend to the OP/AS."),
+		AP_INIT_ITERATE("OIDCStripCookies",
+				oidc_set_cookie_names,
+				(void *) APR_OFFSETOF(oidc_dir_cfg, strip_cookies),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Specify cookies that should be stripped from the incoming request before passing it on to the backend."),
 		AP_INIT_TAKE1("OIDCAuthNHeader", ap_set_string_slot,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, authn_header),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
