@@ -1113,7 +1113,7 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 	/* get the token endpoint authentication method */
 	oidc_metadata_get_valid_string(r, j_conf, "token_endpoint_auth",
 			oidc_valid_endpoint_auth_method, &provider->token_endpoint_auth,
-			cfg->provider.token_endpoint_auth);
+			provider->token_endpoint_auth);
 
 	/* get the dynamic client registration token */
 	oidc_json_object_get_string(r->pool, j_conf, "registration_token",
