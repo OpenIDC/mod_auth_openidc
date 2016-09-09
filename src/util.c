@@ -601,26 +601,29 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 	if (h_list != NULL)
 		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, h_list);
 
-	/* gather cookies that we need to pass on from the incoming request */
-	char *cookie_string = NULL;
-	for (i = 0; i < pass_cookies->nelts; i++) {
-		const char *cookie_name = ((const char**) pass_cookies->elts)[i];
-		char *cookie_value = oidc_util_get_cookie(r, cookie_name);
-		if (cookie_value != NULL) {
-			cookie_string =
-					(cookie_string == NULL) ?
-							apr_psprintf(r->pool, "%s=%s", cookie_name,
-									cookie_value) :
-									apr_psprintf(r->pool, "%s; %s=%s", cookie_string,
-											cookie_name, cookie_value);
+	if (pass_cookies != NULL) {
+		/* gather cookies that we need to pass on from the incoming request */
+		char *cookie_string = NULL;
+		for (i = 0; i < pass_cookies->nelts; i++) {
+			const char *cookie_name = ((const char**) pass_cookies->elts)[i];
+			char *cookie_value = oidc_util_get_cookie(r, cookie_name);
+			if (cookie_value != NULL) {
+				cookie_string =
+						(cookie_string == NULL) ?
+								apr_psprintf(r->pool, "%s=%s", cookie_name,
+										cookie_value) :
+										apr_psprintf(r->pool, "%s; %s=%s",
+												cookie_string, cookie_name,
+												cookie_value);
+			}
 		}
-	}
 
-	/* see if we need to pass any cookies */
-	if (cookie_string != NULL) {
-		oidc_debug(r, "passing browser cookies on backend call: %s",
-				cookie_string);
-		curl_easy_setopt(curl, CURLOPT_COOKIE, cookie_string);
+		/* see if we need to pass any cookies */
+		if (cookie_string != NULL) {
+			oidc_debug(r, "passing browser cookies on backend call: %s",
+					cookie_string);
+			curl_easy_setopt(curl, CURLOPT_COOKIE, cookie_string);
+		}
 	}
 
 	/* set the target URL */
@@ -762,7 +765,7 @@ void oidc_util_set_cookie(request_rec *r, const char *cookieName,
 
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
-	char *headerString, *currentCookies, *expiresString = NULL;
+	char *headerString, *expiresString = NULL;
 
 	/* see if we need to clear the cookie */
 	if (apr_strnatcmp(cookieValue, "") == 0)
@@ -796,14 +799,6 @@ void oidc_util_set_cookie(request_rec *r, const char *cookieName,
 
 	/* use r->err_headers_out so we always print our headers (even on 302 redirect) - headers_out only prints on 2xx responses */
 	apr_table_add(r->err_headers_out, "Set-Cookie", headerString);
-
-	/* see if we need to add it to existing cookies */
-	if ((currentCookies = (char *) apr_table_get(r->headers_in, "Cookie"))
-			== NULL)
-		apr_table_add(r->headers_in, "Cookie", headerString);
-	else
-		apr_table_set(r->headers_in, "Cookie",
-				(apr_pstrcat(r->pool, headerString, ";", currentCookies, NULL)));
 
 	/* do some logging */
 	oidc_debug(r, "adding outgoing header: Set-Cookie: %s", headerString);
