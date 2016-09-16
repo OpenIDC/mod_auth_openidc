@@ -58,8 +58,6 @@
 #include "mod_auth_openidc.h"
 #include "parse.h"
 
-extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
-
 /*
  * validate an access token against the validation endpoint of the Authorization server and gets a response back
  */
