@@ -904,8 +904,8 @@ static void oidc_metadata_parse_boolean(request_rec *r, json_t *json,
 static void oidc_metadata_parse_url(request_rec *r, const char *type,
 		const char *issuer, json_t *json, const char *key, char **value,
 		const char *default_value) {
-	if (oidc_metadata_is_valid_uri(r, type, issuer, json, key, value,
-			FALSE) == FALSE) {
+	if ((oidc_metadata_is_valid_uri(r, type, issuer, json, key, value,
+			FALSE) == FALSE) || ((*value == NULL) && (default_value != NULL))) {
 		*value = apr_pstrdup(r->pool, default_value);
 	}
 }
@@ -1025,6 +1025,8 @@ void oidc_metadata_get_valid_int(request_rec *r, json_t *json, const char *key,
  */
 apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 		json_t *j_conf, oidc_provider_t *provider) {
+
+	oidc_debug(r, "parsing: provider->client_jwks_uri=%s, cfg->provider.client_jwks_uri=%s", provider->client_jwks_uri, cfg->provider.client_jwks_uri);
 
 	oidc_metadata_parse_url(r, "conf", provider->issuer, j_conf,
 			"client_jwks_uri", &provider->client_jwks_uri,

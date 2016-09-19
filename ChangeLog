@@ -1,5 +1,7 @@
-9/15/2016
+9/19/2016
 - check that a sub claim returned from the userinfo endpoint matches the one in the id_token
+- fix issue in oidc_metadata_parse_url so that static default would not be honored
+  - this only affected server-wide OIDCClientJwksUri usage in dynamic client registration
 - non-functional changes for OIDC RP certification:
   - explicitly log the client authentication method when calling the token endpoint
   - log the keys that are included for token verification
