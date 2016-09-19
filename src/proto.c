@@ -544,6 +544,7 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, oidc_jwt_t *jwt,
 	apr_byte_t rc = TRUE;
 	oidc_jwk_t *jwk = NULL;
 	oidc_jose_error_t err;
+	char *jwk_json = NULL;
 
 	/* get the (optional) thumbprint for comparison */
 	const char *x5t = oidc_jwt_hdr_get(jwt, "x5t");
@@ -580,7 +581,8 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, oidc_jwt_t *jwt,
 
 		/* see if we were looking for a specific kid, if not we'll include any key that matches the type */
 		if ((jwt->header.kid == NULL) && (x5t == NULL)) {
-			oidc_debug(r, "no kid/x5t to match, include matching key type");
+			oidc_jwk_to_json(r->pool, jwk, &jwk_json, &err);
+			oidc_debug(r, "no kid/x5t to match, include matching key type: %s", jwk_json);
 			if (jwk->kid != NULL)
 				apr_hash_set(result, jwk->kid, APR_HASH_KEY_STRING, jwk);
 			else
@@ -593,7 +595,8 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, oidc_jwt_t *jwt,
 		/* compare the requested kid against the current element */
 		if ((jwt->header.kid != NULL) && (jwk->kid != NULL)
 				&& (apr_strnatcmp(jwt->header.kid, jwk->kid) == 0)) {
-			oidc_debug(r, "found matching kid: \"%s\"", jwt->header.kid);
+			oidc_jwk_to_json(r->pool, jwk, &jwk_json, &err);
+			oidc_debug(r, "found matching kid: \"%s\" for jwk: %s", jwt->header.kid, jwk_json);
 			apr_hash_set(result, jwt->header.kid, APR_HASH_KEY_STRING, jwk);
 			break;
 		}
@@ -603,7 +606,8 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, oidc_jwt_t *jwt,
 		oidc_json_object_get_string(r->pool, elem, "x5t", &s_x5t, NULL);
 		/* compare the requested thumbprint against the current element */
 		if ((s_x5t != NULL) && (apr_strnatcmp(x5t, s_x5t) == 0)) {
-			oidc_debug(r, "found matching x5t: \"%s\"", x5t);
+			oidc_jwk_to_json(r->pool, jwk, &jwk_json, &err);
+			oidc_debug(r, "found matching x5t: \"%s\" for jwk: %s", x5t, jwk_json);
 			apr_hash_set(result, x5t, APR_HASH_KEY_STRING, jwk);
 			break;
 		}
@@ -809,8 +813,10 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 		int *expires_in, char **refresh_token) {
 
 	const char *response = NULL;
-
 	const char *basic_auth = NULL;
+
+	oidc_debug(r, "token_endpoint_auth=%s", provider->token_endpoint_auth);
+
 	if (provider->client_secret != NULL) {
 		/* see if we need to do basic auth or auth-through-post-params (both applied through the HTTP POST method though) */
 		if ((provider->token_endpoint_auth == NULL)
@@ -1017,8 +1023,8 @@ apr_byte_t oidc_proto_refresh_request(request_rec *r, oidc_cfg *cfg,
  * get claims from the OP UserInfo endpoint using the provided access_token
  */
 apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
-		oidc_provider_t *provider, const char *access_token,
-		const char **response) {
+		oidc_provider_t *provider, const char *id_token_sub,
+		const char *access_token, const char **response) {
 
 	oidc_debug(r, "enter, endpoint=%s, access_token=%s",
 			provider->userinfo_endpoint_url, access_token);
@@ -1034,6 +1040,22 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 	json_t *claims = NULL;
 	if (oidc_util_decode_json_and_check_error(r, *response, &claims) == FALSE)
 		return FALSE;
+
+	char *user_info_sub = NULL;
+	oidc_jose_get_string(r->pool, claims, "sub", FALSE, &user_info_sub, NULL);
+
+	oidc_debug(r, "id_token_sub=%s, user_info_sub=%s", id_token_sub, user_info_sub);
+
+	if ((id_token_sub != NULL) && (user_info_sub != NULL)) {
+		if (apr_strnatcmp(id_token_sub, user_info_sub) != 0) {
+			oidc_error(r,
+					"\"sub\" claim (\"%s\") returned from userinfo endpoint does not match the one in the id_token (\"%s\")",
+					user_info_sub, id_token_sub);
+			json_decref(claims);
+			return FALSE;
+		}
+	}
+
 	json_decref(claims);
 
 	return TRUE;

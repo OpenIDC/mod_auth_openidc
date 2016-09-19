@@ -1,3 +1,10 @@
+9/15/2016
+- check that a sub claim returned from the userinfo endpoint matches the one in the id_token
+- non-functional changes for OIDC RP certification:
+  - explicitly log the client authentication method when calling the token endpoint
+  - log the keys that are included for token verification
+- bump to 2.0.1rc0
+
 9/9/2016
 - fix overriding provider token endpoint auth with static config when not set in .conf file
 - don't add our own cookies to the incoming headers

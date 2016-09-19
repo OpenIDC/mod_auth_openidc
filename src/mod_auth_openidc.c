@@ -1046,7 +1046,7 @@ static apr_byte_t oidc_refresh_access_token(request_rec *r, oidc_cfg *c,
  */
 static const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r,
 		oidc_cfg *c, oidc_provider_t *provider, const char *access_token,
-		oidc_session_t *session) {
+		oidc_session_t *session, char *id_token_sub) {
 
 	oidc_debug(r, "enter");
 
@@ -1064,12 +1064,37 @@ static const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r,
 		return NULL;
 	}
 
+	if ((id_token_sub == NULL) && (session != NULL)) {
+
+		// when refreshing claims from the userinfo endpoint
+
+		const char *s_id_token_claims = NULL;
+		oidc_session_get(r, session, OIDC_IDTOKEN_CLAIMS_SESSION_KEY,
+				&s_id_token_claims);
+
+		if (s_id_token_claims == NULL) {
+			oidc_error(r, "no id_token claims provided");
+			return NULL;
+		}
+
+		json_error_t json_error;
+		json_t *id_token_claims = json_loads(s_id_token_claims, 0, &json_error);
+
+		if (id_token_claims == NULL) {
+			oidc_error(r, "JSON parsing (json_loads) failed: %s (%s)",
+					json_error.text, s_id_token_claims);
+			return NULL;
+		}
+
+		oidc_jose_get_string(r->pool, id_token_claims, "sub", FALSE, &id_token_sub, NULL);
+	}
+
 	// TODO: return code should indicate whether the token expired or some other error occurred
 	// TODO: long-term: session storage should be JSON (with explicit types and less conversion, using standard routines)
 
 	/* try to get claims from the userinfo endpoint using the provided access token */
 	const char *result = NULL;
-	if (oidc_proto_resolve_userinfo(r, c, provider, access_token,
+	if (oidc_proto_resolve_userinfo(r, c, provider, id_token_sub, access_token,
 			&result) == FALSE) {
 
 		/* see if we have an existing session and we are refreshing the user info claims */
@@ -1081,7 +1106,7 @@ static const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r,
 					&access_token) == TRUE) {
 
 				/* try again with the new access token */
-				if (oidc_proto_resolve_userinfo(r, c, provider, access_token,
+				if (oidc_proto_resolve_userinfo(r, c, provider, id_token_sub, access_token,
 						&result) == FALSE) {
 
 					oidc_error(r,
@@ -1155,7 +1180,7 @@ static apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r,
 
 			/* retrieve the current claims */
 			claims = oidc_retrieve_claims_from_userinfo_endpoint(r, cfg,
-					provider, access_token, session);
+					provider, access_token, session, NULL);
 
 			/* store claims resolved from userinfo endpoint */
 			oidc_store_userinfo_claims(r, session, provider, claims);
@@ -1697,7 +1722,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	 * parsed claims are not actually used here but need to be parsed anyway for error checking purposes
 	 */
 	const char *claims = oidc_retrieve_claims_from_userinfo_endpoint(r, c,
-			provider, apr_table_get(params, "access_token"), NULL);
+			provider, apr_table_get(params, "access_token"), NULL, jwt->payload.sub);
 
 	/* restore the original protected URL that the user was trying to access */
 	const char *original_url = apr_pstrdup(r->pool,
