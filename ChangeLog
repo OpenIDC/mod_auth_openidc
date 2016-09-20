@@ -1,3 +1,6 @@
+9/20/2016
+- log the JWT header before optional decryption is applied
+
 9/19/2016
 - check that a sub claim returned from the userinfo endpoint matches the one in the id_token
 - fix issue in oidc_metadata_parse_url so that static default would not be honored

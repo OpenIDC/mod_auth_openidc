@@ -715,17 +715,36 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt,
 }
 
 /*
+ * return the compact-encoded JWT header contents
+ */
+char *oidc_proto_peek_jwt_header(request_rec *r, const char *compact_encoded_jwt) {
+	char *input = NULL, *result = NULL;
+	char *p = strstr(compact_encoded_jwt, ".");
+	if (p == NULL) {
+		oidc_error(r,
+				"could not parse first element separated by \".\" from input");
+		return NULL;
+	}
+	input = apr_pstrndup(r->pool, compact_encoded_jwt, p - compact_encoded_jwt);
+	if (oidc_base64url_decode(r->pool, &result, input) <= 0) {
+		oidc_error(r, "oidc_base64url_decode returned an error");
+		return NULL;
+	}
+	return result;
+}
+
+/*
  * check whether the provided string is a valid id_token and return its parsed contents
  */
 apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char *id_token, const char *nonce,
 		oidc_jwt_t **jwt, apr_byte_t is_code_flow) {
 
+	oidc_debug(r, "enter: id_token header=%s",
+			oidc_proto_peek_jwt_header(r, id_token));
+
 	char buf[APR_RFC822_DATE_LEN + 1];
 	oidc_jose_error_t err;
-
-	oidc_debug(r, "enter");
-
 	oidc_jwk_t *jwk = NULL;
 	if (oidc_util_create_symmetric_key(r, provider->client_secret, "sha256",
 			TRUE, &jwk) == FALSE)

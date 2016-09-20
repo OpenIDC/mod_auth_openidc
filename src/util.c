@@ -200,6 +200,9 @@ end:
 apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret,
 		const char *compact_encoded_jwt, json_t **result) {
 
+	oidc_debug(r, "enter: JWT header=%s",
+			oidc_proto_peek_jwt_header(r, compact_encoded_jwt));
+
 	apr_byte_t rv = FALSE;
 	oidc_jose_error_t err;
 

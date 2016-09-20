@@ -482,10 +482,10 @@ static int oidc_request_post_preserved_restore(request_rec *r,
 static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 		const char *state, json_t **proto_state) {
 
-	oidc_debug(r, "enter");
+	oidc_debug(r, "enter: state header=%s",
+			oidc_proto_peek_jwt_header(r, state));
 
 	oidc_jose_error_t err;
-
 	oidc_jwk_t *jwk = NULL;
 	if (oidc_util_create_symmetric_key(r, c->provider.client_secret, "sha256",
 			TRUE, &jwk) == FALSE)
