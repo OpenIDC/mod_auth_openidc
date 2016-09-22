@@ -1,5 +1,6 @@
 9/22/2016
 - refuse webfinger responses with an href value that is not on secure https
+- add userinfo JWT response verification and decryption
 
 9/20/2016
 - log the JWT header before optional decryption is applied

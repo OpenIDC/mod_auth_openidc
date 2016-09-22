@@ -563,7 +563,7 @@ static apr_byte_t oidc_jose_parse_payload(apr_pool_t *pool,
 /*
  * decrypt a JWT and return the plaintext
  */
-static uint8_t *oidc_jwe_decrypt(apr_pool_t *pool, cjose_jwe_t *jwe,
+static uint8_t *oidc_jwe_decrypt_impl(apr_pool_t *pool, cjose_jwe_t *jwe,
 		apr_hash_t *keys, size_t *content_len, oidc_jose_error_t *err) {
 
 	uint8_t *decrypted = NULL;
@@ -609,32 +609,41 @@ static uint8_t *oidc_jwe_decrypt(apr_pool_t *pool, cjose_jwe_t *jwe,
 }
 
 /*
- * parse and (optionally) decrypt a JSON Web Token
+ * decrypt a JSON Web Token
  */
-apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json,
-		oidc_jwt_t **j_jwt, apr_hash_t *keys, oidc_jose_error_t *err) {
-
-	const char *s_json = NULL;
-
+apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json,
+		apr_hash_t *keys, char **s_json, oidc_jose_error_t *err) {
 	cjose_err cjose_err;
 	cjose_jwe_t *jwe = cjose_jwe_import(input_json, strlen(input_json),
 			&cjose_err);
 	if (jwe != NULL) {
 		size_t content_len = 0;
-		uint8_t *decrypted = oidc_jwe_decrypt(pool, jwe, keys, &content_len,
+		uint8_t *decrypted = oidc_jwe_decrypt_impl(pool, jwe, keys, &content_len,
 				err);
 		if (decrypted != NULL) {
 			decrypted[content_len] = '\0';
-			s_json = apr_pstrdup(pool, (const char *) decrypted);
+			*s_json = apr_pstrdup(pool, (const char *) decrypted);
 			cjose_get_dealloc()(decrypted);
 		}
 		cjose_jwe_release(jwe);
 	} else {
-		s_json = input_json;
+		oidc_jose_error(err, "cjose_jwe_import failed: %s",
+				oidc_cjose_e2s(pool, cjose_err));
 	}
+	return (*s_json != NULL);
+}
 
-	if (s_json == NULL)
-		return FALSE;
+/*
+ * parse and (optionally) decrypt a JSON Web Token
+ */
+apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json,
+		oidc_jwt_t **j_jwt, apr_hash_t *keys, oidc_jose_error_t *err) {
+
+	cjose_err cjose_err;
+	char *s_json = NULL;
+
+	if (oidc_jwe_decrypt(pool, input_json, keys, &s_json, err) == FALSE)
+		s_json = apr_pstrdup(pool, input_json);
 
 	*j_jwt = oidc_jwt_new(pool, FALSE, FALSE);
 	oidc_jwt_t *jwt = *j_jwt;
