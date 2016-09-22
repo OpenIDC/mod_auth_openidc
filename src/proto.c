@@ -54,6 +54,7 @@
 #include <http_request.h>
 
 #include "mod_auth_openidc.h"
+#include "parse.h"
 
 #include <openssl/opensslconf.h>
 #include <openssl/opensslv.h>
@@ -1140,6 +1141,15 @@ apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg,
 	if ((j_href == NULL) || (!json_is_string(j_href))) {
 		oidc_error(r,
 				"response JSON object did not contain a \"href\" element in the first \"links\" array object");
+		json_decref(j_response);
+		return FALSE;
+	}
+
+	/* check that the link is on secure HTTPs */
+	if (oidc_valid_url(r->pool, json_string_value(j_href), "https") != NULL) {
+		oidc_error(r,
+				"response JSON object contains an \"href\" value that is not a valid \"https\" URL: %s",
+				json_string_value(j_href));
 		json_decref(j_response);
 		return FALSE;
 	}
