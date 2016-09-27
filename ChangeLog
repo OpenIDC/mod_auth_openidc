@@ -1,3 +1,7 @@
+9/27/2016
+- add support for Request URI
+- bump to 2.0.1rc1
+
 9/22/2016
 - refuse webfinger responses with an href value that is not on secure https
 - add userinfo JWT response verification and decryption

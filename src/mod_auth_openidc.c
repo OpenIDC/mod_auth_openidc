@@ -2673,6 +2673,31 @@ end:
 }
 
 /*
+ * handle request object by reference request
+ */
+static int oidc_handle_request_uri(request_rec *r, oidc_cfg *c) {
+
+	char *request_ref = NULL;
+	oidc_util_get_request_parameter(r, "request_uri", &request_ref);
+	if (request_ref == NULL) {
+		oidc_error(r, "no \"request_uri\" parameter found");
+		return HTTP_BAD_REQUEST;
+	}
+
+	const char *jwt = NULL;
+	c->cache->get(r, OIDC_CACHE_SECTION_REQUEST_URI, request_ref, &jwt);
+	if (jwt == NULL) {
+		oidc_error(r, "no cached JWT found for request_uri reference: %s",
+				request_ref);
+		return HTTP_NOT_FOUND;
+	}
+
+	c->cache->set(r, OIDC_CACHE_SECTION_REQUEST_URI, request_ref, NULL, 0);
+
+	return oidc_util_http_send(r, jwt, strlen(jwt), " application/jwt", DONE);
+}
+
+/*
  * handle all requests to the redirect_uri
  */
 int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
@@ -2712,6 +2737,11 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 
 		/* handle refresh token request */
 		return oidc_handle_refresh_token_request(r, c, session);
+
+	} else if (oidc_util_request_has_parameter(r, "request_uri")) {
+
+		/* handle request object by reference request */
+		return oidc_handle_request_uri(r, c);
 
 	} else if ((r->args == NULL) || (apr_strnatcmp(r->args, "") == 0)) {
 

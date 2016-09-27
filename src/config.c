@@ -817,6 +817,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->error_template = NULL;
 
 	c->provider.userinfo_refresh_interval = OIDC_DEFAULT_USERINFO_REFRESH_INTERVAL;
+	c->provider.request_object = NULL;
 
 	return c;
 }
@@ -1174,6 +1175,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 				!= OIDC_DEFAULT_USERINFO_REFRESH_INTERVAL ?
 					add->provider.userinfo_refresh_interval :
 					base->provider.userinfo_refresh_interval;
+	c->provider.request_object =
+			add->provider.request_object != NULL ?
+					add->provider.request_object :
+					base->provider.request_object;
 
 	return c;
 }
@@ -2204,5 +2209,10 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_dir_cfg, pass_refresh_token),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Pass the refresh token in a header and/or environment variable (On or Off)"),
+		AP_INIT_TAKE1("OIDCRequestObject",
+				ap_set_string_slot,
+				(void *)APR_OFFSETOF(oidc_cfg, provider.request_object),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"The default request object settings"),
 		{ NULL }
 };

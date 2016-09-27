@@ -1022,8 +1022,10 @@ static char * test_proto_authorization_request(request_rec *r) {
 	provider.authorization_endpoint_url = "https://idp.example.com/authorize";
 	provider.scope = "openid";
 	provider.client_id = "client_id";
+	provider.client_secret = NULL;
 	provider.response_type = "code";
 	provider.auth_request_params = NULL;
+	provider.request_object = NULL;
 	const char *redirect_uri = "https://www.example.com/protected/";
 	const char *state = "12345";
 

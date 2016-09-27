@@ -1027,10 +1027,9 @@ static apr_byte_t oidc_util_check_json_error(request_rec *r, json_t *json) {
 }
 
 /*
- * decode a JSON string, check for "error" results and printout
+ * parse a JSON object
  */
-apr_byte_t oidc_util_decode_json_and_check_error(request_rec *r,
-		const char *str, json_t **json) {
+apr_byte_t oidc_util_decode_json_object(request_rec *r, const char *str, json_t **json) {
 
 	json_error_t json_error;
 	*json = json_loads(str, 0, &json_error);
@@ -1038,7 +1037,7 @@ apr_byte_t oidc_util_decode_json_and_check_error(request_rec *r,
 	/* decode the JSON contents of the buffer */
 	if (*json == NULL) {
 		/* something went wrong */
-		oidc_error(r, "JSON parsing returned an error: %s", json_error.text);
+		oidc_error(r, "JSON parsing returned an error: %s (%s)", json_error.text, str);
 		return FALSE;
 	}
 
@@ -1049,6 +1048,18 @@ apr_byte_t oidc_util_decode_json_and_check_error(request_rec *r,
 		*json = NULL;
 		return FALSE;
 	}
+
+	return TRUE;
+}
+
+/*
+ * decode a JSON string, check for "error" results and printout
+ */
+apr_byte_t oidc_util_decode_json_and_check_error(request_rec *r,
+		const char *str, json_t **json) {
+
+	if (oidc_util_decode_json_object(r, str, json) == FALSE)
+		return FALSE;
 
 	// see if it is not an error response somehow
 	if (oidc_util_check_json_error(r, *json) == TRUE) {

@@ -121,10 +121,28 @@ char *oidc_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt,
 		oidc_jose_error_t *err) {
 	cjose_err cjose_err;
 	const char *cser = NULL;
-	if (cjose_jws_export(jwt->cjose_jws, &cser, &cjose_err) == FALSE) {
-		oidc_jose_error(err, "cjose_jws_export failed: %s",
-				oidc_cjose_e2s(pool, cjose_err));
-		return NULL;
+	if (strcmp(jwt->header.alg, "none") != 0) {
+		if (cjose_jws_export(jwt->cjose_jws, &cser, &cjose_err) == FALSE) {
+			oidc_jose_error(err, "cjose_jws_export failed: %s",
+					oidc_cjose_e2s(pool, cjose_err));
+			return NULL;
+		}
+	} else {
+
+		char *s_payload = json_dumps(jwt->payload.value.json,
+				JSON_PRESERVE_ORDER | JSON_COMPACT);
+
+		char *out = NULL;
+		size_t out_len;
+		if (cjose_base64url_encode((const uint8_t *)s_payload, strlen(s_payload), &out, &out_len,
+				&cjose_err) == FALSE)
+			return FALSE;
+		cser = apr_pstrndup(pool, out, out_len);
+		cjose_get_dealloc()(out);
+
+		free(s_payload);
+
+		cser = apr_psprintf(pool, "eyJhbGciOiJub25lIn0.%s.", cser);
 	}
 	return apr_pstrdup(pool, cser);
 }

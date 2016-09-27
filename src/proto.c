@@ -62,6 +62,226 @@
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 /*
+ * generate a random value (nonce) to correlate request/response through browser state
+ */
+static apr_byte_t oidc_proto_generate_random_string(request_rec *r,
+		char **output, int len) {
+	unsigned char *bytes = apr_pcalloc(r->pool, len);
+	if (apr_generate_random_bytes(bytes, len) != APR_SUCCESS) {
+		oidc_error(r, "apr_generate_random_bytes returned an error");
+		return FALSE;
+	}
+	if (oidc_base64url_encode(r, output, (const char *) bytes, len, TRUE)
+			<= 0) {
+		oidc_error(r, "oidc_base64url_encode returned an error");
+		return FALSE;
+	}
+	return TRUE;
+}
+
+static apr_byte_t oidc_proto_copy_param_from_request(json_t *request_object_config,
+		const char *parameter_name) {
+	json_t *copy_from_request = json_object_get(request_object_config,
+			"copy_from_request");
+	size_t index = 0;
+	while (index < json_array_size(copy_from_request)) {
+		json_t *value = json_array_get(copy_from_request, index);
+		if ((json_is_string(value))
+				&& (apr_strnatcmp(json_string_value(value), parameter_name) == 0)) {
+			return TRUE;
+		}
+		index++;
+	}
+	return FALSE;
+}
+
+static void oidc_proto_copy_from_request(request_rec *r, oidc_jwt_t *request_object, json_t *request_object_config, const char *authorization_request) {
+
+	char *tokenizer_ctx, *p = strstr(authorization_request, "?");
+	char *request = apr_pstrdup(r->pool, ++p);
+
+	oidc_debug(r, "processing request: %s", request);
+
+	p = apr_strtok(request, "&", &tokenizer_ctx);
+	do {
+
+		char *tuple = apr_pstrdup(r->pool, p);
+		oidc_debug(r, "processing tuple: %s", tuple);
+		char *q = strstr(tuple, "=");
+
+		if (q) {
+			*q = '\0';
+			q++;
+			char *name = apr_pstrdup(r->pool,
+					oidc_util_unescape_string(r, tuple));
+			char *value = apr_pstrdup(r->pool, oidc_util_unescape_string(r, q));
+
+			oidc_debug(r, "processing name: %s, value: %s", name, value);
+
+			if (oidc_proto_copy_param_from_request(request_object_config, name)) {
+				json_t *result = NULL;
+				json_error_t json_error;
+				result = json_loads(value, JSON_DECODE_ANY, &json_error);
+				if (result == NULL)
+					// assume string
+					result = json_string(value);
+				if (result) {
+					json_object_set_new(request_object->payload.value.json,
+							name, json_deep_copy(result));
+					json_decref(result);
+				}
+			}
+		}
+
+		p = apr_strtok(NULL, "&", &tokenizer_ctx);
+
+	} while (p);
+}
+
+/*
+ * generate a request object and pass it by reference in the authorization request
+ */
+char *oidc_proto_create_request_uri(request_rec *r,
+		struct oidc_provider_t *provider, json_t *proto_state,
+		const char *redirect_uri, const char *authorization_request) {
+
+	oidc_debug(r, "enter");
+
+	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
+
+	/* parse the request object configuration from a string in to a JSON structure */
+	json_t *request_object_config = NULL;
+	if (oidc_util_decode_json_object(r, provider->request_object,
+			&request_object_config) == FALSE)
+		return FALSE;
+
+	/* see if we need to override the resolver URL, mostly for test purposes */
+	if (json_object_get(request_object_config, "url") != NULL)
+		redirect_uri = json_string_value(json_object_get(request_object_config, "url"));
+
+	/* create the request object value */
+	oidc_jwt_t *request_object = oidc_jwt_new(r->pool, TRUE, TRUE);
+
+	/* set basic values: iss and aud */
+	json_object_set_new(request_object->payload.value.json, "iss",
+			json_string(provider->client_id));
+	json_object_set_new(request_object->payload.value.json, "aud",
+			json_string(provider->issuer));
+
+	/* add static values to the request object as configured in the .conf file; may override iss/aud */
+	oidc_util_json_merge(json_object_get(request_object_config, "static"), request_object->payload.value.json);
+
+	/* copy parameters from the authorization request as configured in the .conf file */
+	oidc_proto_copy_from_request(r, request_object, request_object_config, authorization_request);
+
+	/* debug logging */
+	char *s_json = json_dumps(request_object->payload.value.json, 0);
+	oidc_debug(r, "request object: %s", s_json);
+	free(s_json);
+
+	char *serialized_request_object = NULL;
+	oidc_jose_error_t err;
+
+	/* get the crypto settings from the configuration */
+	json_t *crypto = json_object_get(request_object_config, "crypto");
+	oidc_json_object_get_string(r->pool, crypto, "sign_alg",
+			&request_object->header.alg, "none");
+
+	/* see if we need to sign the request object */
+	if ((strcmp(request_object->header.alg, "none") != 0)
+			&& (provider->client_secret != NULL)) {
+
+		oidc_jwk_t *jwk = NULL;
+		if (oidc_util_create_symmetric_key(r, provider->client_secret, NULL,
+				FALSE, &jwk) == FALSE) {
+			oidc_jwt_destroy(request_object);
+			json_decref(request_object_config);
+			return FALSE;
+		}
+
+		if (oidc_jwt_sign(r->pool, request_object, jwk, &err) == FALSE) {
+			oidc_error(r, "signing Request Object failed: %s",
+					oidc_jose_e2s(r->pool, err));
+			oidc_jwk_destroy(jwk);
+			oidc_jwt_destroy(request_object);
+			json_decref(request_object_config);
+			return FALSE;
+		}
+	}
+
+	oidc_jwt_t *jwe = oidc_jwt_new(r->pool, TRUE, FALSE);
+	if (jwe == NULL) {
+		oidc_error(r, "creating JWE failed");
+		oidc_jwt_destroy(request_object);
+		json_decref(request_object_config);
+		return FALSE;
+	}
+
+	oidc_json_object_get_string(r->pool, crypto, "crypt_alg", &jwe->header.alg,
+			NULL);
+	oidc_json_object_get_string(r->pool, crypto, "crypt_enc", &jwe->header.enc,
+			NULL);
+
+	char *cser = oidc_jwt_serialize(r->pool, request_object, &err);
+
+	/* see if we need to encrypt the request object */
+	if ((jwe->header.alg != NULL) && (provider->client_secret != NULL)) {
+
+		oidc_jwk_t *jwk = NULL;
+		if (oidc_util_create_symmetric_key(r, provider->client_secret, "sha256",
+				FALSE, &jwk) == FALSE) {
+			oidc_jwt_destroy(jwe);
+			oidc_jwt_destroy(request_object);
+			json_decref(request_object_config);
+			return FALSE;
+		}
+
+		if (oidc_jwt_encrypt(r->pool, jwe, jwk, cser,
+				&serialized_request_object, &err) == FALSE) {
+			oidc_error(r, "encrypting JWT failed: %s",
+					oidc_jose_e2s(r->pool, err));
+			oidc_jwk_destroy(jwk);
+			oidc_jwt_destroy(jwe);
+			oidc_jwt_destroy(request_object);
+			json_decref(request_object_config);
+			return FALSE;
+		}
+
+		oidc_jwk_destroy(jwk);
+
+	} else {
+
+		// should be sign only or "none"
+		serialized_request_object = cser;
+	}
+
+	oidc_jwt_destroy(request_object);
+	oidc_jwt_destroy(jwe);
+	json_decref(request_object_config);
+
+	oidc_debug(r, "serialized request object JWT header = \"%s\"",
+			oidc_proto_peek_jwt_header(r, serialized_request_object));
+	oidc_debug(r, "serialized request object = \"%s\"",
+			serialized_request_object);
+
+	/* generate a temporary reference, store the request object in the cache and generate a Request URI that references it */
+	char *request_uri = NULL;
+	if (serialized_request_object != NULL) {
+		char *request_ref = NULL;
+		if (oidc_proto_generate_random_string(r, &request_ref, 16) == TRUE) {
+			cfg->cache->set(r, OIDC_CACHE_SECTION_REQUEST_URI, request_ref,
+					serialized_request_object,
+					apr_time_now() + apr_time_from_sec(OIDC_REQUEST_URI_CACHE_DURATION));
+			request_uri = apr_psprintf(r->pool, "%s?request_uri=%s",
+					redirect_uri, oidc_util_escape_string(r, request_ref));
+		}
+	}
+
+	return request_uri;
+}
+
+/*
  * send an OpenID Connect authorization request to the specified provider
  */
 int oidc_proto_authorization_request(request_rec *r,
@@ -166,6 +386,14 @@ int oidc_proto_authorization_request(request_rec *r,
 				authorization_request, auth_request_params);
 	}
 
+	if (provider->request_object != NULL) {
+		/* add a request uri */
+		char *request_uri = oidc_proto_create_request_uri(r, provider, proto_state, redirect_uri, authorization_request);
+		if (request_uri != NULL)
+			authorization_request = apr_psprintf(r->pool, "%s&request_uri=%s",
+					authorization_request, oidc_util_escape_string(r, request_uri));
+	}
+
 	/* cleanup */
 	json_decref(proto_state);
 
@@ -206,24 +434,6 @@ apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r,
 			&& oidc_util_request_has_parameter(r, "state")
 			&& (oidc_util_request_has_parameter(r, "id_token")
 					|| oidc_util_request_has_parameter(r, "code")));
-}
-
-/*
- * generate a random value (nonce) to correlate request/response through browser state
- */
-static apr_byte_t oidc_proto_generate_random_string(request_rec *r,
-		char **output, int len) {
-	unsigned char *bytes = apr_pcalloc(r->pool, len);
-	if (apr_generate_random_bytes(bytes, len) != APR_SUCCESS) {
-		oidc_error(r, "apr_generate_random_bytes returned an error");
-		return FALSE;
-	}
-	if (oidc_base64url_encode(r, output, (const char *) bytes, len, TRUE)
-			<= 0) {
-		oidc_error(r, "oidc_base64url_encode returned an error");
-		return FALSE;
-	}
-	return TRUE;
 }
 
 /*
@@ -722,13 +932,13 @@ char *oidc_proto_peek_jwt_header(request_rec *r, const char *compact_encoded_jwt
 	char *input = NULL, *result = NULL;
 	char *p = strstr(compact_encoded_jwt, ".");
 	if (p == NULL) {
-		oidc_error(r,
+		oidc_warn(r,
 				"could not parse first element separated by \".\" from input");
 		return NULL;
 	}
 	input = apr_pstrndup(r->pool, compact_encoded_jwt, p - compact_encoded_jwt);
 	if (oidc_base64url_decode(r->pool, &result, input) <= 0) {
-		oidc_error(r, "oidc_base64url_decode returned an error");
+		oidc_warn(r, "oidc_base64url_decode returned an error");
 		return NULL;
 	}
 	return result;
@@ -1043,11 +1253,17 @@ apr_byte_t oidc_user_info_response_validate(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char **response, json_t **claims) {
 
 	oidc_debug(r,
-			"enter: userinfo_signed_response_alg=%s, userinfo_encrypted_response_alg=%s, userinfo_encrypted_response_enc=%s, JWT header=%s",
+			"enter: userinfo_signed_response_alg=%s, userinfo_encrypted_response_alg=%s, userinfo_encrypted_response_enc=%s",
 			provider->userinfo_signed_response_alg,
 			provider->userinfo_encrypted_response_alg,
-			provider->userinfo_encrypted_response_enc,
-			oidc_proto_peek_jwt_header(r, *response));
+			provider->userinfo_encrypted_response_enc);
+
+	if ((provider->userinfo_signed_response_alg != NULL)
+			|| (provider->userinfo_encrypted_response_alg)
+			|| (provider->userinfo_encrypted_response_enc != NULL)) {
+		oidc_debug(r, "JWT header=%s",
+				oidc_proto_peek_jwt_header(r, *response));
+	}
 
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;

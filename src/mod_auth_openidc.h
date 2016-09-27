@@ -203,6 +203,7 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_CACHE_SECTION_JWKS "jwks"
 #define OIDC_CACHE_SECTION_ACCESS_TOKEN "access_token"
 #define OIDC_CACHE_SECTION_PROVIDER "provider"
+#define OIDC_CACHE_SECTION_REQUEST_URI "request_uri"
 
 /* http methods */
 #define OIDC_METHOD_GET       "get"
@@ -215,6 +216,8 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_UNAUTH_PASS         2
 #define OIDC_UNAUTH_RETURN401    3
 #define OIDC_UNAUTH_RETURN410    4
+
+#define OIDC_REQUEST_URI_CACHE_DURATION 30
 
 typedef struct oidc_jwks_uri_t {
 	const char *url;
@@ -262,6 +265,7 @@ typedef struct oidc_provider_t {
 	char *userinfo_signed_response_alg;
 	char *userinfo_encrypted_response_alg;
 	char *userinfo_encrypted_response_enc;
+	char *request_object;
 } oidc_provider_t ;
 
 typedef struct oidc_remote_user_claim_t {
@@ -451,6 +455,7 @@ apr_byte_t oidc_util_http_post_json(request_rec *r, const char *url, const json_
 apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url);
 apr_byte_t oidc_util_request_has_parameter(request_rec *r, const char* param);
 apr_byte_t oidc_util_get_request_parameter(request_rec *r, char *name, char **value);
+apr_byte_t oidc_util_decode_json_object(request_rec *r, const char *str, json_t **json);
 apr_byte_t oidc_util_decode_json_and_check_error(request_rec *r, const char *str, json_t **json);
 int oidc_util_http_send(request_rec *r, const char *data, int data_len, const char *content_type, int success_rvalue);
 int oidc_util_html_send(request_rec *r, const char *title, const char *html_head, const char *on_load, const char *html_body, int status_code);

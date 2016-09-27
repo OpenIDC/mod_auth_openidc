@@ -165,25 +165,7 @@ static apr_byte_t oidc_metadata_file_read_json(request_rec *r, const char *path,
 		return FALSE;
 
 	/* decode the JSON contents of the buffer */
-	json_error_t json_error;
-	*result = json_loads(buf, 0, &json_error);
-
-	if (*result == NULL) {
-		/* something went wrong */
-		oidc_error(r, "JSON parsing (%s) returned an error: %s", path,
-				json_error.text);
-		return FALSE;
-	}
-
-	if (!json_is_object(*result)) {
-		/* oops, no JSON */
-		oidc_error(r, "parsed JSON from (%s) did not contain a JSON object",
-				path);
-		json_decref(*result);
-		return FALSE;
-	}
-
-	return TRUE;
+	return oidc_util_decode_json_object(r, buf, result);
 }
 
 /*
@@ -561,31 +543,14 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 				json_pack("[s]", cfg->default_slo_url));
 	}
 
+	/* add any custom JSON in to the registration request */
 	if (provider->registration_endpoint_json != NULL) {
-
-		json_error_t json_error;
-		json_t *json = json_loads(provider->registration_endpoint_json, 0,
-				&json_error);
-
-		if (json == NULL) {
-
-			oidc_error(r, "JSON parsing returned an error: %s",
-					json_error.text);
-
-		} else {
-
-			if (!json_is_object(json)) {
-
-				oidc_error(r, "parsed JSON did not contain a JSON object");
-
-			} else {
-
-				oidc_util_json_merge(json, data);
-
-			}
-
-			json_decref(json);
-		}
+		json_t *json = NULL;
+		if (oidc_util_decode_json_object(r, provider->registration_endpoint_json,
+				&json) == FALSE)
+			return FALSE;
+		oidc_util_json_merge(json, data);
+		json_decref(json);
 	}
 
 	/* dynamically register the client with the specified parameters */
@@ -1144,6 +1109,9 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 			"token_endpoint_tls_client_key",
 			&provider->token_endpoint_tls_client_key,
 			cfg->provider.token_endpoint_tls_client_key);
+
+	oidc_json_object_get_string(r->pool, j_conf, "request_object",
+			&provider->request_object, cfg->provider.request_object);
 
 	return TRUE;
 }
