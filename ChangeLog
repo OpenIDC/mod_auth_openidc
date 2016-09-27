@@ -1,5 +1,5 @@
 9/27/2016
-- add support for Request URI
+- add support for Request URI with signed and/or encrypted Request Objects
 - bump to 2.0.1rc1
 
 9/22/2016

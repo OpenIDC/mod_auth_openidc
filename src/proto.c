@@ -138,6 +138,59 @@ static void oidc_proto_copy_from_request(request_rec *r, oidc_jwt_t *request_obj
 	} while (p);
 }
 
+apr_byte_t oidc_proto_get_encryption_jwk_by_type(request_rec *r, oidc_cfg *cfg,
+		struct oidc_provider_t *provider, int key_type, oidc_jwk_t **jwk) {
+
+	oidc_jwks_uri_t jwks_uri = { provider->jwks_uri,
+			provider->jwks_refresh_interval, provider->ssl_validate_server };
+
+	oidc_jose_error_t err;
+	json_t *j_jwks = NULL;
+	apr_byte_t force_refresh = TRUE;
+	oidc_jwk_t *key = NULL;
+	char *jwk_json = NULL;
+
+	oidc_metadata_jwks_get(r, cfg, &jwks_uri, &j_jwks, &force_refresh);
+
+	if (j_jwks == NULL) {
+		oidc_error(r, "could not retrieve JSON Web Keys");
+		return FALSE;
+	}
+
+	json_t *keys = json_object_get(j_jwks, "keys");
+	if ((keys == NULL) || !(json_is_array(keys))) {
+		oidc_error(r, "\"keys\" array element is not a JSON array");
+		return FALSE;
+	}
+
+	int i;
+	for (i = 0; i < json_array_size(keys); i++) {
+
+		json_t *elem = json_array_get(keys, i);
+
+		const char *use = json_string_value(json_object_get(elem, "use"));
+		if ((use != NULL) && (strcmp(use, "enc") != 0)) {
+			oidc_debug(r, "skipping key because of non-matching \"use\": \"%s\"", use);
+			continue;
+		}
+
+		if (oidc_jwk_parse_json(r->pool, elem, &key, &err) == FALSE) {
+			oidc_warn(r, "oidc_jwk_parse_json failed: %s",
+					oidc_jose_e2s(r->pool, err));
+			continue;
+		}
+
+		if (key_type == key->kty) {
+			oidc_jwk_to_json(r->pool, key, &jwk_json, &err);
+			oidc_debug(r, "found matching encryption key type for key: %s", jwk_json);
+			*jwk = key;
+			break;
+		}
+	}
+
+	return (*jwk != NULL);
+}
+
 /*
  * generate a request object and pass it by reference in the authorization request
  */
@@ -189,12 +242,34 @@ char *oidc_proto_create_request_uri(request_rec *r,
 			&request_object->header.alg, "none");
 
 	/* see if we need to sign the request object */
-	if ((strcmp(request_object->header.alg, "none") != 0)
-			&& (provider->client_secret != NULL)) {
+	if (strcmp(request_object->header.alg, "none") != 0) {
 
 		oidc_jwk_t *jwk = NULL;
-		if (oidc_util_create_symmetric_key(r, provider->client_secret, NULL,
-				FALSE, &jwk) == FALSE) {
+		int jwk_needs_destroy = 0;
+
+		switch (oidc_jwt_alg2kty(request_object)) {
+			case CJOSE_JWK_KTY_RSA:
+				if (cfg->private_keys != NULL) {
+					apr_ssize_t klen = 0;
+					apr_hash_index_t *hi = apr_hash_first(r->pool,
+							cfg->private_keys);
+					apr_hash_this(hi, (const void **) &request_object->header.kid, &klen,
+							(void **) &jwk);
+				} else {
+					oidc_error(r,
+							"no private keys have been configured to use for private_key_jwt client authentication (OIDCPrivateKeyFiles)");
+				}
+				break;
+			case CJOSE_JWK_KTY_OCT:
+				oidc_util_create_symmetric_key(r, provider->client_secret, NULL, FALSE, &jwk);
+				jwk_needs_destroy = 1;
+				break;
+			default:
+				oidc_error(r, "unsupported signing algorithm, no key type for algorithm: %s", request_object->header.alg);
+				break;
+		}
+
+		if (jwk == NULL) {
 			oidc_jwt_destroy(request_object);
 			json_decref(request_object_config);
 			return FALSE;
@@ -203,11 +278,15 @@ char *oidc_proto_create_request_uri(request_rec *r,
 		if (oidc_jwt_sign(r->pool, request_object, jwk, &err) == FALSE) {
 			oidc_error(r, "signing Request Object failed: %s",
 					oidc_jose_e2s(r->pool, err));
-			oidc_jwk_destroy(jwk);
+			if (jwk_needs_destroy)
+				oidc_jwk_destroy(jwk);
 			oidc_jwt_destroy(request_object);
 			json_decref(request_object_config);
 			return FALSE;
 		}
+
+		if (jwk_needs_destroy)
+			oidc_jwk_destroy(jwk);
 	}
 
 	oidc_jwt_t *jwe = oidc_jwt_new(r->pool, TRUE, FALSE);
@@ -229,8 +308,20 @@ char *oidc_proto_create_request_uri(request_rec *r,
 	if ((jwe->header.alg != NULL) && (provider->client_secret != NULL)) {
 
 		oidc_jwk_t *jwk = NULL;
-		if (oidc_util_create_symmetric_key(r, provider->client_secret, "sha256",
-				FALSE, &jwk) == FALSE) {
+
+		switch (oidc_jwt_alg2kty(jwe)) {
+			case CJOSE_JWK_KTY_RSA:
+				oidc_proto_get_encryption_jwk_by_type(r, cfg, provider, CJOSE_JWK_KTY_RSA, &jwk);
+				break;
+			case CJOSE_JWK_KTY_OCT:
+				oidc_util_create_symmetric_key(r, provider->client_secret, "sha256", FALSE, &jwk);
+				break;
+			default:
+				oidc_error(r, "unsupported encryption algorithm, no key type for algorithm: %s", request_object->header.alg);
+				break;
+		}
+
+		if (jwk == NULL) {
 			oidc_jwt_destroy(jwe);
 			oidc_jwt_destroy(request_object);
 			json_decref(request_object_config);
@@ -1277,7 +1368,7 @@ apr_byte_t oidc_user_info_response_validate(request_rec *r, oidc_cfg *cfg,
 	if (provider->userinfo_encrypted_response_alg != NULL) {
 		if (oidc_jwe_decrypt(r->pool, *response,
 				oidc_util_merge_symmetric_key(r->pool, cfg->private_keys, jwk),
-				&payload, &err) == FALSE) {
+				&payload, &err, TRUE) == FALSE) {
 			oidc_error(r, "oidc_jwe_decrypt failed: %s",
 					oidc_jose_e2s(r->pool, err));
 			oidc_jwk_destroy(jwk);

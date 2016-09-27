@@ -161,6 +161,10 @@ int oidc_jwt_alg2kty(oidc_jwt_t *jwt) {
 	if (strncmp(jwt->header.alg, "ES", 2) == 0)
 		return CJOSE_JWK_KTY_EC;
 #endif
+	if ((strcmp(jwt->header.alg, CJOSE_HDR_ALG_A128KW) == 0) || (strcmp(jwt->header.alg, CJOSE_HDR_ALG_A192KW) == 0) || (strcmp(jwt->header.alg, CJOSE_HDR_ALG_A256KW) == 0))
+		return CJOSE_JWK_KTY_OCT;
+	if ((strcmp(jwt->header.alg, CJOSE_HDR_ALG_RSA1_5) == 0) || (strcmp(jwt->header.alg, CJOSE_HDR_ALG_RSA_OAEP) == 0))
+		return CJOSE_JWK_KTY_RSA;
 	return -1;
 }
 
@@ -630,7 +634,7 @@ static uint8_t *oidc_jwe_decrypt_impl(apr_pool_t *pool, cjose_jwe_t *jwe,
  * decrypt a JSON Web Token
  */
 apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json,
-		apr_hash_t *keys, char **s_json, oidc_jose_error_t *err) {
+		apr_hash_t *keys, char **s_json, oidc_jose_error_t *err, apr_byte_t import_must_succeed) {
 	cjose_err cjose_err;
 	cjose_jwe_t *jwe = cjose_jwe_import(input_json, strlen(input_json),
 			&cjose_err);
@@ -644,6 +648,8 @@ apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json,
 			cjose_get_dealloc()(decrypted);
 		}
 		cjose_jwe_release(jwe);
+	} else if (import_must_succeed == FALSE) {
+		*s_json = apr_pstrdup(pool, input_json);
 	} else {
 		oidc_jose_error(err, "cjose_jwe_import failed: %s",
 				oidc_cjose_e2s(pool, cjose_err));
@@ -660,8 +666,8 @@ apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json,
 	cjose_err cjose_err;
 	char *s_json = NULL;
 
-	if (oidc_jwe_decrypt(pool, input_json, keys, &s_json, err) == FALSE)
-		s_json = apr_pstrdup(pool, input_json);
+	if (oidc_jwe_decrypt(pool, input_json, keys, &s_json, err, FALSE) == FALSE)
+		return FALSE;
 
 	*j_jwt = oidc_jwt_new(pool, FALSE, FALSE);
 	oidc_jwt_t *jwt = *j_jwt;

@@ -144,7 +144,7 @@ typedef struct oidc_jwk_t {
 
 /* decrypt a JWT */
 apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json,
-		apr_hash_t *keys, char **s_json, oidc_jose_error_t *err);
+		apr_hash_t *keys, char **s_json, oidc_jose_error_t *err, apr_byte_t import_must_succeed);
 /* parse a JSON string to a JWK struct */
 oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, const char *s_json,
 		oidc_jose_error_t *err);
