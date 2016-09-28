@@ -186,6 +186,8 @@ apr_byte_t oidc_proto_get_encryption_jwk_by_type(request_rec *r, oidc_cfg *cfg,
 			*jwk = key;
 			break;
 		}
+
+		oidc_jwk_destroy(key);
 	}
 
 	return (*jwk != NULL);
@@ -210,8 +212,11 @@ char *oidc_proto_create_request_uri(request_rec *r,
 		return FALSE;
 
 	/* see if we need to override the resolver URL, mostly for test purposes */
+	char *resolver_url = NULL;
 	if (json_object_get(request_object_config, "url") != NULL)
-		redirect_uri = json_string_value(json_object_get(request_object_config, "url"));
+		resolver_url = apr_pstrdup(r->pool, json_string_value(json_object_get(request_object_config, "url")));
+	else
+		resolver_url = apr_pstrdup(r->pool, redirect_uri);
 
 	/* create the request object value */
 	oidc_jwt_t *request_object = oidc_jwt_new(r->pool, TRUE, TRUE);
@@ -365,7 +370,7 @@ char *oidc_proto_create_request_uri(request_rec *r,
 					serialized_request_object,
 					apr_time_now() + apr_time_from_sec(OIDC_REQUEST_URI_CACHE_DURATION));
 			request_uri = apr_psprintf(r->pool, "%s?request_uri=%s",
-					redirect_uri, oidc_util_escape_string(r, request_ref));
+					resolver_url, oidc_util_escape_string(r, request_ref));
 		}
 	}
 
