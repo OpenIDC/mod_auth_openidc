@@ -2698,6 +2698,25 @@ static int oidc_handle_request_uri(request_rec *r, oidc_cfg *c) {
 }
 
 /*
+ * handle a request to invalidate a cached access token introspection result
+ */
+static int oidc_handle_remove_at_cache(request_rec *r, oidc_cfg *c) {
+	char *access_token = NULL;
+	oidc_util_get_request_parameter(r, "remove_at_cache", &access_token);
+
+	const char *cache_entry = NULL;
+	c->cache->get(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, access_token, &cache_entry);
+	if (cache_entry == NULL) {
+		oidc_error(r, "no cached access token found for value: %s", access_token);
+		return HTTP_NOT_FOUND;
+	}
+
+	c->cache->set(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, access_token, NULL, 0);
+
+	return DONE;
+}
+
+/*
  * handle all requests to the redirect_uri
  */
 int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
@@ -2742,6 +2761,11 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 
 		/* handle request object by reference request */
 		return oidc_handle_request_uri(r, c);
+
+	} else if (oidc_util_request_has_parameter(r, "remove_at_cache")) {
+
+		/* handle request to invalidate access token cache */
+		return oidc_handle_remove_at_cache(r, c);
 
 	} else if ((r->args == NULL) || (apr_strnatcmp(r->args, "") == 0)) {
 
