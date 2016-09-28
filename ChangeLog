@@ -1,3 +1,6 @@
+9/28/2016
+- fix memory leak in oidc_jwk_to_json
+
 9/27/2016
 - add support for Request URI with signed and/or encrypted Request Objects
 - bump to 2.0.1rc1
