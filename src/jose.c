@@ -306,6 +306,7 @@ apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, oidc_jwk_t *jwk, char **s_json,
 		return FALSE;
 	}
 	*s_json = apr_pstrdup(pool, s);
+	free(s);
 	return TRUE;
 }
 
