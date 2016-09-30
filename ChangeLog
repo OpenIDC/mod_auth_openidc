@@ -1,3 +1,6 @@
+9/30/2016
+- support WebFinger Discovery with URL-style user identifiers
+
 9/28/2016
 - fix memory leak in oidc_jwk_to_json
 - add "remove_at_cache" hook; addresses #177

@@ -339,7 +339,8 @@ static apr_byte_t oidc_is_discovery_response(request_rec *r, oidc_cfg *cfg) {
 	 * prereq: this is a call to the configured redirect_uri, now see if:
 	 * the OIDC_DISC_OP_PARAM is present
 	 */
-	return oidc_util_request_has_parameter(r, OIDC_DISC_OP_PARAM);
+	return oidc_util_request_has_parameter(r, OIDC_DISC_OP_PARAM)
+			|| oidc_util_request_has_parameter(r, OIDC_DISC_USER_PARAM);
 }
 
 /*
@@ -2146,10 +2147,12 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 
 	/* variables to hold the values returned in the response */
 	char *issuer = NULL, *target_link_uri = NULL, *login_hint = NULL,
-			*auth_request_params = NULL, *csrf_cookie, *csrf_query = NULL;
+			*auth_request_params = NULL, *csrf_cookie, *csrf_query = NULL,
+			*user = NULL;
 	oidc_provider_t *provider = NULL;
 
 	oidc_util_get_request_parameter(r, OIDC_DISC_OP_PARAM, &issuer);
+	oidc_util_get_request_parameter(r, OIDC_DISC_USER_PARAM, &user);
 	oidc_util_get_request_parameter(r, OIDC_DISC_RT_PARAM, &target_link_uri);
 	oidc_util_get_request_parameter(r, OIDC_DISC_LH_PARAM, &login_hint);
 	oidc_util_get_request_parameter(r, OIDC_DISC_AR_PARAM,
@@ -2174,15 +2177,9 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 
 	// TODO: trim issuer/accountname/domain input and do more input validation
 
-	oidc_debug(r, "issuer=\"%s\", target_link_uri=\"%s\", login_hint=\"%s\"",
-			issuer, target_link_uri, login_hint);
-
-	if (issuer == NULL) {
-		return oidc_util_html_send_error(r, c->error_template,
-				"Invalid Request",
-				"Wherever you came from, it sent you here with the wrong parameters...",
-				HTTP_INTERNAL_SERVER_ERROR);
-	}
+	oidc_debug(r,
+			"issuer=\"%s\", target_link_uri=\"%s\", login_hint=\"%s\", user=\"%s\"",
+			issuer, target_link_uri, login_hint, user);
 
 	if (target_link_uri == NULL) {
 		if (c->default_sso_url == NULL) {
@@ -2204,7 +2201,28 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 	}
 
 	/* find out if the user entered an account name or selected an OP manually */
-	if (strstr(issuer, "@") != NULL) {
+	if (user != NULL) {
+
+		if (login_hint == NULL)
+			login_hint = apr_pstrdup(r->pool, user);
+
+		/* normalize the user identifier */
+		if (strstr(user, "https://") != user)
+			user = apr_psprintf(r->pool, "https://%s", user);
+
+		/* got an user identifier as input, perform OP discovery with that */
+		if (oidc_proto_url_based_discovery(r, c, user, &issuer) == FALSE) {
+
+			/* something did not work out, show a user facing error */
+			return oidc_util_html_send_error(r, c->error_template,
+					"Invalid Request",
+					"Could not resolve the provided user identifier to an OpenID Connect provider; check your syntax.",
+					HTTP_NOT_FOUND);
+		}
+
+		/* issuer is set now, so let's continue as planned */
+
+	} else if (strstr(issuer, "@") != NULL) {
 
 		if (login_hint == NULL) {
 			login_hint = apr_pstrdup(r->pool, issuer);

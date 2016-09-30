@@ -125,6 +125,8 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_DISC_CB_PARAM "oidc_callback"
 /* parameter name of the OP provider selection in the discovery response */
 #define OIDC_DISC_OP_PARAM "iss"
+/* parameter name of the user URL in the discovery response */
+#define OIDC_DISC_USER_PARAM "disc_user"
 /* parameter name of the original URL in the discovery response */
 #define OIDC_DISC_RT_PARAM "target_link_uri"
 /* parameter name of the original method in the discovery response */
@@ -388,6 +390,7 @@ apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r, oidc_cf
 apr_byte_t oidc_proto_refresh_request(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *rtoken, char **id_token, char **access_token, char **token_type, int *expires_in, char **refresh_token);
 apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *id_token_sub, const char *access_token, const char **response);
 apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg, const char *acct, char **issuer);
+apr_byte_t oidc_proto_url_based_discovery(request_rec *r, oidc_cfg *cfg, const char *url, char **issuer);
 apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *id_token, const char *nonce, oidc_jwt_t **jwt, apr_byte_t is_code_flow);
 int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg *c);
 apr_array_header_t *oidc_proto_supported_flows(apr_pool_t *pool);

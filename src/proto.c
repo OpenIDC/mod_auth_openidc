@@ -1472,22 +1472,11 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 }
 
 /*
- * based on an account name, perform OpenID Connect Provider Issuer Discovery to find out the issuer and obtain and store its metadata
+ * based on a resource perform OpenID Connect Provider Issuer Discovery to find out the issuer and obtain and store its metadata
  */
-apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg,
-		const char *acct, char **issuer) {
+static apr_byte_t oidc_proto_webfinger_discovery(request_rec *r, oidc_cfg *cfg,
+		const char *resource, const char *domain, char **issuer) {
 
-	// TODO: maybe show intermediate/progress screen "discovering..."
-
-	oidc_debug(r, "enter, acct=%s", acct);
-
-	const char *resource = apr_psprintf(r->pool, "acct:%s", acct);
-	const char *domain = strrchr(acct, '@');
-	if (domain == NULL) {
-		oidc_error(r, "invalid account name");
-		return FALSE;
-	}
-	domain++;
 	const char *url = apr_psprintf(r->pool, "https://%s/.well-known/webfinger",
 			domain);
 
@@ -1547,12 +1536,51 @@ apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg,
 	*issuer = apr_pstrdup(r->pool, json_string_value(j_href));
 
 	oidc_debug(r,
-			"returning issuer \"%s\" for account \"%s\" after doing successful webfinger-based discovery",
-			*issuer, acct);
+			"returning issuer \"%s\" for resource \"%s\" after doing successful webfinger-based discovery",
+			*issuer, resource);
 
 	json_decref(j_response);
 
 	return TRUE;
+}
+
+/*
+ * based on an account name, perform OpenID Connect Provider Issuer Discovery to find out the issuer and obtain and store its metadata
+ */
+apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg,
+		const char *acct, char **issuer) {
+
+	// TODO: maybe show intermediate/progress screen "discovering..."
+
+	oidc_debug(r, "enter, acct=%s", acct);
+
+	const char *resource = apr_psprintf(r->pool, "acct:%s", acct);
+	const char *domain = strrchr(acct, '@');
+	if (domain == NULL) {
+		oidc_error(r, "invalid account name");
+		return FALSE;
+	}
+	domain++;
+
+	return oidc_proto_webfinger_discovery(r, cfg, resource, domain, issuer);
+}
+
+/*
+ * based on user identifier URL, perform OpenID Connect Provider Issuer Discovery to find out the issuer and obtain and store its metadata
+ */
+apr_byte_t oidc_proto_url_based_discovery(request_rec *r, oidc_cfg *cfg,
+		const char *url, char **issuer) {
+
+	oidc_debug(r, "enter, url=%s", url);
+
+	apr_uri_t uri;
+	apr_uri_parse(r->pool, url, &uri);
+
+	char *domain = uri.hostname;
+	if (uri.port_str != NULL)
+		domain = apr_psprintf(r->pool, "%s:%s", domain, uri.port_str);
+
+	return oidc_proto_webfinger_discovery(r, cfg, url, domain, issuer);
 }
 
 int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg *c) {
