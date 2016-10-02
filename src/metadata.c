@@ -1113,6 +1113,17 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 	oidc_json_object_get_string(r->pool, j_conf, "request_object",
 			&provider->request_object, cfg->provider.request_object);
 
+	/* see if we've got a custom userinfo endpoint token presentation method */
+	char *method = NULL;
+	oidc_metadata_get_valid_string(r, j_conf, "userinfo_token_method",
+			oidc_valid_userinfo_token_method, &method,
+			NULL);
+	if (method != NULL)
+		oidc_parse_userinfo_token_method(r->pool, method,
+				&provider->userinfo_token_method);
+	else
+		provider->userinfo_token_method = OIDC_USER_INFO_TOKEN_METHOD_HEADER;
+
 	return TRUE;
 }
 

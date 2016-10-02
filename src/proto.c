@@ -1441,20 +1441,37 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 			provider->userinfo_endpoint_url, access_token);
 
 	/* get the JSON response */
-	if (oidc_util_http_get(r, provider->userinfo_endpoint_url,
-			NULL, NULL, access_token, provider->ssl_validate_server, response,
-			cfg->http_timeout_long, cfg->outgoing_proxy,
-			oidc_dir_cfg_pass_cookies(r), NULL, NULL) == FALSE)
+	if (provider->userinfo_token_method == OIDC_USER_INFO_TOKEN_METHOD_HEADER) {
+		if (oidc_util_http_get(r, provider->userinfo_endpoint_url,
+				NULL, NULL, access_token, provider->ssl_validate_server, response,
+				cfg->http_timeout_long, cfg->outgoing_proxy,
+				oidc_dir_cfg_pass_cookies(r), NULL, NULL) == FALSE)
+			return FALSE;
+	} else if (provider->userinfo_token_method
+			== OIDC_USER_INFO_TOKEN_METHOD_POST) {
+		apr_table_t *params = apr_table_make(r->pool, 4);
+		apr_table_addn(params, "access_token", access_token);
+		if (oidc_util_http_post_form(r, provider->userinfo_endpoint_url, params,
+				NULL, access_token, provider->ssl_validate_server, response,
+				cfg->http_timeout_long, cfg->outgoing_proxy,
+				oidc_dir_cfg_pass_cookies(r), NULL, NULL) == FALSE)
+			return FALSE;
+	} else {
+		oidc_error(r, "unsupported userinfo token presentation method: %d",
+				provider->userinfo_token_method);
 		return FALSE;
+	}
 
 	json_t *claims = NULL;
-	if (oidc_user_info_response_validate(r, cfg, provider, response, &claims) == FALSE)
+	if (oidc_user_info_response_validate(r, cfg, provider, response,
+			&claims) == FALSE)
 		return FALSE;
 
 	char *user_info_sub = NULL;
 	oidc_jose_get_string(r->pool, claims, "sub", FALSE, &user_info_sub, NULL);
 
-	oidc_debug(r, "id_token_sub=%s, user_info_sub=%s", id_token_sub, user_info_sub);
+	oidc_debug(r, "id_token_sub=%s, user_info_sub=%s", id_token_sub,
+			user_info_sub);
 
 	if ((id_token_sub != NULL) && (user_info_sub != NULL)) {
 		if (apr_strnatcmp(id_token_sub, user_info_sub) != 0) {

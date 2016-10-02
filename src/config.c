@@ -414,6 +414,18 @@ static const char *oidc_set_encrypted_response_enc(cmd_parms *cmd,
 }
 
 /*
+ * set the userinfo endpoint token presentation method
+ */
+static const char *oidc_set_userinfo_token_method(cmd_parms *cmd,
+		void *struct_ptr, const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+	const char *rv = oidc_parse_userinfo_token_method(cmd->pool, arg,
+			&cfg->provider.userinfo_token_method);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
+/*
  * set the session inactivity timeout
  */
 static const char *oidc_set_session_inactivity_timeout(cmd_parms *cmd,
@@ -751,6 +763,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->provider.userinfo_signed_response_alg = NULL;
 	c->provider.userinfo_encrypted_response_alg = NULL;
 	c->provider.userinfo_encrypted_response_enc = NULL;
+	c->provider.userinfo_token_method = OIDC_USER_INFO_TOKEN_METHOD_HEADER;
 
 	c->oauth.ssl_validate_server = OIDC_DEFAULT_SSL_VALIDATE_SERVER;
 	c->oauth.client_id = NULL;
@@ -983,6 +996,11 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->provider.userinfo_encrypted_response_enc != NULL ?
 					add->provider.userinfo_encrypted_response_enc :
 					base->provider.userinfo_encrypted_response_enc;
+	c->provider.userinfo_token_method =
+			add->provider.userinfo_token_method
+				!= OIDC_USER_INFO_TOKEN_METHOD_HEADER ?
+					add->provider.userinfo_token_method :
+					base->provider.userinfo_token_method;
 
 	c->oauth.ssl_validate_server =
 			add->oauth.ssl_validate_server != OIDC_DEFAULT_SSL_VALIDATE_SERVER ?
@@ -1877,6 +1895,11 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, provider.userinfo_encrypted_response_enc),
 				RSRC_CONF,
 				"The algorithm that the OP should use to encrypt to encrypt the UserInfo response with the Content Encryption Key (used only in dynamic client registration); must be one of [A128CBC-HS256|A256CBC-HS512|A128GCM|A192GCM|A256GCM]"),
+		AP_INIT_TAKE1("OIDCUserInfoTokenMethod",
+				oidc_set_userinfo_token_method,
+				(void *)APR_OFFSETOF(oidc_cfg, provider.userinfo_token_method),
+				RSRC_CONF,
+				"The method that is used to present the access token to the userinfo endpoint; must be one of [authz_header|post_param]"),
 
 		AP_INIT_TAKE1("OIDCSSLValidateServer",
 				oidc_set_ssl_validate_slot,

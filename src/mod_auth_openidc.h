@@ -221,6 +221,9 @@ APLOG_USE_MODULE(auth_openidc);
 
 #define OIDC_REQUEST_URI_CACHE_DURATION 30
 
+#define OIDC_USER_INFO_TOKEN_METHOD_HEADER 0
+#define OIDC_USER_INFO_TOKEN_METHOD_POST   1
+
 typedef struct oidc_jwks_uri_t {
 	const char *url;
 	int refresh_interval;
@@ -267,6 +270,7 @@ typedef struct oidc_provider_t {
 	char *userinfo_signed_response_alg;
 	char *userinfo_encrypted_response_alg;
 	char *userinfo_encrypted_response_enc;
+	int userinfo_token_method;
 	char *request_object;
 } oidc_provider_t ;
 

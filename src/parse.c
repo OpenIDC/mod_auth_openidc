@@ -970,3 +970,33 @@ const char *oidc_parse_userinfo_refresh_interval(apr_pool_t *pool,
 			oidc_valid_userinfo_refresh_interval);
 }
 
+#define OIDC_USER_INFO_TOKEN_METHOD_HEADER_STR "authz_header"
+#define OIDC_USER_INFO_TOKEN_METHOD_POST_STR   "post_param"
+
+/*
+ * check if the provided string is a valid userinfo token presentation method
+ */
+const char *oidc_valid_userinfo_token_method(apr_pool_t *pool, const char *arg) {
+	static char *options[] = {
+			OIDC_USER_INFO_TOKEN_METHOD_HEADER_STR,
+			OIDC_USER_INFO_TOKEN_METHOD_POST_STR,
+			NULL };
+	return oidc_valid_string_option(pool, arg, options);
+}
+
+/*
+ * parse a userinfo token method string value to an integer
+ */
+const char *oidc_parse_userinfo_token_method(apr_pool_t *pool, const char *arg,
+		int *int_value) {
+	const char *rv = oidc_valid_userinfo_token_method(pool, arg);
+	if (rv != NULL)
+		return rv;
+
+	if (apr_strnatcmp(arg, OIDC_USER_INFO_TOKEN_METHOD_HEADER_STR) == 0)
+		*int_value = OIDC_USER_INFO_TOKEN_METHOD_HEADER;
+	if (apr_strnatcmp(arg, OIDC_USER_INFO_TOKEN_METHOD_POST_STR) == 0)
+		*int_value = OIDC_USER_INFO_TOKEN_METHOD_POST;
+
+	return NULL;
+}

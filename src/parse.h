@@ -77,6 +77,7 @@ const char *oidc_valid_session_max_duration(apr_pool_t *pool,  int v);
 const char *oidc_valid_jwks_refresh_interval(apr_pool_t *pool, int v);
 const char *oidc_valid_idtoken_iat_slack(apr_pool_t *pool, int v);
 const char *oidc_valid_userinfo_refresh_interval(apr_pool_t *pool, int v);
+const char *oidc_valid_userinfo_token_method(apr_pool_t *pool, const char *arg);
 
 const char *oidc_parse_int(apr_pool_t *pool, const char *arg, int *int_value);
 const char *oidc_parse_boolean(apr_pool_t *pool, const char *arg, int *bool_value);
@@ -96,6 +97,7 @@ const char *oidc_parse_unauth_action(apr_pool_t *pool, const char *arg, int *act
 const char *oidc_parse_jwks_refresh_interval(apr_pool_t *pool, const char *arg, int *int_value);
 const char *oidc_parse_idtoken_iat_slack(apr_pool_t *pool, const char *arg, int *int_value);
 const char *oidc_parse_userinfo_refresh_interval(apr_pool_t *pool, const char *arg, int *int_value);
+const char *oidc_parse_userinfo_token_method(apr_pool_t *pool, const char *arg, int *int_value);
 
 typedef const char *(*oidc_valid_int_function_t)(apr_pool_t *, int);
 typedef const char *(*oidc_valid_function_t)(apr_pool_t *, const char *);
