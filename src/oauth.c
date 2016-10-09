@@ -111,6 +111,8 @@ static apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 	const char *cookie_name = oidc_cfg_dir_accept_token_in_option(r,
 			OIDC_OAUTH_ACCEPT_TOKEN_IN_OPTION_COOKIE_NAME);
 
+	oidc_debug(r, "accept_token_in=%d", accept_token_in);
+
 	*access_token = NULL;
 
 	if ((accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER)

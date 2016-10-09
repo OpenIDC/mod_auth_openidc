@@ -763,7 +763,10 @@ const char *oidc_parse_accept_oauth_token_in(apr_pool_t *pool, const char *arg,
 		return rv;
 
 	int v = oidc_parse_oauth_accept_token_in_str2byte(s);
-	*b_value |= v;
+	if (*b_value == OIDC_CONFIG_POS_INT_UNSET)
+		*b_value = v;
+	else
+		*b_value |= v;
 
 	return NULL;
 }

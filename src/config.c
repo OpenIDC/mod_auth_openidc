@@ -1201,10 +1201,6 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	return c;
 }
 
-#define OIDC_CONFIG_STRING_UNSET  "_UNSET_"
-#define OIDC_CONFIG_STRING_EMPTY  ""
-#define OIDC_CONFIG_POS_INT_UNSET -1
-
 /*
  * create a new directory config record with defaults
  */

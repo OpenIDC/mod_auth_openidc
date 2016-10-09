@@ -55,6 +55,10 @@
 
 #include "apr_pools.h"
 
+#define OIDC_CONFIG_STRING_UNSET  "_UNSET_"
+#define OIDC_CONFIG_STRING_EMPTY  ""
+#define OIDC_CONFIG_POS_INT_UNSET -1
+
 #define OIDC_CLAIM_FORMAT_RELATIVE    "relative"
 #define OIDC_CLAIM_FORMAT_ABSOLUTE    "absolute"
 #define OIDC_CLAIM_REQUIRED_MANDATORY "mandatory"
