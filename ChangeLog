@@ -1,3 +1,6 @@
+10/9/2016
+- fix null pointer segfault in debug printout in oidc_util_read_form_encoded_params
+
 10/2/2016
 - support presenting the access token to the userinfo endpoint in a POST parameter
 - bump to 2.0.1rc3

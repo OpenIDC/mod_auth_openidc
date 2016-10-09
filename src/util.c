@@ -1226,7 +1226,7 @@ apr_byte_t oidc_util_read_form_encoded_params(request_rec *r,
 	}
 
 	oidc_debug(r, "parsed: %lu bytes in to %d elements",
-			(unsigned long )strlen(data), apr_table_elts(table)->nelts);
+			data ? (unsigned long )strlen(data) : 0 , apr_table_elts(table)->nelts);
 
 	return TRUE;
 }
