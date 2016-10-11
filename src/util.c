@@ -640,6 +640,10 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 		goto out;
 	}
 
+	long response_code;
+	curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+	oidc_debug(r, "HTTP response code=%ld", response_code);
+
 	*response = apr_pstrndup(r->pool, curlBuffer.buf, curlBuffer.written);
 
 	/* set and log the response */
