@@ -1,3 +1,6 @@
+10/13/2016
+- urlencode provider URL cache key to fix file cache backend issue; closes #179, thanks @djahandarie
+
 10/9/2016
 - fix null pointer segfault in debug printout in oidc_util_read_form_encoded_params
 - fix OIDCOAuthAcceptTokenAs parsing flaw introduced in 2.0.0rc5

@@ -259,8 +259,8 @@ static apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg *c,
 		return TRUE;
 	}
 
-	c->cache->get(r, OIDC_CACHE_SECTION_PROVIDER, c->provider.metadata_url,
-			&s_json);
+	c->cache->get(r, OIDC_CACHE_SECTION_PROVIDER,
+			oidc_util_escape_string(r, c->provider.metadata_url), &s_json);
 
 	if (s_json == NULL) {
 
@@ -272,8 +272,8 @@ static apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg *c,
 		}
 
 		// TODO: make the expiry configurable
-		c->cache->set(r, OIDC_CACHE_SECTION_PROVIDER, c->provider.metadata_url,
-				s_json,
+		c->cache->set(r, OIDC_CACHE_SECTION_PROVIDER,
+				oidc_util_escape_string(r, c->provider.metadata_url), s_json,
 				apr_time_now() + apr_time_from_sec(OIDC_CACHE_PROVIDER_METADATA_EXPIRY_DEFAULT));
 
 	} else {
