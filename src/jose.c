@@ -848,13 +848,16 @@ apr_byte_t oidc_jwt_verify(apr_pool_t *pool, oidc_jwt_t *jwt, apr_hash_t *keys,
 
 		for (hi = apr_hash_first(pool, keys); hi; hi = apr_hash_next(hi)) {
 			apr_hash_this(hi, NULL, NULL, (void **) &jwk);
-			rc = cjose_jws_verify(jwt->cjose_jws, jwk->cjose_jwk, &cjose_err);
-			if (rc == FALSE) {
-				oidc_jose_error(err, "cjose_jws_verify failed: %s",
-						oidc_cjose_e2s(pool, cjose_err));
-				jwt->cjose_jws = NULL;
+			if (jwk->kty == oidc_jwt_alg2kty(jwt)) {
+				rc = cjose_jws_verify(jwt->cjose_jws, jwk->cjose_jwk,
+						&cjose_err);
+				if (rc == FALSE) {
+					oidc_jose_error(err, "cjose_jws_verify failed: %s",
+							oidc_cjose_e2s(pool, cjose_err));
+					jwt->cjose_jws = NULL;
+				}
 			}
-			if (rc == TRUE)
+			if ((rc == TRUE) || (jwt->cjose_jws = NULL))
 				break;
 		}
 

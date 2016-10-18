@@ -1,3 +1,7 @@
+10/18/2016
+- bugfix: JWTs with a header that doesn't specify a `kid` that would not validate when used with more than 1 key; closes #184; thanks @solsson
+- bump to 2.0.1rc5
+
 10/13/2016
 - urlencode provider URL cache key to fix file cache backend issue; closes #179, thanks @djahandarie
 
