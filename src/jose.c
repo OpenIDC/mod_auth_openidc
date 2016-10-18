@@ -857,7 +857,7 @@ apr_byte_t oidc_jwt_verify(apr_pool_t *pool, oidc_jwt_t *jwt, apr_hash_t *keys,
 					jwt->cjose_jws = NULL;
 				}
 			}
-			if ((rc == TRUE) || (jwt->cjose_jws = NULL))
+			if ((rc == TRUE) || (jwt->cjose_jws == NULL))
 				break;
 		}
 
