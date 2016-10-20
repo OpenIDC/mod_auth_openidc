@@ -214,7 +214,9 @@ char *oidc_proto_create_request_uri(request_rec *r,
 	/* see if we need to override the resolver URL, mostly for test purposes */
 	char *resolver_url = NULL;
 	if (json_object_get(request_object_config, "url") != NULL)
-		resolver_url = apr_pstrdup(r->pool, json_string_value(json_object_get(request_object_config, "url")));
+		resolver_url = apr_pstrdup(r->pool,
+				json_string_value(
+						json_object_get(request_object_config, "url")));
 	else
 		resolver_url = apr_pstrdup(r->pool, redirect_uri);
 
@@ -228,10 +230,12 @@ char *oidc_proto_create_request_uri(request_rec *r,
 			json_string(provider->issuer));
 
 	/* add static values to the request object as configured in the .conf file; may override iss/aud */
-	oidc_util_json_merge(json_object_get(request_object_config, "static"), request_object->payload.value.json);
+	oidc_util_json_merge(json_object_get(request_object_config, "static"),
+			request_object->payload.value.json);
 
 	/* copy parameters from the authorization request as configured in the .conf file */
-	oidc_proto_copy_from_request(r, request_object, request_object_config, authorization_request);
+	oidc_proto_copy_from_request(r, request_object, request_object_config,
+			authorization_request);
 
 	/* debug logging */
 	char *s_json = json_dumps(request_object->payload.value.json, 0);
@@ -253,25 +257,28 @@ char *oidc_proto_create_request_uri(request_rec *r,
 		int jwk_needs_destroy = 0;
 
 		switch (oidc_jwt_alg2kty(request_object)) {
-			case CJOSE_JWK_KTY_RSA:
-				if (cfg->private_keys != NULL) {
-					apr_ssize_t klen = 0;
-					apr_hash_index_t *hi = apr_hash_first(r->pool,
-							cfg->private_keys);
-					apr_hash_this(hi, (const void **) &request_object->header.kid, &klen,
-							(void **) &jwk);
-				} else {
-					oidc_error(r,
-							"no private keys have been configured to use for private_key_jwt client authentication (OIDCPrivateKeyFiles)");
-				}
-				break;
-			case CJOSE_JWK_KTY_OCT:
-				oidc_util_create_symmetric_key(r, provider->client_secret, NULL, FALSE, &jwk);
-				jwk_needs_destroy = 1;
-				break;
-			default:
-				oidc_error(r, "unsupported signing algorithm, no key type for algorithm: %s", request_object->header.alg);
-				break;
+		case CJOSE_JWK_KTY_RSA:
+			if (cfg->private_keys != NULL) {
+				apr_ssize_t klen = 0;
+				apr_hash_index_t *hi = apr_hash_first(r->pool,
+						cfg->private_keys);
+				apr_hash_this(hi, (const void **) &request_object->header.kid,
+						&klen, (void **) &jwk);
+			} else {
+				oidc_error(r,
+						"no private keys have been configured to use for private_key_jwt client authentication (OIDCPrivateKeyFiles)");
+			}
+			break;
+		case CJOSE_JWK_KTY_OCT:
+			oidc_util_create_symmetric_key(r, provider->client_secret, 0, NULL,
+					FALSE, &jwk);
+			jwk_needs_destroy = 1;
+			break;
+		default:
+			oidc_error(r,
+					"unsupported signing algorithm, no key type for algorithm: %s",
+					request_object->header.alg);
+			break;
 		}
 
 		if (jwk == NULL) {
@@ -310,20 +317,24 @@ char *oidc_proto_create_request_uri(request_rec *r,
 	char *cser = oidc_jwt_serialize(r->pool, request_object, &err);
 
 	/* see if we need to encrypt the request object */
-	if ((jwe->header.alg != NULL) && (provider->client_secret != NULL)) {
+	if (jwe->header.alg != NULL) {
 
 		oidc_jwk_t *jwk = NULL;
 
 		switch (oidc_jwt_alg2kty(jwe)) {
-			case CJOSE_JWK_KTY_RSA:
-				oidc_proto_get_encryption_jwk_by_type(r, cfg, provider, CJOSE_JWK_KTY_RSA, &jwk);
-				break;
-			case CJOSE_JWK_KTY_OCT:
-				oidc_util_create_symmetric_key(r, provider->client_secret, "sha256", FALSE, &jwk);
-				break;
-			default:
-				oidc_error(r, "unsupported encryption algorithm, no key type for algorithm: %s", request_object->header.alg);
-				break;
+		case CJOSE_JWK_KTY_RSA:
+			oidc_proto_get_encryption_jwk_by_type(r, cfg, provider,
+					CJOSE_JWK_KTY_RSA, &jwk);
+			break;
+		case CJOSE_JWK_KTY_OCT:
+			oidc_util_create_symmetric_key(r, provider->client_secret,
+					oidc_alg2keysize(jwe->header.alg), "sha256", FALSE, &jwk);
+			break;
+		default:
+			oidc_error(r,
+					"unsupported encryption algorithm, no key type for algorithm: %s",
+					request_object->header.alg);
+			break;
 		}
 
 		if (jwk == NULL) {
@@ -332,6 +343,9 @@ char *oidc_proto_create_request_uri(request_rec *r,
 			json_decref(request_object_config);
 			return FALSE;
 		}
+
+		if (jwe->header.enc == NULL)
+			jwe->header.enc = apr_pstrdup(r->pool, CJOSE_HDR_ENC_A128CBC_HS256);
 
 		if (oidc_jwt_encrypt(r->pool, jwe, jwk, cser,
 				&serialized_request_object, &err) == FALSE) {
@@ -357,7 +371,7 @@ char *oidc_proto_create_request_uri(request_rec *r,
 	json_decref(request_object_config);
 
 	oidc_debug(r, "serialized request object JWT header = \"%s\"",
-			oidc_proto_peek_jwt_header(r, serialized_request_object));
+			oidc_proto_peek_jwt_header(r, serialized_request_object, NULL));
 	oidc_debug(r, "serialized request object = \"%s\"",
 			serialized_request_object);
 
@@ -1024,7 +1038,8 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt,
 /*
  * return the compact-encoded JWT header contents
  */
-char *oidc_proto_peek_jwt_header(request_rec *r, const char *compact_encoded_jwt) {
+char *oidc_proto_peek_jwt_header(request_rec *r,
+		const char *compact_encoded_jwt, char **alg) {
 	char *input = NULL, *result = NULL;
 	char *p = strstr(compact_encoded_jwt, ".");
 	if (p == NULL) {
@@ -1037,6 +1052,14 @@ char *oidc_proto_peek_jwt_header(request_rec *r, const char *compact_encoded_jwt
 		oidc_warn(r, "oidc_base64url_decode returned an error");
 		return NULL;
 	}
+	if (alg) {
+		json_error_t json_error;
+		json_t *json = json_loads(result, JSON_DECODE_ANY, &json_error);
+		if (json)
+			*alg = apr_pstrdup(r->pool,
+					json_string_value(json_object_get(json, CJOSE_HDR_ALG)));
+		json_decref(json);
+	}
 	return result;
 }
 
@@ -1047,13 +1070,15 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char *id_token, const char *nonce,
 		oidc_jwt_t **jwt, apr_byte_t is_code_flow) {
 
+	char *alg = NULL;
 	oidc_debug(r, "enter: id_token header=%s",
-			oidc_proto_peek_jwt_header(r, id_token));
+			oidc_proto_peek_jwt_header(r, id_token, &alg));
 
 	char buf[APR_RFC822_DATE_LEN + 1];
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
-	if (oidc_util_create_symmetric_key(r, provider->client_secret, "sha256",
+	if (oidc_util_create_symmetric_key(r, provider->client_secret,
+			oidc_alg2keysize(alg), "sha256",
 			TRUE, &jwk) == FALSE)
 		return FALSE;
 
@@ -1075,7 +1100,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 	if (is_code_flow == FALSE || strcmp((*jwt)->header.alg, "none") != 0) {
 
 		jwk = NULL;
-		if (oidc_util_create_symmetric_key(r, provider->client_secret,
+		if (oidc_util_create_symmetric_key(r, provider->client_secret, 0,
 				NULL, TRUE, &jwk) == FALSE)
 			return FALSE;
 
@@ -1354,11 +1379,12 @@ apr_byte_t oidc_user_info_response_validate(request_rec *r, oidc_cfg *cfg,
 			provider->userinfo_encrypted_response_alg,
 			provider->userinfo_encrypted_response_enc);
 
+	char *alg = NULL;
 	if ((provider->userinfo_signed_response_alg != NULL)
-			|| (provider->userinfo_encrypted_response_alg)
+			|| (provider->userinfo_encrypted_response_alg != NULL)
 			|| (provider->userinfo_encrypted_response_enc != NULL)) {
 		oidc_debug(r, "JWT header=%s",
-				oidc_proto_peek_jwt_header(r, *response));
+				oidc_proto_peek_jwt_header(r, *response, &alg));
 	}
 
 	oidc_jose_error_t err;
@@ -1366,7 +1392,8 @@ apr_byte_t oidc_user_info_response_validate(request_rec *r, oidc_cfg *cfg,
 	oidc_jwt_t *jwt = NULL;
 	char *payload = NULL;
 
-	if (oidc_util_create_symmetric_key(r, provider->client_secret, "sha256",
+	if (oidc_util_create_symmetric_key(r, provider->client_secret,
+			oidc_alg2keysize(alg), "sha256",
 			TRUE, &jwk) == FALSE)
 		return FALSE;
 
@@ -1379,28 +1406,30 @@ apr_byte_t oidc_user_info_response_validate(request_rec *r, oidc_cfg *cfg,
 			oidc_jwk_destroy(jwk);
 			return FALSE;
 		} else {
-			oidc_debug(r, "successfully decrypted JWE returned from userinfo endpoint: %s", payload);
+			oidc_debug(r,
+					"successfully decrypted JWE returned from userinfo endpoint: %s",
+					payload);
 			*response = payload;
 		}
 	}
 
 	if (provider->userinfo_signed_response_alg != NULL) {
-			if (oidc_jwt_parse(r->pool, *response, &jwt,
+		if (oidc_jwt_parse(r->pool, *response, &jwt,
 				oidc_util_merge_symmetric_key(r->pool, cfg->private_keys, jwk),
 				&err) == FALSE) {
-			oidc_error(r, "oidc_jwt_parse failed: %s", oidc_jose_e2s(r->pool, err));
+			oidc_error(r, "oidc_jwt_parse failed: %s",
+					oidc_jose_e2s(r->pool, err));
 			oidc_jwt_destroy(jwt);
 			oidc_jwk_destroy(jwk);
 			return FALSE;
 		}
-		oidc_debug(r,
-				"successfully parsed JWT with header=%s, and payload=%s",
+		oidc_debug(r, "successfully parsed JWT with header=%s, and payload=%s",
 				jwt->header.value.str, jwt->payload.value.str);
 
 		oidc_jwk_destroy(jwk);
 
 		jwk = NULL;
-		if (oidc_util_create_symmetric_key(r, provider->client_secret,
+		if (oidc_util_create_symmetric_key(r, provider->client_secret, 0,
 				NULL, TRUE, &jwk) == FALSE)
 			return FALSE;
 
@@ -1415,7 +1444,9 @@ apr_byte_t oidc_user_info_response_validate(request_rec *r, oidc_cfg *cfg,
 			return FALSE;
 		}
 		oidc_jwk_destroy(jwk);
-		oidc_debug(r, "successfully verified signed JWT returned from userinfo endpoint: %s", jwt->payload.value.str);
+		oidc_debug(r,
+				"successfully verified signed JWT returned from userinfo endpoint: %s",
+				jwt->payload.value.str);
 
 		*claims = json_deep_copy(jwt->payload.value.json);
 		*response = apr_pstrdup(r->pool, jwt->payload.value.str);

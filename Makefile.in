@@ -59,10 +59,10 @@ configure:	configure.ac
 @NAMEVER@.tar.gz:	 $(DISTFILES)
 	tar -c --transform="s#^#@NAMEVER@/#" -vzf $@ $(DISTFILES)
 
-test/test: test/*.c src/mod_auth_openidc.la
-	@APXS2@ @APXS2_OPTS@ $(CFLAGS) -Wl,"$(LIBS)" -Isrc -Wc,-Wall -Wc,-g -c -o $@ test/*.c $(SRC:.c=.lo) @APR_LIBS@
+test/test test/test-cmd: test/test.c test/stub.c src/mod_auth_openidc.la
+	@APXS2@ @APXS2_OPTS@ $(CFLAGS) -Wl,"$(LIBS)" -Isrc -Wc,-Wall -Wc,-g -c -o $@ $@.c test/stub.c $(SRC:.c=.lo) @APR_LIBS@
 
-test-compile: test/test
+test-compile: test/test test/test-cmd
 
 test: test-compile
 	test/test
@@ -81,7 +81,7 @@ clean:
 	rm -f src/*.lo src/cache/*.lo test/*.lo
 	rm -f src/*.slo src/cache/*.slo test/*.slo
 	rm -rf src/.libs/ src/cache/.libs/ test/.libs
-	rm -rf test/test
+	rm -rf test/test test/test-cmd
 
 .PHONY:	distclean
 distclean:	clean

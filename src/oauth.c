@@ -510,11 +510,11 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 		oidc_cfg *c, const char *access_token, json_t **token, char **response) {
 
 	oidc_debug(r, "enter: JWT access_token header=%s",
-			oidc_proto_peek_jwt_header(r, access_token));
+			oidc_proto_peek_jwt_header(r, access_token, NULL));
 
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
-	if (oidc_util_create_symmetric_key(r, c->provider.client_secret, NULL,
+	if (oidc_util_create_symmetric_key(r, c->provider.client_secret, 0, NULL,
 			TRUE, &jwk) == FALSE)
 		return FALSE;
 

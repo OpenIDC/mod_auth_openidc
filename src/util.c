@@ -147,7 +147,7 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret,
 	oidc_jwt_t *jwt = NULL;
 	oidc_jwt_t *jwe = NULL;
 
-	if (oidc_util_create_symmetric_key(r, secret, "sha256", FALSE,
+	if (oidc_util_create_symmetric_key(r, secret, 0, "sha256", FALSE,
 			&jwk) == FALSE)
 		goto end;
 
@@ -183,7 +183,7 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret,
 
 	rv = TRUE;
 
-end:
+	end:
 
 	if (jwe != NULL)
 		oidc_jwt_destroy(jwe);
@@ -201,7 +201,7 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret,
 		const char *compact_encoded_jwt, json_t **result) {
 
 	oidc_debug(r, "enter: JWT header=%s",
-			oidc_proto_peek_jwt_header(r, compact_encoded_jwt));
+			oidc_proto_peek_jwt_header(r, compact_encoded_jwt, NULL));
 
 	apr_byte_t rv = FALSE;
 	oidc_jose_error_t err;
@@ -209,7 +209,7 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret,
 	oidc_jwk_t *jwk = NULL;
 	oidc_jwt_t *jwt = NULL;
 
-	if (oidc_util_create_symmetric_key(r, secret, "sha256", FALSE,
+	if (oidc_util_create_symmetric_key(r, secret, 0, "sha256", FALSE,
 			&jwk) == FALSE)
 		goto end;
 
@@ -230,7 +230,7 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret,
 
 	rv = TRUE;
 
-end:
+	end:
 
 	if (jwk != NULL)
 		oidc_jwk_destroy(jwk);
@@ -1688,8 +1688,8 @@ void oidc_util_table_add_query_encoded_params(apr_pool_t *pool,
  * create a symmetric key from a client_secret
  */
 apr_byte_t oidc_util_create_symmetric_key(request_rec *r,
-		const char *client_secret, const char *hash_algo, apr_byte_t set_kid,
-		oidc_jwk_t **jwk) {
+		const char *client_secret, int r_key_len, const char *hash_algo,
+		apr_byte_t set_kid, oidc_jwk_t **jwk) {
 	oidc_jose_error_t err;
 	unsigned char *key = NULL;
 	unsigned int key_len;
@@ -1706,9 +1706,13 @@ apr_byte_t oidc_util_create_symmetric_key(request_rec *r,
 					strlen(client_secret), &key, &key_len, &err);
 		}
 
-		if ((key != NULL) && (key_len > 0))
+		if ((key != NULL) && (key_len > 0)) {
+			if ((r_key_len != 0) && (key_len >= r_key_len))
+				key_len = r_key_len;
+			oidc_debug(r, "key_len=%d", key_len);
 			*jwk = oidc_jwk_create_symmetric_key(r->pool, NULL, key, key_len,
 					set_kid, &err);
+		}
 
 		if (*jwk == NULL) {
 			oidc_error(r,

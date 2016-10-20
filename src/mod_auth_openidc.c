@@ -479,12 +479,14 @@ static int oidc_request_post_preserved_restore(request_rec *r,
 static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 		const char *state, json_t **proto_state) {
 
+	char *alg = NULL;
 	oidc_debug(r, "enter: state header=%s",
-			oidc_proto_peek_jwt_header(r, state));
+			oidc_proto_peek_jwt_header(r, state, &alg));
 
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
-	if (oidc_util_create_symmetric_key(r, c->provider.client_secret, "sha256",
+	if (oidc_util_create_symmetric_key(r, c->provider.client_secret,
+			oidc_alg2keysize(alg), "sha256",
 			TRUE, &jwk) == FALSE)
 		return FALSE;
 
@@ -598,7 +600,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 			jti, apr_time_sec(jti_cache_duration));
 
 	jwk = NULL;
-	if (oidc_util_create_symmetric_key(r, c->provider.client_secret,
+	if (oidc_util_create_symmetric_key(r, c->provider.client_secret, 0,
 			NULL, TRUE, &jwk) == FALSE)
 		return FALSE;
 
