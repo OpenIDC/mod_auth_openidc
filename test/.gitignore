@@ -5,3 +5,5 @@
 /*.o
 /*.slo
 /.libs/
+/test-cmd
+/*.json
