@@ -32,6 +32,7 @@ HDRS = \
 DISTFILES=$(SRC) \
 	$(HDRS) \
 	test/test.c \
+	test/test-cmd.c \
 	test/stub.c \
 	configure \
 	configure.ac \
