@@ -1337,7 +1337,8 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 
 	/* check if something was updated in the session and we need to save it again */
 	if (needs_save)
-		oidc_session_save(r, session);
+		if (oidc_session_save(r, session) == FALSE)
+			return HTTP_INTERNAL_SERVER_ERROR;
 
 	/* return "user authenticated" status */
 	return OK;
@@ -1473,7 +1474,7 @@ static apr_byte_t oidc_get_remote_user(request_rec *r, oidc_cfg *c,
 /*
  * store resolved information in the session
  */
-static void oidc_save_in_session(request_rec *r, oidc_cfg *c,
+static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
 		oidc_session_t *session, oidc_provider_t *provider,
 		const char *remoteUser, const char *id_token, oidc_jwt_t *id_token_jwt,
 		const char *claims, const char *access_token, const int expires_in,
@@ -1561,7 +1562,7 @@ static void oidc_save_in_session(request_rec *r, oidc_cfg *c,
 			c->cookie_domain ? c->cookie_domain : oidc_get_current_url_host(r));
 
 	/* store the session */
-	oidc_session_save(r, session);
+	return oidc_session_save(r, session);
 }
 
 /*
@@ -1752,12 +1753,14 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		}
 
 		/* store resolved information in the session */
-		oidc_save_in_session(r, c, session, provider, r->user,
+		if (oidc_save_in_session(r, c, session, provider, r->user,
 				apr_table_get(params, "id_token"), jwt, claims,
 				apr_table_get(params, "access_token"), expires_in,
 				apr_table_get(params, "refresh_token"),
 				apr_table_get(params, "session_state"),
-				apr_table_get(params, "state"), original_url);
+				apr_table_get(params, "state"), original_url) == FALSE)
+			return HTTP_INTERNAL_SERVER_ERROR;
+
 	} else {
 		oidc_error(r, "remote user could not be set");
 		return oidc_authorization_response_error(r, c, proto_state,
@@ -2672,7 +2675,10 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
 	}
 
 	/* store the session */
-	oidc_session_save(r, session);
+	if (oidc_session_save(r, session) == FALSE) {
+		error_code = "session_corruption";
+		goto end;
+	}
 
 end:
 

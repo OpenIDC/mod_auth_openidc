@@ -133,6 +133,8 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 
+	apr_byte_t rc = TRUE;
+
 	/* get a new uuid for this session */
 	apr_uuid_t uuid;
 	apr_uuid_get(&uuid);
@@ -145,11 +147,13 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z) {
 		char *s_value = NULL;
 		if (oidc_session_encode(r, c, z, &s_value, c->cache->secure) == FALSE)
 			return FALSE;
-		c->cache->set(r, OIDC_CACHE_SECTION_SESSION, key, s_value, z->expiry);
+		rc = c->cache->set(r, OIDC_CACHE_SECTION_SESSION, key, s_value,
+				z->expiry);
 
-		/* set the uuid in the cookie */
-		oidc_util_set_cookie(r, oidc_cfg_dir_cookie(r), key,
-				c->persistent_session_cookie ? z->expiry : -1);
+		if (rc == TRUE)
+			/* set the uuid in the cookie */
+			oidc_util_set_cookie(r, oidc_cfg_dir_cookie(r), key,
+					c->persistent_session_cookie ? z->expiry : -1);
 
 	} else {
 
@@ -157,10 +161,10 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z) {
 		oidc_util_set_cookie(r, oidc_cfg_dir_cookie(r), "", 0);
 
 		/* remove the session from the cache */
-		c->cache->set(r, OIDC_CACHE_SECTION_SESSION, key, NULL, 0);
+		rc = c->cache->set(r, OIDC_CACHE_SECTION_SESSION, key, NULL, 0);
 	}
 
-	return TRUE;
+	return rc;
 }
 
 /*
@@ -261,6 +265,8 @@ apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 
+	apr_byte_t rc = TRUE;
+
 	if (z->state != NULL) {
 		oidc_session_set(r, z, OIDC_SESSION_REMOTE_USER_KEY, z->remote_user);
 		json_object_set_new(z->state, OIDC_SESSION_EXPIRY_KEY,
@@ -272,15 +278,16 @@ apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z) {
 
 	if (c->session_type == OIDC_SESSION_TYPE_SERVER_CACHE) {
 		/* store the session in the cache */
-		oidc_session_save_cache(r, z);
+		rc = oidc_session_save_cache(r, z);
 	} else if (c->session_type == OIDC_SESSION_TYPE_CLIENT_COOKIE) {
 		/* store the session in a self-contained cookie */
-		oidc_session_save_cookie(r, z);
+		rc = oidc_session_save_cookie(r, z);
 	} else {
 		oidc_error(r, "unknown session type: %d", c->session_type);
+		rc = FALSE;
 	}
 
-	return TRUE;
+	return rc;
 }
 
 /*
