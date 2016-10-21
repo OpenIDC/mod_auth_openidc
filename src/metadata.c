@@ -420,7 +420,7 @@ static apr_byte_t oidc_metadata_file_write(request_rec *r, const char *path,
 	char s_err[128];
 
 	/* try to open the metadata file for writing, creating it if it does not exist */
-	if ((rc = apr_file_open(&fd, path, (APR_FOPEN_WRITE | APR_FOPEN_CREATE),
+	if ((rc = apr_file_open(&fd, path, (APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE),
 			APR_OS_DEFAULT, r->pool)) != APR_SUCCESS) {
 		oidc_error(r, "file \"%s\" could not be opened (%s)", path,
 				apr_strerror(rc, s_err, sizeof(s_err)));

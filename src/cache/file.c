@@ -412,8 +412,8 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section,
 	}
 
 	/* try to open the cache file for writing, creating it if it does not exist */
-	if ((rc = apr_file_open(&fd, path, (APR_FOPEN_WRITE | APR_FOPEN_CREATE),
-	APR_OS_DEFAULT, r->pool)) != APR_SUCCESS) {
+	if ((rc = apr_file_open(&fd, path, (APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE),
+			APR_OS_DEFAULT, r->pool)) != APR_SUCCESS) {
 		oidc_error(r, "cache file \"%s\" could not be opened (%s)", path,
 				apr_strerror(rc, s_err, sizeof(s_err)));
 		return FALSE;
