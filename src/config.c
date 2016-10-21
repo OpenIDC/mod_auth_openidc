@@ -149,6 +149,8 @@
 #define OIDC_DEFAULT_TOKEN_INTROSPECTION_INTERVAL 0
 /* default action to take on an incoming unauthenticated request */
 #define OIDC_DEFAULT_UNAUTH_ACTION OIDC_UNAUTH_AUTHENTICATE
+/* defines for how long provider metadata will be cached */
+#define OIDC_DEFAULT_PROVIDER_METADATA_REFRESH_INTERVAL 0
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -832,6 +834,8 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->provider.userinfo_refresh_interval = OIDC_DEFAULT_USERINFO_REFRESH_INTERVAL;
 	c->provider.request_object = NULL;
 
+	c->provider_metadata_refresh_interval = OIDC_DEFAULT_PROVIDER_METADATA_REFRESH_INTERVAL;
+
 	return c;
 }
 
@@ -1197,6 +1201,12 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->provider.request_object != NULL ?
 					add->provider.request_object :
 					base->provider.request_object;
+
+	c->provider_metadata_refresh_interval =
+			add->provider_metadata_refresh_interval
+				!= OIDC_DEFAULT_PROVIDER_METADATA_REFRESH_INTERVAL ?
+					add->provider_metadata_refresh_interval :
+					base->provider_metadata_refresh_interval;
 
 	return c;
 }
@@ -2233,5 +2243,10 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, provider.request_object),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"The default request object settings"),
+		AP_INIT_TAKE1("OIDCProviderMetadataRefreshInterval",
+				oidc_set_int_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, provider_metadata_refresh_interval),
+				RSRC_CONF,
+				"Provider metadata refresh interval in seconds."),
 		{ NULL }
 };

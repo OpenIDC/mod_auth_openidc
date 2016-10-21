@@ -1,5 +1,6 @@
 10/21/2016
 - bugfix: first truncate files before writing them
+- support refreshing provider metadata based on timestamp and OIDCProviderMetadataRefreshInterval
 
 10/20/2016
 - bugfix: correctly truncate encryption keys derived from client secret for algorithms that require a key size < 256 bits

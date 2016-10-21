@@ -370,6 +370,9 @@ typedef struct oidc_cfg {
 	char *outgoing_proxy;
 
 	char *crypto_passphrase;
+
+	int provider_metadata_refresh_interval;
+
 } oidc_cfg;
 
 int oidc_check_user_id(request_rec *r);

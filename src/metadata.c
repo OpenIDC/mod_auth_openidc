@@ -412,8 +412,6 @@ static apr_byte_t oidc_metadata_conf_is_valid(request_rec *r, json_t *j_conf,
 static apr_byte_t oidc_metadata_file_write(request_rec *r, const char *path,
 		const char *data) {
 
-	// TODO: completely erase the contents of the file if it already exists....
-
 	apr_file_t *fd = NULL;
 	apr_status_t rc = APR_SUCCESS;
 	apr_size_t bytes_written = 0;
@@ -687,21 +685,39 @@ static apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
 	/* get the full file path to the provider metadata for this issuer */
 	const char *provider_path = oidc_metadata_provider_file_path(r, issuer);
 
-	/* see if we have valid metadata already, if so, return it */
-	if (oidc_metadata_file_read_json(r, provider_path, j_provider) == TRUE) {
+	/* check the last-modified timestamp */
+	apr_byte_t use_cache = TRUE;
+	apr_finfo_t fi;
+	json_t *j_cache = NULL;
+	apr_byte_t have_cache = FALSE;
 
-		/* return the validation result */
-		return oidc_metadata_provider_is_valid(r, *j_provider, issuer);
+	/* see if we are refreshing metadata and we need a refresh */
+	if (cfg->provider_metadata_refresh_interval > 0) {
+
+		have_cache = (apr_stat(&fi, provider_path, APR_FINFO_MTIME, r->pool) == APR_SUCCESS);
+
+		if (have_cache == TRUE)
+			use_cache = (apr_time_now() < fi.mtime	+ apr_time_from_sec(cfg->provider_metadata_refresh_interval));
+
+		oidc_debug(r, "use_cache: %s", use_cache ? "yes" : "no");
 	}
 
-	if (!allow_discovery) {
+	/* see if we have valid metadata already, if so, return it */
+	if (oidc_metadata_file_read_json(r, provider_path, &j_cache) == TRUE) {
+
+		/* return the validation result */
+		if (use_cache == TRUE) {
+			*j_provider = j_cache;
+			return oidc_metadata_provider_is_valid(r, *j_provider, issuer);
+		}
+	}
+
+	if ((have_cache == FALSE) && (!allow_discovery)) {
 		oidc_warn(r,
 				"no metadata found for the requested issuer (%s), and Discovery is not allowed",
 				issuer);
 		return FALSE;
 	}
-
-	// TODO: how to do validity/expiry checks on provider metadata
 
 	/* assemble the URL to the .well-known OpenID metadata */
 	const char *url = apr_psprintf(r->pool, "%s",
@@ -713,8 +729,25 @@ static apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
 
 	/* get the metadata for the issuer using OpenID Connect Discovery and validate it */
 	if (oidc_metadata_provider_retrieve(r, cfg, issuer, url, j_provider,
-			&response) == FALSE)
+			&response) == FALSE) {
+
+		oidc_debug(r,
+				"could not retrieve provider metadata; have_cache: %s (data=%pp)",
+				have_cache ? "yes" : "no", j_cache);
+
+		/* see if we can use at least the cache that may have expired by now */
+		if ((cfg->provider_metadata_refresh_interval > 0) && (have_cache == TRUE) && (j_cache != NULL)) {
+
+			/* reset the file-modified timestamp so it is cached for a while again */
+			apr_file_mtime_set(provider_path, apr_time_now(), r->pool);
+
+			/* return the validated cached data */
+			*j_provider = j_cache;
+			return oidc_metadata_provider_is_valid(r, *j_provider, issuer);
+		}
+
 		return FALSE;
+	}
 
 	/* since it is valid, write the obtained provider metadata file */
 	if (oidc_metadata_file_write(r, provider_path, response) == FALSE)
