@@ -1,3 +1,6 @@
+10/24/2016
+- add OpenID Connect RP certification test script
+
 10/21/2016
 - bugfix: first truncate files before writing them
 - support refreshing provider metadata based on timestamp and OIDCProviderMetadataRefreshInterval

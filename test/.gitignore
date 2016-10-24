@@ -7,3 +7,4 @@
 /.libs/
 /test-cmd
 /*.json
+/setenv.sh
