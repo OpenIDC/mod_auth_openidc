@@ -1,5 +1,6 @@
 10/24/2016
 - add OpenID Connect RP certification test script
+- handle non-integer exp/iat timestamps; closes #187; thanks @drdivano
 
 10/21/2016
 - bugfix: first truncate files before writing them

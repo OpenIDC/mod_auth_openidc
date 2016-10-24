@@ -197,9 +197,9 @@ typedef struct oidc_jwt_payload_t {
 	/* JWT "sub" claim value; subject/principal */
 	char *sub;
 	/* parsed JWT "exp" claim value; token expiry */
-	json_int_t exp;
+	double exp;
 	/* parsed JWT "iat" claim value; issued-at timestamp */
-	json_int_t iat;
+	double iat;
 } oidc_jwt_payload_t;
 
 /* parsed JWT */

@@ -556,13 +556,13 @@ apr_byte_t oidc_jose_get_string(apr_pool_t *pool, json_t *json,
  * parse (optional) timestamp from payload
  */
 static apr_byte_t oidc_jose_get_timestamp(apr_pool_t *pool, json_t *json,
-		const char *claim_name, apr_byte_t is_mandatory, json_int_t *result,
+		const char *claim_name, apr_byte_t is_mandatory, double *result,
 		oidc_jose_error_t *err) {
 	*result = OIDC_JWT_CLAIM_TIME_EMPTY;
 	json_t *v = json_object_get(json, claim_name);
 	if (v != NULL) {
-		if (json_is_integer(v)) {
-			*result = json_integer_value(v);
+		if (json_is_number(v)) {
+			*result = json_number_value(v);
 		} else if (is_mandatory) {
 			oidc_jose_error(err,
 					"mandatory JSON key \"%s\" was found but the type is not a number",
