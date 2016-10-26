@@ -187,8 +187,10 @@ static apr_byte_t oidc_metadata_is_valid_uri(request_rec *r, const char *type,
 		return (!is_mandatory);
 	}
 
-	if (oidc_valid_http_url(r->pool, s_value) != NULL)
+	if (oidc_valid_http_url(r->pool, s_value) != NULL) {
+		oidc_warn(r, "\"%s\" is not a valid http URL for key \"%s\"", s_value, key);
 		return FALSE;
+	}
 
 	if (value)
 		*value = s_value;
