@@ -381,14 +381,25 @@ const char *oidc_parse_boolean(apr_pool_t *pool, const char *arg,
 /*
  * check if the provided endpoint authentication method is supported
  */
-const char *oidc_valid_endpoint_auth_method(apr_pool_t *pool, const char *arg) {
+static const char *oidc_valid_endpoint_auth_method_impl(apr_pool_t *pool, const char *arg, apr_byte_t has_private_key) {
 	static char *options[] = {
 			OIDC_ENDPOINT_AUTH_CLIENT_SECRET_POST,
 			OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC,
 			OIDC_ENDPOINT_AUTH_CLIENT_SECRET_JWT,
-			OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT,
+			NULL,
 			NULL };
+	if (has_private_key)
+		options[3] = OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT;
+
 	return oidc_valid_string_option(pool, arg, options);
+}
+
+const char *oidc_valid_endpoint_auth_method(apr_pool_t *pool, const char *arg) {
+	return oidc_valid_endpoint_auth_method_impl(pool, arg, TRUE);
+}
+
+const char *oidc_valid_endpoint_auth_method_no_private_key(apr_pool_t *pool, const char *arg) {
+	return oidc_valid_endpoint_auth_method_impl(pool, arg, FALSE);
 }
 
 /*

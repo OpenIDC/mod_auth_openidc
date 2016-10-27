@@ -201,7 +201,7 @@ static apr_byte_t oidc_metadata_is_valid_uri(request_rec *r, const char *type,
 /*
  * check to see if JSON provider metadata is valid
  */
-static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
+static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, oidc_cfg *cfg,
 		json_t *j_provider, const char *issuer) {
 
 	/* get the "issuer" from the provider metadata and double-check that it matches what we looked for */
@@ -272,7 +272,8 @@ static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r,
 	/* find out what type of authentication the token endpoint supports */
 	if (oidc_valid_string_in_array(r->pool, j_provider,
 			"token_endpoint_auth_methods_supported",
-			oidc_valid_endpoint_auth_method, NULL, TRUE) != NULL) {
+			oidc_cfg_get_valid_endpoint_auth_function(cfg), NULL,
+			TRUE) != NULL) {
 		oidc_error(r,
 				"could not find a supported token endpoint authentication method in provider metadata (%s) for entry \"token_endpoint_auth_methods_supported\"",
 				issuer);
@@ -667,7 +668,7 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg,
 	}
 
 	/* check to see if it is valid metadata */
-	if (oidc_metadata_provider_is_valid(r, *j_metadata, issuer) == FALSE)
+	if (oidc_metadata_provider_is_valid(r, cfg, *j_metadata, issuer) == FALSE)
 		return FALSE;
 
 	/* all OK */
@@ -710,7 +711,7 @@ static apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
 		/* return the validation result */
 		if (use_cache == TRUE) {
 			*j_provider = j_cache;
-			return oidc_metadata_provider_is_valid(r, *j_provider, issuer);
+			return oidc_metadata_provider_is_valid(r, cfg, *j_provider, issuer);
 		}
 	}
 
@@ -745,7 +746,7 @@ static apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
 
 			/* return the validated cached data */
 			*j_provider = j_cache;
-			return oidc_metadata_provider_is_valid(r, *j_provider, issuer);
+			return oidc_metadata_provider_is_valid(r, cfg, *j_provider, issuer);
 		}
 
 		return FALSE;
@@ -913,8 +914,8 @@ static void oidc_metadata_parse_url(request_rec *r, const char *type,
 /*
  * parse the JSON provider metadata in to a oidc_provider_t struct but do not override values already set
  */
-apr_byte_t oidc_metadata_provider_parse(request_rec *r, json_t *j_provider,
-		oidc_provider_t *provider) {
+apr_byte_t oidc_metadata_provider_parse(request_rec *r, oidc_cfg *cfg,
+		json_t *j_provider, oidc_provider_t *provider) {
 
 	if (provider->issuer == NULL) {
 		/* get the "issuer" from the provider metadata */
@@ -970,7 +971,8 @@ apr_byte_t oidc_metadata_provider_parse(request_rec *r, json_t *j_provider,
 	if (provider->token_endpoint_auth == NULL) {
 		if (oidc_valid_string_in_array(r->pool, j_provider,
 				"token_endpoint_auth_methods_supported",
-				oidc_valid_endpoint_auth_method, &provider->token_endpoint_auth,
+				oidc_cfg_get_valid_endpoint_auth_function(cfg),
+				&provider->token_endpoint_auth,
 				TRUE) != NULL) {
 			oidc_error(r,
 					"could not find a supported token endpoint authentication method in provider metadata (%s) for entry \"token_endpoint_auth_methods_supported\"",
@@ -1112,8 +1114,8 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 
 	/* get the token endpoint authentication method */
 	oidc_metadata_get_valid_string(r, j_conf, "token_endpoint_auth",
-			oidc_valid_endpoint_auth_method, &provider->token_endpoint_auth,
-			provider->token_endpoint_auth);
+			oidc_cfg_get_valid_endpoint_auth_function(cfg),
+			&provider->token_endpoint_auth, provider->token_endpoint_auth);
 
 	/* get the dynamic client registration token */
 	oidc_json_object_get_string(r->pool, j_conf, "registration_token",
@@ -1247,7 +1249,7 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *issuer,
 	if (oidc_metadata_provider_get(r, cfg, issuer, &j_provider,
 			allow_discovery) == FALSE)
 		goto end;
-	if (oidc_metadata_provider_parse(r, j_provider, *provider) == FALSE)
+	if (oidc_metadata_provider_parse(r, cfg, j_provider, *provider) == FALSE)
 		goto end;
 
 	if (oidc_metadata_conf_get(r, cfg, issuer, &j_conf) == FALSE)

@@ -322,13 +322,23 @@ static const char *oidc_set_ssl_validate_slot(cmd_parms *cmd, void *struct_ptr,
 }
 
 /*
+ * return the right token endpoint authentication method validation function, based on whether private keys are set
+ */
+oidc_valid_function_t oidc_cfg_get_valid_endpoint_auth_function(oidc_cfg *cfg) {
+	return (cfg->private_keys != NULL) ?
+						oidc_valid_endpoint_auth_method :
+						oidc_valid_endpoint_auth_method_no_private_key;
+}
+
+/*
  * set an authentication method for an endpoint and check it is one that we support
  */
 static const char *oidc_set_endpoint_auth_slot(cmd_parms *cmd, void *struct_ptr,
 		const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
-	const char *rv = oidc_valid_endpoint_auth_method(cmd->pool, arg);
+	const char *rv = oidc_cfg_get_valid_endpoint_auth_function(cfg)(
+			cmd->pool, arg);
 	if (rv == NULL)
 		rv = ap_set_string_slot(cmd, cfg, arg);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);

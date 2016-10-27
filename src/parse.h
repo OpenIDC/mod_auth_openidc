@@ -69,6 +69,7 @@ const char *oidc_valid_http_url(apr_pool_t *pool, const char *arg);
 const char *oidc_valid_dir(apr_pool_t *pool, const char *arg);
 const char *oidc_valid_cookie_domain(apr_pool_t *pool, const char *arg);
 const char *oidc_valid_endpoint_auth_method(apr_pool_t *pool,const char *arg);
+const char *oidc_valid_endpoint_auth_method_no_private_key(apr_pool_t *pool, const char *arg);
 const char *oidc_valid_response_type(apr_pool_t *pool, const char *arg);
 const char *oidc_valid_pkce_method(apr_pool_t *pool, const char *arg);
 const char *oidc_valid_response_mode(apr_pool_t *pool, const char *arg);
