@@ -6,7 +6,7 @@
 # Script used to do automated OpenID Connect Relying Party Certification
 # Testing for the mod_auth_openidc OIDC RP implementation for Apache HTTPd.
 #
-# @Version: 2.0.1, mod_auth_openidc >= v2.0.1rc6
+# @Version: 2.0.1, mod_auth_openidc >= v2.0.1rc7
 # 
 # @Author: Hans Zandbelt - hzandbelt@pingidentity.com
 #
@@ -35,6 +35,7 @@ TESTS="
 	rp_discovery_jwks_uri_keys
 	rp_registration_dynamic
 	rp_response_type_code
+	rp_response_type_id_token
 	rp_response_type_id_token_token
 	rp_response_type_code_id_token
 	rp_response_type_code_token
@@ -70,6 +71,8 @@ TESTS="
 	rp_id_token_kid_absent_single_jwks
 	rp_id_token_kid_absent_multiple_jwks
 	rp_key_rotation_op_sign_key
+	rp_claims_aggregated
+	rp_claims_distributed
 	rp_userinfo_bearer_header
 	rp_userinfo_bearer_body
 	rp_userinfo_sig
@@ -79,20 +82,19 @@ TESTS="
 "
 
 TEST_ERR="
-	rp_response_type_id_token
-	rp_support_3rd_party_init_login
 	rp_key_rotation_op_enc_key
 "
 
 TESTS_OBSOLETE="
 	rp_discovery_webfinger_http_href
 	rp_discovery_webfinger_unknown_member
+	rp_support_3rd_party_init_login
 "
 
 TESTS_UNSUPPORTED="
 	rp-self-issued
-	rp-claims-aggregated
-	rp-claims-distributed
+	rp-key-rotation-rp-sign-key
+	rp-key-rotation-rp-enc-key
 "
 
 if [ -z $1 ] ; then
@@ -489,7 +491,6 @@ function rp_response_mode_form_post() {
 
 function rp_claims_request_id_token() {
 	local TEST_ID="rp-claims_request-id_token"
-	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"scope\" is set to \"openid\""
@@ -507,7 +508,6 @@ function rp_claims_request_id_token() {
 
 function rp_claims_request_userinfo() {
 	local TEST_ID="rp-claims_request-userinfo"
-	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"scope\" is set to \"openid\""
@@ -523,7 +523,6 @@ function rp_claims_request_userinfo() {
 
 function rp_request_uri_enc() {
 	local TEST_ID="rp-request_uri-enc"
-	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 	
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"request_object\" is set to e.g. \"{ \"crypto\": { \"crypt_alg\": \"A128KW\" } }"
@@ -543,7 +542,6 @@ function rp_request_uri_enc() {
 
 function rp_request_uri_sig_enc() {
 	local TEST_ID="rp-request_uri-sig+enc"
-	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 	
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"request_object\" is set to e.g. \"{ \"crypto\": { \"sign_alg\": \"RS256\", \"crypt_alg\": \"A128KW\" } }"
@@ -563,7 +561,6 @@ function rp_request_uri_sig_enc() {
 
 function rp_request_uri_unsigned() {
 	local TEST_ID="rp-request_uri-unsigned"
-	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"request_object\" is set to e.g. \"{ \"crypto\": { \"sign_alg\": \"none\" } }"
@@ -583,7 +580,6 @@ function rp_request_uri_unsigned() {
 
 function rp_request_uri_sig() {
 	local TEST_ID="rp-request_uri-sig"
-	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 	
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"request_object\" is set to e.g. \"{ \"crypto\": { \"sign_alg\": \"HS256\" } }"
@@ -615,7 +611,6 @@ function rp_support_3rd_party_init_login() {
 
 function rp_scope_userinfo_claims() {
 	local TEST_ID="rp-scope-userinfo-claims"
-	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"scope\" is set to \"openid email phone\""
@@ -634,14 +629,14 @@ function rp_nonce_unless_code_flow() {
 	local TEST_ID="rp-nonce-unless-code-flow"
 
 	echo " * "
-	echo " * [server] prerequisite: .conf exists and \"response_type\" is set to \"code id_token token\""
+	echo " * [server] prerequisite: .conf exists and \"response_type\" is set to \"id_token\""
 	echo " * "
 
 	# test a regular flow up until successful authenticated application access
 	regular_flow "${TEST_ID}" fragment
 	
 	# check that the code authorization response handling is triggered
-	find_in_logfile "${TEST_ID}" "check \"code id_token token\" response" 150 "oidc_proto_authorization_response_code_idtoken_token: enter"
+	find_in_logfile "${TEST_ID}" "check \"id_token\" response" 150 "oidc_proto_handle_authorization_response_idtoken: enter"
 
 	# check that the nonce validates
 	find_in_logfile "${TEST_ID}" "check nonce validation" 150 "oidc_proto_validate_nonce: nonce" "validated successfully"
@@ -770,7 +765,6 @@ function rp_id_token_bad_sig_hs256() {
 
 function rp_id_token_sig_enc() {
 	local TEST_ID="rp-id_token-sig+enc"
-	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"id_token_encrypted_response_alg\" is set to e.g. \"A128KW\""
@@ -812,7 +806,6 @@ function rp_id_token_sig_es256() {
 
 function rp_id_token_sig_none() {
 	local TEST_ID="rp-id_token-sig-none"
-	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	# test a regular flow up until successful authenticated application access
 	regular_flow "${TEST_ID}"
@@ -916,7 +909,6 @@ function rp_id_token_sub() {
 
 function rp_id_token_kid_absent_single_jwks() {
 	local TEST_ID="rp-id_token-kid-absent-single-jwks"
-	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	# test a regular flow up until successful authenticated application access
 	regular_flow "${TEST_ID}"
@@ -943,7 +935,6 @@ function rp_id_token_kid_absent_multiple_jwks() {
 
 function rp_key_rotation_op_sign_key() {
 	local TEST_ID="rp-key-rotation-op-sign-key"
-	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	# test a regular flow up until successful authenticated application access
 	regular_flow "${TEST_ID}"
@@ -963,7 +954,6 @@ function rp_key_rotation_op_sign_key() {
 
 function rp_key_rotation_op_enc_key() {
 	local TEST_ID="rp-key-rotation-op-enc-key"
-	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 	
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"request_object\" is set to e.g. \"{ \"crypto\": { \"crypt_alg\": \"RSA1_5\" } }"
@@ -1004,6 +994,28 @@ function rp_key_rotation_op_enc_key() {
 	# check that the kid's from the two tests differ
 	message "${TEST_ID}" "check different kids" "-n"
 	if [ "${KIDA}" != "${KIDB}" ] ; then echo "OK"; else echo "ERROR" && exit; fi
+}
+
+function rp_claims_aggregated() {
+	local TEST_ID="rp-claims-aggregated"
+	
+	# test a regular flow up until successful authenticated application access
+	regular_flow "${TEST_ID}"
+
+	# check that aggregated claims were returned and processed	
+	find_in_logfile "${TEST_ID}" "check eye_color aggregated claim" 125 "oidc_proto_resolve_composite_claims: processing:" "eye_color: src1"	
+	find_in_logfile "${TEST_ID}" "check shoe_size aggregated claim" 125 "oidc_proto_resolve_composite_claims: processing:" "shoe_size: src1"
+	
+	# check that aggregated claims were flattened in to headers		
+	find_in_logfile "${TEST_ID}" "check flattened eye_color claim" 75 "oidc_util_set_header: setting header" "\"OIDC_CLAIM_eye_color: blue"\"	
+	find_in_logfile "${TEST_ID}" "check flattened shoe_size claim" 75 "oidc_util_set_header: setting header" "\"OIDC_CLAIM_shoe_size: 8\""	
+}
+
+function rp_claims_distributed() {
+	local TEST_ID="rp-claims-distributed"
+
+	# test a regular flow up until successful authenticated application access
+	regular_flow "${TEST_ID}"
 }
 
 function rp_userinfo_bearer_header() {
@@ -1051,7 +1063,6 @@ function rp_userinfo_bearer_body() {
 
 function rp_userinfo_sig() {
 	local TEST_ID="rp-userinfo-sig"
-	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"userinfo_signed_response_alg\" is set to e.g. \"RS256\""
@@ -1069,7 +1080,6 @@ function rp_userinfo_sig() {
 
 function rp_userinfo_sig_enc() {
 	local TEST_ID="rp-userinfo-sig+enc"
-	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"userinfo_signed_response_alg\" is set to e.g. \"RS256\""
@@ -1091,7 +1101,6 @@ function rp_userinfo_sig_enc() {
 
 function rp_userinfo_enc() {
 	local TEST_ID="rp-userinfo-enc"
-	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"userinfo_encrypted_response_alg\" is set to e.g. \"RSA1_5\""
@@ -1108,7 +1117,6 @@ function rp_userinfo_enc() {
 
 function rp_userinfo_bad_sub_claim() {
 	local TEST_ID="rp-userinfo-bad-sub-claim"
-	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	# test a regular flow up until successful authenticated application access
 	regular_flow "${TEST_ID}"
@@ -1131,7 +1139,7 @@ function execute_test() {
 }
 
 if [ $1 != "all" ] ; then
-		execute_test "${1}" 0 1
+	execute_test "${1}" 0 1
 else
 	TOTAL=`echo ${TESTS} ${TESTS_UNSUPPORTED} ${TEST_ERR} | wc -w`
 	NR=0

@@ -1,3 +1,7 @@
+10/27/2016
+- handle aggregated and distributed claims from the userinfo endpoint
+- bump to 2.0.1rc7
+
 10/24/2016
 - add OpenID Connect RP certification test script
 - handle non-integer exp/iat timestamps; closes #187; thanks @drdivano
