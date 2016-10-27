@@ -902,13 +902,22 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, oidc_jwt_t *jwt,
 
 		/* see if we were looking for a specific kid, if not we'll include any key that matches the type */
 		if ((jwt->header.kid == NULL) && (x5t == NULL)) {
-			oidc_jwk_to_json(r->pool, jwk, &jwk_json, &err);
-			oidc_debug(r, "no kid/x5t to match, include matching key type: %s", jwk_json);
-			if (jwk->kid != NULL)
-				apr_hash_set(result, jwk->kid, APR_HASH_KEY_STRING, jwk);
-			else
-				apr_hash_set(result, apr_psprintf(r->pool, "%d", i),
-						APR_HASH_KEY_STRING, jwk);
+			const char *use = json_string_value(json_object_get(elem, "use"));
+			if ((use != NULL) && (strcmp(use, "sig") != 0)) {
+				oidc_debug(r,
+						"skipping key because of non-matching \"use\": \"%s\"",
+						use);
+			} else {
+				oidc_jwk_to_json(r->pool, jwk, &jwk_json, &err);
+				oidc_debug(r,
+						"no kid/x5t to match, include matching key type: %s",
+						jwk_json);
+				if (jwk->kid != NULL)
+					apr_hash_set(result, jwk->kid, APR_HASH_KEY_STRING, jwk);
+				else
+					apr_hash_set(result, apr_psprintf(r->pool, "%d", i),
+							APR_HASH_KEY_STRING, jwk);
+			}
 			continue;
 		}
 

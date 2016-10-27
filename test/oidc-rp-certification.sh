@@ -71,6 +71,7 @@ TESTS="
 	rp_id_token_kid_absent_single_jwks
 	rp_id_token_kid_absent_multiple_jwks
 	rp_key_rotation_op_sign_key
+	rp_key_rotation_op_enc_key
 	rp_claims_aggregated
 	rp_claims_distributed
 	rp_userinfo_bearer_header
@@ -82,7 +83,6 @@ TESTS="
 "
 
 TEST_ERR="
-	rp_key_rotation_op_enc_key
 "
 
 TESTS_OBSOLETE="
@@ -915,6 +915,7 @@ function rp_id_token_kid_absent_single_jwks() {
 
 	find_in_logfile "${TEST_ID}" "check missing kid" 150 "oidc_proto_get_key_from_jwks: search for kid \"(null)\""
 	#find_in_logfile "${TEST_ID}" "check abort" 30 "oidc_proto_parse_idtoken: id_token signature could not be validated, aborting"
+	find_in_logfile "${TEST_ID}" "check single JWK" 150 "oidc_proto_get_keys_from_jwks_uri: returning 1 key(s)"
 	find_in_logfile "${TEST_ID}" "check signature verification" 150 "oidc_proto_jwt_verify: JWT signature verification with algorithm \"RS256\" was successful"
 }
 
@@ -922,15 +923,19 @@ function rp_id_token_kid_absent_multiple_jwks() {
 	local TEST_ID="rp-id_token-kid-absent-multiple-jwks"
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
-	initiate_sso ${TEST_ID} ${ISSUER}
-	send_authentication_request ${TEST_ID} ${RESULT}
-	send_authentication_response ${TEST_ID} ${RESULT}
+	#initiate_sso ${TEST_ID} ${ISSUER}
+	#send_authentication_request ${TEST_ID} ${RESULT}
+	#send_authentication_response ${TEST_ID} ${RESULT}
 
-	find_in_logfile "${TEST_ID}" "check missing JWK" 30 "oidc_proto_jwt_verify: JWT signature verification failed" "could not verify signature against any of the"
-	find_in_logfile "${TEST_ID}" "check abort" 30 "oidc_proto_parse_idtoken: id_token signature could not be validated, aborting"
+	#find_in_logfile "${TEST_ID}" "check missing JWK" 30 "oidc_proto_jwt_verify: JWT signature verification failed" "could not verify signature against any of the"
+	#find_in_logfile "${TEST_ID}" "check abort" 30 "oidc_proto_parse_idtoken: id_token signature could not be validated, aborting"
 
 	# test a regular flow up until successful authenticated application access
-	#regular_flow "${TEST_ID}"
+	regular_flow "${TEST_ID}"
+
+	find_in_logfile "${TEST_ID}" "check missing kid" 150 "oidc_proto_get_key_from_jwks: search for kid \"(null)\""
+	find_in_logfile "${TEST_ID}" "check multiple JWKs" 150 "oidc_proto_get_keys_from_jwks_uri: returning 2 key(s)"
+	find_in_logfile "${TEST_ID}" "check signature verification" 150 "oidc_proto_jwt_verify: JWT signature verification with algorithm \"RS256\" was successful"
 }
 
 function rp_key_rotation_op_sign_key() {
@@ -1002,11 +1007,11 @@ function rp_claims_aggregated() {
 	# test a regular flow up until successful authenticated application access
 	regular_flow "${TEST_ID}"
 
-	# check that aggregated claims were returned and processed	
+	# check that aggregated claims were returned and processed
 	find_in_logfile "${TEST_ID}" "check eye_color aggregated claim" 125 "oidc_proto_resolve_composite_claims: processing:" "eye_color: src1"	
 	find_in_logfile "${TEST_ID}" "check shoe_size aggregated claim" 125 "oidc_proto_resolve_composite_claims: processing:" "shoe_size: src1"
 	
-	# check that aggregated claims were flattened in to headers		
+	# check that aggregated claims were flattened in to headers
 	find_in_logfile "${TEST_ID}" "check flattened eye_color claim" 75 "oidc_util_set_header: setting header" "\"OIDC_CLAIM_eye_color: blue"\"	
 	find_in_logfile "${TEST_ID}" "check flattened shoe_size claim" 75 "oidc_util_set_header: setting header" "\"OIDC_CLAIM_shoe_size: 8\""	
 }
@@ -1016,6 +1021,12 @@ function rp_claims_distributed() {
 
 	# test a regular flow up until successful authenticated application access
 	regular_flow "${TEST_ID}"
+
+	# check that distributed claim was returned and processed
+	find_in_logfile "${TEST_ID}" "check age distributed claim" 125 "oidc_proto_resolve_composite_claims: processing:" "age: src1"	
+
+	# check that distributed claim was flattened in to a header
+	find_in_logfile "${TEST_ID}" "check flattened age claim" 75 "oidc_util_set_header: setting header" "\"OIDC_CLAIM_age: 30"\"									
 }
 
 function rp_userinfo_bearer_header() {
