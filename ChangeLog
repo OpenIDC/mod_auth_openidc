@@ -1,8 +1,11 @@
+10/28/2016
+- don't include encryption keys from the jwks_uri when verifying a JWT and no kid has been specified
+- fix memory leaks in composite claim handling
+
 10/27/2016
 - handle aggregated and distributed claims from the userinfo endpoint
 - only pick private_key_jwt token endpoint authentication if a private key is configured; closes #189
 - bump to 2.0.1rc7
-- don't include encryption keys from the jwks_uri when verifiying and no kid has been specified
 
 10/24/2016
 - add OpenID Connect RP certification test script

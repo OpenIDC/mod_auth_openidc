@@ -190,6 +190,9 @@ apr_byte_t oidc_proto_get_encryption_jwk_by_type(request_rec *r, oidc_cfg *cfg,
 		oidc_jwk_destroy(key);
 	}
 
+	/* no need anymore for the parsed json_t contents, release the it */
+	json_decref(j_jwks);
+
 	return (*jwk != NULL);
 }
 
@@ -1535,10 +1538,11 @@ static apr_byte_t oidc_proto_resolve_composite_claims(request_rec *r,
 					json_t *v = json_object_get(decoded, key);
 					if (v == NULL) {
 						v = json_object();
-						json_object_set(decoded, key, v);
+						json_object_set_new(decoded, key, v);
 					}
 					oidc_util_json_merge(jwt->payload.value.json, v);
 				}
+				oidc_jwt_destroy(jwt);
 			}
 		}
 		iter = json_object_iter_next(sources, iter);
@@ -1564,6 +1568,7 @@ static apr_byte_t oidc_proto_resolve_composite_claims(request_rec *r,
 
 	json_object_del(claims, OIDC_COMPOSITE_CLAIM_NAMES);
 	json_object_del(claims, OIDC_COMPOSITE_CLAIM_SOURCES);
+	json_decref(decoded);
 
 	return TRUE;
 }
