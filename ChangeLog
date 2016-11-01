@@ -1,3 +1,6 @@
+11/1/2016
+- release version 2.1.0
+
 10/28/2016
 - don't include encryption keys from the jwks_uri when verifying a JWT and no kid has been specified
 - fix memory leaks in composite claim handling

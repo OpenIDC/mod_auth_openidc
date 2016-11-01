@@ -6,7 +6,7 @@
 # Script used to do automated OpenID Connect Relying Party Certification
 # Testing for the mod_auth_openidc OIDC RP implementation for Apache HTTPd.
 #
-# @Version: 2.0.1, mod_auth_openidc >= v2.0.1rc7
+# @Version: 2.1.0, mod_auth_openidc >= v2.0.1rc7
 # 
 # @Author: Hans Zandbelt - hzandbelt@pingidentity.com
 #
