@@ -135,13 +135,20 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z) {
 
 	apr_byte_t rc = TRUE;
 
-	/* get a new uuid for this session */
-	apr_uuid_t uuid;
-	apr_uuid_get(&uuid);
-	char key[APR_UUID_FORMATTED_LENGTH + 1];
-	apr_uuid_format((char *) &key, &uuid);
+	/* check for an old cache entry */
+	char *oldkey = oidc_util_get_cookie(r, oidc_cfg_dir_cookie(r));
+
+	if (oldkey != NULL) {
+		/* remove the old session from the cache */
+		rc = c->cache->set(r, OIDC_CACHE_SECTION_SESSION, oldkey, NULL, 0);
+	}
 
 	if (z->state != NULL) {
+		/* get a new uuid for this session */
+		apr_uuid_t uuid;
+		apr_uuid_get(&uuid);
+		char key[APR_UUID_FORMATTED_LENGTH + 1];
+		apr_uuid_format((char *) &key, &uuid);
 
 		/* store the string-encoded session in the cache */
 		char *s_value = NULL;
@@ -156,12 +163,8 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z) {
 					c->persistent_session_cookie ? z->expiry : -1);
 
 	} else {
-
 		/* clear the cookie */
 		oidc_util_set_cookie(r, oidc_cfg_dir_cookie(r), "", 0);
-
-		/* remove the session from the cache */
-		rc = c->cache->set(r, OIDC_CACHE_SECTION_SESSION, key, NULL, 0);
 	}
 
 	return rc;
