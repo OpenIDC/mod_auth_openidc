@@ -89,12 +89,12 @@ TESTS_OBSOLETE="
 	rp_discovery_webfinger_http_href
 	rp_discovery_webfinger_unknown_member
 	rp_support_3rd_party_init_login
+	rp-key-rotation-rp-sign-key
+	rp-key-rotation-rp-enc-key
 "
 
 TESTS_UNSUPPORTED="
 	rp-self-issued
-	rp-key-rotation-rp-sign-key
-	rp-key-rotation-rp-enc-key
 "
 
 if [ -z $1 ] ; then
