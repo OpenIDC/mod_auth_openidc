@@ -1,0 +1,596 @@
+
+ # test [1/53]: rp_discovery_webfinger_url
+
+ [11/02/16 23:46:11] rp-discovery-webfinger-url: initiate CSRF ... OK
+ [11/02/16 23:46:12] rp-discovery-webfinger-url: initiate URL based Discovery ... OK
+ [11/02/16 23:46:13] rp-discovery-webfinger-url: check webfinger request ... OK
+ [11/02/16 23:46:13] rp-discovery-webfinger-url: check webfinger issuer result ... OK
+
+ # test [2/53]: rp_discovery_webfinger_acct
+
+ [11/02/16 23:46:13] rp-discovery-webfinger-acct: initiate CSRF ... OK
+ [11/02/16 23:46:14] rp-discovery-webfinger-acct: initiate SSO ... OK
+ [11/02/16 23:46:16] rp-discovery-webfinger-acct: check webfinger request ... OK
+ [11/02/16 23:46:16] rp-discovery-webfinger-acct: check webfinger issuer result ... OK
+
+ # test [3/53]: rp_discovery_issuer_not_matching_config
+
+ [11/02/16 23:46:16] rp-discovery-issuer-not-matching-config: initiate CSRF ... OK
+ [11/02/16 23:46:17] rp-discovery-issuer-not-matching-config: initiate SSO ... OK
+ [11/02/16 23:46:17] rp-discovery-issuer-not-matching-config: check issuer mismatch error message ... OK
+
+ # test [4/53]: rp_discovery_openid_configuration
+
+ [11/02/16 23:46:17] rp-discovery-openid-configuration: initiate CSRF ... OK
+ [11/02/16 23:46:18] rp-discovery-openid-configuration: initiate SSO ... OK
+
+ # test [5/53]: rp_discovery_jwks_uri_keys
+
+ [11/02/16 23:46:19] rp-discovery-jwks_uri-keys: initiate CSRF ... OK
+ [11/02/16 23:46:20] rp-discovery-jwks_uri-keys: initiate SSO ... OK
+ [11/02/16 23:46:21] rp-discovery-jwks_uri-keys: send authentication request to OP ... OK
+ [11/02/16 23:46:22] rp-discovery-jwks_uri-keys: return authentication response to RP ... OK
+ [11/02/16 23:46:23] rp-discovery-jwks_uri-keys: access application as authenticated user ... OK
+ [11/02/16 23:46:24] rp-discovery-jwks_uri-keys: check id_token parse result ... OK
+ [11/02/16 23:46:24] rp-discovery-jwks_uri-keys: check JWK retrieval by "kid" ... OK
+ [11/02/16 23:46:24] rp-discovery-jwks_uri-keys: check id_token verification ... OK
+
+ # test [6/53]: rp_registration_dynamic
+
+ [11/02/16 23:46:24] rp-registration-dynamic: initiate CSRF ... OK
+ [11/02/16 23:46:24] rp-registration-dynamic: initiate SSO ... OK
+
+ # test [7/53]: rp_response_type_code
+
+ * 
+ * [server] prerequisite: .conf exists and "response_type" is set to "code"
+ * 
+ [11/02/16 23:46:25] rp-response_type-code: initiate CSRF ... OK
+ [11/02/16 23:46:26] rp-response_type-code: initiate SSO ... OK
+ [11/02/16 23:46:27] rp-response_type-code: send authentication request to OP ... OK
+ [11/02/16 23:46:28] rp-response_type-code: return authentication response to RP ... OK
+ [11/02/16 23:46:30] rp-response_type-code: access application as authenticated user ... OK
+ [11/02/16 23:46:30] rp-response_type-code: check "code" response ... OK
+
+ # test [8/53]: rp_response_type_id_token
+
+ * 
+ * [server] prerequisite: .conf exists and "response_type" is set to "id_token"
+ * 
+ [11/02/16 23:46:30] rp-response_type-id_token: initiate CSRF ... OK
+ [11/02/16 23:46:31] rp-response_type-id_token: initiate SSO ... OK
+ [11/02/16 23:46:32] rp-response_type-id_token: send authentication request to OP ... OK
+ [11/02/16 23:46:33] rp-response_type-id_token: return authentication response to RP ... OK
+ [11/02/16 23:46:33] rp-response_type-id_token: access application as authenticated user ... OK
+ [11/02/16 23:46:33] rp-response_type-id_token: check "id_token" response ... OK
+
+ # test [9/53]: rp_response_type_id_token_token
+
+ * 
+ * [server] prerequisite: .conf exists and "response_type" is set to "id_token token"
+ * 
+ [11/02/16 23:46:33] rp-response_type-id_token+token: initiate CSRF ... OK
+ [11/02/16 23:46:34] rp-response_type-id_token+token: initiate SSO ... OK
+ [11/02/16 23:46:35] rp-response_type-id_token+token: send authentication request to OP ... OK
+ [11/02/16 23:46:36] rp-response_type-id_token+token: return authentication response to RP ... OK
+ [11/02/16 23:46:37] rp-response_type-id_token+token: access application as authenticated user ... OK
+ [11/02/16 23:46:38] rp-response_type-id_token+token: check "id_token token" response ... OK
+
+ # test [10/53]: rp_response_type_code_id_token
+
+ * 
+ * [server] prerequisite: .conf exists and "response_type" is set to "code id_token"
+ * 
+ [11/02/16 23:46:38] rp-response_type-code+id_token: initiate CSRF ... OK
+ [11/02/16 23:46:38] rp-response_type-code+id_token: initiate SSO ... OK
+ [11/02/16 23:46:39] rp-response_type-code+id_token: send authentication request to OP ... OK
+ [11/02/16 23:46:40] rp-response_type-code+id_token: return authentication response to RP ... OK
+ [11/02/16 23:46:42] rp-response_type-code+id_token: access application as authenticated user ... OK
+ [11/02/16 23:46:42] rp-response_type-code+id_token: check "code id_token" response ... OK
+
+ # test [11/53]: rp_response_type_code_token
+
+ * 
+ * [server] prerequisite: .conf exists and "response_type" is set to "code token"
+ * 
+ [11/02/16 23:46:42] rp-response_type-code+token: initiate CSRF ... OK
+ [11/02/16 23:46:43] rp-response_type-code+token: initiate SSO ... OK
+ [11/02/16 23:46:44] rp-response_type-code+token: send authentication request to OP ... OK
+ [11/02/16 23:46:45] rp-response_type-code+token: return authentication response to RP ... OK
+ [11/02/16 23:46:46] rp-response_type-code+token: access application as authenticated user ... OK
+ [11/02/16 23:46:47] rp-response_type-code+token: check "code token" response ... OK
+
+ # test [12/53]: rp_response_type_code_id_token_token
+
+ * 
+ * [server] prerequisite: .conf exists and "response_type" is set to "code id_token token"
+ * 
+ [11/02/16 23:46:47] rp-response_type-code+id_token+token: initiate CSRF ... OK
+ [11/02/16 23:46:47] rp-response_type-code+id_token+token: initiate SSO ... OK
+ [11/02/16 23:46:48] rp-response_type-code+id_token+token: send authentication request to OP ... OK
+ [11/02/16 23:46:49] rp-response_type-code+id_token+token: return authentication response to RP ... OK
+ [11/02/16 23:46:51] rp-response_type-code+id_token+token: access application as authenticated user ... OK
+ [11/02/16 23:46:51] rp-response_type-code+id_token+token: check "code id_token token" response ... OK
+
+ # test [13/53]: rp_response_mode_form_post
+
+ * 
+ * [server] prerequisite: .conf exists and "response_type" is set to "id_token token"
+ * [server] prerequisite: .conf exists and "response_mode" is set to "form_post"
+ * 
+ [11/02/16 23:46:51] rp-response_mode-form_post: initiate CSRF ... OK
+ [11/02/16 23:46:52] rp-response_mode-form_post: initiate SSO ... OK
+ [11/02/16 23:46:53] rp-response_mode-form_post: send authentication request to OP ... OK
+ [11/02/16 23:46:54] rp-response_mode-form_post: return authentication response to RP ... OK
+ [11/02/16 23:46:55] rp-response_mode-form_post: access application as authenticated user ... OK
+ [11/02/16 23:46:55] rp-response_mode-form_post: check form_post response ... OK
+ [11/02/16 23:46:55] rp-response_mode-form_post: check response type ... OK
+
+ # test [14/53]: rp_claims_request_id_token
+
+ * 
+ * [server] prerequisite: .conf exists and "scope" is set to "openid"
+ * [server] prerequisite: .conf exists and "auth_request_params" is set to e.g. "claims=%7B%20%22id_token%22%3A%20%7B%20%22email%22%3A%20%7B%22essential%22%3A%20true%7D%20%7D%20%7D"
+ * 
+ [11/02/16 23:46:55] rp-claims_request-id_token: initiate CSRF ... OK
+ [11/02/16 23:46:56] rp-claims_request-id_token: initiate SSO ... OK
+ [11/02/16 23:46:57] rp-claims_request-id_token: send authentication request to OP ... OK
+ [11/02/16 23:46:58] rp-claims_request-id_token: return authentication response to RP ... OK
+ [11/02/16 23:47:00] rp-claims_request-id_token: access application as authenticated user ... OK
+ [11/02/16 23:47:00] rp-claims_request-id_token: check email claim ... OK
+ [11/02/16 23:47:00] rp-claims_request-id_token: check valid id_token ... OK
+
+ # test [15/53]: rp_claims_request_userinfo
+
+ * 
+ * [server] prerequisite: .conf exists and "scope" is set to "openid"
+ * [server] prerequisite: .conf exists and "auth_request_params" is set to e.g. "claims=%7B%20%22userinfo%22%3A%20%7B%20%22email%22%3A%20%7B%22essential%22%3A%20true%7D%20%7D%20%7D"
+ * 
+ [11/02/16 23:47:00] rp-claims_request-userinfo: initiate CSRF ... OK
+ [11/02/16 23:47:00] rp-claims_request-userinfo: initiate SSO ... OK
+ [11/02/16 23:47:01] rp-claims_request-userinfo: send authentication request to OP ... OK
+ [11/02/16 23:47:03] rp-claims_request-userinfo: return authentication response to RP ... OK
+ [11/02/16 23:47:04] rp-claims_request-userinfo: access application as authenticated user ... OK
+ [11/02/16 23:47:04] rp-claims_request-userinfo: check email claim ... OK
+
+ # test [16/53]: rp_request_uri_enc
+
+ * 
+ * [server] prerequisite: .conf exists and "request_object" is set to e.g. "{ "crypto": { "crypt_alg": "A128KW" } }
+ * 
+ [11/02/16 23:47:04] rp-request_uri-enc: initiate CSRF ... OK
+ [11/02/16 23:47:05] rp-request_uri-enc: initiate SSO ... OK
+ [11/02/16 23:47:06] rp-request_uri-enc: send authentication request to OP ... OK
+ [11/02/16 23:47:08] rp-request_uri-enc: return authentication response to RP ... OK
+ [11/02/16 23:47:10] rp-request_uri-enc: access application as authenticated user ... OK
+ [11/02/16 23:47:10] rp-request_uri-enc: check encrypted request object ... OK
+ [11/02/16 23:47:10] rp-request_uri-enc: check request URI ... OK
+
+ # test [17/53]: rp_request_uri_sig_enc
+
+ * 
+ * [server] prerequisite: .conf exists and "request_object" is set to e.g. "{ "crypto": { "sign_alg": "RS256", "crypt_alg": "A128KW" } }
+ * 
+ [11/02/16 23:47:10] rp-request_uri-sig+enc: initiate CSRF ... OK
+ [11/02/16 23:47:11] rp-request_uri-sig+enc: initiate SSO ... OK
+ [11/02/16 23:47:12] rp-request_uri-sig+enc: send authentication request to OP ... OK
+ [11/02/16 23:47:14] rp-request_uri-sig+enc: return authentication response to RP ... OK
+ [11/02/16 23:47:16] rp-request_uri-sig+enc: access application as authenticated user ... OK
+ [11/02/16 23:47:16] rp-request_uri-sig+enc: check encrypted request object ... OK
+ [11/02/16 23:47:16] rp-request_uri-sig+enc: check request URI ... OK
+
+ # test [18/53]: rp_request_uri_unsigned
+
+ * 
+ * [server] prerequisite: .conf exists and "request_object" is set to e.g. "{ "crypto": { "sign_alg": "none" } }
+ * 
+ [11/02/16 23:47:16] rp-request_uri-unsigned: initiate CSRF ... OK
+ [11/02/16 23:47:16] rp-request_uri-unsigned: initiate SSO ... OK
+ [11/02/16 23:47:17] rp-request_uri-unsigned: send authentication request to OP ... OK
+ [11/02/16 23:47:20] rp-request_uri-unsigned: return authentication response to RP ... OK
+ [11/02/16 23:47:21] rp-request_uri-unsigned: access application as authenticated user ... OK
+ [11/02/16 23:47:21] rp-request_uri-unsigned: check unsigned request object ... OK
+ [11/02/16 23:47:21] rp-request_uri-unsigned: check request URI ... OK
+
+ # test [19/53]: rp_request_uri_sig
+
+ * 
+ * [server] prerequisite: .conf exists and "request_object" is set to e.g. "{ "crypto": { "sign_alg": "HS256" } }
+ * 
+ [11/02/16 23:47:21] rp-request_uri-sig: initiate CSRF ... OK
+ [11/02/16 23:47:22] rp-request_uri-sig: initiate SSO ... OK
+ [11/02/16 23:47:23] rp-request_uri-sig: send authentication request to OP ... OK
+ [11/02/16 23:47:25] rp-request_uri-sig: return authentication response to RP ... OK
+ [11/02/16 23:47:27] rp-request_uri-sig: access application as authenticated user ... OK
+ [11/02/16 23:47:27] rp-request_uri-sig: check signed request object ... OK
+ [11/02/16 23:47:27] rp-request_uri-sig: check request URI ... OK
+
+ # test [20/53]: rp_scope_userinfo_claims
+
+ * 
+ * [server] prerequisite: .conf exists and "scope" is set to "openid email phone"
+ * 
+ [11/02/16 23:47:27] rp-scope-userinfo-claims: initiate CSRF ... OK
+ [11/02/16 23:47:28] rp-scope-userinfo-claims: initiate SSO ... OK
+ [11/02/16 23:47:29] rp-scope-userinfo-claims: send authentication request to OP ... OK
+ [11/02/16 23:47:30] rp-scope-userinfo-claims: return authentication response to RP ... OK
+ [11/02/16 23:47:31] rp-scope-userinfo-claims: access application as authenticated user ... OK
+ [11/02/16 23:47:31] rp-scope-userinfo-claims: check email claim ... OK
+ [11/02/16 23:47:31] rp-scope-userinfo-claims: check phone claim ... OK
+
+ # test [21/53]: rp_nonce_unless_code_flow
+
+ * 
+ * [server] prerequisite: .conf exists and "response_type" is set to "id_token"
+ * 
+ [11/02/16 23:47:31] rp-nonce-unless-code-flow: initiate CSRF ... OK
+ [11/02/16 23:47:32] rp-nonce-unless-code-flow: initiate SSO ... OK
+ [11/02/16 23:47:33] rp-nonce-unless-code-flow: send authentication request to OP ... OK
+ [11/02/16 23:47:35] rp-nonce-unless-code-flow: return authentication response to RP ... OK
+ [11/02/16 23:47:35] rp-nonce-unless-code-flow: access application as authenticated user ... OK
+ [11/02/16 23:47:35] rp-nonce-unless-code-flow: check "id_token" response ... OK
+ [11/02/16 23:47:35] rp-nonce-unless-code-flow: check nonce validation ... OK
+
+ # test [22/53]: rp_nonce_invalid
+
+ [11/02/16 23:47:35] rp-nonce-invalid: initiate CSRF ... OK
+ [11/02/16 23:47:36] rp-nonce-invalid: initiate SSO ... OK
+ [11/02/16 23:47:37] rp-nonce-invalid: send authentication request to OP ... OK
+ [11/02/16 23:47:38] rp-nonce-invalid: return authentication response to RP ... OK
+ [11/02/16 23:47:39] rp-nonce-invalid: check nonce mismatch ... OK
+
+ # test [23/53]: rp_token_endpoint_client_secret_basic
+
+ * 
+ * [server] prerequisite: .conf exists and "token_endpoint_auth" is set to "client_secret_basic"
+ * 
+ [11/02/16 23:47:39] rp-token_endpoint-client_secret_basic: initiate CSRF ... OK
+ [11/02/16 23:47:40] rp-token_endpoint-client_secret_basic: initiate SSO ... OK
+ [11/02/16 23:47:41] rp-token_endpoint-client_secret_basic: send authentication request to OP ... OK
+ [11/02/16 23:47:42] rp-token_endpoint-client_secret_basic: return authentication response to RP ... OK
+ [11/02/16 23:47:44] rp-token_endpoint-client_secret_basic: access application as authenticated user ... OK
+ [11/02/16 23:47:44] rp-token_endpoint-client_secret_basic: check token endpoint auth method ... OK
+ [11/02/16 23:47:44] rp-token_endpoint-client_secret_basic: check basic auth ... OK
+ [11/02/16 23:47:44] rp-token_endpoint-client_secret_basic: check token exchange response ... OK
+
+ # test [24/53]: rp_token_endpoint_client_secret_post
+
+ * 
+ * [server] prerequisite: .conf exists and "token_endpoint_auth" is set to "client_secret_post"
+ * 
+ [11/02/16 23:47:44] rp-token_endpoint-client_secret_post: initiate CSRF ... OK
+ [11/02/16 23:47:44] rp-token_endpoint-client_secret_post: initiate SSO ... OK
+ [11/02/16 23:47:45] rp-token_endpoint-client_secret_post: send authentication request to OP ... OK
+ [11/02/16 23:47:46] rp-token_endpoint-client_secret_post: return authentication response to RP ... OK
+ [11/02/16 23:47:48] rp-token_endpoint-client_secret_post: access application as authenticated user ... OK
+ [11/02/16 23:47:48] rp-token_endpoint-client_secret_post: check token endpoint auth method ... OK
+ [11/02/16 23:47:48] rp-token_endpoint-client_secret_post: check post auth ... OK
+ [11/02/16 23:47:48] rp-token_endpoint-client_secret_post: check token exchange response ... OK
+
+ # test [25/53]: rp_token_endpoint_client_secret_jwt
+
+ * 
+ * [server] prerequisite: .conf exists and "token_endpoint_auth" is set to "client_secret_jwt"
+ * 
+ [11/02/16 23:47:48] rp-token_endpoint-client_secret_jwt: initiate CSRF ... OK
+ [11/02/16 23:47:49] rp-token_endpoint-client_secret_jwt: initiate SSO ... OK
+ [11/02/16 23:47:50] rp-token_endpoint-client_secret_jwt: send authentication request to OP ... OK
+ [11/02/16 23:47:51] rp-token_endpoint-client_secret_jwt: return authentication response to RP ... OK
+ [11/02/16 23:47:53] rp-token_endpoint-client_secret_jwt: access application as authenticated user ... OK
+ [11/02/16 23:47:53] rp-token_endpoint-client_secret_jwt: check token endpoint auth method ... OK
+ [11/02/16 23:47:53] rp-token_endpoint-client_secret_jwt: check client assertion auth ... OK
+ [11/02/16 23:47:53] rp-token_endpoint-client_secret_jwt: check token exchange response ... OK
+
+ # test [26/53]: rp_token_endpoint_private_key_jwt
+
+ * 
+ * [server] prerequisite: .conf exists and "token_endpoint_auth" is set to "private_key_jwt"
+ * 
+ [11/02/16 23:47:53] rp-token_endpoint-private_key_jwt: initiate CSRF ... OK
+ [11/02/16 23:47:53] rp-token_endpoint-private_key_jwt: initiate SSO ... OK
+ [11/02/16 23:47:55] rp-token_endpoint-private_key_jwt: send authentication request to OP ... OK
+ [11/02/16 23:47:56] rp-token_endpoint-private_key_jwt: return authentication response to RP ... OK
+ [11/02/16 23:47:57] rp-token_endpoint-private_key_jwt: access application as authenticated user ... OK
+ [11/02/16 23:47:57] rp-token_endpoint-private_key_jwt: check token endpoint auth method ... OK
+ [11/02/16 23:47:57] rp-token_endpoint-private_key_jwt: check client assertion auth ... OK
+ [11/02/16 23:47:57] rp-token_endpoint-private_key_jwt: check token exchange response ... OK
+
+ # test [27/53]: rp_id_token_bad_sig_rs256
+
+ [11/02/16 23:47:57] rp-id_token-bad-sig-rs256: initiate CSRF ... OK
+ [11/02/16 23:47:58] rp-id_token-bad-sig-rs256: initiate SSO ... OK
+ [11/02/16 23:47:59] rp-id_token-bad-sig-rs256: send authentication request to OP ... OK
+ [11/02/16 23:48:00] rp-id_token-bad-sig-rs256: return authentication response to RP ... OK
+ [11/02/16 23:48:01] rp-id_token-bad-sig-rs256: check RS id_token ... OK
+ [11/02/16 23:48:01] rp-id_token-bad-sig-rs256: check RS signature mismatch ... OK
+
+ # test [28/53]: rp_id_token_bad_sig_hs256
+
+ [11/02/16 23:48:01] rp-id_token-bad-sig-hs256: initiate CSRF ... OK
+ [11/02/16 23:48:02] rp-id_token-bad-sig-hs256: initiate SSO ... OK
+ [11/02/16 23:48:03] rp-id_token-bad-sig-hs256: send authentication request to OP ... OK
+ [11/02/16 23:48:04] rp-id_token-bad-sig-hs256: return authentication response to RP ... OK
+ [11/02/16 23:48:05] rp-id_token-bad-sig-hs256: check HS id_token ... OK
+ [11/02/16 23:48:05] rp-id_token-bad-sig-hs256: check HS signature mismatch ... OK
+
+ # test [29/53]: rp_id_token_sig_enc
+
+ * 
+ * [server] prerequisite: .conf exists and "id_token_encrypted_response_alg" is set to e.g. "A128KW"
+ * 
+ [11/02/16 23:48:05] rp-id_token-sig+enc: initiate CSRF ... OK
+ [11/02/16 23:48:06] rp-id_token-sig+enc: initiate SSO ... OK
+ [11/02/16 23:48:07] rp-id_token-sig+enc: send authentication request to OP ... OK
+ [11/02/16 23:48:08] rp-id_token-sig+enc: return authentication response to RP ... OK
+ [11/02/16 23:48:10] rp-id_token-sig+enc: access application as authenticated user ... OK
+ [11/02/16 23:48:10] rp-id_token-sig+enc: check encrypted id_token ... OK
+ [11/02/16 23:48:10] rp-id_token-sig+enc: check decryption result ... OK
+
+ # test [30/53]: rp_id_token_sig_rs256
+
+ [11/02/16 23:48:10] rp-id_token-sig-rs256: initiate CSRF ... OK
+ [11/02/16 23:48:11] rp-id_token-sig-rs256: initiate SSO ... OK
+ [11/02/16 23:48:12] rp-id_token-sig-rs256: send authentication request to OP ... OK
+ [11/02/16 23:48:13] rp-id_token-sig-rs256: return authentication response to RP ... OK
+ [11/02/16 23:48:14] rp-id_token-sig-rs256: access application as authenticated user ... OK
+ [11/02/16 23:48:14] rp-id_token-sig-rs256: check RS id_token ... OK
+
+ # test [31/53]: rp_id_token_sig_hs256
+
+ [11/02/16 23:48:15] rp-id_token-sig-hs256: initiate CSRF ... OK
+ [11/02/16 23:48:15] rp-id_token-sig-hs256: initiate SSO ... OK
+ [11/02/16 23:48:16] rp-id_token-sig-hs256: send authentication request to OP ... OK
+ [11/02/16 23:48:17] rp-id_token-sig-hs256: return authentication response to RP ... OK
+ [11/02/16 23:48:19] rp-id_token-sig-hs256: access application as authenticated user ... OK
+ [11/02/16 23:48:19] rp-id_token-sig-hs256: check HS id_token ... OK
+
+ # test [32/53]: rp_id_token_sig_es256
+
+ [11/02/16 23:48:19] rp-id_token-sig-es256: initiate CSRF ... OK
+ [11/02/16 23:48:20] rp-id_token-sig-es256: initiate SSO ... OK
+ [11/02/16 23:48:21] rp-id_token-sig-es256: send authentication request to OP ... OK
+ [11/02/16 23:48:22] rp-id_token-sig-es256: return authentication response to RP ... OK
+ [11/02/16 23:48:23] rp-id_token-sig-es256: access application as authenticated user ... OK
+ [11/02/16 23:48:24] rp-id_token-sig-es256: check ES id_token ... OK
+
+ # test [33/53]: rp_id_token_sig_none
+
+ [11/02/16 23:48:24] rp-id_token-sig-none: initiate CSRF ... OK
+ [11/02/16 23:48:24] rp-id_token-sig-none: initiate SSO ... OK
+ [11/02/16 23:48:25] rp-id_token-sig-none: send authentication request to OP ... OK
+ [11/02/16 23:48:27] rp-id_token-sig-none: return authentication response to RP ... OK
+ [11/02/16 23:48:28] rp-id_token-sig-none: access application as authenticated user ... OK
+ [11/02/16 23:48:28] rp-id_token-sig-none: check code flow ... OK
+ [11/02/16 23:48:28] rp-id_token-sig-none: check alg none ... OK
+ [11/02/16 23:48:28] rp-id_token-sig-none: check valid id_token ... OK
+
+ # test [34/53]: rp_id_token_bad_c_hash
+
+ * 
+ * [server] prerequisite: .conf exists and "response_type" is set to "code id_token token"
+ * 
+ [11/02/16 23:48:28] rp-id_token-bad-c_hash: initiate CSRF ... OK
+ [11/02/16 23:48:28] rp-id_token-bad-c_hash: initiate SSO ... OK
+ [11/02/16 23:48:29] rp-id_token-bad-c_hash: send authentication request to OP ... OK
+ [11/02/16 23:48:31] rp-id_token-bad-c_hash: return authentication response to RP ... OK
+ [11/02/16 23:48:31] rp-id_token-bad-c_hash: check c_hash mismatch ... OK
+
+ # test [35/53]: rp_id_token_bad_at_hash
+
+ * 
+ * [server] prerequisite: .conf exists and "response_type" is set to "code id_token token"
+ * 
+ [11/02/16 23:48:31] rp-id_token-bad-at_hash: initiate CSRF ... OK
+ [11/02/16 23:48:32] rp-id_token-bad-at_hash: initiate SSO ... OK
+ [11/02/16 23:48:33] rp-id_token-bad-at_hash: send authentication request to OP ... OK
+ [11/02/16 23:48:34] rp-id_token-bad-at_hash: return authentication response to RP ... OK
+ [11/02/16 23:48:35] rp-id_token-bad-at_hash: check at_hash mismatch ... OK
+
+ # test [36/53]: rp_id_token_issuer_mismatch
+
+ [11/02/16 23:48:35] rp-id_token-issuer-mismatch: initiate CSRF ... OK
+ [11/02/16 23:48:36] rp-id_token-issuer-mismatch: initiate SSO ... OK
+ [11/02/16 23:48:37] rp-id_token-issuer-mismatch: send authentication request to OP ... OK
+ [11/02/16 23:48:38] rp-id_token-issuer-mismatch: return authentication response to RP ... OK
+ [11/02/16 23:48:39] rp-id_token-issuer-mismatch: check issuer mismatch ... OK
+ [11/02/16 23:48:39] rp-id_token-issuer-mismatch: check abort ... OK
+
+ # test [37/53]: rp_id_token_iat
+
+ [11/02/16 23:48:39] rp-id_token-iat: initiate CSRF ... OK
+ [11/02/16 23:48:39] rp-id_token-iat: initiate SSO ... OK
+ [11/02/16 23:48:41] rp-id_token-iat: send authentication request to OP ... OK
+ [11/02/16 23:48:42] rp-id_token-iat: return authentication response to RP ... OK
+ [11/02/16 23:48:43] rp-id_token-iat: check missing iat ... OK
+ [11/02/16 23:48:43] rp-id_token-iat: check abort ... OK
+
+ # test [38/53]: rp_id_token_bad_sig_es256
+
+ [11/02/16 23:48:43] rp-id_token-bad-sig-es256: initiate CSRF ... OK
+ [11/02/16 23:48:43] rp-id_token-bad-sig-es256: initiate SSO ... OK
+ [11/02/16 23:48:44] rp-id_token-bad-sig-es256: send authentication request to OP ... OK
+ [11/02/16 23:48:46] rp-id_token-bad-sig-es256: return authentication response to RP ... OK
+ [11/02/16 23:48:47] rp-id_token-bad-sig-es256: check EC id_token ... OK
+ [11/02/16 23:48:47] rp-id_token-bad-sig-es256: check EC signature mismatch ... OK
+
+ # test [39/53]: rp_id_token_aud
+
+ [11/02/16 23:48:47] rp-id_token-aud: initiate CSRF ... OK
+ [11/02/16 23:48:47] rp-id_token-aud: initiate SSO ... OK
+ [11/02/16 23:48:48] rp-id_token-aud: send authentication request to OP ... OK
+ [11/02/16 23:48:50] rp-id_token-aud: return authentication response to RP ... OK
+ [11/02/16 23:48:51] rp-id_token-aud: check aud mismatch ... OK
+
+ # test [40/53]: rp_id_token_sub
+
+ [11/02/16 23:48:51] rp-id_token-sub: initiate CSRF ... OK
+ [11/02/16 23:48:51] rp-id_token-sub: initiate SSO ... OK
+ [11/02/16 23:48:52] rp-id_token-sub: send authentication request to OP ... OK
+ [11/02/16 23:48:54] rp-id_token-sub: return authentication response to RP ... OK
+ [11/02/16 23:48:55] rp-id_token-sub: check missing sub ... OK
+ [11/02/16 23:48:55] rp-id_token-sub: check abort ... OK
+
+ # test [41/53]: rp_id_token_kid_absent_single_jwks
+
+ [11/02/16 23:48:55] rp-id_token-kid-absent-single-jwks: initiate CSRF ... OK
+ [11/02/16 23:48:55] rp-id_token-kid-absent-single-jwks: initiate SSO ... OK
+ [11/02/16 23:48:56] rp-id_token-kid-absent-single-jwks: send authentication request to OP ... OK
+ [11/02/16 23:48:58] rp-id_token-kid-absent-single-jwks: return authentication response to RP ... OK
+ [11/02/16 23:48:59] rp-id_token-kid-absent-single-jwks: access application as authenticated user ... OK
+ [11/02/16 23:48:59] rp-id_token-kid-absent-single-jwks: check missing kid ... OK
+ [11/02/16 23:48:59] rp-id_token-kid-absent-single-jwks: check single JWK ... OK
+ [11/02/16 23:48:59] rp-id_token-kid-absent-single-jwks: check signature verification ... OK
+
+ # test [42/53]: rp_id_token_kid_absent_multiple_jwks
+
+ [11/02/16 23:48:59] rp-id_token-kid-absent-multiple-jwks: initiate CSRF ... OK
+ [11/02/16 23:49:00] rp-id_token-kid-absent-multiple-jwks: initiate SSO ... OK
+ [11/02/16 23:49:01] rp-id_token-kid-absent-multiple-jwks: send authentication request to OP ... OK
+ [11/02/16 23:49:02] rp-id_token-kid-absent-multiple-jwks: return authentication response to RP ... OK
+ [11/02/16 23:49:04] rp-id_token-kid-absent-multiple-jwks: access application as authenticated user ... OK
+ [11/02/16 23:49:04] rp-id_token-kid-absent-multiple-jwks: check missing kid ... OK
+ [11/02/16 23:49:04] rp-id_token-kid-absent-multiple-jwks: check multiple JWKs ... OK
+ [11/02/16 23:49:04] rp-id_token-kid-absent-multiple-jwks: check signature verification ... OK
+
+ # test [43/53]: rp_key_rotation_op_sign_key
+
+ [11/02/16 23:49:04] rp-key-rotation-op-sign-key: initiate CSRF ... OK
+ [11/02/16 23:49:05] rp-key-rotation-op-sign-key: initiate SSO ... OK
+ [11/02/16 23:49:06] rp-key-rotation-op-sign-key: send authentication request to OP ... OK
+ [11/02/16 23:49:07] rp-key-rotation-op-sign-key: return authentication response to RP ... OK
+ [11/02/16 23:49:09] rp-key-rotation-op-sign-key: access application as authenticated user ... OK
+ [11/02/16 23:49:09] rp-key-rotation-op-sign-key: initiate CSRF ... OK
+ [11/02/16 23:49:10] rp-key-rotation-op-sign-key: initiate SSO ... OK
+ [11/02/16 23:49:10] rp-key-rotation-op-sign-key: send authentication request to OP ... OK
+ [11/02/16 23:49:10] rp-key-rotation-op-sign-key: return authentication response to RP ... OK
+ [11/02/16 23:49:12] rp-key-rotation-op-sign-key: access application as authenticated user ... OK
+ [11/02/16 23:49:12] rp-key-rotation-op-sign-key: check JWKs cache miss ... OK
+ [11/02/16 23:49:12] rp-key-rotation-op-sign-key: check JWKs refresh ... OK
+ [11/02/16 23:49:12] rp-key-rotation-op-sign-key: check matching kid ... OK
+ [11/02/16 23:49:12] rp-key-rotation-op-sign-key: check verification ... OK
+
+ # test [44/53]: rp_key_rotation_op_enc_key
+
+ * 
+ * [server] prerequisite: .conf exists and "request_object" is set to e.g. "{ "crypto": { "crypt_alg": "RSA1_5" } }
+ * 
+ [11/02/16 23:49:12] rp-key-rotation-op-enc-key: initiate CSRF ... OK
+ [11/02/16 23:49:13] rp-key-rotation-op-enc-key: initiate SSO ... OK
+ [11/02/16 23:49:15] rp-key-rotation-op-enc-key: send authentication request to OP ... OK
+ [11/02/16 23:49:17] rp-key-rotation-op-enc-key: return authentication response to RP ... OK
+ [11/02/16 23:49:18] rp-key-rotation-op-enc-key: access application as authenticated user ... OK
+ [11/02/16 23:49:18] rp-key-rotation-op-enc-key: check encrypted request object ... OK
+ [11/02/16 23:49:18] rp-key-rotation-op-enc-key: check request URI ... OK
+ [11/02/16 23:49:18] rp-key-rotation-op-enc-key: check JWKS refresh ... OK
+ [11/02/16 23:49:18] rp-key-rotation-op-enc-key: kid #1 ZIGye4-ZgjUILu4xD0J5VTXB3e3aASky2_oPIhqMlD4 ... 
+ [11/02/16 23:49:18] rp-key-rotation-op-enc-key: initiate CSRF ... OK
+ [11/02/16 23:49:19] rp-key-rotation-op-enc-key: initiate SSO ... OK
+ [11/02/16 23:49:20] rp-key-rotation-op-enc-key: send authentication request to OP ... OK
+ [11/02/16 23:49:22] rp-key-rotation-op-enc-key: return authentication response to RP ... OK
+ [11/02/16 23:49:23] rp-key-rotation-op-enc-key: access application as authenticated user ... OK
+ [11/02/16 23:49:23] rp-key-rotation-op-enc-key: check encrypted request object ... OK
+ [11/02/16 23:49:23] rp-key-rotation-op-enc-key: check request URI ... OK
+ [11/02/16 23:49:23] rp-key-rotation-op-enc-key: check JWKS refresh ... OK
+ [11/02/16 23:49:23] rp-key-rotation-op-enc-key: kid #2 rotated_rsa_1478126956.76 ... 
+ [11/02/16 23:49:23] rp-key-rotation-op-enc-key: check different kids ... OK
+
+ # test [45/53]: rp_claims_aggregated
+
+ [11/02/16 23:49:23] rp-claims-aggregated: initiate CSRF ... OK
+ [11/02/16 23:49:24] rp-claims-aggregated: initiate SSO ... OK
+ [11/02/16 23:49:25] rp-claims-aggregated: send authentication request to OP ... OK
+ [11/02/16 23:49:26] rp-claims-aggregated: return authentication response to RP ... OK
+ [11/02/16 23:49:28] rp-claims-aggregated: access application as authenticated user ... OK
+ [11/02/16 23:49:28] rp-claims-aggregated: check eye_color aggregated claim ... OK
+ [11/02/16 23:49:28] rp-claims-aggregated: check shoe_size aggregated claim ... OK
+ [11/02/16 23:49:28] rp-claims-aggregated: check flattened eye_color claim ... OK
+ [11/02/16 23:49:28] rp-claims-aggregated: check flattened shoe_size claim ... OK
+
+ # test [46/53]: rp_claims_distributed
+
+ [11/02/16 23:49:28] rp-claims-distributed: initiate CSRF ... OK
+ [11/02/16 23:49:28] rp-claims-distributed: initiate SSO ... OK
+ [11/02/16 23:49:29] rp-claims-distributed: send authentication request to OP ... OK
+ [11/02/16 23:49:31] rp-claims-distributed: return authentication response to RP ... OK
+ [11/02/16 23:49:33] rp-claims-distributed: access application as authenticated user ... OK
+ [11/02/16 23:49:33] rp-claims-distributed: check age distributed claim ... OK
+ [11/02/16 23:49:33] rp-claims-distributed: check flattened age claim ... OK
+
+ # test [47/53]: rp_userinfo_bearer_header
+
+ [11/02/16 23:49:33] rp-userinfo-bearer-header: initiate CSRF ... OK
+ [11/02/16 23:49:33] rp-userinfo-bearer-header: initiate SSO ... OK
+ [11/02/16 23:49:35] rp-userinfo-bearer-header: send authentication request to OP ... OK
+ [11/02/16 23:49:36] rp-userinfo-bearer-header: return authentication response to RP ... OK
+ [11/02/16 23:49:37] rp-userinfo-bearer-header: access application as authenticated user ... OK
+ [11/02/16 23:49:37] rp-userinfo-bearer-header: check userinfo endpoint access ... OK
+ [11/02/16 23:49:37] rp-userinfo-bearer-header: check bearer token header ... OK
+ [11/02/16 23:49:37] rp-userinfo-bearer-header: check valid JSON result ... OK
+ [11/02/16 23:49:37] rp-userinfo-bearer-header: check no error ... OK
+
+ # test [48/53]: rp_userinfo_bearer_body
+
+ [11/02/16 23:49:37] rp-userinfo-bearer-body: initiate CSRF ... OK
+ [11/02/16 23:49:38] rp-userinfo-bearer-body: initiate SSO ... OK
+ [11/02/16 23:49:39] rp-userinfo-bearer-body: send authentication request to OP ... OK
+ [11/02/16 23:49:40] rp-userinfo-bearer-body: return authentication response to RP ... OK
+ [11/02/16 23:49:42] rp-userinfo-bearer-body: access application as authenticated user ... OK
+ [11/02/16 23:49:42] rp-userinfo-bearer-body: check userinfo endpoint access ... OK
+ [11/02/16 23:49:42] rp-userinfo-bearer-body: check bearer token POST param ... OK
+ [11/02/16 23:49:42] rp-userinfo-bearer-body: check valid JSON result ... OK
+ [11/02/16 23:49:42] rp-userinfo-bearer-body: check no error ... OK
+
+ # test [49/53]: rp_userinfo_sig
+
+ * 
+ * [server] prerequisite: .conf exists and "userinfo_signed_response_alg" is set to e.g. "RS256"
+ * 
+ [11/02/16 23:49:42] rp-userinfo-sig: initiate CSRF ... OK
+ [11/02/16 23:49:43] rp-userinfo-sig: initiate SSO ... OK
+ [11/02/16 23:49:44] rp-userinfo-sig: send authentication request to OP ... OK
+ [11/02/16 23:49:45] rp-userinfo-sig: return authentication response to RP ... OK
+ [11/02/16 23:49:46] rp-userinfo-sig: access application as authenticated user ... OK
+ [11/02/16 23:49:46] rp-userinfo-sig: check JWT response ... OK
+ [11/02/16 23:49:46] rp-userinfo-sig: check JWT verification ... OK
+
+ # test [50/53]: rp_userinfo_sig_enc
+
+ * 
+ * [server] prerequisite: .conf exists and "userinfo_signed_response_alg" is set to e.g. "RS256"
+ * [server] prerequisite: .conf exists and "userinfo_encrypted_response_alg" is set to e.g. "A128KW"
+ * 
+ [11/02/16 23:49:46] rp-userinfo-sig+enc: initiate CSRF ... OK
+ [11/02/16 23:49:47] rp-userinfo-sig+enc: initiate SSO ... OK
+ [11/02/16 23:49:48] rp-userinfo-sig+enc: send authentication request to OP ... OK
+ [11/02/16 23:49:49] rp-userinfo-sig+enc: return authentication response to RP ... OK
+ [11/02/16 23:49:51] rp-userinfo-sig+enc: access application as authenticated user ... OK
+ [11/02/16 23:49:51] rp-userinfo-sig+enc: check JWE response ... OK
+ [11/02/16 23:49:51] rp-userinfo-sig+enc: check JWE decryption ... OK
+ [11/02/16 23:49:51] rp-userinfo-sig+enc: check JWT in JWE response ... OK
+ [11/02/16 23:49:51] rp-userinfo-sig+enc: check JWT verification ... OK
+
+ # test [51/53]: rp_userinfo_enc
+
+ * 
+ * [server] prerequisite: .conf exists and "userinfo_encrypted_response_alg" is set to e.g. "RSA1_5"
+ * 
+ [11/02/16 23:49:51] rp-userinfo-enc: initiate CSRF ... OK
+ [11/02/16 23:49:52] rp-userinfo-enc: initiate SSO ... OK
+ [11/02/16 23:49:53] rp-userinfo-enc: send authentication request to OP ... OK
+ [11/02/16 23:49:54] rp-userinfo-enc: return authentication response to RP ... OK
+ [11/02/16 23:49:56] rp-userinfo-enc: access application as authenticated user ... OK
+ [11/02/16 23:49:56] rp-userinfo-enc: check JWE response ... OK
+ [11/02/16 23:49:56] rp-userinfo-enc: check JWE decryption ... OK
+
+ # test [52/53]: rp_userinfo_bad_sub_claim
+
+ [11/02/16 23:49:56] rp-userinfo-bad-sub-claim: initiate CSRF ... OK
+ [11/02/16 23:49:56] rp-userinfo-bad-sub-claim: initiate SSO ... OK
+ [11/02/16 23:49:57] rp-userinfo-bad-sub-claim: send authentication request to OP ... OK
+ [11/02/16 23:49:59] rp-userinfo-bad-sub-claim: return authentication response to RP ... OK
+ [11/02/16 23:50:00] rp-userinfo-bad-sub-claim: access application as authenticated user ... OK
+ [11/02/16 23:50:00] rp-userinfo-bad-sub-claim: check sub mismatch ... OK
+ [11/02/16 23:50:00] rp-userinfo-bad-sub-claim: check claims discarded ... OK
+
+ # SUCCESS: coverage 98.11%
+
