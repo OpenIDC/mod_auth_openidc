@@ -208,13 +208,6 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 
-	/* first see if this is a sub-request and it was set already in the main request */
-	if (((*zz) = (oidc_session_t *) oidc_request_state_get(r, "session"))
-			!= NULL) {
-		oidc_debug(r, "loading session from request state");
-		return TRUE;
-	}
-
 	/* allocate space for the session object and fill it */
 	oidc_session_t *z = (*zz = apr_pcalloc(r->pool, sizeof(oidc_session_t)));
 
@@ -241,9 +234,8 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 		if (apr_time_now() > z->expiry) {
 
 			oidc_warn(r, "session restored from cache has expired");
-			json_decref(z->state);
+			oidc_session_free(r, z);
 			z->state = json_object();
-			z->expiry = 0;
 
 		} else {
 
@@ -254,9 +246,6 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 
 		z->state = json_object();
 	}
-
-	/* store this session in the request context, so it is available to sub-requests */
-	oidc_request_state_set(r, "session", (const char *) z);
 
 	return TRUE;
 }
@@ -276,9 +265,6 @@ apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z) {
 				json_integer(apr_time_sec(z->expiry)));
 	}
 
-	/* store this session in the request context, so it is available to sub-requests as a quicker-than-file-backend cache */
-	oidc_request_state_set(r, "session", (const char *) z);
-
 	if (c->session_type == OIDC_SESSION_TYPE_SERVER_CACHE) {
 		/* store the session in the cache */
 		rc = oidc_session_save_cache(r, z);
@@ -294,14 +280,22 @@ apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z) {
 }
 
 /*
- * terminate a session
+ * free resources allocated for a session
  */
-apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z) {
+apr_byte_t oidc_session_free(request_rec *r, oidc_session_t *z) {
 	if (z->state) {
 		json_decref(z->state);
 		z->state = NULL;
 	}
 	z->expiry = 0;
+	return TRUE;
+}
+
+/*
+ * terminate a session
+ */
+apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z) {
+	oidc_session_free(r, z);
 	return oidc_session_save(r, z);
 }
 

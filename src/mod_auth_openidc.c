@@ -1195,6 +1195,32 @@ static apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r,
 }
 
 /*
+ * copy the claims and id_token from the session to the request state and optionally return them
+ */
+static void oidc_copy_tokens_to_request_state(request_rec *r,
+		oidc_session_t *session, const char **s_id_token, const char **s_claims) {
+
+	const char *id_token = NULL, *claims = NULL;
+
+	oidc_session_get(r, session, OIDC_IDTOKEN_CLAIMS_SESSION_KEY, &id_token);
+	oidc_session_get(r, session, OIDC_CLAIMS_SESSION_KEY, &claims);
+
+	oidc_debug(r, "id_token=%s claims=%s", id_token, claims);
+
+	if (id_token != NULL) {
+		oidc_request_state_set(r, OIDC_IDTOKEN_CLAIMS_SESSION_KEY, id_token);
+		if (s_id_token != NULL)
+			*s_id_token = id_token;
+	}
+
+	if (claims != NULL) {
+		oidc_request_state_set(r, OIDC_CLAIMS_SESSION_KEY, claims);
+		if (s_claims != NULL)
+			*s_claims = claims;
+	}
+}
+
+/*
  * handle the case where we have identified an existing authentication session for a user
  */
 static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
@@ -1247,19 +1273,12 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	const char *s_claims = NULL;
 	const char *s_id_token = NULL;
 
-	/* get the string-encoded claims JSON object from the session */
-	oidc_session_get(r, session, OIDC_CLAIMS_SESSION_KEY, &s_claims);
-	/* set the claims JSON string in the request state so it is available for authz purposes later on */
-	oidc_request_state_set(r, OIDC_CLAIMS_SESSION_KEY, s_claims);
+	/* copy id_token and claims from session to request state and obtain their values */
+	oidc_copy_tokens_to_request_state(r, session, &s_id_token, &s_claims);
 
 	/* set the claims in the app headers  */
 	if (oidc_set_app_claims(r, cfg, session, s_claims) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
-
-	/* get the string-encoded id_token JSON object from the session */
-	oidc_session_get(r, session, OIDC_IDTOKEN_CLAIMS_SESSION_KEY, &s_id_token);
-	/* set the claims JSON string in the request state so it is available for authz purposes later on */
-	oidc_request_state_set(r, OIDC_IDTOKEN_CLAIMS_SESSION_KEY, s_id_token);
 
 	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_CLAIMS)) {
 		/* set the id_token in the app headers */
@@ -2845,9 +2864,8 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 			/* handle request to the redirect_uri */
 			rc = oidc_handle_redirect_uri_request(r, c, session);
 
-			// TODO: cleanup function
-			if (session->state != NULL)
-				json_decref(session->state);
+			/* free resources allocated for the session */
+			oidc_session_free(r, session);
 
 			return rc;
 
@@ -2860,9 +2878,8 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 			/* this is initial request and we already have a session */
 			rc = oidc_handle_existing_session(r, c, session);
 
-			// TODO: cleanup function
-			if (session->state != NULL)
-				json_decref(session->state);
+			/* free resources allocated for the session */
+			oidc_session_free(r, session);
 
 			/* strip any cookies that we need to */
 			oidc_strip_cookies(r);
@@ -2870,9 +2887,8 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 			return rc;
 		}
 
-		// TODO: cleanup function
-		if (session->state != NULL)
-			json_decref(session->state);
+		/* free resources allocated for the session */
+		oidc_session_free(r, session);
 
 		/*
 		 * else: initial request, we have no session and it is not an authorization or
@@ -2892,6 +2908,23 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 			oidc_debug(r,
 					"recycling user '%s' from initial request for sub-request",
 					r->user);
+
+			/*
+			 * apparently request state can get lost in sub-requests, so let's see
+			 * if we need to restore id_token and/or claims from the session cache
+			 */
+			const char *s_id_token = oidc_request_state_get(r,
+					OIDC_IDTOKEN_CLAIMS_SESSION_KEY);
+			if (s_id_token == NULL) {
+
+				oidc_session_t *session = NULL;
+				oidc_session_load(r, &session);
+
+				oidc_copy_tokens_to_request_state(r, session, NULL, NULL);
+
+				/* free resources allocated for the session */
+				oidc_session_free(r, session);
+			}
 
 			/* strip any cookies that we need to */
 			oidc_strip_cookies(r);

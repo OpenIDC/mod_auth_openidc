@@ -1,3 +1,8 @@
+11/4/2016
+- always restore id_token/claims on sub-requests so e.g. listing claims-protected subdirectories will work
+- remove obsolete functions for storing the session in the request state
+- bump to 2.1.1rc0
+
 11/3/2016
 - remove obsolete sessions from session cache; thanks @stevedave
 
