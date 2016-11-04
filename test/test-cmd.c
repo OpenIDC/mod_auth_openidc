@@ -14,7 +14,7 @@
 
 int usage(int argc, char **argv, const char *msg) {
 	fprintf(stderr, "Usage: %s %s\n", argv[0],
-			msg ? msg : "[sign|verify|rsa|enckey] <options>");
+			msg ? msg : "[ sign | verify | jwk2cert | cert2jwk | enckey ] <options>");
 	return -1;
 }
 
@@ -208,10 +208,10 @@ int mkcert(RSA *rsa, X509 **x509p, EVP_PKEY **pkeyp, int serial, int days) {
 	return 0;
 }
 
-int rsa(int argc, char **argv, apr_pool_t *pool) {
+int jwk2cert(int argc, char **argv, apr_pool_t *pool) {
 
 	if (argc <= 2)
-		return usage(argc, argv, "rsa <jwk-file>");
+		return usage(argc, argv, "jwk2cert <jwk-file>");
 
 	char *s_jwk = NULL;
 
@@ -252,6 +252,31 @@ int rsa(int argc, char **argv, apr_pool_t *pool) {
 
 	X509_free(x509);
 	EVP_PKEY_free(pkey);
+
+	return 0;
+}
+
+int cert2jwk(int argc, char **argv, apr_pool_t *pool) {
+
+	if (argc <= 2)
+		return usage(argc, argv, "cert2jwk <pem-file>");
+
+	oidc_jwk_t *jwk = NULL;
+	oidc_jose_error_t err;
+	if (oidc_jwk_parse_rsa_public_key(pool, NULL, argv[2], &jwk, &err) == FALSE) {
+		fprintf(stderr, "oidc_jwk_parse_rsa_public_key failed: %s", oidc_jose_e2s(pool, err));
+		return -1;
+	}
+
+	char *s_json = NULL;
+	if (oidc_jwk_to_json(pool, jwk, &s_json, &err) == FALSE) {
+		fprintf(stderr, "oidc_jwk_to_json failed: %s", oidc_jose_e2s(pool, err));
+		return -1;
+	}
+
+	fprintf(stdout, "%s", s_json);
+
+	oidc_jwk_destroy(jwk);
 
 	return 0;
 }
@@ -378,8 +403,11 @@ int main(int argc, char **argv, char **env) {
 	if (strcmp(argv[1], "verify") == 0)
 		return verify(argc, argv, pool);
 
-	if (strcmp(argv[1], "rsa") == 0)
-		return rsa(argc, argv, pool);
+	if (strcmp(argv[1], "jwk2cert") == 0)
+		return jwk2cert(argc, argv, pool);
+
+	if (strcmp(argv[1], "cert2jwk") == 0)
+		return cert2jwk(argc, argv, pool);
 
 	if (strcmp(argv[1], "enckey") == 0)
 		return enckey(argc, argv, pool);
