@@ -910,6 +910,7 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, oidc_jwt_t *jwt,
 				oidc_debug(r,
 						"skipping key because of non-matching \"use\": \"%s\"",
 						use);
+				oidc_jwk_destroy(jwk);
 			} else {
 				oidc_jwk_to_json(r->pool, jwk, &jwk_json, &err);
 				oidc_debug(r,
@@ -918,7 +919,9 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, oidc_jwt_t *jwt,
 				if (jwk->kid != NULL)
 					apr_hash_set(result, jwk->kid, APR_HASH_KEY_STRING, jwk);
 				else
-					apr_hash_set(result, apr_psprintf(r->pool, "%d", i),
+					// can do this because we never remove anything from the list
+					apr_hash_set(result,
+							apr_psprintf(r->pool, "%d", apr_hash_count(result)),
 							APR_HASH_KEY_STRING, jwk);
 			}
 			continue;
