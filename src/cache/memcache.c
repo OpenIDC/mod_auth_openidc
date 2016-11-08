@@ -61,8 +61,6 @@
 
 #include "../mod_auth_openidc.h"
 
-// TODO: proper memcache error reporting (server unreachable etc.)
-
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 typedef struct oidc_cache_cfg_memcache_t {
@@ -168,6 +166,20 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 	return OK;
 }
 
+#define OIDC_CACHE_MEMCACHE_STATUS_ERR_SIZE  64
+
+/*
+ * printout readable error messages about memcache failures
+ */
+static void oidc_cache_memcache_log_status_error(request_rec *r, const char *s,
+		apr_status_t rv) {
+	char s_err[OIDC_CACHE_MEMCACHE_STATUS_ERR_SIZE];
+	apr_strerror(rv, s_err, OIDC_CACHE_MEMCACHE_STATUS_ERR_SIZE);
+	oidc_error(r,
+			"%s returned an error: [%s]; check your that your memcache server is available/accessible.",
+			s, s_err);
+}
+
 /*
  * assemble single key name based on section/key input
  */
@@ -201,8 +213,7 @@ static apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *section,
 				oidc_cache_memcache_get_key(r->pool, section, key));
 		return FALSE;
 	} else if (rv != APR_SUCCESS) {
-		// TODO: error strings ?
-		oidc_error(r, "apr_memcache_getp returned an error; perhaps your memcache server is not available?");
+		oidc_cache_memcache_log_status_error(r, "apr_memcache_getp", rv);
 		return FALSE;
 	}
 
@@ -242,9 +253,7 @@ static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *section,
 			oidc_debug(r, "apr_memcache_delete: key %s not found in cache",
 					oidc_cache_memcache_get_key(r->pool, section, key));
 		} else if (rv != APR_SUCCESS) {
-			// TODO: error strings ?
-			oidc_error(r,
-					"apr_memcache_delete returned an error; perhaps your memcache server is not available?");
+			oidc_cache_memcache_log_status_error(r, "apr_memcache_delete", rv);
 		}
 
 	} else {
@@ -257,9 +266,8 @@ static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *section,
 				oidc_cache_memcache_get_key(r->pool, section, key),
 				(char *) value, strlen(value), timeout, 0);
 
-		// TODO: error strings ?
 		if (rv != APR_SUCCESS) {
-			oidc_error(r, "apr_memcache_set returned an error; perhaps your memcache server is not available?");
+			oidc_cache_memcache_log_status_error(r, "apr_memcache_set", rv);
 		}
 	}
 

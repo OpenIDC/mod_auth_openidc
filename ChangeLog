@@ -1,3 +1,6 @@
+11/8/2016
+- log readable error messages when memcache operations fail
+
 11/6/2016
 - fix memory leak when skipping jwks_uri keys with a non-matching "use" value
 
