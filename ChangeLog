@@ -1,3 +1,7 @@
+11/9/2016
+- remove stale claims from session when refreshing them from the userinfo endpoint fails; addresses #194
+- release 2.1.1
+
 11/8/2016
 - log readable error messages when memcache operations fail
 
