@@ -941,7 +941,7 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, oidc_jwt_t *jwt,
 		char *s_x5t = NULL;
 		oidc_json_object_get_string(r->pool, elem, "x5t", &s_x5t, NULL);
 		/* compare the requested thumbprint against the current element */
-		if ((s_x5t != NULL) && (apr_strnatcmp(x5t, s_x5t) == 0)) {
+		if ((s_x5t != NULL) && (x5t != NULL) && (apr_strnatcmp(x5t, s_x5t) == 0)) {
 			oidc_jwk_to_json(r->pool, jwk, &jwk_json, &err);
 			oidc_debug(r, "found matching x5t: \"%s\" for jwk: %s", x5t, jwk_json);
 			apr_hash_set(result, x5t, APR_HASH_KEY_STRING, jwk);

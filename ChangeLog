@@ -1,3 +1,6 @@
+11/18/2016
+- fix crash when searching for keys with a kid, there's no initial match and x5t values exist for the non-matching keys; closes #196
+
 11/9/2016
 - remove stale claims from session when refreshing them from the userinfo endpoint fails; addresses #194
 - release 2.1.1
