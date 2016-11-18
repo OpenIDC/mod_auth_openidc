@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/pingidentity/mod_auth_openidc.svg?branch=master)](https://travis-ci.org/pingidentity/mod_auth_openidc)
+
 mod_auth_openidc
 ================
 
