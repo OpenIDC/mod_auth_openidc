@@ -1,3 +1,6 @@
+11/19/2016
+- release 2.1.2
+
 11/18/2016
 - fix crash when searching for keys with a kid, there's no initial match and x5t values exist for the non-matching keys; closes #196
 
