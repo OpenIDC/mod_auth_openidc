@@ -1061,7 +1061,7 @@ static apr_byte_t oidc_jwk_rsa_bio_to_jwk(apr_pool_t *pool, BIO *input,
 	}
 
 	const BIGNUM *rsa_n, *rsa_e, *rsa_d;
-#if OPENSSL_VERSION_NUMBER >= 0x10100005L
+#if OPENSSL_VERSION_NUMBER >= 0x10100005L && !defined (LIBRESSL_VERSION_NUMBER)
 	RSA_get0_key(rsa, &rsa_n, &rsa_e, &rsa_d);
 #else
 	rsa_n = rsa->n;
