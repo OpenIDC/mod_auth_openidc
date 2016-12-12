@@ -1,3 +1,7 @@
+12/12/2016
+- don't rollover session id's and keep the same session cookie name for cache storage over session updates
+- bump to 2.1.3rc0
+
 11/19/2016
 - release 2.1.2
 

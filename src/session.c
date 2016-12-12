@@ -49,7 +49,6 @@
  */
 
 #include <apr_base64.h>
-#include <apr_uuid.h>
 #include <apr_lib.h>
 
 #include <httpd.h>
@@ -121,6 +120,7 @@ static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 				&& (oidc_session_decode(r, c, z, s_json, c->cache->secure)
 						== FALSE))
 			return FALSE;
+		strncpy(z->uuid, uuid, strlen(uuid));
 	}
 
 	return TRUE;
@@ -144,22 +144,24 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z) {
 	}
 
 	if (z->state != NULL) {
-		/* get a new uuid for this session */
-		apr_uuid_t uuid;
-		apr_uuid_get(&uuid);
-		char key[APR_UUID_FORMATTED_LENGTH + 1];
-		apr_uuid_format((char *) &key, &uuid);
+
+		if (apr_strnatcmp(z->uuid, "") == 0) {
+			/* get a new uuid for this session */
+			apr_uuid_t uuid;
+			apr_uuid_get(&uuid);
+			apr_uuid_format((char *) &z->uuid, &uuid);
+		}
 
 		/* store the string-encoded session in the cache */
 		char *s_value = NULL;
 		if (oidc_session_encode(r, c, z, &s_value, c->cache->secure) == FALSE)
 			return FALSE;
-		rc = c->cache->set(r, OIDC_CACHE_SECTION_SESSION, key, s_value,
+		rc = c->cache->set(r, OIDC_CACHE_SECTION_SESSION, z->uuid, s_value,
 				z->expiry);
 
 		if (rc == TRUE)
 			/* set the uuid in the cookie */
-			oidc_util_set_cookie(r, oidc_cfg_dir_cookie(r), key,
+			oidc_util_set_cookie(r, oidc_cfg_dir_cookie(r), z->uuid,
 					c->persistent_session_cookie ? z->expiry : -1);
 
 	} else {
@@ -211,6 +213,7 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 	/* allocate space for the session object and fill it */
 	oidc_session_t *z = (*zz = apr_pcalloc(r->pool, sizeof(oidc_session_t)));
 
+	strncpy(z->uuid, "", strlen(""));
 	z->remote_user = NULL;
 	z->state = NULL;
 

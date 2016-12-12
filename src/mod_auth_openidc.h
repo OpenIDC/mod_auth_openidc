@@ -60,6 +60,7 @@
 #include "jose.h"
 #include "cache/cache.h"
 #include "parse.h"
+#include <apr_uuid.h>
 
 #ifdef APLOG_USE_MODULE
 APLOG_USE_MODULE(auth_openidc);
@@ -510,9 +511,10 @@ apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg, const oidc_jwks
 
 // oidc_session.c
 typedef struct {
-    const char *remote_user;  /* user who owns this particular session */
-    json_t *state;            /* the state for this session, encoded in a JSON object */
-    apr_time_t expiry;        /* if > 0, the time of expiry of this session */
+	char uuid[APR_UUID_FORMATTED_LENGTH + 1]; /* unique id */
+    const char *remote_user;                  /* user who owns this particular session */
+    json_t *state;                            /* the state for this session, encoded in a JSON object */
+    apr_time_t expiry;                        /* if > 0, the time of expiry of this session */
 } oidc_session_t;
 
 apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **z);
