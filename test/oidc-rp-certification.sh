@@ -28,58 +28,58 @@ if [[ -x "${SETENV}" ]]; then
 fi
 
 TESTS="
-	rp_discovery_webfinger_url
-	rp_discovery_webfinger_acct
-	rp_discovery_issuer_not_matching_config
-	rp_discovery_openid_configuration
-	rp_discovery_jwks_uri_keys
-	rp_registration_dynamic
-	rp_response_type_code
-	rp_response_type_id_token
-	rp_response_type_id_token_token
-	rp_response_type_code_id_token
-	rp_response_type_code_token
-	rp_response_type_code_id_token_token
-	rp_response_mode_form_post
-	rp_claims_request_id_token
-	rp_claims_request_userinfo
-	rp_request_uri_enc
-	rp_request_uri_sig_enc
-	rp_request_uri_unsigned
-	rp_request_uri_sig
-	rp_scope_userinfo_claims
-	rp_nonce_unless_code_flow
-	rp_nonce_invalid
-	rp_token_endpoint_client_secret_basic
-	rp_token_endpoint_client_secret_post
-	rp_token_endpoint_client_secret_jwt
-	rp_token_endpoint_private_key_jwt
-	rp_id_token_bad_sig_rs256
-	rp_id_token_bad_sig_hs256
-	rp_id_token_sig_enc
-	rp_id_token_sig_rs256
-	rp_id_token_sig_hs256
-	rp_id_token_sig_es256
-	rp_id_token_sig_none
-	rp_id_token_bad_c_hash
-	rp_id_token_bad_at_hash
-	rp_id_token_issuer_mismatch
-	rp_id_token_iat
-	rp_id_token_bad_sig_es256
-	rp_id_token_aud
-	rp_id_token_sub
-	rp_id_token_kid_absent_single_jwks
-	rp_id_token_kid_absent_multiple_jwks
-	rp_key_rotation_op_sign_key
-	rp_key_rotation_op_enc_key
-	rp_claims_aggregated
-	rp_claims_distributed
-	rp_userinfo_bearer_header
-	rp_userinfo_bearer_body
-	rp_userinfo_sig
-	rp_userinfo_sig_enc	
-	rp_userinfo_enc
-	rp_userinfo_bad_sub_claim
+	rp-discovery-webfinger-url
+	rp-discovery-webfinger-acct
+	rp-discovery-issuer-not-matching-config
+	rp-discovery-openid-configuration
+	rp-discovery-jwks_uri-keys
+	rp-registration-dynamic
+	rp-response_type-code
+	rp-response_type-id_token
+	rp-response_type-id_token+token
+	rp-response_type-code+id_token
+	rp-response_type-code+token
+	rp-response_type-code+id_token+token
+	rp-response_mode-form_post
+	rp-claims_request-id_token
+	rp-claims_request-userinfo
+	rp-request_uri-enc
+	rp-request_uri-sig+enc
+	rp-request_uri-unsigned
+	rp-request_uri-sig
+	rp-scope-userinfo-claims
+	rp-nonce-unless-code-flow
+	rp-nonce-invalid
+	rp-token_endpoint-client_secret_basic
+	rp-token_endpoint-client_secret_post
+	rp-token_endpoint-client_secret_jwt
+	rp-token_endpoint-private_key_jwt
+	rp-id_token-bad-sig-rs256
+	rp-id_token-bad-sig-hs256
+	rp-id_token-sig+enc			
+	rp-id_token-sig-rs256
+	rp-id_token-sig-hs256
+	rp-id_token-sig-es256
+	rp-id_token-sig-none
+	rp-id_token-bad-c_hash
+	rp-id_token-bad-at_hash
+	rp-id_token-issuer-mismatch
+	rp-id_token-iat
+	rp-id_token-bad-sig-es256
+	rp-id_token-aud
+	rp-id_token-sub
+	rp-id_token-kid-absent-single-jwks
+	rp-id_token-kid-absent-multiple-jwks
+	rp-key-rotation-op-sign-key
+	rp-key-rotation-op-enc-key
+	rp-claims-aggregated
+	rp-claims-distributed
+	rp-userinfo-bearer-header
+	rp-userinfo-bearer-body
+	rp-userinfo-sig
+	rp-userinfo-sig+enc
+	rp-userinfo-enc
+	rp-userinfo-bad-sub-claim
 "
 
 TEST_ERR="
@@ -97,9 +97,90 @@ TESTS_UNSUPPORTED="
 	rp-self-issued
 "
 
+TESTS_BASIC="
+	rp-response_type-code
+	rp-scope-userinfo-claims
+	rp-nonce-invalid
+	rp-token_endpoint-client_secret_basic
+	rp-id_token-bad-sig-rs256
+	rp-id_token-sig-rs256
+	rp-id_token-sig-none
+	rp-id_token-issuer-mismatch
+	rp-id_token-iat
+	rp-id_token-aud
+	rp-id_token-sub
+	rp-id_token-kid-absent-single-jwks
+	rp-id_token-kid-absent-multiple-jwks
+	rp-userinfo-bearer-header
+	rp-userinfo-bearer-body
+	rp-userinfo-bad-sub-claim
+"
+
+TESTS_IMPLICIT="
+	rp-scope-userinfo-claims
+	rp-nonce-unless-code-flow
+	rp-nonce-invalid
+	rp-token_endpoint-client_secret_basic
+	rp-id_token-bad-sig-rs256
+	rp-id_token-sig-rs256
+	rp-id_token-bad-at_hash
+	rp-id_token-issuer-mismatch
+	rp-id_token-iat
+	rp-id_token-aud
+	rp-id_token-sub
+	rp-id_token-kid-absent-single-jwks
+	rp-id_token-kid-absent-multiple-jwks
+	rp-userinfo-bearer-header
+	rp-userinfo-bearer-body
+	rp-userinfo-bad-sub-claim	
+"
+
+TESTS_HYBRID="
+	rp-scope-userinfo-claims
+	rp-nonce-unless-code-flow
+	rp-nonce-invalid
+	rp-token_endpoint-client_secret_basic
+	rp-id_token-bad-sig-rs256
+	rp-id_token-sig-rs256
+	rp-id_token-bad-c_hash
+	rp-id_token-bad-at_hash
+	rp-id_token-issuer-mismatch
+	rp-id_token-iat
+	rp-id_token-aud
+	rp-id_token-sub
+	rp-id_token-kid-absent-single-jwks
+	rp-id_token-kid-absent-multiple-jwks
+	rp-userinfo-bearer-header
+	rp-userinfo-bearer-body
+	rp-userinfo-bad-sub-claim
+"
+
+TESTS_CONFIG="
+	rp-discovery-issuer-not-matching-config
+	rp-discovery-openid-configuration
+	rp-discovery-jwks_uri-keys
+	rp-id_token-sig-none
+	rp-key-rotation-op-sign-key
+	rp-userinfo-sig
+"
+
+TESTS_DYNAMIC="
+	rp-discovery-webfinger-url
+	rp-discovery-webfinger-acct
+	rp-discovery-issuer-not-matching-config
+	rp-discovery-openid-configuration
+	rp-discovery-jwks_uri-keys
+	rp-registration-dynamic
+	rp-request_uri-unsigned
+	rp-request_uri-sig
+	rp-id_token-sig-none
+	rp-key-rotation-op-sign-key
+	rp-userinfo-sig
+"
+
 if [ -z $1 ] ; then
 	echo
-	printf "Usage: ${0}\n\tall${TESTS}"
+	printf "Usage: ${0}\n\tall\n\tbasic\n\timplicit-idtoken\n\timplicit-idtoken-token\n\thybrid-code-idtoken\n\thybrid-code-token\n\thybrid-code-idtoken-token\n\tconfig\n\tdynamic${TESTS}"
 	echo
 	exit
 fi
@@ -258,7 +339,7 @@ function regular_flow() {
 ################################################
 
 function rp_discovery_webfinger_url() {
-	local TEST_ID="rp-discovery-webfinger-url"
+	local TEST_ID=$1
 	local USER_INPUT="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	create_csrf "${TEST_ID}"
@@ -281,7 +362,7 @@ function rp_discovery_webfinger_url() {
 }
 
 function rp_discovery_webfinger_acct() {
-	local TEST_ID="rp-discovery-webfinger-acct"
+	local TEST_ID=$1
 	local DOMAIN=`echo ${RP_TEST_URL} | cut -d"/" -f3`
 	local ACCT="${RP_ID}.${TEST_ID}@${DOMAIN}"
 
@@ -298,7 +379,7 @@ function rp_discovery_webfinger_acct() {
 }
 
 function rp_discovery_issuer_not_matching_config() {
-	local TEST_ID="rp-discovery-issuer-not-matching-config"
+	local TEST_ID=$1
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	initiate_sso "${TEST_ID}" "${ISSUER}" "nogrep"
@@ -311,7 +392,7 @@ function rp_discovery_issuer_not_matching_config() {
 }
 
 function rp_discovery_openid_configuration() {
-	local TEST_ID="rp-discovery-openid-configuration"
+	local TEST_ID=$1
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	# check that the authentication request is initiated to the discovered authorization endpoint
@@ -323,7 +404,7 @@ function rp_discovery_openid_configuration() {
 }
 
 function rp_discovery_jwks_uri_keys() {
-	local TEST_ID="rp-discovery-jwks_uri-keys"
+	local TEST_ID=$1
 	
 	# test a regular flow up until successful authenticated application access
 	regular_flow "${TEST_ID}"
@@ -336,7 +417,7 @@ function rp_discovery_jwks_uri_keys() {
 }
 
 function rp_registration_dynamic() {
-	local TEST_ID="rp-registration-dynamic"
+	local TEST_ID=$1
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	# check that the authentication request is initiated to the discovered authorization endpoint
@@ -377,7 +458,7 @@ function rp_registration_dynamic() {
 #}
 
 function rp_response_type_code() {
-	local TEST_ID="rp-response_type-code"
+	local TEST_ID=$1
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"response_type\" is set to \"code\""
@@ -391,7 +472,7 @@ function rp_response_type_code() {
 }
 
 function rp_response_type_id_token() {
-	local TEST_ID="rp-response_type-id_token"
+	local TEST_ID=$1
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"response_type\" is set to \"id_token\""
@@ -405,7 +486,7 @@ function rp_response_type_id_token() {
 }
 
 function rp_response_type_id_token_token() {
-	local TEST_ID="rp-response_type-id_token+token"
+	local TEST_ID=$1
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"response_type\" is set to \"id_token token\""
@@ -419,7 +500,7 @@ function rp_response_type_id_token_token() {
 }
 		
 function rp_response_type_code_id_token() {
-	local TEST_ID="rp-response_type-code+id_token"
+	local TEST_ID=$1
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"response_type\" is set to \"code id_token\""
@@ -433,7 +514,7 @@ function rp_response_type_code_id_token() {
 }
 		
 function rp_response_type_code_token() {
-	local TEST_ID="rp-response_type-code+token"
+	local TEST_ID=$1
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"response_type\" is set to \"code token\""
@@ -447,7 +528,7 @@ function rp_response_type_code_token() {
 }
 		
 function rp_response_type_code_id_token_token() {
-	local TEST_ID="rp-response_type-code+id_token+token"
+	local TEST_ID=$1
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"response_type\" is set to \"code id_token token\""
@@ -461,7 +542,7 @@ function rp_response_type_code_id_token_token() {
 }
 
 function rp_response_mode_form_post() {
-	local TEST_ID="rp-response_mode-form_post"
+	local TEST_ID=$1
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	echo " * "
@@ -490,7 +571,7 @@ function rp_response_mode_form_post() {
 }
 
 function rp_claims_request_id_token() {
-	local TEST_ID="rp-claims_request-id_token"
+	local TEST_ID=$1
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"scope\" is set to \"openid\""
@@ -507,7 +588,7 @@ function rp_claims_request_id_token() {
 }
 
 function rp_claims_request_userinfo() {
-	local TEST_ID="rp-claims_request-userinfo"
+	local TEST_ID=$1
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"scope\" is set to \"openid\""
@@ -522,7 +603,7 @@ function rp_claims_request_userinfo() {
 }
 
 function rp_request_uri_enc() {
-	local TEST_ID="rp-request_uri-enc"
+	local TEST_ID=$1
 	
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"request_object\" is set to e.g. \"{ \"crypto\": { \"crypt_alg\": \"A128KW\" } }"
@@ -541,7 +622,7 @@ function rp_request_uri_enc() {
 }
 
 function rp_request_uri_sig_enc() {
-	local TEST_ID="rp-request_uri-sig+enc"
+	local TEST_ID=$1
 	
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"request_object\" is set to e.g. \"{ \"crypto\": { \"sign_alg\": \"RS256\", \"crypt_alg\": \"A128KW\" } }"
@@ -560,7 +641,7 @@ function rp_request_uri_sig_enc() {
 }
 
 function rp_request_uri_unsigned() {
-	local TEST_ID="rp-request_uri-unsigned"
+	local TEST_ID=$1
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"request_object\" is set to e.g. \"{ \"crypto\": { \"sign_alg\": \"none\" } }"
@@ -579,7 +660,7 @@ function rp_request_uri_unsigned() {
 }
 
 function rp_request_uri_sig() {
-	local TEST_ID="rp-request_uri-sig"
+	local TEST_ID=$1
 	
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"request_object\" is set to e.g. \"{ \"crypto\": { \"sign_alg\": \"HS256\" } }"
@@ -598,7 +679,7 @@ function rp_request_uri_sig() {
 }
 
 function rp_support_3rd_party_init_login() {
-	local TEST_ID="rp-support-3rd-party-init-login"
+	local TEST_ID=$1
 
 	#https://localhost.pingidentity.nl/protected/?iss=https://rp.certification.openid.net:8080/rp-support_3rd_party_init_login/_/_/_/normal
 
@@ -610,23 +691,30 @@ function rp_support_3rd_party_init_login() {
 }
 
 function rp_scope_userinfo_claims() {
-	local TEST_ID="rp-scope-userinfo-claims"
+	local TEST_ID=$1
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"scope\" is set to \"openid email phone\""
 	echo " * "
 
 	# test a regular flow up until successful authenticated application access
-	regular_flow "${TEST_ID}"
-	
-	# make sure the response from the userinfo endpoint contains the email claim
-	find_in_logfile "${TEST_ID}" "check email claim" 125 "oidc_util_http_call: response=" "\"email\": \"diana@example.org\""
-	# make sure the response from the userinfo endpoint contains the phone_number claim
-	find_in_logfile "${TEST_ID}" "check phone claim" 125 "oidc_util_http_call: response=" "\"phone_number\": \"+46 90 7865000\""
+	regular_flow "${TEST_ID}" "$2"
+
+	if [ "$2" != "fragment" ] ; then
+		# make sure the id_token contains the email claim
+		find_in_logfile "${TEST_ID}" "check email claim in userinfo" 125 "oidc_util_http_call: response=" "\"email\": \"diana@example.org\""
+		# make sure the id_token contains the phone_number claim
+		find_in_logfile "${TEST_ID}" "check phone claim in userinfo" 125 "oidc_util_http_call: response=" "\"phone_number\": \"+46 90 7865000\""
+	else
+		# make sure the response from the userinfo endpoint contains the email claim
+		find_in_logfile "${TEST_ID}" "check email claim in id_token" 125 "oidc_proto_parse_idtoken: successfully parsed" "\"email\": \"diana@example.org\""
+		# make sure the response from the userinfo endpoint contains the phone_number claim
+		find_in_logfile "${TEST_ID}" "check phone claim in id_token" 125 "oidc_proto_parse_idtoken: successfully parsed" "\"phone_number\": \"+46 90 7865000\""
+	fi
 }
 
 function rp_nonce_unless_code_flow() {
-	local TEST_ID="rp-nonce-unless-code-flow"
+	local TEST_ID=$1
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"response_type\" is set to \"id_token\""
@@ -643,7 +731,7 @@ function rp_nonce_unless_code_flow() {
 }
 
 function rp_nonce_invalid() {
-	local TEST_ID="rp-nonce-invalid"
+	local TEST_ID=$1
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 				
 	initiate_sso ${TEST_ID} ${ISSUER}
@@ -655,7 +743,7 @@ function rp_nonce_invalid() {
 }
 
 function rp_token_endpoint_client_secret_basic() {
-	local TEST_ID="rp-token_endpoint-client_secret_basic"
+	local TEST_ID=$1
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	echo " * "
@@ -677,7 +765,7 @@ function rp_token_endpoint_client_secret_basic() {
 }
 
 function rp_token_endpoint_client_secret_post() {
-	local TEST_ID="rp-token_endpoint-client_secret_post"
+	local TEST_ID=$1
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	echo " * "
@@ -698,7 +786,7 @@ function rp_token_endpoint_client_secret_post() {
 }
 
 function  rp_token_endpoint_client_secret_jwt() {
-	local TEST_ID="rp-token_endpoint-client_secret_jwt"
+	local TEST_ID=$1
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	echo " * "
@@ -719,7 +807,7 @@ function  rp_token_endpoint_client_secret_jwt() {
 }
 
 function  rp_token_endpoint_private_key_jwt() {
-	local TEST_ID="rp-token_endpoint-private_key_jwt"
+	local TEST_ID=$1
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	echo " * "
@@ -740,7 +828,7 @@ function  rp_token_endpoint_private_key_jwt() {
 }
 
 function rp_id_token_bad_sig_rs256() {
-	local TEST_ID="rp-id_token-bad-sig-rs256"
+	local TEST_ID=$1
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	initiate_sso ${TEST_ID} ${ISSUER}
@@ -752,7 +840,7 @@ function rp_id_token_bad_sig_rs256() {
 }
 
 function rp_id_token_bad_sig_hs256() {
-	local TEST_ID="rp-id_token-bad-sig-hs256"
+	local TEST_ID=$1
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	initiate_sso ${TEST_ID} ${ISSUER}
@@ -764,7 +852,7 @@ function rp_id_token_bad_sig_hs256() {
 }
 
 function rp_id_token_sig_enc() {
-	local TEST_ID="rp-id_token-sig+enc"
+	local TEST_ID=$1
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"id_token_encrypted_response_alg\" is set to e.g. \"A128KW\""
@@ -778,7 +866,7 @@ function rp_id_token_sig_enc() {
 }
 
 function rp_id_token_sig_rs256() {
-	local TEST_ID="rp-id_token-sig-rs256"
+	local TEST_ID=$1
 	
 	# test a regular flow up until successful authenticated application access
 	regular_flow "${TEST_ID}"
@@ -787,7 +875,7 @@ function rp_id_token_sig_rs256() {
 }
 
 function rp_id_token_sig_hs256() {
-	local TEST_ID="rp-id_token-sig-hs256"
+	local TEST_ID=$1
 	
 	# test a regular flow up until successful authenticated application access
 	regular_flow "${TEST_ID}"
@@ -796,7 +884,7 @@ function rp_id_token_sig_hs256() {
 }
 
 function rp_id_token_sig_es256() {
-	local TEST_ID="rp-id_token-sig-es256"
+	local TEST_ID=$1
 
 	# test a regular flow up until successful authenticated application access
 	regular_flow "${TEST_ID}"
@@ -805,7 +893,7 @@ function rp_id_token_sig_es256() {
 }
 
 function rp_id_token_sig_none() {
-	local TEST_ID="rp-id_token-sig-none"
+	local TEST_ID=$1
 
 	# test a regular flow up until successful authenticated application access
 	regular_flow "${TEST_ID}"
@@ -819,7 +907,7 @@ function rp_id_token_sig_none() {
 }
 
 function rp_id_token_bad_c_hash() {
-	local TEST_ID="rp-id_token-bad-c_hash"
+	local TEST_ID=$1
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	echo " * "
@@ -834,7 +922,7 @@ function rp_id_token_bad_c_hash() {
 }
 
 function rp_id_token_bad_at_hash() {
-	local TEST_ID="rp-id_token-bad-at_hash"
+	local TEST_ID=$1
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	echo " * "
@@ -849,7 +937,7 @@ function rp_id_token_bad_at_hash() {
 }
 
 function rp_id_token_issuer_mismatch() {
-	local TEST_ID="rp-id_token-issuer-mismatch"
+	local TEST_ID=$1
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	initiate_sso ${TEST_ID} ${ISSUER}
@@ -861,7 +949,7 @@ function rp_id_token_issuer_mismatch() {
 }
 
 function rp_id_token_iat() {
-	local TEST_ID="rp-id_token-iat"
+	local TEST_ID=$1
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	initiate_sso ${TEST_ID} ${ISSUER}
@@ -873,7 +961,7 @@ function rp_id_token_iat() {
 }
 
 function rp_id_token_bad_sig_es256() {
-	local TEST_ID="rp-id_token-bad-sig-es256"
+	local TEST_ID=$1
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 		
 	initiate_sso ${TEST_ID} ${ISSUER}
@@ -885,7 +973,7 @@ function rp_id_token_bad_sig_es256() {
 }
 
 function rp_id_token_aud() {
-	local TEST_ID="rp-id_token-aud"
+	local TEST_ID=$1
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	initiate_sso ${TEST_ID} ${ISSUER}
@@ -896,7 +984,7 @@ function rp_id_token_aud() {
 }
 
 function rp_id_token_sub() {
-	local TEST_ID="rp-id_token-sub"
+	local TEST_ID=$1
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	initiate_sso ${TEST_ID} ${ISSUER}
@@ -908,7 +996,7 @@ function rp_id_token_sub() {
 }
 
 function rp_id_token_kid_absent_single_jwks() {
-	local TEST_ID="rp-id_token-kid-absent-single-jwks"
+	local TEST_ID=$1
 
 	# test a regular flow up until successful authenticated application access
 	regular_flow "${TEST_ID}"
@@ -920,7 +1008,7 @@ function rp_id_token_kid_absent_single_jwks() {
 }
 
 function rp_id_token_kid_absent_multiple_jwks() {
-	local TEST_ID="rp-id_token-kid-absent-multiple-jwks"
+	local TEST_ID=$1
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	#initiate_sso ${TEST_ID} ${ISSUER}
@@ -939,7 +1027,7 @@ function rp_id_token_kid_absent_multiple_jwks() {
 }
 
 function rp_key_rotation_op_sign_key() {
-	local TEST_ID="rp-key-rotation-op-sign-key"
+	local TEST_ID=$1
 
 	# test a regular flow up until successful authenticated application access
 	regular_flow "${TEST_ID}"
@@ -958,7 +1046,7 @@ function rp_key_rotation_op_sign_key() {
 }
 
 function rp_key_rotation_op_enc_key() {
-	local TEST_ID="rp-key-rotation-op-enc-key"
+	local TEST_ID=$1
 	
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"request_object\" is set to e.g. \"{ \"crypto\": { \"crypt_alg\": \"RSA1_5\" } }"
@@ -1002,7 +1090,7 @@ function rp_key_rotation_op_enc_key() {
 }
 
 function rp_claims_aggregated() {
-	local TEST_ID="rp-claims-aggregated"
+	local TEST_ID=$1
 	
 	# test a regular flow up until successful authenticated application access
 	regular_flow "${TEST_ID}"
@@ -1017,7 +1105,7 @@ function rp_claims_aggregated() {
 }
 
 function rp_claims_distributed() {
-	local TEST_ID="rp-claims-distributed"
+	local TEST_ID=$1
 
 	# test a regular flow up until successful authenticated application access
 	regular_flow "${TEST_ID}"
@@ -1030,7 +1118,7 @@ function rp_claims_distributed() {
 }
 
 function rp_userinfo_bearer_header() {
-	local TEST_ID="rp-userinfo-bearer-header"
+	local TEST_ID=$1
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	# test a regular flow up until successful authenticated application access
@@ -1053,7 +1141,7 @@ function rp_userinfo_bearer_header() {
 }
 
 function rp_userinfo_bearer_body() {
-	local TEST_ID="rp-userinfo-bearer-body"
+	local TEST_ID=$1
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
 
 	# test a regular flow up until successful authenticated application access
@@ -1073,7 +1161,7 @@ function rp_userinfo_bearer_body() {
 }
 
 function rp_userinfo_sig() {
-	local TEST_ID="rp-userinfo-sig"
+	local TEST_ID=$1
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"userinfo_signed_response_alg\" is set to e.g. \"RS256\""
@@ -1090,7 +1178,7 @@ function rp_userinfo_sig() {
 }
 
 function rp_userinfo_sig_enc() {
-	local TEST_ID="rp-userinfo-sig+enc"
+	local TEST_ID=$1
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"userinfo_signed_response_alg\" is set to e.g. \"RS256\""
@@ -1111,7 +1199,7 @@ function rp_userinfo_sig_enc() {
 }
 
 function rp_userinfo_enc() {
-	local TEST_ID="rp-userinfo-enc"
+	local TEST_ID=$1
 
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"userinfo_encrypted_response_alg\" is set to e.g. \"RSA1_5\""
@@ -1127,7 +1215,7 @@ function rp_userinfo_enc() {
 }
 
 function rp_userinfo_bad_sub_claim() {
-	local TEST_ID="rp-userinfo-bad-sub-claim"
+	local TEST_ID=$1
 
 	# test a regular flow up until successful authenticated application access
 	regular_flow "${TEST_ID}"
@@ -1138,27 +1226,64 @@ function rp_userinfo_bad_sub_claim() {
 	find_in_logfile "${TEST_ID}" "check claims discarded" 125 "oidc_retrieve_claims_from_userinfo_endpoint" "failed, nothing will be stored in the session"
 }
 
+function test_name_to_function() {
+	echo ${1} | tr "-" "_" | tr "+" "_"
+}
+
 function execute_test() {
 	local TEST_ID="${1}"
 	local NR="${2}"
 	local TOTAL="${3}"
+	local RESPONSE_TYPE="${4}"
 	
 	echo ""
-	printf " # test [%s/%s]: %s\n" $((NR+1)) ${TOTAL} "${TEST_ID}"
+	printf " # test [%s/%s]: %s [%s]\n" $((NR+1)) ${TOTAL} "${TEST_ID}" "${RESPONSE_TYPE}"
 	echo ""
-	eval "${TEST_ID}"
+	eval `test_name_to_function "${TEST_ID}"` "${TEST_ID}" "${RESPONSE_TYPE}"
 }
 
-if [ $1 != "all" ] ; then
-	execute_test "${1}" 0 1
-else
-	TOTAL=`echo ${TESTS} ${TESTS_UNSUPPORTED} ${TEST_ERR} | wc -w`
+function execute_profile() {
+	NAME="$1"
+	RESPONSE_TYPE="$2"
+	TESTS="$3"
+	mkdir -p "${NAME}"
+	TOTAL=`echo ${TESTS} | wc -w`
 	NR=0
 	for TEST_ID in $TESTS; do
-		execute_test "${TEST_ID}" "${NR}" "${TOTAL}"
+		execute_test "${TEST_ID}" "${NR}" "${TOTAL}" "${RESPONSE_TYPE}" | tee "${NAME}/${TEST_ID}.log"
 		NR=$((NR+1))
 	done
 	echo ""
 	printf " # SUCCESS: coverage %.2f%%\n" `echo "100 * ${NR} / ${TOTAL}" | bc -l`
+	echo ""	
+}
+
+if [ "$1" == "all" ] ; then
+	TOTAL=`echo ${TESTS} ${TESTS_UNSUPPORTED} ${TEST_ERR} | wc -w`
+	NR=0
+	for TEST_ID in $TESTS; do
+		execute_test "${TEST_ID}" "${NR}" "${TOTAL}" query
+		NR=$((NR+1))
+	done
 	echo ""
+	printf " # SUCCESS: coverage %.2f%%\n" `echo "100 * ${NR} / ${TOTAL}" | bc -l`
+	echo ""		
+elif [ "$1" == "basic" ] ; then
+	execute_profile basic query "${TESTS_BASIC}"
+elif [ "$1" == "implicit-idtoken" ] ; then
+	execute_profile implicit/id_token fragment "rp-response_type-id_token ${TESTS_IMPLICIT}"
+elif [ "$1" == "implicit-idtoken-token" ] ; then
+	execute_profile implicit/id_token+token fragment "rp-response_type-id_token+token ${TESTS_IMPLICIT}"
+elif [ "$1" == "config" ] ; then
+	execute_profile config query "${TESTS_CONFIG}"
+elif [ "$1" == "dynamic" ] ; then
+	execute_profile dynamic query "${TESTS_DYNAMIC}"
+elif [ "$1" == "hybrid-code-idtoken" ] ; then
+	execute_profile hybrid/code+id_token fragment "rp-response_type-code+id_token ${TESTS_HYBRID}"
+elif [ "$1" == "hybrid-code-token" ] ; then
+	execute_profile hybrid/code+token fragment "rp-response_type-code+token ${TESTS_HYBRID}"
+elif [ "$1" == "hybrid-code-idtoken-token" ] ; then
+	execute_profile hybrid/code+id_token+token fragment "rp-response_type-code+id_token+token ${TESTS_HYBRID}"
+else				
+	execute_test "${1}" 0 1 fragment
 fi
