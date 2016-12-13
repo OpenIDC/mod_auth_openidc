@@ -135,14 +135,6 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z) {
 
 	apr_byte_t rc = TRUE;
 
-	/* check for an old cache entry */
-	char *oldkey = oidc_util_get_cookie(r, oidc_cfg_dir_cookie(r));
-
-	if (oldkey != NULL) {
-		/* remove the old session from the cache */
-		rc = c->cache->set(r, OIDC_CACHE_SECTION_SESSION, oldkey, NULL, 0);
-	}
-
 	if (z->state != NULL) {
 
 		if (apr_strnatcmp(z->uuid, "") == 0) {
