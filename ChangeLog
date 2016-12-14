@@ -1,3 +1,8 @@
+12/14/2016
+- support Libre SSL, see #205, thanks @AliceWonderMiscreations
+- update OIDC logout support to Front-Channel Logout 1.0 draft 01: http://openid.net/specs/openid-connect-frontchannel-1_0.html
+- bump to 2.1.4rc0
+
 12/13/2016
 - release 2.1.3
 
