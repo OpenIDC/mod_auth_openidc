@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ###########################################################################
-# Copyright (C) 2016 Ping Identity Corporation
+# Copyright (C) 2016-2017 Ping Identity Corporation
 #
 # Script used to do automated OpenID Connect Relying Party Certification
 # Testing for the mod_auth_openidc OIDC RP implementation for Apache HTTPd.

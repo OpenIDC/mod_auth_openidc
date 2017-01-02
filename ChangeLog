@@ -1,5 +1,6 @@
 01/2/2017
 - remove trailing linebreaks from input in test-cmd tool
+- bump copyright year to 2017
 
 12/14/2016
 - support Libre SSL, see #205, thanks @AliceWonderMiscreations
