@@ -47,6 +47,12 @@ int file_read(apr_pool_t *pool, const char *path, char **rbuf) {
 
 	(*rbuf)[bytes_read] = '\0';
 
+	bytes_read--;
+	while ((*rbuf)[bytes_read] == '\n') {
+		(*rbuf)[bytes_read] = '\0';
+		bytes_read --;
+	}
+
 	apr_file_close(fd);
 
 	return 0;
