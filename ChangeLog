@@ -1,3 +1,6 @@
+01/10/2017
+- don't crash when data is POST-ed to the redirect URL, it has just 1 POST parameter and it is not "response_mode"
+
 01/2/2017
 - remove trailing linebreaks from input in test-cmd tool
 - bump copyright year to 2017

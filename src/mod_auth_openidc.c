@@ -1846,6 +1846,7 @@ static int oidc_handle_post_authorization_response(request_rec *r, oidc_cfg *c,
 	/* see if we've got any POST-ed data at all */
 	if ((apr_table_elts(params)->nelts < 1)
 			|| ((apr_table_elts(params)->nelts == 1)
+					&& apr_table_get(params, "response_mode")
 					&& (apr_strnatcmp(apr_table_get(params, "response_mode"),
 							"fragment") == 0))) {
 		return oidc_util_html_send_error(r, c->error_template,
