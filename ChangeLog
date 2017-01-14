@@ -1,3 +1,7 @@
+01/14/2017
+- use dynamic memory buffer for writing HTTP call responses; solves curl/mpm-event interference; see #207
+- bump to 2.1.4rc1
+
 01/10/2017
 - don't crash when data is POST-ed to the redirect URL, it has just 1 POST parameter and it is not "response_mode"
 
