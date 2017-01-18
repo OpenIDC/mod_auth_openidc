@@ -1,3 +1,6 @@
+01/18/2017
+- don't echo the query parameters on the error page when an invalid request is made to the Redirect URI; closes #212; thanks @LukasReschke
+
 01/14/2017
 - use dynamic memory buffer for writing HTTP call responses; solves curl/mpm-event interference; see #207
 - bump to 2.1.4rc1

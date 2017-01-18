@@ -2845,8 +2845,8 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 	/* something went wrong */
 	return oidc_util_html_send_error(r, c->error_template, "Invalid Request",
 			apr_psprintf(r->pool,
-					"The OpenID Connect callback URL received an invalid request: %s",
-					r->args), HTTP_INTERNAL_SERVER_ERROR);
+					"The OpenID Connect callback URL received an invalid request"),
+					HTTP_INTERNAL_SERVER_ERROR);
 }
 
 /*
