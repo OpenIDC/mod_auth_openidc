@@ -451,10 +451,13 @@ char *oidc_get_current_url(request_rec *r) {
 
 /* buffer to hold HTTP call responses */
 typedef struct oidc_curl_buffer {
-	apr_pool_t *pool;
+	request_rec *r;
 	char *memory;
 	size_t size;
 } oidc_curl_buffer;
+
+/* maximum acceptable size of HTTP responses: 1 Mb */
+#define OIDC_CURL_MAX_RESPONSE_SIZE 1024 * 1024
 
 /*
  * callback for CURL to write bytes that come back from an HTTP call
@@ -463,10 +466,24 @@ size_t oidc_curl_write(void *contents, size_t size, size_t nmemb, void *userp) {
 	size_t realsize = size * nmemb;
 	oidc_curl_buffer *mem = (oidc_curl_buffer *) userp;
 
-	char *newptr = apr_palloc(mem->pool, mem->size + realsize + 1);
-	if (newptr == NULL)
+	/* check if we don't run over the maximum buffer/memory size for HTTP responses */
+	if (mem->size + realsize > OIDC_CURL_MAX_RESPONSE_SIZE) {
+		oidc_error(mem->r,
+				"HTTP response larger than maximum allowed size: current size=%ld, additional size=%ld, max=%d",
+				mem->size, realsize, OIDC_CURL_MAX_RESPONSE_SIZE);
 		return 0;
+	}
 
+	/* allocate the new buffer for the current + new response bytes */
+	char *newptr = apr_palloc(mem->r->pool, mem->size + realsize + 1);
+	if (newptr == NULL) {
+		oidc_error(mem->r,
+				"memory allocation for new buffer of %ld bytes failed",
+				mem->size + realsize + 1);
+		return 0;
+	}
+
+	/* copy over the data from current memory plus the cURL buffer */
 	memcpy(newptr, mem->memory, mem->size);
 	memcpy(&(newptr[mem->size]), contents, realsize);
 	mem->size += realsize;
@@ -537,7 +554,7 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 	curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout);
 
 	/* setup the buffer where the response will be written to */
-	curlBuffer.pool = r->pool;
+	curlBuffer.r = r;
 	curlBuffer.memory = NULL;
 	curlBuffer.size = 0;
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, oidc_curl_write);
