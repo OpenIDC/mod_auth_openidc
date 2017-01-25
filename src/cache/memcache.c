@@ -47,7 +47,7 @@
  *
  * caching using a memcache backend
  *
- * @Author: Hans Zandbelt - hzandbelt@pingidentity.com
+ * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
  */
 
 #include "apr_general.h"

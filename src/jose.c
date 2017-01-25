@@ -47,7 +47,7 @@
  *
  * JSON Web Token handling
  *
- * @Author: Hans Zandbelt - hzandbelt@pingidentity.com
+ * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
  */
 
 #include <apr_base64.h>

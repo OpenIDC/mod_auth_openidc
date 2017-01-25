@@ -51,7 +51,7 @@
  * Other code copied/borrowed/adapted:
  * shared memory caching: mod_auth_mellon
  *
- * @Author: Hans Zandbelt - hzandbelt@pingidentity.com
+ * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
  *
  **************************************************************************/
 

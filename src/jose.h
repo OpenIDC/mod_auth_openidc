@@ -47,7 +47,7 @@
  *
  * JSON Object Signing and Encryption
  *
- * @Author: Hans Zandbelt - hzandbelt@pingidentity.com
+ * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
  */
 
 #ifndef MOD_AUTH_OPENIDC_JOSE_H_

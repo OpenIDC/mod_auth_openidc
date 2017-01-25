@@ -47,7 +47,7 @@
  *
  * Validation and parsing of configuration values.
  *
- * @Author: Hans Zandbelt - hzandbelt@pingidentity.com
+ * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
  */
 
 #include <apr_base64.h>

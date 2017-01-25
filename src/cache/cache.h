@@ -47,7 +47,7 @@
  *
  * mem_cache-like interface and semantics (string keys/values) using a storage backend
  *
- * @Author: Hans Zandbelt - hzandbelt@pingidentity.com
+ * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
  */
 
 #ifndef _MOD_AUTH_OPENIDC_CACHE_H_

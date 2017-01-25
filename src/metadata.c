@@ -47,7 +47,7 @@
  *
  * OpenID Connect metadata handling routines, for both OP discovery and client registration
  *
- * @Author: Hans Zandbelt - hzandbelt@pingidentity.com
+ * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
  */
 
 #include <apr_hash.h>

@@ -48,7 +48,7 @@
  * caching using a shared memory backend, FIFO-style
  * based on mod_auth_mellon code
  *
- * @Author: Hans Zandbelt - hzandbelt@pingidentity.com
+ * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
  */
 
 #include <httpd.h>

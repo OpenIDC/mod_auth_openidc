@@ -47,7 +47,7 @@
  *
  * Validation and parsing of configuration values.
  *
- * @Author: Hans Zandbelt - hzandbelt@pingidentity.com
+ * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
  */
 
 #ifndef MOD_AUTH_OPENIDC_PARSE_H_

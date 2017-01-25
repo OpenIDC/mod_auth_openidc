@@ -271,13 +271,16 @@ See the Wiki pages with Frequently Asked Questions at:
 There is a Google Group/mailing list at:  
   [mod_auth_openidc@googlegroups.com](mailto:mod_auth_openidc@googlegroups.com)  
 The corresponding forum/archive is at:  
-  https://groups.google.com/forum/#!forum/mod_auth_openidc
+  https://groups.google.com/forum/#!forum/mod_auth_openidc  
+For commercial support and consultancy you can contact:  
+  [info@zmartzone.eu](mailto:info@zmartzone.eu)  
+
+Any questions/issues should go to the mailing list, the Github issues tracker or the
+primary author [hans.zandbelt@zmartzone.eu](mailto:hans.zandbelt@zmartzone.eu)
 
 Disclaimer
 ----------
 
 *This software is open sourced by Ping Identity but not supported commercially
-as such. Any questions/issues should go to the mailing list, the Github issues
-tracker or the author [hzandbelt@pingidentity.com](mailto:hzandbelt@pingidentity.com)
-directly See also the DISCLAIMER file in this directory.*
-    
+by Ping Identity, see also the DISCLAIMER file in this directory. For commercial support
+you can contact [ZmartZone IAM](https://www.zmartzone.eu) as described above.*

@@ -47,7 +47,7 @@
  *
  * global lock implementation
  *
- * @Author: Hans Zandbelt - hzandbelt@pingidentity.com
+ * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
  */
 
 #ifndef WIN32

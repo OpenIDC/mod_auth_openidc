@@ -8,7 +8,7 @@
 #
 # @Version: 2.1.0, mod_auth_openidc >= v2.0.1rc7
 # 
-# @Author: Hans Zandbelt - hzandbelt@pingidentity.com
+# @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
 #
 ###########################################################################
 
