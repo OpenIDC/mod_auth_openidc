@@ -2935,7 +2935,18 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 /*
  * main routine: handle OpenID Connect authentication
  */
-static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
+static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *cc) {
+
+	oidc_cfg *c = apr_pcalloc(r->pool, sizeof(oidc_cfg));
+	memcpy(c, cc, sizeof(oidc_cfg));
+
+	if (c->redirect_uri_is_relative) {
+
+		c->redirect_uri = apr_pstrcat(r->pool, "https://", r->hostname, cc->redirect_uri, (char *)NULL);
+		oidc_debug(r,
+				"i have constructed the following redirect uri, my master: %s",
+				c->redirect_uri);
+}
 
 	if (c->redirect_uri == NULL) {
 		oidc_error(r,
