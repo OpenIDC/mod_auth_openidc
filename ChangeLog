@@ -1,3 +1,7 @@
+04/20/2017
+- support relative RedirectURIs
+  - add helper function oidc_get_redirect_uri
+
 04/08/2017
 - fix potential crash on prefork process exit when used with Redis cache backend (3x)
 - bump to 2.2.1rc3

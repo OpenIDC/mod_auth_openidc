@@ -369,7 +369,7 @@ static const char *oidc_original_request_method(request_rec *r, oidc_cfg *cfg,
 
 	char *m = NULL;
 	if ((handle_discovery_response == TRUE)
-			&& (oidc_util_request_matches_url(r, cfg->redirect_uri))
+			&& (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, cfg)))
 			&& (oidc_is_discovery_response(r, cfg))) {
 		oidc_util_get_request_parameter(r, OIDC_DISC_RM_PARAM, &m);
 		if (m != NULL)
@@ -1431,7 +1431,7 @@ static int oidc_session_redirect_parent_window_to_logout(request_rec *r,
 	char *java_script = apr_psprintf(r->pool,
 			"    <script type=\"text/javascript\">\n"
 			"      window.top.location.href = '%s?session=logout';\n"
-			"    </script>\n", c->redirect_uri);
+			"    </script>\n", oidc_get_redirect_uri(r, c));
 
 	return oidc_util_html_send(r, "Redirecting...", java_script, NULL, NULL,
 			DONE);
@@ -1923,7 +1923,7 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 						OIDC_DISC_RT_PARAM, oidc_util_escape_string(r, current_url),
 						OIDC_DISC_RM_PARAM, method,
 						OIDC_DISC_CB_PARAM,
-						oidc_util_escape_string(r, cfg->redirect_uri),
+						oidc_util_escape_string(r, oidc_get_redirect_uri(r, cfg)),
 						OIDC_CSRF_NAME, oidc_util_escape_string(r, csrf));
 
 		/* log what we're about to do */
@@ -1974,7 +1974,7 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 		s =
 				apr_psprintf(r->pool,
 						"%s<p><a href=\"%s?%s=%s&amp;%s=%s&amp;%s=%s&amp;%s=%s\">%s</a></p>\n",
-						s, cfg->redirect_uri, OIDC_DISC_OP_PARAM,
+						s, oidc_get_redirect_uri(r, cfg), OIDC_DISC_OP_PARAM,
 						oidc_util_escape_string(r, issuer),
 						OIDC_DISC_RT_PARAM,
 						oidc_util_escape_string(r, current_url),
@@ -1984,7 +1984,7 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 
 	/* add an option to enter an account or issuer name for dynamic OP discovery */
 	s = apr_psprintf(r->pool, "%s<form method=\"get\" action=\"%s\">\n", s,
-			cfg->redirect_uri);
+			oidc_get_redirect_uri(r, cfg));
 	s = apr_psprintf(r->pool,
 			"%s<p><input type=\"hidden\" name=\"%s\" value=\"%s\"><p>\n", s,
 			OIDC_DISC_RT_PARAM, current_url);
@@ -2093,7 +2093,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	apr_uri_t r_uri;
 	memset(&r_uri, 0, sizeof(apr_uri_t));
 	apr_uri_parse(r->pool, original_url, &o_uri);
-	apr_uri_parse(r->pool, c->redirect_uri, &r_uri);
+	apr_uri_parse(r->pool, oidc_get_redirect_uri(r, c), &r_uri);
 	if ((apr_strnatcmp(o_uri.scheme, r_uri.scheme) != 0)
 			&& (apr_strnatcmp(r_uri.scheme, "https") == 0)) {
 		oidc_error(r,
@@ -2124,8 +2124,8 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	/* send off to the OpenID Connect Provider */
 	// TODO: maybe show intermediate/progress screen "redirecting to"
 	return oidc_proto_authorization_request(r, provider, login_hint,
-			c->redirect_uri, state, proto_state, id_token_hint, code_challenge,
-			auth_request_params);
+			oidc_get_redirect_uri(r, c), state, proto_state, id_token_hint,
+			code_challenge, auth_request_params);
 }
 
 /*
@@ -2144,7 +2144,7 @@ static int oidc_target_link_uri_matches_configuration(request_rec *r,
 	}
 
 	apr_uri_t r_uri;
-	apr_uri_parse(r->pool, cfg->redirect_uri, &r_uri);
+	apr_uri_parse(r->pool, oidc_get_redirect_uri(r, cfg), &r_uri);
 
 	if (cfg->cookie_domain == NULL) {
 		/* cookie_domain set: see if the target_link_uri matches the redirect_uri host (because the session cookie will be set host-wide) */
@@ -2584,9 +2584,10 @@ static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c,
 	if (s_poll_interval == NULL)
 		s_poll_interval = "3000";
 
+	const char *redirect_uri = oidc_get_redirect_uri(r, c);
 	java_script = apr_psprintf(r->pool, java_script, origin, client_id,
-			session_state, op_iframe_id, s_poll_interval, c->redirect_uri,
-			c->redirect_uri);
+			session_state, op_iframe_id, s_poll_interval, redirect_uri,
+			redirect_uri);
 
 	return oidc_util_html_send(r, NULL, java_script, "setTimer", NULL, DONE);
 }
@@ -2648,7 +2649,7 @@ static int oidc_handle_session_management(request_rec *r, oidc_cfg *c,
 		if ((session->remote_user != NULL) && (provider != NULL)) {
 			return oidc_authenticate_user(r, c, provider,
 					apr_psprintf(r->pool, "%s?session=iframe_rp",
-							c->redirect_uri), NULL, id_token_hint, "none", NULL);
+							oidc_get_redirect_uri(r, c)), NULL, id_token_hint, "none", NULL);
 		}
 		oidc_debug(r,
 				"[session=check] calling oidc_handle_logout_request because no session found.");
@@ -3057,7 +3058,7 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 		oidc_session_load(r, &session);
 
 		/* see if the initial request is to the redirect URI; this handles potential logout too */
-		if (oidc_util_request_matches_url(r, c->redirect_uri)) {
+		if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c))) {
 
 			/* handle request to the redirect_uri */
 			rc = oidc_handle_redirect_uri_request(r, c, session);

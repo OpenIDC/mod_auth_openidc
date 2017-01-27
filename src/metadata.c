@@ -477,7 +477,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 	json_object_set_new(data, "client_name",
 			json_string(provider->client_name));
 	json_object_set_new(data, "redirect_uris",
-			json_pack("[s]", cfg->redirect_uri));
+			json_pack("[s]", oidc_get_redirect_uri(r, cfg)));
 
 	json_t *response_types = json_array();
 	apr_array_header_t *flows = oidc_proto_supported_flows(r->pool);
@@ -505,7 +505,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 		json_object_set_new(data, "jwks_uri",
 				json_string(
 						apr_psprintf(r->pool, "%s?jwks=rsa",
-								cfg->redirect_uri)));
+								oidc_get_redirect_uri(r, cfg))));
 	}
 
 	if (provider->id_token_signed_response_alg != NULL) {
@@ -535,10 +535,10 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 	}
 
 	json_object_set_new(data, "initiate_login_uri",
-			json_string(cfg->redirect_uri));
+			json_string(oidc_get_redirect_uri(r, cfg)));
 
 	json_object_set_new(data, "frontchannel_logout_uri",
-			json_string(apr_psprintf(r->pool, "%s?logout=%s", cfg->redirect_uri,
+			json_string(apr_psprintf(r->pool, "%s?logout=%s", oidc_get_redirect_uri(r, cfg),
 					OIDC_GET_STYLE_LOGOUT_PARAM_VALUE)));
 
 	if (cfg->default_slo_url != NULL) {

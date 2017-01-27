@@ -1716,7 +1716,7 @@ static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 	apr_table_addn(params, OIDC_PROTO_GRANT_TYPE,
 			OIDC_PROTO_GRANT_TYPE_AUTHZ_CODE);
 	apr_table_addn(params, OIDC_PROTO_CODE, code);
-	apr_table_addn(params, OIDC_PROTO_REDIRECT_URI, cfg->redirect_uri);
+	apr_table_addn(params, OIDC_PROTO_REDIRECT_URI, oidc_get_redirect_uri(r, cfg));
 
 	if (code_verifier)
 		apr_table_addn(params, OIDC_PROTO_CODE_VERIFIER, code_verifier);
