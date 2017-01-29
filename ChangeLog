@@ -1,3 +1,7 @@
+01/29/2017
+- fix error message about passing id_token with session type client-cookie; mentioned in #220
+- bump to 2.1.5rc0
+
 01/25/2017
 - release 2.1.4
 

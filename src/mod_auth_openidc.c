@@ -1302,18 +1302,18 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars);
 	}
 
-	if (cfg->session_type != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
-		if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_SERIALIZED)) {
+	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_SERIALIZED)) {
+		if (cfg->session_type != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
 			const char *s_id_token = NULL;
 			/* get the compact serialized JWT from the session */
 			oidc_session_get(r, session, OIDC_IDTOKEN_SESSION_KEY, &s_id_token);
 			/* pass the compact serialized JWT to the app in a header or environment variable */
 			oidc_util_set_app_info(r, "id_token", s_id_token,
 					OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars);
+		} else {
+			oidc_error(r,
+					"session type \"client-cookie\" does not allow storing/passing the id_token; use \"OIDCSessionType server-cache\" for that");
 		}
-	} else {
-		oidc_error(r,
-				"session type \"client-cookie\" does not allow storing/passing the id_token; use \"OIDCSessionType server-cache\" for that");
 	}
 
 	/* set the refresh_token in the app headers/variables, if enabled for this location/directory */
