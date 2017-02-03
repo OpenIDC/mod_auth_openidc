@@ -1,3 +1,6 @@
+02/03/2017
+- backport AUTHZ_DENIED comparison fix: 8c0e46aeb51014bba7d72150b8c598031879fb65; see #151
+
 7/11/2016
 - fix Elliptic Curve signature verification for corrupted input
 - release 1.8.10.1
