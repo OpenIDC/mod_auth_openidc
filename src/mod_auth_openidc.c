@@ -133,6 +133,34 @@ static void oidc_scrub_request_headers(request_rec *r, const char *claim_prefix,
 	r->headers_in = clean_headers;
 }
 
+/*
+ * scrub all mod_auth_openidc related headers
+ */
+static void oidc_scrub_headers(request_rec *r) {
+	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
+
+	/* get a handle to the directory config */
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+
+	if (cfg->scrub_request_headers != 0) {
+
+		/* scrub all headers starting with OIDC_ first */
+		oidc_scrub_request_headers(r, OIDC_DEFAULT_HEADER_PREFIX,
+				dir_cfg->authn_header);
+
+		/*
+		 * then see if the claim headers need to be removed on top of that
+		 * (i.e. the prefix does not start with the default OIDC_)
+		 */
+		if ((strstr(cfg->claim_prefix, OIDC_DEFAULT_HEADER_PREFIX)
+				!= cfg->claim_prefix)) {
+			oidc_scrub_request_headers(r, cfg->claim_prefix, NULL);
+		}
+	}
+}
+
 #define OIDC_SHA1_LEN 20
 
 /*
@@ -982,21 +1010,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	 * we're going to pass the information that we have to the application,
 	 * but first we need to scrub the headers that we're going to use for security reasons
 	 */
-	if (cfg->scrub_request_headers != 0) {
-
-		/* scrub all headers starting with OIDC_ first */
-		oidc_scrub_request_headers(r, OIDC_DEFAULT_HEADER_PREFIX,
-				dir_cfg->authn_header);
-
-		/*
-		 * then see if the claim headers need to be removed on top of that
-		 * (i.e. the prefix does not start with the default OIDC_)
-		 */
-		if ((strstr(cfg->claim_prefix, OIDC_DEFAULT_HEADER_PREFIX)
-				!= cfg->claim_prefix)) {
-			oidc_scrub_request_headers(r, cfg->claim_prefix, NULL);
-		}
-	}
+	oidc_scrub_headers(r);
 
 	/* set the user authentication HTTP header if set and required */
 	if ((r->user != NULL) && (dir_cfg->authn_header != NULL))
@@ -2580,6 +2594,13 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 			return HTTP_UNAUTHORIZED;
 		case PASS:
 			r->user = "";
+
+			/*
+			 * we're not going to pass information about an authenticated user to the application,
+			 * but we do need to scrub the headers that mod_auth_openidc would set for security reasons
+			 */
+			oidc_scrub_headers(r);
+
 			return OK;
 		case AUTHENTICATE:
 			/* if this is a Javascript path we won't redirect the user and create a state cookie */
