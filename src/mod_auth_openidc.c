@@ -1597,10 +1597,13 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
 				"session management enabled: stored session_state (%s), check_session_iframe (%s) and client_id (%s) in the session",
 				session_state, provider->check_session_iframe,
 				provider->client_id);
-	} else {
+	} else if (provider->check_session_iframe == NULL) {
 		oidc_debug(r,
-				"session management disabled: session_state (%s) and/or check_session_iframe (%s) is not provided",
-				session_state, provider->check_session_iframe);
+				"session management disabled: \"check_session_iframe\" is not set in provider configuration");
+	} else {
+		oidc_warn(r,
+				"session management disabled: no \"session_state\" value is provided in the authentication response even though \"check_session_iframe\" (%s) is set in the provider configuration",
+				provider->check_session_iframe);
 	}
 
 	if (provider->end_session_endpoint != NULL)

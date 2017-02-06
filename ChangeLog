@@ -1,3 +1,6 @@
+02/06/2017
+- improve logging around the availability of session management; closes #223
+
 02/02/2017
 - interpret OIDCUnAuthAction also when the maximum session duration has been exceeded; see #220
 - bump to 2.1.6rc0
