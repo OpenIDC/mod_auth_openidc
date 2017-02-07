@@ -1,3 +1,7 @@
+02/07/2017
+- fix parsing of mandatory/optional attribute in OIDCOAuthTokenExpiryClaim; closes #225; thanks Alessandro Papacci
+- bump to 2.1.6rc1
+
 02/06/2017
 - improve logging around the availability of session management; closes #223
 

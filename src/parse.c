@@ -805,7 +805,7 @@ const char *oidc_parse_claim_required(apr_pool_t *pool, const char *arg,
 	const char *rv = oidc_valid_string_option(pool, arg, options);
 	if (rv != NULL)
 		return rv;
-	*is_required = apr_strnatcmp(arg, OIDC_CLAIM_REQUIRED_MANDATORY);
+	*is_required = (apr_strnatcmp(arg, OIDC_CLAIM_REQUIRED_MANDATORY) == 0);
 	return NULL;
 }
 
