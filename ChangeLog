@@ -1,3 +1,7 @@
+02/09/2017
+- correctly parse "kid" in OIDCPublicKeyFiles and OIDCOAuthVerifyCertFiles; thanks Alessandro Papacci
+- bump to 2.1.6rc2
+
 02/07/2017
 - fix parsing of mandatory/optional attribute in OIDCOAuthTokenExpiryClaim; closes #225; thanks Alessandro Papacci
 - bump to 2.1.6rc1

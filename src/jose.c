@@ -1025,7 +1025,8 @@ int oidc_jose_hash_length(const char *alg) {
  * by "input" to a JSON Web Key object
  */
 static apr_byte_t oidc_jwk_rsa_bio_to_jwk(apr_pool_t *pool, BIO *input,
-		cjose_jwk_t **jwk, int is_private_key, oidc_jose_error_t *err) {
+		const char *kid, cjose_jwk_t **jwk, int is_private_key,
+		oidc_jose_error_t *err) {
 
 	X509 *x509 = NULL;
 	EVP_PKEY *pkey = NULL;
@@ -1100,14 +1101,14 @@ static apr_byte_t oidc_jwk_rsa_bio_to_jwk(apr_pool_t *pool, BIO *input,
 	memcpy(fingerprint, key_spec.n, key_spec.nlen);
 	memcpy(fingerprint + key_spec.nlen, key_spec.e, key_spec.elen);
 
-	if (oidc_jwk_set_or_generate_kid(pool, *jwk, NULL, fingerprint,
+	if (oidc_jwk_set_or_generate_kid(pool, *jwk, kid, fingerprint,
 			key_spec.nlen + key_spec.elen, err) == FALSE) {
 		goto end;
 	}
 
 	rv = TRUE;
 
-	end:
+end:
 
 	if (pkey)
 		EVP_PKEY_free(pkey);
@@ -1137,7 +1138,7 @@ static apr_byte_t oidc_jwk_parse_rsa_key(apr_pool_t *pool, int is_private_key,
 	}
 
 	cjose_jwk_t *cjose_jwk = NULL;
-	if (oidc_jwk_rsa_bio_to_jwk(pool, input, &cjose_jwk, is_private_key,
+	if (oidc_jwk_rsa_bio_to_jwk(pool, input, kid, &cjose_jwk, is_private_key,
 			err) == FALSE)
 		goto end;
 
@@ -1145,7 +1146,7 @@ static apr_byte_t oidc_jwk_parse_rsa_key(apr_pool_t *pool, int is_private_key,
 
 	rv = TRUE;
 
-	end:
+end:
 
 	if (input)
 		BIO_free(input);
@@ -1212,7 +1213,7 @@ static apr_byte_t oidc_jwk_parse_rsa_x5c(apr_pool_t *pool, json_t *json,
 	}
 
 	/* do the actual parsing */
-	rv = oidc_jwk_rsa_bio_to_jwk(pool, input, jwk, FALSE, err);
+	rv = oidc_jwk_rsa_bio_to_jwk(pool, input, NULL, jwk, FALSE, err);
 
 	BIO_free(input);
 
