@@ -747,6 +747,13 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 	/* check that the timestamp is not beyond the valid interval */
 	if (now > json_integer_value(v) + c->state_timeout) {
 		oidc_error(r, "state has expired");
+		oidc_util_html_send_error(r, c->error_template,
+				"Invalid Authentication Response",
+				apr_psprintf(r->pool,
+						"This is due to a timeout; please restart your authentication session by re-entering the URL/bookmark you originally wanted to access: %s",
+						json_string_value(
+								json_object_get(*proto_state, "original_url"))),
+				DONE);
 		json_decref(*proto_state);
 		return FALSE;
 	}

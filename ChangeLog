@@ -1,5 +1,6 @@
 02/14/2017
-- treat only "X-Requested-With: XMLHttpRequest" header as a non-browser client; closes #228 ; thanks @mguillem 
+- treat only "X-Requested-With: XMLHttpRequest" header as a non-browser client; closes #228 ; thanks @mguillem
+- improve error message on state timeout; closes #226; thanks @security4java
 
 02/09/2017
 - correctly parse "kid" in OIDCPublicKeyFiles and OIDCOAuthVerifyCertFiles; thanks Alessandro Papacci
