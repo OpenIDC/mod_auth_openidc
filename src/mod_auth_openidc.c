@@ -926,7 +926,7 @@ static int oidc_handle_unauthenticated_user(request_rec *r, oidc_cfg *c) {
 		 * won't redirect the user and thus avoid creating a state cookie
 		 * for a non-browser (= Javascript) call that will never return from the OP
 		 */
-		if (apr_table_get(r->headers_in, "X-Requested-With") != NULL)
+		if ((apr_table_get(r->headers_in, "X-Requested-With") != NULL) && (apr_strnatcasecmp(apr_table_get(r->headers_in, "X-Requested-With"), "XMLHttpRequest") == 0))
 			return HTTP_UNAUTHORIZED;
 	}
 
