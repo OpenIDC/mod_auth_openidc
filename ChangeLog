@@ -1,3 +1,7 @@
+02/15/2017
+- improve logging of session max duration and session inactivity timeout
+- refactor so that the call to the refresh hook also resets the session inactivity timeout and passes tokens down
+
 02/14/2017
 - treat only "X-Requested-With: XMLHttpRequest" header as a non-browser client; closes #228 ; thanks @mguillem
 - improve error message on state timeout; closes #226; thanks @security4java
