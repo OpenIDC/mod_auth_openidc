@@ -653,6 +653,12 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 		return oidc_oauth_return_www_authenticate(r, "invalid_token", "Could not set remote user");
 	}
 
+	/*
+	 * we're going to pass the information that we have to the application,
+	 * but first we need to scrub the headers that we're going to use for security reasons
+	 */
+	oidc_scrub_headers(r);
+
 	/* get a handle to the director config */
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
