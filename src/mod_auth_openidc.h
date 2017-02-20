@@ -387,6 +387,7 @@ void oidc_request_state_set(request_rec *r, const char *key, const char *value);
 const char*oidc_request_state_get(request_rec *r, const char *key);
 int oidc_handle_jwks(request_rec *r, oidc_cfg *c);
 apr_byte_t oidc_post_preserve_javascript(request_rec *r, const char *location, char **javascript, char **javascript_method);
+void oidc_scrub_headers(request_rec *r);
 
 // oidc_oauth
 int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c);

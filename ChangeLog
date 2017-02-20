@@ -1,3 +1,7 @@
+02/20/2017
+- security fix: scrub headers for "AuthType oauth20"
+- release 2.1.6 
+
 02/15/2017
 - improve logging of session max duration and session inactivity timeout
 - refactor so that the call to the refresh hook also resets the session inactivity timeout and passes tokens down

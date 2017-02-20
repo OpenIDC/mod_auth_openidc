@@ -664,6 +664,12 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 				"Could not set remote user");
 	}
 
+	/*
+	 * we're going to pass the information that we have to the application,
+	 * but first we need to scrub the headers that we're going to use for security reasons
+	 */
+	oidc_scrub_headers(r);
+
 	/* set the user authentication HTTP header if set and required */
 	char *authn_header = oidc_cfg_dir_authn_header(r);
 	int pass_headers = oidc_cfg_dir_pass_info_in_headers(r);
