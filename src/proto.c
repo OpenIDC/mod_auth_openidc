@@ -516,11 +516,7 @@ int oidc_proto_authorization_request(request_rec *r,
 		return DONE;
 
 	/* add the redirect location header */
-	apr_table_add(r->headers_out, "Location", authorization_request);
-
-	/* some more logging */
-	oidc_debug(r, "adding outgoing header: Location: %s",
-			authorization_request);
+	oidc_util_hdr_out_location_set(r, authorization_request);
 
 	/* and tell Apache to return an HTTP Redirect (302) message */
 	return HTTP_MOVED_TEMPORARILY;

@@ -164,8 +164,7 @@ static void oidc_strip_cookies(request_rec *r) {
 
 	apr_array_header_t *strip = oidc_dir_cfg_strip_cookies(r);
 
-	char *cookies = apr_pstrdup(r->pool,
-			(char *) apr_table_get(r->headers_in, "Cookie"));
+	char *cookies = apr_pstrdup(r->pool, oidc_util_hdr_in_cookie_get(r));
 
 	if ((cookies != NULL) && (strip != NULL)) {
 
@@ -198,16 +197,7 @@ static void oidc_strip_cookies(request_rec *r) {
 			cookie = apr_strtok(NULL, ";", &ctx);
 		} while (cookie != NULL);
 
-		if (result != NULL) {
-			oidc_debug(r, "set cookie to backend to: %s",
-					result ?
-							apr_psprintf(r->pool, "\"%s\"", result) : "<null>");
-			apr_table_set(r->headers_in, "Cookie", result);
-		} else {
-			oidc_debug(r, "unsetting all cookies to backend");
-			apr_table_unset(r->headers_in, "Cookie");
-		}
-
+		oidc_util_hdr_in_cookie_set(r, result);
 	}
 }
 
@@ -228,14 +218,14 @@ static char *oidc_get_browser_state_hash(request_rec *r, const char *nonce) {
 	/* Initialize the hash context */
 	apr_sha1_init(&sha1);
 
-	/* get the X_FORWARDED_FOR header value  */
-	value = (char *) apr_table_get(r->headers_in, "X_FORWARDED_FOR");
+	/* get the X-FORWARDED-FOR header value  */
+	value = oidc_util_hdr_in_x_forwarded_for_get(r);
 	/* if we have a value for this header, concat it to the hash input */
 	if (value != NULL)
 		apr_sha1_update(&sha1, value, strlen(value));
 
-	/* get the USER_AGENT header value  */
-	value = (char *) apr_table_get(r->headers_in, "USER_AGENT");
+	/* get the USER-AGENT header value  */
+	value = oidc_util_hdr_in_user_agent_get(r);
 	/* if we have a value for this header, concat it to the hash input */
 	if (value != NULL)
 		apr_sha1_update(&sha1, value, strlen(value));
@@ -390,7 +380,7 @@ static const char *oidc_original_request_method(request_rec *r, oidc_cfg *cfg,
 		if (oidc_cfg_dir_preserve_post(r) == 0)
 			return OIDC_METHOD_GET;
 
-		const char *content_type = apr_table_get(r->headers_in, "Content-Type");
+		const char *content_type = oidc_util_hdr_in_content_type_get(r);
 		if ((r->method_number == M_POST)
 				&& (apr_strnatcmp(content_type,
 						"application/x-www-form-urlencoded") == 0))
@@ -670,8 +660,7 @@ static json_t * oidc_get_state_from_cookie(request_rec *r, oidc_cfg *c,
 
 static void oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c) {
 	char *cookie, *tokenizerCtx;
-	char *cookies = apr_pstrdup(r->pool,
-			(char *) apr_table_get(r->headers_in, "Cookie"));
+	char *cookies = apr_pstrdup(r->pool, oidc_util_hdr_in_cookie_get(r));
 	if (cookies != NULL) {
 		cookie = apr_strtok(cookies, ";", &tokenizerCtx);
 		do {
@@ -925,7 +914,9 @@ static int oidc_handle_unauthenticated_user(request_rec *r, oidc_cfg *c) {
 		 * won't redirect the user and thus avoid creating a state cookie
 		 * for a non-browser (= Javascript) call that will never return from the OP
 		 */
-		if ((apr_table_get(r->headers_in, "X-Requested-With") != NULL) && (apr_strnatcasecmp(apr_table_get(r->headers_in, "X-Requested-With"), "XMLHttpRequest") == 0))
+		if ((oidc_util_hdr_in_x_requested_with_get(r) != NULL)
+				&& (apr_strnatcasecmp(oidc_util_hdr_in_x_requested_with_get(r),
+						"XMLHttpRequest") == 0))
 			return HTTP_UNAUTHORIZED;
 	}
 
@@ -1350,7 +1341,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 
 	/* set the user authentication HTTP header if set and required */
 	if ((r->user != NULL) && (authn_header != NULL))
-		oidc_util_set_header(r, authn_header, r->user);
+		oidc_util_hdr_in_set(r, authn_header, r->user);
 
 	const char *s_claims = NULL;
 	const char *s_id_token = NULL;
@@ -1703,7 +1694,7 @@ static apr_byte_t oidc_handle_browser_back(request_rec *r, const char *r_state,
 					o_url);
 
 			/* go back to the URL that he originally tried to access */
-			apr_table_add(r->headers_out, "Location", o_url);
+			oidc_util_hdr_out_location_set(r, o_url);
 
 			return TRUE;
 		}
@@ -1737,7 +1728,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 			oidc_warn(r,
 					"invalid authorization response state; a default SSO URL is set, sending the user there: %s",
 					c->default_sso_url);
-			apr_table_add(r->headers_out, "Location", c->default_sso_url);
+			oidc_util_hdr_out_location_set(r, c->default_sso_url);
 			return HTTP_MOVED_TEMPORARILY;
 		}
 		oidc_error(r,
@@ -1836,7 +1827,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	}
 
 	/* now we've authenticated the user so go back to the URL that he originally tried to access */
-	apr_table_add(r->headers_out, "Location", original_url);
+	oidc_util_hdr_out_location_set(r, original_url);
 
 	/* do the actual redirect to the original URL */
 	return HTTP_MOVED_TEMPORARILY;
@@ -1936,7 +1927,8 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 			return DONE;
 
 		/* do the actual redirect to an external discovery page */
-		apr_table_add(r->headers_out, "Location", url);
+		oidc_util_hdr_out_location_set(r, url);
+
 		return HTTP_MOVED_TEMPORARILY;
 	}
 
@@ -2347,15 +2339,14 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 	if (oidc_is_front_channel_logout(url)) {
 
 		/* set recommended cache control headers */
-		apr_table_add(r->err_headers_out, "Cache-Control",
-				"no-cache, no-store");
-		apr_table_add(r->err_headers_out, "Pragma", "no-cache");
-		apr_table_add(r->err_headers_out, "P3P", "CAO PSA OUR");
-		apr_table_add(r->err_headers_out, "Expires", "0");
-		apr_table_add(r->err_headers_out, "X-Frame-Options", "DENY");
+		oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL,"no-cache, no-store");
+		oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_PRAGMA, "no-cache");
+		oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_P3P, "CAO PSA OUR");
+		oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_EXPIRES, "0");
+		oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_X_FRAME_OPTIONS, "DENY");
 
 		/* see if this is PF-PA style logout in which case we return a transparent pixel */
-		const char *accept = apr_table_get(r->headers_in, "Accept");
+		const char *accept = oidc_util_hdr_in_accept_get(r);
 		if ((apr_strnatcmp(url, OIDC_IMG_STYLE_LOGOUT_PARAM_VALUE) == 0)
 				|| ((accept) && strstr(accept, "image/png"))) {
 			return oidc_util_http_send(r,
@@ -2374,7 +2365,7 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 				"<p>Logged Out</p>", DONE);
 
 	/* send the user to the specified where-to-go-after-logout URL */
-	apr_table_add(r->headers_out, "Location", url);
+	oidc_util_hdr_out_location_set(r, url);
 
 	return HTTP_MOVED_TEMPORARILY;
 }
@@ -2513,7 +2504,7 @@ int oidc_handle_jwks(request_rec *r, oidc_cfg *c) {
 static int oidc_handle_session_management_iframe_op(request_rec *r, oidc_cfg *c,
 		oidc_session_t *session, const char *check_session_iframe) {
 	oidc_debug(r, "enter");
-	apr_table_add(r->headers_out, "Location", check_session_iframe);
+	oidc_util_hdr_out_location_set(r, check_session_iframe);
 	return HTTP_MOVED_TEMPORARILY;
 }
 
@@ -2733,7 +2724,7 @@ end:
 						oidc_util_escape_string(r, error_code));
 
 	/* add the redirect location header */
-	apr_table_add(r->headers_out, "Location", return_to);
+	oidc_util_hdr_out_location_set(r, return_to);
 
 	return HTTP_MOVED_TEMPORARILY;
 }

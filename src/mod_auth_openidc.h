@@ -451,7 +451,6 @@ apr_byte_t oidc_util_file_read(request_rec *r, const char *path, apr_pool_t *poo
 apr_byte_t oidc_util_issuer_match(const char *a, const char *b);
 int oidc_util_html_send_error(request_rec *r, const char *html_template, const char *error, const char *description, int status_code);
 apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack, const char *needle);
-void oidc_util_set_header(request_rec *r, const char *s_name, const char *s_value);
 void oidc_util_set_app_info(request_rec *r, const char *s_key, const char *s_value, const char *claim_prefix, apr_byte_t as_header, apr_byte_t as_env_var);
 void oidc_util_set_app_infos(request_rec *r, const json_t *j_attrs, const char *claim_prefix, const char *claim_delimiter, apr_byte_t as_header, apr_byte_t as_env_var);
 apr_hash_t *oidc_util_spaced_string_to_hashtable(apr_pool_t *pool, const char *str);
@@ -472,6 +471,43 @@ char *oidc_util_get_chunked_cookie(request_rec *r, const char *cookieName, int c
 void oidc_util_set_chunked_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires, int chunkSize);
 apr_byte_t oidc_util_create_symmetric_key(request_rec *r, const char *client_secret, int r_key_len, const char *hash_algo, apr_byte_t set_kid, oidc_jwk_t **jwk);
 apr_hash_t * oidc_util_merge_symmetric_key(apr_pool_t *pool, apr_hash_t *private_keys, oidc_jwk_t *jwk);
+
+/* HTTP header constants */
+#define OIDC_HTTP_HDR_COOKIE            "Cookie"
+#define OIDC_HTTP_HDR_SET_COOKIE        "Set-Cookie"
+#define OIDC_HTTP_HDR_USER_AGENT        "User-Agent"
+#define OIDC_HTTP_HDR_X_FORWARDED_FOR   "X-Forwarded-For"
+#define OIDC_HTTP_HDR_CONTENT_TYPE      "Content-Type"
+#define OIDC_HTTP_HDR_X_REQUESTED_WITH  "X-Requested-With"
+#define OIDC_HTTP_HDR_ACCEPT            "Accept"
+#define OIDC_HTTP_HDR_AUTHORIZATION     "Authorization"
+#define OIDC_HTTP_HDR_X_FORWARDED_PROTO "X-Forwarded-Proto"
+#define OIDC_HTTP_HDR_X_FORWARDED_PORT  "X-Forwarded-Port"
+#define OIDC_HTTP_HDR_X_FORWARDED_HOST  "X-Forwarded-Host"
+#define OIDC_HTTP_HDR_HOST              "Host"
+#define OIDC_HTTP_HDR_LOCATION          "Location"
+#define OIDC_HTTP_HDR_CACHE_CONTROL     "Cache-Control"
+#define OIDC_HTTP_HDR_PRAGMA            "Pragma"
+#define OIDC_HTTP_HDR_P3P               "P3P"
+#define OIDC_HTTP_HDR_EXPIRES           "Expires"
+#define OIDC_HTTP_HDR_X_FRAME_OPTIONS   "X-Frame-Options"
+#define OIDC_HTTP_HDR_WWW_AUTHENTICATE  "WWW-Authenticate"
+
+void oidc_util_hdr_in_set(const request_rec *r, const char *name, const char *value);
+const char *oidc_util_hdr_in_cookie_get(const request_rec *r);
+void oidc_util_hdr_in_cookie_set(const request_rec *r, const char *value);
+const char *oidc_util_hdr_in_user_agent_get(const request_rec *r);
+const char *oidc_util_hdr_in_x_forwarded_for_get(const request_rec *r);
+const char *oidc_util_hdr_in_content_type_get(const request_rec *r);
+const char *oidc_util_hdr_in_x_requested_with_get(const request_rec *r);
+const char *oidc_util_hdr_in_accept_get(const request_rec *r);
+const char *oidc_util_hdr_in_authorization_get(const request_rec *r);
+const char *oidc_util_hdr_in_x_forwarded_proto_get(const request_rec *r);
+const char *oidc_util_hdr_in_x_forwarded_port_get(const request_rec *r);
+const char *oidc_util_hdr_in_x_forwarded_host_get(const request_rec *r);
+const char *oidc_util_hdr_in_host_get(const request_rec *r);
+void oidc_util_hdr_out_location_set(const request_rec *r, const char *value);
+void oidc_util_hdr_err_out_add(const request_rec *r, const char *name, const char *value);
 
 // oidc_metadata.c
 apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg, const char *issuer, const char *url, json_t **j_metadata, const char **response);

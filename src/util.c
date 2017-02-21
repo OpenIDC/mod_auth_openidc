@@ -363,7 +363,7 @@ char *oidc_util_html_escape(apr_pool_t *pool, const char *s) {
  */
 static const char *oidc_get_current_url_scheme(const request_rec *r) {
 	/* first see if there's a proxy/load-balancer in front of us */
-	const char *scheme_str = apr_table_get(r->headers_in, "X-Forwarded-Proto");
+	const char *scheme_str = oidc_util_hdr_in_x_forwarded_proto_get(r);
 	/* if not we'll determine the scheme used to connect to this server */
 	if (scheme_str == NULL) {
 #ifdef APACHE2_0
@@ -381,16 +381,16 @@ static const char *oidc_get_current_url_scheme(const request_rec *r) {
 static const char *oidc_get_current_url_port(const request_rec *r,
 		const char *scheme_str) {
 	/* first see if there's a proxy/load-balancer in front of us */
-	const char *port_str = apr_table_get(r->headers_in, "X-Forwarded-Port");
+	const char *port_str = oidc_util_hdr_in_x_forwarded_port_get(r);
 	if (port_str == NULL) {
 		/* see if we can get the port from the "X-Forwarded-Host" header */
-		const char *host_hdr = apr_table_get(r->headers_in, "X-Forwarded-Host");
+		const char *host_hdr = oidc_util_hdr_in_x_forwarded_host_get(r);
 		if (host_hdr) {
 			port_str = strchr(host_hdr, ':');
 			if (port_str)
 				port_str++;
 		} else {
-			host_hdr = apr_table_get(r->headers_in, "Host");
+			host_hdr = oidc_util_hdr_in_host_get(r);
 			if (host_hdr)
 				port_str = strchr(host_hdr, ':');
 			if (port_str == NULL) {
@@ -415,9 +415,9 @@ static const char *oidc_get_current_url_port(const request_rec *r,
  * get the hostname part of the URL that is currently being accessed
  */
 const char *oidc_get_current_url_host(request_rec *r) {
-	const char *host_str = apr_table_get(r->headers_in, "X-Forwarded-Host");
+	const char *host_str = oidc_util_hdr_in_x_forwarded_host_get(r);
 	if (host_str == NULL)
-		host_str = apr_table_get(r->headers_in, "Host");
+		host_str = oidc_util_hdr_in_host_get(r);
 	if (host_str) {
 		host_str = apr_pstrdup(r->pool, host_str);
 		char *p = strchr(host_str, ':');
@@ -830,10 +830,7 @@ void oidc_util_set_cookie(request_rec *r, const char *cookieName,
 	}
 
 	/* use r->err_headers_out so we always print our headers (even on 302 redirect) - headers_out only prints on 2xx responses */
-	apr_table_add(r->err_headers_out, "Set-Cookie", headerString);
-
-	/* do some logging */
-	oidc_debug(r, "adding outgoing header: Set-Cookie: %s", headerString);
+	oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_SET_COOKIE, headerString);
 }
 
 /*
@@ -843,8 +840,7 @@ char *oidc_util_get_cookie(request_rec *r, const char *cookieName) {
 	char *cookie, *tokenizerCtx, *rv = NULL;
 
 	/* get the Cookie value */
-	char *cookies = apr_pstrdup(r->pool,
-			(char *) apr_table_get(r->headers_in, "Cookie"));
+	char *cookies = apr_pstrdup(r->pool, oidc_util_hdr_in_cookie_get(r));
 
 	if (cookies != NULL) {
 
@@ -1398,31 +1394,6 @@ apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack,
 }
 
 /*
- * set a HTTP header
- */
-void oidc_util_set_header(request_rec *r, const char *s_name,
-		const char *s_value) {
-	/*
-	 * sanitize the header value by replacing line feeds with spaces
-	 * just like the Apache header input algorithms do for incoming headers
-	 *
-	 * this makes it impossible to have line feeds in values but that is
-	 * compliant with RFC 7230 (and impossible for regular headers due to Apache's
-	 * parsing of headers anyway) and fixes a security vulnerability on
-	 * overwriting/setting outgoing headers when used in proxy mode
-	 */
-	char *p = NULL;
-	while ((p = strchr(s_value, '\n')))
-		*p = ' ';
-
-	/* do some logging about this event */
-	oidc_debug(r, "setting header \"%s: %s\"", s_name, s_value);
-
-	/* now set the actual header name/value */
-	apr_table_set(r->headers_in, s_name, s_value);
-}
-
-/*
  * set a HTTP header and/or environment variable to pass information to the application
  */
 void oidc_util_set_app_info(request_rec *r, const char *s_key,
@@ -1436,7 +1407,7 @@ void oidc_util_set_app_info(request_rec *r, const char *s_key,
 			oidc_normalize_header_name(r, s_key));
 
 	if (as_header)
-		oidc_util_set_header(r, s_name, s_value);
+		oidc_util_hdr_in_set(r, s_name, s_value);
 
 	if (as_env_var) {
 
@@ -1886,4 +1857,107 @@ int oidc_util_cookie_domain_valid(const char *hostname, char *cookie_domain) {
 		return FALSE;
 	}
 	return TRUE;
+}
+
+static const char *oidc_util_hdr_in_get(const request_rec *r, const char *name) {
+	return apr_table_get(r->headers_in, name);
+}
+
+static void oidc_util_hdr_table_set(const request_rec *r, apr_table_t *table,
+		const char *name, const char *value) {
+
+	if (value != NULL) {
+
+		char *s_value = apr_pstrdup(r->pool, value);
+
+		/*
+		 * sanitize the header value by replacing line feeds with spaces
+		 * just like the Apache header input algorithms do for incoming headers
+		 *
+		 * this makes it impossible to have line feeds in values but that is
+		 * compliant with RFC 7230 (and impossible for regular headers due to Apache's
+		 * parsing of headers anyway) and fixes a security vulnerability on
+		 * overwriting/setting outgoing headers when used in proxy mode
+		 */
+		char *p = NULL;
+		while ((p = strchr(s_value, '\n')))
+			*p = ' ';
+
+		oidc_debug(r, "%s: %s", name, s_value);
+		apr_table_set(table, name, s_value);
+
+	} else {
+
+		oidc_debug(r, "unset %s", name);
+		apr_table_unset(table, name);
+
+	}
+}
+
+static void oidc_util_hdr_out_set(const request_rec *r, const char *name,
+		const char *value) {
+	oidc_util_hdr_table_set(r, r->headers_out, name, value);
+}
+
+void oidc_util_hdr_err_out_add(const request_rec *r, const char *name,
+		const char *value) {
+	oidc_debug(r, "%s: %s", name, value);
+	apr_table_add(r->err_headers_out, name, value);
+}
+
+void oidc_util_hdr_in_set(const request_rec *r, const char *name,
+		const char *value) {
+	oidc_util_hdr_table_set(r, r->headers_in, name, value);
+}
+
+const char *oidc_util_hdr_in_cookie_get(const request_rec *r) {
+	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_COOKIE);
+}
+
+void oidc_util_hdr_in_cookie_set(const request_rec *r, const char *value) {
+	return oidc_util_hdr_in_set(r, OIDC_HTTP_HDR_COOKIE, value);
+}
+
+const char *oidc_util_hdr_in_user_agent_get(const request_rec *r) {
+	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_USER_AGENT);
+}
+
+const char *oidc_util_hdr_in_x_forwarded_for_get(const request_rec *r) {
+	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_X_FORWARDED_FOR);
+}
+
+const char *oidc_util_hdr_in_content_type_get(const request_rec *r) {
+	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_CONTENT_TYPE);
+}
+
+const char *oidc_util_hdr_in_x_requested_with_get(const request_rec *r) {
+	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_X_REQUESTED_WITH);
+}
+
+const char *oidc_util_hdr_in_accept_get(const request_rec *r) {
+	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_ACCEPT);
+}
+
+const char *oidc_util_hdr_in_authorization_get(const request_rec *r) {
+	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_AUTHORIZATION);
+}
+
+const char *oidc_util_hdr_in_x_forwarded_proto_get(const request_rec *r) {
+	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_X_FORWARDED_PROTO);
+}
+
+const char *oidc_util_hdr_in_x_forwarded_port_get(const request_rec *r) {
+	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_X_FORWARDED_PORT);
+}
+
+const char *oidc_util_hdr_in_x_forwarded_host_get(const request_rec *r) {
+	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_X_FORWARDED_HOST);
+}
+
+const char *oidc_util_hdr_in_host_get(const request_rec *r) {
+	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_HOST);
+}
+
+void oidc_util_hdr_out_location_set(const request_rec *r, const char *value) {
+	return oidc_util_hdr_out_set(r, OIDC_HTTP_HDR_LOCATION, value);
 }
