@@ -2851,6 +2851,100 @@ static int oidc_handle_remove_at_cache(request_rec *r, oidc_cfg *c) {
 }
 
 /*
+ * handle request for session info
+ */
+static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
+		oidc_session_t *session) {
+	char *format = NULL;
+	oidc_util_get_request_parameter(r, "info", &format);
+
+	/* see if this is a request for a format that is supported */
+	if (apr_strnatcmp("json", format) != 0) {
+		oidc_warn(r, "request for unknown format: %s", format);
+		return HTTP_NOT_FOUND;
+	}
+
+	/* check that we actually have a user session and this is not someone calling without a proper session cookie */
+	if (session->remote_user == NULL) {
+		oidc_warn(r, "no user session found");
+		return HTTP_NOT_FOUND;
+	}
+
+	/* create the JSON object */
+	json_t *json = json_object();
+	/* add a timestamp of creation in there for the caller */
+	json_object_set_new(json, "timestamp",
+			json_integer(apr_time_sec(apr_time_now())));
+
+	/*
+	 * refresh the claims from the userinfo endpoint
+	 * side-effects is that this may refresh the access token
+	 * note also that OIDCUserInfoRefreshInterval should be set on the RedirectURI to control the refresh policy!
+	 */
+	apr_byte_t needs_save = oidc_refresh_claims_from_userinfo_endpoint(r, c,
+			session);
+
+	/* include the access token in the session info */
+	const char *access_token = NULL;
+	oidc_session_get(r, session, OIDC_ACCESSTOKEN_SESSION_KEY, &access_token);
+	if (access_token != NULL)
+		json_object_set_new(json, "access_token", json_string(access_token));
+
+	/* include the access token expiry timestamp in the session info */
+	const char *access_token_expires = NULL;
+	oidc_session_get(r, session, OIDC_ACCESSTOKEN_EXPIRES_SESSION_KEY,
+			&access_token_expires);
+	if (access_token_expires != NULL)
+		json_object_set_new(json, "access_token_expires",
+				json_string(access_token_expires));
+
+	json_t *id_token = NULL, *claims = NULL;
+	json_error_t json_error;
+
+	/* include the id_token claims in the session info */
+	const char *s_id_token = NULL;
+	oidc_session_get(r, session, OIDC_IDTOKEN_CLAIMS_SESSION_KEY, &s_id_token);
+	if (s_id_token != NULL) {
+		id_token = json_loads(s_id_token, 0, &json_error);
+		if (id_token == NULL)
+			oidc_warn(r, "JSON parsing (json_loads) failed: %s (%s)",
+					json_error.text, s_id_token);
+		else
+			json_object_set_new(json, "id_token", id_token);
+	}
+
+	/* include the claims from the userinfo endpoint the session info */
+	const char *s_claims = NULL;
+	oidc_session_get(r, session, OIDC_CLAIMS_SESSION_KEY, &s_claims);
+	if (s_claims != NULL) {
+		claims = json_loads(s_claims, 0, &json_error);
+		if (claims == NULL)
+			oidc_warn(r, "JSON parsing (json_loads) failed: %s (%s)",
+					json_error.text, s_claims);
+		else
+			json_object_set_new(json, "userinfo", claims);
+	}
+
+	/* JSON-encode the result */
+	char *s_value = json_dumps(json, 0);
+	char *r_value = apr_pstrdup(r->pool, s_value);
+
+	/* free the allocated resources */
+	free(s_value);
+	json_decref(json);
+
+	/* pass the tokens to the application and save the session, possibly updating the expiry */
+	if (oidc_session_pass_tokens_and_save(r, c, session, needs_save) == FALSE) {
+		oidc_warn(r, "error saving session");
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	/* return the stringified JSON result */
+	return oidc_util_http_send(r, r_value, strlen(r_value), "application/json",
+			DONE);
+}
+
+/*
  * handle all requests to the redirect_uri
  */
 int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
@@ -2900,6 +2994,11 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 
 		/* handle request to invalidate access token cache */
 		return oidc_handle_remove_at_cache(r, c);
+
+	} else if (oidc_util_request_has_parameter(r, "info")) {
+
+		/* handle request for session info */
+		return oidc_handle_info_request(r, c, session);
 
 	} else if ((r->args == NULL) || (apr_strnatcmp(r->args, "") == 0)) {
 
