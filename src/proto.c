@@ -1068,8 +1068,8 @@ char *oidc_proto_peek_jwt_header(request_rec *r,
 		return NULL;
 	}
 	if (alg) {
-		json_error_t json_error;
-		json_t *json = json_loads(result, JSON_DECODE_ANY, &json_error);
+		json_t *json =NULL;
+		oidc_util_decode_json_object(r, result, &json);
 		if (json)
 			*alg = apr_pstrdup(r->pool,
 					json_string_value(json_object_get(json, CJOSE_HDR_ALG)));

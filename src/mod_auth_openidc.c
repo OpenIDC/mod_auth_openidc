@@ -306,7 +306,7 @@ static apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg *c,
 	} else {
 
 		/* correct parsing and validation was already done when it was put in the cache */
-		j_provider = json_loads(s_json, 0, 0);
+		oidc_util_decode_json_object(r, s_json, &j_provider);
 	}
 
 	*provider = apr_pcalloc(r->pool, sizeof(oidc_provider_t));
@@ -863,17 +863,8 @@ static apr_byte_t oidc_set_app_claims(request_rec *r,
 
 	/* decode the string-encoded attributes in to a JSON structure */
 	if (s_claims != NULL) {
-		json_error_t json_error;
-		j_claims = json_loads(s_claims, 0, &json_error);
-
-		if (j_claims == NULL) {
-			/* whoops, JSON has been corrupted */
-			oidc_error(r,
-					"unable to parse \"%s\" JSON stored in the session: %s",
-					s_claims, json_error.text);
-
+		if (oidc_util_decode_json_object(r, s_claims, &j_claims) == FALSE)
 			return FALSE;
-		}
 	}
 
 	/* set the resolved claims a HTTP headers for the application */
@@ -1490,8 +1481,8 @@ static apr_byte_t oidc_get_remote_user(request_rec *r, oidc_cfg *c,
 
 	/* extract the username claim (default: "sub") from the id_token payload or user claims */
 	char *username = NULL;
-	json_error_t json_error;
-	json_t *claims = json_loads(s_claims, 0, &json_error);
+	json_t *claims = NULL;
+	oidc_util_decode_json_object(r, s_claims, &claims);
 	if (claims == NULL) {
 		username = apr_pstrdup(r->pool,
 				json_string_value(

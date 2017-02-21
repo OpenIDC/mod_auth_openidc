@@ -290,7 +290,6 @@ static apr_byte_t oidc_oauth_get_cached_access_token(request_rec *r,
 		oidc_cfg *c, const char *access_token, json_t **json) {
 	json_t *cache_entry = NULL;
 	const char *s_cache_entry = NULL;
-	json_error_t json_error;
 
 	/* see if we've got the claims for this access_token cached already */
 	c->cache->get(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, access_token,
@@ -300,9 +299,7 @@ static apr_byte_t oidc_oauth_get_cached_access_token(request_rec *r,
 		return FALSE;
 
 	/* json decode the cache entry */
-	cache_entry = json_loads(s_cache_entry, 0, &json_error);
-	if (cache_entry == NULL) {
-		oidc_error(r, "cached JSON was corrupted: %s", json_error.text);
+	if (oidc_util_decode_json_object(r, s_cache_entry, &cache_entry)) {
 		*json = NULL;
 		return FALSE;
 	}

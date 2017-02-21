@@ -84,7 +84,7 @@ static apr_byte_t oidc_session_encode(request_rec *r, oidc_cfg *c,
 static apr_byte_t oidc_session_decode(request_rec *r, oidc_cfg *c,
 		oidc_session_t *z, const char *s_json, apr_byte_t secure) {
 	if (secure == FALSE) {
-		z->state = json_loads(s_json, 0, 0);
+		oidc_util_decode_json_object(r, s_json, &z->state);
 		if (z->state == NULL) {
 			oidc_error(r, "cached JSON parsing (json_loads) failed: (%s)",
 					s_json);
