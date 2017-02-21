@@ -951,15 +951,9 @@ static int oidc_handle_unauthenticated_user(request_rec *r, oidc_cfg *c) {
  */
 static int oidc_check_max_session_duration(request_rec *r, oidc_cfg *cfg,
 		oidc_session_t *session) {
-	const char *s_session_expires = NULL;
-	apr_time_t session_expires;
 
 	/* get the session expiry from the session data */
-	oidc_session_get(r, session, OIDC_SESSION_EXPIRES_SESSION_KEY,
-			&s_session_expires);
-
-	/* convert the string to a timestamp */
-	sscanf(s_session_expires, "%" APR_TIME_T_FMT, &session_expires);
+	apr_time_t session_expires = oidc_session_get_session_expires(r, session);
 
 	/* check the expire timestamp against the current time */
 	if (apr_time_now() > session_expires) {
@@ -989,9 +983,7 @@ static apr_byte_t oidc_check_cookie_domain(request_rec *r, oidc_cfg *cfg,
 	const char *c_cookie_domain =
 			cfg->cookie_domain ?
 					cfg->cookie_domain : oidc_get_current_url_host(r);
-	const char *s_cookie_domain = NULL;
-	oidc_session_get(r, session, OIDC_COOKIE_DOMAIN_SESSION_KEY,
-			&s_cookie_domain);
+	const char *s_cookie_domain = oidc_session_get_cookie_domain(r, session);
 	if ((s_cookie_domain == NULL)
 			|| (apr_strnatcmp(c_cookie_domain, s_cookie_domain) != 0)) {
 		oidc_warn(r,
@@ -1012,8 +1004,7 @@ apr_byte_t oidc_get_provider_from_session(request_rec *r, oidc_cfg *c,
 	oidc_debug(r, "enter");
 
 	/* get the issuer value from the session state */
-	const char *issuer = NULL;
-	oidc_session_get(r, session, OIDC_ISSUER_SESSION_KEY, &issuer);
+	const char *issuer = oidc_session_get_issuer(r, session);
 	if (issuer == NULL) {
 		oidc_error(r, "session corrupted: no issuer found in session");
 		return FALSE;
@@ -1033,18 +1024,6 @@ apr_byte_t oidc_get_provider_from_session(request_rec *r, oidc_cfg *c,
 }
 
 /*
- * store the access token expiry timestamp in the session, based on the expires_in
- */
-static void oidc_store_access_token_expiry(request_rec *r,
-		oidc_session_t *session, int expires_in) {
-	if (expires_in != -1) {
-		oidc_session_set(r, session, OIDC_ACCESSTOKEN_EXPIRES_SESSION_KEY,
-				apr_psprintf(r->pool, "%" APR_TIME_T_FMT,
-						apr_time_sec(apr_time_now()) + expires_in));
-	}
-}
-
-/*
  * store claims resolved from the userinfo endpoint in the session
  */
 static void oidc_store_userinfo_claims(request_rec *r, oidc_session_t *session,
@@ -1059,20 +1038,19 @@ static void oidc_store_userinfo_claims(request_rec *r, oidc_session_t *session,
 		 * (well actually the stringified representation in the response)
 		 * in the session context safely now
 		 */
-		oidc_session_set(r, session, OIDC_CLAIMS_SESSION_KEY, claims);
+		oidc_session_set_userinfo_claims(r, session, claims);
 
 	} else {
 		/*
 		 * clear the existing claims because we could not refresh them
 		 */
-		oidc_session_set(r, session, OIDC_CLAIMS_SESSION_KEY, NULL);
+		oidc_session_set_userinfo_claims(r, session, NULL);
 
 	}
 
 	/* store the last refresh time if we've configured a userinfo refresh interval */
 	if (provider->userinfo_refresh_interval > 0)
-		oidc_session_set(r, session, OIDC_USERINFO_LAST_REFRESH_SESSION_KEY,
-				apr_psprintf(r->pool, "%" APR_TIME_T_FMT, apr_time_now()));
+		oidc_session_reset_userinfo_last_refresh(r, session);
 }
 
 /*
@@ -1085,8 +1063,7 @@ static apr_byte_t oidc_refresh_access_token(request_rec *r, oidc_cfg *c,
 	oidc_debug(r, "enter");
 
 	/* get the refresh token that was stored in the session */
-	const char *refresh_token = NULL;
-	oidc_session_get(r, session, OIDC_REFRESHTOKEN_SESSION_KEY, &refresh_token);
+	const char *refresh_token = oidc_session_get_refresh_token(r, session);
 	if (refresh_token == NULL) {
 		oidc_warn(r,
 				"refresh token routine called but no refresh_token found in the session");
@@ -1109,8 +1086,8 @@ static apr_byte_t oidc_refresh_access_token(request_rec *r, oidc_cfg *c,
 	}
 
 	/* store the new access_token in the session and discard the old one */
-	oidc_session_set(r, session, OIDC_ACCESSTOKEN_SESSION_KEY, s_access_token);
-	oidc_store_access_token_expiry(r, session, expires_in);
+	oidc_session_set_access_token(r, session, s_access_token);
+	oidc_session_set_access_token_expires(r, session, expires_in);
 
 	/* see if we need to return it as a parameter */
 	if (new_access_token != NULL)
@@ -1118,8 +1095,7 @@ static apr_byte_t oidc_refresh_access_token(request_rec *r, oidc_cfg *c,
 
 	/* if we have a new refresh token (rolling refresh), store it in the session and overwrite the old one */
 	if (s_refresh_token != NULL)
-		oidc_session_set(r, session, OIDC_REFRESHTOKEN_SESSION_KEY,
-				s_refresh_token);
+		oidc_session_set_refresh_token(r, session, s_refresh_token);
 
 	return TRUE;
 }
@@ -1150,22 +1126,10 @@ static const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r,
 	if ((id_token_sub == NULL) && (session != NULL)) {
 
 		// when refreshing claims from the userinfo endpoint
-
-		const char *s_id_token_claims = NULL;
-		oidc_session_get(r, session, OIDC_IDTOKEN_CLAIMS_SESSION_KEY,
-				&s_id_token_claims);
-
-		if (s_id_token_claims == NULL) {
-			oidc_error(r, "no id_token claims provided");
-			return NULL;
-		}
-
-		json_error_t json_error;
-		json_t *id_token_claims = json_loads(s_id_token_claims, 0, &json_error);
-
+		json_t *id_token_claims = oidc_session_get_idtoken_claims_json(r,
+				session);
 		if (id_token_claims == NULL) {
-			oidc_error(r, "JSON parsing (json_loads) failed: %s (%s)",
-					json_error.text, s_id_token_claims);
+			oidc_error(r, "no id_token_claims found in session");
 			return NULL;
 		}
 
@@ -1226,7 +1190,7 @@ static apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r,
 
 	oidc_provider_t *provider = NULL;
 	const char *claims = NULL;
-	char *access_token = NULL;
+	const char *access_token = NULL;
 
 	/* get the current provider info */
 	if (oidc_get_provider_from_session(r, cfg, session, &provider) == FALSE)
@@ -1243,13 +1207,8 @@ static apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r,
 	if ((provider->userinfo_endpoint_url != NULL) && (interval > 0)) {
 
 		/* get the last refresh timestamp from the session info */
-		apr_time_t last_refresh = 0;
-		const char *s_last_refresh = NULL;
-		oidc_session_get(r, session, OIDC_USERINFO_LAST_REFRESH_SESSION_KEY,
-				&s_last_refresh);
-		if (s_last_refresh != NULL) {
-			sscanf(s_last_refresh, "%" APR_TIME_T_FMT, &last_refresh);
-		}
+		apr_time_t last_refresh = oidc_session_get_userinfo_last_refresh(r,
+				session);
 
 		oidc_debug(r, "refresh needed in: %" APR_TIME_T_FMT " seconds",
 				apr_time_sec(last_refresh + interval - apr_time_now()));
@@ -1258,8 +1217,7 @@ static apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r,
 		if (last_refresh + interval < apr_time_now()) {
 
 			/* get the current access token */
-			oidc_session_get(r, session, OIDC_ACCESSTOKEN_SESSION_KEY,
-					(const char **) &access_token);
+			access_token = oidc_session_get_access_token(r, session);
 
 			/* retrieve the current claims */
 			claims = oidc_retrieve_claims_from_userinfo_endpoint(r, cfg,
@@ -1281,21 +1239,19 @@ static apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r,
 static void oidc_copy_tokens_to_request_state(request_rec *r,
 		oidc_session_t *session, const char **s_id_token, const char **s_claims) {
 
-	const char *id_token = NULL, *claims = NULL;
-
-	oidc_session_get(r, session, OIDC_IDTOKEN_CLAIMS_SESSION_KEY, &id_token);
-	oidc_session_get(r, session, OIDC_CLAIMS_SESSION_KEY, &claims);
+	const char *id_token = oidc_session_get_idtoken_claims(r, session);
+	const char *claims = oidc_session_get_userinfo_claims(r, session);
 
 	oidc_debug(r, "id_token=%s claims=%s", id_token, claims);
 
 	if (id_token != NULL) {
-		oidc_request_state_set(r, OIDC_IDTOKEN_CLAIMS_SESSION_KEY, id_token);
+		oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_IDTOKEN, id_token);
 		if (s_id_token != NULL)
 			*s_id_token = id_token;
 	}
 
 	if (claims != NULL) {
-		oidc_request_state_set(r, OIDC_CLAIMS_SESSION_KEY, claims);
+		oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_CLAIMS, claims);
 		if (s_claims != NULL)
 			*s_claims = claims;
 	}
@@ -1311,8 +1267,7 @@ static apr_byte_t oidc_session_pass_tokens_and_save(request_rec *r,
 	int pass_envvars = oidc_cfg_dir_pass_info_in_envvars(r);
 
 	/* set the refresh_token in the app headers/variables, if enabled for this location/directory */
-	const char *refresh_token = NULL;
-	oidc_session_get(r, session, OIDC_REFRESHTOKEN_SESSION_KEY, &refresh_token);
+	const char *refresh_token = oidc_session_get_refresh_token(r, session);
 	if ((oidc_cfg_dir_pass_refresh_token(r) != 0) && (refresh_token != NULL)) {
 		/* pass it to the app in a header or environment variable */
 		oidc_util_set_app_info(r, "refresh_token", refresh_token,
@@ -1320,8 +1275,7 @@ static apr_byte_t oidc_session_pass_tokens_and_save(request_rec *r,
 	}
 
 	/* set the access_token in the app headers/variables */
-	const char *access_token = NULL;
-	oidc_session_get(r, session, OIDC_ACCESSTOKEN_SESSION_KEY, &access_token);
+	const char *access_token = oidc_session_get_access_token(r, session);
 	if (access_token != NULL) {
 		/* pass it to the app in a header or environment variable */
 		oidc_util_set_app_info(r, "access_token", access_token,
@@ -1329,9 +1283,8 @@ static apr_byte_t oidc_session_pass_tokens_and_save(request_rec *r,
 	}
 
 	/* set the expiry timestamp in the app headers/variables */
-	const char *access_token_expires = NULL;
-	oidc_session_get(r, session, OIDC_ACCESSTOKEN_EXPIRES_SESSION_KEY,
-			&access_token_expires);
+	const char *access_token_expires = oidc_session_get_access_token_expires(r,
+			session);
 	if (access_token_expires != NULL) {
 		/* pass it to the app in a header or environment variable */
 		oidc_util_set_app_info(r, "access_token_expires", access_token_expires,
@@ -1432,9 +1385,8 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 
 	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_SERIALIZED)) {
 		if (cfg->session_type != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
-			const char *s_id_token = NULL;
 			/* get the compact serialized JWT from the session */
-			oidc_session_get(r, session, OIDC_IDTOKEN_SESSION_KEY, &s_id_token);
+			const char *s_id_token = oidc_session_get_idtoken(r, session);
 			/* pass the compact serialized JWT to the app in a header or environment variable */
 			oidc_util_set_app_info(r, "id_token", s_id_token,
 					OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars);
@@ -1597,29 +1549,27 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
 			apr_time_now() + apr_time_from_sec(c->session_inactivity_timeout);
 
 	/* store the claims payload in the id_token for later reference */
-	oidc_session_set(r, session, OIDC_IDTOKEN_CLAIMS_SESSION_KEY,
+	oidc_session_set_idtoken_claims(r, session,
 			id_token_jwt->payload.value.str);
 
 	if (c->session_type != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
 		/* store the compact serialized representation of the id_token for later reference  */
-		oidc_session_set(r, session, OIDC_IDTOKEN_SESSION_KEY, id_token);
+		oidc_session_set_idtoken(r, session, id_token);
 	}
 
 	/* store the issuer in the session (at least needed for session mgmt and token refresh */
-	oidc_session_set(r, session, OIDC_ISSUER_SESSION_KEY, provider->issuer);
+	oidc_session_set_issuer(r, session, provider->issuer);
 
 	/* store the state and original URL in the session for handling browser-back more elegantly */
-	oidc_session_set(r, session, OIDC_REQUEST_STATE_SESSION_KEY, state);
-	oidc_session_set(r, session, OIDC_REQUEST_ORIGINAL_URL, original_url);
+	oidc_session_set_request_state(r, session, state);
+	oidc_session_set_original_url(r, session, original_url);
 
 	if ((session_state != NULL) && (provider->check_session_iframe != NULL)) {
 		/* store the session state and required parameters session management  */
-		oidc_session_set(r, session, OIDC_SESSION_STATE_SESSION_KEY,
-				session_state);
-		oidc_session_set(r, session, OIDC_CHECK_IFRAME_SESSION_KEY,
+		oidc_session_set_session_state(r, session, session_state);
+		oidc_session_set_check_session_iframe(r, session,
 				provider->check_session_iframe);
-		oidc_session_set(r, session, OIDC_CLIENTID_SESSION_KEY,
-				provider->client_id);
+		oidc_session_set_client_id(r, session, provider->client_id);
 		oidc_debug(r,
 				"session management enabled: stored session_state (%s), check_session_iframe (%s) and client_id (%s) in the session",
 				session_state, provider->check_session_iframe,
@@ -1634,7 +1584,7 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
 	}
 
 	if (provider->end_session_endpoint != NULL)
-		oidc_session_set(r, session, OIDC_LOGOUT_ENDPOINT_SESSION_KEY,
+		oidc_session_set_logout_endpoint(r, session,
 				provider->end_session_endpoint);
 
 	/* store claims resolved from userinfo endpoint */
@@ -1643,17 +1593,15 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
 	/* see if we have an access_token */
 	if (access_token != NULL) {
 		/* store the access_token in the session context */
-		oidc_session_set(r, session, OIDC_ACCESSTOKEN_SESSION_KEY,
-				access_token);
+		oidc_session_set_access_token(r, session, access_token);
 		/* store the associated expires_in value */
-		oidc_store_access_token_expiry(r, session, expires_in);
+		oidc_session_set_access_token_expires(r, session, expires_in);
 	}
 
 	/* see if we have a refresh_token */
 	if (refresh_token != NULL) {
 		/* store the refresh_token in the session context */
-		oidc_session_set(r, session, OIDC_REFRESHTOKEN_SESSION_KEY,
-				refresh_token);
+		oidc_session_set_refresh_token(r, session, refresh_token);
 	}
 
 	/* store max session duration in the session as a hard cut-off expiry timestamp */
@@ -1662,14 +1610,13 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
 					apr_time_from_sec(id_token_jwt->payload.exp) :
 					(apr_time_now()
 							+ apr_time_from_sec(provider->session_max_duration));
-	oidc_session_set(r, session, OIDC_SESSION_EXPIRES_SESSION_KEY,
-			apr_psprintf(r->pool, "%" APR_TIME_T_FMT, session_expires));
+	oidc_session_set_session_expires(r, session, session_expires);
 
 	/* log message about max session duration */
 	oidc_log_session_expires(r, "session max lifetime", session_expires);
 
 	/* store the domain for which this session is valid */
-	oidc_session_set(r, session, OIDC_COOKIE_DOMAIN_SESSION_KEY,
+	oidc_session_set_cookie_domain(r, session,
 			c->cookie_domain ? c->cookie_domain : oidc_get_current_url_host(r));
 
 	/* store the session */
@@ -1753,8 +1700,8 @@ static apr_byte_t oidc_handle_browser_back(request_rec *r, const char *r_state,
 
 	if (session->remote_user != NULL) {
 
-		oidc_session_get(r, session, OIDC_REQUEST_STATE_SESSION_KEY, &s_state);
-		oidc_session_get(r, session, OIDC_REQUEST_ORIGINAL_URL, &o_url);
+		s_state = oidc_session_get_request_state(r, session);
+		o_url = oidc_session_get_original_url(r, session);
 
 		if ((r_state != NULL) && (s_state != NULL)
 				&& (apr_strnatcmp(r_state, s_state) == 0)) {
@@ -2503,13 +2450,11 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 		}
 	}
 
-	const char *end_session_endpoint = NULL;
-	oidc_session_get(r, session, OIDC_LOGOUT_ENDPOINT_SESSION_KEY,
-			&end_session_endpoint);
+	const char *end_session_endpoint = oidc_session_get_logout_endpoint(r,
+			session);
 	if (end_session_endpoint != NULL) {
 
-		const char *id_token_hint = NULL;
-		oidc_session_get(r, session, OIDC_IDTOKEN_SESSION_KEY, &id_token_hint);
+		const char *id_token_hint = oidc_session_get_idtoken(r, session);
 
 		char *logout_request = apr_pstrdup(r->pool, end_session_endpoint);
 		if (id_token_hint != NULL) {
@@ -2635,9 +2580,7 @@ static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c,
 	const char *op_iframe_id = "openidc-op";
 
 	/* restore the OP session_state from the session */
-	const char *session_state = NULL;
-	oidc_session_get(r, session, OIDC_SESSION_STATE_SESSION_KEY,
-			&session_state);
+	const char *session_state = oidc_session_get_session_state(r, session);
 	if (session_state == NULL) {
 		oidc_warn(r,
 				"no session_state found in the session; the OP does probably not support session management!?");
@@ -2682,8 +2625,8 @@ static int oidc_handle_session_management(request_rec *r, oidc_cfg *c,
 
 	/* see if this is a request for the OP iframe */
 	if (apr_strnatcmp("iframe_op", cmd) == 0) {
-		oidc_session_get(r, session, OIDC_CHECK_IFRAME_SESSION_KEY,
-				&check_session_iframe);
+		check_session_iframe = oidc_session_get_check_session_iframe(r,
+				session);
 		if (check_session_iframe != NULL) {
 			return oidc_handle_session_management_iframe_op(r, c, session,
 					check_session_iframe);
@@ -2693,9 +2636,9 @@ static int oidc_handle_session_management(request_rec *r, oidc_cfg *c,
 
 	/* see if this is a request for the RP iframe */
 	if (apr_strnatcmp("iframe_rp", cmd) == 0) {
-		oidc_session_get(r, session, OIDC_CLIENTID_SESSION_KEY, &client_id);
-		oidc_session_get(r, session, OIDC_CHECK_IFRAME_SESSION_KEY,
-				&check_session_iframe);
+		client_id = oidc_session_get_client_id(r, session);
+		check_session_iframe = oidc_session_get_check_session_iframe(r,
+				session);
 		if ((client_id != NULL) && (check_session_iframe != NULL)) {
 			return oidc_handle_session_management_iframe_rp(r, c, session,
 					client_id, check_session_iframe);
@@ -2708,7 +2651,7 @@ static int oidc_handle_session_management(request_rec *r, oidc_cfg *c,
 
 	/* see if this is a request check the login state with the OP */
 	if (apr_strnatcmp("check", cmd) == 0) {
-		oidc_session_get(r, session, OIDC_IDTOKEN_SESSION_KEY, &id_token_hint);
+		id_token_hint = oidc_session_get_idtoken(r, session);
 		oidc_get_provider_from_session(r, c, session, &provider);
 		if ((session->remote_user != NULL) && (provider != NULL)) {
 			return oidc_authenticate_user(r, c, provider,
@@ -2754,9 +2697,7 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
 		goto end;
 	}
 
-	char *s_access_token = NULL;
-	oidc_session_get(r, session, OIDC_ACCESSTOKEN_SESSION_KEY,
-			(const char **) &s_access_token);
+	const char *s_access_token = oidc_session_get_access_token(r, session);
 	if (s_access_token == NULL) {
 		oidc_error(r,
 				"no existing access_token found in the session, nothing to refresh");
@@ -2873,7 +2814,7 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 	/* create the JSON object */
 	json_t *json = json_object();
 	/* add a timestamp of creation in there for the caller */
-	json_object_set_new(json, "timestamp",
+	json_object_set_new(json, "iat",
 			json_integer(apr_time_sec(apr_time_now())));
 
 	/*
@@ -2885,45 +2826,25 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 			session);
 
 	/* include the access token in the session info */
-	const char *access_token = NULL;
-	oidc_session_get(r, session, OIDC_ACCESSTOKEN_SESSION_KEY, &access_token);
+	const char *access_token = oidc_session_get_access_token(r, session);
 	if (access_token != NULL)
 		json_object_set_new(json, "access_token", json_string(access_token));
 
 	/* include the access token expiry timestamp in the session info */
-	const char *access_token_expires = NULL;
-	oidc_session_get(r, session, OIDC_ACCESSTOKEN_EXPIRES_SESSION_KEY,
-			&access_token_expires);
+	const char *access_token_expires = oidc_session_get_access_token_expires(r, session);
 	if (access_token_expires != NULL)
 		json_object_set_new(json, "access_token_expires",
 				json_string(access_token_expires));
 
-	json_t *id_token = NULL, *claims = NULL;
-	json_error_t json_error;
-
 	/* include the id_token claims in the session info */
-	const char *s_id_token = NULL;
-	oidc_session_get(r, session, OIDC_IDTOKEN_CLAIMS_SESSION_KEY, &s_id_token);
-	if (s_id_token != NULL) {
-		id_token = json_loads(s_id_token, 0, &json_error);
-		if (id_token == NULL)
-			oidc_warn(r, "JSON parsing (json_loads) failed: %s (%s)",
-					json_error.text, s_id_token);
-		else
-			json_object_set_new(json, "id_token", id_token);
-	}
+	json_t *id_token = oidc_session_get_idtoken_claims_json(r, session);
+	if (id_token)
+		json_object_set_new(json, "id_token", id_token);
 
 	/* include the claims from the userinfo endpoint the session info */
-	const char *s_claims = NULL;
-	oidc_session_get(r, session, OIDC_CLAIMS_SESSION_KEY, &s_claims);
-	if (s_claims != NULL) {
-		claims = json_loads(s_claims, 0, &json_error);
-		if (claims == NULL)
-			oidc_warn(r, "JSON parsing (json_loads) failed: %s (%s)",
-					json_error.text, s_claims);
-		else
-			json_object_set_new(json, "userinfo", claims);
-	}
+	json_t *claims = oidc_session_get_userinfo_claims_json(r, session);
+	if (claims)
+		json_object_set_new(json, "userinfo", claims);
 
 	/* JSON-encode the result */
 	char *s_value = json_dumps(json, 0);
@@ -3106,8 +3027,7 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 			 * apparently request state can get lost in sub-requests, so let's see
 			 * if we need to restore id_token and/or claims from the session cache
 			 */
-			const char *s_id_token = oidc_request_state_get(r,
-					OIDC_IDTOKEN_CLAIMS_SESSION_KEY);
+			const char *s_id_token = oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_IDTOKEN);
 			if (s_id_token == NULL) {
 
 				oidc_session_t *session = NULL;
@@ -3167,24 +3087,16 @@ int oidc_check_user_id(request_rec *r) {
  */
 static void oidc_authz_get_claims_and_idtoken(request_rec *r, json_t **claims,
 		json_t **id_token) {
-	const char *s_claims = oidc_request_state_get(r, OIDC_CLAIMS_SESSION_KEY);
+
+	const char *s_claims = oidc_request_state_get(r,
+			OIDC_REQUEST_STATE_KEY_CLAIMS);
+	if (s_claims != NULL)
+		oidc_util_decode_json_object(r, s_claims, claims);
+
 	const char *s_id_token = oidc_request_state_get(r,
-			OIDC_IDTOKEN_CLAIMS_SESSION_KEY);
-	json_error_t json_error;
-	if (s_claims != NULL) {
-		*claims = json_loads(s_claims, 0, &json_error);
-		if (*claims == NULL) {
-			oidc_error(r, "could not restore claims from request state: %s",
-					json_error.text);
-		}
-	}
-	if (s_id_token != NULL) {
-		*id_token = json_loads(s_id_token, 0, &json_error);
-		if (*id_token == NULL) {
-			oidc_error(r, "could not restore id_token from request state: %s",
-					json_error.text);
-		}
-	}
+			OIDC_REQUEST_STATE_KEY_IDTOKEN);
+	if (s_id_token != NULL)
+		oidc_util_decode_json_object(r, s_id_token, id_token);
 }
 
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714

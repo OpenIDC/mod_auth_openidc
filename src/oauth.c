@@ -654,7 +654,8 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 	}
 
 	/* store the parsed token (cq. the claims from the response) in the request state so it can be accessed by the authz routines */
-	oidc_request_state_set(r, OIDC_CLAIMS_SESSION_KEY, (const char *) s_token);
+	oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_CLAIMS,
+			(const char *) s_token);
 
 	/* set the REMOTE_USER variable */
 	if (oidc_oauth_set_remote_user(r, c, token) == FALSE) {

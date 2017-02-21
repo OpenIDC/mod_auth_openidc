@@ -320,3 +320,287 @@ apr_byte_t oidc_session_set(request_rec *r, oidc_session_t *z, const char *key,
 	}
 	return TRUE;
 }
+
+/*
+ * session object keys
+ */
+/* key for storing the claims in the session context */
+#define OIDC_SESSION_KEY_USERINFO_CLAIMS "uic"
+/* key for storing the id_token in the session context */
+#define OIDC_SESSION_KEY_IDTOKEN_CLAIMS "idc"
+/* key for storing the raw id_token in the session context */
+#define OIDC_SESSION_KEY_IDTOKEN "idt"
+/* key for storing the access_token in the session context */
+#define OIDC_SESSION_KEY_ACCESSTOKEN "at"
+/* key for storing the access_token expiry in the session context */
+#define OIDC_SESSION_KEY_ACCESSTOKEN_EXPIRES "ate"
+/* key for storing the refresh_token in the session context */
+#define OIDC_SESSION_KEY_REFRESH_TOKEN "rt"
+/* key for storing maximum session duration in the session context */
+#define OIDC_SESSION_KEY_SESSION_EXPIRES "se"
+/* key for storing the cookie domain in the session context */
+#define OIDC_SESSION_KEY_COOKIE_DOMAIN "cd"
+/* key for storing last user info refresh timestamp in the session context */
+#define OIDC_SESSION_KEY_USERINFO_LAST_REFRESH "uilr"
+/* key for storing request state */
+#define OIDC_SESSION_KEY_REQUEST_STATE "rs"
+/* key for storing the original URL */
+#define OIDC_SESSION_KEY_ORIGINAL_URL "ou"
+/* key for storing the session_state in the session context */
+#define OIDC_SESSION_KEY_SESSION_STATE "ss"
+/* key for storing the issuer in the session context */
+#define OIDC_SESSION_KEY_ISSUER "iss"
+/* key for storing the client_id in the session context */
+#define OIDC_SESSION_KEY_CLIENT_ID "cid"
+/* key for storing the check_session_iframe in the session context */
+#define OIDC_SESSION_KEY_CHECK_SESSION_IFRAME "csi"
+/* key for storing the end_session_endpoint in the session context */
+#define OIDC_SESSION_KEY_LOGOUT_ENDPOINT "ese"
+
+/*
+ * helper functions
+ */
+typedef const char *(*oidc_session_get_str_function)(request_rec *r,
+		oidc_session_t *z);
+
+static void oidc_session_set_timestamp(request_rec *r, oidc_session_t *z,
+		const char *key, const apr_time_t timestamp) {
+	if (timestamp != -1)
+		oidc_session_set(r, z, key,
+				apr_psprintf(r->pool, "%" APR_TIME_T_FMT, timestamp));
+}
+
+static json_t *oidc_session_get_str2json(request_rec *r, oidc_session_t *z,
+		oidc_session_get_str_function session_get_str_fn) {
+	json_t *json = NULL;
+	const char *str = session_get_str_fn(r, z);
+	if (str != NULL)
+		oidc_util_decode_json_object(r, str, &json);
+	return json;
+}
+
+static const char *oidc_session_get_key2string(request_rec *r,
+		oidc_session_t *z, const char *key) {
+	const char *s_value = NULL;
+	oidc_session_get(r, z, key, &s_value);
+	return s_value;
+}
+
+static apr_time_t oidc_session_get_key2timestamp(request_rec *r,
+		oidc_session_t *z, const char *key) {
+	apr_time_t t_expires = 0;
+	const char *s_expires = oidc_session_get_key2string(r, z, key);
+	if (s_expires != NULL)
+		sscanf(s_expires, "%" APR_TIME_T_FMT, &t_expires);
+	return t_expires;
+}
+
+/*
+ * userinfo claims
+ */
+void oidc_session_set_userinfo_claims(request_rec *r, oidc_session_t *z,
+		const char *claims) {
+	oidc_session_set(r, z, OIDC_SESSION_KEY_USERINFO_CLAIMS, claims);
+}
+
+const char * oidc_session_get_userinfo_claims(request_rec *r, oidc_session_t *z) {
+	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_USERINFO_CLAIMS);
+}
+
+json_t *oidc_session_get_userinfo_claims_json(request_rec *r, oidc_session_t *z) {
+	return oidc_session_get_str2json(r, z, oidc_session_get_userinfo_claims);
+}
+
+/*
+ * id_token claims
+ */
+void oidc_session_set_idtoken_claims(request_rec *r, oidc_session_t *z,
+		const char *idtoken_claims) {
+	oidc_session_set(r, z, OIDC_SESSION_KEY_IDTOKEN_CLAIMS, idtoken_claims);
+}
+
+const char * oidc_session_get_idtoken_claims(request_rec *r, oidc_session_t *z) {
+	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_IDTOKEN_CLAIMS);
+}
+
+json_t *oidc_session_get_idtoken_claims_json(request_rec *r, oidc_session_t *z) {
+	return oidc_session_get_str2json(r, z, oidc_session_get_idtoken_claims);
+}
+
+/*
+ * compact serialized id_token
+ */
+void oidc_session_set_idtoken(request_rec *r, oidc_session_t *z,
+		const char *s_id_token) {
+	oidc_session_set(r, z, OIDC_SESSION_KEY_IDTOKEN, s_id_token);
+}
+
+const char * oidc_session_get_idtoken(request_rec *r, oidc_session_t *z) {
+	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_IDTOKEN);
+}
+
+/*
+ * access token
+ */
+void oidc_session_set_access_token(request_rec *r, oidc_session_t *z,
+		const char *access_token) {
+	oidc_session_set(r, z, OIDC_SESSION_KEY_ACCESSTOKEN, access_token);
+}
+
+const char * oidc_session_get_access_token(request_rec *r, oidc_session_t *z) {
+	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_ACCESSTOKEN);
+}
+
+/*
+ * access token expires
+ */
+void oidc_session_set_access_token_expires(request_rec *r, oidc_session_t *z,
+		const int expires_in) {
+	if (expires_in != -1) {
+		oidc_session_set(r, z, OIDC_SESSION_KEY_ACCESSTOKEN_EXPIRES,
+				apr_psprintf(r->pool, "%" APR_TIME_T_FMT,
+						apr_time_sec(apr_time_now()) + expires_in));
+	}
+}
+
+const char * oidc_session_get_access_token_expires(request_rec *r,
+		oidc_session_t *z) {
+	return oidc_session_get_key2string(r, z,
+			OIDC_SESSION_KEY_ACCESSTOKEN_EXPIRES);
+}
+
+/*
+ * refresh token
+ */
+void oidc_session_set_refresh_token(request_rec *r, oidc_session_t *z,
+		const char *refresh_token) {
+	oidc_session_set(r, z, OIDC_SESSION_KEY_REFRESH_TOKEN, refresh_token);
+}
+
+const char * oidc_session_get_refresh_token(request_rec *r, oidc_session_t *z) {
+	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_REFRESH_TOKEN);
+}
+
+/*
+ * session expires
+ */
+void oidc_session_set_session_expires(request_rec *r, oidc_session_t *z,
+		const apr_time_t expires) {
+	oidc_session_set_timestamp(r, z, OIDC_SESSION_KEY_SESSION_EXPIRES, expires);
+}
+
+apr_time_t oidc_session_get_session_expires(request_rec *r, oidc_session_t *z) {
+	return oidc_session_get_key2timestamp(r, z,
+			OIDC_SESSION_KEY_SESSION_EXPIRES);
+}
+
+/*
+ * cookie domain
+ */
+void oidc_session_set_cookie_domain(request_rec *r, oidc_session_t *z,
+		const char *cookie_domain) {
+	oidc_session_set(r, z, OIDC_SESSION_KEY_COOKIE_DOMAIN, cookie_domain);
+}
+
+const char * oidc_session_get_cookie_domain(request_rec *r, oidc_session_t *z) {
+	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_COOKIE_DOMAIN);
+}
+
+/*
+ * userinfo last refresh
+ */
+void oidc_session_reset_userinfo_last_refresh(request_rec *r, oidc_session_t *z) {
+	oidc_session_set_timestamp(r, z, OIDC_SESSION_KEY_USERINFO_LAST_REFRESH,
+			apr_time_now());
+}
+
+apr_time_t oidc_session_get_userinfo_last_refresh(request_rec *r,
+		oidc_session_t *z) {
+	return oidc_session_get_key2timestamp(r, z,
+			OIDC_SESSION_KEY_USERINFO_LAST_REFRESH);
+}
+
+/*
+ * request state
+ */
+void oidc_session_set_request_state(request_rec *r, oidc_session_t *z,
+		const char *request_state) {
+	oidc_session_set(r, z, OIDC_SESSION_KEY_REQUEST_STATE, request_state);
+}
+
+const char * oidc_session_get_request_state(request_rec *r, oidc_session_t *z) {
+	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_REQUEST_STATE);
+}
+
+/*
+ * original url
+ */
+void oidc_session_set_original_url(request_rec *r, oidc_session_t *z,
+		const char *original_url) {
+	oidc_session_set(r, z, OIDC_SESSION_KEY_ORIGINAL_URL, original_url);
+}
+
+const char * oidc_session_get_original_url(request_rec *r, oidc_session_t *z) {
+	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_ORIGINAL_URL);
+}
+
+/*
+ * session state
+ */
+void oidc_session_set_session_state(request_rec *r, oidc_session_t *z,
+		const char *session_state) {
+	oidc_session_set(r, z, OIDC_SESSION_KEY_SESSION_STATE, session_state);
+}
+
+const char * oidc_session_get_session_state(request_rec *r, oidc_session_t *z) {
+	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_SESSION_STATE);
+}
+
+/*
+ * issuer
+ */
+void oidc_session_set_issuer(request_rec *r, oidc_session_t *z,
+		const char *issuer) {
+	oidc_session_set(r, z, OIDC_SESSION_KEY_ISSUER, issuer);
+}
+
+const char * oidc_session_get_issuer(request_rec *r, oidc_session_t *z) {
+	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_ISSUER);
+}
+
+/*
+ * client_id
+ */
+void oidc_session_set_client_id(request_rec *r, oidc_session_t *z,
+		const char *client_id) {
+	oidc_session_set(r, z, OIDC_SESSION_KEY_CLIENT_ID, client_id);
+}
+
+const char * oidc_session_get_client_id(request_rec *r, oidc_session_t *z) {
+	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_CLIENT_ID);
+}
+
+/*
+ * check session iframe URL
+ */
+void oidc_session_set_check_session_iframe(request_rec *r, oidc_session_t *z,
+		const char *check_session_iframe) {
+	oidc_session_set(r, z, OIDC_SESSION_KEY_CHECK_SESSION_IFRAME, check_session_iframe);
+}
+
+const char * oidc_session_get_check_session_iframe(request_rec *r,
+		oidc_session_t *z) {
+	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_CHECK_SESSION_IFRAME);
+}
+
+/*
+ * logout endpoint URL
+ */
+void oidc_session_set_logout_endpoint(request_rec *r, oidc_session_t *z,
+		const char *logout_endpoint) {
+	oidc_session_set(r, z, OIDC_SESSION_KEY_LOGOUT_ENDPOINT, logout_endpoint);
+}
+
+const char * oidc_session_get_logout_endpoint(request_rec *r, oidc_session_t *z) {
+	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_LOGOUT_ENDPOINT);
+}

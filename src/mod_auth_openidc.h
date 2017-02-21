@@ -89,39 +89,9 @@ APLOG_USE_MODULE(auth_openidc);
 #define NAMEVERSION TOSTRING(NAMEVER)
 #endif
 
-/* key for storing the claims in the session context */
-#define OIDC_CLAIMS_SESSION_KEY "claims"
-/* key for storing the id_token in the session context */
-#define OIDC_IDTOKEN_CLAIMS_SESSION_KEY "id_token_claims"
-/* key for storing the raw id_token in the session context */
-#define OIDC_IDTOKEN_SESSION_KEY "id_token"
-/* key for storing the access_token in the session context */
-#define OIDC_ACCESSTOKEN_SESSION_KEY "access_token"
-/* key for storing the access_token expiry in the session context */
-#define OIDC_ACCESSTOKEN_EXPIRES_SESSION_KEY "access_token_expires"
-/* key for storing the refresh_token in the session context */
-#define OIDC_REFRESHTOKEN_SESSION_KEY "refresh_token"
-/* key for storing maximum session duration in the session context */
-#define OIDC_SESSION_EXPIRES_SESSION_KEY "session_expires"
-/* key for storing the cookie domain in the session context */
-#define OIDC_COOKIE_DOMAIN_SESSION_KEY "cookie_domain"
-/* key for storing last user info refresh timestamp in the session context */
-#define OIDC_USERINFO_LAST_REFRESH_SESSION_KEY "userinfo_last_refresh"
-/* key for storing request state */
-#define OIDC_REQUEST_STATE_SESSION_KEY "request_state"
-/* key for storing the original URL */
-#define OIDC_REQUEST_ORIGINAL_URL "original_url"
-
-/* key for storing the session_state in the session context */
-#define OIDC_SESSION_STATE_SESSION_KEY "session_state"
-/* key for storing the issuer in the session context */
-#define OIDC_ISSUER_SESSION_KEY "issuer"
-/* key for storing the client_id in the session context */
-#define OIDC_CLIENTID_SESSION_KEY "client_id"
-/* key for storing the check_session_iframe in the session context */
-#define OIDC_CHECK_IFRAME_SESSION_KEY "check_session_iframe"
-/* key for storing the end_session_endpoint in the session context */
-#define OIDC_LOGOUT_ENDPOINT_SESSION_KEY "end_session_endpoint"
+/* keys for storing info in the request state */
+#define OIDC_REQUEST_STATE_KEY_IDTOKEN "i"
+#define OIDC_REQUEST_STATE_KEY_CLAIMS  "c"
 
 /* parameter name of the callback URL in the discovery response */
 #define OIDC_DISC_CB_PARAM "oidc_callback"
@@ -524,5 +494,40 @@ apr_byte_t oidc_session_set(request_rec *r, oidc_session_t *z, const char *key, 
 apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z);
 apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z);
 apr_byte_t oidc_session_free(request_rec *r, oidc_session_t *z);
+
+void oidc_session_set_userinfo_claims(request_rec *r, oidc_session_t *z, const char *claims);
+const char * oidc_session_get_userinfo_claims(request_rec *r, oidc_session_t *z);
+json_t *oidc_session_get_userinfo_claims_json(request_rec *r, oidc_session_t *z);
+void oidc_session_set_idtoken_claims(request_rec *r, oidc_session_t *z, const char *idtoken_claims);
+const char * oidc_session_get_idtoken_claims(request_rec *r, oidc_session_t *z);
+json_t *oidc_session_get_idtoken_claims_json(request_rec *r, oidc_session_t *z);
+void oidc_session_set_idtoken(request_rec *r, oidc_session_t *z, const char *s_id_token);
+const char * oidc_session_get_idtoken(request_rec *r, oidc_session_t *z);
+void oidc_session_set_access_token(request_rec *r, oidc_session_t *z, const char *access_token);
+const char * oidc_session_get_access_token(request_rec *r, oidc_session_t *z);
+void oidc_session_set_access_token_expires(request_rec *r, oidc_session_t *z, const int expires_in);
+const char * oidc_session_get_access_token_expires(request_rec *r, oidc_session_t *z);
+void oidc_session_set_refresh_token(request_rec *r, oidc_session_t *z, const char *refresh_token);
+const char * oidc_session_get_refresh_token(request_rec *r, oidc_session_t *z);
+void oidc_session_set_session_expires(request_rec *r, oidc_session_t *z, const apr_time_t expires);
+apr_time_t oidc_session_get_session_expires(request_rec *r, oidc_session_t *z);
+void oidc_session_set_cookie_domain(request_rec *r, oidc_session_t *z, const char *cookie_domain);
+const char * oidc_session_get_cookie_domain(request_rec *r, oidc_session_t *z);
+void oidc_session_reset_userinfo_last_refresh(request_rec *r, oidc_session_t *z);
+apr_time_t oidc_session_get_userinfo_last_refresh(request_rec *r, oidc_session_t *z);
+void oidc_session_set_request_state(request_rec *r, oidc_session_t *z, const char *request_state);
+const char * oidc_session_get_request_state(request_rec *r, oidc_session_t *z);
+void oidc_session_set_original_url(request_rec *r, oidc_session_t *z, const char *original_url);
+const char * oidc_session_get_original_url(request_rec *r, oidc_session_t *z);
+void oidc_session_set_session_state(request_rec *r, oidc_session_t *z, const char *session_state);
+const char * oidc_session_get_session_state(request_rec *r, oidc_session_t *z);
+void oidc_session_set_issuer(request_rec *r, oidc_session_t *z, const char *issuer);
+const char * oidc_session_get_issuer(request_rec *r, oidc_session_t *z);
+void oidc_session_set_client_id(request_rec *r, oidc_session_t *z, const char *client_id);
+const char * oidc_session_get_client_id(request_rec *r, oidc_session_t *z);
+void oidc_session_set_check_session_iframe(request_rec *r, oidc_session_t *z, const char *check_session_iframe);
+const char * oidc_session_get_check_session_iframe(request_rec *r, oidc_session_t *z);
+void oidc_session_set_logout_endpoint(request_rec *r, oidc_session_t *z, const char *logout_endpoint);
+const char * oidc_session_get_logout_endpoint(request_rec *r, oidc_session_t *z);
 
 #endif /* MOD_AUTH_OPENIDC_H_ */
