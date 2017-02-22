@@ -2808,7 +2808,7 @@ static int oidc_handle_remove_at_cache(request_rec *r, oidc_cfg *c) {
 
 #define OIDC_HOOK_INFO_REQUEST           "info"
 #define OIDC_HOOK_INFO_FORMAT_JSON       "json"
-#define OIDC_HOOK_INFO_TIMESTAMP         "timestamp"
+#define OIDC_HOOK_INFO_TIMESTAMP         "iat"
 #define OIDC_HOOK_INFO_ACCES_TOKEN       "access_token"
 #define OIDC_HOOK_INFO_ACCES_TOKEN_EXP   "access_token_expires"
 #define OIDC_HOOK_INFO_USER_INFO         "userinfo"
