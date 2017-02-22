@@ -308,7 +308,8 @@ const char *oidc_parse_cache_type(apr_pool_t *pool, const char *arg,
  */
 const char *oidc_parse_session_type(apr_pool_t *pool, const char *arg,
 		int *type, int *persistent) {
-	static char *options[] = {
+	static char *options[] =
+	{
 			OIDC_SESSION_TYPE_SERVER_CACHE_STR,
 			OIDC_SESSION_TYPE_SERVER_CACHE_STR OIDC_SESSION_TYPE_SEPARATOR OIDC_SESSION_TYPE_PERSISTENT,
 			OIDC_SESSION_TYPE_CLIENT_COOKIE_STR,
@@ -381,7 +382,8 @@ const char *oidc_parse_boolean(apr_pool_t *pool, const char *arg,
 /*
  * check if the provided endpoint authentication method is supported
  */
-static const char *oidc_valid_endpoint_auth_method_impl(apr_pool_t *pool, const char *arg, apr_byte_t has_private_key) {
+static const char *oidc_valid_endpoint_auth_method_impl(apr_pool_t *pool,
+		const char *arg, apr_byte_t has_private_key) {
 	static char *options[] = {
 			OIDC_ENDPOINT_AUTH_CLIENT_SECRET_POST,
 			OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC,
@@ -398,7 +400,8 @@ const char *oidc_valid_endpoint_auth_method(apr_pool_t *pool, const char *arg) {
 	return oidc_valid_endpoint_auth_method_impl(pool, arg, TRUE);
 }
 
-const char *oidc_valid_endpoint_auth_method_no_private_key(apr_pool_t *pool, const char *arg) {
+const char *oidc_valid_endpoint_auth_method_no_private_key(apr_pool_t *pool,
+		const char *arg) {
 	return oidc_valid_endpoint_auth_method_impl(pool, arg, FALSE);
 }
 

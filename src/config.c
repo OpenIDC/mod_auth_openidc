@@ -108,7 +108,7 @@
 /* default session max duration */
 #define OIDC_DEFAULT_SESSION_MAX_DURATION 3600 * 8
 /* default OpenID Connect authorization response type */
-#define OIDC_DEFAULT_RESPONSE_TYPE "code"
+#define OIDC_DEFAULT_RESPONSE_TYPE OIDC_PROTO_CODE
 /* default duration in seconds after which retrieved JWS should be refreshed */
 #define OIDC_DEFAULT_JWKS_REFRESH_INTERVAL 3600
 /* default max cache size for shm */
@@ -130,7 +130,7 @@
 /* default OAuth 2.0 introspection call HTTP method */
 #define OIDC_DEFAULT_OAUTH_ENDPOINT_METHOD OIDC_INTROSPECTION_METHOD_POST
 /* default OAuth 2.0 non-spec compliant introspection expiry claim name */
-#define OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_NAME "expires_in"
+#define OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_NAME OIDC_PROTO_EXPIRES_IN
 /* default OAuth 2.0 non-spec compliant introspection expiry claim format */
 #define OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_FORMAT OIDC_CLAIM_FORMAT_RELATIVE
 /* default OAuth 2.0 non-spec compliant introspection expiry claim required */
@@ -326,8 +326,8 @@ static const char *oidc_set_ssl_validate_slot(cmd_parms *cmd, void *struct_ptr,
  */
 oidc_valid_function_t oidc_cfg_get_valid_endpoint_auth_function(oidc_cfg *cfg) {
 	return (cfg->private_keys != NULL) ?
-						oidc_valid_endpoint_auth_method :
-						oidc_valid_endpoint_auth_method_no_private_key;
+			oidc_valid_endpoint_auth_method :
+			oidc_valid_endpoint_auth_method_no_private_key;
 }
 
 /*
@@ -337,8 +337,8 @@ static const char *oidc_set_endpoint_auth_slot(cmd_parms *cmd, void *struct_ptr,
 		const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
-	const char *rv = oidc_cfg_get_valid_endpoint_auth_function(cfg)(
-			cmd->pool, arg);
+	const char *rv = oidc_cfg_get_valid_endpoint_auth_function(cfg)(cmd->pool,
+			arg);
 	if (rv == NULL)
 		rv = ap_set_string_slot(cmd, cfg, arg);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
@@ -638,7 +638,8 @@ static const char * oidc_set_introspection_method(cmd_parms *cmd, void *m,
 /*
  * set POST preservation behavior
  */
-static const char *oidc_set_preserve_post(cmd_parms *cmd, void *m, const char *arg) {
+static const char *oidc_set_preserve_post(cmd_parms *cmd, void *m,
+		const char *arg) {
 	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg *) m;
 	int b = 0;
 	const char *rv = oidc_parse_boolean(cmd->pool, arg, &b);
@@ -703,8 +704,8 @@ static const char *oidc_set_jwks_refresh_interval(cmd_parms *cmd,
 /*
  * set the ID token "iat" slack
  */
-static const char *oidc_set_idtoken_iat_slack(cmd_parms *cmd,
-		void *struct_ptr, const char *arg) {
+static const char *oidc_set_idtoken_iat_slack(cmd_parms *cmd, void *struct_ptr,
+		const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
 	const char *rv = oidc_parse_idtoken_iat_slack(cmd->pool, arg,
@@ -820,7 +821,8 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->metadata_dir = NULL;
 	c->session_type = OIDC_DEFAULT_SESSION_TYPE;
 	c->persistent_session_cookie = 0;
-	c->session_cookie_chunk_size = OIDC_DEFAULT_SESSION_CLIENT_COOKIE_CHUNK_SIZE;
+	c->session_cookie_chunk_size =
+			OIDC_DEFAULT_SESSION_CLIENT_COOKIE_CHUNK_SIZE;
 
 	c->http_timeout_long = OIDC_DEFAULT_HTTP_TIMEOUT_LONG;
 	c->http_timeout_short = OIDC_DEFAULT_HTTP_TIMEOUT_SHORT;
@@ -841,10 +843,12 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->scrub_request_headers = OIDC_DEFAULT_SCRUB_REQUEST_HEADERS;
 	c->error_template = NULL;
 
-	c->provider.userinfo_refresh_interval = OIDC_DEFAULT_USERINFO_REFRESH_INTERVAL;
+	c->provider.userinfo_refresh_interval =
+			OIDC_DEFAULT_USERINFO_REFRESH_INTERVAL;
 	c->provider.request_object = NULL;
 
-	c->provider_metadata_refresh_interval = OIDC_DEFAULT_PROVIDER_METADATA_REFRESH_INTERVAL;
+	c->provider_metadata_refresh_interval =
+			OIDC_DEFAULT_PROVIDER_METADATA_REFRESH_INTERVAL;
 
 	return c;
 }
@@ -910,10 +914,12 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 
 	c->provider.token_endpoint_tls_client_key =
 			add->provider.token_endpoint_tls_client_key != NULL ?
-					add->provider.token_endpoint_tls_client_key : base->provider.token_endpoint_tls_client_key;
+					add->provider.token_endpoint_tls_client_key :
+					base->provider.token_endpoint_tls_client_key;
 	c->provider.token_endpoint_tls_client_cert =
 			add->provider.token_endpoint_tls_client_cert != NULL ?
-					add->provider.token_endpoint_tls_client_cert : base->provider.token_endpoint_tls_client_cert;
+					add->provider.token_endpoint_tls_client_cert :
+					base->provider.token_endpoint_tls_client_cert;
 
 	c->provider.registration_endpoint_url =
 			add->provider.registration_endpoint_url != NULL ?
@@ -935,12 +941,12 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 
 	c->provider.ssl_validate_server =
 			add->provider.ssl_validate_server
-					!= OIDC_DEFAULT_SSL_VALIDATE_SERVER ?
+			!= OIDC_DEFAULT_SSL_VALIDATE_SERVER ?
 					add->provider.ssl_validate_server :
 					base->provider.ssl_validate_server;
 	c->provider.client_name =
 			apr_strnatcmp(add->provider.client_name, OIDC_DEFAULT_CLIENT_NAME)
-					!= 0 ?
+			!= 0 ?
 					add->provider.client_name : base->provider.client_name;
 	c->provider.client_contact =
 			add->provider.client_contact != NULL ?
@@ -962,7 +968,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->provider.response_mode : base->provider.response_mode;
 	c->provider.jwks_refresh_interval =
 			add->provider.jwks_refresh_interval
-					!= OIDC_DEFAULT_JWKS_REFRESH_INTERVAL ?
+			!= OIDC_DEFAULT_JWKS_REFRESH_INTERVAL ?
 					add->provider.jwks_refresh_interval :
 					base->provider.jwks_refresh_interval;
 	c->provider.idtoken_iat_slack =
@@ -971,7 +977,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					base->provider.idtoken_iat_slack;
 	c->provider.session_max_duration =
 			add->provider.session_max_duration
-				!= OIDC_DEFAULT_SESSION_MAX_DURATION ?
+			!= OIDC_DEFAULT_SESSION_MAX_DURATION ?
 					add->provider.session_max_duration :
 					base->provider.session_max_duration;
 	c->provider.auth_request_params =
@@ -1012,7 +1018,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					base->provider.userinfo_encrypted_response_enc;
 	c->provider.userinfo_token_method =
 			add->provider.userinfo_token_method
-				!= OIDC_USER_INFO_TOKEN_METHOD_HEADER ?
+			!= OIDC_USER_INFO_TOKEN_METHOD_HEADER ?
 					add->provider.userinfo_token_method :
 					base->provider.userinfo_token_method;
 
@@ -1029,10 +1035,12 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 
 	c->oauth.introspection_endpoint_tls_client_key =
 			add->oauth.introspection_endpoint_tls_client_key != NULL ?
-					add->oauth.introspection_endpoint_tls_client_key : base->oauth.introspection_endpoint_tls_client_key;
+					add->oauth.introspection_endpoint_tls_client_key :
+					base->oauth.introspection_endpoint_tls_client_key;
 	c->oauth.introspection_endpoint_tls_client_cert =
 			add->oauth.introspection_endpoint_tls_client_cert != NULL ?
-					add->oauth.introspection_endpoint_tls_client_cert : base->oauth.introspection_endpoint_tls_client_cert;
+					add->oauth.introspection_endpoint_tls_client_cert :
+					base->oauth.introspection_endpoint_tls_client_cert;
 
 	c->oauth.introspection_endpoint_url =
 			add->oauth.introspection_endpoint_url != NULL ?
@@ -1069,7 +1077,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 							base->oauth.introspection_token_expiry_claim_format;
 	c->oauth.introspection_token_expiry_claim_required =
 			add->oauth.introspection_token_expiry_claim_required
-				!= OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_REQUIRED ?
+			!= OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_REQUIRED ?
 					add->oauth.introspection_token_expiry_claim_required :
 					base->oauth.introspection_token_expiry_claim_required;
 
@@ -1106,7 +1114,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->state_timeout : base->state_timeout;
 	c->session_inactivity_timeout =
 			add->session_inactivity_timeout
-					!= OIDC_DEFAULT_SESSION_INACTIVITY_TIMEOUT ?
+			!= OIDC_DEFAULT_SESSION_INACTIVITY_TIMEOUT ?
 					add->session_inactivity_timeout :
 					base->session_inactivity_timeout;
 
@@ -1122,7 +1130,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->cache_file_dir : base->cache_file_dir;
 	c->cache_file_clean_interval =
 			add->cache_file_clean_interval
-					!= OIDC_DEFAULT_CACHE_FILE_CLEAN_INTERVAL ?
+			!= OIDC_DEFAULT_CACHE_FILE_CLEAN_INTERVAL ?
 					add->cache_file_clean_interval :
 					base->cache_file_clean_interval;
 
@@ -1134,7 +1142,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->cache_shm_size_max : base->cache_shm_size_max;
 	c->cache_shm_entry_size_max =
 			add->cache_shm_entry_size_max
-					!= OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX ?
+			!= OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX ?
 					add->cache_shm_entry_size_max :
 					base->cache_shm_entry_size_max;
 
@@ -1157,7 +1165,8 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->persistent_session_cookie :
 					base->persistent_session_cookie;
 	c->session_cookie_chunk_size =
-			add->session_cookie_chunk_size != OIDC_DEFAULT_SESSION_CLIENT_COOKIE_CHUNK_SIZE ?
+			add->session_cookie_chunk_size
+			!= OIDC_DEFAULT_SESSION_CLIENT_COOKIE_CHUNK_SIZE ?
 					add->session_cookie_chunk_size :
 					base->session_cookie_chunk_size;
 
@@ -1166,7 +1175,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->cookie_domain : base->cookie_domain;
 	c->claim_delimiter =
 			apr_strnatcmp(add->claim_delimiter, OIDC_DEFAULT_CLAIM_DELIMITER)
-					!= 0 ? add->claim_delimiter : base->claim_delimiter;
+			!= 0 ? add->claim_delimiter : base->claim_delimiter;
 	c->claim_prefix =
 			apr_strnatcmp(add->claim_prefix, OIDC_DEFAULT_CLAIM_PREFIX) != 0 ?
 					add->claim_prefix : base->claim_prefix;
@@ -1204,7 +1213,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 
 	c->provider.userinfo_refresh_interval =
 			add->provider.userinfo_refresh_interval
-				!= OIDC_DEFAULT_USERINFO_REFRESH_INTERVAL ?
+			!= OIDC_DEFAULT_USERINFO_REFRESH_INTERVAL ?
 					add->provider.userinfo_refresh_interval :
 					base->provider.userinfo_refresh_interval;
 	c->provider.request_object =
@@ -1214,7 +1223,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 
 	c->provider_metadata_refresh_interval =
 			add->provider_metadata_refresh_interval
-				!= OIDC_DEFAULT_PROVIDER_METADATA_REFRESH_INTERVAL ?
+			!= OIDC_DEFAULT_PROVIDER_METADATA_REFRESH_INTERVAL ?
 					add->provider_metadata_refresh_interval :
 					base->provider_metadata_refresh_interval;
 
@@ -1641,7 +1650,7 @@ static apr_status_t oidc_cleanup(void *data) {
 	EVP_cleanup();
 	curl_global_cleanup();
 
-	ap_log_error(APLOG_MARK, APLOG_INFO, 0, (server_rec *) data,
+	ap_log_error(APLOG_MARK, APLOG_INFO, 0, (server_rec * ) data,
 			"%s - shutdown", NAMEVERSION);
 
 	return APR_SUCCESS;
@@ -1788,10 +1797,12 @@ void oidc_register_hooks(apr_pool_t *pool) {
 	ap_hook_child_init(oidc_child_init, NULL, NULL, APR_HOOK_MIDDLE);
 	ap_hook_fixups(oidc_auth_fixups, NULL, NULL, APR_HOOK_MIDDLE);
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-	ap_hook_check_authn(oidc_check_user_id, NULL, NULL, APR_HOOK_MIDDLE, AP_AUTH_INTERNAL_PER_CONF);
-	ap_register_auth_provider(pool, AUTHZ_PROVIDER_GROUP, OIDC_REQUIRE_NAME, "0", &authz_oidc_provider, AP_AUTH_INTERNAL_PER_CONF);
+	ap_hook_check_authn(oidc_check_user_id, NULL, NULL, APR_HOOK_MIDDLE,
+			AP_AUTH_INTERNAL_PER_CONF);
+	ap_register_auth_provider(pool, AUTHZ_PROVIDER_GROUP, OIDC_REQUIRE_NAME,
+			"0", &authz_oidc_provider, AP_AUTH_INTERNAL_PER_CONF);
 #else
-	static const char * const authzSucc[] = { "mod_authz_user.c", NULL };
+	static const char * const authzSucc[] = {"mod_authz_user.c", NULL};
 	ap_hook_check_user_id(oidc_check_user_id, NULL, NULL, APR_HOOK_MIDDLE);
 	ap_hook_auth_checker(oidc_auth_checker, NULL, authzSucc, APR_HOOK_MIDDLE);
 #endif

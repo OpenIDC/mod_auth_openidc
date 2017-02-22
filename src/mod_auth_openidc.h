@@ -363,6 +363,88 @@ void oidc_scrub_headers(request_rec *r);
 int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c);
 
 // oidc_proto.c
+#define OIDC_PROTO_ISS                   "iss"
+#define OIDC_PROTO_CODE                  "code"
+#define OIDC_PROTO_CLIENT_ID             "client_id"
+#define OIDC_PROTO_CLIENT_SECRET         "client_secret"
+#define OIDC_PROTO_CLIENT_ASSERTION      "client_assertion"
+#define OIDC_PROTO_CLIENT_ASSERTION_TYPE "client_assertion_type"
+#define OIDC_PROTO_ACCESS_TOKEN          "access_token"
+#define OIDC_PROTO_ID_TOKEN              "id_token"
+#define OIDC_PROTO_STATE                 "state"
+#define OIDC_PROTO_GRANT_TYPE            "grant_type"
+#define OIDC_PROTO_REDIRECT_URI          "redirect_uri"
+#define OIDC_PROTO_CODE_VERIFIER         "code_verifier"
+#define OIDC_PROTO_CODE_CHALLENGE        "code_challenge"
+#define OIDC_PROTO_CODE_CHALLENGE_METHOD "code_challenge_method"
+#define OIDC_PROTO_SCOPE                 "scope"
+#define OIDC_PROTO_REFRESH_TOKEN         "refresh_token"
+#define OIDC_PROTO_TOKEN_TYPE            "token_type"
+#define OIDC_PROTO_EXPIRES_IN            "expires_in"
+#define OIDC_PROTO_RESPONSE_TYPE         "response_type"
+#define OIDC_PROTO_RESPONSE_MODE         "response_mode"
+#define OIDC_PROTO_NONCE                 "nonce"
+#define OIDC_PROTO_PROMPT                "prompt"
+#define OIDC_PROTO_LOGIN_HINT            "login_hint"
+#define OIDC_PROTO_ID_TOKEN_HINT         "id_token_hint"
+#define OIDC_PROTO_REQUEST_URI           "request_uri"
+#define OIDC_PROTO_SESSION_STATE         "session_state"
+#define OIDC_PROTO_ACTIVE                "active"
+
+#define OIDC_PROTO_RESPONSE_TYPE_CODE               "code"
+#define OIDC_PROTO_RESPONSE_TYPE_IDTOKEN            "id_token"
+#define OIDC_PROTO_RESPONSE_TYPE_IDTOKEN_TOKEN      "id_token token"
+#define OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN       "code id_token"
+#define OIDC_PROTO_RESPONSE_TYPE_CODE_TOKEN         "code token"
+#define OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN_TOKEN "code id_token token"
+#define OIDC_PROTO_RESPONSE_TYPE_TOKEN              "token"
+
+#define OIDC_PROTO_RESPONSE_MODE_QUERY     "query"
+#define OIDC_PROTO_RESPONSE_MODE_FRAGMENT  "fragment"
+#define OIDC_PROTO_RESPONSE_MODE_FORM_POST "form_post"
+
+#define OIDC_PROTO_SCOPE_OPENID           "openid"
+
+#define OIDC_PROTO_GRANT_TYPE_AUTHZ_CODE    "authorization_code"
+#define OIDC_PROTO_GRANT_TYPE_REFRESH_TOKEN "refresh_token"
+
+#define OIDC_PROTO_CLIENT_ASSERTION_TYPE_JWT_BEARER "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+
+#define OIDC_PROTO_CLIENT_SECRET_BASIC "client_secret_basic"
+#define OIDC_PROTO_CLIENT_SECRET_POST  "client_secret_post"
+#define OIDC_PROTO_CLIENT_SECRET_JWT   "client_secret_jwt"
+#define OIDC_PROTO_PRIVATE_KEY_JWT     "private_key_jwt"
+
+#define OIDC_PROTO_BEARER  "Bearer"
+
+#define OIDC_CLAIM_ISS             "iss"
+#define OIDC_CLAIM_AUD             "aud"
+#define OIDC_CLAIM_AZP             "azp"
+#define OIDC_CLAIM_SUB             "sub"
+#define OIDC_CLAIM_JTI             "jti"
+#define OIDC_CLAIM_EXP             "exp"
+#define OIDC_CLAIM_IAT             "iat"
+#define OIDC_CLAIM_NONCE           "nonce"
+#define OIDC_CLAIM_AT_HASH         "at_hash"
+#define OIDC_CLAIM_C_HASH          "c_hash"
+#define OIDC_CLAIM_RFP             "rfp"
+#define OIDC_CLAIM_TARGET_LINK_URI "target_link_uri"
+
+#define OIDC_JWK_X5T       "x5t"
+#define OIDC_JWK_KEYS      "keys"
+#define OIDC_JWK_USE       "use"
+#define OIDC_JWK_SIG       "sig"
+#define OIDC_JWK_ENC       "enc"
+
+#define OIDC_PROTO_STATE_ISSUER          "iss"
+#define OIDC_PROTO_STATE_ORIGINAL_URL    "ou"
+#define OIDC_PROTO_STATE_ORIGINAL_METHOD "om"
+#define OIDC_PROTO_STATE_RESPONSE_MODE   "rm"
+#define OIDC_PROTO_STATE_RESPONSE_TYPE   "rt"
+#define OIDC_PROTO_STATE_NONCE           "n"
+#define OIDC_PROTO_STATE_TIMESTAMP       "ts"
+#define OIDC_PROTO_STATE_PROMPT          "p"
+
 char *oidc_proto_peek_jwt_header(request_rec *r, const char *jwt, char **alg);
 int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *login_hint, const char *redirect_uri, const char *state, json_t *proto_state, const char *id_token_hint, const char *code_challenge, const char *auth_request_params);
 apr_byte_t oidc_proto_is_post_authorization_response(request_rec *r, oidc_cfg *cfg);

@@ -144,7 +144,8 @@ typedef struct oidc_jwk_t {
 
 /* decrypt a JWT */
 apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json,
-		apr_hash_t *keys, char **s_json, oidc_jose_error_t *err, apr_byte_t import_must_succeed);
+		apr_hash_t *keys, char **s_json, oidc_jose_error_t *err,
+		apr_byte_t import_must_succeed);
 /* parse a JSON string to a JWK struct */
 oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, const char *s_json,
 		oidc_jose_error_t *err);
@@ -160,7 +161,8 @@ void oidc_jwk_destroy(oidc_jwk_t *jwk);
 void oidc_jwk_list_destroy(apr_pool_t *pool, apr_hash_t *key);
 /* create an "oct" symmetric JWK */
 oidc_jwk_t *oidc_jwk_create_symmetric_key(apr_pool_t *pool, const char *kid,
-		const unsigned char *key, unsigned int key_len, apr_byte_t set_kid, oidc_jose_error_t *err);
+		const unsigned char *key, unsigned int key_len, apr_byte_t set_kid,
+		oidc_jose_error_t *err);
 
 /* parse an X.509 PEM formatted certificate file with an RSA public key to a JWK struct */
 apr_byte_t oidc_jwk_parse_rsa_public_key(apr_pool_t *pool, const char *kid,

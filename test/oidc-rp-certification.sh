@@ -6,7 +6,7 @@
 # Script used to do automated OpenID Connect Relying Party Certification
 # Testing for the mod_auth_openidc OIDC RP implementation for Apache HTTPd.
 #
-# @Version: 2.1.0, mod_auth_openidc >= v2.0.1rc7
+# @Version: 2.1.6, mod_auth_openidc >= v2.1.6
 # 
 # @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
 #
@@ -17,7 +17,10 @@ TARGET_URL="<YOUR-APPLICATION-URL-PROTECTED-BY-MOD_AUTH_OPENIDC>"
 RP_ID="<YOUR-RP-TEST-CLIENT-IDENTIFIER>"
 LOG_FILE="<YOUR-APACHE-ERROR-LOGFILE-WITH-DEBUG-MESSAGES>"
 
-RP_TEST_URL="https://rp.certification.openid.net:8080"
+RP_TEST_PORT=8090
+RP_TEST_HOST="rp.certification.openid.net"
+RP_TEST_URL="https://${RP_TEST_HOST}:${RP_TEST_PORT}"
+RP_TEST_URL_ENC="https%3A%2F%2F${RP_TEST_HOST}%3A${RP_TEST_PORT}"
 COOKIE_JAR="/tmp/cookie.jar"
 
 FLAGS="-s -k -b ${COOKIE_JAR} -c ${COOKIE_JAR}"
@@ -355,10 +358,10 @@ function rp_discovery_webfinger_url() {
 	echo ${RESULT} | grep -q "&login_hint=" && echo "OK" || { printf "ERROR: could not find \"login_hint=\" in authorization request\n" && exit; }
 
 	# check that the webfinger request contains the URL"
-	URL="${RP_TEST_URL}/.well-known/webfinger?resource=https%3A%2F%2Frp.certification.openid.net%3A8080%2F${RP_ID}%2F${TEST_ID}&rel=http%3A%2F%2Fopenid.net%2Fspecs%2Fconnect%2F1.0%2Fissuer"
+	URL="${RP_TEST_URL}/.well-known/webfinger?resource=${RP_TEST_URL_ENC}%2F${RP_ID}%2F${TEST_ID}&rel=http%3A%2F%2Fopenid.net%2Fspecs%2Fconnect%2F1.0%2Fissuer"
 	find_in_logfile "${TEST_ID}" "check webfinger request" 75 "oidc_util_http_get: get URL=\"${URL}\""
 	# check that the webfinger request contains the right issuer:"
-	find_in_logfile "${TEST_ID}" "check webfinger issuer result" 75 "oidc_proto_webfinger_discovery: returning issuer \"https://rp.certification.openid.net:8080/mod_auth_openidc/rp-discovery-webfinger-url\" for resource \"${USER_INPUT}\" after doing successful webfinger-based discovery"
+	find_in_logfile "${TEST_ID}" "check webfinger issuer result" 75 "oidc_proto_webfinger_discovery: returning issuer \"${USER_INPUT}\" for resource \"${USER_INPUT}\" after doing successful webfinger-based discovery"
 }
 
 function rp_discovery_webfinger_acct() {
@@ -372,10 +375,10 @@ function rp_discovery_webfinger_acct() {
 	echo ${RESULT} | grep -q "&login_hint=${RP_ID}" && echo "OK" || echo "ERROR"
 
 	# check that the webfinger request contains acct:"
-	URL="${RP_TEST_URL}/.well-known/webfinger?resource=acct%3A${RP_ID}.${TEST_ID}%40rp.certification.openid.net%3A8080&rel=http%3A%2F%2Fopenid.net%2Fspecs%2Fconnect%2F1.0%2Fissuer"
+	URL="${RP_TEST_URL}/.well-known/webfinger?resource=acct%3A${RP_ID}.${TEST_ID}%40${RP_TEST_HOST}%3A${RP_TEST_PORT}&rel=http%3A%2F%2Fopenid.net%2Fspecs%2Fconnect%2F1.0%2Fissuer"
 	find_in_logfile "${TEST_ID}" "check webfinger request" 75 "oidc_util_http_get: get URL=\"${URL}\""
 	# check that the webfinger request contains the right issuer:"
-	find_in_logfile "${TEST_ID}" "check webfinger issuer result" 75 "oidc_proto_webfinger_discovery: returning issuer \"https://rp.certification.openid.net:8080/mod_auth_openidc/rp-discovery-webfinger-acct\" for resource \"acct:${ACCT}\" after doing successful webfinger-based discovery"
+	find_in_logfile "${TEST_ID}" "check webfinger issuer result" 75 "oidc_proto_webfinger_discovery: returning issuer \"${RP_TEST_URL}/${RP_ID}/${TEST_ID}\" for resource \"acct:${ACCT}\" after doing successful webfinger-based discovery"
 }
 
 function rp_discovery_issuer_not_matching_config() {
@@ -555,10 +558,17 @@ function rp_response_mode_form_post() {
 	message "${TEST_ID}" "send authentication request to OP" "-n"
 	RESULT=`echo ${FLAGS} | xargs curl "${RESULT}"`
 	echo "OK"
-			
-	AT=`echo ${RESULT} | cut -d"=" -f7-9 | cut -d "\"" -f2`
-	IDT=`echo ${RESULT} | cut -d"=" -f12 | cut -d"\"" -f2`
-	STATE=`echo $RESULT} | cut -d"=" -f18 | cut -d"\"" -f2`
+	
+#	echo "${RESULT}"
+#	exit
+	
+#	AT=`echo "${RESULT}" | grep "name=\"access_token" | cut -d"=" -f7-9 | cut -d "\"" -f2`
+#	IDT=`echo "${RESULT}" | grep "name=\"id_token" | cut -d"=" -f4 | cut -d"\"" -f2`
+#	STATE=`echo "${RESULT}" | grep "name=\"state" | cut -d"=" -f12 | cut -d"\"" -f2`
+
+	AT=`echo "${RESULT}" | grep "name=\"access_token" | cut -d"=" -f4-6 | cut -d "\"" -f2`
+	IDT=`echo "${RESULT}" | grep "name=\"id_token" | cut -d"=" -f4 | cut -d"\"" -f2`
+	STATE=`echo "${RESULT}" | grep "name=\"state" | cut -d"=" -f4 | cut -d"\"" -f2`
 
 	send_authentication_response ${TEST_ID} "access_token=${AT}&id_token=${IDT}&state=${STATE}" form_post
 	application_access ${TEST_ID} ${RESULT}
@@ -616,7 +626,7 @@ function rp_request_uri_enc() {
 	find_in_logfile "${TEST_ID}" "check encrypted request object" 150 "oidc_proto_create_request_uri: serialized request object JWT header" "\"alg\": \"A128KW\""
 
 	# check we sent request URI in the authorization request
-	find_in_logfile "${TEST_ID}" "check request URI" 150 "oidc_proto_authorization_request: adding outgoing header" "&request_uri="
+	find_in_logfile "${TEST_ID}" "check request URI" 150 "oidc_util_hdr_table_set: Location:" "&request_uri="
 
 	# TODO: check resolving of request URI if on the same server
 }
@@ -635,7 +645,7 @@ function rp_request_uri_sig_enc() {
 	find_in_logfile "${TEST_ID}" "check encrypted request object" 150 "oidc_proto_create_request_uri: serialized request object JWT header" "\"alg\": \"RSA1_5\""
 
 	# check we sent request URI in the authorization request
-	find_in_logfile "${TEST_ID}" "check request URI" 150 "oidc_proto_authorization_request: adding outgoing header" "&request_uri="
+	find_in_logfile "${TEST_ID}" "check request URI" 150 "oidc_util_hdr_table_set: Location:" "&request_uri="
 				
 	# TODO: check resolving of request URI if on the same server
 }
@@ -654,7 +664,7 @@ function rp_request_uri_unsigned() {
 	find_in_logfile "${TEST_ID}" "check unsigned request object" 150 "oidc_proto_create_request_uri: serialized request object JWT header" "\"alg\":\"none\""
 
 	# check we sent request URI in the authorization request
-	find_in_logfile "${TEST_ID}" "check request URI" 150 "oidc_proto_authorization_request: adding outgoing header" "&request_uri="
+	find_in_logfile "${TEST_ID}" "check request URI" 150 "oidc_util_hdr_table_set: Location:" "&request_uri="
 
 	# TODO: check resolving of request URI if on the same server
 }
@@ -673,7 +683,7 @@ function rp_request_uri_sig() {
 	find_in_logfile "${TEST_ID}" "check signed request object" 150 "oidc_proto_create_request_uri: serialized request object JWT header" "\"alg\": \"HS256\""
 
 	# check we sent request URI in the authorization request
-	find_in_logfile "${TEST_ID}" "check request URI" 150 "oidc_proto_authorization_request: adding outgoing header" "&request_uri="
+	find_in_logfile "${TEST_ID}" "check request URI" 150 "oidc_util_hdr_table_set: Location:" "&request_uri="
 
 	# TODO: check resolving of request URI if on the same server
 }
@@ -918,7 +928,7 @@ function rp_id_token_bad_c_hash() {
 	send_authentication_request ${TEST_ID} ${RESULT}
 	send_authentication_response ${TEST_ID} ${RESULT} fragment
 
-	find_in_logfile "${TEST_ID}" "check c_hash mismatch" 15 "oidc_proto_validate_code: could not validate code against c_hash"
+	find_in_logfile "${TEST_ID}" "check c_hash mismatch" 15 "oidc_proto_validate_code: could not validate code against \"c_hash\""
 }
 
 function rp_id_token_bad_at_hash() {
@@ -933,7 +943,7 @@ function rp_id_token_bad_at_hash() {
 	send_authentication_request ${TEST_ID} ${RESULT}
 	send_authentication_response ${TEST_ID} ${RESULT} fragment
 
-	find_in_logfile "${TEST_ID}" "check at_hash mismatch" 15 "oidc_proto_validate_access_token: could not validate access token against at_hash"
+	find_in_logfile "${TEST_ID}" "check at_hash mismatch" 15 "oidc_proto_validate_access_token: could not validate access token against \"at_hash\""
 }
 
 function rp_id_token_issuer_mismatch() {
@@ -1059,7 +1069,7 @@ function rp_key_rotation_op_enc_key() {
 	find_in_logfile "${TEST_ID}" "check encrypted request object" 150 "oidc_proto_create_request_uri: serialized request object JWT header" "\"alg\": \"RSA1_5\""
 
 	# check we sent request URI in the authorization request
-	find_in_logfile "${TEST_ID}" "check request URI" 150 "oidc_proto_authorization_request: adding outgoing header" "&request_uri="
+	find_in_logfile "${TEST_ID}" "check request URI" 150 "oidc_util_hdr_table_set: Location:" "&request_uri="
 
 	# check that we refreshed keys
 	find_in_logfile "${TEST_ID}" "check JWKS refresh" 150 "oidc_metadata_jwks_get: doing a forced refresh of the JWKs from URI"
@@ -1075,7 +1085,7 @@ function rp_key_rotation_op_enc_key() {
 	find_in_logfile "${TEST_ID}" "check encrypted request object" 150 "oidc_proto_create_request_uri: serialized request object JWT header" "\"alg\": \"RSA1_5\""
 
 	# check we sent request URI in the authorization request
-	find_in_logfile "${TEST_ID}" "check request URI" 150 "oidc_proto_authorization_request: adding outgoing header" "&request_uri="
+	find_in_logfile "${TEST_ID}" "check request URI" 150 "oidc_util_hdr_table_set: Location:" "&request_uri="
 
 	# check that we refreshed keys
 	find_in_logfile "${TEST_ID}" "check JWKS refresh" 150 "oidc_metadata_jwks_get: doing a forced refresh of the JWKs from URI"
@@ -1100,8 +1110,8 @@ function rp_claims_aggregated() {
 	find_in_logfile "${TEST_ID}" "check shoe_size aggregated claim" 125 "oidc_proto_resolve_composite_claims: processing:" "shoe_size: src1"
 	
 	# check that aggregated claims were flattened in to headers
-	find_in_logfile "${TEST_ID}" "check flattened eye_color claim" 75 "oidc_util_set_header: setting header" "\"OIDC_CLAIM_eye_color: blue"\"	
-	find_in_logfile "${TEST_ID}" "check flattened shoe_size claim" 75 "oidc_util_set_header: setting header" "\"OIDC_CLAIM_shoe_size: 8\""	
+	find_in_logfile "${TEST_ID}" "check flattened eye_color claim" 75 "oidc_util_hdr_table_set" "OIDC_CLAIM_eye_color: blue"
+	find_in_logfile "${TEST_ID}" "check flattened shoe_size claim" 75 "oidc_util_hdr_table_set" "OIDC_CLAIM_shoe_size: 8"
 }
 
 function rp_claims_distributed() {
@@ -1114,7 +1124,7 @@ function rp_claims_distributed() {
 	find_in_logfile "${TEST_ID}" "check age distributed claim" 125 "oidc_proto_resolve_composite_claims: processing:" "age: src1"	
 
 	# check that distributed claim was flattened in to a header
-	find_in_logfile "${TEST_ID}" "check flattened age claim" 75 "oidc_util_set_header: setting header" "\"OIDC_CLAIM_age: 30"\"									
+	find_in_logfile "${TEST_ID}" "check flattened age claim" 75 "oidc_util_hdr_table_set" "OIDC_CLAIM_age: 30"
 }
 
 function rp_userinfo_bearer_header() {

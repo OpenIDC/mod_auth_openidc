@@ -101,7 +101,7 @@ static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c,
 			} else if (json_is_boolean(elem)) {
 
 				if (apr_strnatcmp(
-				json_is_true(elem) ? "true" : "false", spec_c) == 0)
+						json_is_true(elem) ? "true" : "false", spec_c) == 0)
 					return TRUE;
 
 			} else if (json_is_integer(elem)) {
@@ -316,16 +316,19 @@ int oidc_authz_worker(request_rec *r, const json_t * const claims,
 /*
  * Apache >=2.4 authorization routine: match the claims from the authenticated user against the Require primitive
  */
-authz_status oidc_authz_worker24(request_rec *r, const json_t * const claims, const char *require_args) {
+authz_status oidc_authz_worker24(request_rec *r, const json_t * const claims,
+		const char *require_args) {
 
 	int count_oauth_claims = 0;
 	const char *t, *w;
 
 	/* needed for anonymous authentication */
-	if (r->user == NULL) return AUTHZ_DENIED_NO_USER;
+	if (r->user == NULL)
+		return AUTHZ_DENIED_NO_USER;
 
 	/* if no claims, impossible to satisfy */
-	if (!claims) return AUTHZ_DENIED;
+	if (!claims)
+		return AUTHZ_DENIED;
 
 	/* loop over the Required specifications */
 	t = require_args;

@@ -79,9 +79,10 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 	if ((c->oauth.client_id != NULL) && (c->oauth.client_secret != NULL)) {
 		if ((c->oauth.introspection_endpoint_auth != NULL)
 				&& (apr_strnatcmp(c->oauth.introspection_endpoint_auth,
-						"client_secret_post") == 0)) {
-			apr_table_addn(params, "client_id", c->oauth.client_id);
-			apr_table_addn(params, "client_secret", c->oauth.client_secret);
+						OIDC_PROTO_CLIENT_SECRET_POST) == 0)) {
+			apr_table_addn(params, OIDC_PROTO_CLIENT_ID, c->oauth.client_id);
+			apr_table_addn(params, OIDC_PROTO_CLIENT_SECRET,
+					c->oauth.client_secret);
 		} else {
 			basic_auth = apr_psprintf(r->pool, "%s:%s", c->oauth.client_id,
 					c->oauth.client_secret);
@@ -89,15 +90,20 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 	}
 
 	/* call the endpoint with the constructed parameter set and return the resulting response */
-	return apr_strnatcmp(c->oauth.introspection_endpoint_method, OIDC_INTROSPECTION_METHOD_GET) == 0 ?
-			oidc_util_http_get(r, c->oauth.introspection_endpoint_url, params,
-					basic_auth, NULL, c->oauth.ssl_validate_server, response,
-					c->http_timeout_long, c->outgoing_proxy,
-					oidc_dir_cfg_pass_cookies(r), c->oauth.introspection_endpoint_tls_client_cert, c->oauth.introspection_endpoint_tls_client_key):
-			oidc_util_http_post_form(r, c->oauth.introspection_endpoint_url,
-					params, basic_auth, NULL, c->oauth.ssl_validate_server,
-					response, c->http_timeout_long, c->outgoing_proxy,
-					oidc_dir_cfg_pass_cookies(r), c->oauth.introspection_endpoint_tls_client_cert, c->oauth.introspection_endpoint_tls_client_key);
+	return apr_strnatcmp(c->oauth.introspection_endpoint_method,
+			OIDC_INTROSPECTION_METHOD_GET) == 0 ?
+					oidc_util_http_get(r, c->oauth.introspection_endpoint_url, params,
+							basic_auth, NULL, c->oauth.ssl_validate_server, response,
+							c->http_timeout_long, c->outgoing_proxy,
+							oidc_dir_cfg_pass_cookies(r),
+							c->oauth.introspection_endpoint_tls_client_cert,
+							c->oauth.introspection_endpoint_tls_client_key) :
+							oidc_util_http_post_form(r, c->oauth.introspection_endpoint_url,
+									params, basic_auth, NULL, c->oauth.ssl_validate_server,
+									response, c->http_timeout_long, c->outgoing_proxy,
+									oidc_dir_cfg_pass_cookies(r),
+									c->oauth.introspection_endpoint_tls_client_cert,
+									c->oauth.introspection_endpoint_tls_client_key);
 }
 
 /*
@@ -147,7 +153,7 @@ static apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 			&& (accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_POST)) {
 		apr_table_t *params = apr_table_make(r->pool, 8);
 		if (oidc_util_read_post_params(r, params) == TRUE) {
-			*access_token = apr_table_get(params, "access_token");
+			*access_token = apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN);
 		}
 	}
 
@@ -155,7 +161,7 @@ static apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 			&& (accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_QUERY)) {
 		apr_table_t *params = apr_table_make(r->pool, 8);
 		oidc_util_read_form_encoded_params(r, params, r->args);
-		*access_token = apr_table_get(params, "access_token");
+		*access_token = apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN);
 	}
 
 	if ((*access_token == NULL)
@@ -264,14 +270,17 @@ static apr_byte_t oidc_oauth_parse_and_cache_token_expiry(request_rec *r,
 	return TRUE;
 }
 
+#define OIDC_OAUTH_CACHE_KEY_RESPONSE  "r"
+#define OIDC_OAUTH_CACHE_KEY_TIMESTAMP "t"
+
 static apr_byte_t oidc_oauth_cache_access_token(request_rec *r, oidc_cfg *c,
 		apr_time_t cache_until, const char *access_token, json_t *json) {
 
 	oidc_debug(r, "caching introspection result");
 
 	json_t *cache_entry = json_object();
-	json_object_set(cache_entry, "response", json);
-	json_object_set_new(cache_entry, "timestamp",
+	json_object_set(cache_entry, OIDC_OAUTH_CACHE_KEY_RESPONSE, json);
+	json_object_set_new(cache_entry, OIDC_OAUTH_CACHE_KEY_TIMESTAMP,
 			json_integer(apr_time_sec(apr_time_now())));
 	char *cache_value = json_dumps(cache_entry, 0);
 
@@ -304,7 +313,7 @@ static apr_byte_t oidc_oauth_get_cached_access_token(request_rec *r,
 	}
 
 	/* compare the timestamp against the freshness requirement */
-	json_t *v = json_object_get(cache_entry, "timestamp");
+	json_t *v = json_object_get(cache_entry, OIDC_OAUTH_CACHE_KEY_TIMESTAMP);
 	apr_time_t now = apr_time_sec(apr_time_now());
 	int token_introspection_interval = oidc_cfg_token_introspection_interval(r);
 	if ((token_introspection_interval > 0)
@@ -328,7 +337,8 @@ static apr_byte_t oidc_oauth_get_cached_access_token(request_rec *r,
 			s_cache_entry);
 
 	/* we've got a cached introspection result that is still valid for this path's requirements */
-	*json = json_deep_copy(json_object_get(cache_entry, "response"));
+	*json = json_deep_copy(
+			json_object_get(cache_entry, OIDC_OAUTH_CACHE_KEY_RESPONSE));
 
 	json_decref(cache_entry);
 	return TRUE;
@@ -361,33 +371,36 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 		if (oidc_util_decode_json_and_check_error(r, s_json, &result) == FALSE)
 			return FALSE;
 
-		json_t *active = json_object_get(result, "active");
+		json_t *active = json_object_get(result, OIDC_PROTO_ACTIVE);
 		apr_time_t cache_until;
 		if (active != NULL) {
 
 			if (json_is_boolean(active)) {
 				if (!json_is_true(active)) {
 					oidc_debug(r,
-							"\"active\" boolean object with value \"false\" found in response JSON object");
+							"\"%s\" boolean object with value \"false\" found in response JSON object",
+							OIDC_PROTO_ACTIVE);
 					json_decref(result);
 					return FALSE;
 				}
 			} else if (json_is_string(active)) {
 				if (apr_strnatcasecmp(json_string_value(active), "true") != 0) {
 					oidc_debug(r,
-							"\"active\" string object with value that is not equal to \"true\" found in response JSON object: %s",
-							json_string_value(active));
+							"\"%s\" string object with value that is not equal to \"true\" found in response JSON object: %s",
+							OIDC_PROTO_ACTIVE, json_string_value(active));
 					json_decref(result);
 					return FALSE;
 				}
 			} else {
 				oidc_debug(r,
-						"no \"active\" boolean or string object found in response JSON object");
+						"no \"%s\" boolean or string object found in response JSON object",
+						OIDC_PROTO_ACTIVE);
 				json_decref(result);
 				return FALSE;
 			}
 
-			if (oidc_oauth_parse_and_cache_token_expiry(r, c, result, "exp",
+			if (oidc_oauth_parse_and_cache_token_expiry(r, c, result,
+					OIDC_CLAIM_EXP,
 					TRUE, FALSE, &cache_until) == FALSE) {
 				json_decref(result);
 				return FALSE;
@@ -403,7 +416,7 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 					c->oauth.introspection_token_expiry_claim_name,
 					apr_strnatcmp(
 							c->oauth.introspection_token_expiry_claim_format,
-							"absolute") == 0,
+							OIDC_CLAIM_FORMAT_ABSOLUTE) == 0,
 							c->oauth.introspection_token_expiry_claim_required,
 							&cache_until) == FALSE) {
 				json_decref(result);
@@ -419,17 +432,19 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 	}
 
 	/* return the access_token JSON object */
-	json_t *tkn = json_object_get(result, "access_token");
+	json_t *tkn = json_object_get(result, OIDC_PROTO_ACCESS_TOKEN);
 	if ((tkn != NULL) && (json_is_object(tkn))) {
 
 		/*
 		 * assume PingFederate validation: copy over those claims from the access_token
 		 * that are relevant for authorization purposes
 		 */
-		json_object_set(tkn, "client_id", json_object_get(result, "client_id"));
-		json_object_set(tkn, "scope", json_object_get(result, "scope"));
+		json_object_set(tkn, OIDC_PROTO_CLIENT_ID,
+				json_object_get(result, OIDC_PROTO_CLIENT_ID));
+		json_object_set(tkn, OIDC_PROTO_SCOPE,
+				json_object_get(result, OIDC_PROTO_SCOPE));
 
-		//oidc_oauth_spaced_string_to_array(r, result, "scope", tkn, "scopes");
+		//oidc_oauth_spaced_string_to_array(r, result, OIDC_PROTO_SCOPE, tkn, "scopes");
 
 		/* return only the pimped access_token results */
 		*token = json_deep_copy(tkn);
@@ -438,7 +453,7 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 
 	} else {
 
-		//oidc_oauth_spaced_string_to_array(r, result, "scope", result, "scopes");
+		//oidc_oauth_spaced_string_to_array(r, result, OIDC_PROTO_SCOPE, result, "scopes");
 
 		/* assume spec compliant introspection */
 		*token = result;
@@ -458,7 +473,7 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 static apr_byte_t oidc_oauth_set_remote_user(request_rec *r, oidc_cfg *c,
 		json_t *token) {
 
-	/* get the configured claim name to populate REMOTE_USER with (defaults to "Username") */
+	/* get the configured claim name to populate REMOTE_USER with (defaults to "sub") */
 	char *claim_name = apr_pstrdup(r->pool,
 			c->oauth.remote_user_claim.claim_name);
 

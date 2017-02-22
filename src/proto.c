@@ -79,8 +79,8 @@ static apr_byte_t oidc_proto_generate_random_string(request_rec *r,
 	return TRUE;
 }
 
-static apr_byte_t oidc_proto_copy_param_from_request(json_t *request_object_config,
-		const char *parameter_name) {
+static apr_byte_t oidc_proto_copy_param_from_request(
+		json_t *request_object_config, const char *parameter_name) {
 	json_t *copy_from_request = json_object_get(request_object_config,
 			"copy_from_request");
 	size_t index = 0;
@@ -95,7 +95,9 @@ static apr_byte_t oidc_proto_copy_param_from_request(json_t *request_object_conf
 	return FALSE;
 }
 
-static void oidc_proto_copy_from_request(request_rec *r, oidc_jwt_t *request_object, json_t *request_object_config, const char *authorization_request) {
+static void oidc_proto_copy_from_request(request_rec *r,
+		oidc_jwt_t *request_object, json_t *request_object_config,
+		const char *authorization_request) {
 
 	char *tokenizer_ctx, *p = strstr(authorization_request, "?");
 	char *request = apr_pstrdup(r->pool, ++p);
@@ -118,7 +120,8 @@ static void oidc_proto_copy_from_request(request_rec *r, oidc_jwt_t *request_obj
 
 			oidc_debug(r, "processing name: %s, value: %s", name, value);
 
-			if (oidc_proto_copy_param_from_request(request_object_config, name)) {
+			if (oidc_proto_copy_param_from_request(request_object_config,
+					name)) {
 				json_t *result = NULL;
 				json_error_t json_error;
 				result = json_loads(value, JSON_DECODE_ANY, &json_error);
@@ -168,9 +171,11 @@ apr_byte_t oidc_proto_get_encryption_jwk_by_type(request_rec *r, oidc_cfg *cfg,
 
 		json_t *elem = json_array_get(keys, i);
 
-		const char *use = json_string_value(json_object_get(elem, "use"));
-		if ((use != NULL) && (strcmp(use, "enc") != 0)) {
-			oidc_debug(r, "skipping key because of non-matching \"use\": \"%s\"", use);
+		const char *use = json_string_value(
+				json_object_get(elem, OIDC_JWK_USE));
+		if ((use != NULL) && (strcmp(use, OIDC_JWK_ENC) != 0)) {
+			oidc_debug(r, "skipping key because of non-matching \"%s\": \"%s\"",
+					OIDC_JWK_USE, use);
 			continue;
 		}
 
@@ -182,7 +187,8 @@ apr_byte_t oidc_proto_get_encryption_jwk_by_type(request_rec *r, oidc_cfg *cfg,
 
 		if (key_type == key->kty) {
 			oidc_jwk_to_json(r->pool, key, &jwk_json, &err);
-			oidc_debug(r, "found matching encryption key type for key: %s", jwk_json);
+			oidc_debug(r, "found matching encryption key type for key: %s",
+					jwk_json);
 			*jwk = key;
 			break;
 		}
@@ -200,8 +206,8 @@ apr_byte_t oidc_proto_get_encryption_jwk_by_type(request_rec *r, oidc_cfg *cfg,
  * generate a request object and pass it by reference in the authorization request
  */
 char *oidc_proto_create_request_uri(request_rec *r,
-		struct oidc_provider_t *provider, json_t *proto_state,
-		const char *redirect_uri, const char *authorization_request) {
+		struct oidc_provider_t *provider, const char *redirect_uri,
+		const char *authorization_request) {
 
 	oidc_debug(r, "enter");
 
@@ -227,9 +233,9 @@ char *oidc_proto_create_request_uri(request_rec *r,
 	oidc_jwt_t *request_object = oidc_jwt_new(r->pool, TRUE, TRUE);
 
 	/* set basic values: iss and aud */
-	json_object_set_new(request_object->payload.value.json, "iss",
+	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_ISS,
 			json_string(provider->client_id));
-	json_object_set_new(request_object->payload.value.json, "aud",
+	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_AUD,
 			json_string(provider->issuer));
 
 	/* add static values to the request object as configured in the .conf file; may override iss/aud */
@@ -386,8 +392,8 @@ char *oidc_proto_create_request_uri(request_rec *r,
 			cfg->cache->set(r, OIDC_CACHE_SECTION_REQUEST_URI, request_ref,
 					serialized_request_object,
 					apr_time_now() + apr_time_from_sec(OIDC_REQUEST_URI_CACHE_DURATION));
-			request_uri = apr_psprintf(r->pool, "%s?request_uri=%s",
-					resolver_url, oidc_util_escape_string(r, request_ref));
+			request_uri = apr_psprintf(r->pool, "%s?%s=%s", resolver_url,
+					OIDC_PROTO_REQUEST_URI, oidc_util_escape_string(r, request_ref));
 		}
 	}
 
@@ -415,77 +421,84 @@ int oidc_proto_authorization_request(request_rec *r,
 			provider->authorization_endpoint_url,
 			strchr(provider->authorization_endpoint_url, '?') != NULL ?
 					"&" : "?");
-	authorization_request = apr_psprintf(r->pool, "%sresponse_type=%s",
+	authorization_request = apr_psprintf(r->pool, "%s%s=%s",
 			authorization_request,
+			OIDC_PROTO_RESPONSE_TYPE,
 			oidc_util_escape_string(r,
-					json_string_value(
-							json_object_get(proto_state, "response_type"))));
+					json_string_value(json_object_get(proto_state,
+							OIDC_PROTO_STATE_RESPONSE_TYPE))));
 
 	if (provider->scope != NULL) {
 
 		if (!oidc_util_spaced_string_contains(r->pool, provider->scope,
-				"openid")) {
+				OIDC_PROTO_SCOPE_OPENID)) {
 			oidc_warn(r,
-					"the configuration for the \"scope\" parameter does not include the \"openid\" scope, your provider may not return an \"id_token\": %s",
-					provider->scope);
+					"the configuration for the \"%s\" parameter does not include the \"%s\" scope, your provider may not return an \"id_token\": %s",
+					OIDC_PROTO_SCOPE, OIDC_PROTO_SCOPE_OPENID, provider->scope);
 		}
 
-		authorization_request = apr_psprintf(r->pool, "%s&scope=%s",
+		authorization_request = apr_psprintf(r->pool, "%s&%s=%s",
 				authorization_request,
-				oidc_util_escape_string(r, provider->scope));
+				OIDC_PROTO_SCOPE, oidc_util_escape_string(r, provider->scope));
 	}
 
-	authorization_request = apr_psprintf(r->pool, "%s&client_id=%s",
+	authorization_request = apr_psprintf(r->pool, "%s&%s=%s",
 			authorization_request,
+			OIDC_PROTO_CLIENT_ID,
 			oidc_util_escape_string(r, provider->client_id));
-	authorization_request = apr_psprintf(r->pool, "%s&state=%s",
-			authorization_request, oidc_util_escape_string(r, state));
-	authorization_request = apr_psprintf(r->pool, "%s&redirect_uri=%s",
-			authorization_request, oidc_util_escape_string(r, redirect_uri));
+	authorization_request = apr_psprintf(r->pool, "%s&%s=%s",
+			authorization_request, OIDC_PROTO_STATE,
+			oidc_util_escape_string(r, state));
+	authorization_request = apr_psprintf(r->pool, "%s&%s=%s",
+			authorization_request, OIDC_PROTO_REDIRECT_URI,
+			oidc_util_escape_string(r, redirect_uri));
 
 	/* add the nonce if set */
-	if (json_object_get(proto_state, "nonce") != NULL)
-		authorization_request = apr_psprintf(r->pool, "%s&nonce=%s",
-				authorization_request,
+	if (json_object_get(proto_state, OIDC_PROTO_STATE_NONCE) != NULL)
+		authorization_request = apr_psprintf(r->pool, "%s&%s=%s",
+				authorization_request, OIDC_PROTO_NONCE,
 				oidc_util_escape_string(r,
-						json_string_value(
-								json_object_get(proto_state, "nonce"))));
+						json_string_value(json_object_get(proto_state,
+								OIDC_PROTO_STATE_NONCE))));
 
 	/* add PKCE code challenge if set */
 	if (code_challenge != NULL)
-		authorization_request = apr_psprintf(r->pool,
-				"%s&code_challenge=%s&code_challenge_method=%s",
+		authorization_request = apr_psprintf(r->pool, "%s&%s=%s&%s=%s",
 				authorization_request,
+				OIDC_PROTO_CODE_CHALLENGE,
 				oidc_util_escape_string(r, code_challenge),
-				provider->pkce_method);
+				OIDC_PROTO_CODE_CHALLENGE_METHOD, provider->pkce_method);
 
 	/* add the response_mode if explicitly set */
-	if (json_object_get(proto_state, "response_mode") != NULL)
-		authorization_request = apr_psprintf(r->pool, "%s&response_mode=%s",
+	if (json_object_get(proto_state, OIDC_PROTO_STATE_RESPONSE_MODE) != NULL)
+		authorization_request = apr_psprintf(r->pool, "%s&%s=%s",
 				authorization_request,
+				OIDC_PROTO_RESPONSE_MODE,
 				oidc_util_escape_string(r,
-						json_string_value(
-								json_object_get(proto_state,
-										"response_mode"))));
+						json_string_value(json_object_get(proto_state,
+								OIDC_PROTO_STATE_RESPONSE_MODE))));
 
 	/* add the login_hint if provided */
 	if (login_hint != NULL)
-		authorization_request = apr_psprintf(r->pool, "%s&login_hint=%s",
-				authorization_request, oidc_util_escape_string(r, login_hint));
+		authorization_request = apr_psprintf(r->pool, "%s&%s=%s",
+				authorization_request, OIDC_PROTO_LOGIN_HINT,
+				oidc_util_escape_string(r, login_hint));
 
 	/* add the id_token_hint if provided */
 	if (id_token_hint != NULL)
-		authorization_request = apr_psprintf(r->pool, "%s&id_token_hint=%s",
+		authorization_request = apr_psprintf(r->pool, "%s&%s=%s",
 				authorization_request,
+				OIDC_PROTO_ID_TOKEN_HINT,
 				oidc_util_escape_string(r, id_token_hint));
 
 	/* add the prompt setting if provided (e.g. "none" for no-GUI checks) */
-	if (json_object_get(proto_state, "prompt") != NULL)
-		authorization_request = apr_psprintf(r->pool, "%s&prompt=%s",
+	if (json_object_get(proto_state, OIDC_PROTO_STATE_PROMPT) != NULL)
+		authorization_request = apr_psprintf(r->pool, "%s&%s=%s",
 				authorization_request,
+				OIDC_PROTO_PROMPT,
 				oidc_util_escape_string(r,
-						json_string_value(
-								json_object_get(proto_state, "prompt"))));
+						json_string_value(json_object_get(proto_state,
+								OIDC_PROTO_STATE_PROMPT))));
 
 	/* add any statically configured custom authorization request parameters */
 	if (provider->auth_request_params != NULL) {
@@ -501,10 +514,12 @@ int oidc_proto_authorization_request(request_rec *r,
 
 	if (provider->request_object != NULL) {
 		/* add a request uri */
-		char *request_uri = oidc_proto_create_request_uri(r, provider, proto_state, redirect_uri, authorization_request);
+		char *request_uri = oidc_proto_create_request_uri(r, provider,
+				redirect_uri, authorization_request);
 		if (request_uri != NULL)
-			authorization_request = apr_psprintf(r->pool, "%s&request_uri=%s",
-					authorization_request, oidc_util_escape_string(r, request_uri));
+			authorization_request = apr_psprintf(r->pool, "%s&%s=%s",
+					authorization_request, OIDC_PROTO_REQUEST_URI,
+					oidc_util_escape_string(r, request_uri));
 	}
 
 	/* cleanup */
@@ -540,9 +555,9 @@ apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r,
 
 	/* prereq: this is a call to the configured redirect_uri; see if it is a GET with state and id_token or code parameters */
 	return ((r->method_number == M_GET)
-			&& oidc_util_request_has_parameter(r, "state")
-			&& (oidc_util_request_has_parameter(r, "id_token")
-					|| oidc_util_request_has_parameter(r, "code")));
+			&& oidc_util_request_has_parameter(r, OIDC_PROTO_STATE)
+			&& (oidc_util_request_has_parameter(r, OIDC_PROTO_ID_TOKEN)
+					|| oidc_util_request_has_parameter(r, OIDC_PROTO_CODE)));
 }
 
 /*
@@ -613,11 +628,11 @@ apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
 
 	/* get the "nonce" value in the id_token payload */
 	char *j_nonce = NULL;
-	if (oidc_jose_get_string(r->pool, jwt->payload.value.json, "nonce", TRUE,
-			&j_nonce, &err) == FALSE) {
+	if (oidc_jose_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_NONCE,
+			TRUE, &j_nonce, &err) == FALSE) {
 		oidc_error(r,
-				"id_token JSON payload did not contain a \"nonce\" string: %s",
-				oidc_jose_e2s(r->pool, err));
+				"id_token JSON payload did not contain a \"%s\" string: %s",
+				OIDC_CLAIM_NONCE, oidc_jose_e2s(r->pool, err));
 		return FALSE;
 	}
 
@@ -654,8 +669,8 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, oidc_jwt_payload_t *id_token_payload) {
 
 	char *azp = NULL;
-	oidc_jose_get_string(r->pool, id_token_payload->value.json, "azp", FALSE,
-			&azp,
+	oidc_jose_get_string(r->pool, id_token_payload->value.json, OIDC_CLAIM_AZP,
+			FALSE, &azp,
 			NULL);
 
 	/*
@@ -665,13 +680,13 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 	 */
 	if ((azp != NULL) && (apr_strnatcmp(azp, provider->client_id) != 0)) {
 		oidc_error(r,
-				"the \"azp\" claim (%s) is present in the id_token, but is not equal to the configured client_id (%s)",
-				azp, provider->client_id);
+				"the \"%s\" claim (%s) is present in the id_token, but is not equal to the configured client_id (%s)",
+				OIDC_CLAIM_AZP, azp, provider->client_id);
 		return FALSE;
 	}
 
 	/* get the "aud" value from the JSON payload */
-	json_t *aud = json_object_get(id_token_payload->value.json, "aud");
+	json_t *aud = json_object_get(id_token_payload->value.json, OIDC_CLAIM_AUD);
 	if (aud != NULL) {
 
 		/* check if it is a single-value */
@@ -681,8 +696,9 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 			if (apr_strnatcmp(json_string_value(aud), provider->client_id)
 					!= 0) {
 				oidc_error(r,
-						"the configured client_id (%s) did not match the \"aud\" claim value (%s) in the id_token",
-						provider->client_id, json_string_value(aud));
+						"the configured client_id (%s) did not match the \"%s\" claim value (%s) in the id_token",
+						provider->client_id, OIDC_CLAIM_AUD,
+						json_string_value(aud));
 				return FALSE;
 			}
 
@@ -691,24 +707,27 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 
 			if ((json_array_size(aud) > 1) && (azp == NULL)) {
 				oidc_debug(r,
-						"the \"aud\" claim value in the id_token is an array with more than 1 element, but \"azp\" claim is not present (a SHOULD in the spec...)");
+						"the \"%s\" claim value in the id_token is an array with more than 1 element, but \"%s\" claim is not present (a SHOULD in the spec...)",
+						OIDC_CLAIM_AUD, OIDC_CLAIM_AZP);
 			}
 
 			if (oidc_util_json_array_has_value(r, aud,
 					provider->client_id) == FALSE) {
 				oidc_error(r,
-						"our configured client_id (%s) could not be found in the array of values for \"aud\" claim",
-						provider->client_id);
+						"our configured client_id (%s) could not be found in the array of values for \"%s\" claim",
+						provider->client_id, OIDC_CLAIM_AUD);
 				return FALSE;
 			}
 		} else {
 			oidc_error(r,
-					"id_token JSON payload \"aud\" claim is not a string nor an array");
+					"id_token JSON payload \"%s\" claim is not a string nor an array",
+					OIDC_CLAIM_AUD);
 			return FALSE;
 		}
 
 	} else {
-		oidc_error(r, "id_token JSON payload did not contain an \"aud\" claim");
+		oidc_error(r, "id_token JSON payload did not contain an \"%s\" claim",
+				OIDC_CLAIM_AUD);
 		return FALSE;
 	}
 
@@ -727,7 +746,8 @@ static apr_byte_t oidc_proto_validate_iat(request_rec *r, oidc_jwt_t *jwt,
 	/* sanity check for iat being set */
 	if (jwt->payload.iat == OIDC_JWT_CLAIM_TIME_EMPTY) {
 		if (is_mandatory) {
-			oidc_error(r, "JWT did not contain an \"iat\" number value");
+			oidc_error(r, "JWT did not contain an \"%s\" number value",
+					OIDC_CLAIM_IAT);
 			return FALSE;
 		}
 		return TRUE;
@@ -762,7 +782,8 @@ static apr_byte_t oidc_proto_validate_exp(request_rec *r, oidc_jwt_t *jwt,
 	/* sanity check for exp being set */
 	if (jwt->payload.exp == OIDC_JWT_CLAIM_TIME_EMPTY) {
 		if (is_mandatory) {
-			oidc_error(r, "JWT did not contain an \"exp\" number value");
+			oidc_error(r, "JWT did not contain an \"%s\" number value",
+					OIDC_CLAIM_EXP);
 			return FALSE;
 		}
 		return TRUE;
@@ -791,16 +812,16 @@ apr_byte_t oidc_proto_validate_jwt(request_rec *r, oidc_jwt_t *jwt,
 		/* issuer is set and must match */
 		if (jwt->payload.iss == NULL) {
 			oidc_error(r,
-					"JWT did not contain an \"iss\" string (requested value: %s)",
-					iss);
+					"JWT did not contain an \"%s\" string (requested value: %s)",
+					OIDC_CLAIM_ISS, iss);
 			return FALSE;
 		}
 
 		/* check if the issuer matches the requested value */
 		if (oidc_util_issuer_match(iss, jwt->payload.iss) == FALSE) {
 			oidc_error(r,
-					"requested issuer (%s) does not match received \"iss\" value in id_token (%s)",
-					iss, jwt->payload.iss);
+					"requested issuer (%s) does not match received \"%s\" value in id_token (%s)",
+					iss, OIDC_CLAIM_ISS, jwt->payload.iss);
 			return FALSE;
 		}
 	}
@@ -843,7 +864,8 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
 	/* check if the required-by-spec "sub" claim is present */
 	if (jwt->payload.sub == NULL) {
 		oidc_error(r,
-				"id_token JSON payload did not contain the required-by-spec \"sub\" string value");
+				"id_token JSON payload did not contain the required-by-spec \"%s\" string value",
+				OIDC_CLAIM_SUB);
 		return FALSE;
 	}
 
@@ -867,14 +889,15 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, oidc_jwt_t *jwt,
 	char *jwk_json = NULL;
 
 	/* get the (optional) thumbprint for comparison */
-	const char *x5t = oidc_jwt_hdr_get(jwt, "x5t");
+	const char *x5t = oidc_jwt_hdr_get(jwt, OIDC_JWK_X5T);
 	oidc_debug(r, "search for kid \"%s\" or thumbprint x5t \"%s\"",
 			jwt->header.kid, x5t);
 
 	/* get the "keys" JSON array from the JWKs object */
-	json_t *keys = json_object_get(j_jwks, "keys");
+	json_t *keys = json_object_get(j_jwks, OIDC_JWK_KEYS);
 	if ((keys == NULL) || !(json_is_array(keys))) {
-		oidc_error(r, "\"keys\" array element is not a JSON array");
+		oidc_error(r, "\"%s\" array element is not a JSON array",
+				OIDC_JWK_KEYS);
 		return FALSE;
 	}
 
@@ -901,11 +924,12 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, oidc_jwt_t *jwt,
 
 		/* see if we were looking for a specific kid, if not we'll include any key that matches the type */
 		if ((jwt->header.kid == NULL) && (x5t == NULL)) {
-			const char *use = json_string_value(json_object_get(elem, "use"));
-			if ((use != NULL) && (strcmp(use, "sig") != 0)) {
+			const char *use = json_string_value(
+					json_object_get(elem, OIDC_JWK_USE));
+			if ((use != NULL) && (strcmp(use, OIDC_JWK_SIG) != 0)) {
 				oidc_debug(r,
-						"skipping key because of non-matching \"use\": \"%s\"",
-						use);
+						"skipping key because of non-matching \"%s\": \"%s\"",
+						OIDC_JWK_USE, use);
 				oidc_jwk_destroy(jwk);
 			} else {
 				oidc_jwk_to_json(r->pool, jwk, &jwk_json, &err);
@@ -928,18 +952,21 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, oidc_jwt_t *jwt,
 		if ((jwt->header.kid != NULL) && (jwk->kid != NULL)
 				&& (apr_strnatcmp(jwt->header.kid, jwk->kid) == 0)) {
 			oidc_jwk_to_json(r->pool, jwk, &jwk_json, &err);
-			oidc_debug(r, "found matching kid: \"%s\" for jwk: %s", jwt->header.kid, jwk_json);
+			oidc_debug(r, "found matching kid: \"%s\" for jwk: %s",
+					jwt->header.kid, jwk_json);
 			apr_hash_set(result, jwt->header.kid, APR_HASH_KEY_STRING, jwk);
 			break;
 		}
 
 		/* we are looking for a specific x5t, get the x5t from the current element */
 		char *s_x5t = NULL;
-		oidc_json_object_get_string(r->pool, elem, "x5t", &s_x5t, NULL);
+		oidc_json_object_get_string(r->pool, elem, OIDC_JWK_X5T, &s_x5t, NULL);
 		/* compare the requested thumbprint against the current element */
-		if ((s_x5t != NULL) && (x5t != NULL) && (apr_strnatcmp(x5t, s_x5t) == 0)) {
+		if ((s_x5t != NULL) && (x5t != NULL)
+				&& (apr_strnatcmp(x5t, s_x5t) == 0)) {
 			oidc_jwk_to_json(r->pool, jwk, &jwk_json, &err);
-			oidc_debug(r, "found matching x5t: \"%s\" for jwk: %s", x5t, jwk_json);
+			oidc_debug(r, "found matching %s: \"%s\" for jwk: %s", OIDC_JWK_X5T,
+					x5t, jwk_json);
 			apr_hash_set(result, x5t, APR_HASH_KEY_STRING, jwk);
 			break;
 		}
@@ -1064,7 +1091,7 @@ char *oidc_proto_peek_jwt_header(request_rec *r,
 		return NULL;
 	}
 	if (alg) {
-		json_t *json =NULL;
+		json_t *json = NULL;
 		oidc_util_decode_json_object(r, result, &json);
 		if (json)
 			*alg = apr_pstrdup(r->pool,
@@ -1156,11 +1183,13 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 static apr_byte_t oidc_proto_validate_token_type(request_rec *r,
 		oidc_provider_t *provider, const char *token_type) {
 	/*  we only support bearer/Bearer  */
-	if ((token_type != NULL) && (apr_strnatcasecmp(token_type, "Bearer") != 0)
+	if ((token_type != NULL)
+			&& (apr_strnatcasecmp(token_type, OIDC_PROTO_BEARER) != 0)
 			&& (provider->userinfo_endpoint_url != NULL)) {
 		oidc_error(r,
-				"token_type is \"%s\" and UserInfo endpoint (%s) for issuer \"%s\" is set: can only deal with Bearer authentication against a UserInfo endpoint!",
-				token_type, provider->userinfo_endpoint_url, provider->issuer);
+				"token_type is \"%s\" and UserInfo endpoint (%s) for issuer \"%s\" is set: can only deal with \"%s\" authentication against a UserInfo endpoint!",
+				token_type, provider->userinfo_endpoint_url, provider->issuer,
+				OIDC_PROTO_BEARER);
 		return FALSE;
 	}
 	return TRUE;
@@ -1183,31 +1212,31 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 		/* see if we need to do basic auth or auth-through-post-params (both applied through the HTTP POST method though) */
 		if ((provider->token_endpoint_auth == NULL)
 				|| (apr_strnatcmp(provider->token_endpoint_auth,
-						"client_secret_basic") == 0)) {
+						OIDC_PROTO_CLIENT_SECRET_BASIC) == 0)) {
 			basic_auth = apr_psprintf(r->pool, "%s:%s", provider->client_id,
 					provider->client_secret);
 		} else if ((provider->token_endpoint_auth != NULL)
 				&& ((apr_strnatcmp(provider->token_endpoint_auth,
-						"client_secret_jwt") == 0)
+						OIDC_PROTO_CLIENT_SECRET_JWT) == 0)
 						|| (apr_strnatcmp(provider->token_endpoint_auth,
-								"private_key_jwt") == 0))) {
+								OIDC_PROTO_PRIVATE_KEY_JWT) == 0))) {
 
 			// TODO: factor out somewhere else
 			oidc_jwt_t *jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
 
 			char *jti = NULL;
 			oidc_proto_generate_random_string(r, &jti, 16);
-			json_object_set_new(jwt->payload.value.json, "iss",
+			json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_ISS,
 					json_string(provider->client_id));
-			json_object_set_new(jwt->payload.value.json, "sub",
+			json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_SUB,
 					json_string(provider->client_id));
-			json_object_set_new(jwt->payload.value.json, "aud",
+			json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_AUD,
 					json_string(provider->token_endpoint_url));
-			json_object_set_new(jwt->payload.value.json, "jti",
+			json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_JTI,
 					json_string(jti));
-			json_object_set_new(jwt->payload.value.json, "exp",
+			json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_EXP,
 					json_integer(apr_time_sec(apr_time_now()) + 60));
-			json_object_set_new(jwt->payload.value.json, "iat",
+			json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_IAT,
 					json_integer(apr_time_sec(apr_time_now())));
 
 			oidc_jwk_t *jwk = NULL;
@@ -1215,7 +1244,7 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 			int jwk_needs_destroy = 0;
 
 			if (apr_strnatcmp(provider->token_endpoint_auth,
-					"client_secret_jwt") == 0) {
+					OIDC_PROTO_CLIENT_SECRET_JWT) == 0) {
 
 				jwk = oidc_jwk_create_symmetric_key(r->pool, NULL,
 						(const unsigned char *) provider->client_secret,
@@ -1256,12 +1285,12 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 				return FALSE;
 			}
 
-			apr_table_addn(params, "client_assertion_type",
-					"urn:ietf:params:oauth:client-assertion-type:jwt-bearer");
+			apr_table_addn(params, OIDC_PROTO_CLIENT_ASSERTION_TYPE,
+					OIDC_PROTO_CLIENT_ASSERTION_TYPE_JWT_BEARER);
 
 			char *cser = oidc_jwt_serialize(r->pool, jwt, &err);
 			if (cser != NULL) {
-				apr_table_addn(params, "client_assertion",
+				apr_table_addn(params, OIDC_PROTO_CLIENT_ASSERTION,
 						apr_pstrdup(r->pool, cser));
 			} else {
 				oidc_error(r, "oidc_jwt_serialize failed: %s",
@@ -1274,13 +1303,14 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 			oidc_jwt_destroy(jwt);
 
 		} else {
-			apr_table_addn(params, "client_id", provider->client_id);
-			apr_table_addn(params, "client_secret", provider->client_secret);
+			apr_table_addn(params, OIDC_PROTO_CLIENT_ID, provider->client_id);
+			apr_table_addn(params, OIDC_PROTO_CLIENT_SECRET,
+					provider->client_secret);
 		}
 	} else {
 		oidc_debug(r,
 				"no client secret is configured; calling the token endpoint without client authentication; only public clients are supported");
-		apr_table_addn(params, "client_id", provider->client_id);
+		apr_table_addn(params, OIDC_PROTO_CLIENT_ID, provider->client_id);
 	}
 
 	/* add any configured extra static parameters to the token endpoint */
@@ -1305,14 +1335,17 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 		return FALSE;
 
 	/* get the id_token from the parsed response */
-	oidc_json_object_get_string(r->pool, result, "id_token", id_token, NULL);
+	oidc_json_object_get_string(r->pool, result, OIDC_PROTO_ID_TOKEN, id_token,
+			NULL);
 
 	/* get the access_token from the parsed response */
-	oidc_json_object_get_string(r->pool, result, "access_token", access_token,
+	oidc_json_object_get_string(r->pool, result, OIDC_PROTO_ACCESS_TOKEN,
+			access_token,
 			NULL);
 
 	/* get the token type from the parsed response */
-	oidc_json_object_get_string(r->pool, result, "token_type", token_type,
+	oidc_json_object_get_string(r->pool, result, OIDC_PROTO_TOKEN_TYPE,
+			token_type,
 			NULL);
 
 	/* check the new token type */
@@ -1324,10 +1357,12 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 	}
 
 	/* get the expires_in value */
-	oidc_json_object_get_int(r->pool, result, "expires_in", expires_in, -1);
+	oidc_json_object_get_int(r->pool, result, OIDC_PROTO_EXPIRES_IN, expires_in,
+			-1);
 
 	/* get the refresh_token from the parsed response */
-	oidc_json_object_get_string(r->pool, result, "refresh_token", refresh_token,
+	oidc_json_object_get_string(r->pool, result, OIDC_PROTO_REFRESH_TOKEN,
+			refresh_token,
 			NULL);
 
 	json_decref(result);
@@ -1347,15 +1382,16 @@ static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 
 	/* assemble the parameters for a call to the token endpoint */
 	apr_table_t *params = apr_table_make(r->pool, 5);
-	apr_table_addn(params, "grant_type", "authorization_code");
-	apr_table_addn(params, "code", code);
-	apr_table_addn(params, "redirect_uri", cfg->redirect_uri);
+	apr_table_addn(params, OIDC_PROTO_GRANT_TYPE,
+			OIDC_PROTO_GRANT_TYPE_AUTHZ_CODE);
+	apr_table_addn(params, OIDC_PROTO_CODE, code);
+	apr_table_addn(params, OIDC_PROTO_REDIRECT_URI, cfg->redirect_uri);
 
 	if (code_verifier)
-		apr_table_addn(params, "code_verifier", code_verifier);
+		apr_table_addn(params, OIDC_PROTO_CODE_VERIFIER, code_verifier);
 
 	if (state)
-		apr_table_addn(params, "state", state);
+		apr_table_addn(params, OIDC_PROTO_STATE, state);
 
 	return oidc_proto_token_endpoint_request(r, cfg, provider, params, id_token,
 			access_token, token_type, expires_in, refresh_token);
@@ -1373,9 +1409,10 @@ apr_byte_t oidc_proto_refresh_request(request_rec *r, oidc_cfg *cfg,
 
 	/* assemble the parameters for a call to the token endpoint */
 	apr_table_t *params = apr_table_make(r->pool, 5);
-	apr_table_addn(params, "grant_type", "refresh_token");
-	apr_table_addn(params, "refresh_token", rtoken);
-	apr_table_addn(params, "scope", provider->scope);
+	apr_table_addn(params, OIDC_PROTO_GRANT_TYPE,
+			OIDC_PROTO_GRANT_TYPE_REFRESH_TOKEN);
+	apr_table_addn(params, OIDC_PROTO_REFRESH_TOKEN, rtoken);
+	apr_table_addn(params, OIDC_PROTO_SCOPE, provider->scope);
 
 	return oidc_proto_token_endpoint_request(r, cfg, provider, params, id_token,
 			access_token, token_type, expires_in, refresh_token);
@@ -1475,7 +1512,7 @@ apr_byte_t oidc_user_info_response_validate(request_rec *r, oidc_cfg *cfg,
 #define OIDC_COMPOSITE_CLAIM_NAMES        "_claim_names"
 #define OIDC_COMPOSITE_CLAIM_SOURCES      "_claim_sources"
 #define OIDC_COMPOSITE_CLAIM_JWT          "JWT"
-#define OIDC_COMPOSITE_CLAIM_ACCESS_TOKEN "access_token"
+#define OIDC_COMPOSITE_CLAIM_ACCESS_TOKEN OIDC_PROTO_ACCESS_TOKEN
 #define OIDC_COMPOSITE_CLAIM_ENDPOINT     "endpoint"
 
 static apr_byte_t oidc_proto_resolve_composite_claims(request_rec *r,
@@ -1592,7 +1629,7 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 	} else if (provider->userinfo_token_method
 			== OIDC_USER_INFO_TOKEN_METHOD_POST) {
 		apr_table_t *params = apr_table_make(r->pool, 4);
-		apr_table_addn(params, "access_token", access_token);
+		apr_table_addn(params, OIDC_PROTO_ACCESS_TOKEN, access_token);
 		if (oidc_util_http_post_form(r, provider->userinfo_endpoint_url, params,
 				NULL, access_token, provider->ssl_validate_server, response,
 				cfg->http_timeout_long, cfg->outgoing_proxy,
@@ -1616,7 +1653,8 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 	}
 
 	char *user_info_sub = NULL;
-	oidc_jose_get_string(r->pool, claims, "sub", FALSE, &user_info_sub, NULL);
+	oidc_jose_get_string(r->pool, claims, OIDC_CLAIM_SUB, FALSE, &user_info_sub,
+			NULL);
 
 	oidc_debug(r, "id_token_sub=%s, user_info_sub=%s", id_token_sub,
 			user_info_sub);
@@ -1624,8 +1662,8 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 	if ((id_token_sub != NULL) && (user_info_sub != NULL)) {
 		if (apr_strnatcmp(id_token_sub, user_info_sub) != 0) {
 			oidc_error(r,
-					"\"sub\" claim (\"%s\") returned from userinfo endpoint does not match the one in the id_token (\"%s\")",
-					user_info_sub, id_token_sub);
+					"\"%s\" claim (\"%s\") returned from userinfo endpoint does not match the one in the id_token (\"%s\")",
+					OIDC_CLAIM_SUB, user_info_sub, id_token_sub);
 			json_decref(claims);
 			return FALSE;
 		}
@@ -1774,7 +1812,7 @@ int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg *c) {
 			"    <p>Submitting...</p>\n"
 			"    <form method=\"post\" action=\"\">\n"
 			"      <p>\n"
-			"        <input type=\"hidden\" name=\"response_mode\" value=\"fragment\">\n"
+			"        <input type=\"hidden\" name=\"" OIDC_PROTO_RESPONSE_MODE "\" value=\"" OIDC_PROTO_RESPONSE_MODE_FRAGMENT "\">\n"
 			"      </p>\n"
 			"    </form>\n";
 
@@ -1876,11 +1914,14 @@ apr_byte_t oidc_proto_validate_code(request_rec *r, oidc_provider_t *provider,
 		oidc_jwt_t *jwt, const char *response_type, const char *code) {
 	apr_array_header_t *required_for_flows = apr_array_make(r->pool, 2,
 			sizeof(const char*));
-	*(const char**) apr_array_push(required_for_flows) = "code id_token";
-	*(const char**) apr_array_push(required_for_flows) = "code id_token token";
+	*(const char**) apr_array_push(required_for_flows) =
+			OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN;
+	*(const char**) apr_array_push(required_for_flows) =
+			OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN_TOKEN;
 	if (oidc_proto_validate_hash_value(r, provider, jwt, response_type, code,
-			"c_hash", required_for_flows) == FALSE) {
-		oidc_error(r, "could not validate code against c_hash");
+			OIDC_CLAIM_C_HASH, required_for_flows) == FALSE) {
+		oidc_error(r, "could not validate code against \"%s\" claim value",
+				OIDC_CLAIM_C_HASH);
 		return FALSE;
 	}
 	return TRUE;
@@ -1894,11 +1935,15 @@ apr_byte_t oidc_proto_validate_access_token(request_rec *r,
 		const char *access_token) {
 	apr_array_header_t *required_for_flows = apr_array_make(r->pool, 2,
 			sizeof(const char*));
-	*(const char**) apr_array_push(required_for_flows) = "id_token token";
-	*(const char**) apr_array_push(required_for_flows) = "code id_token token";
+	*(const char**) apr_array_push(required_for_flows) =
+			OIDC_PROTO_RESPONSE_TYPE_IDTOKEN_TOKEN;
+	*(const char**) apr_array_push(required_for_flows) =
+			OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN_TOKEN;
 	if (oidc_proto_validate_hash_value(r, provider, jwt, response_type,
-			access_token, "at_hash", required_for_flows) == FALSE) {
-		oidc_error(r, "could not validate access token against at_hash");
+			access_token, OIDC_CLAIM_AT_HASH, required_for_flows) == FALSE) {
+		oidc_error(r,
+				"could not validate access token against \"%s\" claim value",
+				OIDC_CLAIM_AT_HASH);
 		return FALSE;
 	}
 	return TRUE;
@@ -1909,12 +1954,16 @@ apr_byte_t oidc_proto_validate_access_token(request_rec *r,
  */
 apr_array_header_t *oidc_proto_supported_flows(apr_pool_t *pool) {
 	apr_array_header_t *result = apr_array_make(pool, 6, sizeof(const char*));
-	*(const char**) apr_array_push(result) = "code";
-	*(const char**) apr_array_push(result) = "id_token";
-	*(const char**) apr_array_push(result) = "id_token token";
-	*(const char**) apr_array_push(result) = "code id_token";
-	*(const char**) apr_array_push(result) = "code token";
-	*(const char**) apr_array_push(result) = "code id_token token";
+	*(const char**) apr_array_push(result) = OIDC_PROTO_RESPONSE_TYPE_CODE;
+	*(const char**) apr_array_push(result) = OIDC_PROTO_RESPONSE_TYPE_IDTOKEN;
+	*(const char**) apr_array_push(result) =
+			OIDC_PROTO_RESPONSE_TYPE_IDTOKEN_TOKEN;
+	*(const char**) apr_array_push(result) =
+			OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN;
+	*(const char**) apr_array_push(result) =
+			OIDC_PROTO_RESPONSE_TYPE_CODE_TOKEN;
+	*(const char**) apr_array_push(result) =
+			OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN_TOKEN;
 	return result;
 }
 
@@ -1944,48 +1993,50 @@ static apr_byte_t oidc_proto_validate_code_response(request_rec *r,
 	/*
 	 * check id_token parameter
 	 */
-	if (!oidc_util_spaced_string_contains(r->pool, response_type, "id_token")) {
+	if (!oidc_util_spaced_string_contains(r->pool, response_type,
+			OIDC_PROTO_RESPONSE_TYPE_IDTOKEN)) {
 		if (id_token == NULL) {
 			oidc_error(r,
-					"requested flow is \"%s\" but no \"id_token\" parameter found in the code response",
-					response_type);
+					"requested flow is \"%s\" but no \"%s\" parameter found in the code response",
+					response_type, OIDC_PROTO_ID_TOKEN);
 			return FALSE;
 		}
 	} else {
 		if (id_token != NULL) {
 			oidc_warn(r,
-					"requested flow is \"%s\" but there is an \"id_token\" parameter in the code response that will be dropped",
-					response_type);
+					"requested flow is \"%s\" but there is an \"%s\" parameter in the code response that will be dropped",
+					response_type, OIDC_PROTO_ID_TOKEN);
 		}
 	}
 
 	/*
 	 * check access_token parameter
 	 */
-	if (!oidc_util_spaced_string_contains(r->pool, response_type, "token")) {
+	if (!oidc_util_spaced_string_contains(r->pool, response_type,
+			OIDC_PROTO_RESPONSE_TYPE_TOKEN)) {
 		if (access_token == NULL) {
 			oidc_error(r,
-					"requested flow is \"%s\" but no \"access_token\" parameter found in the code response",
-					response_type);
+					"requested flow is \"%s\" but no \"%s\" parameter found in the code response",
+					response_type, OIDC_PROTO_ACCESS_TOKEN);
 			return FALSE;
 		}
 		if (token_type == NULL) {
 			oidc_error(r,
-					"requested flow is \"%s\" but no \"token_type\" parameter found in the code response",
-					response_type);
+					"requested flow is \"%s\" but no \"%s\" parameter found in the code response",
+					response_type, OIDC_PROTO_TOKEN_TYPE);
 			return FALSE;
 		}
 	} else {
 		if (access_token != NULL) {
 			oidc_warn(r,
-					"requested flow is \"%s\" but there is an \"access_token\" parameter in the code response that will be dropped",
-					response_type);
+					"requested flow is \"%s\" but there is an \"%s\" parameter in the code response that will be dropped",
+					response_type, OIDC_PROTO_ACCESS_TOKEN);
 		}
 
 		if (token_type != NULL) {
 			oidc_warn(r,
-					"requested flow is \"%s\" but there is a \"token_type\" parameter in the code response that will be dropped",
-					response_type);
+					"requested flow is \"%s\" but there is a \"%s\" parameter in the code response that will be dropped",
+					response_type, OIDC_PROTO_TOKEN_TYPE);
 		}
 	}
 
@@ -2000,47 +2051,47 @@ static apr_byte_t oidc_proto_validate_response_type(request_rec *r,
 		const char *id_token, const char *access_token) {
 
 	if (oidc_util_spaced_string_contains(r->pool, requested_response_type,
-			"code")) {
+			OIDC_PROTO_RESPONSE_TYPE_CODE)) {
 		if (code == NULL) {
 			oidc_error(r,
-					"the requested response type was (%s) but the response does not contain a \"code\" parameter",
-					requested_response_type);
+					"the requested response type was (%s) but the response does not contain a \"%s\" parameter",
+					requested_response_type, OIDC_PROTO_CODE);
 			return FALSE;
 		}
 	} else if (code != NULL) {
 		oidc_error(r,
-				"the requested response type was (%s) but the response contains a \"code\" parameter",
-				requested_response_type);
+				"the requested response type was (%s) but the response contains a \"%s\" parameter",
+				requested_response_type, OIDC_PROTO_CODE);
 		return FALSE;
 	}
 
 	if (oidc_util_spaced_string_contains(r->pool, requested_response_type,
-			"id_token")) {
+			OIDC_PROTO_RESPONSE_TYPE_IDTOKEN)) {
 		if (id_token == NULL) {
 			oidc_error(r,
-					"the requested response type was (%s) but the response does not contain an \"id_token\" parameter",
-					requested_response_type);
+					"the requested response type was (%s) but the response does not contain an \"%s\" parameter",
+					requested_response_type, OIDC_PROTO_ID_TOKEN);
 			return FALSE;
 		}
 	} else if (id_token != NULL) {
 		oidc_error(r,
-				"the requested response type was (%s) but the response contains an \"id_token\" parameter",
-				requested_response_type);
+				"the requested response type was (%s) but the response contains an \"%s\" parameter",
+				requested_response_type, OIDC_PROTO_ID_TOKEN);
 		return FALSE;
 	}
 
 	if (oidc_util_spaced_string_contains(r->pool, requested_response_type,
-			"token")) {
+			OIDC_PROTO_RESPONSE_TYPE_TOKEN)) {
 		if (access_token == NULL) {
 			oidc_error(r,
-					"the requested response type was (%s) but the response does not contain an \"access_token\" parameter",
-					requested_response_type);
+					"the requested response type was (%s) but the response does not contain an \"%s\" parameter",
+					requested_response_type, OIDC_PROTO_ACCESS_TOKEN);
 			return FALSE;
 		}
 	} else if (access_token != NULL) {
 		oidc_error(r,
-				"the requested response type was (%s) but the response contains an \"access_token\" parameter",
-				requested_response_type);
+				"the requested response type was (%s) but the response contains an \"%s\" parameter",
+				requested_response_type, OIDC_PROTO_ACCESS_TOKEN);
 		return FALSE;
 	}
 
@@ -2055,9 +2106,9 @@ static apr_byte_t oidc_proto_validate_response_mode(request_rec *r,
 		const char *default_response_mode) {
 
 	const char *requested_response_mode =
-			json_object_get(proto_state, "response_mode") ?
-					json_string_value(
-							json_object_get(proto_state, "response_mode")) :
+			json_object_get(proto_state, OIDC_PROTO_STATE_RESPONSE_MODE) ?
+					json_string_value(json_object_get(proto_state,
+							OIDC_PROTO_STATE_RESPONSE_MODE)) :
 							default_response_mode;
 
 	if (apr_strnatcmp(requested_response_mode, response_mode) != 0) {
@@ -2111,11 +2162,11 @@ static apr_byte_t oidc_proto_validate_response_type_mode_issuer(request_rec *r,
 		const char *default_response_mode, const char *issuer,
 		const char *c_client_id) {
 
-	const char *code = apr_table_get(params, "code");
-	const char *id_token = apr_table_get(params, "id_token");
-	const char *access_token = apr_table_get(params, "access_token");
-	const char *iss = apr_table_get(params, "iss");
-	const char *client_id = apr_table_get(params, "client_id");
+	const char *code = apr_table_get(params, OIDC_PROTO_CODE);
+	const char *id_token = apr_table_get(params, OIDC_PROTO_ID_TOKEN);
+	const char *access_token = apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN);
+	const char *iss = apr_table_get(params, OIDC_PROTO_ISS);
+	const char *client_id = apr_table_get(params, OIDC_PROTO_CLIENT_ID);
 
 	if (oidc_proto_validate_issuer_client_id(r, issuer, iss, c_client_id,
 			client_id) == FALSE)
@@ -2140,15 +2191,15 @@ static apr_byte_t oidc_proto_parse_idtoken_and_validate_code(request_rec *r,
 		const char *response_type, apr_table_t *params, oidc_jwt_t **jwt,
 		apr_byte_t must_validate_code) {
 
-	const char *code = apr_table_get(params, "code");
-	const char *id_token = apr_table_get(params, "id_token");
+	const char *code = apr_table_get(params, OIDC_PROTO_CODE);
+	const char *id_token = apr_table_get(params, OIDC_PROTO_ID_TOKEN);
 
 	apr_byte_t is_code_flow = (oidc_util_spaced_string_contains(r->pool,
-			response_type, "code") == TRUE)
+			response_type, OIDC_PROTO_RESPONSE_TYPE_CODE) == TRUE)
 					&& (oidc_util_spaced_string_contains(r->pool, response_type,
-							"id_token") == FALSE);
+							OIDC_PROTO_RESPONSE_TYPE_IDTOKEN) == FALSE);
 
-	json_t *nonce = json_object_get(proto_state, "nonce");
+	json_t *nonce = json_object_get(proto_state, OIDC_PROTO_STATE_NONCE);
 
 	if (oidc_proto_parse_idtoken(r, c, provider, id_token,
 			nonce ? json_string_value(nonce) : NULL, jwt, is_code_flow) == FALSE)
@@ -2176,19 +2227,21 @@ static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r,
 	char *refresh_token = NULL;
 
 	const char *code_verifier =
-			json_object_get(proto_state, "code_verifier") ?
-					json_string_value(
-							json_object_get(proto_state, "code_verifier")) :
+			json_object_get(proto_state, OIDC_PROTO_CODE_VERIFIER) ?
+					json_string_value(json_object_get(proto_state,
+							OIDC_PROTO_CODE_VERIFIER)) :
 							NULL;
 
 	const char *state =
-			json_object_get(proto_state, "state") ?
-					json_string_value(json_object_get(proto_state, "state")) :
-					NULL;
+			json_object_get(proto_state, OIDC_PROTO_STATE) ?
+					json_string_value(
+							json_object_get(proto_state, OIDC_PROTO_STATE)) :
+							NULL;
 
-	if (oidc_proto_resolve_code(r, c, provider, apr_table_get(params, "code"),
-			code_verifier, &id_token, &access_token, &token_type, &expires_in,
-			&refresh_token, state) == FALSE) {
+	if (oidc_proto_resolve_code(r, c, provider,
+			apr_table_get(params, OIDC_PROTO_CODE), code_verifier, &id_token,
+			&access_token, &token_type, &expires_in, &refresh_token,
+			state) == FALSE) {
 		oidc_error(r, "failed to resolve the code");
 		return FALSE;
 	}
@@ -2200,23 +2253,24 @@ static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r,
 	}
 
 	/* don't override parameters that may already have been (rightfully) set in the authorization response */
-	if ((apr_table_get(params, "id_token") == NULL) && (id_token != NULL)) {
-		apr_table_set(params, "id_token", id_token);
+	if ((apr_table_get(params, OIDC_PROTO_ID_TOKEN) == NULL)
+			&& (id_token != NULL)) {
+		apr_table_set(params, OIDC_PROTO_ID_TOKEN, id_token);
 	}
 
-	if ((apr_table_get(params, "access_token") == NULL)
+	if ((apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN) == NULL)
 			&& (access_token != NULL)) {
-		apr_table_set(params, "access_token", access_token);
+		apr_table_set(params, OIDC_PROTO_ACCESS_TOKEN, access_token);
 		if (token_type != NULL)
-			apr_table_set(params, "token_type", token_type);
+			apr_table_set(params, OIDC_PROTO_TOKEN_TYPE, token_type);
 		if (expires_in != -1)
-			apr_table_set(params, "expires_in",
+			apr_table_set(params, OIDC_PROTO_EXPIRES_IN,
 					apr_psprintf(r->pool, "%d", expires_in));
 	}
 
 	/* refresh token should not have been set before */
 	if (refresh_token != NULL) {
-		apr_table_set(params, "refresh_token", refresh_token);
+		apr_table_set(params, OIDC_PROTO_REFRESH_TOKEN, refresh_token);
 	}
 
 	return TRUE;
@@ -2231,11 +2285,11 @@ apr_byte_t oidc_proto_authorization_response_code_idtoken(request_rec *r,
 
 	oidc_debug(r, "enter");
 
-	static const char *response_type = "code id_token";
+	static const char *response_type = OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN;
 
 	if (oidc_proto_validate_response_type_mode_issuer(r, response_type, params,
-			proto_state, response_mode, "fragment", provider->issuer,
-			provider->client_id) == FALSE)
+			proto_state, response_mode, OIDC_PROTO_RESPONSE_MODE_FRAGMENT,
+			provider->issuer, provider->client_id) == FALSE)
 		return FALSE;
 
 	if (oidc_proto_parse_idtoken_and_validate_code(r, c, proto_state, provider,
@@ -2243,10 +2297,10 @@ apr_byte_t oidc_proto_authorization_response_code_idtoken(request_rec *r,
 		return FALSE;
 
 	/* clear parameters that should only be set from the token endpoint */
-	apr_table_unset(params, "access_token");
-	apr_table_unset(params, "token_type");
-	apr_table_unset(params, "expires_in");
-	apr_table_unset(params, "refresh_token");
+	apr_table_unset(params, OIDC_PROTO_ACCESS_TOKEN);
+	apr_table_unset(params, OIDC_PROTO_TOKEN_TYPE);
+	apr_table_unset(params, OIDC_PROTO_EXPIRES_IN);
+	apr_table_unset(params, OIDC_PROTO_REFRESH_TOKEN);
 
 	if (oidc_proto_resolve_code_and_validate_response(r, c, provider,
 			response_type, params, proto_state) == FALSE)
@@ -2264,16 +2318,16 @@ apr_byte_t oidc_proto_handle_authorization_response_code_token(request_rec *r,
 
 	oidc_debug(r, "enter");
 
-	static const char *response_type = "code token";
+	static const char *response_type = OIDC_PROTO_RESPONSE_TYPE_CODE_TOKEN;
 
 	if (oidc_proto_validate_response_type_mode_issuer(r, response_type, params,
-			proto_state, response_mode, "fragment", provider->issuer,
-			provider->client_id) == FALSE)
+			proto_state, response_mode, OIDC_PROTO_RESPONSE_MODE_FRAGMENT,
+			provider->issuer, provider->client_id) == FALSE)
 		return FALSE;
 
 	/* clear parameters that should only be set from the token endpoint */
-	apr_table_unset(params, "id_token");
-	apr_table_unset(params, "refresh_token");
+	apr_table_unset(params, OIDC_PROTO_ID_TOKEN);
+	apr_table_unset(params, OIDC_PROTO_REFRESH_TOKEN);
 
 	if (oidc_proto_resolve_code_and_validate_response(r, c, provider,
 			response_type, params, proto_state) == FALSE)
@@ -2295,19 +2349,19 @@ apr_byte_t oidc_proto_handle_authorization_response_code(request_rec *r,
 
 	oidc_debug(r, "enter");
 
-	static const char *response_type = "code";
+	static const char *response_type = OIDC_PROTO_RESPONSE_TYPE_CODE;
 
 	if (oidc_proto_validate_response_type_mode_issuer(r, response_type, params,
-			proto_state, response_mode, "query", provider->issuer,
-			provider->client_id) == FALSE)
+			proto_state, response_mode, OIDC_PROTO_RESPONSE_MODE_QUERY,
+			provider->issuer, provider->client_id) == FALSE)
 		return FALSE;
 
 	/* clear parameters that should only be set from the token endpoint */
-	apr_table_unset(params, "access_token");
-	apr_table_unset(params, "token_type");
-	apr_table_unset(params, "expires_in");
-	apr_table_unset(params, "id_token");
-	apr_table_unset(params, "refresh_token");
+	apr_table_unset(params, OIDC_PROTO_ACCESS_TOKEN);
+	apr_table_unset(params, OIDC_PROTO_TOKEN_TYPE);
+	apr_table_unset(params, OIDC_PROTO_EXPIRES_IN);
+	apr_table_unset(params, OIDC_PROTO_ID_TOKEN);
+	apr_table_unset(params, OIDC_PROTO_REFRESH_TOKEN);
 
 	if (oidc_proto_resolve_code_and_validate_response(r, c, provider,
 			response_type, params, proto_state) == FALSE)
@@ -2323,10 +2377,10 @@ apr_byte_t oidc_proto_handle_authorization_response_code(request_rec *r,
 	/*
 	 * in this flow it is actually optional to check the access token against the at_hash
 	 */
-	if ((apr_table_get(params, "access_token") != NULL)
+	if ((apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN) != NULL)
 			&& (oidc_proto_validate_access_token(r, provider, *jwt,
-					response_type, apr_table_get(params, "access_token"))
-					== FALSE))
+					response_type,
+					apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN)) == FALSE))
 		return FALSE;
 
 	return TRUE;
@@ -2341,8 +2395,8 @@ static apr_byte_t oidc_proto_handle_implicit_flow(request_rec *r, oidc_cfg *c,
 		const char *response_mode, oidc_jwt_t **jwt) {
 
 	if (oidc_proto_validate_response_type_mode_issuer(r, response_type, params,
-			proto_state, response_mode, "fragment", provider->issuer,
-			provider->client_id) == FALSE)
+			proto_state, response_mode, OIDC_PROTO_RESPONSE_MODE_FRAGMENT,
+			provider->issuer, provider->client_id) == FALSE)
 		return FALSE;
 
 	if (oidc_proto_parse_idtoken_and_validate_code(r, c, proto_state, provider,
@@ -2361,18 +2415,19 @@ apr_byte_t oidc_proto_authorization_response_code_idtoken_token(request_rec *r,
 
 	oidc_debug(r, "enter");
 
-	static const char *response_type = "code id_token token";
+	static const char *response_type =
+			OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN_TOKEN;
 
 	if (oidc_proto_handle_implicit_flow(r, c, response_type, proto_state,
 			provider, params, response_mode, jwt) == FALSE)
 		return FALSE;
 
 	if (oidc_proto_validate_access_token(r, provider, *jwt, response_type,
-			apr_table_get(params, "access_token")) == FALSE)
+			apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN)) == FALSE)
 		return FALSE;
 
 	/* clear parameters that should only be set from the token endpoint */
-	apr_table_unset(params, "refresh_token");
+	apr_table_unset(params, OIDC_PROTO_REFRESH_TOKEN);
 
 	if (oidc_proto_resolve_code_and_validate_response(r, c, provider,
 			response_type, params, proto_state) == FALSE)
@@ -2391,18 +2446,18 @@ apr_byte_t oidc_proto_handle_authorization_response_idtoken_token(
 
 	oidc_debug(r, "enter");
 
-	static const char *response_type = "id_token token";
+	static const char *response_type = OIDC_PROTO_RESPONSE_TYPE_IDTOKEN_TOKEN;
 
 	if (oidc_proto_handle_implicit_flow(r, c, response_type, proto_state,
 			provider, params, response_mode, jwt) == FALSE)
 		return FALSE;
 
 	if (oidc_proto_validate_access_token(r, provider, *jwt, response_type,
-			apr_table_get(params, "access_token")) == FALSE)
+			apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN)) == FALSE)
 		return FALSE;
 
 	/* clear parameters that should not be part of this flow */
-	apr_table_unset(params, "refresh_token");
+	apr_table_unset(params, OIDC_PROTO_REFRESH_TOKEN);
 
 	return TRUE;
 }
@@ -2416,16 +2471,16 @@ apr_byte_t oidc_proto_handle_authorization_response_idtoken(request_rec *r,
 
 	oidc_debug(r, "enter");
 
-	static const char *response_type = "id_token";
+	static const char *response_type = OIDC_PROTO_RESPONSE_TYPE_IDTOKEN;
 
 	if (oidc_proto_handle_implicit_flow(r, c, response_type, proto_state,
 			provider, params, response_mode, jwt) == FALSE)
 		return FALSE;
 
 	/* clear parameters that should not be part of this flow */
-	apr_table_unset(params, "token_type");
-	apr_table_unset(params, "expires_in");
-	apr_table_unset(params, "refresh_token");
+	apr_table_unset(params, OIDC_PROTO_TOKEN_TYPE);
+	apr_table_unset(params, OIDC_PROTO_EXPIRES_IN);
+	apr_table_unset(params, OIDC_PROTO_REFRESH_TOKEN);
 
 	return TRUE;
 }

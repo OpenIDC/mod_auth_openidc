@@ -134,8 +134,8 @@ char *oidc_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt,
 
 		char *out = NULL;
 		size_t out_len;
-		if (cjose_base64url_encode((const uint8_t *)s_payload, strlen(s_payload), &out, &out_len,
-				&cjose_err) == FALSE)
+		if (cjose_base64url_encode((const uint8_t *) s_payload,
+				strlen(s_payload), &out, &out_len, &cjose_err) == FALSE)
 			return FALSE;
 		cser = apr_pstrndup(pool, out, out_len);
 		cjose_get_dealloc()(out);
@@ -314,8 +314,7 @@ void oidc_jwk_list_destroy(apr_pool_t *pool, apr_hash_t *keys) {
 	apr_hash_index_t *hi = NULL;
 	if (keys == NULL)
 		return;
-	for (hi = apr_hash_first(pool, keys); hi; hi =
-			apr_hash_next(hi)) {
+	for (hi = apr_hash_first(pool, keys); hi; hi = apr_hash_next(hi)) {
 		oidc_jwk_t *jwk = NULL;
 		apr_hash_this(hi, NULL, NULL, (void **) &jwk);
 		oidc_jwk_destroy(jwk);
@@ -410,7 +409,8 @@ static apr_byte_t oidc_jwk_set_or_generate_kid(apr_pool_t *pool,
  * create an "oct" symmetric JWK
  */
 oidc_jwk_t *oidc_jwk_create_symmetric_key(apr_pool_t *pool, const char *skid,
-		const unsigned char *key, unsigned int key_len, apr_byte_t set_kid, oidc_jose_error_t *err) {
+		const unsigned char *key, unsigned int key_len, apr_byte_t set_kid,
+		oidc_jose_error_t *err) {
 
 	cjose_err cjose_err;
 	cjose_jwk_t *cjose_jwk = cjose_jwk_create_oct_spec(key, key_len,
@@ -679,14 +679,15 @@ static uint8_t *oidc_jwe_decrypt_impl(apr_pool_t *pool, cjose_jwe_t *jwe,
  * decrypt a JSON Web Token
  */
 apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json,
-		apr_hash_t *keys, char **s_json, oidc_jose_error_t *err, apr_byte_t import_must_succeed) {
+		apr_hash_t *keys, char **s_json, oidc_jose_error_t *err,
+		apr_byte_t import_must_succeed) {
 	cjose_err cjose_err;
 	cjose_jwe_t *jwe = cjose_jwe_import(input_json, strlen(input_json),
 			&cjose_err);
 	if (jwe != NULL) {
 		size_t content_len = 0;
-		uint8_t *decrypted = oidc_jwe_decrypt_impl(pool, jwe, keys, &content_len,
-				err);
+		uint8_t *decrypted = oidc_jwe_decrypt_impl(pool, jwe, keys,
+				&content_len, err);
 		if (decrypted != NULL) {
 			decrypted[content_len] = '\0';
 			*s_json = apr_pstrdup(pool, (const char *) decrypted);
@@ -727,7 +728,7 @@ apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json,
 	}
 
 	cjose_header_t *hdr = cjose_jws_get_protected(jwt->cjose_jws);
-	jwt->header.value.json = json_deep_copy((json_t *)hdr);
+	jwt->header.value.json = json_deep_copy((json_t *) hdr);
 	char *str = json_dumps(jwt->header.value.json,
 			JSON_PRESERVE_ORDER | JSON_COMPACT);
 	jwt->header.value.str = apr_pstrdup(pool, str);
@@ -784,7 +785,7 @@ void oidc_jwt_destroy(oidc_jwt_t *jwt) {
 apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk,
 		oidc_jose_error_t *err) {
 
-	cjose_header_t *hdr = (cjose_header_t *)jwt->header.value.json;
+	cjose_header_t *hdr = (cjose_header_t *) jwt->header.value.json;
 
 	if (jwt->header.alg)
 		oidc_jwt_hdr_set(jwt, CJOSE_HDR_ALG, jwt->header.alg);
@@ -829,7 +830,7 @@ void EVP_MD_CTX_free(EVP_MD_CTX *ctx) {
 apr_byte_t oidc_jwt_encrypt(apr_pool_t *pool, oidc_jwt_t *jwe, oidc_jwk_t *jwk,
 		const char *payload, char **serialized, oidc_jose_error_t *err) {
 
-	cjose_header_t *hdr = (cjose_header_t *)jwe->header.value.json;
+	cjose_header_t *hdr = (cjose_header_t *) jwe->header.value.json;
 
 	if (jwe->header.alg)
 		oidc_jwt_hdr_set(jwe, CJOSE_HDR_ALG, jwe->header.alg);

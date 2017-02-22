@@ -1054,7 +1054,8 @@ static apr_byte_t oidc_util_check_json_error(request_rec *r, json_t *json) {
 /*
  * parse a JSON object
  */
-apr_byte_t oidc_util_decode_json_object(request_rec *r, const char *str, json_t **json) {
+apr_byte_t oidc_util_decode_json_object(request_rec *r, const char *str,
+		json_t **json) {
 
 	json_error_t json_error;
 	*json = json_loads(str, 0, &json_error);
@@ -1062,7 +1063,8 @@ apr_byte_t oidc_util_decode_json_object(request_rec *r, const char *str, json_t 
 	/* decode the JSON contents of the buffer */
 	if (*json == NULL) {
 		/* something went wrong */
-		oidc_error(r, "JSON parsing returned an error: %s (%s)", json_error.text, str);
+		oidc_error(r, "JSON parsing returned an error: %s (%s)",
+				json_error.text, str);
 		return FALSE;
 	}
 
@@ -1247,11 +1249,13 @@ apr_byte_t oidc_util_read_form_encoded_params(request_rec *r,
 		key = ap_getword(r->pool, &val, '=');
 		key = oidc_util_unescape_string(r, key);
 		val = oidc_util_unescape_string(r, val);
+		oidc_debug(r, "read: %s=%s", key, val);
 		apr_table_set(table, key, val);
 	}
 
 	oidc_debug(r, "parsed: %lu bytes in to %d elements",
-			data ? (unsigned long )strlen(data) : 0 , apr_table_elts(table)->nelts);
+			data ? (unsigned long )strlen(data) : 0,
+					apr_table_elts(table)->nelts);
 
 	return TRUE;
 }

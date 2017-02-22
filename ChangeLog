@@ -2,6 +2,7 @@ feature
 - add basic session info hook
 - refactor session state calls into getters/setters functions
 - refactor header calls into getters/setters functions
+- refactor strings to constants
 
 02/20/2017
 - security fix: scrub headers for "AuthType oauth20"

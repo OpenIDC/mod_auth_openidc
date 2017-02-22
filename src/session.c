@@ -585,12 +585,14 @@ const char * oidc_session_get_client_id(request_rec *r, oidc_session_t *z) {
  */
 void oidc_session_set_check_session_iframe(request_rec *r, oidc_session_t *z,
 		const char *check_session_iframe) {
-	oidc_session_set(r, z, OIDC_SESSION_KEY_CHECK_SESSION_IFRAME, check_session_iframe);
+	oidc_session_set(r, z, OIDC_SESSION_KEY_CHECK_SESSION_IFRAME,
+			check_session_iframe);
 }
 
 const char * oidc_session_get_check_session_iframe(request_rec *r,
 		oidc_session_t *z) {
-	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_CHECK_SESSION_IFRAME);
+	return oidc_session_get_key2string(r, z,
+			OIDC_SESSION_KEY_CHECK_SESSION_IFRAME);
 }
 
 /*

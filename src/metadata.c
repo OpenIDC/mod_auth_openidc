@@ -188,7 +188,8 @@ static apr_byte_t oidc_metadata_is_valid_uri(request_rec *r, const char *type,
 	}
 
 	if (oidc_valid_http_url(r->pool, s_value) != NULL) {
-		oidc_warn(r, "\"%s\" is not a valid http URL for key \"%s\"", s_value, key);
+		oidc_warn(r, "\"%s\" is not a valid http URL for key \"%s\"", s_value,
+				key);
 		return FALSE;
 	}
 
@@ -421,7 +422,8 @@ static apr_byte_t oidc_metadata_file_write(request_rec *r, const char *path,
 	char s_err[128];
 
 	/* try to open the metadata file for writing, creating it if it does not exist */
-	if ((rc = apr_file_open(&fd, path, (APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE),
+	if ((rc = apr_file_open(&fd, path,
+			(APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE),
 			APR_OS_DEFAULT, r->pool)) != APR_SUCCESS) {
 		oidc_error(r, "file \"%s\" could not be opened (%s)", path,
 				apr_strerror(rc, s_err, sizeof(s_err)));
@@ -547,8 +549,8 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 	/* add any custom JSON in to the registration request */
 	if (provider->registration_endpoint_json != NULL) {
 		json_t *json = NULL;
-		if (oidc_util_decode_json_object(r, provider->registration_endpoint_json,
-				&json) == FALSE)
+		if (oidc_util_decode_json_object(r,
+				provider->registration_endpoint_json, &json) == FALSE)
 			return FALSE;
 		oidc_util_json_merge(json, data);
 		json_decref(json);
@@ -697,10 +699,14 @@ static apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
 	/* see if we are refreshing metadata and we need a refresh */
 	if (cfg->provider_metadata_refresh_interval > 0) {
 
-		have_cache = (apr_stat(&fi, provider_path, APR_FINFO_MTIME, r->pool) == APR_SUCCESS);
+		have_cache = (apr_stat(&fi, provider_path, APR_FINFO_MTIME, r->pool)
+				== APR_SUCCESS);
 
 		if (have_cache == TRUE)
-			use_cache = (apr_time_now() < fi.mtime	+ apr_time_from_sec(cfg->provider_metadata_refresh_interval));
+			use_cache = (apr_time_now()
+					< fi.mtime
+					+ apr_time_from_sec(
+							cfg->provider_metadata_refresh_interval));
 
 		oidc_debug(r, "use_cache: %s", use_cache ? "yes" : "no");
 	}
@@ -739,7 +745,8 @@ static apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
 				have_cache ? "yes" : "no", j_cache);
 
 		/* see if we can use at least the cache that may have expired by now */
-		if ((cfg->provider_metadata_refresh_interval > 0) && (have_cache == TRUE) && (j_cache != NULL)) {
+		if ((cfg->provider_metadata_refresh_interval > 0)
+				&& (have_cache == TRUE) && (j_cache != NULL)) {
 
 			/* reset the file-modified timestamp so it is cached for a while again */
 			apr_file_mtime_set(provider_path, apr_time_now(), r->pool);
