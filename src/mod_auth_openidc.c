@@ -2806,13 +2806,18 @@ static int oidc_handle_remove_at_cache(request_rec *r, oidc_cfg *c) {
 	return DONE;
 }
 
-#define OIDC_HOOK_INFO_REQUEST           "info"
-#define OIDC_HOOK_INFO_FORMAT_JSON       "json"
-#define OIDC_HOOK_INFO_TIMESTAMP         "iat"
-#define OIDC_HOOK_INFO_ACCES_TOKEN       "access_token"
-#define OIDC_HOOK_INFO_ACCES_TOKEN_EXP   "access_token_expires"
-#define OIDC_HOOK_INFO_USER_INFO         "userinfo"
-#define OIDC_HOOK_INFO_CONTENT_TYPE_JSON "application/json"
+#define OIDC_HOOK_INFO_REQUEST             "info"
+#define OIDC_HOOK_INFO_FORMAT_JSON         "json"
+#define OIDC_HOOK_INFO_TIMESTAMP           "iat"
+#define OIDC_HOOK_INFO_ACCES_TOKEN         "access_token"
+#define OIDC_HOOK_INFO_ACCES_TOKEN_EXP     "access_token_expires"
+#define OIDC_HOOK_INFO_USER_INFO           "userinfo"
+#define OIDC_HOOK_INFO_CONTENT_TYPE_JSON   "application/json"
+#define OIDC_HOOK_INFO_SESSION             "session"
+#define OIDC_HOOK_INFO_SESSION_STATE       "state"
+#define OIDC_HOOK_INFO_SESSION_UUID        "uuid"
+#define OIDC_HOOK_INFO_SESSION_EXP         "exp"
+#define OIDC_HOOK_INFO_SESSION_REMOTE_USER "remote_user"
 
 /*
  * handle request for session info
@@ -2870,6 +2875,16 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 	json_t *claims = oidc_session_get_userinfo_claims_json(r, session);
 	if (claims)
 		json_object_set_new(json, OIDC_HOOK_INFO_USER_INFO, claims);
+
+	json_t *j_session = json_object();
+	json_object_set(j_session, OIDC_HOOK_INFO_SESSION_STATE, session->state);
+	json_object_set_new(j_session, OIDC_HOOK_INFO_SESSION_UUID,
+			json_string(session->uuid));
+	json_object_set_new(j_session, OIDC_HOOK_INFO_SESSION_EXP,
+			json_integer(apr_time_sec(session->expiry)));
+	json_object_set_new(j_session, OIDC_HOOK_INFO_SESSION_REMOTE_USER,
+			json_string(session->remote_user));
+	json_object_set_new(json, OIDC_HOOK_INFO_SESSION, j_session);
 
 	/* JSON-encode the result */
 	char *s_value = json_dumps(json, 0);
