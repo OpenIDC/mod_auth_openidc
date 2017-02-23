@@ -1080,6 +1080,16 @@ apr_byte_t oidc_util_decode_json_object(request_rec *r, const char *str,
 }
 
 /*
+ * encode a JSON object
+ */
+char *oidc_util_encode_json_object(request_rec *r, json_t *json, size_t flags) {
+	char *s = json_dumps(json, flags);
+	char *s_value = apr_pstrdup(r->pool, s);
+	free(s);
+	return s_value;
+}
+
+/*
  * decode a JSON string, check for "error" results and printout
  */
 apr_byte_t oidc_util_decode_json_and_check_error(request_rec *r,
@@ -1647,7 +1657,7 @@ apr_byte_t oidc_json_object_get_int(apr_pool_t *pool, json_t *json,
 /*
  * merge two JSON objects
  */
-apr_byte_t oidc_util_json_merge(json_t *src, json_t *dst) {
+apr_byte_t oidc_util_json_merge(request_rec *r, json_t *src, json_t *dst) {
 
 	const char *key;
 	json_t *value = NULL;
@@ -1656,6 +1666,10 @@ apr_byte_t oidc_util_json_merge(json_t *src, json_t *dst) {
 	if ((src == NULL) || (dst == NULL))
 		return FALSE;
 
+	oidc_debug(r, "src=%s, dst=%s",
+			oidc_util_encode_json_object(r, src, JSON_COMPACT),
+			oidc_util_encode_json_object(r, dst, JSON_COMPACT));
+
 	iter = json_object_iter(src);
 	while (iter) {
 		key = json_object_iter_key(iter);
@@ -1663,6 +1677,9 @@ apr_byte_t oidc_util_json_merge(json_t *src, json_t *dst) {
 		json_object_set(dst, key, value);
 		iter = json_object_iter_next(src, iter);
 	}
+
+	oidc_debug(r, "result dst=%s",
+			oidc_util_encode_json_object(r, dst, JSON_COMPACT));
 
 	return TRUE;
 }

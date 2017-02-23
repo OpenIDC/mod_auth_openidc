@@ -239,7 +239,7 @@ char *oidc_proto_create_request_uri(request_rec *r,
 			json_string(provider->issuer));
 
 	/* add static values to the request object as configured in the .conf file; may override iss/aud */
-	oidc_util_json_merge(json_object_get(request_object_config, "static"),
+	oidc_util_json_merge(r, json_object_get(request_object_config, "static"),
 			request_object->payload.value.json);
 
 	/* copy parameters from the authorization request as configured in the .conf file */
@@ -1576,7 +1576,7 @@ static apr_byte_t oidc_proto_resolve_composite_claims(request_rec *r,
 						v = json_object();
 						json_object_set_new(decoded, key, v);
 					}
-					oidc_util_json_merge(jwt->payload.value.json, v);
+					oidc_util_json_merge(r, jwt->payload.value.json, v);
 				}
 				oidc_jwt_destroy(jwt);
 			}

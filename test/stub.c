@@ -73,6 +73,11 @@ AP_DECLARE(void) ap_hook_child_init(
 		const char * const *aszPre, const char * const *aszSucc, int nOrder) {
 }
 
+AP_DECLARE(void) ap_hook_handler(
+	int (*handler)(request_rec *r),
+	const char * const *aszPre, const char * const *aszSucc, int nOrder) {
+}
+
 AP_DECLARE(int) ap_is_initial_req(request_rec *r) {
 	return 0;
 }

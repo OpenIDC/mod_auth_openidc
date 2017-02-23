@@ -345,6 +345,8 @@ typedef struct oidc_cfg {
 
 	int provider_metadata_refresh_interval;
 
+	apr_hash_t *info_hook_data;
+
 } oidc_cfg;
 
 int oidc_check_user_id(request_rec *r);
@@ -358,6 +360,7 @@ const char*oidc_request_state_get(request_rec *r, const char *key);
 int oidc_handle_jwks(request_rec *r, oidc_cfg *c);
 apr_byte_t oidc_post_preserve_javascript(request_rec *r, const char *location, char **javascript, char **javascript_method);
 void oidc_scrub_headers(request_rec *r);
+int oidc_content_handler(request_rec *r);
 
 // oidc_oauth
 int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c);
@@ -445,6 +448,21 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c);
 #define OIDC_PROTO_STATE_TIMESTAMP       "ts"
 #define OIDC_PROTO_STATE_PROMPT          "p"
 
+#define OIDC_HOOK_INFO_REQUEST             "info"
+#define OIDC_HOOK_INFO_FORMAT_JSON         "json"
+#define OIDC_HOOK_INFO_TIMESTAMP           "iat"
+#define OIDC_HOOK_INFO_ACCES_TOKEN         "access_token"
+#define OIDC_HOOK_INFO_ACCES_TOKEN_EXP     "access_token_expires"
+#define OIDC_HOOK_INFO_ID_TOKEN            "id_token"
+#define OIDC_HOOK_INFO_USER_INFO           "userinfo"
+#define OIDC_HOOK_INFO_CONTENT_TYPE_JSON   "application/json"
+#define OIDC_HOOK_INFO_SESSION             "session"
+#define OIDC_HOOK_INFO_SESSION_STATE       "state"
+#define OIDC_HOOK_INFO_SESSION_UUID        "uuid"
+#define OIDC_HOOK_INFO_SESSION_EXP         "exp"
+#define OIDC_HOOK_INFO_SESSION_REMOTE_USER "remote_user"
+#define OIDC_HOOK_INFO_REFRESH_TOKEN       "refresh_token"
+
 char *oidc_proto_peek_jwt_header(request_rec *r, const char *jwt, char **alg);
 int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *login_hint, const char *redirect_uri, const char *state, json_t *proto_state, const char *id_token_hint, const char *code_challenge, const char *auth_request_params);
 apr_byte_t oidc_proto_is_post_authorization_response(request_rec *r, oidc_cfg *cfg);
@@ -521,6 +539,7 @@ apr_byte_t oidc_util_http_post_json(request_rec *r, const char *url, const json_
 apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url);
 apr_byte_t oidc_util_request_has_parameter(request_rec *r, const char* param);
 apr_byte_t oidc_util_get_request_parameter(request_rec *r, char *name, char **value);
+char *oidc_util_encode_json_object(request_rec *r, json_t *json, size_t flags);
 apr_byte_t oidc_util_decode_json_object(request_rec *r, const char *str, json_t **json);
 apr_byte_t oidc_util_decode_json_and_check_error(request_rec *r, const char *str, json_t **json);
 int oidc_util_http_send(request_rec *r, const char *data, int data_len, const char *content_type, int success_rvalue);
@@ -544,7 +563,7 @@ char *oidc_util_html_escape(apr_pool_t *pool, const char *input);
 void oidc_util_table_add_query_encoded_params(apr_pool_t *pool, apr_table_t *table, const char *params);
 apr_hash_t * oidc_util_merge_key_sets(apr_pool_t *pool, apr_hash_t *k1, apr_hash_t *k2);
 apr_byte_t oidc_util_regexp_first_match(apr_pool_t *pool, const char *input, const char *regexp, char **output, char **error_str);
-apr_byte_t oidc_util_json_merge(json_t *src, json_t *dst);
+apr_byte_t oidc_util_json_merge(request_rec *r, json_t *src, json_t *dst);
 int oidc_util_cookie_domain_valid(const char *hostname, char *cookie_domain);
 apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char *openssl_hash_algo, const char *input, char **output);
 apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret, json_t *payload, char **compact_encoded_jwt);
@@ -633,6 +652,8 @@ void oidc_session_set_cookie_domain(request_rec *r, oidc_session_t *z, const cha
 const char * oidc_session_get_cookie_domain(request_rec *r, oidc_session_t *z);
 void oidc_session_reset_userinfo_last_refresh(request_rec *r, oidc_session_t *z);
 apr_time_t oidc_session_get_userinfo_last_refresh(request_rec *r, oidc_session_t *z);
+void oidc_session_reset_access_token_last_refresh(request_rec *r, oidc_session_t *z);
+apr_time_t oidc_session_get_access_token_last_refresh(request_rec *r, oidc_session_t *z);
 void oidc_session_set_request_state(request_rec *r, oidc_session_t *z, const char *request_state);
 const char * oidc_session_get_request_state(request_rec *r, oidc_session_t *z);
 void oidc_session_set_original_url(request_rec *r, oidc_session_t *z, const char *original_url);

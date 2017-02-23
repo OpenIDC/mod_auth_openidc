@@ -726,6 +726,18 @@ static const char *oidc_set_userinfo_refresh_interval(cmd_parms *cmd,
 }
 
 /*
+ * define which data will be returned from the info hook
+ */
+static const char * oidc_set_info_hook_data(cmd_parms *cmd, void *m,
+		const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+	const char *rv = oidc_parse_info_hook_data(cmd->pool, arg,
+			&cfg->info_hook_data);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
+/*
  * create a new server config record with defaults
  */
 void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
@@ -849,6 +861,8 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 
 	c->provider_metadata_refresh_interval =
 			OIDC_DEFAULT_PROVIDER_METADATA_REFRESH_INTERVAL;
+
+	c->info_hook_data = NULL;
 
 	return c;
 }
@@ -1226,6 +1240,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			!= OIDC_DEFAULT_PROVIDER_METADATA_REFRESH_INTERVAL ?
 					add->provider_metadata_refresh_interval :
 					base->provider_metadata_refresh_interval;
+
+	c->info_hook_data =
+			add->info_hook_data != NULL ?
+					add->info_hook_data : base->info_hook_data;
 
 	return c;
 }
@@ -1795,6 +1813,7 @@ static int oidc_auth_fixups(request_rec *r) {
 void oidc_register_hooks(apr_pool_t *pool) {
 	ap_hook_post_config(oidc_post_config, NULL, NULL, APR_HOOK_LAST);
 	ap_hook_child_init(oidc_child_init, NULL, NULL, APR_HOOK_MIDDLE);
+    ap_hook_handler(oidc_content_handler, NULL, NULL, APR_HOOK_MIDDLE);
 	ap_hook_fixups(oidc_auth_fixups, NULL, NULL, APR_HOOK_MIDDLE);
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	ap_hook_check_authn(oidc_check_user_id, NULL, NULL, APR_HOOK_MIDDLE,
@@ -2269,5 +2288,10 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, provider_metadata_refresh_interval),
 				RSRC_CONF,
 				"Provider metadata refresh interval in seconds."),
+		AP_INIT_ITERATE("OIDCInfoHook",
+				oidc_set_info_hook_data,
+				(void *)APR_OFFSETOF(oidc_cfg, info_hook_data),
+				RSRC_CONF,
+				"The data that will be returned from the info hook."),
 		{ NULL }
 };

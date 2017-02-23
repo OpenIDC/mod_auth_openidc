@@ -1017,3 +1017,27 @@ const char *oidc_parse_userinfo_token_method(apr_pool_t *pool, const char *arg,
 
 	return NULL;
 }
+
+/*
+ * parse an "info hook data" value from the provided string
+ */
+const char *oidc_parse_info_hook_data(apr_pool_t *pool, const char *arg,
+		apr_hash_t **hook_data) {
+	static char *options[] = {
+			OIDC_HOOK_INFO_TIMESTAMP,
+			OIDC_HOOK_INFO_ACCES_TOKEN,
+			OIDC_HOOK_INFO_ACCES_TOKEN_EXP,
+			OIDC_HOOK_INFO_ID_TOKEN,
+			OIDC_HOOK_INFO_USER_INFO,
+			OIDC_HOOK_INFO_REFRESH_TOKEN,
+			OIDC_HOOK_INFO_SESSION,
+			NULL };
+	const char *rv = oidc_valid_string_option(pool, arg, options);
+	if (rv != NULL)
+		return rv;
+	if (*hook_data == NULL)
+		*hook_data = apr_hash_make(pool);
+	apr_hash_set(*hook_data, arg, APR_HASH_KEY_STRING, arg);
+
+	return NULL;
+}

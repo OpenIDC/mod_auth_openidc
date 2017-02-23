@@ -306,7 +306,7 @@ function send_authentication_response() {
 	local RESPONSE_MODE=$3
 	
 	message ${TEST_ID} "return authentication response to RP" "-n"
-	if [ -z "${RESPONSE_MODE}" ] ; then
+	if [ -z "${RESPONSE_MODE}" ] || [ "${RESPONSE_MODE}" == query ] ; then
 		RESULT=`echo ${FLAGS} -i | xargs curl "${RESPONSE}"`
 	else
 		RESULT=`echo ${FLAGS} -i | xargs curl -d "${RESPONSE}&response_mode=${RESPONSE_MODE}" ${REDIRECT_URI}`
@@ -621,12 +621,12 @@ function rp_request_uri_enc() {
 
 	# test a regular flow up until successful authenticated application access
 	regular_flow "${TEST_ID}"
-	
+
 	# check we created a request object that was encrypted 
-	find_in_logfile "${TEST_ID}" "check encrypted request object" 150 "oidc_proto_create_request_uri: serialized request object JWT header" "\"alg\": \"A128KW\""
+	find_in_logfile "${TEST_ID}" "check encrypted request object" 200 "oidc_proto_create_request_uri: serialized request object JWT header" "\"alg\": \"A128KW\""
 
 	# check we sent request URI in the authorization request
-	find_in_logfile "${TEST_ID}" "check request URI" 150 "oidc_util_hdr_table_set: Location:" "&request_uri="
+	find_in_logfile "${TEST_ID}" "check request URI" 200 "oidc_util_hdr_table_set: Location:" "&request_uri="
 
 	# TODO: check resolving of request URI if on the same server
 }
@@ -642,10 +642,10 @@ function rp_request_uri_sig_enc() {
 	regular_flow "${TEST_ID}"	
 
 	# check we created a request object that was encrypted 
-	find_in_logfile "${TEST_ID}" "check encrypted request object" 150 "oidc_proto_create_request_uri: serialized request object JWT header" "\"alg\": \"RSA1_5\""
+	find_in_logfile "${TEST_ID}" "check encrypted request object" 200 "oidc_proto_create_request_uri: serialized request object JWT header" "\"alg\": \"RSA1_5\""
 
 	# check we sent request URI in the authorization request
-	find_in_logfile "${TEST_ID}" "check request URI" 150 "oidc_util_hdr_table_set: Location:" "&request_uri="
+	find_in_logfile "${TEST_ID}" "check request URI" 200 "oidc_util_hdr_table_set: Location:" "&request_uri="
 				
 	# TODO: check resolving of request URI if on the same server
 }
@@ -661,10 +661,10 @@ function rp_request_uri_unsigned() {
 	regular_flow "${TEST_ID}"	
 
 	# check we created a request object that was unsecured 
-	find_in_logfile "${TEST_ID}" "check unsigned request object" 150 "oidc_proto_create_request_uri: serialized request object JWT header" "\"alg\":\"none\""
+	find_in_logfile "${TEST_ID}" "check unsigned request object" 200 "oidc_proto_create_request_uri: serialized request object JWT header" "\"alg\":\"none\""
 
 	# check we sent request URI in the authorization request
-	find_in_logfile "${TEST_ID}" "check request URI" 150 "oidc_util_hdr_table_set: Location:" "&request_uri="
+	find_in_logfile "${TEST_ID}" "check request URI" 200 "oidc_util_hdr_table_set: Location:" "&request_uri="
 
 	# TODO: check resolving of request URI if on the same server
 }
@@ -680,10 +680,10 @@ function rp_request_uri_sig() {
 	regular_flow "${TEST_ID}"
 
 	# check we created a request object that was signed with the client secret
-	find_in_logfile "${TEST_ID}" "check signed request object" 150 "oidc_proto_create_request_uri: serialized request object JWT header" "\"alg\": \"HS256\""
+	find_in_logfile "${TEST_ID}" "check signed request object" 200 "oidc_proto_create_request_uri: serialized request object JWT header" "\"alg\": \"HS256\""
 
 	# check we sent request URI in the authorization request
-	find_in_logfile "${TEST_ID}" "check request URI" 150 "oidc_util_hdr_table_set: Location:" "&request_uri="
+	find_in_logfile "${TEST_ID}" "check request URI" 200 "oidc_util_hdr_table_set: Location:" "&request_uri="
 
 	# TODO: check resolving of request URI if on the same server
 }
@@ -708,7 +708,7 @@ function rp_scope_userinfo_claims() {
 	echo " * "
 
 	# test a regular flow up until successful authenticated application access
-	regular_flow "${TEST_ID}" "$2"
+	regular_flow "${TEST_ID}" "${2}"
 
 	if [ "$2" != "fragment" ] ; then
 		# make sure the id_token contains the email claim
@@ -1295,5 +1295,5 @@ elif [ "$1" == "hybrid-code-token" ] ; then
 elif [ "$1" == "hybrid-code-idtoken-token" ] ; then
 	execute_profile hybrid/code+id_token+token fragment "rp-response_type-code+id_token+token ${TESTS_HYBRID}"
 else				
-	execute_test "${1}" 0 1 fragment
+	execute_test "${1}" 0 1 query
 fi

@@ -342,6 +342,8 @@ apr_byte_t oidc_session_set(request_rec *r, oidc_session_t *z, const char *key,
 #define OIDC_SESSION_KEY_COOKIE_DOMAIN "cd"
 /* key for storing last user info refresh timestamp in the session context */
 #define OIDC_SESSION_KEY_USERINFO_LAST_REFRESH "uilr"
+/* key for storing last access token refresh timestamp in the session context */
+#define OIDC_SESSION_KEY_ACCESS_TOKEN_LAST_REFRESH "atlr"
 /* key for storing request state */
 #define OIDC_SESSION_KEY_REQUEST_STATE "rs"
 /* key for storing the original URL */
@@ -518,6 +520,20 @@ apr_time_t oidc_session_get_userinfo_last_refresh(request_rec *r,
 		oidc_session_t *z) {
 	return oidc_session_get_key2timestamp(r, z,
 			OIDC_SESSION_KEY_USERINFO_LAST_REFRESH);
+}
+
+/*
+ * access_token last refresh
+ */
+void oidc_session_reset_access_token_last_refresh(request_rec *r, oidc_session_t *z) {
+	oidc_session_set_timestamp(r, z, OIDC_SESSION_KEY_ACCESS_TOKEN_LAST_REFRESH,
+			apr_time_now());
+}
+
+apr_time_t oidc_session_get_access_token_last_refresh(request_rec *r,
+		oidc_session_t *z) {
+	return oidc_session_get_key2timestamp(r, z,
+			OIDC_SESSION_KEY_ACCESS_TOKEN_LAST_REFRESH);
 }
 
 /*
