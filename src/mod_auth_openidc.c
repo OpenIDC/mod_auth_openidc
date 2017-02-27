@@ -265,7 +265,7 @@ static apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg *c,
 		oidc_provider_t **provider) {
 
 	json_t *j_provider = NULL;
-	const char *s_json = NULL;
+	char *s_json = NULL;
 
 	/* see if we should configure a static provider based on external (cached) metadata */
 	if ((c->metadata_dir != NULL) || (c->provider.metadata_url == NULL)) {
@@ -273,7 +273,7 @@ static apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg *c,
 		return TRUE;
 	}
 
-	c->cache->get(r, OIDC_CACHE_SECTION_PROVIDER,
+	oidc_cache_get_provider(r,
 			oidc_util_escape_string(r, c->provider.metadata_url), &s_json);
 
 	if (s_json == NULL) {
@@ -285,13 +285,9 @@ static apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg *c,
 			return FALSE;
 		}
 
-		c->cache->set(r, OIDC_CACHE_SECTION_PROVIDER,
+		oidc_cache_set_provider(r,
 				oidc_util_escape_string(r, c->provider.metadata_url), s_json,
-				apr_time_now()
-				+ (c->provider_metadata_refresh_interval <= 0 ?
-						apr_time_from_sec(
-								OIDC_CACHE_PROVIDER_METADATA_EXPIRY_DEFAULT) :
-								c->provider_metadata_refresh_interval));
+				apr_time_now() + (c->provider_metadata_refresh_interval <= 0 ? apr_time_from_sec( OIDC_CACHE_PROVIDER_METADATA_EXPIRY_DEFAULT) : c->provider_metadata_refresh_interval));
 
 	} else {
 
@@ -599,8 +595,8 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 		}
 	}
 
-	const char *replay = NULL;
-	c->cache->get(r, OIDC_CACHE_SECTION_JTI, jti, &replay);
+	char *replay = NULL;
+	oidc_cache_get_jti(r, jti, &replay);
 	if (replay != NULL) {
 		oidc_error(r,
 				"the \"%s\" value (%s) passed in the browser state was found in the cache already; possible replay attack!?",
@@ -614,8 +610,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 			provider->idtoken_iat_slack * 2 + 10);
 
 	/* store it in the cache for the calculated duration */
-	c->cache->set(r, OIDC_CACHE_SECTION_JTI, jti, jti,
-			apr_time_now() + jti_cache_duration);
+	oidc_cache_set_jti(r, jti, jti, apr_time_now() + jti_cache_duration);
 
 	oidc_debug(r,
 			"jti \"%s\" validated successfully and is now cached for %" APR_TIME_T_FMT " seconds",
@@ -748,10 +743,9 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 				"Invalid Authentication Response",
 				apr_psprintf(r->pool,
 						"This is due to a timeout; please restart your authentication session by re-entering the URL/bookmark you originally wanted to access: %s",
-						json_string_value(
-								json_object_get(*proto_state,
-										OIDC_PROTO_STATE_ORIGINAL_URL))),
-										DONE);
+						json_string_value(json_object_get(*proto_state,
+								OIDC_PROTO_STATE_ORIGINAL_URL))),
+								DONE);
 		json_decref(*proto_state);
 		return FALSE;
 	}
@@ -759,9 +753,9 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 	/* add the state */
 	json_object_set_new(*proto_state, OIDC_PROTO_STATE, json_string(state));
 
-	char *s_value = json_dumps(*proto_state, JSON_ENCODE_ANY);
-	oidc_debug(r, "restored state: %s", s_value);
-	free(s_value);
+	/* log the restored state object */
+	oidc_debug(r, "restored state: %s",
+			oidc_util_encode_json_object(r, *proto_state, JSON_COMPACT));
 
 	/* we've made it */
 	return TRUE;
@@ -1135,7 +1129,7 @@ static const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r,
 	// TODO: long-term: session storage should be JSON (with explicit types and less conversion, using standard routines)
 
 	/* try to get claims from the userinfo endpoint using the provided access token */
-	const char *result = NULL;
+	char *result = NULL;
 	if (oidc_proto_resolve_userinfo(r, c, provider, id_token_sub, access_token,
 			&result) == FALSE) {
 
@@ -1795,13 +1789,11 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 
 	/* restore the original protected URL that the user was trying to access */
 	const char *original_url = apr_pstrdup(r->pool,
-			json_string_value(
-					json_object_get(proto_state,
-							OIDC_PROTO_STATE_ORIGINAL_URL)));
+			json_string_value(json_object_get(proto_state,
+					OIDC_PROTO_STATE_ORIGINAL_URL)));
 	const char *original_method = apr_pstrdup(r->pool,
-			json_string_value(
-					json_object_get(proto_state,
-							OIDC_PROTO_STATE_ORIGINAL_METHOD)));
+			json_string_value(json_object_get(proto_state,
+					OIDC_PROTO_STATE_ORIGINAL_METHOD)));
 
 	/* set the user */
 	if (oidc_get_remote_user(r, c, provider, jwt, &r->user, claims) == TRUE) {
@@ -2780,17 +2772,17 @@ static int oidc_handle_request_uri(request_rec *r, oidc_cfg *c) {
 		return HTTP_BAD_REQUEST;
 	}
 
-	const char *jwt = NULL;
-	c->cache->get(r, OIDC_CACHE_SECTION_REQUEST_URI, request_ref, &jwt);
+	char *jwt = NULL;
+	oidc_cache_get_request_uri(r, request_ref, &jwt);
 	if (jwt == NULL) {
 		oidc_error(r, "no cached JWT found for request_uri reference: %s",
 				request_ref);
 		return HTTP_NOT_FOUND;
 	}
 
-	c->cache->set(r, OIDC_CACHE_SECTION_REQUEST_URI, request_ref, NULL, 0);
+	oidc_cache_set_request_uri(r, request_ref, NULL, 0);
 
-	return oidc_util_http_send(r, jwt, strlen(jwt), " application/jwt", DONE);
+	return oidc_util_http_send(r, jwt, strlen(jwt), OIDC_CONTENT_TYPE_JWT, DONE);
 }
 
 /*
@@ -2800,16 +2792,15 @@ static int oidc_handle_remove_at_cache(request_rec *r, oidc_cfg *c) {
 	char *access_token = NULL;
 	oidc_util_get_request_parameter(r, "remove_at_cache", &access_token);
 
-	const char *cache_entry = NULL;
-	c->cache->get(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, access_token,
-			&cache_entry);
+	char *cache_entry = NULL;
+	oidc_cache_get_access_token(r, access_token, &cache_entry);
 	if (cache_entry == NULL) {
 		oidc_error(r, "no cached access token found for value: %s",
 				access_token);
 		return HTTP_NOT_FOUND;
 	}
 
-	c->cache->set(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, access_token, NULL, 0);
+	oidc_cache_set_access_token(r, access_token, NULL, 0);
 
 	return DONE;
 }
@@ -2952,11 +2943,9 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 	}
 
 	/* JSON-encode the result */
-	char *s_value = json_dumps(json, 0);
-	char *r_value = apr_pstrdup(r->pool, s_value);
+	char *r_value = oidc_util_encode_json_object(r, json, 0);
 
 	/* free the allocated resources */
-	free(s_value);
 	json_decref(json);
 
 	/* pass the tokens to the application and save the session, possibly updating the expiry */
@@ -2967,7 +2956,7 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 
 	/* return the stringified JSON result */
 	return oidc_util_http_send(r, r_value, strlen(r_value),
-			OIDC_HOOK_INFO_CONTENT_TYPE_JSON,
+			OIDC_CONTENT_TYPE_JSON,
 			DONE);
 }
 

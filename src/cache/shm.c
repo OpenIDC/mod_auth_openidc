@@ -116,7 +116,8 @@ int oidc_cache_shm_post_config(server_rec *s) {
 	/* initialize the whole segment to '/0' */
 	int i;
 	oidc_cache_shm_entry_t *t = apr_shm_baseaddr_get(context->shm);
-	for (i = 0; i < cfg->cache_shm_size_max; i++, OIDC_CACHE_SHM_ADD_OFFSET(t, cfg->cache_shm_entry_size_max)) {
+	for (i = 0; i < cfg->cache_shm_size_max;
+			i++, OIDC_CACHE_SHM_ADD_OFFSET(t, cfg->cache_shm_entry_size_max)) {
 		t->section_key[0] = '\0';
 		t->access = 0;
 	}
@@ -124,7 +125,9 @@ int oidc_cache_shm_post_config(server_rec *s) {
 	if (oidc_cache_mutex_post_config(s, context->mutex, "shm") == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
-	oidc_sdebug(s, "initialized shared memory with a cache size (# entries) of: %d, and a max (single) entry size of: %d", cfg->cache_shm_size_max, cfg->cache_shm_entry_size_max);
+	oidc_sdebug(s,
+			"initialized shared memory with a cache size (# entries) of: %d, and a max (single) entry size of: %d",
+			cfg->cache_shm_size_max, cfg->cache_shm_entry_size_max);
 
 	return OK;
 }
@@ -174,10 +177,11 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section,
 	oidc_cache_shm_entry_t *t = apr_shm_baseaddr_get(context->shm);
 
 	/* loop over the block, looking for the key */
-	for (i = 0; i < cfg->cache_shm_size_max; i++, OIDC_CACHE_SHM_ADD_OFFSET(t, cfg->cache_shm_entry_size_max)) {
+	for (i = 0; i < cfg->cache_shm_size_max;
+			i++, OIDC_CACHE_SHM_ADD_OFFSET(t, cfg->cache_shm_entry_size_max)) {
 		const char *tablekey = t->section_key;
 
-		if ( (tablekey != NULL) && (apr_strnatcmp(tablekey, section_key) == 0) ) {
+		if ((tablekey != NULL) && (apr_strnatcmp(tablekey, section_key) == 0)) {
 
 			/* found a match, check if it has expired */
 			if (t->expires > apr_time_now()) {
@@ -234,9 +238,15 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 	}
 
 	/* check that the passed in value is valid */
-	if ((value != NULL) && (strlen(value) > (cfg->cache_shm_entry_size_max - sizeof(oidc_cache_shm_entry_t)))) {
-		oidc_error(r, "could not store value since value size is too large (%llu > %lu); consider increasing OIDCCacheShmEntrySizeMax",
-				(unsigned long long)strlen(value), (unsigned long)(cfg->cache_shm_entry_size_max - sizeof(oidc_cache_shm_entry_t)));
+	if ((value != NULL)
+			&& (strlen(value)
+					> (cfg->cache_shm_entry_size_max
+							- sizeof(oidc_cache_shm_entry_t)))) {
+		oidc_error(r,
+				"could not store value since value size is too large (%llu > %lu); consider increasing OIDCCacheShmEntrySizeMax",
+				(unsigned long long )strlen(value),
+				(unsigned long )(cfg->cache_shm_entry_size_max
+						- sizeof(oidc_cache_shm_entry_t)));
 		return FALSE;
 	}
 
@@ -254,7 +264,8 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 	match = NULL;
 	free = NULL;
 	lru = t;
-	for (i = 0; i < cfg->cache_shm_size_max; i++, OIDC_CACHE_SHM_ADD_OFFSET(t, cfg->cache_shm_entry_size_max)) {
+	for (i = 0; i < cfg->cache_shm_size_max;
+			i++, OIDC_CACHE_SHM_ADD_OFFSET(t, cfg->cache_shm_entry_size_max)) {
 
 		/* see if this slot is free */
 		if (t->section_key[0] == '\0') {
@@ -337,7 +348,6 @@ static int oidc_cache_shm_destroy(server_rec *s) {
 
 oidc_cache_t oidc_cache_shm = {
 		0,
-		oidc_cache_shm_cfg_create,
 		oidc_cache_shm_post_config,
 		oidc_cache_shm_child_init,
 		oidc_cache_shm_get,

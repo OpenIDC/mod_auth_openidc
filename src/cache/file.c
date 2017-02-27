@@ -184,7 +184,7 @@ static apr_byte_t oidc_cache_file_get(request_rec *r, const char *section,
 
 	/* open the cache file if it exists, otherwise we just have a "regular" cache miss */
 	if (apr_file_open(&fd, path, APR_FOPEN_READ | APR_FOPEN_BUFFERED,
-	APR_OS_DEFAULT, r->pool) != APR_SUCCESS) {
+			APR_OS_DEFAULT, r->pool) != APR_SUCCESS) {
 		oidc_debug(r, "cache miss for key \"%s\"", key);
 		return TRUE;
 	}
@@ -412,7 +412,8 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section,
 	}
 
 	/* try to open the cache file for writing, creating it if it does not exist */
-	if ((rc = apr_file_open(&fd, path, (APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE),
+	if ((rc = apr_file_open(&fd, path,
+			(APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE),
 			APR_OS_DEFAULT, r->pool)) != APR_SUCCESS) {
 		oidc_error(r, "cache file \"%s\" could not be opened (%s)", path,
 				apr_strerror(rc, s_err, sizeof(s_err)));
@@ -453,7 +454,6 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section,
 
 oidc_cache_t oidc_cache_file = {
 		1,
-		NULL,
 		oidc_cache_file_post_config,
 		NULL,
 		oidc_cache_file_get,

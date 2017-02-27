@@ -247,9 +247,8 @@ char *oidc_proto_create_request_uri(request_rec *r,
 			authorization_request);
 
 	/* debug logging */
-	char *s_json = json_dumps(request_object->payload.value.json, 0);
-	oidc_debug(r, "request object: %s", s_json);
-	free(s_json);
+	oidc_debug(r, "request object: %s",
+			oidc_util_encode_json_object(r, request_object->payload.value.json, JSON_COMPACT));
 
 	char *serialized_request_object = NULL;
 	oidc_jose_error_t err;
@@ -389,7 +388,7 @@ char *oidc_proto_create_request_uri(request_rec *r,
 	if (serialized_request_object != NULL) {
 		char *request_ref = NULL;
 		if (oidc_proto_generate_random_string(r, &request_ref, 16) == TRUE) {
-			cfg->cache->set(r, OIDC_CACHE_SECTION_REQUEST_URI, request_ref,
+			oidc_cache_set_request_uri(r, request_ref,
 					serialized_request_object,
 					apr_time_now() + apr_time_from_sec(OIDC_REQUEST_URI_CACHE_DURATION));
 			request_uri = apr_psprintf(r->pool, "%s?%s=%s", resolver_url,
@@ -410,11 +409,11 @@ int oidc_proto_authorization_request(request_rec *r,
 		const char *auth_request_params) {
 
 	/* log some stuff */
-	char *s_value = json_dumps(proto_state, JSON_ENCODE_ANY);
 	oidc_debug(r,
 			"enter, issuer=%s, redirect_uri=%s, state=%s, proto_state=%s, code_challenge=%s",
-			provider->issuer, redirect_uri, state, s_value, code_challenge);
-	free(s_value);
+			provider->issuer, redirect_uri, state,
+			oidc_util_encode_json_object(r, proto_state, JSON_COMPACT),
+			code_challenge);
 
 	/* assemble the full URL as the authorization request to the OP where we want to redirect to */
 	char *authorization_request = apr_psprintf(r->pool, "%s%s",
@@ -530,6 +529,9 @@ int oidc_proto_authorization_request(request_rec *r,
 			NULL) == TRUE)
 		return DONE;
 
+	/* add a referred token binding request for the provider */
+	oidc_util_hdr_err_out_add(r, "Include-Referred-Token-Binding-ID", "true");
+
 	/* add the redirect location header */
 	oidc_util_hdr_out_location_set(r, authorization_request);
 
@@ -617,8 +619,8 @@ apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
 	oidc_jose_error_t err;
 
 	/* see if we have this nonce cached already */
-	const char *replay = NULL;
-	cfg->cache->get(r, OIDC_CACHE_SECTION_NONCE, nonce, &replay);
+	char *replay = NULL;
+	oidc_cache_get_nonce(r, nonce, &replay);
 	if (replay != NULL) {
 		oidc_error(r,
 				"the nonce value (%s) passed in the browser state was found in the cache already; possible replay attack!?",
@@ -652,7 +654,7 @@ apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
 			provider->idtoken_iat_slack * 2 + 10);
 
 	/* store it in the cache for the calculated duration */
-	cfg->cache->set(r, OIDC_CACHE_SECTION_NONCE, nonce, nonce,
+	oidc_cache_set_nonce(r, nonce, nonce,
 			apr_time_now() + nonce_cache_duration);
 
 	oidc_debug(r,
@@ -1203,7 +1205,7 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 		char **id_token, char **access_token, char **token_type,
 		int *expires_in, char **refresh_token) {
 
-	const char *response = NULL;
+	char *response = NULL;
 	const char *basic_auth = NULL;
 
 	oidc_debug(r, "token_endpoint_auth=%s", provider->token_endpoint_auth);
@@ -1418,8 +1420,9 @@ apr_byte_t oidc_proto_refresh_request(request_rec *r, oidc_cfg *cfg,
 			access_token, token_type, expires_in, refresh_token);
 }
 
-apr_byte_t oidc_user_info_response_validate(request_rec *r, oidc_cfg *cfg,
-		oidc_provider_t *provider, const char **response, json_t **claims) {
+static apr_byte_t oidc_user_info_response_validate(request_rec *r,
+		oidc_cfg *cfg, oidc_provider_t *provider, char **response,
+		json_t **claims) {
 
 	oidc_debug(r,
 			"enter: userinfo_signed_response_alg=%s, userinfo_encrypted_response_alg=%s, userinfo_encrypted_response_enc=%s",
@@ -1545,9 +1548,9 @@ static apr_byte_t oidc_proto_resolve_composite_claims(request_rec *r,
 		value = json_object_iter_value(iter);
 		if ((value != NULL) && (json_is_object(value))) {
 			json_t *jwt = json_object_get(value, OIDC_COMPOSITE_CLAIM_JWT);
-			const char *s_json = NULL;
+			char *s_json = NULL;
 			if ((jwt != NULL) && (json_is_string(jwt))) {
-				s_json = json_string_value(jwt);
+				s_json = apr_pstrdup(r->pool, json_string_value(jwt));
 			} else {
 				const char *access_token = json_string_value(
 						json_object_get(value,
@@ -1614,7 +1617,7 @@ static apr_byte_t oidc_proto_resolve_composite_claims(request_rec *r,
  */
 apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char *id_token_sub,
-		const char *access_token, const char **response) {
+		const char *access_token, char **response) {
 
 	oidc_debug(r, "enter, endpoint=%s, access_token=%s",
 			provider->userinfo_endpoint_url, access_token);
@@ -1646,11 +1649,9 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 			&claims) == FALSE)
 		return FALSE;
 
-	if (oidc_proto_resolve_composite_claims(r, cfg, claims) == TRUE) {
-		char *s_json = json_dumps(claims, JSON_PRESERVE_ORDER | JSON_COMPACT);
-		*response = apr_pstrdup(r->pool, s_json);
-		free(s_json);
-	}
+	if (oidc_proto_resolve_composite_claims(r, cfg, claims) == TRUE)
+		*response = oidc_util_encode_json_object(r, claims,
+				JSON_PRESERVE_ORDER | JSON_COMPACT);
 
 	char *user_info_sub = NULL;
 	oidc_jose_get_string(r->pool, claims, OIDC_CLAIM_SUB, FALSE, &user_info_sub,
@@ -1687,7 +1688,7 @@ static apr_byte_t oidc_proto_webfinger_discovery(request_rec *r, oidc_cfg *cfg,
 	apr_table_addn(params, "resource", resource);
 	apr_table_addn(params, "rel", "http://openid.net/specs/connect/1.0/issuer");
 
-	const char *response = NULL;
+	char *response = NULL;
 	if (oidc_util_http_get(r, url, params, NULL, NULL,
 			cfg->provider.ssl_validate_server, &response,
 			cfg->http_timeout_short, cfg->outgoing_proxy,

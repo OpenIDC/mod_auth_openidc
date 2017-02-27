@@ -63,7 +63,7 @@
 #include <apr_uuid.h>
 
 #ifdef APLOG_USE_MODULE
-APLOG_USE_MODULE(auth_openidc);
+//APLOG_USE_MODULE(auth_openidc);
 #endif
 
 #ifndef OIDC_DEBUG
@@ -169,15 +169,6 @@ APLOG_USE_MODULE(auth_openidc);
 
 /* define the name of the cookie/parameter for CSRF protection */
 #define OIDC_CSRF_NAME "x_csrf"
-
-/* cache sections */
-#define OIDC_CACHE_SECTION_JTI "jti"
-#define OIDC_CACHE_SECTION_SESSION "session"
-#define OIDC_CACHE_SECTION_NONCE "nonce"
-#define OIDC_CACHE_SECTION_JWKS "jwks"
-#define OIDC_CACHE_SECTION_ACCESS_TOKEN "access_token"
-#define OIDC_CACHE_SECTION_PROVIDER "provider"
-#define OIDC_CACHE_SECTION_REQUEST_URI "request_uri"
 
 /* http methods */
 #define OIDC_METHOD_GET       "get"
@@ -323,6 +314,7 @@ typedef struct oidc_cfg {
 	char *cache_redis_server;
 	char *cache_redis_password;
 #endif
+	int cache_encrypt;
 
 	/* tell the module to strip any mod_auth_openidc related headers that already have been set by the user-agent, normally required for secure operation */
 	int scrub_request_headers;
@@ -364,6 +356,7 @@ int oidc_content_handler(request_rec *r);
 
 // oidc_oauth
 int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c);
+apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token);
 
 // oidc_proto.c
 #define OIDC_PROTO_ISS                   "iss"
@@ -455,7 +448,6 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c);
 #define OIDC_HOOK_INFO_ACCES_TOKEN_EXP     "access_token_expires"
 #define OIDC_HOOK_INFO_ID_TOKEN            "id_token"
 #define OIDC_HOOK_INFO_USER_INFO           "userinfo"
-#define OIDC_HOOK_INFO_CONTENT_TYPE_JSON   "application/json"
 #define OIDC_HOOK_INFO_SESSION             "session"
 #define OIDC_HOOK_INFO_SESSION_STATE       "state"
 #define OIDC_HOOK_INFO_SESSION_UUID        "uuid"
@@ -463,12 +455,15 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c);
 #define OIDC_HOOK_INFO_SESSION_REMOTE_USER "remote_user"
 #define OIDC_HOOK_INFO_REFRESH_TOKEN       "refresh_token"
 
+#define OIDC_CONTENT_TYPE_JSON "application/json"
+#define OIDC_CONTENT_TYPE_JWT  "application/jwt"
+
 char *oidc_proto_peek_jwt_header(request_rec *r, const char *jwt, char **alg);
 int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *login_hint, const char *redirect_uri, const char *state, json_t *proto_state, const char *id_token_hint, const char *code_challenge, const char *auth_request_params);
 apr_byte_t oidc_proto_is_post_authorization_response(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_refresh_request(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *rtoken, char **id_token, char **access_token, char **token_type, int *expires_in, char **refresh_token);
-apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *id_token_sub, const char *access_token, const char **response);
+apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *id_token_sub, const char *access_token, char **response);
 apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg, const char *acct, char **issuer);
 apr_byte_t oidc_proto_url_based_discovery(request_rec *r, oidc_cfg *cfg, const char *url, char **issuer);
 apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *id_token, const char *nonce, oidc_jwt_t **jwt, apr_byte_t is_code_flow);
@@ -522,6 +517,7 @@ apr_array_header_t *oidc_dir_cfg_pass_cookies(request_rec *r);
 apr_array_header_t *oidc_dir_cfg_strip_cookies(request_rec *r);
 int oidc_dir_cfg_unauth_action(request_rec *r);
 oidc_valid_function_t oidc_cfg_get_valid_endpoint_auth_function(oidc_cfg *cfg);
+int oidc_cfg_cache_encrypt(request_rec *r);
 
 // oidc_util.c
 int oidc_strnenvcmp(const char *a, const char *b, int len);
@@ -533,9 +529,9 @@ char *oidc_url_encode(const request_rec *r, const char *str, const char *charsTo
 char *oidc_normalize_header_name(const request_rec *r, const char *str);
 void oidc_util_set_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires);
 char *oidc_util_get_cookie(request_rec *r, const char *cookieName);
-apr_byte_t oidc_util_http_get(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth, const char *bearer_token, int ssl_validate_server, const char **response, int timeout, const char *outgoing_proxy, apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key);
-apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth, const char *bearer_token, int ssl_validate_server, const char **response, int timeout, const char *outgoing_proxy, apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key);
-apr_byte_t oidc_util_http_post_json(request_rec *r, const char *url, const json_t *data, const char *basic_auth, const char *bearer_token, int ssl_validate_server, const char **response, int timeout, const char *outgoing_proxy, apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key);
+apr_byte_t oidc_util_http_get(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth, const char *bearer_token, int ssl_validate_server, char **response, int timeout, const char *outgoing_proxy, apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key);
+apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth, const char *bearer_token, int ssl_validate_server, char **response, int timeout, const char *outgoing_proxy, apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key);
+apr_byte_t oidc_util_http_post_json(request_rec *r, const char *url, json_t *data, const char *basic_auth, const char *bearer_token, int ssl_validate_server, char **response, int timeout, const char *outgoing_proxy, apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key);
 apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url);
 apr_byte_t oidc_util_request_has_parameter(request_rec *r, const char* param);
 apr_byte_t oidc_util_get_request_parameter(request_rec *r, char *name, char **value);
@@ -611,7 +607,7 @@ void oidc_util_hdr_out_location_set(const request_rec *r, const char *value);
 void oidc_util_hdr_err_out_add(const request_rec *r, const char *name, const char *value);
 
 // oidc_metadata.c
-apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg, const char *issuer, const char *url, json_t **j_metadata, const char **response);
+apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg, const char *issuer, const char *url, json_t **j_metadata, char **response);
 apr_byte_t oidc_metadata_provider_parse(request_rec *r, oidc_cfg *cfg, json_t *j_provider, oidc_provider_t *provider);
 apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg *cfg, apr_array_header_t **arr);
 apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *selected, oidc_provider_t **provider, apr_byte_t allow_discovery);

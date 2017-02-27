@@ -6,6 +6,7 @@ feature
   - session state calls into getters/setters functions
   - header calls into getters/setters functions
   - use constants instead of strings literals
+- add encryption for all cache entries instead of just session data
 
 02/20/2017
 - security fix: scrub headers for "AuthType oauth20"

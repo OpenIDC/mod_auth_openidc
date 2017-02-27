@@ -124,7 +124,8 @@ static int oidc_cache_redis_post_config(server_rec *s) {
 		context->port = 6379;
 
 	if (cfg->cache_redis_password != NULL) {
-		context->passwd = apr_pstrdup(s->process->pool, cfg->cache_redis_password);
+		context->passwd = apr_pstrdup(s->process->pool,
+				cfg->cache_redis_password);
 	}
 
 	if (oidc_cache_mutex_post_config(s, context->mutex, "redis") == FALSE)
@@ -210,7 +211,8 @@ static redisReply* oidc_cache_redis_command(request_rec *r,
 			break;
 
 		if (context->passwd != NULL) {
-			redisAppendCommand(ctx, apr_psprintf(r->pool, "AUTH %s", context->passwd));
+			redisAppendCommand(ctx,
+					apr_psprintf(r->pool, "AUTH %s", context->passwd));
 		}
 
 		/* execute the command */
@@ -221,19 +223,21 @@ static redisReply* oidc_cache_redis_command(request_rec *r,
 
 		if (context->passwd != NULL) {
 			/* get the reply for the AUTH command */
-			redisGetReply(ctx, (void **)&reply);
+			redisGetReply(ctx, (void **) &reply);
 			if (reply == NULL) {
-				oidc_error(r, "authentication to the Redis server (%s:%d) failed, reply == NULL",
+				oidc_error(r,
+						"authentication to the Redis server (%s:%d) failed, reply == NULL",
 						context->host_str, context->port);
 			} else if (reply->type == REDIS_REPLY_ERROR) {
-				oidc_error(r, "authentication to the Redis server (%s:%d) failed, reply.status = %s",
+				oidc_error(r,
+						"authentication to the Redis server (%s:%d) failed, reply.status = %s",
 						context->host_str, context->port, reply->str);
 			}
 		}
 
 		/* get the reply for the actual command */
 		reply = NULL;
-		redisGetReply(ctx, (void **)&reply);
+		redisGetReply(ctx, (void **) &reply);
 
 		/* errors will result in an empty reply */
 		if (reply != NULL) {
@@ -246,7 +250,9 @@ static redisReply* oidc_cache_redis_command(request_rec *r,
 		}
 
 		/* something went wrong, log it */
-		oidc_error(r, "redisvAppendCommand/redisGetReply (%d) failed, disconnecting: '%s'", i, ctx->errstr);
+		oidc_error(r,
+				"redisvAppendCommand/redisGetReply (%d) failed, disconnecting: '%s'",
+				i, ctx->errstr);
 
 		/* cleanup, we may try again (once) after reconnecting */
 		redisFree(ctx);
@@ -375,7 +381,6 @@ static int oidc_cache_redis_destroy(server_rec *s) {
 
 oidc_cache_t oidc_cache_redis = {
 		1,
-		oidc_cache_redis_cfg_create,
 		oidc_cache_redis_post_config,
 		oidc_cache_redis_child_init,
 		oidc_cache_redis_get,

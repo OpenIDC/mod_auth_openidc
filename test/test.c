@@ -1280,10 +1280,12 @@ static request_rec * test_setup(apr_pool_t *pool) {
 			cfg);
 	ap_set_module_config(request->per_dir_config, &auth_openidc_module, d_cfg);
 
+	cfg->crypto_passphrase = "12345678901234567890123456789012";
 	cfg->cache = &oidc_cache_shm;
 	cfg->cache_cfg = NULL;
 	cfg->cache_shm_size_max = 500;
 	cfg->cache_shm_entry_size_max = 16384 + 255 + 17;
+	cfg->cache_encrypt = 1;
 	if (cfg->cache->post_config(request->server) != OK) {
 		printf("cfg->cache->post_config failed!\n");
 		exit(-1);

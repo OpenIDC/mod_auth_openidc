@@ -66,8 +66,7 @@ typedef apr_byte_t (*oidc_cache_set_function)(request_rec *r,
 typedef int (*oidc_cache_destroy_function)(server_rec *s);
 
 typedef struct oidc_cache_t {
-	apr_byte_t secure;
-	oidc_cache_cfg_create create_config;
+	int encrypt_by_default;
 	oidc_cache_post_config_function post_config;
 	oidc_cache_child_init_function child_init;
 	oidc_cache_get_function get;
@@ -88,6 +87,35 @@ apr_status_t oidc_cache_mutex_child_init(apr_pool_t *p, server_rec *s,
 apr_byte_t oidc_cache_mutex_lock(request_rec *r, oidc_cache_mutex_t *m);
 apr_byte_t oidc_cache_mutex_unlock(request_rec *r, oidc_cache_mutex_t *m);
 apr_byte_t oidc_cache_mutex_destroy(server_rec *s, oidc_cache_mutex_t *m);
+
+apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key,
+		char **value);
+apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key,
+		const char *value, apr_time_t expiry);
+
+#define OIDC_CACHE_SECTION_SESSION      "s"
+#define OIDC_CACHE_SECTION_NONCE        "n"
+#define OIDC_CACHE_SECTION_JWKS         "j"
+#define OIDC_CACHE_SECTION_ACCESS_TOKEN "a"
+#define OIDC_CACHE_SECTION_PROVIDER     "p"
+#define OIDC_CACHE_SECTION_JTI          "t"
+#define OIDC_CACHE_SECTION_REQUEST_URI  "r"
+
+#define oidc_cache_get_session(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, key, value)
+#define oidc_cache_get_nonce(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_NONCE, key, value)
+#define oidc_cache_get_jwks(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_JWKS, key, value)
+#define oidc_cache_get_access_token(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, key, value)
+#define oidc_cache_get_provider(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_PROVIDER, key, value)
+#define oidc_cache_get_jti(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_JTI, key, value)
+#define oidc_cache_get_request_uri(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_REQUEST_URI, key, value)
+
+#define oidc_cache_set_session(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, key, value, expiry)
+#define oidc_cache_set_nonce(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_NONCE, key, value, expiry)
+#define oidc_cache_set_jwks(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_JWKS, key, value, expiry)
+#define oidc_cache_set_access_token(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, key, value, expiry)
+#define oidc_cache_set_provider(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_PROVIDER, key, value, expiry)
+#define oidc_cache_set_jti(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_JTI, key, value, expiry)
+#define oidc_cache_set_request_uri(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_REQUEST_URI, key, value, expiry)
 
 extern oidc_cache_t oidc_cache_file;
 extern oidc_cache_t oidc_cache_memcache;

@@ -819,6 +819,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 
 	c->cache = &oidc_cache_shm;
 	c->cache_cfg = NULL;
+	c->cache_encrypt = OIDC_CONFIG_POS_INT_UNSET;
 
 	c->cache_file_dir = NULL;
 	c->cache_file_clean_interval = OIDC_DEFAULT_CACHE_FILE_CLEAN_INTERVAL;
@@ -1137,6 +1138,11 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	} else {
 		c->cache = base->cache;
 	}
+
+	c->cache_encrypt =
+			add->cache_encrypt != OIDC_CONFIG_POS_INT_UNSET ?
+					add->cache_encrypt : base->cache_encrypt;
+
 	c->cache_cfg = NULL;
 
 	c->cache_file_dir =
@@ -1246,6 +1252,14 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->info_hook_data : base->info_hook_data;
 
 	return c;
+}
+
+int oidc_cfg_cache_encrypt(request_rec *r) {
+	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
+	if (cfg->cache_encrypt == OIDC_CONFIG_POS_INT_UNSET)
+		return cfg->cache->encrypt_by_default;
+	return cfg->cache_encrypt;
 }
 
 /*
@@ -2176,7 +2190,11 @@ const command_rec oidc_config_cmds[] = {
 		AP_INIT_TAKE1("OIDCCacheType", oidc_set_cache_type,
 				(void*)APR_OFFSETOF(oidc_cfg, cache), RSRC_CONF,
 				"Cache type; must be one of \"file\", \"memcache\" or \"shm\"."),
-
+		AP_INIT_FLAG("OIDCCacheEncrypt",
+				oidc_set_flag_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, cache_encrypt),
+				RSRC_CONF,
+				"Encrypt the data in the cache backend (On or Off)"),
 		AP_INIT_TAKE1("OIDCCacheDir", oidc_set_dir_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, cache_file_dir),
 				RSRC_CONF,

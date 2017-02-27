@@ -517,8 +517,8 @@ static int oidc_http_add_form_url_encoded_param(void* rec, const char* key,
  */
 static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 		const char *data, const char *content_type, const char *basic_auth,
-		const char *bearer_token, int ssl_validate_server,
-		const char **response, int timeout, const char *outgoing_proxy,
+		const char *bearer_token, int ssl_validate_server, char **response,
+		int timeout, const char *outgoing_proxy,
 		apr_array_header_t *pass_cookies, const char *ssl_cert,
 		const char *ssl_key) {
 	char curlError[CURL_ERROR_SIZE];
@@ -689,8 +689,8 @@ out:
  */
 apr_byte_t oidc_util_http_get(request_rec *r, const char *url,
 		const apr_table_t *params, const char *basic_auth,
-		const char *bearer_token, int ssl_validate_server,
-		const char **response, int timeout, const char *outgoing_proxy,
+		const char *bearer_token, int ssl_validate_server, char **response,
+		int timeout, const char *outgoing_proxy,
 		apr_array_header_t *pass_cookies, const char *ssl_cert,
 		const char *ssl_key) {
 
@@ -712,8 +712,8 @@ apr_byte_t oidc_util_http_get(request_rec *r, const char *url,
  */
 apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url,
 		const apr_table_t *params, const char *basic_auth,
-		const char *bearer_token, int ssl_validate_server,
-		const char **response, int timeout, const char *outgoing_proxy,
+		const char *bearer_token, int ssl_validate_server, char **response,
+		int timeout, const char *outgoing_proxy,
 		apr_array_header_t *pass_cookies, const char *ssl_cert,
 		const char *ssl_key) {
 
@@ -736,18 +736,13 @@ apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url,
  * execute HTTP POST request with JSON-encoded data
  */
 apr_byte_t oidc_util_http_post_json(request_rec *r, const char *url,
-		const json_t *json, const char *basic_auth, const char *bearer_token,
-		int ssl_validate_server, const char **response, int timeout,
+		json_t *json, const char *basic_auth, const char *bearer_token,
+		int ssl_validate_server, char **response, int timeout,
 		const char *outgoing_proxy, apr_array_header_t *pass_cookies,
 		const char *ssl_cert, const char *ssl_key) {
-
-	char *data = NULL;
-	if (json != NULL) {
-		char *s_value = json_dumps(json, 0);
-		data = apr_pstrdup(r->pool, s_value);
-		free(s_value);
-	}
-
+	char *data =
+			json != NULL ?
+					oidc_util_encode_json_object(r, json, JSON_COMPACT) : NULL;
 	return oidc_util_http_call(r, url, data, "application/json", basic_auth,
 			bearer_token, ssl_validate_server, response, timeout,
 			outgoing_proxy, pass_cookies, ssl_cert, ssl_key);
@@ -1028,11 +1023,10 @@ static apr_byte_t oidc_util_json_string_print(request_rec *r, json_t *result,
 		const char *key, const char *log) {
 	json_t *value = json_object_get(result, key);
 	if (value != NULL && !json_is_null(value)) {
-		char *s_value = json_dumps(value, JSON_ENCODE_ANY);
 		oidc_error(r,
 				"%s: response contained an \"%s\" entry with value: \"%s\"",
-				log, key, s_value);
-		free(s_value);
+				log, key,
+				oidc_util_encode_json_object(r, value, JSON_ENCODE_ANY));
 		return TRUE;
 	}
 	return FALSE;
@@ -1501,10 +1495,9 @@ void oidc_util_set_app_infos(request_rec *r, const json_t *j_attrs,
 		} else if (json_is_object(j_value)) {
 
 			/* set json value in the application header whose name is based on the key and the prefix */
-			char *s_value = json_dumps(j_value, 0);
-			oidc_util_set_app_info(r, s_key, s_value, claim_prefix, as_header,
-					as_env_var);
-			free(s_value);
+			oidc_util_set_app_info(r, s_key,
+					oidc_util_encode_json_object(r, j_value, 0), claim_prefix,
+					as_header, as_env_var);
 
 			/* check if it is a multi-value string */
 		} else if (json_is_array(j_value)) {

@@ -66,12 +66,11 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_SESSION_EXPIRY_KEY      "e"
 
 static apr_byte_t oidc_session_encode(request_rec *r, oidc_cfg *c,
-		oidc_session_t *z, char **s_value, apr_byte_t secure) {
-	if (secure == FALSE) {
-		char *s = json_dumps(z->state, JSON_COMPACT);
-		*s_value = apr_pstrdup(r->pool, s);
-		free(s);
-		return TRUE;
+		oidc_session_t *z, char **s_value, apr_byte_t encrypt) {
+
+	if (encrypt == FALSE) {
+		*s_value = oidc_util_encode_json_object(r, z->state, JSON_COMPACT);
+		return (*s_value != NULL);
 	}
 
 	if (oidc_util_jwt_create(r, c->crypto_passphrase, z->state,
@@ -82,15 +81,10 @@ static apr_byte_t oidc_session_encode(request_rec *r, oidc_cfg *c,
 }
 
 static apr_byte_t oidc_session_decode(request_rec *r, oidc_cfg *c,
-		oidc_session_t *z, const char *s_json, apr_byte_t secure) {
-	if (secure == FALSE) {
-		oidc_util_decode_json_object(r, s_json, &z->state);
-		if (z->state == NULL) {
-			oidc_error(r, "cached JSON parsing (json_loads) failed: (%s)",
-					s_json);
-			return FALSE;
-		}
-		return TRUE;
+		oidc_session_t *z, const char *s_json, apr_byte_t encrypt) {
+
+	if (encrypt == FALSE) {
+		return oidc_util_decode_json_object(r, s_json, &z->state);
 	}
 
 	if (oidc_util_jwt_verify(r, c->crypto_passphrase, s_json,
@@ -112,13 +106,12 @@ static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 	/* get the cookie that should be our uuid/key */
 	char *uuid = oidc_util_get_cookie(r, oidc_cfg_dir_cookie(r));
 
-	/* get the string-encoded session from the cache based on the key */
+	/* get the string-encoded session from the cache based on the key; decryption is based on the cache backend config */
 	if (uuid != NULL) {
-		const char *s_json = NULL;
-		c->cache->get(r, OIDC_CACHE_SECTION_SESSION, uuid, &s_json);
+		char *s_json = NULL;
+		oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, uuid, &s_json);
 		if ((s_json != NULL)
-				&& (oidc_session_decode(r, c, z, s_json, c->cache->secure)
-						== FALSE))
+				&& (oidc_session_decode(r, c, z, s_json, FALSE) == FALSE))
 			return FALSE;
 		strncpy(z->uuid, uuid, strlen(uuid));
 	}
@@ -144,11 +137,11 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z) {
 			apr_uuid_format((char *) &z->uuid, &uuid);
 		}
 
-		/* store the string-encoded session in the cache */
+		/* store the string-encoded session in the cache; encryption depends on cache backend settings */
 		char *s_value = NULL;
-		if (oidc_session_encode(r, c, z, &s_value, c->cache->secure) == FALSE)
+		if (oidc_session_encode(r, c, z, &s_value, FALSE) == FALSE)
 			return FALSE;
-		rc = c->cache->set(r, OIDC_CACHE_SECTION_SESSION, z->uuid, s_value,
+		rc = oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, z->uuid, s_value,
 				z->expiry);
 
 		if (rc == TRUE)
