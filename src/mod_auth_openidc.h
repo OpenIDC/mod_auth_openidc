@@ -63,7 +63,7 @@
 #include <apr_uuid.h>
 
 #ifdef APLOG_USE_MODULE
-//APLOG_USE_MODULE(auth_openidc);
+APLOG_USE_MODULE(auth_openidc);
 #endif
 
 #ifndef OIDC_DEBUG
