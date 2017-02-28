@@ -65,7 +65,7 @@
 
 int usage(int argc, char **argv, const char *msg) {
 	fprintf(stderr, "Usage: %s %s\n", argv[0],
-			msg ? msg : "[ sign | verify | jwk2cert | cert2jwk | enckey ] <options>");
+			msg ? msg : "[ sign | verify | jwk2cert | cert2jwk | enckey | hash_base64url] <options>");
 	return -1;
 }
 
@@ -438,6 +438,25 @@ int enckey(int argc, char **argv, apr_pool_t *pool) {
 	return 0;
 }
 
+int hash_base64url(int argc, char **argv, apr_pool_t *pool) {
+	if (argc <= 2)
+		return usage(argc, argv, "hash_base64url <string> [algo]");
+
+	char *algo = argc > 3 ? argv[3] : "sha256";
+	char *output = NULL;
+
+	request_rec *r = request_setup(pool);
+
+	if (oidc_util_hash_string_and_base64url_encode(r, algo, argv[2], &output) == FALSE) {
+		fprintf(stderr, "oidc_util_hash_string_and_base64url_encode failed");
+		return -1;
+	}
+
+	fprintf(stdout, "%s\n", output);
+
+	return 0;
+}
+
 int main(int argc, char **argv, char **env) {
 
 	if (argc <= 1)
@@ -468,6 +487,9 @@ int main(int argc, char **argv, char **env) {
 
 	if (strcmp(argv[1], "enckey") == 0)
 		return enckey(argc, argv, pool);
+
+	if (strcmp(argv[1], "hash_base64url") == 0)
+		return hash_base64url(argc, argv, pool);
 
 	apr_pool_destroy(pool);
 	apr_terminate();
