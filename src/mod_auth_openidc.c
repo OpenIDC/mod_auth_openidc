@@ -639,7 +639,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	json_object_set_new(*proto_state, OIDC_PROTO_STATE_ORIGINAL_URL,
 			json_string(target_link_uri));
 	json_object_set_new(*proto_state, OIDC_PROTO_STATE_ORIGINAL_METHOD,
-			json_string("get"));
+			json_string(OIDC_METHOD_GET));
 	json_object_set_new(*proto_state, OIDC_PROTO_STATE_RESPONSE_MODE,
 			json_string(provider->response_mode));
 	json_object_set_new(*proto_state, OIDC_PROTO_STATE_RESPONSE_TYPE,

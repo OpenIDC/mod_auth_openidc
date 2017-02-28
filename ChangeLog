@@ -8,6 +8,7 @@ feature
   - use constants instead of strings literals
 - add encryption for all cache entries instead of just session data
 - add cookie SameSite flag/policy
+- return HTTP 200 on OPTIONS requests to (unauthenticated) "oauth20" paths
 
 02/20/2017
 - security fix: scrub headers for "AuthType oauth20"

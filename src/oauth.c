@@ -631,9 +631,14 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 
 	/* get the bearer access token from the Authorization header */
 	const char *access_token = NULL;
-	if (oidc_oauth_get_bearer_token(r, &access_token) == FALSE)
+	if (oidc_oauth_get_bearer_token(r, &access_token) == FALSE) {
+		if (r->method_number == M_OPTIONS) {
+			r->user = "";
+			return OK;
+		}
 		return oidc_oauth_return_www_authenticate(r, "invalid_request",
 				"No bearer token found in the request");
+	}
 
 	/* validate the obtained access token against the OAuth AS validation endpoint */
 	json_t *token = NULL;
