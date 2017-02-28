@@ -122,7 +122,7 @@ static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 /*
  * save the session to the cache using a cookie for the index
  */
-static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z) {
+static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, apr_byte_t first_time) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 
@@ -147,11 +147,16 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z) {
 		if (rc == TRUE)
 			/* set the uuid in the cookie */
 			oidc_util_set_cookie(r, oidc_cfg_dir_cookie(r), z->uuid,
-					c->persistent_session_cookie ? z->expiry : -1);
+					c->persistent_session_cookie ? z->expiry : -1,
+							c->cookie_same_site ?
+									(first_time ?
+											OIDC_COOKIE_EXT_SAME_SITE_LAX :
+											OIDC_COOKIE_EXT_SAME_SITE_STRICT) :
+											NULL);
 
 	} else {
 		/* clear the cookie */
-		oidc_util_set_cookie(r, oidc_cfg_dir_cookie(r), "", 0);
+		oidc_util_set_cookie(r, oidc_cfg_dir_cookie(r), "", 0, NULL);
 	}
 
 	return rc;
@@ -173,7 +178,7 @@ static apr_byte_t oidc_session_load_cookie(request_rec *r, oidc_cfg *c,
 /*
  * store the session in a self-contained client-side-only cookie storage
  */
-static apr_byte_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z) {
+static apr_byte_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z, apr_byte_t first_time) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	char *cookieValue = "";
@@ -183,7 +188,12 @@ static apr_byte_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z) {
 
 	oidc_util_set_chunked_cookie(r, oidc_cfg_dir_cookie(r), cookieValue,
 			c->persistent_session_cookie ? z->expiry : -1,
-					c->session_cookie_chunk_size);
+					c->session_cookie_chunk_size,
+					c->cookie_same_site ?
+							(first_time ?
+									OIDC_COOKIE_EXT_SAME_SITE_LAX :
+									OIDC_COOKIE_EXT_SAME_SITE_STRICT) :
+									NULL);
 
 	return TRUE;
 }
@@ -241,7 +251,7 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 /*
  * save a session to cache/cookie
  */
-apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z) {
+apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z, apr_byte_t first_time) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 
@@ -255,10 +265,10 @@ apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z) {
 
 	if (c->session_type == OIDC_SESSION_TYPE_SERVER_CACHE) {
 		/* store the session in the cache */
-		rc = oidc_session_save_cache(r, z);
+		rc = oidc_session_save_cache(r, z, first_time);
 	} else if (c->session_type == OIDC_SESSION_TYPE_CLIENT_COOKIE) {
 		/* store the session in a self-contained cookie */
-		rc = oidc_session_save_cookie(r, z);
+		rc = oidc_session_save_cookie(r, z, first_time);
 	} else {
 		oidc_error(r, "unknown session type: %d", c->session_type);
 		rc = FALSE;
@@ -284,7 +294,7 @@ apr_byte_t oidc_session_free(request_rec *r, oidc_session_t *z) {
  */
 apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z) {
 	oidc_session_free(r, z);
-	return oidc_session_save(r, z);
+	return oidc_session_save(r, z, FALSE);
 }
 
 /*

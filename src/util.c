@@ -788,7 +788,7 @@ static char *oidc_util_get_cookie_path(request_rec *r) {
  * set a cookie in the HTTP response headers
  */
 void oidc_util_set_cookie(request_rec *r, const char *cookieName,
-		const char *cookieValue, apr_time_t expires) {
+		const char *cookieValue, apr_time_t expires, const char *ext) {
 
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
@@ -807,15 +807,27 @@ void oidc_util_set_cookie(request_rec *r, const char *cookieName,
 	}
 
 	/* construct the cookie value */
-	headerString = apr_psprintf(r->pool, "%s=%s;Path=%s%s%s%s%s", cookieName,
-			cookieValue, oidc_util_get_cookie_path(r),
-			(expiresString == NULL) ?
-					"" : apr_psprintf(r->pool, "; expires=%s", expiresString),
-					c->cookie_domain != NULL ?
-							apr_psprintf(r->pool, ";Domain=%s", c->cookie_domain) : "",
-							((apr_strnatcasecmp("https", oidc_get_current_url_scheme(r)) == 0) ?
-									";Secure" : ""),
-									c->cookie_http_only != FALSE ? ";HttpOnly" : "");
+	headerString = apr_psprintf(r->pool, "%s=%s", cookieName, cookieValue);
+
+	headerString = apr_psprintf(r->pool, "%s; Path=%s", headerString,
+			oidc_util_get_cookie_path(r));
+
+	if (expiresString != NULL)
+		headerString = apr_psprintf(r->pool, "%s; Expires=%s", headerString,
+				expiresString);
+
+	if (c->cookie_domain != NULL)
+		headerString = apr_psprintf(r->pool, "%s; Domain=%s", headerString,
+				c->cookie_domain);
+
+	if (apr_strnatcasecmp("https", oidc_get_current_url_scheme(r)) == 0)
+		headerString = apr_psprintf(r->pool, "%s; Secure", headerString);
+
+	if (c->cookie_http_only != FALSE)
+		headerString = apr_psprintf(r->pool, "%s; HttpOnly", headerString);
+
+	if (ext != NULL)
+		headerString = apr_psprintf(r->pool, "%s; %s", headerString, ext);
 
 	/* sanity check on overall cookie value size */
 	if (strlen(headerString) > 4093) {
@@ -913,11 +925,11 @@ char *oidc_util_get_chunked_cookie(request_rec *r, const char *cookieName,
  * set a cookie value that is split over a number of chunked cookies
  */
 void oidc_util_set_chunked_cookie(request_rec *r, const char *cookieName,
-		const char *cookieValue, apr_time_t expires, int chunkSize) {
+		const char *cookieValue, apr_time_t expires, int chunkSize, const char *ext) {
 	int i = 0;
 	int cookieLength = strlen(cookieValue);
 	if ((chunkSize == 0) || (cookieLength < chunkSize)) {
-		oidc_util_set_cookie(r, cookieName, cookieValue, expires);
+		oidc_util_set_cookie(r, cookieName, cookieValue, expires, ext);
 	} else {
 		int chunkCountValue = cookieLength / chunkSize + 1;
 		const char *ptr = cookieValue;
@@ -926,12 +938,12 @@ void oidc_util_set_chunked_cookie(request_rec *r, const char *cookieName,
 					OIDC_COOKIE_CHUNKS_SEPARATOR, i);
 			char *chunkValue = apr_pstrndup(r->pool, ptr, chunkSize);
 			ptr += chunkSize;
-			oidc_util_set_cookie(r, chunkName, chunkValue, expires);
+			oidc_util_set_cookie(r, chunkName, chunkValue, expires, ext);
 		};
 		char *chunkCountName = apr_psprintf(r->pool, "%s%s%s", cookieName,
 				OIDC_COOKIE_CHUNKS_SEPARATOR, OIDC_COOKIE_CHUNKS_POSTFIX);
 		oidc_util_set_cookie(r, chunkCountName,
-				apr_psprintf(r->pool, "%d", chunkCountValue), expires);
+				apr_psprintf(r->pool, "%d", chunkCountValue), expires, ext);
 	}
 }
 

@@ -187,6 +187,9 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_USER_INFO_TOKEN_METHOD_HEADER 0
 #define OIDC_USER_INFO_TOKEN_METHOD_POST   1
 
+#define OIDC_COOKIE_EXT_SAME_SITE_LAX    "SameSite=Lax"
+#define OIDC_COOKIE_EXT_SAME_SITE_STRICT "SameSite=Strict"
+
 typedef struct oidc_jwks_uri_t {
 	const char *url;
 	int refresh_interval;
@@ -330,6 +333,7 @@ typedef struct oidc_cfg {
 	oidc_remote_user_claim_t remote_user_claim;
 	int pass_idtoken_as;
 	int cookie_http_only;
+	int cookie_same_site;
 
 	char *outgoing_proxy;
 
@@ -527,7 +531,7 @@ const char *oidc_get_current_url_host(request_rec *r);
 char *oidc_get_current_url(request_rec *r);
 char *oidc_url_encode(const request_rec *r, const char *str, const char *charsToEncode);
 char *oidc_normalize_header_name(const request_rec *r, const char *str);
-void oidc_util_set_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires);
+void oidc_util_set_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires, const char *ext);
 char *oidc_util_get_cookie(request_rec *r, const char *cookieName);
 apr_byte_t oidc_util_http_get(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth, const char *bearer_token, int ssl_validate_server, char **response, int timeout, const char *outgoing_proxy, apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key);
 apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth, const char *bearer_token, int ssl_validate_server, char **response, int timeout, const char *outgoing_proxy, apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key);
@@ -565,7 +569,7 @@ apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char
 apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret, json_t *payload, char **compact_encoded_jwt);
 apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret, const char *compact_encoded_jwt, json_t **result);
 char *oidc_util_get_chunked_cookie(request_rec *r, const char *cookieName, int cookie_chunk_size);
-void oidc_util_set_chunked_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires, int chunkSize);
+void oidc_util_set_chunked_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires, int chunkSize, const char *ext);
 apr_byte_t oidc_util_create_symmetric_key(request_rec *r, const char *client_secret, int r_key_len, const char *hash_algo, apr_byte_t set_kid, oidc_jwk_t **jwk);
 apr_hash_t * oidc_util_merge_symmetric_key(apr_pool_t *pool, apr_hash_t *private_keys, oidc_jwk_t *jwk);
 
@@ -624,7 +628,7 @@ typedef struct {
 apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **z);
 apr_byte_t oidc_session_get(request_rec *r, oidc_session_t *z, const char *key, const char **value);
 apr_byte_t oidc_session_set(request_rec *r, oidc_session_t *z, const char *key, const char *value);
-apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z);
+apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z, apr_byte_t first_time);
 apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z);
 apr_byte_t oidc_session_free(request_rec *r, oidc_session_t *z);
 

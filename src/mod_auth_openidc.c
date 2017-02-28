@@ -682,7 +682,7 @@ static void oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c) {
 						apr_time_t now = apr_time_sec(apr_time_now());
 						if (now > json_integer_value(v) + c->state_timeout) {
 							oidc_error(r, "state has expired");
-							oidc_util_set_cookie(r, cookieName, "", 0);
+							oidc_util_set_cookie(r, cookieName, "", 0, NULL);
 						}
 						json_decref(state);
 					}
@@ -714,7 +714,7 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 	}
 
 	/* clear state cookie because we don't need it anymore */
-	oidc_util_set_cookie(r, cookieName, "", 0);
+	oidc_util_set_cookie(r, cookieName, "", 0, NULL);
 
 	*proto_state = oidc_get_state_from_cookie(r, c, cookieValue);
 	if (*proto_state == NULL)
@@ -787,7 +787,8 @@ static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
 	const char *cookieName = oidc_get_state_cookie_name(r, state);
 
 	/* set it as a cookie */
-	oidc_util_set_cookie(r, cookieName, cookieValue, -1);
+	oidc_util_set_cookie(r, cookieName, cookieValue, -1,
+			c->cookie_same_site ? OIDC_COOKIE_EXT_SAME_SITE_LAX : NULL);
 
 	//free(s_value);
 
@@ -1315,7 +1316,7 @@ static apr_byte_t oidc_session_pass_tokens_and_save(request_rec *r,
 
 	/* check if something was updated in the session and we need to save it again */
 	if (needs_save)
-		if (oidc_session_save(r, session) == FALSE)
+		if (oidc_session_save(r, session, FALSE) == FALSE)
 			return FALSE;
 
 	return TRUE;
@@ -1623,7 +1624,7 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
 			c->cookie_domain ? c->cookie_domain : oidc_get_current_url_host(r));
 
 	/* store the session */
-	return oidc_session_save(r, session);
+	return oidc_session_save(r, session, TRUE);
 }
 
 /*
@@ -1945,7 +1946,9 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 		oidc_debug(r, "redirecting to external discovery page: %s", url);
 
 		/* set CSRF cookie */
-		oidc_util_set_cookie(r, OIDC_CSRF_NAME, csrf, -1);
+		oidc_util_set_cookie(r, OIDC_CSRF_NAME, csrf, -1,
+				cfg->cookie_same_site ?
+						OIDC_COOKIE_EXT_SAME_SITE_STRICT : NULL);
 
 		/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
 		if (oidc_post_preserve_javascript(r, url, NULL, NULL) == TRUE)
@@ -2017,7 +2020,8 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 			"%s<p><input type=\"submit\" value=\"Submit\"></p>\n", s);
 	s = apr_psprintf(r->pool, "%s</form>\n", s);
 
-	oidc_util_set_cookie(r, OIDC_CSRF_NAME, csrf, -1);
+	oidc_util_set_cookie(r, OIDC_CSRF_NAME, csrf, -1,
+			cfg->cookie_same_site ? OIDC_COOKIE_EXT_SAME_SITE_STRICT : NULL);
 
 	char *javascript = NULL, *javascript_method = NULL;
 	char *html_head =
@@ -2236,7 +2240,7 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 	if (csrf_cookie) {
 
 		/* clean CSRF cookie */
-		oidc_util_set_cookie(r, OIDC_CSRF_NAME, "", 0);
+		oidc_util_set_cookie(r, OIDC_CSRF_NAME, "", 0, NULL);
 
 		/* compare CSRF cookie value with query parameter value */
 		if ((csrf_query == NULL)

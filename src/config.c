@@ -123,6 +123,8 @@
 #define OIDC_DEFAULT_CACHE_FILE_CLEAN_INTERVAL 60
 /* set httponly flag on cookies */
 #define OIDC_DEFAULT_COOKIE_HTTPONLY 1
+/* set Same-Site flag on cookies */
+#define OIDC_DEFAULT_COOKIE_SAME_SITE 0
 /* default cookie path */
 #define OIDC_DEFAULT_COOKIE_PATH "/"
 /* default OAuth 2.0 introspection token parameter name */
@@ -849,6 +851,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->remote_user_claim.reg_exp = NULL;
 	c->pass_idtoken_as = OIDC_PASS_IDTOKEN_AS_CLAIMS;
 	c->cookie_http_only = OIDC_DEFAULT_COOKIE_HTTPONLY;
+	c->cookie_same_site = OIDC_DEFAULT_COOKIE_SAME_SITE;
 
 	c->outgoing_proxy = NULL;
 	c->crypto_passphrase = NULL;
@@ -1214,6 +1217,9 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->cookie_http_only =
 			add->cookie_http_only != OIDC_DEFAULT_COOKIE_HTTPONLY ?
 					add->cookie_http_only : base->cookie_http_only;
+	c->cookie_same_site =
+			add->cookie_same_site != OIDC_DEFAULT_COOKIE_SAME_SITE ?
+					add->cookie_same_site : base->cookie_same_site;
 
 	c->outgoing_proxy =
 			add->outgoing_proxy != NULL ?
@@ -2045,6 +2051,11 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_cfg, cookie_http_only),
 				RSRC_CONF,
 				"Defines whether or not the cookie httponly flag is set on cookies."),
+		AP_INIT_FLAG("OIDCCookieSameSite",
+				oidc_set_flag_slot,
+				(void *) APR_OFFSETOF(oidc_cfg, cookie_same_site),
+				RSRC_CONF,
+				"Defines whether or not the cookie Same-Site flag is set on cookies."),
 		AP_INIT_TAKE1("OIDCOutgoingProxy",
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, outgoing_proxy),
