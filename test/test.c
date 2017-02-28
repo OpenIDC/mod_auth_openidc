@@ -1032,7 +1032,7 @@ static char * test_proto_authorization_request(request_rec *r) {
 	json_t * proto_state = json_object();
 	json_object_set_new(proto_state, OIDC_PROTO_STATE_NONCE, json_string("anonce"));
 	json_object_set_new(proto_state, OIDC_PROTO_STATE_ORIGINAL_URL, json_string("https://localhost/protected/index.php"));
-	json_object_set_new(proto_state, OIDC_PROTO_STATE_ORIGINAL_METHOD, json_string(OIDC_HTTP_METHOD_GET));
+	json_object_set_new(proto_state, OIDC_PROTO_STATE_ORIGINAL_METHOD, json_string(OIDC_METHOD_GET));
 	json_object_set_new(proto_state, OIDC_PROTO_STATE_ISSUER, json_string(provider.issuer));
 	json_object_set_new(proto_state, OIDC_PROTO_STATE_RESPONSE_TYPE, json_string(provider.response_type));
 	json_object_set_new(proto_state, OIDC_PROTO_STATE_TIMESTAMP, json_integer(apr_time_sec(apr_time_now())));
