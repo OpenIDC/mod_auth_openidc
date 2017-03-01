@@ -3156,6 +3156,24 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 }
 
 /*
+ * main routine: handle "mixed" OIDC/OAuth authentication
+ */
+static int oidc_check_mixed_userid_oauth(request_rec *r, oidc_cfg *c) {
+
+	/* get the bearer access token from the Authorization header */
+	const char *access_token = NULL;
+	if (oidc_oauth_get_bearer_token(r, &access_token) == TRUE)
+		return oidc_oauth_check_userid(r, c);
+
+	/* no bearer token found: then treat this as a regular OIDC browser request */
+	return oidc_check_userid_openidc(r, c);
+}
+
+#define OIDC_AUTH_TYPE_OPENID_CONNECT "openid-connect"
+#define OIDC_AUTH_TYPE_OPENID_OAUTH20 "oauth20"
+#define OIDC_AUTH_TYPE_OPENID_BOTH    "auth-openidc"
+
+/*
  * generic Apache authentication hook for this module: dispatches to OpenID Connect or OAuth 2.0 specific routines
  */
 int oidc_check_user_id(request_rec *r) {
@@ -3172,13 +3190,19 @@ int oidc_check_user_id(request_rec *r) {
 		return DECLINED;
 
 	/* see if we've configured OpenID Connect user authentication for this request */
-	if (apr_strnatcasecmp((const char *) ap_auth_type(r), "openid-connect")
-			== 0)
+	if (apr_strnatcasecmp((const char *) ap_auth_type(r),
+			OIDC_AUTH_TYPE_OPENID_CONNECT) == 0)
 		return oidc_check_userid_openidc(r, c);
 
 	/* see if we've configured OAuth 2.0 access control for this request */
-	if (apr_strnatcasecmp((const char *) ap_auth_type(r), "oauth20") == 0)
+	if (apr_strnatcasecmp((const char *) ap_auth_type(r),
+			OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0)
 		return oidc_oauth_check_userid(r, c);
+
+	/* see if we've configured "mixed mode" for this request */
+	if (apr_strnatcasecmp((const char *) ap_auth_type(r),
+			OIDC_AUTH_TYPE_OPENID_BOTH) == 0)
+		return oidc_check_mixed_userid_oauth(r, c);
 
 	/* this is not for us but for some other handler */
 	return DECLINED;

@@ -9,6 +9,7 @@ feature
 - add encryption for all cache entries instead of just session data
 - add cookie SameSite flag/policy
 - return HTTP 200 on OPTIONS requests to (unauthenticated) "oauth20" paths
+- add "AuthType auth-openidc" option that allows both "oauth20" and "openid-connect" on the same path
 
 02/20/2017
 - security fix: scrub headers for "AuthType oauth20"
