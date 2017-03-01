@@ -865,13 +865,13 @@ function rp_id_token_sig_enc() {
 	local TEST_ID=$1
 
 	echo " * "
-	echo " * [server] prerequisite: .conf exists and \"id_token_encrypted_response_alg\" is set to e.g. \"A128KW\""
+	echo " * [server] prerequisite: .conf exists and \"id_token_encrypted_response_alg\" is set to e.g. \"RSA1_5\""
 	echo " * "
 
 	# test a regular flow up until successful authenticated application access
 	regular_flow "${TEST_ID}"
 
-	find_in_logfile "${TEST_ID}" "check encrypted id_token" 125 "oidc_proto_parse_idtoken: enter: id_token header={\"alg\":\"A128KW\""
+	find_in_logfile "${TEST_ID}" "check encrypted id_token" 125 "oidc_proto_parse_idtoken: enter: id_token header" "\"alg\":\"RSA1_5\""
 	find_in_logfile "${TEST_ID}" "check decryption result" 125 "oidc_proto_parse_idtoken: successfully parsed (and possibly decrypted) JWT"
 }
 
@@ -1066,32 +1066,32 @@ function rp_key_rotation_op_enc_key() {
 	regular_flow "${TEST_ID}"
 	
 	# check we created a request object that was encrypted 
-	find_in_logfile "${TEST_ID}" "check encrypted request object" 150 "oidc_proto_create_request_uri: serialized request object JWT header" "\"alg\": \"RSA1_5\""
+	find_in_logfile "${TEST_ID}" "check encrypted request object" 200 "oidc_proto_create_request_uri: serialized request object JWT header" "\"alg\": \"RSA1_5\""
 
 	# check we sent request URI in the authorization request
-	find_in_logfile "${TEST_ID}" "check request URI" 150 "oidc_util_hdr_table_set: Location:" "&request_uri="
+	find_in_logfile "${TEST_ID}" "check request URI" 200 "oidc_util_hdr_table_set: Location:" "&request_uri="
 
 	# check that we refreshed keys
-	find_in_logfile "${TEST_ID}" "check JWKS refresh" 150 "oidc_metadata_jwks_get: doing a forced refresh of the JWKs from URI"
+	find_in_logfile "${TEST_ID}" "check JWKS refresh" 200 "oidc_metadata_jwks_get: doing a forced refresh of the JWKs from URI"
 	
 	# get the kid we used for encryption
-	KIDA=`tail -n 150 ${LOG_FILE} | grep  "oidc_proto_create_request_uri: serialized request object JWT header" | cut -d{ -f2 | cut -d: -f4 | cut -d"\"" -f2`
+	KIDA=`tail -n 200 ${LOG_FILE} | grep  "oidc_proto_create_request_uri: serialized request object JWT header" | cut -d{ -f2 | cut -d: -f4 | cut -d"\"" -f2`
 	message "${TEST_ID}" "kid #1 ${KIDA}"
 		
 	# test a regular flow up until successful authenticated application access
 	regular_flow "${TEST_ID}"
 	
 	# check we created a request object that was encrypted 
-	find_in_logfile "${TEST_ID}" "check encrypted request object" 150 "oidc_proto_create_request_uri: serialized request object JWT header" "\"alg\": \"RSA1_5\""
+	find_in_logfile "${TEST_ID}" "check encrypted request object" 200 "oidc_proto_create_request_uri: serialized request object JWT header" "\"alg\": \"RSA1_5\""
 
 	# check we sent request URI in the authorization request
-	find_in_logfile "${TEST_ID}" "check request URI" 150 "oidc_util_hdr_table_set: Location:" "&request_uri="
+	find_in_logfile "${TEST_ID}" "check request URI" 200 "oidc_util_hdr_table_set: Location:" "&request_uri="
 
 	# check that we refreshed keys
-	find_in_logfile "${TEST_ID}" "check JWKS refresh" 150 "oidc_metadata_jwks_get: doing a forced refresh of the JWKs from URI"
+	find_in_logfile "${TEST_ID}" "check JWKS refresh" 200 "oidc_metadata_jwks_get: doing a forced refresh of the JWKs from URI"
 	
 	# get the kid we used for encryption
-	KIDB=`tail -n 150 ${LOG_FILE} | grep  "oidc_proto_create_request_uri: serialized request object JWT header" | cut -d{ -f2 | cut -d: -f4 | cut -d"\"" -f2`
+	KIDB=`tail -n 200 ${LOG_FILE} | grep  "oidc_proto_create_request_uri: serialized request object JWT header" | cut -d{ -f2 | cut -d: -f4 | cut -d"\"" -f2`
 	message "${TEST_ID}" "kid #2 ${KIDB}"
 				
 	# check that the kid's from the two tests differ
