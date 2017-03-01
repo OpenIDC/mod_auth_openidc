@@ -305,7 +305,7 @@ static apr_byte_t oidc_oauth_get_cached_access_token(request_rec *r,
 		return FALSE;
 
 	/* json decode the cache entry */
-	if (oidc_util_decode_json_object(r, s_cache_entry, &cache_entry)) {
+	if (oidc_util_decode_json_object(r, s_cache_entry, &cache_entry) == FALSE) {
 		*json = NULL;
 		return FALSE;
 	}
@@ -674,6 +674,7 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 	if (oidc_oauth_set_remote_user(r, c, token) == FALSE) {
 		oidc_error(r,
 				"remote user could not be set, aborting with HTTP_UNAUTHORIZED");
+		json_decref(token);
 		return oidc_oauth_return_www_authenticate(r, "invalid_token",
 				"Could not set remote user");
 	}
