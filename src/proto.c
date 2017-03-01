@@ -530,7 +530,7 @@ int oidc_proto_authorization_request(request_rec *r,
 		return DONE;
 
 	/* add a referred token binding request for the provider */
-	oidc_util_hdr_err_out_add(r, "Include-Referred-Token-Binding-ID", "true");
+	//oidc_util_hdr_err_out_add(r, "Include-Referred-Token-Binding-ID", "true");
 
 	/* add the redirect location header */
 	oidc_util_hdr_out_location_set(r, authorization_request);
