@@ -551,8 +551,8 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key,
 			&auth_openidc_module);
 	int encrypted = oidc_cfg_cache_encrypt(r);
 
-	oidc_debug(r, "enter: %s=len(%d) (encrypt=%d)", key, (int )strlen(value),
-			encrypted);
+	oidc_debug(r, "enter: %s=len(%d) (encrypt=%d)", key,
+			value ? (int )strlen(value) : 0, encrypted);
 
 	/* see if we need to encrypt */
 	if ((value != NULL) && (encrypted == 1)) {
