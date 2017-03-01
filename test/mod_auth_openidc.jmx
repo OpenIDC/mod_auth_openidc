@@ -9,7 +9,7 @@
         <collectionProp name="Arguments.arguments">
           <elementProp name="APP_SERVER" elementType="Argument">
             <stringProp name="Argument.name">APP_SERVER</stringProp>
-            <stringProp name="Argument.value">localhost.pingidentity.nl</stringProp>
+            <stringProp name="Argument.value">ubuntu.zmartzone.eu</stringProp>
             <stringProp name="Argument.metadata">=</stringProp>
           </elementProp>
           <elementProp name="APP_PORT" elementType="Argument">
@@ -24,7 +24,7 @@
           </elementProp>
           <elementProp name="AS_HOST" elementType="Argument">
             <stringProp name="Argument.name">AS_HOST</stringProp>
-            <stringProp name="Argument.value">localhost.pingidentity.nl</stringProp>
+            <stringProp name="Argument.value">macbook</stringProp>
             <stringProp name="Argument.metadata">=</stringProp>
           </elementProp>
           <elementProp name="AS_PORT" elementType="Argument">
@@ -691,7 +691,7 @@
         </hashTree>
       </hashTree>
       <ResultCollector guiclass="ViewResultsFullVisualizer" testclass="ResultCollector" testname="View Results Tree" enabled="true">
-        <boolProp name="ResultCollector.error_logging">false</boolProp>
+        <boolProp name="ResultCollector.error_logging">true</boolProp>
         <objProp>
           <name>saveConfig</name>
           <value class="SampleSaveConfiguration">
