@@ -8,3 +8,5 @@
 /test-cmd
 /*.json
 /setenv.sh
+/code/
+/metadata/

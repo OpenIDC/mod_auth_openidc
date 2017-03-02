@@ -17,8 +17,9 @@ TARGET_URL="<YOUR-APPLICATION-URL-PROTECTED-BY-MOD_AUTH_OPENIDC>"
 RP_ID="<YOUR-RP-TEST-CLIENT-IDENTIFIER>"
 LOG_FILE="<YOUR-APACHE-ERROR-LOGFILE-WITH-DEBUG-MESSAGES>"
 
-RP_TEST_PORT=8090
+RP_TEST_PORT=8080
 RP_TEST_HOST="rp.certification.openid.net"
+#RP_TEST_HOST="localhost"
 RP_TEST_URL="https://${RP_TEST_HOST}:${RP_TEST_PORT}"
 RP_TEST_URL_ENC="https%3A%2F%2F${RP_TEST_HOST}%3A${RP_TEST_PORT}"
 COOKIE_JAR="/tmp/cookie.jar"
@@ -32,7 +33,9 @@ fi
 
 TESTS="
 	rp-discovery-webfinger-url
+	rp-discovery-webfinger-http-href
 	rp-discovery-webfinger-acct
+	rp-discovery-webfinger-unknown-member
 	rp-discovery-issuer-not-matching-config
 	rp-discovery-openid-configuration
 	rp-discovery-jwks_uri-keys
@@ -59,7 +62,8 @@ TESTS="
 	rp-token_endpoint-private_key_jwt
 	rp-id_token-bad-sig-rs256
 	rp-id_token-bad-sig-hs256
-	rp-id_token-sig+enc			
+	rp-id_token-sig+enc
+	rp-id_token-sig+enc-a128kw
 	rp-id_token-sig-rs256
 	rp-id_token-sig-hs256
 	rp-id_token-sig-es256
@@ -89,8 +93,6 @@ TEST_ERR="
 "
 
 TESTS_OBSOLETE="
-	rp_discovery_webfinger_http_href
-	rp_discovery_webfinger_unknown_member
 	rp_support_3rd_party_init_login
 	rp-key-rotation-rp-sign-key
 	rp-key-rotation-rp-enc-key
@@ -100,23 +102,52 @@ TESTS_UNSUPPORTED="
 	rp-self-issued
 "
 
-TESTS_BASIC="
+TESTS_CODE="
 	rp-response_type-code
 	rp-scope-userinfo-claims
 	rp-nonce-invalid
 	rp-token_endpoint-client_secret_basic
-	rp-id_token-bad-sig-rs256
-	rp-id_token-sig-rs256
+	rp-id_token-aud
+	rp-id_token-kid-absent-single-jwks
 	rp-id_token-sig-none
 	rp-id_token-issuer-mismatch
-	rp-id_token-iat
-	rp-id_token-aud
-	rp-id_token-sub
-	rp-id_token-kid-absent-single-jwks
 	rp-id_token-kid-absent-multiple-jwks
-	rp-userinfo-bearer-header
-	rp-userinfo-bearer-body
+	rp-id_token-bad-sig-rs256
+	rp-id_token-iat
+	rp-id_token-sig-rs256
+	rp-id_token-sub
 	rp-userinfo-bad-sub-claim
+	rp-userinfo-bearer-header
+	rp-discovery-jwks_uri-keys
+	rp-discovery-webfinger-http-href
+	rp-discovery-webfinger-acct
+	rp-discovery-webfinger-unknown-member
+	rp-discovery-issuer-not-matching-config
+	rp-discovery-webfinger-url
+	rp-discovery-openid-configuration
+	rp-registration-dynamic
+	rp-request_uri-sig+enc
+	rp-request_uri-sig
+	rp-request_uri-unsigned
+	rp-request_uri-enc
+	rp-token_endpoint-private_key_jwt
+	rp-token_endpoint-client_secret_jwt
+	rp-token_endpoint-client_secret_post
+	rp-id_token-sig+enc-a128kw
+	rp-id_token-bad-sig-es256
+	rp-id_token-sig+enc
+	rp-id_token-sig-es256
+	rp-id_token-bad-sig-hs256
+	rp-id_token-sig-hs256
+	rp-key-rotation-op-sign-key-native
+	rp-key-rotation-op-sign-key
+	rp-key-rotation-op-enc-key
+	rp-claims-distributed
+	rp-claims-aggregated
+	rp-userinfo-sig+enc
+	rp-userinfo-bearer-body
+	rp-userinfo-sig
+	rp-userinfo-enc	
 "
 
 TESTS_IMPLICIT="
@@ -183,7 +214,7 @@ TESTS_DYNAMIC="
 
 if [ -z $1 ] ; then
 	echo
-	printf "Usage: ${0}\n\tall\n\tbasic\n\timplicit-idtoken\n\timplicit-idtoken-token\n\thybrid-code-idtoken\n\thybrid-code-token\n\thybrid-code-idtoken-token\n\tconfig\n\tdynamic${TESTS}"
+	printf "Usage: ${0}\n\tall\n\tcode\n\timplicit-idtoken\n\timplicit-idtoken-token\n\thybrid-code-idtoken\n\thybrid-code-token\n\thybrid-code-idtoken-token\n\tconfig\n\tdynamic${TESTS}"
 	echo
 	exit
 fi
@@ -366,8 +397,7 @@ function rp_discovery_webfinger_url() {
 
 function rp_discovery_webfinger_acct() {
 	local TEST_ID=$1
-	local DOMAIN=`echo ${RP_TEST_URL} | cut -d"/" -f3`
-	local ACCT="${RP_ID}.${TEST_ID}@${DOMAIN}"
+	local ACCT="${RP_ID}.${TEST_ID}@${RP_TEST_HOST}:${RP_TEST_PORT}"
 
 	initiate_sso ${TEST_ID} ${ACCT} "return"
 	
@@ -430,35 +460,33 @@ function rp_registration_dynamic() {
 	# check that the registration is initiated and a successful client registration response is returned"
 }
 
-#function rp_discovery_webfinger_unknown_member() {
-#	local TEST_ID="rp-discovery-webfinger-unknown-member"
-#	local DOMAIN=`echo ${RP_TEST_URL} | cut -d"/" -f3`
-#	local ACCT="${RP_ID}.${TEST_ID}@${DOMAIN}"
-#
-#	# check that the authentication request is initiated to the discovered authorization endpoint
-#	initiate_sso "${TEST_ID}" "${ACCT}" "authorization"
-#
-#	# check that the webfinger request contains acct:
-#	URL="${RP_TEST_URL}/.well-known/webfinger?resource=acct%3A${RP_ID}.${TEST_ID}%40rp.certification.openid.net%3A8080&rel=http%3A%2F%2Fopenid.net%2Fspecs%2Fconnect%2F1.0%2Fissuer"
-#	find_in_logfile "${TEST_ID}" "check webfinger request" 75 "oidc_util_http_get: get URL=\"${URL}\""
-#	# check that the response contains \"dummy\": \"foobar\""
-#	find_in_logfile "${TEST_ID}" "check webfinger response" 75 "oidc_util_http_call: response=" "\"dummy\": \"foobar\""
-#}
+function rp_discovery_webfinger_unknown_member() {
+	local TEST_ID=$1
+	local ACCT="${RP_ID}.${TEST_ID}@${RP_TEST_HOST}:${RP_TEST_PORT}"
 
-#function rp_discovery_webfinger_http_href() {
-#	local TEST_ID="rp-discovery-webfinger-http-href"
-#	local DOMAIN=`echo ${RP_TEST_URL} | cut -d"/" -f3`
-#	local ACCT="${RP_ID}.${TEST_ID}@${DOMAIN}"
-#
-#	# check that the authentication request is initiated to the discovered authorization endpoint
-#	initiate_sso "${TEST_ID}" "${ACCT}" "nogrep"
-#	
-#	MATCH="Could not resolve the provided account name to an OpenID Connect provider"
-#	echo "${RESULT}" | grep -q "${MATCH}" && echo "OK" || { printf "ERROR:\n could not find \"%s\" in client HTML output:\n%s\n" "${MATCH}" "${RESULT}" && exit; }
-#
-#	# check that the module choked on the plain HTTP href value
-#	find_in_logfile "${TEST_ID}" "check webfinger response" 50 "oidc_proto_webfinger_discovery: response JSON object contains an \"href\" value that is not a valid \"https\" URL"
-#}
+	# check that the authentication request is initiated to the discovered authorization endpoint
+	initiate_sso "${TEST_ID}" "${ACCT}" "authorization"
+
+	# check that the webfinger request contains acct:
+	URL="${RP_TEST_URL}/.well-known/webfinger?resource=acct%3A${RP_ID}.${TEST_ID}%40${RP_TEST_HOST}%3A${RP_TEST_PORT}&rel=http%3A%2F%2Fopenid.net%2Fspecs%2Fconnect%2F1.0%2Fissuer"
+	find_in_logfile "${TEST_ID}" "check webfinger request" 75 "oidc_util_http_get: get URL=\"${URL}\""
+	# check that the response contains \"dummy\": \"foobar\""
+	find_in_logfile "${TEST_ID}" "check webfinger response" 75 "oidc_util_http_call: response=" "\"dummy\": \"foobar\""
+}
+
+function rp_discovery_webfinger_http_href() {
+	local TEST_ID=$1
+	local ACCT="${RP_ID}.${TEST_ID}@${RP_TEST_HOST}:${RP_TEST_PORT}"
+
+	# check that the authentication request is initiated to the discovered authorization endpoint
+	initiate_sso "${TEST_ID}" "${ACCT}" "nogrep"
+	
+	MATCH="Could not resolve the provided account name to an OpenID Connect provider"
+	echo "${RESULT}" | grep -q "${MATCH}" && echo "OK" || { printf "ERROR:\n could not find \"%s\" in client HTML output:\n%s\n" "${MATCH}" "${RESULT}" && exit; }
+
+	# check that the module choked on the plain HTTP href value
+	find_in_logfile "${TEST_ID}" "check reject webfinger response" 50 "oidc_proto_webfinger_discovery: response JSON object contains an \"href\" value that is not a valid \"https\" URL"
+}
 
 function rp_response_type_code() {
 	local TEST_ID=$1
@@ -702,13 +730,14 @@ function rp_support_3rd_party_init_login() {
 
 function rp_scope_userinfo_claims() {
 	local TEST_ID=$1
-
+	local RESPONSE_MODE=$2
+	
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"scope\" is set to \"openid email phone\""
 	echo " * "
 
 	# test a regular flow up until successful authenticated application access
-	regular_flow "${TEST_ID}" "${2}"
+	regular_flow "${TEST_ID}" "${RESPONSE_MODE}"
 
 	if [ "$2" != "fragment" ] ; then
 		# make sure the id_token contains the email claim
@@ -875,6 +904,20 @@ function rp_id_token_sig_enc() {
 	find_in_logfile "${TEST_ID}" "check decryption result" 125 "oidc_proto_parse_idtoken: successfully parsed (and possibly decrypted) JWT"
 }
 
+function rp_id_token_sig_enc_a128kw() {
+	local TEST_ID=$1
+
+	echo " * "
+	echo " * [server] prerequisite: .conf exists and \"id_token_encrypted_response_alg\" is set to e.g. \"A128KW\""
+	echo " * "
+
+	# test a regular flow up until successful authenticated application access
+	regular_flow "${TEST_ID}"
+
+	find_in_logfile "${TEST_ID}" "check encrypted id_token" 125 "oidc_proto_parse_idtoken: enter: id_token header" "\"alg\":\"A128KW\""
+	find_in_logfile "${TEST_ID}" "check decryption result" 125 "oidc_proto_parse_idtoken: successfully parsed (and possibly decrypted) JWT"
+}
+
 function rp_id_token_sig_rs256() {
 	local TEST_ID=$1
 	
@@ -918,15 +961,18 @@ function rp_id_token_sig_none() {
 
 function rp_id_token_bad_c_hash() {
 	local TEST_ID=$1
+	local RESPONSE_MODE=$3
 	local ISSUER="${RP_TEST_URL}/${RP_ID}/${TEST_ID}"
-
+	if [ -z ${RESPONSE_MODE} ] ; then
+		RESPONSE_MODE="fragment"
+	fi
 	echo " * "
 	echo " * [server] prerequisite: .conf exists and \"response_type\" is set to \"code id_token token\""
 	echo " * "
 
 	initiate_sso ${TEST_ID} ${ISSUER}
 	send_authentication_request ${TEST_ID} ${RESULT}
-	send_authentication_response ${TEST_ID} ${RESULT} fragment
+	send_authentication_response ${TEST_ID} ${RESULT} ${RESPONSE_MODE}
 
 	find_in_logfile "${TEST_ID}" "check c_hash mismatch" 15 "oidc_proto_validate_code: could not validate code against \"c_hash\""
 }
@@ -1041,6 +1087,22 @@ function rp_key_rotation_op_sign_key() {
 
 	# test a regular flow up until successful authenticated application access
 	regular_flow "${TEST_ID}"
+
+	# test a regular flow up until successful authenticated application access
+	regular_flow "${TEST_ID}"
+	
+	# make sure we tried to use keys from cache first and missed
+	find_in_logfile "${TEST_ID}" "check JWKs cache miss" 125 "oidc_proto_get_keys_from_jwks_uri: could not find a key in the cached JSON Web Keys"
+	# and we did a forced refresh
+	find_in_logfile "${TEST_ID}" "check JWKs refresh" 125 "oidc_metadata_jwks_get: doing a forced refresh of the JWKs"
+	# then we found a match
+	find_in_logfile "${TEST_ID}" "check matching kid" 125 "oidc_proto_get_key_from_jwks: found matching kid:" "rotated_rsa"
+	# and it verified succesfully
+	find_in_logfile "${TEST_ID}" "check verification" 125 "oidc_proto_jwt_verify: JWT signature verification" "was successful"				
+}
+
+function rp_key_rotation_op_sign_key_native() {
+	local TEST_ID=$1
 
 	# test a regular flow up until successful authenticated application access
 	regular_flow "${TEST_ID}"
@@ -1278,8 +1340,8 @@ if [ "$1" == "all" ] ; then
 	echo ""
 	printf " # SUCCESS: coverage %.2f%%\n" `echo "100 * ${NR} / ${TOTAL}" | bc -l`
 	echo ""		
-elif [ "$1" == "basic" ] ; then
-	execute_profile basic query "${TESTS_BASIC}"
+elif [ "$1" == "code" ] ; then
+	execute_profile code query "${TESTS_CODE}"
 elif [ "$1" == "implicit-idtoken" ] ; then
 	execute_profile implicit/id_token fragment "rp-response_type-id_token ${TESTS_IMPLICIT}"
 elif [ "$1" == "implicit-idtoken-token" ] ; then
@@ -1295,5 +1357,5 @@ elif [ "$1" == "hybrid-code-token" ] ; then
 elif [ "$1" == "hybrid-code-idtoken-token" ] ; then
 	execute_profile hybrid/code+id_token+token fragment "rp-response_type-code+id_token+token ${TESTS_HYBRID}"
 else				
-	execute_test "${1}" 0 1 query
+	execute_test "${1}" 0 1
 fi
