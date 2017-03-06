@@ -193,7 +193,8 @@ static char *oidc_cache_memcache_get_key(apr_pool_t *pool, const char *section,
  */
 static apr_byte_t oidc_cache_memcache_status(request_rec *r, oidc_cache_cfg_memcache_t *context) {
 	int rc = TRUE;
-	for (int i = 0; rc && i < context->cache_memcache->ntotal; i++)
+	int i;
+	for (i = 0; rc && i < context->cache_memcache->ntotal; i++)
 		rc = rc && (context->cache_memcache->live_servers[0]->status != APR_MC_SERVER_DEAD);
 	return rc;
 }
