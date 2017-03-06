@@ -436,20 +436,19 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section,
 		return FALSE;
 
 	/* next write the value */
-	if ((rc = oidc_cache_file_write(r, path, fd, (void *) value, info.len))
-			!= APR_SUCCESS)
-		return FALSE;
+	rc = oidc_cache_file_write(r, path, fd, (void *) value, info.len);
 
 	/* unlock and close the written file */
 	apr_file_unlock(fd);
 	apr_file_close(fd);
 
-	/* log our success */
+	/* log our success/failure */
 	oidc_debug(r,
-			"set entry for key \"%s\" (%" APR_SIZE_T_FMT " bytes, expires in: %" APR_TIME_T_FMT ")",
-			key, info.len, apr_time_sec(expiry - apr_time_now()));
+			"%s stored entry for key \"%s\" (%" APR_SIZE_T_FMT " bytes, expires in: %" APR_TIME_T_FMT ")",
+			rc ? "successfully" : "could not", key, info.len,
+					apr_time_sec(expiry - apr_time_now()));
 
-	return TRUE;
+	return rc;
 }
 
 oidc_cache_t oidc_cache_file = {

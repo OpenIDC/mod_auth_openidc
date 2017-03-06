@@ -103,20 +103,23 @@ static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 
+	apr_byte_t rc = FALSE;
+
 	/* get the cookie that should be our uuid/key */
 	char *uuid = oidc_util_get_cookie(r, oidc_cfg_dir_cookie(r));
 
 	/* get the string-encoded session from the cache based on the key; decryption is based on the cache backend config */
 	if (uuid != NULL) {
 		char *s_json = NULL;
-		oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, uuid, &s_json);
-		if ((s_json != NULL)
-				&& (oidc_session_decode(r, c, z, s_json, FALSE) == FALSE))
-			return FALSE;
-		strncpy(z->uuid, uuid, strlen(uuid));
+		rc = oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, uuid, &s_json);
+		if ((rc == TRUE) && (s_json != NULL)) {
+			rc = oidc_session_decode(r, c, z, s_json, FALSE);
+			if (rc == TRUE)
+				strncpy(z->uuid, uuid, strlen(uuid));
+		}
 	}
 
-	return TRUE;
+	return rc;
 }
 
 /*
@@ -205,6 +208,8 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 
+	apr_byte_t rc = FALSE;
+
 	/* allocate space for the session object and fill it */
 	oidc_session_t *z = (*zz = apr_pcalloc(r->pool, sizeof(oidc_session_t)));
 
@@ -212,15 +217,15 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 	z->remote_user = NULL;
 	z->state = NULL;
 
-	if (c->session_type == OIDC_SESSION_TYPE_SERVER_CACHE) {
+	if (c->session_type == OIDC_SESSION_TYPE_SERVER_CACHE)
 		/* load the session from the cache */
-		oidc_session_load_cache(r, z);
-	} else if (c->session_type == OIDC_SESSION_TYPE_CLIENT_COOKIE) {
+		rc = oidc_session_load_cache(r, z);
+
+	/* if we get here we configured client-cookie or retrieving from the cache failed */
+	if ((c->session_type == OIDC_SESSION_TYPE_CLIENT_COOKIE)
+			|| oidc_cfg_session_cache_fallback_to_cookie(r))
 		/* load the session from a self-contained cookie */
-		oidc_session_load_cookie(r, c, z);
-	} else {
-		oidc_error(r, "unknown session type: %d", c->session_type);
-	}
+		rc = oidc_session_load_cookie(r, c, z);
 
 	if (z->state != NULL) {
 
@@ -245,7 +250,7 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 		z->state = json_object();
 	}
 
-	return TRUE;
+	return rc;
 }
 
 /*
@@ -255,7 +260,7 @@ apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z, apr_byte_t first
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 
-	apr_byte_t rc = TRUE;
+	apr_byte_t rc = FALSE;
 
 	if (z->state != NULL) {
 		oidc_session_set(r, z, OIDC_SESSION_REMOTE_USER_KEY, z->remote_user);
@@ -263,16 +268,15 @@ apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z, apr_byte_t first
 				json_integer(apr_time_sec(z->expiry)));
 	}
 
-	if (c->session_type == OIDC_SESSION_TYPE_SERVER_CACHE) {
+	if (c->session_type == OIDC_SESSION_TYPE_SERVER_CACHE)
 		/* store the session in the cache */
 		rc = oidc_session_save_cache(r, z, first_time);
-	} else if (c->session_type == OIDC_SESSION_TYPE_CLIENT_COOKIE) {
+
+	/* if we get here we configured client-cookie or saving in the cache failed */
+	if ((c->session_type == OIDC_SESSION_TYPE_CLIENT_COOKIE)
+			|| oidc_cfg_session_cache_fallback_to_cookie(r))
 		/* store the session in a self-contained cookie */
 		rc = oidc_session_save_cookie(r, z, first_time);
-	} else {
-		oidc_error(r, "unknown session type: %d", c->session_type);
-		rc = FALSE;
-	}
 
 	return rc;
 }

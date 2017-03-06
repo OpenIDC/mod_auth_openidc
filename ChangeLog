@@ -10,6 +10,7 @@ feature
 - add cookie SameSite flag/policy
 - return HTTP 200 on OPTIONS requests to (unauthenticated) "oauth20" paths
 - add "AuthType auth-openidc" option that allows both "oauth20" and "openid-connect" on the same path
+- add fallback to a by-value session cookie if the primary cache fails with OIDCSessionCacheFallbackToCookie
 
 02/20/2017
 - security fix: scrub headers for "AuthType oauth20"

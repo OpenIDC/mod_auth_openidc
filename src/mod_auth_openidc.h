@@ -326,6 +326,7 @@ typedef struct oidc_cfg {
 	int http_timeout_short;
 	int state_timeout;
 	int session_inactivity_timeout;
+	int session_cache_fallback_to_cookie;
 
 	char *cookie_domain;
 	char *claim_delimiter;
@@ -522,6 +523,7 @@ apr_array_header_t *oidc_dir_cfg_strip_cookies(request_rec *r);
 int oidc_dir_cfg_unauth_action(request_rec *r);
 oidc_valid_function_t oidc_cfg_get_valid_endpoint_auth_function(oidc_cfg *cfg);
 int oidc_cfg_cache_encrypt(request_rec *r);
+int oidc_cfg_session_cache_fallback_to_cookie(request_rec *r);
 
 // oidc_util.c
 int oidc_strnenvcmp(const char *a, const char *b, int len);

@@ -189,6 +189,16 @@ static char *oidc_cache_memcache_get_key(apr_pool_t *pool, const char *section,
 }
 
 /*
+ * check dead/alive status for all servers
+ */
+static apr_byte_t oidc_cache_memcache_status(request_rec *r, oidc_cache_cfg_memcache_t *context) {
+	int rc = TRUE;
+	for (int i = 0; rc && i < context->cache_memcache->ntotal; i++)
+		rc = rc && (context->cache_memcache->live_servers[0]->status != APR_MC_SERVER_DEAD);
+	return rc;
+}
+
+/*
  * get a name/value pair from memcache
  */
 static apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *section,
@@ -209,11 +219,26 @@ static apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *section,
 			&len, NULL);
 
 	if (rv == APR_NOTFOUND) {
+
+		/*
+		 * NB: workaround the fact that the apr_memcache returns APR_NOTFOUND if a server has been marked dead
+		 */
+		if (oidc_cache_memcache_status(r, context) == FALSE) {
+
+			oidc_cache_memcache_log_status_error(r, "apr_memcache_getp", rv);
+
+			return FALSE;
+		}
+
 		oidc_debug(r, "apr_memcache_getp: key %s not found in cache",
 				oidc_cache_memcache_get_key(r->pool, section, key));
-		return FALSE;
+
+		return TRUE;
+
 	} else if (rv != APR_SUCCESS) {
+
 		oidc_cache_memcache_log_status_error(r, "apr_memcache_getp", rv);
+
 		return FALSE;
 	}
 
@@ -252,6 +277,7 @@ static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *section,
 		if (rv == APR_NOTFOUND) {
 			oidc_debug(r, "apr_memcache_delete: key %s not found in cache",
 					oidc_cache_memcache_get_key(r->pool, section, key));
+			rv = APR_SUCCESS;
 		} else if (rv != APR_SUCCESS) {
 			oidc_cache_memcache_log_status_error(r, "apr_memcache_delete", rv);
 		}

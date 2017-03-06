@@ -835,6 +835,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 
 	c->metadata_dir = NULL;
 	c->session_type = OIDC_DEFAULT_SESSION_TYPE;
+	c->session_cache_fallback_to_cookie = OIDC_CONFIG_POS_INT_UNSET;
 	c->persistent_session_cookie = 0;
 	c->session_cookie_chunk_size =
 			OIDC_DEFAULT_SESSION_CLIENT_COOKIE_CHUNK_SIZE;
@@ -1183,6 +1184,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->session_type =
 			add->session_type != OIDC_DEFAULT_SESSION_TYPE ?
 					add->session_type : base->session_type;
+	c->session_cache_fallback_to_cookie =
+			add->session_cache_fallback_to_cookie != OIDC_CONFIG_POS_INT_UNSET ?
+					add->session_cache_fallback_to_cookie :
+					base->session_cache_fallback_to_cookie;
 	c->persistent_session_cookie =
 			add->persistent_session_cookie != 0 ?
 					add->persistent_session_cookie :
@@ -1266,6 +1271,14 @@ int oidc_cfg_cache_encrypt(request_rec *r) {
 	if (cfg->cache_encrypt == OIDC_CONFIG_POS_INT_UNSET)
 		return cfg->cache->encrypt_by_default;
 	return cfg->cache_encrypt;
+}
+
+int oidc_cfg_session_cache_fallback_to_cookie(request_rec *r) {
+	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
+	if (cfg->session_cache_fallback_to_cookie == OIDC_CONFIG_POS_INT_UNSET)
+		return 0;
+	return cfg->session_cache_fallback_to_cookie;
 }
 
 /*
@@ -2188,6 +2201,11 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, session_type),
 				RSRC_CONF,
 				"OpenID Connect session storage type (Apache 2.0/2.2 only). Must be one of \"server-cache\" or \"client-cookie\" with an optional suffix \":persistent\"."),
+		AP_INIT_FLAG("OIDCSessionCacheFallbackToCookie",
+				oidc_set_flag_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, session_cache_fallback_to_cookie),
+				RSRC_CONF,
+				"Fallback to client-side cookie session storage when server side cache fails."),
 		AP_INIT_TAKE1("OIDCSessionCookieChunkSize", oidc_set_int_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, session_cookie_chunk_size),
 				RSRC_CONF,

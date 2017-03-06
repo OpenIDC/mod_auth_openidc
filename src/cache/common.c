@@ -528,7 +528,7 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key,
 
 	/* see if it is any good */
 	if (cache_value == NULL)
-		return FALSE;
+		return TRUE;
 
 	/* see if encryption is turned on */
 	if (encrypted == 0) {
