@@ -980,7 +980,8 @@ char *oidc_normalize_header_name(const request_rec *r, const char *str) {
 apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url) {
 	apr_uri_t uri;
 	memset(&uri, 0, sizeof(apr_uri_t));
-	apr_uri_parse(r->pool, url, &uri);
+	if ((url == NULL) || (apr_uri_parse(r->pool, url, &uri) != APR_SUCCESS))
+		return FALSE;
 	oidc_debug(r, "comparing \"%s\"==\"%s\"", r->parsed_uri.path, uri.path);
 	if ((r->parsed_uri.path == NULL) || (uri.path == NULL))
 		return (r->parsed_uri.path == uri.path);
