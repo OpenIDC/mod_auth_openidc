@@ -58,6 +58,10 @@
 
 #include <pcre.h>
 
+#ifdef USE_LIBJQ
+#include "jq.h"
+#endif
+
 static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c,
 		json_t *val, const char *key) {
 
@@ -180,7 +184,7 @@ static apr_byte_t oidc_authz_match_expression(request_rec *r,
 /*
  * see if a the Require value matches with a set of provided claims
  */
-static apr_byte_t oidc_authz_match_claim(request_rec *r,
+apr_byte_t oidc_authz_match_claim(request_rec *r,
 		const char * const attr_spec, const json_t * const claims) {
 
 	const char *key;
@@ -233,10 +237,71 @@ static apr_byte_t oidc_authz_match_claim(request_rec *r,
 	return FALSE;
 }
 
+#ifdef USE_LIBJQ
+
+static apr_byte_t jq_parse(request_rec *r, jq_state *jq, struct jv_parser *parser) {
+	apr_byte_t rv = FALSE;
+	jv value;
+
+	while (jv_is_valid((value = jv_parser_next(parser)))) {
+		jq_start(jq, value, 0);
+		jv result;
+
+		while (jv_is_valid(result = jq_next(jq))) {
+			jv dumped = jv_dump_string(result, 0);
+			const char *str = jv_string_value(dumped);
+			oidc_debug(r, "dumped: %s", str);
+			rv = (apr_strnatcmp(str, "true") == 0);
+		}
+
+		jv_free(result);
+	}
+
+	if (jv_invalid_has_msg(jv_copy(value))) {
+		jv msg = jv_invalid_get_msg(value);
+		oidc_error(r, "invalid: %s", jv_string_value(msg));
+		jv_free(msg);
+		rv = FALSE;
+	} else {
+		jv_free(value);
+	}
+
+	return rv;
+}
+
+/*
+ * see if a the Require value matches a configured expression
+ */
+apr_byte_t oidc_authz_match_claims_expr(request_rec *r,
+		const char * const attr_spec, const json_t * const claims) {
+	apr_byte_t rv = FALSE;
+
+	oidc_debug(r, " ### enter: '%s' ###", attr_spec);
+
+	jq_state *jq = jq_init();
+	if (jq_compile(jq, attr_spec) == 0)
+		jq_teardown(&jq);
+
+	struct jv_parser *parser = jv_parser_new(0);
+
+	char *buf = oidc_util_encode_json_object(r, (json_t *)claims, 0);
+	jv_parser_set_buf(parser, buf, strlen(buf), 0);
+	rv = jq_parse(r, jq, parser);
+
+	jv_parser_free(parser);
+	jq_teardown(&jq);
+
+	return rv;
+}
+
+#endif
+
+#if MODULE_MAGIC_NUMBER_MAJOR < 20100714
+
 /*
  * Apache <2.4 authorization routine: match the claims from the authenticated user against the Require primitive
  */
-int oidc_authz_worker(request_rec *r, const json_t * const claims,
+int oidc_authz_worker22(request_rec *r, const json_t * const claims,
 		const require_line * const reqs, int nelts) {
 	const int m = r->method_number;
 	const char *token;
@@ -244,6 +309,7 @@ int oidc_authz_worker(request_rec *r, const json_t * const claims,
 	int i;
 	int have_oauthattr = 0;
 	int count_oauth_claims = 0;
+	oidc_authz_match_claim_fn_type match_claim_fn = NULL;
 
 	/* go through applicable Require directives */
 	for (i = 0; i < nelts; ++i) {
@@ -258,11 +324,18 @@ int oidc_authz_worker(request_rec *r, const json_t * const claims,
 
 		token = ap_getword_white(r->pool, &requirement);
 
-		if (apr_strnatcasecmp(token, OIDC_REQUIRE_NAME) != 0) {
+		/* see if we've got anything meant for us */
+		if (apr_strnatcasecmp(token, OIDC_REQUIRE_CLAIM_NAME) == 0) {
+			match_claim_fn = oidc_authz_match_claim;
+#ifdef USE_LIBJQ
+		} else if (apr_strnatcasecmp(token, OIDC_REQUIRE_CLAIMS_EXPR_NAME) == 0) {
+			match_claim_fn = oidc_authz_match_claims_expr;
+#endif
+		} else {
 			continue;
 		}
 
-		/* ok, we have a "Require claim" to satisfy */
+		/* ok, we have a "Require claim/claims_expr" to satisfy */
 		have_oauthattr = 1;
 
 		/*
@@ -276,18 +349,18 @@ int oidc_authz_worker(request_rec *r, const json_t * const claims,
 
 		/*
 		 * iterate over the claim specification strings in this require directive searching
-		 * for a specification that matches one of the claims.
+		 * for a specification that matches one of the claims/expressions.
 		 */
 		while (*requirement) {
 			token = ap_getword_conf(r->pool, &requirement);
 			count_oauth_claims++;
 
-			oidc_debug(r, "evaluating claim specification: %s", token);
+			oidc_debug(r, "evaluating claim/expr specification: %s", token);
 
-			if (oidc_authz_match_claim(r, token, claims) == TRUE) {
+			if (match_claim_fn(r, token, claims) == TRUE) {
 
 				/* if *any* claim matches, then authorization has succeeded and all of the others are ignored */
-				oidc_debug(r, "require claim '%s' matched", token);
+				oidc_debug(r, "require claim/expr '%s' matched", token);
 				return OK;
 			}
 		}
@@ -295,13 +368,13 @@ int oidc_authz_worker(request_rec *r, const json_t * const claims,
 
 	/* if there weren't any "Require claim" directives, we're irrelevant */
 	if (!have_oauthattr) {
-		oidc_debug(r, "no claim statements found, not performing authz");
+		oidc_debug(r, "no claim/expr statements found, not performing authz");
 		return DECLINED;
 	}
 	/* if there was a "Require claim", but no actual claims, that's cause to warn the admin of an iffy configuration */
 	if (count_oauth_claims == 0) {
 		oidc_warn(r,
-				"'require claim' missing specification(s) in configuration, declining");
+				"'require claim/expr' missing specification(s) in configuration, declining");
 		return DECLINED;
 	}
 
@@ -312,12 +385,13 @@ int oidc_authz_worker(request_rec *r, const json_t * const claims,
 	return HTTP_UNAUTHORIZED;
 }
 
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+#else
+
 /*
  * Apache >=2.4 authorization routine: match the claims from the authenticated user against the Require primitive
  */
 authz_status oidc_authz_worker24(request_rec *r, const json_t * const claims,
-		const char *require_args) {
+		const char *require_args, oidc_authz_match_claim_fn_type match_claim_fn) {
 
 	int count_oauth_claims = 0;
 	const char *t, *w;
@@ -336,12 +410,12 @@ authz_status oidc_authz_worker24(request_rec *r, const json_t * const claims,
 
 		count_oauth_claims++;
 
-		oidc_debug(r, "evaluating claim specification: %s", w);
+		oidc_debug(r, "evaluating claim/expr specification: %s", w);
 
 		/* see if we can match any of out input claims against this Require'd value */
-		if (oidc_authz_match_claim(r, w, claims) == TRUE) {
+		if (match_claim_fn(r, w, claims) == TRUE) {
 
-			oidc_debug(r, "require claim '%s' matched", w);
+			oidc_debug(r, "require claim/expr '%s' matched", w);
 			return AUTHZ_GRANTED;
 		}
 	}
@@ -349,9 +423,10 @@ authz_status oidc_authz_worker24(request_rec *r, const json_t * const claims,
 	/* if there wasn't anything after the Require claims directive... */
 	if (count_oauth_claims == 0) {
 		oidc_warn(r,
-				"'require claim' missing specification(s) in configuration, denying");
+				"'require claim/expr' missing specification(s) in configuration, denying");
 	}
 
 	return AUTHZ_DENIED;
 }
+
 #endif

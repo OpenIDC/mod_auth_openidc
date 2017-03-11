@@ -3231,7 +3231,7 @@ static void oidc_authz_get_claims_and_idtoken(request_rec *r, json_t **claims,
  * handles both OpenID Connect or OAuth 2.0 in the same way, based on the claims stored in the session
  */
 authz_status oidc_authz_checker(request_rec *r, const char *require_args,
-		const void *parsed_require_args) {
+		const void *parsed_require_args, oidc_authz_match_claim_fn_type match_claim_fn) {
 
 	oidc_debug(r, "enter");
 
@@ -3252,7 +3252,7 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args,
 
 	/* dispatch to the >=2.4 specific authz routine */
 	authz_status rc = oidc_authz_worker24(r, claims ? claims : id_token,
-			require_args);
+			require_args, match_claim_fn);
 
 	/* cleanup */
 	if (claims)
@@ -3268,6 +3268,17 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args,
 
 	return rc;
 }
+
+authz_status oidc_authz_checker_claim(request_rec *r, const char *require_args, const void *parsed_require_args) {
+	return oidc_authz_checker(r, require_args, parsed_require_args, oidc_authz_match_claim);
+}
+
+#ifdef USE_LIBJQ
+authz_status oidc_authz_checker_claims_expr(request_rec *r, const char *require_args, const void *parsed_require_args) {
+	return oidc_authz_checker(r, require_args, parsed_require_args, oidc_authz_match_claims_expr);
+}
+#endif
+
 #else
 /*
  * generic Apache <2.4 authorization hook for this module

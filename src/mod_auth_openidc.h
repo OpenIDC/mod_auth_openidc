@@ -158,7 +158,11 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_UTIL_HTTP_SENDSTRING "OIDC_UTIL_HTTP_SENDSTRING"
 
 /* the name of the keyword that follows the Require primitive to indicate claims-based authorization */
-#define OIDC_REQUIRE_NAME "claim"
+#define OIDC_REQUIRE_CLAIM_NAME "claim"
+#ifdef USE_LIBJQ
+/* the name of the keyword that follows the Require primitive to indicate claims-expression-based authorization */
+#define OIDC_REQUIRE_CLAIMS_EXPR_NAME "claims_expr"
+#endif
 
 /* defines for how long provider metadata will be cached */
 #define OIDC_CACHE_PROVIDER_METADATA_EXPIRY_DEFAULT 86400
@@ -348,7 +352,10 @@ typedef struct oidc_cfg {
 
 int oidc_check_user_id(request_rec *r);
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-authz_status oidc_authz_checker(request_rec *r, const char *require_args, const void *parsed_require_args);
+authz_status oidc_authz_checker_claim(request_rec *r, const char *require_args, const void *parsed_require_args);
+#ifdef USE_LIBJQ
+authz_status oidc_authz_checker_claims_expr(request_rec *r, const char *require_args, const void *parsed_require_args);
+#endif
 #else
 int oidc_auth_checker(request_rec *r);
 #endif
@@ -495,9 +502,15 @@ apr_byte_t oidc_proto_validate_code(request_rec *r, oidc_provider_t *provider, o
 apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *nonce, oidc_jwt_t *jwt);
 
 // oidc_authz.c
+typedef apr_byte_t (*oidc_authz_match_claim_fn_type)(request_rec *, const char * const, const json_t * const);
+apr_byte_t oidc_authz_match_claim(request_rec *r, const char * const attr_spec, const json_t * const claims);
+#ifdef USE_LIBJQ
+apr_byte_t oidc_authz_match_claims_expr(request_rec *r, const char * const attr_spec, const json_t * const claims);
+#endif
+#if MODULE_MAGIC_NUMBER_MAJOR < 20100714
 int oidc_authz_worker(request_rec *r, const json_t *const claims, const require_line *const reqs, int nelts);
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-authz_status oidc_authz_worker24(request_rec *r, const json_t * const claims, const char *require_line);
+#else
+authz_status oidc_authz_worker24(request_rec *r, const json_t * const claims, const char *require_args, oidc_authz_match_claim_fn_type match_claim_fn);
 #endif
 int oidc_oauth_return_www_authenticate(request_rec *r, const char *error, const char *error_description);
 

@@ -1,4 +1,4 @@
-AC_INIT([mod_auth_openidc],[2.2.0rc1],[hans.zandbelt@zmartzone.eu])
+AC_INIT([mod_auth_openidc],[2.2.0rc2],[hans.zandbelt@zmartzone.eu])
 
 AC_SUBST(NAMEVER, AC_PACKAGE_TARNAME()-AC_PACKAGE_VERSION())
 
@@ -85,6 +85,20 @@ AS_CASE(["$with_hiredis"],
 AC_SUBST(HAVE_LIBHIREDIS)
 AC_SUBST(HIREDIS_CFLAGS)
 AC_SUBST(HIREDIS_LIBS)
+
+# JQ
+AC_ARG_WITH([jq],
+  [AS_HELP_STRING([--with-jq],
+    [support JQ @<:@default=check@:>@])],
+  [],
+  [with_jq=yes])
+AS_CASE(["$with_jq"],
+  [yes], [if test "$JQ_LIBS" == ""; then PKG_CHECK_MODULES([JQ], [libjq], [HAVE_LIBJQ=1], [HAVE_LIBHJQ=0]) ; else [HAVE_LIBJQ=1] ; fi],
+  [no], [HAVE_LIBJQ=0],
+  [PKG_CHECK_MODULES([JQ], [jq], [HAVE_LIBJQ=1], [HAVE_LIBJQ=0])])
+AC_SUBST(HAVE_LIBJQ)
+AC_SUBST(JQ_CFLAGS)
+AC_SUBST(JQ_LIBS)
 
 # Create Makefile from Makefile.in
 AC_CONFIG_FILES([Makefile])
