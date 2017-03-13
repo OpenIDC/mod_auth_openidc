@@ -276,11 +276,13 @@ apr_byte_t oidc_authz_match_claims_expr(request_rec *r,
 		const char * const attr_spec, const json_t * const claims) {
 	apr_byte_t rv = FALSE;
 
-	oidc_debug(r, " ### enter: '%s' ###", attr_spec);
+	oidc_debug(r, "enter: '%s'", attr_spec);
 
 	jq_state *jq = jq_init();
-	if (jq_compile(jq, attr_spec) == 0)
+	if (jq_compile(jq, attr_spec) == 0) {
 		jq_teardown(&jq);
+		return FALSE;
+	}
 
 	struct jv_parser *parser = jv_parser_new(0);
 
