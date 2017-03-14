@@ -739,6 +739,20 @@ static const char * oidc_set_info_hook_data(cmd_parms *cmd, void *m,
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
+static const char * oidc_set_filtered_claims(cmd_parms *cmd, void *m,
+		const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+	int offset = (int) (long) cmd->info;
+	apr_hash_t **list =
+			(apr_hash_t **) ((char *) cfg + offset);
+	if (*list == NULL)
+		*list = apr_hash_make(cmd->pool);
+	apr_hash_set(*list, arg, APR_HASH_KEY_STRING, arg);
+	return NULL;
+}
+
+
 /*
  * create a new server config record with defaults
  */
@@ -868,6 +882,8 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 			OIDC_DEFAULT_PROVIDER_METADATA_REFRESH_INTERVAL;
 
 	c->info_hook_data = NULL;
+	c->black_listed_claims = NULL;
+	c->white_listed_claims = NULL;
 
 	return c;
 }
@@ -1261,6 +1277,12 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->info_hook_data =
 			add->info_hook_data != NULL ?
 					add->info_hook_data : base->info_hook_data;
+	c->black_listed_claims =
+			add->black_listed_claims != NULL ?
+					add->black_listed_claims : base->black_listed_claims;
+	c->white_listed_claims =
+			add->white_listed_claims != NULL ?
+					add->white_listed_claims : base->white_listed_claims;
 
 	return c;
 }
@@ -2353,5 +2375,15 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, info_hook_data),
 				RSRC_CONF,
 				"The data that will be returned from the info hook."),
+		AP_INIT_ITERATE("OIDCBlackListedClaims",
+				oidc_set_filtered_claims,
+				(void *) APR_OFFSETOF(oidc_cfg, black_listed_claims),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Specify claims that should be removed from the userinfo and/or id_token before storing them in the session."),
+		AP_INIT_ITERATE("OIDCWhiteListedClaims",
+				oidc_set_filtered_claims,
+				(void *) APR_OFFSETOF(oidc_cfg, white_listed_claims),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Specify claims from the userinfo and/or id_token that should be stored in the session (all other claims will be discarded)."),
 		{ NULL }
 };

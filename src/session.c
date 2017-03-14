@@ -404,12 +404,57 @@ static apr_time_t oidc_session_get_key2timestamp(request_rec *r,
 	return t_expires;
 }
 
+void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z,
+		const char *session_key, const char *claims) {
+	oidc_cfg *c = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
+
+	const char *name;
+	json_t *src = NULL, *dst = NULL, *value = NULL;
+	void *iter = NULL;
+	apr_byte_t is_allowed;
+
+	if (oidc_util_decode_json_object(r, claims, &src) == FALSE)
+		return;
+
+	dst = json_object();
+	iter = json_object_iter(src);
+	while (iter) {
+		is_allowed = TRUE;
+		name = json_object_iter_key(iter);
+		value = json_object_iter_value(iter);
+
+		if ((c->black_listed_claims != NULL)
+				&& (apr_hash_get(c->black_listed_claims, name,
+						APR_HASH_KEY_STRING) != NULL)) {
+			oidc_debug(r, "removing blacklisted claim [%s]: '%s'", session_key, name);
+			is_allowed = FALSE;
+		}
+
+		if ((is_allowed == TRUE) && (c->white_listed_claims != NULL)
+				&& (apr_hash_get(c->white_listed_claims, name,
+						APR_HASH_KEY_STRING) == NULL)) {
+			oidc_debug(r, "removing non-whitelisted claim [%s]: '%s'", session_key, name);
+			is_allowed = FALSE;
+		}
+
+		if (is_allowed == TRUE)
+			json_object_set(dst, name, value);
+
+		iter = json_object_iter_next(src, iter);
+	}
+
+	char *filtered_claims = oidc_util_encode_json_object(r, dst, JSON_COMPACT);
+	json_decref(dst);
+	oidc_session_set(r, z, session_key, filtered_claims);
+}
+
 /*
  * userinfo claims
  */
 void oidc_session_set_userinfo_claims(request_rec *r, oidc_session_t *z,
 		const char *claims) {
-	oidc_session_set(r, z, OIDC_SESSION_KEY_USERINFO_CLAIMS, claims);
+	oidc_session_set_filtered_claims(r, z, OIDC_SESSION_KEY_USERINFO_CLAIMS, claims);
 }
 
 const char * oidc_session_get_userinfo_claims(request_rec *r, oidc_session_t *z) {
@@ -425,7 +470,7 @@ json_t *oidc_session_get_userinfo_claims_json(request_rec *r, oidc_session_t *z)
  */
 void oidc_session_set_idtoken_claims(request_rec *r, oidc_session_t *z,
 		const char *idtoken_claims) {
-	oidc_session_set(r, z, OIDC_SESSION_KEY_IDTOKEN_CLAIMS, idtoken_claims);
+	oidc_session_set_filtered_claims(r, z, OIDC_SESSION_KEY_IDTOKEN_CLAIMS, idtoken_claims);
 }
 
 const char * oidc_session_get_idtoken_claims(request_rec *r, oidc_session_t *z) {

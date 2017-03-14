@@ -347,6 +347,8 @@ typedef struct oidc_cfg {
 	int provider_metadata_refresh_interval;
 
 	apr_hash_t *info_hook_data;
+	apr_hash_t *black_listed_claims;
+	apr_hash_t *white_listed_claims;
 
 } oidc_cfg;
 
