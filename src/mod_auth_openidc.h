@@ -510,7 +510,7 @@ apr_byte_t oidc_authz_match_claim(request_rec *r, const char * const attr_spec, 
 apr_byte_t oidc_authz_match_claims_expr(request_rec *r, const char * const attr_spec, const json_t * const claims);
 #endif
 #if MODULE_MAGIC_NUMBER_MAJOR < 20100714
-int oidc_authz_worker(request_rec *r, const json_t *const claims, const require_line *const reqs, int nelts);
+int oidc_authz_worker22(request_rec *r, const json_t *const claims, const require_line *const reqs, int nelts);
 #else
 authz_status oidc_authz_worker24(request_rec *r, const json_t * const claims, const char *require_args, oidc_authz_match_claim_fn_type match_claim_fn);
 #endif
