@@ -3314,7 +3314,7 @@ int oidc_auth_checker(request_rec *r) {
 		oidc_util_json_merge(r, id_token, claims);
 
 	/* dispatch to the <2.4 specific authz routine */
-	int rc = oidc_authz_worker(r, claims ? claims : id_token, reqs,
+	int rc = oidc_authz_worker22(r, claims ? claims : id_token, reqs,
 			reqs_arr->nelts);
 
 	/* cleanup */
