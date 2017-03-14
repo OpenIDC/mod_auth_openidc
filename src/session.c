@@ -446,6 +446,7 @@ void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z,
 
 	char *filtered_claims = oidc_util_encode_json_object(r, dst, JSON_COMPACT);
 	json_decref(dst);
+	json_decref(src);
 	oidc_session_set(r, z, session_key, filtered_claims);
 }
 
