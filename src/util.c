@@ -621,7 +621,7 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 	if (content_type != NULL) {
 		/* set content type */
 		h_list = curl_slist_append(h_list,
-				apr_psprintf(r->pool, "Content-type: %s", content_type));
+				apr_psprintf(r->pool, "%s: %s", OIDC_HTTP_HDR_CONTENT_TYPE, content_type));
 	}
 
 	/* see if we need to add any custom headers */
