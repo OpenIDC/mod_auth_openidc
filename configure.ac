@@ -96,6 +96,8 @@ if test -n "$with_jq"
 then
     JQ_CFLAGS="-I$with_jq/include"
     JQ_LIBS="-L$with_jq/lib -ljq"
+else
+    JQ_LIBS="-ljq"
 fi
 
 CPPFLAGS="$JQ_CFLAGS $CPPFLAGS"
