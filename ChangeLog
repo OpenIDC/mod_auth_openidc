@@ -13,6 +13,7 @@ feature
 - add fallback to a by-value session cookie if the primary cache fails with OIDCSessionCacheFallbackToCookie
 - add support for JQ expressions with "Require claims_expr <jq_boolan_expression>"
 - add support for black- and/or white-listing claims with OIDCBlackListedClaims and OIDCWhiteListedClaims
+- fix clearing chunked session cookies on logout; closes #246; thanks @Jharmuth
 
 02/20/2017
 - security fix: scrub headers for "AuthType oauth20"
