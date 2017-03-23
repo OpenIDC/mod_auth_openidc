@@ -241,6 +241,15 @@ static char *oidc_get_browser_state_hash(request_rec *r, const char *nonce) {
 	/* concat the nonce parameter to the hash input */
 	apr_sha1_update(&sha1, nonce, strlen(nonce));
 
+	/* concat the token binding ID if present */
+	value = apr_table_get(r->subprocess_env, OIDC_TB_CFG_PROVIDED_ENV_VAR);
+	if (value != NULL) {
+		oidc_debug(r,
+				"token binding environment variable %s found; adding its value to the state",
+				OIDC_TB_CFG_PROVIDED_ENV_VAR);
+		apr_sha1_update(&sha1, value, strlen(value));
+	}
+
 	/* finalize the hash input and calculate the resulting hash output */
 	unsigned char hash[OIDC_SHA1_LEN];
 	apr_sha1_final(hash, &sha1);

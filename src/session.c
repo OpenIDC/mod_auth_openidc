@@ -61,9 +61,11 @@
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 /* the name of the remote-user attribute in the session  */
-#define OIDC_SESSION_REMOTE_USER_KEY "r"
+#define OIDC_SESSION_REMOTE_USER_KEY              "r"
 /* the name of the session expiry attribute in the session */
-#define OIDC_SESSION_EXPIRY_KEY      "e"
+#define OIDC_SESSION_EXPIRY_KEY                   "e"
+/* the name of the provided token binding attribute in the session */
+#define OIDC_SESSION_PROVIDED_TOKEN_BINDING_KEY   "ptb"
 
 static apr_byte_t oidc_session_encode(request_rec *r, oidc_cfg *c,
 		oidc_session_t *z, char **s_value, apr_byte_t encrypt) {
@@ -125,7 +127,8 @@ static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 /*
  * save the session to the cache using a cookie for the index
  */
-static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, apr_byte_t first_time) {
+static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z,
+		apr_byte_t first_time) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 
@@ -184,7 +187,8 @@ static apr_byte_t oidc_session_load_cookie(request_rec *r, oidc_cfg *c,
 /*
  * store the session in a self-contained client-side-only cookie storage
  */
-static apr_byte_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z, apr_byte_t first_time) {
+static apr_byte_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z,
+		apr_byte_t first_time) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	char *cookieValue = "";
@@ -212,6 +216,7 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 			&auth_openidc_module);
 
 	apr_byte_t rc = FALSE;
+	const char *ses_p_tb_id = NULL, *env_p_tb_id = NULL;
 
 	/* allocate space for the session object and fill it */
 	oidc_session_t *z = (*zz = apr_pcalloc(r->pool, sizeof(oidc_session_t)));
@@ -245,6 +250,21 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 
 		} else {
 
+			oidc_session_get(r, z, OIDC_SESSION_PROVIDED_TOKEN_BINDING_KEY,
+					&ses_p_tb_id);
+
+			if (ses_p_tb_id != NULL) {
+				env_p_tb_id = apr_table_get(r->subprocess_env,
+						OIDC_TB_CFG_PROVIDED_ENV_VAR);
+				if ((env_p_tb_id == NULL)
+						|| (apr_strnatcmp(env_p_tb_id, ses_p_tb_id) != 0)) {
+					oidc_error(r,
+							"the token binding ID stored in the session doesn't match the one presented by the user agent");
+					oidc_session_free(r, z);
+					z->state = json_object();
+				}
+			}
+
 			oidc_session_get(r, z, OIDC_SESSION_REMOTE_USER_KEY,
 					&z->remote_user);
 		}
@@ -259,16 +279,27 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 /*
  * save a session to cache/cookie
  */
-apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z, apr_byte_t first_time) {
+apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z,
+		apr_byte_t first_time) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 
 	apr_byte_t rc = FALSE;
+	const char *p_tb_id = apr_table_get(r->subprocess_env,
+			OIDC_TB_CFG_PROVIDED_ENV_VAR);
 
 	if (z->state != NULL) {
 		oidc_session_set(r, z, OIDC_SESSION_REMOTE_USER_KEY, z->remote_user);
 		json_object_set_new(z->state, OIDC_SESSION_EXPIRY_KEY,
 				json_integer(apr_time_sec(z->expiry)));
+	}
+
+	if ((first_time) && (p_tb_id != NULL)) {
+		oidc_debug(r,
+				"token binding environment variable %s found; adding its value to the session state",
+				OIDC_TB_CFG_PROVIDED_ENV_VAR);
+		oidc_session_set(r, z, OIDC_SESSION_PROVIDED_TOKEN_BINDING_KEY,
+				p_tb_id);
 	}
 
 	if (c->session_type == OIDC_SESSION_TYPE_SERVER_CACHE)
@@ -430,14 +461,16 @@ void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z,
 		if ((c->black_listed_claims != NULL)
 				&& (apr_hash_get(c->black_listed_claims, name,
 						APR_HASH_KEY_STRING) != NULL)) {
-			oidc_debug(r, "removing blacklisted claim [%s]: '%s'", session_key, name);
+			oidc_debug(r, "removing blacklisted claim [%s]: '%s'", session_key,
+					name);
 			is_allowed = FALSE;
 		}
 
 		if ((is_allowed == TRUE) && (c->white_listed_claims != NULL)
 				&& (apr_hash_get(c->white_listed_claims, name,
 						APR_HASH_KEY_STRING) == NULL)) {
-			oidc_debug(r, "removing non-whitelisted claim [%s]: '%s'", session_key, name);
+			oidc_debug(r, "removing non-whitelisted claim [%s]: '%s'",
+					session_key, name);
 			is_allowed = FALSE;
 		}
 
@@ -458,7 +491,8 @@ void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z,
  */
 void oidc_session_set_userinfo_claims(request_rec *r, oidc_session_t *z,
 		const char *claims) {
-	oidc_session_set_filtered_claims(r, z, OIDC_SESSION_KEY_USERINFO_CLAIMS, claims);
+	oidc_session_set_filtered_claims(r, z, OIDC_SESSION_KEY_USERINFO_CLAIMS,
+			claims);
 }
 
 const char * oidc_session_get_userinfo_claims(request_rec *r, oidc_session_t *z) {
@@ -474,7 +508,8 @@ json_t *oidc_session_get_userinfo_claims_json(request_rec *r, oidc_session_t *z)
  */
 void oidc_session_set_idtoken_claims(request_rec *r, oidc_session_t *z,
 		const char *idtoken_claims) {
-	oidc_session_set_filtered_claims(r, z, OIDC_SESSION_KEY_IDTOKEN_CLAIMS, idtoken_claims);
+	oidc_session_set_filtered_claims(r, z, OIDC_SESSION_KEY_IDTOKEN_CLAIMS,
+			idtoken_claims);
 }
 
 const char * oidc_session_get_idtoken_claims(request_rec *r, oidc_session_t *z) {
@@ -581,7 +616,8 @@ apr_time_t oidc_session_get_userinfo_last_refresh(request_rec *r,
 /*
  * access_token last refresh
  */
-void oidc_session_reset_access_token_last_refresh(request_rec *r, oidc_session_t *z) {
+void oidc_session_reset_access_token_last_refresh(request_rec *r,
+		oidc_session_t *z) {
 	oidc_session_set_timestamp(r, z, OIDC_SESSION_KEY_ACCESS_TOKEN_LAST_REFRESH,
 			apr_time_now());
 }
