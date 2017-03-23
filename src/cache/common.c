@@ -550,19 +550,19 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key,
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	int encrypted = oidc_cfg_cache_encrypt(r);
+	char *encoded = NULL;
 
 	oidc_debug(r, "enter: %s=len(%d) (encrypt=%d)", key,
 			value ? (int )strlen(value) : 0, encrypted);
 
 	/* see if we need to encrypt */
-	if ((value != NULL) && (encrypted == 1)) {
-		char *encoded = NULL;
-		if (oidc_cache_crypto_encrypt(r, value,
-				oidc_cache_hash_passphrase(r, cfg->crypto_passphrase), &encoded)
-				> 0) {
-			key = oidc_cache_get_hashed_key(r, cfg->crypto_passphrase, key);
+	if (encrypted == 1) {
+		key = oidc_cache_get_hashed_key(r, cfg->crypto_passphrase, key);
+		if ((value != NULL)
+				&& (oidc_cache_crypto_encrypt(r, value,
+						oidc_cache_hash_passphrase(r, cfg->crypto_passphrase),
+						&encoded) > 0))
 			value = encoded;
-		}
 	}
 
 	/* store the resulting value in the cache */

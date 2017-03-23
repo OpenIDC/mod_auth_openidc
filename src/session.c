@@ -160,6 +160,9 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, apr
 	} else {
 		/* clear the cookie */
 		oidc_util_set_cookie(r, oidc_cfg_dir_cookie(r), "", 0, NULL);
+
+		/* remove the session from the cache */
+		rc = oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, z->uuid, NULL, 0);
 	}
 
 	return rc;
