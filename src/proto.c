@@ -530,7 +530,7 @@ int oidc_proto_authorization_request(request_rec *r,
 		return DONE;
 
 	/* add a referred token binding request for the provider */
-	//oidc_util_hdr_err_out_add(r, "Include-Referred-Token-Binding-ID", "true");
+	oidc_util_hdr_err_out_add(r, "Include-Referred-Token-Binding-ID", "true");
 
 	/* add the redirect location header */
 	oidc_util_hdr_out_location_set(r, authorization_request);
@@ -736,6 +736,67 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 	return TRUE;
 }
 
+#define OIDC_CLAIM_CNF     "cnf"
+#define OIDC_CLAIM_CNF_TBH "tbh"
+
+/*
+ * validate the "cnf" claims in the id_token payload
+ */
+static apr_byte_t oidc_proto_validate_cnf(request_rec *r, oidc_cfg *cfg,
+		oidc_provider_t *provider, oidc_jwt_payload_t *id_token_payload) {
+	char *tbh_str = NULL;
+	char *tbh = NULL;
+	int tbh_len = -1;
+	const char *tbp_str = NULL;
+	char *tbp = NULL;
+	int tbp_len = -1;
+	unsigned char *tbp_hash = NULL;
+	unsigned int tbp_hash_len = -1;
+	json_t *cnf = json_object_get(id_token_payload->value.json, OIDC_CLAIM_CNF);
+	if (cnf != NULL) {
+		oidc_jose_get_string(r->pool, cnf, OIDC_CLAIM_CNF_TBH, FALSE, &tbh_str, NULL);
+		if (tbh_str != NULL) {
+			tbh_len = oidc_base64url_decode(r->pool, &tbh, tbh_str);
+			if (tbh_len > 0) {
+				tbp_str = apr_table_get(r->subprocess_env, OIDC_TB_CFG_PROVIDED_ENV_VAR);
+				if (tbp_str != NULL) {
+					tbp_len = oidc_base64url_decode(r->pool, &tbp, tbp_str);
+					if (tbp_len > 0) {
+						if (oidc_jose_hash_bytes(r->pool, "sha256",
+								(const unsigned char *) tbp,
+								tbp_len, &tbp_hash, &tbp_hash_len, NULL) == TRUE) {
+							if (tbp_hash_len == tbh_len) {
+								if (memcmp(tbp_hash, tbh, tbh_len) == 0) {
+									oidc_debug(r, "hash of provided token binding ID environment variable matches cnf[\"tbh\"]");
+									return TRUE;
+								} else {
+									oidc_warn(r, "hash of provided token binding ID environment variable does not match cnf[\"tbh\"]");
+								}
+							} else {
+								oidc_warn(r, "hash length of provided token binding ID environment variable: %d does not match length of cnf[\"tbh\"]: %d", tbp_hash_len, tbh_len);
+							}
+						} else {
+							oidc_warn(r, "hashing provided token binding ID environment variable failed");
+						}
+					} else {
+						oidc_warn(r, "cnf[\"tbh\"] provided but provided token binding ID environment variable could not be decoded");
+					}
+				} else {
+					oidc_warn(r, "cnf[\"tbh\"] provided but no provided token binding ID environment variable found");
+				}
+			} else {
+				oidc_warn(r, "cnf[\"tbh\"] provided but it could not be decoded");
+			}
+		} else {
+			oidc_debug(r, " \"cnf\" claim found in id_token but no \"tbh\" claim inside found");
+		}
+		return FALSE;
+	} else {
+		oidc_debug(r, "no \"cnf\" claim found in id_token");
+	}
+	return TRUE;
+}
+
 /*
  * validate "iat" claim in JWT
  */
@@ -874,6 +935,10 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
 	/* verify the "aud" and "azp" values */
 	if (oidc_proto_validate_aud_and_azp(r, cfg, provider,
 			&jwt->payload) == FALSE)
+		return FALSE;
+
+	/* verify the included token binding ID if provided */
+	if (oidc_proto_validate_cnf(r, cfg, provider, &jwt->payload) == FALSE)
 		return FALSE;
 
 	return TRUE;
