@@ -14,8 +14,9 @@ feature
 - add support for black- and/or white-listing claims with OIDCBlackListedClaims and OIDCWhiteListedClaims
 - fix clearing chunked session cookies on logout; closes #246; thanks @Jharmuth
 - actually remove session state from cache on logout; fix cache delete for encrypted backends i.e. always hash key
-- add token binding support in conjunction with https://github.com/zmartzone/mod_token_binding
-- add OpenID Connect referred token binding support, confirmed against Brian's PingFederate OP at token-provider-bc.ping-eng.com:9031
+- add token binding support for state & session cookies in conjunction with https://github.com/zmartzone/mod_token_binding
+- add OpenID Connect Token Bound Authentication support (http://openid.net/specs/openid-connect-token-bound-authentication-1_0.html)
+  confirmed against Brian Campbell's PingFederate OP at token-provider-bc.ping-eng.com:9031
 
 02/20/2017
 - security fix: scrub headers for "AuthType oauth20"

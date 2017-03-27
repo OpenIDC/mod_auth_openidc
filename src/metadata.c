@@ -1168,6 +1168,17 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 	else
 		provider->userinfo_token_method = OIDC_USER_INFO_TOKEN_METHOD_HEADER;
 
+	/* see if we've got a custom token binding policy */
+	char *policy = NULL;
+	oidc_metadata_get_valid_string(r, j_conf, "token_binding_policy",
+			oidc_valid_token_binding_policy, &policy,
+			NULL);
+	if (method != NULL)
+		oidc_parse_token_binding_policy(r->pool, policy,
+				&provider->token_binding_policy);
+	else
+		provider->token_binding_policy = cfg->provider.token_binding_policy;
+
 	return TRUE;
 }
 

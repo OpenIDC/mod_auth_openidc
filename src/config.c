@@ -153,6 +153,8 @@
 #define OIDC_DEFAULT_UNAUTH_ACTION OIDC_UNAUTH_AUTHENTICATE
 /* defines for how long provider metadata will be cached */
 #define OIDC_DEFAULT_PROVIDER_METADATA_REFRESH_INTERVAL 0
+/* defines the default token binding policy for a provider */
+#define OIDC_DEFAULT_PROVIDER_TOKEN_BINDING_POLICY OIDC_TOKEN_BINDING_POLICY_OPTIONAL
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -752,6 +754,18 @@ static const char * oidc_set_filtered_claims(cmd_parms *cmd, void *m,
 	return NULL;
 }
 
+/*
+ * set the token binding policy
+ */
+static const char *oidc_set_token_binding_policy(cmd_parms *cmd,
+		void *struct_ptr, const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+	const char *rv = oidc_parse_token_binding_policy(cmd->pool, arg,
+			&cfg->provider.token_binding_policy);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
 
 /*
  * create a new server config record with defaults
@@ -880,6 +894,9 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 
 	c->provider_metadata_refresh_interval =
 			OIDC_DEFAULT_PROVIDER_METADATA_REFRESH_INTERVAL;
+
+	c->provider.token_binding_policy =
+			OIDC_DEFAULT_PROVIDER_TOKEN_BINDING_POLICY;
 
 	c->info_hook_data = NULL;
 	c->black_listed_claims = NULL;
@@ -1273,6 +1290,12 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			!= OIDC_DEFAULT_PROVIDER_METADATA_REFRESH_INTERVAL ?
 					add->provider_metadata_refresh_interval :
 					base->provider_metadata_refresh_interval;
+
+	c->provider.token_binding_policy =
+			add->provider.token_binding_policy
+			!= OIDC_DEFAULT_PROVIDER_TOKEN_BINDING_POLICY ?
+					add->provider.token_binding_policy :
+					base->provider.token_binding_policy;
 
 	c->info_hook_data =
 			add->info_hook_data != NULL ?
@@ -2014,6 +2037,11 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, provider.userinfo_token_method),
 				RSRC_CONF,
 				"The method that is used to present the access token to the userinfo endpoint; must be one of [authz_header|post_param]"),
+		AP_INIT_TAKE1("OIDCTokenBindingPolicy",
+				oidc_set_token_binding_policy,
+				(void *)APR_OFFSETOF(oidc_cfg, provider.token_binding_policy),
+				RSRC_CONF,
+				"The token binding policy used with the provider; must be one of [disabled|optional|required|enforced]"),
 
 		AP_INIT_TAKE1("OIDCSSLValidateServer",
 				oidc_set_ssl_validate_slot,

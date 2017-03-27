@@ -196,6 +196,11 @@ APLOG_USE_MODULE(auth_openidc);
 
 #define OIDC_TB_CFG_PROVIDED_ENV_VAR     "Token-Binding-ID-Provided"
 
+#define OIDC_TOKEN_BINDING_POLICY_DISABLED  0
+#define OIDC_TOKEN_BINDING_POLICY_OPTIONAL  1
+#define OIDC_TOKEN_BINDING_POLICY_REQUIRED  2
+#define OIDC_TOKEN_BINDING_POLICY_ENFORCED  3
+
 typedef struct oidc_jwks_uri_t {
 	const char *url;
 	int refresh_interval;
@@ -244,6 +249,7 @@ typedef struct oidc_provider_t {
 	char *userinfo_encrypted_response_enc;
 	int userinfo_token_method;
 	char *request_object;
+	int token_binding_policy;
 } oidc_provider_t ;
 
 typedef struct oidc_remote_user_claim_t {
@@ -593,25 +599,26 @@ apr_byte_t oidc_util_create_symmetric_key(request_rec *r, const char *client_sec
 apr_hash_t * oidc_util_merge_symmetric_key(apr_pool_t *pool, apr_hash_t *private_keys, oidc_jwk_t *jwk);
 
 /* HTTP header constants */
-#define OIDC_HTTP_HDR_COOKIE            "Cookie"
-#define OIDC_HTTP_HDR_SET_COOKIE        "Set-Cookie"
-#define OIDC_HTTP_HDR_USER_AGENT        "User-Agent"
-#define OIDC_HTTP_HDR_X_FORWARDED_FOR   "X-Forwarded-For"
-#define OIDC_HTTP_HDR_CONTENT_TYPE      "Content-Type"
-#define OIDC_HTTP_HDR_X_REQUESTED_WITH  "X-Requested-With"
-#define OIDC_HTTP_HDR_ACCEPT            "Accept"
-#define OIDC_HTTP_HDR_AUTHORIZATION     "Authorization"
-#define OIDC_HTTP_HDR_X_FORWARDED_PROTO "X-Forwarded-Proto"
-#define OIDC_HTTP_HDR_X_FORWARDED_PORT  "X-Forwarded-Port"
-#define OIDC_HTTP_HDR_X_FORWARDED_HOST  "X-Forwarded-Host"
-#define OIDC_HTTP_HDR_HOST              "Host"
-#define OIDC_HTTP_HDR_LOCATION          "Location"
-#define OIDC_HTTP_HDR_CACHE_CONTROL     "Cache-Control"
-#define OIDC_HTTP_HDR_PRAGMA            "Pragma"
-#define OIDC_HTTP_HDR_P3P               "P3P"
-#define OIDC_HTTP_HDR_EXPIRES           "Expires"
-#define OIDC_HTTP_HDR_X_FRAME_OPTIONS   "X-Frame-Options"
-#define OIDC_HTTP_HDR_WWW_AUTHENTICATE  "WWW-Authenticate"
+#define OIDC_HTTP_HDR_COOKIE							"Cookie"
+#define OIDC_HTTP_HDR_SET_COOKIE						"Set-Cookie"
+#define OIDC_HTTP_HDR_USER_AGENT						"User-Agent"
+#define OIDC_HTTP_HDR_X_FORWARDED_FOR					"X-Forwarded-For"
+#define OIDC_HTTP_HDR_CONTENT_TYPE						"Content-Type"
+#define OIDC_HTTP_HDR_X_REQUESTED_WITH					"X-Requested-With"
+#define OIDC_HTTP_HDR_ACCEPT							"Accept"
+#define OIDC_HTTP_HDR_AUTHORIZATION						"Authorization"
+#define OIDC_HTTP_HDR_X_FORWARDED_PROTO					"X-Forwarded-Proto"
+#define OIDC_HTTP_HDR_X_FORWARDED_PORT					"X-Forwarded-Port"
+#define OIDC_HTTP_HDR_X_FORWARDED_HOST					"X-Forwarded-Host"
+#define OIDC_HTTP_HDR_HOST								"Host"
+#define OIDC_HTTP_HDR_LOCATION							"Location"
+#define OIDC_HTTP_HDR_CACHE_CONTROL						"Cache-Control"
+#define OIDC_HTTP_HDR_PRAGMA							"Pragma"
+#define OIDC_HTTP_HDR_P3P								"P3P"
+#define OIDC_HTTP_HDR_EXPIRES							"Expires"
+#define OIDC_HTTP_HDR_X_FRAME_OPTIONS					"X-Frame-Options"
+#define OIDC_HTTP_HDR_WWW_AUTHENTICATE					"WWW-Authenticate"
+#define OIDC_HTTP_HDR_INCLUDE_REFERRED_TOKEN_BINDING_ID	"Include-Referred-Token-Binding-ID"
 
 void oidc_util_hdr_in_set(const request_rec *r, const char *name, const char *value);
 const char *oidc_util_hdr_in_cookie_get(const request_rec *r);
