@@ -466,7 +466,7 @@ int oidc_proto_authorization_request(request_rec *r,
 				authorization_request,
 				OIDC_PROTO_CODE_CHALLENGE,
 				oidc_util_escape_string(r, code_challenge),
-				OIDC_PROTO_CODE_CHALLENGE_METHOD, provider->pkce_method);
+				OIDC_PROTO_CODE_CHALLENGE_METHOD, provider->pkce->method);
 
 	/* add the response_mode if explicitly set */
 	if (json_object_get(proto_state, OIDC_PROTO_STATE_RESPONSE_MODE) != NULL)
@@ -574,43 +574,120 @@ apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce, int len) {
 }
 
 /*
- * generate a random value (code_verifier) to correlate authorization request and token exchange request through browser state
+ * PCKE "plain" proto state
  */
-apr_byte_t oidc_proto_generate_code_verifier(request_rec *r,
-		char **code_verifier, int len) {
-	//*code_verifier = apr_pstrdup(r->pool, "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"); return TRUE;
-	return oidc_proto_generate_random_string(r, code_verifier, len);
+static apr_byte_t oidc_proto_pkce_state_plain(request_rec *r, char **state) {
+	return oidc_proto_generate_random_string(r, state,
+			OIDC_PROTO_CODE_VERIFIER_LENGTH);
 }
 
 /*
- * generate the PKCE code challenge for a given code verifier and method
+ * PCKE "plain" code_challenge
  */
-apr_byte_t oidc_proto_generate_code_challenge(request_rec *r,
-		const char *code_verifier, char **code_challenge,
-		const char *challenge_method) {
-
-	oidc_debug(r, "enter: method=%s", challenge_method);
-
-	if (code_verifier != NULL) {
-
-		if (apr_strnatcmp(challenge_method, "plain") == 0) {
-
-			*code_challenge = apr_pstrdup(r->pool, code_verifier);
-
-		} else if (apr_strnatcmp(challenge_method, "S256") == 0) {
-
-			if (oidc_util_hash_string_and_base64url_encode(r, "sha256",
-					code_verifier, code_challenge) == FALSE) {
-				oidc_error(r,
-						"oidc_util_hash_string_and_base64url_encode returned an error for the code verifier");
-				return FALSE;
-			}
-		}
-
-	}
-
+static apr_byte_t oidc_proto_pkce_challenge_plain(request_rec *r,
+		const char *state, char **code_challenge) {
+	*code_challenge = apr_pstrdup(r->pool, state);
 	return TRUE;
 }
+
+/*
+ * PCKE "plain" code_verifier
+ */
+static apr_byte_t oidc_proto_pkce_verifier_plain(request_rec *r,
+		const char *state, char **code_verifier) {
+	*code_verifier = apr_pstrdup(r->pool, state);
+	return TRUE;
+}
+
+/*
+ * PCKE "s256" proto state
+ */
+static apr_byte_t oidc_proto_pkce_state_s256(request_rec *r, char **state) {
+	return oidc_proto_generate_random_string(r, state,
+			OIDC_PROTO_CODE_VERIFIER_LENGTH);
+}
+
+/*
+ * PCKE "s256" code_challenge
+ */
+static apr_byte_t oidc_proto_pkce_challenge_s256(request_rec *r,
+		const char *state, char **code_challenge) {
+	if (oidc_util_hash_string_and_base64url_encode(r, "sha256", state,
+			code_challenge) == FALSE) {
+		oidc_error(r,
+				"oidc_util_hash_string_and_base64url_encode returned an error for the code verifier");
+		return FALSE;
+	}
+	return TRUE;
+}
+
+/*
+ * PCKE "s256" code_verifier
+ */
+static apr_byte_t oidc_proto_pkce_verifier_s256(request_rec *r,
+		const char *state, char **code_verifier) {
+	*code_verifier = apr_pstrdup(r->pool, state);
+	return TRUE;
+}
+
+/*
+ * PCKE "referred_tb" proto state
+ */
+static apr_byte_t oidc_proto_pkce_state_referred_tb(request_rec *r,
+		char **state) {
+	*state = NULL;
+	return TRUE;
+}
+
+/*
+ * PCKE "referred_tb" code_challenge
+ */
+static apr_byte_t oidc_proto_pkce_challenge_referred_tb(request_rec *r,
+		const char *state, char **code_challenge) {
+	// state should be NULL
+	*code_challenge = OIDC_PKCE_METHOD_REFERRED_TB;
+	return TRUE;
+}
+
+/*
+ * PCKE "referred_tb" code_verifier
+ */
+static apr_byte_t oidc_proto_pkce_verifier_referred_tb(request_rec *r,
+		const char *state, char **code_verifier) {
+	*code_verifier = apr_pstrdup(r->pool,
+			apr_table_get(r->subprocess_env, OIDC_TB_CFG_PROVIDED_ENV_VAR));
+	return TRUE;
+}
+
+/*
+ * PKCE plain
+ */
+oidc_proto_pkce_t oidc_pkce_plain = {
+		OIDC_PKCE_METHOD_PLAIN,
+		oidc_proto_pkce_state_plain,
+		oidc_proto_pkce_verifier_plain,
+		oidc_proto_pkce_challenge_plain
+};
+
+/*
+ * PKCE s256
+ */
+oidc_proto_pkce_t oidc_pkce_s256 = {
+		OIDC_PKCE_METHOD_S256,
+		oidc_proto_pkce_state_s256,
+		oidc_proto_pkce_verifier_s256,
+		oidc_proto_pkce_challenge_s256
+};
+
+/*
+ * PKCE referred_tb
+ */
+oidc_proto_pkce_t oidc_pkce_referred_tb = {
+		OIDC_PKCE_METHOD_REFERRED_TB,
+		oidc_proto_pkce_state_referred_tb,
+		oidc_proto_pkce_verifier_referred_tb,
+		oidc_proto_pkce_challenge_referred_tb
+};
 
 /*
  * if a nonce was passed in the authorization request (and stored in the browser state),
@@ -2325,12 +2402,17 @@ static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r,
 	char *token_type = NULL;
 	int expires_in = -1;
 	char *refresh_token = NULL;
+	const char *pkce_state = NULL;
+	char *code_verifier = NULL;
 
-	const char *code_verifier =
-			json_object_get(proto_state, OIDC_PROTO_CODE_VERIFIER) ?
-					json_string_value(json_object_get(proto_state,
-							OIDC_PROTO_CODE_VERIFIER)) :
-							NULL;
+	if (provider->pkce != NULL) {
+		pkce_state =
+				json_object_get(proto_state, OIDC_PROTO_STATE_PKCE) ?
+						json_string_value(json_object_get(proto_state,
+								OIDC_PROTO_STATE_PKCE)) :
+								NULL;
+		provider->pkce->verifier(r, pkce_state, &code_verifier);
+	}
 
 	const char *state =
 			json_object_get(proto_state, OIDC_PROTO_STATE) ?

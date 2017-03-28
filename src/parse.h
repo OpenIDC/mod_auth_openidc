@@ -64,6 +64,10 @@
 #define OIDC_CLAIM_REQUIRED_MANDATORY "mandatory"
 #define OIDC_CLAIM_REQUIRED_OPTIONAL  "optional"
 
+#define OIDC_PKCE_METHOD_PLAIN        "plain"
+#define OIDC_PKCE_METHOD_S256         "S256"
+#define OIDC_PKCE_METHOD_REFERRED_TB  "referred_tb"
+
 const char *oidc_valid_url(apr_pool_t *pool, const char *arg, const char *scheme);
 const char *oidc_valid_http_url(apr_pool_t *pool, const char *arg);
 const char *oidc_valid_dir(apr_pool_t *pool, const char *arg);

@@ -17,6 +17,7 @@ feature
 - add token binding support for state & session cookies in conjunction with https://github.com/zmartzone/mod_token_binding
 - add OpenID Connect Token Bound Authentication support (http://openid.net/specs/openid-connect-token-bound-authentication-1_0.html)
   confirmed against Brian Campbell's PingFederate OP at token-provider-bc.ping-eng.com:9031
+- refactor PKCE support and add OAuth 2.0 Token Binding for Authorization Codes (https://tools.ietf.org/html/draft-jones-oauth-token-binding)
 
 02/20/2017
 - security fix: scrub headers for "AuthType oauth20"

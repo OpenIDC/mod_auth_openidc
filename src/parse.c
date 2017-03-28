@@ -417,9 +417,6 @@ const char *oidc_valid_response_type(apr_pool_t *pool, const char *arg) {
 	return NULL;
 }
 
-#define OIDC_PKCE_METHOD_PLAIN "plain"
-#define OIDC_PKCE_METHOD_S256  "S256"
-
 /*
  * check if the provided PKCE method is supported
  */
@@ -427,6 +424,7 @@ const char *oidc_valid_pkce_method(apr_pool_t *pool, const char *arg) {
 	static char *options[] = {
 			OIDC_PKCE_METHOD_PLAIN,
 			OIDC_PKCE_METHOD_S256,
+			OIDC_PKCE_METHOD_REFERRED_TB,
 			NULL };
 	return oidc_valid_string_option(pool, arg, options);
 }

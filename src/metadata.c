@@ -1107,9 +1107,12 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 			cfg->provider.response_mode);
 
 	/* get the PKCE method to use */
+	char *pkce_method = NULL;
 	oidc_metadata_get_valid_string(r, j_conf, "pkce_method",
-			oidc_valid_pkce_method, &provider->pkce_method,
-			cfg->provider.pkce_method);
+			oidc_valid_pkce_method, &pkce_method,
+			cfg->provider.pkce ? cfg->provider.pkce->method : NULL);
+	if (pkce_method != NULL)
+		oidc_parse_pkce_type(r->pool, pkce_method, &provider->pkce);
 
 	/* get the client name */
 	oidc_json_object_get_string(r->pool, j_conf, "client_name",

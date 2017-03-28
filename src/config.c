@@ -362,6 +362,23 @@ static const char *oidc_set_response_type(cmd_parms *cmd, void *struct_ptr,
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
+const char *oidc_parse_pkce_type(apr_pool_t *pool, const char *arg,
+		oidc_proto_pkce_t **type) {
+	const char *rv = oidc_valid_pkce_method(pool, arg);
+	if (rv != NULL)
+		return rv;
+
+	if (apr_strnatcmp(arg, OIDC_PKCE_METHOD_PLAIN) == 0) {
+		*type = &oidc_pkce_plain;
+	} else if (apr_strnatcmp(arg, OIDC_PKCE_METHOD_S256) == 0) {
+		*type = &oidc_pkce_s256;
+	} else if (apr_strnatcmp(arg, OIDC_PKCE_METHOD_REFERRED_TB) == 0) {
+		*type = &oidc_pkce_referred_tb;
+	}
+
+	return NULL;
+}
+
 /*
  * define the PCKE method to use
  */
@@ -369,10 +386,7 @@ static const char *oidc_set_pkce_method(cmd_parms *cmd, void *ptr,
 		const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
-
-	const char *rv = oidc_valid_pkce_method(cmd->pool, arg);
-	if (rv == NULL)
-		rv = ap_set_string_slot(cmd, cfg, arg);
+	const char *rv = oidc_parse_pkce_type(cmd->pool, arg, &cfg->provider.pkce);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -809,7 +823,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->provider.idtoken_iat_slack = OIDC_DEFAULT_IDTOKEN_IAT_SLACK;
 	c->provider.session_max_duration = OIDC_DEFAULT_SESSION_MAX_DURATION;
 	c->provider.auth_request_params = NULL;
-	c->provider.pkce_method = NULL;
+	c->provider.pkce = NULL;
 
 	c->provider.client_jwks_uri = NULL;
 	c->provider.id_token_signed_response_alg = NULL;
@@ -1036,9 +1050,9 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->provider.auth_request_params != NULL ?
 					add->provider.auth_request_params :
 					base->provider.auth_request_params;
-	c->provider.pkce_method =
-			add->provider.pkce_method != NULL ?
-					add->provider.pkce_method : base->provider.pkce_method;
+	c->provider.pkce =
+			add->provider.pkce != NULL ?
+					add->provider.pkce : base->provider.pkce;
 
 	c->provider.client_jwks_uri =
 			add->provider.client_jwks_uri != NULL ?
@@ -2084,9 +2098,9 @@ const command_rec oidc_config_cmds[] = {
 				"Extra parameters that need to be sent in the Authorization Request (must be query-encoded like \"display=popup&prompt=consent\"."),
 		AP_INIT_TAKE1("OIDCPKCEMethod",
 				oidc_set_pkce_method,
-				(void *)APR_OFFSETOF(oidc_cfg, provider.pkce_method),
+				(void *)APR_OFFSETOF(oidc_cfg, provider.pkce),
 				RSRC_CONF,
-				"The RFC 7636 PCKE mode used; must be one of \"plain\", \"S256\""),
+				"The RFC 7636 PCKE mode used; must be one of \"plain\", \"S256\" or \"referred_tb\""),
 
 		AP_INIT_TAKE1("OIDCClientID", oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.client_id),

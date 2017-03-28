@@ -2070,20 +2070,18 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	if (oidc_proto_generate_nonce(r, &nonce, OIDC_PROTO_NONCE_LENGTH) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
-	char *code_verifier = NULL;
+	char *pkce_state = NULL;
 	char *code_challenge = NULL;
 
 	if ((oidc_util_spaced_string_contains(r->pool, provider->response_type,
-			OIDC_PROTO_CODE) == TRUE) && (provider->pkce_method != NULL)) {
+			OIDC_PROTO_CODE) == TRUE) && (provider->pkce != NULL)) {
 
 		/* generate the code verifier value that correlates authorization requests and code exchange requests */
-		if (oidc_proto_generate_code_verifier(r, &code_verifier,
-				OIDC_PROTO_CODE_VERIFIER_LENGTH) == FALSE)
+		if (provider->pkce->state(r, &pkce_state) == FALSE)
 			return HTTP_INTERNAL_SERVER_ERROR;
 
 		/* generate the PKCE code challenge */
-		if (oidc_proto_generate_code_challenge(r, code_verifier,
-				&code_challenge, provider->pkce_method) == FALSE)
+		if (provider->pkce->challenge(r, pkce_state, &code_challenge) == FALSE)
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -2107,9 +2105,9 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	if (prompt)
 		json_object_set_new(proto_state, OIDC_PROTO_STATE_PROMPT,
 				json_string(prompt));
-	if (code_verifier)
-		json_object_set_new(proto_state, OIDC_PROTO_CODE_VERIFIER,
-				json_string(code_verifier));
+	if (pkce_state)
+		json_object_set_new(proto_state, OIDC_PROTO_STATE_PKCE,
+				json_string(pkce_state));
 
 	/* get a hash value that fingerprints the browser concatenated with the random input */
 	char *state = oidc_get_browser_state_hash(r, nonce);
