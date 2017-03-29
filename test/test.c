@@ -1029,13 +1029,13 @@ static char * test_proto_authorization_request(request_rec *r) {
 	const char *redirect_uri = "https://www.example.com/protected/";
 	const char *state = "12345";
 
-	json_t * proto_state = json_object();
-	json_object_set_new(proto_state, OIDC_PROTO_STATE_NONCE, json_string("anonce"));
-	json_object_set_new(proto_state, OIDC_PROTO_STATE_ORIGINAL_URL, json_string("https://localhost/protected/index.php"));
-	json_object_set_new(proto_state, OIDC_PROTO_STATE_ORIGINAL_METHOD, json_string(OIDC_METHOD_GET));
-	json_object_set_new(proto_state, OIDC_PROTO_STATE_ISSUER, json_string(provider.issuer));
-	json_object_set_new(proto_state, OIDC_PROTO_STATE_RESPONSE_TYPE, json_string(provider.response_type));
-	json_object_set_new(proto_state, OIDC_PROTO_STATE_TIMESTAMP, json_integer(apr_time_sec(apr_time_now())));
+	oidc_proto_state_t *proto_state = oidc_proto_state_new();
+	oidc_proto_state_set_nonce(proto_state, "anonce");
+	oidc_proto_state_set_original_url(proto_state, "https://localhost/protected/index.php");
+	oidc_proto_state_set_original_method(proto_state, OIDC_METHOD_GET);
+	oidc_proto_state_set_issuer(proto_state, provider.issuer);
+	oidc_proto_state_set_response_type(proto_state, provider.response_type);
+	oidc_proto_state_set_timestamp_now(proto_state);
 
 	TST_ASSERT("oidc_proto_authorization_request (1)",
 			oidc_proto_authorization_request(r, &provider, NULL, redirect_uri, state, proto_state, NULL, NULL, NULL) == HTTP_MOVED_TEMPORARILY);

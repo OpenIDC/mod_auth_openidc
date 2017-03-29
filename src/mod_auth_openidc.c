@@ -499,7 +499,7 @@ static int oidc_request_post_preserved_restore(request_rec *r,
  * parse state that was sent to us by the issuer
  */
 static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
-		const char *state, json_t **proto_state) {
+		const char *state, oidc_proto_state_t **proto_state) {
 
 	char *alg = NULL;
 	oidc_debug(r, "enter: state header=%s",
@@ -642,31 +642,17 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	oidc_jwk_destroy(jwk);
 	oidc_debug(r, "successfully verified state JWT");
 
-	*proto_state = json_object();
-	json_object_set_new(*proto_state, OIDC_PROTO_STATE_ISSUER,
-			json_string(jwt->payload.iss));
-	json_object_set_new(*proto_state, OIDC_PROTO_STATE_ORIGINAL_URL,
-			json_string(target_link_uri));
-	json_object_set_new(*proto_state, OIDC_PROTO_STATE_ORIGINAL_METHOD,
-			json_string(OIDC_METHOD_GET));
-	json_object_set_new(*proto_state, OIDC_PROTO_STATE_RESPONSE_MODE,
-			json_string(provider->response_mode));
-	json_object_set_new(*proto_state, OIDC_PROTO_STATE_RESPONSE_TYPE,
-			json_string(provider->response_type));
-	json_object_set_new(*proto_state, OIDC_PROTO_STATE_TIMESTAMP,
-			json_integer(apr_time_sec(apr_time_now())));
+	*proto_state = oidc_proto_state_new();
+	oidc_proto_state_set_issuer(*proto_state, jwt->payload.iss);
+	oidc_proto_state_set_original_url(*proto_state, target_link_uri);
+	oidc_proto_state_set_original_method(*proto_state, OIDC_METHOD_GET);
+	oidc_proto_state_set_response_mode(*proto_state, provider->response_mode);
+	oidc_proto_state_set_response_type(*proto_state, provider->response_type);
+	oidc_proto_state_set_timestamp_now(*proto_state);
 
 	oidc_jwt_destroy(jwt);
 
 	return TRUE;
-}
-
-/* obtain the state from the cookie value */
-static json_t * oidc_get_state_from_cookie(request_rec *r, oidc_cfg *c,
-		const char *cookieValue) {
-	json_t *result = NULL;
-	oidc_util_jwt_verify(r, c->crypto_passphrase, cookieValue, &result);
-	return result;
 }
 
 static void oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c) {
@@ -684,16 +670,16 @@ static void oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c) {
 				if (*cookie == '=') {
 					*cookie = '\0';
 					cookie++;
-					json_t *state = oidc_get_state_from_cookie(r, c, cookie);
-					if (state != NULL) {
-						json_t *v = json_object_get(state,
-								OIDC_PROTO_STATE_TIMESTAMP);
-						apr_time_t now = apr_time_sec(apr_time_now());
-						if (now > json_integer_value(v) + c->state_timeout) {
+					oidc_proto_state_t *proto_state =
+							oidc_proto_state_from_cookie(r, c, cookie);
+					if (proto_state != NULL) {
+						json_int_t ts = oidc_proto_state_get_timestamp(
+								proto_state);
+						if (apr_time_now() > ts + apr_time_from_sec(c->state_timeout)) {
 							oidc_error(r, "state has expired");
 							oidc_util_set_cookie(r, cookieName, "", 0, NULL);
 						}
-						json_decref(state);
+						oidc_proto_state_destroy(proto_state);
 					}
 				}
 			}
@@ -706,7 +692,7 @@ static void oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c) {
  * restore the state that was maintained between authorization request and response in an encrypted cookie
  */
 static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
-		const char *state, json_t **proto_state) {
+		const char *state, oidc_proto_state_t **proto_state) {
 
 	oidc_debug(r, "enter");
 
@@ -725,46 +711,44 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 	/* clear state cookie because we don't need it anymore */
 	oidc_util_set_cookie(r, cookieName, "", 0, NULL);
 
-	*proto_state = oidc_get_state_from_cookie(r, c, cookieValue);
+	*proto_state = oidc_proto_state_from_cookie(r, c, cookieValue);
 	if (*proto_state == NULL)
 		return FALSE;
 
-	json_t *v = json_object_get(*proto_state, OIDC_PROTO_STATE_NONCE);
+	const char *nonce = oidc_proto_state_get_nonce(*proto_state);
 
 	/* calculate the hash of the browser fingerprint concatenated with the nonce */
-	char *calc = oidc_get_browser_state_hash(r, json_string_value(v));
+	char *calc = oidc_get_browser_state_hash(r, nonce);
 	/* compare the calculated hash with the value provided in the authorization response */
 	if (apr_strnatcmp(calc, state) != 0) {
 		oidc_error(r,
 				"calculated state from cookie does not match state parameter passed back in URL: \"%s\" != \"%s\"",
 				state, calc);
-		json_decref(*proto_state);
+		oidc_proto_state_destroy(*proto_state);
 		return FALSE;
 	}
 
-	v = json_object_get(*proto_state, OIDC_PROTO_STATE_TIMESTAMP);
-	apr_time_t now = apr_time_sec(apr_time_now());
+	apr_time_t ts = oidc_proto_state_get_timestamp(*proto_state);
 
 	/* check that the timestamp is not beyond the valid interval */
-	if (now > json_integer_value(v) + c->state_timeout) {
+	if (apr_time_now() > ts + apr_time_from_sec(c->state_timeout)) {
 		oidc_error(r, "state has expired");
 		oidc_util_html_send_error(r, c->error_template,
 				"Invalid Authentication Response",
 				apr_psprintf(r->pool,
 						"This is due to a timeout; please restart your authentication session by re-entering the URL/bookmark you originally wanted to access: %s",
-						json_string_value(json_object_get(*proto_state,
-								OIDC_PROTO_STATE_ORIGINAL_URL))),
-								DONE);
-		json_decref(*proto_state);
+						oidc_proto_state_get_original_url(*proto_state)),
+						DONE);
+		oidc_proto_state_destroy(*proto_state);
 		return FALSE;
 	}
 
 	/* add the state */
-	json_object_set_new(*proto_state, OIDC_PROTO_STATE, json_string(state));
+	oidc_proto_state_set_state(*proto_state, state);
 
 	/* log the restored state object */
 	oidc_debug(r, "restored state: %s",
-			oidc_util_encode_json_object(r, *proto_state, JSON_COMPACT));
+			oidc_proto_state_to_string(r, *proto_state));
 
 	/* we've made it */
 	return TRUE;
@@ -775,18 +759,14 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
  * in a cookie in the browser that is cryptographically bound to that state
  */
 static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
-		oidc_cfg *c, const char *state, json_t *proto_state) {
+		oidc_cfg *c, const char *state, oidc_proto_state_t *proto_state) {
 	/*
 	 * create a cookie consisting of 8 elements:
 	 * random value, original URL, original method, issuer, response_type, response_mod, prompt and timestamp
-	 * encoded as JSON
+	 * encoded as JSON, encrypting the resulting JSON value
 	 */
-
-	/* encrypt the resulting JSON value  */
-	char *cookieValue = NULL;
-
-	if (oidc_util_jwt_create(r, c->crypto_passphrase, proto_state,
-			&cookieValue) == FALSE)
+	char *cookieValue = oidc_proto_state_to_cookie(r, c, proto_state);
+	if (cookieValue == NULL)
 		return FALSE;
 
 	/* clean expired state cookies to avoid pollution */
@@ -1420,7 +1400,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
  */
 static apr_byte_t oidc_authorization_response_match_state(request_rec *r,
 		oidc_cfg *c, const char *state, struct oidc_provider_t **provider,
-		json_t **proto_state) {
+		oidc_proto_state_t **proto_state) {
 
 	oidc_debug(r, "enter (state=%s)", state);
 
@@ -1436,9 +1416,7 @@ static apr_byte_t oidc_authorization_response_match_state(request_rec *r,
 	}
 
 	*provider = oidc_get_provider_for_issuer(r, c,
-			json_string_value(
-					json_object_get(*proto_state, OIDC_PROTO_STATE_ISSUER)),
-					FALSE);
+			oidc_proto_state_get_issuer(*proto_state), FALSE);
 
 	return (*provider != NULL);
 }
@@ -1464,14 +1442,12 @@ static int oidc_session_redirect_parent_window_to_logout(request_rec *r,
  * handle an error returned by the OP
  */
 static int oidc_authorization_response_error(request_rec *r, oidc_cfg *c,
-		json_t *proto_state, const char *error, const char *error_description) {
-	const char *prompt =
-			json_object_get(proto_state, OIDC_PROTO_STATE_PROMPT) ?
-					apr_pstrdup(r->pool,
-							json_string_value(json_object_get(proto_state,
-									OIDC_PROTO_STATE_PROMPT))) :
-									NULL;
-	json_decref(proto_state);
+		oidc_proto_state_t *proto_state, const char *error,
+		const char *error_description) {
+	const char *prompt = oidc_proto_state_get_prompt(proto_state);
+	if (prompt != NULL)
+		prompt = apr_pstrdup(r->pool, prompt);
+	oidc_proto_state_destroy(proto_state);
 	if ((prompt != NULL) && (apr_strnatcmp(prompt, "none") == 0)) {
 		return oidc_session_redirect_parent_window_to_logout(r, c);
 	}
@@ -1658,13 +1634,13 @@ static int oidc_parse_expires_in(request_rec *r, const char *expires_in) {
  * handle the different flows (hybrid, implicit, Authorization Code)
  */
 static apr_byte_t oidc_handle_flows(request_rec *r, oidc_cfg *c,
-		json_t *proto_state, oidc_provider_t *provider, apr_table_t *params,
-		const char *response_mode, oidc_jwt_t **jwt) {
+		oidc_proto_state_t *proto_state, oidc_provider_t *provider,
+		apr_table_t *params, const char *response_mode, oidc_jwt_t **jwt) {
 
 	apr_byte_t rc = FALSE;
 
-	const char *requested_response_type = json_string_value(
-			json_object_get(proto_state, OIDC_PROTO_STATE_RESPONSE_TYPE));
+	const char *requested_response_type = oidc_proto_state_get_response_type(
+			proto_state);
 
 	/* handle the requested response type/mode */
 	if (oidc_util_spaced_string_equals(r->pool, requested_response_type,
@@ -1744,7 +1720,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	oidc_debug(r, "enter, response_mode=%s", response_mode);
 
 	oidc_provider_t *provider = NULL;
-	json_t *proto_state = NULL;
+	oidc_proto_state_t *proto_state = NULL;
 	oidc_jwt_t *jwt = NULL;
 
 	/* see if this response came from a browser-back event */
@@ -1798,20 +1774,20 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 			jwt->payload.sub);
 
 	/* restore the original protected URL that the user was trying to access */
-	const char *original_url = apr_pstrdup(r->pool,
-			json_string_value(json_object_get(proto_state,
-					OIDC_PROTO_STATE_ORIGINAL_URL)));
-	const char *original_method = apr_pstrdup(r->pool,
-			json_string_value(json_object_get(proto_state,
-					OIDC_PROTO_STATE_ORIGINAL_METHOD)));
+	const char *original_url = oidc_proto_state_get_original_url(proto_state);
+	if (original_url != NULL)
+		original_url = apr_pstrdup(r->pool, original_url);
+	const char *original_method = oidc_proto_state_get_original_method(
+			proto_state);
+	if (original_method != NULL)
+		original_method = apr_pstrdup(r->pool, original_method);
+	const char *prompt = oidc_proto_state_get_prompt(proto_state);
 
 	/* set the user */
 	if (oidc_get_remote_user(r, c, provider, jwt, &r->user, claims) == TRUE) {
 
 		/* session management: if the user in the new response is not equal to the old one, error out */
-		if ((json_object_get(proto_state, OIDC_PROTO_STATE_PROMPT) != NULL)
-				&& (apr_strnatcmp(json_string_value(json_object_get(proto_state,
-						OIDC_PROTO_STATE_PROMPT)), "none") == 0)) {
+		if ((prompt != NULL) && (apr_strnatcmp(prompt, "none") == 0)) {
 			// TOOD: actually need to compare sub? (need to store it in the session separately then
 			//const char *sub = NULL;
 			//oidc_session_get(r, session, "sub", &sub);
@@ -1842,7 +1818,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	}
 
 	/* cleanup */
-	json_decref(proto_state);
+	oidc_proto_state_destroy(proto_state);
 	oidc_jwt_destroy(jwt);
 
 	/* check that we've actually authenticated a user; functions as error handling for oidc_get_remote_user */
@@ -1957,7 +1933,8 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 		/* set CSRF cookie */
 		oidc_util_set_cookie(r, OIDC_CSRF_NAME, csrf, -1,
 				cfg->cookie_same_site ?
-						OIDC_COOKIE_EXT_SAME_SITE_STRICT : NULL);
+						OIDC_COOKIE_EXT_SAME_SITE_STRICT :
+						NULL);
 
 		/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
 		if (oidc_post_preserve_javascript(r, url, NULL, NULL) == TRUE)
@@ -2086,28 +2063,21 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	}
 
 	/* create the state between request/response */
-	json_t *proto_state = json_object();
-	json_object_set_new(proto_state, OIDC_PROTO_STATE_ORIGINAL_URL,
-			json_string(original_url));
-	json_object_set_new(proto_state, OIDC_PROTO_STATE_ORIGINAL_METHOD,
-			json_string(oidc_original_request_method(r, c, TRUE)));
-	json_object_set_new(proto_state, OIDC_PROTO_STATE_ISSUER,
-			json_string(provider->issuer));
-	json_object_set_new(proto_state, OIDC_PROTO_STATE_RESPONSE_TYPE,
-			json_string(provider->response_type));
-	json_object_set_new(proto_state, OIDC_PROTO_STATE_NONCE,
-			json_string(nonce));
-	json_object_set_new(proto_state, OIDC_PROTO_STATE_TIMESTAMP,
-			json_integer(apr_time_sec(apr_time_now())));
+	oidc_proto_state_t *proto_state = oidc_proto_state_new();
+	oidc_proto_state_set_original_url(proto_state, original_url);
+	oidc_proto_state_set_original_method(proto_state,
+			oidc_original_request_method(r, c, TRUE));
+	oidc_proto_state_set_issuer(proto_state, provider->issuer);
+	oidc_proto_state_set_response_type(proto_state, provider->response_type);
+	oidc_proto_state_set_nonce(proto_state, nonce);
+	oidc_proto_state_set_timestamp_now(proto_state);
 	if (provider->response_mode)
-		json_object_set_new(proto_state, OIDC_PROTO_STATE_RESPONSE_MODE,
-				json_string(provider->response_mode));
+		oidc_proto_state_set_response_mode(proto_state,
+				provider->response_mode);
 	if (prompt)
-		json_object_set_new(proto_state, OIDC_PROTO_STATE_PROMPT,
-				json_string(prompt));
+		oidc_proto_state_set_prompt(proto_state, prompt);
 	if (pkce_state)
-		json_object_set_new(proto_state, OIDC_PROTO_STATE_PKCE,
-				json_string(pkce_state));
+		oidc_proto_state_set_pkce_state(proto_state, pkce_state);
 
 	/* get a hash value that fingerprints the browser concatenated with the random input */
 	char *state = oidc_get_browser_state_hash(r, nonce);
@@ -2824,7 +2794,8 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 	apr_byte_t needs_save = FALSE;
 	char *s_format = NULL, *s_interval = NULL;
 	oidc_util_get_request_parameter(r, OIDC_HOOK_INFO_REQUEST, &s_format);
-	oidc_util_get_request_parameter(r, "access_token_refresh_interval", &s_interval);
+	oidc_util_get_request_parameter(r, "access_token_refresh_interval",
+			&s_interval);
 
 	/* see if this is a request for a format that is supported */
 	if (apr_strnatcmp(OIDC_HOOK_INFO_FORMAT_JSON, s_format) != 0) {
@@ -2847,15 +2818,16 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 	}
 
 	/* see if we can and need to refresh the access token */
-	if ((s_interval != NULL) && (oidc_session_get_refresh_token(r, session) != NULL)) {
+	if ((s_interval != NULL)
+			&& (oidc_session_get_refresh_token(r, session) != NULL)) {
 
 		apr_time_t t_interval;
 		if (sscanf(s_interval, "%" APR_TIME_T_FMT, &t_interval) == 1) {
 			t_interval = apr_time_from_sec(t_interval);
 
 			/* get the last refresh timestamp from the session info */
-			apr_time_t last_refresh = oidc_session_get_access_token_last_refresh(r,
-					session);
+			apr_time_t last_refresh =
+					oidc_session_get_access_token_last_refresh(r, session);
 
 			oidc_debug(r, "refresh needed in: %" APR_TIME_T_FMT " seconds",
 					apr_time_sec(last_refresh + t_interval - apr_time_now()));
@@ -2865,11 +2837,13 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 
 				/* get the current provider info */
 				oidc_provider_t *provider = NULL;
-				if (oidc_get_provider_from_session(r, c, session, &provider) == FALSE)
+				if (oidc_get_provider_from_session(r, c, session,
+						&provider) == FALSE)
 					return HTTP_INTERNAL_SERVER_ERROR;
 
 				/* execute the actual refresh grant */
-				if (oidc_refresh_access_token(r, c, session, provider, NULL) == FALSE)
+				if (oidc_refresh_access_token(r, c, session, provider,
+						NULL) == FALSE)
 					oidc_warn(r, "access_token could not be refreshed");
 				else
 					needs_save = TRUE;
@@ -2892,8 +2866,7 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 	 * side-effect is that this may refresh the access token if not already done
 	 * note that OIDCUserInfoRefreshInterval should be set to control the refresh policy
 	 */
-	needs_save |= oidc_refresh_claims_from_userinfo_endpoint(r, c,
-			session);
+	needs_save |= oidc_refresh_claims_from_userinfo_endpoint(r, c, session);
 
 	/* include the access token in the session info */
 	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_ACCES_TOKEN,
@@ -3024,7 +2997,8 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 		/* handle request to invalidate access token cache */
 		return oidc_handle_remove_at_cache(r, c);
 
-	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO)) {
+	} else if (oidc_util_request_has_parameter(r,
+			OIDC_REDIRECT_URI_REQUEST_INFO)) {
 
 		if (session->remote_user == NULL)
 			return HTTP_UNAUTHORIZED;
@@ -3043,12 +3017,12 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 	/* check for "error" response */
 	if (oidc_util_request_has_parameter(r, "error")) {
 
-//		char *error = NULL, *descr = NULL;
-//		oidc_util_get_request_parameter(r, "error", &error);
-//		oidc_util_get_request_parameter(r, "error_description", &descr);
-//
-//		/* send user facing error to browser */
-//		return oidc_util_html_send_error(r, error, descr, DONE);
+		//		char *error = NULL, *descr = NULL;
+		//		oidc_util_get_request_parameter(r, "error", &error);
+		//		oidc_util_get_request_parameter(r, "error_description", &descr);
+		//
+		//		/* send user facing error to browser */
+		//		return oidc_util_html_send_error(r, error, descr, DONE);
 		oidc_handle_redirect_authorization_response(r, c, session);
 	}
 
@@ -3238,7 +3212,8 @@ static void oidc_authz_get_claims_and_idtoken(request_rec *r, json_t **claims,
  * handles both OpenID Connect or OAuth 2.0 in the same way, based on the claims stored in the session
  */
 authz_status oidc_authz_checker(request_rec *r, const char *require_args,
-		const void *parsed_require_args, oidc_authz_match_claim_fn_type match_claim_fn) {
+		const void *parsed_require_args,
+		oidc_authz_match_claim_fn_type match_claim_fn) {
 
 	oidc_debug(r, "enter");
 
@@ -3276,8 +3251,10 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args,
 	return rc;
 }
 
-authz_status oidc_authz_checker_claim(request_rec *r, const char *require_args, const void *parsed_require_args) {
-	return oidc_authz_checker(r, require_args, parsed_require_args, oidc_authz_match_claim);
+authz_status oidc_authz_checker_claim(request_rec *r, const char *require_args,
+		const void *parsed_require_args) {
+	return oidc_authz_checker(r, require_args, parsed_require_args,
+			oidc_authz_match_claim);
 }
 
 #ifdef USE_LIBJQ
@@ -3350,7 +3327,8 @@ int oidc_content_handler(request_rec *r) {
 	int rc = DECLINED;
 	if (oidc_util_request_matches_url(r, c->redirect_uri)) {
 
-		if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO)) {
+		if (oidc_util_request_has_parameter(r,
+				OIDC_REDIRECT_URI_REQUEST_INFO)) {
 
 			oidc_session_t *session = NULL;
 			oidc_session_load(r, &session);

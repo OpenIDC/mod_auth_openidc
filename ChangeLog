@@ -3,7 +3,7 @@ feature
 - add authorization capability for session info hook through Require directives
 - support access_token_refresh_interval parameter to the info hook to refresh the access token
 - refactoring:
-  - session state calls into getters/setters functions
+  - session state and proto state into getters/setters functions
   - header calls into getters/setters functions
   - use constants instead of strings literals
 - add encryption for all cache entries instead of just session data
