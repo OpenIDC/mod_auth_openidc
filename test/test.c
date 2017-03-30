@@ -1026,6 +1026,7 @@ static char * test_proto_authorization_request(request_rec *r) {
 	provider.response_type = "code";
 	provider.auth_request_params = NULL;
 	provider.request_object = NULL;
+	provider.token_binding_policy = OIDC_TOKEN_BINDING_POLICY_OPTIONAL;
 	const char *redirect_uri = "https://www.example.com/protected/";
 	const char *state = "12345";
 
