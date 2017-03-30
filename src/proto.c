@@ -525,8 +525,7 @@ int oidc_proto_authorization_request(request_rec *r,
 
 	/* add a referred token binding request for the provider if enabled */
 	if ((provider->token_binding_policy > OIDC_TOKEN_BINDING_POLICY_DISABLED)
-			&& (apr_table_get(r->subprocess_env, OIDC_TB_CFG_PROVIDED_ENV_VAR)
-					!= NULL))
+			&& (oidc_util_get_provided_token_binding_id(r) != NULL))
 		oidc_util_hdr_err_out_add(r,
 				OIDC_HTTP_HDR_INCLUDE_REFERRED_TOKEN_BINDING_ID, "true");
 
@@ -648,8 +647,8 @@ static apr_byte_t oidc_proto_pkce_challenge_referred_tb(request_rec *r,
  */
 static apr_byte_t oidc_proto_pkce_verifier_referred_tb(request_rec *r,
 		const char *state, char **code_verifier) {
-	*code_verifier = apr_pstrdup(r->pool,
-			apr_table_get(r->subprocess_env, OIDC_TB_CFG_PROVIDED_ENV_VAR));
+	const char *tb_id = oidc_util_get_provided_token_binding_id(r);
+	*code_verifier = tb_id ? apr_pstrdup(r->pool, tb_id) : NULL;
 	return TRUE;
 }
 
@@ -993,23 +992,23 @@ static apr_byte_t oidc_proto_validate_cnf(request_rec *r, oidc_cfg *cfg,
 	if (provider->token_binding_policy == OIDC_TOKEN_BINDING_POLICY_DISABLED)
 		return TRUE;
 
-	tbp_str = apr_table_get(r->subprocess_env, OIDC_TB_CFG_PROVIDED_ENV_VAR);
+	tbp_str = oidc_util_get_provided_token_binding_id(r);
 	if (tbp_str == NULL) {
-		oidc_warn(r, "no provided token binding ID environment variable found");
+		oidc_warn(r, "no Provided Token Binding ID environment variable found");
 		goto out_err;
 	}
 
 	tbp_len = oidc_base64url_decode(r->pool, &tbp, tbp_str);
 	if (tbp_len <= 0) {
 		oidc_warn(r,
-				"token binding ID environment variable could not be decoded");
+				"Provided Token Binding ID environment variable could not be decoded");
 		return FALSE;
 	}
 
 	if (oidc_jose_hash_bytes(r->pool, "sha256", (const unsigned char *) tbp,
 			tbp_len, &tbp_hash, &tbp_hash_len, NULL) == FALSE) {
 		oidc_warn(r,
-				"hashing provided token binding ID environment variable failed");
+				"hashing Provided Token Binding ID environment variable failed");
 		return FALSE;
 	}
 

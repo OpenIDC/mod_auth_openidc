@@ -2036,3 +2036,10 @@ const char *oidc_util_hdr_in_host_get(const request_rec *r) {
 void oidc_util_hdr_out_location_set(const request_rec *r, const char *value) {
 	return oidc_util_hdr_out_set(r, OIDC_HTTP_HDR_LOCATION, value);
 }
+
+const char *oidc_util_get_provided_token_binding_id(const request_rec *r) {
+	const char *result = NULL;
+	if (r->subprocess_env != NULL)
+		result = apr_table_get(r->subprocess_env, OIDC_TB_CFG_PROVIDED_ENV_VAR);
+	return result;
+}

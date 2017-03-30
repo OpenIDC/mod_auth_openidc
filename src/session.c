@@ -254,12 +254,11 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 					&ses_p_tb_id);
 
 			if (ses_p_tb_id != NULL) {
-				env_p_tb_id = apr_table_get(r->subprocess_env,
-						OIDC_TB_CFG_PROVIDED_ENV_VAR);
+				env_p_tb_id = oidc_util_get_provided_token_binding_id(r);
 				if ((env_p_tb_id == NULL)
 						|| (apr_strnatcmp(env_p_tb_id, ses_p_tb_id) != 0)) {
 					oidc_error(r,
-							"the token binding ID stored in the session doesn't match the one presented by the user agent");
+							"the Provided Token Binding ID stored in the session doesn't match the one presented by the user agent");
 					oidc_session_free(r, z);
 					z->state = json_object();
 				}
@@ -285,8 +284,7 @@ apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z,
 			&auth_openidc_module);
 
 	apr_byte_t rc = FALSE;
-	const char *p_tb_id = apr_table_get(r->subprocess_env,
-			OIDC_TB_CFG_PROVIDED_ENV_VAR);
+	const char *p_tb_id = oidc_util_get_provided_token_binding_id(r);
 
 	if (z->state != NULL) {
 		oidc_session_set(r, z, OIDC_SESSION_REMOTE_USER_KEY, z->remote_user);
@@ -296,8 +294,7 @@ apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z,
 
 	if ((first_time) && (p_tb_id != NULL)) {
 		oidc_debug(r,
-				"token binding environment variable %s found; adding its value to the session state",
-				OIDC_TB_CFG_PROVIDED_ENV_VAR);
+				"Provided Token Binding ID environment variable found; adding its value to the session state");
 		oidc_session_set(r, z, OIDC_SESSION_PROVIDED_TOKEN_BINDING_KEY,
 				p_tb_id);
 	}

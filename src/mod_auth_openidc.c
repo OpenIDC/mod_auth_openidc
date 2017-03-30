@@ -242,11 +242,10 @@ static char *oidc_get_browser_state_hash(request_rec *r, const char *nonce) {
 	apr_sha1_update(&sha1, nonce, strlen(nonce));
 
 	/* concat the token binding ID if present */
-	value = apr_table_get(r->subprocess_env, OIDC_TB_CFG_PROVIDED_ENV_VAR);
+	value = oidc_util_get_provided_token_binding_id(r);
 	if (value != NULL) {
 		oidc_debug(r,
-				"token binding environment variable %s found; adding its value to the state",
-				OIDC_TB_CFG_PROVIDED_ENV_VAR);
+				"Provided Token Binding ID environment variable found; adding its value to the state");
 		apr_sha1_update(&sha1, value, strlen(value));
 	}
 
