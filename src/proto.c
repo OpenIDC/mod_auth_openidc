@@ -516,7 +516,7 @@ int oidc_proto_authorization_request(request_rec *r,
 	}
 
 	/* cleanup */
-	json_decref(proto_state);
+	oidc_proto_state_destroy(proto_state);
 
 	/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
 	if (oidc_post_preserve_javascript(r, authorization_request, NULL,
