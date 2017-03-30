@@ -1,23 +1,27 @@
-feature
-- add session info hook that is configurable through OIDCInfoHook
-- add authorization capability for session info hook through Require directives
-- support access_token_refresh_interval parameter to the info hook to refresh the access token
-- refactoring:
-  - session state and proto state into getters/setters functions
-  - header calls into getters/setters functions
-  - use constants instead of strings literals
-- add encryption for all cache entries instead of just session data
-- add cookie SameSite flag/policy
-- return HTTP 200 on OPTIONS requests to (unauthenticated) "oauth20" paths
-- add "AuthType auth-openidc" option that allows both "oauth20" and "openid-connect" on the same path
-- add fallback to a by-value session cookie if the primary cache fails with OIDCSessionCacheFallbackToCookie
-- add support for black- and/or white-listing claims with OIDCBlackListedClaims and OIDCWhiteListedClaims
-- fix clearing chunked session cookies on logout; closes #246; thanks @Jharmuth
-- actually remove session state from cache on logout; fix cache delete for encrypted backends i.e. always hash key
-- add token binding support for state & session cookies in conjunction with https://github.com/zmartzone/mod_token_binding
-- add OpenID Connect Token Bound Authentication support (http://openid.net/specs/openid-connect-token-bound-authentication-1_0.html)
-  confirmed against Brian Campbell's PingFederate OP at token-provider-bc.ping-eng.com:9031
-- refactor PKCE support and add OAuth 2.0 Token Binding for Authorization Codes (https://tools.ietf.org/html/draft-jones-oauth-token-binding)
+03/30/2017
+- merge feature branch back to master:
+  - better support for Single Page Applications, see:
+    https://github.com/pingidentity/mod_auth_openidc/wiki/Single-Page-Applications
+    - add session info hook that is configurable through OIDCInfoHook
+    - add "AuthType auth-openidc" option that allows both "oauth20" and "openid-connect" on the same path
+  - add encryption for all cache entries instead of just session data through OIDCCacheEncrypt
+  - add cookie SameSite flag/policy through OIDCCookieSameSite
+  - return HTTP 200 on OPTIONS requests to (unauthenticated) "oauth20" paths
+  - add fallback to a by-value session cookie if the primary session cache fails with OIDCSessionCacheFallbackToCookie
+  - add support for black- and/or white-listing claims with OIDCBlackListedClaims and OIDCWhiteListedClaims
+  - add prototype token binding support in conjunction with:
+    https://github.com/zmartzone/mod_token_binding:
+    - for state & session cookies, see:
+      https://github.com/TokenBinding/Internet-Drafts
+    - for ID tokens with OpenID Connect Token Bound Authentication support, see:
+      http://openid.net/specs/openid-connect-token-bound-authentication-1_0.html
+    - for Authorization Codes with OAuth 2.0 Token Binding for Authorization Codes, see:
+      https://tools.ietf.org/html/draft-jones-oauth-token-binding
+  - refactoring:
+    - refactor session state, proto state and headers into getters/setters functions
+    - refactor PKCE support
+  - fix removing session state from cache on logout
+  - fix clearing chunked session cookies on logout; closes #246; thanks @Jharmuth
 
 02/20/2017
 - security fix: scrub headers for "AuthType oauth20"
