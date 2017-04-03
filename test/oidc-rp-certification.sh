@@ -6,7 +6,7 @@
 # Script used to do automated OpenID Connect Relying Party Certification
 # Testing for the mod_auth_openidc OIDC RP implementation for Apache HTTPd.
 #
-# @Version: 2.1.6, mod_auth_openidc >= v2.1.6
+# @Version: 2.2.0, mod_auth_openidc >= v2.2.0
 # 
 # @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
 #
@@ -19,9 +19,6 @@ LOG_FILE="<YOUR-APACHE-ERROR-LOGFILE-WITH-DEBUG-MESSAGES>"
 
 RP_TEST_PORT=8080
 RP_TEST_HOST="rp.certification.openid.net"
-#RP_TEST_HOST="localhost"
-RP_TEST_URL="https://${RP_TEST_HOST}:${RP_TEST_PORT}"
-RP_TEST_URL_ENC="https%3A%2F%2F${RP_TEST_HOST}%3A${RP_TEST_PORT}"
 COOKIE_JAR="/tmp/cookie.jar"
 
 FLAGS="-s -k -b ${COOKIE_JAR} -c ${COOKIE_JAR}"
@@ -30,6 +27,9 @@ SETENV="$(dirname "$0")/setenv.sh"
 if [[ -x "${SETENV}" ]]; then
 	source "${SETENV}"
 fi
+
+RP_TEST_URL="https://${RP_TEST_HOST}:${RP_TEST_PORT}"
+RP_TEST_URL_ENC="https%3A%2F%2F${RP_TEST_HOST}%3A${RP_TEST_PORT}"
 
 TESTS="
 	rp-discovery-webfinger-url
