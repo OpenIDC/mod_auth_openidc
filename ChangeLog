@@ -16,7 +16,7 @@
     - for ID tokens with OpenID Connect Token Bound Authentication support, see:
       http://openid.net/specs/openid-connect-token-bound-authentication-1_0.html
     - for Authorization Codes with OAuth 2.0 Token Binding for Authorization Codes, see:
-      https://tools.ietf.org/html/draft-jones-oauth-token-binding
+       https://tools.ietf.org/html/draft-ietf-oauth-token-binding
   - refactoring:
     - refactor session state, proto state and headers into getters/setters functions
     - refactor PKCE support
