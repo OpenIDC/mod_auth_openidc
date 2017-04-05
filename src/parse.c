@@ -488,7 +488,7 @@ const char *oidc_valid_encrypted_response_enc(apr_pool_t *pool, const char *arg)
 }
 
 #define OIDC_SESSION_INACTIVITY_TIMEOUT_MIN 10
-#define OIDC_SESSION_INACTIVITY_TIMEOUT_MAX 86400
+#define OIDC_SESSION_INACTIVITY_TIMEOUT_MAX 3600 * 24 * 365
 
 /*
  * parse a session inactivity timeout value from the provided string

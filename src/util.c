@@ -1176,8 +1176,13 @@ int oidc_util_http_send(request_rec *r, const char *data, int data_len,
 	APR_BRIGADE_INSERT_TAIL(bb, b);
 	b = apr_bucket_eos_create(r->connection->bucket_alloc);
 	APR_BRIGADE_INSERT_TAIL(bb, b);
-	if (ap_pass_brigade(r->output_filters, bb) != APR_SUCCESS)
+	int rc = ap_pass_brigade(r->output_filters, bb);
+	if (rc != APR_SUCCESS) {
+		oidc_error(r,
+				"ap_pass_brigade returned an error: %d; if you're using this module combined with mod_deflate try make an exception for the OIDCRedirectURI e.g. using SetEnvIf Request_URI <url> no-gzip",
+				rc);
 		return HTTP_INTERNAL_SERVER_ERROR;
+	}
 	//r->status = success_rvalue;
 	return success_rvalue;
 }

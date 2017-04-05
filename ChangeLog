@@ -1,3 +1,8 @@
+04/05/2017
+- allow for high session inactivity timeout max value
+- improve error message in oidc_util_http_send when ap_pass_brigade fails and mention possible interference with mod_deflate
+- bump to 2.2.1rc0
+
 03/30/2017
 - merge feature branch back to master:
   - better support for Single Page Applications, see:
