@@ -1,3 +1,6 @@
+04/06/2017
+- change warn log about missing token binding ID to debug log
+
 04/05/2017
 - allow for high session inactivity timeout max value
 - improve error message in oidc_util_http_send when ap_pass_brigade fails and mention possible interference with mod_deflate

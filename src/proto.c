@@ -994,7 +994,7 @@ static apr_byte_t oidc_proto_validate_cnf(request_rec *r, oidc_cfg *cfg,
 
 	tbp_str = oidc_util_get_provided_token_binding_id(r);
 	if (tbp_str == NULL) {
-		oidc_warn(r, "no Provided Token Binding ID environment variable found");
+		oidc_debug(r, "no Provided Token Binding ID environment variable found");
 		goto out_err;
 	}
 
