@@ -122,7 +122,7 @@ Note that this is not an OpenID Connect SSO scenario where users are authenticat
 scenario where **mod_auth_openidc** is the OAuth 2.0 Resource Server instead of the RP/client. How the actual
 client accessing the protected resources got its access token is not relevant to this Apache Resource Server setup.
 
-###OpenID Connect SSO with multiple OpenID Connect Providers
+### OpenID Connect SSO with multiple OpenID Connect Providers
 
 Sample configuration for multiple OpenID Connect providers, which triggers OpenID
 Connect Discovery first to find the user's OP.
@@ -221,7 +221,7 @@ An additional **mod_auth_openidc** specific parameter named `auth_request_params
 in, see the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki#13-how-can-i-add-custom-parameters-to-the-authorization-request)
 for its usage.
 
-###OpenID Connect SSO & OAuth 2.0 Access Control with PingFederate
+### OpenID Connect SSO & OAuth 2.0 Access Control with PingFederate
 
 Another example config for using PingFederate as your OpenID Connect OP and/or
 OAuth 2.0 Authorization server, based on the OAuth 2.0 PlayGround 3.x default
