@@ -275,8 +275,9 @@ The corresponding forum/archive is at:
 For commercial support and consultancy you can contact:  
   [info@zmartzone.eu](mailto:info@zmartzone.eu)  
 
-Any questions/issues should go to the mailing list, the Github issues tracker or the
-primary author [hans.zandbelt@zmartzone.eu](mailto:hans.zandbelt@zmartzone.eu)
+Any questions/issues should go to the mailing list or the
+primary author [hans.zandbelt@zmartzone.eu](mailto:hans.zandbelt@zmartzone.eu).  
+The Github issues tracker should be used only for bugs reports and feature requests.
 
 Disclaimer
 ----------
