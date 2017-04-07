@@ -177,6 +177,10 @@ static redisContext * oidc_cache_redis_connect(request_rec *r,
 		if ((ctx == NULL) || (ctx->err != 0)) {
 			oidc_error(r, "failed to connect to Redis server (%s:%d): '%s'",
 					context->host_str, context->port, ctx->errstr);
+			if (ctx != NULL)
+				redisFree(ctx);
+			apr_pool_userdata_set(NULL, OIDC_CACHE_REDIS_CONTEXT,
+					apr_pool_cleanup_null, r->server->process->pool);
 			return NULL;
 		}
 
