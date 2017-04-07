@@ -1,3 +1,7 @@
+04/07/2017
+- fix potential crash on prefork process exit when used with Redis cache backend
+- bump to 2.2.1rc1
+
 04/06/2017
 - change warn log about missing token binding ID to debug log
 
