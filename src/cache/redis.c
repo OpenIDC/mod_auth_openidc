@@ -158,42 +158,63 @@ static char *oidc_cache_redis_get_key(apr_pool_t *pool, const char *section,
 #define OIDC_CACHE_REDIS_CONTEXT "oidc_cache_redis_context"
 
 /*
+ * per-process Redis connection context
+ */
+typedef struct {
+	redisContext *ctx;
+} oidc_cache_redis_ctx_t;
+
+/*
+ * free resources allocated for the per-process Redis connection context
+ */
+static apr_status_t oidc_cache_redis_free(void *ptr) {
+	oidc_cache_redis_ctx_t *rctx = (oidc_cache_redis_ctx_t *) ptr;
+	if ((rctx != NULL) && (rctx->ctx != NULL)) {
+		redisFree(rctx->ctx);
+		rctx->ctx = NULL;
+	}
+	return APR_SUCCESS;
+}
+
+/*
  * connect to Redis server
  */
-static redisContext * oidc_cache_redis_connect(request_rec *r,
+static oidc_cache_redis_ctx_t * oidc_cache_redis_connect(request_rec *r,
 		oidc_cache_cfg_redis_t *context) {
 
 	/* see if we already have a connection by looking it up in the process context */
-	redisContext *ctx = NULL;
-	apr_pool_userdata_get((void **) &ctx, OIDC_CACHE_REDIS_CONTEXT,
+	oidc_cache_redis_ctx_t *rctx = NULL;
+
+	apr_pool_userdata_get((void **) &rctx, OIDC_CACHE_REDIS_CONTEXT,
 			r->server->process->pool);
 
-	if (ctx == NULL) {
-
-		/* no connection, connect to the configured Redis server */
-		ctx = redisConnect(context->host_str, context->port);
-
-		/* check for errors */
-		if ((ctx == NULL) || (ctx->err != 0)) {
-			oidc_error(r, "failed to connect to Redis server (%s:%d): '%s'",
-					context->host_str, context->port, ctx->errstr);
-			if (ctx != NULL)
-				redisFree(ctx);
-			apr_pool_userdata_set(NULL, OIDC_CACHE_REDIS_CONTEXT,
-					apr_pool_cleanup_null, r->server->process->pool);
-			return NULL;
-		}
+	if (rctx == NULL) {
+		rctx = apr_pcalloc(r->server->process->pool, sizeof(oidc_cache_redis_ctx_t));
+		rctx->ctx = NULL;
 
 		/* store the connection in the process context */
-		apr_pool_userdata_set(ctx, OIDC_CACHE_REDIS_CONTEXT,
-				(apr_status_t (*)(void *)) redisFree, r->server->process->pool);
-
-		/* log the connection */
-		oidc_debug(r, "successfully connected to Redis server (%s:%d)",
-				context->host_str, context->port);
+		apr_pool_userdata_set(rctx, OIDC_CACHE_REDIS_CONTEXT, oidc_cache_redis_free,
+				r->server->process->pool);
 	}
 
-	return ctx;
+	if (rctx->ctx == NULL) {
+
+		/* no connection, connect to the configured Redis server */
+		rctx->ctx = redisConnect(context->host_str, context->port);
+
+		/* check for errors */
+		if ((rctx->ctx == NULL) || (rctx->ctx->err != 0)) {
+			oidc_error(r, "failed to connect to Redis server (%s:%d): '%s'",
+					context->host_str, context->port, rctx->ctx != NULL ? rctx->ctx->errstr : "");
+			oidc_cache_redis_free(rctx);
+		} else {
+			/* log the connection */
+			oidc_debug(r, "successfully connected to Redis server (%s:%d)",
+					context->host_str, context->port);
+		}
+	}
+
+	return rctx;
 }
 
 /*
@@ -202,7 +223,7 @@ static redisContext * oidc_cache_redis_connect(request_rec *r,
 static redisReply* oidc_cache_redis_command(request_rec *r,
 		oidc_cache_cfg_redis_t *context, const char *format, ...) {
 
-	redisContext *ctx = NULL;
+	oidc_cache_redis_ctx_t *rctx = NULL;
 	redisReply *reply = NULL;
 	int i = 0;
 
@@ -210,24 +231,24 @@ static redisReply* oidc_cache_redis_command(request_rec *r,
 	for (i = 0; i < 2; i++) {
 
 		/* connect */
-		ctx = oidc_cache_redis_connect(r, context);
-		if (ctx == NULL)
+		rctx = oidc_cache_redis_connect(r, context);
+		if ((rctx == NULL) || (rctx->ctx == NULL))
 			break;
 
 		if (context->passwd != NULL) {
-			redisAppendCommand(ctx,
+			redisAppendCommand(rctx->ctx,
 					apr_psprintf(r->pool, "AUTH %s", context->passwd));
 		}
 
 		/* execute the command */
 		va_list args;
 		va_start(args, format);
-		redisvAppendCommand(ctx, format, args);
+		redisvAppendCommand(rctx->ctx, format, args);
 		va_end(args);
 
 		if (context->passwd != NULL) {
 			/* get the reply for the AUTH command */
-			redisGetReply(ctx, (void **) &reply);
+			redisGetReply(rctx->ctx, (void **) &reply);
 			if (reply == NULL) {
 				oidc_error(r,
 						"authentication to the Redis server (%s:%d) failed, reply == NULL",
@@ -241,7 +262,7 @@ static redisReply* oidc_cache_redis_command(request_rec *r,
 
 		/* get the reply for the actual command */
 		reply = NULL;
-		redisGetReply(ctx, (void **) &reply);
+		redisGetReply(rctx->ctx, (void **) &reply);
 
 		/* errors will result in an empty reply */
 		if (reply != NULL) {
@@ -256,12 +277,10 @@ static redisReply* oidc_cache_redis_command(request_rec *r,
 		/* something went wrong, log it */
 		oidc_error(r,
 				"redisvAppendCommand/redisGetReply (%d) failed, disconnecting: '%s'",
-				i, ctx->errstr);
+				i, rctx->ctx->errstr);
 
 		/* cleanup, we may try again (once) after reconnecting */
-		redisFree(ctx);
-		apr_pool_userdata_set(NULL, OIDC_CACHE_REDIS_CONTEXT,
-				apr_pool_cleanup_null, r->server->process->pool);
+		oidc_cache_redis_free(rctx);
 	}
 
 	return reply;
