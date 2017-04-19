@@ -239,21 +239,22 @@ static const char *oidc_set_url_slot(cmd_parms *cmd, void *ptr, const char *arg)
 }
 
 /*
- * set a relative HTTPS/HTTP value in the server config
+ * set a relative or absolute URL value in the server config
  */
-static const char *oidc_set_redirect_url_slot(cmd_parms *cmd, void *ptr, const char *arg) {
+static const char *oidc_set_relative_or_absolute_url_slot(cmd_parms *cmd, void *ptr, const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
   if (arg[0] == '/') {
-		// Relative RedirectURI
+		// relative uri
 		apr_uri_t uri;
 		if (apr_uri_parse(cmd->pool, arg, &uri) != APR_SUCCESS) {
-			return apr_psprintf(cmd->pool, "'%s' cannot be parsed as a relative URL", arg);
+			const char *rv = apr_psprintf(cmd->pool, "cannot parse '%s' as relative URI", arg);
+			return OIDC_CONFIG_DIR_RV(cmd, rv);
 		} else {
 			return ap_set_string_slot(cmd, cfg, arg);
 		}
 	} else {
-		// Absolute RedirectURI
+		// absolute uri
 		return oidc_set_url_slot_type(cmd, cfg, arg, NULL);
 	}
 }
@@ -753,7 +754,6 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->merged = FALSE;
 
 	c->redirect_uri = NULL;
-	c->redirect_uri_is_relative = FALSE;
 	c->default_sso_url = NULL;
 	c->default_slo_url = NULL;
 	c->public_keys = NULL;
@@ -882,10 +882,6 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 
 	c->redirect_uri =
 			add->redirect_uri != NULL ? add->redirect_uri : base->redirect_uri;
-
-	if (c->redirect_uri != NULL) {
-		c->redirect_uri_is_relative = (c->redirect_uri[0] == '/');
-	}
 
 	c->default_sso_url =
 			add->default_sso_url != NULL ?
@@ -1455,6 +1451,7 @@ static int oidc_check_config_error(server_rec *s, const char *config_str) {
 static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 
 	apr_uri_t r_uri;
+	int redirect_uri_is_relative;
 
 	if ((c->metadata_dir == NULL) && (c->provider.issuer == NULL)
 			&& (c->provider.metadata_url == NULL)) {
@@ -1465,6 +1462,8 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 
 	if (c->redirect_uri == NULL)
 		return oidc_check_config_error(s, "OIDCRedirectURI");
+	redirect_uri_is_relative = (c->redirect_uri[0] == '/');
+
 	if (c->crypto_passphrase == NULL)
 		return oidc_check_config_error(s, "OIDCCryptoPassphrase");
 
@@ -1494,7 +1493,7 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 	}
 
 	apr_uri_parse(s->process->pconf, c->redirect_uri, &r_uri);
-	if (!c->redirect_uri_is_relative) {
+	if (!redirect_uri_is_relative) {
 		if (apr_strnatcmp(r_uri.scheme, "https") != 0) {
 			oidc_swarn(s,
 					"the URL scheme (%s) of the configured OIDCRedirectURI SHOULD be \"https\" for security reasons (moreover: some Providers may reject non-HTTPS URLs)",
@@ -1503,7 +1502,7 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 	}
 
 	if (c->cookie_domain != NULL) {
-		if (c->redirect_uri_is_relative) {
+		if (redirect_uri_is_relative) {
 				oidc_swarn(s,	"if the configured OIDCRedirectURI is relative, OIDCCookieDomain SHOULD be empty");
 		} else if (!oidc_util_cookie_domain_valid(r_uri.hostname, c->cookie_domain)) {
 			oidc_serror(s,
@@ -2010,7 +2009,7 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF,
 				"TLS client certificate private key used for calls to OpenID Connect OP token endpoint."),
 
-		AP_INIT_TAKE1("OIDCRedirectURI", oidc_set_redirect_url_slot,
+		AP_INIT_TAKE1("OIDCRedirectURI", oidc_set_relative_or_absolute_url_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, redirect_uri),
 				RSRC_CONF,
 				"Define the Redirect URI (e.g.: https://localhost:9031/protected/example/)"),

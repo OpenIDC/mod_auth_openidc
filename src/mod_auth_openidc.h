@@ -311,9 +311,6 @@ typedef struct oidc_cfg {
 	/* the redirect URI as configured with the OpenID Connect OP's that we talk to */
 	char *redirect_uri;
 
-	/* whether the redirect URI is relative */
-	int redirect_uri_is_relative;
-
 	/* (optional) default URL for 3rd-party initiated SSO */
 	char *default_sso_url;
 	/* (optional) default URL to go to after logout */
@@ -395,6 +392,7 @@ void oidc_scrub_headers(request_rec *r);
 
 // oidc_oauth
 int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c);
+const char *oidc_get_redirect_uri(request_rec *r, oidc_cfg *c);
 
 // oidc_proto.c
 char *oidc_proto_peek_jwt_header(request_rec *r, const char *jwt, char **alg);
