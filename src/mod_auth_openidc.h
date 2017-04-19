@@ -310,7 +310,6 @@ typedef struct oidc_cfg {
 
 	/* the redirect URI as configured with the OpenID Connect OP's that we talk to */
 	char *redirect_uri;
-
 	/* (optional) default URL for 3rd-party initiated SSO */
 	char *default_sso_url;
 	/* (optional) default URL to go to after logout */
