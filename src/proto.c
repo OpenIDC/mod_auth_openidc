@@ -1353,7 +1353,7 @@ static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 	apr_table_t *params = apr_table_make(r->pool, 5);
 	apr_table_addn(params, "grant_type", "authorization_code");
 	apr_table_addn(params, "code", code);
-	apr_table_addn(params, "redirect_uri", cfg->redirect_uri);
+	apr_table_addn(params, "redirect_uri", oidc_get_redirect_uri(r, cfg));
 
 	if (code_verifier)
 		apr_table_addn(params, "code_verifier", code_verifier);
