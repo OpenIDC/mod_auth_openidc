@@ -433,7 +433,7 @@ const char *oidc_get_current_url_host(request_rec *r) {
 /*
  * get the base part of the current URL (scheme + host (+ port))
  */
-const char *oidc_get_current_url_base(request_rec *r) {
+static const char *oidc_get_current_url_base(request_rec *r) {
 
 	const char *scheme_str = oidc_get_current_url_scheme(r);
 	const char *host_str = oidc_get_current_url_host(r);

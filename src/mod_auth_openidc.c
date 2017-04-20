@@ -3042,7 +3042,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
  */
 static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 
-	if (c->redirect_uri == NULL) {
+	if (oidc_get_redirect_uri(r, c) == NULL) {
 		oidc_error(r,
 				"configuration error: the authentication type is set to \"openid-connect\" but OIDCRedirectURI has not been set");
 		return HTTP_INTERNAL_SERVER_ERROR;
@@ -3325,7 +3325,7 @@ int oidc_content_handler(request_rec *r) {
 			&auth_openidc_module);
 
 	int rc = DECLINED;
-	if (oidc_util_request_matches_url(r, c->redirect_uri)) {
+	if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c))) {
 
 		if (oidc_util_request_has_parameter(r,
 				OIDC_REDIRECT_URI_REQUEST_INFO)) {

@@ -616,8 +616,7 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 		}
 
 		/* check if this is a request for the public (encryption) keys */
-	} else if ((c->redirect_uri != NULL)
-			&& (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c)))) {
+	} else if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c))) {
 
 		if (oidc_util_request_has_parameter(r, "jwks")) {
 
