@@ -1,5 +1,7 @@
 04/20/2017
 - support relative RedirectURIs; closes #200; thanks @moschlar
+- don't assume that having OIDCCryptPassphrase set means we should validate the config for
+  openid-connect since it can now also be used to encrypt (auth20) cache entries
 - bump to 2.2.1rc4
 
 04/08/2017
