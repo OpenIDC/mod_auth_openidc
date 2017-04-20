@@ -882,7 +882,6 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 
 	c->redirect_uri =
 			add->redirect_uri != NULL ? add->redirect_uri : base->redirect_uri;
-
 	c->default_sso_url =
 			add->default_sso_url != NULL ?
 					add->default_sso_url : base->default_sso_url;
