@@ -431,16 +431,26 @@ const char *oidc_get_current_url_host(request_rec *r) {
 }
 
 /*
- * get the URL that is currently being accessed
+ * get the base part of the current URL (scheme + host (+ port))
  */
-char *oidc_get_current_url(request_rec *r) {
+const char *oidc_get_current_url_base(request_rec *r) {
 
 	const char *scheme_str = oidc_get_current_url_scheme(r);
 	const char *host_str = oidc_get_current_url_host(r);
 	const char *port_str = oidc_get_current_url_port(r, scheme_str);
 	port_str = port_str ? apr_psprintf(r->pool, ":%s", port_str) : "";
 
-	char *url = apr_pstrcat(r->pool, scheme_str, "://", host_str, port_str,
+	char *url = apr_pstrcat(r->pool, scheme_str, "://", host_str, port_str, NULL);
+
+	return url;
+}
+
+/*
+ * get the URL that is currently being accessed
+ */
+char *oidc_get_current_url(request_rec *r) {
+
+	char *url = apr_pstrcat(r->pool, oidc_get_current_url_base(r),
 			r->uri, (r->args != NULL && *r->args != '\0' ? "?" : ""), r->args,
 			NULL);
 
@@ -459,12 +469,7 @@ const char *oidc_get_redirect_uri(request_rec *r, oidc_cfg *cfg) {
 	if ((redirect_uri != NULL) && (redirect_uri[0] == '/')) {
 		// relative redirect uri
 
-		const char *scheme_str = oidc_get_current_url_scheme(r);
-		const char *host_str = oidc_get_current_url_host(r);
-		const char *port_str = oidc_get_current_url_port(r, scheme_str);
-		port_str = port_str ? apr_psprintf(r->pool, ":%s", port_str) : "";
-
-		redirect_uri = apr_pstrcat(r->pool, scheme_str, "://", host_str, port_str,
+		redirect_uri = apr_pstrcat(r->pool, oidc_get_current_url_base(r),
 				cfg->redirect_uri, NULL);
 
 		oidc_debug(r, "determined absolute redirect uri: %s", redirect_uri);
