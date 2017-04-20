@@ -1451,7 +1451,7 @@ static int oidc_check_config_error(server_rec *s, const char *config_str) {
 static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 
 	apr_uri_t r_uri;
-	int redirect_uri_is_relative;
+	apr_byte_t redirect_uri_is_relative;
 
 	if ((c->metadata_dir == NULL) && (c->provider.issuer == NULL)
 			&& (c->provider.metadata_url == NULL)) {
