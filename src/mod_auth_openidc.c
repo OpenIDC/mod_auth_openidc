@@ -2934,22 +2934,6 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 }
 
 /*
- * determine absolute redirect uri
- */
-const char *oidc_get_redirect_uri(request_rec *r, oidc_cfg *cfg) {
-
-	char *redirect_uri = cfg->redirect_uri;
-
-	if ((redirect_uri != NULL) && (redirect_uri[0] == '/')) {
-		// relative redirect uri
-		// TODO: we are forcing https here because the actual scheme is harder to get
-		redirect_uri = apr_pstrcat(r->pool, "https://", r->hostname, cfg->redirect_uri, (char *)NULL);
-		oidc_debug(r, "determined absolute redirect uri: %s", redirect_uri);
-	}
-	return redirect_uri;
-}
-
-/*
  * main routine: handle OpenID Connect authentication
  */
 static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {

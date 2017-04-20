@@ -449,6 +449,29 @@ char *oidc_get_current_url(request_rec *r) {
 	return url;
 }
 
+/*
+ * determine absolute redirect uri
+ */
+const char *oidc_get_redirect_uri(request_rec *r, oidc_cfg *cfg) {
+
+	char *redirect_uri = cfg->redirect_uri;
+
+	if ((redirect_uri != NULL) && (redirect_uri[0] == '/')) {
+		// relative redirect uri
+
+		const char *scheme_str = oidc_get_current_url_scheme(r);
+		const char *host_str = oidc_get_current_url_host(r);
+		const char *port_str = oidc_get_current_url_port(r, scheme_str);
+		port_str = port_str ? apr_psprintf(r->pool, ":%s", port_str) : "";
+
+		redirect_uri = apr_pstrcat(r->pool, scheme_str, "://", host_str, port_str,
+				cfg->redirect_uri, NULL);
+
+		oidc_debug(r, "determined absolute redirect uri: %s", redirect_uri);
+	}
+	return redirect_uri;
+}
+
 /* buffer to hold HTTP call responses */
 typedef struct oidc_curl_buffer {
 	request_rec *r;
