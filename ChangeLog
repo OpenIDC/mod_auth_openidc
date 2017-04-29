@@ -1,3 +1,6 @@
+04/29/2017
+- correctly log success/failure in cache_file_set
+
 04/20/2017
 - support relative RedirectURIs; closes #200; thanks @moschlar
 - don't assume that having OIDCCryptPassphrase set means we should validate the config for

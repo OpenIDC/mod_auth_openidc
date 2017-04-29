@@ -444,9 +444,9 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section,
 
 	/* log our success/failure */
 	oidc_debug(r,
-			"%s stored entry for key \"%s\" (%" APR_SIZE_T_FMT " bytes, expires in: %" APR_TIME_T_FMT ")",
-			rc ? "successfully" : "could not", key, info.len,
-					apr_time_sec(expiry - apr_time_now()));
+			"%s entry for key \"%s\" (%" APR_SIZE_T_FMT " bytes, expires in: %" APR_TIME_T_FMT ")",
+			(rc == APR_SUCCESS) ? "successfully stored" : "could not store",
+					key, info.len, apr_time_sec(expiry - apr_time_now()));
 
 	return rc;
 }
