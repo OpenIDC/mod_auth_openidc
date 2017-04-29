@@ -1,5 +1,7 @@
 04/29/2017
 - correctly log success/failure in cache_file_set
+- avoid decoding a JSON object and logging an error when the input is NULL
+  e.g. when claims have not been resolved because userinfo endpoint is not set
 
 04/20/2017
 - support relative RedirectURIs; closes #200; thanks @moschlar

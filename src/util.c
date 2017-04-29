@@ -1140,6 +1140,9 @@ static apr_byte_t oidc_util_check_json_error(request_rec *r, json_t *json) {
 apr_byte_t oidc_util_decode_json_object(request_rec *r, const char *str,
 		json_t **json) {
 
+	if (str == NULL)
+		return FALSE;
+
 	json_error_t json_error;
 	*json = json_loads(str, 0, &json_error);
 
