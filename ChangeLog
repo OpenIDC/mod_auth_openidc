@@ -1,3 +1,7 @@
+04/30/2017
+- fix wrong return value for cache_file_set in the file cache backend (OIDCCacheType file); thanks Ernani Joppert Pontes Martins
+- bump to 2.2.1rc5
+
 04/29/2017
 - correctly log success/failure in cache_file_set
 - avoid decoding a JSON object and logging an error when the input is NULL

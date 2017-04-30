@@ -448,7 +448,7 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section,
 			(rc == APR_SUCCESS) ? "successfully stored" : "could not store",
 					key, info.len, apr_time_sec(expiry - apr_time_now()));
 
-	return rc;
+	return (rc == APR_SUCCESS);
 }
 
 oidc_cache_t oidc_cache_file = {
