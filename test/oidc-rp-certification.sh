@@ -104,7 +104,8 @@ TESTS_UNSUPPORTED="
 	rp-self-issued
 "
 
-# for f in `ls *.log` ; do tail -n 1 $f ; done | grep -v " OK"
+# for f in `find . -name *.log` ; do tail -n 1 $f | grep -v " OK" ; done
+# for f in `find . -name *.log` ; do echo $f && tail -n 1 $f | grep -v " OK" ; done
 # mv rp-id_token-sig+enc.conf rp-id_token-sig%2Benc.conf && mv rp-request_uri-sig+enc.conf rp-request_uri-sig%2Benc.conf && mv rp-id_token-sig+enc-a128kw.conf rp-id_token-sig%2Benc-a128kw.conf
 # for f in `ls *.conf` ; do ln -s $f rp.certification.openid.net%3A8080%2Fmod_auth_openidc%2F$f ; done
 
@@ -1614,9 +1615,14 @@ function execute_test() {
 	local NR="${2}"
 	local TOTAL="${3}"
 	local RESPONSE_TYPE="${4}"
+	local MSG="${5}"
+	
+	if [ -z "${MSG}" ] ; then
+		MSG="test"
+	fi
 	
 	echo ""
-	printf " # test [%s/%s]: %s [%s]\n" $((NR+1)) ${TOTAL} "${TEST_ID}" "${RESPONSE_TYPE}"
+	printf " # %s [%s/%s]: %s [%s]\n" "${MSG}" $((NR+1)) ${TOTAL} "${TEST_ID}" "${RESPONSE_TYPE}"
 	echo ""
 	eval `test_name_to_function "${TEST_ID}"` "${TEST_ID}" "${RESPONSE_TYPE}"
 }
@@ -1629,7 +1635,7 @@ function execute_profile() {
 	TOTAL=`echo ${TESTS} | wc -w`
 	NR=0
 	for TEST_ID in $TESTS; do
-		execute_test "${TEST_ID}" "${NR}" "${TOTAL}" "${RESPONSE_TYPE}" | tee "profile/${NAME}/${TEST_ID}.log"
+		execute_test "${TEST_ID}" "${NR}" "${TOTAL}" "${RESPONSE_TYPE}" "${NAME}" | tee "profile/${NAME}/${TEST_ID}.log"
 		NR=$((NR+1))
 	done
 	echo ""
@@ -1641,6 +1647,7 @@ if [ "$1" == "clean" ] ; then
 	for profile in code id_token id_token+token code+token code+id_token code+id_token+token ; do
 		rm -f metadata/${profile}/*.provider metadata/${profile}/*.client
 	done
+	rm -rf profile
 	exit
 fi
 
