@@ -457,9 +457,9 @@ function find_in_logfile() {
 	
 	message "${TEST_ID}" "${MESSAGE}" "-n"
 	if [ -z "${MATCH2}" ] ; then
-		tail -n ${NUMBER} ${LOG_FILE} | grep -q "${MATCH}" && echo "OK" || { printf "ERROR:\n could not find \"%s\" in logfile\n" "${MATCH}" && exit; }
+		tail -n ${NUMBER} ${LOG_FILE} | grep -q "${MATCH}" && echo "OK" || { printf "ERROR:\n could not find \"%s\" in logfile\n" "${MATCH}" && false; }
 	else
-		tail -n ${NUMBER} ${LOG_FILE} | grep "${MATCH}" | grep -q "${MATCH2}" && echo "OK" || { printf "ERROR:\n could not find \"%s\" and \"%s\" in logfile\n" "${MATCH}" "${MATCH2}" && exit; }
+		tail -n ${NUMBER} ${LOG_FILE} | grep "${MATCH}" | grep -q "${MATCH2}" && echo "OK" || { printf "ERROR:\n could not find \"%s\" and \"%s\" in logfile\n" "${MATCH}" "${MATCH2}" && false; }
 	fi
 }
 
@@ -471,12 +471,12 @@ function create_csrf() {
 	local RESPONSE=`echo ${FLAGS} -j | xargs curl ${TARGET_URL}`
 	if [ $? -ne 0 ] ; then
 		echo "ERROR"
-		exit
+		return -1
 	fi
 	CSRF=`echo "${RESPONSE}" | grep hidden | grep x_csrf | cut -d"\"" -f6`
 	if [ $? -ne 0 ] ; then
 		echo "ERROR"
-		exit
+		return -1
 	else
 		echo "OK"
 	fi
@@ -494,21 +494,21 @@ function initiate_sso() {
 	RESULT=`echo ${FLAGS} -i | xargs curl -G --data-urlencode "iss=${ISSUER}" --data-urlencode "target_link_uri=${TARGET_URL}" --data-urlencode "x_csrf=${CSRF}" ${REDIRECT_URI}`
 	if [ $? -ne 0 ] ; then
 		echo "ERROR"
-		exit
+		return -1
 	fi
 
 	if [ "${RESULT_PARAM}" != "nogrep" ] ; then
 		RESULT=`echo "${RESULT}" | grep_location_header_value`
 		if [ $? -ne 0 ] ; then
 			echo "ERROR"
-			exit
+			return -1
 		fi		
 	fi
 
 	if [ -z "${RESULT_PARAM}" ] ; then
 		echo "OK"
 	elif [ "${RESULT_PARAM}" == "authorization" ] ; then
-		echo "${RESULT}" | grep -q "${RP_TEST_URL}/${RP_ID}/${TEST_ID}/authorization" && echo "OK" || { echo "ERROR: no authentication request found in redirect" && exit; }
+		echo "${RESULT}" | grep -q "${RP_TEST_URL}/${RP_ID}/${TEST_ID}/authorization" && echo "OK" || { echo "ERROR: no authentication request found in redirect" && false; }
 	fi
 	# else it should be "nogrep" or "return"
 }
@@ -516,16 +516,16 @@ function initiate_sso() {
 function grep_location_header_value_result() {
 	if [ $? -ne 0 ] ; then
 		echo "ERROR: result is: \"${RESULT}\""
-		exit
+		return -1
 	fi
 	if `echo "${RESULT}" | head -1 | grep -q "HTTP/1.1 4"` ; then
 		echo "ERROR: result is:\n${RESULT}"
-		exit
+		return -1
 	fi
 	RESULT=`echo "${RESULT}" | grep_location_header_value`
 	if [ $? -ne 0 ] ; then
 		echo "ERROR: could not parse Location header from: \"${RESULT}\""
-		exit
+		return -1
 	else
 		echo "OK"
 	fi
@@ -564,7 +564,7 @@ function application_access() {
 	message ${TEST_ID} "access application as authenticated user" "-n"
 	RESULT=`echo ${FLAGS} | xargs curl "${RETURN}"`
 	MATCH="\[OIDC_CLAIM_sub\]"
-	echo "${RESULT}" | grep -q "${MATCH}" && echo "OK" || { printf "ERROR:\n could not find \"%s\" in client HTML output:\n%s\n" "${MATCH}" "${RESULT}" && exit; }
+	echo "${RESULT}" | grep -q "${MATCH}" && echo "OK" || { printf "ERROR:\n could not find \"%s\" in client HTML output:\n%s\n" "${MATCH}" "${RESULT}" && false; }
 }
 
 # go through a regular flow from discovery to authenticated application access
@@ -594,11 +594,11 @@ function rp_discovery_webfinger_url() {
 	RESULT=`echo ${FLAGS} -i | xargs curl -G --data-urlencode "disc_user=${USER_INPUT}" --data-urlencode "target_link_uri=${TARGET_URL}" --data-urlencode "x_csrf=${CSRF}" ${REDIRECT_URI}`
 	if [ $? -ne 0 ] ; then
 		echo "ERROR"
-		exit
+		return -1
 	fi
 	
 	# check that the authentication request contains a login_hint parameter set to the URL value
-	echo ${RESULT} | grep -q "&login_hint=" && echo "OK" || { printf "ERROR: could not find \"login_hint=\" in authorization request\n" && exit; }
+	echo ${RESULT} | grep -q "&login_hint=" && echo "OK" || { printf "ERROR: could not find \"login_hint=\" in authorization request\n" && false; }
 
 	# check that the webfinger request contains the URL"
 	URL="${RP_TEST_URL}/.well-known/webfinger?resource=${RP_TEST_URL_ENC}%2F${RP_ID}%2F${TEST_ID}&rel=http%3A%2F%2Fopenid.net%2Fspecs%2Fconnect%2F1.0%2Fissuer"
@@ -631,7 +631,7 @@ function rp_discovery_issuer_not_matching_config() {
 
 	initiate_sso "${TEST_ID}" "${ISSUER}" "nogrep"
 	MATCH="Could not find valid provider metadata"
-	echo "${RESULT}" | grep -q "${MATCH}" && echo "OK" || { printf "ERROR:\n could not find \"%s\" in client HTML output:\n%s\n" "${MATCH}" "${RESULT}" && exit; }
+	echo "${RESULT}" | grep -q "${MATCH}" && echo "OK" || { printf "ERROR:\n could not find \"%s\" in client HTML output:\n%s\n" "${MATCH}" "${RESULT}" && false; }
 
 	# make sure that we've got the right error message in the error log
 	WRONG_ISSUER="https://example.com"
@@ -701,7 +701,7 @@ function rp_discovery_webfinger_http_href() {
 	initiate_sso "${TEST_ID}" "${ACCT}" "nogrep"
 	
 	MATCH="Could not resolve the provided account name to an OpenID Connect provider"
-	echo "${RESULT}" | grep -q "${MATCH}" && echo "OK" || { printf "ERROR:\n could not find \"%s\" in client HTML output:\n%s\n" "${MATCH}" "${RESULT}" && exit; }
+	echo "${RESULT}" | grep -q "${MATCH}" && echo "OK" || { printf "ERROR:\n could not find \"%s\" in client HTML output:\n%s\n" "${MATCH}" "${RESULT}" && false; }
 
 	# check that the module choked on the plain HTTP href value
 	find_in_logfile "${TEST_ID}" "check reject webfinger response" 50 "oidc_proto_webfinger_discovery: response JSON object contains an \"href\" value that is not a valid \"https\" URL"
@@ -813,7 +813,7 @@ function rp_response_mode_form_post() {
 	echo "OK"
 	
 #	echo "${RESULT}"
-#	exit
+#	return -1
 	
 #	AT=`echo "${RESULT}" | grep "name=\"access_token" | cut -d"=" -f7-9 | cut -d "\"" -f2`
 #	IDT=`echo "${RESULT}" | grep "name=\"id_token" | cut -d"=" -f4 | cut -d"\"" -f2`
@@ -842,7 +842,7 @@ function rp_response_mode_form_post() {
 #echo "####"
 #echo ${CODE}
 #echo "####"
-#exit
+#return -1
 
 	send_authentication_response ${TEST_ID} "${RESPONSE}" form_post
 	application_access ${TEST_ID} ${RESULT}
@@ -1043,7 +1043,7 @@ function rp_token_endpoint_client_secret_basic() {
 
 	# check that basic_auth is set to something other than "basic_auth=(null)"
 	message "${TEST_ID}" "check basic auth" "-n"
-	tail -n 150 ${LOG_FILE} | grep "oidc_util_http_call: url=${ISSUER}/token" | grep "grant_type=authorization_code" | grep -q "basic_auth=(null)" && { echo "ERROR: basic_auth found" && exit; } || echo "OK"
+	tail -n 150 ${LOG_FILE} | grep "oidc_util_http_call: url=${ISSUER}/token" | grep "grant_type=authorization_code" | grep -q "basic_auth=(null)" && { echo "ERROR: basic_auth found" && false; } || echo "OK"
 	
 	# check that the response from the token endpoint call is successful
 	find_in_logfile "${TEST_ID}" "check token exchange response" 150 "oidc_util_http_call: response={" "\"id_token\": "
@@ -1458,7 +1458,7 @@ function rp_key_rotation_op_enc_key() {
 				
 	# check that the kid's from the two tests differ
 	message "${TEST_ID}" "check different kids" "-n"
-	if [ "${KIDA}" != "${KIDB}" ] ; then echo "OK"; else echo "ERROR" && exit; fi
+	if [ "${KIDA}" != "${KIDB}" ] ; then echo "OK"; else echo "ERROR" && false; fi
 }
 
 function rp_claims_aggregated() {
@@ -1622,7 +1622,7 @@ function execute_test() {
 	fi
 	
 	echo ""
-	printf " # %s [%s/%s]: %s [%s]\n" "${MSG}" $((NR+1)) ${TOTAL} "${TEST_ID}" "${RESPONSE_TYPE}"
+	printf " # [%s - %s/%s]: %s [%s]\n" "${MSG}" $((NR+1)) ${TOTAL} "${TEST_ID}" "${RESPONSE_TYPE}"
 	echo ""
 	eval `test_name_to_function "${TEST_ID}"` "${TEST_ID}" "${RESPONSE_TYPE}"
 }
@@ -1635,12 +1635,13 @@ function execute_profile() {
 	TOTAL=`echo ${TESTS} | wc -w`
 	NR=0
 	for TEST_ID in $TESTS; do
-		execute_test "${TEST_ID}" "${NR}" "${TOTAL}" "${RESPONSE_TYPE}" "${NAME}" | tee "profile/${NAME}/${TEST_ID}.log"
+		execute_test "${TEST_ID}" "${NR}" "${TOTAL}" "${RESPONSE_TYPE}" "${NAME}" | tee "profile/${NAME}/${TEST_ID}.log" ; test ${PIPESTATUS[0]} -eq 0 || continue
 		NR=$((NR+1))
 	done
 	echo ""
-	printf " # SUCCESS: coverage %.2f%%\n" `echo "100 * ${NR} / ${TOTAL}" | bc -l`
+	printf " # SUCCESS: [%s] profile coverage %.2f%%\n" "${NAME}" `echo "100 * ${NR} / ${TOTAL}" | bc -l`
 	echo ""	
+	test  ${NR} -eq ${TOTAL}
 }
 
 if [ "$1" == "clean" ] ; then
