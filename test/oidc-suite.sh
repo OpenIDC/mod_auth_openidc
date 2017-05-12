@@ -18,17 +18,20 @@ function rollover() {
 
 ./oidc-rp-certification.sh clean
 
-TESTS="code id_token id_token+token code+token code+id_token code+id_token+token"
+TESTS=$1
+if [ -z ${TESTS} ] ; then
+	TESTS="config dynamic code id_token id_token+token code+token code+id_token code+id_token+token"
+fi
 TOTAL=`echo ${TESTS} | wc -w`
 NR=0
 for PROFILE in ${TESTS} ; do
 	rollover  ${MDIR}/${PROFILE}
-	./oidc-rp-certification.sh ${PROFILE} || continue
+	./oidc-rp-certification.sh ${PROFILE} || exit
 	NR=$((NR+1))
 done
 
 echo ""
-printf " # SUCCESS: accumulated profile coverage %.2f%%\n" `echo "100 * ${NR} / ${TOTAL}" | bc -l`
+printf " # SUCCESS: accumulated profile coverage %.2f%% (%d/%d)\n" `echo "100 * ${NR} / ${TOTAL}" | bc -l` ${NR} ${TOTAL}
 echo ""	
 
 rollover $(dirname ${SCRIPTPATH})/metadata
