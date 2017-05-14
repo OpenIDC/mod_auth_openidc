@@ -2302,6 +2302,23 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 				HTTP_UNAUTHORIZED);
 	}
 
+	/* see if this is a static setup */
+	if (c->metadata_dir == NULL) {
+		if ((oidc_provider_static_config(r, c, &provider) == TRUE)
+				&& (issuer != NULL)) {
+			if (apr_strnatcmp(provider->issuer, issuer) != 0) {
+				return oidc_util_html_send_error(r, c->error_template,
+						"Invalid Request",
+						apr_psprintf(r->pool,
+								"The \"iss\" value must match the configured providers' one (%s != %s).",
+								issuer, c->provider.issuer),
+								HTTP_INTERNAL_SERVER_ERROR);
+			}
+		}
+		return oidc_authenticate_user(r, c, NULL, target_link_uri, login_hint,
+				NULL, NULL, auth_request_params, path_scopes);
+	}
+
 	/* find out if the user entered an account name or selected an OP manually */
 	if (user != NULL) {
 
