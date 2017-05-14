@@ -22,11 +22,14 @@
 - add OIDCPathAuthRequestParams that is configurable on a per-path basis and use OIDCAuthRequestParams for the static per-provider value
 - add OIDCPathScope that is configurable on a per-path basis and concatenate with OIDCScope as static per-provider value
 - support 3rd-party-init-SSO with additional authentication request params when a single static provider has been configured
+- add support for an empty OIDCClaimPrefix; can be used with OIDCWhiteListedClaims to protect selected headers
+- bump to 2.3.0rc0
   TODO:
   - Wiki doc that this setup can lead to infinite redirect loops
   - Wiki doc that Session Management refresh with per-path authn request params & scopes is not possible (yet)
   - Wiki doc that Apache 2.4 does the authorization-based redirect with a HTML page with a meta refresh tag 
 - support JWT verification against multiple keys with no provided kid by looping over the provided keys with cjose 0.5.0
+- remove OIDC RP certification files; moved to separate repository
 
 05/04/2017
 - improve documentation for OIDCCryptoPassphrase; closes #268

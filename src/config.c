@@ -824,6 +824,30 @@ static const char *oidc_set_token_binding_policy(cmd_parms *cmd,
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
+/*
+ * set the claim prefix
+ */
+static const char *oidc_cfg_set_claim_prefix(cmd_parms *cmd, void *struct_ptr, const char *args) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+    char *w = ap_getword_conf(cmd->pool, &args);
+    if (*w == '\0' || *args != 0)
+    	cfg->claim_prefix = "";
+    else
+    	cfg->claim_prefix = w;
+    return NULL;
+}
+
+/*
+ * get the claim prefix
+ */
+const char *oidc_cfg_claim_prefix(request_rec *r) {
+	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
+	if (cfg->claim_prefix == NULL)
+		return OIDC_DEFAULT_CLAIM_PREFIX;
+	return cfg->claim_prefix;
+}
 
 /*
  * create a new server config record with defaults
@@ -933,7 +957,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 
 	c->cookie_domain = NULL;
 	c->claim_delimiter = OIDC_DEFAULT_CLAIM_DELIMITER;
-	c->claim_prefix = OIDC_DEFAULT_CLAIM_PREFIX;
+	c->claim_prefix = NULL;
 	c->remote_user_claim.claim_name = OIDC_DEFAULT_CLAIM_REMOTE_USER;
 	c->remote_user_claim.reg_exp = NULL;
 	c->pass_idtoken_as = OIDC_PASS_IDTOKEN_AS_CLAIMS;
@@ -1296,7 +1320,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			apr_strnatcmp(add->claim_delimiter, OIDC_DEFAULT_CLAIM_DELIMITER)
 			!= 0 ? add->claim_delimiter : base->claim_delimiter;
 	c->claim_prefix =
-			apr_strnatcmp(add->claim_prefix, OIDC_DEFAULT_CLAIM_PREFIX) != 0 ?
+			add->claim_prefix != NULL ?
 					add->claim_prefix : base->claim_prefix;
 	c->remote_user_claim.claim_name =
 			apr_strnatcmp(add->remote_user_claim.claim_name,
@@ -2254,7 +2278,7 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, claim_delimiter),
 				RSRC_CONF,
 				"The delimiter to use when setting multi-valued claims in the HTTP headers."),
-		AP_INIT_TAKE1("OIDCClaimPrefix", oidc_set_string_slot,
+		AP_INIT_RAW_ARGS("OIDCClaimPrefix", oidc_cfg_set_claim_prefix,
 				(void*)APR_OFFSETOF(oidc_cfg, claim_prefix),
 				RSRC_CONF,
 				"The prefix to use when setting claims in the HTTP headers."),

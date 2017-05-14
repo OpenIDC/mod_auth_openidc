@@ -696,8 +696,8 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 		oidc_util_hdr_in_set(r, authn_header, r->user);
 
 	/* set the resolved claims in the HTTP headers for the target application */
-	oidc_util_set_app_infos(r, token, c->claim_prefix, c->claim_delimiter,
-			pass_headers, pass_envvars);
+	oidc_util_set_app_infos(r, token, oidc_cfg_claim_prefix(r),
+			c->claim_delimiter, pass_headers, pass_envvars);
 
 	/* set the access_token in the app headers */
 	if (access_token != NULL) {

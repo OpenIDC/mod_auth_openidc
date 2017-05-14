@@ -85,8 +85,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 /*
  * clean any suspicious headers in the HTTP request sent by the user agent
  */
-static void oidc_scrub_request_headers(request_rec *r, const char *claim_prefix,
-		const char *authn_header) {
+static void oidc_scrub_request_headers(request_rec *r, const char *claim_prefix, apr_hash_t *scrub) {
 
 	const int prefix_len = claim_prefix ? strlen(claim_prefix) : 0;
 
@@ -102,9 +101,12 @@ static void oidc_scrub_request_headers(request_rec *r, const char *claim_prefix,
 	for (i = 0; i < h->nelts; i++) {
 		const char * const k = e[i].key;
 
-		/* is this header's name equivalent to the header that mod_auth_openidc would set for the authenticated user? */
-		const int authn_header_matches = (k != NULL) && authn_header
-				&& (oidc_strnenvcmp(k, authn_header, -1) == 0);
+		/* is this header's name equivalent to a header that needs scrubbing? */
+		const char *hdr =
+				(k != NULL) && (scrub != NULL) ?
+						apr_hash_get(scrub, k, APR_HASH_KEY_STRING) : NULL;
+		const int header_matches = (hdr != NULL)
+						&& (oidc_strnenvcmp(k, hdr, -1) == 0);
 
 		/*
 		 * would this header be interpreted as a mod_auth_openidc attribute? Note
@@ -117,7 +119,7 @@ static void oidc_scrub_request_headers(request_rec *r, const char *claim_prefix,
 				&& (oidc_strnenvcmp(k, claim_prefix, prefix_len) == 0);
 
 		/* add to the clean_headers if non-suspicious, skip and report otherwise */
-		if (!prefix_matches && !authn_header_matches) {
+		if (!prefix_matches && !header_matches) {
 			apr_table_addn(clean_headers, k, e[i].val);
 		} else {
 			oidc_warn(r, "scrubbed suspicious request header (%s: %.32s)", k,
@@ -138,17 +140,34 @@ void oidc_scrub_headers(request_rec *r) {
 
 	if (cfg->scrub_request_headers != 0) {
 
-		/* scrub all headers starting with OIDC_ first */
-		oidc_scrub_request_headers(r, OIDC_DEFAULT_HEADER_PREFIX,
-				oidc_cfg_dir_authn_header(r));
+		const char *prefix = oidc_cfg_claim_prefix(r);
+		apr_hash_t *hdrs = apr_hash_make(r->pool);
+
+		if (apr_strnatcmp(prefix, "") == 0) {
+			if ((cfg->white_listed_claims != NULL)
+					&& (apr_hash_count(cfg->white_listed_claims) > 0))
+				hdrs = apr_hash_overlay(r->pool, cfg->white_listed_claims,
+						hdrs);
+			else
+				oidc_warn(r,
+						"both OIDCClaimPrefix and OIDCWhiteListedClaims are empty: this renders an insecure setup!");
+		}
+
+		char *authn_hdr = oidc_cfg_dir_authn_header(r);
+		if (authn_hdr != NULL)
+			apr_hash_set(hdrs, authn_hdr, APR_HASH_KEY_STRING, authn_hdr);
+
+		/*
+		 * scrub all headers starting with OIDC_ first
+		 */
+		oidc_scrub_request_headers(r, OIDC_DEFAULT_HEADER_PREFIX, hdrs);
 
 		/*
 		 * then see if the claim headers need to be removed on top of that
 		 * (i.e. the prefix does not start with the default OIDC_)
 		 */
-		if ((strstr(cfg->claim_prefix, OIDC_DEFAULT_HEADER_PREFIX)
-				!= cfg->claim_prefix)) {
-			oidc_scrub_request_headers(r, cfg->claim_prefix, NULL);
+		if ((strstr(prefix, OIDC_DEFAULT_HEADER_PREFIX) != prefix)) {
+			oidc_scrub_request_headers(r, prefix, NULL);
 		}
 	}
 }
@@ -850,7 +869,7 @@ static apr_byte_t oidc_set_app_claims(request_rec *r,
 
 	/* set the resolved claims a HTTP headers for the application */
 	if (j_claims != NULL) {
-		oidc_util_set_app_infos(r, j_claims, cfg->claim_prefix,
+		oidc_util_set_app_infos(r, j_claims, oidc_cfg_claim_prefix(r),
 				cfg->claim_delimiter, oidc_cfg_dir_pass_info_in_headers(r),
 				oidc_cfg_dir_pass_info_in_envvars(r));
 
