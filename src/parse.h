@@ -104,6 +104,7 @@ const char *oidc_accept_oauth_token_in2str(apr_pool_t *pool, apr_byte_t v);
 const char *oidc_parse_claim_required(apr_pool_t *pool, const char *arg, int *is_required);
 const char *oidc_parse_set_claims_as(apr_pool_t *pool, const char *arg, int *in_headers, int *in_env_vars);
 const char *oidc_parse_unauth_action(apr_pool_t *pool, const char *arg, int *action);
+const char *oidc_parse_unautz_action(apr_pool_t *pool, const char *arg, int *action);
 const char *oidc_parse_jwks_refresh_interval(apr_pool_t *pool, const char *arg, int *int_value);
 const char *oidc_parse_idtoken_iat_slack(apr_pool_t *pool, const char *arg, int *int_value);
 const char *oidc_parse_userinfo_refresh_interval(apr_pool_t *pool, const char *arg, int *int_value);

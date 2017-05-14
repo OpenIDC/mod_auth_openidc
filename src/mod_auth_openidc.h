@@ -186,6 +186,10 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_UNAUTH_RETURN401    3
 #define OIDC_UNAUTH_RETURN410    4
 
+#define OIDC_UNAUTZ_RETURN403    1
+#define OIDC_UNAUTZ_RETURN401    2
+#define OIDC_UNAUTZ_AUTHENTICATE 3
+
 #define OIDC_REQUEST_URI_CACHE_DURATION 30
 
 #define OIDC_USER_INFO_TOKEN_METHOD_HEADER 0
@@ -579,6 +583,7 @@ int oidc_cfg_dir_preserve_post(request_rec *r);
 apr_array_header_t *oidc_dir_cfg_pass_cookies(request_rec *r);
 apr_array_header_t *oidc_dir_cfg_strip_cookies(request_rec *r);
 int oidc_dir_cfg_unauth_action(request_rec *r);
+int oidc_dir_cfg_unautz_action(request_rec *r);
 oidc_valid_function_t oidc_cfg_get_valid_endpoint_auth_function(oidc_cfg *cfg);
 int oidc_cfg_cache_encrypt(request_rec *r);
 int oidc_cfg_session_cache_fallback_to_cookie(request_rec *r);
@@ -658,6 +663,8 @@ const char *oidc_util_get_provided_token_binding_id(const request_rec *r);
 #define OIDC_HTTP_HDR_WWW_AUTHENTICATE					"WWW-Authenticate"
 #define OIDC_HTTP_HDR_INCLUDE_REFERRED_TOKEN_BINDING_ID	"Include-Referred-Token-Binding-ID"
 
+#define OIDC_HTTP_HDR_VAL_XML_HTTP_REQUEST				"XMLHttpRequest"
+
 void oidc_util_hdr_in_set(const request_rec *r, const char *name, const char *value);
 const char *oidc_util_hdr_in_cookie_get(const request_rec *r);
 void oidc_util_hdr_in_cookie_set(const request_rec *r, const char *value);
@@ -672,6 +679,7 @@ const char *oidc_util_hdr_in_x_forwarded_port_get(const request_rec *r);
 const char *oidc_util_hdr_in_x_forwarded_host_get(const request_rec *r);
 const char *oidc_util_hdr_in_host_get(const request_rec *r);
 void oidc_util_hdr_out_location_set(const request_rec *r, const char *value);
+const char *oidc_util_hdr_out_location_get(const request_rec *r);
 void oidc_util_hdr_err_out_add(const request_rec *r, const char *name, const char *value);
 
 // oidc_metadata.c

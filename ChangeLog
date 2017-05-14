@@ -17,6 +17,7 @@
 - avoid crash when the X-Forwarded-Proto header is not correctly set by a reverse proxy in front of mod_auth_openidc
 
 05/14/2017
+- add support for custom actions to take after authorization fails with OIDCUnAutzAction
 - support JWT verification against multiple keys with no provided kid by looping over the provided keys with cjose 0.5.0
 
 05/04/2017

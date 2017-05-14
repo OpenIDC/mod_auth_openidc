@@ -2018,6 +2018,10 @@ static void oidc_util_hdr_out_set(const request_rec *r, const char *name,
 	oidc_util_hdr_table_set(r, r->headers_out, name, value);
 }
 
+static const char *oidc_util_hdr_out_get(const request_rec *r, const char *name) {
+	return apr_table_get(r->headers_out, name);
+}
+
 void oidc_util_hdr_err_out_add(const request_rec *r, const char *name,
 		const char *value) {
 	oidc_debug(r, "%s: %s", name, value);
@@ -2079,6 +2083,10 @@ const char *oidc_util_hdr_in_host_get(const request_rec *r) {
 
 void oidc_util_hdr_out_location_set(const request_rec *r, const char *value) {
 	return oidc_util_hdr_out_set(r, OIDC_HTTP_HDR_LOCATION, value);
+}
+
+const char *oidc_util_hdr_out_location_get(const request_rec *r) {
+	return oidc_util_hdr_out_get(r, OIDC_HTTP_HDR_LOCATION);
 }
 
 const char *oidc_util_get_provided_token_binding_id(const request_rec *r) {

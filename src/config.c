@@ -151,6 +151,8 @@
 #define OIDC_DEFAULT_TOKEN_INTROSPECTION_INTERVAL 0
 /* default action to take on an incoming unauthenticated request */
 #define OIDC_DEFAULT_UNAUTH_ACTION OIDC_UNAUTH_AUTHENTICATE
+/* default action to take on an incoming authorized request */
+#define OIDC_DEFAULT_UNAUTZ_ACTION OIDC_UNAUTZ_RETURN403
 /* defines for how long provider metadata will be cached */
 #define OIDC_DEFAULT_PROVIDER_METADATA_REFRESH_INTERVAL 0
 /* defines the default token binding policy for a provider */
@@ -167,6 +169,7 @@ typedef struct oidc_dir_cfg {
 	char *cookie;
 	char *authn_header;
 	int unauth_action;
+	int unautz_action;
 	apr_array_header_t *pass_cookies;
 	apr_array_header_t *strip_cookies;
 	int pass_info_in_headers;
@@ -732,6 +735,17 @@ static const char * oidc_set_unauth_action(cmd_parms *cmd, void *m,
 	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg *) m;
 	const char *rv = oidc_parse_unauth_action(cmd->pool, arg,
 			&dir_cfg->unauth_action);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
+/*
+ * define how to act on unauthorized requests
+ */
+static const char * oidc_set_unautz_action(cmd_parms *cmd, void *m,
+		const char *arg) {
+	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg *) m;
+	const char *rv = oidc_parse_unautz_action(cmd->pool, arg,
+			&dir_cfg->unautz_action);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -1378,6 +1392,7 @@ void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->cookie_path = OIDC_CONFIG_STRING_UNSET;
 	c->authn_header = OIDC_CONFIG_STRING_UNSET;
 	c->unauth_action = OIDC_CONFIG_POS_INT_UNSET;
+	c->unautz_action = OIDC_CONFIG_POS_INT_UNSET;
 	c->pass_cookies = NULL;
 	c->strip_cookies = NULL;
 	c->pass_info_in_headers = OIDC_CONFIG_POS_INT_UNSET;
@@ -1507,6 +1522,14 @@ int oidc_dir_cfg_unauth_action(request_rec *r) {
 	return dir_cfg->unauth_action;
 }
 
+int oidc_dir_cfg_unautz_action(request_rec *r) {
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+	if (dir_cfg->unautz_action == OIDC_CONFIG_POS_INT_UNSET)
+		return OIDC_DEFAULT_UNAUTZ_ACTION;
+	return dir_cfg->unautz_action;
+}
+
 /*
  * merge a new directory config with a base one
  */
@@ -1529,6 +1552,9 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->unauth_action =
 			add->unauth_action != OIDC_CONFIG_POS_INT_UNSET ?
 					add->unauth_action : base->unauth_action;
+	c->unautz_action =
+			add->unautz_action != OIDC_CONFIG_POS_INT_UNSET ?
+					add->unautz_action : base->unautz_action;
 
 	c->pass_cookies =
 			add->pass_cookies != NULL ? add->pass_cookies : base->pass_cookies;
@@ -2407,6 +2433,11 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_dir_cfg, unauth_action),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Sets the action taken when an unauthenticated request occurs: must be one of \"auth\" (default), \"pass\" , \"401\" or \"410\"."),
+		AP_INIT_TAKE1("OIDCUnAutzAction",
+				oidc_set_unautz_action,
+				(void *) APR_OFFSETOF(oidc_dir_cfg, unautz_action),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Sets the action taken when an unauthorized request occurs: must be one of \"401\" (default), \"403\" or \"auth\"."),
 		AP_INIT_TAKE1("OIDCPassClaimsAs",
 				oidc_set_pass_claims_as, NULL,
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,

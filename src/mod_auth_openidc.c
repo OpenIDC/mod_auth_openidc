@@ -921,6 +921,17 @@ static int oidc_handle_unauthenticated_user(request_rec *r, oidc_cfg *c) {
 }
 
 /*
+ * see if this is a non-browser request
+ */
+static apr_byte_t oidc_is_xml_http_request(request_rec *r) {
+	if ((oidc_util_hdr_in_x_requested_with_get(r) != NULL)
+			&& (apr_strnatcasecmp(oidc_util_hdr_in_x_requested_with_get(r),
+					OIDC_HTTP_HDR_VAL_XML_HTTP_REQUEST) == 0))
+		return TRUE;
+	return FALSE;
+}
+
+/*
  * check if maximum session duration was exceeded
  */
 static int oidc_check_max_session_duration(request_rec *r, oidc_cfg *cfg,
@@ -3211,6 +3222,58 @@ static void oidc_authz_get_claims_and_idtoken(request_rec *r, json_t **claims,
 }
 
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+
+/*
+ * find out which action we need to take when encountering an unauthorized request
+ */
+static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
+
+	oidc_debug(r, "enter");
+
+	oidc_cfg *c = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
+
+	if (apr_strnatcasecmp((const char *) ap_auth_type(r), "oauth20") == 0) {
+		oidc_oauth_return_www_authenticate(r, "insufficient_scope",
+				"Different scope(s) or other claims required");
+		return AUTHZ_DENIED;
+	}
+
+	/* see if we've configured OIDCUnAutzAction for this path */
+	switch (oidc_dir_cfg_unautz_action(r)) {
+	// TODO: document that AuthzSendForbiddenOnFailure is required to return 403 FORBIDDEN
+	case OIDC_UNAUTZ_RETURN403:
+	case OIDC_UNAUTZ_RETURN401:
+		return AUTHZ_DENIED;
+		break;
+	case OIDC_UNAUTZ_AUTHENTICATE:
+		/*
+		 * exception handling: if this looks like a XMLHttpRequest call we
+		 * won't redirect the user and thus avoid creating a state cookie
+		 * for a non-browser (= Javascript) call that will never return from the OP
+		 */
+		if (oidc_is_xml_http_request(r) == TRUE)
+			return AUTHZ_DENIED;
+		break;
+	}
+
+	oidc_authenticate_user(r, c, NULL, oidc_get_current_url(r), NULL,
+			NULL, NULL, NULL);
+
+	const char *location = oidc_util_hdr_out_location_get(r);
+	if (location != NULL) {
+		oidc_debug(r, "send HTML refresh with authorization redirect: %s", location);
+
+		char *html_head = apr_psprintf(r->pool,
+				"<meta http-equiv=\"refresh\" content=\"0; url=%s\">",
+				location);
+		oidc_util_html_send(r, "Stepup Authentication", html_head, NULL, NULL,
+				HTTP_UNAUTHORIZED);
+	}
+
+	return AUTHZ_DENIED;
+}
+
 /*
  * generic Apache >=2.4 authorization hook for this module
  * handles both OpenID Connect or OAuth 2.0 in the same way, based on the claims stored in the session
@@ -3246,11 +3309,8 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args,
 	if (id_token)
 		json_decref(id_token);
 
-	if ((rc == AUTHZ_DENIED) && ap_auth_type(r)
-			&& (apr_strnatcasecmp((const char *) ap_auth_type(r), "oauth20")
-					== 0))
-		oidc_oauth_return_www_authenticate(r, "insufficient_scope",
-				"Different scope(s) or other claims required");
+	if ((rc == AUTHZ_DENIED) && ap_auth_type(r))
+		rc = oidc_handle_unauthorized_user24(r);
 
 	return rc;
 }
@@ -3268,6 +3328,40 @@ authz_status oidc_authz_checker_claims_expr(request_rec *r, const char *require_
 #endif
 
 #else
+
+/*
+ * find out which action we need to take when encountering an unauthorized request
+ */
+static int oidc_handle_unauthorized_user22(request_rec *r) {
+
+	oidc_cfg *c = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
+
+	if (apr_strnatcasecmp((const char *) ap_auth_type(r), "oauth20") == 0) {
+		oidc_oauth_return_www_authenticate(r, "insufficient_scope", "Different scope(s) or other claims required");
+		return HTTP_UNAUTHORIZED;
+	}
+
+	/* see if we've configured OIDCUnAutzAction for this path */
+	switch (oidc_dir_cfg_unautz_action(r)) {
+	case OIDC_UNAUTZ_RETURN403:
+		return HTTP_FORBIDDEN;
+	case OIDC_UNAUTZ_RETURN401:
+		return HTTP_UNAUTHORIZED;
+	case OIDC_UNAUTZ_AUTHENTICATE:
+		/*
+		 * exception handling: if this looks like a XMLHttpRequest call we
+		 * won't redirect the user and thus avoid creating a state cookie
+		 * for a non-browser (= Javascript) call that will never return from the OP
+		 */
+		if (oidc_is_xml_http_request(r) == TRUE)
+			return HTTP_UNAUTHORIZED;
+	}
+
+	return oidc_authenticate_user(r, c, NULL, oidc_get_current_url(r), NULL,
+			NULL, NULL, oidc_dir_cfg_path_auth_request_params(r), oidc_dir_cfg_path_scope(r));
+}
+
 /*
  * generic Apache <2.4 authorization hook for this module
  * handles both OpenID Connect and OAuth 2.0 in the same way, based on the claims stored in the request context
@@ -3311,14 +3405,12 @@ int oidc_auth_checker(request_rec *r) {
 	if (id_token)
 		json_decref(id_token);
 
-	if ((rc == HTTP_UNAUTHORIZED) && ap_auth_type(r)
-			&& (apr_strnatcasecmp((const char *) ap_auth_type(r), "oauth20")
-					== 0))
-		oidc_oauth_return_www_authenticate(r, "insufficient_scope",
-				"Different scope(s) or other claims required");
+	if ((rc == HTTP_UNAUTHORIZED) && ap_auth_type(r))
+		rc = oidc_handle_unauthorized_user22(r);
 
 	return rc;
 }
+
 #endif
 
 /*
