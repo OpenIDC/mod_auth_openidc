@@ -1,3 +1,6 @@
+05/14/2017
+- support JWT verification against multiple keys with no provided kid by looping over the provided keys with cjose 0.5.0
+
 05/04/2017
 - improve documentation for OIDCCryptoPassphrase; closes #268
 

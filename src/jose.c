@@ -881,7 +881,8 @@ apr_byte_t oidc_jwt_verify(apr_pool_t *pool, oidc_jwt_t *jwt, apr_hash_t *keys,
 			if (rc == FALSE) {
 				oidc_jose_error(err, "cjose_jws_verify failed: %s",
 						oidc_cjose_e2s(pool, cjose_err));
-				jwt->cjose_jws = NULL;
+				if (strstr(CJOSE_VERSION, "0.4.") == CJOSE_VERSION)
+					jwt->cjose_jws = NULL;
 			}
 		} else {
 			oidc_jose_error(err, "could not find key with kid: %s",
@@ -899,7 +900,8 @@ apr_byte_t oidc_jwt_verify(apr_pool_t *pool, oidc_jwt_t *jwt, apr_hash_t *keys,
 				if (rc == FALSE) {
 					oidc_jose_error(err, "cjose_jws_verify failed: %s",
 							oidc_cjose_e2s(pool, cjose_err));
-					jwt->cjose_jws = NULL;
+					if (strstr(CJOSE_VERSION, "0.4.") == CJOSE_VERSION)
+						jwt->cjose_jws = NULL;
 				}
 			}
 			if ((rc == TRUE) || (jwt->cjose_jws == NULL))
