@@ -864,7 +864,7 @@ static apr_byte_t oidc_set_app_claims(request_rec *r,
 static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 		oidc_provider_t *provider, const char *original_url,
 		const char *login_hint, const char *id_token_hint, const char *prompt,
-		const char *auth_request_params);
+		const char *auth_request_params, const char *path_scope);
 
 /*
  * log message about max session duration
@@ -917,7 +917,7 @@ static int oidc_handle_unauthenticated_user(request_rec *r, oidc_cfg *c) {
 	 * and we need to authenticate the user
 	 */
 	return oidc_authenticate_user(r, c, NULL, oidc_get_current_url(r), NULL,
-			NULL, NULL, NULL);
+			NULL, NULL, oidc_dir_cfg_path_auth_request_params(r), oidc_dir_cfg_path_scope(r));
 }
 
 /*
@@ -1928,6 +1928,9 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 	if (oidc_proto_generate_nonce(r, &csrf, 8) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
+	char *path_scopes = oidc_dir_cfg_path_scope(r);
+	char *path_auth_request_params = oidc_dir_cfg_path_auth_request_params(r);
+
 	char *discover_url = oidc_cfg_dir_discover_url(r);
 	/* see if there's an external discovery page configured */
 	if (discover_url != NULL) {
@@ -1940,6 +1943,13 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 						OIDC_DISC_CB_PARAM,
 						oidc_util_escape_string(r, oidc_get_redirect_uri(r, cfg)),
 						OIDC_CSRF_NAME, oidc_util_escape_string(r, csrf));
+
+		if (path_scopes != NULL)
+			url = apr_psprintf(r->pool, "%s&%s=%s", url, OIDC_DISC_SC_PARAM,
+					oidc_util_escape_string(r, path_scopes));
+		if (path_auth_request_params != NULL)
+			url = apr_psprintf(r->pool, "%s&%s=%s", url, OIDC_DISC_AR_PARAM,
+					oidc_util_escape_string(r, path_auth_request_params));
 
 		/* log what we're about to do */
 		oidc_debug(r, "redirecting to external discovery page: %s", url);
@@ -1974,8 +1984,26 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 	/* list all configured providers in there */
 	int i;
 	for (i = 0; i < arr->nelts; i++) {
+
 		const char *issuer = ((const char**) arr->elts)[i];
 		// TODO: html escape (especially & character)
+
+		char *href = apr_psprintf(r->pool,
+				"%s?%s=%s&amp;%s=%s&amp;%s=%s&amp;%s=%s",
+				oidc_get_redirect_uri(r, cfg), OIDC_DISC_OP_PARAM,
+				oidc_util_escape_string(r, issuer),
+				OIDC_DISC_RT_PARAM, oidc_util_escape_string(r, current_url),
+				OIDC_DISC_RM_PARAM, method,
+				OIDC_CSRF_NAME, csrf);
+
+		if (path_scopes != NULL)
+			href = apr_psprintf(r->pool, "%s&amp;%s=%s", href,
+					OIDC_DISC_SC_PARAM,
+					oidc_util_escape_string(r, path_scopes));
+		if (path_auth_request_params != NULL)
+			href = apr_psprintf(r->pool, "%s&amp;%s=%s", href,
+					OIDC_DISC_AR_PARAM,
+					oidc_util_escape_string(r, path_auth_request_params));
 
 		char *display =
 				(strstr(issuer, "https://") == NULL) ?
@@ -1988,13 +2016,8 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 		/* point back to the redirect_uri, where the selection is handled, with an IDP selection and return_to URL */
 		s =
 				apr_psprintf(r->pool,
-						"%s<p><a href=\"%s?%s=%s&amp;%s=%s&amp;%s=%s&amp;%s=%s\">%s</a></p>\n",
-						s, oidc_get_redirect_uri(r, cfg), OIDC_DISC_OP_PARAM,
-						oidc_util_escape_string(r, issuer),
-						OIDC_DISC_RT_PARAM,
-						oidc_util_escape_string(r, current_url),
-						OIDC_DISC_RM_PARAM, method,
-						OIDC_CSRF_NAME, csrf, display);
+						"%s<p><a href=\"%s\">%s</a></p>\n",
+						s, href, display);
 	}
 
 	/* add an option to enter an account or issuer name for dynamic OP discovery */
@@ -2009,6 +2032,16 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 	s = apr_psprintf(r->pool,
 			"%s<p><input type=\"hidden\" name=\"%s\" value=\"%s\"><p>\n", s,
 			OIDC_CSRF_NAME, csrf);
+
+	if (path_scopes != NULL)
+		s = apr_psprintf(r->pool,
+				"%s<p><input type=\"hidden\" name=\"%s\" value=\"%s\"><p>\n", s,
+				OIDC_DISC_SC_PARAM, path_scopes);
+	if (path_auth_request_params != NULL)
+		s = apr_psprintf(r->pool,
+				"%s<p><input type=\"hidden\" name=\"%s\" value=\"%s\"><p>\n", s,
+				OIDC_DISC_AR_PARAM, path_auth_request_params);
+
 	s =
 			apr_psprintf(r->pool,
 					"%s<p>Or enter your account name (eg. &quot;mike@seed.gluu.org&quot;, or an IDP identifier (eg. &quot;mitreid.org&quot;):</p>\n",
@@ -2041,7 +2074,7 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 		oidc_provider_t *provider, const char *original_url,
 		const char *login_hint, const char *id_token_hint, const char *prompt,
-		const char *auth_request_params) {
+		const char *auth_request_params, const char *path_scope) {
 
 	oidc_debug(r, "enter");
 
@@ -2140,7 +2173,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	// TODO: maybe show intermediate/progress screen "redirecting to"
 	return oidc_proto_authorization_request(r, provider, login_hint,
 			oidc_get_redirect_uri(r, c), state, proto_state, id_token_hint,
-			code_challenge, auth_request_params);
+			code_challenge, auth_request_params, path_scope);
 }
 
 /*
@@ -2215,17 +2248,19 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 	/* variables to hold the values returned in the response */
 	char *issuer = NULL, *target_link_uri = NULL, *login_hint = NULL,
 			*auth_request_params = NULL, *csrf_cookie, *csrf_query = NULL,
-			*user = NULL;
+			*user = NULL, *path_scopes;
 	oidc_provider_t *provider = NULL;
 
 	oidc_util_get_request_parameter(r, OIDC_DISC_OP_PARAM, &issuer);
 	oidc_util_get_request_parameter(r, OIDC_DISC_USER_PARAM, &user);
 	oidc_util_get_request_parameter(r, OIDC_DISC_RT_PARAM, &target_link_uri);
 	oidc_util_get_request_parameter(r, OIDC_DISC_LH_PARAM, &login_hint);
+	oidc_util_get_request_parameter(r, OIDC_DISC_SC_PARAM, &path_scopes);
 	oidc_util_get_request_parameter(r, OIDC_DISC_AR_PARAM,
 			&auth_request_params);
 	oidc_util_get_request_parameter(r, OIDC_CSRF_NAME, &csrf_query);
 	csrf_cookie = oidc_util_get_cookie(r, OIDC_CSRF_NAME);
+
 
 	/* do CSRF protection if not 3rd party initiated SSO */
 	if (csrf_cookie) {
@@ -2322,7 +2357,7 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 
 		/* now we've got a selected OP, send the user there to authenticate */
 		return oidc_authenticate_user(r, c, provider, target_link_uri,
-				login_hint, NULL, NULL, auth_request_params);
+				login_hint, NULL, NULL, auth_request_params, path_scopes);
 	}
 
 	/* something went wrong */
@@ -2662,9 +2697,17 @@ static int oidc_handle_session_management(request_rec *r, oidc_cfg *c,
 		id_token_hint = oidc_session_get_idtoken(r, session);
 		oidc_get_provider_from_session(r, c, session, &provider);
 		if ((session->remote_user != NULL) && (provider != NULL)) {
+			/*
+			 * TODO: this doesn't work with per-path provided auth_request_params and scopes
+			 *       as oidc_dir_cfg_path_auth_request_params and oidc_dir_cfg_path_scope will pick
+			 *       those for the redirect_uri itself; do we need to store those as part of the
+			 *       session now?
+			 */
 			return oidc_authenticate_user(r, c, provider,
 					apr_psprintf(r->pool, "%s?session=iframe_rp",
-							oidc_get_redirect_uri(r, c)), NULL, id_token_hint, "none", NULL);
+							oidc_get_redirect_uri(r, c)), NULL, id_token_hint,
+							"none", oidc_dir_cfg_path_auth_request_params(r),
+							oidc_dir_cfg_path_scope(r));
 		}
 		oidc_debug(r,
 				"[session=check] calling oidc_handle_logout_request because no session found.");
@@ -3258,7 +3301,8 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 	}
 
 	oidc_authenticate_user(r, c, NULL, oidc_get_current_url(r), NULL,
-			NULL, NULL, NULL);
+			NULL, NULL, oidc_dir_cfg_path_auth_request_params(r),
+			oidc_dir_cfg_path_scope(r));
 
 	const char *location = oidc_util_hdr_out_location_get(r);
 	if (location != NULL) {

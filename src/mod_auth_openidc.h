@@ -107,6 +107,8 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_DISC_LH_PARAM "login_hint"
 /* parameter name of parameters that need to be passed in the authentication request */
 #define OIDC_DISC_AR_PARAM "auth_request_params"
+/* parameter name of the scopes required in the discovery response */
+#define OIDC_DISC_SC_PARAM "scopes"
 
 /* value that indicates to use server-side cache based session tracking */
 #define OIDC_SESSION_TYPE_SERVER_CACHE 0
@@ -522,7 +524,7 @@ void oidc_proto_state_set_pkce_state(oidc_proto_state_t *proto_state, const char
 void oidc_proto_state_set_timestamp_now(oidc_proto_state_t *proto_state);
 
 char *oidc_proto_peek_jwt_header(request_rec *r, const char *jwt, char **alg);
-int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *login_hint, const char *redirect_uri, const char *state, oidc_proto_state_t *proto_state, const char *id_token_hint, const char *code_challenge, const char *auth_request_params);
+int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *login_hint, const char *redirect_uri, const char *state, oidc_proto_state_t *proto_state, const char *id_token_hint, const char *code_challenge, const char *auth_request_params, const char *path_scope);
 apr_byte_t oidc_proto_is_post_authorization_response(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_refresh_request(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *rtoken, char **id_token, char **access_token, char **token_type, int *expires_in, char **refresh_token);
@@ -584,6 +586,8 @@ apr_array_header_t *oidc_dir_cfg_pass_cookies(request_rec *r);
 apr_array_header_t *oidc_dir_cfg_strip_cookies(request_rec *r);
 int oidc_dir_cfg_unauth_action(request_rec *r);
 int oidc_dir_cfg_unautz_action(request_rec *r);
+char *oidc_dir_cfg_path_auth_request_params(request_rec *r);
+char *oidc_dir_cfg_path_scope(request_rec *r);
 oidc_valid_function_t oidc_cfg_get_valid_endpoint_auth_function(oidc_cfg *cfg);
 int oidc_cfg_cache_encrypt(request_rec *r);
 int oidc_cfg_session_cache_fallback_to_cookie(request_rec *r);

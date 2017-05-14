@@ -211,7 +211,7 @@ URL-encoded account name for OpenID Connect Discovery purposes (aka. e-mail styl
 
 Sample callback:
 
-    <oidc_callback>?target_link_uri=<target_link_uri>&iss=[<issuer>|<domain>|<e-mail-style-account-name>][&login_hint=<name>][&auth_request_params=<urlencoded-query-string>]
+    <oidc_callback>?target_link_uri=<target_link_uri>&iss=[<issuer>|<domain>|<e-mail-style-account-name>][&login_hint=<name>][&scopes=<space-separated-scopes>][&auth_request_params=<urlencoded-query-string>]
 
 This is also the OpenID Connect specified way of triggering 3rd party initiated SSO 
 to a specific provider when multiple OPs have been configured. In that case the callback

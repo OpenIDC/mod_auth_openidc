@@ -1039,7 +1039,7 @@ static char * test_proto_authorization_request(request_rec *r) {
 	oidc_proto_state_set_timestamp_now(proto_state);
 
 	TST_ASSERT("oidc_proto_authorization_request (1)",
-			oidc_proto_authorization_request(r, &provider, NULL, redirect_uri, state, proto_state, NULL, NULL, NULL) == HTTP_MOVED_TEMPORARILY);
+			oidc_proto_authorization_request(r, &provider, NULL, redirect_uri, state, proto_state, NULL, NULL, NULL, NULL) == HTTP_MOVED_TEMPORARILY);
 
 	TST_ASSERT_STR("oidc_proto_authorization_request (2)",
 			apr_table_get(r->headers_out, "Location"),

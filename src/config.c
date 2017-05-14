@@ -179,6 +179,8 @@ typedef struct oidc_dir_cfg {
 	int oauth_token_introspect_interval;
 	int preserve_post;
 	int pass_refresh_token;
+	char *path_auth_request_params;
+	char *path_scope;
 } oidc_dir_cfg;
 
 #define OIDC_CONFIG_DIR_RV(cmd, rv) rv != NULL ? apr_psprintf(cmd->pool, "Invalid value for directive '%s': %s", cmd->directive->directive, rv) : NULL
@@ -1402,6 +1404,8 @@ void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->oauth_token_introspect_interval = OIDC_CONFIG_POS_INT_UNSET;
 	c->preserve_post = OIDC_CONFIG_POS_INT_UNSET;
 	c->pass_refresh_token = OIDC_CONFIG_POS_INT_UNSET;
+	c->path_auth_request_params = NULL;
+	c->path_scope = NULL;
 	return (c);
 }
 
@@ -1530,6 +1534,18 @@ int oidc_dir_cfg_unautz_action(request_rec *r) {
 	return dir_cfg->unautz_action;
 }
 
+char *oidc_dir_cfg_path_auth_request_params(request_rec *r) {
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+	return dir_cfg->path_auth_request_params;
+}
+
+char *oidc_dir_cfg_path_scope(request_rec *r) {
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+	return dir_cfg->path_scope;
+}
+
 /*
  * merge a new directory config with a base one
  */
@@ -1585,6 +1601,12 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->pass_refresh_token =
 			add->pass_refresh_token != OIDC_CONFIG_POS_INT_UNSET ?
 					add->pass_refresh_token : base->pass_refresh_token;
+	c->path_auth_request_params =
+			add->path_auth_request_params != NULL ?
+					add->path_auth_request_params : base->path_auth_request_params;
+	c->path_scope =
+			add->path_scope != NULL ? add->path_scope : base->path_scope;
+
 	return (c);
 }
 
@@ -2132,10 +2154,16 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_cfg, provider.client_contact),
 				RSRC_CONF,
 				"Define the contact that the client registers in dynamic registration with the OP."),
-		AP_INIT_TAKE1("OIDCScope", oidc_set_string_slot,
+		AP_INIT_TAKE1("OIDCScope",
+				oidc_set_string_slot,
 				(void *) APR_OFFSETOF(oidc_cfg, provider.scope),
 				RSRC_CONF,
 				"Define the OpenID Connect scope that is requested from the OP."),
+		AP_INIT_TAKE1("OIDCPathScope",
+				ap_set_string_slot,
+				(void*)APR_OFFSETOF(oidc_dir_cfg, path_scope),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Define the OpenID Connect scope that is requested from all providers for a specific path/context."),
 		AP_INIT_TAKE1("OIDCJWKSRefreshInterval",
 				oidc_set_jwks_refresh_interval,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.jwks_refresh_interval),
@@ -2155,6 +2183,11 @@ const command_rec oidc_config_cmds[] = {
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.auth_request_params),
 				RSRC_CONF,
+				"Extra parameters that need to be sent in the Authorization Request (must be query-encoded like \"display=popup&prompt=consent\"."),
+		AP_INIT_TAKE1("OIDCPathAuthRequestParams",
+				ap_set_string_slot,
+				(void*)APR_OFFSETOF(oidc_dir_cfg, path_auth_request_params),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Extra parameters that need to be sent in the Authorization Request (must be query-encoded like \"display=popup&prompt=consent\"."),
 		AP_INIT_TAKE1("OIDCPKCEMethod",
 				oidc_set_pkce_method,

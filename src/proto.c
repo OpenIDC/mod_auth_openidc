@@ -469,13 +469,15 @@ int oidc_proto_authorization_request(request_rec *r,
 		struct oidc_provider_t *provider, const char *login_hint,
 		const char *redirect_uri, const char *state,
 		oidc_proto_state_t *proto_state, const char *id_token_hint,
-		const char *code_challenge, const char *auth_request_params) {
+		const char *code_challenge, const char *auth_request_params,
+		const char *path_scope) {
 
 	/* log some stuff */
 	oidc_debug(r,
-			"enter, issuer=%s, redirect_uri=%s, state=%s, proto_state=%s, code_challenge=%s",
+			"enter, issuer=%s, redirect_uri=%s, state=%s, proto_state=%s, code_challenge=%s, auth_request_params=%s, path_scope=%s",
 			provider->issuer, redirect_uri, state,
-			oidc_proto_state_to_string(r, proto_state), code_challenge);
+			oidc_proto_state_to_string(r, proto_state), code_challenge,
+			auth_request_params, path_scope);
 
 	/* assemble the full URL as the authorization request to the OP where we want to redirect to */
 	char *authorization_request = apr_psprintf(r->pool, "%s%s",
@@ -488,9 +490,14 @@ int oidc_proto_authorization_request(request_rec *r,
 			oidc_util_escape_string(r,
 					oidc_proto_state_get_response_type(proto_state)));
 
-	if (provider->scope != NULL) {
+	/* concat the per-path scopes with the per-provider scopes */
+	const char *scope = provider->scope;
+	if (path_scope != NULL)
+		scope = ((scope != NULL) && (apr_strnatcmp(scope, "") != 0)) ?
+				apr_pstrcat(r->pool, scope, " ", path_scope, NULL) : path_scope;
 
-		if (!oidc_util_spaced_string_contains(r->pool, provider->scope,
+	if (scope != NULL) {
+		if (!oidc_util_spaced_string_contains(r->pool, scope,
 				OIDC_PROTO_SCOPE_OPENID)) {
 			oidc_warn(r,
 					"the configuration for the \"%s\" parameter does not include the \"%s\" scope, your provider may not return an \"id_token\": %s",
@@ -499,7 +506,7 @@ int oidc_proto_authorization_request(request_rec *r,
 
 		authorization_request = apr_psprintf(r->pool, "%s&%s=%s",
 				authorization_request,
-				OIDC_PROTO_SCOPE, oidc_util_escape_string(r, provider->scope));
+				OIDC_PROTO_SCOPE, oidc_util_escape_string(r, scope));
 	}
 
 	authorization_request = apr_psprintf(r->pool, "%s&%s=%s",
