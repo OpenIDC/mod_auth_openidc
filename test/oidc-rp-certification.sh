@@ -1681,10 +1681,11 @@ function execute_profile() {
 }
 
 if [ "$1" == "clean" ] ; then
-	for profile in `ls metadata` ; do
-		rm -f metadata/${profile}/*.provider metadata/${profile}/*.client
-	done
 	rm -rf profile
+	cd metadata
+	for profile in `find * -maxdepth 0 -type d` ; do
+		rm -f ${profile}/*.provider ${profile}/*.client
+	done
 	exit
 fi
 

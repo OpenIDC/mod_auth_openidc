@@ -20,7 +20,7 @@ function rollover() {
 
 TESTS=$1
 if [ -z ${TESTS} ] ; then
-	TESTS="config dynamic code id_token id_token+token code+token code+id_token code+id_token+token"
+	TESTS=`cd metadata && find * -maxdepth 0 -type d | sort`
 fi
 TOTAL=`echo ${TESTS} | wc -w`
 NR=0
