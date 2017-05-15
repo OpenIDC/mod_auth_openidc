@@ -863,6 +863,15 @@ apr_byte_t oidc_jwt_encrypt(apr_pool_t *pool, oidc_jwt_t *jwe, oidc_jwk_t *jwk,
 }
 
 /*
+ * check for a version of cjose < 0.5.0 that has a version of
+ * cjose_jws_verify that resources after a verification failure
+ */
+apr_byte_t oidc_jose_version_deprecated(apr_pool_t *pool) {
+	char *version = apr_pstrdup(pool, cjose_version());
+	return (strstr(version, "0.4.") == version);
+}
+
+/*
  * verify the signature on a JWT
  */
 apr_byte_t oidc_jwt_verify(apr_pool_t *pool, oidc_jwt_t *jwt, apr_hash_t *keys,
@@ -881,7 +890,7 @@ apr_byte_t oidc_jwt_verify(apr_pool_t *pool, oidc_jwt_t *jwt, apr_hash_t *keys,
 			if (rc == FALSE) {
 				oidc_jose_error(err, "cjose_jws_verify failed: %s",
 						oidc_cjose_e2s(pool, cjose_err));
-				if (strstr(CJOSE_VERSION, "0.4.") == CJOSE_VERSION)
+				if (oidc_jose_version_deprecated(pool))
 					jwt->cjose_jws = NULL;
 			}
 		} else {
@@ -900,7 +909,7 @@ apr_byte_t oidc_jwt_verify(apr_pool_t *pool, oidc_jwt_t *jwt, apr_hash_t *keys,
 				if (rc == FALSE) {
 					oidc_jose_error(err, "cjose_jws_verify failed: %s",
 							oidc_cjose_e2s(pool, cjose_err));
-					if (strstr(CJOSE_VERSION, "0.4.") == CJOSE_VERSION)
+					if (oidc_jose_version_deprecated(pool))
 						jwt->cjose_jws = NULL;
 				}
 			}
