@@ -1,17 +1,29 @@
 <!--
 
-NOTE WELL
-A new issue should be about a bug or a feature!
+NOTE WELL:
+A new issue should be about a bug verified with a minimized example or about a new feature request!
 
-A question should go to the mailinglist at:
+Randomly opened "bug" or "feature" reports to debug your setup will be closed as "invalid".
+
+Questions should go to the mailinglist at:
 mod_auth_openidc@googlegroups.com
 The corresponding forum/archive is at:
 https://groups.google.com/forum/#!forum/mod_auth_openidc
 
 -->
 
-### Expected behaviour
+###### Environment
 
-### Actual behaviour
+- mod_auth_openidc version (e.g. 2.1.5)
+- Apache version (e.g. 2.4.8)
+- platform/distro (e.g. Ubuntu Xenial or Centos 7)
 
-### Minimized example that reproduces the behaviour
+###### Expected behaviour
+
+###### Actual behaviour
+
+###### Minimized example
+*Minimal, complete configuration that reproduces the behavior. Use the mailing list or get commercial support to discuss your own (full) setup.*
+
+###### Configuration and Log files
+*For the minimized example, possibly provided as attachments.*
