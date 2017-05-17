@@ -372,6 +372,14 @@ static const char *oidc_get_current_url_scheme(const request_rec *r) {
 		scheme_str = (char *) ap_http_scheme(r);
 #endif
 	}
+	if ((scheme_str == NULL)
+			|| ((apr_strnatcmp(scheme_str, "http") != 0)
+					&& (apr_strnatcmp(scheme_str, "https") != 0))) {
+		oidc_warn(r,
+				"detected HTTP scheme \"%s\" is not \"http\" nor \"https\"; perhaps your reverse proxy passes a wrongly configured \"%s\" header: falling back to default \"https\"",
+				scheme_str, OIDC_HTTP_HDR_X_FORWARDED_PROTO);
+		scheme_str = "https";
+	}
 	return scheme_str;
 }
 
