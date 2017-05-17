@@ -1600,6 +1600,10 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
 							+ apr_time_from_sec(provider->session_max_duration));
 	oidc_session_set_session_expires(r, session, session_expires);
 
+	oidc_debug(r,
+			"provider->session_max_duration = %d, session_expires=%" APR_TIME_T_FMT,
+			provider->session_max_duration, session_expires);
+
 	/* log message about max session duration */
 	oidc_log_session_expires(r, "session max lifetime", session_expires);
 

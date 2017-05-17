@@ -65,7 +65,7 @@
 
 int usage(int argc, char **argv, const char *msg) {
 	fprintf(stderr, "Usage: %s %s\n", argv[0],
-			msg ? msg : "[ sign | verify | jwk2cert | cert2jwk | enckey | hash_base64url] <options>");
+			msg ? msg : "[ sign | verify | jwk2cert | cert2jwk | enckey | hash_base64url | timestamp] <options>");
 	return -1;
 }
 
@@ -457,6 +457,25 @@ int hash_base64url(int argc, char **argv, apr_pool_t *pool) {
 	return 0;
 }
 
+int timestamp(int argc, char **argv, apr_pool_t *pool) {
+	if (argc <= 2)
+		return usage(argc, argv, "timestamp <seconds>");
+	long delta = strtol(argv[2], NULL, 10);
+	apr_time_t t1 = apr_time_now() + apr_time_from_sec(delta);
+	char *s = apr_psprintf(pool, "%" APR_TIME_T_FMT, t1);
+	fprintf(stderr, "timestamp (1) = %s\n", s);
+
+	apr_time_t t2;
+	sscanf(s, "%" APR_TIME_T_FMT, &t2);
+	fprintf(stderr, "timestamp (2) = %" APR_TIME_T_FMT "\n", t2);
+
+	char buf[APR_RFC822_DATE_LEN + 1];
+	apr_rfc822_date(buf, t2);
+	fprintf(stderr, "timestamp (3): %s (%" APR_TIME_T_FMT " secs from now)\n", buf, apr_time_sec(t2 - apr_time_now()));
+
+	return 0;
+}
+
 int main(int argc, char **argv, char **env) {
 
 	if (argc <= 1)
@@ -490,6 +509,9 @@ int main(int argc, char **argv, char **env) {
 
 	if (strcmp(argv[1], "hash_base64url") == 0)
 		return hash_base64url(argc, argv, pool);
+
+	if (strcmp(argv[1], "timestamp") == 0)
+		return timestamp(argc, argv, pool);
 
 	apr_pool_destroy(pool);
 	apr_terminate();
