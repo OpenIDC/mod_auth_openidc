@@ -2430,7 +2430,7 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Pass the refresh token in a header and/or environment variable (On or Off)"),
 		AP_INIT_TAKE1("OIDCRequestObject",
-				ap_set_string_slot,
+				oidc_set_string_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.request_object),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"The default request object settings"),
