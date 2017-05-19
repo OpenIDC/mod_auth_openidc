@@ -1,4 +1,7 @@
-05/28/2017
+05/19/2017
+- make OIDCStripCookies work on AuthType oauth20 paths; closes #273; thanks Michele Danieli
+
+05/18/2017
 - fix parse function of OIDCRequestObject configuration option; thanks @suttod 
 
 05/17/2017

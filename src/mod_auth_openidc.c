@@ -156,7 +156,7 @@ void oidc_scrub_headers(request_rec *r) {
 /*
  * strip the session cookie from the headers sent to the application/backend
  */
-static void oidc_strip_cookies(request_rec *r) {
+void oidc_strip_cookies(request_rec *r) {
 
 	char *cookie, *ctx, *result = NULL;
 	const char *name = NULL;

@@ -612,6 +612,9 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 					"recycling user '%s' from initial request for sub-request",
 					r->user);
 
+			/* strip any cookies that we need to */
+			oidc_strip_cookies(r);
+
 			return OK;
 		}
 
@@ -704,6 +707,9 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 
 	/* free JSON resources */
 	json_decref(token);
+
+	/* strip any cookies that we need to */
+	oidc_strip_cookies(r);
 
 	return OK;
 }
