@@ -1207,15 +1207,15 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 
 	if (add->cache != &oidc_cache_shm) {
 		c->cache = add->cache;
+		c->cache_cfg = add->cache_cfg;
 	} else {
 		c->cache = base->cache;
+		c->cache_cfg = base->cache_cfg;
 	}
 
 	c->cache_encrypt =
 			add->cache_encrypt != OIDC_CONFIG_POS_INT_UNSET ?
 					add->cache_encrypt : base->cache_encrypt;
-
-	c->cache_cfg = NULL;
 
 	c->cache_file_dir =
 			add->cache_file_dir != NULL ?
