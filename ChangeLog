@@ -1,3 +1,6 @@
+05/25/2017
+- fix cache fallback so it happens (when enabled) only after failure
+
 05/19/2017
 - make OIDCStripCookies work on AuthType oauth20 paths; closes #273; thanks Michele Danieli
 - bump to 2.2.1rc6

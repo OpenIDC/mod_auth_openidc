@@ -231,7 +231,7 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 
 	/* if we get here we configured client-cookie or retrieving from the cache failed */
 	if ((c->session_type == OIDC_SESSION_TYPE_CLIENT_COOKIE)
-			|| oidc_cfg_session_cache_fallback_to_cookie(r))
+			|| ((rc == FALSE) && oidc_cfg_session_cache_fallback_to_cookie(r)))
 		/* load the session from a self-contained cookie */
 		rc = oidc_session_load_cookie(r, c, z);
 
@@ -305,7 +305,7 @@ apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z,
 
 	/* if we get here we configured client-cookie or saving in the cache failed */
 	if ((c->session_type == OIDC_SESSION_TYPE_CLIENT_COOKIE)
-			|| oidc_cfg_session_cache_fallback_to_cookie(r))
+			|| ((rc == FALSE) && oidc_cfg_session_cache_fallback_to_cookie(r)))
 		/* store the session in a self-contained cookie */
 		rc = oidc_session_save_cookie(r, z, first_time);
 
