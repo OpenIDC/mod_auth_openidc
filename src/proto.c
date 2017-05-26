@@ -455,7 +455,7 @@ char *oidc_proto_create_request_param(request_rec *r,
 
 	/* concatenate parameter with value */
 	char* request_param = NULL;
-	if (value != NULL && value != FALSE) {
+	if (value != NULL) {
 		request_param = apr_psprintf(r->pool, "%s=%s", parameter, value);
 	}
 
