@@ -229,6 +229,21 @@ apr_byte_t oidc_authz_match_claim(request_rec *r,
 
 			if (oidc_authz_match_expression(r, spec_c, val) == TRUE)
 				return TRUE;
+
+			/* dot means child nodes must be evaluated */
+		} else if (!(*attr_c) && (*spec_c) == '.') {
+
+			/* skip the dot */
+			spec_c++;
+
+			if (!json_is_object(val)) {
+				oidc_warn(r, "\"%s\" matched, and child nodes should be evaluated, but value is not an object.", key);
+				return FALSE;
+			}
+
+			oidc_debug(r, "Attribute chunk matched. Evaluating children of key: \"%s\".", key);
+
+			return oidc_authz_match_claim(r, spec_c, json_object_get(claims, key));
 		}
 
 		iter = json_object_iter_next((json_t *) claims, iter);
