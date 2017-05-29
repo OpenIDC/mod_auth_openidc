@@ -456,7 +456,7 @@ char *oidc_proto_create_request_param(request_rec *r,
 	/* concatenate parameter with value */
 	char* request_param = NULL;
 	if (value != NULL) {
-		request_param = apr_psprintf(r->pool, "%s=%s", parameter, value);
+		request_param = apr_psprintf(r->pool, "%s=%s", parameter, oidc_util_escape_string(r, value));
 	}
 
 	return request_param;
@@ -575,7 +575,7 @@ int oidc_proto_authorization_request(request_rec *r,
 		if (request_param != NULL)
 			authorization_request = apr_psprintf(r->pool, "%s&%s",
 					authorization_request,
-					oidc_util_escape_string(r, request_param));
+					request_param);
 	}
 
 	/* cleanup */
