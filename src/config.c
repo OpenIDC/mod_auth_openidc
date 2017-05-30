@@ -581,9 +581,16 @@ static const char *oidc_set_private_key_files_enc(cmd_parms *cmd, void *dummy,
 	oidc_jwk_t *jwk = NULL;
 	oidc_jose_error_t err;
 
-	if (oidc_jwk_parse_rsa_private_key(cmd->pool, arg, &jwk, &err) == FALSE) {
+	char *kid = NULL, *fname = NULL;
+	int fname_len;
+	const char *rv = oidc_parse_enc_kid_key_tuple(cmd->pool, arg, &kid, &fname,
+			&fname_len, FALSE);
+	if (rv != NULL)
+		return rv;
+
+	if (oidc_jwk_parse_rsa_private_key(cmd->pool, kid, fname, &jwk, &err) == FALSE) {
 		return apr_psprintf(cmd->pool,
-				"oidc_jwk_parse_rsa_private_key failed for \"%s\": %s", arg,
+				"oidc_jwk_parse_rsa_private_key failed for (kid=%s) \"%s\": %s", kid, fname,
 				oidc_jose_e2s(cmd->pool, err));
 	}
 
