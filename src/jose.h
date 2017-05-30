@@ -168,7 +168,7 @@ oidc_jwk_t *oidc_jwk_create_symmetric_key(apr_pool_t *pool, const char *kid,
 apr_byte_t oidc_jwk_parse_rsa_public_key(apr_pool_t *pool, const char *kid,
 		const char *filename, oidc_jwk_t **jwk, oidc_jose_error_t *err);
 /* parse an X.509 PEM formatted RSA private key file to a JWK */
-apr_byte_t oidc_jwk_parse_rsa_private_key(apr_pool_t *pool,
+apr_byte_t oidc_jwk_parse_rsa_private_key(apr_pool_t *pool, const char *kid,
 		const char *filename, oidc_jwk_t **jwk, oidc_jose_error_t *err);
 
 /*
