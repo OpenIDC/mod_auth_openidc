@@ -422,6 +422,7 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_PROTO_LOGIN_HINT            "login_hint"
 #define OIDC_PROTO_ID_TOKEN_HINT         "id_token_hint"
 #define OIDC_PROTO_REQUEST_URI           "request_uri"
+#define OIDC_PROTO_REQUEST_OBJECT        "request"
 #define OIDC_PROTO_SESSION_STATE         "session_state"
 #define OIDC_PROTO_ACTIVE                "active"
 
