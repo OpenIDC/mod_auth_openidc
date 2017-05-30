@@ -586,7 +586,7 @@ static const char *oidc_set_private_key_files_enc(cmd_parms *cmd, void *dummy,
 	const char *rv = oidc_parse_enc_kid_key_tuple(cmd->pool, arg, &kid, &fname,
 			&fname_len, FALSE);
 	if (rv != NULL)
-	return rv;
+		return rv;
 
 	if (oidc_jwk_parse_rsa_private_key(cmd->pool, kid, fname, &jwk, &err) == FALSE) {
 		return apr_psprintf(cmd->pool,
