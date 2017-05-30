@@ -1,3 +1,8 @@
+05/30/2017
+- support sending Authorization Request as "request" object in addition to "request_uri"; thanks @suttod
+- support nested claim matching in Require directives; thanks @suttod
+- support explicitly setting the "kid" of the private key in OIDCPrivateKeyFiles; thanks @suttod
+
 05/25/2017
 - fix cache fallback so it happens (when enabled) only after failure
 

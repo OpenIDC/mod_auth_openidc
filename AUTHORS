@@ -5,6 +5,7 @@ The primary author of mod_auth_openidc is:
 Thanks to the following people for contributing to mod_auth_openidc by
 reporting bugs, providing fixes, suggesting useful features or other:
 
+	Dániel SÜTTŐ <https://github.com/suttod>
 	Roland Hedberg <https://github.com/rohe>
 	Bill Simon <https://github.com/billsimon>
 	Jim Fox <https://github.com/jimfox>
@@ -35,4 +36,3 @@ reporting bugs, providing fixes, suggesting useful features or other:
 	Wouter Hund <https://github.com/wouterhund>
 	Hans Keeler <https://github.com/hkeeler> 
 	Moritz Schlarb <https://github.com/moschlar>
-	Dániel SÜTTŐ <https://github.com/suttod>
