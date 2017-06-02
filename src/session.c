@@ -113,7 +113,7 @@ static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 	/* get the string-encoded session from the cache based on the key; decryption is based on the cache backend config */
 	if (uuid != NULL) {
 		char *s_json = NULL;
-		rc = oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, uuid, &s_json);
+		rc = oidc_cache_get_session(r, uuid, &s_json);
 		if ((rc == TRUE) && (s_json != NULL)) {
 			rc = oidc_session_decode(r, c, z, s_json, FALSE);
 			if (rc == TRUE)
@@ -147,8 +147,7 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z,
 		char *s_value = NULL;
 		if (oidc_session_encode(r, c, z, &s_value, FALSE) == FALSE)
 			return FALSE;
-		rc = oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, z->uuid, s_value,
-				z->expiry);
+		rc = oidc_cache_set_session(r, z->uuid, s_value, z->expiry);
 
 		if (rc == TRUE)
 			/* set the uuid in the cookie */
@@ -165,7 +164,7 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z,
 		oidc_util_set_cookie(r, oidc_cfg_dir_cookie(r), "", 0, NULL);
 
 		/* remove the session from the cache */
-		rc = oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, z->uuid, NULL, 0);
+		rc = oidc_cache_set_session(r, z->uuid, NULL, 0);
 	}
 
 	return rc;
