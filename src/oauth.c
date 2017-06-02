@@ -465,44 +465,6 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 }
 
 /*
- * set the unique user identifier that will be propagated in the Apache r->user and REMOTE_USER variables
- */
-static apr_byte_t oidc_oauth_set_remote_user(request_rec *r, oidc_cfg *c,
-		json_t *token) {
-
-	/* get the configured claim name to populate REMOTE_USER with (defaults to "sub") */
-	char *claim_name = apr_pstrdup(r->pool,
-			c->oauth.remote_user_claim.claim_name);
-
-	/* get the claim value from the resolved token JSON response to use as the REMOTE_USER key */
-	json_t *username = json_object_get(token, claim_name);
-	if ((username == NULL) || (!json_is_string(username))) {
-		oidc_warn(r, "response JSON object did not contain a \"%s\" string",
-				claim_name);
-		return FALSE;
-	}
-
-	r->user = apr_pstrdup(r->pool, json_string_value(username));
-
-	if (c->oauth.remote_user_claim.reg_exp != NULL) {
-
-		char *error_str = NULL;
-		if (oidc_util_regexp_first_match(r->pool, r->user,
-				c->oauth.remote_user_claim.reg_exp, &r->user,
-				&error_str) == FALSE) {
-			oidc_error(r, "oidc_util_regexp_first_match failed: %s", error_str);
-			r->user = NULL;
-			return FALSE;
-		}
-	}
-
-	oidc_debug(r, "set REMOTE_USER to claim %s=%s", claim_name,
-			json_string_value(username));
-
-	return TRUE;
-}
-
-/*
  * validate a JWT access token (locally)
  *
  * TODO: document that we're reusing the following settings from the OIDC config section:
@@ -593,6 +555,33 @@ int oidc_oauth_return_www_authenticate(request_rec *r, const char *error,
 }
 
 /*
+ * set the unique user identifier that will be propagated in the Apache r->user and REMOTE_USER variables
+ */
+static apr_byte_t oidc_oauth_set_request_user(request_rec *r, oidc_cfg *c,
+		json_t *token) {
+	char *remote_user = NULL;
+
+	if (oidc_get_remote_user(r, c->oauth.remote_user_claim.claim_name,
+			c->oauth.remote_user_claim.reg_exp, token, &remote_user) == FALSE) {
+		oidc_error(r,
+				"OIDCOAuthRemoteUserClaim is set to \"%s\", but could not set the remote user based the available claims for the user",
+				c->oauth.remote_user_claim.claim_name);
+		return FALSE;
+	}
+
+	r->user = remote_user;
+
+	oidc_debug(r, "set user to \"%s\" based on claim: \"%s\"%s", r->user,
+			c->oauth.remote_user_claim.claim_name,
+			c->oauth.remote_user_claim.reg_exp ?
+					apr_psprintf(r->pool, " and expression: \"%s\"",
+							c->oauth.remote_user_claim.reg_exp) :
+							"");
+
+	return TRUE;
+}
+
+/*
  * main routine: handle OAuth 2.0 authentication/authorization
  */
 int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
@@ -672,11 +661,11 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 	oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_CLAIMS,
 			(const char *) s_token);
 
-	/* set the REMOTE_USER variable */
-	if (oidc_oauth_set_remote_user(r, c, token) == FALSE) {
+	/* set the request user */
+	if (oidc_oauth_set_request_user(r, c, token) == FALSE) {
+		json_decref(token);
 		oidc_error(r,
 				"remote user could not be set, aborting with HTTP_UNAUTHORIZED");
-		json_decref(token);
 		return oidc_oauth_return_www_authenticate(r, "invalid_token",
 				"Could not set remote user");
 	}

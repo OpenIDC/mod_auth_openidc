@@ -1350,6 +1350,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 
 	/* set the user in the main request for further (incl. sub-request) processing */
 	r->user = (char *) session->remote_user;
+	oidc_debug(r, "set remote_user to \"%s\"", r->user);
 
 	/* get the header name in which the remote user name needs to be passed */
 	char *authn_header = oidc_cfg_dir_authn_header(r);
@@ -1486,17 +1487,46 @@ static int oidc_authorization_response_error(request_rec *r, oidc_cfg *c,
 }
 
 /*
+ * get the r->user for this request based on the configuration for OIDC/OAuth
+ */
+apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name,
+		const char *reg_exp, json_t *json, char **request_user) {
+
+	/* get the claim value from the JSON object */
+	json_t *username = json_object_get(json, claim_name);
+	if ((username == NULL) || (!json_is_string(username))) {
+		oidc_warn(r, "JSON object did not contain a \"%s\" string", claim_name);
+		return FALSE;
+	}
+
+	*request_user = apr_pstrdup(r->pool, json_string_value(username));
+
+	if (reg_exp != NULL) {
+
+		char *error_str = NULL;
+		if (oidc_util_regexp_first_match(r->pool, *request_user, reg_exp,
+				request_user, &error_str) == FALSE) {
+			oidc_error(r, "oidc_util_regexp_first_match failed: %s", error_str);
+			*request_user = NULL;
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
+/*
  * set the unique user identifier that will be propagated in the Apache r->user and REMOTE_USER variables
  */
-static apr_byte_t oidc_get_remote_user(request_rec *r, oidc_cfg *c,
-		oidc_provider_t *provider, oidc_jwt_t *jwt, char **user,
+static apr_byte_t oidc_set_request_user(request_rec *r, oidc_cfg *c,
+		oidc_provider_t *provider, oidc_jwt_t *jwt,
 		const char *s_claims) {
 
 	char *issuer = provider->issuer;
 	char *claim_name = apr_pstrdup(r->pool, c->remote_user_claim.claim_name);
 	int n = strlen(claim_name);
-	int post_fix_with_issuer = (claim_name[n - 1] == '@');
-	if (post_fix_with_issuer) {
+	apr_byte_t post_fix_with_issuer = (claim_name[n - 1] == '@');
+	if (post_fix_with_issuer == TRUE) {
 		claim_name[n - 1] = '\0';
 		issuer =
 				(strstr(issuer, "https://") == NULL) ?
@@ -1505,44 +1535,38 @@ static apr_byte_t oidc_get_remote_user(request_rec *r, oidc_cfg *c,
 	}
 
 	/* extract the username claim (default: "sub") from the id_token payload or user claims */
-	char *username = NULL;
+	apr_byte_t rc = FALSE;
+	char *remote_user = NULL;
 	json_t *claims = NULL;
 	oidc_util_decode_json_object(r, s_claims, &claims);
 	if (claims == NULL) {
-		username = apr_pstrdup(r->pool,
-				json_string_value(
-						json_object_get(jwt->payload.value.json, claim_name)));
+		rc = oidc_get_remote_user(r, claim_name, c->remote_user_claim.reg_exp,
+				jwt->payload.value.json, &remote_user);
 	} else {
 		oidc_util_json_merge(r, jwt->payload.value.json, claims);
-		username = apr_pstrdup(r->pool,
-				json_string_value(json_object_get(claims, claim_name)));
+		rc = oidc_get_remote_user(r, claim_name, c->remote_user_claim.reg_exp,
+				claims, &remote_user);
 		json_decref(claims);
 	}
 
-	if (username == NULL) {
+	if ((rc == FALSE) || (remote_user == NULL)) {
 		oidc_error(r,
-				"OIDCRemoteUserClaim is set to \"%s\", but the id_token JSON payload and user claims did not contain a \"%s\" string",
+				"OIDCRemoteUserClaim is set to \"%s\", but could not set the remote user based on the requested claim \"%s\" and the available claims for the user",
 				c->remote_user_claim.claim_name, claim_name);
-		*user = NULL;
 		return FALSE;
 	}
 
-	/* set the unique username in the session (will propagate to r->user/REMOTE_USER) */
-	*user = post_fix_with_issuer ?
-			apr_psprintf(r->pool, "%s@%s", username, issuer) : username;
+	if (post_fix_with_issuer == TRUE)
+		remote_user = apr_psprintf(r->pool, "%s@%s", remote_user, issuer);
 
-	if (c->remote_user_claim.reg_exp != NULL) {
+	r->user = remote_user;
 
-		char *error_str = NULL;
-		if (oidc_util_regexp_first_match(r->pool, *user,
-				c->remote_user_claim.reg_exp, user, &error_str) == FALSE) {
-			oidc_error(r, "oidc_util_regexp_first_match failed: %s", error_str);
-			*user = NULL;
-			return FALSE;
-		}
-	}
-
-	oidc_debug(r, "set user to \"%s\"", *user);
+	oidc_debug(r, "set remote_user to \"%s\" based on claim: \"%s\"%s", r->user,
+			c->remote_user_claim.claim_name,
+			c->remote_user_claim.reg_exp ?
+					apr_psprintf(r->pool, " and expression: \"%s\"",
+							c->remote_user_claim.reg_exp) :
+							"");
 
 	return TRUE;
 }
@@ -1817,7 +1841,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	const char *prompt = oidc_proto_state_get_prompt(proto_state);
 
 	/* set the user */
-	if (oidc_get_remote_user(r, c, provider, jwt, &r->user, claims) == TRUE) {
+	if (oidc_set_request_user(r, c, provider, jwt, claims) == TRUE) {
 
 		/* session management: if the user in the new response is not equal to the old one, error out */
 		if ((prompt != NULL) && (apr_strnatcmp(prompt, "none") == 0)) {

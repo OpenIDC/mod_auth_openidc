@@ -1,3 +1,7 @@
+06/02/2017
+- refactor remote user handling so it allows for postfixing with the issuer value after applying the regex
+- bump to 2.3.0rc1
+
 05/31/2017
 - add support for custom actions to take after authorization fails with OIDCUnAutzAction
   this enables stepup authentication scenarios when combined with the following:
