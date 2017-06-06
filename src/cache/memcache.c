@@ -103,10 +103,10 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 
 	/* loop over the provided memcache servers to find out the number of servers configured */
 	char *cache_config = apr_pstrdup(p, cfg->cache_memcache_servers);
-	split = apr_strtok(cache_config, " ", &tok);
+	split = apr_strtok(cache_config, OIDC_STR_SPACE, &tok);
 	while (split) {
 		nservers++;
-		split = apr_strtok(NULL, " ", &tok);
+		split = apr_strtok(NULL, OIDC_STR_SPACE, &tok);
 	}
 
 	/* allocated space for the number of servers */
@@ -119,7 +119,7 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 
 	/* loop again over the provided servers */
 	cache_config = apr_pstrdup(p, cfg->cache_memcache_servers);
-	split = apr_strtok(cache_config, " ", &tok);
+	split = apr_strtok(cache_config, OIDC_STR_SPACE, &tok);
 	while (split) {
 		apr_memcache_server_t* st;
 		char* host_str;
@@ -160,7 +160,7 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 		}
 
 		/* go to the next entry */
-		split = apr_strtok(NULL, " ", &tok);
+		split = apr_strtok(NULL, OIDC_STR_SPACE, &tok);
 	}
 
 	return OK;

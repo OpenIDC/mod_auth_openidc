@@ -446,6 +446,9 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_PROTO_RESPONSE_MODE_FORM_POST "form_post"
 
 #define OIDC_PROTO_SCOPE_OPENID           "openid"
+#define OIDC_PROTO_PROMPT_NONE            "none"
+#define OIDC_PROTO_ERROR                  "error"
+#define OIDC_PROTO_ERROR_DESCRIPTION      "error_description"
 
 #define OIDC_PROTO_GRANT_TYPE_AUTHZ_CODE    "authorization_code"
 #define OIDC_PROTO_GRANT_TYPE_REFRESH_TOKEN "refresh_token"
@@ -492,8 +495,31 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_HOOK_INFO_SESSION_REMOTE_USER "remote_user"
 #define OIDC_HOOK_INFO_REFRESH_TOKEN       "refresh_token"
 
-#define OIDC_CONTENT_TYPE_JSON "application/json"
-#define OIDC_CONTENT_TYPE_JWT  "application/jwt"
+#define OIDC_CONTENT_TYPE_JSON          "application/json"
+#define OIDC_CONTENT_TYPE_JWT           "application/jwt"
+#define OIDC_CONTENT_TYPE_FORM_ENCODED  "application/x-www-form-urlencoded"
+#define OIDC_CONTENT_TYPE_IMAGE_PNG     "image/png"
+
+#define OIDC_STR_SPACE         " "
+#define OIDC_STR_EQUAL         "="
+#define OIDC_STR_AMP           "&"
+#define OIDC_STR_QUERY         "?"
+#define OIDC_STR_COLON         ":"
+#define OIDC_STR_SEMI_COLON    ";"
+#define OIDC_STR_FORWARD_SLASH "/"
+#define OIDC_STR_AT            "@"
+
+#define OIDC_CHAR_EQUAL         '='
+#define OIDC_CHAR_COLON         ':'
+#define OIDC_CHAR_TILDE         '~'
+#define OIDC_CHAR_SPACE         ' '
+#define OIDC_CHAR_COMMA         ','
+#define OIDC_CHAR_QUERY         '?'
+#define OIDC_CHAR_DOT           '.'
+#define OIDC_CHAR_AT            '@'
+#define OIDC_CHAR_FORWARD_SLASH '/'
+#define OIDC_CHAR_PIPE          '|'
+#define OIDC_CHAR_AMP           '&'
 
 typedef json_t oidc_proto_state_t;
 

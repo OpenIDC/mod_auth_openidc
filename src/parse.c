@@ -412,7 +412,7 @@ const char *oidc_valid_response_type(apr_pool_t *pool, const char *arg) {
 	if (oidc_proto_flow_is_supported(pool, arg) == FALSE) {
 		return apr_psprintf(pool,
 				"oidc_valid_response_type: type must be one of %s",
-				apr_array_pstrcat(pool, oidc_proto_supported_flows(pool), '|'));
+				apr_array_pstrcat(pool, oidc_proto_supported_flows(pool), OIDC_CHAR_PIPE));
 	}
 	return NULL;
 }
@@ -454,7 +454,7 @@ const char *oidc_valid_signed_response_alg(apr_pool_t *pool, const char *arg) {
 				"unsupported/invalid signing algorithm '%s'; must be one of [%s]",
 				arg,
 				apr_array_pstrcat(pool,
-						oidc_jose_jws_supported_algorithms(pool), '|'));
+						oidc_jose_jws_supported_algorithms(pool), OIDC_CHAR_PIPE));
 	}
 	return NULL;
 }
@@ -468,7 +468,7 @@ const char *oidc_valid_encrypted_response_alg(apr_pool_t *pool, const char *arg)
 				"unsupported/invalid encryption algorithm '%s'; must be one of [%s]",
 				arg,
 				apr_array_pstrcat(pool,
-						oidc_jose_jwe_supported_algorithms(pool), '|'));
+						oidc_jose_jwe_supported_algorithms(pool), OIDC_CHAR_PIPE));
 	}
 	return NULL;
 }
@@ -482,7 +482,7 @@ const char *oidc_valid_encrypted_response_enc(apr_pool_t *pool, const char *arg)
 				"unsupported/invalid encryption type '%s'; must be one of [%s]",
 				arg,
 				apr_array_pstrcat(pool,
-						oidc_jose_jwe_supported_encryptions(pool), '|'));
+						oidc_jose_jwe_supported_encryptions(pool), OIDC_CHAR_PIPE));
 	}
 	return NULL;
 }

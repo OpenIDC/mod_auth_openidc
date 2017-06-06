@@ -104,12 +104,12 @@ static void oidc_proto_copy_from_request(request_rec *r,
 
 	oidc_debug(r, "processing request: %s", request);
 
-	p = apr_strtok(request, "&", &tokenizer_ctx);
+	p = apr_strtok(request, OIDC_STR_AMP, &tokenizer_ctx);
 	do {
 
 		char *tuple = apr_pstrdup(r->pool, p);
 		oidc_debug(r, "processing tuple: %s", tuple);
-		char *q = strstr(tuple, "=");
+		char *q = strstr(tuple, OIDC_STR_EQUAL);
 
 		if (q) {
 			*q = '\0';
@@ -136,7 +136,7 @@ static void oidc_proto_copy_from_request(request_rec *r,
 			}
 		}
 
-		p = apr_strtok(NULL, "&", &tokenizer_ctx);
+		p = apr_strtok(NULL, OIDC_STR_AMP, &tokenizer_ctx);
 
 	} while (p);
 }
@@ -482,8 +482,8 @@ int oidc_proto_authorization_request(request_rec *r,
 	/* assemble the full URL as the authorization request to the OP where we want to redirect to */
 	char *authorization_request = apr_psprintf(r->pool, "%s%s",
 			provider->authorization_endpoint_url,
-			strchr(provider->authorization_endpoint_url, '?') != NULL ?
-					"&" : "?");
+			strchr(provider->authorization_endpoint_url, OIDC_CHAR_QUERY) != NULL ?
+					OIDC_STR_AMP : "?");
 	authorization_request = apr_psprintf(r->pool, "%s%s=%s",
 			authorization_request,
 			OIDC_PROTO_RESPONSE_TYPE,
@@ -494,7 +494,7 @@ int oidc_proto_authorization_request(request_rec *r,
 	const char *scope = provider->scope;
 	if (path_scope != NULL)
 		scope = ((scope != NULL) && (apr_strnatcmp(scope, "") != 0)) ?
-				apr_pstrcat(r->pool, scope, " ", path_scope, NULL) : path_scope;
+				apr_pstrcat(r->pool, scope, OIDC_STR_SPACE, path_scope, NULL) : path_scope;
 
 	if (scope != NULL) {
 		if (!oidc_util_spaced_string_contains(r->pool, scope,
@@ -2158,7 +2158,7 @@ apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg,
 	oidc_debug(r, "enter, acct=%s", acct);
 
 	const char *resource = apr_psprintf(r->pool, "acct:%s", acct);
-	const char *domain = strrchr(acct, '@');
+	const char *domain = strrchr(acct, OIDC_CHAR_AT);
 	if (domain == NULL) {
 		oidc_error(r, "invalid account name");
 		return FALSE;

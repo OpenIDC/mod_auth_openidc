@@ -189,18 +189,18 @@ void oidc_strip_cookies(request_rec *r) {
 
 		oidc_debug(r,
 				"looking for the following cookies to strip from cookie header: %s",
-				apr_array_pstrcat(r->pool, strip, ','));
+				apr_array_pstrcat(r->pool, strip, OIDC_CHAR_COMMA));
 
-		cookie = apr_strtok(cookies, ";", &ctx);
+		cookie = apr_strtok(cookies, OIDC_STR_SEMI_COLON, &ctx);
 
 		do {
-			while (cookie != NULL && *cookie == ' ')
+			while (cookie != NULL && *cookie == OIDC_CHAR_SPACE)
 				cookie++;
 
 			for (i = 0; i < strip->nelts; i++) {
 				name = ((const char**) strip->elts)[i];
 				if ((strncmp(cookie, name, strlen(name)) == 0)
-						&& (cookie[strlen(name)] == '=')) {
+						&& (cookie[strlen(name)] == OIDC_CHAR_EQUAL)) {
 					oidc_debug(r, "stripping: %s", name);
 					break;
 				}
@@ -209,11 +209,11 @@ void oidc_strip_cookies(request_rec *r) {
 			if (i == strip->nelts) {
 				result =
 						result ?
-								apr_psprintf(r->pool, "%s;%s", result, cookie) :
+								apr_psprintf(r->pool, "%s%s%s", result, OIDC_STR_SEMI_COLON, cookie) :
 								cookie;
 			}
 
-			cookie = apr_strtok(NULL, ";", &ctx);
+			cookie = apr_strtok(NULL, OIDC_STR_SEMI_COLON, &ctx);
 		} while (cookie != NULL);
 
 		oidc_util_hdr_in_cookie_set(r, result);
@@ -404,9 +404,8 @@ static const char *oidc_original_request_method(request_rec *r, oidc_cfg *cfg,
 			return OIDC_METHOD_GET;
 
 		const char *content_type = oidc_util_hdr_in_content_type_get(r);
-		if ((r->method_number == M_POST)
-				&& (apr_strnatcmp(content_type,
-						"application/x-www-form-urlencoded") == 0))
+		if ((r->method_number == M_POST) && (apr_strnatcmp(content_type,
+				OIDC_CONTENT_TYPE_FORM_ENCODED) == 0))
 			method = OIDC_METHOD_FORM_POST;
 	}
 
@@ -677,15 +676,15 @@ static void oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c) {
 	char *cookie, *tokenizerCtx;
 	char *cookies = apr_pstrdup(r->pool, oidc_util_hdr_in_cookie_get(r));
 	if (cookies != NULL) {
-		cookie = apr_strtok(cookies, ";", &tokenizerCtx);
+		cookie = apr_strtok(cookies, OIDC_STR_SEMI_COLON, &tokenizerCtx);
 		do {
-			while (cookie != NULL && *cookie == ' ')
+			while (cookie != NULL && *cookie == OIDC_CHAR_SPACE)
 				cookie++;
 			if (strstr(cookie, OIDCStateCookiePrefix) == cookie) {
 				char *cookieName = cookie;
-				while (cookie != NULL && *cookie != '=')
+				while (cookie != NULL && *cookie != OIDC_CHAR_EQUAL)
 					cookie++;
-				if (*cookie == '=') {
+				if (*cookie == OIDC_CHAR_EQUAL) {
 					*cookie = '\0';
 					cookie++;
 					oidc_proto_state_t *proto_state =
@@ -701,7 +700,7 @@ static void oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c) {
 					}
 				}
 			}
-			cookie = apr_strtok(NULL, ";", &tokenizerCtx);
+			cookie = apr_strtok(NULL, OIDC_STR_SEMI_COLON, &tokenizerCtx);
 		} while (cookie != NULL);
 	}
 }
@@ -927,7 +926,7 @@ static int oidc_handle_unauthenticated_user(request_rec *r, oidc_cfg *c) {
 		 */
 		if ((oidc_util_hdr_in_x_requested_with_get(r) != NULL)
 				&& (apr_strnatcasecmp(oidc_util_hdr_in_x_requested_with_get(r),
-						"XMLHttpRequest") == 0))
+						OIDC_HTTP_HDR_VAL_XML_HTTP_REQUEST) == 0))
 			return HTTP_UNAUTHORIZED;
 	}
 
@@ -1478,7 +1477,7 @@ static int oidc_authorization_response_error(request_rec *r, oidc_cfg *c,
 	if (prompt != NULL)
 		prompt = apr_pstrdup(r->pool, prompt);
 	oidc_proto_state_destroy(proto_state);
-	if ((prompt != NULL) && (apr_strnatcmp(prompt, "none") == 0)) {
+	if ((prompt != NULL) && (apr_strnatcmp(prompt, OIDC_PROTO_PROMPT_NONE) == 0)) {
 		return oidc_session_redirect_parent_window_to_logout(r, c);
 	}
 	return oidc_util_html_send_error(r, c->error_template,
@@ -1525,7 +1524,7 @@ static apr_byte_t oidc_set_request_user(request_rec *r, oidc_cfg *c,
 	char *issuer = provider->issuer;
 	char *claim_name = apr_pstrdup(r->pool, c->remote_user_claim.claim_name);
 	int n = strlen(claim_name);
-	apr_byte_t post_fix_with_issuer = (claim_name[n - 1] == '@');
+	apr_byte_t post_fix_with_issuer = (claim_name[n - 1] == OIDC_CHAR_AT);
 	if (post_fix_with_issuer == TRUE) {
 		claim_name[n - 1] = '\0';
 		issuer =
@@ -1557,7 +1556,7 @@ static apr_byte_t oidc_set_request_user(request_rec *r, oidc_cfg *c,
 	}
 
 	if (post_fix_with_issuer == TRUE)
-		remote_user = apr_psprintf(r->pool, "%s@%s", remote_user, issuer);
+		remote_user = apr_psprintf(r->pool, "%s%s%s", remote_user, OIDC_STR_AT, issuer);
 
 	r->user = remote_user;
 
@@ -1802,10 +1801,10 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	}
 
 	/* see if the response is an error response */
-	if (apr_table_get(params, "error") != NULL)
+	if (apr_table_get(params, OIDC_PROTO_ERROR) != NULL)
 		return oidc_authorization_response_error(r, c, proto_state,
-				apr_table_get(params, "error"),
-				apr_table_get(params, "error_description"));
+				apr_table_get(params, OIDC_PROTO_ERROR),
+				apr_table_get(params, OIDC_PROTO_ERROR_DESCRIPTION));
 
 	/* handle the code, implicit or hybrid flow */
 	if (oidc_handle_flows(r, c, proto_state, provider, params, response_mode,
@@ -1844,7 +1843,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	if (oidc_set_request_user(r, c, provider, jwt, claims) == TRUE) {
 
 		/* session management: if the user in the new response is not equal to the old one, error out */
-		if ((prompt != NULL) && (apr_strnatcmp(prompt, "none") == 0)) {
+		if ((prompt != NULL) && (apr_strnatcmp(prompt, OIDC_PROTO_PROMPT_NONE) == 0)) {
 			// TOOD: actually need to compare sub? (need to store it in the session separately then
 			//const char *sub = NULL;
 			//oidc_session_get(r, session, "sub", &sub);
@@ -1980,7 +1979,7 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 
 		/* yes, assemble the parameters for external discovery */
 		char *url = apr_psprintf(r->pool, "%s%s%s=%s&%s=%s&%s=%s&%s=%s",
-				discover_url, strchr(discover_url, '?') != NULL ? "&" : "?",
+				discover_url, strchr(discover_url, OIDC_CHAR_QUERY) != NULL ? OIDC_STR_AMP : OIDC_STR_QUERY,
 						OIDC_DISC_RT_PARAM, oidc_util_escape_string(r, current_url),
 						OIDC_DISC_RM_PARAM, method,
 						OIDC_DISC_CB_PARAM,
@@ -2270,9 +2269,9 @@ static int oidc_target_link_uri_matches_configuration(request_rec *r,
 			return FALSE;
 		} else if (strlen(o_uri.path) > strlen(cookie_path)) {
 			int n = strlen(cookie_path);
-			if (cookie_path[n - 1] == '/')
+			if (cookie_path[n - 1] == OIDC_CHAR_FORWARD_SLASH)
 				n--;
-			if (o_uri.path[n] != '/') {
+			if (o_uri.path[n] != OIDC_CHAR_FORWARD_SLASH) {
 				oidc_error(r,
 						"the path (%s) configured in OIDCCookiePath does not match the URL path (%s) of the \"target_link_uri\" (%s): aborting to prevent an open redirect.",
 						cfg->cookie_domain, o_uri.path, target_link_uri);
@@ -2384,11 +2383,11 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 
 		/* issuer is set now, so let's continue as planned */
 
-	} else if (strstr(issuer, "@") != NULL) {
+	} else if (strstr(issuer, OIDC_STR_AT) != NULL) {
 
 		if (login_hint == NULL) {
 			login_hint = apr_pstrdup(r->pool, issuer);
-			//char *p = strstr(issuer, "@");
+			//char *p = strstr(issuer, OIDC_STR_AT);
 			//*p = '\0';
 		}
 
@@ -2408,7 +2407,7 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 
 	/* strip trailing '/' */
 	int n = strlen(issuer);
-	if (issuer[n - 1] == '/')
+	if (issuer[n - 1] == OIDC_CHAR_FORWARD_SLASH)
 		issuer[n - 1] = '\0';
 
 	/* try and get metadata from the metadata directories for the selected OP */
@@ -2468,10 +2467,10 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 		/* see if this is PF-PA style logout in which case we return a transparent pixel */
 		const char *accept = oidc_util_hdr_in_accept_get(r);
 		if ((apr_strnatcmp(url, OIDC_IMG_STYLE_LOGOUT_PARAM_VALUE) == 0)
-				|| ((accept) && strstr(accept, "image/png"))) {
+				|| ((accept) && strstr(accept, OIDC_CONTENT_TYPE_IMAGE_PNG))) {
 			return oidc_util_http_send(r,
 					(const char *) &oidc_transparent_pixel,
-					sizeof(oidc_transparent_pixel), "image/png", DONE);
+					sizeof(oidc_transparent_pixel), OIDC_CONTENT_TYPE_IMAGE_PNG, DONE);
 		}
 
 		/* standard HTTP based logout: should be called in an iframe from the OP */
@@ -2562,14 +2561,14 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 		if (id_token_hint != NULL) {
 			logout_request = apr_psprintf(r->pool, "%s%sid_token_hint=%s",
 					logout_request,
-					strchr(logout_request, '?') != NULL ? "&" : "?",
+					strchr(logout_request, OIDC_CHAR_QUERY) != NULL ? OIDC_STR_AMP : OIDC_STR_QUERY,
 							oidc_util_escape_string(r, id_token_hint));
 		}
 
 		if (url != NULL) {
 			logout_request = apr_psprintf(r->pool,
 					"%s%spost_logout_redirect_uri=%s", logout_request,
-					strchr(logout_request, '?') != NULL ? "&" : "?",
+					strchr(logout_request, OIDC_CHAR_QUERY) != NULL ? OIDC_STR_AMP : OIDC_STR_QUERY,
 							oidc_util_escape_string(r, url));
 		}
 		url = logout_request;
@@ -2618,7 +2617,7 @@ int oidc_handle_jwks(request_rec *r, oidc_cfg *c) {
 	// TODO: send stuff if first == FALSE?
 	jwks = apr_psprintf(r->pool, "%s ] }", jwks);
 
-	return oidc_util_http_send(r, jwks, strlen(jwks), "application/json", DONE);
+	return oidc_util_http_send(r, jwks, strlen(jwks), OIDC_CONTENT_TYPE_JSON, DONE);
 }
 
 static int oidc_handle_session_management_iframe_op(request_rec *r, oidc_cfg *c,
@@ -2850,7 +2849,7 @@ end:
 	/* pass optional error message to the return URL */
 	if (error_code != NULL)
 		return_to = apr_psprintf(r->pool, "%s%serror_code=%s", return_to,
-				strchr(return_to, '?') ? "&" : "?",
+				strchr(return_to, OIDC_CHAR_QUERY) ? OIDC_STR_AMP : OIDC_STR_QUERY,
 						oidc_util_escape_string(r, error_code));
 
 	/* add the redirect location header */
@@ -3133,7 +3132,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 	/* this is not an authorization response or logout request */
 
 	/* check for "error" response */
-	if (oidc_util_request_has_parameter(r, "error")) {
+	if (oidc_util_request_has_parameter(r, OIDC_PROTO_ERROR)) {
 
 		//		char *error = NULL, *descr = NULL;
 		//		oidc_util_get_request_parameter(r, "error", &error);
@@ -3336,7 +3335,7 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 
-	if (apr_strnatcasecmp((const char *) ap_auth_type(r), "oauth20") == 0) {
+	if (apr_strnatcasecmp((const char *) ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
 		oidc_oauth_return_www_authenticate(r, "insufficient_scope",
 				"Different scope(s) or other claims required");
 		return AUTHZ_DENIED;
@@ -3441,7 +3440,7 @@ static int oidc_handle_unauthorized_user22(request_rec *r) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 
-	if (apr_strnatcasecmp((const char *) ap_auth_type(r), "oauth20") == 0) {
+	if (apr_strnatcasecmp((const char *) ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
 		oidc_oauth_return_www_authenticate(r, "insufficient_scope", "Different scope(s) or other claims required");
 		return HTTP_UNAUTHORIZED;
 	}

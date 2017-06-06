@@ -394,13 +394,13 @@ static const char *oidc_get_current_url_port(const request_rec *r,
 		/* see if we can get the port from the "X-Forwarded-Host" header */
 		const char *host_hdr = oidc_util_hdr_in_x_forwarded_host_get(r);
 		if (host_hdr) {
-			port_str = strchr(host_hdr, ':');
+			port_str = strchr(host_hdr, OIDC_CHAR_COLON);
 			if (port_str)
 				port_str++;
 		} else {
 			host_hdr = oidc_util_hdr_in_host_get(r);
 			if (host_hdr)
-				port_str = strchr(host_hdr, ':');
+				port_str = strchr(host_hdr, OIDC_CHAR_COLON);
 			if (port_str == NULL) {
 				/* if no port was set in the Host header we'll determine it locally */
 				const apr_port_t port = r->connection->local_addr->port;
@@ -428,7 +428,7 @@ const char *oidc_get_current_url_host(request_rec *r) {
 		host_str = oidc_util_hdr_in_host_get(r);
 	if (host_str) {
 		host_str = apr_pstrdup(r->pool, host_str);
-		char *p = strchr(host_str, ':');
+		char *p = strchr(host_str, OIDC_CHAR_COLON);
 		if (p != NULL)
 			*p = '\0';
 	} else {
@@ -474,7 +474,7 @@ const char *oidc_get_redirect_uri(request_rec *r, oidc_cfg *cfg) {
 
 	char *redirect_uri = cfg->redirect_uri;
 
-	if ((redirect_uri != NULL) && (redirect_uri[0] == '/')) {
+	if ((redirect_uri != NULL) && (redirect_uri[0] == OIDC_CHAR_FORWARD_SLASH)) {
 		// relative redirect uri
 
 		redirect_uri = apr_pstrcat(r->pool, oidc_get_current_url_base(r),
@@ -541,7 +541,7 @@ typedef struct oidc_http_encode_t {
 static int oidc_http_add_form_url_encoded_param(void* rec, const char* key,
 		const char* value) {
 	oidc_http_encode_t *ctx = (oidc_http_encode_t*) rec;
-	const char *sep = apr_strnatcmp(ctx->encoded_params, "") == 0 ? "" : "&";
+	const char *sep = apr_strnatcmp(ctx->encoded_params, "") == 0 ? "" : OIDC_STR_AMP;
 	ctx->encoded_params = apr_psprintf(ctx->r->pool, "%s%s%s=%s",
 			ctx->encoded_params, sep, oidc_util_escape_string(ctx->r, key),
 			oidc_util_escape_string(ctx->r, value));
@@ -733,7 +733,7 @@ apr_byte_t oidc_util_http_get(request_rec *r, const char *url,
 	if ((params != NULL) && (apr_table_elts(params)->nelts > 0)) {
 		oidc_http_encode_t data = { r, "" };
 		apr_table_do(oidc_http_add_form_url_encoded_param, &data, params, NULL);
-		const char *sep = strchr(url, '?') != NULL ? "&" : "?";
+		const char *sep = strchr(url, OIDC_CHAR_QUERY) != NULL ? OIDC_STR_AMP : OIDC_STR_QUERY;
 		url = apr_psprintf(r->pool, "%s%s%s", url, sep, data.encoded_params);
 		oidc_debug(r, "get URL=\"%s\"", url);
 	}
@@ -792,9 +792,9 @@ static char *oidc_util_get_path(request_rec *r) {
 	char *p;
 	p = r->parsed_uri.path;
 	if ((p == NULL) || (p[0] == '\0'))
-		return apr_pstrdup(r->pool, "/");
+		return apr_pstrdup(r->pool, OIDC_STR_FORWARD_SLASH);
 	for (i = strlen(p) - 1; i > 0; i--)
-		if (p[i] == '/')
+		if (p[i] == OIDC_CHAR_FORWARD_SLASH)
 			break;
 	return apr_pstrndup(r->pool, p, i + 1);
 }
@@ -888,16 +888,16 @@ char *oidc_util_get_cookie(request_rec *r, const char *cookieName) {
 	if (cookies != NULL) {
 
 		/* tokenize on ; to find the cookie we want */
-		cookie = apr_strtok(cookies, ";", &tokenizerCtx);
+		cookie = apr_strtok(cookies, OIDC_STR_SEMI_COLON, &tokenizerCtx);
 
-		do {
+		while (cookie != NULL) {
 
-			while (cookie != NULL && *cookie == ' ')
+			while (*cookie == OIDC_CHAR_SPACE)
 				cookie++;
 
 			/* see if we've found the cookie that we're looking for */
 			if ((strncmp(cookie, cookieName, strlen(cookieName)) == 0)
-					&& (cookie[strlen(cookieName)] == '=')) {
+					&& (cookie[strlen(cookieName)] == OIDC_CHAR_EQUAL)) {
 
 				/* skip to the meat of the parameter (the value after the '=') */
 				cookie += (strlen(cookieName) + 1);
@@ -907,9 +907,8 @@ char *oidc_util_get_cookie(request_rec *r, const char *cookieName) {
 			}
 
 			/* go to the next cookie */
-			cookie = apr_strtok(NULL, ";", &tokenizerCtx);
-
-		} while (cookie != NULL);
+			cookie = apr_strtok(NULL, OIDC_STR_SEMI_COLON, &tokenizerCtx);
+		}
 	}
 
 	/* log what we've found */
@@ -1101,13 +1100,13 @@ apr_byte_t oidc_util_get_request_parameter(request_rec *r, char *name,
 	/* not sure why we do this, but better be safe than sorry */
 	args = apr_pstrndup(r->pool, r->args, strlen(r->args));
 
-	p = apr_strtok(args, "&", &tokenizer_ctx);
+	p = apr_strtok(args, OIDC_STR_AMP, &tokenizer_ctx);
 	do {
 		if (p && strncmp(p, k_param, k_param_sz) == 0) {
 			*value = apr_pstrdup(r->pool, p + k_param_sz);
 			*value = oidc_util_unescape_string(r, *value);
 		}
-		p = apr_strtok(NULL, "&", &tokenizer_ctx);
+		p = apr_strtok(NULL, OIDC_STR_AMP, &tokenizer_ctx);
 	} while (p);
 
 	return (*value != NULL ? TRUE : FALSE);
@@ -1354,8 +1353,8 @@ apr_byte_t oidc_util_read_form_encoded_params(request_rec *r,
 		apr_table_t *table, char *data) {
 	const char *key, *val, *p = data;
 
-	while (p && *p && (val = ap_getword(r->pool, &p, '&'))) {
-		key = ap_getword(r->pool, &val, '=');
+	while (p && *p && (val = ap_getword(r->pool, &p, OIDC_CHAR_AMP))) {
+		key = ap_getword(r->pool, &val, OIDC_CHAR_EQUAL);
 		key = oidc_util_unescape_string(r, key);
 		val = oidc_util_unescape_string(r, val);
 		oidc_debug(r, "read: %s=%s", key, val);
@@ -1468,8 +1467,8 @@ apr_byte_t oidc_util_issuer_match(const char *a, const char *b) {
 		/* no strict match, but we are going to accept if the difference is only a trailing slash */
 		int n1 = strlen(a);
 		int n2 = strlen(b);
-		int n = ((n1 == n2 + 1) && (a[n1 - 1] == '/')) ?
-				n2 : (((n2 == n1 + 1) && (b[n2 - 1] == '/')) ? n1 : 0);
+		int n = ((n1 == n2 + 1) && (a[n1 - 1] == OIDC_CHAR_FORWARD_SLASH)) ?
+				n2 : (((n2 == n1 + 1) && (b[n2 - 1] == OIDC_CHAR_FORWARD_SLASH)) ? n1 : 0);
 		if ((n == 0) || (strncmp(a, b, n) != 0))
 			return FALSE;
 	}
@@ -1790,8 +1789,8 @@ void oidc_util_table_add_query_encoded_params(apr_pool_t *pool,
 	if (params != NULL) {
 		const char *key, *val;
 		const char *p = params;
-		while (*p && (val = ap_getword(pool, &p, '&'))) {
-			key = ap_getword(pool, &val, '=');
+		while (*p && (val = ap_getword(pool, &p, OIDC_CHAR_AMP))) {
+			key = ap_getword(pool, &val, OIDC_CHAR_EQUAL);
 			ap_unescape_url((char *) key);
 			ap_unescape_url((char *) val);
 			apr_table_addn(table, key, val);
@@ -2000,7 +1999,7 @@ static void oidc_util_hdr_table_set(const request_rec *r, apr_table_t *table,
 		 */
 		char *p = NULL;
 		while ((p = strchr(s_value, '\n')))
-			*p = ' ';
+			*p = OIDC_CHAR_SPACE;
 
 		oidc_debug(r, "%s: %s", name, s_value);
 		apr_table_set(table, name, s_value);

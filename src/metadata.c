@@ -88,7 +88,7 @@ static const char *oidc_metadata_issuer_to_filename(request_rec *r,
 
 	/* strip trailing '/' */
 	int n = strlen(p);
-	if (p[n - 1] == '/')
+	if (p[n - 1] == OIDC_CHAR_FORWARD_SLASH)
 		p[n - 1] = '\0';
 
 	return oidc_util_escape_string(r, p);
@@ -100,7 +100,7 @@ static const char *oidc_metadata_issuer_to_filename(request_rec *r,
 static const char *oidc_metadata_filename_to_issuer(request_rec *r,
 		const char *filename) {
 	char *result = apr_pstrdup(r->pool, filename);
-	char *p = strrchr(result, '.');
+	char *p = strrchr(result, OIDC_CHAR_DOT);
 	*p = '\0';
 	p = oidc_util_unescape_string(r, result);
 	return apr_psprintf(r->pool, "https://%s", p);
@@ -734,7 +734,7 @@ static apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
 					|| (strstr(issuer, "https://") == issuer)) ?
 							issuer : apr_psprintf(r->pool, "https://%s", issuer));
 	url = apr_psprintf(r->pool, "%s%s.well-known/openid-configuration", url,
-			url[strlen(url) - 1] != '/' ? "/" : "");
+			url[strlen(url) - 1] != OIDC_CHAR_FORWARD_SLASH ? OIDC_STR_FORWARD_SLASH : "");
 
 	/* get the metadata for the issuer using OpenID Connect Discovery and validate it */
 	if (oidc_metadata_provider_retrieve(r, cfg, issuer, url, j_provider,
@@ -860,10 +860,10 @@ apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg *cfg,
 	while (apr_dir_read(&fi, APR_FINFO_NAME, dir) == APR_SUCCESS) {
 
 		/* skip "." and ".." entries */
-		if (fi.name[0] == '.')
+		if (fi.name[0] == OIDC_CHAR_DOT)
 			continue;
 		/* skip other non-provider entries */
-		char *ext = strrchr(fi.name, '.');
+		char *ext = strrchr(fi.name, OIDC_CHAR_DOT);
 		if ((ext == NULL)
 				|| (strcmp(++ext, OIDC_METADATA_SUFFIX_PROVIDER) != 0))
 			continue;

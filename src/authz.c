@@ -213,7 +213,7 @@ apr_byte_t oidc_authz_match_claim(request_rec *r,
 		}
 
 		/* The match is a success if we walked the whole claim name and the attr_spec is at a colon. */
-		if (!(*attr_c) && (*spec_c) == ':') {
+		if (!(*attr_c) && (*spec_c) == OIDC_CHAR_COLON) {
 
 			/* skip the colon */
 			spec_c++;
@@ -222,7 +222,7 @@ apr_byte_t oidc_authz_match_claim(request_rec *r,
 				return TRUE;
 
 			/* a tilde denotes a string PCRE match */
-		} else if (!(*attr_c) && (*spec_c) == '~') {
+		} else if (!(*attr_c) && (*spec_c) == OIDC_CHAR_TILDE) {
 
 			/* skip the tilde */
 			spec_c++;
@@ -231,7 +231,7 @@ apr_byte_t oidc_authz_match_claim(request_rec *r,
 				return TRUE;
 
 			/* dot means child nodes must be evaluated */
-		} else if (!(*attr_c) && (*spec_c) == '.') {
+		} else if (!(*attr_c) && (*spec_c) == OIDC_CHAR_DOT) {
 
 			/* skip the dot */
 			spec_c++;

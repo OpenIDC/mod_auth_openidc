@@ -158,7 +158,7 @@ static char *test_jwt_parse(apr_pool_t *pool) {
 	oidc_jwt_destroy(jwt);
 	oidc_jwk_destroy(jwk);
 
-	s[5] = '.';
+	s[5] = OIDC_CHAR_DOT;
 	TST_ASSERT_ERR("corrupted header (1) oidc_jwt_parse",
 			oidc_jwt_parse(pool, s, &jwt, NULL, &err) == FALSE, pool, err);
 

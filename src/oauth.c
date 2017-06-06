@@ -130,8 +130,9 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 			oidc_debug(r, "authorization header found");
 
 			/* look for the Bearer keyword */
-			if (apr_strnatcasecmp(ap_getword(r->pool, &auth_line, ' '),
-					"Bearer") == 0) {
+			if (apr_strnatcasecmp(
+					ap_getword(r->pool, &auth_line, OIDC_CHAR_SPACE),
+					OIDC_PROTO_BEARER) == 0) {
 
 				/* skip any spaces after the Bearer keyword */
 				while (apr_isspace(*auth_line)) {

@@ -253,7 +253,7 @@ static const char *oidc_set_url_slot(cmd_parms *cmd, void *ptr, const char *arg)
 static const char *oidc_set_relative_or_absolute_url_slot(cmd_parms *cmd, void *ptr, const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
-  if (arg[0] == '/') {
+  if (arg[0] == OIDC_CHAR_FORWARD_SLASH) {
 		// relative uri
 		apr_uri_t uri;
 		if (apr_uri_parse(cmd->pool, arg, &uri) != APR_SUCCESS) {
@@ -1659,7 +1659,7 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 
 	if (c->redirect_uri == NULL)
 		return oidc_check_config_error(s, "OIDCRedirectURI");
-	redirect_uri_is_relative = (c->redirect_uri[0] == '/');
+	redirect_uri_is_relative = (c->redirect_uri[0] == OIDC_CHAR_FORWARD_SLASH);
 
 	if (c->crypto_passphrase == NULL)
 		return oidc_check_config_error(s, "OIDCCryptoPassphrase");

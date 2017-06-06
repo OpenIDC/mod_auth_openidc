@@ -329,7 +329,7 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 		if (i == APR_SUCCESS) {
 
 			/* skip non-cache entries, cq. the ".", ".." and the metadata file */
-			if ((fi.name[0] == '.')
+			if ((fi.name[0] == OIDC_CHAR_DOT)
 					|| (strstr(fi.name, OIDC_CACHE_FILE_PREFIX) != fi.name)
 					|| ((apr_strnatcmp(fi.name,
 							oidc_cache_file_name(r, "cache-file",
