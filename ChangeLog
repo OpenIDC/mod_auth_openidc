@@ -1,3 +1,7 @@
+06/06/2017
+- avoid cleaning our own state cookie twice when it is expired
+- bump to 2.3.0rc2
+
 06/02/2017
 - refactor remote user handling so it allows for postfixing with the issuer value after applying the regex
 - bump to 2.3.0rc1

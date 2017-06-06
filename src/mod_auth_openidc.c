@@ -672,13 +672,13 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	return TRUE;
 }
 
-static void oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c) {
+static void oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c, const char *currentCookieName) {
 	char *cookie, *tokenizerCtx;
 	char *cookies = apr_pstrdup(r->pool, oidc_util_hdr_in_cookie_get(r));
 	if (cookies != NULL) {
 		cookie = apr_strtok(cookies, OIDC_STR_SEMI_COLON, &tokenizerCtx);
-		do {
-			while (cookie != NULL && *cookie == OIDC_CHAR_SPACE)
+		while (cookie != NULL) {
+			while (*cookie == OIDC_CHAR_SPACE)
 				cookie++;
 			if (strstr(cookie, OIDCStateCookiePrefix) == cookie) {
 				char *cookieName = cookie;
@@ -687,21 +687,23 @@ static void oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c) {
 				if (*cookie == OIDC_CHAR_EQUAL) {
 					*cookie = '\0';
 					cookie++;
-					oidc_proto_state_t *proto_state =
-							oidc_proto_state_from_cookie(r, c, cookie);
-					if (proto_state != NULL) {
-						json_int_t ts = oidc_proto_state_get_timestamp(
-								proto_state);
-						if (apr_time_now() > ts + apr_time_from_sec(c->state_timeout)) {
-							oidc_error(r, "state has expired");
-							oidc_util_set_cookie(r, cookieName, "", 0, NULL);
+					if ((currentCookieName == NULL) || (apr_strnatcmp(cookieName, currentCookieName) != 0)) {
+						oidc_proto_state_t *proto_state =
+								oidc_proto_state_from_cookie(r, c, cookie);
+						if (proto_state != NULL) {
+							json_int_t ts = oidc_proto_state_get_timestamp(
+									proto_state);
+							if (apr_time_now() > ts + apr_time_from_sec(c->state_timeout)) {
+								oidc_error(r, "state (%s) has expired", cookieName);
+								oidc_util_set_cookie(r, cookieName, "", 0, NULL);
+							}
+							oidc_proto_state_destroy(proto_state);
 						}
-						oidc_proto_state_destroy(proto_state);
 					}
 				}
 			}
 			cookie = apr_strtok(NULL, OIDC_STR_SEMI_COLON, &tokenizerCtx);
-		} while (cookie != NULL);
+		}
 	}
 }
 
@@ -713,10 +715,10 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 
 	oidc_debug(r, "enter");
 
-	/* clean expired state cookies to avoid pollution */
-	oidc_clean_expired_state_cookies(r, c);
-
 	const char *cookieName = oidc_get_state_cookie_name(r, state);
+
+	/* clean expired state cookies to avoid pollution */
+	oidc_clean_expired_state_cookies(r, c, cookieName);
 
 	/* get the state cookie value first */
 	char *cookieValue = oidc_util_get_cookie(r, cookieName);
@@ -787,7 +789,7 @@ static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
 		return FALSE;
 
 	/* clean expired state cookies to avoid pollution */
-	oidc_clean_expired_state_cookies(r, c);
+	oidc_clean_expired_state_cookies(r, c, NULL);
 
 	/* assemble the cookie name for the state cookie */
 	const char *cookieName = oidc_get_state_cookie_name(r, state);
