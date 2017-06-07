@@ -89,25 +89,23 @@ AC_SUBST(HIREDIS_LIBS)
 # JQ
 HAVE_LIBJQ=0
 
-#AC_ARG_WITH(jq,
-#        [  --with-jq=PATH          location of your libjq installation])
+AC_ARG_WITH(jq,
+        [  --with-jq=PATH          location of your libjq installation])
     
-#if test -n "$with_jq"
-#then
-#    JQ_CFLAGS="-I$with_jq/include"
-#    JQ_LIBS="-L$with_jq/lib -ljq"
-#else
-#    JQ_LIBS="-ljq"
-#fi
+if test -n "$with_jq"
+then
+    JQ_CFLAGS="-I$with_jq/include"
+    JQ_LIBS="-L$with_jq/lib -ljq"
 
-#CPPFLAGS="$JQ_CFLAGS $CPPFLAGS"
-#AC_CHECK_HEADERS([jq.h], , [HAVE_LIBJQ=0])
+	CPPFLAGS="$JQ_CFLAGS $CPPFLAGS"
+	AC_CHECK_HEADERS([jq.h], , [HAVE_LIBJQ=0])
 
-#LDFLAGS="$JQ_LIBS $LDFLAGS"
-#AC_CHECK_LIB([jq], [jq_init], , [HAVE_LIBJQ=0])
-#if test "x$have_jq" = "x0" ; then
-#  AC_MSG_WARN("cannot find library for -ljq.")
-#fi
+	LDFLAGS="$JQ_LIBS $LDFLAGS"
+	AC_CHECK_LIB([jq], [jq_init], [HAVE_LIBJQ=1], [HAVE_LIBJQ=0])
+	if test "x$have_jq" = "x0" ; then
+  		AC_MSG_WARN("cannot find library for -ljq.")
+	fi
+fi
 
 AC_SUBST(HAVE_LIBJQ)
 AC_SUBST(JQ_CFLAGS)
