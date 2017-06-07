@@ -1,5 +1,5 @@
 06/07/2017
-- file cache backend: fix caching of non-filename friendly keys such as configuration URLs and JWKs URIs
+- fix file cache backend: allow caching of non-filename friendly keys such as configuration URLs and JWKs URIs
 - bump to 2.3.0rc3
 
 06/06/2017
