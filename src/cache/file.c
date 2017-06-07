@@ -75,7 +75,7 @@ typedef struct {
 /*
  * prefix that distinguishes mod_auth_openidc cache files from other files in the same directory (/tmp)
  */
-#define OIDC_CACHE_FILE_PREFIX "mod-auth-connect-"
+#define OIDC_CACHE_FILE_PREFIX "mod-auth-openidc-"
 
 /* post config routine */
 int oidc_cache_file_post_config(server_rec *s) {
@@ -95,7 +95,7 @@ int oidc_cache_file_post_config(server_rec *s) {
 static const char *oidc_cache_file_name(request_rec *r, const char *section,
 		const char *key) {
 	return apr_psprintf(r->pool, "%s%s-%s", OIDC_CACHE_FILE_PREFIX, section,
-			key);
+			oidc_util_escape_string(r, key));
 }
 
 /*
