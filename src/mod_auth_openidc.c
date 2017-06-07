@@ -300,8 +300,7 @@ static apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg *c,
 		return TRUE;
 	}
 
-	oidc_cache_get_provider(r,
-			oidc_util_escape_string(r, c->provider.metadata_url), &s_json);
+	oidc_cache_get_provider(r, c->provider.metadata_url, &s_json);
 
 	if (s_json == NULL) {
 
