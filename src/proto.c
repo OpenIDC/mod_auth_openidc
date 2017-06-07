@@ -321,7 +321,7 @@ char *oidc_proto_create_request_object(request_rec *r,
 			break;
 		case CJOSE_JWK_KTY_OCT:
 			oidc_util_create_symmetric_key(r, provider->client_secret,
-					oidc_alg2keysize(jwe->header.alg), "sha256", FALSE, &jwk);
+					oidc_alg2keysize(jwe->header.alg), OIDC_JOSE_ALG_SHA256, FALSE, &jwk);
 			break;
 		default:
 			oidc_error(r,
@@ -675,7 +675,7 @@ static apr_byte_t oidc_proto_pkce_state_s256(request_rec *r, char **state) {
  */
 static apr_byte_t oidc_proto_pkce_challenge_s256(request_rec *r,
 		const char *state, char **code_challenge) {
-	if (oidc_util_hash_string_and_base64url_encode(r, "sha256", state,
+	if (oidc_util_hash_string_and_base64url_encode(r, OIDC_JOSE_ALG_SHA256, state,
 			code_challenge) == FALSE) {
 		oidc_error(r,
 				"oidc_util_hash_string_and_base64url_encode returned an error for the code verifier");
@@ -1075,7 +1075,7 @@ static apr_byte_t oidc_proto_validate_cnf(request_rec *r, oidc_cfg *cfg,
 		return FALSE;
 	}
 
-	if (oidc_jose_hash_bytes(r->pool, "sha256", (const unsigned char *) tbp,
+	if (oidc_jose_hash_bytes(r->pool, OIDC_JOSE_ALG_SHA256, (const unsigned char *) tbp,
 			tbp_len, &tbp_hash, &tbp_hash_len, NULL) == FALSE) {
 		oidc_warn(r,
 				"hashing Provided Token Binding ID environment variable failed");
@@ -1517,7 +1517,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
 	if (oidc_util_create_symmetric_key(r, provider->client_secret,
-			oidc_alg2keysize(alg), "sha256",
+			oidc_alg2keysize(alg), OIDC_JOSE_ALG_SHA256,
 			TRUE, &jwk) == FALSE)
 		return FALSE;
 
@@ -1843,7 +1843,7 @@ static apr_byte_t oidc_user_info_response_validate(request_rec *r,
 	char *payload = NULL;
 
 	if (oidc_util_create_symmetric_key(r, provider->client_secret,
-			oidc_alg2keysize(alg), "sha256",
+			oidc_alg2keysize(alg), OIDC_JOSE_ALG_SHA256,
 			TRUE, &jwk) == FALSE)
 		return FALSE;
 
