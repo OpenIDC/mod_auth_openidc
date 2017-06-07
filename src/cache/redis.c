@@ -292,8 +292,6 @@ static redisReply* oidc_cache_redis_command(request_rec *r,
 static apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section,
 		const char *key, const char **value) {
 
-	oidc_debug(r, "enter, section=\"%s\", key=\"%s\"", section, key);
-
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *) cfg->cache_cfg;
@@ -343,8 +341,6 @@ static apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section,
  */
 static apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section,
 		const char *key, const char *value, apr_time_t expiry) {
-
-	oidc_debug(r, "enter, section=\"%s\", key=\"%s\"", section, key);
 
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
@@ -403,6 +399,7 @@ static int oidc_cache_redis_destroy(server_rec *s) {
 }
 
 oidc_cache_t oidc_cache_redis = {
+		"redis",
 		1,
 		oidc_cache_redis_post_config,
 		oidc_cache_redis_child_init,

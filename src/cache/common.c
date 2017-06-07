@@ -479,7 +479,7 @@ static unsigned char *oidc_cache_hash_passphrase(request_rec *r,
 	unsigned int key_len = 0;
 	oidc_jose_error_t err;
 
-	if (oidc_jose_hash_bytes(r->pool, "sha256",
+	if (oidc_jose_hash_bytes(r->pool, OIDC_JOSE_ALG_SHA256,
 			(const unsigned char *) passphrase, strlen(passphrase), &key,
 			&key_len, &err) == FALSE) {
 		oidc_error(r, "oidc_jose_hash_bytes returned an error: %s", err.text);
@@ -496,7 +496,7 @@ static char *oidc_cache_get_hashed_key(request_rec *r, const char *passphrase,
 		const char *key) {
 	char *input = apr_psprintf(r->pool, "%s:%s", passphrase, key);
 	char *output = NULL;
-	if (oidc_util_hash_string_and_base64url_encode(r, "sha256", input,
+	if (oidc_util_hash_string_and_base64url_encode(r, OIDC_JOSE_ALG_SHA256, input,
 			&output) == FALSE) {
 		oidc_error(r,
 				"oidc_util_hash_string_and_base64url_encode returned an error");
@@ -514,8 +514,11 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key,
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	int encrypted = oidc_cfg_cache_encrypt(r);
+	apr_byte_t rc = TRUE;
+	char *msg = NULL;
 
-	oidc_debug(r, "enter: %s (decrypt=%d)", key, encrypted);
+	oidc_debug(r, "enter: %s (section=%s, decrypt=%d, type=%s)", key, section,
+			encrypted, cfg->cache->name);
 
 	/* see if encryption is turned on */
 	if (encrypted == 1)
@@ -523,22 +526,39 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key,
 
 	/* get the value from the cache */
 	const char *cache_value = NULL;
-	if (cfg->cache->get(r, section, key, &cache_value) == FALSE)
-		return FALSE;
+	if (cfg->cache->get(r, section, key, &cache_value) == FALSE) {
+		rc = FALSE;
+		goto out;
+	}
 
 	/* see if it is any good */
 	if (cache_value == NULL)
-		return TRUE;
+		goto out;
 
 	/* see if encryption is turned on */
 	if (encrypted == 0) {
 		*value = apr_pstrdup(r->pool, cache_value);
-		return TRUE;
+		goto out;
 	}
 
-	return (oidc_cache_crypto_decrypt(r, cache_value,
+	rc = (oidc_cache_crypto_decrypt(r, cache_value,
 			oidc_cache_hash_passphrase(r, cfg->crypto_passphrase),
 			(unsigned char **) value) > 0);
+
+out:
+	/* log the result */
+	msg = apr_psprintf(r->pool, "from %s cache backend for %skey %s",
+			cfg->cache->name, encrypted ? "encrypted " : "", key);
+	if (rc == TRUE)
+		if (*value != NULL)
+			oidc_debug(r, "cache hit: return %d bytes %s",
+					*value ? (int )strlen(*value) : 0, msg);
+		else
+			oidc_debug(r, "cache miss %s", msg);
+	else
+		oidc_warn(r, "error retrieving value %s", msg);
+
+	return rc;
 }
 
 /*
@@ -551,20 +571,42 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key,
 			&auth_openidc_module);
 	int encrypted = oidc_cfg_cache_encrypt(r);
 	char *encoded = NULL;
+	apr_byte_t rc = FALSE;
+	char *msg = NULL;
 
-	oidc_debug(r, "enter: %s=len(%d) (encrypt=%d)", key,
-			value ? (int )strlen(value) : 0, encrypted);
+	oidc_debug(r,
+			"enter: %s (section=%s, len=%d, encrypt=%d, ttl(s)=%" APR_TIME_T_FMT ", type=%s)",
+			key, section, value ? (int )strlen(value) : 0, encrypted,
+					apr_time_sec(expiry - apr_time_now()), cfg->cache->name);
 
 	/* see if we need to encrypt */
 	if (encrypted == 1) {
+
 		key = oidc_cache_get_hashed_key(r, cfg->crypto_passphrase, key);
-		if ((value != NULL)
-				&& (oidc_cache_crypto_encrypt(r, value,
-						oidc_cache_hash_passphrase(r, cfg->crypto_passphrase),
-						&encoded) > 0))
+		if (key == NULL)
+			goto out;
+
+		if (value != NULL) {
+			if (oidc_cache_crypto_encrypt(r, value,
+					oidc_cache_hash_passphrase(r, cfg->crypto_passphrase),
+					&encoded) <= 0)
+				goto out;
 			value = encoded;
+		}
 	}
 
 	/* store the resulting value in the cache */
-	return cfg->cache->set(r, section, key, value, expiry);
+	rc = cfg->cache->set(r, section, key, value, expiry);
+
+out:
+	/* log the result */
+	msg = apr_psprintf(r->pool, "%d bytes in %s cache backend for %skey %s",
+			value ? (int) strlen(value) : 0, cfg->cache->name,
+					encrypted ? "encrypted " : "", key);
+	if (rc == TRUE)
+		oidc_debug(r, "succesfully stored %s", msg);
+	else
+		oidc_warn(r, "could NOT store %s", msg);
+
+	return rc;
 }

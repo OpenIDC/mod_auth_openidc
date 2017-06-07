@@ -66,6 +66,7 @@ typedef apr_byte_t (*oidc_cache_set_function)(request_rec *r,
 typedef int (*oidc_cache_destroy_function)(server_rec *s);
 
 typedef struct oidc_cache_t {
+	const char *name;
 	int encrypt_by_default;
 	oidc_cache_post_config_function post_config;
 	oidc_cache_child_init_function child_init;

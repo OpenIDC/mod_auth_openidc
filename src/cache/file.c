@@ -239,11 +239,6 @@ static apr_byte_t oidc_cache_file_get(request_rec *r, const char *section,
 	apr_file_unlock(fd);
 	apr_file_close(fd);
 
-	/* log a successful cache hit */
-	oidc_debug(r,
-			"cache hit for key \"%s\" (%" APR_SIZE_T_FMT " bytes, expiring in: %" APR_TIME_T_FMT ")",
-			key, info.len, apr_time_sec(info.expire - apr_time_now()));
-
 	return TRUE;
 
 error_close:
@@ -294,6 +289,8 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 
 		/* time to clean, reset the modification time of the metadata file to reflect the timestamp of this cleaning cycle */
 		apr_file_mtime_set(metadata_path, apr_time_now(), r->pool);
+
+		oidc_debug(r, "start cleaning cycle");
 
 	} else {
 
@@ -444,14 +441,15 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section,
 
 	/* log our success/failure */
 	oidc_debug(r,
-			"%s entry for key \"%s\" (%" APR_SIZE_T_FMT " bytes, expires in: %" APR_TIME_T_FMT ")",
+			"%s entry for key \"%s\" in file of %" APR_SIZE_T_FMT " bytes",
 			(rc == APR_SUCCESS) ? "successfully stored" : "could not store",
-					key, info.len, apr_time_sec(expiry - apr_time_now()));
+					key, info.len);
 
 	return (rc == APR_SUCCESS);
 }
 
 oidc_cache_t oidc_cache_file = {
+		"file",
 		1,
 		oidc_cache_file_post_config,
 		NULL,

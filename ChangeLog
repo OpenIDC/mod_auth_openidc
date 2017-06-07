@@ -2,6 +2,7 @@
 - fix file cache backend: allow caching of non-filename friendly keys such as configuration URLs and JWKs URIs
 - enable JQ-based claims expression matching when compiled from source with --with-jq=<dir>, e.g.:
   Require claims_expr '.aud == "ac_oic_client" and (.scope | index("profile") != null)'
+- normalize cache backend logging
 - bump to 2.3.0rc3
 
 06/06/2017

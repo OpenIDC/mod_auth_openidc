@@ -158,8 +158,6 @@ static char *oidc_cache_shm_get_key(apr_pool_t *pool, const char *section,
 static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section,
 		const char *key, const char **value) {
 
-	oidc_debug(r, "enter, section=\"%s\", key=\"%s\"", section, key);
-
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *) cfg->cache_cfg;
@@ -206,7 +204,7 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section,
 	/* release the global lock */
 	oidc_cache_mutex_unlock(r, context->mutex);
 
-	return (*value == NULL) ? FALSE : TRUE;
+	return TRUE;
 }
 
 /*
@@ -214,9 +212,6 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section,
  */
 static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 		const char *key, const char *value, apr_time_t expiry) {
-
-	oidc_debug(r, "enter, section=\"%s\", key=\"%s\", value size=%llu", section,
-			key, value ? (unsigned long long )strlen(value) : 0);
 
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
@@ -347,6 +342,7 @@ static int oidc_cache_shm_destroy(server_rec *s) {
 }
 
 oidc_cache_t oidc_cache_shm = {
+		"shm",
 		0,
 		oidc_cache_shm_post_config,
 		oidc_cache_shm_child_init,
