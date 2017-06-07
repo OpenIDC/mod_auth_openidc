@@ -63,6 +63,8 @@
 
 #include "cjose/cjose.h"
 
+#define OIDC_JOSE_ALG_SHA256 "sha256"
+
 /* indicate support for OpenSSL version dependent features */
 #define OIDC_JOSE_EC_SUPPORT  OPENSSL_VERSION_NUMBER >= 0x1000100f
 #define OIDC_JOSE_GCM_SUPPORT OPENSSL_VERSION_NUMBER >= 0x1000100f

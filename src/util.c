@@ -147,7 +147,7 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret,
 	oidc_jwt_t *jwt = NULL;
 	oidc_jwt_t *jwe = NULL;
 
-	if (oidc_util_create_symmetric_key(r, secret, 0, "sha256", FALSE,
+	if (oidc_util_create_symmetric_key(r, secret, 0, OIDC_JOSE_ALG_SHA256, FALSE,
 			&jwk) == FALSE)
 		goto end;
 
@@ -157,7 +157,7 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret,
 		goto end;
 	}
 
-	jwt->header.alg = apr_pstrdup(r->pool, "HS256");
+	jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_HS256);
 	jwt->payload.value.json = payload;
 
 	if (oidc_jwt_sign(r->pool, jwt, jwk, &err) == FALSE) {
@@ -171,8 +171,8 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret,
 		goto end;
 	}
 
-	jwe->header.alg = "dir";
-	jwe->header.enc = "A256GCM";
+	jwe->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_DIR);
+	jwe->header.enc = apr_pstrdup(r->pool, CJOSE_HDR_ENC_A256GCM);
 
 	const char *cser = oidc_jwt_serialize(r->pool, jwt, &err);
 	if (oidc_jwt_encrypt(r->pool, jwe, jwk, cser, compact_encoded_jwt,
@@ -209,7 +209,7 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret,
 	oidc_jwk_t *jwk = NULL;
 	oidc_jwt_t *jwt = NULL;
 
-	if (oidc_util_create_symmetric_key(r, secret, 0, "sha256", FALSE,
+	if (oidc_util_create_symmetric_key(r, secret, 0, OIDC_JOSE_ALG_SHA256, FALSE,
 			&jwk) == FALSE)
 		goto end;
 

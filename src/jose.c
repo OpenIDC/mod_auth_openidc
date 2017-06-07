@@ -387,7 +387,7 @@ static apr_byte_t oidc_jwk_set_or_generate_kid(apr_pool_t *pool,
 		jwk_kid = apr_pstrdup(pool, s_kid);
 	} else {
 		/* calculate a unique key identifier (kid) by fingerprinting the key params */
-		if (oidc_jose_hash_and_base64url_encode(pool, "sha256", key_params,
+		if (oidc_jose_hash_and_base64url_encode(pool, OIDC_JOSE_ALG_SHA256, key_params,
 				key_params_len, &jwk_kid) == FALSE) {
 			oidc_jose_error(err, "oidc_jose_hash_and_base64urlencode failed");
 			return FALSE;

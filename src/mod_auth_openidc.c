@@ -523,7 +523,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
 	if (oidc_util_create_symmetric_key(r, c->provider.client_secret,
-			oidc_alg2keysize(alg), "sha256",
+			oidc_alg2keysize(alg), OIDC_JOSE_ALG_SHA256,
 			TRUE, &jwk) == FALSE)
 		return FALSE;
 
@@ -611,7 +611,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 		char *cser = oidc_jwt_serialize(r->pool, jwt, &err);
 		if (cser == NULL)
 			return FALSE;
-		if (oidc_util_hash_string_and_base64url_encode(r, "sha256", cser,
+		if (oidc_util_hash_string_and_base64url_encode(r, OIDC_JOSE_ALG_SHA256, cser,
 				&jti) == FALSE) {
 			oidc_error(r,
 					"oidc_util_hash_string_and_base64url_encode returned an error");
