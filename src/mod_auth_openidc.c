@@ -1264,12 +1264,6 @@ static void oidc_copy_tokens_to_request_state(request_rec *r,
 	}
 }
 
-#define OIDC_APP_INFO_REFRESH_TOKEN     "refresh_token"
-#define OIDC_APP_INFO_ACCESS_TOKEN      "access_token"
-#define OIDC_APP_INFO_ACCESS_TOKEN_EXP  "access_token_expires"
-#define OIDC_APP_INFO_ID_TOKEN          "id_token"
-#define OIDC_APP_INFO_ID_TOKEN_PAYLOAD  "id_token_payload"
-
 /*
  * pass refresh_token, access_token and access_token_expires as headers/environment variables to the application
  */
@@ -2497,7 +2491,7 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 
 	/* pickup the command or URL where the user wants to go after logout */
 	char *url = NULL;
-	oidc_util_get_request_parameter(r, "logout", &url);
+	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_LOGOUT, &url);
 
 	oidc_debug(r, "enter (url=%s)", url);
 
@@ -2584,7 +2578,7 @@ int oidc_handle_jwks(request_rec *r, oidc_cfg *c) {
 
 	/* pickup requested JWKs type */
 	//	char *jwks_type = NULL;
-	//	oidc_util_get_request_parameter(r, "jwks", &jwks_type);
+	//	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS, &jwks_type);
 	char *jwks = apr_pstrdup(r->pool, "{ \"keys\" : [");
 	apr_hash_index_t *hi = NULL;
 	apr_byte_t first = TRUE;
@@ -2712,7 +2706,7 @@ static int oidc_handle_session_management(request_rec *r, oidc_cfg *c,
 	oidc_provider_t *provider = NULL;
 
 	/* get the command passed to the session management handler */
-	oidc_util_get_request_parameter(r, "session", &cmd);
+	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_SESSION, &cmd);
 	if (cmd == NULL) {
 		oidc_error(r, "session management handler called with no command");
 		return HTTP_INTERNAL_SERVER_ERROR;
@@ -2790,7 +2784,7 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
 	char *error_code = NULL;
 
 	/* get the command passed to the session management handler */
-	oidc_util_get_request_parameter(r, "refresh", &return_to);
+	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_REFRESH, &return_to);
 	oidc_util_get_request_parameter(r, OIDC_PROTO_ACCESS_TOKEN,
 			&r_access_token);
 
@@ -2888,7 +2882,7 @@ static int oidc_handle_request_uri(request_rec *r, oidc_cfg *c) {
  */
 static int oidc_handle_remove_at_cache(request_rec *r, oidc_cfg *c) {
 	char *access_token = NULL;
-	oidc_util_get_request_parameter(r, "remove_at_cache", &access_token);
+	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE, &access_token);
 
 	char *cache_entry = NULL;
 	oidc_cache_get_access_token(r, access_token, &cache_entry);
@@ -2903,6 +2897,8 @@ static int oidc_handle_remove_at_cache(request_rec *r, oidc_cfg *c) {
 	return DONE;
 }
 
+#define OIDC_INFO_PARAM_ACCESS_TOKEN_REFRESH_INTERVAL "access_token_refresh_interval"
+
 /*
  * handle request for session info
  */
@@ -2910,8 +2906,8 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 		oidc_session_t *session) {
 	apr_byte_t needs_save = FALSE;
 	char *s_format = NULL, *s_interval = NULL;
-	oidc_util_get_request_parameter(r, OIDC_HOOK_INFO_REQUEST, &s_format);
-	oidc_util_get_request_parameter(r, "access_token_refresh_interval",
+	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO, &s_format);
+	oidc_util_get_request_parameter(r, OIDC_INFO_PARAM_ACCESS_TOKEN_REFRESH_INTERVAL,
 			&s_interval);
 
 	/* see if this is a request for a format that is supported */
@@ -3061,8 +3057,6 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 			DONE);
 }
 
-#define OIDC_REDIRECT_URI_REQUEST_INFO "info"
-
 /*
  * handle all requests to the redirect_uri
  */
@@ -3084,22 +3078,22 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 		/* this is response from the OP discovery page */
 		return oidc_handle_discovery_response(r, c);
 
-	} else if (oidc_util_request_has_parameter(r, "logout")) {
+	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_LOGOUT)) {
 
 		/* handle logout */
 		return oidc_handle_logout(r, c, session);
 
-	} else if (oidc_util_request_has_parameter(r, "jwks")) {
+	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
 
 		/* handle JWKs request */
 		return oidc_handle_jwks(r, c);
 
-	} else if (oidc_util_request_has_parameter(r, "session")) {
+	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_SESSION)) {
 
 		/* handle session management request */
 		return oidc_handle_session_management(r, c, session);
 
-	} else if (oidc_util_request_has_parameter(r, "refresh")) {
+	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REFRESH)) {
 
 		/* handle refresh token request */
 		return oidc_handle_refresh_token_request(r, c, session);
@@ -3109,7 +3103,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 		/* handle request object by reference request */
 		return oidc_handle_request_uri(r, c);
 
-	} else if (oidc_util_request_has_parameter(r, "remove_at_cache")) {
+	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE)) {
 
 		/* handle request to invalidate access token cache */
 		return oidc_handle_remove_at_cache(r, c);

@@ -399,6 +399,13 @@ void oidc_strip_cookies(request_rec *r);
 int oidc_content_handler(request_rec *r);
 apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name, const char *reg_exp, json_t *json, char **request_user);
 
+#define OIDC_REDIRECT_URI_REQUEST_INFO             "info"
+#define OIDC_REDIRECT_URI_REQUEST_LOGOUT           "logout"
+#define OIDC_REDIRECT_URI_REQUEST_JWKS             "jwks"
+#define OIDC_REDIRECT_URI_REQUEST_SESSION          "session"
+#define OIDC_REDIRECT_URI_REQUEST_REFRESH          "refresh"
+#define OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE  "remove_at_cache"
+
 // oidc_oauth
 int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c);
 apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token);
@@ -449,6 +456,10 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_PROTO_PROMPT_NONE            "none"
 #define OIDC_PROTO_ERROR                  "error"
 #define OIDC_PROTO_ERROR_DESCRIPTION      "error_description"
+#define OIDC_PROTO_REALM                  "realm"
+
+#define OIDC_PROTO_ERR_INVALID_TOKEN          "invalid_token"
+#define OIDC_PROTO_ERR_INVALID_REQUEST        "invalid_request"
 
 #define OIDC_PROTO_GRANT_TYPE_AUTHZ_CODE    "authorization_code"
 #define OIDC_PROTO_GRANT_TYPE_REFRESH_TOKEN "refresh_token"
@@ -481,7 +492,6 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_JWK_SIG       "sig"
 #define OIDC_JWK_ENC       "enc"
 
-#define OIDC_HOOK_INFO_REQUEST             "info"
 #define OIDC_HOOK_INFO_FORMAT_JSON         "json"
 #define OIDC_HOOK_INFO_TIMESTAMP           "iat"
 #define OIDC_HOOK_INFO_ACCES_TOKEN         "access_token"
@@ -499,6 +509,7 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_CONTENT_TYPE_JWT           "application/jwt"
 #define OIDC_CONTENT_TYPE_FORM_ENCODED  "application/x-www-form-urlencoded"
 #define OIDC_CONTENT_TYPE_IMAGE_PNG     "image/png"
+#define OIDC_CONTENT_TYPE_HTML          "text/html"
 
 #define OIDC_STR_SPACE         " "
 #define OIDC_STR_EQUAL         "="
@@ -520,6 +531,12 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_CHAR_FORWARD_SLASH '/'
 #define OIDC_CHAR_PIPE          '|'
 #define OIDC_CHAR_AMP           '&'
+
+#define OIDC_APP_INFO_REFRESH_TOKEN     "refresh_token"
+#define OIDC_APP_INFO_ACCESS_TOKEN      "access_token"
+#define OIDC_APP_INFO_ACCESS_TOKEN_EXP  "access_token_expires"
+#define OIDC_APP_INFO_ID_TOKEN          "id_token"
+#define OIDC_APP_INFO_ID_TOKEN_PAYLOAD  "id_token_payload"
 
 typedef json_t oidc_proto_state_t;
 

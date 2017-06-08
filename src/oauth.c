@@ -542,15 +542,16 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
  */
 int oidc_oauth_return_www_authenticate(request_rec *r, const char *error,
 		const char *error_description) {
-	char *hdr = apr_psprintf(r->pool, "Bearer");
+	char *hdr = apr_psprintf(r->pool, "%s", OIDC_PROTO_BEARER);
 	if (ap_auth_name(r) != NULL)
-		hdr = apr_psprintf(r->pool, "%s realm=\"%s\"", hdr, ap_auth_name(r));
+		hdr = apr_psprintf(r->pool, "%s %s=\"%s\"", hdr, OIDC_PROTO_REALM,
+				ap_auth_name(r));
 	if (error != NULL)
-		hdr = apr_psprintf(r->pool, "%s%s error=\"%s\"", hdr,
-				(ap_auth_name(r) ? "," : ""), error);
+		hdr = apr_psprintf(r->pool, "%s%s %s=\"%s\"", hdr,
+				(ap_auth_name(r) ? "," : ""), OIDC_PROTO_ERROR, error);
 	if (error_description != NULL)
-		hdr = apr_psprintf(r->pool, "%s, error_description=\"%s\"", hdr,
-				error_description);
+		hdr = apr_psprintf(r->pool, "%s, %s=\"%s\"", hdr,
+				OIDC_PROTO_ERROR_DESCRIPTION, error_description);
 	oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_WWW_AUTHENTICATE, hdr);
 	return HTTP_UNAUTHORIZED;
 }
@@ -611,7 +612,8 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 		/* check if this is a request for the public (encryption) keys */
 	} else if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c))) {
 
-		if (oidc_util_request_has_parameter(r, "jwks")) {
+		if (oidc_util_request_has_parameter(r,
+				OIDC_REDIRECT_URI_REQUEST_JWKS)) {
 
 			return oidc_handle_jwks(r, c);
 
@@ -628,7 +630,8 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 			r->user = "";
 			return OK;
 		}
-		return oidc_oauth_return_www_authenticate(r, "invalid_request",
+		return oidc_oauth_return_www_authenticate(r,
+				OIDC_PROTO_ERR_INVALID_REQUEST,
 				"No bearer token found in the request");
 	}
 
@@ -641,20 +644,23 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 		/* we'll validate the token remotely */
 		if (oidc_oauth_resolve_access_token(r, c, access_token, &token,
 				&s_token) == FALSE)
-			return oidc_oauth_return_www_authenticate(r, "invalid_token",
+			return oidc_oauth_return_www_authenticate(r,
+					OIDC_PROTO_ERR_INVALID_TOKEN,
 					"Reference token could not be introspected");
 	} else {
 		/* no introspection endpoint is set, assume the token is a JWT and validate it locally */
 		if (oidc_oauth_validate_jwt_access_token(r, c, access_token, &token,
 				&s_token) == FALSE)
-			return oidc_oauth_return_www_authenticate(r, "invalid_token",
+			return oidc_oauth_return_www_authenticate(r,
+					OIDC_PROTO_ERR_INVALID_TOKEN,
 					"JWT token could not be validated");
 	}
 
 	/* check that we've got something back */
 	if (token == NULL) {
 		oidc_error(r, "could not resolve claims (token == NULL)");
-		return oidc_oauth_return_www_authenticate(r, "invalid_token",
+		return oidc_oauth_return_www_authenticate(r,
+				OIDC_PROTO_ERR_INVALID_TOKEN,
 				"No claims could be parsed from the token");
 	}
 
@@ -667,8 +673,8 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 		json_decref(token);
 		oidc_error(r,
 				"remote user could not be set, aborting with HTTP_UNAUTHORIZED");
-		return oidc_oauth_return_www_authenticate(r, "invalid_token",
-				"Could not set remote user");
+		return oidc_oauth_return_www_authenticate(r,
+				OIDC_PROTO_ERR_INVALID_TOKEN, "Could not set remote user");
 	}
 
 	/*
@@ -691,7 +697,7 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 
 	/* set the access_token in the app headers */
 	if (access_token != NULL) {
-		oidc_util_set_app_info(r, "access_token", access_token,
+		oidc_util_set_app_info(r, OIDC_APP_INFO_ACCESS_TOKEN, access_token,
 				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars);
 	}
 

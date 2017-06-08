@@ -147,8 +147,8 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret,
 	oidc_jwt_t *jwt = NULL;
 	oidc_jwt_t *jwe = NULL;
 
-	if (oidc_util_create_symmetric_key(r, secret, 0, OIDC_JOSE_ALG_SHA256, FALSE,
-			&jwk) == FALSE)
+	if (oidc_util_create_symmetric_key(r, secret, 0, OIDC_JOSE_ALG_SHA256,
+			FALSE, &jwk) == FALSE)
 		goto end;
 
 	jwt = oidc_jwt_new(r->pool, TRUE, FALSE);
@@ -183,7 +183,7 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret,
 
 	rv = TRUE;
 
-	end:
+end:
 
 	if (jwe != NULL)
 		oidc_jwt_destroy(jwe);
@@ -209,8 +209,8 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret,
 	oidc_jwk_t *jwk = NULL;
 	oidc_jwt_t *jwt = NULL;
 
-	if (oidc_util_create_symmetric_key(r, secret, 0, OIDC_JOSE_ALG_SHA256, FALSE,
-			&jwk) == FALSE)
+	if (oidc_util_create_symmetric_key(r, secret, 0, OIDC_JOSE_ALG_SHA256,
+			FALSE, &jwk) == FALSE)
 		goto end;
 
 	apr_hash_t *keys = apr_hash_make(r->pool);
@@ -230,7 +230,7 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret,
 
 	rv = TRUE;
 
-	end:
+end:
 
 	if (jwk != NULL)
 		oidc_jwk_destroy(jwk);
@@ -448,7 +448,8 @@ static const char *oidc_get_current_url_base(request_rec *r) {
 	const char *port_str = oidc_get_current_url_port(r, scheme_str);
 	port_str = port_str ? apr_psprintf(r->pool, ":%s", port_str) : "";
 
-	char *url = apr_pstrcat(r->pool, scheme_str, "://", host_str, port_str, NULL);
+	char *url = apr_pstrcat(r->pool, scheme_str, "://", host_str, port_str,
+			NULL);
 
 	return url;
 }
@@ -458,8 +459,8 @@ static const char *oidc_get_current_url_base(request_rec *r) {
  */
 char *oidc_get_current_url(request_rec *r) {
 
-	char *url = apr_pstrcat(r->pool, oidc_get_current_url_base(r),
-			r->uri, (r->args != NULL && *r->args != '\0' ? "?" : ""), r->args,
+	char *url = apr_pstrcat(r->pool, oidc_get_current_url_base(r), r->uri,
+			(r->args != NULL && *r->args != '\0' ? "?" : ""), r->args,
 			NULL);
 
 	oidc_debug(r, "current URL '%s'", url);
@@ -474,7 +475,8 @@ const char *oidc_get_redirect_uri(request_rec *r, oidc_cfg *cfg) {
 
 	char *redirect_uri = cfg->redirect_uri;
 
-	if ((redirect_uri != NULL) && (redirect_uri[0] == OIDC_CHAR_FORWARD_SLASH)) {
+	if ((redirect_uri != NULL)
+			&& (redirect_uri[0] == OIDC_CHAR_FORWARD_SLASH)) {
 		// relative redirect uri
 
 		redirect_uri = apr_pstrcat(r->pool, oidc_get_current_url_base(r),
@@ -541,7 +543,8 @@ typedef struct oidc_http_encode_t {
 static int oidc_http_add_form_url_encoded_param(void* rec, const char* key,
 		const char* value) {
 	oidc_http_encode_t *ctx = (oidc_http_encode_t*) rec;
-	const char *sep = apr_strnatcmp(ctx->encoded_params, "") == 0 ? "" : OIDC_STR_AMP;
+	const char *sep =
+			apr_strnatcmp(ctx->encoded_params, "") == 0 ? "" : OIDC_STR_AMP;
 	ctx->encoded_params = apr_psprintf(ctx->r->pool, "%s%s%s=%s",
 			ctx->encoded_params, sep, oidc_util_escape_string(ctx->r, key),
 			oidc_util_escape_string(ctx->r, value));
@@ -657,7 +660,8 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 	if (content_type != NULL) {
 		/* set content type */
 		h_list = curl_slist_append(h_list,
-				apr_psprintf(r->pool, "%s: %s", OIDC_HTTP_HDR_CONTENT_TYPE, content_type));
+				apr_psprintf(r->pool, "%s: %s", OIDC_HTTP_HDR_CONTENT_TYPE,
+						content_type));
 	}
 
 	/* see if we need to add any custom headers */
@@ -733,7 +737,9 @@ apr_byte_t oidc_util_http_get(request_rec *r, const char *url,
 	if ((params != NULL) && (apr_table_elts(params)->nelts > 0)) {
 		oidc_http_encode_t data = { r, "" };
 		apr_table_do(oidc_http_add_form_url_encoded_param, &data, params, NULL);
-		const char *sep = strchr(url, OIDC_CHAR_QUERY) != NULL ? OIDC_STR_AMP : OIDC_STR_QUERY;
+		const char *sep =
+				strchr(url, OIDC_CHAR_QUERY) != NULL ?
+						OIDC_STR_AMP : OIDC_STR_QUERY;
 		url = apr_psprintf(r->pool, "%s%s%s", url, sep, data.encoded_params);
 		oidc_debug(r, "get URL=\"%s\"", url);
 	}
@@ -763,7 +769,7 @@ apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url,
 	}
 
 	return oidc_util_http_call(r, url, data,
-			"application/x-www-form-urlencoded", basic_auth, bearer_token,
+			OIDC_CONTENT_TYPE_FORM_ENCODED, basic_auth, bearer_token,
 			ssl_validate_server, response, timeout, outgoing_proxy,
 			pass_cookies, ssl_cert, ssl_key);
 }
@@ -779,7 +785,7 @@ apr_byte_t oidc_util_http_post_json(request_rec *r, const char *url,
 	char *data =
 			json != NULL ?
 					oidc_util_encode_json_object(r, json, JSON_COMPACT) : NULL;
-	return oidc_util_http_call(r, url, data, "application/json", basic_auth,
+	return oidc_util_http_call(r, url, data, OIDC_CONTENT_TYPE_JSON, basic_auth,
 			bearer_token, ssl_validate_server, response, timeout,
 			outgoing_proxy, pass_cookies, ssl_cert, ssl_key);
 }
@@ -820,6 +826,14 @@ static char *oidc_util_get_cookie_path(request_rec *r) {
 	return (rv);
 }
 
+#define OIDC_COOKIE_FLAG_DOMAIN         "Domain"
+#define OIDC_COOKIE_FLAG_PATH           "Path"
+#define OIDC_COOKIE_FLAG_EXPIRES        "Expires"
+#define OIDC_COOKIE_FLAG_SECURE         "Secure"
+#define OIDC_COOKIE_FLAG_HTTP_ONLY      "HttpOnly"
+
+#define OIDC_COOKIE_MAX_SIZE            4093
+
 /*
  * set a cookie in the HTTP response headers
  */
@@ -845,31 +859,33 @@ void oidc_util_set_cookie(request_rec *r, const char *cookieName,
 	/* construct the cookie value */
 	headerString = apr_psprintf(r->pool, "%s=%s", cookieName, cookieValue);
 
-	headerString = apr_psprintf(r->pool, "%s; Path=%s", headerString,
-			oidc_util_get_cookie_path(r));
+	headerString = apr_psprintf(r->pool, "%s; %s=%s", headerString,
+			OIDC_COOKIE_FLAG_PATH, oidc_util_get_cookie_path(r));
 
 	if (expiresString != NULL)
-		headerString = apr_psprintf(r->pool, "%s; Expires=%s", headerString,
-				expiresString);
+		headerString = apr_psprintf(r->pool, "%s; %s=%s", headerString,
+				OIDC_COOKIE_FLAG_EXPIRES, expiresString);
 
 	if (c->cookie_domain != NULL)
-		headerString = apr_psprintf(r->pool, "%s; Domain=%s", headerString,
-				c->cookie_domain);
+		headerString = apr_psprintf(r->pool, "%s; %s=%s", headerString,
+				OIDC_COOKIE_FLAG_DOMAIN, c->cookie_domain);
 
 	if (apr_strnatcasecmp("https", oidc_get_current_url_scheme(r)) == 0)
-		headerString = apr_psprintf(r->pool, "%s; Secure", headerString);
+		headerString = apr_psprintf(r->pool, "%s; %s", headerString,
+				OIDC_COOKIE_FLAG_SECURE);
 
 	if (c->cookie_http_only != FALSE)
-		headerString = apr_psprintf(r->pool, "%s; HttpOnly", headerString);
+		headerString = apr_psprintf(r->pool, "%s; %s", headerString,
+				OIDC_COOKIE_FLAG_HTTP_ONLY);
 
 	if (ext != NULL)
 		headerString = apr_psprintf(r->pool, "%s; %s", headerString, ext);
 
 	/* sanity check on overall cookie value size */
-	if (strlen(headerString) > 4093) {
+	if (strlen(headerString) > OIDC_COOKIE_MAX_SIZE) {
 		oidc_warn(r,
-				"the length of the cookie value (%lu) is greater than 4093(!) bytes, this may not work with all browsers/server combinations: consider switching to a server side caching!",
-				(unsigned long )strlen(headerString));
+				"the length of the cookie value (%d) is greater than %d(!) bytes, this may not work with all browsers/server combinations: consider switching to a server side caching!",
+				(int )strlen(headerString), OIDC_COOKIE_MAX_SIZE);
 	}
 
 	/* use r->err_headers_out so we always print our headers (even on 302 redirect) - headers_out only prints on 2xx responses */
@@ -1132,9 +1148,9 @@ static apr_byte_t oidc_util_json_string_print(request_rec *r, json_t *result,
  * check a JSON object for "error" results and printout
  */
 static apr_byte_t oidc_util_check_json_error(request_rec *r, json_t *json) {
-	if (oidc_util_json_string_print(r, json, "error",
+	if (oidc_util_json_string_print(r, json, OIDC_PROTO_ERROR,
 			"oidc_util_check_json_error") == TRUE) {
-		oidc_util_json_string_print(r, json, "error_description",
+		oidc_util_json_string_print(r, json, OIDC_PROTO_ERROR_DESCRIPTION,
 				"oidc_util_check_json_error");
 		return TRUE;
 	}
@@ -1251,7 +1267,8 @@ int oidc_util_html_send(request_rec *r, const char *title,
 							on_load ? apr_psprintf(r->pool, " onload=\"%s()\"", on_load) : "",
 									html_body ? html_body : "<p></p>");
 
-	return oidc_util_http_send(r, html, strlen(html), "text/html", status_code);
+	return oidc_util_http_send(r, html, strlen(html), OIDC_CONTENT_TYPE_HTML,
+			status_code);
 }
 
 static char *html_error_template_contents = NULL;
@@ -1282,8 +1299,8 @@ int oidc_util_html_send_error(request_rec *r, const char *html_template,
 					oidc_util_html_escape(r->pool,
 							description ? description : ""));
 
-			return oidc_util_http_send(r, html, strlen(html), "text/html",
-					status_code);
+			return oidc_util_http_send(r, html, strlen(html),
+					OIDC_CONTENT_TYPE_HTML, status_code);
 		}
 	}
 
@@ -1335,8 +1352,7 @@ static apr_byte_t oidc_util_read(request_rec *r, char **rbuf) {
 			(*rbuf)[bytes_read] = '\0';
 			break;
 		} else if (read_length < 0) {
-			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-					"Failed to read POST data from client.");
+			oidc_error(r, "failed to read POST data from client");
 			return FALSE;
 		}
 		bytes_read += read_length;
@@ -1361,9 +1377,8 @@ apr_byte_t oidc_util_read_form_encoded_params(request_rec *r,
 		apr_table_set(table, key, val);
 	}
 
-	oidc_debug(r, "parsed: %lu bytes in to %d elements",
-			data ? (unsigned long )strlen(data) : 0,
-					apr_table_elts(table)->nelts);
+	oidc_debug(r, "parsed: %d bytes into %d elements",
+			data ? (int )strlen(data) : 0, apr_table_elts(table)->nelts);
 
 	return TRUE;
 }
@@ -1468,7 +1483,9 @@ apr_byte_t oidc_util_issuer_match(const char *a, const char *b) {
 		int n1 = strlen(a);
 		int n2 = strlen(b);
 		int n = ((n1 == n2 + 1) && (a[n1 - 1] == OIDC_CHAR_FORWARD_SLASH)) ?
-				n2 : (((n2 == n1 + 1) && (b[n2 - 1] == OIDC_CHAR_FORWARD_SLASH)) ? n1 : 0);
+				n2 :
+				(((n2 == n1 + 1) && (b[n2 - 1] == OIDC_CHAR_FORWARD_SLASH)) ?
+						n1 : 0);
 		if ((n == 0) || (strncmp(a, b, n) != 0))
 			return FALSE;
 	}
