@@ -604,7 +604,7 @@ out:
 			value ? (int) strlen(value) : 0, cfg->cache->name,
 					encrypted ? "encrypted " : "", key);
 	if (rc == TRUE)
-		oidc_debug(r, "succesfully stored %s", msg);
+		oidc_debug(r, "successfully stored %s", msg);
 	else
 		oidc_warn(r, "could NOT store %s", msg);
 
