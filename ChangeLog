@@ -1,3 +1,6 @@
+06/13/2017
+- release 2.3.0
+
 06/07/2017
 - fix file cache backend: allow caching of non-filename friendly keys such as configuration URLs and JWKs URIs
 - enable JQ-based claims expression matching when compiled from source with --with-jq=<dir>, e.g.:

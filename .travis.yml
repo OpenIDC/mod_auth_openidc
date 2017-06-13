@@ -14,9 +14,9 @@ addons:
     - check
 
 install:
-  - wget https://github.com/cisco/cjose/archive/0.4.1.tar.gz
-  - tar zxvf 0.4.1.tar.gz
-  - cd cjose-0.4.1
+  - wget https://github.com/cisco/cjose/archive/0.5.1.tar.gz
+  - tar zxvf 0.5.1.tar.gz
+  - cd cjose-0.5.1
   - ./configure --prefix=/usr
   - make test
   - sudo make install
