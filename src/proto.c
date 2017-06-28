@@ -1600,10 +1600,10 @@ static apr_byte_t oidc_proto_validate_token_type(request_rec *r,
  * setup for an endpoint call without authentication
  */
 static apr_byte_t oidc_proto_endpoint_auth_none(request_rec *r,
-		oidc_provider_t *provider, apr_table_t *params) {
+		const char *client_id, apr_table_t *params) {
 	oidc_debug(r,
 			"no client secret is configured; calling the token endpoint without client authentication; only public clients are supported");
-	apr_table_addn(params, OIDC_PROTO_CLIENT_ID, provider->client_id);
+	apr_table_addn(params, OIDC_PROTO_CLIENT_ID, client_id);
 	return TRUE;
 }
 
@@ -1611,13 +1611,13 @@ static apr_byte_t oidc_proto_endpoint_auth_none(request_rec *r,
  * setup for an endpoint call with HTTP Basic authentication
  */
 static apr_byte_t oidc_proto_endpoint_auth_basic(request_rec *r,
-		oidc_provider_t *provider, char **basic_auth_str) {
-	if (provider->client_secret == NULL) {
+		const char *client_id, const char *client_secret, char **basic_auth_str) {
+	oidc_debug(r, "enter");
+	if (client_secret == NULL) {
 		oidc_error(r, "no client secret is configured");
 		return FALSE;
 	}
-	*basic_auth_str = apr_psprintf(r->pool, "%s:%s", provider->client_id,
-			provider->client_secret);
+	*basic_auth_str = apr_psprintf(r->pool, "%s:%s", client_id, client_secret);
 	return TRUE;
 }
 
@@ -1625,13 +1625,14 @@ static apr_byte_t oidc_proto_endpoint_auth_basic(request_rec *r,
  * setup for an endpoint call with authentication in POST parameters
  */
 static apr_byte_t oidc_proto_endpoint_auth_post(request_rec *r,
-		oidc_provider_t *provider, apr_table_t *params) {
-	if (provider->client_secret == NULL) {
+		const char *client_id, const char *client_secret, apr_table_t *params) {
+	oidc_debug(r, "enter");
+	if (client_secret == NULL) {
 		oidc_error(r, "no client secret is configured");
 		return FALSE;
 	}
-	apr_table_addn(params, OIDC_PROTO_CLIENT_ID, provider->client_id);
-	apr_table_addn(params, OIDC_PROTO_CLIENT_SECRET, provider->client_secret);
+	apr_table_addn(params, OIDC_PROTO_CLIENT_ID, client_id);
+	apr_table_addn(params, OIDC_PROTO_CLIENT_SECRET, client_secret);
 	return TRUE;
 }
 
@@ -1640,8 +1641,8 @@ static apr_byte_t oidc_proto_endpoint_auth_post(request_rec *r,
 /*
  * helper function to create a JWT assertion for endpoint authentication
  */
-static apr_byte_t oidc_proto_jwt_create(request_rec *r,
-		oidc_provider_t *provider, oidc_jwt_t **out) {
+static apr_byte_t oidc_proto_jwt_create(request_rec *r, const char *client_id,
+		const char *audience, oidc_jwt_t **out) {
 
 	*out = oidc_jwt_new(r->pool, TRUE, TRUE);
 	oidc_jwt_t *jwt = *out;
@@ -1650,11 +1651,11 @@ static apr_byte_t oidc_proto_jwt_create(request_rec *r,
 	oidc_proto_generate_random_string(r, &jti, OIDC_PROTO_ASSERTION_JTI_LEN);
 
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_ISS,
-			json_string(provider->client_id));
+			json_string(client_id));
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_SUB,
-			json_string(provider->client_id));
+			json_string(client_id));
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_AUD,
-			json_string(provider->token_endpoint_url));
+			json_string(audience));
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_JTI,
 			json_string(jti));
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_EXP,
@@ -1695,17 +1696,19 @@ static apr_byte_t oidc_proto_jwt_sign_and_add(request_rec *r,
 #define OIDC_PROTO_JWT_ASSERTION_SYMMETRIC_ALG CJOSE_HDR_ALG_HS256
 
 static apr_byte_t oidc_proto_endpoint_auth_client_secret_jwt(request_rec *r,
-		oidc_provider_t *provider, apr_table_t *params) {
-
+		const char *client_id, const char *client_secret, const char *audience,
+		apr_table_t *params) {
 	oidc_jwt_t *jwt = NULL;
 	oidc_jose_error_t err;
 
-	if (oidc_proto_jwt_create(r, provider, &jwt) == FALSE)
+	oidc_debug(r, "enter");
+
+	if (oidc_proto_jwt_create(r, client_id, audience, &jwt) == FALSE)
 		return FALSE;
 
 	oidc_jwk_t *jwk = oidc_jwk_create_symmetric_key(r->pool, NULL,
-			(const unsigned char *) provider->client_secret,
-			strlen(provider->client_secret), FALSE, &err);
+			(const unsigned char *) client_secret, strlen(client_secret), FALSE,
+			&err);
 	if (jwk == NULL) {
 		oidc_error(r, "parsing of client secret into JWK failed: %s",
 				oidc_jose_e2s(r->pool, err));
@@ -1713,7 +1716,8 @@ static apr_byte_t oidc_proto_endpoint_auth_client_secret_jwt(request_rec *r,
 		return FALSE;
 	}
 
-	jwt->header.alg = apr_pstrdup(r->pool, OIDC_PROTO_JWT_ASSERTION_SYMMETRIC_ALG);
+	jwt->header.alg = apr_pstrdup(r->pool,
+			OIDC_PROTO_JWT_ASSERTION_SYMMETRIC_ALG);
 
 	oidc_proto_jwt_sign_and_add(r, params, jwt, jwk);
 
@@ -1726,12 +1730,14 @@ static apr_byte_t oidc_proto_endpoint_auth_client_secret_jwt(request_rec *r,
 #define OIDC_PROTO_JWT_ASSERTION_ASYMMETRIC_ALG CJOSE_HDR_ALG_RS256
 
 static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r,
-		oidc_cfg *cfg, oidc_provider_t *provider, apr_table_t *params) {
-
+		oidc_cfg *cfg, const char *client_id, const char *audience,
+		apr_table_t *params) {
 	oidc_jwt_t *jwt = NULL;
 	oidc_jwk_t *jwk = NULL;
 
-	if (oidc_proto_jwt_create(r, provider, &jwt) == FALSE)
+	oidc_debug(r, "enter");
+
+	if (oidc_proto_jwt_create(r, client_id, audience, &jwt) == FALSE)
 		return FALSE;
 
 	if (cfg->private_keys == NULL) {
@@ -1754,30 +1760,36 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r,
 	return TRUE;
 }
 
-static apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg,
-		oidc_provider_t *provider, apr_table_t *params, char **basic_auth_str) {
+apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg,
+		const char *token_endpoint_auth, const char *client_id,
+		const char *client_secret, const char *audience, apr_table_t *params,
+		char **basic_auth_str) {
 
-	oidc_debug(r, "oidc_proto_token_endpoint_request: token_endpoint_auth=%s", provider->token_endpoint_auth);
+	oidc_debug(r, "token_endpoint_auth=%s", token_endpoint_auth);
 
-	if (provider->token_endpoint_auth == NULL)
-		return oidc_proto_endpoint_auth_none(r, provider, params);
+	// we assume the default is client_secret_basic unless no secret is set
+	if ((token_endpoint_auth == NULL) && (client_secret == NULL))
+		return oidc_proto_endpoint_auth_none(r, client_id, params);
 
-	if (apr_strnatcmp(provider->token_endpoint_auth,
-			OIDC_PROTO_CLIENT_SECRET_BASIC) == 0)
-		return oidc_proto_endpoint_auth_basic(r, provider, basic_auth_str);
+	if ((token_endpoint_auth == NULL) || (apr_strnatcmp(token_endpoint_auth,
+			OIDC_PROTO_CLIENT_SECRET_BASIC) == 0))
+		return oidc_proto_endpoint_auth_basic(r, client_id, client_secret,
+				basic_auth_str);
 
-	if (apr_strnatcmp(provider->token_endpoint_auth,
+	if (apr_strnatcmp(token_endpoint_auth,
 			OIDC_PROTO_CLIENT_SECRET_POST) == 0)
-		return oidc_proto_endpoint_auth_post(r, provider, params);
-
-	if (apr_strnatcmp(provider->token_endpoint_auth,
-			OIDC_PROTO_CLIENT_SECRET_JWT) == 0)
-		return oidc_proto_endpoint_auth_client_secret_jwt(r, provider, params);
-
-	if (apr_strnatcmp(provider->token_endpoint_auth,
-			OIDC_PROTO_PRIVATE_KEY_JWT) == 0)
-		return oidc_proto_endpoint_auth_private_key_jwt(r, cfg, provider,
+		return oidc_proto_endpoint_auth_post(r, client_id, client_secret,
 				params);
+
+	if (apr_strnatcmp(token_endpoint_auth,
+			OIDC_PROTO_CLIENT_SECRET_JWT) == 0)
+		return oidc_proto_endpoint_auth_client_secret_jwt(r, client_id,
+				client_secret, audience, params);
+
+	if (apr_strnatcmp(token_endpoint_auth,
+			OIDC_PROTO_PRIVATE_KEY_JWT) == 0)
+		return oidc_proto_endpoint_auth_private_key_jwt(r, cfg, client_id,
+				audience, params);
 
 	oidc_error(r, "uhm, shouldn't be here...");
 
@@ -1796,8 +1808,9 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 	char *basic_auth = NULL;
 
 	/* add the token endpoint authentication credentials */
-	if (oidc_proto_token_endpoint_auth(r, cfg, provider, params,
-			&basic_auth) == FALSE)
+	if (oidc_proto_token_endpoint_auth(r, cfg, provider->token_endpoint_auth,
+			provider->client_id, provider->client_secret,
+			provider->token_endpoint_url, params, &basic_auth) == FALSE)
 		return FALSE;
 
 	/* add any configured extra static parameters to the token endpoint */

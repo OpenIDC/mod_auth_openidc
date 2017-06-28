@@ -64,6 +64,8 @@
 static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 		const char *token, char **response) {
 
+	char *basic_auth = NULL;
+
 	/* assemble parameters to call the token endpoint for validation */
 	apr_table_t *params = apr_table_make(r->pool, 4);
 
@@ -74,20 +76,12 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 	/* add the access_token itself */
 	apr_table_addn(params, c->oauth.introspection_token_param_name, token);
 
-	/* see if we want to do basic auth or post-param-based auth */
-	const char *basic_auth = NULL;
-	if ((c->oauth.client_id != NULL) && (c->oauth.client_secret != NULL)) {
-		if ((c->oauth.introspection_endpoint_auth != NULL)
-				&& (apr_strnatcmp(c->oauth.introspection_endpoint_auth,
-						OIDC_PROTO_CLIENT_SECRET_POST) == 0)) {
-			apr_table_addn(params, OIDC_PROTO_CLIENT_ID, c->oauth.client_id);
-			apr_table_addn(params, OIDC_PROTO_CLIENT_SECRET,
-					c->oauth.client_secret);
-		} else {
-			basic_auth = apr_psprintf(r->pool, "%s:%s", c->oauth.client_id,
-					c->oauth.client_secret);
-		}
-	}
+	/* add the token endpoint authentication credentials */
+	if (oidc_proto_token_endpoint_auth(r, c,
+			c->oauth.introspection_endpoint_auth, c->oauth.client_id,
+			c->oauth.client_secret, c->oauth.introspection_endpoint_url, params,
+			&basic_auth) == FALSE)
+		return FALSE;
 
 	/* call the endpoint with the constructed parameter set and return the resulting response */
 	return apr_strnatcmp(c->oauth.introspection_endpoint_method,

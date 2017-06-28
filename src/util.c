@@ -568,9 +568,10 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 
 	/* do some logging about the inputs */
 	oidc_debug(r,
-			"url=%s, data=%s, content_type=%s, basic_auth=%s, bearer_token=%s, ssl_validate_server=%d",
+			"url=%s, data=%s, content_type=%s, basic_auth=%s, bearer_token=%s, ssl_validate_server=%d, timeout=%d, outgoing_proxy=%s, pass_cookies=%pp, ssl_cert=%s, ssl_key=%s",
 			url, data, content_type, basic_auth, bearer_token,
-			ssl_validate_server);
+			ssl_validate_server, timeout, outgoing_proxy, pass_cookies,
+			ssl_cert, ssl_key);
 
 	curl = curl_easy_init();
 	if (curl == NULL) {

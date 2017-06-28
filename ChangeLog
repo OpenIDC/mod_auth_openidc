@@ -1,3 +1,7 @@
+06/28/2017
+- support private_key_jwt and client_secret_jwt as client authentication methods for token introspection
+- bump to 2.3.1rc1
+
 06/22/2017
 - fix bug where token_endpoint_auth set to private_key_jwt would fail to provide the credential if client_secret wasn't set
 - bump to 2.3.1rc0
