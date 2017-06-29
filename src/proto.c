@@ -62,7 +62,7 @@
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 /*
- * generate a random value (nonce) to correlate request/response through browser state
+ * generate a random string value value of a specified length
  */
 static apr_byte_t oidc_proto_generate_random_string(request_rec *r,
 		char **output, int len) {
@@ -79,7 +79,12 @@ static apr_byte_t oidc_proto_generate_random_string(request_rec *r,
 	return TRUE;
 }
 
-static apr_byte_t oidc_proto_copy_param_from_request(
+/*
+ * indicates wether a request parameter from the authorization request needs to be
+ * copied to the protected request object based on the settings specified in the
+ * "copy_from_request" JSON array in the request object
+ */
+static apr_byte_t oidc_proto_param_needs_copy(
 		json_t *request_object_config, const char *parameter_name) {
 	json_t *copy_from_request = json_object_get(request_object_config,
 			"copy_from_request");
@@ -103,7 +108,8 @@ typedef struct oidc_proto_copy_req_ctx_t {
 } oidc_proto_copy_req_ctx_t;
 
 /*
- * add a key/value pair post parameter
+ * copy a parameter key/value from the authorizion request to the
+ * request object if the configuration setting says to include it
  */
 static int oidc_proto_copy_from_request(void* rec, const char* name,
 		const char* value) {
@@ -111,12 +117,12 @@ static int oidc_proto_copy_from_request(void* rec, const char* name,
 
 	oidc_debug(ctx->r, "processing name: %s, value: %s", name, value);
 
-	if (oidc_proto_copy_param_from_request(ctx->request_object_config, name)) {
+	if (oidc_proto_param_needs_copy(ctx->request_object_config, name)) {
 		json_t *result = NULL;
 		json_error_t json_error;
 		result = json_loads(value, JSON_DECODE_ANY, &json_error);
 		if (result == NULL)
-			// assume string
+			/* assume string */
 			result = json_string(value);
 		if (result) {
 			json_object_set_new(ctx->request_object->payload.value.json, name,
@@ -128,6 +134,9 @@ static int oidc_proto_copy_from_request(void* rec, const char* name,
 	return 1;
 }
 
+/*
+ * obtain the public key for a provider to encrypt the request object with
+ */
 apr_byte_t oidc_proto_get_encryption_jwk_by_type(request_rec *r, oidc_cfg *cfg,
 		struct oidc_provider_t *provider, int key_type, oidc_jwk_t **jwk) {
 
@@ -140,6 +149,7 @@ apr_byte_t oidc_proto_get_encryption_jwk_by_type(request_rec *r, oidc_cfg *cfg,
 	oidc_jwk_t *key = NULL;
 	char *jwk_json = NULL;
 
+	/* TODO: forcefully refresh now; we may want to relax that */
 	oidc_metadata_jwks_get(r, cfg, &jwks_uri, &j_jwks, &force_refresh);
 
 	if (j_jwks == NULL) {
@@ -154,6 +164,7 @@ apr_byte_t oidc_proto_get_encryption_jwk_by_type(request_rec *r, oidc_cfg *cfg,
 	}
 
 	int i;
+	/* walk the set of published keys to find the first that has a matching type */
 	for (i = 0; i < json_array_size(keys); i++) {
 
 		json_t *elem = json_array_get(keys, i);
@@ -344,7 +355,7 @@ char *oidc_proto_create_request_object(request_rec *r,
 
 	} else {
 
-		// should be sign only or "none"
+		/* should be sign only or "none" */
 		serialized_request_object = cser;
 	}
 
