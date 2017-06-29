@@ -363,7 +363,7 @@ char *oidc_proto_create_request_object(request_rec *r,
 /*
  * generate a request object and pass it by reference in the authorization request
  */
-char *oidc_proto_create_request_uri(request_rec *r,
+static char *oidc_proto_create_request_uri(request_rec *r,
 		struct oidc_provider_t *provider, json_t * request_object_config,
 		const char *redirect_uri, apr_table_t *params) {
 
@@ -400,7 +400,7 @@ char *oidc_proto_create_request_uri(request_rec *r,
 /*
  * Generic function to generate request/request_object parameter with value
  */
-char *oidc_proto_add_request_param(request_rec *r,
+static void oidc_proto_add_request_param(request_rec *r,
 		struct oidc_provider_t *provider, const char *redirect_uri,
 		apr_table_t *params) {
 
@@ -408,7 +408,7 @@ char *oidc_proto_add_request_param(request_rec *r,
 	json_t *request_object_config = NULL;
 	if (oidc_util_decode_json_object(r, provider->request_object,
 			&request_object_config) == FALSE)
-		return FALSE;
+		return;
 
 	/* request_uri is used as default parameter for sending Request Object */
 	char* parameter = OIDC_PROTO_REQUEST_URI;
@@ -422,7 +422,7 @@ char *oidc_proto_add_request_param(request_rec *r,
 		if (request_object_type_str == NULL) {
 			oidc_error(r,
 					"Value of request_object_type in request_object config is not a string");
-			return FALSE;
+			return;
 		}
 
 		/* ensure parameter variable to have a valid value */
@@ -432,7 +432,7 @@ char *oidc_proto_add_request_param(request_rec *r,
 				!= 0) {
 			oidc_error(r, "Bad request_object_type in config: %s",
 					request_object_type_str);
-			return FALSE;
+			return;
 		}
 	}
 
@@ -442,20 +442,13 @@ char *oidc_proto_add_request_param(request_rec *r,
 		/* parameter is "request_uri" */
 		value = oidc_proto_create_request_uri(r, provider,
 				request_object_config, redirect_uri, params);
+		apr_table_setn(params, OIDC_PROTO_REQUEST_URI, value);
 	} else {
 		/* parameter is "request" */
 		value = oidc_proto_create_request_object(r, provider,
 				request_object_config, params);
+		apr_table_setn(params, OIDC_PROTO_REQUEST_OBJECT, value);
 	}
-
-	/* concatenate parameter with value */
-	char* request_param = NULL;
-	if (value != NULL) {
-		request_param = apr_psprintf(r->pool, "%s=%s", parameter,
-				oidc_util_escape_string(r, value));
-	}
-
-	return request_param;
 }
 
 /* context structure for encoding parameters */
