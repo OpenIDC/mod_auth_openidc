@@ -145,6 +145,10 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_INTROSPECTION_METHOD_GET  "GET"
 #define OIDC_INTROSPECTION_METHOD_POST "POST"
 
+/* HTTP methods to send authentication requests */
+#define OIDC_AUTH_REQUEST_METHOD_GET  0
+#define OIDC_AUTH_REQUEST_METHOD_POST 1
+
 /* prefix of the cookie that binds the state in the authorization request/response to the browser */
 #define OIDCStateCookiePrefix  "mod_auth_openidc_state_"
 
@@ -270,6 +274,7 @@ typedef struct oidc_provider_t {
 	char *userinfo_encrypted_response_enc;
 	int userinfo_token_method;
 	char *request_object;
+	int auth_request_method;
 	int token_binding_policy;
 } oidc_provider_t ;
 
@@ -692,6 +697,7 @@ void oidc_util_set_chunked_cookie(request_rec *r, const char *cookieName, const 
 apr_byte_t oidc_util_create_symmetric_key(request_rec *r, const char *client_secret, int r_key_len, const char *hash_algo, apr_byte_t set_kid, oidc_jwk_t **jwk);
 apr_hash_t * oidc_util_merge_symmetric_key(apr_pool_t *pool, apr_hash_t *private_keys, oidc_jwk_t *jwk);
 const char *oidc_util_get_provided_token_binding_id(const request_rec *r);
+char *oidc_util_http_query_encoded_url(request_rec *r, const char *url, const apr_table_t *params);
 
 /* HTTP header constants */
 #define OIDC_HTTP_HDR_COOKIE							"Cookie"

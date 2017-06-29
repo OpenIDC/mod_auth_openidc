@@ -1182,6 +1182,16 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 	else
 		provider->token_binding_policy = cfg->provider.token_binding_policy;
 
+	/* see if we've got a custom HTTP method for passing the auth request */
+	oidc_metadata_get_valid_string(r, j_conf, "auth_request_method",
+			oidc_valid_auth_request_method, &method,
+			NULL);
+	if (method != NULL)
+		oidc_parse_auth_request_method(r->pool, method,
+				&provider->auth_request_method);
+	else
+		provider->auth_request_method = cfg->provider.auth_request_method;
+
 	return TRUE;
 }
 

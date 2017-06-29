@@ -1118,3 +1118,34 @@ const char *oidc_parse_token_binding_policy(apr_pool_t *pool, const char *arg, i
 
 	return NULL;
 }
+
+#define OIDC_AUTH_REQUEST_METHOD_GET_STR  "GET"
+#define OIDC_AUTH_REQEUST_METHOD_POST_STR "POST"
+
+/*
+ * parse method for sending the authentication request
+ */
+const char *oidc_valid_auth_request_method(apr_pool_t *pool, const char *arg) {
+	static char *options[] = {
+			OIDC_AUTH_REQUEST_METHOD_GET_STR,
+			OIDC_AUTH_REQEUST_METHOD_POST_STR,
+			NULL };
+	return oidc_valid_string_option(pool, arg, options);
+}
+
+/*
+ * parse method for sending the authentication request
+ */
+const char *oidc_parse_auth_request_method(apr_pool_t *pool, const char *arg,
+		int *method) {
+	const char *rv = oidc_valid_auth_request_method(pool, arg);
+	if (rv != NULL)
+		return rv;
+
+	if (apr_strnatcmp(arg, OIDC_AUTH_REQUEST_METHOD_GET_STR) == 0)
+		*method = OIDC_AUTH_REQUEST_METHOD_GET;
+	else if (apr_strnatcmp(arg, OIDC_AUTH_REQEUST_METHOD_POST_STR) == 0)
+		*method = OIDC_AUTH_REQUEST_METHOD_POST;
+
+	return NULL;
+}

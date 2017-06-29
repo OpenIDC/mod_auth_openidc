@@ -157,6 +157,8 @@
 #define OIDC_DEFAULT_PROVIDER_METADATA_REFRESH_INTERVAL 0
 /* defines the default token binding policy for a provider */
 #define OIDC_DEFAULT_PROVIDER_TOKEN_BINDING_POLICY OIDC_TOKEN_BINDING_POLICY_OPTIONAL
+/* define the default HTTP method used to send the authentication request to the provider */
+#define OIDC_DEFAULT_AUTH_REQUEST_METHOD OIDC_AUTH_REQUEST_METHOD_GET
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -850,6 +852,18 @@ const char *oidc_cfg_claim_prefix(request_rec *r) {
 }
 
 /*
+ * set the HTTP method used to send the authentication request to the provider
+ */
+const char *oidc_set_auth_request_method(cmd_parms *cmd, void *struct_ptr,
+		const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+	const char *rv = oidc_parse_auth_request_method(cmd->pool, arg,
+			&cfg->provider.auth_request_method);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
+/*
  * create a new server config record with defaults
  */
 void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
@@ -901,6 +915,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->provider.userinfo_encrypted_response_alg = NULL;
 	c->provider.userinfo_encrypted_response_enc = NULL;
 	c->provider.userinfo_token_method = OIDC_USER_INFO_TOKEN_METHOD_HEADER;
+	c->provider.auth_request_method = OIDC_DEFAULT_AUTH_REQUEST_METHOD;
 
 	c->oauth.ssl_validate_server = OIDC_DEFAULT_SSL_VALIDATE_SERVER;
 	c->oauth.client_id = NULL;
@@ -1155,6 +1170,11 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			!= OIDC_USER_INFO_TOKEN_METHOD_HEADER ?
 					add->provider.userinfo_token_method :
 					base->provider.userinfo_token_method;
+	c->provider.auth_request_method =
+			add->provider.auth_request_method
+			!= OIDC_DEFAULT_AUTH_REQUEST_METHOD ?
+					add->provider.auth_request_method :
+					base->provider.auth_request_method;
 
 	c->oauth.ssl_validate_server =
 			add->oauth.ssl_validate_server != OIDC_DEFAULT_SSL_VALIDATE_SERVER ?
@@ -2534,6 +2554,11 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, provider_metadata_refresh_interval),
 				RSRC_CONF,
 				"Provider metadata refresh interval in seconds."),
+		AP_INIT_TAKE1("OIDCProviderAuthRequestMethod",
+				oidc_set_auth_request_method,
+				(void*)APR_OFFSETOF(oidc_cfg, provider.auth_request_method),
+				RSRC_CONF,
+				"HTTP method used to send the authentication request to the provider (GET or POST)."),
 		AP_INIT_ITERATE("OIDCInfoHook",
 				oidc_set_info_hook_data,
 				(void *)APR_OFFSETOF(oidc_cfg, info_hook_data),

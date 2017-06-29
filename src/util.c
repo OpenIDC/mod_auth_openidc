@@ -534,21 +534,61 @@ size_t oidc_curl_write(void *contents, size_t size, size_t nmemb, void *userp) {
 /* context structure for encoding parameters */
 typedef struct oidc_http_encode_t {
 	request_rec *r;
-	const char *encoded_params;
+	char *encoded_params;
 } oidc_http_encode_t;
 
 /*
  * add a url-form-encoded name/value pair
  */
-static int oidc_http_add_form_url_encoded_param(void* rec, const char* key,
+static int oidc_util_http_add_form_url_encoded_param(void* rec, const char* key,
 		const char* value) {
 	oidc_http_encode_t *ctx = (oidc_http_encode_t*) rec;
+	oidc_debug(ctx->r, "processing: %s=%s", key, value);
 	const char *sep =
 			apr_strnatcmp(ctx->encoded_params, "") == 0 ? "" : OIDC_STR_AMP;
 	ctx->encoded_params = apr_psprintf(ctx->r->pool, "%s%s%s=%s",
 			ctx->encoded_params, sep, oidc_util_escape_string(ctx->r, key),
 			oidc_util_escape_string(ctx->r, value));
 	return 1;
+}
+
+/*
+ * construct a URL with query parameters
+ */
+char *oidc_util_http_query_encoded_url(request_rec *r, const char *url,
+		const apr_table_t *params) {
+	char *result = NULL;
+	if ((params != NULL) && (apr_table_elts(params)->nelts > 0)) {
+		oidc_http_encode_t data = { r, "" };
+		apr_table_do(oidc_util_http_add_form_url_encoded_param, &data, params,
+				NULL);
+		const char *sep =
+				strchr(url, OIDC_CHAR_QUERY) != NULL ?
+						OIDC_STR_AMP :
+						OIDC_STR_QUERY;
+		result = apr_psprintf(r->pool, "%s%s%s", url, sep, data.encoded_params);
+	} else {
+		result = apr_pstrdup(r->pool, url);
+	}
+	oidc_debug(r, "url=%s", result);
+	return result;
+}
+
+/*
+ * construct form-encoded POST data
+ */
+static char *oidc_util_http_form_encoded_data(request_rec *r,
+		const apr_table_t *params) {
+	char *data = NULL;
+	if ((params != NULL) && (apr_table_elts(params)->nelts > 0)) {
+		oidc_http_encode_t encode_data = { r, "" };
+		apr_table_do(oidc_util_http_add_form_url_encoded_param, &encode_data,
+				params,
+				NULL);
+		data = encode_data.encoded_params;
+	}
+	oidc_debug(r, "data=%s", data);
+	return data;
 }
 
 /*
@@ -734,20 +774,10 @@ apr_byte_t oidc_util_http_get(request_rec *r, const char *url,
 		int timeout, const char *outgoing_proxy,
 		apr_array_header_t *pass_cookies, const char *ssl_cert,
 		const char *ssl_key) {
-
-	if ((params != NULL) && (apr_table_elts(params)->nelts > 0)) {
-		oidc_http_encode_t data = { r, "" };
-		apr_table_do(oidc_http_add_form_url_encoded_param, &data, params, NULL);
-		const char *sep =
-				strchr(url, OIDC_CHAR_QUERY) != NULL ?
-						OIDC_STR_AMP : OIDC_STR_QUERY;
-		url = apr_psprintf(r->pool, "%s%s%s", url, sep, data.encoded_params);
-		oidc_debug(r, "get URL=\"%s\"", url);
-	}
-
-	return oidc_util_http_call(r, url, NULL, NULL, basic_auth, bearer_token,
-			ssl_validate_server, response, timeout, outgoing_proxy,
-			pass_cookies, ssl_cert, ssl_key);
+	char *query_url = oidc_util_http_query_encoded_url(r, url, params);
+	return oidc_util_http_call(r, query_url, NULL, NULL, basic_auth,
+			bearer_token, ssl_validate_server, response, timeout,
+			outgoing_proxy, pass_cookies, ssl_cert, ssl_key);
 }
 
 /*
@@ -759,16 +789,7 @@ apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url,
 		int timeout, const char *outgoing_proxy,
 		apr_array_header_t *pass_cookies, const char *ssl_cert,
 		const char *ssl_key) {
-
-	const char *data = NULL;
-	if ((params != NULL) && (apr_table_elts(params)->nelts > 0)) {
-		oidc_http_encode_t encode_data = { r, "" };
-		apr_table_do(oidc_http_add_form_url_encoded_param, &encode_data, params,
-				NULL);
-		data = encode_data.encoded_params;
-		oidc_debug(r, "post data=\"%s\"", data);
-	}
-
+	char *data = oidc_util_http_form_encoded_data(r, params);
 	return oidc_util_http_call(r, url, data,
 			OIDC_CONTENT_TYPE_FORM_ENCODED, basic_auth, bearer_token,
 			ssl_validate_server, response, timeout, outgoing_proxy,

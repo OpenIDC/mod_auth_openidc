@@ -178,6 +178,7 @@ Entries that can be included in the .conf file are:
     "userinfo_refresh_interval"          overrides OIDCUserInfoRefreshInterval
     "userinfo_token_method"              overrides OIDCUserInfoTokenMethod
     "request_object"                     overrides OIDCRequestObject
+    "auth_request_method"                overrides OIDCProviderAuthRequestMethod
     "registration_token"                 an access_token that will be used on client registration calls for the associated OP
 
 Sample client metadata for issuer `https://localhost:9031`, so the **mod_auth_openidc**
