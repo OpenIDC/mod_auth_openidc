@@ -544,11 +544,11 @@ static int oidc_util_http_add_form_url_encoded_param(void* rec, const char* key,
 		const char* value) {
 	oidc_http_encode_t *ctx = (oidc_http_encode_t*) rec;
 	oidc_debug(ctx->r, "processing: %s=%s", key, value);
-	const char *sep =
-			apr_strnatcmp(ctx->encoded_params, "") == 0 ? "" : OIDC_STR_AMP;
+	const char *sep = ctx->encoded_params ? OIDC_STR_AMP : "";
 	ctx->encoded_params = apr_psprintf(ctx->r->pool, "%s%s%s=%s",
-			ctx->encoded_params, sep, oidc_util_escape_string(ctx->r, key),
-			oidc_util_escape_string(ctx->r, value));
+			ctx->encoded_params ? ctx->encoded_params : "", sep,
+					oidc_util_escape_string(ctx->r, key),
+					oidc_util_escape_string(ctx->r, value));
 	return 1;
 }
 
@@ -559,14 +559,16 @@ char *oidc_util_http_query_encoded_url(request_rec *r, const char *url,
 		const apr_table_t *params) {
 	char *result = NULL;
 	if ((params != NULL) && (apr_table_elts(params)->nelts > 0)) {
-		oidc_http_encode_t data = { r, "" };
+		oidc_http_encode_t data = { r, NULL };
 		apr_table_do(oidc_util_http_add_form_url_encoded_param, &data, params,
 				NULL);
-		const char *sep =
-				strchr(url, OIDC_CHAR_QUERY) != NULL ?
-						OIDC_STR_AMP :
-						OIDC_STR_QUERY;
-		result = apr_psprintf(r->pool, "%s%s%s", url, sep, data.encoded_params);
+		const char *sep = NULL;
+		if (data.encoded_params)
+			sep = strchr(url, OIDC_CHAR_QUERY) != NULL ?
+					OIDC_STR_AMP :
+					OIDC_STR_QUERY;
+		result = apr_psprintf(r->pool, "%s%s%s", url, sep ? sep : "",
+				data.encoded_params ? data.encoded_params : "");
 	} else {
 		result = apr_pstrdup(r->pool, url);
 	}
@@ -581,7 +583,7 @@ static char *oidc_util_http_form_encoded_data(request_rec *r,
 		const apr_table_t *params) {
 	char *data = NULL;
 	if ((params != NULL) && (apr_table_elts(params)->nelts > 0)) {
-		oidc_http_encode_t encode_data = { r, "" };
+		oidc_http_encode_t encode_data = { r, NULL };
 		apr_table_do(oidc_util_http_add_form_url_encoded_param, &encode_data,
 				params,
 				NULL);
@@ -1832,7 +1834,7 @@ void oidc_util_table_add_query_encoded_params(apr_pool_t *pool,
 			key = ap_getword(pool, &val, OIDC_CHAR_EQUAL);
 			ap_unescape_url((char *) key);
 			ap_unescape_url((char *) val);
-			apr_table_addn(table, key, val);
+			apr_table_add(table, key, val);
 		}
 	}
 }
