@@ -1641,7 +1641,7 @@ static apr_byte_t oidc_proto_endpoint_auth_none(request_rec *r,
 		const char *client_id, apr_table_t *params) {
 	oidc_debug(r,
 			"no client secret is configured; calling the token endpoint without client authentication; only public clients are supported");
-	apr_table_addn(params, OIDC_PROTO_CLIENT_ID, client_id);
+	apr_table_add(params, OIDC_PROTO_CLIENT_ID, client_id);
 	return TRUE;
 }
 
@@ -1669,8 +1669,8 @@ static apr_byte_t oidc_proto_endpoint_auth_post(request_rec *r,
 		oidc_error(r, "no client secret is configured");
 		return FALSE;
 	}
-	apr_table_addn(params, OIDC_PROTO_CLIENT_ID, client_id);
-	apr_table_addn(params, OIDC_PROTO_CLIENT_SECRET, client_secret);
+	apr_table_add(params, OIDC_PROTO_CLIENT_ID, client_id);
+	apr_table_add(params, OIDC_PROTO_CLIENT_SECRET, client_secret);
 	return TRUE;
 }
 
@@ -1725,8 +1725,7 @@ static apr_byte_t oidc_proto_jwt_sign_and_add(request_rec *r,
 
 	apr_table_addn(params, OIDC_PROTO_CLIENT_ASSERTION_TYPE,
 			OIDC_PROTO_CLIENT_ASSERTION_TYPE_JWT_BEARER);
-	apr_table_addn(params, OIDC_PROTO_CLIENT_ASSERTION,
-			apr_pstrdup(r->pool, cser));
+	apr_table_add(params, OIDC_PROTO_CLIENT_ASSERTION, cser);
 
 	return TRUE;
 }
@@ -1923,7 +1922,7 @@ static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 	apr_table_addn(params, OIDC_PROTO_GRANT_TYPE,
 			OIDC_PROTO_GRANT_TYPE_AUTHZ_CODE);
 	apr_table_addn(params, OIDC_PROTO_CODE, code);
-	apr_table_addn(params, OIDC_PROTO_REDIRECT_URI, oidc_get_redirect_uri(r, cfg));
+	apr_table_add(params, OIDC_PROTO_REDIRECT_URI, oidc_get_redirect_uri(r, cfg));
 
 	if (code_verifier)
 		apr_table_addn(params, OIDC_PROTO_CODE_VERIFIER, code_verifier);
