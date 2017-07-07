@@ -1,3 +1,9 @@
+07/07/2017
+- use the defined name (`Provided-Token-Binding-ID`) for the provided token binding ID HTTP header
+  see: https://tools.ietf.org/html/draft-campbell-tokbind-ttrp-00#section-2.1
+  depends on mod_token_binding >= 0.3.0 now
+- bump to 2.3.1rc3
+
 06/29/2017
 - support sending the authentication request via HTTP POST through HTML/Javascript autosubmit
 - bump to 2.3.1rc2
