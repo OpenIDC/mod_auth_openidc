@@ -388,34 +388,58 @@ static const char *oidc_get_current_url_scheme(const request_rec *r) {
  */
 static const char *oidc_get_current_url_port(const request_rec *r,
 		const char *scheme_str) {
-	/* first see if there's a proxy/load-balancer in front of us */
+
+	/*
+	 * first see if there's a proxy/load-balancer in front of us
+	 * that sets X-Forwarded-Port
+	 */
 	const char *port_str = oidc_util_hdr_in_x_forwarded_port_get(r);
-	if (port_str == NULL) {
-		/* see if we can get the port from the "X-Forwarded-Host" header */
-		const char *host_hdr = oidc_util_hdr_in_x_forwarded_host_get(r);
-		if (host_hdr) {
-			port_str = strchr(host_hdr, OIDC_CHAR_COLON);
-			if (port_str)
-				port_str++;
-		} else {
-			host_hdr = oidc_util_hdr_in_host_get(r);
-			if (host_hdr)
-				port_str = strchr(host_hdr, OIDC_CHAR_COLON);
-			if (port_str == NULL) {
-				/* if no port was set in the Host header we'll determine it locally */
-				const apr_port_t port = r->connection->local_addr->port;
-				apr_byte_t print_port = TRUE;
-				if ((apr_strnatcmp(scheme_str, "https") == 0) && port == 443)
-					print_port = FALSE;
-				else if ((apr_strnatcmp(scheme_str, "http") == 0) && port == 80)
-					print_port = FALSE;
-				if (print_port)
-					port_str = apr_psprintf(r->pool, "%u", port);
-			} else {
-				port_str++;
-			}
+	if (port_str)
+		return port_str;
+
+	/*
+	 * see if we can get the port from the "X-Forwarded-Host" header
+	 * and if that header was set we'll assume defaults
+	 */
+	const char *host_hdr = oidc_util_hdr_in_x_forwarded_host_get(r);
+	if (host_hdr) {
+		port_str = strchr(host_hdr, OIDC_CHAR_COLON);
+		if (port_str)
+			port_str++;
+		return port_str;
+	}
+
+	/*
+	 * see if we can get the port from the "Host" header; if not
+	 * we'll determine the port locally
+	 */
+	host_hdr = oidc_util_hdr_in_host_get(r);
+	if (host_hdr) {
+		port_str = strchr(host_hdr, OIDC_CHAR_COLON);
+		if (port_str) {
+			port_str++;
+			return port_str;
 		}
 	}
+
+	/*
+	 * if X-Forwarded-Proto assume the default port otherwise the
+	 * port should have been set in the X-Forwarded-Port header
+	 */
+	if (oidc_util_hdr_in_x_forwarded_proto_get(r))
+		return NULL;
+
+	/*
+	 * if no port was set in the Host header and no X-Forwarded-Proto was set, we'll
+	 * determine the port locally and don't print it when it's the default for the protocol
+	 */
+	const apr_port_t port = r->connection->local_addr->port;
+	if ((apr_strnatcmp(scheme_str, "https") == 0) && port == 443)
+		return NULL;
+	else if ((apr_strnatcmp(scheme_str, "http") == 0) && port == 80)
+		return NULL;
+
+	port_str = apr_psprintf(r->pool, "%u", port);
 	return port_str;
 }
 

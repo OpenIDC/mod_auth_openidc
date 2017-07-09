@@ -1,3 +1,8 @@
+07/09/2017
+- refactor oidc_get_current_url_port so that it assumes the default port when
+  X-Forwarded-Proto has been set; closes #282 and may address #278
+- bump to 2.3.1rc4
+
 07/07/2017
 - use the defined name (`Provided-Token-Binding-ID`) for the provided token binding ID HTTP header
   see: https://tools.ietf.org/html/draft-campbell-tokbind-ttrp-00#section-2.1
