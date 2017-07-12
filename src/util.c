@@ -1520,6 +1520,62 @@ error_close:
 }
 
 /*
+ * write data to a file
+ */
+apr_byte_t oidc_util_file_write(request_rec *r, const char *path,
+		const char *data) {
+
+	apr_file_t *fd = NULL;
+	apr_status_t rc = APR_SUCCESS;
+	apr_size_t bytes_written = 0;
+	char s_err[128];
+
+	/* try to open the metadata file for writing, creating it if it does not exist */
+	if ((rc = apr_file_open(&fd, path,
+			(APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE),
+			APR_OS_DEFAULT, r->pool)) != APR_SUCCESS) {
+		oidc_error(r, "file \"%s\" could not be opened (%s)", path,
+				apr_strerror(rc, s_err, sizeof(s_err)));
+		return FALSE;
+	}
+
+	/* lock the file and move the write pointer to the start of it */
+	apr_file_lock(fd, APR_FLOCK_EXCLUSIVE);
+	apr_off_t begin = 0;
+	apr_file_seek(fd, APR_SET, &begin);
+
+	/* calculate the length of the data, which is a string length */
+	apr_size_t len = strlen(data);
+
+	/* (blocking) write the number of bytes in the buffer */
+	rc = apr_file_write_full(fd, data, len, &bytes_written);
+
+	/* check for a system error */
+	if (rc != APR_SUCCESS) {
+		oidc_error(r, "could not write to: \"%s\" (%s)", path,
+				apr_strerror(rc, s_err, sizeof(s_err)));
+		return FALSE;
+	}
+
+	/* check that all bytes from the header were written */
+	if (bytes_written != len) {
+		oidc_error(r,
+				"could not write enough bytes to: \"%s\", bytes_written (%" APR_SIZE_T_FMT ") != len (%" APR_SIZE_T_FMT ")",
+				path, bytes_written, len);
+		return FALSE;
+	}
+
+	/* unlock and close the written file */
+	apr_file_unlock(fd);
+	apr_file_close(fd);
+
+	oidc_debug(r, "file \"%s\" written; number of bytes (%" APR_SIZE_T_FMT ")",
+			path, len);
+
+	return TRUE;
+}
+
+/*
  * see if two provided issuer identifiers match (cq. ignore trailing slash)
  */
 apr_byte_t oidc_util_issuer_match(const char *a, const char *b) {
