@@ -100,7 +100,7 @@ static int oidc_cache_redis_post_config(server_rec *s) {
 	/* parse the host:post tuple from the configuration */
 	if (cfg->cache_redis_server == NULL) {
 		oidc_serror(s,
-				"cache type is set to \"redis\", but no valid OIDCRedisCacheServer setting was found");
+				"cache type is set to \"redis\", but no valid " OIDCRedisCacheServer " setting was found");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -189,12 +189,13 @@ static oidc_cache_redis_ctx_t * oidc_cache_redis_connect(request_rec *r,
 			r->server->process->pool);
 
 	if (rctx == NULL) {
-		rctx = apr_pcalloc(r->server->process->pool, sizeof(oidc_cache_redis_ctx_t));
+		rctx = apr_pcalloc(r->server->process->pool,
+				sizeof(oidc_cache_redis_ctx_t));
 		rctx->ctx = NULL;
 
 		/* store the connection in the process context */
-		apr_pool_userdata_set(rctx, OIDC_CACHE_REDIS_CONTEXT, oidc_cache_redis_free,
-				r->server->process->pool);
+		apr_pool_userdata_set(rctx, OIDC_CACHE_REDIS_CONTEXT,
+				oidc_cache_redis_free, r->server->process->pool);
 	}
 
 	if (rctx->ctx == NULL) {
@@ -205,7 +206,8 @@ static oidc_cache_redis_ctx_t * oidc_cache_redis_connect(request_rec *r,
 		/* check for errors */
 		if ((rctx->ctx == NULL) || (rctx->ctx->err != 0)) {
 			oidc_error(r, "failed to connect to Redis server (%s:%d): '%s'",
-					context->host_str, context->port, rctx->ctx != NULL ? rctx->ctx->errstr : "");
+					context->host_str, context->port,
+					rctx->ctx != NULL ? rctx->ctx->errstr : "");
 			oidc_cache_redis_free(rctx);
 		} else {
 			/* log the connection */

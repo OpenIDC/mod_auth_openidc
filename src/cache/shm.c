@@ -238,7 +238,7 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 					> (cfg->cache_shm_entry_size_max
 							- sizeof(oidc_cache_shm_entry_t)))) {
 		oidc_error(r,
-				"could not store value since value size is too large (%llu > %lu); consider increasing OIDCCacheShmEntrySizeMax",
+				"could not store value since value size is too large (%llu > %lu); consider increasing " OIDCCacheShmEntrySizeMax "",
 				(unsigned long long )strlen(value),
 				(unsigned long )(cfg->cache_shm_entry_size_max
 						- sizeof(oidc_cache_shm_entry_t)));
@@ -294,7 +294,7 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 		age = (current_time - lru->access) / 1000000;
 		if (age < 3600) {
 			oidc_warn(r,
-					"dropping LRU entry with age = %" APR_TIME_T_FMT "s, which is less than one hour; consider increasing the shared memory caching space (which is %d now) with the (global) OIDCCacheShmMax setting.",
+					"dropping LRU entry with age = %" APR_TIME_T_FMT "s, which is less than one hour; consider increasing the shared memory caching space (which is %d now) with the (global) " OIDCCacheShmMax " setting.",
 					age, cfg->cache_shm_size_max);
 		}
 	}

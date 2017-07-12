@@ -97,7 +97,7 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 
 	if (cfg->cache_memcache_servers == NULL) {
 		oidc_serror(s,
-				"cache type is set to \"memcache\", but no valid OIDCMemCacheServers setting was found");
+				"cache type is set to \"memcache\", but no valid " OIDCMemCacheServers " setting was found");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -191,11 +191,14 @@ static char *oidc_cache_memcache_get_key(apr_pool_t *pool, const char *section,
 /*
  * check dead/alive status for all servers
  */
-static apr_byte_t oidc_cache_memcache_status(request_rec *r, oidc_cache_cfg_memcache_t *context) {
+static apr_byte_t oidc_cache_memcache_status(request_rec *r,
+		oidc_cache_cfg_memcache_t *context) {
 	int rc = TRUE;
 	int i;
 	for (i = 0; rc && i < context->cache_memcache->ntotal; i++)
-		rc = rc && (context->cache_memcache->live_servers[0]->status != APR_MC_SERVER_DEAD);
+		rc = rc
+		&& (context->cache_memcache->live_servers[0]->status
+				!= APR_MC_SERVER_DEAD);
 	return rc;
 }
 

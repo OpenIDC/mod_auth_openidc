@@ -84,8 +84,8 @@ static apr_byte_t oidc_proto_generate_random_string(request_rec *r,
  * copied to the protected request object based on the settings specified in the
  * "copy_from_request" JSON array in the request object
  */
-static apr_byte_t oidc_proto_param_needs_copy(
-		json_t *request_object_config, const char *parameter_name) {
+static apr_byte_t oidc_proto_param_needs_copy(json_t *request_object_config,
+		const char *parameter_name) {
 	json_t *copy_from_request = json_object_get(request_object_config,
 			"copy_from_request");
 	size_t index = 0;
@@ -258,7 +258,7 @@ char *oidc_proto_create_request_object(request_rec *r,
 						&klen, (void **) &jwk);
 			} else {
 				oidc_error(r,
-						"no private keys have been configured to use for private_key_jwt client authentication (OIDCPrivateKeyFiles)");
+						"no private keys have been configured to use for private_key_jwt client authentication (" OIDCPrivateKeyFiles ")");
 			}
 			break;
 		case CJOSE_JWK_KTY_OCT:
@@ -498,8 +498,7 @@ static int oidc_proto_html_post(request_rec *r, const char *url,
 	oidc_proto_form_post_ctx_t data = { r, html_body };
 	apr_table_do(oidc_proto_add_form_post_param, &data, params, NULL);
 
-	html_body = apr_psprintf(r->pool, "%s%s", data.html_body,
-			"      </p>\n"
+	html_body = apr_psprintf(r->pool, "%s%s", data.html_body, "      </p>\n"
 			"    </form>\n");
 
 	return oidc_util_html_send(r, "Submitting...", NULL,
@@ -713,8 +712,8 @@ static apr_byte_t oidc_proto_pkce_state_s256(request_rec *r, char **state) {
  */
 static apr_byte_t oidc_proto_pkce_challenge_s256(request_rec *r,
 		const char *state, char **code_challenge) {
-	if (oidc_util_hash_string_and_base64url_encode(r, OIDC_JOSE_ALG_SHA256, state,
-			code_challenge) == FALSE) {
+	if (oidc_util_hash_string_and_base64url_encode(r, OIDC_JOSE_ALG_SHA256,
+			state, code_challenge) == FALSE) {
 		oidc_error(r,
 				"oidc_util_hash_string_and_base64url_encode returned an error for the code verifier");
 		return FALSE;
@@ -1102,7 +1101,8 @@ static apr_byte_t oidc_proto_validate_cnf(request_rec *r, oidc_cfg *cfg,
 
 	tbp_str = oidc_util_get_provided_token_binding_id(r);
 	if (tbp_str == NULL) {
-		oidc_debug(r, "no Provided Token Binding ID environment variable found");
+		oidc_debug(r,
+				"no Provided Token Binding ID environment variable found");
 		goto out_err;
 	}
 
@@ -1113,8 +1113,9 @@ static apr_byte_t oidc_proto_validate_cnf(request_rec *r, oidc_cfg *cfg,
 		return FALSE;
 	}
 
-	if (oidc_jose_hash_bytes(r->pool, OIDC_JOSE_ALG_SHA256, (const unsigned char *) tbp,
-			tbp_len, &tbp_hash, &tbp_hash_len, NULL) == FALSE) {
+	if (oidc_jose_hash_bytes(r->pool, OIDC_JOSE_ALG_SHA256,
+			(const unsigned char *) tbp, tbp_len, &tbp_hash, &tbp_hash_len,
+			NULL) == FALSE) {
 		oidc_warn(r,
 				"hashing Provided Token Binding ID environment variable failed");
 		return FALSE;
@@ -1779,7 +1780,7 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r,
 
 	if (cfg->private_keys == NULL) {
 		oidc_error(r,
-				"no private keys have been configured to use for private_key_jwt client authentication (OIDCPrivateKeyFiles)");
+				"no private keys have been configured to use for private_key_jwt client authentication (" OIDCPrivateKeyFiles ")");
 		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
@@ -1922,7 +1923,8 @@ static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 	apr_table_setn(params, OIDC_PROTO_GRANT_TYPE,
 			OIDC_PROTO_GRANT_TYPE_AUTHZ_CODE);
 	apr_table_setn(params, OIDC_PROTO_CODE, code);
-	apr_table_set(params, OIDC_PROTO_REDIRECT_URI, oidc_get_redirect_uri(r, cfg));
+	apr_table_set(params, OIDC_PROTO_REDIRECT_URI,
+			oidc_get_redirect_uri(r, cfg));
 
 	if (code_verifier)
 		apr_table_setn(params, OIDC_PROTO_CODE_VERIFIER, code_verifier);
@@ -2762,7 +2764,8 @@ static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r,
 	char *code_verifier = NULL;
 
 	if (provider->pkce != NULL)
-		provider->pkce->verifier(r, oidc_proto_state_get_pkce_state(proto_state), &code_verifier);
+		provider->pkce->verifier(r,
+				oidc_proto_state_get_pkce_state(proto_state), &code_verifier);
 
 	const char *state = oidc_proto_state_get_state(proto_state);
 

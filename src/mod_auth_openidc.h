@@ -619,6 +619,23 @@ authz_status oidc_authz_worker24(request_rec *r, const json_t * const claims, co
 int oidc_oauth_return_www_authenticate(request_rec *r, const char *error, const char *error_description);
 
 // oidc_config.c
+
+#define OIDCPrivateKeyFiles                  "OIDCPrivateKeyFiles"
+#define OIDCRedirectURI                      "OIDCRedirectURI"
+#define OIDCDefaultURL                       "OIDCDefaultURL"
+#define OIDCCookieDomain                     "OIDCCookieDomain"
+#define OIDCClaimPrefix                      "OIDCClaimPrefix"
+#define OIDCRemoteUserClaim                  "OIDCRemoteUserClaim"
+#define OIDCOAuthRemoteUserClaim             "OIDCOAuthRemoteUserClaim"
+#define OIDCSessionType                      "OIDCSessionType"
+#define OIDCMemCacheServers                  "OIDCMemCacheServers"
+#define OIDCCacheShmMax                      "OIDCCacheShmMax"
+#define OIDCCacheShmEntrySizeMax             "OIDCCacheShmEntrySizeMax"
+#define OIDCRedisCacheServer                 "OIDCRedisCacheServer"
+#define OIDCCookiePath                       "OIDCCookiePath"
+#define OIDCInfoHook                         "OIDCInfoHook"
+#define OIDCWhiteListedClaims                "OIDCWhiteListedClaims"
+
 void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr);
 void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD);
 void *oidc_create_dir_config(apr_pool_t *pool, char *path);

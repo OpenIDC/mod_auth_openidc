@@ -160,6 +160,97 @@
 /* define the default HTTP method used to send the authentication request to the provider */
 #define OIDC_DEFAULT_AUTH_REQUEST_METHOD OIDC_AUTH_REQUEST_METHOD_GET
 
+#define OIDCProviderMetadataURL              "OIDCProviderMetadataURL"
+#define OIDCProviderIssuer                   "OIDCProviderIssuer"
+#define OIDCProviderAuthorizationEndpoint    "OIDCProviderAuthorizationEndpoint"
+#define OIDCProviderTokenEndpoint            "OIDCProviderTokenEndpoint"
+#define OIDCProviderTokenEndpointAuth        "OIDCProviderTokenEndpointAuth"
+#define OIDCProviderTokenEndpointParams      "OIDCProviderTokenEndpointParams"
+#define OIDCProviderRegistrationEndpointJson "OIDCProviderRegistrationEndpointJson"
+#define OIDCProviderUserInfoEndpoint         "OIDCProviderUserInfoEndpoint"
+#define OIDCProviderCheckSessionIFrame       "OIDCProviderCheckSessionIFrame"
+#define OIDCProviderEndSessionEndpoint       "OIDCProviderEndSessionEndpoint"
+#define OIDCProviderJwksUri                  "OIDCProviderJwksUri"
+#define OIDCResponseType                     "OIDCResponseType"
+#define OIDCResponseMode                     "OIDCResponseMode"
+#define OIDCPublicKeyFiles                   "OIDCPublicKeyFiles"
+#define OIDCClientJwksUri                    "OIDCClientJwksUri"
+#define OIDCIDTokenSignedResponseAlg         "OIDCIDTokenSignedResponseAlg"
+#define OIDCIDTokenEncryptedResponseAlg      "OIDCIDTokenEncryptedResponseAlg"
+#define OIDCIDTokenEncryptedResponseEnc      "OIDCIDTokenEncryptedResponseEnc"
+#define OIDCUserInfoSignedResponseAlg        "OIDCUserInfoSignedResponseAlg"
+#define OIDCUserInfoEncryptedResponseAlg     "OIDCUserInfoEncryptedResponseAlg"
+#define OIDCUserInfoEncryptedResponseEnc     "OIDCUserInfoEncryptedResponseEnc"
+#define OIDCUserInfoTokenMethod              "OIDCUserInfoTokenMethod"
+#define OIDCTokenBindingPolicy               "OIDCTokenBindingPolicy"
+#define OIDCSSLValidateServer                "OIDCSSLValidateServer"
+#define OIDCClientName                       "OIDCClientName"
+#define OIDCClientContact                    "OIDCClientContact"
+#define OIDCScope                            "OIDCScope"
+#define OIDCPathScope                        "OIDCPathScope"
+#define OIDCJWKSRefreshInterval              "OIDCJWKSRefreshInterval"
+#define OIDCIDTokenIatSlack                  "OIDCIDTokenIatSlack"
+#define OIDCSessionMaxDuration               "OIDCSessionMaxDuration"
+#define OIDCAuthRequestParams                "OIDCAuthRequestParams"
+#define OIDCPathAuthRequestParams            "OIDCPathAuthRequestParams"
+#define OIDCPKCEMethod                       "OIDCPKCEMethod"
+#define OIDCClientID                         "OIDCClientID"
+#define OIDCClientSecret                     "OIDCClientSecret"
+#define OIDCClientTokenEndpointCert          "OIDCClientTokenEndpointCert"
+#define OIDCClientTokenEndpointKey           "OIDCClientTokenEndpointKey"
+#define OIDCDefaultLoggedOutURL              "OIDCDefaultLoggedOutURL"
+#define OIDCCookieHTTPOnly                   "OIDCCookieHTTPOnly"
+#define OIDCCookieSameSite                   "OIDCCookieSameSite"
+#define OIDCOutgoingProxy                    "OIDCOutgoingProxy"
+#define OIDCCryptoPassphrase                 "OIDCCryptoPassphrase"
+#define OIDCClaimDelimiter                   "OIDCClaimDelimiter"
+#define OIDCPassIDTokenAs                    "OIDCPassIDTokenAs"
+#define OIDCOAuthClientID                    "OIDCOAuthClientID"
+#define OIDCOAuthClientSecret                "OIDCOAuthClientSecret"
+#define OIDCOAuthIntrospectionEndpoint       "OIDCOAuthIntrospectionEndpoint"
+#define OIDCOAuthIntrospectionEndpointMethod "OIDCOAuthIntrospectionEndpointMethod"
+#define OIDCOAuthIntrospectionEndpointParams "OIDCOAuthIntrospectionEndpointParams"
+#define OIDCOAuthIntrospectionEndpointAuth   "OIDCOAuthIntrospectionEndpointAuth"
+#define OIDCOAuthIntrospectionEndpointCert   "OIDCOAuthIntrospectionEndpointCert"
+#define OIDCOAuthIntrospectionEndpointKey    "OIDCOAuthIntrospectionEndpointKey"
+#define OIDCOAuthIntrospectionTokenParamName "OIDCOAuthIntrospectionTokenParamName"
+#define OIDCOAuthTokenExpiryClaim            "OIDCOAuthTokenExpiryClaim"
+#define OIDCOAuthSSLValidateServer           "OIDCOAuthSSLValidateServer"
+#define OIDCOAuthVerifyCertFiles             "OIDCOAuthVerifyCertFiles"
+#define OIDCOAuthVerifySharedKeys            "OIDCOAuthVerifySharedKeys"
+#define OIDCOAuthVerifyJwksUri               "OIDCOAuthVerifyJwksUri"
+#define OIDCHTTPTimeoutLong                  "OIDCHTTPTimeoutLong"
+#define OIDCHTTPTimeoutShort                 "OIDCHTTPTimeoutShort"
+#define OIDCStateTimeout                     "OIDCStateTimeout"
+#define OIDCSessionInactivityTimeout         "OIDCSessionInactivityTimeout"
+#define OIDCMetadataDir                      "OIDCMetadataDir"
+#define OIDCSessionCacheFallbackToCookie     "OIDCSessionCacheFallbackToCookie"
+#define OIDCSessionCookieChunkSize           "OIDCSessionCookieChunkSize"
+#define OIDCScrubRequestHeaders              "OIDCScrubRequestHeaders"
+#define OIDCCacheType                        "OIDCCacheType"
+#define OIDCCacheEncrypt                     "OIDCCacheEncrypt"
+#define OIDCCacheDir                         "OIDCCacheDir"
+#define OIDCCacheFileCleanInterval           "OIDCCacheFileCleanInterval"
+#define OIDCRedisCachePassword               "OIDCRedisCachePassword"
+#define OIDCHTMLErrorTemplate                "OIDCHTMLErrorTemplate"
+#define OIDCDiscoverURL                      "OIDCDiscoverURL"
+#define OIDCPassCookies                      "OIDCPassCookies"
+#define OIDCStripCookies                     "OIDCStripCookies"
+#define OIDCAuthNHeader                      "OIDCAuthNHeader"
+#define OIDCCookie                           "OIDCCookie"
+#define OIDCUnAuthAction                     "OIDCUnAuthAction"
+#define OIDCUnAutzAction                     "OIDCUnAutzAction"
+#define OIDCPassClaimsAs                     "OIDCPassClaimsAs"
+#define OIDCOAuthAcceptTokenAs               "OIDCOAuthAcceptTokenAs"
+#define OIDCUserInfoRefreshInterval          "OIDCUserInfoRefreshInterval"
+#define OIDCOAuthTokenIntrospectionInterval  "OIDCOAuthTokenIntrospectionInterval"
+#define OIDCPreservePost                     "OIDCPreservePost"
+#define OIDCPassRefreshToken                 "OIDCPassRefreshToken"
+#define OIDCRequestObject                    "OIDCRequestObject"
+#define OIDCProviderMetadataRefreshInterval  "OIDCProviderMetadataRefreshInterval"
+#define OIDCProviderAuthRequestMethod        "OIDCProviderAuthRequestMethod"
+#define OIDCBlackListedClaims                "OIDCBlackListedClaims"
+
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 /*
@@ -252,14 +343,16 @@ static const char *oidc_set_url_slot(cmd_parms *cmd, void *ptr, const char *arg)
 /*
  * set a relative or absolute URL value in the server config
  */
-static const char *oidc_set_relative_or_absolute_url_slot(cmd_parms *cmd, void *ptr, const char *arg) {
+static const char *oidc_set_relative_or_absolute_url_slot(cmd_parms *cmd,
+		void *ptr, const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
-  if (arg[0] == OIDC_CHAR_FORWARD_SLASH) {
+	if (arg[0] == OIDC_CHAR_FORWARD_SLASH) {
 		// relative uri
 		apr_uri_t uri;
 		if (apr_uri_parse(cmd->pool, arg, &uri) != APR_SUCCESS) {
-			const char *rv = apr_psprintf(cmd->pool, "cannot parse '%s' as relative URI", arg);
+			const char *rv = apr_psprintf(cmd->pool,
+					"cannot parse '%s' as relative URI", arg);
 			return OIDC_CONFIG_DIR_RV(cmd, rv);
 		} else {
 			return ap_set_string_slot(cmd, cfg, arg);
@@ -595,10 +688,11 @@ static const char *oidc_set_private_key_files_enc(cmd_parms *cmd, void *dummy,
 	if (rv != NULL)
 		return rv;
 
-	if (oidc_jwk_parse_rsa_private_key(cmd->pool, kid, fname, &jwk, &err) == FALSE) {
+	if (oidc_jwk_parse_rsa_private_key(cmd->pool, kid, fname, &jwk,
+			&err) == FALSE) {
 		return apr_psprintf(cmd->pool,
-				"oidc_jwk_parse_rsa_private_key failed for (kid=%s) \"%s\": %s", kid, fname,
-				oidc_jose_e2s(cmd->pool, err));
+				"oidc_jwk_parse_rsa_private_key failed for (kid=%s) \"%s\": %s",
+				kid, fname, oidc_jose_e2s(cmd->pool, err));
 	}
 
 	if (cfg->private_keys == NULL)
@@ -806,8 +900,7 @@ static const char * oidc_set_filtered_claims(cmd_parms *cmd, void *m,
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
 	int offset = (int) (long) cmd->info;
-	apr_hash_t **list =
-			(apr_hash_t **) ((char *) cfg + offset);
+	apr_hash_t **list = (apr_hash_t **) ((char *) cfg + offset);
 	if (*list == NULL)
 		*list = apr_hash_make(cmd->pool);
 	apr_hash_set(*list, arg, APR_HASH_KEY_STRING, arg);
@@ -829,15 +922,16 @@ static const char *oidc_set_token_binding_policy(cmd_parms *cmd,
 /*
  * set the claim prefix
  */
-static const char *oidc_cfg_set_claim_prefix(cmd_parms *cmd, void *struct_ptr, const char *args) {
+static const char *oidc_cfg_set_claim_prefix(cmd_parms *cmd, void *struct_ptr,
+		const char *args) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
-    char *w = ap_getword_conf(cmd->pool, &args);
-    if (*w == '\0' || *args != 0)
-    	cfg->claim_prefix = "";
-    else
-    	cfg->claim_prefix = w;
-    return NULL;
+	char *w = ap_getword_conf(cmd->pool, &args);
+	if (*w == '\0' || *args != 0)
+		cfg->claim_prefix = "";
+	else
+		cfg->claim_prefix = w;
+	return NULL;
 }
 
 /*
@@ -1340,8 +1434,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			apr_strnatcmp(add->claim_delimiter, OIDC_DEFAULT_CLAIM_DELIMITER)
 			!= 0 ? add->claim_delimiter : base->claim_delimiter;
 	c->claim_prefix =
-			add->claim_prefix != NULL ?
-					add->claim_prefix : base->claim_prefix;
+			add->claim_prefix != NULL ? add->claim_prefix : base->claim_prefix;
 	c->remote_user_claim.claim_name =
 			apr_strnatcmp(add->remote_user_claim.claim_name,
 					OIDC_DEFAULT_CLAIM_REMOTE_USER) != 0 ?
@@ -1647,7 +1740,8 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->pass_refresh_token : base->pass_refresh_token;
 	c->path_auth_request_params =
 			add->path_auth_request_params != NULL ?
-					add->path_auth_request_params : base->path_auth_request_params;
+					add->path_auth_request_params :
+					base->path_auth_request_params;
 	c->path_scope =
 			add->path_scope != NULL ? add->path_scope : base->path_scope;
 
@@ -1673,38 +1767,38 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 	if ((c->metadata_dir == NULL) && (c->provider.issuer == NULL)
 			&& (c->provider.metadata_url == NULL)) {
 		oidc_serror(s,
-				"one of 'OIDCProviderIssuer', 'OIDCProviderMetadataURL' or 'OIDCMetadataDir' must be set");
+				"one of '" OIDCProviderIssuer "', '" OIDCProviderMetadataURL "' or '" OIDCMetadataDir "' must be set");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
 	if (c->redirect_uri == NULL)
-		return oidc_check_config_error(s, "OIDCRedirectURI");
+		return oidc_check_config_error(s, OIDCRedirectURI);
 	redirect_uri_is_relative = (c->redirect_uri[0] == OIDC_CHAR_FORWARD_SLASH);
 
 	if (c->crypto_passphrase == NULL)
-		return oidc_check_config_error(s, "OIDCCryptoPassphrase");
+		return oidc_check_config_error(s, OIDCCryptoPassphrase);
 
 	if (c->metadata_dir == NULL) {
 		if (c->provider.metadata_url == NULL) {
 			if (c->provider.issuer == NULL)
-				return oidc_check_config_error(s, "OIDCProviderIssuer");
+				return oidc_check_config_error(s, OIDCProviderIssuer);
 			if (c->provider.authorization_endpoint_url == NULL)
 				return oidc_check_config_error(s,
-						"OIDCProviderAuthorizationEndpoint");
+						OIDCProviderAuthorizationEndpoint);
 		} else {
 			apr_uri_parse(s->process->pconf, c->provider.metadata_url, &r_uri);
 			if (apr_strnatcmp(r_uri.scheme, "http") == 0) {
 				oidc_swarn(s,
-						"the URL scheme (%s) of the configured OIDCProviderMetadataURL SHOULD be \"https\" for security reasons!",
+						"the URL scheme (%s) of the configured " OIDCProviderMetadataURL " SHOULD be \"https\" for security reasons!",
 						r_uri.scheme);
 			}
 		}
 		if (c->provider.client_id == NULL)
-			return oidc_check_config_error(s, "OIDCClientID");
+			return oidc_check_config_error(s, OIDCClientID);
 	} else {
 		if (c->provider.metadata_url != NULL) {
 			oidc_serror(s,
-					"only one of 'OIDCProviderMetadataURL' or 'OIDCMetadataDir' should be set");
+					"only one of '" OIDCProviderMetadataURL "' or '" OIDCMetadataDir "' should be set");
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 	}
@@ -1713,17 +1807,19 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 	if (!redirect_uri_is_relative) {
 		if (apr_strnatcmp(r_uri.scheme, "https") != 0) {
 			oidc_swarn(s,
-					"the URL scheme (%s) of the configured OIDCRedirectURI SHOULD be \"https\" for security reasons (moreover: some Providers may reject non-HTTPS URLs)",
+					"the URL scheme (%s) of the configured " OIDCRedirectURI " SHOULD be \"https\" for security reasons (moreover: some Providers may reject non-HTTPS URLs)",
 					r_uri.scheme);
 		}
 	}
 
 	if (c->cookie_domain != NULL) {
 		if (redirect_uri_is_relative) {
-				oidc_swarn(s,	"if the configured OIDCRedirectURI is relative, OIDCCookieDomain SHOULD be empty");
-		} else if (!oidc_util_cookie_domain_valid(r_uri.hostname, c->cookie_domain)) {
+			oidc_swarn(s,
+					"if the configured " OIDCRedirectURI " is relative, " OIDCCookieDomain " SHOULD be empty");
+		} else if (!oidc_util_cookie_domain_valid(r_uri.hostname,
+				c->cookie_domain)) {
 			oidc_serror(s,
-					"the domain (%s) configured in OIDCCookieDomain does not match the URL hostname (%s) of the configured OIDCRedirectURI (%s): setting \"state\" and \"session\" cookies will not work!",
+					"the domain (%s) configured in " OIDCCookieDomain " does not match the URL hostname (%s) of the configured " OIDCRedirectURI " (%s): setting \"state\" and \"session\" cookies will not work!",
 					c->cookie_domain, r_uri.hostname, c->redirect_uri);
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
@@ -1743,7 +1839,7 @@ static int oidc_check_config_oauth(server_rec *s, oidc_cfg *c) {
 				&& (c->oauth.verify_public_keys == NULL)
 				&& (c->oauth.verify_shared_keys == NULL)) {
 			oidc_serror(s,
-					"one of 'OIDCOAuthIntrospectionEndpoint', 'OIDCOAuthVerifyJwksUri', 'OIDCOAuthVerifySharedKeys' or 'OIDCOAuthVerifyCertFiles' must be set");
+					"one of '" OIDCOAuthIntrospectionEndpoint "', '" OIDCOAuthVerifyJwksUri "', '" OIDCOAuthVerifySharedKeys "' or '" OIDCOAuthVerifyCertFiles "' must be set");
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 
@@ -1751,7 +1847,7 @@ static int oidc_check_config_oauth(server_rec *s, oidc_cfg *c) {
 			|| (c->oauth.verify_public_keys != NULL)
 			|| (c->oauth.verify_shared_keys != NULL)) {
 		oidc_serror(s,
-				"only 'OIDCOAuthIntrospectionEndpoint' OR one (or more) out of ('OIDCOAuthVerifyJwksUri', 'OIDCOAuthVerifySharedKeys' or 'OIDCOAuthVerifyCertFiles') must be set");
+				"only '" OIDCOAuthIntrospectionEndpoint "' OR one (or more) out of ('" OIDCOAuthVerifyJwksUri "', '" OIDCOAuthVerifySharedKeys "' or '" OIDCOAuthVerifyCertFiles "') must be set");
 		return HTTP_INTERNAL_SERVER_ERROR;
 
 	}
@@ -2069,513 +2165,539 @@ void oidc_register_hooks(apr_pool_t *pool) {
  */
 const command_rec oidc_config_cmds[] = {
 
-		AP_INIT_TAKE1("OIDCProviderMetadataURL", oidc_set_string_slot,
+		AP_INIT_TAKE1(OIDCProviderMetadataURL, oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.metadata_url),
 				RSRC_CONF,
 				"OpenID Connect OP configuration metadata URL."),
-		AP_INIT_TAKE1("OIDCProviderIssuer", oidc_set_string_slot,
+		AP_INIT_TAKE1(OIDCProviderIssuer, oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.issuer),
 				RSRC_CONF,
 				"OpenID Connect OP issuer identifier."),
-		AP_INIT_TAKE1("OIDCProviderAuthorizationEndpoint",
+		AP_INIT_TAKE1(OIDCProviderAuthorizationEndpoint,
 				oidc_set_https_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.authorization_endpoint_url),
 				RSRC_CONF,
 				"Define the OpenID OP Authorization Endpoint URL (e.g.: https://localhost:9031/as/authorization.oauth2)"),
-		AP_INIT_TAKE1("OIDCProviderTokenEndpoint",
+		AP_INIT_TAKE1(OIDCProviderTokenEndpoint,
 				oidc_set_https_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.token_endpoint_url),
 				RSRC_CONF,
 				"Define the OpenID OP Token Endpoint URL (e.g.: https://localhost:9031/as/token.oauth2)"),
-		AP_INIT_TAKE1("OIDCProviderTokenEndpointAuth",
+		AP_INIT_TAKE1(OIDCProviderTokenEndpointAuth,
 				oidc_set_endpoint_auth_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.token_endpoint_auth),
 				RSRC_CONF,
 				"Specify an authentication method for the OpenID OP Token Endpoint (e.g.: client_secret_basic)"),
-		AP_INIT_TAKE1("OIDCProviderTokenEndpointParams",
+		AP_INIT_TAKE1(OIDCProviderTokenEndpointParams,
 				oidc_set_string_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.token_endpoint_params),
 				RSRC_CONF,
 				"Define extra parameters that will be posted to the OpenID OP Token Endpoint (e.g.: param1=value1&param2=value2, all urlencoded)."),
-		AP_INIT_TAKE1("OIDCProviderRegistrationEndpointJson",
+		AP_INIT_TAKE1(OIDCProviderRegistrationEndpointJson,
 				oidc_set_string_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.registration_endpoint_json),
 				RSRC_CONF,
 				"Define a JSON object with parameters that will be merged into the client registration request to the OpenID OP Registration Endpoint (e.g.: { \"request_uris\" : [ \"https://example.com/uri\"] })."),
-		AP_INIT_TAKE1("OIDCProviderUserInfoEndpoint",
+		AP_INIT_TAKE1(OIDCProviderUserInfoEndpoint,
 				oidc_set_https_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.userinfo_endpoint_url),
 				RSRC_CONF,
 				"Define the OpenID OP UserInfo Endpoint URL (e.g.: https://localhost:9031/idp/userinfo.openid)"),
-		AP_INIT_TAKE1("OIDCProviderCheckSessionIFrame",
+		AP_INIT_TAKE1(OIDCProviderCheckSessionIFrame,
 				oidc_set_url_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.check_session_iframe),
 				RSRC_CONF,
 				"Define the OpenID OP Check Session iFrame URL."),
-		AP_INIT_TAKE1("OIDCProviderEndSessionEndpoint",
+		AP_INIT_TAKE1(OIDCProviderEndSessionEndpoint,
 				oidc_set_url_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.end_session_endpoint),
 				RSRC_CONF,
 				"Define the OpenID OP End Session Endpoint URL."),
-		AP_INIT_TAKE1("OIDCProviderJwksUri",
+		AP_INIT_TAKE1(OIDCProviderJwksUri,
 				oidc_set_https_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.jwks_uri),
 				RSRC_CONF,
 				"Define the OpenID OP JWKS URL (e.g.: https://localhost:9031/pf/JWKS)"),
-		AP_INIT_TAKE1("OIDCResponseType",
+		AP_INIT_TAKE1(OIDCResponseType,
 				oidc_set_response_type,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.response_type),
 				RSRC_CONF,
 				"The response type (or OpenID Connect Flow) used; must be one of \"code\", \"id_token\", \"id_token token\", \"code id_token\", \"code token\" or \"code id_token token\" (serves as default value for discovered OPs too)"),
-		AP_INIT_TAKE1("OIDCResponseMode",
+		AP_INIT_TAKE1(OIDCResponseMode,
 				oidc_set_response_mode,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.response_mode),
 				RSRC_CONF,
 				"The response mode used; must be one of \"fragment\", \"query\" or \"form_post\" (serves as default value for discovered OPs too)"),
 
-		AP_INIT_ITERATE("OIDCPublicKeyFiles",
+		AP_INIT_ITERATE(OIDCPublicKeyFiles,
 				oidc_set_public_key_files,
 				(void *)APR_OFFSETOF(oidc_cfg, public_keys),
 				RSRC_CONF,
 				"The fully qualified names of the files that contain the X.509 certificates that contains the RSA public keys that can be used for encryption by the OP."),
-		AP_INIT_ITERATE("OIDCPrivateKeyFiles", oidc_set_private_key_files_enc,
+		AP_INIT_ITERATE(OIDCPrivateKeyFiles,
+				oidc_set_private_key_files_enc,
 				NULL,
 				RSRC_CONF,
 				"The fully qualified names of the files that contain the RSA private keys that can be used to decrypt content sent to us by the OP."),
 
-		AP_INIT_TAKE1("OIDCClientJwksUri",
+		AP_INIT_TAKE1(OIDCClientJwksUri,
 				oidc_set_https_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.client_jwks_uri),
 				RSRC_CONF,
 				"Define the Client JWKS URL (e.g.: https://localhost/protected/?jwks=rsa)"),
-		AP_INIT_TAKE1("OIDCIDTokenSignedResponseAlg",
+		AP_INIT_TAKE1(OIDCIDTokenSignedResponseAlg,
 				oidc_set_signed_response_alg,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.id_token_signed_response_alg),
 				RSRC_CONF,
 				"The algorithm that the OP should use to sign the id_token (used only in dynamic client registration); must be one of [RS256|RS384|RS512|PS256|PS384|PS512|HS256|HS384|HS512]"),
-		AP_INIT_TAKE1("OIDCIDTokenEncryptedResponseAlg",
+		AP_INIT_TAKE1(OIDCIDTokenEncryptedResponseAlg,
 				oidc_set_encrypted_response_alg,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.id_token_encrypted_response_alg),
 				RSRC_CONF,
 				"The algorithm that the OP should use to encrypt the Content Encryption Key that is used to encrypt the id_token (used only in dynamic client registration); must be one of [RSA1_5|A128KW|A256KW|RSA-OAEP]"),
-		AP_INIT_TAKE1("OIDCIDTokenEncryptedResponseEnc",
+		AP_INIT_TAKE1(OIDCIDTokenEncryptedResponseEnc,
 				oidc_set_encrypted_response_enc,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.id_token_encrypted_response_enc),
 				RSRC_CONF,
 				"The algorithm that the OP should use to encrypt to the id_token with the Content Encryption Key (used only in dynamic client registration); must be one of [A128CBC-HS256|A256CBC-HS512|A128GCM|A192GCM|A256GCM]"),
-		AP_INIT_TAKE1("OIDCUserInfoSignedResponseAlg",
+		AP_INIT_TAKE1(OIDCUserInfoSignedResponseAlg,
 				oidc_set_signed_response_alg,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.userinfo_signed_response_alg),
 				RSRC_CONF,
 				"The algorithm that the OP should use to sign the UserInfo response (used only in dynamic client registration); must be one of [RS256|RS384|RS512|PS256|PS384|PS512|HS256|HS384|HS512]"),
-		AP_INIT_TAKE1("OIDCUserInfoEncryptedResponseAlg",
+		AP_INIT_TAKE1(OIDCUserInfoEncryptedResponseAlg,
 				oidc_set_encrypted_response_alg,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.userinfo_encrypted_response_alg),
 				RSRC_CONF,
 				"The algorithm that the OP should use to encrypt the Content Encryption Key that is used to encrypt the UserInfo response (used only in dynamic client registration); must be one of [RSA1_5|A128KW|A256KW|RSA-OAEP]"),
-		AP_INIT_TAKE1("OIDCUserInfoEncryptedResponseEnc",
+		AP_INIT_TAKE1(OIDCUserInfoEncryptedResponseEnc,
 				oidc_set_encrypted_response_enc,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.userinfo_encrypted_response_enc),
 				RSRC_CONF,
 				"The algorithm that the OP should use to encrypt to encrypt the UserInfo response with the Content Encryption Key (used only in dynamic client registration); must be one of [A128CBC-HS256|A256CBC-HS512|A128GCM|A192GCM|A256GCM]"),
-		AP_INIT_TAKE1("OIDCUserInfoTokenMethod",
+		AP_INIT_TAKE1(OIDCUserInfoTokenMethod,
 				oidc_set_userinfo_token_method,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.userinfo_token_method),
 				RSRC_CONF,
 				"The method that is used to present the access token to the userinfo endpoint; must be one of [authz_header|post_param]"),
-		AP_INIT_TAKE1("OIDCTokenBindingPolicy",
+		AP_INIT_TAKE1(OIDCTokenBindingPolicy,
 				oidc_set_token_binding_policy,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.token_binding_policy),
 				RSRC_CONF,
 				"The token binding policy used with the provider; must be one of [disabled|optional|required|enforced]"),
 
-		AP_INIT_TAKE1("OIDCSSLValidateServer",
+		AP_INIT_TAKE1(OIDCSSLValidateServer,
 				oidc_set_ssl_validate_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.ssl_validate_server),
 				RSRC_CONF,
 				"Require validation of the OpenID Connect OP SSL server certificate for successful authentication (On or Off)"),
-		AP_INIT_TAKE1("OIDCClientName",
+		AP_INIT_TAKE1(OIDCClientName,
 				oidc_set_string_slot,
 				(void *) APR_OFFSETOF(oidc_cfg, provider.client_name),
 				RSRC_CONF,
 				"Define the (client_name) name that the client uses for dynamic registration to the OP."),
-		AP_INIT_TAKE1("OIDCClientContact",
+		AP_INIT_TAKE1(OIDCClientContact,
 				oidc_set_string_slot,
 				(void *) APR_OFFSETOF(oidc_cfg, provider.client_contact),
 				RSRC_CONF,
 				"Define the contact that the client registers in dynamic registration with the OP."),
-		AP_INIT_TAKE1("OIDCScope",
+		AP_INIT_TAKE1(OIDCScope,
 				oidc_set_string_slot,
 				(void *) APR_OFFSETOF(oidc_cfg, provider.scope),
 				RSRC_CONF,
 				"Define the OpenID Connect scope that is requested from the OP."),
-		AP_INIT_TAKE1("OIDCPathScope",
+		AP_INIT_TAKE1(OIDCPathScope,
 				ap_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_dir_cfg, path_scope),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Define the OpenID Connect scope that is requested from all providers for a specific path/context."),
-		AP_INIT_TAKE1("OIDCJWKSRefreshInterval",
+		AP_INIT_TAKE1(OIDCJWKSRefreshInterval,
 				oidc_set_jwks_refresh_interval,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.jwks_refresh_interval),
 				RSRC_CONF,
 				"Duration in seconds after which retrieved JWS should be refreshed."),
-		AP_INIT_TAKE1("OIDCIDTokenIatSlack",
+		AP_INIT_TAKE1(OIDCIDTokenIatSlack,
 				oidc_set_idtoken_iat_slack,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.idtoken_iat_slack),
 				RSRC_CONF,
 				"Acceptable offset (both before and after) for checking the \"iat\" (= issued at) timestamp in the id_token."),
-		AP_INIT_TAKE1("OIDCSessionMaxDuration",
+		AP_INIT_TAKE1(OIDCSessionMaxDuration,
 				oidc_set_session_max_duration,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.session_max_duration),
 				RSRC_CONF,
 				"Maximum duration of a session in seconds."),
-		AP_INIT_TAKE1("OIDCAuthRequestParams",
+		AP_INIT_TAKE1(OIDCAuthRequestParams,
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.auth_request_params),
 				RSRC_CONF,
 				"Extra parameters that need to be sent in the Authorization Request (must be query-encoded like \"display=popup&prompt=consent\"."),
-		AP_INIT_TAKE1("OIDCPathAuthRequestParams",
+		AP_INIT_TAKE1(OIDCPathAuthRequestParams,
 				ap_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_dir_cfg, path_auth_request_params),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Extra parameters that need to be sent in the Authorization Request (must be query-encoded like \"display=popup&prompt=consent\"."),
-		AP_INIT_TAKE1("OIDCPKCEMethod",
+		AP_INIT_TAKE1(OIDCPKCEMethod,
 				oidc_set_pkce_method,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.pkce),
 				RSRC_CONF,
 				"The RFC 7636 PCKE mode used; must be one of \"plain\", \"S256\" or \"referred_tb\""),
 
-		AP_INIT_TAKE1("OIDCClientID", oidc_set_string_slot,
+		AP_INIT_TAKE1(OIDCClientID,
+				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.client_id),
 				RSRC_CONF,
 				"Client identifier used in calls to OpenID Connect OP."),
-		AP_INIT_TAKE1("OIDCClientSecret", oidc_set_string_slot,
+		AP_INIT_TAKE1(OIDCClientSecret,
+				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.client_secret),
 				RSRC_CONF,
 				"Client secret used in calls to OpenID Connect OP."),
 
-		AP_INIT_TAKE1("OIDCClientTokenEndpointCert", oidc_set_string_slot,
+		AP_INIT_TAKE1(OIDCClientTokenEndpointCert,
+				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.token_endpoint_tls_client_cert),
 				RSRC_CONF,
 				"TLS client certificate used for calls to OpenID Connect OP token endpoint."),
-		AP_INIT_TAKE1("OIDCClientTokenEndpointKey", oidc_set_string_slot,
+		AP_INIT_TAKE1(OIDCClientTokenEndpointKey,
+				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.token_endpoint_tls_client_key),
 				RSRC_CONF,
 				"TLS client certificate private key used for calls to OpenID Connect OP token endpoint."),
 
-		AP_INIT_TAKE1("OIDCRedirectURI", oidc_set_relative_or_absolute_url_slot,
+		AP_INIT_TAKE1(OIDCRedirectURI,
+				oidc_set_relative_or_absolute_url_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, redirect_uri),
 				RSRC_CONF,
 				"Define the Redirect URI (e.g.: https://localhost:9031/protected/example/)"),
-		AP_INIT_TAKE1("OIDCDefaultURL", oidc_set_url_slot,
+		AP_INIT_TAKE1(OIDCDefaultURL,
+				oidc_set_url_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, default_sso_url),
 				RSRC_CONF,
 				"Defines the default URL where the user is directed to in case of 3rd-party initiated SSO."),
-		AP_INIT_TAKE1("OIDCDefaultLoggedOutURL",
+		AP_INIT_TAKE1(OIDCDefaultLoggedOutURL,
 				oidc_set_url_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, default_slo_url),
 				RSRC_CONF,
 				"Defines the default URL where the user is directed to after logout."),
-		AP_INIT_TAKE1("OIDCCookieDomain",
-				oidc_set_cookie_domain, NULL, RSRC_CONF,
+		AP_INIT_TAKE1(OIDCCookieDomain,
+				oidc_set_cookie_domain,
+				NULL,
+				RSRC_CONF,
 				"Specify domain element for OIDC session cookie."),
-		AP_INIT_FLAG("OIDCCookieHTTPOnly",
+		AP_INIT_FLAG(OIDCCookieHTTPOnly,
 				oidc_set_flag_slot,
 				(void *) APR_OFFSETOF(oidc_cfg, cookie_http_only),
 				RSRC_CONF,
 				"Defines whether or not the cookie httponly flag is set on cookies."),
-		AP_INIT_FLAG("OIDCCookieSameSite",
+		AP_INIT_FLAG(OIDCCookieSameSite,
 				oidc_set_flag_slot,
 				(void *) APR_OFFSETOF(oidc_cfg, cookie_same_site),
 				RSRC_CONF,
 				"Defines whether or not the cookie Same-Site flag is set on cookies."),
-		AP_INIT_TAKE1("OIDCOutgoingProxy",
+		AP_INIT_TAKE1(OIDCOutgoingProxy,
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, outgoing_proxy),
 				RSRC_CONF,
 				"Specify an outgoing proxy for your network (<host>[:<port>]."),
-		AP_INIT_TAKE1("OIDCCryptoPassphrase",
+		AP_INIT_TAKE1(OIDCCryptoPassphrase,
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, crypto_passphrase),
 				RSRC_CONF,
 				"Passphrase used for AES crypto on cookies and state."),
-		AP_INIT_TAKE1("OIDCClaimDelimiter",
+		AP_INIT_TAKE1(OIDCClaimDelimiter,
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, claim_delimiter),
 				RSRC_CONF,
 				"The delimiter to use when setting multi-valued claims in the HTTP headers."),
-		AP_INIT_RAW_ARGS("OIDCClaimPrefix", oidc_cfg_set_claim_prefix,
+		AP_INIT_RAW_ARGS(OIDCClaimPrefix,
+				oidc_cfg_set_claim_prefix,
 				(void*)APR_OFFSETOF(oidc_cfg, claim_prefix),
 				RSRC_CONF,
 				"The prefix to use when setting claims in the HTTP headers."),
-		AP_INIT_TAKE12("OIDCRemoteUserClaim",
+		AP_INIT_TAKE12(OIDCRemoteUserClaim,
 				oidc_set_remote_user_claim,
 				(void*)APR_OFFSETOF(oidc_cfg, remote_user_claim),
 				RSRC_CONF,
 				"The claim that is used when setting the REMOTE_USER variable for OpenID Connect protected paths."),
-		AP_INIT_TAKE123("OIDCPassIDTokenAs",
+		AP_INIT_TAKE123(OIDCPassIDTokenAs,
 				oidc_set_pass_idtoken_as,
 				NULL,
 				RSRC_CONF,
 				"The format in which the id_token is passed in (a) header(s); must be one or more of: claims|payload|serialized"),
 
-		AP_INIT_TAKE1("OIDCOAuthClientID", oidc_set_string_slot,
+		AP_INIT_TAKE1(OIDCOAuthClientID,
+				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.client_id),
 				RSRC_CONF,
 				"Client identifier used in calls to OAuth 2.0 Authorization server validation calls."),
-		AP_INIT_TAKE1("OIDCOAuthClientSecret",
+		AP_INIT_TAKE1(OIDCOAuthClientSecret,
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.client_secret),
 				RSRC_CONF,
 				"Client secret used in calls to OAuth 2.0 Authorization server validation calls."),
 
-		AP_INIT_TAKE1("OIDCOAuthIntrospectionEndpoint",
+		AP_INIT_TAKE1(OIDCOAuthIntrospectionEndpoint,
 				oidc_set_https_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, oauth.introspection_endpoint_url),
 				RSRC_CONF,
 				"Define the OAuth AS Introspection Endpoint URL (e.g.: https://localhost:9031/as/token.oauth2)"),
-		AP_INIT_TAKE1("OIDCOAuthIntrospectionEndpointMethod",
+		AP_INIT_TAKE1(OIDCOAuthIntrospectionEndpointMethod,
 				oidc_set_introspection_method,
 				(void *)APR_OFFSETOF(oidc_cfg, oauth.introspection_endpoint_method),
 				RSRC_CONF,
 				"Define the HTTP method to use for the introspection call: one of \"GET\" or \"POST\" (default)"),
-		AP_INIT_TAKE1("OIDCOAuthIntrospectionEndpointParams",
+		AP_INIT_TAKE1(OIDCOAuthIntrospectionEndpointParams,
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.introspection_endpoint_params),
 				RSRC_CONF,
 				"Extra parameters that need to be sent in the token introspection request (must be query-encoded like \"grant_type=urn%3Apingidentity.com%3Aoauth2%3Agrant_type%3Avalidate_bearer\"."),
 
-		AP_INIT_TAKE1("OIDCOAuthIntrospectionEndpointAuth",
+		AP_INIT_TAKE1(OIDCOAuthIntrospectionEndpointAuth,
 				oidc_set_endpoint_auth_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, oauth.introspection_endpoint_auth),
 				RSRC_CONF,
 				"Specify an authentication method for the OAuth AS Introspection Endpoint (e.g.: client_secret_basic)"),
-		AP_INIT_TAKE1("OIDCOAuthIntrospectionEndpointCert", oidc_set_string_slot,
+		AP_INIT_TAKE1(OIDCOAuthIntrospectionEndpointCert,
+				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.introspection_endpoint_tls_client_cert),
 				RSRC_CONF,
 				"TLS client certificate used for calls to the OAuth 2.0 Authorization server introspection endpoint."),
-		AP_INIT_TAKE1("OIDCOAuthIntrospectionEndpointKey", oidc_set_string_slot,
+		AP_INIT_TAKE1(OIDCOAuthIntrospectionEndpointKey,
+				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.introspection_endpoint_tls_client_key),
 				RSRC_CONF,
 				"TLS client certificate private key used for calls to the OAuth 2.0 Authorization server introspection endpoint."),
 
-		AP_INIT_TAKE1("OIDCOAuthIntrospectionTokenParamName",
+		AP_INIT_TAKE1(OIDCOAuthIntrospectionTokenParamName,
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.introspection_token_param_name),
 				RSRC_CONF,
 				"Name of the parameter whose value carries the access token value in an validation request to the token introspection endpoint."),
-		AP_INIT_TAKE123("OIDCOAuthTokenExpiryClaim",
+		AP_INIT_TAKE123(OIDCOAuthTokenExpiryClaim,
 				oidc_set_token_expiry_claim,
 				NULL,
 				RSRC_CONF,
 				"Name of the claim that carries the token expiry value in the introspection result, optionally followed by absolute|relative, optionally followed by optional|mandatory"),
-		AP_INIT_TAKE1("OIDCOAuthSSLValidateServer",
+		AP_INIT_TAKE1(OIDCOAuthSSLValidateServer,
 				oidc_set_ssl_validate_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.ssl_validate_server),
 				RSRC_CONF,
 				"Require validation of the OAuth 2.0 AS Validation Endpoint SSL server certificate for successful authentication (On or Off)"),
-		AP_INIT_TAKE12("OIDCOAuthRemoteUserClaim",
+		AP_INIT_TAKE12(OIDCOAuthRemoteUserClaim,
 				oidc_set_remote_user_claim,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.remote_user_claim),
 				RSRC_CONF,
 				"The claim that is used when setting the REMOTE_USER variable for OAuth 2.0 protected paths."),
-		AP_INIT_ITERATE("OIDCOAuthVerifyCertFiles",
+		AP_INIT_ITERATE(OIDCOAuthVerifyCertFiles,
 				oidc_set_public_key_files,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.verify_public_keys),
 				RSRC_CONF,
 				"The fully qualified names of the files that contain the X.509 certificates that contains the RSA public keys that can be used for access token validation."),
-		AP_INIT_ITERATE("OIDCOAuthVerifySharedKeys",
+		AP_INIT_ITERATE(OIDCOAuthVerifySharedKeys,
 				oidc_set_shared_keys,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.verify_shared_keys),
 				RSRC_CONF,
 				"Shared secret(s) that is/are used to verify signed JWT access tokens locally."),
-		AP_INIT_TAKE1("OIDCOAuthVerifyJwksUri",
+		AP_INIT_TAKE1(OIDCOAuthVerifyJwksUri,
 				oidc_set_https_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, oauth.verify_jwks_uri),
 				RSRC_CONF,
 				"The JWKs URL on which the Authorization publishes the keys used to sign its JWT access tokens."),
 
-		AP_INIT_TAKE1("OIDCHTTPTimeoutLong", oidc_set_int_slot,
+		AP_INIT_TAKE1(OIDCHTTPTimeoutLong,
+				oidc_set_int_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, http_timeout_long),
 				RSRC_CONF,
 				"Timeout for long duration HTTP calls (default)."),
-		AP_INIT_TAKE1("OIDCHTTPTimeoutShort", oidc_set_int_slot,
+		AP_INIT_TAKE1(OIDCHTTPTimeoutShort,
+				oidc_set_int_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, http_timeout_short),
 				RSRC_CONF,
 				"Timeout for short duration HTTP calls (registry/discovery)."),
-		AP_INIT_TAKE1("OIDCStateTimeout", oidc_set_int_slot,
+		AP_INIT_TAKE1(OIDCStateTimeout,
+				oidc_set_int_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, state_timeout),
 				RSRC_CONF,
 				"Time to live in seconds for state parameter (cq. interval in which the authorization request and the corresponding response need to be completed)."),
-		AP_INIT_TAKE1("OIDCSessionInactivityTimeout",
+		AP_INIT_TAKE1(OIDCSessionInactivityTimeout,
 				oidc_set_session_inactivity_timeout,
 				(void*)APR_OFFSETOF(oidc_cfg, session_inactivity_timeout),
 				RSRC_CONF,
 				"Inactivity interval after which the session is invalidated when no interaction has occurred."),
 
-		AP_INIT_TAKE1("OIDCMetadataDir", oidc_set_dir_slot,
+		AP_INIT_TAKE1(OIDCMetadataDir,
+				oidc_set_dir_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, metadata_dir),
 				RSRC_CONF,
 				"Directory that contains provider and client metadata files."),
-		AP_INIT_TAKE1("OIDCSessionType", oidc_set_session_type,
+		AP_INIT_TAKE1(OIDCSessionType,
+				oidc_set_session_type,
 				(void*)APR_OFFSETOF(oidc_cfg, session_type),
 				RSRC_CONF,
 				"OpenID Connect session storage type (Apache 2.0/2.2 only). Must be one of \"server-cache\" or \"client-cookie\" with an optional suffix \":persistent\"."),
-		AP_INIT_FLAG("OIDCSessionCacheFallbackToCookie",
+		AP_INIT_FLAG(OIDCSessionCacheFallbackToCookie,
 				oidc_set_flag_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, session_cache_fallback_to_cookie),
 				RSRC_CONF,
 				"Fallback to client-side cookie session storage when server side cache fails."),
-		AP_INIT_TAKE1("OIDCSessionCookieChunkSize", oidc_set_int_slot,
+		AP_INIT_TAKE1(OIDCSessionCookieChunkSize,
+				oidc_set_int_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, session_cookie_chunk_size),
 				RSRC_CONF,
 				"Chunk size for client-cookie session storage type in bytes. Defaults to 4k. Set 0 to suppress chunking."),
-		AP_INIT_FLAG("OIDCScrubRequestHeaders",
+		AP_INIT_FLAG(OIDCScrubRequestHeaders,
 				oidc_set_flag_slot,
 				(void *) APR_OFFSETOF(oidc_cfg, scrub_request_headers),
 				RSRC_CONF,
 				"Scrub user name and claim headers from the user's request."),
 
-		AP_INIT_TAKE1("OIDCCacheType", oidc_set_cache_type,
+		AP_INIT_TAKE1(OIDCCacheType,
+				oidc_set_cache_type,
 				(void*)APR_OFFSETOF(oidc_cfg, cache), RSRC_CONF,
 				"Cache type; must be one of \"file\", \"memcache\" or \"shm\"."),
-		AP_INIT_FLAG("OIDCCacheEncrypt",
+		AP_INIT_FLAG(OIDCCacheEncrypt,
 				oidc_set_flag_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, cache_encrypt),
 				RSRC_CONF,
 				"Encrypt the data in the cache backend (On or Off)"),
-		AP_INIT_TAKE1("OIDCCacheDir", oidc_set_dir_slot,
+		AP_INIT_TAKE1(OIDCCacheDir,
+				oidc_set_dir_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, cache_file_dir),
 				RSRC_CONF,
 				"Directory used for file-based caching."),
-		AP_INIT_TAKE1("OIDCCacheFileCleanInterval",
+		AP_INIT_TAKE1(OIDCCacheFileCleanInterval,
 				oidc_set_int_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, cache_file_clean_interval),
 				RSRC_CONF,
 				"Cache file clean interval in seconds."),
-		AP_INIT_TAKE1("OIDCMemCacheServers",
+		AP_INIT_TAKE1(OIDCMemCacheServers,
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, cache_memcache_servers),
 				RSRC_CONF,
 				"Memcache servers used for caching (space separated list of <hostname>[:<port>] tuples)"),
-		AP_INIT_TAKE1("OIDCCacheShmMax", oidc_set_int_slot,
+		AP_INIT_TAKE1(OIDCCacheShmMax,
+				oidc_set_int_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, cache_shm_size_max),
 				RSRC_CONF,
 				"Maximum number of cache entries to use for \"shm\" caching."),
-		AP_INIT_TAKE1("OIDCCacheShmEntrySizeMax",
+		AP_INIT_TAKE1(OIDCCacheShmEntrySizeMax,
 				oidc_set_cache_shm_entry_size_max,
 				(void*)APR_OFFSETOF(oidc_cfg, cache_shm_entry_size_max),
 				RSRC_CONF,
 				"Maximum size of a single cache entry used for \"shm\" caching."),
 #ifdef USE_LIBHIREDIS
-		AP_INIT_TAKE1("OIDCRedisCacheServer",
+		AP_INIT_TAKE1(OIDCRedisCacheServer,
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, cache_redis_server),
 				RSRC_CONF,
 				"Redis server used for caching (<hostname>[:<port>])"),
-		AP_INIT_TAKE1("OIDCRedisCachePassword",
+		AP_INIT_TAKE1(OIDCRedisCachePassword,
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, cache_redis_password),
 				RSRC_CONF,
 				"Password for authentication to the Redis servers."),
 #endif
-		AP_INIT_TAKE1("OIDCHTMLErrorTemplate",
+		AP_INIT_TAKE1(OIDCHTMLErrorTemplate,
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, error_template),
 				RSRC_CONF,
 				"Name of a HTML error template: needs to contain two \"%s\" characters, one for the error message, one for the description."),
 
-		AP_INIT_TAKE1("OIDCDiscoverURL", oidc_set_url_slot_dir_cfg,
+		AP_INIT_TAKE1(OIDCDiscoverURL,
+				oidc_set_url_slot_dir_cfg,
 				(void *)APR_OFFSETOF(oidc_dir_cfg, discover_url),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Defines an external IDP Discovery page"),
-		AP_INIT_ITERATE("OIDCPassCookies",
+		AP_INIT_ITERATE(OIDCPassCookies,
 				oidc_set_cookie_names,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, pass_cookies),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Specify cookies that need to be passed from the browser on to the backend to the OP/AS."),
-		AP_INIT_ITERATE("OIDCStripCookies",
+		AP_INIT_ITERATE(OIDCStripCookies,
 				oidc_set_cookie_names,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, strip_cookies),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Specify cookies that should be stripped from the incoming request before passing it on to the backend."),
-		AP_INIT_TAKE1("OIDCAuthNHeader", ap_set_string_slot,
+		AP_INIT_TAKE1(OIDCAuthNHeader,
+				ap_set_string_slot,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, authn_header),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Specify the HTTP header variable to set with the name of the authenticated user. By default no explicit header is added but Apache's default REMOTE_USER will be set."),
-		AP_INIT_TAKE1("OIDCCookiePath", ap_set_string_slot,
+		AP_INIT_TAKE1(OIDCCookiePath,
+				ap_set_string_slot,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, cookie_path),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Define the cookie path for the session cookie."),
-		AP_INIT_TAKE1("OIDCCookie", ap_set_string_slot,
+		AP_INIT_TAKE1(OIDCCookie,
+				ap_set_string_slot,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, cookie),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Define the cookie name for the session cookie."),
-		AP_INIT_TAKE1("OIDCUnAuthAction",
+		AP_INIT_TAKE1(OIDCUnAuthAction,
 				oidc_set_unauth_action,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, unauth_action),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Sets the action taken when an unauthenticated request occurs: must be one of \"auth\" (default), \"pass\" , \"401\" or \"410\"."),
-		AP_INIT_TAKE1("OIDCUnAutzAction",
+		AP_INIT_TAKE1(OIDCUnAutzAction,
 				oidc_set_unautz_action,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, unautz_action),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Sets the action taken when an unauthorized request occurs: must be one of \"401\" (default), \"403\" or \"auth\"."),
-		AP_INIT_TAKE1("OIDCPassClaimsAs",
+		AP_INIT_TAKE1(OIDCPassClaimsAs,
 				oidc_set_pass_claims_as, NULL,
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Specify how claims are passed to the application(s); must be one of \"none\", \"headers\", \"environment\" or \"both\" (default)."),
-		AP_INIT_ITERATE("OIDCOAuthAcceptTokenAs",
+		AP_INIT_ITERATE(OIDCOAuthAcceptTokenAs,
 				oidc_set_accept_oauth_token_in,
 				NULL,
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"The method in which an OAuth token can be presented; must be one or more of: header|post|query|cookie"),
-		AP_INIT_TAKE1("OIDCUserInfoRefreshInterval",
+		AP_INIT_TAKE1(OIDCUserInfoRefreshInterval,
 				oidc_set_userinfo_refresh_interval,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.userinfo_refresh_interval),
 				RSRC_CONF,
 				"Duration in seconds after which retrieved claims from the userinfo endpoint should be refreshed."),
-		AP_INIT_TAKE1("OIDCOAuthTokenIntrospectionInterval",
+		AP_INIT_TAKE1(OIDCOAuthTokenIntrospectionInterval,
 				ap_set_int_slot,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, oauth_token_introspect_interval),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Sets the token introspection refresh interval."),
-		AP_INIT_TAKE1("OIDCPreservePost",
+		AP_INIT_TAKE1(OIDCPreservePost,
 				oidc_set_preserve_post,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, preserve_post),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Indicates whether POST parameters will be preserved across authentication requests."),
-		AP_INIT_FLAG("OIDCPassRefreshToken",
+		AP_INIT_FLAG(OIDCPassRefreshToken,
 				ap_set_flag_slot,
 				(void*)APR_OFFSETOF(oidc_dir_cfg, pass_refresh_token),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Pass the refresh token in a header and/or environment variable (On or Off)"),
-		AP_INIT_TAKE1("OIDCRequestObject",
+		AP_INIT_TAKE1(OIDCRequestObject,
 				oidc_set_string_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.request_object),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"The default request object settings"),
-		AP_INIT_TAKE1("OIDCProviderMetadataRefreshInterval",
+		AP_INIT_TAKE1(OIDCProviderMetadataRefreshInterval,
 				oidc_set_int_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider_metadata_refresh_interval),
 				RSRC_CONF,
 				"Provider metadata refresh interval in seconds."),
-		AP_INIT_TAKE1("OIDCProviderAuthRequestMethod",
+		AP_INIT_TAKE1(OIDCProviderAuthRequestMethod,
 				oidc_set_auth_request_method,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.auth_request_method),
 				RSRC_CONF,
 				"HTTP method used to send the authentication request to the provider (GET or POST)."),
-		AP_INIT_ITERATE("OIDCInfoHook",
+		AP_INIT_ITERATE(OIDCInfoHook,
 				oidc_set_info_hook_data,
 				(void *)APR_OFFSETOF(oidc_cfg, info_hook_data),
 				RSRC_CONF,
 				"The data that will be returned from the info hook."),
-		AP_INIT_ITERATE("OIDCBlackListedClaims",
+		AP_INIT_ITERATE(OIDCBlackListedClaims,
 				oidc_set_filtered_claims,
 				(void *) APR_OFFSETOF(oidc_cfg, black_listed_claims),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Specify claims that should be removed from the userinfo and/or id_token before storing them in the session."),
-		AP_INIT_ITERATE("OIDCWhiteListedClaims",
+		AP_INIT_ITERATE(OIDCWhiteListedClaims,
 				oidc_set_filtered_claims,
 				(void *) APR_OFFSETOF(oidc_cfg, white_listed_claims),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,

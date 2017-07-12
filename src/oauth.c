@@ -560,7 +560,7 @@ static apr_byte_t oidc_oauth_set_request_user(request_rec *r, oidc_cfg *c,
 	if (oidc_get_remote_user(r, c->oauth.remote_user_claim.claim_name,
 			c->oauth.remote_user_claim.reg_exp, token, &remote_user) == FALSE) {
 		oidc_error(r,
-				"OIDCOAuthRemoteUserClaim is set to \"%s\", but could not set the remote user based the available claims for the user",
+				"" OIDCOAuthRemoteUserClaim " is set to \"%s\", but could not set the remote user based the available claims for the user",
 				c->oauth.remote_user_claim.claim_name);
 		return FALSE;
 	}
@@ -625,8 +625,7 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 			return OK;
 		}
 		return oidc_oauth_return_www_authenticate(r,
-				OIDC_PROTO_ERR_INVALID_REQUEST,
-				"No bearer token found in the request");
+				OIDC_PROTO_ERR_INVALID_REQUEST, "No bearer token found in the request");
 	}
 
 	/* validate the obtained access token against the OAuth AS validation endpoint */
@@ -646,8 +645,7 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 		if (oidc_oauth_validate_jwt_access_token(r, c, access_token, &token,
 				&s_token) == FALSE)
 			return oidc_oauth_return_www_authenticate(r,
-					OIDC_PROTO_ERR_INVALID_TOKEN,
-					"JWT token could not be validated");
+					OIDC_PROTO_ERR_INVALID_TOKEN, "JWT token could not be validated");
 	}
 
 	/* check that we've got something back */
