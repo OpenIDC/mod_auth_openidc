@@ -378,6 +378,7 @@ typedef struct oidc_cfg {
 	char *outgoing_proxy;
 
 	char *crypto_passphrase;
+	char *extensions;
 
 	int provider_metadata_refresh_interval;
 
@@ -446,6 +447,7 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_PROTO_REQUEST_OBJECT        "request"
 #define OIDC_PROTO_SESSION_STATE         "session_state"
 #define OIDC_PROTO_ACTIVE                "active"
+#define OIDC_PROTO_EXTENSIONS            "extensions"
 
 #define OIDC_PROTO_RESPONSE_TYPE_CODE               "code"
 #define OIDC_PROTO_RESPONSE_TYPE_IDTOKEN            "id_token"
@@ -580,7 +582,7 @@ char *oidc_proto_peek_jwt_header(request_rec *r, const char *jwt, char **alg);
 int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *login_hint, const char *redirect_uri, const char *state, oidc_proto_state_t *proto_state, const char *id_token_hint, const char *code_challenge, const char *auth_request_params, const char *path_scope);
 apr_byte_t oidc_proto_is_post_authorization_response(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r, oidc_cfg *cfg);
-apr_byte_t oidc_proto_refresh_request(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *rtoken, char **id_token, char **access_token, char **token_type, int *expires_in, char **refresh_token);
+apr_byte_t oidc_proto_refresh_request(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *rtoken, char **id_token, char **access_token, char **token_type, int *expires_in, char **refresh_token, char **extensions);
 apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *id_token_sub, const char *access_token, char **response);
 apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg, const char *acct, char **issuer);
 apr_byte_t oidc_proto_url_based_discovery(request_rec *r, oidc_cfg *cfg, const char *url, char **issuer);

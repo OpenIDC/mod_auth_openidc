@@ -1087,11 +1087,12 @@ static apr_byte_t oidc_refresh_access_token(request_rec *r, oidc_cfg *c,
 	char *s_token_type = NULL;
 	char *s_access_token = NULL;
 	char *s_refresh_token = NULL;
+	char *s_extensions = NULL;
 
 	/* refresh the tokens by calling the token endpoint */
 	if (oidc_proto_refresh_request(r, c, provider, refresh_token, &s_id_token,
 			&s_access_token, &s_token_type, &expires_in,
-			&s_refresh_token) == FALSE) {
+			&s_refresh_token, &s_extensions) == FALSE) {
 		oidc_error(r, "access_token could not be refreshed");
 		return FALSE;
 	}
@@ -1305,6 +1306,15 @@ static apr_byte_t oidc_session_pass_tokens_and_save(request_rec *r,
 		oidc_util_set_app_info(r, OIDC_APP_INFO_ACCESS_TOKEN_EXP,
 				access_token_expires,
 				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars);
+	}
+	if (cfg->extensions != NULL) {
+		const char *extensions = NULL;
+		/* get the serialized extensions from the session */
+		oidc_session_get(r, session, OIDC_PROTO_EXTENSIONS, &extensions);
+		/* pass it to the app in a header or environment variable */
+		oidc_util_set_app_info(r, "extensions", extensions,
+				OIDC_DEFAULT_HEADER_PREFIX,
+				pass_headers, pass_envvars);
 	}
 
 	/*
@@ -1581,7 +1591,7 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
 		const char *remoteUser, const char *id_token, oidc_jwt_t *id_token_jwt,
 		const char *claims, const char *access_token, const int expires_in,
 		const char *refresh_token, const char *session_state, const char *state,
-		const char *original_url) {
+		const char *extensions, const char *original_url) {
 
 	/* store the user in the session */
 	session->remote_user = remoteUser;
@@ -1631,6 +1641,10 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
 
 	/* store claims resolved from userinfo endpoint */
 	oidc_store_userinfo_claims(r, session, provider, claims);
+
+	if (extensions != NULL) {
+		oidc_session_set(r, session, OIDC_PROTO_EXTENSIONS, extensions);
+	}
 
 	/* see if we have an access_token */
 	if (access_token != NULL) {
@@ -1867,7 +1881,8 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 				apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN), expires_in,
 				apr_table_get(params, OIDC_PROTO_REFRESH_TOKEN),
 				apr_table_get(params, OIDC_PROTO_SESSION_STATE),
-				apr_table_get(params, OIDC_PROTO_STATE), original_url) == FALSE)
+				apr_table_get(params, OIDC_PROTO_STATE),
+				apr_table_get(params, OIDC_PROTO_EXTENSIONS), original_url) == FALSE)
 			return HTTP_INTERNAL_SERVER_ERROR;
 
 	} else {
