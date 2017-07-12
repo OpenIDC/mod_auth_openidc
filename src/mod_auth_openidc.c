@@ -3172,6 +3172,10 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 					HTTP_INTERNAL_SERVER_ERROR);
 }
 
+#define OIDC_AUTH_TYPE_OPENID_CONNECT "openid-connect"
+#define OIDC_AUTH_TYPE_OPENID_OAUTH20 "oauth20"
+#define OIDC_AUTH_TYPE_OPENID_BOTH    "auth-openidc"
+
 /*
  * main routine: handle OpenID Connect authentication
  */
@@ -3179,7 +3183,7 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 
 	if (oidc_get_redirect_uri(r, c) == NULL) {
 		oidc_error(r,
-				"configuration error: the authentication type is set to \"openid-connect\" but " OIDCRedirectURI " has not been set");
+				"configuration error: the authentication type is set to \"" OIDC_AUTH_TYPE_OPENID_CONNECT "\" but " OIDCRedirectURI " has not been set");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -3284,10 +3288,6 @@ static int oidc_check_mixed_userid_oauth(request_rec *r, oidc_cfg *c) {
 	/* no bearer token found: then treat this as a regular OIDC browser request */
 	return oidc_check_userid_openidc(r, c);
 }
-
-#define OIDC_AUTH_TYPE_OPENID_CONNECT "openid-connect"
-#define OIDC_AUTH_TYPE_OPENID_OAUTH20 "oauth20"
-#define OIDC_AUTH_TYPE_OPENID_BOTH    "auth-openidc"
 
 /*
  * generic Apache authentication hook for this module: dispatches to OpenID Connect or OAuth 2.0 specific routines
