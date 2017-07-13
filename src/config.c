@@ -2165,11 +2165,13 @@ void oidc_register_hooks(apr_pool_t *pool) {
  */
 const command_rec oidc_config_cmds[] = {
 
-		AP_INIT_TAKE1(OIDCProviderMetadataURL, oidc_set_string_slot,
+		AP_INIT_TAKE1(OIDCProviderMetadataURL,
+				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.metadata_url),
 				RSRC_CONF,
 				"OpenID Connect OP configuration metadata URL."),
-		AP_INIT_TAKE1(OIDCProviderIssuer, oidc_set_string_slot,
+		AP_INIT_TAKE1(OIDCProviderIssuer,
+				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.issuer),
 				RSRC_CONF,
 				"OpenID Connect OP issuer identifier."),
@@ -2259,7 +2261,7 @@ const command_rec oidc_config_cmds[] = {
 				oidc_set_encrypted_response_enc,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.id_token_encrypted_response_enc),
 				RSRC_CONF,
-				"The algorithm that the OP should use to encrypt to the id_token with the Content Encryption Key (used only in dynamic client registration); must be one of [A128CBC-HS256|A256CBC-HS512|A128GCM|A192GCM|A256GCM]"),
+				"The algorithm that the OP should use to encrypt to the id_token with the Content Encryption Key (used only in dynamic client registration); must be one of [A128CBC-HS256|A256CBC-HS512|A256GCM]"),
 		AP_INIT_TAKE1(OIDCUserInfoSignedResponseAlg,
 				oidc_set_signed_response_alg,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.userinfo_signed_response_alg),
@@ -2274,7 +2276,7 @@ const command_rec oidc_config_cmds[] = {
 				oidc_set_encrypted_response_enc,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.userinfo_encrypted_response_enc),
 				RSRC_CONF,
-				"The algorithm that the OP should use to encrypt to encrypt the UserInfo response with the Content Encryption Key (used only in dynamic client registration); must be one of [A128CBC-HS256|A256CBC-HS512|A128GCM|A192GCM|A256GCM]"),
+				"The algorithm that the OP should use to encrypt to encrypt the UserInfo response with the Content Encryption Key (used only in dynamic client registration); must be one of [A128CBC-HS256|A256CBC-HS512|A256GCM]"),
 		AP_INIT_TAKE1(OIDCUserInfoTokenMethod,
 				oidc_set_userinfo_token_method,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.userinfo_token_method),

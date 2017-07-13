@@ -1,3 +1,8 @@
+07/13/2017
+- remove A128GCM/A192GCM from the supported algorithms in docs/auth_openidc.conf
+  because cjose doesn't support A128GCM and A192GCM (yet)
+- bump to 2.3.1rc5
+
 07/09/2017
 - refactor oidc_get_current_url_port so that it assumes the default port when
   X-Forwarded-Proto has been set; closes #282 and may address #278

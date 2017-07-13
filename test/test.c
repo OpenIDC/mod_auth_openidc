@@ -867,7 +867,7 @@ static char *test_jwt_decrypt(apr_pool_t *pool) {
 			pool, err);
     oidc_jwk_destroy(jwk_s);
 
-	TST_ASSERT_STR("header.alg", jwt->header.alg, "RS256");
+	TST_ASSERT_STR("header.alg", jwt->header.alg, CJOSE_HDR_ALG_RS256);
 	TST_ASSERT_STR("payload.iss", jwt->payload.iss, "joe");
 	TST_ASSERT_LONG("payload.exp", (long )jwt->payload.exp, 1300819380L);
 
