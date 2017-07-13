@@ -1840,7 +1840,7 @@ apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg,
 static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 		oidc_cfg *cfg, oidc_provider_t *provider, apr_table_t *params,
 		char **id_token, char **access_token, char **token_type,
-		int *expires_in, char **refresh_token) {
+		int *expires_in, char **refresh_token, char **extensions) {
 
 	char *response = NULL;
 	char *basic_auth = NULL;
@@ -1903,6 +1903,23 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 			refresh_token,
 			NULL);
 
+	if (cfg->extensions != NULL) {
+		const char *data = cfg->extensions;
+		char *name = NULL;
+		json_t *extension_value = NULL;
+		json_t *extension_blob = json_object();
+		char *tmp_extension = NULL;
+
+		while (*data && (name = ap_getword_white(r->pool, &data))) {
+			extension_value = json_object_get(result, name);
+			json_object_set(extension_blob, name, extension_value);
+		}
+		tmp_extension = json_dumps(extension_blob, 0);
+		*extensions = apr_pstrdup(r->pool, tmp_extension);
+		free(tmp_extension);
+		json_decref(extension_blob);
+	}
+
 	json_decref(result);
 
 	return TRUE;
@@ -1914,7 +1931,7 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char *code, const char *code_verifier,
 		char **id_token, char **access_token, char **token_type,
-		int *expires_in, char **refresh_token, const char *state) {
+		int *expires_in, char **refresh_token, char **extensions, const char *state) {
 
 	oidc_debug(r, "enter");
 
@@ -1933,7 +1950,7 @@ static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 		apr_table_setn(params, OIDC_PROTO_STATE, state);
 
 	return oidc_proto_token_endpoint_request(r, cfg, provider, params, id_token,
-			access_token, token_type, expires_in, refresh_token);
+			access_token, token_type, expires_in, refresh_token, extensions);
 }
 
 /*
@@ -1942,7 +1959,7 @@ static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 apr_byte_t oidc_proto_refresh_request(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char *rtoken, char **id_token,
 		char **access_token, char **token_type, int *expires_in,
-		char **refresh_token) {
+		char **refresh_token, char **extensions) {
 
 	oidc_debug(r, "enter");
 
@@ -1954,7 +1971,7 @@ apr_byte_t oidc_proto_refresh_request(request_rec *r, oidc_cfg *cfg,
 	apr_table_setn(params, OIDC_PROTO_SCOPE, provider->scope);
 
 	return oidc_proto_token_endpoint_request(r, cfg, provider, params, id_token,
-			access_token, token_type, expires_in, refresh_token);
+			access_token, token_type, expires_in, refresh_token, extensions);
 }
 
 static apr_byte_t oidc_user_info_response_validate(request_rec *r,
@@ -2762,6 +2779,7 @@ static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r,
 	int expires_in = -1;
 	char *refresh_token = NULL;
 	char *code_verifier = NULL;
+	char *extensions = NULL;
 
 	if (provider->pkce != NULL)
 		provider->pkce->verifier(r,
@@ -2772,7 +2790,7 @@ static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r,
 	if (oidc_proto_resolve_code(r, c, provider,
 			apr_table_get(params, OIDC_PROTO_CODE), code_verifier, &id_token,
 			&access_token, &token_type, &expires_in, &refresh_token,
-			state) == FALSE) {
+			&extensions, state) == FALSE) {
 		oidc_error(r, "failed to resolve the code");
 		return FALSE;
 	}
@@ -2797,6 +2815,9 @@ static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r,
 		if (expires_in != -1)
 			apr_table_setn(params, OIDC_PROTO_EXPIRES_IN,
 					apr_psprintf(r->pool, "%d", expires_in));
+		if (extensions != NULL) {
+			apr_table_set(params, "extensions", extensions);
+		}
 	}
 
 	/* refresh token should not have been set before */
