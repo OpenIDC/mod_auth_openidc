@@ -60,8 +60,7 @@ How to Use It
 Sample configuration for using Google as your OpenID Connect Provider running on
 `www.example.com` and `https://www.example.com/example/redirect_uri` registered
 as the *redirect_uri* for the client through the Google API Console. You will also
-have to enable the `Google+ API` under `APIs & auth` in the [Google API console]
-(https://console.developers.google.com).
+have to enable the `Google+ API` under `APIs & auth` in the [Google API console](https://console.developers.google.com).
 
 ```apache
 OIDCProviderMetadataURL https://accounts.google.com/.well-known/openid-configuration
