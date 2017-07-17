@@ -43,7 +43,7 @@ provider metadata files in a specified metadata directory.
 - [OpenID Connect Session Management](http://openid.net/specs/openid-connect-session-1_0.html). See the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki/Session-Management) for information
 on how to configure it.
 
-Alternatively thos module can operate as an OAuth 2.0 Resource Server to an OAuth 2.0 Authorization Server,
+Alternatively the module can operate as an OAuth 2.0 Resource Server to an OAuth 2.0 Authorization Server,
 introspecting/validating bearer Access Tokens conforming to [OAuth 2.0 Token Introspection](https://tools.ietf.org/html/rfc7662) or similar.
 The `REMOTE_USER` variable setting, passing claims in HTTP headers and authorization based on `Require` primitives
 works in the same way as described for OpenID Connect above. See the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki/OAuth-2.0-Resource-Server) for information
