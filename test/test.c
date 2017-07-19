@@ -1189,10 +1189,14 @@ static char * test_current_url(request_rec *r) {
 	url = oidc_get_current_url(r);
 	TST_ASSERT_STR("test_headers (5)", url, "http://www.outer.com:321");
 
+	apr_table_set(r->headers_in, "X-Forwarded-Proto", "https , http");
+	url = oidc_get_current_url(r);
+	TST_ASSERT_STR("test_headers (6)", url, "https://www.outer.com:321");
+
 	apr_table_unset(r->headers_in, "X-Forwarded-Host");
 	apr_table_unset(r->headers_in, "X-Forwarded-Port");
 	url = oidc_get_current_url(r);
-	TST_ASSERT_STR("test_headers (6)", url, "http://www.example.com");
+	TST_ASSERT_STR("test_headers (7)", url, "https://www.example.com");
 
 	return 0;
 }

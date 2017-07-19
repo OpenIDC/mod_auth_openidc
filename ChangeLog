@@ -1,3 +1,8 @@
+07/19/2017
+- handle multiple values in X-Forwarded-* headers as to better support chains of reverse proxies in front of mod_auth_openidc
+- log request headers in oidc_util_hdr_in_get
+- release 2.3.1
+
 07/13/2017
 - remove A128GCM/A192GCM from the supported algorithms in docs/auth_openidc.conf
   because cjose doesn't support A128GCM and A192GCM (yet)

@@ -2099,7 +2099,18 @@ int oidc_util_cookie_domain_valid(const char *hostname, char *cookie_domain) {
 }
 
 static const char *oidc_util_hdr_in_get(const request_rec *r, const char *name) {
-	return apr_table_get(r->headers_in, name);
+	const char *value = apr_table_get(r->headers_in, name);
+	if (value)
+		oidc_debug(r, "%s=%s", name, value);
+	return value;
+}
+
+static const char *oidc_util_hdr_in_get_left_most_only(const request_rec *r, const char *name, const char *separator) {
+	char *last = NULL;
+	const char *value = oidc_util_hdr_in_get(r, name);
+	if (value)
+		return apr_strtok(apr_pstrdup(r->pool, value), separator, &last);
+	return NULL;
 }
 
 static void oidc_util_hdr_table_set(const request_rec *r, apr_table_t *table,
@@ -2166,7 +2177,7 @@ const char *oidc_util_hdr_in_user_agent_get(const request_rec *r) {
 }
 
 const char *oidc_util_hdr_in_x_forwarded_for_get(const request_rec *r) {
-	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_X_FORWARDED_FOR);
+	return oidc_util_hdr_in_get_left_most_only(r, OIDC_HTTP_HDR_X_FORWARDED_FOR, OIDC_STR_COMMA);
 }
 
 const char *oidc_util_hdr_in_content_type_get(const request_rec *r) {
@@ -2186,15 +2197,15 @@ const char *oidc_util_hdr_in_authorization_get(const request_rec *r) {
 }
 
 const char *oidc_util_hdr_in_x_forwarded_proto_get(const request_rec *r) {
-	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_X_FORWARDED_PROTO);
+	return oidc_util_hdr_in_get_left_most_only(r, OIDC_HTTP_HDR_X_FORWARDED_PROTO, OIDC_STR_COMMA);
 }
 
 const char *oidc_util_hdr_in_x_forwarded_port_get(const request_rec *r) {
-	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_X_FORWARDED_PORT);
+	return oidc_util_hdr_in_get_left_most_only(r, OIDC_HTTP_HDR_X_FORWARDED_PORT, OIDC_STR_COMMA);
 }
 
 const char *oidc_util_hdr_in_x_forwarded_host_get(const request_rec *r) {
-	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_X_FORWARDED_HOST);
+	return oidc_util_hdr_in_get_left_most_only(r, OIDC_HTTP_HDR_X_FORWARDED_HOST, OIDC_STR_COMMA);
 }
 
 const char *oidc_util_hdr_in_host_get(const request_rec *r) {
