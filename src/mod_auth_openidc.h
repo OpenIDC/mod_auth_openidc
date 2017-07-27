@@ -718,6 +718,7 @@ apr_byte_t oidc_util_create_symmetric_key(request_rec *r, const char *client_sec
 apr_hash_t * oidc_util_merge_symmetric_key(apr_pool_t *pool, apr_hash_t *private_keys, oidc_jwk_t *jwk);
 const char *oidc_util_get_provided_token_binding_id(const request_rec *r);
 char *oidc_util_http_query_encoded_url(request_rec *r, const char *url, const apr_table_t *params);
+const char *oidc_util_get_full_path(apr_pool_t *pool, const char *abs_or_rel_filename);
 
 /* HTTP header constants */
 #define OIDC_HTTP_HDR_COOKIE							"Cookie"

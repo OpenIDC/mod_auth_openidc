@@ -1,3 +1,10 @@
+07/27/2017
+- support paths that are relative to the Apache root dir for:
+  OIDCHTMLErrorTemplate, OIDCPublicKeyFiles, OIDCPrivateKeyFiles,
+  OIDCOAuthVerifyCertFiles, OIDCClientTokenEndpointCert, OIDCClientTokenEndpointKey,
+  OIDCOAuthIntrospectionEndpointCert and OIDCOAuthIntrospectionEndpointKey
+- bump to 2.3.2rc0
+
 07/19/2017
 - handle multiple values in X-Forwarded-* headers as to better support chains of reverse proxies in front of mod_auth_openidc
 - log request headers in oidc_util_hdr_in_get

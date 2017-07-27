@@ -176,3 +176,7 @@ AP_DECLARE(apr_status_t) unixd_set_global_mutex_perms(
 AP_DECLARE(const char *) ap_get_server_name(request_rec *r) {
 	return "www.example.com";
 }
+
+AP_DECLARE(char *) ap_server_root_relative(apr_pool_t *p, const char *file) {
+	return "";
+}

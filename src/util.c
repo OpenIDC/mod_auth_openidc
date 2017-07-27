@@ -1322,6 +1322,14 @@ int oidc_util_html_send(request_rec *r, const char *title,
 static char *html_error_template_contents = NULL;
 
 /*
+ * get the full path to a file based on an (already) absolute filename or a filename
+ * that is relative to the Apache root directory
+ */
+const char *oidc_util_get_full_path(apr_pool_t *pool, const char *abs_or_rel_filename) {
+	return (abs_or_rel_filename) ? ap_server_root_relative(pool, abs_or_rel_filename) : NULL;
+}
+
+/*
  * send a user-facing error to the browser
  */
 int oidc_util_html_send_error(request_rec *r, const char *html_template,
@@ -1330,6 +1338,8 @@ int oidc_util_html_send_error(request_rec *r, const char *html_template,
 	char *html = "";
 
 	if (html_template != NULL) {
+
+		html_template = oidc_util_get_full_path(r->pool, html_template);
 
 		if (html_error_template_contents == NULL) {
 			int rc = oidc_util_file_read(r, html_template,

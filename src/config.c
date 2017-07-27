@@ -621,6 +621,8 @@ static const char *oidc_set_public_key_files(cmd_parms *cmd, void *struct_ptr,
 	if (rv != NULL)
 		return rv;
 
+	fname = oidc_util_get_full_path(cmd->pool, fname);
+
 	if (oidc_jwk_parse_rsa_public_key(cmd->pool, kid, fname, &jwk,
 			&err) == FALSE) {
 		return apr_psprintf(cmd->pool,
@@ -687,6 +689,8 @@ static const char *oidc_set_private_key_files_enc(cmd_parms *cmd, void *dummy,
 			&fname_len, FALSE);
 	if (rv != NULL)
 		return rv;
+
+	fname = oidc_util_get_full_path(cmd->pool, fname);
 
 	if (oidc_jwk_parse_rsa_private_key(cmd->pool, kid, fname, &jwk,
 			&err) == FALSE) {

@@ -1860,8 +1860,8 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 			basic_auth, NULL, provider->ssl_validate_server, &response,
 			cfg->http_timeout_long, cfg->outgoing_proxy,
 			oidc_dir_cfg_pass_cookies(r),
-			provider->token_endpoint_tls_client_cert,
-			provider->token_endpoint_tls_client_key) == FALSE) {
+			oidc_util_get_full_path(r->pool, provider->token_endpoint_tls_client_cert),
+			oidc_util_get_full_path(r->pool, provider->token_endpoint_tls_client_key)) == FALSE) {
 		oidc_warn(r, "error when calling the token endpoint (%s)",
 				provider->token_endpoint_url);
 		return FALSE;
