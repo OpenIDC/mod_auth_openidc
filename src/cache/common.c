@@ -429,9 +429,15 @@ static int oidc_cache_crypto_decrypt(request_rec *r, const char *cache_value,
 
 	/* grab the base64url-encoded tag after the "." */
 	char *encoded_tag = strstr(cache_value, ".");
-	if (encoded_tag == NULL)
+	if (encoded_tag == NULL) {
+		oidc_error(r,
+				"corrupted cache value: no tag separator found in encrypted value");
 		return FALSE;
-	*encoded_tag = '\0';
+	}
+
+	/* make sure we don't modify the original string since it may be just a pointer into the cache (shm) */
+	cache_value = apr_pstrndup(r->pool, cache_value,
+			strlen(cache_value) - strlen(encoded_tag));
 	encoded_tag++;
 
 	/* base64url decode the ciphertext */
