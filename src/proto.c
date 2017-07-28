@@ -1525,7 +1525,7 @@ char *oidc_proto_peek_jwt_header(request_rec *r,
 				"could not parse first element separated by \".\" from input");
 		return NULL;
 	}
-	input = apr_pstrndup(r->pool, compact_encoded_jwt, p - compact_encoded_jwt);
+	input = apr_pstrmemdup(r->pool, compact_encoded_jwt, strlen(compact_encoded_jwt) - strlen(p));
 	if (oidc_base64url_decode(r->pool, &result, input) <= 0) {
 		oidc_warn(r, "oidc_base64url_decode returned an error");
 		return NULL;

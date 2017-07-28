@@ -436,7 +436,7 @@ static int oidc_cache_crypto_decrypt(request_rec *r, const char *cache_value,
 	}
 
 	/* make sure we don't modify the original string since it may be just a pointer into the cache (shm) */
-	cache_value = apr_pstrndup(r->pool, cache_value,
+	cache_value = apr_pstrmemdup(r->pool, cache_value,
 			strlen(cache_value) - strlen(encoded_tag));
 	encoded_tag++;
 

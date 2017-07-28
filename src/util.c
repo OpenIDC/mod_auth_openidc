@@ -776,7 +776,7 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 	curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
 	oidc_debug(r, "HTTP response code=%ld", response_code);
 
-	*response = apr_pstrndup(r->pool, curlBuffer.memory, curlBuffer.size);
+	*response = apr_pstrmemdup(r->pool, curlBuffer.memory, curlBuffer.size);
 
 	/* set and log the response */
 	oidc_debug(r, "response=%s", *response ? *response : "");
@@ -1162,7 +1162,7 @@ apr_byte_t oidc_util_get_request_parameter(request_rec *r, char *name,
 		return FALSE;
 
 	/* not sure why we do this, but better be safe than sorry */
-	args = apr_pstrndup(r->pool, r->args, strlen(r->args));
+	args = apr_pstrmemdup(r->pool, r->args, strlen(r->args));
 
 	p = apr_strtok(args, OIDC_STR_AMP, &tokenizer_ctx);
 	do {
