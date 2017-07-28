@@ -1325,7 +1325,7 @@ static char *html_error_template_contents = NULL;
  * get the full path to a file based on an (already) absolute filename or a filename
  * that is relative to the Apache root directory
  */
-const char *oidc_util_get_full_path(apr_pool_t *pool, const char *abs_or_rel_filename) {
+char *oidc_util_get_full_path(apr_pool_t *pool, const char *abs_or_rel_filename) {
 	return (abs_or_rel_filename) ? ap_server_root_relative(pool, abs_or_rel_filename) : NULL;
 }
 
