@@ -284,7 +284,7 @@ static char *oidc_get_browser_state_hash(request_rec *r, const char *nonce) {
  * return the name for the state cookie
  */
 static char *oidc_get_state_cookie_name(request_rec *r, const char *state) {
-	return apr_psprintf(r->pool, "%s%s", OIDCStateCookiePrefix, state);
+	return apr_psprintf(r->pool, "%s%s", OIDC_STATE_COOKIE_PREFIX, state);
 }
 
 /*
@@ -681,7 +681,7 @@ static void oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c,
 		while (cookie != NULL) {
 			while (*cookie == OIDC_CHAR_SPACE)
 				cookie++;
-			if (strstr(cookie, OIDCStateCookiePrefix) == cookie) {
+			if (strstr(cookie, OIDC_STATE_COOKIE_PREFIX) == cookie) {
 				char *cookieName = cookie;
 				while (cookie != NULL && *cookie != OIDC_CHAR_EQUAL)
 					cookie++;

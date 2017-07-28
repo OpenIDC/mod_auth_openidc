@@ -150,7 +150,7 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_AUTH_REQUEST_METHOD_POST 1
 
 /* prefix of the cookie that binds the state in the authorization request/response to the browser */
-#define OIDCStateCookiePrefix  "mod_auth_openidc_state_"
+#define OIDC_STATE_COOKIE_PREFIX  "mod_auth_openidc_state_"
 
 /* default prefix for information passed in HTTP headers */
 #define OIDC_DEFAULT_HEADER_PREFIX "OIDC_"
