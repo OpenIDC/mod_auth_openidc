@@ -1,3 +1,8 @@
+08/01/2017
+- don't abort when mutex operations fail
+- printout textual descriptions of errors returned by mutex operations
+- bump to 2.3.2rc2
+
 07/28/2017
 - fix issue with the combination of shared memory (shm) cache and using encryption (OIDCCacheEncrypt On)
   where the cache value would be corrupted after the first (succesful) retrieval

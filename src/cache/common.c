@@ -82,6 +82,16 @@ oidc_cache_mutex_t *oidc_cache_mutex_create(apr_pool_t *pool) {
 	return ctx;
 }
 
+#define OIDC_CACHE_ERROR_STR_MAX 255
+
+/*
+ * convert a apr status code to a string
+ */
+char *oidc_cache_status2str(apr_status_t statcode) {
+	char buf[OIDC_CACHE_ERROR_STR_MAX];
+	return apr_strerror(statcode, buf, OIDC_CACHE_ERROR_STR_MAX);
+}
+
 apr_byte_t oidc_cache_mutex_post_config(server_rec *s, oidc_cache_mutex_t *m,
 		const char *type) {
 
@@ -99,8 +109,8 @@ apr_byte_t oidc_cache_mutex_post_config(server_rec *s, oidc_cache_mutex_t *m,
 			APR_LOCK_DEFAULT, s->process->pool);
 	if (rv != APR_SUCCESS) {
 		oidc_serror(s,
-				"apr_global_mutex_create failed to create mutex on file %s",
-				m->mutex_filename);
+				"apr_global_mutex_create failed to create mutex on file %s: %s (%d)",
+				m->mutex_filename, oidc_cache_status2str(rv), rv);
 		return FALSE;
 	}
 
@@ -113,7 +123,8 @@ apr_byte_t oidc_cache_mutex_post_config(server_rec *s, oidc_cache_mutex_t *m,
 #endif
 	if (rv != APR_SUCCESS) {
 		oidc_serror(s,
-				"unixd_set_global_mutex_perms failed; could not set permissions ");
+				"unixd_set_global_mutex_perms failed; could not set permissions: %s (%d)",
+				oidc_cache_status2str(rv), rv);
 		return FALSE;
 	}
 #endif
@@ -133,8 +144,8 @@ apr_status_t oidc_cache_mutex_child_init(apr_pool_t *p, server_rec *s,
 
 	if (rv != APR_SUCCESS) {
 		oidc_serror(s,
-				"apr_global_mutex_child_init failed to reopen mutex on file %s",
-				m->mutex_filename);
+				"apr_global_mutex_child_init failed to reopen mutex on file %s: %s (%d)",
+				m->mutex_filename, oidc_cache_status2str(rv), rv);
 	}
 
 	return rv;
@@ -147,10 +158,9 @@ apr_byte_t oidc_cache_mutex_lock(request_rec *r, oidc_cache_mutex_t *m) {
 
 	apr_status_t rv = apr_global_mutex_lock(m->mutex);
 
-	if (rv != APR_SUCCESS) {
-		oidc_error(r, "apr_global_mutex_lock() failed [%d]", rv);
-		return FALSE;
-	}
+	if (rv != APR_SUCCESS)
+		oidc_error(r, "apr_global_mutex_lock() failed: %s (%d)",
+				oidc_cache_status2str(rv), rv);
 
 	return TRUE;
 }
@@ -162,10 +172,9 @@ apr_byte_t oidc_cache_mutex_unlock(request_rec *r, oidc_cache_mutex_t *m) {
 
 	apr_status_t rv = apr_global_mutex_unlock(m->mutex);
 
-	if (rv != APR_SUCCESS) {
-		oidc_error(r, "apr_global_mutex_unlock() failed [%d]", rv);
-		return FALSE;
-	}
+	if (rv != APR_SUCCESS)
+		oidc_error(r, "apr_global_mutex_unlock() failed: %s (%d)",
+				oidc_cache_status2str(rv), rv);
 
 	return TRUE;
 }
@@ -179,9 +188,9 @@ apr_byte_t oidc_cache_mutex_destroy(server_rec *s, oidc_cache_mutex_t *m) {
 
 	if (m->mutex != NULL) {
 		rv = apr_global_mutex_destroy(m->mutex);
-		if (rv != APR_SUCCESS) {
-			oidc_swarn(s, "apr_global_mutex_destroy failed: [%d]", rv);
-		}
+		if (rv != APR_SUCCESS)
+			oidc_swarn(s, "apr_global_mutex_destroy failed: %s (%d)",
+					oidc_cache_status2str(rv), rv);
 		m->mutex = NULL;
 	}
 
