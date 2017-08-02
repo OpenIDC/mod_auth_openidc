@@ -204,8 +204,8 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_COOKIE_EXT_SAME_SITE_LAX    "SameSite=Lax"
 #define OIDC_COOKIE_EXT_SAME_SITE_STRICT "SameSite=Strict"
 
-/* draft-campbell-tokbind-ttrp-00 */
-#define OIDC_TB_CFG_PROVIDED_ENV_VAR     "Provided-Token-Binding-ID"
+/* https://tools.ietf.org/html/draft-ietf-tokbind-ttrp-01 */
+#define OIDC_TB_CFG_PROVIDED_ENV_VAR     "Sec-Provided-Token-Binding-ID"
 
 #define OIDC_TOKEN_BINDING_POLICY_DISABLED  0
 #define OIDC_TOKEN_BINDING_POLICY_OPTIONAL  1

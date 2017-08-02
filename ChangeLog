@@ -1,3 +1,8 @@
+08/02/2017
+- update experimental token binding support to https://tools.ietf.org/html/draft-ietf-tokbind-ttrp-01
+  and use header names prefixed with "Sec-"; depends on mod_token_binding >= 0.3.4 now
+- bump to 2.3.2rc3
+
 08/01/2017
 - don't abort when mutex operations fail
 - printout textual descriptions of errors returned by mutex operations
