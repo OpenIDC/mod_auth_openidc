@@ -111,27 +111,13 @@ OIDCCryptoPassphrase <password>
 
 For details on configuring multiple providers see https://github.com/pingidentity/mod_auth_openidc/wiki/Multiple-Providers.
 
-### OpenID Connect SSO & OAuth 2.0 Access Control with PingFederate
+### OAuth 2.0 Resource Server
 
-Another example config for using PingFederate as your OpenID Connect OP and/or
-OAuth 2.0 Authorization server, based on the OAuth 2.0 PlayGround 3.x default
-configuration and doing claims-based authorization. (running on `localhost` and
-`https://localhost/example/redirect_uri/` registered as *redirect_uri* for the
-client `ac_oic_client`)
+Another example config for using PingFederate as your OAuth 2.0 Authorization server,
+based on the OAuth 2.0 PlayGround configuration and doing claims-based authorization.
 
 ```apache
-OIDCProviderMetadataURL https://macbook:9031/.well-known/openid-configuration
-
-OIDCSSLValidateServer Off
-OIDCClientID ac_oic_client
-OIDCClientSecret abc123DEFghijklmnop4567rstuvwxyzZYXWUT8910SRQPOnmlijhoauthplaygroundapplication
-
-OIDCRedirectURI https://localhost/example/redirect_uri/
-OIDCCryptoPassphrase <password>
-OIDCScope "openid email profile"
-
-OIDCOAuthIntrospectionEndpoint https://macbook:9031/as/token.oauth2
-OIDCOAuthIntrospectionEndpointParams grant_type=urn%3Apingidentity.com%3Aoauth2%3Agrant_type%3Avalidate_bearer
+OIDCOAuthIntrospectionEndpoint https://localhost:9031/as/introspect.oauth2
 OIDCOAuthIntrospectionEndpointAuth client_secret_basic
 OIDCOAuthRemoteUserClaim Username
 	
@@ -139,16 +125,9 @@ OIDCOAuthSSLValidateServer Off
 OIDCOAuthClientID rs_client
 OIDCOAuthClientSecret 2Federate
 
-<Location /example/>
-   AuthType openid-connect
-   #Require valid-user
-   Require claim sub:joe
-</Location>
-
-<Location /example-api>
+<Location /api>
    AuthType oauth20
-   #Require valid-user
-   Require claim Username:joe
+   Require claim client_id:ro_client
    #Require claim scope~\bprofile\b
 </Location>
 ```
