@@ -95,68 +95,7 @@ Sample configuration for multiple OpenID Connect providers, which triggers OpenI
 Connect Discovery first to find the user's OP.
 
 `OIDCMetadataDir` points to a directory that contains files that contain per-provider
-configuration data. For each provider, there are 3 types of files in the directory:
-
-1. `<urlencoded-issuer-value-with-https-prefix-and-trailing-slash-stripped>.provider`  
-contains (standardized) OpenID Connect Discovery OP JSON metadata where each
-name of the file is the url-encoded issuer name of the OP that is described
-by the metadata in that file.
-
-2. `<urlencoded-issuer-value-with-https-prefix-and-trailing-slash-stripped>.client`  
-contains statically configured or dynamically registered Dynamic Client Registration
-specific JSON metadata (based on the OpenID Connect Client Registration specification)
-and the filename is the url-encoded issuer name of the OP that this client is registered
-with. Sample client metadata for issuer `https://localhost:9031`, so the client metadata
-filename is `localhost%3A9031.client`:
-
-        {
-            "client_id" : "ac_oic_client",
-            "client_secret" : "abc123DEFghijklmnop4567rstuvwxyzZYXWUT8910SRQPOnmlijhoauthplaygroundapplication"
-        }
-
-3. `<urlencoded-issuer-value-with-https-prefix-and-trailing-slash-stripped>.conf`  
-contains *mod_auth_openidc* specific custom JSON metadata that can be used to overrule
-some of the settings defined in `auth_openidc.conf` on a per-client basis. The filename
-is the URL-encoded issuer name of the OP that this client is registered with.
-
-Entries that can be included in the .conf file are:
-
-    "ssl_validate_server"                overrides OIDCSSLValidateServer (value 0 or 1...)
-    "scope"                              overrides OIDCScope 
-    "response_type"                      overrides OIDCResponseType 
-    "response_mode"                      overrides OIDCResponseMode 
-    "pkce_method"                        overrides OIDCPKCEMethod
-    "client_name"                        overrides OIDCClientName 
-    "client_contact"                     overrides OIDCClientContact 
-    "idtoken_iat_slack"                  overrides OIDCIDTokenIatSlack
-    "session_max_duration"               overrides OIDCSessionMaxDuration
-    "jwks_refresh_interval"              overrides OIDCJWKSRefreshInterval
-    "client_jwks_uri"                    overrides OIDCClientJwksUri
-    "id_token_signed_response_alg"       overrides OIDCIDTokenSignedResponseAlg
-    "id_token_encrypted_response_alg"    overrides OIDCIDTokenEncryptedResponseAlg
-    "id_token_encrypted_response_enc"    overrides OIDCIDTokenEncryptedResponseEnc
-    "userinfo_signed_response_alg"       overrides OIDCUserInfoSignedResponseAlg
-    "userinfo_encrypted_response_alg"    overrides OIDCUserInfoEncryptedResponseAlg
-    "userinfo_encrypted_response_enc"    overrides OIDCUserInfoEncryptedResponseEnc
-    "auth_request_params"                overrides OIDCAuthRequestParams
-    "token_endpoint_params"              overrides OIDCProviderTokenEndpointParams
-    "token_endpoint_auth"                overrides OIDCProviderTokenEndpointAuth
-    "registration_endpoint_json"         overrides OIDCProviderRegistrationEndpointJson
-    "userinfo_refresh_interval"          overrides OIDCUserInfoRefreshInterval
-    "userinfo_token_method"              overrides OIDCUserInfoTokenMethod
-    "request_object"                     overrides OIDCRequestObject
-    "auth_request_method"                overrides OIDCProviderAuthRequestMethod
-    "registration_token"                 an access_token that will be used on client registration calls for the associated OP
-
-Sample client metadata for issuer `https://localhost:9031`, so the *mod_auth_openidc*
-configuration filename is `localhost%3A9031.conf`:
-
-    {
-        "ssl_validate_server" : 0,
-        "scope" : "openid email profile"
-    }
-  
-And the related *mod_auth_openidc* Apache config section:
+configuration data.
 
 ```apache
 OIDCMetadataDir <somewhere-writable-for-the-apache-process>/metadata
@@ -170,24 +109,7 @@ OIDCCryptoPassphrase <password>
 </Location>
 ```
 
-If you do not want to use the internal discovery page (you really shouldn't...), you
-can have the user being redirected to an external discovery page by setting
-`OIDCDiscoverURL`. That URL will be accessed with a number parameters: `oidc_callback`, `target_link_uri`,
-`method` and `x_csrf`. All parameters (except `oidc_callback`) need to be returned to the `oidc_callback` URL
-together with an `iss` parameter that contains the URL-encoded issuer value of the selected Provider, or a
-URL-encoded account name for OpenID Connect Discovery purposes (aka. e-mail style identifier), or a domain name.
-
-Sample callback:
-
-    <oidc_callback>?target_link_uri=<target_link_uri>&iss=[<issuer>|<domain>|<e-mail-style-account-name>][&login_hint=<name>][&scopes=<space-separated-scopes>][&auth_request_params=<urlencoded-query-string>]
-
-This is also the OpenID Connect specified way of triggering 3rd party initiated SSO 
-to a specific provider when multiple OPs have been configured. In that case the callback
-may also contain a "login_hint" parameter with the login identifier the user might use to log in.
-
-An additional *mod_auth_openidc* specific parameter named `auth_request_params` may also be passed
-in, see the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki#13-how-can-i-add-custom-parameters-to-the-authorization-request)
-for its usage.
+For details on configuring multiple providers see https://github.com/pingidentity/mod_auth_openidc/wiki/Multiple-Providers.
 
 ### OpenID Connect SSO & OAuth 2.0 Access Control with PingFederate
 
