@@ -109,12 +109,13 @@ OIDCCryptoPassphrase <password>
 </Location>
 ```
 
-For details on configuring multiple providers see https://github.com/pingidentity/mod_auth_openidc/wiki/Multiple-Providers.
+For details on configuring multiple providers see the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki/Multiple-Providers).
 
 ### OAuth 2.0 Resource Server
 
 Another example config for using PingFederate as your OAuth 2.0 Authorization server,
-based on the OAuth 2.0 PlayGround configuration and doing claims-based authorization.
+based on the OAuth 2.0 PlayGround configuration and doing claims-based authorization, using
+RFC 7662 compliant Token Introspection.
 
 ```apache
 OIDCOAuthIntrospectionEndpoint https://localhost:9031/as/introspect.oauth2
@@ -131,6 +132,8 @@ OIDCOAuthClientSecret 2Federate
    #Require claim scope~\bprofile\b
 </Location>
 ```
+
+For details on the OAuth 2.0 Resource Server setup see the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki/OAuth-2.0-Resource-Server).
 
 Support
 -------
