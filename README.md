@@ -51,35 +51,6 @@ in this directory. This file can also serve as an include file for `httpd.conf`.
 How to Use It  
 -------------
 
-### Quickstart with a generic OpenID Connect Provider
-
-1. install and load `mod_auth_openidc.so` in your Apache server
-1. configure your protected content/locations with `AuthType openid-connect`
-1. set `OIDCRedirectURI` to a "vanity" URL within a location that is protected by mod_auth_openidc
-1. register/generate a Client identifier and a secret with the OpenID Connect Provider and configure those in `OIDCClientID` and `OIDCClientSecret` respectively
-1. and register the `OIDCRedirectURI` as the Redirect or Callback URI with your client at the Provider
-1. configure `OIDCProviderMetadataURL` so it points to the Discovery metadata of your OpenID Connect Provider served on the `.well-known/openid-configuration` endpoint
-1. configure a random password in `OIDCCryptoPassphrase` for session/state encryption purposes
-
-```apache
-LoadModule auth_openidc_module modules/mod_auth_openidc.so
-
-OIDCProviderMetadataURL <issuer>/.well-known/openid-configuration
-OIDCClientID <client_id>
-OIDCClientSecret <client_secret>
-
-OIDCRedirectURI https://<hostname>/secure/redirect_uri
-OIDCCryptoPassphrase <password>
-
-<Location /secure>
-   AuthType openid-connect
-   Require valid-user
-</Location>
-```
-
-See below for more specific examples.
-For details on configuring multiple providers see the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki/Multiple-Providers).
-
 ### OpenID Connect SSO with Google+ Sign-In
 
 Sample configuration for using Google as your OpenID Connect Provider running on
@@ -114,23 +85,32 @@ Require claim hd:<your-domain>
 The above is an authorization example of an exact match of a provided claim against a string value.
 For more authorization options see the [Wiki page on Authorization](https://github.com/pingidentity/mod_auth_openidc/wiki/Authorization).
 
-### Quickstart with a generic OAuth 2.0 Resource Server
-
-Using "local" validation of JWT bearer tokens:
+### Quickstart with a generic OpenID Connect Provider
 
 1. install and load `mod_auth_openidc.so` in your Apache server
-1. configure your protected APIs/locations with `AuthType oauth20` and `Require claim` directives to restrict access to specific clients/scopes/claims/resource-owners
-1. configure local or remote bearer token validation following the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki/OAuth-2.0-Resource-Server)
+1. configure your protected content/locations with `AuthType openid-connect`
+1. set `OIDCRedirectURI` to a "vanity" URL within a location that is protected by mod_auth_openidc
+1. register/generate a Client identifier and a secret with the OpenID Connect Provider and configure those in `OIDCClientID` and `OIDCClientSecret` respectively
+1. and register the `OIDCRedirectURI` as the Redirect or Callback URI with your client at the Provider
+1. configure `OIDCProviderMetadataURL` so it points to the Discovery metadata of your OpenID Connect Provider served on the `.well-known/openid-configuration` endpoint
+1. configure a random password in `OIDCCryptoPassphrase` for session/state encryption purposes
 
 ```apache
-# local validation
-OIDCOAuthVerifySharedKeys plain##<shared-secret-to-validate-symmetric-jwt-signatures>
+LoadModule auth_openidc_module modules/mod_auth_openidc.so
 
-<Location /api>
-   AuthType oauth20
-   Require claim sub:<resource_owner_identifier>
+OIDCProviderMetadataURL <issuer>/.well-known/openid-configuration
+OIDCClientID <client_id>
+OIDCClientSecret <client_secret>
+
+OIDCRedirectURI https://<hostname>/secure/redirect_uri
+OIDCCryptoPassphrase <password>
+
+<Location /secure>
+   AuthType openid-connect
+   Require valid-user
 </Location>
 ```
+For details on configuring multiple providers see the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki/Multiple-Providers).
 
 ### PingFederate OAuth 2.0 Resource Server
 
@@ -154,8 +134,25 @@ OIDCOAuthClientSecret 2Federate
    #Require claim scope~\bprofile\b
 </Location>
 ```
-
 For details and additional options on the OAuth 2.0 Resource Server setup see the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki/OAuth-2.0-Resource-Server).
+
+### Quickstart with a generic OAuth 2.0 Resource Server
+
+Using "local" validation of JWT bearer tokens:
+
+1. install and load `mod_auth_openidc.so` in your Apache server
+1. configure your protected APIs/locations with `AuthType oauth20` and `Require claim` directives to restrict access to specific clients/scopes/claims/resource-owners
+1. configure local or remote bearer token validation following the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki/OAuth-2.0-Resource-Server)
+
+```apache
+# local validation
+OIDCOAuthVerifySharedKeys plain##<shared-secret-to-validate-symmetric-jwt-signatures>
+
+<Location /api>
+   AuthType oauth20
+   Require claim sub:<resource_owner_identifier>
+</Location>
+```
 
 Support
 -------
