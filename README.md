@@ -16,9 +16,8 @@ This module enables an Apache 2.x web server to operate as an [OpenID Connect](h
 receives user identity information from the OP in a so called ID Token and passes the identity information
 (a.k.a. claims) in the ID Token to applications hosted and protected by the Apache web server.
 
-It can also be configured as an OAuth 2.0 *Resource Server* (RS), consuming bearer access tokens and introspecting/validating
-them against a token introspection endpoint of an OAuth 2.0 Authorization Server and authorizing the Clients based on the
-introspection results.
+It can also be configured as an OAuth 2.0 *Resource Server* (RS), consuming bearer access tokens and validating
+them against an OAuth 2.0 Authorization Server, authorizing the Clients based on the validation results.
 
 The protected content and/or applications can be served by the Apache server itself or it can be served from elsewhere
 when Apache is configured as a Reverse Proxy in front of the origin server(s).
@@ -30,12 +29,8 @@ identifier (`[sub]@[iss]`). Other `id_token` claims are passed in HTTP headers a
 It allows for authorization rules (based on standard Apache `Require` primitives) that can be matched against the set
 of claims provided in the `id_token`/ `userinfo` claims.
 
-This module supports all defined OpenID Connect flows, including *Basic Client Profile*, *Implicit Client Profile*,
-*Hybrid Flows* and the *Refresh Flow*. It supports connecting to multiple OpenID Connect Providers through reading/writing
-provider metadata files in a specified metadata directory.
-
 *mod_auth_openidc* supports the following specifications:
-- [OpenID Connect](http://openid.net/specs/openid-connect-core-1_0.html)
+- [OpenID Connect](http://openid.net/specs/openid-connect-core-1_0.html) Basic, Implicit, Hybrid and Refresh flows.
 - [OpenID Connect Dynamic Client Registration](http://openid.net/specs/openid-connect-registration-1_0.html)
 - [OpenID Provider Discovery](http://openid.net/specs/openid-connect-discovery-1_0.html)
 - [OAuth 2.0 Form Post Response Mode](http://openid.net/specs/oauth-v2-form-post-response-mode-1_0.html)
@@ -44,7 +39,8 @@ provider metadata files in a specified metadata directory.
 on how to configure it.
 
 Alternatively the module can operate as an OAuth 2.0 Resource Server to an OAuth 2.0 Authorization Server,
-introspecting/validating bearer Access Tokens conforming to [OAuth 2.0 Token Introspection](https://tools.ietf.org/html/rfc7662) or similar.
+introspecting/validating bearer Access Tokens conforming to [OAuth 2.0 Token Introspection](https://tools.ietf.org/html/rfc7662) (or similar),
+or verifiying them locally if they are JWTs.
 The `REMOTE_USER` variable setting, passing claims in HTTP headers and authorization based on `Require` primitives
 works in the same way as described for OpenID Connect above. See the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki/OAuth-2.0-Resource-Server) for information
 on how to configure it.
@@ -54,6 +50,35 @@ in this directory. This file can also serve as an include file for `httpd.conf`.
 
 How to Use It  
 -------------
+
+### Quickstart with a generic OpenID Connect Provider
+
+1. install and load `mod_auth_openidc.so` in your Apache server
+1. configure your protected content/locations with `AuthType openid-connect`
+1. set `OIDCRedirectURI` to a "vanity" URL within a location that is protected by mod_auth_openidc
+1. register/generate a Client identifier and a secret with the OpenID Connect Provider and configure those in `OIDCClientID` and `OIDCClientSecret` respectively
+1. and register the `OIDCRedirectURI` as the Redirect or Callback URI with your client at the Provider
+1. configure `OIDCProviderMetadataURL` so it points to the Discovery metadata of your OpenID Connect Provider served on the `.well-known/openid-configuration` endpoint
+1. configure a random password in `OIDCCryptoPassphrase` for session/state encryption purposes
+
+```apache
+LoadModule auth_openidc_module modules/mod_auth_openidc.so
+
+OIDCProviderMetadataURL <issuer>/.well-known/openid-configuration
+OIDCClientID <client_id>
+OIDCClientSecret <client_secret>
+
+OIDCRedirectURI https://<hostname>/secure/redirect_uri
+OIDCCryptoPassphrase <password>
+
+<Location /secure>
+   AuthType openid-connect
+   Require valid-user
+</Location>
+```
+
+See below for more specific examples.
+For details on configuring multiple providers see the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki/Multiple-Providers).
 
 ### OpenID Connect SSO with Google+ Sign-In
 
@@ -89,35 +114,32 @@ Require claim hd:<your-domain>
 The above is an authorization example of an exact match of a provided claim against a string value.
 For more authorization options see the [Wiki page on Authorization](https://github.com/pingidentity/mod_auth_openidc/wiki/Authorization).
 
-### OpenID Connect SSO with multiple OpenID Connect Providers
+### Quickstart with a generic OAuth 2.0 Resource Server
 
-Sample configuration for multiple OpenID Connect providers, which triggers OpenID
-Connect Discovery first to find the user's OP.
+Using "local" validation of JWT bearer tokens:
 
-`OIDCMetadataDir` points to a directory that contains files that contain per-provider
-configuration data.
+1. install and load `mod_auth_openidc.so` in your Apache server
+1. configure your protected APIs/locations with `AuthType oauth20` and `Require claim` directives to restrict access to specific clients/scopes/claims/resource-owners
+1. configure local or remote bearer token validation following the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki/OAuth-2.0-Resource-Server)
 
 ```apache
-OIDCMetadataDir <somewhere-writable-for-the-apache-process>/metadata
+# local validation
+OIDCOAuthVerifySharedKeys plain##<shared-secret-to-validate-symmetric-jwt-signatures>
 
-OIDCRedirectURI https://www.example.com/example/redirect_uri/
-OIDCCryptoPassphrase <password>
-
-<Location /example/>
-   AuthType openid-connect
-   Require valid-user
+<Location /api>
+   AuthType oauth20
+   Require claim sub:<resource_owner_identifier>
 </Location>
 ```
 
-For details on configuring multiple providers see the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki/Multiple-Providers).
+### PingFederate OAuth 2.0 Resource Server
 
-### OAuth 2.0 Resource Server
-
-Another example config for using PingFederate as your OAuth 2.0 Authorization server,
+Example config for using PingFederate as your OAuth 2.0 Authorization server,
 based on the OAuth 2.0 PlayGround configuration and doing claims-based authorization, using
 RFC 7662 compliant Token Introspection.
 
 ```apache
+# remote validation
 OIDCOAuthIntrospectionEndpoint https://localhost:9031/as/introspect.oauth2
 OIDCOAuthIntrospectionEndpointAuth client_secret_basic
 OIDCOAuthRemoteUserClaim Username
@@ -133,7 +155,7 @@ OIDCOAuthClientSecret 2Federate
 </Location>
 ```
 
-For details on the OAuth 2.0 Resource Server setup see the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki/OAuth-2.0-Resource-Server).
+For details and additional options on the OAuth 2.0 Resource Server setup see the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki/OAuth-2.0-Resource-Server).
 
 Support
 -------
