@@ -1811,14 +1811,16 @@ apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg,
 		token_endpoint_auth = OIDC_PROTO_CLIENT_SECRET_BASIC;
 
 	if ((token_endpoint_auth == NULL) || (apr_strnatcmp(token_endpoint_auth,
-			OIDC_PROTO_ENDPOINT_AUTH_NONE) != 0))
+			OIDC_PROTO_ENDPOINT_AUTH_NONE) == 0))
 		return oidc_proto_endpoint_auth_none(r, client_id, params);
 
 	// if no client_secret is set and we don't authenticate using private_key_jwt,
 	// we can only be a public client since the other methods require a client_secret
-	if ((client_secret == NULL) || (apr_strnatcmp(token_endpoint_auth,
-			OIDC_PROTO_PRIVATE_KEY_JWT) != 0))
+	if ((client_secret == NULL) && (apr_strnatcmp(token_endpoint_auth,
+			OIDC_PROTO_PRIVATE_KEY_JWT) != 0)) {
+		oidc_debug(r, "no client secret set and not using private_key_jwt, assume we are a public client");
 		return oidc_proto_endpoint_auth_none(r, client_id, params);
+	}
 
 	if (apr_strnatcmp(token_endpoint_auth,
 			OIDC_PROTO_CLIENT_SECRET_BASIC) == 0)
