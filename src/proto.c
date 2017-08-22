@@ -1805,12 +1805,23 @@ apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg,
 
 	oidc_debug(r, "token_endpoint_auth=%s", token_endpoint_auth);
 
-	// we assume the default is client_secret_basic unless no secret is set
-	if ((token_endpoint_auth == NULL) && (client_secret == NULL))
-		return oidc_proto_endpoint_auth_none(r, client_id, params);
+	// default is client_secret_basic, but only if a client_secret is set,
+	// otherwise we are a public client
+	if ((token_endpoint_auth == NULL) && (client_secret != NULL))
+		token_endpoint_auth = OIDC_PROTO_CLIENT_SECRET_BASIC;
 
 	if ((token_endpoint_auth == NULL) || (apr_strnatcmp(token_endpoint_auth,
-			OIDC_PROTO_CLIENT_SECRET_BASIC) == 0))
+			OIDC_PROTO_ENDPOINT_AUTH_NONE) != 0))
+		return oidc_proto_endpoint_auth_none(r, client_id, params);
+
+	// if no client_secret is set and we don't authenticate using private_key_jwt,
+	// we can only be a public client since the other methods require a client_secret
+	if ((client_secret == NULL) || (apr_strnatcmp(token_endpoint_auth,
+			OIDC_PROTO_PRIVATE_KEY_JWT) != 0))
+		return oidc_proto_endpoint_auth_none(r, client_id, params);
+
+	if (apr_strnatcmp(token_endpoint_auth,
+			OIDC_PROTO_CLIENT_SECRET_BASIC) == 0)
 		return oidc_proto_endpoint_auth_basic(r, client_id, client_secret,
 				basic_auth_str);
 

@@ -477,6 +477,7 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_PROTO_CLIENT_SECRET_POST  "client_secret_post"
 #define OIDC_PROTO_CLIENT_SECRET_JWT   "client_secret_jwt"
 #define OIDC_PROTO_PRIVATE_KEY_JWT     "private_key_jwt"
+#define OIDC_PROTO_ENDPOINT_AUTH_NONE  "none"
 
 #define OIDC_PROTO_BEARER  "Bearer"
 

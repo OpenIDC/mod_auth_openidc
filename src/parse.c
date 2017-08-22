@@ -378,6 +378,7 @@ const char *oidc_parse_boolean(apr_pool_t *pool, const char *arg,
 #define OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC "client_secret_basic"
 #define OIDC_ENDPOINT_AUTH_CLIENT_SECRET_JWT   "client_secret_jwt"
 #define OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT     "private_key_jwt"
+#define OIDC_ENDPOINT_AUTH_NONE                "none"
 
 /*
  * check if the provided endpoint authentication method is supported
@@ -388,6 +389,7 @@ static const char *oidc_valid_endpoint_auth_method_impl(apr_pool_t *pool,
 			OIDC_ENDPOINT_AUTH_CLIENT_SECRET_POST,
 			OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC,
 			OIDC_ENDPOINT_AUTH_CLIENT_SECRET_JWT,
+			OIDC_ENDPOINT_AUTH_NONE,
 			NULL,
 			NULL };
 	if (has_private_key)
