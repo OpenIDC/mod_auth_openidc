@@ -61,9 +61,9 @@
 #include <curl/curl.h>
 
 #include "mod_auth_openidc.h"
-#include "pcre_subst.h"
 
 #include <pcre.h>
+#include "pcre_subst.h"
 
 /* hrm, should we get rid of this by adding parameters to the (3) functions? */
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
