@@ -61,6 +61,7 @@
 #include <curl/curl.h>
 
 #include "mod_auth_openidc.h"
+#include "pcre_subst.h"
 
 #include <pcre.h>
 
@@ -2019,6 +2020,46 @@ apr_hash_t * oidc_util_merge_key_sets(apr_pool_t *pool, apr_hash_t *k1,
 	if (k2 == NULL)
 		return k1;
 	return apr_hash_overlay(pool, k1, k2);
+}
+
+/*
+ * regexp substitute
+ *   Example:
+ *     regex: "^.*([0-9]+).*$"
+ *     replace: "$1"
+ *     text_original: "match 292 numbers"
+ *     text_replaced: "292"
+ */
+
+apr_byte_t oidc_util_regexp_substitute(
+        apr_pool_t *pool, const char *input,
+        const char *regexp, const char *replace, char **output, char **error_str) {
+
+    const char *errorptr;
+    int erroffset;
+    pcre *preg;
+    char *substituted;
+
+    preg = pcre_compile(regexp, 0, &errorptr, &erroffset, NULL);
+
+    if (preg == NULL) {
+        *error_str = apr_psprintf(pool, "pattern [%s] is not a valid regular expression", regexp);
+        pcre_free(preg);
+        return FALSE;
+    }
+
+    substituted = pcre_subst(preg, NULL, input, (int) strlen(input), 0, 0, replace);
+    if (substituted) {
+        *output = apr_pstrdup(pool, substituted);
+        pcre_free(preg);
+        pcre_free(substituted);
+        return TRUE;
+    } else {
+        *error_str = apr_psprintf(pool,"unknown error could not match string [%s] using pattern [%s] and replace matches in [%s]",
+                                  input, regexp, replace);
+        pcre_free(preg);
+    }
+    return FALSE;
 }
 
 /*

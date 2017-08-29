@@ -12,7 +12,8 @@ SRC=src/mod_auth_openidc.c \
 	src/session.c \
 	src/metadata.c \
 	src/jose.c \
-	src/parse.c
+	src/parse.c \
+	src/pcre_subst.c \
 
 ifeq (@HAVE_LIBHIREDIS@, 1)
 SRC += \
@@ -31,7 +32,8 @@ HDRS = \
 	src/mod_auth_openidc.h \
 	src/jose.h \
 	src/parse.h \
-	src/cache/cache.h
+	src/cache/cache.h \
+	src/pcre_subst.h \
 
 # Files to include when making a .tar.gz-file for distribution
 DISTFILES=$(SRC) \
