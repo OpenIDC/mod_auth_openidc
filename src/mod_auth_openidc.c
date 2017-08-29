@@ -1492,7 +1492,7 @@ static int oidc_authorization_response_error(request_rec *r, oidc_cfg *c,
  * get the r->user for this request based on the configuration for OIDC/OAuth
  */
 apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name,
-		const char *reg_exp, json_t *json, char **request_user) {
+		const char *reg_exp, const char *replace, json_t *json, char **request_user) {
 
 	/* get the claim value from the JSON object */
 	json_t *username = json_object_get(json, claim_name);
@@ -1506,9 +1506,9 @@ apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name,
 	if (reg_exp != NULL) {
 
 		char *error_str = NULL;
-		if (oidc_util_regexp_first_match(r->pool, *request_user, reg_exp,
+		if (oidc_util_regexp_substitute(r->pool, *request_user, reg_exp, replace,
 				request_user, &error_str) == FALSE) {
-			oidc_error(r, "oidc_util_regexp_first_match failed: %s", error_str);
+			oidc_error(r, "oidc_util_regexp_substitute failed: %s", error_str);
 			*request_user = NULL;
 			return FALSE;
 		}
@@ -1541,11 +1541,11 @@ static apr_byte_t oidc_set_request_user(request_rec *r, oidc_cfg *c,
 	json_t *claims = NULL;
 	oidc_util_decode_json_object(r, s_claims, &claims);
 	if (claims == NULL) {
-		rc = oidc_get_remote_user(r, claim_name, c->remote_user_claim.reg_exp,
+		rc = oidc_get_remote_user(r, claim_name, c->remote_user_claim.reg_exp, c->remote_user_claim.replace,
 				jwt->payload.value.json, &remote_user);
 	} else {
 		oidc_util_json_merge(r, jwt->payload.value.json, claims);
-		rc = oidc_get_remote_user(r, claim_name, c->remote_user_claim.reg_exp,
+		rc = oidc_get_remote_user(r, claim_name, c->remote_user_claim.reg_exp, c->remote_user_claim.replace,
 				claims, &remote_user);
 		json_decref(claims);
 	}
@@ -1565,10 +1565,10 @@ static apr_byte_t oidc_set_request_user(request_rec *r, oidc_cfg *c,
 
 	oidc_debug(r, "set remote_user to \"%s\" based on claim: \"%s\"%s", r->user,
 			c->remote_user_claim.claim_name,
-			c->remote_user_claim.reg_exp ?
-					apr_psprintf(r->pool, " and expression: \"%s\"",
-							c->remote_user_claim.reg_exp) :
-							"");
+			c->remote_user_claim.reg_exp ? apr_psprintf(
+                    r->pool, " and expression: \"%s\" and replace string: \"%s\"",
+                    c->remote_user_claim.reg_exp, c->remote_user_claim.replace) :
+            "");
 
 	return TRUE;
 }

@@ -284,6 +284,7 @@ typedef struct oidc_provider_t {
 typedef struct oidc_remote_user_claim_t {
 	const char *claim_name;
 	const char *reg_exp;
+	const char *replace;
 } oidc_remote_user_claim_t;
 
 typedef struct oidc_oauth_t {
@@ -405,7 +406,8 @@ apr_byte_t oidc_post_preserve_javascript(request_rec *r, const char *location, c
 void oidc_scrub_headers(request_rec *r);
 void oidc_strip_cookies(request_rec *r);
 int oidc_content_handler(request_rec *r);
-apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name, const char *reg_exp, json_t *json, char **request_user);
+apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name, const char *replace, const char *reg_exp,
+                                json_t *json, char **request_user);
 
 #define OIDC_REDIRECT_URI_REQUEST_INFO             "info"
 #define OIDC_REDIRECT_URI_REQUEST_LOGOUT           "logout"
@@ -711,6 +713,7 @@ apr_byte_t oidc_json_object_get_bool(apr_pool_t *pool, json_t *json, const char 
 char *oidc_util_html_escape(apr_pool_t *pool, const char *input);
 void oidc_util_table_add_query_encoded_params(apr_pool_t *pool, apr_table_t *table, const char *params);
 apr_hash_t * oidc_util_merge_key_sets(apr_pool_t *pool, apr_hash_t *k1, apr_hash_t *k2);
+apr_byte_t oidc_util_regexp_substitute(apr_pool_t *pool, const char *input, const char *regexp, const char *replace, char **output, char **error_str);
 apr_byte_t oidc_util_regexp_first_match(apr_pool_t *pool, const char *input, const char *regexp, char **output, char **error_str);
 apr_byte_t oidc_util_json_merge(request_rec *r, json_t *src, json_t *dst);
 int oidc_util_cookie_domain_valid(const char *hostname, char *cookie_domain);

@@ -83,8 +83,12 @@
 #define OIDC_DEFAULT_CLAIM_PREFIX "OIDC_CLAIM_"
 /* default name for the claim that will contain the REMOTE_USER value for OpenID Connect protected paths */
 #define OIDC_DEFAULT_CLAIM_REMOTE_USER "sub@"
+/* default replace str for regex, $1 represent the first match group*/
+#define OIDC_DEFAULT_CLAIM_REMOTE_USER_REPLACE "$1"
 /* default name for the claim that will contain the REMOTE_USER value for OAuth 2.0 protected paths */
 #define OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER "sub"
+/* default replace str for regex, $1 represent the first match group*/
+#define OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER_REPLACE "$1"
 /* default name of the session cookie */
 #define OIDC_DEFAULT_COOKIE "mod_auth_openidc_session"
 /* default for the HTTP header name in which the remote user name is passed */
@@ -805,7 +809,7 @@ static const char *oidc_set_preserve_post(cmd_parms *cmd, void *m,
  * set the remote user name claims, optionally plus the regular expression applied to it
  */
 static const char *oidc_set_remote_user_claim(cmd_parms *cmd, void *struct_ptr,
-		const char *v1, const char *v2) {
+		const char *v1, const char *v2, const char *v3) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
 
@@ -816,6 +820,8 @@ static const char *oidc_set_remote_user_claim(cmd_parms *cmd, void *struct_ptr,
 	remote_user_claim->claim_name = v1;
 	if (v2)
 		remote_user_claim->reg_exp = v2;
+    if (v3)
+        remote_user_claim->replace = v3;
 
 	return NULL;
 }
@@ -1039,6 +1045,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->oauth.remote_user_claim.claim_name =
 			OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER;
 	c->oauth.remote_user_claim.reg_exp = NULL;
+    c->oauth.remote_user_claim.replace = OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER_REPLACE;
 
 	c->oauth.verify_jwks_uri = NULL;
 	c->oauth.verify_public_keys = NULL;
@@ -1075,6 +1082,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->claim_prefix = NULL;
 	c->remote_user_claim.claim_name = OIDC_DEFAULT_CLAIM_REMOTE_USER;
 	c->remote_user_claim.reg_exp = NULL;
+    c->remote_user_claim.replace = OIDC_DEFAULT_CLAIM_REMOTE_USER_REPLACE;
 	c->pass_idtoken_as = OIDC_PASS_IDTOKEN_AS_CLAIMS;
 	c->cookie_http_only = OIDC_DEFAULT_COOKIE_HTTPONLY;
 	c->cookie_same_site = OIDC_DEFAULT_COOKIE_SAME_SITE;
@@ -1347,6 +1355,11 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->oauth.remote_user_claim.reg_exp != NULL ?
 					add->oauth.remote_user_claim.reg_exp :
 					base->oauth.remote_user_claim.reg_exp;
+    c->oauth.remote_user_claim.replace =
+            apr_strnatcmp(add->oauth.remote_user_claim.replace,
+                          OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER_REPLACE) != 0 ?
+            add->oauth.remote_user_claim.replace :
+            base->oauth.remote_user_claim.replace;
 
 	c->oauth.verify_jwks_uri =
 			add->oauth.verify_jwks_uri != NULL ?
@@ -1453,6 +1466,11 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->remote_user_claim.reg_exp != NULL ?
 					add->remote_user_claim.reg_exp :
 					base->remote_user_claim.reg_exp;
+    c->remote_user_claim.replace =
+            apr_strnatcmp(add->remote_user_claim.replace,
+                          OIDC_DEFAULT_CLAIM_REMOTE_USER_REPLACE) != 0 ?
+            add->remote_user_claim.replace :
+            base->remote_user_claim.replace;
 	c->pass_idtoken_as =
 			add->pass_idtoken_as != OIDC_PASS_IDTOKEN_AS_CLAIMS ?
 					add->pass_idtoken_as : base->pass_idtoken_as;
@@ -2431,7 +2449,7 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, claim_prefix),
 				RSRC_CONF,
 				"The prefix to use when setting claims in the HTTP headers."),
-		AP_INIT_TAKE12(OIDCRemoteUserClaim,
+		AP_INIT_TAKE123(OIDCRemoteUserClaim,
 				oidc_set_remote_user_claim,
 				(void*)APR_OFFSETOF(oidc_cfg, remote_user_claim),
 				RSRC_CONF,
@@ -2500,7 +2518,7 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.ssl_validate_server),
 				RSRC_CONF,
 				"Require validation of the OAuth 2.0 AS Validation Endpoint SSL server certificate for successful authentication (On or Off)"),
-		AP_INIT_TAKE12(OIDCOAuthRemoteUserClaim,
+		AP_INIT_TAKE123(OIDCOAuthRemoteUserClaim,
 				oidc_set_remote_user_claim,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.remote_user_claim),
 				RSRC_CONF,
