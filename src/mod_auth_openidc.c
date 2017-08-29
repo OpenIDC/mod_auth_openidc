@@ -208,11 +208,9 @@ void oidc_strip_cookies(request_rec *r) {
 			}
 
 			if (i == strip->nelts) {
-				result =
-						result ?
-								apr_psprintf(r->pool, "%s%s%s", result,
-										OIDC_STR_SEMI_COLON, cookie) :
-										cookie;
+				result = result ? apr_psprintf(r->pool, "%s%s%s", result,
+						OIDC_STR_SEMI_COLON, cookie) :
+						cookie;
 			}
 
 			cookie = apr_strtok(NULL, OIDC_STR_SEMI_COLON, &ctx);
@@ -1492,7 +1490,8 @@ static int oidc_authorization_response_error(request_rec *r, oidc_cfg *c,
  * get the r->user for this request based on the configuration for OIDC/OAuth
  */
 apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name,
-		const char *reg_exp, const char *replace, json_t *json, char **request_user) {
+		const char *reg_exp, const char *replace, json_t *json,
+		char **request_user) {
 
 	/* get the claim value from the JSON object */
 	json_t *username = json_object_get(json, claim_name);
@@ -1506,12 +1505,25 @@ apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name,
 	if (reg_exp != NULL) {
 
 		char *error_str = NULL;
-		if (oidc_util_regexp_substitute(r->pool, *request_user, reg_exp, replace,
-				request_user, &error_str) == FALSE) {
+
+		if (replace == NULL) {
+
+			if (oidc_util_regexp_first_match(r->pool, *request_user, reg_exp,
+					request_user, &error_str) == FALSE) {
+				oidc_error(r, "oidc_util_regexp_first_match failed: %s",
+						error_str);
+				*request_user = NULL;
+				return FALSE;
+			}
+
+		} else if (oidc_util_regexp_substitute(r->pool, *request_user, reg_exp,
+				replace, request_user, &error_str) == FALSE) {
+
 			oidc_error(r, "oidc_util_regexp_substitute failed: %s", error_str);
 			*request_user = NULL;
 			return FALSE;
 		}
+
 	}
 
 	return TRUE;
@@ -1541,12 +1553,13 @@ static apr_byte_t oidc_set_request_user(request_rec *r, oidc_cfg *c,
 	json_t *claims = NULL;
 	oidc_util_decode_json_object(r, s_claims, &claims);
 	if (claims == NULL) {
-		rc = oidc_get_remote_user(r, claim_name, c->remote_user_claim.reg_exp, c->remote_user_claim.replace,
-				jwt->payload.value.json, &remote_user);
+		rc = oidc_get_remote_user(r, claim_name, c->remote_user_claim.reg_exp,
+				c->remote_user_claim.replace, jwt->payload.value.json,
+				&remote_user);
 	} else {
 		oidc_util_json_merge(r, jwt->payload.value.json, claims);
-		rc = oidc_get_remote_user(r, claim_name, c->remote_user_claim.reg_exp, c->remote_user_claim.replace,
-				claims, &remote_user);
+		rc = oidc_get_remote_user(r, claim_name, c->remote_user_claim.reg_exp,
+				c->remote_user_claim.replace, claims, &remote_user);
 		json_decref(claims);
 	}
 
@@ -1565,10 +1578,12 @@ static apr_byte_t oidc_set_request_user(request_rec *r, oidc_cfg *c,
 
 	oidc_debug(r, "set remote_user to \"%s\" based on claim: \"%s\"%s", r->user,
 			c->remote_user_claim.claim_name,
-			c->remote_user_claim.reg_exp ? apr_psprintf(
-                    r->pool, " and expression: \"%s\" and replace string: \"%s\"",
-                    c->remote_user_claim.reg_exp, c->remote_user_claim.replace) :
-            "");
+			c->remote_user_claim.reg_exp ?
+					apr_psprintf(r->pool,
+							" and expression: \"%s\" and replace string: \"%s\"",
+							c->remote_user_claim.reg_exp,
+							c->remote_user_claim.replace) :
+							"");
 
 	return TRUE;
 }
@@ -1985,7 +2000,8 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 		char *url = apr_psprintf(r->pool, "%s%s%s=%s&%s=%s&%s=%s&%s=%s",
 				discover_url,
 				strchr(discover_url, OIDC_CHAR_QUERY) != NULL ?
-						OIDC_STR_AMP : OIDC_STR_QUERY,
+						OIDC_STR_AMP :
+						OIDC_STR_QUERY,
 						OIDC_DISC_RT_PARAM, oidc_util_escape_string(r, current_url),
 						OIDC_DISC_RM_PARAM, method,
 						OIDC_DISC_CB_PARAM,
@@ -2858,7 +2874,8 @@ end:
 	if (error_code != NULL)
 		return_to = apr_psprintf(r->pool, "%s%serror_code=%s", return_to,
 				strchr(return_to, OIDC_CHAR_QUERY) ?
-						OIDC_STR_AMP : OIDC_STR_QUERY,
+						OIDC_STR_AMP :
+						OIDC_STR_QUERY,
 						oidc_util_escape_string(r, error_code));
 
 	/* add the redirect location header */
@@ -3208,7 +3225,7 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 
 			return rc;
 
-		/* initial request to non-redirect URI, check if we have an existing session */
+			/* initial request to non-redirect URI, check if we have an existing session */
 		} else if (session->remote_user != NULL) {
 
 			/* this is initial request and we already have a session */
