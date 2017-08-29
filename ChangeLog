@@ -1,3 +1,6 @@
+08/29/2017
+- properly support JSON boolean values in metatadat .conf files
+
 08/27/2017
 - add issuer specific redirect URI option ("issuer_specific_redirect_uri") for multi-provider setups to mitigate IDP mixup
 - bump to 2.3.2rc5

@@ -1903,6 +1903,22 @@ apr_byte_t oidc_json_object_get_int(apr_pool_t *pool, json_t *json,
 }
 
 /*
+ * get (optional) boolean from a JSON object
+ */
+apr_byte_t oidc_json_object_get_bool(apr_pool_t *pool, json_t *json,
+		const char *name, int *value, const int default_value) {
+	*value = default_value;
+	if (json != NULL) {
+		json_t *v = json_object_get(json, name);
+		if ((v != NULL) && (json_is_boolean(v))) {
+			*value = json_is_true(v);
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+/*
  * merge two JSON objects
  */
 apr_byte_t oidc_util_json_merge(request_rec *r, json_t *src, json_t *dst) {

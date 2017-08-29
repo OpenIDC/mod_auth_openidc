@@ -908,16 +908,20 @@ static void oidc_metadata_parse_boolean(request_rec *r, json_t *json,
 		const char *key, int *value, int default_value) {
 	int int_value = 0;
 	char *s_value = NULL;
-	oidc_json_object_get_string(r->pool, json, key, &s_value,
-			NULL);
-	if (s_value != NULL) {
-		const char *rv = oidc_parse_boolean(r->pool, s_value, &int_value);
-		if (rv != NULL) {
-			oidc_warn(r, "%s: %s", key, rv);
-			int_value = default_value;
+	if (oidc_json_object_get_bool(r->pool, json, key, &int_value,
+			default_value) == FALSE) {
+		oidc_json_object_get_string(r->pool, json, key, &s_value,
+				NULL);
+		if (s_value != NULL) {
+			const char *rv = oidc_parse_boolean(r->pool, s_value, &int_value);
+			if (rv != NULL) {
+				oidc_warn(r, "%s: %s", key, rv);
+				int_value = default_value;
+			}
+		} else {
+			oidc_json_object_get_int(r->pool, json, key, &int_value,
+					default_value);
 		}
-	} else {
-		oidc_json_object_get_int(r->pool, json, key, &int_value, default_value);
 	}
 	*value = (int_value != 0) ? TRUE : FALSE;
 }
