@@ -282,6 +282,7 @@ typedef struct oidc_provider_t {
 typedef struct oidc_remote_user_claim_t {
 	const char *claim_name;
 	const char *reg_exp;
+	const char *replace;
 } oidc_remote_user_claim_t;
 
 typedef struct oidc_oauth_t {
