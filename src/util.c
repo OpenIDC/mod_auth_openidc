@@ -511,6 +511,26 @@ const char *oidc_get_redirect_uri(request_rec *r, oidc_cfg *cfg) {
 	return redirect_uri;
 }
 
+/*
+ * determine absolute redirect uri that is issuer specific
+ */
+const char *oidc_get_redirect_uri_iss(request_rec *r, oidc_cfg *cfg,
+		oidc_provider_t *provider) {
+	const char *redirect_uri = oidc_get_redirect_uri(r, cfg);
+	if (provider->issuer_specific_redirect_uri != 0) {
+		redirect_uri = apr_psprintf(r->pool, "%s%s%s=%s", redirect_uri,
+				strchr(redirect_uri, OIDC_CHAR_QUERY) != NULL ?
+						OIDC_STR_AMP :
+						OIDC_STR_QUERY,
+						OIDC_PROTO_ISS, oidc_util_escape_string(r, provider->issuer));
+//						OIDC_PROTO_CLIENT_ID,
+//						oidc_util_escape_string(r, provider->client_id));
+		oidc_debug(r, "determined issuer specific redirect uri: %s",
+				redirect_uri);
+	}
+	return redirect_uri;
+}
+
 /* buffer to hold HTTP call responses */
 typedef struct oidc_curl_buffer {
 	request_rec *r;

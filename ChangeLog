@@ -1,3 +1,7 @@
+08/27/2017
+- add issuer specific redirect URI option ("issuer_specific_redirect_uri") for multi-provider setups to mitigate IDP mixup
+- bump to 2.3.2rc5
+
 08/20/2017
 - fix public clients; add endpoint authentication method "none"
 - bump to 2.3.2rc4

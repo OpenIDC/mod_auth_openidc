@@ -277,6 +277,8 @@ typedef struct oidc_provider_t {
 	char *request_object;
 	int auth_request_method;
 	int token_binding_policy;
+
+	int issuer_specific_redirect_uri;
 } oidc_provider_t ;
 
 typedef struct oidc_remote_user_claim_t {
@@ -673,6 +675,7 @@ int oidc_base64url_decode(apr_pool_t *pool, char **dst, const char *src);
 const char *oidc_get_current_url_host(request_rec *r);
 char *oidc_get_current_url(request_rec *r);
 const char *oidc_get_redirect_uri(request_rec *r, oidc_cfg *c);
+const char *oidc_get_redirect_uri_iss(request_rec *r, oidc_cfg *c, oidc_provider_t *provider);
 char *oidc_url_encode(const request_rec *r, const char *str, const char *charsToEncode);
 char *oidc_normalize_header_name(const request_rec *r, const char *str);
 void oidc_util_set_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires, const char *ext);

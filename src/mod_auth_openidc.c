@@ -2217,8 +2217,8 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	/* send off to the OpenID Connect Provider */
 	// TODO: maybe show intermediate/progress screen "redirecting to"
 	return oidc_proto_authorization_request(r, provider, login_hint,
-			oidc_get_redirect_uri(r, c), state, proto_state, id_token_hint,
-			code_challenge, auth_request_params, path_scope);
+			oidc_get_redirect_uri_iss(r, c, provider), state, proto_state,
+			id_token_hint, code_challenge, auth_request_params, path_scope);
 }
 
 /*
@@ -2770,8 +2770,9 @@ static int oidc_handle_session_management(request_rec *r, oidc_cfg *c,
 			 */
 			return oidc_authenticate_user(r, c, provider,
 					apr_psprintf(r->pool, "%s?session=iframe_rp",
-							oidc_get_redirect_uri(r, c)), NULL, id_token_hint,
-							"none", oidc_dir_cfg_path_auth_request_params(r),
+							oidc_get_redirect_uri_iss(r, c, provider)), NULL,
+							id_token_hint, "none",
+							oidc_dir_cfg_path_auth_request_params(r),
 							oidc_dir_cfg_path_scope(r));
 		}
 		oidc_debug(r,

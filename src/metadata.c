@@ -123,6 +123,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_METADATA_USERINFO_TOKEN_METHOD                 "userinfo_token_method"
 #define OIDC_METADATA_TOKEN_BINDING_POLICY                  "token_binding_policy"
 #define OIDC_METADATA_AUTH_REQUEST_METHOD                   "auth_request_method"
+#define OIDC_METADATA_ISSUER_SPECIFIC_REDIRECT_URI          "issuer_specific_redirect_uri"
 
 /*
  * get the metadata filename for a specified issuer (cq. urlencode it)
@@ -487,7 +488,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 	json_object_set_new(data, OIDC_METADATA_CLIENT_NAME,
 			json_string(provider->client_name));
 	json_object_set_new(data, OIDC_METADATA_REDIRECT_URIS,
-			json_pack("[s]", oidc_get_redirect_uri(r, cfg)));
+			json_pack("[s]", oidc_get_redirect_uri_iss(r, cfg, provider)));
 
 	json_t *response_types = json_array();
 	apr_array_header_t *flows = oidc_proto_supported_flows(r->pool);
@@ -1233,6 +1234,12 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 				&provider->auth_request_method);
 	else
 		provider->auth_request_method = cfg->provider.auth_request_method;
+
+	/* get the issuer specific redirect URI option */
+	oidc_metadata_parse_boolean(r, j_conf,
+			OIDC_METADATA_ISSUER_SPECIFIC_REDIRECT_URI,
+			&provider->issuer_specific_redirect_uri,
+			cfg->provider.issuer_specific_redirect_uri);
 
 	return TRUE;
 }

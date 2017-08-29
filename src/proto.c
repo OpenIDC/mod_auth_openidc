@@ -1937,7 +1937,7 @@ static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg *cfg,
 			OIDC_PROTO_GRANT_TYPE_AUTHZ_CODE);
 	apr_table_setn(params, OIDC_PROTO_CODE, code);
 	apr_table_set(params, OIDC_PROTO_REDIRECT_URI,
-			oidc_get_redirect_uri(r, cfg));
+			oidc_get_redirect_uri_iss(r, cfg, provider));
 
 	if (code_verifier)
 		apr_table_setn(params, OIDC_PROTO_CODE_VERIFIER, code_verifier);

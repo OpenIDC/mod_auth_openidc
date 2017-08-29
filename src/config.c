@@ -159,6 +159,8 @@
 #define OIDC_DEFAULT_PROVIDER_TOKEN_BINDING_POLICY OIDC_TOKEN_BINDING_POLICY_OPTIONAL
 /* define the default HTTP method used to send the authentication request to the provider */
 #define OIDC_DEFAULT_AUTH_REQUEST_METHOD OIDC_AUTH_REQUEST_METHOD_GET
+/* define whether the issuer will be added to the redirect uri by default to mitigate the IDP mixup attack */
+#define OIDC_DEFAULT_PROVIDER_ISSUER_SPECIFIC_REDIRECT_URI 0
 
 #define OIDCProviderMetadataURL              "OIDCProviderMetadataURL"
 #define OIDCProviderIssuer                   "OIDCProviderIssuer"
@@ -1097,6 +1099,9 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->black_listed_claims = NULL;
 	c->white_listed_claims = NULL;
 
+	c->provider.issuer_specific_redirect_uri =
+			OIDC_DEFAULT_PROVIDER_ISSUER_SPECIFIC_REDIRECT_URI;
+
 	return c;
 }
 
@@ -1505,6 +1510,12 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->white_listed_claims =
 			add->white_listed_claims != NULL ?
 					add->white_listed_claims : base->white_listed_claims;
+
+	c->provider.issuer_specific_redirect_uri =
+			add->provider.issuer_specific_redirect_uri
+			!= OIDC_DEFAULT_PROVIDER_ISSUER_SPECIFIC_REDIRECT_URI ?
+					add->provider.issuer_specific_redirect_uri :
+					base->provider.issuer_specific_redirect_uri;
 
 	return c;
 }
