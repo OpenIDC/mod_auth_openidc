@@ -1282,7 +1282,7 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 
-	oidc_debug(r, "enter, jwt.header=\"%s\", jwt.payload=\%s\", nonce=%s",
+	oidc_debug(r, "enter, jwt.header=\"%s\", jwt.payload=\"%s\", nonce=\"%s\"",
 			jwt->header.value.str, jwt->payload.value.str, nonce);
 
 	/* if a nonce is not passed, we're doing a ("code") flow where the nonce is optional */
