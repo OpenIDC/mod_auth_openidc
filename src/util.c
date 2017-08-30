@@ -2256,7 +2256,7 @@ const char *oidc_util_hdr_in_cookie_get(const request_rec *r) {
 }
 
 void oidc_util_hdr_in_cookie_set(const request_rec *r, const char *value) {
-	return oidc_util_hdr_in_set(r, OIDC_HTTP_HDR_COOKIE, value);
+	oidc_util_hdr_in_set(r, OIDC_HTTP_HDR_COOKIE, value);
 }
 
 const char *oidc_util_hdr_in_user_agent_get(const request_rec *r) {
@@ -2300,7 +2300,7 @@ const char *oidc_util_hdr_in_host_get(const request_rec *r) {
 }
 
 void oidc_util_hdr_out_location_set(const request_rec *r, const char *value) {
-	return oidc_util_hdr_out_set(r, OIDC_HTTP_HDR_LOCATION, value);
+	oidc_util_hdr_out_set(r, OIDC_HTTP_HDR_LOCATION, value);
 }
 
 const char *oidc_util_hdr_out_location_get(const request_rec *r) {
