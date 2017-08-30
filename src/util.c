@@ -338,12 +338,12 @@ char *oidc_util_html_escape(apr_pool_t *pool, const char *s) {
 	const char * const replace[] =
 	{ "&amp;", "&apos;", "&quot;", "&gt;", "&lt;", };
 	unsigned int i, j = 0, k, n = 0, len = strlen(chars);
-	int m = 0;
+	unsigned int m = 0;
 	char *r = apr_pcalloc(pool, strlen(s) * 6);
 	for (i = 0; i < strlen(s); i++) {
 		for (n = 0; n < len; n++) {
 			if (s[i] == chars[n]) {
-				m = strlen(replace[n]);
+				m = (unsigned int)strlen(replace[n]);
 				for (k = 0; k < m; k++)
 					r[j + k] = replace[n][k];
 				j += m;
