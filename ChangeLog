@@ -23,7 +23,7 @@
 
 07/28/2017
 - fix issue with the combination of shared memory (shm) cache and using encryption (OIDCCacheEncrypt On)
-  where the cache value would be corrupted after the first (succesful) retrieval
+  where the cache value would be corrupted after the first (successful) retrieval
 - bump to 2.3.2rc1
 
 07/27/2017
