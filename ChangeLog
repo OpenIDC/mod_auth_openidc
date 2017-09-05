@@ -1,7 +1,11 @@
+09/05/2017
+- optionally remove request object parameters from the authorization request URL with "copy_and_remove_from_request"; see #294
+- bump to 2.3.2rc7
+
 08/29/2017
 - properly support JSON boolean values in metatadat .conf files
 - add regex substitution for *RemoteUserClaim; thanks @hihellobolke
-- bump to bump to 2.3.2rc6
+- bump to 2.3.2rc6
 
 08/27/2017
 - add issuer specific redirect URI option ("issuer_specific_redirect_uri") for multi-provider setups to mitigate IDP mixup
