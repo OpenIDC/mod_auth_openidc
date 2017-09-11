@@ -331,9 +331,13 @@ static int oidc_cache_shm_destroy(server_rec *s) {
 	apr_status_t rv = APR_SUCCESS;
 
 	if (context->shm) {
-		rv = apr_shm_destroy(context->shm);
-		oidc_sdebug(s, "apr_shm_destroy returned: %d", rv);
+		apr_global_mutex_lock(context->mutex->mutex);
+		if (*context->mutex->sema == 1) {
+			rv = apr_shm_destroy(context->shm);
+			oidc_sdebug(s, "apr_shm_destroy returned: %d", rv);
+		}
 		context->shm = NULL;
+		apr_global_mutex_unlock(context->mutex->mutex);
 	}
 
 	oidc_cache_mutex_destroy(s, context->mutex);

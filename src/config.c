@@ -1972,8 +1972,7 @@ static void oidc_ssl_id_callback(CRYPTO_THREADID *id) {
 
 #endif /* defined(OPENSSL_THREADS) && APR_HAS_THREADS */
 
-static apr_status_t oidc_cleanup(void *data) {
-
+static apr_status_t oidc_cleanup_child(void *data) {
 	server_rec *sp = (server_rec *) data;
 	while (sp != NULL) {
 		oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(sp->module_config,
@@ -1993,6 +1992,13 @@ static apr_status_t oidc_cleanup(void *data) {
 
 		sp = sp->next;
 	}
+
+	return APR_SUCCESS;
+}
+
+static apr_status_t oidc_cleanup_parent(void *data) {
+
+	oidc_cleanup_child(data);
 
 #if (defined (OPENSSL_THREADS) && APR_HAS_THREADS)
 	if (CRYPTO_get_locking_callback() == oidc_ssl_locking_callback)
@@ -2081,7 +2087,7 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 	}
 #endif /* OPENSSL_NO_THREADID */
 #endif /* defined(OPENSSL_THREADS) && APR_HAS_THREADS */
-	apr_pool_cleanup_register(pool, s, oidc_cleanup, apr_pool_cleanup_null);
+	apr_pool_cleanup_register(pool, s, oidc_cleanup_parent, apr_pool_cleanup_null);
 
 	server_rec *sp = s;
 	while (sp != NULL) {
@@ -2132,16 +2138,18 @@ static const authz_provider oidc_authz_claims_expr_provider = {
  * initialize cache context in child process if required
  */
 static void oidc_child_init(apr_pool_t *p, server_rec *s) {
-	while (s != NULL) {
-		oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(s->module_config,
+	server_rec *sp = s;
+	while (sp != NULL) {
+		oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(sp->module_config,
 				&auth_openidc_module);
 		if (cfg->cache->child_init != NULL) {
-			if (cfg->cache->child_init(p, s) != APR_SUCCESS) {
-				oidc_serror(s, "cfg->cache->child_init failed");
+			if (cfg->cache->child_init(p, sp) != APR_SUCCESS) {
+				oidc_serror(sp, "cfg->cache->child_init failed");
 			}
 		}
-		s = s->next;
+		sp = sp->next;
 	}
+    apr_pool_cleanup_register(p, s, oidc_cleanup_child, apr_pool_cleanup_null);
 }
 
 /*

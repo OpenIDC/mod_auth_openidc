@@ -54,6 +54,7 @@
 #define _MOD_AUTH_OPENIDC_CACHE_H_
 
 #include "apr_global_mutex.h"
+#include "apr_shm.h"
 
 typedef void * (*oidc_cache_cfg_create)(apr_pool_t *pool);
 typedef int (*oidc_cache_post_config_function)(server_rec *s);
@@ -78,6 +79,8 @@ typedef struct oidc_cache_t {
 typedef struct oidc_cache_mutex_t {
 	apr_global_mutex_t *mutex;
 	char *mutex_filename;
+	apr_shm_t *shm;
+	int *sema;
 } oidc_cache_mutex_t;
 
 oidc_cache_mutex_t *oidc_cache_mutex_create(apr_pool_t *pool);

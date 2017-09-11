@@ -1,3 +1,7 @@
+09/11/2017
+- fix "graceful" restart for shm/redis cache backends; see #296
+- bump to 2.3.2rc8
+
 09/05/2017
 - optionally remove request object parameters from the authorization request URL with "copy_and_remove_from_request"; see #294
 - bump to 2.3.2rc7
