@@ -32,6 +32,10 @@ make install
 
 Note that, depending on your distribution,  apxs2 may be named apxs.
 
+FreeBSD users can use one of the following two options to install mod_auth_openidc:
+- To install the port: cd /usr/ports/www/mod_auth_openidc/ && make install clean
+- To add the package: pkg install ap24-mod_auth_openidc
+
 Configuration
 =============
 
