@@ -7,7 +7,7 @@
 - bump to 2.3.2rc7
 
 08/29/2017
-- properly support JSON boolean values in metatadat .conf files
+- properly support JSON boolean values in metadata .conf files
 - add regex substitution for *RemoteUserClaim; thanks @hihellobolke
 - bump to 2.3.2rc6
 
