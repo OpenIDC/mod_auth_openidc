@@ -1,3 +1,6 @@
+09/18/2017
+- release 2.3.2
+
 09/11/2017
 - fix "graceful" restart for shm/redis cache backends; see #296
 - bump to 2.3.2rc8
