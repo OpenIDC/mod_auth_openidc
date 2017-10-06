@@ -1225,6 +1225,12 @@ static apr_byte_t oidc_proto_validate_iat(request_rec *r, oidc_jwt_t *jwt,
 		return TRUE;
 	}
 
+	/* see if we are asked to enforce a time window at all */
+	if (slack < 0) {
+		oidc_debug(r, "slack for JWT set < 0, do not enforce boundary check");
+		return TRUE;
+	}
+
 	/* check if this id_token has been issued just now +- slack (default 10 minutes) */
 	if ((now - slack) > jwt->payload.iat) {
 		oidc_error(r,
@@ -1841,6 +1847,11 @@ apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg,
 		char **basic_auth_str) {
 
 	oidc_debug(r, "token_endpoint_auth=%s", token_endpoint_auth);
+
+	if (client_id == NULL) {
+		oidc_debug(r, "no client ID set: assume we don't need to authenticate");
+		return TRUE;
+	}
 
 	// default is client_secret_basic, but only if a client_secret is set,
 	// otherwise we are a public client

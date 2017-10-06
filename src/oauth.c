@@ -465,7 +465,6 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
  * TODO: document that we're reusing the following settings from the OIDC config section:
  *       - JWKs URI refresh interval
  *       - encryption key material (OIDCPrivateKeyFiles)
- *       - iat slack (OIDCIDTokenIatSlack)
  *
  * OIDCOAuthRemoteUserClaim client_id
  * # 32x 61 hex
@@ -496,9 +495,11 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 	oidc_debug(r, "successfully parsed JWT with header: %s",
 			jwt->header.value.str);
 
-	/* validate the access token JWT, validating optional exp + iat */
-	if (oidc_proto_validate_jwt(r, jwt, NULL, FALSE, FALSE,
-			c->provider.idtoken_iat_slack) == FALSE) {
+	/*
+	 * validate the access token JWT by validating the (optional) exp claim
+	 * don't enforce anything around iat since it doesn't make much sense for access tokens
+	 */
+	if (oidc_proto_validate_jwt(r, jwt, NULL, FALSE, FALSE, -1) == FALSE) {
 		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}

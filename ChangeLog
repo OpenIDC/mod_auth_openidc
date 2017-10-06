@@ -1,3 +1,8 @@
+10/6/2017
+- avoid crash when no OIDCOAuthClientID is set for remote access token validation
+- don't enforce "iat" slack checks on locally validaed JWT access tokens
+- bump to 2.3.3rc0
+
 09/18/2017
 - release 2.3.2
 
