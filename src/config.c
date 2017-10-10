@@ -1814,7 +1814,7 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 						OIDCProviderAuthorizationEndpoint);
 		} else {
 			apr_uri_parse(s->process->pconf, c->provider.metadata_url, &r_uri);
-			if (apr_strnatcmp(r_uri.scheme, "http") == 0) {
+			if ((r_uri.scheme == NULL) || (apr_strnatcmp(r_uri.scheme, "https") != 0)) {
 				oidc_swarn(s,
 						"the URL scheme (%s) of the configured " OIDCProviderMetadataURL " SHOULD be \"https\" for security reasons!",
 						r_uri.scheme);
@@ -2201,7 +2201,7 @@ void oidc_register_hooks(apr_pool_t *pool) {
 const command_rec oidc_config_cmds[] = {
 
 		AP_INIT_TAKE1(OIDCProviderMetadataURL,
-				oidc_set_string_slot,
+				oidc_set_url_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.metadata_url),
 				RSRC_CONF,
 				"OpenID Connect OP configuration metadata URL."),

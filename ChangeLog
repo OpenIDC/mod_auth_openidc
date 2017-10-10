@@ -1,3 +1,7 @@
+10/10/2017
+- avoid crash when no scheme is set on OIDCProviderMetadataURL; closes #303; thanks @iconoeugen
+- bump to 2.3.3rc1
+
 10/6/2017
 - avoid crash when no OIDCOAuthClientID is set for remote access token validation
 - don't enforce "iat" slack checks on locally validaed JWT access tokens
