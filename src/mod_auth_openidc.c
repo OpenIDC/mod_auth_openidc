@@ -1276,8 +1276,8 @@ static void oidc_copy_tokens_to_request_state(request_rec *r,
 static apr_byte_t oidc_session_pass_tokens_and_save(request_rec *r,
 		oidc_cfg *cfg, oidc_session_t *session, apr_byte_t needs_save) {
 
-	int pass_headers = oidc_cfg_dir_pass_info_in_headers(r);
-	int pass_envvars = oidc_cfg_dir_pass_info_in_envvars(r);
+	apr_byte_t pass_headers = oidc_cfg_dir_pass_info_in_headers(r);
+	apr_byte_t pass_envvars = oidc_cfg_dir_pass_info_in_envvars(r);
 
 	/* set the refresh_token in the app headers/variables, if enabled for this location/directory */
 	const char *refresh_token = oidc_session_get_refresh_token(r, session);
@@ -1353,8 +1353,8 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 
 	/* get the header name in which the remote user name needs to be passed */
 	char *authn_header = oidc_cfg_dir_authn_header(r);
-	int pass_headers = oidc_cfg_dir_pass_info_in_headers(r);
-	int pass_envvars = oidc_cfg_dir_pass_info_in_envvars(r);
+	apr_byte_t pass_headers = oidc_cfg_dir_pass_info_in_headers(r);
+	apr_byte_t pass_envvars = oidc_cfg_dir_pass_info_in_envvars(r);
 
 	/* verify current cookie domain against issued cookie domain */
 	if (oidc_check_cookie_domain(r, cfg, session) == FALSE)
@@ -2580,7 +2580,7 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 		if (id_token_hint != NULL) {
 			logout_request = apr_psprintf(r->pool, "%s%sid_token_hint=%s",
 					logout_request,
-					strchr(logout_request, OIDC_CHAR_QUERY) != NULL ?
+					strchr(logout_request ? logout_request : "", OIDC_CHAR_QUERY) != NULL ?
 							OIDC_STR_AMP : OIDC_STR_QUERY,
 							oidc_util_escape_string(r, id_token_hint));
 		}
@@ -2588,7 +2588,7 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 		if (url != NULL) {
 			logout_request = apr_psprintf(r->pool,
 					"%s%spost_logout_redirect_uri=%s", logout_request,
-					strchr(logout_request, OIDC_CHAR_QUERY) != NULL ?
+					strchr(logout_request ? logout_request : "", OIDC_CHAR_QUERY) != NULL ?
 							OIDC_STR_AMP : OIDC_STR_QUERY,
 							oidc_util_escape_string(r, url));
 		}
@@ -2873,7 +2873,7 @@ end:
 	/* pass optional error message to the return URL */
 	if (error_code != NULL)
 		return_to = apr_psprintf(r->pool, "%s%serror_code=%s", return_to,
-				strchr(return_to, OIDC_CHAR_QUERY) ?
+				strchr(return_to ? return_to : "", OIDC_CHAR_QUERY) ?
 						OIDC_STR_AMP :
 						OIDC_STR_QUERY,
 						oidc_util_escape_string(r, error_code));

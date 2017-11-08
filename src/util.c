@@ -77,10 +77,10 @@ int oidc_base64url_encode(request_rec *r, char **dst, const char *src,
 		oidc_error(r, "not encoding anything; src=NULL and/or src_len<1");
 		return -1;
 	}
-	int enc_len = apr_base64_encode_len(src_len);
+	unsigned int enc_len = apr_base64_encode_len(src_len);
 	char *enc = apr_palloc(r->pool, enc_len);
 	apr_base64_encode(enc, (const char *) src, src_len);
-	int i = 0;
+	unsigned int i = 0;
 	while (enc[i] != '\0') {
 		if (enc[i] == '+')
 			enc[i] = '-';
@@ -92,10 +92,11 @@ int oidc_base64url_encode(request_rec *r, char **dst, const char *src,
 	}
 	if (remove_padding) {
 		/* remove /0 and padding */
-		enc_len--;
-		if (enc[enc_len - 1] == ',')
+		if (enc_len > 0)
 			enc_len--;
-		if (enc[enc_len - 1] == ',')
+		if ((enc_len > 0) && (enc[enc_len - 1] == ','))
+			enc_len--;
+		if ((enc_len > 0) &&(enc[enc_len - 1] == ','))
 			enc_len--;
 		enc[enc_len] = '\0';
 	}
@@ -520,7 +521,7 @@ const char *oidc_get_redirect_uri_iss(request_rec *r, oidc_cfg *cfg,
 	const char *redirect_uri = oidc_get_redirect_uri(r, cfg);
 	if (provider->issuer_specific_redirect_uri != 0) {
 		redirect_uri = apr_psprintf(r->pool, "%s%s%s=%s", redirect_uri,
-				strchr(redirect_uri, OIDC_CHAR_QUERY) != NULL ?
+				strchr(redirect_uri ? redirect_uri : "", OIDC_CHAR_QUERY) != NULL ?
 						OIDC_STR_AMP :
 						OIDC_STR_QUERY,
 						OIDC_PROTO_ISS, oidc_util_escape_string(r, provider->issuer));
@@ -609,7 +610,7 @@ char *oidc_util_http_query_encoded_url(request_rec *r, const char *url,
 				NULL);
 		const char *sep = NULL;
 		if (data.encoded_params)
-			sep = strchr(url, OIDC_CHAR_QUERY) != NULL ?
+			sep = strchr(url ? url : "", OIDC_CHAR_QUERY) != NULL ?
 					OIDC_STR_AMP :
 					OIDC_STR_QUERY;
 		result = apr_psprintf(r->pool, "%s%s%s", url, sep ? sep : "",
@@ -1289,7 +1290,7 @@ apr_byte_t oidc_util_decode_json_and_check_error(request_rec *r,
 /*
  * sends content to the user agent
  */
-int oidc_util_http_send(request_rec *r, const char *data, int data_len,
+int oidc_util_http_send(request_rec *r, const char *data, size_t data_len,
 		const char *content_type, int success_rvalue) {
 	ap_set_content_type(r, content_type);
 	apr_bucket_brigade *bb = apr_brigade_create(r->pool,
@@ -1765,7 +1766,7 @@ void oidc_util_set_app_infos(request_rec *r, const json_t *j_attrs,
 
 			/* string to hold the concatenated array string values */
 			char *s_concat = apr_pstrdup(r->pool, "");
-			int i = 0;
+			size_t i = 0;
 
 			/* loop over the array */
 			for (i = 0; i < json_array_size(j_value); i++) {
@@ -1970,7 +1971,7 @@ void oidc_util_table_add_query_encoded_params(apr_pool_t *pool,
  * create a symmetric key from a client_secret
  */
 apr_byte_t oidc_util_create_symmetric_key(request_rec *r,
-		const char *client_secret, int r_key_len, const char *hash_algo,
+		const char *client_secret, unsigned int r_key_len, const char *hash_algo,
 		apr_byte_t set_kid, oidc_jwk_t **jwk) {
 	oidc_jose_error_t err;
 	unsigned char *key = NULL;

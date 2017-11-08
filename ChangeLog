@@ -1,3 +1,7 @@
+11/08/2017
+- address a number of static code analysis issues
+- bump to 2.3.3rc2
+
 10/10/2017
 - avoid crash when no scheme is set on OIDCProviderMetadataURL; closes #303; thanks @iconoeugen
 - bump to 2.3.3rc1

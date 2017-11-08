@@ -1615,7 +1615,7 @@ char *oidc_cfg_dir_authn_header(request_rec *r) {
 	return dir_cfg->authn_header;
 }
 
-int oidc_cfg_dir_pass_info_in_headers(request_rec *r) {
+apr_byte_t oidc_cfg_dir_pass_info_in_headers(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 	if (dir_cfg->pass_info_in_headers == OIDC_CONFIG_POS_INT_UNSET)
@@ -1623,7 +1623,7 @@ int oidc_cfg_dir_pass_info_in_headers(request_rec *r) {
 	return dir_cfg->pass_info_in_headers;
 }
 
-int oidc_cfg_dir_pass_info_in_envvars(request_rec *r) {
+apr_byte_t oidc_cfg_dir_pass_info_in_envvars(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 	if (dir_cfg->pass_info_in_env_vars == OIDC_CONFIG_POS_INT_UNSET)
@@ -1631,7 +1631,7 @@ int oidc_cfg_dir_pass_info_in_envvars(request_rec *r) {
 	return dir_cfg->pass_info_in_env_vars;
 }
 
-int oidc_cfg_dir_pass_refresh_token(request_rec *r) {
+apr_byte_t oidc_cfg_dir_pass_refresh_token(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 	if (dir_cfg->pass_refresh_token == OIDC_CONFIG_POS_INT_UNSET)
@@ -1639,7 +1639,7 @@ int oidc_cfg_dir_pass_refresh_token(request_rec *r) {
 	return dir_cfg->pass_refresh_token;
 }
 
-int oidc_cfg_dir_accept_token_in(request_rec *r) {
+apr_byte_t oidc_cfg_dir_accept_token_in(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 	if (dir_cfg->oauth_accept_token_in == OIDC_CONFIG_POS_INT_UNSET)

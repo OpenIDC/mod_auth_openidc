@@ -107,7 +107,7 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 		const char **access_token) {
 
 	/* get the directory specific setting on how the token can be passed in */
-	int accept_token_in = oidc_cfg_dir_accept_token_in(r);
+	apr_byte_t accept_token_in = oidc_cfg_dir_accept_token_in(r);
 	const char *cookie_name = oidc_cfg_dir_accept_token_in_option(r,
 			OIDC_OAUTH_ACCEPT_TOKEN_IN_OPTION_COOKIE_NAME);
 
@@ -676,8 +676,8 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 
 	/* set the user authentication HTTP header if set and required */
 	char *authn_header = oidc_cfg_dir_authn_header(r);
-	int pass_headers = oidc_cfg_dir_pass_info_in_headers(r);
-	int pass_envvars = oidc_cfg_dir_pass_info_in_envvars(r);
+	apr_byte_t pass_headers = oidc_cfg_dir_pass_info_in_headers(r);
+	apr_byte_t pass_envvars = oidc_cfg_dir_pass_info_in_envvars(r);
 
 	if ((r->user != NULL) && (authn_header != NULL))
 		oidc_util_hdr_in_set(r, authn_header, r->user);

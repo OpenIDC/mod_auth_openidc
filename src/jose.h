@@ -243,6 +243,6 @@ const char *oidc_jwt_hdr_get(oidc_jwt_t *jwt, const char *key);
 /* return the key type of a JWT */
 int oidc_jwt_alg2kty(oidc_jwt_t *jwt);
 /* return the key size for an algorithm */
-int oidc_alg2keysize(const char *alg);
+unsigned int oidc_alg2keysize(const char *alg);
 
 #endif /* MOD_AUTH_OPENIDC_JOSE_H_ */

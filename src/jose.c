@@ -188,7 +188,7 @@ int oidc_jwt_alg2kty(oidc_jwt_t *jwt) {
 /*
  * return the key size for an algorithm
  */
-int oidc_alg2keysize(const char *alg) {
+unsigned int oidc_alg2keysize(const char *alg) {
 
 	if (alg == NULL)
 		return 0;
@@ -738,6 +738,8 @@ apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json,
 		return FALSE;
 
 	*j_jwt = oidc_jwt_new(pool, FALSE, FALSE);
+	if (*j_jwt == NULL)
+		return FALSE;
 	oidc_jwt_t *jwt = *j_jwt;
 
 	jwt->cjose_jws = cjose_jws_import(s_json, strlen(s_json), &cjose_err);

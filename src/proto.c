@@ -1268,10 +1268,11 @@ static apr_byte_t oidc_proto_validate_exp(request_rec *r, oidc_jwt_t *jwt,
 	}
 
 	/* see if now is beyond the JWT expiry timestamp */
-	if (now > jwt->payload.exp) {
+	apr_time_t expires = jwt->payload.exp;
+	if (now > expires) {
 		oidc_error(r,
 				"\"exp\" validation failure (%ld): JWT expired %ld seconds ago",
-				(long )jwt->payload.exp, (long )(now - jwt->payload.exp));
+				(long )expires, (long )(now - expires));
 		return FALSE;
 	}
 
@@ -1561,7 +1562,7 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt,
 char *oidc_proto_peek_jwt_header(request_rec *r,
 		const char *compact_encoded_jwt, char **alg) {
 	char *input = NULL, *result = NULL;
-	char *p = strstr(compact_encoded_jwt, ".");
+	char *p = strstr(compact_encoded_jwt ? compact_encoded_jwt : "", ".");
 	if (p == NULL) {
 		oidc_warn(r,
 				"could not parse first element separated by \".\" from input");
