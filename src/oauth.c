@@ -65,6 +65,7 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 		const char *token, char **response) {
 
 	char *basic_auth = NULL;
+    char *bearer_auth = NULL;
 
 	/* assemble parameters to call the token endpoint for validation */
 	apr_table_t *params = apr_table_make(r->pool, 4);
@@ -80,20 +81,20 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 	if (oidc_proto_token_endpoint_auth(r, c,
 			c->oauth.introspection_endpoint_auth, c->oauth.client_id,
 			c->oauth.client_secret, c->oauth.introspection_endpoint_url, params,
-			&basic_auth) == FALSE)
+			&basic_auth, &bearer_auth) == FALSE)
 		return FALSE;
 
 	/* call the endpoint with the constructed parameter set and return the resulting response */
 	return apr_strnatcmp(c->oauth.introspection_endpoint_method,
 			OIDC_INTROSPECTION_METHOD_GET) == 0 ?
 					oidc_util_http_get(r, c->oauth.introspection_endpoint_url, params,
-							basic_auth, NULL, c->oauth.ssl_validate_server, response,
+							basic_auth, bearer_auth, c->oauth.ssl_validate_server, response,
 							c->http_timeout_long, c->outgoing_proxy,
 							oidc_dir_cfg_pass_cookies(r),
 							oidc_util_get_full_path(r->pool, c->oauth.introspection_endpoint_tls_client_cert),
 							oidc_util_get_full_path(r->pool, c->oauth.introspection_endpoint_tls_client_key)) :
 							oidc_util_http_post_form(r, c->oauth.introspection_endpoint_url,
-									params, basic_auth, NULL, c->oauth.ssl_validate_server,
+									params, basic_auth, bearer_auth, c->oauth.ssl_validate_server,
 									response, c->http_timeout_long, c->outgoing_proxy,
 									oidc_dir_cfg_pass_cookies(r),
 									oidc_util_get_full_path(r->pool, c->oauth.introspection_endpoint_tls_client_cert),
