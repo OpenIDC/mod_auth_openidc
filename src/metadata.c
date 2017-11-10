@@ -1272,13 +1272,13 @@ apr_byte_t oidc_metadata_client_parse(request_rec *r, oidc_cfg *cfg,
 		if ((apr_strnatcmp(token_endpoint_auth, OIDC_PROTO_CLIENT_SECRET_POST)
 				== 0)
 				|| (apr_strnatcmp(token_endpoint_auth,
-						OIDC_PROTO_CLIENT_SECRET_BASIC) == 0)
-                        || (apr_strnatcmp(token_endpoint_auth,
-								OIDC_PROTO_CLIENT_SECRET_BEARER) == 0)
-                                || (apr_strnatcmp(token_endpoint_auth,
-                                        OIDC_PROTO_CLIENT_SECRET_JWT) == 0)
-                                        || (apr_strnatcmp(token_endpoint_auth,
-                                                OIDC_PROTO_PRIVATE_KEY_JWT) == 0)) {
+				OIDC_PROTO_CLIENT_SECRET_BASIC) == 0)
+					|| (apr_strnatcmp(token_endpoint_auth,
+					OIDC_PROTO_CLIENT_BEARER) == 0)
+						|| (apr_strnatcmp(token_endpoint_auth,
+						OIDC_PROTO_CLIENT_SECRET_JWT) == 0)
+							|| (apr_strnatcmp(token_endpoint_auth,
+							OIDC_PROTO_PRIVATE_KEY_JWT) == 0)) {
 			provider->token_endpoint_auth = apr_pstrdup(r->pool,
 					token_endpoint_auth);
 		} else {

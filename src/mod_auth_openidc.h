@@ -478,7 +478,7 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_PROTO_CLIENT_ASSERTION_TYPE_JWT_BEARER "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
 
 #define OIDC_PROTO_CLIENT_SECRET_BASIC "client_secret_basic"
-#define OIDC_PROTO_CLIENT_SECRET_BEARER   "client_secret_bearer"
+#define OIDC_PROTO_CLIENT_BEARER   "client_bearer"
 #define OIDC_PROTO_CLIENT_SECRET_POST  "client_secret_post"
 #define OIDC_PROTO_CLIENT_SECRET_JWT   "client_secret_jwt"
 #define OIDC_PROTO_PRIVATE_KEY_JWT     "private_key_jwt"

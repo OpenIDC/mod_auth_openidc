@@ -1809,7 +1809,7 @@ static apr_byte_t oidc_proto_endpoint_auth_client_secret_jwt(request_rec *r,
 	return TRUE;
 }
 
-static apr_byte_t oidc_proto_endpoint_auth_client_secret_bearer(request_rec *r,
+static apr_byte_t oidc_proto_endpoint_auth_client_bearer(request_rec *r,
 		oidc_cfg *cfg, apr_table_t *params, char **bearer_auth_str) {
 
     const char *token = apr_table_get(params, cfg->oauth.introspection_token_param_name);
@@ -1887,8 +1887,8 @@ apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg,
 				basic_auth_str);
 
    	if (apr_strnatcmp(token_endpoint_auth,
-			OIDC_PROTO_CLIENT_SECRET_BEARER) == 0)
-		return oidc_proto_endpoint_auth_client_secret_bearer(r, cfg, params, bearer_auth_str);
+			OIDC_PROTO_CLIENT_BEARER) == 0)
+		return oidc_proto_endpoint_auth_client_bearer(r, cfg, params, bearer_auth_str);
 
 	if (apr_strnatcmp(token_endpoint_auth,
 			OIDC_PROTO_CLIENT_SECRET_POST) == 0)
