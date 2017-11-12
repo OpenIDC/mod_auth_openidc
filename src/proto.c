@@ -1809,11 +1809,13 @@ static apr_byte_t oidc_proto_endpoint_auth_client_secret_jwt(request_rec *r,
 	return TRUE;
 }
 
-static apr_byte_t oidc_proto_endpoint_auth_client_bearer(request_rec *r,
+static apr_byte_t oidc_proto_endpoint_access_token_bearer(request_rec *r,
 		oidc_cfg *cfg, apr_table_t *params, char **bearer_auth_str) {
 
-    const char *token = apr_table_get(params, cfg->oauth.introspection_token_param_name);
-    *bearer_auth_str = apr_psprintf(r->pool, "%s", token);
+	const char *token = strcmp(cfg->oauth.introspection_client_auth_bearer_token, "") == 0 ? 
+							apr_table_get(params, cfg->oauth.introspection_token_param_name):
+							cfg->oauth.introspection_client_auth_bearer_token;
+	*bearer_auth_str = apr_psprintf(r->pool, "%s", token);
     
 	return TRUE;
 }
@@ -1855,6 +1857,9 @@ apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg,
 		const char *token_endpoint_auth, const char *client_id,
 		const char *client_secret, const char *audience, apr_table_t *params,
 		char **basic_auth_str, char **bearer_auth_str) {
+	
+	if (cfg->oauth.introspection_client_auth_bearer_token != NULL)
+		return oidc_proto_endpoint_access_token_bearer(r, cfg, params, bearer_auth_str);
 
 	oidc_debug(r, "token_endpoint_auth=%s", token_endpoint_auth);
 
@@ -1874,8 +1879,8 @@ apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg,
 
 	// if no client_secret is set and we don't authenticate using private_key_jwt,
 	// we can only be a public client since the other methods require a client_secret
-	if ((client_secret == NULL) && (apr_strnatcmp(token_endpoint_auth,
-			OIDC_PROTO_PRIVATE_KEY_JWT) != 0)) {
+	if ((client_secret == NULL) && (apr_strnatcmp(token_endpoint_auth, 
+					OIDC_PROTO_PRIVATE_KEY_JWT) != 0)) {
 		oidc_debug(r,
 				"no client secret set and not using private_key_jwt, assume we are a public client");
 		return oidc_proto_endpoint_auth_none(r, client_id, params);
@@ -1885,10 +1890,6 @@ apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg,
 			OIDC_PROTO_CLIENT_SECRET_BASIC) == 0)
 		return oidc_proto_endpoint_auth_basic(r, client_id, client_secret,
 				basic_auth_str);
-
-   	if (apr_strnatcmp(token_endpoint_auth,
-			OIDC_PROTO_CLIENT_BEARER) == 0)
-		return oidc_proto_endpoint_auth_client_bearer(r, cfg, params, bearer_auth_str);
 
 	if (apr_strnatcmp(token_endpoint_auth,
 			OIDC_PROTO_CLIENT_SECRET_POST) == 0)
@@ -1920,7 +1921,7 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 
 	char *response = NULL;
 	char *basic_auth = NULL;
-    char *bearer_auth = NULL;
+	char *bearer_auth = NULL;
 
 	/* add the token endpoint authentication credentials */
 	if (oidc_proto_token_endpoint_auth(r, cfg, provider->token_endpoint_auth,

@@ -209,6 +209,7 @@
 #define OIDCPassIDTokenAs                    "OIDCPassIDTokenAs"
 #define OIDCOAuthClientID                    "OIDCOAuthClientID"
 #define OIDCOAuthClientSecret                "OIDCOAuthClientSecret"
+#define OIDCOAuthIntrospectionClientAuthBearerToken "OIDCOAuthIntrospectionClientAuthBearerToken"
 #define OIDCOAuthIntrospectionEndpoint       "OIDCOAuthIntrospectionEndpoint"
 #define OIDCOAuthIntrospectionEndpointMethod "OIDCOAuthIntrospectionEndpointMethod"
 #define OIDCOAuthIntrospectionEndpointParams "OIDCOAuthIntrospectionEndpointParams"
@@ -966,6 +967,18 @@ const char *oidc_set_auth_request_method(cmd_parms *cmd, void *struct_ptr,
 }
 
 /*
+ * set the introspection authorization static bearer token
+ */
+static const char *oidc_set_client_auth_bearer_token(cmd_parms *cmd, void *struct_ptr,
+		const char *args) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+	char *w = ap_getword_conf(cmd->pool, &args);
+	cfg->oauth.introspection_client_auth_bearer_token = (*w == '\0' || *args != 0) ? "" : w;
+	return NULL;
+}
+
+/*
  * create a new server config record with defaults
  */
 void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
@@ -1027,7 +1040,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->oauth.introspection_endpoint_url = NULL;
 	c->oauth.introspection_endpoint_method = OIDC_DEFAULT_OAUTH_ENDPOINT_METHOD;
 	c->oauth.introspection_endpoint_params = NULL;
-	c->oauth.introspection_endpoint_auth = NULL;
+	c->oauth.introspection_client_auth_bearer_token = NULL;
 	c->oauth.introspection_token_param_name =
 			OIDC_DEFAULT_OAUTH_TOKEN_PARAM_NAME;
 
@@ -1320,6 +1333,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->oauth.introspection_endpoint_auth != NULL ?
 					add->oauth.introspection_endpoint_auth :
 					base->oauth.introspection_endpoint_auth;
+	c->oauth.introspection_client_auth_bearer_token =
+			add->oauth.introspection_client_auth_bearer_token != NULL ?
+					add->oauth.introspection_client_auth_bearer_token :
+					base->oauth.introspection_client_auth_bearer_token;
 	c->oauth.introspection_token_param_name =
 			apr_strnatcmp(add->oauth.introspection_token_param_name,
 					OIDC_DEFAULT_OAUTH_TOKEN_PARAM_NAME) != 0 ?
@@ -2494,6 +2511,11 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, oauth.introspection_endpoint_auth),
 				RSRC_CONF,
 				"Specify an authentication method for the OAuth AS Introspection Endpoint (e.g.: client_secret_basic)"),
+        AP_INIT_RAW_ARGS(OIDCOAuthIntrospectionClientAuthBearerToken,
+				oidc_set_client_auth_bearer_token,
+				NULL,
+				RSRC_CONF,
+				"Specify a bearer token to authorize against the OAuth AS Introspection Endpoint (e.g.: 55554ee-2491-11e3-be72-001fe2e44345 or empty to use the introspected token itself)"),
 		AP_INIT_TAKE1(OIDCOAuthIntrospectionEndpointCert,
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.introspection_endpoint_tls_client_cert),

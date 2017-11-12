@@ -297,6 +297,7 @@ typedef struct oidc_oauth_t {
 	char *introspection_endpoint_method;
 	char *introspection_endpoint_params;
 	char *introspection_endpoint_auth;
+	char *introspection_client_auth_bearer_token;
 	char *introspection_token_param_name;
 	char *introspection_token_expiry_claim_name;
 	char *introspection_token_expiry_claim_format;
@@ -478,7 +479,6 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_PROTO_CLIENT_ASSERTION_TYPE_JWT_BEARER "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
 
 #define OIDC_PROTO_CLIENT_SECRET_BASIC "client_secret_basic"
-#define OIDC_PROTO_CLIENT_BEARER   "client_bearer"
 #define OIDC_PROTO_CLIENT_SECRET_POST  "client_secret_post"
 #define OIDC_PROTO_CLIENT_SECRET_JWT   "client_secret_jwt"
 #define OIDC_PROTO_PRIVATE_KEY_JWT     "private_key_jwt"

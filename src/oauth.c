@@ -63,9 +63,11 @@
  */
 static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 		const char *token, char **response) {
+	
+	oidc_debug(r, "enter");
 
 	char *basic_auth = NULL;
-    char *bearer_auth = NULL;
+	char *bearer_auth = NULL;
 
 	/* assemble parameters to call the token endpoint for validation */
 	apr_table_t *params = apr_table_make(r->pool, 4);
