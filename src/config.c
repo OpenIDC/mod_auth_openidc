@@ -1040,6 +1040,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->oauth.introspection_endpoint_url = NULL;
 	c->oauth.introspection_endpoint_method = OIDC_DEFAULT_OAUTH_ENDPOINT_METHOD;
 	c->oauth.introspection_endpoint_params = NULL;
+	c->oauth.introspection_endpoint_auth = NULL;
 	c->oauth.introspection_client_auth_bearer_token = NULL;
 	c->oauth.introspection_token_param_name =
 			OIDC_DEFAULT_OAUTH_TOKEN_PARAM_NAME;
