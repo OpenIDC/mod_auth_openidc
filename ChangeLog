@@ -1,3 +1,7 @@
+11/13/2017
+- add support for authentication to the introspection endpoint with a bearer token using OIDCOAuthIntrospectionClientAuthBearerToken; thanks @cristichiru
+- bump to 2.3.3rc3
+
 11/08/2017
 - address a number of static code analysis issues
 - bump to 2.3.3rc2
