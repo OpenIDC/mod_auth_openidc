@@ -1,6 +1,6 @@
 Preferably you should use one of the pre-compiled binary packages, available for
 various platforms, see:
-  https://github.com/pingidentity/mod_auth_openidc/wiki#11-where-can-i-get-binary-packages
+  https://github.com/zmartzone/mod_auth_openidc/wiki#11-where-can-i-get-binary-packages
 and proceed with the Configuration section below.
 
 If your platform is not supported or you want to run the latest code,

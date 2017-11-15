@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/pingidentity/mod_auth_openidc.svg?branch=master)](https://travis-ci.org/pingidentity/mod_auth_openidc)
+[![Build Status](https://travis-ci.org/zmartzone/mod_auth_openidc.svg?branch=master)](https://travis-ci.org/zmartzone/mod_auth_openidc)
 
 mod_auth_openidc
 ================
@@ -35,14 +35,14 @@ of claims provided in the `id_token`/ `userinfo` claims.
 - [OpenID Provider Discovery](http://openid.net/specs/openid-connect-discovery-1_0.html)
 - [OAuth 2.0 Form Post Response Mode](http://openid.net/specs/oauth-v2-form-post-response-mode-1_0.html)
 - [Proof Key for Code Exchange by OAuth Public Clients](https://tools.ietf.org/html/rfc7636)
-- [OpenID Connect Session Management](http://openid.net/specs/openid-connect-session-1_0.html). See the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki/Session-Management) for information
+- [OpenID Connect Session Management](http://openid.net/specs/openid-connect-session-1_0.html). See the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki/Session-Management) for information
 on how to configure it.
 
 Alternatively the module can operate as an OAuth 2.0 Resource Server to an OAuth 2.0 Authorization Server,
 introspecting/validating bearer Access Tokens conforming to [OAuth 2.0 Token Introspection](https://tools.ietf.org/html/rfc7662) (or similar),
 or verifiying them locally if they are JWTs.
 The `REMOTE_USER` variable setting, passing claims in HTTP headers and authorization based on `Require` primitives
-works in the same way as described for OpenID Connect above. See the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki/OAuth-2.0-Resource-Server) for information
+works in the same way as described for OpenID Connect above. See the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki/OAuth-2.0-Resource-Server) for information
 on how to configure it.
 
 For an exhaustive description of all configuration options, see the file `auth_openidc.conf`
@@ -83,7 +83,7 @@ Require claim hd:<your-domain>
 ```
 
 The above is an authorization example of an exact match of a provided claim against a string value.
-For more authorization options see the [Wiki page on Authorization](https://github.com/pingidentity/mod_auth_openidc/wiki/Authorization).
+For more authorization options see the [Wiki page on Authorization](https://github.com/zmartzone/mod_auth_openidc/wiki/Authorization).
 
 ### Quickstart with a generic OpenID Connect Provider
 
@@ -110,7 +110,7 @@ OIDCCryptoPassphrase <password>
    Require valid-user
 </Location>
 ```
-For details on configuring multiple providers see the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki/Multiple-Providers).
+For details on configuring multiple providers see the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki/Multiple-Providers).
 
 ### PingFederate OAuth 2.0 Resource Server
 
@@ -134,7 +134,7 @@ OIDCOAuthClientSecret 2Federate
    #Require claim scope~\bprofile\b
 </Location>
 ```
-For details and additional options on the OAuth 2.0 Resource Server setup see the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki/OAuth-2.0-Resource-Server).
+For details and additional options on the OAuth 2.0 Resource Server setup see the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki/OAuth-2.0-Resource-Server).
 
 ### Quickstart with a generic OAuth 2.0 Resource Server
 
@@ -142,7 +142,7 @@ Using "local" validation of JWT bearer tokens:
 
 1. install and load `mod_auth_openidc.so` in your Apache server
 1. configure your protected APIs/locations with `AuthType oauth20` and `Require claim` directives to restrict access to specific clients/scopes/claims/resource-owners
-1. configure local or remote bearer token validation following the [Wiki](https://github.com/pingidentity/mod_auth_openidc/wiki/OAuth-2.0-Resource-Server)
+1. configure local or remote bearer token validation following the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki/OAuth-2.0-Resource-Server)
 
 ```apache
 # local validation
@@ -158,7 +158,7 @@ Support
 -------
 
 See the Wiki pages with Frequently Asked Questions at:  
-  https://github.com/pingidentity/mod_auth_openidc/wiki   
+  https://github.com/zmartzone/mod_auth_openidc/wiki   
 There is a Google Group/mailing list at:  
   [mod_auth_openidc@googlegroups.com](mailto:mod_auth_openidc@googlegroups.com)  
 The corresponding forum/archive is at:  
@@ -173,6 +173,5 @@ The Github issues tracker should be used only for bugs reports and feature reque
 Disclaimer
 ----------
 
-*This software is open sourced by Ping Identity but not supported commercially
-by Ping Identity, see also the DISCLAIMER file in this directory. For commercial support
+*This software is open sourced by ZmartZone IAM. For commercial support
 you can contact [ZmartZone IAM](https://www.zmartzone.eu) as described above.*

@@ -176,7 +176,7 @@
 03/30/2017
 - merge feature branch back to master:
   - better support for Single Page Applications, see:
-    https://github.com/pingidentity/mod_auth_openidc/wiki/Single-Page-Applications
+    https://github.com/zmartzone/mod_auth_openidc/wiki/Single-Page-Applications
     - add session info hook that is configurable through OIDCInfoHook
     - add "AuthType auth-openidc" option that allows both "oauth20" and "openid-connect" on the same path
   - add encryption for all cache entries instead of just session data through OIDCCacheEncrypt
