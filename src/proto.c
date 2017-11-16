@@ -1812,11 +1812,13 @@ static apr_byte_t oidc_proto_endpoint_auth_client_secret_jwt(request_rec *r,
 static apr_byte_t oidc_proto_endpoint_access_token_bearer(request_rec *r,
 		oidc_cfg *cfg, apr_table_t *params, char **bearer_auth_str) {
 
-	const char *token = strcmp(cfg->oauth.introspection_client_auth_bearer_token, "") == 0 ? 
-							apr_table_get(params, cfg->oauth.introspection_token_param_name):
+	const char *token =
+			strcmp(cfg->oauth.introspection_client_auth_bearer_token, "") == 0 ?
+					apr_table_get(params,
+							cfg->oauth.introspection_token_param_name) :
 							cfg->oauth.introspection_client_auth_bearer_token;
 	*bearer_auth_str = apr_psprintf(r->pool, "%s", token);
-    
+
 	return TRUE;
 }
 
@@ -1857,9 +1859,10 @@ apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg,
 		const char *token_endpoint_auth, const char *client_id,
 		const char *client_secret, const char *audience, apr_table_t *params,
 		char **basic_auth_str, char **bearer_auth_str) {
-	
+
 	if (cfg->oauth.introspection_client_auth_bearer_token != NULL)
-		return oidc_proto_endpoint_access_token_bearer(r, cfg, params, bearer_auth_str);
+		return oidc_proto_endpoint_access_token_bearer(r, cfg, params,
+				bearer_auth_str);
 
 	oidc_debug(r, "token_endpoint_auth=%s", token_endpoint_auth);
 
@@ -1879,8 +1882,8 @@ apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg,
 
 	// if no client_secret is set and we don't authenticate using private_key_jwt,
 	// we can only be a public client since the other methods require a client_secret
-	if ((client_secret == NULL) && (apr_strnatcmp(token_endpoint_auth, 
-					OIDC_PROTO_PRIVATE_KEY_JWT) != 0)) {
+	if ((client_secret == NULL) && (apr_strnatcmp(token_endpoint_auth,
+			OIDC_PROTO_PRIVATE_KEY_JWT) != 0)) {
 		oidc_debug(r,
 				"no client secret set and not using private_key_jwt, assume we are a public client");
 		return oidc_proto_endpoint_auth_none(r, client_id, params);
@@ -1926,7 +1929,8 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 	/* add the token endpoint authentication credentials */
 	if (oidc_proto_token_endpoint_auth(r, cfg, provider->token_endpoint_auth,
 			provider->client_id, provider->client_secret,
-			provider->token_endpoint_url, params, &basic_auth, &bearer_auth) == FALSE)
+			provider->token_endpoint_url, params, &basic_auth,
+			&bearer_auth) == FALSE)
 		return FALSE;
 
 	/* add any configured extra static parameters to the token endpoint */
@@ -2039,7 +2043,7 @@ apr_byte_t oidc_proto_refresh_request(request_rec *r, oidc_cfg *cfg,
 
 static apr_byte_t oidc_user_info_response_validate(request_rec *r,
 		oidc_cfg *cfg, oidc_provider_t *provider, char **response,
-		json_t **claims) {
+		json_t **claims, char **userinfo_jwt) {
 
 	oidc_debug(r,
 			"enter: userinfo_signed_response_alg=%s, userinfo_encrypted_response_alg=%s, userinfo_encrypted_response_enc=%s",
@@ -2116,9 +2120,9 @@ static apr_byte_t oidc_user_info_response_validate(request_rec *r,
 				"successfully verified signed JWT returned from userinfo endpoint: %s",
 				jwt->payload.value.str);
 
+		*userinfo_jwt = apr_pstrdup(r->pool, *response);
 		*claims = json_deep_copy(jwt->payload.value.json);
 		*response = apr_pstrdup(r->pool, jwt->payload.value.str);
-
 		oidc_jwt_destroy(jwt);
 
 		return TRUE;
@@ -2234,7 +2238,7 @@ static apr_byte_t oidc_proto_resolve_composite_claims(request_rec *r,
  */
 apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, const char *id_token_sub,
-		const char *access_token, char **response) {
+		const char *access_token, char **response, char **userinfo_jwt) {
 
 	oidc_debug(r, "enter, endpoint=%s, access_token=%s",
 			provider->userinfo_endpoint_url, access_token);
@@ -2262,8 +2266,8 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 	}
 
 	json_t *claims = NULL;
-	if (oidc_user_info_response_validate(r, cfg, provider, response,
-			&claims) == FALSE)
+	if (oidc_user_info_response_validate(r, cfg, provider, response, &claims,
+			userinfo_jwt) == FALSE)
 		return FALSE;
 
 	if (oidc_proto_resolve_composite_claims(r, cfg, claims) == TRUE)

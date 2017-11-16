@@ -361,8 +361,10 @@ apr_byte_t oidc_session_set(request_rec *r, oidc_session_t *z, const char *key,
 /*
  * session object keys
  */
-/* key for storing the claims in the session context */
+/* key for storing the userinfo claims in the session context */
 #define OIDC_SESSION_KEY_USERINFO_CLAIMS "uic"
+/* key for storing the userinfo JWT in the session context */
+#define OIDC_SESSION_KEY_USERINFO_JWT "uij"
 /* key for storing the id_token in the session context */
 #define OIDC_SESSION_KEY_IDTOKEN_CLAIMS "idc"
 /* key for storing the raw id_token in the session context */
@@ -497,6 +499,15 @@ const char * oidc_session_get_userinfo_claims(request_rec *r, oidc_session_t *z)
 
 json_t *oidc_session_get_userinfo_claims_json(request_rec *r, oidc_session_t *z) {
 	return oidc_session_get_str2json(r, z, oidc_session_get_userinfo_claims);
+}
+
+void oidc_session_set_userinfo_jwt(request_rec *r, oidc_session_t *z,
+		const char *s_userinfo_jwt) {
+	oidc_session_set(r, z, OIDC_SESSION_KEY_USERINFO_JWT, s_userinfo_jwt);
+}
+
+const char * oidc_session_get_userinfo_jwt(request_rec *r, oidc_session_t *z) {
+	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_USERINFO_JWT);
 }
 
 /*

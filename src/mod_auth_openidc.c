@@ -1035,8 +1035,9 @@ apr_byte_t oidc_get_provider_from_session(request_rec *r, oidc_cfg *c,
 /*
  * store claims resolved from the userinfo endpoint in the session
  */
-static void oidc_store_userinfo_claims(request_rec *r, oidc_session_t *session,
-		oidc_provider_t *provider, const char *claims) {
+static void oidc_store_userinfo_claims(request_rec *r, oidc_cfg *c,
+		oidc_session_t *session, oidc_provider_t *provider, const char *claims,
+		const char *userinfo_jwt) {
 
 	oidc_debug(r, "enter");
 
@@ -1049,12 +1050,18 @@ static void oidc_store_userinfo_claims(request_rec *r, oidc_session_t *session,
 		 */
 		oidc_session_set_userinfo_claims(r, session, claims);
 
+		if (c->session_type != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
+			/* this will also clear the entry if a JWT was not returned at this point */
+			oidc_session_set_userinfo_jwt(r, session, userinfo_jwt);
+		}
+
 	} else {
 		/*
 		 * clear the existing claims because we could not refresh them
 		 */
 		oidc_session_set_userinfo_claims(r, session, NULL);
 
+		oidc_session_set_userinfo_jwt(r, session, NULL);
 	}
 
 	/* store the last refresh time if we've configured a userinfo refresh interval */
@@ -1117,7 +1124,7 @@ static apr_byte_t oidc_refresh_access_token(request_rec *r, oidc_cfg *c,
  */
 static const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r,
 		oidc_cfg *c, oidc_provider_t *provider, const char *access_token,
-		oidc_session_t *session, char *id_token_sub) {
+		oidc_session_t *session, char *id_token_sub, char **userinfo_jwt) {
 
 	oidc_debug(r, "enter");
 
@@ -1155,7 +1162,7 @@ static const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r,
 	/* try to get claims from the userinfo endpoint using the provided access token */
 	char *result = NULL;
 	if (oidc_proto_resolve_userinfo(r, c, provider, id_token_sub, access_token,
-			&result) == FALSE) {
+			&result, userinfo_jwt) == FALSE) {
 
 		/* see if we have an existing session and we are refreshing the user info claims */
 		if (session != NULL) {
@@ -1167,7 +1174,7 @@ static const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r,
 
 				/* try again with the new access token */
 				if (oidc_proto_resolve_userinfo(r, c, provider, id_token_sub,
-						access_token, &result) == FALSE) {
+						access_token, &result, userinfo_jwt) == FALSE) {
 
 					oidc_error(r,
 							"resolving user info claims with the refreshed access token failed, nothing will be stored in the session");
@@ -1204,6 +1211,7 @@ static apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r,
 	oidc_provider_t *provider = NULL;
 	const char *claims = NULL;
 	const char *access_token = NULL;
+	char *userinfo_jwt = NULL;
 
 	/* get the current provider info */
 	if (oidc_get_provider_from_session(r, cfg, session, &provider) == FALSE)
@@ -1234,10 +1242,11 @@ static apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r,
 
 			/* retrieve the current claims */
 			claims = oidc_retrieve_claims_from_userinfo_endpoint(r, cfg,
-					provider, access_token, session, NULL);
+					provider, access_token, session, NULL, &userinfo_jwt);
 
 			/* store claims resolved from userinfo endpoint */
-			oidc_store_userinfo_claims(r, session, provider, claims);
+			oidc_store_userinfo_claims(r, cfg, session, provider, claims,
+					userinfo_jwt);
 
 			/* indicated something changed */
 			return TRUE;
@@ -1385,9 +1394,37 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	/* copy id_token and claims from session to request state and obtain their values */
 	oidc_copy_tokens_to_request_state(r, session, &s_id_token, &s_claims);
 
-	/* set the claims in the app headers  */
-	if (oidc_set_app_claims(r, cfg, session, s_claims) == FALSE)
-		return HTTP_INTERNAL_SERVER_ERROR;
+	if ((cfg->pass_userinfo_as & OIDC_PASS_USERINFO_AS_CLAIMS)) {
+		/* set the userinfo claims in the app headers */
+		if (oidc_set_app_claims(r, cfg, session, s_claims) == FALSE)
+			return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	if ((cfg->pass_userinfo_as & OIDC_PASS_USERINFO_AS_JSON_OBJECT)) {
+		/* pass the userinfo JSON object to the app in a header or environment variable */
+		oidc_util_set_app_info(r, OIDC_APP_INFO_USERINFO_JSON, s_claims,
+				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars);
+	}
+
+	if ((cfg->pass_userinfo_as & OIDC_PASS_USERINFO_AS_JWT)) {
+		if (cfg->session_type != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
+			/* get the compact serialized JWT from the session */
+			const char *s_userinfo_jwt = oidc_session_get_userinfo_jwt(r,
+					session);
+			if (s_userinfo_jwt != NULL) {
+				/* pass the compact serialized JWT to the app in a header or environment variable */
+				oidc_util_set_app_info(r, OIDC_APP_INFO_USERINFO_JWT,
+						s_userinfo_jwt,
+						OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars);
+			} else {
+				oidc_debug(r,
+						"configured to pass userinfo in a JWT, but no such JWT was found in the session (probably no such JWT was returned from the userinfo endpoint)");
+			}
+		} else {
+			oidc_error(r,
+					"session type \"client-cookie\" does not allow storing/passing a userinfo JWT; use \"" OIDCSessionType " server-cache\" for that");
+		}
+	}
 
 	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_CLAIMS)) {
 		/* set the id_token in the app headers */
@@ -1596,7 +1633,7 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
 		const char *remoteUser, const char *id_token, oidc_jwt_t *id_token_jwt,
 		const char *claims, const char *access_token, const int expires_in,
 		const char *refresh_token, const char *session_state, const char *state,
-		const char *original_url) {
+		const char *original_url, const char *userinfo_jwt) {
 
 	/* store the user in the session */
 	session->remote_user = remoteUser;
@@ -1645,7 +1682,7 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
 				provider->end_session_endpoint);
 
 	/* store claims resolved from userinfo endpoint */
-	oidc_store_userinfo_claims(r, session, provider, claims);
+	oidc_store_userinfo_claims(r, c, session, provider, claims, userinfo_jwt);
 
 	/* see if we have an access_token */
 	if (access_token != NULL) {
@@ -1838,6 +1875,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 
 	int expires_in = oidc_parse_expires_in(r,
 			apr_table_get(params, OIDC_PROTO_EXPIRES_IN));
+	char *userinfo_jwt = NULL;
 
 	/*
 	 * optionally resolve additional claims against the userinfo endpoint
@@ -1845,7 +1883,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	 */
 	const char *claims = oidc_retrieve_claims_from_userinfo_endpoint(r, c,
 			provider, apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN), NULL,
-			jwt->payload.sub);
+			jwt->payload.sub, &userinfo_jwt);
 
 	/* restore the original protected URL that the user was trying to access */
 	const char *original_url = oidc_proto_state_get_original_url(proto_state);
@@ -1882,7 +1920,8 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 				apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN), expires_in,
 				apr_table_get(params, OIDC_PROTO_REFRESH_TOKEN),
 				apr_table_get(params, OIDC_PROTO_SESSION_STATE),
-				apr_table_get(params, OIDC_PROTO_STATE), original_url) == FALSE)
+				apr_table_get(params, OIDC_PROTO_STATE), original_url,
+				userinfo_jwt) == FALSE)
 			return HTTP_INTERNAL_SERVER_ERROR;
 
 	} else {
@@ -2580,17 +2619,21 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 		if (id_token_hint != NULL) {
 			logout_request = apr_psprintf(r->pool, "%s%sid_token_hint=%s",
 					logout_request,
-					strchr(logout_request ? logout_request : "", OIDC_CHAR_QUERY) != NULL ?
-							OIDC_STR_AMP : OIDC_STR_QUERY,
-							oidc_util_escape_string(r, id_token_hint));
+					strchr(logout_request ? logout_request : "",
+							OIDC_CHAR_QUERY) != NULL ?
+									OIDC_STR_AMP :
+									OIDC_STR_QUERY,
+									oidc_util_escape_string(r, id_token_hint));
 		}
 
 		if (url != NULL) {
 			logout_request = apr_psprintf(r->pool,
 					"%s%spost_logout_redirect_uri=%s", logout_request,
-					strchr(logout_request ? logout_request : "", OIDC_CHAR_QUERY) != NULL ?
-							OIDC_STR_AMP : OIDC_STR_QUERY,
-							oidc_util_escape_string(r, url));
+					strchr(logout_request ? logout_request : "",
+							OIDC_CHAR_QUERY) != NULL ?
+									OIDC_STR_AMP :
+									OIDC_STR_QUERY,
+									oidc_util_escape_string(r, url));
 		}
 		url = logout_request;
 	}
@@ -2875,8 +2918,7 @@ end:
 		return_to = apr_psprintf(r->pool, "%s%serror_code=%s", return_to,
 				strchr(return_to ? return_to : "", OIDC_CHAR_QUERY) ?
 						OIDC_STR_AMP :
-						OIDC_STR_QUERY,
-						oidc_util_escape_string(r, error_code));
+						OIDC_STR_QUERY, oidc_util_escape_string(r, error_code));
 
 	/* add the redirect location header */
 	oidc_util_hdr_out_location_set(r, return_to);

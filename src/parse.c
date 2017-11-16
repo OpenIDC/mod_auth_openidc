@@ -414,7 +414,8 @@ const char *oidc_valid_response_type(apr_pool_t *pool, const char *arg) {
 	if (oidc_proto_flow_is_supported(pool, arg) == FALSE) {
 		return apr_psprintf(pool,
 				"oidc_valid_response_type: type must be one of %s",
-				apr_array_pstrcat(pool, oidc_proto_supported_flows(pool), OIDC_CHAR_PIPE));
+				apr_array_pstrcat(pool, oidc_proto_supported_flows(pool),
+						OIDC_CHAR_PIPE));
 	}
 	return NULL;
 }
@@ -456,7 +457,8 @@ const char *oidc_valid_signed_response_alg(apr_pool_t *pool, const char *arg) {
 				"unsupported/invalid signing algorithm '%s'; must be one of [%s]",
 				arg,
 				apr_array_pstrcat(pool,
-						oidc_jose_jws_supported_algorithms(pool), OIDC_CHAR_PIPE));
+						oidc_jose_jws_supported_algorithms(pool),
+						OIDC_CHAR_PIPE));
 	}
 	return NULL;
 }
@@ -470,7 +472,8 @@ const char *oidc_valid_encrypted_response_alg(apr_pool_t *pool, const char *arg)
 				"unsupported/invalid encryption algorithm '%s'; must be one of [%s]",
 				arg,
 				apr_array_pstrcat(pool,
-						oidc_jose_jwe_supported_algorithms(pool), OIDC_CHAR_PIPE));
+						oidc_jose_jwe_supported_algorithms(pool),
+						OIDC_CHAR_PIPE));
 	}
 	return NULL;
 }
@@ -484,7 +487,8 @@ const char *oidc_valid_encrypted_response_enc(apr_pool_t *pool, const char *arg)
 				"unsupported/invalid encryption type '%s'; must be one of [%s]",
 				arg,
 				apr_array_pstrcat(pool,
-						oidc_jose_jwe_supported_encryptions(pool), OIDC_CHAR_PIPE));
+						oidc_jose_jwe_supported_encryptions(pool),
+						OIDC_CHAR_PIPE));
 	}
 	return NULL;
 }
@@ -695,6 +699,58 @@ const char *oidc_parse_pass_idtoken_as(apr_pool_t *pool, const char *v1,
 	if (rv != NULL)
 		return rv;
 	*int_value |= oidc_parse_pass_idtoken_as_str2int(v3);
+
+	return NULL;
+}
+
+#define OIDC_PASS_USERINFO_AS_CLAIMS_STR      "claims"
+#define OIDC_PASS_USERINFO_AS_JSON_OBJECT_STR "json"
+#define OIDC_PASS_USERINFO_AS_JWT_STR         "jwt"
+
+/*
+ * convert a "pass userinfo as" value to an integer
+ */
+static int oidc_parse_pass_userinfo_as_str2int(const char *v) {
+	if (apr_strnatcmp(v, OIDC_PASS_USERINFO_AS_CLAIMS_STR) == 0)
+		return OIDC_PASS_USERINFO_AS_CLAIMS;
+	if (apr_strnatcmp(v, OIDC_PASS_USERINFO_AS_JSON_OBJECT_STR) == 0)
+		return OIDC_PASS_USERINFO_AS_JSON_OBJECT;
+	if (apr_strnatcmp(v, OIDC_PASS_USERINFO_AS_JWT_STR) == 0)
+		return OIDC_PASS_USERINFO_AS_JWT;
+	return -1;
+}
+
+/*
+ * parse a "pass id token as" value from the provided strings
+ */
+const char *oidc_parse_pass_userinfo_as(apr_pool_t *pool, const char *v1,
+		const char *v2, const char *v3, int *int_value) {
+	static char *options[] = {
+			OIDC_PASS_USERINFO_AS_CLAIMS_STR,
+			OIDC_PASS_USERINFO_AS_JSON_OBJECT_STR,
+			OIDC_PASS_USERINFO_AS_JWT_STR,
+			NULL };
+	const char *rv = NULL;
+	rv = oidc_valid_string_option(pool, v1, options);
+	if (rv != NULL)
+		return rv;
+	*int_value = oidc_parse_pass_userinfo_as_str2int(v1);
+
+	if (v2 == NULL)
+		return NULL;
+
+	rv = oidc_valid_string_option(pool, v2, options);
+	if (rv != NULL)
+		return rv;
+	*int_value |= oidc_parse_pass_userinfo_as_str2int(v2);
+
+	if (v3 == NULL)
+		return NULL;
+
+	rv = oidc_valid_string_option(pool, v3, options);
+	if (rv != NULL)
+		return rv;
+	*int_value |= oidc_parse_pass_userinfo_as_str2int(v3);
 
 	return NULL;
 }
@@ -1087,7 +1143,6 @@ const char *oidc_token_binding_policy2str(apr_pool_t *pool, int v) {
 	return NULL;
 }
 
-
 /*
  * check token binding policy string value
  */
@@ -1104,7 +1159,8 @@ const char *oidc_valid_token_binding_policy(apr_pool_t *pool, const char *arg) {
 /*
  * parse token binding policy
  */
-const char *oidc_parse_token_binding_policy(apr_pool_t *pool, const char *arg, int *policy) {
+const char *oidc_parse_token_binding_policy(apr_pool_t *pool, const char *arg,
+		int *policy) {
 	const char *rv = oidc_valid_token_binding_policy(pool, arg);
 	if (rv != NULL)
 		return rv;

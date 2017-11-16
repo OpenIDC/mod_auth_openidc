@@ -207,6 +207,7 @@
 #define OIDCCryptoPassphrase                 "OIDCCryptoPassphrase"
 #define OIDCClaimDelimiter                   "OIDCClaimDelimiter"
 #define OIDCPassIDTokenAs                    "OIDCPassIDTokenAs"
+#define OIDCPassUserInfoAs                   "OIDCPassUserInfoAs"
 #define OIDCOAuthClientID                    "OIDCOAuthClientID"
 #define OIDCOAuthClientSecret                "OIDCOAuthClientSecret"
 #define OIDCOAuthIntrospectionClientAuthBearerToken "OIDCOAuthIntrospectionClientAuthBearerToken"
@@ -721,6 +722,18 @@ static const char * oidc_set_pass_idtoken_as(cmd_parms *cmd, void *dummy,
 }
 
 /*
+ * define how to pass the userinfo/claims in HTTP headers
+ */
+static const char * oidc_set_pass_userinfo_as(cmd_parms *cmd, void *dummy,
+		const char *v1, const char *v2, const char *v3) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+	const char *rv = oidc_parse_pass_userinfo_as(cmd->pool, v1, v2, v3,
+			&cfg->pass_userinfo_as);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
+/*
  * define which method of pass an OAuth Bearer token is accepted
  */
 static const char * oidc_set_accept_oauth_token_in(cmd_parms *cmd, void *m,
@@ -969,12 +982,13 @@ const char *oidc_set_auth_request_method(cmd_parms *cmd, void *struct_ptr,
 /*
  * set the introspection authorization static bearer token
  */
-static const char *oidc_set_client_auth_bearer_token(cmd_parms *cmd, void *struct_ptr,
-		const char *args) {
+static const char *oidc_set_client_auth_bearer_token(cmd_parms *cmd,
+		void *struct_ptr, const char *args) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
 	char *w = ap_getword_conf(cmd->pool, &args);
-	cfg->oauth.introspection_client_auth_bearer_token = (*w == '\0' || *args != 0) ? "" : w;
+	cfg->oauth.introspection_client_auth_bearer_token =
+			(*w == '\0' || *args != 0) ? "" : w;
 	return NULL;
 }
 
@@ -1094,6 +1108,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->remote_user_claim.reg_exp = NULL;
 	c->remote_user_claim.replace = NULL;
 	c->pass_idtoken_as = OIDC_PASS_IDTOKEN_AS_CLAIMS;
+	c->pass_userinfo_as = OIDC_PASS_USERINFO_AS_CLAIMS;
 	c->cookie_http_only = OIDC_DEFAULT_COOKIE_HTTPONLY;
 	c->cookie_same_site = OIDC_DEFAULT_COOKIE_SAME_SITE;
 
@@ -1486,6 +1501,9 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->pass_idtoken_as =
 			add->pass_idtoken_as != OIDC_PASS_IDTOKEN_AS_CLAIMS ?
 					add->pass_idtoken_as : base->pass_idtoken_as;
+	c->pass_userinfo_as =
+			add->pass_userinfo_as != OIDC_PASS_USERINFO_AS_CLAIMS ?
+					add->pass_userinfo_as : base->pass_userinfo_as;
 	c->cookie_http_only =
 			add->cookie_http_only != OIDC_DEFAULT_COOKIE_HTTPONLY ?
 					add->cookie_http_only : base->cookie_http_only;
@@ -1832,7 +1850,8 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 						OIDCProviderAuthorizationEndpoint);
 		} else {
 			apr_uri_parse(s->process->pconf, c->provider.metadata_url, &r_uri);
-			if ((r_uri.scheme == NULL) || (apr_strnatcmp(r_uri.scheme, "https") != 0)) {
+			if ((r_uri.scheme == NULL)
+					|| (apr_strnatcmp(r_uri.scheme, "https") != 0)) {
 				oidc_swarn(s,
 						"the URL scheme (%s) of the configured " OIDCProviderMetadataURL " SHOULD be \"https\" for security reasons!",
 						r_uri.scheme);
@@ -2105,7 +2124,8 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 	}
 #endif /* OPENSSL_NO_THREADID */
 #endif /* defined(OPENSSL_THREADS) && APR_HAS_THREADS */
-	apr_pool_cleanup_register(pool, s, oidc_cleanup_parent, apr_pool_cleanup_null);
+	apr_pool_cleanup_register(pool, s, oidc_cleanup_parent,
+			apr_pool_cleanup_null);
 
 	server_rec *sp = s;
 	while (sp != NULL) {
@@ -2167,7 +2187,7 @@ static void oidc_child_init(apr_pool_t *p, server_rec *s) {
 		}
 		sp = sp->next;
 	}
-    apr_pool_cleanup_register(p, s, oidc_cleanup_child, apr_pool_cleanup_null);
+	apr_pool_cleanup_register(p, s, oidc_cleanup_child, apr_pool_cleanup_null);
 }
 
 /*
@@ -2479,6 +2499,11 @@ const command_rec oidc_config_cmds[] = {
 				NULL,
 				RSRC_CONF,
 				"The format in which the id_token is passed in (a) header(s); must be one or more of: claims|payload|serialized"),
+		AP_INIT_TAKE123(OIDCPassUserInfoAs,
+				oidc_set_pass_userinfo_as,
+				NULL,
+				RSRC_CONF,
+				"The format in which the userinfo is passed in (a) header(s); must be one or more of: claims|json|jwt"),
 
 		AP_INIT_TAKE1(OIDCOAuthClientID,
 				oidc_set_string_slot,
