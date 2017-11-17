@@ -1860,7 +1860,8 @@ apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg,
 		const char *client_secret, const char *audience, apr_table_t *params,
 		char **basic_auth_str, char **bearer_auth_str) {
 
-	if (cfg->oauth.introspection_client_auth_bearer_token != NULL)
+	if (cfg->oauth.introspection_client_auth_bearer_token != NULL &&
+			(strcmp(cfg->oauth.introspection_endpoint_url, audience) == 0))
 		return oidc_proto_endpoint_access_token_bearer(r, cfg, params,
 				bearer_auth_str);
 
