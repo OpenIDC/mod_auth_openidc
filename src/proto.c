@@ -1810,16 +1810,19 @@ static apr_byte_t oidc_proto_endpoint_auth_client_secret_jwt(request_rec *r,
 }
 
 static apr_byte_t oidc_proto_endpoint_access_token_bearer(request_rec *r,
-		oidc_cfg *cfg, apr_table_t *params, char **bearer_auth_str) {
+		oidc_cfg *cfg, const char *bearer_access_token, char **bearer_auth_str) {
 
-	const char *token =
-			strcmp(cfg->oauth.introspection_client_auth_bearer_token, "") == 0 ?
-					apr_table_get(params,
-							cfg->oauth.introspection_token_param_name) :
-							cfg->oauth.introspection_client_auth_bearer_token;
-	*bearer_auth_str = apr_psprintf(r->pool, "%s", token);
+	apr_byte_t rv = TRUE;
 
-	return TRUE;
+	if (bearer_access_token != NULL) {
+		*bearer_auth_str = apr_psprintf(r->pool, "%s", bearer_access_token);
+	} else {
+		oidc_error(r,
+				"endpoint auth method set to bearer access token but no token is provided");
+		rv = FALSE;
+	}
+
+	return rv;
 }
 
 #define OIDC_PROTO_JWT_ASSERTION_ASYMMETRIC_ALG CJOSE_HDR_ALG_RS256
@@ -1858,11 +1861,7 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r,
 apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg,
 		const char *token_endpoint_auth, const char *client_id,
 		const char *client_secret, const char *audience, apr_table_t *params,
-		char **basic_auth_str, char **bearer_auth_str) {
-
-	if (cfg->oauth.introspection_client_auth_bearer_token != NULL)
-		return oidc_proto_endpoint_access_token_bearer(r, cfg, params,
-				bearer_auth_str);
+		const char *bearer_access_token, char **basic_auth_str, char **bearer_auth_str) {
 
 	oidc_debug(r, "token_endpoint_auth=%s", token_endpoint_auth);
 
@@ -1909,6 +1908,11 @@ apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg,
 		return oidc_proto_endpoint_auth_private_key_jwt(r, cfg, client_id,
 				audience, params);
 
+	if (apr_strnatcmp(token_endpoint_auth,
+			OIDC_PROTO_BEARER_ACCESS_TOKEN) == 0) {
+		return oidc_proto_endpoint_access_token_bearer(r, cfg, bearer_access_token, bearer_auth_str);
+	}
+
 	oidc_error(r, "uhm, shouldn't be here...");
 
 	return FALSE;
@@ -1929,7 +1933,7 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 	/* add the token endpoint authentication credentials */
 	if (oidc_proto_token_endpoint_auth(r, cfg, provider->token_endpoint_auth,
 			provider->client_id, provider->client_secret,
-			provider->token_endpoint_url, params, &basic_auth,
+			provider->token_endpoint_url, params, NULL, &basic_auth,
 			&bearer_auth) == FALSE)
 		return FALSE;
 

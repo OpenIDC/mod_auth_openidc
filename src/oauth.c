@@ -79,11 +79,16 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 	/* add the access_token itself */
 	apr_table_addn(params, c->oauth.introspection_token_param_name, token);
 
+	const char *bearer_access_token_auth =
+			strcmp(c->oauth.introspection_client_auth_bearer_token, "") == 0 ?
+					apr_table_get(params, token) :
+					c->oauth.introspection_client_auth_bearer_token;
+
 	/* add the token endpoint authentication credentials */
 	if (oidc_proto_token_endpoint_auth(r, c,
 			c->oauth.introspection_endpoint_auth, c->oauth.client_id,
 			c->oauth.client_secret, c->oauth.introspection_endpoint_url, params,
-			&basic_auth, &bearer_auth) == FALSE)
+			bearer_access_token_auth, &basic_auth, &bearer_auth) == FALSE)
 		return FALSE;
 
 	/* call the endpoint with the constructed parameter set and return the resulting response */

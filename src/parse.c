@@ -378,6 +378,7 @@ const char *oidc_parse_boolean(apr_pool_t *pool, const char *arg,
 #define OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC "client_secret_basic"
 #define OIDC_ENDPOINT_AUTH_CLIENT_SECRET_JWT   "client_secret_jwt"
 #define OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT     "private_key_jwt"
+#define OIDC_ENDPOINT_AUTH_BEARER_ACCESS_TOKEN "bearer_access_token"
 #define OIDC_ENDPOINT_AUTH_NONE                "none"
 
 /*
@@ -390,10 +391,11 @@ static const char *oidc_valid_endpoint_auth_method_impl(apr_pool_t *pool,
 			OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC,
 			OIDC_ENDPOINT_AUTH_CLIENT_SECRET_JWT,
 			OIDC_ENDPOINT_AUTH_NONE,
+			OIDC_ENDPOINT_AUTH_BEARER_ACCESS_TOKEN,
 			NULL,
 			NULL };
 	if (has_private_key)
-		options[4] = OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT;
+		options[5] = OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT;
 
 	return oidc_valid_string_option(pool, arg, options);
 }

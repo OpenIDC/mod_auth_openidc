@@ -1,3 +1,6 @@
+01/23/2018
+- add explicit endpoint authentication method "bearer_access_token"
+
 12/29/2017
 - correct documentation on kid usage for OIDCOAuthVerifyCertFiles; closes #318
 
