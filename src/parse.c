@@ -393,7 +393,7 @@ static const char *oidc_valid_endpoint_auth_method_impl(apr_pool_t *pool,
 			NULL,
 			NULL };
 	if (has_private_key)
-		options[3] = OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT;
+		options[4] = OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT;
 
 	return oidc_valid_string_option(pool, arg, options);
 }

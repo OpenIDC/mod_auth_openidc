@@ -1,3 +1,7 @@
+11/21/2017
+- fix bug where endpoint authentication method "private_key_jwt" would not co-exist with "none"
+- bump to 2.3.4rc0
+
 11/16/2017
 - add support for passing userinfo as a JSON object or JWT; see #311
 - release 2.3.3
