@@ -1982,7 +1982,7 @@ static int oidc_config_merged_vhost_configs_exist(server_rec *s) {
 /*
  * SSL initialization magic copied from mod_auth_cas
  */
-#if defined(OPENSSL_THREADS) && APR_HAS_THREADS
+#if ((OPENSSL_VERSION_NUMBER < 0x10100000) && defined(OPENSSL_THREADS) && APR_HAS_THREADS)
 
 static apr_thread_mutex_t **ssl_locks;
 static int ssl_num_locks;
@@ -2037,7 +2037,7 @@ static apr_status_t oidc_cleanup_parent(void *data) {
 
 	oidc_cleanup_child(data);
 
-#if (defined (OPENSSL_THREADS) && APR_HAS_THREADS)
+#if ((OPENSSL_VERSION_NUMBER < 0x10100000) && defined (OPENSSL_THREADS) && APR_HAS_THREADS)
 	if (CRYPTO_get_locking_callback() == oidc_ssl_locking_callback)
 		CRYPTO_set_locking_callback(NULL);
 #ifdef OPENSSL_NO_THREADID
@@ -2048,7 +2048,8 @@ static apr_status_t oidc_cleanup_parent(void *data) {
 		CRYPTO_THREADID_set_callback(NULL);
 #endif /* OPENSSL_NO_THREADID */
 
-#endif /* defined(OPENSSL_THREADS) && APR_HAS_THREADS */
+#endif /* (OPENSSL_VERSION_NUMBER < 0x10100000) && defined (OPENSSL_THREADS) && APR_HAS_THREADS */
+
 	EVP_cleanup();
 	curl_global_cleanup();
 
@@ -2065,7 +2066,6 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 		server_rec *s) {
 	const char *userdata_key = "oidc_post_config";
 	void *data = NULL;
-	int i;
 
 	/* Since the post_config hook is invoked twice (once
 	 * for 'sanity checking' of the config and once for
@@ -2102,11 +2102,12 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 	curl_global_init(CURL_GLOBAL_ALL);
 	OpenSSL_add_all_digests();
 
-#if (defined(OPENSSL_THREADS) && APR_HAS_THREADS)
+#if ((OPENSSL_VERSION_NUMBER < 0x10100000) && defined (OPENSSL_THREADS) && APR_HAS_THREADS)
 	ssl_num_locks = CRYPTO_num_locks();
 	ssl_locks = apr_pcalloc(s->process->pool,
 			ssl_num_locks * sizeof(*ssl_locks));
 
+	int i;
 	for (i = 0; i < ssl_num_locks; i++)
 		apr_thread_mutex_create(&(ssl_locks[i]), APR_THREAD_MUTEX_DEFAULT,
 				s->process->pool);
@@ -2123,7 +2124,9 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 		CRYPTO_THREADID_set_callback(oidc_ssl_id_callback);
 	}
 #endif /* OPENSSL_NO_THREADID */
-#endif /* defined(OPENSSL_THREADS) && APR_HAS_THREADS */
+
+#endif /* (OPENSSL_VERSION_NUMBER < 0x10100000) && defined (OPENSSL_THREADS) && APR_HAS_THREADS */
+
 	apr_pool_cleanup_register(pool, s, oidc_cleanup_parent,
 			apr_pool_cleanup_null);
 

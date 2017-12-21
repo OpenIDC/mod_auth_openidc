@@ -1,3 +1,7 @@
+12/21/2017
+- fix compiler warnings for OpenSSL 1.1.x
+- bump to 2.3.4rc1
+
 11/21/2017
 - fix bug where endpoint authentication method "private_key_jwt" would not co-exist with "none"
 - bump to 2.3.4rc0
