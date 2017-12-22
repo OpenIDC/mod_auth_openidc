@@ -1269,7 +1269,8 @@ apr_byte_t oidc_metadata_client_parse(request_rec *r, oidc_cfg *cfg,
 			NULL);
 
 	if (token_endpoint_auth != NULL) {
-		if (oidc_valid_endpoint_auth_method(r->pool, token_endpoint_auth)) {
+		if (oidc_cfg_get_valid_endpoint_auth_function(cfg)(r->pool,
+				token_endpoint_auth) == NULL) {
 			provider->token_endpoint_auth = apr_pstrdup(r->pool,
 					token_endpoint_auth);
 		} else {
