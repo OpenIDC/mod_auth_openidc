@@ -10,3 +10,4 @@
 /.settings
 .kdev4/
 *.kdev4
+/.pydevproject
