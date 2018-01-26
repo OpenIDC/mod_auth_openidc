@@ -1,3 +1,6 @@
+01/26/2018
+- send session management Javascript logging to debug; thanks @kerrermanisNL
+
 01/25/2018
 - add Cache-Control no-cache header to authorization requests to avoid replays of state/nonce; see #321
 - bump to 2.3.4rc2
