@@ -1,3 +1,7 @@
+01/25/2018
+- add Cache-Control no-cache header to authorization requests to avoid replays of state/nonce; see #321
+- bump to 2.3.4rc2
+
 01/23/2018
 - add explicit endpoint authentication method "bearer_access_token"
 

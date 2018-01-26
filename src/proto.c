@@ -673,6 +673,10 @@ int oidc_proto_authorization_request(request_rec *r,
 	/* cleanup */
 	oidc_proto_state_destroy(proto_state);
 
+	/* no cache */
+	oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL,
+			"no-cache, no-store, max-age=0");
+
 	/* log our exit code */
 	oidc_debug(r, "return: %d", rv);
 
