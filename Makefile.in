@@ -48,7 +48,6 @@ DISTFILES=$(SRC) \
 	INSTALL \
 	README.md \
 	AUTHORS \
-	DISCLAIMER \
 	auth_openidc.conf \
 	LICENSE.txt \
 	ChangeLog
