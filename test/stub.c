@@ -46,6 +46,10 @@ AP_DECLARE(char *) ap_getword_conf(apr_pool_t *p, const char **line) {
 	return "";
 }
 
+AP_DECLARE(char *) ap_getword_nulls(apr_pool_t *p, const char **line, char stop) {
+	return "";
+}
+
 AP_DECLARE(char *) ap_getword_white(apr_pool_t *p, const char **line) {
 	return 0;
 }
