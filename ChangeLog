@@ -1,3 +1,7 @@
+02/06/2018
+- add support for passing an access token in a HTTP Basic authentication password; thanks @puiterwijk
+- bump to 2.3.4rc3
+
 01/26/2018
 - send session management Javascript logging to debug; thanks @kerrermanisNL
 
