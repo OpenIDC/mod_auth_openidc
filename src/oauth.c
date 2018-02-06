@@ -125,18 +125,23 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 
 	*access_token = NULL;
 
-	if ((accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER)
-			|| (accept_token_in == OIDC_OAUTH_ACCEPT_TOKEN_IN_DEFAULT)) {
+	const bool accept_header = (accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER) || (accept_token_in == OIDC_OAUTH_ACCEPT_TOKEN_IN_DEFAULT);
+
+	if ((accept_header)
+			|| (accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_BASIC)) {
 
 		/* get the authorization header */
 		const char *auth_line = oidc_util_hdr_in_authorization_get(r);
 		if (auth_line) {
 			oidc_debug(r, "authorization header found");
 
+			bool known_scheme = false;
+
 			/* look for the Bearer keyword */
-			if (apr_strnatcasecmp(
+			if ((apr_strnatcasecmp(
 					ap_getword(r->pool, &auth_line, OIDC_CHAR_SPACE),
-					OIDC_PROTO_BEARER) == 0) {
+					OIDC_PROTO_BEARER) == 0) &&
+					accept_header) {
 
 				/* skip any spaces after the Bearer keyword */
 				while (apr_isspace(*auth_line)) {
@@ -146,7 +151,26 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 				/* copy the result in to the access_token */
 				*access_token = apr_pstrdup(r->pool, auth_line);
 
-			} else {
+				known_scheme = true;
+
+			} else if (accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_BASIC) {
+
+				char *decoded_line;
+				int decoded_len;
+				if (oidc_parse_base64(r->pool, auth_line, &decoded_line, &decoded_len) == NULL) {
+					decoded_line[decoded_len] = '\0';
+
+					if (strchr(decoded_line, ':') != NULL) {
+						/* Strip the username and colon and take just the password */
+						ap_getword_nulls(r->pool, (const char**)&decoded_line, ':');
+						*access_token = decoded_line;
+
+						known_scheme = true;
+					}
+				}
+			}
+
+			if (!known_scheme) {
 				oidc_warn(r,
 						"client used unsupported authentication scheme: %s",
 						r->uri);

@@ -144,6 +144,8 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_OAUTH_ACCEPT_TOKEN_IN_QUERY   4
 /* accept bearer token as a cookie parameter (PingAccess) */
 #define OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE  8
+/* accept bearer token as basic auth password (non-oauth clients) */
+#define OIDC_OAUTH_ACCEPT_TOKEN_IN_BASIC   16
 
 /* the hash key of the cookie name value in the list of options */
 #define OIDC_OAUTH_ACCEPT_TOKEN_IN_OPTION_COOKIE_NAME "cookie-name"
@@ -494,6 +496,7 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_PROTO_ENDPOINT_AUTH_NONE  "none"
 
 #define OIDC_PROTO_BEARER  "Bearer"
+#define OIDC_PROTO_BASIC   "Basic"
 
 #define OIDC_CLAIM_ISS             "iss"
 #define OIDC_CLAIM_AUD             "aud"
@@ -841,5 +844,7 @@ void oidc_session_set_check_session_iframe(request_rec *r, oidc_session_t *z, co
 const char * oidc_session_get_check_session_iframe(request_rec *r, oidc_session_t *z);
 void oidc_session_set_logout_endpoint(request_rec *r, oidc_session_t *z, const char *logout_endpoint);
 const char * oidc_session_get_logout_endpoint(request_rec *r, oidc_session_t *z);
+
+char *oidc_parse_base64(apr_pool_t *pool, const char *input, char **output, int *output_len);
 
 #endif /* MOD_AUTH_OPENIDC_H_ */
