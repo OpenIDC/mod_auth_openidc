@@ -1,3 +1,7 @@
+03/22/2018
+- interpret X-Forwarded-Host when doing XSRF protection on the after-logout URL; see #341; thanks @pepe79
+- bump to 2.3.4rc4
+
 02/06/2018
 - add support for passing an access token in a HTTP Basic authentication password; thanks @puiterwijk
 - bump to 2.3.4rc3

@@ -2584,12 +2584,12 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 
 		}
 
-		if ((strstr(r->hostname, uri.hostname) == NULL)
-				|| (strstr(uri.hostname, r->hostname) == NULL)) {
+		if ((strstr(oidc_get_current_url_host(r), uri.hostname) == NULL)
+				|| (strstr(uri.hostname, oidc_get_current_url_host(r)) == NULL)) {
 			error_description =
 					apr_psprintf(r->pool,
 							"logout value \"%s\" does not match the hostname of the current request \"%s\"",
-							apr_uri_unparse(r->pool, &uri, 0), r->hostname);
+							apr_uri_unparse(r->pool, &uri, 0), oidc_get_current_url_host(r));
 			oidc_error(r, "%s", error_description);
 			return oidc_util_html_send_error(r, c->error_template,
 					"Invalid Request", error_description,
