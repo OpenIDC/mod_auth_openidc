@@ -2584,12 +2584,14 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 
 		}
 
-		if ((strstr(oidc_get_current_url_host(r), uri.hostname) == NULL)
-				|| (strstr(uri.hostname, oidc_get_current_url_host(r)) == NULL)) {
+		const char *c_host = oidc_get_current_url_host(r);
+		if ((uri.hostname != NULL)
+				&& ((strstr(c_host, uri.hostname) == NULL)
+						|| (strstr(uri.hostname, c_host) == NULL))) {
 			error_description =
 					apr_psprintf(r->pool,
 							"logout value \"%s\" does not match the hostname of the current request \"%s\"",
-							apr_uri_unparse(r->pool, &uri, 0), oidc_get_current_url_host(r));
+							apr_uri_unparse(r->pool, &uri, 0), c_host);
 			oidc_error(r, "%s", error_description);
 			return oidc_util_html_send_error(r, c->error_template,
 					"Invalid Request", error_description,
@@ -2618,8 +2620,7 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 		char *logout_request = apr_pstrdup(r->pool, end_session_endpoint);
 		if (id_token_hint != NULL) {
 			logout_request = apr_psprintf(r->pool, "%s%sid_token_hint=%s",
-					logout_request,
-					strchr(logout_request ? logout_request : "",
+					logout_request, strchr(logout_request ? logout_request : "",
 							OIDC_CHAR_QUERY) != NULL ?
 									OIDC_STR_AMP :
 									OIDC_STR_QUERY,

@@ -1,3 +1,7 @@
+04/27/2018
+- avoid crash when a relative logout URL parameter is passed in; thanks Vivien Delenne 
+- release 2.3.4
+
 03/22/2018
 - interpret X-Forwarded-Host when doing XSRF protection on the after-logout URL; see #341; thanks @pepe79
 - bump to 2.3.4rc4
