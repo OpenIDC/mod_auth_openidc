@@ -234,7 +234,7 @@ apr_byte_t oidc_cache_mutex_destroy(server_rec *s, oidc_cache_mutex_t *m) {
 #define OIDC_CACHE_CIPHER							EVP_aes_256_gcm()
 #define OIDC_CACHE_TAG_LEN							16
 
-#if (OPENSSL_VERSION_NUMBER >= 0x10100005L)
+#if (OPENSSL_VERSION_NUMBER >= 0x10100005L && !defined(LIBRESSL_VERSION_NUMBER))
 #define OIDC_CACHE_CRYPTO_GET_TAG					EVP_CTRL_AEAD_GET_TAG
 #define OIDC_CACHE_CRYPTO_SET_TAG					EVP_CTRL_AEAD_SET_TAG
 #define OIDC_CACHE_CRYPTO_SET_IVLEN					EVP_CTRL_AEAD_SET_IVLEN

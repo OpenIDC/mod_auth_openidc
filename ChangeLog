@@ -1,3 +1,7 @@
+05/08/2018
+- compile with with Libressl; closes #358; thanks @hihellobolke
+- bump to 2.3.5rc0
+
 04/27/2018
 - avoid crash when a relative logout URL parameter is passed in; thanks Vivien Delenne 
 - release 2.3.4
