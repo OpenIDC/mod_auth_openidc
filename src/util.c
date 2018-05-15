@@ -318,7 +318,15 @@ char *oidc_util_unescape_string(const request_rec *r, const char *str) {
 		oidc_error(r, "curl_easy_init() error");
 		return NULL;
 	}
-	char *result = curl_easy_unescape(curl, str, 0, 0);
+	int counter = 0;
+	char *replaced = (char *)str;
+	while(str[counter] != '\0') {
+		if(str[counter] == '+') {
+			replaced[counter] = ' ';
+		}
+		counter++;
+	}
+	char *result = curl_easy_unescape(curl, replaced, 0, 0);
 	if (result == NULL) {
 		oidc_error(r, "curl_easy_unescape() error");
 		return NULL;
