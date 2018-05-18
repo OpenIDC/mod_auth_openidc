@@ -1,3 +1,8 @@
+05/18/2018
+- fix encoding of preserved POST data; see #338; thanks @timpuri
+- avoid buffer overflow in shm cache key construction; thanks @kyprizel
+- release 2.3.5
+
 05/08/2018
 - compile with with Libressl; closes #358; thanks @hihellobolke
 - bump to 2.3.5rc0

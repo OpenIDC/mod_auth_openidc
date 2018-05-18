@@ -147,9 +147,20 @@ int oidc_cache_shm_child_init(apr_pool_t *p, server_rec *s) {
 /*
  * assemble single key name based on section/key input
  */
-static char *oidc_cache_shm_get_key(apr_pool_t *pool, const char *section,
+static char *oidc_cache_shm_get_key(request_rec *r, const char *section,
 		const char *key) {
-	return apr_psprintf(pool, "%s:%s", section, key);
+
+	char *section_key = apr_psprintf(r->pool, "%s:%s", section, key);
+
+	/* check that the passed in key is valid */
+	if (strlen(section_key) > OIDC_CACHE_SHM_KEY_MAX) {
+		oidc_error(r,
+				"could not construct cache key since size is too large (%s)",
+				section_key);
+		return NULL;
+	}
+
+	return section_key;
 }
 
 /*
@@ -163,7 +174,9 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section,
 	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *) cfg->cache_cfg;
 
 	int i;
-	const char *section_key = oidc_cache_shm_get_key(r->pool, section, key);
+	const char *section_key = oidc_cache_shm_get_key(r, section, key);
+	if (section_key == NULL)
+		return FALSE;
 
 	*value = NULL;
 
@@ -223,14 +236,9 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 	int i;
 	apr_time_t age;
 
-	const char *section_key = oidc_cache_shm_get_key(r->pool, section, key);
-
-	/* check that the passed in key is valid */
-	if (strlen(section_key) > OIDC_CACHE_SHM_KEY_MAX) {
-		oidc_error(r, "could not store value since key size is too large (%s)",
-				section_key);
+	const char *section_key = oidc_cache_shm_get_key(r, section, key);
+	if (section_key == NULL)
 		return FALSE;
-	}
 
 	/* check that the passed in value is valid */
 	if ((value != NULL)
