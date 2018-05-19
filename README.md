@@ -105,6 +105,22 @@ OIDCScope "openid email"
 </Location>
 ```
 
+### OpenID Connect SSO with LemonLDAP::NG
+
+```apache
+OIDCProviderMetadataURL https://auth.example.com/.well-known/openid-configuration
+OIDCRedirectURI https://www.example.com/oauth2callback
+OIDCCryptoPassphrase random1234
+OIDCClientID <your-client-id-registered-in-lemonldapng>
+OIDCClientSecret <your-client-secret-registered-in-lemonldapng>
+OIDCScope "openid profile email"
+
+<Location /example/>
+   AuthType openid-connect
+   Require valid-user
+</Location>
+```
+
 ### Quickstart with a generic OpenID Connect Provider
 
 1. install and load `mod_auth_openidc.so` in your Apache server
