@@ -1,3 +1,7 @@
+05/19/2018
+- explicitly set encryption kid so we're compatible with cjose >= 0.6.0
+- bump to 2.3.6rc0
+
 05/18/2018
 - fix encoding of preserved POST data; see #338; thanks @timpuri
 - avoid buffer overflow in shm cache key construction; thanks @kyprizel
