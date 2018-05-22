@@ -3227,7 +3227,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 		//
 		//		/* send user facing error to browser */
 		//		return oidc_util_html_send_error(r, error, descr, DONE);
-		oidc_handle_redirect_authorization_response(r, c, session);
+		return oidc_handle_redirect_authorization_response(r, c, session);
 	}
 
 	oidc_error(r,

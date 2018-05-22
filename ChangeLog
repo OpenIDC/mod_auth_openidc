@@ -1,5 +1,7 @@
 05/22/2018
 - turn missing session_state from warning into a debug statement
+- fix missing "return" on error return from the OP; see #345; thanks @gergan
+- bump to 2.3.6rc1
 
 05/19/2018
 - explicitly set encryption kid so we're compatible with cjose >= 0.6.0
