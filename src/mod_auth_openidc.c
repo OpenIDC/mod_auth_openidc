@@ -1680,7 +1680,7 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
 		oidc_debug(r,
 				"session management disabled: \"check_session_iframe\" is not set in provider configuration");
 	} else {
-		oidc_warn(r,
+		oidc_debug(r,
 				"session management disabled: no \"session_state\" value is provided in the authentication response even though \"check_session_iframe\" (%s) is set in the provider configuration",
 				provider->check_session_iframe);
 	}

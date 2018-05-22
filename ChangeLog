@@ -1,3 +1,6 @@
+05/22/2018
+- turn missing session_state from warning into a debug statement
+
 05/19/2018
 - explicitly set encryption kid so we're compatible with cjose >= 0.6.0
 - bump to 2.3.6rc0
