@@ -1,3 +1,7 @@
+05/28/2018
+- refactor Redis cache backend to solve issues on AUTH errors: a) memory leak and b) redisGetReply lagging behind
+- bump to 2.3.6rc3
+
 05/23/2018
 - fix buffer overflow in shm cache key set strcpy; thanks @kyprizel
 - bump to 2.3.6rc2
