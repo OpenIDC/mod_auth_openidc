@@ -572,7 +572,14 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
  */
 int oidc_oauth_return_www_authenticate(request_rec *r, const char *error,
 		const char *error_description) {
-	char *hdr = apr_psprintf(r->pool, "%s", OIDC_PROTO_BEARER);
+	apr_byte_t accept_token_in = oidc_cfg_dir_accept_token_in(r);
+	char *hdr;
+	if (accept_token_in == OIDC_OAUTH_ACCEPT_TOKEN_IN_BASIC) {
+		hdr = apr_psprintf(r->pool, "%s", OIDC_PROTO_BASIC);
+	} else {
+		hdr = apr_psprintf(r->pool, "%s", OIDC_PROTO_BEARER);
+	}
+
 	if (ap_auth_name(r) != NULL)
 		hdr = apr_psprintf(r->pool, "%s %s=\"%s\"", hdr, OIDC_PROTO_REALM,
 				ap_auth_name(r));
