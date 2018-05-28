@@ -1,5 +1,6 @@
 05/28/2018
 - refactor Redis cache backend to solve issues on AUTH errors: a) memory leak and b) redisGetReply lagging behind
+- adjust copyright year/org
 - bump to 2.3.6rc3
 
 05/23/2018
