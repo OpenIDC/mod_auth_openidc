@@ -1,4 +1,7 @@
 05/28/2018
+- send Basic header in OAuth www-authenticate response if that's the only accepted method; thanks @puiterwijk
+
+05/28/2018
 - refactor Redis cache backend to solve issues on AUTH errors: a) memory leak and b) redisGetReply lagging behind
 - adjust copyright year/org
 - bump to 2.3.6rc3
