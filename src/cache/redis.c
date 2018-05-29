@@ -236,11 +236,10 @@ static void oidc_cache_redis_reply_free(redisReply **reply) {
  * execute Redis command and deal with return value
  */
 static redisReply* oidc_cache_redis_command(request_rec *r,
-		oidc_cache_cfg_redis_t *context, const char *format, ...) {
+		oidc_cache_cfg_redis_t *context, const char *command) {
 
 	oidc_cache_redis_ctx_t *rctx = NULL;
 	redisReply *reply = NULL;
-	int rv = REDIS_ERR;
 	int i = 0;
 
 	/* try to execute a command at max 2 times while reconnecting */
@@ -249,26 +248,12 @@ static redisReply* oidc_cache_redis_command(request_rec *r,
 		/* connect */
 		rctx = oidc_cache_redis_connect(r, context);
 		if ((rctx == NULL) || (rctx->ctx == NULL))
-			continue;
+			break;
 
 		/* see if we need to authenticate to the Redis server */
 		if (context->passwd != NULL) {
-			redisAppendCommand(rctx->ctx,
-					apr_psprintf(r->pool, "AUTH %s", context->passwd));
-		}
-
-		/* execute the command(s) */
-		va_list args;
-		va_start(args, format);
-		redisvAppendCommand(rctx->ctx, format, args);
-		va_end(args);
-
-		if (context->passwd != NULL) {
-			/* get the reply for the AUTH command */
-			rv = redisGetReply(rctx->ctx, (void **) &reply);
-
-			if ((rv != REDIS_OK) || (reply == NULL)
-					|| (reply->type == REDIS_REPLY_ERROR))
+			reply = redisCommand(rctx->ctx, "AUTH %s", context->passwd);
+			if ((reply == NULL) || (reply->type == REDIS_REPLY_ERROR))
 				oidc_error(r,
 						"Redis AUTH command (attempt=%d to %s:%d) failed: '%s' [%s]",
 						i, context->host_str, context->port, rctx->ctx->errstr,
@@ -278,8 +263,8 @@ static redisReply* oidc_cache_redis_command(request_rec *r,
 			oidc_cache_redis_reply_free(&reply);
 		}
 
-		/* get the reply for the actual command */
-		rv = redisGetReply(rctx->ctx, (void **) &reply);
+		/* execute the actual command */
+		reply = redisCommand(rctx->ctx, command);
 
 		/* check for errors, need to return error replies for cache miss case REDIS_REPLY_NIL */
 		if ((reply != NULL) && (reply->type != REDIS_REPLY_ERROR))
@@ -319,8 +304,9 @@ static apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section,
 		return FALSE;
 
 	/* get */
-	reply = oidc_cache_redis_command(r, context, "GET %s",
-			oidc_cache_redis_get_key(r->pool, section, key));
+	reply = oidc_cache_redis_command(r, context,
+			apr_psprintf(r->pool, "GET %s",
+					oidc_cache_redis_get_key(r->pool, section, key)));
 
 	if (reply == NULL)
 		goto end;
@@ -377,8 +363,9 @@ static apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section,
 	if (value == NULL) {
 
 		/* delete it */
-		reply = oidc_cache_redis_command(r, context, "DEL %s",
-				oidc_cache_redis_get_key(r->pool, section, key));
+		reply = oidc_cache_redis_command(r, context,
+				apr_psprintf(r->pool, "DEL %s",
+						oidc_cache_redis_get_key(r->pool, section, key)));
 
 	} else {
 
@@ -386,9 +373,10 @@ static apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section,
 		timeout = apr_time_sec(expiry - apr_time_now());
 
 		/* store it */
-		reply = oidc_cache_redis_command(r, context, "SETEX %s %d %s",
-				oidc_cache_redis_get_key(r->pool, section, key), timeout,
-				value);
+		reply = oidc_cache_redis_command(r, context,
+				apr_psprintf(r->pool, "SETEX %s %d %s",
+						oidc_cache_redis_get_key(r->pool, section, key),
+						timeout, value));
 
 	}
 

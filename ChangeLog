@@ -1,3 +1,7 @@
+05/29/2018
+- avoid using pipelining for Redis
+- bump to 2.3.6rc4
+
 05/28/2018
 - send Basic header in OAuth www-authenticate response if that's the only accepted method; thanks @puiterwijk
 
