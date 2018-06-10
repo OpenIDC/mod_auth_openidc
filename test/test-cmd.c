@@ -66,7 +66,7 @@
 
 int usage(int argc, char **argv, const char *msg) {
 	fprintf(stderr, "Usage: %s %s\n", argv[0],
-			msg ? msg : "[ sign | verify | jwk2cert | cert2jwk | enckey | hash_base64url | timestamp] <options>");
+			msg ? msg : "[ sign | verify | jwk2cert | cert2jwk | enckey | hash_base64url | timestamp | uuid] <options>");
 	return -1;
 }
 
@@ -79,7 +79,7 @@ int file_read(apr_pool_t *pool, const char *path, char **rbuf) {
 	apr_size_t len;
 
 	rc = apr_file_open(&fd, path, APR_FOPEN_READ | APR_FOPEN_BUFFERED,
-	APR_OS_DEFAULT, pool);
+			APR_OS_DEFAULT, pool);
 	if (rc != APR_SUCCESS) {
 		fprintf(stderr, "could not open file %s: %s", path,
 				apr_strerror(rc, s_err, sizeof(s_err)));
@@ -102,7 +102,7 @@ int file_read(apr_pool_t *pool, const char *path, char **rbuf) {
 	bytes_read--;
 	while ((*rbuf)[bytes_read] == '\n') {
 		(*rbuf)[bytes_read] = '\0';
-		bytes_read --;
+		bytes_read--;
 	}
 
 	apr_file_close(fd);
@@ -251,9 +251,9 @@ int mkcert(RSA *rsa, X509 **x509p, EVP_PKEY **pkeyp, int serial, int days) {
 	name = X509_get_subject_name(x);
 
 	X509_NAME_add_entry_by_txt(name, "C",
-	MBSTRING_ASC, (const unsigned char *) "NL", -1, -1, 0);
+			MBSTRING_ASC, (const unsigned char *) "NL", -1, -1, 0);
 	X509_NAME_add_entry_by_txt(name, "CN",
-	MBSTRING_ASC, (const unsigned char *) "Ping Identity", -1, -1, 0);
+			MBSTRING_ASC, (const unsigned char *) "Ping Identity", -1, -1, 0);
 
 	X509_set_issuer_name(x, name);
 
@@ -322,13 +322,15 @@ int cert2jwk(int argc, char **argv, apr_pool_t *pool) {
 	oidc_jwk_t *jwk = NULL;
 	oidc_jose_error_t err;
 	if (oidc_jwk_parse_rsa_public_key(pool, NULL, argv[2], &jwk, &err) == FALSE) {
-		fprintf(stderr, "oidc_jwk_parse_rsa_public_key failed: %s", oidc_jose_e2s(pool, err));
+		fprintf(stderr, "oidc_jwk_parse_rsa_public_key failed: %s",
+				oidc_jose_e2s(pool, err));
 		return -1;
 	}
 
 	char *s_json = NULL;
 	if (oidc_jwk_to_json(pool, jwk, &s_json, &err) == FALSE) {
-		fprintf(stderr, "oidc_jwk_to_json failed: %s", oidc_jose_e2s(pool, err));
+		fprintf(stderr, "oidc_jwk_to_json failed: %s",
+				oidc_jose_e2s(pool, err));
 		return -1;
 	}
 
@@ -416,7 +418,8 @@ int enckey(int argc, char **argv, apr_pool_t *pool) {
 	request_rec *r = request_setup(pool);
 
 	oidc_jwk_t *jwk = NULL;
-	if (oidc_util_create_symmetric_key(r, argv[2], argc > 4 ? atoi(argv[4]) : 0, argc > 3 ? argv[3] : NULL, FALSE, &jwk) == FALSE) {
+	if (oidc_util_create_symmetric_key(r, argv[2], argc > 4 ? atoi(argv[4]) : 0,
+			argc > 3 ? argv[3] : NULL, FALSE, &jwk) == FALSE) {
 		fprintf(stderr, "oidc_util_create_symmetric_key failed");
 		return -1;
 	}
@@ -432,7 +435,9 @@ int enckey(int argc, char **argv, apr_pool_t *pool) {
 	int src_len = cjose_jwk_get_keysize(jwk->cjose_jwk, &cjose_err) / 8;
 	int enc_len = apr_base64_encode_len(src_len);
 	char *b64 = apr_palloc(r->pool, enc_len);
-	apr_base64_encode(b64, (const char *) cjose_jwk_get_keydata(jwk->cjose_jwk, &cjose_err), src_len);
+	apr_base64_encode(b64,
+			(const char *) cjose_jwk_get_keydata(jwk->cjose_jwk, &cjose_err),
+			src_len);
 
 	fprintf(stdout, "\nJWK:\n%s\n\nbase64:\n%s\n\n", s_json, b64);
 
@@ -448,7 +453,8 @@ int hash_base64url(int argc, char **argv, apr_pool_t *pool) {
 
 	request_rec *r = request_setup(pool);
 
-	if (oidc_util_hash_string_and_base64url_encode(r, algo, argv[2], &output) == FALSE) {
+	if (oidc_util_hash_string_and_base64url_encode(r, algo, argv[2],
+			&output) == FALSE) {
 		fprintf(stderr, "oidc_util_hash_string_and_base64url_encode failed");
 		return -1;
 	}
@@ -472,8 +478,40 @@ int timestamp(int argc, char **argv, apr_pool_t *pool) {
 
 	char buf[APR_RFC822_DATE_LEN + 1];
 	apr_rfc822_date(buf, t2);
-	fprintf(stderr, "timestamp (3): %s (%" APR_TIME_T_FMT " secs from now)\n", buf, apr_time_sec(t2 - apr_time_now()));
+	fprintf(stderr, "timestamp (3): %s (%" APR_TIME_T_FMT " secs from now)\n",
+			buf, apr_time_sec(t2 - apr_time_now()));
 
+	return 0;
+}
+
+int uuid(int argc, char **argv, apr_pool_t *pool) {
+	char s_uuid[APR_UUID_FORMATTED_LENGTH + 1];
+	const unsigned long e = 1000000;
+	unsigned long n = 10000000;
+	unsigned long i = 0;
+
+	if (argc > 2)
+		n = atoi(argv[2]);
+
+	apr_hash_t *entries = apr_hash_make(pool);
+	apr_uuid_t *uuid;
+	while (i < n) {
+		uuid = (apr_uuid_t *) apr_pcalloc(pool, sizeof(apr_uuid_t));
+		apr_uuid_get(uuid);
+		if (apr_hash_get(entries, (const void *) uuid,
+				sizeof(apr_uuid_t)) != NULL) {
+			apr_uuid_format((char *) &s_uuid, uuid);
+			fprintf(stderr, "duplicate found: %s\n", s_uuid);
+			exit(-1);
+		} else {
+			apr_hash_set(entries, (const void *) uuid, sizeof(apr_uuid_t),
+					(const void *) 1);
+		}
+		i++;
+		if (i % e == 0)
+			fprintf(stderr, "\r %lu  ", i / e);
+	}
+	fprintf(stderr, "\n");
 	return 0;
 }
 
@@ -513,6 +551,9 @@ int main(int argc, char **argv, char **env) {
 
 	if (strcmp(argv[1], "timestamp") == 0)
 		return timestamp(argc, argv, pool);
+
+	if (strcmp(argv[1], "uuid") == 0)
+		return uuid(argc, argv, pool);
 
 	apr_pool_destroy(pool);
 	apr_terminate();

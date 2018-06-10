@@ -66,7 +66,7 @@ configure:	configure.ac
 @NAMEVER@.tar.gz:	 $(DISTFILES)
 	tar -c --transform="s#^#@NAMEVER@/#" -vzf $@ $(DISTFILES)
 
-test/test test/test-cmd: test/test.c test/stub.c src/mod_auth_openidc.la
+test/test test/test-cmd: test/test.c test/test-cmd.c test/stub.c src/mod_auth_openidc.la
 	@APXS2@ @APXS2_OPTS@ $(CFLAGS) -Wl,"$(LIBS)" -Isrc -Wc,-Wall -Wc,-g -c -o $@ $@.c test/stub.c $(SRC:.c=.lo) @APR_LIBS@
 
 test-compile: test/test test/test-cmd
