@@ -1,5 +1,6 @@
 06/15/2018
 - add check to detect session cache corruption for server-based caches and cached static metadata
+- release 2.3.6
 
 05/29/2018
 - avoid using pipelining for Redis
