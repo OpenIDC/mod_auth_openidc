@@ -317,8 +317,15 @@ static apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg *c,
 
 	} else {
 
-		/* correct parsing and validation was already done when it was put in the cache */
 		oidc_util_decode_json_object(r, s_json, &j_provider);
+
+		/* check to see if it is valid metadata */
+		if (oidc_metadata_provider_is_valid(r, c, j_provider, NULL) == FALSE) {
+			oidc_error(r,
+					"cache corruption detected: invalid metadata from url: %s",
+					c->provider.metadata_url);
+			return FALSE;
+		}
 	}
 
 	*provider = apr_pcalloc(r->pool, sizeof(oidc_provider_t));

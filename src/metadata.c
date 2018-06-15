@@ -261,7 +261,7 @@ static apr_byte_t oidc_metadata_is_valid_uri(request_rec *r, const char *type,
 /*
  * check to see if JSON provider metadata is valid
  */
-static apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, oidc_cfg *cfg,
+apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, oidc_cfg *cfg,
 		json_t *j_provider, const char *issuer) {
 
 	/* get the "issuer" from the provider metadata and double-check that it matches what we looked for */
