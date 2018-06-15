@@ -1,3 +1,6 @@
+06/15/2018
+- add check to detect session cache corruption for server-based caches
+
 05/29/2018
 - avoid using pipelining for Redis
 - bump to 2.3.6rc4

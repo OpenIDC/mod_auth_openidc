@@ -67,6 +67,8 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_SESSION_EXPIRY_KEY                   "e"
 /* the name of the provided token binding attribute in the session */
 #define OIDC_SESSION_PROVIDED_TOKEN_BINDING_KEY   "ptb"
+/* the name of the session identifier in the session */
+#define OIDC_SESSION_SESSION_ID                   "i"
 
 static apr_byte_t oidc_session_encode(request_rec *r, oidc_cfg *c,
 		oidc_session_t *z, char **s_value, apr_byte_t encrypt) {
@@ -106,6 +108,7 @@ static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 
+	const char *stored_uuid = NULL;
 	apr_byte_t rc = FALSE;
 
 	/* get the cookie that should be our uuid/key */
@@ -117,9 +120,21 @@ static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 		rc = oidc_cache_get_session(r, uuid, &s_json);
 		if ((rc == TRUE) && (s_json != NULL)) {
 			rc = oidc_session_decode(r, c, z, s_json, FALSE);
-			if (rc == TRUE)
+			if (rc == TRUE) {
 				strncpy(z->uuid, uuid, strlen(uuid));
+
+				/* compare the session id in the cache value so it allows  us to detect cache corruption */
+				oidc_session_get(r, z, OIDC_SESSION_SESSION_ID, &stored_uuid);
+				if ((stored_uuid == NULL)
+						|| (apr_strnatcmp(stored_uuid, uuid) != 0)) {
+					oidc_error(r,
+							"cache corruption detected: stored id is not equal to requested id");
+					oidc_session_free(r, z);
+					rc = FALSE;
+				}
+			}
 		}
+
 	}
 
 	return rc;
@@ -142,6 +157,9 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z,
 			apr_uuid_t uuid;
 			apr_uuid_get(&uuid);
 			apr_uuid_format((char *) &z->uuid, &uuid);
+
+			/* store the session id in the cache value so it allows  us to detect cache corruption */
+			oidc_session_set(r, z, OIDC_SESSION_SESSION_ID, z->uuid);
 		}
 
 		/* store the string-encoded session in the cache; encryption depends on cache backend settings */
