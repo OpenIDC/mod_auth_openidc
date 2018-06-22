@@ -2,6 +2,8 @@
 - clear session cookie and contents if cache corruption is detected
 - bump to 2.3.7rc0
 - use apr_pstrdup when setting r->user
+- reserve 255 characters in remote username substition instead of 50
+- bump to 2.3.7rc1
 
 06/15/2018
 - add check to detect session cache corruption for server-based caches and cached static metadata

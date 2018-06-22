@@ -38,7 +38,7 @@ restrictions:
 #include <pcre.h>
 #include "pcre_subst.h"
 
-#define MAXCAPTURE	50
+#define MAXCAPTURE	255
 
 #ifdef DEBUG_PCRE_SUBST
 static void

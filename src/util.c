@@ -2077,35 +2077,42 @@ apr_hash_t * oidc_util_merge_key_sets(apr_pool_t *pool, apr_hash_t *k1,
  *     text_replaced: "292"
  */
 
-apr_byte_t oidc_util_regexp_substitute(
-        apr_pool_t *pool, const char *input,
-        const char *regexp, const char *replace, char **output, char **error_str) {
+apr_byte_t oidc_util_regexp_substitute(apr_pool_t *pool, const char *input,
+		const char *regexp, const char *replace, char **output,
+		char **error_str) {
 
-    const char *errorptr;
-    int erroffset;
-    pcre *preg;
-    char *substituted;
+	const char *errorptr = NULL;
+	int erroffset;
+	char *substituted = NULL;
+	apr_byte_t rc = FALSE;
 
-    preg = pcre_compile(regexp, 0, &errorptr, &erroffset, NULL);
+	pcre *preg = pcre_compile(regexp, 0, &errorptr, &erroffset, NULL);
+	if (preg == NULL) {
+		*error_str = apr_psprintf(pool,
+				"pattern [%s] is not a valid regular expression", regexp);
+		goto out;
+	}
 
-    if (preg == NULL) {
-        *error_str = apr_psprintf(pool, "pattern [%s] is not a valid regular expression", regexp);
-        pcre_free(preg);
-        return FALSE;
-    }
+	substituted = pcre_subst(preg, NULL, input, (int) strlen(input), 0, 0,
+			replace);
+	if (substituted == NULL) {
+		*error_str =
+				apr_psprintf(pool,
+						"unknown error could not match string [%s] using pattern [%s] and replace matches in [%s]",
+						input, regexp, replace);
+		goto out;
+	}
 
-    substituted = pcre_subst(preg, NULL, input, (int) strlen(input), 0, 0, replace);
-    if (substituted) {
-        *output = apr_pstrdup(pool, substituted);
-        pcre_free(preg);
-        pcre_free(substituted);
-        return TRUE;
-    } else {
-        *error_str = apr_psprintf(pool,"unknown error could not match string [%s] using pattern [%s] and replace matches in [%s]",
-                                  input, regexp, replace);
-        pcre_free(preg);
-    }
-    return FALSE;
+	*output = apr_pstrdup(pool, substituted);
+	rc = TRUE;
+
+out:
+	if (substituted)
+		pcre_free(substituted);
+	if (preg)
+		pcre_free(preg);
+
+	return rc;
 }
 
 /*
