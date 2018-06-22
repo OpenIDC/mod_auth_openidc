@@ -102,6 +102,27 @@ static apr_byte_t oidc_session_decode(request_rec *r, oidc_cfg *c,
 }
 
 /*
+ * generate a unique identifier for a session
+ */
+static void oidc_session_uuid_new(request_rec *r, oidc_session_t *z) {
+	apr_uuid_t uuid;
+	apr_uuid_get(&uuid);
+	apr_uuid_format((char *) &z->uuid, &uuid);
+}
+
+/*
+ * clear contents of a session
+ */
+static void oidc_session_clear(request_rec *r, oidc_session_t *z) {
+	strncpy(z->uuid, "", strlen(""));
+	z->remote_user = NULL;
+	z->expiry = 0;
+	if (z->state)
+		json_decref(z->state);
+	z->state = json_object();
+}
+
+/*
  * load the session from the cache using the cookie as the index
  */
 static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
@@ -128,8 +149,17 @@ static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 				if ((stored_uuid == NULL)
 						|| (apr_strnatcmp(stored_uuid, uuid) != 0)) {
 					oidc_error(r,
-							"cache corruption detected: stored id is not equal to requested id");
-					oidc_session_free(r, z);
+							"cache corruption detected: stored session id (%s) is not equal to requested session id (%s)",
+							stored_uuid, uuid);
+
+					/* delete the session cookie */
+					oidc_util_set_cookie(r, oidc_cfg_dir_cookie(r), "", 0,
+							NULL);
+					/* delete the cache entry */
+					rc = oidc_cache_set_session(r, z->uuid, NULL, 0);
+					/* clear the session */
+					oidc_session_clear(r, z);
+
 					rc = FALSE;
 				}
 			}
@@ -154,10 +184,7 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z,
 
 		if (apr_strnatcmp(z->uuid, "") == 0) {
 			/* get a new uuid for this session */
-			apr_uuid_t uuid;
-			apr_uuid_get(&uuid);
-			apr_uuid_format((char *) &z->uuid, &uuid);
-
+			oidc_session_uuid_new(r, z);
 			/* store the session id in the cache value so it allows  us to detect cache corruption */
 			oidc_session_set(r, z, OIDC_SESSION_SESSION_ID, z->uuid);
 		}
@@ -238,10 +265,7 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 
 	/* allocate space for the session object and fill it */
 	oidc_session_t *z = (*zz = apr_pcalloc(r->pool, sizeof(oidc_session_t)));
-
-	strncpy(z->uuid, "", strlen(""));
-	z->remote_user = NULL;
-	z->state = NULL;
+	oidc_session_clear(r, z);
 
 	if (c->session_type == OIDC_SESSION_TYPE_SERVER_CACHE)
 		/* load the session from the cache */
@@ -253,7 +277,7 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 		/* load the session from a self-contained cookie */
 		rc = oidc_session_load_cookie(r, c, z);
 
-	if (z->state != NULL) {
+	if (rc == TRUE) {
 
 		json_t *j_expires = json_object_get(z->state, OIDC_SESSION_EXPIRY_KEY);
 		if (j_expires)
@@ -263,8 +287,7 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 		if (apr_time_now() > z->expiry) {
 
 			oidc_warn(r, "session restored from cache has expired");
-			oidc_session_free(r, z);
-			z->state = json_object();
+			oidc_session_clear(r, z);
 
 		} else {
 
@@ -277,17 +300,13 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 						|| (apr_strnatcmp(env_p_tb_id, ses_p_tb_id) != 0)) {
 					oidc_error(r,
 							"the Provided Token Binding ID stored in the session doesn't match the one presented by the user agent");
-					oidc_session_free(r, z);
-					z->state = json_object();
+					oidc_session_clear(r, z);
 				}
 			}
 
 			oidc_session_get(r, z, OIDC_SESSION_REMOTE_USER_KEY,
 					&z->remote_user);
 		}
-	} else {
-
-		z->state = json_object();
 	}
 
 	return rc;
