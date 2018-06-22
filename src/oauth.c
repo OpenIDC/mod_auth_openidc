@@ -608,7 +608,7 @@ static apr_byte_t oidc_oauth_set_request_user(request_rec *r, oidc_cfg *c,
 		return FALSE;
 	}
 
-	r->user = remote_user;
+	r->user = apr_pstrdup(r->pool, remote_user);
     oidc_debug(r, "set user to \"%s\" based on claim: \"%s\"%s", r->user,
                c->oauth.remote_user_claim.claim_name,
                c->oauth.remote_user_claim.reg_exp ?

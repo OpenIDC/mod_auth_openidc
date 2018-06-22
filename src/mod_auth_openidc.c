@@ -1373,7 +1373,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	oidc_debug(r, "enter");
 
 	/* set the user in the main request for further (incl. sub-request) processing */
-	r->user = (char *) session->remote_user;
+	r->user = apr_pstrdup(r->pool, session->remote_user);
 	oidc_debug(r, "set remote_user to \"%s\"", r->user);
 
 	/* get the header name in which the remote user name needs to be passed */
@@ -1627,7 +1627,7 @@ static apr_byte_t oidc_set_request_user(request_rec *r, oidc_cfg *c,
 		remote_user = apr_psprintf(r->pool, "%s%s%s", remote_user, OIDC_STR_AT,
 				issuer);
 
-	r->user = remote_user;
+	r->user = apr_pstrdup(r->pool, remote_user);
 
 	oidc_debug(r, "set remote_user to \"%s\" based on claim: \"%s\"%s", r->user,
 			c->remote_user_claim.claim_name,
@@ -3018,7 +3018,7 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 	}
 
 	/* set the user in the main request for further (incl. sub-request and authz) processing */
-	r->user = (char *) session->remote_user;
+	r->user = apr_pstrdup(r->pool, session->remote_user);
 
 	if (c->info_hook_data == NULL) {
 		oidc_warn(r, "no data configured to return in " OIDCInfoHook);

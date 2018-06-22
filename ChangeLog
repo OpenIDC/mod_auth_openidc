@@ -1,6 +1,7 @@
 06/22/2018
 - clear session cookie and contents if cache corruption is detected
 - bump to 2.3.7rc0
+- use apr_pstrdup when setting r->user
 
 06/15/2018
 - add check to detect session cache corruption for server-based caches and cached static metadata
