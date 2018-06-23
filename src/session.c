@@ -117,9 +117,10 @@ static void oidc_session_clear(request_rec *r, oidc_session_t *z) {
 	strncpy(z->uuid, "", strlen(""));
 	z->remote_user = NULL;
 	z->expiry = 0;
-	if (z->state)
+	if (z->state) {
 		json_decref(z->state);
-	z->state = json_object();
+		z->state = NULL;
+	}
 }
 
 /*
@@ -277,7 +278,7 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 		/* load the session from a self-contained cookie */
 		rc = oidc_session_load_cookie(r, c, z);
 
-	if (rc == TRUE) {
+	if ((rc == TRUE) && (z->state != NULL)) {
 
 		json_t *j_expires = json_object_get(z->state, OIDC_SESSION_EXPIRY_KEY);
 		if (j_expires)
@@ -327,13 +328,13 @@ apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z,
 		oidc_session_set(r, z, OIDC_SESSION_REMOTE_USER_KEY, z->remote_user);
 		json_object_set_new(z->state, OIDC_SESSION_EXPIRY_KEY,
 				json_integer(apr_time_sec(z->expiry)));
-	}
 
-	if ((first_time) && (p_tb_id != NULL)) {
-		oidc_debug(r,
-				"Provided Token Binding ID environment variable found; adding its value to the session state");
-		oidc_session_set(r, z, OIDC_SESSION_PROVIDED_TOKEN_BINDING_KEY,
-				p_tb_id);
+		if ((first_time) && (p_tb_id != NULL)) {
+			oidc_debug(r,
+					"Provided Token Binding ID environment variable found; adding its value to the session state");
+			oidc_session_set(r, z, OIDC_SESSION_PROVIDED_TOKEN_BINDING_KEY,
+					p_tb_id);
+		}
 	}
 
 	if (c->session_type == OIDC_SESSION_TYPE_SERVER_CACHE)
@@ -353,11 +354,7 @@ apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z,
  * free resources allocated for a session
  */
 apr_byte_t oidc_session_free(request_rec *r, oidc_session_t *z) {
-	if (z->state) {
-		json_decref(z->state);
-		z->state = NULL;
-	}
-	z->expiry = 0;
+	oidc_session_clear(r, z);
 	return TRUE;
 }
 
@@ -375,6 +372,9 @@ apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z) {
 apr_byte_t oidc_session_get(request_rec *r, oidc_session_t *z, const char *key,
 		const char **value) {
 
+	if (z->state == NULL)
+		z->state = json_object();
+
 	/* just return the value for the key */
 	oidc_json_object_get_string(r->pool, z->state, key, (char **) value, NULL);
 
@@ -386,6 +386,9 @@ apr_byte_t oidc_session_get(request_rec *r, oidc_session_t *z, const char *key,
  */
 apr_byte_t oidc_session_set(request_rec *r, oidc_session_t *z, const char *key,
 		const char *value) {
+
+	if (z->state == NULL)
+		z->state = json_object();
 
 	/* only set it if non-NULL, otherwise delete the entry */
 	if (value) {
