@@ -2123,22 +2123,20 @@ out:
 
 apr_byte_t oidc_util_regexp_first_match(apr_pool_t *pool, const char *input,
 		const char *regexp, char **output, char **error_str) {
-	const char *errorptr;
+	const char *errorptr = NULL;
 	int erroffset;
-	pcre *preg;
+	int rc = 0;
 	int subStr[OIDC_UTIL_REGEXP_MATCH_SIZE];
-	const char *psubStrMatchStr;
+	const char *psubStrMatchStr = NULL;
+	apr_byte_t rv = FALSE;
 
-	preg = pcre_compile(regexp, 0, &errorptr, &erroffset, NULL);
-
+	pcre *preg = pcre_compile(regexp, 0, &errorptr, &erroffset, NULL);
 	if (preg == NULL) {
 		*error_str = apr_psprintf(pool,
 				"pattern [%s] is not a valid regular expression", regexp);
-		pcre_free(preg);
-		return FALSE;
+		goto out;
 	}
 
-	int rc = 0;
 	if ((rc = pcre_exec(preg, NULL, input, (int) strlen(input), 0, 0, subStr,
 			OIDC_UTIL_REGEXP_MATCH_SIZE)) < 0) {
 		switch (rc) {
@@ -2166,24 +2164,27 @@ apr_byte_t oidc_util_regexp_first_match(apr_pool_t *pool, const char *input,
 			*error_str = apr_psprintf(pool, "unknown error: %d", rc);
 			break;
 		}
-		pcre_free(preg);
-		return FALSE;
+		goto out;
 	}
 
 	if (pcre_get_substring(input, subStr, rc, OIDC_UTIL_REGEXP_MATCH_NR,
 			&(psubStrMatchStr)) <= 0) {
 		*error_str = apr_psprintf(pool, "pcre_get_substring failed (rc=%d)",
 				rc);
-		pcre_free(preg);
-		return FALSE;
+		goto out;
 	}
 
 	*output = apr_pstrdup(pool, psubStrMatchStr);
+	rv = TRUE;
 
-	pcre_free_substring(psubStrMatchStr);
-	pcre_free(preg);
+out:
 
-	return TRUE;
+	if (psubStrMatchStr)
+		pcre_free_substring(psubStrMatchStr);
+	if (preg)
+		pcre_free(preg);
+
+	return rv;
 }
 
 int oidc_util_cookie_domain_valid(const char *hostname, char *cookie_domain) {
