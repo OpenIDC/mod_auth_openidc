@@ -372,9 +372,6 @@ apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z) {
 apr_byte_t oidc_session_get(request_rec *r, oidc_session_t *z, const char *key,
 		const char **value) {
 
-	if (z->state == NULL)
-		z->state = json_object();
-
 	/* just return the value for the key */
 	oidc_json_object_get_string(r->pool, z->state, key, (char **) value, NULL);
 
@@ -387,15 +384,15 @@ apr_byte_t oidc_session_get(request_rec *r, oidc_session_t *z, const char *key,
 apr_byte_t oidc_session_set(request_rec *r, oidc_session_t *z, const char *key,
 		const char *value) {
 
-	if (z->state == NULL)
-		z->state = json_object();
-
 	/* only set it if non-NULL, otherwise delete the entry */
 	if (value) {
+		if (z->state == NULL)
+			z->state = json_object();
 		json_object_set_new(z->state, key, json_string(value));
-	} else {
+	} else if (z->state != NULL) {
 		json_object_del(z->state, key);
 	}
+
 	return TRUE;
 }
 
