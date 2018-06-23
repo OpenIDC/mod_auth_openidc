@@ -1,3 +1,7 @@
+06/23/2018
+- refactor session object creation
+- bump to 2.3.7rc2
+
 06/22/2018
 - clear session cookie and contents if cache corruption is detected
 - bump to 2.3.7rc0
