@@ -7,18 +7,18 @@ mod_auth_openidc
 *mod_auth_openidc* is an authentication/authorization module for the Apache 2.x
 HTTP server that functions as an **OpenID Connect Relying Party**, authenticating users against an
 OpenID Connect Provider. It can also function as an **OAuth 2.0 Resource Server**, validating 
-OAuth 2.0 access tokens presented by OAuth 2.0 Clients.
+OAuth 2.0 bearer access tokens presented by OAuth 2.0 Clients.
 
 Overview
 --------
 
 This module enables an Apache 2.x web server to operate as an [OpenID Connect](http://openid.net/specs/openid-connect-core-1_0.html)
 *Relying Party* (RP) to an OpenID Connect *Provider* (OP). It authenticates users against an OpenID Connect Provider,
-receives user identity information from the OP in a so called ID Token and passes the identity information
+receives user identity information from the OP in a so called ID Token and passes on the identity information
 (a.k.a. claims) in the ID Token to applications hosted and protected by the Apache web server.
 
 It can also be configured as an OAuth 2.0 *Resource Server* (RS), consuming bearer access tokens and validating
-them against an OAuth 2.0 Authorization Server, authorizing the Clients based on the validation results.
+them against an OAuth 2.0 Authorization Server, authorizing Clients based on the validation results.
 
 The protected content and/or applications can be served by the Apache server itself or it can be served from elsewhere
 when Apache is configured as a Reverse Proxy in front of the origin server(s).
@@ -31,20 +31,26 @@ It allows for authorization rules (based on standard Apache `Require` primitives
 of claims provided in the `id_token`/ `userinfo` claims.
 
 *mod_auth_openidc* supports the following specifications:
-- [OpenID Connect](http://openid.net/specs/openid-connect-core-1_0.html) Basic, Implicit, Hybrid and Refresh flows.
-- [OpenID Connect Dynamic Client Registration](http://openid.net/specs/openid-connect-registration-1_0.html)
-- [OpenID Provider Discovery](http://openid.net/specs/openid-connect-discovery-1_0.html)
-- [OAuth 2.0 Form Post Response Mode](http://openid.net/specs/oauth-v2-form-post-response-mode-1_0.html)
-- [Proof Key for Code Exchange by OAuth Public Clients](https://tools.ietf.org/html/rfc7636)
-- [OpenID Connect Session Management](http://openid.net/specs/openid-connect-session-1_0.html). See the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki/Session-Management) for information
-on how to configure it.
+- [OpenID Connect Core 1.0](http://openid.net/specs/openid-connect-core-1_0.html) *(Basic, Implicit, Hybrid and Refresh flows)*
+- [OpenID Connect Discovery 1.0](http://openid.net/specs/openid-connect-discovery-1_0.html)
+- [OpenID Connect Dynamic Client Registration 1.0](http://openid.net/specs/openid-connect-registration-1_0.html)
+- [OAuth 2.0 Multiple Response Type Encoding Practices 1.0](http://openid.net/specs/oauth-v2-multiple-response-types-1_0.html)
+- [OAuth 2.0 Form Post Response Mode 1.0](http://openid.net/specs/oauth-v2-form-post-response-mode-1_0.html)
+- [RFC7 7636 - Proof Key for Code Exchange by OAuth Public Clients](https://tools.ietf.org/html/rfc7636)
+- [OpenID Connect Session Management 1.0](http://openid.net/specs/openid-connect-session-1_0.html) *(implementers draft; see the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki/Session-Management) for information on how to configure it)*
+- [OpenID Connect Front-Channel Logout 1.0](http://openid.net/specs/openid-connect-frontchannel-1_0.html) *(implementers draft)*
+- [Encoding claims in the OAuth 2 state parameter using a JWT](https://tools.ietf.org/html/draft-bradley-oauth-jwt-encoded-state-08) *(draft spec)*
+- [OpenID Connect Token Bound Authentication](https://openid.net/specs/openid-connect-token-bound-authentication-1_0.html) *(draft spec)*
 
 Alternatively the module can operate as an OAuth 2.0 Resource Server to an OAuth 2.0 Authorization Server,
-introspecting/validating bearer Access Tokens conforming to [OAuth 2.0 Token Introspection](https://tools.ietf.org/html/rfc7662) (or similar),
-or verifying them locally if they are JWTs.
+validating bearer Access Tokens by introspecting them or verifying them locally if they are JWTs.
+In the OAuth 2.0 Resource Server mode *mod_auth_openidc* supports the following specifications:
+- [RFC 6750 - The OAuth 2.0 Authorization Framework: Bearer Token Usage](https://tools.ietf.org/html/rfc6750)
+- [RFC 7662 - OAuth 2.0 Token Introspection](https://tools.ietf.org/html/rfc7662) (or similar)
+- [RFC 8414 - OAuth 2.0 Authorization Server Metadata](https://tools.ietf.org/html/rfc8414)
+
 The `REMOTE_USER` variable setting, passing claims in HTTP headers and authorization based on `Require` primitives
-works in the same way as described for OpenID Connect above. See the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki/OAuth-2.0-Resource-Server) for information
-on how to configure it.
+works in the same way as described for OpenID Connect above. See the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki/OAuth-2.0-Resource-Server) for information on how to configure it.
 
 For an exhaustive description of all configuration options, see the file `auth_openidc.conf`
 in this directory. This file can also serve as an include file for `httpd.conf`.
