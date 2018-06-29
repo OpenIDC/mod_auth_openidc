@@ -41,7 +41,7 @@ on how to configure it.
 
 Alternatively the module can operate as an OAuth 2.0 Resource Server to an OAuth 2.0 Authorization Server,
 introspecting/validating bearer Access Tokens conforming to [OAuth 2.0 Token Introspection](https://tools.ietf.org/html/rfc7662) (or similar),
-or verifiying them locally if they are JWTs.
+or verifying them locally if they are JWTs.
 The `REMOTE_USER` variable setting, passing claims in HTTP headers and authorization based on `Require` primitives
 works in the same way as described for OpenID Connect above. See the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki/OAuth-2.0-Resource-Server) for information
 on how to configure it.

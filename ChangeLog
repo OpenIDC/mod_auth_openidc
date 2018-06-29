@@ -1,3 +1,7 @@
+06/29/2018
+- add support for authorization server metadata with OIDCOAuthServerMetadataURL as in RFC 8414
+- bump to 2.3.7rc3
+
 06/23/2018
 - refactor session object creation
 - bump to 2.3.7rc2

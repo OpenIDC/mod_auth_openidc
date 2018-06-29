@@ -255,6 +255,7 @@
 #define OIDCProviderMetadataRefreshInterval  "OIDCProviderMetadataRefreshInterval"
 #define OIDCProviderAuthRequestMethod        "OIDCProviderAuthRequestMethod"
 #define OIDCBlackListedClaims                "OIDCBlackListedClaims"
+#define OIDCOAuthServerMetadataURL           "OIDCOAuthServerMetadataURL"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -1048,6 +1049,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->provider.auth_request_method = OIDC_DEFAULT_AUTH_REQUEST_METHOD;
 
 	c->oauth.ssl_validate_server = OIDC_DEFAULT_SSL_VALIDATE_SERVER;
+	c->oauth.metadata_url = NULL;
 	c->oauth.client_id = NULL;
 	c->oauth.client_secret = NULL;
 	c->oauth.introspection_endpoint_tls_client_cert = NULL;
@@ -1317,6 +1319,9 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->oauth.ssl_validate_server != OIDC_DEFAULT_SSL_VALIDATE_SERVER ?
 					add->oauth.ssl_validate_server :
 					base->oauth.ssl_validate_server;
+	c->oauth.metadata_url =
+			add->oauth.metadata_url != NULL ?
+					add->oauth.metadata_url : base->oauth.metadata_url;
 	c->oauth.client_id =
 			add->oauth.client_id != NULL ?
 					add->oauth.client_id : base->oauth.client_id;
@@ -1898,13 +1903,26 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
  */
 static int oidc_check_config_oauth(server_rec *s, oidc_cfg *c) {
 
+	apr_uri_t r_uri;
+
+	if (c->oauth.metadata_url != NULL) {
+		apr_uri_parse(s->process->pconf, c->oauth.metadata_url, &r_uri);
+		if ((r_uri.scheme == NULL)
+				|| (apr_strnatcmp(r_uri.scheme, "https") != 0)) {
+			oidc_swarn(s,
+					"the URL scheme (%s) of the configured " OIDCOAuthServerMetadataURL " SHOULD be \"https\" for security reasons!",
+					r_uri.scheme);
+		}
+		return TRUE;
+	}
+
 	if (c->oauth.introspection_endpoint_url == NULL) {
 
 		if ((c->oauth.verify_jwks_uri == NULL)
 				&& (c->oauth.verify_public_keys == NULL)
 				&& (c->oauth.verify_shared_keys == NULL)) {
 			oidc_serror(s,
-					"one of '" OIDCOAuthIntrospectionEndpoint "', '" OIDCOAuthVerifyJwksUri "', '" OIDCOAuthVerifySharedKeys "' or '" OIDCOAuthVerifyCertFiles "' must be set");
+					"one of '" OIDCOAuthServerMetadataURL "', '" OIDCOAuthIntrospectionEndpoint "', '" OIDCOAuthVerifyJwksUri "', '" OIDCOAuthVerifySharedKeys "' or '" OIDCOAuthVerifyCertFiles "' must be set");
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 
@@ -1936,7 +1954,8 @@ static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s) {
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	if ((cfg->oauth.client_id != NULL) || (cfg->oauth.client_secret != NULL)
+	if ((cfg->oauth.metadata_url != NULL) || (cfg->oauth.client_id != NULL)
+			|| (cfg->oauth.client_secret != NULL)
 			|| (cfg->oauth.introspection_endpoint_url != NULL)
 			|| (cfg->oauth.verify_jwks_uri != NULL)
 			|| (cfg->oauth.verify_public_keys != NULL)
@@ -2791,5 +2810,10 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_cfg, white_listed_claims),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Specify claims from the userinfo and/or id_token that should be stored in the session (all other claims will be discarded)."),
+		AP_INIT_TAKE1(OIDCOAuthServerMetadataURL,
+				oidc_set_url_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, oauth.metadata_url),
+				RSRC_CONF,
+				"Authorization Server metadata URL."),
 		{ NULL }
 };
