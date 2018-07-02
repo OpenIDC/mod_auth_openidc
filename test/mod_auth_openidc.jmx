@@ -9,7 +9,7 @@
         <collectionProp name="Arguments.arguments">
           <elementProp name="APP_SERVER" elementType="Argument">
             <stringProp name="Argument.name">APP_SERVER</stringProp>
-            <stringProp name="Argument.value">ubuntu.zmartzone.eu</stringProp>
+            <stringProp name="Argument.value">localhost.zmartzone.eu</stringProp>
             <stringProp name="Argument.metadata">=</stringProp>
           </elementProp>
           <elementProp name="APP_PORT" elementType="Argument">
@@ -24,7 +24,7 @@
           </elementProp>
           <elementProp name="AS_HOST" elementType="Argument">
             <stringProp name="Argument.name">AS_HOST</stringProp>
-            <stringProp name="Argument.value">macbook</stringProp>
+            <stringProp name="Argument.value">localhost</stringProp>
             <stringProp name="Argument.metadata">=</stringProp>
           </elementProp>
           <elementProp name="AS_PORT" elementType="Argument">
@@ -71,7 +71,7 @@
           <boolProp name="LoopController.continue_forever">false</boolProp>
           <stringProp name="LoopController.loops">5</stringProp>
         </elementProp>
-        <stringProp name="ThreadGroup.num_threads">100</stringProp>
+        <stringProp name="ThreadGroup.num_threads">10</stringProp>
         <stringProp name="ThreadGroup.ramp_time">0</stringProp>
         <longProp name="ThreadGroup.start_time">1299167831000</longProp>
         <longProp name="ThreadGroup.end_time">1299167831000</longProp>
@@ -576,7 +576,7 @@
           <boolProp name="LoopController.continue_forever">false</boolProp>
           <stringProp name="LoopController.loops">5</stringProp>
         </elementProp>
-        <stringProp name="ThreadGroup.num_threads">100</stringProp>
+        <stringProp name="ThreadGroup.num_threads">10</stringProp>
         <stringProp name="ThreadGroup.ramp_time">0</stringProp>
         <longProp name="ThreadGroup.start_time">1388176686000</longProp>
         <longProp name="ThreadGroup.end_time">1388176686000</longProp>
