@@ -370,9 +370,6 @@ static int oidc_cache_redis_destroy(server_rec *s) {
 			&auth_openidc_module);
 	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *) cfg->cache_cfg;
 
-	oidc_sdebug(s, "enter: (%pp), (%pp)", context,
-			((context != NULL) ? context->ctx : 0));
-
 	if (context != NULL) {
 		// TODO: why do we need this check...? it is set/checked to null inside of oidc_cache_redis_free, no?
 		if (context->ctx != NULL) {
@@ -382,8 +379,6 @@ static int oidc_cache_redis_destroy(server_rec *s) {
 		}
 		oidc_cache_mutex_destroy(s, context->mutex);
 	}
-
-	oidc_sdebug(s, "leave");
 
 	return APR_SUCCESS;
 }

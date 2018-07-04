@@ -165,7 +165,7 @@ apr_status_t oidc_cache_mutex_child_init(apr_pool_t *p, server_rec *s,
 		apr_global_mutex_unlock(m->mutex);
 	}
 
-	oidc_sdebug(s, "semaphore: %d (m=%pp,s=%pp)", *m->sema, m, s);
+	//oidc_sdebug(s, "semaphore: %d (m=%pp,s=%pp)", *m->sema, m, s);
 
 	return rv;
 }
@@ -209,7 +209,7 @@ apr_byte_t oidc_cache_mutex_destroy(server_rec *s, oidc_cache_mutex_t *m) {
 
 		apr_global_mutex_lock(m->mutex);
 		(*m->sema)--;
-		oidc_sdebug(s, "semaphore: %d (m=%pp,s=%pp)", *m->sema, m->mutex, s);
+		//oidc_sdebug(s, "semaphore: %d (m=%pp,s=%pp)", *m->sema, m->mutex, s);
 		apr_global_mutex_unlock(m->mutex);
 
 		if ((m->shm != NULL) && (*m->sema == 0)) {
