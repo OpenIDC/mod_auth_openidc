@@ -2210,7 +2210,7 @@ static void oidc_child_init(apr_pool_t *p, server_rec *s) {
 		}
 		sp = sp->next;
 	}
-	apr_pool_cleanup_register(p, s, apr_pool_cleanup_null, oidc_cleanup_child);
+	apr_pool_cleanup_register(p, s, oidc_cleanup_child, apr_pool_cleanup_null);
 }
 
 /*
