@@ -182,7 +182,7 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section,
 	*value = NULL;
 
 	/* grab the global lock */
-	if (oidc_cache_mutex_lock(r, context->mutex) == FALSE)
+	if (oidc_cache_mutex_lock(r->server, context->mutex) == FALSE)
 		return FALSE;
 
 	/* get the pointer to the start of the shared memory block */
@@ -216,7 +216,7 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section,
 	}
 
 	/* release the global lock */
-	oidc_cache_mutex_unlock(r, context->mutex);
+	oidc_cache_mutex_unlock(r->server, context->mutex);
 
 	return TRUE;
 }
@@ -255,7 +255,7 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 	}
 
 	/* grab the global lock */
-	if (oidc_cache_mutex_lock(r, context->mutex) == FALSE)
+	if (oidc_cache_mutex_lock(r->server, context->mutex) == FALSE)
 		return FALSE;
 
 	/* get a pointer to the shared memory block */
@@ -328,7 +328,7 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 	}
 
 	/* release the global lock */
-	oidc_cache_mutex_unlock(r, context->mutex);
+	oidc_cache_mutex_unlock(r->server, context->mutex);
 
 	return TRUE;
 }
@@ -340,13 +340,13 @@ static int oidc_cache_shm_destroy(server_rec *s) {
 	apr_status_t rv = APR_SUCCESS;
 
 	if (context->shm) {
-		apr_global_mutex_lock(context->mutex->mutex);
+		oidc_cache_mutex_lock(s, context->mutex);
 		if (*context->mutex->sema == 1) {
 			rv = apr_shm_destroy(context->shm);
 			oidc_sdebug(s, "apr_shm_destroy returned: %d", rv);
 		}
 		context->shm = NULL;
-		apr_global_mutex_unlock(context->mutex->mutex);
+		oidc_cache_mutex_unlock(s, context->mutex);
 	}
 
 	oidc_cache_mutex_destroy(s, context->mutex);

@@ -67,11 +67,11 @@
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 typedef struct oidc_cache_cfg_redis_t {
-	/* cache_type = redis: Redis ptr */
 	oidc_cache_mutex_t *mutex;
 	char *host_str;
 	apr_port_t port;
 	char *passwd;
+	redisContext *ctx;
 } oidc_cache_cfg_redis_t;
 
 /* create the cache context */
@@ -79,7 +79,9 @@ static void *oidc_cache_redis_cfg_create(apr_pool_t *pool) {
 	oidc_cache_cfg_redis_t *context = apr_pcalloc(pool,
 			sizeof(oidc_cache_cfg_redis_t));
 	context->mutex = oidc_cache_mutex_create(pool);
+	context->host_str = NULL;
 	context->passwd = NULL;
+	context->ctx = NULL;
 	return context;
 }
 
@@ -155,24 +157,13 @@ static char *oidc_cache_redis_get_key(apr_pool_t *pool, const char *section,
 	return apr_psprintf(pool, "%s:%s", section, key);
 }
 
-/* key for storing data in the process pool */
-#define OIDC_CACHE_REDIS_CONTEXT "oidc_cache_redis_context"
-
-/*
- * per-process Redis connection context
- */
-typedef struct {
-	redisContext *ctx;
-} oidc_cache_redis_ctx_t;
-
 /*
  * free resources allocated for the per-process Redis connection context
  */
-static apr_status_t oidc_cache_redis_free(void *ptr) {
-	oidc_cache_redis_ctx_t *rctx = (oidc_cache_redis_ctx_t *) ptr;
-	if ((rctx != NULL) && (rctx->ctx != NULL)) {
-		redisFree(rctx->ctx);
-		rctx->ctx = NULL;
+static apr_status_t oidc_cache_redis_free(oidc_cache_cfg_redis_t *context) {
+	if ((context != NULL) && (context->ctx != NULL)) {
+		redisFree(context->ctx);
+		context->ctx = NULL;
 	}
 	return APR_SUCCESS;
 }
@@ -180,36 +171,20 @@ static apr_status_t oidc_cache_redis_free(void *ptr) {
 /*
  * connect to Redis server
  */
-static oidc_cache_redis_ctx_t * oidc_cache_redis_connect(request_rec *r,
+static apr_status_t oidc_cache_redis_connect(request_rec *r,
 		oidc_cache_cfg_redis_t *context) {
 
-	/* see if we already have a connection by looking it up in the process context */
-	oidc_cache_redis_ctx_t *rctx = NULL;
-
-	apr_pool_userdata_get((void **) &rctx, OIDC_CACHE_REDIS_CONTEXT,
-			r->server->process->pool);
-
-	if (rctx == NULL) {
-		rctx = apr_pcalloc(r->server->process->pool,
-				sizeof(oidc_cache_redis_ctx_t));
-		rctx->ctx = NULL;
-
-		/* store the connection in the process context */
-		apr_pool_userdata_set(rctx, OIDC_CACHE_REDIS_CONTEXT,
-				oidc_cache_redis_free, r->server->process->pool);
-	}
-
-	if (rctx->ctx == NULL) {
+	if (context->ctx == NULL) {
 
 		/* no connection, connect to the configured Redis server */
-		rctx->ctx = redisConnect(context->host_str, context->port);
+		context->ctx = redisConnect(context->host_str, context->port);
 
 		/* check for errors */
-		if ((rctx->ctx == NULL) || (rctx->ctx->err != 0)) {
+		if ((context->ctx == NULL) || (context->ctx->err != 0)) {
 			oidc_error(r, "failed to connect to Redis server (%s:%d): '%s'",
 					context->host_str, context->port,
-					rctx->ctx != NULL ? rctx->ctx->errstr : "");
-			oidc_cache_redis_free(rctx);
+					context->ctx != NULL ? context->ctx->errstr : "");
+			oidc_cache_redis_free(context);
 		} else {
 			/* log the connection */
 			oidc_debug(r, "successfully connected to Redis server (%s:%d)",
@@ -217,7 +192,7 @@ static oidc_cache_redis_ctx_t * oidc_cache_redis_connect(request_rec *r,
 		}
 	}
 
-	return rctx;
+	return (context->ctx != NULL) ? APR_SUCCESS : APR_EGENERAL;
 }
 
 /*
@@ -238,7 +213,6 @@ static void oidc_cache_redis_reply_free(redisReply **reply) {
 static redisReply* oidc_cache_redis_command(request_rec *r,
 		oidc_cache_cfg_redis_t *context, const char *command) {
 
-	oidc_cache_redis_ctx_t *rctx = NULL;
 	redisReply *reply = NULL;
 	int i = 0;
 
@@ -246,25 +220,24 @@ static redisReply* oidc_cache_redis_command(request_rec *r,
 	for (i = 0; i < OIDC_REDIS_MAX_TRIES; i++) {
 
 		/* connect */
-		rctx = oidc_cache_redis_connect(r, context);
-		if ((rctx == NULL) || (rctx->ctx == NULL))
+		if (oidc_cache_redis_connect(r, context) != APR_SUCCESS)
 			break;
 
 		/* see if we need to authenticate to the Redis server */
 		if (context->passwd != NULL) {
-			reply = redisCommand(rctx->ctx, "AUTH %s", context->passwd);
+			reply = redisCommand(context->ctx, "AUTH %s", context->passwd);
 			if ((reply == NULL) || (reply->type == REDIS_REPLY_ERROR))
 				oidc_error(r,
 						"Redis AUTH command (attempt=%d to %s:%d) failed: '%s' [%s]",
-						i, context->host_str, context->port, rctx->ctx->errstr,
-						reply ? reply->str : "<n/a>");
+						i, context->host_str, context->port,
+						context->ctx->errstr, reply ? reply->str : "<n/a>");
 
 			/* free the auth answer */
 			oidc_cache_redis_reply_free(&reply);
 		}
 
 		/* execute the actual command */
-		reply = redisCommand(rctx->ctx, command);
+		reply = redisCommand(context->ctx, command);
 
 		/* check for errors, need to return error replies for cache miss case REDIS_REPLY_NIL */
 		if ((reply != NULL) && (reply->type != REDIS_REPLY_ERROR))
@@ -274,14 +247,14 @@ static redisReply* oidc_cache_redis_command(request_rec *r,
 		/* something went wrong, log it */
 		oidc_error(r,
 				"Redis command (attempt=%d to %s:%d) failed, disconnecting: '%s' [%s]",
-				i, context->host_str, context->port, rctx->ctx->errstr,
+				i, context->host_str, context->port, context->ctx->errstr,
 				reply ? reply->str : "<n/a>");
 
 		/* free the reply (if there is one allocated) */
 		oidc_cache_redis_reply_free(&reply);
 
 		/* cleanup, we may try again (once) after reconnecting */
-		oidc_cache_redis_free(rctx);
+		oidc_cache_redis_free(context);
 	}
 
 	return reply;
@@ -300,7 +273,7 @@ static apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section,
 	apr_byte_t rv = FALSE;
 
 	/* grab the global lock */
-	if (oidc_cache_mutex_lock(r, context->mutex) == FALSE)
+	if (oidc_cache_mutex_lock(r->server, context->mutex) == FALSE)
 		return FALSE;
 
 	/* get */
@@ -336,7 +309,7 @@ end:
 	oidc_cache_redis_reply_free(&reply);
 
 	/* unlock the global mutex */
-	oidc_cache_mutex_unlock(r, context->mutex);
+	oidc_cache_mutex_unlock(r->server, context->mutex);
 
 	/* return the status */
 	return rv;
@@ -356,7 +329,7 @@ static apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section,
 	apr_uint32_t timeout;
 
 	/* grab the global lock */
-	if (oidc_cache_mutex_lock(r, context->mutex) == FALSE)
+	if (oidc_cache_mutex_lock(r->server, context->mutex) == FALSE)
 		return FALSE;
 
 	/* see if we should be clearing this entry */
@@ -386,7 +359,7 @@ static apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section,
 	oidc_cache_redis_reply_free(&reply);
 
 	/* unlock the global mutex */
-	oidc_cache_mutex_unlock(r, context->mutex);
+	oidc_cache_mutex_unlock(r->server, context->mutex);
 
 	/* return the status */
 	return rv;
@@ -397,7 +370,20 @@ static int oidc_cache_redis_destroy(server_rec *s) {
 			&auth_openidc_module);
 	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *) cfg->cache_cfg;
 
-	oidc_cache_mutex_destroy(s, context->mutex);
+	oidc_sdebug(s, "enter: (%pp), (%pp)", context,
+			((context != NULL) ? context->ctx : 0));
+
+	if (context != NULL) {
+		// TODO: why do we need this check...? it is set/checked to null inside of oidc_cache_redis_free, no?
+		if (context->ctx != NULL) {
+			oidc_cache_mutex_lock(s, context->mutex);
+			oidc_cache_redis_free(context);
+			oidc_cache_mutex_unlock(s, context->mutex);
+		}
+		oidc_cache_mutex_destroy(s, context->mutex);
+	}
+
+	oidc_sdebug(s, "leave");
 
 	return APR_SUCCESS;
 }
