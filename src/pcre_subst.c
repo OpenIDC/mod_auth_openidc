@@ -38,8 +38,6 @@ restrictions:
 #include <pcre.h>
 #include "pcre_subst.h"
 
-#define MAXCAPTURE	255
-
 #ifdef DEBUG_PCRE_SUBST
 static void
 dumpstr(const char *str, int len, int start, int end)
@@ -114,8 +112,8 @@ edit(const char *str, int len, const char *rep, int nmat, const int *ovec)
 	int i, slen, rlen;
 	const int *mvec = ovec;
 	char *res, *cp;
-	int replen[MAXCAPTURE];
-	const char *repstr[MAXCAPTURE];
+	int replen[OIDC_PCRE_MAXCAPTURE];
+	const char *repstr[OIDC_PCRE_MAXCAPTURE];
 	nmat--;
 	ovec += 2;
 	for (i = 0; i < nmat; i++) {
@@ -149,7 +147,7 @@ pcre_subst(const pcre *ppat, const pcre_extra *extra, const char *str, int len,
 			int offset, int options, const char *rep)
 {
 	int nmat;
-	int ovec[MAXCAPTURE * 3];
+	int ovec[OIDC_PCRE_MAXCAPTURE * 3];
 	nmat = pcre_exec(ppat, extra, str, len, offset, options,
 		ovec, sizeof(ovec));
 #ifdef DEBUG_PCRE_SUBST

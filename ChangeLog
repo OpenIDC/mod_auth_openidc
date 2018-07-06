@@ -1,3 +1,7 @@
+07/06/2018
+- abort when string length for remote user name substitution is larger than 255 characters
+- release 2.3.7
+
 07/04/2018
 - fix Redis concurrency issue when used with multiple vhosts
 - bump to 2.3.7rc4 and 2.3.7rc5

@@ -2076,7 +2076,6 @@ apr_hash_t * oidc_util_merge_key_sets(apr_pool_t *pool, apr_hash_t *k1,
  *     text_original: "match 292 numbers"
  *     text_replaced: "292"
  */
-
 apr_byte_t oidc_util_regexp_substitute(apr_pool_t *pool, const char *input,
 		const char *regexp, const char *replace, char **output,
 		char **error_str) {
@@ -2093,6 +2092,14 @@ apr_byte_t oidc_util_regexp_substitute(apr_pool_t *pool, const char *input,
 		goto out;
 	}
 
+	if (strlen(input) >= OIDC_PCRE_MAXCAPTURE - 1) {
+		*error_str =
+				apr_psprintf(pool,
+						"string length (%d) is larger than the maximum allowed for pcre_subst (%d)",
+						(int) strlen(input), OIDC_PCRE_MAXCAPTURE - 1);
+		goto out;
+	}
+
 	substituted = pcre_subst(preg, NULL, input, (int) strlen(input), 0, 0,
 			replace);
 	if (substituted == NULL) {
@@ -2106,8 +2113,7 @@ apr_byte_t oidc_util_regexp_substitute(apr_pool_t *pool, const char *input,
 	*output = apr_pstrdup(pool, substituted);
 	rc = TRUE;
 
-out:
-	if (substituted)
+	out: if (substituted)
 		pcre_free(substituted);
 	if (preg)
 		pcre_free(preg);

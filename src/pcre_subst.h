@@ -32,4 +32,6 @@ restrictions:
    supersede any condition above with which it is incompatible.
 */
 
+#define OIDC_PCRE_MAXCAPTURE	255
+
 char *pcre_subst(const pcre *, const pcre_extra *, const char *, int, int, int, const char *);
