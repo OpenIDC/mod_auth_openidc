@@ -86,6 +86,7 @@ OIDCProviderMetadataURL https://accounts.google.com/.well-known/openid-configura
 OIDCClientID <your-client-id-administered-through-the-google-api-console>
 OIDCClientSecret <your-client-secret-administered-through-the-google-api-console>
 
+# OIDCRedirectURI is a vanity URL that must point to a path protected by this module but must NOT point to any content
 OIDCRedirectURI https://www.example.com/example/redirect_uri
 OIDCCryptoPassphrase <password>
 
@@ -114,6 +115,7 @@ See also the [Wiki page on Keycloak](https://github.com/zmartzone/mod_auth_openi
 
 ```apache
 OIDCProviderMetadataURL https://keycloak.example.net/auth/realms/master/.well-known/openid-configuration
+# OIDCRedirectURI is a vanity URL that must point to a path protected by this module but must NOT point to any content
 OIDCRedirectURI https://www.example.net/oauth2callback
 OIDCCryptoPassphrase random1234
 OIDCClientID <your-client-id-registered-in-keycloak>
@@ -144,6 +146,7 @@ OIDCProviderMetadataURL <issuer>/.well-known/openid-configuration
 OIDCClientID <client_id>
 OIDCClientSecret <client_secret>
 
+# OIDCRedirectURI is a vanity URL that must point to a path protected by this module but must NOT point to any content
 OIDCRedirectURI https://<hostname>/secure/redirect_uri
 OIDCCryptoPassphrase <password>
 
