@@ -3360,7 +3360,7 @@ static int oidc_check_mixed_userid_oauth(request_rec *r, oidc_cfg *c) {
 	/* get the bearer access token from the Authorization header */
 	const char *access_token = NULL;
 	if (oidc_oauth_get_bearer_token(r, &access_token) == TRUE)
-		return oidc_oauth_check_userid(r, c);
+		return oidc_oauth_check_userid(r, c, access_token);
 
 	/* no bearer token found: then treat this as a regular OIDC browser request */
 	return oidc_check_userid_openidc(r, c);
@@ -3390,7 +3390,7 @@ int oidc_check_user_id(request_rec *r) {
 	/* see if we've configured OAuth 2.0 access control for this request */
 	if (apr_strnatcasecmp((const char *) ap_auth_type(r),
 			OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0)
-		return oidc_oauth_check_userid(r, c);
+		return oidc_oauth_check_userid(r, c, NULL);
 
 	/* see if we've configured "mixed mode" for this request */
 	if (apr_strnatcasecmp((const char *) ap_auth_type(r),

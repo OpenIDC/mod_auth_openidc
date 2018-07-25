@@ -1,3 +1,7 @@
+07/25/2018
+- fix reading access_token form POST parameters when combined with `AuthType auth-openidc`; see #376; thanks Nicolas Salerno
+- bump to 2.3.8rc0
+
 07/06/2018
 - abort when string length for remote user name substitution is larger than 255 characters
 - release 2.3.7

@@ -706,7 +706,7 @@ static apr_byte_t oidc_oauth_set_request_user(request_rec *r, oidc_cfg *c,
 /*
  * main routine: handle OAuth 2.0 authentication/authorization
  */
-int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
+int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c, const char *access_token) {
 
 	/* check if this is a sub-request or an initial request */
 	if (!ap_is_initial_req(r)) {
@@ -747,14 +747,15 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c) {
 	oidc_oauth_provider_config(r, c);
 
 	/* get the bearer access token from the Authorization header */
-	const char *access_token = NULL;
-	if (oidc_oauth_get_bearer_token(r, &access_token) == FALSE) {
-		if (r->method_number == M_OPTIONS) {
-			r->user = "";
-			return OK;
+	if (access_token == NULL) {
+		if (oidc_oauth_get_bearer_token(r, &access_token) == FALSE) {
+			if (r->method_number == M_OPTIONS) {
+				r->user = "";
+				return OK;
+			}
+			return oidc_oauth_return_www_authenticate(r,
+					OIDC_PROTO_ERR_INVALID_REQUEST, "No bearer token found in the request");
 		}
-		return oidc_oauth_return_www_authenticate(r,
-				OIDC_PROTO_ERR_INVALID_REQUEST, "No bearer token found in the request");
 	}
 
 	/* validate the obtained access token against the OAuth AS validation endpoint */
