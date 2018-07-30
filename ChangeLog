@@ -1,3 +1,6 @@
+07/30/2018
+- fix using access token as endpoint auth method in introspection calls; closes #377; thanks @skauffmann
+
 07/25/2018
 - fix reading access_token form POST parameters when combined with `AuthType auth-openidc`; see #376; thanks Nicolas Salerno
 - bump to 2.3.8rc0
