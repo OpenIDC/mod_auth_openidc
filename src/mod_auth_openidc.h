@@ -379,6 +379,7 @@ typedef struct oidc_cfg {
 	int http_timeout_long;
 	int http_timeout_short;
 	int state_timeout;
+	int max_number_of_state_cookies;
 	int session_inactivity_timeout;
 	int session_cache_fallback_to_cookie;
 
@@ -686,6 +687,7 @@ int oidc_cfg_cache_encrypt(request_rec *r);
 int oidc_cfg_session_cache_fallback_to_cookie(request_rec *r);
 const char *oidc_parse_pkce_type(apr_pool_t *pool, const char *arg, oidc_proto_pkce_t **type);
 const char *oidc_cfg_claim_prefix(request_rec *r);
+int oidc_cfg_max_number_of_state_cookies(oidc_cfg *cfg);
 
 // oidc_util.c
 int oidc_strnenvcmp(const char *a, const char *b, int len);

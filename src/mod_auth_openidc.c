@@ -686,8 +686,14 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	return TRUE;
 }
 
-static void oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c,
+/*
+ * clean state cookies that have expired i.e. for outstanding requests that will never return
+ * successfully and return the number of remaining valid cookies/outstanding-requests while
+ * doing so
+ */
+static int oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c,
 		const char *currentCookieName) {
+	int number_of_valid_state_cookies = 0;
 	char *cookie, *tokenizerCtx;
 	char *cookies = apr_pstrdup(r->pool, oidc_util_hdr_in_cookie_get(r));
 	if (cookies != NULL) {
@@ -715,6 +721,8 @@ static void oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c,
 										cookieName);
 								oidc_util_set_cookie(r, cookieName, "", 0,
 										NULL);
+							} else {
+								number_of_valid_state_cookies++;
 							}
 							oidc_proto_state_destroy(proto_state);
 						}
@@ -724,6 +732,7 @@ static void oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c,
 			cookie = apr_strtok(NULL, OIDC_STR_SEMI_COLON, &tokenizerCtx);
 		}
 	}
+	return number_of_valid_state_cookies;
 }
 
 /*
@@ -796,7 +805,7 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
  * set the state that is maintained between an authorization request and an authorization response
  * in a cookie in the browser that is cryptographically bound to that state
  */
-static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
+static int oidc_authorization_request_set_cookie(request_rec *r,
 		oidc_cfg *c, const char *state, oidc_proto_state_t *proto_state) {
 	/*
 	 * create a cookie consisting of 8 elements:
@@ -805,10 +814,32 @@ static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
 	 */
 	char *cookieValue = oidc_proto_state_to_cookie(r, c, proto_state);
 	if (cookieValue == NULL)
-		return FALSE;
+		return HTTP_INTERNAL_SERVER_ERROR;
 
-	/* clean expired state cookies to avoid pollution */
-	oidc_clean_expired_state_cookies(r, c, NULL);
+	/*
+	 * clean expired state cookies to avoid pollution and optionally
+ 	 * try to avoid the number of state cookies exceeding a max
+	 */
+	int number_of_cookies = oidc_clean_expired_state_cookies(r, c, NULL);
+	int max_number_of_cookies = oidc_cfg_max_number_of_state_cookies(c);
+	if ((max_number_of_cookies > 0)
+			&& (number_of_cookies >= max_number_of_cookies)) {
+		oidc_warn(r,
+				"the number of existing, valid state cookies (%d) has exceeded the limit (%d), no additional authorization request + state cookie can be generated, aborting the request",
+				number_of_cookies, max_number_of_cookies);
+		/*
+		 * TODO: the html_send code below caters for the case that there's a user behind a
+		 * browser generating this request, rather than a piece of XHR code; how would an
+		 * XHR client handle this?
+		 */
+
+		return oidc_util_html_send_error(r, c->error_template,
+				"Too Many Outstanding Requests",
+				apr_psprintf(r->pool,
+						"No authentication request could be generated since there are too many outstanding authentication requests already; you may have to wait up to %d seconds to be able to create a new request",
+						c->state_timeout),
+						HTTP_SERVICE_UNAVAILABLE);
+	}
 
 	/* assemble the cookie name for the state cookie */
 	const char *cookieName = oidc_get_state_cookie_name(r, state);
@@ -817,9 +848,7 @@ static apr_byte_t oidc_authorization_request_set_cookie(request_rec *r,
 	oidc_util_set_cookie(r, cookieName, cookieValue, -1,
 			c->cookie_same_site ? OIDC_COOKIE_EXT_SAME_SITE_LAX : NULL);
 
-	//free(s_value);
-
-	return TRUE;
+	return HTTP_OK;
 }
 
 /*
@@ -2245,12 +2274,19 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	/* get a hash value that fingerprints the browser concatenated with the random input */
 	char *state = oidc_get_browser_state_hash(r, nonce);
 
-	/* create state that restores the context when the authorization response comes in; cryptographically bind it to the browser */
-	if (oidc_authorization_request_set_cookie(r, c, state, proto_state) == FALSE)
-		return HTTP_INTERNAL_SERVER_ERROR;
+	/*
+	 * create state that restores the context when the authorization response comes in
+	 * and cryptographically bind it to the browser
+	 */
+	int rc = oidc_authorization_request_set_cookie(r, c, state, proto_state);
+	if (rc != HTTP_OK) {
+		oidc_proto_state_destroy(proto_state);
+		return rc;
+	}
 
 	/*
 	 * printout errors if Cookie settings are not going to work
+	 * TODO: separate this code out into its own function
 	 */
 	apr_uri_t o_uri;
 	memset(&o_uri, 0, sizeof(apr_uri_t));
@@ -2263,6 +2299,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 		oidc_error(r,
 				"the URL scheme (%s) of the configured " OIDCRedirectURI " does not match the URL scheme of the URL being accessed (%s): the \"state\" and \"session\" cookies will not be shared between the two!",
 				r_uri.scheme, o_uri.scheme);
+		oidc_proto_state_destroy(proto_state);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -2273,6 +2310,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 				oidc_error(r,
 						"the URL hostname (%s) of the configured " OIDCRedirectURI " does not match the URL hostname of the URL being accessed (%s): the \"state\" and \"session\" cookies will not be shared between the two!",
 						r_uri.hostname, o_uri.hostname);
+				oidc_proto_state_destroy(proto_state);
 				return HTTP_INTERNAL_SERVER_ERROR;
 			}
 		}
@@ -2281,6 +2319,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 			oidc_error(r,
 					"the domain (%s) configured in " OIDCCookieDomain " does not match the URL hostname (%s) of the URL being accessed (%s): setting \"state\" and \"session\" cookies will not work!!",
 					c->cookie_domain, o_uri.hostname, original_url);
+			oidc_proto_state_destroy(proto_state);
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 	}

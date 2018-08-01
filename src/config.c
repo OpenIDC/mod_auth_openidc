@@ -104,6 +104,8 @@
 #define OIDC_DEFAULT_SESSION_CLIENT_COOKIE_CHUNK_SIZE 4000
 /* timeout in seconds after which state expires */
 #define OIDC_DEFAULT_STATE_TIMEOUT 300
+/* maximum number of parallel state cookies; 0 means unlimited, until the browser or server gives up */
+#define OIDC_DEFAULT_MAX_NUMBER_OF_STATE_COOKIES 0
 /* default session inactivity timeout */
 #define OIDC_DEFAULT_SESSION_INACTIVITY_TIMEOUT 300
 /* default session max duration */
@@ -227,6 +229,7 @@
 #define OIDCHTTPTimeoutLong                  "OIDCHTTPTimeoutLong"
 #define OIDCHTTPTimeoutShort                 "OIDCHTTPTimeoutShort"
 #define OIDCStateTimeout                     "OIDCStateTimeout"
+#define OIDCStateMaxNumberOfCookies          "OIDCStateMaxNumberOfCookies"
 #define OIDCSessionInactivityTimeout         "OIDCSessionInactivityTimeout"
 #define OIDCMetadataDir                      "OIDCMetadataDir"
 #define OIDCSessionCacheFallbackToCookie     "OIDCSessionCacheFallbackToCookie"
@@ -994,6 +997,12 @@ static const char *oidc_set_client_auth_bearer_token(cmd_parms *cmd,
 	return NULL;
 }
 
+int oidc_cfg_max_number_of_state_cookies(oidc_cfg *cfg) {
+	if (cfg->max_number_of_state_cookies == OIDC_CONFIG_POS_INT_UNSET)
+		return OIDC_DEFAULT_MAX_NUMBER_OF_STATE_COOKIES;
+	return cfg->max_number_of_state_cookies;
+}
+
 /*
  * create a new server config record with defaults
  */
@@ -1102,6 +1111,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->http_timeout_long = OIDC_DEFAULT_HTTP_TIMEOUT_LONG;
 	c->http_timeout_short = OIDC_DEFAULT_HTTP_TIMEOUT_SHORT;
 	c->state_timeout = OIDC_DEFAULT_STATE_TIMEOUT;
+	c->max_number_of_state_cookies = OIDC_CONFIG_POS_INT_UNSET;
 	c->session_inactivity_timeout = OIDC_DEFAULT_SESSION_INACTIVITY_TIMEOUT;
 
 	c->cookie_domain = NULL;
@@ -1416,6 +1426,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->state_timeout =
 			add->state_timeout != OIDC_DEFAULT_STATE_TIMEOUT ?
 					add->state_timeout : base->state_timeout;
+	c->max_number_of_state_cookies =
+			add->max_number_of_state_cookies != OIDC_CONFIG_POS_INT_UNSET ?
+					add->max_number_of_state_cookies :
+					base->max_number_of_state_cookies;
 	c->session_inactivity_timeout =
 			add->session_inactivity_timeout
 			!= OIDC_DEFAULT_SESSION_INACTIVITY_TIMEOUT ?
@@ -2627,6 +2641,11 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, state_timeout),
 				RSRC_CONF,
 				"Time to live in seconds for state parameter (cq. interval in which the authorization request and the corresponding response need to be completed)."),
+		AP_INIT_TAKE1(OIDCStateMaxNumberOfCookies,
+				oidc_set_int_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, max_number_of_state_cookies),
+				RSRC_CONF,
+				"Maximun number of parallel state cookies i.e. outstanding authorization requests."),
 		AP_INIT_TAKE1(OIDCSessionInactivityTimeout,
 				oidc_set_session_inactivity_timeout,
 				(void*)APR_OFFSETOF(oidc_cfg, session_inactivity_timeout),
