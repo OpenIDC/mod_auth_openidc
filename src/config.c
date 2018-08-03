@@ -105,7 +105,7 @@
 /* timeout in seconds after which state expires */
 #define OIDC_DEFAULT_STATE_TIMEOUT 300
 /* maximum number of parallel state cookies; 0 means unlimited, until the browser or server gives up */
-#define OIDC_DEFAULT_MAX_NUMBER_OF_STATE_COOKIES 0
+#define OIDC_DEFAULT_MAX_NUMBER_OF_STATE_COOKIES 7
 /* default session inactivity timeout */
 #define OIDC_DEFAULT_SESSION_INACTIVITY_TIMEOUT 300
 /* default session max duration */

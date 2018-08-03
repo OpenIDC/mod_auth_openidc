@@ -1,5 +1,8 @@
-08/01/2018
+
+08/03/2018
 - add option to set an upper limit to the number of concurrent state cookies via OIDCStateMaxNumberOfCookies; see #331
+- make the default maximum number of parallel state cookies 7 instead of unlimited; see #331
+- bump o 2.3.8rc1
 
 07/30/2018
 - fix using access token as endpoint auth method in introspection calls; closes #377; thanks @skauffmann
