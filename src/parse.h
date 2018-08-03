@@ -90,6 +90,7 @@ const char *oidc_valid_userinfo_refresh_interval(apr_pool_t *pool, int v);
 const char *oidc_valid_userinfo_token_method(apr_pool_t *pool, const char *arg);
 const char *oidc_valid_token_binding_policy(apr_pool_t *pool, const char *arg);
 const char *oidc_valid_auth_request_method(apr_pool_t *pool, const char *arg);
+const char *oidc_valid_max_number_of_state_cookies(apr_pool_t *pool, int v);
 
 const char *oidc_parse_int(apr_pool_t *pool, const char *arg, int *int_value);
 const char *oidc_parse_boolean(apr_pool_t *pool, const char *arg, int *bool_value);
@@ -116,6 +117,7 @@ const char *oidc_parse_info_hook_data(apr_pool_t *pool, const char *arg, apr_has
 const char *oidc_parse_token_binding_policy(apr_pool_t *pool, const char *arg, int *int_value);
 const char *oidc_token_binding_policy2str(apr_pool_t *pool, int v);
 const char *oidc_parse_auth_request_method(apr_pool_t *pool, const char *arg, int *method);
+const char *oidc_parse_max_number_of_state_cookies(apr_pool_t *pool, const char *arg, int *int_value);
 
 typedef const char *(*oidc_valid_int_function_t)(apr_pool_t *, int);
 typedef const char *(*oidc_valid_function_t)(apr_pool_t *, const char *);

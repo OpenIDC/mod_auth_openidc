@@ -530,6 +530,28 @@ const char *oidc_valid_session_max_duration(apr_pool_t *pool, int v) {
 	return NULL;
 }
 
+#define OIDC_MAX_NUMBER_OF_STATE_COOKIES_MIN  0
+#define OIDC_MAX_NUMBER_OF_STATE_COOKIES_MAX  255
+
+/*
+ * check the maximum number of parallel state cookies
+ */
+const char *oidc_valid_max_number_of_state_cookies(apr_pool_t *pool, int v) {
+	if (v == 0) {
+		return NULL;
+	}
+	if (v < OIDC_MAX_NUMBER_OF_STATE_COOKIES_MIN) {
+		return apr_psprintf(pool, "maximum must not be less than %d",
+				OIDC_MAX_NUMBER_OF_STATE_COOKIES_MIN);
+	}
+	if (v > OIDC_MAX_NUMBER_OF_STATE_COOKIES_MAX) {
+		return apr_psprintf(pool, "maximum must not be greater than %d",
+				OIDC_MAX_NUMBER_OF_STATE_COOKIES_MAX);
+	}
+	return NULL;
+}
+
+
 /*
  * parse a session max duration value from the provided string
  */
@@ -1217,4 +1239,13 @@ const char *oidc_parse_auth_request_method(apr_pool_t *pool, const char *arg,
 		*method = OIDC_AUTH_REQUEST_METHOD_POST;
 
 	return NULL;
+}
+
+/*
+ * parse the maximum number of parallel state cookies
+ */
+const char *oidc_parse_max_number_of_state_cookies(apr_pool_t *pool,
+		const char *arg, int *int_value) {
+	return oidc_parse_int_valid(pool, arg, int_value,
+			oidc_valid_max_number_of_state_cookies);
 }

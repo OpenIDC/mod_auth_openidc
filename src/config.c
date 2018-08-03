@@ -997,6 +997,21 @@ static const char *oidc_set_client_auth_bearer_token(cmd_parms *cmd,
 	return NULL;
 }
 
+/*
+ * set the maximun number of parallel state cookies
+ */
+static const char *oidc_set_max_number_of_state_cookies(cmd_parms *cmd,
+		void *struct_ptr, const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+	const char *rv = oidc_parse_max_number_of_state_cookies(cmd->pool, arg,
+			&cfg->max_number_of_state_cookies);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
+/*
+ * return the maximun number of parallel state cookies
+ */
 int oidc_cfg_max_number_of_state_cookies(oidc_cfg *cfg) {
 	if (cfg->max_number_of_state_cookies == OIDC_CONFIG_POS_INT_UNSET)
 		return OIDC_DEFAULT_MAX_NUMBER_OF_STATE_COOKIES;
@@ -2642,7 +2657,7 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF,
 				"Time to live in seconds for state parameter (cq. interval in which the authorization request and the corresponding response need to be completed)."),
 		AP_INIT_TAKE1(OIDCStateMaxNumberOfCookies,
-				oidc_set_int_slot,
+				oidc_set_max_number_of_state_cookies,
 				(void*)APR_OFFSETOF(oidc_cfg, max_number_of_state_cookies),
 				RSRC_CONF,
 				"Maximun number of parallel state cookies i.e. outstanding authorization requests."),
