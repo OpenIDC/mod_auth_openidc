@@ -833,12 +833,20 @@ static int oidc_authorization_request_set_cookie(request_rec *r,
 		 * XHR client handle this?
 		 */
 
+		/*
+		 * it appears that sending content with a 503 turns the HTTP status code
+		 * into a 200 so we'll avoid that for now: the user will see Apache specific
+		 * readable text anyway
+		 *
 		return oidc_util_html_send_error(r, c->error_template,
 				"Too Many Outstanding Requests",
 				apr_psprintf(r->pool,
 						"No authentication request could be generated since there are too many outstanding authentication requests already; you may have to wait up to %d seconds to be able to create a new request",
 						c->state_timeout),
 						HTTP_SERVICE_UNAVAILABLE);
+		*/
+
+		return HTTP_SERVICE_UNAVAILABLE;
 	}
 
 	/* assemble the cookie name for the state cookie */
