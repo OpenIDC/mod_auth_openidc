@@ -1,5 +1,6 @@
 08/04/2018
 - don't return content with 503 since it will turn the HTTP status code into a 200; see #331
+- bump to 2.3.8rc2
 
 08/03/2018
 - add option to set an upper limit to the number of concurrent state cookies via OIDCStateMaxNumberOfCookies; see #331
