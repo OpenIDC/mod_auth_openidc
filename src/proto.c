@@ -154,7 +154,7 @@ static int oidc_proto_delete_from_request(void* rec, const char* name,
 		const char* value) {
 	oidc_proto_copy_req_ctx_t *ctx = (oidc_proto_copy_req_ctx_t *) rec;
 
-	oidc_debug(ctx->r, "deleting from query paramters: name: %s, value: %s",
+	oidc_debug(ctx->r, "deleting from query parameters: name: %s, value: %s",
 			name, value);
 
 	if (oidc_proto_param_needs_action(ctx->request_object_config, name,
