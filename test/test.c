@@ -1019,6 +1019,9 @@ static char *test_proto_validate_code(request_rec *r) {
 static char * test_proto_authorization_request(request_rec *r) {
 
 	oidc_provider_t provider;
+
+        memset(&provider, 0, sizeof(provider));
+
 	provider.issuer = "https://idp.example.com";
 	provider.authorization_endpoint_url = "https://idp.example.com/authorize";
 	provider.scope = "openid";
@@ -1028,6 +1031,8 @@ static char * test_proto_authorization_request(request_rec *r) {
 	provider.auth_request_params = NULL;
 	provider.request_object = NULL;
 	provider.token_binding_policy = OIDC_TOKEN_BINDING_POLICY_OPTIONAL;
+        provider.auth_request_method = OIDC_AUTH_REQUEST_METHOD_GET;
+
 	const char *redirect_uri = "https://www.example.com/protected/";
 	const char *state = "12345";
 
@@ -1260,6 +1265,7 @@ static request_rec * test_setup(apr_pool_t *pool) {
 			sizeof(struct process_rec));
 	request->server->process->pool = request->pool;
 	request->connection = apr_pcalloc(request->pool, sizeof(struct conn_rec));
+        request->connection->bucket_alloc = apr_bucket_alloc_create(request->pool);
 	request->connection->local_addr = apr_pcalloc(request->pool,
 			sizeof(apr_sockaddr_t));
 
