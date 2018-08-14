@@ -839,7 +839,7 @@ apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk,
 	return TRUE;
 }
 
-#if (OPENSSL_VERSION_NUMBER < 0x10100000)
+#if (OPENSSL_VERSION_NUMBER < 0x10100000) || defined(LIBRESSL_VERSION_NUMBER)
 EVP_MD_CTX * EVP_MD_CTX_new() {
 	return malloc(sizeof(EVP_MD_CTX));
 }

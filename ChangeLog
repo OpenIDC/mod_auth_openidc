@@ -1,3 +1,7 @@
+08/14/2018
+- allow usage with LibreSSL; closes #380; thanks @hihellobolke
+- bump to 2.3.8rc3
+
 08/04/2018
 - don't return content with 503 since it will turn the HTTP status code into a 200; see #331
 - bump to 2.3.8rc2
