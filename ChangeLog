@@ -1,3 +1,8 @@
+08/15/2018
+- initialize test_proto_authorization_request properly; see #382; thanks @jdennis
+- add sanity check on provider->auth_request_method; closes #382; thanks @jdennis
+- bump to 2.3.8rc4
+
 08/14/2018
 - allow usage with LibreSSL; closes #380; thanks @hihellobolke
 - bump to 2.3.8rc3
