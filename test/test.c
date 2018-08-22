@@ -88,11 +88,11 @@ static int TST_RC;
 		}
 
 #define TST_ASSERT_CJOSE_ERR(message, expression, pool, cjose_err) \
-        TST_RC = (expression); \
-        if (!TST_RC) { \
-            sprintf(TST_ERR_MSG, TST_FORMAT("%d") " %s", __FUNCTION__, message, TST_RC, 1, oidc_cjose_e2s(pool, cjose_err)); \
-            return TST_ERR_MSG; \
-        }
+		TST_RC = (expression); \
+		if (!TST_RC) { \
+			sprintf(TST_ERR_MSG, TST_FORMAT("%d") " %s", __FUNCTION__, message, TST_RC, 1, oidc_cjose_e2s(pool, cjose_err)); \
+			return TST_ERR_MSG; \
+		}
 
 #define TST_ASSERT_STR(message, result, expected) \
 		TST_RC = (result && expected) ? (apr_strnatcmp(result, expected) != 0) : ((result != NULL) || (expected != NULL)); \
@@ -151,8 +151,8 @@ static char *test_jwt_parse(apr_pool_t *pool) {
 	const char * k =
 			"{\"kty\":\"oct\", \"k\":\"AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow\"}";
 	jwk = NULL;
-	TST_ASSERT_ERR("oidc_jwk_parse", _jwk_parse(pool, k, &jwk, &err) == 0,
-			pool, err);
+	TST_ASSERT_ERR("oidc_jwk_parse", _jwk_parse(pool, k, &jwk, &err) == 0, pool,
+			err);
 	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
 	TST_ASSERT_ERR("oidc_jwt_verify", oidc_jwt_verify(pool, jwt, keys, &err),
 			pool, err);
@@ -178,15 +178,15 @@ static char *test_jwt_parse(apr_pool_t *pool) {
 
 static char *test_jwt_verify_ec(apr_pool_t *pool) {
 
-	 // {
-	 //   "sub": "joe",
-	 //   "aud": "ac_oic_client",
-	 //   "jti": "oDWivWPJB47zkjOm2cygDv",
-	 //   "iss": "https://localhost:9031",
-	 //   "iat": 1467997207,
-	 //   "exp": 1467997507,
-	 //   "nonce": "WLxmv5StYyUk9JlWI8SaXTLPkGZ0Vs8aSTdj_VQ6rao"
-	 // }
+	// {
+	//   "sub": "joe",
+	//   "aud": "ac_oic_client",
+	//   "jti": "oDWivWPJB47zkjOm2cygDv",
+	//   "iss": "https://localhost:9031",
+	//   "iat": 1467997207,
+	//   "exp": 1467997507,
+	//   "nonce": "WLxmv5StYyUk9JlWI8SaXTLPkGZ0Vs8aSTdj_VQ6rao"
+	// }
 
 	char *s_jwt = apr_pstrdup(pool, "eyJhbGciOiJFUzI1NiIsImtpZCI6ImY2cXRqIn0.eyJzdWIiOiJqb2UiLCJhdWQiOiJhY19vaWNfY2xpZW50IiwianRpIjoib0RXaXZXUEpCNDd6a2pPbTJjeWdEdiIsImlzcyI6Imh0dHBzOlwvXC9sb2NhbGhvc3Q6OTAzMSIsImlhdCI6MTQ2Nzk5NzIwNywiZXhwIjoxNDY3OTk3NTA3LCJub25jZSI6IldMeG12NVN0WXlVazlKbFdJOFNhWFRMUGtHWjBWczhhU1Rkal9WUTZyYW8ifQ.2kqX56QNow37gOlnfLn0SIzwie4mLLIUx_p9OSQa0hiUXKQWQLmMYBjIp5qGh2-R-KPHwNEBxqXwuPgXG4Y7Eg");
 	oidc_jwt_t *jwt = NULL;
@@ -195,13 +195,13 @@ static char *test_jwt_verify_ec(apr_pool_t *pool) {
 			oidc_jwt_parse(pool, s_jwt, &jwt, NULL, &err), pool, err);
 
 	char *s_key = "{"
-		      "\"kty\": \"EC\","
-		      "\"kid\": \"f6qtj\","
-		      "\"use\": \"sig\","
-		      "\"x\": \"iARwFlN3B3xa8Zn_O-CVfqry68tXIhO9DckKo1yrNg0\","
-		      "\"y\": \"583S_mPS7YVZtLCjx2O69G_JzQPnMxjieOli-9cc_6Q\","
-		      "\"crv\": \"P-256\""
-		    "}";
+			"\"kty\": \"EC\","
+			"\"kid\": \"f6qtj\","
+			"\"use\": \"sig\","
+			"\"x\": \"iARwFlN3B3xa8Zn_O-CVfqry68tXIhO9DckKo1yrNg0\","
+			"\"y\": \"583S_mPS7YVZtLCjx2O69G_JzQPnMxjieOli-9cc_6Q\","
+			"\"crv\": \"P-256\""
+			"}";
 
 	apr_hash_t *keys = apr_hash_make(pool);
 	oidc_jwk_t *jwk = NULL;
@@ -257,7 +257,8 @@ static char *test_jwt_verify_rsa(apr_pool_t *pool) {
 	 *   "nbf": 1411580875
 	 * }
 	 */
-	char *s_jwt = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IloxTkNqb2plaUhBaWItR204dkZFNnlhNmxQTSJ9.eyJub25jZSI6ImF2U2s3UzY5RzRrRUU4S200YlBpT2pyZkNoSHQ2bk80WjM5N0xwX2JRbmMsIiwiaWF0IjoxNDExNTgwODc2LCJhdF9oYXNoIjoieVRxc29PTlpidVdiTjZUYmdldnVEUSIsInN1YiI6IjYzNDNhMjljLTUzOTktNDRhNy05YjM1LTQ5OTBmNDM3N2M5NiIsImFtciI6InBhc3N3b3JkIiwiYXV0aF90aW1lIjoxNDExNTc3MjY3LCJpZHAiOiJpZHNydiIsIm5hbWUiOiJrc29uYXR5IiwiaXNzIjoiaHR0cHM6Ly9hZ3N5bmMuY29tIiwiYXVkIjoiYWdzeW5jX2ltcGxpY2l0IiwiZXhwIjoxNDExNTg0NDc1LCJuYmYiOjE0MTE1ODA4NzV9.lEG-DgHHa0JuOEuOTBvCqyexjRVcKXBnJJm289o2HyTgclpH80DsOMED9RlXCFfuDY7nw9i2cxUmIMAV42AdTxkMPomK3chytcajvpAZJirlk653bo9GTDXJSKZr5fwyEu--qahsoT5t9qvoWyFdYkvmMHFw1-mAHDGgVe23voc9jPuFFIhRRqIn4e8ikzN4VQeEV1UXJD02kYYFn2TRWURgiFyVeTr2r0MTn-auCEsFS_AfR1Bl_kmpMfqwrsicf5MTBvfPJeuSMt3t3d3LOGBkg36_z21X-ZRN7wy1KTjagr7iQ_y5csIpmtqs_QM55TTB9dW1HIosJPhiuMEJEA";
+	char *s_jwt =
+			"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IloxTkNqb2plaUhBaWItR204dkZFNnlhNmxQTSJ9.eyJub25jZSI6ImF2U2s3UzY5RzRrRUU4S200YlBpT2pyZkNoSHQ2bk80WjM5N0xwX2JRbmMsIiwiaWF0IjoxNDExNTgwODc2LCJhdF9oYXNoIjoieVRxc29PTlpidVdiTjZUYmdldnVEUSIsInN1YiI6IjYzNDNhMjljLTUzOTktNDRhNy05YjM1LTQ5OTBmNDM3N2M5NiIsImFtciI6InBhc3N3b3JkIiwiYXV0aF90aW1lIjoxNDExNTc3MjY3LCJpZHAiOiJpZHNydiIsIm5hbWUiOiJrc29uYXR5IiwiaXNzIjoiaHR0cHM6Ly9hZ3N5bmMuY29tIiwiYXVkIjoiYWdzeW5jX2ltcGxpY2l0IiwiZXhwIjoxNDExNTg0NDc1LCJuYmYiOjE0MTE1ODA4NzV9.lEG-DgHHa0JuOEuOTBvCqyexjRVcKXBnJJm289o2HyTgclpH80DsOMED9RlXCFfuDY7nw9i2cxUmIMAV42AdTxkMPomK3chytcajvpAZJirlk653bo9GTDXJSKZr5fwyEu--qahsoT5t9qvoWyFdYkvmMHFw1-mAHDGgVe23voc9jPuFFIhRRqIn4e8ikzN4VQeEV1UXJD02kYYFn2TRWURgiFyVeTr2r0MTn-auCEsFS_AfR1Bl_kmpMfqwrsicf5MTBvfPJeuSMt3t3d3LOGBkg36_z21X-ZRN7wy1KTjagr7iQ_y5csIpmtqs_QM55TTB9dW1HIosJPhiuMEJEA";
 
 	oidc_jwt_t *jwt = NULL;
 	oidc_jose_error_t err;
@@ -267,15 +268,15 @@ static char *test_jwt_verify_rsa(apr_pool_t *pool) {
 	char *s_key =
 			"{"
 			"\"kty\": \"RSA\","
-	        "\"n\": \"3lDyn_ZvG32Pw5kYbRuVxHsPfe9Xt8s9vOXnt8z7_T-hZZvealNhCxz9VEwTJ7TsZ9CLi5c30FjoEJYFkKddLAdxKo0oOXWc_AWrQvPwht9a-o6dX2fL_9CmXW1hGHXMH0qiLMrFqMSzZeh-GUY6F1woE_eKsAo6LOhP8X77FlEQT2Eu71wu8KC4B3sH_9QTco50KNw14-bRY5j2V2TZelvsXJnvrN4lXtEVYWFkREKeXzMH8DhDyZzh0NcHa7dFBa7rDusyfIHjuP6uAju_Ao6hhdOGjlKePMVtfusWBAI7MWDChLTqiCTvlZnCpkpTTh5m-i7TbE1TwmdbLceq1w\","
-	        "\"e\": \"AQAB\""
+			"\"n\": \"3lDyn_ZvG32Pw5kYbRuVxHsPfe9Xt8s9vOXnt8z7_T-hZZvealNhCxz9VEwTJ7TsZ9CLi5c30FjoEJYFkKddLAdxKo0oOXWc_AWrQvPwht9a-o6dX2fL_9CmXW1hGHXMH0qiLMrFqMSzZeh-GUY6F1woE_eKsAo6LOhP8X77FlEQT2Eu71wu8KC4B3sH_9QTco50KNw14-bRY5j2V2TZelvsXJnvrN4lXtEVYWFkREKeXzMH8DhDyZzh0NcHa7dFBa7rDusyfIHjuP6uAju_Ao6hhdOGjlKePMVtfusWBAI7MWDChLTqiCTvlZnCpkpTTh5m-i7TbE1TwmdbLceq1w\","
+			"\"e\": \"AQAB\""
 			"}";
 
 	apr_hash_t *keys = apr_hash_make(pool);
 	oidc_jwk_t *jwk = NULL;
 
-	TST_ASSERT_ERR("oidc_jwk_parse",
-			_jwk_parse(pool, s_key, &jwk, &err) == 0, pool, err);
+	TST_ASSERT_ERR("oidc_jwk_parse", _jwk_parse(pool, s_key, &jwk, &err) == 0,
+			pool, err);
 	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
 
 	TST_ASSERT_ERR("oidc_jwt_verify", oidc_jwt_verify(pool, jwt, keys, &err),
@@ -284,23 +285,24 @@ static char *test_jwt_verify_rsa(apr_pool_t *pool) {
 	oidc_jwt_destroy(jwt);
 	jwt = NULL;
 
-
-	s_jwt = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IloxTkNqb2plaUhBaWItR204dkZFNnlhNmxQTSJ9.eyJub25jZSI6ImF2U2s3UzY5RzRrRUU4S200YlBpT2pyZkNoSHQ2bk80WjM5N0xwX2JRbmMsIiwiaWF0IjoxNDExNTgwODc2LCJhdF9oYXNoIjoieVRxc29PTlpidVdiTjZUYmdldnVEUSIsInN1YiI6IjYzNDNhMjljLTUzOTktNDRhNy05YjM1LTQ5OTBmNDM3N2M5NiIsImFtciI6InBhc3N3b3JkIiwiYXV0aF90aW1lIjoxNDExNTc3MjY3LCJpZHAiOiJpZHNydiIsIm5hbWUiOiJrc29uYXR5IiwiaXNzIjoiaHR0cHM6Ly9hZ3N5bmMuY29tIiwiYXVkIjoiYWdzeW5jX2ltcGxpY2l0IiwiZXhwIjoxNDExNTg0NDc1LCJuYmYiOjE1MTE1ODA4NzV9.lEG-DgHHa0JuOEuOTBvCqyexjRVcKXBnJJm289o2HyTgclpH80DsOMED9RlXCFfuDY7nw9i2cxUmIMAV42AdTxkMPomK3chytcajvpAZJirlk653bo9GTDXJSKZr5fwyEu--qahsoT5t9qvoWyFdYkvmMHFw1-mAHDGgVe23voc9jPuFFIhRRqIn4e8ikzN4VQeEV1UXJD02kYYFn2TRWURgiFyVeTr2r0MTn-auCEsFS_AfR1Bl_kmpMfqwrsicf5MTBvfPJeuSMt3t3d3LOGBkg36_z21X-ZRN7wy1KTjagr7iQ_y5csIpmtqs_QM55TTB9dW1HIosJPhiuMEJEA";
+	s_jwt =
+			"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IloxTkNqb2plaUhBaWItR204dkZFNnlhNmxQTSJ9.eyJub25jZSI6ImF2U2s3UzY5RzRrRUU4S200YlBpT2pyZkNoSHQ2bk80WjM5N0xwX2JRbmMsIiwiaWF0IjoxNDExNTgwODc2LCJhdF9oYXNoIjoieVRxc29PTlpidVdiTjZUYmdldnVEUSIsInN1YiI6IjYzNDNhMjljLTUzOTktNDRhNy05YjM1LTQ5OTBmNDM3N2M5NiIsImFtciI6InBhc3N3b3JkIiwiYXV0aF90aW1lIjoxNDExNTc3MjY3LCJpZHAiOiJpZHNydiIsIm5hbWUiOiJrc29uYXR5IiwiaXNzIjoiaHR0cHM6Ly9hZ3N5bmMuY29tIiwiYXVkIjoiYWdzeW5jX2ltcGxpY2l0IiwiZXhwIjoxNDExNTg0NDc1LCJuYmYiOjE1MTE1ODA4NzV9.lEG-DgHHa0JuOEuOTBvCqyexjRVcKXBnJJm289o2HyTgclpH80DsOMED9RlXCFfuDY7nw9i2cxUmIMAV42AdTxkMPomK3chytcajvpAZJirlk653bo9GTDXJSKZr5fwyEu--qahsoT5t9qvoWyFdYkvmMHFw1-mAHDGgVe23voc9jPuFFIhRRqIn4e8ikzN4VQeEV1UXJD02kYYFn2TRWURgiFyVeTr2r0MTn-auCEsFS_AfR1Bl_kmpMfqwrsicf5MTBvfPJeuSMt3t3d3LOGBkg36_z21X-ZRN7wy1KTjagr7iQ_y5csIpmtqs_QM55TTB9dW1HIosJPhiuMEJEA";
 	TST_ASSERT_ERR("oidc_jwt_parse (rsa1)",
 			oidc_jwt_parse(pool, s_jwt, &jwt, NULL, &err), pool, err);
 
-	TST_ASSERT_ERR("oidc_jwt_verify (rsa1)", oidc_jwt_verify(pool, jwt, keys, &err) == FALSE,
-			pool, err);
+	TST_ASSERT_ERR("oidc_jwt_verify (rsa1)",
+			oidc_jwt_verify(pool, jwt, keys, &err) == FALSE, pool, err);
 
 	oidc_jwt_destroy(jwt);
 	jwt = NULL;
 
-	s_jwt = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IloxTkNqb2plaUhBaWItR204dkZFNnlhNmxQTSJ9.eyJub25jZSI6ImF2U2s3UzY5RzRrRUU4S200YlBpT2pyZkNoSHQ2bk80WjM5N0xwX2JRbmMsIiwiaWF0IjoxNDExNTgwODc2LCJhdF9oYXNoIjoieVRxc29PTlpidVdiTjZUYmdldnVEUSIsInN1YiI6IjYzNDNhMjljLTUzOTktNDRhNy05YjM1LTQ5OTBmNDM3N2M5NiIsImFtciI6InBhc3N3b3JkIiwiYXV0aF90aW1lIjoxNDExNTc3MjY3LCJpZHAiOiJpZHNydiIsIm5hbWUiOiJrc29uYXR5IiwiaXNzIjoiaHR0cHM6Ly9hZ3N5bmMuY29tIiwiYXVkIjoiYWdzeW5jX2ltcGxpY2l0IiwiZXhwIjoxNDExNTg0NDc1LCJuYmYiOjE0MTE1ODA4NzV9.lEG-DgHHa0JuOEuOTBvCqyexjRVcKXBnJJm289o2HyTgclpH80DsOMED9RlXCFfuDY7nw9i2cxUmIMAV42AdTxkMPomK3chytcajvpAZJirlk653bo9GTDXJSKZr5fwyEu--qahsoT5t9qvoWyFdYkvmMHFw1-mAHDGgVe23voc9jPuFFIhRRqIn4e8ikzN4VQeEV1UXJD02kYYFn2TRWURgiFyVeTr2r0MTn-auCEsFS_AfR1Bl_kmpMfqwrsicf5MTBvfPJeuSMt3t3d3LOGBkg36_z21X-ZRN7wy1KTjagr7iQ_y5csIpmtqs_QM55TTB9dW1HIosJPhiuMEJEa";
+	s_jwt =
+			"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IloxTkNqb2plaUhBaWItR204dkZFNnlhNmxQTSJ9.eyJub25jZSI6ImF2U2s3UzY5RzRrRUU4S200YlBpT2pyZkNoSHQ2bk80WjM5N0xwX2JRbmMsIiwiaWF0IjoxNDExNTgwODc2LCJhdF9oYXNoIjoieVRxc29PTlpidVdiTjZUYmdldnVEUSIsInN1YiI6IjYzNDNhMjljLTUzOTktNDRhNy05YjM1LTQ5OTBmNDM3N2M5NiIsImFtciI6InBhc3N3b3JkIiwiYXV0aF90aW1lIjoxNDExNTc3MjY3LCJpZHAiOiJpZHNydiIsIm5hbWUiOiJrc29uYXR5IiwiaXNzIjoiaHR0cHM6Ly9hZ3N5bmMuY29tIiwiYXVkIjoiYWdzeW5jX2ltcGxpY2l0IiwiZXhwIjoxNDExNTg0NDc1LCJuYmYiOjE0MTE1ODA4NzV9.lEG-DgHHa0JuOEuOTBvCqyexjRVcKXBnJJm289o2HyTgclpH80DsOMED9RlXCFfuDY7nw9i2cxUmIMAV42AdTxkMPomK3chytcajvpAZJirlk653bo9GTDXJSKZr5fwyEu--qahsoT5t9qvoWyFdYkvmMHFw1-mAHDGgVe23voc9jPuFFIhRRqIn4e8ikzN4VQeEV1UXJD02kYYFn2TRWURgiFyVeTr2r0MTn-auCEsFS_AfR1Bl_kmpMfqwrsicf5MTBvfPJeuSMt3t3d3LOGBkg36_z21X-ZRN7wy1KTjagr7iQ_y5csIpmtqs_QM55TTB9dW1HIosJPhiuMEJEa";
 	TST_ASSERT_ERR("oidc_jwt_parse (rsa2)",
 			oidc_jwt_parse(pool, s_jwt, &jwt, NULL, &err), pool, err);
 
-	TST_ASSERT_ERR("oidc_jwt_verify (rsa2)", oidc_jwt_verify(pool, jwt, keys, &err) == FALSE,
-			pool, err);
+	TST_ASSERT_ERR("oidc_jwt_verify (rsa2)",
+			oidc_jwt_verify(pool, jwt, keys, &err) == FALSE, pool, err);
 
 	oidc_jwt_destroy(jwt);
 	oidc_jwk_destroy(jwk);
@@ -325,8 +327,8 @@ static char *test_jwt_sign_verify(apr_pool_t *pool) {
 
 	apr_hash_t *keys = apr_hash_make(pool);
 
-	TST_ASSERT_ERR("oidc_jwk_parse",
-			_jwk_parse(pool, s_key, &jwk, &err) == 0, pool, err);
+	TST_ASSERT_ERR("oidc_jwk_parse", _jwk_parse(pool, s_key, &jwk, &err) == 0,
+			pool, err);
 
 	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
 
@@ -350,8 +352,8 @@ static char *test_jwt_sign_verify(apr_pool_t *pool) {
 	TST_ASSERT_ERR("oidc_jwt_serialize (rsa)", cser != NULL, pool, err);
 
 	oidc_jwt_t *rsa_jwt = NULL;
-	TST_ASSERT_ERR("oidc_jwt_parse (rsa)", oidc_jwt_parse(pool, cser, &rsa_jwt, NULL, &err),
-			pool, err);
+	TST_ASSERT_ERR("oidc_jwt_parse (rsa)",
+			oidc_jwt_parse(pool, cser, &rsa_jwt, NULL, &err), pool, err);
 	TST_ASSERT_ERR("oidc_jwt_verify (rsa)",
 			oidc_jwt_verify(pool, rsa_jwt, keys, &err), pool, err);
 	oidc_jwt_destroy(rsa_jwt);
@@ -359,7 +361,8 @@ static char *test_jwt_sign_verify(apr_pool_t *pool) {
 	oidc_jwk_destroy(jwk);
 
 	const char *secret = "my_secret4321";
-	jwk = oidc_jwk_create_symmetric_key(pool, NULL, (const unsigned char *)secret, strlen(secret), FALSE, &err);
+	jwk = oidc_jwk_create_symmetric_key(pool, NULL,
+			(const unsigned char *) secret, strlen(secret), FALSE, &err);
 	TST_ASSERT_ERR("oidc_jwk_create_symmetric_key", jwk != NULL, pool, err);
 	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
 
@@ -371,8 +374,8 @@ static char *test_jwt_sign_verify(apr_pool_t *pool) {
 	TST_ASSERT_ERR("oidc_jwt_serialize (hmac)", cser != NULL, pool, err);
 
 	oidc_jwt_t *hmac_jwt = NULL;
-	TST_ASSERT_ERR("oidc_jwt_parse (rsa)", oidc_jwt_parse(pool, cser, &hmac_jwt, NULL, &err),
-			pool, err);
+	TST_ASSERT_ERR("oidc_jwt_parse (rsa)",
+			oidc_jwt_parse(pool, cser, &hmac_jwt, NULL, &err), pool, err);
 	TST_ASSERT_ERR("oidc_jwt_verify (rsa)",
 			oidc_jwt_verify(pool, hmac_jwt, keys, &err), pool, err);
 	oidc_jwt_destroy(hmac_jwt);
@@ -421,7 +424,6 @@ static char *test_jwt_get_string(apr_pool_t *pool) {
 	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(pool, s, &jwt, NULL, &err),
 			pool, err);
 
-
 	char *dst = NULL;
 	TST_ASSERT("oidc_jose_get_string (1a)",
 			oidc_jose_get_string(pool, jwt->header.value.json, "typ", TRUE, &dst, &err));
@@ -453,8 +455,8 @@ static char *test_jwk_parse_json(apr_pool_t *pool) {
 	oidc_jwk_t *jwk;
 
 	jwk = NULL;
-	TST_ASSERT_ERR("oidc_jwk_parse (1)",
-			_jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
+	TST_ASSERT_ERR("oidc_jwk_parse (1)", _jwk_parse(pool, s, &jwk, &err) == 0,
+			pool, err);
 	oidc_jwk_destroy(jwk);
 
 	// https://tools.ietf.org/html/draft-ietf-jose-json-web-key-41#appendix-A.3
@@ -624,21 +626,24 @@ static char *test_plaintext_decrypt(apr_pool_t *pool) {
 	apr_hash_t *keys = apr_hash_make(pool);
 	oidc_jwk_t *jwk = NULL;
 
-	TST_ASSERT_ERR("oidc_jwk_parse", _jwk_parse(pool, k, &jwk, &err) == 0,
-			pool, err);
+	TST_ASSERT_ERR("oidc_jwk_parse", _jwk_parse(pool, k, &jwk, &err) == 0, pool,
+			err);
 	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
 
-    cjose_err cjose_err;
-    cjose_jwe_t *jwe = cjose_jwe_import(s, strlen(s), &cjose_err);
-    TST_ASSERT_CJOSE_ERR("cjose_jwe_import", jwe != NULL, pool, cjose_err);
+	cjose_err cjose_err;
+	cjose_jwe_t *jwe = cjose_jwe_import(s, strlen(s), &cjose_err);
+	TST_ASSERT_CJOSE_ERR("cjose_jwe_import", jwe != NULL, pool, cjose_err);
 
-    size_t content_len = 0;
-    uint8_t *decrypted = cjose_jwe_decrypt(jwe, jwk->cjose_jwk, &content_len, &cjose_err);
-    TST_ASSERT_CJOSE_ERR("cjose_jwe_decrypt", decrypted != NULL, pool, cjose_err);
+	size_t content_len = 0;
+	uint8_t *decrypted = cjose_jwe_decrypt(jwe, jwk->cjose_jwk, &content_len,
+			&cjose_err);
+	TST_ASSERT_CJOSE_ERR("cjose_jwe_decrypt", decrypted != NULL, pool,
+			cjose_err);
 
-	TST_ASSERT_STRN("decrypted", (const char *)decrypted, "Live long and prosper.", content_len);
+	TST_ASSERT_STRN("decrypted", (const char * )decrypted,
+			"Live long and prosper.", content_len);
 
-    cjose_get_dealloc()(decrypted);
+	cjose_get_dealloc()(decrypted);
 	oidc_jwk_destroy(jwk);
 	cjose_jwe_release(jwe);
 
@@ -718,29 +723,33 @@ static char *test_plaintext_decrypt2(apr_pool_t *pool) {
 	apr_hash_t *keys = apr_hash_make(pool);
 	oidc_jwk_t *jwk = NULL;
 
-	TST_ASSERT_ERR("oidc_jwk_parse", _jwk_parse(pool, k, &jwk, &err) == 0,
-			pool, err);
+	TST_ASSERT_ERR("oidc_jwk_parse", _jwk_parse(pool, k, &jwk, &err) == 0, pool,
+			err);
 
-	apr_hash_set(keys, "frodo.baggins@hobbiton.example", APR_HASH_KEY_STRING, jwk);
+	apr_hash_set(keys, "frodo.baggins@hobbiton.example", APR_HASH_KEY_STRING,
+			jwk);
 
-    cjose_err cjose_err;
-    cjose_jwe_t *jwe = cjose_jwe_import(s, strlen(s), &cjose_err);
-    TST_ASSERT_CJOSE_ERR("cjose_jwe_import", jwe != NULL, pool, cjose_err);
+	cjose_err cjose_err;
+	cjose_jwe_t *jwe = cjose_jwe_import(s, strlen(s), &cjose_err);
+	TST_ASSERT_CJOSE_ERR("cjose_jwe_import", jwe != NULL, pool, cjose_err);
 
-    size_t content_len = 0;
-    uint8_t *decrypted = cjose_jwe_decrypt(jwe, jwk->cjose_jwk, &content_len, &cjose_err);
-    TST_ASSERT_CJOSE_ERR("cjose_jwe_decrypt", decrypted != NULL, pool, cjose_err);
+	size_t content_len = 0;
+	uint8_t *decrypted = cjose_jwe_decrypt(jwe, jwk->cjose_jwk, &content_len,
+			&cjose_err);
+	TST_ASSERT_CJOSE_ERR("cjose_jwe_decrypt", decrypted != NULL, pool,
+			cjose_err);
 
-	TST_ASSERT_STRN("decrypted", (const char *)decrypted,
+	TST_ASSERT_STRN("decrypted", (const char * )decrypted,
 			"You can trust us to stick with you through thick and "
 			"thin\u2013to the bitter end. And you can trust us to "
 			"keep any secret of yours\u2013closer than you keep it "
 			"yourself. But you cannot trust us to let you face trouble "
-			"alone, and go off without a word. We are your friends, Frodo.", content_len);
+			"alone, and go off without a word. We are your friends, Frodo.",
+			content_len);
 
-    cjose_get_dealloc()(decrypted);
-    oidc_jwk_destroy(jwk);
-    cjose_jwe_release(jwe);
+	cjose_get_dealloc()(decrypted);
+	oidc_jwk_destroy(jwk);
+	cjose_jwe_release(jwe);
 
 	return 0;
 }
@@ -754,8 +763,8 @@ static char *test_plaintext_decrypt_symmetric(apr_pool_t *pool) {
 	// A.3.  Example JWE using AES Key Wrap and AES_128_CBC_HMAC_SHA_256
 	const char * k = "{\"kty\":\"oct\", \"k\":\"GawgguFyGrWKav7AX4VKUg\"}";
 	jwk = NULL;
-	TST_ASSERT_ERR("oidc_jwk_parse", _jwk_parse(pool, k, &jwk, &err) == 0,
-			pool, err);
+	TST_ASSERT_ERR("oidc_jwk_parse", _jwk_parse(pool, k, &jwk, &err) == 0, pool,
+			err);
 	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
 
 	const char *s = "eyJhbGciOiJBMTI4S1ciLCJlbmMiOiJBMTI4Q0JDLUhTMjU2In0."
@@ -764,19 +773,22 @@ static char *test_plaintext_decrypt_symmetric(apr_pool_t *pool) {
 			"KDlTtXchhZTGufMYmOYGS4HffxPSUrfmqCHXaI9wOGY."
 			"U0m_YmjN04DJvceFICbCVQ";
 
-    cjose_err cjose_err;
-    cjose_jwe_t *jwe = cjose_jwe_import(s, strlen(s), &cjose_err);
-    TST_ASSERT_CJOSE_ERR("cjose_jwe_import", jwe != NULL, pool, cjose_err);
+	cjose_err cjose_err;
+	cjose_jwe_t *jwe = cjose_jwe_import(s, strlen(s), &cjose_err);
+	TST_ASSERT_CJOSE_ERR("cjose_jwe_import", jwe != NULL, pool, cjose_err);
 
-    size_t content_len = 0;
-    uint8_t *decrypted = cjose_jwe_decrypt(jwe, jwk->cjose_jwk, &content_len, &cjose_err);
-    TST_ASSERT_CJOSE_ERR("cjose_jwe_decrypt", decrypted != NULL, pool, cjose_err);
+	size_t content_len = 0;
+	uint8_t *decrypted = cjose_jwe_decrypt(jwe, jwk->cjose_jwk, &content_len,
+			&cjose_err);
+	TST_ASSERT_CJOSE_ERR("cjose_jwe_decrypt", decrypted != NULL, pool,
+			cjose_err);
 
-	TST_ASSERT_STRN("decrypted", (const char *)decrypted, "Live long and prosper.", content_len);
+	TST_ASSERT_STRN("decrypted", (const char * )decrypted,
+			"Live long and prosper.", content_len);
 
-    cjose_get_dealloc()(decrypted);
-    oidc_jwk_destroy(jwk);
-    cjose_jwe_release(jwe);
+	cjose_get_dealloc()(decrypted);
+	oidc_jwk_destroy(jwk);
+	cjose_jwe_release(jwe);
 
 	return 0;
 }
@@ -857,16 +869,16 @@ static char *test_jwt_decrypt(apr_pool_t *pool) {
 			_jwk_parse(pool, ek, &jwk_e, &err) == 0, pool, err);
 	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk_e);
 
-    TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(pool, s, &jwt, keys, &err),
-            pool, err);
-    oidc_jwk_destroy(jwk_e);
+	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(pool, s, &jwt, keys, &err),
+			pool, err);
+	oidc_jwk_destroy(jwk_e);
 
 	TST_ASSERT_ERR("oidc_jwk_parse (signing key)",
 			_jwk_parse(pool, sk, &jwk_s, &err) == 0, pool, err);
 	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk_s);
 	TST_ASSERT_ERR("oidc_jwt_verify", oidc_jwt_verify(pool, jwt, keys, &err),
 			pool, err);
-    oidc_jwk_destroy(jwk_s);
+	oidc_jwk_destroy(jwk_s);
 
 	TST_ASSERT_STR("header.alg", jwt->header.alg, CJOSE_HDR_ALG_RS256);
 	TST_ASSERT_STR("payload.iss", jwt->payload.iss, "joe");
@@ -897,56 +909,59 @@ static char *test_jwt_decrypt_gcm(apr_pool_t *pool) {
 					"SdiwkIr3ajwQzaBtQD_A."
 					"XFBoMYUZodetZdvTiFvSkQ");
 
-	char * k =
-			"{\"kty\":\"RSA\","
+	char * k = "{\"kty\":\"RSA\","
 			"\"n\":\"oahUIoWw0K0usKNuOR6H4wkf4oBUXHTxRvgb48E-BVvxkeDNjbC4he8rUW"
-			  "cJoZmds2h7M70imEVhRU5djINXtqllXI4DFqcI1DgjT9LewND8MW2Krf3S"
-			  "psk_ZkoFnilakGygTwpZ3uesH-PFABNIUYpOiN15dsQRkgr0vEhxN92i2a"
-			  "sbOenSZeyaxziK72UwxrrKoExv6kc5twXTq4h-QChLOln0_mtUZwfsRaMS"
-			  "tPs6mS6XrgxnxbWhojf663tuEQueGC-FCMfra36C9knDFGzKsNa7LZK2dj"
-			  "YgyD3JR_MB_4NUJW_TqOQtwHYbxevoJArm-L5StowjzGy-_bq6Gw\","
+			"cJoZmds2h7M70imEVhRU5djINXtqllXI4DFqcI1DgjT9LewND8MW2Krf3S"
+			"psk_ZkoFnilakGygTwpZ3uesH-PFABNIUYpOiN15dsQRkgr0vEhxN92i2a"
+			"sbOenSZeyaxziK72UwxrrKoExv6kc5twXTq4h-QChLOln0_mtUZwfsRaMS"
+			"tPs6mS6XrgxnxbWhojf663tuEQueGC-FCMfra36C9knDFGzKsNa7LZK2dj"
+			"YgyD3JR_MB_4NUJW_TqOQtwHYbxevoJArm-L5StowjzGy-_bq6Gw\","
 			"\"e\":\"AQAB\","
 			"\"d\":\"kLdtIj6GbDks_ApCSTYQtelcNttlKiOyPzMrXHeI-yk1F7-kpDxY4-WY5N"
-			  "WV5KntaEeXS1j82E375xxhWMHXyvjYecPT9fpwR_M9gV8n9Hrh2anTpTD9"
-			  "3Dt62ypW3yDsJzBnTnrYu1iwWRgBKrEYY46qAZIrA2xAwnm2X7uGR1hghk"
-			  "qDp0Vqj3kbSCz1XyfCs6_LehBwtxHIyh8Ripy40p24moOAbgxVw3rxT_vl"
-			  "t3UVe4WO3JkJOzlpUf-KTVI2Ptgm-dARxTEtE-id-4OJr0h-K-VFs3VSnd"
-			  "VTIznSxfyrj8ILL6MG_Uv8YAu7VILSB3lOW085-4qE3DzgrTjgyQ\","
+			"WV5KntaEeXS1j82E375xxhWMHXyvjYecPT9fpwR_M9gV8n9Hrh2anTpTD9"
+			"3Dt62ypW3yDsJzBnTnrYu1iwWRgBKrEYY46qAZIrA2xAwnm2X7uGR1hghk"
+			"qDp0Vqj3kbSCz1XyfCs6_LehBwtxHIyh8Ripy40p24moOAbgxVw3rxT_vl"
+			"t3UVe4WO3JkJOzlpUf-KTVI2Ptgm-dARxTEtE-id-4OJr0h-K-VFs3VSnd"
+			"VTIznSxfyrj8ILL6MG_Uv8YAu7VILSB3lOW085-4qE3DzgrTjgyQ\","
 			"\"p\":\"1r52Xk46c-LsfB5P442p7atdPUrxQSy4mti_tZI3Mgf2EuFVbUoDBvaRQ-"
-			  "SWxkbkmoEzL7JXroSBjSrK3YIQgYdMgyAEPTPjXv_hI2_1eTSPVZfzL0lf"
-			  "fNn03IXqWF5MDFuoUYE0hzb2vhrlN_rKrbfDIwUbTrjjgieRbwC6Cl0\","
+			"SWxkbkmoEzL7JXroSBjSrK3YIQgYdMgyAEPTPjXv_hI2_1eTSPVZfzL0lf"
+			"fNn03IXqWF5MDFuoUYE0hzb2vhrlN_rKrbfDIwUbTrjjgieRbwC6Cl0\","
 			"\"q\":\"wLb35x7hmQWZsWJmB_vle87ihgZ19S8lBEROLIsZG4ayZVe9Hi9gDVCOBm"
-			  "UDdaDYVTSNx_8Fyw1YYa9XGrGnDew00J28cRUoeBB_jKI1oma0Orv1T9aX"
-			  "IWxKwd4gvxFImOWr3QRL9KEBRzk2RatUBnmDZJTIAfwTs0g68UZHvtc\","
+			"UDdaDYVTSNx_8Fyw1YYa9XGrGnDew00J28cRUoeBB_jKI1oma0Orv1T9aX"
+			"IWxKwd4gvxFImOWr3QRL9KEBRzk2RatUBnmDZJTIAfwTs0g68UZHvtc\","
 			"\"dp\":\"ZK-YwE7diUh0qR1tR7w8WHtolDx3MZ_OTowiFvgfeQ3SiresXjm9gZ5KL"
-			  "hMXvo-uz-KUJWDxS5pFQ_M0evdo1dKiRTjVw_x4NyqyXPM5nULPkcpU827"
-			  "rnpZzAJKpdhWAgqrXGKAECQH0Xt4taznjnd_zVpAmZZq60WPMBMfKcuE\","
+			"hMXvo-uz-KUJWDxS5pFQ_M0evdo1dKiRTjVw_x4NyqyXPM5nULPkcpU827"
+			"rnpZzAJKpdhWAgqrXGKAECQH0Xt4taznjnd_zVpAmZZq60WPMBMfKcuE\","
 			"\"dq\":\"Dq0gfgJ1DdFGXiLvQEZnuKEN0UUmsJBxkjydc3j4ZYdBiMRAy86x0vHCj"
-			  "ywcMlYYg4yoC4YZa9hNVcsjqA3FeiL19rk8g6Qn29Tt0cj8qqyFpz9vNDB"
-			  "UfCAiJVeESOjJDZPYHdHY8v1b-o-Z2X5tvLx-TCekf7oxyeKDUqKWjis\","
+			"ywcMlYYg4yoC4YZa9hNVcsjqA3FeiL19rk8g6Qn29Tt0cj8qqyFpz9vNDB"
+			"UfCAiJVeESOjJDZPYHdHY8v1b-o-Z2X5tvLx-TCekf7oxyeKDUqKWjis\","
 			"\"qi\":\"VIMpMYbPf47dT1w_zDUXfPimsSegnMOA1zTaX7aGk_8urY6R8-ZW1FxU7"
-			  "AlWAyLWybqq6t16VFd7hQd0y6flUK4SlOydB61gwanOsXGOAOv82cHq0E3"
-			  "eL4HrtZkUuKvnPrMnsUUFlfUdybVzxyjz9JF_XyaY14ardLSjf4L_FNY\""
+			"AlWAyLWybqq6t16VFd7hQd0y6flUK4SlOydB61gwanOsXGOAOv82cHq0E3"
+			"eL4HrtZkUuKvnPrMnsUUFlfUdybVzxyjz9JF_XyaY14ardLSjf4L_FNY\""
 			"}";
 
 	oidc_jose_error_t err;
 	apr_hash_t *keys = apr_hash_make(pool);
 	oidc_jwk_t *jwk = NULL;
-	TST_ASSERT_ERR("oidc_jwk_parse", _jwk_parse(pool, k, &jwk, &err) == 0,
-			pool, err);
+	TST_ASSERT_ERR("oidc_jwk_parse", _jwk_parse(pool, k, &jwk, &err) == 0, pool,
+			err);
 	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
 
 	cjose_err cjose_err;
 	cjose_jwe_t *jwe = cjose_jwe_import(s, strlen(s), &cjose_err);
-    TST_ASSERT_CJOSE_ERR("cjose_jwe_import", jwe != NULL, pool, cjose_err);
+	TST_ASSERT_CJOSE_ERR("cjose_jwe_import", jwe != NULL, pool, cjose_err);
 
 	size_t content_len = 0;
-	uint8_t *decrypted = cjose_jwe_decrypt(jwe, jwk->cjose_jwk, &content_len, &cjose_err);
-    TST_ASSERT_CJOSE_ERR("cjose_jwe_decrypt", decrypted != NULL, pool, cjose_err);
+	uint8_t *decrypted = cjose_jwe_decrypt(jwe, jwk->cjose_jwk, &content_len,
+			&cjose_err);
+	TST_ASSERT_CJOSE_ERR("cjose_jwe_decrypt", decrypted != NULL, pool,
+			cjose_err);
 
-	TST_ASSERT_STRN("decrypted", (const char *)decrypted, "The true sign of intelligence is not knowledge but imagination.", content_len);
+	TST_ASSERT_STRN("decrypted", (const char * )decrypted,
+			"The true sign of intelligence is not knowledge but imagination.",
+			content_len);
 
-    cjose_get_dealloc()(decrypted);
+	cjose_get_dealloc()(decrypted);
 	cjose_jwe_release(jwe);
 	oidc_jwk_destroy(jwk);
 
@@ -973,8 +988,8 @@ static char *test_proto_validate_access_token(request_rec *r) {
 
 	oidc_jose_error_t err;
 	oidc_jwt_t *jwt = NULL;
-	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(r->pool, s, &jwt, NULL, &err),
-			r->pool, err);
+	TST_ASSERT_ERR("oidc_jwt_parse",
+			oidc_jwt_parse(r->pool, s, &jwt, NULL, &err), r->pool, err);
 
 	const char *access_token = "jHkWEdUXMU1BwAsC4vtUsZwnNvTIxEl0z9K3vx5KF0Y";
 	TST_ASSERT("oidc_proto_validate_access_token",
@@ -1003,8 +1018,8 @@ static char *test_proto_validate_code(request_rec *r) {
 
 	oidc_jose_error_t err;
 	oidc_jwt_t *jwt = NULL;
-	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(r->pool, s, &jwt, NULL, &err),
-			r->pool, err);
+	TST_ASSERT_ERR("oidc_jwt_parse",
+			oidc_jwt_parse(r->pool, s, &jwt, NULL, &err), r->pool, err);
 
 	const char *code =
 			"Qcb0Orv1zh30vL1MPRsbm-diHiMwcLyZvn1arpZv-Jxf_11jnpEX3Tgfvk";
@@ -1020,7 +1035,7 @@ static char * test_proto_authorization_request(request_rec *r) {
 
 	oidc_provider_t provider;
 
-        memset(&provider, 0, sizeof(provider));
+	memset(&provider, 0, sizeof(provider));
 
 	provider.issuer = "https://idp.example.com";
 	provider.authorization_endpoint_url = "https://idp.example.com/authorize";
@@ -1031,14 +1046,15 @@ static char * test_proto_authorization_request(request_rec *r) {
 	provider.auth_request_params = NULL;
 	provider.request_object = NULL;
 	provider.token_binding_policy = OIDC_TOKEN_BINDING_POLICY_OPTIONAL;
-        provider.auth_request_method = OIDC_AUTH_REQUEST_METHOD_GET;
+	provider.auth_request_method = OIDC_AUTH_REQUEST_METHOD_GET;
 
 	const char *redirect_uri = "https://www.example.com/protected/";
 	const char *state = "12345";
 
 	oidc_proto_state_t *proto_state = oidc_proto_state_new();
 	oidc_proto_state_set_nonce(proto_state, "anonce");
-	oidc_proto_state_set_original_url(proto_state, "https://localhost/protected/index.php");
+	oidc_proto_state_set_original_url(proto_state,
+			"https://localhost/protected/index.php");
 	oidc_proto_state_set_original_method(proto_state, OIDC_METHOD_GET);
 	oidc_proto_state_set_issuer(proto_state, provider.issuer);
 	oidc_proto_state_set_response_type(proto_state, provider.response_type);
@@ -1207,6 +1223,75 @@ static char * test_current_url(request_rec *r) {
 	return 0;
 }
 
+static char * test_accept(request_rec *r) {
+
+	// ie 9/10/11
+	apr_table_set(r->headers_in, "Accept",
+			"text/html, application/xhtml+xml, */*");
+	TST_ASSERT("Accept: text/html (ie 9/10/11)",
+			oidc_util_hdr_in_accept_contains(r, "text/html") != 0);
+	TST_ASSERT("Accept: application/json (ie 9/10/11)",
+			oidc_util_hdr_in_accept_contains(r, "application/json") == 0);
+
+	// firefox
+	apr_table_set(r->headers_in, "Accept",
+			"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+	TST_ASSERT("Accept: text/html (firefox)",
+			oidc_util_hdr_in_accept_contains(r, "text/html") != 0);
+	TST_ASSERT("Accept: application/json (firefox)",
+			oidc_util_hdr_in_accept_contains(r, "application/json") == 0);
+
+	// chrome/safari
+	apr_table_set(r->headers_in, "Accept",
+			"application/xml,application/xhtml+xml,text/html;q=0.9, text/plain;q=0.8,image/png,*/*;q=0.5");
+	TST_ASSERT("Accept: text/html (chrome/safari)",
+			oidc_util_hdr_in_accept_contains(r, "text/html") != 0);
+	TST_ASSERT("Accept: application/json (chrome/safari)",
+			oidc_util_hdr_in_accept_contains(r, "application/json") == 0);
+
+	// safari 5
+	apr_table_set(r->headers_in, "Accept",
+			"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+	TST_ASSERT("Accept: text/html (safari 5)",
+			oidc_util_hdr_in_accept_contains(r, "text/html") != 0);
+	TST_ASSERT("Accept: application/json (safari 5)",
+			oidc_util_hdr_in_accept_contains(r, "application/json") == 0);
+
+	// ie 8
+	apr_table_set(r->headers_in, "Accept",
+			"image/jpeg, application/x-ms-application, image/gif, application/xaml+xml, image/pjpeg, application/x-ms-xbap, application/x-shockwave-flash, application/msword, */*");
+	TST_ASSERT("Accept: text/html (ie 8)",
+			oidc_util_hdr_in_accept_contains(r, "text/html") == 0);
+	TST_ASSERT("Accept: */* (ie 8)",
+			oidc_util_hdr_in_accept_contains(r, "*/*") != 0);
+	TST_ASSERT("Accept: application/json (ie 8)",
+			oidc_util_hdr_in_accept_contains(r, "application/json") == 0);
+
+	// edge
+	apr_table_set(r->headers_in, "Accept",
+			"text/html, application/xhtml+xml, image/jxr, */*");
+	TST_ASSERT("Accept: text/html (edge)",
+			oidc_util_hdr_in_accept_contains(r, "text/html") != 0);
+	TST_ASSERT("Accept: application/json (edge)",
+			oidc_util_hdr_in_accept_contains(r, "application/json") == 0);
+
+	// opera
+	apr_table_set(r->headers_in, "Accept",
+			"text/html, application/xml;q=0.9, application/xhtml+xml, image/png, image/webp, image/jpeg, image/gif, image/x-xbitmap, */*;q=0.1");
+	TST_ASSERT("Accept: text/html (opera)",
+			oidc_util_hdr_in_accept_contains(r, "text/html") != 0);
+	TST_ASSERT("Accept: application/json (opera)",
+			oidc_util_hdr_in_accept_contains(r, "application/json") == 0);
+
+	// xmlhttprequest
+	apr_table_set(r->headers_in, "Accept", "application/json");
+	TST_ASSERT("Accept: text/html (opera)",
+			oidc_util_hdr_in_accept_contains(r, "text/html") == 0);
+	TST_ASSERT("Accept: application/json (opera)",
+			oidc_util_hdr_in_accept_contains(r, "application/json") != 0);
+
+	return 0;
+}
 static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	char *message;
 	TST_RUN(test_jwt_parse, pool);
@@ -1237,6 +1322,7 @@ static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	TST_RUN(test_proto_validate_jwt, r);
 
 	TST_RUN(test_current_url, r);
+	TST_RUN(test_accept, r);
 
 	return 0;
 }
@@ -1265,7 +1351,7 @@ static request_rec * test_setup(apr_pool_t *pool) {
 			sizeof(struct process_rec));
 	request->server->process->pool = request->pool;
 	request->connection = apr_pcalloc(request->pool, sizeof(struct conn_rec));
-        request->connection->bucket_alloc = apr_bucket_alloc_create(request->pool);
+	request->connection->bucket_alloc = apr_bucket_alloc_create(request->pool);
 	request->connection->local_addr = apr_pcalloc(request->pool,
 			sizeof(apr_sockaddr_t));
 

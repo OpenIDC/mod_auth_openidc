@@ -97,7 +97,7 @@ int oidc_base64url_encode(request_rec *r, char **dst, const char *src,
 			enc_len--;
 		if ((enc_len > 0) && (enc[enc_len - 1] == ','))
 			enc_len--;
-		if ((enc_len > 0) &&(enc[enc_len - 1] == ','))
+		if ((enc_len > 0) && (enc[enc_len - 1] == ','))
 			enc_len--;
 		enc[enc_len] = '\0';
 	}
@@ -320,9 +320,9 @@ char *oidc_util_unescape_string(const request_rec *r, const char *str) {
 		return NULL;
 	}
 	int counter = 0;
-	char *replaced = (char *)str;
-	while(str[counter] != '\0') {
-		if(str[counter] == '+') {
+	char *replaced = (char *) str;
+	while (str[counter] != '\0') {
+		if (str[counter] == '+') {
 			replaced[counter] = ' ';
 		}
 		counter++;
@@ -353,7 +353,7 @@ char *oidc_util_html_escape(apr_pool_t *pool, const char *s) {
 	for (i = 0; i < strlen(s); i++) {
 		for (n = 0; n < len; n++) {
 			if (s[i] == chars[n]) {
-				m = (unsigned int)strlen(replace[n]);
+				m = (unsigned int) strlen(replace[n]);
 				for (k = 0; k < m; k++)
 					r[j + k] = replace[n][k];
 				j += m;
@@ -530,12 +530,13 @@ const char *oidc_get_redirect_uri_iss(request_rec *r, oidc_cfg *cfg,
 	const char *redirect_uri = oidc_get_redirect_uri(r, cfg);
 	if (provider->issuer_specific_redirect_uri != 0) {
 		redirect_uri = apr_psprintf(r->pool, "%s%s%s=%s", redirect_uri,
-				strchr(redirect_uri ? redirect_uri : "", OIDC_CHAR_QUERY) != NULL ?
-						OIDC_STR_AMP :
-						OIDC_STR_QUERY,
-						OIDC_PROTO_ISS, oidc_util_escape_string(r, provider->issuer));
-//						OIDC_PROTO_CLIENT_ID,
-//						oidc_util_escape_string(r, provider->client_id));
+				strchr(redirect_uri ? redirect_uri : "",
+						OIDC_CHAR_QUERY) != NULL ?
+								OIDC_STR_AMP :
+								OIDC_STR_QUERY,
+								OIDC_PROTO_ISS, oidc_util_escape_string(r, provider->issuer));
+		//						OIDC_PROTO_CLIENT_ID,
+		//						oidc_util_escape_string(r, provider->client_id));
 		oidc_debug(r, "determined issuer specific redirect uri: %s",
 				redirect_uri);
 	}
@@ -1346,8 +1347,8 @@ int oidc_util_html_send(request_rec *r, const char *title,
 							on_load ? apr_psprintf(r->pool, " onload=\"%s()\"", on_load) : "",
 									html_body ? html_body : "<p></p>");
 
-	return oidc_util_http_send(r, html, strlen(html), OIDC_CONTENT_TYPE_HTML,
-			status_code);
+	return oidc_util_http_send(r, html, strlen(html),
+			OIDC_CONTENT_TYPE_TEXT_HTML, status_code);
 }
 
 static char *html_error_template_contents = NULL;
@@ -1357,7 +1358,8 @@ static char *html_error_template_contents = NULL;
  * that is relative to the Apache root directory
  */
 char *oidc_util_get_full_path(apr_pool_t *pool, const char *abs_or_rel_filename) {
-	return (abs_or_rel_filename) ? ap_server_root_relative(pool, abs_or_rel_filename) : NULL;
+	return (abs_or_rel_filename) ?
+			ap_server_root_relative(pool, abs_or_rel_filename) : NULL;
 }
 
 /*
@@ -1389,7 +1391,7 @@ int oidc_util_html_send_error(request_rec *r, const char *html_template,
 							description ? description : ""));
 
 			return oidc_util_http_send(r, html, strlen(html),
-					OIDC_CONTENT_TYPE_HTML, status_code);
+					OIDC_CONTENT_TYPE_TEXT_HTML, status_code);
 		}
 	}
 
@@ -1980,8 +1982,8 @@ void oidc_util_table_add_query_encoded_params(apr_pool_t *pool,
  * create a symmetric key from a client_secret
  */
 apr_byte_t oidc_util_create_symmetric_key(request_rec *r,
-		const char *client_secret, unsigned int r_key_len, const char *hash_algo,
-		apr_byte_t set_kid, oidc_jwk_t **jwk) {
+		const char *client_secret, unsigned int r_key_len,
+		const char *hash_algo, apr_byte_t set_kid, oidc_jwk_t **jwk) {
 	oidc_jose_error_t err;
 	unsigned char *key = NULL;
 	unsigned int key_len;
@@ -2216,12 +2218,36 @@ static const char *oidc_util_hdr_in_get(const request_rec *r, const char *name) 
 	return value;
 }
 
-static const char *oidc_util_hdr_in_get_left_most_only(const request_rec *r, const char *name, const char *separator) {
+static const char *oidc_util_hdr_in_get_left_most_only(const request_rec *r,
+		const char *name, const char *separator) {
 	char *last = NULL;
 	const char *value = oidc_util_hdr_in_get(r, name);
 	if (value)
 		return apr_strtok(apr_pstrdup(r->pool, value), separator, &last);
 	return NULL;
+}
+
+static apr_byte_t oidc_util_hdr_in_contains(const request_rec *r,
+		const char *name, const char *separator, const char postfix_separator,
+		const char *needle) {
+	char *ctx = NULL, *elem = NULL;
+	const char *value = oidc_util_hdr_in_get(r, name);
+	apr_byte_t rc = FALSE;
+	if (value) {
+		elem = apr_strtok(apr_pstrdup(r->pool, value), separator, &ctx);
+		while (elem != NULL) {
+			while (*elem == OIDC_CHAR_SPACE)
+				elem++;
+			if ((strncmp(elem, needle, strlen(needle)) == 0)
+					&& ((elem[strlen(needle)] == '\0')
+							|| (elem[strlen(needle)] == postfix_separator))) {
+				rc = TRUE;
+				break;
+			}
+			elem = apr_strtok(NULL, separator, &ctx);
+		}
+	}
+	return rc;
 }
 
 static void oidc_util_hdr_table_set(const request_rec *r, apr_table_t *table,
@@ -2288,7 +2314,8 @@ const char *oidc_util_hdr_in_user_agent_get(const request_rec *r) {
 }
 
 const char *oidc_util_hdr_in_x_forwarded_for_get(const request_rec *r) {
-	return oidc_util_hdr_in_get_left_most_only(r, OIDC_HTTP_HDR_X_FORWARDED_FOR, OIDC_STR_COMMA);
+	return oidc_util_hdr_in_get_left_most_only(r, OIDC_HTTP_HDR_X_FORWARDED_FOR,
+			OIDC_STR_COMMA);
 }
 
 const char *oidc_util_hdr_in_content_type_get(const request_rec *r) {
@@ -2303,20 +2330,29 @@ const char *oidc_util_hdr_in_accept_get(const request_rec *r) {
 	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_ACCEPT);
 }
 
+apr_byte_t oidc_util_hdr_in_accept_contains(const request_rec *r,
+		const char *needle) {
+	return oidc_util_hdr_in_contains(r, OIDC_HTTP_HDR_ACCEPT, OIDC_STR_COMMA,
+			OIDC_CHAR_SEMI_COLON, needle);
+}
+
 const char *oidc_util_hdr_in_authorization_get(const request_rec *r) {
 	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_AUTHORIZATION);
 }
 
 const char *oidc_util_hdr_in_x_forwarded_proto_get(const request_rec *r) {
-	return oidc_util_hdr_in_get_left_most_only(r, OIDC_HTTP_HDR_X_FORWARDED_PROTO, OIDC_STR_COMMA);
+	return oidc_util_hdr_in_get_left_most_only(r,
+			OIDC_HTTP_HDR_X_FORWARDED_PROTO, OIDC_STR_COMMA);
 }
 
 const char *oidc_util_hdr_in_x_forwarded_port_get(const request_rec *r) {
-	return oidc_util_hdr_in_get_left_most_only(r, OIDC_HTTP_HDR_X_FORWARDED_PORT, OIDC_STR_COMMA);
+	return oidc_util_hdr_in_get_left_most_only(r,
+			OIDC_HTTP_HDR_X_FORWARDED_PORT, OIDC_STR_COMMA);
 }
 
 const char *oidc_util_hdr_in_x_forwarded_host_get(const request_rec *r) {
-	return oidc_util_hdr_in_get_left_most_only(r, OIDC_HTTP_HDR_X_FORWARDED_HOST, OIDC_STR_COMMA);
+	return oidc_util_hdr_in_get_left_most_only(r,
+			OIDC_HTTP_HDR_X_FORWARDED_HOST, OIDC_STR_COMMA);
 }
 
 const char *oidc_util_hdr_in_host_get(const request_rec *r) {

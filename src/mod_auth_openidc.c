@@ -805,8 +805,8 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
  * set the state that is maintained between an authorization request and an authorization response
  * in a cookie in the browser that is cryptographically bound to that state
  */
-static int oidc_authorization_request_set_cookie(request_rec *r,
-		oidc_cfg *c, const char *state, oidc_proto_state_t *proto_state) {
+static int oidc_authorization_request_set_cookie(request_rec *r, oidc_cfg *c,
+		const char *state, oidc_proto_state_t *proto_state) {
 	/*
 	 * create a cookie consisting of 8 elements:
 	 * random value, original URL, original method, issuer, response_type, response_mod, prompt and timestamp
@@ -818,7 +818,7 @@ static int oidc_authorization_request_set_cookie(request_rec *r,
 
 	/*
 	 * clean expired state cookies to avoid pollution and optionally
- 	 * try to avoid the number of state cookies exceeding a max
+	 * try to avoid the number of state cookies exceeding a max
 	 */
 	int number_of_cookies = oidc_clean_expired_state_cookies(r, c, NULL);
 	int max_number_of_cookies = oidc_cfg_max_number_of_state_cookies(c);
@@ -954,6 +954,26 @@ static void oidc_log_session_expires(request_rec *r, const char *msg,
 }
 
 /*
+ * see if this is a non-browser request
+ */
+static apr_byte_t oidc_is_xml_http_request(request_rec *r) {
+
+	if ((oidc_util_hdr_in_x_requested_with_get(r) != NULL)
+			&& (apr_strnatcasecmp(oidc_util_hdr_in_x_requested_with_get(r),
+					OIDC_HTTP_HDR_VAL_XML_HTTP_REQUEST) == 0))
+		return TRUE;
+
+	if ((oidc_util_hdr_in_accept_contains(r, OIDC_CONTENT_TYPE_TEXT_HTML)
+			== FALSE) && (oidc_util_hdr_in_accept_contains(r,
+					OIDC_CONTENT_TYPE_APP_XHTML_XML) == FALSE)
+					&& (oidc_util_hdr_in_accept_contains(r,
+							OIDC_CONTENT_TYPE_ANY) == FALSE))
+		return TRUE;
+
+	return FALSE;
+}
+
+/*
  * find out which action we need to take when encountering an unauthenticated request
  */
 static int oidc_handle_unauthenticated_user(request_rec *r, oidc_cfg *c) {
@@ -982,9 +1002,7 @@ static int oidc_handle_unauthenticated_user(request_rec *r, oidc_cfg *c) {
 		 * won't redirect the user and thus avoid creating a state cookie
 		 * for a non-browser (= Javascript) call that will never return from the OP
 		 */
-		if ((oidc_util_hdr_in_x_requested_with_get(r) != NULL)
-				&& (apr_strnatcasecmp(oidc_util_hdr_in_x_requested_with_get(r),
-						OIDC_HTTP_HDR_VAL_XML_HTTP_REQUEST) == 0))
+		if (oidc_is_xml_http_request(r) == TRUE)
 			return HTTP_UNAUTHORIZED;
 	}
 
@@ -995,17 +1013,6 @@ static int oidc_handle_unauthenticated_user(request_rec *r, oidc_cfg *c) {
 	return oidc_authenticate_user(r, c, NULL, oidc_get_current_url(r), NULL,
 			NULL, NULL, oidc_dir_cfg_path_auth_request_params(r),
 			oidc_dir_cfg_path_scope(r));
-}
-
-/*
- * see if this is a non-browser request
- */
-static apr_byte_t oidc_is_xml_http_request(request_rec *r) {
-	if ((oidc_util_hdr_in_x_requested_with_get(r) != NULL)
-			&& (apr_strnatcasecmp(oidc_util_hdr_in_x_requested_with_get(r),
-					OIDC_HTTP_HDR_VAL_XML_HTTP_REQUEST) == 0))
-		return TRUE;
-	return FALSE;
 }
 
 /*

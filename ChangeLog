@@ -1,3 +1,7 @@
+08/23/2018
+- improve auto-detection of XMLHttpRequests via Accept header; see #331
+- bump to 2.3.8rc5
+
 08/15/2018
 - initialize test_proto_authorization_request properly; see #382; thanks @jdennis
 - add sanity check on provider->auth_request_method; closes #382; thanks @jdennis

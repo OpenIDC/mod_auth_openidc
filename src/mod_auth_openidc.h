@@ -537,7 +537,9 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_CONTENT_TYPE_JWT           "application/jwt"
 #define OIDC_CONTENT_TYPE_FORM_ENCODED  "application/x-www-form-urlencoded"
 #define OIDC_CONTENT_TYPE_IMAGE_PNG     "image/png"
-#define OIDC_CONTENT_TYPE_HTML          "text/html"
+#define OIDC_CONTENT_TYPE_TEXT_HTML     "text/html"
+#define OIDC_CONTENT_TYPE_APP_XHTML_XML "application/xhtml+xml"
+#define OIDC_CONTENT_TYPE_ANY           "*/*"
 
 #define OIDC_STR_SPACE         " "
 #define OIDC_STR_EQUAL         "="
@@ -560,6 +562,7 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_CHAR_FORWARD_SLASH '/'
 #define OIDC_CHAR_PIPE          '|'
 #define OIDC_CHAR_AMP           '&'
+#define OIDC_CHAR_SEMI_COLON    ';'
 
 #define OIDC_APP_INFO_REFRESH_TOKEN     "refresh_token"
 #define OIDC_APP_INFO_ACCESS_TOKEN      "access_token"
@@ -787,6 +790,7 @@ const char *oidc_util_hdr_in_host_get(const request_rec *r);
 void oidc_util_hdr_out_location_set(const request_rec *r, const char *value);
 const char *oidc_util_hdr_out_location_get(const request_rec *r);
 void oidc_util_hdr_err_out_add(const request_rec *r, const char *name, const char *value);
+apr_byte_t oidc_util_hdr_in_accept_contains(const request_rec *r, const char *needle);
 
 // oidc_metadata.c
 apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg, const char *issuer, const char *url, json_t **j_metadata, char **response);
