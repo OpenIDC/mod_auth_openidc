@@ -32,6 +32,11 @@ restrictions:
    supersede any condition above with which it is incompatible.
 */
 
+#ifndef MOD_AUTH_OPENIDC_PCRE_SUBST_H_
+#define MOD_AUTH_OPENIDC_PCRE_SUBST_H_
+
 #define OIDC_PCRE_MAXCAPTURE	255
 
 char *pcre_subst(const pcre *, const pcre_extra *, const char *, int, int, int, const char *);
+
+#endif /* MOD_AUTH_OPENIDC_PCRE_SUBST_H_ */

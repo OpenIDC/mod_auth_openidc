@@ -1188,6 +1188,9 @@ static const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r,
 
 	oidc_debug(r, "enter");
 
+	char *result = NULL;
+	char *refreshed_access_token = NULL;
+
 	/* see if a userinfo endpoint is set, otherwise there's nothing to do for us */
 	if (provider->userinfo_endpoint_url == NULL) {
 		oidc_debug(r,
@@ -1220,7 +1223,6 @@ static const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r,
 	// TODO: long-term: session storage should be JSON (with explicit types and less conversion, using standard routines)
 
 	/* try to get claims from the userinfo endpoint using the provided access token */
-	char *result = NULL;
 	if (oidc_proto_resolve_userinfo(r, c, provider, id_token_sub, access_token,
 			&result, userinfo_jwt) == FALSE) {
 
@@ -1228,13 +1230,12 @@ static const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r,
 		if (session != NULL) {
 
 			/* first call to user info endpoint failed, but the access token may have just expired, so refresh it */
-			char *access_token = NULL;
 			if (oidc_refresh_access_token(r, c, session, provider,
-					&access_token) == TRUE) {
+					&refreshed_access_token) == TRUE) {
 
 				/* try again with the new access token */
 				if (oidc_proto_resolve_userinfo(r, c, provider, id_token_sub,
-						access_token, &result, userinfo_jwt) == FALSE) {
+						refreshed_access_token, &result, userinfo_jwt) == FALSE) {
 
 					oidc_error(r,
 							"resolving user info claims with the refreshed access token failed, nothing will be stored in the session");

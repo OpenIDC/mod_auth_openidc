@@ -1,3 +1,7 @@
+08/30/2018
+- add LGTM code quality badges, see #385; thanks @xcorail
+- fix 3 LGTM alerts
+
 08/23/2018
 - improve auto-detection of XMLHttpRequests via Accept header; see #331
 - bump to 2.3.8rc5
