@@ -1,3 +1,7 @@
+09/12/2018
+- fix return result FALSE when JWT payload parsing fails; see #389; thanks @amdonov
+- release 2.3.8
+
 08/30/2018
 - add LGTM code quality badges, see #385; thanks @xcorail
 - fix 3 LGTM alerts

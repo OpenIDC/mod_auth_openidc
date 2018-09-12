@@ -779,6 +779,7 @@ apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json,
 			&jwt->payload, err) == FALSE) {
 		oidc_jwt_destroy(jwt);
 		*j_jwt = NULL;
+		return FALSE;
 	}
 
 	return TRUE;
