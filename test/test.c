@@ -1292,6 +1292,83 @@ static char * test_accept(request_rec *r) {
 
 	return 0;
 }
+
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+
+static char * test_authz_worker(request_rec *r) {
+	authz_status rc;
+	char *require_args = NULL;
+	json_error_t err;
+	json_t *json = NULL;
+	char *claims = NULL;
+
+	r->user = "dummy";
+
+	claims = "{"
+			"\"sub\": \"stef\","
+			"\"nested\": {"
+			"\"level1\": {"
+			"\"level2\": \"hans\""
+			"},"
+			"\"nestedarray\": ["
+			"\"b\","
+			"\"c\","
+			"true"
+			"],"
+			"\"somebool\": false"
+			"},"
+			"\"somearray\": ["
+			"\"one\","
+			"\"two\","
+			"\"three\""
+			"],"
+			"\"somebool\": false"
+			"}";
+
+	json = json_loads(claims, 0, &err);
+	TST_ASSERT(
+			apr_psprintf(r->pool, "JSON parsed [%s]", json ? "ok" : err.text),
+			json != NULL);
+
+	require_args = "Require claim sub:hans";
+	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (1: simple sub claim)", rc == AUTHZ_DENIED);
+
+	require_args = "Require claim sub:stef";
+	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (2: simple sub claim)", rc == AUTHZ_GRANTED);
+
+	require_args = "Require claim nested.level1.level2:hans";
+	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (3: nested claim)", rc == AUTHZ_GRANTED);
+
+	require_args = "Require claim nested.nestedarray:a";
+	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (4: nested array)", rc == AUTHZ_DENIED);
+
+	require_args = "Require claim nested.nestedarray:c";
+	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (5: nested array)", rc == AUTHZ_GRANTED);
+
+	require_args = "Require claim nested.level1:a";
+	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (6: nested non-string)", rc == AUTHZ_DENIED);
+
+	require_args = "Require claim somebool:a";
+	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (7: non-array)", rc == AUTHZ_DENIED);
+
+	require_args = "Require claim somebool.level1:a";
+	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (8: nested non-array)", rc == AUTHZ_DENIED);
+
+	json_decref(json);
+
+	return 0;
+}
+
+#endif
+
 static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	char *message;
 	TST_RUN(test_jwt_parse, pool);
@@ -1323,6 +1400,10 @@ static char * all_tests(apr_pool_t *pool, request_rec *r) {
 
 	TST_RUN(test_current_url, r);
 	TST_RUN(test_accept, r);
+
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+	TST_RUN(test_authz_worker, r);
+#endif
 
 	return 0;
 }
