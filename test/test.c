@@ -1322,7 +1322,23 @@ static char * test_authz_worker(request_rec *r) {
 			"\"two\","
 			"\"three\""
 			"],"
-			"\"somebool\": false"
+			"\"somebool\": false,"
+
+			"\"realm_access\": {"
+			"\"roles\": ["
+			"\"someRole1\","
+			"\"someRole2\""
+			"]"
+			"},"
+			"\"resource_access\": {"
+			"\"someClient\": {"
+			"\"roles\": ["
+			"\"someRole3\","
+			"\"someRole4\""
+			"]"
+			"}"
+			"}"
+
 			"}";
 
 	json = json_loads(claims, 0, &err);
@@ -1361,6 +1377,10 @@ static char * test_authz_worker(request_rec *r) {
 	require_args = "Require claim somebool.level1:a";
 	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
 	TST_ASSERT("auth status (8: nested non-array)", rc == AUTHZ_DENIED);
+
+	require_args = "Require claim resource_access.someClient.roles:someRole4";
+	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (9: keycloak sample)", rc == AUTHZ_GRANTED);
 
 	json_decref(json);
 
