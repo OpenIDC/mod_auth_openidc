@@ -1123,101 +1123,6 @@ static apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 	return TRUE;
 }
 
-#define OIDC_CLAIM_CNF     "cnf"
-#define OIDC_CLAIM_CNF_TBH "tbh"
-
-/*
- * validate the "cnf" claims in the id_token payload
- */
-static apr_byte_t oidc_proto_validate_cnf(request_rec *r, oidc_cfg *cfg,
-		oidc_provider_t *provider, oidc_jwt_payload_t *id_token_payload) {
-	char *tbh_str = NULL;
-	char *tbh = NULL;
-	int tbh_len = -1;
-	const char *tbp_str = NULL;
-	char *tbp = NULL;
-	int tbp_len = -1;
-	unsigned char *tbp_hash = NULL;
-	unsigned int tbp_hash_len = -1;
-
-	oidc_debug(r, "enter: policy=%s",
-			oidc_token_binding_policy2str(r->pool,
-					provider->token_binding_policy));
-
-	if (provider->token_binding_policy == OIDC_TOKEN_BINDING_POLICY_DISABLED)
-		return TRUE;
-
-	tbp_str = oidc_util_get_provided_token_binding_id(r);
-	if (tbp_str == NULL) {
-		oidc_debug(r,
-				"no Provided Token Binding ID environment variable found");
-		goto out_err;
-	}
-
-	tbp_len = oidc_base64url_decode(r->pool, &tbp, tbp_str);
-	if (tbp_len <= 0) {
-		oidc_warn(r,
-				"Provided Token Binding ID environment variable could not be decoded");
-		return FALSE;
-	}
-
-	if (oidc_jose_hash_bytes(r->pool, OIDC_JOSE_ALG_SHA256,
-			(const unsigned char *) tbp, tbp_len, &tbp_hash, &tbp_hash_len,
-			NULL) == FALSE) {
-		oidc_warn(r,
-				"hashing Provided Token Binding ID environment variable failed");
-		return FALSE;
-	}
-
-	json_t *cnf = json_object_get(id_token_payload->value.json, OIDC_CLAIM_CNF);
-	if (cnf == NULL) {
-		oidc_debug(r, "no \"cnf\" claim found in id_token");
-		goto out_err;
-	}
-
-	oidc_jose_get_string(r->pool, cnf, OIDC_CLAIM_CNF_TBH, FALSE, &tbh_str,
-			NULL);
-	if (tbh_str == NULL) {
-		oidc_debug(r,
-				" \"cnf\" claim found in id_token but no \"tbh\" claim inside found");
-		goto out_err;
-	}
-
-	tbh_len = oidc_base64url_decode(r->pool, &tbh, tbh_str);
-	if (tbh_len <= 0) {
-		oidc_warn(r, "cnf[\"tbh\"] provided but it could not be decoded");
-		return FALSE;
-	}
-
-	if (tbp_hash_len != tbh_len) {
-		oidc_warn(r,
-				"hash length of provided token binding ID environment variable: %d does not match length of cnf[\"tbh\"]: %d",
-				tbp_hash_len, tbh_len);
-		return FALSE;
-	}
-
-	if (memcmp(tbp_hash, tbh, tbh_len) != 0) {
-		oidc_warn(r,
-				"hash of provided token binding ID environment variable does not match cnf[\"tbh\"]");
-		return FALSE;
-	}
-
-	oidc_debug(r,
-			"hash of provided token binding ID environment variable matches cnf[\"tbh\"]");
-
-	return TRUE;
-
-out_err:
-
-	if (provider->token_binding_policy == OIDC_TOKEN_BINDING_POLICY_OPTIONAL)
-		return TRUE;
-	if (provider->token_binding_policy == OIDC_TOKEN_BINDING_POLICY_ENFORCED)
-		return FALSE;
-
-	// provider->token_binding_policy == OIDC_TOKEN_BINDING_POLICY_REQURIED
-	return (tbp_str == NULL);
-}
-
 /*
  * validate "iat" claim in JWT
  */
@@ -1296,7 +1201,7 @@ static apr_byte_t oidc_proto_validate_exp(request_rec *r, oidc_jwt_t *jwt,
  */
 apr_byte_t oidc_proto_validate_jwt(request_rec *r, oidc_jwt_t *jwt,
 		const char *iss, apr_byte_t exp_is_mandatory,
-		apr_byte_t iat_is_mandatory, int iat_slack) {
+		apr_byte_t iat_is_mandatory, int iat_slack, int token_binding_policy) {
 
 	if (iss != NULL) {
 
@@ -1325,6 +1230,11 @@ apr_byte_t oidc_proto_validate_jwt(request_rec *r, oidc_jwt_t *jwt,
 	if (oidc_proto_validate_iat(r, jwt, iat_is_mandatory, iat_slack) == FALSE)
 		return FALSE;
 
+	/* check the token binding ID in the JWT */
+	if (oidc_util_json_validate_cnf(r, jwt->payload.value.json,
+			token_binding_policy) == FALSE)
+		return FALSE;
+
 	return TRUE;
 }
 
@@ -1349,7 +1259,8 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
 
 	/* validate the ID Token JWT, requiring iss match, and valid exp + iat */
 	if (oidc_proto_validate_jwt(r, jwt, provider->issuer, TRUE, TRUE,
-			provider->idtoken_iat_slack) == FALSE)
+			provider->idtoken_iat_slack,
+			provider->token_binding_policy) == FALSE)
 		return FALSE;
 
 	/* check if the required-by-spec "sub" claim is present */
@@ -1363,10 +1274,6 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
 	/* verify the "aud" and "azp" values */
 	if (oidc_proto_validate_aud_and_azp(r, cfg, provider,
 			&jwt->payload) == FALSE)
-		return FALSE;
-
-	/* verify the included token binding ID if provided */
-	if (oidc_proto_validate_cnf(r, cfg, provider, &jwt->payload) == FALSE)
 		return FALSE;
 
 	return TRUE;
@@ -1873,7 +1780,8 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r,
 apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg,
 		const char *token_endpoint_auth, const char *client_id,
 		const char *client_secret, const char *audience, apr_table_t *params,
-		const char *bearer_access_token, char **basic_auth_str, char **bearer_auth_str) {
+		const char *bearer_access_token, char **basic_auth_str,
+		char **bearer_auth_str) {
 
 	oidc_debug(r, "token_endpoint_auth=%s", token_endpoint_auth);
 
@@ -1922,7 +1830,8 @@ apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg,
 
 	if (apr_strnatcmp(token_endpoint_auth,
 			OIDC_PROTO_BEARER_ACCESS_TOKEN) == 0) {
-		return oidc_proto_endpoint_access_token_bearer(r, cfg, bearer_access_token, bearer_auth_str);
+		return oidc_proto_endpoint_access_token_bearer(r, cfg,
+				bearer_access_token, bearer_auth_str);
 	}
 
 	oidc_error(r, "uhm, shouldn't be here...");

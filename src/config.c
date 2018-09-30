@@ -160,6 +160,8 @@
 #define OIDC_DEFAULT_PROVIDER_METADATA_REFRESH_INTERVAL 0
 /* defines the default token binding policy for a provider */
 #define OIDC_DEFAULT_PROVIDER_TOKEN_BINDING_POLICY OIDC_TOKEN_BINDING_POLICY_OPTIONAL
+/* defines the default token binding policy for OAuth 2.0 access tokens */
+#define OIDC_DEFAULT_OAUTH_ACCESS_TOKEN_BINDING_POLICY OIDC_TOKEN_BINDING_POLICY_OPTIONAL
 /* define the default HTTP method used to send the authentication request to the provider */
 #define OIDC_DEFAULT_AUTH_REQUEST_METHOD OIDC_AUTH_REQUEST_METHOD_GET
 /* define whether the issuer will be added to the redirect uri by default to mitigate the IDP mixup attack */
@@ -259,6 +261,7 @@
 #define OIDCProviderAuthRequestMethod        "OIDCProviderAuthRequestMethod"
 #define OIDCBlackListedClaims                "OIDCBlackListedClaims"
 #define OIDCOAuthServerMetadataURL           "OIDCOAuthServerMetadataURL"
+#define OIDCOAuthAccessTokenBindingPolicy    "OIDCOAuthAccessTokenBindingPolicy"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -941,8 +944,10 @@ static const char *oidc_set_token_binding_policy(cmd_parms *cmd,
 		void *struct_ptr, const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
+	int offset = (int) (long) cmd->info;
+	int *token_binding_policy = (int *) ((char *) cfg + offset);
 	const char *rv = oidc_parse_token_binding_policy(cmd->pool, arg,
-			&cfg->provider.token_binding_policy);
+			token_binding_policy);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -1101,6 +1106,9 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->oauth.verify_jwks_uri = NULL;
 	c->oauth.verify_public_keys = NULL;
 	c->oauth.verify_shared_keys = NULL;
+
+	c->oauth.access_token_binding_policy =
+			OIDC_DEFAULT_OAUTH_ACCESS_TOKEN_BINDING_POLICY;
 
 	c->cache = &oidc_cache_shm;
 	c->cache_cfg = NULL;
@@ -1431,6 +1439,12 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->oauth.verify_shared_keys != NULL ?
 					add->oauth.verify_shared_keys :
 					base->oauth.verify_shared_keys;
+
+	c->oauth.access_token_binding_policy =
+			add->oauth.access_token_binding_policy
+			!= OIDC_DEFAULT_OAUTH_ACCESS_TOKEN_BINDING_POLICY ?
+					add->oauth.access_token_binding_policy :
+					base->oauth.access_token_binding_policy;
 
 	c->http_timeout_long =
 			add->http_timeout_long != OIDC_DEFAULT_HTTP_TIMEOUT_LONG ?
@@ -2849,5 +2863,11 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.metadata_url),
 				RSRC_CONF,
 				"Authorization Server metadata URL."),
+		AP_INIT_TAKE1(OIDCOAuthAccessTokenBindingPolicy,
+				oidc_set_token_binding_policy,
+				(void *)APR_OFFSETOF(oidc_cfg, oauth.access_token_binding_policy),
+				RSRC_CONF,
+				"The token binding policy used for access tokens; must be one of [disabled|optional|required|enforced]"),
+
 		{ NULL }
 };

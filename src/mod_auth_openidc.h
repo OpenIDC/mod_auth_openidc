@@ -319,6 +319,7 @@ typedef struct oidc_oauth_t {
 	apr_hash_t *verify_shared_keys;
 	char *verify_jwks_uri;
 	apr_hash_t *verify_public_keys;
+	int access_token_binding_policy;
 } oidc_oauth_t;
 
 typedef struct oidc_cfg {
@@ -515,6 +516,8 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_CLAIM_C_HASH          "c_hash"
 #define OIDC_CLAIM_RFP             "rfp"
 #define OIDC_CLAIM_TARGET_LINK_URI "target_link_uri"
+#define OIDC_CLAIM_CNF             "cnf"
+#define OIDC_CLAIM_CNF_TBH         "tbh"
 
 #define OIDC_JWK_X5T       "x5t"
 #define OIDC_JWK_KEYS      "keys"
@@ -619,7 +622,7 @@ apr_array_header_t *oidc_proto_supported_flows(apr_pool_t *pool);
 apr_byte_t oidc_proto_flow_is_supported(apr_pool_t *pool, const char *flow);
 apr_byte_t oidc_proto_validate_authorization_response(request_rec *r, const char *response_type, const char *requested_response_mode, char **code, char **id_token, char **access_token, char **token_type, const char *used_response_mode);
 apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri, apr_hash_t *symmetric_keys);
-apr_byte_t oidc_proto_validate_jwt(request_rec *r, oidc_jwt_t *jwt, const char *iss, apr_byte_t exp_is_mandatory, apr_byte_t iat_is_mandatory, int iat_slack);
+apr_byte_t oidc_proto_validate_jwt(request_rec *r, oidc_jwt_t *jwt, const char *iss, apr_byte_t exp_is_mandatory, apr_byte_t iat_is_mandatory, int iat_slack, int token_binding_policy);
 apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce, int len);
 
 apr_byte_t oidc_proto_authorization_response_code_idtoken_token(request_rec *r, oidc_cfg *c, oidc_proto_state_t *proto_state, oidc_provider_t *provider, apr_table_t *params, const char *response_mode, oidc_jwt_t **jwt);
@@ -793,6 +796,7 @@ void oidc_util_hdr_out_location_set(const request_rec *r, const char *value);
 const char *oidc_util_hdr_out_location_get(const request_rec *r);
 void oidc_util_hdr_err_out_add(const request_rec *r, const char *name, const char *value);
 apr_byte_t oidc_util_hdr_in_accept_contains(const request_rec *r, const char *needle);
+apr_byte_t oidc_util_json_validate_cnf(request_rec *r, json_t *jwt, int token_binding_policy);
 
 // oidc_metadata.c
 apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg, const char *issuer, const char *url, json_t **j_metadata, char **response);

@@ -1,3 +1,7 @@
+09/30/2018
+- support Token Binding for Access Tokens according to: https://tools.ietf.org/html/draft-ietf-oauth-token-binding
+- bump to 2.3.9rc1
+
 09/16/2018
 - support nested arrays in Require claim authorization evaluation; see #392; thanks @hpbieker
 - bump to 2.3.9rc0

@@ -1181,7 +1181,7 @@ static char * test_proto_validate_jwt(request_rec *r) {
 			r->pool, err);
 
 	TST_ASSERT_ERR("oidc_proto_validate_jwt",
-			oidc_proto_validate_jwt(r, jwt, s_issuer, TRUE, TRUE, 10), r->pool,
+			oidc_proto_validate_jwt(r, jwt, s_issuer, TRUE, TRUE, 10, OIDC_TOKEN_BINDING_POLICY_DISABLED), r->pool,
 			err);
 
 	oidc_jwk_destroy(jwk);

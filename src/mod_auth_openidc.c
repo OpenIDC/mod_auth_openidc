@@ -252,11 +252,11 @@ static char *oidc_get_browser_state_hash(request_rec *r, const char *nonce) {
 
 	/* get the remote client IP address or host name */
 	/*
-	int remotehost_is_ip;
-	value = ap_get_remote_host(r->connection, r->per_dir_config,
-			REMOTE_NOLOOKUP, &remotehost_is_ip);
-	apr_sha1_update(&sha1, value, strlen(value));
-	*/
+	 int remotehost_is_ip;
+	 value = ap_get_remote_host(r->connection, r->per_dir_config,
+	 REMOTE_NOLOOKUP, &remotehost_is_ip);
+	 apr_sha1_update(&sha1, value, strlen(value));
+	 */
 
 	/* concat the nonce parameter to the hash input */
 	apr_sha1_update(&sha1, nonce, strlen(nonce));
@@ -572,7 +572,8 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 
 	/* validate the state JWT, validating optional exp + iat */
 	if (oidc_proto_validate_jwt(r, jwt, provider->issuer, FALSE, FALSE,
-			provider->idtoken_iat_slack) == FALSE) {
+			provider->idtoken_iat_slack,
+			OIDC_TOKEN_BINDING_POLICY_DISABLED) == FALSE) {
 		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
@@ -838,13 +839,13 @@ static int oidc_authorization_request_set_cookie(request_rec *r, oidc_cfg *c,
 		 * into a 200 so we'll avoid that for now: the user will see Apache specific
 		 * readable text anyway
 		 *
-		return oidc_util_html_send_error(r, c->error_template,
-				"Too Many Outstanding Requests",
-				apr_psprintf(r->pool,
-						"No authentication request could be generated since there are too many outstanding authentication requests already; you may have to wait up to %d seconds to be able to create a new request",
-						c->state_timeout),
-						HTTP_SERVICE_UNAVAILABLE);
-		*/
+		 return oidc_util_html_send_error(r, c->error_template,
+		 "Too Many Outstanding Requests",
+		 apr_psprintf(r->pool,
+		 "No authentication request could be generated since there are too many outstanding authentication requests already; you may have to wait up to %d seconds to be able to create a new request",
+		 c->state_timeout),
+		 HTTP_SERVICE_UNAVAILABLE);
+		 */
 
 		return HTTP_SERVICE_UNAVAILABLE;
 	}
@@ -2983,7 +2984,7 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
 		goto end;
 	}
 
-end:
+	end:
 
 	/* pass optional error message to the return URL */
 	if (error_code != NULL)

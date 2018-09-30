@@ -480,6 +480,11 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 		if (oidc_util_decode_json_and_check_error(r, s_json, &result) == FALSE)
 			return FALSE;
 
+		/* check the token binding ID in the introspection result */
+		if (oidc_util_json_validate_cnf(r, result,
+				c->oauth.access_token_binding_policy) == FALSE)
+			return FALSE;
+
 		json_t *active = json_object_get(result, OIDC_PROTO_ACTIVE);
 		apr_time_t cache_until;
 		if (active != NULL) {
@@ -580,7 +585,7 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
  *
  * TODO: document that we're reusing the following settings from the OIDC config section:
  *       - JWKs URI refresh interval
- *       - encryption key material (OIDCPrivateKeyFiles)
+ *       - decryption key material (OIDCPrivateKeyFiles)
  *
  * OIDCOAuthRemoteUserClaim client_id
  * # 32x 61 hex
@@ -594,6 +599,8 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
+
+	// TODO: replace this OIDC client secret with OIDCOAuthDecryptSharedKeys
 	if (oidc_util_create_symmetric_key(r, c->provider.client_secret, 0, NULL,
 			TRUE, &jwk) == FALSE)
 		return FALSE;
@@ -615,7 +622,8 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 	 * validate the access token JWT by validating the (optional) exp claim
 	 * don't enforce anything around iat since it doesn't make much sense for access tokens
 	 */
-	if (oidc_proto_validate_jwt(r, jwt, NULL, FALSE, FALSE, -1) == FALSE) {
+	if (oidc_proto_validate_jwt(r, jwt, NULL, FALSE, FALSE, -1,
+			c->oauth.access_token_binding_policy) == FALSE) {
 		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
@@ -705,7 +713,8 @@ static apr_byte_t oidc_oauth_set_request_user(request_rec *r, oidc_cfg *c,
 /*
  * main routine: handle OAuth 2.0 authentication/authorization
  */
-int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c, const char *access_token) {
+int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c,
+		const char *access_token) {
 
 	/* check if this is a sub-request or an initial request */
 	if (!ap_is_initial_req(r)) {
@@ -753,7 +762,8 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c, const char *access_toke
 				return OK;
 			}
 			return oidc_oauth_return_www_authenticate(r,
-					OIDC_PROTO_ERR_INVALID_REQUEST, "No bearer token found in the request");
+					OIDC_PROTO_ERR_INVALID_REQUEST,
+					"No bearer token found in the request");
 		}
 	}
 
