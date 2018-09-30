@@ -2418,7 +2418,7 @@ apr_byte_t oidc_util_json_validate_cnf(request_rec *r, json_t *jwt,
 
 	json_t *cnf = json_object_get(jwt, OIDC_CLAIM_CNF);
 	if (cnf == NULL) {
-		oidc_debug(r, "no \"cnf\" claim found in id_token");
+		oidc_debug(r, "no \"cnf\" claim found in the token");
 		goto out_err;
 	}
 
@@ -2426,7 +2426,7 @@ apr_byte_t oidc_util_json_validate_cnf(request_rec *r, json_t *jwt,
 			NULL);
 	if (tbh_str == NULL) {
 		oidc_debug(r,
-				" \"cnf\" claim found in id_token but no \"tbh\" claim inside found");
+				" \"cnf\" claim found in the token but no \"tbh\" claim inside found");
 		goto out_err;
 	}
 
@@ -2454,7 +2454,7 @@ apr_byte_t oidc_util_json_validate_cnf(request_rec *r, json_t *jwt,
 
 	return TRUE;
 
-	out_err:
+out_err:
 
 	if (token_binding_policy == OIDC_TOKEN_BINDING_POLICY_OPTIONAL)
 		return TRUE;
