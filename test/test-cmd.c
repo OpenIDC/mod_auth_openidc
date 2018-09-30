@@ -446,17 +446,35 @@ int enckey(int argc, char **argv, apr_pool_t *pool) {
 
 int hash_base64url(int argc, char **argv, apr_pool_t *pool) {
 	if (argc <= 2)
-		return usage(argc, argv, "hash_base64url <string> [algo]");
+		return usage(argc, argv, "hash_base64url <string> [algo] [base64url-decode-first]");
 
 	char *algo = argc > 3 ? argv[3] : "sha256";
+	int base64url_decode_first = argc > 4 ? (strcmp(argv[4], "yes") == 0) : 0;
 	char *output = NULL;
 
 	request_rec *r = request_setup(pool);
 
-	if (oidc_util_hash_string_and_base64url_encode(r, algo, argv[2],
-			&output) == FALSE) {
-		fprintf(stderr, "oidc_util_hash_string_and_base64url_encode failed");
-		return -1;
+	if (base64url_decode_first) {
+
+		uint8_t *bytes = NULL;
+		size_t outlen = 0;
+		cjose_err err;
+		if (cjose_base64url_decode(argv[2], strlen(argv[2]), &bytes, &outlen, &err) == FALSE) {
+			fprintf(stderr, "cjose_base64_decode failed: %s", err.message);
+			return -1;
+		}
+		if (oidc_jose_hash_and_base64url_encode(r->pool,
+				algo, (const char *)bytes, outlen,
+				&output) == FALSE) {
+			fprintf(stderr, "oidc_jose_hash_and_base64url_encode failed");
+			return -1;
+		}
+	} else {
+		if (oidc_util_hash_string_and_base64url_encode(r, algo, argv[2],
+				&output) == FALSE) {
+			fprintf(stderr, "oidc_util_hash_string_and_base64url_encode failed");
+			return -1;
+		}
 	}
 
 	fprintf(stdout, "%s\n", output);

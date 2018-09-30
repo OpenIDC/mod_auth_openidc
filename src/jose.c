@@ -369,7 +369,7 @@ apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, oidc_jwk_t *jwk, char **s_json,
 /*
  * hash a sequence of bytes with a specific algorithm and return the result as a base64url-encoded \0 terminated string
  */
-static apr_byte_t oidc_jose_hash_and_base64url_encode(apr_pool_t *pool,
+apr_byte_t oidc_jose_hash_and_base64url_encode(apr_pool_t *pool,
 		const char *openssl_hash_algo, const char *input, int input_len,
 		char **output) {
 	oidc_jose_error_t err;

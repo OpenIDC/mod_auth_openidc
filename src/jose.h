@@ -117,6 +117,9 @@ apr_byte_t oidc_jose_hash_bytes(apr_pool_t *pool, const char *s_digest,
 		const unsigned char *input, unsigned int input_len,
 		unsigned char **output, unsigned int *output_len,
 		oidc_jose_error_t *err);
+apr_byte_t oidc_jose_hash_and_base64url_encode(apr_pool_t *pool,
+		const char *openssl_hash_algo, const char *input, int input_len,
+		char **output);
 
 /* return a string claim value from a JSON object */
 apr_byte_t oidc_jose_get_string(apr_pool_t *pool, json_t *json,

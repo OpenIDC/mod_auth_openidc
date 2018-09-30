@@ -1,3 +1,6 @@
+10/01/2018
+- add test-cmd command to generate hashes base64urlencoded inputs (cnf/tbh claims)
+
 09/30/2018
 - support Token Binding for Access Tokens according to: https://tools.ietf.org/html/draft-ietf-oauth-token-binding
 - bump to 2.3.9rc1
