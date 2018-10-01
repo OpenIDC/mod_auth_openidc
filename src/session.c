@@ -69,6 +69,10 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_SESSION_PROVIDED_TOKEN_BINDING_KEY   "ptb"
 /* the name of the session identifier in the session */
 #define OIDC_SESSION_SESSION_ID                   "i"
+/* the name of the sub attribute in the session */
+#define OIDC_SESSION_SUB_KEY                      "sub"
+/* the name of the sid attribute in the session */
+#define OIDC_SESSION_SID_KEY                      "sid"
 
 static apr_byte_t oidc_session_encode(request_rec *r, oidc_cfg *c,
 		oidc_session_t *z, char **s_value, apr_byte_t encrypt) {
@@ -116,6 +120,7 @@ static void oidc_session_uuid_new(request_rec *r, oidc_session_t *z) {
 static void oidc_session_clear(request_rec *r, oidc_session_t *z) {
 	strncpy(z->uuid, "", strlen(""));
 	z->remote_user = NULL;
+	// NB: don't clear sid
 	z->expiry = 0;
 	if (z->state) {
 		json_decref(z->state);
@@ -190,6 +195,11 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z,
 			oidc_session_set(r, z, OIDC_SESSION_SESSION_ID, z->uuid);
 		}
 
+		if (z->sid != NULL) {
+			oidc_cache_set_sid(r, z->sid, z->uuid, z->expiry);
+			oidc_session_set(r, z, OIDC_SESSION_SID_KEY, z->sid);
+		}
+
 		/* store the string-encoded session in the cache; encryption depends on cache backend settings */
 		char *s_value = NULL;
 		if (oidc_session_encode(r, c, z, &s_value, FALSE) == FALSE)
@@ -207,6 +217,10 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z,
 											NULL);
 
 	} else {
+
+		if (z->sid != NULL)
+			oidc_cache_set_sid(r, z->sid, NULL, 0);
+
 		/* clear the cookie */
 		oidc_util_set_cookie(r, oidc_cfg_dir_cookie(r), "", 0, NULL);
 
@@ -267,6 +281,7 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 	/* allocate space for the session object and fill it */
 	oidc_session_t *z = (*zz = apr_pcalloc(r->pool, sizeof(oidc_session_t)));
 	oidc_session_clear(r, z);
+	z->sid = NULL;
 
 	if (c->session_type == OIDC_SESSION_TYPE_SERVER_CACHE)
 		/* load the session from the cache */
@@ -307,6 +322,9 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 
 			oidc_session_get(r, z, OIDC_SESSION_REMOTE_USER_KEY,
 					&z->remote_user);
+			oidc_session_get(r, z, OIDC_SESSION_SID_KEY,
+					&z->sid);
+
 		}
 	}
 

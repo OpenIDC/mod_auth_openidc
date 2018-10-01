@@ -103,6 +103,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_METADATA_CONTACTS                              "contacts"
 #define OIDC_METADATA_INITIATE_LOGIN_URI                    "initiate_login_uri"
 #define OIDC_METADATA_FRONTCHANNEL_LOGOUT_URI               "frontchannel_logout_uri"
+#define OIDC_METADATA_BACKCHANNEL_LOGOUT_URI                "backchannel_logout_uri"
 #define OIDC_METADATA_POST_LOGOUT_REDIRECT_URIS             "post_logout_redirect_uris"
 
 #define OIDC_METADATA_SSL_VALIDATE_SERVER                   "ssl_validate_server"
@@ -558,6 +559,14 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 							oidc_get_redirect_uri(r, cfg),
 							OIDC_REDIRECT_URI_REQUEST_LOGOUT,
 							OIDC_GET_STYLE_LOGOUT_PARAM_VALUE)));
+
+	// TODO: may want to add backchannel_logout_session_required
+	json_object_set_new(data, OIDC_METADATA_BACKCHANNEL_LOGOUT_URI,
+			json_string(
+					apr_psprintf(r->pool, "%s?%s=%s",
+							oidc_get_redirect_uri(r, cfg),
+							OIDC_REDIRECT_URI_REQUEST_LOGOUT,
+							OIDC_BACKCHANNEL_STYLE_LOGOUT_PARAM_VALUE)));
 
 	if (cfg->default_slo_url != NULL) {
 		json_object_set_new(data, OIDC_METADATA_POST_LOGOUT_REDIRECT_URIS,

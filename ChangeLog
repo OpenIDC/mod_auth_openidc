@@ -1,4 +1,8 @@
 10/01/2018
+- support backchannel logout according to: https://openid.net/specs/openid-connect-backchannel-1_0.html
+- bump to 2.3.9rc2
+
+10/01/2018
 - add test-cmd command to generate hashes base64urlencoded inputs (cnf/tbh claims)
 
 09/30/2018

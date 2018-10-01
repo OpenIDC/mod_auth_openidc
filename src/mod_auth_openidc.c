@@ -252,11 +252,11 @@ static char *oidc_get_browser_state_hash(request_rec *r, const char *nonce) {
 
 	/* get the remote client IP address or host name */
 	/*
-	 int remotehost_is_ip;
-	 value = ap_get_remote_host(r->connection, r->per_dir_config,
-	 REMOTE_NOLOOKUP, &remotehost_is_ip);
-	 apr_sha1_update(&sha1, value, strlen(value));
-	 */
+	int remotehost_is_ip;
+	value = ap_get_remote_host(r->connection, r->per_dir_config,
+			REMOTE_NOLOOKUP, &remotehost_is_ip);
+	apr_sha1_update(&sha1, value, strlen(value));
+	*/
 
 	/* concat the nonce parameter to the hash input */
 	apr_sha1_update(&sha1, nonce, strlen(nonce));
@@ -839,13 +839,13 @@ static int oidc_authorization_request_set_cookie(request_rec *r, oidc_cfg *c,
 		 * into a 200 so we'll avoid that for now: the user will see Apache specific
 		 * readable text anyway
 		 *
-		 return oidc_util_html_send_error(r, c->error_template,
-		 "Too Many Outstanding Requests",
-		 apr_psprintf(r->pool,
-		 "No authentication request could be generated since there are too many outstanding authentication requests already; you may have to wait up to %d seconds to be able to create a new request",
-		 c->state_timeout),
-		 HTTP_SERVICE_UNAVAILABLE);
-		 */
+		return oidc_util_html_send_error(r, c->error_template,
+				"Too Many Outstanding Requests",
+				apr_psprintf(r->pool,
+						"No authentication request could be generated since there are too many outstanding authentication requests already; you may have to wait up to %d seconds to be able to create a new request",
+						c->state_timeout),
+						HTTP_SERVICE_UNAVAILABLE);
+		*/
 
 		return HTTP_SERVICE_UNAVAILABLE;
 	}
@@ -1687,6 +1687,11 @@ static apr_byte_t oidc_set_request_user(request_rec *r, oidc_cfg *c,
 	return TRUE;
 }
 
+static char *oidc_make_sid_iss_unique(request_rec *r, const char *sid,
+		const char *issuer) {
+	return apr_psprintf(r->pool, "%s@%s", sid, issuer);
+}
+
 /*
  * store resolved information in the session
  */
@@ -1780,6 +1785,15 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
 	/* store the domain for which this session is valid */
 	oidc_session_set_cookie_domain(r, session,
 			c->cookie_domain ? c->cookie_domain : oidc_get_current_url_host(r));
+
+	char *sid = NULL;
+	if (provider->end_session_endpoint != NULL) {
+		oidc_jose_get_string(r->pool, id_token_jwt->payload.value.json,
+				OIDC_CLAIM_SID, FALSE, &sid, NULL);
+		if (sid == NULL)
+			sid = id_token_jwt->payload.sub;
+		session->sid = oidc_make_sid_iss_unique(r, sid, provider->issuer);
+	}
 
 	/* store the session */
 	return oidc_session_save(r, session, TRUE);
@@ -2567,6 +2581,11 @@ static apr_byte_t oidc_is_front_channel_logout(const char *logout_param_value) {
 							OIDC_IMG_STYLE_LOGOUT_PARAM_VALUE) == 0)));
 }
 
+static apr_byte_t oidc_is_back_channel_logout(const char *logout_param_value) {
+	return ((logout_param_value != NULL) && (apr_strnatcmp(logout_param_value,
+			OIDC_BACKCHANNEL_STYLE_LOGOUT_PARAM_VALUE) == 0));
+}
+
 /*
  * handle a local logout
  */
@@ -2620,6 +2639,187 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 }
 
 /*
+ * handle a backchannel logout
+ */
+#define OIDC_EVENTS_BLOGOUT_KEY "http://schemas.openid.net/event/backchannel-logout"
+
+static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
+
+	oidc_debug(r, "enter");
+
+	const char *logout_token = NULL;
+	oidc_jwt_t *jwt = NULL;
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	oidc_provider_t *provider = NULL;
+	char *sid = NULL, *uuid = NULL;
+	int rc = HTTP_BAD_REQUEST;
+
+	apr_table_t *params = apr_table_make(r->pool, 8);
+	if (oidc_util_read_post_params(r, params) == FALSE) {
+		oidc_error(r,
+				"could not read POST-ed parameters to the logout endpoint");
+		goto out;
+	}
+
+	logout_token = apr_table_get(params, OIDC_PROTO_LOGOUT_TOKEN);
+	if (logout_token == NULL) {
+		oidc_error(r,
+				"backchannel lggout endpoint was called but could not find a parameter named \"%s\"",
+				OIDC_PROTO_LOGOUT_TOKEN);
+		goto out;
+	}
+
+	// TODO: jwk symmetric key based on provider
+	// TODO: share more code with regular id_token validation and unsolicited state
+
+	if (oidc_jwt_parse(r->pool, logout_token, &jwt,
+			oidc_util_merge_symmetric_key(r->pool, cfg->private_keys, NULL),
+			&err) == FALSE) {
+		oidc_error(r, "oidc_jwt_parse failed: %s", oidc_jose_e2s(r->pool, err));
+		goto out;
+	}
+
+	provider = oidc_get_provider_for_issuer(r, cfg, jwt->payload.iss, FALSE);
+	if (provider == NULL) {
+		oidc_error(r, "no provider found for issuer: %s", jwt->payload.iss);
+		goto out;
+	}
+
+	// TODO: destroy the JWK used for decryption
+
+	jwk = NULL;
+	if (oidc_util_create_symmetric_key(r, provider->client_secret, 0,
+			NULL, TRUE, &jwk) == FALSE)
+		return FALSE;
+
+	oidc_jwks_uri_t jwks_uri = { provider->jwks_uri,
+			provider->jwks_refresh_interval, provider->ssl_validate_server };
+	if (oidc_proto_jwt_verify(r, cfg, jwt, &jwks_uri,
+			oidc_util_merge_symmetric_key(r->pool, NULL, jwk)) == FALSE) {
+
+		oidc_error(r, "id_token signature could not be validated, aborting");
+		goto out;
+	}
+
+	// oidc_proto_validate_idtoken would try and require a token binding cnf
+	// if the policy is set to "required", so don't use that here
+
+	if (oidc_proto_validate_jwt(r, jwt, provider->issuer, FALSE, FALSE,
+			provider->idtoken_iat_slack,
+			OIDC_TOKEN_BINDING_POLICY_DISABLED) == FALSE)
+		goto out;
+
+	/* verify the "aud" and "azp" values */
+	if (oidc_proto_validate_aud_and_azp(r, cfg, provider,
+			&jwt->payload) == FALSE)
+		goto out;
+
+	json_t *events = json_object_get(jwt->payload.value.json,
+			OIDC_CLAIM_EVENTS);
+	if (events == NULL) {
+		oidc_error(r, "\"%s\" claim could not be found in logout token",
+				OIDC_CLAIM_EVENTS);
+		goto out;
+	}
+
+	json_t *blogout = json_object_get(events, OIDC_EVENTS_BLOGOUT_KEY);
+	if (!json_is_object(blogout)) {
+		oidc_error(r, "\"%s\" object could not be found in \"%s\" claim",
+				OIDC_EVENTS_BLOGOUT_KEY, OIDC_CLAIM_EVENTS);
+		goto out;
+	}
+
+	char *nonce = NULL;
+	oidc_json_object_get_string(r->pool, jwt->payload.value.json,
+			OIDC_CLAIM_NONCE, &nonce, NULL);
+	if (nonce != NULL) {
+		oidc_error(r,
+				"rejecting logout request/token since it contains a \"%s\" claim",
+				OIDC_CLAIM_NONCE);
+		goto out;
+	}
+
+	char *jti = NULL;
+	oidc_json_object_get_string(r->pool, jwt->payload.value.json,
+			OIDC_CLAIM_JTI, &jti, NULL);
+	if (jti != NULL) {
+		char *replay = NULL;
+		oidc_cache_get_jti(r, jti, &replay);
+		if (replay != NULL) {
+			oidc_error(r,
+					"the \"%s\" value (%s) passed in logout token was found in the cache already; possible replay attack!?",
+					OIDC_CLAIM_JTI, jti);
+			goto out;
+		}
+	}
+
+	/* jti cache duration is the configured replay prevention window for token issuance plus 10 seconds for safety */
+	apr_time_t jti_cache_duration = apr_time_from_sec(
+			provider->idtoken_iat_slack * 2 + 10);
+
+	/* store it in the cache for the calculated duration */
+	oidc_cache_set_jti(r, jti, jti, apr_time_now() + jti_cache_duration);
+
+	oidc_json_object_get_string(r->pool, jwt->payload.value.json,
+			OIDC_CLAIM_EVENTS, &sid, NULL);
+
+	// TODO: by-spec we should cater for the fact that "sid" has been provided
+	//       in the id_token returned in the authentication request, but "sub"
+	//       is used in the logout token but that requires a 2nd entry in the
+	//       cache and a separate session "sub" member, ugh; we'll just assume
+	//       that is "sid" is specified in the id_token, the OP will actually use
+	//       this for logout
+	//       (and probably call us multiple times or the same sub if needed)
+
+	oidc_json_object_get_string(r->pool, jwt->payload.value.json,
+			OIDC_CLAIM_SID, &sid, NULL);
+	if (sid == NULL)
+		sid = jwt->payload.sub;
+
+	if (sid == NULL) {
+		oidc_error(r, "no \"sub\" and no \"sid\" claim found in logout token");
+		goto out;
+	}
+
+	// TODO: when dealing with sub instead of a true sid, we'll be killing all sessions for
+	//       a specific user, across hosts that share the *same* cache backend
+	//       if those hosts haven't been configured with a different OIDCCryptoPassphrase
+	//       - perhaps that's even acceptable since non-memory caching is encrypted by default
+	//         and memory-based caching doesn't suffer from this (different shm segments)?
+	//       - it will result in 400 errors returned from backchannel logout calls to the other hosts...
+
+	sid = oidc_make_sid_iss_unique(r, sid, provider->issuer);
+	oidc_cache_get_sid(r, sid, &uuid);
+	if (uuid == NULL) {
+		oidc_error(r,
+				"could not find session based on sid/sub provided in logout token: %s",
+				sid);
+		goto out;
+	}
+
+	// clear the session cache
+	oidc_cache_set_sid(r, sid, NULL, 0);
+	oidc_cache_set_session(r, uuid, NULL, 0);
+
+	rc = DONE;
+
+out:
+
+	if (jwk != NULL) {
+		oidc_jwk_destroy(jwk);
+		jwk = NULL;
+
+	}
+	if (jwt != NULL) {
+		oidc_jwt_destroy(jwt);
+		jwt = NULL;
+	}
+
+	return rc;
+}
+
+/*
  * perform (single) logout
  */
 static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
@@ -2633,6 +2833,8 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 
 	if (oidc_is_front_channel_logout(url)) {
 		return oidc_handle_logout_request(r, c, session, url);
+	} else if (oidc_is_back_channel_logout(url)) {
+		return oidc_handle_logout_backchannel(r, c);
 	}
 
 	if ((url == NULL) || (apr_strnatcmp(url, "") == 0)) {
@@ -2984,7 +3186,7 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
 		goto end;
 	}
 
-	end:
+end:
 
 	/* pass optional error message to the return URL */
 	if (error_code != NULL)
@@ -3218,6 +3420,19 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 
 		/* this is an authorization response from the OP using the Basic Client profile or a Hybrid flow*/
 		return oidc_handle_redirect_authorization_response(r, c, session);
+	/*
+	 *
+	 * Note that we are checking for logout *before* checking for a POST authorization response
+	 * to handle backchannel POST-based logout
+	 *
+	 * so any POST to the Redirect URI that does not have a logout query parameter will be handled
+	 * as an authorization response; alternatively we could assume that a POST response has no
+	 * parameters
+	 */
+	} else if (oidc_util_request_has_parameter(r,
+			OIDC_REDIRECT_URI_REQUEST_LOGOUT)) {
+		/* handle logout */
+		return oidc_handle_logout(r, c, session);
 
 	} else if (oidc_proto_is_post_authorization_response(r, c)) {
 
@@ -3228,12 +3443,6 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 
 		/* this is response from the OP discovery page */
 		return oidc_handle_discovery_response(r, c);
-
-	} else if (oidc_util_request_has_parameter(r,
-			OIDC_REDIRECT_URI_REQUEST_LOGOUT)) {
-
-		/* handle logout */
-		return oidc_handle_logout(r, c, session);
 
 	} else if (oidc_util_request_has_parameter(r,
 			OIDC_REDIRECT_URI_REQUEST_JWKS)) {
