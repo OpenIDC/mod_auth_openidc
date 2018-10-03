@@ -108,6 +108,9 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key,
 #define OIDC_CACHE_SECTION_REQUEST_URI       "r"
 #define OIDC_CACHE_SECTION_SID               "d"
 
+// TODO: now every section occupies the same space; we may want to differentiate
+//       according to section-based size, at least for the shm backend
+
 #define oidc_cache_get_session(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, key, value)
 #define oidc_cache_get_nonce(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_NONCE, key, value)
 #define oidc_cache_get_jwks(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_JWKS, key, value)

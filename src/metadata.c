@@ -64,9 +64,9 @@
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
-#define OIDC_METADATA_SUFFIX_PROVIDER                       "provider"
-#define OIDC_METADATA_SUFFIX_CLIENT                         "client"
-#define OIDC_METADATA_SUFFIX_CONF                           "conf"
+#define OIDC_METADATA_SUFFIX_PROVIDER                              "provider"
+#define OIDC_METADATA_SUFFIX_CLIENT                                "client"
+#define OIDC_METADATA_SUFFIX_CONF                                  "conf"
 
 #define OIDC_METADATA_ISSUER                                       "issuer"
 #define OIDC_METADATA_RESPONSE_TYPES_SUPPORTED                     "response_types_supported"
@@ -80,54 +80,55 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_METADATA_INTROSPECTON_NDPOINT_AUTH_METHODS_SUPPORTED  "introspection_endpoint_auth_methods_supported"
 #define OIDC_METADATA_REGISTRATION_ENDPOINT                        "registration_endpoint"
 #define OIDC_METADATA_CHECK_SESSION_IFRAME                         "check_session_iframe"
+#define OIDC_METADATA_BACKCHANNEL_LOGOUT_SUPPORTED                 "backchannel_logout_supported"
+
 #define OIDC_METADATA_END_SESSION_ENDPOINT                         "end_session_endpoint"
+#define OIDC_METADATA_CLIENT_ID                                    "client_id"
+#define OIDC_METADATA_CLIENT_SECRET                                "client_secret"
+#define OIDC_METADATA_CLIENT_SECRET_EXPIRES_AT                     "client_secret_expires_at"
 
-#define OIDC_METADATA_CLIENT_ID                             "client_id"
-#define OIDC_METADATA_CLIENT_SECRET                         "client_secret"
-#define OIDC_METADATA_CLIENT_SECRET_EXPIRES_AT              "client_secret_expires_at"
+#define OIDC_METADATA_KEYS                                         "keys"
 
-#define OIDC_METADATA_KEYS                                  "keys"
+#define OIDC_METADATA_CLIENT_JWKS_URI                              "client_jwks_uri"
+#define OIDC_METADATA_ID_TOKEN_SIGNED_RESPONSE_ALG                 "id_token_signed_response_alg"
+#define OIDC_METADATA_ID_TOKEN_ENCRYPTED_RESPONSE_ALG              "id_token_encrypted_response_alg"
+#define OIDC_METADATA_ID_TOKEN_ENCRYPTED_RESPONSE_ENC              "id_token_encrypted_response_enc"
+#define OIDC_METADATA_USERINFO_SIGNED_RESPONSE_ALG                 "userinfo_signed_response_alg"
+#define OIDC_METADATA_USERINFO_ENCRYPTED_RESPONSE_ALG              "userinfo_encrypted_response_alg"
+#define OIDC_METADATA_USERINFO_ENCRYPTED_RESPONSE_ENC              "userinfo_encrypted_response_enc"
 
-#define OIDC_METADATA_CLIENT_JWKS_URI                       "client_jwks_uri"
-#define OIDC_METADATA_ID_TOKEN_SIGNED_RESPONSE_ALG          "id_token_signed_response_alg"
-#define OIDC_METADATA_ID_TOKEN_ENCRYPTED_RESPONSE_ALG       "id_token_encrypted_response_alg"
-#define OIDC_METADATA_ID_TOKEN_ENCRYPTED_RESPONSE_ENC       "id_token_encrypted_response_enc"
-#define OIDC_METADATA_USERINFO_SIGNED_RESPONSE_ALG          "userinfo_signed_response_alg"
-#define OIDC_METADATA_USERINFO_ENCRYPTED_RESPONSE_ALG       "userinfo_encrypted_response_alg"
-#define OIDC_METADATA_USERINFO_ENCRYPTED_RESPONSE_ENC       "userinfo_encrypted_response_enc"
+#define OIDC_METADATA_CLIENT_NAME                                  "client_name"
+#define OIDC_METADATA_REDIRECT_URIS                                "redirect_uris"
+#define OIDC_METADATA_RESPONSE_TYPES                               "response_types"
+#define OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHOD                   "token_endpoint_auth_method"
+#define OIDC_METADATA_CONTACTS                                     "contacts"
+#define OIDC_METADATA_INITIATE_LOGIN_URI                           "initiate_login_uri"
+#define OIDC_METADATA_FRONTCHANNEL_LOGOUT_URI                      "frontchannel_logout_uri"
+#define OIDC_METADATA_BACKCHANNEL_LOGOUT_URI                       "backchannel_logout_uri"
+#define OIDC_METADATA_POST_LOGOUT_REDIRECT_URIS                    "post_logout_redirect_uris"
 
-#define OIDC_METADATA_CLIENT_NAME                           "client_name"
-#define OIDC_METADATA_REDIRECT_URIS                         "redirect_uris"
-#define OIDC_METADATA_RESPONSE_TYPES                        "response_types"
-#define OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHOD            "token_endpoint_auth_method"
-#define OIDC_METADATA_CONTACTS                              "contacts"
-#define OIDC_METADATA_INITIATE_LOGIN_URI                    "initiate_login_uri"
-#define OIDC_METADATA_FRONTCHANNEL_LOGOUT_URI               "frontchannel_logout_uri"
-#define OIDC_METADATA_BACKCHANNEL_LOGOUT_URI                "backchannel_logout_uri"
-#define OIDC_METADATA_POST_LOGOUT_REDIRECT_URIS             "post_logout_redirect_uris"
-
-#define OIDC_METADATA_SSL_VALIDATE_SERVER                   "ssl_validate_server"
-#define OIDC_METADATA_SCOPE                                 "scope"
-#define OIDC_METADATA_JWKS_REFRESH_INTERVAL                 "jwks_refresh_interval"
-#define OIDC_METADATA_IDTOKEN_IAT_SLACK                     "idtoken_iat_slack"
-#define OIDC_METADATA_SESSION_MAX_DURATION                  "session_max_duration"
-#define OIDC_METADATA_AUTH_REQUEST_PARAMS                   "auth_request_params"
-#define OIDC_METADATA_TOKEN_ENDPOINT_PARAMS                 "token_endpoint_params"
-#define OIDC_METADATA_RESPONSE_MODE                         "response_mode"
-#define OIDC_METADATA_PKCE_METHOD                           "pkce_method"
-#define OIDC_METADATA_CLIENT_CONTACT                        "client_contact"
-#define OIDC_METADATA_TOKEN_ENDPOINT_AUTH                   "token_endpoint_auth"
-#define OIDC_METADATA_REGISTRATION_TOKEN                    "registration_token"
-#define OIDC_METADATA_REGISTRATION_ENDPOINT_JSON            "registration_endpoint_json"
-#define OIDC_METADATA_RESPONSE_TYPE                         "response_type"
-#define OIDC_METADATA_USERINFO_REFRESH_INTERVAL             "userinfo_refresh_interval"
-#define OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_CERT        "token_endpoint_tls_client_cert"
-#define OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_KEY         "token_endpoint_tls_client_key"
-#define OIDC_METADATA_REQUEST_OBJECT                        "request_object"
-#define OIDC_METADATA_USERINFO_TOKEN_METHOD                 "userinfo_token_method"
-#define OIDC_METADATA_TOKEN_BINDING_POLICY                  "token_binding_policy"
-#define OIDC_METADATA_AUTH_REQUEST_METHOD                   "auth_request_method"
-#define OIDC_METADATA_ISSUER_SPECIFIC_REDIRECT_URI          "issuer_specific_redirect_uri"
+#define OIDC_METADATA_SSL_VALIDATE_SERVER                          "ssl_validate_server"
+#define OIDC_METADATA_SCOPE                                        "scope"
+#define OIDC_METADATA_JWKS_REFRESH_INTERVAL                        "jwks_refresh_interval"
+#define OIDC_METADATA_IDTOKEN_IAT_SLACK                            "idtoken_iat_slack"
+#define OIDC_METADATA_SESSION_MAX_DURATION                         "session_max_duration"
+#define OIDC_METADATA_AUTH_REQUEST_PARAMS                          "auth_request_params"
+#define OIDC_METADATA_TOKEN_ENDPOINT_PARAMS                        "token_endpoint_params"
+#define OIDC_METADATA_RESPONSE_MODE                                "response_mode"
+#define OIDC_METADATA_PKCE_METHOD                                  "pkce_method"
+#define OIDC_METADATA_CLIENT_CONTACT                               "client_contact"
+#define OIDC_METADATA_TOKEN_ENDPOINT_AUTH                          "token_endpoint_auth"
+#define OIDC_METADATA_REGISTRATION_TOKEN                           "registration_token"
+#define OIDC_METADATA_REGISTRATION_ENDPOINT_JSON                   "registration_endpoint_json"
+#define OIDC_METADATA_RESPONSE_TYPE                                "response_type"
+#define OIDC_METADATA_USERINFO_REFRESH_INTERVAL                    "userinfo_refresh_interval"
+#define OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_CERT               "token_endpoint_tls_client_cert"
+#define OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_KEY                "token_endpoint_tls_client_key"
+#define OIDC_METADATA_REQUEST_OBJECT                               "request_object"
+#define OIDC_METADATA_USERINFO_TOKEN_METHOD                        "userinfo_token_method"
+#define OIDC_METADATA_TOKEN_BINDING_POLICY                         "token_binding_policy"
+#define OIDC_METADATA_AUTH_REQUEST_METHOD                          "auth_request_method"
+#define OIDC_METADATA_ISSUER_SPECIFIC_REDIRECT_URI                 "issuer_specific_redirect_uri"
 
 /*
  * get the metadata filename for a specified issuer (cq. urlencode it)
@@ -1018,6 +1019,13 @@ apr_byte_t oidc_metadata_provider_parse(request_rec *r, oidc_cfg *cfg,
 				provider->issuer, j_provider,
 				OIDC_METADATA_END_SESSION_ENDPOINT,
 				&provider->end_session_endpoint, NULL);
+	}
+
+	// TODO: default 0 should have a defined default that may be 1...
+	if (provider->backchannel_logout_supported == OIDC_CONFIG_POS_INT_UNSET) {
+		oidc_metadata_parse_boolean(r, j_provider,
+				OIDC_METADATA_BACKCHANNEL_LOGOUT_SUPPORTED,
+				&provider->backchannel_logout_supported, 0);
 	}
 
 	if (provider->token_endpoint_auth == NULL) {
