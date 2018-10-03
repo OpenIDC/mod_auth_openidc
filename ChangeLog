@@ -1,3 +1,10 @@
+10/02/1028
+- improve OIDC backchannel logout based on config/Discover
+  - add OIDCProviderBackChannelLogoutSupported config primitive
+  - parse/interpret `backchannel_logout_supported` in Discovery document
+- add `id_token_token_binding_cnf`: `tbh` to dynamic client registration metadata
+- bump to 2.3.9rc3
+
 10/01/2018
 - support backchannel logout according to: https://openid.net/specs/openid-connect-backchannel-1_0.html
 - bump to 2.3.9rc2

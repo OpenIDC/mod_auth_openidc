@@ -1787,7 +1787,8 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
 			c->cookie_domain ? c->cookie_domain : oidc_get_current_url_host(r));
 
 	char *sid = NULL;
-	if (provider->end_session_endpoint != NULL) {
+	oidc_debug(r, "provider->backchannel_logout_supported=%d", provider->backchannel_logout_supported);
+	if (provider->backchannel_logout_supported > 0) {
 		oidc_jose_get_string(r->pool, id_token_jwt->payload.value.json,
 				OIDC_CLAIM_SID, FALSE, &sid, NULL);
 		if (sid == NULL)

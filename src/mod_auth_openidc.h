@@ -262,6 +262,7 @@ typedef struct oidc_provider_t {
 	char *client_secret;
 	char *token_endpoint_tls_client_key;
 	char *token_endpoint_tls_client_cert;
+	int backchannel_logout_supported;
 
 	// the next ones function as global default settings too
 	int ssl_validate_server;
