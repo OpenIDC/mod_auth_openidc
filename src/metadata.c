@@ -107,7 +107,6 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_METADATA_BACKCHANNEL_LOGOUT_URI                       "backchannel_logout_uri"
 #define OIDC_METADATA_POST_LOGOUT_REDIRECT_URIS                    "post_logout_redirect_uris"
 #define OIDC_METADATA_IDTOKEN_BINDING_CNF                          "id_token_token_binding_cnf"
-
 #define OIDC_METADATA_SSL_VALIDATE_SERVER                          "ssl_validate_server"
 #define OIDC_METADATA_SCOPE                                        "scope"
 #define OIDC_METADATA_JWKS_REFRESH_INTERVAL                        "jwks_refresh_interval"
