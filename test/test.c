@@ -1192,33 +1192,43 @@ static char * test_proto_validate_jwt(request_rec *r) {
 
 static char * test_current_url(request_rec *r) {
 
-	char *url = oidc_get_current_url(r);
-	TST_ASSERT_STR("test_headers (1)", url, "https://www.example.com");
+	char *url = NULL;
+
+	r->uri = "/test";
+
+	url = oidc_get_current_url(r);
+	TST_ASSERT_STR("test_current_url (1)", url, "https://www.example.com/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Host", "www.outer.com");
 	url = oidc_get_current_url(r);
-	TST_ASSERT_STR("test_headers (2)", url, "https://www.outer.com");
+	TST_ASSERT_STR("test_current_url (2)", url, "https://www.outer.com/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Host", "www.outer.com:654");
 	url = oidc_get_current_url(r);
-	TST_ASSERT_STR("test_headers (3)", url, "https://www.outer.com:654");
+	TST_ASSERT_STR("test_current_url (3)", url, "https://www.outer.com:654/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Port", "321");
 	url = oidc_get_current_url(r);
-	TST_ASSERT_STR("test_headers (4)", url, "https://www.outer.com:321");
+	TST_ASSERT_STR("test_current_url (4)", url, "https://www.outer.com:321/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Proto", "http");
 	url = oidc_get_current_url(r);
-	TST_ASSERT_STR("test_headers (5)", url, "http://www.outer.com:321");
+	TST_ASSERT_STR("test_current_url (5)", url, "http://www.outer.com:321/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Proto", "https , http");
 	url = oidc_get_current_url(r);
-	TST_ASSERT_STR("test_headers (6)", url, "https://www.outer.com:321");
+	TST_ASSERT_STR("test_current_url (6)", url, "https://www.outer.com:321/test?foo=bar&param1=value1");
 
 	apr_table_unset(r->headers_in, "X-Forwarded-Host");
 	apr_table_unset(r->headers_in, "X-Forwarded-Port");
 	url = oidc_get_current_url(r);
-	TST_ASSERT_STR("test_headers (7)", url, "https://www.example.com");
+	TST_ASSERT_STR("test_current_url (7)", url, "https://www.example.com/test?foo=bar&param1=value1");
+
+	apr_table_set(r->headers_in, "X-Forwarded-Proto", "http ");
+	apr_table_set(r->headers_in, "Host", "remotehost:8380");
+	r->uri = "http://remotehost:8380/private/";
+	url = oidc_get_current_url(r);
+	TST_ASSERT_STR("test_current_url (8)", url, "http://remotehost:8380/private/?foo=bar&param1=value1");
 
 	return 0;
 }

@@ -1,5 +1,7 @@
 10/27/2018
 - ignore/trim spaces in X-Forwarded-* headers
+- deal with forwarding proxy setups; see #395 ; thanks @archzone
+- bump to 2.3.9rc4
 
 10/02/2018
 - improve OIDC backchannel logout based on config/Discover

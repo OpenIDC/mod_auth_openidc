@@ -493,8 +493,20 @@ static const char *oidc_get_current_url_base(request_rec *r) {
  * get the URL that is currently being accessed
  */
 char *oidc_get_current_url(request_rec *r) {
+	char *url = NULL, *path = NULL;
+	apr_uri_t uri;
 
-	char *url = apr_pstrcat(r->pool, oidc_get_current_url_base(r), r->uri,
+	path = r->uri;
+
+	if ((path) && (path[0] != '/')) {
+		memset(&uri, 0, sizeof(apr_uri_t));
+		if (apr_uri_parse(r->pool, r->uri, &uri) == APR_SUCCESS)
+			path = uri.path;
+		else
+			oidc_warn(r, "apr_uri_parse failed on non-relative URL: %s", r->uri);
+	}
+
+	url = apr_pstrcat(r->pool, oidc_get_current_url_base(r), path,
 			(r->args != NULL && *r->args != '\0' ? "?" : ""), r->args,
 			NULL);
 
