@@ -2315,7 +2315,7 @@ const char *oidc_util_hdr_in_user_agent_get(const request_rec *r) {
 
 const char *oidc_util_hdr_in_x_forwarded_for_get(const request_rec *r) {
 	return oidc_util_hdr_in_get_left_most_only(r, OIDC_HTTP_HDR_X_FORWARDED_FOR,
-			OIDC_STR_COMMA);
+			OIDC_STR_COMMA OIDC_STR_SPACE);
 }
 
 const char *oidc_util_hdr_in_content_type_get(const request_rec *r) {
@@ -2342,17 +2342,17 @@ const char *oidc_util_hdr_in_authorization_get(const request_rec *r) {
 
 const char *oidc_util_hdr_in_x_forwarded_proto_get(const request_rec *r) {
 	return oidc_util_hdr_in_get_left_most_only(r,
-			OIDC_HTTP_HDR_X_FORWARDED_PROTO, OIDC_STR_COMMA);
+			OIDC_HTTP_HDR_X_FORWARDED_PROTO, OIDC_STR_COMMA OIDC_STR_SPACE);
 }
 
 const char *oidc_util_hdr_in_x_forwarded_port_get(const request_rec *r) {
 	return oidc_util_hdr_in_get_left_most_only(r,
-			OIDC_HTTP_HDR_X_FORWARDED_PORT, OIDC_STR_COMMA);
+			OIDC_HTTP_HDR_X_FORWARDED_PORT, OIDC_STR_COMMA OIDC_STR_SPACE);
 }
 
 const char *oidc_util_hdr_in_x_forwarded_host_get(const request_rec *r) {
 	return oidc_util_hdr_in_get_left_most_only(r,
-			OIDC_HTTP_HDR_X_FORWARDED_HOST, OIDC_STR_COMMA);
+			OIDC_HTTP_HDR_X_FORWARDED_HOST, OIDC_STR_COMMA OIDC_STR_SPACE);
 }
 
 const char *oidc_util_hdr_in_host_get(const request_rec *r) {

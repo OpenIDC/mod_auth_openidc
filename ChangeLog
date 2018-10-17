@@ -1,4 +1,7 @@
-10/02/1028
+10/27/2018
+- ignore/trim spaces in X-Forwarded-* headers
+
+10/02/2018
 - improve OIDC backchannel logout based on config/Discover
   - add OIDCProviderBackChannelLogoutSupported config primitive
   - parse/interpret `backchannel_logout_supported` in Discovery document
