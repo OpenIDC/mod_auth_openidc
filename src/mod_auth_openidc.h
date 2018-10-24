@@ -219,6 +219,8 @@ APLOG_USE_MODULE(auth_openidc);
 
 /* https://tools.ietf.org/html/draft-ietf-tokbind-ttrp-01 */
 #define OIDC_TB_CFG_PROVIDED_ENV_VAR     "Sec-Provided-Token-Binding-ID"
+/* https://www.ietf.org/id/draft-ietf-oauth-mtls-12 */
+#define OIDC_TB_CFG_FINGERPRINT_ENV_VAR  "TB_SSL_CLIENT_CERT_FINGERPRINT"
 
 #define OIDC_TOKEN_BINDING_POLICY_DISABLED  0
 #define OIDC_TOKEN_BINDING_POLICY_OPTIONAL  1
@@ -521,6 +523,7 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_CLAIM_TARGET_LINK_URI "target_link_uri"
 #define OIDC_CLAIM_CNF             "cnf"
 #define OIDC_CLAIM_CNF_TBH         "tbh"
+#define OIDC_CLAIM_CNF_X5T_S256    "x5t#S256"
 #define OIDC_CLAIM_SID             "sid"
 #define OIDC_CLAIM_EVENTS          "events"
 

@@ -2386,25 +2386,34 @@ const char *oidc_util_get_provided_token_binding_id(const request_rec *r) {
 	return result;
 }
 
-/*
- * validate the "cnf" claim in a JWT payload
- */
-apr_byte_t oidc_util_json_validate_cnf(request_rec *r, json_t *jwt,
-		int token_binding_policy) {
-	char *tbh_str = NULL;
-	char *tbh = NULL;
-	int tbh_len = -1;
+const char *oidc_util_get_client_cert_fingerprint(request_rec *r) {
+	const char *fingerprint = NULL;
+
+	if (r->subprocess_env == NULL)
+		goto end;
+
+	fingerprint = apr_table_get(r->subprocess_env,
+			OIDC_TB_CFG_FINGERPRINT_ENV_VAR);
+	if (fingerprint == NULL) {
+		oidc_debug(r, "no %s environment variable found",
+				OIDC_TB_CFG_FINGERPRINT_ENV_VAR);
+		goto end;
+	}
+
+end:
+
+	return fingerprint;
+}
+
+apr_byte_t oidc_util_json_validate_cnf_tbh(request_rec *r,
+		int token_binding_policy, const char *tbh_str) {
 	const char *tbp_str = NULL;
 	char *tbp = NULL;
 	int tbp_len = -1;
 	unsigned char *tbp_hash = NULL;
 	unsigned int tbp_hash_len = -1;
-
-	oidc_debug(r, "enter: policy=%s",
-			oidc_token_binding_policy2str(r->pool, token_binding_policy));
-
-	if (token_binding_policy == OIDC_TOKEN_BINDING_POLICY_DISABLED)
-		return TRUE;
+	char *tbh = NULL;
+	int tbh_len = -1;
 
 	tbp_str = oidc_util_get_provided_token_binding_id(r);
 	if (tbp_str == NULL) {
@@ -2417,7 +2426,7 @@ apr_byte_t oidc_util_json_validate_cnf(request_rec *r, json_t *jwt,
 	if (tbp_len <= 0) {
 		oidc_warn(r,
 				"Provided Token Binding ID environment variable could not be decoded");
-		return FALSE;
+		goto out_err;
 	}
 
 	if (oidc_jose_hash_bytes(r->pool, OIDC_JOSE_ALG_SHA256,
@@ -2425,40 +2434,26 @@ apr_byte_t oidc_util_json_validate_cnf(request_rec *r, json_t *jwt,
 			NULL) == FALSE) {
 		oidc_warn(r,
 				"hashing Provided Token Binding ID environment variable failed");
-		return FALSE;
-	}
-
-	json_t *cnf = json_object_get(jwt, OIDC_CLAIM_CNF);
-	if (cnf == NULL) {
-		oidc_debug(r, "no \"cnf\" claim found in the token");
-		goto out_err;
-	}
-
-	oidc_jose_get_string(r->pool, cnf, OIDC_CLAIM_CNF_TBH, FALSE, &tbh_str,
-			NULL);
-	if (tbh_str == NULL) {
-		oidc_debug(r,
-				" \"cnf\" claim found in the token but no \"tbh\" claim inside found");
 		goto out_err;
 	}
 
 	tbh_len = oidc_base64url_decode(r->pool, &tbh, tbh_str);
 	if (tbh_len <= 0) {
 		oidc_warn(r, "cnf[\"tbh\"] provided but it could not be decoded");
-		return FALSE;
+		goto out_err;
 	}
 
 	if (tbp_hash_len != tbh_len) {
 		oidc_warn(r,
 				"hash length of provided token binding ID environment variable: %d does not match length of cnf[\"tbh\"]: %d",
 				tbp_hash_len, tbh_len);
-		return FALSE;
+		goto out_err;
 	}
 
 	if (memcmp(tbp_hash, tbh, tbh_len) != 0) {
 		oidc_warn(r,
 				"hash of provided token binding ID environment variable does not match cnf[\"tbh\"]");
-		return FALSE;
+		goto out_err;
 	}
 
 	oidc_debug(r,
@@ -2475,5 +2470,84 @@ out_err:
 
 	// token_binding_policy == OIDC_TOKEN_BINDING_POLICY_REQURIED
 	return (tbp_str == NULL);
+}
+
+apr_byte_t oidc_util_json_validate_cnf_x5t_s256(request_rec *r,
+		int token_binding_policy, const char *x5t_256_str) {
+	const char *fingerprint = NULL;
+
+	fingerprint = oidc_util_get_client_cert_fingerprint(r);
+	if (fingerprint == NULL) {
+		oidc_debug(r, "no certificate (fingerprint) provided");
+		goto out_err;
+	}
+
+	if (apr_strnatcmp(fingerprint, x5t_256_str) != 0) {
+		oidc_warn(r,
+				"fingerprint of provided cert (%s) does not match cnf[\"x5t#S256\"] (%s)",
+				fingerprint, x5t_256_str);
+		goto out_err;
+	}
+
+	oidc_debug(r, "fingerprint of provided cert (%s) matches cnf[\"x5t#S256\"]",
+			fingerprint);
+
+	return TRUE;
+
+	out_err:
+
+	if (token_binding_policy == OIDC_TOKEN_BINDING_POLICY_OPTIONAL)
+		return TRUE;
+	if (token_binding_policy == OIDC_TOKEN_BINDING_POLICY_ENFORCED)
+		return FALSE;
+
+	// token_binding_policy == OIDC_TOKEN_BINDING_POLICY_REQURIED
+	return (fingerprint == NULL);
+}
+
+/*
+ * validate the "cnf" claim in a JWT payload
+ */
+apr_byte_t oidc_util_json_validate_cnf(request_rec *r, json_t *jwt,
+		int token_binding_policy) {
+	char *tbh_str = NULL;
+
+	oidc_debug(r, "enter: policy=%s",
+			oidc_token_binding_policy2str(r->pool, token_binding_policy));
+
+	if (token_binding_policy == OIDC_TOKEN_BINDING_POLICY_DISABLED)
+		return TRUE;
+
+	json_t *cnf = json_object_get(jwt, OIDC_CLAIM_CNF);
+	if (cnf == NULL) {
+		oidc_debug(r, "no \"%s\" claim found in the token", OIDC_CLAIM_CNF);
+		goto out_err;
+	}
+
+	oidc_jose_get_string(r->pool, cnf, OIDC_CLAIM_CNF_TBH, FALSE, &tbh_str,
+			NULL);
+	if (tbh_str != NULL)
+		return oidc_util_json_validate_cnf_tbh(r, token_binding_policy, tbh_str);
+
+	oidc_jose_get_string(r->pool, cnf, OIDC_CLAIM_CNF_X5T_S256, FALSE, &tbh_str,
+			NULL);
+	if (tbh_str != NULL)
+		return oidc_util_json_validate_cnf_x5t_s256(r, token_binding_policy,
+				tbh_str);
+
+	oidc_debug(r,
+			" \"%s\" claim found in the token but no \"%s\" or \"%s\" key found inside",
+			OIDC_CLAIM_CNF, OIDC_CLAIM_CNF_TBH, OIDC_CLAIM_CNF_X5T_S256);
+
+out_err:
+
+	if (token_binding_policy == OIDC_TOKEN_BINDING_POLICY_OPTIONAL)
+		return TRUE;
+	if (token_binding_policy == OIDC_TOKEN_BINDING_POLICY_ENFORCED)
+		return FALSE;
+
+	// token_binding_policy == OIDC_TOKEN_BINDING_POLICY_REQUIRED
+	// TODO: we don't know which token binding the client supports, do we ?
+	return FALSE;
 }
 

@@ -44,7 +44,7 @@ of claims provided in the `id_token`/ `userinfo` claims.
 - [OpenID Connect Back-Channel Logout 1.0](https://openid.net/specs/openid-connect-backchannel-1_0.html) *(implementers draft)*
 - [Encoding claims in the OAuth 2 state parameter using a JWT](https://tools.ietf.org/html/draft-bradley-oauth-jwt-encoded-state-08) *(draft spec)*
 - [OpenID Connect Token Bound Authentication](https://openid.net/specs/openid-connect-token-bound-authentication-1_0.html) *(draft spec; when combined with [mod_token_binding](https://github.com/zmartzone/mod_token_binding))*
-- [OAuth 2.0 Token Binding for Authorization Codes for Web Server Clients](https://tools.ietf.org/html/draft-ietf-oauth-token-binding-07#section-5.2)
+- [OAuth 2.0 Token Binding for Authorization Codes for Web Server Clients](https://tools.ietf.org/html/draft-ietf-oauth-token-binding-07#section-5.2) *(draft spec)*
 
 Alternatively the module can operate as an OAuth 2.0 Resource Server to an OAuth 2.0 Authorization Server,
 validating bearer Access Tokens by introspecting them or verifying them locally if they are JWTs.
@@ -52,7 +52,8 @@ In the OAuth 2.0 Resource Server mode *mod_auth_openidc* supports the following 
 - [RFC 6750 - The OAuth 2.0 Authorization Framework: Bearer Token Usage](https://tools.ietf.org/html/rfc6750)
 - [RFC 7662 - OAuth 2.0 Token Introspection](https://tools.ietf.org/html/rfc7662) (or similar)
 - [RFC 8414 - OAuth 2.0 Authorization Server Metadata](https://tools.ietf.org/html/rfc8414)
-- [OAuth 2.0 Token Binding for Access Tokens](https://tools.ietf.org/html/draft-ietf-oauth-token-binding-07#section-3)
+- [OAuth 2.0 Token Binding for Access Tokens](https://tools.ietf.org/html/draft-ietf-oauth-token-binding-07#section-3) *(draft spec)*
+- [OAuth 2.0 Mutual TLS Client Certificate Bound Access Tokens](https://tools.ietf.org/html/draft-ietf-oauth-mtls-12#section-3) *(draft spec)*
 
 The `REMOTE_USER` variable setting, passing claims in HTTP headers and authorization based on `Require` primitives
 works in the same way as described for OpenID Connect above. See the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki/OAuth-2.0-Resource-Server) for information on how to configure it.

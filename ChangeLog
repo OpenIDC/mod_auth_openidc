@@ -1,4 +1,10 @@
-10/27/2018
+10/24/2018
+- add support for draft https://www.ietf.org/id/draft-ietf-oauth-mtls-12.txt:
+  OAuth 2.0 Mutual TLS Client Certificate Bound Access Tokens
+  when running as an OAuth 2.0 RS, validating cnf["x5t#S256"] claims.
+- bump to 2.3.9rc5
+
+10/17/2018
 - ignore/trim spaces in X-Forwarded-* headers
 - deal with forwarding proxy setups; see #395 ; thanks @archzone
 - bump to 2.3.9rc4
