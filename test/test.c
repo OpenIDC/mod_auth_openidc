@@ -1340,6 +1340,7 @@ static char * test_authz_worker(request_rec *r) {
 			"\"someRole2\""
 			"]"
 			"},"
+
 			"\"resource_access\": {"
 			"\"someClient\": {"
 			"\"roles\": ["
@@ -1347,7 +1348,9 @@ static char * test_authz_worker(request_rec *r) {
 			"\"someRole4\""
 			"]"
 			"}"
-			"}"
+			"},"
+
+			"\"https://test.com/pay\": \"alot\""
 
 			"}";
 
@@ -1391,6 +1394,10 @@ static char * test_authz_worker(request_rec *r) {
 	require_args = "Require claim resource_access.someClient.roles:someRole4";
 	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
 	TST_ASSERT("auth status (9: keycloak sample)", rc == AUTHZ_GRANTED);
+
+	require_args = "Require claim https://test.com/pay:alot";
+	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (10: namespaced key)", rc == AUTHZ_GRANTED);
 
 	json_decref(json);
 

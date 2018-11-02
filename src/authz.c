@@ -68,6 +68,8 @@ static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c,
 
 	int i = 0;
 
+	oidc_debug(r, "matching: spec_c=%s, key=%s", spec_c, key);
+
 	/* see if it is a string and it (case-insensitively) matches the Require'd value */
 	if (json_is_string(val)) {
 
