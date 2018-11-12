@@ -1963,7 +1963,7 @@ static int oidc_check_config_oauth(server_rec *s, oidc_cfg *c) {
 					"the URL scheme (%s) of the configured " OIDCOAuthServerMetadataURL " SHOULD be \"https\" for security reasons!",
 					r_uri.scheme);
 		}
-		return TRUE;
+		return OK;
 	}
 
 	if (c->oauth.introspection_endpoint_url == NULL) {

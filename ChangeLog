@@ -1,3 +1,7 @@
+11/12/2018
+- fix OAuth 2.0 RS config check when OIDCOAuthServerMetadataURL is set; thanks @psteniusubi
+- bump to 2.3.9rc6
+
 10/24/2018
 - add support for draft https://www.ietf.org/id/draft-ietf-oauth-mtls-12.txt:
   OAuth 2.0 Mutual TLS Client Certificate Bound Access Tokens
