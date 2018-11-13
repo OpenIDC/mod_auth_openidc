@@ -1,3 +1,7 @@
+11/13/2018
+- fix parsing of cookie name in OIDCOAuthAcceptTokenAs when the cookie option is not listed last 
+- bump to 2.3.9rc7
+
 11/12/2018
 - fix OAuth 2.0 RS config check when OIDCOAuthServerMetadataURL is set; thanks @psteniusubi
 - bump to 2.3.9rc6
