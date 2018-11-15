@@ -1,3 +1,6 @@
+11/15/2018
+- release 2.3.9
+
 11/13/2018
 - fix parsing of cookie name in OIDCOAuthAcceptTokenAs when the cookie option is not listed last 
 - bump to 2.3.9rc7
