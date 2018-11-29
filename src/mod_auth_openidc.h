@@ -705,6 +705,7 @@ int oidc_cfg_session_cache_fallback_to_cookie(request_rec *r);
 const char *oidc_parse_pkce_type(apr_pool_t *pool, const char *arg, oidc_proto_pkce_t **type);
 const char *oidc_cfg_claim_prefix(request_rec *r);
 int oidc_cfg_max_number_of_state_cookies(oidc_cfg *cfg);
+int oidc_cfg_dir_refresh_access_token_before_expiry(request_rec *r);
 
 // oidc_util.c
 int oidc_strnenvcmp(const char *a, const char *b, int len);

@@ -166,6 +166,8 @@
 #define OIDC_DEFAULT_AUTH_REQUEST_METHOD OIDC_AUTH_REQUEST_METHOD_GET
 /* define whether the issuer will be added to the redirect uri by default to mitigate the IDP mixup attack */
 #define OIDC_DEFAULT_PROVIDER_ISSUER_SPECIFIC_REDIRECT_URI 0
+/* define the default number of seconds that the access token needs to be valid for; -1 = no refresh */
+#define OIDC_DEFAULT_REFRESH_ACCESS_TOKEN_BEFORE_EXPIRY -1
 
 #define OIDCProviderMetadataURL                "OIDCProviderMetadataURL"
 #define OIDCProviderIssuer                     "OIDCProviderIssuer"
@@ -263,6 +265,7 @@
 #define OIDCBlackListedClaims                  "OIDCBlackListedClaims"
 #define OIDCOAuthServerMetadataURL             "OIDCOAuthServerMetadataURL"
 #define OIDCOAuthAccessTokenBindingPolicy      "OIDCOAuthAccessTokenBindingPolicy"
+#define OIDCRefreshAccessTokenBeforeExpiry     "OIDCRefreshAccessTokenBeforeExpiry"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -287,6 +290,7 @@ typedef struct oidc_dir_cfg {
 	int pass_refresh_token;
 	char *path_auth_request_params;
 	char *path_scope;
+	int refresh_access_token_before_expiry;
 } oidc_dir_cfg;
 
 #define OIDC_CONFIG_DIR_RV(cmd, rv) rv != NULL ? apr_psprintf(cmd->pool, "Invalid value for directive '%s': %s", cmd->directive->directive, rv) : NULL
@@ -1025,6 +1029,25 @@ int oidc_cfg_max_number_of_state_cookies(oidc_cfg *cfg) {
 }
 
 /*
+ * set the time in seconds that the access token needs to be valid for
+ */
+static const char * oidc_set_refresh_access_token_before_expiry(cmd_parms *cmd,
+		void *m, const char *arg) {
+	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg *) m;
+	const char *rv = oidc_parse_refresh_access_token_before_expiry(cmd->pool,
+			arg, &dir_cfg->refresh_access_token_before_expiry);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
+int oidc_cfg_dir_refresh_access_token_before_expiry(request_rec *r) {
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+	if (dir_cfg->refresh_access_token_before_expiry == OIDC_CONFIG_POS_INT_UNSET)
+		return OIDC_DEFAULT_REFRESH_ACCESS_TOKEN_BEFORE_EXPIRY;
+	return dir_cfg->refresh_access_token_before_expiry;
+}
+
+/*
  * create a new server config record with defaults
  */
 void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
@@ -1662,6 +1685,7 @@ void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->pass_refresh_token = OIDC_CONFIG_POS_INT_UNSET;
 	c->path_auth_request_params = NULL;
 	c->path_scope = NULL;
+	c->refresh_access_token_before_expiry = OIDC_CONFIG_POS_INT_UNSET;
 	return (c);
 }
 
@@ -1863,6 +1887,11 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					base->path_auth_request_params;
 	c->path_scope =
 			add->path_scope != NULL ? add->path_scope : base->path_scope;
+
+	c->refresh_access_token_before_expiry =
+			add->refresh_access_token_before_expiry != OIDC_CONFIG_POS_INT_UNSET ?
+					add->refresh_access_token_before_expiry :
+					base->refresh_access_token_before_expiry;
 
 	return (c);
 }
@@ -2880,6 +2909,12 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, oauth.access_token_binding_policy),
 				RSRC_CONF,
 				"The token binding policy used for access tokens; must be one of [disabled|optional|required|enforced]"),
+
+		AP_INIT_TAKE1(OIDCRefreshAccessTokenBeforeExpiry,
+				oidc_set_refresh_access_token_before_expiry,
+				(void *)APR_OFFSETOF(oidc_dir_cfg, refresh_access_token_before_expiry),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Ensure the access token is valid for at least <x> seconds by refreshing it if required."),
 
 		{ NULL }
 };

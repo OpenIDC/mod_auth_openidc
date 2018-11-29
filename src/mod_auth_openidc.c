@@ -1410,6 +1410,57 @@ static apr_byte_t oidc_session_pass_tokens_and_save(request_rec *r,
 	return TRUE;
 }
 
+static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
+		oidc_cfg *cfg, oidc_session_t *session, int ttl_minimum) {
+
+	const char *s_access_token_expires = NULL;
+	apr_time_t t_expires = -1;
+	oidc_provider_t *provider = NULL;
+
+	oidc_debug(r, "ttl_minimum=%d", ttl_minimum);
+
+	if (ttl_minimum < 0)
+		return FALSE;
+
+	s_access_token_expires = oidc_session_get_access_token_expires(r, session);
+	if (s_access_token_expires == NULL) {
+		oidc_debug(r,
+				"no access token expires_in stored in the session (i.e. returned from in the authorization response), so cannot refresh the access token based on TTL requirement");
+		return FALSE;
+	}
+
+	if (oidc_session_get_refresh_token(r, session) == NULL) {
+		oidc_debug(r,
+				"no refresh token stored in the session, so cannot refresh the access token based on TTL requirement");
+		return FALSE;
+	}
+
+	if (sscanf(s_access_token_expires, "%" APR_TIME_T_FMT, &t_expires) != 1) {
+		oidc_error(r, "could not parse s_access_token_expires %s",
+				s_access_token_expires);
+		return FALSE;
+	}
+
+	t_expires = apr_time_from_sec(t_expires - ttl_minimum);
+
+	oidc_debug(r, "refresh needed in: %" APR_TIME_T_FMT " seconds",
+			apr_time_sec(t_expires - apr_time_now()));
+
+	if (t_expires > apr_time_now())
+		return FALSE;
+
+	if (oidc_get_provider_from_session(r, cfg, session, &provider) == FALSE)
+		return FALSE;
+
+	if (oidc_refresh_access_token(r, cfg, session, provider,
+			NULL) == FALSE) {
+		oidc_warn(r, "access_token could not be refreshed");
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 /*
  * handle the case where we have identified an existing authentication session for a user
  */
@@ -1417,6 +1468,9 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 		oidc_session_t *session) {
 
 	oidc_debug(r, "enter");
+
+	/* track if the session needs to be updated/saved into the cache */
+	apr_byte_t needs_save = FALSE;
 
 	/* set the user in the main request for further (incl. sub-request) processing */
 	r->user = apr_pstrdup(r->pool, session->remote_user);
@@ -1436,9 +1490,14 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	if (rc != OK)
 		return rc;
 
+	/* if needed, refresh the access token */
+	if (oidc_refresh_access_token_before_expiry(r, cfg, session,
+			oidc_cfg_dir_refresh_access_token_before_expiry(r)) == TRUE)
+		needs_save = TRUE;
+
 	/* if needed, refresh claims from the user info endpoint */
-	apr_byte_t needs_save = oidc_refresh_claims_from_userinfo_endpoint(r, cfg,
-			session);
+	if (oidc_refresh_claims_from_userinfo_endpoint(r, cfg, session) == TRUE)
+		needs_save = TRUE;
 
 	/*
 	 * we're going to pass the information that we have to the application,
@@ -1787,7 +1846,8 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
 			c->cookie_domain ? c->cookie_domain : oidc_get_current_url_host(r));
 
 	char *sid = NULL;
-	oidc_debug(r, "provider->backchannel_logout_supported=%d", provider->backchannel_logout_supported);
+	oidc_debug(r, "provider->backchannel_logout_supported=%d",
+			provider->backchannel_logout_supported);
 	if (provider->backchannel_logout_supported > 0) {
 		oidc_jose_get_string(r->pool, id_token_jwt->payload.value.json,
 				OIDC_CLAIM_SID, FALSE, &sid, NULL);
