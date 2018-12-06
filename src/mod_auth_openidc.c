@@ -687,15 +687,53 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	return TRUE;
 }
 
+typedef struct oidc_state_cookies_t {
+	char *name;
+	apr_time_t timestamp;
+	struct oidc_state_cookies_t *next;
+} oidc_state_cookies_t;
+
+static int oidc_delete_oldest_state_cookies(request_rec *r,
+		int number_of_valid_state_cookies, int max_number_of_state_cookies,
+		oidc_state_cookies_t *first) {
+	oidc_state_cookies_t *cur = NULL, *prev = NULL, *prev_oldest = NULL,
+			*oldest = NULL;
+	while (number_of_valid_state_cookies >= max_number_of_state_cookies) {
+		oldest = first;
+		prev_oldest = NULL;
+		prev = first;
+		cur = first->next;
+		while (cur) {
+			if ((cur->timestamp < oldest->timestamp)) {
+				oldest = cur;
+				prev_oldest = prev;
+			}
+			prev = cur;
+			cur = cur->next;
+		}
+		oidc_warn(r,
+				"deleting oldest state cookie: %s (time until expiry " APR_TIME_T_FMT " seconds)",
+				oldest->name, apr_time_sec(oldest->timestamp - apr_time_now()));
+		oidc_util_set_cookie(r, oldest->name, "", 0, NULL);
+		if (prev_oldest)
+			prev_oldest->next = oldest->next;
+		else
+			first = first->next;
+		number_of_valid_state_cookies--;
+	}
+	return number_of_valid_state_cookies;
+}
+
 /*
  * clean state cookies that have expired i.e. for outstanding requests that will never return
  * successfully and return the number of remaining valid cookies/outstanding-requests while
  * doing so
  */
 static int oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c,
-		const char *currentCookieName) {
+		const char *currentCookieName, int delete_oldest) {
 	int number_of_valid_state_cookies = 0;
-	char *cookie, *tokenizerCtx;
+	oidc_state_cookies_t *first = NULL, *last = NULL;
+	char *cookie, *tokenizerCtx = NULL;
 	char *cookies = apr_pstrdup(r->pool, oidc_util_hdr_in_cookie_get(r));
 	if (cookies != NULL) {
 		cookie = apr_strtok(cookies, OIDC_STR_SEMI_COLON, &tokenizerCtx);
@@ -723,6 +761,18 @@ static int oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c,
 								oidc_util_set_cookie(r, cookieName, "", 0,
 										NULL);
 							} else {
+								if (first == NULL) {
+									first = apr_pcalloc(r->pool,
+											sizeof(oidc_state_cookies_t));
+									last = first;
+								} else {
+									last->next = apr_pcalloc(r->pool,
+											sizeof(oidc_state_cookies_t));
+									last = last->next;
+								}
+								last->name = cookieName;
+								last->timestamp = ts;
+								last->next = NULL;
 								number_of_valid_state_cookies++;
 							}
 							oidc_proto_state_destroy(proto_state);
@@ -733,6 +783,12 @@ static int oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c,
 			cookie = apr_strtok(NULL, OIDC_STR_SEMI_COLON, &tokenizerCtx);
 		}
 	}
+
+	if (delete_oldest > 0)
+		number_of_valid_state_cookies = oidc_delete_oldest_state_cookies(r,
+				number_of_valid_state_cookies, c->max_number_of_state_cookies,
+				first);
+
 	return number_of_valid_state_cookies;
 }
 
@@ -747,7 +803,7 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 	const char *cookieName = oidc_get_state_cookie_name(r, state);
 
 	/* clean expired state cookies to avoid pollution */
-	oidc_clean_expired_state_cookies(r, c, cookieName);
+	oidc_clean_expired_state_cookies(r, c, cookieName, FALSE);
 
 	/* get the state cookie value first */
 	char *cookieValue = oidc_util_get_cookie(r, cookieName);
@@ -821,10 +877,12 @@ static int oidc_authorization_request_set_cookie(request_rec *r, oidc_cfg *c,
 	 * clean expired state cookies to avoid pollution and optionally
 	 * try to avoid the number of state cookies exceeding a max
 	 */
-	int number_of_cookies = oidc_clean_expired_state_cookies(r, c, NULL);
+	int number_of_cookies = oidc_clean_expired_state_cookies(r, c, NULL,
+			oidc_cfg_delete_oldest_state_cookies(c));
 	int max_number_of_cookies = oidc_cfg_max_number_of_state_cookies(c);
 	if ((max_number_of_cookies > 0)
 			&& (number_of_cookies >= max_number_of_cookies)) {
+
 		oidc_warn(r,
 				"the number of existing, valid state cookies (%d) has exceeded the limit (%d), no additional authorization request + state cookie can be generated, aborting the request",
 				number_of_cookies, max_number_of_cookies);

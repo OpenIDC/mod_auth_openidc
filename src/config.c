@@ -106,6 +106,8 @@
 #define OIDC_DEFAULT_STATE_TIMEOUT 300
 /* maximum number of parallel state cookies; 0 means unlimited, until the browser or server gives up */
 #define OIDC_DEFAULT_MAX_NUMBER_OF_STATE_COOKIES 7
+/* default setting for deleting the oldest state cookies */
+#define OIDC_DEFAULT_DELETE_OLDEST_STATE_COOKIES 0
 /* default session inactivity timeout */
 #define OIDC_DEFAULT_SESSION_INACTIVITY_TIMEOUT 300
 /* default session max duration */
@@ -1011,11 +1013,12 @@ static const char *oidc_set_client_auth_bearer_token(cmd_parms *cmd,
  * set the maximun number of parallel state cookies
  */
 static const char *oidc_set_max_number_of_state_cookies(cmd_parms *cmd,
-		void *struct_ptr, const char *arg) {
+		void *struct_ptr, const char *arg1, const char *arg2) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
-	const char *rv = oidc_parse_max_number_of_state_cookies(cmd->pool, arg,
-			&cfg->max_number_of_state_cookies);
+	const char *rv = oidc_parse_max_number_of_state_cookies(cmd->pool, arg1,
+			arg2, &cfg->max_number_of_state_cookies,
+			&cfg->delete_oldest_state_cookies);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -1026,6 +1029,15 @@ int oidc_cfg_max_number_of_state_cookies(oidc_cfg *cfg) {
 	if (cfg->max_number_of_state_cookies == OIDC_CONFIG_POS_INT_UNSET)
 		return OIDC_DEFAULT_MAX_NUMBER_OF_STATE_COOKIES;
 	return cfg->max_number_of_state_cookies;
+}
+
+/*
+ * return the number of oldest state cookies that need to be deleted
+ */
+int oidc_cfg_delete_oldest_state_cookies(oidc_cfg *cfg) {
+	if (cfg->delete_oldest_state_cookies == OIDC_CONFIG_POS_INT_UNSET)
+		return OIDC_DEFAULT_DELETE_OLDEST_STATE_COOKIES;
+	return cfg->delete_oldest_state_cookies;
 }
 
 /*
@@ -1160,6 +1172,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->http_timeout_short = OIDC_DEFAULT_HTTP_TIMEOUT_SHORT;
 	c->state_timeout = OIDC_DEFAULT_STATE_TIMEOUT;
 	c->max_number_of_state_cookies = OIDC_CONFIG_POS_INT_UNSET;
+	c->delete_oldest_state_cookies = OIDC_CONFIG_POS_INT_UNSET;
 	c->session_inactivity_timeout = OIDC_DEFAULT_SESSION_INACTIVITY_TIMEOUT;
 
 	c->cookie_domain = NULL;
@@ -1489,6 +1502,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->max_number_of_state_cookies != OIDC_CONFIG_POS_INT_UNSET ?
 					add->max_number_of_state_cookies :
 					base->max_number_of_state_cookies;
+	c->delete_oldest_state_cookies =
+			add->delete_oldest_state_cookies != OIDC_CONFIG_POS_INT_UNSET ?
+					add->delete_oldest_state_cookies :
+					base->delete_oldest_state_cookies;
 	c->session_inactivity_timeout =
 			add->session_inactivity_timeout
 			!= OIDC_DEFAULT_SESSION_INACTIVITY_TIMEOUT ?
@@ -2711,11 +2728,11 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, state_timeout),
 				RSRC_CONF,
 				"Time to live in seconds for state parameter (cq. interval in which the authorization request and the corresponding response need to be completed)."),
-		AP_INIT_TAKE1(OIDCStateMaxNumberOfCookies,
+		AP_INIT_TAKE12(OIDCStateMaxNumberOfCookies,
 				oidc_set_max_number_of_state_cookies,
 				(void*)APR_OFFSETOF(oidc_cfg, max_number_of_state_cookies),
 				RSRC_CONF,
-				"Maximun number of parallel state cookies i.e. outstanding authorization requests."),
+				"Maximun number of parallel state cookies i.e. outstanding authorization requests and whether to delete the oldest cookie(s)."),
 		AP_INIT_TAKE1(OIDCSessionInactivityTimeout,
 				oidc_set_session_inactivity_timeout,
 				(void*)APR_OFFSETOF(oidc_cfg, session_inactivity_timeout),

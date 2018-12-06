@@ -1248,9 +1248,14 @@ const char *oidc_parse_auth_request_method(apr_pool_t *pool, const char *arg,
  * parse the maximum number of parallel state cookies
  */
 const char *oidc_parse_max_number_of_state_cookies(apr_pool_t *pool,
-		const char *arg, int *int_value) {
-	return oidc_parse_int_valid(pool, arg, int_value,
+		const char *arg1, const char *arg2, int *int_value, int *bool_value) {
+	const char *rv = NULL;
+
+	rv = oidc_parse_int_valid(pool, arg1, int_value,
 			oidc_valid_max_number_of_state_cookies);
+	if ((rv == NULL) && (arg2 != NULL))
+		rv = oidc_parse_boolean(pool, arg2, bool_value);
+	return rv;
 }
 
 #define OIDC_REFRESH_ACCESS_TOKEN_BEFORE_EXPIRY_MIN 0
