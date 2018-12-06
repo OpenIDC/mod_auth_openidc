@@ -1,3 +1,8 @@
+12/06/2018
+- retain the unparsed URL path in current/original URL determination
+  and thereby preserve/support URL-encoded characters in paths
+- bump to 2.3.10rc1
+
 11/29/2018
 - add support for refreshing an access token associated with an OIDC session using OIDCRefreshAccessTokenBeforeExpiry
 - bump to 2.3.10rc0

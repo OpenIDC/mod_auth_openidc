@@ -1195,6 +1195,7 @@ static char * test_current_url(request_rec *r) {
 	char *url = NULL;
 
 	r->uri = "/test";
+	r->unparsed_uri = r->uri;
 
 	url = oidc_get_current_url(r);
 	TST_ASSERT_STR("test_current_url (1)", url, "https://www.example.com/test?foo=bar&param1=value1");

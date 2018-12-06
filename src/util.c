@@ -498,12 +498,16 @@ char *oidc_get_current_url(request_rec *r) {
 
 	path = r->uri;
 
+	/* check if we're dealing with a forward proxying secenario i.e. a non-relative URL */
 	if ((path) && (path[0] != '/')) {
 		memset(&uri, 0, sizeof(apr_uri_t));
 		if (apr_uri_parse(r->pool, r->uri, &uri) == APR_SUCCESS)
 			path = uri.path;
 		else
 			oidc_warn(r, "apr_uri_parse failed on non-relative URL: %s", r->uri);
+	} else {
+		/* make sure we retain URL-encoded characters original URL that we send the user back to */
+		path = r->unparsed_uri;
 	}
 
 	url = apr_pstrcat(r->pool, oidc_get_current_url_base(r), path,
