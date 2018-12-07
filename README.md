@@ -64,6 +64,10 @@ in this directory. This file can also serve as an include file for `httpd.conf`.
 Support
 -------
 
+#### Support mod_auth_openidc yourself
+You now have the opportunity to support mod_auth_openidc development/continuity and to express your gratitude as a happy user!
+See: https://www.patreon.com/mod_auth_openidc
+
 #### Community Support
 For generic questions, see the Wiki pages with Frequently Asked Questions at:  
   [https://github.com/zmartzone/mod_auth_openidc/wiki](https://github.com/zmartzone/mod_auth_openidc/wiki)  
