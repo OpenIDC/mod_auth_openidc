@@ -437,17 +437,18 @@ static int oidc_cache_crypto_encrypt(request_rec *r, const char *plaintext,
 	if (encoded_len > 0) {
 		p = encoded;
 
+		/* base64url encode the tag */
+		e_tag_len = oidc_base64url_encode(r, &e_tag, (const char *) tag,
+				OIDC_CACHE_TAG_LEN, 1);
+
 		/* now allocated space for the concatenated base64url encoded ciphertext and tag */
-		encoded = apr_pcalloc(r->pool,
-				encoded_len + 1 + OIDC_CACHE_TAG_LEN + 1);
+		encoded = apr_pcalloc(r->pool, encoded_len + 1 + e_tag_len + 1);
 		memcpy(encoded, p, encoded_len);
 		p = encoded + encoded_len;
 		*p = OIDC_CHAR_DOT;
 		p++;
 
-		/* base64url encode the tag and append it in the buffer */
-		e_tag_len = oidc_base64url_encode(r, &e_tag, (const char *) tag,
-				OIDC_CACHE_TAG_LEN, 1);
+		/* append the tag in the buffer */
 		memcpy(p, e_tag, e_tag_len);
 		encoded_len += e_tag_len + 1;
 
