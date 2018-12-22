@@ -64,11 +64,11 @@ in this directory. This file can also serve as an include file for `httpd.conf`.
 Support
 -------
 
-#### Sponsor mod_auth_openidc
-Please consider sponsoring mod_auth_openidc development/maintenance/continuity and/or to express your
-gratitude as a happy user or company.  
+#### Give back to mod_auth_openidc
+Please consider giving back by sponsoring mod_auth_openidc development/maintenance/continuity and to express
+your gratitude as a happy user or company.  
 See: https://www.patreon.com/mod_auth_openidc  
-Sponsored by: (GLUU)[https://www.gluu.org/]
+Sponsored by: [Auth0](https://auth0.com) and [GLUU](https://www.gluu.org)
 
 #### Community Support
 For generic questions, see the Wiki pages with Frequently Asked Questions at:  
