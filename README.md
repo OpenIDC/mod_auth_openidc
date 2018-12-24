@@ -128,7 +128,7 @@ See also the [Wiki page on Keycloak](https://github.com/zmartzone/mod_auth_openi
 ```apache
 OIDCProviderMetadataURL https://keycloak.example.net/auth/realms/master/.well-known/openid-configuration
 # OIDCRedirectURI is a vanity URL that must point to a path protected by this module but must NOT point to any content
-OIDCRedirectURI https://www.example.net/oauth2callback
+OIDCRedirectURI https://www.example.net/example/oauth2callback
 OIDCCryptoPassphrase random1234
 OIDCClientID <your-client-id-registered-in-keycloak>
 OIDCClientSecret <your-client-secret-registered-in-keycloak>
