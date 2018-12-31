@@ -712,7 +712,7 @@ static int oidc_delete_oldest_state_cookies(request_rec *r,
 			cur = cur->next;
 		}
 		oidc_warn(r,
-				"deleting oldest state cookie: %s (time until expiry " APR_TIME_T_FMT " seconds)",
+				"deleting oldest state cookie: %s (time until expiry %" APR_TIME_T_FMT " seconds)",
 				oldest->name, apr_time_sec(oldest->timestamp - apr_time_now()));
 		oidc_util_set_cookie(r, oldest->name, "", 0, NULL);
 		if (prev_oldest)
