@@ -1,3 +1,7 @@
+01/16/2019
+- fix bug in current URL detection where query parameters would be duplicated; see #420; thanks @jreynaert
+- release 2.3.10.1
+
 12/31/2018
 - fix warning printout in oidc_delete_oldest_state_cookies
 - release 2.3.10

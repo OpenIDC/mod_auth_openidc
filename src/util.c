@@ -502,7 +502,7 @@ char *oidc_get_current_url(request_rec *r) {
 	if ((path) && (path[0] != '/')) {
 		memset(&uri, 0, sizeof(apr_uri_t));
 		if (apr_uri_parse(r->pool, r->uri, &uri) == APR_SUCCESS)
-			path = uri.path;
+			path = apr_pstrcat(r->pool, uri.path, (r->args != NULL && *r->args != '\0' ? "?" : ""), r->args, NULL);
 		else
 			oidc_warn(r, "apr_uri_parse failed on non-relative URL: %s", r->uri);
 	} else {
@@ -510,9 +510,7 @@ char *oidc_get_current_url(request_rec *r) {
 		path = r->unparsed_uri;
 	}
 
-	url = apr_pstrcat(r->pool, oidc_get_current_url_base(r), path,
-			(r->args != NULL && *r->args != '\0' ? "?" : ""), r->args,
-			NULL);
+	url = apr_pstrcat(r->pool, oidc_get_current_url_base(r), path, NULL);
 
 	oidc_debug(r, "current URL '%s'", url);
 
