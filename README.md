@@ -121,26 +121,6 @@ Require claim hd:<your-domain>
 The above is an authorization example of an exact match of a provided claim against a string value.
 For more authorization options see the [Wiki page on Authorization](https://github.com/zmartzone/mod_auth_openidc/wiki/Authorization).
 
-### OpenID Connect SSO with Keycloak
-
-See also the [Wiki page on Keycloak](https://github.com/zmartzone/mod_auth_openidc/wiki/Keycloak)
-
-```apache
-OIDCProviderMetadataURL https://keycloak.example.net/auth/realms/master/.well-known/openid-configuration
-# OIDCRedirectURI is a vanity URL that must point to a path protected by this module but must NOT point to any content
-OIDCRedirectURI https://www.example.net/example/oauth2callback
-OIDCCryptoPassphrase random1234
-OIDCClientID <your-client-id-registered-in-keycloak>
-OIDCClientSecret <your-client-secret-registered-in-keycloak>
-OIDCRemoteUserClaim email
-OIDCScope "openid email"
-
-<Location /example/>
-   AuthType openid-connect
-   Require valid-user
-</Location>
-```
-
 ### Quickstart with a generic OpenID Connect Provider
 
 1. install and load `mod_auth_openidc.so` in your Apache server
@@ -168,6 +148,17 @@ OIDCCryptoPassphrase <password>
 </Location>
 ```
 For details on configuring multiple providers see the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki/Multiple-Providers).
+
+### Quickstart for Other Providers
+
+See the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki) for configuration docs for other OpenID Connect Providers:
+- [GLUU Server](https://github.com/zmartzone/mod_auth_openidc/wiki/Gluu-Server)
+- [Keycloak](https://github.com/zmartzone/mod_auth_openidc/wiki/Keycloak)
+- [Azure AD](https://github.com/zmartzone/mod_auth_openidc/wiki/Azure-OAuth2.0-and-OpenID)
+- [LemonLDAP::NG](https://github.com/zmartzone/mod_auth_openidc/wiki/LemonLDAP::NG)
+- [GitLab](https://github.com/zmartzone/mod_auth_openidc/wiki/GitLab-OAuth2)
+- [Globus](https://github.com/zmartzone/mod_auth_openidc/wiki/Globus)
+and [more](https://github.com/zmartzone/mod_auth_openidc/wiki/Useful-Links)
 
 ### Quickstart with a generic OAuth 2.0 Resource Server
 
