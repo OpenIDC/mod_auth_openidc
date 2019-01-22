@@ -3106,7 +3106,7 @@ static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c,
 			"\n"
 			"      function setTimer() {\n"
 			"        checkSession();\n"
-			"        timerID = setInterval('checkSession()', %s);\n"
+			"        timerID = setInterval('checkSession()', %d);\n"
 			"      }\n"
 			"\n"
 			"      function receiveMessage(e) {\n"
@@ -3149,12 +3149,13 @@ static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c,
 
 	char *s_poll_interval = NULL;
 	oidc_util_get_request_parameter(r, "poll", &s_poll_interval);
-	if (s_poll_interval == NULL)
-		s_poll_interval = "3000";
+	int poll_interval = s_poll_interval ? strtol(s_poll_interval, NULL, 10) : 0;
+	if ((poll_interval <= 0) || (poll_interval > 3600 * 24))
+		poll_interval = 3000;
 
 	const char *redirect_uri = oidc_get_redirect_uri(r, c);
 	java_script = apr_psprintf(r->pool, java_script, origin, client_id,
-			session_state, op_iframe_id, s_poll_interval, redirect_uri,
+			session_state, op_iframe_id, poll_interval, redirect_uri,
 			redirect_uri);
 
 	return oidc_util_html_send(r, NULL, java_script, "setTimer", NULL, DONE);

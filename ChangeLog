@@ -1,3 +1,7 @@
+01/22/2019
+- fix XSS vulnerability CSNC-2019-001 wrt. poll parameter in OIDC Session Management RP iframe; thanks Mischa Bachmann
+- release 2.3.10.2
+
 01/16/2019
 - fix bug in current URL detection where query parameters would be duplicated; see #420; thanks @jreynaert
 - release 2.3.10.1
