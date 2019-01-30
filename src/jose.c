@@ -1272,7 +1272,7 @@ static apr_byte_t oidc_jwk_parse_rsa_x5c(apr_pool_t *pool, json_t *json,
 }
 
 /*
- * parse an X.509 PEM formatted certificate file with an RSA public key to a JWK struct
+ * parse a PEM formatted RSA private key to a JWK
  */
 apr_byte_t oidc_jwk_parse_rsa_private_key(apr_pool_t *pool, const char *kid,
 		const char *filename, oidc_jwk_t **jwk, oidc_jose_error_t *err) {
@@ -1280,7 +1280,7 @@ apr_byte_t oidc_jwk_parse_rsa_private_key(apr_pool_t *pool, const char *kid,
 }
 
 /*
- * parse an X.509 PEM formatted RSA private key file to a JWK
+ * parse a PEM formatted RSA public key file to a JWK
  */
 apr_byte_t oidc_jwk_parse_rsa_public_key(apr_pool_t *pool, const char *kid,
 		const char *filename, oidc_jwk_t **jwk, oidc_jose_error_t *err) {
