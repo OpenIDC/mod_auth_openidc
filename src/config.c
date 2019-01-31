@@ -1153,7 +1153,9 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 
 	c->cache_file_dir = NULL;
 	c->cache_file_clean_interval = OIDC_DEFAULT_CACHE_FILE_CLEAN_INTERVAL;
+#ifdef USE_MEMCACHE
 	c->cache_memcache_servers = NULL;
+#endif
 	c->cache_shm_size_max = OIDC_DEFAULT_CACHE_SHM_SIZE;
 	c->cache_shm_entry_size_max = OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX;
 #ifdef USE_LIBHIREDIS
@@ -1533,9 +1535,11 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->cache_file_clean_interval :
 					base->cache_file_clean_interval;
 
+#ifdef USE_MEMCACHE
 	c->cache_memcache_servers =
 			add->cache_memcache_servers != NULL ?
 					add->cache_memcache_servers : base->cache_memcache_servers;
+#endif
 	c->cache_shm_size_max =
 			add->cache_shm_size_max != OIDC_DEFAULT_CACHE_SHM_SIZE ?
 					add->cache_shm_size_max : base->cache_shm_size_max;
@@ -2196,22 +2200,26 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 	}
 
 	ap_log_error(APLOG_MARK, APLOG_INFO, 0, s,
-			"%s - init - cjose %s, %s, EC=%s, GCM=%s, Redis=%s, JQ=%s",
-			NAMEVERSION,
-			cjose_version(),
-			OPENSSL_VERSION_TEXT,
+			"%s - init - cjose %s, %s, EC=%s, GCM=%s, Memcache=%s, Redis=%s, JQ=%s",
+			NAMEVERSION, cjose_version(), OPENSSL_VERSION_TEXT,
 			OIDC_JOSE_EC_SUPPORT ? "yes" : "no",
-			OIDC_JOSE_GCM_SUPPORT ? "yes" : "no",
-#ifdef USE_LIBHIREDIS
-			"yes"
+					OIDC_JOSE_GCM_SUPPORT ? "yes" : "no",
+#ifdef USE_MEMCACHE
+							"yes"
 #else
-			"no"
+							"no"
 #endif
-			,
-#ifdef USE_LIBJQ
-			"yes"
+							,
+#ifdef USE_LIBHIREDIS
+							"yes"
 #else
-			"no"
+							"no"
+#endif
+							,
+#ifdef USE_LIBJQ
+							"yes"
+#else
+							"no"
 #endif
 	);
 
@@ -2280,8 +2288,7 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 static const authz_provider oidc_authz_claim_provider = {
 		&oidc_authz_checker_claim,
-		NULL,
-};
+		NULL, };
 
 #ifdef USE_LIBJQ
 static const authz_provider oidc_authz_claims_expr_provider = {
@@ -2784,11 +2791,13 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, cache_file_clean_interval),
 				RSRC_CONF,
 				"Cache file clean interval in seconds."),
+#ifdef USE_MEMCACHE
 		AP_INIT_TAKE1(OIDCMemCacheServers,
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, cache_memcache_servers),
 				RSRC_CONF,
 				"Memcache servers used for caching (space separated list of <hostname>[:<port>] tuples)"),
+#endif
 		AP_INIT_TAKE1(OIDCCacheShmMax,
 				oidc_set_int_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, cache_shm_size_max),

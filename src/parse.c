@@ -274,7 +274,9 @@ const char *oidc_parse_cache_type(apr_pool_t *pool, const char *arg,
 		oidc_cache_t **type) {
 	static char *options[] = {
 			OIDC_CACHE_TYPE_SHM,
+#ifdef USE_MEMCACHE
 			OIDC_CACHE_TYPE_MEMCACHE,
+#endif
 #ifdef USE_LIBHIREDIS
 			OIDC_CACHE_TYPE_REDIS,
 #endif
@@ -286,8 +288,10 @@ const char *oidc_parse_cache_type(apr_pool_t *pool, const char *arg,
 
 	if (apr_strnatcmp(arg, OIDC_CACHE_TYPE_SHM) == 0) {
 		*type = &oidc_cache_shm;
+#ifdef USE_MEMCACHE
 	} else if (apr_strnatcmp(arg, OIDC_CACHE_TYPE_MEMCACHE) == 0) {
 		*type = &oidc_cache_memcache;
+#endif
 	} else if (apr_strnatcmp(arg, OIDC_CACHE_TYPE_FILE) == 0) {
 		*type = &oidc_cache_file;
 #ifdef USE_LIBHIREDIS

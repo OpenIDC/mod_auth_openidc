@@ -132,8 +132,11 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key,
 #define oidc_cache_set_sid(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_SID, key, value, expiry)
 
 extern oidc_cache_t oidc_cache_file;
-extern oidc_cache_t oidc_cache_memcache;
 extern oidc_cache_t oidc_cache_shm;
+
+#ifdef USE_MEMCACHE
+extern oidc_cache_t oidc_cache_memcache;
+#endif
 
 #ifdef USE_LIBHIREDIS
 extern oidc_cache_t oidc_cache_redis;

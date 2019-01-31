@@ -1,7 +1,6 @@
 # Source files. mod_auth_openidc.c must be the first file.
 SRC=src/mod_auth_openidc.c \
 	src/cache/file.c \
-	src/cache/memcache.c \
 	src/cache/shm.c \
 	src/cache/common.c \
 	src/oauth.c \
@@ -13,13 +12,19 @@ SRC=src/mod_auth_openidc.c \
 	src/metadata.c \
 	src/jose.c \
 	src/parse.c \
-	src/pcre_subst.c \
+	src/pcre_subst.c
 
 ifeq (@HAVE_LIBHIREDIS@, 1)
 SRC += \
 	src/cache/redis.c	
 REDIS_CFLAGS=-DUSE_LIBHIREDIS @HIREDIS_CFLAGS@
 REDIS_LIBS=@HIREDIS_LIBS@
+endif
+
+ifeq (@HAVE_MEMCACHE@, 1)
+REDIS_CFLAGS+=-DUSE_MEMCACHE
+SRC += \
+	src/cache/memcache.c
 endif
 
 ifeq (@HAVE_LIBJQ@, 1)
