@@ -2,6 +2,7 @@
 #include <http_core.h>
 #include <http_config.h>
 #include <apr_global_mutex.h>
+#include <apr_strings.h>
 #include <apr_lib.h>
 #include <http_log.h>
 
@@ -36,8 +37,26 @@ AP_DECLARE(long) ap_get_client_block(request_rec * r, char * buffer,
 	return 0;
 }
 
-AP_DECLARE(char *) ap_getword(apr_pool_t *p, const char **line, char stop) {
-	return "";
+AP_DECLARE(char *) ap_getword(apr_pool_t *atrans, const char **line, char stop) {
+	const char *pos = *line;
+	int len;
+	char *res;
+
+	while ((*pos != stop) && *pos) {
+		++pos;
+	}
+
+	len = pos - *line;
+	res = apr_pstrmemdup(atrans, *line, len);
+
+	if (stop) {
+		while (*pos == stop) {
+			++pos;
+		}
+	}
+	*line = pos;
+
+	return res;
 }
 
 static char *substring_conf(apr_pool_t *p, const char *start, int len,

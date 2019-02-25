@@ -1043,7 +1043,7 @@ static char * test_proto_authorization_request(request_rec *r) {
 	provider.client_id = "client_id";
 	provider.client_secret = NULL;
 	provider.response_type = "code";
-	provider.auth_request_params = NULL;
+	provider.auth_request_params = "jan=piet&foo=#";
 	provider.request_object = NULL;
 	provider.token_binding_policy = OIDC_TOKEN_BINDING_POLICY_OPTIONAL;
 	provider.auth_request_method = OIDC_AUTH_REQUEST_METHOD_GET;
@@ -1065,7 +1065,7 @@ static char * test_proto_authorization_request(request_rec *r) {
 
 	TST_ASSERT_STR("oidc_proto_authorization_request (2)",
 			apr_table_get(r->headers_out, "Location"),
-			"https://idp.example.com/authorize?response_type=code&scope=openid&client_id=client_id&state=12345&redirect_uri=https%3A%2F%2Fwww.example.com%2Fprotected%2F&nonce=anonce");
+			"https://idp.example.com/authorize?response_type=code&scope=openid&client_id=client_id&state=12345&redirect_uri=https%3A%2F%2Fwww.example.com%2Fprotected%2F&nonce=anonce&jan=piet&foo=bar");
 
 	return 0;
 }
@@ -1181,8 +1181,8 @@ static char * test_proto_validate_jwt(request_rec *r) {
 			r->pool, err);
 
 	TST_ASSERT_ERR("oidc_proto_validate_jwt",
-			oidc_proto_validate_jwt(r, jwt, s_issuer, TRUE, TRUE, 10, OIDC_TOKEN_BINDING_POLICY_DISABLED), r->pool,
-			err);
+			oidc_proto_validate_jwt(r, jwt, s_issuer, TRUE, TRUE, 10, OIDC_TOKEN_BINDING_POLICY_DISABLED),
+			r->pool, err);
 
 	oidc_jwk_destroy(jwk);
 	oidc_jwt_destroy(jwt);
@@ -1198,38 +1198,46 @@ static char * test_current_url(request_rec *r) {
 	r->unparsed_uri = apr_pstrcat(r->pool, r->uri, "?", r->args, NULL);
 
 	url = oidc_get_current_url(r);
-	TST_ASSERT_STR("test_current_url (1)", url, "https://www.example.com/test?foo=bar&param1=value1");
+	TST_ASSERT_STR("test_current_url (1)", url,
+			"https://www.example.com/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Host", "www.outer.com");
 	url = oidc_get_current_url(r);
-	TST_ASSERT_STR("test_current_url (2)", url, "https://www.outer.com/test?foo=bar&param1=value1");
+	TST_ASSERT_STR("test_current_url (2)", url,
+			"https://www.outer.com/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Host", "www.outer.com:654");
 	url = oidc_get_current_url(r);
-	TST_ASSERT_STR("test_current_url (3)", url, "https://www.outer.com:654/test?foo=bar&param1=value1");
+	TST_ASSERT_STR("test_current_url (3)", url,
+			"https://www.outer.com:654/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Port", "321");
 	url = oidc_get_current_url(r);
-	TST_ASSERT_STR("test_current_url (4)", url, "https://www.outer.com:321/test?foo=bar&param1=value1");
+	TST_ASSERT_STR("test_current_url (4)", url,
+			"https://www.outer.com:321/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Proto", "http");
 	url = oidc_get_current_url(r);
-	TST_ASSERT_STR("test_current_url (5)", url, "http://www.outer.com:321/test?foo=bar&param1=value1");
+	TST_ASSERT_STR("test_current_url (5)", url,
+			"http://www.outer.com:321/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Proto", "https , http");
 	url = oidc_get_current_url(r);
-	TST_ASSERT_STR("test_current_url (6)", url, "https://www.outer.com:321/test?foo=bar&param1=value1");
+	TST_ASSERT_STR("test_current_url (6)", url,
+			"https://www.outer.com:321/test?foo=bar&param1=value1");
 
 	apr_table_unset(r->headers_in, "X-Forwarded-Host");
 	apr_table_unset(r->headers_in, "X-Forwarded-Port");
 	url = oidc_get_current_url(r);
-	TST_ASSERT_STR("test_current_url (7)", url, "https://www.example.com/test?foo=bar&param1=value1");
+	TST_ASSERT_STR("test_current_url (7)", url,
+			"https://www.example.com/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Proto", "http ");
 	apr_table_set(r->headers_in, "Host", "remotehost:8380");
 	r->uri = "http://remotehost:8380/private/";
 	url = oidc_get_current_url(r);
-	TST_ASSERT_STR("test_current_url (8)", url, "http://remotehost:8380/private/?foo=bar&param1=value1");
+	TST_ASSERT_STR("test_current_url (8)", url,
+			"http://remotehost:8380/private/?foo=bar&param1=value1");
 
 	return 0;
 }

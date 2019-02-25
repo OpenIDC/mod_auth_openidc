@@ -566,6 +566,7 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_STR_FORWARD_SLASH "/"
 #define OIDC_STR_AT            "@"
 #define OIDC_STR_COMMA         ","
+#define OIDC_STR_HASH          "#"
 
 #define OIDC_CHAR_EQUAL         '='
 #define OIDC_CHAR_COLON         ':'

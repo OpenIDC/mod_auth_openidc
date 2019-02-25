@@ -545,6 +545,29 @@ static int oidc_proto_html_post(request_rec *r, const char *url,
 			"document.forms[0].submit()", html_body, DONE);
 }
 
+void add_auth_request_params(request_rec *r, apr_table_t *params,
+		const char *auth_request_params) {
+	char *key = NULL;
+	char *val = NULL;
+
+	if (auth_request_params == NULL)
+		return;
+
+	while (*auth_request_params && (val = ap_getword(r->pool, &auth_request_params, OIDC_CHAR_AMP))) {
+		key = ap_getword(r->pool, (const char **)&val, OIDC_CHAR_EQUAL);
+		ap_unescape_url(key);
+		ap_unescape_url(val);
+		if (apr_strnatcmp(val, OIDC_STR_HASH) != 0) {
+			apr_table_add(params, key, val);
+			continue;
+		}
+		if (oidc_util_request_has_parameter(r, key) == TRUE) {
+			oidc_util_get_request_parameter(r, key, &val);
+			apr_table_add(params, key, val);
+		}
+	}
+}
+
 /*
  * send an OpenID Connect authorization request to the specified provider
  */
@@ -576,8 +599,9 @@ int oidc_proto_authorization_request(request_rec *r,
 	const char *scope = provider->scope;
 	if (path_scope != NULL)
 		scope = ((scope != NULL) && (apr_strnatcmp(scope, "") != 0)) ?
-				apr_pstrcat(r->pool, scope, OIDC_STR_SPACE, path_scope, NULL) :
-				path_scope;
+				apr_pstrcat(r->pool, scope, OIDC_STR_SPACE, path_scope,
+						NULL) :
+						path_scope;
 
 	if (scope != NULL) {
 		if (!oidc_util_spaced_string_contains(r->pool, scope,
@@ -629,14 +653,10 @@ int oidc_proto_authorization_request(request_rec *r,
 		apr_table_setn(params, OIDC_PROTO_PROMPT, prompt);
 
 	/* add any statically configured custom authorization request parameters */
-	if (provider->auth_request_params != NULL)
-		oidc_util_table_add_query_encoded_params(r->pool, params,
-				provider->auth_request_params);
+	add_auth_request_params(r, params, provider->auth_request_params);
 
 	/* add any dynamically configured custom authorization request parameters */
-	if (auth_request_params != NULL)
-		oidc_util_table_add_query_encoded_params(r->pool, params,
-				auth_request_params);
+	add_auth_request_params(r, params, auth_request_params);
 
 	/* add request parameter (request or request_uri) if set */
 	if (provider->request_object != NULL)
@@ -986,8 +1006,8 @@ void oidc_proto_state_set_prompt(oidc_proto_state_t *proto_state,
 
 void oidc_proto_state_set_pkce_state(oidc_proto_state_t *proto_state,
 		const char *pkce_state) {
-	oidc_proto_state_set_string_value(proto_state, OIDC_PROTO_STATE_PKCE_STATE,
-			pkce_state);
+	oidc_proto_state_set_string_value(proto_state,
+			OIDC_PROTO_STATE_PKCE_STATE, pkce_state);
 }
 
 void oidc_proto_state_set_timestamp_now(oidc_proto_state_t *proto_state) {
@@ -1017,7 +1037,8 @@ apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg,
 
 	/* get the "nonce" value in the id_token payload */
 	char *j_nonce = NULL;
-	if (oidc_jose_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_NONCE,
+	if (oidc_jose_get_string(r->pool, jwt->payload.value.json,
+			OIDC_CLAIM_NONCE,
 			TRUE, &j_nonce, &err) == FALSE) {
 		oidc_error(r,
 				"id_token JSON payload did not contain a \"%s\" string: %s",
@@ -1058,7 +1079,8 @@ apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider, oidc_jwt_payload_t *id_token_payload) {
 
 	char *azp = NULL;
-	oidc_jose_get_string(r->pool, id_token_payload->value.json, OIDC_CLAIM_AZP,
+	oidc_jose_get_string(r->pool, id_token_payload->value.json,
+			OIDC_CLAIM_AZP,
 			FALSE, &azp,
 			NULL);
 
@@ -1075,7 +1097,8 @@ apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg,
 	}
 
 	/* get the "aud" value from the JSON payload */
-	json_t *aud = json_object_get(id_token_payload->value.json, OIDC_CLAIM_AUD);
+	json_t *aud = json_object_get(id_token_payload->value.json,
+			OIDC_CLAIM_AUD);
 	if (aud != NULL) {
 
 		/* check if it is a single-value */
@@ -1362,7 +1385,8 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, oidc_jwt_t *jwt,
 
 		/* we are looking for a specific x5t, get the x5t from the current element */
 		char *s_x5t = NULL;
-		oidc_json_object_get_string(r->pool, elem, OIDC_JWK_X5T, &s_x5t, NULL);
+		oidc_json_object_get_string(r->pool, elem, OIDC_JWK_X5T, &s_x5t,
+				NULL);
 		/* compare the requested thumbprint against the current element */
 		if ((s_x5t != NULL) && (x5t != NULL)
 				&& (apr_strnatcmp(x5t, s_x5t) == 0)) {
@@ -1650,7 +1674,8 @@ static apr_byte_t oidc_proto_jwt_create(request_rec *r, const char *client_id,
 	oidc_jwt_t *jwt = *out;
 
 	char *jti = NULL;
-	oidc_proto_generate_random_string(r, &jti, OIDC_PROTO_ASSERTION_JTI_LEN);
+	oidc_proto_generate_random_string(r, &jti,
+			OIDC_PROTO_ASSERTION_JTI_LEN);
 
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_ISS,
 			json_string(client_id));
@@ -1708,8 +1733,8 @@ static apr_byte_t oidc_proto_endpoint_auth_client_secret_jwt(request_rec *r,
 		return FALSE;
 
 	oidc_jwk_t *jwk = oidc_jwk_create_symmetric_key(r->pool, NULL,
-			(const unsigned char *) client_secret, strlen(client_secret), FALSE,
-			&err);
+			(const unsigned char *) client_secret, strlen(client_secret),
+			FALSE, &err);
 	if (jwk == NULL) {
 		oidc_error(r, "parsing of client secret into JWK failed: %s",
 				oidc_jose_e2s(r->pool, err));
@@ -1854,8 +1879,8 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 	/* add the token endpoint authentication credentials */
 	if (oidc_proto_token_endpoint_auth(r, cfg, provider->token_endpoint_auth,
 			provider->client_id, provider->client_secret,
-			provider->token_endpoint_url, params, NULL, &basic_auth,
-			&bearer_auth) == FALSE)
+			provider->token_endpoint_url, params,
+			NULL, &basic_auth, &bearer_auth) == FALSE)
 		return FALSE;
 
 	/* add any configured extra static parameters to the token endpoint */
@@ -2102,8 +2127,8 @@ static apr_byte_t oidc_proto_resolve_composite_claims(request_rec *r,
 				const char *access_token = json_string_value(
 						json_object_get(value,
 								OIDC_COMPOSITE_CLAIM_ACCESS_TOKEN));
-				const char *endpoint = json_string_value(
-						json_object_get(value, OIDC_COMPOSITE_CLAIM_ENDPOINT));
+				const char *endpoint = json_string_value(json_object_get(value,
+						OIDC_COMPOSITE_CLAIM_ENDPOINT));
 				if ((access_token != NULL) && (endpoint != NULL)) {
 					oidc_util_http_get(r, endpoint,
 							NULL, NULL, access_token, cfg->provider.ssl_validate_server,
@@ -2503,7 +2528,8 @@ apr_byte_t oidc_proto_validate_access_token(request_rec *r,
 apr_array_header_t *oidc_proto_supported_flows(apr_pool_t *pool) {
 	apr_array_header_t *result = apr_array_make(pool, 6, sizeof(const char*));
 	*(const char**) apr_array_push(result) = OIDC_PROTO_RESPONSE_TYPE_CODE;
-	*(const char**) apr_array_push(result) = OIDC_PROTO_RESPONSE_TYPE_IDTOKEN;
+	*(const char**) apr_array_push(result) =
+			OIDC_PROTO_RESPONSE_TYPE_IDTOKEN;
 	*(const char**) apr_array_push(result) =
 			OIDC_PROTO_RESPONSE_TYPE_IDTOKEN_TOKEN;
 	*(const char**) apr_array_push(result) =
@@ -2711,7 +2737,8 @@ static apr_byte_t oidc_proto_validate_response_type_mode_issuer(request_rec *r,
 
 	const char *code = apr_table_get(params, OIDC_PROTO_CODE);
 	const char *id_token = apr_table_get(params, OIDC_PROTO_ID_TOKEN);
-	const char *access_token = apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN);
+	const char *access_token = apr_table_get(params,
+			OIDC_PROTO_ACCESS_TOKEN);
 	const char *iss = apr_table_get(params, OIDC_PROTO_ISS);
 	const char *client_id = apr_table_get(params, OIDC_PROTO_CLIENT_ID);
 
@@ -2829,8 +2856,9 @@ apr_byte_t oidc_proto_authorization_response_code_idtoken(request_rec *r,
 	static const char *response_type = OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN;
 
 	if (oidc_proto_validate_response_type_mode_issuer(r, response_type, params,
-			proto_state, response_mode, OIDC_PROTO_RESPONSE_MODE_FRAGMENT,
-			provider->issuer, provider->client_id) == FALSE)
+			proto_state, response_mode,
+			OIDC_PROTO_RESPONSE_MODE_FRAGMENT, provider->issuer,
+			provider->client_id) == FALSE)
 		return FALSE;
 
 	if (oidc_proto_parse_idtoken_and_validate_code(r, c, proto_state, provider,
@@ -2862,8 +2890,9 @@ apr_byte_t oidc_proto_handle_authorization_response_code_token(request_rec *r,
 	static const char *response_type = OIDC_PROTO_RESPONSE_TYPE_CODE_TOKEN;
 
 	if (oidc_proto_validate_response_type_mode_issuer(r, response_type, params,
-			proto_state, response_mode, OIDC_PROTO_RESPONSE_MODE_FRAGMENT,
-			provider->issuer, provider->client_id) == FALSE)
+			proto_state, response_mode,
+			OIDC_PROTO_RESPONSE_MODE_FRAGMENT, provider->issuer,
+			provider->client_id) == FALSE)
 		return FALSE;
 
 	/* clear parameters that should only be set from the token endpoint */
@@ -2893,8 +2922,9 @@ apr_byte_t oidc_proto_handle_authorization_response_code(request_rec *r,
 	static const char *response_type = OIDC_PROTO_RESPONSE_TYPE_CODE;
 
 	if (oidc_proto_validate_response_type_mode_issuer(r, response_type, params,
-			proto_state, response_mode, OIDC_PROTO_RESPONSE_MODE_QUERY,
-			provider->issuer, provider->client_id) == FALSE)
+			proto_state, response_mode,
+			OIDC_PROTO_RESPONSE_MODE_QUERY, provider->issuer,
+			provider->client_id) == FALSE)
 		return FALSE;
 
 	/* clear parameters that should only be set from the token endpoint */
@@ -2936,8 +2966,9 @@ static apr_byte_t oidc_proto_handle_implicit_flow(request_rec *r, oidc_cfg *c,
 		const char *response_mode, oidc_jwt_t **jwt) {
 
 	if (oidc_proto_validate_response_type_mode_issuer(r, response_type, params,
-			proto_state, response_mode, OIDC_PROTO_RESPONSE_MODE_FRAGMENT,
-			provider->issuer, provider->client_id) == FALSE)
+			proto_state, response_mode,
+			OIDC_PROTO_RESPONSE_MODE_FRAGMENT, provider->issuer,
+			provider->client_id) == FALSE)
 		return FALSE;
 
 	if (oidc_proto_parse_idtoken_and_validate_code(r, c, proto_state, provider,
@@ -2987,7 +3018,8 @@ apr_byte_t oidc_proto_handle_authorization_response_idtoken_token(
 
 	oidc_debug(r, "enter");
 
-	static const char *response_type = OIDC_PROTO_RESPONSE_TYPE_IDTOKEN_TOKEN;
+	static const char *response_type =
+			OIDC_PROTO_RESPONSE_TYPE_IDTOKEN_TOKEN;
 
 	if (oidc_proto_handle_implicit_flow(r, c, response_type, proto_state,
 			provider, params, response_mode, jwt) == FALSE)

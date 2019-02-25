@@ -1,3 +1,11 @@
+02/25/2019
+- add option to dynamically pass query parameters to the authorization request; closes #401
+- bump to 2.3.11rc1
+
+01/31/2019
+- support conditional compilation of memcache support
+- bump to 2.3.11rc0
+
 01/22/2019
 - fix XSS vulnerability CSNC-2019-001 wrt. poll parameter in OIDC Session Management RP iframe; thanks Mischa Bachmann
 - release 2.3.10.2
