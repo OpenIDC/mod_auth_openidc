@@ -1,3 +1,7 @@
+02/26/2019
+- add session expiry to session info hook response (and change inactivity timeout key)
+- bump to 2.3.11rc2
+
 02/25/2019
 - add option to dynamically pass query parameters to the authorization request; closes #401
 - bump to 2.3.11rc1

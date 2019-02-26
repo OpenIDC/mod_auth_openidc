@@ -3496,11 +3496,16 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 				session->state);
 		json_object_set_new(j_session, OIDC_HOOK_INFO_SESSION_UUID,
 				json_string(session->uuid));
-		json_object_set_new(j_session, OIDC_HOOK_INFO_SESSION_EXP,
+		json_object_set_new(j_session, OIDC_HOOK_INFO_SESSION_TIMEOUT,
 				json_integer(apr_time_sec(session->expiry)));
+		apr_time_t session_expires = oidc_session_get_session_expires(r,
+				session);
+		json_object_set_new(j_session, OIDC_HOOK_INFO_SESSION_EXP,
+				json_integer(apr_time_sec(session_expires)));
 		json_object_set_new(j_session, OIDC_HOOK_INFO_SESSION_REMOTE_USER,
 				json_string(session->remote_user));
 		json_object_set_new(json, OIDC_HOOK_INFO_SESSION, j_session);
+
 	}
 
 	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_REFRESH_TOKEN,

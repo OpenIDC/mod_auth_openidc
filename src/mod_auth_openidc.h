@@ -546,6 +546,7 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_HOOK_INFO_SESSION_STATE       "state"
 #define OIDC_HOOK_INFO_SESSION_UUID        "uuid"
 #define OIDC_HOOK_INFO_SESSION_EXP         "exp"
+#define OIDC_HOOK_INFO_SESSION_TIMEOUT     "timeout"
 #define OIDC_HOOK_INFO_SESSION_REMOTE_USER "remote_user"
 #define OIDC_HOOK_INFO_REFRESH_TOKEN       "refresh_token"
 
