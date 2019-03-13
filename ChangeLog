@@ -1,3 +1,6 @@
+03/13/2019
+- release 2.3.11
+
 02/26/2019
 - add session expiry to session info hook response (and change inactivity timeout key)
 - bump to 2.3.11rc2
