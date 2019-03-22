@@ -1,0 +1,7 @@
+/*.la
+/*.lo
+/*.o
+/*.slo
+/.libs/
+/.deps/
+/.dirstamp
