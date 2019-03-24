@@ -6,21 +6,9 @@ variables based on the validation results.
 
 ## Features
 
-#### Generic
-- generic code with plugins for Apache, NGINX and possibly more (e.g. Envoy, IIS)
-- reusable code across for other OAuth 2.0 / REST related protocols
-  i.e. token exchange with endpoint authentication, source token retrieval, target pass settings etc.
-- no longer depends on libapr
-
 #### Config
 - less configuration primitives with more flexibility/options
 - per-directory configuration over per-virtual host
-
-#### Cache
-- cache backend/size/options per element type (ie. no longer a single flat shared backend/storage/namespace)
-- configurable cache key hashing algorithm
-- shm: support configurable key sizes (ie. storage)
-- memcache: use libmemcached and support (universal) server options string
 
 #### OAuth 2.0
 - specify multiple token verification options, tried sequentially (allow for key/algo rollover)
