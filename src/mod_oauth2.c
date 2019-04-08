@@ -35,6 +35,15 @@
 #include <http_log.h>
 #include <http_request.h>
 
+// override ap_config_auto "" but to allow that we first have to undefine
+#undef PACKAGE_BUGREPORT
+#undef PACKAGE_NAME
+#undef PACKAGE_STRING
+#undef PACKAGE_TARNAME
+#undef PACKAGE_VERSION
+
+#include "config.h"
+
 #include <apr_strings.h>
 
 OAUTH2_APACHE_LOG(oauth2)
@@ -261,7 +270,7 @@ static const command_rec OAUTH2_APACHE_COMMANDS(oauth2)[] = {
 	OAUTH2_CFG_CMD_ARGS(12,
 		"OAuth2AcceptTokenIn",
 		accept_token_in,
-		"Configures in which format tokens can be presented."),
+		"Configures in which format source tokens can be presented."),
 
 	OAUTH2_CFG_CMD_ARGS(1,
 		"OAuth2TargetPass",

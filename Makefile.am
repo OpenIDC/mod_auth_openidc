@@ -1,6 +1,6 @@
 ACLOCAL_AMFLAGS=-I m4
 
-EXTRA_DIST = autogen.sh ChangeLog README.md LICENSE DISCLAIMER
+EXTRA_DIST = autogen.sh ChangeLog README.md LICENSE src/config.h.in oauth2.conf
 
 AM_CPPFLAGS = -Wall -Werror
 AM_CPPFLAGS += -DOAUTH2_PACKAGE_NAME_VERSION=\"@PACKAGE_NAME@-@PACKAGE_VERSION@\"
@@ -8,6 +8,14 @@ AM_CPPFLAGS += $(CODE_COVERAGE_CPPFLAGS) $(CODE_COVERAGE_CFLAGS)
 AM_LDFLAGS = --coverage
 
 LDADD = $(CODE_COVERAGE_LIBS)
+
+includesubdir = $(includedir)/oauth2
+
+includesub_HEADERS = \
+	src/mod_oauth2.h
+	
+nodist_includesub_HEADERS = \
+	src/config.h
 
 lib_LTLIBRARIES = @PACKAGE_NAME@.la
 

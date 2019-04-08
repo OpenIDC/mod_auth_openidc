@@ -1,20 +1,28 @@
 # mod_oauth2
-An module for the Apache HTTP Server 2.x which makes an Apache web server operate as an
-OAuth 2.0 Resource Server, validating OAuth 2.0 bearer access tokens and setting headers/environment
-variables based on the validation results.
 
+A module for Apache HTTP Server 2.x that makes the Apache web server operate as a OAuth 2.0 Resource Server,
+validating OAuth 2.0 bearer access tokens and setting headers/environment variables based on the validation results.
+
+
+## Quickstart
+
+Reference Bearer Access Token validation using RFC7662 based introspection:
+```apache
+   OAuth2TokenVerify introspect https://pingfed:9031/as/introspect.oauth2 introspect.ssl_verify=false&introspect.auth=client_secret_basic&client_id=rs0&client_secret=2Federate
+```
+
+JWT Bearer Access Token validation using a set of JWKs published on a `jwks_uri`:
+```apache
+OAuth2TokenVerify jwks_uri https://pingfed:9031/ext/one jwks_uri.ssl_verify=false
+```
 
 ## Features
 
-#### Config
-- less configuration primitives with more flexibility/options
+As provided by the [`liboauth2`](https://github.com/zmartzone/liboauth2) dependency, including:
 - per-directory configuration over per-virtual host
-
-#### OAuth 2.0
+- flexible cache configuration per cached element type
 - specify multiple token verification options, tried sequentially (allow for key/algo rollover)
-
-#### Other
-- support AWS ALB header verification
+- etc.
 
 
 ## Support
