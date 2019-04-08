@@ -16,6 +16,8 @@ JWT Bearer Access Token validation using a set of JWKs published on a `jwks_uri`
 OAuth2TokenVerify jwks_uri https://pingfed:9031/ext/one jwks_uri.ssl_verify=false
 ```
 
+For a detailed overview of configuration options see the `oauth2.conf` Apache configuration file in this directory.
+
 ## Features
 
 As provided by the [`liboauth2`](https://github.com/zmartzone/liboauth2) dependency, including:
