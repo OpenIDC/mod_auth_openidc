@@ -2005,6 +2005,8 @@ static int oidc_check_config_oauth(server_rec *s, oidc_cfg *c) {
 
 	apr_uri_t r_uri;
 
+	oidc_swarn(s, "The OAuth 2.0 Resource Server functionality is deprecated and superseded by a new module, see: https://github.com/zmartzone/mod_oauth2!");
+
 	if (c->oauth.metadata_url != NULL) {
 		apr_uri_parse(s->process->pconf, c->oauth.metadata_url, &r_uri);
 		if ((r_uri.scheme == NULL)

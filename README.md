@@ -8,8 +8,7 @@ mod_auth_openidc
 
 *mod_auth_openidc* is an authentication/authorization module for the Apache 2.x
 HTTP server that functions as an **OpenID Connect Relying Party**, authenticating users against an
-OpenID Connect Provider. It can also function as an **OAuth 2.0 Resource Server**, validating 
-OAuth 2.0 bearer access tokens presented by OAuth 2.0 Clients.
+OpenID Connect Provider.
 
 Overview
 --------
@@ -18,9 +17,6 @@ This module enables an Apache 2.x web server to operate as an [OpenID Connect](h
 *Relying Party* (RP) to an OpenID Connect *Provider* (OP). It authenticates users against an OpenID Connect Provider,
 receives user identity information from the OP in a so called ID Token and passes on the identity information
 (a.k.a. claims) in the ID Token to applications hosted and protected by the Apache web server.
-
-It can also be configured as an OAuth 2.0 *Resource Server* (RS), consuming bearer access tokens and validating
-them against an OAuth 2.0 Authorization Server, authorizing Clients based on the validation results.
 
 The protected content and/or applications can be served by the Apache server itself or it can be served from elsewhere
 when Apache is configured as a Reverse Proxy in front of the origin server(s).
@@ -46,18 +42,6 @@ of claims provided in the `id_token`/ `userinfo` claims.
 - [OpenID Connect Token Bound Authentication](https://openid.net/specs/openid-connect-token-bound-authentication-1_0.html) *(draft spec; when combined with [mod_token_binding](https://github.com/zmartzone/mod_token_binding))*
 - [OAuth 2.0 Token Binding for Authorization Codes for Web Server Clients](https://tools.ietf.org/html/draft-ietf-oauth-token-binding-07#section-5.2) *(draft spec)*
 
-Alternatively the module can operate as an OAuth 2.0 Resource Server to an OAuth 2.0 Authorization Server,
-validating bearer Access Tokens by introspecting them or verifying them locally if they are JWTs.
-In the OAuth 2.0 Resource Server mode *mod_auth_openidc* supports the following specifications:
-- [RFC 6750 - The OAuth 2.0 Authorization Framework: Bearer Token Usage](https://tools.ietf.org/html/rfc6750)
-- [RFC 7662 - OAuth 2.0 Token Introspection](https://tools.ietf.org/html/rfc7662) (or similar)
-- [RFC 8414 - OAuth 2.0 Authorization Server Metadata](https://tools.ietf.org/html/rfc8414)
-- [OAuth 2.0 Token Binding for Access Tokens](https://tools.ietf.org/html/draft-ietf-oauth-token-binding-07#section-3) *(draft spec)*
-- [OAuth 2.0 Mutual TLS Client Certificate Bound Access Tokens](https://tools.ietf.org/html/draft-ietf-oauth-mtls-12#section-3) *(draft spec)*
-
-The `REMOTE_USER` variable setting, passing claims in HTTP headers and authorization based on `Require` primitives
-works in the same way as described for OpenID Connect above. See the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki/OAuth-2.0-Resource-Server) for information on how to configure it.
-
 For an exhaustive description of all configuration options, see the file `auth_openidc.conf`
 in this directory. This file can also serve as an include file for `httpd.conf`.
 
@@ -77,7 +61,7 @@ There is a Google Group/mailing list at:
   [mod_auth_openidc@googlegroups.com](mailto:mod_auth_openidc@googlegroups.com)  
 The corresponding forum/archive is at:  
   [https://groups.google.com/forum/#!forum/mod_auth_openidc](https://groups.google.com/forum/#!forum/mod_auth_openidc)  
-Any questions/issues should go to the mailing list. The Github issues tracker should be used only for bugs reports and feature requests.
+Any questions/issues should go to the mailing list.
 
 #### Commercial Services
 For commercial Support contracts, Professional Services, Training and use-case specific support you can contact:  
@@ -159,24 +143,6 @@ See the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki) for configura
 - [GitLab](https://github.com/zmartzone/mod_auth_openidc/wiki/GitLab-OAuth2)
 - [Globus](https://github.com/zmartzone/mod_auth_openidc/wiki/Globus)
 and [more](https://github.com/zmartzone/mod_auth_openidc/wiki/Useful-Links)
-
-### Quickstart with a generic OAuth 2.0 Resource Server
-
-Using "local" validation of JWT bearer tokens:
-
-1. install and load `mod_auth_openidc.so` in your Apache server
-1. configure your protected APIs/locations with `AuthType oauth20` and `Require claim` directives to restrict access to specific clients/scopes/claims/resource-owners
-1. configure local or remote bearer token validation following the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki/OAuth-2.0-Resource-Server)
-
-```apache
-# local validation
-OIDCOAuthVerifySharedKeys plain##<shared-secret-to-validate-symmetric-jwt-signatures>
-
-<Location /api>
-   AuthType oauth20
-   Require claim sub:<resource_owner_identifier>
-</Location>
-```
 
 Disclaimer
 ----------
