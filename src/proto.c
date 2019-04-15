@@ -68,10 +68,12 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 static apr_byte_t oidc_proto_generate_random_string(request_rec *r,
 		char **output, int len) {
 	unsigned char *bytes = apr_pcalloc(r->pool, len);
+	oidc_debug(r, "apr_generate_random_bytes call for %d bytes", len);
 	if (apr_generate_random_bytes(bytes, len) != APR_SUCCESS) {
 		oidc_error(r, "apr_generate_random_bytes returned an error");
 		return FALSE;
 	}
+	oidc_debug(r, "apr_generate_random_bytes returned");
 	if (oidc_base64url_encode(r, output, (const char *) bytes, len, TRUE)
 			<= 0) {
 		oidc_error(r, "oidc_base64url_encode returned an error");
