@@ -1,3 +1,8 @@
+04/19/2019
+- add USE_URANDOM compile time option to use /dev/urandom explicitly for non-blocking random number generation
+  configure with APXS2_OPTS="-DUSE_URANDOM"
+- bump to 2.4.0rc2
+
 04/15/2019
 - add debug logs in oidc_proto_generate_random_string
 - URL-encode client_id/client_secret when using client_secret_basic according to: https://tools.ietf.org/html/rfc6749#section-2.3.1
