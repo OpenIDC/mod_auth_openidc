@@ -90,8 +90,6 @@
 #define OIDC_DEFAULT_COOKIE "mod_auth_openidc_session"
 /* default for the HTTP header name in which the remote user name is passed */
 #define OIDC_DEFAULT_AUTHN_HEADER NULL
-/* scrub HTTP headers by default unless overridden (and insecure) */
-#define OIDC_DEFAULT_SCRUB_REQUEST_HEADERS 1
 /* default client_name the client uses for dynamic client registration */
 #define OIDC_DEFAULT_CLIENT_NAME "OpenID Connect Apache Module (mod_auth_openidc)"
 /* timeouts in seconds for HTTP calls that may take a long time */
@@ -1191,7 +1189,6 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->outgoing_proxy = NULL;
 	c->crypto_passphrase = NULL;
 
-	c->scrub_request_headers = OIDC_DEFAULT_SCRUB_REQUEST_HEADERS;
 	c->error_template = NULL;
 
 	c->provider.userinfo_refresh_interval =
@@ -1618,10 +1615,6 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->crypto_passphrase =
 			add->crypto_passphrase != NULL ?
 					add->crypto_passphrase : base->crypto_passphrase;
-
-	c->scrub_request_headers =
-			add->scrub_request_headers != OIDC_DEFAULT_SCRUB_REQUEST_HEADERS ?
-					add->scrub_request_headers : base->scrub_request_headers;
 
 	c->error_template =
 			add->error_template != NULL ?
@@ -2768,11 +2761,6 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, session_cookie_chunk_size),
 				RSRC_CONF,
 				"Chunk size for client-cookie session storage type in bytes. Defaults to 4k. Set 0 to suppress chunking."),
-		AP_INIT_FLAG(OIDCScrubRequestHeaders,
-				oidc_set_flag_slot,
-				(void *) APR_OFFSETOF(oidc_cfg, scrub_request_headers),
-				RSRC_CONF,
-				"Scrub user name and claim headers from the user's request."),
 
 		AP_INIT_TAKE1(OIDCCacheType,
 				oidc_set_cache_type,

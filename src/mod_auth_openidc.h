@@ -382,9 +382,6 @@ typedef struct oidc_cfg {
 #endif
 	int cache_encrypt;
 
-	/* tell the module to strip any mod_auth_openidc related headers that already have been set by the user-agent, normally required for secure operation */
-	int scrub_request_headers;
-
 	int http_timeout_long;
 	int http_timeout_short;
 	int state_timeout;

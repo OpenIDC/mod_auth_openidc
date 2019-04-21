@@ -1,3 +1,7 @@
+04/21/2019
+- remove option to skip scrubbing request headers (thus avoiding potentionally insecure setups)
+- bump to 2.4.0rc3
+
 04/19/2019
 - add USE_URANDOM compile time option to use /dev/urandom explicitly for non-blocking random number generation
   configure with APXS2_OPTS="-DUSE_URANDOM"
