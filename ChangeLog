@@ -1,3 +1,7 @@
+05/02/2019
+- correct caching for OIDCOAuthServerMetadataURL
+- bump to 2.4.0rc4
+
 04/21/2019
 - remove option to skip scrubbing request headers (thus avoiding potentionally insecure setups)
 - bump to 2.4.0rc3
