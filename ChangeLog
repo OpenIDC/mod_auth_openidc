@@ -1,3 +1,7 @@
+05/03/2019
+- fix (cached) parsing of OIDCOAuthServerMetadataURL; thanks Lance Fannin
+- bump to 2.4.0rc5
+
 05/02/2019
 - correct caching for OIDCOAuthServerMetadataURL
 - bump to 2.4.0rc4

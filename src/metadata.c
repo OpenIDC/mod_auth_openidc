@@ -1058,34 +1058,28 @@ apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg *c,
 	oidc_json_object_get_string(r->pool, j_provider, OIDC_METADATA_ISSUER,
 			&issuer, NULL);
 
-	if (c->oauth.introspection_endpoint_url == NULL) {
-		/* get a handle to the introspection endpoint */
-		oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER, issuer,
-				j_provider,
-				OIDC_METADATA_INTROSPECTION_ENDPOINT,
-				&c->oauth.introspection_endpoint_url,
-				NULL);
-	}
+	/* get a handle to the introspection endpoint */
+	oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER, issuer,
+			j_provider,
+			OIDC_METADATA_INTROSPECTION_ENDPOINT,
+			&c->oauth.introspection_endpoint_url,
+			NULL);
 
-	if (c->oauth.verify_jwks_uri == NULL) {
-		/* get a handle to the jwks_uri endpoint */
-		oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER, issuer,
-				j_provider,
-				OIDC_METADATA_JWKS_URI, &c->oauth.verify_jwks_uri,
-				NULL);
-	}
+	/* get a handle to the jwks_uri endpoint */
+	oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER, issuer,
+			j_provider,
+			OIDC_METADATA_JWKS_URI, &c->oauth.verify_jwks_uri,
+			NULL);
 
-	if (c->oauth.introspection_endpoint_auth == NULL) {
-		if (oidc_valid_string_in_array(r->pool, j_provider,
-				OIDC_METADATA_INTROSPECTON_ENDPOINT_AUTH_METHODS_SUPPORTED,
-				oidc_cfg_get_valid_endpoint_auth_function(c),
-				&c->oauth.introspection_endpoint_auth,
-				TRUE) != NULL) {
-			oidc_error(r,
-					"could not find a supported token endpoint authentication method in provider metadata (%s) for entry \"" OIDC_METADATA_INTROSPECTON_ENDPOINT_AUTH_METHODS_SUPPORTED "\"",
-					issuer);
-			return FALSE;
-		}
+	if (oidc_valid_string_in_array(r->pool, j_provider,
+			OIDC_METADATA_INTROSPECTON_ENDPOINT_AUTH_METHODS_SUPPORTED,
+			oidc_cfg_get_valid_endpoint_auth_function(c),
+			&c->oauth.introspection_endpoint_auth,
+			TRUE) != NULL) {
+		oidc_error(r,
+				"could not find a supported token endpoint authentication method in provider metadata (%s) for entry \"" OIDC_METADATA_INTROSPECTON_ENDPOINT_AUTH_METHODS_SUPPORTED "\"",
+				issuer);
+		return FALSE;
 	}
 
 	return TRUE;
