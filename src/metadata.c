@@ -77,7 +77,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_METADATA_USERINFO_ENDPOINT                            "userinfo_endpoint"
 #define OIDC_METADATA_JWKS_URI                                     "jwks_uri"
 #define OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED        "token_endpoint_auth_methods_supported"
-#define OIDC_METADATA_INTROSPECTON_NDPOINT_AUTH_METHODS_SUPPORTED  "introspection_endpoint_auth_methods_supported"
+#define OIDC_METADATA_INTROSPECTON_ENDPOINT_AUTH_METHODS_SUPPORTED "introspection_endpoint_auth_methods_supported"
 #define OIDC_METADATA_REGISTRATION_ENDPOINT                        "registration_endpoint"
 #define OIDC_METADATA_CHECK_SESSION_IFRAME                         "check_session_iframe"
 #define OIDC_METADATA_BACKCHANNEL_LOGOUT_SUPPORTED                 "backchannel_logout_supported"
@@ -1077,12 +1077,12 @@ apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg *c,
 
 	if (c->oauth.introspection_endpoint_auth == NULL) {
 		if (oidc_valid_string_in_array(r->pool, j_provider,
-				OIDC_METADATA_INTROSPECTON_NDPOINT_AUTH_METHODS_SUPPORTED,
+				OIDC_METADATA_INTROSPECTON_ENDPOINT_AUTH_METHODS_SUPPORTED,
 				oidc_cfg_get_valid_endpoint_auth_function(c),
 				&c->oauth.introspection_endpoint_auth,
 				TRUE) != NULL) {
 			oidc_error(r,
-					"could not find a supported token endpoint authentication method in provider metadata (%s) for entry \"" OIDC_METADATA_INTROSPECTON_NDPOINT_AUTH_METHODS_SUPPORTED "\"",
+					"could not find a supported token endpoint authentication method in provider metadata (%s) for entry \"" OIDC_METADATA_INTROSPECTON_ENDPOINT_AUTH_METHODS_SUPPORTED "\"",
 					issuer);
 			return FALSE;
 		}
