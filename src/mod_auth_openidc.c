@@ -2699,20 +2699,26 @@ static apr_byte_t oidc_is_back_channel_logout(const char *logout_param_value) {
  * OP has an RFC 7009 compliant token revocation endpoint
  */
 static void oidc_revoke_tokens(request_rec *r, oidc_cfg *c,
-		oidc_session_t *session, oidc_provider_t *provider) {
+		oidc_session_t *session) {
 
 	char *response = NULL;
 	char *basic_auth = NULL;
 	char *bearer_auth = NULL;
 	apr_table_t *params = NULL;
 	const char *token = NULL;
+	oidc_provider_t *provider = NULL;
 
-	oidc_debug(r, "enter: revocation_endpoint=%s",
+	oidc_debug(r, "enter");
+
+	if (oidc_get_provider_from_session(r, c, session, &provider) == FALSE)
+		goto out;
+
+	oidc_debug(r, "revocation_endpoint=%s",
 			provider->revocation_endpoint_url ?
 					provider->revocation_endpoint_url : "(null)");
 
 	if (provider->revocation_endpoint_url == NULL)
-		return;
+		goto out;
 
 	params = apr_table_make(r->pool, 4);
 
@@ -2721,7 +2727,7 @@ static void oidc_revoke_tokens(request_rec *r, oidc_cfg *c,
 			provider->client_id, provider->client_secret,
 			provider->token_endpoint_url, params, NULL, &basic_auth,
 			&bearer_auth) == FALSE)
-		return;
+		goto out;
 
 	// TODO: use oauth.ssl_validate_server ...
 	token = oidc_session_get_refresh_token(r, session);
@@ -2752,6 +2758,10 @@ static void oidc_revoke_tokens(request_rec *r, oidc_cfg *c,
 			oidc_warn(r, "revoking access token failed");
 		}
 	}
+
+out:
+
+	oidc_debug(r, "leave");
 }
 
 /*
@@ -2760,17 +2770,12 @@ static void oidc_revoke_tokens(request_rec *r, oidc_cfg *c,
 static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 		oidc_session_t *session, const char *url) {
 
-	oidc_provider_t *provider = NULL;
-
 	oidc_debug(r, "enter (url=%s)", url);
 
 	/* if there's no remote_user then there's no (stored) session to kill */
 	if (session->remote_user != NULL) {
 
-		if (oidc_get_provider_from_session(r, c, session, &provider) == FALSE)
-			return HTTP_INTERNAL_SERVER_ERROR;
-
-		oidc_revoke_tokens(r, c, session, provider);
+		oidc_revoke_tokens(r, c, session);
 
 		/* remove session state (cq. cache entry and cookie) */
 		oidc_session_kill(r, session);
@@ -2828,6 +2833,7 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 	oidc_jwk_t *jwk = NULL;
 	oidc_provider_t *provider = NULL;
 	char *sid = NULL, *uuid = NULL;
+	oidc_session_t session;
 	int rc = HTTP_BAD_REQUEST;
 
 	apr_table_t *params = apr_table_make(r->pool, 8);
@@ -2973,9 +2979,12 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 		goto out;
 	}
 
-	// TODO: re-factor session.c so that we can obtain a oidc_session_t from the (server/client)
-	//       cache based on the uuid and then revoke the refresh token an access token stored
-	//       in the session: oidc_revoke_tokens
+	// revoke tokens if we can get a handle on those
+	if (cfg->session_type != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
+		if (oidc_session_load_cache_by_uuid(r, cfg, uuid, &session) != FALSE)
+			if (oidc_session_extract(r, &session) != FALSE)
+				oidc_revoke_tokens(r, cfg, &session);
+	}
 
 	// clear the session cache
 	oidc_cache_set_sid(r, sid, NULL, 0);
