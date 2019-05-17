@@ -447,14 +447,6 @@ apr_byte_t oidc_session_set(request_rec *r, oidc_session_t *z, const char *key,
 #define OIDC_SESSION_KEY_SESSION_STATE "ss"
 /* key for storing the issuer in the session context */
 #define OIDC_SESSION_KEY_ISSUER "iss"
-/* key for storing the client_id in the session context */
-#define OIDC_SESSION_KEY_CLIENT_ID "cid"
-/* key for storing the check_session_iframe in the session context */
-#define OIDC_SESSION_KEY_CHECK_SESSION_IFRAME "csi"
-/* key for storing the end_session_endpoint in the session context */
-#define OIDC_SESSION_KEY_LOGOUT_ENDPOINT "ese"
-/* key for storing the revocation in the session context */
-#define OIDC_SESSION_KEY_REVOCATION_ENDPOINT "re"
 
 /*
  * helper functions
@@ -739,55 +731,4 @@ void oidc_session_set_issuer(request_rec *r, oidc_session_t *z,
 
 const char * oidc_session_get_issuer(request_rec *r, oidc_session_t *z) {
 	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_ISSUER);
-}
-
-/*
- * client_id
- */
-void oidc_session_set_client_id(request_rec *r, oidc_session_t *z,
-		const char *client_id) {
-	oidc_session_set(r, z, OIDC_SESSION_KEY_CLIENT_ID, client_id);
-}
-
-const char * oidc_session_get_client_id(request_rec *r, oidc_session_t *z) {
-	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_CLIENT_ID);
-}
-
-/*
- * check session iframe URL
- */
-void oidc_session_set_check_session_iframe(request_rec *r, oidc_session_t *z,
-		const char *check_session_iframe) {
-	oidc_session_set(r, z, OIDC_SESSION_KEY_CHECK_SESSION_IFRAME,
-			check_session_iframe);
-}
-
-const char * oidc_session_get_check_session_iframe(request_rec *r,
-		oidc_session_t *z) {
-	return oidc_session_get_key2string(r, z,
-			OIDC_SESSION_KEY_CHECK_SESSION_IFRAME);
-}
-
-/*
- * logout endpoint URL
- */
-void oidc_session_set_logout_endpoint(request_rec *r, oidc_session_t *z,
-		const char *logout_endpoint) {
-	oidc_session_set(r, z, OIDC_SESSION_KEY_LOGOUT_ENDPOINT, logout_endpoint);
-}
-
-const char * oidc_session_get_logout_endpoint(request_rec *r, oidc_session_t *z) {
-	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_LOGOUT_ENDPOINT);
-}
-
-/*
- * revocation endpoint URL
- */
-void oidc_session_set_revocation_endpoint(request_rec *r, oidc_session_t *z,
-		const char *revocation_endpoint) {
-	oidc_session_set(r, z, OIDC_SESSION_KEY_REVOCATION_ENDPOINT, revocation_endpoint);
-}
-
-const char * oidc_session_get_revocation_endpoint(request_rec *r, oidc_session_t *z) {
-	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_REVOCATION_ENDPOINT);
 }

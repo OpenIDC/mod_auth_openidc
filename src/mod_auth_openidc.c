@@ -146,8 +146,7 @@ void oidc_scrub_headers(request_rec *r) {
 	if (apr_strnatcmp(prefix, "") == 0) {
 		if ((cfg->white_listed_claims != NULL)
 				&& (apr_hash_count(cfg->white_listed_claims) > 0))
-			hdrs = apr_hash_overlay(r->pool, cfg->white_listed_claims,
-					hdrs);
+			hdrs = apr_hash_overlay(r->pool, cfg->white_listed_claims, hdrs);
 		else
 			oidc_warn(r,
 					"both " OIDCClaimPrefix " and " OIDCWhiteListedClaims " are empty: this renders an insecure setup!");
@@ -1842,9 +1841,6 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
 	if ((session_state != NULL) && (provider->check_session_iframe != NULL)) {
 		/* store the session state and required parameters session management  */
 		oidc_session_set_session_state(r, session, session_state);
-		oidc_session_set_check_session_iframe(r, session,
-				provider->check_session_iframe);
-		oidc_session_set_client_id(r, session, provider->client_id);
 		oidc_debug(r,
 				"session management enabled: stored session_state (%s), check_session_iframe (%s) and client_id (%s) in the session",
 				session_state, provider->check_session_iframe,
@@ -1857,13 +1853,6 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
 				"session management disabled: no \"session_state\" value is provided in the authentication response even though \"check_session_iframe\" (%s) is set in the provider configuration",
 				provider->check_session_iframe);
 	}
-
-	if (provider->end_session_endpoint != NULL)
-		oidc_session_set_logout_endpoint(r, session,
-				provider->end_session_endpoint);
-	if (provider->revocation_endpoint_url != NULL)
-		oidc_session_set_revocation_endpoint(r, session,
-				provider->revocation_endpoint_url);
 
 	/* store claims resolved from userinfo endpoint */
 	oidc_store_userinfo_claims(r, c, session, provider, claims, userinfo_jwt);
@@ -2710,32 +2699,29 @@ static apr_byte_t oidc_is_back_channel_logout(const char *logout_param_value) {
  * OP has an RFC 7009 compliant token revocation endpoint
  */
 static void oidc_revoke_tokens(request_rec *r, oidc_cfg *c,
-		oidc_session_t *session) {
+		oidc_session_t *session, oidc_provider_t *provider) {
 
 	char *response = NULL;
 	char *basic_auth = NULL;
 	char *bearer_auth = NULL;
 	apr_table_t *params = NULL;
 	const char *token = NULL;
-	const char *revocation_endpoint = oidc_session_get_revocation_endpoint(r,
-			session);
 
 	oidc_debug(r, "enter: revocation_endpoint=%s",
-			revocation_endpoint ? revocation_endpoint : "(null)");
+			provider->revocation_endpoint_url ?
+					provider->revocation_endpoint_url : "(null)");
 
-	if (revocation_endpoint == NULL)
+	if (provider->revocation_endpoint_url == NULL)
 		return;
 
 	params = apr_table_make(r->pool, 4);
 
-	// add the token endpoint authentication credentials
-	/*
-	 if (oidc_proto_token_endpoint_auth(r, cfg, provider->token_endpoint_auth,
-	 provider->client_id, provider->client_secret,
-	 provider->token_endpoint_url, params,
-	 NULL, &basic_auth, &bearer_auth) == FALSE)
-	 return FALSE;
-	 */
+	// add the token endpoint authentication credentials to the revocation endpoint call...
+	if (oidc_proto_token_endpoint_auth(r, c, provider->token_endpoint_auth,
+			provider->client_id, provider->client_secret,
+			provider->token_endpoint_url, params, NULL, &basic_auth,
+			&bearer_auth) == FALSE)
+		return;
 
 	// TODO: use oauth.ssl_validate_server ...
 	token = oidc_session_get_refresh_token(r, session);
@@ -2743,9 +2729,9 @@ static void oidc_revoke_tokens(request_rec *r, oidc_cfg *c,
 		apr_table_addn(params, "token_type_hint", "refresh_token");
 		apr_table_addn(params, "token", token);
 
-		if (oidc_util_http_post_form(r, revocation_endpoint, params, basic_auth,
-				bearer_auth, c->oauth.ssl_validate_server, &response,
-				c->http_timeout_long, c->outgoing_proxy,
+		if (oidc_util_http_post_form(r, provider->revocation_endpoint_url,
+				params, basic_auth, bearer_auth, c->oauth.ssl_validate_server,
+				&response, c->http_timeout_long, c->outgoing_proxy,
 				oidc_dir_cfg_pass_cookies(r), NULL,
 				NULL) == FALSE) {
 			oidc_warn(r, "revoking refresh token failed");
@@ -2758,9 +2744,9 @@ static void oidc_revoke_tokens(request_rec *r, oidc_cfg *c,
 		apr_table_addn(params, "token_type_hint", "access_token");
 		apr_table_addn(params, "token", token);
 
-		if (oidc_util_http_post_form(r, revocation_endpoint, params, basic_auth,
-				bearer_auth, c->oauth.ssl_validate_server, &response,
-				c->http_timeout_long, c->outgoing_proxy,
+		if (oidc_util_http_post_form(r, provider->revocation_endpoint_url,
+				params, basic_auth, bearer_auth, c->oauth.ssl_validate_server,
+				&response, c->http_timeout_long, c->outgoing_proxy,
 				oidc_dir_cfg_pass_cookies(r), NULL,
 				NULL) == FALSE) {
 			oidc_warn(r, "revoking access token failed");
@@ -2774,12 +2760,17 @@ static void oidc_revoke_tokens(request_rec *r, oidc_cfg *c,
 static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 		oidc_session_t *session, const char *url) {
 
-	oidc_debug(r, "enter (url=%s)", url);
+	oidc_provider_t *provider = NULL;
 
-	oidc_revoke_tokens(r, c, session);
+	oidc_debug(r, "enter (url=%s)", url);
 
 	/* if there's no remote_user then there's no (stored) session to kill */
 	if (session->remote_user != NULL) {
+
+		if (oidc_get_provider_from_session(r, c, session, &provider) == FALSE)
+			return HTTP_INTERNAL_SERVER_ERROR;
+
+		oidc_revoke_tokens(r, c, session, provider);
 
 		/* remove session state (cq. cache entry and cookie) */
 		oidc_session_kill(r, session);
@@ -3013,6 +3004,7 @@ out:
 static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 		oidc_session_t *session) {
 
+	oidc_provider_t *provider = NULL;
 	/* pickup the command or URL where the user wants to go after logout */
 	char *url = NULL;
 	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_LOGOUT, &url);
@@ -3073,13 +3065,14 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 		}
 	}
 
-	const char *end_session_endpoint = oidc_session_get_logout_endpoint(r,
-			session);
-	if (end_session_endpoint != NULL) {
+	oidc_get_provider_from_session(r, c, session, &provider);
+
+	if ((provider != NULL) && (provider->end_session_endpoint != NULL)) {
 
 		const char *id_token_hint = oidc_session_get_idtoken(r, session);
 
-		char *logout_request = apr_pstrdup(r->pool, end_session_endpoint);
+		char *logout_request = apr_pstrdup(r->pool,
+				provider->end_session_endpoint);
 		if (id_token_hint != NULL) {
 			logout_request = apr_psprintf(r->pool, "%s%sid_token_hint=%s",
 					logout_request, strchr(logout_request ? logout_request : "",
@@ -3236,8 +3229,7 @@ static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c,
 static int oidc_handle_session_management(request_rec *r, oidc_cfg *c,
 		oidc_session_t *session) {
 	char *cmd = NULL;
-	const char *id_token_hint = NULL, *client_id = NULL, *check_session_iframe =
-			NULL;
+	const char *id_token_hint = NULL;
 	oidc_provider_t *provider = NULL;
 
 	/* get the command passed to the session management handler */
@@ -3254,36 +3246,33 @@ static int oidc_handle_session_management(request_rec *r, oidc_cfg *c,
 		return oidc_handle_logout_request(r, c, session, c->default_slo_url);
 	}
 
+	oidc_get_provider_from_session(r, c, session, &provider);
+
 	/* see if this is a request for the OP iframe */
 	if (apr_strnatcmp("iframe_op", cmd) == 0) {
-		check_session_iframe = oidc_session_get_check_session_iframe(r,
-				session);
-		if (check_session_iframe != NULL) {
+		if (provider->check_session_iframe != NULL) {
 			return oidc_handle_session_management_iframe_op(r, c, session,
-					check_session_iframe);
+					provider->check_session_iframe);
 		}
 		return HTTP_NOT_FOUND;
 	}
 
 	/* see if this is a request for the RP iframe */
 	if (apr_strnatcmp("iframe_rp", cmd) == 0) {
-		client_id = oidc_session_get_client_id(r, session);
-		check_session_iframe = oidc_session_get_check_session_iframe(r,
-				session);
-		if ((client_id != NULL) && (check_session_iframe != NULL)) {
+		if ((provider->client_id != NULL)
+				&& (provider->check_session_iframe != NULL)) {
 			return oidc_handle_session_management_iframe_rp(r, c, session,
-					client_id, check_session_iframe);
+					provider->client_id, provider->check_session_iframe);
 		}
 		oidc_debug(r,
 				"iframe_rp command issued but no client (%s) and/or no check_session_iframe (%s) set",
-				client_id, check_session_iframe);
+				provider->client_id, provider->check_session_iframe);
 		return HTTP_NOT_FOUND;
 	}
 
 	/* see if this is a request check the login state with the OP */
 	if (apr_strnatcmp("check", cmd) == 0) {
 		id_token_hint = oidc_session_get_idtoken(r, session);
-		oidc_get_provider_from_session(r, c, session, &provider);
 		if ((session->remote_user != NULL) && (provider != NULL)) {
 			/*
 			 * TODO: this doesn't work with per-path provided auth_request_params and scopes
