@@ -1,6 +1,7 @@
 05/17/2019
 - allow removing an access token from the cache ("remove_at_cache") when running in OAuth 2.0 RS mode only
-- bump to 2.4.0rc6
+- support refresh and access tokens revocation from an RFC 7009 endpoint upon OIDC session logout (no client auth yet)
+- bump to 2.4.0rc7
 
 05/03/2019
 - fix (cached) parsing of OIDCOAuthServerMetadataURL; thanks Lance Fannin

@@ -256,6 +256,7 @@ typedef struct oidc_provider_t {
 	char *token_endpoint_auth;
 	char *token_endpoint_params;
 	char *userinfo_endpoint_url;
+	char *revocation_endpoint_url;
 	char *registration_endpoint_url;
 	char *check_session_iframe;
 	char *end_session_endpoint;
@@ -875,6 +876,8 @@ void oidc_session_set_check_session_iframe(request_rec *r, oidc_session_t *z, co
 const char * oidc_session_get_check_session_iframe(request_rec *r, oidc_session_t *z);
 void oidc_session_set_logout_endpoint(request_rec *r, oidc_session_t *z, const char *logout_endpoint);
 const char * oidc_session_get_logout_endpoint(request_rec *r, oidc_session_t *z);
+void oidc_session_set_revocation_endpoint(request_rec *r, oidc_session_t *z, const char *revocation_endpoint);
+const char * oidc_session_get_revocation_endpoint(request_rec *r, oidc_session_t *z);
 
 char *oidc_parse_base64(apr_pool_t *pool, const char *input, char **output, int *output_len);
 

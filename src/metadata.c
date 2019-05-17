@@ -75,6 +75,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_METADATA_TOKEN_ENDPOINT                               "token_endpoint"
 #define OIDC_METADATA_INTROSPECTION_ENDPOINT                       "introspection_endpoint"
 #define OIDC_METADATA_USERINFO_ENDPOINT                            "userinfo_endpoint"
+#define OIDC_METADATA_REVOCATION_ENDPOINT                          "revocation_endpoint"
 #define OIDC_METADATA_JWKS_URI                                     "jwks_uri"
 #define OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED        "token_endpoint_auth_methods_supported"
 #define OIDC_METADATA_INTROSPECTON_ENDPOINT_AUTH_METHODS_SUPPORTED "introspection_endpoint_auth_methods_supported"
@@ -991,6 +992,14 @@ apr_byte_t oidc_metadata_provider_parse(request_rec *r, oidc_cfg *cfg,
 				provider->issuer, j_provider,
 				OIDC_METADATA_USERINFO_ENDPOINT,
 				&provider->userinfo_endpoint_url, NULL);
+	}
+
+	if (provider->revocation_endpoint_url == NULL) {
+		/* get a handle to the token revocation endpoint */
+		oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER,
+				provider->issuer, j_provider,
+				OIDC_METADATA_REVOCATION_ENDPOINT,
+				&provider->revocation_endpoint_url, NULL);
 	}
 
 	if (provider->jwks_uri == NULL) {

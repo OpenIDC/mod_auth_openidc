@@ -1861,6 +1861,9 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
 	if (provider->end_session_endpoint != NULL)
 		oidc_session_set_logout_endpoint(r, session,
 				provider->end_session_endpoint);
+	if (provider->revocation_endpoint_url != NULL)
+		oidc_session_set_revocation_endpoint(r, session,
+				provider->revocation_endpoint_url);
 
 	/* store claims resolved from userinfo endpoint */
 	oidc_store_userinfo_claims(r, c, session, provider, claims, userinfo_jwt);
@@ -2703,12 +2706,77 @@ static apr_byte_t oidc_is_back_channel_logout(const char *logout_param_value) {
 }
 
 /*
+ * revoke refresh token and access token stored in the session if the
+ * OP has an RFC 7009 compliant token revocation endpoint
+ */
+static void oidc_revoke_tokens(request_rec *r, oidc_cfg *c,
+		oidc_session_t *session) {
+
+	char *response = NULL;
+	char *basic_auth = NULL;
+	char *bearer_auth = NULL;
+	apr_table_t *params = NULL;
+	const char *token = NULL;
+	const char *revocation_endpoint = oidc_session_get_revocation_endpoint(r,
+			session);
+
+	oidc_debug(r, "enter: revocation_endpoint=%s",
+			revocation_endpoint ? revocation_endpoint : "(null)");
+
+	if (revocation_endpoint == NULL)
+		return;
+
+	params = apr_table_make(r->pool, 4);
+
+	// add the token endpoint authentication credentials
+	/*
+	 if (oidc_proto_token_endpoint_auth(r, cfg, provider->token_endpoint_auth,
+	 provider->client_id, provider->client_secret,
+	 provider->token_endpoint_url, params,
+	 NULL, &basic_auth, &bearer_auth) == FALSE)
+	 return FALSE;
+	 */
+
+	// TODO: use oauth.ssl_validate_server ...
+	token = oidc_session_get_refresh_token(r, session);
+	if (token != NULL) {
+		apr_table_addn(params, "token_type_hint", "refresh_token");
+		apr_table_addn(params, "token", token);
+
+		if (oidc_util_http_post_form(r, revocation_endpoint, params, basic_auth,
+				bearer_auth, c->oauth.ssl_validate_server, &response,
+				c->http_timeout_long, c->outgoing_proxy,
+				oidc_dir_cfg_pass_cookies(r), NULL,
+				NULL) == FALSE) {
+			oidc_warn(r, "revoking refresh token failed");
+		}
+		apr_table_clear(params);
+	}
+
+	token = oidc_session_get_access_token(r, session);
+	if (token != NULL) {
+		apr_table_addn(params, "token_type_hint", "access_token");
+		apr_table_addn(params, "token", token);
+
+		if (oidc_util_http_post_form(r, revocation_endpoint, params, basic_auth,
+				bearer_auth, c->oauth.ssl_validate_server, &response,
+				c->http_timeout_long, c->outgoing_proxy,
+				oidc_dir_cfg_pass_cookies(r), NULL,
+				NULL) == FALSE) {
+			oidc_warn(r, "revoking access token failed");
+		}
+	}
+}
+
+/*
  * handle a local logout
  */
 static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 		oidc_session_t *session, const char *url) {
 
 	oidc_debug(r, "enter (url=%s)", url);
+
+	oidc_revoke_tokens(r, c, session);
 
 	/* if there's no remote_user then there's no (stored) session to kill */
 	if (session->remote_user != NULL) {
@@ -2913,6 +2981,10 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 				sid);
 		goto out;
 	}
+
+	// TODO: re-factor session.c so that we can obtain a oidc_session_t from the (server/client)
+	//       cache based on the uuid and then revoke the refresh token an access token stored
+	//       in the session: oidc_revoke_tokens
 
 	// clear the session cache
 	oidc_cache_set_sid(r, sid, NULL, 0);

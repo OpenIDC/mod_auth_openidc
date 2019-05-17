@@ -453,6 +453,8 @@ apr_byte_t oidc_session_set(request_rec *r, oidc_session_t *z, const char *key,
 #define OIDC_SESSION_KEY_CHECK_SESSION_IFRAME "csi"
 /* key for storing the end_session_endpoint in the session context */
 #define OIDC_SESSION_KEY_LOGOUT_ENDPOINT "ese"
+/* key for storing the revocation in the session context */
+#define OIDC_SESSION_KEY_REVOCATION_ENDPOINT "re"
 
 /*
  * helper functions
@@ -776,4 +778,16 @@ void oidc_session_set_logout_endpoint(request_rec *r, oidc_session_t *z,
 
 const char * oidc_session_get_logout_endpoint(request_rec *r, oidc_session_t *z) {
 	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_LOGOUT_ENDPOINT);
+}
+
+/*
+ * revocation endpoint URL
+ */
+void oidc_session_set_revocation_endpoint(request_rec *r, oidc_session_t *z,
+		const char *revocation_endpoint) {
+	oidc_session_set(r, z, OIDC_SESSION_KEY_REVOCATION_ENDPOINT, revocation_endpoint);
+}
+
+const char * oidc_session_get_revocation_endpoint(request_rec *r, oidc_session_t *z) {
+	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_REVOCATION_ENDPOINT);
 }

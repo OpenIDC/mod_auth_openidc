@@ -177,6 +177,7 @@
 #define OIDCProviderTokenEndpointParams        "OIDCProviderTokenEndpointParams"
 #define OIDCProviderRegistrationEndpointJson   "OIDCProviderRegistrationEndpointJson"
 #define OIDCProviderUserInfoEndpoint           "OIDCProviderUserInfoEndpoint"
+#define OIDCProviderRevocationEndpoint         "OIDCProviderRevocationEndpoint"
 #define OIDCProviderCheckSessionIFrame         "OIDCProviderCheckSessionIFrame"
 #define OIDCProviderEndSessionEndpoint         "OIDCProviderEndSessionEndpoint"
 #define OIDCProviderBackChannelLogoutSupported "OIDCProviderBackChannelLogoutSupported"
@@ -1078,6 +1079,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->provider.token_endpoint_auth = NULL;
 	c->provider.token_endpoint_params = NULL;
 	c->provider.userinfo_endpoint_url = NULL;
+	c->provider.revocation_endpoint_url = NULL;
 	c->provider.client_id = NULL;
 	c->provider.client_secret = NULL;
 	c->provider.token_endpoint_tls_client_cert = NULL;
@@ -1260,6 +1262,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->provider.userinfo_endpoint_url != NULL ?
 					add->provider.userinfo_endpoint_url :
 					base->provider.userinfo_endpoint_url;
+	c->provider.revocation_endpoint_url =
+			add->provider.revocation_endpoint_url != NULL ?
+					add->provider.revocation_endpoint_url :
+					base->provider.revocation_endpoint_url;
 	c->provider.jwks_uri =
 			add->provider.jwks_uri != NULL ?
 					add->provider.jwks_uri : base->provider.jwks_uri;
@@ -2398,6 +2404,11 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, provider.userinfo_endpoint_url),
 				RSRC_CONF,
 				"Define the OpenID OP UserInfo Endpoint URL (e.g.: https://localhost:9031/idp/userinfo.openid)"),
+		AP_INIT_TAKE1(OIDCProviderRevocationEndpoint,
+				oidc_set_https_slot,
+				(void *)APR_OFFSETOF(oidc_cfg, provider.revocation_endpoint_url),
+				RSRC_CONF,
+				"Define the RFC 7009 Token Revocation Endpoint URL (e.g.: https://localhost:9031/as/revoke_token.oauth2)"),
 		AP_INIT_TAKE1(OIDCProviderCheckSessionIFrame,
 				oidc_set_url_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.check_session_iframe),
