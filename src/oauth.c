@@ -737,16 +737,22 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c,
 			return OK;
 		}
 
-		/* check if this is a request for the public (encryption) keys */
+		/* check if this is a request to the "special" handler (Redirect URI) */
 	} else if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c))) {
 
+		/* check if this is a request for the public (encryption) keys */
 		if (oidc_util_request_has_parameter(r,
 				OIDC_REDIRECT_URI_REQUEST_JWKS)) {
 
 			return oidc_handle_jwks(r, c);
 
-		}
+			/* check if this is a request to remove the access token from the cache */
+		} else if (oidc_util_request_has_parameter(r,
+				OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE)) {
 
+			/* handle request to invalidate access token cache */
+			return oidc_handle_remove_at_cache(r, c);
+		}
 	}
 
 	/* we don't have a session yet */

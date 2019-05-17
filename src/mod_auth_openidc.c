@@ -3348,7 +3348,7 @@ static int oidc_handle_request_uri(request_rec *r, oidc_cfg *c) {
 /*
  * handle a request to invalidate a cached access token introspection result
  */
-static int oidc_handle_remove_at_cache(request_rec *r, oidc_cfg *c) {
+int oidc_handle_remove_at_cache(request_rec *r, oidc_cfg *c) {
 	char *access_token = NULL;
 	oidc_util_get_request_parameter(r,
 			OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE, &access_token);
