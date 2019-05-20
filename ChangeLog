@@ -1,2 +1,6 @@
+05/20/2019
+- add Apache Require claim authorization functions
+- bump to 3.0.1
+
 03/22/2019
 - initial import of version 3.0.0
