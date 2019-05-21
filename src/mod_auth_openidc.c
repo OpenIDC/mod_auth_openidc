@@ -752,8 +752,11 @@ static int oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c,
 							json_int_t ts = oidc_proto_state_get_timestamp(
 									proto_state);
 							if (apr_time_now() > ts + apr_time_from_sec(c->state_timeout)) {
-								oidc_error(r, "state (%s) has expired",
-										cookieName);
+								oidc_error(r,
+										"state (%s) has expired (original_url=%s)",
+										cookieName,
+										oidc_proto_state_get_original_url(
+												proto_state));
 								oidc_util_set_cookie(r, cookieName, "", 0,
 										NULL);
 							} else {
