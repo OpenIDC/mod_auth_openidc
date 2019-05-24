@@ -1,10 +1,14 @@
+05/24/2019
+- fix oidc_proto_html_post auto-post-submit so it no longer results in duplicate parentheses; closes #440; thanks @gobreak
+- bump to 2.4.0rc10
+
 05/21/2019
 - log the original URL for expired state cookies, useful for debugging SPA/JS issues
 
 05/17/2019
 - allow removing an access token from the cache ("remove_at_cache") when running in OAuth 2.0 RS mode only
 - support refresh and access tokens revocation from an RFC 7009 endpoint upon OIDC session logout
-- bump to 2.4.0rc8
+- bump to 2.4.0rc9
 
 05/03/2019
 - fix (cached) parsing of OIDCOAuthServerMetadataURL; thanks Lance Fannin

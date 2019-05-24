@@ -604,7 +604,7 @@ static int oidc_proto_html_post(request_rec *r, const char *url,
 			"    </form>\n");
 
 	return oidc_util_html_send(r, "Submitting...", NULL,
-			"document.forms[0].submit()", html_body, DONE);
+			"document.forms[0].submit", html_body, DONE);
 }
 
 void add_auth_request_params(request_rec *r, apr_table_t *params,
