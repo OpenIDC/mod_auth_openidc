@@ -836,6 +836,10 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 	/* check that the timestamp is not beyond the valid interval */
 	if (apr_time_now() > ts + apr_time_from_sec(c->state_timeout)) {
 		oidc_error(r, "state has expired");
+		/*
+		 * note that this overrides redirection to the OIDCDefaultURL as done later...
+		 * see: https://groups.google.com/forum/?utm_medium=email&utm_source=footer#!msg/mod_auth_openidc/L4JFBw-XCNU/BWi2Fmk2AwAJ
+		 */
 		oidc_util_html_send_error(r, c->error_template,
 				"Invalid Authentication Response",
 				apr_psprintf(r->pool,
