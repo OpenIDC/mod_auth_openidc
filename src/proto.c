@@ -78,7 +78,9 @@ apr_status_t oidc_proto_generate_random_bytes(request_rec *r,
 
 #ifndef USE_URANDOM
 
-	oidc_debug(r, "apr_generate_random_bytes call for %" APR_SIZE_T_FMT " bytes", length);
+	oidc_debug(r,
+			"apr_generate_random_bytes call for %" APR_SIZE_T_FMT " bytes",
+			length);
 	rv = apr_generate_random_bytes(buf, length);
 	oidc_debug(r, "apr_generate_random_bytes returned");
 
@@ -604,7 +606,7 @@ static int oidc_proto_html_post(request_rec *r, const char *url,
 			"    </form>\n");
 
 	return oidc_util_html_send(r, "Submitting...", NULL,
-			"document.forms[0].submit", html_body, DONE);
+			"document.forms[0].submit", html_body, OK);
 }
 
 void add_auth_request_params(request_rec *r, apr_table_t *params,
@@ -648,7 +650,7 @@ int oidc_proto_authorization_request(request_rec *r,
 			oidc_proto_state_to_string(r, proto_state), code_challenge,
 			auth_request_params, path_scope);
 
-	int rv = DONE;
+	int rv = OK;
 	char *authorization_request = NULL;
 
 	/* assemble parameters to call the token endpoint for validation */
@@ -2456,7 +2458,7 @@ int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg *c) {
 			"    </form>\n";
 
 	return oidc_util_html_send(r, "Submitting...", java_script, "postOnLoad",
-			html_body, DONE);
+			html_body, OK);
 }
 
 /*

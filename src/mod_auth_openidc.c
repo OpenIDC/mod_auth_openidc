@@ -474,7 +474,7 @@ apr_byte_t oidc_post_preserve_javascript(request_rec *r, const char *location,
 			*javascript = apr_pstrdup(r->pool, jscript);
 	} else {
 		oidc_util_html_send(r, "Preserving...", jscript, jmethod,
-				"<p>Preserving...</p>", DONE);
+				"<p>Preserving...</p>", OK);
 	}
 
 	return TRUE;
@@ -519,7 +519,7 @@ static int oidc_request_post_preserved_restore(request_rec *r,
 			"    <form method=\"post\"></form>\n";
 
 	return oidc_util_html_send(r, "Restoring...", script, method, body,
-			DONE);
+			OK);
 }
 
 /*
@@ -845,7 +845,7 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 				apr_psprintf(r->pool,
 						"This is due to a timeout; please restart your authentication session by re-entering the URL/bookmark you originally wanted to access: %s",
 						oidc_proto_state_get_original_url(*proto_state)),
-						DONE);
+						OK);
 		oidc_proto_state_destroy(*proto_state);
 		return FALSE;
 	}
@@ -1683,7 +1683,7 @@ static int oidc_session_redirect_parent_window_to_logout(request_rec *r,
 			"    </script>\n", oidc_get_redirect_uri(r, c));
 
 	return oidc_util_html_send(r, "Redirecting...", java_script, NULL, NULL,
-			DONE);
+			OK);
 }
 
 /*
@@ -1702,7 +1702,7 @@ static int oidc_authorization_response_error(request_rec *r, oidc_cfg *c,
 	}
 	return oidc_util_html_send_error(r, c->error_template,
 			apr_psprintf(r->pool, "OpenID Connect Provider error: %s", error),
-			error_description, DONE);
+			error_description, OK);
 }
 
 /*
@@ -2256,7 +2256,7 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 
 		/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
 		if (oidc_post_preserve_javascript(r, url, NULL, NULL) == TRUE)
-			return DONE;
+			return OK;
 
 		/* do the actual redirect to an external discovery page */
 		oidc_util_hdr_out_location_set(r, url);
@@ -2356,7 +2356,7 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 
 	/* now send the HTML contents to the user agent */
 	return oidc_util_html_send(r, "OpenID Connect Provider Discovery",
-			html_head, javascript_method, s, DONE);
+			html_head, javascript_method, s, OK);
 }
 
 /*
@@ -2806,18 +2806,18 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 			return oidc_util_http_send(r,
 					(const char *) &oidc_transparent_pixel,
 					sizeof(oidc_transparent_pixel), OIDC_CONTENT_TYPE_IMAGE_PNG,
-					DONE);
+					OK);
 		}
 
 		/* standard HTTP based logout: should be called in an iframe from the OP */
 		return oidc_util_html_send(r, "Logged Out", NULL, NULL,
-				"<p>Logged Out</p>", DONE);
+				"<p>Logged Out</p>", OK);
 	}
 
 	/* see if we don't need to go somewhere special after killing the session locally */
 	if (url == NULL)
 		return oidc_util_html_send(r, "Logged Out", NULL, NULL,
-				"<p>Logged Out</p>", DONE);
+				"<p>Logged Out</p>", OK);
 
 	/* send the user to the specified where-to-go-after-logout URL */
 	oidc_util_hdr_out_location_set(r, url);
@@ -2997,7 +2997,7 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 	oidc_cache_set_sid(r, sid, NULL, 0);
 	oidc_cache_set_session(r, uuid, NULL, 0);
 
-	rc = DONE;
+	rc = OK;
 
 out:
 
@@ -3154,7 +3154,7 @@ int oidc_handle_jwks(request_rec *r, oidc_cfg *c) {
 	jwks = apr_psprintf(r->pool, "%s ] }", jwks);
 
 	return oidc_util_http_send(r, jwks, strlen(jwks), OIDC_CONTENT_TYPE_JSON,
-			DONE);
+			OK);
 }
 
 static int oidc_handle_session_management_iframe_op(request_rec *r, oidc_cfg *c,
@@ -3222,7 +3222,7 @@ static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c,
 	if (session_state == NULL) {
 		oidc_warn(r,
 				"no session_state found in the session; the OP does probably not support session management!?");
-		return DONE;
+		return OK;
 	}
 
 	char *s_poll_interval = NULL;
@@ -3236,7 +3236,7 @@ static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c,
 			session_state, op_iframe_id, poll_interval, redirect_uri,
 			redirect_uri);
 
-	return oidc_util_html_send(r, NULL, java_script, "setTimer", NULL, DONE);
+	return oidc_util_html_send(r, NULL, java_script, "setTimer", NULL, OK);
 }
 
 /*
@@ -3419,7 +3419,7 @@ static int oidc_handle_request_uri(request_rec *r, oidc_cfg *c) {
 
 	oidc_cache_set_request_uri(r, request_ref, NULL, 0);
 
-	return oidc_util_http_send(r, jwt, strlen(jwt), OIDC_CONTENT_TYPE_JWT, DONE);
+	return oidc_util_http_send(r, jwt, strlen(jwt), OIDC_CONTENT_TYPE_JWT, OK);
 }
 
 /*
@@ -3440,7 +3440,7 @@ int oidc_handle_remove_at_cache(request_rec *r, oidc_cfg *c) {
 
 	oidc_cache_set_access_token(r, access_token, NULL, 0);
 
-	return DONE;
+	return OK;
 }
 
 #define OIDC_INFO_PARAM_ACCESS_TOKEN_REFRESH_INTERVAL "access_token_refresh_interval"
@@ -3606,7 +3606,7 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 	/* return the stringified JSON result */
 	return oidc_util_http_send(r, r_value, strlen(r_value),
 			OIDC_CONTENT_TYPE_JSON,
-			DONE);
+			OK);
 }
 
 /*
@@ -3679,8 +3679,10 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 		if (session->remote_user == NULL)
 			return HTTP_UNAUTHORIZED;
 
-		/* set remote user, set headers/env-vars, update expiry, update userinfo + AT */
-		return oidc_handle_existing_session(r, c, session);
+		/* set r->user, set headers/env-vars, update expiry, update userinfo + AT */
+		oidc_handle_existing_session(r, c, session);
+
+		return oidc_handle_info_request(r, c, session);
 
 	} else if ((r->args == NULL) || (apr_strnatcmp(r->args, "") == 0)) {
 
@@ -4083,26 +4085,8 @@ int oidc_auth_checker(request_rec *r) {
 int oidc_content_handler(request_rec *r) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
-
-	int rc = DECLINED;
-	if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c))) {
-
-		if (oidc_util_request_has_parameter(r,
-				OIDC_REDIRECT_URI_REQUEST_INFO)) {
-
-			oidc_session_t *session = NULL;
-			oidc_session_load(r, &session);
-
-			/* handle request for session info */
-			rc = oidc_handle_info_request(r, c, session);
-
-			/* free resources allocated for the session */
-			oidc_session_free(r, session);
-
-		}
-
-	}
-	return rc;
+	return oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c)) ?
+			OK : DECLINED;
 }
 
 extern const command_rec oidc_config_cmds[];
