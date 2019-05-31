@@ -3450,15 +3450,17 @@ int oidc_handle_remove_at_cache(request_rec *r, oidc_cfg *c) {
  */
 static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 		oidc_session_t *session) {
+	int rc = HTTP_UNAUTHORIZED;
 	apr_byte_t needs_save = FALSE;
-	char *s_format = NULL, *s_interval = NULL;
+	char *s_format = NULL, *s_interval = NULL, *r_value = NULL;
 	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO,
 			&s_format);
 	oidc_util_get_request_parameter(r,
 			OIDC_INFO_PARAM_ACCESS_TOKEN_REFRESH_INTERVAL, &s_interval);
 
 	/* see if this is a request for a format that is supported */
-	if (apr_strnatcmp(OIDC_HOOK_INFO_FORMAT_JSON, s_format) != 0) {
+	if ((apr_strnatcmp(OIDC_HOOK_INFO_FORMAT_JSON, s_format) != 0)
+			&& (apr_strnatcmp(OIDC_HOOK_INFO_FORMAT_HTML, s_format) != 0)) {
 		oidc_warn(r, "request for unknown format: %s", s_format);
 		return HTTP_UNSUPPORTED_MEDIA_TYPE;
 	}
@@ -3591,8 +3593,18 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 					json_string(refresh_token));
 	}
 
-	/* JSON-encode the result */
-	char *r_value = oidc_util_encode_json_object(r, json, 0);
+	if (apr_strnatcmp(OIDC_HOOK_INFO_FORMAT_JSON, s_format) == 0) {
+		/* JSON-encode the result */
+		r_value = oidc_util_encode_json_object(r, json, 0);
+		/* return the stringified JSON result */
+		rc = oidc_util_http_send(r, r_value, strlen(r_value),
+				OIDC_CONTENT_TYPE_JSON, OK);
+	} else if (apr_strnatcmp(OIDC_HOOK_INFO_FORMAT_HTML, s_format) == 0) {
+		/* JSON-encode the result */
+		r_value = oidc_util_encode_json_object(r, json, JSON_INDENT(2));
+		rc = oidc_util_html_send(r, "Session Info", NULL, NULL,
+				apr_psprintf(r->pool, "<pre>%s</pre>", r_value), OK);
+	}
 
 	/* free the allocated resources */
 	json_decref(json);
@@ -3600,13 +3612,10 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 	/* pass the tokens to the application and save the session, possibly updating the expiry */
 	if (oidc_session_pass_tokens_and_save(r, c, session, needs_save) == FALSE) {
 		oidc_warn(r, "error saving session");
-		return HTTP_INTERNAL_SERVER_ERROR;
+		rc = HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	/* return the stringified JSON result */
-	return oidc_util_http_send(r, r_value, strlen(r_value),
-			OIDC_CONTENT_TYPE_JSON,
-			OK);
+	return rc;
 }
 
 /*

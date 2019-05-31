@@ -2,6 +2,7 @@
 - make sure the content handler is called for every request to the configured Redirect URI so all
   Apache processing is executed (e.g. setting headers with mod_headers) before returning the response
   thanks Don Sengpiehl (NB: this may affect browser behavior and backwards compatibility)
+- add ability to view session info in HTML via the session info hook: <redirect_uri)?info=html
 - bump to 2.4.0rc11
 
 05/24/2019

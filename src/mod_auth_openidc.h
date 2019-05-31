@@ -536,6 +536,7 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_JWK_ENC       "enc"
 
 #define OIDC_HOOK_INFO_FORMAT_JSON         "json"
+#define OIDC_HOOK_INFO_FORMAT_HTML         "html"
 #define OIDC_HOOK_INFO_TIMESTAMP           "iat"
 #define OIDC_HOOK_INFO_ACCES_TOKEN         "access_token"
 #define OIDC_HOOK_INFO_ACCES_TOKEN_EXP     "access_token_expires"
