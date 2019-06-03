@@ -769,7 +769,8 @@ static apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
 							issuer : apr_psprintf(r->pool, "https://%s", issuer));
 	url = apr_psprintf(r->pool, "%s%s.well-known/openid-configuration", url,
 			url[strlen(url) - 1] != OIDC_CHAR_FORWARD_SLASH ?
-					OIDC_STR_FORWARD_SLASH : "");
+					OIDC_STR_FORWARD_SLASH :
+					"");
 
 	/* get the metadata for the issuer using OpenID Connect Discovery and validate it */
 	if (oidc_metadata_provider_retrieve(r, cfg, issuer, url, j_provider,
@@ -1132,6 +1133,50 @@ void oidc_metadata_get_valid_int(request_rec *r, json_t *json, const char *key,
 	*int_value = v;
 }
 
+void oidc_metadata_get_jwks(request_rec *r, json_t *json, const char *s_use,
+		apr_hash_t **jwk_list) {
+	json_t *keys = NULL;
+	int i = 0;
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	json_t *elem = NULL;
+	const char *use = NULL;
+
+	keys = json_object_get(json, OIDC_JWK_KEYS);
+	if (keys == NULL)
+		return;
+
+	if (!json_is_array(keys)) {
+		oidc_error(r,
+				"trying to parse a list of JWKs but the value for key \"%s\" is not a JSON array",
+				OIDC_JWK_KEYS);
+		return;
+	}
+
+	for (i = 0; i < json_array_size(keys); i++) {
+
+		elem = json_array_get(keys, i);
+
+		use = json_string_value(json_object_get(elem, OIDC_JWK_USE));
+		if ((use != NULL) && (strcmp(use, s_use) != 0)) {
+			oidc_debug(r,
+					"skipping key because of non-matching \"%s\": \"%s\" != \"%s\"",
+					OIDC_JWK_USE, use, s_use);
+			continue;
+		}
+
+		if (oidc_jwk_parse_json(r->pool, elem, &jwk, &err) == FALSE) {
+			oidc_warn(r, "oidc_jwk_parse_json failed: %s",
+					oidc_jose_e2s(r->pool, err));
+			continue;
+		}
+
+		if (*jwk_list == NULL)
+			*jwk_list = apr_hash_make(r->pool);
+		apr_hash_set(*jwk_list, jwk->kid, APR_HASH_KEY_STRING, jwk);
+	}
+}
+
 /*
  * parse the JSON conf metadata in to a oidc_provider_t struct
  */
@@ -1143,10 +1188,14 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 			OIDC_METADATA_CLIENT_JWKS_URI, &provider->client_jwks_uri,
 			cfg->provider.client_jwks_uri);
 
+	oidc_metadata_get_jwks(r, j_conf,
+			OIDC_JWK_SIG, &provider->client_signing_keys);
+	oidc_metadata_get_jwks(r, j_conf,
+			OIDC_JWK_ENC, &provider->client_encryption_keys);
+
 	/* get the (optional) signing & encryption settings for the id_token */
 	oidc_metadata_get_valid_string(r, j_conf,
-			OIDC_METADATA_ID_TOKEN_SIGNED_RESPONSE_ALG,
-			oidc_valid_signed_response_alg,
+			OIDC_METADATA_ID_TOKEN_SIGNED_RESPONSE_ALG, oidc_valid_signed_response_alg,
 			&provider->id_token_signed_response_alg,
 			cfg->provider.id_token_signed_response_alg);
 	oidc_metadata_get_valid_string(r, j_conf,
@@ -1162,8 +1211,7 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 
 	/* get the (optional) signing & encryption settings for the userinfo response */
 	oidc_metadata_get_valid_string(r, j_conf,
-			OIDC_METADATA_USERINFO_SIGNED_RESPONSE_ALG,
-			oidc_valid_signed_response_alg,
+			OIDC_METADATA_USERINFO_SIGNED_RESPONSE_ALG, oidc_valid_signed_response_alg,
 			&provider->userinfo_signed_response_alg,
 			cfg->provider.userinfo_signed_response_alg);
 	oidc_metadata_get_valid_string(r, j_conf,
@@ -1209,8 +1257,7 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 
 	/* see if we've got custom token endpoint parameter values */
 	oidc_json_object_get_string(r->pool, j_conf,
-			OIDC_METADATA_TOKEN_ENDPOINT_PARAMS,
-			&provider->token_endpoint_params,
+			OIDC_METADATA_TOKEN_ENDPOINT_PARAMS, &provider->token_endpoint_params,
 			cfg->provider.token_endpoint_params);
 
 	/* get the response mode to use */
@@ -1278,8 +1325,8 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 	/* see if we've got a custom userinfo endpoint token presentation method */
 	char *method = NULL;
 	oidc_metadata_get_valid_string(r, j_conf,
-			OIDC_METADATA_USERINFO_TOKEN_METHOD,
-			oidc_valid_userinfo_token_method, &method,
+			OIDC_METADATA_USERINFO_TOKEN_METHOD, oidc_valid_userinfo_token_method,
+			&method,
 			NULL);
 	if (method != NULL)
 		oidc_parse_userinfo_token_method(r->pool, method,

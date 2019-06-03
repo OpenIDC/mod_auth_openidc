@@ -283,6 +283,9 @@ typedef struct oidc_provider_t {
 	oidc_proto_pkce_t *pkce;
 	int userinfo_refresh_interval;
 
+	apr_hash_t *client_signing_keys;
+	apr_hash_t *client_encryption_keys;
+
 	char *client_jwks_uri;
 	char *id_token_signed_response_alg;
 	char *id_token_encrypted_response_alg;

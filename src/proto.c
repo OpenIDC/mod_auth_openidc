@@ -252,9 +252,10 @@ apr_byte_t oidc_proto_get_encryption_jwk_by_type(request_rec *r, oidc_cfg *cfg,
 		return FALSE;
 	}
 
-	json_t *keys = json_object_get(j_jwks, "keys");
+	json_t *keys = json_object_get(j_jwks, OIDC_JWK_KEYS);
 	if ((keys == NULL) || !(json_is_array(keys))) {
-		oidc_error(r, "\"keys\" array element is not a JSON array");
+		oidc_error(r, "\"%s\" array element is not a JSON array",
+				OIDC_JWK_KEYS);
 		return FALSE;
 	}
 
@@ -302,6 +303,11 @@ char *oidc_proto_create_request_object(request_rec *r,
 		struct oidc_provider_t *provider, json_t * request_object_config,
 		apr_table_t *params) {
 
+	apr_ssize_t klen = 0;
+	oidc_jwk_t *jwk = NULL;
+	int jwk_needs_destroy = 0;
+	apr_hash_index_t *hi = NULL;
+
 	oidc_debug(r, "enter");
 
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
@@ -346,20 +352,22 @@ char *oidc_proto_create_request_object(request_rec *r,
 	/* see if we need to sign the request object */
 	if (strcmp(request_object->header.alg, "none") != 0) {
 
-		oidc_jwk_t *jwk = NULL;
-		int jwk_needs_destroy = 0;
+		jwk = NULL;
+		jwk_needs_destroy = 0;
+		klen = 0;
 
 		switch (oidc_jwt_alg2kty(request_object)) {
 		case CJOSE_JWK_KTY_RSA:
-			if (cfg->private_keys != NULL) {
-				apr_ssize_t klen = 0;
-				apr_hash_index_t *hi = apr_hash_first(r->pool,
-						cfg->private_keys);
+			if ((provider->client_signing_keys != NULL)
+					|| (cfg->private_keys != NULL)) {
+				hi = provider->client_signing_keys ?
+						apr_hash_first(r->pool, provider->client_signing_keys) :
+						apr_hash_first(r->pool, cfg->private_keys);
 				apr_hash_this(hi, (const void **) &request_object->header.kid,
 						&klen, (void **) &jwk);
 			} else {
 				oidc_error(r,
-						"no private keys have been configured to use for private_key_jwt client authentication (" OIDCPrivateKeyFiles ")");
+						"no global or per-provider private keys have been configured to use for request object signing");
 			}
 			break;
 		case CJOSE_JWK_KTY_OCT:
@@ -1603,6 +1611,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 	char *alg = NULL;
 	oidc_debug(r, "enter: id_token header=%s",
 			oidc_proto_peek_jwt_header(r, id_token, &alg));
+	apr_hash_t *decryption_keys = NULL;
 
 	char buf[APR_RFC822_DATE_LEN + 1];
 	oidc_jose_error_t err;
@@ -1612,9 +1621,14 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 			TRUE, &jwk) == FALSE)
 		return FALSE;
 
-	if (oidc_jwt_parse(r->pool, id_token, jwt,
-			oidc_util_merge_symmetric_key(r->pool, cfg->private_keys, jwk),
-			&err) == FALSE) {
+	if (cfg->private_keys)
+		decryption_keys = oidc_util_merge_symmetric_key(r->pool,
+				cfg->private_keys, jwk);
+	if (provider->client_encryption_keys)
+		decryption_keys = oidc_util_merge_key_sets(r->pool, decryption_keys,
+				provider->client_encryption_keys);
+
+	if (oidc_jwt_parse(r->pool, id_token, jwt, decryption_keys, &err) == FALSE) {
 		oidc_error(r, "oidc_jwt_parse failed: %s", oidc_jose_e2s(r->pool, err));
 		oidc_jwt_destroy(*jwt);
 		*jwt = NULL;
@@ -1850,6 +1864,7 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r,
 	if (oidc_proto_jwt_create(r, client_id, audience, &jwt) == FALSE)
 		return FALSE;
 
+	// TODO: may prefer per-provider key
 	if (cfg->private_keys == NULL) {
 		oidc_error(r,
 				"no private keys have been configured to use for private_key_jwt client authentication (" OIDCPrivateKeyFiles ")");

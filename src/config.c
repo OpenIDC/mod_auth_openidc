@@ -1105,6 +1105,9 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->provider.pkce = NULL;
 
 	c->provider.client_jwks_uri = NULL;
+	c->provider.client_signing_keys = NULL;
+	c->provider.client_encryption_keys = NULL;
+
 	c->provider.id_token_signed_response_alg = NULL;
 	c->provider.id_token_encrypted_response_alg = NULL;
 	c->provider.id_token_encrypted_response_enc = NULL;
@@ -1361,6 +1364,15 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->provider.client_jwks_uri != NULL ?
 					add->provider.client_jwks_uri :
 					base->provider.client_jwks_uri;
+	c->provider.client_signing_keys =
+			add->provider.client_signing_keys != NULL ?
+					add->provider.client_signing_keys :
+					base->provider.client_signing_keys;
+	c->provider.client_encryption_keys =
+			add->provider.client_encryption_keys != NULL ?
+					add->provider.client_encryption_keys :
+					base->provider.client_encryption_keys;
+
 	c->provider.id_token_signed_response_alg =
 			add->provider.id_token_signed_response_alg != NULL ?
 					add->provider.id_token_signed_response_alg :
@@ -2004,7 +2016,8 @@ static int oidc_check_config_oauth(server_rec *s, oidc_cfg *c) {
 
 	apr_uri_t r_uri;
 
-	oidc_swarn(s, "The OAuth 2.0 Resource Server functionality is deprecated and superseded by a new module, see: https://github.com/zmartzone/mod_oauth2!");
+	oidc_swarn(s,
+			"The OAuth 2.0 Resource Server functionality is deprecated and superseded by a new module, see: https://github.com/zmartzone/mod_oauth2!");
 
 	if (c->oauth.metadata_url != NULL) {
 		apr_uri_parse(s->process->pconf, c->oauth.metadata_url, &r_uri);

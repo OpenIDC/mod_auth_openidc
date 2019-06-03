@@ -1,3 +1,13 @@
+06/03/2019
+- enable per-provider signing and encryption keys; limitations:
+  - for request object signing and id_token decryption only
+  - take the first configured key, no kid specification
+  - no publishing of key information on client endpoints
+  - no private_key_jwt token endpoint authentication
+  - no userinfo JWT decryption
+  - no composite claims decryption
+- bump to 2.4.0rc12
+
 05/31/2019
 - make sure the content handler is called for every request to the configured Redirect URI so all
   Apache processing is executed (e.g. setting headers with mod_headers) before returning the response
