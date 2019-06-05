@@ -90,8 +90,8 @@ void _oidc_jose_error_set(oidc_jose_error_t *, const char *, const int,
 		const char *, const char *msg, ...);
 #define oidc_jose_error(err, msg, ...) _oidc_jose_error_set(err, __FILE__, __LINE__, __FUNCTION__, msg, ##__VA_ARGS__)
 #define oidc_jose_error_openssl(err, msg, ...) _oidc_jose_error_set(err, __FILE__, __LINE__, __FUNCTION__, "%s() failed: %s", msg, ERR_error_string(ERR_get_error(), NULL), ##__VA_ARGS__)
-#define oidc_jose_e2s(pool, err) apr_psprintf(pool, "[%s:%d: %s]: %s\n", err.source, err.line, err.function, err.text)
-#define oidc_cjose_e2s(pool, cjose_err) apr_psprintf(pool, "%s [file: %s, function: %s, line: %ld]\n", cjose_err.message, cjose_err.file, cjose_err.function, cjose_err.line)
+#define oidc_jose_e2s(pool, err) apr_psprintf(pool, "[%s:%d: %s]: %s", err.source, err.line, err.function, err.text)
+#define oidc_cjose_e2s(pool, cjose_err) apr_psprintf(pool, "%s [file: %s, function: %s, line: %ld]", cjose_err.message, cjose_err.file, cjose_err.function, cjose_err.line)
 
 /*
  * helper functions

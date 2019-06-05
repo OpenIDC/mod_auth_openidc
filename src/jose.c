@@ -661,6 +661,11 @@ static uint8_t *oidc_jwe_decrypt_impl(apr_pool_t *pool, cjose_jwe_t *jwe,
 	const char *kid = cjose_header_get(hdr, CJOSE_HDR_KID, &cjose_err);
 	const char *alg = cjose_header_get(hdr, CJOSE_HDR_ALG, &cjose_err);
 
+	if ((keys == NULL) || (apr_hash_count(keys) == 0)) {
+		oidc_jose_error(err, "no decryption keys configured");
+		return NULL;
+	}
+
 	if (kid != NULL) {
 
 		jwk = apr_hash_get(keys, kid, APR_HASH_KEY_STRING);

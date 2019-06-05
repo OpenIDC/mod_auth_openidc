@@ -1,3 +1,7 @@
+06/05/2019
+- avoid passing empty key set for JWT decryption
+- bump to 2.4.0rc13
+
 06/03/2019
 - enable per-provider signing and encryption keys; limitations:
   - for request object signing and id_token decryption only

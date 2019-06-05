@@ -1621,9 +1621,8 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 			TRUE, &jwk) == FALSE)
 		return FALSE;
 
-	if (cfg->private_keys)
-		decryption_keys = oidc_util_merge_symmetric_key(r->pool,
-				cfg->private_keys, jwk);
+	decryption_keys = oidc_util_merge_symmetric_key(r->pool, cfg->private_keys,
+			jwk);
 	if (provider->client_encryption_keys)
 		decryption_keys = oidc_util_merge_key_sets(r->pool, decryption_keys,
 				provider->client_encryption_keys);

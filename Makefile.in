@@ -83,6 +83,14 @@ test: test-compile
 install: src/mod_auth_openidc.la
 	@APXS2@ @APXS2_OPTS@ -i -n mod_auth_openidc src/mod_auth_openidc.la
 
+docker: docker-build docker-run
+
+docker-build:
+	docker build -t mod_auth_openidc .
+
+docker-run:
+	docker run -p 80:80 -p 443:443 --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -it mod_auth_openidc /bin/bash -c "/root/run.sh"
+
 .PHONY: distfile
 distfile:	@NAMEVER@.tar.gz
 
