@@ -2732,8 +2732,8 @@ static void oidc_revoke_tokens(request_rec *r, oidc_cfg *c,
 	// add the token endpoint authentication credentials to the revocation endpoint call...
 	if (oidc_proto_token_endpoint_auth(r, c, provider->token_endpoint_auth,
 			provider->client_id, provider->client_secret,
-			provider->token_endpoint_url, params, NULL, &basic_auth,
-			&bearer_auth) == FALSE)
+			provider->client_signing_keys, provider->token_endpoint_url, params,
+			NULL, &basic_auth, &bearer_auth) == FALSE)
 		goto out;
 
 	// TODO: use oauth.ssl_validate_server ...

@@ -1,5 +1,9 @@
+06/06/2019
+- use per-provider signing keys in private_key_jwt authentication towards token endpoint
+- bump to 2.4.0rc14
+
 06/05/2019
-- avoid passing empty key set for JWT decryption
+- avoid passing empty key set for JWT decryption (solve but introduced in 2.4.0rc12)
 - bump to 2.4.0rc13
 
 06/03/2019
@@ -7,9 +11,9 @@
   - for request object signing and id_token decryption only
   - take the first configured key, no kid specification
   - no publishing of key information on client endpoints
-  - no private_key_jwt token endpoint authentication
   - no userinfo JWT decryption
   - no composite claims decryption
+  - no backchannel logout with encrypted logout token (inherent)
 - bump to 2.4.0rc12
 
 05/31/2019

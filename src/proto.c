@@ -1853,18 +1853,24 @@ static apr_byte_t oidc_proto_endpoint_access_token_bearer(request_rec *r,
 #define OIDC_PROTO_JWT_ASSERTION_ASYMMETRIC_ALG CJOSE_HDR_ALG_RS256
 
 static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r,
-		oidc_cfg *cfg, const char *client_id, const char *audience,
-		apr_table_t *params) {
+		oidc_cfg *cfg, const char *client_id, apr_hash_t *client_signing_keys,
+		const char *audience, apr_table_t *params) {
 	oidc_jwt_t *jwt = NULL;
 	oidc_jwk_t *jwk = NULL;
+	apr_hash_t *signing_keys = NULL;
 
 	oidc_debug(r, "enter");
 
 	if (oidc_proto_jwt_create(r, client_id, audience, &jwt) == FALSE)
 		return FALSE;
 
-	// TODO: may prefer per-provider key
-	if (cfg->private_keys == NULL) {
+	if ((client_signing_keys != NULL)
+			&& (apr_hash_count(client_signing_keys) > 0)) {
+		signing_keys = client_signing_keys;
+	} else if ((cfg->private_keys != NULL)
+			&& (apr_hash_count(client_signing_keys) > 0)) {
+		signing_keys = cfg->private_keys;
+	} else {
 		oidc_error(r,
 				"no private keys have been configured to use for private_key_jwt client authentication (" OIDCPrivateKeyFiles ")");
 		oidc_jwt_destroy(jwt);
@@ -1872,7 +1878,7 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r,
 	}
 
 	apr_ssize_t klen = 0;
-	apr_hash_index_t *hi = apr_hash_first(r->pool, cfg->private_keys);
+	apr_hash_index_t *hi = apr_hash_first(r->pool, signing_keys);
 	apr_hash_this(hi, (const void **) &jwt->header.kid, &klen, (void **) &jwk);
 
 	jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_RS256);
@@ -1886,7 +1892,8 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r,
 
 apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg,
 		const char *token_endpoint_auth, const char *client_id,
-		const char *client_secret, const char *audience, apr_table_t *params,
+		const char *client_secret, apr_hash_t *client_signing_keys,
+		const char *audience, apr_table_t *params,
 		const char *bearer_access_token, char **basic_auth_str,
 		char **bearer_auth_str) {
 
@@ -1933,7 +1940,7 @@ apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg,
 	if (apr_strnatcmp(token_endpoint_auth,
 			OIDC_PROTO_PRIVATE_KEY_JWT) == 0)
 		return oidc_proto_endpoint_auth_private_key_jwt(r, cfg, client_id,
-				audience, params);
+				client_signing_keys, audience, params);
 
 	if (apr_strnatcmp(token_endpoint_auth,
 			OIDC_PROTO_BEARER_ACCESS_TOKEN) == 0) {
@@ -1961,7 +1968,7 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 	/* add the token endpoint authentication credentials */
 	if (oidc_proto_token_endpoint_auth(r, cfg, provider->token_endpoint_auth,
 			provider->client_id, provider->client_secret,
-			provider->token_endpoint_url, params,
+			provider->client_signing_keys, provider->token_endpoint_url, params,
 			NULL, &basic_auth, &bearer_auth) == FALSE)
 		return FALSE;
 
