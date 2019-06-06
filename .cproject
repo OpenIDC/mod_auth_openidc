@@ -19,8 +19,6 @@
         	
     </storageModule>
     	
-    <storageModule moduleId="org.eclipse.cdt.core.pathentry"/>
-    	
     <storageModule moduleId="org.eclipse.cdt.core.LanguageSettingsProviders"/>
     	
     <storageModule moduleId="scannerConfiguration"/>
@@ -76,6 +74,20 @@
             </target>
             		
         </buildTargets>
+        	
+    </storageModule>
+    	
+    <storageModule moduleId="org.eclipse.cdt.core.pathentry">
+        		
+        <pathentry include="/opt/local/include/apache2" kind="inc" path="" system="true"/>
+        		
+        <pathentry include="/opt/local/include/apr-1" kind="inc" path="" system="true"/>
+        		
+        <pathentry include="/opt/local/include" kind="inc" path="" system="true"/>
+        		
+        <pathentry kind="src" path=""/>
+        		
+        <pathentry kind="out" path=""/>
         	
     </storageModule>
     
