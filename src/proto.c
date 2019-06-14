@@ -1881,8 +1881,6 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r,
 	apr_hash_index_t *hi = apr_hash_first(r->pool, signing_keys);
 	apr_hash_this(hi, (const void **) &jwt->header.kid, &klen, (void **) &jwk);
 
-	oidc_debug(r, "#6");
-
 	jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_RS256);
 
 	oidc_proto_jwt_sign_and_add(r, params, jwt, jwk);
