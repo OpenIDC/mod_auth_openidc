@@ -1,3 +1,7 @@
+06/14/2019
+- fix regression bug when no per-provider keys have been configured and private_key_jwt is used
+- bump to 2.4.0rc15
+
 06/06/2019
 - use per-provider signing keys in private_key_jwt authentication towards token endpoint
 - bump to 2.4.0rc14
