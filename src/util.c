@@ -1332,6 +1332,15 @@ int oidc_util_http_send(request_rec *r, const char *data, size_t data_len,
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 	//r->status = success_rvalue;
+
+	if ((success_rvalue == OK) && (r->user == NULL)) {
+		/*
+		 * satisfy Apache 2.4 mod_authz_core:
+		 * prevent it to return HTTP 500 after sending content
+		 */
+		r->user = "";
+	}
+
 	return success_rvalue;
 }
 
