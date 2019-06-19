@@ -2354,6 +2354,13 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 			&javascript_method) == TRUE)
 		html_head = apr_psprintf(r->pool, "%s%s", html_head, javascript);
 
+	/*
+	 * satisfy Apache 2.4 mod_authz_core:
+	 * prevent it to return HTTP 500 after sending the content
+	 */
+	r->user = "";
+
+
 	/* now send the HTML contents to the user agent */
 	return oidc_util_html_send(r, "OpenID Connect Provider Discovery",
 			html_head, javascript_method, s, OK);

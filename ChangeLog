@@ -1,3 +1,7 @@
+06/19/2019
+- fix regression bug that includes a HTTP 500 message after rendering the Discovery page
+- bump to 2.4.0rc16
+
 06/14/2019
 - fix regression bug when no per-provider keys have been configured and private_key_jwt is used
 - bump to 2.4.0rc15
