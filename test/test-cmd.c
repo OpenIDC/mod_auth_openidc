@@ -186,16 +186,17 @@ int verify(int argc, char **argv, apr_pool_t *pool) {
 		return -1;
 	}
 
-	cjose_jwk_t *jwk = cjose_jwk_import(s_jwk, strlen(s_jwk), &cjose_err);
+	oidc_jose_error_t oidc_err;
+	oidc_jwk_t *jwk = oidc_jwk_parse(pool, s_jwk, &oidc_err);
 	if (jwk == NULL) {
 		fprintf(stderr,
-				"could not import JWK: %s [file: %s, function: %s, line: %ld]\n",
-				cjose_err.message, cjose_err.file, cjose_err.function,
-				cjose_err.line);
+				"could not import JWK: %s [file: %s, function: %s, line: %d]\n",
+				oidc_err.text, oidc_err.source, oidc_err.function,
+				oidc_err.line);
 		return -1;
 	}
 
-	if (cjose_jws_verify(jws, jwk, &cjose_err) == FALSE) {
+	if (cjose_jws_verify(jws, jwk->cjose_jwk, &cjose_err) == FALSE) {
 		fprintf(stderr,
 				"could not verify JWS: %s [file: %s, function: %s, line: %ld]\n",
 				cjose_err.message, cjose_err.file, cjose_err.function,
@@ -217,7 +218,7 @@ int verify(int argc, char **argv, apr_pool_t *pool) {
 	fprintf(stdout, "%s", plaintext);
 
 	cjose_jws_release(jws);
-	cjose_jwk_release(jwk);
+	oidc_jwk_destroy(jwk);
 
 	return 0;
 }
@@ -325,13 +326,15 @@ int key2jwk(int argc, char **argv, apr_pool_t *pool) {
 	int is_private_key = (argc > 3);
 
 	if (is_private_key) {
-		if (oidc_jwk_parse_rsa_private_key(pool, NULL, argv[2], &jwk, &err) == FALSE) {
+		if (oidc_jwk_parse_rsa_private_key(pool, NULL, argv[2], &jwk,
+				&err) == FALSE) {
 			fprintf(stderr, "oidc_jwk_parse_rsa_private_key failed: %s",
 					oidc_jose_e2s(pool, err));
 			return -1;
 		}
 	} else {
-		if (oidc_jwk_parse_rsa_public_key(pool, NULL, argv[2], &jwk, &err) == FALSE) {
+		if (oidc_jwk_parse_rsa_public_key(pool, NULL, argv[2], &jwk,
+				&err) == FALSE) {
 			fprintf(stderr, "oidc_jwk_parse_rsa_public_key failed: %s",
 					oidc_jose_e2s(pool, err));
 			return -1;
@@ -457,7 +460,8 @@ int enckey(int argc, char **argv, apr_pool_t *pool) {
 
 int hash_base64url(int argc, char **argv, apr_pool_t *pool) {
 	if (argc <= 2)
-		return usage(argc, argv, "hash_base64url <string> [algo] [base64url-decode-first]");
+		return usage(argc, argv,
+				"hash_base64url <string> [algo] [base64url-decode-first]");
 
 	char *algo = argc > 3 ? argv[3] : "sha256";
 	int base64url_decode_first = argc > 4 ? (strcmp(argv[4], "yes") == 0) : 0;
@@ -470,20 +474,21 @@ int hash_base64url(int argc, char **argv, apr_pool_t *pool) {
 		uint8_t *bytes = NULL;
 		size_t outlen = 0;
 		cjose_err err;
-		if (cjose_base64url_decode(argv[2], strlen(argv[2]), &bytes, &outlen, &err) == FALSE) {
+		if (cjose_base64url_decode(argv[2], strlen(argv[2]), &bytes, &outlen,
+				&err) == FALSE) {
 			fprintf(stderr, "cjose_base64_decode failed: %s", err.message);
 			return -1;
 		}
-		if (oidc_jose_hash_and_base64url_encode(r->pool,
-				algo, (const char *)bytes, outlen,
-				&output) == FALSE) {
+		if (oidc_jose_hash_and_base64url_encode(r->pool, algo,
+				(const char *) bytes, outlen, &output) == FALSE) {
 			fprintf(stderr, "oidc_jose_hash_and_base64url_encode failed");
 			return -1;
 		}
 	} else {
 		if (oidc_util_hash_string_and_base64url_encode(r, algo, argv[2],
 				&output) == FALSE) {
-			fprintf(stderr, "oidc_util_hash_string_and_base64url_encode failed");
+			fprintf(stderr,
+					"oidc_util_hash_string_and_base64url_encode failed");
 			return -1;
 		}
 	}

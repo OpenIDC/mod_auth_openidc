@@ -1,3 +1,7 @@
+07/10/2019
+- fix RSA JWK "x5c" parsing issue (e.g. when parsing "n" fails): explicitly set the "kid" into to JWK
+- bump to 2.4.0rc18
+
 06/19/2019
 - fix regression bug that includes a HTTP 500 message after rendering content
 - bump to 2.4.0rc17

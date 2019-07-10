@@ -1216,6 +1216,7 @@ static apr_byte_t oidc_jwk_parse_rsa_x5c(apr_pool_t *pool, json_t *json,
 		cjose_jwk_t **jwk, oidc_jose_error_t *err) {
 
 	apr_byte_t rv = FALSE;
+	const char *kid = NULL;
 
 	/* get the "x5c" array element from the JSON object */
 	json_t *v = json_object_get(json, OIDC_JOSE_HDR_X5C);
@@ -1249,7 +1250,8 @@ static apr_byte_t oidc_jwk_parse_rsa_x5c(apr_pool_t *pool, json_t *json,
 	int i = 0;
 	char *s = apr_psprintf(pool, "%s\n", OIDC_JOSE_CERT_BEGIN);
 	while (i < strlen(s_x5c)) {
-		s = apr_psprintf(pool, "%s%s\n", s, apr_pstrmemdup(pool, s_x5c + i, len));
+		s = apr_psprintf(pool, "%s%s\n", s,
+				apr_pstrmemdup(pool, s_x5c + i, len));
 		i += len;
 	}
 	s = apr_psprintf(pool, "%s%s\n", s, OIDC_JOSE_CERT_END);
@@ -1268,8 +1270,13 @@ static apr_byte_t oidc_jwk_parse_rsa_x5c(apr_pool_t *pool, json_t *json,
 		return FALSE;
 	}
 
+	v = json_object_get(json, CJOSE_HDR_KID);
+	if ((v != NULL) && json_is_string(v)) {
+		kid = json_string_value(v);
+	}
+
 	/* do the actual parsing */
-	rv = oidc_jwk_rsa_bio_to_jwk(pool, input, NULL, jwk, FALSE, err);
+	rv = oidc_jwk_rsa_bio_to_jwk(pool, input, kid, jwk, FALSE, err);
 
 	BIO_free(input);
 
