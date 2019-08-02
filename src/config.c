@@ -2346,6 +2346,97 @@ static int oidc_auth_fixups(request_rec *r) {
 	return OK;
 }
 
+static const char oidcFilterName[] = "oidc_filter_in_filter";
+
+static void oidc_filter_in_insert_filter(request_rec *r) {
+
+	if (oidc_enabled(r) == FALSE)
+		return;
+
+	if (ap_is_initial_req(r) == 0)
+		return;
+
+	apr_table_t *userdata_post_params = NULL;
+	apr_pool_userdata_get((void **) &userdata_post_params,
+			OIDC_USERDATA_POST_PARAMS_KEY, r->pool);
+	if (userdata_post_params == NULL)
+		return;
+
+	ap_add_input_filter(oidcFilterName, NULL, r, r->connection);
+}
+
+typedef struct oidc_filter_in_context {
+	apr_bucket_brigade *pbbTmp;
+	apr_size_t nbytes;
+} oidc_filter_in_context;
+
+static apr_status_t oidc_filter_in_filter(ap_filter_t *f,
+		apr_bucket_brigade *brigade, ap_input_mode_t mode,
+		apr_read_type_e block, apr_off_t nbytes) {
+	oidc_filter_in_context *ctx = NULL;
+	apr_bucket *b_in = NULL, *b_out = NULL;
+	char *buf = NULL;
+	apr_table_t *userdata_post_params = NULL;
+	apr_status_t rc = APR_SUCCESS;
+
+	if (!(ctx = f->ctx)) {
+		f->ctx = ctx = apr_palloc(f->r->pool, sizeof *ctx);
+		ctx->pbbTmp = apr_brigade_create(f->r->pool,
+				f->r->connection->bucket_alloc);
+		ctx->nbytes = 0;
+	}
+
+	if (APR_BRIGADE_EMPTY(ctx->pbbTmp)) {
+		rc = ap_get_brigade(f->next, ctx->pbbTmp, mode, block, nbytes);
+
+		if (mode == AP_MODE_EATCRLF || rc != APR_SUCCESS)
+			return rc;
+	}
+
+	while (!APR_BRIGADE_EMPTY(ctx->pbbTmp)) {
+
+		b_in = APR_BRIGADE_FIRST(ctx->pbbTmp);
+
+		if (APR_BUCKET_IS_EOS(b_in)) {
+
+			APR_BUCKET_REMOVE(b_in);
+
+			apr_pool_userdata_get((void **) &userdata_post_params,
+					OIDC_USERDATA_POST_PARAMS_KEY, f->r->pool);
+
+			if (userdata_post_params != NULL) {
+				buf = apr_psprintf(f->r->pool, "%s%s",
+						ctx->nbytes > 0 ? "&" : "",
+								oidc_util_http_form_encoded_data(f->r,
+										userdata_post_params));
+				b_out = apr_bucket_heap_create(buf, strlen(buf), 0,
+						f->r->connection->bucket_alloc);
+
+				APR_BRIGADE_INSERT_TAIL(brigade, b_out);
+
+				ctx->nbytes += strlen(buf);
+
+				if (oidc_util_hdr_in_content_length_get(f->r) != NULL)
+					oidc_util_hdr_in_set(f->r, OIDC_HTTP_HDR_CONTENT_LENGTH,
+							apr_psprintf(f->r->pool, "%ld", ctx->nbytes));
+
+				apr_pool_userdata_set(NULL, OIDC_USERDATA_POST_PARAMS_KEY,
+						NULL, f->r->pool);
+			}
+
+			APR_BRIGADE_INSERT_TAIL(brigade, b_in);
+
+			break;
+		}
+
+		APR_BUCKET_REMOVE(b_in);
+		APR_BRIGADE_INSERT_TAIL(brigade, b_in);
+		ctx->nbytes += b_in->length;
+	}
+
+	return rc;
+}
+
 /*
  * register our authentication and authorization functions
  */
@@ -2354,6 +2445,10 @@ void oidc_register_hooks(apr_pool_t *pool) {
 	ap_hook_child_init(oidc_child_init, NULL, NULL, APR_HOOK_MIDDLE);
 	ap_hook_handler(oidc_content_handler, NULL, NULL, APR_HOOK_FIRST);
 	ap_hook_fixups(oidc_auth_fixups, NULL, NULL, APR_HOOK_MIDDLE);
+	ap_hook_insert_filter(oidc_filter_in_insert_filter, NULL, NULL,
+			APR_HOOK_MIDDLE);
+	ap_register_input_filter(oidcFilterName, oidc_filter_in_filter, NULL,
+			AP_FTYPE_RESOURCE);
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	ap_hook_check_authn(oidc_check_user_id, NULL, NULL, APR_HOOK_MIDDLE,
 			AP_AUTH_INTERNAL_PER_CONF);

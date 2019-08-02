@@ -169,8 +169,8 @@ APLOG_USE_MODULE(auth_openidc);
 
 /* the (global) key for the mod_auth_openidc related state that is stored in the request userdata context */
 #define OIDC_USERDATA_KEY "mod_auth_openidc_state"
-
 #define OIDC_USERDATA_ENV_KEY "mod_auth_openidc_env"
+#define OIDC_USERDATA_POST_PARAMS_KEY "oidc_userdata_post_params"
 
 /* input filter hook name */
 #define OIDC_UTIL_HTTP_SENDSTRING "OIDC_UTIL_HTTP_SENDSTRING"
@@ -742,7 +742,7 @@ int oidc_util_html_send(request_rec *r, const char *title, const char *html_head
 char *oidc_util_escape_string(const request_rec *r, const char *str);
 char *oidc_util_unescape_string(const request_rec *r, const char *str);
 apr_byte_t oidc_util_read_form_encoded_params(request_rec *r, apr_table_t *table, char *data);
-apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table);
+apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table, apr_byte_t propagate, const char *strip_param_name);
 apr_byte_t oidc_util_file_read(request_rec *r, const char *path, apr_pool_t *pool, char **result);
 apr_byte_t oidc_util_file_write(request_rec *r, const char *path, const char *data);
 apr_byte_t oidc_util_issuer_match(const char *a, const char *b);
@@ -773,6 +773,8 @@ apr_hash_t * oidc_util_merge_symmetric_key(apr_pool_t *pool, apr_hash_t *private
 const char *oidc_util_get_provided_token_binding_id(const request_rec *r);
 char *oidc_util_http_query_encoded_url(request_rec *r, const char *url, const apr_table_t *params);
 char *oidc_util_get_full_path(apr_pool_t *pool, const char *abs_or_rel_filename);
+apr_byte_t oidc_enabled(request_rec *r);
+char *oidc_util_http_form_encoded_data(request_rec *r, const apr_table_t *params);
 
 /* HTTP header constants */
 #define OIDC_HTTP_HDR_COOKIE							"Cookie"
@@ -780,6 +782,7 @@ char *oidc_util_get_full_path(apr_pool_t *pool, const char *abs_or_rel_filename)
 #define OIDC_HTTP_HDR_USER_AGENT						"User-Agent"
 #define OIDC_HTTP_HDR_X_FORWARDED_FOR					"X-Forwarded-For"
 #define OIDC_HTTP_HDR_CONTENT_TYPE						"Content-Type"
+#define OIDC_HTTP_HDR_CONTENT_LENGTH					"Content-Length"
 #define OIDC_HTTP_HDR_X_REQUESTED_WITH					"X-Requested-With"
 #define OIDC_HTTP_HDR_ACCEPT							"Accept"
 #define OIDC_HTTP_HDR_AUTHORIZATION						"Authorization"
@@ -804,6 +807,7 @@ void oidc_util_hdr_in_cookie_set(const request_rec *r, const char *value);
 const char *oidc_util_hdr_in_user_agent_get(const request_rec *r);
 const char *oidc_util_hdr_in_x_forwarded_for_get(const request_rec *r);
 const char *oidc_util_hdr_in_content_type_get(const request_rec *r);
+const char *oidc_util_hdr_in_content_length_get(const request_rec *r);
 const char *oidc_util_hdr_in_x_requested_with_get(const request_rec *r);
 const char *oidc_util_hdr_in_accept_get(const request_rec *r);
 const char *oidc_util_hdr_in_authorization_get(const request_rec *r);

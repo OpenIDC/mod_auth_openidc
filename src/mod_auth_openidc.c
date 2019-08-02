@@ -437,7 +437,7 @@ apr_byte_t oidc_post_preserve_javascript(request_rec *r, const char *location,
 
 	/* read the parameters that are POST-ed to us */
 	apr_table_t *params = apr_table_make(r->pool, 8);
-	if (oidc_util_read_post_params(r, params) == FALSE) {
+	if (oidc_util_read_post_params(r, params, FALSE, NULL) == FALSE) {
 		oidc_error(r, "something went wrong when reading the POST parameters");
 		return FALSE;
 	}
@@ -2160,7 +2160,7 @@ static int oidc_handle_post_authorization_response(request_rec *r, oidc_cfg *c,
 
 	/* read the parameters that are POST-ed to us */
 	apr_table_t *params = apr_table_make(r->pool, 8);
-	if (oidc_util_read_post_params(r, params) == FALSE) {
+	if (oidc_util_read_post_params(r, params, FALSE, NULL) == FALSE) {
 		oidc_error(r, "something went wrong when reading the POST parameters");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
@@ -2844,7 +2844,7 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 	int rc = HTTP_BAD_REQUEST;
 
 	apr_table_t *params = apr_table_make(r->pool, 8);
-	if (oidc_util_read_post_params(r, params) == FALSE) {
+	if (oidc_util_read_post_params(r, params, FALSE, NULL) == FALSE) {
 		oidc_error(r,
 				"could not read POST-ed parameters to the logout endpoint");
 		goto out;
@@ -4088,10 +4088,30 @@ int oidc_auth_checker(request_rec *r) {
 
 #endif
 
+apr_byte_t oidc_enabled(request_rec *r) {
+	if (ap_auth_type(r) == NULL)
+		return FALSE;
+
+	if (apr_strnatcasecmp((const char *) ap_auth_type(r),
+			OIDC_AUTH_TYPE_OPENID_CONNECT) == 0)
+		return TRUE;
+
+	if (apr_strnatcasecmp((const char *) ap_auth_type(r),
+			OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0)
+		return TRUE;
+
+	if (apr_strnatcasecmp((const char *) ap_auth_type(r),
+			OIDC_AUTH_TYPE_OPENID_BOTH) == 0)
+		return TRUE;
+
+	return FALSE;
+}
 /*
  * handle content generating requests
  */
 int oidc_content_handler(request_rec *r) {
+	if (oidc_enabled(r) == FALSE)
+		return DECLINED;
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	return oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c)) ?

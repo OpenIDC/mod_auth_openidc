@@ -1,5 +1,7 @@
 08/02/2019
 - return DONE from the content handler early to prevent triggering other content handlers
+- fix `OIDCOAuthAcceptTokenAs post` so POST data is propagated and not lost; see #443
+- bump to 2.4.0rc19
 
 07/10/2019
 - fix RSA JWK "x5c" parsing issue (e.g. when parsing "n" fails): explicitly set the "kid" into to JWK

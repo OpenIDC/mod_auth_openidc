@@ -264,7 +264,8 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 	if ((*access_token == NULL) && (r->method_number == M_POST)
 			&& (accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_POST)) {
 		apr_table_t *params = apr_table_make(r->pool, 8);
-		if (oidc_util_read_post_params(r, params) == TRUE) {
+		if (oidc_util_read_post_params(r, params, TRUE,
+				OIDC_PROTO_ACCESS_TOKEN) == TRUE) {
 			*access_token = apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN);
 		}
 	}
