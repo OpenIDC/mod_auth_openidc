@@ -783,6 +783,34 @@ const char *oidc_parse_pass_userinfo_as(apr_pool_t *pool, const char *v1,
 	return NULL;
 }
 
+#define OIDC_LOGOUT_ON_ERROR_REFRESH_STR "logout_on_error"
+
+/*
+ * convert a "logout_on_error" to an integer
+ */
+static int oidc_parse_logout_on_error_refresh_as_str2int(const char *v) {
+	if (apr_strnatcmp(v, OIDC_LOGOUT_ON_ERROR_REFRESH_STR) == 0)
+		return OIDC_LOGOUT_ON_ERROR_REFRESH;
+	return OIDC_CONFIG_POS_INT_UNSET;
+}
+
+/*
+ * parse a "logout_on_error" value from the provided strings
+ */
+const char *oidc_parse_logout_on_error_refresh_as(apr_pool_t *pool, const char *v1,
+		int *int_value) {
+	static char *options[] = {
+			OIDC_LOGOUT_ON_ERROR_REFRESH_STR,
+			NULL };
+	const char *rv = NULL;
+	rv = oidc_valid_string_option(pool, v1, options);
+	if (rv != NULL)
+		return rv;
+	*int_value = oidc_parse_logout_on_error_refresh_as_str2int(v1);
+
+	return NULL;
+}
+
 #define OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER_STR "header"
 #define OIDC_OAUTH_ACCEPT_TOKEN_IN_POST_STR   "post"
 #define OIDC_OAUTH_ACCEPT_TOKEN_IN_QUERY_STR  "query"

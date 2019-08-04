@@ -138,6 +138,9 @@ APLOG_USE_MODULE(auth_openidc);
 /* pass userinfo as a JWT in header (when returned as a JWT) */
 #define OIDC_PASS_USERINFO_AS_JWT         4
 
+/* logout on refresh error before expiry */
+#define OIDC_LOGOUT_ON_ERROR_REFRESH 1
+
 #define OIDC_OAUTH_ACCEPT_TOKEN_IN_DEFAULT 0
 /* accept bearer token in header (default) */
 #define OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER  1
@@ -714,6 +717,7 @@ const char *oidc_parse_pkce_type(apr_pool_t *pool, const char *arg, oidc_proto_p
 const char *oidc_cfg_claim_prefix(request_rec *r);
 int oidc_cfg_max_number_of_state_cookies(oidc_cfg *cfg);
 int oidc_cfg_dir_refresh_access_token_before_expiry(request_rec *r);
+int oidc_cfg_dir_logout_on_error_refresh(request_rec *r);
 int oidc_cfg_delete_oldest_state_cookies(oidc_cfg *cfg);
 
 // oidc_util.c

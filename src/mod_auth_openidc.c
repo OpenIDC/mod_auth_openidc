@@ -74,6 +74,11 @@
 
 #include "mod_auth_openidc.h"
 
+#define ERROR 2
+
+static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
+		oidc_session_t *session, const char *url);
+
 // TODO:
 // - sort out oidc_cfg vs. oidc_dir_cfg stuff
 // - rigid input checking on discovery responses
@@ -1472,7 +1477,7 @@ static apr_byte_t oidc_session_pass_tokens_and_save(request_rec *r,
 }
 
 static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
-		oidc_cfg *cfg, oidc_session_t *session, int ttl_minimum) {
+		oidc_cfg *cfg, oidc_session_t *session, int ttl_minimum, int logout_on_error) {
 
 	const char *s_access_token_expires = NULL;
 	apr_time_t t_expires = -1;
@@ -1515,8 +1520,11 @@ static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
 
 	if (oidc_refresh_access_token(r, cfg, session, provider,
 			NULL) == FALSE) {
-		oidc_warn(r, "access_token could not be refreshed");
-		return FALSE;
+		oidc_warn(r, "access_token could not be refreshed, logout=%d", logout_on_error & OIDC_LOGOUT_ON_ERROR_REFRESH);
+		if (logout_on_error & OIDC_LOGOUT_ON_ERROR_REFRESH)
+			return ERROR;
+		else
+			return FALSE;
 	}
 
 	return TRUE;
@@ -1552,9 +1560,11 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 		return rc;
 
 	/* if needed, refresh the access token */
-	if (oidc_refresh_access_token_before_expiry(r, cfg, session,
-			oidc_cfg_dir_refresh_access_token_before_expiry(r)) == TRUE)
-		needs_save = TRUE;
+	needs_save = oidc_refresh_access_token_before_expiry(r, cfg, session,
+			oidc_cfg_dir_refresh_access_token_before_expiry(r),
+			oidc_cfg_dir_logout_on_error_refresh(r));
+	if (needs_save == ERROR)
+		return oidc_handle_logout_request(r, cfg, session, cfg->default_slo_url);
 
 	/* if needed, refresh claims from the user info endpoint */
 	if (oidc_refresh_claims_from_userinfo_endpoint(r, cfg, session) == TRUE)
@@ -3689,7 +3699,9 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 			return HTTP_UNAUTHORIZED;
 
 		/* set r->user, set headers/env-vars, update expiry, update userinfo + AT */
-		oidc_handle_existing_session(r, c, session);
+		int rc = oidc_handle_existing_session(r, c, session);
+		if (rc != OK)
+			return rc;
 
 		return oidc_handle_info_request(r, c, session);
 

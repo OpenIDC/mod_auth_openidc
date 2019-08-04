@@ -292,6 +292,7 @@ typedef struct oidc_dir_cfg {
 	char *path_auth_request_params;
 	char *path_scope;
 	int refresh_access_token_before_expiry;
+	int logout_on_error_refresh;
 } oidc_dir_cfg;
 
 #define OIDC_CONFIG_DIR_RV(cmd, rv) rv != NULL ? apr_psprintf(cmd->pool, "Invalid value for directive '%s': %s", cmd->directive->directive, rv) : NULL
@@ -1043,11 +1044,20 @@ int oidc_cfg_delete_oldest_state_cookies(oidc_cfg *cfg) {
  * set the time in seconds that the access token needs to be valid for
  */
 static const char * oidc_set_refresh_access_token_before_expiry(cmd_parms *cmd,
-		void *m, const char *arg) {
+		void *m, const char *arg1, const char *arg2) {
 	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg *) m;
-	const char *rv = oidc_parse_refresh_access_token_before_expiry(cmd->pool,
-			arg, &dir_cfg->refresh_access_token_before_expiry);
-	return OIDC_CONFIG_DIR_RV(cmd, rv);
+	const char *rv1 = oidc_parse_refresh_access_token_before_expiry(cmd->pool,
+			arg1, &dir_cfg->refresh_access_token_before_expiry);
+	if (rv1 != NULL)
+		return apr_psprintf(cmd->pool, "Invalid value for directive '%s': %s", cmd->directive->directive, rv1);
+
+	if (arg2) {
+		const char *rv2 = oidc_parse_logout_on_error_refresh_as(cmd->pool,
+			arg2, &dir_cfg->logout_on_error_refresh);
+		return OIDC_CONFIG_DIR_RV(cmd, rv2);
+	}
+
+	return NULL;
 }
 
 int oidc_cfg_dir_refresh_access_token_before_expiry(request_rec *r) {
@@ -1056,6 +1066,14 @@ int oidc_cfg_dir_refresh_access_token_before_expiry(request_rec *r) {
 	if (dir_cfg->refresh_access_token_before_expiry == OIDC_CONFIG_POS_INT_UNSET)
 		return OIDC_DEFAULT_REFRESH_ACCESS_TOKEN_BEFORE_EXPIRY;
 	return dir_cfg->refresh_access_token_before_expiry;
+}
+
+int oidc_cfg_dir_logout_on_error_refresh(request_rec *r) {
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+	if (dir_cfg->logout_on_error_refresh == OIDC_CONFIG_POS_INT_UNSET)
+		return 0; // no mask
+	return dir_cfg->logout_on_error_refresh;
 }
 
 /*
@@ -1718,6 +1736,7 @@ void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->path_auth_request_params = NULL;
 	c->path_scope = NULL;
 	c->refresh_access_token_before_expiry = OIDC_CONFIG_POS_INT_UNSET;
+	c->logout_on_error_refresh = OIDC_CONFIG_POS_INT_UNSET;
 	return (c);
 }
 
@@ -1924,6 +1943,11 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->refresh_access_token_before_expiry != OIDC_CONFIG_POS_INT_UNSET ?
 					add->refresh_access_token_before_expiry :
 					base->refresh_access_token_before_expiry;
+
+	c->logout_on_error_refresh =
+			add->logout_on_error_refresh != OIDC_CONFIG_POS_INT_UNSET ?
+					add->logout_on_error_refresh :
+					base->logout_on_error_refresh;
 
 	return (c);
 }
@@ -3044,11 +3068,11 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF,
 				"The token binding policy used for access tokens; must be one of [disabled|optional|required|enforced]"),
 
-		AP_INIT_TAKE1(OIDCRefreshAccessTokenBeforeExpiry,
+		AP_INIT_TAKE12(OIDCRefreshAccessTokenBeforeExpiry,
 				oidc_set_refresh_access_token_before_expiry,
 				(void *)APR_OFFSETOF(oidc_dir_cfg, refresh_access_token_before_expiry),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
-				"Ensure the access token is valid for at least <x> seconds by refreshing it if required."),
+				"Ensure the access token is valid for at least <x> seconds by refreshing it if required; must be: <x> [logout_on_error]; the logout_on_error performs a logout on refresh error."),
 
 		{ NULL }
 };
