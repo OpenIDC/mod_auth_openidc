@@ -1523,8 +1523,11 @@ apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table,
 	const apr_array_header_t *arr = NULL;
 	const apr_table_entry_t *elts = NULL;
 	int i = 0;
+	const char *content_type = NULL;
 
-	if (r->method_number != M_POST)
+	content_type = oidc_util_hdr_in_content_type_get(r);
+	if ((r->method_number != M_POST) || (apr_strnatcmp(content_type,
+			OIDC_CONTENT_TYPE_FORM_ENCODED) != 0))
 		goto end;
 
 	if (oidc_util_read(r, &data) != TRUE)
@@ -1543,7 +1546,7 @@ apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table,
 		if (apr_strnatcmp(elts[i].key, strip_param_name) != 0)
 			oidc_userdata_set_post_param(r, elts[i].key, elts[i].val);
 
-end:
+	end:
 
 	return rc;
 }

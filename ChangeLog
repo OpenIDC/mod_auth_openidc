@@ -1,3 +1,7 @@
+08/04/2019
+- avoid decoding non-form-encoded POST data; closes #443
+- bump to 2.4.0rc20
+
 08/02/2019
 - return DONE from the content handler early to prevent triggering other content handlers
 - fix `OIDCOAuthAcceptTokenAs post` so POST data is propagated and not lost; see #443
