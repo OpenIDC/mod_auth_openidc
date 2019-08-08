@@ -1738,8 +1738,6 @@ void oidc_util_set_app_info(request_rec *r, const char *s_key,
 		const char *s_value, const char *claim_prefix, apr_byte_t as_header,
 		apr_byte_t as_env_var) {
 
-	apr_table_t *env = NULL;
-
 	/* construct the header name, cq. put the prefix in front of a normalized key name */
 	const char *s_name = apr_psprintf(r->pool, "%s%s", claim_prefix,
 			oidc_normalize_header_name(r, s_key));
@@ -1753,11 +1751,7 @@ void oidc_util_set_app_info(request_rec *r, const char *s_key,
 		oidc_debug(r, "setting environment variable \"%s: %s\"", s_name,
 				s_value);
 
-		apr_pool_userdata_get((void **) &env, OIDC_USERDATA_ENV_KEY, r->pool);
-		if (env == NULL)
-			env = apr_table_make(r->pool, 10);
-		apr_table_set(env, s_name, s_value);
-		apr_pool_userdata_set(env, OIDC_USERDATA_ENV_KEY, NULL, r->pool);
+		apr_table_set(r->subprocess_env, s_name, s_value);
 	}
 }
 

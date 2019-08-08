@@ -2329,23 +2329,6 @@ static void oidc_child_init(apr_pool_t *p, server_rec *s) {
 	apr_pool_cleanup_register(p, s, oidc_cleanup_child, apr_pool_cleanup_null);
 }
 
-/*
- * fixup handler: be authoritative for environment variables at late processing
- */
-static int oidc_auth_fixups(request_rec *r) {
-	apr_table_t *env = NULL;
-	apr_pool_userdata_get((void **) &env, OIDC_USERDATA_ENV_KEY, r->pool);
-	if ((env == NULL) || apr_is_empty_table(env))
-		return DECLINED;
-
-	oidc_debug(r, "overlaying env with %d elements",
-			apr_table_elts(env)->nelts);
-
-	r->subprocess_env = apr_table_overlay(r->pool, r->subprocess_env, env);
-
-	return OK;
-}
-
 static const char oidcFilterName[] = "oidc_filter_in_filter";
 
 static void oidc_filter_in_insert_filter(request_rec *r) {
@@ -2444,7 +2427,6 @@ void oidc_register_hooks(apr_pool_t *pool) {
 	ap_hook_post_config(oidc_post_config, NULL, NULL, APR_HOOK_LAST);
 	ap_hook_child_init(oidc_child_init, NULL, NULL, APR_HOOK_MIDDLE);
 	ap_hook_handler(oidc_content_handler, NULL, NULL, APR_HOOK_FIRST);
-	ap_hook_fixups(oidc_auth_fixups, NULL, NULL, APR_HOOK_MIDDLE);
 	ap_hook_insert_filter(oidc_filter_in_insert_filter, NULL, NULL,
 			APR_HOOK_MIDDLE);
 	ap_register_input_filter(oidcFilterName, oidc_filter_in_filter, NULL,
