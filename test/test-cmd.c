@@ -66,7 +66,7 @@
 
 int usage(int argc, char **argv, const char *msg) {
 	fprintf(stderr, "Usage: %s %s\n", argv[0],
-			msg ? msg : "[ sign | verify | jwk2cert | key2jwk | enckey | hash_base64url | timestamp | uuid ] <options>");
+			msg ? msg : "[ sign | verify | decrypt | jwk2cert | key2jwk | enckey | hash_base64url | timestamp | uuid ] <options>");
 	return -1;
 }
 
@@ -222,6 +222,49 @@ int verify(int argc, char **argv, apr_pool_t *pool) {
 
 	return 0;
 }
+
+int decrypt(int argc, char **argv, apr_pool_t *pool) {
+
+	if (argc <= 3)
+		return usage(argc, argv, "decrypt <serialized-jwt-file> <jwk-file>");
+
+	char *s_jwt = NULL, *s_jwk = NULL;
+
+	if (file_read(pool, argv[2], &s_jwt) != 0)
+		return -1;
+	if (file_read(pool, argv[3], &s_jwk) != 0)
+		return -1;
+
+
+	apr_hash_t *keys = apr_hash_make(pool);
+	oidc_jose_error_t oidc_err;
+
+	oidc_jwk_t *jwk = oidc_jwk_parse(pool, s_jwk, &oidc_err);
+	if (jwk == NULL) {
+		fprintf(stderr,
+				"could not import JWK: %s [file: %s, function: %s, line: %d]\n",
+				oidc_err.text, oidc_err.source, oidc_err.function,
+				oidc_err.line);
+		return -1;
+	}
+
+	apr_hash_set(keys, jwk->kid ? jwk->kid : "dummy", APR_HASH_KEY_STRING, jwk);
+
+	char *plaintext = NULL;
+	if (oidc_jwe_decrypt(pool, s_jwt, keys, &plaintext, &oidc_err, TRUE) == FALSE) {
+		fprintf(stderr,
+				"oidc_jwe_decrypt failed: %s [file: %s, function: %s, line: %d]\n",
+				oidc_err.text, oidc_err.source, oidc_err.function,
+				oidc_err.line);
+		return -1;
+	}
+
+	fprintf(stdout, "%s", plaintext);
+	oidc_jwk_destroy(jwk);
+
+	return 0;
+}
+
 
 int mkcert(RSA *rsa, X509 **x509p, EVP_PKEY **pkeyp, int serial, int days) {
 	X509 *x;
@@ -570,6 +613,9 @@ int main(int argc, char **argv, char **env) {
 
 	if (strcmp(argv[1], "verify") == 0)
 		return verify(argc, argv, pool);
+
+	if (strcmp(argv[1], "decrypt") == 0)
+		return decrypt(argc, argv, pool);
 
 	if (strcmp(argv[1], "jwk2cert") == 0)
 		return jwk2cert(argc, argv, pool);
