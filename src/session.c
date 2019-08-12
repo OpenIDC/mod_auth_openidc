@@ -520,8 +520,10 @@ void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z,
 	void *iter = NULL;
 	apr_byte_t is_allowed;
 
-	if (oidc_util_decode_json_object(r, claims, &src) == FALSE)
+	if (oidc_util_decode_json_object(r, claims, &src) == FALSE){
+		oidc_session_set(r, z, session_key, NULL);
 		return;
+	}
 
 	dst = json_object();
 	iter = json_object_iter(src);
