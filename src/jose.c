@@ -717,8 +717,9 @@ apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json,
 		uint8_t *decrypted = oidc_jwe_decrypt_impl(pool, jwe, keys,
 				&content_len, err);
 		if (decrypted != NULL) {
-			decrypted[content_len] = '\0';
-			*s_json = apr_pstrdup(pool, (const char *) decrypted);
+			*s_json = apr_pcalloc(pool, content_len + 1);
+			memcpy(*s_json, decrypted, content_len);
+			(*s_json)[content_len] = '\0';
 			cjose_get_dealloc()(decrypted);
 		}
 		cjose_jwe_release(jwe);

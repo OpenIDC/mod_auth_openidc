@@ -1,3 +1,7 @@
+08/12/2019
+- fix JWT decryption crashing on non-null terminated input
+- bump to 2.4.0rc23
+
 08/09/2019
 - add logout_on_error option to OIDCRefreshAccessTokenBeforeExpiry to kill the session when
   refreshing an access token fails
