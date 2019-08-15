@@ -1705,8 +1705,6 @@ static apr_byte_t oidc_proto_validate_token_type(request_rec *r,
  */
 static apr_byte_t oidc_proto_endpoint_auth_none(request_rec *r,
 		const char *client_id, apr_table_t *params) {
-	oidc_debug(r,
-			"no client secret is configured; calling the token endpoint without client authentication; only public clients are supported");
 	apr_table_set(params, OIDC_PROTO_CLIENT_ID, client_id);
 	return TRUE;
 }
@@ -1910,8 +1908,12 @@ apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg,
 		token_endpoint_auth = OIDC_PROTO_CLIENT_SECRET_BASIC;
 
 	if ((token_endpoint_auth == NULL) || (apr_strnatcmp(token_endpoint_auth,
-			OIDC_PROTO_ENDPOINT_AUTH_NONE) == 0))
+			OIDC_PROTO_ENDPOINT_AUTH_NONE) == 0)) {
+		oidc_debug(r,
+				"no client secret is configured or the token endpoint auth method was set to \"%s\"; calling the token endpoint without client authentication; only public clients are supported",
+				OIDC_PROTO_ENDPOINT_AUTH_NONE);
 		return oidc_proto_endpoint_auth_none(r, client_id, params);
+	}
 
 	// if no client_secret is set and we don't authenticate using private_key_jwt,
 	// we can only be a public client since the other methods require a client_secret

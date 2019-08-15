@@ -293,7 +293,7 @@ apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, oidc_cfg *cfg,
 	/* verify that the provider supports the a flow that we implement */
 	if (oidc_valid_string_in_array(r->pool, j_provider,
 			OIDC_METADATA_RESPONSE_TYPES_SUPPORTED, oidc_valid_response_type, NULL,
-			FALSE) != NULL) {
+			FALSE, NULL) != NULL) {
 		if (json_object_get(j_provider,
 				OIDC_METADATA_RESPONSE_TYPES_SUPPORTED) != NULL) {
 			oidc_error(r,
@@ -309,7 +309,7 @@ apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, oidc_cfg *cfg,
 	/* verify that the provider supports a response_mode that we implement */
 	if (oidc_valid_string_in_array(r->pool, j_provider,
 			OIDC_METADATA_RESPONSE_MODES_SUPPORTED, oidc_valid_response_mode, NULL,
-			TRUE) != NULL) {
+			TRUE, NULL) != NULL) {
 		oidc_error(r,
 				"could not find a supported response mode in provider metadata (%s) for entry \"" OIDC_METADATA_RESPONSE_MODES_SUPPORTED "\"",
 				issuer);
@@ -344,7 +344,7 @@ apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, oidc_cfg *cfg,
 	if (oidc_valid_string_in_array(r->pool, j_provider,
 			OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED,
 			oidc_cfg_get_valid_endpoint_auth_function(cfg), NULL,
-			TRUE) != NULL) {
+			TRUE, NULL) != NULL) {
 		oidc_error(r,
 				"could not find a supported token endpoint authentication method in provider metadata (%s) for entry \"" OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED "\"",
 				issuer);
@@ -1048,7 +1048,7 @@ apr_byte_t oidc_metadata_provider_parse(request_rec *r, oidc_cfg *cfg,
 				OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED,
 				oidc_cfg_get_valid_endpoint_auth_function(cfg),
 				&provider->token_endpoint_auth,
-				TRUE) != NULL) {
+				TRUE, OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC) != NULL) {
 			oidc_error(r,
 					"could not find a supported token endpoint authentication method in provider metadata (%s) for entry \"" OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED "\"",
 					provider->issuer);
@@ -1068,6 +1068,12 @@ apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg *c,
 	oidc_json_object_get_string(r->pool, j_provider, OIDC_METADATA_ISSUER,
 			&issuer, NULL);
 
+	// TOOD: should check for "if c->oauth.introspection_endpoint_url == NULL and
+	//       allocate the string from the process/config pool
+	//
+	// https://github.com/zmartzone/mod_auth_openidc/commit/32321024ed5bdbc02ba8b5d61aabc4a4c3745c89
+	// https://groups.google.com/forum/#!topic/mod_auth_openidc/o1K_1Yh-TQA
+
 	/* get a handle to the introspection endpoint */
 	oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER, issuer,
 			j_provider,
@@ -1085,7 +1091,7 @@ apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg *c,
 			OIDC_METADATA_INTROSPECTON_ENDPOINT_AUTH_METHODS_SUPPORTED,
 			oidc_cfg_get_valid_endpoint_auth_function(c),
 			&c->oauth.introspection_endpoint_auth,
-			TRUE) != NULL) {
+			TRUE, OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC) != NULL) {
 		oidc_error(r,
 				"could not find a supported token endpoint authentication method in provider metadata (%s) for entry \"" OIDC_METADATA_INTROSPECTON_ENDPOINT_AUTH_METHODS_SUPPORTED "\"",
 				issuer);

@@ -1,3 +1,9 @@
+08/15/2019
+- be smart about picking the token endpoint authentication method when not configured explicitly:
+  don't choose the first one published by the OP but prefer client_secret_basic if that is listed as well
+  see: panva/node-oidc-provider#514; thanks @richard-drummond and @panva
+- bump to 2.4.0rc24
+
 08/12/2019
 - fix not clearing claims in session when setting claims to null; closes #445; thanks @FilipVujicic
 

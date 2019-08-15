@@ -69,6 +69,8 @@
 #define OIDC_PKCE_METHOD_S256         "S256"
 #define OIDC_PKCE_METHOD_REFERRED_TB  "referred_tb"
 
+#define OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC "client_secret_basic"
+
 const char *oidc_valid_url(apr_pool_t *pool, const char *arg, const char *scheme);
 const char *oidc_valid_http_url(apr_pool_t *pool, const char *arg);
 const char *oidc_valid_dir(apr_pool_t *pool, const char *arg);
@@ -123,6 +125,6 @@ const char *oidc_parse_refresh_access_token_before_expiry(apr_pool_t *pool, cons
 
 typedef const char *(*oidc_valid_int_function_t)(apr_pool_t *, int);
 typedef const char *(*oidc_valid_function_t)(apr_pool_t *, const char *);
-const char *oidc_valid_string_in_array(apr_pool_t *pool, json_t *json, const char *key, oidc_valid_function_t valid_function, char **value, apr_byte_t optional);
+const char *oidc_valid_string_in_array(apr_pool_t *pool, json_t *json, const char *key, oidc_valid_function_t valid_function, char **value, apr_byte_t optional, const char *preference);
 
 #endif /* MOD_AUTH_OPENIDC_PARSE_H_ */

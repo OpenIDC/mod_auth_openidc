@@ -380,7 +380,6 @@ const char *oidc_parse_boolean(apr_pool_t *pool, const char *arg,
 }
 
 #define OIDC_ENDPOINT_AUTH_CLIENT_SECRET_POST  "client_secret_post"
-#define OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC "client_secret_basic"
 #define OIDC_ENDPOINT_AUTH_CLIENT_SECRET_JWT   "client_secret_jwt"
 #define OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT     "private_key_jwt"
 #define OIDC_ENDPOINT_AUTH_BEARER_ACCESS_TOKEN "bearer_access_token"
@@ -1045,13 +1044,14 @@ const char *oidc_parse_unautz_action(apr_pool_t *pool, const char *arg,
 }
 
 /*
- * check if there's one valid entry in a string of arrays
+ * check if there's a valid entry in a string of arrays, with a preference
  */
 const char *oidc_valid_string_in_array(apr_pool_t *pool, json_t *json,
 		const char *key, oidc_valid_function_t valid_function, char **value,
-		apr_byte_t optional) {
+		apr_byte_t optional, const char *preference) {
 	int i = 0;
 	json_t *json_arr = json_object_get(json, key);
+	apr_byte_t found = FALSE;
 	if ((json_arr != NULL) && (json_is_array(json_arr))) {
 		for (i = 0; i < json_array_size(json_arr); i++) {
 			json_t *elem = json_array_get(json_arr, i);
@@ -1062,12 +1062,21 @@ const char *oidc_valid_string_in_array(apr_pool_t *pool, json_t *json,
 				continue;
 			}
 			if (valid_function(pool, json_string_value(elem)) == NULL) {
-				if (value != NULL)
-					*value = apr_pstrdup(pool, json_string_value(elem));
-				break;
+				found = TRUE;
+				if (value != NULL) {
+					if ((preference != NULL)
+							&& (apr_strnatcmp(json_string_value(elem),
+									preference) == 0)) {
+						*value = apr_pstrdup(pool, json_string_value(elem));
+						break;
+					}
+					if (*value == NULL) {
+						*value = apr_pstrdup(pool, json_string_value(elem));
+					}
+				}
 			}
 		}
-		if (i == json_array_size(json_arr)) {
+		if (found == FALSE) {
 			return apr_psprintf(pool,
 					"could not find a valid array string element for entry \"%s\"",
 					key);
