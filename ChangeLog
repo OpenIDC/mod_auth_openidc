@@ -1,3 +1,6 @@
+08/16/2019
+- revert 3d95b4a3fbc493c6acc745626ac33143eb4968bf: don't return early from the content handler
+
 08/15/2019
 - be smart about picking the token endpoint authentication method when not configured explicitly:
   don't choose the first one published by the OP but prefer client_secret_basic if that is listed as well
