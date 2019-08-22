@@ -1,3 +1,6 @@
+08/22/2019
+- release 2.4.0
+
 08/16/2019
 - revert 3d95b4a3fbc493c6acc745626ac33143eb4968bf: don't return early from the content handler
 
