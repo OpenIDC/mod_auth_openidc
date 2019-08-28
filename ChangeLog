@@ -1,3 +1,8 @@
+08/28/2019
+- fixes #447 #441 : changed storing POST params from localStorage to
+  sessionStorage due to some issue of losing data in localStorage in Firefox
+  (private mode) 
+
 08/22/2019
 - release 2.4.0
 

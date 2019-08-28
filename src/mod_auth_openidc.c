@@ -464,7 +464,7 @@ apr_byte_t oidc_post_preserve_javascript(request_rec *r, const char *location,
 			apr_psprintf(r->pool,
 					"    <script type=\"text/javascript\">\n"
 					"      function %s() {\n"
-					"        localStorage.setItem('mod_auth_openidc_preserve_post_params', JSON.stringify(%s));\n"
+					"        sessionStorage.setItem('mod_auth_openidc_preserve_post_params', JSON.stringify(%s));\n"
 					"        %s"
 					"      }\n"
 					"    </script>\n", jmethod, json,
@@ -506,8 +506,8 @@ static int oidc_request_post_preserved_restore(request_rec *r,
 					"        return result;\n"
 					"      }\n"
 					"      function %s() {\n"
-					"        var mod_auth_openidc_preserve_post_params = JSON.parse(localStorage.getItem('mod_auth_openidc_preserve_post_params'));\n"
-					"		 localStorage.removeItem('mod_auth_openidc_preserve_post_params');\n"
+					"        var mod_auth_openidc_preserve_post_params = JSON.parse(sessionStorage.getItem('mod_auth_openidc_preserve_post_params'));\n"
+					"		 sessionStorage.removeItem('mod_auth_openidc_preserve_post_params');\n"
 					"        for (var key in mod_auth_openidc_preserve_post_params) {\n"
 					"          var input = document.createElement(\"input\");\n"
 					"          input.name = str_decode(key);\n"
