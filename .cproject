@@ -37,7 +37,7 @@
             			
             <storageModule moduleId="cdtBuildSystem" version="4.0.0">
                 				
-                <configuration artifactName="${ProjName}" buildArtefactType="org.eclipse.linuxtools.cdt.autotools.core.buildArtefactType.autotools" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.linuxtools.cdt.autotools.core.buildArtefactType.autotools,org.eclipse.cdt.build.core.buildType=org.eclipse.linuxtools.cdt.autotools.core.buildType.default" cleanCommand="rm -rf" description="" errorParsers="org.eclipse.cdt.core.CWDLocator;org.eclipse.cdt.core.GmakeErrorParser;org.eclipse.cdt.core.GCCErrorParser;org.eclipse.cdt.core.GLDErrorParser;org.eclipse.cdt.core.GASErrorParser" id="org.eclipse.linuxtools.cdt.autotools.core.configuration.build.1562680719" name="Build (GNU)" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.connection=unix:///var/run/docker.sock,org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=" parent="org.eclipse.linuxtools.cdt.autotools.core.configuration.build">
+                <configuration artifactName="${ProjName}" buildArtefactType="org.eclipse.linuxtools.cdt.autotools.core.buildArtefactType.autotools" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.linuxtools.cdt.autotools.core.buildArtefactType.autotools,org.eclipse.cdt.build.core.buildType=org.eclipse.linuxtools.cdt.autotools.core.buildType.default" cleanCommand="rm -rf" description="" errorParsers="org.eclipse.cdt.core.CWDLocator;org.eclipse.cdt.core.GmakeErrorParser;org.eclipse.cdt.core.GCCErrorParser;org.eclipse.cdt.core.GLDErrorParser;org.eclipse.cdt.core.GASErrorParser" id="org.eclipse.linuxtools.cdt.autotools.core.configuration.build.1562680719" name="Build (GNU)" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.connection=unix:///var/run/docker.sock" parent="org.eclipse.linuxtools.cdt.autotools.core.configuration.build">
                     					
                     <folderInfo id="org.eclipse.linuxtools.cdt.autotools.core.configuration.build.1562680719." name="/" resourcePath="">
                         						
@@ -66,6 +66,8 @@
                             <tool id="org.eclipse.linuxtools.cdt.autotools.core.toolchain.tool.gcc.548331172" name="GCC C Compiler" superClass="org.eclipse.linuxtools.cdt.autotools.core.toolchain.tool.gcc">
                                 								
                                 <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.c.compiler.option.include.paths.811285626" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
+                                    									
+                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc:/liboauth2-docker/src/liboauth2/include}&quot;"/>
                                     									
                                     <listOptionValue builtIn="false" value="/Users/hzandbelt/projects/nginx-1.15.5/src/core"/>
                                     									
@@ -261,8 +263,6 @@
     	
     <storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings"/>
     	
-    <storageModule moduleId="scannerConfiguration"/>
-    	
     <storageModule moduleId="org.eclipse.cdt.core.pathentry"/>
     	
     <storageModule moduleId="org.eclipse.cdt.make.core.buildtargets">
@@ -332,6 +332,24 @@
             </target>
             		
         </buildTargets>
+        	
+    </storageModule>
+    	
+    <storageModule moduleId="scannerConfiguration">
+        		
+        <autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+        		
+        <scannerConfigBuildInfo instanceId="org.eclipse.linuxtools.cdt.autotools.core.configuration.build.1562680719;org.eclipse.linuxtools.cdt.autotools.core.configuration.build.1562680719.;org.eclipse.linuxtools.cdt.autotools.core.toolchain.tool.gcc.548331172;cdt.managedbuild.tool.gnu.c.compiler.input.1754841162">
+            			
+            <autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+            		
+        </scannerConfigBuildInfo>
+        		
+        <scannerConfigBuildInfo instanceId="org.eclipse.linuxtools.cdt.autotools.core.configuration.build.1562680719;org.eclipse.linuxtools.cdt.autotools.core.configuration.build.1562680719.;org.eclipse.linuxtools.cdt.autotools.core.toolchain.tool.gpp.1890200658;cdt.managedbuild.tool.gnu.cpp.compiler.input.1378665586">
+            			
+            <autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+            		
+        </scannerConfigBuildInfo>
         	
     </storageModule>
     
