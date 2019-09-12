@@ -252,9 +252,76 @@ static const char *oauth2_cfg_set_target_pass(cmd_parms *cmd, void *m,
 	return rv;
 }
 
+static authz_status
+oauth2_authz_checker(request_rec *r, const char *require_args,
+		     const void *parsed_require_args,
+		     oauth2_apache_authz_match_claim_fn_type match_claim_fn)
+{
+	json_t *claims = NULL;
+	oauth2_cfg_dir_t *cfg = NULL;
+	oauth2_apache_request_ctx_t *ctx = NULL;
+	authz_status rc = AUTHZ_DENIED_NO_USER;
+
+	cfg = ap_get_module_config(r->per_dir_config, &oauth2_module);
+	ctx = OAUTH2_APACHE_REQUEST_CTX(r, oauth2);
+
+	oauth2_debug(ctx->log, "enter");
+
+	if (r->user != NULL && strlen(r->user) == 0)
+		r->user = NULL;
+
+	oauth2_apache_request_state_get_json(
+	    ctx, OAUTH2_REQUEST_STATE_KEY_CLAIMS, &claims);
+
+	rc = oauth2_apache_authorize(ctx, claims, require_args, match_claim_fn);
+	if (claims)
+		json_decref(claims);
+
+	if ((rc == AUTHZ_DENIED) && ap_auth_type(r))
+		oauth2_apache_return_www_authenticate(
+		    cfg->source_token, ctx, HTTP_UNAUTHORIZED,
+		    "insufficient_scope", // TODO:
+					  // OAUTH2_ERROR_INSUFFICIENT_SCOPE,
+		    "Different scope(s) or other claims required.");
+
+	oauth2_debug(ctx->log, "leave");
+
+	return rc;
+}
+
+static authz_status oauth2_authz_checker_claim(request_rec *r,
+					       const char *require_args,
+					       const void *parsed_require_args)
+{
+	return oauth2_authz_checker(r, require_args, parsed_require_args,
+				    oauth2_apache_authz_match_claim);
+}
+
+static const authz_provider oauth2_authz_claim_provider = {
+    &oauth2_authz_checker_claim, NULL};
+
+#define OAUTH2_REQUIRE_CLAIM "claim"
+
 // clang-format off
 
 OAUTH2_APACHE_HANDLERS(oauth2)
+
+static void oauth2_register_hooks(apr_pool_t *p)
+{
+	ap_hook_post_config(OAUTH2_APACHE_POST_CONFIG(oauth2), NULL, NULL,
+			    APR_HOOK_MIDDLE);
+	ap_hook_check_authn(oauth2_check_user_id_handler, NULL, NULL,
+			    APR_HOOK_MIDDLE, AP_AUTH_INTERNAL_PER_CONF);
+	ap_register_auth_provider(p, AUTHZ_PROVIDER_GROUP, OAUTH2_REQUIRE_CLAIM,
+				  "0", &oauth2_authz_claim_provider,
+				  AP_AUTH_INTERNAL_PER_CONF);
+	// TODO: register content handler for "special" stuff like returning the
+	// JWKs that
+	//       the peer may use to encrypt the token and the private key
+	//       material that we use to sign e.g. client authentication
+	//       assertions
+	// ap_hook_handler(oauth2_content_handler, NULL, NULL, APR_HOOK_MIDDLE);
+}
 
 #define OAUTH2_CFG_CMD_ARGS(nargs, cmd, member, desc) \
 	AP_INIT_TAKE##nargs( \
@@ -283,68 +350,6 @@ static const command_rec OAUTH2_APACHE_COMMANDS(oauth2)[] = {
 
 	{ NULL }
 };
-
-
-static authz_status oauth2_authz_checker(request_rec *r,
-		const char *require_args, const void *parsed_require_args,
-		oauth2_apache_authz_match_claim_fn_type match_claim_fn) {
-	json_t *claims = NULL;
-	oauth2_cfg_dir_t *cfg = NULL;
-	oauth2_apache_request_ctx_t *ctx = NULL;
-	authz_status rc = AUTHZ_DENIED_NO_USER;
-
-	cfg = ap_get_module_config(r->per_dir_config, &oauth2_module);
-	ctx = OAUTH2_APACHE_REQUEST_CTX(r, oauth2);
-
-	oauth2_debug(ctx->log, "enter");
-
-	if (r->user != NULL && strlen(r->user) == 0)
-		r->user = NULL;
-
-	oauth2_apache_request_state_get_json(ctx, OAUTH2_REQUEST_STATE_KEY_CLAIMS, &claims);
-
-	rc = oauth2_apache_authorize(ctx, claims, require_args, match_claim_fn);
-	if (claims)
-		json_decref(claims);
-
-	if ((rc == AUTHZ_DENIED) && ap_auth_type(r))
-		oauth2_apache_return_www_authenticate(cfg->source_token, ctx,
-				HTTP_UNAUTHORIZED, "insufficient_scope", // TODO: OAUTH2_ERROR_INSUFFICIENT_SCOPE,
-				"Different scope(s) or other claims required.");
-
-	oauth2_debug(ctx->log, "leave");
-
-	return rc;
-}
-
-static authz_status oauth2_authz_checker_claim(request_rec *r,
-		const char *require_args, const void *parsed_require_args) {
-	return oauth2_authz_checker(r, require_args, parsed_require_args,
-			oauth2_apache_authz_match_claim);
-}
-
-static const authz_provider oauth2_authz_claim_provider = {
-		&oauth2_authz_checker_claim,
-		NULL };
-
-#define OAUTH2_REQUIRE_CLAIM "claim"
-
-static void oauth2_register_hooks(apr_pool_t *p)
-{
-	ap_hook_post_config(OAUTH2_APACHE_POST_CONFIG(oauth2), NULL, NULL,
-			    APR_HOOK_MIDDLE);
-	ap_hook_check_authn(oauth2_check_user_id_handler, NULL, NULL,
-			    APR_HOOK_MIDDLE, AP_AUTH_INTERNAL_PER_CONF);
-	ap_register_auth_provider(p, AUTHZ_PROVIDER_GROUP,
-			OAUTH2_REQUIRE_CLAIM, "0", &oauth2_authz_claim_provider,
-			AP_AUTH_INTERNAL_PER_CONF);
-	// TODO: register content handler for "special" stuff like returning the
-	// JWKs that
-	//       the peer may use to encrypt the token and the private key
-	//       material that we use to sign e.g. client authentication
-	//       assertions
-	// ap_hook_handler(oauth2_content_handler, NULL, NULL, APR_HOOK_MIDDLE);
-}
 
 OAUTH2_APACHE_MODULE_DECLARE_EX(
 	oauth2,
