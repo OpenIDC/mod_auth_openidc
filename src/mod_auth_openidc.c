@@ -48,7 +48,6 @@
 
 OAUTH2_APACHE_LOG(auth_openidc)
 
-
 // clang-format off
 
 OAUTH2_APACHE_HANDLERS(auth_openidc)
@@ -57,15 +56,20 @@ static const command_rec OAUTH2_APACHE_COMMANDS(auth_openidc)[] = {
 	{ NULL }
 };
 
+static int openidc_check_user_id_handler(request_rec *r)
+{
+	oauth2_apache_request_ctx_t *ctx = OAUTH2_APACHE_REQUEST_CTX(r, auth_openidc)
+	// make it compile for now
+	r = ctx->r;
+	return 0;
+}
+
 static void auth_openidc_register_hooks(apr_pool_t *p)
 {
 	ap_hook_post_config(OAUTH2_APACHE_POST_CONFIG(auth_openidc), NULL, NULL,
 			    APR_HOOK_MIDDLE);
-
-	// make it compile for now
-	request_rec *r = NULL;
-	oauth2_apache_request_ctx_t *ctx = OAUTH2_APACHE_REQUEST_CTX(r, auth_openidc)
-	r = ctx->r;
+	ap_hook_check_authn(openidc_check_user_id_handler, NULL, NULL,
+			    APR_HOOK_MIDDLE, AP_AUTH_INTERNAL_PER_CONF);
 }
 
 OAUTH2_APACHE_MODULE_DECLARE_EX(
