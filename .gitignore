@@ -6,3 +6,14 @@
 /discover
 /metadata
 /build/
+/.libs/
+/m4/
+/compile
+/config.guess
+/install-sh
+/libtool
+/ltmain.sh
+/mod_auth_openidc.la
+/config.sub
+/depcomp
+/missing
