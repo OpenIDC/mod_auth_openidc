@@ -1,0 +1,33 @@
+ACLOCAL_AMFLAGS=-I m4
+
+EXTRA_DIST = autogen.sh ChangeLog README.md LICENSE src/config.h.in auth_openidc.conf
+
+AM_CPPFLAGS = -Wall -Werror
+AM_CPPFLAGS += -DOAUTH2_PACKAGE_NAME_VERSION=\"@PACKAGE_NAME@-@PACKAGE_VERSION@\"
+AM_CPPFLAGS += $(CODE_COVERAGE_CPPFLAGS) $(CODE_COVERAGE_CFLAGS)
+AM_LDFLAGS = --coverage
+
+LDADD = $(CODE_COVERAGE_LIBS)
+
+includesubdir = $(includedir)/oauth2
+
+includesub_HEADERS = \
+	src/mod_auth_openidc.h
+	
+nodist_includesub_HEADERS = \
+	src/config.h
+
+lib_LTLIBRARIES = @PACKAGE_NAME@.la
+
+@PACKAGE_NAME@_la_CFLAGS = @OAUTH2_CFLAGS@ @OAUTH2_APACHE_CFLAGS@ @APR_CFLAGS@
+@PACKAGE_NAME@_la_LIBADD = @OAUTH2_LIBS@ @OAUTH2_APACHE_LIBS@ @APR_LIBS@
+@PACKAGE_NAME@_la_SOURCES = src/@PACKAGE_NAME@.c
+@PACKAGE_NAME@_la_LDFLAGS = -module
+
+@CODE_COVERAGE_RULES@
+
+clang-format:
+	clang-format -style=file -i `find . -name *.[ch]`
+
+install:
+	@APXS2@ @APXS2_OPTS@ -i -n @PACKAGE_NAME@ @PACKAGE_NAME@.la
