@@ -1,0 +1,62 @@
+Preferably you should use one of the pre-compiled binary packages, available for
+various platforms, see:
+  https://github.com/zmartzone/mod_auth_openidc/wiki#11-where-can-i-get-binary-packages
+and proceed with the Configuration section below.
+
+If your platform is not supported or you want to run the latest code,
+you can build from source as described below.
+
+Installation from source
+========================
+
+You will require development headers and tools for the following
+dependencies:
+ Apache (>=2.0)
+ cjose (>=0.4.1)
+ OpenSSL (>=0.9.8) (>=1.0.1 for Elliptic Curve support)
+ Curl (>=?)
+ Jansson (>=2.0) (JSON parser for C)
+ pcre3 (>=?) (Regular Expressions support)
+ pkg-config
+
+and if you want Redis support:
+ hiredis (>=0.9.0) (Redis client for C)
+
+
+Configure, make and install with:
+
+(run ./autogen.sh first if you work straight from the github source tree)
+./configure --with-apxs2=/opt/apache2/bin/apxs2
+make
+make install
+
+Note that, depending on your distribution,  apxs2 may be named apxs.
+
+FreeBSD users can use one of the following two options to install mod_auth_openidc:
+- To install the port: cd /usr/ports/www/mod_auth_openidc/ && make install clean
+- To add the package: pkg install ap24-mod_auth_openidc
+
+Configuration
+=============
+
+Edit the configuration file for your web server. Depending on
+your distribution, it may be named '/etc/apache/httpd.conf' or something
+different.
+
+You need to add a LoadModule directive for mod_auth_openidc. This will
+look similar to this:
+
+LoadModule auth_openidc_module /usr/lib/apache2/modules/mod_auth_openidc.so
+
+To find the full path to mod_auth_openidc.so, you may run:
+
+apxs2 -q LIBEXECDIR
+
+This will print the path where Apache stores modules. mod_auth_openidc.so
+will be stored in that directory.
+
+After you have added the LoadModule directive, you must add the configuration
+for mod_auth_openidc. For a quickstart doing so, see the provided samples
+in the README.md file.
+
+For an exhaustive overview of all configuration primitives, see: auth_openidc.conf

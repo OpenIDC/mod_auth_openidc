@@ -1,0 +1,2 @@
+localhost.zmartzone.eu
+some.localhost.zmartzone.eu

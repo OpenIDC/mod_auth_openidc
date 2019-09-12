@@ -1,0 +1,11 @@
+/jmeter.log
+/mod_auth_openidc-interop.jmx
+/test
+/*.lo
+/*.o
+/*.slo
+/.libs/
+/test-cmd
+/*.json
+/*.jwt
+/*.jwk
