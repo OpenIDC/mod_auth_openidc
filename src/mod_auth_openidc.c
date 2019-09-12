@@ -61,7 +61,7 @@ static int openidc_check_user_id_handler(request_rec *r)
 	oauth2_apache_request_ctx_t *ctx = OAUTH2_APACHE_REQUEST_CTX(r, auth_openidc)
 	// make it compile for now
 	r = ctx->r;
-	return 0;
+	return DECLINED;
 }
 
 static void auth_openidc_register_hooks(apr_pool_t *p)
