@@ -17,3 +17,5 @@
 /config.sub
 /depcomp
 /missing
+/.settings/
+/.autotools
