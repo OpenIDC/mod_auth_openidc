@@ -86,11 +86,64 @@ static void *openidc_cfg_dir_merge(apr_pool_t *pool, void *b, void *a)
 	return cfg;
 }
 
+static const char *openidc_cfg_set_openidc_provider_resolver(cmd_parms *cmd, void *m,
+					      const char *type, const char *value, const char *options)
+{
+	const char *rv = NULL;
+	openidc_cfg_dir_t *dir_cfg = NULL;
+	oauth2_apache_cfg_srv_t *srv_cfg = NULL;
+
+	dir_cfg = (openidc_cfg_dir_t *)m;
+	srv_cfg =
+	    ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
+
+	rv = oauth2_cfg_openidc_provider_resolver_set_options(srv_cfg->log, dir_cfg->openidc, type, value, options);
+
+	return rv;
+}
+
+// TODO: MACRO-IZE across mod_oauth.c
+static const char *openidc_cfg_set_target_pass(cmd_parms *cmd, void *m,
+					      const char *options)
+{
+	const char *rv = NULL;
+	openidc_cfg_dir_t *dir_cfg = NULL;
+	oauth2_apache_cfg_srv_t *srv_cfg = NULL;
+
+	dir_cfg = (openidc_cfg_dir_t *)m;
+	srv_cfg =
+	    ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
+	rv = oauth2_cfg_set_target_pass_options(srv_cfg->log,
+						dir_cfg->target_pass, options);
+	return rv;
+}
+
 // clang-format off
 
 OAUTH2_APACHE_HANDLERS(auth_openidc)
 
+#define OPENIDC_CFG_CMD_ARGS(nargs, cmd, member, desc) \
+	AP_INIT_TAKE##nargs( \
+		cmd, \
+		openidc_cfg_set_##member, \
+		NULL, \
+		RSRC_CONF | ACCESS_CONF | OR_AUTHCFG, \
+		desc)
+
 static const command_rec OAUTH2_APACHE_COMMANDS(auth_openidc)[] = {
+
+	AP_INIT_TAKE123(
+		"OpenIDCProviderResolver",
+		openidc_cfg_set_openidc_provider_resolver,
+		NULL,
+		RSRC_CONF | ACCESS_CONF | OR_AUTHCFG,
+		"Configures a resolver for OpenID Connect Provider configuration data."),
+
+	OPENIDC_CFG_CMD_ARGS(1,
+		"OpenIDCTargetPass",
+		target_pass,
+		"Configures in which format claims are passed to the target application."),
+
 	{ NULL }
 };
 
@@ -137,25 +190,6 @@ end:
 	return rv;
 }
 
-// TODO:
-bool _openidc_provider_resolver(oauth2_log_t *log,
-				const oauth2_http_request_t *request,
-				oauth2_openidc_provider_t **provider)
-{
-	// json = json_load_file("/path/to/file.json", 0, &error);
-
-	// TODO: free/global
-	*provider = oauth2_openidc_provider_init(log);
-	oauth2_openidc_provider_issuer_set(log, *provider,
-					   "https://op.example.org");
-	oauth2_openidc_provider_authorization_endpoint_set(
-	    log, *provider, "https://op.example.org/authorize");
-	oauth2_openidc_provider_scope_set(log, *provider, "openid");
-	oauth2_openidc_provider_client_id_set(log, *provider, "myclient");
-	oauth2_openidc_provider_client_secret_set(log, *provider, "secret");
-	return true;
-}
-
 static int openidc_check_user_id_handler(request_rec *r)
 {
 	openidc_cfg_dir_t *cfg = NULL;
@@ -186,9 +220,6 @@ static int openidc_check_user_id_handler(request_rec *r)
 	cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
 	ctx = OAUTH2_APACHE_REQUEST_CTX(r, auth_openidc);
 
-	// TODO:
-	oauth2_cfg_openidc_provider_resolver_set(ctx->log, cfg->openidc,
-						 _openidc_provider_resolver);
 	oauth2_cfg_openidc_passphrase_set(ctx->log, cfg->openidc,
 					  "password1234");
 
