@@ -160,6 +160,7 @@ static int openidc_request_handler(oauth2_cfg_openidc_t *cfg,
 	bool rc = false;
 	oauth2_http_response_t *response = NULL;
 	json_t *claims = NULL;
+	char *s_claims = NULL;
 
 	oauth2_debug(ctx->log, "enter");
 
@@ -184,10 +185,26 @@ static int openidc_request_handler(oauth2_cfg_openidc_t *cfg,
 	//	if (oauth2_apache_http_response_status_code_get() == 200)
 	//		rv = OK;
 
-	oauth2_apache_target_pass(ctx, target_pass, NULL, claims);
+	s_claims = oauth2_json_encode(ctx->log, claims, 0);
+	oauth2_debug(ctx->log, "claims: %s", s_claims);
+
+	if (claims) {
+		// TODO:
+		ctx->r->user = apr_pstrdup(
+		    ctx->r->pool,
+		    json_string_value(json_object_get(claims, "sub")));
+		if (ctx->r->user == NULL)
+			ctx->r->user = apr_pstrdup(ctx->r->pool, "(dummy)");
+		oauth2_debug(ctx->log, "r->user: %s",
+			     ctx->r->user ? ctx->r->user : "(null)");
+		oauth2_apache_target_pass(ctx, target_pass, NULL, claims);
+		rv = OK;
+	}
 
 end:
 
+	if (s_claims)
+		oauth2_mem_free(s_claims);
 	if (claims)
 		json_decref(claims);
 	if (response)
