@@ -86,33 +86,36 @@ static void *openidc_cfg_dir_merge(apr_pool_t *pool, void *b, void *a)
 	return cfg;
 }
 
-static const char *openidc_cfg_set_openidc_provider_resolver(cmd_parms *cmd, void *m,
-					      const char *type, const char *value, const char *options)
+static const char *
+openidc_cfg_set_openidc_provider_resolver(cmd_parms *cmd, void *m,
+					  const char *type, const char *value,
+					  const char *options)
 {
 	const char *rv = NULL;
 	openidc_cfg_dir_t *dir_cfg = NULL;
 	oauth2_apache_cfg_srv_t *srv_cfg = NULL;
 
 	dir_cfg = (openidc_cfg_dir_t *)m;
-	srv_cfg =
-	    ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
+	srv_cfg = ap_get_module_config(cmd->server->module_config,
+				       &auth_openidc_module);
 
-	rv = oauth2_cfg_openidc_provider_resolver_set_options(srv_cfg->log, dir_cfg->openidc, type, value, options);
+	rv = oauth2_cfg_openidc_provider_resolver_set_options(
+	    srv_cfg->log, dir_cfg->openidc, type, value, options);
 
 	return rv;
 }
 
 // TODO: MACRO-IZE across mod_oauth.c
 static const char *openidc_cfg_set_target_pass(cmd_parms *cmd, void *m,
-					      const char *options)
+					       const char *options)
 {
 	const char *rv = NULL;
 	openidc_cfg_dir_t *dir_cfg = NULL;
 	oauth2_apache_cfg_srv_t *srv_cfg = NULL;
 
 	dir_cfg = (openidc_cfg_dir_t *)m;
-	srv_cfg =
-	    ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
+	srv_cfg = ap_get_module_config(cmd->server->module_config,
+				       &auth_openidc_module);
 	rv = oauth2_cfg_set_target_pass_options(srv_cfg->log,
 						dir_cfg->target_pass, options);
 	return rv;
@@ -156,12 +159,14 @@ static int openidc_request_handler(oauth2_cfg_openidc_t *cfg,
 	int rv = DECLINED;
 	bool rc = false;
 	oauth2_http_response_t *response = NULL;
+	json_t *claims = NULL;
 
 	oauth2_debug(ctx->log, "enter");
 
 	oauth2_apache_scrub_headers(ctx, target_pass);
 
-	rc = oauth2_openidc_handle(ctx->log, cfg, ctx->request, &response);
+	rc = oauth2_openidc_handle(ctx->log, cfg, ctx->request, &response,
+				   &claims);
 	if (rc == false) {
 		rv = HTTP_INTERNAL_SERVER_ERROR;
 		goto end;
@@ -179,11 +184,12 @@ static int openidc_request_handler(oauth2_cfg_openidc_t *cfg,
 	//	if (oauth2_apache_http_response_status_code_get() == 200)
 	//		rv = OK;
 
-	// oauth2_apache_target_pass(ctx, target_pass, source_token,
-	// json_token);
+	oauth2_apache_target_pass(ctx, target_pass, NULL, claims);
 
 end:
 
+	if (claims)
+		json_decref(claims);
 	if (response)
 		oauth2_http_response_free(ctx->log, response);
 
@@ -227,12 +233,13 @@ static int openidc_check_user_id_handler(request_rec *r)
 		     "incoming request: \"%s?%s\" ap_is_initial_req=%d",
 		     r->parsed_uri.path, r->args, ap_is_initial_req(r));
 
-	if (strcasecmp((const char *)ap_auth_type(r), OPENIDC_AUTH_TYPE) == 0)
-		return openidc_request_handler(cfg->openidc, cfg->target_pass,
-					       ctx);
-
-	if (strcasecmp((const char *)ap_auth_type(r),
-		       OPENIDC_AUTH_TYPE_OPENIDC) == 0)
+	// TODO: don't really need oauth2_openidc_is_request_to_redirect_uri...
+	if ((strcasecmp((const char *)ap_auth_type(r), OPENIDC_AUTH_TYPE) ==
+	     0) ||
+	    (strcasecmp((const char *)ap_auth_type(r),
+			OPENIDC_AUTH_TYPE_OPENIDC) == 0) ||
+	    (oauth2_openidc_is_request_to_redirect_uri(ctx->log, cfg->openidc,
+						       ctx->request)))
 		return openidc_request_handler(cfg->openidc, cfg->target_pass,
 					       ctx);
 
