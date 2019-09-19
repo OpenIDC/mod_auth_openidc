@@ -243,6 +243,7 @@ static int openidc_check_user_id_handler(request_rec *r)
 	cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
 	ctx = OAUTH2_APACHE_REQUEST_CTX(r, auth_openidc);
 
+	// TODO:
 	oauth2_cfg_openidc_passphrase_set(ctx->log, cfg->openidc,
 					  "password1234");
 
