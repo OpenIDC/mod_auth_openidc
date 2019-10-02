@@ -1104,28 +1104,20 @@ void oidc_util_set_chunked_cookie(request_rec *r, const char *cookieName,
 		const char *ext) {
 	int i = 0;
 	int cookieLength = strlen(cookieValue);
-	char *chunkCountName = oidc_util_get_chunk_count_name(r, cookieName);
 	char *chunkValue = NULL;
 
 	/* see if we need to chunk at all */
 	if ((chunkSize == 0)
 			|| ((cookieLength > 0) && (cookieLength < chunkSize))) {
 		oidc_util_set_cookie(r, cookieName, cookieValue, expires, ext);
+		oidc_util_clear_chunked_cookie(r, cookieName, expires, ext);
 		return;
 	}
 
 	/* see if we need to clear a possibly chunked cookie */
 	if (cookieLength == 0) {
-		int chunkCount = oidc_util_get_chunked_count(r, cookieName);
-		if (chunkCount > 0) {
-			for (i = 0; i < chunkCount; i++)
-				oidc_util_set_cookie(r,
-						oidc_util_get_chunk_cookie_name(r, cookieName, i), "",
-						expires, ext);
-			oidc_util_set_cookie(r, chunkCountName, "", expires, ext);
-		} else {
-			oidc_util_set_cookie(r, cookieName, "", expires, ext);
-		}
+		oidc_util_set_cookie(r, cookieName, "", expires, ext);
+		oidc_util_clear_chunked_cookie(r, cookieName, expires, ext);
 		return;
 	}
 
@@ -1139,8 +1131,26 @@ void oidc_util_set_chunked_cookie(request_rec *r, const char *cookieName,
 				oidc_util_get_chunk_cookie_name(r, cookieName, i), chunkValue,
 				expires, ext);
 	};
-	oidc_util_set_cookie(r, chunkCountName,
+	oidc_util_set_cookie(r, oidc_util_get_chunk_count_name(r, cookieName),
 			apr_psprintf(r->pool, "%d", chunkCountValue), expires, ext);
+	oidc_util_set_cookie(r, cookieName, "", expires, ext);
+}
+
+/*
+ * unset all chunked cookies, including the counter cookie, if they exist
+ */
+void oidc_util_clear_chunked_cookie(request_rec *r, const char *cookieName,
+		apr_time_t expires, const char *ext) {
+	int i = 0;
+	int chunkCount = oidc_util_get_chunked_count(r, cookieName);
+	if (chunkCount > 0) {
+		for (i = 0; i < chunkCount; i++)
+			oidc_util_set_cookie(r,
+					oidc_util_get_chunk_cookie_name(r, cookieName, i), "",
+					expires, ext);
+		oidc_util_set_cookie(r, oidc_util_get_chunk_count_name(r, cookieName),
+				"", expires, ext);
+	}
 }
 
 /*
