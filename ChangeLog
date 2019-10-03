@@ -1,6 +1,6 @@
 10/02/2019
 - improve validation of the post-logout URL parameter on logout; thanks AIMOTO Norihito; closes #449
-- release 2.4.0.1
+- release 2.4.0.2
 
 08/28/2019
 - fixes #447 #441 : changed storing POST params from localStorage to

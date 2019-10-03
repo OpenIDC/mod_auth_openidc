@@ -3047,7 +3047,7 @@ static apr_byte_t oidc_validate_post_logout_url(request_rec *r, const char *url,
 						apr_uri_unparse(r->pool, &uri, 0), c_host);
 		oidc_error(r, "%s: %s", *err_str, *err_desc);
 		return FALSE;
-	} else if (strstr(url, "/") != url) {
+	} else if ((uri.hostname == NULL) && (strstr(url, "/") != url)) {
 		*err_str = apr_pstrdup(r->pool, "Malformed URL");
 		*err_desc =
 				apr_psprintf(r->pool,
