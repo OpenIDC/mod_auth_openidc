@@ -1,6 +1,7 @@
 10/03/2019
 - improve validation of the post-logout URL parameter on logout; thanks AIMOTO Norihito; closes #449
 - release 2.4.0.3
+- clear any existing chunked cookies when setting a non-chunked cookie; prevents login loops in some scenarios
 
 08/28/2019
 - fixes #447 #441 : changed storing POST params from localStorage to
