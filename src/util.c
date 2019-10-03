@@ -1097,6 +1097,23 @@ char *oidc_util_get_chunked_cookie(request_rec *r, const char *cookieName,
 }
 
 /*
+ * unset all chunked cookies, including the counter cookie, if they exist
+ */
+static void oidc_util_clear_chunked_cookie(request_rec *r,
+		const char *cookieName, apr_time_t expires, const char *ext) {
+	int i = 0;
+	int chunkCount = oidc_util_get_chunked_count(r, cookieName);
+	if (chunkCount > 0) {
+		for (i = 0; i < chunkCount; i++)
+			oidc_util_set_cookie(r,
+					oidc_util_get_chunk_cookie_name(r, cookieName, i), "",
+					expires, ext);
+		oidc_util_set_cookie(r, oidc_util_get_chunk_count_name(r, cookieName),
+				"", expires, ext);
+	}
+}
+
+/*
  * set a cookie value that is split over a number of chunked cookies
  */
 void oidc_util_set_chunked_cookie(request_rec *r, const char *cookieName,
@@ -1134,23 +1151,6 @@ void oidc_util_set_chunked_cookie(request_rec *r, const char *cookieName,
 	oidc_util_set_cookie(r, oidc_util_get_chunk_count_name(r, cookieName),
 			apr_psprintf(r->pool, "%d", chunkCountValue), expires, ext);
 	oidc_util_set_cookie(r, cookieName, "", expires, ext);
-}
-
-/*
- * unset all chunked cookies, including the counter cookie, if they exist
- */
-void oidc_util_clear_chunked_cookie(request_rec *r, const char *cookieName,
-		apr_time_t expires, const char *ext) {
-	int i = 0;
-	int chunkCount = oidc_util_get_chunked_count(r, cookieName);
-	if (chunkCount > 0) {
-		for (i = 0; i < chunkCount; i++)
-			oidc_util_set_cookie(r,
-					oidc_util_get_chunk_cookie_name(r, cookieName, i), "",
-					expires, ext);
-		oidc_util_set_cookie(r, oidc_util_get_chunk_count_name(r, cookieName),
-				"", expires, ext);
-	}
 }
 
 /*
