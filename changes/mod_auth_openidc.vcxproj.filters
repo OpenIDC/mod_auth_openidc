@@ -1,0 +1,102 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="src">
+      <UniqueIdentifier>{f0688e8d-977c-473e-8f2d-d674bc94c0c2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\cache">
+      <UniqueIdentifier>{35c778c2-551c-480a-b5b6-571593a1940a}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="targetver.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\jose.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="src\mod_auth_openidc.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="src\parse.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="src\pcre_subst.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="src\cache\cache.h">
+      <Filter>src\cache</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="stdafx.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mod_auth_openidc.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\authz.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\config.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jose.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\metadata.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\mod_auth_openidc.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\oauth.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\parse.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\pcre_subst.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\proto.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\session.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\util.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cache\common.c">
+      <Filter>src\cache</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cache\file.c">
+      <Filter>src\cache</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cache\memcache.c">
+      <Filter>src\cache</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cache\redis.c">
+      <Filter>src\cache</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cache\shm.c">
+      <Filter>src\cache</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>

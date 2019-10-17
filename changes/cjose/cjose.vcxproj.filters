@@ -1,0 +1,101 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="pch.cpp" />
+    <ClCompile Include="src\base64.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\concatkdf.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\error.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\header.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jwe.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jws.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jwk.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\version.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\util.c">
+      <Filter>src</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="pch.h" />
+    <ClInclude Include="src\include\concatkdf_int.h">
+      <Filter>src\include</Filter>
+    </ClInclude>
+    <ClInclude Include="framework.h">
+      <Filter>src\include</Filter>
+    </ClInclude>
+    <ClInclude Include="src\include\header_int.h">
+      <Filter>src\include</Filter>
+    </ClInclude>
+    <ClInclude Include="src\include\jwe_int.h">
+      <Filter>src\include</Filter>
+    </ClInclude>
+    <ClInclude Include="src\include\jwk_int.h">
+      <Filter>src\include</Filter>
+    </ClInclude>
+    <ClInclude Include="src\include\jws_int.h">
+      <Filter>src\include</Filter>
+    </ClInclude>
+    <ClInclude Include="src\include\util_int.h">
+      <Filter>src\include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\cjose\base64.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\cjose\cjose.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\cjose\error.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\cjose\header.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\cjose\jwe.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\cjose\jwk.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\cjose\jws.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\cjose\util.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\cjose\version.h">
+      <Filter>include</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="cpp.hint" />
+    <None Include="src\Makefile.am" />
+    <None Include="src\Makefile.in" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="src">
+      <UniqueIdentifier>{4b8cd0cf-7660-442b-9c65-cb4ef2e87609}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="include">
+      <UniqueIdentifier>{1c02c687-68d2-4c4c-b7e4-0e8111f3b213}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\include">
+      <UniqueIdentifier>{7cc06cf8-8b9a-4387-a9a7-612ea100d301}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
