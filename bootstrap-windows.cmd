@@ -14,18 +14,13 @@ rem .\vcpkg install apr:x86-windows
 .\vcpkg install openssl:x86-windows
 .\vcpkg install jansson:x64-windows
 .\vcpkg install jansson:x86-windows
-cd..
-git clone https://github.com/cisco/cjose
+
 
 @echo Over changes to cjose and mod_auth_openidc so they compile on windows
 xcopy changes\*.* /r
 
-@echo Copy Apache headers and libs to the local folder for building.  Make sure the next two lines are correct for your system.
-REM TODO:  add curl to download the zip file and extract it locally.
-mkdir include
-mkdir lib
-xcopy D:\spe\flexsort\Apache24\include\*.* include
-xcopy D:\spe\flexsort\Apache24\lib\*.* lib
+@echo Downloading Apache http x32 and x64 zip files.
+
 
 
 rem call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars32.bat"
