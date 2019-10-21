@@ -1,0 +1,6 @@
+[submodule "cjose"]
+	path = cjose
+	url = https://github.com/cisco/cjose
+[submodule "vcpkg"]
+	path = vcpkg
+	url = https://github.com/microsoft/vcpkg.git
