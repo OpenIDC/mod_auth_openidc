@@ -1,8 +1,12 @@
 @echo Requires git installed and an account on github
 
 call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+@echo cd to vcpkg
 cd vcpkg
+dir
 call bootstrap-vcpkg.bat
+
+pause
 
 .\vcpkg install pcre:x64-windows
 .\vcpkg install pcre:x86-windows
@@ -14,7 +18,7 @@ call bootstrap-vcpkg.bat
 .\vcpkg install openssl:x86-windows
 .\vcpkg install jansson:x64-windows
 .\vcpkg install jansson:x86-windows
-.\vcpkg integrate install
+REM .\vcpkg integrate install
 
 cd..
 
