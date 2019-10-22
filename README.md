@@ -2,8 +2,8 @@ https://github.com/zmartzone/mod_auth_openidc was copied to https://github.com/d
 Build steps
 1) bootstrap-windows.cmd
 2) build.cmd -  the output is in the tartet folder.
+  The output is two zip files, one for x86 and one for x64.
 3) deploy_to_artifactory.cmd
-
 
 [![Build Status](https://travis-ci.org/zmartzone/mod_auth_openidc.svg?branch=master)](https://travis-ci.org/zmartzone/mod_auth_openidc)
 [<img width="184" height="96" align="right" src="http://openid.net/wordpress-content/uploads/2016/04/oid-l-certification-mark-l-rgb-150dpi-90mm@2x.png" alt="OpenID Certification">](https://openid.net/certification)
