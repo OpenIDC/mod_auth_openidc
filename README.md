@@ -8,11 +8,13 @@ validating OAuth 2.0 bearer access tokens and setting headers/environment variab
 
 Reference Bearer Access Token validation using RFC7662 based introspection:
 ```apache
+AuthType oauth2
 OAuth2TokenVerify introspect https://pingfed:9031/as/introspect.oauth2 introspect.ssl_verify=false&introspect.auth=client_secret_basic&client_id=rs0&client_secret=2Federate
 ```
 
 JWT Bearer Access Token validation using a set of JWKs published on a `jwks_uri`:
 ```apache
+AuthType oauth2
 OAuth2TokenVerify jwks_uri https://pingfed:9031/ext/one jwks_uri.ssl_verify=false
 ```
 
