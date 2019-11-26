@@ -124,6 +124,38 @@ static char *_jwk_parse(apr_pool_t *pool, const char *s, oidc_jwk_t **jwk,
 	return 0;
 }
 
+
+static char *test_public_key_parse(apr_pool_t *pool) {
+
+	oidc_jose_error_t err;
+	cjose_jwk_t *jwk, *jwkCert = NULL;
+
+	BIO *input, *inputCert = NULL;
+	int isPrivateKey = 0;
+	int result;
+
+	const char publicKeyFile[] = "./test/public.pem";
+	const char certificateFile[] = "./test/certificate.pem";
+
+	input = BIO_new(BIO_s_file());
+	TST_ASSERT_ERR("test_public_key_parse_BIO_new_public_key", input != NULL, pool, err);
+
+	TST_ASSERT_ERR("test_public_key_parse_BIOread_filename_public_key", result = BIO_read_filename(input, publicKeyFile), pool, err);
+
+	TST_ASSERT_ERR("oidc_jwk_rsa_bio_to_jwk", oidc_jwk_rsa_bio_to_jwk(pool, input, NULL, &jwk, isPrivateKey, &err),
+			pool, err);
+	
+	inputCert = BIO_new(BIO_s_file());
+	TST_ASSERT_ERR("test_public_key_parse_BIO_new_certificate", inputCert != NULL, pool, err);	
+
+	TST_ASSERT_ERR("test_public_key_parse_BIOread_filename_certificate", BIO_read_filename(inputCert, certificateFile), pool, err);	
+
+	TST_ASSERT_ERR("oidc_jwk_rsa_bio_to_jwk", oidc_jwk_rsa_bio_to_jwk(pool, inputCert, NULL, &jwkCert, isPrivateKey, &err),
+			pool, err);
+
+	return 0;
+}
+
 static char *test_jwt_parse(apr_pool_t *pool) {
 
 	// from http://tools.ietf.org/html/draft-ietf-oauth-json-web-token-20
@@ -1421,6 +1453,7 @@ static char * test_authz_worker(request_rec *r) {
 
 static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	char *message;
+	TST_RUN(test_public_key_parse, pool);
 	TST_RUN(test_jwt_parse, pool);
 	TST_RUN(test_plaintext_jwt_parse, pool);
 	TST_RUN(test_jwt_get_string, pool);
