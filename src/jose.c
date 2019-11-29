@@ -1173,8 +1173,6 @@ end:
 		EVP_PKEY_free(pkey);
 	if (x509)
 		X509_free(x509);
-	if (input)
-		BIO_free(input);
 
 	return rv;
 }
