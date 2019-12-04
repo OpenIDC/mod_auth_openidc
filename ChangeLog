@@ -1,3 +1,7 @@
+11/26/2019
+- add the possibility to use a public key instead of a certificate for OIDCPublicKeyFiles parameter
+- added an alpine dockerfile =~ 20MB container size
+
 11/19/2019
 - make cleaning of expired state cookies log with a warning rather than an error; thanks Pavel Drobov
 - bump to 2.4.1rc0
