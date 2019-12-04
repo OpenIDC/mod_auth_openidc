@@ -2993,6 +2993,9 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 		oidc_error(r,
 				"could not find session based on sid/sub provided in logout token: %s",
 				sid);
+		// return HTTP 200 according to (new?) spec and terminate early
+		// to avoid Apache returning auth/authz error 500 for the redirect URI
+		rc = DONE;
 		goto out;
 	}
 
