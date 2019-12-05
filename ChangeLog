@@ -1,6 +1,10 @@
-11/26/2019
+12/05/2019
 - add the possibility to use a public key instead of a certificate for OIDCPublicKeyFiles parameter
 - added an alpine dockerfile =~ 20MB container size
+
+12/04/2019
+- return 200 OK for backchannel logout if session not found
+- bump to 2.4.1rc1
 
 11/19/2019
 - make cleaning of expired state cookies log with a warning rather than an error; thanks Pavel Drobov
