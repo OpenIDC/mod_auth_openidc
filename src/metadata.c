@@ -1446,6 +1446,7 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *issuer,
 
 	/* allocate space for a parsed-and-merged metadata struct */
 	*provider = apr_pcalloc(r->pool, sizeof(oidc_provider_t));
+	oidc_cfg_provider_init(*provider);
 
 	/*
 	 * read and parse the provider, conf and client metadata respectively

@@ -1076,6 +1076,53 @@ int oidc_cfg_dir_logout_on_error_refresh(request_rec *r) {
 	return dir_cfg->logout_on_error_refresh;
 }
 
+void oidc_cfg_provider_init(oidc_provider_t *provider) {
+	provider->metadata_url = NULL;
+	provider->issuer = NULL;
+	provider->authorization_endpoint_url = NULL;
+	provider->token_endpoint_url = NULL;
+	provider->token_endpoint_auth = NULL;
+	provider->token_endpoint_params = NULL;
+	provider->userinfo_endpoint_url = NULL;
+	provider->revocation_endpoint_url = NULL;
+	provider->client_id = NULL;
+	provider->client_secret = NULL;
+	provider->token_endpoint_tls_client_cert = NULL;
+	provider->token_endpoint_tls_client_key = NULL;
+	provider->registration_endpoint_url = NULL;
+	provider->registration_endpoint_json = NULL;
+	provider->check_session_iframe = NULL;
+	provider->end_session_endpoint = NULL;
+	provider->jwks_uri = NULL;
+	provider->backchannel_logout_supported = OIDC_CONFIG_POS_INT_UNSET;
+
+	provider->ssl_validate_server = OIDC_DEFAULT_SSL_VALIDATE_SERVER;
+	provider->client_name = OIDC_DEFAULT_CLIENT_NAME;
+	provider->client_contact = NULL;
+	provider->registration_token = NULL;
+	provider->scope = OIDC_DEFAULT_SCOPE;
+	provider->response_type = OIDC_DEFAULT_RESPONSE_TYPE;
+	provider->response_mode = NULL;
+	provider->jwks_refresh_interval = OIDC_DEFAULT_JWKS_REFRESH_INTERVAL;
+	provider->idtoken_iat_slack = OIDC_DEFAULT_IDTOKEN_IAT_SLACK;
+	provider->session_max_duration = OIDC_DEFAULT_SESSION_MAX_DURATION;
+	provider->auth_request_params = NULL;
+	provider->pkce = NULL;
+
+	provider->client_jwks_uri = NULL;
+	provider->client_signing_keys = NULL;
+	provider->client_encryption_keys = NULL;
+
+	provider->id_token_signed_response_alg = NULL;
+	provider->id_token_encrypted_response_alg = NULL;
+	provider->id_token_encrypted_response_enc = NULL;
+	provider->userinfo_signed_response_alg = NULL;
+	provider->userinfo_encrypted_response_alg = NULL;
+	provider->userinfo_encrypted_response_enc = NULL;
+	provider->userinfo_token_method = OIDC_USER_INFO_TOKEN_METHOD_HEADER;
+	provider->auth_request_method = OIDC_DEFAULT_AUTH_REQUEST_METHOD;
+}
+
 /*
  * create a new server config record with defaults
  */
@@ -1090,50 +1137,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->public_keys = NULL;
 	c->private_keys = NULL;
 
-	c->provider.metadata_url = NULL;
-	c->provider.issuer = NULL;
-	c->provider.authorization_endpoint_url = NULL;
-	c->provider.token_endpoint_url = NULL;
-	c->provider.token_endpoint_auth = NULL;
-	c->provider.token_endpoint_params = NULL;
-	c->provider.userinfo_endpoint_url = NULL;
-	c->provider.revocation_endpoint_url = NULL;
-	c->provider.client_id = NULL;
-	c->provider.client_secret = NULL;
-	c->provider.token_endpoint_tls_client_cert = NULL;
-	c->provider.token_endpoint_tls_client_key = NULL;
-	c->provider.registration_endpoint_url = NULL;
-	c->provider.registration_endpoint_json = NULL;
-	c->provider.check_session_iframe = NULL;
-	c->provider.end_session_endpoint = NULL;
-	c->provider.jwks_uri = NULL;
-	c->provider.backchannel_logout_supported = OIDC_CONFIG_POS_INT_UNSET;
-
-	c->provider.ssl_validate_server = OIDC_DEFAULT_SSL_VALIDATE_SERVER;
-	c->provider.client_name = OIDC_DEFAULT_CLIENT_NAME;
-	c->provider.client_contact = NULL;
-	c->provider.registration_token = NULL;
-	c->provider.scope = OIDC_DEFAULT_SCOPE;
-	c->provider.response_type = OIDC_DEFAULT_RESPONSE_TYPE;
-	c->provider.response_mode = NULL;
-	c->provider.jwks_refresh_interval = OIDC_DEFAULT_JWKS_REFRESH_INTERVAL;
-	c->provider.idtoken_iat_slack = OIDC_DEFAULT_IDTOKEN_IAT_SLACK;
-	c->provider.session_max_duration = OIDC_DEFAULT_SESSION_MAX_DURATION;
-	c->provider.auth_request_params = NULL;
-	c->provider.pkce = NULL;
-
-	c->provider.client_jwks_uri = NULL;
-	c->provider.client_signing_keys = NULL;
-	c->provider.client_encryption_keys = NULL;
-
-	c->provider.id_token_signed_response_alg = NULL;
-	c->provider.id_token_encrypted_response_alg = NULL;
-	c->provider.id_token_encrypted_response_enc = NULL;
-	c->provider.userinfo_signed_response_alg = NULL;
-	c->provider.userinfo_encrypted_response_alg = NULL;
-	c->provider.userinfo_encrypted_response_enc = NULL;
-	c->provider.userinfo_token_method = OIDC_USER_INFO_TOKEN_METHOD_HEADER;
-	c->provider.auth_request_method = OIDC_DEFAULT_AUTH_REQUEST_METHOD;
+	oidc_cfg_provider_init(&c->provider);
 
 	c->oauth.ssl_validate_server = OIDC_DEFAULT_SSL_VALIDATE_SERVER;
 	c->oauth.metadata_url = NULL;

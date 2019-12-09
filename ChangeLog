@@ -1,3 +1,6 @@
+12/09/2019
+- fix parsing of values from metadata files when the default is non-NULL (e.g. UNSET)
+
 12/04/2019
 - return 200 OK for backchannel logout if session not found
 - bump to 2.4.1rc1

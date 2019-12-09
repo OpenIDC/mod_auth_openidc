@@ -718,6 +718,7 @@ int oidc_cfg_max_number_of_state_cookies(oidc_cfg *cfg);
 int oidc_cfg_dir_refresh_access_token_before_expiry(request_rec *r);
 int oidc_cfg_dir_logout_on_error_refresh(request_rec *r);
 int oidc_cfg_delete_oldest_state_cookies(oidc_cfg *cfg);
+void oidc_cfg_provider_init(oidc_provider_t *provider);
 
 // oidc_util.c
 int oidc_strnenvcmp(const char *a, const char *b, int len);
