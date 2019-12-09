@@ -666,7 +666,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	oidc_jwks_uri_t jwks_uri = { provider->jwks_uri,
 			provider->jwks_refresh_interval, provider->ssl_validate_server };
 	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri,
-			oidc_util_merge_symmetric_key(r->pool, NULL, jwk)) == FALSE) {
+			oidc_util_merge_symmetric_key(r->pool, NULL, jwk), NULL) == FALSE) {
 		oidc_error(r, "state JWT could not be validated, aborting");
 		oidc_jwt_destroy(jwt);
 		return FALSE;
@@ -2894,7 +2894,8 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 	oidc_jwks_uri_t jwks_uri = { provider->jwks_uri,
 			provider->jwks_refresh_interval, provider->ssl_validate_server };
 	if (oidc_proto_jwt_verify(r, cfg, jwt, &jwks_uri,
-			oidc_util_merge_symmetric_key(r->pool, NULL, jwk)) == FALSE) {
+			oidc_util_merge_symmetric_key(r->pool, NULL, jwk),
+			provider->id_token_signed_response_alg) == FALSE) {
 
 		oidc_error(r, "id_token signature could not be validated, aborting");
 		goto out;

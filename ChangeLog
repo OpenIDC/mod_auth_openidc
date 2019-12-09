@@ -1,5 +1,7 @@
 12/09/2019
 - fix parsing of values from metadata files when the default is non-NULL (e.g. UNSET)
+- enforce OIDCIDTokenSignedResponseAlg and OIDCUserInfoSignedResponseAlg; see #435
+- bump to 2.4.1rc2
 
 12/05/2019
 - add the possibility to use a public key instead of a certificate for OIDCPublicKeyFiles parameter

@@ -1530,10 +1530,22 @@ apr_byte_t oidc_proto_get_keys_from_jwks_uri(request_rec *r, oidc_cfg *cfg,
  * verify the signature on a JWT using the dynamically obtained and statically configured keys
  */
 apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt,
-		const oidc_jwks_uri_t *jwks_uri, apr_hash_t *static_keys) {
+		const oidc_jwks_uri_t *jwks_uri, apr_hash_t *static_keys,
+		const char *alg) {
 
 	oidc_jose_error_t err;
-	apr_hash_t *dynamic_keys = apr_hash_make(r->pool);
+	apr_hash_t *dynamic_keys = NULL;
+
+	if (alg != NULL) {
+		if (apr_strnatcmp(jwt->header.alg, alg) != 0) {
+			oidc_error(r,
+					"JWT was not signed with the expected configured algorithm: %s != %s",
+					jwt->header.alg, alg);
+			return FALSE;
+		}
+	}
+
+	dynamic_keys = apr_hash_make(r->pool);
 
 	/* see if we've got a JWKs URI set for signature validation with dynamically obtained asymmetric keys */
 	if (jwks_uri->url == NULL) {
@@ -1650,7 +1662,8 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 		oidc_jwks_uri_t jwks_uri = { provider->jwks_uri,
 				provider->jwks_refresh_interval, provider->ssl_validate_server };
 		if (oidc_proto_jwt_verify(r, cfg, *jwt, &jwks_uri,
-				oidc_util_merge_symmetric_key(r->pool, NULL, jwk)) == FALSE) {
+				oidc_util_merge_symmetric_key(r->pool, NULL, jwk),
+				provider->id_token_signed_response_alg) == FALSE) {
 
 			oidc_error(r,
 					"id_token signature could not be validated, aborting");
@@ -2150,7 +2163,8 @@ static apr_byte_t oidc_user_info_response_validate(request_rec *r,
 		oidc_jwks_uri_t jwks_uri = { provider->jwks_uri,
 				provider->jwks_refresh_interval, provider->ssl_validate_server };
 		if (oidc_proto_jwt_verify(r, cfg, jwt, &jwks_uri,
-				oidc_util_merge_symmetric_key(r->pool, NULL, jwk)) == FALSE) {
+				oidc_util_merge_symmetric_key(r->pool, NULL, jwk),
+				provider->userinfo_signed_response_alg) == FALSE) {
 
 			oidc_error(r, "JWT signature could not be validated, aborting");
 			oidc_jwt_destroy(jwt);

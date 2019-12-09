@@ -2578,7 +2578,7 @@ const command_rec oidc_config_cmds[] = {
 				oidc_set_signed_response_alg,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.id_token_signed_response_alg),
 				RSRC_CONF,
-				"The algorithm that the OP should use to sign the id_token (used only in dynamic client registration); must be one of [RS256|RS384|RS512|PS256|PS384|PS512|HS256|HS384|HS512]"),
+				"The algorithm that the OP must use to sign the ID token."),
 		AP_INIT_TAKE1(OIDCIDTokenEncryptedResponseAlg,
 				oidc_set_encrypted_response_alg,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.id_token_encrypted_response_alg),
