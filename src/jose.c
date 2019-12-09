@@ -1076,15 +1076,15 @@ int oidc_jose_hash_length(const char *alg) {
 }
 
 /*
- * convert the RSA public key in the X.509 certificate in the BIO pointed to
+ * convert the RSA public key - eventually in a X.509 certificate - in the BIO pointed to
  * by "input" to a JSON Web Key object
  */
-static apr_byte_t oidc_jwk_rsa_bio_to_jwk(apr_pool_t *pool, BIO *input,
+apr_byte_t oidc_jwk_rsa_bio_to_jwk(apr_pool_t *pool, BIO *input,
 		const char *kid, cjose_jwk_t **jwk, int is_private_key,
 		oidc_jose_error_t *err) {
 
 	X509 *x509 = NULL;
-	EVP_PKEY *pkey = NULL;
+	EVP_PKEY *pkey = NULL;	
 	apr_byte_t rv = FALSE;
 
 	cjose_jwk_rsa_keyspec key_spec;
@@ -1097,15 +1097,20 @@ static apr_byte_t oidc_jwk_rsa_bio_to_jwk(apr_pool_t *pool, BIO *input,
 			goto end;
 		}
 	} else {
-		/* read the X.509 struct */
-		if ((x509 = PEM_read_bio_X509_AUX(input, NULL, NULL, NULL)) == NULL) {
-			oidc_jose_error_openssl(err, "PEM_read_bio_X509_AUX");
-			goto end;
-		}
-		/* get the public key struct from the X.509 struct */
-		if ((pkey = X509_get_pubkey(x509)) == NULL) {
-			oidc_jose_error_openssl(err, "X509_get_pubkey");
-			goto end;
+		/* read public key */
+		if ((pkey = PEM_read_bio_PUBKEY(input, NULL, NULL, NULL)) == NULL) {
+			/* not a public key - reset the buffer */
+			BIO_reset(input);
+			/* read the X.509 struct - assume input is no public key */
+			if ((x509 = PEM_read_bio_X509_AUX(input, NULL, NULL, NULL)) == NULL) {
+				oidc_jose_error_openssl(err, "PEM_read_bio_X509_AUX");
+				goto end;
+			}
+			/* get the public key struct from the X.509 struct */
+			if ((pkey = X509_get_pubkey(x509)) == NULL) {
+				oidc_jose_error_openssl(err, "X509_get_pubkey");
+				goto end;
+			}
 		}
 	}
 
