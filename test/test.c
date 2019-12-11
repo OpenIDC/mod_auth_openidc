@@ -128,9 +128,11 @@ static char *_jwk_parse(apr_pool_t *pool, const char *s, oidc_jwk_t **jwk,
 static char *test_public_key_parse(apr_pool_t *pool) {
 
 	oidc_jose_error_t err;
-	cjose_jwk_t *jwk, *jwkCert = NULL;
+	oidc_jwk_t *jwk, *jwkCert = NULL;
 
 	BIO *input, *inputCert = NULL;
+	char* json = NULL;
+
 	int isPrivateKey = 0;
 	int result;
 
@@ -151,6 +153,12 @@ static char *test_public_key_parse(apr_pool_t *pool) {
 	TST_ASSERT_ERR("test_public_key_parse_BIOread_filename_certificate", BIO_read_filename(inputCert, certificateFile), pool, err);	
 
 	TST_ASSERT_ERR("oidc_jwk_rsa_bio_to_jwk", oidc_jwk_rsa_bio_to_jwk(pool, inputCert, NULL, &jwkCert, isPrivateKey, &err),
+			pool, err);
+
+	TST_ASSERT_ERR("oidc_jwk_to_json with public key", oidc_jwk_to_json(pool, jwk, &json, &err),
+			pool, err);
+	
+	TST_ASSERT_ERR("oidc_jwk_to_json with certificate", oidc_jwk_to_json(pool, jwkCert, &json, &err),
 			pool, err);
 
 	return 0;
