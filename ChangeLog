@@ -1,3 +1,8 @@
+
+12/05/2019
+- if OIDCPublicKeyFiles contains a certificate, the corresponding x5c, x5t and x5t#256 
+  parameters will be added to the generated jwkset available at "<redirect_uri>?jwks=rsa"
+
 12/09/2019
 - fix parsing of values from metadata files when the default is non-NULL (e.g. UNSET)
 - enforce OIDCIDTokenSignedResponseAlg and OIDCUserInfoSignedResponseAlg; see #435
