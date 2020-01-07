@@ -2978,7 +2978,7 @@ const command_rec oidc_config_cmds[] = {
 				oidc_set_unauth_action,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, unauth_action),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
-				"Sets the action taken when an unauthenticated request occurs: must be one of \"auth\" (default), \"pass\" , \"401\" or \"410\"."),
+				"Sets the action taken when an unauthenticated request occurs: must be one of \"auth\" (default), \"pass\" , \"401\", \"407\", or \"410\"."),
 		AP_INIT_TAKE1(OIDCUnAutzAction,
 				oidc_set_unautz_action,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, unautz_action),
