@@ -74,7 +74,7 @@
 
 #include "mod_auth_openidc.h"
 
-#define ERROR 2
+#define ERROR_NEEDS_TO_SAVE 2
 
 static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 		oidc_session_t *session, const char *url);
@@ -1522,7 +1522,7 @@ static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
 			NULL) == FALSE) {
 		oidc_warn(r, "access_token could not be refreshed, logout=%d", logout_on_error & OIDC_LOGOUT_ON_ERROR_REFRESH);
 		if (logout_on_error & OIDC_LOGOUT_ON_ERROR_REFRESH)
-			return ERROR;
+			return ERROR_NEEDS_TO_SAVE;
 		else
 			return FALSE;
 	}
@@ -1563,7 +1563,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	needs_save = oidc_refresh_access_token_before_expiry(r, cfg, session,
 			oidc_cfg_dir_refresh_access_token_before_expiry(r),
 			oidc_cfg_dir_logout_on_error_refresh(r));
-	if (needs_save == ERROR)
+	if (needs_save == ERROR_NEEDS_TO_SAVE)
 		return oidc_handle_logout_request(r, cfg, session, cfg->default_slo_url);
 
 	/* if needed, refresh claims from the user info endpoint */

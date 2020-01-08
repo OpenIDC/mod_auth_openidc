@@ -421,7 +421,7 @@ static int oidc_cache_crypto_encrypt(request_rec *r, const char *plaintext,
 	unsigned char tag[OIDC_CACHE_TAG_LEN];
 
 	/* allocate space for the ciphertext */
-	plaintext_len = strlen(plaintext) + 1;
+	plaintext_len = (int) strlen(plaintext) + 1;
 	ciphertext = apr_pcalloc(r->pool,
 			(plaintext_len + EVP_CIPHER_block_size(OIDC_CACHE_CIPHER)));
 
@@ -528,7 +528,7 @@ static unsigned char *oidc_cache_hash_passphrase(request_rec *r,
 	oidc_jose_error_t err;
 
 	if (oidc_jose_hash_bytes(r->pool, OIDC_JOSE_ALG_SHA256,
-			(const unsigned char *) passphrase, strlen(passphrase), &key,
+			(const unsigned char *) passphrase, (unsigned int) strlen(passphrase), &key,
 			&key_len, &err) == FALSE) {
 		oidc_error(r, "oidc_jose_hash_bytes returned an error: %s", err.text);
 		return NULL;
