@@ -1,3 +1,6 @@
+01/08/2020
+- support 407 option on OIDCUnAuthAction
+
 12/09/2019
 - fix parsing of values from metadata files when the default is non-NULL (e.g. UNSET)
 - enforce OIDCIDTokenSignedResponseAlg and OIDCUserInfoSignedResponseAlg; see #435
