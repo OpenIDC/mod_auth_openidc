@@ -642,7 +642,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 			c->provider.jwks_refresh_interval, c->oauth.ssl_validate_server };
 	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri,
 			oidc_util_merge_key_sets(r->pool, c->oauth.verify_public_keys,
-					c->oauth.verify_shared_keys)) == FALSE) {
+					c->oauth.verify_shared_keys), NULL) == FALSE) {
 		oidc_error(r,
 				"JWT access token signature could not be validated, aborting");
 		oidc_jwt_destroy(jwt);

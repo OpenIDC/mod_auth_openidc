@@ -46,6 +46,8 @@ DISTFILES=$(SRC) \
 	test/test.c \
 	test/test-cmd.c \
 	test/stub.c \
+	test/public.pem \
+	test/certificate.pem \
 	configure \
 	configure.ac \
 	Makefile.in \

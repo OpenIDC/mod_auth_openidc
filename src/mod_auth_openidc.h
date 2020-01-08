@@ -206,6 +206,7 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_UNAUTH_PASS         2
 #define OIDC_UNAUTH_RETURN401    3
 #define OIDC_UNAUTH_RETURN410    4
+#define OIDC_UNAUTH_RETURN407    5
 
 #define OIDC_UNAUTZ_RETURN403    1
 #define OIDC_UNAUTZ_RETURN401    2
@@ -639,7 +640,7 @@ int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg *c);
 apr_array_header_t *oidc_proto_supported_flows(apr_pool_t *pool);
 apr_byte_t oidc_proto_flow_is_supported(apr_pool_t *pool, const char *flow);
 apr_byte_t oidc_proto_validate_authorization_response(request_rec *r, const char *response_type, const char *requested_response_mode, char **code, char **id_token, char **access_token, char **token_type, const char *used_response_mode);
-apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri, apr_hash_t *symmetric_keys);
+apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri, apr_hash_t *symmetric_keys, const char *alg);
 apr_byte_t oidc_proto_validate_jwt(request_rec *r, oidc_jwt_t *jwt, const char *iss, apr_byte_t exp_is_mandatory, apr_byte_t iat_is_mandatory, int iat_slack, int token_binding_policy);
 apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce, int len);
 apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, oidc_jwt_payload_t *id_token_payload);
@@ -718,6 +719,7 @@ int oidc_cfg_max_number_of_state_cookies(oidc_cfg *cfg);
 int oidc_cfg_dir_refresh_access_token_before_expiry(request_rec *r);
 int oidc_cfg_dir_logout_on_error_refresh(request_rec *r);
 int oidc_cfg_delete_oldest_state_cookies(oidc_cfg *cfg);
+void oidc_cfg_provider_init(oidc_provider_t *provider);
 
 // oidc_util.c
 int oidc_strnenvcmp(const char *a, const char *b, int len);
