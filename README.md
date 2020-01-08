@@ -1,7 +1,7 @@
 https://github.com/zmartzone/mod_auth_openidc was copied to https://github.com/dematic-spe/mod_auth_openidc
 Build steps
 1) bootstrap-windows.cmd
-2) build.cmd -  the output is in the tartet folder.
+2) build.cmd -  the output is in the target folder.
   The output is two zip files, one for x86 and one for x64.
 3) deploy_to_artifactory.cmd
 
