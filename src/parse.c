@@ -986,6 +986,7 @@ const char *oidc_parse_set_claims_as(apr_pool_t *pool, const char *arg,
 #define OIDC_UNAUTH_ACTION_AUTH_STR "auth"
 #define OIDC_UNAUTH_ACTION_PASS_STR "pass"
 #define OIDC_UNAUTH_ACTION_401_STR  "401"
+#define OIDC_UNAUTH_ACTION_407_STR  "407"
 #define OIDC_UNAUTH_ACTION_410_STR  "410"
 
 /*
@@ -997,6 +998,7 @@ const char *oidc_parse_unauth_action(apr_pool_t *pool, const char *arg,
 			OIDC_UNAUTH_ACTION_AUTH_STR,
 			OIDC_UNAUTH_ACTION_PASS_STR,
 			OIDC_UNAUTH_ACTION_401_STR,
+			OIDC_UNAUTH_ACTION_407_STR,
 			OIDC_UNAUTH_ACTION_410_STR,
 			NULL };
 	const char *rv = oidc_valid_string_option(pool, arg, options);
@@ -1009,6 +1011,8 @@ const char *oidc_parse_unauth_action(apr_pool_t *pool, const char *arg,
 		*action = OIDC_UNAUTH_PASS;
 	else if (apr_strnatcmp(arg, OIDC_UNAUTH_ACTION_401_STR) == 0)
 		*action = OIDC_UNAUTH_RETURN401;
+	else if (apr_strnatcmp(arg, OIDC_UNAUTH_ACTION_407_STR) == 0)
+		*action = OIDC_UNAUTH_RETURN407;
 	else if (apr_strnatcmp(arg, OIDC_UNAUTH_ACTION_410_STR) == 0)
 		*action = OIDC_UNAUTH_RETURN410;
 

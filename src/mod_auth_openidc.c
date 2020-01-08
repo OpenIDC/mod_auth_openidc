@@ -1049,6 +1049,8 @@ static int oidc_handle_unauthenticated_user(request_rec *r, oidc_cfg *c) {
 	switch (oidc_dir_cfg_unauth_action(r)) {
 	case OIDC_UNAUTH_RETURN410:
 		return HTTP_GONE;
+	case OIDC_UNAUTH_RETURN407:
+		return HTTP_PROXY_AUTHENTICATION_REQUIRED;
 	case OIDC_UNAUTH_RETURN401:
 		return HTTP_UNAUTHORIZED;
 	case OIDC_UNAUTH_PASS:
