@@ -1,3 +1,9 @@
+01/15/2020
+- add value of OIDC_SET_COOKIE_APPEND env var to Set-Cookie headers
+  useful for handling changing/upcoming SameSite behaviors across different browsers, e.g.:
+    SetEnvIf User-Agent ".*IOS.*" OIDC_SET_COOKIE_APPEND=SameSite=None
+- bump to 2.4.1rc4
+
 01/08/2020
 - support 407 option on OIDCUnAuthAction
 
