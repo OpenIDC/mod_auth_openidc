@@ -997,13 +997,12 @@ void oidc_util_set_cookie(request_rec *r, const char *cookieName,
 		headerString = apr_psprintf(r->pool, "%s; %s", headerString,
 				OIDC_COOKIE_FLAG_HTTP_ONLY);
 
-	if (ext != NULL)
-		headerString = apr_psprintf(r->pool, "%s; %s", headerString, ext);
-
 	appendString = oidc_util_set_cookie_append_value(r, c);
 	if (appendString != NULL)
 		headerString = apr_psprintf(r->pool, "%s; %s", headerString,
 				appendString);
+	else if (ext != NULL)
+		headerString = apr_psprintf(r->pool, "%s; %s", headerString, ext);
 
 	/* sanity check on overall cookie value size */
 	if (strlen(headerString) > OIDC_COOKIE_MAX_SIZE) {
