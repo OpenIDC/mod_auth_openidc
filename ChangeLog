@@ -1,3 +1,7 @@
+01/22/2020
+- URL encode logout url in session management JS; thanks Paolo Battino
+- bump to 2.4.1rc5
+
 01/15/2020
 - add value of OIDC_SET_COOKIE_APPEND env var to Set-Cookie headers
   useful for handling changing/upcoming SameSite behaviors across different browsers, e.g.:

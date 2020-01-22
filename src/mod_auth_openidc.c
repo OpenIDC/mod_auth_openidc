@@ -3254,7 +3254,7 @@ static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c,
 			"            }\n"
 			"		   } else {\n"
 			"              // either 'changed' + active session, or 'error': enforce a logout\n"
-			"              window.top.location.replace('%s?logout=' + window.top.location.href);\n"
+			"              window.top.location.replace('%s?logout=' + encodeURIComponent(window.top.location.href));\n"
 			"          }\n"
 			"        }\n"
 			"      }\n"
