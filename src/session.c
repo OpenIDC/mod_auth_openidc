@@ -222,11 +222,13 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z,
 			/* set the uuid in the cookie */
 			oidc_util_set_cookie(r, oidc_cfg_dir_cookie(r), z->uuid,
 					c->persistent_session_cookie ? z->expiry : -1,
-							c->cookie_same_site ?
-									(first_time ?
-											OIDC_COOKIE_EXT_SAME_SITE_LAX :
-											OIDC_COOKIE_EXT_SAME_SITE_STRICT) :
-											NULL);
+					c->cookie_same_site_none ? 
+						OIDC_COOKIE_EXT_SAME_SITE_NONE :
+						c->cookie_same_site ?
+								(first_time ?
+										OIDC_COOKIE_EXT_SAME_SITE_LAX :
+										OIDC_COOKIE_EXT_SAME_SITE_STRICT) :
+										NULL);
 
 	} else {
 

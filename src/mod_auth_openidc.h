@@ -217,6 +217,7 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_USER_INFO_TOKEN_METHOD_HEADER 0
 #define OIDC_USER_INFO_TOKEN_METHOD_POST   1
 
+#define OIDC_COOKIE_EXT_SAME_SITE_NONE   "SameSite=None"
 #define OIDC_COOKIE_EXT_SAME_SITE_LAX    "SameSite=Lax"
 #define OIDC_COOKIE_EXT_SAME_SITE_STRICT "SameSite=Strict"
 
@@ -405,6 +406,7 @@ typedef struct oidc_cfg {
 	int pass_userinfo_as;
 	int cookie_http_only;
 	int cookie_same_site;
+	int cookie_same_site_none;
 
 	char *outgoing_proxy;
 

@@ -128,6 +128,8 @@
 #define OIDC_DEFAULT_COOKIE_HTTPONLY 1
 /* set Same-Site flag on cookies */
 #define OIDC_DEFAULT_COOKIE_SAME_SITE 0
+/* set Same-Site=None flag on session cookie */
+#define OIDC_DEFAULT_COOKIE_SAME_SITE_NONE 0
 /* default cookie path */
 #define OIDC_DEFAULT_COOKIE_PATH "/"
 /* default OAuth 2.0 introspection token parameter name */
@@ -212,6 +214,7 @@
 #define OIDCDefaultLoggedOutURL                "OIDCDefaultLoggedOutURL"
 #define OIDCCookieHTTPOnly                     "OIDCCookieHTTPOnly"
 #define OIDCCookieSameSite                     "OIDCCookieSameSite"
+#define OIDCCookieSameSiteNone                 "OIDCCookieSameSiteNone"
 #define OIDCOutgoingProxy                      "OIDCOutgoingProxy"
 #define OIDCCryptoPassphrase                   "OIDCCryptoPassphrase"
 #define OIDCClaimDelimiter                     "OIDCClaimDelimiter"
@@ -1212,6 +1215,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->pass_userinfo_as = OIDC_PASS_USERINFO_AS_CLAIMS;
 	c->cookie_http_only = OIDC_DEFAULT_COOKIE_HTTPONLY;
 	c->cookie_same_site = OIDC_DEFAULT_COOKIE_SAME_SITE;
+	c->cookie_same_site_none = OIDC_DEFAULT_COOKIE_SAME_SITE_NONE;
 
 	c->outgoing_proxy = NULL;
 	c->crypto_passphrase = NULL;
@@ -1647,6 +1651,9 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->cookie_same_site =
 			add->cookie_same_site != OIDC_DEFAULT_COOKIE_SAME_SITE ?
 					add->cookie_same_site : base->cookie_same_site;
+	c->cookie_same_site_none =
+			add->cookie_same_site_none != OIDC_DEFAULT_COOKIE_SAME_SITE_NONE ?
+					add->cookie_same_site_none : base->cookie_same_site_none;
 
 	c->outgoing_proxy =
 			add->outgoing_proxy != NULL ?
@@ -2723,6 +2730,11 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_cfg, cookie_same_site),
 				RSRC_CONF,
 				"Defines whether or not the cookie Same-Site flag is set on cookies."),
+		AP_INIT_FLAG(OIDCCookieSameSiteNone,
+				oidc_set_flag_slot,
+				(void *) APR_OFFSETOF(oidc_cfg, cookie_same_site_none),
+				RSRC_CONF,
+				"Defines whether or not the cookie Same-Site flag is set to None on session cookies."),
 		AP_INIT_TAKE1(OIDCOutgoingProxy,
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, outgoing_proxy),
