@@ -921,7 +921,9 @@ static int oidc_authorization_request_set_cookie(request_rec *r, oidc_cfg *c,
 
 	/* set it as a cookie */
 	oidc_util_set_cookie(r, cookieName, cookieValue, -1,
-			c->cookie_same_site ? OIDC_COOKIE_EXT_SAME_SITE_LAX : NULL);
+			c->cookie_same_site ?
+					OIDC_COOKIE_EXT_SAME_SITE_LAX :
+					OIDC_COOKIE_EXT_SAME_SITE_NONE);
 
 	return HTTP_OK;
 }
@@ -2264,7 +2266,7 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 		oidc_util_set_cookie(r, OIDC_CSRF_NAME, csrf, -1,
 				cfg->cookie_same_site ?
 						OIDC_COOKIE_EXT_SAME_SITE_STRICT :
-						NULL);
+						OIDC_COOKIE_EXT_SAME_SITE_NONE);
 
 		/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
 		if (oidc_post_preserve_javascript(r, url, NULL, NULL) == TRUE)
@@ -2357,7 +2359,9 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 	s = apr_psprintf(r->pool, "%s</form>\n", s);
 
 	oidc_util_set_cookie(r, OIDC_CSRF_NAME, csrf, -1,
-			cfg->cookie_same_site ? OIDC_COOKIE_EXT_SAME_SITE_STRICT : NULL);
+			cfg->cookie_same_site ?
+					OIDC_COOKIE_EXT_SAME_SITE_STRICT :
+					OIDC_COOKIE_EXT_SAME_SITE_NONE);
 
 	char *javascript = NULL, *javascript_method = NULL;
 	char *html_head =

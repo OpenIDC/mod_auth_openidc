@@ -1,3 +1,9 @@
+01/29/2020
+- always add a SameSite value to the Set-Cookie header to satisfy upcoming Chrome/Firefox changes
+  this can be overridden by using, e.g.:
+    SetEnvIf User-Agent ".*IOS.*" OIDC_SET_COOKIE_APPEND=;
+- release 2.4.1rc6
+
 01/22/2020
 - URL encode logout url in session management JS; thanks Paolo Battino
 - bump to 2.4.1rc5
