@@ -1,3 +1,7 @@
+01/30/2020
+- try to fix graceful restart crash; see #458
+- release 2.4.1
+
 01/29/2020
 - always add a SameSite value to the Set-Cookie header to satisfy upcoming Chrome/Firefox changes
   this can be overridden by using, e.g.:

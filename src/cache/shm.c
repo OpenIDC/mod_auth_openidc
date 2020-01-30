@@ -340,6 +340,9 @@ static int oidc_cache_shm_destroy(server_rec *s) {
 	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *) cfg->cache_cfg;
 	apr_status_t rv = APR_SUCCESS;
 
+	if (context == NULL)
+		return rv;
+
 	if (context->shm) {
 		oidc_cache_mutex_lock(s, context->mutex);
 		if (*context->mutex->sema == 1) {
@@ -350,7 +353,11 @@ static int oidc_cache_shm_destroy(server_rec *s) {
 		oidc_cache_mutex_unlock(s, context->mutex);
 	}
 
+	if (context->mutex == NULL)
+		return rv;
+
 	oidc_cache_mutex_destroy(s, context->mutex);
+	context->mutex = NULL;
 
 	return rv;
 }
