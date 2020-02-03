@@ -64,6 +64,7 @@
 
 #include "cjose/cjose.h"
 
+#define OIDC_JOSE_ALG_SHA1 "sha1"
 #define OIDC_JOSE_ALG_SHA256 "sha256"
 
 /* indicate support for OpenSSL version dependent features */
@@ -74,6 +75,14 @@
 #define OIDC_JOSE_ERROR_TEXT_LENGTH    200
 #define OIDC_JOSE_ERROR_SOURCE_LENGTH   80
 #define OIDC_JOSE_ERROR_FUNCTION_LENGTH 80
+
+/* the OIDC jwk fileds as references in RFC 5741 */
+#define OIDC_JOSE_JWK_KID_STR "kid" //Key ID
+#define OIDC_JOSE_JWK_KTY_STR "kty" //Key type
+#define OIDC_JOSE_JWK_USE_STR "use" //Key usage (enc|sig)
+#define OIDC_JOSE_JWK_X5C_STR "x5c" //X509 certificate chain
+#define OIDC_JOSE_JWK_X5T_STR "x5t" //X509 SHA-1 thumbprint
+#define OIDC_JOSE_JWK_X5T256_STR "x5t#S256" //X509 SHA-256 thumbprint
 
 /* struct for returning errors to the caller */
 typedef struct {
@@ -144,6 +153,14 @@ typedef struct oidc_jwk_t {
 	int kty;
 	/* key identifier */
 	char *kid;
+	/* X.509 Certificate Chain */;
+	unsigned char **x5c;
+	/* the size of the certificate chain */
+	int x5c_count;
+	/* X.509 Certificate SHA-1 Thumbprint */
+	char *x5t;
+	/* X.509 Certificate SHA-256 Thumbprint */
+	char *x5t_S256;
 	/* cjose JWK structure */
 	cjose_jwk_t *cjose_jwk;
 } oidc_jwk_t;
@@ -250,7 +267,7 @@ int oidc_jwt_alg2kty(oidc_jwt_t *jwt);
 unsigned int oidc_alg2keysize(const char *alg);
 
 apr_byte_t oidc_jwk_rsa_bio_to_jwk(apr_pool_t *pool, BIO *input,
-		const char *kid, cjose_jwk_t **jwk, int is_private_key,
+		const char *kid, oidc_jwk_t **jwk, int is_private_key,
 		oidc_jose_error_t *err);
 
 #endif /* MOD_AUTH_OPENIDC_JOSE_H_ */
