@@ -1,3 +1,7 @@
+02/03/2020
+- fix: also add SameSite=None to by-value session cookies
+- bump to 2.4.2rc0
+
 01/30/2020
 - try to fix graceful restart crash; see #458
 - release 2.4.1
