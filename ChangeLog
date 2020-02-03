@@ -1,7 +1,29 @@
-
-12/05/2019
+02/03/2020
 - if OIDCPublicKeyFiles contains a certificate, the corresponding x5c, x5t and x5t#256 
   parameters will be added to the generated jwkset available at "<redirect_uri>?jwks=rsa"
+
+01/30/2020
+- try to fix graceful restart crash; see #458
+- release 2.4.1
+
+01/29/2020
+- always add a SameSite value to the Set-Cookie header to satisfy upcoming Chrome/Firefox changes
+  this can be overridden by using, e.g.:
+    SetEnvIf User-Agent ".*IOS.*" OIDC_SET_COOKIE_APPEND=;
+- release 2.4.1rc6
+
+01/22/2020
+- URL encode logout url in session management JS; thanks Paolo Battino
+- bump to 2.4.1rc5
+
+01/15/2020
+- add value of OIDC_SET_COOKIE_APPEND env var to Set-Cookie headers
+  useful for handling changing/upcoming SameSite behaviors across different browsers, e.g.:
+    SetEnvIf User-Agent ".*IOS.*" OIDC_SET_COOKIE_APPEND=SameSite=None
+- bump to 2.4.1rc4
+
+01/08/2020
+- support 407 option on OIDCUnAuthAction
 
 12/09/2019
 - fix parsing of values from metadata files when the default is non-NULL (e.g. UNSET)

@@ -206,6 +206,7 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_UNAUTH_PASS         2
 #define OIDC_UNAUTH_RETURN401    3
 #define OIDC_UNAUTH_RETURN410    4
+#define OIDC_UNAUTH_RETURN407    5
 
 #define OIDC_UNAUTZ_RETURN403    1
 #define OIDC_UNAUTZ_RETURN401    2
@@ -218,6 +219,7 @@ APLOG_USE_MODULE(auth_openidc);
 
 #define OIDC_COOKIE_EXT_SAME_SITE_LAX    "SameSite=Lax"
 #define OIDC_COOKIE_EXT_SAME_SITE_STRICT "SameSite=Strict"
+#define OIDC_COOKIE_EXT_SAME_SITE_NONE   "SameSite=None"
 
 /* https://tools.ietf.org/html/draft-ietf-tokbind-ttrp-01 */
 #define OIDC_TB_CFG_PROVIDED_ENV_VAR     "Sec-Provided-Token-Binding-ID"

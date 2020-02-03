@@ -931,6 +931,27 @@ static char *oidc_util_get_cookie_path(request_rec *r) {
 
 #define OIDC_COOKIE_MAX_SIZE            4093
 
+#define OIDC_SET_COOKIE_APPEND_ENV_VAR  "OIDC_SET_COOKIE_APPEND"
+
+const char *oidc_util_set_cookie_append_value(request_rec *r, oidc_cfg *c) {
+	const char *env_var_value = NULL;
+
+	if (r->subprocess_env != NULL)
+		env_var_value = apr_table_get(r->subprocess_env,
+				OIDC_SET_COOKIE_APPEND_ENV_VAR);
+
+	if (env_var_value == NULL) {
+		oidc_debug(r, "no cookie append environment variable %s found",
+				OIDC_SET_COOKIE_APPEND_ENV_VAR);
+		return NULL;
+	}
+
+	oidc_debug(r, "cookie append environment variable %s=%s found",
+			OIDC_SET_COOKIE_APPEND_ENV_VAR, env_var_value);
+
+	return env_var_value;
+}
+
 /*
  * set a cookie in the HTTP response headers
  */
@@ -940,6 +961,7 @@ void oidc_util_set_cookie(request_rec *r, const char *cookieName,
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	char *headerString, *expiresString = NULL;
+	const char *appendString = NULL;
 
 	/* see if we need to clear the cookie */
 	if (apr_strnatcmp(cookieValue, "") == 0)
@@ -975,7 +997,11 @@ void oidc_util_set_cookie(request_rec *r, const char *cookieName,
 		headerString = apr_psprintf(r->pool, "%s; %s", headerString,
 				OIDC_COOKIE_FLAG_HTTP_ONLY);
 
-	if (ext != NULL)
+	appendString = oidc_util_set_cookie_append_value(r, c);
+	if (appendString != NULL)
+		headerString = apr_psprintf(r->pool, "%s; %s", headerString,
+				appendString);
+	else if (ext != NULL)
 		headerString = apr_psprintf(r->pool, "%s; %s", headerString, ext);
 
 	/* sanity check on overall cookie value size */
@@ -2608,4 +2634,3 @@ out_err:
 	// TODO: we don't know which token binding the client supports, do we ?
 	return FALSE;
 }
-

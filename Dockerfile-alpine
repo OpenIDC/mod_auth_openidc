@@ -1,5 +1,7 @@
 FROM alpine:3.10
 
+ENV MOD_AUTH_OPENIDC_REPO
+
 ENV BUILD_DIR /tmp/mod_auth_openidc
 
 ENV APACHE_LOG_DIR /var/log/apache2
@@ -7,7 +9,7 @@ ENV APACHE_LOG_DIR /var/log/apache2
 ENV APACHE_DEFAULT_CONF /etc/apache2/httpd.conf
 
 # add testing repository (for cjose library)
-RUN echo "http://nl.alpinelinux.org/alpine/edge/testing" >>  /etc/apk/repositories
+RUN echo "http://nl.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
 
 # ADD source
 RUN mkdir ${BUILD_DIR}

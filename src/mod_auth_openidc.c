@@ -921,7 +921,9 @@ static int oidc_authorization_request_set_cookie(request_rec *r, oidc_cfg *c,
 
 	/* set it as a cookie */
 	oidc_util_set_cookie(r, cookieName, cookieValue, -1,
-			c->cookie_same_site ? OIDC_COOKIE_EXT_SAME_SITE_LAX : NULL);
+			c->cookie_same_site ?
+					OIDC_COOKIE_EXT_SAME_SITE_LAX :
+					OIDC_COOKIE_EXT_SAME_SITE_NONE);
 
 	return HTTP_OK;
 }
@@ -1049,6 +1051,8 @@ static int oidc_handle_unauthenticated_user(request_rec *r, oidc_cfg *c) {
 	switch (oidc_dir_cfg_unauth_action(r)) {
 	case OIDC_UNAUTH_RETURN410:
 		return HTTP_GONE;
+	case OIDC_UNAUTH_RETURN407:
+		return HTTP_PROXY_AUTHENTICATION_REQUIRED;
 	case OIDC_UNAUTH_RETURN401:
 		return HTTP_UNAUTHORIZED;
 	case OIDC_UNAUTH_PASS:
@@ -2262,7 +2266,7 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 		oidc_util_set_cookie(r, OIDC_CSRF_NAME, csrf, -1,
 				cfg->cookie_same_site ?
 						OIDC_COOKIE_EXT_SAME_SITE_STRICT :
-						NULL);
+						OIDC_COOKIE_EXT_SAME_SITE_NONE);
 
 		/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
 		if (oidc_post_preserve_javascript(r, url, NULL, NULL) == TRUE)
@@ -2355,7 +2359,9 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 	s = apr_psprintf(r->pool, "%s</form>\n", s);
 
 	oidc_util_set_cookie(r, OIDC_CSRF_NAME, csrf, -1,
-			cfg->cookie_same_site ? OIDC_COOKIE_EXT_SAME_SITE_STRICT : NULL);
+			cfg->cookie_same_site ?
+					OIDC_COOKIE_EXT_SAME_SITE_STRICT :
+					OIDC_COOKIE_EXT_SAME_SITE_NONE);
 
 	char *javascript = NULL, *javascript_method = NULL;
 	char *html_head =
@@ -3252,7 +3258,7 @@ static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c,
 			"            }\n"
 			"		   } else {\n"
 			"              // either 'changed' + active session, or 'error': enforce a logout\n"
-			"              window.top.location.replace('%s?logout=' + window.top.location.href);\n"
+			"              window.top.location.replace('%s?logout=' + encodeURIComponent(window.top.location.href));\n"
 			"          }\n"
 			"        }\n"
 			"      }\n"

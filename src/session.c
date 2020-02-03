@@ -226,7 +226,7 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z,
 									(first_time ?
 											OIDC_COOKIE_EXT_SAME_SITE_LAX :
 											OIDC_COOKIE_EXT_SAME_SITE_STRICT) :
-											NULL);
+											OIDC_COOKIE_EXT_SAME_SITE_NONE);
 
 	} else {
 
