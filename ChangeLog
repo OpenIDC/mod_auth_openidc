@@ -1,6 +1,8 @@
 02/03/2020
 - if OIDCPublicKeyFiles contains a certificate, the corresponding x5c, x5t and x5t#256 
   parameters will be added to the generated jwkset available at "<redirect_uri>?jwks=rsa"
+- fix: also add SameSite=None to by-value session cookies
+- bump to 2.4.2rc0
 
 01/30/2020
 - try to fix graceful restart crash; see #458
