@@ -70,10 +70,10 @@
 /* to extract a b64 encoded certificate representation as a single string */
 static int oidc_jose_util_get_b64encoded_certificate_data(apr_pool_t *p, X509 *x509_cert, unsigned char** b64_encoded_certificate, oidc_jose_error_t *err)
 {
-    char *name, *header;
-    long len, b64_len;
-    BIO *bio;
-	unsigned char* data;
+    char *name = NULL, *header = NULL;
+    long len = 0, b64_len = 0;
+    BIO *bio = NULL;
+	unsigned char* data = NULL;
 	
     if ((bio = BIO_new(BIO_s_mem())) == NULL){
 		oidc_jose_error_openssl(err, "BIO_new");
