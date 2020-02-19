@@ -2046,8 +2046,8 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 
 	/* match the returned state parameter against the state stored in the browser */
 	if (oidc_authorization_response_match_state(r, c,
-			apr_table_get(params, OIDC_PROTO_STATE), &provider,
-			&proto_state) == FALSE) {
+			apr_table_get(params, OIDC_PROTO_STATE), &provider, &proto_state)
+			== FALSE) {
 		if (c->default_sso_url != NULL) {
 			oidc_warn(r,
 					"invalid authorization response state; a default SSO URL is set, sending the user there: %s",
@@ -2057,7 +2057,10 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		}
 		oidc_error(r,
 				"invalid authorization response state and no default SSO URL is set, sending an error...");
-		return HTTP_INTERNAL_SERVER_ERROR;
+		// if content was already returned via html/http send then don't return 500
+		// but send 200 to avoid extraneous internal error document text to be sent
+		return ((r->user) && (strncmp(r->user, "", 1) == 0)) ?
+				OK : HTTP_INTERNAL_SERVER_ERROR;
 	}
 
 	/* see if the response is an error response */

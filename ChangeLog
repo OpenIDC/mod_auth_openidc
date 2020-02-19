@@ -1,3 +1,9 @@
+02/19/2020
+- if content was already returned via html/http send then don't return 500
+  but send 200 to avoid extraneous internal error document text to be sent
+  on some Apache 2.4.x versions e.g. CentOS 7
+- bump to 2.4.2rc1
+
 02/03/2020
 - if OIDCPublicKeyFiles contains a certificate, the corresponding x5c, x5t and x5t#256 
   parameters will be added to the generated jwkset available at "<redirect_uri>?jwks=rsa"
