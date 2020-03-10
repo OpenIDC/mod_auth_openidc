@@ -1,3 +1,7 @@
+03/10/2020
+- fix memory leaks introduced by #457
+- bump to 2.4.2rc2
+
 02/19/2020
 - if content was already returned via html/http send then don't return 500
   but send 200 to avoid extraneous internal error document text to be sent
