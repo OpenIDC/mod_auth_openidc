@@ -82,6 +82,7 @@ oidc_cache_mutex_t *oidc_cache_mutex_create(apr_pool_t *pool) {
 	ctx->mutex_filename = NULL;
 	ctx->shm = NULL;
 	ctx->sema = NULL;
+	ctx->is_parent = TRUE;
 	return ctx;
 }
 
@@ -169,6 +170,7 @@ apr_status_t oidc_cache_mutex_child_init(apr_pool_t *p, server_rec *s,
 		apr_global_mutex_unlock(m->mutex);
 	}
 
+	m->is_parent = FALSE;
 	//oidc_sdebug(s, "semaphore: %d (m=%pp,s=%pp)", *m->sema, m, s);
 
 	return rv;
@@ -215,7 +217,7 @@ apr_byte_t oidc_cache_mutex_destroy(server_rec *s, oidc_cache_mutex_t *m) {
 		(*m->sema)--;
 		//oidc_sdebug(s, "semaphore: %d (m=%pp,s=%pp)", *m->sema, m->mutex, s);
 
-		if ((m->shm != NULL) && (*m->sema == 0)) {
+		if ((m->shm != NULL) && (*m->sema == 0) && (m->is_parent == TRUE)) {
 
 			rv = apr_shm_destroy(m->shm);
 			oidc_sdebug(s, "apr_shm_destroy for semaphore returned: %d", rv);
