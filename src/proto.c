@@ -1556,7 +1556,7 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt,
 	 oidc_debug(r,
 	 "\"jwks_uri\" is set, but the JWT has a symmetric signature so we won't pull/use keys from there");
 	 } */else {
-		 apr_byte_t force_refresh = FALSE;
+		 apr_byte_t force_refresh = jwt->header.kid == NULL ? TRUE : FALSE;
 		 /* get the key from the JWKs that corresponds with the key specified in the header */
 		 if (oidc_proto_get_keys_from_jwks_uri(r, cfg, jwt, jwks_uri,
 				 dynamic_keys, &force_refresh) == FALSE) {

@@ -1,3 +1,7 @@
+03/19/2020
+- always refresh keys from jwks_uri when there is no kid in the JWT header
+- bump to 2.4.2rc4
+
 03/15/2020
 - destroy shared memory segments only in parent process; see #458
 - bump to 2.4.2rc3
