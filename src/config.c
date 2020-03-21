@@ -2326,11 +2326,29 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 	return oidc_config_check_merged_vhost_configs(pool, s);
 }
 
+static const char *oidc_parse_config(cmd_parms *cmd, const char *require_line,
+		const void **parsed_require_line) {
+	const char *expr_err = NULL;
+	ap_expr_info_t *expr;
+
+	expr = ap_expr_parse_cmd(cmd, require_line, AP_EXPR_FLAG_STRING_RESULT,
+		&expr_err, NULL);
+
+	if (expr_err)
+		return apr_pstrcat(cmd->temp_pool,
+			"Cannot parse expression in require line: ",
+			expr_err, NULL);
+
+	*parsed_require_line = expr;
+
+	return NULL;
+}
+
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 static const authz_provider oidc_authz_claim_provider = {
 		&oidc_authz_checker_claim,
-		NULL, };
-
+		&oidc_parse_config,
+};
 #ifdef USE_LIBJQ
 static const authz_provider oidc_authz_claims_expr_provider = {
 		&oidc_authz_checker_claims_expr,
