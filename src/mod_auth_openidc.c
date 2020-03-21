@@ -4043,7 +4043,7 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args,
 
 	/* dispatch to the >=2.4 specific authz routine */
 	authz_status rc = oidc_authz_worker24(r, claims ? claims : id_token,
-			require_args, match_claim_fn);
+			require_args, parsed_require_args, match_claim_fn);
 
 	/* cleanup */
 	if (claims)
