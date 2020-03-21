@@ -1,3 +1,8 @@
+03/21/2020
+- allow for expressions in Require statements, see #469; thanks @wwaaron
+  also see: https://github.com/zmartzone/mod_auth_openidc/wiki/Authorization#expressions-in-require-statements
+- bump to 2.4.2rc5
+
 03/19/2020
 - always refresh keys from jwks_uri when there is no kid in the JWT header
 - bump to 2.4.2rc4
