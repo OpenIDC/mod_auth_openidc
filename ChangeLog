@@ -1,5 +1,7 @@
 03/24/2020
+- fix memory leak in OAuth 2.0 JWT validation; closes #470; thanks Conrad Thukral
 - fix configured private/public key cleanup on process exit
+- release 2.4.2
 
 03/21/2020
 - allow for expressions in Require statements, see #469; thanks @wwaaron

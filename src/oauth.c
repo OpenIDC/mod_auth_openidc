@@ -655,6 +655,8 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 	*token = jwt->payload.value.json;
 	*response = jwt->payload.value.str;
 
+	oidc_jwt_destroy(jwt);
+
 	return TRUE;
 }
 
