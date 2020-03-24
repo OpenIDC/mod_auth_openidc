@@ -1,3 +1,6 @@
+03/24/2020
+- fix configured private/public key cleanup on process exit
+
 03/21/2020
 - allow for expressions in Require statements, see #469; thanks @wwaaron
   also see: https://github.com/zmartzone/mod_auth_openidc/wiki/Authorization#expressions-in-require-statements

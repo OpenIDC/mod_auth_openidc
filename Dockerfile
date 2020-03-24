@@ -35,3 +35,4 @@ ADD openidc.conf /etc/apache2/conf-available
 RUN a2enconf openidc
 RUN /usr/sbin/apache2ctl start
 
+# docker run -p 443:443 -it 749d1204d189 /bin/bash -c "source /etc/apache2/envvars && valgrind --leak-check=full /usr/sbin/apache2 -X"
