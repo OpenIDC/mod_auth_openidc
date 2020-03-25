@@ -652,7 +652,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 	oidc_debug(r, "successfully verified JWT access token: %s",
 			jwt->payload.value.str);
 
-	*token = jwt->payload.value.json;
+	*token = json_deep_copy(jwt->payload.value.json);
 	*response = jwt->payload.value.str;
 
 	oidc_jwt_destroy(jwt);
