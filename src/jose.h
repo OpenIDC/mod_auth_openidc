@@ -153,7 +153,7 @@ typedef struct oidc_jwk_t {
 	int kty;
 	/* key identifier */
 	char *kid;
-	/* X.509 Certificate Chain */;
+	/* X.509 Certificate Chain */
 	unsigned char **x5c;
 	/* the size of the certificate chain */
 	int x5c_count;
