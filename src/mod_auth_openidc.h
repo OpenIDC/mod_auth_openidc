@@ -231,6 +231,9 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_TOKEN_BINDING_POLICY_REQUIRED  2
 #define OIDC_TOKEN_BINDING_POLICY_ENFORCED  3
 
+#define OIDC_STATE_INPUT_HEADERS_USER_AGENT 1
+#define OIDC_STATE_INPUT_HEADERS_X_FORWARDED_FOR 2
+
 typedef apr_byte_t (*oidc_proto_pkce_state)(request_rec *r, char **state);
 typedef apr_byte_t (*oidc_proto_pkce_challenge)(request_rec *r, const char *state, char **code_challenge);
 typedef apr_byte_t (*oidc_proto_pkce_verifier)(request_rec *r, const char *state, char **code_verifier);
@@ -416,6 +419,8 @@ typedef struct oidc_cfg {
 	apr_hash_t *info_hook_data;
 	apr_hash_t *black_listed_claims;
 	apr_hash_t *white_listed_claims;
+
+	apr_byte_t state_input_headers;
 
 } oidc_cfg;
 

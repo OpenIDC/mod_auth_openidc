@@ -168,6 +168,8 @@
 #define OIDC_DEFAULT_PROVIDER_ISSUER_SPECIFIC_REDIRECT_URI 0
 /* define the default number of seconds that the access token needs to be valid for; -1 = no refresh */
 #define OIDC_DEFAULT_REFRESH_ACCESS_TOKEN_BEFORE_EXPIRY -1
+/* default setting for calculating the fingerprint of the state from request headers during authentication */
+#define OIDC_DEFAULT_STATE_INPUT_HEADERS OIDC_STATE_INPUT_HEADERS_USER_AGENT | OIDC_STATE_INPUT_HEADERS_X_FORWARDED_FOR
 
 #define OIDCProviderMetadataURL                "OIDCProviderMetadataURL"
 #define OIDCProviderIssuer                     "OIDCProviderIssuer"
@@ -267,6 +269,7 @@
 #define OIDCOAuthServerMetadataURL             "OIDCOAuthServerMetadataURL"
 #define OIDCOAuthAccessTokenBindingPolicy      "OIDCOAuthAccessTokenBindingPolicy"
 #define OIDCRefreshAccessTokenBeforeExpiry     "OIDCRefreshAccessTokenBeforeExpiry"
+#define OIDCStateInputHeaders                  "OIDCStateInputHeaders"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -1093,6 +1096,17 @@ static const char * oidc_set_refresh_access_token_before_expiry(cmd_parms *cmd,
 	return NULL;
 }
 
+/*
+ * define which header we use for calculating the fingerprint of the state during authentication
+ */
+static const char * oidc_set_state_input_headers_as(cmd_parms *cmd, void *m,
+		const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+	const char *rv = oidc_parse_set_state_input_headers_as(cmd->pool, arg, &cfg->state_input_headers);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
 int oidc_cfg_dir_refresh_access_token_before_expiry(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
@@ -1267,6 +1281,8 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 
 	c->provider.issuer_specific_redirect_uri =
 			OIDC_DEFAULT_PROVIDER_ISSUER_SPECIFIC_REDIRECT_URI;
+
+	c->state_input_headers = OIDC_DEFAULT_STATE_INPUT_HEADERS;
 
 	return c;
 }
@@ -1730,6 +1746,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			!= OIDC_DEFAULT_PROVIDER_ISSUER_SPECIFIC_REDIRECT_URI ?
 					add->provider.issuer_specific_redirect_uri :
 					base->provider.issuer_specific_redirect_uri;
+
+	c->state_input_headers =
+			add->state_input_headers != OIDC_DEFAULT_STATE_INPUT_HEADERS ?
+					add->state_input_headers : base->state_input_headers;
 
 	return c;
 }
@@ -3110,6 +3130,12 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_dir_cfg, refresh_access_token_before_expiry),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Ensure the access token is valid for at least <x> seconds by refreshing it if required; must be: <x> [logout_on_error]; the logout_on_error performs a logout on refresh error."),
+
+		AP_INIT_TAKE123(OIDCStateInputHeaders,
+				oidc_set_state_input_headers_as,
+				NULL,
+				RSRC_CONF,
+				"Specify header name which is used as the input for calculating the fingerprint of the state during authentication; must be one of \"none\", \"user-agent\", \"x-forwarded-for\" or \"both\" (default)."),
 
 		{ NULL }
 };
