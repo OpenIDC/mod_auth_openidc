@@ -227,7 +227,7 @@ void oidc_strip_cookies(request_rec *r) {
 /*
  * calculates a hash value based on request fingerprint plus a provided nonce string.
  */
-static char *oidc_get_browser_state_hash(request_rec *r, const char *nonce) {
+static char *oidc_get_browser_state_hash(request_rec *r, oidc_cfg *c, const char *nonce) {
 
 	oidc_debug(r, "enter");
 
@@ -239,17 +239,21 @@ static char *oidc_get_browser_state_hash(request_rec *r, const char *nonce) {
 	/* Initialize the hash context */
 	apr_sha1_init(&sha1);
 
-	/* get the X-FORWARDED-FOR header value  */
-	value = oidc_util_hdr_in_x_forwarded_for_get(r);
-	/* if we have a value for this header, concat it to the hash input */
-	if (value != NULL)
-		apr_sha1_update(&sha1, value, strlen(value));
+	if (c->state_input_headers & OIDC_STATE_INPUT_HEADERS_X_FORWARDED_FOR) {
+		/* get the X-FORWARDED-FOR header value  */
+		value = oidc_util_hdr_in_x_forwarded_for_get(r);
+		/* if we have a value for this header, concat it to the hash input */
+		if (value != NULL)
+			apr_sha1_update(&sha1, value, strlen(value));
+	}
 
-	/* get the USER-AGENT header value  */
-	value = oidc_util_hdr_in_user_agent_get(r);
-	/* if we have a value for this header, concat it to the hash input */
-	if (value != NULL)
-		apr_sha1_update(&sha1, value, strlen(value));
+	if (c->state_input_headers & OIDC_STATE_INPUT_HEADERS_USER_AGENT) {
+		/* get the USER-AGENT header value  */
+		value = oidc_util_hdr_in_user_agent_get(r);
+		/* if we have a value for this header, concat it to the hash input */
+		if (value != NULL)
+			apr_sha1_update(&sha1, value, strlen(value));
+	}
 
 	/* get the remote client IP address or host name */
 	/*
@@ -826,7 +830,7 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 	const char *nonce = oidc_proto_state_get_nonce(*proto_state);
 
 	/* calculate the hash of the browser fingerprint concatenated with the nonce */
-	char *calc = oidc_get_browser_state_hash(r, nonce);
+	char *calc = oidc_get_browser_state_hash(r, c, nonce);
 	/* compare the calculated hash with the value provided in the authorization response */
 	if (apr_strnatcmp(calc, state) != 0) {
 		oidc_error(r,
@@ -2437,7 +2441,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 		oidc_proto_state_set_pkce_state(proto_state, pkce_state);
 
 	/* get a hash value that fingerprints the browser concatenated with the random input */
-	char *state = oidc_get_browser_state_hash(r, nonce);
+	char *state = oidc_get_browser_state_hash(r, c, nonce);
 
 	/*
 	 * create state that restores the context when the authorization response comes in

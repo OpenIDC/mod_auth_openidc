@@ -122,6 +122,7 @@ const char *oidc_token_binding_policy2str(apr_pool_t *pool, int v);
 const char *oidc_parse_auth_request_method(apr_pool_t *pool, const char *arg, int *method);
 const char *oidc_parse_max_number_of_state_cookies(apr_pool_t *pool, const char *arg1, const char *arg2, int *int_value, int *bool_value);
 const char *oidc_parse_refresh_access_token_before_expiry(apr_pool_t *pool, const char *arg, int *int_value);
+const char *oidc_parse_set_state_input_headers_as(apr_pool_t *pool, const char *arg, apr_byte_t *state_input_headers);
 
 typedef const char *(*oidc_valid_int_function_t)(apr_pool_t *, int);
 typedef const char *(*oidc_valid_function_t)(apr_pool_t *, const char *);

@@ -1,3 +1,7 @@
+04/25/2020
+- add OIDCStateInputHeaders that allows configuring the header values used to calculate the fingerprint of the state during authentication
+- bump to 2.4.3rc0
+
 03/25/2020
 - oops: fix json_deep_copy of claims
 - release 2.4.2.1
