@@ -210,7 +210,7 @@ void oidc_strip_cookies(request_rec *r) {
 			}
 
 			if (i == strip->nelts) {
-				result = result ? apr_psprintf(r->pool, "%s%s%s", result,
+				result = result ? apr_psprintf(r->pool, "%s%s %s", result,
 						OIDC_STR_SEMI_COLON, cookie) :
 						cookie;
 			}
