@@ -1,3 +1,6 @@
+05/02/2020
+- when stripping cookies, add a space between cookies in the resulting header (required by RFC 6265)
+
 04/25/2020
 - add OIDCStateInputHeaders that allows configuring the header values used to calculate the fingerprint of the state during authentication
 - bump to 2.4.3rc0
