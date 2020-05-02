@@ -2379,6 +2379,7 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 	return oidc_config_check_merged_vhost_configs(pool, s);
 }
 
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 static const char *oidc_parse_config(cmd_parms *cmd, const char *require_line,
 		const void **parsed_require_line) {
 	const char *expr_err = NULL;
@@ -2397,7 +2398,6 @@ static const char *oidc_parse_config(cmd_parms *cmd, const char *require_line,
 	return NULL;
 }
 
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 static const authz_provider oidc_authz_claim_provider = {
 		&oidc_authz_checker_claim,
 		&oidc_parse_config,

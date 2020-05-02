@@ -1,5 +1,6 @@
 05/02/2020
 - when stripping cookies, add a space between cookies in the resulting header (required by RFC 6265)
+- move oidc_parse_config inside MODULE_MAGIC_NUMBER_MAJOR to make sure the module compiles with Apache 2.0
 
 04/25/2020
 - add OIDCStateInputHeaders that allows configuring the header values used to calculate the fingerprint of the state during authentication
