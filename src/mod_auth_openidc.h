@@ -276,6 +276,7 @@ typedef struct oidc_provider_t {
 
 	// the next ones function as global default settings too
 	int ssl_validate_server;
+        int validate_issuer;
 	char *client_name;
 	char *client_contact;
 	char *registration_token;
@@ -316,6 +317,7 @@ typedef struct oidc_remote_user_claim_t {
 
 typedef struct oidc_oauth_t {
 	int ssl_validate_server;
+	int validate_issuer;
 	char *client_id;
 	char *client_secret;
 	char *metadata_url;
@@ -647,7 +649,7 @@ apr_array_header_t *oidc_proto_supported_flows(apr_pool_t *pool);
 apr_byte_t oidc_proto_flow_is_supported(apr_pool_t *pool, const char *flow);
 apr_byte_t oidc_proto_validate_authorization_response(request_rec *r, const char *response_type, const char *requested_response_mode, char **code, char **id_token, char **access_token, char **token_type, const char *used_response_mode);
 apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri, apr_hash_t *symmetric_keys, const char *alg);
-apr_byte_t oidc_proto_validate_jwt(request_rec *r, oidc_jwt_t *jwt, const char *iss, apr_byte_t exp_is_mandatory, apr_byte_t iat_is_mandatory, int iat_slack, int token_binding_policy);
+apr_byte_t oidc_proto_validate_jwt(request_rec *r, oidc_jwt_t *jwt, const char *iss, apr_byte_t exp_is_mandatory, apr_byte_t iat_is_mandatory, int iat_slack, int token_binding_policy, int validate_issuer);
 apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce, int len);
 apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, oidc_jwt_payload_t *id_token_payload);
 

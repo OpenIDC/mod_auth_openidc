@@ -1297,7 +1297,7 @@ static apr_byte_t oidc_proto_validate_exp(request_rec *r, oidc_jwt_t *jwt,
  */
 apr_byte_t oidc_proto_validate_jwt(request_rec *r, oidc_jwt_t *jwt,
 		const char *iss, apr_byte_t exp_is_mandatory,
-		apr_byte_t iat_is_mandatory, int iat_slack, int token_binding_policy) {
+		apr_byte_t iat_is_mandatory, int iat_slack, int token_binding_policy, int validate_issuer) {
 
 	if (iss != NULL) {
 
@@ -1310,7 +1310,7 @@ apr_byte_t oidc_proto_validate_jwt(request_rec *r, oidc_jwt_t *jwt,
 		}
 
 		/* check if the issuer matches the requested value */
-		if (oidc_util_issuer_match(iss, jwt->payload.iss) == FALSE) {
+		if (validate_issuer == 1 && oidc_util_issuer_match(iss, jwt->payload.iss) == FALSE) {
 			oidc_error(r,
 					"requested issuer (%s) does not match received \"%s\" value in id_token (%s)",
 					iss, OIDC_CLAIM_ISS, jwt->payload.iss);
@@ -1356,7 +1356,7 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
 	/* validate the ID Token JWT, requiring iss match, and valid exp + iat */
 	if (oidc_proto_validate_jwt(r, jwt, provider->issuer, TRUE, TRUE,
 			provider->idtoken_iat_slack,
-			provider->token_binding_policy) == FALSE)
+			provider->token_binding_policy, provider->validate_issuer) == FALSE)
 		return FALSE;
 
 	/* check if the required-by-spec "sub" claim is present */
