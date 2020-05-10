@@ -1206,7 +1206,6 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	oidc_cfg_provider_init(&c->provider);
 
 	c->oauth.ssl_validate_server = OIDC_DEFAULT_SSL_VALIDATE_SERVER;
-	c->oauth.validate_issuer = OIDC_DEFAULT_VALIDATE_ISSUER;
 	c->oauth.metadata_url = NULL;
 	c->oauth.client_id = NULL;
 	c->oauth.client_secret = NULL;
