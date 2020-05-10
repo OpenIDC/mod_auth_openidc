@@ -1504,10 +1504,6 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			!= OIDC_DEFAULT_AUTH_REQUEST_METHOD ?
 					add->provider.auth_request_method :
 					base->provider.auth_request_method;
-	c->oauth.ssl_validate_server =
-			add->oauth.ssl_validate_server != OIDC_DEFAULT_SSL_VALIDATE_SERVER ?
-					add->oauth.ssl_validate_server :
-					base->oauth.ssl_validate_server;
 	c->oauth.metadata_url =
 			add->oauth.metadata_url != NULL ?
 					add->oauth.metadata_url : base->oauth.metadata_url;
@@ -2925,12 +2921,6 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.ssl_validate_server),
 				RSRC_CONF,
 				"Require validation of the OAuth 2.0 AS Validation Endpoint SSL server certificate for successful authentication (On or Off)"),
-     		AP_INIT_TAKE1(OIDCValidateIssuer,
-                                oidc_set_validate_issuer_slot,
-                                (void*)APR_OFFSETOF(oidc_cfg, oauth.validate_issuer),
-                                RSRC_CONF,
-                                "Require validation of token issuer for successful authentication (On or Off)"),
-
 		AP_INIT_TAKE123(OIDCOAuthRemoteUserClaim,
 				oidc_set_remote_user_claim,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.remote_user_claim),
