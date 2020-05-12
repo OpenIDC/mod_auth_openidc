@@ -109,6 +109,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_METADATA_POST_LOGOUT_REDIRECT_URIS                    "post_logout_redirect_uris"
 #define OIDC_METADATA_IDTOKEN_BINDING_CNF                          "id_token_token_binding_cnf"
 #define OIDC_METADATA_SSL_VALIDATE_SERVER                          "ssl_validate_server"
+#define OIDC_METADATA_VALIDATE_ISSUER                              "validate_issuer"
 #define OIDC_METADATA_SCOPE                                        "scope"
 #define OIDC_METADATA_JWKS_REFRESH_INTERVAL                        "jwks_refresh_interval"
 #define OIDC_METADATA_IDTOKEN_IAT_SLACK                            "idtoken_iat_slack"
@@ -1234,6 +1235,9 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 	/* find out if we need to perform SSL server certificate validation on the token_endpoint and user_info_endpoint for this provider */
 	oidc_metadata_parse_boolean(r, j_conf, OIDC_METADATA_SSL_VALIDATE_SERVER,
 			&provider->ssl_validate_server, cfg->provider.ssl_validate_server);
+
+	oidc_metadata_parse_boolean(r, j_conf, OIDC_METADATA_VALIDATE_ISSUER,
+			&provider->validate_issuer, cfg->provider.validate_issuer);
 
 	/* find out what scopes we should be requesting from this provider */
 	// TODO: use the provider "scopes_supported" to mix-and-match with what we've configured for the client

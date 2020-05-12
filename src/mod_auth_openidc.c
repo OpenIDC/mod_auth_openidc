@@ -576,9 +576,9 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	}
 
 	/* validate the state JWT, validating optional exp + iat */
-	if (oidc_proto_validate_jwt(r, jwt, provider->issuer, FALSE, FALSE,
+	if (oidc_proto_validate_jwt(r, jwt, provider->validate_issuer ? provider->issuer : NULL, FALSE, FALSE,
 			provider->idtoken_iat_slack,
-			OIDC_TOKEN_BINDING_POLICY_DISABLED, provider->validate_issuer) == FALSE) {
+			OIDC_TOKEN_BINDING_POLICY_DISABLED) == FALSE) {
 		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
@@ -2916,10 +2916,9 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 
 	// oidc_proto_validate_idtoken would try and require a token binding cnf
 	// if the policy is set to "required", so don't use that here
-
-	if (oidc_proto_validate_jwt(r, jwt, provider->issuer, FALSE, FALSE,
+	if (oidc_proto_validate_jwt(r, jwt, provider->validate_issuer ? provider->issuer : NULL, FALSE, FALSE,
 			provider->idtoken_iat_slack,
-			OIDC_TOKEN_BINDING_POLICY_DISABLED, provider->validate_issuer) == FALSE)
+			OIDC_TOKEN_BINDING_POLICY_DISABLED) == FALSE)
 		goto out;
 
 	/* verify the "aud" and "azp" values */

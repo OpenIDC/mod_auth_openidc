@@ -625,7 +625,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 	 * don't enforce anything around iat since it doesn't make much sense for access tokens
 	 */
 	if (oidc_proto_validate_jwt(r, jwt, NULL, FALSE, FALSE, -1,
-			c->oauth.access_token_binding_policy, 1) == FALSE) {
+			c->oauth.access_token_binding_policy) == FALSE) {
 		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
