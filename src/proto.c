@@ -1354,7 +1354,7 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
 	}
 
 	/* validate the ID Token JWT, requiring iss match, and valid exp + iat */
-	if (oidc_proto_validate_jwt(r, jwt, provider->issuer, TRUE, TRUE,
+	if (oidc_proto_validate_jwt(r, jwt, provider->validate_issuer ? provider->issuer : NULL, TRUE, TRUE,
 			provider->idtoken_iat_slack,
 			provider->token_binding_policy) == FALSE)
 		return FALSE;

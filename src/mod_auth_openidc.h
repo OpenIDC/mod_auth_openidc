@@ -276,6 +276,7 @@ typedef struct oidc_provider_t {
 
 	// the next ones function as global default settings too
 	int ssl_validate_server;
+	int validate_issuer;
 	char *client_name;
 	char *client_contact;
 	char *registration_token;
