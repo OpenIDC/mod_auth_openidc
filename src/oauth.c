@@ -302,6 +302,74 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 }
 
 /*
+ * extract resource owners credentials and exchange it to a bearer token
+ */
+apr_byte_t oidc_oauth_convert_auth_to_bearer_token(request_rec *r, oidc_cfg *c, const char **access_token) {
+
+    oidc_debug(r, "enter");
+
+    char *auth_creds = NULL;
+    const char *auth_line = oidc_util_hdr_in_resource_owner_authorization_get(r);
+    if (auth_line == NULL ||
+        apr_strnatcasecmp(ap_getword(r->pool, &auth_line, OIDC_CHAR_SPACE), OIDC_PROTO_BASIC) != 0) {
+      oidc_debug(r, "resource owner credentials not found or authorization scheme unknown");
+      return FALSE;
+    }
+
+    while (apr_isspace(*auth_line)) {
+        auth_line++;
+    }
+    auth_creds = apr_pstrdup(r->pool, auth_line);
+
+    char *decoded_creds;
+    int decoded_len;
+    if (oidc_parse_base64(r->pool, auth_creds, &decoded_creds, &decoded_len) != NULL) {
+      oidc_warn(r, "could not decode credentials");
+      return FALSE;
+    }
+    if (strchr(decoded_creds, ':') == NULL) {
+      oidc_warn(r, "invalid credentials format");
+      return FALSE;
+    }
+    decoded_creds[decoded_len] = '\0';
+
+    apr_table_t *params = apr_table_make(r->pool, 5);
+    apr_table_addn(params, "client_id", c->provider.client_id);
+    apr_table_addn(params, "client_secret", c->provider.client_secret);
+    const char* username = ap_getword_nulls(r->pool, (const char**) &decoded_creds, ':');
+    apr_table_addn(params, "username", username);
+    apr_table_addn(params, "password", decoded_creds);
+    apr_table_addn(params, "grant_type", "password");
+
+    char *response = NULL;
+    if (oidc_util_http_post_form(r, c->oauth.ropc_token_uri,
+        params, NULL, NULL, c->oauth.ssl_validate_server,
+        &response, c->http_timeout_long, c->outgoing_proxy,
+        oidc_dir_cfg_pass_cookies(r), NULL, NULL) == FALSE) {
+      oidc_warn(r, "failed to exchange credentials to token");
+      return FALSE;
+    }
+
+    json_t *result = NULL;
+    if (oidc_util_decode_json_and_check_error(r, response, &result) == FALSE) {
+      oidc_warn(r, "token exchange response contains errors");
+      return FALSE;
+    }
+
+    char *bearer = NULL;
+        oidc_json_object_get_string(r->pool, result, OIDC_PROTO_ACCESS_TOKEN, &bearer, NULL);
+        if (bearer == NULL) {
+          oidc_warn(r, "could not find bearer token in token exchange response");
+          return FALSE;
+        }
+
+    *access_token = bearer;
+
+    oidc_debug(r, "bearer token [%s]", *access_token);
+    return TRUE;
+}
+
+/*
  * copy over space separated scope value but do it in an array for authorization purposes
  */
 /*

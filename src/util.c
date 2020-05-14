@@ -2436,6 +2436,10 @@ const char *oidc_util_hdr_in_authorization_get(const request_rec *r) {
 	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_AUTHORIZATION);
 }
 
+const char *oidc_util_hdr_in_resource_owner_authorization_get(const request_rec *r) {
+	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_RESOURCE_OWNER_AUTHORIZATION);
+}
+
 const char *oidc_util_hdr_in_x_forwarded_proto_get(const request_rec *r) {
 	return oidc_util_hdr_in_get_left_most_only(r,
 			OIDC_HTTP_HDR_X_FORWARDED_PROTO, OIDC_STR_COMMA OIDC_STR_SPACE);

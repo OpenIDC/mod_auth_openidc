@@ -237,6 +237,7 @@
 #define OIDCOAuthVerifyCertFiles               "OIDCOAuthVerifyCertFiles"
 #define OIDCOAuthVerifySharedKeys              "OIDCOAuthVerifySharedKeys"
 #define OIDCOAuthVerifyJwksUri                 "OIDCOAuthVerifyJwksUri"
+#define OIDCAuthROPCTokenUri                   "OIDCAuthROPCTokenUri"
 #define OIDCHTTPTimeoutLong                    "OIDCHTTPTimeoutLong"
 #define OIDCHTTPTimeoutShort                   "OIDCHTTPTimeoutShort"
 #define OIDCStateTimeout                       "OIDCStateTimeout"
@@ -1233,6 +1234,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->oauth.verify_jwks_uri = NULL;
 	c->oauth.verify_public_keys = NULL;
 	c->oauth.verify_shared_keys = NULL;
+	c->oauth.ropc_token_uri = NULL;
 
 	c->oauth.access_token_binding_policy =
 			OIDC_DEFAULT_OAUTH_ACCESS_TOKEN_BINDING_POLICY;
@@ -1593,6 +1595,9 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->oauth.verify_shared_keys != NULL ?
 					add->oauth.verify_shared_keys :
 					base->oauth.verify_shared_keys;
+    c->oauth.ropc_token_uri =
+            add->oauth.ropc_token_uri != NULL ?
+                    add->oauth.ropc_token_uri : base->oauth.ropc_token_uri;
 
 	c->oauth.access_token_binding_policy =
 			add->oauth.access_token_binding_policy
@@ -2941,6 +2946,11 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, oauth.verify_jwks_uri),
 				RSRC_CONF,
 				"The JWKs URL on which the Authorization publishes the keys used to sign its JWT access tokens."),
+		AP_INIT_TAKE1(OIDCAuthROPCTokenUri,
+                oidc_set_https_slot,
+                (void *)APR_OFFSETOF(oidc_cfg, oauth.ropc_token_uri),
+                RSRC_CONF,
+                "Endpoint URL on which the resource owner credentials can be exchanged to bearer tokens."),
 
 		AP_INIT_TAKE1(OIDCHTTPTimeoutLong,
 				oidc_set_int_slot,

@@ -336,6 +336,7 @@ typedef struct oidc_oauth_t {
 	char *verify_jwks_uri;
 	apr_hash_t *verify_public_keys;
 	int access_token_binding_policy;
+	char *ropc_token_uri;
 } oidc_oauth_t;
 
 typedef struct oidc_cfg {
@@ -456,6 +457,7 @@ apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name, const ch
 // oidc_oauth
 int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c, const char *access_token);
 apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token);
+apr_byte_t oidc_oauth_convert_auth_to_bearer_token(request_rec *r, oidc_cfg *c, const char **access_token);
 
 // oidc_proto.c
 #define OIDC_PROTO_ISS                   "iss"
@@ -798,6 +800,7 @@ char *oidc_util_http_form_encoded_data(request_rec *r, const apr_table_t *params
 #define OIDC_HTTP_HDR_X_REQUESTED_WITH					"X-Requested-With"
 #define OIDC_HTTP_HDR_ACCEPT							"Accept"
 #define OIDC_HTTP_HDR_AUTHORIZATION						"Authorization"
+#define OIDC_HTTP_HDR_RESOURCE_OWNER_AUTHORIZATION      "ResourceOwnerAuthorization"
 #define OIDC_HTTP_HDR_X_FORWARDED_PROTO					"X-Forwarded-Proto"
 #define OIDC_HTTP_HDR_X_FORWARDED_PORT					"X-Forwarded-Port"
 #define OIDC_HTTP_HDR_X_FORWARDED_HOST					"X-Forwarded-Host"
@@ -823,6 +826,7 @@ const char *oidc_util_hdr_in_content_length_get(const request_rec *r);
 const char *oidc_util_hdr_in_x_requested_with_get(const request_rec *r);
 const char *oidc_util_hdr_in_accept_get(const request_rec *r);
 const char *oidc_util_hdr_in_authorization_get(const request_rec *r);
+const char *oidc_util_hdr_in_resource_owner_authorization_get(const request_rec *r);
 const char *oidc_util_hdr_in_x_forwarded_proto_get(const request_rec *r);
 const char *oidc_util_hdr_in_x_forwarded_port_get(const request_rec *r);
 const char *oidc_util_hdr_in_x_forwarded_host_get(const request_rec *r);
