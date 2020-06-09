@@ -436,10 +436,14 @@ authz_status oidc_authz_worker24(request_rec *r, const json_t * const claims,
 	if (!claims)
 		return AUTHZ_DENIED;
 
-	t = ap_expr_str_exec(r, expr, &err);
-	if (err) {
-		oidc_error(r, "could not evaluate expression '%s': %s", require_args, err);
-		return AUTHZ_DENIED;
+	if (expr) {
+		t = ap_expr_str_exec(r, expr, &err);
+		if (err) {
+			oidc_error(r, "could not evaluate expression '%s': %s", require_args, err);
+			return AUTHZ_DENIED;
+		}
+	} else {
+		t = require_args;
 	}
 
 	/* loop over the Required specifications */

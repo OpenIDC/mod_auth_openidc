@@ -1,3 +1,9 @@
+06/09/2020
+- fix complex expressions crash when compiled from source with libjq; closes #472
+  thanks vincentscharf0803
+  introduced by OIDCStateInputHeaders addition in 2.4.3rc0
+- bump to 2.4.3rc1
+
 05/11/2020
 - added OIDCValidateIssuer to allow for disabling of issuer matching.  helps to support multi-tenant applications.
 
