@@ -171,7 +171,7 @@
 /* define the default number of seconds that the access token needs to be valid for; -1 = no refresh */
 #define OIDC_DEFAULT_REFRESH_ACCESS_TOKEN_BEFORE_EXPIRY -1
 /* default setting for calculating the fingerprint of the state from request headers during authentication */
-#define OIDC_DEFAULT_STATE_INPUT_HEADERS OIDC_STATE_INPUT_HEADERS_USER_AGENT | OIDC_STATE_INPUT_HEADERS_X_FORWARDED_FOR
+#define OIDC_DEFAULT_STATE_INPUT_HEADERS (OIDC_STATE_INPUT_HEADERS_USER_AGENT | OIDC_STATE_INPUT_HEADERS_X_FORWARDED_FOR)
 
 #define OIDCProviderMetadataURL                "OIDCProviderMetadataURL"
 #define OIDCProviderIssuer                     "OIDCProviderIssuer"
@@ -474,8 +474,8 @@ static const char *oidc_set_ssl_validate_slot(cmd_parms *cmd, void *struct_ptr,
 /*
  * set validate issuer slot
  */
-static const char *oidc_set_validate_issuer_slot(cmd_parms *cmd, void *struct_ptr,
-		const char *arg) {
+static const char *oidc_set_validate_issuer_slot(cmd_parms *cmd,
+		void *struct_ptr, const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
 	int b = 0;
@@ -1102,11 +1102,12 @@ static const char * oidc_set_refresh_access_token_before_expiry(cmd_parms *cmd,
 	const char *rv1 = oidc_parse_refresh_access_token_before_expiry(cmd->pool,
 			arg1, &dir_cfg->refresh_access_token_before_expiry);
 	if (rv1 != NULL)
-		return apr_psprintf(cmd->pool, "Invalid value for directive '%s': %s", cmd->directive->directive, rv1);
+		return apr_psprintf(cmd->pool, "Invalid value for directive '%s': %s",
+				cmd->directive->directive, rv1);
 
 	if (arg2) {
-		const char *rv2 = oidc_parse_logout_on_error_refresh_as(cmd->pool,
-			arg2, &dir_cfg->logout_on_error_refresh);
+		const char *rv2 = oidc_parse_logout_on_error_refresh_as(cmd->pool, arg2,
+				&dir_cfg->logout_on_error_refresh);
 		return OIDC_CONFIG_DIR_RV(cmd, rv2);
 	}
 
@@ -1120,7 +1121,8 @@ static const char * oidc_set_state_input_headers_as(cmd_parms *cmd, void *m,
 		const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
-	const char *rv = oidc_parse_set_state_input_headers_as(cmd->pool, arg, &cfg->state_input_headers);
+	const char *rv = oidc_parse_set_state_input_headers_as(cmd->pool, arg,
+			&cfg->state_input_headers);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -1406,8 +1408,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->provider.ssl_validate_server :
 					base->provider.ssl_validate_server;
 	c->provider.validate_issuer =
-			add->provider.validate_issuer
-			!= OIDC_DEFAULT_VALIDATE_ISSUER ?
+			add->provider.validate_issuer != OIDC_DEFAULT_VALIDATE_ISSUER ?
 					add->provider.validate_issuer :
 					base->provider.validate_issuer;
 	c->provider.client_name =
@@ -2409,12 +2410,11 @@ static const char *oidc_parse_config(cmd_parms *cmd, const char *require_line,
 	ap_expr_info_t *expr;
 
 	expr = ap_expr_parse_cmd(cmd, require_line, AP_EXPR_FLAG_STRING_RESULT,
-		&expr_err, NULL);
+			&expr_err, NULL);
 
 	if (expr_err)
 		return apr_pstrcat(cmd->temp_pool,
-			"Cannot parse expression in require line: ",
-			expr_err, NULL);
+				"Cannot parse expression in require line: ", expr_err, NULL);
 
 	*parsed_require_line = expr;
 
@@ -2422,9 +2422,7 @@ static const char *oidc_parse_config(cmd_parms *cmd, const char *require_line,
 }
 
 static const authz_provider oidc_authz_claim_provider = {
-		&oidc_authz_checker_claim,
-		&oidc_parse_config,
-};
+		&oidc_authz_checker_claim, &oidc_parse_config, };
 #ifdef USE_LIBJQ
 static const authz_provider oidc_authz_claims_expr_provider = {
 		&oidc_authz_checker_claims_expr,
@@ -3159,7 +3157,7 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Ensure the access token is valid for at least <x> seconds by refreshing it if required; must be: <x> [logout_on_error]; the logout_on_error performs a logout on refresh error."),
 
-		AP_INIT_TAKE123(OIDCStateInputHeaders,
+		AP_INIT_TAKE1(OIDCStateInputHeaders,
 				oidc_set_state_input_headers_as,
 				NULL,
 				RSRC_CONF,
