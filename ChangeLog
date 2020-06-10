@@ -1,3 +1,9 @@
+06/10/2020
+- prevent open redirect on refresh token requests
+  add new OIDCRedirectURLsAllowed primitive to handle post logout and refresh-return-to validation
+  addresses #453; closes #466
+- release 2.4.3
+
 06/09/2020
 - fix complex expressions crash when compiled from source with libjq; closes #472
   thanks vincentscharf0803

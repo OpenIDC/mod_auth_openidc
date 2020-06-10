@@ -2267,14 +2267,18 @@ apr_byte_t oidc_util_regexp_first_match(apr_pool_t *pool, const char *input,
 		goto out;
 	}
 
-	if (pcre_get_substring(input, subStr, rc, OIDC_UTIL_REGEXP_MATCH_NR,
-			&(psubStrMatchStr)) <= 0) {
-		*error_str = apr_psprintf(pool, "pcre_get_substring failed (rc=%d)",
-				rc);
-		goto out;
+	if (output) {
+
+		if (pcre_get_substring(input, subStr, rc, OIDC_UTIL_REGEXP_MATCH_NR,
+				&(psubStrMatchStr)) <= 0) {
+			*error_str = apr_psprintf(pool, "pcre_get_substring failed (rc=%d)",
+					rc);
+			goto out;
+		}
+
+		*output = apr_pstrdup(pool, psubStrMatchStr);
 	}
 
-	*output = apr_pstrdup(pool, psubStrMatchStr);
 	rv = TRUE;
 
 out:

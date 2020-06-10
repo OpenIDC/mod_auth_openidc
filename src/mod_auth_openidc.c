@@ -227,7 +227,8 @@ void oidc_strip_cookies(request_rec *r) {
 /*
  * calculates a hash value based on request fingerprint plus a provided nonce string.
  */
-static char *oidc_get_browser_state_hash(request_rec *r, oidc_cfg *c, const char *nonce) {
+static char *oidc_get_browser_state_hash(request_rec *r, oidc_cfg *c,
+		const char *nonce) {
 
 	oidc_debug(r, "enter");
 
@@ -544,14 +545,13 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
 	if (oidc_util_create_symmetric_key(r, c->provider.client_secret,
-			oidc_alg2keysize(alg), OIDC_JOSE_ALG_SHA256,
-			TRUE, &jwk) == FALSE)
+			oidc_alg2keysize(alg), OIDC_JOSE_ALG_SHA256, TRUE, &jwk) == FALSE)
 		return FALSE;
 
 	oidc_jwt_t *jwt = NULL;
 	if (oidc_jwt_parse(r->pool, state, &jwt,
-			oidc_util_merge_symmetric_key(r->pool, c->private_keys, jwk),
-			&err) == FALSE) {
+			oidc_util_merge_symmetric_key(r->pool, c->private_keys, jwk), &err)
+			== FALSE) {
 		oidc_error(r,
 				"could not parse JWT from state: invalid unsolicited response: %s",
 				oidc_jose_e2s(r->pool, err));
@@ -576,9 +576,10 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 	}
 
 	/* validate the state JWT, validating optional exp + iat */
-	if (oidc_proto_validate_jwt(r, jwt, provider->validate_issuer ? provider->issuer : NULL, FALSE, FALSE,
-			provider->idtoken_iat_slack,
-			OIDC_TOKEN_BINDING_POLICY_DISABLED) == FALSE) {
+	if (oidc_proto_validate_jwt(r, jwt,
+			provider->validate_issuer ? provider->issuer : NULL, FALSE, FALSE,
+					provider->idtoken_iat_slack,
+					OIDC_TOKEN_BINDING_POLICY_DISABLED) == FALSE) {
 		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
@@ -602,8 +603,7 @@ static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
 
 	char *target_link_uri = NULL;
 	oidc_jose_get_string(r->pool, jwt->payload.value.json,
-			OIDC_CLAIM_TARGET_LINK_URI,
-			FALSE, &target_link_uri, NULL);
+			OIDC_CLAIM_TARGET_LINK_URI, FALSE, &target_link_uri, NULL);
 	if (target_link_uri == NULL) {
 		if (c->default_sso_url == NULL) {
 			oidc_error(r,
@@ -1230,8 +1230,8 @@ static apr_byte_t oidc_refresh_access_token(request_rec *r, oidc_cfg *c,
 
 	/* refresh the tokens by calling the token endpoint */
 	if (oidc_proto_refresh_request(r, c, provider, refresh_token, &s_id_token,
-			&s_access_token, &s_token_type, &expires_in,
-			&s_refresh_token) == FALSE) {
+			&s_access_token, &s_token_type, &expires_in, &s_refresh_token)
+			== FALSE) {
 		oidc_error(r, "access_token could not be refreshed");
 		return FALSE;
 	}
@@ -1310,7 +1310,8 @@ static const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r,
 
 				/* try again with the new access token */
 				if (oidc_proto_resolve_userinfo(r, c, provider, id_token_sub,
-						refreshed_access_token, &result, userinfo_jwt) == FALSE) {
+						refreshed_access_token, &result, userinfo_jwt)
+						== FALSE) {
 
 					oidc_error(r,
 							"resolving user info claims with the refreshed access token failed, nothing will be stored in the session");
@@ -1485,7 +1486,8 @@ static apr_byte_t oidc_session_pass_tokens_and_save(request_rec *r,
 }
 
 static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
-		oidc_cfg *cfg, oidc_session_t *session, int ttl_minimum, int logout_on_error) {
+		oidc_cfg *cfg, oidc_session_t *session, int ttl_minimum,
+		int logout_on_error) {
 
 	const char *s_access_token_expires = NULL;
 	apr_time_t t_expires = -1;
@@ -1528,7 +1530,8 @@ static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
 
 	if (oidc_refresh_access_token(r, cfg, session, provider,
 			NULL) == FALSE) {
-		oidc_warn(r, "access_token could not be refreshed, logout=%d", logout_on_error & OIDC_LOGOUT_ON_ERROR_REFRESH);
+		oidc_warn(r, "access_token could not be refreshed, logout=%d",
+				logout_on_error & OIDC_LOGOUT_ON_ERROR_REFRESH);
 		if (logout_on_error & OIDC_LOGOUT_ON_ERROR_REFRESH)
 			return ERROR;
 		else
@@ -2373,8 +2376,8 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 	char *javascript = NULL, *javascript_method = NULL;
 	char *html_head =
 			"<style type=\"text/css\">body {text-align: center}</style>";
-	if (oidc_post_preserve_javascript(r, NULL, &javascript,
-			&javascript_method) == TRUE)
+	if (oidc_post_preserve_javascript(r, NULL, &javascript, &javascript_method)
+			== TRUE)
 		html_head = apr_psprintf(r->pool, "%s%s", html_head, javascript);
 
 	/* now send the HTML contents to the user agent */
@@ -2617,8 +2620,8 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 	}
 
 	/* do open redirect prevention */
-	if (oidc_target_link_uri_matches_configuration(r, c,
-			target_link_uri) == FALSE) {
+	if (oidc_target_link_uri_matches_configuration(r, c, target_link_uri)
+			== FALSE) {
 		return oidc_util_html_send_error(r, c->error_template,
 				"Invalid Request",
 				"\"target_link_uri\" parameter does not match configuration settings, aborting to prevent an open redirect.",
@@ -2673,7 +2676,8 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 		}
 
 		/* got an account name as input, perform OP discovery with that */
-		if (oidc_proto_account_based_discovery(r, c, issuer, &issuer) == FALSE) {
+		if (oidc_proto_account_based_discovery(r, c, issuer, &issuer)
+				== FALSE) {
 
 			/* something did not work out, show a user facing error */
 			return oidc_util_html_send_error(r, c->error_template,
@@ -2916,14 +2920,15 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 
 	// oidc_proto_validate_idtoken would try and require a token binding cnf
 	// if the policy is set to "required", so don't use that here
-	if (oidc_proto_validate_jwt(r, jwt, provider->validate_issuer ? provider->issuer : NULL, FALSE, FALSE,
-			provider->idtoken_iat_slack,
-			OIDC_TOKEN_BINDING_POLICY_DISABLED) == FALSE)
+	if (oidc_proto_validate_jwt(r, jwt,
+			provider->validate_issuer ? provider->issuer : NULL, FALSE, FALSE,
+					provider->idtoken_iat_slack,
+					OIDC_TOKEN_BINDING_POLICY_DISABLED) == FALSE)
 		goto out;
 
 	/* verify the "aud" and "azp" values */
-	if (oidc_proto_validate_aud_and_azp(r, cfg, provider,
-			&jwt->payload) == FALSE)
+	if (oidc_proto_validate_aud_and_azp(r, cfg, provider, &jwt->payload)
+			== FALSE)
 		goto out;
 
 	json_t *events = json_object_get(jwt->payload.value.json,
@@ -3040,30 +3045,51 @@ out:
 	return rc;
 }
 
-static apr_byte_t oidc_validate_post_logout_url(request_rec *r, const char *url,
-		char **err_str, char **err_desc) {
+static apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg *c,
+		const char *url, char **err_str, char **err_desc) {
 	apr_uri_t uri;
 	const char *c_host = NULL;
+	apr_hash_index_t *hi = NULL;
 
 	if (apr_uri_parse(r->pool, url, &uri) != APR_SUCCESS) {
 		*err_str = apr_pstrdup(r->pool, "Malformed URL");
-		*err_desc = apr_psprintf(r->pool, "Logout URL malformed: %s", url);
+		*err_desc = apr_psprintf(r->pool, "not a valid URL value: %s", url);
 		oidc_error(r, "%s: %s", *err_str, *err_desc);
 		return FALSE;
 	}
 
-	c_host = oidc_get_current_url_host(r);
-	if ((uri.hostname != NULL)
-			&& ((strstr(c_host, uri.hostname) == NULL)
-					|| (strstr(uri.hostname, c_host) == NULL))) {
-		*err_str = apr_pstrdup(r->pool, "Invalid Request");
-		*err_desc =
-				apr_psprintf(r->pool,
-						"logout value \"%s\" does not match the hostname of the current request \"%s\"",
-						apr_uri_unparse(r->pool, &uri, 0), c_host);
-		oidc_error(r, "%s: %s", *err_str, *err_desc);
-		return FALSE;
-	} else if ((uri.hostname == NULL) && (strstr(url, "/") != url)) {
+	if (c->redirect_urls_allowed != NULL) {
+		for (hi = apr_hash_first(NULL, c->redirect_urls_allowed); hi; hi =
+				apr_hash_next(hi)) {
+			apr_hash_this(hi, (const void**) &c_host, NULL, NULL);
+			if (oidc_util_regexp_first_match(r->pool, url, c_host,
+					NULL, err_str) == TRUE)
+				break;
+		}
+		if (hi == NULL) {
+			*err_str = apr_pstrdup(r->pool, "URL not allowed");
+			*err_desc =
+					apr_psprintf(r->pool,
+							"value does not match the list of allowed redirect URLs: %s",
+							url);
+			oidc_error(r, "%s: %s", *err_str, *err_desc);
+			return FALSE;
+		}
+	} else if (uri.hostname != NULL) {
+		c_host = oidc_get_current_url_host(r);
+		if ((strstr(c_host, uri.hostname) == NULL)
+				|| (strstr(uri.hostname, c_host) == NULL)) {
+			*err_str = apr_pstrdup(r->pool, "Invalid Request");
+			*err_desc =
+					apr_psprintf(r->pool,
+							"URL value \"%s\" does not match the hostname of the current request \"%s\"",
+							apr_uri_unparse(r->pool, &uri, 0), c_host);
+			oidc_error(r, "%s: %s", *err_str, *err_desc);
+			return FALSE;
+		}
+	}
+
+	if ((uri.hostname == NULL) && (strstr(url, "/") != url)) {
 		*err_str = apr_pstrdup(r->pool, "Malformed URL");
 		*err_desc =
 				apr_psprintf(r->pool,
@@ -3071,30 +3097,26 @@ static apr_byte_t oidc_validate_post_logout_url(request_rec *r, const char *url,
 						url);
 		oidc_error(r, "%s: %s", *err_str, *err_desc);
 		return FALSE;
-        } else if ((uri.hostname == NULL) && (strstr(url, "//") == url)) {
-                *err_str = apr_pstrdup(r->pool, "Malformed URL");
-                *err_desc =
-                                apr_psprintf(r->pool,
-                                                "No hostname was parsed and starting with '//': %s",
-                                                url);
-                oidc_error(r, "%s: %s", *err_str, *err_desc);
-                return FALSE;
-        } else if ((uri.hostname == NULL) && (strstr(url, "/\\") == url)) {
-                *err_str = apr_pstrdup(r->pool, "Malformed URL");
-                *err_desc =
-                                apr_psprintf(r->pool,
-                                                "No hostname was parsed and starting with '/\\': %s",
-                                                url);
-                oidc_error(r, "%s: %s", *err_str, *err_desc);
-                return FALSE;
+	} else if ((uri.hostname == NULL) && (strstr(url, "//") == url)) {
+		*err_str = apr_pstrdup(r->pool, "Malformed URL");
+		*err_desc = apr_psprintf(r->pool,
+				"No hostname was parsed and starting with '//': %s", url);
+		oidc_error(r, "%s: %s", *err_str, *err_desc);
+		return FALSE;
+	} else if ((uri.hostname == NULL) && (strstr(url, "/\\") == url)) {
+		*err_str = apr_pstrdup(r->pool, "Malformed URL");
+		*err_desc = apr_psprintf(r->pool,
+				"No hostname was parsed and starting with '/\\': %s", url);
+		oidc_error(r, "%s: %s", *err_str, *err_desc);
+		return FALSE;
 	}
 
 	/* validate the URL to prevent HTTP header splitting */
 	if (((strstr(url, "\n") != NULL) || strstr(url, "\r") != NULL)) {
-		*err_str = apr_pstrdup(r->pool, "Invalid Request");
+		*err_str = apr_pstrdup(r->pool, "Invalid URL");
 		*err_desc =
 				apr_psprintf(r->pool,
-						"logout value \"%s\" contains illegal \"\n\" or \"\r\" character(s)",
+						"URL value \"%s\" contains illegal \"\n\" or \"\r\" character(s)",
 						url);
 		oidc_error(r, "%s: %s", *err_str, *err_desc);
 		return FALSE;
@@ -3132,7 +3154,7 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 	} else {
 
 		/* do input validation on the logout parameter value */
-		if (oidc_validate_post_logout_url(r, url, &error_str,
+		if (oidc_validate_redirect_url(r, c, url, &error_str,
 				&error_description) == FALSE) {
 			return oidc_util_html_send_error(r, c->error_template, error_str,
 					error_description,
@@ -3391,6 +3413,8 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
 	char *return_to = NULL;
 	char *r_access_token = NULL;
 	char *error_code = NULL;
+	char *error_str = NULL;
+	char *error_description = NULL;
 
 	/* get the command passed to the session management handler */
 	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_REFRESH,
@@ -3402,6 +3426,14 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
 	if (return_to == NULL) {
 		oidc_error(r,
 				"refresh token request handler called with no URL to return to");
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	/* do input validation on the return to parameter value */
+	if (oidc_validate_redirect_url(r, c, return_to, &error_str,
+			&error_description) == FALSE) {
+		oidc_error(r, "return_to URL validation failed: %s: %s", error_str,
+				error_description);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -3567,8 +3599,8 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 
 				/* get the current provider info */
 				oidc_provider_t *provider = NULL;
-				if (oidc_get_provider_from_session(r, c, session,
-						&provider) == FALSE)
+				if (oidc_get_provider_from_session(r, c, session, &provider)
+						== FALSE)
 					return HTTP_INTERNAL_SERVER_ERROR;
 
 				/* execute the actual refresh grant */
@@ -3696,15 +3728,15 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 
 		/* this is an authorization response from the OP using the Basic Client profile or a Hybrid flow*/
 		return oidc_handle_redirect_authorization_response(r, c, session);
-	/*
-	 *
-	 * Note that we are checking for logout *before* checking for a POST authorization response
-	 * to handle backchannel POST-based logout
-	 *
-	 * so any POST to the Redirect URI that does not have a logout query parameter will be handled
-	 * as an authorization response; alternatively we could assume that a POST response has no
-	 * parameters
-	 */
+		/*
+		 *
+		 * Note that we are checking for logout *before* checking for a POST authorization response
+		 * to handle backchannel POST-based logout
+		 *
+		 * so any POST to the Redirect URI that does not have a logout query parameter will be handled
+		 * as an authorization response; alternatively we could assume that a POST response has no
+		 * parameters
+		 */
 	} else if (oidc_util_request_has_parameter(r,
 			OIDC_REDIRECT_URI_REQUEST_LOGOUT)) {
 		/* handle logout */
