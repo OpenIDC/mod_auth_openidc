@@ -1079,7 +1079,8 @@ static int oidc_handle_unauthenticated_user(request_rec *r, oidc_cfg *c) {
 		/*
 		 * exception handling: if this looks like a XMLHttpRequest call we
 		 * won't redirect the user and thus avoid creating a state cookie
-		 * for a non-browser (= Javascript) call that will never return from the OP
+		 * for a non-browser (= Javascript) call that will never return from the OP.
+		 * This behaviour can be partially overwritten using config option: OIDCIgnoreAcceptHeader=On
 		 */
 		if (oidc_is_xml_http_request(r) == TRUE)
 			return HTTP_UNAUTHORIZED;
