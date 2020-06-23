@@ -424,6 +424,8 @@ typedef struct oidc_cfg {
 	apr_byte_t state_input_headers;
 
 	apr_hash_t *redirect_urls_allowed;
+
+	int ignore_accept_headers;
 } oidc_cfg;
 
 int oidc_check_user_id(request_rec *r);

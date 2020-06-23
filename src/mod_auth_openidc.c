@@ -1031,6 +1031,9 @@ static void oidc_log_session_expires(request_rec *r, const char *msg,
  */
 static apr_byte_t oidc_is_xml_http_request(request_rec *r) {
 
+	oidc_cfg *c = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
+
 	if ((oidc_util_hdr_in_x_requested_with_get(r) != NULL)
 			&& (apr_strnatcasecmp(oidc_util_hdr_in_x_requested_with_get(r),
 					OIDC_HTTP_HDR_VAL_XML_HTTP_REQUEST) == 0))
@@ -1040,7 +1043,8 @@ static apr_byte_t oidc_is_xml_http_request(request_rec *r) {
 			== FALSE) && (oidc_util_hdr_in_accept_contains(r,
 					OIDC_CONTENT_TYPE_APP_XHTML_XML) == FALSE)
 					&& (oidc_util_hdr_in_accept_contains(r,
-							OIDC_CONTENT_TYPE_ANY) == FALSE))
+							OIDC_CONTENT_TYPE_ANY) == FALSE)
+							&& c->ignore_accept_headers == FALSE)
 		return TRUE;
 
 	return FALSE;

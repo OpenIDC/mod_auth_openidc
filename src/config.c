@@ -173,6 +173,8 @@
 /* default setting for calculating the fingerprint of the state from request headers during authentication */
 #define OIDC_DEFAULT_STATE_INPUT_HEADERS (OIDC_STATE_INPUT_HEADERS_USER_AGENT | OIDC_STATE_INPUT_HEADERS_X_FORWARDED_FOR)
 
+#define OIDC_DEFAULT_IGNORE_ACCEPT_HEADERS 0
+
 #define OIDCProviderMetadataURL                "OIDCProviderMetadataURL"
 #define OIDCProviderIssuer                     "OIDCProviderIssuer"
 #define OIDCProviderAuthorizationEndpoint      "OIDCProviderAuthorizationEndpoint"
@@ -274,6 +276,7 @@
 #define OIDCRefreshAccessTokenBeforeExpiry     "OIDCRefreshAccessTokenBeforeExpiry"
 #define OIDCStateInputHeaders                  "OIDCStateInputHeaders"
 #define OIDCRedirectURLsAllowed                "OIDCRedirectURLsAllowed"
+#define OIDCIgnoreAcceptHeader                 "OIDCIgnoreAcceptHeader"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -1316,6 +1319,8 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->state_input_headers = OIDC_DEFAULT_STATE_INPUT_HEADERS;
 
 	c->redirect_urls_allowed = NULL;
+	
+	c->ignore_accept_headers = OIDC_DEFAULT_IGNORE_ACCEPT_HEADERS;
 
 	return c;
 }
@@ -1791,6 +1796,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->redirect_urls_allowed =
 			add->redirect_urls_allowed != NULL ?
 					add->redirect_urls_allowed : base->redirect_urls_allowed;
+
+	c->ignore_accept_headers =
+			add->ignore_accept_headers != OIDC_DEFAULT_IGNORE_ACCEPT_HEADERS ?
+					add->ignore_accept_headers : base->ignore_accept_headers;
 
 	return c;
 }
@@ -3186,5 +3195,10 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Specify one or more regular expressions that define URLs allowed for post logout and other redirects."),
 
+		AP_INIT_FLAG(OIDCIgnoreAcceptHeader,
+				oidc_set_flag_slot,
+				(void *) APR_OFFSETOF(oidc_cfg, ignore_accept_headers),
+				RSRC_CONF,
+				"Defines whether or not to check for accept headers in a non-browser requests."),
 		{ NULL }
 };
