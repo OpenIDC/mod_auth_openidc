@@ -2311,7 +2311,7 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 		apr_table_t *params = apr_table_make(r->pool, 4);
 		apr_table_setn(params, OIDC_PROTO_ACCESS_TOKEN, access_token);
 		if (oidc_util_http_post_form(r, provider->userinfo_endpoint_url, params,
-				NULL, access_token, provider->ssl_validate_server, response,
+				NULL, NULL, provider->ssl_validate_server, response,
 				cfg->http_timeout_long, cfg->outgoing_proxy,
 				oidc_dir_cfg_pass_cookies(r), NULL, NULL) == FALSE)
 			return FALSE;
