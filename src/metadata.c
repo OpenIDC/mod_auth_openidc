@@ -101,6 +101,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_METADATA_CLIENT_NAME                                  "client_name"
 #define OIDC_METADATA_REDIRECT_URIS                                "redirect_uris"
 #define OIDC_METADATA_RESPONSE_TYPES                               "response_types"
+#define OIDC_METADATA_GRANT_TYPES                                  "grant_types"
 #define OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHOD                   "token_endpoint_auth_method"
 #define OIDC_METADATA_CONTACTS                                     "contacts"
 #define OIDC_METADATA_INITIATE_LOGIN_URI                           "initiate_login_uri"
@@ -505,6 +506,10 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 				json_string(((const char**) flows->elts)[i]));
 	}
 	json_object_set_new(data, OIDC_METADATA_RESPONSE_TYPES, response_types);
+
+	json_object_set_new(data, OIDC_METADATA_GRANT_TYPES,
+			json_pack("[s, s, s]", "authorization_code", "implicit",
+					"refresh_token"));
 
 	if (provider->token_endpoint_auth != NULL) {
 		json_object_set_new(data, OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHOD,

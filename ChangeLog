@@ -1,3 +1,8 @@
+06/30/2020
+- add grant_types to dynamic client registration request
+- don't send access_token in user info request when method is set to POST; conform OIDC test suite 4.0.5
+- bump to 2.4.4rc0
+
 06/10/2020
 - prevent open redirect on refresh token requests
   add new OIDCRedirectURLsAllowed primitive to handle post logout and refresh-return-to validation
