@@ -1448,6 +1448,7 @@ static char *internal_cjose_jwk_to_json(apr_pool_t *pool, oidc_jwk_t *oidc_jwk,
 	cjose_err err;
 	json_t *json = NULL, *tempArray = NULL;
 	json_error_t json_error;
+	int i = 0;
 
 	if (!oidc_jwk) {
 		oidc_jose_error(oidc_err,
@@ -1477,7 +1478,7 @@ static char *internal_cjose_jwk_to_json(apr_pool_t *pool, oidc_jwk_t *oidc_jwk,
 			oidc_jose_error(oidc_err, "json_array failed");
 			goto to_json_cleanup;
 		}
-		for (int i = 0; i < oidc_jwk->x5c_count; i++) {
+		for (i = 0; i < oidc_jwk->x5c_count; i++) {
 			if (json_array_append_new(tempArray,
 					json_string((char *) oidc_jwk->x5c[i])) == -1) {
 				oidc_jose_error(oidc_err, "json_array_append failed");
