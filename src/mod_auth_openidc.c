@@ -784,6 +784,12 @@ static int oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c,
 								number_of_valid_state_cookies++;
 							}
 							oidc_proto_state_destroy(proto_state);
+						} else {
+							oidc_warn(r,
+									"state cookie could not be retrieved/decoded, deleting: %s",
+									cookieName);
+							oidc_util_set_cookie(r, cookieName, "", 0,
+									NULL);
 						}
 					}
 				}
