@@ -1,3 +1,8 @@
+07/30/2020
+- fix doubled Set-Cookie behaviour when using `client-cookie`, calling the session info hook
+  and writing out a session update (twice); thanks Tim Deisser
+- bump to 2.4.4rc4
+
 07/27/2020
 - prevent XSS and open redirect on OIDC session managemement OP iframe with OIDCRedirectURLsAllowed
   thanks Andrew Brady
