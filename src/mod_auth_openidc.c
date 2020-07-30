@@ -74,7 +74,7 @@
 
 #include "mod_auth_openidc.h"
 
-#define OIDC_REFRESH_ERROR 2
+#define ERROR 2
 
 static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 		oidc_session_t *session, const char *url);
@@ -1425,8 +1425,8 @@ static void oidc_copy_tokens_to_request_state(request_rec *r,
 /*
  * pass refresh_token, access_token and access_token_expires as headers/environment variables to the application
  */
-static apr_byte_t oidc_session_pass_tokens(request_rec *r,
-		oidc_cfg *cfg, oidc_session_t *session, apr_byte_t *needs_save) {
+static apr_byte_t oidc_session_pass_tokens_and_save(request_rec *r,
+		oidc_cfg *cfg, oidc_session_t *session, apr_byte_t needs_save) {
 
 	apr_byte_t pass_headers = oidc_cfg_dir_pass_info_in_headers(r);
 	apr_byte_t pass_envvars = oidc_cfg_dir_pass_info_in_envvars(r);
@@ -1477,11 +1477,16 @@ static apr_byte_t oidc_session_pass_tokens(request_rec *r,
 		slack = apr_time_from_sec(60);
 	if (session->expiry - now < interval - slack) {
 		session->expiry = now + interval;
-		*needs_save = TRUE;
+		needs_save = TRUE;
 	}
 
 	/* log message about session expiry */
 	oidc_log_session_expires(r, "session inactivity timeout", session->expiry);
+
+	/* check if something was updated in the session and we need to save it again */
+	if (needs_save)
+		if (oidc_session_save(r, session, FALSE) == FALSE)
+			return FALSE;
 
 	return TRUE;
 }
@@ -1534,7 +1539,7 @@ static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
 		oidc_warn(r, "access_token could not be refreshed, logout=%d",
 				logout_on_error & OIDC_LOGOUT_ON_ERROR_REFRESH);
 		if (logout_on_error & OIDC_LOGOUT_ON_ERROR_REFRESH)
-			return OIDC_REFRESH_ERROR;
+			return ERROR;
 		else
 			return FALSE;
 	}
@@ -1546,11 +1551,12 @@ static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
  * handle the case where we have identified an existing authentication session for a user
  */
 static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
-		oidc_session_t *session, apr_byte_t *needs_save) {
-
-	apr_byte_t rv = FALSE;
+		oidc_session_t *session) {
 
 	oidc_debug(r, "enter");
+
+	/* track if the session needs to be updated/saved into the cache */
+	apr_byte_t needs_save = FALSE;
 
 	/* set the user in the main request for further (incl. sub-request) processing */
 	r->user = apr_pstrdup(r->pool, session->remote_user);
@@ -1571,20 +1577,15 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 		return rc;
 
 	/* if needed, refresh the access token */
-	rv = oidc_refresh_access_token_before_expiry(r, cfg, session,
+	needs_save = oidc_refresh_access_token_before_expiry(r, cfg, session,
 			oidc_cfg_dir_refresh_access_token_before_expiry(r),
 			oidc_cfg_dir_logout_on_error_refresh(r));
-
-	if (rv == OIDC_REFRESH_ERROR) {
-		*needs_save = FALSE;
+	if (needs_save == ERROR)
 		return oidc_handle_logout_request(r, cfg, session, cfg->default_slo_url);
-	}
-
-	*needs_save |= rv;
 
 	/* if needed, refresh claims from the user info endpoint */
 	if (oidc_refresh_claims_from_userinfo_endpoint(r, cfg, session) == TRUE)
-		*needs_save = TRUE;
+		needs_save = TRUE;
 
 	/*
 	 * we're going to pass the information that we have to the application,
@@ -1659,8 +1660,8 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 		}
 	}
 
-	/* pass the at, rt and at expiry to the application, possibly update the session expiry */
-	if (oidc_session_pass_tokens(r, cfg, session, needs_save) == FALSE)
+	/* pass the at, rt and at expiry to the application, possibly update the session expiry and save the session */
+	if (oidc_session_pass_tokens_and_save(r, cfg, session, needs_save) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
 	/* return "user authenticated" status */
@@ -3426,7 +3427,6 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
 	char *error_code = NULL;
 	char *error_str = NULL;
 	char *error_description = NULL;
-	apr_byte_t needs_save = TRUE;
 
 	/* get the command passed to the session management handler */
 	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_REFRESH,
@@ -3486,14 +3486,9 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
 		goto end;
 	}
 
-	/* pass the tokens to the application, possibly updating the expiry */
-	if (oidc_session_pass_tokens(r, c, session, &needs_save) == FALSE) {
+	/* pass the tokens to the application and save the session, possibly updating the expiry */
+	if (oidc_session_pass_tokens_and_save(r, c, session, TRUE) == FALSE) {
 		error_code = "session_corruption";
-		goto end;
-	}
-
-	if (oidc_session_save(r, session, FALSE) == FALSE) {
-		error_code = "error saving session";
 		goto end;
 	}
 
@@ -3566,8 +3561,9 @@ int oidc_handle_remove_at_cache(request_rec *r, oidc_cfg *c) {
  * handle request for session info
  */
 static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
-		oidc_session_t *session, apr_byte_t needs_save) {
+		oidc_session_t *session) {
 	int rc = HTTP_UNAUTHORIZED;
+	apr_byte_t needs_save = FALSE;
 	char *s_format = NULL, *s_interval = NULL, *r_value = NULL;
 	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO,
 			&s_format);
@@ -3726,15 +3722,9 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 	json_decref(json);
 
 	/* pass the tokens to the application and save the session, possibly updating the expiry */
-	if (oidc_session_pass_tokens(r, c, session, &needs_save) == FALSE)
-		oidc_warn(r, "error passing tokens");
-
-	/* check if something was updated in the session and we need to save it again */
-	if (needs_save) {
-		if (oidc_session_save(r, session, FALSE) == FALSE) {
-			oidc_warn(r, "error saving session");
-			rc = HTTP_INTERNAL_SERVER_ERROR;
-		}
+	if (oidc_session_pass_tokens_and_save(r, c, session, needs_save) == FALSE) {
+		oidc_warn(r, "error saving session");
+		rc = HTTP_INTERNAL_SERVER_ERROR;
 	}
 
 	return rc;
@@ -3745,9 +3735,6 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
  */
 int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 		oidc_session_t *session) {
-
-	/* track if the session needs to be updated/saved into the cache */
-	apr_byte_t needs_save = FALSE;
 
 	if (oidc_proto_is_redirect_authorization_response(r, c)) {
 
@@ -3814,11 +3801,11 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 			return HTTP_UNAUTHORIZED;
 
 		/* set r->user, set headers/env-vars, update expiry, update userinfo + AT */
-		int rc = oidc_handle_existing_session(r, c, session, &needs_save);
+		int rc = oidc_handle_existing_session(r, c, session);
 		if (rc != OK)
 			return rc;
 
-		return oidc_handle_info_request(r, c, session, needs_save);
+		return oidc_handle_info_request(r, c, session);
 
 	} else if ((r->args == NULL) || (apr_strnatcmp(r->args, "") == 0)) {
 
@@ -3870,7 +3857,6 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 	if (ap_is_initial_req(r)) {
 
 		int rc = OK;
-		apr_byte_t needs_save = FALSE;
 
 		/* load the session from the request state; this will be a new "empty" session if no state exists */
 		oidc_session_t *session = NULL;
@@ -3891,17 +3877,7 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 		} else if (session->remote_user != NULL) {
 
 			/* this is initial request and we already have a session */
-			rc = oidc_handle_existing_session(r, c, session, &needs_save);
-			if (rc == OK) {
-
-				/* check if something was updated in the session and we need to save it again */
-				if (needs_save) {
-					if (oidc_session_save(r, session, FALSE) == FALSE) {
-						oidc_warn(r, "error saving session");
-						rc = HTTP_INTERNAL_SERVER_ERROR;
-					}
-				}
-			}
+			rc = oidc_handle_existing_session(r, c, session);
 
 			/* free resources allocated for the session */
 			oidc_session_free(r, session);
