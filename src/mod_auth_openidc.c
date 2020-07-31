@@ -3709,6 +3709,18 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 					json_string(refresh_token));
 	}
 
+	/* pass the tokens to the application and save the session, possibly updating the expiry */
+	if (oidc_session_pass_tokens(r, c, session, &needs_save) == FALSE)
+		oidc_warn(r, "error passing tokens");
+
+	/* check if something was updated in the session and we need to save it again */
+	if (needs_save) {
+		if (oidc_session_save(r, session, FALSE) == FALSE) {
+			oidc_warn(r, "error saving session");
+			rc = HTTP_INTERNAL_SERVER_ERROR;
+		}
+	}
+	
 	if (apr_strnatcmp(OIDC_HOOK_INFO_FORMAT_JSON, s_format) == 0) {
 		/* JSON-encode the result */
 		r_value = oidc_util_encode_json_object(r, json, 0);
@@ -3724,18 +3736,6 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 
 	/* free the allocated resources */
 	json_decref(json);
-
-	/* pass the tokens to the application and save the session, possibly updating the expiry */
-	if (oidc_session_pass_tokens(r, c, session, &needs_save) == FALSE)
-		oidc_warn(r, "error passing tokens");
-
-	/* check if something was updated in the session and we need to save it again */
-	if (needs_save) {
-		if (oidc_session_save(r, session, FALSE) == FALSE) {
-			oidc_warn(r, "error saving session");
-			rc = HTTP_INTERNAL_SERVER_ERROR;
-		}
-	}
 
 	return rc;
 }
