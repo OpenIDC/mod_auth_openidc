@@ -1,6 +1,10 @@
+07/31/2020
+- reverse order of creating HTML response and adding session cookie; thanks @deisser
+- bump to 2.4.4rc5
+
 07/30/2020
 - fix doubled Set-Cookie behaviour when using `client-cookie`, calling the session info hook
-  and writing out a session update (twice); thanks Tim Deisser
+  and writing out a session update (twice); thanks @deisser
 - bump to 2.4.4rc4
 
 07/27/2020
