@@ -286,6 +286,7 @@ typedef struct oidc_dir_cfg {
 	char *cookie;
 	char *authn_header;
 	int unauth_action;
+	ap_expr_info_t *unauth_expression;
 	int unautz_action;
 	apr_array_header_t *pass_cookies;
 	apr_array_header_t *strip_cookies;
@@ -920,10 +921,20 @@ static const char * oidc_set_pass_claims_as(cmd_parms *cmd, void *m,
  * define how to act on unauthenticated requests
  */
 static const char * oidc_set_unauth_action(cmd_parms *cmd, void *m,
-		const char *arg) {
+		const char *arg1, const char *arg2) {
 	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg *) m;
-	const char *rv = oidc_parse_unauth_action(cmd->pool, arg,
+	const char *expr_err = NULL;
+	const char *rv = oidc_parse_unauth_action(cmd->pool, arg1,
 			&dir_cfg->unauth_action);
+	if ((rv == NULL) && (arg2 != NULL)) {
+		dir_cfg->unauth_expression = ap_expr_parse_cmd(cmd, arg2,
+				AP_EXPR_FLAG_DONT_VARY & AP_EXPR_FLAG_RESTRICTED, &expr_err,
+				NULL);
+		if (expr_err != NULL) {
+			rv = apr_pstrcat(cmd->temp_pool, "cannot parse expression: ",
+					expr_err, NULL);
+		}
+	}
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -1821,6 +1832,7 @@ void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->cookie_path = OIDC_CONFIG_STRING_UNSET;
 	c->authn_header = OIDC_CONFIG_STRING_UNSET;
 	c->unauth_action = OIDC_CONFIG_POS_INT_UNSET;
+	c->unauth_expression = NULL;
 	c->unautz_action = OIDC_CONFIG_POS_INT_UNSET;
 	c->pass_cookies = NULL;
 	c->strip_cookies = NULL;
@@ -1950,9 +1962,29 @@ apr_array_header_t *oidc_dir_cfg_strip_cookies(request_rec *r) {
 int oidc_dir_cfg_unauth_action(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
+
+	int rc = 0;
+	const char *err_str = NULL;
 	if (dir_cfg->unauth_action == OIDC_CONFIG_POS_INT_UNSET)
 		return OIDC_DEFAULT_UNAUTH_ACTION;
-	return dir_cfg->unauth_action;
+
+	if (dir_cfg->unauth_expression == NULL)
+		return dir_cfg->unauth_action;
+
+	rc = ap_expr_exec(r, dir_cfg->unauth_expression, &err_str);
+
+	if (rc < 0) {
+		oidc_warn(r, "executing expression failed");
+		return OIDC_DEFAULT_UNAUTH_ACTION;
+	}
+
+	return (rc > 0) ? dir_cfg->unauth_action : OIDC_DEFAULT_UNAUTH_ACTION;
+}
+
+apr_byte_t oidc_dir_cfg_unauth_expr_is_set(request_rec *r) {
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+	return (dir_cfg->unauth_expression != NULL) ? TRUE : FALSE;
 }
 
 int oidc_dir_cfg_unautz_action(request_rec *r) {
@@ -1997,6 +2029,9 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->unauth_action =
 			add->unauth_action != OIDC_CONFIG_POS_INT_UNSET ?
 					add->unauth_action : base->unauth_action;
+	c->unauth_expression =
+			add->unauth_expression != NULL ?
+					add->unauth_expression : base->unauth_expression;
 	c->unautz_action =
 			add->unautz_action != OIDC_CONFIG_POS_INT_UNSET ?
 					add->unautz_action : base->unautz_action;
@@ -3088,7 +3123,7 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_dir_cfg, cookie),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Define the cookie name for the session cookie."),
-		AP_INIT_TAKE1(OIDCUnAuthAction,
+		AP_INIT_TAKE12(OIDCUnAuthAction,
 				oidc_set_unauth_action,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, unauth_action),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,

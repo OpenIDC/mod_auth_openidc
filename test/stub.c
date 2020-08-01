@@ -297,3 +297,9 @@ AP_DECLARE(void) ap_log_error_(const char *file, int line, int module_index,
 				ap_filter_type ftype) {
 			return NULL;
 		}
+
+		AP_DECLARE(int) ap_expr_exec(request_rec *r, const ap_expr_info_t *expr,
+				const char **err) {
+			return 0;
+		}
+

@@ -1,3 +1,7 @@
+08/01/2020
+- add conditional expression to OIDCUnAuthAction; see #479; thanks @raro42 and @marcstern
+- bump to 2.4.4rc6
+
 07/31/2020
 - reverse order of creating HTML response and adding session cookie; thanks @deisser
 - bump to 2.4.4rc5
