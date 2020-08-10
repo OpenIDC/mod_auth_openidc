@@ -172,6 +172,8 @@
 #define OIDC_DEFAULT_REFRESH_ACCESS_TOKEN_BEFORE_EXPIRY -1
 /* default setting for calculating the fingerprint of the state from request headers during authentication */
 #define OIDC_DEFAULT_STATE_INPUT_HEADERS (OIDC_STATE_INPUT_HEADERS_USER_AGENT | OIDC_STATE_INPUT_HEADERS_X_FORWARDED_FOR)
+/* default prefix of the state cookie that binds the state in the authorization request/response to the browser */
+#define OIDC_DEFAULT_STATE_COOKIE_PREFIX "mod_auth_openidc_state_"
 
 #define OIDCProviderMetadataURL                "OIDCProviderMetadataURL"
 #define OIDCProviderIssuer                     "OIDCProviderIssuer"
@@ -274,6 +276,7 @@
 #define OIDCRefreshAccessTokenBeforeExpiry     "OIDCRefreshAccessTokenBeforeExpiry"
 #define OIDCStateInputHeaders                  "OIDCStateInputHeaders"
 #define OIDCRedirectURLsAllowed                "OIDCRedirectURLsAllowed"
+#define OIDCStateCookiePrefix                  "OIDCStateCookiePrefix"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -301,6 +304,7 @@ typedef struct oidc_dir_cfg {
 	char *path_scope;
 	int refresh_access_token_before_expiry;
 	int logout_on_error_refresh;
+	char *state_cookie_prefix;
 } oidc_dir_cfg;
 
 #define OIDC_CONFIG_DIR_RV(cmd, rv) rv != NULL ? apr_psprintf(cmd->pool, "Invalid value for directive '%s': %s", cmd->directive->directive, rv) : NULL
@@ -1164,6 +1168,17 @@ int oidc_cfg_dir_logout_on_error_refresh(request_rec *r) {
 	return dir_cfg->logout_on_error_refresh;
 }
 
+char *oidc_cfg_dir_state_cookie_prefix(request_rec *r) {
+    oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+                                                 &auth_openidc_module);
+    if ((dir_cfg->state_cookie_prefix == NULL)
+        || ((dir_cfg->state_cookie_prefix != NULL)
+            && (apr_strnatcmp(dir_cfg->state_cookie_prefix, OIDC_CONFIG_STRING_UNSET)
+                == 0)))
+        return OIDC_DEFAULT_STATE_COOKIE_PREFIX;
+    return dir_cfg->state_cookie_prefix;
+}
+
 void oidc_cfg_provider_init(oidc_provider_t *provider) {
 	provider->metadata_url = NULL;
 	provider->issuer = NULL;
@@ -1847,6 +1862,7 @@ void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->path_scope = NULL;
 	c->refresh_access_token_before_expiry = OIDC_CONFIG_POS_INT_UNSET;
 	c->logout_on_error_refresh = OIDC_CONFIG_POS_INT_UNSET;
+	c->state_cookie_prefix = OIDC_CONFIG_STRING_UNSET;
 	return (c);
 }
 
@@ -2081,6 +2097,10 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->logout_on_error_refresh != OIDC_CONFIG_POS_INT_UNSET ?
 					add->logout_on_error_refresh :
 					base->logout_on_error_refresh;
+
+    c->state_cookie_prefix =
+            (apr_strnatcmp(add->state_cookie_prefix, OIDC_CONFIG_STRING_UNSET) != 0) ?
+            add->state_cookie_prefix : base->state_cookie_prefix;
 
 	return (c);
 }
@@ -3220,6 +3240,12 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_cfg, redirect_urls_allowed),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Specify one or more regular expressions that define URLs allowed for post logout and other redirects."),
+
+		AP_INIT_TAKE1(OIDCStateCookiePrefix,
+				ap_set_string_slot,
+				(void *) APR_OFFSETOF(oidc_dir_cfg, state_cookie_prefix),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Define the cookie prefix for the state cookie."),
 
 		{ NULL }
 };

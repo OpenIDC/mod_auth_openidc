@@ -1,3 +1,6 @@
+08/10/2020
+- add new OIDCStateCookiePrefix primitive for the state cookie prefix
+
 08/01/2020
 - add conditional expression to OIDCUnAuthAction; see #479; thanks @raro42 and @marcstern
 - bump to 2.4.4rc6
