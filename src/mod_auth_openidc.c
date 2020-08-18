@@ -3048,6 +3048,10 @@ out:
 		jwt = NULL;
 	}
 
+	oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL,
+			"no-cache, no-store");
+	oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_PRAGMA, "no-cache");
+
 	return rc;
 }
 
