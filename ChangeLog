@@ -1,3 +1,7 @@
+08/28/2020
+- allow Content-Type check on backchannel logout to have postfixes (utf-8 etc)
+- bump to 2.4.4rc8
+
 08/18/2020
 - add recommended cache headers on backchannel logout response
   https://openid.net/specs/openid-connect-backchannel-1_0.html#rfc.section.2.8

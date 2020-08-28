@@ -1562,9 +1562,12 @@ apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table,
 	const char *content_type = NULL;
 
 	content_type = oidc_util_hdr_in_content_type_get(r);
-	if ((r->method_number != M_POST) || (apr_strnatcmp(content_type,
-			OIDC_CONTENT_TYPE_FORM_ENCODED) != 0))
+	if ((r->method_number != M_POST) || (strstr(content_type,
+			OIDC_CONTENT_TYPE_FORM_ENCODED) != content_type)) {
+		oidc_debug(r, "required content-type %s not found",
+				OIDC_CONTENT_TYPE_FORM_ENCODED);
 		goto end;
+	}
 
 	if (oidc_util_read(r, &data) != TRUE)
 		goto end;
