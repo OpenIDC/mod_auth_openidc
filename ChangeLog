@@ -1,5 +1,6 @@
 08/28/2020
 - allow Content-Type check on backchannel logout to have postfixes (utf-8 etc)
+- terminate backchannel logout with DONE instead of OK to avoid authz error 500
 - bump to 2.4.4rc8
 
 08/18/2020

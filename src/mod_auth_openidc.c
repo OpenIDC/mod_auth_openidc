@@ -3034,7 +3034,9 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 	oidc_cache_set_sid(r, sid, NULL, 0);
 	oidc_cache_set_session(r, uuid, NULL, 0);
 
-	rc = OK;
+	// terminate with DONE instead of OK
+	// to avoid Apache returning auth/authz error 500 for the redirect URI
+	rc = DONE;
 
 out:
 
