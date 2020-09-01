@@ -67,7 +67,7 @@
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 static int test_nr_run = 0;
-static char TST_ERR_MSG[512];
+static char TST_ERR_MSG[4096];
 static int TST_RC;
 
 #define TST_FORMAT(fmt) \

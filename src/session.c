@@ -118,7 +118,7 @@ static void oidc_session_uuid_new(request_rec *r, oidc_session_t *z) {
  * clear contents of a session
  */
 static void oidc_session_clear(request_rec *r, oidc_session_t *z) {
-	strncpy(z->uuid, "", strlen(""));
+	z->uuid[0] = '\0';
 	z->remote_user = NULL;
 	// NB: don't clear sid
 	z->expiry = 0;
@@ -138,7 +138,8 @@ apr_byte_t oidc_session_load_cache_by_uuid(request_rec *r, oidc_cfg *c, const ch
 	if ((rc == TRUE) && (s_json != NULL)) {
 		rc = oidc_session_decode(r, c, z, s_json, FALSE);
 		if (rc == TRUE) {
-			strncpy(z->uuid, uuid, strlen(uuid));
+			strncpy(z->uuid, uuid, APR_UUID_FORMATTED_LENGTH);
+			z->uuid[APR_UUID_FORMATTED_LENGTH] = '\0';
 
 			/* compare the session id in the cache value so it allows  us to detect cache corruption */
 			oidc_session_get(r, z, OIDC_SESSION_SESSION_ID, &stored_uuid);

@@ -661,8 +661,9 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key,
 out:
 	/* log the result */
 	msg = apr_psprintf(r->pool, "%d bytes in %s cache backend for %skey %s",
-			value ? (int) strlen(value) : 0, cfg->cache->name,
-					encrypted ? "encrypted " : "", key);
+			(value ? (int) strlen(value) : 0),
+			(cfg->cache->name ? cfg->cache->name : ""),
+			(encrypted ? "encrypted " : ""), (key ? key : ""));
 	if (rc == TRUE)
 		oidc_debug(r, "successfully stored %s", msg);
 	else
