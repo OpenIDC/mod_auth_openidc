@@ -1,3 +1,7 @@
+09/03/2020
+- add SameSite attribute on cookie clearance / logout; thanks @v0gler
+- bump to 2.4.4.1
+
 09/01/2020
 - avoid GCC 9 compiler warnings
 - release 2.4.4

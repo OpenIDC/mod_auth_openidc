@@ -289,7 +289,8 @@ static char *oidc_get_browser_state_hash(request_rec *r, oidc_cfg *c,
  * return the name for the state cookie
  */
 static char *oidc_get_state_cookie_name(request_rec *r, const char *state) {
-	return apr_psprintf(r->pool, "%s%s", oidc_cfg_dir_state_cookie_prefix(r), state);
+	return apr_psprintf(r->pool, "%s%s", oidc_cfg_dir_state_cookie_prefix(r),
+			state);
 }
 
 /*
@@ -719,7 +720,8 @@ static int oidc_delete_oldest_state_cookies(request_rec *r,
 		oidc_warn(r,
 				"deleting oldest state cookie: %s (time until expiry %" APR_TIME_T_FMT " seconds)",
 				oldest->name, apr_time_sec(oldest->timestamp - apr_time_now()));
-		oidc_util_set_cookie(r, oldest->name, "", 0, NULL);
+		oidc_util_set_cookie(r, oldest->name, "", 0,
+				OIDC_COOKIE_EXT_SAME_SITE_NONE);
 		if (prev_oldest)
 			prev_oldest->next = oldest->next;
 		else
@@ -767,7 +769,7 @@ static int oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c,
 										oidc_proto_state_get_original_url(
 												proto_state));
 								oidc_util_set_cookie(r, cookieName, "", 0,
-										NULL);
+										OIDC_COOKIE_EXT_SAME_SITE_NONE);
 							} else {
 								if (first == NULL) {
 									first = apr_pcalloc(r->pool,
@@ -789,7 +791,7 @@ static int oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c,
 									"state cookie could not be retrieved/decoded, deleting: %s",
 									cookieName);
 							oidc_util_set_cookie(r, cookieName, "", 0,
-									NULL);
+									OIDC_COOKIE_EXT_SAME_SITE_NONE);
 						}
 					}
 				}
@@ -827,7 +829,7 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 	}
 
 	/* clear state cookie because we don't need it anymore */
-	oidc_util_set_cookie(r, cookieName, "", 0, NULL);
+	oidc_util_set_cookie(r, cookieName, "", 0, OIDC_COOKIE_EXT_SAME_SITE_NONE);
 
 	*proto_state = oidc_proto_state_from_cookie(r, c, cookieValue);
 	if (*proto_state == NULL)
@@ -931,9 +933,7 @@ static int oidc_authorization_request_set_cookie(request_rec *r, oidc_cfg *c,
 
 	/* set it as a cookie */
 	oidc_util_set_cookie(r, cookieName, cookieValue, -1,
-			c->cookie_same_site ?
-					OIDC_COOKIE_EXT_SAME_SITE_LAX :
-					OIDC_COOKIE_EXT_SAME_SITE_NONE);
+			OIDC_COOKIE_SAMESITE_LAX(c));
 
 	return HTTP_OK;
 }
@@ -1426,8 +1426,8 @@ static void oidc_copy_tokens_to_request_state(request_rec *r,
 /*
  * pass refresh_token, access_token and access_token_expires as headers/environment variables to the application
  */
-static apr_byte_t oidc_session_pass_tokens(request_rec *r,
-		oidc_cfg *cfg, oidc_session_t *session, apr_byte_t *needs_save) {
+static apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg *cfg,
+		oidc_session_t *session, apr_byte_t *needs_save) {
 
 	apr_byte_t pass_headers = oidc_cfg_dir_pass_info_in_headers(r);
 	apr_byte_t pass_envvars = oidc_cfg_dir_pass_info_in_envvars(r);
@@ -2280,9 +2280,7 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 
 		/* set CSRF cookie */
 		oidc_util_set_cookie(r, OIDC_CSRF_NAME, csrf, -1,
-				cfg->cookie_same_site ?
-						OIDC_COOKIE_EXT_SAME_SITE_STRICT :
-						OIDC_COOKIE_EXT_SAME_SITE_NONE);
+				OIDC_COOKIE_SAMESITE_STRICT(cfg));
 
 		/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
 		if (oidc_post_preserve_javascript(r, url, NULL, NULL) == TRUE)
@@ -2375,9 +2373,7 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 	s = apr_psprintf(r->pool, "%s</form>\n", s);
 
 	oidc_util_set_cookie(r, OIDC_CSRF_NAME, csrf, -1,
-			cfg->cookie_same_site ?
-					OIDC_COOKIE_EXT_SAME_SITE_STRICT :
-					OIDC_COOKIE_EXT_SAME_SITE_NONE);
+			OIDC_COOKIE_SAMESITE_STRICT(cfg));
 
 	char *javascript = NULL, *javascript_method = NULL;
 	char *html_head =
@@ -2598,7 +2594,8 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 	if (csrf_cookie) {
 
 		/* clean CSRF cookie */
-		oidc_util_set_cookie(r, OIDC_CSRF_NAME, "", 0, NULL);
+		oidc_util_set_cookie(r, OIDC_CSRF_NAME, "", 0,
+				OIDC_COOKIE_EXT_SAME_SITE_NONE);
 
 		/* compare CSRF cookie value with query parameter value */
 		if ((csrf_query == NULL)
@@ -2813,13 +2810,15 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 	oidc_debug(r, "enter (url=%s)", url);
 
 	/* if there's no remote_user then there's no (stored) session to kill */
-	if (session->remote_user != NULL) {
-
+	if (session->remote_user != NULL)
 		oidc_revoke_tokens(r, c, session);
 
-		/* remove session state (cq. cache entry and cookie) */
-		oidc_session_kill(r, session);
-	}
+	/*
+	 * remove session state (cq. cache entry and cookie)
+	 * always clear the session cookie because the cookie may be not sent (but still in the browser)
+	 * due to SameSite policies
+	 */
+	oidc_session_kill(r, session);
 
 	/* see if this is the OP calling us */
 	if (oidc_is_front_channel_logout(url)) {
@@ -2836,15 +2835,17 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 		const char *accept = oidc_util_hdr_in_accept_get(r);
 		if ((apr_strnatcmp(url, OIDC_IMG_STYLE_LOGOUT_PARAM_VALUE) == 0)
 				|| ((accept) && strstr(accept, OIDC_CONTENT_TYPE_IMAGE_PNG))) {
+			// terminate with DONE instead of OK
+			// to avoid Apache returning auth/authz error 401 for the redirect URI
 			return oidc_util_http_send(r,
 					(const char *) &oidc_transparent_pixel,
 					sizeof(oidc_transparent_pixel), OIDC_CONTENT_TYPE_IMAGE_PNG,
-					OK);
+					DONE);
 		}
 
 		/* standard HTTP based logout: should be called in an iframe from the OP */
 		return oidc_util_html_send(r, "Logged Out", NULL, NULL,
-				"<p>Logged Out</p>", OK);
+				"<p>Logged Out</p>", DONE);
 	}
 
 	/* see if we don't need to go somewhere special after killing the session locally */
@@ -3727,7 +3728,7 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 			rc = HTTP_INTERNAL_SERVER_ERROR;
 		}
 	}
-	
+
 	if (apr_strnatcmp(OIDC_HOOK_INFO_FORMAT_JSON, s_format) == 0) {
 		/* JSON-encode the result */
 		r_value = oidc_util_encode_json_object(r, json, 0);
