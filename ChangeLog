@@ -1,3 +1,6 @@
+09/21/2020
+- populate AUTH_TYPE when performing authentication; thanks @spanglerco
+
 09/19/2020
 - enable authentication of sub-requests when the main request doesn't require
   authentication; thanks @spanglerco

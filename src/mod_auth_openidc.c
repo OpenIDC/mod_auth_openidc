@@ -3979,10 +3979,14 @@ static int oidc_check_mixed_userid_oauth(request_rec *r, oidc_cfg *c) {
 
 	/* get the bearer access token from the Authorization header */
 	const char *access_token = NULL;
-	if (oidc_oauth_get_bearer_token(r, &access_token) == TRUE)
+	if (oidc_oauth_get_bearer_token(r, &access_token) == TRUE) {
+
+		r->ap_auth_type = apr_pstrdup(r->pool, OIDC_AUTH_TYPE_OPENID_OAUTH20);
 		return oidc_oauth_check_userid(r, c, access_token);
+	}
 
 	/* no bearer token found: then treat this as a regular OIDC browser request */
+	r->ap_auth_type = apr_pstrdup(r->pool, OIDC_AUTH_TYPE_OPENID_CONNECT);
 	return oidc_check_userid_openidc(r, c);
 }
 
@@ -3999,22 +4003,26 @@ int oidc_check_user_id(request_rec *r) {
 			r->parsed_uri.path, r->args, ap_is_initial_req(r));
 
 	/* see if any authentication has been defined at all */
-	if (ap_auth_type(r) == NULL)
+	const char *current_auth = ap_auth_type(r);
+	if (current_auth == NULL)
 		return DECLINED;
 
 	/* see if we've configured OpenID Connect user authentication for this request */
-	if (apr_strnatcasecmp((const char *) ap_auth_type(r),
-			OIDC_AUTH_TYPE_OPENID_CONNECT) == 0)
+	if (strcasecmp(current_auth, OIDC_AUTH_TYPE_OPENID_CONNECT) == 0) {
+
+		r->ap_auth_type = (char *)current_auth;
 		return oidc_check_userid_openidc(r, c);
+	}
 
 	/* see if we've configured OAuth 2.0 access control for this request */
-	if (apr_strnatcasecmp((const char *) ap_auth_type(r),
-			OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0)
+	if (strcasecmp(current_auth, OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
+
+		r->ap_auth_type = (char *)current_auth;
 		return oidc_oauth_check_userid(r, c, NULL);
+	}
 
 	/* see if we've configured "mixed mode" for this request */
-	if (apr_strnatcasecmp((const char *) ap_auth_type(r),
-			OIDC_AUTH_TYPE_OPENID_BOTH) == 0)
+	if (strcasecmp(current_auth, OIDC_AUTH_TYPE_OPENID_BOTH) == 0)
 		return oidc_check_mixed_userid_oauth(r, c);
 
 	/* this is not for us but for some other handler */
