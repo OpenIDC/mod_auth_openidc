@@ -1,3 +1,7 @@
+09/19/2020
+- enable authentication of sub-requests when the main request doesn't require
+  authentication; thanks @spanglerco
+
 09/03/2020
 - add SameSite attribute on cookie clearance / logout; thanks @v0gler
 - bump to 2.4.4.1

@@ -3875,59 +3875,7 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 	}
 
 	/* check if this is a sub-request or an initial request */
-	if (ap_is_initial_req(r)) {
-
-		int rc = OK;
-		apr_byte_t needs_save = FALSE;
-
-		/* load the session from the request state; this will be a new "empty" session if no state exists */
-		oidc_session_t *session = NULL;
-		oidc_session_load(r, &session);
-
-		/* see if the initial request is to the redirect URI; this handles potential logout too */
-		if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c))) {
-
-			/* handle request to the redirect_uri */
-			rc = oidc_handle_redirect_uri_request(r, c, session);
-
-			/* free resources allocated for the session */
-			oidc_session_free(r, session);
-
-			return rc;
-
-			/* initial request to non-redirect URI, check if we have an existing session */
-		} else if (session->remote_user != NULL) {
-
-			/* this is initial request and we already have a session */
-			rc = oidc_handle_existing_session(r, c, session, &needs_save);
-			if (rc == OK) {
-
-				/* check if something was updated in the session and we need to save it again */
-				if (needs_save) {
-					if (oidc_session_save(r, session, FALSE) == FALSE) {
-						oidc_warn(r, "error saving session");
-						rc = HTTP_INTERNAL_SERVER_ERROR;
-					}
-				}
-			}
-
-			/* free resources allocated for the session */
-			oidc_session_free(r, session);
-
-			/* strip any cookies that we need to */
-			oidc_strip_cookies(r);
-
-			return rc;
-		}
-
-		/* free resources allocated for the session */
-		oidc_session_free(r, session);
-
-		/*
-		 * else: initial request, we have no session and it is not an authorization or
-		 *       discovery response: just hit the default flow for unauthenticated users
-		 */
-	} else {
+	if (!ap_is_initial_req(r)) {
 
 		/* not an initial request, try to recycle what we've already established in the main request */
 		if (r->main != NULL)
@@ -3966,9 +3914,60 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 		}
 		/*
 		 * else: not initial request, but we could not find a session, so:
-		 * just hit the default flow for unauthenticated users
+		 * try to load a new session as if this were the initial request
 		 */
 	}
+
+	int rc = OK;
+	apr_byte_t needs_save = FALSE;
+
+	/* load the session from the request state; this will be a new "empty" session if no state exists */
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* see if the initial request is to the redirect URI; this handles potential logout too */
+	if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c))) {
+
+		/* handle request to the redirect_uri */
+		rc = oidc_handle_redirect_uri_request(r, c, session);
+
+		/* free resources allocated for the session */
+		oidc_session_free(r, session);
+
+		return rc;
+
+		/* initial request to non-redirect URI, check if we have an existing session */
+	} else if (session->remote_user != NULL) {
+
+		/* this is initial request and we already have a session */
+		rc = oidc_handle_existing_session(r, c, session, &needs_save);
+		if (rc == OK) {
+
+			/* check if something was updated in the session and we need to save it again */
+			if (needs_save) {
+				if (oidc_session_save(r, session, FALSE) == FALSE) {
+					oidc_warn(r, "error saving session");
+					rc = HTTP_INTERNAL_SERVER_ERROR;
+				}
+			}
+		}
+
+		/* free resources allocated for the session */
+		oidc_session_free(r, session);
+
+		/* strip any cookies that we need to */
+		oidc_strip_cookies(r);
+
+		return rc;
+	}
+
+	/* free resources allocated for the session */
+	oidc_session_free(r, session);
+
+	/*
+	 * else: we have no session and it is not an authorization or
+	 *       discovery response: just hit the default flow for unauthenticated users
+	 */
 
 	return oidc_handle_unauthenticated_user(r, c);
 }
