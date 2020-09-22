@@ -4097,6 +4097,11 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 				location);
 		oidc_util_html_send(r, "Stepup Authentication", html_head, NULL, NULL,
 				HTTP_UNAUTHORIZED);
+		/*
+		 * a hack for Apache 2.4 to prevent it from writing its own 401 HTML document
+		 * text by making ap_send_error_response in http_protocol.c return early...
+		 */
+		r->header_only = 1;
 	}
 
 	return AUTHZ_DENIED;
