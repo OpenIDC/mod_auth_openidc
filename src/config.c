@@ -277,6 +277,7 @@
 #define OIDCStateInputHeaders                  "OIDCStateInputHeaders"
 #define OIDCRedirectURLsAllowed                "OIDCRedirectURLsAllowed"
 #define OIDCStateCookiePrefix                  "OIDCStateCookiePrefix"
+#define OIDCCABundlePath                       "OIDCCABundlePath"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -1343,6 +1344,8 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 
 	c->redirect_urls_allowed = NULL;
 
+	c->ca_bundle_path = NULL;
+
 	return c;
 }
 
@@ -1817,6 +1820,10 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->redirect_urls_allowed =
 			add->redirect_urls_allowed != NULL ?
 					add->redirect_urls_allowed : base->redirect_urls_allowed;
+
+	c->ca_bundle_path =
+			add->ca_bundle_path != NULL ?
+					add->ca_bundle_path : base->ca_bundle_path;
 
 	return c;
 }
@@ -3246,6 +3253,12 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_dir_cfg, state_cookie_prefix),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Define the cookie prefix for the state cookie."),
+
+		AP_INIT_TAKE1(OIDCCABundlePath,
+				oidc_set_string_slot,
+				(void *) APR_OFFSETOF(oidc_cfg, ca_bundle_path),
+				RSRC_CONF,
+				"Sets the path to the CA bundle to be used by cURL."),
 
 		{ NULL }
 };
