@@ -1,3 +1,6 @@
+10/08/2020
+- add OIDCCABundlePath for configuring path to curl CA bundle
+
 09/21/2020
 - populate AUTH_TYPE when performing authentication; thanks @spanglerco
 
