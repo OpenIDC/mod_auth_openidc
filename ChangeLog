@@ -1,3 +1,6 @@
+10/08/2020
+- add OIDCCABundlePath for configuring path to curl CA bundle
+
 09/22/2020
 - avoid Apache 2.4 appending 401 HTML document text to step-up authentication HTML refresh page; closes #484
 - bump to 2.4.5rc0
