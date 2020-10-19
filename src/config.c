@@ -373,12 +373,10 @@ static const char *oidc_set_url_slot(cmd_parms *cmd, void *ptr, const char *arg)
 }
 
 /*
- * set a relative or absolute URL value in the server config
+ * set a relative or absolute URL value in a config rec
  */
-static const char *oidc_set_relative_or_absolute_url_slot(cmd_parms *cmd,
-		void *ptr, const char *arg) {
-	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
-			cmd->server->module_config, &auth_openidc_module);
+static const char *oidc_set_relative_or_absolute_url_slot_dir_cfg(
+		cmd_parms *cmd, void *ptr, const char *arg) {
 	if (arg[0] == OIDC_CHAR_FORWARD_SLASH) {
 		// relative uri
 		apr_uri_t uri;
@@ -387,20 +385,22 @@ static const char *oidc_set_relative_or_absolute_url_slot(cmd_parms *cmd,
 					"cannot parse '%s' as relative URI", arg);
 			return OIDC_CONFIG_DIR_RV(cmd, rv);
 		} else {
-			return ap_set_string_slot(cmd, cfg, arg);
+			return ap_set_string_slot(cmd, ptr, arg);
 		}
 	} else {
 		// absolute uri
-		return oidc_set_url_slot_type(cmd, cfg, arg, NULL);
+		return oidc_set_url_slot_type(cmd, ptr, arg, NULL);
 	}
 }
 
 /*
- * set a HTTPS/HTTP value in the directory config
+ * set a relative or absolute URL value in the server config
  */
-static const char *oidc_set_url_slot_dir_cfg(cmd_parms *cmd, void *ptr,
-		const char *arg) {
-	return oidc_set_url_slot_type(cmd, ptr, arg, NULL);
+static const char *oidc_set_relative_or_absolute_url_slot(cmd_parms *cmd,
+		void *ptr, const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+	return oidc_set_relative_or_absolute_url_slot_dir_cfg(cmd, cfg, arg);
 }
 
 /*
@@ -3131,7 +3131,7 @@ const command_rec oidc_config_cmds[] = {
 				"Name of a HTML error template: needs to contain two \"%s\" characters, one for the error message, one for the description."),
 
 		AP_INIT_TAKE1(OIDCDiscoverURL,
-				oidc_set_url_slot_dir_cfg,
+				oidc_set_relative_or_absolute_url_slot_dir_cfg,
 				(void *)APR_OFFSETOF(oidc_dir_cfg, discover_url),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Defines an external IDP Discovery page"),
