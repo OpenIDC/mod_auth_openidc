@@ -37,6 +37,11 @@ AP_DECLARE(long) ap_get_client_block(request_rec * r, char * buffer,
 	return 0;
 }
 
+AP_DECLARE(char *) ap_get_exec_line(apr_pool_t *p, const char *cmd,
+		const char * const *argv) {
+	return NULL;
+}
+
 AP_DECLARE(char *) ap_getword(apr_pool_t *atrans, const char **line, char stop) {
 	const char *pos = *line;
 	int len;

@@ -429,6 +429,45 @@ static const char *oidc_set_path_slot(cmd_parms *cmd, void *ptr, const char *arg
 }
 
 /*
+ * set a string value in the server config with exec support
+ */
+static const char *oidc_set_passphrase_slot(cmd_parms *cmd, void *struct_ptr,
+		const char *arg) {
+	int arglen = strlen(arg);
+	char **argv;
+	char *result;
+	const char *passphrase;
+	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
+			cmd->server->module_config, &auth_openidc_module);
+
+	/* Based on code from mod_session_crypto. */
+	if (arglen > 5 && strncmp(arg, "exec:", 5) == 0) {
+		if (apr_tokenize_to_argv(arg + 5, &argv, cmd->temp_pool) != APR_SUCCESS) {
+			return apr_pstrcat(cmd->pool,
+				"Unable to parse exec arguments from ", arg + 5, NULL);
+		}
+		argv[0] = ap_server_root_relative(cmd->temp_pool, argv[0]);
+
+		if (!argv[0]) {
+			return apr_pstrcat(cmd->pool,
+				"Invalid ", cmd->cmd->name, " exec location:", arg + 5, NULL);
+		}
+		result = ap_get_exec_line(cmd->pool, argv[0], (const char * const *)argv);
+
+		if (!result) {
+			return apr_pstrcat(cmd->pool,
+				"Unable to get passphrase from exec of ", arg + 5, NULL);
+		}
+
+		passphrase = result;
+	} else {
+		passphrase = arg;
+	}
+
+	return ap_set_string_slot(cmd, cfg, passphrase);
+}
+
+/*
  * set the cookie domain in the server config and check it syntactically
  */
 static const char *oidc_set_cookie_domain(cmd_parms *cmd, void *ptr,
@@ -2931,7 +2970,7 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF,
 				"Specify an outgoing proxy for your network (<host>[:<port>]."),
 		AP_INIT_TAKE1(OIDCCryptoPassphrase,
-				oidc_set_string_slot,
+				oidc_set_passphrase_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, crypto_passphrase),
 				RSRC_CONF,
 				"Passphrase used for AES crypto on cookies and state."),
