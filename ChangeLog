@@ -1,6 +1,7 @@
 10/22/2019
 - hash define expression option to OIDCUnAuthAction so it compiles for Apache 2.2; fixes 1461634
 - bump to 2.4.5rc1
+- add exec support to OIDCCryptoPassphrase
  
 10/19/2020
 - delete stale session cookies that aren't in the cache
