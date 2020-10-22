@@ -290,7 +290,9 @@ typedef struct oidc_dir_cfg {
 	char *cookie;
 	char *authn_header;
 	int unauth_action;
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	ap_expr_info_t *unauth_expression;
+#endif
 	int unautz_action;
 	apr_array_header_t *pass_cookies;
 	apr_array_header_t *strip_cookies;
@@ -938,9 +940,10 @@ static const char * oidc_set_pass_claims_as(cmd_parms *cmd, void *m,
 static const char * oidc_set_unauth_action(cmd_parms *cmd, void *m,
 		const char *arg1, const char *arg2) {
 	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg *) m;
-	const char *expr_err = NULL;
 	const char *rv = oidc_parse_unauth_action(cmd->pool, arg1,
 			&dir_cfg->unauth_action);
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+	const char *expr_err = NULL;
 	if ((rv == NULL) && (arg2 != NULL)) {
 		dir_cfg->unauth_expression = ap_expr_parse_cmd(cmd, arg2,
 				AP_EXPR_FLAG_DONT_VARY & AP_EXPR_FLAG_RESTRICTED, &expr_err,
@@ -950,6 +953,7 @@ static const char * oidc_set_unauth_action(cmd_parms *cmd, void *m,
 					expr_err, NULL);
 		}
 	}
+#endif
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -1864,7 +1868,9 @@ void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->cookie_path = OIDC_CONFIG_STRING_UNSET;
 	c->authn_header = OIDC_CONFIG_STRING_UNSET;
 	c->unauth_action = OIDC_CONFIG_POS_INT_UNSET;
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	c->unauth_expression = NULL;
+#endif
 	c->unautz_action = OIDC_CONFIG_POS_INT_UNSET;
 	c->pass_cookies = NULL;
 	c->strip_cookies = NULL;
@@ -1996,11 +2002,12 @@ int oidc_dir_cfg_unauth_action(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 
-	int rc = 0;
-	const char *err_str = NULL;
 	if (dir_cfg->unauth_action == OIDC_CONFIG_POS_INT_UNSET)
 		return OIDC_DEFAULT_UNAUTH_ACTION;
 
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+	int rc = 0;
+	const char *err_str = NULL;
 	if (dir_cfg->unauth_expression == NULL)
 		return dir_cfg->unauth_action;
 
@@ -2012,12 +2019,19 @@ int oidc_dir_cfg_unauth_action(request_rec *r) {
 	}
 
 	return (rc > 0) ? dir_cfg->unauth_action : OIDC_DEFAULT_UNAUTH_ACTION;
+#else
+	return dir_cfg->unauth_action;
+#endif
 }
 
 apr_byte_t oidc_dir_cfg_unauth_expr_is_set(request_rec *r) {
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 	return (dir_cfg->unauth_expression != NULL) ? TRUE : FALSE;
+#else
+	return FALSE;
+#endif
 }
 
 int oidc_dir_cfg_unautz_action(request_rec *r) {
@@ -2062,9 +2076,11 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->unauth_action =
 			add->unauth_action != OIDC_CONFIG_POS_INT_UNSET ?
 					add->unauth_action : base->unauth_action;
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	c->unauth_expression =
 			add->unauth_expression != NULL ?
 					add->unauth_expression : base->unauth_expression;
+#endif
 	c->unautz_action =
 			add->unautz_action != OIDC_CONFIG_POS_INT_UNSET ?
 					add->unautz_action : base->unautz_action;
