@@ -1,4 +1,8 @@
-10/22/2019
+10/27/2020
+- config check on OIDCCryptoPassphrase in OAuth 2.0 RS setup with cache encryption enabled
+- bump to 2.4.5rc2
+
+10/22/2020
 - hash define expression option to OIDCUnAuthAction so it compiles for Apache 2.2; fixes 1461634
 - bump to 2.4.5rc1
 - add exec support to OIDCCryptoPassphrase

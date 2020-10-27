@@ -2298,6 +2298,9 @@ static int oidc_check_config_oauth(server_rec *s, oidc_cfg *c) {
 
 	}
 
+	if ((c->cache_encrypt == 1) && (c->crypto_passphrase == NULL))
+		return oidc_check_config_error(s, OIDCCryptoPassphrase);
+
 	return OK;
 }
 
