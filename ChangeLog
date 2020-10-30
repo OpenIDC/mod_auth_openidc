@@ -1,3 +1,7 @@
+10/30/2020
+- disable caching token introspection results by setting OIDCOAuthTokenIntrospectionInterval to -1; thanks @wadahiro
+- bump to 2.4.5rc3
+
 10/27/2020
 - config check on OIDCCryptoPassphrase in OAuth 2.0 RS setup with cache encryption enabled
 - bump to 2.4.5rc2

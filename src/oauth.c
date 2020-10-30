@@ -392,7 +392,7 @@ static apr_byte_t oidc_oauth_cache_access_token(request_rec *r, oidc_cfg *c,
 	/* no cache mode */
 	int token_introspection_interval = oidc_cfg_token_introspection_interval(r);
 	if (token_introspection_interval == -1) {
-		oidc_debug(r, "no caching introspection result");
+		oidc_debug(r, "not caching introspection result");
 		return TRUE;
 	}
 
