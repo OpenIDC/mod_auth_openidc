@@ -1917,7 +1917,7 @@ void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->pass_info_in_env_vars = OIDC_CONFIG_POS_INT_UNSET;
 	c->oauth_accept_token_in = OIDC_CONFIG_POS_INT_UNSET;
 	c->oauth_accept_token_options = apr_hash_make(pool);
-	c->oauth_token_introspect_interval = OIDC_CONFIG_POS_INT_UNSET;
+	c->oauth_token_introspect_interval = -2;
 	c->preserve_post = OIDC_CONFIG_POS_INT_UNSET;
 	c->pass_refresh_token = OIDC_CONFIG_POS_INT_UNSET;
 	c->path_auth_request_params = NULL;
@@ -2012,7 +2012,7 @@ char *oidc_cfg_dir_accept_token_in_option(request_rec *r, const char *key) {
 int oidc_cfg_token_introspection_interval(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
-	if (dir_cfg->oauth_token_introspect_interval == OIDC_CONFIG_POS_INT_UNSET)
+	if (dir_cfg->oauth_token_introspect_interval <= -2)
 		return OIDC_DEFAULT_TOKEN_INTROSPECTION_INTERVAL;
 	return dir_cfg->oauth_token_introspect_interval;
 }
@@ -2144,7 +2144,7 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->oauth_accept_token_options :
 					base->oauth_accept_token_options;
 	c->oauth_token_introspect_interval =
-			add->oauth_token_introspect_interval != OIDC_CONFIG_POS_INT_UNSET ?
+			add->oauth_token_introspect_interval >= -1 ?
 					add->oauth_token_introspect_interval :
 					base->oauth_token_introspect_interval;
 	c->preserve_post =

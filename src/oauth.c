@@ -389,6 +389,13 @@ static apr_byte_t oidc_oauth_parse_and_cache_token_expiry(request_rec *r,
 static apr_byte_t oidc_oauth_cache_access_token(request_rec *r, oidc_cfg *c,
 		apr_time_t cache_until, const char *access_token, json_t *json) {
 
+	/* no cache mode */
+	int token_introspection_interval = oidc_cfg_token_introspection_interval(r);
+	if (token_introspection_interval == -1) {
+		oidc_debug(r, "no caching introspection result");
+		return TRUE;
+	}
+
 	oidc_debug(r, "caching introspection result");
 
 	json_t *cache_entry = json_object();
@@ -411,6 +418,12 @@ static apr_byte_t oidc_oauth_get_cached_access_token(request_rec *r,
 	json_t *cache_entry = NULL;
 	char *s_cache_entry = NULL;
 
+	/* no cache mode */
+	int token_introspection_interval = oidc_cfg_token_introspection_interval(r);
+	if (token_introspection_interval == -1) {
+		return FALSE;
+	}
+
 	/* see if we've got the claims for this access_token cached already */
 	oidc_cache_get_access_token(r, access_token, &s_cache_entry);
 
@@ -426,7 +439,6 @@ static apr_byte_t oidc_oauth_get_cached_access_token(request_rec *r,
 	/* compare the timestamp against the freshness requirement */
 	json_t *v = json_object_get(cache_entry, OIDC_OAUTH_CACHE_KEY_TIMESTAMP);
 	apr_time_t now = apr_time_sec(apr_time_now());
-	int token_introspection_interval = oidc_cfg_token_introspection_interval(r);
 	if ((token_introspection_interval > 0)
 			&& (now > json_integer_value(v) + token_introspection_interval)) {
 
