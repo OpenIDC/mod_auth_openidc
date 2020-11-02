@@ -291,10 +291,17 @@ static apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section,
 		goto end;
 	}
 
+	if (reply->type != REDIS_REPLY_STRING) {
+		oidc_error(r, "redisCommand reply type is not string: %d", reply->type);
+		goto end;
+	}
+
 	/* do a sanity check on the returned value */
-	if (reply->len != strlen(reply->str)) {
-		oidc_error(r, "redisCommand reply->len != strlen(reply->str): '%s'",
-				reply->str);
+	if ((reply->len < 0) || (reply->str == NULL)
+			|| (reply->len != strlen(reply->str))) {
+		oidc_error(r,
+				"redisCommand reply->len (%d) != strlen(reply->str): '%s'",
+				(int )reply->len, reply->str);
 		goto end;
 	}
 

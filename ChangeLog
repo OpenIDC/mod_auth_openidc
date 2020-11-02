@@ -1,3 +1,7 @@
+11/2/2020
+- improve sanity checking on Redis reply
+- bump to 2.4.5rc4
+
 10/30/2020
 - disable caching token introspection results by setting OIDCOAuthTokenIntrospectionInterval to -1; thanks @wadahiro
 - bump to 2.4.5rc3
