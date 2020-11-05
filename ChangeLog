@@ -1,3 +1,7 @@
+11/5/2020
+- fix content processing for info and JWKs handler so mod_headers etc. works; closes #497
+- bump to 2.4.5rc5
+
 11/2/2020
 - improve sanity checking on Redis reply
 - bump to 2.4.5rc4

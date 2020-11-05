@@ -2693,7 +2693,7 @@ static apr_status_t oidc_filter_in_filter(ap_filter_t *f,
 void oidc_register_hooks(apr_pool_t *pool) {
 	ap_hook_post_config(oidc_post_config, NULL, NULL, APR_HOOK_LAST);
 	ap_hook_child_init(oidc_child_init, NULL, NULL, APR_HOOK_MIDDLE);
-	ap_hook_handler(oidc_content_handler, NULL, NULL, APR_HOOK_MIDDLE);
+	ap_hook_handler(oidc_content_handler, NULL, NULL, APR_HOOK_FIRST);
 	ap_hook_insert_filter(oidc_filter_in_insert_filter, NULL, NULL,
 			APR_HOOK_MIDDLE);
 	ap_register_input_filter(oidcFilterName, oidc_filter_in_filter, NULL,

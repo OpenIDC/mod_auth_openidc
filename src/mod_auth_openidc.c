@@ -935,7 +935,7 @@ static int oidc_authorization_request_set_cookie(request_rec *r, oidc_cfg *c,
 	oidc_util_set_cookie(r, cookieName, cookieValue, -1,
 			OIDC_COOKIE_SAMESITE_LAX(c));
 
-	return HTTP_OK;
+	return OK;
 }
 
 /*
@@ -2453,7 +2453,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	 * and cryptographically bind it to the browser
 	 */
 	int rc = oidc_authorization_request_set_cookie(r, c, state, proto_state);
-	if (rc != HTTP_OK) {
+	if (rc != OK) {
 		oidc_proto_state_destroy(proto_state);
 		return rc;
 	}
@@ -3754,9 +3754,6 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 		oidc_session_t *session) {
 
-	/* track if the session needs to be updated/saved into the cache */
-	apr_byte_t needs_save = FALSE;
-
 	if (oidc_proto_is_redirect_authorization_response(r, c)) {
 
 		/* this is an authorization response from the OP using the Basic Client profile or a Hybrid flow*/
@@ -3787,9 +3784,13 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 
 	} else if (oidc_util_request_has_parameter(r,
 			OIDC_REDIRECT_URI_REQUEST_JWKS)) {
-
-		/* handle JWKs request */
-		return oidc_handle_jwks(r, c);
+		/*
+		 * Will be handled in the content handler; avoid:
+		 * No authentication done but request not allowed without authentication
+		 * by setting r->user
+		 */
+		r->user = "";
+		return OK;
 
 	} else if (oidc_util_request_has_parameter(r,
 			OIDC_REDIRECT_URI_REQUEST_SESSION)) {
@@ -3821,12 +3822,13 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 		if (session->remote_user == NULL)
 			return HTTP_UNAUTHORIZED;
 
-		/* set r->user, set headers/env-vars, update expiry, update userinfo + AT */
-		int rc = oidc_handle_existing_session(r, c, session, &needs_save);
-		if (rc != OK)
-			return rc;
-
-		return oidc_handle_info_request(r, c, session, needs_save);
+		/*
+		 * Will be handled in the content handler; avoid:
+		 * No authentication done but request not allowed without authentication
+		 * by setting r->user
+		 */
+		r->user = "";
+		return OK;
 
 	} else if ((r->args == NULL) || (apr_strnatcmp(r->args, "") == 0)) {
 
@@ -4268,12 +4270,39 @@ apr_byte_t oidc_enabled(request_rec *r) {
  * handle content generating requests
  */
 int oidc_content_handler(request_rec *r) {
-	if (oidc_enabled(r) == FALSE)
-		return DECLINED;
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
-	return oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c)) ?
-			OK : DECLINED;
+	int rc = DECLINED;
+	/* track if the session needs to be updated/saved into the cache */
+	apr_byte_t needs_save = FALSE;
+	oidc_session_t *session = NULL;
+
+	if (oidc_enabled(r)
+			&& oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c))) {
+
+		if (oidc_util_request_has_parameter(r,
+				OIDC_REDIRECT_URI_REQUEST_INFO)) {
+
+			oidc_session_load(r, &session);
+
+			rc = oidc_handle_existing_session(r, c, session, &needs_save);
+			if (rc == OK)
+				/* handle request for session info */
+				rc = oidc_handle_info_request(r, c, session, needs_save);
+
+			/* free resources allocated for the session */
+			oidc_session_free(r, session);
+
+		} else if (oidc_util_request_has_parameter(r,
+				OIDC_REDIRECT_URI_REQUEST_JWKS)) {
+
+			/* handle JWKs request */
+			rc = oidc_handle_jwks(r, c);
+		}
+
+	}
+
+	return rc;
 }
 
 extern const command_rec oidc_config_cmds[];
