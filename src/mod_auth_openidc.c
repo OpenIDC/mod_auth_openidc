@@ -36,15 +36,6 @@
 #include <http_log.h>
 #include <http_request.h>
 
-// override ap_config_auto "" but to allow that we first have to undefine
-#undef PACKAGE_BUGREPORT
-#undef PACKAGE_NAME
-#undef PACKAGE_STRING
-#undef PACKAGE_TARNAME
-#undef PACKAGE_VERSION
-
-#include "config.h"
-
 #include <apr_strings.h>
 
 OAUTH2_APACHE_LOG(auth_openidc)

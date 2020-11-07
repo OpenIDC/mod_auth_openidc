@@ -1,2 +1,7 @@
+11/07/2020
+- remove config.h
+- depend on liboauth2 >= 1.4.0
+- bump to 3.0.0-dev
+
 09/12/2019
 - initial creation of branch 3.x
