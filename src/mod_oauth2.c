@@ -35,15 +35,6 @@
 #include <http_log.h>
 #include <http_request.h>
 
-// override ap_config_auto "" but to allow that we first have to undefine
-#undef PACKAGE_BUGREPORT
-#undef PACKAGE_NAME
-#undef PACKAGE_STRING
-#undef PACKAGE_TARNAME
-#undef PACKAGE_VERSION
-
-#include "config.h"
-
 #include <apr_strings.h>
 
 OAUTH2_APACHE_LOG(oauth2)
@@ -121,8 +112,8 @@ static int oauth2_request_handler(oauth2_cfg_source_token_t *cfg,
 		goto end;
 	}
 
-	if (oauth2_token_verify(ctx->log, verify, source_token, &json_token) ==
-	    false) {
+	if (oauth2_token_verify(ctx->log, ctx->request, verify, source_token,
+				&json_token) == false) {
 		rv = oauth2_apache_return_www_authenticate(
 		    cfg, ctx, HTTP_UNAUTHORIZED, OAUTH2_ERROR_INVALID_TOKEN,
 		    "Token could not be verified.");
@@ -300,7 +291,7 @@ static authz_status oauth2_authz_checker_claim(request_rec *r,
 static const authz_provider oauth2_authz_claim_provider = {
     &oauth2_authz_checker_claim, NULL};
 
-#define OAUTH2_REQUIRE_CLAIM "claim"
+#define OAUTH2_REQUIRE_OAUTH2_CLAIM "oauth2_claim"
 
 // clang-format off
 
@@ -312,7 +303,7 @@ static void oauth2_register_hooks(apr_pool_t *p)
 			    APR_HOOK_MIDDLE);
 	ap_hook_check_authn(oauth2_check_user_id_handler, NULL, NULL,
 			    APR_HOOK_MIDDLE, AP_AUTH_INTERNAL_PER_CONF);
-	ap_register_auth_provider(p, AUTHZ_PROVIDER_GROUP, OAUTH2_REQUIRE_CLAIM,
+	ap_register_auth_provider(p, AUTHZ_PROVIDER_GROUP, OAUTH2_REQUIRE_OAUTH2_CLAIM,
 				  "0", &oauth2_authz_claim_provider,
 				  AP_AUTH_INTERNAL_PER_CONF);
 	// TODO: register content handler for "special" stuff like returning the
