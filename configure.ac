@@ -1,5 +1,4 @@
 AC_INIT([mod_auth_openidc],[3.0.0-dev],[hans.zandbelt@zmartzone.eu])
-AC_CONFIG_HEADERS([src/config.h])
 
 AM_INIT_AUTOMAKE([foreign no-define subdir-objects])
 AC_CONFIG_MACRO_DIRS([m4])
