@@ -248,11 +248,7 @@ static const char *oauth2_cfg_set_cache_mod(cmd_parms *cmd, void *m,
 					    const char *options)
 {
 	const char *rv = NULL;
-	oauth2_cfg_dir_t *dir_cfg = NULL;
-	oauth2_apache_cfg_srv_t *srv_cfg = NULL;
-
-	dir_cfg = (oauth2_cfg_dir_t *)m;
-	srv_cfg =
+	oauth2_apache_cfg_srv_t *srv_cfg =
 	    ap_get_module_config(cmd->server->module_config, &oauth2_module);
 	rv = oauth2_cfg_set_cache(srv_cfg->log, type, options);
 	return rv;
