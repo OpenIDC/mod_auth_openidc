@@ -243,6 +243,21 @@ static const char *oauth2_cfg_set_target_pass(cmd_parms *cmd, void *m,
 	return rv;
 }
 
+static const char *oauth2_cfg_set_cache_mod(cmd_parms *cmd, void *m,
+					    const char *type,
+					    const char *options)
+{
+	const char *rv = NULL;
+	oauth2_cfg_dir_t *dir_cfg = NULL;
+	oauth2_apache_cfg_srv_t *srv_cfg = NULL;
+
+	dir_cfg = (oauth2_cfg_dir_t *)m;
+	srv_cfg =
+	    ap_get_module_config(cmd->server->module_config, &oauth2_module);
+	rv = oauth2_cfg_set_cache(srv_cfg->log, type, options);
+	return rv;
+}
+
 static authz_status
 oauth2_authz_checker(request_rec *r, const char *require_args,
 		     const void *parsed_require_args,
@@ -338,6 +353,11 @@ static const command_rec OAUTH2_APACHE_COMMANDS(oauth2)[] = {
 		"OAuth2TargetPass",
 		target_pass,
 		"Configures in which format claims are passed to the target application."),
+
+	OAUTH2_CFG_CMD_ARGS(12,
+		"OAuth2Cache",
+		cache_mod,
+		"Set cache backend and options."),
 
 	{ NULL }
 };

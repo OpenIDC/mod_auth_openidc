@@ -1,3 +1,6 @@
+11/10/2020
+- allow setting a cache with OAuth2Cache
+
 11/07/2020
 - change Require keyword from "claim" to "oauth2_claim" to avoid interference with mod_auth_openidc
 - depend on liboauth2 >= 1.4.0 with new oauth2_token_verify (dpop) interface
