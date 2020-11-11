@@ -1,5 +1,6 @@
 11/11/2020
 - support for (named) cache configuration(s)
+- support for (named) session configuration(s)
 
 11/07/2020
 - remove config.h

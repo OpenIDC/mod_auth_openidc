@@ -27,6 +27,7 @@
 #include <oauth2/oauth2.h>
 #include <oauth2/openidc.h>
 #include <oauth2/proto.h>
+#include <oauth2/session.h>
 #include <oauth2/util.h>
 
 #include <httpd.h>
@@ -123,6 +124,20 @@ static const char *openidc_cfg_set_cache_mod(cmd_parms *cmd, void *m,
 	return rv;
 }
 
+static const char *openidc_cfg_set_session_mod(cmd_parms *cmd, void *m,
+					       const char *type,
+					       const char *options)
+{
+	const char *rv = NULL;
+	oauth2_apache_cfg_srv_t *srv_cfg = ap_get_module_config(
+	    cmd->server->module_config, &auth_openidc_module);
+	oauth2_cfg_session_t *session_cfg =
+	    oauth2_cfg_session_init(srv_cfg->log);
+	rv = oauth2_cfg_session_set_options(srv_cfg->log, session_cfg, type,
+					    options);
+	return rv;
+}
+
 // clang-format off
 
 OAUTH2_APACHE_HANDLERS(auth_openidc)
@@ -141,6 +156,11 @@ static const command_rec OAUTH2_APACHE_COMMANDS(auth_openidc)[] = {
 		"OpenIDCCache",
 		cache_mod,
 		"Set cache backend and options."),
+
+	OPENIDC_CFG_CMD_ARGS(12,
+		"OpenIDCSession",
+		session_mod,
+		"Set session backend and options."),
 
 	AP_INIT_TAKE123(
 		"OpenIDCProviderResolver",
