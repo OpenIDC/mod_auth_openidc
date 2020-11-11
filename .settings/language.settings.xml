@@ -11,7 +11,7 @@
             			
             <provider-reference id="org.eclipse.cdt.managedbuilder.core.MBSLanguageSettingsProvider" ref="shared-provider"/>
             			
-            <provider copy-of="extension" id="org.eclipse.cdt.autotools.core.LibtoolGCCBuildCommandParser"/>
+            <provider class="org.eclipse.cdt.managedbuilder.language.settings.providers.GCCBuildCommandParser" id="org.eclipse.cdt.autotools.core.LibtoolGCCBuildCommandParser" keep-relative-paths="false" name="CDT Libtool GCC Build Output Parser" parameter="(libtool:\s+compile:\s+)?((g?cc)|([gc]\+\+)|(clang))" prefer-non-shared="true"/>
             			
             <provider class="org.eclipse.cdt.managedbuilder.language.settings.providers.GCCBuiltinSpecsDetector" console="false" env-hash="453082631270749664" id="org.eclipse.cdt.managedbuilder.core.GCCBuiltinSpecsDetector" keep-relative-paths="false" name="CDT GCC Built-in Compiler Settings" parameter="${COMMAND} ${FLAGS} -E -P -v -dD &quot;${INPUTS}&quot;" prefer-non-shared="true">
                 				

@@ -1,3 +1,6 @@
+11/11/2020
+- support for (named) cache configuration(s)
+
 11/07/2020
 - remove config.h
 - depend on liboauth2 >= 1.4.0

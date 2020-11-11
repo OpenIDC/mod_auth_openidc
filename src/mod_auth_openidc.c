@@ -112,6 +112,17 @@ static const char *openidc_cfg_set_target_pass(cmd_parms *cmd, void *m,
 	return rv;
 }
 
+static const char *openidc_cfg_set_cache_mod(cmd_parms *cmd, void *m,
+					     const char *type,
+					     const char *options)
+{
+	const char *rv = NULL;
+	oauth2_apache_cfg_srv_t *srv_cfg = ap_get_module_config(
+	    cmd->server->module_config, &auth_openidc_module);
+	rv = oauth2_cfg_set_cache(srv_cfg->log, type, options);
+	return rv;
+}
+
 // clang-format off
 
 OAUTH2_APACHE_HANDLERS(auth_openidc)
@@ -125,6 +136,11 @@ OAUTH2_APACHE_HANDLERS(auth_openidc)
 		desc)
 
 static const command_rec OAUTH2_APACHE_COMMANDS(auth_openidc)[] = {
+
+	OPENIDC_CFG_CMD_ARGS(12,
+		"OpenIDCCache",
+		cache_mod,
+		"Set cache backend and options."),
 
 	AP_INIT_TAKE123(
 		"OpenIDCProviderResolver",
