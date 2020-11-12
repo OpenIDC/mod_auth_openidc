@@ -138,6 +138,20 @@ static const char *openidc_cfg_set_session_mod(cmd_parms *cmd, void *m,
 	return rv;
 }
 
+static const char *openidc_cfg_set_client_mod(cmd_parms *cmd, void *m,
+					      const char *name,
+					      const char *options)
+{
+	const char *rv = NULL;
+	openidc_cfg_dir_t *dir_cfg = (openidc_cfg_dir_t *)m;
+	;
+	oauth2_apache_cfg_srv_t *srv_cfg = ap_get_module_config(
+	    cmd->server->module_config, &auth_openidc_module);
+	rv = oauth2_openidc_client_set_options(srv_cfg->log, dir_cfg->openidc,
+					       name, options);
+	return rv;
+}
+
 // clang-format off
 
 OAUTH2_APACHE_HANDLERS(auth_openidc)
@@ -168,6 +182,11 @@ static const command_rec OAUTH2_APACHE_COMMANDS(auth_openidc)[] = {
 		NULL,
 		RSRC_CONF | ACCESS_CONF | OR_AUTHCFG,
 		"Configures a resolver for OpenID Connect Provider configuration data."),
+
+	OPENIDC_CFG_CMD_ARGS(12,
+		"OpenIDCClient",
+		client_mod,
+		"Set client configuration."),
 
 	OPENIDC_CFG_CMD_ARGS(1,
 		"OpenIDCTargetPass",
