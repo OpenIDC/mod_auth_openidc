@@ -325,6 +325,17 @@ static void oauth2_register_hooks(apr_pool_t *p)
 	// ap_hook_handler(oauth2_content_handler, NULL, NULL, APR_HOOK_MIDDLE);
 }
 
+static const char *oauth2_cfg_set_passphrase_mod(cmd_parms *cmd, void *m,
+						  const char *passphrase)
+{
+	const char *rv = NULL;
+	oauth2_apache_cfg_srv_t *srv_cfg = NULL;
+	srv_cfg =
+	    ap_get_module_config(cmd->server->module_config, &oauth2_module);
+	rv = oauth2_crypto_passphrase_set(srv_cfg->log, passphrase);
+	return rv;
+}
+
 #define OAUTH2_CFG_CMD_ARGS(nargs, cmd, member, desc) \
 	AP_INIT_TAKE##nargs( \
 		cmd, \
@@ -334,6 +345,11 @@ static void oauth2_register_hooks(apr_pool_t *p)
 		desc)
 
 static const command_rec OAUTH2_APACHE_COMMANDS(oauth2)[] = {
+
+	OAUTH2_CFG_CMD_ARGS(1,
+		"OAuth2CryptoPassphrase",
+		passphrase_mod,
+		"Set crypto passphrase."),
 
 	OAUTH2_CFG_CMD_ARGS(23,
 		"OAuth2TokenVerify",
