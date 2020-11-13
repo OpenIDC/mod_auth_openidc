@@ -1,3 +1,6 @@
+11/13/2020
+- add OIDCCryptoPassphrase
+
 11/11/2020
 - support for (named) cache configuration(s)
 - support for (named) session configuration(s)

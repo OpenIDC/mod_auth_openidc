@@ -152,6 +152,16 @@ static const char *openidc_cfg_set_client_mod(cmd_parms *cmd, void *m,
 	return rv;
 }
 
+static const char *openidc_cfg_set_passphrase_mod(cmd_parms *cmd, void *m,
+						  const char *passphrase)
+{
+	const char *rv = NULL;
+	oauth2_apache_cfg_srv_t *srv_cfg = ap_get_module_config(
+	    cmd->server->module_config, &auth_openidc_module);
+	rv = oauth2_crypto_passphrase_set(srv_cfg->log, passphrase);
+	return rv;
+}
+
 // clang-format off
 
 OAUTH2_APACHE_HANDLERS(auth_openidc)
@@ -165,6 +175,11 @@ OAUTH2_APACHE_HANDLERS(auth_openidc)
 		desc)
 
 static const command_rec OAUTH2_APACHE_COMMANDS(auth_openidc)[] = {
+
+	OPENIDC_CFG_CMD_ARGS(1,
+		"OpenIDCCryptoPassphrase",
+		passphrase_mod,
+		"Set crypto passphrase."),
 
 	OPENIDC_CFG_CMD_ARGS(12,
 		"OpenIDCCache",
@@ -288,10 +303,6 @@ static int openidc_check_user_id_handler(request_rec *r)
 
 	cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
 	ctx = OAUTH2_APACHE_REQUEST_CTX(r, auth_openidc);
-
-	// TODO:
-	oauth2_cfg_openidc_passphrase_set(ctx->log, cfg->openidc,
-					  "password1234");
 
 	oauth2_debug(ctx->log,
 		     "incoming request: \"%s?%s\" ap_is_initial_req=%d",
