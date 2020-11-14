@@ -78,132 +78,52 @@ static void *openidc_cfg_dir_merge(apr_pool_t *pool, void *b, void *a)
 	return cfg;
 }
 
-static const char *
-openidc_cfg_set_openidc_provider_resolver(cmd_parms *cmd, void *m,
-					  const char *type, const char *value,
-					  const char *options)
-{
-	const char *rv = NULL;
-	openidc_cfg_dir_t *dir_cfg = NULL;
-	oauth2_apache_cfg_srv_t *srv_cfg = NULL;
+OAUTH2_APACHE_HANDLERS(auth_openidc)
 
-	dir_cfg = (openidc_cfg_dir_t *)m;
-	srv_cfg = ap_get_module_config(cmd->server->module_config,
-				       &auth_openidc_module);
-
-	rv = oauth2_cfg_openidc_provider_resolver_set_options(
-	    srv_cfg->log, dir_cfg->openidc, type, value, options);
-
-	return rv;
-}
-
-// TODO: MACRO-IZE across mod_oauth.c
-static const char *openidc_cfg_set_target_pass(cmd_parms *cmd, void *m,
-					       const char *options)
-{
-	const char *rv = NULL;
-	openidc_cfg_dir_t *dir_cfg = NULL;
-	oauth2_apache_cfg_srv_t *srv_cfg = NULL;
-
-	dir_cfg = (openidc_cfg_dir_t *)m;
-	srv_cfg = ap_get_module_config(cmd->server->module_config,
-				       &auth_openidc_module);
-	rv = oauth2_cfg_set_target_pass_options(srv_cfg->log,
-						dir_cfg->target_pass, options);
-	return rv;
-}
-
-static const char *openidc_cfg_set_cache_mod(cmd_parms *cmd, void *m,
-					     const char *type,
-					     const char *options)
-{
-	const char *rv = NULL;
-	oauth2_apache_cfg_srv_t *srv_cfg = ap_get_module_config(
-	    cmd->server->module_config, &auth_openidc_module);
-	rv = oauth2_cfg_set_cache(srv_cfg->log, type, options);
-	return rv;
-}
-
-static const char *openidc_cfg_set_session_mod(cmd_parms *cmd, void *m,
-					       const char *type,
-					       const char *options)
-{
-	const char *rv = NULL;
-	oauth2_apache_cfg_srv_t *srv_cfg = ap_get_module_config(
-	    cmd->server->module_config, &auth_openidc_module);
-	oauth2_cfg_session_t *session_cfg =
-	    oauth2_cfg_session_init(srv_cfg->log);
-	rv = oauth2_cfg_session_set_options(srv_cfg->log, session_cfg, type,
-					    options);
-	return rv;
-}
-
-static const char *openidc_cfg_set_client_mod(cmd_parms *cmd, void *m,
-					      const char *name,
-					      const char *options)
-{
-	const char *rv = NULL;
-	openidc_cfg_dir_t *dir_cfg = (openidc_cfg_dir_t *)m;
-	;
-	oauth2_apache_cfg_srv_t *srv_cfg = ap_get_module_config(
-	    cmd->server->module_config, &auth_openidc_module);
-	rv = oauth2_openidc_client_set_options(srv_cfg->log, dir_cfg->openidc,
-					       name, options);
-	return rv;
-}
-
-static const char *openidc_cfg_set_passphrase_mod(cmd_parms *cmd, void *m,
-						  const char *passphrase)
-{
-	const char *rv = NULL;
-	oauth2_apache_cfg_srv_t *srv_cfg = ap_get_module_config(
-	    cmd->server->module_config, &auth_openidc_module);
-	rv = oauth2_crypto_passphrase_set(srv_cfg->log, passphrase);
-	return rv;
-}
+OAUTH2_APACHE_CMD_ARGS1(auth_openidc, openidc_cfg_dir_t, passphrase,
+			oauth2_crypto_passphrase_set, NULL)
+OAUTH2_APACHE_CMD_ARGS2(auth_openidc, openidc_cfg_dir_t, cache,
+			oauth2_cfg_set_cache, NULL)
+OAUTH2_APACHE_CMD_ARGS2(auth_openidc, openidc_cfg_dir_t, session,
+			oauth2_cfg_session_set_options, NULL)
+OAUTH2_APACHE_CMD_ARGS3(auth_openidc, openidc_cfg_dir_t, provider_resolver,
+			oauth2_cfg_openidc_provider_resolver_set_options,
+			cfg->openidc)
+OAUTH2_APACHE_CMD_ARGS2(auth_openidc, openidc_cfg_dir_t, client,
+			oauth2_openidc_client_set_options, cfg->openidc)
+OAUTH2_APACHE_CMD_ARGS1(auth_openidc, openidc_cfg_dir_t, target_pass,
+			oauth2_cfg_set_target_pass_options, cfg->target_pass)
 
 // clang-format off
 
-OAUTH2_APACHE_HANDLERS(auth_openidc)
-
-#define OPENIDC_CFG_CMD_ARGS(nargs, cmd, member, desc) \
-	AP_INIT_TAKE##nargs( \
-		cmd, \
-		openidc_cfg_set_##member, \
-		NULL, \
-		RSRC_CONF | ACCESS_CONF | OR_AUTHCFG, \
-		desc)
-
 static const command_rec OAUTH2_APACHE_COMMANDS(auth_openidc)[] = {
 
-	OPENIDC_CFG_CMD_ARGS(1,
+	OAUTH2_APACHE_CMD_ARGS(auth_openidc, 1,
 		"OpenIDCCryptoPassphrase",
-		passphrase_mod,
+		passphrase,
 		"Set crypto passphrase."),
 
-	OPENIDC_CFG_CMD_ARGS(12,
+	OAUTH2_APACHE_CMD_ARGS(auth_openidc, 12,
 		"OpenIDCCache",
-		cache_mod,
+		cache,
 		"Set cache backend and options."),
 
-	OPENIDC_CFG_CMD_ARGS(12,
+	OAUTH2_APACHE_CMD_ARGS(auth_openidc, 12,
 		"OpenIDCSession",
-		session_mod,
+		session,
 		"Set session backend and options."),
 
-	AP_INIT_TAKE123(
+	OAUTH2_APACHE_CMD_ARGS(auth_openidc, 23,
 		"OpenIDCProviderResolver",
-		openidc_cfg_set_openidc_provider_resolver,
-		NULL,
-		RSRC_CONF | ACCESS_CONF | OR_AUTHCFG,
+		provider_resolver,
 		"Configures a resolver for OpenID Connect Provider configuration data."),
 
-	OPENIDC_CFG_CMD_ARGS(12,
+	OAUTH2_APACHE_CMD_ARGS(auth_openidc, 2,
 		"OpenIDCClient",
-		client_mod,
+		client,
 		"Set client configuration."),
 
-	OPENIDC_CFG_CMD_ARGS(1,
+	OAUTH2_APACHE_CMD_ARGS(auth_openidc, 1,
 		"OpenIDCTargetPass",
 		target_pass,
 		"Configures in which format claims are passed to the target application."),
