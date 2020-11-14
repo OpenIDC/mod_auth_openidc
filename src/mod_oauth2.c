@@ -192,68 +192,6 @@ static int oauth2_check_user_id_handler(request_rec *r)
 	return DECLINED;
 }
 
-// TODO: probably macro-ize this
-//       and rename oauth2_cfg_token_verify_add_options to
-//       oauth2_cfg_set_token_verify_
-static const char *oauth2_cfg_set_token_verify(cmd_parms *cmd, void *m,
-					       const char *type,
-					       const char *value,
-					       const char *options)
-{
-	const char *rv = NULL;
-	oauth2_cfg_dir_t *dir_cfg = NULL;
-	oauth2_apache_cfg_srv_t *srv_cfg = NULL;
-
-	dir_cfg = (oauth2_cfg_dir_t *)m;
-	srv_cfg =
-	    ap_get_module_config(cmd->server->module_config, &oauth2_module);
-	rv = oauth2_cfg_token_verify_add_options(srv_cfg->log, &dir_cfg->verify,
-						 type, value, options);
-	return rv;
-}
-
-static const char *oauth2_cfg_set_accept_token_in(cmd_parms *cmd, void *m,
-						  const char *type,
-						  const char *options)
-{
-	const char *rv = NULL;
-	oauth2_cfg_dir_t *dir_cfg = NULL;
-	oauth2_apache_cfg_srv_t *srv_cfg = NULL;
-
-	dir_cfg = (oauth2_cfg_dir_t *)m;
-	srv_cfg =
-	    ap_get_module_config(cmd->server->module_config, &oauth2_module);
-	rv = oauth2_cfg_source_token_set_accept_in(
-	    srv_cfg->log, dir_cfg->source_token, type, options);
-	return rv;
-}
-
-static const char *oauth2_cfg_set_target_pass(cmd_parms *cmd, void *m,
-					      const char *options)
-{
-	const char *rv = NULL;
-	oauth2_cfg_dir_t *dir_cfg = NULL;
-	oauth2_apache_cfg_srv_t *srv_cfg = NULL;
-
-	dir_cfg = (oauth2_cfg_dir_t *)m;
-	srv_cfg =
-	    ap_get_module_config(cmd->server->module_config, &oauth2_module);
-	rv = oauth2_cfg_set_target_pass_options(srv_cfg->log,
-						dir_cfg->target_pass, options);
-	return rv;
-}
-
-static const char *oauth2_cfg_set_cache_mod(cmd_parms *cmd, void *m,
-					    const char *type,
-					    const char *options)
-{
-	const char *rv = NULL;
-	oauth2_apache_cfg_srv_t *srv_cfg =
-	    ap_get_module_config(cmd->server->module_config, &oauth2_module);
-	rv = oauth2_cfg_set_cache(srv_cfg->log, type, options);
-	return rv;
-}
-
 static authz_status
 oauth2_authz_checker(request_rec *r, const char *require_args,
 		     const void *parsed_require_args,
@@ -304,8 +242,6 @@ static const authz_provider oauth2_authz_claim_provider = {
 
 #define OAUTH2_REQUIRE_OAUTH2_CLAIM "oauth2_claim"
 
-// clang-format off
-
 OAUTH2_APACHE_HANDLERS(oauth2)
 
 static void oauth2_register_hooks(apr_pool_t *p)
@@ -314,9 +250,9 @@ static void oauth2_register_hooks(apr_pool_t *p)
 			    APR_HOOK_MIDDLE);
 	ap_hook_check_authn(oauth2_check_user_id_handler, NULL, NULL,
 			    APR_HOOK_MIDDLE, AP_AUTH_INTERNAL_PER_CONF);
-	ap_register_auth_provider(p, AUTHZ_PROVIDER_GROUP, OAUTH2_REQUIRE_OAUTH2_CLAIM,
-				  "0", &oauth2_authz_claim_provider,
-				  AP_AUTH_INTERNAL_PER_CONF);
+	ap_register_auth_provider(
+	    p, AUTHZ_PROVIDER_GROUP, OAUTH2_REQUIRE_OAUTH2_CLAIM, "0",
+	    &oauth2_authz_claim_provider, AP_AUTH_INTERNAL_PER_CONF);
 	// TODO: register content handler for "special" stuff like returning the
 	// JWKs that
 	//       the peer may use to encrypt the token and the private key
@@ -325,50 +261,45 @@ static void oauth2_register_hooks(apr_pool_t *p)
 	// ap_hook_handler(oauth2_content_handler, NULL, NULL, APR_HOOK_MIDDLE);
 }
 
-static const char *oauth2_cfg_set_passphrase_mod(cmd_parms *cmd, void *m,
-						  const char *passphrase)
-{
-	const char *rv = NULL;
-	oauth2_apache_cfg_srv_t *srv_cfg = NULL;
-	srv_cfg =
-	    ap_get_module_config(cmd->server->module_config, &oauth2_module);
-	rv = oauth2_crypto_passphrase_set(srv_cfg->log, passphrase);
-	return rv;
-}
+OAUTH2_APACHE_CMD_ARGS1(oauth2, oauth2_cfg_dir_t, passphrase,
+			oauth2_crypto_passphrase_set, NULL)
+OAUTH2_APACHE_CMD_ARGS2(oauth2, oauth2_cfg_dir_t, cache, oauth2_cfg_set_cache,
+			NULL)
+OAUTH2_APACHE_CMD_ARGS3(oauth2, oauth2_cfg_dir_t, token_verify,
+			oauth2_cfg_token_verify_add_options, &cfg->verify)
+OAUTH2_APACHE_CMD_ARGS2(oauth2, oauth2_cfg_dir_t, accept_token_in,
+			oauth2_cfg_source_token_set_accept_in,
+			cfg->source_token)
+OAUTH2_APACHE_CMD_ARGS1(oauth2, oauth2_cfg_dir_t, target_pass,
+			oauth2_cfg_set_target_pass_options, cfg->target_pass)
 
-#define OAUTH2_CFG_CMD_ARGS(nargs, cmd, member, desc) \
-	AP_INIT_TAKE##nargs( \
-		cmd, \
-		oauth2_cfg_set_##member, \
-		NULL, \
-		RSRC_CONF | ACCESS_CONF | OR_AUTHCFG, \
-		desc)
+// clang-format off
 
 static const command_rec OAUTH2_APACHE_COMMANDS(oauth2)[] = {
 
-	OAUTH2_CFG_CMD_ARGS(1,
+	OAUTH2_APACHE_CMD_ARGS(oauth2, 1,
 		"OAuth2CryptoPassphrase",
-		passphrase_mod,
+		passphrase,
 		"Set crypto passphrase."),
 
-	OAUTH2_CFG_CMD_ARGS(23,
+	OAUTH2_APACHE_CMD_ARGS(oauth2, 23,
 		"OAuth2TokenVerify",
 		token_verify,
 		"Set token verification method and options."),
 
-	OAUTH2_CFG_CMD_ARGS(12,
+	OAUTH2_APACHE_CMD_ARGS(oauth2, 12,
 		"OAuth2AcceptTokenIn",
 		accept_token_in,
 		"Configures in which format source tokens can be presented."),
 
-	OAUTH2_CFG_CMD_ARGS(1,
+	OAUTH2_APACHE_CMD_ARGS(oauth2, 1,
 		"OAuth2TargetPass",
 		target_pass,
 		"Configures in which format claims are passed to the target application."),
 
-	OAUTH2_CFG_CMD_ARGS(12,
+	OAUTH2_APACHE_CMD_ARGS(oauth2, 12,
 		"OAuth2Cache",
-		cache_mod,
+		cache,
 		"Set cache backend and options."),
 
 	{ NULL }
