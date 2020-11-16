@@ -86,10 +86,10 @@ OAUTH2_APACHE_CMD_ARGS2(auth_openidc, openidc_cfg_dir_t, cache,
 			oauth2_cfg_set_cache, NULL)
 OAUTH2_APACHE_CMD_ARGS2(auth_openidc, openidc_cfg_dir_t, session,
 			oauth2_cfg_session_set_options, NULL)
-OAUTH2_APACHE_CMD_ARGS3(auth_openidc, openidc_cfg_dir_t, provider_resolver,
+OAUTH2_APACHE_CMD_ARGS3(auth_openidc, openidc_cfg_dir_t, provider,
 			oauth2_cfg_openidc_provider_resolver_set_options,
 			cfg->openidc)
-OAUTH2_APACHE_CMD_ARGS2(auth_openidc, openidc_cfg_dir_t, client,
+OAUTH2_APACHE_CMD_ARGS3(auth_openidc, openidc_cfg_dir_t, client,
 			oauth2_openidc_client_set_options, cfg->openidc)
 OAUTH2_APACHE_CMD_ARGS1(auth_openidc, openidc_cfg_dir_t, target_pass,
 			oauth2_cfg_set_target_pass_options, cfg->target_pass)
@@ -114,11 +114,11 @@ static const command_rec OAUTH2_APACHE_COMMANDS(auth_openidc)[] = {
 		"Set session backend and options."),
 
 	OAUTH2_APACHE_CMD_ARGS(auth_openidc, 23,
-		"OpenIDCProviderResolver",
-		provider_resolver,
+		"OpenIDCProvider",
+		provider,
 		"Configures a resolver for OpenID Connect Provider configuration data."),
 
-	OAUTH2_APACHE_CMD_ARGS(auth_openidc, 2,
+	OAUTH2_APACHE_CMD_ARGS(auth_openidc, 23,
 		"OpenIDCClient",
 		client,
 		"Set client configuration."),
