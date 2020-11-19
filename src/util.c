@@ -1297,6 +1297,8 @@ static apr_byte_t oidc_util_check_json_error(request_rec *r, json_t *json) {
 	return FALSE;
 }
 
+#define OIDC_JSON_MAX_ERROR_STR 4096
+
 /*
  * parse a JSON object
  */
@@ -1312,8 +1314,13 @@ apr_byte_t oidc_util_decode_json_object(request_rec *r, const char *str,
 	/* decode the JSON contents of the buffer */
 	if (*json == NULL) {
 		/* something went wrong */
-		oidc_error(r, "JSON parsing returned an error: %s (%s)",
-				json_error.text, str);
+		if (json_error_code(&json_error) == json_error_null_character) {
+			oidc_error(r, "JSON parsing returned an error: %s",
+					json_error.text);
+		} else {
+			oidc_error(r, "JSON parsing returned an error: %s (%s)",
+					json_error.text, apr_pstrndup(r->pool, str, OIDC_JSON_MAX_ERROR_STR));
+		}
 		return FALSE;
 	}
 
