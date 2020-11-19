@@ -1,3 +1,7 @@
+11/19/2020
+- ensure that "sub" is returned from the userinfo endpoint following https://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse
+  prevents potential ID spoofing; thanks Christian Fries of Ruhr-University Bochum
+
 11/5/2020
 - fix content processing for info and JWKs handler so mod_headers etc. works; closes #497
 - bump to 2.4.5rc5

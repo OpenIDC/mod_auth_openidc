@@ -2337,7 +2337,15 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 	oidc_debug(r, "id_token_sub=%s, user_info_sub=%s", id_token_sub,
 			user_info_sub);
 
-	if ((id_token_sub != NULL) && (user_info_sub != NULL)) {
+	if (user_info_sub == NULL) {
+		oidc_error(r,
+				"mandatory claim (\"%s\") was not returned from userinfo endpoint (https://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse)",
+				OIDC_CLAIM_SUB);
+		json_decref(claims);
+		return FALSE;
+	}
+
+	if (id_token_sub != NULL) {
 		if (apr_strnatcmp(id_token_sub, user_info_sub) != 0) {
 			oidc_error(r,
 					"\"%s\" claim (\"%s\") returned from userinfo endpoint does not match the one in the id_token (\"%s\")",
