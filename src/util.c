@@ -1314,13 +1314,18 @@ apr_byte_t oidc_util_decode_json_object(request_rec *r, const char *str,
 	/* decode the JSON contents of the buffer */
 	if (*json == NULL) {
 		/* something went wrong */
+#if JANSSON_VERSION_HEX >= 0x020B00
 		if (json_error_code(&json_error) == json_error_null_character) {
 			oidc_error(r, "JSON parsing returned an error: %s",
 					json_error.text);
 		} else {
+#endif
 			oidc_error(r, "JSON parsing returned an error: %s (%s)",
-					json_error.text, apr_pstrndup(r->pool, str, OIDC_JSON_MAX_ERROR_STR));
+					json_error.text,
+					apr_pstrndup(r->pool, str, OIDC_JSON_MAX_ERROR_STR));
+#if JANSSON_VERSION_HEX >= 0x020B00
 		}
+#endif
 		return FALSE;
 	}
 
