@@ -1,5 +1,7 @@
 11/23/2020
 - release 2.4.5
+- make sure the module compiles with Apache 2.0 for passphrase exec:
+- bump to 2.4.6-dev
 
 11/19/2020
 - ensure that "sub" is returned from the userinfo endpoint following https://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse

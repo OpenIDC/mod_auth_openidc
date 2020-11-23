@@ -440,6 +440,7 @@ static const char *oidc_set_passphrase_slot(cmd_parms *cmd, void *struct_ptr,
 	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(
 			cmd->server->module_config, &auth_openidc_module);
 
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	/* Based on code from mod_session_crypto. */
 	if (arglen > 5 && strncmp(arg, "exec:", 5) == 0) {
 		if (apr_tokenize_to_argv(arg + 5, &argv, cmd->temp_pool) != APR_SUCCESS) {
@@ -461,8 +462,11 @@ static const char *oidc_set_passphrase_slot(cmd_parms *cmd, void *struct_ptr,
 
 		passphrase = result;
 	} else {
+#endif
 		passphrase = arg;
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	}
+#endif
 
 	return ap_set_string_slot(cmd, cfg, passphrase);
 }
