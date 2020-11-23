@@ -1,3 +1,6 @@
+11/23/2020
+- release 2.4.5
+
 11/19/2020
 - ensure that "sub" is returned from the userinfo endpoint following https://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse
   prevents potential ID spoofing; thanks Christian Fries of Ruhr-University Bochum
