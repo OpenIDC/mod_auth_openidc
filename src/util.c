@@ -729,9 +729,33 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST,
 			(ssl_validate_server != FALSE ? 2L : 0L));
 
-	if (c->ca_bundle_path != NULL) {
-		curl_easy_setopt(curl, CURLOPT_CAINFO, c->ca_bundle_path);
+	if (r->subprocess_env != NULL) {
+		const char *env_var_value = apr_table_get(r->subprocess_env,
+				"CURLOPT_SSL_OPTIONS");
+		if (env_var_value != NULL) {
+			oidc_debug(r, "cookie append environment variable %s=%s found",
+					"CURLOPT_SSL_OPTIONS", env_var_value);
+			if (strstr(env_var_value, "CURLSSLOPT_NO_REVOKE"))
+				curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS,
+						CURLSSLOPT_NO_REVOKE);
+			if (strstr(env_var_value, "CURLSSLOPT_ALLOW_BEAST"))
+				curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS,
+						CURLSSLOPT_ALLOW_BEAST);
+			if (strstr(env_var_value, "CURLSSLOPT_NO_PARTIALCHAIN"))
+				curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS,
+						CURLSSLOPT_NO_PARTIALCHAIN);
+			if (strstr(env_var_value, "CURLSSLOPT_REVOKE_BEST_EFFORT"))
+				curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS,
+						CURLSSLOPT_REVOKE_BEST_EFFORT);
+			if (strstr(env_var_value, "CURLSSLOPT_NATIVE_CA"))
+				curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS,
+						CURLSSLOPT_NATIVE_CA);
+		}
 	}
+
+	if (c->ca_bundle_path != NULL)
+		curl_easy_setopt(curl, CURLOPT_CAINFO, c->ca_bundle_path);
+
 #ifdef WIN32
 	else {
 		DWORD buflen;

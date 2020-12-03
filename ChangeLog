@@ -1,6 +1,9 @@
+12/03/2020
+- add environment variable to control libcURL CURLOPT_SSL_OPTIONS behaviors
+
 11/23/2020
 - release 2.4.5
-- make sure the module compiles with Apache 2.0 for passphrase exec:
+- make sure the module compiles with Apache 2.2 for passphrase exec:
 - bump to 2.4.6-dev
 
 11/19/2020
