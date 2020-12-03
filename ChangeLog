@@ -1,5 +1,6 @@
 12/03/2020
 - add environment variable to control libcURL CURLOPT_SSL_OPTIONS behaviors
+  e.g.: SetEnvIfExpr true CURLOPT_SSL_OPTIONS=CURLSSLOPT_NO_REVOKE
 
 11/23/2020
 - release 2.4.5
