@@ -735,22 +735,45 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 		if (env_var_value != NULL) {
 			oidc_debug(r, "cookie append environment variable %s=%s found",
 					"CURLOPT_SSL_OPTIONS", env_var_value);
-			if (strstr(env_var_value, "CURLSSLOPT_NO_REVOKE"))
-				curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS,
-						CURLSSLOPT_NO_REVOKE);
-			if (strstr(env_var_value, "CURLSSLOPT_ALLOW_BEAST"))
+			if (strstr(env_var_value, "CURLSSLOPT_ALLOW_BEAST")) {
+				oidc_debug(r,
+						"curl_easy_setopt CURLOPT_SSL_OPTIONS CURLSSLOPT_ALLOW_BEAST");
 				curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS,
 						CURLSSLOPT_ALLOW_BEAST);
-			if (strstr(env_var_value, "CURLSSLOPT_NO_PARTIALCHAIN"))
+			}
+#if LIBCURL_VERSION_NUM >= 0x072c00
+			if (strstr(env_var_value, "CURLSSLOPT_NO_REVOKE")) {
+				oidc_debug(r,
+						"curl_easy_setopt CURLOPT_SSL_OPTIONS CURLSSLOPT_NO_REVOKE");
+				curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS,
+						CURLSSLOPT_NO_REVOKE);
+			}
+#endif
+#if LIBCURL_VERSION_NUM >= 0x074400
+			if (strstr(env_var_value, "CURLSSLOPT_NO_PARTIALCHAIN")) {
+				oidc_debug(r,
+						"curl_easy_setopt CURLOPT_SSL_OPTIONS CURLSSLOPT_NO_PARTIALCHAIN");
 				curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS,
 						CURLSSLOPT_NO_PARTIALCHAIN);
-			if (strstr(env_var_value, "CURLSSLOPT_REVOKE_BEST_EFFORT"))
+			}
+#endif
+#if LIBCURL_VERSION_NUM >= 0x074600
+			if (strstr(env_var_value, "CURLSSLOPT_REVOKE_BEST_EFFORT")) {
+				oidc_debug(r,
+						"curl_easy_setopt CURLOPT_SSL_OPTIONS CURLSSLOPT_REVOKE_BEST_EFFORT");
 				curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS,
 						CURLSSLOPT_REVOKE_BEST_EFFORT);
-			if (strstr(env_var_value, "CURLSSLOPT_NATIVE_CA"))
+			}
+#endif
+#if LIBCURL_VERSION_NUM >= 0x074700
+			if (strstr(env_var_value, "CURLSSLOPT_NATIVE_CA")) {
+				oidc_debug(r,
+						"curl_easy_setopt CURLOPT_SSL_OPTIONS CURLSSLOPT_NATIVE_CA");
 				curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS,
 						CURLSSLOPT_NATIVE_CA);
+			}
 		}
+#endif
 	}
 
 	if (c->ca_bundle_path != NULL)
