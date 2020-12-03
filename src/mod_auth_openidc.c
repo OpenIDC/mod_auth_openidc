@@ -91,6 +91,8 @@ OAUTH2_APACHE_CMD_ARGS3(auth_openidc, openidc_cfg_dir_t, provider,
 			cfg->openidc)
 OAUTH2_APACHE_CMD_ARGS3(auth_openidc, openidc_cfg_dir_t, client,
 			oauth2_openidc_client_set_options, cfg->openidc)
+OAUTH2_APACHE_CMD_ARGS1(auth_openidc, openidc_cfg_dir_t, config,
+			oauth2_cfg_openidc_set_options, cfg->openidc)
 OAUTH2_APACHE_CMD_ARGS1(auth_openidc, openidc_cfg_dir_t, target_pass,
 			oauth2_cfg_set_target_pass_options, cfg->target_pass)
 
@@ -122,6 +124,11 @@ static const command_rec OAUTH2_APACHE_COMMANDS(auth_openidc)[] = {
 		"OpenIDCClient",
 		client,
 		"Set client configuration."),
+
+	OAUTH2_APACHE_CMD_ARGS(auth_openidc, 1,
+		"OpenIDCConfig",
+		config,
+		"Set OpenID Connect configuration."),
 
 	OAUTH2_APACHE_CMD_ARGS(auth_openidc, 1,
 		"OpenIDCTargetPass",
