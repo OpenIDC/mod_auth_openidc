@@ -772,8 +772,8 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 				curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS,
 						CURLSSLOPT_NATIVE_CA);
 			}
-		}
 #endif
+		}
 	}
 
 	if (c->ca_bundle_path != NULL)
