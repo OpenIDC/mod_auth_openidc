@@ -733,7 +733,7 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 		const char *env_var_value = apr_table_get(r->subprocess_env,
 				"CURLOPT_SSL_OPTIONS");
 		if (env_var_value != NULL) {
-			oidc_debug(r, "cookie append environment variable %s=%s found",
+			oidc_debug(r, "SSL options environment variable %s=%s found",
 					"CURLOPT_SSL_OPTIONS", env_var_value);
 			if (strstr(env_var_value, "CURLSSLOPT_ALLOW_BEAST")) {
 				oidc_debug(r,
