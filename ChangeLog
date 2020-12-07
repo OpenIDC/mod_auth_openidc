@@ -1,3 +1,6 @@
+12/07/2020
+- don't set SameSite=None on cookies when on plain http
+
 12/03/2020
 - add environment variable to control libcURL CURLOPT_SSL_OPTIONS behaviors
   e.g.: SetEnvIfExpr true CURLOPT_SSL_OPTIONS=CURLSSLOPT_NO_REVOKE

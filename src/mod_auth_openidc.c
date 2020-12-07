@@ -721,7 +721,7 @@ static int oidc_delete_oldest_state_cookies(request_rec *r,
 				"deleting oldest state cookie: %s (time until expiry %" APR_TIME_T_FMT " seconds)",
 				oldest->name, apr_time_sec(oldest->timestamp - apr_time_now()));
 		oidc_util_set_cookie(r, oldest->name, "", 0,
-				OIDC_COOKIE_EXT_SAME_SITE_NONE);
+				OIDC_COOKIE_EXT_SAME_SITE_NONE(r));
 		if (prev_oldest)
 			prev_oldest->next = oldest->next;
 		else
@@ -769,7 +769,7 @@ static int oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c,
 										oidc_proto_state_get_original_url(
 												proto_state));
 								oidc_util_set_cookie(r, cookieName, "", 0,
-										OIDC_COOKIE_EXT_SAME_SITE_NONE);
+										OIDC_COOKIE_EXT_SAME_SITE_NONE(r));
 							} else {
 								if (first == NULL) {
 									first = apr_pcalloc(r->pool,
@@ -791,7 +791,7 @@ static int oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c,
 									"state cookie could not be retrieved/decoded, deleting: %s",
 									cookieName);
 							oidc_util_set_cookie(r, cookieName, "", 0,
-									OIDC_COOKIE_EXT_SAME_SITE_NONE);
+									OIDC_COOKIE_EXT_SAME_SITE_NONE(r));
 						}
 					}
 				}
@@ -829,7 +829,7 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 	}
 
 	/* clear state cookie because we don't need it anymore */
-	oidc_util_set_cookie(r, cookieName, "", 0, OIDC_COOKIE_EXT_SAME_SITE_NONE);
+	oidc_util_set_cookie(r, cookieName, "", 0, OIDC_COOKIE_EXT_SAME_SITE_NONE(r));
 
 	*proto_state = oidc_proto_state_from_cookie(r, c, cookieValue);
 	if (*proto_state == NULL)
@@ -933,7 +933,7 @@ static int oidc_authorization_request_set_cookie(request_rec *r, oidc_cfg *c,
 
 	/* set it as a cookie */
 	oidc_util_set_cookie(r, cookieName, cookieValue, -1,
-			OIDC_COOKIE_SAMESITE_LAX(c));
+			OIDC_COOKIE_SAMESITE_LAX(c, r));
 
 	return OK;
 }
@@ -2280,7 +2280,7 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 
 		/* set CSRF cookie */
 		oidc_util_set_cookie(r, OIDC_CSRF_NAME, csrf, -1,
-				OIDC_COOKIE_SAMESITE_STRICT(cfg));
+				OIDC_COOKIE_SAMESITE_STRICT(cfg, r));
 
 		/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
 		if (oidc_post_preserve_javascript(r, url, NULL, NULL) == TRUE)
@@ -2373,7 +2373,7 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 	s = apr_psprintf(r->pool, "%s</form>\n", s);
 
 	oidc_util_set_cookie(r, OIDC_CSRF_NAME, csrf, -1,
-			OIDC_COOKIE_SAMESITE_STRICT(cfg));
+			OIDC_COOKIE_SAMESITE_STRICT(cfg, r));
 
 	char *javascript = NULL, *javascript_method = NULL;
 	char *html_head =
@@ -2595,7 +2595,7 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 
 		/* clean CSRF cookie */
 		oidc_util_set_cookie(r, OIDC_CSRF_NAME, "", 0,
-				OIDC_COOKIE_EXT_SAME_SITE_NONE);
+				OIDC_COOKIE_EXT_SAME_SITE_NONE(r));
 
 		/* compare CSRF cookie value with query parameter value */
 		if ((csrf_query == NULL)

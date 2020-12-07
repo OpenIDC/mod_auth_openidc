@@ -1006,6 +1006,10 @@ const char *oidc_util_set_cookie_append_value(request_rec *r, oidc_cfg *c) {
 	return env_var_value;
 }
 
+apr_byte_t oidc_util_request_is_secure(request_rec *r) {
+	return (apr_strnatcasecmp("https", oidc_get_current_url_scheme(r)) == 0);
+}
+
 /*
  * set a cookie in the HTTP response headers
  */
@@ -1043,7 +1047,7 @@ void oidc_util_set_cookie(request_rec *r, const char *cookieName,
 		headerString = apr_psprintf(r->pool, "%s; %s=%s", headerString,
 				OIDC_COOKIE_FLAG_DOMAIN, c->cookie_domain);
 
-	if (apr_strnatcasecmp("https", oidc_get_current_url_scheme(r)) == 0)
+	if (oidc_util_request_is_secure(r))
 		headerString = apr_psprintf(r->pool, "%s; %s", headerString,
 				OIDC_COOKIE_FLAG_SECURE);
 
