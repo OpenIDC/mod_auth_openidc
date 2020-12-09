@@ -253,6 +253,7 @@
 #define OIDCCacheDir                           "OIDCCacheDir"
 #define OIDCCacheFileCleanInterval             "OIDCCacheFileCleanInterval"
 #define OIDCRedisCachePassword                 "OIDCRedisCachePassword"
+#define OIDCRedisCacheDatabase                 "OIDCRedisCacheDatabase"
 #define OIDCHTMLErrorTemplate                  "OIDCHTMLErrorTemplate"
 #define OIDCDiscoverURL                        "OIDCDiscoverURL"
 #define OIDCPassCookies                        "OIDCPassCookies"
@@ -1348,6 +1349,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 #ifdef USE_LIBHIREDIS
 	c->cache_redis_server = NULL;
 	c->cache_redis_password = NULL;
+	c->cache_redis_database = -1;
 #endif
 
 	c->metadata_dir = NULL;
@@ -1765,6 +1767,9 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->cache_redis_password =
 			add->cache_redis_password != NULL ?
 					add->cache_redis_password : base->cache_redis_password;
+	c->cache_redis_database =
+			add->cache_redis_database != -1 ?
+					add->cache_redis_database : base->cache_redis_database;
 #endif
 
 	c->metadata_dir =
@@ -3185,6 +3190,11 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, cache_redis_password),
 				RSRC_CONF,
 				"Password for authentication to the Redis servers."),
+		AP_INIT_TAKE1(OIDCRedisCacheDatabase,
+				oidc_set_int_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, cache_redis_database),
+				RSRC_CONF,
+				"Database for the Redis servers."),
 #endif
 		AP_INIT_TAKE1(OIDCHTMLErrorTemplate,
 				oidc_set_string_slot,

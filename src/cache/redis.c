@@ -71,6 +71,7 @@ typedef struct oidc_cache_cfg_redis_t {
 	char *host_str;
 	apr_port_t port;
 	char *passwd;
+	int database;
 	redisContext *ctx;
 } oidc_cache_cfg_redis_t;
 
@@ -81,6 +82,7 @@ static void *oidc_cache_redis_cfg_create(apr_pool_t *pool) {
 	context->mutex = oidc_cache_mutex_create(pool);
 	context->host_str = NULL;
 	context->passwd = NULL;
+	context->database = -1;
 	context->ctx = NULL;
 	return context;
 }
@@ -131,6 +133,9 @@ static int oidc_cache_redis_post_config(server_rec *s) {
 				cfg->cache_redis_password);
 	}
 
+	if (cfg->cache_redis_database != -1)
+		context->database = cfg->cache_redis_database;
+
 	if (oidc_cache_mutex_post_config(s, context->mutex, "redis") == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
@@ -169,10 +174,22 @@ static apr_status_t oidc_cache_redis_free(oidc_cache_cfg_redis_t *context) {
 }
 
 /*
+ * free and nullify a reply object
+ */
+static void oidc_cache_redis_reply_free(redisReply **reply) {
+	if (*reply != NULL) {
+		freeReplyObject(*reply);
+		*reply = NULL;
+	}
+}
+
+/*
  * connect to Redis server
  */
 static apr_status_t oidc_cache_redis_connect(request_rec *r,
 		oidc_cache_cfg_redis_t *context) {
+
+	redisReply *reply = NULL;
 
 	if (context->ctx == NULL) {
 
@@ -189,20 +206,45 @@ static apr_status_t oidc_cache_redis_connect(request_rec *r,
 			/* log the connection */
 			oidc_debug(r, "successfully connected to Redis server (%s:%d)",
 					context->host_str, context->port);
+
+			/* see if we need to authenticate to the Redis server */
+			if (context->passwd != NULL) {
+				reply = redisCommand(context->ctx, "AUTH %s", context->passwd);
+				if ((reply == NULL) || (reply->type == REDIS_REPLY_ERROR))
+					oidc_error(r,
+							"Redis AUTH command (%s:%d) failed: '%s' [%s]",
+							context->host_str, context->port,
+							context->ctx->errstr, reply ? reply->str : "<n/a>");
+				else
+					oidc_debug(r,
+							"successfully authenticated to the Redis server: %s",
+							reply ? reply->str : "<n/a>");
+
+				/* free the auth answer */
+				oidc_cache_redis_reply_free(&reply);
+			}
+
+			/* see if we need to set the database */
+			if (context->database != -1) {
+				reply = redisCommand(context->ctx, "SELECT %d",
+						context->database);
+				if ((reply == NULL) || (reply->type == REDIS_REPLY_ERROR))
+					oidc_error(r,
+							"Redis SELECT command (%s:%d) failed: '%s' [%s]",
+							context->host_str, context->port,
+							context->ctx->errstr, reply ? reply->str : "<n/a>");
+				else
+					oidc_debug(r,
+							"successfully selected database %d on the Redis server: %s",
+							context->database, reply ? reply->str : "<n/a>");
+
+				/* free the database answer */
+				oidc_cache_redis_reply_free(&reply);
+			}
 		}
 	}
 
 	return (context->ctx != NULL) ? APR_SUCCESS : APR_EGENERAL;
-}
-
-/*
- * free and nullify a reply object
- */
-static void oidc_cache_redis_reply_free(redisReply **reply) {
-	if (*reply != NULL) {
-		freeReplyObject(*reply);
-		*reply = NULL;
-	}
 }
 
 #define OIDC_REDIS_MAX_TRIES 2
@@ -222,19 +264,6 @@ static redisReply* oidc_cache_redis_command(request_rec *r,
 		/* connect */
 		if (oidc_cache_redis_connect(r, context) != APR_SUCCESS)
 			break;
-
-		/* see if we need to authenticate to the Redis server */
-		if (context->passwd != NULL) {
-			reply = redisCommand(context->ctx, "AUTH %s", context->passwd);
-			if ((reply == NULL) || (reply->type == REDIS_REPLY_ERROR))
-				oidc_error(r,
-						"Redis AUTH command (attempt=%d to %s:%d) failed: '%s' [%s]",
-						i, context->host_str, context->port,
-						context->ctx->errstr, reply ? reply->str : "<n/a>");
-
-			/* free the auth answer */
-			oidc_cache_redis_reply_free(&reply);
-		}
 
 		/* execute the actual command */
 		reply = redisCommand(context->ctx, command);

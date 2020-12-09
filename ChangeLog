@@ -1,3 +1,7 @@
+12/09/2020
+- add Redis database selection option with OIDCRedisCacheDatabase; closes #423
+- optimize Redis AUTH execution once per connection
+
 12/07/2020
 - don't set SameSite=None on cookies when on plain http
 

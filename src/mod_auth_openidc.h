@@ -394,6 +394,7 @@ typedef struct oidc_cfg {
 	/* cache_type= redis: Redis host/port server to use */
 	char *cache_redis_server;
 	char *cache_redis_password;
+	int cache_redis_database;
 #endif
 	int cache_encrypt;
 
