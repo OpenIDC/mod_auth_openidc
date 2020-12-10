@@ -152,6 +152,8 @@
 #define OIDC_DEFAULT_PASS_APP_INFO_IN_HEADERS 1
 /* default for passing app info in environment variables */
 #define OIDC_DEFAULT_PASS_APP_INFO_IN_ENVVARS 1
+/* default for passing app info in base64 encoded format */
+#define OIDC_DEFAULT_PASS_APP_INFO_BASE64URL 0
 /* default value for the token introspection interval (0 = disabled, no expiry of claims) */
 #define OIDC_DEFAULT_TOKEN_INTROSPECTION_INTERVAL 0
 /* default action to take on an incoming unauthenticated request */
@@ -299,6 +301,7 @@ typedef struct oidc_dir_cfg {
 	apr_array_header_t *strip_cookies;
 	int pass_info_in_headers;
 	int pass_info_in_env_vars;
+	int pass_info_base64url;
 	int oauth_accept_token_in;
 	apr_hash_t *oauth_accept_token_options;
 	int oauth_token_introspect_interval;
@@ -971,10 +974,20 @@ static const char *oidc_set_remote_user_claim(cmd_parms *cmd, void *struct_ptr,
  * define how to pass claims information to the application: in headers and/or environment variables
  */
 static const char * oidc_set_pass_claims_as(cmd_parms *cmd, void *m,
-		const char *arg) {
+		const char *arg1, const char *arg2) {
 	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg *) m;
-	const char *rv = oidc_parse_set_claims_as(cmd->pool, arg,
+	const char *rv = oidc_parse_set_claims_as(cmd->pool, arg1,
 			&dir_cfg->pass_info_in_headers, &dir_cfg->pass_info_in_env_vars);
+	if (rv == NULL) {
+		if (arg2 != NULL) {
+			if (apr_strnatcmp(arg2, "base64url") == 0) {
+				dir_cfg->pass_info_base64url = 1;
+			} else {
+				rv = apr_pstrcat(cmd->temp_pool, "unknown encoding option \"",
+						arg2, "\", only \"base64url\" is supported", NULL);
+			}
+		}
+	}
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -1924,6 +1937,7 @@ void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->strip_cookies = NULL;
 	c->pass_info_in_headers = OIDC_CONFIG_POS_INT_UNSET;
 	c->pass_info_in_env_vars = OIDC_CONFIG_POS_INT_UNSET;
+	c->pass_info_base64url = OIDC_CONFIG_POS_INT_UNSET;
 	c->oauth_accept_token_in = OIDC_CONFIG_POS_INT_UNSET;
 	c->oauth_accept_token_options = apr_hash_make(pool);
 	c->oauth_token_introspect_interval = -2;
@@ -1993,6 +2007,14 @@ apr_byte_t oidc_cfg_dir_pass_info_in_envvars(request_rec *r) {
 	if (dir_cfg->pass_info_in_env_vars == OIDC_CONFIG_POS_INT_UNSET)
 		return OIDC_DEFAULT_PASS_APP_INFO_IN_ENVVARS;
 	return dir_cfg->pass_info_in_env_vars;
+}
+
+apr_byte_t oidc_cfg_dir_pass_info_base64url(request_rec *r) {
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+	if (dir_cfg->pass_info_base64url == OIDC_CONFIG_POS_INT_UNSET)
+		return OIDC_DEFAULT_PASS_APP_INFO_BASE64URL;
+	return dir_cfg->pass_info_base64url;
 }
 
 apr_byte_t oidc_cfg_dir_pass_refresh_token(request_rec *r) {
@@ -2145,6 +2167,9 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->pass_info_in_env_vars =
 			add->pass_info_in_env_vars != OIDC_CONFIG_POS_INT_UNSET ?
 					add->pass_info_in_env_vars : base->pass_info_in_env_vars;
+	c->pass_info_base64url =
+			add->pass_info_base64url != OIDC_CONFIG_POS_INT_UNSET ?
+					add->pass_info_base64url : base->pass_info_base64url;
 	c->oauth_accept_token_in =
 			add->oauth_accept_token_in != OIDC_CONFIG_POS_INT_UNSET ?
 					add->oauth_accept_token_in : base->oauth_accept_token_in;
@@ -3242,7 +3267,7 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_dir_cfg, unautz_action),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Sets the action taken when an unauthorized request occurs: must be one of \"401\" (default), \"403\" or \"auth\"."),
-		AP_INIT_TAKE1(OIDCPassClaimsAs,
+		AP_INIT_TAKE12(OIDCPassClaimsAs,
 				oidc_set_pass_claims_as, NULL,
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Specify how claims are passed to the application(s); must be one of \"none\", \"headers\", \"environment\" or \"both\" (default)."),

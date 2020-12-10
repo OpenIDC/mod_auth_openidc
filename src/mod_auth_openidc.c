@@ -1007,7 +1007,7 @@ static apr_byte_t oidc_set_app_claims(request_rec *r,
 	if (j_claims != NULL) {
 		oidc_util_set_app_infos(r, j_claims, oidc_cfg_claim_prefix(r),
 				cfg->claim_delimiter, oidc_cfg_dir_pass_info_in_headers(r),
-				oidc_cfg_dir_pass_info_in_envvars(r));
+				oidc_cfg_dir_pass_info_in_envvars(r), oidc_cfg_dir_pass_info_base64url(r));
 
 		/* release resources */
 		json_decref(j_claims);
@@ -1431,13 +1431,14 @@ static apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg *cfg,
 
 	apr_byte_t pass_headers = oidc_cfg_dir_pass_info_in_headers(r);
 	apr_byte_t pass_envvars = oidc_cfg_dir_pass_info_in_envvars(r);
+	apr_byte_t pass_base64url = oidc_cfg_dir_pass_info_base64url(r);
 
 	/* set the refresh_token in the app headers/variables, if enabled for this location/directory */
 	const char *refresh_token = oidc_session_get_refresh_token(r, session);
 	if ((oidc_cfg_dir_pass_refresh_token(r) != 0) && (refresh_token != NULL)) {
 		/* pass it to the app in a header or environment variable */
 		oidc_util_set_app_info(r, OIDC_APP_INFO_REFRESH_TOKEN, refresh_token,
-				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars);
+				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars, pass_base64url);
 	}
 
 	/* set the access_token in the app headers/variables */
@@ -1445,7 +1446,7 @@ static apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg *cfg,
 	if (access_token != NULL) {
 		/* pass it to the app in a header or environment variable */
 		oidc_util_set_app_info(r, OIDC_APP_INFO_ACCESS_TOKEN, access_token,
-				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars);
+				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars, pass_base64url);
 	}
 
 	/* set the expiry timestamp in the app headers/variables */
@@ -1455,7 +1456,7 @@ static apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg *cfg,
 		/* pass it to the app in a header or environment variable */
 		oidc_util_set_app_info(r, OIDC_APP_INFO_ACCESS_TOKEN_EXP,
 				access_token_expires,
-				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars);
+				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars, pass_base64url);
 	}
 
 	/*
@@ -1561,6 +1562,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	char *authn_header = oidc_cfg_dir_authn_header(r);
 	apr_byte_t pass_headers = oidc_cfg_dir_pass_info_in_headers(r);
 	apr_byte_t pass_envvars = oidc_cfg_dir_pass_info_in_envvars(r);
+	apr_byte_t pass_base64url  = oidc_cfg_dir_pass_info_base64url(r);
 
 	/* verify current cookie domain against issued cookie domain */
 	if (oidc_check_cookie_domain(r, cfg, session) == FALSE)
@@ -1612,7 +1614,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	if ((cfg->pass_userinfo_as & OIDC_PASS_USERINFO_AS_JSON_OBJECT)) {
 		/* pass the userinfo JSON object to the app in a header or environment variable */
 		oidc_util_set_app_info(r, OIDC_APP_INFO_USERINFO_JSON, s_claims,
-				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars);
+				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars, pass_base64url);
 	}
 
 	if ((cfg->pass_userinfo_as & OIDC_PASS_USERINFO_AS_JWT)) {
@@ -1624,7 +1626,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 				/* pass the compact serialized JWT to the app in a header or environment variable */
 				oidc_util_set_app_info(r, OIDC_APP_INFO_USERINFO_JWT,
 						s_userinfo_jwt,
-						OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars);
+						OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars, pass_base64url);
 			} else {
 				oidc_debug(r,
 						"configured to pass userinfo in a JWT, but no such JWT was found in the session (probably no such JWT was returned from the userinfo endpoint)");
@@ -1644,7 +1646,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_PAYLOAD)) {
 		/* pass the id_token JSON object to the app in a header or environment variable */
 		oidc_util_set_app_info(r, OIDC_APP_INFO_ID_TOKEN_PAYLOAD, s_id_token,
-				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars);
+				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars, pass_base64url);
 	}
 
 	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_SERIALIZED)) {
@@ -1653,7 +1655,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 			const char *s_id_token = oidc_session_get_idtoken(r, session);
 			/* pass the compact serialized JWT to the app in a header or environment variable */
 			oidc_util_set_app_info(r, OIDC_APP_INFO_ID_TOKEN, s_id_token,
-					OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars);
+					OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars, pass_base64url);
 		} else {
 			oidc_error(r,
 					"session type \"client-cookie\" does not allow storing/passing the id_token; use \"" OIDCSessionType " server-cache\" for that");

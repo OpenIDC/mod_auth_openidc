@@ -1,3 +1,6 @@
+12/10/2020
+- add "base64url" option to OIDCPassClaimsAs primitive; closes #417
+
 12/09/2020
 - add Redis database selection option with OIDCRedisCacheDatabase; closes #423
 - optimize Redis AUTH execution once per connection

@@ -713,6 +713,7 @@ char *oidc_cfg_dir_cookie_path(request_rec *r);
 char *oidc_cfg_dir_authn_header(request_rec *r);
 apr_byte_t oidc_cfg_dir_pass_info_in_headers(request_rec *r);
 apr_byte_t oidc_cfg_dir_pass_info_in_envvars(request_rec *r);
+apr_byte_t oidc_cfg_dir_pass_info_base64url(request_rec *r);
 apr_byte_t oidc_cfg_dir_pass_refresh_token(request_rec *r);
 apr_byte_t oidc_cfg_dir_accept_token_in(request_rec *r);
 char *oidc_cfg_dir_accept_token_in_option(request_rec *r, const char *key);
@@ -770,8 +771,8 @@ apr_byte_t oidc_util_file_write(request_rec *r, const char *path, const char *da
 apr_byte_t oidc_util_issuer_match(const char *a, const char *b);
 int oidc_util_html_send_error(request_rec *r, const char *html_template, const char *error, const char *description, int status_code);
 apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack, const char *needle);
-void oidc_util_set_app_info(request_rec *r, const char *s_key, const char *s_value, const char *claim_prefix, apr_byte_t as_header, apr_byte_t as_env_var);
-void oidc_util_set_app_infos(request_rec *r, const json_t *j_attrs, const char *claim_prefix, const char *claim_delimiter, apr_byte_t as_header, apr_byte_t as_env_var);
+void oidc_util_set_app_info(request_rec *r, const char *s_key, const char *s_value, const char *claim_prefix, apr_byte_t as_header, apr_byte_t as_env_var, apr_byte_t base64url);
+void oidc_util_set_app_infos(request_rec *r, const json_t *j_attrs, const char *claim_prefix, const char *claim_delimiter, apr_byte_t as_header, apr_byte_t as_env_var, apr_byte_t base64url);
 apr_hash_t *oidc_util_spaced_string_to_hashtable(apr_pool_t *pool, const char *str);
 apr_byte_t oidc_util_spaced_string_equals(apr_pool_t *pool, const char *a, const char *b);
 apr_byte_t oidc_util_spaced_string_contains(apr_pool_t *pool, const char *str, const char *match);
