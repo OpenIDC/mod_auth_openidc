@@ -1151,7 +1151,7 @@ static const char *oidc_set_client_auth_bearer_token(cmd_parms *cmd,
 }
 
 /*
- * set the maximun number of parallel state cookies
+ * set the maximum number of parallel state cookies
  */
 static const char *oidc_set_max_number_of_state_cookies(cmd_parms *cmd,
 		void *struct_ptr, const char *arg1, const char *arg2) {
@@ -1164,7 +1164,7 @@ static const char *oidc_set_max_number_of_state_cookies(cmd_parms *cmd,
 }
 
 /*
- * return the maximun number of parallel state cookies
+ * return the maximum number of parallel state cookies
  */
 int oidc_cfg_max_number_of_state_cookies(oidc_cfg *cfg) {
 	if (cfg->max_number_of_state_cookies == OIDC_CONFIG_POS_INT_UNSET)
