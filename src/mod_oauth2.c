@@ -248,7 +248,8 @@ static void oauth2_register_hooks(apr_pool_t *p)
 {
 	ap_hook_post_config(OAUTH2_APACHE_POST_CONFIG(oauth2), NULL, NULL,
 			    APR_HOOK_MIDDLE);
-	ap_hook_check_authn(oauth2_check_user_id_handler, NULL, NULL,
+	static const char * const authzSucc[] = {"mod_auth_openidc.c", NULL};
+	ap_hook_check_authn(oauth2_check_user_id_handler, NULL, authzSucc,
 			    APR_HOOK_MIDDLE, AP_AUTH_INTERNAL_PER_CONF);
 	ap_register_auth_provider(
 	    p, AUTHZ_PROVIDER_GROUP, OAUTH2_REQUIRE_OAUTH2_CLAIM, "0",
