@@ -131,7 +131,7 @@ For details on configuring multiple providers see the [Wiki](https://github.com/
 See the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki) for configuration docs for other OpenID Connect Providers:
 - [GLUU Server](https://github.com/zmartzone/mod_auth_openidc/wiki/Gluu-Server)
 - [Keycloak](https://github.com/zmartzone/mod_auth_openidc/wiki/Keycloak)
-- [Azure AD](https://github.com/zmartzone/mod_auth_openidc/wiki/Azure-OAuth2.0-and-OpenID)
+- [Azure AD](https://github.com/zmartzone/mod_auth_openidc/wiki/Azure-Active-Directory-Authentication)
 - [Sign in with Apple](https://github.com/zmartzone/mod_auth_openidc/wiki/Sign-in-with-Apple)
 - [Curity Identity Server](https://github.com/zmartzone/mod_auth_openidc/wiki/Curity-Identity-Server)
 - [LemonLDAP::NG](https://github.com/zmartzone/mod_auth_openidc/wiki/LemonLDAP::NG)
