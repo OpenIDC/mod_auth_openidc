@@ -169,17 +169,22 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 	return apr_strnatcmp(c->oauth.introspection_endpoint_method,
 			OIDC_INTROSPECTION_METHOD_GET) == 0 ?
 					oidc_util_http_get(r, c->oauth.introspection_endpoint_url, params,
-							basic_auth, bearer_auth, c->oauth.ssl_validate_server, response,
-							c->http_timeout_long, c->outgoing_proxy,
+							basic_auth, bearer_auth, c->oauth.ssl_validate_server,
+							response, c->http_timeout_long, c->outgoing_proxy,
 							oidc_dir_cfg_pass_cookies(r),
-							oidc_util_get_full_path(r->pool, c->oauth.introspection_endpoint_tls_client_cert),
-							oidc_util_get_full_path(r->pool, c->oauth.introspection_endpoint_tls_client_key)) :
-							oidc_util_http_post_form(r, c->oauth.introspection_endpoint_url,
-									params, basic_auth, bearer_auth, c->oauth.ssl_validate_server,
-									response, c->http_timeout_long, c->outgoing_proxy,
-									oidc_dir_cfg_pass_cookies(r),
-									oidc_util_get_full_path(r->pool, c->oauth.introspection_endpoint_tls_client_cert),
-									oidc_util_get_full_path(r->pool, c->oauth.introspection_endpoint_tls_client_key));
+							oidc_util_get_full_path(r->pool,
+									c->oauth.introspection_endpoint_tls_client_cert),
+									oidc_util_get_full_path(r->pool,
+											c->oauth.introspection_endpoint_tls_client_key)) :
+											oidc_util_http_post_form(r, c->oauth.introspection_endpoint_url,
+													params, basic_auth, bearer_auth,
+													c->oauth.ssl_validate_server, response,
+													c->http_timeout_long, c->outgoing_proxy,
+													oidc_dir_cfg_pass_cookies(r),
+													oidc_util_get_full_path(r->pool,
+															c->oauth.introspection_endpoint_tls_client_cert),
+															oidc_util_get_full_path(r->pool,
+																	c->oauth.introspection_endpoint_tls_client_key));
 }
 
 /*
@@ -292,35 +297,6 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r,
 	oidc_debug(r, "bearer token: %s", *access_token);
 	return TRUE;
 }
-
-/*
- * copy over space separated scope value but do it in an array for authorization purposes
- */
-/*
-static void oidc_oauth_spaced_string_to_array(request_rec *r, json_t *src,
-		const char *src_key, json_t *dst, const char *dst_key) {
-	apr_hash_t *ht = NULL;
-	apr_hash_index_t *hi = NULL;
-	json_t *arr = NULL;
-
-	json_t *src_val = json_object_get(src, src_key);
-
-	if (src_val != NULL)
-		ht = oidc_util_spaced_string_to_hashtable(r->pool,
-				json_string_value(src_val));
-
-	if (ht != NULL) {
-		arr = json_array();
-		for (hi = apr_hash_first(NULL, ht); hi; hi = apr_hash_next(hi)) {
-			const char *k;
-			const char *v;
-			apr_hash_this(hi, (const void**) &k, NULL, (void**) &v);
-			json_array_append_new(arr, json_string(v));
-		}
-		json_object_set_new(dst, dst_key, arr);
-	}
-}
-*/
 
 /*
  * parse (custom/configurable) token expiry claim in introspection result
@@ -645,7 +621,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 	oidc_jwks_uri_t jwks_uri = { c->oauth.verify_jwks_uri,
 			c->provider.jwks_refresh_interval, c->oauth.ssl_validate_server };
 	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri,
-			oidc_util_merge_key_sets(r->pool, c->oauth.verify_public_keys,
+			oidc_util_merge_key_sets_hash(r->pool, c->oauth.verify_public_keys,
 					c->oauth.verify_shared_keys), NULL) == FALSE) {
 		oidc_error(r,
 				"JWT access token signature could not be validated, aborting");
@@ -811,7 +787,7 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c,
 
 	/* store the parsed token (cq. the claims from the response) in the request state so it can be accessed by the authz routines */
 	oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_CLAIMS,
-			(const char *) s_token);
+			(const char*) s_token);
 
 	/* set the request user */
 	if (oidc_oauth_set_request_user(r, c, token) == FALSE) {

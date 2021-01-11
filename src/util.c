@@ -72,7 +72,7 @@ int oidc_base64url_encode(request_rec *r, char **dst, const char *src,
 	}
 	unsigned int enc_len = apr_base64_encode_len(src_len);
 	char *enc = apr_palloc(r->pool, enc_len);
-	apr_base64_encode(enc, (const char *) src, src_len);
+	apr_base64_encode(enc, (const char*) src, src_len);
 	unsigned int i = 0;
 	while (enc[i] != '\0') {
 		if (enc[i] == '+')
@@ -170,8 +170,8 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret,
 	jwe->header.enc = apr_pstrdup(r->pool, CJOSE_HDR_ENC_A256GCM);
 
 	const char *cser = oidc_jwt_serialize(r->pool, jwt, &err);
-	if (oidc_jwt_encrypt(r->pool, jwe, jwk, cser, compact_encoded_jwt,
-			&err) == FALSE) {
+	if (oidc_jwt_encrypt(r->pool, jwe, jwk, cser, compact_encoded_jwt, &err)
+			== FALSE) {
 		oidc_error(r, "encrypting JWT failed: %s", oidc_jose_e2s(r->pool, err));
 		goto end;
 	}
@@ -211,7 +211,8 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret,
 	apr_hash_t *keys = apr_hash_make(r->pool);
 	apr_hash_set(keys, "", APR_HASH_KEY_STRING, jwk);
 
-	if (oidc_jwt_parse(r->pool, compact_encoded_jwt, &jwt, keys, &err) == FALSE) {
+	if (oidc_jwt_parse(r->pool, compact_encoded_jwt, &jwt, keys, &err)
+			== FALSE) {
 		oidc_error(r, "parsing JWT failed: %s", oidc_jose_e2s(r->pool, err));
 		goto end;
 	}
@@ -285,7 +286,7 @@ int oidc_strnenvcmp(const char *a, const char *b, int len) {
 /*
  * escape a string
  */
-char *oidc_util_escape_string(const request_rec *r, const char *str) {
+char* oidc_util_escape_string(const request_rec *r, const char *str) {
 	CURL *curl = curl_easy_init();
 	if (curl == NULL) {
 		oidc_error(r, "curl_easy_init() error");
@@ -305,14 +306,14 @@ char *oidc_util_escape_string(const request_rec *r, const char *str) {
 /*
  * escape a string
  */
-char *oidc_util_unescape_string(const request_rec *r, const char *str) {
+char* oidc_util_unescape_string(const request_rec *r, const char *str) {
 	CURL *curl = curl_easy_init();
 	if (curl == NULL) {
 		oidc_error(r, "curl_easy_init() error");
 		return NULL;
 	}
 	int counter = 0;
-	char *replaced = (char *) str;
+	char *replaced = (char*) str;
 	while (str[counter] != '\0') {
 		if (str[counter] == '+') {
 			replaced[counter] = ' ';
@@ -334,10 +335,10 @@ char *oidc_util_unescape_string(const request_rec *r, const char *str) {
 /*
  * HTML escape a string
  */
-char *oidc_util_html_escape(apr_pool_t *pool, const char *s) {
+char* oidc_util_html_escape(apr_pool_t *pool, const char *s) {
 	// TODO: this has performance/memory issues for large chunks of HTML
 	const char chars[6] = { '&', '\'', '\"', '>', '<', '\0' };
-	const char * const replace[] =
+	const char *const replace[] =
 	{ "&amp;", "&apos;", "&quot;", "&gt;", "&lt;", };
 	unsigned int i, j = 0, k, n = 0, len = strlen(chars);
 	unsigned int m = 0;
@@ -364,7 +365,7 @@ char *oidc_util_html_escape(apr_pool_t *pool, const char *s) {
 /*
  * get the URL scheme that is currently being accessed
  */
-static const char *oidc_get_current_url_scheme(const request_rec *r) {
+static const char* oidc_get_current_url_scheme(const request_rec *r) {
 	/* first see if there's a proxy/load-balancer in front of us */
 	const char *scheme_str = oidc_util_hdr_in_x_forwarded_proto_get(r);
 	/* if not we'll determine the scheme used to connect to this server */
@@ -372,7 +373,7 @@ static const char *oidc_get_current_url_scheme(const request_rec *r) {
 #ifdef APACHE2_0
 		scheme_str = (char *) ap_http_method(r);
 #else
-		scheme_str = (char *) ap_http_scheme(r);
+		scheme_str = (char*) ap_http_scheme(r);
 #endif
 	}
 	if ((scheme_str == NULL)
@@ -389,7 +390,7 @@ static const char *oidc_get_current_url_scheme(const request_rec *r) {
 /*
  * get the URL port that is currently being accessed
  */
-static const char *oidc_get_current_url_port(const request_rec *r,
+static const char* oidc_get_current_url_port(const request_rec *r,
 		const char *scheme_str) {
 
 	/*
@@ -449,7 +450,7 @@ static const char *oidc_get_current_url_port(const request_rec *r,
 /*
  * get the hostname part of the URL that is currently being accessed
  */
-const char *oidc_get_current_url_host(request_rec *r) {
+const char* oidc_get_current_url_host(request_rec *r) {
 	const char *host_str = oidc_util_hdr_in_x_forwarded_host_get(r);
 	if (host_str == NULL)
 		host_str = oidc_util_hdr_in_host_get(r);
@@ -468,7 +469,7 @@ const char *oidc_get_current_url_host(request_rec *r) {
 /*
  * get the base part of the current URL (scheme + host (+ port))
  */
-static const char *oidc_get_current_url_base(request_rec *r) {
+static const char* oidc_get_current_url_base(request_rec *r) {
 
 	const char *scheme_str = oidc_get_current_url_scheme(r);
 	const char *host_str = oidc_get_current_url_host(r);
@@ -484,7 +485,7 @@ static const char *oidc_get_current_url_base(request_rec *r) {
 /*
  * get the URL that is currently being accessed
  */
-char *oidc_get_current_url(request_rec *r) {
+char* oidc_get_current_url(request_rec *r) {
 	char *url = NULL, *path = NULL;
 	apr_uri_t uri;
 
@@ -515,7 +516,7 @@ char *oidc_get_current_url(request_rec *r) {
 /*
  * determine absolute redirect uri
  */
-const char *oidc_get_redirect_uri(request_rec *r, oidc_cfg *cfg) {
+const char* oidc_get_redirect_uri(request_rec *r, oidc_cfg *cfg) {
 
 	char *redirect_uri = cfg->redirect_uri;
 
@@ -534,7 +535,7 @@ const char *oidc_get_redirect_uri(request_rec *r, oidc_cfg *cfg) {
 /*
  * determine absolute redirect uri that is issuer specific
  */
-const char *oidc_get_redirect_uri_iss(request_rec *r, oidc_cfg *cfg,
+const char* oidc_get_redirect_uri_iss(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider) {
 	const char *redirect_uri = oidc_get_redirect_uri(r, cfg);
 	if (provider->issuer_specific_redirect_uri != 0) {
@@ -567,7 +568,7 @@ typedef struct oidc_curl_buffer {
  */
 size_t oidc_curl_write(void *contents, size_t size, size_t nmemb, void *userp) {
 	size_t realsize = size * nmemb;
-	oidc_curl_buffer *mem = (oidc_curl_buffer *) userp;
+	oidc_curl_buffer *mem = (oidc_curl_buffer*) userp;
 
 	/* check if we don't run over the maximum buffer/memory size for HTTP responses */
 	if (mem->size + realsize > OIDC_CURL_MAX_RESPONSE_SIZE) {
@@ -605,8 +606,8 @@ typedef struct oidc_http_encode_t {
 /*
  * add a url-form-encoded name/value pair
  */
-static int oidc_util_http_add_form_url_encoded_param(void* rec, const char* key,
-		const char* value) {
+static int oidc_util_http_add_form_url_encoded_param(void *rec, const char *key,
+		const char *value) {
 	oidc_http_encode_t *ctx = (oidc_http_encode_t*) rec;
 	oidc_debug(ctx->r, "processing: %s=%s", key, value);
 	const char *sep = ctx->encoded_params ? OIDC_STR_AMP : "";
@@ -620,7 +621,7 @@ static int oidc_util_http_add_form_url_encoded_param(void* rec, const char* key,
 /*
  * construct a URL with query parameters
  */
-char *oidc_util_http_query_encoded_url(request_rec *r, const char *url,
+char* oidc_util_http_query_encoded_url(request_rec *r, const char *url,
 		const apr_table_t *params) {
 	char *result = NULL;
 	if ((params != NULL) && (apr_table_elts(params)->nelts > 0)) {
@@ -644,7 +645,7 @@ char *oidc_util_http_query_encoded_url(request_rec *r, const char *url,
 /*
  * construct form-encoded POST data
  */
-char *oidc_util_http_form_encoded_data(request_rec *r,
+char* oidc_util_http_form_encoded_data(request_rec *r,
 		const apr_table_t *params) {
 	char *data = NULL;
 	if ((params != NULL) && (apr_table_elts(params)->nelts > 0)) {
@@ -707,7 +708,7 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 	curlBuffer.memory = NULL;
 	curlBuffer.size = 0;
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, oidc_curl_write);
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void * )&curlBuffer);
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void* )&curlBuffer);
 
 #ifndef LIBCURL_NO_CURLPROTO
 	curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS,
@@ -936,7 +937,7 @@ apr_byte_t oidc_util_http_post_json(request_rec *r, const char *url,
 /*
  * get the current path from the request in a normalized way
  */
-static char *oidc_util_get_path(request_rec *r) {
+static char* oidc_util_get_path(request_rec *r) {
 	size_t i;
 	char *p;
 	p = r->parsed_uri.path;
@@ -951,7 +952,7 @@ static char *oidc_util_get_path(request_rec *r) {
 /*
  * get the cookie path setting and check that it matches the request path; cook it up if it is not set
  */
-static char *oidc_util_get_cookie_path(request_rec *r) {
+static char* oidc_util_get_cookie_path(request_rec *r) {
 	char *rv = NULL, *requestPath = oidc_util_get_path(r);
 	char *cookie_path = oidc_cfg_dir_cookie_path(r);
 	if (cookie_path != NULL) {
@@ -979,7 +980,7 @@ static char *oidc_util_get_cookie_path(request_rec *r) {
 
 #define OIDC_SET_COOKIE_APPEND_ENV_VAR  "OIDC_SET_COOKIE_APPEND"
 
-const char *oidc_util_set_cookie_append_value(request_rec *r, oidc_cfg *c) {
+const char* oidc_util_set_cookie_append_value(request_rec *r, oidc_cfg *c) {
 	const char *env_var_value = NULL;
 
 	if (r->subprocess_env != NULL)
@@ -1019,7 +1020,7 @@ void oidc_util_set_cookie(request_rec *r, const char *cookieName,
 
 	/* construct the expire value */
 	if (expires != -1) {
-		expiresString = (char *) apr_pcalloc(r->pool, APR_RFC822_DATE_LEN);
+		expiresString = (char*) apr_pcalloc(r->pool, APR_RFC822_DATE_LEN);
 		if (apr_rfc822_date(expiresString, expires) != APR_SUCCESS) {
 			oidc_error(r, "could not set cookie expiry date");
 		}
@@ -1068,7 +1069,7 @@ void oidc_util_set_cookie(request_rec *r, const char *cookieName,
 /*
  * get a cookie from the HTTP request
  */
-char *oidc_util_get_cookie(request_rec *r, const char *cookieName) {
+char* oidc_util_get_cookie(request_rec *r, const char *cookieName) {
 	char *cookie, *tokenizerCtx, *rv = NULL;
 
 	/* get the Cookie value */
@@ -1113,7 +1114,7 @@ char *oidc_util_get_cookie(request_rec *r, const char *cookieName) {
 /*
  * get the name of the cookie that contains the number of chunks
  */
-static char *oidc_util_get_chunk_count_name(request_rec *r,
+static char* oidc_util_get_chunk_count_name(request_rec *r,
 		const char *cookieName) {
 	return apr_psprintf(r->pool, "%s%s%s", cookieName,
 			OIDC_COOKIE_CHUNKS_SEPARATOR, OIDC_COOKIE_CHUNKS_POSTFIX);
@@ -1124,7 +1125,7 @@ static char *oidc_util_get_chunk_count_name(request_rec *r,
  */
 static int oidc_util_get_chunked_count(request_rec *r, const char *cookieName) {
 	int chunkCount = 0;
-	char* chunkCountValue = oidc_util_get_cookie(r,
+	char *chunkCountValue = oidc_util_get_cookie(r,
 			oidc_util_get_chunk_count_name(r, cookieName));
 	if (chunkCountValue != NULL) {
 		char *endptr = NULL;
@@ -1138,7 +1139,7 @@ static int oidc_util_get_chunked_count(request_rec *r, const char *cookieName) {
 /*
  * get the name of a chunk
  */
-static char *oidc_util_get_chunk_cookie_name(request_rec *r,
+static char* oidc_util_get_chunk_cookie_name(request_rec *r,
 		const char *cookieName, int i) {
 	return apr_psprintf(r->pool, "%s%s%d", cookieName,
 			OIDC_COOKIE_CHUNKS_SEPARATOR, i);
@@ -1147,7 +1148,7 @@ static char *oidc_util_get_chunk_cookie_name(request_rec *r,
 /*
  * get a cookie value that is split over a number of chunked cookies
  */
-char *oidc_util_get_chunked_cookie(request_rec *r, const char *cookieName,
+char* oidc_util_get_chunked_cookie(request_rec *r, const char *cookieName,
 		int chunkSize) {
 	char *cookieValue = NULL;
 	char *chunkValue = NULL;
@@ -1235,7 +1236,7 @@ void oidc_util_set_chunked_cookie(request_rec *r, const char *cookieName,
  * http://tools.ietf.org/html/rfc2616#section-2.2) are replaced with
  * a dash ('-') character.
  */
-char *oidc_normalize_header_name(const request_rec *r, const char *str) {
+char* oidc_normalize_header_name(const request_rec *r, const char *str) {
 	/* token = 1*<any CHAR except CTLs or separators>
 	 * CTL = <any US-ASCII control character
 	 *          (octets 0 - 31) and DEL (127)>
@@ -1273,7 +1274,7 @@ apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url) {
 /*
  * see if the currently accessed path has a certain query parameter
  */
-apr_byte_t oidc_util_request_has_parameter(request_rec *r, const char* param) {
+apr_byte_t oidc_util_request_has_parameter(request_rec *r, const char *param) {
 	if (r->args == NULL)
 		return FALSE;
 	const char *option1 = apr_psprintf(r->pool, "%s=", param);
@@ -1386,7 +1387,7 @@ apr_byte_t oidc_util_decode_json_object(request_rec *r, const char *str,
 /*
  * encode a JSON object
  */
-char *oidc_util_encode_json_object(request_rec *r, json_t *json, size_t flags) {
+char* oidc_util_encode_json_object(request_rec *r, json_t *json, size_t flags) {
 	char *s = json_dumps(json, flags);
 	char *s_value = apr_pstrdup(r->pool, s);
 	free(s);
@@ -1481,7 +1482,7 @@ static char *html_error_template_contents = NULL;
  * get the full path to a file based on an (already) absolute filename or a filename
  * that is relative to the Apache root directory
  */
-char *oidc_util_get_full_path(apr_pool_t *pool, const char *abs_or_rel_filename) {
+char* oidc_util_get_full_path(apr_pool_t *pool, const char *abs_or_rel_filename) {
 	return (abs_or_rel_filename) ?
 			ap_server_root_relative(pool, abs_or_rel_filename) : NULL;
 }
@@ -1551,7 +1552,7 @@ static apr_byte_t oidc_util_read(request_rec *r, char **rbuf) {
 		return FALSE;
 	}
 
-	*rbuf = (char *) apr_palloc(r->pool, len + 1);
+	*rbuf = (char*) apr_palloc(r->pool, len + 1);
 	if (*rbuf == NULL) {
 		oidc_error(r, "could not allocate memory for %lu bytes of POST data.",
 				(unsigned long )len);
@@ -1601,7 +1602,7 @@ apr_byte_t oidc_util_read_form_encoded_params(request_rec *r,
 static void oidc_userdata_set_post_param(request_rec *r,
 		const char *post_param_name, const char *post_param_value) {
 	apr_table_t *userdata_post_params = NULL;
-	apr_pool_userdata_get((void **) &userdata_post_params,
+	apr_pool_userdata_get((void**) &userdata_post_params,
 			OIDC_USERDATA_POST_PARAMS_KEY, r->pool);
 	if (userdata_post_params == NULL)
 		userdata_post_params = apr_table_make(r->pool, 1);
@@ -1992,14 +1993,14 @@ void oidc_util_set_app_infos(request_rec *r, const json_t *j_attrs,
 					j_value->type, s_key);
 		}
 
-		iter = json_object_iter_next((json_t *) j_attrs, iter);
+		iter = json_object_iter_next((json_t*) j_attrs, iter);
 	}
 }
 
 /*
  * parse a space separated string in to a hash table
  */
-apr_hash_t *oidc_util_spaced_string_to_hashtable(apr_pool_t *pool,
+apr_hash_t* oidc_util_spaced_string_to_hashtable(apr_pool_t *pool,
 		const char *str) {
 	char *val;
 	const char *data = apr_pstrdup(pool, str);
@@ -2133,8 +2134,8 @@ void oidc_util_table_add_query_encoded_params(apr_pool_t *pool,
 		const char *p = params;
 		while (*p && (val = ap_getword(pool, &p, OIDC_CHAR_AMP))) {
 			key = ap_getword(pool, &val, OIDC_CHAR_EQUAL);
-			ap_unescape_url((char *) key);
-			ap_unescape_url((char *) val);
+			ap_unescape_url((char*) key);
+			ap_unescape_url((char*) val);
 			apr_table_add(table, key, val);
 		}
 	}
@@ -2153,13 +2154,13 @@ apr_byte_t oidc_util_create_symmetric_key(request_rec *r,
 	if ((client_secret != NULL) && (strlen(client_secret) > 0)) {
 
 		if (hash_algo == NULL) {
-			key = (unsigned char *) client_secret;
+			key = (unsigned char*) client_secret;
 			key_len = strlen(client_secret);
 		} else {
 			/* hash the client_secret first, this is OpenID Connect specific */
 			oidc_jose_hash_bytes(r->pool, hash_algo,
-					(const unsigned char *) client_secret,
-					strlen(client_secret), &key, &key_len, &err);
+					(const unsigned char*) client_secret, strlen(client_secret),
+					&key, &key_len, &err);
 		}
 
 		if ((key != NULL) && (key_len > 0)) {
@@ -2184,10 +2185,16 @@ apr_byte_t oidc_util_create_symmetric_key(request_rec *r,
 /*
  * merge provided keys and client secret in to a single hashtable
  */
-apr_hash_t * oidc_util_merge_symmetric_key(apr_pool_t *pool, apr_hash_t *keys,
-		oidc_jwk_t *jwk) {
-	apr_hash_t *result =
-			(keys != NULL) ? apr_hash_copy(pool, keys) : apr_hash_make(pool);
+apr_hash_t* oidc_util_merge_symmetric_key(apr_pool_t *pool,
+		const apr_array_header_t *keys, oidc_jwk_t *jwk) {
+	apr_hash_t *result = apr_hash_make(pool);
+	int i = 0;
+	if (keys != NULL) {
+		for (i = 0; i < keys->nelts; i++) {
+			const oidc_jwk_t *elem = ((const oidc_jwk_t**) keys->elts)[i];
+			apr_hash_set(result, elem->kid, APR_HASH_KEY_STRING, elem);
+		}
+	}
 	if (jwk != NULL) {
 		apr_hash_set(result, jwk->kid, APR_HASH_KEY_STRING, jwk);
 	}
@@ -2203,14 +2210,14 @@ apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r,
 	unsigned char *hashed = NULL;
 	unsigned int hashed_len = 0;
 	if (oidc_jose_hash_bytes(r->pool, openssl_hash_algo,
-			(const unsigned char *) input, strlen(input), &hashed, &hashed_len,
+			(const unsigned char*) input, strlen(input), &hashed, &hashed_len,
 			&err) == FALSE) {
 		oidc_error(r, "oidc_jose_hash_bytes returned an error: %s", err.text);
 		return FALSE;
 	}
 
-	if (oidc_base64url_encode(r, output, (const char *) hashed, hashed_len,
-			TRUE) <= 0) {
+	if (oidc_base64url_encode(r, output, (const char*) hashed, hashed_len, TRUE)
+			<= 0) {
 		oidc_error(r, "oidc_base64url_encode returned an error: %s", err.text);
 		return FALSE;
 	}
@@ -2220,7 +2227,20 @@ apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r,
 /*
  * merge two key sets
  */
-apr_hash_t * oidc_util_merge_key_sets(apr_pool_t *pool, apr_hash_t *k1,
+apr_hash_t* oidc_util_merge_key_sets(apr_pool_t *pool, apr_hash_t *k1,
+		const apr_array_header_t *k2) {
+	apr_hash_t *rv = k1 ? apr_hash_copy(pool, k1) : apr_hash_make(pool);
+	int i = 0;
+	if (k2 != NULL) {
+		for (i = 0; i < k2->nelts; i++) {
+			const oidc_jwk_t *jwk = ((const oidc_jwk_t**) k2->elts)[i];
+			apr_hash_set(rv, jwk->kid, APR_HASH_KEY_STRING, jwk);
+		}
+	}
+	return rv;
+}
+
+apr_hash_t* oidc_util_merge_key_sets_hash(apr_pool_t *pool, apr_hash_t *k1,
 		apr_hash_t *k2) {
 	if (k1 == NULL) {
 		if (k2 == NULL)
@@ -2377,14 +2397,14 @@ int oidc_util_cookie_domain_valid(const char *hostname, char *cookie_domain) {
 	return TRUE;
 }
 
-static const char *oidc_util_hdr_in_get(const request_rec *r, const char *name) {
+static const char* oidc_util_hdr_in_get(const request_rec *r, const char *name) {
 	const char *value = apr_table_get(r->headers_in, name);
 	if (value)
 		oidc_debug(r, "%s=%s", name, value);
 	return value;
 }
 
-static const char *oidc_util_hdr_in_get_left_most_only(const request_rec *r,
+static const char* oidc_util_hdr_in_get_left_most_only(const request_rec *r,
 		const char *name, const char *separator) {
 	char *last = NULL;
 	const char *value = oidc_util_hdr_in_get(r, name);
@@ -2452,7 +2472,7 @@ static void oidc_util_hdr_out_set(const request_rec *r, const char *name,
 	oidc_util_hdr_table_set(r, r->headers_out, name, value);
 }
 
-static const char *oidc_util_hdr_out_get(const request_rec *r, const char *name) {
+static const char* oidc_util_hdr_out_get(const request_rec *r, const char *name) {
 	return apr_table_get(r->headers_out, name);
 }
 
@@ -2467,7 +2487,7 @@ void oidc_util_hdr_in_set(const request_rec *r, const char *name,
 	oidc_util_hdr_table_set(r, r->headers_in, name, value);
 }
 
-const char *oidc_util_hdr_in_cookie_get(const request_rec *r) {
+const char* oidc_util_hdr_in_cookie_get(const request_rec *r) {
 	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_COOKIE);
 }
 
@@ -2475,28 +2495,28 @@ void oidc_util_hdr_in_cookie_set(const request_rec *r, const char *value) {
 	oidc_util_hdr_in_set(r, OIDC_HTTP_HDR_COOKIE, value);
 }
 
-const char *oidc_util_hdr_in_user_agent_get(const request_rec *r) {
+const char* oidc_util_hdr_in_user_agent_get(const request_rec *r) {
 	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_USER_AGENT);
 }
 
-const char *oidc_util_hdr_in_x_forwarded_for_get(const request_rec *r) {
+const char* oidc_util_hdr_in_x_forwarded_for_get(const request_rec *r) {
 	return oidc_util_hdr_in_get_left_most_only(r, OIDC_HTTP_HDR_X_FORWARDED_FOR,
 			OIDC_STR_COMMA OIDC_STR_SPACE);
 }
 
-const char *oidc_util_hdr_in_content_type_get(const request_rec *r) {
+const char* oidc_util_hdr_in_content_type_get(const request_rec *r) {
 	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_CONTENT_TYPE);
 }
 
-const char *oidc_util_hdr_in_content_length_get(const request_rec *r) {
+const char* oidc_util_hdr_in_content_length_get(const request_rec *r) {
 	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_CONTENT_LENGTH);
 }
 
-const char *oidc_util_hdr_in_x_requested_with_get(const request_rec *r) {
+const char* oidc_util_hdr_in_x_requested_with_get(const request_rec *r) {
 	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_X_REQUESTED_WITH);
 }
 
-const char *oidc_util_hdr_in_accept_get(const request_rec *r) {
+const char* oidc_util_hdr_in_accept_get(const request_rec *r) {
 	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_ACCEPT);
 }
 
@@ -2506,26 +2526,26 @@ apr_byte_t oidc_util_hdr_in_accept_contains(const request_rec *r,
 			OIDC_CHAR_SEMI_COLON, needle);
 }
 
-const char *oidc_util_hdr_in_authorization_get(const request_rec *r) {
+const char* oidc_util_hdr_in_authorization_get(const request_rec *r) {
 	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_AUTHORIZATION);
 }
 
-const char *oidc_util_hdr_in_x_forwarded_proto_get(const request_rec *r) {
+const char* oidc_util_hdr_in_x_forwarded_proto_get(const request_rec *r) {
 	return oidc_util_hdr_in_get_left_most_only(r,
 			OIDC_HTTP_HDR_X_FORWARDED_PROTO, OIDC_STR_COMMA OIDC_STR_SPACE);
 }
 
-const char *oidc_util_hdr_in_x_forwarded_port_get(const request_rec *r) {
+const char* oidc_util_hdr_in_x_forwarded_port_get(const request_rec *r) {
 	return oidc_util_hdr_in_get_left_most_only(r,
 			OIDC_HTTP_HDR_X_FORWARDED_PORT, OIDC_STR_COMMA OIDC_STR_SPACE);
 }
 
-const char *oidc_util_hdr_in_x_forwarded_host_get(const request_rec *r) {
+const char* oidc_util_hdr_in_x_forwarded_host_get(const request_rec *r) {
 	return oidc_util_hdr_in_get_left_most_only(r,
 			OIDC_HTTP_HDR_X_FORWARDED_HOST, OIDC_STR_COMMA OIDC_STR_SPACE);
 }
 
-const char *oidc_util_hdr_in_host_get(const request_rec *r) {
+const char* oidc_util_hdr_in_host_get(const request_rec *r) {
 	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_HOST);
 }
 
@@ -2533,18 +2553,18 @@ void oidc_util_hdr_out_location_set(const request_rec *r, const char *value) {
 	oidc_util_hdr_out_set(r, OIDC_HTTP_HDR_LOCATION, value);
 }
 
-const char *oidc_util_hdr_out_location_get(const request_rec *r) {
+const char* oidc_util_hdr_out_location_get(const request_rec *r) {
 	return oidc_util_hdr_out_get(r, OIDC_HTTP_HDR_LOCATION);
 }
 
-const char *oidc_util_get_provided_token_binding_id(const request_rec *r) {
+const char* oidc_util_get_provided_token_binding_id(const request_rec *r) {
 	const char *result = NULL;
 	if (r->subprocess_env != NULL)
 		result = apr_table_get(r->subprocess_env, OIDC_TB_CFG_PROVIDED_ENV_VAR);
 	return result;
 }
 
-const char *oidc_util_get_client_cert_fingerprint(request_rec *r) {
+const char* oidc_util_get_client_cert_fingerprint(request_rec *r) {
 	const char *fingerprint = NULL;
 
 	if (r->subprocess_env == NULL)
@@ -2588,7 +2608,7 @@ apr_byte_t oidc_util_json_validate_cnf_tbh(request_rec *r,
 	}
 
 	if (oidc_jose_hash_bytes(r->pool, OIDC_JOSE_ALG_SHA256,
-			(const unsigned char *) tbp, tbp_len, &tbp_hash, &tbp_hash_len,
+			(const unsigned char*) tbp, tbp_len, &tbp_hash, &tbp_hash_len,
 			NULL) == FALSE) {
 		oidc_warn(r,
 				"hashing Provided Token Binding ID environment variable failed");

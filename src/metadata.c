@@ -128,7 +128,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 /*
  * get the metadata filename for a specified issuer (cq. urlencode it)
  */
-static const char *oidc_metadata_issuer_to_filename(request_rec *r,
+static const char* oidc_metadata_issuer_to_filename(request_rec *r,
 		const char *issuer) {
 
 	/* strip leading https:// */
@@ -155,7 +155,7 @@ static const char *oidc_metadata_issuer_to_filename(request_rec *r,
 /*
  * get the issuer from a metadata filename (cq. urldecode it)
  */
-static const char *oidc_metadata_filename_to_issuer(request_rec *r,
+static const char* oidc_metadata_filename_to_issuer(request_rec *r,
 		const char *filename) {
 	char *result = apr_pstrdup(r->pool, filename);
 	char *p = strrchr(result, OIDC_CHAR_DOT);
@@ -167,7 +167,7 @@ static const char *oidc_metadata_filename_to_issuer(request_rec *r,
 /*
  * get the full path to the metadata file for a specified issuer and directory
  */
-static const char *oidc_metadata_file_path(request_rec *r, oidc_cfg *cfg,
+static const char* oidc_metadata_file_path(request_rec *r, oidc_cfg *cfg,
 		const char *issuer, const char *type) {
 	return apr_psprintf(r->pool, "%s/%s.%s", cfg->metadata_dir,
 			oidc_metadata_issuer_to_filename(r, issuer), type);
@@ -176,7 +176,7 @@ static const char *oidc_metadata_file_path(request_rec *r, oidc_cfg *cfg,
 /*
  * get the full path to the provider metadata file for a specified issuer
  */
-static const char *oidc_metadata_provider_file_path(request_rec *r,
+static const char* oidc_metadata_provider_file_path(request_rec *r,
 		const char *issuer) {
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
@@ -187,7 +187,7 @@ static const char *oidc_metadata_provider_file_path(request_rec *r,
 /*
  * get the full path to the client metadata file for a specified issuer
  */
-static const char *oidc_metadata_client_file_path(request_rec *r,
+static const char* oidc_metadata_client_file_path(request_rec *r,
 		const char *issuer) {
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
@@ -197,7 +197,7 @@ static const char *oidc_metadata_client_file_path(request_rec *r,
 /*
  * get the full path to the custom config file for a specified issuer
  */
-static const char *oidc_metadata_conf_path(request_rec *r, const char *issuer) {
+static const char* oidc_metadata_conf_path(request_rec *r, const char *issuer) {
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	return oidc_metadata_file_path(r, cfg, issuer, OIDC_METADATA_SUFFIX_CONF);
@@ -206,7 +206,7 @@ static const char *oidc_metadata_conf_path(request_rec *r, const char *issuer) {
 /*
  * get cache key for the JWKs file for a specified URI
  */
-static const char *oidc_metadata_jwks_cache_key(request_rec *r,
+static const char* oidc_metadata_jwks_cache_key(request_rec *r,
 		const char *jwks_uri) {
 	return jwks_uri;
 }
@@ -1137,8 +1137,8 @@ void oidc_metadata_get_valid_int(request_rec *r, json_t *json, const char *key,
 	*int_value = v;
 }
 
-void oidc_metadata_get_jwks(request_rec *r, json_t *json, const char *s_use,
-		apr_hash_t **jwk_list) {
+static void oidc_metadata_get_jwks(request_rec *r, json_t *json,
+		const char *s_use, apr_array_header_t **jwk_list) {
 	json_t *keys = NULL;
 	int i = 0;
 	oidc_jose_error_t err;
@@ -1176,8 +1176,8 @@ void oidc_metadata_get_jwks(request_rec *r, json_t *json, const char *s_use,
 		}
 
 		if (*jwk_list == NULL)
-			*jwk_list = apr_hash_make(r->pool);
-		apr_hash_set(*jwk_list, jwk->kid, APR_HASH_KEY_STRING, jwk);
+			*jwk_list = apr_array_make(r->pool, 4, sizeof(const oidc_jwk_t*));
+		*(const oidc_jwk_t**) apr_array_push(*jwk_list) = jwk;
 	}
 }
 

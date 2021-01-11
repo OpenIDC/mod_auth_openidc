@@ -87,8 +87,8 @@ typedef struct {
 /*
  * error handling functions
  */
-void _oidc_jose_error_set(oidc_jose_error_t *, const char *, const int,
-		const char *, const char *msg, ...);
+void _oidc_jose_error_set(oidc_jose_error_t*, const char*, const int,
+		const char*, const char *msg, ...);
 #define oidc_jose_error(err, msg, ...) _oidc_jose_error_set(err, __FILE__, __LINE__, __FUNCTION__, msg, ##__VA_ARGS__)
 #define oidc_jose_error_openssl(err, msg, ...) _oidc_jose_error_set(err, __FILE__, __LINE__, __FUNCTION__, "%s() failed: %s", msg, ERR_error_string(ERR_get_error(), NULL), ##__VA_ARGS__)
 #define oidc_jose_e2s(pool, err) apr_psprintf(pool, "[%s:%d: %s]: %s", err.source, err.line, err.function, err.text)
@@ -99,13 +99,13 @@ void _oidc_jose_error_set(oidc_jose_error_t *, const char *, const int,
  */
 
 /* helpers to find out about the supported ala/enc algorithms */
-apr_array_header_t *oidc_jose_jws_supported_algorithms(apr_pool_t *pool);
+apr_array_header_t* oidc_jose_jws_supported_algorithms(apr_pool_t *pool);
 apr_byte_t oidc_jose_jws_algorithm_is_supported(apr_pool_t *pool,
 		const char *alg);
-apr_array_header_t *oidc_jose_jwe_supported_algorithms(apr_pool_t *pool);
+apr_array_header_t* oidc_jose_jwe_supported_algorithms(apr_pool_t *pool);
 apr_byte_t oidc_jose_jwe_algorithm_is_supported(apr_pool_t *pool,
 		const char *alg);
-apr_array_header_t *oidc_jose_jwe_supported_encryptions(apr_pool_t *pool);
+apr_array_header_t* oidc_jose_jwe_supported_encryptions(apr_pool_t *pool);
 apr_byte_t oidc_jose_jwe_encryption_is_supported(apr_pool_t *pool,
 		const char *enc);
 
@@ -162,20 +162,21 @@ apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json,
 		apr_hash_t *keys, char **s_json, oidc_jose_error_t *err,
 		apr_byte_t import_must_succeed);
 /* parse a JSON string to a JWK struct */
-oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, const char *s_json,
+oidc_jwk_t* oidc_jwk_parse(apr_pool_t *pool, const char *s_json,
 		oidc_jose_error_t *err);
 /* parse a JSON object in to a JWK struct */
 apr_byte_t oidc_jwk_parse_json(apr_pool_t *pool, json_t *json, oidc_jwk_t **jwk,
 		oidc_jose_error_t *err);
 /* convert a JWK struct to a JSON string */
-apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, oidc_jwk_t *jwk, char **s_json,
-		oidc_jose_error_t *err);
+apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk,
+		char **s_json, oidc_jose_error_t *err);
 /* destroy resources allocated for a JWK struct */
 void oidc_jwk_destroy(oidc_jwk_t *jwk);
 /* destroy a list of JWKs structs */
-void oidc_jwk_list_destroy(apr_pool_t *pool, apr_hash_t *key);
+void oidc_jwk_list_destroy_hash(apr_pool_t *pool, apr_hash_t *key);
+void oidc_jwk_list_destroy(apr_pool_t *pool, apr_array_header_t *keys_list);
 /* create an "oct" symmetric JWK */
-oidc_jwk_t *oidc_jwk_create_symmetric_key(apr_pool_t *pool, const char *kid,
+oidc_jwk_t* oidc_jwk_create_symmetric_key(apr_pool_t *pool, const char *kid,
 		const unsigned char *key, unsigned int key_len, apr_byte_t set_kid,
 		oidc_jose_error_t *err);
 
@@ -239,20 +240,20 @@ apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk,
 apr_byte_t oidc_jwt_verify(apr_pool_t *pool, oidc_jwt_t *jwt, apr_hash_t *keys,
 		oidc_jose_error_t *err);
 /* perform compact serialization on a JWT and return the resulting string */
-char *oidc_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt,
+char* oidc_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt,
 		oidc_jose_error_t *err);
 /* encrypt JWT */
 apr_byte_t oidc_jwt_encrypt(apr_pool_t *pool, oidc_jwt_t *jwe, oidc_jwk_t *jwk,
 		const char *payload, char **serialized, oidc_jose_error_t *err);
 
 /* create a new JWT */
-oidc_jwt_t *oidc_jwt_new(apr_pool_t *pool, int create_header,
+oidc_jwt_t* oidc_jwt_new(apr_pool_t *pool, int create_header,
 		int create_payload);
 /* destroy resources allocated for JWT */
-void oidc_jwt_destroy(oidc_jwt_t *);
+void oidc_jwt_destroy(oidc_jwt_t*);
 
 /* get a header value from a JWT */
-const char *oidc_jwt_hdr_get(oidc_jwt_t *jwt, const char *key);
+const char* oidc_jwt_hdr_get(oidc_jwt_t *jwt, const char *key);
 /* return the key type of a JWT */
 int oidc_jwt_alg2kty(oidc_jwt_t *jwt);
 /* return the key size for an algorithm */
