@@ -1,3 +1,6 @@
+01/12/2021
+- fix inconsistent public/private keys loading order; closes #515
+
 12/17/2020
 - remove support for https://tools.ietf.org/html/draft-bradley-oauth-jwt-encoded-state
 
