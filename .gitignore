@@ -21,3 +21,4 @@
 /.autotools
 /target
 /.vscode/
+.vs/mod_auth_openidc/v15
