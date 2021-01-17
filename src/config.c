@@ -2819,7 +2819,7 @@ const command_rec oidc_config_cmds[] = {
 				oidc_set_public_key_files,
 				(void *)APR_OFFSETOF(oidc_cfg, public_keys),
 				RSRC_CONF,
-				"The fully qualified names of the files that contain the X.509 certificates that contains the RSA public keys that can be used for encryption by the OP."),
+				"The fully qualified names of the files that contain the RSA public keys or X.509 certificates that contains the RSA public keys that can be used for signature validation or encryption by the OP."),
 		AP_INIT_ITERATE(OIDCPrivateKeyFiles,
 				oidc_set_private_key_files_enc,
 				NULL,
