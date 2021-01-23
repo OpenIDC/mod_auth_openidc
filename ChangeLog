@@ -1,3 +1,6 @@
+01/23/2021
+- fix semaphore cleanup on graceful restarts; see #522
+
 01/12/2021
 - fix inconsistent public/private keys loading order; closes #515
 

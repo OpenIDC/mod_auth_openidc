@@ -94,6 +94,8 @@ apr_byte_t oidc_cache_mutex_post_config(server_rec *s, oidc_cache_mutex_t *m,
 	apr_status_t rv = APR_SUCCESS;
 	const char *dir;
 
+	// oidc_sdebug(s, "enter: %d (m=%pp,s=%pp, p=%d)", (m && m->sema) ? *m->sema : -1, m->mutex ? m->mutex : 0, s, m->is_parent);
+
 	/* construct the mutex filename */
 	apr_temp_dir_get(&dir, s->process->pool);
 	m->mutex_filename = apr_psprintf(s->process->pool,
@@ -146,6 +148,11 @@ apr_byte_t oidc_cache_mutex_post_config(server_rec *s, oidc_cache_mutex_t *m,
  */
 apr_status_t oidc_cache_mutex_child_init(apr_pool_t *p, server_rec *s,
 		oidc_cache_mutex_t *m) {
+
+	// oidc_sdebug(s, "enter: %d (m=%pp,s=%pp, p=%d)", (m && m->sema) ? *m->sema : -1, m->mutex ? m->mutex : 0, s, m->is_parent);
+
+	if (m->is_parent == FALSE)
+		return APR_SUCCESS;
 
 	/* initialize the lock for the child process */
 	apr_status_t rv = apr_global_mutex_child_init(&m->mutex,
@@ -203,13 +210,17 @@ apr_byte_t oidc_cache_mutex_destroy(server_rec *s, oidc_cache_mutex_t *m) {
 
 	apr_status_t rv = APR_SUCCESS;
 
+	// oidc_sdebug(s, "enter: %d (m=%pp,s=%pp, p=%d)", (m && m->sema) ? *m->sema : -1, m->mutex ? m->mutex : 0, s, m->is_parent);
+
 	if (m->mutex != NULL) {
 
 		apr_global_mutex_lock(m->mutex);
 		(*m->sema)--;
 		//oidc_sdebug(s, "semaphore: %d (m=%pp,s=%pp)", *m->sema, m->mutex, s);
 
-		if ((m->shm != NULL) && (*m->sema == 0) && (m->is_parent == TRUE)) {
+		// oidc_sdebug(s, "processing: %d (m=%pp,s=%pp, p=%d)", (m && m->sema) ? *m->sema : -1, m->mutex ? m->mutex : 0, s, m->is_parent);
+
+		if ((m->shm != NULL) && (*m->sema == 0)) {
 
 			rv = apr_shm_destroy(m->shm);
 			oidc_sdebug(s, "apr_shm_destroy for semaphore returned: %d", rv);
