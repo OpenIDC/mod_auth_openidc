@@ -1,3 +1,6 @@
+01/25/2021
+- add TLS Client Certificate bound access token support
+
 12/22/2020
 - depend on liboauth2 1.4.0
 - release 3.2.0

@@ -37,6 +37,8 @@
 
 #include <apr_strings.h>
 
+#include <mod_ssl.h>
+
 OAUTH2_APACHE_LOG(oauth2)
 
 // TODO: move the type into liboauth and use the Apache macro's (as in mod_sts)?
@@ -85,6 +87,21 @@ static void *oauth2_cfg_dir_merge(apr_pool_t *pool, void *b, void *a)
 
 #define OAUTH2_REQUEST_STATE_KEY_CLAIMS "C"
 
+APR_DECLARE_OPTIONAL_FN(int, ssl_is_https, (conn_rec *));
+APR_DECLARE_OPTIONAL_FN(char *, ssl_var_lookup,
+			(apr_pool_t *, server_rec *, conn_rec *, request_rec *,
+			 char *));
+
+static APR_OPTIONAL_FN_TYPE(ssl_var_lookup) *oauth2_ssl_val = NULL;
+
+const char *oauth2_conn_ssl_val(apr_pool_t *p, server_rec *s, conn_rec *c,
+				request_rec *r, const char *var)
+{
+	return (oauth2_ssl_val != NULL)
+		   ? (const char *)oauth2_ssl_val(p, s, c, r, (char *)var)
+		   : NULL;
+}
+
 static int oauth2_request_handler(oauth2_cfg_source_token_t *cfg,
 				  oauth2_cfg_token_verify_t *verify,
 				  oauth2_cfg_target_pass_t *target_pass,
@@ -112,8 +129,9 @@ static int oauth2_request_handler(oauth2_cfg_source_token_t *cfg,
 		goto end;
 	}
 
-	if (oauth2_token_verify(ctx->log, ctx->request, verify, source_token,
-				&json_token) == false) {
+	if (oauth2_token_verify(
+		ctx->log, ctx->request, verify, source_token, &json_token,
+		&oauth2_apache_server_callback_funcs, ctx->r) == false) {
 		rv = oauth2_apache_return_www_authenticate(
 		    cfg, ctx, HTTP_UNAUTHORIZED, OAUTH2_ERROR_INVALID_TOKEN,
 		    "Token could not be verified.");
@@ -180,6 +198,13 @@ static int oauth2_check_user_id_handler(request_rec *r)
 		     "incoming request: \"%s?%s\" ap_is_initial_req=%d",
 		     r->parsed_uri.path, r->args, ap_is_initial_req(r));
 
+	/* workaround because the SSL CGI env var push happens only in the fixup
+	 * handler */
+	const char *pem = oauth2_conn_ssl_val(r->pool, r->server, r->connection,
+					      r, "SSL_CLIENT_CERT");
+	oauth2_apache_server_callback_funcs.set(ctx->log, ctx->r,
+						"SSL_CLIENT_CERT", pem);
+
 	if (strcasecmp((const char *)ap_auth_type(r), OAUTH2_AUTH_TYPE) == 0)
 		return oauth2_request_handler(cfg->source_token, cfg->verify,
 					      cfg->target_pass, ctx, true);
@@ -244,16 +269,24 @@ static const authz_provider oauth2_authz_claim_provider = {
 
 OAUTH2_APACHE_HANDLERS(oauth2)
 
+static apr_status_t oauth2_post_config_wrap(apr_pool_t *pool, apr_pool_t *p1,
+					    apr_pool_t *p2, server_rec *s)
+{
+	oauth2_ssl_val = APR_RETRIEVE_OPTIONAL_FN(ssl_var_lookup);
+	return OAUTH2_APACHE_POST_CONFIG(oauth2)(pool, p1, p2, s);
+}
+
 static void oauth2_register_hooks(apr_pool_t *p)
 {
-	ap_hook_post_config(OAUTH2_APACHE_POST_CONFIG(oauth2), NULL, NULL,
+	ap_hook_post_config(oauth2_post_config_wrap, NULL, NULL,
 			    APR_HOOK_MIDDLE);
-	static const char * const authzSucc[] = {"mod_auth_openidc.c", NULL};
+	static const char *const authzSucc[] = {"mod_auth_openidc.c", NULL};
 	ap_hook_check_authn(oauth2_check_user_id_handler, NULL, authzSucc,
 			    APR_HOOK_MIDDLE, AP_AUTH_INTERNAL_PER_CONF);
 	ap_register_auth_provider(
 	    p, AUTHZ_PROVIDER_GROUP, OAUTH2_REQUIRE_OAUTH2_CLAIM, "0",
 	    &oauth2_authz_claim_provider, AP_AUTH_INTERNAL_PER_CONF);
+
 	// TODO: register content handler for "special" stuff like returning the
 	// JWKs that
 	//       the peer may use to encrypt the token and the private key
