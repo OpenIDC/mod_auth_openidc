@@ -680,6 +680,12 @@ int oidc_proto_authorization_request(request_rec *r,
 		apr_table_setn(params, OIDC_PROTO_SCOPE, scope);
 	}
 
+	if (provider->client_id == NULL) {
+		oidc_error(r,
+				"no Client ID set for the provider: perhaps you are accessing an endpoint protected with \"AuthType openid-connect\" instead of \"AuthType oauth20\"?)");
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
 	/* add the client ID */
 	apr_table_setn(params, OIDC_PROTO_CLIENT_ID, provider->client_id);
 

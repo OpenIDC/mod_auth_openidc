@@ -1,3 +1,7 @@
+01/28/2021
+- avoid segmentation fault when hitting an endpoint configured with AuthType openid-connect
+  in an OAuth 2.0 only setup; see #529
+
 01/23/2021
 - fix semaphore cleanup on graceful restarts; see #522
 
