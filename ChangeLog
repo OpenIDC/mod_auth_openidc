@@ -1,5 +1,6 @@
-01/25/2021
-- add TLS Client Certificate bound access token support
+02/01/2021
+- depend on liboauth2 1.4.1 with support for RFC 8705 mTLS Client Certificate bound access tokens
+- release 3.2.1
 
 12/22/2020
 - depend on liboauth2 1.4.0

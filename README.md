@@ -18,6 +18,13 @@ AuthType oauth2
 OAuth2TokenVerify jwks_uri https://pingfed:9031/ext/one jwks_uri.ssl_verify=false
 ```
 
+RFC 8705 Mutual TLS Certificate (optionally) Bound JWT Bearer Access Token validation with a known JWK
+```apache
+AuthType oauth2
+OAuth2TokenVerify jwk "{\"kty\":\"RSA\",\"kid\":\"one\",\"use\":\"sig\",\"n\":\"12SBWV_4xU8sBEC2IXcakiDe3IrrUcnIHexfyHG11Kw-EsrZvOy6PrrcqfTr1GcecyWFzQvUr61DWESrZWq96vd08_iTIWIny8pU5dlCoC7FsHU_onUQI1m4gQ3jNr00KhH878vrBVdr_T-zuOYQQOBRMEyFG-I4nb91zO1n2gcpQHeabJw3JIC9g65FCpu8DSw8uXQ1hVfGUDZAK6iwncNZ1uqN4HhRGNevFXT7KVG0cNS8S3oF4AhHafFurheVxh714R2EseTVD_FfLn2QTlCss_73YIJjzn047yKmAx5a9zuun6FKiISnMupGnHShwVoaS695rDmFvj7mvDppMQ\",\"e\":\"AQAB\" }" type=mtls&mtls.policy=optional
+SSLVerifyClient optional_no_ca
+```
+
 For a detailed overview of configuration options see the `oauth2.conf` Apache configuration file in this directory.
 
 ## Features
