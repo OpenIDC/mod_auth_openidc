@@ -1,3 +1,6 @@
+02/03/2021
+- avoid displaying the client_secret in debug logs
+
 01/28/2021
 - avoid segmentation fault when hitting an endpoint configured with AuthType openid-connect
   in an OAuth 2.0 only setup; see #529

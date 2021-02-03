@@ -609,7 +609,8 @@ typedef struct oidc_http_encode_t {
 static int oidc_util_http_add_form_url_encoded_param(void *rec, const char *key,
 		const char *value) {
 	oidc_http_encode_t *ctx = (oidc_http_encode_t*) rec;
-	oidc_debug(ctx->r, "processing: %s=%s", key, value);
+	oidc_debug(ctx->r, "processing: %s=%s", key,
+			(apr_strncmp(key, OIDC_PROTO_CLIENT_SECRET) == 0) ? "***" : value);
 	const char *sep = ctx->encoded_params ? OIDC_STR_AMP : "";
 	ctx->encoded_params = apr_psprintf(ctx->r->pool, "%s%s%s=%s",
 			ctx->encoded_params ? ctx->encoded_params : "", sep,
@@ -679,9 +680,9 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 	/* do some logging about the inputs */
 	oidc_debug(r,
 			"url=%s, data=%s, content_type=%s, basic_auth=%s, bearer_token=%s, ssl_validate_server=%d, timeout=%d, outgoing_proxy=%s, pass_cookies=%pp, ssl_cert=%s, ssl_key=%s",
-			url, data, content_type, basic_auth, bearer_token,
-			ssl_validate_server, timeout, outgoing_proxy, pass_cookies,
-			ssl_cert, ssl_key);
+			url, data, content_type, basic_auth ? "****" : "null", bearer_token,
+					ssl_validate_server, timeout, outgoing_proxy, pass_cookies,
+					ssl_cert, ssl_key);
 
 	curl = curl_easy_init();
 	if (curl == NULL) {
@@ -2172,9 +2173,8 @@ apr_byte_t oidc_util_create_symmetric_key(request_rec *r,
 		}
 
 		if (*jwk == NULL) {
-			oidc_error(r,
-					"could not create JWK from the provided secret %s: %s",
-					client_secret, oidc_jose_e2s(r->pool, err));
+			oidc_error(r, "could not create JWK from the provided secret: %s",
+					oidc_jose_e2s(r->pool, err));
 			return FALSE;
 		}
 	}
