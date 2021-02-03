@@ -610,7 +610,7 @@ static int oidc_util_http_add_form_url_encoded_param(void *rec, const char *key,
 		const char *value) {
 	oidc_http_encode_t *ctx = (oidc_http_encode_t*) rec;
 	oidc_debug(ctx->r, "processing: %s=%s", key,
-			(apr_strncmp(key, OIDC_PROTO_CLIENT_SECRET) == 0) ? "***" : value);
+			(strncmp(key, OIDC_PROTO_CLIENT_SECRET, strlen(OIDC_PROTO_CLIENT_SECRET)) == 0) ? "***" : value);
 	const char *sep = ctx->encoded_params ? OIDC_STR_AMP : "";
 	ctx->encoded_params = apr_psprintf(ctx->r->pool, "%s%s%s=%s",
 			ctx->encoded_params ? ctx->encoded_params : "", sep,
