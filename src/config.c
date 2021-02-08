@@ -430,14 +430,13 @@ static const char* oidc_set_path_slot(cmd_parms *cmd, void *ptr,
  */
 static const char* oidc_set_passphrase_slot(cmd_parms *cmd, void *struct_ptr,
 		const char *arg) {
-	int arglen = strlen(arg);
-	char **argv;
-	char *result;
-	const char *passphrase;
 	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
 			&auth_openidc_module);
-
+	const char *passphrase = NULL;
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+	int arglen = strlen(arg);
+	char **argv = NULL;
+	char *result = NULL;
 	/* Based on code from mod_session_crypto. */
 	if (arglen > 5 && strncmp(arg, "exec:", 5) == 0) {
 		if (apr_tokenize_to_argv(arg + 5, &argv, cmd->temp_pool) != APR_SUCCESS) {
@@ -445,25 +444,22 @@ static const char* oidc_set_passphrase_slot(cmd_parms *cmd, void *struct_ptr,
 					"Unable to parse exec arguments from ", arg + 5, NULL);
 		}
 		argv[0] = ap_server_root_relative(cmd->temp_pool, argv[0]);
-
 		if (!argv[0]) {
 			return apr_pstrcat(cmd->pool, "Invalid ", cmd->cmd->name,
 					" exec location:", arg + 5, NULL);
 		}
 		result = ap_get_exec_line(cmd->pool, argv[0],
 				(const char* const*) argv);
-
 		if (!result) {
 			return apr_pstrcat(cmd->pool,
 					"Unable to get passphrase from exec of ", arg + 5, NULL);
 		}
-
 		passphrase = result;
 	} else {
-#endif
 		passphrase = arg;
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	}
+#else
+	passphrase = arg;
 #endif
 
 	return ap_set_string_slot(cmd, cfg, passphrase);
