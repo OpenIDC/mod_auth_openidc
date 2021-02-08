@@ -1,3 +1,7 @@
+02/08/2021
+- return 400 instead of 500 when state cookie matching fails
+- release 2.4.6
+
 02/03/2021
 - avoid displaying the client_secret in debug logs
 

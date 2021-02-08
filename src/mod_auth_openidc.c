@@ -1913,7 +1913,8 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		// if content was already returned via html/http send then don't return 500
 		// but send 200 to avoid extraneous internal error document text to be sent
 		return ((r->user) && (strncmp(r->user, "", 1) == 0)) ?
-				OK : HTTP_INTERNAL_SERVER_ERROR;
+				OK :
+				HTTP_BAD_REQUEST;
 	}
 
 	/* see if the response is an error response */
