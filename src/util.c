@@ -723,6 +723,7 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST,
 			(ssl_validate_server != FALSE ? 2L : 0L));
 
+#if LIBCURL_VERSION_NUM >= 0x071900
 	if (r->subprocess_env != NULL) {
 		const char *env_var_value = apr_table_get(r->subprocess_env,
 				"CURLOPT_SSL_OPTIONS");
@@ -769,6 +770,7 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 #endif
 		}
 	}
+#endif
 
 	if (c->ca_bundle_path != NULL)
 		curl_easy_setopt(curl, CURLOPT_CAINFO, c->ca_bundle_path);
