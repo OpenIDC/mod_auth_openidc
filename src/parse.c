@@ -1187,6 +1187,9 @@ const char *oidc_parse_info_hook_data(apr_pool_t *pool, const char *arg,
 			OIDC_HOOK_INFO_ID_TOKEN,
 			OIDC_HOOK_INFO_USER_INFO,
 			OIDC_HOOK_INFO_REFRESH_TOKEN,
+			OIDC_HOOK_INFO_SESSION_EXP,
+			OIDC_HOOK_INFO_SESSION_TIMEOUT,
+			OIDC_HOOK_INFO_SESSION_REMOTE_USER,
 			OIDC_HOOK_INFO_SESSION,
 			NULL };
 	const char *rv = oidc_valid_string_option(pool, arg, options);

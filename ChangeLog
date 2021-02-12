@@ -1,3 +1,7 @@
+02/12/2021
+- add maximum session lifetime (exp), inactivity timeout (timeout) and remote_user to OIDCInfoHook
+- bump to 2.4.7-dev
+
 02/08/2021
 - return 400 instead of 500 when state cookie matching fails
 - release 2.4.6
