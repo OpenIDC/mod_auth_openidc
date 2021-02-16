@@ -398,8 +398,12 @@ apr_byte_t oidc_session_free(request_rec *r, oidc_session_t *z) {
  * terminate a session
  */
 apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z) {
-	oidc_session_free(r, z);
-	return oidc_session_save(r, z, FALSE);
+	if (z->state) {
+		json_decref(z->state);
+		z->state = NULL;
+	}
+	oidc_session_save(r, z, FALSE);
+	return oidc_session_free(r, z);
 }
 
 /*
