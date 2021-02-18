@@ -2345,10 +2345,12 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 	}
 
 	if (id_token_sub != NULL) {
-		if (apr_strnatcmp(id_token_sub, user_info_sub) != 0) {
+		if ((user_info_sub == NULL)
+				|| (apr_strnatcmp(id_token_sub, user_info_sub) != 0)) {
 			oidc_error(r,
 					"\"%s\" claim (\"%s\") returned from userinfo endpoint does not match the one in the id_token (\"%s\")",
-					OIDC_CLAIM_SUB, user_info_sub, id_token_sub);
+					OIDC_CLAIM_SUB, user_info_sub ? user_info_sub : "<n/a>",
+							id_token_sub);
 			json_decref(claims);
 			return FALSE;
 		}
