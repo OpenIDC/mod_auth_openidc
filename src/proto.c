@@ -2335,7 +2335,8 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 	oidc_debug(r, "id_token_sub=%s, user_info_sub=%s", id_token_sub,
 			user_info_sub);
 
-	if (user_info_sub == NULL) {
+	if ((user_info_sub == NULL)
+			&& (apr_table_get(r->subprocess_env, "OIDC_NO_USERINFO_SUB") == NULL)) {
 		oidc_error(r,
 				"mandatory claim (\"%s\") was not returned from userinfo endpoint (https://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse)",
 				OIDC_CLAIM_SUB);
