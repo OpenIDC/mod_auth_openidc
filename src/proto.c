@@ -1734,7 +1734,7 @@ static apr_byte_t oidc_proto_endpoint_client_secret_basic(request_rec *r,
 	}
 	*basic_auth_str = apr_psprintf(r->pool, "%s:%s",
 			oidc_util_escape_string(r, client_id),
-			oidc_util_escape_string(r, client_secret));
+			client_secret);
 
 	return TRUE;
 }
