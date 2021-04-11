@@ -1533,7 +1533,13 @@ static apr_byte_t oidc_authorization_response_match_state(request_rec *r,
 	*provider = oidc_get_provider_for_issuer(r, c,
 			oidc_proto_state_get_issuer(*proto_state), FALSE);
 
-	return (*provider != NULL);
+	if (*provider == NULL) {
+		oidc_proto_state_destroy(*proto_state);
+		*proto_state = NULL;
+		return FALSE;
+	}
+
+	return TRUE;
 }
 
 /*
@@ -1983,11 +1989,15 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 				apr_table_get(params, OIDC_PROTO_REFRESH_TOKEN),
 				apr_table_get(params, OIDC_PROTO_SESSION_STATE),
 				apr_table_get(params, OIDC_PROTO_STATE), original_url,
-				userinfo_jwt) == FALSE)
+				userinfo_jwt) == FALSE) {
+			oidc_proto_state_destroy(proto_state);
+			oidc_jwt_destroy(jwt);
 			return HTTP_INTERNAL_SERVER_ERROR;
+		}
 
 	} else {
 		oidc_error(r, "remote user could not be set");
+		oidc_jwt_destroy(jwt);
 		return oidc_authorization_response_error(r, c, proto_state,
 				"Remote user could not be set: contact the website administrator",
 				NULL);

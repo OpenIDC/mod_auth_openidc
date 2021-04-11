@@ -1,3 +1,7 @@
+04/12/2021
+- fix memory leaks when caching fails
+- bump to 2.4.7.1
+
 04/04/2021
 - improve documentation on OIDCPreservePost
 - release 2.4.7

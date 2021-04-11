@@ -2892,8 +2892,10 @@ static apr_byte_t oidc_proto_parse_idtoken_and_validate_code(request_rec *r,
 
 	if ((must_validate_code == TRUE)
 			&& (oidc_proto_validate_code(r, provider, *jwt, response_type, code)
-					== FALSE))
+					== FALSE)) {
+		oidc_jwt_destroy(*jwt);
 		return FALSE;
+	}
 
 	return TRUE;
 }
