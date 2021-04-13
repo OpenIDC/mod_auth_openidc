@@ -387,6 +387,8 @@ typedef struct oidc_cfg {
 	char *cache_redis_server;
 	char *cache_redis_password;
 	int cache_redis_database;
+	int cache_redis_connect_timeout;
+	int cache_redis_timeout;
 #endif
 	int cache_encrypt;
 

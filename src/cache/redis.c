@@ -64,8 +64,13 @@ typedef struct oidc_cache_cfg_redis_t {
 	apr_port_t port;
 	char *passwd;
 	int database;
+	struct timeval connect_timeout;
+	struct timeval timeout;
 	redisContext *ctx;
 } oidc_cache_cfg_redis_t;
+
+#define REDIS_CONNECT_TIMEOUT_DEFAULT 5
+#define REDIS_TIMEOUT_DEFAULT 5
 
 /* create the cache context */
 static void *oidc_cache_redis_cfg_create(apr_pool_t *pool) {
@@ -75,6 +80,10 @@ static void *oidc_cache_redis_cfg_create(apr_pool_t *pool) {
 	context->host_str = NULL;
 	context->passwd = NULL;
 	context->database = -1;
+	context->connect_timeout.tv_sec = REDIS_CONNECT_TIMEOUT_DEFAULT;
+	context->connect_timeout.tv_usec = 0;
+	context->timeout.tv_sec = REDIS_TIMEOUT_DEFAULT;
+	context->timeout.tv_usec = 0;
 	context->ctx = NULL;
 	return context;
 }
@@ -127,6 +136,12 @@ static int oidc_cache_redis_post_config(server_rec *s) {
 
 	if (cfg->cache_redis_database != -1)
 		context->database = cfg->cache_redis_database;
+
+	if (cfg->cache_redis_connect_timeout != -1)
+		context->connect_timeout.tv_sec = cfg->cache_redis_connect_timeout;
+
+	if (cfg->cache_redis_timeout != -1)
+		context->timeout.tv_sec = cfg->cache_redis_timeout;
 
 	if (oidc_cache_mutex_post_config(s, context->mutex, "redis") == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
@@ -186,7 +201,8 @@ static apr_status_t oidc_cache_redis_connect(request_rec *r,
 	if (context->ctx == NULL) {
 
 		/* no connection, connect to the configured Redis server */
-		context->ctx = redisConnect(context->host_str, context->port);
+		oidc_debug(r, "calling redisConnectWithTimeout");
+		context->ctx = redisConnectWithTimeout(context->host_str, context->port, context->connect_timeout);
 
 		/* check for errors */
 		if ((context->ctx == NULL) || (context->ctx->err != 0)) {
@@ -233,6 +249,10 @@ static apr_status_t oidc_cache_redis_connect(request_rec *r,
 				/* free the database answer */
 				oidc_cache_redis_reply_free(&reply);
 			}
+
+			if (redisSetTimeout(context->ctx, context->timeout) != REDIS_OK)
+				oidc_error(r, "redisSetTimeout failed: %s", context->ctx->errstr);
+
 		}
 	}
 
