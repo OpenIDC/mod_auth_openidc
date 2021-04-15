@@ -21,3 +21,8 @@
 /.autotools
 /.vscode/
 /configure~
+/Dockerfile-buster
+/Dockerfile-centos
+/Dockerfile-centos7
+/Dockerfile-debian
+/Dockerfile-trusty
