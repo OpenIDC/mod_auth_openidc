@@ -2240,7 +2240,7 @@ static apr_byte_t oidc_proto_resolve_composite_claims(request_rec *r,
 							NULL, NULL, access_token, cfg->provider.ssl_validate_server,
 							&s_json, cfg->http_timeout_long,
 							cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r),
-							NULL, NULL);
+							NULL, NULL, NULL);
 				}
 			}
 			if ((s_json != NULL) && (strcmp(s_json, "") != 0)) {
@@ -2305,7 +2305,7 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 		if (oidc_util_http_get(r, provider->userinfo_endpoint_url,
 				NULL, NULL, access_token, provider->ssl_validate_server, response,
 				cfg->http_timeout_long, cfg->outgoing_proxy,
-				oidc_dir_cfg_pass_cookies(r), NULL, NULL) == FALSE)
+				oidc_dir_cfg_pass_cookies(r), NULL, NULL, NULL) == FALSE)
 			return FALSE;
 	} else if (provider->userinfo_token_method
 			== OIDC_USER_INFO_TOKEN_METHOD_POST) {
@@ -2314,7 +2314,7 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 		if (oidc_util_http_post_form(r, provider->userinfo_endpoint_url, params,
 				NULL, NULL, provider->ssl_validate_server, response,
 				cfg->http_timeout_long, cfg->outgoing_proxy,
-				oidc_dir_cfg_pass_cookies(r), NULL, NULL) == FALSE)
+				oidc_dir_cfg_pass_cookies(r), NULL, NULL, NULL) == FALSE)
 			return FALSE;
 	} else {
 		oidc_error(r, "unsupported userinfo token presentation method: %d",
@@ -2379,7 +2379,7 @@ static apr_byte_t oidc_proto_webfinger_discovery(request_rec *r, oidc_cfg *cfg,
 	if (oidc_util_http_get(r, url, params, NULL, NULL,
 			cfg->provider.ssl_validate_server, &response,
 			cfg->http_timeout_short, cfg->outgoing_proxy,
-			oidc_dir_cfg_pass_cookies(r), NULL, NULL) == FALSE) {
+			oidc_dir_cfg_pass_cookies(r), NULL, NULL, NULL) == FALSE) {
 		/* errors will have been logged by now */
 		return FALSE;
 	}

@@ -594,7 +594,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 			NULL, provider->registration_token, provider->ssl_validate_server, response,
 			cfg->http_timeout_short, cfg->outgoing_proxy,
 			oidc_dir_cfg_pass_cookies(r),
-			NULL, NULL) == FALSE) {
+			NULL, NULL, NULL) == FALSE) {
 		json_decref(data);
 		return FALSE;
 	}
@@ -622,7 +622,7 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
 	if (oidc_util_http_get(r, jwks_uri->url, NULL, NULL,
 			NULL, jwks_uri->ssl_validate_server, &response, cfg->http_timeout_long,
 			cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL,
-			NULL) == FALSE)
+			NULL, NULL) == FALSE)
 		return FALSE;
 
 	/* decode and see if it is not an error response somehow */
@@ -693,7 +693,7 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg,
 			cfg->provider.ssl_validate_server, response,
 			cfg->http_timeout_short, cfg->outgoing_proxy,
 			oidc_dir_cfg_pass_cookies(r),
-			NULL, NULL) == FALSE)
+			NULL, NULL, NULL) == FALSE)
 		return FALSE;
 
 	/* decode and see if it is not an error response somehow */
