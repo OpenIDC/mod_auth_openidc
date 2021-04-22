@@ -119,6 +119,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_METADATA_USERINFO_REFRESH_INTERVAL                    "userinfo_refresh_interval"
 #define OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_CERT               "token_endpoint_tls_client_cert"
 #define OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_KEY                "token_endpoint_tls_client_key"
+#define OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_KEY_PWD            "token_endpoint_tls_client_key_pwd"
 #define OIDC_METADATA_REQUEST_OBJECT                               "request_object"
 #define OIDC_METADATA_USERINFO_TOKEN_METHOD                        "userinfo_token_method"
 #define OIDC_METADATA_TOKEN_BINDING_POLICY                         "token_binding_policy"
@@ -1325,6 +1326,10 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 			OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_KEY,
 			&provider->token_endpoint_tls_client_key,
 			cfg->provider.token_endpoint_tls_client_key);
+	oidc_json_object_get_string(r->pool, j_conf,
+			OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_KEY_PWD,
+			&provider->token_endpoint_tls_client_key_pwd,
+			cfg->provider.token_endpoint_tls_client_key_pwd);
 
 	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_REQUEST_OBJECT,
 			&provider->request_object, cfg->provider.request_object);

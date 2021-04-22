@@ -1996,8 +1996,11 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 			oidc_dir_cfg_pass_cookies(r),
 			oidc_util_get_full_path(r->pool,
 					provider->token_endpoint_tls_client_cert),
-					oidc_util_get_full_path(r->pool,
-							provider->token_endpoint_tls_client_key)) == FALSE) {
+			oidc_util_get_full_path(r->pool,
+					provider->token_endpoint_tls_client_key),
+			oidc_util_get_full_path(r->pool,
+					provider->token_endpoint_tls_client_key_pwd)
+			) == FALSE) {
 		oidc_warn(r, "error when calling the token endpoint (%s)",
 				provider->token_endpoint_url);
 		return FALSE;
