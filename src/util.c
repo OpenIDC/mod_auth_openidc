@@ -682,7 +682,7 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 			"url=%s, data=%s, content_type=%s, basic_auth=%s, bearer_token=%s, ssl_validate_server=%d, timeout=%d, outgoing_proxy=%s, pass_cookies=%pp, ssl_cert=%s, ssl_key=%s, ssl_key_pwd=%s",
 			url, data, content_type, basic_auth ? "****" : "null", bearer_token,
 					ssl_validate_server, timeout, outgoing_proxy, pass_cookies,
-					ssl_cert, ssl_key, ssl_key_pwd ? "****" : "null");
+					ssl_cert, ssl_key, ssl_key_pwd ? "****" : "(null)");
 
 	curl = curl_easy_init();
 	if (curl == NULL) {
