@@ -1,3 +1,7 @@
+04/30/2021
+- fix potential crash when Content-Type is not set in POST requests; thanks JPCERT/CC
+- release 2.4.8
+
 04/21/2021
 - on OAuth 2.0 RS token scope/claim 401 error, add environment variable for usage with mod_headers,
   instead of adding a header ourselves; see #572; usage, e.g;
