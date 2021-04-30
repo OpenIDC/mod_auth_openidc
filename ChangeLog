@@ -1,6 +1,12 @@
 04/30/2021
 - add OIDCClientTokenEndpointKeyPassword option to allow the use of an encrypted private key
 
+04/21/2021
+- on OAuth 2.0 RS token scope/claim 401 error, add environment variable for usage with mod_headers,
+  instead of adding a header ourselves; see #572; usage, e.g;
+    Header always append WWW-Authenticate %{OIDC_OAUTH_BEARER_SCOPE_ERROR}e "expr=(%{REQUEST_STATUS} == 401) && (-n reqenv('OIDC_OAUTH_BEARER_SCOPE_ERROR'))"
+- bump to 2.4.8-dev
+
 04/13/2021
 - add OIDCRedisCacheConnectTimeout and OIDCRedisCacheTimeout options to configure Redis timeouts
 - bump to 2.4.7.2
