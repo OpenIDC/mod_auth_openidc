@@ -317,6 +317,7 @@ typedef struct oidc_oauth_t {
 	char *client_secret;
 	char *metadata_url;
 	char *introspection_endpoint_tls_client_key;
+	char *introspection_endpoint_tls_client_key_pwd;
 	char *introspection_endpoint_tls_client_cert;
 	char *introspection_endpoint_url;
 	char *introspection_endpoint_method;

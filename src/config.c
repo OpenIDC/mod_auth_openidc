@@ -2968,7 +2968,7 @@ const command_rec oidc_config_cmds[] = {
 				"TLS client certificate private key used for calls to OpenID Connect OP token endpoint."),
 		AP_INIT_TAKE1(OIDCClientTokenEndpointKeyPassword,
 				oidc_set_passphrase_slot,
-				(void*)APR_OFFSETOF(oidc_cfg, provider.token_endpoint_tls_client_key_pwd,
+				(void*)APR_OFFSETOF(oidc_cfg, provider.token_endpoint_tls_client_key_pwd),
 				RSRC_CONF,
 				"TLS client certificate private key password used for calls to OpenID Connect OP token endpoint."),
 		AP_INIT_TAKE1(OIDCRedirectURI,
