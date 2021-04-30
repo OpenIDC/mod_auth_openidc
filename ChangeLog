@@ -1,3 +1,6 @@
+04/30/2021
+- add OIDCClientTokenEndpointKeyPassword option to allow the use of an encrypted private key
+
 04/13/2021
 - add OIDCRedisCacheConnectTimeout and OIDCRedisCacheTimeout options to configure Redis timeouts
 - bump to 2.4.7.2
