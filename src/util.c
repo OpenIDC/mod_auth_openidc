@@ -679,7 +679,7 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 
 	/* do some logging about the inputs */
 	oidc_debug(r,
-			"url=%s, data=%s, content_type=%s, basic_auth=%s, bearer_token=%s, ssl_validate_server=%d, timeout=%d, outgoing_proxy=%s, pass_cookies=%pp, ssl_cert=%s, ssl_key=%s",
+			"url=%s, data=%s, content_type=%s, basic_auth=%s, bearer_token=%s, ssl_validate_server=%d, timeout=%d, outgoing_proxy=%s, pass_cookies=%pp, ssl_cert=%s, ssl_key=%s, ssl_key_pwd=%s",
 			url, data, content_type, basic_auth ? "****" : "null", bearer_token,
 					ssl_validate_server, timeout, outgoing_proxy, pass_cookies,
 					ssl_cert, ssl_key, ssl_key_pwd ? "****" : "null");
@@ -815,9 +815,8 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 		curl_easy_setopt(curl, CURLOPT_SSLCERT, ssl_cert);
 	if (ssl_key != NULL)
 		curl_easy_setopt(curl, CURLOPT_SSLKEY, ssl_key);
-
 	if (ssl_key_pwd != NULL)
-		curl_easy_setopt(curl, CURLOPT_KEYPASSWD, ssl_key_pwd)
+		curl_easy_setopt(curl, CURLOPT_KEYPASSWD, ssl_key_pwd);
 
 	if (data != NULL) {
 		/* set POST data */
