@@ -1,5 +1,9 @@
-04/30/2021
+05/07/2021
 - add OIDCClientTokenEndpointKeyPassword option to allow the use of an encrypted private key
+
+04/30/2021
+- fix potential crash when Content-Type is not set in POST requests; thanks Tatsuhiko Yasumatsu of JPCERT/CC
+- release 2.4.8
 
 04/21/2021
 - on OAuth 2.0 RS token scope/claim 401 error, add environment variable for usage with mod_headers,
@@ -117,6 +121,13 @@
 09/03/2020
 - add SameSite attribute on cookie clearance / logout; thanks @v0gler
 - bump to 2.4.4.1
+
+09/01/2020
+- forward port Tufin patches
+- always set session cookie same site policy to Lax
+- disable cookie domain check
+- unset host headers for metadata URL retrieval
+- bump to 2.4.4-tufin
 
 09/01/2020
 - avoid GCC 9 compiler warnings
