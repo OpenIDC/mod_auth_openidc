@@ -2627,7 +2627,7 @@ static void oidc_revoke_tokens(request_rec *r, oidc_cfg *c,
 				params, basic_auth, bearer_auth, c->oauth.ssl_validate_server,
 				&response, c->http_timeout_long, c->outgoing_proxy,
 				oidc_dir_cfg_pass_cookies(r), NULL,
-				NULL) == FALSE) {
+				NULL, NULL) == FALSE) {
 			oidc_warn(r, "revoking refresh token failed");
 		}
 		apr_table_clear(params);
@@ -2642,7 +2642,7 @@ static void oidc_revoke_tokens(request_rec *r, oidc_cfg *c,
 				params, basic_auth, bearer_auth, c->oauth.ssl_validate_server,
 				&response, c->http_timeout_long, c->outgoing_proxy,
 				oidc_dir_cfg_pass_cookies(r), NULL,
-				NULL) == FALSE) {
+				NULL, NULL) == FALSE) {
 			oidc_warn(r, "revoking access token failed");
 		}
 	}

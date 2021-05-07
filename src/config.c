@@ -210,6 +210,7 @@
 #define OIDCClientSecret                       "OIDCClientSecret"
 #define OIDCClientTokenEndpointCert            "OIDCClientTokenEndpointCert"
 #define OIDCClientTokenEndpointKey             "OIDCClientTokenEndpointKey"
+#define OIDCClientTokenEndpointKeyPassword     "OIDCClientTokenEndpointKeyPassword"
 #define OIDCDefaultLoggedOutURL                "OIDCDefaultLoggedOutURL"
 #define OIDCCookieHTTPOnly                     "OIDCCookieHTTPOnly"
 #define OIDCCookieSameSite                     "OIDCCookieSameSite"
@@ -1243,6 +1244,7 @@ void oidc_cfg_provider_init(oidc_provider_t *provider) {
 	provider->client_secret = NULL;
 	provider->token_endpoint_tls_client_cert = NULL;
 	provider->token_endpoint_tls_client_key = NULL;
+	provider->token_endpoint_tls_client_key_pwd = NULL;
 	provider->registration_endpoint_url = NULL;
 	provider->registration_endpoint_json = NULL;
 	provider->check_session_iframe = NULL;
@@ -1469,6 +1471,10 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->provider.token_endpoint_tls_client_key != NULL ?
 					add->provider.token_endpoint_tls_client_key :
 					base->provider.token_endpoint_tls_client_key;
+	c->provider.token_endpoint_tls_client_key_pwd =
+		add->provider.token_endpoint_tls_client_key_pwd != NULL ?
+				add->provider.token_endpoint_tls_client_key_pwd :
+				base->provider.token_endpoint_tls_client_key_pwd;
 	c->provider.token_endpoint_tls_client_cert =
 			add->provider.token_endpoint_tls_client_cert != NULL ?
 					add->provider.token_endpoint_tls_client_cert :
@@ -2960,7 +2966,11 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, provider.token_endpoint_tls_client_key),
 				RSRC_CONF,
 				"TLS client certificate private key used for calls to OpenID Connect OP token endpoint."),
-
+		AP_INIT_TAKE1(OIDCClientTokenEndpointKeyPassword,
+				oidc_set_passphrase_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, provider.token_endpoint_tls_client_key_pwd),
+				RSRC_CONF,
+				"TLS client certificate private key password used for calls to OpenID Connect OP token endpoint."),
 		AP_INIT_TAKE1(OIDCRedirectURI,
 				oidc_set_relative_or_absolute_url_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, redirect_uri),

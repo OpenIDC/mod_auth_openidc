@@ -668,7 +668,7 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 		const char *bearer_token, int ssl_validate_server, char **response,
 		int timeout, const char *outgoing_proxy,
 		apr_array_header_t *pass_cookies, const char *ssl_cert,
-		const char *ssl_key) {
+		const char *ssl_key, const char *ssl_key_pwd) {
 	char curlError[CURL_ERROR_SIZE];
 	oidc_curl_buffer curlBuffer;
 	CURL *curl;
@@ -679,10 +679,10 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 
 	/* do some logging about the inputs */
 	oidc_debug(r,
-			"url=%s, data=%s, content_type=%s, basic_auth=%s, bearer_token=%s, ssl_validate_server=%d, timeout=%d, outgoing_proxy=%s, pass_cookies=%pp, ssl_cert=%s, ssl_key=%s",
+			"url=%s, data=%s, content_type=%s, basic_auth=%s, bearer_token=%s, ssl_validate_server=%d, timeout=%d, outgoing_proxy=%s, pass_cookies=%pp, ssl_cert=%s, ssl_key=%s, ssl_key_pwd=%s",
 			url, data, content_type, basic_auth ? "****" : "null", bearer_token,
 					ssl_validate_server, timeout, outgoing_proxy, pass_cookies,
-					ssl_cert, ssl_key);
+					ssl_cert, ssl_key, ssl_key_pwd ? "****" : "(null)");
 
 	curl = curl_easy_init();
 	if (curl == NULL) {
@@ -815,6 +815,8 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 		curl_easy_setopt(curl, CURLOPT_SSLCERT, ssl_cert);
 	if (ssl_key != NULL)
 		curl_easy_setopt(curl, CURLOPT_SSLKEY, ssl_key);
+	if (ssl_key_pwd != NULL)
+		curl_easy_setopt(curl, CURLOPT_KEYPASSWD, ssl_key_pwd);
 
 	if (data != NULL) {
 		/* set POST data */
@@ -898,11 +900,11 @@ apr_byte_t oidc_util_http_get(request_rec *r, const char *url,
 		const char *bearer_token, int ssl_validate_server, char **response,
 		int timeout, const char *outgoing_proxy,
 		apr_array_header_t *pass_cookies, const char *ssl_cert,
-		const char *ssl_key) {
+		const char *ssl_key, const char *ssl_key_pwd) {
 	char *query_url = oidc_util_http_query_encoded_url(r, url, params);
 	return oidc_util_http_call(r, query_url, NULL, NULL, basic_auth,
 			bearer_token, ssl_validate_server, response, timeout,
-			outgoing_proxy, pass_cookies, ssl_cert, ssl_key);
+			outgoing_proxy, pass_cookies, ssl_cert, ssl_key, ssl_key_pwd);
 }
 
 /*
@@ -913,12 +915,12 @@ apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url,
 		const char *bearer_token, int ssl_validate_server, char **response,
 		int timeout, const char *outgoing_proxy,
 		apr_array_header_t *pass_cookies, const char *ssl_cert,
-		const char *ssl_key) {
+		const char *ssl_key, const char *ssl_key_pwd) {
 	char *data = oidc_util_http_form_encoded_data(r, params);
 	return oidc_util_http_call(r, url, data,
 			OIDC_CONTENT_TYPE_FORM_ENCODED, basic_auth, bearer_token,
 			ssl_validate_server, response, timeout, outgoing_proxy,
-			pass_cookies, ssl_cert, ssl_key);
+			pass_cookies, ssl_cert, ssl_key, ssl_key_pwd);
 }
 
 /*
@@ -928,13 +930,13 @@ apr_byte_t oidc_util_http_post_json(request_rec *r, const char *url,
 		json_t *json, const char *basic_auth, const char *bearer_token,
 		int ssl_validate_server, char **response, int timeout,
 		const char *outgoing_proxy, apr_array_header_t *pass_cookies,
-		const char *ssl_cert, const char *ssl_key) {
+		const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd) {
 	char *data =
 			json != NULL ?
 					oidc_util_encode_json_object(r, json, JSON_COMPACT) : NULL;
 	return oidc_util_http_call(r, url, data, OIDC_CONTENT_TYPE_JSON, basic_auth,
 			bearer_token, ssl_validate_server, response, timeout,
-			outgoing_proxy, pass_cookies, ssl_cert, ssl_key);
+			outgoing_proxy, pass_cookies, ssl_cert, ssl_key, ssl_key_pwd);
 }
 
 /*

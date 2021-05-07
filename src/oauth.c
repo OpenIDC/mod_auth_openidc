@@ -59,7 +59,7 @@ apr_byte_t oidc_oauth_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg,
 	if (oidc_util_http_get(r, url, NULL, NULL, NULL,
 			cfg->oauth.ssl_validate_server, response, cfg->http_timeout_short,
 			cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r),
-			NULL, NULL) == FALSE)
+			NULL, NULL, NULL) == FALSE)
 		return FALSE;
 
 	/* decode and see if it is not an error response somehow */
@@ -174,17 +174,23 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 							oidc_dir_cfg_pass_cookies(r),
 							oidc_util_get_full_path(r->pool,
 									c->oauth.introspection_endpoint_tls_client_cert),
-									oidc_util_get_full_path(r->pool,
-											c->oauth.introspection_endpoint_tls_client_key)) :
-											oidc_util_http_post_form(r, c->oauth.introspection_endpoint_url,
-													params, basic_auth, bearer_auth,
-													c->oauth.ssl_validate_server, response,
-													c->http_timeout_long, c->outgoing_proxy,
-													oidc_dir_cfg_pass_cookies(r),
-													oidc_util_get_full_path(r->pool,
-															c->oauth.introspection_endpoint_tls_client_cert),
-															oidc_util_get_full_path(r->pool,
-																	c->oauth.introspection_endpoint_tls_client_key));
+							oidc_util_get_full_path(r->pool,
+									c->oauth.introspection_endpoint_tls_client_key),
+							oidc_util_get_full_path(r->pool,
+									c->oauth.introspection_endpoint_tls_client_key_pwd)
+					) :
+					oidc_util_http_post_form(r, c->oauth.introspection_endpoint_url,
+							params, basic_auth, bearer_auth,
+							c->oauth.ssl_validate_server, response,
+							c->http_timeout_long, c->outgoing_proxy,
+							oidc_dir_cfg_pass_cookies(r),
+							oidc_util_get_full_path(r->pool,
+									c->oauth.introspection_endpoint_tls_client_cert),
+							oidc_util_get_full_path(r->pool,
+									c->oauth.introspection_endpoint_tls_client_key),
+							oidc_util_get_full_path(r->pool,
+									c->oauth.introspection_endpoint_tls_client_key_pwd)
+					);
 }
 
 /*

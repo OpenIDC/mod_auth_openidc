@@ -119,6 +119,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_METADATA_USERINFO_REFRESH_INTERVAL                    "userinfo_refresh_interval"
 #define OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_CERT               "token_endpoint_tls_client_cert"
 #define OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_KEY                "token_endpoint_tls_client_key"
+#define OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_KEY_PWD            "token_endpoint_tls_client_key_pwd"
 #define OIDC_METADATA_REQUEST_OBJECT                               "request_object"
 #define OIDC_METADATA_USERINFO_TOKEN_METHOD                        "userinfo_token_method"
 #define OIDC_METADATA_TOKEN_BINDING_POLICY                         "token_binding_policy"
@@ -593,7 +594,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 			NULL, provider->registration_token, provider->ssl_validate_server, response,
 			cfg->http_timeout_short, cfg->outgoing_proxy,
 			oidc_dir_cfg_pass_cookies(r),
-			NULL, NULL) == FALSE) {
+			NULL, NULL, NULL) == FALSE) {
 		json_decref(data);
 		return FALSE;
 	}
@@ -621,7 +622,7 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
 	if (oidc_util_http_get(r, jwks_uri->url, NULL, NULL,
 			NULL, jwks_uri->ssl_validate_server, &response, cfg->http_timeout_long,
 			cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL,
-			NULL) == FALSE)
+			NULL, NULL) == FALSE)
 		return FALSE;
 
 	/* decode and see if it is not an error response somehow */
@@ -692,7 +693,7 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg,
 			cfg->provider.ssl_validate_server, response,
 			cfg->http_timeout_short, cfg->outgoing_proxy,
 			oidc_dir_cfg_pass_cookies(r),
-			NULL, NULL) == FALSE)
+			NULL, NULL, NULL) == FALSE)
 		return FALSE;
 
 	/* decode and see if it is not an error response somehow */
@@ -1325,6 +1326,10 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 			OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_KEY,
 			&provider->token_endpoint_tls_client_key,
 			cfg->provider.token_endpoint_tls_client_key);
+	oidc_json_object_get_string(r->pool, j_conf,
+			OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_KEY_PWD,
+			&provider->token_endpoint_tls_client_key_pwd,
+			cfg->provider.token_endpoint_tls_client_key_pwd);
 
 	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_REQUEST_OBJECT,
 			&provider->request_object, cfg->provider.request_object);
