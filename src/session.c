@@ -480,7 +480,7 @@ static void oidc_session_set_timestamp(request_rec *r, oidc_session_t *z,
 		const char *key, const apr_time_t timestamp) {
 	if (timestamp != -1)
 		oidc_session_set(r, z, key,
-				apr_psprintf(r->pool, "%" APR_TIME_T_FMT, timestamp));
+				apr_psprintf(r->pool, "%" APR_TIME_T_FMT, apr_time_sec(timestamp)));
 }
 
 static json_t *oidc_session_get_str2json(request_rec *r, oidc_session_t *z,
@@ -505,7 +505,7 @@ static apr_time_t oidc_session_get_key2timestamp(request_rec *r,
 	const char *s_expires = oidc_session_get_key2string(r, z, key);
 	if (s_expires != NULL)
 		sscanf(s_expires, "%" APR_TIME_T_FMT, &t_expires);
-	return t_expires;
+	return apr_time_from_sec(t_expires);
 }
 
 void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z,

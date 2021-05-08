@@ -1,3 +1,8 @@
+05/08/2021
+- store timestamps in session in seconds to avoid string conversion problems on some (libapr-1)
+  platform build/run combinations, causing "maximum session duration exceeded" errors
+- bump to 2.4.8.2
+
 05/07/2021
 - add OIDCClientTokenEndpointKeyPassword option to allow the use of an encrypted private key
 - release 2.4.8.1
