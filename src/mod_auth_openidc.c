@@ -992,7 +992,7 @@ apr_byte_t oidc_get_provider_from_session(request_rec *r, oidc_cfg *c,
 	/* get the issuer value from the session state */
 	const char *issuer = oidc_session_get_issuer(r, session);
 	if (issuer == NULL) {
-		oidc_error(r, "session corrupted: no issuer found in session");
+		oidc_warn(r, "empty or invalid session: no issuer found");
 		return FALSE;
 	}
 
