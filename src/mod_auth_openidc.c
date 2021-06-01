@@ -699,6 +699,13 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 						oidc_proto_state_get_original_url(*proto_state)),
 						OK);
 		oidc_proto_state_destroy(*proto_state);
+
+		/*
+		 * a hack for Apache 2.4 to prevent it from writing its own 500/400/302 HTML document
+		 * text by making ap_send_error_response in http_protocol.c return early...
+		 */
+		r->header_only = 1;
+
 		return FALSE;
 	}
 
