@@ -26,3 +26,4 @@
 /Dockerfile-centos7
 /Dockerfile-debian
 /Dockerfile-trusty
+/Dockerfile-amazon
