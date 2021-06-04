@@ -131,13 +131,6 @@
 		</configuration>
 	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings"/>
-	<storageModule moduleId="org.eclipse.cdt.core.pathentry">
-		<pathentry include="/opt/local/include/apache2" kind="inc" path="" system="true"/>
-		<pathentry include="/opt/local/include/apr-1" kind="inc" path="" system="true"/>
-		<pathentry include="/opt/local/include" kind="inc" path="" system="true"/>
-		<pathentry kind="src" path=""/>
-		<pathentry kind="out" path=""/>
-	</storageModule>
 	<storageModule moduleId="scannerConfiguration"/>
 	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets">
 		<buildTargets>
@@ -172,5 +165,16 @@
 				<runAllBuilders>true</runAllBuilders>
 			</target>
 		</buildTargets>
+	</storageModule>
+	<storageModule moduleId="org.eclipse.cdt.core.pathentry">
+		<pathentry include="/opt/local/include/apache2" kind="inc" path="" system="true"/>
+		<pathentry include="/opt/local/include/apr-1" kind="inc" path="" system="true"/>
+		<pathentry include="/opt/local/include" kind="inc" path="" system="true"/>
+		<pathentry include="/Library/Developer/CommandLineTools/SDKs/MacOSX11.1.sdk/usr/include" kind="inc" path="" system="true"/>
+		<pathentry include="/Library/Developer/CommandLineTools/usr/lib/clang/12.0.0/include" kind="inc" path="" system="true"/>
+		<pathentry kind="mac" name="HAVE_LIBHIREDIS" path="" value=""/>
+		<pathentry kind="mac" name="HAVE_MEMCACHE" path="" value=""/>
+		<pathentry kind="src" path=""/>
+		<pathentry kind="out" path=""/>
 	</storageModule>
 </cproject>
