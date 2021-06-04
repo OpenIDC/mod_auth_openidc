@@ -1,3 +1,6 @@
+06/04/2021
+- fix a problem where the host and port are calculated incorrectly, when you use literal ipv6 address.
+
 06/02/2021
 - do not send state timeout HTML document when OIDCDefaultURL is set; this can be overridden by using e.g.:
   SetEnvIfExpr true OIDC_NO_DEFAULT_URL_ON_STATE_TIMEOUT=true 
