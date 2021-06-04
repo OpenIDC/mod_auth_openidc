@@ -1285,6 +1285,16 @@ static char * test_current_url(request_rec *r) {
 	TST_ASSERT_STR("test_current_url (8)", url,
 			"http://remotehost:8380/private/?foo=bar&param1=value1");
 
+	apr_table_set(r->headers_in, "Host", "[fd04:41b1:1170:28:16b0:446b:9fb7:7118]:8380");
+	url = oidc_get_current_url(r);
+	TST_ASSERT_STR("test_current_url (9)", url,
+			"http://[fd04:41b1:1170:28:16b0:446b:9fb7:7118]:8380/private/?foo=bar&param1=value1");
+
+	apr_table_set(r->headers_in, "Host", "[fd04:41b1:1170:28:16b0:446b:9fb7:7118]");
+	url = oidc_get_current_url(r);
+	TST_ASSERT_STR("test_current_url (10)", url,
+			"http://[fd04:41b1:1170:28:16b0:446b:9fb7:7118]/private/?foo=bar&param1=value1");
+
 	return 0;
 }
 

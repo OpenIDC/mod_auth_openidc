@@ -388,6 +388,27 @@ static const char* oidc_get_current_url_scheme(const request_rec *r) {
 }
 
 /*
+ * get the Port part that is currently being accessed
+ */
+static const char* oidc_get_port_from_host(	const char *host_hdr){
+	char *p = NULL;
+	char *i = NULL;
+
+	if (host_hdr) {
+		if (host_hdr[0]=='[') {
+			i = strchr(host_hdr, ']');
+			p = strchr(i, OIDC_CHAR_COLON);
+		} else {
+			p = strchr(host_hdr, OIDC_CHAR_COLON);
+		}
+	}
+	if (p)
+		return p;
+	else
+		return NULL;
+}
+
+/*
  * get the URL port that is currently being accessed
  */
 static const char* oidc_get_current_url_port(const request_rec *r,
@@ -407,7 +428,7 @@ static const char* oidc_get_current_url_port(const request_rec *r,
 	 */
 	const char *host_hdr = oidc_util_hdr_in_x_forwarded_host_get(r);
 	if (host_hdr) {
-		port_str = strchr(host_hdr, OIDC_CHAR_COLON);
+		port_str = oidc_get_port_from_host(host_hdr);
 		if (port_str)
 			port_str++;
 		return port_str;
@@ -419,7 +440,7 @@ static const char* oidc_get_current_url_port(const request_rec *r,
 	 */
 	host_hdr = oidc_util_hdr_in_host_get(r);
 	if (host_hdr) {
-		port_str = strchr(host_hdr, OIDC_CHAR_COLON);
+		port_str = oidc_get_port_from_host(host_hdr);
 		if (port_str) {
 			port_str++;
 			return port_str;
@@ -452,13 +473,22 @@ static const char* oidc_get_current_url_port(const request_rec *r,
  */
 const char* oidc_get_current_url_host(request_rec *r) {
 	const char *host_str = oidc_util_hdr_in_x_forwarded_host_get(r);
+    char *p = NULL;
+	char *i = NULL;
 	if (host_str == NULL)
 		host_str = oidc_util_hdr_in_host_get(r);
 	if (host_str) {
 		host_str = apr_pstrdup(r->pool, host_str);
-		char *p = strchr(host_str, OIDC_CHAR_COLON);
-		if (p != NULL)
-			*p = '\0';
+
+		if (host_str[0] == '[') {
+			i= strchr(host_str, ']');
+			p = strchr(i, OIDC_CHAR_COLON);
+		} else {
+			p = strchr(host_str, OIDC_CHAR_COLON);
+		}
+
+	if (p != NULL)
+		*p = '\0';
 	} else {
 		/* no Host header, HTTP 1.0 */
 		host_str = ap_get_server_name(r);
