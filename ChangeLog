@@ -1,3 +1,9 @@
+06/07/2021
+- depend on liboauth2 1.4.2.1 with fixed iat slack validation defaults
+- set WWW-Authenticate environment variable to allow for complex Require logic; see 
+  https://github.com/zmartzone/mod_auth_openidc/discussions/572
+- release 3.2.2
+
 02/01/2021
 - depend on liboauth2 1.4.1 with support for RFC 8705 mTLS Client Certificate bound access tokens
 - release 3.2.1

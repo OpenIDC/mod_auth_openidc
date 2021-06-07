@@ -17,3 +17,6 @@
 /.settings/
 /.libs/
 /mod_oauth2.la
+/config.guess~
+/config.sub~
+/configure~

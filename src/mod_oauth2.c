@@ -192,6 +192,8 @@ static int oauth2_check_user_id_handler(request_rec *r)
 	return DECLINED;
 }
 
+#define OAUTH2_BEARER_SCOPE_ERROR "OAUTH2_BEARER_SCOPE_ERROR"
+
 static authz_status
 oauth2_authz_checker(request_rec *r, const char *require_args,
 		     const void *parsed_require_args,
@@ -201,6 +203,7 @@ oauth2_authz_checker(request_rec *r, const char *require_args,
 	oauth2_cfg_dir_t *cfg = NULL;
 	oauth2_apache_request_ctx_t *ctx = NULL;
 	authz_status rc = AUTHZ_DENIED_NO_USER;
+	const char *value = NULL;
 
 	cfg = ap_get_module_config(r->per_dir_config, &oauth2_module);
 	ctx = OAUTH2_APACHE_REQUEST_CTX(r, oauth2);
@@ -217,12 +220,22 @@ oauth2_authz_checker(request_rec *r, const char *require_args,
 	if (claims)
 		json_decref(claims);
 
-	if ((rc == AUTHZ_DENIED) && ap_auth_type(r))
+	if ((rc == AUTHZ_DENIED) && ap_auth_type(r)) {
 		oauth2_apache_return_www_authenticate(
 		    cfg->source_token, ctx, HTTP_UNAUTHORIZED,
-		    "insufficient_scope", // TODO:
-					  // OAUTH2_ERROR_INSUFFICIENT_SCOPE,
+		    OAUTH2_ERROR_INSUFFICIENT_SCOPE,
 		    "Different scope(s) or other claims required.");
+		value = apr_table_get(r->err_headers_out,
+				      OAUTH2_HTTP_HDR_WWW_AUTHENTICATE);
+		apr_table_unset(r->err_headers_out,
+				OAUTH2_HTTP_HDR_WWW_AUTHENTICATE);
+		oauth2_debug(ctx->log,
+			     "setting environment variable %s to \"%s\" for "
+			     "usage in mod_headers",
+			     OAUTH2_BEARER_SCOPE_ERROR, value);
+		apr_table_set(r->subprocess_env, OAUTH2_BEARER_SCOPE_ERROR,
+			      value);
+	}
 
 	oauth2_debug(ctx->log, "leave");
 

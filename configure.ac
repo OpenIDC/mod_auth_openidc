@@ -1,4 +1,4 @@
-AC_INIT([mod_oauth2],[3.2.1],[hans.zandbelt@zmartzone.eu])
+AC_INIT([mod_oauth2],[3.2.2],[hans.zandbelt@zmartzone.eu])
 
 AM_INIT_AUTOMAKE([foreign no-define subdir-objects])
 AC_CONFIG_MACRO_DIRS([m4])
@@ -32,11 +32,11 @@ PKG_CHECK_MODULES(APR, [apr-1, apr-util-1])
 AC_SUBST(APR_CFLAGS)
 AC_SUBST(APR_LIBS)
 
-PKG_CHECK_MODULES(OAUTH2, [liboauth2 >= 1.4.1])
+PKG_CHECK_MODULES(OAUTH2, [liboauth2 >= 1.4.2.1])
 AC_SUBST(OAUTH2_CFLAGS)
 AC_SUBST(OAUTH2_LIBS)
 
-PKG_CHECK_MODULES(OAUTH2_APACHE, [liboauth2_apache >= 1.4.1])
+PKG_CHECK_MODULES(OAUTH2_APACHE, [liboauth2_apache >= 1.4.2.1])
 AC_SUBST(OAUTH2_APACHE_CFLAGS)
 AC_SUBST(OAUTH2_APACHE_LIBS)
 
