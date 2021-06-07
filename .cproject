@@ -131,7 +131,6 @@
 		</configuration>
 	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings"/>
-	<storageModule moduleId="scannerConfiguration"/>
 	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets">
 		<buildTargets>
 			<target name="all" path="" targetID="org.eclipse.cdt.build.MakeTargetBuilder">
@@ -176,5 +175,14 @@
 		<pathentry kind="mac" name="HAVE_MEMCACHE" path="" value=""/>
 		<pathentry kind="src" path=""/>
 		<pathentry kind="out" path=""/>
+	</storageModule>
+	<storageModule moduleId="scannerConfiguration">
+		<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		<scannerConfigBuildInfo instanceId="org.eclipse.linuxtools.cdt.autotools.core.configuration.build.1562680719;org.eclipse.linuxtools.cdt.autotools.core.configuration.build.1562680719.;org.eclipse.linuxtools.cdt.autotools.core.toolchain.tool.gcc.548331172;cdt.managedbuild.tool.gnu.c.compiler.input.1754841162">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		</scannerConfigBuildInfo>
+		<scannerConfigBuildInfo instanceId="org.eclipse.linuxtools.cdt.autotools.core.configuration.build.debug.1551656597;org.eclipse.linuxtools.cdt.autotools.core.configuration.build.debug.1551656597.;org.eclipse.linuxtools.cdt.autotools.core.toolchain.tool.gcc.debug.397973033;cdt.managedbuild.tool.gnu.c.compiler.input.814681391">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		</scannerConfigBuildInfo>
 	</storageModule>
 </cproject>
