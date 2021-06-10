@@ -18,3 +18,8 @@
 /.libs/
 /mod_auth_openidc.la
 /test/
+/Dockerfile-*
+/config.guess~
+/configure~
+/*.rpm
+/config.sub~
