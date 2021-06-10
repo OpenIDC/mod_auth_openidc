@@ -1,3 +1,7 @@
+06/10/2021
+- use encrypted JWTs for storing encrypted cache contents and avoid using static AAD/IV; thanks @niebardzo
+- bump to 2.4.9-dev
+
 06/04/2021
 - fix a problem where the host and port are calculated incorrectly, when you use literal ipv6 address.
 

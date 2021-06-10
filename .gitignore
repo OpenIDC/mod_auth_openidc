@@ -24,3 +24,5 @@
 /Dockerfile-*
 /*.rpm
 
+/config.guess~
+/config.sub~
