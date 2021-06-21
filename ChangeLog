@@ -1,3 +1,7 @@
+06/21/2021
+- strip A256GCM JWT header from encrypted JWTS used for state cookies, cache encryption and by-value session cookies
+  resulting in smaller cookies and reduced cache content size
+
 06/10/2021
 - use encrypted JWTs for storing encrypted cache contents and avoid using static AAD/IV; thanks @niebardzo
 - bump to 2.4.9-dev
