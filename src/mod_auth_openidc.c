@@ -513,7 +513,7 @@ static int oidc_request_post_preserved_restore(request_rec *r,
 					"          input.type = \"hidden\";\n"
 					"          document.forms[0].appendChild(input);\n"
 					"        }\n"
-					"        document.forms[0].action = '%s';\n"
+					"        document.forms[0].action = \"%s\";\n"
 					"        document.forms[0].submit();\n"
 					"      }\n"
 					"    </script>\n", method, original_url);
