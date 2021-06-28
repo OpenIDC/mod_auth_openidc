@@ -367,6 +367,87 @@ char* oidc_util_html_escape(apr_pool_t *pool, const char *s) {
 }
 
 /*
+ * JavaScript escape a string
+ */
+char* oidc_util_javascript_escape(apr_pool_t *pool, const char *s) {
+    const char *cp;
+    char *output;
+    size_t outputlen;
+    int i;
+
+    if (s == NULL) {
+        return NULL;
+    }
+
+    outputlen = 0;
+    for (cp = s; *cp; cp++) {
+        switch (*cp) {
+        case '\'':
+        case '"':
+        case '\\':
+        case '/':
+        case 0x0D:
+        case 0x0A:
+            outputlen += 2;
+            break;
+        case '<':
+        case '>':
+            outputlen += 4;
+            break;
+        default:
+            outputlen += 1;
+            break;
+        }
+    }
+
+    i = 0;
+    output = apr_palloc(pool, outputlen + 1);
+    for (cp = s; *cp; cp++) {
+        switch (*cp) {
+        case '\'':
+            (void)strcpy(&output[i], "\\'");
+            i += 2;
+            break;
+        case '"':
+            (void)strcpy(&output[i], "\\\"");
+            i += 2;
+            break;
+        case '\\':
+            (void)strcpy(&output[i], "\\\\");
+            i += 2;
+            break;
+        case '/':
+            (void)strcpy(&output[i], "\\/");
+            i += 2;
+            break;
+        case 0x0D:
+            (void)strcpy(&output[i], "\\r");
+            i += 2;
+            break;
+        case 0x0A:
+            (void)strcpy(&output[i], "\\n");
+            i += 2;
+            break;
+        case '<':
+            (void)strcpy(&output[i], "\\x3c");
+            i += 4;
+            break;
+        case '>':
+            (void)strcpy(&output[i], "\\x3e");
+            i += 4;
+            break;
+        default:
+            output[i] = *cp;
+            i += 1;
+            break;
+        }
+    }
+    output[i] = '\0';
+    return output;
+}
+
+
+/*
  * get the URL scheme that is currently being accessed
  */
 static const char* oidc_get_current_url_scheme(const request_rec *r) {
