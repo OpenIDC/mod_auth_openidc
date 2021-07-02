@@ -1,3 +1,7 @@
+07/02/2021
+- handle discovery in the content handler
+- return OK in the content handler for calls to the redirect URI and when preserving POST data
+
 06/25/2021
 - avoid XSS vulnerability when using OIDCPreservePost On and supplying URLs that contain single quotes
   thanks @oss-aimoto

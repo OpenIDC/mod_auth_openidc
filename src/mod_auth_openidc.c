@@ -2252,8 +2252,17 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	if (provider == NULL) {
 
 		// TODO: should we use an explicit redirect to the discovery endpoint (maybe a "discovery" param to the redirect_uri)?
-		if (c->metadata_dir != NULL)
-			return oidc_discovery(r, c);
+		if (c->metadata_dir != NULL) {
+			/*
+			 * Will be handled in the content handler; avoid:
+			 * No authentication done but request not allowed without authentication
+			 * by setting r->user
+			 */
+			oidc_debug(r, "defer discovery to the content handler");
+			oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_DISCOVERY, "");
+			r->user = "";
+			return OK;
+		}
 
 		/* we're not using multiple OP's configured in a metadata directory, pick the statically configured OP */
 		if (oidc_provider_static_config(r, c, &provider) == FALSE)
@@ -2687,16 +2696,14 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 		const char *accept = oidc_util_hdr_in_accept_get(r);
 		if ((apr_strnatcmp(url, OIDC_IMG_STYLE_LOGOUT_PARAM_VALUE) == 0)
 				|| ((accept) && strstr(accept, OIDC_CONTENT_TYPE_IMAGE_PNG))) {
-			// terminate with DONE instead of OK
-			// to avoid Apache returning auth/authz error 401 for the redirect URI
 			return oidc_util_http_send(r, (const char*) &oidc_transparent_pixel,
 					sizeof(oidc_transparent_pixel), OIDC_CONTENT_TYPE_IMAGE_PNG,
-					DONE);
+					OK);
 		}
 
 		/* standard HTTP based logout: should be called in an iframe from the OP */
 		return oidc_util_html_send(r, "Logged Out", NULL, NULL,
-				"<p>Logged Out</p>", DONE);
+				"<p>Logged Out</p>", OK);
 	}
 
 	/* see if we don't need to go somewhere special after killing the session locally */
@@ -2868,9 +2875,8 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 		oidc_error(r,
 				"could not find session based on sid/sub provided in logout token: %s",
 				sid);
-		// return HTTP 200 according to (new?) spec and terminate early
-		// to avoid Apache returning auth/authz error 500 for the redirect URI
-		rc = DONE;
+		r->user = "";
+		rc = OK;
 		goto out;
 	}
 
@@ -2885,9 +2891,8 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 	oidc_cache_set_sid(r, sid, NULL, 0);
 	oidc_cache_set_session(r, uuid, NULL, 0);
 
-	// terminate with DONE instead of OK
-	// to avoid Apache returning auth/authz error 500 for the redirect URI
-	rc = DONE;
+	r->user = "";
+	rc = OK;
 
 out:
 
@@ -3707,7 +3712,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 		//		oidc_util_get_request_parameter(r, "error_description", &descr);
 		//
 		//		/* send user facing error to browser */
-		//		return oidc_util_html_send_error(r, error, descr, DONE);
+		//		return oidc_util_html_send_error(r, error, descr, OK);
 		return oidc_handle_redirect_authorization_response(r, c, session);
 	}
 
@@ -4137,27 +4142,43 @@ int oidc_content_handler(request_rec *r) {
 	apr_byte_t needs_save = FALSE;
 	oidc_session_t *session = NULL;
 
-	if (oidc_enabled(r)
-			&& oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c))) {
+	if (oidc_enabled(r) == TRUE) {
 
-		if (oidc_util_request_has_parameter(r,
-				OIDC_REDIRECT_URI_REQUEST_INFO)) {
+		if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c)) == TRUE) {
 
-			oidc_session_load(r, &session);
+			if (oidc_util_request_has_parameter(r,
+					OIDC_REDIRECT_URI_REQUEST_INFO)) {
 
-			rc = oidc_handle_existing_session(r, c, session, &needs_save);
-			if (rc == OK)
-				/* handle request for session info */
-				rc = oidc_handle_info_request(r, c, session, needs_save);
+				oidc_session_load(r, &session);
 
-			/* free resources allocated for the session */
-			oidc_session_free(r, session);
+				rc = oidc_handle_existing_session(r, c, session, &needs_save);
+				if (rc == OK)
+					/* handle request for session info */
+					rc = oidc_handle_info_request(r, c, session, needs_save);
 
-		} else if (oidc_util_request_has_parameter(r,
-				OIDC_REDIRECT_URI_REQUEST_JWKS)) {
+				/* free resources allocated for the session */
+				oidc_session_free(r, session);
 
-			/* handle JWKs request */
-			rc = oidc_handle_jwks(r, c);
+			} else if (oidc_util_request_has_parameter(r,
+					OIDC_REDIRECT_URI_REQUEST_JWKS)) {
+
+				/* handle JWKs request */
+				rc = oidc_handle_jwks(r, c);
+
+			} else {
+
+				rc = OK;
+
+			}
+
+		} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL) {
+
+			rc = oidc_discovery(r, c);
+
+		} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_AUTHN) != NULL) {
+
+			rc = OK;
+
 		}
 
 	}

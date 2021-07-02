@@ -758,7 +758,16 @@ int oidc_proto_authorization_request(request_rec *r,
 
 			/* and tell Apache to return an HTTP Redirect (302) message */
 			rv = HTTP_MOVED_TEMPORARILY;
+
+		} else {
+
+			/* signal this to the content handler */
+			oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_AUTHN, "");
+			r->user = "";
+			rv = OK;
+
 		}
+
 	} else {
 		oidc_error(r, "provider->auth_request_method set to wrong value: %d",
 				provider->auth_request_method);
