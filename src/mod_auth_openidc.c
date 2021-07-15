@@ -2759,6 +2759,11 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 		goto out;
 	}
 
+	if ((jwt->header.alg == NULL) || (strcmp(jwt->header.alg, "none") == 0)) {
+		oidc_error(r, "logout token is not signed");
+		goto out;
+	}
+
 	provider = oidc_get_provider_for_issuer(r, cfg, jwt->payload.iss, FALSE);
 	if (provider == NULL) {
 		oidc_error(r, "no provider found for issuer: %s", jwt->payload.iss);
@@ -2872,8 +2877,9 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 	sid = oidc_make_sid_iss_unique(r, sid, provider->issuer);
 	oidc_cache_get_sid(r, sid, &uuid);
 	if (uuid == NULL) {
-		oidc_error(r,
-				"could not find session based on sid/sub provided in logout token: %s",
+		// this may happen when we are the caller
+		oidc_warn(r,
+				"could not (or no longer) find a session based on sid/sub provided in logout token: %s",
 				sid);
 		r->user = "";
 		rc = OK;
@@ -3057,6 +3063,9 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 									OIDC_STR_QUERY,
 									oidc_util_escape_string(r, url));
 		}
+		//char *state = NULL;
+		//oidc_proto_generate_nonce(r, &state, 8);
+		//url = apr_psprintf(r->pool, "%s&state=%s", logout_request, state);
 		url = logout_request;
 	}
 
