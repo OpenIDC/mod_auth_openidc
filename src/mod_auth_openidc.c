@@ -2644,8 +2644,8 @@ static void oidc_revoke_tokens(request_rec *r, oidc_cfg *c,
 
 	token = oidc_session_get_access_token(r, session);
 	if (token != NULL) {
-		apr_table_addn(params, "token_type_hint", "access_token");
-		apr_table_addn(params, "token", token);
+		apr_table_setn(params, "token_type_hint", "access_token");
+		apr_table_setn(params, "token", token);
 
 		if (oidc_util_http_post_form(r, provider->revocation_endpoint_url,
 				params, basic_auth, bearer_auth, c->oauth.ssl_validate_server,
