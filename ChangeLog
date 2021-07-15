@@ -1,7 +1,9 @@
 07/15/2021
 - verify that "alg" is not none in logout_token explicitly
 - make session not found on backchannel logout produce a log warning instead of error
+- don't clear POST params authn on token revocation; thanks @iainh
 
+closes #626
 07/02/2021
 - handle discovery in the content handler
 - return OK in the content handler for calls to the redirect URI and when preserving POST data

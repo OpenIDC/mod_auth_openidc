@@ -2630,8 +2630,8 @@ static void oidc_revoke_tokens(request_rec *r, oidc_cfg *c,
 	// TODO: use oauth.ssl_validate_server ...
 	token = oidc_session_get_refresh_token(r, session);
 	if (token != NULL) {
-		apr_table_addn(params, "token_type_hint", "refresh_token");
-		apr_table_addn(params, "token", token);
+		apr_table_setn(params, OIDC_PROTO_TOKEN_TYPE_HINT, OIDC_PROTO_REFRESH_TOKEN);
+		apr_table_setn(params, OIDC_PROTO_TOKEN, token);
 
 		if (oidc_util_http_post_form(r, provider->revocation_endpoint_url,
 				params, basic_auth, bearer_auth, c->oauth.ssl_validate_server,
@@ -2640,13 +2640,14 @@ static void oidc_revoke_tokens(request_rec *r, oidc_cfg *c,
 				NULL, NULL) == FALSE) {
 			oidc_warn(r, "revoking refresh token failed");
 		}
-		apr_table_clear(params);
+		apr_table_unset(params, OIDC_PROTO_TOKEN_TYPE_HINT);
+		apr_table_unset(params, OIDC_PROTO_TOKEN);
 	}
 
 	token = oidc_session_get_access_token(r, session);
 	if (token != NULL) {
-		apr_table_addn(params, "token_type_hint", "access_token");
-		apr_table_addn(params, "token", token);
+		apr_table_setn(params, OIDC_PROTO_TOKEN_TYPE_HINT, OIDC_PROTO_ACCESS_TOKEN);
+		apr_table_setn(params, OIDC_PROTO_TOKEN, token);
 
 		if (oidc_util_http_post_form(r, provider->revocation_endpoint_url,
 				params, basic_auth, bearer_auth, c->oauth.ssl_validate_server,

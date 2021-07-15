@@ -480,6 +480,8 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_PROTO_SCOPE                 "scope"
 #define OIDC_PROTO_REFRESH_TOKEN         "refresh_token"
 #define OIDC_PROTO_TOKEN_TYPE            "token_type"
+#define OIDC_PROTO_TOKEN_TYPE_HINT       "token_type_hint"
+#define OIDC_PROTO_TOKEN                 "token"
 #define OIDC_PROTO_EXPIRES_IN            "expires_in"
 #define OIDC_PROTO_RESPONSE_TYPE         "response_type"
 #define OIDC_PROTO_RESPONSE_MODE         "response_mode"
