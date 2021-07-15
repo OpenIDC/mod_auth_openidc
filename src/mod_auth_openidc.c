@@ -2640,7 +2640,6 @@ static void oidc_revoke_tokens(request_rec *r, oidc_cfg *c,
 				NULL, NULL) == FALSE) {
 			oidc_warn(r, "revoking refresh token failed");
 		}
-		apr_table_clear(params);
 	}
 
 	token = oidc_session_get_access_token(r, session);
