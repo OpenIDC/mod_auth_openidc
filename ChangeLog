@@ -2,6 +2,7 @@
 - verify that "alg" is not none in logout_token explicitly
 - make session not found on backchannel logout produce a log warning instead of error
 - don't clear POST params authn on token revocation; thanks @iainh
+- bump to 2.4.9rc0
 
 closes #626
 07/02/2021
