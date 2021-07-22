@@ -265,10 +265,12 @@ static apr_status_t oidc_cache_redis_connect(request_rec *r,
  * execute Redis command and deal with return value
  */
 static redisReply* oidc_cache_redis_command(request_rec *r,
-		oidc_cache_cfg_redis_t *context, const char *command) {
+		oidc_cache_cfg_redis_t *context, const char *format, ...) {
 
 	redisReply *reply = NULL;
 	int i = 0;
+	va_list ap;
+	va_start(ap, format);
 
 	/* try to execute a command at max 2 times while reconnecting */
 	for (i = 0; i < OIDC_REDIS_MAX_TRIES; i++) {
@@ -278,7 +280,7 @@ static redisReply* oidc_cache_redis_command(request_rec *r,
 			break;
 
 		/* execute the actual command */
-		reply = redisCommand(context->ctx, command);
+		reply = redisvCommand(context->ctx, format, ap);
 
 		/* check for errors, need to return error replies for cache miss case REDIS_REPLY_NIL */
 		if ((reply != NULL) && (reply->type != REDIS_REPLY_ERROR))
@@ -297,6 +299,8 @@ static redisReply* oidc_cache_redis_command(request_rec *r,
 		/* cleanup, we may try again (once) after reconnecting */
 		oidc_cache_redis_free(context);
 	}
+
+	va_end(ap);
 
 	return reply;
 }
@@ -318,9 +322,8 @@ static apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section,
 		return FALSE;
 
 	/* get */
-	reply = oidc_cache_redis_command(r, context,
-			apr_psprintf(r->pool, "GET %s",
-					oidc_cache_redis_get_key(r->pool, section, key)));
+	reply =
+			oidc_cache_redis_command(r, context, "GET %s", oidc_cache_redis_get_key(r->pool, section, key));
 
 	if (reply == NULL)
 		goto end;
@@ -384,9 +387,8 @@ static apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section,
 	if (value == NULL) {
 
 		/* delete it */
-		reply = oidc_cache_redis_command(r, context,
-				apr_psprintf(r->pool, "DEL %s",
-						oidc_cache_redis_get_key(r->pool, section, key)));
+		reply =
+				oidc_cache_redis_command(r, context, "DEL %s", oidc_cache_redis_get_key(r->pool, section, key));
 
 	} else {
 
@@ -394,10 +396,8 @@ static apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section,
 		timeout = apr_time_sec(expiry - apr_time_now());
 
 		/* store it */
-		reply = oidc_cache_redis_command(r, context,
-				apr_psprintf(r->pool, "SETEX %s %d %s",
-						oidc_cache_redis_get_key(r->pool, section, key),
-						timeout, value));
+		reply =
+				oidc_cache_redis_command(r, context, "SETEX %s %d %s", oidc_cache_redis_get_key(r->pool, section, key), timeout, value);
 
 	}
 
