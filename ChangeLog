@@ -2,6 +2,7 @@
 - use redisvCommand to avoid crash with crafted key when using Redis without encryption; thanks @thomas-chauchefoin-sonarsource
 - replace potentially harmful backslashes with forward slashes when validating redirection URLs; thanks @thomas-chauchefoin-sonarsource
 - release 2.4.9
+- don't use DEFAULT_LIMIT_REQUEST_LINE constant; since it does not exist in Apache 2.2.x
 
 07/15/2021
 - verify that "alg" is not none in logout_token explicitly

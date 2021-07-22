@@ -2920,7 +2920,7 @@ out:
 	return rc;
 }
 
-#define OIDC_MAX_URL_LENGTH DEFAULT_LIMIT_REQUEST_LINE * 2
+#define OIDC_MAX_URL_LENGTH 8192 * 2
 
 static apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg *c,
 		const char *redirect_to_url, apr_byte_t restrict_to_host, char **err_str,
