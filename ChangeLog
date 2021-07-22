@@ -1,3 +1,6 @@
+07/22/2021
+- use redisvCommand to avoid crash with crafted key when using Redis without encryption; thanks @thomas-chauchefoin-sonarsource
+
 07/15/2021
 - verify that "alg" is not none in logout_token explicitly
 - make session not found on backchannel logout produce a log warning instead of error
