@@ -2920,12 +2920,21 @@ out:
 	return rc;
 }
 
+#define OIDC_MAX_URL_LENGTH DEFAULT_LIMIT_REQUEST_LINE * 2
+
 static apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg *c,
-		const char *url, apr_byte_t restrict_to_host, char **err_str,
+		const char *redirect_to_url, apr_byte_t restrict_to_host, char **err_str,
 		char **err_desc) {
 	apr_uri_t uri;
 	const char *c_host = NULL;
 	apr_hash_index_t *hi = NULL;
+	size_t i = 0;
+	char *url = apr_pstrndup(r->pool, redirect_to_url, OIDC_MAX_URL_LENGTH);
+
+	// replace potentially harmful backslashes with forward slashes
+	for (i = 0; i < strlen(url); i++)
+		if (url[i] == '\\')
+			url[i] = '/';
 
 	if (apr_uri_parse(r->pool, url, &uri) != APR_SUCCESS) {
 		*err_str = apr_pstrdup(r->pool, "Malformed URL");
