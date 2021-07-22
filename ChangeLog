@@ -1,4 +1,5 @@
 07/22/2021
+- use redisvCommand to avoid crash with crafted key when using Redis without encryption; thanks @thomas-chauchefoin-sonarsource
 - replace potentially harmful backslashes with forward slashes when validating redirection URLs; thanks @thomas-chauchefoin-sonarsource
 
 07/15/2021
