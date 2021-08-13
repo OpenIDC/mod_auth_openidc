@@ -270,7 +270,6 @@ static redisReply* oidc_cache_redis_command(request_rec *r,
 	redisReply *reply = NULL;
 	int i = 0;
 	va_list ap;
-	va_start(ap, format);
 
 	/* try to execute a command at max 2 times while reconnecting */
 	for (i = 0; i < OIDC_REDIS_MAX_TRIES; i++) {
@@ -279,8 +278,10 @@ static redisReply* oidc_cache_redis_command(request_rec *r,
 		if (oidc_cache_redis_connect(r, context) != APR_SUCCESS)
 			break;
 
+		va_start(ap, format);
 		/* execute the actual command */
 		reply = redisvCommand(context->ctx, format, ap);
+		va_end(ap);
 
 		/* check for errors, need to return error replies for cache miss case REDIS_REPLY_NIL */
 		if ((reply != NULL) && (reply->type != REDIS_REPLY_ERROR))
@@ -299,8 +300,6 @@ static redisReply* oidc_cache_redis_command(request_rec *r,
 		/* cleanup, we may try again (once) after reconnecting */
 		oidc_cache_redis_free(context);
 	}
-
-	va_end(ap);
 
 	return reply;
 }
