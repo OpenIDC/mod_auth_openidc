@@ -169,7 +169,14 @@ static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 
 		rc = oidc_session_load_cache_by_uuid(r, c, uuid, z);
 
-		if (rc == FALSE || z->state == NULL) {
+		/* cache backend experienced an error while attempting lookup */
+		if (rc == FALSE) {
+			oidc_error(r, "cache backend failure for key %s", uuid);
+			return FALSE;
+		}
+
+		/* cache backend does not contain an entry for the given key */
+		if (z->state == NULL) {
 			/* delete the session cookie */
 			oidc_util_set_cookie(r, oidc_cfg_dir_cookie(r), "", 0,
 					OIDC_COOKIE_EXT_SAME_SITE_NONE(r));

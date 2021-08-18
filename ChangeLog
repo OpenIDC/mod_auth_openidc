@@ -1,3 +1,6 @@
+08/18/2021
+- preserve session cookie in the event of a cache backend failure
+
 08/13/2021
 - fix retried Redis commands after a reconnect; thanks @iainh
 - release 2.4.9.1
