@@ -1,5 +1,6 @@
 08/18/2021
 - preserve session cookie in the event of a cache backend failure
+- update the id_token in the session cache if one is provided while refreshing the access token
 
 08/13/2021
 - fix retried Redis commands after a reconnect; thanks @iainh
