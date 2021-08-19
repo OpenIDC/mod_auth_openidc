@@ -1093,6 +1093,33 @@ static apr_byte_t oidc_refresh_access_token(request_rec *r, oidc_cfg *c,
 	if (s_refresh_token != NULL)
 		oidc_session_set_refresh_token(r, session, s_refresh_token);
 
+	/* if we have a new id_token, store it in the session and update the session max lifetime if required */
+	if (s_id_token != NULL) {
+		/* only store the serialized representation when client cookie based session tracking is not in use */
+		if (c->session_type != OIDC_SESSION_TYPE_CLIENT_COOKIE) 
+			oidc_session_set_idtoken(r, session, s_id_token);
+		
+		oidc_jwt_t *id_token_jwt = NULL;
+		oidc_jose_error_t err;
+		if (oidc_jwt_parse(r->pool, s_id_token, &id_token_jwt, NULL, &err) == TRUE) {
+
+			/* store the claims payload in the id_token for later reference */
+			oidc_session_set_idtoken_claims(r, session,
+				id_token_jwt->payload.value.str);
+
+			if (provider->session_max_duration == 0) {
+				/* update the session expiry to match the expiry of the id_token */
+				apr_time_t session_expires = apr_time_from_sec(id_token_jwt->payload.exp);
+				oidc_session_set_session_expires(r, session, session_expires);
+
+				/* log message about the updated max session duration */
+				oidc_log_session_expires(r, "session max lifetime", session_expires);
+			}		
+		} else { 
+			oidc_warn(r, "parsing of id_token failed");
+		}
+	}
+
 	return TRUE;
 }
 
