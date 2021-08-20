@@ -220,7 +220,7 @@ apr_byte_t oidc_cache_mutex_destroy(server_rec *s, oidc_cache_mutex_t *m) {
 
 		// oidc_sdebug(s, "processing: %d (m=%pp,s=%pp, p=%d)", (m && m->sema) ? *m->sema : -1, m->mutex ? m->mutex : 0, s, m->is_parent);
 
-		if ((m->shm != NULL) && (*m->sema == 0)) {
+		if ((m->shm != NULL) && (*m->sema == 0) && (m->is_parent == TRUE)) {
 
 			rv = apr_shm_destroy(m->shm);
 			oidc_sdebug(s, "apr_shm_destroy for semaphore returned: %d", rv);

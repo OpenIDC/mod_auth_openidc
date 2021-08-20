@@ -1,3 +1,7 @@
+08/20/2021
+- fix graceful restart (regression); see #458; thanks @Foxite
+- bump to 2.4.9.2
+
 08/18/2021
 - preserve session cookie in the event of a cache backend failure
 - update the id_token in the session cache if one is provided while refreshing the access token
