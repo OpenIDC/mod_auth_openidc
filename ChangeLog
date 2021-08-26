@@ -1,3 +1,6 @@
+08/26/2021
+- don't apply authz to the redirect URI; fixes ac5686495a51bc93e257e42bfdc9c9c46252feb1
+
 08/20/2021
 - fix graceful restart (regression); see #458; thanks @Foxite
 - bump to 2.4.9.2

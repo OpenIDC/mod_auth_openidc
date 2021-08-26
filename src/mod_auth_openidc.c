@@ -4030,10 +4030,15 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args,
 
 	oidc_debug(r, "enter: require_args=\"%s\"", require_args);
 
+	oidc_cfg *c = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
+
 	/* check for anonymous access and PASS mode */
 	if (r->user != NULL && strlen(r->user) == 0) {
 		r->user = NULL;
 		if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
+			return AUTHZ_GRANTED;
+		if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c)) == TRUE)
 			return AUTHZ_GRANTED;
 	}
 
@@ -4114,10 +4119,15 @@ static int oidc_handle_unauthorized_user22(request_rec *r) {
  */
 int oidc_auth_checker(request_rec *r) {
 
+	oidc_cfg *c = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
+
 	/* check for anonymous access and PASS mode */
 	if (r->user != NULL && strlen(r->user) == 0) {
 		r->user = NULL;
 		if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
+			return OK;
+		if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c)) == TRUE)
 			return OK;
 	}
 
