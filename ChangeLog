@@ -1,5 +1,7 @@
 09/03/2021
 - don't apply authz in discovery process; fixes 2.4.9.3
+- apply OIDCRedirectURLsAllowed setting to target_link_uri; closes #672; thanks @Meheni
+- release 2.4.9.4
 
 08/26/2021
 - don't apply authz to the redirect URI; fixes ac5686495a51bc93e257e42bfdc9c9c46252feb1
