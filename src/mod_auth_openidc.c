@@ -4138,7 +4138,7 @@ int oidc_auth_checker(request_rec *r) {
 		r->user = NULL;
 		if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
 			return OK;
-		if if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
+		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
 			return OK;
 	}
 
