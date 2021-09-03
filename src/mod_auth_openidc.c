@@ -4002,6 +4002,9 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 	oidc_authenticate_user(r, c, NULL, oidc_get_current_url(r), NULL,
 			NULL, NULL, oidc_dir_cfg_path_auth_request_params(r), oidc_dir_cfg_path_scope(r));
 
+	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
+		return AUTHZ_GRANTED;
+
 	const char *location = oidc_util_hdr_out_location_get(r);
 	if (location != NULL) {
 		oidc_debug(r, "send HTML refresh with authorization redirect: %s", location);
@@ -4030,15 +4033,12 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args,
 
 	oidc_debug(r, "enter: require_args=\"%s\"", require_args);
 
-	oidc_cfg *c = ap_get_module_config(r->server->module_config,
-			&auth_openidc_module);
-
 	/* check for anonymous access and PASS mode */
 	if (r->user != NULL && strlen(r->user) == 0) {
 		r->user = NULL;
 		if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
 			return AUTHZ_GRANTED;
-		if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c)) == TRUE)
+		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
 			return AUTHZ_GRANTED;
 	}
 
@@ -4127,7 +4127,7 @@ int oidc_auth_checker(request_rec *r) {
 		r->user = NULL;
 		if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
 			return OK;
-		if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c)) == TRUE)
+		if if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
 			return OK;
 	}
 
