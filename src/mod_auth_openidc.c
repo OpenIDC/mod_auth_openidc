@@ -3910,6 +3910,11 @@ static int oidc_check_mixed_userid_oauth(request_rec *r, oidc_cfg *c) {
 		return oidc_oauth_check_userid(r, c, access_token);
 	}
 
+	if (r->method_number == M_OPTIONS) {
+		r->user = "";
+		return OK;
+	}
+
 	/* no bearer token found: then treat this as a regular OIDC browser request */
 	r->ap_auth_type = apr_pstrdup(r->pool, OIDC_AUTH_TYPE_OPENID_CONNECT);
 	return oidc_check_userid_openidc(r, c);
@@ -4051,6 +4056,8 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args,
 			return AUTHZ_GRANTED;
 		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
 			return AUTHZ_GRANTED;
+		if (r->method_number == M_OPTIONS)
+			return AUTHZ_GRANTED;
 	}
 
 	/* get the set of claims from the request state (they've been set in the authentication part earlier */
@@ -4139,6 +4146,8 @@ int oidc_auth_checker(request_rec *r) {
 		if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
 			return OK;
 		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
+			return OK;
+		if (r->method_number == M_OPTIONS)
 			return OK;
 	}
 

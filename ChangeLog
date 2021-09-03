@@ -1,4 +1,11 @@
 09/03/2021
+- return HTTP 200 for OPTIONS requests in auth-openidc mixed mode
+- don't apply claims based authorization for OPTIONS requests
+  so paths protected with Require claim directives will now also
+  return HTTP 200 for OPTIONS requests
+- fix typo in 2.2 authorization routine
+
+09/03/2021
 - don't apply authz in discovery process; fixes 2.4.9.3
 - apply OIDCRedirectURLsAllowed setting to target_link_uri; closes #672; thanks @Meheni
 - release 2.4.9.4
