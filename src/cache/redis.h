@@ -52,6 +52,7 @@ typedef struct oidc_cache_cfg_redis_t oidc_cache_cfg_redis_t;
 typedef apr_status_t (*oidc_cache_redis_connect_function_t)(request_rec*, oidc_cache_cfg_redis_t*);
 typedef redisReply* (*oidc_cache_redis_command_function_t)(request_rec*, oidc_cache_cfg_redis_t*,
 		char**, const char *format, va_list ap);
+typedef apr_status_t (*oidc_cache_redis_disconnect_function_t)(oidc_cache_cfg_redis_t*);
 
 typedef struct oidc_cache_cfg_redis_t {
 	oidc_cache_mutex_t *mutex;
@@ -62,6 +63,7 @@ typedef struct oidc_cache_cfg_redis_t {
 	void *ctx;
 	oidc_cache_redis_connect_function_t connect;
 	oidc_cache_redis_command_function_t command;
+	oidc_cache_redis_disconnect_function_t disconnect;
 } oidc_cache_cfg_redis_t;
 
 int oidc_cache_redis_post_config(server_rec *s, oidc_cfg *cfg, const char *name);

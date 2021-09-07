@@ -119,6 +119,21 @@ int oidc_cache_redis_post_config(server_rec *s, oidc_cfg *cfg, const char *name)
 static apr_status_t oidc_cache_redis_connect(request_rec *r, oidc_cache_cfg_redis_t *context);
 
 /*
+ * free resources allocated for the per-process Redis connection context
+ */
+static apr_status_t oidc_cache_redis_disconnect(oidc_cache_cfg_redis_t *context) {
+	oidc_cache_cfg_redis_ctx_t *rctx = NULL;
+	if (context != NULL) {
+		rctx = (oidc_cache_cfg_redis_ctx_t*) context->ctx;
+		if ((rctx != NULL) && (rctx->rctx != NULL)) {
+			redisFree(rctx->rctx);
+			rctx->rctx = NULL;
+		}
+	}
+	return APR_SUCCESS;
+}
+
+/*
  * initialize the Redis struct the specified Redis server
  */
 static int oidc_cache_redis_post_config_impl(server_rec *s) {
@@ -161,6 +176,7 @@ static int oidc_cache_redis_post_config_impl(server_rec *s) {
 
 	context->connect = oidc_cache_redis_connect;
 	context->command = oidc_cache_redis_command;
+	context->disconnect = oidc_cache_redis_disconnect;
 
 	return OK;
 }
@@ -181,21 +197,6 @@ int oidc_cache_redis_child_init(apr_pool_t *p, server_rec *s) {
  */
 static char* oidc_cache_redis_get_key(apr_pool_t *pool, const char *section, const char *key) {
 	return apr_psprintf(pool, "%s:%s", section, key);
-}
-
-/*
- * free resources allocated for the per-process Redis connection context
- */
-static apr_status_t oidc_cache_redis_free(oidc_cache_cfg_redis_t *context) {
-	oidc_cache_cfg_redis_ctx_t *rctx = NULL;
-	if (context != NULL) {
-		rctx = (oidc_cache_cfg_redis_ctx_t*) context->ctx;
-		if ((rctx != NULL) && (rctx->rctx != NULL)) {
-			redisFree(rctx->rctx);
-			rctx->rctx = NULL;
-		}
-	}
-	return APR_SUCCESS;
 }
 
 /*
@@ -226,7 +227,7 @@ static apr_status_t oidc_cache_redis_connect(request_rec *r, oidc_cache_cfg_redi
 	/* check for errors */
 	if ((rctx->rctx == NULL) || (rctx->rctx->err != 0)) {
 		oidc_error(r, "failed to connect to Redis server (%s:%d): '%s'", rctx->host_str, rctx->port, rctx->rctx != NULL ? rctx->rctx->errstr : "");
-		oidc_cache_redis_free(context);
+		context->disconnect(context);
 		goto end;
 	}
 
@@ -316,7 +317,7 @@ static redisReply* oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t 
 		oidc_cache_redis_reply_free(&reply);
 
 		/* cleanup, we may try again (once) after reconnecting */
-		oidc_cache_redis_free(context);
+		context->disconnect(context);
 	}
 
 	return reply;
@@ -431,7 +432,7 @@ static int oidc_cache_redis_destroy_impl(server_rec *s) {
 
 	if (context != NULL) {
 		oidc_cache_mutex_lock(s, context->mutex);
-		oidc_cache_redis_free(context);
+		context->disconnect(context);
 		oidc_cache_mutex_unlock(s, context->mutex);
 		oidc_cache_mutex_destroy(s, context->mutex);
 		cfg->cache_cfg = NULL;
