@@ -1,3 +1,6 @@
+09/07/2021
+- reorganize Redis code for extensibility
+
 09/03/2021
 - return HTTP 200 for OPTIONS requests in auth-openidc mixed mode
 - don't apply claims based authorization for OPTIONS requests
