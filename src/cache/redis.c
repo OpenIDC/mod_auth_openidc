@@ -216,53 +216,55 @@ static apr_status_t oidc_cache_redis_connect(request_rec *r, oidc_cache_cfg_redi
 	oidc_cache_cfg_redis_ctx_t *rctx = (oidc_cache_cfg_redis_ctx_t*) context->ctx;
 	redisReply *reply = NULL;
 
-	if (rctx->rctx == NULL) {
+	if (rctx->rctx != NULL)
+		goto end;
 
-		/* no connection, connect to the configured Redis server */
-		oidc_debug(r, "calling redisConnectWithTimeout");
-		rctx->rctx = redisConnectWithTimeout(rctx->host_str, rctx->port, context->connect_timeout);
+	/* no connection, connect to the configured Redis server */
+	oidc_debug(r, "calling redisConnectWithTimeout");
+	rctx->rctx = redisConnectWithTimeout(rctx->host_str, rctx->port, context->connect_timeout);
 
-		/* check for errors */
-		if ((rctx->rctx == NULL) || (rctx->rctx->err != 0)) {
-			oidc_error(r, "failed to connect to Redis server (%s:%d): '%s'", rctx->host_str, rctx->port, rctx->rctx != NULL ? rctx->rctx->errstr : "");
-			oidc_cache_redis_free(context);
-		} else {
-			/* log the connection */
-			oidc_debug(r, "successfully connected to Redis server (%s:%d)", rctx->host_str, rctx->port);
-
-			/* see if we need to authenticate to the Redis server */
-			if (context->passwd != NULL) {
-				reply = redisCommand(rctx->rctx, "AUTH %s", context->passwd);
-				if ((reply == NULL) || (reply->type == REDIS_REPLY_ERROR))
-					oidc_error(r, "Redis AUTH command (%s:%d) failed: '%s' [%s]", rctx->host_str, rctx->port, rctx->rctx->errstr,
-							   reply ? reply->str : "<n/a>");
-				else
-					oidc_debug(r, "successfully authenticated to the Redis server: %s",
-							   reply ? reply->str : "<n/a>");
-
-				/* free the auth answer */
-				oidc_cache_redis_reply_free(&reply);
-			}
-
-			/* see if we need to set the database */
-			if (context->database != -1) {
-				reply = redisCommand(rctx->rctx, "SELECT %d", context->database);
-				if ((reply == NULL) || (reply->type == REDIS_REPLY_ERROR))
-					oidc_error(r, "Redis SELECT command (%s:%d) failed: '%s' [%s]", rctx->host_str, rctx->port, rctx->rctx->errstr,
-							   reply ? reply->str : "<n/a>");
-				else
-					oidc_debug(r, "successfully selected database %d on the Redis server: %s", context->database,
-							   reply ? reply->str : "<n/a>");
-
-				/* free the database answer */
-				oidc_cache_redis_reply_free(&reply);
-			}
-
-			if (redisSetTimeout(rctx->rctx, context->timeout) != REDIS_OK)
-				oidc_error(r, "redisSetTimeout failed: %s", rctx->rctx->errstr);
-
-		}
+	/* check for errors */
+	if ((rctx->rctx == NULL) || (rctx->rctx->err != 0)) {
+		oidc_error(r, "failed to connect to Redis server (%s:%d): '%s'", rctx->host_str, rctx->port, rctx->rctx != NULL ? rctx->rctx->errstr : "");
+		oidc_cache_redis_free(context);
+		goto end;
 	}
+
+	/* log the connection */
+	oidc_debug(r, "successfully connected to Redis server (%s:%d)", rctx->host_str, rctx->port);
+
+	if (redisSetTimeout(rctx->rctx, context->timeout) != REDIS_OK)
+		oidc_error(r, "redisSetTimeout failed: %s", rctx->rctx->errstr);
+
+	/* see if we need to authenticate to the Redis server */
+	if (context->passwd != NULL) {
+		reply = redisCommand(rctx->rctx, "AUTH %s", context->passwd);
+		if ((reply == NULL) || (reply->type == REDIS_REPLY_ERROR))
+			oidc_error(r, "Redis AUTH command (%s:%d) failed: '%s' [%s]", rctx->host_str, rctx->port, rctx->rctx->errstr,
+					   reply ? reply->str : "<n/a>");
+		else
+			oidc_debug(r, "successfully authenticated to the Redis server: %s",
+					   reply ? reply->str : "<n/a>");
+
+		/* free the auth answer */
+		oidc_cache_redis_reply_free(&reply);
+	}
+
+	/* see if we need to set the database */
+	if (context->database != -1) {
+		reply = redisCommand(rctx->rctx, "SELECT %d", context->database);
+		if ((reply == NULL) || (reply->type == REDIS_REPLY_ERROR))
+			oidc_error(r, "Redis SELECT command (%s:%d) failed: '%s' [%s]", rctx->host_str, rctx->port, rctx->rctx->errstr,
+					   reply ? reply->str : "<n/a>");
+		else
+			oidc_debug(r, "successfully selected database %d on the Redis server: %s", context->database,
+					   reply ? reply->str : "<n/a>");
+
+		/* free the database answer */
+		oidc_cache_redis_reply_free(&reply);
+	}
+
+end:
 
 	return (rctx->rctx != NULL) ? APR_SUCCESS : APR_EGENERAL;
 }
