@@ -1,3 +1,6 @@
+09/09/2021
+- fix memory leak when parsing JWT access token fails (in RS mode)
+
 09/07/2021
 - reorganize Redis code for extensibility
 

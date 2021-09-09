@@ -599,6 +599,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 			&err) == FALSE) {
 		oidc_error(r, "could not parse JWT from access_token: %s",
 				oidc_jose_e2s(r->pool, err));
+		oidc_jwk_destroy(jwk);
 		return FALSE;
 	}
 
