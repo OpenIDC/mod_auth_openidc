@@ -30,6 +30,5 @@ if(!(Test-Path $targetFolder)){
 	Write-Host "Folder $targetFolder already exists"
 }
 
-download -URL 'https://www.apachelounge.com/download/VS16/binaries/httpd-2.4.41-win64-VS16.zip' -Destination "$PSScriptRoot\target\httpd-2.4.41-win64-VS16.zip"
-download -URL 'https://www.apachelounge.com/download/VS16/binaries/httpd-2.4.41-win32-VS16.zip' -Destination "$PSScriptRoot\target\httpd-2.4.41-win32-VS16.zip"
+download -URL 'https://www.apachelounge.com/download/VS16/binaries/httpd-2.4.46-win64-VS16.zip' -Destination "$PSScriptRoot\target\httpd-2.4.41-win64-VS16.zip"
 
