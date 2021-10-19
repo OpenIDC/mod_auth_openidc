@@ -1,3 +1,7 @@
+10/19/2021
+- log require claims failure on info level
+- bump to 2.4.9.5rc0
+
 09/09/2021
 - fix memory leak when parsing JWT access token fails (in RS mode)
 

@@ -402,7 +402,7 @@ int oidc_authz_worker22(request_rec *r, const json_t * const claims,
 	}
 
 	/* log the event, also in Apache speak */
-	oidc_debug(r, "authorization denied for client session");
+	oidc_info(r, "authorization denied for require claims: '%s'", reqs);
 	ap_note_auth_failure(r);
 
 	return HTTP_UNAUTHORIZED;
@@ -458,6 +458,8 @@ authz_status oidc_authz_worker24(request_rec *r, const json_t * const claims,
 		oidc_warn(r,
 				"'require claim/expr' missing specification(s) in configuration, denying");
 	}
+
+	oidc_info(r, "could not match require claim expression '%s'", require_args);
 
 	return AUTHZ_DENIED;
 }
