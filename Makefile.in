@@ -80,7 +80,9 @@ configure:	configure.ac
 test/test test/test-cmd: test/test.c test/test-cmd.c test/stub.c src/mod_auth_openidc.la
 	@APXS2@ @APXS2_OPTS@ -Wc,"-DNAMEVER=\"@NAMEVER@\" $(CFLAGS)" -Wl,"$(LIBS)" -Isrc -Wc,-Wall -Wc,-g -c -o $@ $@.c test/stub.c $(SRC:.c=.lo) @APR_LIBS@
 
-test-compile: test/test test/test-cmd
+test/test: test/test-cmd
+
+test-compile: test/test
 
 test: test-compile
 	test/test
