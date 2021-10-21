@@ -43,19 +43,10 @@
  **************************************************************************/
 
 #include "mod_auth_openidc.h"
-/*
-#include <stdio.h>
-#include <errno.h>
-*/
+
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
-/*
-#include "apr.h"
-#include "apr_errno.h"
-#include "apr_general.h"
-#include "apr_time.h"
-#include "apr_base64.h"
-*/
+
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 static int test_nr_run = 0;

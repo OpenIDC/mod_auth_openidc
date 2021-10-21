@@ -1,6 +1,6 @@
 10/21/2021
 - complete usage of autoconf/automake; see #674
-- bump to 2.4.9.5rc2
+- bump to 2.4.9.5rc3
 
 10/20/2021
 - fix parallel builds (on Debian) for now

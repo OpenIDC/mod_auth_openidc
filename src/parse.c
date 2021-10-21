@@ -43,7 +43,6 @@
  * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
  */
 
-#include <apr_base64.h>
 #include "mod_auth_openidc.h"
 #include "parse.h"
 #include "jose.h"

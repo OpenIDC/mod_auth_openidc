@@ -42,19 +42,10 @@
  *
  **************************************************************************/
 
-#include <stdio.h>
-#include <string.h>
-
-#include <apr_file_io.h>
-#include <apr_base64.h>
+#include <mod_auth_openidc.h>
 
 #include <openssl/rsa.h>
 #include <openssl/pem.h>
-
-#include <cjose/header.h>
-#include <cjose/jws.h>
-
-#include <mod_auth_openidc.h>
 
 int usage(int argc, char **argv, const char *msg) {
 	fprintf(stderr, "Usage: %s %s\n", argv[0],

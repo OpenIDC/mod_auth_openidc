@@ -47,12 +47,12 @@
 
 #include "mod_auth_openidc.h"
 
-typedef struct oidc_cache_cfg_redis_t oidc_cache_cfg_redis_t;
+struct oidc_cache_cfg_redis_t;
 
-typedef apr_status_t (*oidc_cache_redis_connect_function_t)(request_rec*, oidc_cache_cfg_redis_t*);
-typedef redisReply* (*oidc_cache_redis_command_function_t)(request_rec*, oidc_cache_cfg_redis_t*,
+typedef apr_status_t (*oidc_cache_redis_connect_function_t)(request_rec*, struct oidc_cache_cfg_redis_t*);
+typedef redisReply* (*oidc_cache_redis_command_function_t)(request_rec*, struct oidc_cache_cfg_redis_t*,
 		char**, const char *format, va_list ap);
-typedef apr_status_t (*oidc_cache_redis_disconnect_function_t)(oidc_cache_cfg_redis_t*);
+typedef apr_status_t (*oidc_cache_redis_disconnect_function_t)(struct oidc_cache_cfg_redis_t*);
 
 typedef struct oidc_cache_cfg_redis_t {
 	oidc_cache_mutex_t *mutex;
