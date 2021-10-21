@@ -18,7 +18,7 @@ mod_auth_openidc_la_SOURCES = \
 	src/parse.c \
 	src/pcre_subst.c
 
-mod_auth_openidc_la_CFLAGS = -DNAMEVER=\"@NAMEVER@\" -I$(top_srcdir)/src @APACHE_CFLAGS@ @OPENSSL_CFLAGS@ @CURL_CFLAGS@ @JANSSON_CFLAGS@ @CJOSE_CFLAGS@ @PCRE_CFLAGS@
+mod_auth_openidc_la_CFLAGS = -DNAMEVER="@NAMEVER@" -I$(top_srcdir)/src @APACHE_CFLAGS@ @OPENSSL_CFLAGS@ @CURL_CFLAGS@ @JANSSON_CFLAGS@ @CJOSE_CFLAGS@ @PCRE_CFLAGS@
 mod_auth_openidc_la_CPPFLAGS = @APACHE_CPPFLAGS@
 # -rpath is needed to create shared libraries whilst specifying noinst_LTLIBRARIES
 mod_auth_openidc_la_LDFLAGS = -avoid-version -module -rpath @APACHE_MODULEDIR@ @APACHE_LDFLAGS@
