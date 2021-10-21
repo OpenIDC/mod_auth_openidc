@@ -25,4 +25,4 @@ install:
   - cd -
 
 script:
-  - ./autogen.sh && ./configure --with-apxs=/usr/bin/apxs CFLAGS=-Werror && make && make check
+  - ./autogen.sh && ./configure --with-apxs=/usr/bin/apxs2 CFLAGS=-Werror && make && make check
