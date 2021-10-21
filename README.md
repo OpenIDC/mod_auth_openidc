@@ -1,5 +1,6 @@
-[![Build Status](https://travis-ci.org/zmartzone/mod_auth_openidc.svg?branch=master)](https://travis-ci.org/zmartzone/mod_auth_openidc)
+[![Build Status](https://app.travis-ci.com/zmartzone/mod_auth_openidc.svg?branch=master)](https://app.travis-ci.com/github/zmartzone/mod_auth_openidc)
 [<img width="184" height="96" align="right" src="http://openid.net/wordpress-content/uploads/2016/04/oid-l-certification-mark-l-rgb-150dpi-90mm@2x.png" alt="OpenID Certification">](https://openid.net/certification)
+[![CodeQL Analysis](https://github.com/zmartzone/mod_auth_openidc/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/zmartzone/mod_auth_openidc/actions/workflows/codeql-analysis.yml)
 [![Code Quality: Cpp](https://img.shields.io/lgtm/grade/cpp/g/zmartzone/mod_auth_openidc.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/zmartzone/mod_auth_openidc/context:cpp)
 [![Total Alerts](https://img.shields.io/lgtm/alerts/g/zmartzone/mod_auth_openidc.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/zmartzone/mod_auth_openidc/alerts)
 
