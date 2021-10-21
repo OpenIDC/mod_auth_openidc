@@ -45,7 +45,7 @@
 
 #include "hiredis/hiredis.h"
 
-#include "../mod_auth_openidc.h"
+#include "mod_auth_openidc.h"
 
 typedef struct oidc_cache_cfg_redis_t oidc_cache_cfg_redis_t;
 

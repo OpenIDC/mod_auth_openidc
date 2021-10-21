@@ -43,13 +43,6 @@
  * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
  */
 
-#include "apr_general.h"
-#include "apr_strings.h"
-
-#include <httpd.h>
-#include <http_config.h>
-#include <http_log.h>
-
 #include "redis.h"
 
 // TODO: proper Redis error reporting (server unreachable etc.)

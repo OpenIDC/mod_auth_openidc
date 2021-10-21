@@ -44,16 +44,32 @@
 #ifndef MOD_AUTH_OPENIDC_H_
 #define MOD_AUTH_OPENIDC_H_
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#  undef PACKAGE_NAME
+#  undef PACKAGE_STRING
+#  undef PACKAGE_TARNAME
+#  undef PACKAGE_VERSION
+#  undef PACKAGE_BUGREPORT
+#endif
+
 #include <stdint.h>
 #include <httpd.h>
 #include <http_core.h>
 #include <http_config.h>
+#include <http_log.h>
+#include <http_request.h>
+#include <http_protocol.h>
 #include <mod_auth.h>
+
+#include <apr_base64.h>
+#include <apr_lib.h>
+#include <apr_uuid.h>
+#include <apr_sha1.h>
 
 #include "jose.h"
 #include "cache/cache.h"
 #include "parse.h"
-#include <apr_uuid.h>
 
 #ifdef APLOG_USE_MODULE
 APLOG_USE_MODULE(auth_openidc);

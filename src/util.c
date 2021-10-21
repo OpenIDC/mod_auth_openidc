@@ -41,20 +41,9 @@
  * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
  */
 
-#include <apr_strings.h>
-#include <apr_base64.h>
-#include <apr_lib.h>
-
-#include <httpd.h>
-#include <http_config.h>
-#include <http_log.h>
-#include <http_request.h>
-#include "http_protocol.h"
-
-#include <curl/curl.h>
-
 #include "mod_auth_openidc.h"
 
+#include <curl/curl.h>
 #include <pcre.h>
 #include "pcre_subst.h"
 

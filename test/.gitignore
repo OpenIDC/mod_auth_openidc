@@ -12,3 +12,7 @@
 /jmx/
 /mod_auth_openidc.results
 /test-cmd-licensed
+/.deps/
+/.dirstamp
+/test.log
+/test.trs

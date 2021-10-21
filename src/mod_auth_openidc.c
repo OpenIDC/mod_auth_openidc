@@ -48,13 +48,14 @@
  *
  **************************************************************************/
 
+#include "mod_auth_openidc.h"
+/*
 #include "apr_hash.h"
 #include "apr_strings.h"
 #include "ap_config.h"
 #include "ap_provider.h"
 #include "apr_lib.h"
 #include "apr_file_io.h"
-#include "apr_sha1.h"
 #include "apr_base64.h"
 
 #include "httpd.h"
@@ -63,9 +64,7 @@
 #include "http_log.h"
 #include "http_protocol.h"
 #include "http_request.h"
-
-#include "mod_auth_openidc.h"
-
+*/
 #define OIDC_REFRESH_ERROR 2
 
 static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,

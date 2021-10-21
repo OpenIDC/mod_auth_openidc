@@ -23,6 +23,8 @@
 /configure~
 /Dockerfile-*
 /*.rpm
-
 /config.guess~
 /config.sub~
+/test-driver
+/test-suite.log
+/ar-lib

@@ -43,16 +43,8 @@
  * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
  */
 
-#include "apr_general.h"
-#include "apr_strings.h"
-#include "apr_hash.h"
-#include "apr_memcache.h"
-
-#include <httpd.h>
-#include <http_config.h>
-#include <http_log.h>
-
-#include "../mod_auth_openidc.h"
+#include "mod_auth_openidc.h"
+#include <apr_memcache.h>
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 

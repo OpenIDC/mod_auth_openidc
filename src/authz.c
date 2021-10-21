@@ -43,10 +43,6 @@
  * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
  */
 
-#include <http_core.h>
-#include <http_log.h>
-#include <http_protocol.h>
-
 #include "mod_auth_openidc.h"
 
 #include <pcre.h>

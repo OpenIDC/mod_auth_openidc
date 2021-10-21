@@ -41,13 +41,7 @@
  * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
  */
 
-#include <httpd.h>
-#include <http_config.h>
-#include <http_log.h>
-#include <http_request.h>
-
 #include "mod_auth_openidc.h"
-#include "parse.h"
 
 #include <openssl/opensslconf.h>
 #include <openssl/opensslv.h>
@@ -379,7 +373,7 @@ char* oidc_proto_create_request_object(request_rec *r,
 		if (sjwk == NULL) {
 			oidc_jwt_destroy(request_object);
 			json_decref(request_object_config);
-			return FALSE;
+			return NULL;
 		}
 
 		if (oidc_jwt_sign(r->pool, request_object, sjwk, &err) == FALSE) {
@@ -389,7 +383,7 @@ char* oidc_proto_create_request_object(request_rec *r,
 				oidc_jwk_destroy(sjwk);
 			oidc_jwt_destroy(request_object);
 			json_decref(request_object_config);
-			return FALSE;
+			return NULL;
 		}
 
 		if (jwk_needs_destroy)
@@ -401,7 +395,7 @@ char* oidc_proto_create_request_object(request_rec *r,
 		oidc_error(r, "creating JWE failed");
 		oidc_jwt_destroy(request_object);
 		json_decref(request_object_config);
-		return FALSE;
+		return NULL;
 	}
 
 	oidc_json_object_get_string(r->pool, crypto, "crypt_alg", &jwe->header.alg,
@@ -437,7 +431,7 @@ char* oidc_proto_create_request_object(request_rec *r,
 			oidc_jwt_destroy(jwe);
 			oidc_jwt_destroy(request_object);
 			json_decref(request_object_config);
-			return FALSE;
+			return NULL;
 		}
 
 		if (jwe->header.enc == NULL)
@@ -454,7 +448,7 @@ char* oidc_proto_create_request_object(request_rec *r,
 			oidc_jwt_destroy(jwe);
 			oidc_jwt_destroy(request_object);
 			json_decref(request_object_config);
-			return FALSE;
+			return NULL;
 		}
 
 		oidc_jwk_destroy(ejwk);

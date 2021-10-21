@@ -47,24 +47,24 @@
 #include <unistd.h>
 #endif
 
+#include "mod_auth_openidc.h"
+
+#ifdef AP_NEED_SET_MUTEX_PERMS
+#include "unixd.h"
+#endif
+/*
 #include "apr_general.h"
 
 #include <httpd.h>
 #include <http_config.h>
 #include <http_log.h>
 
-#ifdef AP_NEED_SET_MUTEX_PERMS
-#include "unixd.h"
-#endif
-
 #include <openssl/evp.h>
 #include <openssl/aes.h>
 #include <openssl/err.h>
 
 #include <apr_base64.h>
-
-#include "../mod_auth_openidc.h"
-
+*/
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 /* create the cache lock context */

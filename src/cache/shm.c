@@ -44,13 +44,7 @@
  * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
  */
 
-#include <httpd.h>
-#include <http_config.h>
-#include <http_log.h>
-
-#include "apr_shm.h"
-
-#include "../mod_auth_openidc.h"
+#include "mod_auth_openidc.h"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
