@@ -72,7 +72,7 @@ jobs:
     - run: |
        ./autogen.sh
        ./configure 
-       make test
+       make check
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v1
