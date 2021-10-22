@@ -1,4 +1,4 @@
-AC_INIT([mod_auth_openidc],[2.4.9.5rc3],[hans.zandbelt@zmartzone.eu])
+AC_INIT([mod_auth_openidc],[2.4.9.5rc4],[hans.zandbelt@zmartzone.eu])
 
 AC_SUBST(NAMEVER, AC_PACKAGE_TARNAME()-AC_PACKAGE_VERSION())
 
@@ -61,9 +61,9 @@ AC_SUBST(OPENSSL_LIBS)
 
 # older versions of libapr may not have memcache support
 old_CPPFLAGS=$CPPFLAGS
-CPPFLAGS="${APACHE_CPPFLAGS} ${APACHE_INCLUDES} $CPPFLAGS"
+CPPFLAGS="${APACHE_CPPFLAGS} ${APACHE_CFLAGS} $CPPFLAGS"
 AC_CHECK_HEADER([apr_memcache.h], [HAVE_MEMCACHE=1], [HAVE_MEMCACHE=0])
-AM_CONDITIONAL(HAVE_MEMCACHE, HAVE_MEMCACHE=1)
+AM_CONDITIONAL(HAVE_MEMCACHE,[test x"$HAVE_MEMCACHE" = "x1"])
 CPPFLAGS=$old_CPPFLAGS
 
 # We need Jansson for JSON parsing.
@@ -109,7 +109,7 @@ then
     JQ_LIBS="-L$with_jq/lib -ljq"
 
 	CPPFLAGS="$JQ_CFLAGS $CPPFLAGS"
-	AC_CHECK_HEADER([jq.h], , [HAVE_LIBJQ=0])
+	AC_CHECK_HEADER([jq.h], [HAVE_LIBJQ=1], [HAVE_LIBJQ=0])
 
 	LDFLAGS="$JQ_LIBS $LDFLAGS"
 	AC_CHECK_LIB([jq], [jq_init], [HAVE_LIBJQ=1], [HAVE_LIBJQ=0])

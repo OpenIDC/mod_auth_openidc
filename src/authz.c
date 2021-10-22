@@ -398,7 +398,7 @@ int oidc_authz_worker22(request_rec *r, const json_t * const claims,
 	}
 
 	/* log the event, also in Apache speak */
-	oidc_info(r, "authorization denied for require claims: '%s'", reqs);
+	oidc_info(r, "authorization denied for require claims (0/%d): '%s'", nelts, nelts > 0 ? reqs[0].requirement : "(none)");
 	ap_note_auth_failure(r);
 
 	return HTTP_UNAUTHORIZED;
