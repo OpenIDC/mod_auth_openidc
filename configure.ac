@@ -15,7 +15,7 @@ LT_INIT([dlopen])
 AC_ARG_WITH([apxs],
             [--with-apxs=PATH],
             [APXS_PATH="$withval"],
-            [APXS_PATH="/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:/opt/local/bin"])
+            [APXS_PATH="/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:/opt/local/bin:/usr/local/apache2/bin"])
 
 AC_PATH_PROG(APXS, apxs, no, ${APXS_PATH})
 
