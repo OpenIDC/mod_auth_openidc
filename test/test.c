@@ -1495,6 +1495,31 @@ static char * test_decode_json_object(request_rec *r) {
 	return 0;
 }
 
+static char* test_remote_user(request_rec *r) {
+	apr_byte_t rc = FALSE;
+	char *remote_user = NULL;
+	char *s = NULL;
+	json_t *json = NULL;
+
+	s = "{\"upn\":\"nneul@umsystem.edu\"}";
+	rc = oidc_util_decode_json_object(r, s, &json);
+	TST_ASSERT("test remote user (1) valid JSON", rc == TRUE);
+	rc = oidc_get_remote_user(r, "upn", "^(.*)@umsystem\\.edu", "$1", json, &remote_user);
+	TST_ASSERT("test remote user (1) function result", rc == TRUE);
+	TST_ASSERT_STR("remote_user (1) string", remote_user, "nneul");
+	json_decref(json);
+
+	s = "{\"email\":\"nneul@umsystem.edu\"}";
+	rc = oidc_util_decode_json_object(r, s, &json);
+	TST_ASSERT("test remote user (2) valid JSON", rc == TRUE);
+	rc = oidc_get_remote_user(r, "email", "^(.*)@([^.]+)\\..+$", "$2\\$1", json, &remote_user);
+	TST_ASSERT("test remote user (2) function result", rc == TRUE);
+	TST_ASSERT_STR("remote_user (2) string", remote_user, "umsystem\\nneul");
+	json_decref(json);
+
+	return 0;
+}
+
 static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	char *message;
 	TST_RUN(test_public_key_parse, pool);
@@ -1529,6 +1554,8 @@ static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	TST_RUN(test_accept, r);
 
 	TST_RUN(test_decode_json_object, r);
+
+	TST_RUN(test_remote_user, r);
 
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	TST_RUN(test_authz_worker, r);
