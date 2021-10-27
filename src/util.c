@@ -2623,6 +2623,10 @@ const char* oidc_util_hdr_in_x_requested_with_get(const request_rec *r) {
 	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_X_REQUESTED_WITH);
 }
 
+const char* oidc_util_hdr_in_sec_fetch_mode_get(const request_rec *r) {
+	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_SEC_FETCH_MODE);
+}
+
 const char* oidc_util_hdr_in_accept_get(const request_rec *r) {
 	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_ACCEPT);
 }

@@ -1,7 +1,8 @@
 10/27/2021
 - fix regexp substition crash using OIDCRemoteUserClaim; thanks @nneul; closes #720
 - backport ap_get_exec_line, supporting the "exec:" option in OIDCCryptoPassphrase
-- bump to 2.4.9.5rc6
+- add check for Sec-Fetch-Mode header != "navigate" value to auto-detect XML HTTP Requests
+- bump to 2.4.9.5rc7
 
 10/22/2021
 - complete usage of autoconf/automake; see #674
