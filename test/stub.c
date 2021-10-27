@@ -305,6 +305,10 @@ AP_DECLARE(void) ap_log_error_(const char *file, int line, int module_index,
 			return NULL;
 		}
 
+		AP_DECLARE(char *) ap_make_dirstr_parent(apr_pool_t *p, const char *s) {
+			return NULL;
+		}
+
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 		AP_DECLARE(int) ap_expr_exec(request_rec *r, const ap_expr_info_t *expr,
 				const char **err) {

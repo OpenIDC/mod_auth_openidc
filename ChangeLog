@@ -1,6 +1,7 @@
 10/27/2021
 - fix regexp substition crash using OIDCRemoteUserClaim; thanks @nneul; closes #720
-- bump to 2.4.9.5rc5
+- backport ap_get_exec_line, supporting the "exec:" option in OIDCCryptoPassphrase
+- bump to 2.4.9.5rc6
 
 10/22/2021
 - complete usage of autoconf/automake; see #674
