@@ -1,3 +1,7 @@
+10/28/2021
+- use apxs to link the module in Makefile.am
+- bump to 2.4.9.5rc8
+
 10/27/2021
 - fix regexp substition crash using OIDCRemoteUserClaim; thanks @nneul; closes #720
 - backport ap_get_exec_line, supporting the "exec:" option in OIDCCryptoPassphrase

@@ -13,7 +13,7 @@
 /install-sh
 /libtool
 /ltmain.sh
-/mod_auth_openidc.la
+/*.la
 /config.sub
 /depcomp
 /missing
