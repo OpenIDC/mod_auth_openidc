@@ -13,16 +13,18 @@ LT_INIT([dlopen])
 
 # Checks for apxs.
 AC_ARG_WITH([apxs],
-            [--with-apxs=PATH],
-            [APXS_PATH="$withval"],
-            [APXS_PATH="/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:/opt/local/bin:/usr/local/apache2/bin"])
+            [AS_HELP_STRING([--with-apxs=PATH/NAME],[path to the apxs binary for Apache [[apxs]]])],
+            [AC_SUBST(APXS, $with_apxs)],
+            [AC_PATH_PROGS(APXS, [apxs apxs2],,)])
 
-AC_PATH_PROG(APXS, apxs, no, ${APXS_PATH})
-
-AS_IF([test "x${APXS}" = "xno" ],
-      [AC_MSG_ERROR([apxs not found])],
-      [test "x${APXS}" = "x"],
-      [AC_MSG_ERROR([apxs not found])])
+if test ! -x "$APXS"; then
+   # $APXS isn't a executable file.
+   AC_MSG_ERROR([
+Could not find apxs. Please specify the path to apxs
+using the --with-apxs=/full/path/to/apxs option.
+The executable may also be named 'apxs2'.
+])
+fi
 
 APXS_CFLAGS=`${APXS} -q CFLAGS 2> /dev/null`
 APXS_CPPFLAGS=`${APXS} -q CPPFLAGS 2> /dev/null`
