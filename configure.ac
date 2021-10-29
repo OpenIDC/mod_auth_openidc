@@ -107,8 +107,12 @@ AC_ARG_WITH([jq],
 
 if test -n "$with_jq"
 then
-    JQ_CFLAGS="-I$with_jq/include"
-    JQ_LIBS="-L$with_jq/lib -ljq"
+	if test "$JQ_CFLAGS" == ""; then
+    	JQ_CFLAGS="-I$with_jq/include"
+    fi
+	if test "$JQ_LIBS" == ""; then
+    	JQ_LIBS="-L$with_jq/lib -ljq"
+	fi
 
 	CPPFLAGS="$JQ_CFLAGS $CPPFLAGS"
 	AC_CHECK_HEADER([jq.h], [HAVE_LIBJQ=1], [HAVE_LIBJQ=0])
