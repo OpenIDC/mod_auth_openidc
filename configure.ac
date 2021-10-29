@@ -13,13 +13,13 @@ LT_INIT([dlopen])
 
 # Checks for apxs.
 AC_ARG_WITH([apxs],
-            [AS_HELP_STRING([--with-apxs=PATH/NAME],[path to the apxs binary for Apache [[apxs]]])],
-            [AC_SUBST(APXS, $with_apxs)],
-            [AC_PATH_PROGS(APXS, [apxs apxs2],,)])
+	[AS_HELP_STRING([--with-apxs=PATH/NAME],[path to the apxs binary for Apache [[apxs]]])],
+	[AC_SUBST(APXS, $with_apxs)],
+	[AC_PATH_PROGS(APXS, [apxs apxs2],,)])
 
 if test ! -x "$APXS"; then
-   # $APXS isn't a executable file.
-   AC_MSG_ERROR([
+	# $APXS isn't a executable file.
+	AC_MSG_ERROR([
 Could not find apxs. Please specify the path to apxs
 using the --with-apxs=/full/path/to/apxs option.
 The executable may also be named 'apxs2'.
@@ -85,16 +85,16 @@ AC_SUBST(PCRE_LIBS)
 
 # Redis
 AC_ARG_WITH([hiredis],
-  [AS_HELP_STRING([--with-hiredis],
-    [support Redis @<:@default=check@:>@])],
-  [],
-  [with_hiredis=yes])
+	[AS_HELP_STRING([--with-hiredis],
+	[support Redis @<:@default=check@:>@])],
+	[],
+	[with_hiredis=yes])
 AS_CASE(["$with_hiredis"],
-  [yes], [
-  	if test "$HIREDIS_LIBS" == ""; then PKG_CHECK_MODULES([HIREDIS], [hiredis], [HAVE_LIBHIREDIS=1], [HAVE_LIBHIREDIS=0]) ; else [HAVE_LIBHIREDIS=1] ; fi
-  ],
-  [no], [HAVE_LIBHIREDIS=0],
-  [PKG_CHECK_MODULES([HIREDIS], [hiredis], [HAVE_LIBHIREDIS=1], [HAVE_LIBHIREDIS=0])])
+	[yes], [
+		if test "$HIREDIS_LIBS" == ""; then PKG_CHECK_MODULES([HIREDIS], [hiredis], [HAVE_LIBHIREDIS=1], [HAVE_LIBHIREDIS=0]) ; else [HAVE_LIBHIREDIS=1] ; fi
+	],
+	[no], [HAVE_LIBHIREDIS=0],
+	[PKG_CHECK_MODULES([HIREDIS], [hiredis], [HAVE_LIBHIREDIS=1], [HAVE_LIBHIREDIS=0])])
 AM_CONDITIONAL(HAVE_LIBHIREDIS, [test x"$HAVE_LIBHIREDIS" = "x1"])
 AC_SUBST(HIREDIS_CFLAGS)
 AC_SUBST(HIREDIS_LIBS)
@@ -108,10 +108,10 @@ AC_ARG_WITH([jq],
 if test -n "$with_jq"
 then
 	if test "$JQ_CFLAGS" == ""; then
-    	JQ_CFLAGS="-I$with_jq/include"
-    fi
+		JQ_CFLAGS="-I$with_jq/include"
+	fi
 	if test "$JQ_LIBS" == ""; then
-    	JQ_LIBS="-L$with_jq/lib -ljq"
+		JQ_LIBS="-L$with_jq/lib -ljq"
 	fi
 
 	CPPFLAGS="$JQ_CFLAGS $CPPFLAGS"
@@ -120,7 +120,7 @@ then
 	LDFLAGS="$JQ_LIBS $LDFLAGS"
 	AC_CHECK_LIB([jq], [jq_init], [HAVE_LIBJQ=1], [HAVE_LIBJQ=0])
 	if test "x$have_jq" = "x0" ; then
-  		AC_MSG_WARN("cannot find library for -ljq.")
+		AC_MSG_WARN("cannot find library for -ljq.")
 	fi
 fi
 

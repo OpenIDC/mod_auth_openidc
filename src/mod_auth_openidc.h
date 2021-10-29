@@ -819,31 +819,31 @@ apr_byte_t oidc_enabled(request_rec *r);
 char *oidc_util_http_form_encoded_data(request_rec *r, const apr_table_t *params);
 
 /* HTTP header constants */
-#define OIDC_HTTP_HDR_COOKIE							"Cookie"
-#define OIDC_HTTP_HDR_SET_COOKIE						"Set-Cookie"
-#define OIDC_HTTP_HDR_USER_AGENT						"User-Agent"
-#define OIDC_HTTP_HDR_X_FORWARDED_FOR					"X-Forwarded-For"
-#define OIDC_HTTP_HDR_CONTENT_TYPE						"Content-Type"
-#define OIDC_HTTP_HDR_CONTENT_LENGTH					"Content-Length"
-#define OIDC_HTTP_HDR_X_REQUESTED_WITH					"X-Requested-With"
-#define OIDC_HTTP_HDR_SEC_FETCH_MODE					"Sec-Fetch-Mode"
-#define OIDC_HTTP_HDR_ACCEPT							"Accept"
-#define OIDC_HTTP_HDR_AUTHORIZATION						"Authorization"
-#define OIDC_HTTP_HDR_X_FORWARDED_PROTO					"X-Forwarded-Proto"
-#define OIDC_HTTP_HDR_X_FORWARDED_PORT					"X-Forwarded-Port"
-#define OIDC_HTTP_HDR_X_FORWARDED_HOST					"X-Forwarded-Host"
-#define OIDC_HTTP_HDR_HOST								"Host"
-#define OIDC_HTTP_HDR_LOCATION							"Location"
-#define OIDC_HTTP_HDR_CACHE_CONTROL						"Cache-Control"
-#define OIDC_HTTP_HDR_PRAGMA							"Pragma"
-#define OIDC_HTTP_HDR_P3P								"P3P"
-#define OIDC_HTTP_HDR_EXPIRES							"Expires"
-#define OIDC_HTTP_HDR_X_FRAME_OPTIONS					"X-Frame-Options"
-#define OIDC_HTTP_HDR_WWW_AUTHENTICATE					"WWW-Authenticate"
-#define OIDC_HTTP_HDR_INCLUDE_REFERRED_TOKEN_BINDING_ID	"Include-Referred-Token-Binding-ID"
+#define OIDC_HTTP_HDR_COOKIE                            "Cookie"
+#define OIDC_HTTP_HDR_SET_COOKIE                        "Set-Cookie"
+#define OIDC_HTTP_HDR_USER_AGENT                        "User-Agent"
+#define OIDC_HTTP_HDR_X_FORWARDED_FOR                   "X-Forwarded-For"
+#define OIDC_HTTP_HDR_CONTENT_TYPE                      "Content-Type"
+#define OIDC_HTTP_HDR_CONTENT_LENGTH                    "Content-Length"
+#define OIDC_HTTP_HDR_X_REQUESTED_WITH                  "X-Requested-With"
+#define OIDC_HTTP_HDR_SEC_FETCH_MODE                    "Sec-Fetch-Mode"
+#define OIDC_HTTP_HDR_ACCEPT    	                    "Accept"
+#define OIDC_HTTP_HDR_AUTHORIZATION                     "Authorization"
+#define OIDC_HTTP_HDR_X_FORWARDED_PROTO                 "X-Forwarded-Proto"
+#define OIDC_HTTP_HDR_X_FORWARDED_PORT                  "X-Forwarded-Port"
+#define OIDC_HTTP_HDR_X_FORWARDED_HOST                  "X-Forwarded-Host"
+#define OIDC_HTTP_HDR_HOST    		                    "Host"
+#define OIDC_HTTP_HDR_LOCATION                          "Location"
+#define OIDC_HTTP_HDR_CACHE_CONTROL                     "Cache-Control"
+#define OIDC_HTTP_HDR_PRAGMA                            "Pragma"
+#define OIDC_HTTP_HDR_P3P                               "P3P"
+#define OIDC_HTTP_HDR_EXPIRES                           "Expires"
+#define OIDC_HTTP_HDR_X_FRAME_OPTIONS                   "X-Frame-Options"
+#define OIDC_HTTP_HDR_WWW_AUTHENTICATE                  "WWW-Authenticate"
+#define OIDC_HTTP_HDR_INCLUDE_REFERRED_TOKEN_BINDING_ID "Include-Referred-Token-Binding-ID"
 
-#define OIDC_HTTP_HDR_VAL_XML_HTTP_REQUEST				"XMLHttpRequest"
-#define OIDC_HTTP_HDR_VAL_NAVIGATE						"navigate"
+#define OIDC_HTTP_HDR_VAL_XML_HTTP_REQUEST "XMLHttpRequest"
+#define OIDC_HTTP_HDR_VAL_NAVIGATE         "navigate"
 
 void oidc_util_hdr_in_set(const request_rec *r, const char *name, const char *value);
 const char *oidc_util_hdr_in_cookie_get(const request_rec *r);
@@ -878,10 +878,10 @@ apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg *c, json_
 // oidc_session.c
 typedef struct {
 	char uuid[APR_UUID_FORMATTED_LENGTH + 1]; /* unique id */
-    const char *remote_user;                  /* user who owns this particular session */
-    json_t *state;                            /* the state for this session, encoded in a JSON object */
-    apr_time_t expiry;                        /* if > 0, the time of expiry of this session */
-    const char *sid;
+	const char *remote_user;                  /* user who owns this particular session */
+	json_t *state;                            /* the state for this session, encoded in a JSON object */
+	apr_time_t expiry;                        /* if > 0, the time of expiry of this session */
+	const char *sid;
 } oidc_session_t;
 
 apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **z);
