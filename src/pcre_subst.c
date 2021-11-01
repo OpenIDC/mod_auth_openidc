@@ -149,7 +149,7 @@ pcre_subst(const pcre *ppat, const pcre_extra *extra, const char *str, int len,
 	int nmat;
 	int ovec[OIDC_PCRE_MAXCAPTURE * 3];
 	nmat = pcre_exec(ppat, extra, str, len, offset, options,
-		ovec, sizeof(ovec));
+		ovec, OIDC_PCRE_MAXCAPTURE * 3);
 #ifdef DEBUG_PCRE_SUBST
 	dumpmatch(str, len, rep, nmat, ovec);
 #endif

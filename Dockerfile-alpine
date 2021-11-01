@@ -1,5 +1,9 @@
 FROM alpine:3.10
 
+ENV MOD_AUTH_OPENIDC_REPOSITORY https://github.com/zmartzone/mod_auth_openidc.git
+
+ENV MOD_AUTH_OPENIDC_BRANCH master
+
 ENV BUILD_DIR /tmp/mod_auth_openidc
 
 ENV APACHE_LOG_DIR /var/log/apache2
@@ -7,12 +11,10 @@ ENV APACHE_LOG_DIR /var/log/apache2
 ENV APACHE_DEFAULT_CONF /etc/apache2/httpd.conf
 
 # add testing repository (for cjose library)
-RUN echo "http://nl.alpinelinux.org/alpine/edge/testing" >>  /etc/apk/repositories
+RUN echo "http://nl.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
 
 # ADD source
 RUN mkdir ${BUILD_DIR}
-
-COPY . ${BUILD_DIR}
 
 # add dependencies, build and install mod_auth_openidc, need atomic operation for image size
 RUN apk update && apk add --no-cache \
@@ -34,11 +36,13 @@ RUN apk update && apk add --no-cache \
   libtool \
   && \
   cd ${BUILD_DIR} && \
+  git clone -b ${MOD_AUTH_OPENIDC_BRANCH} ${MOD_AUTH_OPENIDC_REPOSITORY} && \
+  cd mod_auth_openidc && \
   ./autogen.sh && \
   ./configure CFLAGS="-g -O0" LDFLAGS="-lrt" && \
   make test && \
   make install && \
-  cd -- && \
+  cd ../.. && \
   rm -fr ${BUILD_DIR} && \
   apk del git cjose-dev apache2-dev autoconf automake build-base wget curl-dev pcre-dev libtool
 

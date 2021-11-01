@@ -18,17 +18,9 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2019 ZmartZone IAM
+ * Copyright (C) 2017-2021 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
- *
- * For further information please contact:
- *
- *      Ping Identity Corporation
- *      1099 18th St Suite 2950
- *      Denver, CO 80202
- *      303.468.2900
- *      http://www.pingidentity.com
  *
  * DISCLAIMER OF WARRANTIES:
  *
@@ -50,10 +42,6 @@
  *
  * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
  */
-
-#include <http_core.h>
-#include <http_log.h>
-#include <http_protocol.h>
 
 #include "mod_auth_openidc.h"
 
@@ -410,7 +398,7 @@ int oidc_authz_worker22(request_rec *r, const json_t * const claims,
 	}
 
 	/* log the event, also in Apache speak */
-	oidc_debug(r, "authorization denied for client session");
+	oidc_info(r, "authorization denied for require claims (0/%d): '%s'", nelts, nelts > 0 ? reqs[0].requirement : "(none)");
 	ap_note_auth_failure(r);
 
 	return HTTP_UNAUTHORIZED;
@@ -422,10 +410,11 @@ int oidc_authz_worker22(request_rec *r, const json_t * const claims,
  * Apache >=2.4 authorization routine: match the claims from the authenticated user against the Require primitive
  */
 authz_status oidc_authz_worker24(request_rec *r, const json_t * const claims,
-		const char *require_args, oidc_authz_match_claim_fn_type match_claim_fn) {
+		const char *require_args, const void *parsed_require_args, oidc_authz_match_claim_fn_type match_claim_fn) {
 
 	int count_oauth_claims = 0;
-	const char *t, *w;
+	const char *t, *w, *err = NULL;
+	const ap_expr_info_t *expr = parsed_require_args;
 
 	/* needed for anonymous authentication */
 	if (r->user == NULL)
@@ -435,8 +424,17 @@ authz_status oidc_authz_worker24(request_rec *r, const json_t * const claims,
 	if (!claims)
 		return AUTHZ_DENIED;
 
+	if (expr) {
+		t = ap_expr_str_exec(r, expr, &err);
+		if (err) {
+			oidc_error(r, "could not evaluate expression '%s': %s", require_args, err);
+			return AUTHZ_DENIED;
+		}
+	} else {
+		t = require_args;
+	}
+
 	/* loop over the Required specifications */
-	t = require_args;
 	while ((w = ap_getword_conf(r->pool, &t)) && w[0]) {
 
 		count_oauth_claims++;
@@ -456,6 +454,8 @@ authz_status oidc_authz_worker24(request_rec *r, const json_t * const claims,
 		oidc_warn(r,
 				"'require claim/expr' missing specification(s) in configuration, denying");
 	}
+
+	oidc_info(r, "could not match require claim expression '%s'", require_args);
 
 	return AUTHZ_DENIED;
 }

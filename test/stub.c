@@ -37,6 +37,13 @@ AP_DECLARE(long) ap_get_client_block(request_rec * r, char * buffer,
 	return 0;
 }
 
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+AP_DECLARE(char *) ap_get_exec_line(apr_pool_t *p, const char *cmd,
+		const char * const *argv) {
+	return NULL;
+}
+#endif
+
 AP_DECLARE(char *) ap_getword(apr_pool_t *atrans, const char **line, char stop) {
 	const char *pos = *line;
 	int len;
@@ -168,6 +175,18 @@ AP_DECLARE(int) ap_is_initial_req(request_rec *r) {
 }
 
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+AP_DECLARE(ap_expr_info_t *) ap_expr_parse_cmd_mi(const cmd_parms *cmd, const char *expr,
+		unsigned int flags, const char **err, ap_expr_lookup_fn_t *lookup_fn,
+		int module_index) {
+	return NULL;
+}
+
+AP_DECLARE(const char *) ap_expr_str_exec(request_rec *r, const ap_expr_info_t *expr,
+		const char **err) {
+	err = NULL;
+	return expr->filename;
+}
+
 AP_DECLARE(void) ap_log_error_(const char *file, int line, int module_index,
 		int level, apr_status_t status, const server_rec *s, const char *fmt,
 		...) {
@@ -285,3 +304,14 @@ AP_DECLARE(void) ap_log_error_(const char *file, int line, int module_index,
 				ap_filter_type ftype) {
 			return NULL;
 		}
+
+		AP_DECLARE(char *) ap_make_dirstr_parent(apr_pool_t *p, const char *s) {
+			return NULL;
+		}
+
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+		AP_DECLARE(int) ap_expr_exec(request_rec *r, const ap_expr_info_t *expr,
+				const char **err) {
+			return 0;
+		}
+#endif

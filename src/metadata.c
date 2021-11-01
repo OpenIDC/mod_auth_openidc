@@ -18,17 +18,9 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2019 ZmartZone IAM
+ * Copyright (C) 2017-2021 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
- *
- * For further information please contact:
- *
- *      Ping Identity Corporation
- *      1099 18th St Suite 2950
- *      Denver, CO 80202
- *      303.468.2900
- *      http://www.pingidentity.com
  *
  * DISCLAIMER OF WARRANTIES:
  *
@@ -51,16 +43,7 @@
  * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
  */
 
-#include <apr_hash.h>
-#include <apr_time.h>
-#include <apr_strings.h>
-#include <apr_pools.h>
-
-#include <httpd.h>
-#include <http_log.h>
-
 #include "mod_auth_openidc.h"
-#include "parse.h"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -101,6 +84,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_METADATA_CLIENT_NAME                                  "client_name"
 #define OIDC_METADATA_REDIRECT_URIS                                "redirect_uris"
 #define OIDC_METADATA_RESPONSE_TYPES                               "response_types"
+#define OIDC_METADATA_GRANT_TYPES                                  "grant_types"
 #define OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHOD                   "token_endpoint_auth_method"
 #define OIDC_METADATA_CONTACTS                                     "contacts"
 #define OIDC_METADATA_INITIATE_LOGIN_URI                           "initiate_login_uri"
@@ -109,6 +93,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_METADATA_POST_LOGOUT_REDIRECT_URIS                    "post_logout_redirect_uris"
 #define OIDC_METADATA_IDTOKEN_BINDING_CNF                          "id_token_token_binding_cnf"
 #define OIDC_METADATA_SSL_VALIDATE_SERVER                          "ssl_validate_server"
+#define OIDC_METADATA_VALIDATE_ISSUER                              "validate_issuer"
 #define OIDC_METADATA_SCOPE                                        "scope"
 #define OIDC_METADATA_JWKS_REFRESH_INTERVAL                        "jwks_refresh_interval"
 #define OIDC_METADATA_IDTOKEN_IAT_SLACK                            "idtoken_iat_slack"
@@ -125,6 +110,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_METADATA_USERINFO_REFRESH_INTERVAL                    "userinfo_refresh_interval"
 #define OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_CERT               "token_endpoint_tls_client_cert"
 #define OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_KEY                "token_endpoint_tls_client_key"
+#define OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_KEY_PWD            "token_endpoint_tls_client_key_pwd"
 #define OIDC_METADATA_REQUEST_OBJECT                               "request_object"
 #define OIDC_METADATA_USERINFO_TOKEN_METHOD                        "userinfo_token_method"
 #define OIDC_METADATA_TOKEN_BINDING_POLICY                         "token_binding_policy"
@@ -134,7 +120,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 /*
  * get the metadata filename for a specified issuer (cq. urlencode it)
  */
-static const char *oidc_metadata_issuer_to_filename(request_rec *r,
+static const char* oidc_metadata_issuer_to_filename(request_rec *r,
 		const char *issuer) {
 
 	/* strip leading https:// */
@@ -161,7 +147,7 @@ static const char *oidc_metadata_issuer_to_filename(request_rec *r,
 /*
  * get the issuer from a metadata filename (cq. urldecode it)
  */
-static const char *oidc_metadata_filename_to_issuer(request_rec *r,
+static const char* oidc_metadata_filename_to_issuer(request_rec *r,
 		const char *filename) {
 	char *result = apr_pstrdup(r->pool, filename);
 	char *p = strrchr(result, OIDC_CHAR_DOT);
@@ -173,7 +159,7 @@ static const char *oidc_metadata_filename_to_issuer(request_rec *r,
 /*
  * get the full path to the metadata file for a specified issuer and directory
  */
-static const char *oidc_metadata_file_path(request_rec *r, oidc_cfg *cfg,
+static const char* oidc_metadata_file_path(request_rec *r, oidc_cfg *cfg,
 		const char *issuer, const char *type) {
 	return apr_psprintf(r->pool, "%s/%s.%s", cfg->metadata_dir,
 			oidc_metadata_issuer_to_filename(r, issuer), type);
@@ -182,7 +168,7 @@ static const char *oidc_metadata_file_path(request_rec *r, oidc_cfg *cfg,
 /*
  * get the full path to the provider metadata file for a specified issuer
  */
-static const char *oidc_metadata_provider_file_path(request_rec *r,
+static const char* oidc_metadata_provider_file_path(request_rec *r,
 		const char *issuer) {
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
@@ -193,7 +179,7 @@ static const char *oidc_metadata_provider_file_path(request_rec *r,
 /*
  * get the full path to the client metadata file for a specified issuer
  */
-static const char *oidc_metadata_client_file_path(request_rec *r,
+static const char* oidc_metadata_client_file_path(request_rec *r,
 		const char *issuer) {
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
@@ -203,7 +189,7 @@ static const char *oidc_metadata_client_file_path(request_rec *r,
 /*
  * get the full path to the custom config file for a specified issuer
  */
-static const char *oidc_metadata_conf_path(request_rec *r, const char *issuer) {
+static const char* oidc_metadata_conf_path(request_rec *r, const char *issuer) {
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
 	return oidc_metadata_file_path(r, cfg, issuer, OIDC_METADATA_SUFFIX_CONF);
@@ -212,7 +198,7 @@ static const char *oidc_metadata_conf_path(request_rec *r, const char *issuer) {
 /*
  * get cache key for the JWKs file for a specified URI
  */
-static const char *oidc_metadata_jwks_cache_key(request_rec *r,
+static const char* oidc_metadata_jwks_cache_key(request_rec *r,
 		const char *jwks_uri) {
 	return jwks_uri;
 }
@@ -505,6 +491,10 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 	}
 	json_object_set_new(data, OIDC_METADATA_RESPONSE_TYPES, response_types);
 
+	json_object_set_new(data, OIDC_METADATA_GRANT_TYPES,
+			json_pack("[s, s, s]", "authorization_code", "implicit",
+					"refresh_token"));
+
 	if (provider->token_endpoint_auth != NULL) {
 		json_object_set_new(data, OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHOD,
 				json_string(provider->token_endpoint_auth));
@@ -595,7 +585,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 			NULL, provider->registration_token, provider->ssl_validate_server, response,
 			cfg->http_timeout_short, cfg->outgoing_proxy,
 			oidc_dir_cfg_pass_cookies(r),
-			NULL, NULL) == FALSE) {
+			NULL, NULL, NULL) == FALSE) {
 		json_decref(data);
 		return FALSE;
 	}
@@ -623,7 +613,7 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
 	if (oidc_util_http_get(r, jwks_uri->url, NULL, NULL,
 			NULL, jwks_uri->ssl_validate_server, &response, cfg->http_timeout_long,
 			cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL,
-			NULL) == FALSE)
+			NULL, NULL) == FALSE)
 		return FALSE;
 
 	/* decode and see if it is not an error response somehow */
@@ -694,7 +684,7 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg,
 			cfg->provider.ssl_validate_server, response,
 			cfg->http_timeout_short, cfg->outgoing_proxy,
 			oidc_dir_cfg_pass_cookies(r),
-			NULL, NULL) == FALSE)
+			NULL, NULL, NULL) == FALSE)
 		return FALSE;
 
 	/* decode and see if it is not an error response somehow */
@@ -1139,8 +1129,8 @@ void oidc_metadata_get_valid_int(request_rec *r, json_t *json, const char *key,
 	*int_value = v;
 }
 
-void oidc_metadata_get_jwks(request_rec *r, json_t *json, const char *s_use,
-		apr_hash_t **jwk_list) {
+static void oidc_metadata_get_jwks(request_rec *r, json_t *json,
+		const char *s_use, apr_array_header_t **jwk_list) {
 	json_t *keys = NULL;
 	int i = 0;
 	oidc_jose_error_t err;
@@ -1178,8 +1168,8 @@ void oidc_metadata_get_jwks(request_rec *r, json_t *json, const char *s_use,
 		}
 
 		if (*jwk_list == NULL)
-			*jwk_list = apr_hash_make(r->pool);
-		apr_hash_set(*jwk_list, jwk->kid, APR_HASH_KEY_STRING, jwk);
+			*jwk_list = apr_array_make(r->pool, 4, sizeof(const oidc_jwk_t*));
+		*(const oidc_jwk_t**) apr_array_push(*jwk_list) = jwk;
 	}
 }
 
@@ -1234,6 +1224,9 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 	/* find out if we need to perform SSL server certificate validation on the token_endpoint and user_info_endpoint for this provider */
 	oidc_metadata_parse_boolean(r, j_conf, OIDC_METADATA_SSL_VALIDATE_SERVER,
 			&provider->ssl_validate_server, cfg->provider.ssl_validate_server);
+
+	oidc_metadata_parse_boolean(r, j_conf, OIDC_METADATA_VALIDATE_ISSUER,
+			&provider->validate_issuer, cfg->provider.validate_issuer);
 
 	/* find out what scopes we should be requesting from this provider */
 	// TODO: use the provider "scopes_supported" to mix-and-match with what we've configured for the client
@@ -1324,6 +1317,10 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 			OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_KEY,
 			&provider->token_endpoint_tls_client_key,
 			cfg->provider.token_endpoint_tls_client_key);
+	oidc_json_object_get_string(r->pool, j_conf,
+			OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_KEY_PWD,
+			&provider->token_endpoint_tls_client_key_pwd,
+			cfg->provider.token_endpoint_tls_client_key_pwd);
 
 	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_REQUEST_OBJECT,
 			&provider->request_object, cfg->provider.request_object);

@@ -18,17 +18,9 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2019 ZmartZone IAM
+ * Copyright (C) 2017-2021 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
- *
- * For further information please contact:
- *
- *      Ping Identity Corporation
- *      1099 18th St Suite 2950
- *      Denver, CO 80202
- *      303.468.2900
- *      http://www.pingidentity.com
  *
  * DISCLAIMER OF WARRANTIES:
  *
@@ -49,14 +41,6 @@
  * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
  */
 
-#include <apr_base64.h>
-#include <apr_lib.h>
-
-#include <httpd.h>
-#include <http_core.h>
-#include <http_config.h>
-#include <http_log.h>
-
 #include "mod_auth_openidc.h"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
@@ -74,32 +58,29 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 /* the name of the sid attribute in the session */
 #define OIDC_SESSION_SID_KEY                      "sid"
 
-static apr_byte_t oidc_session_encode(request_rec *r, oidc_cfg *c,
-		oidc_session_t *z, char **s_value, apr_byte_t encrypt) {
+static apr_byte_t oidc_session_encode(request_rec *r, oidc_cfg *c, oidc_session_t *z,
+		char **s_value, apr_byte_t encrypt) {
 
 	if (encrypt == FALSE) {
 		*s_value = oidc_util_encode_json_object(r, z->state, JSON_COMPACT);
 		return (*s_value != NULL);
 	}
 
-	if (oidc_util_jwt_create(r, c->crypto_passphrase, z->state,
-			s_value) == FALSE)
+	if (oidc_util_jwt_create(r, c->crypto_passphrase, z->state, s_value, TRUE) == FALSE)
 		return FALSE;
 
 	return TRUE;
 }
 
-static apr_byte_t oidc_session_decode(request_rec *r, oidc_cfg *c,
-		oidc_session_t *z, const char *s_json, apr_byte_t encrypt) {
+static apr_byte_t oidc_session_decode(request_rec *r, oidc_cfg *c, oidc_session_t *z,
+		const char *s_json, apr_byte_t encrypt) {
 
 	if (encrypt == FALSE) {
 		return oidc_util_decode_json_object(r, s_json, &z->state);
 	}
 
-	if (oidc_util_jwt_verify(r, c->crypto_passphrase, s_json,
-			&z->state) == FALSE) {
-		oidc_error(r,
-				"could not verify secure JWT: cache value possibly corrupted");
+	if (oidc_util_jwt_verify(r, c->crypto_passphrase, s_json, &z->state, TRUE) == FALSE) {
+		oidc_error(r, "could not verify secure JWT: cache value possibly corrupted");
 		return FALSE;
 	}
 	return TRUE;
@@ -118,7 +99,7 @@ static void oidc_session_uuid_new(request_rec *r, oidc_session_t *z) {
  * clear contents of a session
  */
 static void oidc_session_clear(request_rec *r, oidc_session_t *z) {
-	strncpy(z->uuid, "", strlen(""));
+	z->uuid[0] = '\0';
 	z->remote_user = NULL;
 	// NB: don't clear sid
 	z->expiry = 0;
@@ -128,7 +109,8 @@ static void oidc_session_clear(request_rec *r, oidc_session_t *z) {
 	}
 }
 
-apr_byte_t oidc_session_load_cache_by_uuid(request_rec *r, oidc_cfg *c, const char *uuid, oidc_session_t *z) {
+apr_byte_t oidc_session_load_cache_by_uuid(request_rec *r, oidc_cfg *c,
+		const char *uuid, oidc_session_t *z) {
 	const char *stored_uuid = NULL;
 	char *s_json = NULL;
 	apr_byte_t rc = FALSE;
@@ -138,7 +120,8 @@ apr_byte_t oidc_session_load_cache_by_uuid(request_rec *r, oidc_cfg *c, const ch
 	if ((rc == TRUE) && (s_json != NULL)) {
 		rc = oidc_session_decode(r, c, z, s_json, FALSE);
 		if (rc == TRUE) {
-			strncpy(z->uuid, uuid, strlen(uuid));
+			strncpy(z->uuid, uuid, APR_UUID_FORMATTED_LENGTH);
+			z->uuid[APR_UUID_FORMATTED_LENGTH] = '\0';
 
 			/* compare the session id in the cache value so it allows  us to detect cache corruption */
 			oidc_session_get(r, z, OIDC_SESSION_SESSION_ID, &stored_uuid);
@@ -178,10 +161,17 @@ static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 
 		rc = oidc_session_load_cache_by_uuid(r, c, uuid, z);
 
+		/* cache backend experienced an error while attempting lookup */
 		if (rc == FALSE) {
+			oidc_error(r, "cache backend failure for key %s", uuid);
+			return FALSE;
+		}
+
+		/* cache backend does not contain an entry for the given key */
+		if (z->state == NULL) {
 			/* delete the session cookie */
 			oidc_util_set_cookie(r, oidc_cfg_dir_cookie(r), "", 0,
-					NULL);
+					OIDC_COOKIE_EXT_SAME_SITE_NONE(r));
 		}
 	}
 
@@ -226,7 +216,7 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z,
 									(first_time ?
 											OIDC_COOKIE_EXT_SAME_SITE_LAX :
 											OIDC_COOKIE_EXT_SAME_SITE_STRICT) :
-											NULL);
+											OIDC_COOKIE_EXT_SAME_SITE_NONE(r));
 
 	} else {
 
@@ -234,7 +224,8 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z,
 			oidc_cache_set_sid(r, z->sid, NULL, 0);
 
 		/* clear the cookie */
-		oidc_util_set_cookie(r, oidc_cfg_dir_cookie(r), "", 0, NULL);
+		oidc_util_set_cookie(r, oidc_cfg_dir_cookie(r), "", 0,
+				OIDC_COOKIE_EXT_SAME_SITE_NONE(r));
 
 		/* remove the session from the cache */
 		rc = oidc_cache_set_session(r, z->uuid, NULL, 0);
@@ -271,11 +262,12 @@ static apr_byte_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z,
 	oidc_util_set_chunked_cookie(r, oidc_cfg_dir_cookie(r), cookieValue,
 			c->persistent_session_cookie ? z->expiry : -1,
 					c->session_cookie_chunk_size,
-					c->cookie_same_site ?
-							(first_time ?
-									OIDC_COOKIE_EXT_SAME_SITE_LAX :
-									OIDC_COOKIE_EXT_SAME_SITE_STRICT) :
-									NULL);
+					(z->state == NULL) ? OIDC_COOKIE_EXT_SAME_SITE_NONE(r) :
+							c->cookie_same_site ?
+									(first_time ?
+											OIDC_COOKIE_EXT_SAME_SITE_LAX :
+											OIDC_COOKIE_EXT_SAME_SITE_STRICT) :
+											OIDC_COOKIE_EXT_SAME_SITE_NONE(r));
 
 	return TRUE;
 }
@@ -313,10 +305,8 @@ apr_byte_t oidc_session_extract(request_rec *r, oidc_session_t *z) {
 		}
 	}
 
-	oidc_session_get(r, z, OIDC_SESSION_REMOTE_USER_KEY,
-			&z->remote_user);
-	oidc_session_get(r, z, OIDC_SESSION_SID_KEY,
-			&z->sid);
+	oidc_session_get(r, z, OIDC_SESSION_REMOTE_USER_KEY, &z->remote_user);
+	oidc_session_get(r, z, OIDC_SESSION_SID_KEY, &z->sid);
 
 	rc = TRUE;
 
@@ -404,8 +394,12 @@ apr_byte_t oidc_session_free(request_rec *r, oidc_session_t *z) {
  * terminate a session
  */
 apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z) {
-	oidc_session_free(r, z);
-	return oidc_session_save(r, z, FALSE);
+	if (z->state) {
+		json_decref(z->state);
+		z->state = NULL;
+	}
+	oidc_session_save(r, z, FALSE);
+	return oidc_session_free(r, z);
 }
 
 /*
@@ -482,7 +476,7 @@ static void oidc_session_set_timestamp(request_rec *r, oidc_session_t *z,
 		const char *key, const apr_time_t timestamp) {
 	if (timestamp != -1)
 		oidc_session_set(r, z, key,
-				apr_psprintf(r->pool, "%" APR_TIME_T_FMT, timestamp));
+				apr_psprintf(r->pool, "%" APR_TIME_T_FMT, apr_time_sec(timestamp)));
 }
 
 static json_t *oidc_session_get_str2json(request_rec *r, oidc_session_t *z,
@@ -507,7 +501,7 @@ static apr_time_t oidc_session_get_key2timestamp(request_rec *r,
 	const char *s_expires = oidc_session_get_key2string(r, z, key);
 	if (s_expires != NULL)
 		sscanf(s_expires, "%" APR_TIME_T_FMT, &t_expires);
-	return t_expires;
+	return apr_time_from_sec(t_expires);
 }
 
 void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z,
@@ -520,7 +514,7 @@ void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z,
 	void *iter = NULL;
 	apr_byte_t is_allowed;
 
-	if (oidc_util_decode_json_object(r, claims, &src) == FALSE){
+	if (oidc_util_decode_json_object(r, claims, &src) == FALSE) {
 		oidc_session_set(r, z, session_key, NULL);
 		return;
 	}

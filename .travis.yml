@@ -1,6 +1,8 @@
 language: c
 
-dist: trusty
+arch:
+  - amd64
+  - ppc64le
 
 addons:
   apt:
@@ -22,5 +24,8 @@ install:
   - sudo make install
   - cd -
 
+before_script:
+  - ./autogen.sh && ./configure
+
 script:
-  - ./autogen.sh && ./configure --with-apxs2=/usr/bin/apxs2 CFLAGS=-Werror && make && make test
+  - make check

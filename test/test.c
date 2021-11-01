@@ -18,17 +18,9 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2019 ZmartZone IAM
+ * Copyright (C) 2017-2021 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
- *
- * For further information please contact:
- *
- *      Ping Identity Corporation
- *      1099 18th St Suite 2950
- *      Denver, CO 80202
- *      303.468.2900
- *      http://www.pingidentity.com
  *
  * DISCLAIMER OF WARRANTIES:
  *
@@ -50,24 +42,15 @@
  *
  **************************************************************************/
 
-#include <stdio.h>
-#include <errno.h>
+#include "mod_auth_openidc.h"
 
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 
-#include "apr.h"
-#include "apr_errno.h"
-#include "apr_general.h"
-#include "apr_time.h"
-#include "apr_base64.h"
-
-#include "mod_auth_openidc.h"
-
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 static int test_nr_run = 0;
-static char TST_ERR_MSG[512];
+static char TST_ERR_MSG[4096];
 static int TST_RC;
 
 #define TST_FORMAT(fmt) \
@@ -128,9 +111,11 @@ static char *_jwk_parse(apr_pool_t *pool, const char *s, oidc_jwk_t **jwk,
 static char *test_public_key_parse(apr_pool_t *pool) {
 
 	oidc_jose_error_t err;
-	cjose_jwk_t *jwk, *jwkCert = NULL;
+	oidc_jwk_t *jwk, *jwkCert = NULL;
 
 	BIO *input, *inputCert = NULL;
+	char* json = NULL;
+
 	int isPrivateKey = 0;
 	int result;
 
@@ -138,20 +123,40 @@ static char *test_public_key_parse(apr_pool_t *pool) {
 	const char certificateFile[] = "./test/certificate.pem";
 
 	input = BIO_new(BIO_s_file());
-	TST_ASSERT_ERR("test_public_key_parse_BIO_new_public_key", input != NULL, pool, err);
-
-	TST_ASSERT_ERR("test_public_key_parse_BIOread_filename_public_key", result = BIO_read_filename(input, publicKeyFile), pool, err);
-
-	TST_ASSERT_ERR("oidc_jwk_rsa_bio_to_jwk", oidc_jwk_rsa_bio_to_jwk(pool, input, NULL, &jwk, isPrivateKey, &err),
+	TST_ASSERT_ERR("test_public_key_parse_BIO_new_public_key", input != NULL,
 			pool, err);
-	
+
+	TST_ASSERT_ERR("test_public_key_parse_BIOread_filename_public_key",
+			result = BIO_read_filename(input, publicKeyFile), pool, err);
+
+	TST_ASSERT_ERR("oidc_jwk_rsa_bio_to_jwk",
+			oidc_jwk_rsa_bio_to_jwk(pool, input, NULL, &jwk, isPrivateKey, &err),
+			pool, err);
+	BIO_free(input);
+
 	inputCert = BIO_new(BIO_s_file());
-	TST_ASSERT_ERR("test_public_key_parse_BIO_new_certificate", inputCert != NULL, pool, err);	
+	TST_ASSERT_ERR("test_public_key_parse_BIO_new_certificate",
+			inputCert != NULL, pool, err);
 
-	TST_ASSERT_ERR("test_public_key_parse_BIOread_filename_certificate", BIO_read_filename(inputCert, certificateFile), pool, err);	
+	TST_ASSERT_ERR("test_public_key_parse_BIOread_filename_certificate",
+			BIO_read_filename(inputCert, certificateFile), pool, err);
 
-	TST_ASSERT_ERR("oidc_jwk_rsa_bio_to_jwk", oidc_jwk_rsa_bio_to_jwk(pool, inputCert, NULL, &jwkCert, isPrivateKey, &err),
+	TST_ASSERT_ERR("oidc_jwk_rsa_bio_to_jwk",
+			oidc_jwk_rsa_bio_to_jwk(pool, inputCert, NULL, &jwkCert, isPrivateKey, &err),
 			pool, err);
+	BIO_free(inputCert);
+
+	TST_ASSERT_ERR("oidc_jwk_to_json with public key",
+			oidc_jwk_to_json(pool, jwk, &json, &err), pool, err);
+	TST_ASSERT_STR("oidc_jwk_to_json with public key output test", json,
+			"{\"kty\":\"RSA\",\"kid\":\"IbLjLR7-C1q0-ypkueZxGIJwBQNaLg46DZMpnPW1kps\",\"e\":\"AQAB\",\"n\":\"iGeTXbfV5bMppx7o7qMLCuVIKqbBa_qOzBiNNpe0K8rjg7-1z9GCuSlqbZtM0_5BQ6bGonnSPD--PowhFdivS4WNA33O0Kl1tQ0wdH3TOnwueIO9ahfW4q0BGFvMObneK-tjwiNMj1l-cZt8pvuS-3LtTWIzC-hTZM4caUmy5olm5PVdmru6C6V5rxkbYBPITFSzl5mpuo_C6RV_MYRwAh60ghs2OEvIWDrJkZnYaF7sjHC9j-4kfcM5oY7Zhg8KuHyloudYNzlqjVAPd0MbkLkh1pa8fmHsnN6cgfXYtFK7Z8WjYDUAhTH1JjZCVSFN55A-51dgD4cQNzieLEEkJw\"}");
+	oidc_jwk_destroy(jwk);
+
+	TST_ASSERT_ERR("oidc_jwk_to_json with certificate",
+			oidc_jwk_to_json(pool, jwkCert, &json, &err), pool, err);
+	TST_ASSERT_STR("oidc_jwk_to_json with certificate output test", json,
+			"{\"kty\":\"RSA\",\"kid\":\"IbLjLR7-C1q0-ypkueZxGIJwBQNaLg46DZMpnPW1kps\",\"e\":\"AQAB\",\"n\":\"iGeTXbfV5bMppx7o7qMLCuVIKqbBa_qOzBiNNpe0K8rjg7-1z9GCuSlqbZtM0_5BQ6bGonnSPD--PowhFdivS4WNA33O0Kl1tQ0wdH3TOnwueIO9ahfW4q0BGFvMObneK-tjwiNMj1l-cZt8pvuS-3LtTWIzC-hTZM4caUmy5olm5PVdmru6C6V5rxkbYBPITFSzl5mpuo_C6RV_MYRwAh60ghs2OEvIWDrJkZnYaF7sjHC9j-4kfcM5oY7Zhg8KuHyloudYNzlqjVAPd0MbkLkh1pa8fmHsnN6cgfXYtFK7Z8WjYDUAhTH1JjZCVSFN55A-51dgD4cQNzieLEEkJw\",\"x5c\":[\"MIICnTCCAYUCBgFuk1+FLDANBgkqhkiG9w0BAQsFADASMRAwDgYDVQQDDAd2aW5jZW50MB4XDTE5MTEyMjEzNDcyMVoXDTI5MTEyMjEzNDkwMVowEjEQMA4GA1UEAwwHdmluY2VudDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAIhnk1231eWzKace6O6jCwrlSCqmwWv6jswYjTaXtCvK44O/tc/Rgrkpam2bTNP+QUOmxqJ50jw/vj6MIRXYr0uFjQN9ztCpdbUNMHR90zp8LniDvWoX1uKtARhbzDm53ivrY8IjTI9ZfnGbfKb7kvty7U1iMwvoU2TOHGlJsuaJZuT1XZq7ugulea8ZG2ATyExUs5eZqbqPwukVfzGEcAIetIIbNjhLyFg6yZGZ2Ghe7IxwvY/uJH3DOaGO2YYPCrh8paLnWDc5ao1QD3dDG5C5IdaWvH5h7JzenIH12LRSu2fFo2A1AIUx9SY2QlUhTeeQPudXYA+HEDc4nixBJCcCAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAfAo40il4qw7DfOkke0p1ZFAgLQQS3J5hYNDSRvVv+vxkk9o/N++zTMoHbfcDcU5BdVH6Qsr/12PXPX7Ur5WYDq+bWGAK3MAaGtZlmycFeVhoVRfab4TUWUy43H3VyFUNqjGRAVJ/VD1RW3fJ18KrQTN2fcKSd88Jqt5TvjROKghq95+8BQtlhrR/sQVrjgYwc+eU9ljWI56MQXbpHstl9IewMXnusSPxKRTbutjaxzKaoXRTUncPL6ga0SSxOTdKksM4ZYpPnq0B93silb+0qs8aJraGzjAmLE30opfufP+roth19VJxAfYsW5mgAmXP9kEAF+iWB8FB4/Q4noNG8Q==\"],\"x5t#S256\":\"hMVJ55Mqi4uAQIztPKUmL2MSfy6iN1Lr3J1CNGAIBms\",\"x5t\":\"0oN6Bx-eh6VAmNw1I7o3Dd9JPwE\"}");
+	oidc_jwk_destroy(jwkCert);
 
 	return 0;
 }
@@ -1271,6 +1276,16 @@ static char * test_current_url(request_rec *r) {
 	TST_ASSERT_STR("test_current_url (8)", url,
 			"http://remotehost:8380/private/?foo=bar&param1=value1");
 
+	apr_table_set(r->headers_in, "Host", "[fd04:41b1:1170:28:16b0:446b:9fb7:7118]:8380");
+	url = oidc_get_current_url(r);
+	TST_ASSERT_STR("test_current_url (9)", url,
+			"http://[fd04:41b1:1170:28:16b0:446b:9fb7:7118]:8380/private/?foo=bar&param1=value1");
+
+	apr_table_set(r->headers_in, "Host", "[fd04:41b1:1170:28:16b0:446b:9fb7:7118]");
+	url = oidc_get_current_url(r);
+	TST_ASSERT_STR("test_current_url (10)", url,
+			"http://[fd04:41b1:1170:28:16b0:446b:9fb7:7118]/private/?foo=bar&param1=value1");
+
 	return 0;
 }
 
@@ -1349,6 +1364,8 @@ static char * test_accept(request_rec *r) {
 static char * test_authz_worker(request_rec *r) {
 	authz_status rc;
 	char *require_args = NULL;
+	ap_expr_info_t *parsed_require_args = (ap_expr_info_t *) apr_pcalloc(r->pool,
+		sizeof(ap_expr_info_t));;
 	json_error_t err;
 	json_t *json = NULL;
 	char *claims = NULL;
@@ -1401,47 +1418,58 @@ static char * test_authz_worker(request_rec *r) {
 			json != NULL);
 
 	require_args = "Require claim sub:hans";
-	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_worker24(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
 	TST_ASSERT("auth status (1: simple sub claim)", rc == AUTHZ_DENIED);
 
 	require_args = "Require claim sub:stef";
-	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_worker24(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
 	TST_ASSERT("auth status (2: simple sub claim)", rc == AUTHZ_GRANTED);
 
 	require_args = "Require claim nested.level1.level2:hans";
-	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_worker24(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
 	TST_ASSERT("auth status (3: nested claim)", rc == AUTHZ_GRANTED);
 
 	require_args = "Require claim nested.nestedarray:a";
-	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_worker24(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
 	TST_ASSERT("auth status (4: nested array)", rc == AUTHZ_DENIED);
 
 	require_args = "Require claim nested.nestedarray:c";
-	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_worker24(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
 	TST_ASSERT("auth status (5: nested array)", rc == AUTHZ_GRANTED);
 
 	require_args = "Require claim nested.level1:a";
-	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_worker24(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
 	TST_ASSERT("auth status (6: nested non-string)", rc == AUTHZ_DENIED);
 
 	require_args = "Require claim somebool:a";
-	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_worker24(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
 	TST_ASSERT("auth status (7: non-array)", rc == AUTHZ_DENIED);
 
 	require_args = "Require claim somebool.level1:a";
-	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_worker24(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
 	TST_ASSERT("auth status (8: nested non-array)", rc == AUTHZ_DENIED);
 
 	require_args = "Require claim realm_access.roles:someRole1";
-	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_worker24(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
 	TST_ASSERT("auth status (9: keycloak sample 1)", rc == AUTHZ_GRANTED);
 
 	require_args = "Require claim resource_access.someClient.roles:someRole4";
-	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_worker24(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
 	TST_ASSERT("auth status (10: keycloak sample 2)", rc == AUTHZ_GRANTED);
 
 	require_args = "Require claim https://test.com/pay:alot";
-	rc = oidc_authz_worker24(r, json, require_args, oidc_authz_match_claim);
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_worker24(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
 	TST_ASSERT("auth status (11: namespaced key)", rc == AUTHZ_GRANTED);
 
 	json_decref(json);
@@ -1450,6 +1478,72 @@ static char * test_authz_worker(request_rec *r) {
 }
 
 #endif
+
+
+static char * test_decode_json_object(request_rec *r) {
+	apr_byte_t rc = FALSE;
+	json_t *json = NULL;
+	rc = oidc_util_decode_json_object(r, "nojson", &json);
+	TST_ASSERT("test invalid JSON", rc == FALSE);
+	rc = oidc_util_decode_json_object(r, "{ \"n\": \"\\u0000<?php echo 'Hello' ?>\"}", &json);
+	TST_ASSERT("test JSON with NULL value", rc == FALSE);
+	rc = oidc_util_decode_json_object(r, "tmjcbnuvyrtygbtbyizkfuabiddgixcvnvupjuwnvxznpspmjaqrlpgmggixxovrpwntkvsvxjtkjjggnevyfyemdrlxtnmzjstmjuyquyyjzzwsfrazgzbdojkcfaeiqawltqsiwwzzgpiikpqoxixhsqtnfbchrcgxbgiaynkscvbvfnpuddrpjbgdtxxlebrswrtukzxqyyfrmwrrtfhcxhjfdoswjzvcchlufkqdaiqakvhyssegikcdkxvqxjrxukllhjduhokudtmhkqhqjheedxnlpbtybpwwogynneilkyffixdchdcjopxtdnhgsinwwktpqxfhmlfwucbtlbojaatocwqxsivdwwxrscsviwtllrqakzyogvseiackzzkkioactssxcglqqgavcpxmfokufechkdjkwbvdcnyboqbinbitixuqxeafdhrzndljsnqdlvxwvzggltmelmdcfouthhhzjuehfoejfyjvrpakmgmhaigkidmpmjtwrgezmwyvkgirhkxwrakbaizldjrcjbwieewdnxmrlgcmnuvhidvkqdokguvphmzywgqgfuwshouxcadbtkoxesyoqikuotloiowjpvztunkguyyrnbmsnwbpghharmvkoqjjoanbejbwdlewiebwkzsuxpxozqzteuozboxdaukiwbqduhdhdlgiewmgeeqwtgyvhexcsdthriprrxvpuqvlcgqlldpnjdtbcuxncoikjxxistytsdlzdmtevmxhoafdcwqqixzxnxnrcoqlkwosdxsktgdejqsopuzaqourcixwktuwjzqagtdjheqgkpeavaoxpechkkdxcrwdtuxvdwpyjgjtsgppnoudyjyslwzxcqtbeqdtppeoelefkumpaamkxjnmdbuzotdzjrwzjspgabxczvxiuogvtmkmvxitdezsrqskorsybwndftfoqrylgsnhetyksfjdctmmarhtxpjukhwxhzjorxgnbpskdzgmskiumcsyquuwknrmkvdxhwgztbbbgiogeynlertjprolkavghiatjaddwlacrlibdnbbhykaqepwujqkmylnnqcfmxqanfvxgmitmsgwotolcwqrxgaftsryrmvlnabnouwqubtocwhkerhvsyzgirkitehbpcvitmjndqwerqopsdhwenihhkybemtmrafhcqbbfrfhemzvklvzxykkczjdokblktoxknolzxgblsjplggysbutvddygjgaqntcavbopwanbdvijawdwuepvzcaoesbkdaaqevbaupyokttlgcplpfijaubzphwutmslimkdxtrgwrfhhvdygznabvhvfhhpuuzwkhaxurnnqrmrhmddkckxzrmzxavvfpyuagjfyjorlfwprlpmwyjbtyzidvabtjckfqesnumqddnrdkunxljarqxcokikkqvrwxfedfumbadugcvzigbdulrcmzihpepztbplwrcvunyrhlwdutawmroajvomwtnbntcdgeqnyjxqlgjcdkaxlezmrldewjvyfjljeskmebuepmbzlhludyzwfnjomfnbgdcseqvqdlxrsuyyakdfsssiobahylumrwzsztpwxvfxyqfhtubamboeykqjltmpdjzhrsdjfebwjhlsyrafmvhefyddxhkchaqxptrqewevrnqftswhhxezdxyowtstejeexrgiujxbxvrvukotxdtlbgdpmorbaglozcmkzyrgnsjauxybuwvozcatacoyrvuxpiqkppoiogpuiykdpxkefxvqwutsbdeerbhztiidxqxsahcbbbrhlqwwnstpsefwtunismgvhbcpholzedkivglyjoperxpfavaxqohcxrcmnfvlzqtflrslurdbxnyoswimovpteleifarnhrivasnxetxnwyumoiwomilmnmpnpfekpwiwpmlqumkfagjbxpswraxctsyvsfspoesfhfdifcexfknbbszjfznpwkftkescltnmmodctjmkwdlrgorauknioeqexwwqdkdhdielfewwenuhsosehfksfaybktumfaprcjgvgenfdffbgduawryrvlbphdjsryjzpspymqhflowqzvesljaasfjvheeqikfocyxuopsgsojcqmyfkwkspnspjewmsxljvezucnpuobfqblakqwbixswbbtuboneixdjhdbzdckkcarsswtutwhkjijwdtsyjirdcibtavigjnehntnpdpdugwryxybsqoboayifiwxyuiqlbjksjpuhwdglymyisjdhkovwexkroooorosiudclbrldesiolbrbeusyrpuuypioziymwdguquitxuiaxeayabeccbrislwinxxyumylbncyshsywkzdyqoaqtwbulnseynghoomiypzefykoexnzhwdcqoctptqabzbuiwxyahaptodtufofabylxtlggldckhuicuqdbueuuoknehkkuypnjwqfhocshmofgbmokiuxvcdonwuwqbjxgdukuubswwvxxqugjxnngnbnvtcophhamvbcuxdfkqubfiftrtfyljjulmansvnhnaoczrmxlqokbovddmpydamzicfzkmwcgecljucaezvhrcssupxkleiximldarmtszakjuficulnaefldyogmnavrfscsptejaexghcrqtnluzmxvxrixxgjtyujoruzzzrfgtymtfsdyrmhvvggyeeykdaglptsuqmqbknimmxnuftjjolcvhpdumqehmyevqlsotrsldgedxmuablgarjfwoqyuakqxbqewdlsfkamxrteaebqwwcsupefoshtwlghkqtqjddikfrwjilzuqfwpcxalauddfotnwlsdwpxynlqjpfcuodeyubenztxsjwxycrdhlluauutfrvgqzacvnfawqibftocxrksltmjvlnyjfeagoxpcepioattazmuuklhjxhpbughkmyjdgrxwqwdafgbnerlhlngeqojhjuvwwmqdradedjuugcqzkfozddctctckaqoruksjsqjpzdbvmocutxpnacbkihboujejmjdhorkpyzubhaxpksjfpzmwauwxkwyjisfsqdjdkvsifgxjygclbdtzultcejefyephhhgbazkqqdvhtkkllyopdcsnbqjcpyvienhqqkwyxfvjrgsymuxxsejqerumcldjuitavdgogcsvjgbwllaijavuaeqxvndvzyrlmmzrhijywctihqizqmjfosrddqqdyilnfzyvwkkqgnnhlajqgdsnhhzpphfjtkeafxlgaarcfdapicfmukyyzvbgoatibulenkkwtyrnzgbmcytazrieabuerwkxoffzuohdhqqhfbxqmqestunudduaywtrmdmbvidyvterebgvxwbhlbsqmghcktujvhfwmhralmodiywvyzvurzghwcpxqtzwmhnderhpognxnynmrfraklflrgppszmuxtwddrkzvqyvvmhlwcnzmspekcwhphabtmzdgvfyrvdzimpxbrkjbntiixkgxhepzqrugnmjyfbkcacbdgxbhraauoagihygwkiikuyximjjdnvslnfaouofwgdacnndhramvxazuzksploibonvneeixkykpwjmrlwkvbesxaklqkoaulskwdfstelqxyyrpvnzkjcmhvxbjvbmrgdoyiwlzubaovirtciwcptmrdggpcgtxptkfwjsnhbxprqjiezncmmypjfbgljzrawwdikhoaqggoizoixpnykwyotofdrduvgfcwxvzjuacxolorrfpunnkzltgbdkztiwjctjedtupmckbjajwcjnkbmywilylfhckksaowsbvhnktfeklaekpflbtsqpyxhrcwmjjgnqtmoumvcswredhtexnaojzjagrvwcieizjfvvmzzxmzwwvqthmrqvtviuyiqffjdpqmeknhwylmteliysiaenkhkiuojxdwscvtacbwfixhrcaxlfeakidxgrmgitrmrzdzhwjyazzikrclajgksENDxxxx", &json);
+	TST_ASSERT("test invalid long JSON", rc == FALSE);
+	rc = oidc_util_decode_json_object(r, "{}", &json);
+	TST_ASSERT("test valid JSON", rc == TRUE);
+	json_decref(json);
+	return 0;
+}
+
+static char* test_remote_user(request_rec *r) {
+	apr_byte_t rc = FALSE;
+	char *remote_user = NULL;
+	char *s = NULL;
+	json_t *json = NULL;
+
+	s = "{\"upn\":\"nneul@umsystem.edu\"}";
+	rc = oidc_util_decode_json_object(r, s, &json);
+	TST_ASSERT("test remote user (1) valid JSON", rc == TRUE);
+	rc = oidc_get_remote_user(r, "upn", "^(.*)@umsystem\\.edu", "$1", json, &remote_user);
+	TST_ASSERT("test remote user (1) function result", rc == TRUE);
+	TST_ASSERT_STR("remote_user (1) string", remote_user, "nneul");
+	json_decref(json);
+
+	s = "{\"email\":\"nneul@umsystem.edu\"}";
+	rc = oidc_util_decode_json_object(r, s, &json);
+	TST_ASSERT("test remote user (2) valid JSON", rc == TRUE);
+	rc = oidc_get_remote_user(r, "email", "^(.*)@([^.]+)\\..+$", "$2\\$1", json, &remote_user);
+	TST_ASSERT("test remote user (2) function result", rc == TRUE);
+	TST_ASSERT_STR("remote_user (2) string", remote_user, "umsystem\\nneul");
+	json_decref(json);
+
+	return 0;
+}
+
+static char* test_is_xml_http_request(request_rec *r) {
+	apr_byte_t rc = FALSE;
+
+	apr_table_set(r->headers_in, "Accept", "*/*");
+	rc = oidc_is_xml_http_request(r);
+	TST_ASSERT("test oidc_is_xml_http_request (1)", rc == FALSE);
+
+	apr_table_set(r->headers_in, "X-Requested-With", "XMLHttpRequest");
+	rc = oidc_is_xml_http_request(r);
+	TST_ASSERT("test oidc_is_xml_http_request (2)", rc == TRUE);
+	apr_table_unset(r->headers_in, "X-Requested-With");
+
+	apr_table_set(r->headers_in, "Sec-Fetch-Mode", "navigate");
+	rc = oidc_is_xml_http_request(r);
+	TST_ASSERT("test oidc_is_xml_http_request (3)", rc == FALSE);
+	apr_table_unset(r->headers_in, "Sec-Fetch-Mode");
+
+	apr_table_set(r->headers_in, "Sec-Fetch-Mode", "cors");
+	rc = oidc_is_xml_http_request(r);
+	TST_ASSERT("test oidc_is_xml_http_request (4)", rc == TRUE);
+	apr_table_unset(r->headers_in, "Sec-Fetch-Mode");
+
+	return 0;
+}
 
 static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	char *message;
@@ -1483,6 +1577,11 @@ static char * all_tests(apr_pool_t *pool, request_rec *r) {
 
 	TST_RUN(test_current_url, r);
 	TST_RUN(test_accept, r);
+
+	TST_RUN(test_decode_json_object, r);
+
+	TST_RUN(test_remote_user, r);
+	TST_RUN(test_is_xml_http_request, r);
 
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	TST_RUN(test_authz_worker, r);

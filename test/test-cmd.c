@@ -18,17 +18,9 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2019 ZmartZone IAM
+ * Copyright (C) 2017-2021 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
- *
- * For further information please contact:
- *
- *      Ping Identity Corporation
- *      1099 18th St Suite 2950
- *      Denver, CO 80202
- *      303.468.2900
- *      http://www.pingidentity.com
  *
  * DISCLAIMER OF WARRANTIES:
  *
@@ -50,19 +42,10 @@
  *
  **************************************************************************/
 
-#include <stdio.h>
-#include <string.h>
-
-#include <apr_file_io.h>
-#include <apr_base64.h>
+#include <mod_auth_openidc.h>
 
 #include <openssl/rsa.h>
 #include <openssl/pem.h>
-
-#include <cjose/header.h>
-#include <cjose/jws.h>
-
-#include <mod_auth_openidc.h>
 
 int usage(int argc, char **argv, const char *msg) {
 	fprintf(stderr, "Usage: %s %s\n", argv[0],

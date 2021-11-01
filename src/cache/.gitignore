@@ -2,3 +2,5 @@
 /*.o
 /*.slo
 /.libs
+/.deps/
+/.dirstamp

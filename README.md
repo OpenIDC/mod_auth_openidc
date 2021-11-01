@@ -5,35 +5,41 @@ Build steps
   The output is two zip files, one for x86 and one for x64.
 3) deploy_to_artifactory.cmd
 
-[![Build Status](https://travis-ci.org/zmartzone/mod_auth_openidc.svg?branch=master)](https://travis-ci.org/zmartzone/mod_auth_openidc)
-[<img width="184" height="96" align="right" src="http://openid.net/wordpress-content/uploads/2016/04/oid-l-certification-mark-l-rgb-150dpi-90mm@2x.png" alt="OpenID Certification">](https://openid.net/certification)
+[![Build Status](https://app.travis-ci.com/zmartzone/mod_auth_openidc.svg?branch=master)](https://app.travis-ci.com/github/zmartzone/mod_auth_openidc)
+[<img width="184" height="96" align="right" src="http://openid.net/wordpress-content/uploads/2016/05/oid-l-certification-mark-l-cmyk-150dpi-90mm.jpg" alt="OpenID Certification">](https://openid.net/certification)
+[![CodeQL Analysis](https://github.com/zmartzone/mod_auth_openidc/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/zmartzone/mod_auth_openidc/actions/workflows/codeql-analysis.yml)
+
+
 [![Code Quality: Cpp](https://img.shields.io/lgtm/grade/cpp/g/zmartzone/mod_auth_openidc.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/zmartzone/mod_auth_openidc/context:cpp)
 [![Total Alerts](https://img.shields.io/lgtm/alerts/g/zmartzone/mod_auth_openidc.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/zmartzone/mod_auth_openidc/alerts)
 
 mod_auth_openidc
 ================
 
-*mod_auth_openidc* is an authentication/authorization module for the Apache 2.x
-HTTP server that functions as an **OpenID Connect Relying Party**, authenticating users against an
-OpenID Connect Provider.
+*mod_auth_openidc* is an authentication and authorization module for the Apache 2.x
+HTTP server that implements the OpenID Connect Relying Party functionality.
 
 Overview
 --------
 
 This module enables an Apache 2.x web server to operate as an [OpenID Connect](http://openid.net/specs/openid-connect-core-1_0.html)
-*Relying Party* (RP) to an OpenID Connect *Provider* (OP). It authenticates users against an OpenID Connect Provider,
-receives user identity information from the OP in a so called ID Token and passes on the identity information
-(a.k.a. claims) in the ID Token to applications hosted and protected by the Apache web server.
+*Relying Party* (RP) towards an OpenID Connect *Provider* (OP). It relays end user authentication to a Provider and
+receives user identity information from that Provder. It then passes on that identity information (a.k.a. claims)
+to applications protected by the Apache web server and establishes an authentication session for the identified user.
 
-The protected content and/or applications can be served by the Apache server itself or it can be served from elsewhere
-when Apache is configured as a Reverse Proxy in front of the origin server(s).
+The protected content, applications and services can be hosted by the Apache server itself or served from
+origin server(s) residing behind it by configuring Apache as a Reverse Proxy in front of those servers. The 
+latter allows adding OpenID Connect based authentication to existing applications/services/SPAs without
+modifying those applications, possibly migrating them away from legacy authentication mechanisms to standards based
+OpenID Connect Single Sign On (SSO).
 
 By default the module sets the `REMOTE_USER` variable to the `id_token` `[sub]` claim, concatenated with the OP's Issuer
 identifier (`[sub]@[iss]`). Other `id_token` claims are passed in HTTP headers and/or environment variables together with those
-(optionally) obtained from the UserInfo endpoint.
+(optionally) obtained from the UserInfo endpoint. The provider HTTP headers and environment variables can be consumed by
+applications protected by the Apache server.
 
-It allows for authorization rules (based on standard Apache `Require` primitives) that can be matched against the set
-of claims provided in the `id_token`/ `userinfo` claims.
+Custom fine-grained authorization rules - based on Apache's `Require` primitives - can be specified to match against the
+set of claims provided in the `id_token`/ `userinfo` claims.
 
 *mod_auth_openidc* supports the following specifications:
 - [OpenID Connect Core 1.0](http://openid.net/specs/openid-connect-core-1_0.html) *(Basic, Implicit, Hybrid and Refresh flows)*
@@ -45,9 +51,6 @@ of claims provided in the `id_token`/ `userinfo` claims.
 - [OpenID Connect Session Management 1.0](http://openid.net/specs/openid-connect-session-1_0.html) *(implementers draft; see the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki/OpenID-Connect-Session-Management) for information on how to configure it)*
 - [OpenID Connect Front-Channel Logout 1.0](http://openid.net/specs/openid-connect-frontchannel-1_0.html) *(implementers draft)*
 - [OpenID Connect Back-Channel Logout 1.0](https://openid.net/specs/openid-connect-backchannel-1_0.html) *(implementers draft)*
-- [Encoding claims in the OAuth 2 state parameter using a JWT](https://tools.ietf.org/html/draft-bradley-oauth-jwt-encoded-state-08) *(draft spec)*
-- [OpenID Connect Token Bound Authentication](https://openid.net/specs/openid-connect-token-bound-authentication-1_0.html) *(draft spec; when combined with [mod_token_binding](https://github.com/zmartzone/mod_token_binding))*
-- [OAuth 2.0 Token Binding for Authorization Codes for Web Server Clients](https://tools.ietf.org/html/draft-ietf-oauth-token-binding-07#section-5.2) *(draft spec)*
 
 For an exhaustive description of all configuration options, see the file `auth_openidc.conf`
 in this directory. This file can also serve as an include file for `httpd.conf`.
@@ -55,23 +58,14 @@ in this directory. This file can also serve as an include file for `httpd.conf`.
 Support
 -------
 
-#### Give back to mod_auth_openidc
-Please consider giving back by sponsoring mod_auth_openidc development/maintenance/continuity and to express
-your gratitude as a happy user or company.  
-See: https://www.patreon.com/mod_auth_openidc  
-Sponsored by: [GLUU](https://www.gluu.org)
-
-#### Community Support
-For generic questions, see the Wiki pages with Frequently Asked Questions at:  
+#### Community
+Documentation can be found at the Wiki (including Frequently Asked Questions) at:  
   [https://github.com/zmartzone/mod_auth_openidc/wiki](https://github.com/zmartzone/mod_auth_openidc/wiki)  
-There is a Google Group/mailing list at:  
-  [mod_auth_openidc@googlegroups.com](mailto:mod_auth_openidc@googlegroups.com)  
-The corresponding forum/archive is at:  
-  [https://groups.google.com/forum/#!forum/mod_auth_openidc](https://groups.google.com/forum/#!forum/mod_auth_openidc)  
-Any questions/issues should go to the mailing list.
+For questions, issues and suggestions use the Github Discussions forum at:  
+  [https://github.com/zmartzone/mod_auth_openidc/discussions](https://github.com/zmartzone/mod_auth_openidc/discussions)
 
-#### Commercial Services
-For commercial Support contracts, Professional Services, Training and use-case specific support you can contact:  
+#### Commercial
+For commercial support contracts, professional services, training and use-case specific support please contact:  
   [sales@zmartzone.eu](mailto:sales@zmartzone.eu)  
 
 How to Use It  
@@ -145,8 +139,9 @@ For details on configuring multiple providers see the [Wiki](https://github.com/
 See the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki) for configuration docs for other OpenID Connect Providers:
 - [GLUU Server](https://github.com/zmartzone/mod_auth_openidc/wiki/Gluu-Server)
 - [Keycloak](https://github.com/zmartzone/mod_auth_openidc/wiki/Keycloak)
-- [Azure AD](https://github.com/zmartzone/mod_auth_openidc/wiki/Azure-OAuth2.0-and-OpenID)
+- [Azure AD](https://github.com/zmartzone/mod_auth_openidc/wiki/Azure-Active-Directory-Authentication)
 - [Sign in with Apple](https://github.com/zmartzone/mod_auth_openidc/wiki/Sign-in-with-Apple)
+- [Curity Identity Server](https://github.com/zmartzone/mod_auth_openidc/wiki/Curity-Identity-Server)
 - [LemonLDAP::NG](https://github.com/zmartzone/mod_auth_openidc/wiki/LemonLDAP::NG)
 - [GitLab](https://github.com/zmartzone/mod_auth_openidc/wiki/GitLab-OAuth2)
 - [Globus](https://github.com/zmartzone/mod_auth_openidc/wiki/Globus)
