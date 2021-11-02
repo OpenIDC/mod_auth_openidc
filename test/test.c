@@ -1520,27 +1520,47 @@ static char* test_remote_user(request_rec *r) {
 	return 0;
 }
 
-static char* test_is_xml_http_request(request_rec *r) {
+static char* test_is_auth_capable_request(request_rec *r) {
 	apr_byte_t rc = FALSE;
 
 	apr_table_set(r->headers_in, "Accept", "*/*");
-	rc = oidc_is_xml_http_request(r);
-	TST_ASSERT("test oidc_is_xml_http_request (1)", rc == FALSE);
+	rc = oidc_is_auth_capable_request(r);
+	TST_ASSERT("test oidc_is_auth_capable_request (1)", rc == TRUE);
 
 	apr_table_set(r->headers_in, "X-Requested-With", "XMLHttpRequest");
-	rc = oidc_is_xml_http_request(r);
-	TST_ASSERT("test oidc_is_xml_http_request (2)", rc == TRUE);
+	rc = oidc_is_auth_capable_request(r);
+	TST_ASSERT("test oidc_is_auth_capable_request (2)", rc == FALSE);
 	apr_table_unset(r->headers_in, "X-Requested-With");
 
 	apr_table_set(r->headers_in, "Sec-Fetch-Mode", "navigate");
-	rc = oidc_is_xml_http_request(r);
-	TST_ASSERT("test oidc_is_xml_http_request (3)", rc == FALSE);
+	rc = oidc_is_auth_capable_request(r);
+	TST_ASSERT("test oidc_is_auth_capable_request (3)", rc == TRUE);
 	apr_table_unset(r->headers_in, "Sec-Fetch-Mode");
 
 	apr_table_set(r->headers_in, "Sec-Fetch-Mode", "cors");
-	rc = oidc_is_xml_http_request(r);
-	TST_ASSERT("test oidc_is_xml_http_request (4)", rc == TRUE);
+	rc = oidc_is_auth_capable_request(r);
+	TST_ASSERT("test oidc_is_auth_capable_request (4)", rc == FALSE);
 	apr_table_unset(r->headers_in, "Sec-Fetch-Mode");
+
+	apr_table_set(r->headers_in, "Sec-Fetch-Dest", "iframe");
+	rc = oidc_is_auth_capable_request(r);
+	TST_ASSERT("test oidc_is_auth_capable_request (5)", rc == FALSE);
+	apr_table_unset(r->headers_in, "Sec-Fetch-Dest");
+
+	apr_table_set(r->headers_in, "Sec-Fetch-Dest", "image");
+	rc = oidc_is_auth_capable_request(r);
+	TST_ASSERT("test oidc_is_auth_capable_request (6)", rc == FALSE);
+	apr_table_unset(r->headers_in, "Sec-Fetch-Dest");
+
+	apr_table_set(r->headers_in, "Sec-Fetch-Dest", "document");
+	rc = oidc_is_auth_capable_request(r);
+	TST_ASSERT("test oidc_is_auth_capable_request (7)", rc == TRUE);
+	apr_table_unset(r->headers_in, "Sec-Fetch-Dest");
+
+	apr_table_set(r->headers_in, "Accept", "application/json");
+	rc = oidc_is_auth_capable_request(r);
+	TST_ASSERT("test oidc_is_auth_capable_request (8)", rc == FALSE);
+	apr_table_unset(r->headers_in, "Accept");
 
 	return 0;
 }
@@ -1581,7 +1601,7 @@ static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	TST_RUN(test_decode_json_object, r);
 
 	TST_RUN(test_remote_user, r);
-	TST_RUN(test_is_xml_http_request, r);
+	TST_RUN(test_is_auth_capable_request, r);
 
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	TST_RUN(test_authz_worker, r);

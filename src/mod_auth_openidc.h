@@ -827,6 +827,7 @@ char *oidc_util_http_form_encoded_data(request_rec *r, const apr_table_t *params
 #define OIDC_HTTP_HDR_CONTENT_LENGTH                    "Content-Length"
 #define OIDC_HTTP_HDR_X_REQUESTED_WITH                  "X-Requested-With"
 #define OIDC_HTTP_HDR_SEC_FETCH_MODE                    "Sec-Fetch-Mode"
+#define OIDC_HTTP_HDR_SEC_FETCH_DEST                    "Sec-Fetch-Dest"
 #define OIDC_HTTP_HDR_ACCEPT                            "Accept"
 #define OIDC_HTTP_HDR_AUTHORIZATION                     "Authorization"
 #define OIDC_HTTP_HDR_X_FORWARDED_PROTO                 "X-Forwarded-Proto"
@@ -844,6 +845,7 @@ char *oidc_util_http_form_encoded_data(request_rec *r, const apr_table_t *params
 
 #define OIDC_HTTP_HDR_VAL_XML_HTTP_REQUEST "XMLHttpRequest"
 #define OIDC_HTTP_HDR_VAL_NAVIGATE         "navigate"
+#define OIDC_HTTP_HDR_VAL_DOCUMENT         "document"
 
 void oidc_util_hdr_in_set(const request_rec *r, const char *name, const char *value);
 const char *oidc_util_hdr_in_cookie_get(const request_rec *r);
@@ -854,6 +856,7 @@ const char *oidc_util_hdr_in_content_type_get(const request_rec *r);
 const char *oidc_util_hdr_in_content_length_get(const request_rec *r);
 const char *oidc_util_hdr_in_x_requested_with_get(const request_rec *r);
 const char* oidc_util_hdr_in_sec_fetch_mode_get(const request_rec *r);
+const char* oidc_util_hdr_in_sec_fetch_dest_get(const request_rec *r);
 const char *oidc_util_hdr_in_accept_get(const request_rec *r);
 const char *oidc_util_hdr_in_authorization_get(const request_rec *r);
 const char *oidc_util_hdr_in_x_forwarded_proto_get(const request_rec *r);
@@ -926,7 +929,7 @@ const char * oidc_session_get_session_state(request_rec *r, oidc_session_t *z);
 void oidc_session_set_issuer(request_rec *r, oidc_session_t *z, const char *issuer);
 const char * oidc_session_get_issuer(request_rec *r, oidc_session_t *z);
 void oidc_session_set_client_id(request_rec *r, oidc_session_t *z, const char *client_id);
-apr_byte_t oidc_is_xml_http_request(request_rec *r);
+apr_byte_t oidc_is_auth_capable_request(request_rec *r);
 char *oidc_parse_base64(apr_pool_t *pool, const char *input, char **output, int *output_len);
 
 #endif /* MOD_AUTH_OPENIDC_H_ */
