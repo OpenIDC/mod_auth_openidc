@@ -7,7 +7,7 @@
 mod_auth_openidc
 ================
 
-*mod_auth_openidc* is an authentication and authorization module for the Apache 2.x
+*mod_auth_openidc* is a certified authentication and authorization module for the Apache 2.x
 HTTP server that implements the OpenID Connect Relying Party functionality.
 
 Overview
@@ -15,7 +15,7 @@ Overview
 
 This module enables an Apache 2.x web server to operate as an [OpenID Connect](http://openid.net/specs/openid-connect-core-1_0.html)
 *Relying Party* (RP) towards an OpenID Connect *Provider* (OP). It relays end user authentication to a Provider and
-receives user identity information from that Provder. It then passes on that identity information (a.k.a. claims)
+receives user identity information from that Provider. It then passes on that identity information (a.k.a. claims)
 to applications protected by the Apache web server and establishes an authentication session for the identified user.
 
 The protected content, applications and services can be hosted by the Apache server itself or served from
