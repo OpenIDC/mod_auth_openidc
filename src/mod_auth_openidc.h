@@ -219,6 +219,7 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_UNAUTZ_RETURN403    1
 #define OIDC_UNAUTZ_RETURN401    2
 #define OIDC_UNAUTZ_AUTHENTICATE 3
+#define OIDC_UNAUTZ_RETURN302    4
 
 #define OIDC_REQUEST_URI_CACHE_DURATION 30
 
@@ -741,6 +742,7 @@ apr_array_header_t *oidc_dir_cfg_strip_cookies(request_rec *r);
 int oidc_dir_cfg_unauth_action(request_rec *r);
 apr_byte_t oidc_dir_cfg_unauth_expr_is_set(request_rec *r);
 int oidc_dir_cfg_unautz_action(request_rec *r);
+char *oidc_dir_cfg_unauthz_arg(request_rec *r);
 char *oidc_dir_cfg_path_auth_request_params(request_rec *r);
 char *oidc_dir_cfg_path_scope(request_rec *r);
 oidc_valid_function_t oidc_cfg_get_valid_endpoint_auth_function(oidc_cfg *cfg);

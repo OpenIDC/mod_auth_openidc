@@ -279,6 +279,7 @@ typedef struct oidc_dir_cfg {
 	ap_expr_info_t *unauth_expression;
 #endif
 	int unautz_action;
+	char *unauthz_arg;
 	apr_array_header_t *pass_cookies;
 	apr_array_header_t *strip_cookies;
 	int pass_info_in_headers;
@@ -1024,11 +1025,17 @@ static const char* oidc_set_unauth_action(cmd_parms *cmd, void *m,
 /*
  * define how to act on unauthorized requests
  */
-static const char* oidc_set_unautz_action(cmd_parms *cmd, void *m,
-		const char *arg) {
+static const char* oidc_set_unautz_action(cmd_parms *cmd, void *m, const char *arg1,
+		const char *arg2) {
 	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg*) m;
-	const char *rv = oidc_parse_unautz_action(cmd->pool, arg,
-			&dir_cfg->unautz_action);
+	const char *rv = oidc_parse_unautz_action(cmd->pool, arg1, &dir_cfg->unautz_action);
+	if ((rv == NULL) && (arg2 != NULL)) {
+		dir_cfg->unauthz_arg = apr_pstrdup(cmd->pool, arg2);
+	} else if (dir_cfg->unautz_action == OIDC_UNAUTZ_RETURN302) {
+		rv =
+				apr_psprintf(cmd->temp_pool, "the (2nd) URL argument to %s must be set", cmd->directive->directive);
+		return rv;
+	}
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -1953,6 +1960,7 @@ void* oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->unauth_expression = NULL;
 #endif
 	c->unautz_action = OIDC_CONFIG_POS_INT_UNSET;
+	c->unauthz_arg = NULL;
 	c->pass_cookies = NULL;
 	c->strip_cookies = NULL;
 	c->pass_info_in_headers = OIDC_CONFIG_POS_INT_UNSET;
@@ -2132,6 +2140,12 @@ int oidc_dir_cfg_unautz_action(request_rec *r) {
 	return dir_cfg->unautz_action;
 }
 
+char *oidc_dir_cfg_unauthz_arg(request_rec *r) {
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+	return dir_cfg->unauthz_arg;
+}
+
 char* oidc_dir_cfg_path_auth_request_params(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
@@ -2174,6 +2188,9 @@ void* oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->unautz_action =
 			add->unautz_action != OIDC_CONFIG_POS_INT_UNSET ?
 					add->unautz_action : base->unautz_action;
+	c->unauthz_arg =
+			add->unauthz_arg != NULL ?
+					add->unauthz_arg : base->unauthz_arg;
 
 	c->pass_cookies =
 			add->pass_cookies != NULL ? add->pass_cookies : base->pass_cookies;
@@ -3299,7 +3316,7 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_dir_cfg, unauth_action),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Sets the action taken when an unauthenticated request occurs: must be one of \"auth\" (default), \"pass\" , \"401\", \"407\", or \"410\"."),
-		AP_INIT_TAKE1(OIDCUnAutzAction,
+		AP_INIT_TAKE12(OIDCUnAutzAction,
 				oidc_set_unautz_action,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, unautz_action),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
