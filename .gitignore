@@ -13,7 +13,7 @@
 /install-sh
 /libtool
 /ltmain.sh
-/mod_auth_openidc.la
+/*.la
 /config.sub
 /depcomp
 /missing
@@ -23,12 +23,15 @@
 /configure~
 /Dockerfile-*
 /*.rpm
-
 /config.guess~
 /config.sub~
+/test-driver
+/test-suite.log
+/ar-lib
+/Makefile.in
 /target
-/.vscode/
 .vs/mod_auth_openidc/v15
 .vs
 win32
 x64
+Debug

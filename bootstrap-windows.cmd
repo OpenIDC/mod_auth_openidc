@@ -25,7 +25,7 @@ REM Please Note:  The paths to the vcpkg builds are set in the VS project files.
 
 cd..
 
-@echo Over changes to cjose and mod_auth_openidc so they compile on windows
+@echo Over changes to cjose so it compiles on windows
 xcopy changes\*.* /r /q /y /s
 
 @echo Downloading Apache http x32 and x64 zip files.
