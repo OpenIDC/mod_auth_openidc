@@ -19,6 +19,16 @@
 /missing
 /.settings/
 /.autotools
+/.vscode/
+/configure~
+/Dockerfile-*
+/*.rpm
+
+/config.guess~
+/config.sub~
 /target
 /.vscode/
 .vs/mod_auth_openidc/v15
+.vs
+win32
+x64

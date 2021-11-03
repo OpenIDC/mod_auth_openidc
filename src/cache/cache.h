@@ -18,17 +18,9 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2019 ZmartZone IAM
+ * Copyright (C) 2017-2021 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
- *
- * For further information please contact:
- *
- *      Ping Identity Corporation
- *      1099 18th St Suite 2950
- *      Denver, CO 80202
- *      303.468.2900
- *      http://www.pingidentity.com
  *
  * DISCLAIMER OF WARRANTIES:
  *
@@ -82,6 +74,7 @@ typedef struct oidc_cache_mutex_t {
 	char *mutex_filename;
 	apr_shm_t *shm;
 	int *sema;
+	apr_byte_t is_parent;
 } oidc_cache_mutex_t;
 
 oidc_cache_mutex_t *oidc_cache_mutex_create(apr_pool_t *pool);

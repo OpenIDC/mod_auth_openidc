@@ -18,17 +18,9 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2019 ZmartZone IAM
+ * Copyright (C) 2017-2021 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
- *
- * For further information please contact:
- *
- *      Ping Identity Corporation
- *      1099 18th St Suite 2950
- *      Denver, CO 80202
- *      303.468.2900
- *      http://www.pingidentity.com
  *
  * DISCLAIMER OF WARRANTIES:
  *
@@ -71,8 +63,14 @@ typedef struct oidc_cache_cfg_redis_t {
 	char *host_str;
 	apr_port_t port;
 	char *passwd;
+	int database;
+	struct timeval connect_timeout;
+	struct timeval timeout;
 	redisContext *ctx;
 } oidc_cache_cfg_redis_t;
+
+#define REDIS_CONNECT_TIMEOUT_DEFAULT 5
+#define REDIS_TIMEOUT_DEFAULT 5
 
 /* create the cache context */
 static void *oidc_cache_redis_cfg_create(apr_pool_t *pool) {
@@ -81,6 +79,11 @@ static void *oidc_cache_redis_cfg_create(apr_pool_t *pool) {
 	context->mutex = oidc_cache_mutex_create(pool);
 	context->host_str = NULL;
 	context->passwd = NULL;
+	context->database = -1;
+	context->connect_timeout.tv_sec = REDIS_CONNECT_TIMEOUT_DEFAULT;
+	context->connect_timeout.tv_usec = 0;
+	context->timeout.tv_sec = REDIS_TIMEOUT_DEFAULT;
+	context->timeout.tv_usec = 0;
 	context->ctx = NULL;
 	return context;
 }
@@ -131,6 +134,15 @@ static int oidc_cache_redis_post_config(server_rec *s) {
 				cfg->cache_redis_password);
 	}
 
+	if (cfg->cache_redis_database != -1)
+		context->database = cfg->cache_redis_database;
+
+	if (cfg->cache_redis_connect_timeout != -1)
+		context->connect_timeout.tv_sec = cfg->cache_redis_connect_timeout;
+
+	if (cfg->cache_redis_timeout != -1)
+		context->timeout.tv_sec = cfg->cache_redis_timeout;
+
 	if (oidc_cache_mutex_post_config(s, context->mutex, "redis") == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
@@ -169,15 +181,28 @@ static apr_status_t oidc_cache_redis_free(oidc_cache_cfg_redis_t *context) {
 }
 
 /*
+ * free and nullify a reply object
+ */
+static void oidc_cache_redis_reply_free(redisReply **reply) {
+	if (*reply != NULL) {
+		freeReplyObject(*reply);
+		*reply = NULL;
+	}
+}
+
+/*
  * connect to Redis server
  */
 static apr_status_t oidc_cache_redis_connect(request_rec *r,
 		oidc_cache_cfg_redis_t *context) {
 
+	redisReply *reply = NULL;
+
 	if (context->ctx == NULL) {
 
 		/* no connection, connect to the configured Redis server */
-		context->ctx = redisConnect(context->host_str, context->port);
+		oidc_debug(r, "calling redisConnectWithTimeout");
+		context->ctx = redisConnectWithTimeout(context->host_str, context->port, context->connect_timeout);
 
 		/* check for errors */
 		if ((context->ctx == NULL) || (context->ctx->err != 0)) {
@@ -189,20 +214,49 @@ static apr_status_t oidc_cache_redis_connect(request_rec *r,
 			/* log the connection */
 			oidc_debug(r, "successfully connected to Redis server (%s:%d)",
 					context->host_str, context->port);
+
+			/* see if we need to authenticate to the Redis server */
+			if (context->passwd != NULL) {
+				reply = redisCommand(context->ctx, "AUTH %s", context->passwd);
+				if ((reply == NULL) || (reply->type == REDIS_REPLY_ERROR))
+					oidc_error(r,
+							"Redis AUTH command (%s:%d) failed: '%s' [%s]",
+							context->host_str, context->port,
+							context->ctx->errstr, reply ? reply->str : "<n/a>");
+				else
+					oidc_debug(r,
+							"successfully authenticated to the Redis server: %s",
+							reply ? reply->str : "<n/a>");
+
+				/* free the auth answer */
+				oidc_cache_redis_reply_free(&reply);
+			}
+
+			/* see if we need to set the database */
+			if (context->database != -1) {
+				reply = redisCommand(context->ctx, "SELECT %d",
+						context->database);
+				if ((reply == NULL) || (reply->type == REDIS_REPLY_ERROR))
+					oidc_error(r,
+							"Redis SELECT command (%s:%d) failed: '%s' [%s]",
+							context->host_str, context->port,
+							context->ctx->errstr, reply ? reply->str : "<n/a>");
+				else
+					oidc_debug(r,
+							"successfully selected database %d on the Redis server: %s",
+							context->database, reply ? reply->str : "<n/a>");
+
+				/* free the database answer */
+				oidc_cache_redis_reply_free(&reply);
+			}
+
+			if (redisSetTimeout(context->ctx, context->timeout) != REDIS_OK)
+				oidc_error(r, "redisSetTimeout failed: %s", context->ctx->errstr);
+
 		}
 	}
 
 	return (context->ctx != NULL) ? APR_SUCCESS : APR_EGENERAL;
-}
-
-/*
- * free and nullify a reply object
- */
-static void oidc_cache_redis_reply_free(redisReply **reply) {
-	if (*reply != NULL) {
-		freeReplyObject(*reply);
-		*reply = NULL;
-	}
 }
 
 #define OIDC_REDIS_MAX_TRIES 2
@@ -211,10 +265,11 @@ static void oidc_cache_redis_reply_free(redisReply **reply) {
  * execute Redis command and deal with return value
  */
 static redisReply* oidc_cache_redis_command(request_rec *r,
-		oidc_cache_cfg_redis_t *context, const char *command) {
+		oidc_cache_cfg_redis_t *context, const char *format, ...) {
 
 	redisReply *reply = NULL;
 	int i = 0;
+	va_list ap;
 
 	/* try to execute a command at max 2 times while reconnecting */
 	for (i = 0; i < OIDC_REDIS_MAX_TRIES; i++) {
@@ -223,21 +278,10 @@ static redisReply* oidc_cache_redis_command(request_rec *r,
 		if (oidc_cache_redis_connect(r, context) != APR_SUCCESS)
 			break;
 
-		/* see if we need to authenticate to the Redis server */
-		if (context->passwd != NULL) {
-			reply = redisCommand(context->ctx, "AUTH %s", context->passwd);
-			if ((reply == NULL) || (reply->type == REDIS_REPLY_ERROR))
-				oidc_error(r,
-						"Redis AUTH command (attempt=%d to %s:%d) failed: '%s' [%s]",
-						i, context->host_str, context->port,
-						context->ctx->errstr, reply ? reply->str : "<n/a>");
-
-			/* free the auth answer */
-			oidc_cache_redis_reply_free(&reply);
-		}
-
+		va_start(ap, format);
 		/* execute the actual command */
-		reply = redisCommand(context->ctx, command);
+		reply = redisvCommand(context->ctx, format, ap);
+		va_end(ap);
 
 		/* check for errors, need to return error replies for cache miss case REDIS_REPLY_NIL */
 		if ((reply != NULL) && (reply->type != REDIS_REPLY_ERROR))
@@ -277,9 +321,8 @@ static apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section,
 		return FALSE;
 
 	/* get */
-	reply = oidc_cache_redis_command(r, context,
-			apr_psprintf(r->pool, "GET %s",
-					oidc_cache_redis_get_key(r->pool, section, key)));
+	reply =
+			oidc_cache_redis_command(r, context, "GET %s", oidc_cache_redis_get_key(r->pool, section, key));
 
 	if (reply == NULL)
 		goto end;
@@ -291,10 +334,17 @@ static apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section,
 		goto end;
 	}
 
+	if (reply->type != REDIS_REPLY_STRING) {
+		oidc_error(r, "redisCommand reply type is not string: %d", reply->type);
+		goto end;
+	}
+
 	/* do a sanity check on the returned value */
-	if (reply->len != strlen(reply->str)) {
-		oidc_error(r, "redisCommand reply->len != strlen(reply->str): '%s'",
-				reply->str);
+	if ((reply->str == NULL)
+			|| (reply->len != strlen(reply->str))) {
+		oidc_error(r,
+				"redisCommand reply->len (%d) != strlen(reply->str): '%s'",
+				(int )reply->len, reply->str);
 		goto end;
 	}
 
@@ -336,9 +386,8 @@ static apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section,
 	if (value == NULL) {
 
 		/* delete it */
-		reply = oidc_cache_redis_command(r, context,
-				apr_psprintf(r->pool, "DEL %s",
-						oidc_cache_redis_get_key(r->pool, section, key)));
+		reply =
+				oidc_cache_redis_command(r, context, "DEL %s", oidc_cache_redis_get_key(r->pool, section, key));
 
 	} else {
 
@@ -346,10 +395,8 @@ static apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section,
 		timeout = apr_time_sec(expiry - apr_time_now());
 
 		/* store it */
-		reply = oidc_cache_redis_command(r, context,
-				apr_psprintf(r->pool, "SETEX %s %d %s",
-						oidc_cache_redis_get_key(r->pool, section, key),
-						timeout, value));
+		reply =
+				oidc_cache_redis_command(r, context, "SETEX %s %d %s", oidc_cache_redis_get_key(r->pool, section, key), timeout, value);
 
 	}
 

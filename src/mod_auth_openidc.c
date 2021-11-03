@@ -18,17 +18,9 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2019 ZmartZone IAM
+ * Copyright (C) 2017-2021 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
- *
- * For further information please contact:
- *
- *      Ping Identity Corporation
- *      1099 18th St Suite 2950
- *      Denver, CO 80202
- *      303.468.2900
- *      http://www.pingidentity.com
  *
  * DISCLAIMER OF WARRANTIES:
  *
@@ -74,7 +66,7 @@
 
 #include "mod_auth_openidc.h"
 
-#define ERROR_NEEDS_TO_SAVE 2
+#define OIDC_REFRESH_ERROR 2
 
 static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 		oidc_session_t *session, const char *url);
@@ -97,16 +89,16 @@ static void oidc_scrub_request_headers(request_rec *r, const char *claim_prefix,
 	const int prefix_len = claim_prefix ? strlen(claim_prefix) : 0;
 
 	/* get an array representation of the incoming HTTP headers */
-	const apr_array_header_t * const h = apr_table_elts(r->headers_in);
+	const apr_array_header_t *const h = apr_table_elts(r->headers_in);
 
 	/* table to keep the non-suspicious headers */
 	apr_table_t *clean_headers = apr_table_make(r->pool, h->nelts);
 
 	/* loop over the incoming HTTP headers */
-	const apr_table_entry_t * const e = (const apr_table_entry_t *) h->elts;
+	const apr_table_entry_t *const e = (const apr_table_entry_t*) h->elts;
 	int i;
 	for (i = 0; i < h->nelts; i++) {
-		const char * const k = e[i].key;
+		const char *const k = e[i].key;
 
 		/* is this header's name equivalent to a header that needs scrubbing? */
 		const char *hdr =
@@ -210,7 +202,7 @@ void oidc_strip_cookies(request_rec *r) {
 			}
 
 			if (i == strip->nelts) {
-				result = result ? apr_psprintf(r->pool, "%s%s%s", result,
+				result = result ? apr_psprintf(r->pool, "%s%s %s", result,
 						OIDC_STR_SEMI_COLON, cookie) :
 						cookie;
 			}
@@ -227,7 +219,8 @@ void oidc_strip_cookies(request_rec *r) {
 /*
  * calculates a hash value based on request fingerprint plus a provided nonce string.
  */
-static char *oidc_get_browser_state_hash(request_rec *r, const char *nonce) {
+static char* oidc_get_browser_state_hash(request_rec *r, oidc_cfg *c,
+		const char *nonce) {
 
 	oidc_debug(r, "enter");
 
@@ -239,25 +232,29 @@ static char *oidc_get_browser_state_hash(request_rec *r, const char *nonce) {
 	/* Initialize the hash context */
 	apr_sha1_init(&sha1);
 
-	/* get the X-FORWARDED-FOR header value  */
-	value = oidc_util_hdr_in_x_forwarded_for_get(r);
-	/* if we have a value for this header, concat it to the hash input */
-	if (value != NULL)
-		apr_sha1_update(&sha1, value, strlen(value));
+	if (c->state_input_headers & OIDC_STATE_INPUT_HEADERS_X_FORWARDED_FOR) {
+		/* get the X-FORWARDED-FOR header value  */
+		value = oidc_util_hdr_in_x_forwarded_for_get(r);
+		/* if we have a value for this header, concat it to the hash input */
+		if (value != NULL)
+			apr_sha1_update(&sha1, value, strlen(value));
+	}
 
-	/* get the USER-AGENT header value  */
-	value = oidc_util_hdr_in_user_agent_get(r);
-	/* if we have a value for this header, concat it to the hash input */
-	if (value != NULL)
-		apr_sha1_update(&sha1, value, strlen(value));
+	if (c->state_input_headers & OIDC_STATE_INPUT_HEADERS_USER_AGENT) {
+		/* get the USER-AGENT header value  */
+		value = oidc_util_hdr_in_user_agent_get(r);
+		/* if we have a value for this header, concat it to the hash input */
+		if (value != NULL)
+			apr_sha1_update(&sha1, value, strlen(value));
+	}
 
 	/* get the remote client IP address or host name */
 	/*
-	int remotehost_is_ip;
-	value = ap_get_remote_host(r->connection, r->per_dir_config,
-			REMOTE_NOLOOKUP, &remotehost_is_ip);
-	apr_sha1_update(&sha1, value, strlen(value));
-	*/
+	 int remotehost_is_ip;
+	 value = ap_get_remote_host(r->connection, r->per_dir_config,
+	 REMOTE_NOLOOKUP, &remotehost_is_ip);
+	 apr_sha1_update(&sha1, value, strlen(value));
+	 */
 
 	/* concat the nonce parameter to the hash input */
 	apr_sha1_update(&sha1, nonce, strlen(nonce));
@@ -276,15 +273,16 @@ static char *oidc_get_browser_state_hash(request_rec *r, const char *nonce) {
 
 	/* base64url-encode the resulting hash and return it */
 	char *result = NULL;
-	oidc_base64url_encode(r, &result, (const char *) hash, OIDC_SHA1_LEN, TRUE);
+	oidc_base64url_encode(r, &result, (const char*) hash, OIDC_SHA1_LEN, TRUE);
 	return result;
 }
 
 /*
  * return the name for the state cookie
  */
-static char *oidc_get_state_cookie_name(request_rec *r, const char *state) {
-	return apr_psprintf(r->pool, "%s%s", OIDC_STATE_COOKIE_PREFIX, state);
+static char* oidc_get_state_cookie_name(request_rec *r, const char *state) {
+	return apr_psprintf(r->pool, "%s%s", oidc_cfg_dir_state_cookie_prefix(r),
+			state);
 }
 
 /*
@@ -348,7 +346,7 @@ static apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg *c,
 /*
  * return the oidc_provider_t struct for the specified issuer
  */
-static oidc_provider_t *oidc_get_provider_for_issuer(request_rec *r,
+static oidc_provider_t* oidc_get_provider_for_issuer(request_rec *r,
 		oidc_cfg *c, const char *issuer, apr_byte_t allow_discovery) {
 
 	/* by default we'll assume that we're dealing with a single statically configured OP */
@@ -389,7 +387,7 @@ static apr_byte_t oidc_is_discovery_response(request_rec *r, oidc_cfg *cfg) {
 /*
  * return the HTTP method being called: only for POST data persistence purposes
  */
-static const char *oidc_original_request_method(request_rec *r, oidc_cfg *cfg,
+static const char* oidc_original_request_method(request_rec *r, oidc_cfg *cfg,
 		apr_byte_t handle_discovery_response) {
 	const char *method = OIDC_METHOD_GET;
 
@@ -470,7 +468,7 @@ apr_byte_t oidc_post_preserve_javascript(request_rec *r, const char *location,
 					"    </script>\n", jmethod, json,
 					location ?
 							apr_psprintf(r->pool, "window.location='%s';\n",
-									location) :
+									oidc_util_javascript_escape(r->pool, location)) :
 									"");
 	if (location == NULL) {
 		if (javascript_method)
@@ -515,177 +513,16 @@ static int oidc_request_post_preserved_restore(request_rec *r,
 					"          input.type = \"hidden\";\n"
 					"          document.forms[0].appendChild(input);\n"
 					"        }\n"
-					"        document.forms[0].action = '%s';\n"
+					"        document.forms[0].action = \"%s\";\n"
 					"        document.forms[0].submit();\n"
 					"      }\n"
-					"    </script>\n", method, original_url);
+					"    </script>\n", method, oidc_util_javascript_escape(r->pool, original_url));
 
 	const char *body = "    <p>Restoring...</p>\n"
 			"    <form method=\"post\"></form>\n";
 
 	return oidc_util_html_send(r, "Restoring...", script, method, body,
 			OK);
-}
-
-/*
- * parse state that was sent to us by the issuer
- */
-static apr_byte_t oidc_unsolicited_proto_state(request_rec *r, oidc_cfg *c,
-		const char *state, oidc_proto_state_t **proto_state) {
-
-	char *alg = NULL;
-	oidc_debug(r, "enter: state header=%s",
-			oidc_proto_peek_jwt_header(r, state, &alg));
-
-	oidc_jose_error_t err;
-	oidc_jwk_t *jwk = NULL;
-	if (oidc_util_create_symmetric_key(r, c->provider.client_secret,
-			oidc_alg2keysize(alg), OIDC_JOSE_ALG_SHA256,
-			TRUE, &jwk) == FALSE)
-		return FALSE;
-
-	oidc_jwt_t *jwt = NULL;
-	if (oidc_jwt_parse(r->pool, state, &jwt,
-			oidc_util_merge_symmetric_key(r->pool, c->private_keys, jwk),
-			&err) == FALSE) {
-		oidc_error(r,
-				"could not parse JWT from state: invalid unsolicited response: %s",
-				oidc_jose_e2s(r->pool, err));
-		return FALSE;
-	}
-
-	oidc_jwk_destroy(jwk);
-	oidc_debug(r, "successfully parsed JWT from state");
-
-	if (jwt->payload.iss == NULL) {
-		oidc_error(r, "no \"%s\" could be retrieved from JWT state, aborting",
-				OIDC_CLAIM_ISS);
-		oidc_jwt_destroy(jwt);
-		return FALSE;
-	}
-
-	oidc_provider_t *provider = oidc_get_provider_for_issuer(r, c,
-			jwt->payload.iss, FALSE);
-	if (provider == NULL) {
-		oidc_jwt_destroy(jwt);
-		return FALSE;
-	}
-
-	/* validate the state JWT, validating optional exp + iat */
-	if (oidc_proto_validate_jwt(r, jwt, provider->issuer, FALSE, FALSE,
-			provider->idtoken_iat_slack,
-			OIDC_TOKEN_BINDING_POLICY_DISABLED) == FALSE) {
-		oidc_jwt_destroy(jwt);
-		return FALSE;
-	}
-
-	char *rfp = NULL;
-	if (oidc_jose_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_RFP,
-			TRUE, &rfp, &err) == FALSE) {
-		oidc_error(r,
-				"no \"%s\" claim could be retrieved from JWT state, aborting: %s",
-				OIDC_CLAIM_RFP, oidc_jose_e2s(r->pool, err));
-		oidc_jwt_destroy(jwt);
-		return FALSE;
-	}
-
-	if (apr_strnatcmp(rfp, OIDC_PROTO_ISS) != 0) {
-		oidc_error(r, "\"%s\" (%s) does not match \"%s\", aborting",
-				OIDC_CLAIM_RFP, rfp, OIDC_PROTO_ISS);
-		oidc_jwt_destroy(jwt);
-		return FALSE;
-	}
-
-	char *target_link_uri = NULL;
-	oidc_jose_get_string(r->pool, jwt->payload.value.json,
-			OIDC_CLAIM_TARGET_LINK_URI,
-			FALSE, &target_link_uri, NULL);
-	if (target_link_uri == NULL) {
-		if (c->default_sso_url == NULL) {
-			oidc_error(r,
-					"no \"%s\" claim could be retrieved from JWT state and no " OIDCDefaultURL " is set, aborting",
-					OIDC_CLAIM_TARGET_LINK_URI);
-			oidc_jwt_destroy(jwt);
-			return FALSE;
-		}
-		target_link_uri = c->default_sso_url;
-	}
-
-	if (c->metadata_dir != NULL) {
-		if ((oidc_metadata_get(r, c, jwt->payload.iss, &provider, FALSE)
-				== FALSE) || (provider == NULL)) {
-			oidc_error(r, "no provider metadata found for provider \"%s\"",
-					jwt->payload.iss);
-			oidc_jwt_destroy(jwt);
-			return FALSE;
-		}
-	}
-
-	char *jti = NULL;
-	oidc_jose_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_JTI,
-			FALSE, &jti,
-			NULL);
-	if (jti == NULL) {
-		char *cser = oidc_jwt_serialize(r->pool, jwt, &err);
-		if (cser == NULL)
-			return FALSE;
-		if (oidc_util_hash_string_and_base64url_encode(r, OIDC_JOSE_ALG_SHA256,
-				cser, &jti) == FALSE) {
-			oidc_error(r,
-					"oidc_util_hash_string_and_base64url_encode returned an error");
-			return FALSE;
-		}
-	}
-
-	char *replay = NULL;
-	oidc_cache_get_jti(r, jti, &replay);
-	if (replay != NULL) {
-		oidc_error(r,
-				"the \"%s\" value (%s) passed in the browser state was found in the cache already; possible replay attack!?",
-				OIDC_CLAIM_JTI, jti);
-		oidc_jwt_destroy(jwt);
-		return FALSE;
-	}
-
-	/* jti cache duration is the configured replay prevention window for token issuance plus 10 seconds for safety */
-	apr_time_t jti_cache_duration = apr_time_from_sec(
-			provider->idtoken_iat_slack * 2 + 10);
-
-	/* store it in the cache for the calculated duration */
-	oidc_cache_set_jti(r, jti, jti, apr_time_now() + jti_cache_duration);
-
-	oidc_debug(r,
-			"jti \"%s\" validated successfully and is now cached for %" APR_TIME_T_FMT " seconds",
-			jti, apr_time_sec(jti_cache_duration));
-
-	jwk = NULL;
-	if (oidc_util_create_symmetric_key(r, c->provider.client_secret, 0,
-			NULL, TRUE, &jwk) == FALSE)
-		return FALSE;
-
-	oidc_jwks_uri_t jwks_uri = { provider->jwks_uri,
-			provider->jwks_refresh_interval, provider->ssl_validate_server };
-	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri,
-			oidc_util_merge_symmetric_key(r->pool, NULL, jwk), NULL) == FALSE) {
-		oidc_error(r, "state JWT could not be validated, aborting");
-		oidc_jwt_destroy(jwt);
-		return FALSE;
-	}
-
-	oidc_jwk_destroy(jwk);
-	oidc_debug(r, "successfully verified state JWT");
-
-	*proto_state = oidc_proto_state_new();
-	oidc_proto_state_set_issuer(*proto_state, jwt->payload.iss);
-	oidc_proto_state_set_original_url(*proto_state, target_link_uri);
-	oidc_proto_state_set_original_method(*proto_state, OIDC_METHOD_GET);
-	oidc_proto_state_set_response_mode(*proto_state, provider->response_mode);
-	oidc_proto_state_set_response_type(*proto_state, provider->response_type);
-	oidc_proto_state_set_timestamp_now(*proto_state);
-
-	oidc_jwt_destroy(jwt);
-
-	return TRUE;
 }
 
 typedef struct oidc_state_cookies_t {
@@ -715,7 +552,8 @@ static int oidc_delete_oldest_state_cookies(request_rec *r,
 		oidc_warn(r,
 				"deleting oldest state cookie: %s (time until expiry %" APR_TIME_T_FMT " seconds)",
 				oldest->name, apr_time_sec(oldest->timestamp - apr_time_now()));
-		oidc_util_set_cookie(r, oldest->name, "", 0, NULL);
+		oidc_util_set_cookie(r, oldest->name, "", 0,
+				OIDC_COOKIE_EXT_SAME_SITE_NONE(r));
 		if (prev_oldest)
 			prev_oldest->next = oldest->next;
 		else
@@ -741,7 +579,7 @@ static int oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c,
 		while (cookie != NULL) {
 			while (*cookie == OIDC_CHAR_SPACE)
 				cookie++;
-			if (strstr(cookie, OIDC_STATE_COOKIE_PREFIX) == cookie) {
+			if (strstr(cookie, oidc_cfg_dir_state_cookie_prefix(r)) == cookie) {
 				char *cookieName = cookie;
 				while (cookie != NULL && *cookie != OIDC_CHAR_EQUAL)
 					cookie++;
@@ -763,7 +601,7 @@ static int oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c,
 										oidc_proto_state_get_original_url(
 												proto_state));
 								oidc_util_set_cookie(r, cookieName, "", 0,
-										NULL);
+										OIDC_COOKIE_EXT_SAME_SITE_NONE(r));
 							} else {
 								if (first == NULL) {
 									first = apr_pcalloc(r->pool,
@@ -780,6 +618,12 @@ static int oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c,
 								number_of_valid_state_cookies++;
 							}
 							oidc_proto_state_destroy(proto_state);
+						} else {
+							oidc_warn(r,
+									"state cookie could not be retrieved/decoded, deleting: %s",
+									cookieName);
+							oidc_util_set_cookie(r, cookieName, "", 0,
+									OIDC_COOKIE_EXT_SAME_SITE_NONE(r));
 						}
 					}
 				}
@@ -812,12 +656,15 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 	/* get the state cookie value first */
 	char *cookieValue = oidc_util_get_cookie(r, cookieName);
 	if (cookieValue == NULL) {
-		oidc_error(r, "no \"%s\" state cookie found", cookieName);
-		return oidc_unsolicited_proto_state(r, c, state, proto_state);
+		oidc_error(r,
+				"no \"%s\" state cookie found: check domain and samesite cookie settings",
+				cookieName);
+		return FALSE;
 	}
 
 	/* clear state cookie because we don't need it anymore */
-	oidc_util_set_cookie(r, cookieName, "", 0, NULL);
+	oidc_util_set_cookie(r, cookieName, "", 0,
+			OIDC_COOKIE_EXT_SAME_SITE_NONE(r));
 
 	*proto_state = oidc_proto_state_from_cookie(r, c, cookieValue);
 	if (*proto_state == NULL)
@@ -826,7 +673,7 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 	const char *nonce = oidc_proto_state_get_nonce(*proto_state);
 
 	/* calculate the hash of the browser fingerprint concatenated with the nonce */
-	char *calc = oidc_get_browser_state_hash(r, nonce);
+	char *calc = oidc_get_browser_state_hash(r, c, nonce);
 	/* compare the calculated hash with the value provided in the authorization response */
 	if (apr_strnatcmp(calc, state) != 0) {
 		oidc_error(r,
@@ -841,16 +688,16 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
 	/* check that the timestamp is not beyond the valid interval */
 	if (apr_time_now() > ts + apr_time_from_sec(c->state_timeout)) {
 		oidc_error(r, "state has expired");
-		/*
-		 * note that this overrides redirection to the OIDCDefaultURL as done later...
-		 * see: https://groups.google.com/forum/?utm_medium=email&utm_source=footer#!msg/mod_auth_openidc/L4JFBw-XCNU/BWi2Fmk2AwAJ
-		 */
-		oidc_util_html_send_error(r, c->error_template,
-				"Invalid Authentication Response",
-				apr_psprintf(r->pool,
-						"This is due to a timeout; please restart your authentication session by re-entering the URL/bookmark you originally wanted to access: %s",
-						oidc_proto_state_get_original_url(*proto_state)),
-						OK);
+		if ((c->default_sso_url == NULL)
+				|| (apr_table_get(r->subprocess_env, "OIDC_NO_DEFAULT_URL_ON_STATE_TIMEOUT") != NULL)) {
+			oidc_util_html_send_error(r, c->error_template, "Invalid Authentication Response", apr_psprintf(r->pool, "This is due to a timeout; please restart your authentication session by re-entering the URL/bookmark you originally wanted to access: %s", oidc_proto_state_get_original_url(*proto_state)),
+									  OK);
+			/*
+			 * a hack for Apache 2.4 to prevent it from writing its own 500/400/302 HTML document
+			 * text by making ap_send_error_response in http_protocol.c return early...
+			 */
+			r->header_only = 1;
+		}
 		oidc_proto_state_destroy(*proto_state);
 		return FALSE;
 	}
@@ -905,13 +752,13 @@ static int oidc_authorization_request_set_cookie(request_rec *r, oidc_cfg *c,
 		 * into a 200 so we'll avoid that for now: the user will see Apache specific
 		 * readable text anyway
 		 *
-		return oidc_util_html_send_error(r, c->error_template,
-				"Too Many Outstanding Requests",
-				apr_psprintf(r->pool,
-						"No authentication request could be generated since there are too many outstanding authentication requests already; you may have to wait up to %d seconds to be able to create a new request",
-						c->state_timeout),
-						HTTP_SERVICE_UNAVAILABLE);
-		*/
+		 return oidc_util_html_send_error(r, c->error_template,
+		 "Too Many Outstanding Requests",
+		 apr_psprintf(r->pool,
+		 "No authentication request could be generated since there are too many outstanding authentication requests already; you may have to wait up to %d seconds to be able to create a new request",
+		 c->state_timeout),
+		 HTTP_SERVICE_UNAVAILABLE);
+		 */
 
 		return HTTP_SERVICE_UNAVAILABLE;
 	}
@@ -921,23 +768,23 @@ static int oidc_authorization_request_set_cookie(request_rec *r, oidc_cfg *c,
 
 	/* set it as a cookie */
 	oidc_util_set_cookie(r, cookieName, cookieValue, -1,
-			c->cookie_same_site ? OIDC_COOKIE_EXT_SAME_SITE_LAX : NULL);
+			OIDC_COOKIE_SAMESITE_LAX(c, r));
 
-	return HTTP_OK;
+	return OK;
 }
 
 /*
  * get the mod_auth_openidc related context from the (userdata in the) request
  * (used for passing state between various Apache request processing stages and hook callbacks)
  */
-static apr_table_t *oidc_request_state(request_rec *rr) {
+static apr_table_t* oidc_request_state(request_rec *rr) {
 
 	/* our state is always stored in the main request */
 	request_rec *r = (rr->main != NULL) ? rr->main : rr;
 
 	/* our state is a table, get it */
 	apr_table_t *state = NULL;
-	apr_pool_userdata_get((void **) &state, OIDC_USERDATA_KEY, r->pool);
+	apr_pool_userdata_get((void**) &state, OIDC_USERDATA_KEY, r->pool);
 
 	/* if it does not exist, we'll create a new table */
 	if (state == NULL) {
@@ -966,7 +813,7 @@ void oidc_request_state_set(request_rec *r, const char *key, const char *value) 
  * get a name/value pair from the mod_auth_openidc-specific request context
  * (used for passing state between various Apache request processing stages and hook callbacks)
  */
-const char*oidc_request_state_get(request_rec *r, const char *key) {
+const char* oidc_request_state_get(request_rec *r, const char *key) {
 
 	/* get a handle to the global state, which is a table */
 	apr_table_t *state = oidc_request_state(r);
@@ -979,9 +826,8 @@ const char*oidc_request_state_get(request_rec *r, const char *key) {
  * set the claims from a JSON object (c.q. id_token or user_info response) stored
  * in the session in to HTTP headers passed on to the application
  */
-static apr_byte_t oidc_set_app_claims(request_rec *r,
-		const oidc_cfg * const cfg, oidc_session_t *session,
-		const char *s_claims) {
+static apr_byte_t oidc_set_app_claims(request_rec *r, const oidc_cfg *const cfg,
+		oidc_session_t *session, const char *s_claims) {
 
 	json_t *j_claims = NULL;
 
@@ -995,7 +841,8 @@ static apr_byte_t oidc_set_app_claims(request_rec *r,
 	if (j_claims != NULL) {
 		oidc_util_set_app_infos(r, j_claims, oidc_cfg_claim_prefix(r),
 				cfg->claim_delimiter, oidc_cfg_dir_pass_info_in_headers(r),
-				oidc_cfg_dir_pass_info_in_envvars(r));
+				oidc_cfg_dir_pass_info_in_envvars(r),
+				oidc_cfg_dir_pass_info_base64url(r));
 
 		/* release resources */
 		json_decref(j_claims);
@@ -1071,7 +918,8 @@ static int oidc_handle_unauthenticated_user(request_rec *r, oidc_cfg *c) {
 		 * won't redirect the user and thus avoid creating a state cookie
 		 * for a non-browser (= Javascript) call that will never return from the OP
 		 */
-		if (oidc_is_xml_http_request(r) == TRUE)
+		if ((oidc_dir_cfg_unauth_expr_is_set(r) == FALSE)
+				&& (oidc_is_xml_http_request(r) == TRUE))
 			return HTTP_UNAUTHORIZED;
 	}
 
@@ -1144,7 +992,7 @@ apr_byte_t oidc_get_provider_from_session(request_rec *r, oidc_cfg *c,
 	/* get the issuer value from the session state */
 	const char *issuer = oidc_session_get_issuer(r, session);
 	if (issuer == NULL) {
-		oidc_error(r, "session corrupted: no issuer found in session");
+		oidc_warn(r, "empty or invalid session: no issuer found");
 		return FALSE;
 	}
 
@@ -1224,8 +1072,8 @@ static apr_byte_t oidc_refresh_access_token(request_rec *r, oidc_cfg *c,
 
 	/* refresh the tokens by calling the token endpoint */
 	if (oidc_proto_refresh_request(r, c, provider, refresh_token, &s_id_token,
-			&s_access_token, &s_token_type, &expires_in,
-			&s_refresh_token) == FALSE) {
+			&s_access_token, &s_token_type, &expires_in, &s_refresh_token)
+			== FALSE) {
 		oidc_error(r, "access_token could not be refreshed");
 		return FALSE;
 	}
@@ -1245,13 +1093,40 @@ static apr_byte_t oidc_refresh_access_token(request_rec *r, oidc_cfg *c,
 	if (s_refresh_token != NULL)
 		oidc_session_set_refresh_token(r, session, s_refresh_token);
 
+	/* if we have a new id_token, store it in the session and update the session max lifetime if required */
+	if (s_id_token != NULL) {
+		/* only store the serialized representation when client cookie based session tracking is not in use */
+		if (c->session_type != OIDC_SESSION_TYPE_CLIENT_COOKIE) 
+			oidc_session_set_idtoken(r, session, s_id_token);
+		
+		oidc_jwt_t *id_token_jwt = NULL;
+		oidc_jose_error_t err;
+		if (oidc_jwt_parse(r->pool, s_id_token, &id_token_jwt, NULL, &err) == TRUE) {
+
+			/* store the claims payload in the id_token for later reference */
+			oidc_session_set_idtoken_claims(r, session,
+				id_token_jwt->payload.value.str);
+
+			if (provider->session_max_duration == 0) {
+				/* update the session expiry to match the expiry of the id_token */
+				apr_time_t session_expires = apr_time_from_sec(id_token_jwt->payload.exp);
+				oidc_session_set_session_expires(r, session, session_expires);
+
+				/* log message about the updated max session duration */
+				oidc_log_session_expires(r, "session max lifetime", session_expires);
+			}		
+		} else { 
+			oidc_warn(r, "parsing of id_token failed");
+		}
+	}
+
 	return TRUE;
 }
 
 /*
  * retrieve claims from the userinfo endpoint and return the stringified response
  */
-static const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r,
+static const char* oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r,
 		oidc_cfg *c, oidc_provider_t *provider, const char *access_token,
 		oidc_session_t *session, char *id_token_sub, char **userinfo_jwt) {
 
@@ -1304,7 +1179,8 @@ static const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r,
 
 				/* try again with the new access token */
 				if (oidc_proto_resolve_userinfo(r, c, provider, id_token_sub,
-						refreshed_access_token, &result, userinfo_jwt) == FALSE) {
+						refreshed_access_token, &result, userinfo_jwt)
+						== FALSE) {
 
 					oidc_error(r,
 							"resolving user info claims with the refreshed access token failed, nothing will be stored in the session");
@@ -1412,18 +1288,19 @@ static void oidc_copy_tokens_to_request_state(request_rec *r,
 /*
  * pass refresh_token, access_token and access_token_expires as headers/environment variables to the application
  */
-static apr_byte_t oidc_session_pass_tokens_and_save(request_rec *r,
-		oidc_cfg *cfg, oidc_session_t *session, apr_byte_t needs_save) {
+static apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg *cfg,
+		oidc_session_t *session, apr_byte_t *needs_save) {
 
 	apr_byte_t pass_headers = oidc_cfg_dir_pass_info_in_headers(r);
 	apr_byte_t pass_envvars = oidc_cfg_dir_pass_info_in_envvars(r);
+	apr_byte_t pass_base64url = oidc_cfg_dir_pass_info_base64url(r);
 
 	/* set the refresh_token in the app headers/variables, if enabled for this location/directory */
 	const char *refresh_token = oidc_session_get_refresh_token(r, session);
 	if ((oidc_cfg_dir_pass_refresh_token(r) != 0) && (refresh_token != NULL)) {
 		/* pass it to the app in a header or environment variable */
 		oidc_util_set_app_info(r, OIDC_APP_INFO_REFRESH_TOKEN, refresh_token,
-				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars);
+				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars, pass_base64url);
 	}
 
 	/* set the access_token in the app headers/variables */
@@ -1431,7 +1308,7 @@ static apr_byte_t oidc_session_pass_tokens_and_save(request_rec *r,
 	if (access_token != NULL) {
 		/* pass it to the app in a header or environment variable */
 		oidc_util_set_app_info(r, OIDC_APP_INFO_ACCESS_TOKEN, access_token,
-				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars);
+				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars, pass_base64url);
 	}
 
 	/* set the expiry timestamp in the app headers/variables */
@@ -1441,7 +1318,8 @@ static apr_byte_t oidc_session_pass_tokens_and_save(request_rec *r,
 		/* pass it to the app in a header or environment variable */
 		oidc_util_set_app_info(r, OIDC_APP_INFO_ACCESS_TOKEN_EXP,
 				access_token_expires,
-				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars);
+				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars,
+				pass_base64url);
 	}
 
 	/*
@@ -1464,22 +1342,18 @@ static apr_byte_t oidc_session_pass_tokens_and_save(request_rec *r,
 		slack = apr_time_from_sec(60);
 	if (session->expiry - now < interval - slack) {
 		session->expiry = now + interval;
-		needs_save = TRUE;
+		*needs_save = TRUE;
 	}
 
 	/* log message about session expiry */
 	oidc_log_session_expires(r, "session inactivity timeout", session->expiry);
 
-	/* check if something was updated in the session and we need to save it again */
-	if (needs_save)
-		if (oidc_session_save(r, session, FALSE) == FALSE)
-			return FALSE;
-
 	return TRUE;
 }
 
 static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
-		oidc_cfg *cfg, oidc_session_t *session, int ttl_minimum, int logout_on_error) {
+		oidc_cfg *cfg, oidc_session_t *session, int ttl_minimum,
+		int logout_on_error) {
 
 	const char *s_access_token_expires = NULL;
 	apr_time_t t_expires = -1;
@@ -1522,9 +1396,10 @@ static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
 
 	if (oidc_refresh_access_token(r, cfg, session, provider,
 			NULL) == FALSE) {
-		oidc_warn(r, "access_token could not be refreshed, logout=%d", logout_on_error & OIDC_LOGOUT_ON_ERROR_REFRESH);
+		oidc_warn(r, "access_token could not be refreshed, logout=%d",
+				logout_on_error & OIDC_LOGOUT_ON_ERROR_REFRESH);
 		if (logout_on_error & OIDC_LOGOUT_ON_ERROR_REFRESH)
-			return ERROR_NEEDS_TO_SAVE;
+			return OIDC_REFRESH_ERROR;
 		else
 			return FALSE;
 	}
@@ -1536,12 +1411,11 @@ static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
  * handle the case where we have identified an existing authentication session for a user
  */
 static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
-		oidc_session_t *session) {
+		oidc_session_t *session, apr_byte_t *needs_save) {
+
+	apr_byte_t rv = FALSE;
 
 	oidc_debug(r, "enter");
-
-	/* track if the session needs to be updated/saved into the cache */
-	apr_byte_t needs_save = FALSE;
 
 	/* set the user in the main request for further (incl. sub-request) processing */
 	r->user = apr_pstrdup(r->pool, session->remote_user);
@@ -1551,6 +1425,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	char *authn_header = oidc_cfg_dir_authn_header(r);
 	apr_byte_t pass_headers = oidc_cfg_dir_pass_info_in_headers(r);
 	apr_byte_t pass_envvars = oidc_cfg_dir_pass_info_in_envvars(r);
+	apr_byte_t pass_base64url = oidc_cfg_dir_pass_info_base64url(r);
 
 	/* verify current cookie domain against issued cookie domain */
 	if (oidc_check_cookie_domain(r, cfg, session) == FALSE)
@@ -1562,15 +1437,20 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 		return rc;
 
 	/* if needed, refresh the access token */
-	needs_save = oidc_refresh_access_token_before_expiry(r, cfg, session,
+	rv = oidc_refresh_access_token_before_expiry(r, cfg, session,
 			oidc_cfg_dir_refresh_access_token_before_expiry(r),
 			oidc_cfg_dir_logout_on_error_refresh(r));
-	if (needs_save == ERROR_NEEDS_TO_SAVE)
+
+	if (rv == OIDC_REFRESH_ERROR) {
+		*needs_save = FALSE;
 		return oidc_handle_logout_request(r, cfg, session, cfg->default_slo_url);
+	}
+
+	*needs_save |= rv;
 
 	/* if needed, refresh claims from the user info endpoint */
 	if (oidc_refresh_claims_from_userinfo_endpoint(r, cfg, session) == TRUE)
-		needs_save = TRUE;
+		*needs_save = TRUE;
 
 	/*
 	 * we're going to pass the information that we have to the application,
@@ -1597,7 +1477,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	if ((cfg->pass_userinfo_as & OIDC_PASS_USERINFO_AS_JSON_OBJECT)) {
 		/* pass the userinfo JSON object to the app in a header or environment variable */
 		oidc_util_set_app_info(r, OIDC_APP_INFO_USERINFO_JSON, s_claims,
-				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars);
+				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars, pass_base64url);
 	}
 
 	if ((cfg->pass_userinfo_as & OIDC_PASS_USERINFO_AS_JWT)) {
@@ -1609,7 +1489,8 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 				/* pass the compact serialized JWT to the app in a header or environment variable */
 				oidc_util_set_app_info(r, OIDC_APP_INFO_USERINFO_JWT,
 						s_userinfo_jwt,
-						OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars);
+						OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars,
+						pass_base64url);
 			} else {
 				oidc_debug(r,
 						"configured to pass userinfo in a JWT, but no such JWT was found in the session (probably no such JWT was returned from the userinfo endpoint)");
@@ -1629,7 +1510,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_PAYLOAD)) {
 		/* pass the id_token JSON object to the app in a header or environment variable */
 		oidc_util_set_app_info(r, OIDC_APP_INFO_ID_TOKEN_PAYLOAD, s_id_token,
-				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars);
+				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars, pass_base64url);
 	}
 
 	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_SERIALIZED)) {
@@ -1638,15 +1519,16 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 			const char *s_id_token = oidc_session_get_idtoken(r, session);
 			/* pass the compact serialized JWT to the app in a header or environment variable */
 			oidc_util_set_app_info(r, OIDC_APP_INFO_ID_TOKEN, s_id_token,
-					OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars);
+					OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars,
+					pass_base64url);
 		} else {
 			oidc_error(r,
 					"session type \"client-cookie\" does not allow storing/passing the id_token; use \"" OIDCSessionType " server-cache\" for that");
 		}
 	}
 
-	/* pass the at, rt and at expiry to the application, possibly update the session expiry and save the session */
-	if (oidc_session_pass_tokens_and_save(r, cfg, session, needs_save) == FALSE)
+	/* pass the at, rt and at expiry to the application, possibly update the session expiry */
+	if (oidc_session_pass_tokens(r, cfg, session, needs_save) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
 	/* return "user authenticated" status */
@@ -1678,7 +1560,13 @@ static apr_byte_t oidc_authorization_response_match_state(request_rec *r,
 	*provider = oidc_get_provider_for_issuer(r, c,
 			oidc_proto_state_get_issuer(*proto_state), FALSE);
 
-	return (*provider != NULL);
+	if (*provider == NULL) {
+		oidc_proto_state_destroy(*proto_state);
+		*proto_state = NULL;
+		return FALSE;
+	}
+
+	return TRUE;
 }
 
 /*
@@ -1692,7 +1580,7 @@ static int oidc_session_redirect_parent_window_to_logout(request_rec *r,
 	char *java_script = apr_psprintf(r->pool,
 			"    <script type=\"text/javascript\">\n"
 			"      window.top.location.href = '%s?session=logout';\n"
-			"    </script>\n", oidc_get_redirect_uri(r, c));
+			"    </script>\n", oidc_util_javascript_escape(r->pool, oidc_get_redirect_uri(r, c)));
 
 	return oidc_util_html_send(r, "Redirecting...", java_script, NULL, NULL,
 			OK);
@@ -1819,7 +1707,7 @@ static apr_byte_t oidc_set_request_user(request_rec *r, oidc_cfg *c,
 	return TRUE;
 }
 
-static char *oidc_make_sid_iss_unique(request_rec *r, const char *sid,
+static char* oidc_make_sid_iss_unique(request_rec *r, const char *sid,
 		const char *issuer) {
 	return apr_psprintf(r->pool, "%s@%s", sid, issuer);
 }
@@ -2044,18 +1932,23 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 
 	/* match the returned state parameter against the state stored in the browser */
 	if (oidc_authorization_response_match_state(r, c,
-			apr_table_get(params, OIDC_PROTO_STATE), &provider,
-			&proto_state) == FALSE) {
+			apr_table_get(params, OIDC_PROTO_STATE), &provider, &proto_state)
+			== FALSE) {
 		if (c->default_sso_url != NULL) {
 			oidc_warn(r,
 					"invalid authorization response state; a default SSO URL is set, sending the user there: %s",
 					c->default_sso_url);
 			oidc_util_hdr_out_location_set(r, c->default_sso_url);
+			//oidc_util_hdr_err_out_add(r, "Location", c->default_sso_url));
 			return HTTP_MOVED_TEMPORARILY;
 		}
 		oidc_error(r,
 				"invalid authorization response state and no default SSO URL is set, sending an error...");
-		return HTTP_INTERNAL_SERVER_ERROR;
+		// if content was already returned via html/http send then don't return 500
+		// but send 200 to avoid extraneous internal error document text to be sent
+		return ((r->user) && (strncmp(r->user, "", 1) == 0)) ?
+				OK :
+				HTTP_BAD_REQUEST;
 	}
 
 	/* see if the response is an error response */
@@ -2124,11 +2017,15 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 				apr_table_get(params, OIDC_PROTO_REFRESH_TOKEN),
 				apr_table_get(params, OIDC_PROTO_SESSION_STATE),
 				apr_table_get(params, OIDC_PROTO_STATE), original_url,
-				userinfo_jwt) == FALSE)
+				userinfo_jwt) == FALSE) {
+			oidc_proto_state_destroy(proto_state);
+			oidc_jwt_destroy(jwt);
 			return HTTP_INTERNAL_SERVER_ERROR;
+		}
 
 	} else {
 		oidc_error(r, "remote user could not be set");
+		oidc_jwt_destroy(jwt);
 		return oidc_authorization_response_error(r, c, proto_state,
 				"Remote user could not be set: contact the website administrator",
 				NULL);
@@ -2191,7 +2088,7 @@ static int oidc_handle_post_authorization_response(request_rec *r, oidc_cfg *c,
 	}
 
 	/* get the parameters */
-	response_mode = (char *) apr_table_get(params, OIDC_PROTO_RESPONSE_MODE);
+	response_mode = (char*) apr_table_get(params, OIDC_PROTO_RESPONSE_MODE);
 
 	/* do the actual implicit work */
 	return oidc_handle_authorization_response(r, c, session, params,
@@ -2262,9 +2159,7 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 
 		/* set CSRF cookie */
 		oidc_util_set_cookie(r, OIDC_CSRF_NAME, csrf, -1,
-				cfg->cookie_same_site ?
-						OIDC_COOKIE_EXT_SAME_SITE_STRICT :
-						NULL);
+				OIDC_COOKIE_SAMESITE_STRICT(cfg, r));
 
 		/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
 		if (oidc_post_preserve_javascript(r, url, NULL, NULL) == TRUE)
@@ -2357,13 +2252,13 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 	s = apr_psprintf(r->pool, "%s</form>\n", s);
 
 	oidc_util_set_cookie(r, OIDC_CSRF_NAME, csrf, -1,
-			cfg->cookie_same_site ? OIDC_COOKIE_EXT_SAME_SITE_STRICT : NULL);
+			OIDC_COOKIE_SAMESITE_STRICT(cfg, r));
 
 	char *javascript = NULL, *javascript_method = NULL;
 	char *html_head =
 			"<style type=\"text/css\">body {text-align: center}</style>";
-	if (oidc_post_preserve_javascript(r, NULL, &javascript,
-			&javascript_method) == TRUE)
+	if (oidc_post_preserve_javascript(r, NULL, &javascript, &javascript_method)
+			== TRUE)
 		html_head = apr_psprintf(r->pool, "%s%s", html_head, javascript);
 
 	/* now send the HTML contents to the user agent */
@@ -2384,8 +2279,17 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	if (provider == NULL) {
 
 		// TODO: should we use an explicit redirect to the discovery endpoint (maybe a "discovery" param to the redirect_uri)?
-		if (c->metadata_dir != NULL)
-			return oidc_discovery(r, c);
+		if (c->metadata_dir != NULL) {
+			/*
+			 * Will be handled in the content handler; avoid:
+			 * No authentication done but request not allowed without authentication
+			 * by setting r->user
+			 */
+			oidc_debug(r, "defer discovery to the content handler");
+			oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_DISCOVERY, "");
+			r->user = "";
+			return OK;
+		}
 
 		/* we're not using multiple OP's configured in a metadata directory, pick the statically configured OP */
 		if (oidc_provider_static_config(r, c, &provider) == FALSE)
@@ -2430,14 +2334,14 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 		oidc_proto_state_set_pkce_state(proto_state, pkce_state);
 
 	/* get a hash value that fingerprints the browser concatenated with the random input */
-	char *state = oidc_get_browser_state_hash(r, nonce);
+	char *state = oidc_get_browser_state_hash(r, c, nonce);
 
 	/*
 	 * create state that restores the context when the authorization response comes in
 	 * and cryptographically bind it to the browser
 	 */
 	int rc = oidc_authorization_request_set_cookie(r, c, state, proto_state);
-	if (rc != HTTP_OK) {
+	if (rc != OK) {
 		oidc_proto_state_destroy(proto_state);
 		return rc;
 	}
@@ -2553,6 +2457,96 @@ static int oidc_target_link_uri_matches_configuration(request_rec *r,
 	return TRUE;
 }
 
+#define OIDC_MAX_URL_LENGTH 8192 * 2
+
+static apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg *c,
+		const char *redirect_to_url, apr_byte_t restrict_to_host, char **err_str,
+		char **err_desc) {
+	apr_uri_t uri;
+	const char *c_host = NULL;
+	apr_hash_index_t *hi = NULL;
+	size_t i = 0;
+	char *url = apr_pstrndup(r->pool, redirect_to_url, OIDC_MAX_URL_LENGTH);
+
+	// replace potentially harmful backslashes with forward slashes
+	for (i = 0; i < strlen(url); i++)
+		if (url[i] == '\\')
+			url[i] = '/';
+
+	if (apr_uri_parse(r->pool, url, &uri) != APR_SUCCESS) {
+		*err_str = apr_pstrdup(r->pool, "Malformed URL");
+		*err_desc = apr_psprintf(r->pool, "not a valid URL value: %s", url);
+		oidc_error(r, "%s: %s", *err_str, *err_desc);
+		return FALSE;
+	}
+
+	if (c->redirect_urls_allowed != NULL) {
+		for (hi = apr_hash_first(NULL, c->redirect_urls_allowed); hi; hi =
+				apr_hash_next(hi)) {
+			apr_hash_this(hi, (const void**) &c_host, NULL, NULL);
+			if (oidc_util_regexp_first_match(r->pool, url, c_host,
+					NULL, err_str) == TRUE)
+				break;
+		}
+		if (hi == NULL) {
+			*err_str = apr_pstrdup(r->pool, "URL not allowed");
+			*err_desc =
+					apr_psprintf(r->pool,
+							"value does not match the list of allowed redirect URLs: %s",
+							url);
+			oidc_error(r, "%s: %s", *err_str, *err_desc);
+			return FALSE;
+		}
+	} else if ((uri.hostname != NULL) && (restrict_to_host == TRUE)) {
+		c_host = oidc_get_current_url_host(r);
+		if ((strstr(c_host, uri.hostname) == NULL)
+				|| (strstr(uri.hostname, c_host) == NULL)) {
+			*err_str = apr_pstrdup(r->pool, "Invalid Request");
+			*err_desc =
+					apr_psprintf(r->pool,
+							"URL value \"%s\" does not match the hostname of the current request \"%s\"",
+							apr_uri_unparse(r->pool, &uri, 0), c_host);
+			oidc_error(r, "%s: %s", *err_str, *err_desc);
+			return FALSE;
+		}
+	}
+
+	if ((uri.hostname == NULL) && (strstr(url, "/") != url)) {
+		*err_str = apr_pstrdup(r->pool, "Malformed URL");
+		*err_desc =
+				apr_psprintf(r->pool,
+						"No hostname was parsed and it does not seem to be relative, i.e starting with '/': %s",
+						url);
+		oidc_error(r, "%s: %s", *err_str, *err_desc);
+		return FALSE;
+	} else if ((uri.hostname == NULL) && (strstr(url, "//") == url)) {
+		*err_str = apr_pstrdup(r->pool, "Malformed URL");
+		*err_desc = apr_psprintf(r->pool,
+				"No hostname was parsed and starting with '//': %s", url);
+		oidc_error(r, "%s: %s", *err_str, *err_desc);
+		return FALSE;
+	} else if ((uri.hostname == NULL) && (strstr(url, "/\\") == url)) {
+		*err_str = apr_pstrdup(r->pool, "Malformed URL");
+		*err_desc = apr_psprintf(r->pool,
+				"No hostname was parsed and starting with '/\\': %s", url);
+		oidc_error(r, "%s: %s", *err_str, *err_desc);
+		return FALSE;
+	}
+
+	/* validate the URL to prevent HTTP header splitting */
+	if (((strstr(url, "\n") != NULL) || strstr(url, "\r") != NULL)) {
+		*err_str = apr_pstrdup(r->pool, "Invalid URL");
+		*err_desc =
+				apr_psprintf(r->pool,
+						"URL value \"%s\" contains illegal \"\n\" or \"\r\" character(s)",
+						url);
+		oidc_error(r, "%s: %s", *err_str, *err_desc);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 /*
  * handle a response from an IDP discovery page and/or handle 3rd-party initiated SSO
  */
@@ -2563,6 +2557,8 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 			*auth_request_params = NULL, *csrf_cookie, *csrf_query = NULL,
 			*user = NULL, *path_scopes;
 	oidc_provider_t *provider = NULL;
+	char *error_str = NULL;
+	char *error_description = NULL;
 
 	oidc_util_get_request_parameter(r, OIDC_DISC_OP_PARAM, &issuer);
 	oidc_util_get_request_parameter(r, OIDC_DISC_USER_PARAM, &user);
@@ -2578,7 +2574,8 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 	if (csrf_cookie) {
 
 		/* clean CSRF cookie */
-		oidc_util_set_cookie(r, OIDC_CSRF_NAME, "", 0, NULL);
+		oidc_util_set_cookie(r, OIDC_CSRF_NAME, "", 0,
+				OIDC_COOKIE_EXT_SAME_SITE_NONE(r));
 
 		/* compare CSRF cookie value with query parameter value */
 		if ((csrf_query == NULL)
@@ -2605,12 +2602,20 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 		target_link_uri = c->default_sso_url;
 	}
 
-	/* do open redirect prevention */
-	if (oidc_target_link_uri_matches_configuration(r, c,
-			target_link_uri) == FALSE) {
+	/* do open redirect prevention, step 1 */
+	if (oidc_target_link_uri_matches_configuration(r, c, target_link_uri)
+			== FALSE) {
 		return oidc_util_html_send_error(r, c->error_template,
 				"Invalid Request",
 				"\"target_link_uri\" parameter does not match configuration settings, aborting to prevent an open redirect.",
+				HTTP_UNAUTHORIZED);
+	}
+
+	/* do input validation on the target_link_uri parameter value, step 2 */
+	if (oidc_validate_redirect_url(r, c, target_link_uri, TRUE, &error_str,
+			&error_description) == FALSE) {
+		return oidc_util_html_send_error(r, c->error_template, error_str,
+				error_description,
 				HTTP_UNAUTHORIZED);
 	}
 
@@ -2662,7 +2667,8 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 		}
 
 		/* got an account name as input, perform OP discovery with that */
-		if (oidc_proto_account_based_discovery(r, c, issuer, &issuer) == FALSE) {
+		if (oidc_proto_account_based_discovery(r, c, issuer, &issuer)
+				== FALSE) {
 
 			/* something did not work out, show a user facing error */
 			return oidc_util_html_send_error(r, c->error_template,
@@ -2751,29 +2757,30 @@ static void oidc_revoke_tokens(request_rec *r, oidc_cfg *c,
 	// TODO: use oauth.ssl_validate_server ...
 	token = oidc_session_get_refresh_token(r, session);
 	if (token != NULL) {
-		apr_table_addn(params, "token_type_hint", "refresh_token");
-		apr_table_addn(params, "token", token);
+		apr_table_setn(params, OIDC_PROTO_TOKEN_TYPE_HINT, OIDC_PROTO_REFRESH_TOKEN);
+		apr_table_setn(params, OIDC_PROTO_TOKEN, token);
 
 		if (oidc_util_http_post_form(r, provider->revocation_endpoint_url,
 				params, basic_auth, bearer_auth, c->oauth.ssl_validate_server,
 				&response, c->http_timeout_long, c->outgoing_proxy,
 				oidc_dir_cfg_pass_cookies(r), NULL,
-				NULL) == FALSE) {
+				NULL, NULL) == FALSE) {
 			oidc_warn(r, "revoking refresh token failed");
 		}
-		apr_table_clear(params);
+		apr_table_unset(params, OIDC_PROTO_TOKEN_TYPE_HINT);
+		apr_table_unset(params, OIDC_PROTO_TOKEN);
 	}
 
 	token = oidc_session_get_access_token(r, session);
 	if (token != NULL) {
-		apr_table_addn(params, "token_type_hint", "access_token");
-		apr_table_addn(params, "token", token);
+		apr_table_setn(params, OIDC_PROTO_TOKEN_TYPE_HINT, OIDC_PROTO_ACCESS_TOKEN);
+		apr_table_setn(params, OIDC_PROTO_TOKEN, token);
 
 		if (oidc_util_http_post_form(r, provider->revocation_endpoint_url,
 				params, basic_auth, bearer_auth, c->oauth.ssl_validate_server,
 				&response, c->http_timeout_long, c->outgoing_proxy,
 				oidc_dir_cfg_pass_cookies(r), NULL,
-				NULL) == FALSE) {
+				NULL, NULL) == FALSE) {
 			oidc_warn(r, "revoking access token failed");
 		}
 	}
@@ -2792,13 +2799,15 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 	oidc_debug(r, "enter (url=%s)", url);
 
 	/* if there's no remote_user then there's no (stored) session to kill */
-	if (session->remote_user != NULL) {
-
+	if (session->remote_user != NULL)
 		oidc_revoke_tokens(r, c, session);
 
-		/* remove session state (cq. cache entry and cookie) */
-		oidc_session_kill(r, session);
-	}
+	/*
+	 * remove session state (cq. cache entry and cookie)
+	 * always clear the session cookie because the cookie may be not sent (but still in the browser)
+	 * due to SameSite policies
+	 */
+	oidc_session_kill(r, session);
 
 	/* see if this is the OP calling us */
 	if (oidc_is_front_channel_logout(url)) {
@@ -2815,8 +2824,7 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 		const char *accept = oidc_util_hdr_in_accept_get(r);
 		if ((apr_strnatcmp(url, OIDC_IMG_STYLE_LOGOUT_PARAM_VALUE) == 0)
 				|| ((accept) && strstr(accept, OIDC_CONTENT_TYPE_IMAGE_PNG))) {
-			return oidc_util_http_send(r,
-					(const char *) &oidc_transparent_pixel,
+			return oidc_util_http_send(r, (const char*) &oidc_transparent_pixel,
 					sizeof(oidc_transparent_pixel), OIDC_CONTENT_TYPE_IMAGE_PNG,
 					OK);
 		}
@@ -2871,12 +2879,16 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 	}
 
 	// TODO: jwk symmetric key based on provider
-	// TODO: share more code with regular id_token validation and unsolicited state
 
 	if (oidc_jwt_parse(r->pool, logout_token, &jwt,
 			oidc_util_merge_symmetric_key(r->pool, cfg->private_keys, NULL),
 			&err) == FALSE) {
 		oidc_error(r, "oidc_jwt_parse failed: %s", oidc_jose_e2s(r->pool, err));
+		goto out;
+	}
+
+	if ((jwt->header.alg == NULL) || (strcmp(jwt->header.alg, "none") == 0)) {
+		oidc_error(r, "logout token is not signed");
 		goto out;
 	}
 
@@ -2905,15 +2917,15 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 
 	// oidc_proto_validate_idtoken would try and require a token binding cnf
 	// if the policy is set to "required", so don't use that here
-
-	if (oidc_proto_validate_jwt(r, jwt, provider->issuer, FALSE, FALSE,
-			provider->idtoken_iat_slack,
-			OIDC_TOKEN_BINDING_POLICY_DISABLED) == FALSE)
+	if (oidc_proto_validate_jwt(r, jwt,
+			provider->validate_issuer ? provider->issuer : NULL, FALSE, FALSE,
+					provider->idtoken_iat_slack,
+					OIDC_TOKEN_BINDING_POLICY_DISABLED) == FALSE)
 		goto out;
 
 	/* verify the "aud" and "azp" values */
-	if (oidc_proto_validate_aud_and_azp(r, cfg, provider,
-			&jwt->payload) == FALSE)
+	if (oidc_proto_validate_aud_and_azp(r, cfg, provider, &jwt->payload)
+			== FALSE)
 		goto out;
 
 	json_t *events = json_object_get(jwt->payload.value.json,
@@ -2993,12 +3005,12 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 	sid = oidc_make_sid_iss_unique(r, sid, provider->issuer);
 	oidc_cache_get_sid(r, sid, &uuid);
 	if (uuid == NULL) {
-		oidc_error(r,
-				"could not find session based on sid/sub provided in logout token: %s",
+		// this may happen when we are the caller
+		oidc_warn(r,
+				"could not (or no longer) find a session based on sid/sub provided in logout token: %s",
 				sid);
-		// return HTTP 200 according to (new?) spec and terminate early
-		// to avoid Apache returning auth/authz error 500 for the redirect URI
-		rc = DONE;
+		r->user = "";
+		rc = OK;
 		goto out;
 	}
 
@@ -3013,6 +3025,7 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 	oidc_cache_set_sid(r, sid, NULL, 0);
 	oidc_cache_set_session(r, uuid, NULL, 0);
 
+	r->user = "";
 	rc = OK;
 
 out:
@@ -3027,71 +3040,13 @@ out:
 		jwt = NULL;
 	}
 
+	oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL,
+			"no-cache, no-store");
+	oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_PRAGMA, "no-cache");
+
 	return rc;
 }
 
-static apr_byte_t oidc_validate_post_logout_url(request_rec *r, const char *url,
-		char **err_str, char **err_desc) {
-	apr_uri_t uri;
-	const char *c_host = NULL;
-
-	if (apr_uri_parse(r->pool, url, &uri) != APR_SUCCESS) {
-		*err_str = apr_pstrdup(r->pool, "Malformed URL");
-		*err_desc = apr_psprintf(r->pool, "Logout URL malformed: %s", url);
-		oidc_error(r, "%s: %s", *err_str, *err_desc);
-		return FALSE;
-	}
-
-	c_host = oidc_get_current_url_host(r);
-	if ((uri.hostname != NULL)
-			&& ((strstr(c_host, uri.hostname) == NULL)
-					|| (strstr(uri.hostname, c_host) == NULL))) {
-		*err_str = apr_pstrdup(r->pool, "Invalid Request");
-		*err_desc =
-				apr_psprintf(r->pool,
-						"logout value \"%s\" does not match the hostname of the current request \"%s\"",
-						apr_uri_unparse(r->pool, &uri, 0), c_host);
-		oidc_error(r, "%s: %s", *err_str, *err_desc);
-		return FALSE;
-	} else if ((uri.hostname == NULL) && (strstr(url, "/") != url)) {
-		*err_str = apr_pstrdup(r->pool, "Malformed URL");
-		*err_desc =
-				apr_psprintf(r->pool,
-						"No hostname was parsed and it does not seem to be relative, i.e starting with '/': %s",
-						url);
-		oidc_error(r, "%s: %s", *err_str, *err_desc);
-		return FALSE;
-        } else if ((uri.hostname == NULL) && (strstr(url, "//") == url)) {
-                *err_str = apr_pstrdup(r->pool, "Malformed URL");
-                *err_desc =
-                                apr_psprintf(r->pool,
-                                                "No hostname was parsed and starting with '//': %s",
-                                                url);
-                oidc_error(r, "%s: %s", *err_str, *err_desc);
-                return FALSE;
-        } else if ((uri.hostname == NULL) && (strstr(url, "/\\") == url)) {
-                *err_str = apr_pstrdup(r->pool, "Malformed URL");
-                *err_desc =
-                                apr_psprintf(r->pool,
-                                                "No hostname was parsed and starting with '/\\': %s",
-                                                url);
-                oidc_error(r, "%s: %s", *err_str, *err_desc);
-                return FALSE;
-	}
-
-	/* validate the URL to prevent HTTP header splitting */
-	if (((strstr(url, "\n") != NULL) || strstr(url, "\r") != NULL)) {
-		*err_str = apr_pstrdup(r->pool, "Invalid Request");
-		*err_desc =
-				apr_psprintf(r->pool,
-						"logout value \"%s\" contains illegal \"\n\" or \"\r\" character(s)",
-						url);
-		oidc_error(r, "%s: %s", *err_str, *err_desc);
-		return FALSE;
-	}
-
-	return TRUE;
-}
 
 /*
  * perform (single) logout
@@ -3122,7 +3077,7 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 	} else {
 
 		/* do input validation on the logout parameter value */
-		if (oidc_validate_post_logout_url(r, url, &error_str,
+		if (oidc_validate_redirect_url(r, c, url, TRUE, &error_str,
 				&error_description) == FALSE) {
 			return oidc_util_html_send_error(r, c->error_template, error_str,
 					error_description,
@@ -3156,6 +3111,9 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 									OIDC_STR_QUERY,
 									oidc_util_escape_string(r, url));
 		}
+		//char *state = NULL;
+		//oidc_proto_generate_nonce(r, &state, 8);
+		//url = apr_psprintf(r->pool, "%s&state=%s", logout_request, state);
 		url = logout_request;
 	}
 
@@ -3171,21 +3129,17 @@ int oidc_handle_jwks(request_rec *r, oidc_cfg *c) {
 	//	char *jwks_type = NULL;
 	//	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS, &jwks_type);
 	char *jwks = apr_pstrdup(r->pool, "{ \"keys\" : [");
-	apr_hash_index_t *hi = NULL;
+	int i = 0;
 	apr_byte_t first = TRUE;
 	oidc_jose_error_t err;
 
 	if (c->public_keys != NULL) {
 
 		/* loop over the RSA public keys */
-		for (hi = apr_hash_first(r->pool, c->public_keys); hi; hi =
-				apr_hash_next(hi)) {
-
-			const char *s_kid = NULL;
-			oidc_jwk_t *jwk = NULL;
+		for (i = 0; i < c->public_keys->nelts; i++) {
+			const oidc_jwk_t *jwk =
+					((const oidc_jwk_t**) c->public_keys->elts)[i];
 			char *s_json = NULL;
-
-			apr_hash_this(hi, (const void**) &s_kid, NULL, (void**) &jwk);
 
 			if (oidc_jwk_to_json(r->pool, jwk, &s_json, &err) == TRUE) {
 				jwks = apr_psprintf(r->pool, "%s%s %s ", jwks, first ? "" : ",",
@@ -3254,7 +3208,7 @@ static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c,
 			"            }\n"
 			"		   } else {\n"
 			"              // either 'changed' + active session, or 'error': enforce a logout\n"
-			"              window.top.location.replace('%s?logout=' + window.top.location.href);\n"
+			"              window.top.location.replace('%s?logout=' + encodeURIComponent(window.top.location.href));\n"
 			"          }\n"
 			"        }\n"
 			"      }\n"
@@ -3287,8 +3241,13 @@ static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c,
 	if ((poll_interval <= 0) || (poll_interval > 3600 * 24))
 		poll_interval = 3000;
 
-	char *login_uri = NULL;
+	char *login_uri = NULL, *error_str = NULL, *error_description = NULL;
 	oidc_util_get_request_parameter(r, "login_uri", &login_uri);
+	if ((login_uri != NULL)
+			&& (oidc_validate_redirect_url(r, c, login_uri, FALSE, &error_str,
+					&error_description) == FALSE)) {
+		return HTTP_BAD_REQUEST;
+	}
 
 	const char *redirect_uri = oidc_get_redirect_uri(r, c);
 
@@ -3381,6 +3340,9 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
 	char *return_to = NULL;
 	char *r_access_token = NULL;
 	char *error_code = NULL;
+	char *error_str = NULL;
+	char *error_description = NULL;
+	apr_byte_t needs_save = TRUE;
 
 	/* get the command passed to the session management handler */
 	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_REFRESH,
@@ -3392,6 +3354,14 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
 	if (return_to == NULL) {
 		oidc_error(r,
 				"refresh token request handler called with no URL to return to");
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	/* do input validation on the return to parameter value */
+	if (oidc_validate_redirect_url(r, c, return_to, TRUE, &error_str,
+			&error_description) == FALSE) {
+		oidc_error(r, "return_to URL validation failed: %s: %s", error_str,
+				error_description);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -3432,9 +3402,14 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
 		goto end;
 	}
 
-	/* pass the tokens to the application and save the session, possibly updating the expiry */
-	if (oidc_session_pass_tokens_and_save(r, c, session, TRUE) == FALSE) {
+	/* pass the tokens to the application, possibly updating the expiry */
+	if (oidc_session_pass_tokens(r, c, session, &needs_save) == FALSE) {
 		error_code = "session_corruption";
+		goto end;
+	}
+
+	if (oidc_session_save(r, session, FALSE) == FALSE) {
+		error_code = "error saving session";
 		goto end;
 	}
 
@@ -3507,9 +3482,8 @@ int oidc_handle_remove_at_cache(request_rec *r, oidc_cfg *c) {
  * handle request for session info
  */
 static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
-		oidc_session_t *session) {
+		oidc_session_t *session, apr_byte_t needs_save) {
 	int rc = HTTP_UNAUTHORIZED;
-	apr_byte_t needs_save = FALSE;
 	char *s_format = NULL, *s_interval = NULL, *r_value = NULL;
 	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO,
 			&s_format);
@@ -3557,8 +3531,8 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 
 				/* get the current provider info */
 				oidc_provider_t *provider = NULL;
-				if (oidc_get_provider_from_session(r, c, session,
-						&provider) == FALSE)
+				if (oidc_get_provider_from_session(r, c, session, &provider)
+						== FALSE)
 					return HTTP_INTERNAL_SERVER_ERROR;
 
 				/* execute the actual refresh grant */
@@ -3623,6 +3597,29 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 			json_object_set_new(json, OIDC_HOOK_INFO_USER_INFO, claims);
 	}
 
+	/* include the maximum session lifetime in the session info */
+	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_SESSION_EXP,
+			APR_HASH_KEY_STRING)) {
+		apr_time_t session_expires = oidc_session_get_session_expires(r,
+				session);
+		json_object_set_new(json, OIDC_HOOK_INFO_SESSION_EXP,
+				json_integer(apr_time_sec(session_expires)));
+	}
+
+	/* include the inactivity timeout in the session info */
+	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_SESSION_TIMEOUT,
+			APR_HASH_KEY_STRING)) {
+		json_object_set_new(json, OIDC_HOOK_INFO_SESSION_TIMEOUT,
+				json_integer(apr_time_sec(session->expiry)));
+	}
+
+	/* include the remote_user in the session info */
+	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_SESSION_REMOTE_USER,
+			APR_HASH_KEY_STRING)) {
+		json_object_set_new(json, OIDC_HOOK_INFO_SESSION_REMOTE_USER,
+				json_string(session->remote_user));
+	}
+
 	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_SESSION,
 			APR_HASH_KEY_STRING)) {
 		json_t *j_session = json_object();
@@ -3630,14 +3627,6 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 				session->state);
 		json_object_set_new(j_session, OIDC_HOOK_INFO_SESSION_UUID,
 				json_string(session->uuid));
-		json_object_set_new(j_session, OIDC_HOOK_INFO_SESSION_TIMEOUT,
-				json_integer(apr_time_sec(session->expiry)));
-		apr_time_t session_expires = oidc_session_get_session_expires(r,
-				session);
-		json_object_set_new(j_session, OIDC_HOOK_INFO_SESSION_EXP,
-				json_integer(apr_time_sec(session_expires)));
-		json_object_set_new(j_session, OIDC_HOOK_INFO_SESSION_REMOTE_USER,
-				json_string(session->remote_user));
 		json_object_set_new(json, OIDC_HOOK_INFO_SESSION, j_session);
 
 	}
@@ -3649,6 +3638,18 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 		if (refresh_token != NULL)
 			json_object_set_new(json, OIDC_HOOK_INFO_REFRESH_TOKEN,
 					json_string(refresh_token));
+	}
+
+	/* pass the tokens to the application and save the session, possibly updating the expiry */
+	if (oidc_session_pass_tokens(r, c, session, &needs_save) == FALSE)
+		oidc_warn(r, "error passing tokens");
+
+	/* check if something was updated in the session and we need to save it again */
+	if (needs_save) {
+		if (oidc_session_save(r, session, FALSE) == FALSE) {
+			oidc_warn(r, "error saving session");
+			rc = HTTP_INTERNAL_SERVER_ERROR;
+		}
 	}
 
 	if (apr_strnatcmp(OIDC_HOOK_INFO_FORMAT_JSON, s_format) == 0) {
@@ -3667,12 +3668,6 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 	/* free the allocated resources */
 	json_decref(json);
 
-	/* pass the tokens to the application and save the session, possibly updating the expiry */
-	if (oidc_session_pass_tokens_and_save(r, c, session, needs_save) == FALSE) {
-		oidc_warn(r, "error saving session");
-		rc = HTTP_INTERNAL_SERVER_ERROR;
-	}
-
 	return rc;
 }
 
@@ -3686,15 +3681,15 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 
 		/* this is an authorization response from the OP using the Basic Client profile or a Hybrid flow*/
 		return oidc_handle_redirect_authorization_response(r, c, session);
-	/*
-	 *
-	 * Note that we are checking for logout *before* checking for a POST authorization response
-	 * to handle backchannel POST-based logout
-	 *
-	 * so any POST to the Redirect URI that does not have a logout query parameter will be handled
-	 * as an authorization response; alternatively we could assume that a POST response has no
-	 * parameters
-	 */
+		/*
+		 *
+		 * Note that we are checking for logout *before* checking for a POST authorization response
+		 * to handle backchannel POST-based logout
+		 *
+		 * so any POST to the Redirect URI that does not have a logout query parameter will be handled
+		 * as an authorization response; alternatively we could assume that a POST response has no
+		 * parameters
+		 */
 	} else if (oidc_util_request_has_parameter(r,
 			OIDC_REDIRECT_URI_REQUEST_LOGOUT)) {
 		/* handle logout */
@@ -3712,9 +3707,13 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 
 	} else if (oidc_util_request_has_parameter(r,
 			OIDC_REDIRECT_URI_REQUEST_JWKS)) {
-
-		/* handle JWKs request */
-		return oidc_handle_jwks(r, c);
+		/*
+		 * Will be handled in the content handler; avoid:
+		 * No authentication done but request not allowed without authentication
+		 * by setting r->user
+		 */
+		r->user = "";
+		return OK;
 
 	} else if (oidc_util_request_has_parameter(r,
 			OIDC_REDIRECT_URI_REQUEST_SESSION)) {
@@ -3746,12 +3745,13 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 		if (session->remote_user == NULL)
 			return HTTP_UNAUTHORIZED;
 
-		/* set r->user, set headers/env-vars, update expiry, update userinfo + AT */
-		int rc = oidc_handle_existing_session(r, c, session);
-		if (rc != OK)
-			return rc;
-
-		return oidc_handle_info_request(r, c, session);
+		/*
+		 * Will be handled in the content handler; avoid:
+		 * No authentication done but request not allowed without authentication
+		 * by setting r->user
+		 */
+		r->user = "";
+		return OK;
 
 	} else if ((r->args == NULL) || (apr_strnatcmp(r->args, "") == 0)) {
 
@@ -3769,7 +3769,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 		//		oidc_util_get_request_parameter(r, "error_description", &descr);
 		//
 		//		/* send user facing error to browser */
-		//		return oidc_util_html_send_error(r, error, descr, DONE);
+		//		return oidc_util_html_send_error(r, error, descr, OK);
 		return oidc_handle_redirect_authorization_response(r, c, session);
 	}
 
@@ -3800,48 +3800,7 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 	}
 
 	/* check if this is a sub-request or an initial request */
-	if (ap_is_initial_req(r)) {
-
-		int rc = OK;
-
-		/* load the session from the request state; this will be a new "empty" session if no state exists */
-		oidc_session_t *session = NULL;
-		oidc_session_load(r, &session);
-
-		/* see if the initial request is to the redirect URI; this handles potential logout too */
-		if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c))) {
-
-			/* handle request to the redirect_uri */
-			rc = oidc_handle_redirect_uri_request(r, c, session);
-
-			/* free resources allocated for the session */
-			oidc_session_free(r, session);
-
-			return rc;
-
-			/* initial request to non-redirect URI, check if we have an existing session */
-		} else if (session->remote_user != NULL) {
-
-			/* this is initial request and we already have a session */
-			rc = oidc_handle_existing_session(r, c, session);
-
-			/* free resources allocated for the session */
-			oidc_session_free(r, session);
-
-			/* strip any cookies that we need to */
-			oidc_strip_cookies(r);
-
-			return rc;
-		}
-
-		/* free resources allocated for the session */
-		oidc_session_free(r, session);
-
-		/*
-		 * else: initial request, we have no session and it is not an authorization or
-		 *       discovery response: just hit the default flow for unauthenticated users
-		 */
-	} else {
+	if (!ap_is_initial_req(r)) {
 
 		/* not an initial request, try to recycle what we've already established in the main request */
 		if (r->main != NULL)
@@ -3880,9 +3839,60 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 		}
 		/*
 		 * else: not initial request, but we could not find a session, so:
-		 * just hit the default flow for unauthenticated users
+		 * try to load a new session as if this were the initial request
 		 */
 	}
+
+	int rc = OK;
+	apr_byte_t needs_save = FALSE;
+
+	/* load the session from the request state; this will be a new "empty" session if no state exists */
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* see if the initial request is to the redirect URI; this handles potential logout too */
+	if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c))) {
+
+		/* handle request to the redirect_uri */
+		rc = oidc_handle_redirect_uri_request(r, c, session);
+
+		/* free resources allocated for the session */
+		oidc_session_free(r, session);
+
+		return rc;
+
+		/* initial request to non-redirect URI, check if we have an existing session */
+	} else if (session->remote_user != NULL) {
+
+		/* this is initial request and we already have a session */
+		rc = oidc_handle_existing_session(r, c, session, &needs_save);
+		if (rc == OK) {
+
+			/* check if something was updated in the session and we need to save it again */
+			if (needs_save) {
+				if (oidc_session_save(r, session, FALSE) == FALSE) {
+					oidc_warn(r, "error saving session");
+					rc = HTTP_INTERNAL_SERVER_ERROR;
+				}
+			}
+		}
+
+		/* free resources allocated for the session */
+		oidc_session_free(r, session);
+
+		/* strip any cookies that we need to */
+		oidc_strip_cookies(r);
+
+		return rc;
+	}
+
+	/* free resources allocated for the session */
+	oidc_session_free(r, session);
+
+	/*
+	 * else: we have no session and it is not an authorization or
+	 *       discovery response: just hit the default flow for unauthenticated users
+	 */
 
 	return oidc_handle_unauthenticated_user(r, c);
 }
@@ -3894,10 +3904,14 @@ static int oidc_check_mixed_userid_oauth(request_rec *r, oidc_cfg *c) {
 
 	/* get the bearer access token from the Authorization header */
 	const char *access_token = NULL;
-	if (oidc_oauth_get_bearer_token(r, &access_token) == TRUE)
+	if (oidc_oauth_get_bearer_token(r, &access_token) == TRUE) {
+
+		r->ap_auth_type = apr_pstrdup(r->pool, OIDC_AUTH_TYPE_OPENID_OAUTH20);
 		return oidc_oauth_check_userid(r, c, access_token);
+	}
 
 	/* no bearer token found: then treat this as a regular OIDC browser request */
+	r->ap_auth_type = apr_pstrdup(r->pool, OIDC_AUTH_TYPE_OPENID_CONNECT);
 	return oidc_check_userid_openidc(r, c);
 }
 
@@ -3914,22 +3928,26 @@ int oidc_check_user_id(request_rec *r) {
 			r->parsed_uri.path, r->args, ap_is_initial_req(r));
 
 	/* see if any authentication has been defined at all */
-	if (ap_auth_type(r) == NULL)
+	const char *current_auth = ap_auth_type(r);
+	if (current_auth == NULL)
 		return DECLINED;
 
 	/* see if we've configured OpenID Connect user authentication for this request */
-	if (apr_strnatcasecmp((const char *) ap_auth_type(r),
-			OIDC_AUTH_TYPE_OPENID_CONNECT) == 0)
+	if (strcasecmp(current_auth, OIDC_AUTH_TYPE_OPENID_CONNECT) == 0) {
+
+		r->ap_auth_type = (char*) current_auth;
 		return oidc_check_userid_openidc(r, c);
+	}
 
 	/* see if we've configured OAuth 2.0 access control for this request */
-	if (apr_strnatcasecmp((const char *) ap_auth_type(r),
-			OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0)
+	if (strcasecmp(current_auth, OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
+
+		r->ap_auth_type = (char*) current_auth;
 		return oidc_oauth_check_userid(r, c, NULL);
+	}
 
 	/* see if we've configured "mixed mode" for this request */
-	if (apr_strnatcasecmp((const char *) ap_auth_type(r),
-			OIDC_AUTH_TYPE_OPENID_BOTH) == 0)
+	if (strcasecmp(current_auth, OIDC_AUTH_TYPE_OPENID_BOTH) == 0)
 		return oidc_check_mixed_userid_oauth(r, c);
 
 	/* this is not for us but for some other handler */
@@ -3955,6 +3973,9 @@ static void oidc_authz_get_claims_and_idtoken(request_rec *r, json_t **claims,
 
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 
+#define OIDC_OAUTH_BEARER_SCOPE_ERROR "OIDC_OAUTH_BEARER_SCOPE_ERROR"
+#define OIDC_OAUTH_BEARER_SCOPE_ERROR_VALUE "Bearer error=\"insufficient_scope\", error_description=\"Different scope(s) or other claims required\""
+
 /*
  * find out which action we need to take when encountering an unauthorized request
  */
@@ -3962,48 +3983,52 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 
 	oidc_debug(r, "enter");
 
-	oidc_cfg *c = ap_get_module_config(r->server->module_config,
-			&auth_openidc_module);
+	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
-	if (apr_strnatcasecmp((const char *) ap_auth_type(r),
-			OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
-		oidc_oauth_return_www_authenticate(r, "insufficient_scope",
-				"Different scope(s) or other claims required");
+	if (apr_strnatcasecmp((const char*) ap_auth_type(r),
+						  OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
+		oidc_debug(r, "setting environment variable %s to \"%s\" for usage in mod_headers", OIDC_OAUTH_BEARER_SCOPE_ERROR, OIDC_OAUTH_BEARER_SCOPE_ERROR_VALUE);
+		apr_table_set(r->subprocess_env, OIDC_OAUTH_BEARER_SCOPE_ERROR, OIDC_OAUTH_BEARER_SCOPE_ERROR_VALUE);
 		return AUTHZ_DENIED;
 	}
 
 	/* see if we've configured OIDCUnAutzAction for this path */
 	switch (oidc_dir_cfg_unautz_action(r)) {
-	// TODO: document that AuthzSendForbiddenOnFailure is required to return 403 FORBIDDEN
-	case OIDC_UNAUTZ_RETURN403:
-	case OIDC_UNAUTZ_RETURN401:
-		return AUTHZ_DENIED;
-		break;
-	case OIDC_UNAUTZ_AUTHENTICATE:
-		/*
-		 * exception handling: if this looks like a XMLHttpRequest call we
-		 * won't redirect the user and thus avoid creating a state cookie
-		 * for a non-browser (= Javascript) call that will never return from the OP
-		 */
-		if (oidc_is_xml_http_request(r) == TRUE)
+		// TODO: document that AuthzSendForbiddenOnFailure is required to return 403 FORBIDDEN
+		case OIDC_UNAUTZ_RETURN403:
+		case OIDC_UNAUTZ_RETURN401:
 			return AUTHZ_DENIED;
-		break;
+			break;
+		case OIDC_UNAUTZ_AUTHENTICATE:
+			/*
+			 * exception handling: if this looks like a XMLHttpRequest call we
+			 * won't redirect the user and thus avoid creating a state cookie
+			 * for a non-browser (= Javascript) call that will never return from the OP
+			 */
+			if (oidc_is_xml_http_request(r) == TRUE)
+				return AUTHZ_DENIED;
+			break;
 	}
 
 	oidc_authenticate_user(r, c, NULL, oidc_get_current_url(r), NULL,
-			NULL, NULL, oidc_dir_cfg_path_auth_request_params(r),
-			oidc_dir_cfg_path_scope(r));
+			NULL, NULL, oidc_dir_cfg_path_auth_request_params(r), oidc_dir_cfg_path_scope(r));
+
+	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
+		return AUTHZ_GRANTED;
 
 	const char *location = oidc_util_hdr_out_location_get(r);
 	if (location != NULL) {
-		oidc_debug(r, "send HTML refresh with authorization redirect: %s",
-				location);
+		oidc_debug(r, "send HTML refresh with authorization redirect: %s", location);
 
-		char *html_head = apr_psprintf(r->pool,
-				"<meta http-equiv=\"refresh\" content=\"0; url=%s\">",
-				location);
+		char *html_head =
+				apr_psprintf(r->pool, "<meta http-equiv=\"refresh\" content=\"0; url=%s\">", location);
 		oidc_util_html_send(r, "Stepup Authentication", html_head, NULL, NULL,
 				HTTP_UNAUTHORIZED);
+		/*
+		 * a hack for Apache 2.4 to prevent it from writing its own 401 HTML document
+		 * text by making ap_send_error_response in http_protocol.c return early...
+		 */
+		r->header_only = 1;
 	}
 
 	return AUTHZ_DENIED;
@@ -4017,12 +4042,14 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args,
 		const void *parsed_require_args,
 		oidc_authz_match_claim_fn_type match_claim_fn) {
 
-	oidc_debug(r, "enter");
+	oidc_debug(r, "enter: require_args=\"%s\"", require_args);
 
 	/* check for anonymous access and PASS mode */
 	if (r->user != NULL && strlen(r->user) == 0) {
 		r->user = NULL;
 		if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
+			return AUTHZ_GRANTED;
+		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
 			return AUTHZ_GRANTED;
 	}
 
@@ -4036,7 +4063,7 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args,
 
 	/* dispatch to the >=2.4 specific authz routine */
 	authz_status rc = oidc_authz_worker24(r, claims ? claims : id_token,
-			require_args, match_claim_fn);
+			require_args, parsed_require_args, match_claim_fn);
 
 	/* cleanup */
 	if (claims)
@@ -4103,10 +4130,15 @@ static int oidc_handle_unauthorized_user22(request_rec *r) {
  */
 int oidc_auth_checker(request_rec *r) {
 
+	oidc_cfg *c = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
+
 	/* check for anonymous access and PASS mode */
 	if (r->user != NULL && strlen(r->user) == 0) {
 		r->user = NULL;
 		if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
+			return OK;
+		if if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
 			return OK;
 	}
 
@@ -4152,15 +4184,15 @@ apr_byte_t oidc_enabled(request_rec *r) {
 	if (ap_auth_type(r) == NULL)
 		return FALSE;
 
-	if (apr_strnatcasecmp((const char *) ap_auth_type(r),
+	if (apr_strnatcasecmp((const char*) ap_auth_type(r),
 			OIDC_AUTH_TYPE_OPENID_CONNECT) == 0)
 		return TRUE;
 
-	if (apr_strnatcasecmp((const char *) ap_auth_type(r),
+	if (apr_strnatcasecmp((const char*) ap_auth_type(r),
 			OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0)
 		return TRUE;
 
-	if (apr_strnatcasecmp((const char *) ap_auth_type(r),
+	if (apr_strnatcasecmp((const char*) ap_auth_type(r),
 			OIDC_AUTH_TYPE_OPENID_BOTH) == 0)
 		return TRUE;
 
@@ -4170,12 +4202,55 @@ apr_byte_t oidc_enabled(request_rec *r) {
  * handle content generating requests
  */
 int oidc_content_handler(request_rec *r) {
-	if (oidc_enabled(r) == FALSE)
-		return DECLINED;
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
-	return oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c)) ?
-			OK : DECLINED;
+	int rc = DECLINED;
+	/* track if the session needs to be updated/saved into the cache */
+	apr_byte_t needs_save = FALSE;
+	oidc_session_t *session = NULL;
+
+	if (oidc_enabled(r) == TRUE) {
+
+		if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c)) == TRUE) {
+
+			if (oidc_util_request_has_parameter(r,
+					OIDC_REDIRECT_URI_REQUEST_INFO)) {
+
+				oidc_session_load(r, &session);
+
+				rc = oidc_handle_existing_session(r, c, session, &needs_save);
+				if (rc == OK)
+					/* handle request for session info */
+					rc = oidc_handle_info_request(r, c, session, needs_save);
+
+				/* free resources allocated for the session */
+				oidc_session_free(r, session);
+
+			} else if (oidc_util_request_has_parameter(r,
+					OIDC_REDIRECT_URI_REQUEST_JWKS)) {
+
+				/* handle JWKs request */
+				rc = oidc_handle_jwks(r, c);
+
+			} else {
+
+				rc = OK;
+
+			}
+
+		} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL) {
+
+			rc = oidc_discovery(r, c);
+
+		} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_AUTHN) != NULL) {
+
+			rc = OK;
+
+		}
+
+	}
+
+	return rc;
 }
 
 extern const command_rec oidc_config_cmds[];
