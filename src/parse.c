@@ -1013,6 +1013,7 @@ const char *oidc_parse_unauth_action(apr_pool_t *pool, const char *arg,
 #define OIDC_UNAUTZ_ACTION_AUTH_STR "auth"
 #define OIDC_UNAUTZ_ACTION_401_STR  "401"
 #define OIDC_UNAUTZ_ACTION_403_STR  "403"
+#define OIDC_UNAUTZ_ACTION_302_STR  "302"
 
 /*
  * parse an "unauthorized action" value from the provided string
@@ -1023,6 +1024,7 @@ const char *oidc_parse_unautz_action(apr_pool_t *pool, const char *arg,
 			OIDC_UNAUTZ_ACTION_AUTH_STR,
 			OIDC_UNAUTZ_ACTION_401_STR,
 			OIDC_UNAUTZ_ACTION_403_STR,
+			OIDC_UNAUTZ_ACTION_302_STR,
 			NULL };
 	const char *rv = oidc_valid_string_option(pool, arg, options);
 	if (rv != NULL)
@@ -1034,6 +1036,8 @@ const char *oidc_parse_unautz_action(apr_pool_t *pool, const char *arg,
 		*action = OIDC_UNAUTZ_RETURN401;
 	else if (apr_strnatcmp(arg, OIDC_UNAUTZ_ACTION_403_STR) == 0)
 		*action = OIDC_UNAUTZ_RETURN403;
+	else if (apr_strnatcmp(arg, OIDC_UNAUTZ_ACTION_302_STR) == 0)
+		*action = OIDC_UNAUTZ_RETURN302;
 
 	return NULL;
 }

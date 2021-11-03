@@ -3983,6 +3983,7 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 	oidc_debug(r, "enter");
 
 	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	char *html_head = NULL;
 
 	if (apr_strnatcasecmp((const char*) ap_auth_type(r),
 						  OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
@@ -3996,6 +3997,19 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 		// TODO: document that AuthzSendForbiddenOnFailure is required to return 403 FORBIDDEN
 		case OIDC_UNAUTZ_RETURN403:
 		case OIDC_UNAUTZ_RETURN401:
+			if (oidc_dir_cfg_unauthz_arg(r)) {
+				oidc_util_html_send(r, "Authorization Error", NULL, NULL, oidc_dir_cfg_unauthz_arg(r),
+									HTTP_UNAUTHORIZED);
+				r->header_only = 1;
+			}
+			return AUTHZ_DENIED;
+			break;
+		case OIDC_UNAUTZ_RETURN302:
+			html_head =
+					apr_psprintf(r->pool, "<meta http-equiv=\"refresh\" content=\"0; url=%s\">", oidc_dir_cfg_unauthz_arg(r));
+			oidc_util_html_send(r, "Authorization Error Redirect", html_head, NULL, NULL,
+					HTTP_UNAUTHORIZED);
+			r->header_only = 1;
 			return AUTHZ_DENIED;
 			break;
 		case OIDC_UNAUTZ_AUTHENTICATE:
@@ -4019,7 +4033,7 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 	if (location != NULL) {
 		oidc_debug(r, "send HTML refresh with authorization redirect: %s", location);
 
-		char *html_head =
+		html_head =
 				apr_psprintf(r->pool, "<meta http-equiv=\"refresh\" content=\"0; url=%s\">", location);
 		oidc_util_html_send(r, "Stepup Authentication", html_head, NULL, NULL,
 				HTTP_UNAUTHORIZED);
@@ -4108,9 +4122,18 @@ static int oidc_handle_unauthorized_user22(request_rec *r) {
 	/* see if we've configured OIDCUnAutzAction for this path */
 	switch (oidc_dir_cfg_unautz_action(r)) {
 	case OIDC_UNAUTZ_RETURN403:
+		if (oidc_dir_cfg_unauthz_arg(r))
+			oidc_util_html_send(r, "Authorization Error", NULL, NULL, oidc_dir_cfg_unauthz_arg(r),
+								HTTP_FORBIDDEN);
 		return HTTP_FORBIDDEN;
 	case OIDC_UNAUTZ_RETURN401:
+		if (oidc_dir_cfg_unauthz_arg(r))
+			oidc_util_html_send(r, "Authorization Error", NULL, NULL, oidc_dir_cfg_unauthz_arg(r),
+								HTTP_UNAUTHORIZED);
 		return HTTP_UNAUTHORIZED;
+	case OIDC_UNAUTZ_RETURN302:
+		oidc_util_hdr_out_location_set(r, oidc_dir_cfg_unauthz_arg(r));
+		return HTTP_MOVED_TEMPORARILY;
 	case OIDC_UNAUTZ_AUTHENTICATE:
 		/*
 		 * exception handling: if this looks like a XMLHttpRequest call we
