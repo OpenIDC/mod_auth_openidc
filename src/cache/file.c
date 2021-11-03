@@ -43,7 +43,7 @@
  * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
  */
 
-#include "mod_auth_openidc.h"
+#include "../mod_auth_openidc.h"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 

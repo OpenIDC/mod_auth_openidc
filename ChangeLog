@@ -1,5 +1,8 @@
-11/01/2021
-- add note about using Sec-Fetch-Dest in an OIDCUnAuthAction expression to return 401 for iframes and images
+11/02/2021
+- add check for Sec-Fetch-Dest header != "document" value to auto-detect requests that are not
+  capable of handling an authentication round trip to the Provider;
+  see https://github.com/zmartzone/mod_auth_openidc/discussions/714; thanks @studersi
+- bump to 2.4.10rc0
 
 10/28/2021
 - use apxs to link the module in Makefile.am

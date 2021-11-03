@@ -31,3 +31,7 @@
 /Makefile.in
 /target
 .vs/mod_auth_openidc/v15
+.vs
+win32
+x64
+Debug

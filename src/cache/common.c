@@ -47,7 +47,7 @@
 #include <unistd.h>
 #endif
 
-#include "mod_auth_openidc.h"
+#include "../mod_auth_openidc.h"
 
 #ifdef AP_NEED_SET_MUTEX_PERMS
 #include "unixd.h"

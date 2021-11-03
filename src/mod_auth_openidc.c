@@ -852,28 +852,33 @@ static void oidc_log_session_expires(request_rec *r, const char *msg,
 }
 
 /*
- * see if this is a non-browser request
+ * see if this is a request that is capable of completing an authentication round trip to the Provider
  */
-apr_byte_t oidc_is_xml_http_request(request_rec *r) {
+apr_byte_t oidc_is_auth_capable_request(request_rec *r) {
 
 	if ((oidc_util_hdr_in_x_requested_with_get(r) != NULL)
 			&& (apr_strnatcasecmp(oidc_util_hdr_in_x_requested_with_get(r),
 					OIDC_HTTP_HDR_VAL_XML_HTTP_REQUEST) == 0))
-		return TRUE;
+		return FALSE;
 
 	if ((oidc_util_hdr_in_sec_fetch_mode_get(r) != NULL)
 			&& (apr_strnatcasecmp(oidc_util_hdr_in_sec_fetch_mode_get(r),
 								  OIDC_HTTP_HDR_VAL_NAVIGATE) != 0))
-		return TRUE;
+		return FALSE;
+
+	if ((oidc_util_hdr_in_sec_fetch_dest_get(r) != NULL)
+			&& (apr_strnatcasecmp(oidc_util_hdr_in_sec_fetch_dest_get(r),
+								  OIDC_HTTP_HDR_VAL_DOCUMENT) != 0))
+		return FALSE;
 
 	if ((oidc_util_hdr_in_accept_contains(r, OIDC_CONTENT_TYPE_TEXT_HTML)
 			== FALSE) && (oidc_util_hdr_in_accept_contains(r,
 					OIDC_CONTENT_TYPE_APP_XHTML_XML) == FALSE)
 					&& (oidc_util_hdr_in_accept_contains(r,
 							OIDC_CONTENT_TYPE_ANY) == FALSE))
-		return TRUE;
+		return FALSE;
 
-	return FALSE;
+	return TRUE;
 }
 
 /*
@@ -908,7 +913,7 @@ static int oidc_handle_unauthenticated_user(request_rec *r, oidc_cfg *c) {
 		 * for a non-browser (= Javascript) call that will never return from the OP
 		 */
 		if ((oidc_dir_cfg_unauth_expr_is_set(r) == FALSE)
-				&& (oidc_is_xml_http_request(r) == TRUE))
+				&& (oidc_is_auth_capable_request(r) == FALSE))
 			return HTTP_UNAUTHORIZED;
 	}
 
@@ -3995,11 +4000,11 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 			break;
 		case OIDC_UNAUTZ_AUTHENTICATE:
 			/*
-			 * exception handling: if this looks like a XMLHttpRequest call we
+			 * exception handling: if this looks like an HTTP request that cannot
+			 * complete an authentication round trip to the provider, we
 			 * won't redirect the user and thus avoid creating a state cookie
-			 * for a non-browser (= Javascript) call that will never return from the OP
 			 */
-			if (oidc_is_xml_http_request(r) == TRUE)
+			if (oidc_is_auth_capable_request(r) == FALSE)
 				return AUTHZ_DENIED;
 			break;
 	}
@@ -4112,7 +4117,7 @@ static int oidc_handle_unauthorized_user22(request_rec *r) {
 		 * won't redirect the user and thus avoid creating a state cookie
 		 * for a non-browser (= Javascript) call that will never return from the OP
 		 */
-		if (oidc_is_xml_http_request(r) == TRUE)
+		if (oidc_is_auth_capable_request(r) == FALSE)
 			return HTTP_UNAUTHORIZED;
 	}
 

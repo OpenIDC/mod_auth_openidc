@@ -30,8 +30,8 @@ mkdir target\x86
 del target\x86\LIBEAY32.dll
 copy  vcpkg\installed\x86-windows\bin\libeay32.dll target\x86\LIBEAY32.dll
 
-powershell Compress-Archive -Path target\x64\LIBEAY32.dll -DestinationPath target\mod_auth_openidc-2.4.0_3-win64-VS16.zip
-powershell Compress-Archive -Path target\mod_auth_openidc\x64\Release\mod_auth_openidc.dll -Update -DestinationPath target\mod_auth_openidc-2.4.0_3-win64-VS16.zip
+powershell Compress-Archive -Path target\x64\LIBEAY32.dll -DestinationPath target\mod_auth_openidc-2.4.9.4-win64-VS16.zip
+powershell Compress-Archive -Path target\mod_auth_openidc\x64\Release\mod_auth_openidc.dll -Update -DestinationPath target\mod_auth_openidc-2.4.9.4-win64-VS16.zip
 
-powershell Compress-Archive -Path target\x86\LIBEAY32.dll -DestinationPath target\mod_auth_openidc-2.4.0_3-win32-VS16.zip
-powershell Compress-Archive -Path target\mod_auth_openidc\x86\Release\mod_auth_openidc.dll -Update -DestinationPath target\mod_auth_openidc-2.4.0_3-win32-VS16.zip
+powershell Compress-Archive -Path target\x86\LIBEAY32.dll -DestinationPath target\mod_auth_openidc-2.4.9.4-win32-VS16.zip
+powershell Compress-Archive -Path target\mod_auth_openidc\x86\Release\mod_auth_openidc.dll -Update -DestinationPath target\mod_auth_openidc-2.4.9.4-win32-VS16.zip

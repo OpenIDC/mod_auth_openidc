@@ -16,7 +16,7 @@ Build steps
 mod_auth_openidc
 ================
 
-*mod_auth_openidc* is an authentication and authorization module for the Apache 2.x
+*mod_auth_openidc* is a certified authentication and authorization module for the Apache 2.x
 HTTP server that implements the OpenID Connect Relying Party functionality.
 
 Overview
@@ -24,24 +24,32 @@ Overview
 
 This module enables an Apache 2.x web server to operate as an [OpenID Connect](http://openid.net/specs/openid-connect-core-1_0.html)
 *Relying Party* (RP) towards an OpenID Connect *Provider* (OP). It relays end user authentication to a Provider and
-receives user identity information from that Provder. It then passes on that identity information (a.k.a. claims)
+receives user identity information from that Provider. It then passes on that identity information (a.k.a. claims)
 to applications protected by the Apache web server and establishes an authentication session for the identified user.
 
 The protected content, applications and services can be hosted by the Apache server itself or served from
 origin server(s) residing behind it by configuring Apache as a Reverse Proxy in front of those servers. The 
-latter allows adding OpenID Connect based authentication to existing applications/services/SPAs without
-modifying those applications, possibly migrating them away from legacy authentication mechanisms to standards based
+latter allows for adding OpenID Connect based authentication to existing applications/services/SPAs without
+modifying those applications, possibly migrating them away from legacy authentication mechanisms to standards-based
 OpenID Connect Single Sign On (SSO).
 
 By default the module sets the `REMOTE_USER` variable to the `id_token` `[sub]` claim, concatenated with the OP's Issuer
 identifier (`[sub]@[iss]`). Other `id_token` claims are passed in HTTP headers and/or environment variables together with those
-(optionally) obtained from the UserInfo endpoint. The provider HTTP headers and environment variables can be consumed by
+(optionally) obtained from the UserInfo endpoint. The provided HTTP headers and environment variables can be consumed by
 applications protected by the Apache server.
 
 Custom fine-grained authorization rules - based on Apache's `Require` primitives - can be specified to match against the
-set of claims provided in the `id_token`/ `userinfo` claims.
+set of claims provided in the `id_token`/ `userinfo` claims, see [here](https://github.com/zmartzone/mod_auth_openidc/wiki/Authorization). 
+Clustering for resilience and performance can be configured using one of the supported cache backends options as
+listed [here](https://github.com/zmartzone/mod_auth_openidc/wiki/Caching).
 
-*mod_auth_openidc* supports the following specifications:
+For an exhaustive description of all configuration options, see the file [`auth_openidc.conf`](https://github.com/zmartzone/mod_auth_openidc/blob/master/auth_openidc.conf). 
+This file can also serve as an include file for `httpd.conf`.
+
+Interoperability
+----------------
+
+*mod_auth_openidc* is [OpenID Connect certified](https://openid.net/certification/#RPs) and supports the following specifications:
 - [OpenID Connect Core 1.0](http://openid.net/specs/openid-connect-core-1_0.html) *(Basic, Implicit, Hybrid and Refresh flows)*
 - [OpenID Connect Discovery 1.0](http://openid.net/specs/openid-connect-discovery-1_0.html)
 - [OpenID Connect Dynamic Client Registration 1.0](http://openid.net/specs/openid-connect-registration-1_0.html)
@@ -51,9 +59,6 @@ set of claims provided in the `id_token`/ `userinfo` claims.
 - [OpenID Connect Session Management 1.0](http://openid.net/specs/openid-connect-session-1_0.html) *(implementers draft; see the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki/OpenID-Connect-Session-Management) for information on how to configure it)*
 - [OpenID Connect Front-Channel Logout 1.0](http://openid.net/specs/openid-connect-frontchannel-1_0.html) *(implementers draft)*
 - [OpenID Connect Back-Channel Logout 1.0](https://openid.net/specs/openid-connect-backchannel-1_0.html) *(implementers draft)*
-
-For an exhaustive description of all configuration options, see the file `auth_openidc.conf`
-in this directory. This file can also serve as an include file for `httpd.conf`.
 
 Support
 -------
