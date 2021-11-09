@@ -9,7 +9,7 @@ mkdir target\mod_auth_openidc\x64
 mkdir target\mod_auth_openidc\x64\Release
 copy x64\Release\mod_auth_openidc.dll target\mod_auth_openidc\x64\Release\mod_auth_openidc.dll
 
-del target\mod_auth_openidc-2.4.0_3-win64-VS16.zip
+del target\mod_auth_openidc-2.4.9.4-win64-VS16.zip
 
 REM This next step is perplexing.  Something verifies the case of the dll that it is loading and libeay32.dll must be uppercase 
 REM following the import statements. vcpkg creates a lower case dll, but the imports from the lib file have the dll name unppercase.
