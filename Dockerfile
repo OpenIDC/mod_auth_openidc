@@ -23,7 +23,7 @@ WORKDIR /root/mod_auth_openidc
 RUN ./autogen.sh
 RUN ./configure CFLAGS="-g -O0" LDFLAGS="-lrt"
 #-I/usr/include/apache2
-RUN make clean && make test 
+RUN make clean && make check 
 RUN make install
 
 WORKDIR /root
