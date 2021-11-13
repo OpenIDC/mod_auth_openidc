@@ -7,10 +7,8 @@ mod_auth_openidc
 This project is to build mod_auth_openidc for Apache  64bit on Windows 10 and for Apache 32bit on Windows 7.
 
 #Specific versions targeted
-Apache	httpd-2.4.41-win32-VS16.zip
-		httpd-2.4.41-win64-VS16.zip
+Apache	httpd-2.4.51-win64-VS16.zip
 Php		php-7.3.10-Win32-VC15-x64.zip
-		php-7.3.10-Win32-VC15-x86.zip
 Using Visual Studio 2019
 
 #Automated Build Script

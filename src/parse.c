@@ -18,17 +18,9 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2019 ZmartZone IAM
+ * Copyright (C) 2017-2021 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
- *
- * For further information please contact:
- *
- *      Ping Identity Corporation
- *      1099 18th St Suite 2950
- *      Denver, CO 80202
- *      303.468.2900
- *      http://www.pingidentity.com
  *
  * DISCLAIMER OF WARRANTIES:
  *
@@ -1195,6 +1187,9 @@ const char *oidc_parse_info_hook_data(apr_pool_t *pool, const char *arg,
 			OIDC_HOOK_INFO_ID_TOKEN,
 			OIDC_HOOK_INFO_USER_INFO,
 			OIDC_HOOK_INFO_REFRESH_TOKEN,
+			OIDC_HOOK_INFO_SESSION_EXP,
+			OIDC_HOOK_INFO_SESSION_TIMEOUT,
+			OIDC_HOOK_INFO_SESSION_REMOTE_USER,
 			OIDC_HOOK_INFO_SESSION,
 			NULL };
 	const char *rv = oidc_valid_string_option(pool, arg, options);
@@ -1323,4 +1318,37 @@ const char *oidc_parse_refresh_access_token_before_expiry(apr_pool_t *pool,
 		const char *arg, int *int_value) {
 	return oidc_parse_int_valid(pool, arg, int_value,
 			oidc_valid_refresh_access_token_before_expiry);
+}
+
+#define OIDC_STATE_INPUT_HEADERS_AS_BOTH            "both"
+#define OIDC_STATE_INPUT_HEADERS_AS_USER_AGENT      "user-agent"
+#define OIDC_STATE_INPUT_HEADERS_AS_X_FORWARDED_FOR "x-forwarded-for"
+#define OIDC_STATE_INPUT_HEADERS_AS_NONE            "none"
+
+/*
+ * parse a "set state input headers as" value from the provided string
+ */
+const char *oidc_parse_set_state_input_headers_as(apr_pool_t *pool, const char *arg,
+		apr_byte_t *state_input_headers) {
+	static char *options[] = {
+			OIDC_STATE_INPUT_HEADERS_AS_BOTH,
+			OIDC_STATE_INPUT_HEADERS_AS_USER_AGENT,
+			OIDC_STATE_INPUT_HEADERS_AS_X_FORWARDED_FOR,
+			OIDC_STATE_INPUT_HEADERS_AS_NONE,
+			NULL };
+	const char *rv = oidc_valid_string_option(pool, arg, options);
+	if (rv != NULL)
+		return rv;
+
+	if (apr_strnatcmp(arg, OIDC_STATE_INPUT_HEADERS_AS_BOTH) == 0) {
+		*state_input_headers = OIDC_STATE_INPUT_HEADERS_USER_AGENT | OIDC_STATE_INPUT_HEADERS_X_FORWARDED_FOR;
+	} else if (apr_strnatcmp(arg, OIDC_STATE_INPUT_HEADERS_AS_USER_AGENT) == 0) {
+		*state_input_headers = OIDC_STATE_INPUT_HEADERS_USER_AGENT;
+	} else if (apr_strnatcmp(arg, OIDC_STATE_INPUT_HEADERS_AS_X_FORWARDED_FOR) == 0) {
+		*state_input_headers = OIDC_STATE_INPUT_HEADERS_X_FORWARDED_FOR;
+	} else if (apr_strnatcmp(arg, OIDC_STATE_INPUT_HEADERS_AS_NONE) == 0) {
+		*state_input_headers = 0;
+	}
+
+	return NULL;
 }

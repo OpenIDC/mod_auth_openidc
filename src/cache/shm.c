@@ -18,17 +18,9 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2019 ZmartZone IAM
+ * Copyright (C) 2017-2021 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
- *
- * For further information please contact:
- *
- *      Ping Identity Corporation
- *      1099 18th St Suite 2950
- *      Denver, CO 80202
- *      303.468.2900
- *      http://www.pingidentity.com
  *
  * DISCLAIMER OF WARRANTIES:
  *
@@ -65,6 +57,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 typedef struct oidc_cache_cfg_shm_t {
 	apr_shm_t *shm;
 	oidc_cache_mutex_t *mutex;
+	apr_byte_t is_parent;
 } oidc_cache_cfg_shm_t;
 
 /* size of key in cached key/value pairs */
@@ -88,6 +81,7 @@ static void *oidc_cache_shm_cfg_create(apr_pool_t *pool) {
 			sizeof(oidc_cache_cfg_shm_t));
 	context->shm = NULL;
 	context->mutex = oidc_cache_mutex_create(pool);
+	context->is_parent = TRUE;
 	return context;
 }
 
@@ -141,6 +135,8 @@ int oidc_cache_shm_child_init(apr_pool_t *p, server_rec *s) {
 	oidc_cfg *cfg = ap_get_module_config(s->module_config,
 			&auth_openidc_module);
 	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *) cfg->cache_cfg;
+
+	context->is_parent = FALSE;
 
 	/* initialize the lock for the child process */
 	return oidc_cache_mutex_child_init(p, s, context->mutex);
@@ -340,7 +336,10 @@ static int oidc_cache_shm_destroy(server_rec *s) {
 	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *) cfg->cache_cfg;
 	apr_status_t rv = APR_SUCCESS;
 
-	if (context->shm) {
+	if (context == NULL)
+		return rv;
+
+	if ((context->is_parent == TRUE) && (context->shm)) {
 		oidc_cache_mutex_lock(s, context->mutex);
 		if (*context->mutex->sema == 1) {
 			rv = apr_shm_destroy(context->shm);
@@ -350,7 +349,11 @@ static int oidc_cache_shm_destroy(server_rec *s) {
 		oidc_cache_mutex_unlock(s, context->mutex);
 	}
 
+	if (context->mutex == NULL)
+		return rv;
+
 	oidc_cache_mutex_destroy(s, context->mutex);
+	context->mutex = NULL;
 
 	return rv;
 }

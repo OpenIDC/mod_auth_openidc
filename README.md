@@ -45,9 +45,6 @@ of claims provided in the `id_token`/ `userinfo` claims.
 - [OpenID Connect Session Management 1.0](http://openid.net/specs/openid-connect-session-1_0.html) *(implementers draft; see the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki/OpenID-Connect-Session-Management) for information on how to configure it)*
 - [OpenID Connect Front-Channel Logout 1.0](http://openid.net/specs/openid-connect-frontchannel-1_0.html) *(implementers draft)*
 - [OpenID Connect Back-Channel Logout 1.0](https://openid.net/specs/openid-connect-backchannel-1_0.html) *(implementers draft)*
-- [Encoding claims in the OAuth 2 state parameter using a JWT](https://tools.ietf.org/html/draft-bradley-oauth-jwt-encoded-state-08) *(draft spec)*
-- [OpenID Connect Token Bound Authentication](https://openid.net/specs/openid-connect-token-bound-authentication-1_0.html) *(draft spec; when combined with [mod_token_binding](https://github.com/zmartzone/mod_token_binding))*
-- [OAuth 2.0 Token Binding for Authorization Codes for Web Server Clients](https://tools.ietf.org/html/draft-ietf-oauth-token-binding-07#section-5.2) *(draft spec)*
 
 For an exhaustive description of all configuration options, see the file `auth_openidc.conf`
 in this directory. This file can also serve as an include file for `httpd.conf`.
@@ -55,20 +52,14 @@ in this directory. This file can also serve as an include file for `httpd.conf`.
 Support
 -------
 
-#### Give back to mod_auth_openidc
-Please consider giving back by sponsoring mod_auth_openidc development/maintenance/continuity and to express
-your gratitude as a happy user or company.  
-See: https://www.patreon.com/mod_auth_openidc  
-Sponsored by: [GLUU](https://www.gluu.org)
-
 #### Community Support
-For generic questions, see the Wiki pages with Frequently Asked Questions at:  
+For documentation, see the Wiki pages (including Frequently Asked Questions) at:  
   [https://github.com/zmartzone/mod_auth_openidc/wiki](https://github.com/zmartzone/mod_auth_openidc/wiki)  
-There is a Google Group/mailing list at:  
-  [mod_auth_openidc@googlegroups.com](mailto:mod_auth_openidc@googlegroups.com)  
-The corresponding forum/archive is at:  
+For generic questions there is a Github Discussions forum at:  
+  [https://github.com/zmartzone/mod_auth_openidc/discussions](https://github.com/zmartzone/mod_auth_openidc/discussions)
+There is a (now deprecated) Google Group/mailing list archive at:  
   [https://groups.google.com/forum/#!forum/mod_auth_openidc](https://groups.google.com/forum/#!forum/mod_auth_openidc)  
-Any questions/issues should go to the mailing list.
+Any questions/issues should go to the Discussions forum.
 
 #### Commercial Services
 For commercial Support contracts, Professional Services, Training and use-case specific support you can contact:  
@@ -145,8 +136,9 @@ For details on configuring multiple providers see the [Wiki](https://github.com/
 See the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki) for configuration docs for other OpenID Connect Providers:
 - [GLUU Server](https://github.com/zmartzone/mod_auth_openidc/wiki/Gluu-Server)
 - [Keycloak](https://github.com/zmartzone/mod_auth_openidc/wiki/Keycloak)
-- [Azure AD](https://github.com/zmartzone/mod_auth_openidc/wiki/Azure-OAuth2.0-and-OpenID)
+- [Azure AD](https://github.com/zmartzone/mod_auth_openidc/wiki/Azure-Active-Directory-Authentication)
 - [Sign in with Apple](https://github.com/zmartzone/mod_auth_openidc/wiki/Sign-in-with-Apple)
+- [Curity Identity Server](https://github.com/zmartzone/mod_auth_openidc/wiki/Curity-Identity-Server)
 - [LemonLDAP::NG](https://github.com/zmartzone/mod_auth_openidc/wiki/LemonLDAP::NG)
 - [GitLab](https://github.com/zmartzone/mod_auth_openidc/wiki/GitLab-OAuth2)
 - [Globus](https://github.com/zmartzone/mod_auth_openidc/wiki/Globus)

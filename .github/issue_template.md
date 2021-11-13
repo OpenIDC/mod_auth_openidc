@@ -1,3 +1,4 @@
-THIS ISSUER TRACKER IS NO LONGER USED!
-DON'T CREATE ANY NEW ISSUES AS THEY WILL BE CLOSED IMMEDIATELY AS INVALID!
-QUESTIONS SHOULD GO TO THE MAILINGLIST AT: mod_auth_openidc@googlegroups.com
+This issue tracker is not for end users!
+Don't create any new issues as they will immediately be closed as invalid.
+Questions and discussions are at: https://github.com/zmartzone/mod_auth_openidc/discussions
+There's also a user mailing list at: mod_auth_openidc@googlegroups.com
