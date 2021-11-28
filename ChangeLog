@@ -1,3 +1,6 @@
+11/28/2021
+- install taking into account DESTDIR; see @674; thanks @alerque
+
 11/11/2021
 - correct ap_hook_insert_filter function signature in stub.c; closes #732; thanks @stroeder
 - bump to 2.4.10.1rc0
