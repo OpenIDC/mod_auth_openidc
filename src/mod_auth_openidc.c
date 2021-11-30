@@ -3671,6 +3671,9 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 		oidc_session_t *session) {
 
+	apr_byte_t needs_save = FALSE;
+	int rc = OK;
+
 	if (oidc_proto_is_redirect_authorization_response(r, c)) {
 
 		/* this is an authorization response from the OP using the Basic Client profile or a Hybrid flow*/
@@ -3739,13 +3742,13 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 		if (session->remote_user == NULL)
 			return HTTP_UNAUTHORIZED;
 
-		/*
-		 * Will be handled in the content handler; avoid:
-		 * No authentication done but request not allowed without authentication
-		 * by setting r->user
-		 */
-		r->user = "";
-		return OK;
+		// need to establish user/claims for authorization purposes
+		rc = oidc_handle_existing_session(r, c, session, &needs_save);
+
+		if (needs_save)
+			oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_SAVE, "");
+
+		return rc;
 
 	} else if ((r->args == NULL) || (apr_strnatcmp(r->args, "") == 0)) {
 
@@ -4244,10 +4247,10 @@ int oidc_content_handler(request_rec *r) {
 
 				oidc_session_load(r, &session);
 
-				rc = oidc_handle_existing_session(r, c, session, &needs_save);
-				if (rc == OK)
-					/* handle request for session info */
-					rc = oidc_handle_info_request(r, c, session, needs_save);
+				needs_save = (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_SAVE) != NULL);;
+
+				/* handle request for session info */
+				rc = oidc_handle_info_request(r, c, session, needs_save);
 
 				/* free resources allocated for the session */
 				oidc_session_free(r, session);

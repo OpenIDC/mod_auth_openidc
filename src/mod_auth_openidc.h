@@ -106,6 +106,7 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_REQUEST_STATE_KEY_CLAIMS  "c"
 #define OIDC_REQUEST_STATE_KEY_DISCOVERY  "d"
 #define OIDC_REQUEST_STATE_KEY_AUTHN  "a"
+#define OIDC_REQUEST_STATE_KEY_SAVE "s"
 
 /* parameter name of the callback URL in the discovery response */
 #define OIDC_DISC_CB_PARAM "oidc_callback"
