@@ -1,4 +1,5 @@
 12/01/2021
+- allow authorization on info requests, see #746
 - bump to 2.4.10rc1
 
 11/28/2021
