@@ -1,3 +1,6 @@
+12/01/2021
+- bump to 2.4.10rc1
+
 11/28/2021
 - install taking into account DESTDIR; see @674; thanks @alerque
 
