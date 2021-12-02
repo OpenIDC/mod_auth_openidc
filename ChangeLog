@@ -1,9 +1,13 @@
+12/02/2021
+- add support for libpcre2; see #740
+- bump to 2.4.10.1rc2
+
 12/01/2021
 - allow authorization on info requests, see #746
 - bump to 2.4.10rc1
 
 11/28/2021
-- install taking into account DESTDIR; see @674; thanks @alerque
+- install taking into account DESTDIR; see #674; thanks @alerque
 
 11/11/2021
 - correct ap_hook_insert_filter function signature in stub.c; closes #732; thanks @stroeder

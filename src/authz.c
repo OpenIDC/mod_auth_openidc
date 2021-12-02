@@ -44,8 +44,7 @@
  */
 
 #include "mod_auth_openidc.h"
-
-#include <pcre.h>
+#include "pcre_subst.h"
 
 #ifdef USE_LIBJQ
 #include "jq.h"
@@ -123,17 +122,16 @@ static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c,
 
 static apr_byte_t oidc_authz_match_expression(request_rec *r,
 		const char *spec_c, json_t *val) {
-	const char *errorptr;
-	int erroffset;
-	pcre *preg;
+	oidc_pcre *preg = NULL;
+	char *error_str = NULL;
 	int i = 0;
 
 	/* setup the regex; spec_c points to the NULL-terminated value pattern */
-	preg = pcre_compile(spec_c, 0, &errorptr, &erroffset, NULL);
+	preg = oidc_pcre_compile(r->pool, spec_c, &error_str);
 
 	if (preg == NULL) {
-		oidc_error(r, "pattern [%s] is not a valid regular expression", spec_c);
-		pcre_free(preg);
+		oidc_error(r, "pattern [%s] is not a valid regular expression: %s", spec_c, error_str);
+		oidc_pcre_free(preg);
 		return FALSE;
 	}
 
@@ -141,9 +139,9 @@ static apr_byte_t oidc_authz_match_expression(request_rec *r,
 	if (json_is_string(val)) {
 
 		/* PCRE-compare the string value against the expression */
-		if (pcre_exec(preg, NULL, json_string_value(val),
-				(int) strlen(json_string_value(val)), 0, 0, NULL, 0) == 0) {
-			pcre_free(preg);
+		if (oidc_pcre_exec(r->pool, preg, json_string_value(val),
+				(int) strlen(json_string_value(val)), NULL) == 0) {
+			oidc_pcre_free(preg);
 			return TRUE;
 		}
 
@@ -157,17 +155,16 @@ static apr_byte_t oidc_authz_match_expression(request_rec *r,
 			if (json_is_string(elem)) {
 
 				/* PCRE-compare the string value against the expression */
-				if (pcre_exec(preg, NULL, json_string_value(elem),
-						(int) strlen(json_string_value(elem)), 0, 0,
-						NULL, 0) == 0) {
-					pcre_free(preg);
+				if (oidc_pcre_exec(r->pool, preg, json_string_value(elem),
+						(int) strlen(json_string_value(elem)), NULL) == 0) {
+					oidc_pcre_free(preg);
 					return TRUE;
 				}
 			}
 		}
 	}
 
-	pcre_free(preg);
+	oidc_pcre_free(preg);
 
 	return FALSE;
 }

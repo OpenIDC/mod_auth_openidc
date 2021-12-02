@@ -11,7 +11,7 @@ addons:
     - libcurl4-openssl-dev
     - libjansson-dev
     - libhiredis-dev
-    - libpcre3-dev
+    - libpcre2-dev
     - apache2-dev
     - check
 

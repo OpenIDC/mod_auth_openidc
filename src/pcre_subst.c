@@ -35,9 +35,32 @@ restrictions:
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
-#include <pcre.h>
+#include <apr_strings.h>
 #include "pcre_subst.h"
+#include "config.h"
 
+#ifdef HAVE_LIBPCRE2
+#define PCRE2_CODE_UNIT_WIDTH 8
+#include <pcre2.h>
+#else
+#include <pcre.h>
+#endif
+
+/*
+ * gcc -DDEBUG_BUILD=1 -DDEBUG_PCRE_SUBST=1 -I/opt/local/include/apr-1 -I/opt/local/include -o pcre_subst src/pcre_subst.c -L/opt/local/lib -lpcre -lapr-1
+ */
+
+typedef struct oidc_pcre {
+#ifdef HAVE_LIBPCRE2
+	pcre2_code *preg;
+	pcre2_match_data *match_data;
+#else
+	int subStr[OIDC_UTIL_REGEXP_MATCH_SIZE];
+	pcre *preg;
+#endif
+} oidc_pcre;
+
+#ifndef HAVE_LIBPCRE2
 #ifdef DEBUG_PCRE_SUBST
 static void
 dumpstr(const char *str, int len, int start, int end)
@@ -144,12 +167,12 @@ edit(const char *str, int len, const char *rep, int nmat, const int *ovec)
 
 char *
 pcre_subst(const pcre *ppat, const pcre_extra *extra, const char *str, int len,
-			int offset, int options, const char *rep)
+		int offset, int options, const char *rep)
 {
 	int nmat;
 	int ovec[OIDC_PCRE_MAXCAPTURE * 3];
 	nmat = pcre_exec(ppat, extra, str, len, offset, options,
-		ovec, OIDC_PCRE_MAXCAPTURE * 3);
+					 ovec, OIDC_PCRE_MAXCAPTURE * 3);
 #ifdef DEBUG_PCRE_SUBST
 	dumpmatch(str, len, rep, nmat, ovec);
 #endif
@@ -157,7 +180,158 @@ pcre_subst(const pcre *ppat, const pcre_extra *extra, const char *str, int len,
 		return NULL;
 	return(edit(str, len, rep, nmat, ovec));
 }
+#endif
 
+char* oidc_pcre_subst(apr_pool_t *pool, const oidc_pcre *pcre, const char *str, int len,
+		const char *rep) {
+	char *rv = NULL;
+#ifdef HAVE_LIBPCRE2
+	PCRE2_SIZE bufsize = (len == 0) ? 16 : 2 * len;
+	PCRE2_UCHAR *output = (PCRE2_UCHAR*) malloc(sizeof(PCRE2_UCHAR) * bufsize);
+	PCRE2_SIZE outlen = bufsize;
+	PCRE2_SPTR subject = (PCRE2_SPTR) str;
+	PCRE2_SIZE length = (PCRE2_SIZE) len;
+	PCRE2_SPTR replacement = (PCRE2_SPTR) rep;
+	if (pcre2_substitute(pcre->preg, subject, length, 0,
+						 PCRE2_SUBSTITUTE_GLOBAL, 0, 0, replacement, PCRE2_ZERO_TERMINATED, output, &outlen) > 0)
+		rv = apr_pstrdup(pool, (const char*) output);
+	free(output);
+#else
+	char *substituted = NULL;
+	substituted = pcre_subst(pcre->preg, 0, str, len, 0, 0, rep);
+	rv = apr_pstrdup(pool, substituted);
+	pcre_free(substituted);
+#endif
+	return rv;
+}
+
+oidc_pcre* oidc_pcre_compile(apr_pool_t *pool, const char *regexp, char **error_str) {
+	oidc_pcre *pcre = apr_pcalloc(pool, sizeof(oidc_pcre));
+#ifdef HAVE_LIBPCRE2
+	int errorcode;
+	PCRE2_SIZE erroroffset;
+	pcre->preg =
+			pcre2_compile((PCRE2_SPTR) regexp, (PCRE2_SIZE) strlen(regexp), 0, &errorcode, &erroroffset, NULL);
+#else
+	const char *errorptr = NULL;
+	int erroffset;
+	pcre->preg = pcre_compile(regexp, 0, &errorptr, &erroffset, NULL);
+#endif
+
+	if (pcre->preg == NULL) {
+		*error_str = apr_psprintf(pool, "pattern [%s] is not a valid regular expression", regexp);
+		pcre = NULL;
+	}
+	return pcre;
+}
+
+void oidc_pcre_free(oidc_pcre *pcre) {
+#ifdef HAVE_LIBPCRE2
+	if (pcre->match_data)
+		pcre2_match_data_free(pcre->match_data);
+	if (pcre->preg)
+		pcre2_code_free(pcre->preg);
+#else
+	pcre_free(pcre->preg);
+#endif
+}
+
+int oidc_pcre_get_substring(apr_pool_t *pool, const oidc_pcre *pcre, const char *input, int rc,
+		char **sub_str, char **error_str) {
+	int rv = 0;
+#ifdef HAVE_LIBPCRE2
+	PCRE2_UCHAR *buf = NULL;
+	PCRE2_SIZE buflen = 0;
+	if ((rv =
+			pcre2_substring_get_bynumber(pcre->match_data, OIDC_UTIL_REGEXP_MATCH_NR, &buf, &buflen))
+			< 0) {
+		switch (rc) {
+			case PCRE2_ERROR_NOSUBSTRING:
+				*error_str = apr_psprintf(pool, "there are no groups of that number");
+				break;
+			case PCRE2_ERROR_UNAVAILABLE:
+				*error_str = apr_psprintf(pool, "the ovector was too small for that group");
+				break;
+			case PCRE2_ERROR_UNSET:
+				*error_str = apr_psprintf(pool, "the group did not participate in the match");
+				break;
+			case PCRE2_ERROR_NOMEMORY:
+				*error_str = apr_psprintf(pool, "memory could not be obtained");
+				break;
+			default:
+				*error_str = apr_psprintf(pool, "pcre2_substring_get_bynumber failed (rv=%d)", rv);
+				break;
+		}
+	} else {
+		*sub_str = apr_pstrndup(pool, (const char*) buf, buflen);
+		pcre2_substring_free(buf);
+		rv = 1;
+	}
+#else
+	const char *buf = NULL;
+	if ((rv = pcre_get_substring(input, (int *)pcre->subStr, rc, OIDC_UTIL_REGEXP_MATCH_NR, &buf)) <= 0) {
+		*error_str = apr_psprintf(pool, "pcre_get_substring failed (rv=%d)",
+								  rv);
+	} else {
+		*sub_str = apr_pstrdup(pool, buf);
+		pcre_free_substring(buf);
+	}
+#endif
+	return rv;
+}
+
+int oidc_pcre_exec(apr_pool_t *pool, oidc_pcre *pcre, const char *input, int len, char **error_str) {
+	int rc = 0;
+#ifdef HAVE_LIBPCRE2
+	pcre->match_data = pcre2_match_data_create_from_pattern(pcre->preg, NULL);
+	if ((rc =
+			pcre2_match(pcre->preg, (PCRE2_SPTR) input, (PCRE2_SIZE) len, 0, 0, pcre->match_data, NULL))
+			< 0) {
+		switch (rc) {
+			case PCRE2_ERROR_NOMATCH:
+				*error_str = apr_pstrdup(pool, "string did not match the pattern");
+				break;
+			default:
+				*error_str = apr_psprintf(pool, "unknown error: %d", rc);
+				break;
+		}
+	}
+#else
+	if ((rc = pcre_exec(pcre->preg, NULL, input, len, 0, 0, pcre->subStr, OIDC_UTIL_REGEXP_MATCH_SIZE)) < 0) {
+
+		switch (rc) {
+			case PCRE_ERROR_NOMATCH:
+				*error_str = apr_pstrdup(pool, "string did not match the pattern");
+				break;
+			case PCRE_ERROR_NULL:
+				*error_str = apr_pstrdup(pool, "something was null");
+				break;
+			case PCRE_ERROR_BADOPTION:
+				*error_str = apr_pstrdup(pool, "a bad option was passed");
+				break;
+			case PCRE_ERROR_BADMAGIC:
+				*error_str = apr_pstrdup(pool,
+										 "magic number bad (compiled re corrupt?)");
+				break;
+			case PCRE_ERROR_UNKNOWN_NODE:
+				*error_str = apr_pstrdup(pool,
+										 "something kooky in the compiled re");
+				break;
+			case PCRE_ERROR_NOMEMORY:
+				*error_str = apr_pstrdup(pool, "ran out of memory");
+				break;
+			default:
+				*error_str = apr_psprintf(pool, "unknown error: %d", rc);
+				break;
+		}
+
+	}
+#endif
+
+	return rc;
+}
+
+#ifndef HAVE_LIBPCRE2
 #ifdef DEBUG_BUILD
 int
 main()
@@ -184,6 +358,10 @@ main()
 	} else {
 		printf("No match\n");
 	}
+	pcre_free(extra);
+	pcre_free(ppat);
 	return 0;
 }
 #endif
+#endif
+

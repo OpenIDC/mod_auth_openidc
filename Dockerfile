@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y pkg-config make gcc gdb lcov valgrind v
 RUN apt-get update && apt-get install -y autoconf automake libtool
 RUN apt-get update && apt-get install -y libssl-dev libjansson-dev libcurl4-openssl-dev check
 RUN apt-get update && apt-get install -y apache2 apache2-dev
-RUN apt-get update && apt-get install -y libpcre3-dev zlib1g-dev
+RUN apt-get update && apt-get install -y libpcre2-dev zlib1g-dev
 RUN apt-get update && apt-get install -y libapache2-mod-php libhiredis-dev
 RUN apt-get update && apt-get install -y libcjose-dev
 

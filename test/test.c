@@ -1504,6 +1504,8 @@ static char* test_remote_user(request_rec *r) {
 	s = "{\"upn\":\"nneul@umsystem.edu\"}";
 	rc = oidc_util_decode_json_object(r, s, &json);
 	TST_ASSERT("test remote user (1) valid JSON", rc == TRUE);
+	rc = oidc_get_remote_user(r, "upn", "^(.*)@umsystem\\.edu", NULL, json, &remote_user);
+	TST_ASSERT_STR("remote_user (0) string", remote_user, "nneul");
 	rc = oidc_get_remote_user(r, "upn", "^(.*)@umsystem\\.edu", "$1", json, &remote_user);
 	TST_ASSERT("test remote user (1) function result", rc == TRUE);
 	TST_ASSERT_STR("remote_user (1) string", remote_user, "nneul");

@@ -44,7 +44,6 @@
 #include "mod_auth_openidc.h"
 
 #include <curl/curl.h>
-#include <pcre.h>
 #include "pcre_subst.h"
 
 /* hrm, should we get rid of this by adding parameters to the (3) functions? */
@@ -2367,47 +2366,39 @@ apr_hash_t* oidc_util_merge_key_sets_hash(apr_pool_t *pool, apr_hash_t *k1,
  *     text_original: "match 292 numbers"
  *     text_replaced: "292"
  */
-apr_byte_t oidc_util_regexp_substitute(apr_pool_t *pool, const char *input,
-		const char *regexp, const char *replace, char **output,
-		char **error_str) {
+apr_byte_t oidc_util_regexp_substitute(apr_pool_t *pool, const char *input, const char *regexp,
+		const char *replace, char **output, char **error_str) {
 
-	const char *errorptr = NULL;
-	int erroffset;
 	char *substituted = NULL;
 	apr_byte_t rc = FALSE;
 
-	pcre *preg = pcre_compile(regexp, 0, &errorptr, &erroffset, NULL);
+	oidc_pcre *preg = oidc_pcre_compile(pool, regexp, error_str);
 	if (preg == NULL) {
-		*error_str = apr_psprintf(pool,
-				"pattern [%s] is not a valid regular expression", regexp);
+		*error_str =
+				apr_psprintf(pool, "pattern [%s] is not a valid regular expression: %s", regexp, *error_str);
 		goto out;
 	}
 
 	if (strlen(input) >= OIDC_PCRE_MAXCAPTURE - 1) {
 		*error_str =
-				apr_psprintf(pool,
-						"string length (%d) is larger than the maximum allowed for pcre_subst (%d)",
-						(int) strlen(input), OIDC_PCRE_MAXCAPTURE - 1);
+				apr_psprintf(pool, "string length (%d) is larger than the maximum allowed for pcre_subst (%d)", (int) strlen(input), OIDC_PCRE_MAXCAPTURE
+							 - 1);
 		goto out;
 	}
 
-	substituted = pcre_subst(preg, NULL, input, (int) strlen(input), 0, 0,
-			replace);
+	substituted = oidc_pcre_subst(pool, preg, input, (int) strlen(input), replace);
 	if (substituted == NULL) {
 		*error_str =
-				apr_psprintf(pool,
-						"unknown error could not match string [%s] using pattern [%s] and replace matches in [%s]",
-						input, regexp, replace);
+				apr_psprintf(pool, "unknown error could not match string [%s] using pattern [%s] and replace matches in [%s]", input, regexp, replace);
 		goto out;
 	}
 
 	*output = apr_pstrdup(pool, substituted);
 	rc = TRUE;
 
-	out: if (substituted)
-		pcre_free(substituted);
+out:
 	if (preg)
-		pcre_free(preg);
+		oidc_pcre_free(preg);
 
 	return rc;
 }
@@ -2415,75 +2406,35 @@ apr_byte_t oidc_util_regexp_substitute(apr_pool_t *pool, const char *input,
 /*
  * regexp match
  */
-#define OIDC_UTIL_REGEXP_MATCH_SIZE 30
-#define OIDC_UTIL_REGEXP_MATCH_NR 1
 
-apr_byte_t oidc_util_regexp_first_match(apr_pool_t *pool, const char *input,
-		const char *regexp, char **output, char **error_str) {
-	const char *errorptr = NULL;
-	int erroffset;
-	int rc = 0;
-	int subStr[OIDC_UTIL_REGEXP_MATCH_SIZE];
-	const char *psubStrMatchStr = NULL;
+apr_byte_t oidc_util_regexp_first_match(apr_pool_t *pool, const char *input, const char *regexp,
+		char **output, char **error_str) {
 	apr_byte_t rv = FALSE;
+	int rc = 0;
 
-	pcre *preg = pcre_compile(regexp, 0, &errorptr, &erroffset, NULL);
+	oidc_pcre *preg = oidc_pcre_compile(pool, regexp, error_str);
 	if (preg == NULL) {
-		*error_str = apr_psprintf(pool,
-				"pattern [%s] is not a valid regular expression", regexp);
+		*error_str =
+				apr_psprintf(pool, "pattern [%s] is not a valid regular expression: %s", regexp, *error_str);
 		goto out;
 	}
 
-	if ((rc = pcre_exec(preg, NULL, input, (int) strlen(input), 0, 0, subStr,
-			OIDC_UTIL_REGEXP_MATCH_SIZE)) < 0) {
-		switch (rc) {
-		case PCRE_ERROR_NOMATCH:
-			*error_str = apr_pstrdup(pool, "string did not match the pattern");
-			break;
-		case PCRE_ERROR_NULL:
-			*error_str = apr_pstrdup(pool, "something was null");
-			break;
-		case PCRE_ERROR_BADOPTION:
-			*error_str = apr_pstrdup(pool, "a bad option was passed");
-			break;
-		case PCRE_ERROR_BADMAGIC:
-			*error_str = apr_pstrdup(pool,
-					"magic number bad (compiled re corrupt?)");
-			break;
-		case PCRE_ERROR_UNKNOWN_NODE:
-			*error_str = apr_pstrdup(pool,
-					"something kooky in the compiled re");
-			break;
-		case PCRE_ERROR_NOMEMORY:
-			*error_str = apr_pstrdup(pool, "ran out of memory");
-			break;
-		default:
-			*error_str = apr_psprintf(pool, "unknown error: %d", rc);
-			break;
-		}
+	if ((rc = oidc_pcre_exec(pool, preg, input, (int) strlen(input), error_str)) < 0)
 		goto out;
-	}
 
 	if (output) {
 
-		if (pcre_get_substring(input, subStr, rc, OIDC_UTIL_REGEXP_MATCH_NR,
-				&(psubStrMatchStr)) <= 0) {
-			*error_str = apr_psprintf(pool, "pcre_get_substring failed (rc=%d)",
-					rc);
+		if (oidc_pcre_get_substring(pool, preg, input, rc, output, error_str) <= 0) {
+			*error_str = apr_psprintf(pool, "pcre_get_substring failed: %s", *error_str);
 			goto out;
 		}
-
-		*output = apr_pstrdup(pool, psubStrMatchStr);
 	}
 
 	rv = TRUE;
 
 out:
-
-	if (psubStrMatchStr)
-		pcre_free_substring(psubStrMatchStr);
 	if (preg)
-		pcre_free(preg);
+		oidc_pcre_free(preg);
 
 	return rv;
 }
