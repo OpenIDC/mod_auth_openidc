@@ -1,3 +1,6 @@
+12/15/2021
+- remove typedef for oidc_pcre to avoid compiler errors
+
 12/02/2021
 - add support for libpcre2; see #740
 - bump to 2.4.10.1rc2

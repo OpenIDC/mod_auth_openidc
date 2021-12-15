@@ -122,7 +122,7 @@ static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c,
 
 static apr_byte_t oidc_authz_match_expression(request_rec *r,
 		const char *spec_c, json_t *val) {
-	oidc_pcre *preg = NULL;
+	struct oidc_pcre *preg = NULL;
 	char *error_str = NULL;
 	int i = 0;
 

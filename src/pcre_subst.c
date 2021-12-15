@@ -1,36 +1,36 @@
 /*************************************************
-*      PCRE string replacement                   *
-*************************************************/
+ *      PCRE string replacement                   *
+ *************************************************/
 
 /*
-PCRE is a library of functions to support regular expressions whose syntax
-and semantics are as close as possible to those of the Perl 5 language.
-pcre_subst is a wrapper around pcre_exec designed to make it easier to
-perform PERL style replacements with PCRE.
+ PCRE is a library of functions to support regular expressions whose syntax
+ and semantics are as close as possible to those of the Perl 5 language.
+ pcre_subst is a wrapper around pcre_exec designed to make it easier to
+ perform PERL style replacements with PCRE.
 
-Written by: Bert Driehuis <driehuis@playbeing.org>
+ Written by: Bert Driehuis <driehuis@playbeing.org>
 
-           Copyright (c) 2000 Bert Driehuis
+ Copyright (c) 2000 Bert Driehuis
 
------------------------------------------------------------------------------
-Permission is granted to anyone to use this software for any purpose on any
-computer system, and to redistribute it freely, subject to the following
-restrictions:
+ -----------------------------------------------------------------------------
+ Permission is granted to anyone to use this software for any purpose on any
+ computer system, and to redistribute it freely, subject to the following
+ restrictions:
 
-1. This software is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ 1. This software is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-2. The origin of this software must not be misrepresented, either by
-   explicit claim or by omission.
+ 2. The origin of this software must not be misrepresented, either by
+ explicit claim or by omission.
 
-3. Altered versions must be plainly marked as such, and must not be
-   misrepresented as being the original software.
+ 3. Altered versions must be plainly marked as such, and must not be
+ misrepresented as being the original software.
 
-4. If PCRE is embedded in any software that is released under the GNU
-   General Purpose Licence (GPL), then the terms of that licence shall
-   supersede any condition above with which it is incompatible.
-*/
+ 4. If PCRE is embedded in any software that is released under the GNU
+ General Purpose Licence (GPL), then the terms of that licence shall
+ supersede any condition above with which it is incompatible.
+ */
 
 #include <stdio.h>
 #include <ctype.h>
@@ -50,7 +50,7 @@ restrictions:
  * gcc -DDEBUG_BUILD=1 -DDEBUG_PCRE_SUBST=1 -I/opt/local/include/apr-1 -I/opt/local/include -o pcre_subst src/pcre_subst.c -L/opt/local/lib -lpcre -lapr-1
  */
 
-typedef struct oidc_pcre {
+struct oidc_pcre {
 #ifdef HAVE_LIBPCRE2
 	pcre2_code *preg;
 	pcre2_match_data *match_data;
@@ -58,7 +58,7 @@ typedef struct oidc_pcre {
 	int subStr[OIDC_UTIL_REGEXP_MATCH_SIZE];
 	pcre *preg;
 #endif
-} oidc_pcre;
+};
 
 #ifndef HAVE_LIBPCRE2
 #ifdef DEBUG_PCRE_SUBST
@@ -182,7 +182,7 @@ pcre_subst(const pcre *ppat, const pcre_extra *extra, const char *str, int len,
 }
 #endif
 
-char* oidc_pcre_subst(apr_pool_t *pool, const oidc_pcre *pcre, const char *str, int len,
+char* oidc_pcre_subst(apr_pool_t *pool, const struct oidc_pcre *pcre, const char *str, int len,
 		const char *rep) {
 	char *rv = NULL;
 #ifdef HAVE_LIBPCRE2
@@ -205,8 +205,8 @@ char* oidc_pcre_subst(apr_pool_t *pool, const oidc_pcre *pcre, const char *str, 
 	return rv;
 }
 
-oidc_pcre* oidc_pcre_compile(apr_pool_t *pool, const char *regexp, char **error_str) {
-	oidc_pcre *pcre = apr_pcalloc(pool, sizeof(oidc_pcre));
+struct oidc_pcre* oidc_pcre_compile(apr_pool_t *pool, const char *regexp, char **error_str) {
+	struct oidc_pcre *pcre = apr_pcalloc(pool, sizeof(struct oidc_pcre));
 #ifdef HAVE_LIBPCRE2
 	int errorcode;
 	PCRE2_SIZE erroroffset;
@@ -225,7 +225,7 @@ oidc_pcre* oidc_pcre_compile(apr_pool_t *pool, const char *regexp, char **error_
 	return pcre;
 }
 
-void oidc_pcre_free(oidc_pcre *pcre) {
+void oidc_pcre_free(struct oidc_pcre *pcre) {
 #ifdef HAVE_LIBPCRE2
 	if (pcre->match_data)
 		pcre2_match_data_free(pcre->match_data);
@@ -236,15 +236,14 @@ void oidc_pcre_free(oidc_pcre *pcre) {
 #endif
 }
 
-int oidc_pcre_get_substring(apr_pool_t *pool, const oidc_pcre *pcre, const char *input, int rc,
-		char **sub_str, char **error_str) {
+int oidc_pcre_get_substring(apr_pool_t *pool, const struct oidc_pcre *pcre, const char *input,
+		int rc, char **sub_str, char **error_str) {
 	int rv = 0;
 #ifdef HAVE_LIBPCRE2
 	PCRE2_UCHAR *buf = NULL;
 	PCRE2_SIZE buflen = 0;
 	if ((rv =
-			pcre2_substring_get_bynumber(pcre->match_data, OIDC_UTIL_REGEXP_MATCH_NR, &buf, &buflen))
-			< 0) {
+			pcre2_substring_get_bynumber(pcre->match_data, OIDC_UTIL_REGEXP_MATCH_NR, &buf, &buflen)) < 0) {
 		switch (rc) {
 			case PCRE2_ERROR_NOSUBSTRING:
 				*error_str = apr_psprintf(pool, "there are no groups of that number");
@@ -280,7 +279,8 @@ int oidc_pcre_get_substring(apr_pool_t *pool, const oidc_pcre *pcre, const char 
 	return rv;
 }
 
-int oidc_pcre_exec(apr_pool_t *pool, oidc_pcre *pcre, const char *input, int len, char **error_str) {
+int oidc_pcre_exec(apr_pool_t *pool, struct oidc_pcre *pcre, const char *input, int len,
+		char **error_str) {
 	int rc = 0;
 #ifdef HAVE_LIBPCRE2
 	pcre->match_data = pcre2_match_data_create_from_pattern(pcre->preg, NULL);

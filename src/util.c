@@ -2372,7 +2372,7 @@ apr_byte_t oidc_util_regexp_substitute(apr_pool_t *pool, const char *input, cons
 	char *substituted = NULL;
 	apr_byte_t rc = FALSE;
 
-	oidc_pcre *preg = oidc_pcre_compile(pool, regexp, error_str);
+	struct oidc_pcre *preg = oidc_pcre_compile(pool, regexp, error_str);
 	if (preg == NULL) {
 		*error_str =
 				apr_psprintf(pool, "pattern [%s] is not a valid regular expression: %s", regexp, *error_str);
@@ -2412,7 +2412,7 @@ apr_byte_t oidc_util_regexp_first_match(apr_pool_t *pool, const char *input, con
 	apr_byte_t rv = FALSE;
 	int rc = 0;
 
-	oidc_pcre *preg = oidc_pcre_compile(pool, regexp, error_str);
+	struct oidc_pcre *preg = oidc_pcre_compile(pool, regexp, error_str);
 	if (preg == NULL) {
 		*error_str =
 				apr_psprintf(pool, "pattern [%s] is not a valid regular expression: %s", regexp, *error_str);
