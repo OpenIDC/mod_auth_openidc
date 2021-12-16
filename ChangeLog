@@ -1,3 +1,8 @@
+12/16/2021
+- make X-Frame-Options header returned on OIDC front-channel logout requests configurable
+  through OIDCLogoutXFrameOptions; closes #464
+- bump to 2.4.10.1rc3
+
 12/15/2021
 - remove typedef for oidc_pcre to avoid compiler errors
 

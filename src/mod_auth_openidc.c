@@ -2812,7 +2812,8 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 		oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_PRAGMA, "no-cache");
 		oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_P3P, "CAO PSA OUR");
 		oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_EXPIRES, "0");
-		oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_X_FRAME_OPTIONS, "DENY");
+		oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_X_FRAME_OPTIONS,
+				c->logout_x_frame_options ? c->logout_x_frame_options : "DENY");
 
 		/* see if this is PF-PA style logout in which case we return a transparent pixel */
 		const char *accept = oidc_util_hdr_in_accept_get(r);

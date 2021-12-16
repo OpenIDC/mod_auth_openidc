@@ -447,6 +447,8 @@ typedef struct oidc_cfg {
 	apr_hash_t *redirect_urls_allowed;
 
 	char *ca_bundle_path;
+
+	char *logout_x_frame_options;
 } oidc_cfg;
 
 int oidc_check_user_id(request_rec *r);

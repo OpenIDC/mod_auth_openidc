@@ -263,6 +263,7 @@
 #define OIDCRedirectURLsAllowed                "OIDCRedirectURLsAllowed"
 #define OIDCStateCookiePrefix                  "OIDCStateCookiePrefix"
 #define OIDCCABundlePath                       "OIDCCABundlePath"
+#define OIDCLogoutXFrameOptions                "OIDCLogoutXFrameOptions"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -1435,6 +1436,8 @@ void* oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 
 	c->ca_bundle_path = NULL;
 
+	c->logout_x_frame_options = NULL;
+
 	return c;
 }
 
@@ -1926,6 +1929,10 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->ca_bundle_path =
 			add->ca_bundle_path != NULL ?
 					add->ca_bundle_path : base->ca_bundle_path;
+
+	c->logout_x_frame_options =
+			add->logout_x_frame_options != NULL ?
+					add->logout_x_frame_options : base->logout_x_frame_options;
 
 	return c;
 }
@@ -3420,6 +3427,12 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_cfg, ca_bundle_path),
 				RSRC_CONF,
 				"Sets the path to the CA bundle to be used by cURL."),
+
+		AP_INIT_TAKE1(OIDCLogoutXFrameOptions,
+				ap_set_string_slot,
+				(void *) APR_OFFSETOF(oidc_cfg, logout_x_frame_options),
+				RSRC_CONF,
+				"Sets the value of the X-Frame-Options header on front channel logout."),
 
 		{ NULL }
 };
