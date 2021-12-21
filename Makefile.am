@@ -73,7 +73,7 @@ install-exec-local:
 	${INSTALL} -p -m 755 -D .libs/mod_auth_openidc.so $(DESTDIR)@APACHE_MODULEDIR@/mod_auth_openidc.so
 
 uninstall-local:
-	rm -f $(DESTDIR)@APACHE_MODULEDIR@/mod_auth_openidc.so
+	rm -f $(DESTDIR)@APACHE_MODULEDIR@/mod_auth_openidc.so mod_auth_openidc.la
 
 LDADD = libauth_openidc.la ${LIBADD}
 
