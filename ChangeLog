@@ -1,5 +1,6 @@
 12/21/2021
 - add "x5t" to JWT header in private_key_jwt client assertions; for interop with Azure AD
+- add CI Github workflow over Travis
 - bump to 2.4.10.1rc4
 
 12/16/2021

@@ -72,6 +72,9 @@ install-exec-local:
 #	@APXS@ -i -a -n auth_openidc mod_auth_openidc.la
 	${INSTALL} -p -m 755 -D .libs/mod_auth_openidc.so $(DESTDIR)@APACHE_MODULEDIR@/mod_auth_openidc.so
 
+uninstall-local:
+	rm -f $(DESTDIR)@APACHE_MODULEDIR@/mod_auth_openidc.so
+
 LDADD = libauth_openidc.la ${LIBADD}
 
 noinst_PROGRAMS = test/test-cmd

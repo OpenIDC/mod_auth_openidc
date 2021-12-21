@@ -119,8 +119,11 @@ static char *test_public_key_parse(apr_pool_t *pool) {
 	int isPrivateKey = 0;
 	int result;
 
-	const char publicKeyFile[] = "./test/public.pem";
-	const char certificateFile[] = "./test/certificate.pem";
+	const char publicKeyFile[512];
+	const char certificateFile[512];
+	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	sprintf((char *)publicKeyFile, "%s/%s", dir, "/test/public.pem");
+	sprintf((char *)certificateFile, "%s/%s", dir, "/test/certificate.pem");
 
 	input = BIO_new(BIO_s_file());
 	TST_ASSERT_ERR("test_public_key_parse_BIO_new_public_key", input != NULL,
