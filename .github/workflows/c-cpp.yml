@@ -27,5 +27,4 @@ jobs:
     - name: make check
       run: make check
     - name: make distcheck
-      run: make distcheck
- 
+      run: make distcheck DESTDIR=/tmp/mod_auth_openidc
