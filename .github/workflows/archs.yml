@@ -51,4 +51,4 @@ jobs:
           
     - name: Results
       run: |
-        cat "${PWD}/logs/*.log"
+        cat ${PWD}/logs/*.log
