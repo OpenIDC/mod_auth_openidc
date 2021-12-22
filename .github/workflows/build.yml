@@ -11,7 +11,7 @@ jobs:
       run: |
         sudo apt-get update -y
         sudo apt-get install -y apache2-dev libcjose-dev libssl-dev check pkg-config
-        sudo apt-get install -y libjansson-dev libcurl4-openssl-dev libhiredis-dev pcre2-dev
+        sudo apt-get install -y libjansson-dev libcurl4-openssl-dev libhiredis-dev libpcre2-dev
     - name: Configure
       run: |
         ./autogen.sh
