@@ -677,7 +677,7 @@ size_t oidc_curl_write(void *contents, size_t size, size_t nmemb, void *userp) {
 	if (mem->size + realsize > OIDC_CURL_MAX_RESPONSE_SIZE) {
 		oidc_error(mem->r,
 				"HTTP response larger than maximum allowed size: current size=%ld, additional size=%ld, max=%d",
-				mem->size, realsize, OIDC_CURL_MAX_RESPONSE_SIZE);
+				(long)mem->size, (long)realsize, OIDC_CURL_MAX_RESPONSE_SIZE);
 		return 0;
 	}
 
@@ -686,7 +686,7 @@ size_t oidc_curl_write(void *contents, size_t size, size_t nmemb, void *userp) {
 	if (newptr == NULL) {
 		oidc_error(mem->r,
 				"memory allocation for new buffer of %ld bytes failed",
-				mem->size + realsize + 1);
+				(long)(mem->size + realsize + 1));
 		return 0;
 	}
 

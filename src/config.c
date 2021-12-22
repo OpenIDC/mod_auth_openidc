@@ -2749,7 +2749,7 @@ static apr_status_t oidc_filter_in_filter(ap_filter_t *f,
 
 				if (oidc_util_hdr_in_content_length_get(f->r) != NULL)
 					oidc_util_hdr_in_set(f->r, OIDC_HTTP_HDR_CONTENT_LENGTH,
-							apr_psprintf(f->r->pool, "%ld", ctx->nbytes));
+							apr_psprintf(f->r->pool, "%ld", (long)ctx->nbytes));
 
 				apr_pool_userdata_set(NULL, OIDC_USERDATA_POST_PARAMS_KEY,
 						NULL, f->r->pool);
