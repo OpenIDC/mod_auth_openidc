@@ -1248,7 +1248,7 @@ apr_byte_t oidc_jwk_rsa_bio_to_jwk(apr_pool_t *pool, BIO *input,
 	}
 
 	/* get the RSA key from the public key struct */
-	RSA *rsa = EVP_PKEY_get1_RSA(pkey);
+	RSA *rsa = (RSA *)EVP_PKEY_get1_RSA(pkey);
 	if (rsa == NULL) {
 		oidc_jose_error_openssl(err, "EVP_PKEY_get1_RSA");
 		goto end;
