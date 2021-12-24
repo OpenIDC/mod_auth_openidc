@@ -1355,3 +1355,25 @@ const char *oidc_parse_set_state_input_headers_as(apr_pool_t *pool, const char *
 
 	return NULL;
 }
+
+const char* oidc_parse_x_forwarded_headers(apr_pool_t *pool, const char *arg,
+		apr_byte_t *x_forwarded_headers) {
+	static char *options[] = {
+			OIDC_HTTP_HDR_X_FORWARDED_HOST,
+			OIDC_HTTP_HDR_X_FORWARDED_PORT,
+			OIDC_HTTP_HDR_X_FORWARDED_PROTO,
+			NULL };
+	const char *rv = oidc_valid_string_option(pool, arg, options);
+	if (rv != NULL)
+		return rv;
+
+	if (apr_strnatcmp(arg, OIDC_HTTP_HDR_X_FORWARDED_HOST) == 0) {
+		*x_forwarded_headers |= OIDC_HDR_X_FORWARDED_HOST;
+	} else if (apr_strnatcmp(arg, OIDC_HTTP_HDR_X_FORWARDED_PORT) == 0) {
+		*x_forwarded_headers |= OIDC_HDR_X_FORWARDED_PORT;
+	} else if (apr_strnatcmp(arg, OIDC_HTTP_HDR_X_FORWARDED_PROTO) == 0) {
+		*x_forwarded_headers |= OIDC_HDR_X_FORWARDED_PROTO;
+	}
+
+	return NULL;
+}

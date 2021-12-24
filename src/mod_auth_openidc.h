@@ -229,13 +229,13 @@ APLOG_USE_MODULE(auth_openidc);
 
 #define OIDC_COOKIE_EXT_SAME_SITE_LAX    "SameSite=Lax"
 #define OIDC_COOKIE_EXT_SAME_SITE_STRICT "SameSite=Strict"
-#define OIDC_COOKIE_EXT_SAME_SITE_NONE(r) \
-		oidc_util_request_is_secure(r) ? "SameSite=None" : NULL
+#define OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r) \
+		oidc_util_request_is_secure(r,c ) ? "SameSite=None" : NULL
 
 #define OIDC_COOKIE_SAMESITE_STRICT(c, r) \
-		c->cookie_same_site ? OIDC_COOKIE_EXT_SAME_SITE_STRICT : OIDC_COOKIE_EXT_SAME_SITE_NONE(r)
+		c->cookie_same_site ? OIDC_COOKIE_EXT_SAME_SITE_STRICT : OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r)
 #define OIDC_COOKIE_SAMESITE_LAX(c, r) \
-		c->cookie_same_site ? OIDC_COOKIE_EXT_SAME_SITE_LAX : OIDC_COOKIE_EXT_SAME_SITE_NONE(r)
+		c->cookie_same_site ? OIDC_COOKIE_EXT_SAME_SITE_LAX : OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r)
 
 /* https://tools.ietf.org/html/draft-ietf-tokbind-ttrp-01 */
 #define OIDC_TB_CFG_PROVIDED_ENV_VAR     "Sec-Provided-Token-Binding-ID"
@@ -249,6 +249,10 @@ APLOG_USE_MODULE(auth_openidc);
 
 #define OIDC_STATE_INPUT_HEADERS_USER_AGENT 1
 #define OIDC_STATE_INPUT_HEADERS_X_FORWARDED_FOR 2
+
+#define OIDC_HDR_X_FORWARDED_HOST   1
+#define OIDC_HDR_X_FORWARDED_PORT   2
+#define OIDC_HDR_X_FORWARDED_PROTO  4
 
 typedef apr_byte_t (*oidc_proto_pkce_state)(request_rec *r, char **state);
 typedef apr_byte_t (*oidc_proto_pkce_challenge)(request_rec *r, const char *state, char **code_challenge);
@@ -443,12 +447,10 @@ typedef struct oidc_cfg {
 	apr_hash_t *white_listed_claims;
 
 	apr_byte_t state_input_headers;
-
 	apr_hash_t *redirect_urls_allowed;
-
 	char *ca_bundle_path;
-
 	char *logout_x_frame_options;
+	apr_byte_t x_forwarded_headers;
 } oidc_cfg;
 
 int oidc_check_user_id(request_rec *r);
@@ -764,13 +766,13 @@ void oidc_cfg_provider_init(oidc_provider_t *provider);
 int oidc_strnenvcmp(const char *a, const char *b, int len);
 int oidc_base64url_encode(request_rec *r, char **dst, const char *src, int src_len, int remove_padding);
 int oidc_base64url_decode(apr_pool_t *pool, char **dst, const char *src);
-const char *oidc_get_current_url_host(request_rec *r);
-char *oidc_get_current_url(request_rec *r);
+const char *oidc_get_current_url_host(request_rec *r, const apr_byte_t x_forwarded_headers);
+char *oidc_get_current_url(request_rec *r, const apr_byte_t x_forwarded_headers);
 const char *oidc_get_redirect_uri(request_rec *r, oidc_cfg *c);
 const char *oidc_get_redirect_uri_iss(request_rec *r, oidc_cfg *c, oidc_provider_t *provider);
 char *oidc_url_encode(const request_rec *r, const char *str, const char *charsToEncode);
 char *oidc_normalize_header_name(const request_rec *r, const char *str);
-apr_byte_t oidc_util_request_is_secure(request_rec *r);
+apr_byte_t oidc_util_request_is_secure(request_rec *r, oidc_cfg *c);
 void oidc_util_set_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires, const char *ext);
 char *oidc_util_get_cookie(request_rec *r, const char *cookieName);
 apr_byte_t oidc_util_http_get(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth, const char *bearer_token, int ssl_validate_server, char **response, int timeout, const char *outgoing_proxy, apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd);

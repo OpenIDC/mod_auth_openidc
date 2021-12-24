@@ -438,9 +438,14 @@ char* oidc_util_javascript_escape(apr_pool_t *pool, const char *s) {
 /*
  * get the URL scheme that is currently being accessed
  */
-static const char* oidc_get_current_url_scheme(const request_rec *r) {
+static const char* oidc_get_current_url_scheme(const request_rec *r,
+		const apr_byte_t x_forwarded_headers) {
 	/* first see if there's a proxy/load-balancer in front of us */
-	const char *scheme_str = oidc_util_hdr_in_x_forwarded_proto_get(r);
+	const char *scheme_str = NULL;
+
+	if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_PROTO)
+		scheme_str = oidc_util_hdr_in_x_forwarded_proto_get(r);
+
 	/* if not we'll determine the scheme used to connect to this server */
 	if (scheme_str == NULL) {
 #ifdef APACHE2_0
@@ -452,9 +457,7 @@ static const char* oidc_get_current_url_scheme(const request_rec *r) {
 	if ((scheme_str == NULL)
 			|| ((apr_strnatcmp(scheme_str, "http") != 0)
 					&& (apr_strnatcmp(scheme_str, "https") != 0))) {
-		oidc_warn(r,
-				"detected HTTP scheme \"%s\" is not \"http\" nor \"https\"; perhaps your reverse proxy passes a wrongly configured \"%s\" header: falling back to default \"https\"",
-				scheme_str, OIDC_HTTP_HDR_X_FORWARDED_PROTO);
+		oidc_warn(r, "detected HTTP scheme \"%s\" is not \"http\" nor \"https\"; perhaps your reverse proxy passes a wrongly configured \"%s\" header: falling back to default \"https\"", scheme_str, OIDC_HTTP_HDR_X_FORWARDED_PROTO);
 		scheme_str = "https";
 	}
 	return scheme_str;
@@ -463,12 +466,12 @@ static const char* oidc_get_current_url_scheme(const request_rec *r) {
 /*
  * get the Port part that is currently being accessed
  */
-static const char* oidc_get_port_from_host(	const char *host_hdr){
+static const char* oidc_get_port_from_host(const char *host_hdr) {
 	char *p = NULL;
 	char *i = NULL;
 
 	if (host_hdr) {
-		if (host_hdr[0]=='[') {
+		if (host_hdr[0] == '[') {
 			i = strchr(host_hdr, ']');
 			p = strchr(i, OIDC_CHAR_COLON);
 		} else {
@@ -484,14 +487,20 @@ static const char* oidc_get_port_from_host(	const char *host_hdr){
 /*
  * get the URL port that is currently being accessed
  */
-static const char* oidc_get_current_url_port(const request_rec *r,
-		const char *scheme_str) {
+static const char* oidc_get_current_url_port(const request_rec *r, const char *scheme_str,
+		const apr_byte_t x_forwarded_headers) {
+
+	const char *host_hdr = NULL;
+	const char *port_str = NULL;
 
 	/*
 	 * first see if there's a proxy/load-balancer in front of us
 	 * that sets X-Forwarded-Port
 	 */
-	const char *port_str = oidc_util_hdr_in_x_forwarded_port_get(r);
+
+	if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_PORT)
+		port_str = oidc_util_hdr_in_x_forwarded_port_get(r);
+
 	if (port_str)
 		return port_str;
 
@@ -499,7 +508,10 @@ static const char* oidc_get_current_url_port(const request_rec *r,
 	 * see if we can get the port from the "X-Forwarded-Host" header
 	 * and if that header was set we'll assume defaults
 	 */
-	const char *host_hdr = oidc_util_hdr_in_x_forwarded_host_get(r);
+
+	if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_HOST)
+		host_hdr = oidc_util_hdr_in_x_forwarded_host_get(r);
+
 	if (host_hdr) {
 		port_str = oidc_get_port_from_host(host_hdr);
 		if (port_str)
@@ -524,8 +536,9 @@ static const char* oidc_get_current_url_port(const request_rec *r,
 	 * if X-Forwarded-Proto assume the default port otherwise the
 	 * port should have been set in the X-Forwarded-Port header
 	 */
-	if (oidc_util_hdr_in_x_forwarded_proto_get(r))
-		return NULL;
+	if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_PROTO)
+		if (oidc_util_hdr_in_x_forwarded_proto_get(r))
+			return NULL;
 
 	/*
 	 * if no port was set in the Host header and no X-Forwarded-Proto was set, we'll
@@ -544,24 +557,28 @@ static const char* oidc_get_current_url_port(const request_rec *r,
 /*
  * get the hostname part of the URL that is currently being accessed
  */
-const char* oidc_get_current_url_host(request_rec *r) {
-	const char *host_str = oidc_util_hdr_in_x_forwarded_host_get(r);
-    char *p = NULL;
+const char* oidc_get_current_url_host(request_rec *r, const apr_byte_t x_forwarded_headers) {
+	const char *host_str = NULL;
+	char *p = NULL;
 	char *i = NULL;
+
+	if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_HOST)
+		host_str = oidc_util_hdr_in_x_forwarded_host_get(r);
+
 	if (host_str == NULL)
 		host_str = oidc_util_hdr_in_host_get(r);
 	if (host_str) {
 		host_str = apr_pstrdup(r->pool, host_str);
 
 		if (host_str[0] == '[') {
-			i= strchr(host_str, ']');
+			i = strchr(host_str, ']');
 			p = strchr(i, OIDC_CHAR_COLON);
 		} else {
 			p = strchr(host_str, OIDC_CHAR_COLON);
 		}
 
-	if (p != NULL)
-		*p = '\0';
+		if (p != NULL)
+			*p = '\0';
 	} else {
 		/* no Host header, HTTP 1.0 */
 		host_str = ap_get_server_name(r);
@@ -572,15 +589,15 @@ const char* oidc_get_current_url_host(request_rec *r) {
 /*
  * get the base part of the current URL (scheme + host (+ port))
  */
-static const char* oidc_get_current_url_base(request_rec *r) {
+static const char* oidc_get_current_url_base(request_rec *r, const apr_byte_t x_forwarded_headers) {
 
-	const char *scheme_str = oidc_get_current_url_scheme(r);
-	const char *host_str = oidc_get_current_url_host(r);
-	const char *port_str = oidc_get_current_url_port(r, scheme_str);
+	const char *scheme_str = oidc_get_current_url_scheme(r, x_forwarded_headers);
+	const char *host_str = oidc_get_current_url_host(r, x_forwarded_headers);
+	const char *port_str = oidc_get_current_url_port(r, scheme_str, x_forwarded_headers);
 	port_str = port_str ? apr_psprintf(r->pool, ":%s", port_str) : "";
 
 	char *url = apr_pstrcat(r->pool, scheme_str, "://", host_str, port_str,
-			NULL);
+							NULL);
 
 	return url;
 }
@@ -588,7 +605,7 @@ static const char* oidc_get_current_url_base(request_rec *r) {
 /*
  * get the URL that is currently being accessed
  */
-char* oidc_get_current_url(request_rec *r) {
+char* oidc_get_current_url(request_rec *r, const apr_byte_t x_forwarded_headers) {
 	char *url = NULL, *path = NULL;
 	apr_uri_t uri;
 
@@ -598,18 +615,17 @@ char* oidc_get_current_url(request_rec *r) {
 	if ((path) && (path[0] != '/')) {
 		memset(&uri, 0, sizeof(apr_uri_t));
 		if (apr_uri_parse(r->pool, r->uri, &uri) == APR_SUCCESS)
-			path = apr_pstrcat(r->pool, uri.path,
-					(r->args != NULL && *r->args != '\0' ? "?" : ""), r->args,
-					NULL);
+			path =
+					apr_pstrcat(r->pool, uri.path, (r->args != NULL && *r->args != '\0' ? "?" : ""), r->args,
+								NULL);
 		else
-			oidc_warn(r, "apr_uri_parse failed on non-relative URL: %s",
-					r->uri);
+			oidc_warn(r, "apr_uri_parse failed on non-relative URL: %s", r->uri);
 	} else {
 		/* make sure we retain URL-encoded characters original URL that we send the user back to */
 		path = r->unparsed_uri;
 	}
 
-	url = apr_pstrcat(r->pool, oidc_get_current_url_base(r), path, NULL);
+	url = apr_pstrcat(r->pool, oidc_get_current_url_base(r, x_forwarded_headers), path, NULL);
 
 	oidc_debug(r, "current URL '%s'", url);
 
@@ -627,7 +643,7 @@ const char* oidc_get_redirect_uri(request_rec *r, oidc_cfg *cfg) {
 			&& (redirect_uri[0] == OIDC_CHAR_FORWARD_SLASH)) {
 		// relative redirect uri
 
-		redirect_uri = apr_pstrcat(r->pool, oidc_get_current_url_base(r),
+		redirect_uri = apr_pstrcat(r->pool, oidc_get_current_url_base(r, cfg->x_forwarded_headers),
 				cfg->redirect_uri, NULL);
 
 		oidc_debug(r, "determined absolute redirect uri: %s", redirect_uri);
@@ -1107,18 +1123,17 @@ const char* oidc_util_set_cookie_append_value(request_rec *r, oidc_cfg *c) {
 	return env_var_value;
 }
 
-apr_byte_t oidc_util_request_is_secure(request_rec *r) {
-	return (apr_strnatcasecmp("https", oidc_get_current_url_scheme(r)) == 0);
+apr_byte_t oidc_util_request_is_secure(request_rec *r, oidc_cfg *c) {
+	return (apr_strnatcasecmp("https", oidc_get_current_url_scheme(r, c->x_forwarded_headers)) == 0);
 }
 
 /*
  * set a cookie in the HTTP response headers
  */
-void oidc_util_set_cookie(request_rec *r, const char *cookieName,
-		const char *cookieValue, apr_time_t expires, const char *ext) {
+void oidc_util_set_cookie(request_rec *r, const char *cookieName, const char *cookieValue,
+		apr_time_t expires, const char *ext) {
 
-	oidc_cfg *c = ap_get_module_config(r->server->module_config,
-			&auth_openidc_module);
+	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	char *headerString, *expiresString = NULL;
 	const char *appendString = NULL;
 
@@ -1138,36 +1153,33 @@ void oidc_util_set_cookie(request_rec *r, const char *cookieName,
 	headerString = apr_psprintf(r->pool, "%s=%s", cookieName, cookieValue);
 
 	headerString = apr_psprintf(r->pool, "%s; %s=%s", headerString,
-			OIDC_COOKIE_FLAG_PATH, oidc_util_get_cookie_path(r));
+								OIDC_COOKIE_FLAG_PATH, oidc_util_get_cookie_path(r));
 
 	if (expiresString != NULL)
 		headerString = apr_psprintf(r->pool, "%s; %s=%s", headerString,
-				OIDC_COOKIE_FLAG_EXPIRES, expiresString);
+									OIDC_COOKIE_FLAG_EXPIRES, expiresString);
 
 	if (c->cookie_domain != NULL)
 		headerString = apr_psprintf(r->pool, "%s; %s=%s", headerString,
-				OIDC_COOKIE_FLAG_DOMAIN, c->cookie_domain);
+									OIDC_COOKIE_FLAG_DOMAIN, c->cookie_domain);
 
-	if (oidc_util_request_is_secure(r))
+	if (oidc_util_request_is_secure(r, c))
 		headerString = apr_psprintf(r->pool, "%s; %s", headerString,
-				OIDC_COOKIE_FLAG_SECURE);
+									OIDC_COOKIE_FLAG_SECURE);
 
 	if (c->cookie_http_only != FALSE)
 		headerString = apr_psprintf(r->pool, "%s; %s", headerString,
-				OIDC_COOKIE_FLAG_HTTP_ONLY);
+									OIDC_COOKIE_FLAG_HTTP_ONLY);
 
 	appendString = oidc_util_set_cookie_append_value(r, c);
 	if (appendString != NULL)
-		headerString = apr_psprintf(r->pool, "%s; %s", headerString,
-				appendString);
+		headerString = apr_psprintf(r->pool, "%s; %s", headerString, appendString);
 	else if (ext != NULL)
 		headerString = apr_psprintf(r->pool, "%s; %s", headerString, ext);
 
 	/* sanity check on overall cookie value size */
 	if (strlen(headerString) > OIDC_COOKIE_MAX_SIZE) {
-		oidc_warn(r,
-				"the length of the cookie value (%d) is greater than %d(!) bytes, this may not work with all browsers/server combinations: consider switching to a server side caching!",
-				(int )strlen(headerString), OIDC_COOKIE_MAX_SIZE);
+		oidc_warn(r, "the length of the cookie value (%d) is greater than %d(!) bytes, this may not work with all browsers/server combinations: consider switching to a server side caching!", (int )strlen(headerString), OIDC_COOKIE_MAX_SIZE);
 	}
 
 	/* use r->err_headers_out so we always print our headers (even on 302 redirect) - headers_out only prints on 2xx responses */

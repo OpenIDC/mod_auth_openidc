@@ -1237,55 +1237,73 @@ static char * test_current_url(request_rec *r) {
 	r->uri = "/test";
 	r->unparsed_uri = apr_pstrcat(r->pool, r->uri, "?", r->args, NULL);
 
-	url = oidc_get_current_url(r);
+	url = oidc_get_current_url(r, 0);
 	TST_ASSERT_STR("test_current_url (1)", url,
 			"https://www.example.com/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Host", "www.outer.com");
-	url = oidc_get_current_url(r);
-	TST_ASSERT_STR("test_current_url (2)", url,
+	url = oidc_get_current_url(r, 0);
+	TST_ASSERT_STR("test_current_url (2a)", url,
+			"https://www.example.com/test?foo=bar&param1=value1");
+	url = oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_HOST);
+	TST_ASSERT_STR("test_current_url (2b)", url,
 			"https://www.outer.com/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Host", "www.outer.com:654");
-	url = oidc_get_current_url(r);
+	url = oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_HOST);
 	TST_ASSERT_STR("test_current_url (3)", url,
 			"https://www.outer.com:654/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Port", "321");
-	url = oidc_get_current_url(r);
+	url = oidc_get_current_url(r, 0);
+	TST_ASSERT_STR("test_current_url (4a)", url,
+			"https://www.example.com/test?foo=bar&param1=value1");
+	url = oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_HOST);
+	TST_ASSERT_STR("test_current_url (4b)", url,
+			"https://www.outer.com:654/test?foo=bar&param1=value1");
+	url = oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT);
 	TST_ASSERT_STR("test_current_url (4)", url,
 			"https://www.outer.com:321/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Proto", "http");
-	url = oidc_get_current_url(r);
-	TST_ASSERT_STR("test_current_url (5)", url,
+	url = oidc_get_current_url(r, 0);
+	TST_ASSERT_STR("test_current_url (5a)", url,
+			"https://www.example.com/test?foo=bar&param1=value1");
+	url = oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_HOST);
+	TST_ASSERT_STR("test_current_url (5b)", url,
+			"https://www.outer.com:654/test?foo=bar&param1=value1");
+	url = oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT);
+	TST_ASSERT_STR("test_current_url (5c)", url,
+			"https://www.outer.com:321/test?foo=bar&param1=value1");
+	url = oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT | OIDC_HDR_X_FORWARDED_PROTO);
+	TST_ASSERT_STR("test_current_url (5d)", url,
 			"http://www.outer.com:321/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Proto", "https , http");
-	url = oidc_get_current_url(r);
+	url = oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT | OIDC_HDR_X_FORWARDED_PROTO);
 	TST_ASSERT_STR("test_current_url (6)", url,
 			"https://www.outer.com:321/test?foo=bar&param1=value1");
 
 	apr_table_unset(r->headers_in, "X-Forwarded-Host");
 	apr_table_unset(r->headers_in, "X-Forwarded-Port");
-	url = oidc_get_current_url(r);
+	url = oidc_get_current_url(r,  OIDC_HDR_X_FORWARDED_PROTO);
 	TST_ASSERT_STR("test_current_url (7)", url,
 			"https://www.example.com/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Proto", "http ");
 	apr_table_set(r->headers_in, "Host", "remotehost:8380");
 	r->uri = "http://remotehost:8380/private/";
-	url = oidc_get_current_url(r);
+	url = oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_PROTO);
 	TST_ASSERT_STR("test_current_url (8)", url,
 			"http://remotehost:8380/private/?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "Host", "[fd04:41b1:1170:28:16b0:446b:9fb7:7118]:8380");
-	url = oidc_get_current_url(r);
+	url = oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_PROTO);
 	TST_ASSERT_STR("test_current_url (9)", url,
 			"http://[fd04:41b1:1170:28:16b0:446b:9fb7:7118]:8380/private/?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "Host", "[fd04:41b1:1170:28:16b0:446b:9fb7:7118]");
-	url = oidc_get_current_url(r);
+	url = oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_PROTO);
 	TST_ASSERT_STR("test_current_url (10)", url,
 			"http://[fd04:41b1:1170:28:16b0:446b:9fb7:7118]/private/?foo=bar&param1=value1");
 
