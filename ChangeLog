@@ -1,3 +1,7 @@
+01/06/2022
+- improve detection of suspicious redirect URLs; add test list
+- bump to 2.4.11rc1
+
 12/24/2021
 - make interpretation of X-Forwarded-* headers configurable, defaulting to none
   so mod_auth_openidc running behind a reverse proxy that sets X-Forwarded-* headers

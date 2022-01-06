@@ -61,7 +61,8 @@ EXTRA_DIST = \
 	LICENSE.txt \
 	auth_openidc.conf \
 	test/public.pem \
-	test/certificate.pem
+	test/certificate.pem \
+	test/open-redirect-payload-list.txt
 
 noinst_DATA = mod_auth_openidc.la
 

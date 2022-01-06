@@ -2430,7 +2430,7 @@ static int oidc_target_link_uri_matches_configuration(request_rec *r,
 
 #define OIDC_MAX_URL_LENGTH 8192 * 2
 
-static apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg *c,
+apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg *c,
 		const char *redirect_to_url, apr_byte_t restrict_to_host, char **err_str,
 		char **err_desc) {
 	apr_uri_t uri;
@@ -2515,6 +2515,19 @@ static apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg *c,
 		return FALSE;
 	}
 
+	if ((strstr(url, "/%09") != NULL) || (strstr(url, "/%2f") != NULL)
+			|| (strstr(url, "/%68") != NULL) || (strstr(url, "/.") != NULL)
+			|| (strstr(url, "/http:") != NULL) || (strstr(url, "/https:") != NULL)
+			|| (strstr(url, "/javascript:") != NULL) || (strstr(url, "/〱") != NULL)
+			|| (strstr(url, "/〵") != NULL) || (strstr(url, "/ゝ") != NULL)
+			|| (strstr(url, "/ー") != NULL) || (strstr(url, "/〱") != NULL)
+			|| (strstr(url, "/ｰ") != NULL) || (strstr(url, "/<") != NULL)
+			|| (strstr(url, "%01javascript:") != NULL) || (strstr(url, "/%5c") != NULL)) {
+		*err_str = apr_pstrdup(r->pool, "Invalid URL");
+		*err_desc = apr_psprintf(r->pool, "URL value \"%s\" contains illegal character(s)", url);
+		oidc_error(r, "%s: %s", *err_str, *err_desc);
+		return FALSE;
+	}
 	return TRUE;
 }
 

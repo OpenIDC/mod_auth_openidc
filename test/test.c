@@ -97,6 +97,12 @@ static int TST_RC;
 			return TST_ERR_MSG; \
 		}
 
+#define TST_ASSERT_BYTE(message, result, expected) \
+		if (result != expected) { \
+			sprintf(TST_ERR_MSG, TST_FORMAT("%s"), __FUNCTION__, message, result ? "TRUE" : "FALSE", expected ? "TRUE" : "FALSE"); \
+			return TST_ERR_MSG; \
+		}
+
 #define TST_RUN(test, pool) message = test(pool); test_nr_run++; if (message) return message;
 
 static char *_jwk_parse(apr_pool_t *pool, const char *s, oidc_jwk_t **jwk,
@@ -1307,6 +1313,8 @@ static char * test_current_url(request_rec *r) {
 	TST_ASSERT_STR("test_current_url (10)", url,
 			"http://[fd04:41b1:1170:28:16b0:446b:9fb7:7118]/private/?foo=bar&param1=value1");
 
+	apr_table_set(r->headers_in, "Host", "www.example.com");
+
 	return 0;
 }
 
@@ -1588,6 +1596,42 @@ static char* test_is_auth_capable_request(request_rec *r) {
 	return 0;
 }
 
+#define TST_OPEN_REDIRECT(url, result) \
+		err_str = NULL; \
+		err_desc = NULL; \
+		rc = oidc_validate_redirect_url(r, c, url, TRUE, &err_str, &err_desc); \
+		msg = apr_psprintf(r->pool, "test validate_redirect_url (%s): %s: %s", url, err_str, err_desc); \
+		TST_ASSERT_BYTE(msg, rc, result);
+
+static char* test_open_redirect(request_rec *r) {
+	apr_byte_t rc = FALSE;
+	char *err_str = NULL, *err_desc = NULL, *url = NULL, *msg = NULL;
+	char filename[512];
+	char line_buf[8096];
+	apr_file_t *f;
+	size_t line_s;
+	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	// https://github.com/payloadbox/open-redirect-payload-list
+	sprintf((char* )filename, "%s/%s", dir, "/test/open-redirect-payload-list.txt");
+
+	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+
+	TST_OPEN_REDIRECT("https://www.example.com/somewhere", TRUE);
+	TST_OPEN_REDIRECT("https://evil.example.com/somewhere", FALSE);
+
+	apr_file_open(&f, filename, APR_READ, APR_OS_DEFAULT, r->pool);
+	while (1) {
+		if (apr_file_gets(line_buf, sizeof(line_buf), f) != APR_SUCCESS)
+			break;
+		line_s = strlen(line_buf);
+		line_buf[--line_s] = '\0';
+		TST_OPEN_REDIRECT(line_buf, FALSE);
+	}
+	apr_file_close(f);
+
+	return 0;
+}
+
 static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	char *message;
 	TST_RUN(test_public_key_parse, pool);
@@ -1625,6 +1669,7 @@ static char * all_tests(apr_pool_t *pool, request_rec *r) {
 
 	TST_RUN(test_remote_user, r);
 	TST_RUN(test_is_auth_capable_request, r);
+	TST_RUN(test_open_redirect, r);
 
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	TST_RUN(test_authz_worker, r);
