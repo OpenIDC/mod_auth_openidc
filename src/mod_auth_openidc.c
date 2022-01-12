@@ -4139,7 +4139,7 @@ static int oidc_handle_unauthorized_user22(request_rec *r) {
 			return HTTP_UNAUTHORIZED;
 	}
 
-	return oidc_authenticate_user(r, c, NULL, oidc_get_current_url(r), NULL,
+	return oidc_authenticate_user(r, c, NULL, oidc_get_current_url(r, c->x_forwarded_headers), NULL,
 			NULL, NULL, oidc_dir_cfg_path_auth_request_params(r), oidc_dir_cfg_path_scope(r));
 }
 
@@ -4148,9 +4148,6 @@ static int oidc_handle_unauthorized_user22(request_rec *r) {
  * handles both OpenID Connect and OAuth 2.0 in the same way, based on the claims stored in the request context
  */
 int oidc_auth_checker(request_rec *r) {
-
-	oidc_cfg *c = ap_get_module_config(r->server->module_config,
-			&auth_openidc_module);
 
 	/* check for anonymous access and PASS mode */
 	if (r->user != NULL && strlen(r->user) == 0) {
