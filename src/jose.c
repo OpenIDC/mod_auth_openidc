@@ -53,6 +53,7 @@
 #include <openssl/err.h>
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
+#include <openssl/bn.h>
 
 #ifdef WIN32
 #define snprintf _snprintf

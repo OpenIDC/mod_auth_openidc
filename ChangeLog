@@ -1,3 +1,8 @@
+01/12/2022
+- add AM_PROG_CC_C_O to configure.ac (at least for RHEL 7.7); see #765; thanks @bitmagewb
+- include <openssl/bn.h> in jose.c to compile with OpenSSL 1.0.x
+- bump to 2.4.11rc2
+
 01/06/2022
 - improve detection of suspicious redirect URLs; add test list
 - bump to 2.4.11rc1

@@ -1,4 +1,4 @@
-AC_INIT([mod_auth_openidc],[2.4.11rc1],[hans.zandbelt@zmartzone.eu])
+AC_INIT([mod_auth_openidc],[2.4.11rc2],[hans.zandbelt@zmartzone.eu])
 
 AC_SUBST(NAMEVER, AC_PACKAGE_TARNAME()-AC_PACKAGE_VERSION())
 
@@ -8,6 +8,7 @@ AC_CONFIG_HEADERS([src/config.h])
 AC_CONFIG_MACRO_DIR([m4])
 
 AC_PROG_CC
+AM_PROG_CC_C_O
 AM_PROG_AR
 LT_INIT([dlopen])
 
