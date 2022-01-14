@@ -1,5 +1,7 @@
 01/14/2022
 - fix: avoid crash when using pcre2 for claims matching: don't pass NULL for errorstr
+- add administrative session revocation capability <redirect_uri>?revoke_session=<uuid>
+- bump to 2.4.11rc3
 
 01/12/2022
 - add AM_PROG_CC_C_O to configure.ac (at least for RHEL 7.7); see #765; thanks @bitmagewb

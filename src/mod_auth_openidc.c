@@ -1390,7 +1390,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 
 	/* set the user in the main request for further (incl. sub-request) processing */
 	r->user = apr_pstrdup(r->pool, session->remote_user);
-	oidc_debug(r, "set remote_user to \"%s\"", r->user);
+	oidc_debug(r, "set remote_user to \"%s\" in existing session \"%s\"", r->user, session->uuid);
 
 	/* get the header name in which the remote user name needs to be passed */
 	char *authn_header = oidc_cfg_dir_authn_header(r);
@@ -1623,7 +1623,7 @@ apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name,
  * set the unique user identifier that will be propagated in the Apache r->user and REMOTE_USER variables
  */
 static apr_byte_t oidc_set_request_user(request_rec *r, oidc_cfg *c,
-		oidc_provider_t *provider, oidc_jwt_t *jwt, const char *s_claims) {
+		oidc_session_t *session, oidc_provider_t *provider, oidc_jwt_t *jwt, const char *s_claims) {
 
 	char *issuer = provider->issuer;
 	char *claim_name = apr_pstrdup(r->pool, c->remote_user_claim.claim_name);
@@ -1666,14 +1666,10 @@ static apr_byte_t oidc_set_request_user(request_rec *r, oidc_cfg *c,
 
 	r->user = apr_pstrdup(r->pool, remote_user);
 
-	oidc_debug(r, "set remote_user to \"%s\" based on claim: \"%s\"%s", r->user,
-			c->remote_user_claim.claim_name,
+	oidc_debug(r, "set remote_user to \"%s\" in new session \"%s\", based on claim: \"%s\"%s", session->uuid, r->user, c->remote_user_claim.claim_name,
 			c->remote_user_claim.reg_exp ?
-					apr_psprintf(r->pool,
-							" and expression: \"%s\" and replace string: \"%s\"",
-							c->remote_user_claim.reg_exp,
-							c->remote_user_claim.replace) :
-							"");
+					apr_psprintf(r->pool, " and expression: \"%s\" and replace string: \"%s\"", c->remote_user_claim.reg_exp, c->remote_user_claim.replace) :
+					"");
 
 	return TRUE;
 }
@@ -1963,7 +1959,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	const char *prompt = oidc_proto_state_get_prompt(proto_state);
 
 	/* set the user */
-	if (oidc_set_request_user(r, c, provider, jwt, claims) == TRUE) {
+	if (oidc_set_request_user(r, c, session, provider, jwt, claims) == TRUE) {
 
 		/* session management: if the user in the new response is not equal to the old one, error out */
 		if ((prompt != NULL)
@@ -3462,6 +3458,25 @@ int oidc_handle_remove_at_cache(request_rec *r, oidc_cfg *c) {
 	return OK;
 }
 
+int oidc_handle_revoke_session(request_rec *r, oidc_cfg *c) {
+	apr_byte_t rc = FALSE;
+	char *session_id = NULL;
+
+	oidc_util_get_request_parameter(r,
+			OIDC_REDIRECT_URI_REQUEST_REVOKE_SESSION, &session_id);
+	if (session_id == NULL)
+		return HTTP_BAD_REQUEST;
+
+	if (c->session_type == OIDC_SESSION_TYPE_SERVER_CACHE)
+		rc = oidc_cache_set_session(r, session_id, NULL, 0);
+	else
+		oidc_warn(r, "cannot revoke session because server side caching is not in use");
+
+	r->user = "";
+
+	return (rc == TRUE) ? OK : HTTP_INTERNAL_SERVER_ERROR;
+}
+
 #define OIDC_INFO_PARAM_ACCESS_TOKEN_REFRESH_INTERVAL "access_token_refresh_interval"
 
 /*
@@ -3727,6 +3742,12 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 
 		/* handle request to invalidate access token cache */
 		return oidc_handle_remove_at_cache(r, c);
+
+	} else if (oidc_util_request_has_parameter(r,
+			OIDC_REDIRECT_URI_REQUEST_REVOKE_SESSION)) {
+
+		/* handle request to revoke a user session */
+		return oidc_handle_revoke_session(r, c);
 
 	} else if (oidc_util_request_has_parameter(r,
 			OIDC_REDIRECT_URI_REQUEST_INFO)) {
