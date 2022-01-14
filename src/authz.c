@@ -140,7 +140,7 @@ static apr_byte_t oidc_authz_match_expression(request_rec *r,
 
 		/* PCRE-compare the string value against the expression */
 		if (oidc_pcre_exec(r->pool, preg, json_string_value(val),
-				(int) strlen(json_string_value(val)), NULL) == 0) {
+				(int) strlen(json_string_value(val)), &error_str) == 0) {
 			oidc_pcre_free(preg);
 			return TRUE;
 		}
