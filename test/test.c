@@ -1605,7 +1605,7 @@ static char* test_is_auth_capable_request(request_rec *r) {
 
 static char* test_open_redirect(request_rec *r) {
 	apr_byte_t rc = FALSE;
-	char *err_str = NULL, *err_desc = NULL, *url = NULL, *msg = NULL;
+	char *err_str = NULL, *err_desc = NULL, *msg = NULL;
 	char filename[512];
 	char line_buf[8096];
 	apr_file_t *f;
