@@ -1666,7 +1666,7 @@ static apr_byte_t oidc_set_request_user(request_rec *r, oidc_cfg *c,
 
 	r->user = apr_pstrdup(r->pool, remote_user);
 
-	oidc_debug(r, "set remote_user to \"%s\" in new session \"%s\", based on claim: \"%s\"%s", session->uuid, r->user, c->remote_user_claim.claim_name,
+	oidc_debug(r, "set remote_user to \"%s\" based on claim: \"%s\"%s", r->user, c->remote_user_claim.claim_name,
 			c->remote_user_claim.reg_exp ?
 					apr_psprintf(r->pool, " and expression: \"%s\" and replace string: \"%s\"", c->remote_user_claim.reg_exp, c->remote_user_claim.replace) :
 					"");
@@ -1989,6 +1989,8 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 			oidc_jwt_destroy(jwt);
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
+
+		oidc_debug(r, "set remote_user to \"%s\" in new session \"%s\"", r->user, session->uuid);
 
 	} else {
 		oidc_error(r, "remote user could not be set");

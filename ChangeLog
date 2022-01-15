@@ -1,4 +1,5 @@
 01/15/2022
+- correct printout of session id and remote user tuple for new sessions
 - avoid debug printout of payload as header when the latter is stripped
 
 01/14/2022
