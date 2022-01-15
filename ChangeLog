@@ -1,3 +1,6 @@
+01/15/2022
+- avoid debug printout of payload as header when the latter is stripped
+
 01/14/2022
 - fix: avoid crash when using pcre2 for claims matching: don't pass NULL for errorstr
 - add administrative session revocation capability <redirect_uri>?revoke_session=<uuid>

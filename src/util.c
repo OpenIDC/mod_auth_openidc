@@ -186,23 +186,23 @@ end:
 apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret, const char *compact_encoded_jwt,
 		json_t **result, apr_byte_t stripped_header) {
 
-	oidc_debug(r, "enter: JWT header=%s", oidc_proto_peek_jwt_header(r, compact_encoded_jwt, NULL));
-
 	apr_byte_t rv = FALSE;
 	oidc_jose_error_t err;
 
 	oidc_jwk_t *jwk = NULL;
 	oidc_jwt_t *jwt = NULL;
 
+	if (stripped_header == TRUE)
+		compact_encoded_jwt =
+				apr_pstrcat(r->pool, OIDC_JWT_HDR_DIR_A256GCM, compact_encoded_jwt, NULL);
+
+	oidc_debug(r, "enter: JWT header=%s", oidc_proto_peek_jwt_header(r, compact_encoded_jwt, NULL));
+
 	if (oidc_util_create_symmetric_key(r, secret, 0, OIDC_JOSE_ALG_SHA256, FALSE, &jwk) == FALSE)
 		goto end;
 
 	apr_hash_t *keys = apr_hash_make(r->pool);
 	apr_hash_set(keys, "", APR_HASH_KEY_STRING, jwk);
-
-	if (stripped_header == TRUE)
-		compact_encoded_jwt =
-				apr_pstrcat(r->pool, OIDC_JWT_HDR_DIR_A256GCM, compact_encoded_jwt, NULL);
 
 	if (oidc_jwt_parse(r->pool, compact_encoded_jwt, &jwt, keys, &err) == FALSE) {
 		oidc_error(r, "parsing JWT failed: %s", oidc_jose_e2s(r->pool, err));
