@@ -492,6 +492,8 @@ static const char* oidc_set_passphrase_slot(cmd_parms *cmd, void *struct_ptr,
 			return apr_pstrcat(cmd->pool,
 					"Unable to get passphrase from exec of ", arg + 5, NULL);
 		}
+		if (strlen(result) == 0)
+			return apr_pstrdup(cmd->pool, "the output of the crypto passphrase generation command is empty (perhaps you need to pass it to bash -c \"<cmd>\"?)");
 		passphrase = result;
 	} else {
 		passphrase = arg;
