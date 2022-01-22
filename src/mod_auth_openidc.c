@@ -2250,14 +2250,13 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 		// TODO: should we use an explicit redirect to the discovery endpoint (maybe a "discovery" param to the redirect_uri)?
 		if (c->metadata_dir != NULL) {
 			/*
-			 * Will be handled in the content handler; avoid:
 			 * No authentication done but request not allowed without authentication
 			 * by setting r->user
 			 */
-			oidc_debug(r, "defer discovery to the content handler");
 			oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_DISCOVERY, "");
 			r->user = "";
-			return OK;
+			oidc_discovery(r, c);
+			return DONE;
 		}
 
 		/* we're not using multiple OP's configured in a metadata directory, pick the statically configured OP */
@@ -4073,18 +4072,18 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args,
 		const void *parsed_require_args,
 		oidc_authz_match_claim_fn_type match_claim_fn) {
 
-	oidc_debug(r, "enter: require_args=\"%s\"", require_args);
+	oidc_debug(r, "enter: (r->user=%s) require_args=\"%s\"", r->user, require_args);
 
 	/* check for anonymous access and PASS mode */
-	if (r->user != NULL && strlen(r->user) == 0) {
+	if ((r->user != NULL) && (strlen(r->user) == 0))
 		r->user = NULL;
-		if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
-			return AUTHZ_GRANTED;
-		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
-			return AUTHZ_GRANTED;
-		if (r->method_number == M_OPTIONS)
-			return AUTHZ_GRANTED;
-	}
+
+	if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
+		return AUTHZ_GRANTED;
+	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
+		return AUTHZ_GRANTED;
+	if (r->method_number == M_OPTIONS)
+		return AUTHZ_GRANTED;
 
 	/* get the set of claims from the request state (they've been set in the authentication part earlier */
 	json_t *claims = NULL, *id_token = NULL;
@@ -4173,15 +4172,15 @@ static int oidc_handle_unauthorized_user22(request_rec *r) {
 int oidc_auth_checker(request_rec *r) {
 
 	/* check for anonymous access and PASS mode */
-	if (r->user != NULL && strlen(r->user) == 0) {
+	if ((r->user != NULL) && (strlen(r->user) == 0))
 		r->user = NULL;
-		if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
-			return OK;
-		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
-			return OK;
-		if (r->method_number == M_OPTIONS)
-			return OK;
-	}
+
+	if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
+		return OK;
+	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
+		return OK;
+	if (r->method_number == M_OPTIONS)
+		return OK;
 
 	/* get the set of claims from the request state (they've been set in the authentication part earlier */
 	json_t *claims = NULL, *id_token = NULL;
