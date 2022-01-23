@@ -120,8 +120,8 @@ static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c,
 	return FALSE;
 }
 
-static apr_byte_t oidc_authz_match_expression(request_rec *r,
-		const char *spec_c, json_t *val) {
+static apr_byte_t oidc_authz_match_expression(request_rec *r, const char *spec_c, json_t *val) {
+	apr_byte_t rc = FALSE;
 	struct oidc_pcre *preg = NULL;
 	char *error_str = NULL;
 	int i = 0;
@@ -131,18 +131,21 @@ static apr_byte_t oidc_authz_match_expression(request_rec *r,
 
 	if (preg == NULL) {
 		oidc_error(r, "pattern [%s] is not a valid regular expression: %s", spec_c, error_str);
-		oidc_pcre_free(preg);
-		return FALSE;
+		goto end;
 	}
 
 	/* see if the claim is a literal string */
 	if (json_is_string(val)) {
 
+		error_str = NULL;
 		/* PCRE-compare the string value against the expression */
-		if (oidc_pcre_exec(r->pool, preg, json_string_value(val),
-				(int) strlen(json_string_value(val)), &error_str) == 0) {
-			oidc_pcre_free(preg);
-			return TRUE;
+		if (oidc_pcre_exec(r->pool, preg, json_string_value(val), (int) strlen(json_string_value(val)), &error_str)
+				> 0) {
+			oidc_debug(r, "value \"%s\" matched regex \"%s\"", json_string_value(val), spec_c);
+			rc = TRUE;
+			goto end;
+		} else if (error_str) {
+			oidc_debug(r, "pcre error (string): %s", error_str);
 		}
 
 		/* see if the claim value is an array */
@@ -154,19 +157,26 @@ static apr_byte_t oidc_authz_match_expression(request_rec *r,
 			json_t *elem = json_array_get(val, i);
 			if (json_is_string(elem)) {
 
+				error_str = NULL;
 				/* PCRE-compare the string value against the expression */
-				if (oidc_pcre_exec(r->pool, preg, json_string_value(elem),
-						(int) strlen(json_string_value(elem)), NULL) == 0) {
-					oidc_pcre_free(preg);
-					return TRUE;
+				if (oidc_pcre_exec(r->pool, preg, json_string_value(elem), (int) strlen(json_string_value(elem)), &error_str)
+						> 0) {
+					oidc_debug(r, "array value \"%s\" matched regex \"%s\"", json_string_value(elem), spec_c);
+					rc = TRUE;
+					goto end;
+				} else if (error_str) {
+					oidc_debug(r, "pcre error (array): %s", error_str);
 				}
 			}
 		}
 	}
 
-	oidc_pcre_free(preg);
+end:
 
-	return FALSE;
+	if (preg)
+		oidc_pcre_free(preg);
+
+	return rc;
 }
 
 /*

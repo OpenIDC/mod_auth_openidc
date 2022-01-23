@@ -1501,6 +1501,36 @@ static char * test_authz_worker(request_rec *r) {
 	rc = oidc_authz_worker24(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
 	TST_ASSERT("auth status (11: namespaced key)", rc == AUTHZ_GRANTED);
 
+	require_args = "Require claim nested.level1.level2~.an.";
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_worker24(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (12: nested expression)", rc == AUTHZ_GRANTED);
+
+	require_args = "Require claim nested.level1.level2~zan.";
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_worker24(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (13: nested expression)", rc == AUTHZ_DENIED);
+
+	require_args = "Require claim nested.nestedarray~.";
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_worker24(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (14: nested array expression)", rc == AUTHZ_GRANTED);
+
+	require_args = "Require claim nested.nestedarray~.b";
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_worker24(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (15: nested array expression)", rc == AUTHZ_DENIED);
+
+	require_args = "Require claim email~...$";
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_worker24(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (16: expression)", rc == AUTHZ_DENIED);
+
+	require_args = "Require claim sub~...$";
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_worker24(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (17: expression)", rc == AUTHZ_GRANTED);
+
 	json_decref(json);
 
 	return 0;

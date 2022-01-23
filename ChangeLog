@@ -1,3 +1,7 @@
+01/23/2022
+- fix regular expressions in Require statements
+- bump to 2.4.11rc6
+
 01/22/2022
 - no longer defer Discovery to the content handler to allow RequireAll and Require not directives
   see #770; closes #775; thanks @rajeevn1
