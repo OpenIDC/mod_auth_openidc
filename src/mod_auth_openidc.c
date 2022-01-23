@@ -2243,6 +2243,8 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 		const char *login_hint, const char *id_token_hint, const char *prompt,
 		const char *auth_request_params, const char *path_scope) {
 
+	int rc;
+
 	oidc_debug(r, "enter");
 
 	if (provider == NULL) {
@@ -2255,8 +2257,8 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 			 */
 			oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_DISCOVERY, "");
 			r->user = "";
-			oidc_discovery(r, c);
-			return DONE;
+			rc = oidc_discovery(r, c);
+			return (rc == OK) ? DONE : rc;
 		}
 
 		/* we're not using multiple OP's configured in a metadata directory, pick the statically configured OP */
