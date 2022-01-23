@@ -2310,7 +2310,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	 * create state that restores the context when the authorization response comes in
 	 * and cryptographically bind it to the browser
 	 */
-	int rc = oidc_authorization_request_set_cookie(r, c, state, proto_state);
+	rc = oidc_authorization_request_set_cookie(r, c, state, proto_state);
 	if (rc != OK) {
 		oidc_proto_state_destroy(proto_state);
 		return rc;
