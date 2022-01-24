@@ -1,3 +1,7 @@
+01/24/2022
+- fix race condition in file cache backend reading truncated files under load; see #777; thanks @dbakker
+- bump to 2.4.11rc7
+
 01/23/2022
 - fix regular expressions in Require statements
 - bump to 2.4.11rc6
