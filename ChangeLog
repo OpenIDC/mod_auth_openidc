@@ -1,7 +1,7 @@
 01/26/2022
 - improve handling session duration expiry when combined with OIDCUnAuthAction or Discovery
-  also clear r->user in oidc_session_clear for such cases; see #778
-- bump to 2.4.11rc8
+  also clear r->user in oidc_session_kill for such cases; see #778
+- release 2.4.11
 
 01/24/2022
 - fix race condition in file cache backend reading truncated files under load; see #777; thanks @dbakker
