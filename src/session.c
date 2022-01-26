@@ -99,6 +99,7 @@ static void oidc_session_uuid_new(request_rec *r, oidc_session_t *z) {
  * clear contents of a session
  */
 static void oidc_session_clear(request_rec *r, oidc_session_t *z) {
+	r->user = NULL;
 	z->uuid[0] = '\0';
 	z->remote_user = NULL;
 	// NB: don't clear sid
