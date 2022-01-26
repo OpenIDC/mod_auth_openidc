@@ -99,7 +99,6 @@ static void oidc_session_uuid_new(request_rec *r, oidc_session_t *z) {
  * clear contents of a session
  */
 static void oidc_session_clear(request_rec *r, oidc_session_t *z) {
-	r->user = NULL;
 	z->uuid[0] = '\0';
 	z->remote_user = NULL;
 	// NB: don't clear sid
@@ -382,6 +381,7 @@ apr_byte_t oidc_session_free(request_rec *r, oidc_session_t *z) {
  * terminate a session
  */
 apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z) {
+	r->user = NULL;
 	if (z->state) {
 		json_decref(z->state);
 		z->state = NULL;
