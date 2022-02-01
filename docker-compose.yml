@@ -1,0 +1,46 @@
+version: '3'
+
+services:
+
+  keycloak:
+    #image: jboss/keycloak:16.1.1
+    image: sleighzy/keycloak:16.1.0-arm64
+    environment:
+      KEYCLOAK_USER: admin
+      KEYCLOAK_PASSWORD: admin
+    expose:
+      - "8443"
+#    ports:
+#      - "8443:8443"
+    volumes:
+      - ./test/keycloak.sh:/opt/jboss/startup-scripts/keycloak.sh
+
+  echo:
+    image: solsson/http-echo
+    expose:
+       - "80"
+
+  apache:
+    build:
+      context: .
+      dockerfile: ./test/Dockerfile
+    expose:
+      - "443"
+#    ports:
+#      - "443:443"
+    volumes:
+      - ./test/openidc.conf:/etc/apache2/conf-available/openidc.conf
+    command: [ "bash", "-c", "a2enconf openidc && source /etc/apache2/envvars && valgrind --leak-check=full --show-possibly-lost=no --read-inline-info=yes --keep-debuginfo=yes --undef-value-errors=no /usr/sbin/apache2 -X" ]
+
+  jmeter:
+    image: justb4/jmeter
+    command: [ "-n", "-t", "/tmp/mod_auth_openidc.jmx"]
+    depends_on:
+      - keycloak
+      - echo
+      - apache
+    volumes:
+      - ./test/mod_auth_openidc.jmx:/tmp/mod_auth_openidc.jmx
+
+# docker exec -it `docker ps | grep apache | cut -d" " -f1` tail -f /var/log/apache2/error.log
+# docker stop `docker ps | grep apache | cut -d" " -f1`
