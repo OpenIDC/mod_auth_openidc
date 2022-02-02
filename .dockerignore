@@ -20,4 +20,6 @@
 /test/.gitignore
 /test/openidc.conf
 /test/keycloak.sh
+/test/jmeter.sh
+/test/valgrind.sh
 /test/mod_auth_openidc.jmx

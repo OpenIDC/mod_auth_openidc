@@ -29,18 +29,26 @@ services:
 #    ports:
 #      - "443:443"
     volumes:
+      - ./test/valgrind.sh:/tmp/valgrind.sh
       - ./test/openidc.conf:/etc/apache2/conf-available/openidc.conf
-    command: [ "bash", "-c", "a2enconf openidc && source /etc/apache2/envvars && valgrind --leak-check=full --show-possibly-lost=no --read-inline-info=yes --keep-debuginfo=yes --undef-value-errors=no /usr/sbin/apache2 -X" ]
+    command: ["/tmp/valgrind.sh"]
 
   jmeter:
-    image: justb4/jmeter
-    command: [ "-n", "-t", "/tmp/mod_auth_openidc.jmx"]
+    #image: justb4/jmeter
+    build: https://github.com/justb4/docker-jmeter.git
+    #command: [ "-n", "-t", "/tmp/mod_auth_openidc.jmx"]
+    entrypoint: ["/tmp/jmeter.sh"]
     depends_on:
       - keycloak
       - echo
       - apache
+    environment:
+      THREADS: 5
+      LOOP: 5
     volumes:
+      - ./test/jmeter.sh:/tmp/jmeter.sh
       - ./test/mod_auth_openidc.jmx:/tmp/mod_auth_openidc.jmx
+      - /var/run/docker.sock:/var/run/docker.sock
 
 # docker exec -it `docker ps | grep apache | cut -d" " -f1` tail -f /var/log/apache2/error.log
 # docker stop `docker ps | grep apache | cut -d" " -f1`
