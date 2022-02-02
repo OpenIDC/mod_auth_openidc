@@ -5,6 +5,8 @@ services:
   keycloak:
     #image: jboss/keycloak:16.1.1
     image: sleighzy/keycloak:16.1.0-arm64
+    #build:
+    #  context: https://github.com/keycloak/keycloak-containers.git#16.1.1:server
     environment:
       KEYCLOAK_USER: admin
       KEYCLOAK_PASSWORD: admin
@@ -36,7 +38,6 @@ services:
   jmeter:
     #image: justb4/jmeter
     build: https://github.com/justb4/docker-jmeter.git
-    #command: [ "-n", "-t", "/tmp/mod_auth_openidc.jmx"]
     entrypoint: ["/tmp/jmeter.sh"]
     depends_on:
       - keycloak
@@ -50,5 +51,6 @@ services:
       - ./test/mod_auth_openidc.jmx:/tmp/mod_auth_openidc.jmx
       - /var/run/docker.sock:/var/run/docker.sock
 
+# docker-compose up --build keycloak apache echo
 # docker exec -it `docker ps | grep apache | cut -d" " -f1` tail -f /var/log/apache2/error.log
 # docker stop `docker ps | grep apache | cut -d" " -f1`
