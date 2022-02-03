@@ -13,7 +13,6 @@
 /ar-lib
 /aclocal.m4
 /.gitignore
-/docker-compose.yml
 /test/Dockerfile
 /test/*.la
 /test/*.log
@@ -24,3 +23,5 @@
 /test/valgrind.sh
 /test/mod_auth_openidc.jmx
 /.github
+/test/docker-compose.yml
+/test/docker-compose-mac.yml

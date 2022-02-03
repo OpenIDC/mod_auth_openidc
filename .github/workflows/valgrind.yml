@@ -12,4 +12,4 @@ jobs:
       - name: Run
         run: |
           pip3 install docker-compose --upgrade
-          docker-compose up --abort-on-container-exit --build
+          docker-compose -f test/docker-compose.yml up --build --abort-on-container-exit

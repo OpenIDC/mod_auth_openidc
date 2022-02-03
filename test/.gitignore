@@ -6,7 +6,6 @@
 /*.slo
 /.libs/
 /test-cmd
-/*.json
 /*.jwt
 /*.jwk
 /jmx/
