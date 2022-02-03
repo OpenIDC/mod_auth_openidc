@@ -6,8 +6,8 @@ if [ -z "$1" ] ; then
 fi
 
 PATH="${PATH}:${JBOSS_HOME}/bin"
-		
-while ! curl -k -s https://localhost:8443/auth/ > /dev/null ; do sleep 1 ; done
+
+while ! curl -k -s https://localhost:8443/auth/ > /dev/null ; do sleep 2 ; done
 
 kcadm.sh config truststore --trustpass password /opt/jboss/keycloak/standalone/configuration/application.keystore
 kcadm.sh config credentials --server https://localhost:8443/auth --realm master --user "${KEYCLOAK_USER}" --password "${KEYCLOAK_PASSWORD}"
