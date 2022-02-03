@@ -591,9 +591,37 @@ const char* oidc_get_current_url_host(request_rec *r, const apr_byte_t x_forward
  */
 static const char* oidc_get_current_url_base(request_rec *r, const apr_byte_t x_forwarded_headers) {
 
-	const char *scheme_str = oidc_get_current_url_scheme(r, x_forwarded_headers);
-	const char *host_str = oidc_get_current_url_host(r, x_forwarded_headers);
-	const char *port_str = oidc_get_current_url_port(r, scheme_str, x_forwarded_headers);
+	const char *scheme_str = NULL;
+	const char *host_str = NULL;
+	const char *port_str = NULL;
+
+	if (oidc_util_hdr_in_x_forwarded_host_get(r)) {
+		if (!(x_forwarded_headers & OIDC_HDR_X_FORWARDED_HOST))
+			oidc_warn(r, "header %s received but OIDCXForwardedHeaders not configured for it", OIDC_HTTP_HDR_X_FORWARDED_HOST);
+	} else {
+		if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_HOST)
+			oidc_warn(r, "OIDCXForwardedHeaders configured for header %s but not found in request", OIDC_HTTP_HDR_X_FORWARDED_HOST);
+	}
+
+	if (oidc_util_hdr_in_x_forwarded_port_get(r)) {
+		if (!(x_forwarded_headers & OIDC_HDR_X_FORWARDED_PORT))
+			oidc_warn(r, "header %s received but OIDCXForwardedHeaders not configured for it", OIDC_HTTP_HDR_X_FORWARDED_PORT);
+	} else {
+		if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_PORT)
+			oidc_warn(r, "OIDCXForwardedHeaders configured for header %s but not found in request", OIDC_HTTP_HDR_X_FORWARDED_PORT);
+	}
+
+	if (oidc_util_hdr_in_x_forwarded_proto_get(r)) {
+		if (!(x_forwarded_headers & OIDC_HDR_X_FORWARDED_PROTO))
+			oidc_warn(r, "header %s received but OIDCXForwardedHeaders not configured for it", OIDC_HTTP_HDR_X_FORWARDED_PROTO);
+	} else {
+		if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_PROTO)
+			oidc_warn(r, "OIDCXForwardedHeaders configured for header %s but not found in request", OIDC_HTTP_HDR_X_FORWARDED_PROTO);
+	}
+
+	scheme_str = oidc_get_current_url_scheme(r, x_forwarded_headers);
+	host_str = oidc_get_current_url_host(r, x_forwarded_headers);
+	port_str = oidc_get_current_url_port(r, scheme_str, x_forwarded_headers);
 	port_str = port_str ? apr_psprintf(r->pool, ":%s", port_str) : "";
 
 	char *url = apr_pstrcat(r->pool, scheme_str, "://", host_str, port_str,
