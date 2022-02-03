@@ -763,6 +763,7 @@ int oidc_cfg_dir_logout_on_error_refresh(request_rec *r);
 char *oidc_cfg_dir_state_cookie_prefix(request_rec *r);
 int oidc_cfg_delete_oldest_state_cookies(oidc_cfg *cfg);
 void oidc_cfg_provider_init(oidc_provider_t *provider);
+void oidc_config_check_x_forwarded(request_rec *r, const apr_byte_t x_forwarded_headers);
 
 // oidc_util.c
 int oidc_strnenvcmp(const char *a, const char *b, int len);

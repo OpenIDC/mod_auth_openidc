@@ -1241,6 +1241,24 @@ static const char* oidc_set_x_forwarded_headers(cmd_parms *cmd, void *m, const c
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
+static void oidc_check_x_forwarded_hdr(request_rec *r, const apr_byte_t x_forwarded_headers,
+		const apr_byte_t hdr_type, const char *hdr_str,
+		const char* (hdr_func)(const request_rec *r)) {
+	if (hdr_func(r)) {
+		if (!(x_forwarded_headers & hdr_type))
+			oidc_warn(r, "header %s received but %s not configured for it", hdr_str, OIDCXForwardedHeaders);
+	} else {
+		if (x_forwarded_headers & hdr_type)
+			oidc_warn(r, "%s configured for header %s but not found in request", OIDCXForwardedHeaders, hdr_str);
+	}
+}
+
+void oidc_config_check_x_forwarded(request_rec *r, const apr_byte_t x_forwarded_headers) {
+	oidc_check_x_forwarded_hdr(r, x_forwarded_headers, OIDC_HDR_X_FORWARDED_HOST, OIDC_HTTP_HDR_X_FORWARDED_HOST, oidc_util_hdr_in_x_forwarded_host_get);
+	oidc_check_x_forwarded_hdr(r, x_forwarded_headers, OIDC_HDR_X_FORWARDED_PORT, OIDC_HTTP_HDR_X_FORWARDED_PORT, oidc_util_hdr_in_x_forwarded_port_get);
+	oidc_check_x_forwarded_hdr(r, x_forwarded_headers, OIDC_HDR_X_FORWARDED_PROTO, OIDC_HTTP_HDR_X_FORWARDED_PROTO, oidc_util_hdr_in_x_forwarded_proto_get);
+}
+
 static const char* oidc_set_redirect_urls_allowed(cmd_parms *cmd, void *m,
 		const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,

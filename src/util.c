@@ -595,29 +595,7 @@ static const char* oidc_get_current_url_base(request_rec *r, const apr_byte_t x_
 	const char *host_str = NULL;
 	const char *port_str = NULL;
 
-	if (oidc_util_hdr_in_x_forwarded_host_get(r)) {
-		if (!(x_forwarded_headers & OIDC_HDR_X_FORWARDED_HOST))
-			oidc_warn(r, "header %s received but OIDCXForwardedHeaders not configured for it", OIDC_HTTP_HDR_X_FORWARDED_HOST);
-	} else {
-		if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_HOST)
-			oidc_warn(r, "OIDCXForwardedHeaders configured for header %s but not found in request", OIDC_HTTP_HDR_X_FORWARDED_HOST);
-	}
-
-	if (oidc_util_hdr_in_x_forwarded_port_get(r)) {
-		if (!(x_forwarded_headers & OIDC_HDR_X_FORWARDED_PORT))
-			oidc_warn(r, "header %s received but OIDCXForwardedHeaders not configured for it", OIDC_HTTP_HDR_X_FORWARDED_PORT);
-	} else {
-		if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_PORT)
-			oidc_warn(r, "OIDCXForwardedHeaders configured for header %s but not found in request", OIDC_HTTP_HDR_X_FORWARDED_PORT);
-	}
-
-	if (oidc_util_hdr_in_x_forwarded_proto_get(r)) {
-		if (!(x_forwarded_headers & OIDC_HDR_X_FORWARDED_PROTO))
-			oidc_warn(r, "header %s received but OIDCXForwardedHeaders not configured for it", OIDC_HTTP_HDR_X_FORWARDED_PROTO);
-	} else {
-		if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_PROTO)
-			oidc_warn(r, "OIDCXForwardedHeaders configured for header %s but not found in request", OIDC_HTTP_HDR_X_FORWARDED_PROTO);
-	}
+	oidc_config_check_x_forwarded(r, x_forwarded_headers);
 
 	scheme_str = oidc_get_current_url_scheme(r, x_forwarded_headers);
 	host_str = oidc_get_current_url_host(r, x_forwarded_headers);
