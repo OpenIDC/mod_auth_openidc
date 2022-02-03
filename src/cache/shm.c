@@ -238,8 +238,8 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 					> (cfg->cache_shm_entry_size_max
 							- sizeof(oidc_cache_shm_entry_t)))) {
 		oidc_error(r,
-				"could not store value since value size is too large (%llu > %lu); consider increasing " OIDCCacheShmEntrySizeMax "",
-				(unsigned long long )strlen(value),
+				"could not store value since value size is too large (%lu > %lu); consider increasing " OIDCCacheShmEntrySizeMax "",
+				(unsigned long )strlen(value),
 				(unsigned long )(cfg->cache_shm_entry_size_max
 						- sizeof(oidc_cache_shm_entry_t)));
 		return FALSE;

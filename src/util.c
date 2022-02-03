@@ -2060,8 +2060,8 @@ void oidc_util_set_app_infos(request_rec *r, const json_t *j_attrs,
 
 			/* some logging about what we're going to do */
 			oidc_debug(r,
-					"parsing attribute array for key \"%s\" (#nr-of-elems: %llu)",
-					s_key, (unsigned long long )json_array_size(j_value));
+					"parsing attribute array for key \"%s\" (#nr-of-elems: %lu)",
+					s_key, (unsigned long)json_array_size(j_value));
 
 			/* string to hold the concatenated array string values */
 			char *s_concat = apr_pstrdup(r->pool, "");
