@@ -1,3 +1,6 @@
+02/03/2022
+- add Valgrind Github action
+
 01/26/2022
 - improve handling session duration expiry when combined with OIDCUnAuthAction or Discovery
   also clear r->user in oidc_session_kill for such cases; see #778

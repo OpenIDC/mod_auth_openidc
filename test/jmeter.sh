@@ -11,7 +11,12 @@ sleep 5
 cat /tmp/mod_auth_openidc.log | tail -n 10
 grep "summary =" /tmp/mod_auth_openidc.log | grep "Err:     0 (0.00%)" || exit 1
 
-echo -e "POST /containers/mod_auth_openidc-apache-1/kill?signal=TERM HTTP/1.0\r\n" | \
+#echo -e "GET /containers/json HTTP/1.0\r\n" | \
+#	/usr/bin/nc -U /var/run/docker.sock
+
+#NAME=mod_auth_openidc-apache-1
+NAME=mod_auth_openidc_apache_1
+echo -e "POST /containers/${NAME}/kill?signal=TERM HTTP/1.0\r\n" | \
 	/usr/bin/nc -U /var/run/docker.sock
 
 sleep infinity & PID=$!

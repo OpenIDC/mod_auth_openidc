@@ -3,8 +3,8 @@ version: '3'
 services:
 
   keycloak:
-    #image: jboss/keycloak:16.1.1
-    image: sleighzy/keycloak:16.1.0-arm64
+    image: jboss/keycloak:16.1.1
+    #image: sleighzy/keycloak:16.1.0-arm64
     #build:
     #  context: https://github.com/keycloak/keycloak-containers.git#16.1.1:server
     environment:
