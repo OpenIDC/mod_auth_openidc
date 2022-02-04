@@ -1,3 +1,6 @@
+02/04/2022
+- correct ap_hook_insert_filter function signature in stub.c, part 2; closes #784; thanks @stroeder
+
 02/03/2022
 - add Valgrind Github action
 - warn about mismatch between incoming X-Forwarded-* headers and OIDCXForwardedHeaders configuration
