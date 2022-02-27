@@ -1,3 +1,6 @@
+02/27/2022
+- document Apache 2.4 behavior on OIDCUnAuthzAction 403; see #795; thanks @candlerb
+
 02/04/2022
 - correct ap_hook_insert_filter function signature in stub.c, part 2; closes #784; thanks @stroeder
 

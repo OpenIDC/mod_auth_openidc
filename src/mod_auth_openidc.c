@@ -4020,7 +4020,6 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 
 	/* see if we've configured OIDCUnAutzAction for this path */
 	switch (oidc_dir_cfg_unautz_action(r)) {
-		// TODO: document that AuthzSendForbiddenOnFailure is required to return 403 FORBIDDEN
 		case OIDC_UNAUTZ_RETURN403:
 		case OIDC_UNAUTZ_RETURN401:
 			if (oidc_dir_cfg_unauthz_arg(r)) {
