@@ -2296,6 +2296,12 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	/* create the state between request/response */
 	oidc_proto_state_t *proto_state = oidc_proto_state_new();
 	oidc_proto_state_set_original_url(proto_state, original_url);
+
+	if (oidc_proto_state_get_original_url(proto_state) == NULL) {
+		oidc_error(r, "could not store the current URL in the state: most probably you need to ensure that it does not contain unencoded Unicode characters e.g. by forcing IE 11 to encode all URL characters");
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
 	oidc_proto_state_set_original_method(proto_state,
 			oidc_original_request_method(r, c, TRUE));
 	oidc_proto_state_set_issuer(proto_state, provider->issuer);

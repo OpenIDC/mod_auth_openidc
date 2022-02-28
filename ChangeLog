@@ -1,3 +1,7 @@
+02/28/2022
+- add a check to make sure URLs do not contain unencoded Unicode characters; see #796; thanks @cnico
+- bump to 2.4.11.1.rc1
+
 02/27/2022
 - document Apache 2.4 behavior on OIDCUnAuthzAction 403; see #795; thanks @candlerb
 
