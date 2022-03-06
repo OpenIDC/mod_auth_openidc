@@ -54,6 +54,9 @@
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
 #include <openssl/bn.h>
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+#include <openssl/core_names.h>
+#endif
 
 #ifdef WIN32
 #define snprintf _snprintf
@@ -1248,6 +1251,13 @@ apr_byte_t oidc_jwk_rsa_bio_to_jwk(apr_pool_t *pool, BIO *input,
 		}
 	}
 
+	BIGNUM *rsa_n = NULL, *rsa_e = NULL, *rsa_d = NULL;
+
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+	EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_RSA_N, &rsa_n);
+	EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_RSA_E, &rsa_e);
+	EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_RSA_D, &rsa_d);
+#else
 	/* get the RSA key from the public key struct */
 	RSA *rsa = (RSA *)EVP_PKEY_get1_RSA(pkey);
 	if (rsa == NULL) {
@@ -1255,9 +1265,8 @@ apr_byte_t oidc_jwk_rsa_bio_to_jwk(apr_pool_t *pool, BIO *input,
 		goto end;
 	}
 
-	const BIGNUM *rsa_n, *rsa_e, *rsa_d;
-#if OPENSSL_VERSION_NUMBER >= 0x10100005L && !defined (LIBRESSL_VERSION_NUMBER)
-	RSA_get0_key(rsa, &rsa_n, &rsa_e, &rsa_d);
+#if OPENSSL_VERSION_NUMBER >= 0x10100005L && !defined(LIBRESSL_VERSION_NUMBER)
+	RSA_get0_key(rsa, (const BIGNUM **)&rsa_n, (const BIGNUM **)&rsa_e, (const BIGNUM **)&rsa_d);
 #else
 	rsa_n = rsa->n;
 	rsa_e = rsa->e;
@@ -1265,6 +1274,7 @@ apr_byte_t oidc_jwk_rsa_bio_to_jwk(apr_pool_t *pool, BIO *input,
 #endif
 
 	RSA_free(rsa);
+#endif
 
 	/* convert the modulus bignum in to a key/len */
 	key_spec.nlen = BN_num_bytes(rsa_n);

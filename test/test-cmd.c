@@ -44,12 +44,11 @@
 
 #include <mod_auth_openidc.h>
 
-#include <openssl/rsa.h>
 #include <openssl/pem.h>
 
 int usage(int argc, char **argv, const char *msg) {
 	fprintf(stderr, "Usage: %s %s\n", argv[0],
-			msg ? msg : "[ sign | verify | decrypt | jwk2cert | key2jwk | enckey | hash_base64url | timestamp | uuid ] <options>");
+			msg ? msg : "[ sign | verify | decrypt | key2jwk | enckey | hash_base64url | timestamp | uuid ] <options>");
 	return -1;
 }
 
@@ -244,99 +243,6 @@ int decrypt(int argc, char **argv, apr_pool_t *pool) {
 
 	fprintf(stdout, "%s", plaintext);
 	oidc_jwk_destroy(jwk);
-
-	return 0;
-}
-
-
-int mkcert(RSA *rsa, X509 **x509p, EVP_PKEY **pkeyp, int serial, int days) {
-	X509 *x;
-	EVP_PKEY *pk;
-	X509_NAME *name = NULL;
-
-	if ((pkeyp == NULL) || (*pkeyp == NULL)) {
-		if ((pk = EVP_PKEY_new()) == NULL)
-			return -1;
-	} else
-		pk = *pkeyp;
-
-	if ((x509p == NULL) || (*x509p == NULL)) {
-		if ((x = X509_new()) == NULL)
-			return -1;
-	} else
-		x = *x509p;
-
-	if (!EVP_PKEY_assign_RSA(pk, rsa))
-		return -1;
-
-	X509_set_version(x, 2);
-	ASN1_INTEGER_set(X509_get_serialNumber(x), serial);
-	X509_gmtime_adj(X509_get_notBefore(x), 0);
-	X509_gmtime_adj(X509_get_notAfter(x), (long) 60 * 60 * 24 * days);
-	X509_set_pubkey(x, pk);
-
-	name = X509_get_subject_name(x);
-
-	X509_NAME_add_entry_by_txt(name, "C",
-			MBSTRING_ASC, (const unsigned char *) "NL", -1, -1, 0);
-	X509_NAME_add_entry_by_txt(name, "CN",
-			MBSTRING_ASC, (const unsigned char *) "Ping Identity", -1, -1, 0);
-
-	X509_set_issuer_name(x, name);
-
-	if (!X509_sign(x, pk, EVP_md5()))
-		return -1;
-
-	*x509p = x;
-	*pkeyp = pk;
-
-	return 0;
-}
-
-int jwk2cert(int argc, char **argv, apr_pool_t *pool) {
-
-	if (argc <= 2)
-		return usage(argc, argv, "jwk2cert <jwk-file>");
-
-	char *s_jwk = NULL;
-
-	if (file_read(pool, argv[2], &s_jwk) != 0)
-		return -1;
-
-	cjose_err cjose_err;
-
-	cjose_jwk_t *jwk = cjose_jwk_import(s_jwk, strlen(s_jwk), &cjose_err);
-	if (jwk == NULL) {
-		fprintf(stderr,
-				"could not import JWK: %s [file: %s, function: %s, line: %ld]\n",
-				cjose_err.message, cjose_err.file, cjose_err.function,
-				cjose_err.line);
-		return -1;
-	}
-
-	if (cjose_jwk_get_kty(jwk, &cjose_err) != CJOSE_JWK_KTY_RSA) {
-		fprintf(stderr, "wrong key type");
-		return -1;
-	}
-
-	RSA *rsa = cjose_jwk_get_keydata(jwk, &cjose_err);
-	//PEM_write_RSAPublicKey(stdout, rsa);
-	PEM_write_RSA_PUBKEY(stdout, rsa);
-
-	X509 *x509 = NULL;
-	EVP_PKEY *pkey = NULL;
-
-	if (mkcert(rsa, &x509, &pkey, 0, 365) != 0)
-		return -1;
-
-	//RSA_print_fp(stdout,pkey->pkey.rsa,0);
-	//X509_print_fp(stdout,x509);
-
-	//PEM_write_PrivateKey(stdout,pkey,NULL,NULL,0,NULL, NULL);
-	PEM_write_X509(stdout, x509);
-
-	X509_free(x509);
-	EVP_PKEY_free(pkey);
 
 	return 0;
 }
@@ -599,9 +505,6 @@ int main(int argc, char **argv, char **env) {
 
 	if (strcmp(argv[1], "decrypt") == 0)
 		return decrypt(argc, argv, pool);
-
-	if (strcmp(argv[1], "jwk2cert") == 0)
-		return jwk2cert(argc, argv, pool);
 
 	if (strcmp(argv[1], "key2jwk") == 0)
 		return key2jwk(argc, argv, pool);
