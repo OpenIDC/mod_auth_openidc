@@ -1,3 +1,6 @@
+03/14/2022
+- fix temporary cache file naming; see #777
+
 03/08/2022
 - fix a 2nd race condition in the file cache backend; see #777; thanks @dbakker and @blackwhiser1
 - bump to 2.4.11.1rc3

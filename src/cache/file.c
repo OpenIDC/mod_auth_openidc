@@ -379,10 +379,13 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section, const
 	apr_file_t *fd = NULL;
 	apr_status_t rc = APR_SUCCESS;
 	char s_err[128];
+	char *rnd = NULL;
+
+	oidc_proto_generate_nonce(r, &rnd, 12);
 
 	/* get the fully qualified path to the cache file based on the key name */
 	const char *target = oidc_cache_file_path(r, section, key);
-	const char *path = apr_psprintf(r->pool, "%s.tmp", target);
+	const char *path = apr_psprintf(r->pool, "%s.%s.tmp", target, rnd);
 
 	/* only on writes (not on reads) we clean the cache first (if not done recently) */
 	oidc_cache_file_clean(r);
