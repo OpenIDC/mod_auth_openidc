@@ -80,7 +80,7 @@ APLOG_USE_MODULE(auth_openidc);
 #endif
 
 #define oidc_log(r, level, fmt, ...) ap_log_rerror(APLOG_MARK, level, 0, r,"%s: %s", __FUNCTION__, apr_psprintf(r->pool, fmt, ##__VA_ARGS__))
-#define oidc_slog(s, level, fmt, ...) ap_log_error(APLOG_MARK, level, 0, s, "%s: %s", __FUNCTION__, apr_psprintf(s->process->pool, fmt, ##__VA_ARGS__))
+#define oidc_slog(s, level, fmt, ...) ap_log_error(APLOG_MARK, level, 0, s, "%s: %s", __FUNCTION__, apr_psprintf(s->process->pconf, fmt, ##__VA_ARGS__))
 //#define oidc_log(r, level, fmt, ...) fprintf(stderr, "# %s: %s\n", __FUNCTION__, apr_psprintf(r->pool, fmt, ##__VA_ARGS__))
 //#define oidc_slog(s, level, fmt, ...) fprintf(stderr, "## %s: %s\n", __FUNCTION__, apr_psprintf(s->process->pool, fmt, ##__VA_ARGS__))
 

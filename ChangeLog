@@ -1,3 +1,7 @@
+03/17/2022
+- use s->process->pconf pool instead of the s->process->pool in oidc_slog
+  closes #823; thanks @smanolache
+
 03/14/2022
 - fix temporary cache file naming; see #777
 
