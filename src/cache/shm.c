@@ -90,7 +90,7 @@ int oidc_cache_shm_post_config(server_rec *s) {
 
 	if (cfg->cache_cfg != NULL)
 		return APR_SUCCESS;
-	oidc_cache_cfg_shm_t *context = oidc_cache_shm_cfg_create(s->process->pool);
+	oidc_cache_cfg_shm_t *context = oidc_cache_shm_cfg_create(s->process->pconf);
 	cfg->cache_cfg = context;
 
 	/* create the shared memory segment */

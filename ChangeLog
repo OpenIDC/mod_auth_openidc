@@ -1,6 +1,7 @@
 03/17/2022
-- use s->process->pconf pool instead of the s->process->pool in oidc_slog
-  closes #823; thanks @smanolache
+- fix memory leaks over graceful restarts: use s->process->pconf pool instead of
+  the s->process->pool in oidc_slog and oidc_cache_shm_cfg_create
+  closes #823 and #824; thanks @smanolache
 
 03/14/2022
 - fix temporary cache file naming; see #777
