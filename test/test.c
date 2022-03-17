@@ -1731,6 +1731,7 @@ static request_rec * test_setup(apr_pool_t *pool) {
 	request->server->process = apr_pcalloc(request->pool,
 			sizeof(struct process_rec));
 	request->server->process->pool = request->pool;
+	request->server->process->pconf = request->pool;
 	request->connection = apr_pcalloc(request->pool, sizeof(struct conn_rec));
 	request->connection->bucket_alloc = apr_bucket_alloc_create(request->pool);
 	request->connection->local_addr = apr_pcalloc(request->pool,

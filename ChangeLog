@@ -1,3 +1,7 @@
+03/18/2022
+- fix make check; add @smanolache to the AUTHORS file
+- bump to 2.4.11.1rc4
+
 03/17/2022
 - fix memory leaks over graceful restarts: use s->process->pconf pool instead of
   the s->process->pool in oidc_slog and oidc_cache_shm_cfg_create
