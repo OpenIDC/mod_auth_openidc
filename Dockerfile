@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y pkg-config make gcc gdb lcov valgrind v
 RUN apt-get update && apt-get install -y autoconf automake libtool
 RUN apt-get update && apt-get install -y libssl-dev libjansson-dev libcurl4-openssl-dev check
 RUN apt-get update && apt-get install -y apache2 apache2-dev
-RUN apt-get update && apt-get install -y libpcre3-dev zlib1g-dev
+RUN apt-get update && apt-get install -y libpcre2-dev zlib1g-dev
 RUN apt-get update && apt-get install -y libapache2-mod-php libhiredis-dev
 
 RUN wget https://mod-auth-openidc.org/download/libcjose0_0.6.1.5-1~bionic+1_amd64.deb
@@ -27,7 +27,7 @@ WORKDIR /root/mod_auth_openidc
 RUN ./autogen.sh
 RUN ./configure CFLAGS="-g -O0" LDFLAGS="-lrt"
 #-I/usr/include/apache2
-RUN make clean && make test 
+RUN make clean && make check 
 RUN make install
 
 WORKDIR /root

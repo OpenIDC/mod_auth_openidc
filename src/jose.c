@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2021 ZmartZone Holding BV
+ * Copyright (C) 2017-2022 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -53,6 +53,7 @@
 #include <openssl/err.h>
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
+#include <openssl/bn.h>
 
 #ifdef WIN32
 #define snprintf _snprintf
@@ -880,6 +881,8 @@ apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk,
 		oidc_jwt_hdr_set(jwt, CJOSE_HDR_KID, jwt->header.kid);
 	if (jwt->header.enc)
 		oidc_jwt_hdr_set(jwt, CJOSE_HDR_ENC, jwt->header.enc);
+	if (jwt->header.x5t)
+		oidc_jwt_hdr_set(jwt, OIDC_JOSE_JWK_X5T_STR, jwt->header.x5t);
 
 	if (jwt->cjose_jws)
 		cjose_jws_release(jwt->cjose_jws);
@@ -1246,7 +1249,7 @@ apr_byte_t oidc_jwk_rsa_bio_to_jwk(apr_pool_t *pool, BIO *input,
 	}
 
 	/* get the RSA key from the public key struct */
-	RSA *rsa = EVP_PKEY_get1_RSA(pkey);
+	RSA *rsa = (RSA *)EVP_PKEY_get1_RSA(pkey);
 	if (rsa == NULL) {
 		oidc_jose_error_openssl(err, "EVP_PKEY_get1_RSA");
 		goto end;

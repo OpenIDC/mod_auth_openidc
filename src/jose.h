@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2021 ZmartZone Holding BV
+ * Copyright (C) 2017-2022 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -45,6 +45,9 @@
 
 #ifndef MOD_AUTH_OPENIDC_JOSE_H_
 #define MOD_AUTH_OPENIDC_JOSE_H_
+
+#define OPENSSL_API_COMPAT 0x10000000L
+#define OPENSSL_NO_DEPRECATED 1
 
 #include <stdint.h>
 #include "apr_pools.h"
@@ -204,6 +207,8 @@ typedef struct oidc_jwt_hdr_t {
 	char *kid;
 	/* JWT "enc" claim value; encryption algorithm */
 	char *enc;
+	/* JWT "x5t" thumbprint */
+	char *x5t;
 } oidc_jwt_hdr_t;
 
 /* parsed JWT payload */

@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2021 ZmartZone Holding BV
+ * Copyright (C) 2017-2022 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -168,6 +168,8 @@
 #define OIDC_DEFAULT_STATE_INPUT_HEADERS (OIDC_STATE_INPUT_HEADERS_USER_AGENT | OIDC_STATE_INPUT_HEADERS_X_FORWARDED_FOR)
 /* default prefix of the state cookie that binds the state in the authorization request/response to the browser */
 #define OIDC_DEFAULT_STATE_COOKIE_PREFIX "mod_auth_openidc_state_"
+/* default x-forwarded-* headers to be interpreted */
+#define OIDC_DEFAULT_X_FORWARDED_HEADERS 0
 
 #define OIDCProviderMetadataURL                "OIDCProviderMetadataURL"
 #define OIDCProviderIssuer                     "OIDCProviderIssuer"
@@ -276,6 +278,8 @@
 #define OIDCRedirectURLsAllowed                "OIDCRedirectURLsAllowed"
 #define OIDCStateCookiePrefix                  "OIDCStateCookiePrefix"
 #define OIDCCABundlePath                       "OIDCCABundlePath"
+#define OIDCLogoutXFrameOptions                "OIDCLogoutXFrameOptions"
+#define OIDCXForwardedHeaders                  "OIDCXForwardedHeaders"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -457,6 +461,8 @@ static const char* oidc_set_passphrase_slot(cmd_parms *cmd, void *struct_ptr,
 			return apr_pstrcat(cmd->pool,
 					"Unable to get passphrase from exec of ", arg + 5, NULL);
 		}
+		if (strlen(result) == 0)
+			return apr_pstrdup(cmd->pool, "the output of the crypto passphrase generation command is empty (perhaps you need to pass it to bash -c \"<cmd>\"?)");
 		passphrase = result;
 	} else {
 		passphrase = arg;
@@ -1194,6 +1200,13 @@ static const char* oidc_set_state_input_headers_as(cmd_parms *cmd, void *m,
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
+static const char* oidc_set_x_forwarded_headers(cmd_parms *cmd, void *m, const char *arg) {
+	oidc_cfg *cfg =
+			(oidc_cfg*) ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
+	const char *rv = oidc_parse_x_forwarded_headers(cmd->pool, arg, &cfg->x_forwarded_headers);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
 static const char* oidc_set_redirect_urls_allowed(cmd_parms *cmd, void *m,
 		const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
@@ -1396,10 +1409,10 @@ void* oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 			OIDC_DEFAULT_PROVIDER_ISSUER_SPECIFIC_REDIRECT_URI;
 
 	c->state_input_headers = OIDC_DEFAULT_STATE_INPUT_HEADERS;
-
 	c->redirect_urls_allowed = NULL;
-
 	c->ca_bundle_path = NULL;
+	c->logout_x_frame_options = NULL;
+	c->x_forwarded_headers = OIDC_DEFAULT_X_FORWARDED_HEADERS;
 
 	return c;
 }
@@ -1892,6 +1905,14 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->ca_bundle_path =
 			add->ca_bundle_path != NULL ?
 					add->ca_bundle_path : base->ca_bundle_path;
+
+	c->logout_x_frame_options =
+			add->logout_x_frame_options != NULL ?
+					add->logout_x_frame_options : base->logout_x_frame_options;
+
+	c->x_forwarded_headers =
+			add->x_forwarded_headers != OIDC_DEFAULT_X_FORWARDED_HEADERS ?
+					add->x_forwarded_headers : base->x_forwarded_headers;
 
 	return c;
 }
@@ -2698,7 +2719,7 @@ static apr_status_t oidc_filter_in_filter(ap_filter_t *f,
 
 				if (oidc_util_hdr_in_content_length_get(f->r) != NULL)
 					oidc_util_hdr_in_set(f->r, OIDC_HTTP_HDR_CONTENT_LENGTH,
-							apr_psprintf(f->r->pool, "%ld", ctx->nbytes));
+							apr_psprintf(f->r->pool, "%ld", (long)ctx->nbytes));
 
 				apr_pool_userdata_set(NULL, OIDC_USERDATA_POST_PARAMS_KEY,
 						NULL, f->r->pool);
@@ -3376,6 +3397,18 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_cfg, ca_bundle_path),
 				RSRC_CONF,
 				"Sets the path to the CA bundle to be used by cURL."),
+
+		AP_INIT_TAKE1(OIDCLogoutXFrameOptions,
+				ap_set_string_slot,
+				(void *) APR_OFFSETOF(oidc_cfg, logout_x_frame_options),
+				RSRC_CONF,
+				"Sets the value of the X-Frame-Options header on front channel logout."),
+
+		AP_INIT_ITERATE(OIDCXForwardedHeaders,
+				oidc_set_x_forwarded_headers,
+				(void *) APR_OFFSETOF(oidc_cfg, x_forwarded_headers),
+				RSRC_CONF,
+				"Sets the value of the interpreted X-Forwarded-* headers."),
 
 		{ NULL }
 };

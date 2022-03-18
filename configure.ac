@@ -1,4 +1,4 @@
-AC_INIT([mod_auth_openidc],[2.4.9.4],[hans.zandbelt@zmartzone.eu])
+AC_INIT([mod_auth_openidc],[2.4.11],[hans.zandbelt@zmartzone.eu])
 
 AC_SUBST(NAMEVER, AC_PACKAGE_TARNAME()-AC_PACKAGE_VERSION())
 
@@ -11,8 +11,10 @@ AC_ARG_WITH(
 	],)
 
 
-if test "x$APXS2" = "x"; then
-   # The user didn't specify the --with-apxs2-option.
+AC_PROG_CC
+AM_PROG_CC_C_O
+AM_PROG_AR
+LT_INIT([dlopen])
 
    # Search for apxs2 in the specified directories
    AC_PATH_PROG(APXS2, apxs2,,
@@ -75,7 +77,41 @@ AC_SUBST(CJOSE_CFLAGS)
 AC_SUBST(CJOSE_LIBS)
 
 # PCRE
-PKG_CHECK_MODULES(PCRE, libpcre)
+PKG_CHECK_MODULES([PCRE2], libpcre2-8, [
+  PCRE_CFLAGS="$PCRE2_CFLAGS"
+  PCRE_LIBS="$PCRE2_LIBS"
+  AC_DEFINE([HAVE_LIBPCRE2], [1], [Define if libpcre2 is available.])
+  enable_pcre2=yes
+], [
+  AC_CHECK_HEADER(pcre2.h, [
+    AC_CHECK_LIB(pcre2-8, pcre2_compile_8, [
+      PCRE_LIBS="-lpcre2-8"
+      AC_DEFINE([HAVE_LIBPCRE2], 1, [Define if libpcre2 is available.])
+      enable_pcre2=yes
+    ])
+  ])
+])
+
+AS_IF([test "X$enable_pcre2" != "Xyes"],[
+  PKG_CHECK_MODULES([PCRE], libpcre, [
+    CFLAGS="$PCRE_CFLAGS $CFLAGS"
+    AC_CHECK_HEADER(pcre.h, [
+      LIBS="$PCRE_LIBS $LIBS"
+      AC_DEFINE([HAVE_LIBPCRE], [1], [Define if libpcre is available.])
+      enable_pcre=yes
+    ])
+  ], [
+    AC_CHECK_HEADER(pcre.h, [
+      AC_CHECK_LIB(pcre, pcre_compile, [
+        PCRE_LIBS="-lpcre"
+        AC_DEFINE([HAVE_LIBPCRE], 1, [Define if libpcre is available.])
+      ])
+    ])
+  ])
+])
+
+AS_IF([test "X$enable_pcre2" = Xyes], [PCRE_INFO="yes, via libpcre2"], [test "X$enable_pcre" = Xyes], [PCRE_INFO="yes, via libpcre"], [PCRE_INFO=no])
+
 AC_SUBST(PCRE_CFLAGS)
 AC_SUBST(PCRE_LIBS)
 
