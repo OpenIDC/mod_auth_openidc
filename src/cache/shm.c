@@ -97,7 +97,7 @@ int oidc_cache_shm_post_config(server_rec *s) {
 	apr_status_t rv = apr_shm_create(&context->shm,
 			(apr_size_t) cfg->cache_shm_entry_size_max
 			* cfg->cache_shm_size_max,
-			NULL, s->process->pool);
+			NULL, s->process->pconf);
 	if (rv != APR_SUCCESS) {
 		oidc_serror(s, "apr_shm_create failed to create shared memory segment");
 		return HTTP_INTERNAL_SERVER_ERROR;
