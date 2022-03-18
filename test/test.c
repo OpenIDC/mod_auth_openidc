@@ -42,7 +42,7 @@
  *
  **************************************************************************/
 
-#include "mod_auth_openidc.h"
+#include "../src/mod_auth_openidc.h"
 
 #include <openssl/evp.h>
 #include <openssl/hmac.h>

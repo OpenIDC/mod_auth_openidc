@@ -37,7 +37,6 @@
 #include <string.h>
 #include <apr_strings.h>
 #include "pcre_subst.h"
-#include "config.h"
 
 #ifdef HAVE_LIBPCRE2
 #define PCRE2_CODE_UNIT_WIDTH 8
