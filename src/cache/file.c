@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2021 ZmartZone Holding BV
+ * Copyright (C) 2017-2022 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -337,8 +337,10 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 			}
 
 			/* read the header with cache metadata info */
+			apr_file_lock(fd, APR_FLOCK_EXCLUSIVE);
 			rc = oidc_cache_file_read(r, path, fd, &info,
 					sizeof(oidc_cache_file_info_t));
+			apr_file_unlock(fd);
 			apr_file_close(fd);
 
 			if (rc == APR_SUCCESS) {
@@ -403,7 +405,7 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section,
 
 	/* try to open the cache file for writing, creating it if it does not exist */
 	if ((rc = apr_file_open(&fd, path,
-			(APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE),
+			(APR_FOPEN_WRITE | APR_FOPEN_CREATE),
 			APR_OS_DEFAULT, r->pool)) != APR_SUCCESS) {
 		oidc_error(r, "cache file \"%s\" could not be opened (%s)", path,
 				apr_strerror(rc, s_err, sizeof(s_err)));
@@ -413,6 +415,7 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section,
 	/* lock the file and move the write pointer to the start of it */
 	apr_file_lock(fd, APR_FLOCK_EXCLUSIVE);
 	apr_off_t begin = 0;
+	apr_file_trunc(fd, begin);
 	apr_file_seek(fd, APR_SET, &begin);
 
 	/* construct the metadata for this cache entry in the header info */

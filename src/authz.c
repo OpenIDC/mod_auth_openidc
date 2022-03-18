@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2021 ZmartZone Holding BV
+ * Copyright (C) 2017-2022 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -48,8 +48,7 @@
 #include <http_protocol.h>
 
 #include "mod_auth_openidc.h"
-
-#include <pcre.h>
+#include "pcre_subst.h"
 
 #ifdef USE_LIBJQ
 #include "jq.h"
@@ -125,30 +124,32 @@ static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c,
 	return FALSE;
 }
 
-static apr_byte_t oidc_authz_match_expression(request_rec *r,
-		const char *spec_c, json_t *val) {
-	const char *errorptr;
-	int erroffset;
-	pcre *preg;
+static apr_byte_t oidc_authz_match_expression(request_rec *r, const char *spec_c, json_t *val) {
+	apr_byte_t rc = FALSE;
+	struct oidc_pcre *preg = NULL;
+	char *error_str = NULL;
 	int i = 0;
 
 	/* setup the regex; spec_c points to the NULL-terminated value pattern */
-	preg = pcre_compile(spec_c, 0, &errorptr, &erroffset, NULL);
+	preg = oidc_pcre_compile(r->pool, spec_c, &error_str);
 
 	if (preg == NULL) {
-		oidc_error(r, "pattern [%s] is not a valid regular expression", spec_c);
-		pcre_free(preg);
-		return FALSE;
+		oidc_error(r, "pattern [%s] is not a valid regular expression: %s", spec_c, error_str);
+		goto end;
 	}
 
 	/* see if the claim is a literal string */
 	if (json_is_string(val)) {
 
+		error_str = NULL;
 		/* PCRE-compare the string value against the expression */
-		if (pcre_exec(preg, NULL, json_string_value(val),
-				(int) strlen(json_string_value(val)), 0, 0, NULL, 0) == 0) {
-			pcre_free(preg);
-			return TRUE;
+		if (oidc_pcre_exec(r->pool, preg, json_string_value(val), (int) strlen(json_string_value(val)), &error_str)
+				> 0) {
+			oidc_debug(r, "value \"%s\" matched regex \"%s\"", json_string_value(val), spec_c);
+			rc = TRUE;
+			goto end;
+		} else if (error_str) {
+			oidc_debug(r, "pcre error (string): %s", error_str);
 		}
 
 		/* see if the claim value is an array */
@@ -160,20 +161,26 @@ static apr_byte_t oidc_authz_match_expression(request_rec *r,
 			json_t *elem = json_array_get(val, i);
 			if (json_is_string(elem)) {
 
+				error_str = NULL;
 				/* PCRE-compare the string value against the expression */
-				if (pcre_exec(preg, NULL, json_string_value(elem),
-						(int) strlen(json_string_value(elem)), 0, 0,
-						NULL, 0) == 0) {
-					pcre_free(preg);
-					return TRUE;
+				if (oidc_pcre_exec(r->pool, preg, json_string_value(elem), (int) strlen(json_string_value(elem)), &error_str)
+						> 0) {
+					oidc_debug(r, "array value \"%s\" matched regex \"%s\"", json_string_value(elem), spec_c);
+					rc = TRUE;
+					goto end;
+				} else if (error_str) {
+					oidc_debug(r, "pcre error (array): %s", error_str);
 				}
 			}
 		}
 	}
 
-	pcre_free(preg);
+end:
 
-	return FALSE;
+	if (preg)
+		oidc_pcre_free(preg);
+
+	return rc;
 }
 
 /*

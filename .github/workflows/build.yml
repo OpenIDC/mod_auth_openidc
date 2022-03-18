@@ -1,0 +1,24 @@
+name: Build
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Dependencies
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y apache2-dev libcjose-dev libssl-dev check pkg-config
+        sudo apt-get install -y libjansson-dev libcurl4-openssl-dev libhiredis-dev libpcre2-dev
+    - name: Configure
+      run: |
+        ./autogen.sh
+        ./configure
+    - name: Make
+      run: make
+    - name: Test
+      run: make check
+    - name: Distcheck
+      run: make distcheck DESTDIR=/tmp/mod_auth_openidc

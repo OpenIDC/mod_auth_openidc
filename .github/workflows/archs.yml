@@ -1,0 +1,54 @@
+name: Archs
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    name: Build on ${{ matrix.arch }}
+
+    strategy:
+      matrix:
+        include:
+          - arch: armv7
+            distro: ubuntu20.04
+          - arch: aarch64
+            distro: ubuntu20.04
+          - arch: ppc64le
+            distro: ubuntu20.04
+          - arch: s390x
+            distro: ubuntu20.04
+  
+    steps:
+    - uses: actions/checkout@v2.4.0
+    - uses: uraimo/run-on-arch-action@v2.1.1
+      name: Build
+      id: build
+      with:
+        arch: ${{ matrix.arch }}
+        distro: ${{ matrix.distro }}
+        install: |
+          apt-get update -y
+          apt-get install -y apache2-dev libcjose-dev libssl-dev check pkg-config
+          apt-get install -y libjansson-dev libcurl4-openssl-dev libhiredis-dev libpcre2-dev
+        setup: |
+          mkdir -p "${PWD}/logs"
+        dockerRunArgs: |
+          --volume "${PWD}/logs:/logs"
+        env: |
+          logfilename: test-suite-${{ matrix.distro }}-${{ matrix.arch }}.log
+        run: |
+          ./autogen.sh
+          ./configure
+          make check
+          cp test-suite.log "/logs/${logfilename}"
+          echo "Copied test-suite.log to /logs/${logfilename}"
+          
+    - name: Results
+      run: |
+        cat ${PWD}/logs/*.log

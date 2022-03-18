@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2021 ZmartZone Holding BV
+ * Copyright (C) 2017-2022 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -1872,13 +1872,11 @@ static apr_byte_t oidc_proto_endpoint_access_token_bearer(request_rec *r,
 
 #define OIDC_PROTO_JWT_ASSERTION_ASYMMETRIC_ALG CJOSE_HDR_ALG_RS256
 
-static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r,
-		oidc_cfg *cfg, const char *client_id,
-		const apr_array_header_t *client_signing_keys, const char *audience,
+static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r, oidc_cfg *cfg,
+		const char *client_id, const apr_array_header_t *client_signing_keys, const char *audience,
 		apr_table_t *params) {
 	oidc_jwt_t *jwt = NULL;
 	oidc_jwk_t *jwk = NULL;
-	const apr_array_header_t *signing_keys = NULL;
 
 	oidc_debug(r, "enter");
 
@@ -1886,17 +1884,19 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r,
 		return FALSE;
 
 	if ((client_signing_keys != NULL) && (client_signing_keys->nelts > 0)) {
-		signing_keys = client_signing_keys;
+		jwk = ((oidc_jwk_t**) client_signing_keys->elts)[0];
+		jwt->header.x5t = apr_pstrdup(r->pool, jwk->x5t);
 	} else if ((cfg->private_keys != NULL) && (cfg->private_keys->nelts > 0)) {
-		signing_keys = cfg->private_keys;
+		jwk = ((oidc_jwk_t**) cfg->private_keys->elts)[0];
+		if (cfg->public_keys->nelts > 0)
+			// populate x5t; at least required for Azure AD
+			jwt->header.x5t =
+					apr_pstrdup(r->pool, ((oidc_jwk_t**) (cfg->public_keys->elts))[0]->x5t);
 	} else {
-		oidc_error(r,
-				"no private keys have been configured to use for private_key_jwt client authentication (" OIDCPrivateKeyFiles ")");
+		oidc_error(r, "no private keys have been configured to use for private_key_jwt client authentication (" OIDCPrivateKeyFiles ")");
 		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
-
-	jwk = ((oidc_jwk_t**) signing_keys->elts)[0];
 
 	jwt->header.kid = apr_pstrdup(r->pool, jwk->kid);
 	jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_RS256);
