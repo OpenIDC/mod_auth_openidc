@@ -4089,15 +4089,15 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args,
 	oidc_debug(r, "enter: (r->user=%s) require_args=\"%s\"", r->user, require_args);
 
 	/* check for anonymous access and PASS mode */
-	if ((r->user != NULL) && (strlen(r->user) == 0))
+	if ((r->user != NULL) && (strlen(r->user) == 0)) {
 		r->user = NULL;
-
-	if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
-		return AUTHZ_GRANTED;
-	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
-		return AUTHZ_GRANTED;
-	if (r->method_number == M_OPTIONS)
-		return AUTHZ_GRANTED;
+		if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
+			return AUTHZ_GRANTED;
+		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
+			return AUTHZ_GRANTED;
+		if (r->method_number == M_OPTIONS)
+			return AUTHZ_GRANTED;
+	}
 
 	/* get the set of claims from the request state (they've been set in the authentication part earlier */
 	json_t *claims = NULL, *id_token = NULL;
@@ -4186,15 +4186,15 @@ static int oidc_handle_unauthorized_user22(request_rec *r) {
 int oidc_auth_checker(request_rec *r) {
 
 	/* check for anonymous access and PASS mode */
-	if ((r->user != NULL) && (strlen(r->user) == 0))
+	if ((r->user != NULL) && (strlen(r->user) == 0)) {
 		r->user = NULL;
-
-	if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
-		return OK;
-	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
-		return OK;
-	if (r->method_number == M_OPTIONS)
-		return OK;
+		if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
+			return OK;
+		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
+			return OK;
+		if (r->method_number == M_OPTIONS)
+			return OK;
+	}
 
 	/* get the set of claims from the request state (they've been set in the authentication part earlier */
 	json_t *claims = NULL, *id_token = NULL;
