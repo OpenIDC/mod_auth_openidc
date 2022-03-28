@@ -1,3 +1,6 @@
+03/28/2022
+- correct registration_endpoint_json naming in auth_openidc.conf documentation 
+
 03/21/2022
 - fix OIDCUnAuthAction pass, see #790
 - bump to 2.4.11.1rc5
