@@ -1,3 +1,6 @@
+03/29/2022
+- release 2.4.11.1
+
 03/28/2022
 - correct registration_endpoint_json naming in auth_openidc.conf documentation 
 
