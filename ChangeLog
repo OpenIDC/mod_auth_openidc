@@ -1,3 +1,9 @@
+04/06/2022
+- don't strip the header from encrypted JWTs as future versions of cjose may use compact
+  encoding for JWEs; this slightly increases state cookie size, by-value session cookies
+  and encrypted cache contents again at the benefit of forward cjose compatibility
+- bump to 2.4.11.2rc0
+
 03/29/2022
 - release 2.4.11.1
 

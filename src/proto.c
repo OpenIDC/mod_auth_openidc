@@ -965,13 +965,13 @@ void oidc_proto_state_destroy(oidc_proto_state_t *proto_state) {
 oidc_proto_state_t* oidc_proto_state_from_cookie(request_rec *r, oidc_cfg *c,
 		const char *cookieValue) {
 	json_t *result = NULL;
-	oidc_util_jwt_verify(r, c->crypto_passphrase, cookieValue, &result, TRUE);
+	oidc_util_jwt_verify(r, c->crypto_passphrase, cookieValue, &result, FALSE);
 	return result;
 }
 
 char* oidc_proto_state_to_cookie(request_rec *r, oidc_cfg *c, oidc_proto_state_t *proto_state) {
 	char *cookieValue = NULL;
-	oidc_util_jwt_create(r, c->crypto_passphrase, proto_state, &cookieValue, TRUE);
+	oidc_util_jwt_create(r, c->crypto_passphrase, proto_state, &cookieValue, FALSE);
 	return cookieValue;
 }
 
