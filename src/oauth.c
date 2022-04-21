@@ -617,6 +617,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 							apr_hash_count(c->oauth.verify_shared_keys) : 0,
 							c->oauth.verify_jwks_uri);
 
+	// TODO: we're re-using the OIDC provider JWKs refresh interval here...
 	oidc_jwks_uri_t jwks_uri = { c->oauth.verify_jwks_uri,
 			c->provider.jwks_refresh_interval, c->oauth.ssl_validate_server };
 	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri,
