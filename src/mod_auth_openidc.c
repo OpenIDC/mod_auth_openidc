@@ -2832,6 +2832,10 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 				"<p>Logged Out</p>", OK);
 	}
 
+	oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL,
+			"no-cache, no-store");
+	oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_PRAGMA, "no-cache");
+
 	/* see if we don't need to go somewhere special after killing the session locally */
 	if (url == NULL)
 		return oidc_util_html_send(r, "Logged Out", NULL, NULL,

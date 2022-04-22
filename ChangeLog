@@ -1,3 +1,7 @@
+04/22/2022
+- add no Cache-Control headers to logout request response; see #846; thanks @blackwhiser1
+- bump to 2.4.11.2rc1
+
 04/06/2022
 - don't strip the header from encrypted JWTs as future versions of cjose may use compact
   encoding for JWEs; this slightly increases state cookie size, by-value session cookies
