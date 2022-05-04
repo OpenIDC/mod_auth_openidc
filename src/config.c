@@ -296,6 +296,10 @@ typedef struct oidc_dir_cfg {
 	int pass_refresh_token;
 	char *path_auth_request_params;
 	char *path_scope;
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+	ap_expr_info_t *path_auth_request_expr;
+	ap_expr_info_t *path_scope_expr;
+#endif
 	int refresh_access_token_before_expiry;
 	int logout_on_error_refresh;
 	char *state_cookie_prefix;
@@ -1024,6 +1028,39 @@ static const char* oidc_set_unauth_action(cmd_parms *cmd, void *m,
 					expr_err, NULL);
 		}
 	}
+#endif
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+static const char* oidc_set_path_expr(cmd_parms *cmd, const char *arg, ap_expr_info_t **expression) {
+	const char *rv = NULL;
+	const char *expr_err = NULL;
+	*expression = ap_expr_parse_cmd(cmd, arg, AP_EXPR_FLAG_STRING_RESULT, &expr_err, NULL);
+	if (expr_err != NULL) {
+		oidc_swarn(cmd->server, "cannot parse expression: %s", expr_err);
+		//rv = apr_pstrcat(cmd->temp_pool, "cannot parse expression: ", expr_err, NULL);
+	}
+	return rv;
+}
+#endif
+
+static const char* oidc_set_path_auth_request_params(cmd_parms *cmd, void *m, const char *arg) {
+	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg*) m;
+	const char *rv = NULL;
+	dir_cfg->path_auth_request_params = apr_pstrdup(cmd->pool, arg);
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+	rv = oidc_set_path_expr(cmd, arg, &dir_cfg->path_auth_request_expr);
+#endif
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
+static const char* oidc_set_path_scope(cmd_parms *cmd, void *m, const char *arg) {
+	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg*) m;
+	const char *rv = NULL;
+	dir_cfg->path_auth_request_params = apr_pstrdup(cmd->pool, arg);
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+	rv = oidc_set_path_expr(cmd, arg, &dir_cfg->path_scope_expr);
 #endif
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
@@ -2012,6 +2049,10 @@ void* oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->pass_refresh_token = OIDC_CONFIG_POS_INT_UNSET;
 	c->path_auth_request_params = NULL;
 	c->path_scope = NULL;
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+	c->path_auth_request_expr = NULL;
+	c->path_scope_expr = NULL;
+#endif
 	c->refresh_access_token_before_expiry = OIDC_CONFIG_POS_INT_UNSET;
 	c->logout_on_error_refresh = OIDC_CONFIG_POS_INT_UNSET;
 	c->state_cookie_prefix = OIDC_CONFIG_STRING_UNSET;
@@ -2185,16 +2226,36 @@ char *oidc_dir_cfg_unauthz_arg(request_rec *r) {
 	return dir_cfg->unauthz_arg;
 }
 
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+static char *oidc_dir_cfg_path_expr(request_rec *r, const ap_expr_info_t *expression ) {
+	const char *expr_result = NULL, *expr_err = NULL;
+	if (expression == NULL)
+		return NULL;
+	expr_result = ap_expr_str_exec(r, expression, &expr_err);
+	if (expr_err) {
+		oidc_error(r, "executing expression failed: %s", expr_err);
+		expr_result = NULL;
+	}
+	return expr_result ? apr_pstrdup(r->pool, expr_result) : NULL;
+}
+#endif
+
 char* oidc_dir_cfg_path_auth_request_params(request_rec *r) {
-	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
-			&auth_openidc_module);
-	return dir_cfg->path_auth_request_params;
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	char *rv = NULL;
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+	rv = oidc_dir_cfg_path_expr(r, dir_cfg->path_auth_request_expr);
+#endif
+	return rv ? rv : dir_cfg->path_auth_request_params;
 }
 
 char* oidc_dir_cfg_path_scope(request_rec *r) {
-	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
-			&auth_openidc_module);
-	return dir_cfg->path_scope;
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	char *rv = NULL;
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+	rv = oidc_dir_cfg_path_expr(r, dir_cfg->path_scope_expr);
+#endif
+	return rv ? rv : dir_cfg->path_scope;
 }
 
 /*
@@ -2269,6 +2330,14 @@ void* oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					base->path_auth_request_params;
 	c->path_scope =
 			add->path_scope != NULL ? add->path_scope : base->path_scope;
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+	c->path_auth_request_expr =
+			add->path_auth_request_expr != NULL ?
+					add->path_auth_request_expr : base->path_auth_request_expr;
+	c->path_scope_expr =
+			add->path_scope_expr != NULL ?
+					add->path_scope_expr : base->path_scope_expr;
+#endif
 
 	c->refresh_access_token_before_expiry =
 			add->refresh_access_token_before_expiry != OIDC_CONFIG_POS_INT_UNSET ?
@@ -2993,7 +3062,7 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF,
 				"Define the OpenID Connect scope that is requested from the OP."),
 		AP_INIT_TAKE1(OIDCPathScope,
-				ap_set_string_slot,
+				oidc_set_path_scope,
 				(void*)APR_OFFSETOF(oidc_dir_cfg, path_scope),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Define the OpenID Connect scope that is requested from all providers for a specific path/context."),
@@ -3018,7 +3087,7 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF,
 				"Extra parameters that need to be sent in the Authorization Request (must be query-encoded like \"display=popup&prompt=consent\"."),
 		AP_INIT_TAKE1(OIDCPathAuthRequestParams,
-				ap_set_string_slot,
+				oidc_set_path_auth_request_params,
 				(void*)APR_OFFSETOF(oidc_dir_cfg, path_auth_request_params),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Extra parameters that need to be sent in the Authorization Request (must be query-encoded like \"display=popup&prompt=consent\"."),

@@ -1,3 +1,7 @@
+05/04/2022
+- add support for Apache expressions in OIDCPathAuthRequestParams and OIDCPathScope; see #594
+- bump to 2.4.11.2rc2
+
 04/22/2022
 - add no Cache-Control headers to logout request response; see #846; thanks @blackwhiser1
 - bump to 2.4.11.2rc1
