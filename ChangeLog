@@ -1,3 +1,7 @@
+05/06/2022
+- support Forwarded header in addition to X-Forwarded-*; see #853; thanks @studersi
+- bump to 2.4.11.3rc0
+
 05/05/2022
 - release 2.4.11.2
 

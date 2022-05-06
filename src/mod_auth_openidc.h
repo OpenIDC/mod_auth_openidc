@@ -253,6 +253,7 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_HDR_X_FORWARDED_HOST   1
 #define OIDC_HDR_X_FORWARDED_PORT   2
 #define OIDC_HDR_X_FORWARDED_PROTO  4
+#define OIDC_HDR_FORWARDED          8
 
 typedef apr_byte_t (*oidc_proto_pkce_state)(request_rec *r, char **state);
 typedef apr_byte_t (*oidc_proto_pkce_challenge)(request_rec *r, const char *state, char **code_challenge);
@@ -843,6 +844,7 @@ char *oidc_util_http_form_encoded_data(request_rec *r, const apr_table_t *params
 #define OIDC_HTTP_HDR_X_FORWARDED_PROTO                 "X-Forwarded-Proto"
 #define OIDC_HTTP_HDR_X_FORWARDED_PORT                  "X-Forwarded-Port"
 #define OIDC_HTTP_HDR_X_FORWARDED_HOST                  "X-Forwarded-Host"
+#define OIDC_HTTP_HDR_FORWARDED                         "Forwarded"
 #define OIDC_HTTP_HDR_HOST                              "Host"
 #define OIDC_HTTP_HDR_LOCATION                          "Location"
 #define OIDC_HTTP_HDR_CACHE_CONTROL                     "Cache-Control"
@@ -872,6 +874,7 @@ const char *oidc_util_hdr_in_authorization_get(const request_rec *r);
 const char *oidc_util_hdr_in_x_forwarded_proto_get(const request_rec *r);
 const char *oidc_util_hdr_in_x_forwarded_port_get(const request_rec *r);
 const char *oidc_util_hdr_in_x_forwarded_host_get(const request_rec *r);
+const char* oidc_util_hdr_in_forwarded_get(const request_rec *r);
 const char *oidc_util_hdr_in_host_get(const request_rec *r);
 void oidc_util_hdr_out_location_set(const request_rec *r, const char *value);
 const char *oidc_util_hdr_out_location_get(const request_rec *r);

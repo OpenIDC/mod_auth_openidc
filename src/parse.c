@@ -1362,6 +1362,7 @@ const char* oidc_parse_x_forwarded_headers(apr_pool_t *pool, const char *arg,
 			OIDC_HTTP_HDR_X_FORWARDED_HOST,
 			OIDC_HTTP_HDR_X_FORWARDED_PORT,
 			OIDC_HTTP_HDR_X_FORWARDED_PROTO,
+			OIDC_HTTP_HDR_FORWARDED,
 			NULL };
 	const char *rv = oidc_valid_string_option(pool, arg, options);
 	if (rv != NULL)
@@ -1373,6 +1374,8 @@ const char* oidc_parse_x_forwarded_headers(apr_pool_t *pool, const char *arg,
 		*x_forwarded_headers |= OIDC_HDR_X_FORWARDED_PORT;
 	} else if (apr_strnatcmp(arg, OIDC_HTTP_HDR_X_FORWARDED_PROTO) == 0) {
 		*x_forwarded_headers |= OIDC_HDR_X_FORWARDED_PROTO;
+	} else if (apr_strnatcmp(arg, OIDC_HTTP_HDR_FORWARDED) == 0) {
+		*x_forwarded_headers |= OIDC_HDR_FORWARDED;
 	}
 
 	return NULL;

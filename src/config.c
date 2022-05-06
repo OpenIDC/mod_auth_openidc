@@ -1294,6 +1294,7 @@ void oidc_config_check_x_forwarded(request_rec *r, const apr_byte_t x_forwarded_
 	oidc_check_x_forwarded_hdr(r, x_forwarded_headers, OIDC_HDR_X_FORWARDED_HOST, OIDC_HTTP_HDR_X_FORWARDED_HOST, oidc_util_hdr_in_x_forwarded_host_get);
 	oidc_check_x_forwarded_hdr(r, x_forwarded_headers, OIDC_HDR_X_FORWARDED_PORT, OIDC_HTTP_HDR_X_FORWARDED_PORT, oidc_util_hdr_in_x_forwarded_port_get);
 	oidc_check_x_forwarded_hdr(r, x_forwarded_headers, OIDC_HDR_X_FORWARDED_PROTO, OIDC_HTTP_HDR_X_FORWARDED_PROTO, oidc_util_hdr_in_x_forwarded_proto_get);
+	oidc_check_x_forwarded_hdr(r, x_forwarded_headers, OIDC_HDR_FORWARDED, OIDC_HTTP_HDR_FORWARDED, oidc_util_hdr_in_forwarded_get);
 }
 
 static const char* oidc_set_redirect_urls_allowed(cmd_parms *cmd, void *m,
