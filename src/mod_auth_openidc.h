@@ -482,6 +482,8 @@ apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name, const ch
 #define OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE  "remove_at_cache"
 #define OIDC_REDIRECT_URI_REQUEST_REVOKE_SESSION   "revoke_session"
 #define OIDC_REDIRECT_URI_REQUEST_REQUEST_URI      "request_uri"
+#define OIDC_REDIRECT_URI_REQUEST_SID              "sid"
+#define OIDC_REDIRECT_URI_REQUEST_ISS              "iss"
 
 // oidc_oauth
 int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c, const char *access_token);
