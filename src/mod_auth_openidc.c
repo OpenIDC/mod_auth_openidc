@@ -2455,6 +2455,7 @@ apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg *c,
 	apr_hash_index_t *hi = NULL;
 	size_t i = 0;
 	char *url = apr_pstrndup(r->pool, redirect_to_url, OIDC_MAX_URL_LENGTH);
+	char *url_ipv6_aware = NULL;
 
 	// replace potentially harmful backslashes with forward slashes
 	for (i = 0; i < strlen(url); i++)
@@ -2487,8 +2488,15 @@ apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg *c,
 		}
 	} else if ((uri.hostname != NULL) && (restrict_to_host == TRUE)) {
 		c_host = oidc_get_current_url_host(r, c->x_forwarded_headers);
-		if ((strstr(c_host, uri.hostname) == NULL)
-				|| (strstr(uri.hostname, c_host) == NULL)) {
+
+		if (strchr(uri.hostname, ':')) { /* v6 literal */
+			url_ipv6_aware = apr_pstrcat(r->pool, "[", uri.hostname, "]", NULL);
+		} else {
+			url_ipv6_aware = uri.hostname;
+		}
+
+		if ((strstr(c_host, url_ipv6_aware) == NULL)
+			|| (strstr(url_ipv6_aware, c_host) == NULL)) {
 			*err_str = apr_pstrdup(r->pool, "Invalid Request");
 			*err_desc =
 					apr_psprintf(r->pool,
