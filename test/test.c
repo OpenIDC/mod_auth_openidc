@@ -1313,6 +1313,36 @@ static char * test_current_url(request_rec *r) {
 	TST_ASSERT_STR("test_current_url (10)", url,
 			"http://[fd04:41b1:1170:28:16b0:446b:9fb7:7118]/private/?foo=bar&param1=value1");
 
+	apr_table_unset(r->headers_in, "X-Forwarded-Proto");
+	apr_table_unset(r->headers_in, "Host");
+
+	apr_table_set(r->headers_in, "Forwarded", "host=www.outer.com");
+	url = oidc_get_current_url(r, OIDC_HDR_FORWARDED);
+	TST_ASSERT_STR("test_current_url (11)", url,
+			"https://www.outer.com/private/?foo=bar&param1=value1");
+
+	apr_table_set(r->headers_in, "Forwarded", "proto=http");
+	url = oidc_get_current_url(r, OIDC_HDR_FORWARDED);
+	TST_ASSERT_STR("test_current_url (12)", url,
+			"http://www.example.com/private/?foo=bar&param1=value1");
+
+	apr_table_set(r->headers_in, "Forwarded", "host=www.outer.com:8443");
+	url = oidc_get_current_url(r, OIDC_HDR_FORWARDED);
+	TST_ASSERT_STR("test_current_url (13)", url,
+			"https://www.outer.com:8443/private/?foo=bar&param1=value1");
+
+	apr_table_set(r->headers_in, "Forwarded", "proto=http; host=www.outer.com:8080");
+	url = oidc_get_current_url(r, OIDC_HDR_FORWARDED);
+	TST_ASSERT_STR("test_current_url (14)", url,
+			"http://www.outer.com:8080/private/?foo=bar&param1=value1");
+
+	apr_table_set(r->headers_in, "Forwarded", "host=www.outer.com:8080; proto=http");
+	url = oidc_get_current_url(r, OIDC_HDR_FORWARDED);
+	TST_ASSERT_STR("test_current_url (15)", url,
+			"http://www.outer.com:8080/private/?foo=bar&param1=value1");
+
+	apr_table_unset(r->headers_in, "Forwarded");
+
 	apr_table_set(r->headers_in, "Host", "www.example.com");
 
 	return 0;
@@ -1731,6 +1761,7 @@ static request_rec * test_setup(apr_pool_t *pool) {
 	request->server->process = apr_pcalloc(request->pool,
 			sizeof(struct process_rec));
 	request->server->process->pool = request->pool;
+	request->server->process->pconf = request->pool;
 	request->connection = apr_pcalloc(request->pool, sizeof(struct conn_rec));
 	request->connection->bucket_alloc = apr_bucket_alloc_create(request->pool);
 	request->connection->local_addr = apr_pcalloc(request->pool,

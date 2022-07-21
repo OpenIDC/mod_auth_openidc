@@ -1,0 +1,45 @@
+version: '3'
+
+services:
+
+  keycloak:
+    image: jboss/keycloak:16.1.1
+    environment:
+      KEYCLOAK_USER: admin
+      KEYCLOAK_PASSWORD: admin
+    expose:
+      - "8443"
+    volumes:
+      - ./keycloak.sh:/opt/jboss/startup-scripts/keycloak.sh
+
+  echo:
+    image: solsson/http-echo
+    expose:
+       - "80"
+
+  apache:
+    build:
+      context: ..
+      dockerfile: test/Dockerfile
+    expose:
+      - "443"
+    volumes:
+      - ./valgrind.sh:/tmp/valgrind.sh
+      - ./openidc.conf:/etc/apache2/conf-available/openidc.conf
+    command: ["/tmp/valgrind.sh"]
+
+  jmeter:
+    #image: justb4/jmeter
+    build: https://github.com/justb4/docker-jmeter.git
+    entrypoint: ["/tmp/jmeter.sh"]
+    depends_on:
+      - keycloak
+      - echo
+      - apache
+    environment:
+      THREADS: 5
+      LOOP: 5
+    volumes:
+      - ./jmeter.sh:/tmp/jmeter.sh
+      - ./mod_auth_openidc.jmx:/tmp/mod_auth_openidc.jmx
+      - /var/run/docker.sock:/var/run/docker.sock

@@ -151,7 +151,7 @@ AP_DECLARE(int) ap_hook_fixups(request_rec *r) {
 	return 0;
 }
 
-AP_DECLARE(void) ap_hook_insert_filter(request_rec *r) {
+AP_DECLARE(void) ap_hook_insert_filter(struct request_rec *r) {
 }
 
 AP_DECLARE(void) ap_hook_post_config(

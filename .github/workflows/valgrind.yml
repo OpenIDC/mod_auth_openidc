@@ -1,0 +1,15 @@
+name: Valgrind
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  valgrind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run
+        run: |
+          pip3 install docker-compose --upgrade
+          docker-compose -f test/docker-compose.yml up --build --abort-on-container-exit

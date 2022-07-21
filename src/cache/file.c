@@ -382,14 +382,18 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 /*
  * write a value for the specified key to the cache
  */
-static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section,
-		const char *key, const char *value, apr_time_t expiry) {
+static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section, const char *key,
+		const char *value, apr_time_t expiry) {
 	apr_file_t *fd = NULL;
 	apr_status_t rc = APR_SUCCESS;
 	char s_err[128];
+	char *rnd = NULL;
+
+	oidc_proto_generate_nonce(r, &rnd, 12);
 
 	/* get the fully qualified path to the cache file based on the key name */
-	const char *path = oidc_cache_file_path(r, section, key);
+	const char *target = oidc_cache_file_path(r, section, key);
+	const char *path = apr_psprintf(r->pool, "%s.%s.tmp", target, rnd);
 
 	/* only on writes (not on reads) we clean the cache first (if not done recently) */
 	oidc_cache_file_clean(r);
@@ -397,18 +401,15 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section,
 	/* just remove cache file if value is NULL */
 	if (value == NULL) {
 		if ((rc = apr_file_remove(path, r->pool)) != APR_SUCCESS) {
-			oidc_error(r, "could not delete cache file \"%s\" (%s)", path,
-					apr_strerror(rc, s_err, sizeof(s_err)));
+			oidc_error(r, "could not delete cache file \"%s\" (%s)", path, apr_strerror(rc, s_err, sizeof(s_err)));
 		}
 		return TRUE;
 	}
 
 	/* try to open the cache file for writing, creating it if it does not exist */
-	if ((rc = apr_file_open(&fd, path,
-			(APR_FOPEN_WRITE | APR_FOPEN_CREATE),
-			APR_OS_DEFAULT, r->pool)) != APR_SUCCESS) {
-		oidc_error(r, "cache file \"%s\" could not be opened (%s)", path,
-				apr_strerror(rc, s_err, sizeof(s_err)));
+	if ((rc = apr_file_open(&fd, path, (APR_FOPEN_WRITE | APR_FOPEN_CREATE),
+							APR_OS_DEFAULT, r->pool)) != APR_SUCCESS) {
+		oidc_error(r, "cache file \"%s\" could not be opened (%s)", path, apr_strerror(rc, s_err, sizeof(s_err)));
 		return FALSE;
 	}
 
@@ -424,22 +425,24 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section,
 	info.len = strlen(value) + 1;
 
 	/* write the header */
-	if ((rc = oidc_cache_file_write(r, path, fd, &info,
-			sizeof(oidc_cache_file_info_t))) != APR_SUCCESS)
+	if ((rc = oidc_cache_file_write(r, path, fd, &info, sizeof(oidc_cache_file_info_t)))
+			!= APR_SUCCESS)
 		return FALSE;
 
 	/* next write the value */
-	rc = oidc_cache_file_write(r, path, fd, (void *) value, info.len);
+	rc = oidc_cache_file_write(r, path, fd, (void*) value, info.len);
 
 	/* unlock and close the written file */
 	apr_file_unlock(fd);
 	apr_file_close(fd);
 
+	if (rename(path, target) != 0) {
+		oidc_error(r, "cache file: %s could not be renamed to: %s", path, target);
+		return FALSE;
+	}
+
 	/* log our success/failure */
-	oidc_debug(r,
-			"%s entry for key \"%s\" in file of %" APR_SIZE_T_FMT " bytes",
-			(rc == APR_SUCCESS) ? "successfully stored" : "could not store",
-					key, info.len);
+	oidc_debug(r, "%s entry for key \"%s\" in file of %" APR_SIZE_T_FMT " bytes", (rc == APR_SUCCESS) ? "successfully stored" : "could not store", key, info.len);
 
 	return (rc == APR_SUCCESS);
 }

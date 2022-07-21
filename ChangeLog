@@ -1,3 +1,79 @@
+05/20/2022
+- fix handling of IPv6 based logout URLs; thanks @@codemaker219
+- bump to 2.4.11.3rc1
+
+05/16/2022
+- Use optionally provided sid and iss request parameters during front channel
+  logout; see #855; thanks @rpluem-vf
+
+05/06/2022
+- support Forwarded header in addition to X-Forwarded-*; see #853; thanks @studersi
+- bump to 2.4.11.3rc0
+
+05/05/2022
+- release 2.4.11.2
+
+05/04/2022
+- add support for Apache expressions in OIDCPathAuthRequestParams and OIDCPathScope; see #594
+- bump to 2.4.11.2rc2
+
+04/22/2022
+- add no Cache-Control headers to logout request response; see #846; thanks @blackwhiser1
+- bump to 2.4.11.2rc1
+
+04/06/2022
+- don't strip the header from encrypted JWTs as future versions of cjose may use compact
+  encoding for JWEs; this slightly increases state cookie size, by-value session cookies
+  and encrypted cache contents again at the benefit of forward cjose compatibility
+- bump to 2.4.11.2rc0
+
+03/29/2022
+- release 2.4.11.1
+
+03/28/2022
+- correct registration_endpoint_json naming in auth_openidc.conf documentation 
+
+03/21/2022
+- fix OIDCUnAuthAction pass, see #790
+- bump to 2.4.11.1rc5
+
+03/18/2022
+- fix make check; add @smanolache to the AUTHORS file
+- bump to 2.4.11.1rc4
+
+03/17/2022
+- fix memory leaks over graceful restarts: use s->process->pconf pool instead of
+  the s->process->pool in oidc_slog and oidc_cache_shm_cfg_create
+  closes #823 and #824; thanks @smanolache
+
+03/14/2022
+- fix temporary cache file naming; see #777
+
+03/08/2022
+- fix a 2nd race condition in the file cache backend; see #777; thanks @dbakker and @blackwhiser1
+- bump to 2.4.11.1rc3
+
+03/04/2022
+- add support for OpenSSL 3.0
+- remove test-cmd jwk2cert command
+- bump to 2.4.11.1rc2
+
+02/28/2022
+- add a check to make sure URLs do not contain unencoded Unicode characters; see #796; thanks @cnico
+- bump to 2.4.11.1rc1
+
+02/27/2022
+- document Apache 2.4 behavior on OIDCUnAuthzAction 403; see #795; thanks @candlerb
+
+02/04/2022
+- correct ap_hook_insert_filter function signature in stub.c, part 2; closes #784; thanks @stroeder
+
+02/03/2022
+- add Valgrind Github action
+- warn about mismatch between incoming X-Forwarded-* headers and OIDCXForwardedHeaders configuration
+- avoid using %llu print formatter and switch to %lu for unsigned long so it works cross platform
+- bump to 2.4.11.1rc0
+
 01/26/2022
 - improve handling session duration expiry when combined with OIDCUnAuthAction or Discovery
   also clear r->user in oidc_session_kill for such cases; see #778

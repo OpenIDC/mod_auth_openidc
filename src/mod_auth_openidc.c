@@ -1782,13 +1782,18 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
 	char *sid = NULL;
 	oidc_debug(r, "provider->backchannel_logout_supported=%d",
 			provider->backchannel_logout_supported);
-	if (provider->backchannel_logout_supported > 0) {
-		oidc_jose_get_string(r->pool, id_token_jwt->payload.value.json,
-				OIDC_CLAIM_SID, FALSE, &sid, NULL);
-		if (sid == NULL)
-			sid = id_token_jwt->payload.sub;
-		session->sid = oidc_make_sid_iss_unique(r, sid, provider->issuer);
-	}
+	/*
+	 * Storing the sid in the session makes sense even if no backchannel logout
+	 * is supported as the front channel logout as specified in
+	 * "OpenID Connect Front-Channel Logout 1.0 - draft 05" at
+	 * https://openid.net/specs/openid-connect-frontchannel-1_0.html
+	 * might deliver a sid during front channel logout.
+	 */
+	oidc_jose_get_string(r->pool, id_token_jwt->payload.value.json,
+			OIDC_CLAIM_SID, FALSE, &sid, NULL);
+	if (sid == NULL)
+		sid = id_token_jwt->payload.sub;
+	session->sid = oidc_make_sid_iss_unique(r, sid, provider->issuer);
 
 	/* store the session */
 	return oidc_session_save(r, session, TRUE);
@@ -2302,6 +2307,12 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	/* create the state between request/response */
 	oidc_proto_state_t *proto_state = oidc_proto_state_new();
 	oidc_proto_state_set_original_url(proto_state, original_url);
+
+	if (oidc_proto_state_get_original_url(proto_state) == NULL) {
+		oidc_error(r, "could not store the current URL in the state: most probably you need to ensure that it does not contain unencoded Unicode characters e.g. by forcing IE 11 to encode all URL characters");
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
 	oidc_proto_state_set_original_method(proto_state,
 			oidc_original_request_method(r, c, TRUE));
 	oidc_proto_state_set_issuer(proto_state, provider->issuer);
@@ -2450,6 +2461,7 @@ apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg *c,
 	apr_hash_index_t *hi = NULL;
 	size_t i = 0;
 	char *url = apr_pstrndup(r->pool, redirect_to_url, OIDC_MAX_URL_LENGTH);
+	char *url_ipv6_aware = NULL;
 
 	// replace potentially harmful backslashes with forward slashes
 	for (i = 0; i < strlen(url); i++)
@@ -2482,8 +2494,15 @@ apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg *c,
 		}
 	} else if ((uri.hostname != NULL) && (restrict_to_host == TRUE)) {
 		c_host = oidc_get_current_url_host(r, c->x_forwarded_headers);
-		if ((strstr(c_host, uri.hostname) == NULL)
-				|| (strstr(uri.hostname, c_host) == NULL)) {
+
+		if (strchr(uri.hostname, ':')) { /* v6 literal */
+			url_ipv6_aware = apr_pstrcat(r->pool, "[", uri.hostname, "]", NULL);
+		} else {
+			url_ipv6_aware = uri.hostname;
+		}
+
+		if ((strstr(c_host, url_ipv6_aware) == NULL)
+			|| (strstr(url_ipv6_aware, c_host) == NULL)) {
 			*err_str = apr_pstrdup(r->pool, "Invalid Request");
 			*err_desc =
 					apr_psprintf(r->pool,
@@ -2787,17 +2806,62 @@ out:
 	oidc_debug(r, "leave");
 }
 
+static apr_byte_t oidc_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg *cfg,
+									  oidc_provider_t *provider) {
+
+	char *uuid = NULL;
+	oidc_session_t session;
+
+	oidc_debug(r, "enter (sid=%s,iss=%s)", sid, provider->issuer);
+
+	// TODO: when dealing with sub instead of a true sid, we'll be killing all sessions for
+	//	   a specific user, across hosts that share the *same* cache backend
+	//	   if those hosts haven't been configured with a different OIDCCryptoPassphrase
+	//	   - perhaps that's even acceptable since non-memory caching is encrypted by default
+	//	     and memory-based caching doesn't suffer from this (different shm segments)?
+	//	   - it will result in 400 errors returned from backchannel logout calls to the other hosts...
+
+	sid = oidc_make_sid_iss_unique(r, sid, provider->issuer);
+	oidc_cache_get_sid(r, sid, &uuid);
+	if (uuid == NULL) {
+		// this may happen when we are the caller
+		oidc_warn(r,
+				"could not (or no longer) find a session based on sid/sub provided in logout token / parameter: %s",
+				sid);
+		r->user = "";
+		return TRUE;
+	}
+
+	// revoke tokens if we can get a handle on those
+	if (cfg->session_type != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
+		if (oidc_session_load_cache_by_uuid(r, cfg, uuid, &session) != FALSE)
+			if (oidc_session_extract(r, &session) != FALSE)
+				oidc_revoke_tokens(r, cfg, &session);
+	}
+
+	// clear the session cache
+	oidc_cache_set_sid(r, sid, NULL, 0);
+	oidc_cache_set_session(r, uuid, NULL, 0);
+
+	r->user = "";
+	return FALSE;
+}
+
 /*
  * handle a local logout
  */
 static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 		oidc_session_t *session, const char *url) {
 
+	int no_session_provided = 1;
+
 	oidc_debug(r, "enter (url=%s)", url);
 
 	/* if there's no remote_user then there's no (stored) session to kill */
-	if (session->remote_user != NULL)
+	if (session->remote_user != NULL) {
+		no_session_provided = 0;
 		oidc_revoke_tokens(r, c, session);
+	}
 
 	/*
 	 * remove session state (cq. cache entry and cookie)
@@ -2808,6 +2872,42 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 
 	/* see if this is the OP calling us */
 	if (oidc_is_front_channel_logout(url)) {
+
+		/*
+		 * If no session was provided look for the sid and iss parameters in
+		 * the request as specified in
+		 * "OpenID Connect Front-Channel Logout 1.0 - draft 05" at
+		 * https://openid.net/specs/openid-connect-frontchannel-1_0.html
+		 * and try to clear the session based on sid / iss like in the
+		 * backchannel logout case.
+		 */
+		if (no_session_provided) {
+			char *sid, *iss;
+			oidc_provider_t *provider = NULL;
+
+			if (oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_SID,
+												&sid) != FALSE) {
+
+				if (oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_ISS,
+													&iss) != FALSE) {
+					provider = oidc_get_provider_for_issuer(r, c, iss, FALSE);
+				} else {
+					/*
+					 * Azure AD seems to such a non spec compliant provider.
+					 * In this case try our luck with the static config if
+					 * possible.
+					 */
+					oidc_debug(r, "OP did not provide an iss as parameter");
+					if (oidc_provider_static_config(r, c, &provider) == FALSE)
+						provider = NULL;
+				}
+				if (provider) {
+					oidc_cleanup_by_sid(r, sid, c, provider);
+				} else {
+					oidc_info(r, "No provider for front channel logout found");
+				}
+			}
+		}
 
 		/* set recommended cache control headers */
 		oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL,
@@ -2831,6 +2931,10 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 		return oidc_util_html_send(r, "Logged Out", NULL, NULL,
 				"<p>Logged Out</p>", OK);
 	}
+
+	oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL,
+			"no-cache, no-store");
+	oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_PRAGMA, "no-cache");
 
 	/* see if we don't need to go somewhere special after killing the session locally */
 	if (url == NULL)
@@ -2857,8 +2961,7 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
 	oidc_provider_t *provider = NULL;
-	char *sid = NULL, *uuid = NULL;
-	oidc_session_t session;
+	char *sid = NULL;
 	int rc = HTTP_BAD_REQUEST;
 
 	apr_table_t *params = apr_table_make(r->pool, 8);
@@ -2993,37 +3096,8 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 		goto out;
 	}
 
-	// TODO: when dealing with sub instead of a true sid, we'll be killing all sessions for
-	//       a specific user, across hosts that share the *same* cache backend
-	//       if those hosts haven't been configured with a different OIDCCryptoPassphrase
-	//       - perhaps that's even acceptable since non-memory caching is encrypted by default
-	//         and memory-based caching doesn't suffer from this (different shm segments)?
-	//       - it will result in 400 errors returned from backchannel logout calls to the other hosts...
+	oidc_cleanup_by_sid(r, sid, cfg, provider);
 
-	sid = oidc_make_sid_iss_unique(r, sid, provider->issuer);
-	oidc_cache_get_sid(r, sid, &uuid);
-	if (uuid == NULL) {
-		// this may happen when we are the caller
-		oidc_warn(r,
-				"could not (or no longer) find a session based on sid/sub provided in logout token: %s",
-				sid);
-		r->user = "";
-		rc = OK;
-		goto out;
-	}
-
-	// revoke tokens if we can get a handle on those
-	if (cfg->session_type != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
-		if (oidc_session_load_cache_by_uuid(r, cfg, uuid, &session) != FALSE)
-			if (oidc_session_extract(r, &session) != FALSE)
-				oidc_revoke_tokens(r, cfg, &session);
-	}
-
-	// clear the session cache
-	oidc_cache_set_sid(r, sid, NULL, 0);
-	oidc_cache_set_session(r, uuid, NULL, 0);
-
-	r->user = "";
 	rc = OK;
 
 out:
@@ -4020,7 +4094,6 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 
 	/* see if we've configured OIDCUnAutzAction for this path */
 	switch (oidc_dir_cfg_unautz_action(r)) {
-		// TODO: document that AuthzSendForbiddenOnFailure is required to return 403 FORBIDDEN
 		case OIDC_UNAUTZ_RETURN403:
 		case OIDC_UNAUTZ_RETURN401:
 			return AUTHZ_DENIED;
@@ -4071,15 +4144,15 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args,
 	oidc_debug(r, "enter: (r->user=%s) require_args=\"%s\"", r->user, require_args);
 
 	/* check for anonymous access and PASS mode */
-	if ((r->user != NULL) && (strlen(r->user) == 0))
+	if ((r->user != NULL) && (strlen(r->user) == 0)) {
 		r->user = NULL;
-
-	if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
-		return AUTHZ_GRANTED;
-	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
-		return AUTHZ_GRANTED;
-	if (r->method_number == M_OPTIONS)
-		return AUTHZ_GRANTED;
+		if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
+			return AUTHZ_GRANTED;
+		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
+			return AUTHZ_GRANTED;
+		if (r->method_number == M_OPTIONS)
+			return AUTHZ_GRANTED;
+	}
 
 	/* get the set of claims from the request state (they've been set in the authentication part earlier */
 	json_t *claims = NULL, *id_token = NULL;
@@ -4159,15 +4232,15 @@ static int oidc_handle_unauthorized_user22(request_rec *r) {
 int oidc_auth_checker(request_rec *r) {
 
 	/* check for anonymous access and PASS mode */
-	if ((r->user != NULL) && (strlen(r->user) == 0))
+	if ((r->user != NULL) && (strlen(r->user) == 0)) {
 		r->user = NULL;
-
-	if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
-		return OK;
-	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
-		return OK;
-	if (r->method_number == M_OPTIONS)
-		return OK;
+		if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
+			return OK;
+		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
+			return OK;
+		if (r->method_number == M_OPTIONS)
+			return OK;
+	}
 
 	/* get the set of claims from the request state (they've been set in the authentication part earlier */
 	json_t *claims = NULL, *id_token = NULL;

@@ -64,12 +64,13 @@ APLOG_USE_MODULE(auth_openidc);
 #endif
 
 #define oidc_log(r, level, fmt, ...) ap_log_rerror(APLOG_MARK, level, 0, r,"%s: %s", __FUNCTION__, apr_psprintf(r->pool, fmt, ##__VA_ARGS__))
-#define oidc_slog(s, level, fmt, ...) ap_log_error(APLOG_MARK, level, 0, s, "%s: %s", __FUNCTION__, apr_psprintf(s->process->pool, fmt, ##__VA_ARGS__))
+#define oidc_slog(s, level, fmt, ...) ap_log_error(APLOG_MARK, level, 0, s, "%s: %s", __FUNCTION__, apr_psprintf(s->process->pconf, fmt, ##__VA_ARGS__))
 //#define oidc_log(r, level, fmt, ...) fprintf(stderr, "# %s: %s\n", __FUNCTION__, apr_psprintf(r->pool, fmt, ##__VA_ARGS__))
 //#define oidc_slog(s, level, fmt, ...) fprintf(stderr, "## %s: %s\n", __FUNCTION__, apr_psprintf(s->process->pool, fmt, ##__VA_ARGS__))
 
 #define oidc_debug(r, fmt, ...) oidc_log(r, OIDC_DEBUG, fmt, ##__VA_ARGS__)
 #define oidc_warn(r, fmt, ...) oidc_log(r, APLOG_WARNING, fmt, ##__VA_ARGS__)
+#define oidc_info(r, fmt, ...) oidc_log(r, APLOG_INFO, fmt, ##__VA_ARGS__)
 #define oidc_error(r, fmt, ...) oidc_log(r, APLOG_ERR, fmt, ##__VA_ARGS__)
 
 #define oidc_sdebug(s, fmt, ...) oidc_slog(s, OIDC_DEBUG, fmt, ##__VA_ARGS__)
@@ -203,6 +204,7 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_UNAUTZ_RETURN403    1
 #define OIDC_UNAUTZ_RETURN401    2
 #define OIDC_UNAUTZ_AUTHENTICATE 3
+#define OIDC_UNAUTZ_RETURN302    4
 
 #define OIDC_REQUEST_URI_CACHE_DURATION 30
 
@@ -235,6 +237,7 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_HDR_X_FORWARDED_HOST   1
 #define OIDC_HDR_X_FORWARDED_PORT   2
 #define OIDC_HDR_X_FORWARDED_PROTO  4
+#define OIDC_HDR_FORWARDED          8
 
 typedef apr_byte_t (*oidc_proto_pkce_state)(request_rec *r, char **state);
 typedef apr_byte_t (*oidc_proto_pkce_challenge)(request_rec *r, const char *state, char **code_challenge);
@@ -463,6 +466,8 @@ apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name, const ch
 #define OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE  "remove_at_cache"
 #define OIDC_REDIRECT_URI_REQUEST_REVOKE_SESSION   "revoke_session"
 #define OIDC_REDIRECT_URI_REQUEST_REQUEST_URI      "request_uri"
+#define OIDC_REDIRECT_URI_REQUEST_SID              "sid"
+#define OIDC_REDIRECT_URI_REQUEST_ISS              "iss"
 
 // oidc_oauth
 int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c, const char *access_token);
@@ -744,6 +749,7 @@ int oidc_cfg_dir_logout_on_error_refresh(request_rec *r);
 char *oidc_cfg_dir_state_cookie_prefix(request_rec *r);
 int oidc_cfg_delete_oldest_state_cookies(oidc_cfg *cfg);
 void oidc_cfg_provider_init(oidc_provider_t *provider);
+void oidc_config_check_x_forwarded(request_rec *r, const apr_byte_t x_forwarded_headers);
 
 // oidc_util.c
 int oidc_strnenvcmp(const char *a, const char *b, int len);
@@ -809,27 +815,30 @@ apr_byte_t oidc_enabled(request_rec *r);
 char *oidc_util_http_form_encoded_data(request_rec *r, const apr_table_t *params);
 
 /* HTTP header constants */
-#define OIDC_HTTP_HDR_COOKIE							"Cookie"
-#define OIDC_HTTP_HDR_SET_COOKIE						"Set-Cookie"
-#define OIDC_HTTP_HDR_USER_AGENT						"User-Agent"
-#define OIDC_HTTP_HDR_X_FORWARDED_FOR					"X-Forwarded-For"
-#define OIDC_HTTP_HDR_CONTENT_TYPE						"Content-Type"
-#define OIDC_HTTP_HDR_CONTENT_LENGTH					"Content-Length"
-#define OIDC_HTTP_HDR_X_REQUESTED_WITH					"X-Requested-With"
-#define OIDC_HTTP_HDR_ACCEPT							"Accept"
-#define OIDC_HTTP_HDR_AUTHORIZATION						"Authorization"
-#define OIDC_HTTP_HDR_X_FORWARDED_PROTO					"X-Forwarded-Proto"
-#define OIDC_HTTP_HDR_X_FORWARDED_PORT					"X-Forwarded-Port"
-#define OIDC_HTTP_HDR_X_FORWARDED_HOST					"X-Forwarded-Host"
-#define OIDC_HTTP_HDR_HOST								"Host"
-#define OIDC_HTTP_HDR_LOCATION							"Location"
-#define OIDC_HTTP_HDR_CACHE_CONTROL						"Cache-Control"
-#define OIDC_HTTP_HDR_PRAGMA							"Pragma"
-#define OIDC_HTTP_HDR_P3P								"P3P"
-#define OIDC_HTTP_HDR_EXPIRES							"Expires"
-#define OIDC_HTTP_HDR_X_FRAME_OPTIONS					"X-Frame-Options"
-#define OIDC_HTTP_HDR_WWW_AUTHENTICATE					"WWW-Authenticate"
-#define OIDC_HTTP_HDR_INCLUDE_REFERRED_TOKEN_BINDING_ID	"Include-Referred-Token-Binding-ID"
+#define OIDC_HTTP_HDR_COOKIE                            "Cookie"
+#define OIDC_HTTP_HDR_SET_COOKIE                        "Set-Cookie"
+#define OIDC_HTTP_HDR_USER_AGENT                        "User-Agent"
+#define OIDC_HTTP_HDR_X_FORWARDED_FOR                   "X-Forwarded-For"
+#define OIDC_HTTP_HDR_CONTENT_TYPE                      "Content-Type"
+#define OIDC_HTTP_HDR_CONTENT_LENGTH                    "Content-Length"
+#define OIDC_HTTP_HDR_X_REQUESTED_WITH                  "X-Requested-With"
+#define OIDC_HTTP_HDR_SEC_FETCH_MODE                    "Sec-Fetch-Mode"
+#define OIDC_HTTP_HDR_SEC_FETCH_DEST                    "Sec-Fetch-Dest"
+#define OIDC_HTTP_HDR_ACCEPT                            "Accept"
+#define OIDC_HTTP_HDR_AUTHORIZATION                     "Authorization"
+#define OIDC_HTTP_HDR_X_FORWARDED_PROTO                 "X-Forwarded-Proto"
+#define OIDC_HTTP_HDR_X_FORWARDED_PORT                  "X-Forwarded-Port"
+#define OIDC_HTTP_HDR_X_FORWARDED_HOST                  "X-Forwarded-Host"
+#define OIDC_HTTP_HDR_FORWARDED                         "Forwarded"
+#define OIDC_HTTP_HDR_HOST                              "Host"
+#define OIDC_HTTP_HDR_LOCATION                          "Location"
+#define OIDC_HTTP_HDR_CACHE_CONTROL                     "Cache-Control"
+#define OIDC_HTTP_HDR_PRAGMA                            "Pragma"
+#define OIDC_HTTP_HDR_P3P                               "P3P"
+#define OIDC_HTTP_HDR_EXPIRES                           "Expires"
+#define OIDC_HTTP_HDR_X_FRAME_OPTIONS                   "X-Frame-Options"
+#define OIDC_HTTP_HDR_WWW_AUTHENTICATE                  "WWW-Authenticate"
+#define OIDC_HTTP_HDR_INCLUDE_REFERRED_TOKEN_BINDING_ID "Include-Referred-Token-Binding-ID"
 
 #define OIDC_HTTP_HDR_VAL_XML_HTTP_REQUEST				"XMLHttpRequest"
 
@@ -846,6 +855,7 @@ const char *oidc_util_hdr_in_authorization_get(const request_rec *r);
 const char *oidc_util_hdr_in_x_forwarded_proto_get(const request_rec *r);
 const char *oidc_util_hdr_in_x_forwarded_port_get(const request_rec *r);
 const char *oidc_util_hdr_in_x_forwarded_host_get(const request_rec *r);
+const char* oidc_util_hdr_in_forwarded_get(const request_rec *r);
 const char *oidc_util_hdr_in_host_get(const request_rec *r);
 void oidc_util_hdr_out_location_set(const request_rec *r, const char *value);
 const char *oidc_util_hdr_out_location_get(const request_rec *r);
