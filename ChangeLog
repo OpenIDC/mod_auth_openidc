@@ -1,3 +1,7 @@
+07/27/2022
+- depend on liboauth2 1.4.5 with multi-treading fix for "OAuth2Verify jwk <key>"
+- release 3.2.3
+
 07/01/2021
 - change configure.ac to find Apache flags correctly
 
