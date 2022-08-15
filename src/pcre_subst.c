@@ -236,6 +236,15 @@ void oidc_pcre_free(struct oidc_pcre *pcre) {
 #endif
 }
 
+void oidc_pcre_free_match(struct oidc_pcre *pcre) {
+#ifdef HAVE_LIBPCRE2
+	if (pcre->match_data) {
+		pcre2_match_data_free(pcre->match_data);
+		pcre->match_data = NULL;
+	}
+#endif
+}
+
 int oidc_pcre_get_substring(apr_pool_t *pool, const struct oidc_pcre *pcre, const char *input,
 		int rc, char **sub_str, char **error_str) {
 	int rv = 0;

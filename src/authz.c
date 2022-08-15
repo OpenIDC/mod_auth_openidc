@@ -165,6 +165,7 @@ static apr_byte_t oidc_authz_match_expression(request_rec *r, const char *spec_c
 					rc = TRUE;
 					goto end;
 				} else if (error_str) {
+					oidc_pcre_free_match(preg);
 					oidc_debug(r, "pcre error (array): %s", error_str);
 				}
 			}

@@ -1,3 +1,7 @@
+08/15/2022
+- avoid memory leak when using PCRE2 regular expressions with array matching; closes #902; thanks @smanolache
+- bump to 2.4.11.3rc4
+
 05/20/2022
 - fix handling of IPv6 based logout URLs; thanks @@codemaker219
 - bump to 2.4.11.3rc1
