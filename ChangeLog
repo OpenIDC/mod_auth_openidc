@@ -1,5 +1,6 @@
 08/15/2022
 - avoid memory leak when using PCRE2 regular expressions with array matching; closes #902; thanks @smanolache
+- avoid memory leak when cjose_jws_get_plaintext fails; closes #903; thanks @smanolache
 - bump to 2.4.11.3rc4
 
 05/20/2022

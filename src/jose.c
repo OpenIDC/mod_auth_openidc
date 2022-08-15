@@ -835,6 +835,8 @@ apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json,
 	size_t plaintext_len = 0;
 	if (cjose_jws_get_plaintext(jwt->cjose_jws, &plaintext, &plaintext_len,
 			&cjose_err) == FALSE) {
+		oidc_jwt_destroy(jwt);
+		*j_jwt = NULL;
 		oidc_jose_error(err, "cjose_jws_get_plaintext failed: %s",
 				oidc_cjose_e2s(pool, cjose_err));
 		return FALSE;
