@@ -434,12 +434,31 @@ char* oidc_util_javascript_escape(apr_pool_t *pool, const char *s) {
     return output;
 }
 
+static char* oidc_util_strcasestr(const char *s1, const char *s2) {
+	const char *s = s1;
+	const char *p = s2;
+	do {
+		if (!*p)
+			return (char*) s1;
+		if ((*p == *s) || (tolower(*p) == tolower(*s))) {
+			++p;
+			++s;
+		} else {
+			p = s2;
+			if (!*s)
+				return NULL;
+			s = ++s1;
+		}
+	} while (1);
+	return *p ? NULL : (char*) s1;
+}
+
 static const char* oidc_util_hdr_forwarded_get(const request_rec *r, const char *elem) {
 	const char *value = NULL;
 	char *ptr = NULL;
 	const char *item = apr_psprintf(r->pool, "%s=", elem);
 	value = oidc_util_hdr_in_forwarded_get(r);
-	value = strcasestr(value, item);
+	value = oidc_util_strcasestr(value, item);
 	if (value) {
 		value += strlen(item);
 		ptr = strstr(value, ";");
