@@ -1,5 +1,6 @@
 08/22/2022
 - add oidc_util_strcasestr
+- bump to 2.4.11.4rc0
 
 08/22/2022
 - release 2.4.11.3
