@@ -67,7 +67,7 @@ EXTRA_DIST = \
 noinst_DATA = mod_auth_openidc.la
 
 mod_auth_openidc.la: libauth_openidc.la
-	${APXS} -c -o $@ $< ${AM_CFLAGS} ${LIBADD}
+	${APXS} -c -o $@ libauth_openidc.la ${AM_CFLAGS} ${LIBADD}
 
 install-exec-local:
 #	@APXS@ -i -a -n auth_openidc mod_auth_openidc.la
