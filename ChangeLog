@@ -1,5 +1,7 @@
 08/24/2022
 - avoid using $< in Makefile
+- allow storing the id_token in a client-cookie based session; see #812 and #888
+- bump to 2.4.11.4rc1
 
 08/22/2022
 - add oidc_util_strcasestr

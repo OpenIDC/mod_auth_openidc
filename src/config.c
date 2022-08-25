@@ -157,6 +157,8 @@
 #define OIDC_DEFAULT_STATE_COOKIE_PREFIX "mod_auth_openidc_state_"
 /* default x-forwarded-* headers to be interpreted */
 #define OIDC_DEFAULT_X_FORWARDED_HEADERS 0
+/* default store id_token in session */
+#define OIDC_DEFAULT_STORE_ID_TOKEN TRUE
 
 #define OIDCProviderMetadataURL                "OIDCProviderMetadataURL"
 #define OIDCProviderIssuer                     "OIDCProviderIssuer"
@@ -527,7 +529,7 @@ static const char* oidc_set_session_type(cmd_parms *cmd, void *ptr,
 	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
 			&auth_openidc_module);
 	const char *rv = oidc_parse_session_type(cmd->pool, arg, &cfg->session_type,
-			&cfg->persistent_session_cookie);
+			&cfg->persistent_session_cookie, &cfg->store_id_token);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -1455,6 +1457,7 @@ void* oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->session_type = OIDC_DEFAULT_SESSION_TYPE;
 	c->session_cache_fallback_to_cookie = OIDC_CONFIG_POS_INT_UNSET;
 	c->persistent_session_cookie = 0;
+	c->store_id_token = OIDC_DEFAULT_STORE_ID_TOKEN;
 	c->session_cookie_chunk_size =
 			OIDC_DEFAULT_SESSION_CLIENT_COOKIE_CHUNK_SIZE;
 
@@ -1894,6 +1897,10 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->persistent_session_cookie != 0 ?
 					add->persistent_session_cookie :
 					base->persistent_session_cookie;
+	c->store_id_token =
+			add->store_id_token != OIDC_DEFAULT_STORE_ID_TOKEN ?
+					add->store_id_token :
+					base->store_id_token;
 	c->session_cookie_chunk_size =
 			add->session_cookie_chunk_size
 			!= OIDC_DEFAULT_SESSION_CLIENT_COOKIE_CHUNK_SIZE ?

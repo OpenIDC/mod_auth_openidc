@@ -392,6 +392,8 @@ typedef struct oidc_cfg {
 	int session_type;
 	/* session cookie or persistent cookie */
 	int persistent_session_cookie;
+	/* store the id_token in the session */
+	apr_byte_t store_id_token;
 	/* session cookie chunk size */
 	int session_cookie_chunk_size;
 

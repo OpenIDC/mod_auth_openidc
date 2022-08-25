@@ -90,7 +90,7 @@ const char *oidc_parse_int(apr_pool_t *pool, const char *arg, int *int_value);
 const char *oidc_parse_boolean(apr_pool_t *pool, const char *arg, int *bool_value);
 
 const char *oidc_parse_cache_type(apr_pool_t *pool, const char *arg, oidc_cache_t **type);
-const char *oidc_parse_session_type(apr_pool_t *pool, const char *arg, int *type, int *persistent);
+const char *oidc_parse_session_type(apr_pool_t *pool, const char *arg, int *type, int *persistent, apr_byte_t *store_id_token);
 const char *oidc_parse_cache_shm_entry_size_max(apr_pool_t *pool, const char *arg, int *int_value);
 const char *oidc_parse_session_inactivity_timeout(apr_pool_t *pool, const char *arg, int *int_value);
 const char *oidc_parse_session_max_duration(apr_pool_t *pool, const char *arg, int *int_value);

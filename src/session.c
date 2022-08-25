@@ -590,6 +590,7 @@ json_t *oidc_session_get_idtoken_claims_json(request_rec *r, oidc_session_t *z) 
  */
 void oidc_session_set_idtoken(request_rec *r, oidc_session_t *z,
 		const char *s_id_token) {
+	oidc_debug(r, "storing id_token in the session");
 	oidc_session_set(r, z, OIDC_SESSION_KEY_IDTOKEN, s_id_token);
 }
 

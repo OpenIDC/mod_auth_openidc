@@ -1069,8 +1069,8 @@ static apr_byte_t oidc_refresh_access_token(request_rec *r, oidc_cfg *c,
 
 	/* if we have a new id_token, store it in the session and update the session max lifetime if required */
 	if (s_id_token != NULL) {
-		/* only store the serialized representation when client cookie based session tracking is not in use */
-		if (c->session_type != OIDC_SESSION_TYPE_CLIENT_COOKIE) 
+		/* only store the serialized representation when configured so */
+		if (c->store_id_token == TRUE)
 			oidc_session_set_idtoken(r, session, s_id_token);
 		
 		oidc_jwt_t *id_token_jwt = NULL;
@@ -1492,16 +1492,14 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	}
 
 	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_SERIALIZED)) {
-		if (cfg->session_type != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
-			/* get the compact serialized JWT from the session */
-			const char *s_id_token = oidc_session_get_idtoken(r, session);
+		/* get the compact serialized JWT from the session */
+		s_id_token = oidc_session_get_idtoken(r, session);
+		if (s_id_token) {
 			/* pass the compact serialized JWT to the app in a header or environment variable */
 			oidc_util_set_app_info(r, OIDC_APP_INFO_ID_TOKEN, s_id_token,
-					OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars,
-					pass_base64url);
+								   OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars, pass_base64url);
 		} else {
-			oidc_error(r,
-					"session type \"client-cookie\" does not allow storing/passing the id_token; use \"" OIDCSessionType " server-cache\" for that");
+			oidc_warn(r, "id_token was not found in the session so it cannot be passed on");
 		}
 	}
 
@@ -1707,7 +1705,7 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
 	oidc_session_set_idtoken_claims(r, session,
 			id_token_jwt->payload.value.str);
 
-	if (c->session_type != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
+	if (c->store_id_token == TRUE) {
 		/* store the compact serialized representation of the id_token for later reference  */
 		oidc_session_set_idtoken(r, session, id_token);
 	}

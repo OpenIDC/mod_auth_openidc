@@ -297,19 +297,22 @@ const char *oidc_parse_cache_type(apr_pool_t *pool, const char *arg,
 #define OIDC_SESSION_TYPE_SERVER_CACHE_STR  "server-cache"
 #define OIDC_SESSION_TYPE_CLIENT_COOKIE_STR "client-cookie"
 #define OIDC_SESSION_TYPE_PERSISTENT        "persistent"
+#define OIDC_SESSION_TYPE_STORE_ID_TOKEN    "store_id_token"
 #define OIDC_SESSION_TYPE_SEPARATOR         ":"
 
 /*
  * parse the session mechanism type and the cookie persistency property
  */
-const char *oidc_parse_session_type(apr_pool_t *pool, const char *arg,
-		int *type, int *persistent) {
+const char* oidc_parse_session_type(apr_pool_t *pool, const char *arg, int *type, int *persistent,
+		apr_byte_t *store_id_token) {
 	static char *options[] =
 	{
 			OIDC_SESSION_TYPE_SERVER_CACHE_STR,
 			OIDC_SESSION_TYPE_SERVER_CACHE_STR OIDC_SESSION_TYPE_SEPARATOR OIDC_SESSION_TYPE_PERSISTENT,
 			OIDC_SESSION_TYPE_CLIENT_COOKIE_STR,
 			OIDC_SESSION_TYPE_CLIENT_COOKIE_STR OIDC_SESSION_TYPE_SEPARATOR OIDC_SESSION_TYPE_PERSISTENT,
+			OIDC_SESSION_TYPE_CLIENT_COOKIE_STR OIDC_SESSION_TYPE_SEPARATOR OIDC_SESSION_TYPE_STORE_ID_TOKEN,
+			OIDC_SESSION_TYPE_CLIENT_COOKIE_STR OIDC_SESSION_TYPE_SEPARATOR OIDC_SESSION_TYPE_PERSISTENT OIDC_SESSION_TYPE_SEPARATOR OIDC_SESSION_TYPE_STORE_ID_TOKEN,
 			NULL };
 	const char *rv = oidc_valid_string_option(pool, arg, options);
 	if (rv != NULL)
@@ -319,15 +322,31 @@ const char *oidc_parse_session_type(apr_pool_t *pool, const char *arg,
 	char *p = strstr(s, OIDC_SESSION_TYPE_SEPARATOR);
 
 	if (p) {
-		*persistent = 1;
 		*p = '\0';
+		p++;
 	}
 
 	if (apr_strnatcmp(s, OIDC_SESSION_TYPE_SERVER_CACHE_STR) == 0) {
 		*type = OIDC_SESSION_TYPE_SERVER_CACHE;
 	} else if (apr_strnatcmp(s, OIDC_SESSION_TYPE_CLIENT_COOKIE_STR) == 0) {
 		*type = OIDC_SESSION_TYPE_CLIENT_COOKIE;
+		*store_id_token = FALSE;
 	}
+
+	if (p) {
+		if (apr_strnatcmp(p, OIDC_SESSION_TYPE_PERSISTENT) == 0) {
+			*persistent = 1;
+		} else if (apr_strnatcmp(p, OIDC_SESSION_TYPE_STORE_ID_TOKEN) == 0) {
+			// only for client-cookie
+			*store_id_token = TRUE;
+		} else if (apr_strnatcmp(p, OIDC_SESSION_TYPE_SEPARATOR OIDC_SESSION_TYPE_PERSISTENT OIDC_SESSION_TYPE_SEPARATOR OIDC_SESSION_TYPE_STORE_ID_TOKEN)
+				== 0) {
+			// only for client-cookie
+			*persistent = 1;
+			*store_id_token = TRUE;
+		}
+	}
+
 	return NULL;
 }
 
