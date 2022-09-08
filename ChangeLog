@@ -2,6 +2,7 @@
 - store access token obtained from backchannel in session over the one returned
   in the frontchannel for "code token" and "code id_token token" flows; for 
   certification purposes
+- apply exact length matching for at_hash and c_hash validation; for certification purposes
 
 08/24/2022
 - avoid using $< in Makefile

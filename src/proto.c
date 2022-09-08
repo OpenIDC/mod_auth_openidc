@@ -2541,7 +2541,7 @@ static apr_byte_t oidc_proto_validate_hash(request_rec *r, const char *alg,
 			decoded_len, calc_len);
 
 	/* compare the calculated hash against the provided hash */
-	if ((decoded_len < hash_len) || (calc_len < hash_len)
+	if ((decoded_len != hash_len) || (calc_len < hash_len)
 			|| (memcmp(decoded, calc, hash_len) != 0)) {
 		oidc_error(r,
 				"provided \"%s\" hash value (%s) does not match the calculated value",
