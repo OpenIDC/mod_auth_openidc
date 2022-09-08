@@ -339,6 +339,66 @@ static const char* oidc_set_int_slot(cmd_parms *cmd, void *struct_ptr,
 }
 
 /*
+ * set an apr_uint32_t value in the server config
+ */
+static const char* oidc_set_uint32_slot(cmd_parms *cmd, void *struct_ptr,
+		const char *arg) {
+	char *endptr;
+	apr_int64_t value;
+	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
+			&auth_openidc_module);
+	apr_uintptr_t offset = (apr_uintptr_t)cmd->info;
+
+	value = apr_strtoi64(arg, &endptr, 10);
+	if (errno != 0 || *endptr != '\0') {
+		return OIDC_CONFIG_DIR_RV(cmd, arg);
+	}
+	if (value > APR_UINT32_MAX || value < 0) {
+		return OIDC_CONFIG_DIR_RV(cmd, "Value out of range");
+	}
+	*(apr_uint32_t *)((char *)cfg + offset) = (apr_uint32_t)value;
+	return NULL;
+}
+
+/*
+ * set an 32 bit uint timeout slot in the server config
+ */
+static const char* oidc_set_timeout_slot(cmd_parms *cmd, void *struct_ptr,
+		const char *arg) {
+#if AP_MODULE_MAGIC_AT_LEAST(20080920, 2)
+	apr_status_t rv;
+	apr_interval_time_t timeout;
+#else
+	char *endptr;
+	apr_int64_t timeout;
+#endif
+	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
+			&auth_openidc_module);
+	apr_uintptr_t offset = (apr_uintptr_t)cmd->info;
+
+#if AP_MODULE_MAGIC_AT_LEAST(20080920, 2)
+	rv = ap_timeout_parameter_parse(arg, &timeout, "s");
+	if (rv != APR_SUCCESS) {
+		return OIDC_CONFIG_DIR_RV(cmd, arg);
+	}
+#else
+	timeout = apr_strtoi64(arg, &endptr, 10);
+	if (errno != 0 || *endptr != '\0') {
+		return OIDC_CONFIG_DIR_RV(cmd, arg);
+	}
+	if (timeout > apr_time_sec(APR_INT64_MAX)) {
+		return OIDC_CONFIG_DIR_RV(cmd, "Value out of range");
+	}
+	timeout = apr_time_from_sec(timeout);
+#endif
+    if (timeout > APR_UINT32_MAX) {
+		return OIDC_CONFIG_DIR_RV(cmd, "Value out of range");
+	}
+	*(apr_uint32_t *)((char *)cfg + offset) = (apr_uint32_t)timeout;
+	return NULL;
+}
+
+/*
  * set a URL value in a config record
  */
 static const char* oidc_set_url_slot_type(cmd_parms *cmd, void *ptr,
@@ -1442,6 +1502,10 @@ void* oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->cache_file_clean_interval = OIDC_DEFAULT_CACHE_FILE_CLEAN_INTERVAL;
 #ifdef USE_MEMCACHE
 	c->cache_memcache_servers = NULL;
+	c->cache_memcache_min = 0;
+	c->cache_memcache_smax = 0;
+	c->cache_memcache_hmax = 0;
+	c->cache_memcache_ttl = 0;
 #endif
 	c->cache_shm_size_max = OIDC_DEFAULT_CACHE_SHM_SIZE;
 	c->cache_shm_entry_size_max = OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX;
@@ -1856,6 +1920,18 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->cache_memcache_servers =
 			add->cache_memcache_servers != NULL ?
 					add->cache_memcache_servers : base->cache_memcache_servers;
+	c->cache_memcache_min =
+			add->cache_memcache_min ?
+					add->cache_memcache_min : base->cache_memcache_min;
+	c->cache_memcache_smax =
+			add->cache_memcache_smax ?
+					add->cache_memcache_smax : base->cache_memcache_smax;
+	c->cache_memcache_hmax =
+			add->cache_memcache_hmax ?
+					add->cache_memcache_hmax : base->cache_memcache_hmax;
+	c->cache_memcache_ttl =
+			add->cache_memcache_ttl ?
+					add->cache_memcache_ttl : base->cache_memcache_ttl;
 #endif
 	c->cache_shm_size_max =
 			add->cache_shm_size_max != OIDC_DEFAULT_CACHE_SHM_SIZE ?
@@ -3353,6 +3429,26 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, cache_memcache_servers),
 				RSRC_CONF,
 				"Memcache servers used for caching (space separated list of <hostname>[:<port>] tuples)"),
+		AP_INIT_TAKE1(OIDCMemCacheConnectionsMin,
+				oidc_set_uint32_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, cache_memcache_min),
+				RSRC_CONF,
+				"Minimum number of connections to each Memcache server per process"),
+		AP_INIT_TAKE1(OIDCMemCacheConnectionsSMax,
+				oidc_set_uint32_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, cache_memcache_smax),
+				RSRC_CONF,
+				"Soft maximum number of connections to each Memcache server per process"),
+		AP_INIT_TAKE1(OIDCMemCacheConnectionsHMax,
+				oidc_set_uint32_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, cache_memcache_hmax),
+				RSRC_CONF,
+				"Hard maximum number of connections to each Memcache server per process"),
+		AP_INIT_TAKE1(OIDCMemCacheConnectionsTTL,
+				oidc_set_timeout_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, cache_memcache_ttl),
+				RSRC_CONF,
+				"Maximum time in seconds a connection to a Memcache server can be idle before being closed"),
 #endif
 		AP_INIT_TAKE1(OIDCCacheShmMax,
 				oidc_set_int_slot,

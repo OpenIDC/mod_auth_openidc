@@ -5,6 +5,8 @@
 - apply exact length matching for at_hash and c_hash validation; for certification purposes
 - increase size of the output buffer when using libpcre2 for substitution; closes #915
 - bump to 2.4.11.4rc2
+- allow setting connection pool parameters for Memcache server connections;
+  see #???; thanks @rpluem-vf
 
 08/24/2022
 - avoid using $< in Makefile
