@@ -3,6 +3,8 @@
   in the frontchannel for "code token" and "code id_token token" flows; for 
   certification purposes
 - apply exact length matching for at_hash and c_hash validation; for certification purposes
+- increase size of the output buffer when using libpcre2 for substitution; closes #915
+- bump to 2.4.11.4rc2
 
 08/24/2022
 - avoid using $< in Makefile

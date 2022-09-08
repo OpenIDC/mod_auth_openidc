@@ -186,9 +186,8 @@ char* oidc_pcre_subst(apr_pool_t *pool, const struct oidc_pcre *pcre, const char
 		const char *rep) {
 	char *rv = NULL;
 #ifdef HAVE_LIBPCRE2
-	PCRE2_SIZE bufsize = (len == 0) ? 16 : 2 * len;
-	PCRE2_UCHAR *output = (PCRE2_UCHAR*) malloc(sizeof(PCRE2_UCHAR) * bufsize);
-	PCRE2_SIZE outlen = bufsize;
+	PCRE2_UCHAR *output = (PCRE2_UCHAR*) malloc(sizeof(PCRE2_UCHAR) * OIDC_PCRE_MAXCAPTURE * 3);
+	PCRE2_SIZE outlen = OIDC_PCRE_MAXCAPTURE * 3;
 	PCRE2_SPTR subject = (PCRE2_SPTR) str;
 	PCRE2_SIZE length = (PCRE2_SIZE) len;
 	PCRE2_SPTR replacement = (PCRE2_SPTR) rep;

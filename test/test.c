@@ -1608,6 +1608,22 @@ static char* test_remote_user(request_rec *r) {
 	TST_ASSERT_STR("remote_user (2) string", remote_user, "umsystem\\nneul");
 	json_decref(json);
 
+	s = "{ \"name\": \"Dominik František Bučík\" }";
+	rc = oidc_util_decode_json_object(r, s, &json);
+	TST_ASSERT("test remote user (3) valid JSON", rc == TRUE);
+	rc = oidc_get_remote_user(r, "name", "^(.*)$", "$1@test.com", json, &remote_user);
+	TST_ASSERT("test remote user (3) function result", rc == TRUE);
+	TST_ASSERT_STR("remote_user (3) string", remote_user, "Dominik František Bučík@test.com");
+	json_decref(json);
+
+	s = "{ \"preferred_username\": \"dbucik\" }";
+	rc = oidc_util_decode_json_object(r, s, &json);
+	TST_ASSERT("test remote user (4) valid JSON", rc == TRUE);
+	rc = oidc_get_remote_user(r, "preferred_username", "^(.*)$", "$1@test.com", json, &remote_user);
+	TST_ASSERT("test remote user (4) function result", rc == TRUE);
+	TST_ASSERT_STR("remote_user (4) string", remote_user, "dbucik@test.com");
+	json_decref(json);
+
 	return 0;
 }
 
