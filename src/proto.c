@@ -2945,8 +2945,8 @@ static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r,
 		apr_table_set(params, OIDC_PROTO_ID_TOKEN, id_token);
 	}
 
-	if ((apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN) == NULL)
-			&& (access_token != NULL)) {
+	/* override access token if returned from the token endpoint in the backchannel */
+	if (access_token != NULL) {
 		apr_table_set(params, OIDC_PROTO_ACCESS_TOKEN, access_token);
 		if (token_type != NULL)
 			apr_table_set(params, OIDC_PROTO_TOKEN_TYPE, token_type);
