@@ -1,6 +1,8 @@
 09/12/2022
 - add options to retrieve the configuration document only or pull keys from the JWKS URI;
   for certification purposes
+- check ID token signed response algorithm on backchannel logout_token and retrieve its
+  configuration value from the client metadata file; for certification purposes
   
 09/08/2022
 - store access token obtained from backchannel in session over the one returned

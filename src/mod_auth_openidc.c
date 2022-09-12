@@ -3009,6 +3009,11 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 		goto out;
 	}
 
+	if ((provider->id_token_signed_response_alg != NULL) && (apr_strnatcmp(provider->id_token_signed_response_alg, jwt->header.alg) != 0)) {
+		oidc_error(r, "logout token is signed using wrong algorithm: %s != %s", jwt->header.alg, provider->id_token_signed_response_alg);
+		goto out;
+	}
+
 	// TODO: destroy the JWK used for decryption
 
 	jwk = NULL;

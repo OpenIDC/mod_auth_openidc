@@ -1422,6 +1422,9 @@ apr_byte_t oidc_metadata_client_parse(request_rec *r, oidc_cfg *cfg,
 		}
 	}
 
+	oidc_metadata_get_valid_string(r, j_client,
+			OIDC_METADATA_ID_TOKEN_SIGNED_RESPONSE_ALG, oidc_valid_signed_response_alg, &provider->id_token_signed_response_alg, provider->id_token_signed_response_alg);
+
 	return TRUE;
 }
 
