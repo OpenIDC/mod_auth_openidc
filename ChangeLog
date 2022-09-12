@@ -1,3 +1,7 @@
+09/12/2022
+- add options to retrieve the configuration document only or pull keys from the JWKS URI;
+  for certification purposes
+  
 09/08/2022
 - store access token obtained from backchannel in session over the one returned
   in the frontchannel for "code token" and "code id_token token" flows; for 

@@ -705,7 +705,7 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg,
  * see if we have provider metadata and check its validity
  * if not, use OpenID Connect Discovery to get it, check it and store it
  */
-static apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
+apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
 		const char *issuer, json_t **j_provider, apr_byte_t allow_discovery) {
 
 	/* holds the response data/string/JSON from the OP */

@@ -899,6 +899,7 @@ apr_byte_t oidc_util_hdr_in_accept_contains(const request_rec *r, const char *ne
 apr_byte_t oidc_util_json_validate_cnf(request_rec *r, json_t *jwt, int token_binding_policy);
 
 // oidc_metadata.c
+apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg, const char *issuer, json_t **j_provider, apr_byte_t allow_discovery);
 apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg, const char *issuer, const char *url, json_t **j_metadata, char **response);
 apr_byte_t oidc_metadata_provider_parse(request_rec *r, oidc_cfg *cfg, json_t *j_provider, oidc_provider_t *provider);
 apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, oidc_cfg *cfg, json_t *j_provider, const char *issuer);

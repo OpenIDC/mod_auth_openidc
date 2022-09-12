@@ -2694,13 +2694,31 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 	if (issuer[n - 1] == OIDC_CHAR_FORWARD_SLASH)
 		issuer[n - 1] = '\0';
 
+
+	if (oidc_util_request_has_parameter(r, "test-config")) {
+		json_t *j_provider = NULL;
+		oidc_metadata_provider_get(r, c, issuer, &j_provider, csrf_cookie != NULL);
+		if (j_provider)
+			json_decref(j_provider);
+		return OK;
+	}
+
 	/* try and get metadata from the metadata directories for the selected OP */
 	if ((oidc_metadata_get(r, c, issuer, &provider, csrf_cookie != NULL) == TRUE)
 			&& (provider != NULL)) {
 
-		/* now we've got a selected OP, send the user there to authenticate */
-		return oidc_authenticate_user(r, c, provider, target_link_uri,
-				login_hint, NULL, NULL, auth_request_params, path_scopes);
+		if (oidc_util_request_has_parameter(r, "test-jwks-uri")) {
+			oidc_jwks_uri_t jwks_uri = { provider->jwks_uri, provider->jwks_refresh_interval,
+					provider->ssl_validate_server };
+			json_t *j_jwks = NULL;
+			apr_byte_t force_refresh = TRUE;
+			oidc_metadata_jwks_get(r, c, &jwks_uri, &j_jwks, &force_refresh);
+			json_decref(j_jwks);
+			return OK;
+		} else {
+			/* now we've got a selected OP, send the user there to authenticate */
+			return oidc_authenticate_user(r, c, provider, target_link_uri, login_hint, NULL, NULL, auth_request_params, path_scopes);
+		}
 	}
 
 	/* something went wrong */
