@@ -45,8 +45,22 @@
 
 #include "mod_auth_openidc.h"
 #include <apr_memcache.h>
+#include <apr_optional.h>
+#include <ap_mpm.h>
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
+
+
+#if AP_MODULE_MAGIC_AT_LEAST(20120211, 125)
+#include <mod_http2.h>
+#else
+/*
+ * Copy and paste from mod_http2.h where mod_http2.h is not available
+ */
+APR_DECLARE_OPTIONAL_FN(void,
+						http2_get_num_workers, (server_rec *s,
+												int *minw, int *max));
+#endif
 
 typedef struct oidc_cache_cfg_memcache_t {
 	/* cache_type = memcache: memcache ptr */
@@ -79,6 +93,9 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 	char* split;
 	char* tok;
 	apr_pool_t *p = s->process->pool;
+	APR_OPTIONAL_FN_TYPE(http2_get_num_workers) *get_h2_num_workers;
+	int max_threads, minw, maxw;
+	apr_uint32_t min, smax, hmax, ttl;
 
 	if (cfg->cache_memcache_servers == NULL) {
 		oidc_serror(s,
@@ -102,6 +119,49 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
+	/*
+	 * When mod_http2 is loaded we might have more threads since it has
+	 * its own pool of processing threads.
+	 */
+	ap_mpm_query(AP_MPMQ_MAX_THREADS, &max_threads);
+	get_h2_num_workers = APR_RETRIEVE_OPTIONAL_FN(http2_get_num_workers);
+	if (get_h2_num_workers) {
+		get_h2_num_workers(s, &minw, &maxw);
+		/* So now the max is:
+		 * max_threads-1 threads for HTTP/1 each requiring one connection
+		 * + one thread for HTTP/2 requiring maxw connections
+		 */
+		max_threads = max_threads - 1 + maxw;
+	}
+	min = cfg->cache_memcache_min;
+	smax = cfg->cache_memcache_smax;
+	hmax = cfg->cache_memcache_hmax;
+	ttl = cfg->cache_memcache_ttl;
+	if (max_threads > 0 && hmax == 0) {
+		hmax = max_threads;
+		if (smax == 0) {
+			smax = hmax;
+		}
+		if (min == 0) {
+			min = hmax;
+		}
+	} else {
+		if (hmax == 0) {
+			hmax = 1;
+		}
+		if (smax == 0) {
+			smax = 1;
+		}
+	}
+	if (ttl == 0) {
+		ttl = apr_time_from_sec(60);
+	}
+	if (smax > hmax) {
+		smax = hmax;
+	}
+	if (min > smax) {
+		min = smax;
+	}
 	/* loop again over the provided servers */
 	cache_config = apr_pstrdup(p, cfg->cache_memcache_servers);
 	split = apr_strtok(cache_config, OIDC_STR_SPACE, &tok);
@@ -129,8 +189,7 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 			port = 11211;
 
 		/* create the memcache server struct */
-		// TODO: tune this
-		rv = apr_memcache_server_create(p, host_str, port, 0, 1, 1, 60, &st);
+		rv = apr_memcache_server_create(p, host_str, port, min, smax, hmax, ttl, &st);
 		if (rv != APR_SUCCESS) {
 			oidc_serror(s, "failed to create cache server: %s:%d", host_str,
 					port);

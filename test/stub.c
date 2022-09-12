@@ -308,6 +308,21 @@ AP_DECLARE(void) ap_log_error_(const char *file, int line, int module_index,
 			return NULL;
 		}
 
+		AP_DECLARE(apr_status_t) ap_mpm_query(int query_code, int *result) {
+			*result = 1;
+			return APR_SUCCESS;
+		}
+
+#if AP_MODULE_MAGIC_AT_LEAST(20080920, 2)
+		AP_DECLARE(apr_status_t) ap_timeout_parameter_parse(
+                                               const char *timeout_parameter,
+                                               apr_interval_time_t *timeout,
+                                               const char *default_time_unit) {
+			*timeout = 0;
+			return APR_SUCCESS;
+		}
+#endif
+
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 		AP_DECLARE(int) ap_expr_exec(request_rec *r, const ap_expr_info_t *expr,
 				const char **err) {
