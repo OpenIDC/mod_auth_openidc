@@ -542,6 +542,18 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 				json_string(provider->userinfo_encrypted_response_enc));
 	}
 
+	if (provider->request_object != NULL) {
+		json_t *request_object_config = NULL;
+		if (oidc_util_decode_json_object(r, provider->request_object, &request_object_config)
+				== TRUE) {
+			json_t *crypto = json_object_get(request_object_config, "crypto");
+			char *alg = "none";
+			oidc_json_object_get_string(r->pool, crypto, "sign_alg", &alg, "none");
+			json_object_set_new(data, "request_object_signing_alg", json_string(alg));
+			json_decref(request_object_config);
+		}
+	}
+
 	json_object_set_new(data, OIDC_METADATA_INITIATE_LOGIN_URI,
 			json_string(oidc_get_redirect_uri(r, cfg)));
 

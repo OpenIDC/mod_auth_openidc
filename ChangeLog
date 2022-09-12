@@ -3,7 +3,10 @@
   for certification purposes
 - check ID token signed response algorithm on backchannel logout_token and retrieve its
   configuration value from the client metadata file; for certification purposes
-  
+- register request_object_signing_alg in dynamic client registration when using request_uri;
+  for certification purposes
+- bump to 2.4.11.4rc3
+
 09/08/2022
 - store access token obtained from backchannel in session over the one returned
   in the frontchannel for "code token" and "code id_token token" flows; for 
