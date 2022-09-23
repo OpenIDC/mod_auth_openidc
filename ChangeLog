@@ -1,3 +1,8 @@
+09/23/2022
+- allow for step-up discovery with an external URL using HTML refresh 
+  fixes behaviour on CentOS 7/8 when combined with ProxyPass
+- bump to 2.4.11.4rc4
+
 09/12/2022
 - add options to retrieve the configuration document only or pull keys from the JWKS URI;
   for certification purposes

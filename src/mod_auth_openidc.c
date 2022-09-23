@@ -4146,10 +4146,11 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 	oidc_authenticate_user(r, c, NULL, oidc_get_current_url(r, c->x_forwarded_headers), NULL,
 			NULL, NULL, oidc_dir_cfg_path_auth_request_params(r), oidc_dir_cfg_path_scope(r));
 
-	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
+	const char *location = oidc_util_hdr_out_location_get(r);
+
+	if ((oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL) && (location == NULL))
 		return AUTHZ_GRANTED;
 
-	const char *location = oidc_util_hdr_out_location_get(r);
 	if (location != NULL) {
 		oidc_debug(r, "send HTML refresh with authorization redirect: %s", location);
 
