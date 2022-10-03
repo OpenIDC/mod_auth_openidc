@@ -1,4 +1,4 @@
-AC_INIT([mod_auth_openidc],[2.4.11.4rc4],[hans.zandbelt@zmartzone.eu])
+AC_INIT([mod_auth_openidc],[2.4.11.4rc5],[hans.zandbelt@zmartzone.eu])
 
 AC_SUBST(NAMEVER, AC_PACKAGE_TARNAME()-AC_PACKAGE_VERSION())
 

@@ -1,3 +1,7 @@
+10/03/2022
+- add -fPIC to test and test-cmd compilation; see #925
+- bump to 2.4.11.4rc5
+
 09/23/2022
 - allow for step-up discovery with an external URL using HTML refresh 
   fixes behaviour on CentOS 7/8 when combined with ProxyPass

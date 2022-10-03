@@ -81,11 +81,13 @@ LDADD = libauth_openidc.la ${LIBADD}
 
 noinst_PROGRAMS = test/test-cmd
 test_test_cmd_SOURCES = test/test-cmd.c test/stub.c
+test_test_cmd_CFLAGS = ${AM_CFLAGS} -fPIC
 
 TESTS = test/test
 
 check_PROGRAMS = test/test
 test_test_SOURCES = test/test.c test/stub.c
+test_test_CFLAGS = ${AM_CFLAGS} -fPIC
 
 docker: docker-build docker-run
 
