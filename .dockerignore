@@ -3,7 +3,6 @@
 /.project
 /*.la
 /*.log
-/*.rpm
 /configure
 /configure~
 /config.guess*
