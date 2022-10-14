@@ -142,9 +142,11 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 		if (smax == 0) {
 			smax = hmax;
 		}
-		if (min == 0) {
-			min = hmax;
-		}
+		// a default min value of 1 does not work at least on Mac OS X
+		// so retain backwards compatibility for now with 0
+		//if (min == 0) {
+		//	min = hmax;
+		//}
 	} else {
 		if (hmax == 0) {
 			hmax = 1;
@@ -187,6 +189,8 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 
 		if (port == 0)
 			port = 11211;
+
+		oidc_sdebug(s, "creating server: %s:%d, min=%d, smax=%d, hmax=%d, ttl=%d", host_str, port, min, smax, hmax, ttl);
 
 		/* create the memcache server struct */
 		rv = apr_memcache_server_create(p, host_str, port, min, smax, hmax, ttl, &st);

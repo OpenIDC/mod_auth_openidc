@@ -1,3 +1,7 @@
+10/14/2022
+- set minimum number of default memcache threads to 0 to retain backwards compatibility
+  see #916
+
 10/03/2022
 - add -fPIC to test and test-cmd compilation; see #925
 - bump to 2.4.11.4rc5
