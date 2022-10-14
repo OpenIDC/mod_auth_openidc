@@ -332,8 +332,8 @@ static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *section,
 
 	} else {
 
-		/* calculate the timeout from now */
-		apr_uint32_t timeout = apr_time_sec(expiry - apr_time_now());
+		/* calculate the timeout as a Unix timestamp which allows values > 30 days */
+		apr_uint32_t timeout = apr_time_sec(expiry);
 
 		/* store it */
 		rv = apr_memcache_set(context->cache_memcache,

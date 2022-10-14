@@ -1,6 +1,9 @@
 10/14/2022
 - set minimum number of default memcache threads to 0 to retain backwards compatibility
   see #916
+- support OIDCSessionInactivityTimeout values greater than 30 days when using Memcache
+  see #935, thanks @takesson
+- bump to 2.4.11.4rc6
 
 10/03/2022
 - add -fPIC to test and test-cmd compilation; see #925
