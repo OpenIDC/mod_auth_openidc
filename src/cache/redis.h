@@ -56,6 +56,7 @@ typedef apr_status_t (*oidc_cache_redis_disconnect_function_t)(struct oidc_cache
 
 typedef struct oidc_cache_cfg_redis_t {
 	oidc_cache_mutex_t *mutex;
+	char *username;
 	char *passwd;
 	int database;
 	struct timeval connect_timeout;

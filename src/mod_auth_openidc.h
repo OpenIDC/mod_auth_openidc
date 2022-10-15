@@ -423,6 +423,7 @@ typedef struct oidc_cfg {
 #ifdef USE_LIBHIREDIS
 	/* cache_type= redis: Redis host/port server to use */
 	char *cache_redis_server;
+	char *cache_redis_username;
 	char *cache_redis_password;
 	int cache_redis_database;
 	int cache_redis_connect_timeout;

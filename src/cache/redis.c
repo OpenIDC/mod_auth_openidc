@@ -70,6 +70,7 @@ static oidc_cache_cfg_redis_ctx_t* oidc_cache_redis_cfg_ctx_create(apr_pool_t *p
 static oidc_cache_cfg_redis_t* oidc_cache_redis_cfg_create(apr_pool_t *pool) {
 	oidc_cache_cfg_redis_t *context = apr_pcalloc(pool, sizeof(oidc_cache_cfg_redis_t));
 	context->mutex = oidc_cache_mutex_create(pool);
+	context->username = NULL;
 	context->passwd = NULL;
 	context->database = -1;
 	context->connect_timeout.tv_sec = REDIS_CONNECT_TIMEOUT_DEFAULT;
@@ -90,6 +91,9 @@ int oidc_cache_redis_post_config(server_rec *s, oidc_cfg *cfg, const char *name)
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
+	if (cfg->cache_redis_username != NULL) {
+		context->username = apr_pstrdup(s->process->pool, cfg->cache_redis_username);
+	}
 	if (cfg->cache_redis_password != NULL) {
 		context->passwd = apr_pstrdup(s->process->pool, cfg->cache_redis_password);
 	}
@@ -232,7 +236,11 @@ static apr_status_t oidc_cache_redis_connect(request_rec *r, oidc_cache_cfg_redi
 
 	/* see if we need to authenticate to the Redis server */
 	if (context->passwd != NULL) {
-		reply = redisCommand(rctx->rctx, "AUTH %s", context->passwd);
+		if (context->username != NULL) {
+			reply = redisCommand(rctx->rctx, "AUTH %s %s", context->username, context->passwd);
+		} else {
+			reply = redisCommand(rctx->rctx, "AUTH %s", context->passwd);
+		}
 		if ((reply == NULL) || (reply->type == REDIS_REPLY_ERROR))
 			oidc_error(r, "Redis AUTH command (%s:%d) failed: '%s' [%s]", rctx->host_str, rctx->port, rctx->rctx->errstr,
 					   reply ? reply->str : "<n/a>");

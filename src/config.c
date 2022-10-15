@@ -238,6 +238,7 @@
 #define OIDCCacheEncrypt                       "OIDCCacheEncrypt"
 #define OIDCCacheDir                           "OIDCCacheDir"
 #define OIDCCacheFileCleanInterval             "OIDCCacheFileCleanInterval"
+#define OIDCRedisCacheUsername                 "OIDCRedisCacheUsername"
 #define OIDCRedisCachePassword                 "OIDCRedisCachePassword"
 #define OIDCRedisCacheDatabase                 "OIDCRedisCacheDatabase"
 #define OIDCRedisCacheConnectTimeout           "OIDCRedisCacheConnectTimeout"
@@ -1511,6 +1512,7 @@ void* oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->cache_shm_entry_size_max = OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX;
 #ifdef USE_LIBHIREDIS
 	c->cache_redis_server = NULL;
+	c->cache_redis_username = NULL;
 	c->cache_redis_password = NULL;
 	c->cache_redis_database = -1;
 	c->cache_redis_connect_timeout = -1;
@@ -1946,6 +1948,9 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->cache_redis_server =
 			add->cache_redis_server != NULL ?
 					add->cache_redis_server : base->cache_redis_server;
+	c->cache_redis_username =
+			add->cache_redis_username != NULL ?
+					add->cache_redis_username : base->cache_redis_username;
 	c->cache_redis_password =
 			add->cache_redis_password != NULL ?
 					add->cache_redis_password : base->cache_redis_password;
@@ -3466,6 +3471,11 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, cache_redis_server),
 				RSRC_CONF,
 				"Redis server used for caching (<hostname>[:<port>])"),
+		AP_INIT_TAKE1(OIDCRedisCacheUsername,
+				oidc_set_string_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, cache_redis_username),
+				RSRC_CONF,
+				"Username for authentication to the Redis servers."),
 		AP_INIT_TAKE1(OIDCRedisCachePassword,
 				oidc_set_string_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, cache_redis_password),

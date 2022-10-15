@@ -1,3 +1,7 @@
+10/15/2022
+- add option to set a username for Redis authentication via OIDCRedisCacheUsername
+- bump to 2.4.11.4rc7
+
 10/14/2022
 - set minimum number of default memcache threads to 0 to retain backwards compatibility
   see #916
