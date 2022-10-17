@@ -1,3 +1,6 @@
+10/17/2022
+- release 2.4.12
+
 10/15/2022
 - add option to set a username for Redis authentication via OIDCRedisCacheUsername
 - bump to 2.4.11.4rc7
