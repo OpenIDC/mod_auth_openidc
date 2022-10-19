@@ -9,7 +9,7 @@ while ! curl -k -s https://keycloak:8443/auth/ > /dev/null ; do sleep 2 ;  done
 while ! curl -k -s https://apache:443/auth/ > /dev/null ; do sleep 2 ; done
 
 # give Keycloak time to run startup scripts to create clients
-sleep 5
+sleep 10
 
 # run headless JMeter for a number of threads/loops and record results in a logfile
 /entrypoint.sh -JTHREADS=${THREADS} -JLOOP=${LOOP} -n -t /tmp/mod_auth_openidc.jmx > /tmp/mod_auth_openidc.log
