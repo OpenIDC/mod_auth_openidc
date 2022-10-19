@@ -12,13 +12,14 @@ source /etc/apache2/envvars
 
 valgrind \
 	--leak-check=full \
+	--trace-children=yes \
 	--error-exitcode=1 \
 	--show-possibly-lost=no \
 	--read-inline-info=yes \
 	--keep-debuginfo=yes \
 	--undef-value-errors=no \
 	--log-file=/tmp/valgrind.log \
-	/usr/sbin/apache2 -X &
+	/usr/sbin/apache2 -DFOREGROUND &
 
 child=$! 
 wait "$child"

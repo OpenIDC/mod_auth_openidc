@@ -1,3 +1,8 @@
+10/19/2022
+- fix cleanup of semaphores; see #522, closes #458
+  simplify mutex/shm cleanup without semaphores because we track the parent process anyway; 
+- bump to 2.4.12.1rc0
+
 10/17/2022
 - release 2.4.12
 

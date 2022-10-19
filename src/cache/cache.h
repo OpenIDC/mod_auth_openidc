@@ -72,8 +72,6 @@ typedef struct oidc_cache_t {
 typedef struct oidc_cache_mutex_t {
 	apr_global_mutex_t *mutex;
 	char *mutex_filename;
-	apr_shm_t *shm;
-	int *sema;
 	apr_byte_t is_parent;
 } oidc_cache_mutex_t;
 

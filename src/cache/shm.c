@@ -119,6 +119,8 @@ int oidc_cache_shm_post_config(server_rec *s) {
 			"initialized shared memory with a cache size (# entries) of: %d, and a max (single) entry size of: %d",
 			cfg->cache_shm_size_max, cfg->cache_shm_entry_size_max);
 
+	oidc_slog(s, APLOG_TRACE1, "create: %pp (shm=%pp,s=%pp, p=%d)", context, context ? context->shm : 0, s, context ? context->is_parent : -1);
+
 	return OK;
 }
 
@@ -130,6 +132,10 @@ int oidc_cache_shm_child_init(apr_pool_t *p, server_rec *s) {
 			&auth_openidc_module);
 	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *) cfg->cache_cfg;
 
+	oidc_slog(s, APLOG_TRACE1, "init: %pp (shm=%pp,s=%pp, p=%d)", context, context ? context->shm : 0, s, context ? context->is_parent : -1);
+
+	if (context->is_parent == FALSE)
+		return APR_SUCCESS;
 	context->is_parent = FALSE;
 
 	/* initialize the lock for the child process */
@@ -330,24 +336,20 @@ static int oidc_cache_shm_destroy(server_rec *s) {
 	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *) cfg->cache_cfg;
 	apr_status_t rv = APR_SUCCESS;
 
-	if (context == NULL)
-		return rv;
+	oidc_slog(s, APLOG_TRACE1, "destroy: %pp (shm=%pp,s=%pp, p=%d)", context, context ? context->shm : 0, s, context ? context->is_parent : -1);
 
-	if ((context->is_parent == TRUE) && (context->shm)) {
+	if ((context) && (context->is_parent == TRUE) && (context->shm) && (context->mutex)) {
 		oidc_cache_mutex_lock(s, context->mutex);
-		if (*context->mutex->sema == 1) {
-			rv = apr_shm_destroy(context->shm);
-			oidc_sdebug(s, "apr_shm_destroy returned: %d", rv);
-		}
+		rv = apr_shm_destroy(context->shm);
+		oidc_sdebug(s, "apr_shm_destroy returned: %d", rv);
 		context->shm = NULL;
 		oidc_cache_mutex_unlock(s, context->mutex);
 	}
 
-	if (context->mutex == NULL)
-		return rv;
-
-	oidc_cache_mutex_destroy(s, context->mutex);
-	context->mutex = NULL;
+	if ((context) && (context->mutex)) {
+		rv = oidc_cache_mutex_destroy(s, context->mutex);
+		context->mutex = NULL;
+	}
 
 	return rv;
 }
