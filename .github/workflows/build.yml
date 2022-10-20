@@ -19,6 +19,6 @@ jobs:
     - name: Make
       run: make
     - name: Test
-      run: make check
+      run: make check || (cat test-suite.log && exit -1)
     - name: Distcheck
       run: make distcheck DESTDIR=/tmp/mod_auth_openidc

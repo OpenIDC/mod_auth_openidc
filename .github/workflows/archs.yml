@@ -41,7 +41,7 @@ jobs:
         run: |
           ./autogen.sh
           ./configure
-          make check
+          make check || (cat test-suite.log && exit -1)
           cp test-suite.log "/logs/${logfilename}"
           echo "Copied test-suite.log to /logs/${logfilename}"
           
