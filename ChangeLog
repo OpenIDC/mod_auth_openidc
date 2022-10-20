@@ -1,5 +1,6 @@
 10/20/2022
 - CI: add memory and semaphore checks on various distro's
+- correct ap_hook_insert_filter function signature in stub.c, part 3; see #784
 
 10/19/2022
 - fix cleanup of semaphores on graceful restarts; see #522, closes #458
