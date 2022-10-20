@@ -24,8 +24,8 @@ RUN cd mod_auth_openidc && \
 	./configure && \
 	make clean && \
 	make
-#RUN cd mod_auth_openidc && \
-#	make check || (cat test-suite.log && exit -1)
+RUN cd mod_auth_openidc && \
+	make check || (cat test-suite.log && exit -1)
 RUN cd mod_auth_openidc && \
 	make install 
 
@@ -38,10 +38,11 @@ RUN echo "LoadModule proxy_http_module modules/mod_proxy_http.so" >> /etc/httpd/
 RUN echo "LoadModule ssl_module modules/mod_ssl.so" >> /etc/httpd/conf/httpd.conf
 RUN echo "Include conf/extra/httpd-ssl.conf" >> /etc/httpd/conf/httpd.conf
 RUN echo "LoadModule socache_shmcb_module modules/mod_socache_shmcb.so" >> /etc/httpd/conf/httpd.conf
+#RUN echo "Mutex sem" >> /etc/httpd/conf/httpd.conf
 
 RUN openssl req -new -days 365 -x509 -nodes -out /etc/httpd/conf/server.crt -keyout /etc/httpd/conf/server.key -subj "/CN=apache"
 
 RUN mkdir -p /etc/apache2 && touch /etc/apache2/envvars && chmod a+x /etc/apache2/envvars
 RUN ln -s /usr/sbin/httpd /usr/sbin/apache2 
 
-#RUN apachectl -M
+RUN /usr/sbin/httpd  -M

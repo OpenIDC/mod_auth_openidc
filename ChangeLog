@@ -1,6 +1,10 @@
 10/20/2022
 - CI: add memory and semaphore checks on various distro's
 - correct ap_hook_insert_filter function signature in stub.c, part 3; see #784
+- fix printout of cache mutex errors in cache/common.c
+- prefer APR_LOCK_POSIXSEM over APR_LOCK_DEFAULT in apr_global_mutex_create
+  which is apparently required for (some) ARM based builds (and CI)
+- bump to 2.4.12.1rc1
 
 10/19/2022
 - fix cleanup of semaphores on graceful restarts; see #522, closes #458
