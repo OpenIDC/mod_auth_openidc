@@ -1,10 +1,6 @@
 name: Archs
 
-on:
-  push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
+on: [push, pull_request]
 
 jobs:
   build:
@@ -16,17 +12,17 @@ jobs:
       matrix:
         include:
           - arch: armv7
-            distro: ubuntu20.04
+            distro: ubuntu22.04
           - arch: aarch64
-            distro: ubuntu20.04
+            distro: ubuntu22.04
           - arch: ppc64le
-            distro: ubuntu20.04
+            distro: ubuntu22.04
           - arch: s390x
-            distro: ubuntu20.04
+            distro: ubuntu22.04
   
     steps:
-    - uses: actions/checkout@v2.4.0
-    - uses: uraimo/run-on-arch-action@v2.1.1
+    - uses: actions/checkout@v3
+    - uses: uraimo/run-on-arch-action@v2
       name: Build
       id: build
       with:
