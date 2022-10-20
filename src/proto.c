@@ -2902,6 +2902,7 @@ static apr_byte_t oidc_proto_parse_idtoken_and_validate_code(request_rec *r,
 			&& (oidc_proto_validate_code(r, provider, *jwt, response_type, code)
 					== FALSE)) {
 		oidc_jwt_destroy(*jwt);
+		*jwt = NULL;
 		return FALSE;
 	}
 
@@ -3073,8 +3074,11 @@ apr_byte_t oidc_proto_handle_authorization_response_code(request_rec *r,
 	if ((apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN) != NULL)
 			&& (oidc_proto_validate_access_token(r, provider, *jwt,
 					response_type,
-					apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN)) == FALSE))
+					apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN)) == FALSE)) {
+		oidc_jwt_destroy(*jwt);
+		*jwt = NULL;
 		return FALSE;
+	}
 
 	return TRUE;
 }

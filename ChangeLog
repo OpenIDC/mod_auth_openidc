@@ -6,6 +6,7 @@
   which is apparently required for (some) ARM based builds (and CI)
 - bump to 2.4.12.1rc1
 - fix potential memory leak in proto.c when oidc_util_create_symmetric_key fails
+- fix potential memory leak in proto.c when oidc_proto_validate_access_token fails (at_hash validation)
 
 10/19/2022
 - fix cleanup of semaphores on graceful restarts; see #522, closes #458
