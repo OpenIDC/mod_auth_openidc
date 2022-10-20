@@ -20,14 +20,14 @@ services:
   apache:
     build:
       context: ..
-      dockerfile: test/Dockerfile
+      dockerfile: test/Dockerfile-${DISTRO}
     expose:
       - "443"
     volumes:
       - ./valgrind.sh:/tmp/valgrind.sh
       - ./openidc.conf:/etc/apache2/conf-available/openidc.conf
     command: ["/tmp/valgrind.sh"]
-
+      
   jmeter:
     #image: justb4/jmeter
     build: https://github.com/justb4/docker-jmeter.git

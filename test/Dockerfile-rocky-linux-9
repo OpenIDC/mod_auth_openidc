@@ -1,0 +1,33 @@
+FROM rockylinux:9
+
+RUN dnf -y update && dnf clean all
+
+RUN dnf install -y 'dnf-command(config-manager)'
+RUN dnf config-manager --set-enabled crb
+RUN dnf config-manager --set-enabled devel
+
+RUN dnf install -y epel-release
+RUN dnf update -y
+RUN dnf install -y \
+	rpm-build gcc autoconf automake libtool make \
+	httpd-devel curl-devel pcre2-devel check-devel jansson-devel hiredis-devel \
+	httpd mod_ssl valgrind
+RUN dnf install -y cjose-devel
+
+COPY . mod_auth_openidc
+
+RUN cd mod_auth_openidc && \
+	./autogen.sh && \
+	./configure CFLAGS="-g" && \
+	make clean && \
+	make check && \
+	make install
+
+RUN openssl req -new -days 365 -x509 -nodes -out /etc/pki/tls/certs/localhost.crt -keyout /etc/pki/tls/private/localhost.key -subj "/C=NL/CN=localhost"
+RUN echo "LoadModule auth_openidc_module modules/mod_auth_openidc.so" > /etc/httpd/conf.modules.d/00-openidc.conf
+RUN ln -s /etc/apache2/conf-available/openidc.conf /etc/httpd/conf.d/openidc.conf
+RUN sed -i '/^LogLevel/s/ *$/ & auth_openidc\:trace1/g' /etc/httpd/conf.d/ssl.conf
+RUN mkdir -p /etc/apache2 && touch /etc/apache2/envvars && chmod a+x /etc/apache2/envvars
+RUN ln -s /usr/sbin/httpd /usr/sbin/apache2 
+
+RUN /usr/sbin/httpd -M

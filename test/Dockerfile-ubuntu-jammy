@@ -1,4 +1,4 @@
-FROM ubuntu:focal
+FROM ubuntu:jammy
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -16,8 +16,15 @@ RUN a2enmod ssl proxy proxy_http && \
 
 COPY . mod_auth_openidc
 
-RUN cd mod_auth_openidc && ./autogen.sh && \
-	./configure CFLAGS="-g -O0" LDFLAGS="-lrt" && \
-	make clean && make check && make install
+RUN cd mod_auth_openidc && \
+	./autogen.sh && \
+	./configure CFLAGS="-g" && \
+	make clean && \
+	make check && \
+	make install
+
+RUN touch /etc/apache2/conf-available/openidc.conf && a2enconf openidc
+RUN echo "LoadModule auth_openidc_module /usr/lib/apache2/modules/mod_auth_openidc.so" > /etc/apache2/mods-available/auth_openidc.load
+RUN a2enmod auth_openidc
 
 RUN /usr/sbin/apache2ctl start

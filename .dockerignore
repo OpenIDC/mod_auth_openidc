@@ -24,3 +24,4 @@
 /.github
 /test/docker-compose.yml
 /test/docker-compose-mac.yml
+/test/Dockerfile-*
