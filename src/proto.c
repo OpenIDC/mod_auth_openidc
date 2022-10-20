@@ -1659,8 +1659,11 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 
 		jwk = NULL;
 		if (oidc_util_create_symmetric_key(r, provider->client_secret, 0,
-				NULL, TRUE, &jwk) == FALSE)
+				NULL, TRUE, &jwk) == FALSE) {
+			oidc_jwt_destroy(*jwt);
+			*jwt = NULL;
 			return FALSE;
+		}
 
 		oidc_jwks_uri_t jwks_uri = { provider->jwks_uri,
 				provider->jwks_refresh_interval, provider->ssl_validate_server };
