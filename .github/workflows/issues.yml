@@ -3,7 +3,7 @@ on:
     types: [opened, reopened]
 jobs:
   check:
-    if: github.event.issue.user.login == 'zandbelt'
+    if: github.event.issue.user.login != 'zandbelt'
     runs-on: ubuntu-latest
     steps: 
       - if: github.event.action == 'opened'
