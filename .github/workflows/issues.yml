@@ -1,0 +1,18 @@
+on:
+  issues:
+    types: [opened, reopened]
+jobs:
+  check:
+    if: github.event.issue.user.login != 'zandbelt'
+    runs-on: ubuntu-latest
+    steps: 
+      - if: github.event.action == 'opened'
+        uses: actions-ecosystem/action-add-labels@v1
+        name: Label Invalid
+        with:
+          labels: invalid
+      - uses: peter-evans/close-issue@v2
+        name: Close Issue
+        with:
+          comment: "https://github.com/zmartzone/mod_auth_openidc/wiki#20-why-is-my-ticket-closed-as-invalid"
+ 
