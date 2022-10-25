@@ -1,3 +1,7 @@
+10/25/2022
+- define APLOG_TRACE1 if it does not exist
+- bump to 2.4.12.1rc2
+
 10/20/2022
 - CI: add memory and semaphore checks on various distro's
 - correct ap_hook_insert_filter function signature in stub.c, part 3; see #784
