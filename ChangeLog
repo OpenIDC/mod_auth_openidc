@@ -1,3 +1,9 @@
+10/26/2022
+- OIDCProviderMetadataRefreshInterval was interpreted in microseconds instead
+  of the documented and intended seconds; setting in to seconds would effectively
+  turn of caching and pull the configuration document on each request
+- bump to 2.4.12.1rc3
+
 10/25/2022
 - define APLOG_TRACE1 if it does not exist
 - bump to 2.4.12.1rc2

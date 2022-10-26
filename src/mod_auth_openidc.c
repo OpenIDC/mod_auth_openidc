@@ -296,7 +296,7 @@ static apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg *c,
 		}
 
 		oidc_cache_set_provider(r, c->provider.metadata_url, s_json,
-				apr_time_now() + (c->provider_metadata_refresh_interval <= 0 ? apr_time_from_sec( OIDC_CACHE_PROVIDER_METADATA_EXPIRY_DEFAULT) : c->provider_metadata_refresh_interval));
+				apr_time_now() + apr_time_from_sec(c->provider_metadata_refresh_interval <= 0 ? OIDC_CACHE_PROVIDER_METADATA_EXPIRY_DEFAULT : c->provider_metadata_refresh_interval));
 
 	} else {
 
