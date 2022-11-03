@@ -12,16 +12,7 @@
 /ar-lib
 /aclocal.m4
 /.gitignore
-/test/Dockerfile
 /test/*.la
 /test/*.log
 /test/.gitignore
-/test/openidc.conf
-/test/keycloak.sh
-/test/jmeter.sh
-/test/valgrind.sh
-/test/mod_auth_openidc.jmx
 /.github
-/test/docker-compose.yml
-/test/docker-compose-mac.yml
-/test/Dockerfile-*

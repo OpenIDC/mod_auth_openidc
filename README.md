@@ -1,6 +1,5 @@
 [![Build Status](https://github.com/zmartzone/mod_auth_openidc/actions/workflows/build.yml/badge.svg)](https://github.com/zmartzone/mod_auth_openidc/actions/workflows/build.yml)
 [<img width="184" height="96" align="right" src="http://openid.net/wordpress-content/uploads/2016/05/oid-l-certification-mark-l-cmyk-150dpi-90mm.jpg" alt="OpenID Certification">](https://openid.net/certification)
-[![Valgrind Status](https://github.com/zmartzone/mod_auth_openidc/actions/workflows/valgrind.yml/badge.svg)](https://github.com/zmartzone/mod_auth_openidc/actions/workflows/valgrind.yml)
 [![CodeQL Analysis](https://github.com/zmartzone/mod_auth_openidc/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/zmartzone/mod_auth_openidc/actions/workflows/codeql-analysis.yml)
 
 mod_auth_openidc
