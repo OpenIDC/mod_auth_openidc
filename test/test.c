@@ -1467,7 +1467,13 @@ static char * test_authz_worker(request_rec *r) {
 			"}"
 			"},"
 
-			"\"https://test.com/pay\": \"alot\""
+			"\"https://test.com/pay\": \"alot\","
+
+			"\"https://company.com/productAccess\": ["
+			    "\"snake2\","
+			    "\"snake2ref\","
+			    "\"fxt\""
+			  "]"
 
 			"}";
 
@@ -1560,6 +1566,11 @@ static char * test_authz_worker(request_rec *r) {
 	parsed_require_args->filename = require_args;
 	rc = oidc_authz_worker24(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
 	TST_ASSERT("auth status (17: expression)", rc == AUTHZ_GRANTED);
+
+	require_args = "Require claim https://company.com/productAccess:snake2";
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_worker24(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (18: key in namespaced array)", rc == AUTHZ_GRANTED);
 
 	json_decref(json);
 
