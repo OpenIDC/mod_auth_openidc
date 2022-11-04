@@ -5,7 +5,7 @@
 mod_auth_openidc
 ================
 
-*mod_auth_openidc* is a certified authentication and authorization module for the Apache 2.x
+*mod_auth_openidc* is an OpenID Certified™ authentication and authorization module for the Apache 2.x
 HTTP server that implements the OpenID Connect Relying Party functionality.
 
 Overview
@@ -38,7 +38,7 @@ This file can also serve as an include file for `httpd.conf`.
 Interoperability
 ----------------
 
-*mod_auth_openidc* is [OpenID Connect certified](https://openid.net/certification/#RPs) and supports the following specifications:
+*mod_auth_openidc* is [OpenID Certified™](https://openid.net/certification/#RPs) and supports the following specifications:
 - [OpenID Connect Core 1.0](http://openid.net/specs/openid-connect-core-1_0.html) *(Basic, Implicit, Hybrid and Refresh flows)*
 - [OpenID Connect Discovery 1.0](http://openid.net/specs/openid-connect-discovery-1_0.html)
 - [OpenID Connect Dynamic Client Registration 1.0](http://openid.net/specs/openid-connect-registration-1_0.html)
