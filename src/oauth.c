@@ -808,19 +808,19 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c,
 	char *authn_header = oidc_cfg_dir_authn_header(r);
 	apr_byte_t pass_headers = oidc_cfg_dir_pass_info_in_headers(r);
 	apr_byte_t pass_envvars = oidc_cfg_dir_pass_info_in_envvars(r);
-	apr_byte_t pass_base64url = oidc_cfg_dir_pass_info_base64url(r);
+	int pass_hdr_as = oidc_cfg_dir_pass_info_encoding(r);
 
 	if ((r->user != NULL) && (authn_header != NULL))
 		oidc_util_hdr_in_set(r, authn_header, r->user);
 
 	/* set the resolved claims in the HTTP headers for the target application */
 	oidc_util_set_app_infos(r, token, oidc_cfg_claim_prefix(r),
-			c->claim_delimiter, pass_headers, pass_envvars, pass_base64url);
+			c->claim_delimiter, pass_headers, pass_envvars, pass_hdr_as);
 
 	/* set the access_token in the app headers */
 	if (access_token != NULL) {
 		oidc_util_set_app_info(r, OIDC_APP_INFO_ACCESS_TOKEN, access_token,
-				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars, pass_base64url);
+				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars, pass_hdr_as);
 	}
 
 	/* free JSON resources */

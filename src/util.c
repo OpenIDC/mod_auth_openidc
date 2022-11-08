@@ -2007,22 +2007,59 @@ apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack,
 	return (i == json_array_size(haystack)) ? FALSE : TRUE;
 }
 
+static char* oidc_util_utf8_to_latin1(request_rec *r, const char *src) {
+	char *dst = "";
+	unsigned int cp = 0;
+	unsigned char ch;
+	if (src == NULL)
+		return NULL;
+	while (*src != '\0') {
+		ch = (unsigned char) (*src);
+		if (ch <= 0x7f)
+			cp = ch;
+		else if (ch <= 0xbf)
+			cp = (cp << 6) | (ch & 0x3f);
+		else if (ch <= 0xdf)
+			cp = ch & 0x1f;
+		else if (ch <= 0xef)
+			cp = ch & 0x0f;
+		else
+			cp = ch & 0x07;
+		++src;
+		if (((*src & 0xc0) != 0x80) && (cp <= 0x10ffff)) {
+			if (cp <= 255) {
+				dst = apr_psprintf(r->pool, "%s%c", dst, (unsigned char)cp);
+			} else {
+				// no encoding possible
+				dst = apr_psprintf(r->pool, "%s%c", dst, '?');
+			}
+		}
+	}
+	return dst;
+}
+
+
 /*
  * set a HTTP header and/or environment variable to pass information to the application
  */
 void oidc_util_set_app_info(request_rec *r, const char *s_key,
 		const char *s_value, const char *claim_prefix, apr_byte_t as_header,
-		apr_byte_t as_env_var, apr_byte_t base64url) {
+		apr_byte_t as_env_var, int pass_as) {
 
 	/* construct the header name, cq. put the prefix in front of a normalized key name */
 	const char *s_name = apr_psprintf(r->pool, "%s%s", claim_prefix,
 			oidc_normalize_header_name(r, s_key));
 	char *d_value = NULL;
 
-	if (as_header) {
-		if ((base64url == TRUE) && (s_value != NULL)) {
+	if (s_value != NULL) {
+		if (pass_as == OIDC_PASS_APP_INFO_AS_BASE64URL) {
 			oidc_base64url_encode(r, &d_value, s_value, strlen(s_value), TRUE);
+		} else if (pass_as == OIDC_PASS_APP_INFO_AS_LATIN1) {
+			d_value = oidc_util_utf8_to_latin1(r, s_value);
 		}
+	}
+
+	if (as_header) {
 		oidc_util_hdr_in_set(r, s_name, (d_value != NULL) ? d_value : s_value);
 	}
 
@@ -2030,9 +2067,9 @@ void oidc_util_set_app_info(request_rec *r, const char *s_key,
 
 		/* do some logging about this event */
 		oidc_debug(r, "setting environment variable \"%s: %s\"", s_name,
-				s_value);
+				   (d_value != NULL) ? d_value : s_value);
 
-		apr_table_set(r->subprocess_env, s_name, s_value);
+		apr_table_set(r->subprocess_env, s_name, (d_value != NULL) ? d_value : s_value);
 	}
 }
 
@@ -2041,7 +2078,7 @@ void oidc_util_set_app_info(request_rec *r, const char *s_key,
  */
 void oidc_util_set_app_infos(request_rec *r, const json_t *j_attrs,
 		const char *claim_prefix, const char *claim_delimiter,
-		apr_byte_t as_header, apr_byte_t as_env_var, apr_byte_t base64url) {
+		apr_byte_t as_header, apr_byte_t as_env_var, int pass_as) {
 
 	char s_int[255];
 	json_t *j_value = NULL;
@@ -2070,21 +2107,21 @@ void oidc_util_set_app_infos(request_rec *r, const json_t *j_attrs,
 
 			/* set the single string in the application header whose name is based on the key and the prefix */
 			oidc_util_set_app_info(r, s_key, json_string_value(j_value),
-					claim_prefix, as_header, as_env_var, base64url);
+					claim_prefix, as_header, as_env_var, pass_as);
 
 		} else if (json_is_boolean(j_value)) {
 
 			/* set boolean value in the application header whose name is based on the key and the prefix */
 			oidc_util_set_app_info(r, s_key,
 					(json_is_true(j_value) ? "1" : "0"), claim_prefix,
-					as_header, as_env_var, base64url);
+					as_header, as_env_var, pass_as);
 
 		} else if (json_is_integer(j_value)) {
 
 			if (sprintf(s_int, "%ld", (long) json_integer_value(j_value)) > 0) {
 				/* set long value in the application header whose name is based on the key and the prefix */
 				oidc_util_set_app_info(r, s_key, s_int, claim_prefix, as_header,
-						as_env_var, base64url);
+						as_env_var, pass_as);
 			} else {
 				oidc_warn(r,
 						"could not convert JSON number to string (> 255 characters?), skipping");
@@ -2095,14 +2132,14 @@ void oidc_util_set_app_infos(request_rec *r, const json_t *j_attrs,
 			/* set float value in the application header whose name is based on the key and the prefix */
 			oidc_util_set_app_info(r, s_key,
 					apr_psprintf(r->pool, "%lf", json_real_value(j_value)),
-					claim_prefix, as_header, as_env_var, base64url);
+					claim_prefix, as_header, as_env_var, pass_as);
 
 		} else if (json_is_object(j_value)) {
 
 			/* set json value in the application header whose name is based on the key and the prefix */
 			oidc_util_set_app_info(r, s_key,
 					oidc_util_encode_json_object(r, j_value, 0), claim_prefix,
-					as_header, as_env_var, base64url);
+					as_header, as_env_var, pass_as);
 
 			/* check if it is a multi-value string */
 		} else if (json_is_array(j_value)) {
@@ -2157,7 +2194,7 @@ void oidc_util_set_app_infos(request_rec *r, const json_t *j_attrs,
 
 			/* set the concatenated string */
 			oidc_util_set_app_info(r, s_key, s_concat, claim_prefix, as_header,
-					as_env_var, base64url);
+					as_env_var, pass_as);
 
 		} else {
 

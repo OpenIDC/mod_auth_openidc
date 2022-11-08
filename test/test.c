@@ -1719,6 +1719,38 @@ static char* test_open_redirect(request_rec *r) {
 	return 0;
 }
 
+static char* test_set_app_infos(request_rec *r) {
+	apr_byte_t rc = FALSE;
+	json_t *claims = NULL;
+
+	rc = oidc_util_decode_json_object(r, "{"
+			"\"simple\":\"hans\","
+			"\"name\": \"GÜnther\","
+			"\"dagger\": \"D†gger\""
+			"}", &claims);
+	TST_ASSERT("valid JSON", rc == TRUE);
+
+	oidc_util_set_app_infos(r, claims, "OIDC_CLAIM_", ",", TRUE, FALSE, 0);
+	TST_ASSERT_STR("header plain simple", apr_table_get(r->headers_in, "OIDC_CLAIM_simple"), "hans");
+	TST_ASSERT_STR("header plain name", apr_table_get(r->headers_in, "OIDC_CLAIM_name"), "G\u00DCnther");
+	TST_ASSERT_STR("header plain dagger", apr_table_get(r->headers_in, "OIDC_CLAIM_dagger"), "D\u2020gger");
+
+	oidc_util_set_app_infos(r, claims, "OIDC_CLAIM_", ",", TRUE, FALSE, OIDC_PASS_APP_INFO_AS_BASE64URL);
+	TST_ASSERT_STR("header base64url simple", apr_table_get(r->headers_in, "OIDC_CLAIM_simple"), "aGFucw");
+	TST_ASSERT_STR("header base64url name", apr_table_get(r->headers_in, "OIDC_CLAIM_name"), "R8OcbnRoZXI");
+	TST_ASSERT_STR("header base64url dagger", apr_table_get(r->headers_in, "OIDC_CLAIM_dagger"), "ROKAoGdnZXI");
+
+	oidc_util_set_app_infos(r, claims, "OIDC_CLAIM_", ",", TRUE, FALSE, OIDC_PASS_APP_INFO_AS_LATIN1);
+	TST_ASSERT_STR("header latin1 simple", apr_table_get(r->headers_in, "OIDC_CLAIM_simple"), "hans");
+	TST_ASSERT_STR("header latin1 name", apr_table_get(r->headers_in, "OIDC_CLAIM_name"), "G\xDCnther");
+	TST_ASSERT_STR("header latin1 dagger", apr_table_get(r->headers_in, "OIDC_CLAIM_dagger"), "D?gger");
+
+	json_decref(claims);
+
+	return 0;
+}
+
+
 static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	char *message;
 	TST_RUN(test_public_key_parse, pool);
@@ -1757,6 +1789,7 @@ static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	TST_RUN(test_remote_user, r);
 	TST_RUN(test_is_auth_capable_request, r);
 	TST_RUN(test_open_redirect, r);
+	TST_RUN(test_set_app_infos, r);
 
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	TST_RUN(test_authz_worker, r);
