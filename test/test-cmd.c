@@ -474,8 +474,10 @@ int uuid(int argc, char **argv, apr_pool_t *pool) {
 					(const void *) 1);
 		}
 		i++;
-		if (i % e == 0)
-			fprintf(stderr, "\r %lu  ", i / e);
+		if (i % e == 0) {
+			apr_uuid_format((char *) &s_uuid, uuid);
+			fprintf(stderr, "\r %lu  (%s)", i / e, s_uuid);
+		}
 	}
 	fprintf(stderr, "\n");
 	return 0;
