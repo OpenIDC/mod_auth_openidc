@@ -2,6 +2,7 @@
 - switch to using apr_generate_random_bytes instead of apr_uuid_get to generate session identifiers
   so there's no longer a (rather implicit) dependency on a libapr that is compiled againt libuuid
   on Linux platforms; see #431, #603 and #694; thanks @amitnarang28
+- cache file backend fix: delete the correct file upon logout; closes #955; thanks @damisanet
 - bump to 2.4.12.1rc5
 
 11/08/2022

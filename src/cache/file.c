@@ -392,7 +392,7 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section, const
 
 	/* just remove cache file if value is NULL */
 	if (value == NULL) {
-		if ((rc = apr_file_remove(path, r->pool)) != APR_SUCCESS) {
+		if ((rc = apr_file_remove(target, r->pool)) != APR_SUCCESS) {
 			oidc_error(r, "could not delete cache file \"%s\" (%s)", path, apr_strerror(rc, s_err, sizeof(s_err)));
 		}
 		return TRUE;
