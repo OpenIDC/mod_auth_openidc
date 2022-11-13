@@ -312,6 +312,7 @@ static request_rec * request_setup(apr_pool_t *pool) {
 	request->server->process = apr_pcalloc(request->pool,
 			sizeof(struct process_rec));
 	request->server->process->pool = request->pool;
+	request->server->process->pconf = request->pool;
 	request->connection = apr_pcalloc(request->pool, sizeof(struct conn_rec));
 	request->connection->local_addr = apr_pcalloc(request->pool,
 			sizeof(apr_sockaddr_t));
@@ -451,38 +452,33 @@ int timestamp(int argc, char **argv, apr_pool_t *pool) {
 }
 
 int uuid(int argc, char **argv, apr_pool_t *pool) {
-	char s_uuid[APR_UUID_FORMATTED_LENGTH + 1];
 	const unsigned long e = 1000000;
-	unsigned long n = 10000000;
+	unsigned long n = 25000000;
 	unsigned long i = 0;
+	oidc_session_t z;
 
 	if (argc > 2)
 		n = atoi(argv[2]);
 
+	request_rec *r = request_setup(pool);
+
 	apr_hash_t *entries = apr_hash_make(pool);
-	apr_uuid_t *uuid;
 	while (i < n) {
-		uuid = (apr_uuid_t *) apr_pcalloc(pool, sizeof(apr_uuid_t));
-		apr_uuid_get(uuid);
-		if (apr_hash_get(entries, (const void *) uuid,
-				sizeof(apr_uuid_t)) != NULL) {
-			apr_uuid_format((char *) &s_uuid, uuid);
-			fprintf(stderr, "duplicate found: %s\n", s_uuid);
+		z.uuid = NULL;
+		oidc_session_id_new(r, &z);
+		if (apr_hash_get(entries, (const void*) &z.uuid, APR_HASH_KEY_STRING) != NULL) {
+			fprintf(stderr, "duplicate found: %s\n", z.uuid);
 			exit(-1);
 		} else {
-			apr_hash_set(entries, (const void *) uuid, sizeof(apr_uuid_t),
-					(const void *) 1);
+			apr_hash_set(entries, (const void*) apr_pstrdup(pool, z.uuid), APR_HASH_KEY_STRING, (const void*) 1);
 		}
 		i++;
-		if (i % e == 0) {
-			apr_uuid_format((char *) &s_uuid, uuid);
-			fprintf(stderr, "\r %lu  (%s)", i / e, s_uuid);
-		}
+		if (i % e == 0)
+			fprintf(stderr, "\r %lu  (%s)", i / e, z.uuid);
 	}
 	fprintf(stderr, "\n");
 	return 0;
 }
-
 int main(int argc, char **argv, char **env) {
 
 	if (argc <= 1)

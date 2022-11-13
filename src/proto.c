@@ -58,9 +58,9 @@
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
-apr_status_t oidc_proto_generate_random_bytes(request_rec *r,
+static apr_status_t oidc_proto_generate_random_bytes(request_rec *r,
 		unsigned char *buf, apr_size_t length) {
-	apr_status_t rv;
+	apr_status_t rv = APR_SUCCESS;
 
 #ifndef USE_URANDOM
 
@@ -115,7 +115,7 @@ apr_status_t oidc_proto_generate_random_bytes(request_rec *r,
 /*
  * generate a random string value value of a specified length
  */
-static apr_byte_t oidc_proto_generate_random_string(request_rec *r,
+apr_byte_t oidc_proto_generate_random_string(request_rec *r,
 		char **output, int len) {
 	unsigned char *bytes = apr_pcalloc(r->pool, len);
 	if (oidc_proto_generate_random_bytes(r, bytes, len) != APR_SUCCESS) {

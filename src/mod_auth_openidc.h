@@ -710,6 +710,7 @@ apr_byte_t oidc_proto_handle_authorization_response_code_token(request_rec *r, o
 apr_byte_t oidc_proto_handle_authorization_response_code(request_rec *r, oidc_cfg *c, oidc_proto_state_t *proto_state, oidc_provider_t *provider, apr_table_t *params, const char *response_mode, oidc_jwt_t **jwt);
 apr_byte_t oidc_proto_handle_authorization_response_idtoken_token(request_rec *r, oidc_cfg *c, oidc_proto_state_t *proto_state, oidc_provider_t *provider, apr_table_t *params, const char *response_mode, oidc_jwt_t **jwt);
 apr_byte_t oidc_proto_handle_authorization_response_idtoken(request_rec *r, oidc_cfg *c, oidc_proto_state_t *proto_state, oidc_provider_t *provider, apr_table_t *params, const char *response_mode, oidc_jwt_t **jwt);
+apr_byte_t oidc_proto_generate_random_string(request_rec *r, char **output, int len);
 
 // non-static for test.c
 apr_byte_t oidc_proto_validate_access_token(request_rec *r, oidc_provider_t *provider, oidc_jwt_t *jwt, const char *response_type, const char *access_token);
@@ -918,7 +919,7 @@ apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg *c, json_
 
 // oidc_session.c
 typedef struct {
-	char uuid[APR_UUID_FORMATTED_LENGTH + 1]; /* unique id */
+	char *uuid; /* unique id */
 	const char *remote_user;                  /* user who owns this particular session */
 	json_t *state;                            /* the state for this session, encoded in a JSON object */
 	apr_time_t expiry;                        /* if > 0, the time of expiry of this session */
@@ -933,6 +934,7 @@ apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z);
 apr_byte_t oidc_session_free(request_rec *r, oidc_session_t *z);
 apr_byte_t oidc_session_extract(request_rec *r, oidc_session_t *z);
 apr_byte_t oidc_session_load_cache_by_uuid(request_rec *r, oidc_cfg *c, const char *uuid, oidc_session_t *z);
+void oidc_session_id_new(request_rec *r, oidc_session_t *z);
 
 void oidc_session_set_userinfo_jwt(request_rec *r, oidc_session_t *z, const char *userinfo_jwt);
 const char * oidc_session_get_userinfo_jwt(request_rec *r, oidc_session_t *z);

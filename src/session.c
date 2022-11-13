@@ -89,17 +89,16 @@ static apr_byte_t oidc_session_decode(request_rec *r, oidc_cfg *c, oidc_session_
 /*
  * generate a unique identifier for a session
  */
-static void oidc_session_uuid_new(request_rec *r, oidc_session_t *z) {
-	apr_uuid_t uuid;
-	apr_uuid_get(&uuid);
-	apr_uuid_format((char *) &z->uuid, &uuid);
+void oidc_session_id_new(request_rec *r, oidc_session_t *z) {
+	oidc_proto_generate_random_string(r, &z->uuid, 20);
+	//for (char *p = z->uuid ; (p && *p); ++p) *p = tolower(*p);
 }
 
 /*
  * clear contents of a session
  */
 static void oidc_session_clear(request_rec *r, oidc_session_t *z) {
-	z->uuid[0] = '\0';
+	z->uuid = NULL;
 	z->remote_user = NULL;
 	// NB: don't clear sid
 	z->expiry = 0;
@@ -120,8 +119,7 @@ apr_byte_t oidc_session_load_cache_by_uuid(request_rec *r, oidc_cfg *c,
 	if ((rc == TRUE) && (s_json != NULL)) {
 		rc = oidc_session_decode(r, c, z, s_json, FALSE);
 		if (rc == TRUE) {
-			strncpy(z->uuid, uuid, APR_UUID_FORMATTED_LENGTH);
-			z->uuid[APR_UUID_FORMATTED_LENGTH] = '\0';
+			z->uuid = apr_pstrdup(r->pool, uuid);
 
 			/* compare the session id in the cache value so it allows  us to detect cache corruption */
 			oidc_session_get(r, z, OIDC_SESSION_SESSION_ID, &stored_uuid);
@@ -186,9 +184,9 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, apr
 
 	if (z->state != NULL) {
 
-		if (apr_strnatcmp(z->uuid, "") == 0) {
-			/* get a new uuid for this session */
-			oidc_session_uuid_new(r, z);
+		if (z->uuid == NULL) {
+			/* get a new id for this session */
+			oidc_session_id_new(r, z);
 			/* store the session id in the cache value so it allows  us to detect cache corruption */
 			oidc_session_set(r, z, OIDC_SESSION_SESSION_ID, z->uuid);
 		}
