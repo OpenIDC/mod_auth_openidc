@@ -1,3 +1,6 @@
+11/15/2022
+- release 2.4.12.1
+
 11/13/2022
 - switch to using apr_generate_random_bytes instead of apr_uuid_get to generate session identifiers
   so there's no longer a (rather implicit) dependency on a libapr that is compiled againt libuuid
