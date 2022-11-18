@@ -87,18 +87,22 @@ apr_byte_t oidc_cache_mutex_post_config(server_rec *s, oidc_cache_mutex_t *m,
 			"%s/mod_auth_openidc_%s_mutex.%ld.%pp", dir, type,
 			(long int) getpid(), s);
 
-	/* create the mutex lock */
-	rv = apr_global_mutex_create(&m->mutex, (const char *) m->mutex_filename,
-#if APR_HAS_POSIXSEM_SERIALIZE
-			APR_LOCK_POSIXSEM,
+	/* set the lock type */
+	apr_lockmech_e mech =
+#ifdef OIDC_LOCK
+			OIDC_LOCK
+#elif APR_HAS_POSIXSEM_SERIALIZE
+			APR_LOCK_POSIXSEM
 #else
-			APR_LOCK_DEFAULT,
+			APR_LOCK_DEFAULT
 #endif
-			s->process->pool);
+			;
+
+	/* create the mutex lock */
+	rv =
+			apr_global_mutex_create(&m->mutex, (const char*) m->mutex_filename, mech, s->process->pool);
 	if (rv != APR_SUCCESS) {
-		oidc_serror(s,
-				"apr_global_mutex_create failed to create mutex on file %s: %s (%d)",
-				m->mutex_filename, oidc_cache_status2str(s->process->pool, rv), rv);
+		oidc_serror(s, "apr_global_mutex_create failed to create mutex (%d) on file %s: %s (%d)", mech, m->mutex_filename, oidc_cache_status2str(s->process->pool, rv), rv);
 		return FALSE;
 	}
 
