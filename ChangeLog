@@ -1,3 +1,8 @@
+12/06/2022
+- change Makefile install procedure
+- depend on liboauth 1.4.5.2
+- release 3.3.0
+
 07/01/2021
 - change configure.ac to find Apache flags correctly
 

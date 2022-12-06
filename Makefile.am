@@ -27,4 +27,8 @@ clang-format:
 	clang-format -style=file -i `find . -name *.[ch]`
 
 install:
-	@APXS@ @APXS_OPTS@ -i -n @PACKAGE_NAME@ @PACKAGE_NAME@.la
+	${INSTALL} -d $(DESTDIR)$(shell @APXS@ @APXS_OPTS@ -q LIBEXECDIR)
+	${INSTALL} -p -m 755 .libs/@PACKAGE_NAME@.so $(DESTDIR)$(shell @APXS@ @APXS_OPTS@ -q LIBEXECDIR)/@PACKAGE_NAME@.so
+
+uninstall:
+	rm -f $(DESTDIR)$(shell @APXS@ @APXS_OPTS@ -q LIBEXECDIR)/@PACKAGE_NAME@.so
