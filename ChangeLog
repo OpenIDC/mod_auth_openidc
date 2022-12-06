@@ -1,3 +1,8 @@
+12/06/2022
+- change Makefile install procedure
+- depend on liboauth 1.4.5.2
+- release 3.3.0
+
 07/27/2022
 - depend on liboauth2 1.4.5 with multi-treading fix for "OAuth2TokenVerify jwk <key>"
 - release 3.2.3
