@@ -106,7 +106,7 @@ static apr_status_t oidc_cache_redis_connect(request_rec *r, oidc_cache_cfg_redi
 /*
  * free resources allocated for the per-process Redis connection context
  */
-static apr_status_t oidc_cache_redis_disconnect(oidc_cache_cfg_redis_t *context) {
+apr_status_t oidc_cache_redis_disconnect(oidc_cache_cfg_redis_t *context) {
 	if (context != NULL) {
 		if (context->rctx != NULL) {
 			redisFree(context->rctx);

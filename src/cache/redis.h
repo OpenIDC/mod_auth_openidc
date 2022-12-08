@@ -77,3 +77,4 @@ apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section, const char 
 		const char **value);
 apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section, const char *key,
 		const char *value, apr_time_t expiry);
+apr_status_t oidc_cache_redis_disconnect(oidc_cache_cfg_redis_t *context);
