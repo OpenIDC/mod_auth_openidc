@@ -61,7 +61,9 @@ typedef struct oidc_cache_cfg_redis_t {
 	int database;
 	struct timeval connect_timeout;
 	struct timeval timeout;
-	void *ctx;
+	char *host_str;
+	apr_port_t port;
+	redisContext *rctx;
 	oidc_cache_redis_connect_function_t connect;
 	oidc_cache_redis_command_function_t command;
 	oidc_cache_redis_disconnect_function_t disconnect;

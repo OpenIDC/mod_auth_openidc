@@ -1,3 +1,7 @@
+12/08/2022
+- simplify redis context code
+- bump to 2.4.12.2rc1
+
 11/18/2022
 - allow overriding the type of lock used at compile time with OIDC_LOCK
 - bump to 2.4.12.2rc0

@@ -52,20 +52,6 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define REDIS_CONNECT_TIMEOUT_DEFAULT 5
 #define REDIS_TIMEOUT_DEFAULT 5
 
-typedef struct oidc_cache_cfg_redis_ctx_t {
-	char *host_str;
-	apr_port_t port;
-	redisContext *rctx;
-} oidc_cache_cfg_redis_ctx_t;
-
-static oidc_cache_cfg_redis_ctx_t* oidc_cache_redis_cfg_ctx_create(apr_pool_t *pool) {
-	oidc_cache_cfg_redis_ctx_t *context = apr_pcalloc(pool, sizeof(oidc_cache_cfg_redis_ctx_t));
-	context->host_str = NULL;
-	context->port = 0;
-	context->rctx = NULL;
-	return context;
-}
-
 /* create the cache context */
 static oidc_cache_cfg_redis_t* oidc_cache_redis_cfg_create(apr_pool_t *pool) {
 	oidc_cache_cfg_redis_t *context = apr_pcalloc(pool, sizeof(oidc_cache_cfg_redis_t));
@@ -77,7 +63,9 @@ static oidc_cache_cfg_redis_t* oidc_cache_redis_cfg_create(apr_pool_t *pool) {
 	context->connect_timeout.tv_usec = 0;
 	context->timeout.tv_sec = REDIS_TIMEOUT_DEFAULT;
 	context->timeout.tv_usec = 0;
-	context->ctx = NULL;
+	context->host_str = NULL;
+	context->port = 0;
+	context->rctx = NULL;
 	return context;
 }
 
@@ -119,12 +107,10 @@ static apr_status_t oidc_cache_redis_connect(request_rec *r, oidc_cache_cfg_redi
  * free resources allocated for the per-process Redis connection context
  */
 static apr_status_t oidc_cache_redis_disconnect(oidc_cache_cfg_redis_t *context) {
-	oidc_cache_cfg_redis_ctx_t *rctx = NULL;
 	if (context != NULL) {
-		rctx = (oidc_cache_cfg_redis_ctx_t*) context->ctx;
-		if ((rctx != NULL) && (rctx->rctx != NULL)) {
-			redisFree(rctx->rctx);
-			rctx->rctx = NULL;
+		if (context->rctx != NULL) {
+			redisFree(context->rctx);
+			context->rctx = NULL;
 		}
 	}
 	return APR_SUCCESS;
@@ -136,7 +122,6 @@ static apr_status_t oidc_cache_redis_disconnect(oidc_cache_cfg_redis_t *context)
 static int oidc_cache_redis_post_config_impl(server_rec *s) {
 	apr_status_t rv = APR_SUCCESS;
 	oidc_cache_cfg_redis_t *context = NULL;
-	oidc_cache_cfg_redis_ctx_t *rctx = NULL;
 	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(s->module_config, &auth_openidc_module);
 
 	if (cfg->cache_cfg != NULL)
@@ -145,9 +130,7 @@ static int oidc_cache_redis_post_config_impl(server_rec *s) {
 	if (oidc_cache_redis_post_config(s, cfg, "redis") != OK)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
-	context = cfg->cache_cfg;
-	rctx = oidc_cache_redis_cfg_ctx_create(s->process->pool);
-	context->ctx = rctx;
+	context = (oidc_cache_cfg_redis_t *)cfg->cache_cfg;
 
 	/* parse the host:post tuple from the configuration */
 	if (cfg->cache_redis_server == NULL) {
@@ -157,19 +140,19 @@ static int oidc_cache_redis_post_config_impl(server_rec *s) {
 
 	char *scope_id;
 	rv =
-			apr_parse_addr_port(&rctx->host_str, &scope_id, &rctx->port, cfg->cache_redis_server, s->process->pool);
+			apr_parse_addr_port(&context->host_str, &scope_id, &context->port, cfg->cache_redis_server, s->process->pool);
 	if (rv != APR_SUCCESS) {
 		oidc_serror(s, "failed to parse cache server: '%s'", cfg->cache_redis_server);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	if (rctx->host_str == NULL) {
+	if (context->host_str == NULL) {
 		oidc_serror(s, "failed to parse cache server, no hostname specified: '%s'", cfg->cache_redis_server);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	if (rctx->port == 0)
-		rctx->port = 6379;
+	if (context->port == 0)
+		context->port = 6379;
 
 	context->connect = oidc_cache_redis_connect;
 	context->command = oidc_cache_redis_command;
@@ -211,38 +194,37 @@ static void oidc_cache_redis_reply_free(redisReply **reply) {
  */
 static apr_status_t oidc_cache_redis_connect(request_rec *r, oidc_cache_cfg_redis_t *context) {
 
-	oidc_cache_cfg_redis_ctx_t *rctx = (oidc_cache_cfg_redis_ctx_t*) context->ctx;
 	redisReply *reply = NULL;
 
-	if (rctx->rctx != NULL)
+	if (context->rctx != NULL)
 		goto end;
 
 	/* no connection, connect to the configured Redis server */
 	oidc_debug(r, "calling redisConnectWithTimeout");
-	rctx->rctx = redisConnectWithTimeout(rctx->host_str, rctx->port, context->connect_timeout);
+	context->rctx = redisConnectWithTimeout(context->host_str, context->port, context->connect_timeout);
 
 	/* check for errors */
-	if ((rctx->rctx == NULL) || (rctx->rctx->err != 0)) {
-		oidc_error(r, "failed to connect to Redis server (%s:%d): '%s'", rctx->host_str, rctx->port, rctx->rctx != NULL ? rctx->rctx->errstr : "");
+	if ((context->rctx == NULL) || (context->rctx->err != 0)) {
+		oidc_error(r, "failed to connect to Redis server (%s:%d): '%s'", context->host_str, context->port, context->rctx != NULL ? context->rctx->errstr : "");
 		context->disconnect(context);
 		goto end;
 	}
 
 	/* log the connection */
-	oidc_debug(r, "successfully connected to Redis server (%s:%d)", rctx->host_str, rctx->port);
+	oidc_debug(r, "successfully connected to Redis server (%s:%d)", context->host_str, context->port);
 
-	if (redisSetTimeout(rctx->rctx, context->timeout) != REDIS_OK)
-		oidc_error(r, "redisSetTimeout failed: %s", rctx->rctx->errstr);
+	if (redisSetTimeout(context->rctx, context->timeout) != REDIS_OK)
+		oidc_error(r, "redisSetTimeout failed: %s", context->rctx->errstr);
 
 	/* see if we need to authenticate to the Redis server */
 	if (context->passwd != NULL) {
 		if (context->username != NULL) {
-			reply = redisCommand(rctx->rctx, "AUTH %s %s", context->username, context->passwd);
+			reply = redisCommand(context->rctx, "AUTH %s %s", context->username, context->passwd);
 		} else {
-			reply = redisCommand(rctx->rctx, "AUTH %s", context->passwd);
+			reply = redisCommand(context->rctx, "AUTH %s", context->passwd);
 		}
 		if ((reply == NULL) || (reply->type == REDIS_REPLY_ERROR))
-			oidc_error(r, "Redis AUTH command (%s:%d) failed: '%s' [%s]", rctx->host_str, rctx->port, rctx->rctx->errstr,
+			oidc_error(r, "Redis AUTH command (%s:%d) failed: '%s' [%s]", context->host_str, context->port, context->rctx->errstr,
 					   reply ? reply->str : "<n/a>");
 		else
 			oidc_debug(r, "successfully authenticated to the Redis server: %s",
@@ -254,9 +236,9 @@ static apr_status_t oidc_cache_redis_connect(request_rec *r, oidc_cache_cfg_redi
 
 	/* see if we need to set the database */
 	if (context->database != -1) {
-		reply = redisCommand(rctx->rctx, "SELECT %d", context->database);
+		reply = redisCommand(context->rctx, "SELECT %d", context->database);
 		if ((reply == NULL) || (reply->type == REDIS_REPLY_ERROR))
-			oidc_error(r, "Redis SELECT command (%s:%d) failed: '%s' [%s]", rctx->host_str, rctx->port, rctx->rctx->errstr,
+			oidc_error(r, "Redis SELECT command (%s:%d) failed: '%s' [%s]", context->host_str, context->port, context->rctx->errstr,
 					   reply ? reply->str : "<n/a>");
 		else
 			oidc_debug(r, "successfully selected database %d on the Redis server: %s", context->database,
@@ -268,14 +250,13 @@ static apr_status_t oidc_cache_redis_connect(request_rec *r, oidc_cache_cfg_redi
 
 end:
 
-	return (rctx->rctx != NULL) ? APR_SUCCESS : APR_EGENERAL;
+	return (context->rctx != NULL) ? APR_SUCCESS : APR_EGENERAL;
 }
 
 redisReply* oidc_cache_redis_command(request_rec *r, oidc_cache_cfg_redis_t *context, char **errstr,
 		const char *format, va_list ap) {
-	oidc_cache_cfg_redis_ctx_t *rctx = (oidc_cache_cfg_redis_ctx_t*) context->ctx;
-	redisReply *reply = redisvCommand(rctx->rctx, format, ap);
-	*errstr = apr_pstrdup(r->pool, rctx->rctx->errstr);
+	redisReply *reply = redisvCommand(context->rctx, format, ap);
+	*errstr = apr_pstrdup(r->pool, context->rctx->errstr);
 	return reply;
 }
 
@@ -287,7 +268,6 @@ redisReply* oidc_cache_redis_command(request_rec *r, oidc_cache_cfg_redis_t *con
 static redisReply* oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t *context,
 		const char *format, ...) {
 
-	oidc_cache_cfg_redis_ctx_t *rctx = (oidc_cache_cfg_redis_ctx_t*) context->ctx;
 	redisReply *reply = NULL;
 	char *errstr = NULL;
 	int i = 0;
@@ -311,7 +291,7 @@ static redisReply* oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t 
 			break;
 
 		/* something went wrong, log it */
-		oidc_error(r, "Redis command (attempt=%d to %s:%d) failed, disconnecting: '%s' [%s]", i, rctx->host_str, rctx->port, errstr,
+		oidc_error(r, "Redis command (attempt=%d to %s:%d) failed, disconnecting: '%s' [%s]", i, context->host_str, context->port, errstr,
 				reply ? reply->str : "<n/a>");
 
 		/* free the reply (if there is one allocated) */
