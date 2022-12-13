@@ -853,6 +853,7 @@ char *oidc_util_http_query_encoded_url(request_rec *r, const char *url, const ap
 char *oidc_util_get_full_path(apr_pool_t *pool, const char *abs_or_rel_filename);
 apr_byte_t oidc_enabled(request_rec *r);
 char *oidc_util_http_form_encoded_data(request_rec *r, const apr_table_t *params);
+char* oidc_util_strcasestr(const char *s1, const char *s2);
 
 /* HTTP header constants */
 #define OIDC_HTTP_HDR_COOKIE                            "Cookie"

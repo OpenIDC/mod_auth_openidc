@@ -434,7 +434,7 @@ char* oidc_util_javascript_escape(apr_pool_t *pool, const char *s) {
     return output;
 }
 
-static char* oidc_util_strcasestr(const char *s1, const char *s2) {
+char* oidc_util_strcasestr(const char *s1, const char *s2) {
 	const char *s = s1;
 	const char *p = s2;
 	do {

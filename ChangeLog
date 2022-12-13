@@ -1,3 +1,8 @@
+12/13/2022
+- CVE-2022-23527: prevent open redirect in default setup when OIDCRedirectURLsAllowed is not configured
+  see: https://github.com/zmartzone/mod_auth_openidc/security/advisories/GHSA-q6f2-285m-gr53
+- release 2.4.12.2
+
 12/08/2022
 - simplify redis context code
 - bump to 2.4.12.2rc1
