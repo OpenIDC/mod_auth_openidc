@@ -173,6 +173,7 @@ void oidc_strip_cookies(request_rec *r) {
 		cookie = apr_strtok(cookies, OIDC_STR_SEMI_COLON, &ctx);
 
 		do {
+			// test code
 			while (cookie != NULL && *cookie == OIDC_CHAR_SPACE)
 				cookie++;
 

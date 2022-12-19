@@ -233,7 +233,6 @@
 #define OIDCMetadataDir                        "OIDCMetadataDir"
 #define OIDCSessionCacheFallbackToCookie       "OIDCSessionCacheFallbackToCookie"
 #define OIDCSessionCookieChunkSize             "OIDCSessionCookieChunkSize"
-#define OIDCScrubRequestHeaders                "OIDCScrubRequestHeaders"
 #define OIDCCacheType                          "OIDCCacheType"
 #define OIDCCacheEncrypt                       "OIDCCacheEncrypt"
 #define OIDCCacheDir                           "OIDCCacheDir"
