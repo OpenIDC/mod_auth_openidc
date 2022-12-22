@@ -468,7 +468,7 @@ apr_byte_t oidc_post_preserve_javascript(request_rec *r, const char *location,
 }
 
 /*
- * restore POST parameters on original_url from HTML5 local storage
+ * restore POST parameters on original_url from HTML5 session storage
  */
 static int oidc_request_post_preserved_restore(request_rec *r,
 		const char *original_url) {
