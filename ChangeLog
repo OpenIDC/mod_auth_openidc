@@ -1,3 +1,6 @@
+12/28/2022
+- update sample/test Dockerfile to Ubuntu Jammy
+
 12/13/2022
 - CVE-2022-23527: prevent open redirect in default setup when OIDCRedirectURLsAllowed is not configured
   see: https://github.com/zmartzone/mod_auth_openidc/security/advisories/GHSA-q6f2-285m-gr53

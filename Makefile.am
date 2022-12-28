@@ -70,7 +70,6 @@ mod_auth_openidc.la: libauth_openidc.la
 	${APXS} -c -o $@ libauth_openidc.la ${AM_CFLAGS} ${LIBADD}
 
 install-exec-local:
-#	@APXS@ -i -a -n auth_openidc mod_auth_openidc.la
 	${INSTALL} -d $(DESTDIR)@APACHE_MODULEDIR@
 	${INSTALL} -p -m 755 .libs/mod_auth_openidc.so $(DESTDIR)@APACHE_MODULEDIR@/mod_auth_openidc.so
 
@@ -89,10 +88,14 @@ check_PROGRAMS = test/test
 test_test_SOURCES = test/test.c test/stub.c
 test_test_CFLAGS = ${AM_CFLAGS} -fPIC
 
-docker: docker-build docker-run
+docker: docker-run
 
 docker-build:
 	docker build -t mod_auth_openidc .
 
-docker-run:
-	docker run -p 80:80 -p 443:443 --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -it mod_auth_openidc /bin/bash -c "/root/run.sh"
+# --cap-add=SYS_PTRACE --security-opt seccomp=unconfined
+docker-run: docker-build
+	docker run -p 443:443 -v $(PWD)/openidc.conf:/etc/apache2/conf-available/openidc.conf -it mod_auth_openidc "/usr/sbin/apache2ctl start && tail -f /var/log/apache2/error.log"
+
+docker-valgrind: docker-build
+	docker run -p 443:443 -v $(PWD)/openidc.conf:/etc/apache2/conf-available/openidc.conf -it mod_auth_openidc "source /etc/apache2/envvars && valgrind --leak-check=full /usr/sbin/apache2 -X"

@@ -1,39 +1,31 @@
-FROM ubuntu:bionic
-MAINTAINER hans.zandbelt@zmartzone.eu
+FROM ubuntu:jammy
 
 ENV DEBIAN_FRONTEND noninteractive
 
-RUN apt-get update && apt-get install -y pkg-config make gcc gdb lcov valgrind vim curl iputils-ping wget
-RUN apt-get update && apt-get install -y autoconf automake libtool
-RUN apt-get update && apt-get install -y libssl-dev libjansson-dev libcurl4-openssl-dev check
-RUN apt-get update && apt-get install -y apache2 apache2-dev
-RUN apt-get update && apt-get install -y libpcre2-dev zlib1g-dev
-RUN apt-get update && apt-get install -y libapache2-mod-php libhiredis-dev
-RUN apt-get update && apt-get install -y libcjose-dev
+RUN apt-get update && apt-get install -y \
+	pkg-config make gcc gdb lcov valgrind vim curl iputils-ping wget \
+	autoconf automake libtool \
+	apache2 libapache2-mod-php apache2-dev \
+	libssl-dev libjansson-dev libcurl4-openssl-dev check \
+	libhiredis-dev libcjose-dev \
+	libpcre2-dev zlib1g-dev
 
-RUN a2enmod ssl
-RUN a2ensite default-ssl
-
-RUN echo "/usr/sbin/apache2ctl start && tail -f /var/log/apache2/error.log " >> /root/run.sh
-RUN chmod a+x /root/run.sh
+RUN a2enmod ssl && a2ensite default-ssl
 
 COPY . /root/mod_auth_openidc
-WORKDIR /root/mod_auth_openidc
 
-RUN ./autogen.sh
-RUN ./configure CFLAGS="-g -O0" LDFLAGS="-lrt"
-#-I/usr/include/apache2
-RUN make clean && make check 
-RUN make install
+RUN cd /root/mod_auth_openidc && \
+	./autogen.sh && \
+	./configure CFLAGS="-g -O0" LDFLAGS="-lrt" && \
+	make clean && make check && \
+	make install
 
-WORKDIR /root
-
-ADD openidc.conf /etc/apache2/conf-available
-RUN a2enconf openidc
+RUN touch /etc/apache2/conf-available/openidc.conf && \
+	a2enconf openidc
 RUN /usr/sbin/apache2ctl start
 
-RUN mkdir -p /var/www/html/protected
-RUN echo "<html><body><h1>Hello, <?php echo($_SERVER['REMOTE_USER']) ?></h1><pre><?php print_r(array_map(\"htmlentities\", apache_request_headers())); ?></pre><a href=\"/protected/?logout=https%3A%2F%2Flocalhost.zmartzone.eu%2Floggedout.html\">Logout</a></body></html>" >  /var/www/html/protected/index.php
-RUN mkdir -p /var/www/html/api && cp /var/www/html/protected/index.php /var/www/html/api
+RUN mkdir -p /var/www/html/protected && \
+	echo "<html><body><h1>Hello, <?php echo($_SERVER['REMOTE_USER']) ?></h1><pre><?php print_r(array_map(\"htmlentities\", apache_request_headers())); ?></pre><a href=\"/protected/?logout=https%3A%2F%2Flocalhost.zmartzone.eu%2Floggedout.html\">Logout</a></body></html>" >  /var/www/html/protected/index.php && \
+	mkdir -p /var/www/html/api && cp /var/www/html/protected/index.php /var/www/html/api
 
-# docker run -p 443:443 -it mod_auth_openidc /bin/bash -c "source /etc/apache2/envvars && valgrind --leak-check=full /usr/sbin/apache2 -X"
+ENTRYPOINT ["/bin/bash", "-c"]

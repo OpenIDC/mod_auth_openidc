@@ -16,3 +16,4 @@
 /test/*.log
 /test/.gitignore
 /.github
+/openidc.conf
