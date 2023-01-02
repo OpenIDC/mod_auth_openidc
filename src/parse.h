@@ -40,7 +40,7 @@
  *
  * Validation and parsing of configuration values.
  *
- * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
+ * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
 #ifndef MOD_AUTH_OPENIDC_PARSE_H_

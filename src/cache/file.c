@@ -40,7 +40,7 @@
  *
  * caching using a file storage backend
  *
- * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
+ * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
 #include "mod_auth_openidc.h"

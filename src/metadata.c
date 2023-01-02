@@ -40,7 +40,7 @@
  *
  * OpenID Connect metadata handling routines, for both OP discovery and client registration
  *
- * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
+ * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
 #include "mod_auth_openidc.h"

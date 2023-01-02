@@ -40,7 +40,7 @@
  *
  * mostly copied from mod_auth_cas
  *
- * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
+ * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
 #include "mod_auth_openidc.h"

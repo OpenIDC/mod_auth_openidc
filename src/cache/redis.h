@@ -40,7 +40,7 @@
  *
  * caching using a Redis backend
  *
- * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
+ * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
 #include "hiredis/hiredis.h"

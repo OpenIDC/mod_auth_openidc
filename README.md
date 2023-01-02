@@ -60,7 +60,7 @@ For questions, issues and suggestions use the Github Discussions forum at:
 
 #### Commercial
 For commercial support contracts, professional services, training and use-case specific support please contact:  
-  [sales@zmartzone.eu](mailto:sales@zmartzone.eu)  
+  [sales@openidc.com](mailto:sales@openidc.com)  
 
 How to Use It  
 -------------
@@ -144,5 +144,5 @@ and [more](https://github.com/zmartzone/mod_auth_openidc/wiki/Useful-Links)
 Disclaimer
 ----------
 
-*This software is open sourced by ZmartZone IAM. For commercial services
-you can contact [ZmartZone IAM](https://www.zmartzone.eu) as described above in the [Support](#support) section.*
+*This software is open sourced by OpenIDC, subsidiary of ZmartZone Holding B.V. For commercial services
+you can contact [OpenIDC](https://www.openidc.com) as described above in the [Support](#support) section.*

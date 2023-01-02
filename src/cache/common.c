@@ -40,7 +40,7 @@
  *
  * core cache functions: locking, crypto and utils
  *
- * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
+ * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
 #ifndef WIN32

@@ -25,7 +25,7 @@ RUN touch /etc/apache2/conf-available/openidc.conf && \
 RUN /usr/sbin/apache2ctl start
 
 RUN mkdir -p /var/www/html/protected && \
-	echo "<html><body><h1>Hello, <?php echo($_SERVER['REMOTE_USER']) ?></h1><pre><?php print_r(array_map(\"htmlentities\", apache_request_headers())); ?></pre><a href=\"/protected/?logout=https%3A%2F%2Flocalhost.zmartzone.eu%2Floggedout.html\">Logout</a></body></html>" >  /var/www/html/protected/index.php && \
+	echo "<html><body><h1>Hello, <?php echo($_SERVER['REMOTE_USER']) ?></h1><pre><?php print_r(array_map(\"htmlentities\", apache_request_headers())); ?></pre><a href=\"/protected/?logout=https%3A%2F%2Flocalhost.openidc.com%2Floggedout.html\">Logout</a></body></html>" >  /var/www/html/protected/index.php && \
 	mkdir -p /var/www/html/api && cp /var/www/html/protected/index.php /var/www/html/api
 
 ENTRYPOINT ["/bin/bash", "-c"]
