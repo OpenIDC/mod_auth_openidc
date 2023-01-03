@@ -1,7 +1,7 @@
 # mod_oauth2
 
 A module for Apache HTTP Server 2.x that makes the Apache web server operate as a OAuth 2.0 Resource Server,
-validating OAuth 2.0 bearer access tokens and setting headers/environment variables based on the validation results.
+validating OAuth 2.0 access tokens and setting headers/environment variables based on the validation results.
 
 
 ## Quickstart
