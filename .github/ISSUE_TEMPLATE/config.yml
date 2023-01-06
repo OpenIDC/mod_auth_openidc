@@ -1,8 +1,5 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Community Support
+  - name: Questions and Suggestions
     url: https://github.com/zmartzone/mod_auth_openidc/discussions
-    about: Please ask and answer questions here.
-  - name: Security Vulnerabilities
-    url: https://github.com/zmartzone/mod_auth_openidc/security/policy
-    about: Please report security vulnerabilities as documented here.
+    about: This issue tracker is not for end users, please provide your input here.
