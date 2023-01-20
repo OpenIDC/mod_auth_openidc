@@ -3024,7 +3024,7 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 	oidc_jwks_uri_t jwks_uri = { provider->jwks_uri,
 			provider->jwks_refresh_interval, provider->ssl_validate_server };
 	if (oidc_proto_jwt_verify(r, cfg, jwt, &jwks_uri,
-			oidc_util_merge_symmetric_key(r->pool, NULL, jwk),
+			oidc_util_merge_symmetric_key(r->pool, provider->verify_public_keys, jwk),
 			provider->id_token_signed_response_alg) == FALSE) {
 
 		oidc_error(r, "id_token signature could not be validated, aborting");

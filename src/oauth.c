@@ -612,7 +612,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 	oidc_debug(r,
 			"verify JWT against %d statically configured public keys and %d shared keys, with JWKs URI set to %s",
 			c->oauth.verify_public_keys ?
-					apr_hash_count(c->oauth.verify_public_keys) : 0,
+					c->oauth.verify_public_keys->nelts : 0,
 					c->oauth.verify_shared_keys ?
 							apr_hash_count(c->oauth.verify_shared_keys) : 0,
 							c->oauth.verify_jwks_uri);
@@ -620,11 +620,9 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 	// TODO: we're re-using the OIDC provider JWKs refresh interval here...
 	oidc_jwks_uri_t jwks_uri = { c->oauth.verify_jwks_uri,
 			c->provider.jwks_refresh_interval, c->oauth.ssl_validate_server };
-	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri,
-			oidc_util_merge_key_sets_hash(r->pool, c->oauth.verify_public_keys,
-					c->oauth.verify_shared_keys), NULL) == FALSE) {
-		oidc_error(r,
-				"JWT access token signature could not be validated, aborting");
+	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri, oidc_util_merge_key_sets(r->pool, c->oauth.verify_shared_keys, c->oauth.verify_public_keys), NULL)
+			== FALSE) {
+		oidc_error(r, "JWT access token signature could not be validated, aborting");
 		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}

@@ -173,6 +173,7 @@
 #define OIDCProviderEndSessionEndpoint         "OIDCProviderEndSessionEndpoint"
 #define OIDCProviderBackChannelLogoutSupported "OIDCProviderBackChannelLogoutSupported"
 #define OIDCProviderJwksUri                    "OIDCProviderJwksUri"
+#define OIDCProviderVerifyCertFiles            "OIDCProviderVerifyCertFiles"
 #define OIDCResponseType                       "OIDCResponseType"
 #define OIDCResponseMode                       "OIDCResponseMode"
 #define OIDCPublicKeyFiles                     "OIDCPublicKeyFiles"
@@ -1417,6 +1418,7 @@ void oidc_cfg_provider_init(oidc_provider_t *provider) {
 	provider->check_session_iframe = NULL;
 	provider->end_session_endpoint = NULL;
 	provider->jwks_uri = NULL;
+	provider->verify_public_keys = NULL;
 	provider->backchannel_logout_supported = OIDC_CONFIG_POS_INT_UNSET;
 
 	provider->ssl_validate_server = OIDC_DEFAULT_SSL_VALIDATE_SERVER;
@@ -1633,6 +1635,10 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->provider.jwks_uri =
 			add->provider.jwks_uri != NULL ?
 					add->provider.jwks_uri : base->provider.jwks_uri;
+	c->provider.verify_public_keys =
+			add->provider.verify_public_keys != NULL ?
+					add->provider.verify_public_keys :
+					base->provider.verify_public_keys;
 	c->provider.client_id =
 			add->provider.client_id != NULL ?
 					add->provider.client_id : base->provider.client_id;
@@ -2677,7 +2683,9 @@ static apr_status_t oidc_cleanup_child(void *data) {
 
 		// can do this even though we haven't got a deep copy
 		// since references within the object will be set to NULL
-		oidc_jwk_list_destroy_hash(sp->process->pool,
+		oidc_jwk_list_destroy(sp->process->pool,
+				cfg->provider.verify_public_keys);
+		oidc_jwk_list_destroy(sp->process->pool,
 				cfg->oauth.verify_public_keys);
 		oidc_jwk_list_destroy_hash(sp->process->pool,
 				cfg->oauth.verify_shared_keys);
@@ -3058,6 +3066,11 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, provider.jwks_uri),
 				RSRC_CONF,
 				"Define the OpenID OP JWKS URL (e.g.: https://localhost:9031/pf/JWKS)"),
+		AP_INIT_ITERATE(OIDCProviderVerifyCertFiles,
+				oidc_set_public_key_files,
+				(void*)APR_OFFSETOF(oidc_cfg, provider.verify_public_keys),
+				RSRC_CONF,
+				"The fully qualified names of the files that contain the X.509 certificates that contains the RSA public keys that can be used for ID token validation."),
 		AP_INIT_TAKE1(OIDCResponseType,
 				oidc_set_response_type,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.response_type),

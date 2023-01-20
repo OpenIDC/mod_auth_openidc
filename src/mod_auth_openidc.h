@@ -296,6 +296,7 @@ typedef struct oidc_provider_t {
 	char *check_session_iframe;
 	char *end_session_endpoint;
 	char *jwks_uri;
+	apr_array_header_t *verify_public_keys;
 	char *client_id;
 	char *client_secret;
 	char *token_endpoint_tls_client_key;
@@ -364,7 +365,7 @@ typedef struct oidc_oauth_t {
 	oidc_remote_user_claim_t remote_user_claim;
 	apr_hash_t *verify_shared_keys;
 	char *verify_jwks_uri;
-	apr_hash_t *verify_public_keys;
+	apr_array_header_t *verify_public_keys;
 	int access_token_binding_policy;
 } oidc_oauth_t;
 
