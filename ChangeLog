@@ -1,6 +1,12 @@
+01/21/2023
+- clean WWW-Authenticate header in main request as well if this is a subrequest; closes #42
+  this avoids the WWW-Authenticate header to be sent in HTTP 200 responses; thanks @ErmakovDmitriy
+- depend on liboauth2 1.4.5.3
+- release 3.3.1
+
 12/06/2022
 - change Makefile install procedure
-- depend on liboauth 1.4.5.2
+- depend on liboauth2 1.4.5.2
 - release 3.3.0
 
 07/27/2022
@@ -14,6 +20,8 @@
 - depend on liboauth2 1.4.2.1 with fixed iat slack validation defaults
 - set WWW-Authenticate environment variable to allow for complex Require logic; see 
   https://github.com/zmartzone/mod_auth_openidc/discussions/572
+  example:
+  Header always append WWW-Authenticate %{OAUTH2_BEARER_SCOPE_ERROR}e "expr=(%{REQUEST_STATUS} == 401) && (-n reqenv('OAUTH2_BEARER_SCOPE_ERROR'))"  
 - release 3.2.2
 
 02/01/2021
