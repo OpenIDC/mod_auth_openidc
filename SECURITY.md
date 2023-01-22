@@ -4,12 +4,12 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 3.2.x   | :white_check_mark: |
-| < 3.2.0   | :x:               |
+| 3.3.x   | :white_check_mark: |
+| < 3.3.0   | :x:               |
 
 ## Reporting a Vulnerability
 
-Please send an e-mail to support@zmartzone.eu with a description of:
+Please send an e-mail to support@openidc.com with a description of:
 
 - a brief description of the vulnerability
 - how the vulnerability can be observed
