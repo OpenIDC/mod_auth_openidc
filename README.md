@@ -1,3 +1,5 @@
+[![Build Status](https://github.com/zmartzone/mod_oauth2/actions/workflows/build.yml/badge.svg)](https://github.com/zmartzone/mod_oauth2/actions/workflows/build.yml)
+
 # mod_oauth2
 
 A module for Apache HTTP Server 2.x that makes the Apache web server operate as a OAuth 2.0 Resource Server,
