@@ -1,3 +1,6 @@
+01/23/2023
+- release 2.4.12.3
+
 01/20/2023
 - add OIDCProviderVerifyCertFiles option to statically configure ID token validation keys; see #989; thanks @madsfreek
 - fix bug in OIDCOAuthVerifyCertFiles where cert(s) would be cast to apr_hash_t instead of apr_array_header_t; see #990; thanks @bommo1
