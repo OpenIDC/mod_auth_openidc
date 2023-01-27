@@ -1,6 +1,10 @@
 name: Build
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 0 * * *"
 
 jobs:
   build:
@@ -15,10 +19,16 @@ jobs:
         sudo apt-get install -y libssl-dev libcurl4-openssl-dev libhiredis-dev libmemcached-dev
         sudo apt-get install -y libjansson-dev libcjose-dev apache2-dev pkg-config
         cd /tmp
-        curl https://api.github.com/repos/zmartzone/liboauth2/releases/latest | grep "browser_download_url.*liboauth2_.*jammy_amd64.deb" | cut -d: -f2,3 | tr -d \" | wget -qi -
-        curl https://api.github.com/repos/zmartzone/liboauth2/releases/latest | grep "browser_download_url.*liboauth2-apache_.*jammy_amd64.deb" | cut -d: -f2,3 | tr -d \" | wget -qi -
-        curl https://api.github.com/repos/zmartzone/liboauth2/releases/latest | grep "browser_download_url.*liboauth2-dev_.*jammy_amd64.deb" | cut -d: -f2,3 | tr -d \" | wget -qi -
-        sudo apt-get -y install ./*.deb        
+        #curl https://api.github.com/repos/zmartzone/liboauth2/releases/latest | grep "browser_download_url.*liboauth2_.*jammy_amd64.deb" | cut -d: -f2,3 | tr -d \" | wget -qi -
+        #curl https://api.github.com/repos/zmartzone/liboauth2/releases/latest | grep "browser_download_url.*liboauth2-apache_.*jammy_amd64.deb" | cut -d: -f2,3 | tr -d \" | wget -qi -
+        #curl https://api.github.com/repos/zmartzone/liboauth2/releases/latest | grep "browser_download_url.*liboauth2-dev_.*jammy_amd64.deb" | cut -d: -f2,3 | tr -d \" | wget -qi -
+        #sudo apt-get -y install ./*.deb
+        git clone https://github.com/zmartzone/liboauth2.git
+        cd liboauth2
+        ./autogen.sh
+        ./configure
+        make
+        sudo make install
     - name: Configure
       run: |
         ./autogen.sh
