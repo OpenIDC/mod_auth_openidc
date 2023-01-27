@@ -1,4 +1,3 @@
-/Dockerfile*
 /.cproject
 /.project
 /*.la
@@ -16,4 +15,5 @@
 /test/*.log
 /test/.gitignore
 /.github
-/openidc.conf
+/test/Dockerfile
+/test/openidc.conf

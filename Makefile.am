@@ -91,11 +91,11 @@ test_test_CFLAGS = ${AM_CFLAGS} -fPIC
 docker: docker-run
 
 docker-build:
-	docker build -t mod_auth_openidc .
+	docker build -f test/Dockerfile -t mod_auth_openidc .
 
 # --cap-add=SYS_PTRACE --security-opt seccomp=unconfined
 docker-run: docker-build
-	docker run -p 443:443 -v $(PWD)/openidc.conf:/etc/apache2/conf-available/openidc.conf -it mod_auth_openidc "/usr/sbin/apache2ctl start && tail -f /var/log/apache2/error.log"
+	docker run -p 443:443 -v $(PWD)/test/openidc.conf:/etc/apache2/conf-available/openidc.conf -it mod_auth_openidc "/usr/sbin/apache2ctl start && tail -f /var/log/apache2/error.log"
 
 docker-valgrind: docker-build
-	docker run -p 443:443 -v $(PWD)/openidc.conf:/etc/apache2/conf-available/openidc.conf -it mod_auth_openidc "source /etc/apache2/envvars && valgrind --leak-check=full /usr/sbin/apache2 -X"
+	docker run -p 443:443 -v $(PWD)/test/openidc.conf:/etc/apache2/conf-available/openidc.conf -it mod_auth_openidc "source /etc/apache2/envvars && valgrind --leak-check=full /usr/sbin/apache2 -X"
