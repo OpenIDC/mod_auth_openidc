@@ -734,8 +734,8 @@ typedef struct oidc_curl_buffer {
 	size_t size;
 } oidc_curl_buffer;
 
-/* maximum acceptable size of HTTP responses: 1 Mb */
-#define OIDC_CURL_MAX_RESPONSE_SIZE 1024 * 1024
+/* maximum acceptable size of HTTP responses: 10 Mb */
+#define OIDC_CURL_MAX_RESPONSE_SIZE 1024 * 1024 * 10
 
 /*
  * callback for CURL to write bytes that come back from an HTTP call

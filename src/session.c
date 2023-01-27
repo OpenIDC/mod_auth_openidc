@@ -490,6 +490,8 @@ static apr_time_t oidc_session_get_key2timestamp(request_rec *r,
 	return apr_time_from_sec(t_expires);
 }
 
+#define OIDC_SESSION_MAX_CLAIM_SIZE 1024 * 256
+
 void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z,
 		const char *session_key, const char *claims) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
@@ -528,8 +530,13 @@ void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z,
 			is_allowed = FALSE;
 		}
 
-		if (is_allowed == TRUE)
+		if (is_allowed == TRUE) {
+			char *s =
+					value ? oidc_util_encode_json_object(r, value, JSON_COMPACT | JSON_ENCODE_ANY) : "";
+			if (strlen(s) > OIDC_SESSION_MAX_CLAIM_SIZE)
+				oidc_warn(r, "(encoded) value size of [%s] claim \"%s\" is larger than %d; consider blacklisting it in OIDCBlackListedClaims", session_key, name, OIDC_SESSION_MAX_CLAIM_SIZE);
 			json_object_set(dst, name, value);
+		}
 
 		iter = json_object_iter_next(src, iter);
 	}
