@@ -1,7 +1,7 @@
 01/27/2023
 - increase maximum allowed size of HTTP responses (e.g. from token endpoint) to 10Mb; see #998; thanks @mikehearn
-- do a sanity check on the individual size of claim values stored in the session, warn about blacklisting if > 256Kb
-- bump to 2.4.12.4rc1
+- do a sanity check on the individual size of claim values stored in the session, warn about blacklisting if > 8Kb
+- bump to 2.4.12.4rc2
 
 01/23/2023
 - release 2.4.12.3
