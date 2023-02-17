@@ -1,3 +1,7 @@
+02/17/2023
+- avoid (small) memory leak when using OpenSSL 3.x when setting public/private keys
+  (over graceful restarts) in the config and/or importing JWKs with x5c specs
+
 01/27/2023
 - increase maximum allowed size of HTTP responses (e.g. from token endpoint) to 10Mb; see #998; thanks @mikehearn
 - do a sanity check on the individual size of claim values stored in the session, warn about blacklisting if > 8Kb

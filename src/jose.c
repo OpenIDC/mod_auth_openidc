@@ -1316,7 +1316,16 @@ apr_byte_t oidc_jwk_rsa_bio_to_jwk(apr_pool_t *pool, BIO *input,
 	(*oidc_jwk)->kty = cjose_jwk_get_kty((*oidc_jwk)->cjose_jwk, &cjose_err);
 
 	rv = TRUE;
+
 end:
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+	if (rsa_n)
+		BN_clear_free(rsa_n);
+	if (rsa_e)
+		BN_clear_free(rsa_e);
+	if (rsa_d)
+		BN_clear_free(rsa_d);
+#endif
 	if (x509_bytes)
 		free(x509_bytes);
 	if (pkey)
