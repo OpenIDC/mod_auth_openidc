@@ -1,4 +1,4 @@
-AC_INIT([mod_auth_openidc],[2.4.12.4rc2],[hans.zandbelt@openidc.com])
+AC_INIT([mod_auth_openidc],[2.4.13rc0],[hans.zandbelt@openidc.com])
 
 AC_SUBST(NAMEVER, AC_PACKAGE_TARNAME()-AC_PACKAGE_VERSION())
 
@@ -118,6 +118,12 @@ AS_IF([test "X$enable_pcre2" = Xyes], [PCRE_INFO="yes, via libpcre2"], [test "X$
 AC_SUBST(PCRE_CFLAGS)
 AC_SUBST(PCRE_LIBS)
 
+AC_CHECK_HEADERS([zlib.h], [], [
+    AC_MSG_ERROR([libz header file zlib.h was not found])])
+
+AC_SEARCH_LIBS([inflate], [z], [], [
+    AC_MSG_ERROR([libz library was not found])])
+    
 # Redis
 AC_ARG_WITH([hiredis],
 	[AS_HELP_STRING([--with-hiredis],

@@ -45,6 +45,8 @@
 
 #include <apr_base64.h>
 
+#include <zlib.h>
+
 #include "jose.h"
 
 #include <openssl/evp.h>
@@ -791,11 +793,67 @@ apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json,
 	return (*s_json != NULL);
 }
 
+
+static apr_byte_t oidc_jose_compress(apr_pool_t *pool, const char *input, int input_len,
+		char **output, int *output_len, oidc_jose_error_t *err) {
+
+	z_stream zlib;
+	zlib.zalloc = Z_NULL;
+	zlib.zfree = Z_NULL;
+	zlib.opaque = Z_NULL;
+	zlib.next_in = (Bytef*) input;
+	zlib.avail_in = input_len;
+	*output = apr_pcalloc(pool, input_len * 2);
+	zlib.next_out = (Bytef*) (*output);
+	zlib.avail_out = input_len * 2;
+
+	deflateInit(&zlib, Z_BEST_COMPRESSION);
+	if (deflate(&zlib, Z_FINISH) != Z_STREAM_END) {
+		oidc_jose_error(err, "deflate failed");
+		return FALSE;
+	}
+	if (deflateEnd(&zlib) != Z_OK) {
+		oidc_jose_error(err, "deflateEnd failed");
+		return FALSE;
+	}
+
+	*output_len = (int) zlib.total_out;
+
+	return TRUE;
+}
+
+static apr_byte_t oidc_jose_uncompress(apr_pool_t *pool, const char *input, int input_len,
+		char **output, int *output_len, oidc_jose_error_t *err) {
+	z_stream zlib;
+	zlib.zalloc = Z_NULL;
+	zlib.zfree = Z_NULL;
+	zlib.opaque = Z_NULL;
+	zlib.avail_in = (uInt) input_len;
+	zlib.next_in = (Bytef*) input;
+	*output = apr_pcalloc(pool, input_len * 4);
+	zlib.avail_out = (uInt)(input_len * 4);
+	zlib.next_out = (Bytef*) (*output);
+
+	inflateInit(&zlib);
+	if (inflate(&zlib, Z_FINISH) != Z_STREAM_END) {
+		oidc_jose_error(err, "inflate failed");
+		return FALSE;
+	}
+	if (inflateEnd(&zlib) != Z_OK) {
+		oidc_jose_error(err, "inflateEnd failed");
+		return FALSE;
+	}
+
+	*output_len = (int) zlib.total_out;
+
+	return TRUE;
+}
+
 /*
  * parse and (optionally) decrypt a JSON Web Token
  */
 apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json,
-		oidc_jwt_t **j_jwt, apr_hash_t *keys, oidc_jose_error_t *err) {
+		oidc_jwt_t **j_jwt, apr_hash_t *keys, apr_byte_t compress, oidc_jose_error_t *err) {
 
 	cjose_err cjose_err;
 	char *s_json = NULL;
@@ -842,6 +900,18 @@ apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json,
 		return FALSE;
 	}
 
+	if (compress) {
+		char *payload = NULL;
+		int payload_len = 0;
+		if (oidc_jose_uncompress(pool, (char *)plaintext, plaintext_len, &payload, &payload_len, err) == FALSE) {
+			oidc_jwt_destroy(jwt);
+			*j_jwt = NULL;
+			return FALSE;
+		}
+		plaintext = (uint8_t *)payload;
+		plaintext_len = payload_len;
+	}
+
 	if (oidc_jose_parse_payload(pool, (const char*) plaintext, plaintext_len,
 			&jwt->payload, err) == FALSE) {
 		oidc_jwt_destroy(jwt);
@@ -875,7 +945,7 @@ void oidc_jwt_destroy(oidc_jwt_t *jwt) {
 /*
  * sign JWT
  */
-apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk,
+apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk, apr_byte_t compress,
 		oidc_jose_error_t *err) {
 
 	cjose_header_t *hdr = (cjose_header_t*) jwt->header.value.json;
@@ -893,12 +963,25 @@ apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk,
 		cjose_jws_release(jwt->cjose_jws);
 
 	cjose_err cjose_err;
-	char *s_payload = json_dumps(jwt->payload.value.json,
+	char *plaintext = json_dumps(jwt->payload.value.json,
 			JSON_PRESERVE_ORDER | JSON_COMPACT);
+
+	char *s_payload = NULL;
+	int payload_len = 0;
+	if (compress) {
+		if (oidc_jose_compress(pool, (char *)plaintext, strlen(plaintext), &s_payload, &payload_len, err) == FALSE) {
+			free(plaintext);
+			return FALSE;
+		}
+	} else {
+		s_payload = plaintext;
+		payload_len = strlen(plaintext);
+	}
+
 	jwt->payload.value.str = apr_pstrdup(pool, s_payload);
 	jwt->cjose_jws = cjose_jws_sign(jwk->cjose_jwk, hdr,
-			(const uint8_t*) s_payload, strlen(s_payload), &cjose_err);
-	free(s_payload);
+			(const uint8_t*) s_payload, payload_len, &cjose_err);
+	free(plaintext);
 
 	if (jwt->cjose_jws == NULL) {
 		oidc_jose_error(err, "cjose_jws_sign failed: %s",

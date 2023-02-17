@@ -1075,7 +1075,7 @@ static apr_byte_t oidc_refresh_access_token(request_rec *r, oidc_cfg *c,
 		
 		oidc_jwt_t *id_token_jwt = NULL;
 		oidc_jose_error_t err;
-		if (oidc_jwt_parse(r->pool, s_id_token, &id_token_jwt, NULL, &err) == TRUE) {
+		if (oidc_jwt_parse(r->pool, s_id_token, &id_token_jwt, NULL, FALSE, &err) == TRUE) {
 
 			/* store the claims payload in the id_token for later reference */
 			oidc_session_set_idtoken_claims(r, session,
@@ -2992,7 +2992,7 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 	// TODO: jwk symmetric key based on provider
 
 	if (oidc_jwt_parse(r->pool, logout_token, &jwt,
-			oidc_util_merge_symmetric_key(r->pool, cfg->private_keys, NULL),
+			oidc_util_merge_symmetric_key(r->pool, cfg->private_keys, NULL), FALSE,
 			&err) == FALSE) {
 		oidc_error(r, "oidc_jwt_parse failed: %s", oidc_jose_e2s(r->pool, err));
 		goto out;

@@ -1,6 +1,8 @@
 02/17/2023
 - avoid (small) memory leak when using OpenSSL 3.x when setting public/private keys
   (over graceful restarts) in the config and/or importing JWKs with x5c specs
+- compress session and state cookies; add zlib as a dependency
+- bump to 2.4.13rc0
 
 01/27/2023
 - increase maximum allowed size of HTTP responses (e.g. from token endpoint) to 10Mb; see #998; thanks @mikehearn

@@ -234,9 +234,9 @@ typedef struct oidc_jwt_t {
 
 /* parse a string into a JSON Web Token struct and (optionally) decrypt it */
 apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *s_json,
-		oidc_jwt_t **j_jwt, apr_hash_t *keys, oidc_jose_error_t *err);
+		oidc_jwt_t **j_jwt, apr_hash_t *keys, apr_byte_t compress, oidc_jose_error_t *err);
 /* sign a JWT with a JWK */
-apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk,
+apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk, apr_byte_t compress, 
 		oidc_jose_error_t *err);
 /* verify a JWT a key in a list of JWKs */
 apr_byte_t oidc_jwt_verify(apr_pool_t *pool, oidc_jwt_t *jwt, apr_hash_t *keys,

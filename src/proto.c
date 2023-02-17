@@ -376,7 +376,7 @@ char* oidc_proto_create_request_object(request_rec *r,
 			return NULL;
 		}
 
-		if (oidc_jwt_sign(r->pool, request_object, sjwk, &err) == FALSE) {
+		if (oidc_jwt_sign(r->pool, request_object, sjwk, FALSE, &err) == FALSE) {
 			oidc_error(r, "signing Request Object failed: %s",
 					oidc_jose_e2s(r->pool, err));
 			if (jwk_needs_destroy)
@@ -965,13 +965,13 @@ void oidc_proto_state_destroy(oidc_proto_state_t *proto_state) {
 oidc_proto_state_t* oidc_proto_state_from_cookie(request_rec *r, oidc_cfg *c,
 		const char *cookieValue) {
 	json_t *result = NULL;
-	oidc_util_jwt_verify(r, c->crypto_passphrase, cookieValue, &result, FALSE);
+	oidc_util_jwt_verify(r, c->crypto_passphrase, cookieValue, &result, FALSE, TRUE);
 	return result;
 }
 
 char* oidc_proto_state_to_cookie(request_rec *r, oidc_cfg *c, oidc_proto_state_t *proto_state) {
 	char *cookieValue = NULL;
-	oidc_util_jwt_create(r, c->crypto_passphrase, proto_state, &cookieValue, FALSE);
+	oidc_util_jwt_create(r, c->crypto_passphrase, proto_state, &cookieValue, FALSE, TRUE);
 	return cookieValue;
 }
 
@@ -1642,7 +1642,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 		decryption_keys = oidc_util_merge_key_sets(r->pool, decryption_keys,
 				provider->client_encryption_keys);
 
-	if (oidc_jwt_parse(r->pool, id_token, jwt, decryption_keys, &err) == FALSE) {
+	if (oidc_jwt_parse(r->pool, id_token, jwt, decryption_keys, FALSE, &err) == FALSE) {
 		oidc_error(r, "oidc_jwt_parse failed: %s", oidc_jose_e2s(r->pool, err));
 		oidc_jwt_destroy(*jwt);
 		*jwt = NULL;
@@ -1798,7 +1798,7 @@ static apr_byte_t oidc_proto_jwt_sign_and_add(request_rec *r,
 		apr_table_t *params, oidc_jwt_t *jwt, oidc_jwk_t *jwk) {
 	oidc_jose_error_t err;
 
-	if (oidc_jwt_sign(r->pool, jwt, jwk, &err) == FALSE) {
+	if (oidc_jwt_sign(r->pool, jwt, jwk, FALSE, &err) == FALSE) {
 		oidc_error(r, "signing JWT failed: %s", oidc_jose_e2s(r->pool, err));
 		return FALSE;
 	}
@@ -2148,7 +2148,7 @@ static apr_byte_t oidc_user_info_response_validate(request_rec *r,
 
 	if (provider->userinfo_signed_response_alg != NULL) {
 		if (oidc_jwt_parse(r->pool, *response, &jwt,
-				oidc_util_merge_symmetric_key(r->pool, cfg->private_keys, jwk),
+				oidc_util_merge_symmetric_key(r->pool, cfg->private_keys, jwk), FALSE,
 				&err) == FALSE) {
 			oidc_error(r, "oidc_jwt_parse failed: %s",
 					oidc_jose_e2s(r->pool, err));
@@ -2252,7 +2252,7 @@ static apr_byte_t oidc_proto_resolve_composite_claims(request_rec *r,
 				oidc_jwt_t *jwt = NULL;
 				if (oidc_jwt_parse(r->pool, s_json, &jwt,
 						oidc_util_merge_symmetric_key(r->pool,
-								cfg->private_keys, jwk), &err) == FALSE) {
+								cfg->private_keys, jwk), FALSE, &err) == FALSE) {
 					oidc_error(r,
 							"could not parse JWT from aggregated claim \"%s\": %s",
 							key, oidc_jose_e2s(r->pool, err));

@@ -182,7 +182,7 @@ static char *test_jwt_parse(apr_pool_t *pool) {
 
 	oidc_jose_error_t err;
 	oidc_jwt_t *jwt = NULL;
-	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(pool, s, &jwt, NULL, &err),
+	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(pool, s, &jwt, NULL, FALSE, &err),
 			pool, err);
 
 	TST_ASSERT_STR("header.alg", jwt->header.alg, "HS256");
@@ -207,13 +207,13 @@ static char *test_jwt_parse(apr_pool_t *pool) {
 
 	s[5] = OIDC_CHAR_DOT;
 	TST_ASSERT_ERR("corrupted header (1) oidc_jwt_parse",
-			oidc_jwt_parse(pool, s, &jwt, NULL, &err) == FALSE, pool, err);
+			oidc_jwt_parse(pool, s, &jwt, NULL, FALSE, &err) == FALSE, pool, err);
 
 	oidc_jwt_destroy(jwt);
 
 	s[0] = '\0';
 	TST_ASSERT_ERR("corrupted header (2) oidc_jwt_parse",
-			oidc_jwt_parse(pool, s, &jwt, NULL, &err) == FALSE, pool, err);
+			oidc_jwt_parse(pool, s, &jwt, NULL, FALSE, &err) == FALSE, pool, err);
 
 	oidc_jwt_destroy(jwt);
 
@@ -238,7 +238,7 @@ static char *test_jwt_verify_ec(apr_pool_t *pool) {
 	oidc_jwt_t *jwt = NULL;
 	oidc_jose_error_t err;
 	TST_ASSERT_ERR("oidc_jwt_parse (ec0)",
-			oidc_jwt_parse(pool, s_jwt, &jwt, NULL, &err), pool, err);
+			oidc_jwt_parse(pool, s_jwt, &jwt, NULL, FALSE, &err), pool, err);
 
 	char *s_key = "{"
 			"\"kty\": \"EC\","
@@ -261,7 +261,7 @@ static char *test_jwt_verify_ec(apr_pool_t *pool) {
 	s_jwt = apr_pstrdup(pool, "eyJhbGciOiJFUzI1NiIsImtpZCI6ImY2cXRqIn0.eyJzdWIiOiJqb2UiLCJhdWQiOiJhY19vaWNfY2xpZW50IiwianRpIjoib0RXaXZXUEpCNDd6a2pPbTJjeWdEdiIsImlzcyI6Imh0dHBzOlwvXC9sb2NhbGhvc3Q6OTAzMSIsImlhdCI6MTQ2Nzk5NzIwNywiZXhwIjoxNDY3OTk3NTA3LCJub25jZSI6IldMeG12NVN0WXlVazlKbFdJOFNhWFRMUGtHWjBWczhhU1Rkal9WUTZyYW8ifQ.2kqX56QNow37gOlnfLn0SIzwie4mLLIUx_p9OSQa0hiUXKQWQLmMYBjIp5qGh2-R-KPHwNEBxqXwuPgXG4Y7EG");
 	jwt = NULL;
 	TST_ASSERT_ERR("oidc_jwt_parse (ec1)",
-			oidc_jwt_parse(pool, s_jwt, &jwt, NULL, &err), pool, err);
+			oidc_jwt_parse(pool, s_jwt, &jwt, NULL, FALSE, &err), pool, err);
 	TST_ASSERT_ERR("oidc_jwt_verify (ec1)", oidc_jwt_verify(pool, jwt, keys, &err) == FALSE,
 			pool, err);
 	oidc_jwt_destroy(jwt);
@@ -269,7 +269,7 @@ static char *test_jwt_verify_ec(apr_pool_t *pool) {
 	s_jwt = apr_pstrdup(pool, "eyJhbGciOiJFUzI1NiIsImtpZCI6ImY2cXRqIn0.eyJzdWIiOiJqb2UiLCJHdWQiOiJhY19vaWNfY2xpZW50IiwianRpIjoib0RXaXZXUEpCNDd6a2pPbTJjeWdEdiIsImlzcyI6Imh0dHBzOlwvXC9sb2NhbGhvc3Q6OTAzMSIsImlhdCI6MTQ2Nzk5NzIwNywiZXhwIjoxNDY3OTk3NTA3LCJub25jZSI6IldMeG12NVN0WXlVazlKbFdJOFNhWFRMUGtHWjBWczhhU1Rkal9WUTZyYW8ifQ.2kqX56QNow37gOlnfLn0SIzwie4mLLIUx_p9OSQa0hiUXKQWQLmMYBjIp5qGh2-R-KPHwNEBxqXwuPgXG4Y7Eg");
 	jwt = NULL;
 	TST_ASSERT_ERR("oidc_jwt_parse (ec2)",
-			oidc_jwt_parse(pool, s_jwt, &jwt, NULL, &err), pool, err);
+			oidc_jwt_parse(pool, s_jwt, &jwt, NULL, FALSE, &err), pool, err);
 	TST_ASSERT_ERR("oidc_jwt_verify (ec2)", oidc_jwt_verify(pool, jwt, keys, &err) == FALSE,
 			pool, err);
 	oidc_jwt_destroy(jwt);
@@ -309,7 +309,7 @@ static char *test_jwt_verify_rsa(apr_pool_t *pool) {
 	oidc_jwt_t *jwt = NULL;
 	oidc_jose_error_t err;
 	TST_ASSERT_ERR("oidc_jwt_parse",
-			oidc_jwt_parse(pool, s_jwt, &jwt, NULL, &err), pool, err);
+			oidc_jwt_parse(pool, s_jwt, &jwt, NULL, FALSE, &err), pool, err);
 
 	char *s_key =
 			"{"
@@ -334,7 +334,7 @@ static char *test_jwt_verify_rsa(apr_pool_t *pool) {
 	s_jwt =
 			"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IloxTkNqb2plaUhBaWItR204dkZFNnlhNmxQTSJ9.eyJub25jZSI6ImF2U2s3UzY5RzRrRUU4S200YlBpT2pyZkNoSHQ2bk80WjM5N0xwX2JRbmMsIiwiaWF0IjoxNDExNTgwODc2LCJhdF9oYXNoIjoieVRxc29PTlpidVdiTjZUYmdldnVEUSIsInN1YiI6IjYzNDNhMjljLTUzOTktNDRhNy05YjM1LTQ5OTBmNDM3N2M5NiIsImFtciI6InBhc3N3b3JkIiwiYXV0aF90aW1lIjoxNDExNTc3MjY3LCJpZHAiOiJpZHNydiIsIm5hbWUiOiJrc29uYXR5IiwiaXNzIjoiaHR0cHM6Ly9hZ3N5bmMuY29tIiwiYXVkIjoiYWdzeW5jX2ltcGxpY2l0IiwiZXhwIjoxNDExNTg0NDc1LCJuYmYiOjE1MTE1ODA4NzV9.lEG-DgHHa0JuOEuOTBvCqyexjRVcKXBnJJm289o2HyTgclpH80DsOMED9RlXCFfuDY7nw9i2cxUmIMAV42AdTxkMPomK3chytcajvpAZJirlk653bo9GTDXJSKZr5fwyEu--qahsoT5t9qvoWyFdYkvmMHFw1-mAHDGgVe23voc9jPuFFIhRRqIn4e8ikzN4VQeEV1UXJD02kYYFn2TRWURgiFyVeTr2r0MTn-auCEsFS_AfR1Bl_kmpMfqwrsicf5MTBvfPJeuSMt3t3d3LOGBkg36_z21X-ZRN7wy1KTjagr7iQ_y5csIpmtqs_QM55TTB9dW1HIosJPhiuMEJEA";
 	TST_ASSERT_ERR("oidc_jwt_parse (rsa1)",
-			oidc_jwt_parse(pool, s_jwt, &jwt, NULL, &err), pool, err);
+			oidc_jwt_parse(pool, s_jwt, &jwt, NULL, FALSE, &err), pool, err);
 
 	TST_ASSERT_ERR("oidc_jwt_verify (rsa1)",
 			oidc_jwt_verify(pool, jwt, keys, &err) == FALSE, pool, err);
@@ -345,7 +345,7 @@ static char *test_jwt_verify_rsa(apr_pool_t *pool) {
 	s_jwt =
 			"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IloxTkNqb2plaUhBaWItR204dkZFNnlhNmxQTSJ9.eyJub25jZSI6ImF2U2s3UzY5RzRrRUU4S200YlBpT2pyZkNoSHQ2bk80WjM5N0xwX2JRbmMsIiwiaWF0IjoxNDExNTgwODc2LCJhdF9oYXNoIjoieVRxc29PTlpidVdiTjZUYmdldnVEUSIsInN1YiI6IjYzNDNhMjljLTUzOTktNDRhNy05YjM1LTQ5OTBmNDM3N2M5NiIsImFtciI6InBhc3N3b3JkIiwiYXV0aF90aW1lIjoxNDExNTc3MjY3LCJpZHAiOiJpZHNydiIsIm5hbWUiOiJrc29uYXR5IiwiaXNzIjoiaHR0cHM6Ly9hZ3N5bmMuY29tIiwiYXVkIjoiYWdzeW5jX2ltcGxpY2l0IiwiZXhwIjoxNDExNTg0NDc1LCJuYmYiOjE0MTE1ODA4NzV9.lEG-DgHHa0JuOEuOTBvCqyexjRVcKXBnJJm289o2HyTgclpH80DsOMED9RlXCFfuDY7nw9i2cxUmIMAV42AdTxkMPomK3chytcajvpAZJirlk653bo9GTDXJSKZr5fwyEu--qahsoT5t9qvoWyFdYkvmMHFw1-mAHDGgVe23voc9jPuFFIhRRqIn4e8ikzN4VQeEV1UXJD02kYYFn2TRWURgiFyVeTr2r0MTn-auCEsFS_AfR1Bl_kmpMfqwrsicf5MTBvfPJeuSMt3t3d3LOGBkg36_z21X-ZRN7wy1KTjagr7iQ_y5csIpmtqs_QM55TTB9dW1HIosJPhiuMEJEa";
 	TST_ASSERT_ERR("oidc_jwt_parse (rsa2)",
-			oidc_jwt_parse(pool, s_jwt, &jwt, NULL, &err), pool, err);
+			oidc_jwt_parse(pool, s_jwt, &jwt, NULL, FALSE, &err), pool, err);
 
 	TST_ASSERT_ERR("oidc_jwt_verify (rsa2)",
 			oidc_jwt_verify(pool, jwt, keys, &err) == FALSE, pool, err);
@@ -392,14 +392,14 @@ static char *test_jwt_sign_verify(apr_pool_t *pool) {
 
 	jwt->header.alg = apr_pstrdup(pool, CJOSE_HDR_ALG_RS256);
 
-	TST_ASSERT_ERR("oidc_jwt_sign (rsa)", oidc_jwt_sign(pool, jwt, jwk, &err),
+	TST_ASSERT_ERR("oidc_jwt_sign (rsa)", oidc_jwt_sign(pool, jwt, jwk, FALSE, &err),
 			pool, err);
 	cser = oidc_jwt_serialize(pool, jwt, &err);
 	TST_ASSERT_ERR("oidc_jwt_serialize (rsa)", cser != NULL, pool, err);
 
 	oidc_jwt_t *rsa_jwt = NULL;
 	TST_ASSERT_ERR("oidc_jwt_parse (rsa)",
-			oidc_jwt_parse(pool, cser, &rsa_jwt, NULL, &err), pool, err);
+			oidc_jwt_parse(pool, cser, &rsa_jwt, NULL, FALSE, &err), pool, err);
 	TST_ASSERT_ERR("oidc_jwt_verify (rsa)",
 			oidc_jwt_verify(pool, rsa_jwt, keys, &err), pool, err);
 	oidc_jwt_destroy(rsa_jwt);
@@ -414,14 +414,14 @@ static char *test_jwt_sign_verify(apr_pool_t *pool) {
 
 	jwt->header.alg = apr_pstrdup(pool, "HS256");
 
-	TST_ASSERT_ERR("oidc_jwt_sign (hmac)", oidc_jwt_sign(pool, jwt, jwk, &err),
+	TST_ASSERT_ERR("oidc_jwt_sign (hmac)", oidc_jwt_sign(pool, jwt, jwk, FALSE, &err),
 			pool, err);
 	cser = oidc_jwt_serialize(pool, jwt, &err);
 	TST_ASSERT_ERR("oidc_jwt_serialize (hmac)", cser != NULL, pool, err);
 
 	oidc_jwt_t *hmac_jwt = NULL;
 	TST_ASSERT_ERR("oidc_jwt_parse (rsa)",
-			oidc_jwt_parse(pool, cser, &hmac_jwt, NULL, &err), pool, err);
+			oidc_jwt_parse(pool, cser, &hmac_jwt, NULL, FALSE, &err), pool, err);
 	TST_ASSERT_ERR("oidc_jwt_verify (rsa)",
 			oidc_jwt_verify(pool, hmac_jwt, keys, &err), pool, err);
 	oidc_jwt_destroy(hmac_jwt);
@@ -444,7 +444,7 @@ static char *test_plaintext_jwt_parse(apr_pool_t *pool) {
 
 	oidc_jose_error_t err;
 	oidc_jwt_t *jwt = NULL;
-	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(pool, s, &jwt, NULL, &err),
+	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(pool, s, &jwt, NULL, FALSE, &err),
 			pool, err);
 
 	TST_ASSERT_STR("header.alg", jwt->header.alg, "none");
@@ -467,7 +467,7 @@ static char *test_jwt_get_string(apr_pool_t *pool) {
 
 	oidc_jwt_t *jwt = NULL;
 	oidc_jose_error_t err;
-	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(pool, s, &jwt, NULL, &err),
+	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(pool, s, &jwt, NULL, FALSE, &err),
 			pool, err);
 
 	char *dst = NULL;
@@ -915,7 +915,7 @@ static char *test_jwt_decrypt(apr_pool_t *pool) {
 			_jwk_parse(pool, ek, &jwk_e, &err) == 0, pool, err);
 	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk_e);
 
-	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(pool, s, &jwt, keys, &err),
+	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(pool, s, &jwt, keys, FALSE, &err),
 			pool, err);
 	oidc_jwk_destroy(jwk_e);
 
@@ -1035,7 +1035,7 @@ static char *test_proto_validate_access_token(request_rec *r) {
 	oidc_jose_error_t err;
 	oidc_jwt_t *jwt = NULL;
 	TST_ASSERT_ERR("oidc_jwt_parse",
-			oidc_jwt_parse(r->pool, s, &jwt, NULL, &err), r->pool, err);
+			oidc_jwt_parse(r->pool, s, &jwt, NULL, FALSE, &err), r->pool, err);
 
 	const char *access_token = "jHkWEdUXMU1BwAsC4vtUsZwnNvTIxEl0z9K3vx5KF0Y";
 	TST_ASSERT("oidc_proto_validate_access_token",
@@ -1065,7 +1065,7 @@ static char *test_proto_validate_code(request_rec *r) {
 	oidc_jose_error_t err;
 	oidc_jwt_t *jwt = NULL;
 	TST_ASSERT_ERR("oidc_jwt_parse",
-			oidc_jwt_parse(r->pool, s, &jwt, NULL, &err), r->pool, err);
+			oidc_jwt_parse(r->pool, s, &jwt, NULL, FALSE, &err), r->pool, err);
 
 	const char *code =
 			"Qcb0Orv1zh30vL1MPRsbm-diHiMwcLyZvn1arpZv-Jxf_11jnpEX3Tgfvk";
@@ -1149,7 +1149,7 @@ static char * test_proto_validate_nonce(request_rec *r) {
 	oidc_jwt_t *jwt = NULL;
 	oidc_jose_error_t err;
 	TST_ASSERT_ERR("oidc_jwt_parse",
-			oidc_jwt_parse(r->pool, s_jwt, &jwt, NULL, &err), r->pool, err);
+			oidc_jwt_parse(r->pool, s_jwt, &jwt, NULL, FALSE, &err), r->pool, err);
 
 	TST_ASSERT("oidc_proto_validate_nonce (1)",
 			oidc_proto_validate_nonce(r, c, &c->provider, nonce, jwt));
@@ -1213,7 +1213,7 @@ static char * test_proto_validate_jwt(request_rec *r) {
 			s_jwt_payload_encoded, s_jwt_signature_encoded);
 
 	TST_ASSERT_ERR("oidc_jwt_parse",
-			oidc_jwt_parse(r->pool, s_jwt, &jwt, NULL, &err), r->pool, err);
+			oidc_jwt_parse(r->pool, s_jwt, &jwt, NULL, FALSE, &err), r->pool, err);
 
 	oidc_jwk_t *jwk = NULL;
 	TST_ASSERT_ERR("oidc_util_create_symmetric_key",
