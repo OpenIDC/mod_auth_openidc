@@ -1,3 +1,6 @@
+02/19/2023
+- add optional - compilation time support - for brotli compression of session and state cookies
+
 02/17/2023
 - avoid (small) memory leak when using OpenSSL 3.x when setting public/private keys
   (over graceful restarts) in the config and/or importing JWKs with x5c specs

@@ -118,7 +118,22 @@ AS_IF([test "X$enable_pcre2" = Xyes], [PCRE_INFO="yes, via libpcre2"], [test "X$
 AC_SUBST(PCRE_CFLAGS)
 AC_SUBST(PCRE_LIBS)
 
-PKG_CHECK_MODULES([ZLIB], [zlib], [HAVE_LIBZ=1], [HAVE_LIBZ=0])
+AC_ARG_WITH(brotli,
+	AS_HELP_STRING([--with-brotli], [enable brotli compression support]),
+	ac_brotli=$withval, ac_brotli=no)
+if test x$ac_brotli != xno; then
+	PKG_CHECK_MODULES(LIBBROTLIENC, [libbrotlienc >= 1.0.0], [with_libbrotlienc=yes], [with_libbrotlienc=no])
+	PKG_CHECK_MODULES(LIBBROTLIDEC, [libbrotlidec >= 1.0.0], [with_libbrotlidec=yes], [with_libbrotlidec=no])
+fi
+AM_CONDITIONAL(HAVE_LIBBROTLI, [test "${with_libbrotlienc}" == "yes" && test "${with_libbrotlidec}" == "yes"])
+AC_SUBST([LIBBROTLIENC_CFLAGS])
+AC_SUBST([LIBBROTLIDEC_CFLAGS])
+AC_SUBST([LIBBROTLIENC_LIBS])
+AC_SUBST([LIBBROTLIDEC_LIBS])
+
+if test "${with_libbrotlienc}" != "yes" || test "${with_libbrotlidec}" != "yes"; then
+	PKG_CHECK_MODULES([ZLIB], [zlib], [HAVE_LIBZ=1], [HAVE_LIBZ=0])
+fi
 AM_CONDITIONAL(HAVE_LIBZ, [test x"$HAVE_LIBZ" = "x1"])
 AC_SUBST([ZLIB_CFLAGS])
 AC_SUBST([ZLIB_LIBS])
