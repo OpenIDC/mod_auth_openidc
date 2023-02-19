@@ -45,7 +45,9 @@
 
 #include <apr_base64.h>
 
+#ifdef USE_ZLIB
 #include <zlib.h>
+#endif
 
 #include "jose.h"
 
@@ -796,7 +798,7 @@ apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json,
 
 static apr_byte_t oidc_jose_compress(apr_pool_t *pool, const char *input, int input_len,
 		char **output, int *output_len, oidc_jose_error_t *err) {
-
+#ifdef USE_ZLIB
 	z_stream zlib;
 	zlib.zalloc = Z_NULL;
 	zlib.zfree = Z_NULL;
@@ -819,11 +821,17 @@ static apr_byte_t oidc_jose_compress(apr_pool_t *pool, const char *input, int in
 
 	*output_len = (int) zlib.total_out;
 
+#else
+	*output = (char *)input;
+	*output_len = input_len;
+#endif
+
 	return TRUE;
 }
 
 static apr_byte_t oidc_jose_uncompress(apr_pool_t *pool, const char *input, int input_len,
 		char **output, int *output_len, oidc_jose_error_t *err) {
+#ifdef USE_ZLIB
 	z_stream zlib;
 	zlib.zalloc = Z_NULL;
 	zlib.zfree = Z_NULL;
@@ -845,6 +853,11 @@ static apr_byte_t oidc_jose_uncompress(apr_pool_t *pool, const char *input, int 
 	}
 
 	*output_len = (int) zlib.total_out;
+
+#else
+	*output = (char *)input;
+	*output_len = input_len;
+#endif
 
 	return TRUE;
 }

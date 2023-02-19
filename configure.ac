@@ -118,11 +118,10 @@ AS_IF([test "X$enable_pcre2" = Xyes], [PCRE_INFO="yes, via libpcre2"], [test "X$
 AC_SUBST(PCRE_CFLAGS)
 AC_SUBST(PCRE_LIBS)
 
-AC_CHECK_HEADERS([zlib.h], [], [
-    AC_MSG_ERROR([libz header file zlib.h was not found])])
-
-AC_SEARCH_LIBS([inflate], [z], [], [
-    AC_MSG_ERROR([libz library was not found])])
+PKG_CHECK_MODULES([ZLIB], [zlib], [HAVE_LIBZ=1], [HAVE_LIBZ=0])
+AM_CONDITIONAL(HAVE_LIBZ, [test x"$HAVE_LIBZ" = "x1"])
+AC_SUBST([ZLIB_CFLAGS])
+AC_SUBST([ZLIB_LIBS])
     
 # Redis
 AC_ARG_WITH([hiredis],
