@@ -970,7 +970,7 @@ apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json,
 		return FALSE;
 	}
 
-	if (compress) {
+	if (compress == TRUE) {
 		char *payload = NULL;
 		int payload_len = 0;
 		if (oidc_jose_uncompress(pool, (char *)plaintext, plaintext_len, &payload, &payload_len, err) == FALSE) {
@@ -1038,7 +1038,7 @@ apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk, apr
 
 	char *s_payload = NULL;
 	int payload_len = 0;
-	if (compress) {
+	if (compress == TRUE) {
 		if (oidc_jose_compress(pool, (char *)plaintext, strlen(plaintext)+1, &s_payload, &payload_len, err) == FALSE) {
 			free(plaintext);
 			return FALSE;
@@ -1046,9 +1046,9 @@ apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk, apr
 	} else {
 		s_payload = plaintext;
 		payload_len = strlen(plaintext);
+		jwt->payload.value.str = apr_pstrdup(pool, s_payload);
 	}
 
-	//jwt->payload.value.str = apr_pstrdup(pool, s_payload);
 	jwt->cjose_jws = cjose_jws_sign(jwk->cjose_jwk, hdr,
 			(const uint8_t*) s_payload, payload_len, &cjose_err);
 	free(plaintext);
