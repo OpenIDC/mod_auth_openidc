@@ -1660,7 +1660,7 @@ static apr_byte_t oidc_set_request_user(request_rec *r, oidc_cfg *c,
 
 	if ((rc == FALSE) || (remote_user == NULL)) {
 		oidc_error(r,
-				"" OIDCRemoteUserClaim "is set to \"%s\", but could not set the remote user based on the requested claim \"%s\" and the available claims for the user",
+				"" OIDCRemoteUserClaim " is set to \"%s\", but could not set the remote user based on the requested claim \"%s\" and the available claims for the user",
 				c->remote_user_claim.claim_name, claim_name);
 		return FALSE;
 	}
