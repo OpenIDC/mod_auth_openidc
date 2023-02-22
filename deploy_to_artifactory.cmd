@@ -1,5 +1,5 @@
 rem Apache httpd download
-rem https://www.apachelounge.com/download/VS16/binaries/httpd-2.4.53-win64-VS16.zip
+rem https://www.apachelounge.com/download/VS17/binaries/httpd-2.4.55-win64-VS17.zip
 
 rem https://github.com/zmartzone/mod_auth_openidc was copied to https://github.com/dematic-spe/mod_auth_openidc
 rem Build steps
