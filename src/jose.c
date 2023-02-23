@@ -45,12 +45,7 @@
 
 #include <apr_base64.h>
 
-#ifdef USE_LIBBROTLI
-#include <brotli/encode.h>
-#include <brotli/decode.h>
-#elif USE_ZLIB
 #include <zlib.h>
-#endif
 
 #include "jose.h"
 
@@ -799,43 +794,9 @@ apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json,
 }
 
 
-#ifdef USE_LIBBROTLI
-
-static apr_byte_t oidc_jose_brotli_compress(apr_pool_t *pool, const char *input,
-		int input_len, char **output, int *output_len, oidc_jose_error_t *err) {
-	size_t len = BrotliEncoderMaxCompressedSize(input_len);
-	*output = apr_pcalloc(pool, len);
-	if (BrotliEncoderCompress(BROTLI_DEFAULT_QUALITY, BROTLI_DEFAULT_WINDOW,
-			BROTLI_MODE_TEXT, input_len, (const uint8_t*) input, &len,
-			(uint8_t*) *output) != BROTLI_TRUE) {
-		oidc_jose_error(err,
-				"BrotliEncoderCompress failed: compression error or buffer too small");
-		return FALSE;
-	}
-	*output_len = len;
-	return TRUE;
-}
-
-static apr_byte_t oidc_jose_brotli_uncompress(apr_pool_t *pool,
-		const char *input, int input_len, char **output, int *output_len,
-		oidc_jose_error_t *err) {
-
-	size_t len = 4 * input_len;
-	*output = apr_pcalloc(pool, len);
-	if (BrotliDecoderDecompress(input_len, (const uint8_t*) input, &len,
-			(uint8_t*) *output) != BROTLI_DECODER_RESULT_SUCCESS) {
-		oidc_jose_error(err,
-				"BrotliDecoderDecompress failed: decompression error or buffer too small");
-		return FALSE;
-	}
-	*output_len = len;
-	return TRUE;
-}
-
-#elif USE_ZLIB
-
-static apr_byte_t oidc_jose_zlib_compress(apr_pool_t *pool, const char *input, int input_len,
+static apr_byte_t oidc_jose_compress(apr_pool_t *pool, const char *input, int input_len,
 		char **output, int *output_len, oidc_jose_error_t *err) {
+
 	z_stream zlib;
 	zlib.zalloc = Z_NULL;
 	zlib.zfree = Z_NULL;
@@ -861,7 +822,7 @@ static apr_byte_t oidc_jose_zlib_compress(apr_pool_t *pool, const char *input, i
 	return TRUE;
 }
 
-static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input, int input_len,
+static apr_byte_t oidc_jose_uncompress(apr_pool_t *pool, const char *input, int input_len,
 		char **output, int *output_len, oidc_jose_error_t *err) {
 	z_stream zlib;
 	zlib.zalloc = Z_NULL;
@@ -886,37 +847,6 @@ static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input,
 	*output_len = (int) zlib.total_out;
 
 	return TRUE;
-}
-#endif
-
-static apr_byte_t oidc_jose_compress(apr_pool_t *pool, const char *input,
-		int input_len, char **output, int *output_len, oidc_jose_error_t *err) {
-#ifdef USE_LIBBROTLI
-	return oidc_jose_brotli_compress(pool, input, input_len, output, output_len,
-			err);
-#elif USE_ZLIB
-	return oidc_jose_zlib_compress(pool, input, input_len, output, output_len, err);
-#else
-	*output = apr_pcalloc(pool, input_len);
-	memcpy(*output, input, input_len);
-	*output_len = input_len;
-	return TRUE;
-#endif
-}
-
-static apr_byte_t oidc_jose_uncompress(apr_pool_t *pool, const char *input,
-		int input_len, char **output, int *output_len, oidc_jose_error_t *err) {
-#ifdef USE_LIBBROTLI
-	return oidc_jose_brotli_uncompress(pool, input, input_len, output,
-			output_len, err);
-#elif USE_ZLIB
-	return oidc_jose_zlib_uncompress(pool, input, input_len, output, output_len, err);
-#else
-	*output = apr_pcalloc(pool, input_len);
-	memcpy(*output, input, input_len);
-	*output_len = input_len;
-	return TRUE;
-#endif
 }
 
 /*
@@ -970,7 +900,7 @@ apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json,
 		return FALSE;
 	}
 
-	if (compress == TRUE) {
+	if (compress) {
 		char *payload = NULL;
 		int payload_len = 0;
 		if (oidc_jose_uncompress(pool, (char *)plaintext, plaintext_len, &payload, &payload_len, err) == FALSE) {
@@ -1038,17 +968,17 @@ apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk, apr
 
 	char *s_payload = NULL;
 	int payload_len = 0;
-	if (compress == TRUE) {
-		if (oidc_jose_compress(pool, (char *)plaintext, strlen(plaintext)+1, &s_payload, &payload_len, err) == FALSE) {
+	if (compress) {
+		if (oidc_jose_compress(pool, (char *)plaintext, strlen(plaintext), &s_payload, &payload_len, err) == FALSE) {
 			free(plaintext);
 			return FALSE;
 		}
 	} else {
 		s_payload = plaintext;
 		payload_len = strlen(plaintext);
-		jwt->payload.value.str = apr_pstrdup(pool, s_payload);
 	}
 
+	jwt->payload.value.str = apr_pstrdup(pool, s_payload);
 	jwt->cjose_jws = cjose_jws_sign(jwk->cjose_jwk, hdr,
 			(const uint8_t*) s_payload, payload_len, &cjose_err);
 	free(plaintext);
@@ -1306,6 +1236,7 @@ apr_byte_t oidc_jwk_rsa_bio_to_jwk(apr_pool_t *pool, BIO *input,
 	unsigned char *x509_pem_encoded_certificate = NULL, *x509_bytes = NULL;
 	int b64_len, x509_cert_length;
 	cjose_jwk_rsa_keyspec key_spec;
+	BIGNUM *rsa_n = NULL, *rsa_e = NULL, *rsa_d = NULL;
 
 	memset(&key_spec, 0, sizeof(cjose_jwk_rsa_keyspec));
 	*oidc_jwk = oidc_jwk_new(pool);
@@ -1405,8 +1336,6 @@ apr_byte_t oidc_jwk_rsa_bio_to_jwk(apr_pool_t *pool, BIO *input,
 			}
 		}
 	}
-
-	BIGNUM *rsa_n = NULL, *rsa_e = NULL, *rsa_d = NULL;
 
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
 	EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_RSA_N, &rsa_n);
