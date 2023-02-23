@@ -1,6 +1,13 @@
-05/20/2022
-- fix handling of IPv6 based logout URLs; thanks @@codemaker219
-- bump to 2.4.11.3rc1
+01/21/2023
+- clean WWW-Authenticate header in main request as well if this is a subrequest; closes #42
+  this avoids the WWW-Authenticate header to be sent in HTTP 200 responses; thanks @ErmakovDmitriy
+- depend on liboauth2 1.4.5.3
+- release 3.3.1
+
+12/06/2022
+- change Makefile install procedure
+- depend on liboauth2 1.4.5.2
+- release 3.3.0
 
 05/16/2022
 - Use optionally provided sid and iss request parameters during front channel
@@ -10,8 +17,13 @@
 - support Forwarded header in addition to X-Forwarded-*; see #853; thanks @studersi
 - bump to 2.4.11.3rc0
 
-05/05/2022
-- release 2.4.11.2
+06/07/2021
+- depend on liboauth2 1.4.2.1 with fixed iat slack validation defaults
+- set WWW-Authenticate environment variable to allow for complex Require logic; see 
+  https://github.com/zmartzone/mod_auth_openidc/discussions/572
+  example:
+  Header always append WWW-Authenticate %{OAUTH2_BEARER_SCOPE_ERROR}e "expr=(%{REQUEST_STATUS} == 401) && (-n reqenv('OAUTH2_BEARER_SCOPE_ERROR'))"  
+- release 3.2.2
 
 05/04/2022
 - add support for Apache expressions in OIDCPathAuthRequestParams and OIDCPathScope; see #594

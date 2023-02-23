@@ -1,6 +1,6 @@
 /***************************************************************************
  *
- * Copyright (C) 2018-2022 - ZmartZone Holding BV - www.zmartzone.eu
+ * Copyright (C) 2018-2023 - ZmartZone Holding BV - www.zmartzone.eu
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -229,6 +229,9 @@ oauth2_authz_checker(request_rec *r, const char *require_args,
 				      OAUTH2_HTTP_HDR_WWW_AUTHENTICATE);
 		apr_table_unset(r->err_headers_out,
 				OAUTH2_HTTP_HDR_WWW_AUTHENTICATE);
+		if (r->main)
+			apr_table_unset(r->main->err_headers_out,
+					OAUTH2_HTTP_HDR_WWW_AUTHENTICATE);
 		oauth2_debug(ctx->log,
 			     "setting environment variable %s to \"%s\" for "
 			     "usage in mod_headers",
