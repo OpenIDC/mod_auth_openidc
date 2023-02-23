@@ -61,6 +61,28 @@
 /* hrm, should we get rid of this by adding parameters to the (3) functions? */
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
+#ifdef WIN32
+char* strcasestr(const char* str, const char* pattern) {
+	size_t i;
+
+	if (!*pattern)
+		return (char*)str;
+
+	for (; *str; str++) {
+		if (toupper((unsigned char)*str) == toupper((unsigned char)*pattern)) {
+			for (i = 1;; i++) {
+				if (!pattern[i])
+					return (char*)str;
+				if (toupper((unsigned char)str[i]) != toupper((unsigned char)pattern[i]))
+					break;
+			}
+		}
+	}
+	return NULL;
+}
+#endif
+
+
 /*
  * base64url encode a string
  */
@@ -446,6 +468,23 @@ char* oidc_util_javascript_escape(apr_pool_t *pool, const char *s) {
     return output;
 }
 
+static const char* oidc_util_hdr_forwarded_get(const request_rec *r, const char *elem) {
+	const char *value = NULL;
+	char *ptr = NULL;
+	const char *item = apr_psprintf(r->pool, "%s=", elem);
+	value = oidc_util_hdr_in_forwarded_get(r);
+	value = strcasestr(value, item);
+	if (value) {
+		value += strlen(item);
+		ptr = strstr(value, ";");
+		if (ptr)
+			*ptr = '\0';
+		ptr = strstr(value, " ");
+		if (ptr)
+			*ptr = '\0';
+	}
+	return apr_pstrdup(r->pool, value);
+}
 
 /*
  * get the URL scheme that is currently being accessed
@@ -455,7 +494,9 @@ static const char* oidc_get_current_url_scheme(const request_rec *r,
 	/* first see if there's a proxy/load-balancer in front of us */
 	const char *scheme_str = NULL;
 
-	if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_PROTO)
+	if ((x_forwarded_headers & OIDC_HDR_FORWARDED))
+		scheme_str = oidc_util_hdr_forwarded_get(r, "proto");
+	else if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_PROTO)
 		scheme_str = oidc_util_hdr_in_x_forwarded_proto_get(r);
 
 	/* if not we'll determine the scheme used to connect to this server */
@@ -517,11 +558,13 @@ static const char* oidc_get_current_url_port(const request_rec *r, const char *s
 		return port_str;
 
 	/*
-	 * see if we can get the port from the "X-Forwarded-Host" header
+	 * see if we can get the port from the "X-Forwarded-Host" or "Forwarded" header
 	 * and if that header was set we'll assume defaults
 	 */
 
-	if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_HOST)
+	if (x_forwarded_headers & OIDC_HDR_FORWARDED)
+		host_hdr = oidc_util_hdr_forwarded_get(r, "host");
+	else if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_HOST)
 		host_hdr = oidc_util_hdr_in_x_forwarded_host_get(r);
 
 	if (host_hdr) {
@@ -553,6 +596,13 @@ static const char* oidc_get_current_url_port(const request_rec *r, const char *s
 			return NULL;
 
 	/*
+	 * do the same for the Forwarded: proto= header
+	 */
+	if (x_forwarded_headers & OIDC_HDR_FORWARDED)
+		if (oidc_util_hdr_forwarded_get(r, "proto"))
+				return NULL;
+
+	/*
 	 * if no port was set in the Host header and no X-Forwarded-Proto was set, we'll
 	 * determine the port locally and don't print it when it's the default for the protocol
 	 */
@@ -574,7 +624,9 @@ const char* oidc_get_current_url_host(request_rec *r, const apr_byte_t x_forward
 	char *p = NULL;
 	char *i = NULL;
 
-	if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_HOST)
+	if (x_forwarded_headers & OIDC_HDR_FORWARDED)
+		host_str = oidc_util_hdr_forwarded_get(r, "host");
+	else if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_HOST)
 		host_str = oidc_util_hdr_in_x_forwarded_host_get(r);
 
 	if (host_str == NULL)
@@ -603,9 +655,15 @@ const char* oidc_get_current_url_host(request_rec *r, const apr_byte_t x_forward
  */
 static const char* oidc_get_current_url_base(request_rec *r, const apr_byte_t x_forwarded_headers) {
 
-	const char *scheme_str = oidc_get_current_url_scheme(r, x_forwarded_headers);
-	const char *host_str = oidc_get_current_url_host(r, x_forwarded_headers);
-	const char *port_str = oidc_get_current_url_port(r, scheme_str, x_forwarded_headers);
+	const char *scheme_str = NULL;
+	const char *host_str = NULL;
+	const char *port_str = NULL;
+
+	oidc_config_check_x_forwarded(r, x_forwarded_headers);
+
+	scheme_str = oidc_get_current_url_scheme(r, x_forwarded_headers);
+	host_str = oidc_get_current_url_host(r, x_forwarded_headers);
+	port_str = oidc_get_current_url_port(r, scheme_str, x_forwarded_headers);
 	port_str = port_str ? apr_psprintf(r->pool, ":%s", port_str) : "";
 
 	char *url = apr_pstrcat(r->pool, scheme_str, "://", host_str, port_str,
@@ -2066,8 +2124,8 @@ void oidc_util_set_app_infos(request_rec *r, const json_t *j_attrs,
 
 			/* some logging about what we're going to do */
 			oidc_debug(r,
-					"parsing attribute array for key \"%s\" (#nr-of-elems: %llu)",
-					s_key, (unsigned long long )json_array_size(j_value));
+					"parsing attribute array for key \"%s\" (#nr-of-elems: %lu)",
+					s_key, (unsigned long)json_array_size(j_value));
 
 			/* string to hold the concatenated array string values */
 			char *s_concat = apr_pstrdup(r->pool, "");
@@ -2625,6 +2683,11 @@ const char* oidc_util_hdr_in_x_forwarded_port_get(const request_rec *r) {
 const char* oidc_util_hdr_in_x_forwarded_host_get(const request_rec *r) {
 	return oidc_util_hdr_in_get_left_most_only(r,
 			OIDC_HTTP_HDR_X_FORWARDED_HOST, OIDC_STR_COMMA OIDC_STR_SPACE);
+}
+
+const char* oidc_util_hdr_in_forwarded_get(const request_rec *r) {
+	return oidc_util_hdr_in_get_left_most_only(r,
+			OIDC_HTTP_HDR_FORWARDED, OIDC_STR_COMMA);
 }
 
 const char* oidc_util_hdr_in_host_get(const request_rec *r) {

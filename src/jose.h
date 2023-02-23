@@ -46,9 +46,6 @@
 #ifndef MOD_AUTH_OPENIDC_JOSE_H_
 #define MOD_AUTH_OPENIDC_JOSE_H_
 
-#define OPENSSL_API_COMPAT 0x10000000L
-#define OPENSSL_NO_DEPRECATED 1
-
 #include <stdint.h>
 #include "apr_pools.h"
 #include "apr_tables.h"

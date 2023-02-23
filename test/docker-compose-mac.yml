@@ -1,0 +1,22 @@
+version: '3'
+
+services:
+
+  keycloak:
+    image: sleighzy/keycloak:16.1.0-arm64
+    #build:
+    #  context: https://github.com/keycloak/keycloak-containers.git#16.1.1:server
+    ports:
+      - "8443:8443"
+
+  apache:
+    ports:
+      - "443:443"
+
+  jmeter:
+    environment:
+      THREADS: 2
+      LOOP: 2
+
+# docker-compose -f test/docker-compose.yml -f test/docker-compose-mac.yml up --build --abort-on-container-exit
+# docker exec -it `docker ps | grep apache | cut -d" " -f1` tail -f /var/log/apache2/error.log

@@ -78,13 +78,13 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(IncludePath);$(ProjectDir)target\httpd-2.4.55-win32-VS17\Apache24\include;$(ProjectDir)cjose\include;$(ProjectDir)vcpkg\installed\x86-windows\include</IncludePath>
+    <IncludePath>$(IncludePath);$(ProjectDir)target\httpd-latest\Apache24\include;$(ProjectDir)cjose\include;$(ProjectDir)vcpkg\installed\x86-windows\include</IncludePath>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(ProjectDir)\target\httpd-2.4.55-win64-VS17\Apache24\include;$(ProjectDir)cjose\include;$(ProjectDir)\vcpkg\installed\x64-windows\include;$(IncludePath)</IncludePath>
+    <IncludePath>$(ProjectDir)\target\httpd-latest\Apache24\include;$(ProjectDir)cjose\include;$(ProjectDir)\vcpkg\installed\x64-windows\include;$(IncludePath)</IncludePath>
     <LibraryPath>$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
