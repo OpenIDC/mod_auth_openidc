@@ -1,3 +1,7 @@
+03/01/2023
+- revert accidentally removed libbrotli code in jose.c
+- bump to 2.4.13rc2
+
 02/19/2023
 - add optional - compilation time support - for brotli compression of session and state cookies
 
