@@ -835,6 +835,77 @@ char* oidc_util_http_form_encoded_data(request_rec *r,
 }
 
 /*
+ * set libcurl SSL options
+ */
+
+#define OIDC_CURLOPT_SSL_OPTIONS "CURLOPT_SSL_OPTIONS"
+
+#define OIDC_UTIL_SET_CURL_OPTION(r, curl, env_var_value, option, key, val) \
+		if (strstr(env_var_value, option) != NULL) { \
+			oidc_debug(r, "curl_easy_setopt (%d) %s (%d)", key, option, val); \
+			curl_easy_setopt(curl, key, val); \
+		}
+
+static void oidc_util_set_curl_ssl_options(request_rec *r, CURL *curl) {
+	const char *env_var_value = NULL;
+	if (r->subprocess_env != NULL)
+		env_var_value = apr_table_get(r->subprocess_env,
+				OIDC_CURLOPT_SSL_OPTIONS);
+	if (env_var_value == NULL)
+		return;
+	oidc_debug(r, "SSL options environment variable %s=%s found",
+			OIDC_CURLOPT_SSL_OPTIONS, env_var_value);
+#if LIBCURL_VERSION_NUM >= 0x071900
+	OIDC_UTIL_SET_CURL_OPTION(r, curl, env_var_value, "CURLSSLOPT_ALLOW_BEAST",
+			CURLOPT_SSL_OPTIONS, CURLSSLOPT_ALLOW_BEAST);
+#endif
+#if LIBCURL_VERSION_NUM >= 0x072c00
+	OIDC_UTIL_SET_CURL_OPTION(r, curl, env_var_value, "CURLSSLOPT_NO_REVOKE",
+			CURLOPT_SSL_OPTIONS, CURLSSLOPT_NO_REVOKE);
+#endif
+#if LIBCURL_VERSION_NUM >= 0x074400
+	OIDC_UTIL_SET_CURL_OPTION(r, curl, env_var_value,
+			"CURLSSLOPT_NO_PARTIALCHAIN", CURLOPT_SSL_OPTIONS,
+			CURLSSLOPT_NO_PARTIALCHAIN);
+#endif
+#if LIBCURL_VERSION_NUM >= 0x074600
+	OIDC_UTIL_SET_CURL_OPTION(r, curl, env_var_value,
+			"CURLSSLOPT_REVOKE_BEST_EFFORT", CURLOPT_SSL_OPTIONS,
+			CURLSSLOPT_REVOKE_BEST_EFFORT);
+#endif
+#if LIBCURL_VERSION_NUM >= 0x074700
+	OIDC_UTIL_SET_CURL_OPTION(r, curl, env_var_value, "CURLSSLOPT_NATIVE_CA",
+			CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA);
+#endif
+#if LIBCURL_VERSION_NUM >= 0x072200
+	OIDC_UTIL_SET_CURL_OPTION(r, curl, env_var_value, "CURL_SSLVERSION_TLSv1_0",
+			CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_0);
+	OIDC_UTIL_SET_CURL_OPTION(r, curl, env_var_value, "CURL_SSLVERSION_TLSv1_1",
+			CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_1);
+	OIDC_UTIL_SET_CURL_OPTION(r, curl, env_var_value, "CURL_SSLVERSION_TLSv1_2",
+			CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
+#endif
+#if LIBCURL_VERSION_NUM >= 0x073400
+	OIDC_UTIL_SET_CURL_OPTION(r, curl, env_var_value, "CURL_SSLVERSION_TLSv1_3",
+			CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_3);
+#endif
+#if LIBCURL_VERSION_NUM >= 0x073600
+	OIDC_UTIL_SET_CURL_OPTION(r, curl, env_var_value,
+			"CURL_SSLVERSION_MAX_TLSv1_0", CURLOPT_SSLVERSION,
+			CURL_SSLVERSION_MAX_TLSv1_0);
+	OIDC_UTIL_SET_CURL_OPTION(r, curl, env_var_value,
+			"CURL_SSLVERSION_MAX_TLSv1_1", CURLOPT_SSLVERSION,
+			CURL_SSLVERSION_MAX_TLSv1_1);
+	OIDC_UTIL_SET_CURL_OPTION(r, curl, env_var_value,
+			"CURL_SSLVERSION_MAX_TLSv1_2", CURLOPT_SSLVERSION,
+			CURL_SSLVERSION_MAX_TLSv1_2);
+	OIDC_UTIL_SET_CURL_OPTION(r, curl, env_var_value,
+			"CURL_SSLVERSION_MAX_TLSv1_3", CURLOPT_SSLVERSION,
+			CURL_SSLVERSION_MAX_TLSv1_3);
+#endif
+}
+
+/*
  * execute a HTTP (GET or POST) request
  */
 static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
@@ -897,108 +968,7 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST,
 			(ssl_validate_server != FALSE ? 2L : 0L));
 
-#if LIBCURL_VERSION_NUM >= 0x071900
-	if (r->subprocess_env != NULL) {
-		const char *env_var_value = apr_table_get(r->subprocess_env,
-				"CURLOPT_SSL_OPTIONS");
-		if (env_var_value != NULL) {
-			oidc_debug(r, "SSL options environment variable %s=%s found",
-					"CURLOPT_SSL_OPTIONS", env_var_value);
-			if (strstr(env_var_value, "CURLSSLOPT_ALLOW_BEAST")) {
-				oidc_debug(r,
-						"curl_easy_setopt CURLOPT_SSL_OPTIONS CURLSSLOPT_ALLOW_BEAST");
-				curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS,
-						CURLSSLOPT_ALLOW_BEAST);
-			}
-#if LIBCURL_VERSION_NUM >= 0x072c00
-			if (strstr(env_var_value, "CURLSSLOPT_NO_REVOKE")) {
-				oidc_debug(r,
-						"curl_easy_setopt CURLOPT_SSL_OPTIONS CURLSSLOPT_NO_REVOKE");
-				curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS,
-						CURLSSLOPT_NO_REVOKE);
-			}
-#endif
-#if LIBCURL_VERSION_NUM >= 0x074400
-			if (strstr(env_var_value, "CURLSSLOPT_NO_PARTIALCHAIN")) {
-				oidc_debug(r,
-						"curl_easy_setopt CURLOPT_SSL_OPTIONS CURLSSLOPT_NO_PARTIALCHAIN");
-				curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS,
-						CURLSSLOPT_NO_PARTIALCHAIN);
-			}
-#endif
-#if LIBCURL_VERSION_NUM >= 0x074600
-			if (strstr(env_var_value, "CURLSSLOPT_REVOKE_BEST_EFFORT")) {
-				oidc_debug(r,
-						"curl_easy_setopt CURLOPT_SSL_OPTIONS CURLSSLOPT_REVOKE_BEST_EFFORT");
-				curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS,
-						CURLSSLOPT_REVOKE_BEST_EFFORT);
-			}
-#endif
-#if LIBCURL_VERSION_NUM >= 0x074700
-			if (strstr(env_var_value, "CURLSSLOPT_NATIVE_CA")) {
-				oidc_debug(r,
-						"curl_easy_setopt CURLOPT_SSL_OPTIONS CURLSSLOPT_NATIVE_CA");
-				curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS,
-						CURLSSLOPT_NATIVE_CA);
-			}
-#endif
-#if LIBCURL_VERSION_NUM >= 0x072200
-			if (strstr(env_var_value, "CURL_SSLVERSION_TLSv1_0")) {
-				oidc_debug(r,
-						"curl_easy_setopt CURLOPT_SSLVERSION CURL_SSLVERSION_TLSv1_0");
-				curl_easy_setopt(curl, CURLOPT_SSLVERSION,
-						CURL_SSLVERSION_TLSv1_0);
-			}
-			if (strstr(env_var_value, "CURL_SSLVERSION_TLSv1_1")) {
-				oidc_debug(r,
-						"curl_easy_setopt CURLOPT_SSLVERSION CURL_SSLVERSION_TLSv1_1");
-				curl_easy_setopt(curl, CURLOPT_SSLVERSION,
-						CURL_SSLVERSION_TLSv1_1);
-			}
-			if (strstr(env_var_value, "CURL_SSLVERSION_TLSv1_2")) {
-				oidc_debug(r,
-						"curl_easy_setopt CURLOPT_SSLVERSION CURL_SSLVERSION_TLSv1_2");
-				curl_easy_setopt(curl, CURLOPT_SSLVERSION,
-						CURL_SSLVERSION_TLSv1_2);
-			}
-#endif
-#if LIBCURL_VERSION_NUM >= 0x073400
-			if (strstr(env_var_value, "CURL_SSLVERSION_TLSv1_3")) {
-				oidc_debug(r,
-						"curl_easy_setopt CURLOPT_SSLVERSION CURL_SSLVERSION_TLSv1_3");
-				curl_easy_setopt(curl, CURLOPT_SSLVERSION,
-						CURL_SSLVERSION_TLSv1_3);
-			}
-#endif
-#if LIBCURL_VERSION_NUM >= 0x073600
-			if (strstr(env_var_value, "CURL_SSLVERSION_MAX_TLSv1_0")) {
-				oidc_debug(r,
-						"curl_easy_setopt CURLOPT_SSLVERSION CURL_SSLVERSION_MAX_TLSv1_0");
-				curl_easy_setopt(curl, CURLOPT_SSLVERSION,
-						CURL_SSLVERSION_MAX_TLSv1_0);
-			}
-			if (strstr(env_var_value, "CURL_SSLVERSION_MAX_TLSv1_1")) {
-				oidc_debug(r,
-						"curl_easy_setopt CURLOPT_SSLVERSION CURL_SSLVERSION_MAX_TLSv1_1");
-				curl_easy_setopt(curl, CURLOPT_SSLVERSION,
-						CURL_SSLVERSION_MAX_TLSv1_1);
-			}
-			if (strstr(env_var_value, "CURL_SSLVERSION_MAX_TLSv1_2")) {
-				oidc_debug(r,
-						"curl_easy_setopt CURLOPT_SSLVERSION CURL_SSLVERSION_MAX_TLSv1_2");
-				curl_easy_setopt(curl, CURLOPT_SSLVERSION,
-						CURL_SSLVERSION_MAX_TLSv1_2);
-			}
-			if (strstr(env_var_value, "CURL_SSLVERSION_MAX_TLSv1_3")) {
-				oidc_debug(r,
-						"curl_easy_setopt CURLOPT_SSLVERSION CURL_SSLVERSION_MAX_TLSv1_3");
-				curl_easy_setopt(curl, CURLOPT_SSLVERSION,
-						CURL_SSLVERSION_MAX_TLSv1_3);
-			}
-#endif
-		}
-	}
-#endif
+	oidc_util_set_curl_ssl_options(r, curl);
 
 	if (c->ca_bundle_path != NULL)
 		curl_easy_setopt(curl, CURLOPT_CAINFO, c->ca_bundle_path);
