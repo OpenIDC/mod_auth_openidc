@@ -942,6 +942,60 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 						CURLSSLOPT_NATIVE_CA);
 			}
 #endif
+#if LIBCURL_VERSION_NUM >= 0x072200
+			if (strstr(env_var_value, "CURL_SSLVERSION_TLSv1_0")) {
+				oidc_debug(r,
+						"curl_easy_setopt CURLOPT_SSLVERSION CURL_SSLVERSION_TLSv1_0");
+				curl_easy_setopt(curl, CURLOPT_SSLVERSION,
+						CURL_SSLVERSION_TLSv1_0);
+			}
+			if (strstr(env_var_value, "CURL_SSLVERSION_TLSv1_1")) {
+				oidc_debug(r,
+						"curl_easy_setopt CURLOPT_SSLVERSION CURL_SSLVERSION_TLSv1_1");
+				curl_easy_setopt(curl, CURLOPT_SSLVERSION,
+						CURL_SSLVERSION_TLSv1_1);
+			}
+			if (strstr(env_var_value, "CURL_SSLVERSION_TLSv1_2")) {
+				oidc_debug(r,
+						"curl_easy_setopt CURLOPT_SSLVERSION CURL_SSLVERSION_TLSv1_2");
+				curl_easy_setopt(curl, CURLOPT_SSLVERSION,
+						CURL_SSLVERSION_TLSv1_2);
+			}
+#endif
+#if LIBCURL_VERSION_NUM >= 0x073400
+			if (strstr(env_var_value, "CURL_SSLVERSION_TLSv1_3")) {
+				oidc_debug(r,
+						"curl_easy_setopt CURLOPT_SSLVERSION CURL_SSLVERSION_TLSv1_3");
+				curl_easy_setopt(curl, CURLOPT_SSLVERSION,
+						CURL_SSLVERSION_TLSv1_3);
+			}
+#endif
+#if LIBCURL_VERSION_NUM >= 0x073600
+			if (strstr(env_var_value, "CURL_SSLVERSION_MAX_TLSv1_0")) {
+				oidc_debug(r,
+						"curl_easy_setopt CURLOPT_SSLVERSION CURL_SSLVERSION_MAX_TLSv1_0");
+				curl_easy_setopt(curl, CURLOPT_SSLVERSION,
+						CURL_SSLVERSION_MAX_TLSv1_0);
+			}
+			if (strstr(env_var_value, "CURL_SSLVERSION_MAX_TLSv1_1")) {
+				oidc_debug(r,
+						"curl_easy_setopt CURLOPT_SSLVERSION CURL_SSLVERSION_MAX_TLSv1_1");
+				curl_easy_setopt(curl, CURLOPT_SSLVERSION,
+						CURL_SSLVERSION_MAX_TLSv1_1);
+			}
+			if (strstr(env_var_value, "CURL_SSLVERSION_MAX_TLSv1_2")) {
+				oidc_debug(r,
+						"curl_easy_setopt CURLOPT_SSLVERSION CURL_SSLVERSION_MAX_TLSv1_2");
+				curl_easy_setopt(curl, CURLOPT_SSLVERSION,
+						CURL_SSLVERSION_MAX_TLSv1_2);
+			}
+			if (strstr(env_var_value, "CURL_SSLVERSION_MAX_TLSv1_3")) {
+				oidc_debug(r,
+						"curl_easy_setopt CURLOPT_SSLVERSION CURL_SSLVERSION_MAX_TLSv1_3");
+				curl_easy_setopt(curl, CURLOPT_SSLVERSION,
+						CURL_SSLVERSION_MAX_TLSv1_3);
+			}
+#endif
 		}
 	}
 #endif

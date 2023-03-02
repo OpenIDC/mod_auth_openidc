@@ -1,3 +1,9 @@
+03/02/2023
+- allow setting minumum and maximum versions of TLS used in HTTPs calls via libcurl environment
+  variable CURLOPT_SSL_OPTIONS e.g.:
+  SetEnvIfExpr true "CURLOPT_SSL_OPTIONS=CURL_SSLVERSION_TLSv1_3 CURL_SSLVERSION_MAX_TLSv1_3" ; bump to 2.4.13rc3
+- bump to 2.4.13rc3
+
 03/01/2023
 - revert accidentally removed libbrotli code in jose.c
 - bump to 2.4.13rc2
