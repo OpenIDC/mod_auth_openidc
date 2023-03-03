@@ -35,6 +35,7 @@ As provided by the [`liboauth2`](https://github.com/zmartzone/liboauth2) depende
 - per-directory configuration over per-virtual host
 - flexible cache configuration per cached element type
 - specify multiple token verification options, tried sequentially (allow for key/algo rollover)
+- claims-based authorization capabilities see: https://github.com/zmartzone/mod_oauth2/wiki#authorization
 - etc.
 
 
