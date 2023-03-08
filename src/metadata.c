@@ -1073,7 +1073,7 @@ apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg *c,
 	// TOOD: should check for "if c->oauth.introspection_endpoint_url == NULL and
 	//       allocate the string from the process/config pool
 	//
-	// https://github.com/zmartzone/mod_auth_openidc/commit/32321024ed5bdbc02ba8b5d61aabc4a4c3745c89
+	// https://github.com/OpenIDC/mod_auth_openidc/commit/32321024ed5bdbc02ba8b5d61aabc4a4c3745c89
 	// https://groups.google.com/forum/#!topic/mod_auth_openidc/o1K_1Yh-TQA
 
 	/* get a handle to the introspection endpoint */

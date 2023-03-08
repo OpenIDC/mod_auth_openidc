@@ -14,5 +14,5 @@ jobs:
       - uses: peter-evans/close-issue@v2
         name: Close Issue
         with:
-          comment: "https://github.com/zmartzone/mod_auth_openidc/wiki#20-why-is-my-ticket-closed-as-invalid"
+          comment: "https://github.com/OpenIDC/mod_auth_openidc/wiki#20-why-is-my-ticket-closed-as-invalid"
  

@@ -1,6 +1,6 @@
-[![Build Status](https://github.com/zmartzone/mod_auth_openidc/actions/workflows/build.yml/badge.svg)](https://github.com/zmartzone/mod_auth_openidc/actions/workflows/build.yml)
+[![Build Status](https://github.com/OpenIDC/mod_auth_openidc/actions/workflows/build.yml/badge.svg)](https://github.com/OpenIDC/mod_auth_openidc/actions/workflows/build.yml)
 [<img width="184" height="96" align="right" src="http://openid.net/wordpress-content/uploads/2016/05/oid-l-certification-mark-l-cmyk-150dpi-90mm.jpg" alt="OpenID Certification">](https://openid.net/certification)
-[![CodeQL Analysis](https://github.com/zmartzone/mod_auth_openidc/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/zmartzone/mod_auth_openidc/actions/workflows/codeql-analysis.yml)
+[![CodeQL Analysis](https://github.com/OpenIDC/mod_auth_openidc/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/OpenIDC/mod_auth_openidc/actions/workflows/codeql-analysis.yml)
 
 mod_auth_openidc
 ================
@@ -28,11 +28,11 @@ identifier (`[sub]@[iss]`). Other `id_token` claims are passed in HTTP headers a
 applications protected by the Apache server.
 
 Custom fine-grained authorization rules - based on Apache's `Require` primitives - can be specified to match against the
-set of claims provided in the `id_token`/ `userinfo` claims, see [here](https://github.com/zmartzone/mod_auth_openidc/wiki/Authorization). 
+set of claims provided in the `id_token`/ `userinfo` claims, see [here](https://github.com/OpenIDC/mod_auth_openidc/wiki/Authorization). 
 Clustering for resilience and performance can be configured using one of the supported cache backends options as
-listed [here](https://github.com/zmartzone/mod_auth_openidc/wiki/Caching).
+listed [here](https://github.com/OpenIDC/mod_auth_openidc/wiki/Caching).
 
-For an exhaustive description of all configuration options, see the file [`auth_openidc.conf`](https://github.com/zmartzone/mod_auth_openidc/blob/master/auth_openidc.conf). 
+For an exhaustive description of all configuration options, see the file [`auth_openidc.conf`](https://github.com/OpenIDC/mod_auth_openidc/blob/master/auth_openidc.conf). 
 This file can also serve as an include file for `httpd.conf`.
 
 Interoperability
@@ -45,7 +45,7 @@ Interoperability
 - [OAuth 2.0 Multiple Response Type Encoding Practices 1.0](http://openid.net/specs/oauth-v2-multiple-response-types-1_0.html)
 - [OAuth 2.0 Form Post Response Mode 1.0](http://openid.net/specs/oauth-v2-form-post-response-mode-1_0.html)
 - [RFC7 7636 - Proof Key for Code Exchange by OAuth Public Clients](https://tools.ietf.org/html/rfc7636)
-- [OpenID Connect Session Management 1.0](http://openid.net/specs/openid-connect-session-1_0.html) *see the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki/OpenID-Connect-Session-Management) for information on how to configure it)*
+- [OpenID Connect Session Management 1.0](http://openid.net/specs/openid-connect-session-1_0.html) *see the [Wiki](https://github.com/OpenIDC/mod_auth_openidc/wiki/OpenID-Connect-Session-Management) for information on how to configure it)*
 - [OpenID Connect Front-Channel Logout 1.0](http://openid.net/specs/openid-connect-frontchannel-1_0.html)
 - [OpenID Connect Back-Channel Logout 1.0](https://openid.net/specs/openid-connect-backchannel-1_0.html)
 
@@ -54,9 +54,9 @@ Support
 
 #### Community
 Documentation can be found at the Wiki (including Frequently Asked Questions) at:  
-  [https://github.com/zmartzone/mod_auth_openidc/wiki](https://github.com/zmartzone/mod_auth_openidc/wiki)  
+  [https://github.com/OpenIDC/mod_auth_openidc/wiki](https://github.com/OpenIDC/mod_auth_openidc/wiki)  
 For questions, issues and suggestions use the Github Discussions forum at:  
-  [https://github.com/zmartzone/mod_auth_openidc/discussions](https://github.com/zmartzone/mod_auth_openidc/discussions)
+  [https://github.com/OpenIDC/mod_auth_openidc/discussions](https://github.com/OpenIDC/mod_auth_openidc/discussions)
 
 #### Commercial
 For commercial support contracts, professional services, training and use-case specific support please contact:  
@@ -98,7 +98,7 @@ Require claim hd:<your-domain>
 ```
 
 The above is an authorization example of an exact match of a provided claim against a string value.
-For more authorization options see the [Wiki page on Authorization](https://github.com/zmartzone/mod_auth_openidc/wiki/Authorization).
+For more authorization options see the [Wiki page on Authorization](https://github.com/OpenIDC/mod_auth_openidc/wiki/Authorization).
 
 ### Quickstart with a generic OpenID Connect Provider
 
@@ -126,20 +126,20 @@ OIDCCryptoPassphrase <password>
    Require valid-user
 </Location>
 ```
-For details on configuring multiple providers see the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki/Multiple-Providers).
+For details on configuring multiple providers see the [Wiki](https://github.com/OpenIDC/mod_auth_openidc/wiki/Multiple-Providers).
 
 ### Quickstart for Other Providers
 
-See the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki) for configuration docs for other OpenID Connect Providers:
-- [GLUU Server](https://github.com/zmartzone/mod_auth_openidc/wiki/Gluu-Server)
-- [Keycloak](https://github.com/zmartzone/mod_auth_openidc/wiki/Keycloak)
-- [Azure AD](https://github.com/zmartzone/mod_auth_openidc/wiki/Azure-Active-Directory-Authentication)
-- [Sign in with Apple](https://github.com/zmartzone/mod_auth_openidc/wiki/Sign-in-with-Apple)
-- [Curity Identity Server](https://github.com/zmartzone/mod_auth_openidc/wiki/Curity-Identity-Server)
-- [LemonLDAP::NG](https://github.com/zmartzone/mod_auth_openidc/wiki/LemonLDAP::NG)
-- [GitLab](https://github.com/zmartzone/mod_auth_openidc/wiki/GitLab-OAuth2)
-- [Globus](https://github.com/zmartzone/mod_auth_openidc/wiki/Globus)
-and [more](https://github.com/zmartzone/mod_auth_openidc/wiki/Useful-Links)
+See the [Wiki](https://github.com/OpenIDC/mod_auth_openidc/wiki) for configuration docs for other OpenID Connect Providers:
+- [GLUU Server](https://github.com/OpenIDC/mod_auth_openidc/wiki/Gluu-Server)
+- [Keycloak](https://github.com/OpenIDC/mod_auth_openidc/wiki/Keycloak)
+- [Azure AD](https://github.com/OpenIDC/mod_auth_openidc/wiki/Azure-Active-Directory-Authentication)
+- [Sign in with Apple](https://github.com/OpenIDC/mod_auth_openidc/wiki/Sign-in-with-Apple)
+- [Curity Identity Server](https://github.com/OpenIDC/mod_auth_openidc/wiki/Curity-Identity-Server)
+- [LemonLDAP::NG](https://github.com/OpenIDC/mod_auth_openidc/wiki/LemonLDAP::NG)
+- [GitLab](https://github.com/OpenIDC/mod_auth_openidc/wiki/GitLab-OAuth2)
+- [Globus](https://github.com/OpenIDC/mod_auth_openidc/wiki/Globus)
+and [more](https://github.com/OpenIDC/mod_auth_openidc/wiki/Useful-Links)
 
 Disclaimer
 ----------

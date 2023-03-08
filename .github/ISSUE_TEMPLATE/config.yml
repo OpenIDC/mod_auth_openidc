@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: Questions and Suggestions
-    url: https://github.com/zmartzone/mod_auth_openidc/discussions
+    url: https://github.com/OpenIDC/mod_auth_openidc/discussions
     about: This issue tracker is not for end users, please provide your question/suggestion in the Discussions forum here.
