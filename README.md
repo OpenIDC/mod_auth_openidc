@@ -1,4 +1,4 @@
-[![Build Status](https://github.com/zmartzone/mod_oauth2/actions/workflows/build.yml/badge.svg)](https://github.com/zmartzone/mod_oauth2/actions/workflows/build.yml)
+[![Build Status](https://github.com/OpenIDC/mod_oauth2/actions/workflows/build.yml/badge.svg)](https://github.com/OpenIDC/mod_oauth2/actions/workflows/build.yml)
 
 # mod_oauth2
 
@@ -31,11 +31,11 @@ For a detailed overview of configuration options see the `oauth2.conf` Apache co
 
 ## Features
 
-As provided by the [`liboauth2`](https://github.com/zmartzone/liboauth2) dependency, including:
+As provided by the [`liboauth2`](https://github.com/OpenIDC/liboauth2) dependency, including:
 - per-directory configuration over per-virtual host
 - flexible cache configuration per cached element type
 - specify multiple token verification options, tried sequentially (allow for key/algo rollover)
-- claims-based authorization capabilities see: https://github.com/zmartzone/mod_oauth2/wiki#authorization
+- claims-based authorization capabilities see: https://github.com/OpenIDC/mod_oauth2/wiki#authorization
 - etc.
 
 
@@ -43,7 +43,7 @@ As provided by the [`liboauth2`](https://github.com/zmartzone/liboauth2) depende
 
 #### Community Support
 For generic questions, see the Wiki pages with Frequently Asked Questions at:  
-  [https://github.com/zmartzone/mod_oauth2/wiki](https://github.com/zmartzone/mod_oauth2/wiki)  
+  [https://github.com/OpenIDC/mod_oauth2/wiki](https://github.com/OpenIDC/mod_oauth2/wiki)  
 Any questions/issues should go to issues tracker.
 
 #### Commercial Services

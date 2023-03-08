@@ -1,3 +1,6 @@
+03/08/2023
+- move repo to OpenIDC github organization
+
 01/21/2023
 - clean WWW-Authenticate header in main request as well if this is a subrequest; closes #42
   this avoids the WWW-Authenticate header to be sent in HTTP 200 responses; thanks @ErmakovDmitriy
