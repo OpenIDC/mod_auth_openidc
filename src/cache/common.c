@@ -292,6 +292,12 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key,
 		goto out;
 	}
 
+	if (cfg->crypto_passphrase == NULL) {
+		oidc_error(r,
+				"could not decrypt cache entry because " OIDCCryptoPassphrase " is not set");
+		goto out;
+	}
+
 	rc = oidc_cache_crypto_decrypt(r, cache_value, cfg->crypto_passphrase, value);
 
 out:
@@ -336,7 +342,13 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key,
 			goto out;
 
 		if (value != NULL) {
-			if (oidc_cache_crypto_encrypt(r, value, cfg->crypto_passphrase, &encoded) == FALSE)
+			if (cfg->crypto_passphrase == NULL) {
+				oidc_error(r,
+						"could not encrypt cache entry because " OIDCCryptoPassphrase " is not set");
+				goto out;
+			}
+			if (oidc_cache_crypto_encrypt(r, value, cfg->crypto_passphrase,
+					&encoded) == FALSE)
 				goto out;
 			value = encoded;
 		}

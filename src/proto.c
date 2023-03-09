@@ -966,9 +966,16 @@ oidc_proto_state_t* oidc_proto_state_from_cookie(request_rec *r, oidc_cfg *c,
 	return result;
 }
 
-char* oidc_proto_state_to_cookie(request_rec *r, oidc_cfg *c, oidc_proto_state_t *proto_state) {
+char* oidc_proto_state_to_cookie(request_rec *r, oidc_cfg *c,
+		oidc_proto_state_t *proto_state) {
 	char *cookieValue = NULL;
-	oidc_util_jwt_create(r, c->crypto_passphrase, proto_state, &cookieValue, FALSE, TRUE);
+	if (c->crypto_passphrase != NULL) {
+		oidc_util_jwt_create(r, c->crypto_passphrase, proto_state, &cookieValue,
+				FALSE, TRUE);
+	} else {
+		oidc_error(r,
+				"cannot create a state cookie because " OIDCCryptoPassphrase " is not set; please check your OIDC Provider configuration as well or avoid using AuthType openid-connect");
+	}
 	return cookieValue;
 }
 

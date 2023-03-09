@@ -132,6 +132,11 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret, json_t *payl
 	oidc_jwt_t *jwt = NULL;
 	oidc_jwt_t *jwe = NULL;
 
+	if (secret == NULL) {
+		oidc_error(r, "secret is not set");
+		goto end;
+	}
+
 	if (oidc_util_create_symmetric_key(r, secret, 0, OIDC_JOSE_ALG_SHA256, FALSE, &jwk) == FALSE)
 		goto end;
 

@@ -208,7 +208,6 @@
 #define OIDCCookieHTTPOnly                     "OIDCCookieHTTPOnly"
 #define OIDCCookieSameSite                     "OIDCCookieSameSite"
 #define OIDCOutgoingProxy                      "OIDCOutgoingProxy"
-#define OIDCCryptoPassphrase                   "OIDCCryptoPassphrase"
 #define OIDCClaimDelimiter                     "OIDCClaimDelimiter"
 #define OIDCPassIDTokenAs                      "OIDCPassIDTokenAs"
 #define OIDCPassUserInfoAs                     "OIDCPassUserInfoAs"

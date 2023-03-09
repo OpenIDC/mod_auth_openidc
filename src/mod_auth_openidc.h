@@ -753,6 +753,7 @@ int oidc_oauth_return_www_authenticate(request_rec *r, const char *error, const 
 #define OIDCCookiePath                       "OIDCCookiePath"
 #define OIDCInfoHook                         "OIDCInfoHook"
 #define OIDCWhiteListedClaims                "OIDCWhiteListedClaims"
+#define OIDCCryptoPassphrase                 "OIDCCryptoPassphrase"
 
 void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr);
 void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD);
