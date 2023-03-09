@@ -2708,11 +2708,9 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 			&& (provider != NULL)) {
 
 		if (oidc_util_request_has_parameter(r, "test-jwks-uri")) {
-			oidc_jwks_uri_t jwks_uri = { provider->jwks_uri, provider->jwks_refresh_interval,
-					provider->ssl_validate_server };
 			json_t *j_jwks = NULL;
 			apr_byte_t force_refresh = TRUE;
-			oidc_metadata_jwks_get(r, c, &jwks_uri, &j_jwks, &force_refresh);
+			oidc_metadata_jwks_get(r, c, &provider->jwks_uri, provider->ssl_validate_server, &j_jwks, &force_refresh);
 			json_decref(j_jwks);
 			return OK;
 		} else {
@@ -3021,9 +3019,7 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 			NULL, TRUE, &jwk) == FALSE)
 		return FALSE;
 
-	oidc_jwks_uri_t jwks_uri = { provider->jwks_uri,
-			provider->jwks_refresh_interval, provider->ssl_validate_server };
-	if (oidc_proto_jwt_verify(r, cfg, jwt, &jwks_uri,
+	if (oidc_proto_jwt_verify(r, cfg, jwt, &provider->jwks_uri, provider->ssl_validate_server,
 			oidc_util_merge_symmetric_key(r->pool, provider->verify_public_keys, jwk),
 			provider->id_token_signed_response_alg) == FALSE) {
 

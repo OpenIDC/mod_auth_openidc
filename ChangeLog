@@ -1,3 +1,9 @@
+03/09/2023
+- add support for OP "signed_jwks_uri" with "OIDCProviderSignedJwksUri <uri> <jwk>"
+- don't pull JWKs when the id_token was signed with a symmetric key
+- don't immediately refresh of JWKs from (signed)_jwks_uri if "kid" was not set in JWT, but try the cache first
+- bump to 2.4.13rc4
+
 03/08/2023
 - move repo to OpenIDC github organization
 

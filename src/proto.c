@@ -220,9 +220,6 @@ static int oidc_proto_delete_from_request(void *rec, const char *name,
 apr_byte_t oidc_proto_get_encryption_jwk_by_type(request_rec *r, oidc_cfg *cfg,
 		struct oidc_provider_t *provider, int key_type, oidc_jwk_t **jwk) {
 
-	oidc_jwks_uri_t jwks_uri = { provider->jwks_uri,
-			provider->jwks_refresh_interval, provider->ssl_validate_server };
-
 	oidc_jose_error_t err;
 	json_t *j_jwks = NULL;
 	apr_byte_t force_refresh = TRUE;
@@ -230,7 +227,7 @@ apr_byte_t oidc_proto_get_encryption_jwk_by_type(request_rec *r, oidc_cfg *cfg,
 	char *jwk_json = NULL;
 
 	/* TODO: forcefully refresh now; we may want to relax that */
-	oidc_metadata_jwks_get(r, cfg, &jwks_uri, &j_jwks, &force_refresh);
+	oidc_metadata_jwks_get(r, cfg, &provider->jwks_uri, provider->ssl_validate_server, &j_jwks, &force_refresh);
 
 	if (j_jwks == NULL) {
 		oidc_error(r, "could not retrieve JSON Web Keys");
@@ -1484,13 +1481,13 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, oidc_jwt_t *jwt,
  * get the keys from the (possibly cached) set of JWKs on the jwk_uri that corresponds with the key specified in the header
  */
 apr_byte_t oidc_proto_get_keys_from_jwks_uri(request_rec *r, oidc_cfg *cfg,
-		oidc_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri, apr_hash_t *keys,
+		oidc_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri, int ssl_validate_server, apr_hash_t *keys,
 		apr_byte_t *force_refresh) {
 
 	json_t *j_jwks = NULL;
 
 	/* get the set of JSON Web Keys for this provider (possibly by downloading them from the specified provider->jwk_uri) */
-	oidc_metadata_jwks_get(r, cfg, jwks_uri, &j_jwks, force_refresh);
+	oidc_metadata_jwks_get(r, cfg, jwks_uri, ssl_validate_server, &j_jwks, force_refresh);
 	if (j_jwks == NULL) {
 		oidc_error(r, "could not %s JSON Web Keys",
 				*force_refresh ? "refresh" : "get");
@@ -1518,7 +1515,7 @@ apr_byte_t oidc_proto_get_keys_from_jwks_uri(request_rec *r, oidc_cfg *cfg,
 				"could not find a key in the cached JSON Web Keys, doing a forced refresh in case keys were rolled over");
 		/* get the set of JSON Web Keys forcing a fresh download from the specified JWKs URI */
 		*force_refresh = TRUE;
-		return oidc_proto_get_keys_from_jwks_uri(r, cfg, jwt, jwks_uri, keys,
+		return oidc_proto_get_keys_from_jwks_uri(r, cfg, jwt, jwks_uri, ssl_validate_server, keys,
 				force_refresh);
 	}
 
@@ -1533,7 +1530,7 @@ apr_byte_t oidc_proto_get_keys_from_jwks_uri(request_rec *r, oidc_cfg *cfg,
  * verify the signature on a JWT using the dynamically obtained and statically configured keys
  */
 apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt,
-		const oidc_jwks_uri_t *jwks_uri, apr_hash_t *static_keys,
+		const oidc_jwks_uri_t *jwks_uri, int ssl_validate_server, apr_hash_t *static_keys,
 		const char *alg) {
 
 	oidc_jose_error_t err;
@@ -1551,22 +1548,23 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt,
 	dynamic_keys = apr_hash_make(r->pool);
 
 	/* see if we've got a JWKs URI set for signature validation with dynamically obtained asymmetric keys */
-	if (jwks_uri->url == NULL) {
+	if ((jwks_uri->uri == NULL) && (jwks_uri->signed_uri == NULL)) {
 		oidc_debug(r,
-				"\"jwks_uri\" is not set, signature validation will only be performed against statically configured keys");
+				"\"jwks_uri\" and \"signed_jwks_uri\" are not set, signature validation will only be performed against statically configured keys");
 		/* the JWKs URI was provided, but let's see if it makes sense to pull down keys, i.e. if it is an asymmetric signature */
-	} /*else if (oidc_jose_signature_is_hmac(r->pool, jwt)) {
-	 oidc_debug(r,
-	 "\"jwks_uri\" is set, but the JWT has a symmetric signature so we won't pull/use keys from there");
-	 } */else {
-		 apr_byte_t force_refresh = jwt->header.kid == NULL ? TRUE : FALSE;
-		 /* get the key from the JWKs that corresponds with the key specified in the header */
-		 if (oidc_proto_get_keys_from_jwks_uri(r, cfg, jwt, jwks_uri,
-				 dynamic_keys, &force_refresh) == FALSE) {
-			 oidc_jwk_list_destroy_hash(r->pool, dynamic_keys);
-			 return FALSE;
-		 }
-	 }
+	} else if (oidc_jwt_alg2kty(jwt) == CJOSE_JWK_KTY_OCT) {
+		oidc_debug(r,
+				"\"%s\" is set, but the JWT has a symmetric signature so we won't pull/use keys from there",
+				(jwks_uri->signed_uri != NULL) ? "signed_jwks_uri" : "jwks_uri");
+	} else {
+		apr_byte_t force_refresh = FALSE;
+		/* get the key from the JWKs that corresponds with the key specified in the header */
+		if (oidc_proto_get_keys_from_jwks_uri(r, cfg, jwt, jwks_uri,
+				ssl_validate_server, dynamic_keys, &force_refresh) == FALSE) {
+			oidc_jwk_list_destroy_hash(r->pool, dynamic_keys);
+			return FALSE;
+		}
+	}
 
 	/* do the actual JWS verification with the locally and remotely provided key material */
 	// TODO: now static keys "win" if the same `kid` was used in both local and remote key sets
@@ -1665,9 +1663,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 			return FALSE;
 		}
 
-		oidc_jwks_uri_t jwks_uri = { provider->jwks_uri,
-				provider->jwks_refresh_interval, provider->ssl_validate_server };
-		if (oidc_proto_jwt_verify(r, cfg, *jwt, &jwks_uri,
+		if (oidc_proto_jwt_verify(r, cfg, *jwt, &provider->jwks_uri, provider->ssl_validate_server,
 				oidc_util_merge_symmetric_key(r->pool, provider->verify_public_keys, jwk),
 				provider->id_token_signed_response_alg) == FALSE) {
 
@@ -2166,9 +2162,7 @@ static apr_byte_t oidc_user_info_response_validate(request_rec *r,
 				NULL, TRUE, &jwk) == FALSE)
 			return FALSE;
 
-		oidc_jwks_uri_t jwks_uri = { provider->jwks_uri,
-				provider->jwks_refresh_interval, provider->ssl_validate_server };
-		if (oidc_proto_jwt_verify(r, cfg, jwt, &jwks_uri,
+		if (oidc_proto_jwt_verify(r, cfg, jwt, &provider->jwks_uri, provider->ssl_validate_server,
 				oidc_util_merge_symmetric_key(r->pool, NULL, jwk),
 				provider->userinfo_signed_response_alg) == FALSE) {
 

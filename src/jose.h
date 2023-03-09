@@ -164,6 +164,7 @@ apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json,
 /* parse a JSON string to a JWK struct */
 oidc_jwk_t* oidc_jwk_parse(apr_pool_t *pool, const char *s_json,
 		oidc_jose_error_t *err);
+oidc_jwk_t *oidc_jwk_copy(apr_pool_t *pool, const oidc_jwk_t *jwk);
 /* parse a JSON object in to a JWK struct */
 apr_byte_t oidc_jwk_parse_json(apr_pool_t *pool, json_t *json, oidc_jwk_t **jwk,
 		oidc_jose_error_t *err);

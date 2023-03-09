@@ -108,4 +108,4 @@ docker-run: docker-build
 	docker run -p 443:443 -v $(PWD)/test/openidc.conf:/etc/apache2/conf-available/openidc.conf -it mod_auth_openidc "/usr/sbin/apache2ctl start && tail -f /var/log/apache2/error.log"
 
 docker-valgrind: docker-build
-	docker run -p 443:443 -v $(PWD)/test/openidc.conf:/etc/apache2/conf-available/openidc.conf -it mod_auth_openidc "source /etc/apache2/envvars && valgrind --leak-check=full /usr/sbin/apache2 -X"
+	docker run -p 443:443 -v $(PWD)/test/openidc.conf:/etc/apache2/conf-available/openidc.conf -it mod_auth_openidc "source /etc/apache2/envvars && valgrind --leak-check=full --read-inline-info=yes --keep-debuginfo=yes /usr/sbin/apache2 -X"

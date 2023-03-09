@@ -173,6 +173,7 @@
 #define OIDCProviderEndSessionEndpoint         "OIDCProviderEndSessionEndpoint"
 #define OIDCProviderBackChannelLogoutSupported "OIDCProviderBackChannelLogoutSupported"
 #define OIDCProviderJwksUri                    "OIDCProviderJwksUri"
+#define OIDCProviderSignedJwksUri              "OIDCProviderSignedJwksUri"
 #define OIDCProviderVerifyCertFiles            "OIDCProviderVerifyCertFiles"
 #define OIDCResponseType                       "OIDCResponseType"
 #define OIDCResponseMode                       "OIDCResponseMode"
@@ -1155,7 +1156,7 @@ static const char* oidc_set_jwks_refresh_interval(cmd_parms *cmd,
 	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
 			&auth_openidc_module);
 	const char *rv = oidc_parse_jwks_refresh_interval(cmd->pool, arg,
-			&cfg->provider.jwks_refresh_interval);
+			&cfg->provider.jwks_uri.refresh_interval);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -1372,6 +1373,25 @@ static const char* oidc_set_redirect_urls_allowed(cmd_parms *cmd, void *m,
 	return NULL;
 }
 
+static const char* oidc_set_signed_jwks_uri(cmd_parms *cmd, void *m,
+		const char *arg1, const char *arg2) {
+	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
+			&auth_openidc_module);
+	const char *rv = NULL;
+	oidc_jose_error_t err;
+	if (apr_strnatcmp(arg1, "") != 0) {
+		rv = oidc_set_url_slot(cmd, cfg, arg1);
+		if (rv != NULL)
+			return OIDC_CONFIG_DIR_RV(cmd, rv);
+	}
+	cfg->provider.jwks_uri.jwk = oidc_jwk_parse(cmd->pool, arg2, &err);
+	if (cfg->provider.jwks_uri.jwk == NULL) {
+		return apr_psprintf(cmd->pool, "oidc_jwk_parse failed: %s",
+				oidc_jose_e2s(cmd->pool, err));
+	}
+	return NULL;
+}
+
 int oidc_cfg_dir_refresh_access_token_before_expiry(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
@@ -1417,7 +1437,10 @@ void oidc_cfg_provider_init(oidc_provider_t *provider) {
 	provider->registration_endpoint_json = NULL;
 	provider->check_session_iframe = NULL;
 	provider->end_session_endpoint = NULL;
-	provider->jwks_uri = NULL;
+	provider->jwks_uri.uri = NULL;
+	provider->jwks_uri.refresh_interval = OIDC_DEFAULT_JWKS_REFRESH_INTERVAL;
+	provider->jwks_uri.signed_uri = NULL;
+	provider->jwks_uri.jwk = NULL;
 	provider->verify_public_keys = NULL;
 	provider->backchannel_logout_supported = OIDC_CONFIG_POS_INT_UNSET;
 
@@ -1429,7 +1452,6 @@ void oidc_cfg_provider_init(oidc_provider_t *provider) {
 	provider->scope = OIDC_DEFAULT_SCOPE;
 	provider->response_type = OIDC_DEFAULT_RESPONSE_TYPE;
 	provider->response_mode = NULL;
-	provider->jwks_refresh_interval = OIDC_DEFAULT_JWKS_REFRESH_INTERVAL;
 	provider->idtoken_iat_slack = OIDC_DEFAULT_IDTOKEN_IAT_SLACK;
 	provider->session_max_duration = OIDC_DEFAULT_SESSION_MAX_DURATION;
 	provider->auth_request_params = NULL;
@@ -1632,9 +1654,20 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->provider.revocation_endpoint_url != NULL ?
 					add->provider.revocation_endpoint_url :
 					base->provider.revocation_endpoint_url;
-	c->provider.jwks_uri =
-			add->provider.jwks_uri != NULL ?
-					add->provider.jwks_uri : base->provider.jwks_uri;
+	c->provider.jwks_uri.uri =
+			add->provider.jwks_uri.uri != NULL ?
+					add->provider.jwks_uri.uri : base->provider.jwks_uri.uri;
+	c->provider.jwks_uri.refresh_interval =
+			add->provider.jwks_uri.refresh_interval
+			!= OIDC_DEFAULT_JWKS_REFRESH_INTERVAL ?
+					add->provider.jwks_uri.refresh_interval :
+					base->provider.jwks_uri.refresh_interval;
+	c->provider.jwks_uri.signed_uri =
+			add->provider.jwks_uri.signed_uri != NULL ?
+					add->provider.jwks_uri.signed_uri : base->provider.jwks_uri.signed_uri;
+	c->provider.jwks_uri.jwk = oidc_jwk_copy(pool,
+			add->provider.jwks_uri.jwk != NULL ?
+					add->provider.jwks_uri.jwk : base->provider.jwks_uri.jwk);
 	c->provider.verify_public_keys =
 			add->provider.verify_public_keys != NULL ?
 					add->provider.verify_public_keys :
@@ -1713,11 +1746,6 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->provider.response_mode =
 			add->provider.response_mode != NULL ?
 					add->provider.response_mode : base->provider.response_mode;
-	c->provider.jwks_refresh_interval =
-			add->provider.jwks_refresh_interval
-			!= OIDC_DEFAULT_JWKS_REFRESH_INTERVAL ?
-					add->provider.jwks_refresh_interval :
-					base->provider.jwks_refresh_interval;
 	c->provider.idtoken_iat_slack =
 			add->provider.idtoken_iat_slack != OIDC_DEFAULT_IDTOKEN_IAT_SLACK ?
 					add->provider.idtoken_iat_slack :
@@ -2682,7 +2710,9 @@ static apr_status_t oidc_cleanup_child(void *data) {
 		}
 
 		// can do this even though we haven't got a deep copy
-		// since references within the object will be set to NULL
+		// since references within the oidc_jwk_t object will be set to NULL
+		if (cfg->provider.jwks_uri.jwk)
+			oidc_jwk_destroy(cfg->provider.jwks_uri.jwk);
 		oidc_jwk_list_destroy(sp->process->pool,
 				cfg->provider.verify_public_keys);
 		oidc_jwk_list_destroy(sp->process->pool,
@@ -3063,9 +3093,14 @@ const command_rec oidc_config_cmds[] = {
 				"Define whether the OP supports OpenID Connect Back Channel Logout."),
 		AP_INIT_TAKE1(OIDCProviderJwksUri,
 				oidc_set_https_slot,
-				(void *)APR_OFFSETOF(oidc_cfg, provider.jwks_uri),
+				(void *)APR_OFFSETOF(oidc_cfg, provider.jwks_uri.uri),
 				RSRC_CONF,
 				"Define the OpenID OP JWKS URL (e.g.: https://localhost:9031/pf/JWKS)"),
+		AP_INIT_TAKE2(OIDCProviderSignedJwksUri,
+				oidc_set_signed_jwks_uri,
+				(void *)APR_OFFSETOF(oidc_cfg, provider.jwks_uri.signed_uri),
+				RSRC_CONF,
+				"Define the OpenID Connect OP Signed JWKS URI and a JWK that can be used to verify the data on that URL."),
 		AP_INIT_ITERATE(OIDCProviderVerifyCertFiles,
 				oidc_set_public_key_files,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.verify_public_keys),
@@ -3171,7 +3206,7 @@ const command_rec oidc_config_cmds[] = {
 				"Define the OpenID Connect scope that is requested from all providers for a specific path/context."),
 		AP_INIT_TAKE1(OIDCJWKSRefreshInterval,
 				oidc_set_jwks_refresh_interval,
-				(void*)APR_OFFSETOF(oidc_cfg, provider.jwks_refresh_interval),
+				(void*)APR_OFFSETOF(oidc_cfg, provider.jwks_uri.refresh_interval),
 				RSRC_CONF,
 				"Duration in seconds after which retrieved JWS should be refreshed."),
 		AP_INIT_TAKE1(OIDCIDTokenIatSlack,

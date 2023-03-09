@@ -278,9 +278,10 @@ extern oidc_proto_pkce_t oidc_pkce_s256;
 extern oidc_proto_pkce_t oidc_pkce_referred_tb;
 
 typedef struct oidc_jwks_uri_t {
-	const char *url;
+	char *uri;
 	int refresh_interval;
-	int ssl_validate_server;
+	char *signed_uri;
+	oidc_jwk_t *jwk;
 } oidc_jwks_uri_t;
 
 typedef struct oidc_provider_t {
@@ -295,7 +296,7 @@ typedef struct oidc_provider_t {
 	char *registration_endpoint_url;
 	char *check_session_iframe;
 	char *end_session_endpoint;
-	char *jwks_uri;
+	oidc_jwks_uri_t jwks_uri;
 	apr_array_header_t *verify_public_keys;
 	char *client_id;
 	char *client_secret;
@@ -314,7 +315,6 @@ typedef struct oidc_provider_t {
 	char *scope;
 	char *response_type;
 	char *response_mode;
-	int jwks_refresh_interval;
 	int idtoken_iat_slack;
 	char *auth_request_params;
 	int session_max_duration;
@@ -700,7 +700,7 @@ int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg *c);
 apr_array_header_t *oidc_proto_supported_flows(apr_pool_t *pool);
 apr_byte_t oidc_proto_flow_is_supported(apr_pool_t *pool, const char *flow);
 apr_byte_t oidc_proto_validate_authorization_response(request_rec *r, const char *response_type, const char *requested_response_mode, char **code, char **id_token, char **access_token, char **token_type, const char *used_response_mode);
-apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri, apr_hash_t *symmetric_keys, const char *alg);
+apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri, int ssl_validate_server, apr_hash_t *symmetric_keys, const char *alg);
 apr_byte_t oidc_proto_validate_jwt(request_rec *r, oidc_jwt_t *jwt, const char *iss, apr_byte_t exp_is_mandatory, apr_byte_t iat_is_mandatory, int iat_slack, int token_binding_policy);
 apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce, int len);
 apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, oidc_jwt_payload_t *id_token_payload);
@@ -916,7 +916,7 @@ apr_byte_t oidc_metadata_provider_parse(request_rec *r, oidc_cfg *cfg, json_t *j
 apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, oidc_cfg *cfg, json_t *j_provider, const char *issuer);
 apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg *cfg, apr_array_header_t **arr);
 apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *selected, oidc_provider_t **provider, apr_byte_t allow_discovery);
-apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg, const oidc_jwks_uri_t *jwks_uri, json_t **j_jwks, apr_byte_t *refresh);
+apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg, const oidc_jwks_uri_t *jwks_uri, int ssl_validate_server, json_t **j_jwks, apr_byte_t *refresh);
 apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg *c, json_t *j_provider);
 
 // oidc_session.c

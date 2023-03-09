@@ -60,6 +60,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_METADATA_USERINFO_ENDPOINT                            "userinfo_endpoint"
 #define OIDC_METADATA_REVOCATION_ENDPOINT                          "revocation_endpoint"
 #define OIDC_METADATA_JWKS_URI                                     "jwks_uri"
+#define OIDC_METADATA_SIGNED_JWKS_URI                              "signed_jwks_uri"
 #define OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED        "token_endpoint_auth_methods_supported"
 #define OIDC_METADATA_INTROSPECTON_ENDPOINT_AUTH_METHODS_SUPPORTED "introspection_endpoint_auth_methods_supported"
 #define OIDC_METADATA_REGISTRATION_ENDPOINT                        "registration_endpoint"
@@ -199,8 +200,8 @@ static const char* oidc_metadata_conf_path(request_rec *r, const char *issuer) {
  * get cache key for the JWKs file for a specified URI
  */
 static const char* oidc_metadata_jwks_cache_key(request_rec *r,
-		const char *jwks_uri) {
-	return jwks_uri;
+		const oidc_jwks_uri_t *jwks_uri) {
+	return jwks_uri->signed_uri ? jwks_uri->signed_uri : jwks_uri->uri;
 }
 
 /*
@@ -326,6 +327,12 @@ apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, oidc_cfg *cfg,
 			OIDC_METADATA_JWKS_URI, NULL, FALSE) == FALSE)
 		return FALSE;
 
+	/* check the optional signed JWKs URI */
+	if (oidc_metadata_is_valid_uri(r, OIDC_METADATA_SUFFIX_PROVIDER, issuer,
+			j_provider,
+			OIDC_METADATA_SIGNED_JWKS_URI, NULL, FALSE) == FALSE)
+		return FALSE;
+
 	/* find out what type of authentication the token endpoint supports */
 	if (oidc_valid_string_in_array(r->pool, j_provider,
 			OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED,
@@ -403,13 +410,13 @@ static apr_byte_t oidc_metadata_client_is_valid(request_rec *r,
  * checks if a parsed JWKs file is a valid one, cq. contains "keys"
  */
 static apr_byte_t oidc_metadata_jwks_is_valid(request_rec *r,
-		const oidc_jwks_uri_t *jwks_uri, json_t *j_jwks) {
+		const char *url, json_t *j_jwks) {
 
 	json_t *keys = json_object_get(j_jwks, OIDC_METADATA_KEYS);
 	if ((keys == NULL) || (!json_is_array(keys))) {
 		oidc_error(r,
 				"JWKs JSON metadata obtained from URL \"%s\" did not contain a \"" OIDC_METADATA_KEYS "\" array",
-				jwks_uri->url);
+				url);
 		return FALSE;
 	}
 	return TRUE;
@@ -617,16 +624,48 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
  * helper function to get the JWKs for the specified issuer
  */
 static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
-		oidc_cfg *cfg, const oidc_jwks_uri_t *jwks_uri, json_t **j_jwks) {
+		oidc_cfg *cfg, const oidc_jwks_uri_t *jwks_uri, int ssl_validate_server, json_t **j_jwks) {
 
 	char *response = NULL;
+	const char *url = (jwks_uri->signed_uri != NULL) ? jwks_uri->signed_uri : jwks_uri->uri;
 
-	/* no valid provider metadata, get it at the specified URL with the specified parameters */
-	if (oidc_util_http_get(r, jwks_uri->url, NULL, NULL,
-			NULL, jwks_uri->ssl_validate_server, &response, cfg->http_timeout_long,
+	/* get the JWKs from the specified URL with the specified parameters */
+	if (oidc_util_http_get(r, url, NULL, NULL,
+			NULL, ssl_validate_server, &response, cfg->http_timeout_long,
 			cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL,
 			NULL, NULL) == FALSE)
 		return FALSE;
+
+	if (jwks_uri->signed_uri != NULL) {
+
+		oidc_jwt_t *jwt = NULL;
+		oidc_jose_error_t err;
+		apr_hash_t *keys = apr_hash_make(r->pool);
+		apr_hash_set(keys, jwks_uri->jwk->kid ? jwks_uri->jwk->kid : "", APR_HASH_KEY_STRING, jwks_uri->jwk);
+
+		if (oidc_jwt_parse(r->pool, response, &jwt, keys, FALSE, &err) == FALSE) {
+			oidc_error(r, "parsing JWT failed: %s", oidc_jose_e2s(r->pool, err));
+			return FALSE;
+		}
+
+		oidc_debug(r, "successfully parsed JWT returned from \"signed_jwks_uri\" endpoint");
+
+		if (oidc_jwt_verify(r->pool, jwt, keys, &err) == FALSE) {
+			oidc_error(r, "verifying JWT failed: %s", oidc_jose_e2s(r->pool, err));
+			if (jwt != NULL)
+				oidc_jwt_destroy(jwt);
+			return FALSE;
+		}
+
+		// TODO: add issuer?
+		if (oidc_proto_validate_jwt(r, jwt, NULL, TRUE, FALSE, -1, OIDC_TOKEN_BINDING_POLICY_DISABLED) == FALSE)
+			return FALSE;
+
+		oidc_debug(r, "successfully verified and validated JWKs JWT");
+
+		response = jwt->payload.value.str;
+		oidc_jwt_destroy(jwt);
+	}
 
 	/* decode and see if it is not an error response somehow */
 	if (oidc_util_decode_json_and_check_error(r, response, j_jwks) == FALSE) {
@@ -634,12 +673,12 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
 		return FALSE;
 	}
 
-	/* check to see if it is valid metadata */
-	if (oidc_metadata_jwks_is_valid(r, jwks_uri, *j_jwks) == FALSE)
+	/* check to see if it is a set of valid JWKs */
+	if (oidc_metadata_jwks_is_valid(r, url, *j_jwks) == FALSE)
 		return FALSE;
 
 	/* store the JWKs in the cache */
-	oidc_cache_set_jwks(r, oidc_metadata_jwks_cache_key(r, jwks_uri->url),
+	oidc_cache_set_jwks(r, oidc_metadata_jwks_cache_key(r, jwks_uri),
 			response,
 			apr_time_now() + apr_time_from_sec(jwks_uri->refresh_interval));
 
@@ -650,15 +689,16 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
  * return JWKs for the specified issuer
  */
 apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg,
-		const oidc_jwks_uri_t *jwks_uri, json_t **j_jwks, apr_byte_t *refresh) {
+		const oidc_jwks_uri_t *jwks_uri, int ssl_validate_server, json_t **j_jwks, apr_byte_t *refresh) {
 
-	oidc_debug(r, "enter, jwks_uri=%s, refresh=%d", jwks_uri->url, *refresh);
+	const char *url = jwks_uri->signed_uri ? jwks_uri->signed_uri : jwks_uri->uri;
+
+	oidc_debug(r, "enter, %sjwks_uri=%s, refresh=%d", jwks_uri->signed_uri ? "signed_" : "", url, *refresh);
 
 	/* see if we need to do a forced refresh */
 	if (*refresh == TRUE) {
-		oidc_debug(r, "doing a forced refresh of the JWKs from URI \"%s\"",
-				jwks_uri->url);
-		if (oidc_metadata_jwks_retrieve_and_cache(r, cfg, jwks_uri,
+		oidc_debug(r, "doing a forced refresh of the JWKs from URI \"%s\"", url);
+		if (oidc_metadata_jwks_retrieve_and_cache(r, cfg, jwks_uri, ssl_validate_server,
 				j_jwks) == TRUE)
 			return TRUE;
 		// else: fallback on any cached JWKs
@@ -666,16 +706,16 @@ apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg,
 
 	/* see if the JWKs is cached */
 	char *value = NULL;
-	oidc_cache_get_jwks(r, oidc_metadata_jwks_cache_key(r, jwks_uri->url),
+	oidc_cache_get_jwks(r, oidc_metadata_jwks_cache_key(r, jwks_uri),
 			&value);
 
 	if (value == NULL) {
 		/* it is non-existing or expired: do a forced refresh */
 		*refresh = TRUE;
-		return oidc_metadata_jwks_retrieve_and_cache(r, cfg, jwks_uri, j_jwks);
+		return oidc_metadata_jwks_retrieve_and_cache(r, cfg, jwks_uri, ssl_validate_server, j_jwks);
 	}
 
-	/* decode and see if it is not an error response somehow */
+	/* decode and see if it is not a cached error response somehow */
 	if (oidc_util_decode_json_and_check_error(r, value, j_jwks) == FALSE) {
 		oidc_error(r, "JSON parsing of cached JWKs data failed");
 		return FALSE;
@@ -1005,11 +1045,19 @@ apr_byte_t oidc_metadata_provider_parse(request_rec *r, oidc_cfg *cfg,
 				&provider->revocation_endpoint_url, NULL);
 	}
 
-	if (provider->jwks_uri == NULL) {
+	if (provider->jwks_uri.uri == NULL) {
 		/* get a handle to the jwks_uri endpoint */
 		oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER,
 				provider->issuer, j_provider,
-				OIDC_METADATA_JWKS_URI, &provider->jwks_uri,
+				OIDC_METADATA_JWKS_URI, &provider->jwks_uri.uri,
+				NULL);
+	}
+
+	if (provider->jwks_uri.signed_uri == NULL) {
+		/* get a handle to the signed jwks_uri endpoint */
+		oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER,
+				provider->issuer, j_provider,
+				OIDC_METADATA_SIGNED_JWKS_URI, &provider->jwks_uri.signed_uri,
 				NULL);
 	}
 
@@ -1185,6 +1233,12 @@ static void oidc_metadata_get_jwks(request_rec *r, json_t *json,
 	}
 }
 
+static apr_status_t oidc_metadata_cleanup_jwk(void *p) {
+	oidc_jwk_t *jwk = (oidc_jwk_t *)p;
+	oidc_jwk_destroy(jwk);
+	return APR_SUCCESS;
+}
+
 /*
  * parse the JSON conf metadata in to a oidc_provider_t struct
  */
@@ -1200,6 +1254,22 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 			OIDC_JWK_SIG, &provider->client_signing_keys);
 	oidc_metadata_get_jwks(r, j_conf,
 			OIDC_JWK_ENC, &provider->client_encryption_keys);
+
+
+	oidc_jose_error_t err;
+	json_t *jwk = json_object_get(j_conf, "signed_jwks_uri_key");
+	if (jwk != NULL) {
+		if (oidc_jwk_parse_json(r->pool, jwk, &provider->jwks_uri.jwk,
+				&err) == FALSE) {
+			oidc_warn(r,
+					"oidc_jwk_parse_json failed for \"signed_jwks_uri_key\": %s",
+					oidc_jose_e2s(r->pool, err));
+		}
+		apr_pool_cleanup_register(r->pool, provider->jwks_uri.jwk,
+				oidc_metadata_cleanup_jwk, oidc_metadata_cleanup_jwk);
+	} else if (cfg->provider.jwks_uri.jwk != NULL) {
+		provider->jwks_uri.jwk = cfg->provider.jwks_uri.jwk;
+	}
 
 	/* get the (optional) signing & encryption settings for the id_token */
 	oidc_metadata_get_valid_string(r, j_conf,
@@ -1248,8 +1318,8 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 
 	/* see if we've got a custom JWKs refresh interval */
 	oidc_metadata_get_valid_int(r, j_conf, OIDC_METADATA_JWKS_REFRESH_INTERVAL,
-			oidc_valid_jwks_refresh_interval, &provider->jwks_refresh_interval,
-			cfg->provider.jwks_refresh_interval);
+			oidc_valid_jwks_refresh_interval, &provider->jwks_uri.refresh_interval,
+			cfg->provider.jwks_uri.refresh_interval);
 
 	/* see if we've got a custom IAT slack interval */
 	oidc_metadata_get_valid_int(r, j_conf, OIDC_METADATA_IDTOKEN_IAT_SLACK,

@@ -371,6 +371,14 @@ oidc_jwk_t* oidc_jwk_parse(apr_pool_t *pool, const char *s_json,
 	return oidc_jwk_from_cjose(pool, cjose_jwk);
 }
 
+oidc_jwk_t* oidc_jwk_copy(apr_pool_t *pool, const oidc_jwk_t *src) {
+	char *s_json = NULL;
+	oidc_jose_error_t err;
+	if (oidc_jwk_to_json(pool, src, &s_json, &err) == FALSE)
+		return NULL;
+	return oidc_jwk_parse(pool, s_json, &err);
+}
+
 /*
  * destroy resources allocated for a JWK struct
  */

@@ -619,8 +619,8 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 
 	// TODO: we're re-using the OIDC provider JWKs refresh interval here...
 	oidc_jwks_uri_t jwks_uri = { c->oauth.verify_jwks_uri,
-			c->provider.jwks_refresh_interval, c->oauth.ssl_validate_server };
-	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri, oidc_util_merge_key_sets(r->pool, c->oauth.verify_shared_keys, c->oauth.verify_public_keys), NULL)
+			c->provider.jwks_uri.refresh_interval, NULL, NULL };
+	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri, c->oauth.ssl_validate_server, oidc_util_merge_key_sets(r->pool, c->oauth.verify_shared_keys, c->oauth.verify_public_keys), NULL)
 			== FALSE) {
 		oidc_error(r, "JWT access token signature could not be validated, aborting");
 		oidc_jwt_destroy(jwt);
