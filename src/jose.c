@@ -417,7 +417,7 @@ apr_array_header_t* oidc_jwk_list_copy(apr_pool_t *pool,
 					jwk);
 		}
 	}
-	return src;
+	return dst;
 }
 
 void oidc_jwk_list_destroy(apr_array_header_t *keys_list) {
