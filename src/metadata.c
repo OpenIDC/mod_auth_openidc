@@ -1233,12 +1233,6 @@ static void oidc_metadata_get_jwks(request_rec *r, json_t *json,
 	}
 }
 
-static apr_status_t oidc_metadata_cleanup_jwk(void *p) {
-	oidc_jwk_t *jwk = (oidc_jwk_t *)p;
-	oidc_jwk_destroy(jwk);
-	return APR_SUCCESS;
-}
-
 /*
  * parse the JSON conf metadata in to a oidc_provider_t struct
  */
@@ -1255,7 +1249,6 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 	oidc_metadata_get_jwks(r, j_conf,
 			OIDC_JWK_ENC, &provider->client_encryption_keys);
 
-
 	oidc_jose_error_t err;
 	json_t *jwk = json_object_get(j_conf, "signed_jwks_uri_key");
 	if (jwk != NULL) {
@@ -1265,8 +1258,6 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 					"oidc_jwk_parse_json failed for \"signed_jwks_uri_key\": %s",
 					oidc_jose_e2s(r->pool, err));
 		}
-		apr_pool_cleanup_register(r->pool, provider->jwks_uri.jwk,
-				oidc_metadata_cleanup_jwk, oidc_metadata_cleanup_jwk);
 	} else if (cfg->provider.jwks_uri.jwk != NULL) {
 		provider->jwks_uri.jwk = cfg->provider.jwks_uri.jwk;
 	}
@@ -1318,7 +1309,8 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 
 	/* see if we've got a custom JWKs refresh interval */
 	oidc_metadata_get_valid_int(r, j_conf, OIDC_METADATA_JWKS_REFRESH_INTERVAL,
-			oidc_valid_jwks_refresh_interval, &provider->jwks_uri.refresh_interval,
+			oidc_valid_jwks_refresh_interval,
+			&provider->jwks_uri.refresh_interval,
 			cfg->provider.jwks_uri.refresh_interval);
 
 	/* see if we've got a custom IAT slack interval */
@@ -1527,8 +1519,7 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *issuer,
 	json_t *j_conf = NULL;
 
 	/* allocate space for a parsed-and-merged metadata struct */
-	*provider = apr_pcalloc(r->pool, sizeof(oidc_provider_t));
-	oidc_cfg_provider_init(*provider);
+	*provider = oidc_cfg_provider_create(r->pool);
 
 	/*
 	 * read and parse the provider, conf and client metadata respectively

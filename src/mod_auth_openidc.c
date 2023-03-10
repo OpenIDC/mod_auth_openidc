@@ -311,8 +311,7 @@ static apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg *c,
 		}
 	}
 
-	*provider = apr_pcalloc(r->pool, sizeof(oidc_provider_t));
-	memcpy(*provider, &c->provider, sizeof(oidc_provider_t));
+	*provider = oidc_cfg_provider_copy(r->pool, &c->provider);
 
 	if (oidc_metadata_provider_parse(r, c, j_provider, *provider) == FALSE) {
 		oidc_error(r, "could not parse metadata from url: %s",
