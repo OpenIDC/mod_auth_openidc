@@ -394,18 +394,18 @@ void oidc_jwk_destroy(oidc_jwk_t *jwk) {
 /*
  * destroy a list of JWKs structs
  */
-void oidc_jwk_list_destroy_hash(apr_pool_t *pool, apr_hash_t *keys) {
+void oidc_jwk_list_destroy_hash(apr_hash_t *keys) {
 	apr_hash_index_t *hi = NULL;
 	if (keys == NULL)
 		return;
-	for (hi = apr_hash_first(pool, keys); hi; hi = apr_hash_next(hi)) {
+	for (hi = apr_hash_first(NULL, keys); hi; hi = apr_hash_next(hi)) {
 		oidc_jwk_t *jwk = NULL;
 		apr_hash_this(hi, NULL, NULL, (void**) &jwk);
 		oidc_jwk_destroy(jwk);
 	}
 }
 
-void oidc_jwk_list_destroy(apr_pool_t *pool, apr_array_header_t *keys_list) {
+void oidc_jwk_list_destroy(apr_array_header_t *keys_list) {
 	if (keys_list == NULL)
 		return;
 	oidc_jwk_t **jwk = NULL;

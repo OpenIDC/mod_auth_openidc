@@ -1,6 +1,7 @@
 03/10/2023
 - shm cache: increase default maximum number of active sessions from 500 to 2000
 - shm cache: allow configuration of max 1Mb of session data for a single session
+- change oidc_cfg cleanup procedures to better accomodate server rec merging
 
 03/09/2023
 - add support for OP "signed_jwks_uri" with "OIDCProviderSignedJwksUri <uri> <jwk>"

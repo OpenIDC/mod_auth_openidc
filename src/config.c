@@ -797,15 +797,6 @@ static const char* oidc_set_session_max_duration(cmd_parms *cmd,
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
-static apr_status_t oidc_cleanup_keys(void *data) {
-	apr_array_header_t *keys_list = (apr_array_header_t*) data;
-	oidc_jwk_t **jwk = NULL;
-	while ((jwk = apr_array_pop(keys_list))) {
-		oidc_jwk_destroy(*jwk);
-	}
-	return APR_SUCCESS;
-}
-
 /*
  * add a public key from an X.509 file to our list of JWKs with public keys
  */
@@ -837,11 +828,8 @@ static const char* oidc_set_public_key_files(cmd_parms *cmd, void *struct_ptr,
 				kid, fname, oidc_jose_e2s(cmd->pool, err));
 	}
 
-	if (*public_keys == NULL) {
+	if (*public_keys == NULL)
 		*public_keys = apr_array_make(cmd->pool, 4, sizeof(const oidc_jwk_t*));
-		apr_pool_cleanup_register(cmd->pool, *public_keys, oidc_cleanup_keys,
-				oidc_cleanup_keys);
-	}
 
 	*(const oidc_jwk_t**) apr_array_push(*public_keys) = jwk;
 
@@ -910,12 +898,9 @@ static const char* oidc_set_private_key_files_enc(cmd_parms *cmd, void *dummy,
 				kid, fname, oidc_jose_e2s(cmd->pool, err));
 	}
 
-	if (cfg->private_keys == NULL) {
+	if (cfg->private_keys == NULL)
 		cfg->private_keys = apr_array_make(cmd->pool, 4,
 				sizeof(const oidc_jwk_t*));
-		apr_pool_cleanup_register(cmd->pool, cfg->private_keys,
-				oidc_cleanup_keys, oidc_cleanup_keys);
-	}
 
 	*(const oidc_jwk_t**) apr_array_push(cfg->private_keys) = jwk;
 
@@ -1468,11 +1453,26 @@ void oidc_cfg_provider_init(oidc_provider_t *provider) {
 	provider->auth_request_method = OIDC_DEFAULT_AUTH_REQUEST_METHOD;
 }
 
+static apr_status_t oidc_destroy_server_config(void *data) {
+	oidc_cfg *cfg = (oidc_cfg *)data;
+	// can do this even though we haven't got a deep copy
+	// since references within the oidc_jwk_t object will be set to NULL
+	if (cfg->provider.jwks_uri.jwk)
+		oidc_jwk_destroy(cfg->provider.jwks_uri.jwk);
+	oidc_jwk_list_destroy(cfg->provider.verify_public_keys);
+	oidc_jwk_list_destroy(cfg->oauth.verify_public_keys);
+	oidc_jwk_list_destroy_hash(cfg->oauth.verify_shared_keys);
+	oidc_jwk_list_destroy(cfg->public_keys);
+	oidc_jwk_list_destroy(cfg->private_keys);
+	return APR_SUCCESS;
+}
+
 /*
  * create a new server config record with defaults
  */
 void* oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	oidc_cfg *c = apr_pcalloc(pool, sizeof(oidc_cfg));
+	apr_pool_cleanup_register(pool, c, oidc_destroy_server_config, oidc_destroy_server_config);
 
 	c->merged = FALSE;
 
@@ -1603,6 +1603,7 @@ void* oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
  */
 void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	oidc_cfg *c = apr_pcalloc(pool, sizeof(oidc_cfg));
+	apr_pool_cleanup_register(pool, c, oidc_destroy_server_config, oidc_destroy_server_config);
 	oidc_cfg *base = BASE;
 	oidc_cfg *add = ADD;
 
@@ -2705,20 +2706,6 @@ static apr_status_t oidc_cleanup_child(void *data) {
 				oidc_serror(sp, "cache destroy function failed");
 			}
 		}
-
-		// can do this even though we haven't got a deep copy
-		// since references within the oidc_jwk_t object will be set to NULL
-		if (cfg->provider.jwks_uri.jwk)
-			oidc_jwk_destroy(cfg->provider.jwks_uri.jwk);
-		oidc_jwk_list_destroy(sp->process->pool,
-				cfg->provider.verify_public_keys);
-		oidc_jwk_list_destroy(sp->process->pool,
-				cfg->oauth.verify_public_keys);
-		oidc_jwk_list_destroy_hash(sp->process->pool,
-				cfg->oauth.verify_shared_keys);
-		oidc_jwk_list_destroy(sp->process->pool, cfg->public_keys);
-		oidc_jwk_list_destroy(sp->process->pool, cfg->private_keys);
-
 		sp = sp->next;
 	}
 
