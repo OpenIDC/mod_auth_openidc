@@ -9,7 +9,7 @@ you can build from source as described below.
 Installation from source
 ========================
 
-You will require development headers and tools for the following
+You will require development headers and tools for the followingA
 dependencies:
  Apache (>=2.0)
  cjose (>=0.4.1)
