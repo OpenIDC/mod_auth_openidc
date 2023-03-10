@@ -353,7 +353,7 @@ const char* oidc_parse_session_type(apr_pool_t *pool, const char *arg, int *type
 /* minimum size of a SHM cache entry */
 #define OIDC_MINIMUM_CACHE_SHM_ENTRY_SIZE_MAX 8192 + 512 + 17 // 8Kb plus overhead
 /* maximum size of a SHM cache entry */
-#define OIDC_MAXIMUM_CACHE_SHM_ENTRY_SIZE_MAX 1024 * 512     // 512Kb incl. overhead
+#define OIDC_MAXIMUM_CACHE_SHM_ENTRY_SIZE_MAX 1024 * 1024     // 1Mb incl. overhead
 
 /*
  * parse the slot size of a SHM cache entry

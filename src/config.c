@@ -96,11 +96,9 @@
 /* default duration in seconds after which retrieved JWS should be refreshed */
 #define OIDC_DEFAULT_JWKS_REFRESH_INTERVAL 3600
 /* default max cache size for shm */
-#define OIDC_DEFAULT_CACHE_SHM_SIZE 500
+#define OIDC_DEFAULT_CACHE_SHM_SIZE 2000
 /* default max cache entry size for shm: # value + # key + # overhead */
 #define OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX 16384 + 512 + 17
-/* minimum size of a cache entry */
-#define OIDC_MINIMUM_CACHE_SHM_ENTRY_SIZE_MAX 8192 + 512 + 17
 /* for issued-at timestamp (iat) checking */
 #define OIDC_DEFAULT_IDTOKEN_IAT_SLACK 600
 /* for file-based caching: clean interval in seconds */
