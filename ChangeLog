@@ -2,6 +2,7 @@
 - shm cache: increase default maximum number of active sessions from 500 to 2000
 - shm cache: allow configuration of max 1Mb of session data for a single session
 - use deep-copy and cleanup functions for server and provider configs; fixes overriding server-level keys in vhost configs
+- release 2.4.13
 
 03/09/2023
 - add support for OP "signed_jwks_uri" with "OIDCProviderSignedJwksUri <uri> <jwk>"
