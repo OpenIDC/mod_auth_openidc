@@ -1,4 +1,8 @@
 03/10/2023
+- fix oidc_jwk_list_copy and usage of OIDCProviderVerifyCertFiles
+- release 2.4.13.1
+
+03/10/2023
 - shm cache: increase default maximum number of active sessions from 500 to 2000
 - shm cache: allow configuration of max 1Mb of session data for a single session
 - use deep-copy and cleanup functions for server and provider configs; fixes overriding server-level keys in vhost configs

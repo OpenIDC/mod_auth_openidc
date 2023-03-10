@@ -409,12 +409,13 @@ apr_array_header_t* oidc_jwk_list_copy(apr_pool_t *pool,
 		apr_array_header_t *src) {
 	apr_array_header_t *dst = NULL;
 	int i = 0;
-	if (src == NULL)
-		return NULL;
-	apr_array_make(pool, src->nelts, sizeof(const oidc_jwk_t*));
-	for (i = 0; (src) && (i < src->nelts); i++) {
-		const oidc_jwk_t *jwk = ((const oidc_jwk_t**) src->elts)[i];
-		*(const oidc_jwk_t**) apr_array_push(dst) = oidc_jwk_copy(pool, jwk);
+	if (src != NULL) {
+		dst = apr_array_make(pool, src->nelts, sizeof(const oidc_jwk_t*));
+		for (i = 0; (src) && (i < src->nelts); i++) {
+			const oidc_jwk_t *jwk = ((const oidc_jwk_t**) src->elts)[i];
+			*(const oidc_jwk_t**) apr_array_push(dst) = oidc_jwk_copy(pool,
+					jwk);
+		}
 	}
 	return src;
 }
