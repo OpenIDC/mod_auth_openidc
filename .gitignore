@@ -28,3 +28,5 @@
 /libauth_openidc.la
 /test-driver
 /test-suite.log
+/.cproject
+/.project
