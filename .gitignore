@@ -23,3 +23,8 @@
 /configure~
 /*.rpm
 /config.sub~
+/metadata/
+/ar-lib
+/libauth_openidc.la
+/test-driver
+/test-suite.log
