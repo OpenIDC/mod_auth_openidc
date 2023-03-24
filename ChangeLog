@@ -3,6 +3,7 @@
   so its value can be used in logs e.g. with HTTP 401 responses:
     LogFormat "%h %l %u %t %U %401{OIDC_AUTHZ_ERROR}e %>s %b" combined
 - log authorization errors with oidc_debug instead of oidc_info
+- refactor Docker tests make targets; add test/Makefile
 - bump to 2.4.13.2rc0
 
 03/10/2023

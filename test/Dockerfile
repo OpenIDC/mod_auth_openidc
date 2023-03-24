@@ -17,7 +17,7 @@ COPY . /root/mod_auth_openidc
 RUN cd /root/mod_auth_openidc && \
 	./autogen.sh && \
 	./configure CFLAGS="-g -O0" LDFLAGS="-lrt" && \
-	make clean && make check && \
+	make clean && make all test/test && \
 	make install
 
 RUN touch /etc/apache2/conf-available/openidc.conf && \

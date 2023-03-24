@@ -97,15 +97,3 @@ TESTS = test/test
 check_PROGRAMS = test/test
 test_test_SOURCES = test/test.c test/stub.c
 test_test_CFLAGS = ${AM_CFLAGS} -fPIC
-
-docker: docker-run
-
-docker-build:
-	docker build -f test/Dockerfile -t mod_auth_openidc .
-
-# --cap-add=SYS_PTRACE --security-opt seccomp=unconfined
-docker-run: docker-build
-	docker run -p 443:443 -v $(PWD)/test/openidc.conf:/etc/apache2/conf-available/openidc.conf -it mod_auth_openidc "/usr/sbin/apache2ctl start && tail -f /var/log/apache2/error.log"
-
-docker-valgrind: docker-build
-	docker run -p 443:443 -v $(PWD)/test/openidc.conf:/etc/apache2/conf-available/openidc.conf -it mod_auth_openidc "source /etc/apache2/envvars && valgrind --leak-check=full --read-inline-info=yes --keep-debuginfo=yes /usr/sbin/apache2 -X"
