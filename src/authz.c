@@ -323,6 +323,20 @@ apr_byte_t oidc_authz_match_claims_expr(request_rec *r,
 
 #endif
 
+#define OIDC_AUTHZ_ERROR "OIDC_AUTHZ_ERROR"
+
+static void oidc_authz_error_add(request_rec *r, const char *msg) {
+	const char *envvar = NULL;
+	if (r->subprocess_env != NULL) {
+		envvar = apr_table_get(r->subprocess_env, OIDC_AUTHZ_ERROR);
+		oidc_debug(r, "adding %s to environment variable %s=%s", msg,
+				OIDC_AUTHZ_ERROR, envvar);
+		apr_table_set(r->subprocess_env, OIDC_AUTHZ_ERROR,
+				apr_psprintf(r->pool, "%s%s%s", envvar ? envvar : "",
+						envvar ? "," : "", msg ? msg : ""));
+	}
+}
+
 #if MODULE_MAGIC_NUMBER_MAJOR < 20100714
 
 /*
@@ -391,6 +405,8 @@ int oidc_authz_worker22(request_rec *r, const json_t * const claims,
 				return OK;
 			}
 		}
+
+		oidc_authz_error_add(r, requirement);
 	}
 
 	/* if there weren't any "Require claim" directives, we're irrelevant */
@@ -406,7 +422,8 @@ int oidc_authz_worker22(request_rec *r, const json_t * const claims,
 	}
 
 	/* log the event, also in Apache speak */
-	oidc_info(r, "authorization denied for require claims (0/%d): '%s'", nelts, nelts > 0 ? reqs[0].requirement : "(none)");
+	oidc_debug(r, "authorization denied for require claims (0/%d): '%s'", nelts, nelts > 0 ? reqs[0].requirement : "(none)");
+
 	ap_note_auth_failure(r);
 
 	return HTTP_UNAUTHORIZED;
@@ -463,7 +480,8 @@ authz_status oidc_authz_worker24(request_rec *r, const json_t * const claims,
 				"'require claim/expr' missing specification(s) in configuration, denying");
 	}
 
-	oidc_info(r, "could not match require claim expression '%s'", require_args);
+	oidc_debug(r, "could not match require claim expression '%s'", require_args);
+	oidc_authz_error_add(r, require_args);
 
 	return AUTHZ_DENIED;
 }

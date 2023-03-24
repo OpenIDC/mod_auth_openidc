@@ -1,3 +1,10 @@
+03/24/2023
+- record authorization errors in environment variable OIDC_AUTHZ_ERROR
+  so its value can be used in logs e.g. with HTTP 401 responses:
+    LogFormat "%h %l %u %t %U %401{OIDC_AUTHZ_ERROR}e %>s %b" combined
+- log authorization errors with oidc_debug instead of oidc_info
+- bump to 2.4.13.2rc0
+
 03/10/2023
 - fix oidc_jwk_list_copy and usage of OIDCProviderVerifyCertFiles
 - release 2.4.13.1
