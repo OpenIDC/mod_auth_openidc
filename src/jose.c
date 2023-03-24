@@ -284,17 +284,18 @@ static oidc_jwk_t* oidc_jwk_new(apr_pool_t *pool) {
 	return jwk;
 }
 
-static apr_byte_t oidc_jwk_parse_rsa_x5c(apr_pool_t *pool, json_t *json,
+static apr_byte_t _oidc_jwk_parse_x5c(apr_pool_t *pool, json_t *json,
 		cjose_jwk_t **jwk, oidc_jose_error_t *err);
 
 #define OIDC_JOSE_HDR_KTY      "kty"
 #define OIDC_JOSE_HDR_KTY_RSA  "RSA"
+#define OIDC_JOSE_HDR_KTY_EC   "EC"
 #define OIDC_JOSE_HDR_X5C      "x5c"
 
 /*
- * parse a JSON object with an RSA "x5c" JWK representation in to a cjose JWK object
+ * parse a JSON object with an "x5c" JWK representation into a cjose JWK object
  */
-static cjose_jwk_t* oidc_jwk_parse_rsa_x5c_spec(apr_pool_t *pool,
+static cjose_jwk_t* _oidc_jwk_parse_x5c_spec(apr_pool_t *pool,
 		const char *s_json, oidc_jose_error_t *err) {
 
 	cjose_jwk_t *cjose_jwk = NULL;
@@ -315,9 +316,10 @@ static cjose_jwk_t* oidc_jwk_parse_rsa_x5c_spec(apr_pool_t *pool,
 		goto end;
 	}
 
-	if (apr_strnatcmp(kty, OIDC_JOSE_HDR_KTY_RSA) != 0) {
+	if ((apr_strnatcmp(kty, OIDC_JOSE_HDR_KTY_RSA) != 0)
+			&& (apr_strnatcmp(kty, OIDC_JOSE_HDR_KTY_EC) != 0)) {
 		oidc_jose_error(err,
-				"no \"" OIDC_JOSE_HDR_KTY_RSA "\" key type found JWK JSON value");
+				"no \"" OIDC_JOSE_HDR_KTY_RSA "\" or \"" OIDC_JOSE_HDR_KTY_EC "\" key type found JWK JSON value");
 		goto end;
 	}
 
@@ -328,7 +330,7 @@ static cjose_jwk_t* oidc_jwk_parse_rsa_x5c_spec(apr_pool_t *pool,
 		goto end;
 	}
 
-	oidc_jwk_parse_rsa_x5c(pool, json, &cjose_jwk, err);
+	_oidc_jwk_parse_x5c(pool, json, &cjose_jwk, err);
 
 end:
 	if (json)
@@ -359,9 +361,9 @@ oidc_jwk_t* oidc_jwk_parse(apr_pool_t *pool, const char *s_json,
 			&cjose_err);
 	if (cjose_jwk == NULL) {
 		// exception because x5c is not supported by cjose natively
-		// ignore errors set by oidc_jwk_parse_rsa_x5c_spec
+		// ignore errors set by oidc_jwk_parse_x5c_spec
 		oidc_jose_error_t x5c_err;
-		cjose_jwk = oidc_jwk_parse_rsa_x5c_spec(pool, s_json, &x5c_err);
+		cjose_jwk = _oidc_jwk_parse_x5c_spec(pool, s_json, &x5c_err);
 		if (cjose_jwk == NULL) {
 			oidc_jose_error(err, "JWK parsing failed: %s",
 					oidc_cjose_e2s(pool, cjose_err));
@@ -1313,121 +1315,14 @@ int oidc_jose_hash_length(const char *alg) {
 	return 0;
 }
 
-/*
- * convert the RSA public key - eventually in a X.509 certificate - in the BIO pointed to
- * by "input" to a JSON Web Key object
- */
-apr_byte_t oidc_jwk_rsa_bio_to_jwk(apr_pool_t *pool, BIO *input,
-		const char *kid, oidc_jwk_t **oidc_jwk, int is_private_key,
-		oidc_jose_error_t *err) {
-
-	cjose_err cjose_err;
-	X509 *x509 = NULL;
-	EVP_PKEY *pkey = NULL;
+static apr_byte_t _oidc_jwk_rsa_key_to_jwk(apr_pool_t *pool, EVP_PKEY *pkey,
+		oidc_jwk_t **oidc_jwk, char **fp, int *fp_len, oidc_jose_error_t *err) {
 	apr_byte_t rv = FALSE;
-	unsigned char *x509_pem_encoded_certificate = NULL, *x509_bytes = NULL;
-	int b64_len, x509_cert_length;
-	cjose_jwk_rsa_keyspec key_spec;
+	cjose_err cjose_err;
 	BIGNUM *rsa_n = NULL, *rsa_e = NULL, *rsa_d = NULL;
+	cjose_jwk_rsa_keyspec key_spec;
 
 	memset(&key_spec, 0, sizeof(cjose_jwk_rsa_keyspec));
-	*oidc_jwk = oidc_jwk_new(pool);
-
-	if (is_private_key) {
-		/* get the private key struct from the BIO */
-		if ((pkey = PEM_read_bio_PrivateKey(input, NULL, NULL, NULL)) == NULL) {
-			oidc_jose_error_openssl(err, "PEM_read_bio_PrivateKey");
-			goto end;
-		}
-	} else {
-		/* read public key */
-		if ((pkey = PEM_read_bio_PUBKEY(input, NULL, NULL, NULL)) == NULL) {
-			/* not a public key - reset the buffer */
-			BIO_reset(input);
-			/* read the X.509 struct - assume input is no public key */
-			if ((x509 = PEM_read_bio_X509_AUX(input, NULL, NULL, NULL)) == NULL) {
-				oidc_jose_error_openssl(err, "PEM_read_bio_X509_AUX");
-				goto end;
-			}
-			/* get the public key struct from the X.509 struct */
-			if ((pkey = X509_get_pubkey(x509)) == NULL) {
-				oidc_jose_error_openssl(err, "X509_get_pubkey");
-				goto end;
-			}
-			/* certificate is present, fill the jwkset with certificate entries */
-			/* populate first x5c certificate */
-			if (((*oidc_jwk)->x5c = (unsigned char**) apr_pcalloc(pool,
-					sizeof(unsigned char*))) == NULL) {
-				oidc_jose_error_openssl(err, "malloc");
-				goto end;
-			}
-			b64_len = oidc_jose_util_get_b64encoded_certificate_data(pool, x509,
-					&x509_pem_encoded_certificate, err);
-			if (x509_pem_encoded_certificate == NULL) {
-				oidc_jose_error_openssl(err,
-						"oidc_jose_util_get_b64encoded_certificate");
-				goto end;
-			}
-			(*oidc_jwk)->x5c[0] = (unsigned char*) apr_pmemdup(pool,
-					x509_pem_encoded_certificate, b64_len + 1);
-			(*oidc_jwk)->x5c_count = 1;
-			/* populate thumbprints entries */
-#if OPENSSL_VERSION_NUMBER < 0x000907000L
-			// openssl below 0.9.7 does not allocate memory for you :o
-			x509_cert_length = i2d_X509(x509, NULL);
-			if (x509_cert_length <= 0){
-				oidc_jose_error_openssl(err, "i2d_X509");
-				goto end;
-			}
-			x509_bytes =  (unsigned char *)malloc(pool, x509_cert_length + 1);
-#endif
-			x509_cert_length = i2d_X509(x509, &x509_bytes);
-			if (x509_cert_length < 0) {
-				oidc_jose_error_openssl(err, "i2d_X509");
-				goto end;
-			}
-			/* populate x5t */
-			if (oidc_jose_hash_and_base64url_encode(pool, OIDC_JOSE_ALG_SHA1,
-					(const char*) x509_bytes, x509_cert_length,
-					&(*oidc_jwk)->x5t) == FALSE) {
-				oidc_jose_error(err,
-						"oidc_jose_hash_and_base64urlencode failed");
-			}
-			/* populate x5t_S256 */
-			if (oidc_jose_hash_and_base64url_encode(pool, OIDC_JOSE_ALG_SHA256,
-					(const char*) x509_bytes, x509_cert_length,
-					&(*oidc_jwk)->x5t_S256) == FALSE) {
-				oidc_jose_error(err,
-						"oidc_jose_hash_and_base64urlencode failed");
-			}
-
-			X509_free(x509);
-			/* populate the x5c chain if any*/
-			while (!((x509 = PEM_read_bio_X509_AUX(input, NULL, NULL, NULL))
-					== NULL)) {
-				b64_len = oidc_jose_util_get_b64encoded_certificate_data(pool,
-						x509, &x509_pem_encoded_certificate, err);
-				if (((*oidc_jwk)->x5c = (unsigned char**) realloc(
-						(*oidc_jwk)->x5c,
-						sizeof(unsigned char*) * ((*oidc_jwk)->x5c_count + 1)))
-						== NULL) {
-					oidc_jose_error_openssl(err, "realloc");
-					goto end;
-				}
-				if (x509_pem_encoded_certificate == NULL) {
-					oidc_jose_error_openssl(err,
-							"oidc_jose_util_get_b64encoded_certificate %s",
-							(*oidc_jwk)->x5c_count);
-					goto end;
-				}
-				(*oidc_jwk)->x5c[(*oidc_jwk)->x5c_count] =
-						(unsigned char*) apr_pmemdup(pool,
-								x509_pem_encoded_certificate, b64_len + 1);
-				(*oidc_jwk)->x5c_count += 1;
-				X509_free(x509);
-			}
-		}
-	}
 
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
 	EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_RSA_N, &rsa_n);
@@ -1476,12 +1371,264 @@ apr_byte_t oidc_jwk_rsa_bio_to_jwk(apr_pool_t *pool, BIO *input,
 		goto end;
 	}
 
-	char *fingerprint = apr_pcalloc(pool, key_spec.nlen + key_spec.elen);
-	memcpy(fingerprint, key_spec.n, key_spec.nlen);
-	memcpy(fingerprint + key_spec.nlen, key_spec.e, key_spec.elen);
+	*fp_len = key_spec.nlen + key_spec.elen;
+	*fp = apr_pcalloc(pool, *fp_len);
+	memcpy(*fp, key_spec.n, key_spec.nlen);
+	memcpy(*fp + key_spec.nlen, key_spec.e, key_spec.elen);
 
-	if (oidc_jwk_set_or_generate_kid(pool, (*oidc_jwk)->cjose_jwk, kid,
-			fingerprint, key_spec.nlen + key_spec.elen, err) == FALSE) {
+	rv = TRUE;
+
+end:
+
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+	if (rsa_n)
+		BN_clear_free(rsa_n);
+	if (rsa_e)
+		BN_clear_free(rsa_e);
+	if (rsa_d)
+		BN_clear_free(rsa_d);
+#endif
+
+	return rv;
+}
+
+static apr_byte_t _oidc_jwk_ec_key_to_jwk(apr_pool_t *pool, EVP_PKEY *pkey,
+		oidc_jwk_t **oidc_jwk, char **fp, int *fp_len, oidc_jose_error_t *err) {
+	apr_byte_t rv = FALSE;
+	cjose_err cjose_err;
+	cjose_jwk_ec_keyspec ec_keyspec;
+	int crv = 0;
+	BIGNUM *ec_x = NULL, *ec_y = NULL, *ec_d = NULL;
+
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+	char curve_name[64];
+	size_t curve_name_len = 0;
+
+	EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_EC_PUB_X, &ec_x);
+	EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_EC_PUB_Y, &ec_y);
+	EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_PRIV_KEY, &ec_d);
+	if (!EVP_PKEY_get_utf8_string_param(pkey, OSSL_PKEY_PARAM_GROUP_NAME,
+			curve_name, sizeof(curve_name), &curve_name_len)) {
+		oidc_jose_error_openssl(err,
+				"EVP_PKEY_get_utf8_string_param(OSSL_PKEY_PARAM_GROUP_NAME)");
+		goto end;
+	}
+	crv = OBJ_sn2nid(curve_name);
+#else
+	EC_KEY *eckey = (EC_KEY *)EVP_PKEY_get1_EC_KEY(pkey);
+	if (eckey == NULL) {
+		oidc_jose_error_openssl(err, "EVP_PKEY_get1_EC_KEY");
+		goto end;
+	}
+	const EC_GROUP *ec_group = EC_KEY_get0_group(eckey);
+	const EC_POINT *ecpoint = EC_KEY_get0_public_key(eckey);
+	crv = EC_GROUP_get_curve_name(ec_group);
+	ec_x = BN_new();
+	ec_y = BN_new();
+	if (EC_POINT_get_affine_coordinates_GFp(ec_group, ecpoint, ec_x, ec_y, NULL) == 0) {
+		oidc_jose_error_openssl(err, "EC_POINT_get_affine_coordinates_GFp");
+		goto end;
+	}
+	ec_d = (BIGNUM *)EC_KEY_get0_private_key(eckey);
+	if (crv == 0) {
+		oidc_jose_error_openssl(err, "EC_GROUP_get_curve_name");
+		goto end;
+	}
+	EC_KEY_free(eckey);
+#endif
+
+	memset(&ec_keyspec, 0, sizeof(cjose_jwk_ec_keyspec));
+
+	ec_keyspec.crv = crv;
+
+	ec_keyspec.xlen = BN_num_bytes(ec_x);
+	ec_keyspec.x = apr_pcalloc(pool, ec_keyspec.xlen);
+	BN_bn2bin(ec_x, ec_keyspec.x);
+
+	ec_keyspec.ylen = BN_num_bytes(ec_y);
+	ec_keyspec.y = apr_pcalloc(pool, ec_keyspec.ylen);
+	BN_bn2bin(ec_y, ec_keyspec.y);
+
+	if (ec_d != NULL) {
+		ec_keyspec.dlen = BN_num_bytes(ec_d);
+		ec_keyspec.d = apr_pcalloc(pool, ec_keyspec.dlen);
+		BN_bn2bin(ec_d, ec_keyspec.d);
+	}
+
+	(*oidc_jwk)->cjose_jwk = cjose_jwk_create_EC_spec(&ec_keyspec, &cjose_err);
+	if ((*oidc_jwk)->cjose_jwk == NULL) {
+		oidc_jose_error(err, "cjose_jwk_create_EC_spec failed: %s",
+				oidc_cjose_e2s(pool, cjose_err));
+		goto end;
+	}
+
+	*fp_len = sizeof(cjose_jwk_ec_curve) + ec_keyspec.xlen + ec_keyspec.ylen;
+	*fp = apr_pcalloc(pool, *fp_len);
+	memcpy(*fp, &ec_keyspec.crv, sizeof(cjose_jwk_ec_curve));
+	memcpy(*fp + sizeof(cjose_jwk_ec_curve), ec_keyspec.x, ec_keyspec.xlen);
+	memcpy(*fp + sizeof(cjose_jwk_ec_curve) + ec_keyspec.xlen, ec_keyspec.y,
+			ec_keyspec.ylen);
+
+	rv = TRUE;
+
+end:
+
+	if (ec_x)
+		BN_clear_free(ec_x);
+	if (ec_y)
+		BN_clear_free(ec_y);
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+	if (ec_d)
+		BN_clear_free(ec_d);
+#endif
+	return rv;
+}
+
+/*
+ * convert the PEM public key - possibly in a X.509 certificate - in the BIO pointed to
+ * by "input" to a JSON Web Key object
+ */
+apr_byte_t oidc_jwk_pem_bio_to_jwk(apr_pool_t *pool, BIO *input,
+		const char *kid, oidc_jwk_t **oidc_jwk, int is_private_key,
+		oidc_jose_error_t *err) {
+	cjose_err cjose_err;
+	X509 *x509 = NULL;
+	EVP_PKEY *pkey = NULL;
+	int pkey_type = 0;
+	apr_byte_t rv = FALSE;
+	unsigned char *x509_pem_encoded_certificate = NULL, *x509_bytes = NULL;
+	int b64_len, x509_cert_length;
+	char *fp = NULL;
+	int fp_len = 0;
+
+	*oidc_jwk = oidc_jwk_new(pool);
+
+	if (is_private_key) {
+		/* get the private key struct from the BIO */
+		if ((pkey = PEM_read_bio_PrivateKey(input, NULL, NULL, NULL)) == NULL) {
+			oidc_jose_error_openssl(err, "PEM_read_bio_PrivateKey");
+			goto end;
+		}
+	} else {
+		/* read public key */
+		if ((pkey = PEM_read_bio_PUBKEY(input, NULL, NULL, NULL)) == NULL) {
+			/* not a public key - reset the buffer */
+			BIO_reset(input);
+			/* read the X.509 struct - assume input is no public key */
+			if ((x509 = PEM_read_bio_X509_AUX(input, NULL, NULL, NULL)) == NULL) {
+				oidc_jose_error_openssl(err, "PEM_read_bio_X509_AUX");
+				goto end;
+			}
+			/* get the public key struct from the X.509 struct */
+			if ((pkey = X509_get_pubkey(x509)) == NULL) {
+				oidc_jose_error_openssl(err, "X509_get_pubkey");
+				goto end;
+			}
+			/* certificate is present, fill the jwkset with certificate entries */
+			/* populate first x5c certificate */
+			if (((*oidc_jwk)->x5c = (unsigned char**) apr_pcalloc(pool,
+					sizeof(unsigned char*))) == NULL) {
+				oidc_jose_error_openssl(err, "malloc");
+				goto end;
+			}
+			b64_len = oidc_jose_util_get_b64encoded_certificate_data(pool, x509,
+					&x509_pem_encoded_certificate, err);
+			if (x509_pem_encoded_certificate == NULL) {
+				oidc_jose_error_openssl(err,
+						"oidc_jose_util_get_b64encoded_certificate");
+				goto end;
+			}
+			(*oidc_jwk)->x5c[0] = (unsigned char*) apr_pmemdup(pool,
+					x509_pem_encoded_certificate, b64_len + 1);
+			(*oidc_jwk)->x5c_count = 1;
+			/* populate thumbprints entries */
+#if OPENSSL_VERSION_NUMBER < 0x000907000L
+			// openssl below 0.9.7 does not allocate memory for you :o
+			x509_cert_length = i2d_X509(x509, NULL);
+			if (x509_cert_length <= 0){
+				oidc_jose_error_openssl(err, "i2d_X509");
+				goto end;
+			}
+			x509_bytes =  (unsigned char *)OPENSSL_malloc(pool, x509_cert_length + 1);
+			const unsigned char *p = x509_bytes;
+			x509_cert_length = i2d_X509(x509, &p);
+#else
+			x509_cert_length = i2d_X509(x509, &x509_bytes);
+#endif
+			if (x509_cert_length < 0) {
+				oidc_jose_error_openssl(err, "i2d_X509");
+				goto end;
+			}
+			/* populate x5t */
+			if (oidc_jose_hash_and_base64url_encode(pool, OIDC_JOSE_ALG_SHA1,
+					(const char*) x509_bytes, x509_cert_length,
+					&(*oidc_jwk)->x5t) == FALSE) {
+				oidc_jose_error(err,
+						"oidc_jose_hash_and_base64urlencode failed");
+			}
+			/* populate x5t_S256 */
+			if (oidc_jose_hash_and_base64url_encode(pool, OIDC_JOSE_ALG_SHA256,
+					(const char*) x509_bytes, x509_cert_length,
+					&(*oidc_jwk)->x5t_S256) == FALSE) {
+				oidc_jose_error(err,
+						"oidc_jose_hash_and_base64urlencode failed");
+			}
+
+			X509_free(x509);
+			/* populate the x5c chain if any*/
+			while (!((x509 = PEM_read_bio_X509_AUX(input, NULL, NULL, NULL))
+					== NULL)) {
+				b64_len = oidc_jose_util_get_b64encoded_certificate_data(pool,
+						x509, &x509_pem_encoded_certificate, err);
+				if (((*oidc_jwk)->x5c = (unsigned char**) realloc(
+						(*oidc_jwk)->x5c,
+						sizeof(unsigned char*) * ((*oidc_jwk)->x5c_count + 1)))
+						== NULL) {
+					oidc_jose_error_openssl(err, "realloc");
+					goto end;
+				}
+				if (x509_pem_encoded_certificate == NULL) {
+					oidc_jose_error_openssl(err,
+							"oidc_jose_util_get_b64encoded_certificate %s",
+							(*oidc_jwk)->x5c_count);
+					goto end;
+				}
+				(*oidc_jwk)->x5c[(*oidc_jwk)->x5c_count] =
+						(unsigned char*) apr_pmemdup(pool,
+								x509_pem_encoded_certificate, b64_len + 1);
+				(*oidc_jwk)->x5c_count += 1;
+				X509_free(x509);
+			}
+		}
+	}
+
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+	pkey_type = EVP_PKEY_get_base_id(pkey);
+#elif (OPENSSL_VERSION_NUMBER > 0x10100000)
+	pkey_type = EVP_PKEY_base_id(pkey);
+#else
+	pkey_type = EVP_PKEY_type(pkey->type);
+#endif
+
+	switch (pkey_type) {
+	case EVP_PKEY_RSA:
+		if (_oidc_jwk_rsa_key_to_jwk(pool, pkey, oidc_jwk, &fp, &fp_len,
+				err) == FALSE)
+			goto end;
+		break;
+	case EVP_PKEY_EC:
+		if (_oidc_jwk_ec_key_to_jwk(pool, pkey, oidc_jwk, &fp, &fp_len,
+				err) == FALSE)
+			goto end;
+		break;
+	default:
+		oidc_jose_error(err, "EVP_PKEY_get_base_id: unhandled key type: %d",
+				pkey_type);
+		break;
+	}
+
+	if (oidc_jwk_set_or_generate_kid(pool, (*oidc_jwk)->cjose_jwk, kid, fp,
+			fp_len, err) == FALSE) {
 		goto end;
 	}
 
@@ -1492,16 +1639,9 @@ apr_byte_t oidc_jwk_rsa_bio_to_jwk(apr_pool_t *pool, BIO *input,
 	rv = TRUE;
 
 end:
-#if OPENSSL_VERSION_NUMBER >= 0x30000000L
-	if (rsa_n)
-		BN_clear_free(rsa_n);
-	if (rsa_e)
-		BN_clear_free(rsa_e);
-	if (rsa_d)
-		BN_clear_free(rsa_d);
-#endif
+
 	if (x509_bytes)
-		free(x509_bytes);
+		OPENSSL_free(x509_bytes);
 	if (pkey)
 		EVP_PKEY_free(pkey);
 	if (x509)
@@ -1511,9 +1651,9 @@ end:
 }
 
 /*
- * parse an RSA public or private key from the specified file
+ * parse a PEM-formatted public or private key from the specified file
  */
-static apr_byte_t oidc_jwk_parse_rsa_key(apr_pool_t *pool, int is_private_key,
+static apr_byte_t oidc_jwk_parse_pem_key(apr_pool_t *pool, int is_private_key,
 		const char *kid, const char *filename, oidc_jwk_t **jwk,
 		oidc_jose_error_t *err) {
 	BIO *input = NULL;
@@ -1529,7 +1669,7 @@ static apr_byte_t oidc_jwk_parse_rsa_key(apr_pool_t *pool, int is_private_key,
 		goto end;
 	}
 
-	if (oidc_jwk_rsa_bio_to_jwk(pool, input, kid, jwk, is_private_key,
+	if (oidc_jwk_pem_bio_to_jwk(pool, input, kid, jwk, is_private_key,
 			err) == FALSE)
 		goto end;
 
@@ -1546,9 +1686,9 @@ end:
 #define OIDC_JOSE_CERT_END   "-----END CERTIFICATE-----"
 
 /*
- * parse an RSA key from a JSON object in to a cjose JWK object
+ * parse a PEM-formatted key from a JSON object in to a cjose JWK object
  */
-static apr_byte_t oidc_jwk_parse_rsa_x5c(apr_pool_t *pool, json_t *json,
+static apr_byte_t _oidc_jwk_parse_x5c(apr_pool_t *pool, json_t *json,
 		cjose_jwk_t **jwk, oidc_jose_error_t *err) {
 
 	apr_byte_t rv = FALSE;
@@ -1614,7 +1754,7 @@ static apr_byte_t oidc_jwk_parse_rsa_x5c(apr_pool_t *pool, json_t *json,
 
 	/* do the actual parsing */
 
-	rv = oidc_jwk_rsa_bio_to_jwk(pool, input, kid, &oidc_jwk, FALSE, err);
+	rv = oidc_jwk_pem_bio_to_jwk(pool, input, kid, &oidc_jwk, FALSE, err);
 	*jwk = oidc_jwk->cjose_jwk;
 
 	BIO_free(input);
@@ -1623,19 +1763,19 @@ static apr_byte_t oidc_jwk_parse_rsa_x5c(apr_pool_t *pool, json_t *json,
 }
 
 /*
- * parse a PEM formatted RSA private key to a JWK
+ * parse a PEM formatted private key to a JWK
  */
-apr_byte_t oidc_jwk_parse_rsa_private_key(apr_pool_t *pool, const char *kid,
+apr_byte_t oidc_jwk_parse_pem_private_key(apr_pool_t *pool, const char *kid,
 		const char *filename, oidc_jwk_t **jwk, oidc_jose_error_t *err) {
-	return oidc_jwk_parse_rsa_key(pool, TRUE, kid, filename, jwk, err);
+	return oidc_jwk_parse_pem_key(pool, TRUE, kid, filename, jwk, err);
 }
 
 /*
- * parse a PEM formatted RSA public key file to a JWK
+ * parse a PEM formatted public key file to a JWK
  */
-apr_byte_t oidc_jwk_parse_rsa_public_key(apr_pool_t *pool, const char *kid,
+apr_byte_t oidc_jwk_parse_pem_public_key(apr_pool_t *pool, const char *kid,
 		const char *filename, oidc_jwk_t **jwk, oidc_jose_error_t *err) {
-	return oidc_jwk_parse_rsa_key(pool, FALSE, kid, filename, jwk, err);
+	return oidc_jwk_parse_pem_key(pool, FALSE, kid, filename, jwk, err);
 }
 
 /*

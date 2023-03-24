@@ -182,11 +182,11 @@ oidc_jwk_t* oidc_jwk_create_symmetric_key(apr_pool_t *pool, const char *kid,
 		const unsigned char *key, unsigned int key_len, apr_byte_t set_kid,
 		oidc_jose_error_t *err);
 
-/* parse an X.509 PEM formatted certificate file with an RSA public key to a JWK struct */
-apr_byte_t oidc_jwk_parse_rsa_public_key(apr_pool_t *pool, const char *kid,
+/* parse an X.509 PEM formatted certificate file with a public key to a JWK struct */
+apr_byte_t oidc_jwk_parse_pem_public_key(apr_pool_t *pool, const char *kid,
 		const char *filename, oidc_jwk_t **jwk, oidc_jose_error_t *err);
-/* parse an X.509 PEM formatted RSA private key file to a JWK */
-apr_byte_t oidc_jwk_parse_rsa_private_key(apr_pool_t *pool, const char *kid,
+/* parse an X.509 PEM formatted private key file to a JWK */
+apr_byte_t oidc_jwk_parse_pem_private_key(apr_pool_t *pool, const char *kid,
 		const char *filename, oidc_jwk_t **jwk, oidc_jose_error_t *err);
 
 /*
@@ -263,7 +263,7 @@ int oidc_jwt_alg2kty(oidc_jwt_t *jwt);
 /* return the key size for an algorithm */
 unsigned int oidc_alg2keysize(const char *alg);
 
-apr_byte_t oidc_jwk_rsa_bio_to_jwk(apr_pool_t *pool, BIO *input,
+apr_byte_t oidc_jwk_pem_bio_to_jwk(apr_pool_t *pool, BIO *input,
 		const char *kid, oidc_jwk_t **jwk, int is_private_key,
 		oidc_jose_error_t *err);
 

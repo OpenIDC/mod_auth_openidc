@@ -821,10 +821,10 @@ static const char* oidc_set_public_key_files(cmd_parms *cmd, void *struct_ptr,
 
 	fname = oidc_util_get_full_path(cmd->pool, fname);
 
-	if (oidc_jwk_parse_rsa_public_key(cmd->pool, kid, fname, &jwk, &err)
+	if (oidc_jwk_parse_pem_public_key(cmd->pool, kid, fname, &jwk, &err)
 			== FALSE) {
 		return apr_psprintf(cmd->pool,
-				"oidc_jwk_parse_rsa_public_key failed for (kid=%s) \"%s\": %s",
+				"oidc_jwk_parse_pem_public_key failed for (kid=%s) \"%s\": %s",
 				kid, fname, oidc_jose_e2s(cmd->pool, err));
 	}
 
@@ -873,7 +873,7 @@ static const char* oidc_set_shared_keys(cmd_parms *cmd, void *struct_ptr,
 }
 
 /*
- * add a private key from an RSA private key file to our list of JWKs with private keys
+ * add a private key from an RSA/EC private key file to our list of JWKs with private keys
  */
 static const char* oidc_set_private_key_files_enc(cmd_parms *cmd, void *dummy,
 		const char *arg) {
@@ -891,10 +891,10 @@ static const char* oidc_set_private_key_files_enc(cmd_parms *cmd, void *dummy,
 
 	fname = oidc_util_get_full_path(cmd->pool, fname);
 
-	if (oidc_jwk_parse_rsa_private_key(cmd->pool, kid, fname, &jwk, &err)
+	if (oidc_jwk_parse_pem_private_key(cmd->pool, kid, fname, &jwk, &err)
 			== FALSE) {
 		return apr_psprintf(cmd->pool,
-				"oidc_jwk_parse_rsa_private_key failed for (kid=%s) \"%s\": %s",
+				"oidc_jwk_parse_pem_private_key failed for (kid=%s) \"%s\": %s",
 				kid, fname, oidc_jose_e2s(cmd->pool, err));
 	}
 
@@ -3085,7 +3085,7 @@ const command_rec oidc_config_cmds[] = {
 				oidc_set_public_key_files,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.verify_public_keys),
 				RSRC_CONF,
-				"The fully qualified names of the files that contain the X.509 certificates that contains the RSA public keys that can be used for ID token validation."),
+				"The fully qualified names of the files that contain the X.509 certificates that contains the RSA/EC public keys that can be used for ID token validation."),
 		AP_INIT_TAKE1(OIDCResponseType,
 				oidc_set_response_type,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.response_type),
@@ -3101,12 +3101,12 @@ const command_rec oidc_config_cmds[] = {
 				oidc_set_public_key_files,
 				(void *)APR_OFFSETOF(oidc_cfg, public_keys),
 				RSRC_CONF,
-				"The fully qualified names of the files that contain the RSA public keys or X.509 certificates that contains the RSA public keys that can be used for signature validation or encryption by the OP."),
+				"The fully qualified names of the files that contain the RSA/EC public keys or X.509 certificates that contains the RSA/EC public keys that can be used for signature validation or encryption by the OP."),
 		AP_INIT_ITERATE(OIDCPrivateKeyFiles,
 				oidc_set_private_key_files_enc,
 				NULL,
 				RSRC_CONF,
-				"The fully qualified names of the files that contain the RSA private keys that can be used to decrypt content sent to us by the OP."),
+				"The fully qualified names of the files that contain the RSA/EC private keys that can be used to decrypt content sent to us by the OP."),
 
 		AP_INIT_TAKE1(OIDCClientJwksUri,
 				oidc_set_https_slot,
@@ -3379,7 +3379,7 @@ const command_rec oidc_config_cmds[] = {
 				oidc_set_public_key_files,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.verify_public_keys),
 				RSRC_CONF,
-				"The fully qualified names of the files that contain the X.509 certificates that contains the RSA public keys that can be used for access token validation."),
+				"The fully qualified names of the files that contain the X.509 certificates that contains the RSA/EC public keys that can be used for access token validation."),
 		AP_INIT_ITERATE(OIDCOAuthVerifySharedKeys,
 				oidc_set_shared_keys,
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.verify_shared_keys),

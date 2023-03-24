@@ -344,6 +344,7 @@ char* oidc_proto_create_request_object(request_rec *r,
 
 		switch (oidc_jwt_alg2kty(request_object)) {
 		case CJOSE_JWK_KTY_RSA:
+		case CJOSE_JWK_KTY_EC:
 			if ((provider->client_signing_keys != NULL)
 					|| (cfg->private_keys != NULL)) {
 				sjwk = provider->client_signing_keys ?
@@ -409,8 +410,9 @@ char* oidc_proto_create_request_object(request_rec *r,
 
 		switch (oidc_jwt_alg2kty(jwe)) {
 		case CJOSE_JWK_KTY_RSA:
+		case CJOSE_JWK_KTY_EC:
 			oidc_proto_get_encryption_jwk_by_type(r, cfg, provider,
-					CJOSE_JWK_KTY_RSA, &ejwk);
+					oidc_jwt_alg2kty(jwe), &ejwk);
 			break;
 		case CJOSE_JWK_KTY_OCT:
 			oidc_util_create_symmetric_key(r, provider->client_secret,

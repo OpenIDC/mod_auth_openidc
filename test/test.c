@@ -113,23 +113,78 @@ static char *_jwk_parse(apr_pool_t *pool, const char *s, oidc_jwk_t **jwk,
 	return 0;
 }
 
+static char* test_private_key_parse(apr_pool_t *pool) {
+	oidc_jose_error_t err;
+	BIO *input = NULL;
+	oidc_jwk_t *jwk = NULL;
+	int isPrivateKey = 1;
+	int result;
+	char *json = NULL;
 
-static char *test_public_key_parse(apr_pool_t *pool) {
+	const char rsaPrivateKeyFile[512];
+	const char ecPrivateKeyFile[512];
+
+	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	sprintf((char*) rsaPrivateKeyFile, "%s/%s", dir, "/test/private.pem");
+	sprintf((char*) ecPrivateKeyFile, "%s/%s", dir, "/test/ecpriv.key");
+
+	input = BIO_new(BIO_s_file());
+	TST_ASSERT_ERR("test_private_key_parse_BIO_new_RSA_private_key",
+			input != NULL, pool, err);
+
+	TST_ASSERT_ERR("test_private_key_parse_BIOread_filename_RSA_private_key",
+			result = BIO_read_filename(input, rsaPrivateKeyFile), pool, err);
+
+	TST_ASSERT_ERR("oidc_jwk_pem_bio_to_jwk",
+			oidc_jwk_pem_bio_to_jwk(pool, input, NULL, &jwk, isPrivateKey, &err),
+			pool, err);
+	BIO_free(input);
+
+	TST_ASSERT_ERR("oidc_jwk_to_json with RSA private key",
+			oidc_jwk_to_json(pool, jwk, &json, &err), pool, err);
+	TST_ASSERT_STR("oidc_jwk_to_json with RSA private key output test", json,
+			"{\"kty\":\"RSA\",\"kid\":\"IbLjLR7-C1q0-ypkueZxGIJwBQNaLg46DZMpnPW1kps\",\"e\":\"AQAB\",\"n\":\"iGeTXbfV5bMppx7o7qMLCuVIKqbBa_qOzBiNNpe0K8rjg7-1z9GCuSlqbZtM0_5BQ6bGonnSPD--PowhFdivS4WNA33O0Kl1tQ0wdH3TOnwueIO9ahfW4q0BGFvMObneK-tjwiNMj1l-cZt8pvuS-3LtTWIzC-hTZM4caUmy5olm5PVdmru6C6V5rxkbYBPITFSzl5mpuo_C6RV_MYRwAh60ghs2OEvIWDrJkZnYaF7sjHC9j-4kfcM5oY7Zhg8KuHyloudYNzlqjVAPd0MbkLkh1pa8fmHsnN6cgfXYtFK7Z8WjYDUAhTH1JjZCVSFN55A-51dgD4cQNzieLEEkJw\",\"d\":\"Xc9d-kZERQVC0Dzh1b0sCwJE75Bf1fMr4hHAjJsovjV641ElqRdd4Borp9X2sJVcLTq1wWgmvmjYXgvhdTTg2f-vS4dqhPcGjM3VVUhzzPU6wIdZ7W0XzC1PY4E-ozTBJ1Nr-EhujuftnhRhVjYOkAAqU94FXVsaf2mBAKg-8WzrWx2MeWjfLcE79DmSL9Iw2areKVRGlKddIIPnHb-Mw9HB7ZCyVTC1v5sqhQPy6qPo8XHdQju_EYRlIOMksU8kcb20R_ezib_rHuVwJVlTNk6MvFUIj4ayXdX13Qy4kTBRiQM7pumPaypEE4CrAfTWP0AYnEwz_FGluOpMZNzoAQ\"}");
+	oidc_jwk_destroy(jwk);
+
+	input = BIO_new(BIO_s_file());
+	TST_ASSERT_ERR("test_private_key_parse_BIO_new_EC_private_key",
+			input != NULL, pool, err);
+
+	TST_ASSERT_ERR("test_private_key_parse_BIOread_filename_EC_private_key",
+			result = BIO_read_filename(input, ecPrivateKeyFile), pool, err);
+
+	TST_ASSERT_ERR("oidc_jwk_pem_bio_to_jwk",
+			oidc_jwk_pem_bio_to_jwk(pool, input, NULL, &jwk, isPrivateKey, &err),
+			pool, err);
+	BIO_free(input);
+
+	TST_ASSERT_ERR("oidc_jwk_to_json with EC private key",
+			oidc_jwk_to_json(pool, jwk, &json, &err), pool, err);
+	TST_ASSERT_STR("oidc_jwk_to_json with EC private key output test", json,
+			"{\"kty\":\"EC\",\"kid\":\"TvtjQQGy-JAzJjO6KJgeyYlyRdEz7Y4cVV1jWaU4TD4\",\"crv\":\"P-521\",\"x\":\"AR6Eh9VhdLEA-rm5WR0_T0LjKysJuBkSoXaR8GjphHvoOTrljcACRsVlTES9FMkbxbNEs4JdxPgPJl9G-e9WEJTe\",\"y\":\"AammgflZaJuSdycK_ccUXkSXjNQd8NsqJuv9LFpk5Ys1OAiirWm6uktXG8ALNSxSffcurBq8zqZyZ141dV6qSzKQ\",\"d\":\"AKFwyWAZ2FiTTEofXXOC6I2GBPQeEyCnsVzo075hCOcebYgLpzSj8xWfkTqxsUq8FF5cxlKS3jym3qgsuV0Eb0wd\"}");
+	oidc_jwk_destroy(jwk);
+
+	return 0;
+}
+
+static char* test_public_key_parse(apr_pool_t *pool) {
 
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk, *jwkCert = NULL;
 
 	BIO *input, *inputCert = NULL;
-	char* json = NULL;
+	char *json = NULL;
 
 	int isPrivateKey = 0;
 	int result;
 
 	const char publicKeyFile[512];
 	const char certificateFile[512];
+	const char ecCertificateFile[512];
 	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
-	sprintf((char *)publicKeyFile, "%s/%s", dir, "/test/public.pem");
-	sprintf((char *)certificateFile, "%s/%s", dir, "/test/certificate.pem");
+	sprintf((char*) publicKeyFile, "%s/%s", dir, "/test/public.pem");
+	sprintf((char*) certificateFile, "%s/%s", dir, "/test/certificate.pem");
+	sprintf((char*) ecCertificateFile, "%s/%s", dir, "/test/eccert.pem");
 
 	input = BIO_new(BIO_s_file());
 	TST_ASSERT_ERR("test_public_key_parse_BIO_new_public_key", input != NULL,
@@ -138,8 +193,8 @@ static char *test_public_key_parse(apr_pool_t *pool) {
 	TST_ASSERT_ERR("test_public_key_parse_BIOread_filename_public_key",
 			result = BIO_read_filename(input, publicKeyFile), pool, err);
 
-	TST_ASSERT_ERR("oidc_jwk_rsa_bio_to_jwk",
-			oidc_jwk_rsa_bio_to_jwk(pool, input, NULL, &jwk, isPrivateKey, &err),
+	TST_ASSERT_ERR("oidc_jwk_pem_bio_to_jwk",
+			oidc_jwk_pem_bio_to_jwk(pool, input, NULL, &jwk, isPrivateKey, &err),
 			pool, err);
 	BIO_free(input);
 
@@ -150,8 +205,8 @@ static char *test_public_key_parse(apr_pool_t *pool) {
 	TST_ASSERT_ERR("test_public_key_parse_BIOread_filename_certificate",
 			BIO_read_filename(inputCert, certificateFile), pool, err);
 
-	TST_ASSERT_ERR("oidc_jwk_rsa_bio_to_jwk",
-			oidc_jwk_rsa_bio_to_jwk(pool, inputCert, NULL, &jwkCert, isPrivateKey, &err),
+	TST_ASSERT_ERR("oidc_jwk_pem_bio_to_jwk",
+			oidc_jwk_pem_bio_to_jwk(pool, inputCert, NULL, &jwkCert, isPrivateKey, &err),
 			pool, err);
 	BIO_free(inputCert);
 
@@ -165,6 +220,24 @@ static char *test_public_key_parse(apr_pool_t *pool) {
 			oidc_jwk_to_json(pool, jwkCert, &json, &err), pool, err);
 	TST_ASSERT_STR("oidc_jwk_to_json with certificate output test", json,
 			"{\"kty\":\"RSA\",\"kid\":\"IbLjLR7-C1q0-ypkueZxGIJwBQNaLg46DZMpnPW1kps\",\"e\":\"AQAB\",\"n\":\"iGeTXbfV5bMppx7o7qMLCuVIKqbBa_qOzBiNNpe0K8rjg7-1z9GCuSlqbZtM0_5BQ6bGonnSPD--PowhFdivS4WNA33O0Kl1tQ0wdH3TOnwueIO9ahfW4q0BGFvMObneK-tjwiNMj1l-cZt8pvuS-3LtTWIzC-hTZM4caUmy5olm5PVdmru6C6V5rxkbYBPITFSzl5mpuo_C6RV_MYRwAh60ghs2OEvIWDrJkZnYaF7sjHC9j-4kfcM5oY7Zhg8KuHyloudYNzlqjVAPd0MbkLkh1pa8fmHsnN6cgfXYtFK7Z8WjYDUAhTH1JjZCVSFN55A-51dgD4cQNzieLEEkJw\",\"x5c\":[\"MIICnTCCAYUCBgFuk1+FLDANBgkqhkiG9w0BAQsFADASMRAwDgYDVQQDDAd2aW5jZW50MB4XDTE5MTEyMjEzNDcyMVoXDTI5MTEyMjEzNDkwMVowEjEQMA4GA1UEAwwHdmluY2VudDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAIhnk1231eWzKace6O6jCwrlSCqmwWv6jswYjTaXtCvK44O/tc/Rgrkpam2bTNP+QUOmxqJ50jw/vj6MIRXYr0uFjQN9ztCpdbUNMHR90zp8LniDvWoX1uKtARhbzDm53ivrY8IjTI9ZfnGbfKb7kvty7U1iMwvoU2TOHGlJsuaJZuT1XZq7ugulea8ZG2ATyExUs5eZqbqPwukVfzGEcAIetIIbNjhLyFg6yZGZ2Ghe7IxwvY/uJH3DOaGO2YYPCrh8paLnWDc5ao1QD3dDG5C5IdaWvH5h7JzenIH12LRSu2fFo2A1AIUx9SY2QlUhTeeQPudXYA+HEDc4nixBJCcCAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAfAo40il4qw7DfOkke0p1ZFAgLQQS3J5hYNDSRvVv+vxkk9o/N++zTMoHbfcDcU5BdVH6Qsr/12PXPX7Ur5WYDq+bWGAK3MAaGtZlmycFeVhoVRfab4TUWUy43H3VyFUNqjGRAVJ/VD1RW3fJ18KrQTN2fcKSd88Jqt5TvjROKghq95+8BQtlhrR/sQVrjgYwc+eU9ljWI56MQXbpHstl9IewMXnusSPxKRTbutjaxzKaoXRTUncPL6ga0SSxOTdKksM4ZYpPnq0B93silb+0qs8aJraGzjAmLE30opfufP+roth19VJxAfYsW5mgAmXP9kEAF+iWB8FB4/Q4noNG8Q==\"],\"x5t#S256\":\"hMVJ55Mqi4uAQIztPKUmL2MSfy6iN1Lr3J1CNGAIBms\",\"x5t\":\"0oN6Bx-eh6VAmNw1I7o3Dd9JPwE\"}");
+	oidc_jwk_destroy(jwkCert);
+
+	inputCert = BIO_new(BIO_s_file());
+	TST_ASSERT_ERR("test_public_key_parse_BIO_new_EC_certificate",
+			inputCert != NULL, pool, err);
+
+	TST_ASSERT_ERR("test_public_key_parse_BIOread_filename_EC_certificate",
+			BIO_read_filename(inputCert, ecCertificateFile), pool, err);
+
+	TST_ASSERT_ERR("oidc_jwk_pem_bio_to_jwk",
+			oidc_jwk_pem_bio_to_jwk(pool, inputCert, NULL, &jwkCert, isPrivateKey, &err),
+			pool, err);
+	BIO_free(inputCert);
+
+	TST_ASSERT_ERR("oidc_jwk_to_json with EC certificate",
+			oidc_jwk_to_json(pool, jwkCert, &json, &err), pool, err);
+	TST_ASSERT_STR("oidc_jwk_to_json with EC certificate output test", json,
+			"{\"kty\":\"EC\",\"kid\":\"TvtjQQGy-JAzJjO6KJgeyYlyRdEz7Y4cVV1jWaU4TD4\",\"crv\":\"P-521\",\"x\":\"AR6Eh9VhdLEA-rm5WR0_T0LjKysJuBkSoXaR8GjphHvoOTrljcACRsVlTES9FMkbxbNEs4JdxPgPJl9G-e9WEJTe\",\"y\":\"AammgflZaJuSdycK_ccUXkSXjNQd8NsqJuv9LFpk5Ys1OAiirWm6uktXG8ALNSxSffcurBq8zqZyZ141dV6qSzKQ\",\"x5c\":[\"MIICBDCCAWagAwIBAgIUdYpkXaCal7IwjHix3n1PP9/O6OcwCgYIKoZIzj0EAwIwFDESMBAGA1UEAwwJbG9jYWxob3N0MB4XDTIzMDMyMzIwNDU1MFoXDTMzMDMyMDIwNDU1MFowFDESMBAGA1UEAwwJbG9jYWxob3N0MIGbMBAGByqGSM49AgEGBSuBBAAjA4GGAAQBHoSH1WF0sQD6ublZHT9PQuMrKwm4GRKhdpHwaOmEe+g5OuWNwAJGxWVMRL0UyRvFs0Szgl3E+A8mX0b571YQlN4BqaaB+Vlom5J3Jwr9xxReRJeM1B3w2yom6/0sWmTlizU4CKKtabq6S1cbwAs1LFJ99y6sGrzOpnJnXjV1XqpLMpCjUzBRMB0GA1UdDgQWBBTKfLLXyRVQpnXFf19Bs7eXRPlRmzAfBgNVHSMEGDAWgBTKfLLXyRVQpnXFf19Bs7eXRPlRmzAPBgNVHRMBAf8EBTADAQH/MAoGCCqGSM49BAMCA4GLADCBhwJBGkoifMDYwsSLSmnnVdFftqTwxrjdgrtPMRzetz/w/D9KkM4Mlufgv5jBXuWcEiP9ray2ZgAGhdkvoOfsc8g1l6ICQgEJ+9R5K2WKlDTEydmiHiSYQHSVyS61PFskm537AqrLVSRu80Sezu2W4m8IF2UbbRZiUPaHPIx9Xe3GdpqIEmPFfA==\"],\"x5t#S256\":\"yCl_u4GL5GrTkf8xvqdF2aixUIhjDdsMFhLUz7O6gVA\",\"x5t\":\"waxmjjAAhxGY5XvH6ufxVxwYGDw\"}");
 	oidc_jwk_destroy(jwkCert);
 
 	return 0;
@@ -220,7 +293,7 @@ static char *test_jwt_parse(apr_pool_t *pool) {
 	return 0;
 }
 
-#if (APR_JWS_EC_SUPPORT)
+#if (OIDC_JOSE_EC_SUPPORT)
 
 static char *test_jwt_verify_ec(apr_pool_t *pool) {
 
@@ -1753,7 +1826,9 @@ static char* test_set_app_infos(request_rec *r) {
 
 static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	char *message;
+	TST_RUN(test_private_key_parse, pool);
 	TST_RUN(test_public_key_parse, pool);
+
 	TST_RUN(test_jwt_parse, pool);
 	TST_RUN(test_plaintext_jwt_parse, pool);
 	TST_RUN(test_jwt_get_string, pool);
@@ -1767,7 +1842,7 @@ static char * all_tests(apr_pool_t *pool, request_rec *r) {
 #if (OPENSSL_VERSION_NUMBER >= 0x1000100f)	
 	TST_RUN(test_jwt_decrypt_gcm, pool);
 #endif
-#if (APR_JWS_EC_SUPPORT)
+#if (OIDC_JOSE_EC_SUPPORT)
 	TST_RUN(test_jwt_verify_ec, pool);
 #endif
 

@@ -258,16 +258,16 @@ int key2jwk(int argc, char **argv, apr_pool_t *pool) {
 	int is_private_key = (argc > 3);
 
 	if (is_private_key) {
-		if (oidc_jwk_parse_rsa_private_key(pool, NULL, argv[2], &jwk,
+		if (oidc_jwk_parse_pem_private_key(pool, NULL, argv[2], &jwk,
 				&err) == FALSE) {
-			fprintf(stderr, "oidc_jwk_parse_rsa_private_key failed: %s",
+			fprintf(stderr, "oidc_jwk_parse_pem_private_key failed: %s",
 					oidc_jose_e2s(pool, err));
 			return -1;
 		}
 	} else {
-		if (oidc_jwk_parse_rsa_public_key(pool, NULL, argv[2], &jwk,
+		if (oidc_jwk_parse_pem_public_key(pool, NULL, argv[2], &jwk,
 				&err) == FALSE) {
-			fprintf(stderr, "oidc_jwk_parse_rsa_public_key failed: %s",
+			fprintf(stderr, "oidc_jwk_parse_pem_public_key failed: %s",
 					oidc_jose_e2s(pool, err));
 			return -1;
 		}

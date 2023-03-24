@@ -3217,7 +3217,7 @@ int oidc_handle_jwks(request_rec *r, oidc_cfg *c) {
 
 	if (c->public_keys != NULL) {
 
-		/* loop over the RSA public keys */
+		/* loop over the RSA/EC public keys */
 		for (i = 0; i < c->public_keys->nelts; i++) {
 			const oidc_jwk_t *jwk =
 					((const oidc_jwk_t**) c->public_keys->elts)[i];
@@ -3229,7 +3229,7 @@ int oidc_handle_jwks(request_rec *r, oidc_cfg *c) {
 				first = FALSE;
 			} else {
 				oidc_error(r,
-						"could not convert RSA JWK to JSON using oidc_jwk_to_json: %s",
+						"could not convert RSA/EC JWK to JSON using oidc_jwk_to_json: %s",
 						oidc_jose_e2s(r->pool, err));
 			}
 		}

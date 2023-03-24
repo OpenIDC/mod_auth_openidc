@@ -70,6 +70,9 @@ EXTRA_DIST = \
 	AUTHORS \
 	LICENSE.txt \
 	auth_openidc.conf \
+	test/ecpriv.key \
+	test/eccert.pem \
+	test/private.pem \
 	test/public.pem \
 	test/certificate.pem \
 	test/open-redirect-payload-list.txt

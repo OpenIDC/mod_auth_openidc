@@ -1,9 +1,16 @@
 03/24/2023
+- add support for Elliptic Curve signing/encryption keys in addtion to RSA keys,
+  i.e. client keys configured in OIDCPrivateKeyFiles/OIDCPublicKeyFiles, published on OIDCClientJwksUri
+  and used in private_key_jwt authentication, encrypted id_token's, request objects/uri's,
+  but also statically configured provider keys in OIDCOAuthVerifyCertFiles and OIDCProviderVerifyCertFiles
+- refactor Docker tests make targets; add test/Makefile
+- bump to 2.4.13.2rc1
+
+03/24/2023
 - record authorization errors in environment variable OIDC_AUTHZ_ERROR
   so its value can be used in logs e.g. with HTTP 401 responses:
     LogFormat "%h %l %u %t %U %401{OIDC_AUTHZ_ERROR}e %>s %b" combined
 - log authorization errors with oidc_debug instead of oidc_info
-- refactor Docker tests make targets; add test/Makefile
 - bump to 2.4.13.2rc0
 
 03/10/2023
