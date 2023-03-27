@@ -1422,6 +1422,8 @@ end:
 	return rv;
 }
 
+#if (OIDC_JOSE_EC_SUPPORT)
+
 static apr_byte_t _oidc_jwk_ec_key_to_jwk(apr_pool_t *pool, EVP_PKEY *pkey,
 		oidc_jwk_t **oidc_jwk, char **fp, int *fp_len, oidc_jose_error_t *err) {
 	apr_byte_t rv = FALSE;
@@ -1513,6 +1515,8 @@ end:
 #endif
 	return rv;
 }
+
+#endif
 
 /*
  * convert the PEM public key - possibly in a X.509 certificate - in the BIO pointed to
@@ -1610,14 +1614,15 @@ apr_byte_t oidc_jwk_pem_bio_to_jwk(apr_pool_t *pool, BIO *input,
 				err) == FALSE)
 			goto end;
 		break;
+#if (OIDC_JOSE_EC_SUPPORT)
 	case EVP_PKEY_EC:
 		if (_oidc_jwk_ec_key_to_jwk(pool, pkey, oidc_jwk, &fp, &fp_len,
 				err) == FALSE)
 			goto end;
 		break;
+#endif
 	default:
-		oidc_jose_error(err, "EVP_PKEY_get_base_id: unhandled key type: %d",
-				pkey_type);
+		oidc_jose_error(err, "unhandled key type: %d", pkey_type);
 		break;
 	}
 
