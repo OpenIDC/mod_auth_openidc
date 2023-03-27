@@ -537,7 +537,7 @@ static const char* oidc_set_passphrase_slot(cmd_parms *cmd, void *struct_ptr,
 	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
 			&auth_openidc_module);
 	const char *passphrase = NULL;
-	int arglen = strlen(arg);
+	int arglen = _oidc_strlen(arg);
 	char **argv = NULL;
 	char *result = NULL;
 	/* Based on code from mod_session_crypto. */
@@ -557,7 +557,7 @@ static const char* oidc_set_passphrase_slot(cmd_parms *cmd, void *struct_ptr,
 			return apr_pstrcat(cmd->pool,
 					"Unable to get passphrase from exec of ", arg + 5, NULL);
 		}
-		if (strlen(result) == 0)
+		if (_oidc_strlen(result) == 0)
 			return apr_pstrdup(cmd->pool, "the output of the crypto passphrase generation command is empty (perhaps you need to pass it to bash -c \"<cmd>\"?)");
 		passphrase = result;
 	} else {
@@ -2949,12 +2949,12 @@ static apr_status_t oidc_filter_in_filter(ap_filter_t *f,
 						ctx->nbytes > 0 ? "&" : "",
 								oidc_util_http_form_encoded_data(f->r,
 										userdata_post_params));
-				b_out = apr_bucket_heap_create(buf, strlen(buf), 0,
+				b_out = apr_bucket_heap_create(buf, _oidc_strlen(buf), 0,
 						f->r->connection->bucket_alloc);
 
 				APR_BRIGADE_INSERT_TAIL(brigade, b_out);
 
-				ctx->nbytes += strlen(buf);
+				ctx->nbytes += _oidc_strlen(buf);
 
 				if (oidc_util_hdr_in_content_length_get(f->r) != NULL)
 					oidc_util_hdr_in_set(f->r, OIDC_HTTP_HDR_CONTENT_LENGTH,

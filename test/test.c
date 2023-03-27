@@ -481,7 +481,7 @@ static char *test_jwt_sign_verify(apr_pool_t *pool) {
 
 	const char *secret = "my_secret4321";
 	jwk = oidc_jwk_create_symmetric_key(pool, NULL,
-			(const unsigned char *) secret, strlen(secret), FALSE, &err);
+			(const unsigned char *) secret, _oidc_strlen(secret), FALSE, &err);
 	TST_ASSERT_ERR("oidc_jwk_create_symmetric_key", jwk != NULL, pool, err);
 	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
 
@@ -750,7 +750,7 @@ static char *test_plaintext_decrypt(apr_pool_t *pool) {
 	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
 
 	cjose_err cjose_err;
-	cjose_jwe_t *jwe = cjose_jwe_import(s, strlen(s), &cjose_err);
+	cjose_jwe_t *jwe = cjose_jwe_import(s, _oidc_strlen(s), &cjose_err);
 	TST_ASSERT_CJOSE_ERR("cjose_jwe_import", jwe != NULL, pool, cjose_err);
 
 	size_t content_len = 0;
@@ -849,7 +849,7 @@ static char *test_plaintext_decrypt2(apr_pool_t *pool) {
 			jwk);
 
 	cjose_err cjose_err;
-	cjose_jwe_t *jwe = cjose_jwe_import(s, strlen(s), &cjose_err);
+	cjose_jwe_t *jwe = cjose_jwe_import(s, _oidc_strlen(s), &cjose_err);
 	TST_ASSERT_CJOSE_ERR("cjose_jwe_import", jwe != NULL, pool, cjose_err);
 
 	size_t content_len = 0;
@@ -893,7 +893,7 @@ static char *test_plaintext_decrypt_symmetric(apr_pool_t *pool) {
 			"U0m_YmjN04DJvceFICbCVQ";
 
 	cjose_err cjose_err;
-	cjose_jwe_t *jwe = cjose_jwe_import(s, strlen(s), &cjose_err);
+	cjose_jwe_t *jwe = cjose_jwe_import(s, _oidc_strlen(s), &cjose_err);
 	TST_ASSERT_CJOSE_ERR("cjose_jwe_import", jwe != NULL, pool, cjose_err);
 
 	size_t content_len = 0;
@@ -1067,7 +1067,7 @@ static char *test_jwt_decrypt_gcm(apr_pool_t *pool) {
 	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
 
 	cjose_err cjose_err;
-	cjose_jwe_t *jwe = cjose_jwe_import(s, strlen(s), &cjose_err);
+	cjose_jwe_t *jwe = cjose_jwe_import(s, _oidc_strlen(s), &cjose_err);
 	TST_ASSERT_CJOSE_ERR("cjose_jwe_import", jwe != NULL, pool, cjose_err);
 
 	size_t content_len = 0;
@@ -1154,7 +1154,7 @@ static char * test_proto_authorization_request(request_rec *r) {
 
 	oidc_provider_t provider;
 
-	memset(&provider, 0, sizeof(provider));
+	_oidc_memset(&provider, 0, sizeof(provider));
 
 	provider.issuer = "https://idp.example.com";
 	provider.authorization_endpoint_url = "https://idp.example.com/authorize";
@@ -1260,11 +1260,11 @@ static char * test_proto_validate_jwt(request_rec *r) {
 
 	char *s_jwt_header_encoded = NULL;
 	oidc_base64url_encode(r, &s_jwt_header_encoded, s_jwt_header,
-			strlen(s_jwt_header), 1);
+			_oidc_strlen(s_jwt_header), 1);
 
 	char *s_jwt_payload_encoded = NULL;
 	oidc_base64url_encode(r, &s_jwt_payload_encoded, s_jwt_payload,
-			strlen(s_jwt_payload), 1);
+			_oidc_strlen(s_jwt_payload), 1);
 
 	char *s_jwt_message = apr_psprintf(r->pool, "%s.%s", s_jwt_header_encoded,
 			s_jwt_payload_encoded);
@@ -1274,9 +1274,9 @@ static char * test_proto_validate_jwt(request_rec *r) {
 	const EVP_MD *digest = EVP_get_digestbyname("sha256");
 
 	TST_ASSERT("HMAC",
-			HMAC(digest, (const unsigned char * )s_secret, strlen(s_secret),
+			HMAC(digest, (const unsigned char * )s_secret, _oidc_strlen(s_secret),
 					(const unsigned char * )s_jwt_message,
-					strlen(s_jwt_message), md, &md_len) != 0);
+					_oidc_strlen(s_jwt_message), md, &md_len) != 0);
 
 	char *s_jwt_signature_encoded = NULL;
 	oidc_base64url_encode(r, &s_jwt_signature_encoded, (const char *) md,
@@ -1766,13 +1766,13 @@ static char* test_is_auth_capable_request(request_rec *r) {
 static char* test_open_redirect(request_rec *r) {
 	apr_byte_t rc = FALSE;
 	char *err_str = NULL, *err_desc = NULL, *msg = NULL;
-	char filename[512];
+	char *filename = NULL;
 	char line_buf[8096];
 	apr_file_t *f;
 	size_t line_s;
 	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
 	// https://github.com/payloadbox/open-redirect-payload-list
-	sprintf((char* )filename, "%s/%s", dir, "/test/open-redirect-payload-list.txt");
+	filename = apr_psprintf(r->pool, "%s/%s", dir, "/test/open-redirect-payload-list.txt");
 
 	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
@@ -1783,7 +1783,7 @@ static char* test_open_redirect(request_rec *r) {
 	while (1) {
 		if (apr_file_gets(line_buf, sizeof(line_buf), f) != APR_SUCCESS)
 			break;
-		line_s = strlen(line_buf);
+		line_s = _oidc_strlen(line_buf);
 		line_buf[--line_s] = '\0';
 		TST_OPEN_REDIRECT(line_buf, FALSE);
 	}

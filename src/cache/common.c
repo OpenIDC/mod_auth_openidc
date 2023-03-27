@@ -307,7 +307,7 @@ out:
 	if (rc == TRUE)
 		if (*value != NULL)
 			oidc_debug(r, "cache hit: return %d bytes %s",
-					*value ? (int )strlen(*value) : 0, msg);
+					*value ? (int )_oidc_strlen(*value) : 0, msg);
 		else
 			oidc_debug(r, "cache miss %s", msg);
 	else
@@ -331,7 +331,7 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key,
 
 	oidc_debug(r,
 			"enter: %s (section=%s, len=%d, encrypt=%d, ttl(s)=%" APR_TIME_T_FMT ", type=%s)",
-			key, section, value ? (int )strlen(value) : 0, encrypted,
+			key, section, value ? (int )_oidc_strlen(value) : 0, encrypted,
 					apr_time_sec(expiry - apr_time_now()), cfg->cache->name);
 
 	/* see if we need to encrypt */
@@ -360,7 +360,7 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key,
 out:
 	/* log the result */
 	msg = apr_psprintf(r->pool, "%d bytes in %s cache backend for %skey %s",
-			(value ? (int) strlen(value) : 0),
+			(value ? (int) _oidc_strlen(value) : 0),
 			(cfg->cache->name ? cfg->cache->name : ""),
 			(encrypted ? "encrypted " : ""), (key ? key : ""));
 	if (rc == TRUE)

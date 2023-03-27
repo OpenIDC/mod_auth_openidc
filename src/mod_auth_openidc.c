@@ -70,7 +70,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 static void oidc_scrub_request_headers(request_rec *r, const char *claim_prefix,
 		apr_hash_t *scrub) {
 
-	const int prefix_len = claim_prefix ? strlen(claim_prefix) : 0;
+	const int prefix_len = claim_prefix ? _oidc_strlen(claim_prefix) : 0;
 
 	/* get an array representation of the incoming HTTP headers */
 	const apr_array_header_t *const h = apr_table_elts(r->headers_in);
@@ -175,11 +175,13 @@ void oidc_strip_cookies(request_rec *r) {
 		do {
 			while (cookie != NULL && *cookie == OIDC_CHAR_SPACE)
 				cookie++;
+			if (cookie == NULL)
+				break;
 
 			for (i = 0; i < strip->nelts; i++) {
 				name = ((const char**) strip->elts)[i];
-				if ((strncmp(cookie, name, strlen(name)) == 0)
-						&& (cookie[strlen(name)] == OIDC_CHAR_EQUAL)) {
+				if ((strncmp(cookie, name, _oidc_strlen(name)) == 0)
+						&& (cookie[_oidc_strlen(name)] == OIDC_CHAR_EQUAL)) {
 					oidc_debug(r, "stripping: %s", name);
 					break;
 				}
@@ -221,7 +223,7 @@ static char* oidc_get_browser_state_hash(request_rec *r, oidc_cfg *c,
 		value = oidc_util_hdr_in_x_forwarded_for_get(r);
 		/* if we have a value for this header, concat it to the hash input */
 		if (value != NULL)
-			apr_sha1_update(&sha1, value, strlen(value));
+			apr_sha1_update(&sha1, value, _oidc_strlen(value));
 	}
 
 	if (c->state_input_headers & OIDC_STATE_INPUT_HEADERS_USER_AGENT) {
@@ -229,7 +231,7 @@ static char* oidc_get_browser_state_hash(request_rec *r, oidc_cfg *c,
 		value = oidc_util_hdr_in_user_agent_get(r);
 		/* if we have a value for this header, concat it to the hash input */
 		if (value != NULL)
-			apr_sha1_update(&sha1, value, strlen(value));
+			apr_sha1_update(&sha1, value, _oidc_strlen(value));
 	}
 
 	/* get the remote client IP address or host name */
@@ -237,18 +239,18 @@ static char* oidc_get_browser_state_hash(request_rec *r, oidc_cfg *c,
 	 int remotehost_is_ip;
 	 value = ap_get_remote_host(r->connection, r->per_dir_config,
 	 REMOTE_NOLOOKUP, &remotehost_is_ip);
-	 apr_sha1_update(&sha1, value, strlen(value));
+	 apr_sha1_update(&sha1, value, _oidc_strlen(value));
 	 */
 
 	/* concat the nonce parameter to the hash input */
-	apr_sha1_update(&sha1, nonce, strlen(nonce));
+	apr_sha1_update(&sha1, nonce, _oidc_strlen(nonce));
 
 	/* concat the token binding ID if present */
 	value = oidc_util_get_provided_token_binding_id(r);
 	if (value != NULL) {
 		oidc_debug(r,
 				"Provided Token Binding ID environment variable found; adding its value to the state");
-		apr_sha1_update(&sha1, value, strlen(value));
+		apr_sha1_update(&sha1, value, _oidc_strlen(value));
 	}
 
 	/* finalize the hash input and calculate the resulting hash output */
@@ -522,7 +524,7 @@ static int oidc_delete_oldest_state_cookies(request_rec *r, oidc_cfg *c,
 		oldest = first;
 		prev_oldest = NULL;
 		prev = first;
-		cur = first->next;
+		cur = first ? first->next : NULL;
 		while (cur) {
 			if ((cur->timestamp < oldest->timestamp)) {
 				oldest = cur;
@@ -536,7 +538,7 @@ static int oidc_delete_oldest_state_cookies(request_rec *r, oidc_cfg *c,
 		if (prev_oldest)
 			prev_oldest->next = oldest->next;
 		else
-			first = first->next;
+			first = first ? first->next : NULL;
 		number_of_valid_state_cookies--;
 	}
 	return number_of_valid_state_cookies;
@@ -1631,14 +1633,14 @@ static apr_byte_t oidc_set_request_user(request_rec *r, oidc_cfg *c,
 
 	char *issuer = provider->issuer;
 	char *claim_name = apr_pstrdup(r->pool, c->remote_user_claim.claim_name);
-	int n = strlen(claim_name);
+	int n = _oidc_strlen(claim_name);
 	apr_byte_t post_fix_with_issuer = (claim_name[n - 1] == OIDC_CHAR_AT);
 	if (post_fix_with_issuer == TRUE) {
 		claim_name[n - 1] = '\0';
 		issuer =
 				(strstr(issuer, "https://") == NULL) ?
 						apr_pstrdup(r->pool, issuer) :
-						apr_pstrdup(r->pool, issuer + strlen("https://"));
+						apr_pstrdup(r->pool, issuer + _oidc_strlen("https://"));
 	}
 
 	/* extract the username claim (default: "sub") from the id_token payload or user claims */
@@ -2186,7 +2188,7 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 		char *display =
 				(strstr(issuer, "https://") == NULL) ?
 						apr_pstrdup(r->pool, issuer) :
-						apr_pstrdup(r->pool, issuer + strlen("https://"));
+						apr_pstrdup(r->pool, issuer + _oidc_strlen("https://"));
 
 		/* strip port number */
 		//char *p = strstr(display, ":");
@@ -2336,9 +2338,9 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	 * TODO: separate this code out into its own function
 	 */
 	apr_uri_t o_uri;
-	memset(&o_uri, 0, sizeof(apr_uri_t));
+	_oidc_memset(&o_uri, 0, sizeof(apr_uri_t));
 	apr_uri_t r_uri;
-	memset(&r_uri, 0, sizeof(apr_uri_t));
+	_oidc_memset(&r_uri, 0, sizeof(apr_uri_t));
 	apr_uri_parse(r->pool, original_url, &o_uri);
 	apr_uri_parse(r->pool, oidc_get_redirect_uri(r, c), &r_uri);
 	if ((apr_strnatcmp(o_uri.scheme, r_uri.scheme) != 0)
@@ -2427,8 +2429,8 @@ static int oidc_target_link_uri_matches_configuration(request_rec *r,
 					"the path (%s) configured in " OIDCCookiePath " does not match the URL path (%s) of the \"target_link_uri\" (%s): aborting to prevent an open redirect.",
 					cfg->cookie_domain, o_uri.path, target_link_uri);
 			return FALSE;
-		} else if (strlen(o_uri.path) > strlen(cookie_path)) {
-			int n = strlen(cookie_path);
+		} else if (_oidc_strlen(o_uri.path) > _oidc_strlen(cookie_path)) {
+			int n = _oidc_strlen(cookie_path);
 			if (cookie_path[n - 1] == OIDC_CHAR_FORWARD_SLASH)
 				n--;
 			if (o_uri.path[n] != OIDC_CHAR_FORWARD_SLASH) {
@@ -2455,7 +2457,7 @@ apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg *c,
 	char *url_ipv6_aware = NULL;
 
 	// replace potentially harmful backslashes with forward slashes
-	for (i = 0; i < strlen(url); i++)
+	for (i = 0; i < _oidc_strlen(url); i++)
 		if (url[i] == '\\')
 			url[i] = '/';
 
@@ -2542,7 +2544,7 @@ apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg *c,
 			|| (oidc_util_strcasestr(url, "/https:") != NULL) || (oidc_util_strcasestr(url, "/javascript:") != NULL)
 			|| (strstr(url, "/〱") != NULL) || (strstr(url, "/〵") != NULL)
 			|| (strstr(url, "/ゝ") != NULL) || (strstr(url, "/ー") != NULL)
-			|| (strstr(url, "/〱") != NULL) || (strstr(url, "/ｰ") != NULL)
+			|| (strstr(url, "/ｰ") != NULL)
 			|| (strstr(url, "/<") != NULL) || (oidc_util_strcasestr(url, "%01javascript:") != NULL)
 			|| (strstr(url, "/%5c") != NULL) || (strstr(url, "/\\") != NULL)) {
 		*err_str = apr_pstrdup(r->pool, "Invalid URL");
@@ -2689,7 +2691,7 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 	}
 
 	/* strip trailing '/' */
-	int n = strlen(issuer);
+	int n = _oidc_strlen(issuer);
 	if (issuer[n - 1] == OIDC_CHAR_FORWARD_SLASH)
 		issuer[n - 1] = '\0';
 
@@ -3238,7 +3240,7 @@ int oidc_handle_jwks(request_rec *r, oidc_cfg *c) {
 	// TODO: send stuff if first == FALSE?
 	jwks = apr_psprintf(r->pool, "%s ] }", jwks);
 
-	return oidc_util_http_send(r, jwks, strlen(jwks), OIDC_CONTENT_TYPE_JSON,
+	return oidc_util_http_send(r, jwks, _oidc_strlen(jwks), OIDC_CONTENT_TYPE_JSON,
 			OK);
 }
 
@@ -3319,7 +3321,7 @@ static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c,
 
 	char *s_poll_interval = NULL;
 	oidc_util_get_request_parameter(r, "poll", &s_poll_interval);
-	int poll_interval = s_poll_interval ? strtol(s_poll_interval, NULL, 10) : 0;
+	int poll_interval = s_poll_interval ? _oidc_str_to_int(s_poll_interval) : 0;
 	if ((poll_interval <= 0) || (poll_interval > 3600 * 24))
 		poll_interval = 3000;
 
@@ -3534,7 +3536,7 @@ static int oidc_handle_request_uri(request_rec *r, oidc_cfg *c) {
 
 	oidc_cache_set_request_uri(r, request_ref, NULL, 0);
 
-	return oidc_util_http_send(r, jwt, strlen(jwt), OIDC_CONTENT_TYPE_JWT, OK);
+	return oidc_util_http_send(r, jwt, _oidc_strlen(jwt), OIDC_CONTENT_TYPE_JWT, OK);
 }
 
 /*
@@ -3757,7 +3759,7 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 		/* JSON-encode the result */
 		r_value = oidc_util_encode_json_object(r, json, 0);
 		/* return the stringified JSON result */
-		rc = oidc_util_http_send(r, r_value, strlen(r_value),
+		rc = oidc_util_http_send(r, r_value, _oidc_strlen(r_value),
 				OIDC_CONTENT_TYPE_JSON, OK);
 	} else if (apr_strnatcmp(OIDC_HOOK_INFO_FORMAT_HTML, s_format) == 0) {
 		/* JSON-encode the result */
@@ -4118,7 +4120,6 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 				r->header_only = 1;
 			}
 			return AUTHZ_DENIED;
-			break;
 		case OIDC_UNAUTZ_RETURN302:
 			html_head =
 					apr_psprintf(r->pool, "<meta http-equiv=\"refresh\" content=\"0; url=%s\">", oidc_dir_cfg_unauthz_arg(r));
@@ -4126,7 +4127,6 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 					HTTP_UNAUTHORIZED);
 			r->header_only = 1;
 			return AUTHZ_DENIED;
-			break;
 		case OIDC_UNAUTZ_AUTHENTICATE:
 			/*
 			 * exception handling: if this looks like an HTTP request that cannot
@@ -4174,7 +4174,7 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args,
 	oidc_debug(r, "enter: (r->user=%s) require_args=\"%s\"", r->user, require_args);
 
 	/* check for anonymous access and PASS mode */
-	if ((r->user != NULL) && (strlen(r->user) == 0)) {
+	if ((r->user != NULL) && (_oidc_strlen(r->user) == 0)) {
 		r->user = NULL;
 		if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
 			return AUTHZ_GRANTED;
@@ -4271,7 +4271,7 @@ static int oidc_handle_unauthorized_user22(request_rec *r) {
 int oidc_auth_checker(request_rec *r) {
 
 	/* check for anonymous access and PASS mode */
-	if ((r->user != NULL) && (strlen(r->user) == 0)) {
+	if ((r->user != NULL) && (_oidc_strlen(r->user) == 0)) {
 		r->user = NULL;
 		if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
 			return OK;

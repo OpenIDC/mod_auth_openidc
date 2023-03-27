@@ -1607,7 +1607,7 @@ char* oidc_proto_peek_jwt_header(request_rec *r,
 		return NULL;
 	}
 	input = apr_pstrmemdup(r->pool, compact_encoded_jwt,
-			strlen(compact_encoded_jwt) - strlen(p));
+			_oidc_strlen(compact_encoded_jwt) - _oidc_strlen(p));
 	if (oidc_base64url_decode(r->pool, &result, input) <= 0) {
 		oidc_warn(r, "oidc_base64url_decode returned an error");
 		return NULL;
@@ -1836,7 +1836,7 @@ static apr_byte_t oidc_proto_endpoint_auth_client_secret_jwt(request_rec *r,
 		return FALSE;
 
 	oidc_jwk_t *jwk = oidc_jwk_create_symmetric_key(r->pool, NULL,
-			(const unsigned char*) client_secret, strlen(client_secret),
+			(const unsigned char*) client_secret, _oidc_strlen(client_secret),
 			FALSE, &err);
 	if (jwk == NULL) {
 		oidc_error(r, "parsing of client secret into JWK failed: %s",

@@ -66,7 +66,7 @@ static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c,
 		/* see if it is a integer and it equals the Require'd value */
 	} else if (json_is_integer(val)) {
 
-		if (json_integer_value(val) == atoi(spec_c))
+		if (json_integer_value(val) == _oidc_str_to_int(spec_c))
 			return TRUE;
 
 		/* see if it is a boolean and it (case-insensitively) matches the Require'd value */
@@ -100,7 +100,7 @@ static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c,
 
 			} else if (json_is_integer(elem)) {
 
-				if (json_integer_value(elem) == atoi(spec_c))
+				if (json_integer_value(elem) == _oidc_str_to_int(spec_c))
 					return TRUE;
 
 			} else {
@@ -139,7 +139,7 @@ static apr_byte_t oidc_authz_match_expression(request_rec *r, const char *spec_c
 
 		error_str = NULL;
 		/* PCRE-compare the string value against the expression */
-		if (oidc_pcre_exec(r->pool, preg, json_string_value(val), (int) strlen(json_string_value(val)), &error_str)
+		if (oidc_pcre_exec(r->pool, preg, json_string_value(val), (int) _oidc_strlen(json_string_value(val)), &error_str)
 				> 0) {
 			oidc_debug(r, "value \"%s\" matched regex \"%s\"", json_string_value(val), spec_c);
 			rc = TRUE;
@@ -159,7 +159,7 @@ static apr_byte_t oidc_authz_match_expression(request_rec *r, const char *spec_c
 
 				error_str = NULL;
 				/* PCRE-compare the string value against the expression */
-				if (oidc_pcre_exec(r->pool, preg, json_string_value(elem), (int) strlen(json_string_value(elem)), &error_str)
+				if (oidc_pcre_exec(r->pool, preg, json_string_value(elem), (int) _oidc_strlen(json_string_value(elem)), &error_str)
 						> 0) {
 					oidc_debug(r, "array value \"%s\" matched regex \"%s\"", json_string_value(elem), spec_c);
 					rc = TRUE;
@@ -312,7 +312,7 @@ apr_byte_t oidc_authz_match_claims_expr(request_rec *r,
 	struct jv_parser *parser = jv_parser_new(0);
 
 	char *buf = oidc_util_encode_json_object(r, (json_t *)claims, 0);
-	jv_parser_set_buf(parser, buf, strlen(buf), 0);
+	jv_parser_set_buf(parser, buf, _oidc_strlen(buf), 0);
 	rv = jq_parse(r, jq, parser);
 
 	jv_parser_free(parser);

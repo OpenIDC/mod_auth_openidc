@@ -127,18 +127,18 @@ static const char* oidc_metadata_issuer_to_filename(request_rec *r,
 	/* strip leading https:// */
 	char *p = strstr(issuer, "https://");
 	if (p == issuer) {
-		p = apr_pstrdup(r->pool, issuer + strlen("https://"));
+		p = apr_pstrdup(r->pool, issuer + _oidc_strlen("https://"));
 	} else {
 		p = strstr(issuer, "http://");
 		if (p == issuer) {
-			p = apr_pstrdup(r->pool, issuer + strlen("http://"));
+			p = apr_pstrdup(r->pool, issuer + _oidc_strlen("http://"));
 		} else {
 			p = apr_pstrdup(r->pool, issuer);
 		}
 	}
 
 	/* strip trailing '/' */
-	int n = strlen(p);
+	int n = _oidc_strlen(p);
 	if (p[n - 1] == OIDC_CHAR_FORWARD_SLASH)
 		p[n - 1] = '\0';
 
@@ -199,8 +199,7 @@ static const char* oidc_metadata_conf_path(request_rec *r, const char *issuer) {
 /*
  * get cache key for the JWKs file for a specified URI
  */
-static const char* oidc_metadata_jwks_cache_key(request_rec *r,
-		const oidc_jwks_uri_t *jwks_uri) {
+static const char* oidc_metadata_jwks_cache_key(const oidc_jwks_uri_t *jwks_uri) {
 	return jwks_uri->signed_uri ? jwks_uri->signed_uri : jwks_uri->uri;
 }
 
@@ -678,7 +677,7 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
 		return FALSE;
 
 	/* store the JWKs in the cache */
-	oidc_cache_set_jwks(r, oidc_metadata_jwks_cache_key(r, jwks_uri),
+	oidc_cache_set_jwks(r, oidc_metadata_jwks_cache_key(jwks_uri),
 			response,
 			apr_time_now() + apr_time_from_sec(jwks_uri->refresh_interval));
 
@@ -706,7 +705,7 @@ apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg,
 
 	/* see if the JWKs is cached */
 	char *value = NULL;
-	oidc_cache_get_jwks(r, oidc_metadata_jwks_cache_key(r, jwks_uri),
+	oidc_cache_get_jwks(r, oidc_metadata_jwks_cache_key(jwks_uri),
 			&value);
 
 	if (value == NULL) {
@@ -810,7 +809,7 @@ apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
 					|| (strstr(issuer, "https://") == issuer)) ?
 							issuer : apr_psprintf(r->pool, "https://%s", issuer));
 	url = apr_psprintf(r->pool, "%s%s.well-known/openid-configuration", url,
-			url[strlen(url) - 1] != OIDC_CHAR_FORWARD_SLASH ?
+			(url && url[_oidc_strlen(url) - 1] != OIDC_CHAR_FORWARD_SLASH) ?
 					OIDC_STR_FORWARD_SLASH :
 					"");
 
@@ -847,8 +846,8 @@ apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
 /*
  * see if we have config metadata
  */
-static apr_byte_t oidc_metadata_conf_get(request_rec *r, oidc_cfg *cfg,
-		const char *issuer, json_t **j_conf) {
+static apr_byte_t oidc_metadata_conf_get(request_rec *r, const char *issuer,
+		json_t **j_conf) {
 
 	/* get the full file path to the conf metadata for this issuer */
 	const char *conf_path = oidc_metadata_conf_path(r, issuer);
@@ -941,9 +940,11 @@ apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg *cfg,
 		if (fi.name[0] == OIDC_CHAR_DOT)
 			continue;
 		/* skip other non-provider entries */
-		char *ext = strrchr(fi.name, OIDC_CHAR_DOT);
-		if ((ext == NULL)
-				|| (strcmp(++ext, OIDC_METADATA_SUFFIX_PROVIDER) != 0))
+		const char *ext = strrchr(fi.name, OIDC_CHAR_DOT);
+		if (ext == NULL)
+			continue;
+		ext++;
+		if (strcmp(ext, OIDC_METADATA_SUFFIX_PROVIDER) != 0)
 			continue;
 
 		/* get the issuer from the filename */
@@ -1532,7 +1533,7 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *issuer,
 	if (oidc_metadata_provider_parse(r, cfg, j_provider, *provider) == FALSE)
 		goto end;
 
-	if (oidc_metadata_conf_get(r, cfg, issuer, &j_conf) == FALSE)
+	if (oidc_metadata_conf_get(r, issuer, &j_conf) == FALSE)
 		goto end;
 	if (oidc_metadata_conf_parse(r, cfg, j_conf, *provider) == FALSE)
 		goto end;

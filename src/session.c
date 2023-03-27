@@ -516,7 +516,7 @@ void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, const c
 	if (r->subprocess_env != NULL) {
 		s = apr_table_get(r->subprocess_env, OIDC_SESSION_WARN_CLAIM_SIZE_VAR);
 		if (s) {
-			sscanf(s, "%d", &warn_claim_size);
+			warn_claim_size = _oidc_str_to_int(s);
 			oidc_debug(r, "warn_claim_size set to %d in environment variable %s", warn_claim_size, OIDC_SESSION_WARN_CLAIM_SIZE_VAR);
 		}
 	}
@@ -543,7 +543,7 @@ void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, const c
 
 		if (is_allowed == TRUE) {
 			s = value ? oidc_util_encode_json_object(r, value, JSON_COMPACT | JSON_ENCODE_ANY) : "";
-			if (strlen(s) > warn_claim_size)
+			if (_oidc_strlen(s) > warn_claim_size)
 				oidc_warn(r, "(encoded) value size of [%s] claim \"%s\" is larger than %d; consider blacklisting it in OIDCBlackListedClaims "
 						  "or increase the warning limit with environment variable %s", session_key, name, warn_claim_size, OIDC_SESSION_WARN_CLAIM_SIZE_VAR);
 			json_object_set(dst, name, value);

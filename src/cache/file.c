@@ -414,7 +414,7 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section, const
 	/* construct the metadata for this cache entry in the header info */
 	oidc_cache_file_info_t info;
 	info.expire = expiry;
-	info.len = strlen(value) + 1;
+	info.len = _oidc_strlen(value) + 1;
 
 	/* write the header */
 	if ((rc = oidc_cache_file_write(r, path, fd, &info, sizeof(oidc_cache_file_info_t)))

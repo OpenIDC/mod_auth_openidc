@@ -293,10 +293,10 @@ static apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *section,
 	}
 
 	/* do sanity checking on the string value */
-	if ((*value) && (strlen(*value) != len)) {
+	if ((*value) && (_oidc_strlen(*value) != len)) {
 		oidc_error(r,
-				"apr_memcache_getp returned less bytes than expected: strlen(value) [%zu] != len [%" APR_SIZE_T_FMT "]",
-				strlen(*value), len);
+				"apr_memcache_getp returned less bytes than expected: _oidc_strlen(value) [%zu] != len [%" APR_SIZE_T_FMT "]",
+				_oidc_strlen(*value), len);
 		return FALSE;
 	}
 
@@ -338,7 +338,7 @@ static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *section,
 		/* store it */
 		rv = apr_memcache_set(context->cache_memcache,
 				oidc_cache_memcache_get_key(r->pool, section, key),
-				(char *) value, strlen(value), timeout, 0);
+				(char *) value, _oidc_strlen(value), timeout, 0);
 
 		if (rv != APR_SUCCESS) {
 			oidc_cache_memcache_log_status_error(r, "apr_memcache_set", rv);

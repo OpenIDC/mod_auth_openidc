@@ -47,6 +47,9 @@
 #define MOD_AUTH_OPENIDC_JOSE_H_
 
 #include <stdint.h>
+#define __STDC_WANT_LIB_EXT1__ 1
+#include <string.h>
+
 #include "apr_pools.h"
 #include "apr_tables.h"
 #include "apr_hash.h"
@@ -55,6 +58,16 @@
 #include "jansson.h"
 
 #include "cjose/cjose.h"
+
+#ifdef __STDC_LIB_EXT1__
+#define _oidc_memset(b, c, __len) memset_s(b, __len, c, __len)
+#define _oidc_memcpy(__dst, __src, __n) memcpy_s(__dst, __src, __n)
+#else
+#define _oidc_memset(b, c, __len) memset(b, c, __len)
+#define _oidc_memcpy(__dst, __src, __n) memcpy(__dst, __src, __n)
+#endif
+
+#define _oidc_strlen(s) ( s ? strlen(s) : 0 )
 
 #define OIDC_JOSE_ALG_SHA1 "sha1"
 #define OIDC_JOSE_ALG_SHA256 "sha256"
@@ -146,9 +159,7 @@ typedef struct oidc_jwk_t {
 	/* key identifier */
 	char *kid;
 	/* X.509 Certificate Chain */
-	unsigned char **x5c;
-	/* the size of the certificate chain */
-	int x5c_count;
+	apr_array_header_t *x5c;
 	/* X.509 Certificate SHA-1 Thumbprint */
 	char *x5t;
 	/* X.509 Certificate SHA-256 Thumbprint */

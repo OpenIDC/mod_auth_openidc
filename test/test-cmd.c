@@ -110,7 +110,7 @@ int sign(int argc, char **argv, apr_pool_t *pool) {
 	cjose_header_t *hdr = cjose_header_new(&cjose_err);
 	cjose_header_set(hdr, "alg", argv[2], &cjose_err);
 
-	cjose_jwk_t *jwk = cjose_jwk_import(s_jwk, strlen(s_jwk), &cjose_err);
+	cjose_jwk_t *jwk = cjose_jwk_import(s_jwk, _oidc_strlen(s_jwk), &cjose_err);
 	if (jwk == NULL) {
 		fprintf(stderr,
 				"could not import JWK: %s [file: %s, function: %s, line: %ld]\n",
@@ -120,7 +120,7 @@ int sign(int argc, char **argv, apr_pool_t *pool) {
 	}
 
 	cjose_jws_t *jws = cjose_jws_sign(jwk, hdr, (const uint8_t *) s_jwt,
-			strlen(s_jwt), &cjose_err);
+			_oidc_strlen(s_jwt), &cjose_err);
 	if (jws == NULL) {
 		fprintf(stderr,
 				"could not sign JWS: %s [file: %s, function: %s, line: %ld]\n",
@@ -159,7 +159,7 @@ int verify(int argc, char **argv, apr_pool_t *pool) {
 
 	cjose_err cjose_err;
 
-	cjose_jws_t *jws = cjose_jws_import(s_jwt, strlen(s_jwt), &cjose_err);
+	cjose_jws_t *jws = cjose_jws_import(s_jwt, _oidc_strlen(s_jwt), &cjose_err);
 	if (jws == NULL) {
 		fprintf(stderr,
 				"could not import JWS: %s [file: %s, function: %s, line: %ld]\n",
@@ -365,7 +365,7 @@ int enckey(int argc, char **argv, apr_pool_t *pool) {
 	request_rec *r = request_setup(pool);
 
 	oidc_jwk_t *jwk = NULL;
-	if (oidc_util_create_symmetric_key(r, argv[2], argc > 4 ? atoi(argv[4]) : 0,
+	if (oidc_util_create_symmetric_key(r, argv[2], argc > 4 ? _oidc_str_to_int(argv[4]) : 0,
 			argc > 3 ? argv[3] : NULL, FALSE, &jwk) == FALSE) {
 		fprintf(stderr, "oidc_util_create_symmetric_key failed");
 		return -1;
@@ -407,7 +407,7 @@ int hash_base64url(int argc, char **argv, apr_pool_t *pool) {
 		uint8_t *bytes = NULL;
 		size_t outlen = 0;
 		cjose_err err;
-		if (cjose_base64url_decode(argv[2], strlen(argv[2]), &bytes, &outlen,
+		if (cjose_base64url_decode(argv[2], _oidc_strlen(argv[2]), &bytes, &outlen,
 				&err) == FALSE) {
 			fprintf(stderr, "cjose_base64_decode failed: %s", err.message);
 			return -1;
@@ -434,7 +434,7 @@ int hash_base64url(int argc, char **argv, apr_pool_t *pool) {
 int timestamp(int argc, char **argv, apr_pool_t *pool) {
 	if (argc <= 2)
 		return usage(argc, argv, "timestamp <seconds>");
-	long delta = strtol(argv[2], NULL, 10);
+	int delta = _oidc_str_to_int(argv[2]);
 	apr_time_t t1 = apr_time_now() + apr_time_from_sec(delta);
 	char *s = apr_psprintf(pool, "%" APR_TIME_T_FMT, t1);
 	fprintf(stderr, "timestamp (1) = %s\n", s);
@@ -458,7 +458,7 @@ int uuid(int argc, char **argv, apr_pool_t *pool) {
 	oidc_session_t z;
 
 	if (argc > 2)
-		n = atoi(argv[2]);
+		n = _oidc_str_to_int(argv[2]);
 
 	request_rec *r = request_setup(pool);
 

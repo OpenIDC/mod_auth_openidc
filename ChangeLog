@@ -1,3 +1,7 @@
+03/27/2023
+- fix code scanning alerts:
+- bump to 2.4.13.2rc2
+  
 03/24/2023
 - add support for Elliptic Curve signing/encryption keys in addtion to RSA keys,
   i.e. client keys configured in OIDCPrivateKeyFiles/OIDCPublicKeyFiles, published on OIDCClientJwksUri

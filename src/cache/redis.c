@@ -339,8 +339,8 @@ apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section, const char 
 	}
 
 	/* do a sanity check on the returned value */
-	if ((reply->str == NULL) || (reply->len != strlen(reply->str))) {
-		oidc_error(r, "redisCommand reply->len (%d) != strlen(reply->str): '%s'", (int )reply->len, reply->str);
+	if ((reply->str == NULL) || (reply->len != _oidc_strlen(reply->str))) {
+		oidc_error(r, "redisCommand reply->len (%d) != _oidc_strlen(reply->str): '%s'", (int )reply->len, reply->str);
 		goto end;
 	}
 

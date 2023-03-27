@@ -466,7 +466,7 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 			return FALSE;
 
 		json_t *active = json_object_get(result, OIDC_PROTO_ACTIVE);
-		apr_time_t cache_until;
+		apr_time_t cache_until = apr_time_now() + apr_time_from_sec(60);
 		if (active != NULL) {
 
 			if (json_is_boolean(active)) {

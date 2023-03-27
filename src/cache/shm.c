@@ -151,10 +151,10 @@ static char *oidc_cache_shm_get_key(request_rec *r, const char *section,
 	char *section_key = apr_psprintf(r->pool, "%s:%s", section, key);
 
 	/* check that the passed in key is valid */
-	if (strlen(section_key) >= OIDC_CACHE_SHM_KEY_MAX) {
+	if (_oidc_strlen(section_key) >= OIDC_CACHE_SHM_KEY_MAX) {
 		oidc_error(r,
 				"could not construct cache key since key size is too large (%d >= %d) (%s)",
-				(int )strlen(section_key), OIDC_CACHE_SHM_KEY_MAX, section_key);
+				(int )_oidc_strlen(section_key), OIDC_CACHE_SHM_KEY_MAX, section_key);
 		return NULL;
 	}
 
@@ -240,12 +240,12 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 
 	/* check that the passed in value is valid */
 	if ((value != NULL)
-			&& (strlen(value)
+			&& (_oidc_strlen(value)
 					> (cfg->cache_shm_entry_size_max
 							- sizeof(oidc_cache_shm_entry_t)))) {
 		oidc_error(r,
 				"could not store value since value size is too large (%lu > %lu); consider increasing " OIDCCacheShmEntrySizeMax "",
-				(unsigned long )strlen(value),
+				(unsigned long )_oidc_strlen(value),
 				(unsigned long )(cfg->cache_shm_entry_size_max
 						- sizeof(oidc_cache_shm_entry_t)));
 		return FALSE;

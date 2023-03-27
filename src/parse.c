@@ -131,7 +131,7 @@ const char *oidc_valid_dir(apr_pool_t *pool, const char *arg) {
 const char *oidc_valid_cookie_domain(apr_pool_t *pool, const char *arg) {
 	size_t sz, limit;
 	char d;
-	limit = strlen(arg);
+	limit = _oidc_strlen(arg);
 	for (sz = 0; sz < limit; sz++) {
 		d = arg[sz];
 		if ((d < '0' || d > '9') && (d < 'a' || d > 'z') && (d < 'A' || d > 'Z')
@@ -147,7 +147,7 @@ const char *oidc_valid_cookie_domain(apr_pool_t *pool, const char *arg) {
  * parse an integer value from a string
  */
 const char *oidc_parse_int(apr_pool_t *pool, const char *arg, int *int_value) {
-	char *endptr;
+	char *endptr = NULL;
 	int v = strtol(arg, &endptr, 10);
 	if ((*arg == '\0') || (*endptr != '\0')) {
 		return apr_psprintf(pool, "invalid integer value: %s", arg);
@@ -602,11 +602,11 @@ static char *oidc_parse_base64url(apr_pool_t *pool, const char *input,
  */
 static char *oidc_parse_hex(apr_pool_t *pool, const char *input, char **output,
 		int *output_len) {
-	*output_len = strlen(input) / 2;
+	*output_len = _oidc_strlen(input) / 2;
 	const char *pos = input;
-	unsigned char *val = apr_palloc(pool, *output_len);
+	unsigned char *val = apr_pcalloc(pool, *output_len);
 	size_t count = 0;
-	for (count = 0; count < (*output_len) / sizeof(unsigned char); count++) {
+	for (count = 0; (count < (*output_len) / sizeof(unsigned char)) && (pos != NULL); count++) {
 		sscanf(pos, "%2hhx", &val[count]);
 		pos += 2;
 	}
@@ -641,7 +641,7 @@ static const char *oidc_parse_key_value(apr_pool_t *pool, const char *enc,
 		return oidc_parse_hex(pool, input, key, key_len);
 	if (apr_strnatcmp(enc, OIDC_KEY_ENCODING_PLAIN) == 0) {
 		*key = apr_pstrdup(pool, input);
-		*key_len = strlen(*key);
+		*key_len = _oidc_strlen(*key);
 	}
 	return NULL;
 }
@@ -677,12 +677,12 @@ const char *oidc_parse_enc_kid_key_tuple(apr_pool_t *pool, const char *tuple,
 			*p = '\0';
 			*kid = s;
 			*key = p + 1;
-			*key_len = strlen(*key);
+			*key_len = _oidc_strlen(*key);
 		}
 	} else {
 		*kid = NULL;
 		*key = s;
-		*key_len = strlen(*key);
+		*key_len = _oidc_strlen(*key);
 	}
 
 	return rv;
@@ -1073,12 +1073,8 @@ const char *oidc_valid_string_in_array(apr_pool_t *pool, json_t *json,
 	if ((json_arr != NULL) && (json_is_array(json_arr))) {
 		for (i = 0; i < json_array_size(json_arr); i++) {
 			json_t *elem = json_array_get(json_arr, i);
-			if (!json_is_string(elem)) {
-				return apr_psprintf(pool,
-						"unhandled in-array JSON non-string object type [%d]",
-						elem->type);
+			if (!json_is_string(elem))
 				continue;
-			}
 			if (valid_function(pool, json_string_value(elem)) == NULL) {
 				found = TRUE;
 				if (value != NULL) {
