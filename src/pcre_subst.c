@@ -209,12 +209,15 @@ char* oidc_pcre_subst(apr_pool_t *pool, const struct oidc_pcre *pcre, const char
 }
 
 struct oidc_pcre* oidc_pcre_compile(apr_pool_t *pool, const char *regexp, char **error_str) {
-	struct oidc_pcre *pcre = apr_pcalloc(pool, sizeof(struct oidc_pcre));
+	struct oidc_pcre *pcre = NULL;
+	if (regexp == NULL)
+		return NULL;
+	pcre = apr_pcalloc(pool, sizeof(struct oidc_pcre));
 #ifdef HAVE_LIBPCRE2
 	int errorcode;
 	PCRE2_SIZE erroroffset;
 	pcre->preg =
-			pcre2_compile((PCRE2_SPTR) regexp, (PCRE2_SIZE) (regexp ? strlen(regexp) : 0), 0, &errorcode, &erroroffset, NULL);
+			pcre2_compile((PCRE2_SPTR) regexp, (PCRE2_SIZE) strlen(regexp), 0, &errorcode, &erroroffset, NULL);
 #else
 	const char *errorptr = NULL;
 	int erroffset;
@@ -363,7 +366,7 @@ main()
 	extra = pcre_study(ppat, 0, &err);
 	if (err != NULL)
 		fprintf(stderr, "Study %s failed: %s\n", pat, err);
-	newstr = pcre_subst(ppat, extra, str, str ? strlen(str) : 0, 0, 0, rep);
+	newstr = pcre_subst(ppat, extra, str, (str ? strlen(str) : 0), 0, 0, rep);
 	if (newstr) {
 		printf("Newstr\t%s\n", newstr);
 		pcre_free(newstr);

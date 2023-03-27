@@ -62,9 +62,11 @@
 #ifdef __STDC_LIB_EXT1__
 #define _oidc_memset(b, c, __len) memset_s(b, __len, c, __len)
 #define _oidc_memcpy(__dst, __src, __n) memcpy_s(__dst, __src, __n)
+#define _oidc_strcpy(__dst, __src) strcpy_s(__dst, __src)
 #else
 #define _oidc_memset(b, c, __len) memset(b, c, __len)
 #define _oidc_memcpy(__dst, __src, __n) memcpy(__dst, __src, __n)
+#define _oidc_strcpy(__dst, __src) strcpy(__dst, __src)
 #endif
 
 #define _oidc_strlen(s) ( s ? strlen(s) : 0 )

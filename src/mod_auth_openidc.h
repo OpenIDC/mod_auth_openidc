@@ -97,7 +97,7 @@ APLOG_USE_MODULE(auth_openidc);
 #define oidc_swarn(s, fmt, ...) oidc_slog(s, APLOG_WARNING, fmt, ##__VA_ARGS__)
 #define oidc_serror(s, fmt, ...) oidc_slog(s, APLOG_ERR, fmt, ##__VA_ARGS__)
 
-#define _oidc_str_to_int(s) (int)strtol(s, NULL, 10)
+#define _oidc_str_to_int(s) (s ? (int)strtol(s, NULL, 10) : 0)
 
 #ifndef NAMEVER
 #define NAMEVERSION "mod_auth_openidc-0.0.0"

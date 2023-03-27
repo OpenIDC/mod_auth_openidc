@@ -404,42 +404,42 @@ char* oidc_util_javascript_escape(apr_pool_t *pool, const char *s) {
         switch (*cp) {
         case '\'':
         	if (i <= outputlen - 2)
-        		(void)strcpy(&output[i], "\\'");
+        		(void)_oidc_strcpy(&output[i], "\\'");
             i += 2;
             break;
         case '"':
         	if (i <= outputlen - 2)
-        		(void)strcpy(&output[i], "\\\"");
+        		(void)_oidc_strcpy(&output[i], "\\\"");
             i += 2;
             break;
         case '\\':
         	if (i <= outputlen - 2)
-        		(void)strcpy(&output[i], "\\\\");
+        		(void)_oidc_strcpy(&output[i], "\\\\");
             i += 2;
             break;
         case '/':
         	if (i <= outputlen - 2)
-        		(void)strcpy(&output[i], "\\/");
+        		(void)_oidc_strcpy(&output[i], "\\/");
             i += 2;
             break;
         case 0x0D:
         	if (i <= outputlen - 2)
-        		(void)strcpy(&output[i], "\\r");
+        		(void)_oidc_strcpy(&output[i], "\\r");
             i += 2;
             break;
         case 0x0A:
         	if (i <= outputlen - 2)
-        		(void)strcpy(&output[i], "\\n");
+        		(void)_oidc_strcpy(&output[i], "\\n");
             i += 2;
             break;
         case '<':
         	if (i <= outputlen - 4)
-        		(void)strcpy(&output[i], "\\x3c");
+        		(void)_oidc_strcpy(&output[i], "\\x3c");
             i += 4;
             break;
         case '>':
         	if (i <= outputlen - 4)
-        		(void)strcpy(&output[i], "\\x3e");
+        		(void)_oidc_strcpy(&output[i], "\\x3e");
             i += 4;
             break;
         default:
@@ -2175,7 +2175,7 @@ void oidc_util_set_app_infos(request_rec *r, json_t *j_attrs,
 
 		} else if (json_is_integer(j_value)) {
 
-			if (sprintf(s_int, "%ld", (long) json_integer_value(j_value)) > 0) {
+			if (snprintf(s_int, 255, "%ld", (long) json_integer_value(j_value)) > 0) {
 				/* set long value in the application header whose name is based on the key and the prefix */
 				oidc_util_set_app_info(r, s_key, s_int, claim_prefix, as_header,
 						as_env_var, pass_as);
