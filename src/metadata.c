@@ -409,9 +409,9 @@ static apr_byte_t oidc_metadata_client_is_valid(request_rec *r,
  * checks if a parsed JWKs file is a valid one, cq. contains "keys"
  */
 static apr_byte_t oidc_metadata_jwks_is_valid(request_rec *r,
-		const char *url, json_t *j_jwks) {
+		const char *url, const json_t *j_jwks) {
 
-	json_t *keys = json_object_get(j_jwks, OIDC_METADATA_KEYS);
+	const json_t *keys = json_object_get(j_jwks, OIDC_METADATA_KEYS);
 	if ((keys == NULL) || (!json_is_array(keys))) {
 		oidc_error(r,
 				"JWKs JSON metadata obtained from URL \"%s\" did not contain a \"" OIDC_METADATA_KEYS "\" array",
@@ -971,7 +971,7 @@ static void oidc_metadata_parse_boolean(request_rec *r, json_t *json,
 		const char *key, int *value, int default_value) {
 	int int_value = 0;
 	char *s_value = NULL;
-	if (oidc_json_object_get_bool(r->pool, json, key, &int_value,
+	if (oidc_json_object_get_bool(json, key, &int_value,
 			default_value) == FALSE) {
 		oidc_json_object_get_string(r->pool, json, key, &s_value,
 				NULL);
@@ -982,8 +982,7 @@ static void oidc_metadata_parse_boolean(request_rec *r, json_t *json,
 				int_value = default_value;
 			}
 		} else {
-			oidc_json_object_get_int(r->pool, json, key, &int_value,
-					default_value);
+			oidc_json_object_get_int(json, key, &int_value, default_value);
 		}
 	}
 	*value = (int_value != 0) ? TRUE : FALSE;
@@ -1175,11 +1174,11 @@ void oidc_metadata_get_valid_string(request_rec *r, json_t *json,
 /*
  * get an integer value from a JSON object and see if it is a valid value according to the specified validation function
  */
-void oidc_metadata_get_valid_int(request_rec *r, json_t *json, const char *key,
+void oidc_metadata_get_valid_int(request_rec *r, const json_t *json, const char *key,
 		oidc_valid_int_function_t valid_int_function, int *int_value,
 		int default_int_value) {
 	int v = 0;
-	oidc_json_object_get_int(r->pool, json, key, &v, default_int_value);
+	oidc_json_object_get_int(json, key, &v, default_int_value);
 	const char *rv = valid_int_function(r->pool, v);
 	if (rv != NULL) {
 		oidc_warn(r,

@@ -1765,11 +1765,15 @@ static char* test_is_auth_capable_request(request_rec *r) {
 
 static char* test_open_redirect(request_rec *r) {
 	apr_byte_t rc = FALSE;
-	char *err_str = NULL, *err_desc = NULL, *msg = NULL;
-	char *filename = NULL;
+	char *err_str = NULL;
+	char *err_desc = NULL;
+	const char *msg = NULL;
+	const char *filename = NULL;
 	char line_buf[8096];
 	apr_file_t *f;
 	size_t line_s;
+	char *ptr = line_buf;
+
 	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
 	// https://github.com/payloadbox/open-redirect-payload-list
 	filename = apr_psprintf(r->pool, "%s/%s", dir, "/test/open-redirect-payload-list.txt");
@@ -1783,7 +1787,7 @@ static char* test_open_redirect(request_rec *r) {
 	while (1) {
 		if (apr_file_gets(line_buf, sizeof(line_buf), f) != APR_SUCCESS)
 			break;
-		line_s = _oidc_strlen(line_buf);
+		line_s = _oidc_strlen(ptr);
 		line_buf[--line_s] = '\0';
 		TST_OPEN_REDIRECT(line_buf, FALSE);
 	}

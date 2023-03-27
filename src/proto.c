@@ -2044,8 +2044,7 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 	}
 
 	/* get the expires_in value */
-	oidc_json_object_get_int(r->pool, result, OIDC_PROTO_EXPIRES_IN, expires_in,
-			-1);
+	oidc_json_object_get_int(result, OIDC_PROTO_EXPIRES_IN, expires_in, -1);
 
 	/* get the refresh_token from the parsed response */
 	oidc_json_object_get_string(r->pool, result, OIDC_PROTO_REFRESH_TOKEN,

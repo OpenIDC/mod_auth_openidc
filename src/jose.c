@@ -1532,7 +1532,7 @@ apr_byte_t oidc_jwk_pem_bio_to_jwk(apr_pool_t *pool, BIO *input,
 	apr_byte_t rv = FALSE;
 	char *x509_pem_encoded_certificate = NULL;
 	unsigned char *x509_bytes = NULL;
-	int b64_len, x509_cert_length;
+	int x509_cert_length = 0;
 	char *fp = NULL;
 	int fp_len = 0;
 
