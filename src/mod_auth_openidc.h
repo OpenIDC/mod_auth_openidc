@@ -475,6 +475,7 @@ typedef struct oidc_cfg {
 	apr_byte_t x_forwarded_headers;
 } oidc_cfg;
 
+void oidc_pre_config_init();
 int oidc_check_user_id(request_rec *r);
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 authz_status oidc_authz_checker_claim(request_rec *r, const char *require_args, const void *parsed_require_args);

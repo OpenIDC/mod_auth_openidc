@@ -406,15 +406,16 @@ int hash_base64url(int argc, char **argv, apr_pool_t *pool) {
 
 		uint8_t *bytes = NULL;
 		size_t outlen = 0;
-		cjose_err err;
+		cjose_err cjose_err;
 		if (cjose_base64url_decode(argv[2], _oidc_strlen(argv[2]), &bytes, &outlen,
-				&err) == FALSE) {
-			fprintf(stderr, "cjose_base64_decode failed: %s", err.message);
+				&cjose_err) == FALSE) {
+			fprintf(stderr, "cjose_base64_decode failed: %s", cjose_err.message);
 			return -1;
 		}
+		oidc_jose_error_t err;
 		if (oidc_jose_hash_and_base64url_encode(r->pool, algo,
-				(const char *) bytes, outlen, &output) == FALSE) {
-			fprintf(stderr, "oidc_jose_hash_and_base64url_encode failed");
+				(const char *) bytes, outlen, &output, &err) == FALSE) {
+			fprintf(stderr, "oidc_jose_hash_and_base64url_encode failed: %s", err.text);
 			return -1;
 		}
 	} else {
@@ -490,7 +491,7 @@ int main(int argc, char **argv, char **env) {
 		return -1;
 	}
 
-	OpenSSL_add_all_algorithms();
+	oidc_pre_config_init();
 
 	apr_pool_t *pool = NULL;
 	apr_pool_create(&pool, NULL);
@@ -518,6 +519,8 @@ int main(int argc, char **argv, char **env) {
 
 	if (_oidc_strcmp(argv[1], "uuid") == 0)
 		return uuid(argc, argv, pool);
+
+	EVP_cleanup();
 
 	apr_pool_destroy(pool);
 	apr_terminate();

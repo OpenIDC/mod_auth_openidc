@@ -461,21 +461,22 @@ apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk,
  */
 apr_byte_t oidc_jose_hash_and_base64url_encode(apr_pool_t *pool,
 		const char *openssl_hash_algo, const char *input, int input_len,
-		char **output) {
-	oidc_jose_error_t err;
+		char **output, oidc_jose_error_t *err) {
 	unsigned char *hashed = NULL;
 	unsigned int hashed_len = 0;
 	if (oidc_jose_hash_bytes(pool, openssl_hash_algo,
 			(const unsigned char*) input, input_len, &hashed, &hashed_len,
-			&err) == FALSE) {
+			err) == FALSE)
 		return FALSE;
-	}
 	char *out = NULL;
 	size_t out_len;
 	cjose_err cjose_err;
 	if (cjose_base64url_encode(hashed, hashed_len, &out, &out_len,
-			&cjose_err) == FALSE)
+			&cjose_err) == FALSE) {
+		oidc_jose_error(err, "cjose_base64url_encode failed: %s",
+				oidc_cjose_e2s(pool, cjose_err));
 		return FALSE;
+	}
 	*output = apr_pstrmemdup(pool, out, out_len);
 	cjose_get_dealloc()(out);
 	return TRUE;
@@ -495,8 +496,8 @@ static apr_byte_t oidc_jwk_set_or_generate_kid(apr_pool_t *pool,
 	} else {
 		/* calculate a unique key identifier (kid) by fingerprinting the key params */
 		if (oidc_jose_hash_and_base64url_encode(pool, OIDC_JOSE_ALG_SHA256,
-				key_params, key_params_len, &jwk_kid) == FALSE) {
-			oidc_jose_error(err, "oidc_jose_hash_and_base64urlencode failed");
+				key_params, key_params_len, &jwk_kid, err) == FALSE) {
+			//oidc_jose_error(err, "oidc_jose_hash_and_base64urlencode failed");
 			return FALSE;
 		}
 	}
@@ -1580,20 +1581,15 @@ apr_byte_t oidc_jwk_pem_bio_to_jwk(apr_pool_t *pool, BIO *input,
 				oidc_jose_error_openssl(err, "i2d_X509");
 				goto end;
 			}
+
 			/* populate x5t */
-			if (oidc_jose_hash_and_base64url_encode(pool, OIDC_JOSE_ALG_SHA1,
+			oidc_jose_hash_and_base64url_encode(pool, OIDC_JOSE_ALG_SHA1,
 					(const char*) x509_bytes, x509_cert_length,
-					&(*oidc_jwk)->x5t) == FALSE) {
-				oidc_jose_error(err,
-						"oidc_jose_hash_and_base64urlencode failed");
-			}
+					&(*oidc_jwk)->x5t, err);
 			/* populate x5t_S256 */
-			if (oidc_jose_hash_and_base64url_encode(pool, OIDC_JOSE_ALG_SHA256,
+			oidc_jose_hash_and_base64url_encode(pool, OIDC_JOSE_ALG_SHA256,
 					(const char*) x509_bytes, x509_cert_length,
-					&(*oidc_jwk)->x5t_S256) == FALSE) {
-				oidc_jose_error(err,
-						"oidc_jose_hash_and_base64urlencode failed");
-			}
+					&(*oidc_jwk)->x5t_S256, err);
 
 			while (oidc_jwk_x509_read(pool, input, &x509_pem_encoded_certificate, NULL, NULL, err) == TRUE)
 				*(const char**) apr_array_push((*oidc_jwk)->x5c) = x509_pem_encoded_certificate;

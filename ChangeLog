@@ -2,6 +2,8 @@
 - CVE-2023-28625: prevent core dump when OIDCStripCookies is set and a crafted Cookie header is supplied
   https://github.com/OpenIDC/mod_auth_openidc/security/advisories/GHSA-f5xw-rvfr-24qr
 - replace apr_strnatcmp/strcmp with _oidc_strcmp and replace strncmp with _oidc_strncmp
+- handle OpenSSL initialization in new oidc_pre_config_init function:
+  this allows omitting "kid" in OIDCPublicKeyFiles (ao.) when linked against OpenSSL 1.0.x
 
 03/27/2023
 - fix code scanning alerts

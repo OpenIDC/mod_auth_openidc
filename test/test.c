@@ -1956,12 +1956,11 @@ int main(int argc, char **argv, char **env) {
 		return -1;
 	}
 
+	oidc_pre_config_init();
+
 	apr_pool_t *pool = NULL;
 	apr_pool_create(&pool, NULL);
-
 	request_rec *r = test_setup(pool);
-
-	OpenSSL_add_all_algorithms();
 
 	char *result = all_tests(pool, r);
 	if (result != 0) {

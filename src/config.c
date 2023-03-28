@@ -2779,7 +2779,6 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 	);
 
 	curl_global_init(CURL_GLOBAL_ALL);
-	OpenSSL_add_all_digests();
 
 #if ((OPENSSL_VERSION_NUMBER < 0x10100000) && defined (OPENSSL_THREADS) && APR_HAS_THREADS)
 	ssl_num_locks = CRYPTO_num_locks();
@@ -2978,9 +2977,23 @@ static apr_status_t oidc_filter_in_filter(ap_filter_t *f,
 }
 
 /*
+ * initialize before the post config handler runs
+ */
+void oidc_pre_config_init() {
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+	OPENSSL_init_crypto(0, NULL);
+#else
+	ERR_load_crypto_strings();
+	OpenSSL_add_all_algorithms();
+	OpenSSL_add_all_digests();
+#endif
+}
+
+/*
  * register our authentication and authorization functions
  */
 void oidc_register_hooks(apr_pool_t *pool) {
+	oidc_pre_config_init();
 	ap_hook_post_config(oidc_post_config, NULL, NULL, APR_HOOK_LAST);
 	ap_hook_child_init(oidc_child_init, NULL, NULL, APR_HOOK_MIDDLE);
 	ap_hook_handler(oidc_content_handler, NULL, NULL, APR_HOOK_FIRST);
