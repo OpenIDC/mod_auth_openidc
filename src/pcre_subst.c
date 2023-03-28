@@ -138,7 +138,7 @@ edit(const char *str, int len, const char *rep, int nmat, const int *ovec)
 	char *res, *cp;
 	int replen[OIDC_PCRE_MAXCAPTURE];
 	const char *repstr[OIDC_PCRE_MAXCAPTURE];
-	_oidc_memset(repstr, '\0', OIDC_PCRE_MAXCAPTURE);
+	memset(repstr, '\0', OIDC_PCRE_MAXCAPTURE);
 	if ((str == NULL) || (mvec == NULL)) return NULL;
 	nmat--;
 	ovec += 2;
