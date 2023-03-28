@@ -1,5 +1,10 @@
+03/28/2023
+- CVE-2023-28625: prevent core dump when OIDCStripCookies is set and a crafted Cookie header is supplied
+  https://github.com/OpenIDC/mod_auth_openidc/security/advisories/GHSA-f5xw-rvfr-24qr
+- release 2.4.13.2
+
 03/27/2023
-- fix code scanning alerts:
+- fix code scanning alerts
 - bump to 2.4.13.2rc2
   
 03/24/2023
