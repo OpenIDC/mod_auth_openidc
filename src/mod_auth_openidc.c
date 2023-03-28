@@ -124,7 +124,7 @@ void oidc_scrub_headers(request_rec *r) {
 	const char *prefix = oidc_cfg_claim_prefix(r);
 	apr_hash_t *hdrs = apr_hash_make(r->pool);
 
-	if (apr_strnatcmp(prefix, "") == 0) {
+	if (_oidc_strcmp(prefix, "") == 0) {
 		if ((cfg->white_listed_claims != NULL)
 				&& (apr_hash_count(cfg->white_listed_claims) > 0))
 			hdrs = apr_hash_overlay(r->pool, cfg->white_listed_claims, hdrs);
@@ -180,7 +180,7 @@ void oidc_strip_cookies(request_rec *r) {
 
 			for (i = 0; i < strip->nelts; i++) {
 				name = ((const char**) strip->elts)[i];
-				if ((strncmp(cookie, name, _oidc_strlen(name)) == 0)
+				if ((_oidc_strncmp(cookie, name, _oidc_strlen(name)) == 0)
 						&& (cookie[_oidc_strlen(name)] == OIDC_CHAR_EQUAL)) {
 					oidc_debug(r, "stripping: %s", name);
 					break;
@@ -394,7 +394,7 @@ static const char* oidc_original_request_method(request_rec *r, oidc_cfg *cfg,
 			return OIDC_METHOD_GET;
 
 		const char *content_type = oidc_util_hdr_in_content_type_get(r);
-		if ((r->method_number == M_POST) && (apr_strnatcmp(content_type,
+		if ((r->method_number == M_POST) && (_oidc_strcmp(content_type,
 				OIDC_CONTENT_TYPE_FORM_ENCODED) == 0))
 			method = OIDC_METHOD_FORM_POST;
 	}
@@ -420,7 +420,7 @@ apr_byte_t oidc_post_preserve_javascript(request_rec *r, const char *location,
 
 	const char *method = oidc_original_request_method(r, cfg, FALSE);
 
-	if (apr_strnatcmp(method, OIDC_METHOD_FORM_POST) != 0)
+	if (_oidc_strcmp(method, OIDC_METHOD_FORM_POST) != 0)
 		return FALSE;
 
 	/* read the parameters that are POST-ed to us */
@@ -568,7 +568,7 @@ static int oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c,
 					*cookie = '\0';
 					cookie++;
 					if ((currentCookieName == NULL)
-							|| (apr_strnatcmp(cookieName, currentCookieName) != 0)) {
+							|| (_oidc_strcmp(cookieName, currentCookieName) != 0)) {
 						oidc_proto_state_t *proto_state =
 								oidc_proto_state_from_cookie(r, c, cookie);
 						if (proto_state != NULL) {
@@ -640,7 +640,7 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c, const ch
 	/* calculate the hash of the browser fingerprint concatenated with the nonce */
 	char *calc = oidc_get_browser_state_hash(r, c, nonce);
 	/* compare the calculated hash with the value provided in the authorization response */
-	if (apr_strnatcmp(calc, state) != 0) {
+	if (_oidc_strcmp(calc, state) != 0) {
 		oidc_error(r, "calculated state from cookie does not match state parameter passed back in URL: \"%s\" != \"%s\"", state, calc);
 		oidc_proto_state_destroy(*proto_state);
 		return FALSE;
@@ -946,7 +946,7 @@ static apr_byte_t oidc_check_cookie_domain(request_rec *r, oidc_cfg *cfg,
 					cfg->cookie_domain : oidc_get_current_url_host(r, cfg->x_forwarded_headers);
 	const char *s_cookie_domain = oidc_session_get_cookie_domain(r, session);
 	if ((s_cookie_domain == NULL)
-			|| (apr_strnatcmp(c_cookie_domain, s_cookie_domain) != 0)) {
+			|| (_oidc_strcmp(c_cookie_domain, s_cookie_domain) != 0)) {
 		oidc_warn(r,
 				"aborting: detected attempt to play cookie against a different domain/host than issued for! (issued=%s, current=%s)",
 				s_cookie_domain, c_cookie_domain);
@@ -1523,7 +1523,7 @@ static apr_byte_t oidc_authorization_response_match_state(request_rec *r,
 
 	oidc_debug(r, "enter (state=%s)", state);
 
-	if ((state == NULL) || (apr_strnatcmp(state, "") == 0)) {
+	if ((state == NULL) || (_oidc_strcmp(state, "") == 0)) {
 		oidc_error(r, "state parameter is not set");
 		return FALSE;
 	}
@@ -1574,7 +1574,7 @@ static int oidc_authorization_response_error(request_rec *r, oidc_cfg *c,
 		prompt = apr_pstrdup(r->pool, prompt);
 	oidc_proto_state_destroy(proto_state);
 	if ((prompt != NULL)
-			&& (apr_strnatcmp(prompt, OIDC_PROTO_PROMPT_NONE) == 0)) {
+			&& (_oidc_strcmp(prompt, OIDC_PROTO_PROMPT_NONE) == 0)) {
 		return oidc_session_redirect_parent_window_to_logout(r, c);
 	}
 	return oidc_util_html_send_error(r, c->error_template,
@@ -1873,7 +1873,7 @@ static apr_byte_t oidc_handle_browser_back(request_rec *r, const char *r_state,
 		o_url = oidc_session_get_original_url(r, session);
 
 		if ((r_state != NULL) && (s_state != NULL)
-				&& (apr_strnatcmp(r_state, s_state) == 0)) {
+				&& (_oidc_strcmp(r_state, s_state) == 0)) {
 
 			/* log the browser back event detection */
 			oidc_warn(r,
@@ -1924,7 +1924,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 				"invalid authorization response state and no default SSO URL is set, sending an error...");
 		// if content was already returned via html/http send then don't return 500
 		// but send 200 to avoid extraneous internal error document text to be sent
-		return ((r->user) && (strncmp(r->user, "", 1) == 0)) ?
+		return ((r->user) && (_oidc_strncmp(r->user, "", 1) == 0)) ?
 				OK :
 				HTTP_BAD_REQUEST;
 	}
@@ -1974,12 +1974,12 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 
 		/* session management: if the user in the new response is not equal to the old one, error out */
 		if ((prompt != NULL)
-				&& (apr_strnatcmp(prompt, OIDC_PROTO_PROMPT_NONE) == 0)) {
+				&& (_oidc_strcmp(prompt, OIDC_PROTO_PROMPT_NONE) == 0)) {
 			// TOOD: actually need to compare sub? (need to store it in the session separately then
 			//const char *sub = NULL;
 			//oidc_session_get(r, session, "sub", &sub);
-			//if (apr_strnatcmp(sub, jwt->payload.sub) != 0) {
-			if (apr_strnatcmp(session->remote_user, r->user) != 0) {
+			//if (_oidc_strcmp(sub, jwt->payload.sub) != 0) {
+			if (_oidc_strcmp(session->remote_user, r->user) != 0) {
 				oidc_warn(r,
 						"user set from new id_token is different from current one");
 				oidc_jwt_destroy(jwt);
@@ -2025,7 +2025,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 			original_url, original_method);
 
 	/* check whether form post data was preserved; if so restore it */
-	if (apr_strnatcmp(original_method, OIDC_METHOD_FORM_POST) == 0) {
+	if (_oidc_strcmp(original_method, OIDC_METHOD_FORM_POST) == 0) {
 		return oidc_request_post_preserved_restore(r, original_url);
 	}
 
@@ -2058,7 +2058,7 @@ static int oidc_handle_post_authorization_response(request_rec *r, oidc_cfg *c,
 	if ((apr_table_elts(params)->nelts < 1)
 			|| ((apr_table_elts(params)->nelts == 1)
 					&& apr_table_get(params, OIDC_PROTO_RESPONSE_MODE)
-					&& (apr_strnatcmp(
+					&& (_oidc_strcmp(
 							apr_table_get(params, OIDC_PROTO_RESPONSE_MODE),
 							OIDC_PROTO_RESPONSE_MODE_FRAGMENT) == 0))) {
 		return oidc_util_html_send_error(r, c->error_template,
@@ -2343,8 +2343,8 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	_oidc_memset(&r_uri, 0, sizeof(apr_uri_t));
 	apr_uri_parse(r->pool, original_url, &o_uri);
 	apr_uri_parse(r->pool, oidc_get_redirect_uri(r, c), &r_uri);
-	if ((apr_strnatcmp(o_uri.scheme, r_uri.scheme) != 0)
-			&& (apr_strnatcmp(r_uri.scheme, "https") == 0)) {
+	if ((_oidc_strcmp(o_uri.scheme, r_uri.scheme) != 0)
+			&& (_oidc_strcmp(r_uri.scheme, "https") == 0)) {
 		oidc_error(r,
 				"the URL scheme (%s) of the configured " OIDCRedirectURI " does not match the URL scheme of the URL being accessed (%s): the \"state\" and \"session\" cookies will not be shared between the two!",
 				r_uri.scheme, o_uri.scheme);
@@ -2353,9 +2353,9 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 	}
 
 	if (c->cookie_domain == NULL) {
-		if (apr_strnatcmp(o_uri.hostname, r_uri.hostname) != 0) {
+		if (_oidc_strcmp(o_uri.hostname, r_uri.hostname) != 0) {
 			char *p = strstr(o_uri.hostname, r_uri.hostname);
-			if ((p == NULL) || (apr_strnatcmp(r_uri.hostname, p) != 0)) {
+			if ((p == NULL) || (_oidc_strcmp(r_uri.hostname, p) != 0)) {
 				oidc_error(r,
 						"the URL hostname (%s) of the configured " OIDCRedirectURI " does not match the URL hostname of the URL being accessed (%s): the \"state\" and \"session\" cookies will not be shared between the two!",
 						r_uri.hostname, o_uri.hostname);
@@ -2400,9 +2400,9 @@ static int oidc_target_link_uri_matches_configuration(request_rec *r,
 
 	if (cfg->cookie_domain == NULL) {
 		/* cookie_domain set: see if the target_link_uri matches the redirect_uri host (because the session cookie will be set host-wide) */
-		if (apr_strnatcmp(o_uri.hostname, r_uri.hostname) != 0) {
+		if (_oidc_strcmp(o_uri.hostname, r_uri.hostname) != 0) {
 			char *p = strstr(o_uri.hostname, r_uri.hostname);
-			if ((p == NULL) || (apr_strnatcmp(r_uri.hostname, p) != 0)) {
+			if ((p == NULL) || (_oidc_strcmp(r_uri.hostname, p) != 0)) {
 				oidc_error(r,
 						"the URL hostname (%s) of the configured " OIDCRedirectURI " does not match the URL hostname of the \"target_link_uri\" (%s): aborting to prevent an open redirect.",
 						r_uri.hostname, o_uri.hostname);
@@ -2412,7 +2412,7 @@ static int oidc_target_link_uri_matches_configuration(request_rec *r,
 	} else {
 		/* cookie_domain set: see if the target_link_uri is within the cookie_domain */
 		char *p = strstr(o_uri.hostname, cfg->cookie_domain);
-		if ((p == NULL) || (apr_strnatcmp(cfg->cookie_domain, p) != 0)) {
+		if ((p == NULL) || (_oidc_strcmp(cfg->cookie_domain, p) != 0)) {
 			oidc_error(r,
 					"the domain (%s) configured in " OIDCCookieDomain " does not match the URL hostname (%s) of the \"target_link_uri\" (%s): aborting to prevent an open redirect.",
 					cfg->cookie_domain, o_uri.hostname, target_link_uri);
@@ -2588,7 +2588,7 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 
 		/* compare CSRF cookie value with query parameter value */
 		if ((csrf_query == NULL)
-				|| apr_strnatcmp(csrf_query, csrf_cookie) != 0) {
+				|| _oidc_strcmp(csrf_query, csrf_cookie) != 0) {
 			oidc_warn(r,
 					"CSRF protection failed, no Discovery and dynamic client registration will be allowed");
 			csrf_cookie = NULL;
@@ -2632,7 +2632,7 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 	if (c->metadata_dir == NULL) {
 		if ((oidc_provider_static_config(r, c, &provider) == TRUE)
 				&& (issuer != NULL)) {
-			if (apr_strnatcmp(provider->issuer, issuer) != 0) {
+			if (_oidc_strcmp(provider->issuer, issuer) != 0) {
 				return oidc_util_html_send_error(r, c->error_template,
 						"Invalid Request",
 						apr_psprintf(r->pool,
@@ -2733,14 +2733,14 @@ static apr_uint32_t oidc_transparent_pixel[17] = { 0x474e5089, 0x0a1a0a0d,
 
 static apr_byte_t oidc_is_front_channel_logout(const char *logout_param_value) {
 	return ((logout_param_value != NULL)
-			&& ((apr_strnatcmp(logout_param_value,
+			&& ((_oidc_strcmp(logout_param_value,
 					OIDC_GET_STYLE_LOGOUT_PARAM_VALUE) == 0)
-					|| (apr_strnatcmp(logout_param_value,
+					|| (_oidc_strcmp(logout_param_value,
 							OIDC_IMG_STYLE_LOGOUT_PARAM_VALUE) == 0)));
 }
 
 static apr_byte_t oidc_is_back_channel_logout(const char *logout_param_value) {
-	return ((logout_param_value != NULL) && (apr_strnatcmp(logout_param_value,
+	return ((logout_param_value != NULL) && (_oidc_strcmp(logout_param_value,
 			OIDC_BACKCHANNEL_STYLE_LOGOUT_PARAM_VALUE) == 0));
 }
 
@@ -2929,7 +2929,7 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 
 		/* see if this is PF-PA style logout in which case we return a transparent pixel */
 		const char *accept = oidc_util_hdr_in_accept_get(r);
-		if ((apr_strnatcmp(url, OIDC_IMG_STYLE_LOGOUT_PARAM_VALUE) == 0)
+		if ((_oidc_strcmp(url, OIDC_IMG_STYLE_LOGOUT_PARAM_VALUE) == 0)
 				|| ((accept) && strstr(accept, OIDC_CONTENT_TYPE_IMAGE_PNG))) {
 			return oidc_util_http_send(r, (const char*) &oidc_transparent_pixel,
 					sizeof(oidc_transparent_pixel), OIDC_CONTENT_TYPE_IMAGE_PNG,
@@ -2997,7 +2997,7 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 		goto out;
 	}
 
-	if ((jwt->header.alg == NULL) || (strcmp(jwt->header.alg, "none") == 0)) {
+	if ((jwt->header.alg == NULL) || (_oidc_strcmp(jwt->header.alg, "none") == 0)) {
 		oidc_error(r, "logout token is not signed");
 		goto out;
 	}
@@ -3008,7 +3008,7 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 		goto out;
 	}
 
-	if ((provider->id_token_signed_response_alg != NULL) && (apr_strnatcmp(provider->id_token_signed_response_alg, jwt->header.alg) != 0)) {
+	if ((provider->id_token_signed_response_alg != NULL) && (_oidc_strcmp(provider->id_token_signed_response_alg, jwt->header.alg) != 0)) {
 		oidc_error(r, "logout token is signed using wrong algorithm: %s != %s", jwt->header.alg, provider->id_token_signed_response_alg);
 		goto out;
 	}
@@ -3154,7 +3154,7 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 		return oidc_handle_logout_backchannel(r, c);
 	}
 
-	if ((url == NULL) || (apr_strnatcmp(url, "") == 0)) {
+	if ((url == NULL) || (_oidc_strcmp(url, "") == 0)) {
 
 		url = c->default_slo_url;
 
@@ -3359,7 +3359,7 @@ static int oidc_handle_session_management(request_rec *r, oidc_cfg *c,
 	}
 
 	/* see if this is a local logout during session management */
-	if (apr_strnatcmp("logout", cmd) == 0) {
+	if (_oidc_strcmp("logout", cmd) == 0) {
 		oidc_debug(r,
 				"[session=logout] calling oidc_handle_logout_request because of session mgmt local logout call.");
 		return oidc_handle_logout_request(r, c, session, c->default_slo_url);
@@ -3372,7 +3372,7 @@ static int oidc_handle_session_management(request_rec *r, oidc_cfg *c,
 	}
 
 	/* see if this is a request for the OP iframe */
-	if (apr_strnatcmp("iframe_op", cmd) == 0) {
+	if (_oidc_strcmp("iframe_op", cmd) == 0) {
 		if (provider->check_session_iframe != NULL) {
 			return oidc_handle_session_management_iframe_op(r, c, session,
 					provider->check_session_iframe);
@@ -3381,7 +3381,7 @@ static int oidc_handle_session_management(request_rec *r, oidc_cfg *c,
 	}
 
 	/* see if this is a request for the RP iframe */
-	if (apr_strnatcmp("iframe_rp", cmd) == 0) {
+	if (_oidc_strcmp("iframe_rp", cmd) == 0) {
 		if ((provider->client_id != NULL)
 				&& (provider->check_session_iframe != NULL)) {
 			return oidc_handle_session_management_iframe_rp(r, c, session,
@@ -3394,7 +3394,7 @@ static int oidc_handle_session_management(request_rec *r, oidc_cfg *c,
 	}
 
 	/* see if this is a request check the login state with the OP */
-	if (apr_strnatcmp("check", cmd) == 0) {
+	if (_oidc_strcmp("check", cmd) == 0) {
 		id_token_hint = oidc_session_get_idtoken(r, session);
 		/*
 		 * TODO: this doesn't work with per-path provided auth_request_params and scopes
@@ -3465,7 +3465,7 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
 	}
 
 	/* compare the access_token parameter used for XSRF protection */
-	if (apr_strnatcmp(s_access_token, r_access_token) != 0) {
+	if (_oidc_strcmp(s_access_token, r_access_token) != 0) {
 		oidc_error(r,
 				"access_token passed in refresh request does not match the one stored in the session");
 		error_code = "no_access_token_match";
@@ -3594,8 +3594,8 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 			OIDC_INFO_PARAM_ACCESS_TOKEN_REFRESH_INTERVAL, &s_interval);
 
 	/* see if this is a request for a format that is supported */
-	if ((apr_strnatcmp(OIDC_HOOK_INFO_FORMAT_JSON, s_format) != 0)
-			&& (apr_strnatcmp(OIDC_HOOK_INFO_FORMAT_HTML, s_format) != 0)) {
+	if ((_oidc_strcmp(OIDC_HOOK_INFO_FORMAT_JSON, s_format) != 0)
+			&& (_oidc_strcmp(OIDC_HOOK_INFO_FORMAT_HTML, s_format) != 0)) {
 		oidc_warn(r, "request for unknown format: %s", s_format);
 		return HTTP_UNSUPPORTED_MEDIA_TYPE;
 	}
@@ -3755,13 +3755,13 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 		}
 	}
 
-	if (apr_strnatcmp(OIDC_HOOK_INFO_FORMAT_JSON, s_format) == 0) {
+	if (_oidc_strcmp(OIDC_HOOK_INFO_FORMAT_JSON, s_format) == 0) {
 		/* JSON-encode the result */
 		r_value = oidc_util_encode_json_object(r, json, 0);
 		/* return the stringified JSON result */
 		rc = oidc_util_http_send(r, r_value, _oidc_strlen(r_value),
 				OIDC_CONTENT_TYPE_JSON, OK);
-	} else if (apr_strnatcmp(OIDC_HOOK_INFO_FORMAT_HTML, s_format) == 0) {
+	} else if (_oidc_strcmp(OIDC_HOOK_INFO_FORMAT_HTML, s_format) == 0) {
 		/* JSON-encode the result */
 		r_value = oidc_util_encode_json_object(r, json, JSON_INDENT(2));
 		rc = oidc_util_html_send(r, "Session Info", NULL, NULL,
@@ -3865,7 +3865,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 
 		return rc;
 
-	} else if ((r->args == NULL) || (apr_strnatcmp(r->args, "") == 0)) {
+	} else if ((r->args == NULL) || (_oidc_strcmp(r->args, "") == 0)) {
 
 		/* this is a "bare" request to the redirect URI, indicating implicit flow using the fragment response_mode */
 		return oidc_proto_javascript_implicit(r, c);

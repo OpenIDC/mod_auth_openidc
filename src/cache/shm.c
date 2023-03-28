@@ -190,7 +190,7 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section,
 			i++, OIDC_CACHE_SHM_ADD_OFFSET(t, cfg->cache_shm_entry_size_max)) {
 		const char *tablekey = t->section_key;
 
-		if ((tablekey != NULL) && (apr_strnatcmp(tablekey, section_key) == 0)) {
+		if ((tablekey != NULL) && (_oidc_strcmp(tablekey, section_key) == 0)) {
 
 			/* found a match, check if it has expired */
 			if (t->expires > apr_time_now()) {
@@ -276,7 +276,7 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 		}
 
 		/* see if a value already exists for this key */
-		if (apr_strnatcmp(t->section_key, section_key) == 0) {
+		if (_oidc_strcmp(t->section_key, section_key) == 0) {
 			match = t;
 			break;
 		}

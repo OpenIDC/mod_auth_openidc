@@ -511,8 +511,8 @@ static const char* oidc_get_current_url_scheme(const request_rec *r,
 #endif
 	}
 	if ((scheme_str == NULL)
-			|| ((apr_strnatcmp(scheme_str, "http") != 0)
-					&& (apr_strnatcmp(scheme_str, "https") != 0))) {
+			|| ((_oidc_strcmp(scheme_str, "http") != 0)
+					&& (_oidc_strcmp(scheme_str, "https") != 0))) {
 		oidc_warn(r, "detected HTTP scheme \"%s\" is not \"http\" nor \"https\"; perhaps your reverse proxy passes a wrongly configured \"%s\" header: falling back to default \"https\"", scheme_str, OIDC_HTTP_HDR_X_FORWARDED_PROTO);
 		scheme_str = "https";
 	}
@@ -608,9 +608,9 @@ static const char* oidc_get_current_url_port(const request_rec *r, const char *s
 	 * determine the port locally and don't print it when it's the default for the protocol
 	 */
 	const apr_port_t port = r->connection->local_addr->port;
-	if ((apr_strnatcmp(scheme_str, "https") == 0) && port == 443)
+	if ((_oidc_strcmp(scheme_str, "https") == 0) && port == 443)
 		return NULL;
-	else if ((apr_strnatcmp(scheme_str, "http") == 0) && port == 80)
+	else if ((_oidc_strcmp(scheme_str, "http") == 0) && port == 80)
 		return NULL;
 
 	port_str = apr_psprintf(r->pool, "%u", port);
@@ -802,7 +802,7 @@ static int oidc_util_http_add_form_url_encoded_param(void *rec, const char *key,
 		const char *value) {
 	oidc_http_encode_t *ctx = (oidc_http_encode_t*) rec;
 	oidc_debug(ctx->r, "processing: %s=%s", key,
-			(strncmp(key, OIDC_PROTO_CLIENT_SECRET, _oidc_strlen(OIDC_PROTO_CLIENT_SECRET)) == 0) ? "***" : value);
+			(_oidc_strncmp(key, OIDC_PROTO_CLIENT_SECRET, _oidc_strlen(OIDC_PROTO_CLIENT_SECRET)) == 0) ? "***" : value);
 	const char *sep = ctx->encoded_params ? OIDC_STR_AMP : "";
 	ctx->encoded_params = apr_psprintf(ctx->r->pool, "%s%s%s=%s",
 			ctx->encoded_params ? ctx->encoded_params : "", sep,
@@ -1182,7 +1182,7 @@ static char* oidc_util_get_cookie_path(request_rec *r) {
 	char *requestPath = oidc_util_get_path(r);
 	char *cookie_path = oidc_cfg_dir_cookie_path(r);
 	if (cookie_path != NULL) {
-		if (strncmp(cookie_path, requestPath, _oidc_strlen(cookie_path)) == 0)
+		if (_oidc_strncmp(cookie_path, requestPath, _oidc_strlen(cookie_path)) == 0)
 			rv = cookie_path;
 		else {
 			oidc_warn(r,
@@ -1241,7 +1241,7 @@ void oidc_util_set_cookie(request_rec *r, const char *cookieName, const char *co
 	const char *appendString = NULL;
 
 	/* see if we need to clear the cookie */
-	if (apr_strnatcmp(cookieValue, "") == 0)
+	if (_oidc_strcmp(cookieValue, "") == 0)
 		expires = 0;
 
 	/* construct the expire value */
@@ -1311,7 +1311,7 @@ char* oidc_util_get_cookie(request_rec *r, const char *cookieName) {
 				cookie++;
 
 			/* see if we've found the cookie that we're looking for */
-			if ((strncmp(cookie, cookieName, _oidc_strlen(cookieName)) == 0)
+			if ((_oidc_strncmp(cookie, cookieName, _oidc_strlen(cookieName)) == 0)
 					&& (cookie[_oidc_strlen(cookieName)] == OIDC_CHAR_EQUAL)) {
 
 				/* skip to the meat of the parameter (the value after the '=') */
@@ -1493,7 +1493,7 @@ apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url) {
 	oidc_debug(r, "comparing \"%s\"==\"%s\"", r->parsed_uri.path, uri.path);
 	if ((r->parsed_uri.path == NULL) || (uri.path == NULL))
 		return (r->parsed_uri.path == uri.path);
-	return (apr_strnatcmp(r->parsed_uri.path, uri.path) == 0);
+	return (_oidc_strcmp(r->parsed_uri.path, uri.path) == 0);
 }
 
 /*
@@ -1529,7 +1529,7 @@ apr_byte_t oidc_util_get_request_parameter(request_rec *r, char *name,
 
 	p = apr_strtok(args, OIDC_STR_AMP, &tokenizer_ctx);
 	do {
-		if (p && strncmp(p, k_param, k_param_sz) == 0) {
+		if (p && _oidc_strncmp(p, k_param, k_param_sz) == 0) {
 			*value = apr_pstrdup(r->pool, p + k_param_sz);
 			*value = oidc_util_unescape_string(r, *value);
 		}
@@ -1875,7 +1875,7 @@ apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table,
 	arr = apr_table_elts(table);
 	elts = (const apr_table_entry_t*) arr->elts;
 	for (i = 0; i < arr->nelts; i++)
-		if (apr_strnatcmp(elts[i].key, strip_param_name) != 0)
+		if (_oidc_strcmp(elts[i].key, strip_param_name) != 0)
 			oidc_userdata_set_post_param(r, elts[i].key, elts[i].val);
 
 	end:
@@ -2018,7 +2018,7 @@ apr_byte_t oidc_util_file_write(request_rec *r, const char *path,
 apr_byte_t oidc_util_issuer_match(const char *a, const char *b) {
 
 	/* check the "issuer" value against the one configure for the provider we got this id_token from */
-	if (apr_strnatcmp(a, b) != 0) {
+	if (_oidc_strcmp(a, b) != 0) {
 
 		/* no strict match, but we are going to accept if the difference is only a trailing slash */
 		int n1 = _oidc_strlen(a);
@@ -2027,7 +2027,7 @@ apr_byte_t oidc_util_issuer_match(const char *a, const char *b) {
 				n2 :
 				(((n2 == n1 + 1) && (b[n2 - 1] == OIDC_CHAR_FORWARD_SLASH)) ?
 						n1 : 0);
-		if ((n == 0) || (strncmp(a, b, n) != 0))
+		if ((n == 0) || (_oidc_strncmp(a, b, n) != 0))
 			return FALSE;
 	}
 
@@ -2051,7 +2051,7 @@ apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack,
 					elem->type);
 			continue;
 		}
-		if (apr_strnatcmp(json_string_value(elem), needle) == 0) {
+		if (_oidc_strcmp(json_string_value(elem), needle) == 0) {
 			break;
 		}
 	}
@@ -2221,7 +2221,7 @@ void oidc_util_set_app_infos(request_rec *r, json_t *j_attrs,
 
 					/* concatenate the string to the s_concat value using the configured separator char */
 					// TODO: escape the delimiter in the values (maybe reuse/extract url-formatted code from oidc_session_identity_encode)
-					if (apr_strnatcmp(s_concat, "") != 0) {
+					if (_oidc_strcmp(s_concat, "") != 0) {
 						s_concat = apr_psprintf(r->pool, "%s%s%s", s_concat,
 								claim_delimiter, json_string_value(elem));
 					} else {
@@ -2231,7 +2231,7 @@ void oidc_util_set_app_infos(request_rec *r, json_t *j_attrs,
 
 				} else if (json_is_boolean(elem)) {
 
-					if (apr_strnatcmp(s_concat, "") != 0) {
+					if (_oidc_strcmp(s_concat, "") != 0) {
 						s_concat = apr_psprintf(r->pool, "%s%s%s", s_concat,
 								claim_delimiter,
 								json_is_true(elem) ? "1" : "0");
@@ -2612,7 +2612,7 @@ int oidc_util_cookie_domain_valid(const char *hostname, char *cookie_domain) {
 		check_cookie++;
 	p = strstr(hostname, check_cookie);
 
-	if ((p == NULL) || (apr_strnatcmp(check_cookie, p) != 0)) {
+	if ((p == NULL) || (_oidc_strcmp(check_cookie, p) != 0)) {
 		return FALSE;
 	}
 	return TRUE;
@@ -2645,7 +2645,7 @@ static apr_byte_t oidc_util_hdr_in_contains(const request_rec *r,
 		while (elem != NULL) {
 			while (*elem == OIDC_CHAR_SPACE)
 				elem++;
-			if ((strncmp(elem, needle, _oidc_strlen(needle)) == 0)
+			if ((_oidc_strncmp(elem, needle, _oidc_strlen(needle)) == 0)
 					&& ((elem[_oidc_strlen(needle)] == '\0')
 							|| (elem[_oidc_strlen(needle)] == postfix_separator))) {
 				rc = TRUE;
@@ -2894,7 +2894,7 @@ apr_byte_t oidc_util_json_validate_cnf_x5t_s256(request_rec *r,
 		goto out_err;
 	}
 
-	if (apr_strnatcmp(fingerprint, x5t_256_str) != 0) {
+	if (_oidc_strcmp(fingerprint, x5t_256_str) != 0) {
 		oidc_warn(r,
 				"fingerprint of provided cert (%s) does not match cnf[\"x5t#S256\"] (%s)",
 				fingerprint, x5t_256_str);

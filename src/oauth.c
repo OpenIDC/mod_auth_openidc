@@ -145,7 +145,7 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 
 	const char *bearer_access_token_auth =
 			((c->oauth.introspection_client_auth_bearer_token != NULL)
-					&& strcmp(c->oauth.introspection_client_auth_bearer_token,
+					&& _oidc_strcmp(c->oauth.introspection_client_auth_bearer_token,
 							"") == 0) ?
 									token : c->oauth.introspection_client_auth_bearer_token;
 
@@ -158,7 +158,7 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 		return FALSE;
 
 	/* call the endpoint with the constructed parameter set and return the resulting response */
-	return apr_strnatcmp(c->oauth.introspection_endpoint_method,
+	return _oidc_strcmp(c->oauth.introspection_endpoint_method,
 			OIDC_INTROSPECTION_METHOD_GET) == 0 ?
 					oidc_util_http_get(r, c->oauth.introspection_endpoint_url, params,
 							basic_auth, bearer_auth, c->oauth.ssl_validate_server,
@@ -508,7 +508,7 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 
 			if (oidc_oauth_parse_and_cache_token_expiry(r, c, result,
 					c->oauth.introspection_token_expiry_claim_name,
-					apr_strnatcmp(
+					_oidc_strcmp(
 							c->oauth.introspection_token_expiry_claim_format,
 							OIDC_CLAIM_FORMAT_ABSOLUTE) == 0,
 							c->oauth.introspection_token_expiry_claim_required,

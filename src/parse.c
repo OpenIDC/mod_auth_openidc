@@ -64,8 +64,8 @@ static const char * oidc_valid_url_scheme(apr_pool_t *pool, const char *arg,
 				"'%s' cannot be parsed as a URL (no scheme set)", arg);
 	}
 
-	if ((scheme1 != NULL) && (apr_strnatcmp(uri.scheme, scheme1) != 0)) {
-		if ((scheme2 != NULL) && (apr_strnatcmp(uri.scheme, scheme2) != 0)) {
+	if ((scheme1 != NULL) && (_oidc_strcmp(uri.scheme, scheme1) != 0)) {
+		if ((scheme2 != NULL) && (_oidc_strcmp(uri.scheme, scheme2) != 0)) {
 			return apr_psprintf(pool,
 					"'%s' cannot be parsed as a \"%s\" or \"%s\" URL (scheme == %s)!",
 					arg, scheme1, scheme2, uri.scheme);
@@ -241,7 +241,7 @@ static const char *oidc_valid_string_option(apr_pool_t *pool, const char *arg,
 		char *options[]) {
 	int i = 0;
 	while (options[i] != NULL) {
-		if (apr_strnatcmp(arg, options[i]) == 0)
+		if (_oidc_strcmp(arg, options[i]) == 0)
 			break;
 		i++;
 	}
@@ -277,16 +277,16 @@ const char *oidc_parse_cache_type(apr_pool_t *pool, const char *arg,
 	if (rv != NULL)
 		return rv;
 
-	if (apr_strnatcmp(arg, OIDC_CACHE_TYPE_SHM) == 0) {
+	if (_oidc_strcmp(arg, OIDC_CACHE_TYPE_SHM) == 0) {
 		*type = &oidc_cache_shm;
 #ifdef USE_MEMCACHE
-	} else if (apr_strnatcmp(arg, OIDC_CACHE_TYPE_MEMCACHE) == 0) {
+	} else if (_oidc_strcmp(arg, OIDC_CACHE_TYPE_MEMCACHE) == 0) {
 		*type = &oidc_cache_memcache;
 #endif
-	} else if (apr_strnatcmp(arg, OIDC_CACHE_TYPE_FILE) == 0) {
+	} else if (_oidc_strcmp(arg, OIDC_CACHE_TYPE_FILE) == 0) {
 		*type = &oidc_cache_file;
 #ifdef USE_LIBHIREDIS
-	} else if (apr_strnatcmp(arg, OIDC_CACHE_TYPE_REDIS) == 0) {
+	} else if (_oidc_strcmp(arg, OIDC_CACHE_TYPE_REDIS) == 0) {
 		*type = &oidc_cache_redis;
 #endif
 	}
@@ -326,20 +326,20 @@ const char* oidc_parse_session_type(apr_pool_t *pool, const char *arg, int *type
 		p++;
 	}
 
-	if (apr_strnatcmp(s, OIDC_SESSION_TYPE_SERVER_CACHE_STR) == 0) {
+	if (_oidc_strcmp(s, OIDC_SESSION_TYPE_SERVER_CACHE_STR) == 0) {
 		*type = OIDC_SESSION_TYPE_SERVER_CACHE;
-	} else if (apr_strnatcmp(s, OIDC_SESSION_TYPE_CLIENT_COOKIE_STR) == 0) {
+	} else if (_oidc_strcmp(s, OIDC_SESSION_TYPE_CLIENT_COOKIE_STR) == 0) {
 		*type = OIDC_SESSION_TYPE_CLIENT_COOKIE;
 		*store_id_token = FALSE;
 	}
 
 	if (p) {
-		if (apr_strnatcmp(p, OIDC_SESSION_TYPE_PERSISTENT) == 0) {
+		if (_oidc_strcmp(p, OIDC_SESSION_TYPE_PERSISTENT) == 0) {
 			*persistent = 1;
-		} else if (apr_strnatcmp(p, OIDC_SESSION_TYPE_STORE_ID_TOKEN) == 0) {
+		} else if (_oidc_strcmp(p, OIDC_SESSION_TYPE_STORE_ID_TOKEN) == 0) {
 			// only for client-cookie
 			*store_id_token = TRUE;
-		} else if (apr_strnatcmp(p, OIDC_SESSION_TYPE_SEPARATOR OIDC_SESSION_TYPE_PERSISTENT OIDC_SESSION_TYPE_SEPARATOR OIDC_SESSION_TYPE_STORE_ID_TOKEN)
+		} else if (_oidc_strcmp(p, OIDC_SESSION_TYPE_SEPARATOR OIDC_SESSION_TYPE_PERSISTENT OIDC_SESSION_TYPE_SEPARATOR OIDC_SESSION_TYPE_STORE_ID_TOKEN)
 				== 0) {
 			// only for client-cookie
 			*persistent = 1;
@@ -633,13 +633,13 @@ static const char *oidc_parse_key_value(apr_pool_t *pool, const char *enc,
 	const char *rv = oidc_valid_string_option(pool, enc, options);
 	if (rv != NULL)
 		return rv;
-	if (apr_strnatcmp(enc, OIDC_KEY_ENCODING_BASE64) == 0)
+	if (_oidc_strcmp(enc, OIDC_KEY_ENCODING_BASE64) == 0)
 		return oidc_parse_base64(pool, input, key, key_len);
-	if (apr_strnatcmp(enc, OIDC_KEY_ENCODING_BASE64_URL) == 0)
+	if (_oidc_strcmp(enc, OIDC_KEY_ENCODING_BASE64_URL) == 0)
 		return oidc_parse_base64url(pool, input, key, key_len);
-	if (apr_strnatcmp(enc, OIDC_KEY_ENCODING_HEX) == 0)
+	if (_oidc_strcmp(enc, OIDC_KEY_ENCODING_HEX) == 0)
 		return oidc_parse_hex(pool, input, key, key_len);
-	if (apr_strnatcmp(enc, OIDC_KEY_ENCODING_PLAIN) == 0) {
+	if (_oidc_strcmp(enc, OIDC_KEY_ENCODING_PLAIN) == 0) {
 		*key = apr_pstrdup(pool, input);
 		*key_len = _oidc_strlen(*key);
 	}
@@ -656,7 +656,7 @@ const char *oidc_parse_enc_kid_key_tuple(apr_pool_t *pool, const char *tuple,
 	const char *rv = NULL;
 	char *s = NULL, *p = NULL, *q = NULL, *enc = NULL;
 
-	if ((tuple == NULL) || (apr_strnatcmp(tuple, "") == 0))
+	if ((tuple == NULL) || (_oidc_strcmp(tuple, "") == 0))
 		return "tuple value not set";
 
 	s = apr_pstrdup(pool, tuple);
@@ -696,11 +696,11 @@ const char *oidc_parse_enc_kid_key_tuple(apr_pool_t *pool, const char *tuple,
  * convert a "pass id token as" value to an integer
  */
 static int oidc_parse_pass_idtoken_as_str2int(const char *v) {
-	if (apr_strnatcmp(v, OIDC_PASS_ID_TOKEN_AS_CLAIMS_STR) == 0)
+	if (_oidc_strcmp(v, OIDC_PASS_ID_TOKEN_AS_CLAIMS_STR) == 0)
 		return OIDC_PASS_IDTOKEN_AS_CLAIMS;
-	if (apr_strnatcmp(v, OIDC_PASS_IDTOKEN_AS_PAYLOAD_STR) == 0)
+	if (_oidc_strcmp(v, OIDC_PASS_IDTOKEN_AS_PAYLOAD_STR) == 0)
 		return OIDC_PASS_IDTOKEN_AS_PAYLOAD;
-	if (apr_strnatcmp(v, OIDC_PASS_IDTOKEN_AS_SERIALIZED_STR) == 0)
+	if (_oidc_strcmp(v, OIDC_PASS_IDTOKEN_AS_SERIALIZED_STR) == 0)
 		return OIDC_PASS_IDTOKEN_AS_SERIALIZED;
 	return -1;
 }
@@ -748,11 +748,11 @@ const char *oidc_parse_pass_idtoken_as(apr_pool_t *pool, const char *v1,
  * convert a "pass userinfo as" value to an integer
  */
 static int oidc_parse_pass_userinfo_as_str2int(const char *v) {
-	if (apr_strnatcmp(v, OIDC_PASS_USERINFO_AS_CLAIMS_STR) == 0)
+	if (_oidc_strcmp(v, OIDC_PASS_USERINFO_AS_CLAIMS_STR) == 0)
 		return OIDC_PASS_USERINFO_AS_CLAIMS;
-	if (apr_strnatcmp(v, OIDC_PASS_USERINFO_AS_JSON_OBJECT_STR) == 0)
+	if (_oidc_strcmp(v, OIDC_PASS_USERINFO_AS_JSON_OBJECT_STR) == 0)
 		return OIDC_PASS_USERINFO_AS_JSON_OBJECT;
-	if (apr_strnatcmp(v, OIDC_PASS_USERINFO_AS_JWT_STR) == 0)
+	if (_oidc_strcmp(v, OIDC_PASS_USERINFO_AS_JWT_STR) == 0)
 		return OIDC_PASS_USERINFO_AS_JWT;
 	return -1;
 }
@@ -798,7 +798,7 @@ const char *oidc_parse_pass_userinfo_as(apr_pool_t *pool, const char *v1,
  * convert a "logout_on_error" to an integer
  */
 static int oidc_parse_logout_on_error_refresh_as_str2int(const char *v) {
-	if (apr_strnatcmp(v, OIDC_LOGOUT_ON_ERROR_REFRESH_STR) == 0)
+	if (_oidc_strcmp(v, OIDC_LOGOUT_ON_ERROR_REFRESH_STR) == 0)
 		return OIDC_LOGOUT_ON_ERROR_REFRESH;
 	return OIDC_CONFIG_POS_INT_UNSET;
 }
@@ -859,11 +859,11 @@ const char *oidc_accept_oauth_token_in2str(apr_pool_t *pool, apr_byte_t v) {
  * convert an "accept OAuth 2.0 token in" value to an integer
  */
 static apr_byte_t oidc_parse_oauth_accept_token_in_str2byte(const char *v) {
-	if (apr_strnatcmp(v, OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER_STR) == 0)
+	if (_oidc_strcmp(v, OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER_STR) == 0)
 		return OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER;
-	if (apr_strnatcmp(v, OIDC_OAUTH_ACCEPT_TOKEN_IN_POST_STR) == 0)
+	if (_oidc_strcmp(v, OIDC_OAUTH_ACCEPT_TOKEN_IN_POST_STR) == 0)
 		return OIDC_OAUTH_ACCEPT_TOKEN_IN_POST;
-	if (apr_strnatcmp(v, OIDC_OAUTH_ACCEPT_TOKEN_IN_QUERY_STR) == 0)
+	if (_oidc_strcmp(v, OIDC_OAUTH_ACCEPT_TOKEN_IN_QUERY_STR) == 0)
 		return OIDC_OAUTH_ACCEPT_TOKEN_IN_QUERY;
 	if (strstr(v, OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE_STR) == v)
 		return OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE;
@@ -941,7 +941,7 @@ const char *oidc_parse_claim_required(apr_pool_t *pool, const char *arg,
 	const char *rv = oidc_valid_string_option(pool, arg, options);
 	if (rv != NULL)
 		return rv;
-	*is_required = (apr_strnatcmp(arg, OIDC_CLAIM_REQUIRED_MANDATORY) == 0);
+	*is_required = (_oidc_strcmp(arg, OIDC_CLAIM_REQUIRED_MANDATORY) == 0);
 	return NULL;
 }
 
@@ -976,16 +976,16 @@ const char *oidc_parse_set_claims_as(apr_pool_t *pool, const char *arg,
 	if (rv != NULL)
 		return rv;
 
-	if (apr_strnatcmp(arg, OIDC_PASS_CLAIMS_AS_BOTH) == 0) {
+	if (_oidc_strcmp(arg, OIDC_PASS_CLAIMS_AS_BOTH) == 0) {
 		*in_headers = 1;
 		*in_env_vars = 1;
-	} else if (apr_strnatcmp(arg, OIDC_PASS_CLAIMS_AS_HEADERS) == 0) {
+	} else if (_oidc_strcmp(arg, OIDC_PASS_CLAIMS_AS_HEADERS) == 0) {
 		*in_headers = 1;
 		*in_env_vars = 0;
-	} else if (apr_strnatcmp(arg, OIDC_PASS_CLAIMS_AS_ENV) == 0) {
+	} else if (_oidc_strcmp(arg, OIDC_PASS_CLAIMS_AS_ENV) == 0) {
 		*in_headers = 0;
 		*in_env_vars = 1;
-	} else if (apr_strnatcmp(arg, OIDC_PASS_CLAIMS_AS_NONE) == 0) {
+	} else if (_oidc_strcmp(arg, OIDC_PASS_CLAIMS_AS_NONE) == 0) {
 		*in_headers = 0;
 		*in_env_vars = 0;
 	}
@@ -1015,15 +1015,15 @@ const char *oidc_parse_unauth_action(apr_pool_t *pool, const char *arg,
 	if (rv != NULL)
 		return rv;
 
-	if (apr_strnatcmp(arg, OIDC_UNAUTH_ACTION_AUTH_STR) == 0)
+	if (_oidc_strcmp(arg, OIDC_UNAUTH_ACTION_AUTH_STR) == 0)
 		*action = OIDC_UNAUTH_AUTHENTICATE;
-	else if (apr_strnatcmp(arg, OIDC_UNAUTH_ACTION_PASS_STR) == 0)
+	else if (_oidc_strcmp(arg, OIDC_UNAUTH_ACTION_PASS_STR) == 0)
 		*action = OIDC_UNAUTH_PASS;
-	else if (apr_strnatcmp(arg, OIDC_UNAUTH_ACTION_401_STR) == 0)
+	else if (_oidc_strcmp(arg, OIDC_UNAUTH_ACTION_401_STR) == 0)
 		*action = OIDC_UNAUTH_RETURN401;
-	else if (apr_strnatcmp(arg, OIDC_UNAUTH_ACTION_407_STR) == 0)
+	else if (_oidc_strcmp(arg, OIDC_UNAUTH_ACTION_407_STR) == 0)
 		*action = OIDC_UNAUTH_RETURN407;
-	else if (apr_strnatcmp(arg, OIDC_UNAUTH_ACTION_410_STR) == 0)
+	else if (_oidc_strcmp(arg, OIDC_UNAUTH_ACTION_410_STR) == 0)
 		*action = OIDC_UNAUTH_RETURN410;
 
 	return NULL;
@@ -1049,13 +1049,13 @@ const char *oidc_parse_unautz_action(apr_pool_t *pool, const char *arg,
 	if (rv != NULL)
 		return rv;
 
-	if (apr_strnatcmp(arg, OIDC_UNAUTZ_ACTION_AUTH_STR) == 0)
+	if (_oidc_strcmp(arg, OIDC_UNAUTZ_ACTION_AUTH_STR) == 0)
 		*action = OIDC_UNAUTZ_AUTHENTICATE;
-	else if (apr_strnatcmp(arg, OIDC_UNAUTZ_ACTION_401_STR) == 0)
+	else if (_oidc_strcmp(arg, OIDC_UNAUTZ_ACTION_401_STR) == 0)
 		*action = OIDC_UNAUTZ_RETURN401;
-	else if (apr_strnatcmp(arg, OIDC_UNAUTZ_ACTION_403_STR) == 0)
+	else if (_oidc_strcmp(arg, OIDC_UNAUTZ_ACTION_403_STR) == 0)
 		*action = OIDC_UNAUTZ_RETURN403;
-	else if (apr_strnatcmp(arg, OIDC_UNAUTZ_ACTION_302_STR) == 0)
+	else if (_oidc_strcmp(arg, OIDC_UNAUTZ_ACTION_302_STR) == 0)
 		*action = OIDC_UNAUTZ_RETURN302;
 
 	return NULL;
@@ -1079,7 +1079,7 @@ const char *oidc_valid_string_in_array(apr_pool_t *pool, json_t *json,
 				found = TRUE;
 				if (value != NULL) {
 					if ((preference != NULL)
-							&& (apr_strnatcmp(json_string_value(elem),
+							&& (_oidc_strcmp(json_string_value(elem),
 									preference) == 0)) {
 						*value = apr_pstrdup(pool, json_string_value(elem));
 						break;
@@ -1185,9 +1185,9 @@ const char *oidc_parse_userinfo_token_method(apr_pool_t *pool, const char *arg,
 	if (rv != NULL)
 		return rv;
 
-	if (apr_strnatcmp(arg, OIDC_USER_INFO_TOKEN_METHOD_HEADER_STR) == 0)
+	if (_oidc_strcmp(arg, OIDC_USER_INFO_TOKEN_METHOD_HEADER_STR) == 0)
 		*int_value = OIDC_USER_INFO_TOKEN_METHOD_HEADER;
-	if (apr_strnatcmp(arg, OIDC_USER_INFO_TOKEN_METHOD_POST_STR) == 0)
+	if (_oidc_strcmp(arg, OIDC_USER_INFO_TOKEN_METHOD_POST_STR) == 0)
 		*int_value = OIDC_USER_INFO_TOKEN_METHOD_POST;
 
 	return NULL;
@@ -1259,13 +1259,13 @@ const char *oidc_parse_token_binding_policy(apr_pool_t *pool, const char *arg,
 	if (rv != NULL)
 		return rv;
 
-	if (apr_strnatcmp(arg, OIDC_TOKEN_BINDING_POLICY_DISABLED_STR) == 0)
+	if (_oidc_strcmp(arg, OIDC_TOKEN_BINDING_POLICY_DISABLED_STR) == 0)
 		*policy = OIDC_TOKEN_BINDING_POLICY_DISABLED;
-	else if (apr_strnatcmp(arg, OIDC_TOKEN_BINDING_POLICY_OPTIONAL_STR) == 0)
+	else if (_oidc_strcmp(arg, OIDC_TOKEN_BINDING_POLICY_OPTIONAL_STR) == 0)
 		*policy = OIDC_TOKEN_BINDING_POLICY_OPTIONAL;
-	else if (apr_strnatcmp(arg, OIDC_TOKEN_BINDING_POLICY_REQUIRED_STR) == 0)
+	else if (_oidc_strcmp(arg, OIDC_TOKEN_BINDING_POLICY_REQUIRED_STR) == 0)
 		*policy = OIDC_TOKEN_BINDING_POLICY_REQUIRED;
-	else if (apr_strnatcmp(arg, OIDC_TOKEN_BINDING_POLICY_ENFORCED_STR) == 0)
+	else if (_oidc_strcmp(arg, OIDC_TOKEN_BINDING_POLICY_ENFORCED_STR) == 0)
 		*policy = OIDC_TOKEN_BINDING_POLICY_ENFORCED;
 
 	return NULL;
@@ -1294,9 +1294,9 @@ const char *oidc_parse_auth_request_method(apr_pool_t *pool, const char *arg,
 	if (rv != NULL)
 		return rv;
 
-	if (apr_strnatcmp(arg, OIDC_AUTH_REQUEST_METHOD_GET_STR) == 0)
+	if (_oidc_strcmp(arg, OIDC_AUTH_REQUEST_METHOD_GET_STR) == 0)
 		*method = OIDC_AUTH_REQUEST_METHOD_GET;
-	else if (apr_strnatcmp(arg, OIDC_AUTH_REQEUST_METHOD_POST_STR) == 0)
+	else if (_oidc_strcmp(arg, OIDC_AUTH_REQEUST_METHOD_POST_STR) == 0)
 		*method = OIDC_AUTH_REQUEST_METHOD_POST;
 
 	return NULL;
@@ -1358,13 +1358,13 @@ const char *oidc_parse_set_state_input_headers_as(apr_pool_t *pool, const char *
 	if (rv != NULL)
 		return rv;
 
-	if (apr_strnatcmp(arg, OIDC_STATE_INPUT_HEADERS_AS_BOTH) == 0) {
+	if (_oidc_strcmp(arg, OIDC_STATE_INPUT_HEADERS_AS_BOTH) == 0) {
 		*state_input_headers = OIDC_STATE_INPUT_HEADERS_USER_AGENT | OIDC_STATE_INPUT_HEADERS_X_FORWARDED_FOR;
-	} else if (apr_strnatcmp(arg, OIDC_STATE_INPUT_HEADERS_AS_USER_AGENT) == 0) {
+	} else if (_oidc_strcmp(arg, OIDC_STATE_INPUT_HEADERS_AS_USER_AGENT) == 0) {
 		*state_input_headers = OIDC_STATE_INPUT_HEADERS_USER_AGENT;
-	} else if (apr_strnatcmp(arg, OIDC_STATE_INPUT_HEADERS_AS_X_FORWARDED_FOR) == 0) {
+	} else if (_oidc_strcmp(arg, OIDC_STATE_INPUT_HEADERS_AS_X_FORWARDED_FOR) == 0) {
 		*state_input_headers = OIDC_STATE_INPUT_HEADERS_X_FORWARDED_FOR;
-	} else if (apr_strnatcmp(arg, OIDC_STATE_INPUT_HEADERS_AS_NONE) == 0) {
+	} else if (_oidc_strcmp(arg, OIDC_STATE_INPUT_HEADERS_AS_NONE) == 0) {
 		*state_input_headers = 0;
 	}
 
@@ -1383,13 +1383,13 @@ const char* oidc_parse_x_forwarded_headers(apr_pool_t *pool, const char *arg,
 	if (rv != NULL)
 		return rv;
 
-	if (apr_strnatcmp(arg, OIDC_HTTP_HDR_X_FORWARDED_HOST) == 0) {
+	if (_oidc_strcmp(arg, OIDC_HTTP_HDR_X_FORWARDED_HOST) == 0) {
 		*x_forwarded_headers |= OIDC_HDR_X_FORWARDED_HOST;
-	} else if (apr_strnatcmp(arg, OIDC_HTTP_HDR_X_FORWARDED_PORT) == 0) {
+	} else if (_oidc_strcmp(arg, OIDC_HTTP_HDR_X_FORWARDED_PORT) == 0) {
 		*x_forwarded_headers |= OIDC_HDR_X_FORWARDED_PORT;
-	} else if (apr_strnatcmp(arg, OIDC_HTTP_HDR_X_FORWARDED_PROTO) == 0) {
+	} else if (_oidc_strcmp(arg, OIDC_HTTP_HDR_X_FORWARDED_PROTO) == 0) {
 		*x_forwarded_headers |= OIDC_HDR_X_FORWARDED_PROTO;
-	} else if (apr_strnatcmp(arg, OIDC_HTTP_HDR_FORWARDED) == 0) {
+	} else if (_oidc_strcmp(arg, OIDC_HTTP_HDR_FORWARDED) == 0) {
 		*x_forwarded_headers |= OIDC_HDR_FORWARDED;
 	}
 

@@ -128,7 +128,7 @@ apr_byte_t oidc_session_load_cache_by_uuid(request_rec *r, oidc_cfg *c,
 			/* compare the session id in the cache value so it allows  us to detect cache corruption */
 			oidc_session_get(r, z, OIDC_SESSION_SESSION_ID, &stored_uuid);
 			if ((stored_uuid == NULL)
-					|| (apr_strnatcmp(stored_uuid, uuid) != 0)) {
+					|| (_oidc_strcmp(stored_uuid, uuid) != 0)) {
 				oidc_error(r,
 						"cache corruption detected: stored session id (%s) is not equal to requested session id (%s)",
 						stored_uuid, uuid);
@@ -287,7 +287,7 @@ apr_byte_t oidc_session_extract(request_rec *r, oidc_session_t *z) {
 	if (ses_p_tb_id != NULL) {
 		env_p_tb_id = oidc_util_get_provided_token_binding_id(r);
 		if ((env_p_tb_id == NULL)
-				|| (apr_strnatcmp(env_p_tb_id, ses_p_tb_id) != 0)) {
+				|| (_oidc_strcmp(env_p_tb_id, ses_p_tb_id) != 0)) {
 			oidc_error(r,
 					"the Provided Token Binding ID stored in the session doesn't match the one presented by the user agent");
 			oidc_session_clear(r, z);

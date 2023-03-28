@@ -60,7 +60,7 @@ static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c,
 	/* see if it is a string and it (case-insensitively) matches the Require'd value */
 	if (json_is_string(val)) {
 
-		if (apr_strnatcmp(json_string_value(val), spec_c) == 0)
+		if (_oidc_strcmp(json_string_value(val), spec_c) == 0)
 			return TRUE;
 
 		/* see if it is a integer and it equals the Require'd value */
@@ -72,7 +72,7 @@ static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c,
 		/* see if it is a boolean and it (case-insensitively) matches the Require'd value */
 	} else if (json_is_boolean(val)) {
 
-		if (apr_strnatcmp(json_is_true(val) ? "true" : "false", spec_c) == 0)
+		if (_oidc_strcmp((json_is_true(val) ? "true" : "false"), spec_c) == 0)
 			return TRUE;
 
 		/* if it is an array, we'll walk it */
@@ -89,13 +89,14 @@ static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c,
 				 * whitespace). At this point, spec_c points to the
 				 * NULL-terminated value pattern.
 				 */
-				if (apr_strnatcmp(json_string_value(elem), spec_c) == 0)
+				if (_oidc_strcmp(json_string_value(elem), spec_c) == 0)
 					return TRUE;
 
 			} else if (json_is_boolean(elem)) {
 
-				if (apr_strnatcmp(
-						json_is_true(elem) ? "true" : "false", spec_c) == 0)
+				if (_oidc_strcmp((json_is_true(elem) ? "true" : "false"),
+						spec_c)
+						== 0)
 					return TRUE;
 
 			} else if (json_is_integer(elem)) {
@@ -107,14 +108,14 @@ static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c,
 
 				oidc_warn(r,
 						"unhandled in-array JSON object type [%d] for key \"%s\"",
-						elem->type, (const char * ) key);
+						elem->type, (const char* ) key);
 			}
 
 		}
 
 	} else {
 		oidc_warn(r, "unhandled JSON object type [%d] for key \"%s\"",
-				val->type, (const char * ) key);
+				val->type, (const char* ) key);
 	}
 
 	return FALSE;
@@ -276,7 +277,7 @@ static apr_byte_t jq_parse(request_rec *r, jq_state *jq, struct jv_parser *parse
 			jv dumped = jv_dump_string(result, 0);
 			const char *str = jv_string_value(dumped);
 			oidc_debug(r, "dumped: %s", str);
-			rv = (apr_strnatcmp(str, "true") == 0);
+			rv = (_oidc_strcmp(str, "true") == 0);
 		}
 
 		jv_free(result);

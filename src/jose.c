@@ -187,7 +187,7 @@ char* oidc_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt,
 		oidc_jose_error_t *err) {
 	cjose_err cjose_err;
 	const char *cser = NULL;
-	if (strcmp(jwt->header.alg, CJOSE_HDR_ALG_NONE) != 0) {
+	if (_oidc_strcmp(jwt->header.alg, CJOSE_HDR_ALG_NONE) != 0) {
 		if (cjose_jws_export(jwt->cjose_jws, &cser, &cjose_err) == FALSE) {
 			oidc_jose_error(err, "cjose_jws_export failed: %s",
 					oidc_cjose_e2s(pool, cjose_err));
@@ -217,24 +217,24 @@ char* oidc_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt,
  * return the key type for an algorithm
  */
 static int oidc_alg2kty(const char *alg) {
-	if (strcmp(alg, CJOSE_HDR_ALG_DIR) == 0)
+	if (_oidc_strcmp(alg, CJOSE_HDR_ALG_DIR) == 0)
 		return CJOSE_JWK_KTY_OCT;
-	if (strncmp(alg, "RS", 2) == 0)
+	if (_oidc_strncmp(alg, "RS", 2) == 0)
 		return CJOSE_JWK_KTY_RSA;
-	if (strncmp(alg, "PS", 2) == 0)
+	if (_oidc_strncmp(alg, "PS", 2) == 0)
 		return CJOSE_JWK_KTY_RSA;
-	if (strncmp(alg, "HS", 2) == 0)
+	if (_oidc_strncmp(alg, "HS", 2) == 0)
 		return CJOSE_JWK_KTY_OCT;
 #if (OIDC_JOSE_EC_SUPPORT)
-	if (strncmp(alg, "ES", 2) == 0)
+	if (_oidc_strncmp(alg, "ES", 2) == 0)
 		return CJOSE_JWK_KTY_EC;
 #endif
-	if ((strcmp(alg, CJOSE_HDR_ALG_A128KW) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_A192KW) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_A256KW) == 0))
+	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_A128KW) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_A192KW) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_A256KW) == 0))
 		return CJOSE_JWK_KTY_OCT;
-	if ((strcmp(alg, CJOSE_HDR_ALG_RSA1_5) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_RSA_OAEP) == 0))
+	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_RSA1_5) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_RSA_OAEP) == 0))
 		return CJOSE_JWK_KTY_RSA;
 	return -1;
 }
@@ -254,24 +254,24 @@ unsigned int oidc_alg2keysize(const char *alg) {
 	if (alg == NULL)
 		return 0;
 
-	if (strcmp(alg, CJOSE_HDR_ALG_A128KW) == 0)
+	if (_oidc_strcmp(alg, CJOSE_HDR_ALG_A128KW) == 0)
 		return 16;
-	if (strcmp(alg, CJOSE_HDR_ALG_A192KW) == 0)
+	if (_oidc_strcmp(alg, CJOSE_HDR_ALG_A192KW) == 0)
 		return 24;
-	if (strcmp(alg, CJOSE_HDR_ALG_A256KW) == 0)
+	if (_oidc_strcmp(alg, CJOSE_HDR_ALG_A256KW) == 0)
 		return 32;
 
-	if ((strcmp(alg, CJOSE_HDR_ALG_RS256) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_PS256) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_HS256) == 0))
+	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_RS256) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_PS256) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_HS256) == 0))
 		return 32;
-	if ((strcmp(alg, CJOSE_HDR_ALG_RS384) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_PS384) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_HS384) == 0))
+	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_RS384) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_PS384) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_HS384) == 0))
 		return 48;
-	if ((strcmp(alg, CJOSE_HDR_ALG_RS512) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_PS512) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_HS512) == 0))
+	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_RS512) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_PS512) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_HS512) == 0))
 		return 64;
 
 	return 0;
@@ -317,8 +317,8 @@ static cjose_jwk_t* _oidc_jwk_parse_x5c_spec(apr_pool_t *pool,
 		goto end;
 	}
 
-	if ((apr_strnatcmp(kty, OIDC_JOSE_HDR_KTY_RSA) != 0)
-			&& (apr_strnatcmp(kty, OIDC_JOSE_HDR_KTY_EC) != 0)) {
+	if ((_oidc_strcmp(kty, OIDC_JOSE_HDR_KTY_RSA) != 0)
+			&& (_oidc_strcmp(kty, OIDC_JOSE_HDR_KTY_EC) != 0)) {
 		oidc_jose_error(err,
 				"no \"" OIDC_JOSE_HDR_KTY_RSA "\" or \"" OIDC_JOSE_HDR_KTY_EC "\" key type found JWK JSON value");
 		goto end;
@@ -550,7 +550,7 @@ static apr_byte_t oidc_jose_array_has_string(apr_array_header_t *haystack,
 		const char *needle) {
 	int i = 0;
 	while (i < haystack->nelts) {
-		if (apr_strnatcmp(((const char**) haystack->elts)[i], needle) == 0)
+		if (_oidc_strcmp(((const char**) haystack->elts)[i], needle) == 0)
 			return TRUE;
 		i++;
 	}
@@ -1246,22 +1246,22 @@ apr_byte_t oidc_jose_hash_bytes(apr_pool_t *pool, const char *s_digest,
  * return the OpenSSL hash algorithm associated with a specified JWT algorithm
  */
 static char* oidc_jose_alg_to_openssl_digest(const char *alg) {
-	if ((strcmp(alg, CJOSE_HDR_ALG_RS256) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_PS256) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_HS256) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_ES256) == 0)) {
+	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_RS256) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_PS256) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_HS256) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_ES256) == 0)) {
 		return LN_sha256;
 	}
-	if ((strcmp(alg, CJOSE_HDR_ALG_RS384) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_PS384) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_HS384) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_ES384) == 0)) {
+	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_RS384) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_PS384) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_HS384) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_ES384) == 0)) {
 		return LN_sha384;
 	}
-	if ((strcmp(alg, CJOSE_HDR_ALG_RS512) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_PS512) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_HS512) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_ES512) == 0)) {
+	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_RS512) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_PS512) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_HS512) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_ES512) == 0)) {
 		return LN_sha512;
 	}
 	return NULL;
@@ -1290,22 +1290,22 @@ apr_byte_t oidc_jose_hash_string(apr_pool_t *pool, const char *alg,
  * return hash length
  */
 int oidc_jose_hash_length(const char *alg) {
-	if ((strcmp(alg, CJOSE_HDR_ALG_RS256) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_PS256) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_HS256) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_ES256) == 0)) {
+	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_RS256) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_PS256) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_HS256) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_ES256) == 0)) {
 		return 32;
 	}
-	if ((strcmp(alg, CJOSE_HDR_ALG_RS384) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_PS384) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_HS384) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_ES384) == 0)) {
+	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_RS384) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_PS384) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_HS384) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_ES384) == 0)) {
 		return 48;
 	}
-	if ((strcmp(alg, CJOSE_HDR_ALG_RS512) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_PS512) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_HS512) == 0)
-			|| (strcmp(alg, CJOSE_HDR_ALG_ES512) == 0)) {
+	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_RS512) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_PS512) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_HS512) == 0)
+			|| (_oidc_strcmp(alg, CJOSE_HDR_ALG_ES512) == 0)) {
 		return 64;
 	}
 	return 0;

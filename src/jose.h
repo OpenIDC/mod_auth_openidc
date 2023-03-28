@@ -70,6 +70,8 @@
 #endif
 
 #define _oidc_strlen(s) ( s ? strlen(s) : 0 )
+#define _oidc_strcmp(a, b) ( (a && b) ? apr_strnatcmp(a, b) : -1 )
+#define _oidc_strncmp(a, b, size) ( (a && b) ? strncmp(a, b, size) : -1 )
 
 #define OIDC_JOSE_ALG_SHA1 "sha1"
 #define OIDC_JOSE_ALG_SHA256 "sha256"

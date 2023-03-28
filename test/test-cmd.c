@@ -397,7 +397,7 @@ int hash_base64url(int argc, char **argv, apr_pool_t *pool) {
 				"hash_base64url <string> [algo] [base64url-decode-first]");
 
 	char *algo = argc > 3 ? argv[3] : "sha256";
-	int base64url_decode_first = argc > 4 ? (strcmp(argv[4], "yes") == 0) : 0;
+	int base64url_decode_first = argc > 4 ? (_oidc_strcmp(argv[4], "yes") == 0) : 0;
 	char *output = NULL;
 
 	request_rec *r = request_setup(pool);
@@ -495,28 +495,28 @@ int main(int argc, char **argv, char **env) {
 	apr_pool_t *pool = NULL;
 	apr_pool_create(&pool, NULL);
 
-	if (strcmp(argv[1], "sign") == 0)
+	if (_oidc_strcmp(argv[1], "sign") == 0)
 		return sign(argc, argv, pool);
 
-	if (strcmp(argv[1], "verify") == 0)
+	if (_oidc_strcmp(argv[1], "verify") == 0)
 		return verify(argc, argv, pool);
 
-	if (strcmp(argv[1], "decrypt") == 0)
+	if (_oidc_strcmp(argv[1], "decrypt") == 0)
 		return decrypt(argc, argv, pool);
 
-	if (strcmp(argv[1], "key2jwk") == 0)
+	if (_oidc_strcmp(argv[1], "key2jwk") == 0)
 		return key2jwk(argc, argv, pool);
 
-	if (strcmp(argv[1], "enckey") == 0)
+	if (_oidc_strcmp(argv[1], "enckey") == 0)
 		return enckey(argc, argv, pool);
 
-	if (strcmp(argv[1], "hash_base64url") == 0)
+	if (_oidc_strcmp(argv[1], "hash_base64url") == 0)
 		return hash_base64url(argc, argv, pool);
 
-	if (strcmp(argv[1], "timestamp") == 0)
+	if (_oidc_strcmp(argv[1], "timestamp") == 0)
 		return timestamp(argc, argv, pool);
 
-	if (strcmp(argv[1], "uuid") == 0)
+	if (_oidc_strcmp(argv[1], "uuid") == 0)
 		return uuid(argc, argv, pool);
 
 	apr_pool_destroy(pool);

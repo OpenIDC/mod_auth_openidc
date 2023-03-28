@@ -541,7 +541,7 @@ static const char* oidc_set_passphrase_slot(cmd_parms *cmd, void *struct_ptr,
 	char **argv = NULL;
 	char *result = NULL;
 	/* Based on code from mod_session_crypto. */
-	if (arglen > 5 && strncmp(arg, "exec:", 5) == 0) {
+	if (arglen > 5 && _oidc_strncmp(arg, "exec:", 5) == 0) {
 		if (apr_tokenize_to_argv(arg + 5, &argv, cmd->temp_pool) != APR_SUCCESS) {
 			return apr_pstrcat(cmd->pool,
 					"Unable to parse exec arguments from ", arg + 5, NULL);
@@ -686,11 +686,11 @@ const char* oidc_parse_pkce_type(apr_pool_t *pool, const char *arg,
 	if (rv != NULL)
 		return rv;
 
-	if (apr_strnatcmp(arg, OIDC_PKCE_METHOD_PLAIN) == 0) {
+	if (_oidc_strcmp(arg, OIDC_PKCE_METHOD_PLAIN) == 0) {
 		*type = &oidc_pkce_plain;
-	} else if (apr_strnatcmp(arg, OIDC_PKCE_METHOD_S256) == 0) {
+	} else if (_oidc_strcmp(arg, OIDC_PKCE_METHOD_S256) == 0) {
 		*type = &oidc_pkce_s256;
-	} else if (apr_strnatcmp(arg, OIDC_PKCE_METHOD_REFERRED_TB) == 0) {
+	} else if (_oidc_strcmp(arg, OIDC_PKCE_METHOD_REFERRED_TB) == 0) {
 		*type = &oidc_pkce_referred_tb;
 	}
 
@@ -1044,9 +1044,9 @@ static const char* oidc_set_pass_claims_as(cmd_parms *cmd, void *m,
 			&dir_cfg->pass_info_in_headers, &dir_cfg->pass_info_in_env_vars);
 	if (rv == NULL) {
 		if (arg2 != NULL) {
-			if (apr_strnatcmp(arg2, "base64url") == 0) {
+			if (_oidc_strcmp(arg2, "base64url") == 0) {
 				dir_cfg->pass_info_as = OIDC_PASS_APP_INFO_AS_BASE64URL;
-			} else if (apr_strnatcmp(arg2, "latin1") == 0) {
+			} else if (_oidc_strcmp(arg2, "latin1") == 0) {
 					dir_cfg->pass_info_as = OIDC_PASS_APP_INFO_AS_LATIN1;
 			} else {
 				rv = apr_pstrcat(cmd->temp_pool, "unknown encoding option \"",
@@ -1361,7 +1361,7 @@ static const char* oidc_set_signed_jwks_uri(cmd_parms *cmd, void *m,
 			&auth_openidc_module);
 	const char *rv = NULL;
 	oidc_jose_error_t err;
-	if (apr_strnatcmp(arg1, "") != 0) {
+	if (_oidc_strcmp(arg1, "") != 0) {
 		rv = oidc_set_url_slot(cmd, cfg, arg1);
 		if (rv != NULL)
 			return OIDC_CONFIG_DIR_RV(cmd, rv);
@@ -1395,7 +1395,7 @@ char* oidc_cfg_dir_state_cookie_prefix(request_rec *r) {
 			&auth_openidc_module);
 	if ((dir_cfg->state_cookie_prefix == NULL)
 			|| ((dir_cfg->state_cookie_prefix != NULL)
-					&& (apr_strnatcmp(dir_cfg->state_cookie_prefix,
+					&& (_oidc_strcmp(dir_cfg->state_cookie_prefix,
 							OIDC_CONFIG_STRING_UNSET) == 0)))
 		return OIDC_DEFAULT_STATE_COOKIE_PREFIX;
 	return dir_cfg->state_cookie_prefix;
@@ -1559,7 +1559,7 @@ static void oidc_merge_provider_config(apr_pool_t *pool, oidc_provider_t *dst,
 			add->validate_issuer != OIDC_DEFAULT_VALIDATE_ISSUER ?
 					add->validate_issuer : base->validate_issuer;
 	dst->client_name =
-			apr_strnatcmp(add->client_name, OIDC_DEFAULT_CLIENT_NAME) != 0 ?
+			_oidc_strcmp(add->client_name, OIDC_DEFAULT_CLIENT_NAME) != 0 ?
 					add->client_name : base->client_name;
 	dst->client_contact =
 			add->client_contact != NULL ?
@@ -1568,9 +1568,9 @@ static void oidc_merge_provider_config(apr_pool_t *pool, oidc_provider_t *dst,
 			add->registration_token != NULL ?
 					add->registration_token : base->registration_token;
 	dst->scope =
-			apr_strnatcmp(add->scope, OIDC_DEFAULT_SCOPE) != 0 ?
+			_oidc_strcmp(add->scope, OIDC_DEFAULT_SCOPE) != 0 ?
 					add->scope : base->scope;
-	dst->response_type = apr_strnatcmp(add->response_type,
+	dst->response_type = _oidc_strcmp(add->response_type,
 			OIDC_DEFAULT_RESPONSE_TYPE) != 0 ? add->response_type : base->response_type;
 	dst->response_mode =
 			add->response_mode != NULL ?
@@ -1855,7 +1855,7 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->oauth.introspection_endpoint_url :
 					base->oauth.introspection_endpoint_url;
 	c->oauth.introspection_endpoint_method =
-			apr_strnatcmp(add->oauth.introspection_endpoint_method,
+			_oidc_strcmp(add->oauth.introspection_endpoint_method,
 					OIDC_DEFAULT_OAUTH_ENDPOINT_METHOD) != 0 ?
 							add->oauth.introspection_endpoint_method :
 							base->oauth.introspection_endpoint_method;
@@ -1872,18 +1872,18 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->oauth.introspection_client_auth_bearer_token :
 					base->oauth.introspection_client_auth_bearer_token;
 	c->oauth.introspection_token_param_name =
-			apr_strnatcmp(add->oauth.introspection_token_param_name,
+			_oidc_strcmp(add->oauth.introspection_token_param_name,
 					OIDC_DEFAULT_OAUTH_TOKEN_PARAM_NAME) != 0 ?
 							add->oauth.introspection_token_param_name :
 							base->oauth.introspection_token_param_name;
 
 	c->oauth.introspection_token_expiry_claim_name =
-			apr_strnatcmp(add->oauth.introspection_token_expiry_claim_name,
+			_oidc_strcmp(add->oauth.introspection_token_expiry_claim_name,
 					OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_NAME) != 0 ?
 							add->oauth.introspection_token_expiry_claim_name :
 							base->oauth.introspection_token_expiry_claim_name;
 	c->oauth.introspection_token_expiry_claim_format =
-			apr_strnatcmp(add->oauth.introspection_token_expiry_claim_format,
+			_oidc_strcmp(add->oauth.introspection_token_expiry_claim_format,
 					OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_FORMAT) != 0 ?
 							add->oauth.introspection_token_expiry_claim_format :
 							base->oauth.introspection_token_expiry_claim_format;
@@ -1894,7 +1894,7 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					base->oauth.introspection_token_expiry_claim_required;
 
 	c->oauth.remote_user_claim.claim_name =
-			apr_strnatcmp(add->oauth.remote_user_claim.claim_name,
+			_oidc_strcmp(add->oauth.remote_user_claim.claim_name,
 					OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER) != 0 ?
 							add->oauth.remote_user_claim.claim_name :
 							base->oauth.remote_user_claim.claim_name;
@@ -2043,12 +2043,12 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->cookie_domain != NULL ?
 					add->cookie_domain : base->cookie_domain;
 	c->claim_delimiter =
-			apr_strnatcmp(add->claim_delimiter, OIDC_DEFAULT_CLAIM_DELIMITER)
+			_oidc_strcmp(add->claim_delimiter, OIDC_DEFAULT_CLAIM_DELIMITER)
 			!= 0 ? add->claim_delimiter : base->claim_delimiter;
 	c->claim_prefix =
 			add->claim_prefix != NULL ? add->claim_prefix : base->claim_prefix;
 	c->remote_user_claim.claim_name =
-			apr_strnatcmp(add->remote_user_claim.claim_name,
+			_oidc_strcmp(add->remote_user_claim.claim_name,
 					OIDC_DEFAULT_CLAIM_REMOTE_USER) != 0 ?
 							add->remote_user_claim.claim_name :
 							base->remote_user_claim.claim_name;
@@ -2180,7 +2180,7 @@ void* oidc_create_dir_config(apr_pool_t *pool, char *path) {
 char* oidc_cfg_dir_discover_url(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
-	if ((dir_cfg->discover_url != NULL) && (apr_strnatcmp(dir_cfg->discover_url,
+	if ((dir_cfg->discover_url != NULL) && (_oidc_strcmp(dir_cfg->discover_url,
 			OIDC_CONFIG_STRING_UNSET) == 0))
 		return NULL;
 	return dir_cfg->discover_url;
@@ -2191,7 +2191,7 @@ char* oidc_cfg_dir_cookie(request_rec *r) {
 			&auth_openidc_module);
 	if ((dir_cfg->cookie == NULL)
 			|| ((dir_cfg->cookie != NULL)
-					&& (apr_strnatcmp(dir_cfg->cookie, OIDC_CONFIG_STRING_UNSET)
+					&& (_oidc_strcmp(dir_cfg->cookie, OIDC_CONFIG_STRING_UNSET)
 							== 0)))
 		return OIDC_DEFAULT_COOKIE;
 	return dir_cfg->cookie;
@@ -2202,7 +2202,7 @@ char* oidc_cfg_dir_cookie_path(request_rec *r) {
 			&auth_openidc_module);
 	if ((dir_cfg->cookie_path == NULL)
 			|| ((dir_cfg->cookie_path != NULL)
-					&& (apr_strnatcmp(dir_cfg->cookie_path,
+					&& (_oidc_strcmp(dir_cfg->cookie_path,
 							OIDC_CONFIG_STRING_UNSET) == 0)))
 		return OIDC_DEFAULT_COOKIE_PATH;
 	return dir_cfg->cookie_path;
@@ -2213,7 +2213,7 @@ char* oidc_cfg_dir_authn_header(request_rec *r) {
 			&auth_openidc_module);
 	if ((dir_cfg->authn_header == NULL)
 			|| ((dir_cfg->authn_header != NULL)
-					&& (apr_strnatcmp(dir_cfg->authn_header,
+					&& (_oidc_strcmp(dir_cfg->authn_header,
 							OIDC_CONFIG_STRING_UNSET) == 0)))
 		return OIDC_DEFAULT_AUTHN_HEADER;
 	return dir_cfg->authn_header;
@@ -2384,16 +2384,16 @@ void* oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	oidc_dir_cfg *base = BASE;
 	oidc_dir_cfg *add = ADD;
 	c->discover_url =
-			(apr_strnatcmp(add->discover_url, OIDC_CONFIG_STRING_UNSET) != 0) ?
+			(_oidc_strcmp(add->discover_url, OIDC_CONFIG_STRING_UNSET) != 0) ?
 					add->discover_url : base->discover_url;
 	c->cookie =
-			(apr_strnatcmp(add->cookie, OIDC_CONFIG_STRING_UNSET) != 0) ?
+			(_oidc_strcmp(add->cookie, OIDC_CONFIG_STRING_UNSET) != 0) ?
 					add->cookie : base->cookie;
 	c->cookie_path =
-			(apr_strnatcmp(add->cookie_path, OIDC_CONFIG_STRING_UNSET) != 0) ?
+			(_oidc_strcmp(add->cookie_path, OIDC_CONFIG_STRING_UNSET) != 0) ?
 					add->cookie_path : base->cookie_path;
 	c->authn_header =
-			(apr_strnatcmp(add->authn_header, OIDC_CONFIG_STRING_UNSET) != 0) ?
+			(_oidc_strcmp(add->authn_header, OIDC_CONFIG_STRING_UNSET) != 0) ?
 					add->authn_header : base->authn_header;
 	c->unauth_action =
 			add->unauth_action != OIDC_CONFIG_POS_INT_UNSET ?
@@ -2468,7 +2468,7 @@ void* oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					base->logout_on_error_refresh;
 
 	c->state_cookie_prefix =
-			(apr_strnatcmp(add->state_cookie_prefix, OIDC_CONFIG_STRING_UNSET)
+			(_oidc_strcmp(add->state_cookie_prefix, OIDC_CONFIG_STRING_UNSET)
 					!= 0) ?
 							add->state_cookie_prefix : base->state_cookie_prefix;
 
@@ -2515,7 +2515,7 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 		} else {
 			apr_uri_parse(s->process->pconf, c->provider.metadata_url, &r_uri);
 			if ((r_uri.scheme == NULL)
-					|| (apr_strnatcmp(r_uri.scheme, "https") != 0)) {
+					|| (_oidc_strcmp(r_uri.scheme, "https") != 0)) {
 				oidc_swarn(s,
 						"the URL scheme (%s) of the configured " OIDCProviderMetadataURL " SHOULD be \"https\" for security reasons!",
 						r_uri.scheme);
@@ -2533,7 +2533,7 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 
 	apr_uri_parse(s->process->pconf, c->redirect_uri, &r_uri);
 	if (!redirect_uri_is_relative) {
-		if (apr_strnatcmp(r_uri.scheme, "https") != 0) {
+		if (_oidc_strcmp(r_uri.scheme, "https") != 0) {
 			oidc_swarn(s,
 					"the URL scheme (%s) of the configured " OIDCRedirectURI " SHOULD be \"https\" for security reasons (moreover: some Providers may reject non-HTTPS URLs)",
 					r_uri.scheme);
@@ -2569,7 +2569,7 @@ static int oidc_check_config_oauth(server_rec *s, oidc_cfg *c) {
 	if (c->oauth.metadata_url != NULL) {
 		apr_uri_parse(s->process->pconf, c->oauth.metadata_url, &r_uri);
 		if ((r_uri.scheme == NULL)
-				|| (apr_strnatcmp(r_uri.scheme, "https") != 0)) {
+				|| (_oidc_strcmp(r_uri.scheme, "https") != 0)) {
 			oidc_swarn(s,
 					"the URL scheme (%s) of the configured " OIDCOAuthServerMetadataURL " SHOULD be \"https\" for security reasons!",
 					r_uri.scheme);

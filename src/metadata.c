@@ -944,7 +944,7 @@ apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg *cfg,
 		if (ext == NULL)
 			continue;
 		ext++;
-		if (strcmp(ext, OIDC_METADATA_SUFFIX_PROVIDER) != 0)
+		if (_oidc_strcmp(ext, OIDC_METADATA_SUFFIX_PROVIDER) != 0)
 			continue;
 
 		/* get the issuer from the filename */
@@ -1214,7 +1214,7 @@ static void oidc_metadata_get_jwks(request_rec *r, json_t *json,
 		elem = json_array_get(keys, i);
 
 		use = json_string_value(json_object_get(elem, OIDC_JWK_USE));
-		if ((use != NULL) && (strcmp(use, s_use) != 0)) {
+		if ((use != NULL) && (_oidc_strcmp(use, s_use) != 0)) {
 			oidc_debug(r,
 					"skipping key because of non-matching \"%s\": \"%s\" != \"%s\"",
 					OIDC_JWK_USE, use, s_use);
