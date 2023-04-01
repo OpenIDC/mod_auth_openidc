@@ -1,3 +1,7 @@
+04/01/2023
+- allow target_link_uri's without a path in 3rd-party-init SSO with a multi-provider setup
+- correct error log in target_link_uri matching
+
 03/28/2023
 - CVE-2023-28625: prevent core dump when OIDCStripCookies is set and a crafted Cookie header is supplied
   https://github.com/OpenIDC/mod_auth_openidc/security/advisories/GHSA-f5xw-rvfr-24qr

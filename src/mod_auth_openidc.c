@@ -2424,10 +2424,10 @@ static int oidc_target_link_uri_matches_configuration(request_rec *r,
 	char *cookie_path = oidc_cfg_dir_cookie_path(r);
 	if (cookie_path != NULL) {
 		char *p = (o_uri.path != NULL) ? strstr(o_uri.path, cookie_path) : NULL;
-		if ((p == NULL) || (p != o_uri.path)) {
+		if (p != o_uri.path) {
 			oidc_error(r,
 					"the path (%s) configured in " OIDCCookiePath " does not match the URL path (%s) of the \"target_link_uri\" (%s): aborting to prevent an open redirect.",
-					cfg->cookie_domain, o_uri.path, target_link_uri);
+					cookie_path, o_uri.path, target_link_uri);
 			return FALSE;
 		} else if (_oidc_strlen(o_uri.path) > _oidc_strlen(cookie_path)) {
 			int n = _oidc_strlen(cookie_path);
@@ -2436,7 +2436,7 @@ static int oidc_target_link_uri_matches_configuration(request_rec *r,
 			if (o_uri.path[n] != OIDC_CHAR_FORWARD_SLASH) {
 				oidc_error(r,
 						"the path (%s) configured in " OIDCCookiePath " does not match the URL path (%s) of the \"target_link_uri\" (%s): aborting to prevent an open redirect.",
-						cfg->cookie_domain, o_uri.path, target_link_uri);
+						cookie_path, o_uri.path, target_link_uri);
 				return FALSE;
 			}
 		}
