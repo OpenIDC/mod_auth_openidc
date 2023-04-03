@@ -49,6 +49,7 @@
 #include <openssl/opensslconf.h>
 #include <openssl/opensslv.h>
 #include <openssl/evp.h>
+#include <openssl/err.h>
 #if (OPENSSL_VERSION_NUMBER < 0x01000000)
 #define OPENSSL_NO_THREADID
 #endif

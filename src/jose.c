@@ -44,6 +44,8 @@
  */
 
 #include <apr_base64.h>
+#define APR_WANT_BYTEFUNC
+#include <apr_want.h>
 
 #ifdef USE_LIBBROTLI
 #include <brotli/encode.h>
@@ -1495,11 +1497,12 @@ static apr_byte_t _oidc_jwk_ec_key_to_jwk(apr_pool_t *pool, EVP_PKEY *pkey,
 		goto end;
 	}
 
-	*fp_len = sizeof(cjose_jwk_ec_curve) + ec_keyspec.xlen + ec_keyspec.ylen;
+	apr_uint32_t b = htonl(crv);
+	*fp_len = sizeof(b) + ec_keyspec.xlen + ec_keyspec.ylen;
 	*fp = apr_pcalloc(pool, *fp_len);
-	memcpy(*fp, &ec_keyspec.crv, sizeof(cjose_jwk_ec_curve));
-	memcpy(*fp + sizeof(cjose_jwk_ec_curve), ec_keyspec.x, ec_keyspec.xlen);
-	memcpy(*fp + sizeof(cjose_jwk_ec_curve) + ec_keyspec.xlen, ec_keyspec.y,
+	memcpy(*fp, &b, sizeof(cjose_jwk_ec_curve));
+	memcpy(*fp + sizeof(b), ec_keyspec.x, ec_keyspec.xlen);
+	memcpy(*fp + sizeof(b) + ec_keyspec.xlen, ec_keyspec.y,
 			ec_keyspec.ylen);
 
 	rv = TRUE;

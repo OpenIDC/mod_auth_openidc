@@ -1,4 +1,10 @@
 04/03/2023
+- generate Elliptic Curve "kid" using curve identifier with htonl in network byte order
+  so "make check" works on big endian platforms
+- include openssl/err.h in config.c to avoid compiler warning with OpenSSL 1.0.x
+- bump to 2.4.13.3rc0
+
+04/03/2023
 - release 2.4.13.2
 
 04/01/2023
