@@ -1,3 +1,6 @@
+04/03/2023
+- release 2.4.13.2
+
 04/01/2023
 - allow target_link_uri's without a path in 3rd-party-init SSO with a multi-provider setup
 - correct error log in target_link_uri matching
