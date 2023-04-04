@@ -278,10 +278,20 @@ apr_byte_t oidc_proto_get_encryption_jwk_by_type(request_rec *r, oidc_cfg *cfg,
 	return (*jwk != NULL);
 }
 
-static oidc_jwk_t* oidc_key_list_first(const apr_array_header_t *key_list) {
+static oidc_jwk_t* oidc_key_list_first(const apr_array_header_t *key_list,
+		int kty, const char *use) {
 	oidc_jwk_t *rv = NULL;
-	if ((key_list) && (key_list->nelts > 0))
-		rv = ((oidc_jwk_t**) key_list->elts)[0];
+	int i = 0;
+	oidc_jwk_t *jwk = NULL;
+	for (i = 0; (key_list) && (i < key_list->nelts); i++) {
+		jwk = ((oidc_jwk_t**) key_list->elts)[i];
+		if ((jwk->kty == kty)
+				&& ((use == NULL) || (jwk->use == NULL)
+						|| (_oidc_strncmp(jwk->use, use, strlen(use)) == 0))) {
+			rv = jwk;
+			break;
+		}
+	}
 	return rv;
 }
 
@@ -330,6 +340,7 @@ char* oidc_proto_create_request_object(request_rec *r,
 
 	char *serialized_request_object = NULL;
 	oidc_jose_error_t err;
+	int kty = -1;
 
 	/* get the crypto settings from the configuration */
 	json_t *crypto = json_object_get(request_object_config, "crypto");
@@ -341,16 +352,22 @@ char* oidc_proto_create_request_object(request_rec *r,
 
 		sjwk = NULL;
 		jwk_needs_destroy = 0;
-
-		switch (oidc_jwt_alg2kty(request_object)) {
+		kty = oidc_jwt_alg2kty(request_object);
+		switch (kty) {
 		case CJOSE_JWK_KTY_RSA:
 		case CJOSE_JWK_KTY_EC:
 			if ((provider->client_signing_keys != NULL)
 					|| (cfg->private_keys != NULL)) {
 				sjwk = provider->client_signing_keys ?
-						oidc_key_list_first(provider->client_signing_keys) :
-						oidc_key_list_first(cfg->private_keys);
-				request_object->header.kid = apr_pstrdup(r->pool, sjwk->kid);
+						oidc_key_list_first(provider->client_signing_keys, kty,
+								NULL) :
+								oidc_key_list_first(cfg->private_keys, kty,
+										OIDC_JWK_SIG);
+				if (sjwk && sjwk->kid)
+					request_object->header.kid = apr_pstrdup(r->pool,
+							sjwk->kid);
+				else
+					oidc_error(r, "could not find a usable signing key");
 			} else {
 				oidc_error(r,
 						"no global or per-provider private keys have been configured to use for request object signing");
@@ -1539,11 +1556,13 @@ apr_byte_t oidc_proto_get_keys_from_jwks_uri(request_rec *r, oidc_cfg *cfg,
  * verify the signature on a JWT using the dynamically obtained and statically configured keys
  */
 apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt,
-		const oidc_jwks_uri_t *jwks_uri, int ssl_validate_server, apr_hash_t *static_keys,
-		const char *alg) {
+		const oidc_jwks_uri_t *jwks_uri, int ssl_validate_server,
+		apr_hash_t *static_keys, const char *alg) {
 
 	oidc_jose_error_t err;
 	apr_hash_t *dynamic_keys = NULL;
+	apr_byte_t force_refresh = FALSE;
+	apr_byte_t rv = FALSE;
 
 	if (alg != NULL) {
 		if (_oidc_strcmp(jwt->header.alg, alg) != 0) {
@@ -1566,8 +1585,8 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt,
 				"\"%s\" is set, but the JWT has a symmetric signature so we won't pull/use keys from there",
 				(jwks_uri->signed_uri != NULL) ? "signed_jwks_uri" : "jwks_uri");
 	} else {
-		apr_byte_t force_refresh = FALSE;
 		/* get the key from the JWKs that corresponds with the key specified in the header */
+		force_refresh = FALSE;
 		if (oidc_proto_get_keys_from_jwks_uri(r, cfg, jwt, jwks_uri,
 				ssl_validate_server, dynamic_keys, &force_refresh) == FALSE) {
 			oidc_jwk_list_destroy_hash(dynamic_keys);
@@ -1577,9 +1596,26 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt,
 
 	/* do the actual JWS verification with the locally and remotely provided key material */
 	// TODO: now static keys "win" if the same `kid` was used in both local and remote key sets
-	if (oidc_jwt_verify(r->pool, jwt,
+	rv = oidc_jwt_verify(r->pool, jwt,
 			oidc_util_merge_key_sets_hash(r->pool, static_keys, dynamic_keys),
-			&err) == FALSE) {
+			&err);
+
+	/* if no kid was provided we may have used stale keys from the cache, so we'll refresh it */
+	if ((rv == FALSE) && (jwt->header.kid == NULL)) {
+		oidc_warn(r,
+				"JWT signature verification failed (%s) for JWT with no kid, re-trying with forced refresh now",
+				oidc_jose_e2s(r->pool, err));
+		force_refresh = TRUE;
+		/* destroy the list to avoid memory leaks when keys with the same kid are retrieved */
+		oidc_jwk_list_destroy_hash(dynamic_keys);
+		oidc_proto_get_keys_from_jwks_uri(r, cfg, jwt, jwks_uri,
+				ssl_validate_server, dynamic_keys, &force_refresh);
+		rv = oidc_jwt_verify(r->pool, jwt,
+				oidc_util_merge_key_sets_hash(r->pool, static_keys,
+						dynamic_keys), &err);
+	}
+
+	if (rv == FALSE) {
 		oidc_error(r, "JWT signature verification failed: %s",
 				oidc_jose_e2s(r->pool, err));
 		oidc_jwk_list_destroy_hash(dynamic_keys);
@@ -1874,11 +1910,13 @@ static apr_byte_t oidc_proto_endpoint_access_token_bearer(request_rec *r,
 
 #define OIDC_PROTO_JWT_ASSERTION_ASYMMETRIC_ALG CJOSE_HDR_ALG_RS256
 
-static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r, oidc_cfg *cfg,
-		const char *client_id, const apr_array_header_t *client_signing_keys, const char *audience,
+static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r,
+		oidc_cfg *cfg, const char *client_id,
+		const apr_array_header_t *client_signing_keys, const char *audience,
 		apr_table_t *params) {
 	oidc_jwt_t *jwt = NULL;
 	oidc_jwk_t *jwk = NULL;
+	oidc_jwk_t *jwk_pub = NULL;
 
 	oidc_debug(r, "enter");
 
@@ -1886,16 +1924,22 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r, oidc_
 		return FALSE;
 
 	if ((client_signing_keys != NULL) && (client_signing_keys->nelts > 0)) {
-		jwk = ((oidc_jwk_t**) client_signing_keys->elts)[0];
-		jwt->header.x5t = apr_pstrdup(r->pool, jwk->x5t);
+		jwk = oidc_key_list_first(client_signing_keys, CJOSE_JWK_KTY_RSA, NULL);
+		if (jwk && jwk->x5t)
+			jwt->header.x5t = apr_pstrdup(r->pool, jwk->x5t);
 	} else if ((cfg->private_keys != NULL) && (cfg->private_keys->nelts > 0)) {
-		jwk = ((oidc_jwk_t**) cfg->private_keys->elts)[0];
-		if (cfg->public_keys->nelts > 0)
+		jwk = oidc_key_list_first(cfg->private_keys, CJOSE_JWK_KTY_RSA,
+				OIDC_JWK_SIG);
+		jwk_pub = oidc_key_list_first(cfg->public_keys, CJOSE_JWK_KTY_RSA,
+				OIDC_JWK_SIG);
+		if (jwk_pub && jwk_pub->x5t)
 			// populate x5t; at least required for Azure AD
-			jwt->header.x5t =
-					apr_pstrdup(r->pool, ((oidc_jwk_t**) (cfg->public_keys->elts))[0]->x5t);
-	} else {
-		oidc_error(r, "no private keys have been configured to use for private_key_jwt client authentication (" OIDCPrivateKeyFiles ")");
+			jwt->header.x5t = apr_pstrdup(r->pool, jwk_pub->x5t);
+	}
+
+	if (jwk == NULL) {
+		oidc_error(r,
+				"no private signing keys have been configured to use for private_key_jwt client authentication (" OIDCPrivateKeyFiles ")");
 		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}

@@ -284,15 +284,18 @@ int oidc_strnenvcmp(const char *a, const char *b, int len) {
  * escape a string
  */
 char* oidc_util_escape_string(const request_rec *r, const char *str) {
-	CURL *curl = curl_easy_init();
+	CURL *curl = NULL;
+	if (str == NULL)
+		return "";
+	curl = curl_easy_init();
 	if (curl == NULL) {
 		oidc_error(r, "curl_easy_init() error");
-		return NULL;
+		return "";
 	}
 	char *result = curl_easy_escape(curl, str, 0);
 	if (result == NULL) {
 		oidc_error(r, "curl_easy_escape() error");
-		return NULL;
+		return "";
 	}
 	char *rv = apr_pstrdup(r->pool, result);
 	curl_free(result);
@@ -304,10 +307,15 @@ char* oidc_util_escape_string(const request_rec *r, const char *str) {
  * escape a string
  */
 char* oidc_util_unescape_string(const request_rec *r, const char *str) {
-	CURL *curl = curl_easy_init();
+	CURL *curl = NULL;
+
+	if (str == NULL)
+		return "";
+
+	curl = curl_easy_init();
 	if (curl == NULL) {
 		oidc_error(r, "curl_easy_init() error");
-		return NULL;
+		return "";
 	}
 	int counter = 0;
 	char *replaced = (char*) str;
@@ -320,7 +328,7 @@ char* oidc_util_unescape_string(const request_rec *r, const char *str) {
 	char *result = curl_easy_unescape(curl, replaced, 0, 0);
 	if (result == NULL) {
 		oidc_error(r, "curl_easy_unescape() error");
-		return NULL;
+		return "";
 	}
 	char *rv = apr_pstrdup(r->pool, result);
 	curl_free(result);
@@ -802,7 +810,7 @@ static int oidc_util_http_add_form_url_encoded_param(void *rec, const char *key,
 		const char *value) {
 	oidc_http_encode_t *ctx = (oidc_http_encode_t*) rec;
 	oidc_debug(ctx->r, "processing: %s=%s", key,
-			(_oidc_strncmp(key, OIDC_PROTO_CLIENT_SECRET, _oidc_strlen(OIDC_PROTO_CLIENT_SECRET)) == 0) ? "***" : value);
+			(_oidc_strncmp(key, OIDC_PROTO_CLIENT_SECRET, _oidc_strlen(OIDC_PROTO_CLIENT_SECRET)) == 0) ? "***" : (value ? value : ""));
 	const char *sep = ctx->encoded_params ? OIDC_STR_AMP : "";
 	ctx->encoded_params = apr_psprintf(ctx->r->pool, "%s%s%s=%s",
 			ctx->encoded_params ? ctx->encoded_params : "", sep,

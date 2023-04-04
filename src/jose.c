@@ -422,6 +422,7 @@ void oidc_jwk_list_destroy_hash(apr_hash_t *keys) {
 		apr_hash_this(hi, NULL, NULL, (void**) &jwk);
 		oidc_jwk_destroy(jwk);
 	}
+	apr_hash_clear(keys);
 }
 
 apr_array_header_t* oidc_jwk_list_copy(apr_pool_t *pool,
@@ -777,12 +778,19 @@ static uint8_t* oidc_jwe_decrypt_impl(apr_pool_t *pool, cjose_jwe_t *jwe,
 
 		jwk = apr_hash_get(keys, kid, APR_HASH_KEY_STRING);
 		if (jwk != NULL) {
-			decrypted = cjose_jwe_decrypt(jwe, jwk->cjose_jwk, content_len,
-					&cjose_err);
-			if (decrypted == NULL)
+			if ((jwk->use == NULL)
+					|| (_oidc_strncmp(jwk->use, "enc", strlen("enc")) == 0)) {
+				decrypted = cjose_jwe_decrypt(jwe, jwk->cjose_jwk, content_len,
+						&cjose_err);
+				if (decrypted == NULL)
+					oidc_jose_error(err,
+							"encrypted JWT could not be decrypted with kid %s: %s",
+							kid, oidc_cjose_e2s(pool, cjose_err));
+			} else {
 				oidc_jose_error(err,
-						"encrypted JWT could not be decrypted with kid %s: %s",
-						kid, oidc_cjose_e2s(pool, cjose_err));
+						"cannot use non-encryption (\"use=enc\") key with kid: %s",
+						kid);
+			}
 		} else {
 			oidc_jose_error(err, "could not find key with kid: %s", kid);
 		}
@@ -792,12 +800,17 @@ static uint8_t* oidc_jwe_decrypt_impl(apr_pool_t *pool, cjose_jwe_t *jwe,
 		for (hi = apr_hash_first(pool, keys); hi; hi = apr_hash_next(hi)) {
 			apr_hash_this(hi, NULL, NULL, (void**) &jwk);
 
-			if (jwk->kty == oidc_alg2kty(alg)) {
-				decrypted = cjose_jwe_decrypt(jwe, jwk->cjose_jwk, content_len,
-						&cjose_err);
-				if (decrypted != NULL)
-					break;
-			}
+			if (jwk->kty != oidc_alg2kty(alg))
+				continue;
+
+			if ((jwk->use)
+					&& (_oidc_strncmp(jwk->use, "enc", strlen("enc")) != 0))
+				continue;
+
+			decrypted = cjose_jwe_decrypt(jwe, jwk->cjose_jwk, content_len,
+					&cjose_err);
+			if (decrypted != NULL)
+				break;
 		}
 
 		if (decrypted == NULL)
@@ -1800,6 +1813,7 @@ static char* internal_cjose_jwk_to_json(apr_pool_t *pool,
 	json_t *json = NULL, *temp = NULL;
 	json_error_t json_error;
 	int i = 0;
+	void *iter = NULL;
 
 	if (!oidc_jwk) {
 		oidc_jose_error(oidc_err,
@@ -1828,10 +1842,14 @@ static char* internal_cjose_jwk_to_json(apr_pool_t *pool,
 		json_object_set_new(json, OIDC_JOSE_JWK_USE_STR,
 				json_string(oidc_jwk->use));
 
-	if (json_object_update_new(json, temp) != 0) {
-		oidc_jose_error(oidc_err, "json_object_update_new failed");
-		goto to_json_cleanup;
+	iter = json_object_iter(temp);
+	while (iter) {
+		json_object_set(json, json_object_iter_key(iter),
+				json_object_iter_value(iter));
+		iter = json_object_iter_next(temp, iter);
 	}
+	json_decref(temp);
+	temp = NULL;
 
 	// set x5c
 	if ((oidc_jwk->x5c != NULL) && (oidc_jwk->x5c->nelts > 0)) {

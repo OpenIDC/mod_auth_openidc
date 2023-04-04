@@ -3,6 +3,8 @@
   OIDCPublicKeyFiles, OIDCPrivateKeyFiles, OIDCProviderVerifyCertFiles, OIDCOAuthVerifySharedKeys and OIDCOAuthVerifyCertFiles
   by using the prefix "sig:" or "enc:" in the value; using this in OIDCPublicKeyFiles also
   publishes separate "use: sig" and/or "use: enc" keys on the client jwks_uri <redirect_uri>?jwks=rsa
+- fix: don't immediately refresh of JWKs from (signed)_jwks_uri if "kid" was not set in JWT, but try the cache first
+- fix: properly respect "use" attribute (sig/enc) in signing, verification and encryption
 - bump to 2.4.13.3rc1
 
 04/03/2023
