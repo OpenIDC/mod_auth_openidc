@@ -805,6 +805,7 @@ static const char* oidc_set_public_key_files(cmd_parms *cmd, void *struct_ptr,
 		const char *arg) {
 	oidc_jwk_t *jwk = NULL;
 	oidc_jose_error_t err;
+	char *use = NULL;
 
 	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
 			&auth_openidc_module);
@@ -815,8 +816,8 @@ static const char* oidc_set_public_key_files(cmd_parms *cmd, void *struct_ptr,
 
 	char *kid = NULL, *fname = NULL;
 	int fname_len;
-	const char *rv = oidc_parse_enc_kid_key_tuple(cmd->pool, arg, &kid, &fname,
-			&fname_len, FALSE);
+	const char *rv = oidc_parse_use_enc_kid_key_tuple(cmd->pool, arg, &kid, &fname,
+			&fname_len, &use, FALSE);
 	if (rv != NULL)
 		return rv;
 
@@ -831,7 +832,8 @@ static const char* oidc_set_public_key_files(cmd_parms *cmd, void *struct_ptr,
 
 	if (*public_keys == NULL)
 		*public_keys = apr_array_make(cmd->pool, 4, sizeof(const oidc_jwk_t*));
-
+	if (use)
+		jwk->use = apr_pstrdup(cmd->pool, use);
 	*(const oidc_jwk_t**) apr_array_push(*public_keys) = jwk;
 
 	return NULL;
@@ -844,6 +846,7 @@ static const char* oidc_set_shared_keys(cmd_parms *cmd, void *struct_ptr,
 		const char *arg) {
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
+	char *use = NULL;
 
 	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
 			&auth_openidc_module);
@@ -852,8 +855,8 @@ static const char* oidc_set_shared_keys(cmd_parms *cmd, void *struct_ptr,
 
 	char *kid = NULL, *secret = NULL;
 	int key_len = 0;
-	const char *rv = oidc_parse_enc_kid_key_tuple(cmd->pool, arg, &kid, &secret,
-			&key_len, TRUE);
+	const char *rv = oidc_parse_use_enc_kid_key_tuple(cmd->pool, arg, &kid, &secret,
+			&key_len, &use, TRUE);
 	if (rv != NULL)
 		return rv;
 
@@ -867,6 +870,8 @@ static const char* oidc_set_shared_keys(cmd_parms *cmd, void *struct_ptr,
 
 	if (*shared_keys == NULL)
 		*shared_keys = apr_hash_make(cmd->pool);
+	if (use)
+		jwk->use = apr_pstrdup(cmd->pool, use);
 	apr_hash_set(*shared_keys, jwk->kid,
 			APR_HASH_KEY_STRING, jwk);
 
@@ -882,11 +887,12 @@ static const char* oidc_set_private_key_files_enc(cmd_parms *cmd, void *dummy,
 			&auth_openidc_module);
 	oidc_jwk_t *jwk = NULL;
 	oidc_jose_error_t err;
+	char *use = NULL;
 
 	char *kid = NULL, *fname = NULL;
 	int fname_len;
-	const char *rv = oidc_parse_enc_kid_key_tuple(cmd->pool, arg, &kid, &fname,
-			&fname_len, FALSE);
+	const char *rv = oidc_parse_use_enc_kid_key_tuple(cmd->pool, arg, &kid, &fname,
+			&fname_len, &use, FALSE);
 	if (rv != NULL)
 		return rv;
 
@@ -902,7 +908,8 @@ static const char* oidc_set_private_key_files_enc(cmd_parms *cmd, void *dummy,
 	if (cfg->private_keys == NULL)
 		cfg->private_keys = apr_array_make(cmd->pool, 4,
 				sizeof(const oidc_jwk_t*));
-
+	if (use)
+		jwk->use = apr_pstrdup(cmd->pool, use);
 	*(const oidc_jwk_t**) apr_array_push(cfg->private_keys) = jwk;
 
 	return NULL;

@@ -1,3 +1,10 @@
+04/04/2023
+- support configuration of dedicated signing and encryption keys in the primitives:
+  OIDCPublicKeyFiles, OIDCPrivateKeyFiles, OIDCProviderVerifyCertFiles, OIDCOAuthVerifySharedKeys and OIDCOAuthVerifyCertFiles
+  by using the prefix "sig:" or "enc:" in the value; using this in OIDCPublicKeyFiles also
+  publishes separate "use: sig" and/or "use: enc" keys on the client jwks_uri <redirect_uri>?jwks=rsa
+- bump to 2.4.13.3rc1
+
 04/03/2023
 - generate Elliptic Curve "kid" using curve identifier with htonl in network byte order
   so "make check" works on big endian platforms

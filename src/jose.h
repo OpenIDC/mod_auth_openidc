@@ -158,6 +158,8 @@ typedef struct oidc_jose_json_t {
 
 /* parsed JWK */
 typedef struct oidc_jwk_t {
+	/* use type */
+	char *use;
 	/* key type */
 	int kty;
 	/* key identifier */

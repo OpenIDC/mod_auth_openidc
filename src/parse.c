@@ -647,17 +647,30 @@ static const char *oidc_parse_key_value(apr_pool_t *pool, const char *enc,
 }
 
 #define OIDC_KEY_TUPLE_SEPARATOR "#"
+#define OIDC_KEY_SIG_PREFIX OIDC_JWK_SIG":"
+#define OIDC_KEY_ENC_PREFIX OIDC_JWK_ENC":"
 
 /*
- * parse a <encoding>#<key-identifier>#<key> tuple
+ * parse a <use>:<encoding>#<key-identifier>#<key> tuple
  */
-const char *oidc_parse_enc_kid_key_tuple(apr_pool_t *pool, const char *tuple,
-		char **kid, char **key, int *key_len, apr_byte_t triplet) {
+const char* oidc_parse_use_enc_kid_key_tuple(apr_pool_t *pool,
+		const char *tuple, char **kid, char **key, int *key_len, char **use,
+		apr_byte_t triplet) {
 	const char *rv = NULL;
 	char *s = NULL, *p = NULL, *q = NULL, *enc = NULL;
 
 	if ((tuple == NULL) || (_oidc_strcmp(tuple, "") == 0))
 		return "tuple value not set";
+
+	if (use) {
+		if (strstr(tuple, OIDC_KEY_SIG_PREFIX) == tuple) {
+			*use = OIDC_JWK_SIG;
+			tuple += strlen(OIDC_KEY_SIG_PREFIX);
+		} else if (strstr(tuple, OIDC_KEY_ENC_PREFIX) == tuple) {
+			*use = OIDC_JWK_ENC;
+			tuple += strlen(OIDC_KEY_ENC_PREFIX);
+		}
+	}
 
 	s = apr_pstrdup(pool, tuple);
 	p = strstr(s, OIDC_KEY_TUPLE_SEPARATOR);

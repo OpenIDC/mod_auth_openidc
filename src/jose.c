@@ -298,18 +298,10 @@ static apr_byte_t _oidc_jwk_parse_x5c(apr_pool_t *pool, json_t *json,
 /*
  * parse a JSON object with an "x5c" JWK representation into a cjose JWK object
  */
-static cjose_jwk_t* _oidc_jwk_parse_x5c_spec(apr_pool_t *pool,
-		const char *s_json, oidc_jose_error_t *err) {
+static cjose_jwk_t* _oidc_jwk_parse_x5c_spec(apr_pool_t *pool, json_t *json,
+		oidc_jose_error_t *err) {
 
 	cjose_jwk_t *cjose_jwk = NULL;
-
-	json_error_t json_error;
-	json_t *json = json_loads(s_json, 0, &json_error);
-	if (json == NULL) {
-		oidc_jose_error(err, "could not parse JWK: %s (%s)", json_error.text,
-				s_json);
-		goto end;
-	}
 
 	char *kty = NULL;
 	oidc_jose_get_string(pool, json, OIDC_JOSE_HDR_KTY, FALSE, &kty, NULL);
@@ -336,8 +328,6 @@ static cjose_jwk_t* _oidc_jwk_parse_x5c_spec(apr_pool_t *pool,
 	_oidc_jwk_parse_x5c(pool, json, &cjose_jwk, err);
 
 end:
-	if (json)
-		json_decref(json);
 
 	return cjose_jwk;
 }
@@ -345,12 +335,14 @@ end:
 /*
  * create a JWK struct from a cjose_jwk object
  */
-static oidc_jwk_t* oidc_jwk_from_cjose(apr_pool_t *pool, cjose_jwk_t *cjose_jwk) {
+static oidc_jwk_t* oidc_jwk_from_cjose(apr_pool_t *pool, cjose_jwk_t *cjose_jwk,
+		const char *use) {
 	cjose_err cjose_err;
 	oidc_jwk_t *jwk = oidc_jwk_new(pool);
 	jwk->cjose_jwk = cjose_jwk;
 	jwk->kid = apr_pstrdup(pool, cjose_jwk_get_kid(jwk->cjose_jwk, &cjose_err));
 	jwk->kty = cjose_jwk_get_kty(jwk->cjose_jwk, &cjose_err);
+	jwk->use = apr_pstrdup(pool, use);
 	return jwk;
 }
 
@@ -359,21 +351,43 @@ static oidc_jwk_t* oidc_jwk_from_cjose(apr_pool_t *pool, cjose_jwk_t *cjose_jwk)
  */
 oidc_jwk_t* oidc_jwk_parse(apr_pool_t *pool, const char *s_json,
 		oidc_jose_error_t *err) {
+	oidc_jwk_t *result = NULL;
+	cjose_jwk_t *cjose_jwk = NULL;
 	cjose_err cjose_err;
-	cjose_jwk_t *cjose_jwk = cjose_jwk_import(s_json, _oidc_strlen(s_json),
-			&cjose_err);
+	json_error_t json_error;
+	oidc_jose_error_t x5c_err;
+	char *use = NULL;
+
+	json_t *json = json_loads(s_json, 0, &json_error);
+	if (json == NULL) {
+		oidc_jose_error(err, "could not parse JWK: %s (%s)", json_error.text,
+				s_json);
+		goto end;
+	}
+
+	cjose_jwk = cjose_jwk_import(s_json, _oidc_strlen(s_json), &cjose_err);
+
 	if (cjose_jwk == NULL) {
 		// exception because x5c is not supported by cjose natively
 		// ignore errors set by oidc_jwk_parse_x5c_spec
-		oidc_jose_error_t x5c_err;
-		cjose_jwk = _oidc_jwk_parse_x5c_spec(pool, s_json, &x5c_err);
+		cjose_jwk = _oidc_jwk_parse_x5c_spec(pool, json, &x5c_err);
 		if (cjose_jwk == NULL) {
 			oidc_jose_error(err, "JWK parsing failed: %s",
 					oidc_cjose_e2s(pool, cjose_err));
-			return NULL;
+			goto end;
 		}
 	}
-	return oidc_jwk_from_cjose(pool, cjose_jwk);
+
+	oidc_jose_get_string(pool, json, OIDC_JOSE_JWK_USE_STR, FALSE, &use, NULL);
+
+	result = oidc_jwk_from_cjose(pool, cjose_jwk, use);
+
+end:
+
+	if (json)
+		json_decref(json);
+
+	return result;
 }
 
 oidc_jwk_t* oidc_jwk_copy(apr_pool_t *pool, const oidc_jwk_t *src) {
@@ -1783,7 +1797,7 @@ static char* internal_cjose_jwk_to_json(apr_pool_t *pool,
 		const oidc_jwk_t *oidc_jwk, oidc_jose_error_t *oidc_err) {
 	char *result = NULL, *cjose_jwk_json;
 	cjose_err err;
-	json_t *json = NULL, *tempArray = NULL;
+	json_t *json = NULL, *temp = NULL;
 	json_error_t json_error;
 	int i = 0;
 
@@ -1802,27 +1816,39 @@ static char* internal_cjose_jwk_to_json(apr_pool_t *pool,
 		goto to_json_cleanup;
 	}
 
-	json = json_loads(cjose_jwk_json, 0, &json_error);
-	if (!json) {
+	temp = json_loads(cjose_jwk_json, 0, &json_error);
+	if (!temp) {
 		oidc_jose_error(oidc_err, "json_loads failed");
+		goto to_json_cleanup;
+	}
+
+	json = json_object();
+
+	if (oidc_jwk->use)
+		json_object_set_new(json, OIDC_JOSE_JWK_USE_STR,
+				json_string(oidc_jwk->use));
+
+	if (json_object_update_new(json, temp) != 0) {
+		oidc_jose_error(oidc_err, "json_object_update_new failed");
 		goto to_json_cleanup;
 	}
 
 	// set x5c
 	if ((oidc_jwk->x5c != NULL) && (oidc_jwk->x5c->nelts > 0)) {
-		tempArray = json_array();
-		if (tempArray == NULL) {
+		temp = json_array();
+		if (temp == NULL) {
 			oidc_jose_error(oidc_err, "json_array failed");
 			goto to_json_cleanup;
 		}
 		for (i = 0; i < oidc_jwk->x5c->nelts; i++) {
-			if (json_array_append_new(tempArray,
-					json_string(((const char**) oidc_jwk->x5c->elts)[i])) == -1) {
+			if (json_array_append_new(temp,
+					json_string(((const char**) oidc_jwk->x5c->elts)[i]))
+					== -1) {
 				oidc_jose_error(oidc_err, "json_array_append failed");
 				goto to_json_cleanup;
 			}
 		}
-		json_object_set_new(json, OIDC_JOSE_JWK_X5C_STR, tempArray);
+		json_object_set_new(json, OIDC_JOSE_JWK_X5C_STR, temp);
 	}
 
 	// set x5t#256
