@@ -647,8 +647,8 @@ static const char *oidc_parse_key_value(apr_pool_t *pool, const char *enc,
 }
 
 #define OIDC_KEY_TUPLE_SEPARATOR "#"
-#define OIDC_KEY_SIG_PREFIX OIDC_JWK_SIG":"
-#define OIDC_KEY_ENC_PREFIX OIDC_JWK_ENC":"
+#define OIDC_KEY_SIG_PREFIX OIDC_JOSE_JWK_SIG_STR":"
+#define OIDC_KEY_ENC_PREFIX OIDC_JOSE_JWK_ENC_STR":"
 
 /*
  * parse a <use>:<encoding>#<key-identifier>#<key> tuple
@@ -664,10 +664,10 @@ const char* oidc_parse_use_enc_kid_key_tuple(apr_pool_t *pool,
 
 	if (use) {
 		if (strstr(tuple, OIDC_KEY_SIG_PREFIX) == tuple) {
-			*use = OIDC_JWK_SIG;
+			*use = OIDC_JOSE_JWK_SIG_STR;
 			tuple += strlen(OIDC_KEY_SIG_PREFIX);
 		} else if (strstr(tuple, OIDC_KEY_ENC_PREFIX) == tuple) {
-			*use = OIDC_JWK_ENC;
+			*use = OIDC_JOSE_JWK_ENC_STR;
 			tuple += strlen(OIDC_KEY_ENC_PREFIX);
 		}
 	}

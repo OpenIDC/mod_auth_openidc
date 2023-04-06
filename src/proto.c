@@ -225,9 +225,11 @@ apr_byte_t oidc_proto_get_encryption_jwk_by_type(request_rec *r, oidc_cfg *cfg,
 	apr_byte_t force_refresh = TRUE;
 	oidc_jwk_t *key = NULL;
 	char *jwk_json = NULL;
+	int i = 0;
 
 	/* TODO: forcefully refresh now; we may want to relax that */
-	oidc_metadata_jwks_get(r, cfg, &provider->jwks_uri, provider->ssl_validate_server, &j_jwks, &force_refresh);
+	oidc_metadata_jwks_get(r, cfg, &provider->jwks_uri,
+			provider->ssl_validate_server, &j_jwks, &force_refresh);
 
 	if (j_jwks == NULL) {
 		oidc_error(r, "could not retrieve JSON Web Keys");
@@ -241,17 +243,16 @@ apr_byte_t oidc_proto_get_encryption_jwk_by_type(request_rec *r, oidc_cfg *cfg,
 		return FALSE;
 	}
 
-	int i;
 	/* walk the set of published keys to find the first that has a matching type */
 	for (i = 0; i < json_array_size(keys); i++) {
 
 		json_t *elem = json_array_get(keys, i);
 
 		const char *use = json_string_value(
-				json_object_get(elem, OIDC_JWK_USE));
-		if ((use != NULL) && (_oidc_strcmp(use, OIDC_JWK_ENC) != 0)) {
+				json_object_get(elem, OIDC_JOSE_JWK_USE_STR));
+		if ((use != NULL) && (_oidc_strcmp(use, OIDC_JOSE_JWK_ENC_STR) != 0)) {
 			oidc_debug(r, "skipping key because of non-matching \"%s\": \"%s\"",
-					OIDC_JWK_USE, use);
+					OIDC_JOSE_JWK_USE_STR, use);
 			continue;
 		}
 
@@ -362,7 +363,7 @@ char* oidc_proto_create_request_object(request_rec *r,
 						oidc_key_list_first(provider->client_signing_keys, kty,
 								NULL) :
 								oidc_key_list_first(cfg->private_keys, kty,
-										OIDC_JWK_SIG);
+										OIDC_JOSE_JWK_SIG_STR);
 				if (sjwk && sjwk->kid)
 					request_object->header.kid = apr_pstrdup(r->pool,
 							sjwk->kid);
@@ -1413,7 +1414,7 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, oidc_jwt_t *jwt,
 	char *jwk_json = NULL;
 
 	/* get the (optional) thumbprint for comparison */
-	const char *x5t = oidc_jwt_hdr_get(jwt, OIDC_JWK_X5T);
+	const char *x5t = oidc_jwt_hdr_get(jwt, OIDC_JOSE_JWK_X5T_STR);
 	oidc_debug(r, "search for kid \"%s\" or thumbprint x5t \"%s\"",
 			jwt->header.kid, x5t);
 
@@ -1449,11 +1450,12 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, oidc_jwt_t *jwt,
 		/* see if we were looking for a specific kid, if not we'll include any key that matches the type */
 		if ((jwt->header.kid == NULL) && (x5t == NULL)) {
 			const char *use = json_string_value(
-					json_object_get(elem, OIDC_JWK_USE));
-			if ((use != NULL) && (_oidc_strcmp(use, OIDC_JWK_SIG) != 0)) {
+					json_object_get(elem, OIDC_JOSE_JWK_USE_STR));
+			if ((use != NULL)
+					&& (_oidc_strcmp(use, OIDC_JOSE_JWK_SIG_STR) != 0)) {
 				oidc_debug(r,
 						"skipping key because of non-matching \"%s\": \"%s\"",
-						OIDC_JWK_USE, use);
+						OIDC_JOSE_JWK_USE_STR, use);
 				oidc_jwk_destroy(jwk);
 			} else {
 				oidc_jwk_to_json(r->pool, jwk, &jwk_json, &err);
@@ -1484,14 +1486,15 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, oidc_jwt_t *jwt,
 
 		/* we are looking for a specific x5t, get the x5t from the current element */
 		char *s_x5t = NULL;
-		oidc_json_object_get_string(r->pool, elem, OIDC_JWK_X5T, &s_x5t,
+		oidc_json_object_get_string(r->pool, elem, OIDC_JOSE_JWK_X5T_STR,
+				&s_x5t,
 				NULL);
 		/* compare the requested thumbprint against the current element */
 		if ((s_x5t != NULL) && (x5t != NULL)
 				&& (_oidc_strcmp(x5t, s_x5t) == 0)) {
 			oidc_jwk_to_json(r->pool, jwk, &jwk_json, &err);
-			oidc_debug(r, "found matching %s: \"%s\" for jwk: %s", OIDC_JWK_X5T,
-					x5t, jwk_json);
+			oidc_debug(r, "found matching %s: \"%s\" for jwk: %s",
+					OIDC_JOSE_JWK_X5T_STR, x5t, jwk_json);
 			apr_hash_set(result, x5t, APR_HASH_KEY_STRING, jwk);
 			break;
 		}
@@ -1929,9 +1932,9 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r,
 			jwt->header.x5t = apr_pstrdup(r->pool, jwk->x5t);
 	} else if ((cfg->private_keys != NULL) && (cfg->private_keys->nelts > 0)) {
 		jwk = oidc_key_list_first(cfg->private_keys, CJOSE_JWK_KTY_RSA,
-				OIDC_JWK_SIG);
+				OIDC_JOSE_JWK_SIG_STR);
 		jwk_pub = oidc_key_list_first(cfg->public_keys, CJOSE_JWK_KTY_RSA,
-				OIDC_JWK_SIG);
+				OIDC_JOSE_JWK_SIG_STR);
 		if (jwk_pub && jwk_pub->x5t)
 			// populate x5t; at least required for Azure AD
 			jwt->header.x5t = apr_pstrdup(r->pool, jwk_pub->x5t);

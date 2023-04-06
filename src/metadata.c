@@ -1213,11 +1213,11 @@ static void oidc_metadata_get_jwks(request_rec *r, json_t *json,
 
 		elem = json_array_get(keys, i);
 
-		use = json_string_value(json_object_get(elem, OIDC_JWK_USE));
+		use = json_string_value(json_object_get(elem, OIDC_JOSE_JWK_USE_STR));
 		if ((use != NULL) && (_oidc_strcmp(use, s_use) != 0)) {
 			oidc_debug(r,
 					"skipping key because of non-matching \"%s\": \"%s\" != \"%s\"",
-					OIDC_JWK_USE, use, s_use);
+					OIDC_JOSE_JWK_USE_STR, use, s_use);
 			continue;
 		}
 
@@ -1245,9 +1245,9 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 			cfg->provider.client_jwks_uri);
 
 	oidc_metadata_get_jwks(r, j_conf,
-			OIDC_JWK_SIG, &provider->client_signing_keys);
+			OIDC_JOSE_JWK_SIG_STR, &provider->client_signing_keys);
 	oidc_metadata_get_jwks(r, j_conf,
-			OIDC_JWK_ENC, &provider->client_encryption_keys);
+			OIDC_JOSE_JWK_ENC_STR, &provider->client_encryption_keys);
 
 	oidc_jose_error_t err;
 	json_t *jwk = json_object_get(j_conf, "signed_jwks_uri_key");

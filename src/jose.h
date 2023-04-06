@@ -85,13 +85,15 @@
 #define OIDC_JOSE_ERROR_SOURCE_LENGTH   80
 #define OIDC_JOSE_ERROR_FUNCTION_LENGTH 80
 
-/* the OIDC jwk fileds as references in RFC 5741 */
+/* the OIDC jwk fields as references in RFC 5741 */
 #define OIDC_JOSE_JWK_KID_STR "kid" //Key ID
 #define OIDC_JOSE_JWK_KTY_STR "kty" //Key type
 #define OIDC_JOSE_JWK_USE_STR "use" //Key usage (enc|sig)
 #define OIDC_JOSE_JWK_X5C_STR "x5c" //X509 certificate chain
 #define OIDC_JOSE_JWK_X5T_STR "x5t" //X509 SHA-1 thumbprint
 #define OIDC_JOSE_JWK_X5T256_STR "x5t#S256" //X509 SHA-256 thumbprint
+#define OIDC_JOSE_JWK_SIG_STR "sig" //use signature type
+#define OIDC_JOSE_JWK_ENC_STR "enc" //use encryption type
 
 /* struct for returning errors to the caller */
 typedef struct {

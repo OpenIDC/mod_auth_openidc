@@ -779,7 +779,7 @@ static uint8_t* oidc_jwe_decrypt_impl(apr_pool_t *pool, cjose_jwe_t *jwe,
 		jwk = apr_hash_get(keys, kid, APR_HASH_KEY_STRING);
 		if (jwk != NULL) {
 			if ((jwk->use == NULL)
-					|| (_oidc_strncmp(jwk->use, "enc", strlen("enc")) == 0)) {
+					|| (_oidc_strcmp(jwk->use, OIDC_JOSE_JWK_ENC_STR) == 0)) {
 				decrypted = cjose_jwe_decrypt(jwe, jwk->cjose_jwk, content_len,
 						&cjose_err);
 				if (decrypted == NULL)
@@ -804,7 +804,7 @@ static uint8_t* oidc_jwe_decrypt_impl(apr_pool_t *pool, cjose_jwe_t *jwe,
 				continue;
 
 			if ((jwk->use)
-					&& (_oidc_strncmp(jwk->use, "enc", strlen("enc")) != 0))
+					&& (_oidc_strcmp(jwk->use, OIDC_JOSE_JWK_ENC_STR) != 0))
 				continue;
 
 			decrypted = cjose_jwe_decrypt(jwe, jwk->cjose_jwk, content_len,
