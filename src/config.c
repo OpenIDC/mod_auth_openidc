@@ -1413,8 +1413,7 @@ static void oidc_cfg_provider_destroy(oidc_provider_t *provider) {
 	if (provider->jwks_uri.jwk)
 		oidc_jwk_destroy(provider->jwks_uri.jwk);
 	oidc_jwk_list_destroy(provider->verify_public_keys);
-	oidc_jwk_list_destroy(provider->client_signing_keys);
-	oidc_jwk_list_destroy(provider->client_encryption_keys);
+	oidc_jwk_list_destroy(provider->client_keys);
 }
 
 static apr_status_t oidc_provider_config_cleanup(void *data) {
@@ -1462,8 +1461,7 @@ static void oidc_cfg_provider_init(oidc_provider_t *provider) {
 	provider->pkce = NULL;
 
 	provider->client_jwks_uri = NULL;
-	provider->client_signing_keys = NULL;
-	provider->client_encryption_keys = NULL;
+	provider->client_keys = NULL;
 
 	provider->id_token_signed_response_alg = NULL;
 	provider->id_token_encrypted_response_alg = NULL;
@@ -1578,8 +1576,10 @@ static void oidc_merge_provider_config(apr_pool_t *pool, oidc_provider_t *dst,
 	dst->scope =
 			_oidc_strcmp(add->scope, OIDC_DEFAULT_SCOPE) != 0 ?
 					add->scope : base->scope;
-	dst->response_type = _oidc_strcmp(add->response_type,
-			OIDC_DEFAULT_RESPONSE_TYPE) != 0 ? add->response_type : base->response_type;
+	dst->response_type =
+			_oidc_strcmp(add->response_type,
+					OIDC_DEFAULT_RESPONSE_TYPE) != 0 ?
+							add->response_type : base->response_type;
 	dst->response_mode =
 			add->response_mode != NULL ?
 					add->response_mode : base->response_mode;
@@ -1597,12 +1597,8 @@ static void oidc_merge_provider_config(apr_pool_t *pool, oidc_provider_t *dst,
 	dst->client_jwks_uri =
 			add->client_jwks_uri != NULL ?
 					add->client_jwks_uri : base->client_jwks_uri;
-	dst->client_signing_keys =
-			add->client_signing_keys != NULL ?
-					add->client_signing_keys : base->client_signing_keys;
-	dst->client_encryption_keys =
-			add->client_encryption_keys != NULL ?
-					add->client_encryption_keys : base->client_encryption_keys;
+	dst->client_keys =
+			add->client_keys != NULL ? add->client_keys : base->client_keys;
 
 	dst->id_token_signed_response_alg =
 			add->id_token_signed_response_alg != NULL ?

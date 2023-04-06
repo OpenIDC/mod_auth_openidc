@@ -1,3 +1,8 @@
+04/06/2023
+- merge client_signing_keys and client_signing_keys into client_keys
+  since we detect the usage type correctly now
+- bump to 2.4.13.3rc2
+
 04/04/2023
 - support configuration of dedicated signing and encryption keys in the primitives:
   OIDCPublicKeyFiles, OIDCPrivateKeyFiles, OIDCProviderVerifyCertFiles, OIDCOAuthVerifySharedKeys and OIDCOAuthVerifyCertFiles

@@ -322,10 +322,7 @@ typedef struct oidc_provider_t {
 	int session_max_duration;
 	oidc_proto_pkce_t *pkce;
 	int userinfo_refresh_interval;
-
-	apr_array_header_t *client_signing_keys;
-	apr_array_header_t *client_encryption_keys;
-
+	apr_array_header_t *client_keys;
 	char *client_jwks_uri;
 	char *id_token_signed_response_alg;
 	char *id_token_encrypted_response_alg;
@@ -684,7 +681,7 @@ void oidc_proto_state_set_prompt(oidc_proto_state_t *proto_state, const char *pr
 void oidc_proto_state_set_pkce_state(oidc_proto_state_t *proto_state, const char *pkce_state);
 void oidc_proto_state_set_timestamp_now(oidc_proto_state_t *proto_state);
 
-apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg, const char *token_endpoint_auth, const char *client_id, const char *client_secret, const apr_array_header_t *client_signing_keys, const char *audience, apr_table_t *params, const char *bearer_access_token, char **basic_auth_str, char **bearer_auth_str);
+apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg, const char *token_endpoint_auth, const char *client_id, const char *client_secret, const apr_array_header_t *client_keys, const char *audience, apr_table_t *params, const char *bearer_access_token, char **basic_auth_str, char **bearer_auth_str);
 
 char *oidc_proto_peek_jwt_header(request_rec *r, const char *jwt, char **alg);
 int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *login_hint, const char *redirect_uri, const char *state, oidc_proto_state_t *proto_state, const char *id_token_hint, const char *code_challenge, const char *auth_request_params, const char *path_scope);

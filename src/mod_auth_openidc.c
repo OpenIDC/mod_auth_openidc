@@ -2774,15 +2774,16 @@ static void oidc_revoke_tokens(request_rec *r, oidc_cfg *c,
 
 	// add the token endpoint authentication credentials to the revocation endpoint call...
 	if (oidc_proto_token_endpoint_auth(r, c, provider->token_endpoint_auth,
-			provider->client_id, provider->client_secret,
-			provider->client_signing_keys, provider->token_endpoint_url, params,
+			provider->client_id, provider->client_secret, provider->client_keys,
+			provider->token_endpoint_url, params,
 			NULL, &basic_auth, &bearer_auth) == FALSE)
 		goto out;
 
 	// TODO: use oauth.ssl_validate_server ...
 	token = oidc_session_get_refresh_token(r, session);
 	if (token != NULL) {
-		apr_table_setn(params, OIDC_PROTO_TOKEN_TYPE_HINT, OIDC_PROTO_REFRESH_TOKEN);
+		apr_table_setn(params, OIDC_PROTO_TOKEN_TYPE_HINT,
+				OIDC_PROTO_REFRESH_TOKEN);
 		apr_table_setn(params, OIDC_PROTO_TOKEN, token);
 
 		if (oidc_util_http_post_form(r, provider->revocation_endpoint_url,
@@ -2798,7 +2799,8 @@ static void oidc_revoke_tokens(request_rec *r, oidc_cfg *c,
 
 	token = oidc_session_get_access_token(r, session);
 	if (token != NULL) {
-		apr_table_setn(params, OIDC_PROTO_TOKEN_TYPE_HINT, OIDC_PROTO_ACCESS_TOKEN);
+		apr_table_setn(params, OIDC_PROTO_TOKEN_TYPE_HINT,
+				OIDC_PROTO_ACCESS_TOKEN);
 		apr_table_setn(params, OIDC_PROTO_TOKEN, token);
 
 		if (oidc_util_http_post_form(r, provider->revocation_endpoint_url,

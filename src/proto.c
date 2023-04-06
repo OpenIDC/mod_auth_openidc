@@ -357,10 +357,10 @@ char* oidc_proto_create_request_object(request_rec *r,
 		switch (kty) {
 		case CJOSE_JWK_KTY_RSA:
 		case CJOSE_JWK_KTY_EC:
-			if ((provider->client_signing_keys != NULL)
+			if ((provider->client_keys != NULL)
 					|| (cfg->private_keys != NULL)) {
-				sjwk = provider->client_signing_keys ?
-						oidc_key_list_first(provider->client_signing_keys, kty,
+				sjwk = provider->client_keys ?
+						oidc_key_list_first(provider->client_keys, kty,
 								NULL) :
 								oidc_key_list_first(cfg->private_keys, kty,
 										OIDC_JOSE_JWK_SIG_STR);
@@ -1684,11 +1684,12 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 
 	decryption_keys = oidc_util_merge_symmetric_key(r->pool, cfg->private_keys,
 			jwk);
-	if (provider->client_encryption_keys)
+	if (provider->client_keys)
 		decryption_keys = oidc_util_merge_key_sets(r->pool, decryption_keys,
-				provider->client_encryption_keys);
+				provider->client_keys);
 
-	if (oidc_jwt_parse(r->pool, id_token, jwt, decryption_keys, FALSE, &err) == FALSE) {
+	if (oidc_jwt_parse(r->pool, id_token, jwt, decryption_keys, FALSE,
+			&err) == FALSE) {
 		oidc_error(r, "oidc_jwt_parse failed: %s", oidc_jose_e2s(r->pool, err));
 		oidc_jwt_destroy(*jwt);
 		*jwt = NULL;
@@ -1701,7 +1702,8 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 			(*jwt)->header.value.str, (*jwt)->payload.value.str);
 
 	// make signature validation exception for 'code' flow and the algorithm NONE
-	if (is_code_flow == FALSE || _oidc_strcmp((*jwt)->header.alg, "none") != 0) {
+	if (is_code_flow == FALSE
+			|| _oidc_strcmp((*jwt)->header.alg, "none") != 0) {
 
 		jwk = NULL;
 		if (oidc_util_create_symmetric_key(r, provider->client_secret, 0,
@@ -1711,9 +1713,11 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 			return FALSE;
 		}
 
-		if (oidc_proto_jwt_verify(r, cfg, *jwt, &provider->jwks_uri, provider->ssl_validate_server,
-				oidc_util_merge_symmetric_key(r->pool, provider->verify_public_keys, jwk),
-				provider->id_token_signed_response_alg) == FALSE) {
+		if (oidc_proto_jwt_verify(r, cfg, *jwt, &provider->jwks_uri,
+				provider->ssl_validate_server,
+				oidc_util_merge_symmetric_key(r->pool,
+						provider->verify_public_keys, jwk),
+						provider->id_token_signed_response_alg) == FALSE) {
 
 			oidc_error(r,
 					"id_token signature could not be validated, aborting");
@@ -1915,7 +1919,7 @@ static apr_byte_t oidc_proto_endpoint_access_token_bearer(request_rec *r,
 
 static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r,
 		oidc_cfg *cfg, const char *client_id,
-		const apr_array_header_t *client_signing_keys, const char *audience,
+		const apr_array_header_t *client_keys, const char *audience,
 		apr_table_t *params) {
 	oidc_jwt_t *jwt = NULL;
 	oidc_jwk_t *jwk = NULL;
@@ -1926,8 +1930,8 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r,
 	if (oidc_proto_jwt_create(r, client_id, audience, &jwt) == FALSE)
 		return FALSE;
 
-	if ((client_signing_keys != NULL) && (client_signing_keys->nelts > 0)) {
-		jwk = oidc_key_list_first(client_signing_keys, CJOSE_JWK_KTY_RSA, NULL);
+	if ((client_keys != NULL) && (client_keys->nelts > 0)) {
+		jwk = oidc_key_list_first(client_keys, CJOSE_JWK_KTY_RSA, NULL);
 		if (jwk && jwk->x5t)
 			jwt->header.x5t = apr_pstrdup(r->pool, jwk->x5t);
 	} else if ((cfg->private_keys != NULL) && (cfg->private_keys->nelts > 0)) {
@@ -1959,10 +1963,10 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r,
 
 apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg,
 		const char *token_endpoint_auth, const char *client_id,
-		const char *client_secret,
-		const apr_array_header_t *client_signing_keys, const char *audience,
-		apr_table_t *params, const char *bearer_access_token,
-		char **basic_auth_str, char **bearer_auth_str) {
+		const char *client_secret, const apr_array_header_t *client_keys,
+		const char *audience, apr_table_t *params,
+		const char *bearer_access_token, char **basic_auth_str,
+		char **bearer_auth_str) {
 
 	oidc_debug(r, "token_endpoint_auth=%s", token_endpoint_auth);
 
@@ -2011,7 +2015,7 @@ apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg,
 	if (_oidc_strcmp(token_endpoint_auth,
 			OIDC_PROTO_PRIVATE_KEY_JWT) == 0)
 		return oidc_proto_endpoint_auth_private_key_jwt(r, cfg, client_id,
-				client_signing_keys, audience, params);
+				client_keys, audience, params);
 
 	if (_oidc_strcmp(token_endpoint_auth,
 			OIDC_PROTO_BEARER_ACCESS_TOKEN) == 0) {
@@ -2038,8 +2042,8 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 
 	/* add the token endpoint authentication credentials */
 	if (oidc_proto_token_endpoint_auth(r, cfg, provider->token_endpoint_auth,
-			provider->client_id, provider->client_secret,
-			provider->client_signing_keys, provider->token_endpoint_url, params,
+			provider->client_id, provider->client_secret, provider->client_keys,
+			provider->token_endpoint_url, params,
 			NULL, &basic_auth, &bearer_auth) == FALSE)
 		return FALSE;
 
@@ -2056,8 +2060,7 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 					provider->token_endpoint_tls_client_cert),
 			oidc_util_get_full_path(r->pool,
 					provider->token_endpoint_tls_client_key),
-			provider->token_endpoint_tls_client_key_pwd
-			) == FALSE) {
+			provider->token_endpoint_tls_client_key_pwd) == FALSE) {
 		oidc_warn(r, "error when calling the token endpoint (%s)",
 				provider->token_endpoint_url);
 		return FALSE;

@@ -1190,7 +1190,7 @@ void oidc_metadata_get_valid_int(request_rec *r, const json_t *json, const char 
 }
 
 static void oidc_metadata_get_jwks(request_rec *r, json_t *json,
-		const char *s_use, apr_array_header_t **jwk_list) {
+		apr_array_header_t **jwk_list) {
 	json_t *keys = NULL;
 	int i = 0;
 	oidc_jose_error_t err;
@@ -1212,14 +1212,6 @@ static void oidc_metadata_get_jwks(request_rec *r, json_t *json,
 	for (i = 0; i < json_array_size(keys); i++) {
 
 		elem = json_array_get(keys, i);
-
-		use = json_string_value(json_object_get(elem, OIDC_JOSE_JWK_USE_STR));
-		if ((use != NULL) && (_oidc_strcmp(use, s_use) != 0)) {
-			oidc_debug(r,
-					"skipping key because of non-matching \"%s\": \"%s\" != \"%s\"",
-					OIDC_JOSE_JWK_USE_STR, use, s_use);
-			continue;
-		}
 
 		if (oidc_jwk_parse_json(r->pool, elem, &jwk, &err) == FALSE) {
 			oidc_warn(r, "oidc_jwk_parse_json failed: %s",
@@ -1244,10 +1236,7 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 			OIDC_METADATA_CLIENT_JWKS_URI, &provider->client_jwks_uri,
 			cfg->provider.client_jwks_uri);
 
-	oidc_metadata_get_jwks(r, j_conf,
-			OIDC_JOSE_JWK_SIG_STR, &provider->client_signing_keys);
-	oidc_metadata_get_jwks(r, j_conf,
-			OIDC_JOSE_JWK_ENC_STR, &provider->client_encryption_keys);
+	oidc_metadata_get_jwks(r, j_conf, &provider->client_keys);
 
 	oidc_jose_error_t err;
 	json_t *jwk = json_object_get(j_conf, "signed_jwks_uri_key");
