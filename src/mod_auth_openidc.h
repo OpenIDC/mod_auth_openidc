@@ -248,6 +248,9 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_COOKIE_SAMESITE_LAX(c, r) \
 		c->cookie_same_site ? OIDC_COOKIE_EXT_SAME_SITE_LAX : OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r)
 
+#define OIDC_ERROR_ENVVAR "OIDC_ERROR"
+#define OIDC_ERROR_DESC_ENVVAR "OIDC_ERROR_DESC"
+
 /* https://tools.ietf.org/html/draft-ietf-tokbind-ttrp-01 */
 #define OIDC_TB_CFG_PROVIDED_ENV_VAR     "Sec-Provided-Token-Binding-ID"
 /* https://www.ietf.org/id/draft-ietf-oauth-mtls-12 */

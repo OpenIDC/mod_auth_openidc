@@ -1,4 +1,10 @@
 04/07/2023
+- deprecate OIDCHTMLErrorTemplate and rely on standard Apache error handling capabilities by default
+  environment variable strings REDIRECT_OIDC_ERROR and REDIRECT_OIDC_ERROR_DESC are available in ErrorDocument
+  backwards compatibility is retained by setting "OIDCHTMLErrorTemplate deprecated"
+- bump to 2.4.14rc0
+
+04/07/2023
 - add support for passing on claims resolved from the userinfo endpoint in a JWT signed by
   mod_auth_openidc using `OIDCPassUserInfoAs signed_jwt[:<name>]`  with the keys configured
   in OIDCPrivateKeyFiles/OIDCPublicKeyFiles

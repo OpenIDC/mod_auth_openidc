@@ -1735,39 +1735,55 @@ int oidc_util_html_send_error(request_rec *r, const char *html_template,
 
 	if (html_template != NULL) {
 
-		html_template = oidc_util_get_full_path(r->pool, html_template);
+		if (_oidc_strcmp(html_template, "deprecated") != 0) {
 
-		if (html_error_template_contents == NULL) {
-			int rc = oidc_util_file_read(r, html_template,
-					r->server->process->pool, &html_error_template_contents);
-			if (rc == FALSE) {
-				oidc_error(r, "could not read HTML error template: %s",
-						html_template);
-				html_error_template_contents = NULL;
+			html_template = oidc_util_get_full_path(r->pool, html_template);
+
+			if (html_error_template_contents == NULL) {
+				int rc = oidc_util_file_read(r, html_template,
+						r->server->process->pool,
+						&html_error_template_contents);
+				if (rc == FALSE) {
+					oidc_error(r, "could not read HTML error template: %s",
+							html_template);
+					html_error_template_contents = NULL;
+				}
+			}
+
+			if (html_error_template_contents) {
+				html = apr_psprintf(r->pool, html_error_template_contents,
+						oidc_util_html_escape(r->pool, error ? error : ""),
+						oidc_util_html_escape(r->pool,
+								description ? description : ""));
+
+				return oidc_util_http_send(r, html, _oidc_strlen(html),
+						OIDC_CONTENT_TYPE_TEXT_HTML, status_code);
 			}
 		}
 
-		if (html_error_template_contents) {
-			html = apr_psprintf(r->pool, html_error_template_contents,
-					oidc_util_html_escape(r->pool, error ? error : ""),
-					oidc_util_html_escape(r->pool,
-							description ? description : ""));
-
-			return oidc_util_http_send(r, html, _oidc_strlen(html),
-					OIDC_CONTENT_TYPE_TEXT_HTML, status_code);
+		if (error != NULL) {
+			html = apr_psprintf(r->pool, "%s<p>Error: <pre>%s</pre></p>", html,
+					oidc_util_html_escape(r->pool, error));
 		}
+		if (description != NULL) {
+			html = apr_psprintf(r->pool, "%s<p>Description: <pre>%s</pre></p>",
+					html, oidc_util_html_escape(r->pool, description));
+		}
+
+		return oidc_util_html_send(r, "Error", NULL, NULL, html, status_code);
 	}
 
-	if (error != NULL) {
-		html = apr_psprintf(r->pool, "%s<p>Error: <pre>%s</pre></p>", html,
-				oidc_util_html_escape(r->pool, error));
-	}
-	if (description != NULL) {
-		html = apr_psprintf(r->pool, "%s<p>Description: <pre>%s</pre></p>",
-				html, oidc_util_html_escape(r->pool, description));
-	}
+	oidc_debug(r, "setting "OIDC_ERROR_ENVVAR" environment variable to: %s",
+			error);
+	apr_table_set(r->subprocess_env, OIDC_ERROR_ENVVAR, error ? error : "");
 
-	return oidc_util_html_send(r, "Error", NULL, NULL, html, status_code);
+	oidc_debug(r,
+			"setting "OIDC_ERROR_DESC_ENVVAR" environment variable to: %s",
+			description);
+	apr_table_set(r->subprocess_env, OIDC_ERROR_DESC_ENVVAR,
+			description ? description : "");
+
+	return status_code;
 }
 
 /*

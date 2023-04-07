@@ -2150,6 +2150,15 @@ int oidc_cfg_session_cache_fallback_to_cookie(request_rec *r) {
 	return cfg->session_cache_fallback_to_cookie;
 }
 
+static const char* oidc_set_html_error_template(cmd_parms *cmd,
+		void *struct_ptr, const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
+			&auth_openidc_module);
+	oidc_swarn(cmd->server,
+			OIDCHTMLErrorTemplate" is deprecated; please use the standard Apache features to deal with the "OIDC_ERROR_ENVVAR" and "OIDC_ERROR_DESC_ENVVAR" environment variables set by this module, see: https://httpd.apache.org/docs/2.4/custom-error.html");
+	return ap_set_string_slot(cmd, cfg, arg);
+}
+
 /*
  * create a new directory config record with defaults
  */
@@ -3550,7 +3559,7 @@ const command_rec oidc_config_cmds[] = {
 				"Timeout waiting for a response of the Redis servers."),
 #endif
 		AP_INIT_TAKE1(OIDCHTMLErrorTemplate,
-				oidc_set_string_slot,
+				oidc_set_html_error_template,
 				(void*)APR_OFFSETOF(oidc_cfg, error_template),
 				RSRC_CONF,
 				"Name of a HTML error template: needs to contain two \"%s\" characters, one for the error message, one for the description."),

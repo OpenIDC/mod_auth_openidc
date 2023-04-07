@@ -611,8 +611,8 @@ static int oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c,
 /*
  * restore the state that was maintained between authorization request and response in an encrypted cookie
  */
-static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c, const char *state,
-		oidc_proto_state_t **proto_state) {
+static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c,
+		const char *state, oidc_proto_state_t **proto_state) {
 
 	oidc_debug(r, "enter");
 
@@ -624,12 +624,15 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c, const ch
 	/* get the state cookie value first */
 	char *cookieValue = oidc_util_get_cookie(r, cookieName);
 	if (cookieValue == NULL) {
-		oidc_error(r, "no \"%s\" state cookie found: check domain and samesite cookie settings", cookieName);
+		oidc_error(r,
+				"no \"%s\" state cookie found: check domain and samesite cookie settings",
+				cookieName);
 		return FALSE;
 	}
 
 	/* clear state cookie because we don't need it anymore */
-	oidc_util_set_cookie(r, cookieName, "", 0, OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r));
+	oidc_util_set_cookie(r, cookieName, "", 0,
+			OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r));
 
 	*proto_state = oidc_proto_state_from_cookie(r, c, cookieValue);
 	if (*proto_state == NULL)
@@ -641,7 +644,9 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c, const ch
 	char *calc = oidc_get_browser_state_hash(r, c, nonce);
 	/* compare the calculated hash with the value provided in the authorization response */
 	if (_oidc_strcmp(calc, state) != 0) {
-		oidc_error(r, "calculated state from cookie does not match state parameter passed back in URL: \"%s\" != \"%s\"", state, calc);
+		oidc_error(r,
+				"calculated state from cookie does not match state parameter passed back in URL: \"%s\" != \"%s\"",
+				state, calc);
 		oidc_proto_state_destroy(*proto_state);
 		return FALSE;
 	}
@@ -652,14 +657,14 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c, const ch
 	if (apr_time_now() > ts + apr_time_from_sec(c->state_timeout)) {
 		oidc_error(r, "state has expired");
 		if ((c->default_sso_url == NULL)
-				|| (apr_table_get(r->subprocess_env, "OIDC_NO_DEFAULT_URL_ON_STATE_TIMEOUT") != NULL)) {
-			oidc_util_html_send_error(r, c->error_template, "Invalid Authentication Response", apr_psprintf(r->pool, "This is due to a timeout; please restart your authentication session by re-entering the URL/bookmark you originally wanted to access: %s", oidc_proto_state_get_original_url(*proto_state)),
-									  OK);
-			/*
-			 * a hack for Apache 2.4 to prevent it from writing its own 500/400/302 HTML document
-			 * text by making ap_send_error_response in http_protocol.c return early...
-			 */
-			r->header_only = 1;
+				|| (apr_table_get(r->subprocess_env,
+						"OIDC_NO_DEFAULT_URL_ON_STATE_TIMEOUT") != NULL)) {
+			oidc_util_html_send_error(r, c->error_template,
+					"Invalid Authentication Response",
+					apr_psprintf(r->pool,
+							"This is due to a timeout; please restart your authentication session by re-entering the URL/bookmark you originally wanted to access: %s",
+							oidc_proto_state_get_original_url(*proto_state)),
+							OK);
 		}
 		oidc_proto_state_destroy(*proto_state);
 		return FALSE;
@@ -669,7 +674,8 @@ static apr_byte_t oidc_restore_proto_state(request_rec *r, oidc_cfg *c, const ch
 	oidc_proto_state_set_state(*proto_state, state);
 
 	/* log the restored state object */
-	oidc_debug(r, "restored state: %s", oidc_proto_state_to_string(r, *proto_state));
+	oidc_debug(r, "restored state: %s",
+			oidc_proto_state_to_string(r, *proto_state));
 
 	/* we've made it */
 	return TRUE;
@@ -1997,8 +2003,8 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 
 	/* match the returned state parameter against the state stored in the browser */
 	if (oidc_authorization_response_match_state(r, c,
-			apr_table_get(params, OIDC_PROTO_STATE), &provider, &proto_state)
-			== FALSE) {
+			apr_table_get(params, OIDC_PROTO_STATE), &provider,
+			&proto_state) == FALSE) {
 		if (c->default_sso_url != NULL) {
 			oidc_warn(r,
 					"invalid authorization response state; a default SSO URL is set, sending the user there: %s",
@@ -2009,11 +2015,21 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		}
 		oidc_error(r,
 				"invalid authorization response state and no default SSO URL is set, sending an error...");
-		// if content was already returned via html/http send then don't return 500
-		// but send 200 to avoid extraneous internal error document text to be sent
-		return ((r->user) && (_oidc_strncmp(r->user, "", 1) == 0)) ?
-				OK :
-				HTTP_BAD_REQUEST;
+
+		// detect if we've set a (timeout) error message in oidc_authorization_response_match_state
+		if (apr_table_get(r->subprocess_env, OIDC_ERROR_ENVVAR) != NULL) {
+			// overrides the OK from the timeout detection
+			return HTTP_BAD_REQUEST;
+		} else if (c->error_template) {
+			// for backwards compatibility
+			if ((r->user) && (_oidc_strncmp(r->user, "", 1) == 0))
+				return HTTP_BAD_REQUEST;
+		}
+
+		return oidc_util_html_send_error(r, c->error_template,
+				"Invalid Authorization Response",
+				"Could not match the authorization response to an earlier request via the state parameter and corresponding state cookie",
+				HTTP_BAD_REQUEST);
 	}
 
 	/* see if the response is an error response */
@@ -2088,7 +2104,8 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 
-		oidc_debug(r, "set remote_user to \"%s\" in new session \"%s\"", r->user, session->uuid);
+		oidc_debug(r, "set remote_user to \"%s\" in new session \"%s\"",
+				r->user, session->uuid);
 
 	} else {
 		oidc_error(r, "remote user could not be set");
@@ -4186,57 +4203,71 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 
 	oidc_debug(r, "enter");
 
-	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg *c = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
 	char *html_head = NULL;
 
 	if (apr_strnatcasecmp((const char*) ap_auth_type(r),
-						  OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
-		oidc_debug(r, "setting environment variable %s to \"%s\" for usage in mod_headers", OIDC_OAUTH_BEARER_SCOPE_ERROR, OIDC_OAUTH_BEARER_SCOPE_ERROR_VALUE);
-		apr_table_set(r->subprocess_env, OIDC_OAUTH_BEARER_SCOPE_ERROR, OIDC_OAUTH_BEARER_SCOPE_ERROR_VALUE);
+			OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
+		oidc_debug(r,
+				"setting environment variable %s to \"%s\" for usage in mod_headers",
+				OIDC_OAUTH_BEARER_SCOPE_ERROR,
+				OIDC_OAUTH_BEARER_SCOPE_ERROR_VALUE);
+		apr_table_set(r->subprocess_env, OIDC_OAUTH_BEARER_SCOPE_ERROR,
+				OIDC_OAUTH_BEARER_SCOPE_ERROR_VALUE);
 		return AUTHZ_DENIED;
 	}
 
 	/* see if we've configured OIDCUnAutzAction for this path */
 	switch (oidc_dir_cfg_unautz_action(r)) {
-		case OIDC_UNAUTZ_RETURN403:
-		case OIDC_UNAUTZ_RETURN401:
-			if (oidc_dir_cfg_unauthz_arg(r)) {
-				oidc_util_html_send(r, "Authorization Error", NULL, NULL, oidc_dir_cfg_unauthz_arg(r),
-									HTTP_UNAUTHORIZED);
-				r->header_only = 1;
-			}
-			return AUTHZ_DENIED;
-		case OIDC_UNAUTZ_RETURN302:
-			html_head =
-					apr_psprintf(r->pool, "<meta http-equiv=\"refresh\" content=\"0; url=%s\">", oidc_dir_cfg_unauthz_arg(r));
-			oidc_util_html_send(r, "Authorization Error Redirect", html_head, NULL, NULL,
+	case OIDC_UNAUTZ_RETURN403:
+	case OIDC_UNAUTZ_RETURN401:
+		if (oidc_dir_cfg_unauthz_arg(r)) {
+			oidc_util_html_send_error(r, c->error_template,
+					"Authorization Error", oidc_dir_cfg_unauthz_arg(r),
 					HTTP_UNAUTHORIZED);
-			r->header_only = 1;
+			if (c->error_template)
+				r->header_only = 1;
+		}
+		return AUTHZ_DENIED;
+	case OIDC_UNAUTZ_RETURN302:
+		html_head = apr_psprintf(r->pool,
+				"<meta http-equiv=\"refresh\" content=\"0; url=%s\">",
+				oidc_dir_cfg_unauthz_arg(r));
+		oidc_util_html_send(r, "Authorization Error Redirect", html_head, NULL,
+				NULL,
+				HTTP_UNAUTHORIZED);
+		r->header_only = 1;
+		return AUTHZ_DENIED;
+	case OIDC_UNAUTZ_AUTHENTICATE:
+		/*
+		 * exception handling: if this looks like an HTTP request that cannot
+		 * complete an authentication round trip to the provider, we
+		 * won't redirect the user and thus avoid creating a state cookie
+		 */
+		if (oidc_is_auth_capable_request(r) == FALSE)
 			return AUTHZ_DENIED;
-		case OIDC_UNAUTZ_AUTHENTICATE:
-			/*
-			 * exception handling: if this looks like an HTTP request that cannot
-			 * complete an authentication round trip to the provider, we
-			 * won't redirect the user and thus avoid creating a state cookie
-			 */
-			if (oidc_is_auth_capable_request(r) == FALSE)
-				return AUTHZ_DENIED;
-			break;
+		break;
 	}
 
-	oidc_authenticate_user(r, c, NULL, oidc_get_current_url(r, c->x_forwarded_headers), NULL,
-			NULL, NULL, oidc_dir_cfg_path_auth_request_params(r), oidc_dir_cfg_path_scope(r));
+	oidc_authenticate_user(r, c, NULL,
+			oidc_get_current_url(r, c->x_forwarded_headers), NULL,
+			NULL, NULL, oidc_dir_cfg_path_auth_request_params(r),
+			oidc_dir_cfg_path_scope(r));
 
 	const char *location = oidc_util_hdr_out_location_get(r);
 
-	if ((oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL) && (location == NULL))
+	if ((oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
+			&& (location == NULL))
 		return AUTHZ_GRANTED;
 
 	if (location != NULL) {
-		oidc_debug(r, "send HTML refresh with authorization redirect: %s", location);
+		oidc_debug(r, "send HTML refresh with authorization redirect: %s",
+				location);
 
-		html_head =
-				apr_psprintf(r->pool, "<meta http-equiv=\"refresh\" content=\"0; url=%s\">", location);
+		html_head = apr_psprintf(r->pool,
+				"<meta http-equiv=\"refresh\" content=\"0; url=%s\">",
+				location);
 		oidc_util_html_send(r, "Stepup Authentication", html_head, NULL, NULL,
 				HTTP_UNAUTHORIZED);
 		/*
