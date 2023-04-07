@@ -179,7 +179,7 @@ void oidc_strip_cookies(request_rec *r) {
 				break;
 
 			for (i = 0; i < strip->nelts; i++) {
-				name = ((const char**) strip->elts)[i];
+				name = APR_ARRAY_IDX(strip, i, const char *);
 				if ((_oidc_strncmp(cookie, name, _oidc_strlen(name)) == 0)
 						&& (cookie[_oidc_strlen(name)] == OIDC_CHAR_EQUAL)) {
 					oidc_debug(r, "stripping: %s", name);
@@ -2253,7 +2253,7 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 	int i;
 	for (i = 0; i < arr->nelts; i++) {
 
-		const char *issuer = ((const char**) arr->elts)[i];
+		const char *issuer = APR_ARRAY_IDX(arr, i, const char *);
 		// TODO: html escape (especially & character)
 
 		char *href = apr_psprintf(r->pool,
@@ -2324,8 +2324,8 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 	char *javascript = NULL, *javascript_method = NULL;
 	char *html_head =
 			"<style type=\"text/css\">body {text-align: center}</style>";
-	if (oidc_post_preserve_javascript(r, NULL, &javascript, &javascript_method)
-			== TRUE)
+	if (oidc_post_preserve_javascript(r, NULL, &javascript,
+			&javascript_method) == TRUE)
 		html_head = apr_psprintf(r->pool, "%s%s", html_head, javascript);
 
 	/* now send the HTML contents to the user agent */
@@ -3297,39 +3297,36 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
  * handle request for JWKs
  */
 int oidc_handle_jwks(request_rec *r, oidc_cfg *c) {
-
 	/* pickup requested JWKs type */
 	//	char *jwks_type = NULL;
 	//	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS, &jwks_type);
 	char *jwks = apr_pstrdup(r->pool, "{ \"keys\" : [");
 	int i = 0;
 	apr_byte_t first = TRUE;
+	oidc_jwk_t *jwk = NULL;
 	oidc_jose_error_t err;
+	char *s_json = NULL;
 
-	if (c->public_keys != NULL) {
+	/* loop over the RSA/EC public keys */
+	for (i = 0; c->public_keys && i < c->public_keys->nelts; i++) {
+		jwk = APR_ARRAY_IDX(c->public_keys, i, oidc_jwk_t *);
 
-		/* loop over the RSA/EC public keys */
-		for (i = 0; i < c->public_keys->nelts; i++) {
-			const oidc_jwk_t *jwk =
-					((const oidc_jwk_t**) c->public_keys->elts)[i];
-			char *s_json = NULL;
-
-			if (oidc_jwk_to_json(r->pool, jwk, &s_json, &err) == TRUE) {
-				jwks = apr_psprintf(r->pool, "%s%s %s ", jwks, first ? "" : ",",
-						s_json);
-				first = FALSE;
-			} else {
-				oidc_error(r,
-						"could not convert RSA/EC JWK to JSON using oidc_jwk_to_json: %s",
-						oidc_jose_e2s(r->pool, err));
-			}
+		if (oidc_jwk_to_json(r->pool, jwk, &s_json, &err) == TRUE) {
+			jwks = apr_psprintf(r->pool, "%s%s %s ", jwks, first ? "" : ",",
+					s_json);
+			first = FALSE;
+		} else {
+			oidc_error(r,
+					"could not convert RSA/EC JWK to JSON using oidc_jwk_to_json: %s",
+					oidc_jose_e2s(r->pool, err));
 		}
 	}
 
 	// TODO: send stuff if first == FALSE?
 	jwks = apr_psprintf(r->pool, "%s ] }", jwks);
 
-	return oidc_util_http_send(r, jwks, _oidc_strlen(jwks), OIDC_CONTENT_TYPE_JSON,
+	return oidc_util_http_send(r, jwks, _oidc_strlen(jwks),
+			OIDC_CONTENT_TYPE_JSON,
 			OK);
 }
 

@@ -490,11 +490,10 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 
 	json_t *response_types = json_array();
 	apr_array_header_t *flows = oidc_proto_supported_flows(r->pool);
-	int i;
-	for (i = 0; i < flows->nelts; i++) {
+	int i = 0;
+	for (i = 0; i < flows->nelts; i++)
 		json_array_append_new(response_types,
-				json_string(((const char**) flows->elts)[i]));
-	}
+				json_string(APR_ARRAY_IDX(flows, i, const char *)));
 	json_object_set_new(data, OIDC_METADATA_RESPONSE_TYPES, response_types);
 
 	json_object_set_new(data, OIDC_METADATA_GRANT_TYPES,
@@ -550,12 +549,14 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 
 	if (provider->request_object != NULL) {
 		json_t *request_object_config = NULL;
-		if (oidc_util_decode_json_object(r, provider->request_object, &request_object_config)
-				== TRUE) {
+		if (oidc_util_decode_json_object(r, provider->request_object,
+				&request_object_config) == TRUE) {
 			json_t *crypto = json_object_get(request_object_config, "crypto");
 			char *alg = "none";
-			oidc_json_object_get_string(r->pool, crypto, "sign_alg", &alg, "none");
-			json_object_set_new(data, "request_object_signing_alg", json_string(alg));
+			oidc_json_object_get_string(r->pool, crypto, "sign_alg", &alg,
+					"none");
+			json_object_set_new(data, "request_object_signing_alg",
+					json_string(alg));
 			json_decref(request_object_config);
 		}
 	}
@@ -954,7 +955,7 @@ apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider = NULL;
 		if (oidc_metadata_get(r, cfg, issuer, &provider, FALSE) == TRUE) {
 			/* push the decoded issuer filename in to the array */
-			*(const char**) apr_array_push(*list) = provider->issuer;
+			APR_ARRAY_PUSH(*list, const char *) = provider->issuer;
 		}
 	}
 
@@ -1220,8 +1221,8 @@ static void oidc_metadata_get_jwks(request_rec *r, json_t *json,
 		}
 
 		if (*jwk_list == NULL)
-			*jwk_list = apr_array_make(r->pool, 4, sizeof(const oidc_jwk_t*));
-		*(const oidc_jwk_t**) apr_array_push(*jwk_list) = jwk;
+			*jwk_list = apr_array_make(r->pool, 4, sizeof(oidc_jwk_t*));
+		APR_ARRAY_PUSH(*jwk_list, oidc_jwk_t *) = jwk;
 	}
 }
 

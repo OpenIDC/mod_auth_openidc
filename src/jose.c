@@ -429,14 +429,15 @@ apr_array_header_t* oidc_jwk_list_copy(apr_pool_t *pool,
 		apr_array_header_t *src) {
 	apr_array_header_t *dst = NULL;
 	int i = 0;
-	if (src != NULL) {
-		dst = apr_array_make(pool, src->nelts, sizeof(const oidc_jwk_t*));
-		for (i = 0; (src) && (i < src->nelts); i++) {
-			const oidc_jwk_t *jwk = ((const oidc_jwk_t**) src->elts)[i];
-			*(const oidc_jwk_t**) apr_array_push(dst) = oidc_jwk_copy(pool,
-					jwk);
-		}
-	}
+
+	if (src == NULL)
+		return NULL;
+
+	dst = apr_array_make(pool, src->nelts, sizeof(oidc_jwk_t*));
+	for (i = 0; i < src->nelts; i++)
+		APR_ARRAY_PUSH(dst, oidc_jwk_t *) = oidc_jwk_copy(pool,
+				APR_ARRAY_IDX(src, i, oidc_jwk_t *));
+
 	return dst;
 }
 
@@ -568,7 +569,7 @@ static apr_byte_t oidc_jose_array_has_string(apr_array_header_t *haystack,
 		const char *needle) {
 	int i = 0;
 	while (i < haystack->nelts) {
-		if (_oidc_strcmp(((const char**) haystack->elts)[i], needle) == 0)
+		if (_oidc_strcmp(APR_ARRAY_IDX(haystack, i, const char *), needle) == 0)
 			return TRUE;
 		i++;
 	}
@@ -580,21 +581,21 @@ static apr_byte_t oidc_jose_array_has_string(apr_array_header_t *haystack,
  */
 apr_array_header_t* oidc_jose_jws_supported_algorithms(apr_pool_t *pool) {
 	apr_array_header_t *result = apr_array_make(pool, 12, sizeof(const char*));
-	*(const char**) apr_array_push(result) = CJOSE_HDR_ALG_RS256;
-	*(const char**) apr_array_push(result) = CJOSE_HDR_ALG_RS384;
-	*(const char**) apr_array_push(result) = CJOSE_HDR_ALG_RS512;
-	*(const char**) apr_array_push(result) = CJOSE_HDR_ALG_PS256;
-	*(const char**) apr_array_push(result) = CJOSE_HDR_ALG_PS384;
-	*(const char**) apr_array_push(result) = CJOSE_HDR_ALG_PS512;
-	*(const char**) apr_array_push(result) = CJOSE_HDR_ALG_HS256;
-	*(const char**) apr_array_push(result) = CJOSE_HDR_ALG_HS384;
-	*(const char**) apr_array_push(result) = CJOSE_HDR_ALG_HS512;
+	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_RS256;
+	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_RS384;
+	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_RS512;
+	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_PS256;
+	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_PS384;
+	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_PS512;
+	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_HS256;
+	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_HS384;
+	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_HS512;
 #if (OIDC_JOSE_EC_SUPPORT)
-	*(const char**) apr_array_push(result) = CJOSE_HDR_ALG_ES256;
-	*(const char**) apr_array_push(result) = CJOSE_HDR_ALG_ES384;
-	*(const char**) apr_array_push(result) = CJOSE_HDR_ALG_ES512;
+	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_ES256;
+	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_ES384;
+	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_ES512;
 #endif
-	*(const char**) apr_array_push(result) = CJOSE_HDR_ALG_NONE;
+	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_NONE;
 	return result;
 }
 
@@ -612,11 +613,11 @@ apr_byte_t oidc_jose_jws_algorithm_is_supported(apr_pool_t *pool,
  */
 apr_array_header_t* oidc_jose_jwe_supported_algorithms(apr_pool_t *pool) {
 	apr_array_header_t *result = apr_array_make(pool, 4, sizeof(const char*));
-	*(const char**) apr_array_push(result) = CJOSE_HDR_ALG_RSA1_5;
-	*(const char**) apr_array_push(result) = CJOSE_HDR_ALG_A128KW;
-	*(const char**) apr_array_push(result) = CJOSE_HDR_ALG_A192KW;
-	*(const char**) apr_array_push(result) = CJOSE_HDR_ALG_A256KW;
-	*(const char**) apr_array_push(result) = CJOSE_HDR_ALG_RSA_OAEP;
+	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_RSA1_5;
+	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_A128KW;
+	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_A192KW;
+	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_A256KW;
+	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_RSA_OAEP;
 	return result;
 }
 
@@ -634,11 +635,11 @@ apr_byte_t oidc_jose_jwe_algorithm_is_supported(apr_pool_t *pool,
  */
 apr_array_header_t* oidc_jose_jwe_supported_encryptions(apr_pool_t *pool) {
 	apr_array_header_t *result = apr_array_make(pool, 5, sizeof(const char*));
-	*(const char**) apr_array_push(result) = CJOSE_HDR_ENC_A128CBC_HS256;
-	*(const char**) apr_array_push(result) = CJOSE_HDR_ENC_A192CBC_HS384;
-	*(const char**) apr_array_push(result) = CJOSE_HDR_ENC_A256CBC_HS512;
+	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ENC_A128CBC_HS256;
+	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ENC_A192CBC_HS384;
+	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ENC_A256CBC_HS512;
 #if (OIDC_JOSE_GCM_SUPPORT)
-	*(const char**) apr_array_push(result) = CJOSE_HDR_ENC_A256GCM;
+	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ENC_A256GCM;
 #endif
 	return result;
 }
@@ -1581,17 +1582,19 @@ apr_byte_t oidc_jwk_pem_bio_to_jwk(apr_pool_t *pool, BIO *input,
 			/* not a public key - reset the buffer */
 			BIO_reset(input);
 
-			if (oidc_jwk_x509_read(pool, input, &x509_pem_encoded_certificate, &pkey, &x509, err) == FALSE)
+			if (oidc_jwk_x509_read(pool, input, &x509_pem_encoded_certificate,
+					&pkey, &x509, err) == FALSE)
 				goto end;
 
 			/* certificate is present, fill the jwkset with certificate entries */
 			/* populate first x5c certificate */
-			(*oidc_jwk)->x5c = apr_array_make(pool, 1, sizeof(char *));
+			(*oidc_jwk)->x5c = apr_array_make(pool, 1, sizeof(char*));
 			if ((*oidc_jwk)->x5c == NULL) {
 				oidc_jose_error(err, "apr_array_make failed");
 				goto end;
 			}
-			*(const char**) apr_array_push((*oidc_jwk)->x5c) = x509_pem_encoded_certificate;
+			APR_ARRAY_PUSH((*oidc_jwk)->x5c, char *) =
+					x509_pem_encoded_certificate;
 
 			/* populate thumbprints entries */
 #if OPENSSL_VERSION_NUMBER < 0x000907000L
@@ -1621,8 +1624,10 @@ apr_byte_t oidc_jwk_pem_bio_to_jwk(apr_pool_t *pool, BIO *input,
 					(const char*) x509_bytes, x509_cert_length,
 					&(*oidc_jwk)->x5t_S256, err);
 
-			while (oidc_jwk_x509_read(pool, input, &x509_pem_encoded_certificate, NULL, NULL, err) == TRUE)
-				*(const char**) apr_array_push((*oidc_jwk)->x5c) = x509_pem_encoded_certificate;
+			while (oidc_jwk_x509_read(pool, input,
+					&x509_pem_encoded_certificate, NULL, NULL, err) == TRUE)
+				APR_ARRAY_PUSH((*oidc_jwk)->x5c, char *) =
+						x509_pem_encoded_certificate;
 		}
 	}
 
@@ -1701,6 +1706,7 @@ static apr_byte_t oidc_jwk_parse_pem_key(apr_pool_t *pool, int is_private_key,
 	rv = TRUE;
 
 end:
+
 	if (input)
 		BIO_free(input);
 
@@ -1860,7 +1866,7 @@ static char* internal_cjose_jwk_to_json(apr_pool_t *pool,
 		}
 		for (i = 0; i < oidc_jwk->x5c->nelts; i++) {
 			if (json_array_append_new(temp,
-					json_string(((const char**) oidc_jwk->x5c->elts)[i]))
+					json_string(APR_ARRAY_IDX(oidc_jwk->x5c, i, const char *)))
 					== -1) {
 				oidc_jose_error(oidc_err, "json_array_append failed");
 				goto to_json_cleanup;

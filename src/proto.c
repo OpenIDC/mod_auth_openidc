@@ -2618,7 +2618,7 @@ static apr_byte_t oidc_proto_validate_hash_value(request_rec *r,
 		int i;
 		for (i = 0; i < required_for_flows->nelts; i++) {
 			if (oidc_util_spaced_string_equals(r->pool, response_type,
-					((const char**) required_for_flows->elts)[i])) {
+					APR_ARRAY_IDX(required_for_flows, i, const char *))) {
 				oidc_warn(r, "flow is \"%s\", but no %s found in id_token",
 						response_type, key);
 				return FALSE;
@@ -2642,9 +2642,9 @@ apr_byte_t oidc_proto_validate_code(request_rec *r, oidc_provider_t *provider,
 		oidc_jwt_t *jwt, const char *response_type, const char *code) {
 	apr_array_header_t *required_for_flows = apr_array_make(r->pool, 2,
 			sizeof(const char*));
-	*(const char**) apr_array_push(required_for_flows) =
+	APR_ARRAY_PUSH(required_for_flows, const char *) =
 			OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN;
-	*(const char**) apr_array_push(required_for_flows) =
+	APR_ARRAY_PUSH(required_for_flows, const char *) =
 			OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN_TOKEN;
 	if (oidc_proto_validate_hash_value(r, provider, jwt, response_type, code,
 			OIDC_CLAIM_C_HASH, required_for_flows) == FALSE) {
@@ -2663,9 +2663,9 @@ apr_byte_t oidc_proto_validate_access_token(request_rec *r,
 		const char *access_token) {
 	apr_array_header_t *required_for_flows = apr_array_make(r->pool, 2,
 			sizeof(const char*));
-	*(const char**) apr_array_push(required_for_flows) =
+	APR_ARRAY_PUSH(required_for_flows, const char *) =
 			OIDC_PROTO_RESPONSE_TYPE_IDTOKEN_TOKEN;
-	*(const char**) apr_array_push(required_for_flows) =
+	APR_ARRAY_PUSH(required_for_flows, const char *) =
 			OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN_TOKEN;
 	if (oidc_proto_validate_hash_value(r, provider, jwt, response_type,
 			access_token, OIDC_CLAIM_AT_HASH, required_for_flows) == FALSE) {
@@ -2682,16 +2682,14 @@ apr_byte_t oidc_proto_validate_access_token(request_rec *r,
  */
 apr_array_header_t* oidc_proto_supported_flows(apr_pool_t *pool) {
 	apr_array_header_t *result = apr_array_make(pool, 6, sizeof(const char*));
-	*(const char**) apr_array_push(result) = OIDC_PROTO_RESPONSE_TYPE_CODE;
-	*(const char**) apr_array_push(result) =
-			OIDC_PROTO_RESPONSE_TYPE_IDTOKEN;
-	*(const char**) apr_array_push(result) =
+	APR_ARRAY_PUSH(result, const char *) = OIDC_PROTO_RESPONSE_TYPE_CODE;
+	APR_ARRAY_PUSH(result, const char *) = OIDC_PROTO_RESPONSE_TYPE_IDTOKEN;
+	APR_ARRAY_PUSH(result, const char *) =
 			OIDC_PROTO_RESPONSE_TYPE_IDTOKEN_TOKEN;
-	*(const char**) apr_array_push(result) =
+	APR_ARRAY_PUSH(result, const char *) =
 			OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN;
-	*(const char**) apr_array_push(result) =
-			OIDC_PROTO_RESPONSE_TYPE_CODE_TOKEN;
-	*(const char**) apr_array_push(result) =
+	APR_ARRAY_PUSH(result, const char *) = OIDC_PROTO_RESPONSE_TYPE_CODE_TOKEN;
+	APR_ARRAY_PUSH(result, const char *) =
 			OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN_TOKEN;
 	return result;
 }
@@ -2704,7 +2702,7 @@ apr_byte_t oidc_proto_flow_is_supported(apr_pool_t *pool, const char *flow) {
 	int i;
 	for (i = 0; i < flows->nelts; i++) {
 		if (oidc_util_spaced_string_equals(pool, flow,
-				((const char**) flows->elts)[i]))
+				APR_ARRAY_IDX(flows, i, const char *)))
 			return TRUE;
 	}
 	return FALSE;

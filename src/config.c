@@ -816,25 +816,25 @@ static const char* oidc_set_public_key_files(cmd_parms *cmd, void *struct_ptr,
 
 	char *kid = NULL, *fname = NULL;
 	int fname_len;
-	const char *rv = oidc_parse_use_enc_kid_key_tuple(cmd->pool, arg, &kid, &fname,
-			&fname_len, &use, FALSE);
+	const char *rv = oidc_parse_use_enc_kid_key_tuple(cmd->pool, arg, &kid,
+			&fname, &fname_len, &use, FALSE);
 	if (rv != NULL)
 		return rv;
 
 	fname = oidc_util_get_full_path(cmd->pool, fname);
 
-	if (oidc_jwk_parse_pem_public_key(cmd->pool, kid, fname, &jwk, &err)
-			== FALSE) {
+	if (oidc_jwk_parse_pem_public_key(cmd->pool, kid, fname, &jwk,
+			&err) == FALSE) {
 		return apr_psprintf(cmd->pool,
 				"oidc_jwk_parse_pem_public_key failed for (kid=%s) \"%s\": %s",
 				kid, fname, oidc_jose_e2s(cmd->pool, err));
 	}
 
 	if (*public_keys == NULL)
-		*public_keys = apr_array_make(cmd->pool, 4, sizeof(const oidc_jwk_t*));
+		*public_keys = apr_array_make(cmd->pool, 4, sizeof(oidc_jwk_t*));
 	if (use)
 		jwk->use = apr_pstrdup(cmd->pool, use);
-	*(const oidc_jwk_t**) apr_array_push(*public_keys) = jwk;
+	APR_ARRAY_PUSH(*public_keys, oidc_jwk_t *) = jwk;
 
 	return NULL;
 }
@@ -855,8 +855,8 @@ static const char* oidc_set_shared_keys(cmd_parms *cmd, void *struct_ptr,
 
 	char *kid = NULL, *secret = NULL;
 	int key_len = 0;
-	const char *rv = oidc_parse_use_enc_kid_key_tuple(cmd->pool, arg, &kid, &secret,
-			&key_len, &use, TRUE);
+	const char *rv = oidc_parse_use_enc_kid_key_tuple(cmd->pool, arg, &kid,
+			&secret, &key_len, &use, TRUE);
 	if (rv != NULL)
 		return rv;
 
@@ -891,26 +891,25 @@ static const char* oidc_set_private_key_files_enc(cmd_parms *cmd, void *dummy,
 
 	char *kid = NULL, *fname = NULL;
 	int fname_len;
-	const char *rv = oidc_parse_use_enc_kid_key_tuple(cmd->pool, arg, &kid, &fname,
-			&fname_len, &use, FALSE);
+	const char *rv = oidc_parse_use_enc_kid_key_tuple(cmd->pool, arg, &kid,
+			&fname, &fname_len, &use, FALSE);
 	if (rv != NULL)
 		return rv;
 
 	fname = oidc_util_get_full_path(cmd->pool, fname);
 
-	if (oidc_jwk_parse_pem_private_key(cmd->pool, kid, fname, &jwk, &err)
-			== FALSE) {
+	if (oidc_jwk_parse_pem_private_key(cmd->pool, kid, fname, &jwk,
+			&err) == FALSE) {
 		return apr_psprintf(cmd->pool,
 				"oidc_jwk_parse_pem_private_key failed for (kid=%s) \"%s\": %s",
 				kid, fname, oidc_jose_e2s(cmd->pool, err));
 	}
 
 	if (cfg->private_keys == NULL)
-		cfg->private_keys = apr_array_make(cmd->pool, 4,
-				sizeof(const oidc_jwk_t*));
+		cfg->private_keys = apr_array_make(cmd->pool, 4, sizeof(oidc_jwk_t*));
 	if (use)
 		jwk->use = apr_pstrdup(cmd->pool, use);
-	*(const oidc_jwk_t**) apr_array_push(cfg->private_keys) = jwk;
+	APR_ARRAY_PUSH(cfg->private_keys, oidc_jwk_t*) = jwk;
 
 	return NULL;
 }
@@ -998,7 +997,7 @@ static const char* oidc_set_cookie_names(cmd_parms *cmd, void *m,
 			+ offset);
 	if (*cookie_names == NULL)
 		*cookie_names = apr_array_make(cmd->pool, 3, sizeof(const char*));
-	*(const char**) apr_array_push((*cookie_names)) = arg;
+	APR_ARRAY_PUSH(*cookie_names, const char *) = arg;
 	return NULL;
 }
 

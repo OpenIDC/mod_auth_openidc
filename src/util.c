@@ -1068,7 +1068,8 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 		/* gather cookies that we need to pass on from the incoming request */
 		char *cookie_string = NULL;
 		for (i = 0; i < pass_cookies->nelts; i++) {
-			const char *cookie_name = ((const char**) pass_cookies->elts)[i];
+			const char *cookie_name = APR_ARRAY_IDX(pass_cookies, i,
+					const char *);
 			char *cookie_value = oidc_util_get_cookie(r, cookie_name);
 			if (cookie_value != NULL) {
 				cookie_string =
@@ -2466,10 +2467,11 @@ apr_byte_t oidc_util_create_symmetric_key(request_rec *r,
 apr_hash_t* oidc_util_merge_symmetric_key(apr_pool_t *pool,
 		const apr_array_header_t *keys, oidc_jwk_t *jwk) {
 	apr_hash_t *result = apr_hash_make(pool);
+	oidc_jwk_t *elem = NULL;
 	int i = 0;
 	if (keys != NULL) {
 		for (i = 0; i < keys->nelts; i++) {
-			const oidc_jwk_t *elem = ((const oidc_jwk_t**) keys->elts)[i];
+			elem = APR_ARRAY_IDX(keys, i, oidc_jwk_t *);
 			apr_hash_set(result, elem->kid, APR_HASH_KEY_STRING, elem);
 		}
 	}
@@ -2488,8 +2490,8 @@ apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r,
 	unsigned char *hashed = NULL;
 	unsigned int hashed_len = 0;
 	if (oidc_jose_hash_bytes(r->pool, openssl_hash_algo,
-			(const unsigned char*) input, _oidc_strlen(input), &hashed, &hashed_len,
-			&err) == FALSE) {
+			(const unsigned char*) input, _oidc_strlen(input), &hashed,
+			&hashed_len, &err) == FALSE) {
 		oidc_error(r, "oidc_jose_hash_bytes returned an error: %s", err.text);
 		return FALSE;
 	}
@@ -2508,10 +2510,11 @@ apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r,
 apr_hash_t* oidc_util_merge_key_sets(apr_pool_t *pool, apr_hash_t *k1,
 		const apr_array_header_t *k2) {
 	apr_hash_t *rv = k1 ? apr_hash_copy(pool, k1) : apr_hash_make(pool);
+	oidc_jwk_t *jwk = NULL;
 	int i = 0;
 	if (k2 != NULL) {
 		for (i = 0; i < k2->nelts; i++) {
-			const oidc_jwk_t *jwk = ((const oidc_jwk_t**) k2->elts)[i];
+			jwk = APR_ARRAY_IDX(k2, i, oidc_jwk_t *);
 			apr_hash_set(rv, jwk->kid, APR_HASH_KEY_STRING, jwk);
 		}
 	}
@@ -2538,30 +2541,36 @@ apr_hash_t* oidc_util_merge_key_sets_hash(apr_pool_t *pool, apr_hash_t *k1,
  *     text_original: "match 292 numbers"
  *     text_replaced: "292"
  */
-apr_byte_t oidc_util_regexp_substitute(apr_pool_t *pool, const char *input, const char *regexp,
-		const char *replace, char **output, char **error_str) {
+apr_byte_t oidc_util_regexp_substitute(apr_pool_t *pool, const char *input,
+		const char *regexp, const char *replace, char **output,
+		char **error_str) {
 
 	char *substituted = NULL;
 	apr_byte_t rc = FALSE;
 
 	struct oidc_pcre *preg = oidc_pcre_compile(pool, regexp, error_str);
 	if (preg == NULL) {
-		*error_str =
-				apr_psprintf(pool, "pattern [%s] is not a valid regular expression: %s", regexp, *error_str);
+		*error_str = apr_psprintf(pool,
+				"pattern [%s] is not a valid regular expression: %s", regexp,
+				*error_str);
 		goto out;
 	}
 
 	if (_oidc_strlen(input) >= OIDC_PCRE_MAXCAPTURE - 1) {
 		*error_str =
-				apr_psprintf(pool, "string length (%d) is larger than the maximum allowed for pcre_subst (%d)", (int) _oidc_strlen(input), OIDC_PCRE_MAXCAPTURE
-							 - 1);
+				apr_psprintf(pool,
+						"string length (%d) is larger than the maximum allowed for pcre_subst (%d)",
+						(int) _oidc_strlen(input), OIDC_PCRE_MAXCAPTURE - 1);
 		goto out;
 	}
 
-	substituted = oidc_pcre_subst(pool, preg, input, (int) _oidc_strlen(input), replace);
+	substituted = oidc_pcre_subst(pool, preg, input, (int) _oidc_strlen(input),
+			replace);
 	if (substituted == NULL) {
 		*error_str =
-				apr_psprintf(pool, "unknown error could not match string [%s] using pattern [%s] and replace matches in [%s]", input, regexp, replace);
+				apr_psprintf(pool,
+						"unknown error could not match string [%s] using pattern [%s] and replace matches in [%s]",
+						input, regexp, replace);
 		goto out;
 	}
 
@@ -2569,6 +2578,7 @@ apr_byte_t oidc_util_regexp_substitute(apr_pool_t *pool, const char *input, cons
 	rc = TRUE;
 
 out:
+
 	if (preg)
 		oidc_pcre_free(preg);
 
@@ -2579,15 +2589,16 @@ out:
  * regexp match
  */
 
-apr_byte_t oidc_util_regexp_first_match(apr_pool_t *pool, const char *input, const char *regexp,
-		char **output, char **error_str) {
+apr_byte_t oidc_util_regexp_first_match(apr_pool_t *pool, const char *input,
+		const char *regexp, char **output, char **error_str) {
 	apr_byte_t rv = FALSE;
 	int rc = 0;
 
 	struct oidc_pcre *preg = oidc_pcre_compile(pool, regexp, error_str);
 	if (preg == NULL) {
-		*error_str =
-				apr_psprintf(pool, "pattern [%s] is not a valid regular expression: %s", regexp, *error_str);
+		*error_str = apr_psprintf(pool,
+				"pattern [%s] is not a valid regular expression: %s", regexp,
+				*error_str);
 		goto out;
 	}
 
@@ -2595,7 +2606,8 @@ apr_byte_t oidc_util_regexp_first_match(apr_pool_t *pool, const char *input, con
 			error_str)) < 0)
 		goto out;
 
-	if (output && (oidc_pcre_get_substring(pool, preg, input, rc, output,
+	if (output
+			&& (oidc_pcre_get_substring(pool, preg, input, rc, output,
 					error_str) <= 0)) {
 		*error_str = apr_psprintf(pool, "pcre_get_substring failed: %s",
 				*error_str);
@@ -2605,6 +2617,7 @@ apr_byte_t oidc_util_regexp_first_match(apr_pool_t *pool, const char *input, con
 	rv = TRUE;
 
 out:
+
 	if (preg)
 		oidc_pcre_free(preg);
 
@@ -2976,7 +2989,7 @@ oidc_jwk_t* oidc_util_key_list_first(const apr_array_header_t *key_list,
 	int i = 0;
 	oidc_jwk_t *jwk = NULL;
 	for (i = 0; (key_list) && (i < key_list->nelts); i++) {
-		jwk = ((oidc_jwk_t**) key_list->elts)[i];
+		jwk = APR_ARRAY_IDX(key_list, i, oidc_jwk_t *);
 		if ((jwk->kty == kty)
 				&& ((use == NULL) || (jwk->use == NULL)
 						|| (_oidc_strncmp(jwk->use, use, strlen(use)) == 0))) {
