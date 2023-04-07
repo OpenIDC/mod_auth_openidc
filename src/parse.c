@@ -753,9 +753,9 @@ const char *oidc_parse_pass_idtoken_as(apr_pool_t *pool, const char *v1,
 	return NULL;
 }
 
-#define OIDC_PASS_USERINFO_AS_CLAIMS_STR      "claims"
 #define OIDC_PASS_USERINFO_AS_JSON_OBJECT_STR "json"
 #define OIDC_PASS_USERINFO_AS_JWT_STR         "jwt"
+#define OIDC_PASS_USERINFO_AS_SIGNED_JWT_STR  "signed_jwt"
 
 /*
  * convert a "pass userinfo as" value to an integer
@@ -767,40 +767,38 @@ static int oidc_parse_pass_userinfo_as_str2int(const char *v) {
 		return OIDC_PASS_USERINFO_AS_JSON_OBJECT;
 	if (_oidc_strcmp(v, OIDC_PASS_USERINFO_AS_JWT_STR) == 0)
 		return OIDC_PASS_USERINFO_AS_JWT;
+	if (_oidc_strcmp(v, OIDC_PASS_USERINFO_AS_SIGNED_JWT_STR) == 0)
+		return OIDC_PASS_USERINFO_AS_SIGNED_JWT;
 	return -1;
 }
 
 /*
  * parse a "pass id token as" value from the provided strings
  */
-const char *oidc_parse_pass_userinfo_as(apr_pool_t *pool, const char *v1,
-		const char *v2, const char *v3, int *int_value) {
+const char* oidc_parse_pass_userinfo_as(apr_pool_t *pool, const char *v,
+		oidc_pass_user_info_as_t **result) {
 	static char *options[] = {
 			OIDC_PASS_USERINFO_AS_CLAIMS_STR,
 			OIDC_PASS_USERINFO_AS_JSON_OBJECT_STR,
 			OIDC_PASS_USERINFO_AS_JWT_STR,
+			OIDC_PASS_USERINFO_AS_SIGNED_JWT_STR,
 			NULL };
 	const char *rv = NULL;
-	rv = oidc_valid_string_option(pool, v1, options);
+
+	char *name = strstr(v, ":");
+	if (name) {
+		*name = '\0';
+		name++;
+	}
+
+	rv = oidc_valid_string_option(pool, v, options);
 	if (rv != NULL)
 		return rv;
-	*int_value = oidc_parse_pass_userinfo_as_str2int(v1);
 
-	if (v2 == NULL)
-		return NULL;
-
-	rv = oidc_valid_string_option(pool, v2, options);
-	if (rv != NULL)
-		return rv;
-	*int_value |= oidc_parse_pass_userinfo_as_str2int(v2);
-
-	if (v3 == NULL)
-		return NULL;
-
-	rv = oidc_valid_string_option(pool, v3, options);
-	if (rv != NULL)
-		return rv;
-	*int_value |= oidc_parse_pass_userinfo_as_str2int(v3);
+	*result = apr_pcalloc(pool, sizeof(oidc_pass_user_info_as_t));
+	(*result)->type = oidc_parse_pass_userinfo_as_str2int(v);
+	if (name)
+		(*result)->name = apr_pstrdup(pool, name);
 
 	return NULL;
 }

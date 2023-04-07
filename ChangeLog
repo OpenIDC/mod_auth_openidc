@@ -1,3 +1,13 @@
+04/07/2023
+- add support for passing on claims resolved from the userinfo endpoint in a JWT signed by
+  mod_auth_openidc using `OIDCPassUserInfoAs signed_jwt[:<name>]`  with the keys configured
+  in OIDCPrivateKeyFiles/OIDCPublicKeyFiles
+- add support for overriding the default header/environment variable names in
+  `OIDCPassUserInfoAs json:<name>` (default: "OIDC_userinfo_json")
+  and
+  `OIDCPassUserInfoAs jwt:<name>` (default: "OIDC_userinfo_jwt")
+- bump to 2.4.13.3rc3
+
 04/06/2023
 - merge client_signing_keys and client_encryption_keys into client_keys
   since we detect the usage type correctly now

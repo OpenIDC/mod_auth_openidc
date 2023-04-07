@@ -930,13 +930,20 @@ static const char* oidc_set_pass_idtoken_as(cmd_parms *cmd, void *dummy,
 /*
  * define how to pass the userinfo/claims in HTTP headers
  */
-static const char* oidc_set_pass_userinfo_as(cmd_parms *cmd, void *dummy,
-		const char *v1, const char *v2, const char *v3) {
+static const char* oidc_set_pass_userinfo_as(cmd_parms *cmd, void *struct_ptr,
+		const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
 			&auth_openidc_module);
-	const char *rv = oidc_parse_pass_userinfo_as(cmd->pool, v1, v2, v3,
-			&cfg->pass_userinfo_as);
-	return OIDC_CONFIG_DIR_RV(cmd, rv);
+	const char *rv = NULL;
+	oidc_pass_user_info_as_t *p = NULL;
+	rv = oidc_parse_pass_userinfo_as(cmd->pool, arg, &p);
+	if (rv != NULL)
+		return OIDC_CONFIG_DIR_RV(cmd, rv);
+	if (cfg->pass_userinfo_as == NULL)
+		cfg->pass_userinfo_as = apr_array_make(cmd->pool, 3,
+				sizeof(oidc_pass_user_info_as_t*));
+	APR_ARRAY_PUSH(cfg->pass_userinfo_as, oidc_pass_user_info_as_t *) = p;
+	return NULL;
 }
 
 /*
@@ -1767,7 +1774,7 @@ void* oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->remote_user_claim.reg_exp = NULL;
 	c->remote_user_claim.replace = NULL;
 	c->pass_idtoken_as = OIDC_PASS_IDTOKEN_AS_CLAIMS;
-	c->pass_userinfo_as = OIDC_PASS_USERINFO_AS_CLAIMS;
+	c->pass_userinfo_as = NULL;
 	c->cookie_http_only = OIDC_DEFAULT_COOKIE_HTTPONLY;
 	c->cookie_same_site = OIDC_DEFAULT_COOKIE_SAME_SITE;
 
@@ -2068,7 +2075,7 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->pass_idtoken_as != OIDC_PASS_IDTOKEN_AS_CLAIMS ?
 					add->pass_idtoken_as : base->pass_idtoken_as;
 	c->pass_userinfo_as =
-			add->pass_userinfo_as != OIDC_PASS_USERINFO_AS_CLAIMS ?
+			add->pass_userinfo_as != NULL ?
 					add->pass_userinfo_as : base->pass_userinfo_as;
 	c->cookie_http_only =
 			add->cookie_http_only != OIDC_DEFAULT_COOKIE_HTTPONLY ?
@@ -3318,7 +3325,7 @@ const command_rec oidc_config_cmds[] = {
 				NULL,
 				RSRC_CONF,
 				"The format in which the id_token is passed in (a) header(s); must be one or more of: claims|payload|serialized"),
-		AP_INIT_TAKE123(OIDCPassUserInfoAs,
+		AP_INIT_ITERATE(OIDCPassUserInfoAs,
 				oidc_set_pass_userinfo_as,
 				NULL,
 				RSRC_CONF,

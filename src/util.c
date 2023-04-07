@@ -2969,3 +2969,20 @@ out_err:
 	// TODO: we don't know which token binding the client supports, do we ?
 	return FALSE;
 }
+
+oidc_jwk_t* oidc_util_key_list_first(const apr_array_header_t *key_list,
+		int kty, const char *use) {
+	oidc_jwk_t *rv = NULL;
+	int i = 0;
+	oidc_jwk_t *jwk = NULL;
+	for (i = 0; (key_list) && (i < key_list->nelts); i++) {
+		jwk = ((oidc_jwk_t**) key_list->elts)[i];
+		if ((jwk->kty == kty)
+				&& ((use == NULL) || (jwk->use == NULL)
+						|| (_oidc_strncmp(jwk->use, use, strlen(use)) == 0))) {
+			rv = jwk;
+			break;
+		}
+	}
+	return rv;
+}

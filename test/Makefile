@@ -19,6 +19,10 @@ docker-check: docker-build
 
 DOCKER_GDB_FLAGS := --cap-add=SYS_PTRACE --security-opt seccomp=unconfined
 
+docker-gdb: docker-build
+	docker run --rm $(DOCKER_GDB_FLAGS) -p 443:443 -v $(PWD)/test/openidc.conf:/etc/apache2/conf-available/openidc.conf \
+		-it $(TAG) "source /etc/apache2/envvars && gdb -ex run --args /usr/sbin/apache2 -X"
+	
 docker-gdb-check: docker-build
 	docker run --rm $(DOCKER_GDB_FLAGS) -it $(TAG) "cd $(DIR) && gdb -ex run $(TARGET)"
 

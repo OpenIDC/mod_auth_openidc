@@ -1382,6 +1382,119 @@ static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
 	return TRUE;
 }
 
+static apr_byte_t oidc_pass_userinfo_as(request_rec *r, oidc_cfg *cfg,
+		oidc_session_t *session, const char *s_claims, apr_byte_t pass_headers,
+		apr_byte_t pass_envvars, int pass_hdr_as) {
+	apr_byte_t rv = FALSE;
+	oidc_pass_user_info_as_t *p = NULL;
+	int i = 0;
+	oidc_jwt_t *jwt = NULL;
+	oidc_jwk_t *jwk = NULL;
+	char *cser = NULL;
+	oidc_jose_error_t err;
+
+	if (cfg->pass_userinfo_as == NULL) {
+		cfg->pass_userinfo_as = apr_array_make(r->server->process->pconf, 3,
+				sizeof(oidc_pass_user_info_as_t*));
+		oidc_parse_pass_userinfo_as(r->server->process->pconf,
+				OIDC_PASS_USERINFO_AS_CLAIMS_STR, &p);
+		APR_ARRAY_PUSH(cfg->pass_userinfo_as, oidc_pass_user_info_as_t *) = p;
+	}
+
+	for (i = 0;
+			(cfg->pass_userinfo_as != NULL)
+							&& (i < cfg->pass_userinfo_as->nelts); i++) {
+
+		p = APR_ARRAY_IDX(cfg->pass_userinfo_as, i, oidc_pass_user_info_as_t *);
+
+		switch (p->type) {
+
+		case OIDC_PASS_USERINFO_AS_CLAIMS:
+			/* set the userinfo claims in the app headers */
+			if (oidc_set_app_claims(r, cfg, session, s_claims) == FALSE)
+				goto end;
+			rv = TRUE;
+			break;
+
+		case OIDC_PASS_USERINFO_AS_JSON_OBJECT:
+			/* pass the userinfo JSON object to the app in a header or environment variable */
+			oidc_util_set_app_info(r,
+					p->name ? p->name : OIDC_APP_INFO_USERINFO_JSON, s_claims,
+							p->name ? "" : OIDC_DEFAULT_HEADER_PREFIX, pass_headers,
+									pass_envvars, pass_hdr_as);
+			rv = TRUE;
+			break;
+
+		case OIDC_PASS_USERINFO_AS_JWT:
+			if (cfg->session_type != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
+				/* get the compact serialized JWT from the session */
+				const char *s_userinfo_jwt = oidc_session_get_userinfo_jwt(r,
+						session);
+				if (s_userinfo_jwt != NULL) {
+					/* pass the compact serialized JWT to the app in a header or environment variable */
+					oidc_util_set_app_info(r,
+							p->name ? p->name : OIDC_APP_INFO_USERINFO_JWT,
+									s_userinfo_jwt,
+									p->name ? "" : OIDC_DEFAULT_HEADER_PREFIX,
+											pass_headers, pass_envvars, pass_hdr_as);
+				} else {
+					oidc_debug(r,
+							"configured to pass userinfo in a JWT, but no such JWT was found in the session (probably no such JWT was returned from the userinfo endpoint)");
+				}
+			} else {
+				oidc_error(r,
+						"session type \"client-cookie\" does not allow storing/passing a userinfo JWT; use \"" OIDCSessionType " server-cache\" for that");
+			}
+			rv = TRUE;
+			break;
+
+		case OIDC_PASS_USERINFO_AS_SIGNED_JWT:
+
+			jwk = oidc_util_key_list_first(cfg->private_keys, CJOSE_JWK_KTY_RSA,
+					OIDC_JOSE_JWK_SIG_STR);
+			if (jwk == NULL) {
+				oidc_error(r,
+						"no private signing keys have been configured to use for private_key_jwt client authentication (" OIDCPrivateKeyFiles ")");
+				goto end;
+			}
+
+			jwt = oidc_jwt_new(r->pool, TRUE, FALSE);
+			if (jwt == NULL)
+				goto end;
+
+			jwt->header.kid = apr_pstrdup(r->pool, jwk->kid);
+			jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_RS256);
+
+			oidc_util_decode_json_object(r, s_claims, &jwt->payload.value.json);
+
+			if (oidc_jwt_sign(r->pool, jwt, jwk, FALSE, &err) == FALSE)
+				goto end;
+
+			cser = oidc_jwt_serialize(r->pool, jwt, &err);
+			if (cser == NULL)
+				goto end;
+
+			oidc_util_set_app_info(r,
+					p->name ? p->name : OIDC_APP_INFO_SIGNED_JWT, cser,
+							p->name ? "" : OIDC_DEFAULT_HEADER_PREFIX, pass_headers,
+									pass_envvars, pass_hdr_as);
+
+			rv = TRUE;
+			break;
+
+		default:
+			break;
+		}
+	}
+
+end:
+
+	if (jwt)
+		oidc_jwt_destroy(jwt);
+
+	return TRUE;
+}
+
 /*
  * handle the case where we have identified an existing authentication session for a user
  */
@@ -1397,7 +1510,8 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 
 	/* set the user in the main request for further (incl. sub-request) processing */
 	r->user = apr_pstrdup(r->pool, session->remote_user);
-	oidc_debug(r, "set remote_user to \"%s\" in existing session \"%s\"", r->user, session->uuid);
+	oidc_debug(r, "set remote_user to \"%s\" in existing session \"%s\"",
+			r->user, session->uuid);
 
 	/* get the header name in which the remote user name needs to be passed */
 	char *authn_header = oidc_cfg_dir_authn_header(r);
@@ -1447,38 +1561,9 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	/* copy id_token and claims from session to request state and obtain their values */
 	oidc_copy_tokens_to_request_state(r, session, &s_id_token, &s_claims);
 
-	if ((cfg->pass_userinfo_as & OIDC_PASS_USERINFO_AS_CLAIMS)) {
-		/* set the userinfo claims in the app headers */
-		if (oidc_set_app_claims(r, cfg, session, s_claims) == FALSE)
-			return HTTP_INTERNAL_SERVER_ERROR;
-	}
-
-	if ((cfg->pass_userinfo_as & OIDC_PASS_USERINFO_AS_JSON_OBJECT)) {
-		/* pass the userinfo JSON object to the app in a header or environment variable */
-		oidc_util_set_app_info(r, OIDC_APP_INFO_USERINFO_JSON, s_claims,
-				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars, pass_hdr_as);
-	}
-
-	if ((cfg->pass_userinfo_as & OIDC_PASS_USERINFO_AS_JWT)) {
-		if (cfg->session_type != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
-			/* get the compact serialized JWT from the session */
-			const char *s_userinfo_jwt = oidc_session_get_userinfo_jwt(r,
-					session);
-			if (s_userinfo_jwt != NULL) {
-				/* pass the compact serialized JWT to the app in a header or environment variable */
-				oidc_util_set_app_info(r, OIDC_APP_INFO_USERINFO_JWT,
-						s_userinfo_jwt,
-						OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars,
-						pass_hdr_as);
-			} else {
-				oidc_debug(r,
-						"configured to pass userinfo in a JWT, but no such JWT was found in the session (probably no such JWT was returned from the userinfo endpoint)");
-			}
-		} else {
-			oidc_error(r,
-					"session type \"client-cookie\" does not allow storing/passing a userinfo JWT; use \"" OIDCSessionType " server-cache\" for that");
-		}
-	}
+	if (oidc_pass_userinfo_as(r, cfg, session, s_claims, pass_headers,
+			pass_envvars, pass_hdr_as) == FALSE)
+		return HTTP_INTERNAL_SERVER_ERROR;
 
 	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_CLAIMS)) {
 		/* set the id_token in the app headers */
@@ -1498,9 +1583,11 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 		if (s_id_token) {
 			/* pass the compact serialized JWT to the app in a header or environment variable */
 			oidc_util_set_app_info(r, OIDC_APP_INFO_ID_TOKEN, s_id_token,
-								   OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars, pass_hdr_as);
+					OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars,
+					pass_hdr_as);
 		} else {
-			oidc_warn(r, "id_token was not found in the session so it cannot be passed on");
+			oidc_warn(r,
+					"id_token was not found in the session so it cannot be passed on");
 		}
 	}
 

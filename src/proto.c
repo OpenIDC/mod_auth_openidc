@@ -279,23 +279,6 @@ apr_byte_t oidc_proto_get_encryption_jwk_by_type(request_rec *r, oidc_cfg *cfg,
 	return (*jwk != NULL);
 }
 
-static oidc_jwk_t* oidc_key_list_first(const apr_array_header_t *key_list,
-		int kty, const char *use) {
-	oidc_jwk_t *rv = NULL;
-	int i = 0;
-	oidc_jwk_t *jwk = NULL;
-	for (i = 0; (key_list) && (i < key_list->nelts); i++) {
-		jwk = ((oidc_jwk_t**) key_list->elts)[i];
-		if ((jwk->kty == kty)
-				&& ((use == NULL) || (jwk->use == NULL)
-						|| (_oidc_strncmp(jwk->use, use, strlen(use)) == 0))) {
-			rv = jwk;
-			break;
-		}
-	}
-	return rv;
-}
-
 /*
  * generate a request object
  */
@@ -360,9 +343,9 @@ char* oidc_proto_create_request_object(request_rec *r,
 			if ((provider->client_keys != NULL)
 					|| (cfg->private_keys != NULL)) {
 				sjwk = provider->client_keys ?
-						oidc_key_list_first(provider->client_keys, kty,
+						oidc_util_key_list_first(provider->client_keys, kty,
 								NULL) :
-								oidc_key_list_first(cfg->private_keys, kty,
+								oidc_util_key_list_first(cfg->private_keys, kty,
 										OIDC_JOSE_JWK_SIG_STR);
 				if (sjwk && sjwk->kid)
 					request_object->header.kid = apr_pstrdup(r->pool,
@@ -1931,13 +1914,13 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r,
 		return FALSE;
 
 	if ((client_keys != NULL) && (client_keys->nelts > 0)) {
-		jwk = oidc_key_list_first(client_keys, CJOSE_JWK_KTY_RSA, NULL);
+		jwk = oidc_util_key_list_first(client_keys, CJOSE_JWK_KTY_RSA, NULL);
 		if (jwk && jwk->x5t)
 			jwt->header.x5t = apr_pstrdup(r->pool, jwk->x5t);
 	} else if ((cfg->private_keys != NULL) && (cfg->private_keys->nelts > 0)) {
-		jwk = oidc_key_list_first(cfg->private_keys, CJOSE_JWK_KTY_RSA,
+		jwk = oidc_util_key_list_first(cfg->private_keys, CJOSE_JWK_KTY_RSA,
 				OIDC_JOSE_JWK_SIG_STR);
-		jwk_pub = oidc_key_list_first(cfg->public_keys, CJOSE_JWK_KTY_RSA,
+		jwk_pub = oidc_util_key_list_first(cfg->public_keys, CJOSE_JWK_KTY_RSA,
 				OIDC_JOSE_JWK_SIG_STR);
 		if (jwk_pub && jwk_pub->x5t)
 			// populate x5t; at least required for Azure AD

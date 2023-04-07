@@ -150,11 +150,13 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_PASS_IDTOKEN_AS_SERIALIZED 4
 
 /* pass userinfo as individual claims in headers (default) */
-#define OIDC_PASS_USERINFO_AS_CLAIMS      1
+#define OIDC_PASS_USERINFO_AS_CLAIMS       1
 /* pass userinfo payload as JSON object in header */
-#define OIDC_PASS_USERINFO_AS_JSON_OBJECT 2
+#define OIDC_PASS_USERINFO_AS_JSON_OBJECT  2
 /* pass userinfo as a JWT in header (when returned as a JWT) */
-#define OIDC_PASS_USERINFO_AS_JWT         4
+#define OIDC_PASS_USERINFO_AS_JWT          3
+/* pass as re-signed JWT including id_token claims */
+#define OIDC_PASS_USERINFO_AS_SIGNED_JWT   4
 
 #define OIDC_PASS_APP_INFO_AS_BASE64URL 1
 #define OIDC_PASS_APP_INFO_AS_LATIN1    2
@@ -451,7 +453,7 @@ typedef struct oidc_cfg {
 	char *claim_prefix;
 	oidc_remote_user_claim_t remote_user_claim;
 	int pass_idtoken_as;
-	int pass_userinfo_as;
+	apr_array_header_t *pass_userinfo_as;
 	int cookie_http_only;
 	int cookie_same_site;
 
@@ -651,6 +653,7 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_APP_INFO_ID_TOKEN_PAYLOAD  "id_token_payload"
 #define OIDC_APP_INFO_USERINFO_JSON     "userinfo_json"
 #define OIDC_APP_INFO_USERINFO_JWT      "userinfo_jwt"
+#define OIDC_APP_INFO_SIGNED_JWT        "signed_jwt"
 
 typedef json_t oidc_proto_state_t;
 
@@ -853,6 +856,7 @@ char *oidc_util_get_full_path(apr_pool_t *pool, const char *abs_or_rel_filename)
 apr_byte_t oidc_enabled(request_rec *r);
 char *oidc_util_http_form_encoded_data(request_rec *r, const apr_table_t *params);
 const char* oidc_util_strcasestr(const char *s1, const char *s2);
+oidc_jwk_t* oidc_util_key_list_first(const apr_array_header_t *key_list, int kty, const char *use);
 
 /* HTTP header constants */
 #define OIDC_HTTP_HDR_COOKIE                            "Cookie"
