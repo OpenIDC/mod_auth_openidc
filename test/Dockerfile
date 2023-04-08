@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
 	libhiredis-dev libcjose-dev \
 	libpcre2-dev zlib1g-dev
 
-RUN a2enmod ssl && a2ensite default-ssl
+RUN a2enmod proxy && a2enmod ssl && a2ensite default-ssl
 
 COPY . /root/mod_auth_openidc
 
