@@ -1,4 +1,10 @@
 04/09/2023
+- make sure mod_auth_openidc runs before mod_proxy so calls to the redirect URI are never proxied
+  and no separate Location directive or ProxyPass exception for OIDCRedirectURI is required (anymore)
+- handle discovery in the content handler so regular Apache processing applies to the HTTP/HTML response
+- bump to 2.4.14rc2
+
+04/09/2023
 - return 40x instead of 200 on all (authorization) error responses
 - correct backwards compatibility with <2.4.14 for state mismatch/timeout handling
 - bump to 2.4.14rc1

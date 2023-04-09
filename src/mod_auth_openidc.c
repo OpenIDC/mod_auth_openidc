@@ -2376,9 +2376,9 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 			 * by setting r->user
 			 */
 			oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_DISCOVERY, "");
+			oidc_debug(r, "defer discovery to the content handler, setting r->user=\"\"");
 			r->user = "";
-			rc = oidc_discovery(r, c);
-			return (rc == OK) ? DONE : rc;
+			return OK;
 		}
 
 		/* we're not using multiple OP's configured in a metadata directory, pick the statically configured OP */
@@ -4297,7 +4297,6 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args,
 
 	/* check for anonymous access and PASS mode */
 	if ((r->user != NULL) && (_oidc_strlen(r->user) == 0)) {
-		r->user = NULL;
 		if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
 			return AUTHZ_GRANTED;
 		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
@@ -4470,44 +4469,44 @@ int oidc_content_handler(request_rec *r) {
 	apr_byte_t needs_save = FALSE;
 	oidc_session_t *session = NULL;
 
-	if (oidc_enabled(r) == TRUE) {
+	if (oidc_enabled(r) == FALSE)
+		return DECLINED;
 
-		if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c)) == TRUE) {
+	if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c)) == TRUE) {
 
-			if (oidc_util_request_has_parameter(r,
-					OIDC_REDIRECT_URI_REQUEST_INFO)) {
+		/* requests to the redirect URI are handled and finished here */
+		rc = OK;
 
-				oidc_session_load(r, &session);
+		if (oidc_util_request_has_parameter(r,
+				OIDC_REDIRECT_URI_REQUEST_INFO)) {
 
-				needs_save = (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_SAVE) != NULL);;
+			oidc_session_load(r, &session);
 
-				/* handle request for session info */
-				rc = oidc_handle_info_request(r, c, session, needs_save);
+			needs_save = (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_SAVE) != NULL);;
 
-				/* free resources allocated for the session */
-				oidc_session_free(r, session);
+			/* handle request for session info */
+			rc = oidc_handle_info_request(r, c, session, needs_save);
 
-			} else if (oidc_util_request_has_parameter(r,
-					OIDC_REDIRECT_URI_REQUEST_JWKS)) {
+			/* free resources allocated for the session */
+			oidc_session_free(r, session);
 
-				/* handle JWKs request */
-				rc = oidc_handle_jwks(r, c);
+		} else if (oidc_util_request_has_parameter(r,
+				OIDC_REDIRECT_URI_REQUEST_JWKS)) {
 
-			} else {
-
-				rc = OK;
-
-			}
-
-		} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL) {
-
-			rc = oidc_discovery(r, c);
-
-		} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_AUTHN) != NULL) {
-
-			rc = OK;
+			/* handle JWKs request */
+			rc = oidc_handle_jwks(r, c);
 
 		}
+
+	} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL) {
+
+		/* discovery may result in a 200 HTML page or a redirect to an external URL */
+		rc = oidc_discovery(r, c);
+
+	} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_AUTHN) != NULL) {
+
+		/* sending POST preserve */
+		rc = OK;
 
 	}
 
