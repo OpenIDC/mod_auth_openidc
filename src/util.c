@@ -1732,6 +1732,7 @@ int oidc_util_html_send_error(request_rec *r, const char *html_template,
 		const char *error, const char *description, int status_code) {
 
 	char *html = "";
+	int rc = status_code;
 
 	if (html_template != NULL) {
 
@@ -1756,7 +1757,7 @@ int oidc_util_html_send_error(request_rec *r, const char *html_template,
 						oidc_util_html_escape(r->pool,
 								description ? description : ""));
 
-				return oidc_util_http_send(r, html, _oidc_strlen(html),
+				rc = oidc_util_http_send(r, html, _oidc_strlen(html),
 						OIDC_CONTENT_TYPE_TEXT_HTML, status_code);
 			}
 		}
@@ -1770,7 +1771,7 @@ int oidc_util_html_send_error(request_rec *r, const char *html_template,
 					html, oidc_util_html_escape(r->pool, description));
 		}
 
-		return oidc_util_html_send(r, "Error", NULL, NULL, html, status_code);
+		rc = oidc_util_html_send(r, "Error", NULL, NULL, html, status_code);
 	}
 
 	oidc_debug(r, "setting "OIDC_ERROR_ENVVAR" environment variable to: %s",
@@ -1783,7 +1784,7 @@ int oidc_util_html_send_error(request_rec *r, const char *html_template,
 	apr_table_set(r->subprocess_env, OIDC_ERROR_DESC_ENVVAR,
 			description ? description : "");
 
-	return status_code;
+	return rc;
 }
 
 /*

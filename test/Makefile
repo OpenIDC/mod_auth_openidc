@@ -1,6 +1,8 @@
 TAG := mod_auth_openidc
 DIR := /root/mod_auth_openidc
 TARGET := test/test
+FLAGS := --rm -it $(TAG)
+APACHE_FLAGS := -p 80:80 -p 443:443 -v $(PWD)/test/openidc.conf:/etc/apache2/conf-available/openidc.conf -v $(PWD)/metadata/:/root/mod_auth_openidc/metadata/
 
 docker: docker-run
 
@@ -8,10 +10,10 @@ docker-build:
 	docker build -f test/Dockerfile -t $(TAG) .
 
 docker-run: docker-build
-	docker run --init --rm -p 443:443 -v $(PWD)/test/openidc.conf:/etc/apache2/conf-available/openidc.conf -it $(TAG) "apache2ctl start && tail -f /var/log/apache2/error.log"
+	docker run --init ${APACHE_FLAGS} ${FLAGS} "apache2ctl start && tail -f /var/log/apache2/error.log"
 
 docker-check: docker-build
-	docker run --rm -it $(TAG) "cd $(DIR) && $(TARGET)"
+	docker run ${FLAGS} "cd $(DIR) && $(TARGET)"
 
 #
 # gdb
@@ -20,11 +22,10 @@ docker-check: docker-build
 DOCKER_GDB_FLAGS := --cap-add=SYS_PTRACE --security-opt seccomp=unconfined
 
 docker-gdb: docker-build
-	docker run --rm $(DOCKER_GDB_FLAGS) -p 443:443 -v $(PWD)/test/openidc.conf:/etc/apache2/conf-available/openidc.conf \
-		-it $(TAG) "source /etc/apache2/envvars && gdb -ex run --args /usr/sbin/apache2 -X"
+	docker run ${APACHE_FLAGS} $(DOCKER_GDB_FLAGS) ${FLAGS}  "source /etc/apache2/envvars && gdb -ex run --args /usr/sbin/apache2 -X"
 	
 docker-gdb-check: docker-build
-	docker run --rm $(DOCKER_GDB_FLAGS) -it $(TAG) "cd $(DIR) && gdb -ex run $(TARGET)"
+	docker run ${FLAGS} $(DOCKER_GDB_FLAGS) "cd $(DIR) && gdb -ex run $(TARGET)"
 
 #
 # Valgrind
@@ -33,7 +34,7 @@ docker-gdb-check: docker-build
 VALGRIND_FLAGS := --leak-check=full --read-inline-info=yes --keep-debuginfo=yes
 	
 docker-valgrind: docker-build
-	docker run --rm -p 443:443 -v $(PWD)/test/openidc.conf:/etc/apache2/conf-available/openidc.conf -it $(TAG) "source /etc/apache2/envvars && valgrind $(VALGRIND_FLAGS) /usr/sbin/apache2 -X"
+	docker run ${APACHE_FLAGS} ${FLAGS} "source /etc/apache2/envvars && valgrind $(VALGRIND_FLAGS) /usr/sbin/apache2 -X"
 
 docker-valgrind-check: docker-build
-	docker run --rm  -it $(TAG) "cd $(DIR) && valgrind $(VALGRIND_FLAGS) $(TARGET)"
+	docker run ${FLAGS} "cd $(DIR) && valgrind $(VALGRIND_FLAGS) $(TARGET)"

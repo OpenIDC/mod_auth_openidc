@@ -1,3 +1,8 @@
+04/09/2023
+- return 40x instead of 200 on all (authorization) error responses
+- correct backwards compatibility with <2.4.14 for state mismatch/timeout handling
+- bump to 2.4.14rc1
+
 04/07/2023
 - deprecate OIDCHTMLErrorTemplate and rely on standard Apache error handling capabilities by default
   environment variable strings REDIRECT_OIDC_ERROR and REDIRECT_OIDC_ERROR_DESC are available in ErrorDocument

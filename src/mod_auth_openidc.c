@@ -1672,7 +1672,7 @@ static int oidc_authorization_response_error(request_rec *r, oidc_cfg *c,
 	}
 	return oidc_util_html_send_error(r, c->error_template,
 			apr_psprintf(r->pool, "OpenID Connect Provider error: %s", error),
-			error_description, OK);
+			error_description, c->error_template ? OK : HTTP_BAD_REQUEST);
 }
 
 /*
@@ -2016,15 +2016,20 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 		oidc_error(r,
 				"invalid authorization response state and no default SSO URL is set, sending an error...");
 
-		// detect if we've set a (timeout) error message in oidc_authorization_response_match_state
-		if (apr_table_get(r->subprocess_env, OIDC_ERROR_ENVVAR) != NULL) {
-			// overrides the OK from the timeout detection
-			return HTTP_BAD_REQUEST;
-		} else if (c->error_template) {
-			// for backwards compatibility
-			if ((r->user) && (_oidc_strncmp(r->user, "", 1) == 0))
-				return HTTP_BAD_REQUEST;
+		if (c->error_template) {
+			// retain backwards compatibility
+			int rc = HTTP_BAD_REQUEST;
+			if ((r->user) && (strncmp(r->user, "", 1) == 0)) {
+				r->header_only = 1;
+				r->user = NULL;
+				rc = OK;
+			}
+			return rc;
 		}
+
+		// if error text was already produced (e.g. state timeout) then just return with a 400
+		if (apr_table_get(r->subprocess_env, OIDC_ERROR_ENVVAR) != NULL)
+			return HTTP_BAD_REQUEST;
 
 		return oidc_util_html_send_error(r, c->error_template,
 				"Invalid Authorization Response",
