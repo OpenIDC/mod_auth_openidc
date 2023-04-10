@@ -456,7 +456,6 @@ typedef struct oidc_cfg {
 	char *claim_prefix;
 	oidc_remote_user_claim_t remote_user_claim;
 	int pass_idtoken_as;
-	apr_array_header_t *pass_userinfo_as;
 	int cookie_http_only;
 	int cookie_same_site;
 
@@ -781,6 +780,8 @@ apr_byte_t oidc_dir_cfg_unauth_expr_is_set(request_rec *r);
 int oidc_dir_cfg_unautz_action(request_rec *r);
 char *oidc_dir_cfg_unauthz_arg(request_rec *r);
 char *oidc_dir_cfg_path_auth_request_params(request_rec *r);
+apr_array_header_t *oidc_dir_cfg_pass_user_info_as(request_rec *r);
+char *oidc_dir_cfg_userinfo_claims_expr(request_rec *r);
 char *oidc_dir_cfg_path_scope(request_rec *r);
 oidc_valid_function_t oidc_cfg_get_valid_endpoint_auth_function(oidc_cfg *cfg);
 int oidc_cfg_cache_encrypt(request_rec *r);
@@ -860,6 +861,7 @@ apr_byte_t oidc_enabled(request_rec *r);
 char *oidc_util_http_form_encoded_data(request_rec *r, const apr_table_t *params);
 const char* oidc_util_strcasestr(const char *s1, const char *s2);
 oidc_jwk_t* oidc_util_key_list_first(const apr_array_header_t *key_list, int kty, const char *use);
+const char* oidc_util_jq_filter(request_rec *r, const char *input, const char *filter);
 
 /* HTTP header constants */
 #define OIDC_HTTP_HDR_COOKIE                            "Cookie"

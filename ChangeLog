@@ -1,3 +1,11 @@
+04/10/2024
+- add support for OIDCUserInfoClaimsExpr that allows for processing claims returned from the userinfo
+  endpoint with a JQ-based expression before propagating them according to OIDCPassUserInfoAs claims|json|signed_jwt
+  (ie. does not work for "OIDCPassUserInfoAs jwt"), and is only available when compiled/linked with libjq
+- allow OIDCPassUserInfoAs directive in Location/Directory contexts  
+- fix memory leak when using JQ-based expressions in "Require claims_expr"
+- bump to 2.4.14rc3
+
 04/09/2023
 - make sure mod_auth_openidc runs before mod_proxy so calls to the redirect URI are never proxied
   and no separate Location directive or ProxyPass exception for OIDCRedirectURI is required (anymore)

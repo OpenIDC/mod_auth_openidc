@@ -158,6 +158,8 @@
 #define OIDC_DEFAULT_X_FORWARDED_HEADERS 0
 /* default store id_token in session */
 #define OIDC_DEFAULT_STORE_ID_TOKEN TRUE
+/* default pass user info as */
+#define OIDC_DEFAULT_PASS_USERINFO_AS OIDC_PASS_USERINFO_AS_CLAIMS_STR
 
 #define OIDCProviderMetadataURL                "OIDCProviderMetadataURL"
 #define OIDCProviderIssuer                     "OIDCProviderIssuer"
@@ -269,6 +271,7 @@
 #define OIDCCABundlePath                       "OIDCCABundlePath"
 #define OIDCLogoutXFrameOptions                "OIDCLogoutXFrameOptions"
 #define OIDCXForwardedHeaders                  "OIDCXForwardedHeaders"
+#define OIDCUserInfoClaimsExpr                 "OIDCUserInfoClaimsExpr"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -281,9 +284,6 @@ typedef struct oidc_dir_cfg {
 	char *cookie;
 	char *authn_header;
 	int unauth_action;
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-	ap_expr_info_t *unauth_expression;
-#endif
 	int unautz_action;
 	char *unauthz_arg;
 	apr_array_header_t *pass_cookies;
@@ -301,10 +301,13 @@ typedef struct oidc_dir_cfg {
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	ap_expr_info_t *path_auth_request_expr;
 	ap_expr_info_t *path_scope_expr;
+	ap_expr_info_t *unauth_expression;
+	ap_expr_info_t *userinfo_claims_expr;
 #endif
 	int refresh_access_token_before_expiry;
 	int logout_on_error_refresh;
 	char *state_cookie_prefix;
+	apr_array_header_t *pass_userinfo_as;
 } oidc_dir_cfg;
 
 #define OIDC_CONFIG_DIR_RV(cmd, rv) rv != NULL ? apr_psprintf(cmd->pool, "Invalid value for directive '%s': %s", cmd->directive->directive, rv) : NULL
@@ -929,19 +932,18 @@ static const char* oidc_set_pass_idtoken_as(cmd_parms *cmd, void *dummy,
 /*
  * define how to pass the userinfo/claims in HTTP headers
  */
-static const char* oidc_set_pass_userinfo_as(cmd_parms *cmd, void *struct_ptr,
+static const char* oidc_set_pass_userinfo_as(cmd_parms *cmd, void *m,
 		const char *arg) {
-	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
-			&auth_openidc_module);
+	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg*) m;
 	const char *rv = NULL;
 	oidc_pass_user_info_as_t *p = NULL;
 	rv = oidc_parse_pass_userinfo_as(cmd->pool, arg, &p);
 	if (rv != NULL)
 		return OIDC_CONFIG_DIR_RV(cmd, rv);
-	if (cfg->pass_userinfo_as == NULL)
-		cfg->pass_userinfo_as = apr_array_make(cmd->pool, 3,
+	if (dir_cfg->pass_userinfo_as == NULL)
+		dir_cfg->pass_userinfo_as = apr_array_make(cmd->pool, 3,
 				sizeof(oidc_pass_user_info_as_t*));
-	APR_ARRAY_PUSH(cfg->pass_userinfo_as, oidc_pass_user_info_as_t *) = p;
+	APR_ARRAY_PUSH(dir_cfg->pass_userinfo_as, oidc_pass_user_info_as_t *) = p;
 	return NULL;
 }
 
@@ -1105,6 +1107,21 @@ static const char* oidc_set_path_expr(cmd_parms *cmd, const char *arg, ap_expr_i
 	}
 	return rv;
 }
+
+#ifdef USE_LIBJQ
+
+static const char* oidc_set_userinfo_claims_expr(cmd_parms *cmd, void *m,
+		const char *arg) {
+	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg*) m;
+	const char *rv = NULL;
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+	rv = oidc_set_path_expr(cmd, arg, &dir_cfg->userinfo_claims_expr);
+#endif
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
+#endif
+
 #endif
 
 static const char* oidc_set_path_auth_request_params(cmd_parms *cmd, void *m, const char *arg) {
@@ -1773,7 +1790,6 @@ void* oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->remote_user_claim.reg_exp = NULL;
 	c->remote_user_claim.replace = NULL;
 	c->pass_idtoken_as = OIDC_PASS_IDTOKEN_AS_CLAIMS;
-	c->pass_userinfo_as = NULL;
 	c->cookie_http_only = OIDC_DEFAULT_COOKIE_HTTPONLY;
 	c->cookie_same_site = OIDC_DEFAULT_COOKIE_SAME_SITE;
 
@@ -2073,9 +2089,6 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->pass_idtoken_as =
 			add->pass_idtoken_as != OIDC_PASS_IDTOKEN_AS_CLAIMS ?
 					add->pass_idtoken_as : base->pass_idtoken_as;
-	c->pass_userinfo_as =
-			add->pass_userinfo_as != NULL ?
-					add->pass_userinfo_as : base->pass_userinfo_as;
 	c->cookie_http_only =
 			add->cookie_http_only != OIDC_DEFAULT_COOKIE_HTTPONLY ?
 					add->cookie_http_only : base->cookie_http_only;
@@ -2189,10 +2202,12 @@ void* oidc_create_dir_config(apr_pool_t *pool, char *path) {
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	c->path_auth_request_expr = NULL;
 	c->path_scope_expr = NULL;
+	c->userinfo_claims_expr = NULL;
 #endif
 	c->refresh_access_token_before_expiry = OIDC_CONFIG_POS_INT_UNSET;
 	c->logout_on_error_refresh = OIDC_CONFIG_POS_INT_UNSET;
 	c->state_cookie_prefix = OIDC_CONFIG_STRING_UNSET;
+	c->pass_userinfo_as = NULL;
 	return (c);
 }
 
@@ -2386,6 +2401,36 @@ char* oidc_dir_cfg_path_auth_request_params(request_rec *r) {
 	return rv ? rv : dir_cfg->path_auth_request_params;
 }
 
+static apr_array_header_t *pass_userinfo_as_default = NULL;
+
+apr_array_header_t* oidc_dir_cfg_pass_user_info_as(request_rec *r) {
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+	oidc_pass_user_info_as_t *p = NULL;
+	if (dir_cfg->pass_userinfo_as == NULL) {
+		if (pass_userinfo_as_default == NULL) {
+			pass_userinfo_as_default = apr_array_make(r->server->process->pconf,
+					3, sizeof(oidc_pass_user_info_as_t*));
+			oidc_parse_pass_userinfo_as(r->pool,
+					OIDC_DEFAULT_PASS_USERINFO_AS, &p);
+			APR_ARRAY_PUSH(pass_userinfo_as_default, oidc_pass_user_info_as_t *) =
+					p;
+		}
+	}
+	return dir_cfg->pass_userinfo_as ?
+			dir_cfg->pass_userinfo_as : pass_userinfo_as_default;
+}
+
+char* oidc_dir_cfg_userinfo_claims_expr(request_rec *r) {
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+	char *rv = NULL;
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+	rv = oidc_dir_cfg_path_expr(r, dir_cfg->userinfo_claims_expr);
+#endif
+	return rv;
+}
+
 char* oidc_dir_cfg_path_scope(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
 	char *rv = NULL;
@@ -2474,7 +2519,14 @@ void* oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->path_scope_expr =
 			add->path_scope_expr != NULL ?
 					add->path_scope_expr : base->path_scope_expr;
+	c->userinfo_claims_expr =
+			add->userinfo_claims_expr != NULL ?
+					add->userinfo_claims_expr : base->userinfo_claims_expr;
 #endif
+
+	c->pass_userinfo_as =
+			add->pass_userinfo_as != NULL ?
+					add->pass_userinfo_as : base->pass_userinfo_as;
 
 	c->refresh_access_token_before_expiry =
 			add->refresh_access_token_before_expiry != OIDC_CONFIG_POS_INT_UNSET ?
@@ -3335,11 +3387,6 @@ const command_rec oidc_config_cmds[] = {
 				NULL,
 				RSRC_CONF,
 				"The format in which the id_token is passed in (a) header(s); must be one or more of: claims|payload|serialized"),
-		AP_INIT_ITERATE(OIDCPassUserInfoAs,
-				oidc_set_pass_userinfo_as,
-				NULL,
-				RSRC_CONF,
-				"The format in which the userinfo is passed in (a) header(s); must be one or more of: claims|json|jwt"),
 
 		AP_INIT_TAKE1(OIDCOAuthClientID,
 				oidc_set_string_slot,
@@ -3718,5 +3765,18 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF,
 				"Sets the value of the interpreted X-Forwarded-* headers."),
 
+		AP_INIT_ITERATE(OIDCPassUserInfoAs,
+				oidc_set_pass_userinfo_as,
+				NULL,
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"The format in which the userinfo is passed in (a) header(s); must be one or more of: claims|json|jwt|signed_jwt"),
+
+#ifdef USE_LIBJQ
+		AP_INIT_TAKE1(OIDCUserInfoClaimsExpr,
+				oidc_set_userinfo_claims_expr,
+				(void *) APR_OFFSETOF(oidc_dir_cfg, userinfo_claims_expr),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Sets the JQ expression to be executed on the claims from the  userinfo endpoint before propagating them"),
+#endif
 		{ NULL }
 };

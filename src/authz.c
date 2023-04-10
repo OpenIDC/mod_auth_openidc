@@ -46,13 +46,10 @@
 #include "mod_auth_openidc.h"
 #include "pcre_subst.h"
 
-#ifdef USE_LIBJQ
-#include "jq.h"
-#endif
-
 static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c,
-		json_t *val, const char *key) {
+		const json_t *val, const char *key) {
 
+	const json_t *elem = NULL;
 	int i = 0;
 
 	oidc_debug(r, "matching: spec_c=%s, key=%s", spec_c, key);
@@ -81,7 +78,7 @@ static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c,
 		/* compare the claim values */
 		for (i = 0; i < json_array_size(val); i++) {
 
-			json_t *elem = json_array_get(val, i);
+			elem = json_array_get(val, i);
 
 			if (json_is_string(elem)) {
 				/*
@@ -95,8 +92,7 @@ static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c,
 			} else if (json_is_boolean(elem)) {
 
 				if (_oidc_strcmp((json_is_true(elem) ? "true" : "false"),
-						spec_c)
-						== 0)
+						spec_c) == 0)
 					return TRUE;
 
 			} else if (json_is_integer(elem)) {
@@ -121,7 +117,7 @@ static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c,
 	return FALSE;
 }
 
-static apr_byte_t oidc_authz_match_expression(request_rec *r, const char *spec_c, json_t *val) {
+static apr_byte_t oidc_authz_match_expression(request_rec *r, const char *spec_c, const json_t *val) {
 	apr_byte_t rc = FALSE;
 	struct oidc_pcre *preg = NULL;
 	char *error_str = NULL;
@@ -203,7 +199,7 @@ apr_byte_t oidc_authz_match_claim(request_rec *r, const char * const attr_spec,
 
 		oidc_debug(r, "evaluating key \"%s\"", (const char * ) key);
 
-		const char *attr_c = (const char *) key;
+		const char *attr_c = key;
 		const char *spec_c = attr_spec;
 
 		/* walk both strings until we get to the end of either or we find a differing character */
@@ -265,59 +261,19 @@ apr_byte_t oidc_authz_match_claim(request_rec *r, const char * const attr_spec,
 
 #ifdef USE_LIBJQ
 
-static apr_byte_t jq_parse(request_rec *r, jq_state *jq, struct jv_parser *parser) {
-	apr_byte_t rv = FALSE;
-	jv value;
-
-	while (jv_is_valid((value = jv_parser_next(parser)))) {
-		jq_start(jq, value, 0);
-		jv result;
-
-		while (jv_is_valid(result = jq_next(jq))) {
-			jv dumped = jv_dump_string(result, 0);
-			const char *str = jv_string_value(dumped);
-			oidc_debug(r, "dumped: %s", str);
-			rv = (_oidc_strcmp(str, "true") == 0);
-		}
-
-		jv_free(result);
-	}
-
-	if (jv_invalid_has_msg(jv_copy(value))) {
-		jv msg = jv_invalid_get_msg(value);
-		oidc_error(r, "invalid: %s", jv_string_value(msg));
-		jv_free(msg);
-		rv = FALSE;
-	} else {
-		jv_free(value);
-	}
-
-	return rv;
-}
-
 /*
  * see if a the Require value matches a configured expression
  */
 apr_byte_t oidc_authz_match_claims_expr(request_rec *r,
-		const char * const attr_spec, const json_t * const claims) {
+		const char *const attr_spec, const json_t *const claims) {
 	apr_byte_t rv = FALSE;
+	const char *str = NULL;
 
 	oidc_debug(r, "enter: '%s'", attr_spec);
 
-	jq_state *jq = jq_init();
-	if (jq_compile(jq, attr_spec) == 0) {
-		jq_teardown(&jq);
-		return FALSE;
-	}
-
-	struct jv_parser *parser = jv_parser_new(0);
-
-	char *buf = oidc_util_encode_json_object(r, (json_t *)claims, 0);
-	jv_parser_set_buf(parser, buf, _oidc_strlen(buf), 0);
-	rv = jq_parse(r, jq, parser);
-
-	jv_parser_free(parser);
-	jq_teardown(&jq);
+	str = oidc_util_jq_filter(r,
+			oidc_util_encode_json_object(r, (json_t*) claims, 0), attr_spec);
+	rv = (_oidc_strcmp(str, "true") == 0);
 
 	return rv;
 }

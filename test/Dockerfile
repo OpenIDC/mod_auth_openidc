@@ -10,6 +10,8 @@ RUN apt-get update && apt-get install -y \
 	libhiredis-dev libcjose-dev \
 	libpcre2-dev zlib1g-dev git libpcre3-dev
 
+RUN apt-get update && apt-get -y install libjq-dev
+
 RUN a2enmod proxy && a2enmod proxy_http && a2enmod ssl && a2ensite default-ssl
 
 COPY . /root/mod_auth_openidc
@@ -21,7 +23,7 @@ COPY . /root/mod_auth_openidc
 
 RUN cd /root/mod_auth_openidc && \
 	./autogen.sh && \
-	./configure CFLAGS="-g -O0" LDFLAGS="-lrt" && \
+	./configure CFLAGS="-g -O0" LDFLAGS="-lrt" --with-jq=/usr && \
 	make clean && make all test/test
 
 RUN cd /root/mod_auth_openidc && \

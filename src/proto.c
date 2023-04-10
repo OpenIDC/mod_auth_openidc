@@ -1906,7 +1906,7 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r,
 		apr_table_t *params) {
 	oidc_jwt_t *jwt = NULL;
 	oidc_jwk_t *jwk = NULL;
-	oidc_jwk_t *jwk_pub = NULL;
+	const oidc_jwk_t *jwk_pub = NULL;
 
 	oidc_debug(r, "enter");
 

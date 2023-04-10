@@ -1197,7 +1197,6 @@ static void oidc_metadata_get_jwks(request_rec *r, json_t *json,
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
 	json_t *elem = NULL;
-	const char *use = NULL;
 
 	keys = json_object_get(json, OIDC_JWK_KEYS);
 	if (keys == NULL)

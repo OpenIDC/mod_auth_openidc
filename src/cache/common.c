@@ -195,7 +195,7 @@ apr_byte_t oidc_cache_mutex_destroy(server_rec *s, oidc_cache_mutex_t *m) {
 		m->mutex = NULL;
 	}
 
-	return rv;
+	return (rv == APR_SUCCESS);
 }
 
 #define OIDC_CACHE_CRYPTO_JSON_KEY "c"
@@ -211,7 +211,7 @@ static apr_byte_t oidc_cache_crypto_encrypt(request_rec *r, const char *plaintex
 	json = json_object();
 	json_object_set_new(json, OIDC_CACHE_CRYPTO_JSON_KEY, json_string(plaintext));
 
-	rv = oidc_util_jwt_create(r, (const char*) key, json, result, FALSE, FALSE);
+	rv = oidc_util_jwt_create(r, key, json, result, FALSE, FALSE);
 
 	if (json)
 		json_decref(json);
@@ -228,7 +228,7 @@ static apr_byte_t oidc_cache_crypto_decrypt(request_rec *r, const char *cache_va
 	apr_byte_t rv = FALSE;
 	json_t *json = NULL;
 
-	rv = oidc_util_jwt_verify(r, (const char*) key, cache_value, &json, FALSE, FALSE);
+	rv = oidc_util_jwt_verify(r, key, cache_value, &json, FALSE, FALSE);
 	if (rv == FALSE)
 		goto end;
 
@@ -246,7 +246,7 @@ end:
  * hash a cache key and a crypto passphrase so the result is suitable as an randomized cache key
  */
 static char* oidc_cache_get_hashed_key(request_rec *r, const char *passphrase, const char *key) {
-	char *input = apr_psprintf(r->pool, "%s:%s", passphrase, key);
+	const char *input = apr_psprintf(r->pool, "%s:%s", passphrase, key);
 	char *output = NULL;
 	if (oidc_util_hash_string_and_base64url_encode(r, OIDC_JOSE_ALG_SHA256, input, &output)
 			== FALSE) {

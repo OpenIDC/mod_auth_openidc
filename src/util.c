@@ -45,6 +45,9 @@
 
 #include <curl/curl.h>
 #include "pcre_subst.h"
+#ifdef USE_LIBJQ
+#include "jq.h"
+#endif
 
 /* hrm, should we get rid of this by adding parameters to the (3) functions? */
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
@@ -1738,13 +1741,11 @@ int oidc_util_html_send_error(request_rec *r, const char *html_template,
 
 		if (_oidc_strcmp(html_template, "deprecated") != 0) {
 
-			html_template = oidc_util_get_full_path(r->pool, html_template);
-
 			if (html_error_template_contents == NULL) {
-				int rc = oidc_util_file_read(r, html_template,
+				html_template = oidc_util_get_full_path(r->pool, html_template);
+				if (oidc_util_file_read(r, html_template,
 						r->server->process->pool,
-						&html_error_template_contents);
-				if (rc == FALSE) {
+						&html_error_template_contents) == FALSE) {
 					oidc_error(r, "could not read HTML error template: %s",
 							html_template);
 					html_error_template_contents = NULL;
@@ -1760,18 +1761,23 @@ int oidc_util_html_send_error(request_rec *r, const char *html_template,
 				rc = oidc_util_http_send(r, html, _oidc_strlen(html),
 						OIDC_CONTENT_TYPE_TEXT_HTML, status_code);
 			}
+
+		} else {
+
+			if (error != NULL) {
+				html = apr_psprintf(r->pool, "%s<p>Error: <pre>%s</pre></p>",
+						html, oidc_util_html_escape(r->pool, error));
+			}
+			if (description != NULL) {
+				html = apr_psprintf(r->pool,
+						"%s<p>Description: <pre>%s</pre></p>", html,
+						oidc_util_html_escape(r->pool, description));
+			}
+
+			rc = oidc_util_html_send(r, "Error", NULL, NULL, html, status_code);
+
 		}
 
-		if (error != NULL) {
-			html = apr_psprintf(r->pool, "%s<p>Error: <pre>%s</pre></p>", html,
-					oidc_util_html_escape(r->pool, error));
-		}
-		if (description != NULL) {
-			html = apr_psprintf(r->pool, "%s<p>Description: <pre>%s</pre></p>",
-					html, oidc_util_html_escape(r->pool, description));
-		}
-
-		rc = oidc_util_html_send(r, "Error", NULL, NULL, html, status_code);
 	}
 
 	oidc_debug(r, "setting "OIDC_ERROR_ENVVAR" environment variable to: %s",
@@ -2484,7 +2490,7 @@ apr_byte_t oidc_util_create_symmetric_key(request_rec *r,
 apr_hash_t* oidc_util_merge_symmetric_key(apr_pool_t *pool,
 		const apr_array_header_t *keys, oidc_jwk_t *jwk) {
 	apr_hash_t *result = apr_hash_make(pool);
-	oidc_jwk_t *elem = NULL;
+	const oidc_jwk_t *elem = NULL;
 	int i = 0;
 	if (keys != NULL) {
 		for (i = 0; i < keys->nelts; i++) {
@@ -2527,7 +2533,7 @@ apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r,
 apr_hash_t* oidc_util_merge_key_sets(apr_pool_t *pool, apr_hash_t *k1,
 		const apr_array_header_t *k2) {
 	apr_hash_t *rv = k1 ? apr_hash_copy(pool, k1) : apr_hash_make(pool);
-	oidc_jwk_t *jwk = NULL;
+	const oidc_jwk_t *jwk = NULL;
 	int i = 0;
 	if (k2 != NULL) {
 		for (i = 0; i < k2->nelts; i++) {
@@ -3015,4 +3021,87 @@ oidc_jwk_t* oidc_util_key_list_first(const apr_array_header_t *key_list,
 		}
 	}
 	return rv;
+}
+
+#ifdef USE_LIBJQ
+
+static const char* oidc_util_jq_exec(request_rec *r, jq_state *jq,
+		struct jv_parser *parser) {
+	const char *rv = NULL;
+	jv value, elem, str, msg;
+
+	while (jv_is_valid((value = jv_parser_next(parser)))) {
+		jq_start(jq, value, 0);
+		while (jv_is_valid(elem = jq_next(jq))) {
+			str = jv_dump_string(elem, 0);
+			rv = apr_pstrdup(r->pool, jv_string_value(str));
+			oidc_debug(r, "jv_dump_string: %s", rv);
+			jv_free(str);
+		}
+		jv_free(elem);
+	}
+
+	if (jv_invalid_has_msg(jv_copy(value))) {
+		msg = jv_invalid_get_msg(value);
+		oidc_error(r, "invalid: %s", jv_string_value(msg));
+		jv_free(msg);
+	} else {
+		jv_free(value);
+	}
+
+	return rv;
+}
+
+#endif
+
+const char* oidc_util_jq_filter(request_rec *r, const char *input,
+		const char *filter) {
+	const char *result = input;
+#ifdef USE_LIBJQ
+	jq_state *jq = NULL;
+	struct jv_parser *parser = NULL;
+
+	if (filter == NULL) {
+		oidc_debug(r, "filter is NULL, abort");
+		goto end;
+	}
+
+	if (input == NULL) {
+		oidc_debug(r, "input is NULL, set to empty object");
+		input = "{}";
+	}
+
+	oidc_debug(r, "processing input: %s", input);
+	oidc_debug(r, "processing filter: %s", filter);
+
+	jq = jq_init();
+	if (jq == NULL) {
+		oidc_error(r, "jq_init returned NULL");
+		goto end;
+	}
+
+	if (jq_compile(jq, filter) == 0) {
+		oidc_error(r, "jq_compile returned an error");
+		goto end;
+	}
+
+	parser = jv_parser_new(0);
+	if (parser == NULL) {
+		oidc_error(r, "jv_parser_new returned NULL");
+		goto end;
+	}
+
+	jv_parser_set_buf(parser, input, _oidc_strlen(input), 0);
+
+	result = oidc_util_jq_exec(r, jq, parser);
+
+end:
+
+	if (parser)
+		jv_parser_free(parser);
+	if (jq)
+		jq_teardown(&jq);
+#endif
+
+	return result;
 }

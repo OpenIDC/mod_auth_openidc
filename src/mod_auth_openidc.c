@@ -133,7 +133,7 @@ void oidc_scrub_headers(request_rec *r) {
 					"both " OIDCClaimPrefix " and " OIDCWhiteListedClaims " are empty: this renders an insecure setup!");
 	}
 
-	char *authn_hdr = oidc_cfg_dir_authn_header(r);
+	const char *authn_hdr = oidc_cfg_dir_authn_header(r);
 	if (authn_hdr != NULL)
 		apr_hash_set(hdrs, authn_hdr, APR_HASH_KEY_STRING, authn_hdr);
 
@@ -795,7 +795,7 @@ const char* oidc_request_state_get(request_rec *r, const char *key) {
  * in the session in to HTTP headers passed on to the application
  */
 static apr_byte_t oidc_set_app_claims(request_rec *r, const oidc_cfg *const cfg,
-		oidc_session_t *session, const char *s_claims) {
+		const char *s_claims) {
 
 	json_t *j_claims = NULL;
 
@@ -1392,32 +1392,32 @@ static apr_byte_t oidc_pass_userinfo_as(request_rec *r, oidc_cfg *cfg,
 		oidc_session_t *session, const char *s_claims, apr_byte_t pass_headers,
 		apr_byte_t pass_envvars, int pass_hdr_as) {
 	apr_byte_t rv = FALSE;
+	apr_array_header_t *pass_userinfo_as = NULL;
 	oidc_pass_user_info_as_t *p = NULL;
 	int i = 0;
 	oidc_jwt_t *jwt = NULL;
 	oidc_jwk_t *jwk = NULL;
-	char *cser = NULL;
+	const char *cser = NULL;
 	oidc_jose_error_t err;
+	const char *access_token_expires = NULL;
+	char *jti = NULL;
 
-	if (cfg->pass_userinfo_as == NULL) {
-		cfg->pass_userinfo_as = apr_array_make(r->server->process->pconf, 3,
-				sizeof(oidc_pass_user_info_as_t*));
-		oidc_parse_pass_userinfo_as(r->server->process->pconf,
-				OIDC_PASS_USERINFO_AS_CLAIMS_STR, &p);
-		APR_ARRAY_PUSH(cfg->pass_userinfo_as, oidc_pass_user_info_as_t *) = p;
-	}
+	pass_userinfo_as = oidc_dir_cfg_pass_user_info_as(r);
 
-	for (i = 0;
-			(cfg->pass_userinfo_as != NULL)
-							&& (i < cfg->pass_userinfo_as->nelts); i++) {
+#ifdef USE_LIBJQ
+	s_claims = oidc_util_jq_filter(r, s_claims,
+			oidc_dir_cfg_userinfo_claims_expr(r));
+#endif
 
-		p = APR_ARRAY_IDX(cfg->pass_userinfo_as, i, oidc_pass_user_info_as_t *);
+	for (i = 0; (pass_userinfo_as != NULL) && (i < pass_userinfo_as->nelts); i++) {
+
+		p = APR_ARRAY_IDX(pass_userinfo_as, i, oidc_pass_user_info_as_t *);
 
 		switch (p->type) {
 
 		case OIDC_PASS_USERINFO_AS_CLAIMS:
 			/* set the userinfo claims in the app headers */
-			if (oidc_set_app_claims(r, cfg, session, s_claims) == FALSE)
+			if (oidc_set_app_claims(r, cfg, s_claims) == FALSE)
 				goto end;
 			rv = TRUE;
 			break;
@@ -1471,6 +1471,24 @@ static apr_byte_t oidc_pass_userinfo_as(request_rec *r, oidc_cfg *cfg,
 			jwt->header.kid = apr_pstrdup(r->pool, jwk->kid);
 			jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_RS256);
 
+			oidc_proto_generate_random_string(r, &jti, 16);
+			json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_JTI,
+					json_string(jti));
+			json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_IAT,
+					json_integer(apr_time_sec(apr_time_now())));
+			access_token_expires = oidc_session_get_access_token_expires(r,
+					session);
+			json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_EXP,
+					json_integer(
+							access_token_expires ?
+									_oidc_str_to_int(access_token_expires) :
+									apr_time_sec(apr_time_now()) + 60));
+			json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_AUD,
+					json_string(
+							oidc_get_current_url(r, cfg->x_forwarded_headers)));
+			json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_ISS,
+					json_string(cfg->provider.issuer));
+
 			oidc_util_decode_json_object(r, s_claims, &jwt->payload.value.json);
 
 			if (oidc_jwt_sign(r->pool, jwt, jwk, FALSE, &err) == FALSE)
@@ -1498,7 +1516,7 @@ end:
 	if (jwt)
 		oidc_jwt_destroy(jwt);
 
-	return TRUE;
+	return rv;
 }
 
 /*
@@ -1567,13 +1585,9 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	/* copy id_token and claims from session to request state and obtain their values */
 	oidc_copy_tokens_to_request_state(r, session, &s_id_token, &s_claims);
 
-	if (oidc_pass_userinfo_as(r, cfg, session, s_claims, pass_headers,
-			pass_envvars, pass_hdr_as) == FALSE)
-		return HTTP_INTERNAL_SERVER_ERROR;
-
 	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_CLAIMS)) {
 		/* set the id_token in the app headers */
-		if (oidc_set_app_claims(r, cfg, session, s_id_token) == FALSE)
+		if (oidc_set_app_claims(r, cfg, s_id_token) == FALSE)
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -1600,6 +1614,10 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	/* pass the at, rt and at expiry to the application, possibly update the session expiry */
 	if (oidc_session_pass_tokens(r, cfg, session, needs_save) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
+
+	if (oidc_pass_userinfo_as(r, cfg, session, s_claims, pass_headers,
+			pass_envvars, pass_hdr_as) == FALSE)
+		oidc_warn(r, "oidc_pass_userinfo_as failed");
 
 	/* return "user authenticated" status */
 	return OK;
@@ -1722,7 +1740,7 @@ apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name,
  * set the unique user identifier that will be propagated in the Apache r->user and REMOTE_USER variables
  */
 static apr_byte_t oidc_set_request_user(request_rec *r, oidc_cfg *c,
-		oidc_session_t *session, oidc_provider_t *provider, oidc_jwt_t *jwt, const char *s_claims) {
+		oidc_provider_t *provider, oidc_jwt_t *jwt, const char *s_claims) {
 
 	char *issuer = provider->issuer;
 	char *claim_name = apr_pstrdup(r->pool, c->remote_user_claim.claim_name);
@@ -1765,10 +1783,14 @@ static apr_byte_t oidc_set_request_user(request_rec *r, oidc_cfg *c,
 
 	r->user = apr_pstrdup(r->pool, remote_user);
 
-	oidc_debug(r, "set remote_user to \"%s\" based on claim: \"%s\"%s", r->user, c->remote_user_claim.claim_name,
+	oidc_debug(r, "set remote_user to \"%s\" based on claim: \"%s\"%s", r->user,
+			c->remote_user_claim.claim_name,
 			c->remote_user_claim.reg_exp ?
-					apr_psprintf(r->pool, " and expression: \"%s\" and replace string: \"%s\"", c->remote_user_claim.reg_exp, c->remote_user_claim.replace) :
-					"");
+					apr_psprintf(r->pool,
+							" and expression: \"%s\" and replace string: \"%s\"",
+							c->remote_user_claim.reg_exp,
+							c->remote_user_claim.replace) :
+							"");
 
 	return TRUE;
 }
@@ -2078,7 +2100,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 	const char *prompt = oidc_proto_state_get_prompt(proto_state);
 
 	/* set the user */
-	if (oidc_set_request_user(r, c, session, provider, jwt, claims) == TRUE) {
+	if (oidc_set_request_user(r, c, provider, jwt, claims) == TRUE) {
 
 		/* session management: if the user in the new response is not equal to the old one, error out */
 		if ((prompt != NULL)
@@ -2154,7 +2176,7 @@ static int oidc_handle_post_authorization_response(request_rec *r, oidc_cfg *c,
 	oidc_debug(r, "enter");
 
 	/* initialize local variables */
-	char *response_mode = NULL;
+	const char *response_mode = NULL;
 
 	/* read the parameters that are POST-ed to us */
 	apr_table_t *params = apr_table_make(r->pool, 8);
@@ -2430,7 +2452,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c,
 		oidc_proto_state_set_pkce_state(proto_state, pkce_state);
 
 	/* get a hash value that fingerprints the browser concatenated with the random input */
-	char *state = oidc_get_browser_state_hash(r, c, nonce);
+	const char *state = oidc_get_browser_state_hash(r, c, nonce);
 
 	/*
 	 * create state that restores the context when the authorization response comes in
@@ -3325,7 +3347,7 @@ int oidc_handle_jwks(request_rec *r, oidc_cfg *c) {
 	char *jwks = apr_pstrdup(r->pool, "{ \"keys\" : [");
 	int i = 0;
 	apr_byte_t first = TRUE;
-	oidc_jwk_t *jwk = NULL;
+	const oidc_jwk_t *jwk = NULL;
 	oidc_jose_error_t err;
 	char *s_json = NULL;
 
@@ -4482,7 +4504,8 @@ int oidc_content_handler(request_rec *r) {
 
 			oidc_session_load(r, &session);
 
-			needs_save = (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_SAVE) != NULL);;
+			needs_save = (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_SAVE)
+					!= NULL);
 
 			/* handle request for session info */
 			rc = oidc_handle_info_request(r, c, session, needs_save);
@@ -4498,7 +4521,8 @@ int oidc_content_handler(request_rec *r) {
 
 		}
 
-	} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL) {
+	} else if (oidc_request_state_get(r,
+			OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL) {
 
 		/* discovery may result in a 200 HTML page or a redirect to an external URL */
 		rc = oidc_discovery(r, c);
