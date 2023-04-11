@@ -3105,3 +3105,17 @@ end:
 
 	return result;
 }
+
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+char* oidc_util_ap_expr_exec(request_rec *r, const ap_expr_info_t *expression) {
+	const char *expr_result = NULL, *expr_err = NULL;
+	if (expression == NULL)
+		return NULL;
+	expr_result = ap_expr_str_exec(r, expression, &expr_err);
+	if (expr_err) {
+		oidc_error(r, "executing expression failed: %s", expr_err);
+		expr_result = NULL;
+	}
+	return expr_result ? apr_pstrdup(r->pool, expr_result) : NULL;
+}
+#endif

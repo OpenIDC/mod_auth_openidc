@@ -1,4 +1,11 @@
-04/10/2024
+04/11/2023
+- add OIDCFilterClaimsExpr that allows for processing claims in the both the id_token and claims from the
+  userinfo endpoint before storing them in the session, after applying (optional) blacklisting/whitelisting
+  on the toplevel keys; only available when compiled/linked with libjq
+- fix memory access error using default value for OIDCPassUserInfoAs
+- bump to 2.4.14rc4
+
+04/10/2023
 - add support for OIDCUserInfoClaimsExpr that allows for processing claims returned from the userinfo
   endpoint with a JQ-based expression before propagating them according to OIDCPassUserInfoAs claims|json|signed_jwt
   (ie. does not work for "OIDCPassUserInfoAs jwt"), and is only available when compiled/linked with libjq

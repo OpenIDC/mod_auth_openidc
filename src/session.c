@@ -552,7 +552,11 @@ void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, const c
 		iter = json_object_iter_next(src, iter);
 	}
 
-	char *filtered_claims = oidc_util_encode_json_object(r, dst, JSON_COMPACT);
+	const char *filtered_claims = oidc_util_encode_json_object(r, dst,
+			JSON_COMPACT);
+	filtered_claims = oidc_util_jq_filter(r, filtered_claims,
+			oidc_util_ap_expr_exec(r, c->filter_claims_expr));
+
 	json_decref(dst);
 	json_decref(src);
 	oidc_session_set(r, z, session_key, filtered_claims);

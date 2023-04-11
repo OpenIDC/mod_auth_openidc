@@ -466,8 +466,12 @@ typedef struct oidc_cfg {
 	int provider_metadata_refresh_interval;
 
 	apr_hash_t *info_hook_data;
+
 	apr_hash_t *black_listed_claims;
 	apr_hash_t *white_listed_claims;
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+	ap_expr_info_t *filter_claims_expr;
+#endif
 
 	apr_byte_t state_input_headers;
 	apr_hash_t *redirect_urls_allowed;
@@ -862,6 +866,9 @@ char *oidc_util_http_form_encoded_data(request_rec *r, const apr_table_t *params
 const char* oidc_util_strcasestr(const char *s1, const char *s2);
 oidc_jwk_t* oidc_util_key_list_first(const apr_array_header_t *key_list, int kty, const char *use);
 const char* oidc_util_jq_filter(request_rec *r, const char *input, const char *filter);
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+char *oidc_util_ap_expr_exec(request_rec *r, const ap_expr_info_t *expression);
+#endif
 
 /* HTTP header constants */
 #define OIDC_HTTP_HDR_COOKIE                            "Cookie"

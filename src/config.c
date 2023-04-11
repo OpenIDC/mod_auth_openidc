@@ -272,6 +272,7 @@
 #define OIDCLogoutXFrameOptions                "OIDCLogoutXFrameOptions"
 #define OIDCXForwardedHeaders                  "OIDCXForwardedHeaders"
 #define OIDCUserInfoClaimsExpr                 "OIDCUserInfoClaimsExpr"
+#define OIDCFilterClaimsExpr                   "OIDCFilterClaimsExpr"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -1120,6 +1121,17 @@ static const char* oidc_set_userinfo_claims_expr(cmd_parms *cmd, void *m,
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
+static const char* oidc_set_filtered_claims_expr(cmd_parms *cmd, void *m,
+		const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
+			&auth_openidc_module);
+	const char *rv = NULL;
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+	rv = oidc_set_path_expr(cmd, arg, &cfg->filter_claims_expr);
+#endif
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
 #endif
 
 #endif
@@ -1811,6 +1823,7 @@ void* oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->info_hook_data = NULL;
 	c->black_listed_claims = NULL;
 	c->white_listed_claims = NULL;
+	c->filter_claims_expr = NULL;
 
 	c->provider.issuer_specific_redirect_uri =
 			OIDC_DEFAULT_PROVIDER_ISSUER_SPECIFIC_REDIRECT_URI;
@@ -2123,6 +2136,9 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->white_listed_claims =
 			add->white_listed_claims != NULL ?
 					add->white_listed_claims : base->white_listed_claims;
+	c->filter_claims_expr =
+			add->filter_claims_expr != NULL ?
+					add->filter_claims_expr : base->filter_claims_expr;
 
 	c->state_input_headers =
 			add->state_input_headers != OIDC_DEFAULT_STATE_INPUT_HEADERS ?
@@ -2378,25 +2394,11 @@ char *oidc_dir_cfg_unauthz_arg(request_rec *r) {
 	return dir_cfg->unauthz_arg;
 }
 
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-static char *oidc_dir_cfg_path_expr(request_rec *r, const ap_expr_info_t *expression ) {
-	const char *expr_result = NULL, *expr_err = NULL;
-	if (expression == NULL)
-		return NULL;
-	expr_result = ap_expr_str_exec(r, expression, &expr_err);
-	if (expr_err) {
-		oidc_error(r, "executing expression failed: %s", expr_err);
-		expr_result = NULL;
-	}
-	return expr_result ? apr_pstrdup(r->pool, expr_result) : NULL;
-}
-#endif
-
 char* oidc_dir_cfg_path_auth_request_params(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
 	char *rv = NULL;
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-	rv = oidc_dir_cfg_path_expr(r, dir_cfg->path_auth_request_expr);
+	rv = oidc_util_ap_expr_exec(r, dir_cfg->path_auth_request_expr);
 #endif
 	return rv ? rv : dir_cfg->path_auth_request_params;
 }
@@ -2411,7 +2413,7 @@ apr_array_header_t* oidc_dir_cfg_pass_user_info_as(request_rec *r) {
 		if (pass_userinfo_as_default == NULL) {
 			pass_userinfo_as_default = apr_array_make(r->server->process->pconf,
 					3, sizeof(oidc_pass_user_info_as_t*));
-			oidc_parse_pass_userinfo_as(r->pool,
+			oidc_parse_pass_userinfo_as(r->server->process->pconf,
 					OIDC_DEFAULT_PASS_USERINFO_AS, &p);
 			APR_ARRAY_PUSH(pass_userinfo_as_default, oidc_pass_user_info_as_t *) =
 					p;
@@ -2426,7 +2428,7 @@ char* oidc_dir_cfg_userinfo_claims_expr(request_rec *r) {
 			&auth_openidc_module);
 	char *rv = NULL;
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-	rv = oidc_dir_cfg_path_expr(r, dir_cfg->userinfo_claims_expr);
+	rv = oidc_util_ap_expr_exec(r, dir_cfg->userinfo_claims_expr);
 #endif
 	return rv;
 }
@@ -2435,7 +2437,7 @@ char* oidc_dir_cfg_path_scope(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
 	char *rv = NULL;
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-	rv = oidc_dir_cfg_path_expr(r, dir_cfg->path_scope_expr);
+	rv = oidc_util_ap_expr_exec(r, dir_cfg->path_scope_expr);
 #endif
 	return rv ? rv : dir_cfg->path_scope;
 }
@@ -3772,11 +3774,16 @@ const command_rec oidc_config_cmds[] = {
 				"The format in which the userinfo is passed in (a) header(s); must be one or more of: claims|json|jwt|signed_jwt"),
 
 #ifdef USE_LIBJQ
+		AP_INIT_TAKE1(OIDCFilterClaimsExpr,
+				oidc_set_filtered_claims_expr,
+				(void *) APR_OFFSETOF(oidc_cfg, filter_claims_expr),
+				RSRC_CONF,
+				"Sets the JQ expression to be executed on the claims from id_token/userinfo endpoint before storing them in the session"),
 		AP_INIT_TAKE1(OIDCUserInfoClaimsExpr,
 				oidc_set_userinfo_claims_expr,
 				(void *) APR_OFFSETOF(oidc_dir_cfg, userinfo_claims_expr),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
-				"Sets the JQ expression to be executed on the claims from the  userinfo endpoint before propagating them"),
+				"Sets the JQ expression to be executed on the claims from the userinfo endpoint stored in the session before propagating them"),
 #endif
 		{ NULL }
 };
