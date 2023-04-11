@@ -990,9 +990,14 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void* )&curlBuffer);
 
 #ifndef LIBCURL_NO_CURLPROTO
-	curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS,
-			CURLPROTO_HTTP|CURLPROTO_HTTPS);
-	curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTP|CURLPROTO_HTTPS);
+	#if LIBCURL_VERSION_NUM >= 0x078500
+		curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
+		curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "http,https");
+	#else
+		curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS,
+				CURLPROTO_HTTP|CURLPROTO_HTTPS);
+		curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTP|CURLPROTO_HTTPS);
+	#endif
 #endif
 
 	/* set the options for validating the SSL server certificate that the remote site presents */
