@@ -369,7 +369,7 @@ static apr_byte_t oidc_oauth_cache_access_token(request_rec *r, oidc_cfg *c,
 	json_object_set_new(cache_entry, OIDC_OAUTH_CACHE_KEY_TIMESTAMP,
 			json_integer(apr_time_sec(apr_time_now())));
 	char *cache_value = oidc_util_encode_json_object(r, cache_entry,
-			JSON_COMPACT);
+			JSON_PRESERVE_ORDER | JSON_COMPACT);
 
 	/* set it in the cache so subsequent request don't need to validate the access_token and get the claims anymore */
 	oidc_cache_set_access_token(r, access_token, cache_value, cache_until);

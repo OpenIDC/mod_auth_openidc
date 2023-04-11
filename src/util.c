@@ -124,9 +124,25 @@ int oidc_base64url_decode(apr_pool_t *pool, char **dst, const char *src) {
 }
 
 #define OIDC_JWT_HDR_DIR_A256GCM "eyJhbGciOiAiZGlyIiwgImVuYyI6ICJBMjU2R0NNIn0.."
+#define OIDC_JWT_COMPRESS_ENV_VAR "OIDC_JWT_COMPRESS"
 
-apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret, json_t *payload,
-		char **compact_encoded_jwt, apr_byte_t strip_header, apr_byte_t compress) {
+static apr_byte_t oidc_util_jwt_compress(request_rec *r, apr_byte_t compress) {
+	const char *compress_env = NULL;
+	apr_byte_t rc = compress;
+
+	if (r->subprocess_env)
+		compress_env = apr_table_get(r->subprocess_env,
+				OIDC_JWT_COMPRESS_ENV_VAR);
+
+	if (compress_env != NULL)
+		rc = (_oidc_strcmp(compress_env, "off") != 0);
+
+	return rc;
+}
+
+apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret,
+		json_t *payload, char **compact_encoded_jwt, apr_byte_t strip_header,
+		apr_byte_t compress) {
 
 	apr_byte_t rv = FALSE;
 	oidc_jose_error_t err;
@@ -140,7 +156,8 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret, json_t *payl
 		goto end;
 	}
 
-	if (oidc_util_create_symmetric_key(r, secret, 0, OIDC_JOSE_ALG_SHA256, FALSE, &jwk) == FALSE)
+	if (oidc_util_create_symmetric_key(r, secret, 0, OIDC_JOSE_ALG_SHA256,
+			FALSE, &jwk) == FALSE)
 		goto end;
 
 	jwt = oidc_jwt_new(r->pool, TRUE, FALSE);
@@ -152,7 +169,8 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret, json_t *payl
 	jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_HS256);
 	jwt->payload.value.json = payload;
 
-	if (oidc_jwt_sign(r->pool, jwt, jwk, compress, &err) == FALSE) {
+	if (oidc_jwt_sign(r->pool, jwt, jwk, oidc_util_jwt_compress(r, compress),
+			&err) == FALSE) {
 		oidc_error(r, "signing JWT failed: %s", oidc_jose_e2s(r->pool, err));
 		goto end;
 	}
@@ -167,7 +185,8 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret, json_t *payl
 	jwe->header.enc = apr_pstrdup(r->pool, CJOSE_HDR_ENC_A256GCM);
 
 	const char *cser = oidc_jwt_serialize(r->pool, jwt, &err);
-	if (oidc_jwt_encrypt(r->pool, jwe, jwk, cser, compact_encoded_jwt, &err) == FALSE) {
+	if (oidc_jwt_encrypt(r->pool, jwe, jwk, cser, compact_encoded_jwt,
+			&err) == FALSE) {
 		oidc_error(r, "encrypting JWT failed: %s", oidc_jose_e2s(r->pool, err));
 		goto end;
 	}
@@ -191,8 +210,9 @@ end:
 	return rv;
 }
 
-apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret, const char *compact_encoded_jwt,
-		json_t **result, apr_byte_t stripped_header, apr_byte_t compress) {
+apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret,
+		const char *compact_encoded_jwt, json_t **result,
+		apr_byte_t stripped_header, apr_byte_t compress) {
 
 	apr_byte_t rv = FALSE;
 	oidc_jose_error_t err;
@@ -201,18 +221,21 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret, const char *
 	oidc_jwt_t *jwt = NULL;
 
 	if (stripped_header == TRUE)
-		compact_encoded_jwt =
-				apr_pstrcat(r->pool, OIDC_JWT_HDR_DIR_A256GCM, compact_encoded_jwt, NULL);
+		compact_encoded_jwt = apr_pstrcat(r->pool, OIDC_JWT_HDR_DIR_A256GCM,
+				compact_encoded_jwt, NULL);
 
-	oidc_debug(r, "enter: JWT header=%s", oidc_proto_peek_jwt_header(r, compact_encoded_jwt, NULL));
+	oidc_debug(r, "enter: JWT header=%s",
+			oidc_proto_peek_jwt_header(r, compact_encoded_jwt, NULL));
 
-	if (oidc_util_create_symmetric_key(r, secret, 0, OIDC_JOSE_ALG_SHA256, FALSE, &jwk) == FALSE)
+	if (oidc_util_create_symmetric_key(r, secret, 0, OIDC_JOSE_ALG_SHA256,
+			FALSE, &jwk) == FALSE)
 		goto end;
 
 	apr_hash_t *keys = apr_hash_make(r->pool);
 	apr_hash_set(keys, "", APR_HASH_KEY_STRING, jwk);
 
-	if (oidc_jwt_parse(r->pool, compact_encoded_jwt, &jwt, keys, compress, &err) == FALSE) {
+	if (oidc_jwt_parse(r->pool, compact_encoded_jwt, &jwt, keys,
+			oidc_util_jwt_compress(r, compress), &err) == FALSE) {
 		oidc_error(r, "parsing JWT failed: %s", oidc_jose_e2s(r->pool, err));
 		goto end;
 	}

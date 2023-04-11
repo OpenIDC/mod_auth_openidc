@@ -1,4 +1,11 @@
 04/11/2023
+- add caching of signed userinfo JWTs; default cache time is set to the "exp" claim, can be configured/disabled with:
+    SetEnvIfExpr true "OIDC_USERINFO_SIGNED_JWT_CACHE_TTL=0" 
+  be careful when setting "jti", "nbf", "iat" and" "exp" claims in the OIDCUserInfoClaimsExpr filter since they may
+  overload the cache with entries per-user/per-timestamp if the result differs from the previous request
+- bump to 2.4.14rc5
+
+04/11/2023
 - add OIDCFilterClaimsExpr that allows for processing claims in the both the id_token and claims from the
   userinfo endpoint before storing them in the session, after applying (optional) blacklisting/whitelisting
   on the toplevel keys; only available when compiled/linked with libjq

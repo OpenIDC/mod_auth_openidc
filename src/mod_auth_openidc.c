@@ -1388,19 +1388,145 @@ static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
 	return TRUE;
 }
 
-static apr_byte_t oidc_pass_userinfo_as(request_rec *r, oidc_cfg *cfg,
-		oidc_session_t *session, const char *s_claims, apr_byte_t pass_headers,
-		apr_byte_t pass_envvars, int pass_hdr_as) {
+#define OIDC_USERINFO_SIGNED_JWT_EXPIRE_DEFAULT 60
+#define OIDC_USERINFO_SIGNED_JWT_CACHE_TTL_ENVVAR "OIDC_USERINFO_SIGNED_JWT_CACHE_TTL"
+
+static int oidc_userinfo_signed_jwt_cache_ttl(request_rec *r) {
+	int ttl = 0;
+	const char *s_ttl = apr_table_get(r->subprocess_env,
+			OIDC_USERINFO_SIGNED_JWT_CACHE_TTL_ENVVAR);
+	return (s_ttl ?
+			_oidc_str_to_int(s_ttl) : OIDC_USERINFO_SIGNED_JWT_EXPIRE_DEFAULT);
+}
+
+static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg *cfg,
+		oidc_session_t *session, const char *s_claims, char **cser) {
 	apr_byte_t rv = FALSE;
-	apr_array_header_t *pass_userinfo_as = NULL;
-	oidc_pass_user_info_as_t *p = NULL;
-	int i = 0;
 	oidc_jwt_t *jwt = NULL;
 	oidc_jwk_t *jwk = NULL;
-	const char *cser = NULL;
 	oidc_jose_error_t err;
 	const char *access_token_expires = NULL;
 	char *jti = NULL;
+	char *key = NULL;
+	json_t *json = NULL;
+	int ttl = 0;
+	int exp = 0;
+	apr_time_t expiry = 0;
+
+	oidc_debug(r, "enter: %s", s_claims);
+
+	jwk = oidc_util_key_list_first(cfg->private_keys, CJOSE_JWK_KTY_RSA,
+			OIDC_JOSE_JWK_SIG_STR);
+	// TODO: detect at config time
+	if (jwk == NULL) {
+		oidc_error(r,
+				"no private signing keys have been configured to use for private_key_jwt client authentication (" OIDCPrivateKeyFiles ")");
+		goto end;
+	}
+
+	jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	if (jwt == NULL)
+		goto end;
+
+	jwt->header.kid = apr_pstrdup(r->pool, jwk->kid);
+	jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_RS256);
+
+	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_AUD,
+			json_string(oidc_get_current_url(r, cfg->x_forwarded_headers)));
+	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_ISS,
+			json_string(cfg->provider.issuer));
+
+	oidc_util_decode_json_object(r, s_claims, &json);
+	if (json == NULL)
+		goto end;
+	if (oidc_util_json_merge(r, json, jwt->payload.value.json) == FALSE)
+		goto end;
+	s_claims = oidc_util_encode_json_object(r, jwt->payload.value.json,
+			JSON_PRESERVE_ORDER | JSON_COMPACT);
+	if (oidc_jose_hash_and_base64url_encode(r->pool,
+			OIDC_JOSE_ALG_SHA256, s_claims, strlen(s_claims) + 1, &key, &err) == FALSE) {
+		oidc_error(r, "oidc_jose_hash_and_base64url_encode failed: %s",
+				oidc_jose_e2s(r->pool, err));
+		goto end;
+	}
+
+	ttl = oidc_userinfo_signed_jwt_cache_ttl(r);
+	if (ttl != 0)
+		oidc_cache_get_signed_jwt(r, key, cser);
+
+	if (*cser != NULL) {
+		oidc_debug(r, "signed JWT found in cache");
+		rv = TRUE;
+		goto end;
+	}
+
+	if (json_object_get(jwt->payload.value.json, OIDC_CLAIM_JTI) == NULL) {
+		oidc_proto_generate_random_string(r, &jti, 16);
+		json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_JTI,
+				json_string(jti));
+	}
+	if (json_object_get(jwt->payload.value.json, OIDC_CLAIM_IAT) == NULL) {
+		json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_IAT,
+				json_integer(apr_time_sec(apr_time_now())));
+	}
+	if (json_object_get(jwt->payload.value.json, OIDC_CLAIM_EXP) == NULL) {
+		access_token_expires = oidc_session_get_access_token_expires(r,
+				session);
+		json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_EXP,
+				json_integer(
+						access_token_expires ?
+								_oidc_str_to_int(access_token_expires) :
+								apr_time_sec(
+										apr_time_now()) + OIDC_USERINFO_SIGNED_JWT_EXPIRE_DEFAULT));
+	}
+
+	if (oidc_jwt_sign(r->pool, jwt, jwk, FALSE, &err) == FALSE) {
+		oidc_error(r, "oidc_jwt_sign failed: %s", oidc_jose_e2s(r->pool, err));
+		goto end;
+	}
+
+	*cser = oidc_jwt_serialize(r->pool, jwt, &err);
+	if (*cser == NULL) {
+		oidc_error(r, "oidc_jwt_serialize failed: %s",
+				oidc_jose_e2s(r->pool, err));
+		goto end;
+	}
+
+	if (ttl != 0) {
+		if (apr_table_get(r->subprocess_env,
+				OIDC_USERINFO_SIGNED_JWT_CACHE_TTL_ENVVAR) == NULL) {
+			oidc_json_object_get_int(jwt->payload.value.json, OIDC_CLAIM_EXP,
+					&exp, 0);
+			if (exp != 0)
+				expiry = apr_time_from_sec(exp);
+		}
+		if (expiry == 0)
+			expiry = apr_time_now() + apr_time_from_sec(ttl);
+		oidc_debug(r, "caching signed JWT with ~ttl(%ld)",
+				apr_time_sec(expiry - apr_time_now()));
+		oidc_cache_set_signed_jwt(r, key, *cser, expiry);
+	}
+
+	rv = TRUE;
+
+end:
+
+	if (json)
+		json_decref(json);
+
+	if (jwt)
+		oidc_jwt_destroy(jwt);
+
+	return rv;
+}
+
+static void oidc_pass_userinfo_as(request_rec *r, oidc_cfg *cfg,
+		oidc_session_t *session, const char *s_claims, apr_byte_t pass_headers,
+		apr_byte_t pass_envvars, int pass_hdr_as) {
+	apr_array_header_t *pass_userinfo_as = NULL;
+	oidc_pass_user_info_as_t *p = NULL;
+	int i = 0;
+	char *cser = NULL;
 
 	pass_userinfo_as = oidc_dir_cfg_pass_user_info_as(r);
 
@@ -1409,7 +1535,8 @@ static apr_byte_t oidc_pass_userinfo_as(request_rec *r, oidc_cfg *cfg,
 			oidc_dir_cfg_userinfo_claims_expr(r));
 #endif
 
-	for (i = 0; (pass_userinfo_as != NULL) && (i < pass_userinfo_as->nelts); i++) {
+	for (i = 0; (pass_userinfo_as != NULL) && (i < pass_userinfo_as->nelts);
+			i++) {
 
 		p = APR_ARRAY_IDX(pass_userinfo_as, i, oidc_pass_user_info_as_t *);
 
@@ -1417,9 +1544,7 @@ static apr_byte_t oidc_pass_userinfo_as(request_rec *r, oidc_cfg *cfg,
 
 		case OIDC_PASS_USERINFO_AS_CLAIMS:
 			/* set the userinfo claims in the app headers */
-			if (oidc_set_app_claims(r, cfg, s_claims) == FALSE)
-				goto end;
-			rv = TRUE;
+			oidc_set_app_claims(r, cfg, s_claims);
 			break;
 
 		case OIDC_PASS_USERINFO_AS_JSON_OBJECT:
@@ -1428,7 +1553,6 @@ static apr_byte_t oidc_pass_userinfo_as(request_rec *r, oidc_cfg *cfg,
 					p->name ? p->name : OIDC_APP_INFO_USERINFO_JSON, s_claims,
 							p->name ? "" : OIDC_DEFAULT_HEADER_PREFIX, pass_headers,
 									pass_envvars, pass_hdr_as);
-			rv = TRUE;
 			break;
 
 		case OIDC_PASS_USERINFO_AS_JWT:
@@ -1451,72 +1575,23 @@ static apr_byte_t oidc_pass_userinfo_as(request_rec *r, oidc_cfg *cfg,
 				oidc_error(r,
 						"session type \"client-cookie\" does not allow storing/passing a userinfo JWT; use \"" OIDCSessionType " server-cache\" for that");
 			}
-			rv = TRUE;
 			break;
 
 		case OIDC_PASS_USERINFO_AS_SIGNED_JWT:
 
-			jwk = oidc_util_key_list_first(cfg->private_keys, CJOSE_JWK_KTY_RSA,
-					OIDC_JOSE_JWK_SIG_STR);
-			if (jwk == NULL) {
-				oidc_error(r,
-						"no private signing keys have been configured to use for private_key_jwt client authentication (" OIDCPrivateKeyFiles ")");
-				goto end;
+			if (oidc_userinfo_create_signed_jwt(r, cfg, session, s_claims,
+					&cser) == TRUE) {
+				oidc_util_set_app_info(r,
+						p->name ? p->name : OIDC_APP_INFO_SIGNED_JWT, cser,
+								p->name ? "" : OIDC_DEFAULT_HEADER_PREFIX, pass_headers,
+										pass_envvars, pass_hdr_as);
 			}
-
-			jwt = oidc_jwt_new(r->pool, TRUE, FALSE);
-			if (jwt == NULL)
-				goto end;
-
-			jwt->header.kid = apr_pstrdup(r->pool, jwk->kid);
-			jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_RS256);
-
-			oidc_proto_generate_random_string(r, &jti, 16);
-			json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_JTI,
-					json_string(jti));
-			json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_IAT,
-					json_integer(apr_time_sec(apr_time_now())));
-			access_token_expires = oidc_session_get_access_token_expires(r,
-					session);
-			json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_EXP,
-					json_integer(
-							access_token_expires ?
-									_oidc_str_to_int(access_token_expires) :
-									apr_time_sec(apr_time_now()) + 60));
-			json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_AUD,
-					json_string(
-							oidc_get_current_url(r, cfg->x_forwarded_headers)));
-			json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_ISS,
-					json_string(cfg->provider.issuer));
-
-			oidc_util_decode_json_object(r, s_claims, &jwt->payload.value.json);
-
-			if (oidc_jwt_sign(r->pool, jwt, jwk, FALSE, &err) == FALSE)
-				goto end;
-
-			cser = oidc_jwt_serialize(r->pool, jwt, &err);
-			if (cser == NULL)
-				goto end;
-
-			oidc_util_set_app_info(r,
-					p->name ? p->name : OIDC_APP_INFO_SIGNED_JWT, cser,
-							p->name ? "" : OIDC_DEFAULT_HEADER_PREFIX, pass_headers,
-									pass_envvars, pass_hdr_as);
-
-			rv = TRUE;
 			break;
 
 		default:
 			break;
 		}
 	}
-
-end:
-
-	if (jwt)
-		oidc_jwt_destroy(jwt);
-
-	return rv;
 }
 
 /*
@@ -1615,9 +1690,8 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	if (oidc_session_pass_tokens(r, cfg, session, needs_save) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
-	if (oidc_pass_userinfo_as(r, cfg, session, s_claims, pass_headers,
-			pass_envvars, pass_hdr_as) == FALSE)
-		oidc_warn(r, "oidc_pass_userinfo_as failed");
+	oidc_pass_userinfo_as(r, cfg, session, s_claims, pass_headers, pass_envvars,
+			pass_hdr_as);
 
 	/* return "user authenticated" status */
 	return OK;
@@ -3887,13 +3961,13 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 
 	if (_oidc_strcmp(OIDC_HOOK_INFO_FORMAT_JSON, s_format) == 0) {
 		/* JSON-encode the result */
-		r_value = oidc_util_encode_json_object(r, json, 0);
+		r_value = oidc_util_encode_json_object(r, json, JSON_PRESERVE_ORDER);
 		/* return the stringified JSON result */
 		rc = oidc_util_http_send(r, r_value, _oidc_strlen(r_value),
 				OIDC_CONTENT_TYPE_JSON, OK);
 	} else if (_oidc_strcmp(OIDC_HOOK_INFO_FORMAT_HTML, s_format) == 0) {
 		/* JSON-encode the result */
-		r_value = oidc_util_encode_json_object(r, json, JSON_INDENT(2));
+		r_value = oidc_util_encode_json_object(r, json, JSON_PRESERVE_ORDER | JSON_INDENT(2));
 		rc = oidc_util_html_send(r, "Session Info", NULL, NULL,
 				apr_psprintf(r->pool, "<pre>%s</pre>", r_value), OK);
 	}
