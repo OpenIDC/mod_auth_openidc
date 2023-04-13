@@ -554,9 +554,10 @@ void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, const c
 
 	const char *filtered_claims = oidc_util_encode_json_object(r, dst,
 			JSON_COMPACT);
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	filtered_claims = oidc_util_jq_filter(r, filtered_claims,
 			oidc_util_ap_expr_exec(r, c->filter_claims_expr));
-
+#endif
 	json_decref(dst);
 	json_decref(src);
 	oidc_session_set(r, z, session_key, filtered_claims);
