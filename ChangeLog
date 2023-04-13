@@ -1,5 +1,10 @@
 04/13/2023
-- fix OIDC Session decoding fails when OIDCSessionType client-cookie
+- fix session cookie decompression error with OIDCSessionType client-cookie; closes #1046; thanks @oss-aimoto
+  this would occur when the uncompressed JWT is larger than 4 times the compressed JWT
+    oidc_util_jwt_verify: parsing JWT failed: [src/jose.c:901: oidc_jose_zlib_uncompress]: inflate failed
+    oidc_session_decode: could not verify secure JWT: cache value possibly corrupted
+  https://github.com/OpenIDC/mod_auth_openidc/pull/1047
+- bump to 2.4.14rc6
 
 04/11/2023
 - add caching of signed userinfo JWTs; default cache time is set to the "exp" claim, can be configured/disabled with:
