@@ -925,26 +925,16 @@ static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input,
 	zlib.next_in = (Bytef*) input;
 	zlib.total_out = 0;
 	size_t uncompLength = OIDC_CJOSE_UNCOMPRESS_CHUNK;
-	char *uncomp = (char *) calloc(sizeof (char), uncompLength + 1);
-	if (uncomp == NULL) {
-		oidc_jose_error(err, "memory allocation error");
-		return FALSE;
-	}
+	char *uncomp = (char *) apr_pcalloc(pool, uncompLength + 1);
 
 	inflateInit(&zlib);
 	int done = 1;
 	while (done) {
 		int inflate_status;
 		if (zlib.total_out >= OIDC_CJOSE_UNCOMPRESS_CHUNK) {
-			char *uncomp2 = (char *) calloc(sizeof (char), uncompLength + OIDC_CJOSE_UNCOMPRESS_CHUNK);
-			if (uncomp2 == NULL) {
-				free(uncomp);
-				oidc_jose_error(err, "memory allocation error");
-				return FALSE;
-			}
+			char *uncomp2 = (char *) apr_pcalloc(pool, uncompLength + OIDC_CJOSE_UNCOMPRESS_CHUNK);
 			_oidc_memcpy(uncomp2, uncomp, uncompLength);
 			uncompLength += OIDC_CJOSE_UNCOMPRESS_CHUNK;
-			free(uncomp);
 			uncomp = uncomp2;
 		}
 		zlib.next_out = (Bytef *) (uncomp + zlib.total_out);
@@ -954,20 +944,17 @@ static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input,
 			done = 0;
 		} else if (inflate_status != Z_OK) {
 			oidc_jose_error(err, "inflate failed. ret:[%d]", inflate_status);
-			free(uncomp);
 			return FALSE;
 		}
 	}
 
 	if (inflateEnd(&zlib) != Z_OK) {
 		oidc_jose_error(err, "inflateEnd failed");
-		free(uncomp);
 		return FALSE;
 	}
 
 	*output_len = (int) zlib.total_out;
-	*output = (char *)apr_pstrdup(pool, uncomp);
-	free(uncomp);
+	*output = uncomp;
 
 	return TRUE;
 }
