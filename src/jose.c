@@ -925,7 +925,7 @@ static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input,
 	zlib.next_in = (Bytef*) input;
 	zlib.total_out = 0;
 	size_t uncompLength = OIDC_CJOSE_UNCOMPRESS_CHUNK;
-	char *uncomp = (char *) calloc(sizeof (char), uncompLength);
+	char *uncomp = (char *) calloc(sizeof (char), uncompLength + 1);
 	if (uncomp == NULL) {
 		oidc_jose_error(err, "memory allocation error");
 		return FALSE;
