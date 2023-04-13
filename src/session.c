@@ -70,7 +70,7 @@ static apr_byte_t oidc_session_encode(request_rec *r, oidc_cfg *c, oidc_session_
 		return FALSE;
 	}
 
-	if (oidc_util_jwt_create(r, c->crypto_passphrase, z->state, s_value, FALSE, TRUE) == FALSE)
+	if (oidc_util_jwt_create(r, c->crypto_passphrase, z->state, s_value, TRUE, TRUE) == FALSE)
 		return FALSE;
 
 	return TRUE;
@@ -83,7 +83,7 @@ static apr_byte_t oidc_session_decode(request_rec *r, oidc_cfg *c, oidc_session_
 		return oidc_util_decode_json_object(r, s_json, &z->state);
 	}
 
-	if (oidc_util_jwt_verify(r, c->crypto_passphrase, s_json, &z->state, FALSE, TRUE) == FALSE) {
+	if (oidc_util_jwt_verify(r, c->crypto_passphrase, s_json, &z->state, TRUE, TRUE) == FALSE) {
 		oidc_error(r, "could not verify secure JWT: cache value possibly corrupted");
 		return FALSE;
 	}

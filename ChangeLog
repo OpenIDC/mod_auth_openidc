@@ -4,6 +4,7 @@
     oidc_util_jwt_verify: parsing JWT failed: [src/jose.c:901: oidc_jose_zlib_uncompress]: inflate failed
     oidc_session_decode: could not verify secure JWT: cache value possibly corrupted
   https://github.com/OpenIDC/mod_auth_openidc/pull/1047
+- add option to strip the AES GCM header from encrypted state/session JWTs with env var OIDC_JWT_STRIP_HDR=true
 - bump to 2.4.14rc6
 
 04/11/2023
