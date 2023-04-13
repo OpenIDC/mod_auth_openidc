@@ -1,3 +1,6 @@
+04/13/2023
+- fix OIDC Session decoding fails when OIDCSessionType client-cookie
+
 04/11/2023
 - add caching of signed userinfo JWTs; default cache time is set to the "exp" claim, can be configured/disabled with:
     SetEnvIfExpr true "OIDC_USERINFO_SIGNED_JWT_CACHE_TTL=0" 
