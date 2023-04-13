@@ -1823,8 +1823,9 @@ void* oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->info_hook_data = NULL;
 	c->black_listed_claims = NULL;
 	c->white_listed_claims = NULL;
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	c->filter_claims_expr = NULL;
-
+#endif
 	c->provider.issuer_specific_redirect_uri =
 			OIDC_DEFAULT_PROVIDER_ISSUER_SPECIFIC_REDIRECT_URI;
 
@@ -2136,9 +2137,11 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->white_listed_claims =
 			add->white_listed_claims != NULL ?
 					add->white_listed_claims : base->white_listed_claims;
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	c->filter_claims_expr =
 			add->filter_claims_expr != NULL ?
 					add->filter_claims_expr : base->filter_claims_expr;
+#endif
 
 	c->state_input_headers =
 			add->state_input_headers != OIDC_DEFAULT_STATE_INPUT_HEADERS ?
@@ -3774,6 +3777,7 @@ const command_rec oidc_config_cmds[] = {
 				"The format in which the userinfo is passed in (a) header(s); must be one or more of: claims|json|jwt|signed_jwt"),
 
 #ifdef USE_LIBJQ
+#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 		AP_INIT_TAKE1(OIDCFilterClaimsExpr,
 				oidc_set_filtered_claims_expr,
 				(void *) APR_OFFSETOF(oidc_cfg, filter_claims_expr),
@@ -3784,6 +3788,7 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_dir_cfg, userinfo_claims_expr),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Sets the JQ expression to be executed on the claims from the userinfo endpoint stored in the session before propagating them"),
+#endif
 #endif
 		{ NULL }
 };
