@@ -1392,7 +1392,6 @@ static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
 #define OIDC_USERINFO_SIGNED_JWT_CACHE_TTL_ENVVAR "OIDC_USERINFO_SIGNED_JWT_CACHE_TTL"
 
 static int oidc_userinfo_signed_jwt_cache_ttl(request_rec *r) {
-	int ttl = 0;
 	const char *s_ttl = apr_table_get(r->subprocess_env,
 			OIDC_USERINFO_SIGNED_JWT_CACHE_TTL_ENVVAR);
 	return (s_ttl ?
