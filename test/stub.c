@@ -6,6 +6,8 @@
 #include <apr_lib.h>
 #include <http_log.h>
 
+#define HAVE_APACHE_24 MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+
 #define ap_HOOK_check_user_id_t void
 
 AP_DECLARE(void) ap_hook_check_authn(ap_HOOK_check_user_id_t *pf,
@@ -37,12 +39,10 @@ AP_DECLARE(long) ap_get_client_block(request_rec * r, char * buffer,
 	return 0;
 }
 
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 AP_DECLARE(char *) ap_get_exec_line(apr_pool_t *p, const char *cmd,
 		const char * const *argv) {
 	return NULL;
 }
-#endif
 
 AP_DECLARE(char *) ap_getword(apr_pool_t *atrans, const char **line, char stop) {
 	const char *pos = *line;
@@ -174,7 +174,7 @@ AP_DECLARE(int) ap_is_initial_req(request_rec *r) {
 	return 0;
 }
 
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+#if HAVE_APACHE_24
 AP_DECLARE(ap_expr_info_t *) ap_expr_parse_cmd_mi(const cmd_parms *cmd, const char *expr,
 		unsigned int flags, const char **err, ap_expr_lookup_fn_t *lookup_fn,
 		int module_index) {
@@ -204,7 +204,7 @@ AP_DECLARE(void) ap_log_error_(const char *file, int line, int module_index,
 		}
 	}
 
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+#if HAVE_APACHE_24
 	AP_DECLARE(void) ap_log_rerror_(const char *file, int line, int module_index,
 			int level, apr_status_t status, const request_rec *r, const char *fmt,
 			...) {
@@ -324,7 +324,7 @@ AP_DECLARE(void) ap_log_error_(const char *file, int line, int module_index,
 		}
 #endif
 
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+#if HAVE_APACHE_24
 		AP_DECLARE(int) ap_expr_exec(request_rec *r, const ap_expr_info_t *expr,
 				const char **err) {
 			return 0;

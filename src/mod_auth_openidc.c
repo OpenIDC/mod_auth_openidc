@@ -2312,8 +2312,8 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 	if (oidc_proto_generate_nonce(r, &csrf, 8) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
-	char *path_scopes = oidc_dir_cfg_path_scope(r);
-	char *path_auth_request_params = oidc_dir_cfg_path_auth_request_params(r);
+	const char *path_scopes = oidc_dir_cfg_path_scope(r);
+	const char *path_auth_request_params = oidc_dir_cfg_path_auth_request_params(r);
 
 	char *discover_url = oidc_cfg_dir_discover_url(r);
 	/* see if there's an external discovery page configured */
@@ -4291,7 +4291,7 @@ static void oidc_authz_get_claims_and_idtoken(request_rec *r, json_t **claims,
 		oidc_util_decode_json_object(r, s_id_token, id_token);
 }
 
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+#if HAVE_APACHE_24
 
 #define OIDC_OAUTH_BEARER_SCOPE_ERROR "OIDC_OAUTH_BEARER_SCOPE_ERROR"
 #define OIDC_OAUTH_BEARER_SCOPE_ERROR_VALUE "Bearer error=\"insufficient_scope\", error_description=\"Different scope(s) or other claims required\""

@@ -3171,16 +3171,47 @@ end:
 	return result;
 }
 
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-char* oidc_util_ap_expr_exec(request_rec *r, const ap_expr_info_t *expression) {
-	const char *expr_result = NULL, *expr_err = NULL;
-	if (expression == NULL)
+char* oidc_util_apr_expr_parse(cmd_parms *cmd, const char *str,
+		oidc_apr_expr_t **expr, apr_byte_t result_is_str) {
+	char *rv = NULL;
+	if ((str == NULL) || (expr == NULL))
 		return NULL;
-	expr_result = ap_expr_str_exec(r, expression, &expr_err);
+	*expr = apr_pcalloc(cmd->pool, sizeof(oidc_apr_expr_t));
+	(*expr)->str = apr_pstrdup(cmd->pool, str);
+#if HAVE_APACHE_24
+	const char *expr_err = NULL;
+	unsigned int flags = AP_EXPR_FLAG_DONT_VARY & AP_EXPR_FLAG_RESTRICTED;
+	if (result_is_str)
+		flags += AP_EXPR_FLAG_STRING_RESULT;
+	(*expr)->expr = ap_expr_parse_cmd(cmd, str, flags, &expr_err, NULL);
+	if (expr_err != NULL) {
+		rv = apr_pstrcat(cmd->temp_pool, "cannot parse expression: ", expr_err,
+				NULL);
+		*expr = NULL;
+	}
+#endif
+	return rv;
+}
+
+const char* oidc_util_apr_expr_exec(request_rec *r, const oidc_apr_expr_t *expr,
+		apr_byte_t result_is_str) {
+	const char *expr_result = NULL;
+	if (expr == NULL)
+		return NULL;
+#if HAVE_APACHE_24
+	const char *expr_err = NULL;
+	if (result_is_str) {
+		expr_result = ap_expr_str_exec(r, expr->expr, &expr_err);
+	} else {
+		expr_result = ap_expr_exec(r, expr->expr, &expr_err) ? "" : NULL;
+	}
 	if (expr_err) {
-		oidc_error(r, "executing expression failed: %s", expr_err);
+		oidc_error(r, "executing expression \"%s\" failed: %s", expr->str,
+				expr_err);
 		expr_result = NULL;
 	}
-	return expr_result ? apr_pstrdup(r->pool, expr_result) : NULL;
-}
+#else
+	expr_result = expr->str;
 #endif
+	return expr_result;
+}

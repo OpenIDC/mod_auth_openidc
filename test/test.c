@@ -1491,7 +1491,7 @@ static char * test_accept(request_rec *r) {
 	return 0;
 }
 
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+#if HAVE_APACHE_24
 
 static char * test_authz_worker(request_rec *r) {
 	authz_status rc;
@@ -1870,7 +1870,7 @@ static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	TST_RUN(test_open_redirect, r);
 	TST_RUN(test_set_app_infos, r);
 
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+#if HAVE_APACHE_24
 	TST_RUN(test_authz_worker, r);
 #endif
 

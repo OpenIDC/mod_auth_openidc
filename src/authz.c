@@ -295,7 +295,7 @@ static void oidc_authz_error_add(request_rec *r, const char *msg) {
 	}
 }
 
-#if MODULE_MAGIC_NUMBER_MAJOR < 20100714
+#if !(HAVE_APACHE_24)
 
 /*
  * Apache <2.4 authorization routine: match the claims from the authenticated user against the Require primitive

@@ -297,14 +297,10 @@ typedef struct oidc_dir_cfg {
 	int oauth_token_introspect_interval;
 	int preserve_post;
 	int pass_refresh_token;
-	char *path_auth_request_params;
-	char *path_scope;
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-	ap_expr_info_t *path_auth_request_expr;
-	ap_expr_info_t *path_scope_expr;
-	ap_expr_info_t *unauth_expression;
-	ap_expr_info_t *userinfo_claims_expr;
-#endif
+	oidc_apr_expr_t *path_auth_request_expr;
+	oidc_apr_expr_t *path_scope_expr;
+	oidc_apr_expr_t *unauth_expression;
+	oidc_apr_expr_t *userinfo_claims_expr;
 	int refresh_access_token_before_expiry;
 	int logout_on_error_refresh;
 	char *state_cookie_prefix;
@@ -490,7 +486,7 @@ static const char* oidc_set_path_slot(cmd_parms *cmd, void *ptr,
 	return ap_set_string_slot(cmd, cfg, full_path);
 }
 
-#if MODULE_MAGIC_NUMBER_MAJOR < 20100714
+#if !(HAVE_APACHE_24)
 static char * ap_get_exec_line(apr_pool_t *p,
                                     const char *cmd,
                                     const char * const * argv)
@@ -1082,31 +1078,10 @@ static const char* oidc_set_unauth_action(cmd_parms *cmd, void *m,
 	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg*) m;
 	const char *rv = oidc_parse_unauth_action(cmd->pool, arg1,
 			&dir_cfg->unauth_action);
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-	const char *expr_err = NULL;
-	if ((rv == NULL) && (arg2 != NULL)) {
-		dir_cfg->unauth_expression = ap_expr_parse_cmd(cmd, arg2,
-				AP_EXPR_FLAG_DONT_VARY & AP_EXPR_FLAG_RESTRICTED, &expr_err,
-				NULL);
-		if (expr_err != NULL) {
-			rv = apr_pstrcat(cmd->temp_pool, "cannot parse expression: ",
-					expr_err, NULL);
-		}
-	}
-#endif
+	if (rv == NULL)
+		rv = oidc_util_apr_expr_parse(cmd, arg2, &dir_cfg->unauth_expression,
+				FALSE);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
-}
-
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-static const char* oidc_set_path_expr(cmd_parms *cmd, const char *arg, ap_expr_info_t **expression) {
-	const char *rv = NULL;
-	const char *expr_err = NULL;
-	*expression = ap_expr_parse_cmd(cmd, arg, AP_EXPR_FLAG_STRING_RESULT, &expr_err, NULL);
-	if (expr_err != NULL) {
-		oidc_swarn(cmd->server, "cannot parse expression: %s", expr_err);
-		//rv = apr_pstrcat(cmd->temp_pool, "cannot parse expression: ", expr_err, NULL);
-	}
-	return rv;
 }
 
 #ifdef USE_LIBJQ
@@ -1114,10 +1089,8 @@ static const char* oidc_set_path_expr(cmd_parms *cmd, const char *arg, ap_expr_i
 static const char* oidc_set_userinfo_claims_expr(cmd_parms *cmd, void *m,
 		const char *arg) {
 	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg*) m;
-	const char *rv = NULL;
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-	rv = oidc_set_path_expr(cmd, arg, &dir_cfg->userinfo_claims_expr);
-#endif
+	const char *rv = oidc_util_apr_expr_parse(cmd, arg,
+			&dir_cfg->userinfo_claims_expr, TRUE);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -1125,49 +1098,43 @@ static const char* oidc_set_filtered_claims_expr(cmd_parms *cmd, void *m,
 		const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
 			&auth_openidc_module);
-	const char *rv = NULL;
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-	rv = oidc_set_path_expr(cmd, arg, &cfg->filter_claims_expr);
-#endif
+	const char *rv = oidc_util_apr_expr_parse(cmd, arg,
+			&cfg->filter_claims_expr, TRUE);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
 #endif
 
-#endif
-
-static const char* oidc_set_path_auth_request_params(cmd_parms *cmd, void *m, const char *arg) {
+static const char* oidc_set_path_auth_request_params(cmd_parms *cmd, void *m,
+		const char *arg) {
 	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg*) m;
 	const char *rv = NULL;
-	dir_cfg->path_auth_request_params = apr_pstrdup(cmd->pool, arg);
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-	rv = oidc_set_path_expr(cmd, arg, &dir_cfg->path_auth_request_expr);
-#endif
+	rv = oidc_util_apr_expr_parse(cmd, arg, &dir_cfg->path_auth_request_expr,
+			TRUE);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
 static const char* oidc_set_path_scope(cmd_parms *cmd, void *m, const char *arg) {
 	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg*) m;
 	const char *rv = NULL;
-	dir_cfg->path_auth_request_params = apr_pstrdup(cmd->pool, arg);
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-	rv = oidc_set_path_expr(cmd, arg, &dir_cfg->path_scope_expr);
-#endif
+	rv = oidc_util_apr_expr_parse(cmd, arg, &dir_cfg->path_scope_expr, TRUE);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
 /*
  * define how to act on unauthorized requests
  */
-static const char* oidc_set_unautz_action(cmd_parms *cmd, void *m, const char *arg1,
-		const char *arg2) {
+static const char* oidc_set_unautz_action(cmd_parms *cmd, void *m,
+		const char *arg1, const char *arg2) {
 	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg*) m;
-	const char *rv = oidc_parse_unautz_action(cmd->pool, arg1, &dir_cfg->unautz_action);
+	const char *rv = oidc_parse_unautz_action(cmd->pool, arg1,
+			&dir_cfg->unautz_action);
 	if ((rv == NULL) && (arg2 != NULL)) {
 		dir_cfg->unauthz_arg = apr_pstrdup(cmd->pool, arg2);
 	} else if (dir_cfg->unautz_action == OIDC_UNAUTZ_RETURN302) {
-		rv =
-				apr_psprintf(cmd->temp_pool, "the (2nd) URL argument to %s must be set", cmd->directive->directive);
+		rv = apr_psprintf(cmd->temp_pool,
+				"the (2nd) URL argument to %s must be set",
+				cmd->directive->directive);
 		return rv;
 	}
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
@@ -1823,9 +1790,8 @@ void* oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->info_hook_data = NULL;
 	c->black_listed_claims = NULL;
 	c->white_listed_claims = NULL;
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	c->filter_claims_expr = NULL;
-#endif
+
 	c->provider.issuer_specific_redirect_uri =
 			OIDC_DEFAULT_PROVIDER_ISSUER_SPECIFIC_REDIRECT_URI;
 
@@ -2137,11 +2103,9 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->white_listed_claims =
 			add->white_listed_claims != NULL ?
 					add->white_listed_claims : base->white_listed_claims;
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	c->filter_claims_expr =
 			add->filter_claims_expr != NULL ?
 					add->filter_claims_expr : base->filter_claims_expr;
-#endif
 
 	c->state_input_headers =
 			add->state_input_headers != OIDC_DEFAULT_STATE_INPUT_HEADERS ?
@@ -2201,9 +2165,7 @@ void* oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->cookie_path = OIDC_CONFIG_STRING_UNSET;
 	c->authn_header = OIDC_CONFIG_STRING_UNSET;
 	c->unauth_action = OIDC_CONFIG_POS_INT_UNSET;
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	c->unauth_expression = NULL;
-#endif
 	c->unautz_action = OIDC_CONFIG_POS_INT_UNSET;
 	c->unauthz_arg = NULL;
 	c->pass_cookies = NULL;
@@ -2216,13 +2178,9 @@ void* oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->oauth_token_introspect_interval = -2;
 	c->preserve_post = OIDC_CONFIG_POS_INT_UNSET;
 	c->pass_refresh_token = OIDC_CONFIG_POS_INT_UNSET;
-	c->path_auth_request_params = NULL;
-	c->path_scope = NULL;
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	c->path_auth_request_expr = NULL;
 	c->path_scope_expr = NULL;
 	c->userinfo_claims_expr = NULL;
-#endif
 	c->refresh_access_token_before_expiry = OIDC_CONFIG_POS_INT_UNSET;
 	c->logout_on_error_refresh = OIDC_CONFIG_POS_INT_UNSET;
 	c->state_cookie_prefix = OIDC_CONFIG_STRING_UNSET;
@@ -2350,37 +2308,23 @@ apr_array_header_t* oidc_dir_cfg_strip_cookies(request_rec *r) {
 int oidc_dir_cfg_unauth_action(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
+	const char *rv = NULL;
 
 	if (dir_cfg->unauth_action == OIDC_CONFIG_POS_INT_UNSET)
 		return OIDC_DEFAULT_UNAUTH_ACTION;
 
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-	int rc = 0;
-	const char *err_str = NULL;
 	if (dir_cfg->unauth_expression == NULL)
 		return dir_cfg->unauth_action;
 
-	rc = ap_expr_exec(r, dir_cfg->unauth_expression, &err_str);
+	rv = oidc_util_apr_expr_exec(r, dir_cfg->unauth_expression, FALSE);
 
-	if (rc < 0) {
-		oidc_warn(r, "executing expression failed");
-		return OIDC_DEFAULT_UNAUTH_ACTION;
-	}
-
-	return (rc > 0) ? dir_cfg->unauth_action : OIDC_DEFAULT_UNAUTH_ACTION;
-#else
-	return dir_cfg->unauth_action;
-#endif
+	return (rv != NULL) ? dir_cfg->unauth_action : OIDC_DEFAULT_UNAUTH_ACTION;
 }
 
 apr_byte_t oidc_dir_cfg_unauth_expr_is_set(request_rec *r) {
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 	return (dir_cfg->unauth_expression != NULL) ? TRUE : FALSE;
-#else
-	return FALSE;
-#endif
 }
 
 int oidc_dir_cfg_unautz_action(request_rec *r) {
@@ -2391,19 +2335,16 @@ int oidc_dir_cfg_unautz_action(request_rec *r) {
 	return dir_cfg->unautz_action;
 }
 
-char *oidc_dir_cfg_unauthz_arg(request_rec *r) {
+char* oidc_dir_cfg_unauthz_arg(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 	return dir_cfg->unauthz_arg;
 }
 
-char* oidc_dir_cfg_path_auth_request_params(request_rec *r) {
-	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
-	char *rv = NULL;
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-	rv = oidc_util_ap_expr_exec(r, dir_cfg->path_auth_request_expr);
-#endif
-	return rv ? rv : dir_cfg->path_auth_request_params;
+const char* oidc_dir_cfg_path_auth_request_params(request_rec *r) {
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+	return oidc_util_apr_expr_exec(r, dir_cfg->path_auth_request_expr, TRUE);
 }
 
 static apr_array_header_t *pass_userinfo_as_default = NULL;
@@ -2426,23 +2367,16 @@ apr_array_header_t* oidc_dir_cfg_pass_user_info_as(request_rec *r) {
 			dir_cfg->pass_userinfo_as : pass_userinfo_as_default;
 }
 
-char* oidc_dir_cfg_userinfo_claims_expr(request_rec *r) {
+const char* oidc_dir_cfg_userinfo_claims_expr(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
-	char *rv = NULL;
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-	rv = oidc_util_ap_expr_exec(r, dir_cfg->userinfo_claims_expr);
-#endif
-	return rv;
+	return oidc_util_apr_expr_exec(r, dir_cfg->userinfo_claims_expr, TRUE);
 }
 
-char* oidc_dir_cfg_path_scope(request_rec *r) {
-	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
-	char *rv = NULL;
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-	rv = oidc_util_ap_expr_exec(r, dir_cfg->path_scope_expr);
-#endif
-	return rv ? rv : dir_cfg->path_scope;
+const char* oidc_dir_cfg_path_scope(request_rec *r) {
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+	return oidc_util_apr_expr_exec(r, dir_cfg->path_scope_expr, TRUE);
 }
 
 /*
@@ -2467,11 +2401,9 @@ void* oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->unauth_action =
 			add->unauth_action != OIDC_CONFIG_POS_INT_UNSET ?
 					add->unauth_action : base->unauth_action;
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	c->unauth_expression =
 			add->unauth_expression != NULL ?
 					add->unauth_expression : base->unauth_expression;
-#endif
 	c->unautz_action =
 			add->unautz_action != OIDC_CONFIG_POS_INT_UNSET ?
 					add->unautz_action : base->unautz_action;
@@ -2511,13 +2443,6 @@ void* oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->pass_refresh_token =
 			add->pass_refresh_token != OIDC_CONFIG_POS_INT_UNSET ?
 					add->pass_refresh_token : base->pass_refresh_token;
-	c->path_auth_request_params =
-			add->path_auth_request_params != NULL ?
-					add->path_auth_request_params :
-					base->path_auth_request_params;
-	c->path_scope =
-			add->path_scope != NULL ? add->path_scope : base->path_scope;
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 	c->path_auth_request_expr =
 			add->path_auth_request_expr != NULL ?
 					add->path_auth_request_expr : base->path_auth_request_expr;
@@ -2527,7 +2452,6 @@ void* oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->userinfo_claims_expr =
 			add->userinfo_claims_expr != NULL ?
 					add->userinfo_claims_expr : base->userinfo_claims_expr;
-#endif
 
 	c->pass_userinfo_as =
 			add->pass_userinfo_as != NULL ?
@@ -2915,7 +2839,8 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 	return oidc_config_check_merged_vhost_configs(pool, s);
 }
 
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+#if HAVE_APACHE_24
+
 static const char* oidc_parse_config(cmd_parms *cmd, const char *require_line,
 		const void **parsed_require_line) {
 	const char *expr_err = NULL;
@@ -2941,6 +2866,7 @@ static const authz_provider oidc_authz_claims_expr_provider = {
 		NULL,
 };
 #endif
+
 #endif
 
 /*
@@ -3079,7 +3005,7 @@ void oidc_register_hooks(apr_pool_t *pool) {
 			APR_HOOK_MIDDLE);
 	ap_register_input_filter(oidcFilterName, oidc_filter_in_filter, NULL,
 			AP_FTYPE_RESOURCE);
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+#if HAVE_APACHE_24
 	ap_hook_check_authn(oidc_check_user_id, NULL, NULL, APR_HOOK_MIDDLE,
 			AP_AUTH_INTERNAL_PER_CONF);
 	ap_register_auth_provider(pool, AUTHZ_PROVIDER_GROUP,
@@ -3272,7 +3198,7 @@ const command_rec oidc_config_cmds[] = {
 				"Define the OpenID Connect scope that is requested from the OP."),
 		AP_INIT_TAKE1(OIDCPathScope,
 				oidc_set_path_scope,
-				(void*)APR_OFFSETOF(oidc_dir_cfg, path_scope),
+				(void*)APR_OFFSETOF(oidc_dir_cfg, path_scope_expr),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Define the OpenID Connect scope that is requested from all providers for a specific path/context."),
 		AP_INIT_TAKE1(OIDCJWKSRefreshInterval,
@@ -3297,7 +3223,7 @@ const command_rec oidc_config_cmds[] = {
 				"Extra parameters that need to be sent in the Authorization Request (must be query-encoded like \"display=popup&prompt=consent\"."),
 		AP_INIT_TAKE1(OIDCPathAuthRequestParams,
 				oidc_set_path_auth_request_params,
-				(void*)APR_OFFSETOF(oidc_dir_cfg, path_auth_request_params),
+				(void*)APR_OFFSETOF(oidc_dir_cfg, path_auth_request_expr),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Extra parameters that need to be sent in the Authorization Request (must be query-encoded like \"display=popup&prompt=consent\"."),
 		AP_INIT_TAKE1(OIDCPKCEMethod,
@@ -3777,7 +3703,6 @@ const command_rec oidc_config_cmds[] = {
 				"The format in which the userinfo is passed in (a) header(s); must be one or more of: claims|json|jwt|signed_jwt"),
 
 #ifdef USE_LIBJQ
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 		AP_INIT_TAKE1(OIDCFilterClaimsExpr,
 				oidc_set_filtered_claims_expr,
 				(void *) APR_OFFSETOF(oidc_cfg, filter_claims_expr),
@@ -3788,7 +3713,6 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_dir_cfg, userinfo_claims_expr),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Sets the JQ expression to be executed on the claims from the userinfo endpoint stored in the session before propagating them"),
-#endif
 #endif
 		{ NULL }
 };
