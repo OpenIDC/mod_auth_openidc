@@ -34,10 +34,8 @@
 
 #include <stdio.h>
 #include <ctype.h>
-#include <string.h>
-#include <apr_strings.h>
+
 #include "pcre_subst.h"
-#include "config.h"
 
 #ifdef HAVE_LIBPCRE2
 #define PCRE2_CODE_UNIT_WIDTH 8
@@ -66,7 +64,7 @@ static void
 dumpstr(const char *str, int len, int start, int end)
 {
 	int i;
-	for (i = 0; i < (str ? strlen(str) : 0); i++) {
+	for (i = 0; i < _oidc_strlen(str); i++) {
 		if (i >= start && i < end)
 			putchar(str[i]);
 		else
@@ -138,7 +136,7 @@ edit(const char *str, int len, const char *rep, int nmat, const int *ovec)
 	char *res, *cp;
 	int replen[OIDC_PCRE_MAXCAPTURE];
 	const char *repstr[OIDC_PCRE_MAXCAPTURE];
-	memset(repstr, '\0', OIDC_PCRE_MAXCAPTURE);
+	_oidc_memset(repstr, '\0', OIDC_PCRE_MAXCAPTURE);
 	if ((str == NULL) || (mvec == NULL)) return NULL;
 	nmat--;
 	ovec += 2;
@@ -164,7 +162,7 @@ edit(const char *str, int len, const char *rep, int nmat, const int *ovec)
 	doreplace(cp, rep, nmat, replen, repstr);
 	cp += rlen;
 	if ((mvec[1] < slen) && (cp != NULL))
-		strcpy(cp, &str[mvec[1]]);
+		_oidc_strcpy(cp, &str[mvec[1]]);
 	res[len] = 0;
 	return res;
 }
@@ -217,7 +215,7 @@ struct oidc_pcre* oidc_pcre_compile(apr_pool_t *pool, const char *regexp, char *
 	int errorcode;
 	PCRE2_SIZE erroroffset;
 	pcre->preg =
-			pcre2_compile((PCRE2_SPTR) regexp, (PCRE2_SIZE) strlen(regexp), 0, &errorcode, &erroroffset, NULL);
+			pcre2_compile((PCRE2_SPTR) regexp, (PCRE2_SIZE) _oidc_strlen(regexp), 0, &errorcode, &erroroffset, NULL);
 #else
 	const char *errorptr = NULL;
 	int erroffset;
@@ -366,7 +364,7 @@ main()
 	extra = pcre_study(ppat, 0, &err);
 	if (err != NULL)
 		fprintf(stderr, "Study %s failed: %s\n", pat, err);
-	newstr = pcre_subst(ppat, extra, str, (str ? strlen(str) : 0), 0, 0, rep);
+	newstr = pcre_subst(ppat, extra, str, _oidc_strlen(str), 0, 0, rep);
 	if (newstr) {
 		printf("Newstr\t%s\n", newstr);
 		pcre_free(newstr);

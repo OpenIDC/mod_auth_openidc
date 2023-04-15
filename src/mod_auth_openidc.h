@@ -44,16 +44,8 @@
 #ifndef MOD_AUTH_OPENIDC_H_
 #define MOD_AUTH_OPENIDC_H_
 
-#ifdef HAVE_CONFIG_H
-#  include "config.h"
-#  undef PACKAGE_NAME
-#  undef PACKAGE_STRING
-#  undef PACKAGE_TARNAME
-#  undef PACKAGE_VERSION
-#  undef PACKAGE_BUGREPORT
-#endif
+#include "const.h"
 
-#include <stdint.h>
 #include <httpd.h>
 #include <http_core.h>
 #include <http_config.h>
@@ -96,8 +88,6 @@ APLOG_USE_MODULE(auth_openidc);
 #define oidc_sdebug(s, fmt, ...) oidc_slog(s, OIDC_DEBUG, fmt, ##__VA_ARGS__)
 #define oidc_swarn(s, fmt, ...) oidc_slog(s, APLOG_WARNING, fmt, ##__VA_ARGS__)
 #define oidc_serror(s, fmt, ...) oidc_slog(s, APLOG_ERR, fmt, ##__VA_ARGS__)
-
-#define _oidc_str_to_int(s) (s ? (int)strtol(s, NULL, 10) : 0)
 
 #ifndef NAMEVER
 #define NAMEVERSION "mod_auth_openidc-0.0.0"

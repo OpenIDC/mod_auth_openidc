@@ -46,7 +46,10 @@
 #ifndef MOD_AUTH_OPENIDC_PARSE_H_
 #define MOD_AUTH_OPENIDC_PARSE_H_
 
-#include "apr_pools.h"
+#include "const.h"
+#include <apr_hash.h>
+#include <jansson.h>
+#include "cache/cache.h"
 
 #define OIDC_CONFIG_STRING_UNSET  "_UNSET_"
 #define OIDC_CONFIG_STRING_EMPTY  ""

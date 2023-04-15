@@ -53,6 +53,7 @@ endif
 
 noinst_HEADERS = \
 	src/mod_auth_openidc.h \
+	src/const.h \
 	src/jose.h \
 	src/parse.h \
 	src/cache/cache.h \

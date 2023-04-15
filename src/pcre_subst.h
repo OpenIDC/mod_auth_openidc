@@ -35,7 +35,10 @@ restrictions:
 #ifndef MOD_AUTH_OPENIDC_PCRE_SUBST_H_
 #define MOD_AUTH_OPENIDC_PCRE_SUBST_H_
 
+#include "const.h"
+
 #include <apr_pools.h>
+#include <apr_strings.h>
 
 #define OIDC_PCRE_MAXCAPTURE	255
 #define OIDC_UTIL_REGEXP_MATCH_SIZE 30

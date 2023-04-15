@@ -44,8 +44,6 @@
  */
 
 #include "mod_auth_openidc.h"
-#include "parse.h"
-#include "jose.h"
 
 /*
  * parse a URL according to one of two schemes (NULL for any)

@@ -46,32 +46,15 @@
 #ifndef MOD_AUTH_OPENIDC_JOSE_H_
 #define MOD_AUTH_OPENIDC_JOSE_H_
 
-#include <stdint.h>
-#define __STDC_WANT_LIB_EXT1__ 1
-#include <string.h>
+#include "const.h"
 
-#include "apr_pools.h"
-#include "apr_tables.h"
-#include "apr_hash.h"
-#include "apr_strings.h"
+#include <apr_pools.h>
+#include <apr_tables.h>
+#include <apr_hash.h>
+#include <apr_strings.h>
 
-#include "jansson.h"
-
-#include "cjose/cjose.h"
-
-#ifdef __STDC_LIB_EXT1__
-#define _oidc_memset(b, c, __len) memset_s(b, __len, c, __len)
-#define _oidc_memcpy(__dst, __src, __n) memcpy_s(__dst, __src, __n)
-#define _oidc_strcpy(__dst, __src) strcpy_s(__dst, __src)
-#else
-#define _oidc_memset(b, c, __len) memset(b, c, __len)
-#define _oidc_memcpy(__dst, __src, __n) memcpy(__dst, __src, __n)
-#define _oidc_strcpy(__dst, __src) strcpy(__dst, __src)
-#endif
-
-#define _oidc_strlen(s) ( s ? strlen(s) : 0 )
-#define _oidc_strcmp(a, b) ( (a && b) ? apr_strnatcmp(a, b) : -1 )
-#define _oidc_strncmp(a, b, size) ( (a && b) ? strncmp(a, b, size) : -1 )
+#include <jansson.h>
+#include <cjose/cjose.h>
 
 #define OIDC_JOSE_ALG_SHA1 "sha1"
 #define OIDC_JOSE_ALG_SHA256 "sha256"

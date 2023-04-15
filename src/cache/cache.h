@@ -46,8 +46,9 @@
 #ifndef _MOD_AUTH_OPENIDC_CACHE_H_
 #define _MOD_AUTH_OPENIDC_CACHE_H_
 
-#include "apr_global_mutex.h"
-#include "apr_shm.h"
+#include <apr_global_mutex.h>
+#include <apr_shm.h>
+#include <httpd.h>
 
 typedef void * (*oidc_cache_cfg_create)(apr_pool_t *pool);
 typedef int (*oidc_cache_post_config_function)(server_rec *s);
