@@ -4323,22 +4323,18 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 	case OIDC_UNAUTZ_RETURN403:
 	case OIDC_UNAUTZ_RETURN401:
 		if (oidc_dir_cfg_unauthz_arg(r)) {
-			oidc_util_html_send_error(r, c->error_template,
-					"Authorization Error", oidc_dir_cfg_unauthz_arg(r),
-					HTTP_UNAUTHORIZED);
-			if (c->error_template)
-				r->header_only = 1;
+			oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_MSG,
+					oidc_dir_cfg_unauthz_arg(r));
+			oidc_debug(r,
+					"defer authentication error message to the content handler");
 		}
-		return AUTHZ_DENIED;
+		return AUTHZ_GRANTED;
 	case OIDC_UNAUTZ_RETURN302:
-		html_head = apr_psprintf(r->pool,
-				"<meta http-equiv=\"refresh\" content=\"0; url=%s\">",
+		oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_REDIRECT,
 				oidc_dir_cfg_unauthz_arg(r));
-		oidc_util_html_send(r, "Authorization Error Redirect", html_head, NULL,
-				NULL,
-				HTTP_UNAUTHORIZED);
-		r->header_only = 1;
-		return AUTHZ_DENIED;
+		oidc_debug(r,
+				"defer authorization error redirect to the content handler");
+		return AUTHZ_GRANTED;
 	case OIDC_UNAUTZ_AUTHENTICATE:
 		/*
 		 * exception handling: if this looks like an HTTP request that cannot
@@ -4362,19 +4358,10 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 		return AUTHZ_GRANTED;
 
 	if (location != NULL) {
-		oidc_debug(r, "send HTML refresh with authorization redirect: %s",
+		oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_REDIRECT,
 				location);
-
-		html_head = apr_psprintf(r->pool,
-				"<meta http-equiv=\"refresh\" content=\"0; url=%s\">",
-				location);
-		oidc_util_html_send(r, "Stepup Authentication", html_head, NULL, NULL,
-				HTTP_UNAUTHORIZED);
-		/*
-		 * a hack for Apache 2.4 to prevent it from writing its own 401 HTML document
-		 * text by making ap_send_error_response in http_protocol.c return early...
-		 */
-		r->header_only = 1;
+		oidc_debug(r, "defer step up authentication to the content handler");
+		return AUTHZ_GRANTED;
 	}
 
 	return AUTHZ_DENIED;
@@ -4388,7 +4375,8 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args,
 		const void *parsed_require_args,
 		oidc_authz_match_claim_fn_type match_claim_fn) {
 
-	oidc_debug(r, "enter: (r->user=%s) require_args=\"%s\"", r->user, require_args);
+	oidc_debug(r, "enter: (r->user=%s) require_args=\"%s\"", r->user,
+			require_args);
 
 	/* check for anonymous access and PASS mode */
 	if ((r->user != NULL) && (_oidc_strlen(r->user) == 0)) {
@@ -4431,8 +4419,10 @@ authz_status oidc_authz_checker_claim(request_rec *r, const char *require_args,
 }
 
 #ifdef USE_LIBJQ
-authz_status oidc_authz_checker_claims_expr(request_rec *r, const char *require_args, const void *parsed_require_args) {
-	return oidc_authz_checker(r, require_args, parsed_require_args, oidc_authz_match_claims_expr);
+authz_status oidc_authz_checker_claims_expr(request_rec *r,
+		const char *require_args, const void *parsed_require_args) {
+	return oidc_authz_checker(r, require_args, parsed_require_args,
+			oidc_authz_match_claims_expr);
 }
 #endif
 
@@ -4456,12 +4446,12 @@ static int oidc_handle_unauthorized_user22(request_rec *r) {
 	case OIDC_UNAUTZ_RETURN403:
 		if (oidc_dir_cfg_unauthz_arg(r))
 			oidc_util_html_send(r, "Authorization Error", NULL, NULL, oidc_dir_cfg_unauthz_arg(r),
-								HTTP_FORBIDDEN);
+					HTTP_FORBIDDEN);
 		return HTTP_FORBIDDEN;
 	case OIDC_UNAUTZ_RETURN401:
 		if (oidc_dir_cfg_unauthz_arg(r))
 			oidc_util_html_send(r, "Authorization Error", NULL, NULL, oidc_dir_cfg_unauthz_arg(r),
-								HTTP_UNAUTHORIZED);
+					HTTP_UNAUTHORIZED);
 		return HTTP_UNAUTHORIZED;
 	case OIDC_UNAUTZ_RETURN302:
 		oidc_util_hdr_out_location_set(r, oidc_dir_cfg_unauthz_arg(r));
@@ -4605,6 +4595,24 @@ int oidc_content_handler(request_rec *r) {
 		/* sending POST preserve */
 		rc = OK;
 
+	} else if (oidc_request_state_get(r,
+			OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_REDIRECT) != NULL) {
+
+		/* there was an authorization error, redirect for stepup authentication  */
+		oidc_util_hdr_out_location_set(r, oidc_request_state_get(r,
+				OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_REDIRECT));
+
+		rc = HTTP_MOVED_TEMPORARILY;
+
+	} else if (oidc_request_state_get(r,
+			OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_MSG) != NULL) {
+
+		/* error message for 401 or 403 authorization errors */
+		rc = (oidc_dir_cfg_unautz_action(r) == OIDC_UNAUTZ_RETURN403) ?
+				HTTP_FORBIDDEN : HTTP_UNAUTHORIZED;
+		rc = oidc_util_html_send_error(r, c->error_template,
+				"Authorization Error", oidc_request_state_get(r,
+						OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_MSG), rc);
 	}
 
 	return rc;

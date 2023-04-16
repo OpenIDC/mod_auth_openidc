@@ -3000,7 +3000,6 @@ void oidc_register_hooks(apr_pool_t *pool) {
 	ap_hook_child_init(oidc_child_init, NULL, NULL, APR_HOOK_MIDDLE);
     static const char * const proxySucc[] = {"mod_proxy.c", NULL};
 	ap_hook_handler(oidc_content_handler, NULL, proxySucc, APR_HOOK_FIRST);
-	ap_hook_handler(oidc_content_handler, NULL, NULL, APR_HOOK_FIRST);
 	ap_hook_insert_filter(oidc_filter_in_insert_filter, NULL, NULL,
 			APR_HOOK_MIDDLE);
 	ap_register_input_filter(oidcFilterName, oidc_filter_in_filter, NULL,

@@ -1,3 +1,9 @@
+04/16/2024
+- OIDCUnAutzAction auth for stepup authentication now immediately returns a 302 instead
+  of a 200 HTML page with a meta refresh tag and a Location header
+- also fix OIDCUnAutzAction 403 so it does not rely on AuthzSendForbiddenOnFailure
+- bump to 2.4.14rc7
+
 04/13/2023
 - fix session cookie decompression error with OIDCSessionType client-cookie; closes #1046; thanks @oss-aimoto
   this would occur when the uncompressed JWT is larger than 4 times the compressed JWT
