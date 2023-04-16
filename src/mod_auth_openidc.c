@@ -4305,7 +4305,6 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
-	char *html_head = NULL;
 
 	if (apr_strnatcasecmp((const char*) ap_auth_type(r),
 			OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
@@ -4322,12 +4321,13 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 	switch (oidc_dir_cfg_unautz_action(r)) {
 	case OIDC_UNAUTZ_RETURN403:
 	case OIDC_UNAUTZ_RETURN401:
-		if (oidc_dir_cfg_unauthz_arg(r)) {
+		if (oidc_dir_cfg_unauthz_arg(r))
 			oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_MSG,
 					oidc_dir_cfg_unauthz_arg(r));
-			oidc_debug(r,
-					"defer authentication error message to the content handler");
-		}
+		else
+			oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_MSG, "");
+		oidc_debug(r,
+				"defer authentication error message to the content handler");
 		return AUTHZ_GRANTED;
 	case OIDC_UNAUTZ_RETURN302:
 		oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_REDIRECT,
@@ -4610,9 +4610,13 @@ int oidc_content_handler(request_rec *r) {
 		/* error message for 401 or 403 authorization errors */
 		rc = (oidc_dir_cfg_unautz_action(r) == OIDC_UNAUTZ_RETURN403) ?
 				HTTP_FORBIDDEN : HTTP_UNAUTHORIZED;
-		rc = oidc_util_html_send_error(r, c->error_template,
-				"Authorization Error", oidc_request_state_get(r,
-						OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_MSG), rc);
+
+		oidc_debug(r, "request state autz_err_msg found, return %d: %s", rc,
+				oidc_dir_cfg_unauthz_arg(r));
+
+		if (oidc_dir_cfg_unauthz_arg(r))
+			rc = oidc_util_html_send_error(r, c->error_template,
+					"Authorization Error", oidc_dir_cfg_unauthz_arg(r), rc);
 	}
 
 	return rc;
