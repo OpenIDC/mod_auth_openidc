@@ -1030,9 +1030,9 @@ static void oidc_store_userinfo_claims(request_rec *r, oidc_cfg *c,
 /*
  * execute refresh token grant to refresh the existing access token
  */
-static apr_byte_t oidc_refresh_access_token(request_rec *r, oidc_cfg *c,
+static apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg *c,
 		oidc_session_t *session, oidc_provider_t *provider,
-		char **new_access_token) {
+		char **new_access_token, char **new_id_token) {
 
 	oidc_debug(r, "enter");
 
@@ -1053,8 +1053,8 @@ static apr_byte_t oidc_refresh_access_token(request_rec *r, oidc_cfg *c,
 
 	/* refresh the tokens by calling the token endpoint */
 	if (oidc_proto_refresh_request(r, c, provider, refresh_token, &s_id_token,
-			&s_access_token, &s_token_type, &expires_in, &s_refresh_token)
-			== FALSE) {
+			&s_access_token, &s_token_type, &expires_in,
+			&s_refresh_token) == FALSE) {
 		oidc_error(r, "access_token could not be refreshed");
 		return FALSE;
 	}
@@ -1079,24 +1079,32 @@ static apr_byte_t oidc_refresh_access_token(request_rec *r, oidc_cfg *c,
 		/* only store the serialized representation when configured so */
 		if (c->store_id_token == TRUE)
 			oidc_session_set_idtoken(r, session, s_id_token);
-		
+
 		oidc_jwt_t *id_token_jwt = NULL;
 		oidc_jose_error_t err;
-		if (oidc_jwt_parse(r->pool, s_id_token, &id_token_jwt, NULL, FALSE, &err) == TRUE) {
+		if (oidc_jwt_parse(r->pool, s_id_token, &id_token_jwt, NULL, FALSE,
+				&err) == TRUE) {
 
 			/* store the claims payload in the id_token for later reference */
 			oidc_session_set_idtoken_claims(r, session,
-				id_token_jwt->payload.value.str);
+					id_token_jwt->payload.value.str);
 
 			if (provider->session_max_duration == 0) {
 				/* update the session expiry to match the expiry of the id_token */
-				apr_time_t session_expires = apr_time_from_sec(id_token_jwt->payload.exp);
+				apr_time_t session_expires = apr_time_from_sec(
+						id_token_jwt->payload.exp);
 				oidc_session_set_session_expires(r, session, session_expires);
 
 				/* log message about the updated max session duration */
-				oidc_log_session_expires(r, "session max lifetime", session_expires);
-			}		
-		} else { 
+				oidc_log_session_expires(r, "session max lifetime",
+						session_expires);
+			}
+
+			/* see if we need to return it as a parameter */
+			if (new_id_token != NULL)
+				*new_id_token = s_id_token;
+
+		} else {
 			oidc_warn(r, "parsing of id_token failed");
 		}
 	}
@@ -1155,13 +1163,12 @@ static const char* oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r,
 		if (session != NULL) {
 
 			/* first call to user info endpoint failed, but the access token may have just expired, so refresh it */
-			if (oidc_refresh_access_token(r, c, session, provider,
-					&refreshed_access_token) == TRUE) {
+			if (oidc_refresh_token_grant(r, c, session, provider,
+					&refreshed_access_token, NULL) == TRUE) {
 
 				/* try again with the new access token */
 				if (oidc_proto_resolve_userinfo(r, c, provider, id_token_sub,
-						refreshed_access_token, &result, userinfo_jwt)
-						== FALSE) {
+						refreshed_access_token, &result, userinfo_jwt) == FALSE) {
 
 					oidc_error(r,
 							"resolving user info claims with the refreshed access token failed, nothing will be stored in the session");
@@ -1375,8 +1382,8 @@ static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
 	if (oidc_get_provider_from_session(r, cfg, session, &provider) == FALSE)
 		return FALSE;
 
-	if (oidc_refresh_access_token(r, cfg, session, provider,
-			NULL) == FALSE) {
+	if (oidc_refresh_token_grant(r, cfg, session, provider,
+			NULL, NULL) == FALSE) {
 		oidc_warn(r, "access_token could not be refreshed, logout=%d",
 				logout_on_error & OIDC_LOGOUT_ON_ERROR_REFRESH);
 		if (logout_on_error & OIDC_LOGOUT_ON_ERROR_REFRESH)
@@ -3197,13 +3204,14 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 	// TODO: jwk symmetric key based on provider
 
 	if (oidc_jwt_parse(r->pool, logout_token, &jwt,
-			oidc_util_merge_symmetric_key(r->pool, cfg->private_keys, NULL), FALSE,
-			&err) == FALSE) {
+			oidc_util_merge_symmetric_key(r->pool, cfg->private_keys, NULL),
+			FALSE, &err) == FALSE) {
 		oidc_error(r, "oidc_jwt_parse failed: %s", oidc_jose_e2s(r->pool, err));
 		goto out;
 	}
 
-	if ((jwt->header.alg == NULL) || (_oidc_strcmp(jwt->header.alg, "none") == 0)) {
+	if ((jwt->header.alg == NULL)
+			|| (_oidc_strcmp(jwt->header.alg, "none") == 0)) {
 		oidc_error(r, "logout token is not signed");
 		goto out;
 	}
@@ -3214,8 +3222,12 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 		goto out;
 	}
 
-	if ((provider->id_token_signed_response_alg != NULL) && (_oidc_strcmp(provider->id_token_signed_response_alg, jwt->header.alg) != 0)) {
-		oidc_error(r, "logout token is signed using wrong algorithm: %s != %s", jwt->header.alg, provider->id_token_signed_response_alg);
+	if ((provider->id_token_signed_response_alg != NULL)
+			&& (_oidc_strcmp(provider->id_token_signed_response_alg,
+					jwt->header.alg)
+					!= 0)) {
+		oidc_error(r, "logout token is signed using wrong algorithm: %s != %s",
+				jwt->header.alg, provider->id_token_signed_response_alg);
 		goto out;
 	}
 
@@ -3226,9 +3238,10 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 			NULL, TRUE, &jwk) == FALSE)
 		return FALSE;
 
-	if (oidc_proto_jwt_verify(r, cfg, jwt, &provider->jwks_uri, provider->ssl_validate_server,
-			oidc_util_merge_symmetric_key(r->pool, provider->verify_public_keys, jwk),
-			provider->id_token_signed_response_alg) == FALSE) {
+	if (oidc_proto_jwt_verify(r, cfg, jwt, &provider->jwks_uri,
+			provider->ssl_validate_server,
+			oidc_util_merge_symmetric_key(r->pool, provider->verify_public_keys,
+					jwk), provider->id_token_signed_response_alg) == FALSE) {
 
 		oidc_error(r, "id_token signature could not be validated, aborting");
 		goto out;
@@ -3243,8 +3256,8 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 		goto out;
 
 	/* verify the "aud" and "azp" values */
-	if (oidc_proto_validate_aud_and_azp(r, cfg, provider, &jwt->payload)
-			== FALSE)
+	if (oidc_proto_validate_aud_and_azp(r, cfg, provider,
+			&jwt->payload) == FALSE)
 		goto out;
 
 	json_t *events = json_object_get(jwt->payload.value.json,
@@ -3337,6 +3350,7 @@ out:
 	return rc;
 }
 
+#define OIDC_REFRESH_TOKENS_BEFORE_LOGOUT_ENVVAR "OIDC_REFRESH_TOKENS_BEFORE_LOGOUT"
 
 /*
  * perform (single) logout
@@ -3349,6 +3363,8 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 	char *url = NULL;
 	char *error_str = NULL;
 	char *error_description = NULL;
+	char *id_token_hint = NULL;
+	char *s_logout_request = NULL;
 
 	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_LOGOUT, &url);
 
@@ -3379,13 +3395,19 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 
 	if ((provider != NULL) && (provider->end_session_endpoint != NULL)) {
 
-		const char *id_token_hint = oidc_session_get_idtoken(r, session);
+		if (apr_table_get(r->subprocess_env,
+				OIDC_REFRESH_TOKENS_BEFORE_LOGOUT_ENVVAR) != NULL) {
+			oidc_refresh_token_grant(r, c, session, provider, NULL,
+					&id_token_hint);
+		} else {
+			id_token_hint = (char*) oidc_session_get_idtoken(r, session);
+		}
 
-		char *logout_request = apr_pstrdup(r->pool,
-				provider->end_session_endpoint);
+		s_logout_request = apr_pstrdup(r->pool, provider->end_session_endpoint);
 		if (id_token_hint != NULL) {
-			logout_request = apr_psprintf(r->pool, "%s%sid_token_hint=%s",
-					logout_request, strchr(logout_request ? logout_request : "",
+			s_logout_request = apr_psprintf(r->pool,
+					"%s%s"OIDC_PROTO_ID_TOKEN_HINT"=%s", s_logout_request,
+					strchr(s_logout_request ? s_logout_request : "",
 							OIDC_CHAR_QUERY) != NULL ?
 									OIDC_STR_AMP :
 									OIDC_STR_QUERY,
@@ -3393,9 +3415,9 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 		}
 
 		if (url != NULL) {
-			logout_request = apr_psprintf(r->pool,
-					"%s%spost_logout_redirect_uri=%s", logout_request,
-					strchr(logout_request ? logout_request : "",
+			s_logout_request = apr_psprintf(r->pool,
+					"%s%spost_logout_redirect_uri=%s", s_logout_request,
+					strchr(s_logout_request ? s_logout_request : "",
 							OIDC_CHAR_QUERY) != NULL ?
 									OIDC_STR_AMP :
 									OIDC_STR_QUERY,
@@ -3404,7 +3426,7 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 		//char *state = NULL;
 		//oidc_proto_generate_nonce(r, &state, 8);
 		//url = apr_psprintf(r->pool, "%s&state=%s", logout_request, state);
-		url = logout_request;
+		url = s_logout_request;
 	}
 
 	return oidc_handle_logout_request(r, c, session, url);
@@ -3683,7 +3705,7 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c,
 	}
 
 	/* execute the actual refresh grant */
-	if (oidc_refresh_access_token(r, c, session, provider, NULL) == FALSE) {
+	if (oidc_refresh_token_grant(r, c, session, provider, NULL, NULL) == FALSE) {
 		oidc_error(r, "access_token could not be refreshed");
 		error_code = "refresh_failed";
 		goto end;
@@ -3739,7 +3761,8 @@ static int oidc_handle_request_uri(request_rec *r, oidc_cfg *c) {
 
 	oidc_cache_set_request_uri(r, request_ref, NULL, 0);
 
-	return oidc_util_http_send(r, jwt, _oidc_strlen(jwt), OIDC_CONTENT_TYPE_JWT, OK);
+	return oidc_util_http_send(r, jwt, _oidc_strlen(jwt), OIDC_CONTENT_TYPE_JWT,
+			OK);
 }
 
 /*
@@ -3775,7 +3798,8 @@ int oidc_handle_revoke_session(request_rec *r, oidc_cfg *c) {
 	if (c->session_type == OIDC_SESSION_TYPE_SERVER_CACHE)
 		rc = oidc_cache_set_session(r, session_id, NULL, 0);
 	else
-		oidc_warn(r, "cannot revoke session because server side caching is not in use");
+		oidc_warn(r,
+				"cannot revoke session because server side caching is not in use");
 
 	r->user = "";
 
@@ -3837,13 +3861,13 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 
 				/* get the current provider info */
 				oidc_provider_t *provider = NULL;
-				if (oidc_get_provider_from_session(r, c, session, &provider)
-						== FALSE)
+				if (oidc_get_provider_from_session(r, c, session,
+						&provider) == FALSE)
 					return HTTP_INTERNAL_SERVER_ERROR;
 
 				/* execute the actual refresh grant */
-				if (oidc_refresh_access_token(r, c, session, provider,
-						NULL) == FALSE)
+				if (oidc_refresh_token_grant(r, c, session, provider,
+						NULL, NULL) == FALSE)
 					oidc_warn(r, "access_token could not be refreshed");
 				else
 					needs_save = TRUE;
@@ -3885,6 +3909,15 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 		if (access_token_expires != NULL)
 			json_object_set_new(json, OIDC_HOOK_INFO_ACCES_TOKEN_EXP,
 					json_string(access_token_expires));
+	}
+
+	/* include the serialized id_token (id_token_hint) in the session info */
+	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_ID_TOKEN_HINT,
+			APR_HASH_KEY_STRING)) {
+		const char *s_id_token = oidc_session_get_idtoken(r, session);
+		if (s_id_token != NULL)
+			json_object_set_new(json, OIDC_HOOK_INFO_ID_TOKEN_HINT,
+					json_string(s_id_token));
 	}
 
 	/* include the id_token claims in the session info */
@@ -3966,7 +3999,8 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 				OIDC_CONTENT_TYPE_JSON, OK);
 	} else if (_oidc_strcmp(OIDC_HOOK_INFO_FORMAT_HTML, s_format) == 0) {
 		/* JSON-encode the result */
-		r_value = oidc_util_encode_json_object(r, json, JSON_PRESERVE_ORDER | JSON_INDENT(2));
+		r_value = oidc_util_encode_json_object(r, json,
+				JSON_PRESERVE_ORDER | JSON_INDENT(2));
 		rc = oidc_util_html_send(r, "Session Info", NULL, NULL,
 				apr_psprintf(r->pool, "<pre>%s</pre>", r_value), OK);
 	}

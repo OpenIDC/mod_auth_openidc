@@ -624,10 +624,13 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
  * helper function to get the JWKs for the specified issuer
  */
 static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
-		oidc_cfg *cfg, const oidc_jwks_uri_t *jwks_uri, int ssl_validate_server, json_t **j_jwks) {
+		oidc_cfg *cfg, const oidc_jwks_uri_t *jwks_uri, int ssl_validate_server,
+		json_t **j_jwks) {
 
 	char *response = NULL;
-	const char *url = (jwks_uri->signed_uri != NULL) ? jwks_uri->signed_uri : jwks_uri->uri;
+	const char *url =
+			(jwks_uri->signed_uri != NULL) ?
+					jwks_uri->signed_uri : jwks_uri->uri;
 
 	/* get the JWKs from the specified URL with the specified parameters */
 	if (oidc_util_http_get(r, url, NULL, NULL,
@@ -636,29 +639,34 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
 			NULL, NULL) == FALSE)
 		return FALSE;
 
-	if (jwks_uri->signed_uri != NULL) {
+	if ((jwks_uri->signed_uri != NULL) && (jwks_uri->jwk != NULL)) {
 
 		oidc_jwt_t *jwt = NULL;
 		oidc_jose_error_t err;
 		apr_hash_t *keys = apr_hash_make(r->pool);
-		apr_hash_set(keys, jwks_uri->jwk->kid ? jwks_uri->jwk->kid : "", APR_HASH_KEY_STRING, jwks_uri->jwk);
+		apr_hash_set(keys, jwks_uri->jwk->kid ? jwks_uri->jwk->kid : "",
+				APR_HASH_KEY_STRING, jwks_uri->jwk);
 
 		if (oidc_jwt_parse(r->pool, response, &jwt, keys, FALSE, &err) == FALSE) {
-			oidc_error(r, "parsing JWT failed: %s", oidc_jose_e2s(r->pool, err));
+			oidc_error(r, "parsing JWT failed: %s",
+					oidc_jose_e2s(r->pool, err));
 			return FALSE;
 		}
 
-		oidc_debug(r, "successfully parsed JWT returned from \"signed_jwks_uri\" endpoint");
+		oidc_debug(r,
+				"successfully parsed JWT returned from \"signed_jwks_uri\" endpoint");
 
 		if (oidc_jwt_verify(r->pool, jwt, keys, &err) == FALSE) {
-			oidc_error(r, "verifying JWT failed: %s", oidc_jose_e2s(r->pool, err));
+			oidc_error(r, "verifying JWT failed: %s",
+					oidc_jose_e2s(r->pool, err));
 			if (jwt != NULL)
 				oidc_jwt_destroy(jwt);
 			return FALSE;
 		}
 
 		// TODO: add issuer?
-		if (oidc_proto_validate_jwt(r, jwt, NULL, TRUE, FALSE, -1, OIDC_TOKEN_BINDING_POLICY_DISABLED) == FALSE)
+		if (oidc_proto_validate_jwt(r, jwt, NULL, TRUE, FALSE, -1,
+				OIDC_TOKEN_BINDING_POLICY_DISABLED) == FALSE)
 			return FALSE;
 
 		oidc_debug(r, "successfully verified and validated JWKs JWT");
@@ -678,8 +686,7 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
 		return FALSE;
 
 	/* store the JWKs in the cache */
-	oidc_cache_set_jwks(r, oidc_metadata_jwks_cache_key(jwks_uri),
-			response,
+	oidc_cache_set_jwks(r, oidc_metadata_jwks_cache_key(jwks_uri), response,
 			apr_time_now() + apr_time_from_sec(jwks_uri->refresh_interval));
 
 	return TRUE;

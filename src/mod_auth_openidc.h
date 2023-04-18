@@ -609,6 +609,7 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_HOOK_INFO_TIMESTAMP           "iat"
 #define OIDC_HOOK_INFO_ACCES_TOKEN         "access_token"
 #define OIDC_HOOK_INFO_ACCES_TOKEN_EXP     "access_token_expires"
+#define OIDC_HOOK_INFO_ID_TOKEN_HINT       "id_token_hint"
 #define OIDC_HOOK_INFO_ID_TOKEN            "id_token"
 #define OIDC_HOOK_INFO_USER_INFO           "userinfo"
 #define OIDC_HOOK_INFO_SESSION             "session"

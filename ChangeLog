@@ -1,4 +1,13 @@
-04/16/2024
+04/18/2023
+- support calling the refresh token grant before doing RP-initiated logout
+  when the environment variable OIDC_REFRESH_TOKENS_BEFORE_LOGOUT is set
+  may be used to supply a (fresh or non-cached) id_token_hint logout request parameter
+- add support for returning the serialized id_token as id_token_hint from the info hook
+- fix crash when using a multi-provider setup and Provider has signed_jwks_uri set but
+  the conf file does not define signed_jwks_uri_key
+- bump to 2.4.14rc8
+
+04/16/2023
 - OIDCUnAutzAction auth for stepup authentication now immediately returns a 302 instead
   of a 200 HTML page with a meta refresh tag and a Location header
 - also fix OIDCUnAutzAction 403 so it does not rely on AuthzSendForbiddenOnFailure
