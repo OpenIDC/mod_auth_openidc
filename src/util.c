@@ -1050,7 +1050,7 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void* )&curlBuffer);
 
 #ifndef LIBCURL_NO_CURLPROTO
-	#if LIBCURL_VERSION_NUM >= 0x078500
+	#if LIBCURL_VERSION_NUM >= 0x075500
 		curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
 		curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "http,https");
 	#else
