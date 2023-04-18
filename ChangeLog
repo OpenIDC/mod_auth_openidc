@@ -5,6 +5,8 @@
 - add support for returning the serialized id_token as id_token_hint from the info hook
 - fix crash when using a multi-provider setup and Provider has signed_jwks_uri set but
   the conf file does not define signed_jwks_uri_key
+- correct return value from oidc_cache_shm_destroy to avoid misleading
+  "cache destroy function failed" error messages
 - bump to 2.4.14rc8
 
 04/16/2023

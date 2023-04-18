@@ -347,7 +347,8 @@ static int oidc_cache_shm_destroy(server_rec *s) {
 	}
 
 	if ((context) && (context->mutex)) {
-		rv = oidc_cache_mutex_destroy(s, context->mutex);
+		if (oidc_cache_mutex_destroy(s, context->mutex) != TRUE)
+			rv = APR_EGENERAL;
 		context->mutex = NULL;
 	}
 
