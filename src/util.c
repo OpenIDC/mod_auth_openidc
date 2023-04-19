@@ -3078,9 +3078,10 @@ oidc_jwk_t* oidc_util_key_list_first(const apr_array_header_t *key_list,
 	oidc_jwk_t *jwk = NULL;
 	for (i = 0; (key_list) && (i < key_list->nelts); i++) {
 		jwk = APR_ARRAY_IDX(key_list, i, oidc_jwk_t *);
-		if ((jwk->kty == kty)
-				&& ((use == NULL) || (jwk->use == NULL)
-						|| (_oidc_strncmp(jwk->use, use, strlen(use)) == 0))) {
+		if ((kty != -1) && (jwk->kty != kty))
+			continue;
+		if (((use == NULL) || (jwk->use == NULL)
+				|| (_oidc_strncmp(jwk->use, use, strlen(use)) == 0))) {
 			rv = jwk;
 			break;
 		}

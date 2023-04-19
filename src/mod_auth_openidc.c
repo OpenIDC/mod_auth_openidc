@@ -1421,12 +1421,12 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg *cfg,
 
 	oidc_debug(r, "enter: %s", s_claims);
 
-	jwk = oidc_util_key_list_first(cfg->private_keys, CJOSE_JWK_KTY_RSA,
+	jwk = oidc_util_key_list_first(cfg->private_keys, -1,
 			OIDC_JOSE_JWK_SIG_STR);
 	// TODO: detect at config time
 	if (jwk == NULL) {
 		oidc_error(r,
-				"no private signing keys have been configured to use for private_key_jwt client authentication (" OIDCPrivateKeyFiles ")");
+				"no RSA/EC private signing keys have been configured (in " OIDCPrivateKeyFiles ")");
 		goto end;
 	}
 
@@ -1435,7 +1435,16 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg *cfg,
 		goto end;
 
 	jwt->header.kid = apr_pstrdup(r->pool, jwk->kid);
-	jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_RS256);
+
+	if (jwk->kty == CJOSE_JWK_KTY_RSA)
+		jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_RS256);
+	else if (jwk->kty == CJOSE_JWK_KTY_EC)
+		jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_ES256);
+	else {
+		oidc_error(r,
+				"no usable RSA/EC signing keys has been configured (in " OIDCPrivateKeyFiles ")");
+		goto end;
+	}
 
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_AUD,
 			json_string(oidc_get_current_url(r, cfg->x_forwarded_headers)));

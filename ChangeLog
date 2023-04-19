@@ -1,3 +1,7 @@
+04/19/2023
+- add support for using Elliptic Curve keys with `OIDCPassUserInfoAs signed_jwt`
+- bump to 2.4.14rc9
+
 04/18/2023
 - support calling the refresh token grant before doing RP-initiated logout
   when the environment variable OIDC_REFRESH_TOKENS_BEFORE_LOGOUT is set
