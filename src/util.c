@@ -123,23 +123,6 @@ int oidc_base64url_decode(apr_pool_t *pool, char **dst, const char *src) {
 	return apr_base64_decode(*dst, dec);
 }
 
-#define OIDC_JWT_NO_COMPRESS_ENV_VAR "OIDC_JWT_NO_COMPRESS"
-#define OIDC_JWT_STRIP_HDR_ENV_VAR "OIDC_JWT_STRIP_HDR"
-
-static apr_byte_t oidc_util_env_var_override_true(request_rec *r,
-		const char *env_var_name, apr_byte_t default_value,
-		apr_byte_t return_when_set) {
-	const char *s = NULL;
-	// avoid compressing/stripping JWTs that need to be compatible with external producers/consumers
-	if (default_value == FALSE)
-		return FALSE;
-	if (r->subprocess_env == NULL)
-		return default_value;
-	s = apr_table_get(r->subprocess_env, env_var_name);
-	return (s != NULL) && (_oidc_strcmp(s, "true") == 0) ?
-			return_when_set : !return_when_set;
-}
-
 static const char* oidc_util_get__oidc_jwt_hdr_dir_a256gcm(request_rec *r,
 		char *input) {
 	json_t *payload = NULL;
@@ -152,8 +135,7 @@ static const char* oidc_util_get__oidc_jwt_hdr_dir_a256gcm(request_rec *r,
 
 	if (input == NULL) {
 		payload = json_object();
-		oidc_util_jwt_create(r, "dummy", payload, &compact_encoded_jwt, FALSE,
-				FALSE);
+		oidc_util_jwt_create(r, "dummy", payload, &compact_encoded_jwt, FALSE);
 		json_decref(payload);
 	} else {
 		compact_encoded_jwt = input;
@@ -170,9 +152,37 @@ static const char* oidc_util_get__oidc_jwt_hdr_dir_a256gcm(request_rec *r,
 	return _oidc_jwt_hdr_dir_a256gcm;
 }
 
+#define OIDC_JWT_NO_COMPRESS_ENV_VAR "OIDC_JWT_NO_COMPRESS"
+#define OIDC_JWT_STRIP_HDR_ENV_VAR "OIDC_JWT_STRIP_HDR"
+
+static apr_byte_t oidc_util_env_var_override(request_rec *r,
+		const char *env_var_name, apr_byte_t return_when_set) {
+	const char *s = NULL;
+	if (r->subprocess_env == NULL)
+		return !return_when_set;
+	s = apr_table_get(r->subprocess_env, env_var_name);
+	return (s != NULL) && (_oidc_strcmp(s, "true") == 0) ?
+			return_when_set : !return_when_set;
+}
+
+static apr_byte_t oidc_util_jwt_compress(request_rec *r,
+		apr_byte_t for_internal_use) {
+	// avoid compressing JWTs that need to be compatible with external producers/consumers
+	return for_internal_use ?
+			oidc_util_env_var_override(r, OIDC_JWT_NO_COMPRESS_ENV_VAR, FALSE) :
+			FALSE;
+}
+
+static apr_byte_t oidc_util_jwt_strip_header(request_rec *r,
+		apr_byte_t for_internal_use) {
+	// avoid stripping JWT headers that need to be compatible with external producers/consumers
+	return for_internal_use ?
+			oidc_util_env_var_override(r, OIDC_JWT_STRIP_HDR_ENV_VAR, TRUE) :
+			FALSE;
+}
+
 apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret,
-		json_t *payload, char **compact_encoded_jwt, apr_byte_t strip_header,
-		apr_byte_t compress) {
+		json_t *payload, char **compact_encoded_jwt, apr_byte_t for_internal_use) {
 
 	apr_byte_t rv = FALSE;
 	oidc_jose_error_t err;
@@ -200,8 +210,7 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret,
 	jwt->payload.value.json = payload;
 
 	if (oidc_jwt_sign(r->pool, jwt, jwk,
-			oidc_util_env_var_override_true(r, OIDC_JWT_NO_COMPRESS_ENV_VAR,
-					compress, FALSE), &err) == FALSE) {
+			oidc_util_jwt_compress(r, for_internal_use), &err) == FALSE) {
 		oidc_error(r, "signing JWT failed: %s", oidc_jose_e2s(r->pool, err));
 		goto end;
 	}
@@ -222,8 +231,8 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret,
 		goto end;
 	}
 
-	if ((compact_encoded_jwt != NULL) && (oidc_util_env_var_override_true(r,
-			OIDC_JWT_STRIP_HDR_ENV_VAR, strip_header, TRUE)))
+	if ((compact_encoded_jwt != NULL)
+			&& (oidc_util_jwt_strip_header(r, for_internal_use)))
 		*compact_encoded_jwt += _oidc_strlen(
 				oidc_util_get__oidc_jwt_hdr_dir_a256gcm(r,
 						*compact_encoded_jwt));
@@ -246,7 +255,7 @@ end:
 
 apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret,
 		const char *compact_encoded_jwt, json_t **result,
-		apr_byte_t stripped_header, apr_byte_t compress) {
+		apr_byte_t for_internal_use) {
 
 	apr_byte_t rv = FALSE;
 	oidc_jose_error_t err;
@@ -254,8 +263,7 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret,
 	oidc_jwk_t *jwk = NULL;
 	oidc_jwt_t *jwt = NULL;
 
-	if (oidc_util_env_var_override_true(r, OIDC_JWT_STRIP_HDR_ENV_VAR,
-			stripped_header, TRUE))
+	if (oidc_util_jwt_strip_header(r, for_internal_use))
 		compact_encoded_jwt = apr_pstrcat(r->pool,
 				oidc_util_get__oidc_jwt_hdr_dir_a256gcm(r, NULL),
 				compact_encoded_jwt, NULL);
@@ -271,8 +279,7 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret,
 	apr_hash_set(keys, "", APR_HASH_KEY_STRING, jwk);
 
 	if (oidc_jwt_parse(r->pool, compact_encoded_jwt, &jwt, keys,
-			oidc_util_env_var_override_true(r, OIDC_JWT_NO_COMPRESS_ENV_VAR,
-					compress, FALSE), &err) == FALSE) {
+			oidc_util_jwt_compress(r, for_internal_use), &err) == FALSE) {
 		oidc_error(r, "parsing JWT failed: %s", oidc_jose_e2s(r->pool, err));
 		goto end;
 	}
