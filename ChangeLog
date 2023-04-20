@@ -1,6 +1,8 @@
 04/20/2023
 - allow defining OIDCPassIDTokenAs on a per-location/directory level; also fixes resetting back to "claims" in vhosts
 - turn of caching by default for `OIDCPassUserInfoAs signed_jwt`
+- use plain serialized JSON for encrypted state and session cookies, reducing their size; thanks @hihellobolke
+- bump to 2.4.14rc10
 
 04/19/2023
 - add support for using Elliptic Curve keys with `OIDCPassUserInfoAs signed_jwt`

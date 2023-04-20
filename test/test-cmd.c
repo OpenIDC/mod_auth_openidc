@@ -233,7 +233,8 @@ int decrypt(int argc, char **argv, apr_pool_t *pool) {
 	apr_hash_set(keys, jwk->kid ? jwk->kid : "dummy", APR_HASH_KEY_STRING, jwk);
 
 	char *plaintext = NULL;
-	if (oidc_jwe_decrypt(pool, s_jwt, keys, &plaintext, &oidc_err, TRUE) == FALSE) {
+	if (oidc_jwe_decrypt(pool, s_jwt, keys, &plaintext, NULL, &oidc_err,
+			TRUE) == FALSE) {
 		fprintf(stderr,
 				"oidc_jwe_decrypt failed: %s [file: %s, function: %s, line: %d]\n",
 				oidc_err.text, oidc_err.source, oidc_err.function,

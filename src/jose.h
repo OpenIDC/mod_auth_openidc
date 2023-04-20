@@ -129,6 +129,11 @@ apr_byte_t oidc_jose_get_string(apr_pool_t *pool, json_t *json,
 		const char *claim_name, apr_byte_t is_mandatory, char **result,
 		oidc_jose_error_t *err);
 
+apr_byte_t oidc_jose_compress(apr_pool_t *pool, const char *input,
+		int input_len, char **output, int *output_len, oidc_jose_error_t *err);
+apr_byte_t oidc_jose_uncompress(apr_pool_t *pool, const char *input,
+		int input_len, char **output, int *output_len, oidc_jose_error_t *err);
+
 /* a parsed JWK/JWT JSON object */
 typedef struct oidc_jose_json_t {
 	/* parsed JSON struct representation */
@@ -161,7 +166,7 @@ typedef struct oidc_jwk_t {
 
 /* decrypt a JWT */
 apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json,
-		apr_hash_t *keys, char **s_json, oidc_jose_error_t *err,
+		apr_hash_t *keys, char **plaintext, int *plaintext_len, oidc_jose_error_t *err,
 		apr_byte_t import_must_succeed);
 /* parse a JSON string to a JWK struct */
 oidc_jwk_t* oidc_jwk_parse(apr_pool_t *pool, const char *s_json,
@@ -250,7 +255,7 @@ char* oidc_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt,
 		oidc_jose_error_t *err);
 /* encrypt JWT */
 apr_byte_t oidc_jwt_encrypt(apr_pool_t *pool, oidc_jwt_t *jwe, oidc_jwk_t *jwk,
-		const char *payload, char **serialized, oidc_jose_error_t *err);
+		const char *payload, int payload_len, char **serialized, oidc_jose_error_t *err);
 
 /* create a new JWT */
 oidc_jwt_t* oidc_jwt_new(apr_pool_t *pool, int create_header,

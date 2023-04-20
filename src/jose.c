@@ -828,8 +828,8 @@ static uint8_t* oidc_jwe_decrypt_impl(apr_pool_t *pool, cjose_jwe_t *jwe,
  * decrypt a JSON Web Token
  */
 apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json,
-		apr_hash_t *keys, char **s_json, oidc_jose_error_t *err,
-		apr_byte_t import_must_succeed) {
+		apr_hash_t *keys, char **plaintext, int *plaintext_len,
+		oidc_jose_error_t *err, apr_byte_t import_must_succeed) {
 	cjose_err cjose_err;
 	cjose_jwe_t *jwe = cjose_jwe_import(input_json, _oidc_strlen(input_json),
 			&cjose_err);
@@ -838,19 +838,23 @@ apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json,
 		uint8_t *decrypted = oidc_jwe_decrypt_impl(pool, jwe, keys,
 				&content_len, err);
 		if (decrypted != NULL) {
-			*s_json = apr_pcalloc(pool, content_len + 1);
-			_oidc_memcpy(*s_json, decrypted, content_len);
-			(*s_json)[content_len] = '\0';
+			*plaintext = apr_pcalloc(pool, content_len + 1);
+			_oidc_memcpy(*plaintext, decrypted, content_len);
+			(*plaintext)[content_len] = '\0';
 			cjose_get_dealloc()(decrypted);
+			if (plaintext_len)
+				*plaintext_len = content_len + 1;
 		}
 		cjose_jwe_release(jwe);
 	} else if (import_must_succeed == FALSE) {
-		*s_json = apr_pstrdup(pool, input_json);
+		*plaintext = apr_pstrdup(pool, input_json);
+		if (plaintext_len)
+			*plaintext_len = _oidc_strlen(input_json) + 1;
 	} else {
 		oidc_jose_error(err, "cjose_jwe_import failed: %s",
 				oidc_cjose_e2s(pool, cjose_err));
 	}
-	return (*s_json != NULL);
+	return (*plaintext != NULL);
 }
 
 #ifdef USE_LIBBROTLI
@@ -925,19 +929,20 @@ static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input,
 	zlib.next_in = (Bytef*) input;
 	zlib.total_out = 0;
 	size_t uncompLength = OIDC_CJOSE_UNCOMPRESS_CHUNK;
-	char *uncomp = (char *) apr_pcalloc(pool, uncompLength + 1);
+	char *uncomp = (char*) apr_pcalloc(pool, uncompLength + 1);
 
 	inflateInit(&zlib);
 	int done = 1;
 	while (done) {
 		int inflate_status;
 		if (zlib.total_out >= OIDC_CJOSE_UNCOMPRESS_CHUNK) {
-			char *uncomp2 = (char *) apr_pcalloc(pool, uncompLength + OIDC_CJOSE_UNCOMPRESS_CHUNK);
+			char *uncomp2 = (char*) apr_pcalloc(pool,
+					uncompLength + OIDC_CJOSE_UNCOMPRESS_CHUNK);
 			_oidc_memcpy(uncomp2, uncomp, uncompLength);
 			uncompLength += OIDC_CJOSE_UNCOMPRESS_CHUNK;
 			uncomp = uncomp2;
 		}
-		zlib.next_out = (Bytef *) (uncomp + zlib.total_out);
+		zlib.next_out = (Bytef*) (uncomp + zlib.total_out);
 		zlib.avail_out = (uInt) uncompLength - zlib.total_out;
 		inflate_status = inflate(&zlib, Z_SYNC_FLUSH);
 		if (inflate_status == Z_STREAM_END) {
@@ -961,13 +966,14 @@ static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input,
 
 #endif
 
-static apr_byte_t oidc_jose_compress(apr_pool_t *pool, const char *input,
+apr_byte_t oidc_jose_compress(apr_pool_t *pool, const char *input,
 		int input_len, char **output, int *output_len, oidc_jose_error_t *err) {
 #ifdef USE_LIBBROTLI
 	return oidc_jose_brotli_compress(pool, input, input_len, output, output_len,
 			err);
 #elif USE_ZLIB
-	return oidc_jose_zlib_compress(pool, input, input_len, output, output_len, err);
+	return oidc_jose_zlib_compress(pool, input, input_len, output, output_len,
+			err);
 #else
 	*output = apr_pmemdup(pool, input, input_len);
 	*output_len = input_len;
@@ -975,13 +981,14 @@ static apr_byte_t oidc_jose_compress(apr_pool_t *pool, const char *input,
 #endif
 }
 
-static apr_byte_t oidc_jose_uncompress(apr_pool_t *pool, const char *input,
+apr_byte_t oidc_jose_uncompress(apr_pool_t *pool, const char *input,
 		int input_len, char **output, int *output_len, oidc_jose_error_t *err) {
 #ifdef USE_LIBBROTLI
 	return oidc_jose_brotli_uncompress(pool, input, input_len, output,
 			output_len, err);
 #elif USE_ZLIB
-	return oidc_jose_zlib_uncompress(pool, input, input_len, output, output_len, err);
+	return oidc_jose_zlib_uncompress(pool, input, input_len, output, output_len,
+			err);
 #else
 	*output = apr_pmemdup(pool, input, input_len);
 	*output_len = input_len;
@@ -993,12 +1000,14 @@ static apr_byte_t oidc_jose_uncompress(apr_pool_t *pool, const char *input,
  * parse and (optionally) decrypt a JSON Web Token
  */
 apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json,
-		oidc_jwt_t **j_jwt, apr_hash_t *keys, apr_byte_t compress, oidc_jose_error_t *err) {
+		oidc_jwt_t **j_jwt, apr_hash_t *keys, apr_byte_t compress,
+		oidc_jose_error_t *err) {
 
 	cjose_err cjose_err;
 	char *s_json = NULL;
 
-	if (oidc_jwe_decrypt(pool, input_json, keys, &s_json, err, FALSE) == FALSE)
+	if (oidc_jwe_decrypt(pool, input_json, keys, &s_json, NULL, err,
+			FALSE) == FALSE)
 		return FALSE;
 
 	*j_jwt = oidc_jwt_new(pool, FALSE, FALSE);
@@ -1043,12 +1052,13 @@ apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json,
 	if (compress == TRUE) {
 		char *payload = NULL;
 		int payload_len = 0;
-		if (oidc_jose_uncompress(pool, (char *)plaintext, plaintext_len, &payload, &payload_len, err) == FALSE) {
+		if (oidc_jose_uncompress(pool, (char*) plaintext, plaintext_len,
+				&payload, &payload_len, err) == FALSE) {
 			oidc_jwt_destroy(jwt);
 			*j_jwt = NULL;
 			return FALSE;
 		}
-		plaintext = (uint8_t *)payload;
+		plaintext = (uint8_t*) payload;
 		plaintext_len = payload_len;
 	}
 
@@ -1085,8 +1095,8 @@ void oidc_jwt_destroy(oidc_jwt_t *jwt) {
 /*
  * sign JWT
  */
-apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk, apr_byte_t compress,
-		oidc_jose_error_t *err) {
+apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk,
+		apr_byte_t compress, oidc_jose_error_t *err) {
 
 	cjose_header_t *hdr = (cjose_header_t*) jwt->header.value.json;
 
@@ -1109,7 +1119,9 @@ apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk, apr
 	char *s_payload = NULL;
 	int payload_len = 0;
 	if (compress == TRUE) {
-		if (oidc_jose_compress(pool, (char *)plaintext, _oidc_strlen(plaintext)+1, &s_payload, &payload_len, err) == FALSE) {
+		if (oidc_jose_compress(pool, (char*) plaintext,
+				_oidc_strlen(plaintext) + 1, &s_payload, &payload_len,
+				err) == FALSE) {
 			free(plaintext);
 			return FALSE;
 		}
@@ -1146,7 +1158,8 @@ void EVP_MD_CTX_free(EVP_MD_CTX *ctx) {
  * encrypt JWT
  */
 apr_byte_t oidc_jwt_encrypt(apr_pool_t *pool, oidc_jwt_t *jwe, oidc_jwk_t *jwk,
-		const char *payload, char **serialized, oidc_jose_error_t *err) {
+		const char *payload, int payload_len, char **serialized,
+		oidc_jose_error_t *err) {
 
 	cjose_header_t *hdr = (cjose_header_t*) jwe->header.value.json;
 
@@ -1159,7 +1172,7 @@ apr_byte_t oidc_jwt_encrypt(apr_pool_t *pool, oidc_jwt_t *jwe, oidc_jwk_t *jwk,
 
 	cjose_err cjose_err;
 	cjose_jwe_t *cjose_jwe = cjose_jwe_encrypt(jwk->cjose_jwk, hdr,
-			(const uint8_t*) payload, _oidc_strlen(payload), &cjose_err);
+			(const uint8_t*) payload, payload_len, &cjose_err);
 	if (cjose_jwe == NULL) {
 		oidc_jose_error(err, "cjose_jwe_encrypt failed: %s",
 				oidc_cjose_e2s(pool, cjose_err));

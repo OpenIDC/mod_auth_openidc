@@ -440,7 +440,7 @@ char* oidc_proto_create_request_object(request_rec *r,
 		if (ejwk->kid != NULL)
 			jwe->header.kid = ejwk->kid;
 
-		if (oidc_jwt_encrypt(r->pool, jwe, ejwk, cser,
+		if (oidc_jwt_encrypt(r->pool, jwe, ejwk, cser, _oidc_strlen(cser) + 1,
 				&serialized_request_object, &err) == FALSE) {
 			oidc_error(r, "encrypting JWT failed: %s",
 					oidc_jose_e2s(r->pool, err));
@@ -2170,7 +2170,7 @@ static apr_byte_t oidc_user_info_response_validate(request_rec *r,
 	if (provider->userinfo_encrypted_response_alg != NULL) {
 		if (oidc_jwe_decrypt(r->pool, *response,
 				oidc_util_merge_symmetric_key(r->pool, cfg->private_keys, jwk),
-				&payload, &err, TRUE) == FALSE) {
+				&payload, NULL, &err, TRUE) == FALSE) {
 			oidc_error(r, "oidc_jwe_decrypt failed: %s",
 					oidc_jose_e2s(r->pool, err));
 			oidc_jwk_destroy(jwk);
