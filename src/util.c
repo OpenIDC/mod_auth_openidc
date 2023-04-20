@@ -253,14 +253,14 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret,
 
 		cser = oidc_util_jwt_signed_create(r, jwk, payload, for_internal_use);
 		s_payload = cser;
-		payload_len = _oidc_strlen(s_payload) + 1;
+		payload_len = _oidc_strlen(s_payload);
 
 	} else {
 
 		cser = oidc_util_encode_json_object(r, payload,
 				JSON_PRESERVE_ORDER | JSON_COMPACT);
 		if (oidc_util_jwt_internal_compress(r, for_internal_use)) {
-			if (oidc_jose_compress(r->pool, cser, _oidc_strlen(cser) + 1,
+			if (oidc_jose_compress(r->pool, cser, _oidc_strlen(cser),
 					&s_payload, &payload_len, &err) == FALSE) {
 				oidc_error(r, "oidc_jose_compress failed: %s",
 						oidc_jose_e2s(r->pool, err));
@@ -268,7 +268,7 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret,
 			}
 		} else {
 			s_payload = cser;
-			payload_len = _oidc_strlen(s_payload) + 1;
+			payload_len = _oidc_strlen(s_payload);
 		}
 
 	}
@@ -316,7 +316,6 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret,
 	oidc_jwk_t *jwk = NULL;
 	oidc_jwt_t *jwt = NULL;
 
-	cjose_err cjose_err;
 	char *plaintext = NULL;
 	int plaintext_len = 0;
 
@@ -3181,7 +3180,7 @@ oidc_jwk_t* oidc_util_key_list_first(const apr_array_header_t *key_list,
 		if ((kty != -1) && (jwk->kty != kty))
 			continue;
 		if (((use == NULL) || (jwk->use == NULL)
-				|| (_oidc_strncmp(jwk->use, use, strlen(use)) == 0))) {
+				|| (_oidc_strncmp(jwk->use, use, _oidc_strlen(use)) == 0))) {
 			rv = jwk;
 			break;
 		}

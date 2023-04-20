@@ -843,13 +843,13 @@ apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json,
 			(*plaintext)[content_len] = '\0';
 			cjose_get_dealloc()(decrypted);
 			if (plaintext_len)
-				*plaintext_len = content_len + 1;
+				*plaintext_len = content_len;
 		}
 		cjose_jwe_release(jwe);
 	} else if (import_must_succeed == FALSE) {
 		*plaintext = apr_pstrdup(pool, input_json);
 		if (plaintext_len)
-			*plaintext_len = _oidc_strlen(input_json) + 1;
+			*plaintext_len = _oidc_strlen(input_json);
 	} else {
 		oidc_jose_error(err, "cjose_jwe_import failed: %s",
 				oidc_cjose_e2s(pool, cjose_err));
@@ -1119,9 +1119,8 @@ apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk,
 	char *s_payload = NULL;
 	int payload_len = 0;
 	if (compress == TRUE) {
-		if (oidc_jose_compress(pool, (char*) plaintext,
-				_oidc_strlen(plaintext) + 1, &s_payload, &payload_len,
-				err) == FALSE) {
+		if (oidc_jose_compress(pool, (char*) plaintext, _oidc_strlen(plaintext),
+				&s_payload, &payload_len, err) == FALSE) {
 			free(plaintext);
 			return FALSE;
 		}
