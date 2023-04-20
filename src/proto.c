@@ -962,23 +962,38 @@ void oidc_proto_state_destroy(oidc_proto_state_t *proto_state) {
 	json_decref(proto_state);
 }
 
+apr_byte_t oidc_proto_check_crypto_passphrase(request_rec *r, oidc_cfg *c,
+		const char *action) {
+	if (c->crypto_passphrase == NULL) {
+		oidc_error(r,
+				"cannot %s state cookie because " OIDCCryptoPassphrase " is not set; please check your OIDC Provider configuration as well or avoid using AuthType openid-connect",
+				action);
+		return FALSE;
+	}
+	return TRUE;
+}
+
 oidc_proto_state_t* oidc_proto_state_from_cookie(request_rec *r, oidc_cfg *c,
 		const char *cookieValue) {
+	char *s_payload = NULL;
 	json_t *result = NULL;
-	oidc_util_jwt_verify(r, c->crypto_passphrase, cookieValue, &result, TRUE);
+	if (oidc_proto_check_crypto_passphrase(r, c, "parse") == FALSE)
+		return NULL;
+	oidc_util_jwt_verify(r, c->crypto_passphrase, cookieValue, &s_payload,
+			TRUE);
+	oidc_util_decode_json_object(r, s_payload, &result);
 	return result;
 }
 
 char* oidc_proto_state_to_cookie(request_rec *r, oidc_cfg *c,
 		oidc_proto_state_t *proto_state) {
 	char *cookieValue = NULL;
-	if (c->crypto_passphrase != NULL) {
-		oidc_util_jwt_create(r, c->crypto_passphrase, proto_state, &cookieValue,
-				TRUE);
-	} else {
-		oidc_error(r,
-				"cannot create a state cookie because " OIDCCryptoPassphrase " is not set; please check your OIDC Provider configuration as well or avoid using AuthType openid-connect");
-	}
+	if (oidc_proto_check_crypto_passphrase(r, c, "create") == FALSE)
+		return NULL;
+	oidc_util_jwt_create(r, c->crypto_passphrase,
+			oidc_util_encode_json_object(r, proto_state, JSON_COMPACT),
+			&cookieValue,
+			TRUE);
 	return cookieValue;
 }
 

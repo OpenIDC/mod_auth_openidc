@@ -58,8 +58,8 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 /* the name of the sid attribute in the session */
 #define OIDC_SESSION_SID_KEY                      "sid"
 
-static apr_byte_t oidc_session_encode(request_rec *r, oidc_cfg *c, oidc_session_t *z,
-		char **s_value, apr_byte_t encrypt) {
+static apr_byte_t oidc_session_encode(request_rec *r, oidc_cfg *c,
+		oidc_session_t *z, char **s_value, apr_byte_t encrypt) {
 
 	if (encrypt == FALSE) {
 		*s_value = oidc_util_encode_json_object(r, z->state, JSON_COMPACT);
@@ -70,27 +70,34 @@ static apr_byte_t oidc_session_encode(request_rec *r, oidc_cfg *c, oidc_session_
 		return FALSE;
 	}
 
-	if (oidc_util_jwt_create(r, c->crypto_passphrase, z->state, s_value,
+	if (oidc_util_jwt_create(r, c->crypto_passphrase,
+			oidc_util_encode_json_object(r, z->state, JSON_COMPACT), s_value,
 			TRUE) == FALSE)
 		return FALSE;
 
 	return TRUE;
 }
 
-static apr_byte_t oidc_session_decode(request_rec *r, oidc_cfg *c, oidc_session_t *z,
-		const char *s_json, apr_byte_t encrypt) {
+static apr_byte_t oidc_session_decode(request_rec *r, oidc_cfg *c,
+		oidc_session_t *z, const char *s_json, apr_byte_t encrypt) {
+	char *s_payload = NULL;
 
 	if (encrypt == FALSE) {
 		return oidc_util_decode_json_object(r, s_json, &z->state);
+	} else if (c->crypto_passphrase == NULL) {
+		oidc_error(r,
+				"cannot decrypt session state because " OIDCCryptoPassphrase " is not set");
+		return FALSE;
 	}
 
-	if (oidc_util_jwt_verify(r, c->crypto_passphrase, s_json, &z->state,
+	if (oidc_util_jwt_verify(r, c->crypto_passphrase, s_json, &s_payload,
 			TRUE) == FALSE) {
 		oidc_error(r,
 				"could not verify secure JWT: cache value possibly corrupted");
 		return FALSE;
 	}
-	return TRUE;
+
+	return oidc_util_decode_json_object(r, s_payload, &z->state);
 }
 
 /*

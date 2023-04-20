@@ -198,59 +198,33 @@ apr_byte_t oidc_cache_mutex_destroy(server_rec *s, oidc_cache_mutex_t *m) {
 	return (rv == APR_SUCCESS);
 }
 
-#define OIDC_CACHE_CRYPTO_JSON_KEY "c"
-
 /*
  * AES GCM encrypt using the crypto passphrase as symmetric key
  */
-static apr_byte_t oidc_cache_crypto_encrypt(request_rec *r, const char *plaintext, const char *key,
-		char **result) {
-	apr_byte_t rv = FALSE;
-	json_t *json = NULL;
-
-	json = json_object();
-	json_object_set_new(json, OIDC_CACHE_CRYPTO_JSON_KEY, json_string(plaintext));
-
-	rv = oidc_util_jwt_create(r, key, json, result, TRUE);
-
-	if (json)
-		json_decref(json);
-
-	return rv;
+static apr_byte_t oidc_cache_crypto_encrypt(request_rec *r,
+		const char *plaintext, const char *key, char **result) {
+	return oidc_util_jwt_create(r, key, plaintext, result, TRUE);
 }
 
 /*
  * AES GCM decrypt using the crypto passphrase as symmetric key
  */
-static apr_byte_t oidc_cache_crypto_decrypt(request_rec *r, const char *cache_value,
-		const char *key, char **plaintext) {
-
-	apr_byte_t rv = FALSE;
-	json_t *json = NULL;
-
-	rv = oidc_util_jwt_verify(r, key, cache_value, &json, TRUE);
-	if (rv == FALSE)
-		goto end;
-
-	rv = oidc_json_object_get_string(r->pool, json, OIDC_CACHE_CRYPTO_JSON_KEY, plaintext, NULL);
-
-end:
-
-	if (json)
-		json_decref(json);
-
-	return rv;
+static apr_byte_t oidc_cache_crypto_decrypt(request_rec *r,
+		const char *cache_value, const char *key, char **plaintext) {
+	return oidc_util_jwt_verify(r, key, cache_value, plaintext, TRUE);
 }
 
 /*
  * hash a cache key and a crypto passphrase so the result is suitable as an randomized cache key
  */
-static char* oidc_cache_get_hashed_key(request_rec *r, const char *passphrase, const char *key) {
+static char* oidc_cache_get_hashed_key(request_rec *r, const char *passphrase,
+		const char *key) {
 	const char *input = apr_psprintf(r->pool, "%s:%s", passphrase, key);
 	char *output = NULL;
-	if (oidc_util_hash_string_and_base64url_encode(r, OIDC_JOSE_ALG_SHA256, input, &output)
-			== FALSE) {
-		oidc_error(r, "oidc_util_hash_string_and_base64url_encode returned an error");
+	if (oidc_util_hash_string_and_base64url_encode(r, OIDC_JOSE_ALG_SHA256,
+			input, &output) == FALSE) {
+		oidc_error(r,
+				"oidc_util_hash_string_and_base64url_encode returned an error");
 		return NULL;
 	}
 	return output;

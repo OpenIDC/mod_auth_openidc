@@ -272,6 +272,29 @@ static char* oidc_get_state_cookie_name(request_rec *r, const char *state) {
 }
 
 /*
+ * check if s_json is valid provider metadata
+ */
+static apr_byte_t oidc_provider_parse_and_validate_metadata_str(request_rec *r,
+		oidc_cfg *c, const char *s_json, json_t **j_provider) {
+
+	if (oidc_util_decode_json_object(r, s_json, j_provider) == FALSE) {
+		*j_provider = NULL;
+		return FALSE;
+	}
+
+	/* check to see if it is valid metadata */
+	if (oidc_metadata_provider_is_valid(r, c, *j_provider, NULL) == FALSE) {
+		oidc_warn(r, "cache corruption detected: invalid metadata from url: %s",
+				c->provider.metadata_url);
+		json_decref(*j_provider);
+		*j_provider = NULL;
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/*
  * return the static provider configuration, i.e. from a metadata URL or configuration primitives
  */
 static apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg *c,
@@ -288,7 +311,11 @@ static apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg *c,
 
 	oidc_cache_get_provider(r, c->provider.metadata_url, &s_json);
 
-	if (s_json == NULL) {
+	if (s_json != NULL)
+		oidc_provider_parse_and_validate_metadata_str(r, c, s_json,
+				&j_provider);
+
+	if (j_provider == NULL) {
 
 		if (oidc_metadata_provider_retrieve(r, c, NULL,
 				c->provider.metadata_url, &j_provider, &s_json) == FALSE) {
@@ -297,20 +324,12 @@ static apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg *c,
 			return FALSE;
 		}
 
+		if (oidc_provider_parse_and_validate_metadata_str(r, c, s_json,
+				&j_provider) == FALSE)
+			return FALSE;
+
 		oidc_cache_set_provider(r, c->provider.metadata_url, s_json,
 				apr_time_now() + apr_time_from_sec(c->provider_metadata_refresh_interval <= 0 ? OIDC_CACHE_PROVIDER_METADATA_EXPIRY_DEFAULT : c->provider_metadata_refresh_interval));
-
-	} else {
-
-		oidc_util_decode_json_object(r, s_json, &j_provider);
-
-		/* check to see if it is valid metadata */
-		if (oidc_metadata_provider_is_valid(r, c, j_provider, NULL) == FALSE) {
-			oidc_error(r,
-					"cache corruption detected: invalid metadata from url: %s",
-					c->provider.metadata_url);
-			return FALSE;
-		}
 	}
 
 	*provider = oidc_cfg_provider_copy(r->pool, &c->provider);
