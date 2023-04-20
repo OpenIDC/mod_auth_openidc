@@ -1395,7 +1395,7 @@ static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
 	return TRUE;
 }
 
-#define OIDC_USERINFO_SIGNED_JWT_EXPIRE_DEFAULT 60
+#define OIDC_USERINFO_SIGNED_JWT_EXPIRE_DEFAULT 0
 #define OIDC_USERINFO_SIGNED_JWT_CACHE_TTL_ENVVAR "OIDC_USERINFO_SIGNED_JWT_CACHE_TTL"
 
 static int oidc_userinfo_signed_jwt_cache_ttl(request_rec *r) {
@@ -1675,19 +1675,19 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	/* copy id_token and claims from session to request state and obtain their values */
 	oidc_copy_tokens_to_request_state(r, session, &s_id_token, &s_claims);
 
-	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_CLAIMS)) {
+	if ((oidc_dir_cfg_pass_id_token_as(r) & OIDC_PASS_IDTOKEN_AS_CLAIMS)) {
 		/* set the id_token in the app headers */
 		if (oidc_set_app_claims(r, cfg, s_id_token) == FALSE)
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_PAYLOAD)) {
+	if ((oidc_dir_cfg_pass_id_token_as(r) & OIDC_PASS_IDTOKEN_AS_PAYLOAD)) {
 		/* pass the id_token JSON object to the app in a header or environment variable */
 		oidc_util_set_app_info(r, OIDC_APP_INFO_ID_TOKEN_PAYLOAD, s_id_token,
 				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars, pass_hdr_as);
 	}
 
-	if ((cfg->pass_idtoken_as & OIDC_PASS_IDTOKEN_AS_SERIALIZED)) {
+	if ((oidc_dir_cfg_pass_id_token_as(r) & OIDC_PASS_IDTOKEN_AS_SERIALIZED)) {
 		/* get the compact serialized JWT from the session */
 		s_id_token = oidc_session_get_idtoken(r, session);
 		if (s_id_token) {

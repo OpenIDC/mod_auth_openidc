@@ -456,7 +456,6 @@ typedef struct oidc_cfg {
 	char *claim_delimiter;
 	char *claim_prefix;
 	oidc_remote_user_claim_t remote_user_claim;
-	int pass_idtoken_as;
 	int cookie_http_only;
 	int cookie_same_site;
 
@@ -785,6 +784,7 @@ int oidc_dir_cfg_unautz_action(request_rec *r);
 char *oidc_dir_cfg_unauthz_arg(request_rec *r);
 const char *oidc_dir_cfg_path_auth_request_params(request_rec *r);
 apr_array_header_t *oidc_dir_cfg_pass_user_info_as(request_rec *r);
+int oidc_dir_cfg_pass_id_token_as(request_rec *r);
 const char *oidc_dir_cfg_userinfo_claims_expr(request_rec *r);
 const char *oidc_dir_cfg_path_scope(request_rec *r);
 oidc_valid_function_t oidc_cfg_get_valid_endpoint_auth_function(oidc_cfg *cfg);
