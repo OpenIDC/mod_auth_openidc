@@ -716,8 +716,8 @@ apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg,
 	}
 
 	/* see if the JWKs is cached */
-	if (oidc_cache_get_jwks(r, oidc_metadata_jwks_cache_key(jwks_uri),
-			&value) == TRUE) {
+	if ((oidc_cache_get_jwks(r, oidc_metadata_jwks_cache_key(jwks_uri),
+			&value) == TRUE) && (value != NULL)) {
 		/* decode and see if it is not a cached error response somehow */
 		if (oidc_util_decode_json_and_check_error(r, value, j_jwks) == FALSE) {
 			oidc_warn(r, "JSON parsing of cached JWKs data failed");
