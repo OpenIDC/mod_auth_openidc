@@ -1,6 +1,8 @@
-04/20/2023
+04/21/2023
 - use compressed serialized JSON for encrypted cache entries instead of signed JWTs, reducing cache entry size
-- refactor (internal) encrypted JWTs handling; add resilience for corrupted metadata and jwks_uri entries
+- refactor (internal) encrypted JWTs handling
+  - remove support for obsoleted internal signed JWTs
+  - add resilience for corrupted metadata and jwks_uri cache entries
 
 04/20/2023
 - allow defining OIDCPassIDTokenAs on a per-location/directory level; also fixes resetting back to "claims" in vhosts

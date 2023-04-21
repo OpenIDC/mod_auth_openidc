@@ -203,7 +203,7 @@ apr_byte_t oidc_cache_mutex_destroy(server_rec *s, oidc_cache_mutex_t *m) {
  */
 static apr_byte_t oidc_cache_crypto_encrypt(request_rec *r,
 		const char *plaintext, const char *key, char **result) {
-	return oidc_util_jwt_create(r, key, plaintext, result, TRUE);
+	return oidc_util_jwt_create(r, key, plaintext, result);
 }
 
 /*
@@ -211,7 +211,7 @@ static apr_byte_t oidc_cache_crypto_encrypt(request_rec *r,
  */
 static apr_byte_t oidc_cache_crypto_decrypt(request_rec *r,
 		const char *cache_value, const char *key, char **plaintext) {
-	return oidc_util_jwt_verify(r, key, cache_value, plaintext, TRUE);
+	return oidc_util_jwt_verify(r, key, cache_value, plaintext);
 }
 
 /*

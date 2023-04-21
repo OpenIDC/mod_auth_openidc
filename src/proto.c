@@ -979,8 +979,7 @@ oidc_proto_state_t* oidc_proto_state_from_cookie(request_rec *r, oidc_cfg *c,
 	json_t *result = NULL;
 	if (oidc_proto_check_crypto_passphrase(r, c, "parse") == FALSE)
 		return NULL;
-	oidc_util_jwt_verify(r, c->crypto_passphrase, cookieValue, &s_payload,
-			TRUE);
+	oidc_util_jwt_verify(r, c->crypto_passphrase, cookieValue, &s_payload);
 	oidc_util_decode_json_object(r, s_payload, &result);
 	return result;
 }
@@ -992,8 +991,7 @@ char* oidc_proto_state_to_cookie(request_rec *r, oidc_cfg *c,
 		return NULL;
 	oidc_util_jwt_create(r, c->crypto_passphrase,
 			oidc_util_encode_json_object(r, proto_state, JSON_COMPACT),
-			&cookieValue,
-			TRUE);
+			&cookieValue);
 	return cookieValue;
 }
 

@@ -712,16 +712,17 @@ apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg,
 		if (oidc_metadata_jwks_retrieve_and_cache(r, cfg, jwks_uri,
 				ssl_validate_server, j_jwks) == TRUE)
 			return TRUE;
-		// else: fallback on any cached JWKs
+		// else: fall back to any cached JWKs
 	}
 
 	/* see if the JWKs is cached */
-	oidc_cache_get_jwks(r, oidc_metadata_jwks_cache_key(jwks_uri), &value);
-
-	/* decode and see if it is not a cached error response somehow */
-	if (oidc_util_decode_json_and_check_error(r, value, j_jwks) == FALSE) {
-		oidc_warn(r, "JSON parsing of cached JWKs data failed");
-		value = NULL;
+	if (oidc_cache_get_jwks(r, oidc_metadata_jwks_cache_key(jwks_uri),
+			&value) == TRUE) {
+		/* decode and see if it is not a cached error response somehow */
+		if (oidc_util_decode_json_and_check_error(r, value, j_jwks) == FALSE) {
+			oidc_warn(r, "JSON parsing of cached JWKs data failed");
+			value = NULL;
+		}
 	}
 
 	if (value == NULL) {
@@ -756,8 +757,10 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg,
 	}
 
 	/* check to see if it is valid metadata */
-	if (oidc_metadata_provider_is_valid(r, cfg, *j_metadata, issuer) == FALSE)
+	if (oidc_metadata_provider_is_valid(r, cfg, *j_metadata, issuer) == FALSE) {
+		json_decref(*j_metadata);
 		return FALSE;
+	}
 
 	/* all OK */
 	return TRUE;

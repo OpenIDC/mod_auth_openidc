@@ -852,8 +852,8 @@ apr_byte_t oidc_util_regexp_first_match(apr_pool_t *pool, const char *input, con
 apr_byte_t oidc_util_json_merge(request_rec *r, json_t *src, json_t *dst);
 int oidc_util_cookie_domain_valid(const char *hostname, char *cookie_domain);
 apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char *openssl_hash_algo, const char *input, char **output);
-apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret, const char *s_payload, char **compact_encoded_jwt, apr_byte_t for_internal_use);
-apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret, const char *compact_encoded_jwt, char **s_payload, apr_byte_t for_internal_use);
+apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret, const char *s_payload, char **compact_encoded_jwt);
+apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret, const char *compact_encoded_jwt, char **s_payload);
 char *oidc_util_get_chunked_cookie(request_rec *r, const char *cookieName, int cookie_chunk_size);
 void oidc_util_set_chunked_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires, int chunkSize, const char *ext);
 apr_byte_t oidc_util_create_symmetric_key(request_rec *r, const char *client_secret, unsigned int r_key_len, const char *hash_algo, apr_byte_t set_kid, oidc_jwk_t **jwk);
