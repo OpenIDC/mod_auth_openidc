@@ -1,3 +1,9 @@
+04/23/2023
+- add environment variable OIDC_DONT_STORE_ID_TOKEN_CLAIMS_IN_SESSION option to not store
+  the claims in the id_token in the session, to avoid storing claims that are not used anyway
+  and/or overlap with userinfo claims
+- bump to 2.4.14rc11
+
 04/21/2023
 - use compressed serialized JSON for encrypted cache entries instead of signed JWTs, reducing cache entry size
 - refactor (internal) encrypted JWTs handling

@@ -602,8 +602,10 @@ const char * oidc_session_get_userinfo_jwt(request_rec *r, oidc_session_t *z) {
  */
 void oidc_session_set_idtoken_claims(request_rec *r, oidc_session_t *z,
 		const char *idtoken_claims) {
-	oidc_session_set_filtered_claims(r, z, OIDC_SESSION_KEY_IDTOKEN_CLAIMS,
-			idtoken_claims);
+	if (apr_table_get(r->subprocess_env,
+			"OIDC_DONT_STORE_ID_TOKEN_CLAIMS_IN_SESSION") == NULL)
+		oidc_session_set_filtered_claims(r, z, OIDC_SESSION_KEY_IDTOKEN_CLAIMS,
+				idtoken_claims);
 }
 
 const char * oidc_session_get_idtoken_claims(request_rec *r, oidc_session_t *z) {
