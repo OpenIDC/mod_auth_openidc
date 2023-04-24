@@ -1,3 +1,9 @@
+04/24/2023
+- preserve linefeeds in text areas with OIDCPreservePost On
+  by changing the order of the "type=hidden" in the restore Javascript page
+  see: https://github.com/OpenIDC/mod_auth_openidc/discussions/717
+  thanks @paulQdata and @jansmets
+  
 04/23/2023
 - add environment variable OIDC_DONT_STORE_ID_TOKEN_CLAIMS_IN_SESSION option to not store
   the claims in the id_token in the session, to avoid storing claims that are not used anyway
