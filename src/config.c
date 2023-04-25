@@ -1386,6 +1386,18 @@ static const char* oidc_set_signed_jwks_uri(cmd_parms *cmd, void *m,
 	return NULL;
 }
 
+static const char* oidc_set_token_revocation_endpoint(cmd_parms *cmd,
+		void *struct_ptr, const char *args) {
+	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
+			&auth_openidc_module);
+	char *w = ap_getword_conf(cmd->pool, &args);
+	if (*w == '\0' || *args != 0) {
+		cfg->provider.revocation_endpoint_url = "";
+		return NULL;
+	}
+	return oidc_set_https_slot(cmd, struct_ptr, args);
+}
+
 int oidc_cfg_dir_refresh_access_token_before_expiry(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
@@ -3077,8 +3089,8 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, provider.userinfo_endpoint_url),
 				RSRC_CONF,
 				"Define the OpenID OP UserInfo Endpoint URL (e.g.: https://localhost:9031/idp/userinfo.openid)"),
-		AP_INIT_TAKE1(OIDCProviderRevocationEndpoint,
-				oidc_set_https_slot,
+		AP_INIT_RAW_ARGS(OIDCProviderRevocationEndpoint,
+				oidc_set_token_revocation_endpoint,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.revocation_endpoint_url),
 				RSRC_CONF,
 				"Define the RFC 7009 Token Revocation Endpoint URL (e.g.: https://localhost:9031/as/revoke_token.oauth2)"),

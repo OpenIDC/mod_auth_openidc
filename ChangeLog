@@ -1,9 +1,16 @@
+04/25/2023
+- add options to avoid revoking tokens before logout
+  as some OPs may kill their SSO session that would make subsequent logout fail;
+  configure an empty string in OIDCProviderRevocationEndpoint or set the
+  OIDC_DONT_REVOKE_TOKENS_BEFORE_LOGOUT environment variable
+- bump to 2.4.14rc12
+
 04/24/2023
 - preserve linefeeds in text areas with OIDCPreservePost On
   by changing the order of the "type=hidden" in the restore Javascript page
   see: https://github.com/OpenIDC/mod_auth_openidc/discussions/717
   thanks @paulQdata and @jansmets
-  
+
 04/23/2023
 - add environment variable OIDC_DONT_STORE_ID_TOKEN_CLAIMS_IN_SESSION option to not store
   the claims in the id_token in the session, to avoid storing claims that are not used anyway

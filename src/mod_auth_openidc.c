@@ -2980,6 +2980,8 @@ static apr_byte_t oidc_is_back_channel_logout(const char *logout_param_value) {
 			OIDC_BACKCHANNEL_STYLE_LOGOUT_PARAM_VALUE) == 0));
 }
 
+#define OIDC_DONT_REVOKE_TOKENS_BEFORE_LOGOUT_ENVVAR "OIDC_DONT_REVOKE_TOKENS_BEFORE_LOGOUT"
+
 /*
  * revoke refresh token and access token stored in the session if the
  * OP has an RFC 7009 compliant token revocation endpoint
@@ -2999,11 +3001,16 @@ static void oidc_revoke_tokens(request_rec *r, oidc_cfg *c,
 	if (oidc_get_provider_from_session(r, c, session, &provider) == FALSE)
 		goto out;
 
+	if (apr_table_get(r->subprocess_env,
+			OIDC_DONT_REVOKE_TOKENS_BEFORE_LOGOUT_ENVVAR) != NULL)
+		goto out;
+
 	oidc_debug(r, "revocation_endpoint=%s",
 			provider->revocation_endpoint_url ?
 					provider->revocation_endpoint_url : "(null)");
 
-	if (provider->revocation_endpoint_url == NULL)
+	if ((provider->revocation_endpoint_url == NULL)
+			|| (_oidc_strcmp(provider->revocation_endpoint_url, "") == 0))
 		goto out;
 
 	params = apr_table_make(r->pool, 4);
