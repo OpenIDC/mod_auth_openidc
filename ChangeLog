@@ -1,13 +1,338 @@
-01/21/2023
-- clean WWW-Authenticate header in main request as well if this is a subrequest; closes #42
-  this avoids the WWW-Authenticate header to be sent in HTTP 200 responses; thanks @ErmakovDmitriy
-- depend on liboauth2 1.4.5.3
-- release 3.3.1
+04/25/2023
+- add options to avoid revoking tokens before logout
+  as some OPs may kill their SSO session that would make subsequent logout fail;
+  configure an empty string in OIDCProviderRevocationEndpoint or set the
+  OIDC_DONT_REVOKE_TOKENS_BEFORE_LOGOUT environment variable
+- bump to 2.4.14rc12
 
-12/06/2022
-- change Makefile install procedure
-- depend on liboauth2 1.4.5.2
-- release 3.3.0
+04/24/2023
+- preserve linefeeds in text areas with OIDCPreservePost On
+  by changing the order of the "type=hidden" in the restore Javascript page
+  see: https://github.com/OpenIDC/mod_auth_openidc/discussions/717
+  thanks @paulQdata and @jansmets
+
+04/23/2023
+- add environment variable OIDC_DONT_STORE_ID_TOKEN_CLAIMS_IN_SESSION option to not store
+  the claims in the id_token in the session, to avoid storing claims that are not used anyway
+  and/or overlap with userinfo claims
+- bump to 2.4.14rc11
+
+04/21/2023
+- use compressed serialized JSON for encrypted cache entries instead of signed JWTs, reducing cache entry size
+- refactor (internal) encrypted JWTs handling
+  - remove support for obsoleted internal signed JWTs
+  - add resilience for corrupted metadata and jwks_uri cache entries
+
+04/20/2023
+- allow defining OIDCPassIDTokenAs on a per-location/directory level; also fixes resetting back to "claims" in vhosts
+- turn of caching by default for `OIDCPassUserInfoAs signed_jwt`
+- use compressed serialized JSON for encrypted state and session cookies, reducing their size; thanks @hihellobolke
+- bump to 2.4.14rc10
+
+04/19/2023
+- add support for using Elliptic Curve keys with `OIDCPassUserInfoAs signed_jwt`
+- bump to 2.4.14rc9
+
+04/18/2023
+- support calling the refresh token grant before doing RP-initiated logout
+  when the environment variable OIDC_REFRESH_TOKENS_BEFORE_LOGOUT is set
+  may be used to supply a (fresh or non-cached) id_token_hint logout request parameter
+- add support for returning the serialized id_token as id_token_hint from the info hook
+- fix crash when using a multi-provider setup and Provider has signed_jwks_uri set but
+  the conf file does not define signed_jwks_uri_key
+- correct return value from oidc_cache_shm_destroy to avoid misleading
+  "cache destroy function failed" error messages
+- bump to 2.4.14rc8
+
+04/16/2023
+- OIDCUnAutzAction auth for stepup authentication now immediately returns a 302 instead
+  of a 200 HTML page with a meta refresh tag and a Location header
+- also fix OIDCUnAutzAction 403 so it does not rely on AuthzSendForbiddenOnFailure
+- bump to 2.4.14rc7
+
+04/13/2023
+- fix session cookie decompression error with OIDCSessionType client-cookie; closes #1046; thanks @oss-aimoto
+  this would occur when the uncompressed JWT is larger than 4 times the compressed JWT
+    oidc_util_jwt_verify: parsing JWT failed: [src/jose.c:901: oidc_jose_zlib_uncompress]: inflate failed
+    oidc_session_decode: could not verify secure JWT: cache value possibly corrupted
+  https://github.com/OpenIDC/mod_auth_openidc/pull/1047
+- add option to strip the AES GCM header from encrypted state/session JWTs with env var OIDC_JWT_STRIP_HDR=true
+- bump to 2.4.14rc6
+
+04/11/2023
+- add caching of signed userinfo JWTs; default cache time is set to the "exp" claim, can be configured/disabled with:
+    SetEnvIfExpr true "OIDC_USERINFO_SIGNED_JWT_CACHE_TTL=0" 
+  be careful when setting "jti", "nbf", "iat" and" "exp" claims in the OIDCUserInfoClaimsExpr filter since they may
+  overload the cache with entries per-user/per-timestamp if the result differs from the previous request
+- bump to 2.4.14rc5
+
+04/11/2023
+- add OIDCFilterClaimsExpr that allows for processing claims in the both the id_token and claims from the
+  userinfo endpoint before storing them in the session, after applying (optional) blacklisting/whitelisting
+  on the toplevel keys; only available when compiled/linked with libjq
+- fix memory access error using default value for OIDCPassUserInfoAs
+- bump to 2.4.14rc4
+
+04/10/2023
+- add support for OIDCUserInfoClaimsExpr that allows for processing claims returned from the userinfo
+  endpoint with a JQ-based expression before propagating them according to OIDCPassUserInfoAs claims|json|signed_jwt
+  (ie. does not work for "OIDCPassUserInfoAs jwt"), and is only available when compiled/linked with libjq
+- allow OIDCPassUserInfoAs directive in Location/Directory contexts  
+- fix memory leak when using JQ-based expressions in "Require claims_expr"
+- bump to 2.4.14rc3
+
+04/09/2023
+- make sure mod_auth_openidc runs before mod_proxy so calls to the redirect URI are never proxied
+  and no separate Location directive or ProxyPass exception for OIDCRedirectURI is required (anymore)
+- handle discovery in the content handler so regular Apache processing applies to the HTTP/HTML response
+- bump to 2.4.14rc2
+
+04/09/2023
+- return 40x instead of 200 on all (authorization) error responses
+- correct backwards compatibility with <2.4.14 for state mismatch/timeout handling
+- bump to 2.4.14rc1
+
+04/07/2023
+- deprecate OIDCHTMLErrorTemplate and rely on standard Apache error handling capabilities by default
+  environment variable strings REDIRECT_OIDC_ERROR and REDIRECT_OIDC_ERROR_DESC are available in ErrorDocument
+  backwards compatibility is retained by setting "OIDCHTMLErrorTemplate deprecated"
+- bump to 2.4.14rc0
+
+04/07/2023
+- add support for passing on claims resolved from the userinfo endpoint in a JWT signed by
+  mod_auth_openidc using `OIDCPassUserInfoAs signed_jwt[:<name>]`  with the keys configured
+  in OIDCPrivateKeyFiles/OIDCPublicKeyFiles
+- add support for overriding the default header/environment variable names in
+  `OIDCPassUserInfoAs json:<name>` (default: "OIDC_userinfo_json")
+  and
+  `OIDCPassUserInfoAs jwt:<name>` (default: "OIDC_userinfo_jwt")
+- bump to 2.4.13.3rc3
+
+04/06/2023
+- merge client_signing_keys and client_encryption_keys into client_keys
+  since we detect the usage type correctly now
+- bump to 2.4.13.3rc2
+
+04/04/2023
+- support configuration of dedicated signing and encryption keys in the primitives:
+  OIDCPublicKeyFiles, OIDCPrivateKeyFiles, OIDCProviderVerifyCertFiles, OIDCOAuthVerifySharedKeys and OIDCOAuthVerifyCertFiles
+  by using the prefix "sig:" or "enc:" in the value; using this in OIDCPublicKeyFiles also
+  publishes separate "use: sig" and/or "use: enc" keys on the client jwks_uri <redirect_uri>?jwks=rsa
+- fix: don't immediately refresh of JWKs from (signed)_jwks_uri if "kid" was not set in JWT, but try the cache first
+- fix: properly respect "use" attribute (sig/enc) in signing, verification and encryption
+- bump to 2.4.13.3rc1
+
+04/03/2023
+- generate Elliptic Curve "kid" using curve identifier with htonl in network byte order
+  so "make check" works on big endian platforms
+- include openssl/err.h in config.c to avoid compiler warning with OpenSSL 1.0.x
+- bump to 2.4.13.3rc0
+
+04/03/2023
+- release 2.4.13.2
+
+04/01/2023
+- allow target_link_uri's without a path in 3rd-party-init SSO with a multi-provider setup
+- correct error log in target_link_uri matching
+
+03/28/2023
+- CVE-2023-28625: prevent core dump when OIDCStripCookies is set and a crafted Cookie header is supplied
+  https://github.com/OpenIDC/mod_auth_openidc/security/advisories/GHSA-f5xw-rvfr-24qr
+- replace apr_strnatcmp/strcmp with _oidc_strcmp and replace strncmp with _oidc_strncmp
+- handle OpenSSL initialization in new oidc_pre_config_init function:
+  this allows omitting "kid" in OIDCPublicKeyFiles (ao.) when linked against OpenSSL 1.0.x
+
+03/27/2023
+- fix code scanning alerts
+- bump to 2.4.13.2rc2
+  
+03/24/2023
+- add support for Elliptic Curve signing/encryption keys in addtion to RSA keys,
+  i.e. client keys configured in OIDCPrivateKeyFiles/OIDCPublicKeyFiles, published on OIDCClientJwksUri
+  and used in private_key_jwt authentication, encrypted id_token's, request objects/uri's,
+  but also statically configured provider keys in OIDCOAuthVerifyCertFiles and OIDCProviderVerifyCertFiles
+- refactor Docker tests make targets; add test/Makefile
+- bump to 2.4.13.2rc1
+
+03/24/2023
+- record authorization errors in environment variable OIDC_AUTHZ_ERROR
+  so its value can be used in logs e.g. with HTTP 401 responses:
+    LogFormat "%h %l %u %t %U %401{OIDC_AUTHZ_ERROR}e %>s %b" combined
+- log authorization errors with oidc_debug instead of oidc_info
+- bump to 2.4.13.2rc0
+
+03/10/2023
+- fix oidc_jwk_list_copy and usage of OIDCProviderVerifyCertFiles
+- release 2.4.13.1
+
+03/10/2023
+- shm cache: increase default maximum number of active sessions from 500 to 2000
+- shm cache: allow configuration of max 1Mb of session data for a single session
+- use deep-copy and cleanup functions for server and provider configs; fixes overriding server-level keys in vhost configs
+- release 2.4.13
+
+03/09/2023
+- add support for OP "signed_jwks_uri" with "OIDCProviderSignedJwksUri <uri> <jwk>"
+- don't pull JWKs when the id_token was signed with a symmetric key
+- don't immediately refresh of JWKs from (signed)_jwks_uri if "kid" was not set in JWT, but try the cache first
+- warn about incorrect configurations not setting OIDCCryptoPassphrase; see https://github.com/OpenIDC/mod_auth_openidc/discussions/1030
+- bump to 2.4.13rc5
+
+03/08/2023
+- move repo to OpenIDC github organization
+
+03/02/2023
+- allow setting minumum and maximum versions of TLS used in HTTPs calls via libcurl environment
+  variable CURLOPT_SSL_OPTIONS e.g.:
+  SetEnvIfExpr true "CURLOPT_SSL_OPTIONS=CURL_SSLVERSION_TLSv1_3 CURL_SSLVERSION_MAX_TLSv1_3" ; bump to 2.4.13rc3
+- bump to 2.4.13rc3
+
+03/01/2023
+- revert accidentally removed libbrotli code in jose.c
+- bump to 2.4.13rc2
+
+02/19/2023
+- add optional - compilation time support - for brotli compression of session and state cookies
+
+02/17/2023
+- avoid (small) memory leak when using OpenSSL 3.x when setting public/private keys
+  (over graceful restarts) in the config and/or importing JWKs with x5c specs
+- compress session and state cookies; add zlib as a dependency
+- bump to 2.4.13rc0
+
+01/27/2023
+- increase maximum allowed size of HTTP responses (e.g. from token endpoint) to 10Mb; see #998; thanks @mikehearn
+- do a sanity check on the individual size of claim values stored in the session, warn about blacklisting if > 8Kb
+- bump to 2.4.12.4rc2
+
+01/23/2023
+- release 2.4.12.3
+
+01/20/2023
+- add OIDCProviderVerifyCertFiles option to statically configure ID token validation keys; see #989; thanks @madsfreek
+- fix bug in OIDCOAuthVerifyCertFiles where cert(s) would be cast to apr_hash_t instead of apr_array_header_t; see #990; thanks @bommo1
+- bump to 2.4.12.3rc0
+
+12/28/2022
+- update sample/test Dockerfile to Ubuntu Jammy
+
+12/13/2022
+- CVE-2022-23527: prevent open redirect in default setup when OIDCRedirectURLsAllowed is not configured
+  see: https://github.com/zmartzone/mod_auth_openidc/security/advisories/GHSA-q6f2-285m-gr53
+- release 2.4.12.2
+
+12/08/2022
+- simplify redis context code
+- bump to 2.4.12.2rc1
+
+11/18/2022
+- allow overriding the type of lock used at compile time with OIDC_LOCK
+- bump to 2.4.12.2rc0
+
+11/15/2022
+- release 2.4.12.1
+
+11/13/2022
+- switch to using apr_generate_random_bytes instead of apr_uuid_get to generate session identifiers
+  so there's no longer a (rather implicit) dependency on a libapr that is compiled againt libuuid
+  on Linux platforms; see #431, #603 and #694; thanks @amitnarang28
+- cache file backend fix: delete the correct file upon logout; closes #955; thanks @damisanet
+- bump to 2.4.12.1rc5
+
+11/08/2022
+- add option to use ISO-8859-1 encoding for propagated claim values by adding
+  "latin1" option to OIDCPassClaimsAs <> latin1; see #957; thanks @nvchaudhari1991
+  Note that the encoding - including the existing "base64url" - apply to both header and
+  environment variables as well now.
+- bump to 2.4.12.1rc4
+
+10/26/2022
+- OIDCProviderMetadataRefreshInterval was interpreted in microseconds instead
+  of the documented and intended seconds; setting in to seconds would effectively
+  turn of caching and pull the configuration document on each request
+- bump to 2.4.12.1rc3
+
+10/25/2022
+- define APLOG_TRACE1 if it does not exist
+- bump to 2.4.12.1rc2
+
+10/20/2022
+- CI: add memory and semaphore checks on various distro's
+- correct ap_hook_insert_filter function signature in stub.c, part 3; see #784
+- fix printout of cache mutex errors in cache/common.c
+- prefer APR_LOCK_POSIXSEM over APR_LOCK_DEFAULT in apr_global_mutex_create
+  which is apparently required for (some) ARM based builds (and CI)
+- bump to 2.4.12.1rc1
+- fix potential memory leak in proto.c when oidc_util_create_symmetric_key fails
+- fix potential memory leak in proto.c when oidc_proto_validate_access_token fails (at_hash validation)
+
+10/19/2022
+- fix cleanup of semaphores on graceful restarts; see #522, closes #458
+  simplify mutex/shm cleanup without semaphores because we track the parent process anyway; 
+- bump to 2.4.12.1rc0
+
+10/17/2022
+- release 2.4.12
+
+10/15/2022
+- add option to set a username for Redis authentication via OIDCRedisCacheUsername
+- bump to 2.4.11.4rc7
+
+10/14/2022
+- set minimum number of default memcache threads to 0 to retain backwards compatibility
+  see #916
+- support OIDCSessionInactivityTimeout values greater than 30 days when using Memcache
+  see #936, thanks @takesson
+- bump to 2.4.11.4rc6
+
+10/03/2022
+- add -fPIC to test and test-cmd compilation; see #925
+- bump to 2.4.11.4rc5
+
+09/23/2022
+- allow for step-up discovery with an external URL using HTML refresh 
+  fixes behaviour on CentOS 7/8 when combined with ProxyPass
+- bump to 2.4.11.4rc4
+
+09/12/2022
+- add options to retrieve the configuration document only or pull keys from the JWKS URI;
+  for certification purposes
+- check ID token signed response algorithm on backchannel logout_token and retrieve its
+  configuration value from the client metadata file; for certification purposes
+- register request_object_signing_alg in dynamic client registration when using request_uri;
+  for certification purposes
+- bump to 2.4.11.4rc3
+
+09/08/2022
+- store access token obtained from backchannel in session over the one returned
+  in the frontchannel for "code token" and "code id_token token" flows; for 
+  certification purposes
+- apply exact length matching for at_hash and c_hash validation; for certification purposes
+- increase size of the output buffer when using libpcre2 for substitution; closes #915
+- bump to 2.4.11.4rc2
+- allow setting connection pool parameters for Memcache server connections;
+  see #916; thanks @rpluem-vf
+
+08/24/2022
+- avoid using $< in Makefile
+- allow storing the id_token in a client-cookie based session; see #812 and #888
+- bump to 2.4.11.4rc1
+
+08/22/2022
+- add oidc_util_strcasestr
+- bump to 2.4.11.4rc0
+
+08/22/2022
+- release 2.4.11.3
+
+08/15/2022
+- avoid memory leak when using PCRE2 regular expressions with array matching; closes #902; thanks @smanolache
+- avoid memory leak when cjose_jws_get_plaintext fails; closes #903; thanks @smanolache
+- bump to 2.4.11.3rc4
+
+05/20/2022
+- fix handling of IPv6 based logout URLs; thanks @@codemaker219
+- bump to 2.4.11.3rc1
 
 05/16/2022
 - Use optionally provided sid and iss request parameters during front channel
@@ -17,13 +342,8 @@
 - support Forwarded header in addition to X-Forwarded-*; see #853; thanks @studersi
 - bump to 2.4.11.3rc0
 
-06/07/2021
-- depend on liboauth2 1.4.2.1 with fixed iat slack validation defaults
-- set WWW-Authenticate environment variable to allow for complex Require logic; see 
-  https://github.com/zmartzone/mod_auth_openidc/discussions/572
-  example:
-  Header always append WWW-Authenticate %{OAUTH2_BEARER_SCOPE_ERROR}e "expr=(%{REQUEST_STATUS} == 401) && (-n reqenv('OAUTH2_BEARER_SCOPE_ERROR'))"  
-- release 3.2.2
+05/05/2022
+- release 2.4.11.2
 
 05/04/2022
 - add support for Apache expressions in OIDCPathAuthRequestParams and OIDCPathScope; see #594

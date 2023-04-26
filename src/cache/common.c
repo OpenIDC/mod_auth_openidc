@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2022 ZmartZone Holding BV
+ * Copyright (C) 2017-2023 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -40,30 +40,18 @@
  *
  * core cache functions: locking, crypto and utils
  *
- * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
+ * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
 #ifndef WIN32
 #include <unistd.h>
 #endif
 
-#include "apr_general.h"
-
-#include <httpd.h>
-#include <http_config.h>
-#include <http_log.h>
+#include "..\mod_auth_openidc.h"
 
 #ifdef AP_NEED_SET_MUTEX_PERMS
 #include "unixd.h"
 #endif
-
-#include <openssl/evp.h>
-#include <openssl/aes.h>
-#include <openssl/err.h>
-
-#include <apr_base64.h>
-
-#include "../mod_auth_openidc.h"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -72,8 +60,6 @@ oidc_cache_mutex_t *oidc_cache_mutex_create(apr_pool_t *pool) {
 	oidc_cache_mutex_t *ctx = apr_pcalloc(pool, sizeof(oidc_cache_mutex_t));
 	ctx->mutex = NULL;
 	ctx->mutex_filename = NULL;
-	ctx->shm = NULL;
-	ctx->sema = NULL;
 	ctx->is_parent = TRUE;
 	return ctx;
 }
@@ -83,9 +69,10 @@ oidc_cache_mutex_t *oidc_cache_mutex_create(apr_pool_t *pool) {
 /*
  * convert a apr status code to a string
  */
-char *oidc_cache_status2str(apr_status_t statcode) {
+char *oidc_cache_status2str(apr_pool_t *p, apr_status_t statcode) {
 	char buf[OIDC_CACHE_ERROR_STR_MAX];
-	return apr_strerror(statcode, buf, OIDC_CACHE_ERROR_STR_MAX);
+	apr_strerror(statcode, buf, OIDC_CACHE_ERROR_STR_MAX);
+	return apr_pstrdup(p, buf);
 }
 
 apr_byte_t oidc_cache_mutex_post_config(server_rec *s, oidc_cache_mutex_t *m,
@@ -94,21 +81,28 @@ apr_byte_t oidc_cache_mutex_post_config(server_rec *s, oidc_cache_mutex_t *m,
 	apr_status_t rv = APR_SUCCESS;
 	const char *dir;
 
-	// oidc_sdebug(s, "enter: %d (m=%pp,s=%pp, p=%d)", (m && m->sema) ? *m->sema : -1, m->mutex ? m->mutex : 0, s, m->is_parent);
-
 	/* construct the mutex filename */
 	apr_temp_dir_get(&dir, s->process->pool);
 	m->mutex_filename = apr_psprintf(s->process->pool,
 			"%s/mod_auth_openidc_%s_mutex.%ld.%pp", dir, type,
 			(long int) getpid(), s);
 
+	/* set the lock type */
+	apr_lockmech_e mech =
+#ifdef OIDC_LOCK
+			OIDC_LOCK
+#elif APR_HAS_POSIXSEM_SERIALIZE
+			APR_LOCK_POSIXSEM
+#else
+			APR_LOCK_DEFAULT
+#endif
+			;
+
 	/* create the mutex lock */
-	rv = apr_global_mutex_create(&m->mutex, (const char *) m->mutex_filename,
-			APR_LOCK_DEFAULT, s->process->pool);
+	rv =
+			apr_global_mutex_create(&m->mutex, (const char*) m->mutex_filename, mech, s->process->pool);
 	if (rv != APR_SUCCESS) {
-		oidc_serror(s,
-				"apr_global_mutex_create failed to create mutex on file %s: %s (%d)",
-				m->mutex_filename, oidc_cache_status2str(rv), rv);
+		oidc_serror(s, "apr_global_mutex_create failed to create mutex (%d) on file %s: %s (%d)", mech, m->mutex_filename, oidc_cache_status2str(s->process->pool, rv), rv);
 		return FALSE;
 	}
 
@@ -122,23 +116,12 @@ apr_byte_t oidc_cache_mutex_post_config(server_rec *s, oidc_cache_mutex_t *m,
 	if (rv != APR_SUCCESS) {
 		oidc_serror(s,
 				"unixd_set_global_mutex_perms failed; could not set permissions: %s (%d)",
-				oidc_cache_status2str(rv), rv);
+				oidc_cache_status2str(s->process->pool, rv), rv);
 		return FALSE;
 	}
 #endif
 
-	apr_global_mutex_lock(m->mutex);
-
-	rv = apr_shm_create(&m->shm, sizeof(int), NULL, s->process->pool);
-	if (rv != APR_SUCCESS) {
-		oidc_serror(s, "apr_shm_create failed to create shared memory segment");
-		return FALSE;
-	}
-
-	m->sema = apr_shm_baseaddr_get(m->shm);
-	*m->sema = 1;
-
-	apr_global_mutex_unlock(m->mutex);
+	oidc_slog(s, APLOG_TRACE1, "create: %pp (m=%pp,s=%pp, p=%d)", m, m->mutex ? m->mutex : 0, s, m->is_parent);
 
 	return TRUE;
 }
@@ -149,7 +132,7 @@ apr_byte_t oidc_cache_mutex_post_config(server_rec *s, oidc_cache_mutex_t *m,
 apr_status_t oidc_cache_mutex_child_init(apr_pool_t *p, server_rec *s,
 		oidc_cache_mutex_t *m) {
 
-	// oidc_sdebug(s, "enter: %d (m=%pp,s=%pp, p=%d)", (m && m->sema) ? *m->sema : -1, m->mutex ? m->mutex : 0, s, m->is_parent);
+	oidc_slog(s, APLOG_TRACE1, "init: %pp (m=%pp,s=%pp, p=%d)", m, m->mutex ? m->mutex : 0, s, m->is_parent);
 
 	if (m->is_parent == FALSE)
 		return APR_SUCCESS;
@@ -161,16 +144,10 @@ apr_status_t oidc_cache_mutex_child_init(apr_pool_t *p, server_rec *s,
 	if (rv != APR_SUCCESS) {
 		oidc_serror(s,
 				"apr_global_mutex_child_init failed to reopen mutex on file %s: %s (%d)",
-				m->mutex_filename, oidc_cache_status2str(rv), rv);
-	} else {
-		apr_global_mutex_lock(m->mutex);
-		m->sema = apr_shm_baseaddr_get(m->shm);
-		(*m->sema)++;
-		apr_global_mutex_unlock(m->mutex);
+				m->mutex_filename, oidc_cache_status2str(p, rv), rv);
 	}
 
 	m->is_parent = FALSE;
-	//oidc_sdebug(s, "semaphore: %d (m=%pp,s=%pp)", *m->sema, m, s);
 
 	return rv;
 }
@@ -184,7 +161,7 @@ apr_byte_t oidc_cache_mutex_lock(server_rec *s, oidc_cache_mutex_t *m) {
 
 	if (rv != APR_SUCCESS)
 		oidc_serror(s, "apr_global_mutex_lock() failed: %s (%d)",
-				oidc_cache_status2str(rv), rv);
+				oidc_cache_status2str(s->process->pool, rv), rv);
 
 	return TRUE;
 }
@@ -198,7 +175,7 @@ apr_byte_t oidc_cache_mutex_unlock(server_rec *s, oidc_cache_mutex_t *m) {
 
 	if (rv != APR_SUCCESS)
 		oidc_serror(s, "apr_global_mutex_unlock() failed: %s (%d)",
-				oidc_cache_status2str(rv), rv);
+				oidc_cache_status2str(s->process->pool, rv), rv);
 
 	return TRUE;
 }
@@ -210,93 +187,44 @@ apr_byte_t oidc_cache_mutex_destroy(server_rec *s, oidc_cache_mutex_t *m) {
 
 	apr_status_t rv = APR_SUCCESS;
 
-	// oidc_sdebug(s, "enter: %d (m=%pp,s=%pp, p=%d)", (m && m->sema) ? *m->sema : -1, m->mutex ? m->mutex : 0, s, m->is_parent);
+	oidc_slog(s, APLOG_TRACE1, "init: %pp (m=%pp,s=%pp, p=%d)", m, m->mutex ? m->mutex : 0, s, m->is_parent);
 
-	if (m->mutex != NULL) {
-
-		apr_global_mutex_lock(m->mutex);
-		(*m->sema)--;
-		//oidc_sdebug(s, "semaphore: %d (m=%pp,s=%pp)", *m->sema, m->mutex, s);
-
-		// oidc_sdebug(s, "processing: %d (m=%pp,s=%pp, p=%d)", (m && m->sema) ? *m->sema : -1, m->mutex ? m->mutex : 0, s, m->is_parent);
-
-		if ((m->shm != NULL) && (*m->sema == 0) && (m->is_parent == TRUE)) {
-
-			rv = apr_shm_destroy(m->shm);
-			oidc_sdebug(s, "apr_shm_destroy for semaphore returned: %d", rv);
-			m->shm = NULL;
-
-			apr_global_mutex_unlock(m->mutex);
-
-			rv = apr_global_mutex_destroy(m->mutex);
-			oidc_sdebug(s, "apr_global_mutex_destroy returned :%d", rv);
-			m->mutex = NULL;
-
-			rv = APR_SUCCESS;
-
-		} else {
-
-			apr_global_mutex_unlock(m->mutex);
-
-		}
+	if ((m) && (m->is_parent == TRUE) && (m->mutex)) {
+		rv = apr_global_mutex_destroy(m->mutex);
+		oidc_sdebug(s, "apr_global_mutex_destroy returned :%d", rv);
+		m->mutex = NULL;
 	}
 
-	return rv;
+	return (rv == APR_SUCCESS);
 }
-
-#define OIDC_CACHE_CRYPTO_JSON_KEY "c"
 
 /*
  * AES GCM encrypt using the crypto passphrase as symmetric key
  */
-static apr_byte_t oidc_cache_crypto_encrypt(request_rec *r, const char *plaintext, const char *key,
-		char **result) {
-	apr_byte_t rv = FALSE;
-	json_t *json = NULL;
-
-	json = json_object();
-	json_object_set_new(json, OIDC_CACHE_CRYPTO_JSON_KEY, json_string(plaintext));
-
-	rv = oidc_util_jwt_create(r, (const char*) key, json, result, FALSE);
-
-	if (json)
-		json_decref(json);
-
-	return rv;
+static apr_byte_t oidc_cache_crypto_encrypt(request_rec *r,
+		const char *plaintext, const char *key, char **result) {
+	return oidc_util_jwt_create(r, key, plaintext, result);
 }
 
 /*
  * AES GCM decrypt using the crypto passphrase as symmetric key
  */
-static apr_byte_t oidc_cache_crypto_decrypt(request_rec *r, const char *cache_value,
-		const char *key, char **plaintext) {
-
-	apr_byte_t rv = FALSE;
-	json_t *json = NULL;
-
-	rv = oidc_util_jwt_verify(r, (const char*) key, cache_value, &json, FALSE);
-	if (rv == FALSE)
-		goto end;
-
-	rv = oidc_json_object_get_string(r->pool, json, OIDC_CACHE_CRYPTO_JSON_KEY, plaintext, NULL);
-
-end:
-
-	if (json)
-		json_decref(json);
-
-	return rv;
+static apr_byte_t oidc_cache_crypto_decrypt(request_rec *r,
+		const char *cache_value, const char *key, char **plaintext) {
+	return oidc_util_jwt_verify(r, key, cache_value, plaintext);
 }
 
 /*
  * hash a cache key and a crypto passphrase so the result is suitable as an randomized cache key
  */
-static char* oidc_cache_get_hashed_key(request_rec *r, const char *passphrase, const char *key) {
-	char *input = apr_psprintf(r->pool, "%s:%s", passphrase, key);
+static char* oidc_cache_get_hashed_key(request_rec *r, const char *passphrase,
+		const char *key) {
+	const char *input = apr_psprintf(r->pool, "%s:%s", passphrase, key);
 	char *output = NULL;
-	if (oidc_util_hash_string_and_base64url_encode(r, OIDC_JOSE_ALG_SHA256, input, &output)
-			== FALSE) {
-		oidc_error(r, "oidc_util_hash_string_and_base64url_encode returned an error");
+	if (oidc_util_hash_string_and_base64url_encode(r, OIDC_JOSE_ALG_SHA256,
+			input, &output) == FALSE) {
+		oidc_error(r,
+				"oidc_util_hash_string_and_base64url_encode returned an error");
 		return NULL;
 	}
 	return output;
@@ -338,6 +266,12 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key,
 		goto out;
 	}
 
+	if (cfg->crypto_passphrase == NULL) {
+		oidc_error(r,
+				"could not decrypt cache entry because " OIDCCryptoPassphrase " is not set");
+		goto out;
+	}
+
 	rc = oidc_cache_crypto_decrypt(r, cache_value, cfg->crypto_passphrase, value);
 
 out:
@@ -347,7 +281,7 @@ out:
 	if (rc == TRUE)
 		if (*value != NULL)
 			oidc_debug(r, "cache hit: return %d bytes %s",
-					*value ? (int )strlen(*value) : 0, msg);
+					*value ? (int )_oidc_strlen(*value) : 0, msg);
 		else
 			oidc_debug(r, "cache miss %s", msg);
 	else
@@ -371,7 +305,7 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key,
 
 	oidc_debug(r,
 			"enter: %s (section=%s, len=%d, encrypt=%d, ttl(s)=%" APR_TIME_T_FMT ", type=%s)",
-			key, section, value ? (int )strlen(value) : 0, encrypted,
+			key, section, value ? (int )_oidc_strlen(value) : 0, encrypted,
 					apr_time_sec(expiry - apr_time_now()), cfg->cache->name);
 
 	/* see if we need to encrypt */
@@ -382,7 +316,13 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key,
 			goto out;
 
 		if (value != NULL) {
-			if (oidc_cache_crypto_encrypt(r, value, cfg->crypto_passphrase, &encoded) == FALSE)
+			if (cfg->crypto_passphrase == NULL) {
+				oidc_error(r,
+						"could not encrypt cache entry because " OIDCCryptoPassphrase " is not set");
+				goto out;
+			}
+			if (oidc_cache_crypto_encrypt(r, value, cfg->crypto_passphrase,
+					&encoded) == FALSE)
 				goto out;
 			value = encoded;
 		}
@@ -394,7 +334,7 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key,
 out:
 	/* log the result */
 	msg = apr_psprintf(r->pool, "%d bytes in %s cache backend for %skey %s",
-			(value ? (int) strlen(value) : 0),
+			(value ? (int) _oidc_strlen(value) : 0),
 			(cfg->cache->name ? cfg->cache->name : ""),
 			(encrypted ? "encrypted " : ""), (key ? key : ""));
 	if (rc == TRUE)

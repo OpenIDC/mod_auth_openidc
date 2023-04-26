@@ -34,8 +34,7 @@
 
 #include <stdio.h>
 #include <ctype.h>
-#include <string.h>
-#include <apr_strings.h>
+
 #include "pcre_subst.h"
 
 #ifdef HAVE_LIBPCRE2
@@ -65,7 +64,7 @@ static void
 dumpstr(const char *str, int len, int start, int end)
 {
 	int i;
-	for (i = 0; i < strlen(str); i++) {
+	for (i = 0; i < _oidc_strlen(str); i++) {
 		if (i >= start && i < end)
 			putchar(str[i]);
 		else
@@ -115,6 +114,7 @@ doreplace(char *out, const char *rep, int nmat, int *replen, const char **repstr
 {
 	int val;
 	char *cp = (char *)rep;
+	if ((out == NULL) || (replen == NULL) || (repstr == NULL)) return;
 	while(*cp) {
 		if (*cp == '$' && isdigit(cp[1])) {
 			val = strtoul(&cp[1], &cp, 10);
@@ -136,6 +136,8 @@ edit(const char *str, int len, const char *rep, int nmat, const int *ovec)
 	char *res, *cp;
 	int replen[OIDC_PCRE_MAXCAPTURE];
 	const char *repstr[OIDC_PCRE_MAXCAPTURE];
+	_oidc_memset(repstr, '\0', OIDC_PCRE_MAXCAPTURE);
+	if ((str == NULL) || (mvec == NULL)) return NULL;
 	nmat--;
 	ovec += 2;
 	for (i = 0; i < nmat; i++) {
@@ -152,14 +154,15 @@ edit(const char *str, int len, const char *rep, int nmat, const int *ovec)
 	printf("resulting length %d (srclen=%d)\n", len, slen);
 #endif
 	cp = res = pcre_malloc(len + 1);
+	if (cp == NULL) return NULL;
 	if (mvec[0] > 0) {
 		strncpy(cp, str, mvec[0]);
 		cp += mvec[0];
 	}
 	doreplace(cp, rep, nmat, replen, repstr);
 	cp += rlen;
-	if (mvec[1] < slen)
-		strcpy(cp, &str[mvec[1]]);
+	if ((mvec[1] < slen) && (cp != NULL))
+		_oidc_strcpy(cp, &str[mvec[1]]);
 	res[len] = 0;
 	return res;
 }
@@ -185,9 +188,8 @@ char* oidc_pcre_subst(apr_pool_t *pool, const struct oidc_pcre *pcre, const char
 		const char *rep) {
 	char *rv = NULL;
 #ifdef HAVE_LIBPCRE2
-	PCRE2_SIZE bufsize = (len == 0) ? 16 : 2 * len;
-	PCRE2_UCHAR *output = (PCRE2_UCHAR*) malloc(sizeof(PCRE2_UCHAR) * bufsize);
-	PCRE2_SIZE outlen = bufsize;
+	PCRE2_UCHAR *output = (PCRE2_UCHAR*) malloc(sizeof(PCRE2_UCHAR) * OIDC_PCRE_MAXCAPTURE * 3);
+	PCRE2_SIZE outlen = OIDC_PCRE_MAXCAPTURE * 3;
 	PCRE2_SPTR subject = (PCRE2_SPTR) str;
 	PCRE2_SIZE length = (PCRE2_SIZE) len;
 	PCRE2_SPTR replacement = (PCRE2_SPTR) rep;
@@ -205,12 +207,15 @@ char* oidc_pcre_subst(apr_pool_t *pool, const struct oidc_pcre *pcre, const char
 }
 
 struct oidc_pcre* oidc_pcre_compile(apr_pool_t *pool, const char *regexp, char **error_str) {
-	struct oidc_pcre *pcre = apr_pcalloc(pool, sizeof(struct oidc_pcre));
+	struct oidc_pcre *pcre = NULL;
+	if (regexp == NULL)
+		return NULL;
+	pcre = apr_pcalloc(pool, sizeof(struct oidc_pcre));
 #ifdef HAVE_LIBPCRE2
 	int errorcode;
 	PCRE2_SIZE erroroffset;
 	pcre->preg =
-			pcre2_compile((PCRE2_SPTR) regexp, (PCRE2_SIZE) strlen(regexp), 0, &errorcode, &erroroffset, NULL);
+			pcre2_compile((PCRE2_SPTR) regexp, (PCRE2_SIZE) _oidc_strlen(regexp), 0, &errorcode, &erroroffset, NULL);
 #else
 	const char *errorptr = NULL;
 	int erroffset;
@@ -232,6 +237,15 @@ void oidc_pcre_free(struct oidc_pcre *pcre) {
 		pcre2_code_free(pcre->preg);
 #else
 	pcre_free(pcre->preg);
+#endif
+}
+
+void oidc_pcre_free_match(struct oidc_pcre *pcre) {
+#ifdef HAVE_LIBPCRE2
+	if (pcre->match_data) {
+		pcre2_match_data_free(pcre->match_data);
+		pcre->match_data = NULL;
+	}
 #endif
 }
 
@@ -350,7 +364,7 @@ main()
 	extra = pcre_study(ppat, 0, &err);
 	if (err != NULL)
 		fprintf(stderr, "Study %s failed: %s\n", pat, err);
-	newstr = pcre_subst(ppat, extra, str, strlen(str), 0, 0, rep);
+	newstr = pcre_subst(ppat, extra, str, _oidc_strlen(str), 0, 0, rep);
 	if (newstr) {
 		printf("Newstr\t%s\n", newstr);
 		pcre_free(newstr);

@@ -38,43 +38,39 @@
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * caching using a Redis backend
- *
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#include "hiredis/hiredis.h"
+#ifndef MOD_AUTH_OPENIDC_CONST_H_
+#define MOD_AUTH_OPENIDC_CONST_H_
 
-#include "mod_auth_openidc.h"
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#  undef PACKAGE_NAME
+#  undef PACKAGE_STRING
+#  undef PACKAGE_TARNAME
+#  undef PACKAGE_VERSION
+#  undef PACKAGE_BUGREPORT
+#endif
 
-struct oidc_cache_cfg_redis_t;
+#include <stdint.h>
+#define __STDC_WANT_LIB_EXT1__ 1
+#include <string.h>
 
-typedef apr_status_t (*oidc_cache_redis_connect_function_t)(request_rec*, struct oidc_cache_cfg_redis_t*);
-typedef redisReply* (*oidc_cache_redis_command_function_t)(request_rec*, struct oidc_cache_cfg_redis_t*,
-		char**, const char *format, va_list ap);
-typedef apr_status_t (*oidc_cache_redis_disconnect_function_t)(struct oidc_cache_cfg_redis_t*);
+#ifdef __STDC_LIB_EXT1__
+#define _oidc_memset(b, c, __len) memset_s(b, __len, c, __len)
+#define _oidc_memcpy(__dst, __src, __n) memcpy_s(__dst, __src, __n)
+#define _oidc_strcpy(__dst, __src) strcpy_s(__dst, __src)
+#else
+#define _oidc_memset(b, c, __len) memset(b, c, __len)
+#define _oidc_memcpy(__dst, __src, __n) memcpy(__dst, __src, __n)
+#define _oidc_strcpy(__dst, __src) strcpy(__dst, __src)
+#endif
 
-typedef struct oidc_cache_cfg_redis_t {
-	oidc_cache_mutex_t *mutex;
-	char *username;
-	char *passwd;
-	int database;
-	struct timeval connect_timeout;
-	struct timeval timeout;
-	char *host_str;
-	apr_port_t port;
-	redisContext *rctx;
-	oidc_cache_redis_connect_function_t connect;
-	oidc_cache_redis_command_function_t command;
-	oidc_cache_redis_disconnect_function_t disconnect;
-} oidc_cache_cfg_redis_t;
+#define _oidc_strlen(s) ( s ? strlen(s) : 0 )
+#define _oidc_strcmp(a, b) ( (a && b) ? apr_strnatcmp(a, b) : -1 )
+#define _oidc_strncmp(a, b, size) ( (a && b) ? strncmp(a, b, size) : -1 )
 
-int oidc_cache_redis_post_config(server_rec *s, oidc_cfg *cfg, const char *name);
-int oidc_cache_redis_child_init(apr_pool_t *p, server_rec *s);
-redisReply* oidc_cache_redis_command(request_rec *r, oidc_cache_cfg_redis_t *context, char **errstr,
-		const char *format, va_list ap);
-apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section, const char *key,
-		const char **value);
-apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section, const char *key,
-		const char *value, apr_time_t expiry);
-apr_status_t oidc_cache_redis_disconnect(oidc_cache_cfg_redis_t *context);
+#define _oidc_str_to_int(s) (s ? (int)strtol(s, NULL, 10) : 0)
+
+#endif /* MOD_AUTH_OPENIDC_CONST_H_ */

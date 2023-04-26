@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2022 ZmartZone Holding BV
+ * Copyright (C) 2017-2023 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -40,21 +40,27 @@
  *
  * caching using a memcache backend
  *
- * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
+ * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#include "apr_general.h"
-#include "apr_strings.h"
-#include "apr_hash.h"
-#include "apr_memcache.h"
-
-#include <httpd.h>
-#include <http_config.h>
-#include <http_log.h>
-
-#include "../mod_auth_openidc.h"
+#include "mod_auth_openidc.h"
+#include <apr_memcache.h>
+#include <apr_optional.h>
+#include <ap_mpm.h>
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
+
+
+#if AP_MODULE_MAGIC_AT_LEAST(20120211, 125)
+#include <mod_http2.h>
+#else
+/*
+ * Copy and paste from mod_http2.h where mod_http2.h is not available
+ */
+APR_DECLARE_OPTIONAL_FN(void,
+						http2_get_num_workers, (server_rec *s,
+												int *minw, int *max));
+#endif
 
 typedef struct oidc_cache_cfg_memcache_t {
 	/* cache_type = memcache: memcache ptr */
@@ -87,6 +93,9 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 	char* split;
 	char* tok;
 	apr_pool_t *p = s->process->pool;
+	APR_OPTIONAL_FN_TYPE(http2_get_num_workers) *get_h2_num_workers;
+	int max_threads, minw, maxw;
+	apr_uint32_t min, smax, hmax, ttl;
 
 	if (cfg->cache_memcache_servers == NULL) {
 		oidc_serror(s,
@@ -110,6 +119,51 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
+	/*
+	 * When mod_http2 is loaded we might have more threads since it has
+	 * its own pool of processing threads.
+	 */
+	ap_mpm_query(AP_MPMQ_MAX_THREADS, &max_threads);
+	get_h2_num_workers = APR_RETRIEVE_OPTIONAL_FN(http2_get_num_workers);
+	if (get_h2_num_workers) {
+		get_h2_num_workers(s, &minw, &maxw);
+		/* So now the max is:
+		 * max_threads-1 threads for HTTP/1 each requiring one connection
+		 * + one thread for HTTP/2 requiring maxw connections
+		 */
+		max_threads = max_threads - 1 + maxw;
+	}
+	min = cfg->cache_memcache_min;
+	smax = cfg->cache_memcache_smax;
+	hmax = cfg->cache_memcache_hmax;
+	ttl = cfg->cache_memcache_ttl;
+	if (max_threads > 0 && hmax == 0) {
+		hmax = max_threads;
+		if (smax == 0) {
+			smax = hmax;
+		}
+		// a default min value of 1 does not work at least on Mac OS X
+		// so retain backwards compatibility for now with 0
+		//if (min == 0) {
+		//	min = hmax;
+		//}
+	} else {
+		if (hmax == 0) {
+			hmax = 1;
+		}
+		if (smax == 0) {
+			smax = 1;
+		}
+	}
+	if (ttl == 0) {
+		ttl = apr_time_from_sec(60);
+	}
+	if (smax > hmax) {
+		smax = hmax;
+	}
+	if (min > smax) {
+		min = smax;
+	}
 	/* loop again over the provided servers */
 	cache_config = apr_pstrdup(p, cfg->cache_memcache_servers);
 	split = apr_strtok(cache_config, OIDC_STR_SPACE, &tok);
@@ -136,9 +190,10 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 		if (port == 0)
 			port = 11211;
 
+		oidc_sdebug(s, "creating server: %s:%d, min=%d, smax=%d, hmax=%d, ttl=%d", host_str, port, min, smax, hmax, ttl);
+
 		/* create the memcache server struct */
-		// TODO: tune this
-		rv = apr_memcache_server_create(p, host_str, port, 0, 1, 1, 60, &st);
+		rv = apr_memcache_server_create(p, host_str, port, min, smax, hmax, ttl, &st);
 		if (rv != APR_SUCCESS) {
 			oidc_serror(s, "failed to create cache server: %s:%d", host_str,
 					port);
@@ -238,10 +293,10 @@ static apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *section,
 	}
 
 	/* do sanity checking on the string value */
-	if ((*value) && (strlen(*value) != len)) {
+	if ((*value) && (_oidc_strlen(*value) != len)) {
 		oidc_error(r,
-				"apr_memcache_getp returned less bytes than expected: strlen(value) [%zu] != len [%" APR_SIZE_T_FMT "]",
-				strlen(*value), len);
+				"apr_memcache_getp returned less bytes than expected: _oidc_strlen(value) [%zu] != len [%" APR_SIZE_T_FMT "]",
+				_oidc_strlen(*value), len);
 		return FALSE;
 	}
 
@@ -277,13 +332,13 @@ static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *section,
 
 	} else {
 
-		/* calculate the timeout from now */
-		apr_uint32_t timeout = apr_time_sec(expiry - apr_time_now());
+		/* calculate the timeout as a Unix timestamp which allows values > 30 days */
+		apr_uint32_t timeout = apr_time_sec(expiry);
 
 		/* store it */
 		rv = apr_memcache_set(context->cache_memcache,
 				oidc_cache_memcache_get_key(r->pool, section, key),
-				(char *) value, strlen(value), timeout, 0);
+				(char *) value, _oidc_strlen(value), timeout, 0);
 
 		if (rv != APR_SUCCESS) {
 			oidc_cache_memcache_log_status_error(r, "apr_memcache_set", rv);

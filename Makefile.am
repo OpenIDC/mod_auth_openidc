@@ -41,8 +41,19 @@ AM_CFLAGS += -DUSE_LIBJQ @JQ_CFLAGS@
 LIBADD += @JQ_LIBS@
 endif
 
+if HAVE_LIBBROTLI
+AM_CFLAGS += -DUSE_LIBBROTLI @LIBBROTLIENC_CFLAGS@ @LIBBROTLIDEC_CFLAGS@
+LIBADD += @LIBBROTLIENC_LIBS@ @LIBBROTLIDEC_LIBS@
+endif
+
+if HAVE_LIBZ
+AM_CFLAGS += -DUSE_ZLIB @ZLIB_CFLAGS@
+LIBADD += @ZLIB_LIBS@
+endif
+
 noinst_HEADERS = \
 	src/mod_auth_openidc.h \
+	src/const.h \
 	src/jose.h \
 	src/parse.h \
 	src/cache/cache.h \
@@ -60,6 +71,9 @@ EXTRA_DIST = \
 	AUTHORS \
 	LICENSE.txt \
 	auth_openidc.conf \
+	test/ecpriv.key \
+	test/eccert.pem \
+	test/private.pem \
 	test/public.pem \
 	test/certificate.pem \
 	test/open-redirect-payload-list.txt
@@ -67,10 +81,9 @@ EXTRA_DIST = \
 noinst_DATA = mod_auth_openidc.la
 
 mod_auth_openidc.la: libauth_openidc.la
-	${APXS} -c -o $@ $< ${AM_CFLAGS} ${LIBADD}
+	${APXS} -c -o $@ libauth_openidc.la ${AM_CFLAGS} ${LIBADD}
 
 install-exec-local:
-#	@APXS@ -i -a -n auth_openidc mod_auth_openidc.la
 	${INSTALL} -d $(DESTDIR)@APACHE_MODULEDIR@
 	${INSTALL} -p -m 755 .libs/mod_auth_openidc.so $(DESTDIR)@APACHE_MODULEDIR@/mod_auth_openidc.so
 
@@ -81,16 +94,10 @@ LDADD = libauth_openidc.la ${LIBADD}
 
 noinst_PROGRAMS = test/test-cmd
 test_test_cmd_SOURCES = test/test-cmd.c test/stub.c
+test_test_cmd_CFLAGS = ${AM_CFLAGS} -fPIC
 
 TESTS = test/test
 
 check_PROGRAMS = test/test
 test_test_SOURCES = test/test.c test/stub.c
-
-docker: docker-build docker-run
-
-docker-build:
-	docker build -t mod_auth_openidc .
-
-docker-run:
-	docker run -p 80:80 -p 443:443 --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -it mod_auth_openidc /bin/bash -c "/root/run.sh"
+test_test_CFLAGS = ${AM_CFLAGS} -fPIC

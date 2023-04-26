@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2022 ZmartZone Holding BV
+ * Copyright (C) 2017-2023 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -38,18 +38,10 @@
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
+ * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#include <apr_lib.h>
-
-#include <httpd.h>
-#include <http_config.h>
-#include <http_log.h>
-#include <http_request.h>
-
 #include "mod_auth_openidc.h"
-#include "parse.h"
 
 apr_byte_t oidc_oauth_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg,
 		const char *issuer, const char *url, json_t **j_metadata,
@@ -153,7 +145,7 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 
 	const char *bearer_access_token_auth =
 			((c->oauth.introspection_client_auth_bearer_token != NULL)
-					&& strcmp(c->oauth.introspection_client_auth_bearer_token,
+					&& _oidc_strcmp(c->oauth.introspection_client_auth_bearer_token,
 							"") == 0) ?
 									token : c->oauth.introspection_client_auth_bearer_token;
 
@@ -166,7 +158,7 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 		return FALSE;
 
 	/* call the endpoint with the constructed parameter set and return the resulting response */
-	return apr_strnatcmp(c->oauth.introspection_endpoint_method,
+	return _oidc_strcmp(c->oauth.introspection_endpoint_method,
 			OIDC_INTROSPECTION_METHOD_GET) == 0 ?
 					oidc_util_http_get(r, c->oauth.introspection_endpoint_url, params,
 							basic_auth, bearer_auth, c->oauth.ssl_validate_server,
@@ -377,7 +369,7 @@ static apr_byte_t oidc_oauth_cache_access_token(request_rec *r, oidc_cfg *c,
 	json_object_set_new(cache_entry, OIDC_OAUTH_CACHE_KEY_TIMESTAMP,
 			json_integer(apr_time_sec(apr_time_now())));
 	char *cache_value = oidc_util_encode_json_object(r, cache_entry,
-			JSON_COMPACT);
+			JSON_PRESERVE_ORDER | JSON_COMPACT);
 
 	/* set it in the cache so subsequent request don't need to validate the access_token and get the claims anymore */
 	oidc_cache_set_access_token(r, access_token, cache_value, cache_until);
@@ -474,7 +466,7 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 			return FALSE;
 
 		json_t *active = json_object_get(result, OIDC_PROTO_ACTIVE);
-		apr_time_t cache_until;
+		apr_time_t cache_until = apr_time_now() + apr_time_from_sec(60);
 		if (active != NULL) {
 
 			if (json_is_boolean(active)) {
@@ -516,7 +508,7 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 
 			if (oidc_oauth_parse_and_cache_token_expiry(r, c, result,
 					c->oauth.introspection_token_expiry_claim_name,
-					apr_strnatcmp(
+					_oidc_strcmp(
 							c->oauth.introspection_token_expiry_claim_format,
 							OIDC_CLAIM_FORMAT_ABSOLUTE) == 0,
 							c->oauth.introspection_token_expiry_claim_required,
@@ -595,10 +587,11 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 
 	oidc_jwt_t *jwt = NULL;
 	if (oidc_jwt_parse(r->pool, access_token, &jwt,
-			oidc_util_merge_symmetric_key(r->pool, c->private_keys, jwk),
+			oidc_util_merge_symmetric_key(r->pool, c->private_keys, jwk), FALSE,
 			&err) == FALSE) {
 		oidc_error(r, "could not parse JWT from access_token: %s",
 				oidc_jose_e2s(r->pool, err));
+		oidc_jwk_destroy(jwk);
 		return FALSE;
 	}
 
@@ -619,19 +612,17 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 	oidc_debug(r,
 			"verify JWT against %d statically configured public keys and %d shared keys, with JWKs URI set to %s",
 			c->oauth.verify_public_keys ?
-					apr_hash_count(c->oauth.verify_public_keys) : 0,
+					c->oauth.verify_public_keys->nelts : 0,
 					c->oauth.verify_shared_keys ?
 							apr_hash_count(c->oauth.verify_shared_keys) : 0,
 							c->oauth.verify_jwks_uri);
 
 	// TODO: we're re-using the OIDC provider JWKs refresh interval here...
 	oidc_jwks_uri_t jwks_uri = { c->oauth.verify_jwks_uri,
-			c->provider.jwks_refresh_interval, c->oauth.ssl_validate_server };
-	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri,
-			oidc_util_merge_key_sets_hash(r->pool, c->oauth.verify_public_keys,
-					c->oauth.verify_shared_keys), NULL) == FALSE) {
-		oidc_error(r,
-				"JWT access token signature could not be validated, aborting");
+			c->provider.jwks_uri.refresh_interval, NULL, NULL };
+	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri, c->oauth.ssl_validate_server, oidc_util_merge_key_sets(r->pool, c->oauth.verify_shared_keys, c->oauth.verify_public_keys), NULL)
+			== FALSE) {
+		oidc_error(r, "JWT access token signature could not be validated, aborting");
 		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
@@ -815,19 +806,19 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c,
 	char *authn_header = oidc_cfg_dir_authn_header(r);
 	apr_byte_t pass_headers = oidc_cfg_dir_pass_info_in_headers(r);
 	apr_byte_t pass_envvars = oidc_cfg_dir_pass_info_in_envvars(r);
-	apr_byte_t pass_base64url = oidc_cfg_dir_pass_info_base64url(r);
+	int pass_hdr_as = oidc_cfg_dir_pass_info_encoding(r);
 
 	if ((r->user != NULL) && (authn_header != NULL))
 		oidc_util_hdr_in_set(r, authn_header, r->user);
 
 	/* set the resolved claims in the HTTP headers for the target application */
 	oidc_util_set_app_infos(r, token, oidc_cfg_claim_prefix(r),
-			c->claim_delimiter, pass_headers, pass_envvars, pass_base64url);
+			c->claim_delimiter, pass_headers, pass_envvars, pass_hdr_as);
 
 	/* set the access_token in the app headers */
 	if (access_token != NULL) {
 		oidc_util_set_app_info(r, OIDC_APP_INFO_ACCESS_TOKEN, access_token,
-				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars, pass_base64url);
+				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars, pass_hdr_as);
 	}
 
 	/* free JSON resources */

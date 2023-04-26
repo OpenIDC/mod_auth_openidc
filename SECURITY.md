@@ -9,7 +9,7 @@
 
 ## Reporting a Vulnerability
 
-Please send an e-mail to support@zmartzone.eu with a description of:
+Please send an e-mail to support@openidc.com with a description of:
 
 - a brief description of the vulnerability
 - how the vulnerability can be observed
