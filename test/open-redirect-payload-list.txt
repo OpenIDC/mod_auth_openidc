@@ -1,4 +1,5 @@
 /%09/example.com
+/	/example.com
 /%2f%2fexample.com
 /%2f%2f%2fbing.com%2f%3fwww.omise.co
 /%2f%5c%2f%67%6f%6f%67%6c%65%2e%63%6f%6d/

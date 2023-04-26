@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2022 ZmartZone Holding BV
+ * Copyright (C) 2017-2023 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -40,14 +40,15 @@
  *
  * mem_cache-like interface and semantics (string keys/values) using a storage backend
  *
- * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
+ * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
 #ifndef _MOD_AUTH_OPENIDC_CACHE_H_
 #define _MOD_AUTH_OPENIDC_CACHE_H_
 
-#include "apr_global_mutex.h"
-#include "apr_shm.h"
+#include <apr_global_mutex.h>
+#include <apr_shm.h>
+#include <httpd.h>
 
 typedef void * (*oidc_cache_cfg_create)(apr_pool_t *pool);
 typedef int (*oidc_cache_post_config_function)(server_rec *s);
@@ -72,8 +73,6 @@ typedef struct oidc_cache_t {
 typedef struct oidc_cache_mutex_t {
 	apr_global_mutex_t *mutex;
 	char *mutex_filename;
-	apr_shm_t *shm;
-	int *sema;
 	apr_byte_t is_parent;
 } oidc_cache_mutex_t;
 
@@ -100,6 +99,7 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key,
 #define OIDC_CACHE_SECTION_JTI               "t"
 #define OIDC_CACHE_SECTION_REQUEST_URI       "r"
 #define OIDC_CACHE_SECTION_SID               "d"
+#define OIDC_CACHE_SECTION_USERINFO_SJWT     "u"
 
 // TODO: now every section occupies the same space; we may want to differentiate
 //       according to section-based size, at least for the shm backend
@@ -113,6 +113,7 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key,
 #define oidc_cache_get_jti(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_JTI, key, value)
 #define oidc_cache_get_request_uri(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_REQUEST_URI, key, value)
 #define oidc_cache_get_sid(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_SID, key, value)
+#define oidc_cache_get_signed_jwt(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_USERINFO_SJWT, key, value)
 
 #define oidc_cache_set_session(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, key, value, expiry)
 #define oidc_cache_set_nonce(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_NONCE, key, value, expiry)
@@ -123,6 +124,7 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key,
 #define oidc_cache_set_jti(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_JTI, key, value, expiry)
 #define oidc_cache_set_request_uri(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_REQUEST_URI, key, value, expiry)
 #define oidc_cache_set_sid(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_SID, key, value, expiry)
+#define oidc_cache_set_signed_jwt(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_USERINFO_SJWT, key, value, expiry)
 
 extern oidc_cache_t oidc_cache_file;
 extern oidc_cache_t oidc_cache_shm;

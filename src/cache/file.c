@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2022 ZmartZone Holding BV
+ * Copyright (C) 2017-2023 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -40,18 +40,10 @@
  *
  * caching using a file storage backend
  *
- * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
+ * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#include <apr_hash.h>
-#include <apr_time.h>
-#include <apr_strings.h>
-#include <apr_pools.h>
-
-#include <httpd.h>
-#include <http_log.h>
-
-#include "../mod_auth_openidc.h"
+#include "..\mod_auth_openidc.h"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -321,7 +313,7 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 			/* skip non-cache entries, cq. the ".", ".." and the metadata file */
 			if ((fi.name[0] == OIDC_CHAR_DOT)
 					|| (strstr(fi.name, OIDC_CACHE_FILE_PREFIX) != fi.name)
-					|| ((apr_strnatcmp(fi.name,
+					|| ((_oidc_strcmp(fi.name,
 							oidc_cache_file_name(r, "cache-file",
 									OIDC_CACHE_FILE_LAST_CLEANED)) == 0)))
 				continue;
@@ -400,7 +392,7 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section, const
 
 	/* just remove cache file if value is NULL */
 	if (value == NULL) {
-		if ((rc = apr_file_remove(path, r->pool)) != APR_SUCCESS) {
+		if ((rc = apr_file_remove(target, r->pool)) != APR_SUCCESS) {
 			oidc_error(r, "could not delete cache file \"%s\" (%s)", path, apr_strerror(rc, s_err, sizeof(s_err)));
 		}
 		return TRUE;
@@ -422,7 +414,7 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section, const
 	/* construct the metadata for this cache entry in the header info */
 	oidc_cache_file_info_t info;
 	info.expire = expiry;
-	info.len = strlen(value) + 1;
+	info.len = _oidc_strlen(value) + 1;
 
 	/* write the header */
 	if ((rc = oidc_cache_file_write(r, path, fd, &info, sizeof(oidc_cache_file_info_t)))

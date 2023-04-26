@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2022 ZmartZone Holding BV
+ * Copyright (C) 2017-2023 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -41,16 +41,10 @@
  * caching using a shared memory backend, FIFO-style
  * based on mod_auth_mellon code
  *
- * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
+ * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#include <httpd.h>
-#include <http_config.h>
-#include <http_log.h>
-
-#include "apr_shm.h"
-
-#include "../mod_auth_openidc.h"
+#include "..\mod_auth_openidc.h"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -125,6 +119,8 @@ int oidc_cache_shm_post_config(server_rec *s) {
 			"initialized shared memory with a cache size (# entries) of: %d, and a max (single) entry size of: %d",
 			cfg->cache_shm_size_max, cfg->cache_shm_entry_size_max);
 
+	oidc_slog(s, APLOG_TRACE1, "create: %pp (shm=%pp,s=%pp, p=%d)", context, context ? context->shm : 0, s, context ? context->is_parent : -1);
+
 	return OK;
 }
 
@@ -136,6 +132,10 @@ int oidc_cache_shm_child_init(apr_pool_t *p, server_rec *s) {
 			&auth_openidc_module);
 	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *) cfg->cache_cfg;
 
+	oidc_slog(s, APLOG_TRACE1, "init: %pp (shm=%pp,s=%pp, p=%d)", context, context ? context->shm : 0, s, context ? context->is_parent : -1);
+
+	if (context->is_parent == FALSE)
+		return APR_SUCCESS;
 	context->is_parent = FALSE;
 
 	/* initialize the lock for the child process */
@@ -151,10 +151,10 @@ static char *oidc_cache_shm_get_key(request_rec *r, const char *section,
 	char *section_key = apr_psprintf(r->pool, "%s:%s", section, key);
 
 	/* check that the passed in key is valid */
-	if (strlen(section_key) >= OIDC_CACHE_SHM_KEY_MAX) {
+	if (_oidc_strlen(section_key) >= OIDC_CACHE_SHM_KEY_MAX) {
 		oidc_error(r,
 				"could not construct cache key since key size is too large (%d >= %d) (%s)",
-				(int )strlen(section_key), OIDC_CACHE_SHM_KEY_MAX, section_key);
+				(int )_oidc_strlen(section_key), OIDC_CACHE_SHM_KEY_MAX, section_key);
 		return NULL;
 	}
 
@@ -190,7 +190,7 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section,
 			i++, OIDC_CACHE_SHM_ADD_OFFSET(t, cfg->cache_shm_entry_size_max)) {
 		const char *tablekey = t->section_key;
 
-		if ((tablekey != NULL) && (apr_strnatcmp(tablekey, section_key) == 0)) {
+		if ((tablekey != NULL) && (_oidc_strcmp(tablekey, section_key) == 0)) {
 
 			/* found a match, check if it has expired */
 			if (t->expires > apr_time_now()) {
@@ -240,12 +240,12 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 
 	/* check that the passed in value is valid */
 	if ((value != NULL)
-			&& (strlen(value)
+			&& (_oidc_strlen(value)
 					> (cfg->cache_shm_entry_size_max
 							- sizeof(oidc_cache_shm_entry_t)))) {
 		oidc_error(r,
 				"could not store value since value size is too large (%lu > %lu); consider increasing " OIDCCacheShmEntrySizeMax "",
-				(unsigned long )strlen(value),
+				(unsigned long )_oidc_strlen(value),
 				(unsigned long )(cfg->cache_shm_entry_size_max
 						- sizeof(oidc_cache_shm_entry_t)));
 		return FALSE;
@@ -276,7 +276,7 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 		}
 
 		/* see if a value already exists for this key */
-		if (apr_strnatcmp(t->section_key, section_key) == 0) {
+		if (_oidc_strcmp(t->section_key, section_key) == 0) {
 			match = t;
 			break;
 		}
@@ -312,8 +312,8 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 	if (value != NULL) {
 
 		/* fill out the entry with the provided data */
-		strcpy(t->section_key, section_key);
-		strcpy(t->value, value);
+		_oidc_strcpy(t->section_key, section_key);
+		_oidc_strcpy(t->value, value);
 		t->expires = expiry;
 		t->access = current_time;
 
@@ -336,24 +336,21 @@ static int oidc_cache_shm_destroy(server_rec *s) {
 	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *) cfg->cache_cfg;
 	apr_status_t rv = APR_SUCCESS;
 
-	if (context == NULL)
-		return rv;
+	oidc_slog(s, APLOG_TRACE1, "destroy: %pp (shm=%pp,s=%pp, p=%d)", context, context ? context->shm : 0, s, context ? context->is_parent : -1);
 
-	if ((context->is_parent == TRUE) && (context->shm)) {
+	if ((context) && (context->is_parent == TRUE) && (context->shm) && (context->mutex)) {
 		oidc_cache_mutex_lock(s, context->mutex);
-		if (*context->mutex->sema == 1) {
-			rv = apr_shm_destroy(context->shm);
-			oidc_sdebug(s, "apr_shm_destroy returned: %d", rv);
-		}
+		rv = apr_shm_destroy(context->shm);
+		oidc_sdebug(s, "apr_shm_destroy returned: %d", rv);
 		context->shm = NULL;
 		oidc_cache_mutex_unlock(s, context->mutex);
 	}
 
-	if (context->mutex == NULL)
-		return rv;
-
-	oidc_cache_mutex_destroy(s, context->mutex);
-	context->mutex = NULL;
+	if ((context) && (context->mutex)) {
+		if (oidc_cache_mutex_destroy(s, context->mutex) != TRUE)
+			rv = APR_EGENERAL;
+		context->mutex = NULL;
+	}
 
 	return rv;
 }

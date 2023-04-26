@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2022 ZmartZone Holding BV
+ * Copyright (C) 2017-2023 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -40,19 +40,10 @@
  *
  * OpenID Connect metadata handling routines, for both OP discovery and client registration
  *
- * @Author: Hans Zandbelt - hans.zandbelt@zmartzone.eu
+ * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#include <apr_hash.h>
-#include <apr_time.h>
-#include <apr_strings.h>
-#include <apr_pools.h>
-
-#include <httpd.h>
-#include <http_log.h>
-
 #include "mod_auth_openidc.h"
-#include "parse.h"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -69,6 +60,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_METADATA_USERINFO_ENDPOINT                            "userinfo_endpoint"
 #define OIDC_METADATA_REVOCATION_ENDPOINT                          "revocation_endpoint"
 #define OIDC_METADATA_JWKS_URI                                     "jwks_uri"
+#define OIDC_METADATA_SIGNED_JWKS_URI                              "signed_jwks_uri"
 #define OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED        "token_endpoint_auth_methods_supported"
 #define OIDC_METADATA_INTROSPECTON_ENDPOINT_AUTH_METHODS_SUPPORTED "introspection_endpoint_auth_methods_supported"
 #define OIDC_METADATA_REGISTRATION_ENDPOINT                        "registration_endpoint"
@@ -135,18 +127,18 @@ static const char* oidc_metadata_issuer_to_filename(request_rec *r,
 	/* strip leading https:// */
 	char *p = strstr(issuer, "https://");
 	if (p == issuer) {
-		p = apr_pstrdup(r->pool, issuer + strlen("https://"));
+		p = apr_pstrdup(r->pool, issuer + _oidc_strlen("https://"));
 	} else {
 		p = strstr(issuer, "http://");
 		if (p == issuer) {
-			p = apr_pstrdup(r->pool, issuer + strlen("http://"));
+			p = apr_pstrdup(r->pool, issuer + _oidc_strlen("http://"));
 		} else {
 			p = apr_pstrdup(r->pool, issuer);
 		}
 	}
 
 	/* strip trailing '/' */
-	int n = strlen(p);
+	int n = _oidc_strlen(p);
 	if (p[n - 1] == OIDC_CHAR_FORWARD_SLASH)
 		p[n - 1] = '\0';
 
@@ -207,9 +199,8 @@ static const char* oidc_metadata_conf_path(request_rec *r, const char *issuer) {
 /*
  * get cache key for the JWKs file for a specified URI
  */
-static const char* oidc_metadata_jwks_cache_key(request_rec *r,
-		const char *jwks_uri) {
-	return jwks_uri;
+static const char* oidc_metadata_jwks_cache_key(const oidc_jwks_uri_t *jwks_uri) {
+	return jwks_uri->signed_uri ? jwks_uri->signed_uri : jwks_uri->uri;
 }
 
 /*
@@ -335,6 +326,12 @@ apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, oidc_cfg *cfg,
 			OIDC_METADATA_JWKS_URI, NULL, FALSE) == FALSE)
 		return FALSE;
 
+	/* check the optional signed JWKs URI */
+	if (oidc_metadata_is_valid_uri(r, OIDC_METADATA_SUFFIX_PROVIDER, issuer,
+			j_provider,
+			OIDC_METADATA_SIGNED_JWKS_URI, NULL, FALSE) == FALSE)
+		return FALSE;
+
 	/* find out what type of authentication the token endpoint supports */
 	if (oidc_valid_string_in_array(r->pool, j_provider,
 			OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED,
@@ -412,13 +409,13 @@ static apr_byte_t oidc_metadata_client_is_valid(request_rec *r,
  * checks if a parsed JWKs file is a valid one, cq. contains "keys"
  */
 static apr_byte_t oidc_metadata_jwks_is_valid(request_rec *r,
-		const oidc_jwks_uri_t *jwks_uri, json_t *j_jwks) {
+		const char *url, const json_t *j_jwks) {
 
-	json_t *keys = json_object_get(j_jwks, OIDC_METADATA_KEYS);
+	const json_t *keys = json_object_get(j_jwks, OIDC_METADATA_KEYS);
 	if ((keys == NULL) || (!json_is_array(keys))) {
 		oidc_error(r,
 				"JWKs JSON metadata obtained from URL \"%s\" did not contain a \"" OIDC_METADATA_KEYS "\" array",
-				jwks_uri->url);
+				url);
 		return FALSE;
 	}
 	return TRUE;
@@ -493,11 +490,10 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 
 	json_t *response_types = json_array();
 	apr_array_header_t *flows = oidc_proto_supported_flows(r->pool);
-	int i;
-	for (i = 0; i < flows->nelts; i++) {
+	int i = 0;
+	for (i = 0; i < flows->nelts; i++)
 		json_array_append_new(response_types,
-				json_string(((const char**) flows->elts)[i]));
-	}
+				json_string(APR_ARRAY_IDX(flows, i, const char *)));
 	json_object_set_new(data, OIDC_METADATA_RESPONSE_TYPES, response_types);
 
 	json_object_set_new(data, OIDC_METADATA_GRANT_TYPES,
@@ -549,6 +545,20 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 	if (provider->userinfo_encrypted_response_enc != NULL) {
 		json_object_set_new(data, OIDC_METADATA_USERINFO_ENCRYPTED_RESPONSE_ENC,
 				json_string(provider->userinfo_encrypted_response_enc));
+	}
+
+	if (provider->request_object != NULL) {
+		json_t *request_object_config = NULL;
+		if (oidc_util_decode_json_object(r, provider->request_object,
+				&request_object_config) == TRUE) {
+			json_t *crypto = json_object_get(request_object_config, "crypto");
+			char *alg = "none";
+			oidc_json_object_get_string(r->pool, crypto, "sign_alg", &alg,
+					"none");
+			json_object_set_new(data, "request_object_signing_alg",
+					json_string(alg));
+			json_decref(request_object_config);
+		}
 	}
 
 	json_object_set_new(data, OIDC_METADATA_INITIATE_LOGIN_URI,
@@ -614,16 +624,56 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
  * helper function to get the JWKs for the specified issuer
  */
 static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
-		oidc_cfg *cfg, const oidc_jwks_uri_t *jwks_uri, json_t **j_jwks) {
+		oidc_cfg *cfg, const oidc_jwks_uri_t *jwks_uri, int ssl_validate_server,
+		json_t **j_jwks) {
 
 	char *response = NULL;
+	const char *url =
+			(jwks_uri->signed_uri != NULL) ?
+					jwks_uri->signed_uri : jwks_uri->uri;
 
-	/* no valid provider metadata, get it at the specified URL with the specified parameters */
-	if (oidc_util_http_get(r, jwks_uri->url, NULL, NULL,
-			NULL, jwks_uri->ssl_validate_server, &response, cfg->http_timeout_long,
+	/* get the JWKs from the specified URL with the specified parameters */
+	if (oidc_util_http_get(r, url, NULL, NULL,
+			NULL, ssl_validate_server, &response, cfg->http_timeout_long,
 			cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL,
 			NULL, NULL) == FALSE)
 		return FALSE;
+
+	if ((jwks_uri->signed_uri != NULL) && (jwks_uri->jwk != NULL)) {
+
+		oidc_jwt_t *jwt = NULL;
+		oidc_jose_error_t err;
+		apr_hash_t *keys = apr_hash_make(r->pool);
+		apr_hash_set(keys, jwks_uri->jwk->kid ? jwks_uri->jwk->kid : "",
+				APR_HASH_KEY_STRING, jwks_uri->jwk);
+
+		if (oidc_jwt_parse(r->pool, response, &jwt, keys, FALSE, &err) == FALSE) {
+			oidc_error(r, "parsing JWT failed: %s",
+					oidc_jose_e2s(r->pool, err));
+			return FALSE;
+		}
+
+		oidc_debug(r,
+				"successfully parsed JWT returned from \"signed_jwks_uri\" endpoint");
+
+		if (oidc_jwt_verify(r->pool, jwt, keys, &err) == FALSE) {
+			oidc_error(r, "verifying JWT failed: %s",
+					oidc_jose_e2s(r->pool, err));
+			if (jwt != NULL)
+				oidc_jwt_destroy(jwt);
+			return FALSE;
+		}
+
+		// TODO: add issuer?
+		if (oidc_proto_validate_jwt(r, jwt, NULL, TRUE, FALSE, -1,
+				OIDC_TOKEN_BINDING_POLICY_DISABLED) == FALSE)
+			return FALSE;
+
+		oidc_debug(r, "successfully verified and validated JWKs JWT");
+
+		response = jwt->payload.value.str;
+		oidc_jwt_destroy(jwt);
+	}
 
 	/* decode and see if it is not an error response somehow */
 	if (oidc_util_decode_json_and_check_error(r, response, j_jwks) == FALSE) {
@@ -631,13 +681,12 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
 		return FALSE;
 	}
 
-	/* check to see if it is valid metadata */
-	if (oidc_metadata_jwks_is_valid(r, jwks_uri, *j_jwks) == FALSE)
+	/* check to see if it is a set of valid JWKs */
+	if (oidc_metadata_jwks_is_valid(r, url, *j_jwks) == FALSE)
 		return FALSE;
 
 	/* store the JWKs in the cache */
-	oidc_cache_set_jwks(r, oidc_metadata_jwks_cache_key(r, jwks_uri->url),
-			response,
+	oidc_cache_set_jwks(r, oidc_metadata_jwks_cache_key(jwks_uri), response,
 			apr_time_now() + apr_time_from_sec(jwks_uri->refresh_interval));
 
 	return TRUE;
@@ -647,35 +696,40 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
  * return JWKs for the specified issuer
  */
 apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg,
-		const oidc_jwks_uri_t *jwks_uri, json_t **j_jwks, apr_byte_t *refresh) {
+		const oidc_jwks_uri_t *jwks_uri, int ssl_validate_server,
+		json_t **j_jwks, apr_byte_t *refresh) {
+	char *value = NULL;
+	const char *url =
+			jwks_uri->signed_uri ? jwks_uri->signed_uri : jwks_uri->uri;
 
-	oidc_debug(r, "enter, jwks_uri=%s, refresh=%d", jwks_uri->url, *refresh);
+	oidc_debug(r, "enter, %sjwks_uri=%s, refresh=%d",
+			jwks_uri->signed_uri ? "signed_" : "", url, *refresh);
 
 	/* see if we need to do a forced refresh */
 	if (*refresh == TRUE) {
 		oidc_debug(r, "doing a forced refresh of the JWKs from URI \"%s\"",
-				jwks_uri->url);
+				url);
 		if (oidc_metadata_jwks_retrieve_and_cache(r, cfg, jwks_uri,
-				j_jwks) == TRUE)
+				ssl_validate_server, j_jwks) == TRUE)
 			return TRUE;
-		// else: fallback on any cached JWKs
+		// else: fall back to any cached JWKs
 	}
 
 	/* see if the JWKs is cached */
-	char *value = NULL;
-	oidc_cache_get_jwks(r, oidc_metadata_jwks_cache_key(r, jwks_uri->url),
-			&value);
-
-	if (value == NULL) {
-		/* it is non-existing or expired: do a forced refresh */
-		*refresh = TRUE;
-		return oidc_metadata_jwks_retrieve_and_cache(r, cfg, jwks_uri, j_jwks);
+	if ((oidc_cache_get_jwks(r, oidc_metadata_jwks_cache_key(jwks_uri),
+			&value) == TRUE) && (value != NULL)) {
+		/* decode and see if it is not a cached error response somehow */
+		if (oidc_util_decode_json_and_check_error(r, value, j_jwks) == FALSE) {
+			oidc_warn(r, "JSON parsing of cached JWKs data failed");
+			value = NULL;
+		}
 	}
 
-	/* decode and see if it is not an error response somehow */
-	if (oidc_util_decode_json_and_check_error(r, value, j_jwks) == FALSE) {
-		oidc_error(r, "JSON parsing of cached JWKs data failed");
-		return FALSE;
+	if (value == NULL) {
+		/* it is non-existing, invalid or expired: do a forced refresh */
+		*refresh = TRUE;
+		return oidc_metadata_jwks_retrieve_and_cache(r, cfg, jwks_uri,
+				ssl_validate_server, j_jwks);
 	}
 
 	return TRUE;
@@ -703,8 +757,10 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg,
 	}
 
 	/* check to see if it is valid metadata */
-	if (oidc_metadata_provider_is_valid(r, cfg, *j_metadata, issuer) == FALSE)
+	if (oidc_metadata_provider_is_valid(r, cfg, *j_metadata, issuer) == FALSE) {
+		json_decref(*j_metadata);
 		return FALSE;
+	}
 
 	/* all OK */
 	return TRUE;
@@ -714,7 +770,7 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg,
  * see if we have provider metadata and check its validity
  * if not, use OpenID Connect Discovery to get it, check it and store it
  */
-static apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
+apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
 		const char *issuer, json_t **j_provider, apr_byte_t allow_discovery) {
 
 	/* holds the response data/string/JSON from the OP */
@@ -767,7 +823,7 @@ static apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
 					|| (strstr(issuer, "https://") == issuer)) ?
 							issuer : apr_psprintf(r->pool, "https://%s", issuer));
 	url = apr_psprintf(r->pool, "%s%s.well-known/openid-configuration", url,
-			url[strlen(url) - 1] != OIDC_CHAR_FORWARD_SLASH ?
+			(url && url[_oidc_strlen(url) - 1] != OIDC_CHAR_FORWARD_SLASH) ?
 					OIDC_STR_FORWARD_SLASH :
 					"");
 
@@ -804,8 +860,8 @@ static apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
 /*
  * see if we have config metadata
  */
-static apr_byte_t oidc_metadata_conf_get(request_rec *r, oidc_cfg *cfg,
-		const char *issuer, json_t **j_conf) {
+static apr_byte_t oidc_metadata_conf_get(request_rec *r, const char *issuer,
+		json_t **j_conf) {
 
 	/* get the full file path to the conf metadata for this issuer */
 	const char *conf_path = oidc_metadata_conf_path(r, issuer);
@@ -898,9 +954,11 @@ apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg *cfg,
 		if (fi.name[0] == OIDC_CHAR_DOT)
 			continue;
 		/* skip other non-provider entries */
-		char *ext = strrchr(fi.name, OIDC_CHAR_DOT);
-		if ((ext == NULL)
-				|| (strcmp(++ext, OIDC_METADATA_SUFFIX_PROVIDER) != 0))
+		const char *ext = strrchr(fi.name, OIDC_CHAR_DOT);
+		if (ext == NULL)
+			continue;
+		ext++;
+		if (_oidc_strcmp(ext, OIDC_METADATA_SUFFIX_PROVIDER) != 0)
 			continue;
 
 		/* get the issuer from the filename */
@@ -910,7 +968,7 @@ apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg *cfg,
 		oidc_provider_t *provider = NULL;
 		if (oidc_metadata_get(r, cfg, issuer, &provider, FALSE) == TRUE) {
 			/* push the decoded issuer filename in to the array */
-			*(const char**) apr_array_push(*list) = provider->issuer;
+			APR_ARRAY_PUSH(*list, const char *) = provider->issuer;
 		}
 	}
 
@@ -927,7 +985,7 @@ static void oidc_metadata_parse_boolean(request_rec *r, json_t *json,
 		const char *key, int *value, int default_value) {
 	int int_value = 0;
 	char *s_value = NULL;
-	if (oidc_json_object_get_bool(r->pool, json, key, &int_value,
+	if (oidc_json_object_get_bool(json, key, &int_value,
 			default_value) == FALSE) {
 		oidc_json_object_get_string(r->pool, json, key, &s_value,
 				NULL);
@@ -938,8 +996,7 @@ static void oidc_metadata_parse_boolean(request_rec *r, json_t *json,
 				int_value = default_value;
 			}
 		} else {
-			oidc_json_object_get_int(r->pool, json, key, &int_value,
-					default_value);
+			oidc_json_object_get_int(json, key, &int_value, default_value);
 		}
 	}
 	*value = (int_value != 0) ? TRUE : FALSE;
@@ -1002,11 +1059,19 @@ apr_byte_t oidc_metadata_provider_parse(request_rec *r, oidc_cfg *cfg,
 				&provider->revocation_endpoint_url, NULL);
 	}
 
-	if (provider->jwks_uri == NULL) {
+	if (provider->jwks_uri.uri == NULL) {
 		/* get a handle to the jwks_uri endpoint */
 		oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER,
 				provider->issuer, j_provider,
-				OIDC_METADATA_JWKS_URI, &provider->jwks_uri,
+				OIDC_METADATA_JWKS_URI, &provider->jwks_uri.uri,
+				NULL);
+	}
+
+	if (provider->jwks_uri.signed_uri == NULL) {
+		/* get a handle to the signed jwks_uri endpoint */
+		oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER,
+				provider->issuer, j_provider,
+				OIDC_METADATA_SIGNED_JWKS_URI, &provider->jwks_uri.signed_uri,
 				NULL);
 	}
 
@@ -1070,7 +1135,7 @@ apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg *c,
 	// TOOD: should check for "if c->oauth.introspection_endpoint_url == NULL and
 	//       allocate the string from the process/config pool
 	//
-	// https://github.com/zmartzone/mod_auth_openidc/commit/32321024ed5bdbc02ba8b5d61aabc4a4c3745c89
+	// https://github.com/OpenIDC/mod_auth_openidc/commit/32321024ed5bdbc02ba8b5d61aabc4a4c3745c89
 	// https://groups.google.com/forum/#!topic/mod_auth_openidc/o1K_1Yh-TQA
 
 	/* get a handle to the introspection endpoint */
@@ -1123,11 +1188,11 @@ void oidc_metadata_get_valid_string(request_rec *r, json_t *json,
 /*
  * get an integer value from a JSON object and see if it is a valid value according to the specified validation function
  */
-void oidc_metadata_get_valid_int(request_rec *r, json_t *json, const char *key,
+void oidc_metadata_get_valid_int(request_rec *r, const json_t *json, const char *key,
 		oidc_valid_int_function_t valid_int_function, int *int_value,
 		int default_int_value) {
 	int v = 0;
-	oidc_json_object_get_int(r->pool, json, key, &v, default_int_value);
+	oidc_json_object_get_int(json, key, &v, default_int_value);
 	const char *rv = valid_int_function(r->pool, v);
 	if (rv != NULL) {
 		oidc_warn(r,
@@ -1139,13 +1204,12 @@ void oidc_metadata_get_valid_int(request_rec *r, json_t *json, const char *key,
 }
 
 static void oidc_metadata_get_jwks(request_rec *r, json_t *json,
-		const char *s_use, apr_array_header_t **jwk_list) {
+		apr_array_header_t **jwk_list) {
 	json_t *keys = NULL;
 	int i = 0;
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
 	json_t *elem = NULL;
-	const char *use = NULL;
 
 	keys = json_object_get(json, OIDC_JWK_KEYS);
 	if (keys == NULL)
@@ -1162,14 +1226,6 @@ static void oidc_metadata_get_jwks(request_rec *r, json_t *json,
 
 		elem = json_array_get(keys, i);
 
-		use = json_string_value(json_object_get(elem, OIDC_JWK_USE));
-		if ((use != NULL) && (strcmp(use, s_use) != 0)) {
-			oidc_debug(r,
-					"skipping key because of non-matching \"%s\": \"%s\" != \"%s\"",
-					OIDC_JWK_USE, use, s_use);
-			continue;
-		}
-
 		if (oidc_jwk_parse_json(r->pool, elem, &jwk, &err) == FALSE) {
 			oidc_warn(r, "oidc_jwk_parse_json failed: %s",
 					oidc_jose_e2s(r->pool, err));
@@ -1177,8 +1233,8 @@ static void oidc_metadata_get_jwks(request_rec *r, json_t *json,
 		}
 
 		if (*jwk_list == NULL)
-			*jwk_list = apr_array_make(r->pool, 4, sizeof(const oidc_jwk_t*));
-		*(const oidc_jwk_t**) apr_array_push(*jwk_list) = jwk;
+			*jwk_list = apr_array_make(r->pool, 4, sizeof(oidc_jwk_t*));
+		APR_ARRAY_PUSH(*jwk_list, oidc_jwk_t *) = jwk;
 	}
 }
 
@@ -1193,10 +1249,20 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 			OIDC_METADATA_CLIENT_JWKS_URI, &provider->client_jwks_uri,
 			cfg->provider.client_jwks_uri);
 
-	oidc_metadata_get_jwks(r, j_conf,
-			OIDC_JWK_SIG, &provider->client_signing_keys);
-	oidc_metadata_get_jwks(r, j_conf,
-			OIDC_JWK_ENC, &provider->client_encryption_keys);
+	oidc_metadata_get_jwks(r, j_conf, &provider->client_keys);
+
+	oidc_jose_error_t err;
+	json_t *jwk = json_object_get(j_conf, "signed_jwks_uri_key");
+	if (jwk != NULL) {
+		if (oidc_jwk_parse_json(r->pool, jwk, &provider->jwks_uri.jwk,
+				&err) == FALSE) {
+			oidc_warn(r,
+					"oidc_jwk_parse_json failed for \"signed_jwks_uri_key\": %s",
+					oidc_jose_e2s(r->pool, err));
+		}
+	} else if (cfg->provider.jwks_uri.jwk != NULL) {
+		provider->jwks_uri.jwk = cfg->provider.jwks_uri.jwk;
+	}
 
 	/* get the (optional) signing & encryption settings for the id_token */
 	oidc_metadata_get_valid_string(r, j_conf,
@@ -1245,8 +1311,9 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 
 	/* see if we've got a custom JWKs refresh interval */
 	oidc_metadata_get_valid_int(r, j_conf, OIDC_METADATA_JWKS_REFRESH_INTERVAL,
-			oidc_valid_jwks_refresh_interval, &provider->jwks_refresh_interval,
-			cfg->provider.jwks_refresh_interval);
+			oidc_valid_jwks_refresh_interval,
+			&provider->jwks_uri.refresh_interval,
+			cfg->provider.jwks_uri.refresh_interval);
 
 	/* see if we've got a custom IAT slack interval */
 	oidc_metadata_get_valid_int(r, j_conf, OIDC_METADATA_IDTOKEN_IAT_SLACK,
@@ -1431,6 +1498,9 @@ apr_byte_t oidc_metadata_client_parse(request_rec *r, oidc_cfg *cfg,
 		}
 	}
 
+	oidc_metadata_get_valid_string(r, j_client,
+			OIDC_METADATA_ID_TOKEN_SIGNED_RESPONSE_ALG, oidc_valid_signed_response_alg, &provider->id_token_signed_response_alg, provider->id_token_signed_response_alg);
+
 	return TRUE;
 }
 
@@ -1451,8 +1521,7 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *issuer,
 	json_t *j_conf = NULL;
 
 	/* allocate space for a parsed-and-merged metadata struct */
-	*provider = apr_pcalloc(r->pool, sizeof(oidc_provider_t));
-	oidc_cfg_provider_init(*provider);
+	*provider = oidc_cfg_provider_create(r->pool);
 
 	/*
 	 * read and parse the provider, conf and client metadata respectively
@@ -1465,7 +1534,7 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg *cfg, const char *issuer,
 	if (oidc_metadata_provider_parse(r, cfg, j_provider, *provider) == FALSE)
 		goto end;
 
-	if (oidc_metadata_conf_get(r, cfg, issuer, &j_conf) == FALSE)
+	if (oidc_metadata_conf_get(r, issuer, &j_conf) == FALSE)
 		goto end;
 	if (oidc_metadata_conf_parse(r, cfg, j_conf, *provider) == FALSE)
 		goto end;

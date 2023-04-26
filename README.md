@@ -1,23 +1,22 @@
-https://github.com/zmartzone/mod_auth_openidc was copied to https://github.com/dematic-spe/mod_auth_openidc
+[![Build Status](https://github.com/OpenIDC/mod_auth_openidc/actions/workflows/build.yml/badge.svg)](https://github.com/OpenIDC/mod_auth_openidc/actions/workflows/build.yml)
+[<img width="184" height="96" align="right" src="http://openid.net/wordpress-content/uploads/2016/05/oid-l-certification-mark-l-cmyk-150dpi-90mm.jpg" alt="OpenID Certification">](https://openid.net/certification)
+[![CodeQL Analysis](https://github.com/OpenIDC/mod_auth_openidc/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/OpenIDC/mod_auth_openidc/actions/workflows/codeql-analysis.yml)
+
+mod_auth_openidc
+================
+
+*mod_auth_openidc* is an OpenID Certified™ authentication and authorization module for the Apache 2.x
+HTTP server that implements the OpenID Connect Relying Party functionality.
+
 Build steps
+--------
+https://github.com/zmartzone/mod_auth_openidc was copied to https://github.com/dematic-spe/mod_auth_openidc
 1) bootstrap-windows.cmd
 2) build.cmd -  the output is in the target folder.
   The output is two zip files, one for x86 and one for x64.
 3) deploy_to_artifactory.cmd
 
-[![Build Status](https://github.com/zmartzone/mod_auth_openidc/actions/workflows/build.yml/badge.svg)](https://github.com/zmartzone/mod_auth_openidc/actions/workflows/build.yml)
-[<img width="184" height="96" align="right" src="http://openid.net/wordpress-content/uploads/2016/05/oid-l-certification-mark-l-cmyk-150dpi-90mm.jpg" alt="OpenID Certification">](https://openid.net/certification)
-[![Architectures Status](https://github.com/zmartzone/mod_auth_openidc/actions/workflows/archs.yml/badge.svg)](https://github.com/zmartzone/mod_auth_openidc/actions/workflows/archs.yml)
-[![CodeQL Analysis](https://github.com/zmartzone/mod_auth_openidc/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/zmartzone/mod_auth_openidc/actions/workflows/codeql-analysis.yml)
-[![Code Quality: Cpp](https://img.shields.io/lgtm/grade/cpp/g/zmartzone/mod_auth_openidc.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/zmartzone/mod_auth_openidc/context:cpp)
-[![Total Alerts](https://img.shields.io/lgtm/alerts/g/zmartzone/mod_auth_openidc.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/zmartzone/mod_auth_openidc/alerts)
 
-mod_auth_openidc
-================
-
-*mod_auth_openidc* is an authentication/authorization module for the Apache 2.x
-HTTP server that functions as an **OpenID Connect Relying Party**, authenticating users against an
-OpenID Connect Provider.
 
 Overview
 --------
@@ -34,19 +33,28 @@ By default the module sets the `REMOTE_USER` variable to the `id_token` `[sub]` 
 identifier (`[sub]@[iss]`). Other `id_token` claims are passed in HTTP headers and/or environment variables together with those
 (optionally) obtained from the UserInfo endpoint.
 
-It allows for authorization rules (based on standard Apache `Require` primitives) that can be matched against the set
-of claims provided in the `id_token`/ `userinfo` claims.
+Custom fine-grained authorization rules - based on Apache's `Require` primitives - can be specified to match against the
+set of claims provided in the `id_token`/ `userinfo` claims, see [here](https://github.com/OpenIDC/mod_auth_openidc/wiki/Authorization). 
+Clustering for resilience and performance can be configured using one of the supported cache backends options as
+listed [here](https://github.com/OpenIDC/mod_auth_openidc/wiki/Caching).
 
-*mod_auth_openidc* supports the following specifications:
+For an exhaustive description of all configuration options, see the file [`auth_openidc.conf`](https://github.com/OpenIDC/mod_auth_openidc/blob/master/auth_openidc.conf). 
+This file can also serve as an include file for `httpd.conf`.
+
+Interoperability
+----------------
+
+*mod_auth_openidc* is [OpenID Certified™](https://openid.net/certification/#RPs) and supports the following specifications:
+
 - [OpenID Connect Core 1.0](http://openid.net/specs/openid-connect-core-1_0.html) *(Basic, Implicit, Hybrid and Refresh flows)*
 - [OpenID Connect Discovery 1.0](http://openid.net/specs/openid-connect-discovery-1_0.html)
 - [OpenID Connect Dynamic Client Registration 1.0](http://openid.net/specs/openid-connect-registration-1_0.html)
 - [OAuth 2.0 Multiple Response Type Encoding Practices 1.0](http://openid.net/specs/oauth-v2-multiple-response-types-1_0.html)
 - [OAuth 2.0 Form Post Response Mode 1.0](http://openid.net/specs/oauth-v2-form-post-response-mode-1_0.html)
 - [RFC7 7636 - Proof Key for Code Exchange by OAuth Public Clients](https://tools.ietf.org/html/rfc7636)
-- [OpenID Connect Session Management 1.0](http://openid.net/specs/openid-connect-session-1_0.html) *(implementers draft; see the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki/OpenID-Connect-Session-Management) for information on how to configure it)*
-- [OpenID Connect Front-Channel Logout 1.0](http://openid.net/specs/openid-connect-frontchannel-1_0.html) *(implementers draft)*
-- [OpenID Connect Back-Channel Logout 1.0](https://openid.net/specs/openid-connect-backchannel-1_0.html) *(implementers draft)*
+- [OpenID Connect Session Management 1.0](http://openid.net/specs/openid-connect-session-1_0.html) *see the [Wiki](https://github.com/OpenIDC/mod_auth_openidc/wiki/OpenID-Connect-Session-Management) for information on how to configure it)*
+- [OpenID Connect Front-Channel Logout 1.0](http://openid.net/specs/openid-connect-frontchannel-1_0.html)
+- [OpenID Connect Back-Channel Logout 1.0](https://openid.net/specs/openid-connect-backchannel-1_0.html)
 
 For an exhaustive description of all configuration options, see the file `auth_openidc.conf`
 in this directory. This file can also serve as an include file for `httpd.conf`.
@@ -54,18 +62,15 @@ in this directory. This file can also serve as an include file for `httpd.conf`.
 Support
 -------
 
-#### Community Support
-For documentation, see the Wiki pages (including Frequently Asked Questions) at:  
-  [https://github.com/zmartzone/mod_auth_openidc/wiki](https://github.com/zmartzone/mod_auth_openidc/wiki)  
-For generic questions there is a Github Discussions forum at:  
-  [https://github.com/zmartzone/mod_auth_openidc/discussions](https://github.com/zmartzone/mod_auth_openidc/discussions)
-There is a (now deprecated) Google Group/mailing list archive at:  
-  [https://groups.google.com/forum/#!forum/mod_auth_openidc](https://groups.google.com/forum/#!forum/mod_auth_openidc)  
-Any questions/issues should go to the Discussions forum.
+#### Community
+Documentation can be found at the Wiki (including Frequently Asked Questions) at:  
+  [https://github.com/OpenIDC/mod_auth_openidc/wiki](https://github.com/OpenIDC/mod_auth_openidc/wiki)  
+For questions, issues and suggestions use the Github Discussions forum at:  
+  [https://github.com/OpenIDC/mod_auth_openidc/discussions](https://github.com/OpenIDC/mod_auth_openidc/discussions)
 
-#### Commercial Services
-For commercial Support contracts, Professional Services, Training and use-case specific support you can contact:  
-  [sales@zmartzone.eu](mailto:sales@zmartzone.eu)  
+#### Commercial
+For commercial support contracts, professional services, training and use-case specific support please contact:  
+  [sales@openidc.com](mailto:sales@openidc.com)  
 
 How to Use It  
 -------------
@@ -103,7 +108,7 @@ Require claim hd:<your-domain>
 ```
 
 The above is an authorization example of an exact match of a provided claim against a string value.
-For more authorization options see the [Wiki page on Authorization](https://github.com/zmartzone/mod_auth_openidc/wiki/Authorization).
+For more authorization options see the [Wiki page on Authorization](https://github.com/OpenIDC/mod_auth_openidc/wiki/Authorization).
 
 ### Quickstart with a generic OpenID Connect Provider
 
@@ -131,23 +136,23 @@ OIDCCryptoPassphrase <password>
    Require valid-user
 </Location>
 ```
-For details on configuring multiple providers see the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki/Multiple-Providers).
+For details on configuring multiple providers see the [Wiki](https://github.com/OpenIDC/mod_auth_openidc/wiki/Multiple-Providers).
 
 ### Quickstart for Other Providers
 
-See the [Wiki](https://github.com/zmartzone/mod_auth_openidc/wiki) for configuration docs for other OpenID Connect Providers:
-- [GLUU Server](https://github.com/zmartzone/mod_auth_openidc/wiki/Gluu-Server)
-- [Keycloak](https://github.com/zmartzone/mod_auth_openidc/wiki/Keycloak)
-- [Azure AD](https://github.com/zmartzone/mod_auth_openidc/wiki/Azure-Active-Directory-Authentication)
-- [Sign in with Apple](https://github.com/zmartzone/mod_auth_openidc/wiki/Sign-in-with-Apple)
-- [Curity Identity Server](https://github.com/zmartzone/mod_auth_openidc/wiki/Curity-Identity-Server)
-- [LemonLDAP::NG](https://github.com/zmartzone/mod_auth_openidc/wiki/LemonLDAP::NG)
-- [GitLab](https://github.com/zmartzone/mod_auth_openidc/wiki/GitLab-OAuth2)
-- [Globus](https://github.com/zmartzone/mod_auth_openidc/wiki/Globus)
-and [more](https://github.com/zmartzone/mod_auth_openidc/wiki/Useful-Links)
+See the [Wiki](https://github.com/OpenIDC/mod_auth_openidc/wiki) for configuration docs for other OpenID Connect Providers:
+- [GLUU Server](https://github.com/OpenIDC/mod_auth_openidc/wiki/Gluu-Server)
+- [Keycloak](https://github.com/OpenIDC/mod_auth_openidc/wiki/Keycloak)
+- [Azure AD](https://github.com/OpenIDC/mod_auth_openidc/wiki/Azure-Active-Directory-Authentication)
+- [Sign in with Apple](https://github.com/OpenIDC/mod_auth_openidc/wiki/Sign-in-with-Apple)
+- [Curity Identity Server](https://github.com/OpenIDC/mod_auth_openidc/wiki/Curity-Identity-Server)
+- [LemonLDAP::NG](https://github.com/OpenIDC/mod_auth_openidc/wiki/LemonLDAP::NG)
+- [GitLab](https://github.com/OpenIDC/mod_auth_openidc/wiki/GitLab-OAuth2)
+- [Globus](https://github.com/OpenIDC/mod_auth_openidc/wiki/Globus)
+and [more](https://github.com/OpenIDC/mod_auth_openidc/wiki/Useful-Links)
 
 Disclaimer
 ----------
 
-*This software is open sourced by ZmartZone IAM. For commercial services
-you can contact [ZmartZone IAM](https://www.zmartzone.eu) as described above in the [Support](#support) section.*
+*This software is open sourced by OpenIDC, subsidiary of ZmartZone Holding B.V. For commercial services
+you can contact [OpenIDC](https://www.openidc.com) as described above in the [Support](#support) section.*
