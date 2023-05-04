@@ -77,6 +77,18 @@ APLOG_USE_MODULE(auth_openidc);
 #define APLOG_TRACE1 APLOG_DEBUG
 #endif
 
+#ifndef apr_uintptr_t
+typedef apr_uint64_t apr_uintptr_t;
+#endif
+
+#ifndef APR_UINT32_MAX
+#define APR_UINT32_MAX UINT32_MAX
+#endif
+
+#ifndef APR_INT64_MAX
+#define APR_INT64_MAX INT64_MAX
+#endif
+
 #define oidc_log(r, level, fmt, ...) ap_log_rerror(APLOG_MARK, level, 0, r,"%s: %s", __FUNCTION__, apr_psprintf(r->pool, fmt, ##__VA_ARGS__))
 #define oidc_slog(s, level, fmt, ...) ap_log_error(APLOG_MARK, level, 0, s, "%s: %s", __FUNCTION__, apr_psprintf(s->process->pconf, fmt, ##__VA_ARGS__))
 //#define oidc_log(r, level, fmt, ...) fprintf(stderr, "# %s: %s\n", __FUNCTION__, apr_psprintf(r->pool, fmt, ##__VA_ARGS__))

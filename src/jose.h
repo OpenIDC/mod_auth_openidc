@@ -56,6 +56,14 @@
 #include <jansson.h>
 #include <cjose/cjose.h>
 
+#ifndef APR_ARRAY_IDX
+#define APR_ARRAY_IDX(ary, i, type)   (((type *)(ary)->elts)[i])
+#endif
+
+#ifndef APR_ARRAY_PUSH
+#define APR_ARRAY_PUSH(ary, type)   (*((type *)apr_array_push(ary)))
+#endif
+
 #define OIDC_JOSE_ALG_SHA1 "sha1"
 #define OIDC_JOSE_ALG_SHA256 "sha256"
 

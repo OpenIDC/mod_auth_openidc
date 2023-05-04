@@ -1,3 +1,10 @@
+05/04/2023
+- cater for libapr/libapr-util version 1.2.x
+- bump to 2.4.14rc13
+
+04/27/2023
+- increase default OIDCCacheShmMax to 10000
+
 04/25/2023
 - add options to avoid revoking tokens before logout
   as some OPs may kill their SSO session that would make subsequent logout fail;

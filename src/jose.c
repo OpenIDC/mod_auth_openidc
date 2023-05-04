@@ -415,14 +415,16 @@ void oidc_jwk_destroy(oidc_jwk_t *jwk) {
  */
 void oidc_jwk_list_destroy_hash(apr_hash_t *keys) {
 	apr_hash_index_t *hi = NULL;
+	const void *key = NULL;
+	apr_ssize_t klen = 0;
 	if (keys == NULL)
 		return;
 	for (hi = apr_hash_first(NULL, keys); hi; hi = apr_hash_next(hi)) {
 		oidc_jwk_t *jwk = NULL;
-		apr_hash_this(hi, NULL, NULL, (void**) &jwk);
+		apr_hash_this(hi, &key, &klen, (void**) &jwk);
 		oidc_jwk_destroy(jwk);
+		apr_hash_set(keys, key, klen, NULL);
 	}
-	apr_hash_clear(keys);
 }
 
 apr_array_header_t* oidc_jwk_list_copy(apr_pool_t *pool,
