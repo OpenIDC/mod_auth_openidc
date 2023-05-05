@@ -3259,7 +3259,7 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF,
 				"Client identifier used in calls to OpenID Connect OP."),
 		AP_INIT_TAKE1(OIDCClientSecret,
-				oidc_set_string_slot,
+				oidc_set_passphrase_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.client_secret),
 				RSRC_CONF,
 				"Client secret used in calls to OpenID Connect OP."),
