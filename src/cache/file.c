@@ -159,7 +159,7 @@ static apr_status_t oidc_cache_file_write(request_rec *r, const char *path,
  * get a value for the specified key from the cache
  */
 static apr_byte_t oidc_cache_file_get(request_rec *r, const char *section,
-		const char *key, const char **value) {
+		const char *key, char **value) {
 	apr_file_t *fd = NULL;
 	apr_status_t rc = APR_SUCCESS;
 	char s_err[128];
@@ -212,7 +212,7 @@ static apr_byte_t oidc_cache_file_get(request_rec *r, const char *section,
 	*value = apr_palloc(r->pool, info.len);
 
 	/* (blocking) read the requested data in to the buffer */
-	rc = oidc_cache_file_read(r, path, fd, (void *) *value, info.len);
+	rc = oidc_cache_file_read(r, path, fd, (void *) (*value), info.len);
 
 	/* barf on failure */
 	if (rc != APR_SUCCESS) {

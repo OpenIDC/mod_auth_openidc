@@ -71,10 +71,11 @@ typedef struct oidc_cache_cfg_redis_t {
 
 int oidc_cache_redis_post_config(server_rec *s, oidc_cfg *cfg, const char *name);
 int oidc_cache_redis_child_init(apr_pool_t *p, server_rec *s);
-redisReply* oidc_cache_redis_command(request_rec *r, oidc_cache_cfg_redis_t *context, char **errstr,
-		const char *format, va_list ap);
-apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section, const char *key,
-		const char **value);
-apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section, const char *key,
-		const char *value, apr_time_t expiry);
+redisReply* oidc_cache_redis_command(request_rec *r,
+		oidc_cache_cfg_redis_t *context, char **errstr, const char *format,
+		va_list ap);
+apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section,
+		const char *key, char **value);
+apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section,
+		const char *key, const char *value, apr_time_t expiry);
 apr_status_t oidc_cache_redis_disconnect(oidc_cache_cfg_redis_t *context);

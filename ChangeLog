@@ -1,5 +1,5 @@
 05/05/2023
-- add exec support to OIDCClientSecret
+- add exec support to OIDCClientSecret; see #1056; thanks @sealor
 
 05/04/2023
 - cater for libapr/libapr-util version 1.2.x

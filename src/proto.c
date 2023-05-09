@@ -613,8 +613,10 @@ void add_auth_request_params(request_rec *r, apr_table_t *params,
 	if (auth_request_params == NULL)
 		return;
 
-	while (*auth_request_params
-			&& (val = ap_getword(r->pool, &auth_request_params, OIDC_CHAR_AMP))) {
+	while (*auth_request_params) {
+		val = ap_getword(r->pool, &auth_request_params, OIDC_CHAR_AMP);
+		if (val == NULL)
+			break;
 		key = ap_getword(r->pool, (const char**) &val, OIDC_CHAR_EQUAL);
 		ap_unescape_url(key);
 		ap_unescape_url(val);

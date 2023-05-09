@@ -652,8 +652,8 @@ static const char* oidc_set_validate_issuer_slot(cmd_parms *cmd,
  */
 oidc_valid_function_t oidc_cfg_get_valid_endpoint_auth_function(oidc_cfg *cfg) {
 	return (cfg->private_keys != NULL) ?
-			oidc_valid_endpoint_auth_method :
-			oidc_valid_endpoint_auth_method_no_private_key;
+			&oidc_valid_endpoint_auth_method :
+			&oidc_valid_endpoint_auth_method_no_private_key;
 }
 
 /*

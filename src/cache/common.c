@@ -241,6 +241,7 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key,
 	int encrypted = oidc_cfg_cache_encrypt(r);
 	apr_byte_t rc = TRUE;
 	char *msg = NULL;
+	char *cache_value = NULL;
 
 	oidc_debug(r, "enter: %s (section=%s, decrypt=%d, type=%s)", key, section,
 			encrypted, cfg->cache->name);
@@ -250,7 +251,6 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key,
 		key = oidc_cache_get_hashed_key(r, cfg->crypto_passphrase, key);
 
 	/* get the value from the cache */
-	const char *cache_value = NULL;
 	if (cfg->cache->get(r, section, key, &cache_value) == FALSE) {
 		rc = FALSE;
 		goto out;

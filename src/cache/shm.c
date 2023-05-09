@@ -165,11 +165,11 @@ static char *oidc_cache_shm_get_key(request_rec *r, const char *section,
  * get a value from the shared memory cache
  */
 static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section,
-		const char *key, const char **value) {
+		const char *key, char **value) {
 
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
 			&auth_openidc_module);
-	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *) cfg->cache_cfg;
+	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t*) cfg->cache_cfg;
 
 	int i;
 	const char *section_key = oidc_cache_shm_get_key(r, section, key);
