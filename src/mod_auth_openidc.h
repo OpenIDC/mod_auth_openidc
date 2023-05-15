@@ -78,7 +78,7 @@ APLOG_USE_MODULE(auth_openidc);
 #endif
 
 #ifndef apr_uintptr_t
-typedef apr_uint64_t apr_uintptr_t;
+#define apr_uintptr_t apr_uint64_t
 #endif
 
 #ifndef APR_UINT32_MAX
