@@ -1,3 +1,8 @@
+05/17/2023
+- fix refreshing claims from the userinfo endpoint when no id_token claims are stored in the session
+- fix memory leak when refreshing claims from the userinfo endpoint
+- bump to 2.4.14.1rc0
+
 05/15/2023
 - release 2.4.14
 
