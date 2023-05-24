@@ -4366,6 +4366,8 @@ static void oidc_authz_get_claims_and_idtoken(request_rec *r, json_t **claims,
  */
 static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 
+	char *html_head = NULL;
+
 	oidc_debug(r, "enter");
 
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
@@ -4393,7 +4395,7 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 			r->header_only = 1;
 		return AUTHZ_DENIED;
 	case OIDC_UNAUTZ_RETURN302:
-		char *html_head = apr_psprintf(r->pool,
+		html_head = apr_psprintf(r->pool,
 				"<meta http-equiv=\"refresh\" content=\"0; url=%s\">",
 				oidc_dir_cfg_unauthz_arg(r));
 		oidc_util_html_send(r, "Authorization Error Redirect", html_head, NULL,
