@@ -1,7 +1,7 @@
 05/24/2023
 - fix RequireAny behaviour on 401/403/302: revert 9d6192b2ab0716d8f7d2a29754a80b6ab1e804eb for non-stepup authentication cases
 - make OIDCUnautzAction 302|auth (i.e. step up authentication) work with multiple/complex Require expressions e.g. RequireAny
-- bump to 2.4.14.1rc2
+- release 2.4.14.1
 
 05/17/2023
 - fix refreshing claims from the userinfo endpoint when no id_token claims are stored in the session
