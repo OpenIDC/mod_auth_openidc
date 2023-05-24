@@ -112,12 +112,13 @@ APLOG_USE_MODULE(auth_openidc);
 #endif
 
 /* keys for storing info in the request state */
-#define OIDC_REQUEST_STATE_KEY_IDTOKEN "i"
-#define OIDC_REQUEST_STATE_KEY_CLAIMS  "c"
-#define OIDC_REQUEST_STATE_KEY_DISCOVERY  "d"
-#define OIDC_REQUEST_STATE_KEY_AUTHN  "a"
-#define OIDC_REQUEST_STATE_KEY_SAVE "s"
-#define OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_REDIRECT  "ar"
+#define OIDC_REQUEST_STATE_KEY_IDTOKEN            "i"
+#define OIDC_REQUEST_STATE_KEY_CLAIMS             "c"
+#define OIDC_REQUEST_STATE_KEY_DISCOVERY          "d"
+#define OIDC_REQUEST_STATE_KEY_AUTHN              "a"
+#define OIDC_REQUEST_STATE_KEY_SAVE               "s"
+#define OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_MSG      "am"
+#define OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_REDIRECT "ar"
 
 /* parameter name of the callback URL in the discovery response */
 #define OIDC_DISC_CB_PARAM "oidc_callback"
@@ -507,6 +508,7 @@ apr_byte_t oidc_post_preserve_javascript(request_rec *r, const char *location, c
 void oidc_scrub_headers(request_rec *r);
 void oidc_strip_cookies(request_rec *r);
 int oidc_content_handler(request_rec *r);
+int oidc_fixup_handler(request_rec *r);
 apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name, const char *replace, const char *reg_exp,
                                 json_t *json, char **request_user);
 

@@ -3042,6 +3042,7 @@ void oidc_register_hooks(apr_pool_t *pool) {
 	ap_hook_check_user_id(oidc_check_user_id, NULL, NULL, APR_HOOK_MIDDLE);
 	ap_hook_auth_checker(oidc_auth_checker, NULL, authzSucc, APR_HOOK_MIDDLE);
 #endif
+	ap_hook_fixups(oidc_fixup_handler, NULL, NULL, APR_HOOK_MIDDLE);
 }
 
 /*
