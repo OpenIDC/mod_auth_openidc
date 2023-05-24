@@ -4386,20 +4386,22 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 	switch (oidc_dir_cfg_unautz_action(r)) {
 	case OIDC_UNAUTZ_RETURN403:
 	case OIDC_UNAUTZ_RETURN401:
-		if (oidc_dir_cfg_unauthz_arg(r))
-			oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_MSG,
-					oidc_dir_cfg_unauthz_arg(r));
-		else
-			oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_MSG, "");
-		oidc_debug(r,
-				"defer authentication error message to the content handler");
-		return AUTHZ_GRANTED;
+		oidc_util_html_send_error(r, c->error_template, "Authorization Error",
+				oidc_dir_cfg_unauthz_arg(r),
+				HTTP_UNAUTHORIZED);
+		if (c->error_template)
+			r->header_only = 1;
+		return AUTHZ_DENIED;
 	case OIDC_UNAUTZ_RETURN302:
-		oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_REDIRECT,
+		char *html_head = apr_psprintf(r->pool,
+				"<meta http-equiv=\"refresh\" content=\"0; url=%s\">",
 				oidc_dir_cfg_unauthz_arg(r));
-		oidc_debug(r,
-				"defer authorization error redirect to the content handler");
-		return AUTHZ_GRANTED;
+		oidc_util_html_send(r, "Authorization Error Redirect", html_head, NULL,
+				NULL,
+				HTTP_UNAUTHORIZED);
+		if (c->error_template)
+			r->header_only = 1;
+		return AUTHZ_DENIED;
 	case OIDC_UNAUTZ_AUTHENTICATE:
 		/*
 		 * exception handling: if this looks like an HTTP request that cannot
@@ -4669,19 +4671,6 @@ int oidc_content_handler(request_rec *r) {
 
 		rc = HTTP_MOVED_TEMPORARILY;
 
-	} else if (oidc_request_state_get(r,
-			OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_MSG) != NULL) {
-
-		/* error message for 401 or 403 authorization errors */
-		rc = (oidc_dir_cfg_unautz_action(r) == OIDC_UNAUTZ_RETURN403) ?
-				HTTP_FORBIDDEN : HTTP_UNAUTHORIZED;
-
-		oidc_debug(r, "request state autz_err_msg found, return %d: %s", rc,
-				oidc_dir_cfg_unauthz_arg(r));
-
-		if (oidc_dir_cfg_unauthz_arg(r))
-			rc = oidc_util_html_send_error(r, c->error_template,
-					"Authorization Error", oidc_dir_cfg_unauthz_arg(r), rc);
 	}
 
 	return rc;

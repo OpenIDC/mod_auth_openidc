@@ -117,7 +117,6 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_REQUEST_STATE_KEY_DISCOVERY  "d"
 #define OIDC_REQUEST_STATE_KEY_AUTHN  "a"
 #define OIDC_REQUEST_STATE_KEY_SAVE "s"
-#define OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_MSG  "am"
 #define OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_REDIRECT  "ar"
 
 /* parameter name of the callback URL in the discovery response */
