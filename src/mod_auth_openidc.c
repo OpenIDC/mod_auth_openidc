@@ -4366,8 +4366,6 @@ static void oidc_authz_get_claims_and_idtoken(request_rec *r, json_t **claims,
  */
 static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 
-	char *html_head = NULL;
-
 	oidc_debug(r, "enter");
 
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
