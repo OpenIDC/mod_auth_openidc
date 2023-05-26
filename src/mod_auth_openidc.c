@@ -3838,6 +3838,7 @@ int oidc_handle_revoke_session(request_rec *r, oidc_cfg *c) {
 }
 
 #define OIDC_INFO_PARAM_ACCESS_TOKEN_REFRESH_INTERVAL "access_token_refresh_interval"
+#define OIDC_INFO_PARAM_EXTEND_SESSION "extend_session"
 
 /*
  * handle request for session info
@@ -3845,11 +3846,19 @@ int oidc_handle_revoke_session(request_rec *r, oidc_cfg *c) {
 static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 		oidc_session_t *session, apr_byte_t needs_save) {
 	int rc = HTTP_UNAUTHORIZED;
-	char *s_format = NULL, *s_interval = NULL, *r_value = NULL;
+	char *s_format = NULL;
+	char *s_interval = NULL;
+	char *s_extend_session = NULL;
+	char *r_value = NULL;
+	apr_byte_t b_extend_session = TRUE;
 	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO,
 			&s_format);
 	oidc_util_get_request_parameter(r,
 			OIDC_INFO_PARAM_ACCESS_TOKEN_REFRESH_INTERVAL, &s_interval);
+	oidc_util_get_request_parameter(r,
+			OIDC_INFO_PARAM_EXTEND_SESSION, &s_extend_session);
+	if ((s_extend_session) && (_oidc_strcmp(s_extend_session, "false") == 0))
+		b_extend_session = FALSE;
 
 	/* see if this is a request for a format that is supported */
 	if ((_oidc_strcmp(OIDC_HOOK_INFO_FORMAT_JSON, s_format) != 0)
@@ -3921,7 +3930,8 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 	 * side-effect is that this may refresh the access token if not already done
 	 * note that OIDCUserInfoRefreshInterval should be set to control the refresh policy
 	 */
-	needs_save |= oidc_refresh_claims_from_userinfo_endpoint(r, c, session);
+	if (b_extend_session)
+		needs_save |= oidc_refresh_claims_from_userinfo_endpoint(r, c, session);
 
 	/* include the access token in the session info */
 	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_ACCES_TOKEN,
@@ -4011,11 +4021,12 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 	}
 
 	/* pass the tokens to the application and save the session, possibly updating the expiry */
-	if (oidc_session_pass_tokens(r, c, session, &needs_save) == FALSE)
-		oidc_warn(r, "error passing tokens");
+	if (b_extend_session)
+		if (oidc_session_pass_tokens(r, c, session, &needs_save) == FALSE)
+			oidc_warn(r, "error passing tokens");
 
 	/* check if something was updated in the session and we need to save it again */
-	if (needs_save) {
+	if (b_extend_session && needs_save) {
 		if (oidc_session_save(r, session, FALSE) == FALSE) {
 			oidc_warn(r, "error saving session");
 			rc = HTTP_INTERNAL_SERVER_ERROR;

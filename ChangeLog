@@ -1,3 +1,8 @@
+05/25/2023
+- add support for extend_session=false query parameter to the info hook
+  to avoid extending the session on calls to the info hook
+- bump to 2.4.14.2rc0
+
 05/24/2023
 - fix RequireAny behaviour on 401/403/302: revert 9d6192b2ab0716d8f7d2a29754a80b6ab1e804eb for non-stepup authentication cases
 - make OIDCUnautzAction 302|auth (i.e. step up authentication) work with multiple/complex Require expressions e.g. RequireAny
