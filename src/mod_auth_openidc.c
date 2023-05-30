@@ -4377,6 +4377,8 @@ static void oidc_authz_get_claims_and_idtoken(request_rec *r, json_t **claims,
  */
 static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 
+	char *html_head = NULL;
+
 	oidc_debug(r, "enter");
 
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
@@ -4397,16 +4399,20 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 	switch (oidc_dir_cfg_unautz_action(r)) {
 	case OIDC_UNAUTZ_RETURN403:
 	case OIDC_UNAUTZ_RETURN401:
-		oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_MSG,
-				oidc_dir_cfg_unauthz_arg(r) ? oidc_dir_cfg_unauthz_arg(r) : "");
-		oidc_debug(r,
-				"defer authorization error handling to the fixup handler");
+		oidc_util_html_send_error(r, c->error_template, "Authorization Error",
+				oidc_dir_cfg_unauthz_arg(r),
+				HTTP_UNAUTHORIZED);
+		if (c->error_template)
+			r->header_only = 1;
 		return AUTHZ_DENIED;
 	case OIDC_UNAUTZ_RETURN302:
-		oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_REDIRECT,
-				oidc_dir_cfg_unauthz_arg(r) ? oidc_dir_cfg_unauthz_arg(r) : "");
-		oidc_debug(r,
-				"defer authorization error redirect to the fixup handler");
+		html_head = apr_psprintf(r->pool,
+				"<meta http-equiv=\"refresh\" content=\"0; url=%s\">",
+				oidc_dir_cfg_unauthz_arg(r));
+		oidc_util_html_send(r, "Authorization Error Redirect", html_head, NULL,
+				NULL,
+				HTTP_UNAUTHORIZED);
+		r->header_only = 1;
 		return AUTHZ_DENIED;
 	case OIDC_UNAUTZ_AUTHENTICATE:
 		/*
@@ -4431,10 +4437,14 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 		return AUTHZ_GRANTED;
 
 	if (location != NULL) {
-		oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_REDIRECT,
+		oidc_debug(r, "send HTML refresh with authorization redirect: %s",
 				location);
-		oidc_debug(r, "defer step up authentication to the fixup handler");
-		return AUTHZ_DENIED;
+		html_head = apr_psprintf(r->pool,
+				"<meta http-equiv=\"refresh\" content=\"0; url=%s\">",
+				location);
+		oidc_util_html_send(r, "Stepup Authentication", html_head, NULL, NULL,
+				HTTP_UNAUTHORIZED);
+		r->header_only = 1;
 	}
 
 	return AUTHZ_DENIED;
@@ -4669,54 +4679,6 @@ int oidc_content_handler(request_rec *r) {
 		/* sending POST preserve */
 		rc = OK;
 	}
-
-	return rc;
-}
-
-int oidc_fixup_handler(request_rec *r) {
-	oidc_cfg *c = ap_get_module_config(r->server->module_config,
-			&auth_openidc_module);
-	int rc = DECLINED;
-	const char *location = NULL;
-	const char *msg = NULL;
-
-	oidc_debug(r, "enter: status=%d (%s)", r->status,
-			r->status_line ? r->status_line : "");
-
-	/* this handler is (only) used to deal with the overall authorization result of RequireAll/RequireAny etc. */
-	if ((r->status != 401) && (r->status != 403))
-		goto end;
-
-	msg = oidc_request_state_get(r,
-			OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_MSG);
-	if (msg) {
-		oidc_util_html_send_error(r, c->error_template, "Authorization Error",
-				msg, HTTP_UNAUTHORIZED);
-		r->status =
-				(oidc_dir_cfg_unautz_action(r) == OIDC_UNAUTZ_RETURN403) ?
-						HTTP_FORBIDDEN : HTTP_UNAUTHORIZED;
-		;
-		if (c->error_template) {
-			rc = r->status;
-		} else {
-			/* need OK as we are processing internal 401 and a document that is already written */
-			rc = OK;
-		}
-		goto end;
-	}
-
-	location = oidc_request_state_get(r,
-			OIDC_REQUEST_STATE_KEY_AUTHZ_ERR_REDIRECT);
-	if (location != NULL) {
-		/* there was an authorization error, redirect for an external error page or step up authentication  */
-		apr_table_set(r->headers_out, OIDC_HTTP_HDR_LOCATION, location);
-		r->status = HTTP_MOVED_TEMPORARILY;
-		/* need OK as we are processing internal 401 and a document that is already written */
-		rc = OK;
-		goto end;
-	}
-
-end:
 
 	return rc;
 }
