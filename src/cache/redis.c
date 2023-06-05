@@ -274,7 +274,7 @@ static redisReply* oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t 
 	va_list ap;
 
 	/* try to execute a command at max 2 times while reconnecting */
-	for (i = 0; i < OIDC_REDIS_MAX_TRIES; i++) {
+	for (i = 1; i <= OIDC_REDIS_MAX_TRIES; i++) {
 
 		/* connect */
 		if (context->connect(r, context) != APR_SUCCESS)
@@ -291,8 +291,16 @@ static redisReply* oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t 
 			break;
 
 		/* something went wrong, log it */
-		oidc_error(r, "Redis command (attempt=%d to %s:%d) failed, disconnecting: '%s' [%s]", i, context->host_str, context->port, errstr,
-				reply ? reply->str : "<n/a>");
+		if (i < OIDC_REDIS_MAX_TRIES)
+			oidc_warn(r,
+					"Redis command (attempt=%d/%d to %s:%d) failed, disconnecting: '%s' [%s]",
+					i, OIDC_REDIS_MAX_TRIES, context->host_str, context->port,
+					errstr, reply ? reply->str : "<n/a>");
+		else
+			oidc_error(r,
+					"Redis command (attempt=%d/%d to %s:%d) failed, disconnecting: '%s' [%s]",
+					i, OIDC_REDIS_MAX_TRIES, context->host_str, context->port,
+					errstr, reply ? reply->str : "<n/a>");
 
 		/* free the reply (if there is one allocated) */
 		oidc_cache_redis_reply_free(&reply);
