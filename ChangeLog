@@ -1,5 +1,9 @@
+06/05/2023
+- avoid using encryption keys as signing keys for request objects and private_key_jwt token endpoint auth
+- bump to 2.4.14.2rc2
+
 05/30/2023
-- revert all 401/402/302/stepup behaviour to <= 2.4.13.2
+- revert all 401/403/302/stepup behaviour to <= 2.4.13.2
 - bump to 2.4.14.2rc1
 
 05/25/2023

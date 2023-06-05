@@ -344,7 +344,7 @@ char* oidc_proto_create_request_object(request_rec *r,
 					|| (cfg->private_keys != NULL)) {
 				sjwk = provider->client_keys ?
 						oidc_util_key_list_first(provider->client_keys, kty,
-								NULL) :
+								OIDC_JOSE_JWK_SIG_STR) :
 								oidc_util_key_list_first(cfg->private_keys, kty,
 										OIDC_JOSE_JWK_SIG_STR);
 				if (sjwk && sjwk->kid)
@@ -1929,7 +1929,8 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r,
 		return FALSE;
 
 	if ((client_keys != NULL) && (client_keys->nelts > 0)) {
-		jwk = oidc_util_key_list_first(client_keys, CJOSE_JWK_KTY_RSA, NULL);
+		jwk = oidc_util_key_list_first(client_keys, CJOSE_JWK_KTY_RSA,
+				OIDC_JOSE_JWK_SIG_STR);
 		if (jwk && jwk->x5t)
 			jwt->header.x5t = apr_pstrdup(r->pool, jwk->x5t);
 	} else if ((cfg->private_keys != NULL) && (cfg->private_keys->nelts > 0)) {
