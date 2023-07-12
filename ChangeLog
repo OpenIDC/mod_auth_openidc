@@ -1,9 +1,8 @@
 07/12/2023
-- add support for hiding access_token from header/environment with OIDCPassAccessToken config option
-
-07/12/2023
 - add a sanity alg/enc check on self-encrypted AES GCM JWTs
-- bump to 2.4.14.3rc0
+- add `OIDCPassAccessToken Off` option to disable (the default of) passing the access token and its expiry
+  in the OIDC_access_token/OIDC_access_token_expires header/environment variables; thanks @mattias-asander
+- bump to 2.4.14.3rc1
 
 06/05/2023
 - avoid using encryption keys as signing keys for request objects and private_key_jwt token endpoint auth
