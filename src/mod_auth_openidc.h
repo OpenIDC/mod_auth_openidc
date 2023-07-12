@@ -782,6 +782,7 @@ apr_byte_t oidc_cfg_dir_pass_info_in_headers(request_rec *r);
 apr_byte_t oidc_cfg_dir_pass_info_in_envvars(request_rec *r);
 int oidc_cfg_dir_pass_info_encoding(request_rec *r);
 apr_byte_t oidc_cfg_dir_pass_refresh_token(request_rec *r);
+apr_byte_t oidc_cfg_dir_pass_access_token(request_rec *r);
 apr_byte_t oidc_cfg_dir_accept_token_in(request_rec *r);
 char *oidc_cfg_dir_accept_token_in_option(request_rec *r, const char *key);
 int oidc_cfg_token_introspection_interval(request_rec *r);

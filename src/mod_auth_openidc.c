@@ -1308,7 +1308,7 @@ static apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg *cfg,
 
 	/* set the access_token in the app headers/variables */
 	const char *access_token = oidc_session_get_access_token(r, session);
-	if (access_token != NULL) {
+	if ((oidc_cfg_dir_pass_access_token(r) != 0) && access_token != NULL) {
 		/* pass it to the app in a header or environment variable */
 		oidc_util_set_app_info(r, OIDC_APP_INFO_ACCESS_TOKEN, access_token,
 				OIDC_DEFAULT_HEADER_PREFIX, pass_headers, pass_envvars, pass_hdr_as);
@@ -1317,7 +1317,7 @@ static apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg *cfg,
 	/* set the expiry timestamp in the app headers/variables */
 	const char *access_token_expires = oidc_session_get_access_token_expires(r,
 			session);
-	if (access_token_expires != NULL) {
+	if ((oidc_cfg_dir_pass_access_token(r) != 0) && access_token_expires != NULL) {
 		/* pass it to the app in a header or environment variable */
 		oidc_util_set_app_info(r, OIDC_APP_INFO_ACCESS_TOKEN_EXP,
 				access_token_expires,
