@@ -1,4 +1,7 @@
 07/12/2023
+- add support for hiding access_token from header/environment with OIDCPassAccessToken config option
+
+07/12/2023
 - add a sanity alg/enc check on self-encrypted AES GCM JWTs
 - bump to 2.4.14.3rc0
 

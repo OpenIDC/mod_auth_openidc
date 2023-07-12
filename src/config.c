@@ -125,6 +125,8 @@
 /* default for preserving POST parameters across authentication requests */
 #define OIDC_DEFAULT_PRESERVE_POST 0
 /* default for passing the access token in a header/environment variable */
+#define OIDC_DEFAULT_PASS_ACCESS_TOKEN 1
+/* default for passing the refresh token in a header/environment variable */
 #define OIDC_DEFAULT_PASS_REFRESH_TOKEN 0
 /* default for passing app info in headers */
 #define OIDC_DEFAULT_PASS_APP_INFO_IN_HEADERS 1
@@ -259,6 +261,7 @@
 #define OIDCUserInfoRefreshInterval            "OIDCUserInfoRefreshInterval"
 #define OIDCOAuthTokenIntrospectionInterval    "OIDCOAuthTokenIntrospectionInterval"
 #define OIDCPreservePost                       "OIDCPreservePost"
+#define OIDCPassAccessToken                    "OIDCPassAccessToken"
 #define OIDCPassRefreshToken                   "OIDCPassRefreshToken"
 #define OIDCRequestObject                      "OIDCRequestObject"
 #define OIDCProviderMetadataRefreshInterval    "OIDCProviderMetadataRefreshInterval"
@@ -298,6 +301,7 @@ typedef struct oidc_dir_cfg {
 	apr_hash_t *oauth_accept_token_options;
 	int oauth_token_introspect_interval;
 	int preserve_post;
+	int pass_access_token;
 	int pass_refresh_token;
 	oidc_apr_expr_t *path_auth_request_expr;
 	oidc_apr_expr_t *path_scope_expr;
@@ -2187,6 +2191,7 @@ void* oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->oauth_accept_token_options = apr_hash_make(pool);
 	c->oauth_token_introspect_interval = -2;
 	c->preserve_post = OIDC_CONFIG_POS_INT_UNSET;
+	c->pass_access_token = OIDC_CONFIG_POS_INT_UNSET;
 	c->pass_refresh_token = OIDC_CONFIG_POS_INT_UNSET;
 	c->path_auth_request_expr = NULL;
 	c->path_scope_expr = NULL;
@@ -2263,6 +2268,14 @@ int oidc_cfg_dir_pass_info_encoding(request_rec *r) {
 	if (dir_cfg->pass_info_as == OIDC_CONFIG_POS_INT_UNSET)
 		return OIDC_DEFAULT_PASS_APP_INFO_HDR_AS;
 	return dir_cfg->pass_info_as;
+}
+
+apr_byte_t oidc_cfg_dir_pass_access_token(request_rec *r) {
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+	if (dir_cfg->pass_access_token == OIDC_CONFIG_POS_INT_UNSET)
+		return OIDC_DEFAULT_PASS_ACCESS_TOKEN;
+	return dir_cfg->pass_access_token;
 }
 
 apr_byte_t oidc_cfg_dir_pass_refresh_token(request_rec *r) {
@@ -2459,6 +2472,9 @@ void* oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->preserve_post =
 			add->preserve_post != OIDC_CONFIG_POS_INT_UNSET ?
 					add->preserve_post : base->preserve_post;
+	c->pass_access_token =
+			add->pass_access_token != OIDC_CONFIG_POS_INT_UNSET ?
+					add->pass_access_token : base->pass_access_token;
 	c->pass_refresh_token =
 			add->pass_refresh_token != OIDC_CONFIG_POS_INT_UNSET ?
 					add->pass_refresh_token : base->pass_refresh_token;
@@ -3624,6 +3640,11 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_dir_cfg, preserve_post),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Indicates whether POST parameters will be preserved across authentication requests."),
+		AP_INIT_FLAG(OIDCPassAccessToken,
+				ap_set_flag_slot,
+				(void*)APR_OFFSETOF(oidc_dir_cfg, pass_access_token),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Pass the access token in a header and/or environment variable (On or Off)"),
 		AP_INIT_FLAG(OIDCPassRefreshToken,
 				ap_set_flag_slot,
 				(void*)APR_OFFSETOF(oidc_dir_cfg, pass_refresh_token),
