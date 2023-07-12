@@ -268,9 +268,18 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret,
 	char *plaintext = NULL;
 	int plaintext_len = 0;
 
+	char *alg = NULL;
+	char *enc = NULL;
+	oidc_proto_peek_jwt_header(r, compact_encoded_jwt, &alg, &enc);
+	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_DIR) != 0)
+			|| (_oidc_strcmp(enc, CJOSE_HDR_ENC_A256GCM) != 0)) {
+		oidc_error(r, "corrupted JWE header, alg=\"%s\" enc=\"%s\"", alg, enc);
+		goto end;
+	}
+
 	if (oidc_jwe_decrypt(r->pool, compact_encoded_jwt, keys, &plaintext,
 			&plaintext_len, &err, FALSE) == FALSE) {
-		oidc_error(r, "decrypting JWT failed: %s", oidc_jose_e2s(r->pool, err));
+		oidc_error(r, "decrypting JWE failed: %s", oidc_jose_e2s(r->pool, err));
 		goto end;
 	}
 

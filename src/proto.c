@@ -464,7 +464,7 @@ char* oidc_proto_create_request_object(request_rec *r,
 	json_decref(request_object_config);
 
 	oidc_debug(r, "serialized request object JWT header = \"%s\"",
-			oidc_proto_peek_jwt_header(r, serialized_request_object, NULL));
+			oidc_proto_peek_jwt_header(r, serialized_request_object, NULL, NULL));
 	oidc_debug(r, "serialized request object = \"%s\"",
 			serialized_request_object);
 
@@ -1635,7 +1635,7 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt,
  * return the compact-encoded JWT header contents
  */
 char* oidc_proto_peek_jwt_header(request_rec *r,
-		const char *compact_encoded_jwt, char **alg) {
+		const char *compact_encoded_jwt, char **alg, char **enc) {
 	char *input = NULL, *result = NULL;
 	char *p = strstr(compact_encoded_jwt ? compact_encoded_jwt : "", ".");
 	if (p == NULL) {
@@ -1649,12 +1649,19 @@ char* oidc_proto_peek_jwt_header(request_rec *r,
 		oidc_warn(r, "oidc_base64url_decode returned an error");
 		return NULL;
 	}
-	if (alg) {
+	if ((alg != NULL) || (enc != NULL)) {
 		json_t *json = NULL;
 		oidc_util_decode_json_object(r, result, &json);
-		if (json)
-			*alg = apr_pstrdup(r->pool,
-					json_string_value(json_object_get(json, CJOSE_HDR_ALG)));
+		if (json) {
+			if (alg)
+				*alg = apr_pstrdup(r->pool,
+						json_string_value(
+								json_object_get(json, CJOSE_HDR_ALG)));
+			if (enc)
+				*enc = apr_pstrdup(r->pool,
+						json_string_value(
+								json_object_get(json, CJOSE_HDR_ENC)));
+		}
 		json_decref(json);
 	}
 	return result;
@@ -1669,7 +1676,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 
 	char *alg = NULL;
 	oidc_debug(r, "enter: id_token header=%s",
-			oidc_proto_peek_jwt_header(r, id_token, &alg));
+			oidc_proto_peek_jwt_header(r, id_token, &alg, NULL));
 	apr_hash_t *decryption_keys = NULL;
 
 	char buf[APR_RFC822_DATE_LEN + 1];
@@ -2170,7 +2177,7 @@ static apr_byte_t oidc_user_info_response_validate(request_rec *r,
 			|| (provider->userinfo_encrypted_response_alg != NULL)
 			|| (provider->userinfo_encrypted_response_enc != NULL)) {
 		oidc_debug(r, "JWT header=%s",
-				oidc_proto_peek_jwt_header(r, *response, &alg));
+				oidc_proto_peek_jwt_header(r, *response, &alg, NULL));
 	}
 
 	oidc_jose_error_t err;
