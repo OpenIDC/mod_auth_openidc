@@ -196,6 +196,7 @@ APLOG_USE_MODULE(auth_openidc);
 
 /* the (global) key for the mod_auth_openidc related state that is stored in the request userdata context */
 #define OIDC_USERDATA_KEY "mod_auth_openidc_state"
+#define OIDC_USERDATA_SESSION "mod_auth_openidc_session"
 #define OIDC_USERDATA_POST_PARAMS_KEY "oidc_userdata_post_params"
 
 /* input filter hook name */
@@ -961,6 +962,7 @@ apr_byte_t oidc_session_free(request_rec *r, oidc_session_t *z);
 apr_byte_t oidc_session_extract(request_rec *r, oidc_session_t *z);
 apr_byte_t oidc_session_load_cache_by_uuid(request_rec *r, oidc_cfg *c, const char *uuid, oidc_session_t *z);
 void oidc_session_id_new(request_rec *r, oidc_session_t *z);
+oidc_session_t *oidc_session_copy(request_rec *r, oidc_session_t *z);
 
 void oidc_session_set_userinfo_jwt(request_rec *r, oidc_session_t *z, const char *userinfo_jwt);
 const char * oidc_session_get_userinfo_jwt(request_rec *r, oidc_session_t *z);

@@ -4139,6 +4139,8 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 		// need to establish user/claims for authorization purposes
 		rc = oidc_handle_existing_session(r, c, session, &needs_save);
 
+		apr_pool_userdata_set(oidc_session_copy(r, session), OIDC_USERDATA_SESSION, NULL, r->pool);
+
 		if (needs_save)
 			oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_SAVE, "");
 
@@ -4649,7 +4651,11 @@ int oidc_content_handler(request_rec *r) {
 		if (oidc_util_request_has_parameter(r,
 				OIDC_REDIRECT_URI_REQUEST_INFO)) {
 
-			oidc_session_load(r, &session);
+			apr_pool_userdata_get((void**) &session, OIDC_USERDATA_SESSION, r->pool);
+			if (session == NULL) {
+				oidc_error(r, "session could not be found in userdata pool");
+				return HTTP_INTERNAL_SERVER_ERROR;
+			}
 
 			needs_save = (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_SAVE)
 					!= NULL);

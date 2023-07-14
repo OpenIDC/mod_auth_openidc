@@ -122,6 +122,21 @@ static void oidc_session_clear(request_rec *r, oidc_session_t *z) {
 	}
 }
 
+oidc_session_t *oidc_session_copy(request_rec *r, oidc_session_t *z) {
+	oidc_session_t *zz = apr_pcalloc(r->pool, sizeof(oidc_session_t));
+	oidc_session_clear(r, zz);
+	zz->expiry = z->expiry;
+	if (z->remote_user)
+		zz->remote_user = apr_pstrdup(r->pool, z->remote_user);
+	if (z->sid)
+		zz->sid = apr_pstrdup(r->pool, z->sid);
+	if (z->state)
+		zz->state = json_deep_copy(z->state);
+	if (z->uuid)
+		zz->uuid = apr_pstrdup(r->pool, z->uuid);
+	return zz;
+}
+
 apr_byte_t oidc_session_load_cache_by_uuid(request_rec *r, oidc_cfg *c,
 		const char *uuid, oidc_session_t *z) {
 	const char *stored_uuid = NULL;

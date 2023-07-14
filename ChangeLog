@@ -1,3 +1,8 @@
+07/14/2023
+- fix session updates on userinfo requests; see https://github.com/OpenIDC/mod_auth_openidc/discussions/1077
+  this bug was introduced in v2.4.11 with d9fff154ee6ee8a7e4e969dd6a68cbaf18354598
+- bump to 2.4.14.3rc2
+
 07/12/2023
 - add a sanity alg/enc check on self-encrypted AES GCM JWTs
 - add `OIDCPassAccessToken Off` option to disable (the default of) passing the access token and its expiry
