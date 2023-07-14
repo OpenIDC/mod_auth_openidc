@@ -4139,8 +4139,11 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c,
 		// need to establish user/claims for authorization purposes
 		rc = oidc_handle_existing_session(r, c, session, &needs_save);
 
-		apr_pool_userdata_set(oidc_session_copy(r, session), OIDC_USERDATA_SESSION, NULL, r->pool);
+		// retain this session across the authentication hand content handler phases
+		// by storing it in the request state
+		apr_pool_userdata_set(session, OIDC_USERDATA_SESSION, NULL, r->pool);
 
+		// record whether the session was modified and needs to be saved in the cache
 		if (needs_save)
 			oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_SAVE, "");
 
@@ -4240,7 +4243,7 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 	apr_byte_t needs_save = FALSE;
 
 	/* load the session from the request state; this will be a new "empty" session if no state exists */
-	oidc_session_t *session = NULL;
+	oidc_session_t *session = NULL, *retain = NULL;
 	oidc_session_load(r, &session);
 
 	/* see if the initial request is to the redirect URI; this handles potential logout too */
@@ -4249,8 +4252,12 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 		/* handle request to the redirect_uri */
 		rc = oidc_handle_redirect_uri_request(r, c, session);
 
+		/* see if the session needs to be retained for the content handler phase */
+		apr_pool_userdata_get((void**) &retain, OIDC_USERDATA_SESSION, r->pool);
+
 		/* free resources allocated for the session */
-		oidc_session_free(r, session);
+		if (retain == NULL)
+			oidc_session_free(r, session);
 
 		return rc;
 
@@ -4651,12 +4658,17 @@ int oidc_content_handler(request_rec *r) {
 		if (oidc_util_request_has_parameter(r,
 				OIDC_REDIRECT_URI_REQUEST_INFO)) {
 
+			/* see if a session was retained in the request state */
 			apr_pool_userdata_get((void**) &session, OIDC_USERDATA_SESSION, r->pool);
-			if (session == NULL) {
-				oidc_error(r, "session could not be found in userdata pool");
-				return HTTP_INTERNAL_SERVER_ERROR;
-			}
 
+			/* if no retained session was found, load it from the cache or create a new one*/
+			if (session == NULL)
+				oidc_session_load(r, &session);
+
+			/*
+			 * see if the request state indicates that the (retained)
+			 * session was modified and needs to be updated in the cach
+			 */
 			needs_save = (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_SAVE)
 					!= NULL);
 
