@@ -586,7 +586,8 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 
 	if (cfg->default_slo_url != NULL) {
 		json_object_set_new(data, OIDC_METADATA_POST_LOGOUT_REDIRECT_URIS,
-				json_pack("[s]", cfg->default_slo_url));
+				json_pack("[s]",
+						oidc_get_absolute_url(r, cfg, cfg->default_slo_url)));
 	}
 
 	/* add any custom JSON in to the registration request */

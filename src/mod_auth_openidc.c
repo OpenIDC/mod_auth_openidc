@@ -1674,7 +1674,8 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 
 	if (rv == OIDC_REFRESH_ERROR) {
 		*needs_save = FALSE;
-		return oidc_handle_logout_request(r, cfg, session, cfg->default_slo_url);
+		return oidc_handle_logout_request(r, cfg, session,
+				oidc_get_absolute_url(r, cfg, cfg->default_slo_url));
 	}
 
 	*needs_save |= rv;
@@ -2135,8 +2136,8 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 			oidc_warn(r,
 					"invalid authorization response state; a default SSO URL is set, sending the user there: %s",
 					c->default_sso_url);
-			oidc_util_hdr_out_location_set(r, c->default_sso_url);
-			//oidc_util_hdr_err_out_add(r, "Location", c->default_sso_url));
+			oidc_util_hdr_out_location_set(r,
+					oidc_get_absolute_url(r, c, c->default_sso_url));
 			return HTTP_MOVED_TEMPORARILY;
 		}
 		oidc_error(r,
@@ -2843,7 +2844,8 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 					"SSO to this module without specifying a \"target_link_uri\" parameter is not possible because " OIDCDefaultURL " is not set.",
 					HTTP_INTERNAL_SERVER_ERROR);
 		}
-		target_link_uri = c->default_sso_url;
+		target_link_uri = apr_pstrdup(r->pool,
+				oidc_get_absolute_url(r, c, c->default_sso_url));
 	}
 
 	/* do open redirect prevention, step 1 */
@@ -3409,7 +3411,8 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 
 	if ((url == NULL) || (_oidc_strcmp(url, "") == 0)) {
 
-		url = c->default_slo_url;
+		url = apr_pstrdup(r->pool,
+				oidc_get_absolute_url(r, c, c->default_slo_url));
 
 	} else {
 
@@ -3618,7 +3621,8 @@ static int oidc_handle_session_management(request_rec *r, oidc_cfg *c,
 	if (_oidc_strcmp("logout", cmd) == 0) {
 		oidc_debug(r,
 				"[session=logout] calling oidc_handle_logout_request because of session mgmt local logout call.");
-		return oidc_handle_logout_request(r, c, session, c->default_slo_url);
+		return oidc_handle_logout_request(r, c, session,
+				oidc_get_absolute_url(r, c, c->default_slo_url));
 	}
 
 	if (oidc_get_provider_from_session(r, c, session, &provider) == FALSE) {
@@ -4659,7 +4663,8 @@ int oidc_content_handler(request_rec *r) {
 				OIDC_REDIRECT_URI_REQUEST_INFO)) {
 
 			/* see if a session was retained in the request state */
-			apr_pool_userdata_get((void**) &session, OIDC_USERDATA_SESSION, r->pool);
+			apr_pool_userdata_get((void**) &session, OIDC_USERDATA_SESSION,
+					r->pool);
 
 			/* if no retained session was found, load it from the cache or create a new one*/
 			if (session == NULL)
@@ -4667,7 +4672,7 @@ int oidc_content_handler(request_rec *r) {
 
 			/*
 			 * see if the request state indicates that the (retained)
-			 * session was modified and needs to be updated in the cach
+			 * session was modified and needs to be updated in the cache
 			 */
 			needs_save = (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_SAVE)
 					!= NULL);

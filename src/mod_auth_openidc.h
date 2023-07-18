@@ -819,6 +819,7 @@ int oidc_base64url_encode(request_rec *r, char **dst, const char *src, int src_l
 int oidc_base64url_decode(apr_pool_t *pool, char **dst, const char *src);
 const char *oidc_get_current_url_host(request_rec *r, const apr_byte_t x_forwarded_headers);
 char *oidc_get_current_url(request_rec *r, const apr_byte_t x_forwarded_headers);
+const char *oidc_get_absolute_url(request_rec *r, oidc_cfg *cfg, const char *url);
 const char *oidc_get_redirect_uri(request_rec *r, oidc_cfg *c);
 const char *oidc_get_redirect_uri_iss(request_rec *r, oidc_cfg *c, oidc_provider_t *provider);
 char *oidc_url_encode(const request_rec *r, const char *str, const char *charsToEncode);

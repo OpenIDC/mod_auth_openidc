@@ -793,22 +793,24 @@ char* oidc_get_current_url(request_rec *r, const apr_byte_t x_forwarded_headers)
 }
 
 /*
- * determine absolute redirect uri
+ * infer a full absolute URL from the (optional) relative one
  */
-const char* oidc_get_redirect_uri(request_rec *r, oidc_cfg *cfg) {
-
-	char *redirect_uri = cfg->redirect_uri;
-
-	if ((redirect_uri != NULL)
-			&& (redirect_uri[0] == OIDC_CHAR_FORWARD_SLASH)) {
-		// relative redirect uri
-
-		redirect_uri = apr_pstrcat(r->pool, oidc_get_current_url_base(r, cfg->x_forwarded_headers),
+const char *oidc_get_absolute_url(request_rec *r, oidc_cfg *cfg, const char *url) {
+	if ((url != NULL)
+			&& (url[0] == OIDC_CHAR_FORWARD_SLASH)) {
+		url = apr_pstrcat(r->pool, oidc_get_current_url_base(r, cfg->x_forwarded_headers),
 				cfg->redirect_uri, NULL);
 
-		oidc_debug(r, "determined absolute redirect uri: %s", redirect_uri);
+		oidc_debug(r, "determined absolute url: %s", url);
 	}
-	return redirect_uri;
+	return url;
+}
+
+/*
+ * determine absolute Redirect URI
+ */
+const char* oidc_get_redirect_uri(request_rec *r, oidc_cfg *cfg) {
+	return oidc_get_absolute_url(r, cfg, cfg->redirect_uri);
 }
 
 /*
