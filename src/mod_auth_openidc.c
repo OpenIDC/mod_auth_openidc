@@ -1672,6 +1672,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 		if (oidc_cfg_dir_action_on_error_refresh(
 				r) == OIDC_ON_ERROR_AUTHENTICATE) {
 			*needs_save = FALSE;
+			oidc_session_kill(r, session);
 			return oidc_handle_unauthenticated_user(r, cfg);
 		}
 	}
