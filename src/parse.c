@@ -802,29 +802,33 @@ const char* oidc_parse_pass_userinfo_as(apr_pool_t *pool, const char *v,
 }
 
 #define OIDC_LOGOUT_ON_ERROR_REFRESH_STR "logout_on_error"
+#define OIDC_LOGOUT_ON_ERROR_AUTHENTICATE_STR "authenticate_on_error"
 
 /*
- * convert a "logout_on_error" to an integer
+ * convert an "on access token refresh error" to an integer
  */
-static int oidc_parse_logout_on_error_refresh_as_str2int(const char *v) {
+static int oidc_parse_action_on_error_refresh_as_str2int(const char *v) {
 	if (_oidc_strcmp(v, OIDC_LOGOUT_ON_ERROR_REFRESH_STR) == 0)
-		return OIDC_LOGOUT_ON_ERROR_REFRESH;
+		return OIDC_ON_ERROR_LOGOUT;
+	if (_oidc_strcmp(v, OIDC_LOGOUT_ON_ERROR_AUTHENTICATE_STR) == 0)
+		return OIDC_ON_ERROR_AUTHENTICATE;
 	return OIDC_CONFIG_POS_INT_UNSET;
 }
 
 /*
- * parse a "logout_on_error" value from the provided strings
+ * parse an "on access token refresh error" value from the provided strings
  */
-const char *oidc_parse_logout_on_error_refresh_as(apr_pool_t *pool, const char *v1,
-		int *int_value) {
+const char* oidc_parse_action_on_error_refresh_as(apr_pool_t *pool,
+		const char *v1, int *int_value) {
 	static char *options[] = {
 			OIDC_LOGOUT_ON_ERROR_REFRESH_STR,
+			OIDC_LOGOUT_ON_ERROR_AUTHENTICATE_STR,
 			NULL };
 	const char *rv = NULL;
 	rv = oidc_valid_string_option(pool, v1, options);
 	if (rv != NULL)
 		return rv;
-	*int_value = oidc_parse_logout_on_error_refresh_as_str2int(v1);
+	*int_value = oidc_parse_action_on_error_refresh_as_str2int(v1);
 
 	return NULL;
 }

@@ -50,8 +50,6 @@
 
 #include "mod_auth_openidc.h"
 
-#define OIDC_REFRESH_ERROR 2
-
 static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c,
 		oidc_session_t *session, const char *url);
 
@@ -1355,8 +1353,7 @@ static apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg *cfg,
 }
 
 static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
-		oidc_cfg *cfg, oidc_session_t *session, int ttl_minimum,
-		int logout_on_error) {
+		oidc_cfg *cfg, oidc_session_t *session, int ttl_minimum) {
 
 	const char *s_access_token_expires = NULL;
 	apr_time_t t_expires = -1;
@@ -1399,12 +1396,8 @@ static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
 
 	if (oidc_refresh_token_grant(r, cfg, session, provider,
 			NULL, NULL) == FALSE) {
-		oidc_warn(r, "access_token could not be refreshed, logout=%d",
-				logout_on_error & OIDC_LOGOUT_ON_ERROR_REFRESH);
-		if (logout_on_error & OIDC_LOGOUT_ON_ERROR_REFRESH)
-			return OIDC_REFRESH_ERROR;
-		else
-			return FALSE;
+		oidc_warn(r, "access_token could not be refreshed");
+		return FALSE;
 	}
 
 	return TRUE;
@@ -1669,13 +1662,18 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 
 	/* if needed, refresh the access token */
 	rv = oidc_refresh_access_token_before_expiry(r, cfg, session,
-			oidc_cfg_dir_refresh_access_token_before_expiry(r),
-			oidc_cfg_dir_logout_on_error_refresh(r));
-
-	if (rv == OIDC_REFRESH_ERROR) {
-		*needs_save = FALSE;
-		return oidc_handle_logout_request(r, cfg, session,
-				oidc_get_absolute_url(r, cfg, cfg->default_slo_url));
+			oidc_cfg_dir_refresh_access_token_before_expiry(r));
+	if (rv == FALSE) {
+		if (oidc_cfg_dir_action_on_error_refresh(r) == OIDC_ON_ERROR_LOGOUT) {
+			*needs_save = FALSE;
+			return oidc_handle_logout_request(r, cfg, session,
+					oidc_get_absolute_url(r, cfg, cfg->default_slo_url));
+		}
+		if (oidc_cfg_dir_action_on_error_refresh(
+				r) == OIDC_ON_ERROR_AUTHENTICATE) {
+			*needs_save = FALSE;
+			return oidc_handle_unauthenticated_user(r, cfg);
+		}
 	}
 
 	*needs_save |= rv;

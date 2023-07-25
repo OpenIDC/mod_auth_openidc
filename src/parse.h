@@ -121,7 +121,7 @@ const char* oidc_parse_pass_idtoken_as(apr_pool_t *pool, const char *v1,
 		const char *v2, const char *v3, int *int_value);
 const char* oidc_parse_pass_userinfo_as(apr_pool_t *pool, const char *v,
 		oidc_pass_user_info_as_t **result);
-const char* oidc_parse_logout_on_error_refresh_as(apr_pool_t *pool,
+const char* oidc_parse_action_on_error_refresh_as(apr_pool_t *pool,
 		const char *v1, int *int_value);
 const char* oidc_parse_accept_oauth_token_in(apr_pool_t *pool, const char *arg,
 		int *b_value, apr_hash_t *list_options);
