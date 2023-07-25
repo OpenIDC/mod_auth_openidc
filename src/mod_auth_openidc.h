@@ -165,7 +165,7 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_PASS_APP_INFO_AS_BASE64URL 1
 #define OIDC_PASS_APP_INFO_AS_LATIN1    2
 
-/* actions to be taken on access token refresh error */
+/* actions to be taken on access token / userinfo refresh error */
 #define OIDC_ON_ERROR_CONTINUE       0
 #define OIDC_ON_ERROR_LOGOUT         1
 #define OIDC_ON_ERROR_AUTHENTICATE   2
@@ -489,6 +489,7 @@ typedef struct oidc_cfg {
 	char *ca_bundle_path;
 	char *logout_x_frame_options;
 	apr_byte_t x_forwarded_headers;
+	int action_on_userinfo_error;
 } oidc_cfg;
 
 void oidc_pre_config_init();

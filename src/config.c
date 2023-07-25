@@ -311,6 +311,7 @@ typedef struct oidc_dir_cfg {
 	oidc_apr_expr_t *userinfo_claims_expr;
 	int refresh_access_token_before_expiry;
 	int action_on_error_refresh;
+	int action_on_userinfo_refresh;
 	char *state_cookie_prefix;
 	apr_array_header_t *pass_userinfo_as;
 	int pass_idtoken_as;
@@ -1176,11 +1177,15 @@ static const char* oidc_set_idtoken_iat_slack(cmd_parms *cmd, void *struct_ptr,
  * set the userinfo refresh interval
  */
 static const char* oidc_set_userinfo_refresh_interval(cmd_parms *cmd,
-		void *struct_ptr, const char *arg) {
+		void *struct_ptr, const char *arg1, const char *arg2) {
 	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
 			&auth_openidc_module);
-	const char *rv = oidc_parse_userinfo_refresh_interval(cmd->pool, arg,
+	const char *rv = oidc_parse_userinfo_refresh_interval(cmd->pool, arg1,
 			&cfg->provider.userinfo_refresh_interval);
+	if ((rv == NULL) && (arg2)) {
+		rv = oidc_parse_action_on_error_refresh_as(cmd->pool, arg2,
+				&cfg->action_on_userinfo_error);
+	}
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -1413,6 +1418,14 @@ int oidc_cfg_dir_refresh_access_token_before_expiry(request_rec *r) {
 }
 
 int oidc_cfg_dir_action_on_error_refresh(request_rec *r) {
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+	if (dir_cfg->action_on_error_refresh == OIDC_CONFIG_POS_INT_UNSET)
+		return OIDC_DEFAULT_ON_ERROR_REFRESH;
+	return dir_cfg->action_on_error_refresh;
+}
+
+int oidc_cfg_dir_action_on_userinfo_refresh(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
 	if (dir_cfg->action_on_error_refresh == OIDC_CONFIG_POS_INT_UNSET)
@@ -3627,7 +3640,7 @@ const command_rec oidc_config_cmds[] = {
 				NULL,
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"The method in which an OAuth token can be presented; must be one or more of: header|post|query|cookie"),
-		AP_INIT_TAKE1(OIDCUserInfoRefreshInterval,
+		AP_INIT_TAKE12(OIDCUserInfoRefreshInterval,
 				oidc_set_userinfo_refresh_interval,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.userinfo_refresh_interval),
 				RSRC_CONF,

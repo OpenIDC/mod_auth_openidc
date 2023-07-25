@@ -1680,8 +1680,21 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	*needs_save |= rv;
 
 	/* if needed, refresh claims from the user info endpoint */
-	if (oidc_refresh_claims_from_userinfo_endpoint(r, cfg, session) == TRUE)
-		*needs_save = TRUE;
+	rv = oidc_refresh_claims_from_userinfo_endpoint(r, cfg, session);
+	if (rv == FALSE) {
+		if (cfg->action_on_userinfo_error == OIDC_ON_ERROR_LOGOUT) {
+			*needs_save = FALSE;
+			return oidc_handle_logout_request(r, cfg, session,
+					oidc_get_absolute_url(r, cfg, cfg->default_slo_url));
+		}
+		if (cfg->action_on_userinfo_error == OIDC_ON_ERROR_AUTHENTICATE) {
+			*needs_save = FALSE;
+			oidc_session_kill(r, session);
+			return oidc_handle_unauthenticated_user(r, cfg);
+		}
+	}
+
+	*needs_save |= rv;
 
 	/* set the user authentication HTTP header if set and required */
 	if ((r->user != NULL) && (authn_header != NULL))

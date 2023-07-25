@@ -2,7 +2,8 @@
 - support "authenticate_on_error" 2nd parameter value in OIDCRefreshAccessTokenBeforeExpiry 
   to reauthenticate the user when refreshing the access token fails
   see: https://github.com/OpenIDC/mod_auth_openidc/discussions/1084; thanks @xrammit
-- bump 20 2.4.14.3rc4
+- add logout_on_error and authenticate_on_error 2nd parameter option to OIDCUserInfoRefreshInterval
+- bump to 2.4.14.3rc4
 
 07/18/2023
 - allow relative values in OIDCDefaultURL and OIDCDefaultLoggedOutURL
