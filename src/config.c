@@ -1425,14 +1425,6 @@ int oidc_cfg_dir_action_on_error_refresh(request_rec *r) {
 	return dir_cfg->action_on_error_refresh;
 }
 
-int oidc_cfg_dir_action_on_userinfo_refresh(request_rec *r) {
-	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
-			&auth_openidc_module);
-	if (dir_cfg->action_on_error_refresh == OIDC_CONFIG_POS_INT_UNSET)
-		return OIDC_DEFAULT_ON_ERROR_REFRESH;
-	return dir_cfg->action_on_error_refresh;
-}
-
 char* oidc_cfg_dir_state_cookie_prefix(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
