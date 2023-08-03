@@ -1824,6 +1824,7 @@ void* oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->ca_bundle_path = NULL;
 	c->logout_x_frame_options = NULL;
 	c->x_forwarded_headers = OIDC_DEFAULT_X_FORWARDED_HEADERS;
+	c->action_on_userinfo_error = OIDC_ON_ERROR_CONTINUE;
 
 	return c;
 }
@@ -2147,6 +2148,11 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->x_forwarded_headers =
 			add->x_forwarded_headers != OIDC_DEFAULT_X_FORWARDED_HEADERS ?
 					add->x_forwarded_headers : base->x_forwarded_headers;
+
+	c->action_on_userinfo_error =
+			add->action_on_userinfo_error != OIDC_ON_ERROR_CONTINUE ?
+					add->action_on_userinfo_error :
+					base->action_on_userinfo_error;
 
 	return c;
 }

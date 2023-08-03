@@ -1213,16 +1213,21 @@ static const char* oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r,
  * get (new) claims from the userinfo endpoint
  */
 static apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r,
-		oidc_cfg *cfg, oidc_session_t *session) {
+		oidc_cfg *cfg, oidc_session_t *session, apr_byte_t *needs_save) {
 
+	apr_byte_t rc = TRUE;
 	oidc_provider_t *provider = NULL;
 	const char *claims = NULL;
 	const char *access_token = NULL;
 	char *userinfo_jwt = NULL;
 
+	*needs_save = FALSE;
+
 	/* get the current provider info */
-	if (oidc_get_provider_from_session(r, cfg, session, &provider) == FALSE)
+	if (oidc_get_provider_from_session(r, cfg, session, &provider) == FALSE) {
+		*needs_save = TRUE;
 		return FALSE;
+	}
 
 	/* see if we can do anything here, i.e. we have a userinfo endpoint and a refresh interval is configured */
 	apr_time_t interval = apr_time_from_sec(
@@ -1256,10 +1261,15 @@ static apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r,
 					userinfo_jwt);
 
 			/* indicated something changed */
-			return TRUE;
+			*needs_save = TRUE;
+
+			rc = (claims != NULL);
 		}
 	}
-	return FALSE;
+
+	oidc_debug(r, "return: %d", rc);
+
+	return rc;
 }
 
 /*
@@ -1680,8 +1690,9 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	*needs_save |= rv;
 
 	/* if needed, refresh claims from the user info endpoint */
-	rv = oidc_refresh_claims_from_userinfo_endpoint(r, cfg, session);
+	rv = oidc_refresh_claims_from_userinfo_endpoint(r, cfg, session, needs_save);
 	if (rv == FALSE) {
+		oidc_debug(r, "action_on_userinfo_error: %d", cfg->action_on_userinfo_error);
 		if (cfg->action_on_userinfo_error == OIDC_ON_ERROR_LOGOUT) {
 			*needs_save = FALSE;
 			return oidc_handle_logout_request(r, cfg, session,
@@ -3946,8 +3957,11 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 	 * side-effect is that this may refresh the access token if not already done
 	 * note that OIDCUserInfoRefreshInterval should be set to control the refresh policy
 	 */
-	if (b_extend_session)
-		needs_save |= oidc_refresh_claims_from_userinfo_endpoint(r, c, session);
+	if (b_extend_session) {
+		apr_byte_t l_needs_save = FALSE;
+		oidc_refresh_claims_from_userinfo_endpoint(r, c, session, &l_needs_save);
+		needs_save |= l_needs_save;
+	}
 
 	/* include the access token in the session info */
 	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_ACCES_TOKEN,
