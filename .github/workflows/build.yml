@@ -10,7 +10,7 @@ jobs:
     - name: Dependencies
       run: |
         sudo apt-get update -y
-        sudo apt-get install -y apache2-dev=2.4.52-1ubuntu4.4 libcjose-dev libssl-dev check pkg-config
+        sudo apt-get install -y apache2-dev libcjose-dev libssl-dev check pkg-config
         sudo apt-get install -y libjansson-dev libcurl4-openssl-dev libhiredis-dev libpcre2-dev
     - name: Configure
       run: |

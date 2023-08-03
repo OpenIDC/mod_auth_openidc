@@ -50,17 +50,10 @@
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
-
-#if AP_MODULE_MAGIC_AT_LEAST(20120211, 125)
-#include <mod_http2.h>
-#else
 /*
- * Copy and paste from mod_http2.h where mod_http2.h is not available
+ * avoid including mod_http2.h (assume the function signature is stable)
  */
-APR_DECLARE_OPTIONAL_FN(void,
-						http2_get_num_workers, (server_rec *s,
-												int *minw, int *max));
-#endif
+APR_DECLARE_OPTIONAL_FN(void, http2_get_num_workers, (server_rec *s, int *minw, int *max));
 
 typedef struct oidc_cache_cfg_memcache_t {
 	/* cache_type = memcache: memcache ptr */
