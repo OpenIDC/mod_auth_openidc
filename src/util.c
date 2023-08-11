@@ -795,12 +795,12 @@ char* oidc_get_current_url(request_rec *r, const apr_byte_t x_forwarded_headers)
 /*
  * infer a full absolute URL from the (optional) relative one
  */
-const char *oidc_get_absolute_url(request_rec *r, oidc_cfg *cfg, const char *url) {
-	if ((url != NULL)
-			&& (url[0] == OIDC_CHAR_FORWARD_SLASH)) {
-		url = apr_pstrcat(r->pool, oidc_get_current_url_base(r, cfg->x_forwarded_headers),
-				cfg->redirect_uri, NULL);
-
+const char* oidc_get_absolute_url(request_rec *r, oidc_cfg *cfg,
+		const char *url) {
+	if ((url != NULL) && (url[0] == OIDC_CHAR_FORWARD_SLASH)) {
+		url = apr_pstrcat(r->pool,
+				oidc_get_current_url_base(r, cfg->x_forwarded_headers), url,
+				NULL);
 		oidc_debug(r, "determined absolute url: %s", url);
 	}
 	return url;
