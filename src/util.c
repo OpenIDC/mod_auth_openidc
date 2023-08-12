@@ -3145,6 +3145,9 @@ const char* oidc_util_jq_filter(request_rec *r, const char *input,
 #ifdef USE_LIBJQ
 	jq_state *jq = NULL;
 	struct jv_parser *parser = NULL;
+	int ttl = 0;
+	char *key = NULL;
+	char *value = NULL;
 
 	if (filter == NULL) {
 		oidc_debug(r, "filter is NULL, abort");
@@ -3158,6 +3161,17 @@ const char* oidc_util_jq_filter(request_rec *r, const char *input,
 
 	oidc_debug(r, "processing input: %s", input);
 	oidc_debug(r, "processing filter: %s", filter);
+
+	ttl = oidc_userinfo_signed_jwt_cache_ttl(r);
+	key = apr_pstrcat(r->pool, input, ":", filter, NULL);
+	if (ttl != 0) {
+		oidc_cache_get_jq_filter(r, key, &value);
+		if (value != NULL) {
+			oidc_debug(r, "return cached result: %s", value);
+			result = value;
+			goto end;
+		}
+	}
 
 	jq = jq_init();
 	if (jq == NULL) {
@@ -3179,6 +3193,11 @@ const char* oidc_util_jq_filter(request_rec *r, const char *input,
 	jv_parser_set_buf(parser, input, _oidc_strlen(input), 0);
 
 	result = oidc_util_jq_exec(r, jq, parser);
+
+	if ((result != NULL) && (ttl != 0)) {
+		oidc_debug(r, "caching result: %s", result);
+		oidc_cache_set_jq_filter(r, key, result, apr_time_now() + apr_time_from_sec(ttl));
+	}
 
 end:
 

@@ -1,3 +1,7 @@
+08/13/2023
+- increase performance of JQ filtering by caching JQ filtering results
+- bump to 2.4.14.3rc5
+
 07/25/2023
 - support "authenticate_on_error" 2nd parameter value in OIDCRefreshAccessTokenBeforeExpiry 
   to reauthenticate the user when refreshing the access token fails
