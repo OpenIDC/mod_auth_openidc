@@ -815,7 +815,7 @@ int oidc_cfg_delete_oldest_state_cookies(oidc_cfg *cfg);
 oidc_provider_t* oidc_cfg_provider_create(apr_pool_t *pool);
 oidc_provider_t* oidc_cfg_provider_copy(apr_pool_t *pool, const oidc_provider_t *src);
 void oidc_config_check_x_forwarded(request_rec *r, const apr_byte_t x_forwarded_headers);
-int oidc_userinfo_signed_jwt_cache_ttl(request_rec *r);
+int oidc_jq_filter_cache_ttl(request_rec *r);
 
 // oidc_util.c
 int oidc_strnenvcmp(const char *a, const char *b, int len);

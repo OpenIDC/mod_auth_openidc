@@ -3162,9 +3162,14 @@ const char* oidc_util_jq_filter(request_rec *r, const char *input,
 	oidc_debug(r, "processing input: %s", input);
 	oidc_debug(r, "processing filter: %s", filter);
 
-	ttl = oidc_userinfo_signed_jwt_cache_ttl(r);
-	key = apr_pstrcat(r->pool, input, ":", filter, NULL);
+	ttl = oidc_jq_filter_cache_ttl(r);
 	if (ttl != 0) {
+		if (oidc_util_hash_string_and_base64url_encode(r, OIDC_JOSE_ALG_SHA256,
+				apr_pstrcat(r->pool, input, filter, NULL), &key) == FALSE) {
+			oidc_error(r,
+					"oidc_util_hash_string_and_base64url_encode returned an error");
+			goto end;
+		}
 		oidc_cache_get_jq_filter(r, key, &value);
 		if (value != NULL) {
 			oidc_debug(r, "return cached result: %s", value);
@@ -3196,10 +3201,11 @@ const char* oidc_util_jq_filter(request_rec *r, const char *input,
 
 	if ((result != NULL) && (ttl != 0)) {
 		oidc_debug(r, "caching result: %s", result);
-		oidc_cache_set_jq_filter(r, key, result, apr_time_now() + apr_time_from_sec(ttl));
+		oidc_cache_set_jq_filter(r, key, result,
+				apr_time_now() + apr_time_from_sec(ttl));
 	}
 
-end:
+	end:
 
 	if (parser)
 		jv_parser_free(parser);

@@ -1416,11 +1416,20 @@ static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
 #define OIDC_USERINFO_SIGNED_JWT_EXPIRE_DEFAULT 0
 #define OIDC_USERINFO_SIGNED_JWT_CACHE_TTL_ENVVAR "OIDC_USERINFO_SIGNED_JWT_CACHE_TTL"
 
-int oidc_userinfo_signed_jwt_cache_ttl(request_rec *r) {
+static int oidc_userinfo_signed_jwt_cache_ttl(request_rec *r) {
 	const char *s_ttl = apr_table_get(r->subprocess_env,
 			OIDC_USERINFO_SIGNED_JWT_CACHE_TTL_ENVVAR);
 	return (s_ttl ?
 			_oidc_str_to_int(s_ttl) : OIDC_USERINFO_SIGNED_JWT_EXPIRE_DEFAULT);
+}
+
+#define OIDC_JQ_FILTER_EXPIRE_DEFAULT 600
+#define OIDC_JQ_FILTER_CACHE_TTL_ENVVAR "OIDC_JQ_FILTER_CACHE_TTL"
+
+int oidc_jq_filter_cache_ttl(request_rec *r) {
+	const char *s_ttl = apr_table_get(r->subprocess_env,
+			OIDC_JQ_FILTER_CACHE_TTL_ENVVAR);
+	return (s_ttl ? _oidc_str_to_int(s_ttl) : OIDC_JQ_FILTER_EXPIRE_DEFAULT);
 }
 
 static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg *cfg,

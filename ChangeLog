@@ -1,5 +1,6 @@
 08/13/2023
 - increase performance of JQ filtering by caching JQ filtering results
+  default cache ttl is 10 min, configured through environment variable OIDC_JQ_FILTER_CACHE_TTL
 - bump to 2.4.14.3rc5
 
 07/25/2023
