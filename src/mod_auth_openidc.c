@@ -1221,8 +1221,6 @@ static apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r,
 	const char *access_token = NULL;
 	char *userinfo_jwt = NULL;
 
-	*needs_save = FALSE;
-
 	/* get the current provider info */
 	if (oidc_get_provider_from_session(r, cfg, session, &provider) == FALSE) {
 		*needs_save = TRUE;
@@ -1713,8 +1711,6 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 			return oidc_handle_unauthenticated_user(r, cfg);
 		}
 	}
-
-	*needs_save |= rv;
 
 	/* set the user authentication HTTP header if set and required */
 	if ((r->user != NULL) && (authn_header != NULL))
@@ -3966,11 +3962,8 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 	 * side-effect is that this may refresh the access token if not already done
 	 * note that OIDCUserInfoRefreshInterval should be set to control the refresh policy
 	 */
-	if (b_extend_session) {
-		apr_byte_t l_needs_save = FALSE;
-		oidc_refresh_claims_from_userinfo_endpoint(r, c, session, &l_needs_save);
-		needs_save |= l_needs_save;
-	}
+	if (b_extend_session)
+		oidc_refresh_claims_from_userinfo_endpoint(r, c, session, &needs_save);
 
 	/* include the access token in the session info */
 	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_ACCES_TOKEN,

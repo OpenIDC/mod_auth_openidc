@@ -3205,7 +3205,7 @@ const char* oidc_util_jq_filter(request_rec *r, const char *input,
 				apr_time_now() + apr_time_from_sec(ttl));
 	}
 
-	end:
+end:
 
 	if (parser)
 		jv_parser_free(parser);
