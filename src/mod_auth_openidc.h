@@ -331,6 +331,7 @@ typedef struct oidc_provider_t {
 	char *response_mode;
 	int idtoken_iat_slack;
 	char *auth_request_params;
+	char *logout_request_params;
 	int session_max_duration;
 	oidc_proto_pkce_t *pkce;
 	int userinfo_refresh_interval;
@@ -967,6 +968,8 @@ apr_byte_t oidc_session_free(request_rec *r, oidc_session_t *z);
 apr_byte_t oidc_session_extract(request_rec *r, oidc_session_t *z);
 apr_byte_t oidc_session_load_cache_by_uuid(request_rec *r, oidc_cfg *c, const char *uuid, oidc_session_t *z);
 void oidc_session_id_new(request_rec *r, oidc_session_t *z);
+
+int oidc_handle_logout(request_rec *r, oidc_cfg *c, oidc_session_t *session);
 
 void oidc_session_set_userinfo_jwt(request_rec *r, oidc_session_t *z, const char *userinfo_jwt);
 const char * oidc_session_get_userinfo_jwt(request_rec *r, oidc_session_t *z);

@@ -100,6 +100,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_METADATA_IDTOKEN_IAT_SLACK                            "idtoken_iat_slack"
 #define OIDC_METADATA_SESSION_MAX_DURATION                         "session_max_duration"
 #define OIDC_METADATA_AUTH_REQUEST_PARAMS                          "auth_request_params"
+#define OIDC_METADATA_LOGOUT_REQUEST_PARAMS                        "logout_request_params"
 #define OIDC_METADATA_TOKEN_ENDPOINT_PARAMS                        "token_endpoint_params"
 #define OIDC_METADATA_RESPONSE_MODE                                "response_mode"
 #define OIDC_METADATA_PKCE_METHOD                                  "pkce_method"
@@ -1330,6 +1331,10 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 	oidc_json_object_get_string(r->pool, j_conf,
 			OIDC_METADATA_AUTH_REQUEST_PARAMS, &provider->auth_request_params,
 			cfg->provider.auth_request_params);
+	/* see if we've got custom logout request parameter values */
+	oidc_json_object_get_string(r->pool, j_conf,
+			OIDC_METADATA_LOGOUT_REQUEST_PARAMS, &provider->logout_request_params,
+			cfg->provider.logout_request_params);
 
 	/* see if we've got custom token endpoint parameter values */
 	oidc_json_object_get_string(r->pool, j_conf,

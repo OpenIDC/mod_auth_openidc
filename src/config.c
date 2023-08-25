@@ -204,6 +204,7 @@
 #define OIDCIDTokenIatSlack                    "OIDCIDTokenIatSlack"
 #define OIDCSessionMaxDuration                 "OIDCSessionMaxDuration"
 #define OIDCAuthRequestParams                  "OIDCAuthRequestParams"
+#define OIDCLogoutRequestParams                "OIDCLogoutRequestParams"
 #define OIDCPathAuthRequestParams              "OIDCPathAuthRequestParams"
 #define OIDCPKCEMethod                         "OIDCPKCEMethod"
 #define OIDCClientID                           "OIDCClientID"
@@ -1485,6 +1486,7 @@ static void oidc_cfg_provider_init(oidc_provider_t *provider) {
 	provider->idtoken_iat_slack = OIDC_DEFAULT_IDTOKEN_IAT_SLACK;
 	provider->session_max_duration = OIDC_DEFAULT_SESSION_MAX_DURATION;
 	provider->auth_request_params = NULL;
+	provider->logout_request_params = NULL;
 	provider->pkce = NULL;
 
 	provider->client_jwks_uri = NULL;
@@ -1619,6 +1621,9 @@ static void oidc_merge_provider_config(apr_pool_t *pool, oidc_provider_t *dst,
 	dst->auth_request_params =
 			add->auth_request_params != NULL ?
 					add->auth_request_params : base->auth_request_params;
+	dst->logout_request_params =
+			add->logout_request_params != NULL ?
+					add->logout_request_params : base->logout_request_params;
 	dst->pkce = add->pkce != NULL ? add->pkce : base->pkce;
 
 	dst->client_jwks_uri =
@@ -3271,6 +3276,11 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, provider.auth_request_params),
 				RSRC_CONF,
 				"Extra parameters that need to be sent in the Authorization Request (must be query-encoded like \"display=popup&prompt=consent\"."),
+		AP_INIT_TAKE1(OIDCLogoutRequestParams,
+				oidc_set_string_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, provider.logout_request_params),
+				RSRC_CONF,
+				"Extra parameters that need to be sent in the Logout Request (must be query-encoded like \"client_id=myclient&prompt=none\"."),
 		AP_INIT_TAKE1(OIDCPathAuthRequestParams,
 				oidc_set_path_auth_request_params,
 				(void*)APR_OFFSETOF(oidc_dir_cfg, path_auth_request_expr),

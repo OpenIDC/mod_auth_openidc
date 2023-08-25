@@ -3416,7 +3416,7 @@ out:
 /*
  * perform (single) logout
  */
-static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
+int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 		oidc_session_t *session) {
 
 	oidc_provider_t *provider = NULL;
@@ -3484,6 +3484,15 @@ static int oidc_handle_logout(request_rec *r, oidc_cfg *c,
 									OIDC_STR_AMP :
 									OIDC_STR_QUERY,
 									oidc_util_escape_string(r, url));
+		}
+
+		if (provider->logout_request_params != NULL) {
+			s_logout_request = apr_psprintf(r->pool, "%s%s%s", s_logout_request,
+					strchr(s_logout_request ? s_logout_request : "",
+							OIDC_CHAR_QUERY) != NULL ?
+									OIDC_STR_AMP :
+									OIDC_STR_QUERY,
+									provider->logout_request_params);
 		}
 		//char *state = NULL;
 		//oidc_proto_generate_nonce(r, &state, 8);

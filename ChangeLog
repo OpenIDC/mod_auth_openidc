@@ -1,3 +1,8 @@
+08/25/2023
+- add support for adding extra parameters to the Logout Request to the OP with OIDCLogoutRequestParams
+  see: https://github.com/OpenIDC/mod_auth_openidc/discussions/1096
+- bump to 2.4.14.3rc7
+
 08/13/2023
 - increase performance of JQ filtering by caching JQ filtering results
   default cache ttl is 10 min, configured through environment variable OIDC_JQ_FILTER_CACHE_TTL
