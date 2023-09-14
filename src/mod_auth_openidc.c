@@ -1361,7 +1361,8 @@ static apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg *cfg,
 }
 
 static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
-		oidc_cfg *cfg, oidc_session_t *session, int ttl_minimum) {
+		oidc_cfg *cfg, oidc_session_t *session, int ttl_minimum,
+		apr_byte_t *needs_save) {
 
 	const char *s_access_token_expires = NULL;
 	apr_time_t t_expires = -1;
@@ -1370,7 +1371,7 @@ static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
 	oidc_debug(r, "ttl_minimum=%d", ttl_minimum);
 
 	if (ttl_minimum < 0)
-		return FALSE;
+		return TRUE;
 
 	s_access_token_expires = oidc_session_get_access_token_expires(r, session);
 	if (s_access_token_expires == NULL) {
@@ -1397,7 +1398,7 @@ static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
 			apr_time_sec(t_expires - apr_time_now()));
 
 	if (t_expires > apr_time_now())
-		return FALSE;
+		return TRUE;
 
 	if (oidc_get_provider_from_session(r, cfg, session, &provider) == FALSE)
 		return FALSE;
@@ -1407,6 +1408,8 @@ static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
 		oidc_warn(r, "access_token could not be refreshed");
 		return FALSE;
 	}
+
+	*needs_save = TRUE;
 
 	return TRUE;
 }
@@ -1679,7 +1682,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 
 	/* if needed, refresh the access token */
 	rv = oidc_refresh_access_token_before_expiry(r, cfg, session,
-			oidc_cfg_dir_refresh_access_token_before_expiry(r));
+			oidc_cfg_dir_refresh_access_token_before_expiry(r), needs_save);
 	if (rv == FALSE) {
 		if (oidc_cfg_dir_action_on_error_refresh(r) == OIDC_ON_ERROR_LOGOUT) {
 			*needs_save = FALSE;
@@ -1693,8 +1696,6 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 			return oidc_handle_unauthenticated_user(r, cfg);
 		}
 	}
-
-	*needs_save |= rv;
 
 	/* if needed, refresh claims from the user info endpoint */
 	rv = oidc_refresh_claims_from_userinfo_endpoint(r, cfg, session, needs_save);
