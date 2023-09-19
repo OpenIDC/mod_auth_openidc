@@ -604,7 +604,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 	/* dynamically register the client with the specified parameters */
 	if (oidc_util_http_post_json(r, provider->registration_endpoint_url, data,
 			NULL, provider->registration_token, provider->ssl_validate_server, response,
-			cfg->http_timeout_short, cfg->outgoing_proxy,
+			cfg->http_timeout_short, &cfg->outgoing_proxy,
 			oidc_dir_cfg_pass_cookies(r),
 			NULL, NULL, NULL) == FALSE) {
 		json_decref(data);
@@ -637,7 +637,7 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
 	/* get the JWKs from the specified URL with the specified parameters */
 	if (oidc_util_http_get(r, url, NULL, NULL,
 			NULL, ssl_validate_server, &response, cfg->http_timeout_long,
-			cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL,
+			&cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL,
 			NULL, NULL) == FALSE)
 		return FALSE;
 
@@ -747,7 +747,7 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg,
 	/* get provider metadata from the specified URL with the specified parameters */
 	if (oidc_util_http_get(r, url, NULL, NULL, NULL,
 			cfg->provider.ssl_validate_server, response,
-			cfg->http_timeout_short, cfg->outgoing_proxy,
+			cfg->http_timeout_short, &cfg->outgoing_proxy,
 			oidc_dir_cfg_pass_cookies(r),
 			NULL, NULL, NULL) == FALSE)
 		return FALSE;
@@ -826,8 +826,7 @@ apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
 							issuer : apr_psprintf(r->pool, "https://%s", issuer));
 	url = apr_psprintf(r->pool, "%s%s.well-known/openid-configuration", url,
 			(url && url[_oidc_strlen(url) - 1] != OIDC_CHAR_FORWARD_SLASH) ?
-					OIDC_STR_FORWARD_SLASH :
-					"");
+					OIDC_STR_FORWARD_SLASH : "");
 
 	/* get the metadata for the issuer using OpenID Connect Discovery and validate it */
 	if (oidc_metadata_provider_retrieve(r, cfg, issuer, url, j_provider,

@@ -1,6 +1,8 @@
 09/19/2023
 - fix performance issue with latin1 encoding when using OIDCPassClaimsAs <any> latin1
-- bump to 2.4.14.4rc1
+- add options for authentication to OIDCOutgoingProxy; thanks @drzraf
+  see https://github.com/OpenIDC/mod_auth_openidc/discussions/1107
+- bump to 2.4.14.4rc2
 
 09/14/2023
 - fix `OIDCRefreshAccessTokenBeforeExpiry` when using it with `logout_on_error` or `authenticate_on_error`

@@ -1023,7 +1023,7 @@ static void oidc_util_set_curl_ssl_options(request_rec *r, CURL *curl) {
 static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 		const char *data, const char *content_type, const char *basic_auth,
 		const char *bearer_token, int ssl_validate_server, char **response,
-		int timeout, const char *outgoing_proxy,
+		int timeout, const oidc_outgoing_proxy_t *outgoing_proxy,
 		apr_array_header_t *pass_cookies, const char *ssl_cert,
 		const char *ssl_key, const char *ssl_key_pwd) {
 	char curlError[CURL_ERROR_SIZE];
@@ -1036,10 +1036,12 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 
 	/* do some logging about the inputs */
 	oidc_debug(r,
-			"url=%s, data=%s, content_type=%s, basic_auth=%s, bearer_token=%s, ssl_validate_server=%d, timeout=%d, outgoing_proxy=%s, pass_cookies=%pp, ssl_cert=%s, ssl_key=%s, ssl_key_pwd=%s",
+			"url=%s, data=%s, content_type=%s, basic_auth=%s, bearer_token=%s, ssl_validate_server=%d, timeout=%d, outgoing_proxy=%s:%s:%d, pass_cookies=%pp, ssl_cert=%s, ssl_key=%s, ssl_key_pwd=%s",
 			url, data, content_type, basic_auth ? "****" : "null", bearer_token,
-					ssl_validate_server, timeout, outgoing_proxy, pass_cookies,
-					ssl_cert, ssl_key, ssl_key_pwd ? "****" : "(null)");
+					ssl_validate_server, timeout, outgoing_proxy->host_port,
+					outgoing_proxy->username_password ? "****" : "(null)",
+							(int )outgoing_proxy->auth_type, pass_cookies, ssl_cert, ssl_key,
+							ssl_key_pwd ? "****" : "(null)");
 
 	curl = curl_easy_init();
 	if (curl == NULL) {
@@ -1109,8 +1111,14 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, "mod_auth_openidc");
 
 	/* set optional outgoing proxy for the local network */
-	if (outgoing_proxy) {
-		curl_easy_setopt(curl, CURLOPT_PROXY, outgoing_proxy);
+	if (outgoing_proxy->host_port) {
+		curl_easy_setopt(curl, CURLOPT_PROXY, outgoing_proxy->host_port);
+		if (outgoing_proxy->username_password)
+			curl_easy_setopt(curl, CURLOPT_PROXYUSERPWD,
+					outgoing_proxy->username_password);
+		if (outgoing_proxy->auth_type != OIDC_CONFIG_POS_INT_UNSET)
+			curl_easy_setopt(curl, CURLOPT_PROXYAUTH,
+					outgoing_proxy->auth_type);
 	}
 
 	/* see if we need to add token in the Bearer Authorization header */
@@ -1214,7 +1222,7 @@ out:
 apr_byte_t oidc_util_http_get(request_rec *r, const char *url,
 		const apr_table_t *params, const char *basic_auth,
 		const char *bearer_token, int ssl_validate_server, char **response,
-		int timeout, const char *outgoing_proxy,
+		int timeout, const oidc_outgoing_proxy_t *outgoing_proxy,
 		apr_array_header_t *pass_cookies, const char *ssl_cert,
 		const char *ssl_key, const char *ssl_key_pwd) {
 	char *query_url = oidc_util_http_query_encoded_url(r, url, params);
@@ -1229,7 +1237,7 @@ apr_byte_t oidc_util_http_get(request_rec *r, const char *url,
 apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url,
 		const apr_table_t *params, const char *basic_auth,
 		const char *bearer_token, int ssl_validate_server, char **response,
-		int timeout, const char *outgoing_proxy,
+		int timeout, const oidc_outgoing_proxy_t *outgoing_proxy,
 		apr_array_header_t *pass_cookies, const char *ssl_cert,
 		const char *ssl_key, const char *ssl_key_pwd) {
 	char *data = oidc_util_http_form_encoded_data(r, params);
@@ -1245,7 +1253,7 @@ apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url,
 apr_byte_t oidc_util_http_post_json(request_rec *r, const char *url,
 		json_t *json, const char *basic_auth, const char *bearer_token,
 		int ssl_validate_server, char **response, int timeout,
-		const char *outgoing_proxy, apr_array_header_t *pass_cookies,
+		const oidc_outgoing_proxy_t *outgoing_proxy, apr_array_header_t *pass_cookies,
 		const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd) {
 	char *data =
 			json != NULL ?

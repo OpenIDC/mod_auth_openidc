@@ -50,7 +50,7 @@ apr_byte_t oidc_oauth_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg,
 	/* get provider metadata from the specified URL with the specified parameters */
 	if (oidc_util_http_get(r, url, NULL, NULL, NULL,
 			cfg->oauth.ssl_validate_server, response, cfg->http_timeout_short,
-			cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r),
+			&cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r),
 			NULL, NULL, NULL) == FALSE)
 		return FALSE;
 
@@ -160,29 +160,27 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 	/* call the endpoint with the constructed parameter set and return the resulting response */
 	return _oidc_strcmp(c->oauth.introspection_endpoint_method,
 			OIDC_INTROSPECTION_METHOD_GET) == 0 ?
-					oidc_util_http_get(r, c->oauth.introspection_endpoint_url, params,
-							basic_auth, bearer_auth, c->oauth.ssl_validate_server,
-							response, c->http_timeout_long, c->outgoing_proxy,
-							oidc_dir_cfg_pass_cookies(r),
-							oidc_util_get_full_path(r->pool,
-									c->oauth.introspection_endpoint_tls_client_cert),
-							oidc_util_get_full_path(r->pool,
-									c->oauth.introspection_endpoint_tls_client_key),
-							oidc_util_get_full_path(r->pool,
-									c->oauth.introspection_endpoint_tls_client_key_pwd)
-					) :
-					oidc_util_http_post_form(r, c->oauth.introspection_endpoint_url,
-							params, basic_auth, bearer_auth,
-							c->oauth.ssl_validate_server, response,
-							c->http_timeout_long, c->outgoing_proxy,
-							oidc_dir_cfg_pass_cookies(r),
-							oidc_util_get_full_path(r->pool,
-									c->oauth.introspection_endpoint_tls_client_cert),
-							oidc_util_get_full_path(r->pool,
-									c->oauth.introspection_endpoint_tls_client_key),
-							oidc_util_get_full_path(r->pool,
-									c->oauth.introspection_endpoint_tls_client_key_pwd)
-					);
+			oidc_util_http_get(r, c->oauth.introspection_endpoint_url, params,
+					basic_auth, bearer_auth, c->oauth.ssl_validate_server,
+					response, c->http_timeout_long, &c->outgoing_proxy,
+					oidc_dir_cfg_pass_cookies(r),
+					oidc_util_get_full_path(r->pool,
+							c->oauth.introspection_endpoint_tls_client_cert),
+					oidc_util_get_full_path(r->pool,
+							c->oauth.introspection_endpoint_tls_client_key),
+					oidc_util_get_full_path(r->pool,
+							c->oauth.introspection_endpoint_tls_client_key_pwd)) :
+			oidc_util_http_post_form(r, c->oauth.introspection_endpoint_url,
+					params, basic_auth, bearer_auth,
+					c->oauth.ssl_validate_server, response,
+					c->http_timeout_long, &c->outgoing_proxy,
+					oidc_dir_cfg_pass_cookies(r),
+					oidc_util_get_full_path(r->pool,
+							c->oauth.introspection_endpoint_tls_client_cert),
+					oidc_util_get_full_path(r->pool,
+							c->oauth.introspection_endpoint_tls_client_key),
+					oidc_util_get_full_path(r->pool,
+							c->oauth.introspection_endpoint_tls_client_key_pwd));
 }
 
 /*

@@ -541,6 +541,21 @@ static char * ap_get_exec_line(apr_pool_t *p,
 }
 #endif
 
+static const char* oidc_set_outgoing_proxy_slot(cmd_parms *cmd, void *ptr,
+		const char *arg1, const char *arg2, const char *arg3) {
+	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
+			&auth_openidc_module);
+	const char *rv = NULL;
+	if (arg1)
+		cfg->outgoing_proxy.host_port = apr_pstrdup(cmd->pool, arg1);
+	if (arg2)
+		cfg->outgoing_proxy.username_password = apr_pstrdup(cmd->pool, arg2);
+	if (arg3)
+		rv = oidc_parse_outgoing_proxy_auth_type(cmd->pool, arg3,
+				&cfg->outgoing_proxy.auth_type);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
 /*
  * set a string value in the server config with exec support
  */
@@ -1801,7 +1816,10 @@ void* oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->cookie_http_only = OIDC_DEFAULT_COOKIE_HTTPONLY;
 	c->cookie_same_site = OIDC_DEFAULT_COOKIE_SAME_SITE;
 
-	c->outgoing_proxy = NULL;
+	c->outgoing_proxy.host_port = NULL;
+	c->outgoing_proxy.username_password = NULL;
+	c->outgoing_proxy.auth_type = OIDC_CONFIG_POS_INT_UNSET;
+
 	c->crypto_passphrase = NULL;
 
 	c->error_template = NULL;
@@ -2103,9 +2121,18 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->cookie_same_site != OIDC_DEFAULT_COOKIE_SAME_SITE ?
 					add->cookie_same_site : base->cookie_same_site;
 
-	c->outgoing_proxy =
-			add->outgoing_proxy != NULL ?
-					add->outgoing_proxy : base->outgoing_proxy;
+	c->outgoing_proxy.host_port =
+			add->outgoing_proxy.host_port != NULL ?
+					add->outgoing_proxy.host_port :
+					base->outgoing_proxy.host_port;
+	c->outgoing_proxy.username_password =
+			add->outgoing_proxy.username_password != NULL ?
+					add->outgoing_proxy.username_password :
+					base->outgoing_proxy.username_password;
+	c->outgoing_proxy.auth_type =
+			add->outgoing_proxy.auth_type != OIDC_CONFIG_POS_INT_UNSET ?
+					add->outgoing_proxy.auth_type :
+					base->outgoing_proxy.auth_type;
 
 	c->crypto_passphrase =
 			add->crypto_passphrase != NULL ?
@@ -3348,8 +3375,8 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_cfg, cookie_same_site),
 				RSRC_CONF,
 				"Defines whether or not the cookie Same-Site flag is set on cookies."),
-		AP_INIT_TAKE1(OIDCOutgoingProxy,
-				oidc_set_string_slot,
+		AP_INIT_TAKE123(OIDCOutgoingProxy,
+				oidc_set_outgoing_proxy_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, outgoing_proxy),
 				RSRC_CONF,
 				"Specify an outgoing proxy for your network (<host>[:<port>]."),
