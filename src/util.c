@@ -2184,10 +2184,12 @@ static char* oidc_util_utf8_to_latin1(request_rec *r, const char *src) {
 	char *dst = "";
 	unsigned int cp = 0;
 	unsigned char ch;
+	int i = 0;
 	if (src == NULL)
 		return NULL;
-	while (*src != '\0') {
-		ch = (unsigned char) (*src);
+	dst = apr_pcalloc(r->pool, strlen(src) + 1);
+	while (src[i] != '\0') {
+		ch = (unsigned char) (src[i]);
 		if (ch <= 0x7f)
 			cp = ch;
 		else if (ch <= 0xbf)
@@ -2198,19 +2200,19 @@ static char* oidc_util_utf8_to_latin1(request_rec *r, const char *src) {
 			cp = ch & 0x0f;
 		else
 			cp = ch & 0x07;
-		++src;
-		if (((*src & 0xc0) != 0x80) && (cp <= 0x10ffff)) {
+		if (((src[i + 1] & 0xc0) != 0x80) && (cp <= 0x10ffff)) {
 			if (cp <= 255) {
-				dst = apr_psprintf(r->pool, "%s%c", dst, (unsigned char)cp);
+				dst[i] = (unsigned char) cp;
 			} else {
 				// no encoding possible
-				dst = apr_psprintf(r->pool, "%s%c", dst, '?');
+				dst[i] = '?';
 			}
 		}
+		i++;
 	}
+	dst[i] = '\0';
 	return dst;
 }
-
 
 /*
  * set a HTTP header and/or environment variable to pass information to the application
