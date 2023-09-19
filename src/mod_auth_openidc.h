@@ -400,6 +400,10 @@ typedef struct oidc_cfg {
 
 	/* HTML to display error messages+description */
 	char *error_template;
+	/* Javascript template to preserve POST data */
+	char *post_preserve_template;
+	/* Javascript template to restore POST data */
+	char *post_restore_template;
 
 	/* the redirect URI as configured with the OpenID Connect OP's that we talk to */
 	char *redirect_uri;

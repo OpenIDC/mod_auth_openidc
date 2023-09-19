@@ -2,7 +2,10 @@
 - fix performance issue with latin1 encoding when using OIDCPassClaimsAs <any> latin1
 - add options for authentication to OIDCOutgoingProxy; thanks @drzraf
   see https://github.com/OpenIDC/mod_auth_openidc/discussions/1107
-- bump to 2.4.14.4rc2
+- add support for custom preserve/restore POST data templates with OIDCPreservePostTemplates
+  to be used when OIDCPreservePost is set to On; the hard-coded internal templates are added to
+  the test directory as an example; closes #195 (yeah...); thanks @kerrermanisNL and @spiazzi
+- bump to 2.4.14.4rc3
 
 09/14/2023
 - fix `OIDCRefreshAccessTokenBeforeExpiry` when using it with `logout_on_error` or `authenticate_on_error`

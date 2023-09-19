@@ -1,0 +1,34 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>Restoring...</title>	
+		<script type="text/javascript">
+			function str_decode(string) {
+				try {
+					result = decodeURIComponent(string);
+				} catch (e) {
+					result =  unescape(string);
+				}
+				return result;
+			}
+			function postOnLoad() {
+				var mod_auth_openidc_preserve_post_params = JSON.parse(sessionStorage.getItem('mod_auth_openidc_preserve_post_params'));
+				sessionStorage.removeItem('mod_auth_openidc_preserve_post_params');
+				for (var key in mod_auth_openidc_preserve_post_params) {
+					var input = document.createElement("input");
+					input.type = "hidden";
+					input.name = str_decode(key);
+					input.value = str_decode(mod_auth_openidc_preserve_post_params[key]);
+					document.forms[0].appendChild(input);
+				}
+				document.forms[0].action = "%s";
+				document.forms[0].submit();
+			}
+		</script>			
+	</head>
+	<body onload="postOnLoad()">
+		<p>Restoring...</p>
+		<form method="post"></form>
+	</body>
+</html>

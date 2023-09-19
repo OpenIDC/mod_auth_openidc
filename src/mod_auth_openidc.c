@@ -418,6 +418,8 @@ static const char* oidc_original_request_method(request_rec *r, oidc_cfg *cfg,
 	return method;
 }
 
+static char *post_preserve_template_contents = NULL;
+
 /*
  * send an OpenID Connect authorization request to the specified provider preserving POST parameters using HTML5 storage
  */
@@ -456,8 +458,33 @@ apr_byte_t oidc_post_preserve_javascript(request_rec *r, const char *location,
 	}
 	json = apr_psprintf(r->pool, "{ %s }", json);
 
+	const char *jscript = NULL;
+	char *template = NULL;
+
+	if (cfg->post_preserve_template != NULL) {
+		if (post_preserve_template_contents == NULL) {
+			template = oidc_util_get_full_path(r->pool,
+					cfg->post_preserve_template);
+			if (oidc_util_file_read(r, template, r->server->process->pool,
+					&post_preserve_template_contents) == FALSE) {
+				oidc_error(r, "could not read POST template: %s", template);
+				post_preserve_template_contents = NULL;
+			}
+		}
+		if (post_preserve_template_contents != NULL) {
+			jscript = apr_psprintf(r->pool, post_preserve_template_contents,
+					json,
+					location ?
+							oidc_util_javascript_escape(r->pool, location) :
+							"");
+			oidc_util_http_send(r, jscript, _oidc_strlen(jscript),
+					OIDC_CONTENT_TYPE_TEXT_HTML, OK);
+			return TRUE;
+		}
+	}
+
 	const char *jmethod = "preserveOnLoad";
-	const char *jscript =
+	jscript =
 			apr_psprintf(r->pool,
 					"    <script type=\"text/javascript\">\n"
 					"      function %s() {\n"
@@ -467,8 +494,9 @@ apr_byte_t oidc_post_preserve_javascript(request_rec *r, const char *location,
 					"    </script>\n", jmethod, json,
 					location ?
 							apr_psprintf(r->pool, "window.location='%s';\n",
-									oidc_util_javascript_escape(r->pool, location)) :
-									"");
+									oidc_util_javascript_escape(r->pool,
+											location)) :
+											"");
 	if (location == NULL) {
 		if (javascript_method)
 			*javascript_method = apr_pstrdup(r->pool, jmethod);
@@ -2139,6 +2167,8 @@ static apr_byte_t oidc_handle_browser_back(request_rec *r, const char *r_state,
 	return FALSE;
 }
 
+static char *post_restore_template_contents = NULL;
+
 /*
  * complete the handling of an authorization response by obtaining, parsing and verifying the
  * id_token and storing the authenticated user state in the session
@@ -2291,6 +2321,29 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 
 	/* check whether form post data was preserved; if so restore it */
 	if (_oidc_strcmp(original_method, OIDC_METHOD_FORM_POST) == 0) {
+		char *template = NULL;
+		char *jscript = NULL;
+		if (c->post_restore_template != NULL) {
+			if (post_restore_template_contents == NULL) {
+				template = oidc_util_get_full_path(r->pool,
+						c->post_restore_template);
+				if (oidc_util_file_read(r, template, r->server->process->pool,
+						&post_restore_template_contents) == FALSE) {
+					oidc_error(r, "could not read POST template: %s", template);
+					post_restore_template_contents = NULL;
+				}
+			}
+			if (post_restore_template_contents != NULL) {
+				jscript = apr_psprintf(r->pool, post_restore_template_contents,
+						original_url ?
+								oidc_util_javascript_escape(r->pool,
+										original_url) :
+										"");
+				oidc_util_http_send(r, jscript, _oidc_strlen(jscript),
+						OIDC_CONTENT_TYPE_TEXT_HTML, OK);
+				return TRUE;
+			}
+		}
 		return oidc_request_post_preserved_restore(r, original_url);
 	}
 

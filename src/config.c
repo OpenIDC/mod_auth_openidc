@@ -252,6 +252,7 @@
 #define OIDCRedisCacheConnectTimeout           "OIDCRedisCacheConnectTimeout"
 #define OIDCRedisCacheTimeout                  "OIDCRedisCacheTimeout"
 #define OIDCHTMLErrorTemplate                  "OIDCHTMLErrorTemplate"
+#define OIDCPreservePostTemplates              "OIDCPreservePostTemplates"
 #define OIDCDiscoverURL                        "OIDCDiscoverURL"
 #define OIDCPassCookies                        "OIDCPassCookies"
 #define OIDCStripCookies                       "OIDCStripCookies"
@@ -1413,6 +1414,17 @@ static const char* oidc_set_signed_jwks_uri(cmd_parms *cmd, void *m,
 	return NULL;
 }
 
+static const char* oidc_set_post_preserve_templates(cmd_parms *cmd, void *m,
+		const char *arg1, const char *arg2) {
+	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
+			&auth_openidc_module);
+	if (arg1)
+		cfg->post_preserve_template = apr_pstrdup(cmd->pool, arg1);
+	if (arg2)
+		cfg->post_restore_template = apr_pstrdup(cmd->pool, arg2);
+	return NULL;
+}
+
 static const char* oidc_set_token_revocation_endpoint(cmd_parms *cmd,
 		void *struct_ptr, const char *args) {
 	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
@@ -1823,6 +1835,8 @@ void* oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->crypto_passphrase = NULL;
 
 	c->error_template = NULL;
+	c->post_preserve_template = NULL;
+	c->post_restore_template = NULL;
 
 	c->provider.userinfo_refresh_interval =
 			OIDC_DEFAULT_USERINFO_REFRESH_INTERVAL;
@@ -2141,6 +2155,12 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->error_template =
 			add->error_template != NULL ?
 					add->error_template : base->error_template;
+	c->post_preserve_template =
+			add->post_preserve_template != NULL ?
+					add->post_preserve_template : base->post_preserve_template;
+	c->post_restore_template =
+			add->post_restore_template != NULL ?
+					add->post_restore_template : base->post_restore_template;
 
 	c->provider_metadata_refresh_interval =
 			add->provider_metadata_refresh_interval
@@ -3625,6 +3645,14 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, error_template),
 				RSRC_CONF,
 				"Name of a HTML error template: needs to contain two \"%s\" characters, one for the error message, one for the description."),
+		AP_INIT_TAKE2(OIDCPreservePostTemplates,
+				oidc_set_post_preserve_templates,
+				NULL,
+				RSRC_CONF,
+				"Name of POST preserve and restore templates:"
+				"1) preserve: needs to contain two \"%s\" characters, the first for the JSON POST data, the second for the URL to redirect to."
+				"2) restore: needs to contain one \"%s\", which contains the (original) URL to POST the restored data to"
+				),
 
 		AP_INIT_TAKE1(OIDCDiscoverURL,
 				oidc_set_relative_or_absolute_url_slot_dir_cfg,
