@@ -2188,8 +2188,8 @@ static char* oidc_util_utf8_to_latin1(request_rec *r, const char *src) {
 	if (src == NULL)
 		return NULL;
 	dst = apr_pcalloc(r->pool, strlen(src) + 1);
-	while (src[i] != '\0') {
-		ch = (unsigned char) (src[i]);
+	while (*src != '\0') {
+		ch = (unsigned char) (*src);
 		if (ch <= 0x7f)
 			cp = ch;
 		else if (ch <= 0xbf)
@@ -2200,15 +2200,16 @@ static char* oidc_util_utf8_to_latin1(request_rec *r, const char *src) {
 			cp = ch & 0x0f;
 		else
 			cp = ch & 0x07;
-		if (((src[i + 1] & 0xc0) != 0x80) && (cp <= 0x10ffff)) {
+		++src;
+		if (((*src & 0xc0) != 0x80) && (cp <= 0x10ffff)) {
 			if (cp <= 255) {
 				dst[i] = (unsigned char) cp;
 			} else {
 				// no encoding possible
 				dst[i] = '?';
 			}
+			i++;
 		}
-		i++;
 	}
 	dst[i] = '\0';
 	return dst;
