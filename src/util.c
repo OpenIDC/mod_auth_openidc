@@ -1877,26 +1877,10 @@ int oidc_util_html_send_error(request_rec *r, const char *html_template,
 
 		if (_oidc_strcmp(html_template, "deprecated") != 0) {
 
-			if (html_error_template_contents == NULL) {
-				html_template = oidc_util_get_full_path(r->pool, html_template);
-				if (oidc_util_file_read(r, html_template,
-						r->server->process->pool,
-						&html_error_template_contents) == FALSE) {
-					oidc_error(r, "could not read HTML error template: %s",
-							html_template);
-					html_error_template_contents = NULL;
-				}
-			}
-
-			if (html_error_template_contents) {
-				html = apr_psprintf(r->pool, html_error_template_contents,
-						oidc_util_html_escape(r->pool, error ? error : ""),
-						oidc_util_html_escape(r->pool,
-								description ? description : ""));
-
-				rc = oidc_util_http_send(r, html, _oidc_strlen(html),
-						OIDC_CONTENT_TYPE_TEXT_HTML, status_code);
-			}
+			rc = oidc_util_html_send_in_template(r, html_template,
+					&html_error_template_contents, error,
+					OIDC_POST_PRESERVE_ESCAPE_HTML, description,
+					OIDC_POST_PRESERVE_ESCAPE_HTML, status_code);
 
 		} else {
 
