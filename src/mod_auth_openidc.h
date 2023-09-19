@@ -201,6 +201,10 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_USERDATA_SESSION "mod_auth_openidc_session"
 #define OIDC_USERDATA_POST_PARAMS_KEY "oidc_userdata_post_params"
 
+#define OIDC_POST_PRESERVE_ESCAPE_NONE       0
+#define OIDC_POST_PRESERVE_ESCAPE_HTML       1
+#define OIDC_POST_PRESERVE_ESCAPE_JAVASCRIPT 2
+
 /* input filter hook name */
 #define OIDC_UTIL_HTTP_SENDSTRING "OIDC_UTIL_HTTP_SENDSTRING"
 
@@ -949,6 +953,7 @@ const char *oidc_util_hdr_out_location_get(const request_rec *r);
 void oidc_util_hdr_err_out_add(const request_rec *r, const char *name, const char *value);
 apr_byte_t oidc_util_hdr_in_accept_contains(const request_rec *r, const char *needle);
 apr_byte_t oidc_util_json_validate_cnf(request_rec *r, json_t *jwt, int token_binding_policy);
+apr_byte_t oidc_util_html_send_in_template(request_rec *r, const char *filename, char **static_template_content, const char *arg1, int arg1_esc, const char *arg2, int arg2_esc, int status_code);
 
 // oidc_metadata.c
 apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg, const char *issuer, json_t **j_provider, apr_byte_t allow_discovery);

@@ -458,33 +458,15 @@ apr_byte_t oidc_post_preserve_javascript(request_rec *r, const char *location,
 	}
 	json = apr_psprintf(r->pool, "{ %s }", json);
 
-	const char *jscript = NULL;
-	char *template = NULL;
-
-	if (cfg->post_preserve_template != NULL) {
-		if (post_preserve_template_contents == NULL) {
-			template = oidc_util_get_full_path(r->pool,
-					cfg->post_preserve_template);
-			if (oidc_util_file_read(r, template, r->server->process->pool,
-					&post_preserve_template_contents) == FALSE) {
-				oidc_error(r, "could not read POST template: %s", template);
-				post_preserve_template_contents = NULL;
-			}
-		}
-		if (post_preserve_template_contents != NULL) {
-			jscript = apr_psprintf(r->pool, post_preserve_template_contents,
-					json,
-					location ?
-							oidc_util_javascript_escape(r->pool, location) :
-							"");
-			oidc_util_http_send(r, jscript, _oidc_strlen(jscript),
-					OIDC_CONTENT_TYPE_TEXT_HTML, OK);
+	if (cfg->post_preserve_template != NULL)
+		if (oidc_util_html_send_in_template(r, cfg->post_preserve_template,
+				&post_preserve_template_contents, json,
+				OIDC_POST_PRESERVE_ESCAPE_NONE, location,
+				OIDC_POST_PRESERVE_ESCAPE_JAVASCRIPT, OK) == OK)
 			return TRUE;
-		}
-	}
 
 	const char *jmethod = "preserveOnLoad";
-	jscript =
+	const char *jscript =
 			apr_psprintf(r->pool,
 					"    <script type=\"text/javascript\">\n"
 					"      function %s() {\n"
@@ -2321,29 +2303,12 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c,
 
 	/* check whether form post data was preserved; if so restore it */
 	if (_oidc_strcmp(original_method, OIDC_METHOD_FORM_POST) == 0) {
-		char *template = NULL;
-		char *jscript = NULL;
-		if (c->post_restore_template != NULL) {
-			if (post_restore_template_contents == NULL) {
-				template = oidc_util_get_full_path(r->pool,
-						c->post_restore_template);
-				if (oidc_util_file_read(r, template, r->server->process->pool,
-						&post_restore_template_contents) == FALSE) {
-					oidc_error(r, "could not read POST template: %s", template);
-					post_restore_template_contents = NULL;
-				}
-			}
-			if (post_restore_template_contents != NULL) {
-				jscript = apr_psprintf(r->pool, post_restore_template_contents,
-						original_url ?
-								oidc_util_javascript_escape(r->pool,
-										original_url) :
-										"");
-				oidc_util_http_send(r, jscript, _oidc_strlen(jscript),
-						OIDC_CONTENT_TYPE_TEXT_HTML, OK);
+		if (c->post_restore_template != NULL)
+			if (oidc_util_html_send_in_template(r, c->post_restore_template,
+					&post_restore_template_contents, original_url,
+					OIDC_POST_PRESERVE_ESCAPE_JAVASCRIPT, "",
+					OIDC_POST_PRESERVE_ESCAPE_NONE, OK) == OK)
 				return TRUE;
-			}
-		}
 		return oidc_request_post_preserved_restore(r, original_url);
 	}
 

@@ -1821,6 +1821,50 @@ char* oidc_util_get_full_path(apr_pool_t *pool, const char *abs_or_rel_filename)
 }
 
 /*
+ * escape characters in an HTML/Javascript template
+ */
+static char* oidc_util_template_escape(request_rec *r, const char *arg,
+		int escape) {
+	char *rv = NULL;
+	if (escape == OIDC_POST_PRESERVE_ESCAPE_HTML) {
+		rv = oidc_util_html_escape(r->pool, arg ? arg : "");
+	} else if (escape == OIDC_POST_PRESERVE_ESCAPE_JAVASCRIPT) {
+		rv = oidc_util_javascript_escape(r->pool, arg ? arg : "");
+	} else {
+		rv = apr_pstrdup(r->pool, arg);
+	}
+	return rv;
+}
+
+/*
+ * fill and send a HTML template
+ */
+apr_byte_t oidc_util_html_send_in_template(request_rec *r, const char *filename,
+		char **static_template_content, const char *arg1, int arg1_esc,
+		const char *arg2, int arg2_esc, int status_code) {
+	char *fullname = NULL;
+	char *html = NULL;
+	int rc = status_code;
+	if (*static_template_content == NULL) {
+		fullname = oidc_util_get_full_path(r->pool, filename);
+		// NB: templates go into the server process pool
+		if (oidc_util_file_read(r, fullname, r->server->process->pool,
+				static_template_content) == FALSE) {
+			oidc_error(r, "could not read template: %s", fullname);
+			*static_template_content = NULL;
+		}
+	}
+	if (static_template_content) {
+		html = apr_psprintf(r->pool, *static_template_content,
+				oidc_util_template_escape(r, arg1, arg1_esc),
+				oidc_util_template_escape(r, arg2, arg2_esc));
+		rc = oidc_util_http_send(r, html, _oidc_strlen(html),
+				OIDC_CONTENT_TYPE_TEXT_HTML, status_code);
+	}
+	return rc;
+}
+
+/*
  * send a user-facing error to the browser
  */
 int oidc_util_html_send_error(request_rec *r, const char *html_template,
