@@ -55,7 +55,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 /* create the cache context */
 static oidc_cache_cfg_redis_t* oidc_cache_redis_cfg_create(apr_pool_t *pool) {
 	oidc_cache_cfg_redis_t *context = apr_pcalloc(pool, sizeof(oidc_cache_cfg_redis_t));
-	context->mutex = oidc_cache_mutex_create(pool);
+	context->mutex = oidc_cache_mutex_create(pool, FALSE);
 	context->username = NULL;
 	context->passwd = NULL;
 	context->database = -1;

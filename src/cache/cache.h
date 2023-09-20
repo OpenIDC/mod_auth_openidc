@@ -71,12 +71,14 @@ typedef struct oidc_cache_t {
 } oidc_cache_t;
 
 typedef struct oidc_cache_mutex_t {
-	apr_global_mutex_t *mutex;
+	apr_global_mutex_t *gmutex;
+	apr_proc_mutex_t *pmutex;
 	char *mutex_filename;
+	apr_byte_t is_global;
 	apr_byte_t is_parent;
 } oidc_cache_mutex_t;
 
-oidc_cache_mutex_t *oidc_cache_mutex_create(apr_pool_t *pool);
+oidc_cache_mutex_t* oidc_cache_mutex_create(apr_pool_t *pool, apr_byte_t global);
 apr_byte_t oidc_cache_mutex_post_config(server_rec *s, oidc_cache_mutex_t *m,
 		const char *type);
 apr_status_t oidc_cache_mutex_child_init(apr_pool_t *p, server_rec *s,

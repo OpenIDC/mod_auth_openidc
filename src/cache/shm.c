@@ -74,7 +74,7 @@ static void *oidc_cache_shm_cfg_create(apr_pool_t *pool) {
 	oidc_cache_cfg_shm_t *context = apr_pcalloc(pool,
 			sizeof(oidc_cache_cfg_shm_t));
 	context->shm = NULL;
-	context->mutex = oidc_cache_mutex_create(pool);
+	context->mutex = oidc_cache_mutex_create(pool, TRUE);
 	context->is_parent = TRUE;
 	return context;
 }
