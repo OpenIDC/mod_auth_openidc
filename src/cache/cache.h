@@ -83,8 +83,8 @@ apr_byte_t oidc_cache_mutex_post_config(server_rec *s, oidc_cache_mutex_t *m,
 		const char *type);
 apr_status_t oidc_cache_mutex_child_init(apr_pool_t *p, server_rec *s,
 		oidc_cache_mutex_t *m);
-apr_byte_t oidc_cache_mutex_lock(server_rec *s, oidc_cache_mutex_t *m);
-apr_byte_t oidc_cache_mutex_unlock(server_rec *s, oidc_cache_mutex_t *m);
+apr_byte_t oidc_cache_mutex_lock(apr_pool_t *pool, server_rec *s, oidc_cache_mutex_t *m);
+apr_byte_t oidc_cache_mutex_unlock(apr_pool_t *pool, server_rec *s, oidc_cache_mutex_t *m);
 apr_byte_t oidc_cache_mutex_destroy(server_rec *s, oidc_cache_mutex_t *m);
 
 apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key,

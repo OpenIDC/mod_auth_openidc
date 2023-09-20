@@ -175,7 +175,8 @@ apr_status_t oidc_cache_mutex_child_init(apr_pool_t *p, server_rec *s,
 /*
  * mutex lock
  */
-apr_byte_t oidc_cache_mutex_lock(server_rec *s, oidc_cache_mutex_t *m) {
+apr_byte_t oidc_cache_mutex_lock(apr_pool_t *pool, server_rec *s,
+		oidc_cache_mutex_t *m) {
 
 	apr_status_t rv;
 
@@ -187,7 +188,7 @@ apr_byte_t oidc_cache_mutex_lock(server_rec *s, oidc_cache_mutex_t *m) {
 	if (rv != APR_SUCCESS)
 		oidc_serror(s,
 				"apr_global_mutex_lock/apr_proc_mutex_lock failed: %s (%d)",
-				oidc_cache_status2str(s->process->pool, rv), rv);
+				oidc_cache_status2str(pool, rv), rv);
 
 	return TRUE;
 }
@@ -195,7 +196,8 @@ apr_byte_t oidc_cache_mutex_lock(server_rec *s, oidc_cache_mutex_t *m) {
 /*
  * mutex unlock
  */
-apr_byte_t oidc_cache_mutex_unlock(server_rec *s, oidc_cache_mutex_t *m) {
+apr_byte_t oidc_cache_mutex_unlock(apr_pool_t *pool, server_rec *s,
+		oidc_cache_mutex_t *m) {
 
 	apr_status_t rv;
 
@@ -207,7 +209,7 @@ apr_byte_t oidc_cache_mutex_unlock(server_rec *s, oidc_cache_mutex_t *m) {
 	if (rv != APR_SUCCESS)
 		oidc_serror(s,
 				"apr_global_mutex_unlock/apr_proc_mutex_unlock failed: %s (%d)",
-				oidc_cache_status2str(s->process->pool, rv), rv);
+				oidc_cache_status2str(pool, rv), rv);
 
 	return TRUE;
 }

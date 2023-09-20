@@ -324,8 +324,8 @@ apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section,
 	redisReply *reply = NULL;
 	apr_byte_t rv = FALSE;
 
-	/* grab the global lock */
-	if (oidc_cache_mutex_lock(r->server, context->mutex) == FALSE)
+	/* grab the processlock */
+	if (oidc_cache_mutex_lock(r->pool, r->server, context->mutex) == FALSE)
 		return FALSE;
 
 	/* get */
@@ -366,8 +366,8 @@ end:
 	/* free the reply object resources */
 	oidc_cache_redis_reply_free(&reply);
 
-	/* unlock the global mutex */
-	oidc_cache_mutex_unlock(r->server, context->mutex);
+	/* unlock the process mutex */
+	oidc_cache_mutex_unlock(r->pool, r->server, context->mutex);
 
 	/* return the status */
 	return rv;
@@ -385,8 +385,8 @@ apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section, const char 
 	apr_byte_t rv = FALSE;
 	apr_uint32_t timeout;
 
-	/* grab the global lock */
-	if (oidc_cache_mutex_lock(r->server, context->mutex) == FALSE)
+	/* grab the process lock */
+	if (oidc_cache_mutex_lock(r->pool, r->server, context->mutex) == FALSE)
 		return FALSE;
 
 	/* see if we should be clearing this entry */
@@ -412,8 +412,8 @@ apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section, const char 
 	/* free the reply object resources */
 	oidc_cache_redis_reply_free(&reply);
 
-	/* unlock the global mutex */
-	oidc_cache_mutex_unlock(r->server, context->mutex);
+	/* unlock the process mutex */
+	oidc_cache_mutex_unlock(r->pool, r->server, context->mutex);
 
 	/* return the status */
 	return rv;
@@ -424,9 +424,9 @@ static int oidc_cache_redis_destroy_impl(server_rec *s) {
 	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t*) cfg->cache_cfg;
 
 	if (context != NULL) {
-		oidc_cache_mutex_lock(s, context->mutex);
+		oidc_cache_mutex_lock(s->process->pool, s, context->mutex);
 		context->disconnect(context);
-		oidc_cache_mutex_unlock(s, context->mutex);
+		oidc_cache_mutex_unlock(s->process->pool, s, context->mutex);
 		oidc_cache_mutex_destroy(s, context->mutex);
 		cfg->cache_cfg = NULL;
 	}

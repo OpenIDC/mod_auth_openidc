@@ -179,7 +179,7 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section,
 	*value = NULL;
 
 	/* grab the global lock */
-	if (oidc_cache_mutex_lock(r->server, context->mutex) == FALSE)
+	if (oidc_cache_mutex_lock(r->pool, r->server, context->mutex) == FALSE)
 		return FALSE;
 
 	/* get the pointer to the start of the shared memory block */
@@ -213,7 +213,7 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section,
 	}
 
 	/* release the global lock */
-	oidc_cache_mutex_unlock(r->server, context->mutex);
+	oidc_cache_mutex_unlock(r->pool, r->server, context->mutex);
 
 	return TRUE;
 }
@@ -252,7 +252,7 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 	}
 
 	/* grab the global lock */
-	if (oidc_cache_mutex_lock(r->server, context->mutex) == FALSE)
+	if (oidc_cache_mutex_lock(r->pool, r->server, context->mutex) == FALSE)
 		return FALSE;
 
 	/* get a pointer to the shared memory block */
@@ -325,7 +325,7 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section,
 	}
 
 	/* release the global lock */
-	oidc_cache_mutex_unlock(r->server, context->mutex);
+	oidc_cache_mutex_unlock(r->pool, r->server, context->mutex);
 
 	return TRUE;
 }
@@ -339,11 +339,11 @@ static int oidc_cache_shm_destroy(server_rec *s) {
 	oidc_slog(s, APLOG_TRACE1, "destroy: %pp (shm=%pp,s=%pp, p=%d)", context, context ? context->shm : 0, s, context ? context->is_parent : -1);
 
 	if ((context) && (context->is_parent == TRUE) && (context->shm) && (context->mutex)) {
-		oidc_cache_mutex_lock(s, context->mutex);
+		oidc_cache_mutex_lock(s->process->pool, s, context->mutex);
 		rv = apr_shm_destroy(context->shm);
 		oidc_sdebug(s, "apr_shm_destroy returned: %d", rv);
 		context->shm = NULL;
-		oidc_cache_mutex_unlock(s, context->mutex);
+		oidc_cache_mutex_unlock(s->process->pool, s, context->mutex);
 	}
 
 	if ((context) && (context->mutex)) {

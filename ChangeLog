@@ -1,6 +1,7 @@
 09/20/2023
 - performance: skip re-validating cached provider metadata
 - performance: use process based locking instead of global locking for Redis caching
+- avoid potential process lifetime memory leak when mutex lock/unlock fails
 
 09/19/2023
 - fix performance issue with latin1 encoding when using OIDCPassClaimsAs <any> latin1
