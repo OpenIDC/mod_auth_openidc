@@ -12,7 +12,7 @@ on:
   schedule:
     - cron: '18 9 * * 1'
   push:
-    branches: [ "master" ]
+    branches: [ "master", "openssf-scorecard" ]
 
 # Declare default permissions as read only.
 permissions: read-all
