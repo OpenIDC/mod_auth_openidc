@@ -1,3 +1,6 @@
+09/20/2023
+- performance: skip re-validating cached provider metadata
+
 09/19/2023
 - fix performance issue with latin1 encoding when using OIDCPassClaimsAs <any> latin1
 - add options for authentication to OIDCOutgoingProxy; thanks @drzraf

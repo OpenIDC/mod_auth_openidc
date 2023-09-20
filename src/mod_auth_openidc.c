@@ -273,11 +273,14 @@ static char* oidc_get_state_cookie_name(request_rec *r, const char *state) {
  * check if s_json is valid provider metadata
  */
 static apr_byte_t oidc_provider_validate_metadata_str(request_rec *r,
-		oidc_cfg *c, const char *s_json, json_t **j_provider) {
+		oidc_cfg *c, const char *s_json, json_t **j_provider,
+		apr_byte_t decode_only) {
 
-	if (oidc_util_decode_json_object(r, s_json, j_provider) == FALSE) {
+	if (oidc_util_decode_json_object(r, s_json, j_provider) == FALSE)
 		return FALSE;
-	}
+
+	if (decode_only == TRUE)
+		return TRUE;
 
 	/* check to see if it is valid metadata */
 	if (oidc_metadata_provider_is_valid(r, c, *j_provider, NULL) == FALSE) {
@@ -308,7 +311,7 @@ static apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg *c,
 	oidc_cache_get_provider(r, c->provider.metadata_url, &s_json);
 
 	if (s_json != NULL)
-		oidc_provider_validate_metadata_str(r, c, s_json, &j_provider);
+		oidc_provider_validate_metadata_str(r, c, s_json, &j_provider, TRUE);
 
 	if (j_provider == NULL) {
 
@@ -320,8 +323,8 @@ static apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg *c,
 		}
 		json_decref(j_provider);
 
-		if (oidc_provider_validate_metadata_str(r, c, s_json,
-				&j_provider) == FALSE)
+		if (oidc_provider_validate_metadata_str(r, c, s_json, &j_provider,
+				FALSE) == FALSE)
 			return FALSE;
 
 		oidc_cache_set_provider(r, c->provider.metadata_url, s_json,
