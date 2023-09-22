@@ -1,6 +1,7 @@
 09/22/2023
 - performance: store userinfo refresh interval in session to avoid parsing JSON on each request
-- bump to 2.4.14.4rc4
+- fix memory leak in oidc_refresh_token_grant: free the parsed id_token that is returned
+- bump to 2.4.14.4rc5
 
 09/20/2023
 - performance: skip re-validating cached provider metadata

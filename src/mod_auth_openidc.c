@@ -1077,6 +1077,8 @@ static apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg *c,
 	char *s_token_type = NULL;
 	char *s_access_token = NULL;
 	char *s_refresh_token = NULL;
+	oidc_jwt_t *id_token_jwt = NULL;
+	oidc_jose_error_t err;
 
 	/* refresh the tokens by calling the token endpoint */
 	if (oidc_proto_refresh_request(r, c, provider, refresh_token, &s_id_token,
@@ -1103,15 +1105,13 @@ static apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg *c,
 
 	/* if we have a new id_token, store it in the session and update the session max lifetime if required */
 	if (s_id_token != NULL) {
+
 		/* only store the serialized representation when configured so */
 		if (c->store_id_token == TRUE)
 			oidc_session_set_idtoken(r, session, s_id_token);
 
-		oidc_jwt_t *id_token_jwt = NULL;
-		oidc_jose_error_t err;
 		if (oidc_jwt_parse(r->pool, s_id_token, &id_token_jwt, NULL, FALSE,
 				&err) == TRUE) {
-
 			/* store the claims payload in the id_token for later reference */
 			oidc_session_set_idtoken_claims(r, session,
 					id_token_jwt->payload.value.str);
@@ -1134,6 +1134,9 @@ static apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg *c,
 		} else {
 			oidc_warn(r, "parsing of id_token failed");
 		}
+
+		if (id_token_jwt != NULL)
+			oidc_jwt_destroy(id_token_jwt);
 	}
 
 	return TRUE;
