@@ -1,3 +1,7 @@
+09/22/2023
+- performance: store userinfo refresh interval in session to avoid parsing JSON on each request
+- bump to 2.4.14.4rc4
+
 09/20/2023
 - performance: skip re-validating cached provider metadata
 - performance: use process based locking instead of global locking for Redis caching

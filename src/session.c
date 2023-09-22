@@ -465,6 +465,8 @@ apr_byte_t oidc_session_set(request_rec *r, oidc_session_t *z, const char *key,
 #define OIDC_SESSION_KEY_SESSION_STATE "ss"
 /* key for storing the issuer in the session context */
 #define OIDC_SESSION_KEY_ISSUER "iss"
+/* key for storing the provider specific user info refresh interval */
+#define OIDC_SESSION_KEY_USERINFO_REFRESH_INTERVAL "uir"
 
 /*
  * helper functions
@@ -699,6 +701,19 @@ const char * oidc_session_get_cookie_domain(request_rec *r, oidc_session_t *z) {
 /*
  * userinfo last refresh
  */
+
+void oidc_session_set_userinfo_refresh_interval(request_rec *r,
+		oidc_session_t *z, const int interval) {
+	oidc_session_set_timestamp(r, z, OIDC_SESSION_KEY_USERINFO_REFRESH_INTERVAL,
+			apr_time_from_sec(interval));
+}
+
+apr_time_t oidc_session_get_userinfo_refresh_interval(request_rec *r,
+		oidc_session_t *z) {
+	return oidc_session_get_key2timestamp(r, z,
+			OIDC_SESSION_KEY_USERINFO_REFRESH_INTERVAL);
+}
+
 void oidc_session_reset_userinfo_last_refresh(request_rec *r, oidc_session_t *z) {
 	oidc_session_set_timestamp(r, z, OIDC_SESSION_KEY_USERINFO_LAST_REFRESH,
 			apr_time_now());

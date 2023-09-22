@@ -1234,47 +1234,48 @@ static apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r,
 	const char *access_token = NULL;
 	char *userinfo_jwt = NULL;
 
-	/* get the current provider info */
-	if (oidc_get_provider_from_session(r, cfg, session, &provider) == FALSE) {
-		*needs_save = TRUE;
-		return FALSE;
-	}
+	/* see if we can do anything here, i.e. a refresh interval is configured */
+	apr_time_t interval = oidc_session_get_userinfo_refresh_interval(r,
+			session);
 
-	/* see if we can do anything here, i.e. we have a userinfo endpoint and a refresh interval is configured */
-	apr_time_t interval = apr_time_from_sec(
-			provider->userinfo_refresh_interval);
+	oidc_debug(r, "interval=%" APR_TIME_T_FMT, apr_time_sec(interval));
 
-	oidc_debug(r, "userinfo_endpoint=%s, interval=%d",
-			provider->userinfo_endpoint_url,
-			provider->userinfo_refresh_interval);
+	if (interval > 0) {
 
-	if ((provider->userinfo_endpoint_url != NULL) && (interval > 0)) {
-
-		/* get the last refresh timestamp from the session info */
-		apr_time_t last_refresh = oidc_session_get_userinfo_last_refresh(r,
-				session);
-
-		oidc_debug(r, "refresh needed in: %" APR_TIME_T_FMT " seconds",
-				apr_time_sec(last_refresh + interval - apr_time_now()));
-
-		/* see if we need to refresh again */
-		if (last_refresh + interval < apr_time_now()) {
-
-			/* get the current access token */
-			access_token = oidc_session_get_access_token(r, session);
-
-			/* retrieve the current claims */
-			claims = oidc_retrieve_claims_from_userinfo_endpoint(r, cfg,
-					provider, access_token, session, NULL, &userinfo_jwt);
-
-			/* store claims resolved from userinfo endpoint */
-			oidc_store_userinfo_claims(r, cfg, session, provider, claims,
-					userinfo_jwt);
-
-			/* indicated something changed */
+		/* get the current provider info */
+		if (oidc_get_provider_from_session(r, cfg, session, &provider) == FALSE) {
 			*needs_save = TRUE;
+			return FALSE;
+		}
 
-			rc = (claims != NULL);
+		if (provider->userinfo_endpoint_url != NULL) {
+
+			/* get the last refresh timestamp from the session info */
+			apr_time_t last_refresh = oidc_session_get_userinfo_last_refresh(r,
+					session);
+
+			oidc_debug(r, "refresh needed in: %" APR_TIME_T_FMT " seconds",
+					apr_time_sec(last_refresh + interval - apr_time_now()));
+
+			/* see if we need to refresh again */
+			if (last_refresh + interval < apr_time_now()) {
+
+				/* get the current access token */
+				access_token = oidc_session_get_access_token(r, session);
+
+				/* retrieve the current claims */
+				claims = oidc_retrieve_claims_from_userinfo_endpoint(r, cfg,
+						provider, access_token, session, NULL, &userinfo_jwt);
+
+				/* store claims resolved from userinfo endpoint */
+				oidc_store_userinfo_claims(r, cfg, session, provider, claims,
+						userinfo_jwt);
+
+				/* indicated something changed */
+				*needs_save = TRUE;
+
+				rc = (claims != NULL);
+			}
 		}
 	}
 
@@ -1995,6 +1996,10 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
 				"session management disabled: no \"session_state\" value is provided in the authentication response even though \"check_session_iframe\" (%s) is set in the provider configuration",
 				provider->check_session_iframe);
 	}
+
+	/* store the, possibly, provider specific userinfo_refresh_interval for performance reasons */
+	oidc_session_set_userinfo_refresh_interval(r, session,
+			provider->userinfo_refresh_interval);
 
 	/* store claims resolved from userinfo endpoint */
 	oidc_store_userinfo_claims(r, c, session, provider, claims, userinfo_jwt);
