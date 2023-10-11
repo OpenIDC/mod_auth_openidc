@@ -96,6 +96,7 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key,
 #define OIDC_CACHE_SECTION_NONCE             "n"
 #define OIDC_CACHE_SECTION_JWKS              "j"
 #define OIDC_CACHE_SECTION_ACCESS_TOKEN      "a"
+#define OIDC_CACHE_SECTION_REFRESH_TOKEN     "e"
 #define OIDC_CACHE_SECTION_PROVIDER          "p"
 #define OIDC_CACHE_SECTION_OAUTH_PROVIDER    "o"
 #define OIDC_CACHE_SECTION_JTI               "t"
@@ -111,6 +112,7 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key,
 #define oidc_cache_get_nonce(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_NONCE, key, value)
 #define oidc_cache_get_jwks(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_JWKS, key, value)
 #define oidc_cache_get_access_token(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, key, value)
+#define oidc_cache_get_refresh_token(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_REFRESH_TOKEN, key, value)
 #define oidc_cache_get_provider(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_PROVIDER, key, value)
 #define oidc_cache_get_oauth_provider(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_OAUTH_PROVIDER, key, value)
 #define oidc_cache_get_jti(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_JTI, key, value)
@@ -123,6 +125,7 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key,
 #define oidc_cache_set_nonce(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_NONCE, key, value, expiry)
 #define oidc_cache_set_jwks(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_JWKS, key, value, expiry)
 #define oidc_cache_set_access_token(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, key, value, expiry)
+#define oidc_cache_set_refresh_token(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_REFRESH_TOKEN, key, value, expiry)
 #define oidc_cache_set_provider(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_PROVIDER, key, value, expiry)
 #define oidc_cache_set_oauth_provider(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_OAUTH_PROVIDER, key, value, expiry)
 #define oidc_cache_set_jti(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_JTI, key, value, expiry)

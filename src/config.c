@@ -1862,6 +1862,7 @@ void* oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->logout_x_frame_options = NULL;
 	c->x_forwarded_headers = OIDC_DEFAULT_X_FORWARDED_HEADERS;
 	c->action_on_userinfo_error = OIDC_ON_ERROR_CONTINUE;
+	c->refresh_mutex = oidc_cache_mutex_create(pool, TRUE);
 
 	return c;
 }
@@ -2111,8 +2112,8 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->cookie_domain != NULL ?
 					add->cookie_domain : base->cookie_domain;
 	c->claim_delimiter =
-			_oidc_strcmp(add->claim_delimiter, OIDC_DEFAULT_CLAIM_DELIMITER)
-			!= 0 ? add->claim_delimiter : base->claim_delimiter;
+			_oidc_strcmp(add->claim_delimiter, OIDC_DEFAULT_CLAIM_DELIMITER) != 0 ?
+					add->claim_delimiter : base->claim_delimiter;
 	c->claim_prefix =
 			add->claim_prefix != NULL ? add->claim_prefix : base->claim_prefix;
 	c->remote_user_claim.claim_name =
@@ -2205,6 +2206,9 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->action_on_userinfo_error != OIDC_ON_ERROR_CONTINUE ?
 					add->action_on_userinfo_error :
 					base->action_on_userinfo_error;
+
+	c->refresh_mutex =
+			c->refresh_mutex != NULL ? add->refresh_mutex : base->refresh_mutex;
 
 	return c;
 }
@@ -2505,8 +2509,7 @@ void* oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->unautz_action != OIDC_CONFIG_POS_INT_UNSET ?
 					add->unautz_action : base->unautz_action;
 	c->unauthz_arg =
-			add->unauthz_arg != NULL ?
-					add->unauthz_arg : base->unauthz_arg;
+			add->unauthz_arg != NULL ? add->unauthz_arg : base->unauthz_arg;
 
 	c->pass_cookies =
 			add->pass_cookies != NULL ? add->pass_cookies : base->pass_cookies;
@@ -2805,6 +2808,12 @@ static apr_status_t oidc_cleanup_child(void *data) {
 				oidc_serror(sp, "cache destroy function failed");
 			}
 		}
+		if (cfg->refresh_mutex != NULL) {
+			if (oidc_cache_mutex_destroy(sp, cfg->refresh_mutex) != TRUE) {
+				oidc_serror(sp,
+						"oidc_cache_mutex_destroy on refresh mutex failed");
+			}
+		}
 		sp = sp->next;
 	}
 
@@ -2919,6 +2928,11 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 			if (cfg->cache->post_config(sp) != OK)
 				return HTTP_INTERNAL_SERVER_ERROR;
 		}
+		if (cfg->refresh_mutex != NULL) {
+			if (oidc_cache_mutex_post_config(sp, cfg->refresh_mutex,
+					"refresh") != TRUE)
+				return HTTP_INTERNAL_SERVER_ERROR;
+		}
 		sp = sp->next;
 	}
 
@@ -2966,8 +2980,7 @@ static const authz_provider oidc_authz_claim_provider = {
 #ifdef USE_LIBJQ
 static const authz_provider oidc_authz_claims_expr_provider = {
 		&oidc_authz_checker_claims_expr,
-		NULL,
-};
+		NULL, };
 #endif
 
 #endif
@@ -2983,6 +2996,13 @@ static void oidc_child_init(apr_pool_t *p, server_rec *s) {
 		if (cfg->cache->child_init != NULL) {
 			if (cfg->cache->child_init(p, sp) != APR_SUCCESS) {
 				oidc_serror(sp, "cfg->cache->child_init failed");
+			}
+		}
+		if (cfg->refresh_mutex != NULL) {
+			if (oidc_cache_mutex_child_init(p, sp,
+					cfg->refresh_mutex) != APR_SUCCESS) {
+				oidc_serror(sp,
+						"oidc_cache_mutex_child_init on refresh mutex failed");
 			}
 		}
 		sp = sp->next;
@@ -3062,7 +3082,8 @@ static apr_status_t oidc_filter_in_filter(ap_filter_t *f,
 
 				if (oidc_util_hdr_in_content_length_get(f->r) != NULL)
 					oidc_util_hdr_in_set(f->r, OIDC_HTTP_HDR_CONTENT_LENGTH,
-							apr_psprintf(f->r->pool, "%ld", (long)ctx->nbytes));
+							apr_psprintf(f->r->pool, "%ld",
+									(long) ctx->nbytes));
 
 				apr_pool_userdata_set(NULL, OIDC_USERDATA_POST_PARAMS_KEY,
 						NULL, f->r->pool);

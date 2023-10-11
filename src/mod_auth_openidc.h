@@ -505,6 +505,7 @@ typedef struct oidc_cfg {
 	char *logout_x_frame_options;
 	apr_byte_t x_forwarded_headers;
 	int action_on_userinfo_error;
+	oidc_cache_mutex_t *refresh_mutex;
 } oidc_cfg;
 
 void oidc_pre_config_init();

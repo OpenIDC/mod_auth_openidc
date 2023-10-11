@@ -1061,17 +1061,7 @@ static apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg *c,
 		oidc_session_t *session, oidc_provider_t *provider,
 		char **new_access_token, char **new_id_token) {
 
-	oidc_debug(r, "enter");
-
-	/* get the refresh token that was stored in the session */
-	const char *refresh_token = oidc_session_get_refresh_token(r, session);
-	if (refresh_token == NULL) {
-		oidc_warn(r,
-				"refresh token routine called but no refresh_token found in the session");
-		return FALSE;
-	}
-
-	/* elements returned in the refresh response */
+	apr_byte_t rc = FALSE;
 	char *s_id_token = NULL;
 	int expires_in = -1;
 	char *s_token_type = NULL;
@@ -1079,13 +1069,42 @@ static apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg *c,
 	char *s_refresh_token = NULL;
 	oidc_jwt_t *id_token_jwt = NULL;
 	oidc_jose_error_t err;
+	char *value = NULL;
+	const char *refresh_token = NULL;
+
+	oidc_debug(r, "enter");
+
+	oidc_cache_mutex_lock(r->pool, r->server, c->refresh_mutex);
+
+	/* get the refresh token that was stored in the session */
+	refresh_token = oidc_session_get_refresh_token(r, session);
+	if (refresh_token == NULL) {
+		oidc_warn(r,
+				"refresh token routine called but no refresh_token found in the session");
+		goto end;
+	}
+
+	// check existing refresh is going on
+	oidc_cache_get_refresh_token(r, refresh_token, &value);
+	if (value != NULL) {
+		oidc_warn(r,
+				"refresh token routine called but existing parallel refresh is in progress");
+		goto end;
+	}
+	// "lock" the refresh token best effort; this does not work failsafe in a clustered setup...
+	oidc_cache_set_refresh_token(r, refresh_token, refresh_token,
+			apr_time_now() + apr_time_from_sec(c->http_timeout_long));
+	oidc_debug(r, "refreshing refresh_token: %s", refresh_token);
+	// don't unlock after this since other processes may be waiting for the lock to refresh the same refresh token
 
 	/* refresh the tokens by calling the token endpoint */
 	if (oidc_proto_refresh_request(r, c, provider, refresh_token, &s_id_token,
 			&s_access_token, &s_token_type, &expires_in,
 			&s_refresh_token) == FALSE) {
-		oidc_error(r, "access_token could not be refreshed");
-		return FALSE;
+		oidc_error(r,
+				"access_token could not be refreshed with refresh_token: %s",
+				refresh_token);
+		goto end;
 	}
 
 	/* store the new access_token in the session and discard the old one */
@@ -1139,7 +1158,16 @@ static apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg *c,
 			oidc_jwt_destroy(id_token_jwt);
 	}
 
-	return TRUE;
+	oidc_debug(r, "refreshed refresh_token: %s into %s", refresh_token,
+			s_refresh_token);
+
+	rc = TRUE;
+
+end:
+
+	oidc_cache_mutex_unlock(r->pool, r->server, c->refresh_mutex);
+
+	return rc;
 }
 
 /*
@@ -1274,10 +1302,13 @@ static apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r,
 				oidc_store_userinfo_claims(r, cfg, session, provider, claims,
 						userinfo_jwt);
 
-				/* indicated something changed */
-				*needs_save = TRUE;
-
-				rc = (claims != NULL);
+				if (claims == NULL) {
+					*needs_save = FALSE;
+					rc = FALSE;
+				} else {
+					/* indicated something changed */
+					*needs_save = TRUE;
+				}
 			}
 		}
 	}
@@ -1423,6 +1454,7 @@ static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r,
 	if (oidc_refresh_token_grant(r, cfg, session, provider,
 			NULL, NULL) == FALSE) {
 		oidc_warn(r, "access_token could not be refreshed");
+		*needs_save = FALSE;
 		return FALSE;
 	}
 
@@ -1694,6 +1726,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 	/* check if the maximum session duration was exceeded */
 	if (oidc_check_max_session_duration(r, cfg, session, &rc) == FALSE) {
 		*needs_save = FALSE;
+		// NB: rc was set (e.g. to a 302 auth redirect) by the call to oidc_check_max_session_duration
 		return rc;
 	}
 
@@ -1712,12 +1745,16 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 			oidc_session_kill(r, session);
 			return oidc_handle_unauthenticated_user(r, cfg);
 		}
+		*needs_save = FALSE;
+		return HTTP_UNAUTHORIZED;
 	}
 
 	/* if needed, refresh claims from the user info endpoint */
-	rv = oidc_refresh_claims_from_userinfo_endpoint(r, cfg, session, needs_save);
+	rv = oidc_refresh_claims_from_userinfo_endpoint(r, cfg, session,
+			needs_save);
 	if (rv == FALSE) {
-		oidc_debug(r, "action_on_userinfo_error: %d", cfg->action_on_userinfo_error);
+		oidc_debug(r, "action_on_userinfo_error: %d",
+				cfg->action_on_userinfo_error);
 		if (cfg->action_on_userinfo_error == OIDC_ON_ERROR_LOGOUT) {
 			*needs_save = FALSE;
 			return oidc_handle_logout_request(r, cfg, session,
@@ -1728,6 +1765,8 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 			oidc_session_kill(r, session);
 			return oidc_handle_unauthenticated_user(r, cfg);
 		}
+		*needs_save = FALSE;
+		return HTTP_UNAUTHORIZED;
 	}
 
 	/* set the user authentication HTTP header if set and required */
@@ -3978,10 +4017,11 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 
 				/* execute the actual refresh grant */
 				if (oidc_refresh_token_grant(r, c, session, provider,
-						NULL, NULL) == FALSE)
+						NULL, NULL) == FALSE) {
 					oidc_warn(r, "access_token could not be refreshed");
-				else
-					needs_save = TRUE;
+					return HTTP_INTERNAL_SERVER_ERROR;
+				}
+				needs_save = TRUE;
 			}
 		}
 	}
@@ -4001,8 +4041,13 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 	 * side-effect is that this may refresh the access token if not already done
 	 * note that OIDCUserInfoRefreshInterval should be set to control the refresh policy
 	 */
-	if (b_extend_session)
-		oidc_refresh_claims_from_userinfo_endpoint(r, c, session, &needs_save);
+	if (b_extend_session) {
+		if (oidc_refresh_claims_from_userinfo_endpoint(r, c, session,
+				&needs_save) == FALSE) {
+			rc = HTTP_INTERNAL_SERVER_ERROR;
+			goto end;
+		}
+	}
 
 	/* include the access token in the session info */
 	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_ACCES_TOKEN,
@@ -4101,6 +4146,7 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 		if (oidc_session_save(r, session, FALSE) == FALSE) {
 			oidc_warn(r, "error saving session");
 			rc = HTTP_INTERNAL_SERVER_ERROR;
+			goto end;
 		}
 	}
 
@@ -4117,6 +4163,8 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c,
 		rc = oidc_util_html_send(r, "Session Info", NULL, NULL,
 				apr_psprintf(r->pool, "<pre>%s</pre>", r_value), OK);
 	}
+
+end:
 
 	/* free the allocated resources */
 	json_decref(json);
