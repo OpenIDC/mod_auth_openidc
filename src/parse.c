@@ -1414,18 +1414,22 @@ const char* oidc_parse_x_forwarded_headers(apr_pool_t *pool, const char *arg,
 
 #define OIDC_PROXY_AUTH_BASIC          "basic"
 #define OIDC_PROXY_AUTH_DIGEST         "digest"
-#define OIDC_PROXY_AUTH_NEGOTIATE      "negotiate"
 #define OIDC_PROXY_AUTH_NTLM           "ntlm"
 #define OIDC_PROXY_AUTH_ANY            "any"
+#ifdef CURLAUTH_NEGOTIATE
+#define OIDC_PROXY_AUTH_NEGOTIATE      "negotiate"
+#endif
 
 const char* oidc_parse_outgoing_proxy_auth_type(apr_pool_t *pool,
 		const char *arg, unsigned long *auth_type) {
 	static char *options[] = {
 			OIDC_PROXY_AUTH_BASIC,
 			OIDC_PROXY_AUTH_DIGEST,
-			OIDC_PROXY_AUTH_NEGOTIATE,
 			OIDC_PROXY_AUTH_NTLM,
 			OIDC_PROXY_AUTH_ANY,
+#ifdef CURLAUTH_NEGOTIATE
+			OIDC_PROXY_AUTH_NEGOTIATE,
+#endif
 			NULL };
 	const char *rv = oidc_valid_string_option(pool, arg, options);
 	if (rv != NULL)
@@ -1435,12 +1439,14 @@ const char* oidc_parse_outgoing_proxy_auth_type(apr_pool_t *pool,
 		*auth_type = CURLAUTH_BASIC;
 	} else if (_oidc_strcmp(arg, OIDC_PROXY_AUTH_DIGEST) == 0) {
 		*auth_type = CURLAUTH_DIGEST;
-	} else if (_oidc_strcmp(arg, OIDC_PROXY_AUTH_NEGOTIATE) == 0) {
-		*auth_type = CURLAUTH_NEGOTIATE;
 	} else if (_oidc_strcmp(arg, OIDC_PROXY_AUTH_NTLM) == 0) {
 		*auth_type = CURLAUTH_NTLM;
 	} else if (_oidc_strcmp(arg, OIDC_PROXY_AUTH_ANY) == 0) {
 		*auth_type = CURLAUTH_ANY;
+#ifdef CURLAUTH_NEGOTIATE
+	} else if (_oidc_strcmp(arg, OIDC_PROXY_AUTH_NEGOTIATE) == 0) {
+		*auth_type = CURLAUTH_NEGOTIATE;
+#endif
 	}
 
 	return NULL;
