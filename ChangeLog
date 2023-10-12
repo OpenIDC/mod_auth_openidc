@@ -1,3 +1,6 @@
+10/12/2023
+- release 2.4.14.4
+
 10/11/2023
 - improve behaviour when parallel refresh token grant requests occur on the same Apache server/host
   and rolling refresh tokens are issued; synchronize using a global refresh token lock and avoid
