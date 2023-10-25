@@ -1058,6 +1058,8 @@ static void oidc_store_userinfo_claims(request_rec *r, oidc_cfg *c,
 #define OIDC_REFRESH_ERROR_GENERAL				2
 #define OIDC_REFRESH_ERROR_PARALLEL_REFRESH		3
 
+#define OIDC_PARALLEL_REFRESH_ALLOWED_ENVVAR "OIDC_PARALLEL_REFRESH_ALLOWED"
+
 /*
  * execute refresh token grant to refresh the existing access token
  */
@@ -1094,8 +1096,11 @@ static apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg *c,
 	if (value != NULL) {
 		oidc_warn(r,
 				"refresh token routine called but existing parallel refresh is in progress");
-		*error_code = OIDC_REFRESH_ERROR_PARALLEL_REFRESH;
-		goto end;
+		if (apr_table_get(r->subprocess_env,
+				OIDC_PARALLEL_REFRESH_ALLOWED_ENVVAR) == NULL) {
+			*error_code = OIDC_REFRESH_ERROR_PARALLEL_REFRESH;
+			goto end;
+		}
 	}
 	// "lock" the refresh token best effort; this does not work failsafe in a clustered setup...
 	oidc_cache_set_refresh_token(r, refresh_token, refresh_token,
