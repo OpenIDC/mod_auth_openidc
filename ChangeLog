@@ -1,3 +1,8 @@
+10/25/2023
+- do not apply logout_on_error and authenticate_on_error when a parallel refresh token request is detected
+  see https://github.com/OpenIDC/mod_auth_openidc/discussions/1132; thanks @esunke
+- bump to 2.4.14.5rc0
+  
 10/12/2023
 - release 2.4.14.4
 
