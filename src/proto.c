@@ -115,8 +115,8 @@ static apr_status_t oidc_proto_generate_random_bytes(request_rec *r,
 /*
  * generate a random string value value of a specified length
  */
-apr_byte_t oidc_proto_generate_random_string(request_rec *r,
-		char **output, int len) {
+apr_byte_t oidc_proto_generate_random_string(request_rec *r, char **output,
+		int len) {
 	unsigned char *bytes = apr_pcalloc(r->pool, len);
 	if (oidc_proto_generate_random_bytes(r, bytes, len) != APR_SUCCESS) {
 		oidc_error(r, "oidc_proto_generate_random_bytes returned an error");
@@ -537,7 +537,8 @@ static void oidc_proto_add_request_param(request_rec *r,
 		}
 
 		/* ensure parameter variable to have a valid value */
-		if (_oidc_strcmp(request_object_type_str, OIDC_PROTO_REQUEST_OBJECT) == 0) {
+		if (_oidc_strcmp(request_object_type_str, OIDC_PROTO_REQUEST_OBJECT)
+				== 0) {
 			parameter = OIDC_PROTO_REQUEST_OBJECT;
 		} else if (_oidc_strcmp(request_object_type_str, OIDC_PROTO_REQUEST_URI)
 				!= 0) {
@@ -1508,13 +1509,14 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, oidc_jwt_t *jwt,
  * get the keys from the (possibly cached) set of JWKs on the jwk_uri that corresponds with the key specified in the header
  */
 apr_byte_t oidc_proto_get_keys_from_jwks_uri(request_rec *r, oidc_cfg *cfg,
-		oidc_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri, int ssl_validate_server, apr_hash_t *keys,
-		apr_byte_t *force_refresh) {
+		oidc_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri,
+		int ssl_validate_server, apr_hash_t *keys, apr_byte_t *force_refresh) {
 
 	json_t *j_jwks = NULL;
 
 	/* get the set of JSON Web Keys for this provider (possibly by downloading them from the specified provider->jwk_uri) */
-	oidc_metadata_jwks_get(r, cfg, jwks_uri, ssl_validate_server, &j_jwks, force_refresh);
+	oidc_metadata_jwks_get(r, cfg, jwks_uri, ssl_validate_server, &j_jwks,
+			force_refresh);
 	if (j_jwks == NULL) {
 		oidc_error(r, "could not %s JSON Web Keys",
 				*force_refresh ? "refresh" : "get");
@@ -1542,8 +1544,8 @@ apr_byte_t oidc_proto_get_keys_from_jwks_uri(request_rec *r, oidc_cfg *cfg,
 				"could not find a key in the cached JSON Web Keys, doing a forced refresh in case keys were rolled over");
 		/* get the set of JSON Web Keys forcing a fresh download from the specified JWKs URI */
 		*force_refresh = TRUE;
-		return oidc_proto_get_keys_from_jwks_uri(r, cfg, jwt, jwks_uri, ssl_validate_server, keys,
-				force_refresh);
+		return oidc_proto_get_keys_from_jwks_uri(r, cfg, jwt, jwks_uri,
+				ssl_validate_server, keys, force_refresh);
 	}
 
 	oidc_debug(r,
@@ -2060,7 +2062,7 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r,
 	/* send the refresh request to the token endpoint */
 	if (oidc_util_http_post_form(r, provider->token_endpoint_url, params,
 			basic_auth, bearer_auth, provider->ssl_validate_server, &response,
-			cfg->http_timeout_long, &cfg->outgoing_proxy,
+			&cfg->http_timeout_long, &cfg->outgoing_proxy,
 			oidc_dir_cfg_pass_cookies(r),
 			oidc_util_get_full_path(r->pool,
 					provider->token_endpoint_tls_client_cert),
@@ -2302,7 +2304,7 @@ static apr_byte_t oidc_proto_resolve_composite_claims(request_rec *r,
 				if ((access_token != NULL) && (endpoint != NULL)) {
 					oidc_util_http_get(r, endpoint,
 							NULL, NULL, access_token, cfg->provider.ssl_validate_server,
-							&s_json, cfg->http_timeout_long,
+							&s_json, &cfg->http_timeout_long,
 							&cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r),
 							NULL, NULL, NULL);
 				}
@@ -2368,7 +2370,7 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 	if (provider->userinfo_token_method == OIDC_USER_INFO_TOKEN_METHOD_HEADER) {
 		if (oidc_util_http_get(r, provider->userinfo_endpoint_url,
 				NULL, NULL, access_token, provider->ssl_validate_server, response,
-				cfg->http_timeout_long, &cfg->outgoing_proxy,
+				&cfg->http_timeout_long, &cfg->outgoing_proxy,
 				oidc_dir_cfg_pass_cookies(r), NULL, NULL, NULL) == FALSE)
 			return FALSE;
 	} else if (provider->userinfo_token_method
@@ -2377,7 +2379,7 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg,
 		apr_table_setn(params, OIDC_PROTO_ACCESS_TOKEN, access_token);
 		if (oidc_util_http_post_form(r, provider->userinfo_endpoint_url, params,
 				NULL, NULL, provider->ssl_validate_server, response,
-				cfg->http_timeout_long, &cfg->outgoing_proxy,
+				&cfg->http_timeout_long, &cfg->outgoing_proxy,
 				oidc_dir_cfg_pass_cookies(r), NULL, NULL, NULL) == FALSE)
 			return FALSE;
 	} else {
@@ -2442,7 +2444,7 @@ static apr_byte_t oidc_proto_webfinger_discovery(request_rec *r, oidc_cfg *cfg,
 	char *response = NULL;
 	if (oidc_util_http_get(r, url, params, NULL, NULL,
 			cfg->provider.ssl_validate_server, &response,
-			cfg->http_timeout_short, &cfg->outgoing_proxy,
+			&cfg->http_timeout_short, &cfg->outgoing_proxy,
 			oidc_dir_cfg_pass_cookies(r), NULL, NULL, NULL) == FALSE) {
 		/* errors will have been logged by now */
 		return FALSE;

@@ -49,7 +49,7 @@ apr_byte_t oidc_oauth_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg,
 
 	/* get provider metadata from the specified URL with the specified parameters */
 	if (oidc_util_http_get(r, url, NULL, NULL, NULL,
-			cfg->oauth.ssl_validate_server, response, cfg->http_timeout_short,
+			cfg->oauth.ssl_validate_server, response, &cfg->http_timeout_short,
 			&cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r),
 			NULL, NULL, NULL) == FALSE)
 		return FALSE;
@@ -162,7 +162,7 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 			OIDC_INTROSPECTION_METHOD_GET) == 0 ?
 			oidc_util_http_get(r, c->oauth.introspection_endpoint_url, params,
 					basic_auth, bearer_auth, c->oauth.ssl_validate_server,
-					response, c->http_timeout_long, &c->outgoing_proxy,
+					response, &c->http_timeout_long, &c->outgoing_proxy,
 					oidc_dir_cfg_pass_cookies(r),
 					oidc_util_get_full_path(r->pool,
 							c->oauth.introspection_endpoint_tls_client_cert),
@@ -173,7 +173,7 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg *c,
 			oidc_util_http_post_form(r, c->oauth.introspection_endpoint_url,
 					params, basic_auth, bearer_auth,
 					c->oauth.ssl_validate_server, response,
-					c->http_timeout_long, &c->outgoing_proxy,
+					&c->http_timeout_long, &c->outgoing_proxy,
 					oidc_dir_cfg_pass_cookies(r),
 					oidc_util_get_full_path(r->pool,
 							c->oauth.introspection_endpoint_tls_client_cert),
@@ -618,9 +618,12 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 	// TODO: we're re-using the OIDC provider JWKs refresh interval here...
 	oidc_jwks_uri_t jwks_uri = { c->oauth.verify_jwks_uri,
 			c->provider.jwks_uri.refresh_interval, NULL, NULL };
-	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri, c->oauth.ssl_validate_server, oidc_util_merge_key_sets(r->pool, c->oauth.verify_shared_keys, c->oauth.verify_public_keys), NULL)
-			== FALSE) {
-		oidc_error(r, "JWT access token signature could not be validated, aborting");
+	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri,
+			c->oauth.ssl_validate_server,
+			oidc_util_merge_key_sets(r->pool, c->oauth.verify_shared_keys,
+					c->oauth.verify_public_keys), NULL) == FALSE) {
+		oidc_error(r,
+				"JWT access token signature could not be validated, aborting");
 		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
