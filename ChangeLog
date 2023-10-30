@@ -1,8 +1,10 @@
-10/25/2023
+10/30/2023
 - do not apply logout_on_error and authenticate_on_error when a parallel refresh token request is detected
   see https://github.com/OpenIDC/mod_auth_openidc/discussions/1132; thanks @esunke
-- add backwards compatibility option to allow parallel refresh token requests using envvar OIDC_PARALLEL_REFRESH_ALLOWED
-- bump to 2.4.14.5rc0
+- restore backwards compatibility wrt. allowing parallel refresh token requests by default, and add an
+  option to prevent that (i.e. in case of rolling refresh tokens) using envvar OIDC_PARALLEL_REFRESH_NOT_ALLOWED
+- return HTTP 500 on token refresh errors instead of HTTP 401
+- bump to 2.4.14.5rc1
   
 10/12/2023
 - release 2.4.14.4

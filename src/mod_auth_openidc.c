@@ -1058,7 +1058,7 @@ static void oidc_store_userinfo_claims(request_rec *r, oidc_cfg *c,
 #define OIDC_REFRESH_ERROR_GENERAL				2
 #define OIDC_REFRESH_ERROR_PARALLEL_REFRESH		3
 
-#define OIDC_PARALLEL_REFRESH_ALLOWED_ENVVAR "OIDC_PARALLEL_REFRESH_ALLOWED"
+#define OIDC_PARALLEL_REFRESH_NOT_ALLOWED_ENVVAR "OIDC_PARALLEL_REFRESH_NOT_ALLOWED"
 
 /*
  * execute refresh token grant to refresh the existing access token
@@ -1091,14 +1091,17 @@ static apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg *c,
 		goto end;
 	}
 
-	// check existing refresh is going on
+	// check if an existing refresh is going on or if it was just exchanged for a new one in another server
 	oidc_cache_get_refresh_token(r, refresh_token, &value);
 	if (value != NULL) {
-		oidc_warn(r,
-				"refresh token routine called but existing parallel refresh is in progress");
+		oidc_debug(r,
+				"refresh token routine called again within %d seconds for the same refresh token: %s",
+				c->http_timeout_long, refresh_token);
+		*error_code = OIDC_REFRESH_ERROR_PARALLEL_REFRESH;
 		if (apr_table_get(r->subprocess_env,
-				OIDC_PARALLEL_REFRESH_ALLOWED_ENVVAR) == NULL) {
-			*error_code = OIDC_REFRESH_ERROR_PARALLEL_REFRESH;
+				OIDC_PARALLEL_REFRESH_NOT_ALLOWED_ENVVAR) != NULL) {
+			oidc_warn(r,
+					"aborting refresh token grant for a refresh token that was already used before");
 			goto end;
 		}
 	}
@@ -1115,7 +1118,8 @@ static apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg *c,
 		oidc_error(r,
 				"access_token could not be refreshed with refresh_token: %s",
 				refresh_token);
-		*error_code = OIDC_REFRESH_ERROR_GENERAL;
+		if (*error_code != OIDC_REFRESH_ERROR_PARALLEL_REFRESH)
+			*error_code = OIDC_REFRESH_ERROR_GENERAL;
 		goto end;
 	}
 
@@ -1753,43 +1757,41 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg,
 			oidc_cfg_dir_refresh_access_token_before_expiry(r), needs_save,
 			&error_code);
 	if (rv == FALSE) {
+		*needs_save = FALSE;
+		oidc_debug(r, "dir_action_on_error_refresh: %d",
+				oidc_cfg_dir_action_on_error_refresh(r));
 		if (error_code != OIDC_REFRESH_ERROR_PARALLEL_REFRESH) {
 			if (oidc_cfg_dir_action_on_error_refresh(r) == OIDC_ON_ERROR_LOGOUT) {
-				*needs_save = FALSE;
 				return oidc_handle_logout_request(r, cfg, session,
 						oidc_get_absolute_url(r, cfg, cfg->default_slo_url));
 			}
 			if (oidc_cfg_dir_action_on_error_refresh(
 					r) == OIDC_ON_ERROR_AUTHENTICATE) {
-				*needs_save = FALSE;
 				oidc_session_kill(r, session);
 				return oidc_handle_unauthenticated_user(r, cfg);
 			}
 		}
-		*needs_save = FALSE;
-		return HTTP_UNAUTHORIZED;
+		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
 	/* if needed, refresh claims from the user info endpoint */
 	rv = oidc_refresh_claims_from_userinfo_endpoint(r, cfg, session, needs_save,
 			&error_code);
 	if (rv == FALSE) {
+		*needs_save = FALSE;
 		oidc_debug(r, "action_on_userinfo_error: %d",
 				cfg->action_on_userinfo_error);
 		if (error_code != OIDC_REFRESH_ERROR_PARALLEL_REFRESH) {
 			if (cfg->action_on_userinfo_error == OIDC_ON_ERROR_LOGOUT) {
-				*needs_save = FALSE;
 				return oidc_handle_logout_request(r, cfg, session,
 						oidc_get_absolute_url(r, cfg, cfg->default_slo_url));
 			}
 			if (cfg->action_on_userinfo_error == OIDC_ON_ERROR_AUTHENTICATE) {
-				*needs_save = FALSE;
 				oidc_session_kill(r, session);
 				return oidc_handle_unauthenticated_user(r, cfg);
 			}
 		}
-		*needs_save = FALSE;
-		return HTTP_UNAUTHORIZED;
+		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
 	/* set the user authentication HTTP header if set and required */
