@@ -243,14 +243,6 @@ static char* oidc_get_browser_state_hash(request_rec *r, oidc_cfg *c,
 	/* concat the nonce parameter to the hash input */
 	apr_sha1_update(&sha1, nonce, _oidc_strlen(nonce));
 
-	/* concat the token binding ID if present */
-	value = oidc_util_get_provided_token_binding_id(r);
-	if (value != NULL) {
-		oidc_debug(r,
-				"Provided Token Binding ID environment variable found; adding its value to the state");
-		apr_sha1_update(&sha1, value, _oidc_strlen(value));
-	}
-
 	/* finalize the hash input and calculate the resulting hash output */
 	unsigned char hash[OIDC_SHA1_LEN];
 	apr_sha1_final(hash, &sha1);
@@ -3431,12 +3423,9 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 		goto out;
 	}
 
-	// oidc_proto_validate_idtoken would try and require a token binding cnf
-	// if the policy is set to "required", so don't use that here
 	if (oidc_proto_validate_jwt(r, jwt,
 			provider->validate_issuer ? provider->issuer : NULL, FALSE, FALSE,
-					provider->idtoken_iat_slack,
-					OIDC_TOKEN_BINDING_POLICY_DISABLED) == FALSE)
+					provider->idtoken_iat_slack) == FALSE)
 		goto out;
 
 	/* verify the "aud" and "azp" values */

@@ -62,7 +62,6 @@
 
 #define OIDC_PKCE_METHOD_PLAIN        "plain"
 #define OIDC_PKCE_METHOD_S256         "S256"
-#define OIDC_PKCE_METHOD_REFERRED_TB  "referred_tb"
 
 #define OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC "client_secret_basic"
 
@@ -91,7 +90,6 @@ const char* oidc_valid_jwks_refresh_interval(apr_pool_t *pool, int v);
 const char* oidc_valid_idtoken_iat_slack(apr_pool_t *pool, int v);
 const char* oidc_valid_userinfo_refresh_interval(apr_pool_t *pool, int v);
 const char* oidc_valid_userinfo_token_method(apr_pool_t *pool, const char *arg);
-const char* oidc_valid_token_binding_policy(apr_pool_t *pool, const char *arg);
 const char* oidc_valid_auth_request_method(apr_pool_t *pool, const char *arg);
 const char* oidc_valid_max_number_of_state_cookies(apr_pool_t *pool, int v);
 
@@ -144,9 +142,6 @@ const char* oidc_parse_userinfo_token_method(apr_pool_t *pool, const char *arg,
 		int *int_value);
 const char* oidc_parse_info_hook_data(apr_pool_t *pool, const char *arg,
 		apr_hash_t **hook_data);
-const char* oidc_parse_token_binding_policy(apr_pool_t *pool, const char *arg,
-		int *int_value);
-const char* oidc_token_binding_policy2str(apr_pool_t *pool, int v);
 const char* oidc_parse_auth_request_method(apr_pool_t *pool, const char *arg,
 		int *method);
 const char* oidc_parse_max_number_of_state_cookies(apr_pool_t *pool,

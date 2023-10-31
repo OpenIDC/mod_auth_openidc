@@ -1,6 +1,7 @@
 10/31/2023
 - add capability to seamlessly rollover OIDCCryptoPassphrase using a (temporary) 2nd value that holds the old one
 - bump to 2.4.15rc1
+- remove obsolete support for Token Binding https://www.rfc-editor.org/rfc/rfc8471.html (id_token, access_token, session cookie)
 
 10/30/2023
 - do not apply logout_on_error and authenticate_on_error when a parallel refresh token request is detected

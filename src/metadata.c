@@ -92,7 +92,6 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_METADATA_FRONTCHANNEL_LOGOUT_URI                      "frontchannel_logout_uri"
 #define OIDC_METADATA_BACKCHANNEL_LOGOUT_URI                       "backchannel_logout_uri"
 #define OIDC_METADATA_POST_LOGOUT_REDIRECT_URIS                    "post_logout_redirect_uris"
-#define OIDC_METADATA_IDTOKEN_BINDING_CNF                          "id_token_token_binding_cnf"
 #define OIDC_METADATA_SSL_VALIDATE_SERVER                          "ssl_validate_server"
 #define OIDC_METADATA_VALIDATE_ISSUER                              "validate_issuer"
 #define OIDC_METADATA_SCOPE                                        "scope"
@@ -115,7 +114,6 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_KEY_PWD            "token_endpoint_tls_client_key_pwd"
 #define OIDC_METADATA_REQUEST_OBJECT                               "request_object"
 #define OIDC_METADATA_USERINFO_TOKEN_METHOD                        "userinfo_token_method"
-#define OIDC_METADATA_TOKEN_BINDING_POLICY                         "token_binding_policy"
 #define OIDC_METADATA_AUTH_REQUEST_METHOD                          "auth_request_method"
 #define OIDC_METADATA_ISSUER_SPECIFIC_REDIRECT_URI                 "issuer_specific_redirect_uri"
 
@@ -580,11 +578,6 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 							OIDC_REDIRECT_URI_REQUEST_LOGOUT,
 							OIDC_BACKCHANNEL_STYLE_LOGOUT_PARAM_VALUE)));
 
-	if (provider->token_binding_policy > OIDC_TOKEN_BINDING_POLICY_DISABLED) {
-		json_object_set_new(data, OIDC_METADATA_IDTOKEN_BINDING_CNF,
-				json_string(OIDC_CLAIM_CNF_TBH));
-	}
-
 	if (cfg->default_slo_url != NULL) {
 		json_object_set_new(data, OIDC_METADATA_POST_LOGOUT_REDIRECT_URIS,
 				json_pack("[s]",
@@ -667,8 +660,7 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
 		}
 
 		// TODO: add issuer?
-		if (oidc_proto_validate_jwt(r, jwt, NULL, TRUE, FALSE, -1,
-				OIDC_TOKEN_BINDING_POLICY_DISABLED) == FALSE)
+		if (oidc_proto_validate_jwt(r, jwt, NULL, TRUE, FALSE, -1) == FALSE)
 			return FALSE;
 
 		oidc_debug(r, "successfully verified and validated JWKs JWT");
@@ -1416,18 +1408,6 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 				&provider->userinfo_token_method);
 	else
 		provider->userinfo_token_method = OIDC_USER_INFO_TOKEN_METHOD_HEADER;
-
-	/* see if we've got a custom token binding policy */
-	char *policy = NULL;
-	oidc_metadata_get_valid_string(r, j_conf,
-			OIDC_METADATA_TOKEN_BINDING_POLICY, oidc_valid_token_binding_policy,
-			&policy,
-			NULL);
-	if (policy != NULL)
-		oidc_parse_token_binding_policy(r->pool, policy,
-				&provider->token_binding_policy);
-	else
-		provider->token_binding_policy = cfg->provider.token_binding_policy;
 
 	/* see if we've got a custom HTTP method for passing the auth request */
 	oidc_metadata_get_valid_string(r, j_conf, OIDC_METADATA_AUTH_REQUEST_METHOD,

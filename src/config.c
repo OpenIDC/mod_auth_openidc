@@ -154,10 +154,6 @@
 #define OIDC_DEFAULT_UNAUTZ_ACTION OIDC_UNAUTZ_RETURN403
 /* defines for how long provider metadata will be cached */
 #define OIDC_DEFAULT_PROVIDER_METADATA_REFRESH_INTERVAL 0
-/* defines the default token binding policy for a provider */
-#define OIDC_DEFAULT_PROVIDER_TOKEN_BINDING_POLICY OIDC_TOKEN_BINDING_POLICY_OPTIONAL
-/* defines the default token binding policy for OAuth 2.0 access tokens */
-#define OIDC_DEFAULT_OAUTH_ACCESS_TOKEN_BINDING_POLICY OIDC_TOKEN_BINDING_POLICY_OPTIONAL
 /* define the default HTTP method used to send the authentication request to the provider */
 #define OIDC_DEFAULT_AUTH_REQUEST_METHOD OIDC_AUTH_REQUEST_METHOD_GET
 /* define whether the issuer will be added to the redirect uri by default to mitigate the IDP mixup attack */
@@ -205,7 +201,6 @@
 #define OIDCUserInfoEncryptedResponseAlg       "OIDCUserInfoEncryptedResponseAlg"
 #define OIDCUserInfoEncryptedResponseEnc       "OIDCUserInfoEncryptedResponseEnc"
 #define OIDCUserInfoTokenMethod                "OIDCUserInfoTokenMethod"
-#define OIDCTokenBindingPolicy                 "OIDCTokenBindingPolicy"
 #define OIDCSSLValidateServer                  "OIDCSSLValidateServer"
 #define OIDCValidateIssuer                     "OIDCValidateIssuer"
 #define OIDCClientName                         "OIDCClientName"
@@ -284,7 +279,6 @@
 #define OIDCProviderAuthRequestMethod          "OIDCProviderAuthRequestMethod"
 #define OIDCBlackListedClaims                  "OIDCBlackListedClaims"
 #define OIDCOAuthServerMetadataURL             "OIDCOAuthServerMetadataURL"
-#define OIDCOAuthAccessTokenBindingPolicy      "OIDCOAuthAccessTokenBindingPolicy"
 #define OIDCRefreshAccessTokenBeforeExpiry     "OIDCRefreshAccessTokenBeforeExpiry"
 #define OIDCStateInputHeaders                  "OIDCStateInputHeaders"
 #define OIDCRedirectURLsAllowed                "OIDCRedirectURLsAllowed"
@@ -777,8 +771,6 @@ const char* oidc_parse_pkce_type(apr_pool_t *pool, const char *arg,
 		*type = &oidc_pkce_plain;
 	} else if (_oidc_strcmp(arg, OIDC_PKCE_METHOD_S256) == 0) {
 		*type = &oidc_pkce_s256;
-	} else if (_oidc_strcmp(arg, OIDC_PKCE_METHOD_REFERRED_TB) == 0) {
-		*type = &oidc_pkce_referred_tb;
 	}
 
 	return NULL;
@@ -1292,20 +1284,6 @@ static const char* oidc_set_filtered_claims(cmd_parms *cmd, void *m,
 }
 
 /*
- * set the token binding policy
- */
-static const char* oidc_set_token_binding_policy(cmd_parms *cmd,
-		void *struct_ptr, const char *arg) {
-	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
-			&auth_openidc_module);
-	int offset = (int) (long) cmd->info;
-	int *token_binding_policy = (int*) ((char*) cfg + offset);
-	const char *rv = oidc_parse_token_binding_policy(cmd->pool, arg,
-			token_binding_policy);
-	return OIDC_CONFIG_DIR_RV(cmd, rv);
-}
-
-/*
  * set the claim prefix
  */
 static const char* oidc_cfg_set_claim_prefix(cmd_parms *cmd, void *struct_ptr,
@@ -1772,11 +1750,6 @@ static void oidc_merge_provider_config(apr_pool_t *pool, oidc_provider_t *dst,
 			add->request_object != NULL ?
 					add->request_object : base->request_object;
 
-	dst->token_binding_policy =
-			add->token_binding_policy
-			!= OIDC_DEFAULT_PROVIDER_TOKEN_BINDING_POLICY ?
-					add->token_binding_policy : base->token_binding_policy;
-
 	dst->issuer_specific_redirect_uri =
 			add->issuer_specific_redirect_uri
 			!= OIDC_DEFAULT_PROVIDER_ISSUER_SPECIFIC_REDIRECT_URI ?
@@ -1850,9 +1823,6 @@ void* oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->oauth.verify_public_keys = NULL;
 	c->oauth.verify_shared_keys = NULL;
 
-	c->oauth.access_token_binding_policy =
-			OIDC_DEFAULT_OAUTH_ACCESS_TOKEN_BINDING_POLICY;
-
 	c->cache = &oidc_cache_shm;
 	c->cache_cfg = NULL;
 	c->cache_encrypt = OIDC_CONFIG_POS_INT_UNSET;
@@ -1924,9 +1894,6 @@ void* oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 
 	c->provider_metadata_refresh_interval =
 			OIDC_DEFAULT_PROVIDER_METADATA_REFRESH_INTERVAL;
-
-	c->provider.token_binding_policy =
-			OIDC_DEFAULT_PROVIDER_TOKEN_BINDING_POLICY;
 
 	c->info_hook_data = NULL;
 	c->black_listed_claims = NULL;
@@ -2067,12 +2034,6 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->oauth.verify_shared_keys != NULL ?
 					add->oauth.verify_shared_keys :
 					base->oauth.verify_shared_keys;
-
-	c->oauth.access_token_binding_policy =
-			add->oauth.access_token_binding_policy
-			!= OIDC_DEFAULT_OAUTH_ACCESS_TOKEN_BINDING_POLICY ?
-					add->oauth.access_token_binding_policy :
-					base->oauth.access_token_binding_policy;
 
 	c->http_timeout_long.request_timeout =
 			add->http_timeout_long.request_timeout != OIDC_DEFAULT_HTTP_REQUEST_TIMEOUT_LONG ?
@@ -3397,12 +3358,6 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, provider.userinfo_token_method),
 				RSRC_CONF,
 				"The method that is used to present the access token to the userinfo endpoint; must be one of [authz_header|post_param]"),
-		AP_INIT_TAKE1(OIDCTokenBindingPolicy,
-				oidc_set_token_binding_policy,
-				(void *)APR_OFFSETOF(oidc_cfg, provider.token_binding_policy),
-				RSRC_CONF,
-				"The token binding policy used with the provider; must be one of [disabled|optional|required|enforced]"),
-
 		AP_INIT_TAKE1(OIDCSSLValidateServer,
 				oidc_set_ssl_validate_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.ssl_validate_server),
@@ -3893,12 +3848,6 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, oauth.metadata_url),
 				RSRC_CONF,
 				"Authorization Server metadata URL."),
-		AP_INIT_TAKE1(OIDCOAuthAccessTokenBindingPolicy,
-				oidc_set_token_binding_policy,
-				(void *)APR_OFFSETOF(oidc_cfg, oauth.access_token_binding_policy),
-				RSRC_CONF,
-				"The token binding policy used for access tokens; must be one of [disabled|optional|required|enforced]"),
-
 		AP_INIT_TAKE12(OIDCRefreshAccessTokenBeforeExpiry,
 				oidc_set_refresh_access_token_before_expiry,
 				(void *)APR_OFFSETOF(oidc_dir_cfg, refresh_access_token_before_expiry),

@@ -443,7 +443,6 @@ const char *oidc_valid_pkce_method(apr_pool_t *pool, const char *arg) {
 	static char *options[] = {
 			OIDC_PKCE_METHOD_PLAIN,
 			OIDC_PKCE_METHOD_S256,
-			OIDC_PKCE_METHOD_REFERRED_TB,
 			NULL };
 	return oidc_valid_string_option(pool, arg, options);
 }
@@ -1232,57 +1231,6 @@ const char *oidc_parse_info_hook_data(apr_pool_t *pool, const char *arg,
 	if (*hook_data == NULL)
 		*hook_data = apr_hash_make(pool);
 	apr_hash_set(*hook_data, arg, APR_HASH_KEY_STRING, arg);
-
-	return NULL;
-}
-
-#define OIDC_TOKEN_BINDING_POLICY_DISABLED_STR "disabled"
-#define OIDC_TOKEN_BINDING_POLICY_OPTIONAL_STR "optional"
-#define OIDC_TOKEN_BINDING_POLICY_REQUIRED_STR "required"
-#define OIDC_TOKEN_BINDING_POLICY_ENFORCED_STR "enforced"
-
-const char *oidc_token_binding_policy2str(apr_pool_t *pool, int v) {
-	if (v == OIDC_TOKEN_BINDING_POLICY_DISABLED)
-		return OIDC_TOKEN_BINDING_POLICY_DISABLED;
-	if (v == OIDC_TOKEN_BINDING_POLICY_OPTIONAL)
-		return OIDC_TOKEN_BINDING_POLICY_OPTIONAL_STR;
-	if (v == OIDC_TOKEN_BINDING_POLICY_REQUIRED)
-		return OIDC_TOKEN_BINDING_POLICY_REQUIRED_STR;
-	if (v == OIDC_TOKEN_BINDING_POLICY_ENFORCED)
-		return OIDC_TOKEN_BINDING_POLICY_ENFORCED_STR;
-	return NULL;
-}
-
-/*
- * check token binding policy string value
- */
-const char *oidc_valid_token_binding_policy(apr_pool_t *pool, const char *arg) {
-	static char *options[] = {
-			OIDC_TOKEN_BINDING_POLICY_DISABLED_STR,
-			OIDC_TOKEN_BINDING_POLICY_OPTIONAL_STR,
-			OIDC_TOKEN_BINDING_POLICY_REQUIRED_STR,
-			OIDC_TOKEN_BINDING_POLICY_ENFORCED_STR,
-			NULL };
-	return oidc_valid_string_option(pool, arg, options);
-}
-
-/*
- * parse token binding policy
- */
-const char *oidc_parse_token_binding_policy(apr_pool_t *pool, const char *arg,
-		int *policy) {
-	const char *rv = oidc_valid_token_binding_policy(pool, arg);
-	if (rv != NULL)
-		return rv;
-
-	if (_oidc_strcmp(arg, OIDC_TOKEN_BINDING_POLICY_DISABLED_STR) == 0)
-		*policy = OIDC_TOKEN_BINDING_POLICY_DISABLED;
-	else if (_oidc_strcmp(arg, OIDC_TOKEN_BINDING_POLICY_OPTIONAL_STR) == 0)
-		*policy = OIDC_TOKEN_BINDING_POLICY_OPTIONAL;
-	else if (_oidc_strcmp(arg, OIDC_TOKEN_BINDING_POLICY_REQUIRED_STR) == 0)
-		*policy = OIDC_TOKEN_BINDING_POLICY_REQUIRED;
-	else if (_oidc_strcmp(arg, OIDC_TOKEN_BINDING_POLICY_ENFORCED_STR) == 0)
-		*policy = OIDC_TOKEN_BINDING_POLICY_ENFORCED;
 
 	return NULL;
 }

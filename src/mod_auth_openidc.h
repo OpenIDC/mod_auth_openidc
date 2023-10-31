@@ -267,11 +267,6 @@ APLOG_USE_MODULE(auth_openidc);
 /* https://www.ietf.org/id/draft-ietf-oauth-mtls-12 */
 #define OIDC_TB_CFG_FINGERPRINT_ENV_VAR  "TB_SSL_CLIENT_CERT_FINGERPRINT"
 
-#define OIDC_TOKEN_BINDING_POLICY_DISABLED  0
-#define OIDC_TOKEN_BINDING_POLICY_OPTIONAL  1
-#define OIDC_TOKEN_BINDING_POLICY_REQUIRED  2
-#define OIDC_TOKEN_BINDING_POLICY_ENFORCED  3
-
 #define OIDC_STATE_INPUT_HEADERS_USER_AGENT 1
 #define OIDC_STATE_INPUT_HEADERS_X_FORWARDED_FOR 2
 
@@ -293,7 +288,6 @@ typedef struct oidc_proto_pkce_t {
 
 extern oidc_proto_pkce_t oidc_pkce_plain;
 extern oidc_proto_pkce_t oidc_pkce_s256;
-extern oidc_proto_pkce_t oidc_pkce_referred_tb;
 
 typedef struct oidc_jwks_uri_t {
 	char *uri;
@@ -350,7 +344,6 @@ typedef struct oidc_provider_t {
 	int userinfo_token_method;
 	char *request_object;
 	int auth_request_method;
-	int token_binding_policy;
 
 	int issuer_specific_redirect_uri;
 } oidc_provider_t ;
@@ -389,7 +382,6 @@ typedef struct oidc_oauth_t {
 	apr_hash_t *verify_shared_keys;
 	char *verify_jwks_uri;
 	apr_array_header_t *verify_public_keys;
-	int access_token_binding_policy;
 } oidc_oauth_t;
 
 typedef struct oidc_outgoing_proxy_t {
@@ -637,9 +629,6 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_CLAIM_C_HASH          "c_hash"
 #define OIDC_CLAIM_RFP             "rfp"
 #define OIDC_CLAIM_TARGET_LINK_URI "target_link_uri"
-#define OIDC_CLAIM_CNF             "cnf"
-#define OIDC_CLAIM_CNF_TBH         "tbh"
-#define OIDC_CLAIM_CNF_X5T_S256    "x5t#S256"
 #define OIDC_CLAIM_SID             "sid"
 #define OIDC_CLAIM_EVENTS          "events"
 
@@ -747,7 +736,7 @@ apr_array_header_t *oidc_proto_supported_flows(apr_pool_t *pool);
 apr_byte_t oidc_proto_flow_is_supported(apr_pool_t *pool, const char *flow);
 apr_byte_t oidc_proto_validate_authorization_response(request_rec *r, const char *response_type, const char *requested_response_mode, char **code, char **id_token, char **access_token, char **token_type, const char *used_response_mode);
 apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri, int ssl_validate_server, apr_hash_t *symmetric_keys, const char *alg);
-apr_byte_t oidc_proto_validate_jwt(request_rec *r, oidc_jwt_t *jwt, const char *iss, apr_byte_t exp_is_mandatory, apr_byte_t iat_is_mandatory, int iat_slack, int token_binding_policy);
+apr_byte_t oidc_proto_validate_jwt(request_rec *r, oidc_jwt_t *jwt, const char *iss, apr_byte_t exp_is_mandatory, apr_byte_t iat_is_mandatory, int iat_slack);
 apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce, int len);
 apr_byte_t oidc_proto_validate_aud_and_azp(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, oidc_jwt_payload_t *id_token_payload);
 
@@ -903,7 +892,6 @@ char *oidc_util_get_chunked_cookie(request_rec *r, const char *cookieName, int c
 void oidc_util_set_chunked_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires, int chunkSize, const char *ext);
 apr_byte_t oidc_util_create_symmetric_key(request_rec *r, const char *client_secret, unsigned int r_key_len, const char *hash_algo, apr_byte_t set_kid, oidc_jwk_t **jwk);
 apr_hash_t * oidc_util_merge_symmetric_key(apr_pool_t *pool, const apr_array_header_t *keys, oidc_jwk_t *jwk);
-const char *oidc_util_get_provided_token_binding_id(const request_rec *r);
 char *oidc_util_http_query_encoded_url(request_rec *r, const char *url, const apr_table_t *params);
 char *oidc_util_get_full_path(apr_pool_t *pool, const char *abs_or_rel_filename);
 apr_byte_t oidc_enabled(request_rec *r);
@@ -938,7 +926,6 @@ const char *oidc_util_apr_expr_exec(request_rec *r, const oidc_apr_expr_t *expr,
 #define OIDC_HTTP_HDR_EXPIRES                           "Expires"
 #define OIDC_HTTP_HDR_X_FRAME_OPTIONS                   "X-Frame-Options"
 #define OIDC_HTTP_HDR_WWW_AUTHENTICATE                  "WWW-Authenticate"
-#define OIDC_HTTP_HDR_INCLUDE_REFERRED_TOKEN_BINDING_ID "Include-Referred-Token-Binding-ID"
 
 #define OIDC_HTTP_HDR_VAL_XML_HTTP_REQUEST "XMLHttpRequest"
 #define OIDC_HTTP_HDR_VAL_NAVIGATE         "navigate"
@@ -965,7 +952,6 @@ void oidc_util_hdr_out_location_set(const request_rec *r, const char *value);
 const char *oidc_util_hdr_out_location_get(const request_rec *r);
 void oidc_util_hdr_err_out_add(const request_rec *r, const char *name, const char *value);
 apr_byte_t oidc_util_hdr_in_accept_contains(const request_rec *r, const char *needle);
-apr_byte_t oidc_util_json_validate_cnf(request_rec *r, json_t *jwt, int token_binding_policy);
 apr_byte_t oidc_util_html_send_in_template(request_rec *r, const char *filename, char **static_template_content, const char *arg1, int arg1_esc, const char *arg2, int arg2_esc, int status_code);
 
 // oidc_metadata.c

@@ -1164,7 +1164,6 @@ static char * test_proto_authorization_request(request_rec *r) {
 	provider.response_type = "code";
 	provider.auth_request_params = "jan=piet&foo=#";
 	provider.request_object = NULL;
-	provider.token_binding_policy = OIDC_TOKEN_BINDING_POLICY_OPTIONAL;
 	provider.auth_request_method = OIDC_AUTH_REQUEST_METHOD_GET;
 
 	const char *redirect_uri = "https://www.example.com/protected/";
@@ -1323,8 +1322,8 @@ static char * test_proto_validate_jwt(request_rec *r) {
 			r->pool, err);
 
 	TST_ASSERT_ERR("oidc_proto_validate_jwt",
-			oidc_proto_validate_jwt(r, jwt, s_issuer, TRUE, TRUE, 10, OIDC_TOKEN_BINDING_POLICY_DISABLED),
-			r->pool, err);
+			oidc_proto_validate_jwt(r, jwt, s_issuer, TRUE, TRUE, 10), r->pool,
+			err);
 
 	oidc_jwk_destroy(jwk);
 	oidc_jwt_destroy(jwt);
@@ -1948,7 +1947,6 @@ static request_rec * test_setup(apr_pool_t *pool) {
 			"https://idp.example.com/authorize";
 	cfg->provider.scope = "openid";
 	cfg->provider.client_id = "client_id";
-	cfg->provider.token_binding_policy = OIDC_TOKEN_BINDING_POLICY_OPTIONAL;
 	cfg->redirect_uri = "https://www.example.com/protected/";
 
 	oidc_dir_cfg *d_cfg = oidc_create_dir_config(request->pool, NULL);

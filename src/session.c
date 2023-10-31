@@ -49,8 +49,6 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_SESSION_REMOTE_USER_KEY              "r"
 /* the name of the session expiry attribute in the session */
 #define OIDC_SESSION_EXPIRY_KEY                   "e"
-/* the name of the provided token binding attribute in the session */
-#define OIDC_SESSION_PROVIDED_TOKEN_BINDING_KEY   "ptb"
 /* the name of the session identifier in the session */
 #define OIDC_SESSION_SESSION_ID                   "i"
 /* the name of the sub attribute in the session */
@@ -291,19 +289,6 @@ apr_byte_t oidc_session_extract(request_rec *r, oidc_session_t *z) {
 		goto out;
 	}
 
-	oidc_session_get(r, z, OIDC_SESSION_PROVIDED_TOKEN_BINDING_KEY,
-			&ses_p_tb_id);
-
-	if (ses_p_tb_id != NULL) {
-		env_p_tb_id = oidc_util_get_provided_token_binding_id(r);
-		if ((env_p_tb_id == NULL)
-				|| (_oidc_strcmp(env_p_tb_id, ses_p_tb_id) != 0)) {
-			oidc_error(r,
-					"the Provided Token Binding ID stored in the session doesn't match the one presented by the user agent");
-			oidc_session_clear(r, z);
-		}
-	}
-
 	oidc_session_get(r, z, OIDC_SESSION_REMOTE_USER_KEY, &z->remote_user);
 	oidc_session_get(r, z, OIDC_SESSION_SID_KEY, &z->sid);
 
@@ -353,19 +338,11 @@ apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z,
 			&auth_openidc_module);
 
 	apr_byte_t rc = FALSE;
-	const char *p_tb_id = oidc_util_get_provided_token_binding_id(r);
 
 	if (z->state != NULL) {
 		oidc_session_set(r, z, OIDC_SESSION_REMOTE_USER_KEY, z->remote_user);
 		json_object_set_new(z->state, OIDC_SESSION_EXPIRY_KEY,
 				json_integer(apr_time_sec(z->expiry)));
-
-		if ((first_time) && (p_tb_id != NULL)) {
-			oidc_debug(r,
-					"Provided Token Binding ID environment variable found; adding its value to the session state");
-			oidc_session_set(r, z, OIDC_SESSION_PROVIDED_TOKEN_BINDING_KEY,
-					p_tb_id);
-		}
 	}
 
 	if (c->session_type == OIDC_SESSION_TYPE_SERVER_CACHE)

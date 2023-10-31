@@ -458,11 +458,6 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c,
 		if (oidc_util_decode_json_and_check_error(r, s_json, &result) == FALSE)
 			return FALSE;
 
-		/* check the token binding ID in the introspection result */
-		if (oidc_util_json_validate_cnf(r, result,
-				c->oauth.access_token_binding_policy) == FALSE)
-			return FALSE;
-
 		json_t *active = json_object_get(result, OIDC_PROTO_ACTIVE);
 		apr_time_t cache_until = apr_time_now() + apr_time_from_sec(60);
 		if (active != NULL) {
@@ -601,8 +596,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r,
 	 * validate the access token JWT by validating the (optional) exp claim
 	 * don't enforce anything around iat since it doesn't make much sense for access tokens
 	 */
-	if (oidc_proto_validate_jwt(r, jwt, NULL, FALSE, FALSE, -1,
-			c->oauth.access_token_binding_policy) == FALSE) {
+	if (oidc_proto_validate_jwt(r, jwt, NULL, FALSE, FALSE, -1) == FALSE) {
 		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}

@@ -771,12 +771,6 @@ int oidc_proto_authorization_request(request_rec *r,
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	/* add a referred token binding request for the provider if enabled */
-	if ((provider->token_binding_policy > OIDC_TOKEN_BINDING_POLICY_DISABLED)
-			&& (oidc_util_get_provided_token_binding_id(r) != NULL))
-		oidc_util_hdr_err_out_add(r,
-				OIDC_HTTP_HDR_INCLUDE_REFERRED_TOKEN_BINDING_ID, "true");
-
 	/* cleanup */
 	oidc_proto_state_destroy(proto_state);
 
@@ -878,35 +872,6 @@ static apr_byte_t oidc_proto_pkce_verifier_s256(request_rec *r,
 }
 
 /*
- * PCKE "referred_tb" proto state
- */
-static apr_byte_t oidc_proto_pkce_state_referred_tb(request_rec *r,
-		char **state) {
-	*state = NULL;
-	return TRUE;
-}
-
-/*
- * PCKE "referred_tb" code_challenge
- */
-static apr_byte_t oidc_proto_pkce_challenge_referred_tb(request_rec *r,
-		const char *state, char **code_challenge) {
-	// state should be NULL
-	*code_challenge = OIDC_PKCE_METHOD_REFERRED_TB;
-	return TRUE;
-}
-
-/*
- * PCKE "referred_tb" code_verifier
- */
-static apr_byte_t oidc_proto_pkce_verifier_referred_tb(request_rec *r,
-		const char *state, char **code_verifier) {
-	const char *tb_id = oidc_util_get_provided_token_binding_id(r);
-	*code_verifier = tb_id ? apr_pstrdup(r->pool, tb_id) : NULL;
-	return TRUE;
-}
-
-/*
  * PKCE plain
  */
 oidc_proto_pkce_t oidc_pkce_plain = {
@@ -925,15 +890,6 @@ oidc_proto_pkce_t oidc_pkce_s256 = {
 		oidc_proto_pkce_verifier_s256,
 		oidc_proto_pkce_challenge_s256
 };
-
-/*
- * PKCE referred_tb
- */
-oidc_proto_pkce_t oidc_pkce_referred_tb = {
-		OIDC_PKCE_METHOD_REFERRED_TB,
-		oidc_proto_pkce_state_referred_tb,
-		oidc_proto_pkce_verifier_referred_tb,
-		oidc_proto_pkce_challenge_referred_tb };
 
 #define OIDC_PROTO_STATE_ISSUER          "i"
 #define OIDC_PROTO_STATE_ORIGINAL_URL    "ou"
@@ -1322,7 +1278,7 @@ static apr_byte_t oidc_proto_validate_exp(request_rec *r, oidc_jwt_t *jwt,
  */
 apr_byte_t oidc_proto_validate_jwt(request_rec *r, oidc_jwt_t *jwt,
 		const char *iss, apr_byte_t exp_is_mandatory,
-		apr_byte_t iat_is_mandatory, int iat_slack, int token_binding_policy) {
+		apr_byte_t iat_is_mandatory, int iat_slack) {
 
 	if (iss != NULL) {
 
@@ -1351,11 +1307,6 @@ apr_byte_t oidc_proto_validate_jwt(request_rec *r, oidc_jwt_t *jwt,
 	if (oidc_proto_validate_iat(r, jwt, iat_is_mandatory, iat_slack) == FALSE)
 		return FALSE;
 
-	/* check the token binding ID in the JWT */
-	if (oidc_util_json_validate_cnf(r, jwt->payload.value.json,
-			token_binding_policy) == FALSE)
-		return FALSE;
-
 	return TRUE;
 }
 
@@ -1381,8 +1332,7 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r,
 	/* validate the ID Token JWT, requiring iss match, and valid exp + iat */
 	if (oidc_proto_validate_jwt(r, jwt,
 			provider->validate_issuer ? provider->issuer : NULL, TRUE, TRUE,
-					provider->idtoken_iat_slack,
-					provider->token_binding_policy) == FALSE)
+					provider->idtoken_iat_slack) == FALSE)
 		return FALSE;
 
 	/* check if the required-by-spec "sub" claim is present */
