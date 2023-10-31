@@ -464,7 +464,7 @@ char* oidc_proto_create_request_object(request_rec *r,
 	json_decref(request_object_config);
 
 	oidc_debug(r, "serialized request object JWT header = \"%s\"",
-			oidc_proto_peek_jwt_header(r, serialized_request_object, NULL, NULL));
+			oidc_proto_peek_jwt_header(r, serialized_request_object, NULL, NULL, NULL));
 	oidc_debug(r, "serialized request object = \"%s\"",
 			serialized_request_object);
 
@@ -967,7 +967,7 @@ void oidc_proto_state_destroy(oidc_proto_state_t *proto_state) {
 
 apr_byte_t oidc_proto_check_crypto_passphrase(request_rec *r, oidc_cfg *c,
 		const char *action) {
-	if (c->crypto_passphrase == NULL) {
+	if (c->crypto_passphrase.secret1 == NULL) {
 		oidc_error(r,
 				"cannot %s state cookie because " OIDCCryptoPassphrase " is not set; please check your OIDC Provider configuration as well or avoid using AuthType openid-connect",
 				action);
@@ -982,7 +982,7 @@ oidc_proto_state_t* oidc_proto_state_from_cookie(request_rec *r, oidc_cfg *c,
 	json_t *result = NULL;
 	if (oidc_proto_check_crypto_passphrase(r, c, "parse") == FALSE)
 		return NULL;
-	oidc_util_jwt_verify(r, c->crypto_passphrase, cookieValue, &s_payload);
+	oidc_util_jwt_verify(r, &c->crypto_passphrase, cookieValue, &s_payload);
 	oidc_util_decode_json_object(r, s_payload, &result);
 	return result;
 }
@@ -992,7 +992,7 @@ char* oidc_proto_state_to_cookie(request_rec *r, oidc_cfg *c,
 	char *cookieValue = NULL;
 	if (oidc_proto_check_crypto_passphrase(r, c, "create") == FALSE)
 		return NULL;
-	oidc_util_jwt_create(r, c->crypto_passphrase,
+	oidc_util_jwt_create(r, &c->crypto_passphrase,
 			oidc_util_encode_json_object(r, proto_state, JSON_COMPACT),
 			&cookieValue);
 	return cookieValue;
@@ -1637,7 +1637,7 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt,
  * return the compact-encoded JWT header contents
  */
 char* oidc_proto_peek_jwt_header(request_rec *r,
-		const char *compact_encoded_jwt, char **alg, char **enc) {
+		const char *compact_encoded_jwt, char **alg, char **enc, char **kid) {
 	char *input = NULL, *result = NULL;
 	char *p = strstr(compact_encoded_jwt ? compact_encoded_jwt : "", ".");
 	if (p == NULL) {
@@ -1663,6 +1663,10 @@ char* oidc_proto_peek_jwt_header(request_rec *r,
 				*enc = apr_pstrdup(r->pool,
 						json_string_value(
 								json_object_get(json, CJOSE_HDR_ENC)));
+			if (kid)
+				*kid = apr_pstrdup(r->pool,
+						json_string_value(
+								json_object_get(json, CJOSE_HDR_KID)));
 		}
 		json_decref(json);
 	}
@@ -1678,7 +1682,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg,
 
 	char *alg = NULL;
 	oidc_debug(r, "enter: id_token header=%s",
-			oidc_proto_peek_jwt_header(r, id_token, &alg, NULL));
+			oidc_proto_peek_jwt_header(r, id_token, &alg, NULL, NULL));
 	apr_hash_t *decryption_keys = NULL;
 
 	char buf[APR_RFC822_DATE_LEN + 1];
@@ -2179,7 +2183,7 @@ static apr_byte_t oidc_user_info_response_validate(request_rec *r,
 			|| (provider->userinfo_encrypted_response_alg != NULL)
 			|| (provider->userinfo_encrypted_response_enc != NULL)) {
 		oidc_debug(r, "JWT header=%s",
-				oidc_proto_peek_jwt_header(r, *response, &alg, NULL));
+				oidc_proto_peek_jwt_header(r, *response, &alg, NULL, NULL));
 	}
 
 	oidc_jose_error_t err;

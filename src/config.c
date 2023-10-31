@@ -598,14 +598,11 @@ static const char* oidc_set_outgoing_proxy_slot(cmd_parms *cmd, void *ptr,
 /*
  * set a string value in the server config with exec support
  */
-static const char* oidc_set_passphrase_slot(cmd_parms *cmd, void *struct_ptr,
-		const char *arg) {
-	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
-			&auth_openidc_module);
-	const char *passphrase = NULL;
-	int arglen = _oidc_strlen(arg);
+static const char* oidc_parse_passphrase(cmd_parms *cmd, const char *arg,
+		char **passphrase) {
 	char **argv = NULL;
 	char *result = NULL;
+	int arglen = _oidc_strlen(arg);
 	/* Based on code from mod_session_crypto. */
 	if (arglen > 5 && _oidc_strncmp(arg, "exec:", 5) == 0) {
 		if (apr_tokenize_to_argv(arg + 5, &argv, cmd->temp_pool) != APR_SUCCESS) {
@@ -626,12 +623,35 @@ static const char* oidc_set_passphrase_slot(cmd_parms *cmd, void *struct_ptr,
 		if (_oidc_strlen(result) == 0)
 			return apr_pstrdup(cmd->pool,
 					"the output of the crypto passphrase generation command is empty (perhaps you need to pass it to bash -c \"<cmd>\"?)");
-		passphrase = result;
+		*passphrase = apr_pstrdup(cmd->pool, result);
 	} else {
-		passphrase = arg;
+		*passphrase = apr_pstrdup(cmd->pool, arg);
 	}
+	return NULL;
+}
 
-	return ap_set_string_slot(cmd, cfg, passphrase);
+static const char* oidc_set_crypto_passphrase_slot(cmd_parms *cmd,
+		void *struct_ptr, const char *arg1, const char *arg2) {
+	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
+			&auth_openidc_module);
+	const char *rv = NULL;
+	if (arg1)
+		rv = oidc_parse_passphrase(cmd, arg1, &cfg->crypto_passphrase.secret1);
+	if ((rv == NULL) && (arg2 != NULL))
+		rv = oidc_parse_passphrase(cmd, arg2, &cfg->crypto_passphrase.secret2);
+	return NULL;
+}
+
+static const char* oidc_set_passphrase_slot(cmd_parms *cmd, void *struct_ptr,
+		const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
+			&auth_openidc_module);
+	const char *rv = NULL;
+	char *secret = NULL;
+	rv = oidc_parse_passphrase(cmd, arg, &secret);
+	if (rv == NULL)
+		rv = ap_set_string_slot(cmd, cfg, secret);
+	return rv;
 }
 
 /*
@@ -1891,7 +1911,8 @@ void* oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->outgoing_proxy.username_password = NULL;
 	c->outgoing_proxy.auth_type = OIDC_CONFIG_POS_INT_UNSET;
 
-	c->crypto_passphrase = NULL;
+	c->crypto_passphrase.secret1 = NULL;
+	c->crypto_passphrase.secret2 = NULL;
 
 	c->error_template = NULL;
 	c->post_preserve_template = NULL;
@@ -2234,9 +2255,12 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->outgoing_proxy.auth_type :
 					base->outgoing_proxy.auth_type;
 
-	c->crypto_passphrase =
-			add->crypto_passphrase != NULL ?
-					add->crypto_passphrase : base->crypto_passphrase;
+	c->crypto_passphrase.secret1 =
+			add->crypto_passphrase.secret1 != NULL ?
+					add->crypto_passphrase.secret1 : base->crypto_passphrase.secret1;
+	c->crypto_passphrase.secret2 =
+			add->crypto_passphrase.secret2 != NULL ?
+					add->crypto_passphrase.secret1 : base->crypto_passphrase.secret2;
 
 	c->error_template =
 			add->error_template != NULL ?
@@ -2693,7 +2717,7 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg *c) {
 		return oidc_check_config_error(s, OIDCRedirectURI);
 	redirect_uri_is_relative = (c->redirect_uri[0] == OIDC_CHAR_FORWARD_SLASH);
 
-	if (c->crypto_passphrase == NULL)
+	if (c->crypto_passphrase.secret1 == NULL)
 		return oidc_check_config_error(s, OIDCCryptoPassphrase);
 
 	if (c->metadata_dir == NULL) {
@@ -2787,7 +2811,7 @@ static int oidc_check_config_oauth(server_rec *s, oidc_cfg *c) {
 
 	}
 
-	if ((c->cache_encrypt == 1) && (c->crypto_passphrase == NULL))
+	if ((c->cache_encrypt == 1) && (c->crypto_passphrase.secret1 == NULL))
 		return oidc_check_config_error(s, OIDCCryptoPassphrase);
 
 	return OK;
@@ -3506,8 +3530,8 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, outgoing_proxy),
 				RSRC_CONF,
 				"Specify an outgoing proxy for your network (<host>[:<port>]."),
-		AP_INIT_TAKE1(OIDCCryptoPassphrase,
-				oidc_set_passphrase_slot,
+		AP_INIT_TAKE12(OIDCCryptoPassphrase,
+				oidc_set_crypto_passphrase_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, crypto_passphrase),
 				RSRC_CONF,
 				"Passphrase used for AES crypto on cookies and state."),

@@ -128,12 +128,15 @@ static const char* oidc_util_get__oidc_jwt_hdr_dir_a256gcm(request_rec *r,
 	char *compact_encoded_jwt = NULL;
 	char *p = NULL;
 	static const char *_oidc_jwt_hdr_dir_a256gcm = NULL;
+	static oidc_crypto_passphrase_t passphrase;
 
 	if (_oidc_jwt_hdr_dir_a256gcm != NULL)
 		return _oidc_jwt_hdr_dir_a256gcm;
 
 	if (input == NULL) {
-		oidc_util_jwt_create(r, "needs_non_empty_string", "some_string",
+		passphrase.secret1 = "needs_non_empty_string";
+		passphrase.secret2 = NULL;
+		oidc_util_jwt_create(r, &passphrase, "some_string",
 				&compact_encoded_jwt);
 	} else {
 		compact_encoded_jwt = input;
@@ -176,8 +179,9 @@ static apr_byte_t oidc_util_jwt_internal_strip_header(request_rec *r) {
 			TRUE);
 }
 
-apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret,
-		const char *s_payload, char **compact_encoded_jwt) {
+apr_byte_t oidc_util_jwt_create(request_rec *r,
+		const oidc_crypto_passphrase_t *passphrase, const char *s_payload,
+		char **compact_encoded_jwt) {
 
 	apr_byte_t rv = FALSE;
 	oidc_jose_error_t err;
@@ -187,12 +191,13 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret,
 	oidc_jwk_t *jwk = NULL;
 	oidc_jwt_t *jwe = NULL;
 
-	if (secret == NULL) {
+	if (passphrase->secret1 == NULL) {
 		oidc_error(r, "secret is not set");
 		goto end;
 	}
 
-	if (oidc_util_create_symmetric_key(r, secret, 0, OIDC_JOSE_ALG_SHA256,
+	if (oidc_util_create_symmetric_key(r, passphrase->secret1, 0,
+			OIDC_JOSE_ALG_SHA256,
 			FALSE, &jwk) == FALSE)
 		goto end;
 
@@ -216,6 +221,8 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret,
 
 	jwe->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_DIR);
 	jwe->header.enc = apr_pstrdup(r->pool, CJOSE_HDR_ENC_A256GCM);
+	if (passphrase->secret2 != NULL)
+		jwe->header.kid = apr_pstrdup(r->pool, "1");
 
 	if (oidc_jwt_encrypt(r->pool, jwe, jwk, cser, cser_len, compact_encoded_jwt,
 			&err) == FALSE) {
@@ -241,41 +248,49 @@ end:
 	return rv;
 }
 
-apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret,
+apr_byte_t oidc_util_jwt_verify(request_rec *r,
+		const oidc_crypto_passphrase_t *passphrase,
 		const char *compact_encoded_jwt, char **s_payload) {
 
 	apr_byte_t rv = FALSE;
 	oidc_jose_error_t err;
-
 	oidc_jwk_t *jwk = NULL;
 	oidc_jwt_t *jwt = NULL;
+	char *payload = NULL;
+	int payload_len = 0;
+	char *plaintext = NULL;
+	int plaintext_len = 0;
+	apr_hash_t *keys = NULL;
+	char *alg = NULL;
+	char *enc = NULL;
+	char *kid = NULL;
 
 	if (oidc_util_jwt_internal_strip_header(r))
 		compact_encoded_jwt = apr_pstrcat(r->pool,
 				oidc_util_get__oidc_jwt_hdr_dir_a256gcm(r, NULL),
 				compact_encoded_jwt, NULL);
 
-	if (oidc_util_create_symmetric_key(r, secret, 0, OIDC_JOSE_ALG_SHA256,
-			FALSE, &jwk) == FALSE)
-		goto end;
-
-	apr_hash_t *keys = apr_hash_make(r->pool);
-	apr_hash_set(keys, "", APR_HASH_KEY_STRING, jwk);
-
-	char *payload = NULL;
-	int payload_len = 0;
-
-	char *plaintext = NULL;
-	int plaintext_len = 0;
-
-	char *alg = NULL;
-	char *enc = NULL;
-	oidc_proto_peek_jwt_header(r, compact_encoded_jwt, &alg, &enc);
+	oidc_proto_peek_jwt_header(r, compact_encoded_jwt, &alg, &enc, &kid);
 	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_DIR) != 0)
 			|| (_oidc_strcmp(enc, CJOSE_HDR_ENC_A256GCM) != 0)) {
 		oidc_error(r, "corrupted JWE header, alg=\"%s\" enc=\"%s\"", alg, enc);
 		goto end;
 	}
+
+	keys = apr_hash_make(r->pool);
+
+	if ((passphrase->secret2 != NULL) && (kid == NULL)) {
+		if (oidc_util_create_symmetric_key(r, passphrase->secret2, 0,
+				OIDC_JOSE_ALG_SHA256,
+				FALSE, &jwk) == FALSE)
+			goto end;
+	} else {
+		if (oidc_util_create_symmetric_key(r, passphrase->secret1, 0,
+				OIDC_JOSE_ALG_SHA256,
+				FALSE, &jwk) == FALSE)
+			goto end;
+	}
+	apr_hash_set(keys, "1", APR_HASH_KEY_STRING, jwk);
 
 	if (oidc_jwe_decrypt(r->pool, compact_encoded_jwt, keys, &plaintext,
 			&plaintext_len, &err, FALSE) == FALSE) {

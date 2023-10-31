@@ -405,6 +405,11 @@ typedef struct oidc_http_timeout_t {
 	apr_time_t retry_interval;
 } oidc_http_timeout_t;
 
+typedef struct oidc_crypto_passphrase_t {
+	char *secret1;
+	char *secret2;
+} oidc_crypto_passphrase_t;
+
 typedef struct oidc_cfg {
 	/* indicates whether this is a derived config, merged from a base one */
 	unsigned int merged;
@@ -496,7 +501,7 @@ typedef struct oidc_cfg {
 
 	oidc_outgoing_proxy_t outgoing_proxy;
 
-	char *crypto_passphrase;
+	oidc_crypto_passphrase_t crypto_passphrase;
 
 	int provider_metadata_refresh_interval;
 
@@ -728,7 +733,7 @@ void oidc_proto_state_set_timestamp_now(oidc_proto_state_t *proto_state);
 
 apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg, const char *token_endpoint_auth, const char *client_id, const char *client_secret, const apr_array_header_t *client_keys, const char *audience, apr_table_t *params, const char *bearer_access_token, char **basic_auth_str, char **bearer_auth_str);
 
-char *oidc_proto_peek_jwt_header(request_rec *r, const char *jwt, char **alg, char **enc);
+char *oidc_proto_peek_jwt_header(request_rec *r, const char *jwt, char **alg, char **enc, char **kid);
 int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *login_hint, const char *redirect_uri, const char *state, oidc_proto_state_t *proto_state, const char *id_token_hint, const char *code_challenge, const char *auth_request_params, const char *path_scope);
 apr_byte_t oidc_proto_is_post_authorization_response(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r, oidc_cfg *cfg);
@@ -892,8 +897,8 @@ apr_byte_t oidc_util_regexp_first_match(apr_pool_t *pool, const char *input, con
 apr_byte_t oidc_util_json_merge(request_rec *r, json_t *src, json_t *dst);
 int oidc_util_cookie_domain_valid(const char *hostname, char *cookie_domain);
 apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char *openssl_hash_algo, const char *input, char **output);
-apr_byte_t oidc_util_jwt_create(request_rec *r, const char *secret, const char *s_payload, char **compact_encoded_jwt);
-apr_byte_t oidc_util_jwt_verify(request_rec *r, const char *secret, const char *compact_encoded_jwt, char **s_payload);
+apr_byte_t oidc_util_jwt_create(request_rec *r, const oidc_crypto_passphrase_t *passphrase, const char *s_payload, char **compact_encoded_jwt);
+apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *passphrase, const char *compact_encoded_jwt, char **s_payload);
 char *oidc_util_get_chunked_cookie(request_rec *r, const char *cookieName, int cookie_chunk_size);
 void oidc_util_set_chunked_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires, int chunkSize, const char *ext);
 apr_byte_t oidc_util_create_symmetric_key(request_rec *r, const char *client_secret, unsigned int r_key_len, const char *hash_algo, apr_byte_t set_kid, oidc_jwk_t **jwk);

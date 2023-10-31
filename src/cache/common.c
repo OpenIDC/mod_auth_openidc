@@ -244,16 +244,20 @@ apr_byte_t oidc_cache_mutex_destroy(server_rec *s, oidc_cache_mutex_t *m) {
  * AES GCM encrypt using the crypto passphrase as symmetric key
  */
 static apr_byte_t oidc_cache_crypto_encrypt(request_rec *r,
-		const char *plaintext, const char *key, char **result) {
-	return oidc_util_jwt_create(r, key, plaintext, result);
+		const char *plaintext, const oidc_crypto_passphrase_t *passphrase,
+		char **result) {
+	return oidc_util_jwt_create(r, passphrase, plaintext, result);
 }
 
 /*
  * AES GCM decrypt using the crypto passphrase as symmetric key
  */
 static apr_byte_t oidc_cache_crypto_decrypt(request_rec *r,
-		const char *cache_value, const char *key, char **plaintext) {
-	return oidc_util_jwt_verify(r, key, cache_value, plaintext);
+		const char *cache_value, char *secret, char **plaintext) {
+	oidc_crypto_passphrase_t passphrase;
+	passphrase.secret1 = secret;
+	passphrase.secret2 = NULL;
+	return oidc_util_jwt_verify(r, &passphrase, cache_value, plaintext);
 }
 
 /*
@@ -283,24 +287,43 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key,
 	int encrypted = oidc_cfg_cache_encrypt(r);
 	apr_byte_t rc = TRUE;
 	char *msg = NULL;
-	char *cache_value = NULL;
+	const char *s_key = NULL;
+	char *cache_value = NULL, *s_secret = NULL;
 
-	oidc_debug(r, "enter: %s (section=%s, decrypt=%d, type=%s)", key, section,
-			encrypted, cfg->cache->name);
+	oidc_debug(r, "enter: %s (section=%s, decrypt=%d, type=%s)", section,
+			section, encrypted, cfg->cache->name);
 
+	s_key = key;
 	/* see if encryption is turned on */
-	if (encrypted == 1)
-		key = oidc_cache_get_hashed_key(r, cfg->crypto_passphrase, key);
+	if (encrypted == 1) {
+		if (cfg->crypto_passphrase.secret1 == NULL) {
+			oidc_error(r,
+					"could not decrypt cache entry because " OIDCCryptoPassphrase " is not set");
+			goto out;
+		}
+		s_secret = cfg->crypto_passphrase.secret1;
+		s_key = oidc_cache_get_hashed_key(r, s_secret, key);
+	}
 
 	/* get the value from the cache */
-	if (cfg->cache->get(r, section, key, &cache_value) == FALSE) {
+	if (cfg->cache->get(r, section, s_key, &cache_value) == FALSE) {
 		rc = FALSE;
 		goto out;
 	}
 
 	/* see if it is any good */
-	if (cache_value == NULL)
-		goto out;
+	if (cache_value == NULL) {
+		if ((encrypted != 1) || (cfg->crypto_passphrase.secret2 == NULL)) {
+			rc = FALSE;
+			goto out;
+		}
+		s_secret = cfg->crypto_passphrase.secret2;
+		s_key = oidc_cache_get_hashed_key(r, s_secret, key);
+		if (cfg->cache->get(r, section, s_key, &cache_value) == FALSE) {
+			rc = FALSE;
+			goto out;
+		}
+	}
 
 	/* see if encryption is turned on */
 	if (encrypted == 0) {
@@ -308,14 +331,7 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key,
 		goto out;
 	}
 
-	if (cfg->crypto_passphrase == NULL) {
-		oidc_error(r,
-				"could not decrypt cache entry because " OIDCCryptoPassphrase " is not set");
-		goto out;
-	}
-
-	rc = oidc_cache_crypto_decrypt(r, cache_value, cfg->crypto_passphrase,
-			value);
+	rc = oidc_cache_crypto_decrypt(r, cache_value, s_secret, value);
 
 out:
 	/* log the result */
@@ -354,17 +370,18 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key,
 	/* see if we need to encrypt */
 	if (encrypted == 1) {
 
-		key = oidc_cache_get_hashed_key(r, cfg->crypto_passphrase, key);
+		if (cfg->crypto_passphrase.secret1 == NULL) {
+			oidc_error(r,
+					"could not encrypt cache entry because " OIDCCryptoPassphrase " is not set");
+			goto out;
+		}
+
+		key = oidc_cache_get_hashed_key(r, cfg->crypto_passphrase.secret1, key);
 		if (key == NULL)
 			goto out;
 
 		if (value != NULL) {
-			if (cfg->crypto_passphrase == NULL) {
-				oidc_error(r,
-						"could not encrypt cache entry because " OIDCCryptoPassphrase " is not set");
-				goto out;
-			}
-			if (oidc_cache_crypto_encrypt(r, value, cfg->crypto_passphrase,
+			if (oidc_cache_crypto_encrypt(r, value, &cfg->crypto_passphrase,
 					&encoded) == FALSE)
 				goto out;
 			value = encoded;
