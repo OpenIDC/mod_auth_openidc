@@ -119,7 +119,7 @@
 /* set httponly flag on cookies */
 #define OIDC_DEFAULT_COOKIE_HTTPONLY 1
 /* set Same-Site flag on cookies */
-#define OIDC_DEFAULT_COOKIE_SAME_SITE 0
+#define OIDC_DEFAULT_COOKIE_SAME_SITE 1
 /* default cookie path */
 #define OIDC_DEFAULT_COOKIE_PATH "/"
 /* default OAuth 2.0 introspection token parameter name */
