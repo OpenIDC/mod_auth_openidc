@@ -771,6 +771,8 @@ const char* oidc_parse_pkce_type(apr_pool_t *pool, const char *arg,
 		*type = &oidc_pkce_plain;
 	} else if (_oidc_strcmp(arg, OIDC_PKCE_METHOD_S256) == 0) {
 		*type = &oidc_pkce_s256;
+	} else if (_oidc_strcmp(arg, OIDC_PKCE_METHOD_NONE) == 0) {
+		*type = NULL;
 	}
 
 	return NULL;
@@ -1565,7 +1567,7 @@ static void oidc_cfg_provider_init(oidc_provider_t *provider) {
 	provider->session_max_duration = OIDC_DEFAULT_SESSION_MAX_DURATION;
 	provider->auth_request_params = NULL;
 	provider->logout_request_params = NULL;
-	provider->pkce = NULL;
+	provider->pkce = &oidc_pkce_s256;
 
 	provider->client_jwks_uri = NULL;
 	provider->client_keys = NULL;
@@ -1702,7 +1704,7 @@ static void oidc_merge_provider_config(apr_pool_t *pool, oidc_provider_t *dst,
 	dst->logout_request_params =
 			add->logout_request_params != NULL ?
 					add->logout_request_params : base->logout_request_params;
-	dst->pkce = add->pkce != NULL ? add->pkce : base->pkce;
+	dst->pkce = add->pkce != &oidc_pkce_s256 ? add->pkce : base->pkce;
 
 	dst->client_jwks_uri =
 			add->client_jwks_uri != NULL ?
@@ -3422,7 +3424,7 @@ const command_rec oidc_config_cmds[] = {
 				oidc_set_pkce_method,
 				(void *)APR_OFFSETOF(oidc_cfg, provider.pkce),
 				RSRC_CONF,
-				"The RFC 7636 PCKE mode used; must be one of \"plain\", \"S256\" or \"referred_tb\""),
+				"The RFC 7636 PCKE mode used; must be one of \"plain\" or \"S256\""),
 
 		AP_INIT_TAKE1(OIDCClientID,
 				oidc_set_string_slot,

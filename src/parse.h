@@ -62,6 +62,7 @@
 
 #define OIDC_PKCE_METHOD_PLAIN        "plain"
 #define OIDC_PKCE_METHOD_S256         "S256"
+#define OIDC_PKCE_METHOD_NONE         "none"
 
 #define OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC "client_secret_basic"
 

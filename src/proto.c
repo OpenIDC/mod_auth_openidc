@@ -698,7 +698,7 @@ int oidc_proto_authorization_request(request_rec *r,
 		apr_table_setn(params, OIDC_PROTO_NONCE, nonce);
 
 	/* add PKCE code challenge if set */
-	if (code_challenge != NULL) {
+	if ((code_challenge != NULL) && (provider->pkce != NULL)) {
 		apr_table_setn(params, OIDC_PROTO_CODE_CHALLENGE, code_challenge);
 		apr_table_setn(params, OIDC_PROTO_CODE_CHALLENGE_METHOD,
 				provider->pkce->method);
