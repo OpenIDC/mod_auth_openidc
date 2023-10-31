@@ -161,7 +161,7 @@
 /* define the default number of seconds that the access token needs to be valid for; -1 = no refresh */
 #define OIDC_DEFAULT_REFRESH_ACCESS_TOKEN_BEFORE_EXPIRY -1
 /* default setting for calculating the fingerprint of the state from request headers during authentication */
-#define OIDC_DEFAULT_STATE_INPUT_HEADERS (OIDC_STATE_INPUT_HEADERS_USER_AGENT | OIDC_STATE_INPUT_HEADERS_X_FORWARDED_FOR)
+#define OIDC_DEFAULT_STATE_INPUT_HEADERS OIDC_STATE_INPUT_HEADERS_USER_AGENT
 /* default prefix of the state cookie that binds the state in the authorization request/response to the browser */
 #define OIDC_DEFAULT_STATE_COOKIE_PREFIX "mod_auth_openidc_state_"
 /* default x-forwarded-* headers to be interpreted */

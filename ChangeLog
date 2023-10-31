@@ -2,7 +2,9 @@
 - add capability to seamlessly rollover OIDCCryptoPassphrase using a (temporary) 2nd value that holds the old one
 - bump to 2.4.15rc1
 - remove obsolete support for Token Binding https://www.rfc-editor.org/rfc/rfc8471.html (id_token, access_token, session cookie)
-
+- use only the User-Agent header as input for the state browser fingerprinting by default (no X-Forwarded-For)
+  as cloud environments increasingly use dynamic proxy IPs in front
+  
 10/30/2023
 - do not apply logout_on_error and authenticate_on_error when a parallel refresh token request is detected
   see https://github.com/OpenIDC/mod_auth_openidc/discussions/1132; thanks @esunke
