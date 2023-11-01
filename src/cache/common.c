@@ -312,11 +312,9 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key,
 	}
 
 	/* see if it is any good */
-	if (cache_value == NULL) {
-		if ((encrypted != 1) || (cfg->crypto_passphrase.secret2 == NULL)) {
-			rc = FALSE;
-			goto out;
-		}
+	if ((cache_value == NULL) && (encrypted == 1)
+			&& (cfg->crypto_passphrase.secret2 != NULL)) {
+		oidc_debug(r, "2nd try with previous passphrase");
 		s_secret = cfg->crypto_passphrase.secret2;
 		s_key = oidc_cache_get_hashed_key(r, s_secret, key);
 		if (cfg->cache->get(r, section, s_key, &cache_value) == FALSE) {
@@ -324,6 +322,9 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key,
 			goto out;
 		}
 	}
+
+	if (cache_value == NULL)
+		goto out;
 
 	/* see if encryption is turned on */
 	if (encrypted == 0) {
