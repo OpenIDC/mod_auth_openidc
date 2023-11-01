@@ -271,7 +271,6 @@ static apr_byte_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z, ap
 
 apr_byte_t oidc_session_extract(request_rec *r, oidc_session_t *z) {
 	apr_byte_t rc = FALSE;
-	const char *ses_p_tb_id = NULL, *env_p_tb_id = NULL;
 
 	if (z->state == NULL)
 		goto out;
