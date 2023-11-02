@@ -145,7 +145,7 @@
 /* default for passing app info in environment variables */
 #define OIDC_DEFAULT_PASS_APP_INFO_IN_ENVVARS 1
 /* default for passing app info in base64 encoded format */
-#define OIDC_DEFAULT_PASS_APP_INFO_HDR_AS 0
+#define OIDC_DEFAULT_PASS_APP_INFO_HDR_AS OIDC_PASS_APP_INFO_AS_LATIN1
 /* default value for the token introspection interval (0 = disabled, no expiry of claims) */
 #define OIDC_DEFAULT_TOKEN_INTROSPECTION_INTERVAL 0
 /* default action to take on an incoming unauthenticated request */
@@ -1128,6 +1128,7 @@ static const char* oidc_set_remote_user_claim(cmd_parms *cmd, void *struct_ptr,
 
 /*
  * define how to pass claims information to the application: in headers and/or environment variables
+ * and optionally specify the encoding applied to the values
  */
 static const char* oidc_set_pass_claims_as(cmd_parms *cmd, void *m,
 		const char *arg1, const char *arg2) {
@@ -1140,11 +1141,14 @@ static const char* oidc_set_pass_claims_as(cmd_parms *cmd, void *m,
 				dir_cfg->pass_info_as = OIDC_PASS_APP_INFO_AS_BASE64URL;
 			} else if (_oidc_strcmp(arg2, "latin1") == 0) {
 				dir_cfg->pass_info_as = OIDC_PASS_APP_INFO_AS_LATIN1;
+			} else if (_oidc_strcmp(arg2, "none") == 0) {
+				dir_cfg->pass_info_as = OIDC_PASS_APP_INFO_AS_NONE;
 			} else {
-				rv = apr_pstrcat(cmd->temp_pool, "unknown encoding option \"",
-						arg2,
-						"\", only \"base64url\" or \"latin1\" is supported",
-						NULL);
+				rv =
+						apr_pstrcat(cmd->temp_pool,
+								"unknown encoding option \"", arg2,
+								"\", only \"base64url\", \"latin1\" or \"none\" is supported",
+								NULL);
 			}
 		}
 	}

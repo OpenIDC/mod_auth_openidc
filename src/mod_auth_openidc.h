@@ -162,6 +162,7 @@ APLOG_USE_MODULE(auth_openidc);
 /* pass as re-signed JWT including id_token claims */
 #define OIDC_PASS_USERINFO_AS_SIGNED_JWT   4
 
+#define OIDC_PASS_APP_INFO_AS_NONE      0
 #define OIDC_PASS_APP_INFO_AS_BASE64URL 1
 #define OIDC_PASS_APP_INFO_AS_LATIN1    2
 

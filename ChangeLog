@@ -1,3 +1,9 @@
+11/02/2023
+- apply ISO-8859-1 ("latin1") as default encoding mechanism for claim values passed in headers and environment
+  variables to comply with https://www.rfc-editor.org/rfc/rfc5987; see #957; use "OIDCPassClaimsAs <any> none"
+  for backwards compatibility
+- bump to 2.4.15rc3
+
 11/01/2023
 - avoid warnings on cache misses (regression introduced in 2.4.15rc1)
 - bump to 2.4.15rc2
