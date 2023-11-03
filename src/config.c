@@ -370,7 +370,7 @@ static const char* oidc_set_http_timeout_slot(cmd_parms *cmd, void *struct_ptr,
 		http_timeout->connect_timeout = _oidc_str_to_int(arg2);
 	if (arg3) {
 		s = apr_pstrdup(cmd->pool, arg3);
-		p = strstr(s, ":");
+		p = strstr(s, OIDC_STR_COLON);
 		if (p) {
 			*p = '\0';
 			p++;
@@ -398,7 +398,7 @@ static const char* oidc_set_uint32_slot(cmd_parms *cmd, void *struct_ptr,
 		return OIDC_CONFIG_DIR_RV(cmd, arg);
 	}
 	if (value > APR_UINT32_MAX || value < 0) {
-		return OIDC_CONFIG_DIR_RV(cmd, "Value out of range");
+		return OIDC_CONFIG_DIR_RV(cmd, "Integer value out of range");
 	}
 	*(apr_uint32_t*) ((char*) cfg + offset) = (apr_uint32_t) value;
 	return NULL;
@@ -431,12 +431,12 @@ static const char* oidc_set_timeout_slot(cmd_parms *cmd, void *struct_ptr,
 		return OIDC_CONFIG_DIR_RV(cmd, arg);
 	}
 	if (timeout > apr_time_sec(APR_INT64_MAX)) {
-		return OIDC_CONFIG_DIR_RV(cmd, "Value out of range");
+		return OIDC_CONFIG_DIR_RV(cmd, "Integer value out of range");
 	}
 	timeout = apr_time_from_sec(timeout);
 #endif
 	if (timeout > APR_UINT32_MAX) {
-		return OIDC_CONFIG_DIR_RV(cmd, "Value out of range");
+		return OIDC_CONFIG_DIR_RV(cmd, "Integer value out of range");
 	}
 	*(apr_uint32_t*) ((char*) cfg + offset) = (apr_uint32_t) timeout;
 	return NULL;
