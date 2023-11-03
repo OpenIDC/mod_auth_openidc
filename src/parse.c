@@ -1024,7 +1024,7 @@ const char* oidc_parse_pass_claims_as_encoding(apr_pool_t *pool,
 		return rv;
 
 	if (_oidc_strcmp(arg, OIDC_PASS_CLAIMS_ENCODING_NONE_STR) == 0) {
-		*pass_as = OIDC_PASS_APP_INFO_AS_BASE64URL;
+		*pass_as = OIDC_PASS_APP_INFO_AS_NONE;
 	} else if (_oidc_strcmp(arg, OIDC_PASS_CLAIMS_ENCODING_LATIN1_STR) == 0) {
 		*pass_as = OIDC_PASS_APP_INFO_AS_LATIN1;
 	} else if (_oidc_strcmp(arg, OIDC_PASS_CLAIMS_ENCODING_BASE64URL_STR)
