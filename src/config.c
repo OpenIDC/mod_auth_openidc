@@ -1135,23 +1135,9 @@ static const char* oidc_set_pass_claims_as(cmd_parms *cmd, void *m,
 	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg*) m;
 	const char *rv = oidc_parse_set_claims_as(cmd->pool, arg1,
 			&dir_cfg->pass_info_in_headers, &dir_cfg->pass_info_in_env_vars);
-	if (rv == NULL) {
-		if (arg2 != NULL) {
-			if (_oidc_strcmp(arg2, "base64url") == 0) {
-				dir_cfg->pass_info_as = OIDC_PASS_APP_INFO_AS_BASE64URL;
-			} else if (_oidc_strcmp(arg2, "latin1") == 0) {
-				dir_cfg->pass_info_as = OIDC_PASS_APP_INFO_AS_LATIN1;
-			} else if (_oidc_strcmp(arg2, "none") == 0) {
-				dir_cfg->pass_info_as = OIDC_PASS_APP_INFO_AS_NONE;
-			} else {
-				rv =
-						apr_pstrcat(cmd->temp_pool,
-								"unknown encoding option \"", arg2,
-								"\", only \"base64url\", \"latin1\" or \"none\" is supported",
-								NULL);
-			}
-		}
-	}
+	if ((rv == NULL) && (arg2 != NULL))
+		rv = oidc_parse_pass_claims_as_encoding(cmd->pool, arg2,
+				&dir_cfg->pass_info_as);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 

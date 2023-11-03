@@ -1008,6 +1008,33 @@ const char *oidc_parse_set_claims_as(apr_pool_t *pool, const char *arg,
 	return NULL;
 }
 
+#define OIDC_PASS_CLAIMS_ENCODING_NONE_STR        "none"
+#define OIDC_PASS_CLAIMS_ENCODING_LATIN1_STR      "latin1"
+#define OIDC_PASS_CLAIMS_ENCODING_BASE64URL_STR   "base64url"
+
+const char* oidc_parse_pass_claims_as_encoding(apr_pool_t *pool,
+		const char *arg, int *pass_as) {
+	static char *options[] = {
+			OIDC_PASS_CLAIMS_ENCODING_NONE_STR,
+			OIDC_PASS_CLAIMS_ENCODING_LATIN1_STR,
+			OIDC_PASS_CLAIMS_ENCODING_BASE64URL_STR,
+			NULL };
+	const char *rv = oidc_valid_string_option(pool, arg, options);
+	if (rv != NULL)
+		return rv;
+
+	if (_oidc_strcmp(arg, OIDC_PASS_CLAIMS_ENCODING_NONE_STR) == 0) {
+		*pass_as = OIDC_PASS_APP_INFO_AS_BASE64URL;
+	} else if (_oidc_strcmp(arg, OIDC_PASS_CLAIMS_ENCODING_LATIN1_STR) == 0) {
+		*pass_as = OIDC_PASS_APP_INFO_AS_LATIN1;
+	} else if (_oidc_strcmp(arg, OIDC_PASS_CLAIMS_ENCODING_BASE64URL_STR)
+			== 0) {
+		*pass_as = OIDC_PASS_APP_INFO_AS_BASE64URL;
+	}
+
+	return NULL;
+}
+
 #define OIDC_UNAUTH_ACTION_AUTH_STR "auth"
 #define OIDC_UNAUTH_ACTION_PASS_STR "pass"
 #define OIDC_UNAUTH_ACTION_401_STR  "401"

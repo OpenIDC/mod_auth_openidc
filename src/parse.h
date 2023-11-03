@@ -129,6 +129,8 @@ const char* oidc_parse_claim_required(apr_pool_t *pool, const char *arg,
 		int *is_required);
 const char* oidc_parse_set_claims_as(apr_pool_t *pool, const char *arg,
 		int *in_headers, int *in_env_vars);
+const char* oidc_parse_pass_claims_as_encoding(apr_pool_t *pool,
+		const char *arg, int *pass_as);
 const char* oidc_parse_unauth_action(apr_pool_t *pool, const char *arg,
 		int *action);
 const char* oidc_parse_unautz_action(apr_pool_t *pool, const char *arg,
