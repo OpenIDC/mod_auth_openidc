@@ -2144,18 +2144,13 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c,
  * parse the expiry for the access token
  */
 static int oidc_parse_expires_in(request_rec *r, const char *expires_in) {
-	if (expires_in != NULL) {
-		char *ptr = NULL;
-		long number = strtol(expires_in, &ptr, 10);
-		if (number <= 0) {
-			oidc_warn(r,
-					"could not convert \"expires_in\" value (%s) to a number",
-					expires_in);
-			return -1;
-		}
-		return number;
-	}
-	return -1;
+	if (expires_in != NULL)
+		return -1;
+	int number = _oidc_str_to_int(expires_in);
+	if (number <= 0)
+		oidc_warn(r, "could not convert \"expires_in\" value (%s) to a number",
+				expires_in);
+	return number;
 }
 
 /*

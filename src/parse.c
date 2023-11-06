@@ -146,12 +146,10 @@ const char *oidc_valid_cookie_domain(apr_pool_t *pool, const char *arg) {
 /*
  * parse an integer value from a string
  */
-const char *oidc_parse_int(apr_pool_t *pool, const char *arg, int *int_value) {
-	char *endptr = NULL;
-	int v = strtol(arg, &endptr, 10);
-	if ((*arg == '\0') || (*endptr != '\0')) {
+const char* oidc_parse_int(apr_pool_t *pool, const char *arg, int *int_value) {
+	if (*arg == '\0')
 		return apr_psprintf(pool, "invalid integer value: %s", arg);
-	}
+	int v = _oidc_str_to_int(arg);
 	*int_value = v;
 	return NULL;
 }

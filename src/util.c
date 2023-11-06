@@ -1512,9 +1512,8 @@ static int oidc_util_get_chunked_count(request_rec *r, const char *cookieName) {
 	char *chunkCountValue = oidc_util_get_cookie(r,
 			oidc_util_get_chunk_count_name(r, cookieName));
 	if (chunkCountValue != NULL) {
-		char *endptr = NULL;
-		chunkCount = strtol(chunkCountValue, &endptr, 10);
-		if ((*chunkCountValue == '\0') || (*endptr != '\0'))
+		chunkCount = _oidc_str_to_int(chunkCountValue);
+		if (*chunkCountValue == '\0')
 			chunkCount = 0;
 	}
 	return chunkCount;
