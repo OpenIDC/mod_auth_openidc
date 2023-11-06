@@ -180,8 +180,8 @@ end:
 /*
  * see if a the Require value matches with a set of provided claims
  */
-apr_byte_t oidc_authz_match_claim(request_rec *r, const char * const attr_spec,
-		const json_t * const claims) {
+apr_byte_t oidc_authz_match_claim(request_rec *r, const char *const attr_spec,
+		json_t *claims) {
 
 	const char *key;
 	json_t *val;
@@ -191,13 +191,13 @@ apr_byte_t oidc_authz_match_claim(request_rec *r, const char * const attr_spec,
 		return FALSE;
 
 	/* loop over all of the user claims */
-	void *iter = json_object_iter((json_t*) claims);
+	void *iter = json_object_iter(claims);
 	while (iter) {
 
 		key = json_object_iter_key(iter);
 		val = json_object_iter_value(iter);
 
-		oidc_debug(r, "evaluating key \"%s\"", (const char * ) key);
+		oidc_debug(r, "evaluating key \"%s\"", (const char* ) key);
 
 		const char *attr_c = key;
 		const char *spec_c = attr_spec;
@@ -253,7 +253,7 @@ apr_byte_t oidc_authz_match_claim(request_rec *r, const char * const attr_spec,
 
 		}
 
-		iter = json_object_iter_next((json_t *) claims, iter);
+		iter = json_object_iter_next(claims, iter);
 	}
 
 	return FALSE;
@@ -265,15 +265,14 @@ apr_byte_t oidc_authz_match_claim(request_rec *r, const char * const attr_spec,
  * see if a the Require value matches a configured expression
  */
 apr_byte_t oidc_authz_match_claims_expr(request_rec *r,
-		const char *const attr_spec, const json_t *const claims) {
+		const char *const attr_spec, json_t *claims) {
 	apr_byte_t rv = FALSE;
 	const char *str = NULL;
 
 	oidc_debug(r, "enter: '%s'", attr_spec);
 
-	str = oidc_util_jq_filter(r,
-			oidc_util_encode_json_object(r, (json_t*) claims,
-					JSON_PRESERVE_ORDER | JSON_COMPACT), attr_spec);
+	str = oidc_util_jq_filter(r, oidc_util_encode_json_object(r, claims,
+			JSON_PRESERVE_ORDER | JSON_COMPACT), attr_spec);
 	rv = (_oidc_strcmp(str, "true") == 0);
 
 	return rv;
@@ -300,7 +299,7 @@ static void oidc_authz_error_add(request_rec *r, const char *msg) {
 /*
  * Apache <2.4 authorization routine: match the claims from the authenticated user against the Require primitive
  */
-int oidc_authz_worker22(request_rec *r, const json_t * const claims,
+int oidc_authz_worker22(request_rec *r, json_t *claims,
 		const require_line * const reqs, int nelts) {
 	const int m = r->method_number;
 	const char *token;
@@ -392,8 +391,9 @@ int oidc_authz_worker22(request_rec *r, const json_t * const claims,
 /*
  * Apache >=2.4 authorization routine: match the claims from the authenticated user against the Require primitive
  */
-authz_status oidc_authz_worker24(request_rec *r, const json_t * const claims,
-		const char *require_args, const void *parsed_require_args, oidc_authz_match_claim_fn_type match_claim_fn) {
+authz_status oidc_authz_worker24(request_rec *r, json_t *claims,
+		const char *require_args, const void *parsed_require_args,
+		oidc_authz_match_claim_fn_type match_claim_fn) {
 
 	int count_oauth_claims = 0;
 	const char *t, *w, *err = NULL;
@@ -410,7 +410,8 @@ authz_status oidc_authz_worker24(request_rec *r, const json_t * const claims,
 	if (expr) {
 		t = ap_expr_str_exec(r, expr, &err);
 		if (err) {
-			oidc_error(r, "could not evaluate expression '%s': %s", require_args, err);
+			oidc_error(r, "could not evaluate expression '%s': %s",
+					require_args, err);
 			return AUTHZ_DENIED;
 		}
 	} else {
@@ -438,7 +439,8 @@ authz_status oidc_authz_worker24(request_rec *r, const json_t * const claims,
 				"'require claim/expr' missing specification(s) in configuration, denying");
 	}
 
-	oidc_debug(r, "could not match require claim expression '%s'", require_args);
+	oidc_debug(r, "could not match require claim expression '%s'",
+			require_args);
 	oidc_authz_error_add(r, require_args);
 
 	return AUTHZ_DENIED;

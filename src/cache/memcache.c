@@ -50,17 +50,10 @@
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
-
-#if AP_MODULE_MAGIC_AT_LEAST(20120211, 125)
-#include <mod_http2.h>
-#else
 /*
- * Copy and paste from mod_http2.h where mod_http2.h is not available
+ * avoid including mod_http2.h (assume the function signature is stable)
  */
-APR_DECLARE_OPTIONAL_FN(void,
-						http2_get_num_workers, (server_rec *s,
-												int *minw, int *max));
-#endif
+APR_DECLARE_OPTIONAL_FN(void, http2_get_num_workers, (server_rec *s, int *minw, int *max));
 
 typedef struct oidc_cache_cfg_memcache_t {
 	/* cache_type = memcache: memcache ptr */
@@ -253,20 +246,14 @@ static apr_byte_t oidc_cache_memcache_status(request_rec *r,
 /*
  * get a name/value pair from memcache
  */
-static apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *section,
-		const char *key, const char **value) {
+static apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *section, const char *key, char **value) {
 
-	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
-			&auth_openidc_module);
-	oidc_cache_cfg_memcache_t *context =
-			(oidc_cache_cfg_memcache_t *) cfg->cache_cfg;
+	oidc_cfg *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module); oidc_cache_cfg_memcache_t *context = (oidc_cache_cfg_memcache_t *) cfg->cache_cfg;
 
 	apr_size_t len = 0;
 
 	/* get it */
-	apr_status_t rv = apr_memcache_getp(context->cache_memcache, r->pool,
-			oidc_cache_memcache_get_key(r->pool, section, key), (char **) value,
-			&len, NULL);
+	apr_status_t rv = apr_memcache_getp(context->cache_memcache, r->pool, oidc_cache_memcache_get_key(r->pool, section, key), value, &len, NULL);
 
 	if (rv == APR_NOTFOUND) {
 
@@ -277,11 +264,9 @@ static apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *section,
 
 			oidc_cache_memcache_log_status_error(r, "apr_memcache_getp", rv);
 
-			return FALSE;
-		}
+			return FALSE; }
 
-		oidc_debug(r, "apr_memcache_getp: key %s not found in cache",
-				oidc_cache_memcache_get_key(r->pool, section, key));
+		oidc_debug(r, "apr_memcache_getp: key %s not found in cache", oidc_cache_memcache_get_key(r->pool, section, key));
 
 		return TRUE;
 
@@ -289,19 +274,12 @@ static apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *section,
 
 		oidc_cache_memcache_log_status_error(r, "apr_memcache_getp", rv);
 
-		return FALSE;
-	}
+		return FALSE; }
 
 	/* do sanity checking on the string value */
-	if ((*value) && (_oidc_strlen(*value) != len)) {
-		oidc_error(r,
-				"apr_memcache_getp returned less bytes than expected: _oidc_strlen(value) [%zu] != len [%" APR_SIZE_T_FMT "]",
-				_oidc_strlen(*value), len);
-		return FALSE;
-	}
+	if ((*value) && (_oidc_strlen(*value) != len)) { oidc_error(r, "apr_memcache_getp returned less bytes than expected: _oidc_strlen(value) [%zu] != len [%" APR_SIZE_T_FMT "]", _oidc_strlen(*value), len); return FALSE; }
 
-	return TRUE;
-}
+	return TRUE; }
 
 /*
  * store a name/value pair in memcache

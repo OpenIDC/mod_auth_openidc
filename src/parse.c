@@ -43,6 +43,8 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+#include <curl/curl.h>
+
 #include "mod_auth_openidc.h"
 
 /*
@@ -802,29 +804,33 @@ const char* oidc_parse_pass_userinfo_as(apr_pool_t *pool, const char *v,
 }
 
 #define OIDC_LOGOUT_ON_ERROR_REFRESH_STR "logout_on_error"
+#define OIDC_LOGOUT_ON_ERROR_AUTHENTICATE_STR "authenticate_on_error"
 
 /*
- * convert a "logout_on_error" to an integer
+ * convert an "on access token refresh error" to an integer
  */
-static int oidc_parse_logout_on_error_refresh_as_str2int(const char *v) {
+static int oidc_parse_action_on_error_refresh_as_str2int(const char *v) {
 	if (_oidc_strcmp(v, OIDC_LOGOUT_ON_ERROR_REFRESH_STR) == 0)
-		return OIDC_LOGOUT_ON_ERROR_REFRESH;
+		return OIDC_ON_ERROR_LOGOUT;
+	if (_oidc_strcmp(v, OIDC_LOGOUT_ON_ERROR_AUTHENTICATE_STR) == 0)
+		return OIDC_ON_ERROR_AUTHENTICATE;
 	return OIDC_CONFIG_POS_INT_UNSET;
 }
 
 /*
- * parse a "logout_on_error" value from the provided strings
+ * parse an "on access token refresh error" value from the provided strings
  */
-const char *oidc_parse_logout_on_error_refresh_as(apr_pool_t *pool, const char *v1,
-		int *int_value) {
+const char* oidc_parse_action_on_error_refresh_as(apr_pool_t *pool,
+		const char *v1, int *int_value) {
 	static char *options[] = {
 			OIDC_LOGOUT_ON_ERROR_REFRESH_STR,
+			OIDC_LOGOUT_ON_ERROR_AUTHENTICATE_STR,
 			NULL };
 	const char *rv = NULL;
 	rv = oidc_valid_string_option(pool, v1, options);
 	if (rv != NULL)
 		return rv;
-	*int_value = oidc_parse_logout_on_error_refresh_as_str2int(v1);
+	*int_value = oidc_parse_action_on_error_refresh_as_str2int(v1);
 
 	return NULL;
 }
@@ -1401,6 +1407,46 @@ const char* oidc_parse_x_forwarded_headers(apr_pool_t *pool, const char *arg,
 		*x_forwarded_headers |= OIDC_HDR_X_FORWARDED_PROTO;
 	} else if (_oidc_strcmp(arg, OIDC_HTTP_HDR_FORWARDED) == 0) {
 		*x_forwarded_headers |= OIDC_HDR_FORWARDED;
+	}
+
+	return NULL;
+}
+
+#define OIDC_PROXY_AUTH_BASIC          "basic"
+#define OIDC_PROXY_AUTH_DIGEST         "digest"
+#define OIDC_PROXY_AUTH_NTLM           "ntlm"
+#define OIDC_PROXY_AUTH_ANY            "any"
+#ifdef CURLAUTH_NEGOTIATE
+#define OIDC_PROXY_AUTH_NEGOTIATE      "negotiate"
+#endif
+
+const char* oidc_parse_outgoing_proxy_auth_type(apr_pool_t *pool,
+		const char *arg, unsigned long *auth_type) {
+	static char *options[] = {
+			OIDC_PROXY_AUTH_BASIC,
+			OIDC_PROXY_AUTH_DIGEST,
+			OIDC_PROXY_AUTH_NTLM,
+			OIDC_PROXY_AUTH_ANY,
+#ifdef CURLAUTH_NEGOTIATE
+			OIDC_PROXY_AUTH_NEGOTIATE,
+#endif
+			NULL };
+	const char *rv = oidc_valid_string_option(pool, arg, options);
+	if (rv != NULL)
+		return rv;
+
+	if (_oidc_strcmp(arg, OIDC_PROXY_AUTH_BASIC) == 0) {
+		*auth_type = CURLAUTH_BASIC;
+	} else if (_oidc_strcmp(arg, OIDC_PROXY_AUTH_DIGEST) == 0) {
+		*auth_type = CURLAUTH_DIGEST;
+	} else if (_oidc_strcmp(arg, OIDC_PROXY_AUTH_NTLM) == 0) {
+		*auth_type = CURLAUTH_NTLM;
+	} else if (_oidc_strcmp(arg, OIDC_PROXY_AUTH_ANY) == 0) {
+		*auth_type = CURLAUTH_ANY;
+#ifdef CURLAUTH_NEGOTIATE
+	} else if (_oidc_strcmp(arg, OIDC_PROXY_AUTH_NEGOTIATE) == 0) {
+		*auth_type = CURLAUTH_NEGOTIATE;
+#endif
 	}
 
 	return NULL;

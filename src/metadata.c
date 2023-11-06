@@ -100,6 +100,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_METADATA_IDTOKEN_IAT_SLACK                            "idtoken_iat_slack"
 #define OIDC_METADATA_SESSION_MAX_DURATION                         "session_max_duration"
 #define OIDC_METADATA_AUTH_REQUEST_PARAMS                          "auth_request_params"
+#define OIDC_METADATA_LOGOUT_REQUEST_PARAMS                        "logout_request_params"
 #define OIDC_METADATA_TOKEN_ENDPOINT_PARAMS                        "token_endpoint_params"
 #define OIDC_METADATA_RESPONSE_MODE                                "response_mode"
 #define OIDC_METADATA_PKCE_METHOD                                  "pkce_method"
@@ -586,7 +587,8 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 
 	if (cfg->default_slo_url != NULL) {
 		json_object_set_new(data, OIDC_METADATA_POST_LOGOUT_REDIRECT_URIS,
-				json_pack("[s]", cfg->default_slo_url));
+				json_pack("[s]",
+						oidc_get_absolute_url(r, cfg, cfg->default_slo_url)));
 	}
 
 	/* add any custom JSON in to the registration request */
@@ -602,7 +604,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg,
 	/* dynamically register the client with the specified parameters */
 	if (oidc_util_http_post_json(r, provider->registration_endpoint_url, data,
 			NULL, provider->registration_token, provider->ssl_validate_server, response,
-			cfg->http_timeout_short, cfg->outgoing_proxy,
+			cfg->http_timeout_short, &cfg->outgoing_proxy,
 			oidc_dir_cfg_pass_cookies(r),
 			NULL, NULL, NULL) == FALSE) {
 		json_decref(data);
@@ -635,7 +637,7 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r,
 	/* get the JWKs from the specified URL with the specified parameters */
 	if (oidc_util_http_get(r, url, NULL, NULL,
 			NULL, ssl_validate_server, &response, cfg->http_timeout_long,
-			cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL,
+			&cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL,
 			NULL, NULL) == FALSE)
 		return FALSE;
 
@@ -745,7 +747,7 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg,
 	/* get provider metadata from the specified URL with the specified parameters */
 	if (oidc_util_http_get(r, url, NULL, NULL, NULL,
 			cfg->provider.ssl_validate_server, response,
-			cfg->http_timeout_short, cfg->outgoing_proxy,
+			cfg->http_timeout_short, &cfg->outgoing_proxy,
 			oidc_dir_cfg_pass_cookies(r),
 			NULL, NULL, NULL) == FALSE)
 		return FALSE;
@@ -824,8 +826,7 @@ apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg,
 							issuer : apr_psprintf(r->pool, "https://%s", issuer));
 	url = apr_psprintf(r->pool, "%s%s.well-known/openid-configuration", url,
 			(url && url[_oidc_strlen(url) - 1] != OIDC_CHAR_FORWARD_SLASH) ?
-					OIDC_STR_FORWARD_SLASH :
-					"");
+					OIDC_STR_FORWARD_SLASH : "");
 
 	/* get the metadata for the issuer using OpenID Connect Discovery and validate it */
 	if (oidc_metadata_provider_retrieve(r, cfg, issuer, url, j_provider,
@@ -1329,6 +1330,10 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg,
 	oidc_json_object_get_string(r->pool, j_conf,
 			OIDC_METADATA_AUTH_REQUEST_PARAMS, &provider->auth_request_params,
 			cfg->provider.auth_request_params);
+	/* see if we've got custom logout request parameter values */
+	oidc_json_object_get_string(r->pool, j_conf,
+			OIDC_METADATA_LOGOUT_REQUEST_PARAMS, &provider->logout_request_params,
+			cfg->provider.logout_request_params);
 
 	/* see if we've got custom token endpoint parameter values */
 	oidc_json_object_get_string(r->pool, j_conf,

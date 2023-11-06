@@ -1,3 +1,109 @@
+10/12/2023
+- release 2.4.14.4
+
+10/11/2023
+- improve behaviour when parallel refresh token grant requests occur on the same Apache server/host
+  and rolling refresh tokens are issued; synchronize using a global refresh token lock and avoid
+  corrupting the session by storing/overwriting an expired refresh token
+- bump to 2.4.14.4rc6
+
+09/22/2023
+- performance: store userinfo refresh interval in session to avoid parsing JSON on each request
+- fix memory leak in oidc_refresh_token_grant: free the parsed id_token that is returned
+- bump to 2.4.14.4rc5
+
+09/20/2023
+- performance: skip re-validating cached provider metadata
+- performance: use process based locking instead of global locking for Redis caching
+- avoid potential process lifetime memory leak when mutex lock/unlock fails
+
+09/19/2023
+- fix performance issue with latin1 encoding when using OIDCPassClaimsAs <any> latin1
+- add options for authentication to OIDCOutgoingProxy; thanks @drzraf
+  see https://github.com/OpenIDC/mod_auth_openidc/discussions/1107
+- add support for custom preserve/restore POST data templates with OIDCPreservePostTemplates
+  to be used when OIDCPreservePost is set to On; the hard-coded internal templates are added to
+  the test directory as an example; closes #195 (yeah...); thanks @kerrermanisNL and @spiazzi
+- bump to 2.4.14.4rc3
+
+09/14/2023
+- fix `OIDCRefreshAccessTokenBeforeExpiry` when using it with `logout_on_error` or `authenticate_on_error`
+  see #1111; thanks @brandonk10
+- bump to 2.4.14.4rc0
+
+09/05/2023
+- release 2.4.14.3
+
+08/25/2023
+- add support for adding extra parameters to the Logout Request to the OP with OIDCLogoutRequestParams
+  see: https://github.com/OpenIDC/mod_auth_openidc/discussions/1096
+- bump to 2.4.14.3rc7
+
+08/13/2023
+- increase performance of JQ filtering by caching JQ filtering results
+  default cache ttl is 10 min, configured through environment variable OIDC_JQ_FILTER_CACHE_TTL
+- bump to 2.4.14.3rc5
+
+07/25/2023
+- support "authenticate_on_error" 2nd parameter value in OIDCRefreshAccessTokenBeforeExpiry 
+  to reauthenticate the user when refreshing the access token fails
+  see: https://github.com/OpenIDC/mod_auth_openidc/discussions/1084; thanks @xrammit
+- add logout_on_error and authenticate_on_error 2nd parameter option to OIDCUserInfoRefreshInterval
+- bump to 2.4.14.3rc4
+
+07/18/2023
+- allow relative values in OIDCDefaultURL and OIDCDefaultLoggedOutURL
+- bump to 2.4.14.3rc3
+
+07/14/2023
+- fix session updates on userinfo requests; see https://github.com/OpenIDC/mod_auth_openidc/discussions/1077
+  this bug was introduced in v2.4.11 with d9fff154ee6ee8a7e4e969dd6a68cbaf18354598
+- bump to 2.4.14.3rc2
+
+07/12/2023
+- add a sanity alg/enc check on self-encrypted AES GCM JWTs
+- add `OIDCPassAccessToken Off` option to disable (the default of) passing the access token and its expiry
+  in the OIDC_access_token/OIDC_access_token_expires header/environment variables; thanks @mattias-asander
+- bump to 2.4.14.3rc1
+
+06/05/2023
+- avoid using encryption keys as signing keys for request objects and private_key_jwt token endpoint auth
+- log the first Redis error as a warning before retrying
+- release 2.4.14.2
+
+05/30/2023
+- revert all 401/403/302/stepup behaviour to <= 2.4.13.2
+- bump to 2.4.14.2rc1
+
+05/25/2023
+- add support for extend_session=false query parameter to the info hook
+  to avoid extending the session on calls to the info hook
+- bump to 2.4.14.2rc0
+
+05/24/2023
+- fix RequireAny behaviour on 401/403/302: revert 9d6192b2ab0716d8f7d2a29754a80b6ab1e804eb for non-stepup authentication cases
+- make OIDCUnautzAction 302|auth (i.e. step up authentication) work with multiple/complex Require expressions e.g. RequireAny
+- release 2.4.14.1
+
+05/17/2023
+- fix refreshing claims from the userinfo endpoint when no id_token claims are stored in the session
+- fix memory leak when refreshing claims from the userinfo endpoint
+- bump to 2.4.14.1rc0
+- fix docs on OIDCUnAutzAction 403 in auth_openidc.conf because we no longer rely on Apache 2.4's AuthzSendForbiddenOnFailure On to return 403
+
+05/15/2023
+- release 2.4.14
+
+05/05/2023
+- add exec support to OIDCClientSecret; see #1056; thanks @sealor
+
+05/04/2023
+- cater for libapr/libapr-util version 1.2.x
+- bump to 2.4.14rc13
+
+04/27/2023
+- increase default OIDCCacheShmMax to 10000
+
 04/25/2023
 - add options to avoid revoking tokens before logout
   as some OPs may kill their SSO session that would make subsequent logout fail;
@@ -395,7 +501,7 @@
 - bump to 2.4.11.1rc1
 
 02/27/2022
-- document Apache 2.4 behavior on OIDCUnAuthzAction 403; see #795; thanks @candlerb
+- document Apache 2.4 behavior on OIDCUnAutzAction 403; see #795; thanks @candlerb
 
 02/04/2022
 - correct ap_hook_insert_filter function signature in stub.c, part 2; closes #784; thanks @stroeder

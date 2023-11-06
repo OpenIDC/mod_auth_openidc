@@ -55,7 +55,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 /* create the cache context */
 static oidc_cache_cfg_redis_t* oidc_cache_redis_cfg_create(apr_pool_t *pool) {
 	oidc_cache_cfg_redis_t *context = apr_pcalloc(pool, sizeof(oidc_cache_cfg_redis_t));
-	context->mutex = oidc_cache_mutex_create(pool);
+	context->mutex = oidc_cache_mutex_create(pool, FALSE);
 	context->username = NULL;
 	context->passwd = NULL;
 	context->database = -1;
@@ -274,7 +274,7 @@ static redisReply* oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t 
 	va_list ap;
 
 	/* try to execute a command at max 2 times while reconnecting */
-	for (i = 0; i < OIDC_REDIS_MAX_TRIES; i++) {
+	for (i = 1; i <= OIDC_REDIS_MAX_TRIES; i++) {
 
 		/* connect */
 		if (context->connect(r, context) != APR_SUCCESS)
@@ -291,8 +291,16 @@ static redisReply* oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t 
 			break;
 
 		/* something went wrong, log it */
-		oidc_error(r, "Redis command (attempt=%d to %s:%d) failed, disconnecting: '%s' [%s]", i, context->host_str, context->port, errstr,
-				reply ? reply->str : "<n/a>");
+		if (i < OIDC_REDIS_MAX_TRIES)
+			oidc_warn(r,
+					"Redis command (attempt=%d/%d to %s:%d) failed, disconnecting: '%s' [%s]",
+					i, OIDC_REDIS_MAX_TRIES, context->host_str, context->port,
+					errstr, reply ? reply->str : "<n/a>");
+		else
+			oidc_error(r,
+					"Redis command (attempt=%d/%d to %s:%d) failed, disconnecting: '%s' [%s]",
+					i, OIDC_REDIS_MAX_TRIES, context->host_str, context->port,
+					errstr, reply ? reply->str : "<n/a>");
 
 		/* free the reply (if there is one allocated) */
 		oidc_cache_redis_reply_free(&reply);
@@ -307,21 +315,22 @@ static redisReply* oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t 
 /*
  * get a name/value pair from Redis
  */
-apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section, const char *key,
-		const char **value) {
+apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section,
+		const char *key, char **value) {
 
-	oidc_cfg *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
 	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t*) cfg->cache_cfg;
 	redisReply *reply = NULL;
 	apr_byte_t rv = FALSE;
 
-	/* grab the global lock */
-	if (oidc_cache_mutex_lock(r->server, context->mutex) == FALSE)
+	/* grab the processlock */
+	if (oidc_cache_mutex_lock(r->pool, r->server, context->mutex) == FALSE)
 		return FALSE;
 
 	/* get */
-	reply =
-			oidc_cache_redis_exec(r, context, "GET %s", oidc_cache_redis_get_key(r->pool, section, key));
+	reply = oidc_cache_redis_exec(r, context, "GET %s",
+			oidc_cache_redis_get_key(r->pool, section, key));
 
 	if (reply == NULL)
 		goto end;
@@ -340,7 +349,9 @@ apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section, const char 
 
 	/* do a sanity check on the returned value */
 	if ((reply->str == NULL) || (reply->len != _oidc_strlen(reply->str))) {
-		oidc_error(r, "redisCommand reply->len (%d) != _oidc_strlen(reply->str): '%s'", (int )reply->len, reply->str);
+		oidc_error(r,
+				"redisCommand reply->len (%d) != _oidc_strlen(reply->str): '%s'",
+				(int )reply->len, reply->str);
 		goto end;
 	}
 
@@ -351,11 +362,12 @@ apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section, const char 
 	rv = TRUE;
 
 end:
+
 	/* free the reply object resources */
 	oidc_cache_redis_reply_free(&reply);
 
-	/* unlock the global mutex */
-	oidc_cache_mutex_unlock(r->server, context->mutex);
+	/* unlock the process mutex */
+	oidc_cache_mutex_unlock(r->pool, r->server, context->mutex);
 
 	/* return the status */
 	return rv;
@@ -373,8 +385,8 @@ apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section, const char 
 	apr_byte_t rv = FALSE;
 	apr_uint32_t timeout;
 
-	/* grab the global lock */
-	if (oidc_cache_mutex_lock(r->server, context->mutex) == FALSE)
+	/* grab the process lock */
+	if (oidc_cache_mutex_lock(r->pool, r->server, context->mutex) == FALSE)
 		return FALSE;
 
 	/* see if we should be clearing this entry */
@@ -400,8 +412,8 @@ apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section, const char 
 	/* free the reply object resources */
 	oidc_cache_redis_reply_free(&reply);
 
-	/* unlock the global mutex */
-	oidc_cache_mutex_unlock(r->server, context->mutex);
+	/* unlock the process mutex */
+	oidc_cache_mutex_unlock(r->pool, r->server, context->mutex);
 
 	/* return the status */
 	return rv;
@@ -412,9 +424,9 @@ static int oidc_cache_redis_destroy_impl(server_rec *s) {
 	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t*) cfg->cache_cfg;
 
 	if (context != NULL) {
-		oidc_cache_mutex_lock(s, context->mutex);
+		oidc_cache_mutex_lock(s->process->pool, s, context->mutex);
 		context->disconnect(context);
-		oidc_cache_mutex_unlock(s, context->mutex);
+		oidc_cache_mutex_unlock(s->process->pool, s, context->mutex);
 		oidc_cache_mutex_destroy(s, context->mutex);
 		cfg->cache_cfg = NULL;
 	}
