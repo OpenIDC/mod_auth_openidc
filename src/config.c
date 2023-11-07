@@ -97,7 +97,7 @@
 /* default duration in seconds after which retrieved JWS should be refreshed */
 #define OIDC_DEFAULT_JWKS_REFRESH_INTERVAL 3600
 /* default max cache size for shm */
-#define OIDC_DEFAULT_CACHE_SHM_SIZE 2000
+#define OIDC_DEFAULT_CACHE_SHM_SIZE 10000
 /* default max cache entry size for shm: # value + # key + # overhead */
 #define OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX 16384 + 512 + 17
 /* for issued-at timestamp (iat) checking */
@@ -125,6 +125,8 @@
 /* default for preserving POST parameters across authentication requests */
 #define OIDC_DEFAULT_PRESERVE_POST 0
 /* default for passing the access token in a header/environment variable */
+#define OIDC_DEFAULT_PASS_ACCESS_TOKEN 1
+/* default for passing the refresh token in a header/environment variable */
 #define OIDC_DEFAULT_PASS_REFRESH_TOKEN 0
 /* default for passing app info in headers */
 #define OIDC_DEFAULT_PASS_APP_INFO_IN_HEADERS 1
@@ -162,6 +164,8 @@
 #define OIDC_DEFAULT_PASS_USERINFO_AS OIDC_PASS_USERINFO_AS_CLAIMS_STR
 /* default pass id_token as */
 #define OIDC_DEFAULT_PASS_IDTOKEN_AS OIDC_PASS_IDTOKEN_AS_CLAIMS
+/* default action to be taken on access token refresh error */
+#define OIDC_DEFAULT_ON_ERROR_REFRESH OIDC_ON_ERROR_CONTINUE;
 
 #define OIDCProviderMetadataURL                "OIDCProviderMetadataURL"
 #define OIDCProviderIssuer                     "OIDCProviderIssuer"
@@ -200,6 +204,7 @@
 #define OIDCIDTokenIatSlack                    "OIDCIDTokenIatSlack"
 #define OIDCSessionMaxDuration                 "OIDCSessionMaxDuration"
 #define OIDCAuthRequestParams                  "OIDCAuthRequestParams"
+#define OIDCLogoutRequestParams                "OIDCLogoutRequestParams"
 #define OIDCPathAuthRequestParams              "OIDCPathAuthRequestParams"
 #define OIDCPKCEMethod                         "OIDCPKCEMethod"
 #define OIDCClientID                           "OIDCClientID"
@@ -247,6 +252,7 @@
 #define OIDCRedisCacheConnectTimeout           "OIDCRedisCacheConnectTimeout"
 #define OIDCRedisCacheTimeout                  "OIDCRedisCacheTimeout"
 #define OIDCHTMLErrorTemplate                  "OIDCHTMLErrorTemplate"
+#define OIDCPreservePostTemplates              "OIDCPreservePostTemplates"
 #define OIDCDiscoverURL                        "OIDCDiscoverURL"
 #define OIDCPassCookies                        "OIDCPassCookies"
 #define OIDCStripCookies                       "OIDCStripCookies"
@@ -259,6 +265,7 @@
 #define OIDCUserInfoRefreshInterval            "OIDCUserInfoRefreshInterval"
 #define OIDCOAuthTokenIntrospectionInterval    "OIDCOAuthTokenIntrospectionInterval"
 #define OIDCPreservePost                       "OIDCPreservePost"
+#define OIDCPassAccessToken                    "OIDCPassAccessToken"
 #define OIDCPassRefreshToken                   "OIDCPassRefreshToken"
 #define OIDCRequestObject                      "OIDCRequestObject"
 #define OIDCProviderMetadataRefreshInterval    "OIDCProviderMetadataRefreshInterval"
@@ -298,13 +305,15 @@ typedef struct oidc_dir_cfg {
 	apr_hash_t *oauth_accept_token_options;
 	int oauth_token_introspect_interval;
 	int preserve_post;
+	int pass_access_token;
 	int pass_refresh_token;
 	oidc_apr_expr_t *path_auth_request_expr;
 	oidc_apr_expr_t *path_scope_expr;
 	oidc_apr_expr_t *unauth_expression;
 	oidc_apr_expr_t *userinfo_claims_expr;
 	int refresh_access_token_before_expiry;
-	int logout_on_error_refresh;
+	int action_on_error_refresh;
+	int action_on_userinfo_refresh;
 	char *state_cookie_prefix;
 	apr_array_header_t *pass_userinfo_as;
 	int pass_idtoken_as;
@@ -533,6 +542,21 @@ static char * ap_get_exec_line(apr_pool_t *p,
 }
 #endif
 
+static const char* oidc_set_outgoing_proxy_slot(cmd_parms *cmd, void *ptr,
+		const char *arg1, const char *arg2, const char *arg3) {
+	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
+			&auth_openidc_module);
+	const char *rv = NULL;
+	if (arg1)
+		cfg->outgoing_proxy.host_port = apr_pstrdup(cmd->pool, arg1);
+	if (arg2)
+		cfg->outgoing_proxy.username_password = apr_pstrdup(cmd->pool, arg2);
+	if (arg3)
+		rv = oidc_parse_outgoing_proxy_auth_type(cmd->pool, arg3,
+				&cfg->outgoing_proxy.auth_type);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
 /*
  * set a string value in the server config with exec support
  */
@@ -652,8 +676,8 @@ static const char* oidc_set_validate_issuer_slot(cmd_parms *cmd,
  */
 oidc_valid_function_t oidc_cfg_get_valid_endpoint_auth_function(oidc_cfg *cfg) {
 	return (cfg->private_keys != NULL) ?
-			oidc_valid_endpoint_auth_method :
-			oidc_valid_endpoint_auth_method_no_private_key;
+			&oidc_valid_endpoint_auth_method :
+			&oidc_valid_endpoint_auth_method_no_private_key;
 }
 
 /*
@@ -1170,11 +1194,15 @@ static const char* oidc_set_idtoken_iat_slack(cmd_parms *cmd, void *struct_ptr,
  * set the userinfo refresh interval
  */
 static const char* oidc_set_userinfo_refresh_interval(cmd_parms *cmd,
-		void *struct_ptr, const char *arg) {
+		void *struct_ptr, const char *arg1, const char *arg2) {
 	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
 			&auth_openidc_module);
-	const char *rv = oidc_parse_userinfo_refresh_interval(cmd->pool, arg,
+	const char *rv = oidc_parse_userinfo_refresh_interval(cmd->pool, arg1,
 			&cfg->provider.userinfo_refresh_interval);
+	if ((rv == NULL) && (arg2)) {
+		rv = oidc_parse_action_on_error_refresh_as(cmd->pool, arg2,
+				&cfg->action_on_userinfo_error);
+	}
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -1311,8 +1339,8 @@ static const char* oidc_set_refresh_access_token_before_expiry(cmd_parms *cmd,
 				cmd->directive->directive, rv1);
 
 	if (arg2) {
-		const char *rv2 = oidc_parse_logout_on_error_refresh_as(cmd->pool, arg2,
-				&dir_cfg->logout_on_error_refresh);
+		const char *rv2 = oidc_parse_action_on_error_refresh_as(cmd->pool, arg2,
+				&dir_cfg->action_on_error_refresh);
 		return OIDC_CONFIG_DIR_RV(cmd, rv2);
 	}
 
@@ -1386,6 +1414,17 @@ static const char* oidc_set_signed_jwks_uri(cmd_parms *cmd, void *m,
 	return NULL;
 }
 
+static const char* oidc_set_post_preserve_templates(cmd_parms *cmd, void *m,
+		const char *arg1, const char *arg2) {
+	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
+			&auth_openidc_module);
+	if (arg1)
+		cfg->post_preserve_template = apr_pstrdup(cmd->pool, arg1);
+	if (arg2)
+		cfg->post_restore_template = apr_pstrdup(cmd->pool, arg2);
+	return NULL;
+}
+
 static const char* oidc_set_token_revocation_endpoint(cmd_parms *cmd,
 		void *struct_ptr, const char *args) {
 	oidc_cfg *cfg = (oidc_cfg*) ap_get_module_config(cmd->server->module_config,
@@ -1406,12 +1445,12 @@ int oidc_cfg_dir_refresh_access_token_before_expiry(request_rec *r) {
 	return dir_cfg->refresh_access_token_before_expiry;
 }
 
-int oidc_cfg_dir_logout_on_error_refresh(request_rec *r) {
+int oidc_cfg_dir_action_on_error_refresh(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
 			&auth_openidc_module);
-	if (dir_cfg->logout_on_error_refresh == OIDC_CONFIG_POS_INT_UNSET)
-		return 0; // no mask
-	return dir_cfg->logout_on_error_refresh;
+	if (dir_cfg->action_on_error_refresh == OIDC_CONFIG_POS_INT_UNSET)
+		return OIDC_DEFAULT_ON_ERROR_REFRESH;
+	return dir_cfg->action_on_error_refresh;
 }
 
 char* oidc_cfg_dir_state_cookie_prefix(request_rec *r) {
@@ -1474,6 +1513,7 @@ static void oidc_cfg_provider_init(oidc_provider_t *provider) {
 	provider->idtoken_iat_slack = OIDC_DEFAULT_IDTOKEN_IAT_SLACK;
 	provider->session_max_duration = OIDC_DEFAULT_SESSION_MAX_DURATION;
 	provider->auth_request_params = NULL;
+	provider->logout_request_params = NULL;
 	provider->pkce = NULL;
 
 	provider->client_jwks_uri = NULL;
@@ -1608,6 +1648,9 @@ static void oidc_merge_provider_config(apr_pool_t *pool, oidc_provider_t *dst,
 	dst->auth_request_params =
 			add->auth_request_params != NULL ?
 					add->auth_request_params : base->auth_request_params;
+	dst->logout_request_params =
+			add->logout_request_params != NULL ?
+					add->logout_request_params : base->logout_request_params;
 	dst->pkce = add->pkce != NULL ? add->pkce : base->pkce;
 
 	dst->client_jwks_uri =
@@ -1785,10 +1828,15 @@ void* oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->cookie_http_only = OIDC_DEFAULT_COOKIE_HTTPONLY;
 	c->cookie_same_site = OIDC_DEFAULT_COOKIE_SAME_SITE;
 
-	c->outgoing_proxy = NULL;
+	c->outgoing_proxy.host_port = NULL;
+	c->outgoing_proxy.username_password = NULL;
+	c->outgoing_proxy.auth_type = OIDC_CONFIG_POS_INT_UNSET;
+
 	c->crypto_passphrase = NULL;
 
 	c->error_template = NULL;
+	c->post_preserve_template = NULL;
+	c->post_restore_template = NULL;
 
 	c->provider.userinfo_refresh_interval =
 			OIDC_DEFAULT_USERINFO_REFRESH_INTERVAL;
@@ -1813,6 +1861,8 @@ void* oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->ca_bundle_path = NULL;
 	c->logout_x_frame_options = NULL;
 	c->x_forwarded_headers = OIDC_DEFAULT_X_FORWARDED_HEADERS;
+	c->action_on_userinfo_error = OIDC_ON_ERROR_CONTINUE;
+	c->refresh_mutex = oidc_cache_mutex_create(pool, TRUE);
 
 	return c;
 }
@@ -2062,8 +2112,8 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->cookie_domain != NULL ?
 					add->cookie_domain : base->cookie_domain;
 	c->claim_delimiter =
-			_oidc_strcmp(add->claim_delimiter, OIDC_DEFAULT_CLAIM_DELIMITER)
-			!= 0 ? add->claim_delimiter : base->claim_delimiter;
+			_oidc_strcmp(add->claim_delimiter, OIDC_DEFAULT_CLAIM_DELIMITER) != 0 ?
+					add->claim_delimiter : base->claim_delimiter;
 	c->claim_prefix =
 			add->claim_prefix != NULL ? add->claim_prefix : base->claim_prefix;
 	c->remote_user_claim.claim_name =
@@ -2086,9 +2136,18 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->cookie_same_site != OIDC_DEFAULT_COOKIE_SAME_SITE ?
 					add->cookie_same_site : base->cookie_same_site;
 
-	c->outgoing_proxy =
-			add->outgoing_proxy != NULL ?
-					add->outgoing_proxy : base->outgoing_proxy;
+	c->outgoing_proxy.host_port =
+			add->outgoing_proxy.host_port != NULL ?
+					add->outgoing_proxy.host_port :
+					base->outgoing_proxy.host_port;
+	c->outgoing_proxy.username_password =
+			add->outgoing_proxy.username_password != NULL ?
+					add->outgoing_proxy.username_password :
+					base->outgoing_proxy.username_password;
+	c->outgoing_proxy.auth_type =
+			add->outgoing_proxy.auth_type != OIDC_CONFIG_POS_INT_UNSET ?
+					add->outgoing_proxy.auth_type :
+					base->outgoing_proxy.auth_type;
 
 	c->crypto_passphrase =
 			add->crypto_passphrase != NULL ?
@@ -2097,6 +2156,12 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->error_template =
 			add->error_template != NULL ?
 					add->error_template : base->error_template;
+	c->post_preserve_template =
+			add->post_preserve_template != NULL ?
+					add->post_preserve_template : base->post_preserve_template;
+	c->post_restore_template =
+			add->post_restore_template != NULL ?
+					add->post_restore_template : base->post_restore_template;
 
 	c->provider_metadata_refresh_interval =
 			add->provider_metadata_refresh_interval
@@ -2136,6 +2201,14 @@ void* oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->x_forwarded_headers =
 			add->x_forwarded_headers != OIDC_DEFAULT_X_FORWARDED_HEADERS ?
 					add->x_forwarded_headers : base->x_forwarded_headers;
+
+	c->action_on_userinfo_error =
+			add->action_on_userinfo_error != OIDC_ON_ERROR_CONTINUE ?
+					add->action_on_userinfo_error :
+					base->action_on_userinfo_error;
+
+	c->refresh_mutex =
+			c->refresh_mutex != NULL ? add->refresh_mutex : base->refresh_mutex;
 
 	return c;
 }
@@ -2187,12 +2260,13 @@ void* oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->oauth_accept_token_options = apr_hash_make(pool);
 	c->oauth_token_introspect_interval = -2;
 	c->preserve_post = OIDC_CONFIG_POS_INT_UNSET;
+	c->pass_access_token = OIDC_CONFIG_POS_INT_UNSET;
 	c->pass_refresh_token = OIDC_CONFIG_POS_INT_UNSET;
 	c->path_auth_request_expr = NULL;
 	c->path_scope_expr = NULL;
 	c->userinfo_claims_expr = NULL;
 	c->refresh_access_token_before_expiry = OIDC_CONFIG_POS_INT_UNSET;
-	c->logout_on_error_refresh = OIDC_CONFIG_POS_INT_UNSET;
+	c->action_on_error_refresh = OIDC_CONFIG_POS_INT_UNSET;
 	c->state_cookie_prefix = OIDC_CONFIG_STRING_UNSET;
 	c->pass_userinfo_as = NULL;
 	c->pass_idtoken_as = OIDC_CONFIG_POS_INT_UNSET;
@@ -2263,6 +2337,14 @@ int oidc_cfg_dir_pass_info_encoding(request_rec *r) {
 	if (dir_cfg->pass_info_as == OIDC_CONFIG_POS_INT_UNSET)
 		return OIDC_DEFAULT_PASS_APP_INFO_HDR_AS;
 	return dir_cfg->pass_info_as;
+}
+
+apr_byte_t oidc_cfg_dir_pass_access_token(request_rec *r) {
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config,
+			&auth_openidc_module);
+	if (dir_cfg->pass_access_token == OIDC_CONFIG_POS_INT_UNSET)
+		return OIDC_DEFAULT_PASS_ACCESS_TOKEN;
+	return dir_cfg->pass_access_token;
 }
 
 apr_byte_t oidc_cfg_dir_pass_refresh_token(request_rec *r) {
@@ -2427,8 +2509,7 @@ void* oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 			add->unautz_action != OIDC_CONFIG_POS_INT_UNSET ?
 					add->unautz_action : base->unautz_action;
 	c->unauthz_arg =
-			add->unauthz_arg != NULL ?
-					add->unauthz_arg : base->unauthz_arg;
+			add->unauthz_arg != NULL ? add->unauthz_arg : base->unauthz_arg;
 
 	c->pass_cookies =
 			add->pass_cookies != NULL ? add->pass_cookies : base->pass_cookies;
@@ -2459,6 +2540,9 @@ void* oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->preserve_post =
 			add->preserve_post != OIDC_CONFIG_POS_INT_UNSET ?
 					add->preserve_post : base->preserve_post;
+	c->pass_access_token =
+			add->pass_access_token != OIDC_CONFIG_POS_INT_UNSET ?
+					add->pass_access_token : base->pass_access_token;
 	c->pass_refresh_token =
 			add->pass_refresh_token != OIDC_CONFIG_POS_INT_UNSET ?
 					add->pass_refresh_token : base->pass_refresh_token;
@@ -2484,10 +2568,10 @@ void* oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 					add->refresh_access_token_before_expiry :
 					base->refresh_access_token_before_expiry;
 
-	c->logout_on_error_refresh =
-			add->logout_on_error_refresh != OIDC_CONFIG_POS_INT_UNSET ?
-					add->logout_on_error_refresh :
-					base->logout_on_error_refresh;
+	c->action_on_error_refresh =
+			add->action_on_error_refresh != OIDC_CONFIG_POS_INT_UNSET ?
+					add->action_on_error_refresh :
+					base->action_on_error_refresh;
 
 	c->state_cookie_prefix =
 			(_oidc_strcmp(add->state_cookie_prefix, OIDC_CONFIG_STRING_UNSET)
@@ -2724,6 +2808,12 @@ static apr_status_t oidc_cleanup_child(void *data) {
 				oidc_serror(sp, "cache destroy function failed");
 			}
 		}
+		if (cfg->refresh_mutex != NULL) {
+			if (oidc_cache_mutex_destroy(sp, cfg->refresh_mutex) != TRUE) {
+				oidc_serror(sp,
+						"oidc_cache_mutex_destroy on refresh mutex failed");
+			}
+		}
 		sp = sp->next;
 	}
 
@@ -2838,6 +2928,11 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2,
 			if (cfg->cache->post_config(sp) != OK)
 				return HTTP_INTERNAL_SERVER_ERROR;
 		}
+		if (cfg->refresh_mutex != NULL) {
+			if (oidc_cache_mutex_post_config(sp, cfg->refresh_mutex,
+					"refresh") != TRUE)
+				return HTTP_INTERNAL_SERVER_ERROR;
+		}
 		sp = sp->next;
 	}
 
@@ -2885,8 +2980,7 @@ static const authz_provider oidc_authz_claim_provider = {
 #ifdef USE_LIBJQ
 static const authz_provider oidc_authz_claims_expr_provider = {
 		&oidc_authz_checker_claims_expr,
-		NULL,
-};
+		NULL, };
 #endif
 
 #endif
@@ -2902,6 +2996,13 @@ static void oidc_child_init(apr_pool_t *p, server_rec *s) {
 		if (cfg->cache->child_init != NULL) {
 			if (cfg->cache->child_init(p, sp) != APR_SUCCESS) {
 				oidc_serror(sp, "cfg->cache->child_init failed");
+			}
+		}
+		if (cfg->refresh_mutex != NULL) {
+			if (oidc_cache_mutex_child_init(p, sp,
+					cfg->refresh_mutex) != APR_SUCCESS) {
+				oidc_serror(sp,
+						"oidc_cache_mutex_child_init on refresh mutex failed");
 			}
 		}
 		sp = sp->next;
@@ -2981,7 +3082,8 @@ static apr_status_t oidc_filter_in_filter(ap_filter_t *f,
 
 				if (oidc_util_hdr_in_content_length_get(f->r) != NULL)
 					oidc_util_hdr_in_set(f->r, OIDC_HTTP_HDR_CONTENT_LENGTH,
-							apr_psprintf(f->r->pool, "%ld", (long)ctx->nbytes));
+							apr_psprintf(f->r->pool, "%ld",
+									(long) ctx->nbytes));
 
 				apr_pool_userdata_set(NULL, OIDC_USERDATA_POST_PARAMS_KEY,
 						NULL, f->r->pool);
@@ -3242,6 +3344,11 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, provider.auth_request_params),
 				RSRC_CONF,
 				"Extra parameters that need to be sent in the Authorization Request (must be query-encoded like \"display=popup&prompt=consent\"."),
+		AP_INIT_TAKE1(OIDCLogoutRequestParams,
+				oidc_set_string_slot,
+				(void*)APR_OFFSETOF(oidc_cfg, provider.logout_request_params),
+				RSRC_CONF,
+				"Extra parameters that need to be sent in the Logout Request (must be query-encoded like \"client_id=myclient&prompt=none\"."),
 		AP_INIT_TAKE1(OIDCPathAuthRequestParams,
 				oidc_set_path_auth_request_params,
 				(void*)APR_OFFSETOF(oidc_dir_cfg, path_auth_request_expr),
@@ -3259,7 +3366,7 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF,
 				"Client identifier used in calls to OpenID Connect OP."),
 		AP_INIT_TAKE1(OIDCClientSecret,
-				oidc_set_string_slot,
+				oidc_set_passphrase_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.client_secret),
 				RSRC_CONF,
 				"Client secret used in calls to OpenID Connect OP."),
@@ -3285,12 +3392,12 @@ const command_rec oidc_config_cmds[] = {
 				RSRC_CONF,
 				"Define the Redirect URI (e.g.: https://localhost:9031/protected/example/)"),
 		AP_INIT_TAKE1(OIDCDefaultURL,
-				oidc_set_url_slot,
+				oidc_set_relative_or_absolute_url_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, default_sso_url),
 				RSRC_CONF,
 				"Defines the default URL where the user is directed to in case of 3rd-party initiated SSO."),
 		AP_INIT_TAKE1(OIDCDefaultLoggedOutURL,
-				oidc_set_url_slot,
+				oidc_set_relative_or_absolute_url_slot,
 				(void *)APR_OFFSETOF(oidc_cfg, default_slo_url),
 				RSRC_CONF,
 				"Defines the default URL where the user is directed to after logout."),
@@ -3309,8 +3416,8 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_cfg, cookie_same_site),
 				RSRC_CONF,
 				"Defines whether or not the cookie Same-Site flag is set on cookies."),
-		AP_INIT_TAKE1(OIDCOutgoingProxy,
-				oidc_set_string_slot,
+		AP_INIT_TAKE123(OIDCOutgoingProxy,
+				oidc_set_outgoing_proxy_slot,
 				(void*)APR_OFFSETOF(oidc_cfg, outgoing_proxy),
 				RSRC_CONF,
 				"Specify an outgoing proxy for your network (<host>[:<port>]."),
@@ -3559,6 +3666,14 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, error_template),
 				RSRC_CONF,
 				"Name of a HTML error template: needs to contain two \"%s\" characters, one for the error message, one for the description."),
+		AP_INIT_TAKE2(OIDCPreservePostTemplates,
+				oidc_set_post_preserve_templates,
+				NULL,
+				RSRC_CONF,
+				"Name of POST preserve and restore templates:"
+				"1) preserve: needs to contain two \"%s\" characters, the first for the JSON POST data, the second for the URL to redirect to."
+				"2) restore: needs to contain one \"%s\", which contains the (original) URL to POST the restored data to"
+				),
 
 		AP_INIT_TAKE1(OIDCDiscoverURL,
 				oidc_set_relative_or_absolute_url_slot_dir_cfg,
@@ -3609,7 +3724,7 @@ const command_rec oidc_config_cmds[] = {
 				NULL,
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"The method in which an OAuth token can be presented; must be one or more of: header|post|query|cookie"),
-		AP_INIT_TAKE1(OIDCUserInfoRefreshInterval,
+		AP_INIT_TAKE12(OIDCUserInfoRefreshInterval,
 				oidc_set_userinfo_refresh_interval,
 				(void*)APR_OFFSETOF(oidc_cfg, provider.userinfo_refresh_interval),
 				RSRC_CONF,
@@ -3624,6 +3739,11 @@ const command_rec oidc_config_cmds[] = {
 				(void *) APR_OFFSETOF(oidc_dir_cfg, preserve_post),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
 				"Indicates whether POST parameters will be preserved across authentication requests."),
+		AP_INIT_FLAG(OIDCPassAccessToken,
+				ap_set_flag_slot,
+				(void*)APR_OFFSETOF(oidc_dir_cfg, pass_access_token),
+				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
+				"Pass the access token in a header and/or environment variable (On or Off)"),
 		AP_INIT_FLAG(OIDCPassRefreshToken,
 				ap_set_flag_slot,
 				(void*)APR_OFFSETOF(oidc_dir_cfg, pass_refresh_token),
@@ -3674,7 +3794,7 @@ const command_rec oidc_config_cmds[] = {
 				oidc_set_refresh_access_token_before_expiry,
 				(void *)APR_OFFSETOF(oidc_dir_cfg, refresh_access_token_before_expiry),
 				RSRC_CONF|ACCESS_CONF|OR_AUTHCFG,
-				"Ensure the access token is valid for at least <x> seconds by refreshing it if required; must be: <x> [logout_on_error]; the logout_on_error performs a logout on refresh error."),
+				"Ensure the access token is valid for at least <x> seconds by refreshing it if required; must be: <x> [logout_on_error|authenticate_on_error]; the logout_on_error performs a logout on refresh error."),
 
 		AP_INIT_TAKE1(OIDCStateInputHeaders,
 				oidc_set_state_input_headers_as,

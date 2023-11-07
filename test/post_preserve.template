@@ -1,0 +1,16 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>Preserving...</title>		
+		<script type="text/javascript">
+			function preserveOnLoad() {
+				sessionStorage.setItem('mod_auth_openidc_preserve_post_params', JSON.stringify(%s));
+				window.location='%s';
+			}
+		</script>
+	</head>
+	<body onload="preserveOnLoad()">
+		<p>Preserving...</p>
+	</body>
+</html>

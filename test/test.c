@@ -1189,6 +1189,29 @@ static char * test_proto_authorization_request(request_rec *r) {
 	return 0;
 }
 
+static char* test_logout_request(request_rec *r) {
+
+	oidc_cfg *c = ap_get_module_config(r->server->module_config,
+			&auth_openidc_module);
+	oidc_session_t *session = NULL;
+
+	oidc_session_load(r, &session);
+	oidc_session_set_issuer(r, session, c->provider.issuer);
+
+	c->provider.end_session_endpoint = "https://idp.example.com/endsession";
+	c->provider.logout_request_params = "client_id=myclient&foo=bar";
+
+	r->args = "logout=https%3A%2F%2Fwww.example.com%2Floggedout";
+
+	TST_ASSERT("oidc_handle_logout (1)",
+			oidc_handle_logout(r, c, session) == HTTP_MOVED_TEMPORARILY);
+	TST_ASSERT_STR("oidc_handle_logout (2)",
+			apr_table_get(r->headers_out, "Location"),
+			"https://idp.example.com/endsession?post_logout_redirect_uri=https%3A%2F%2Fwww.example.com%2Floggedout&client_id=myclient&foo=bar");
+
+	return 0;
+}
+
 static char * test_proto_validate_nonce(request_rec *r) {
 
 	oidc_cfg *c = ap_get_module_config(r->server->module_config,
@@ -1874,6 +1897,8 @@ static char * all_tests(apr_pool_t *pool, request_rec *r) {
 	TST_RUN(test_authz_worker, r);
 #endif
 
+	TST_RUN(test_logout_request, r);
+
 	return 0;
 }
 
@@ -1886,6 +1911,7 @@ static request_rec * test_setup(apr_pool_t *pool) {
 			sizeof(request_rec));
 
 	request->pool = pool;
+	request->subprocess_env = apr_table_make(request->pool, 0);
 
 	request->headers_in = apr_table_make(request->pool, 0);
 	request->headers_out = apr_table_make(request->pool, 0);
