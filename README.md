@@ -27,6 +27,11 @@ OAuth2TokenVerify jwk "{\"kty\":\"RSA\",\"kid\":\"one\",\"use\":\"sig\",\"n\":\"
 SSLVerifyClient optional_no_ca
 ```
 
+RFC 9449 OAuth 2.0 Demonstrating Proof of Possession (DPoP) validation using introspection (using liboauth > 1.5.2)
+```apache
+OAuth2TokenVerify introspect https://pingfed:9031/as/introspect.oauth2 introspect.ssl_verify=false&introspect.auth=client_secret_basic&client_id=rs_client&client_secret=2Federate&type=dpop
+```
+
 For a detailed overview of configuration options see the `oauth2.conf` Apache configuration file in this directory.
 
 ## Features
