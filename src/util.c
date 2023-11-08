@@ -1228,12 +1228,16 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 			rv = TRUE;
 			break;
 		}
+		if (res == CURLE_OPERATION_TIMEDOUT) {
+			/* in case of a request/transfer timeout (which includes the connect timeout) we'll not retry */
+			oidc_error(r,
+					"curl_easy_perform failed with a timeout for %s: [%s]; won't retry",
+					url, curlError[0] ? curlError : "<n/a>");
+			break;
+		}
 		oidc_error(r, "curl_easy_perform(%d/%d) failed for %s with: [%s]",
 				i + 1, http_timeout->retries + 1, url,
 				curlError[0] ? curlError : "<n/a>");
-		/* in case of a request/transfer timeout (which includes the connect timeout) we'll not retry */
-		if (res == CURLE_OPERATION_TIMEDOUT)
-			break;
 		/* in case of a connectivity/network glitch we'll back off before retrying */
 		if (i < http_timeout->retries)
 			apr_sleep(http_timeout->retry_interval);
@@ -1249,7 +1253,7 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 	/* set and log the response */
 	oidc_debug(r, "response=%s", *response ? *response : "");
 
-	end:
+end:
 
 	/* cleanup and return the result */
 	if (h_list != NULL)

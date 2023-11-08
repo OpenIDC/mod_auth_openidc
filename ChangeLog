@@ -1,3 +1,7 @@
+11/08/2023
+- improve error message in case of curl timeouts
+- bump to 2.4.15rc4
+
 11/02/2023
 - apply ISO-8859-1 ("latin1") as default encoding mechanism for claim values passed in headers and environment
   variables to comply with https://www.rfc-editor.org/rfc/rfc5987; see #957; use "OIDCPassClaimsAs <any> none"
