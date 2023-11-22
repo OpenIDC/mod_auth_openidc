@@ -1,3 +1,8 @@
+11/22/2023
+- populate User-Agent header in outgoing HTTP requests with mod_auth_openidc, libcurl and OpenSSL
+  version information and log it for debugging purposes
+- bump to 2.4.15rc5
+
 11/08/2023
 - improve error message in case of curl timeouts
 - bump to 2.4.15rc4

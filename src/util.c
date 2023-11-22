@@ -1141,7 +1141,10 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url,
 #endif
 
 	/* identify this HTTP client */
-	curl_easy_setopt(curl, CURLOPT_USERAGENT, "mod_auth_openidc");
+	char *useragent = apr_psprintf(r->pool, "%s libcurl-%s %s", NAMEVERSION,
+			LIBCURL_VERSION, OPENSSL_VERSION_TEXT);
+	oidc_debug(r, "set HTTP request header User-Agent to: %s", useragent);
+	curl_easy_setopt(curl, CURLOPT_USERAGENT, useragent);
 
 	/* set optional outgoing proxy for the local network */
 	if (outgoing_proxy->host_port) {
