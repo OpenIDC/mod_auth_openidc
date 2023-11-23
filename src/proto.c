@@ -131,6 +131,8 @@ apr_byte_t oidc_proto_generate_random_string(request_rec *r, char **output,
 
 #define OIDC_REQUEST_OJBECT_COPY_FROM_REQUEST "copy_from_request"
 #define OIDC_REQUEST_OJBECT_COPY_AND_REMOVE_FROM_REQUEST "copy_and_remove_from_request"
+#define OIDC_REQUEST_OJBECT_TTL "ttl"
+#define OIDC_REQUEST_OBJECT_TTL_DEFAULT 30
 
 /*
  * indicates wether a request parameter from the authorization request needs to be
@@ -282,9 +284,9 @@ apr_byte_t oidc_proto_get_encryption_jwk_by_type(request_rec *r, oidc_cfg *cfg,
 /*
  * generate a request object
  */
-char* oidc_proto_create_request_object(request_rec *r,
+static char* oidc_proto_create_request_object(request_rec *r,
 		struct oidc_provider_t *provider, json_t *request_object_config,
-		apr_table_t *params) {
+		apr_table_t *params, int ttl) {
 
 	oidc_jwk_t *sjwk = NULL;
 	int jwk_needs_destroy = 0;
@@ -297,11 +299,15 @@ char* oidc_proto_create_request_object(request_rec *r,
 	/* create the request object value */
 	oidc_jwt_t *request_object = oidc_jwt_new(r->pool, TRUE, TRUE);
 
-	/* set basic values: iss and aud */
+	/* set basic values: iss, aud, iat and exp */
 	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_ISS,
 			json_string(provider->client_id));
 	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_AUD,
 			json_string(provider->issuer));
+	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_IAT,
+			json_integer(apr_time_sec(apr_time_now())));
+	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_EXP,
+			json_integer(apr_time_sec(apr_time_now()) + ttl));
 
 	/* add static values to the request object as configured in the .conf file; may override iss/aud */
 	oidc_util_json_merge(r, json_object_get(request_object_config, "static"),
@@ -476,7 +482,7 @@ char* oidc_proto_create_request_object(request_rec *r,
  */
 static char* oidc_proto_create_request_uri(request_rec *r,
 		struct oidc_provider_t *provider, json_t *request_object_config,
-		const char *redirect_uri, apr_table_t *params) {
+		const char *redirect_uri, apr_table_t *params, int ttl) {
 
 	oidc_debug(r, "enter");
 
@@ -490,7 +496,7 @@ static char* oidc_proto_create_request_uri(request_rec *r,
 		resolver_url = apr_pstrdup(r->pool, redirect_uri);
 
 	char *serialized_request_object = oidc_proto_create_request_object(r,
-			provider, request_object_config, params);
+			provider, request_object_config, params, ttl);
 
 	/* generate a temporary reference, store the request object in the cache and generate a Request URI that references it */
 	char *request_uri = NULL;
@@ -499,7 +505,7 @@ static char* oidc_proto_create_request_uri(request_rec *r,
 		if (oidc_proto_generate_random_string(r, &request_ref, 16) == TRUE) {
 			oidc_cache_set_request_uri(r, request_ref,
 					serialized_request_object,
-					apr_time_now() + apr_time_from_sec(OIDC_REQUEST_URI_CACHE_DURATION));
+					apr_time_now() + apr_time_from_sec(ttl));
 			request_uri = apr_psprintf(r->pool, "%s?%s=%s", resolver_url,
 					OIDC_PROTO_REQUEST_URI, oidc_util_escape_string(r, request_ref));
 		}
@@ -550,15 +556,18 @@ static void oidc_proto_add_request_param(request_rec *r,
 
 	/* create request value */
 	char *value = NULL;
+	int ttl = OIDC_REQUEST_OBJECT_TTL_DEFAULT;
+	oidc_json_object_get_int(request_object_config, "ttl", &ttl,
+			OIDC_REQUEST_OBJECT_TTL_DEFAULT);
 	if (_oidc_strcmp(parameter, OIDC_PROTO_REQUEST_URI) == 0) {
 		/* parameter is "request_uri" */
 		value = oidc_proto_create_request_uri(r, provider,
-				request_object_config, redirect_uri, params);
+				request_object_config, redirect_uri, params, ttl);
 		apr_table_set(params, OIDC_PROTO_REQUEST_URI, value);
 	} else {
 		/* parameter is "request" */
 		value = oidc_proto_create_request_object(r, provider,
-				request_object_config, params);
+				request_object_config, params, ttl);
 		apr_table_set(params, OIDC_PROTO_REQUEST_OBJECT, value);
 	}
 }

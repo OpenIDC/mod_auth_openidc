@@ -1,3 +1,7 @@
+11/23/2023
+- add iat and exp claims to request object; closes #1137
+- bump to 2.4.15rc6
+
 11/22/2023
 - populate User-Agent header in outgoing HTTP requests with mod_auth_openidc, libcurl and OpenSSL
   version information and log it for debugging purposes
