@@ -50,14 +50,12 @@
 #include <apr_shm.h>
 #include <httpd.h>
 
-typedef void* (*oidc_cache_cfg_create)(apr_pool_t *pool);
+typedef void *(*oidc_cache_cfg_create)(apr_pool_t *pool);
 typedef int (*oidc_cache_post_config_function)(server_rec *s);
 typedef int (*oidc_cache_child_init_function)(apr_pool_t *p, server_rec *s);
-typedef apr_byte_t (*oidc_cache_get_function)(request_rec *r,
-		const char *section, const char *key, char **value);
-typedef apr_byte_t (*oidc_cache_set_function)(request_rec *r,
-		const char *section, const char *key, const char *value,
-		apr_time_t expiry);
+typedef apr_byte_t (*oidc_cache_get_function)(request_rec *r, const char *section, const char *key, char **value);
+typedef apr_byte_t (*oidc_cache_set_function)(request_rec *r, const char *section, const char *key, const char *value,
+					      apr_time_t expiry);
 typedef int (*oidc_cache_destroy_function)(server_rec *s);
 
 typedef struct oidc_cache_t {
@@ -78,32 +76,28 @@ typedef struct oidc_cache_mutex_t {
 	apr_byte_t is_parent;
 } oidc_cache_mutex_t;
 
-oidc_cache_mutex_t* oidc_cache_mutex_create(apr_pool_t *pool, apr_byte_t global);
-apr_byte_t oidc_cache_mutex_post_config(server_rec *s, oidc_cache_mutex_t *m,
-		const char *type);
-apr_status_t oidc_cache_mutex_child_init(apr_pool_t *p, server_rec *s,
-		oidc_cache_mutex_t *m);
+oidc_cache_mutex_t *oidc_cache_mutex_create(apr_pool_t *pool, apr_byte_t global);
+apr_byte_t oidc_cache_mutex_post_config(server_rec *s, oidc_cache_mutex_t *m, const char *type);
+apr_status_t oidc_cache_mutex_child_init(apr_pool_t *p, server_rec *s, oidc_cache_mutex_t *m);
 apr_byte_t oidc_cache_mutex_lock(apr_pool_t *pool, server_rec *s, oidc_cache_mutex_t *m);
 apr_byte_t oidc_cache_mutex_unlock(apr_pool_t *pool, server_rec *s, oidc_cache_mutex_t *m);
 apr_byte_t oidc_cache_mutex_destroy(server_rec *s, oidc_cache_mutex_t *m);
 
-apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key,
-		char **value);
-apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key,
-		const char *value, apr_time_t expiry);
+apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, char **value);
+apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key, const char *value, apr_time_t expiry);
 
-#define OIDC_CACHE_SECTION_SESSION           "s"
-#define OIDC_CACHE_SECTION_NONCE             "n"
-#define OIDC_CACHE_SECTION_JWKS              "j"
-#define OIDC_CACHE_SECTION_ACCESS_TOKEN      "a"
-#define OIDC_CACHE_SECTION_REFRESH_TOKEN     "e"
-#define OIDC_CACHE_SECTION_PROVIDER          "p"
-#define OIDC_CACHE_SECTION_OAUTH_PROVIDER    "o"
-#define OIDC_CACHE_SECTION_JTI               "t"
-#define OIDC_CACHE_SECTION_REQUEST_URI       "r"
-#define OIDC_CACHE_SECTION_SID               "d"
-#define OIDC_CACHE_SECTION_USERINFO_SJWT     "u"
-#define OIDC_CACHE_SECTION_JQ_FILTER         "q"
+#define OIDC_CACHE_SECTION_SESSION "s"
+#define OIDC_CACHE_SECTION_NONCE "n"
+#define OIDC_CACHE_SECTION_JWKS "j"
+#define OIDC_CACHE_SECTION_ACCESS_TOKEN "a"
+#define OIDC_CACHE_SECTION_REFRESH_TOKEN "e"
+#define OIDC_CACHE_SECTION_PROVIDER "p"
+#define OIDC_CACHE_SECTION_OAUTH_PROVIDER "o"
+#define OIDC_CACHE_SECTION_JTI "t"
+#define OIDC_CACHE_SECTION_REQUEST_URI "r"
+#define OIDC_CACHE_SECTION_SID "d"
+#define OIDC_CACHE_SECTION_USERINFO_SJWT "u"
+#define OIDC_CACHE_SECTION_JQ_FILTER "q"
 
 // TODO: now every section occupies the same space; we may want to differentiate
 //       according to section-based size, at least for the shm backend
@@ -124,15 +118,22 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key,
 #define oidc_cache_set_session(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, key, value, expiry)
 #define oidc_cache_set_nonce(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_NONCE, key, value, expiry)
 #define oidc_cache_set_jwks(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_JWKS, key, value, expiry)
-#define oidc_cache_set_access_token(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, key, value, expiry)
-#define oidc_cache_set_refresh_token(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_REFRESH_TOKEN, key, value, expiry)
-#define oidc_cache_set_provider(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_PROVIDER, key, value, expiry)
-#define oidc_cache_set_oauth_provider(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_OAUTH_PROVIDER, key, value, expiry)
+#define oidc_cache_set_access_token(r, key, value, expiry)                                                             \
+	oidc_cache_set(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, key, value, expiry)
+#define oidc_cache_set_refresh_token(r, key, value, expiry)                                                            \
+	oidc_cache_set(r, OIDC_CACHE_SECTION_REFRESH_TOKEN, key, value, expiry)
+#define oidc_cache_set_provider(r, key, value, expiry)                                                                 \
+	oidc_cache_set(r, OIDC_CACHE_SECTION_PROVIDER, key, value, expiry)
+#define oidc_cache_set_oauth_provider(r, key, value, expiry)                                                           \
+	oidc_cache_set(r, OIDC_CACHE_SECTION_OAUTH_PROVIDER, key, value, expiry)
 #define oidc_cache_set_jti(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_JTI, key, value, expiry)
-#define oidc_cache_set_request_uri(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_REQUEST_URI, key, value, expiry)
+#define oidc_cache_set_request_uri(r, key, value, expiry)                                                              \
+	oidc_cache_set(r, OIDC_CACHE_SECTION_REQUEST_URI, key, value, expiry)
 #define oidc_cache_set_sid(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_SID, key, value, expiry)
-#define oidc_cache_set_signed_jwt(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_USERINFO_SJWT, key, value, expiry)
-#define oidc_cache_set_jq_filter(r, key, value, expiry) oidc_cache_set(r, OIDC_CACHE_SECTION_JQ_FILTER, key, value, expiry)
+#define oidc_cache_set_signed_jwt(r, key, value, expiry)                                                               \
+	oidc_cache_set(r, OIDC_CACHE_SECTION_USERINFO_SJWT, key, value, expiry)
+#define oidc_cache_set_jq_filter(r, key, value, expiry)                                                                \
+	oidc_cache_set(r, OIDC_CACHE_SECTION_JQ_FILTER, key, value, expiry)
 
 extern oidc_cache_t oidc_cache_file;
 extern oidc_cache_t oidc_cache_shm;

@@ -45,12 +45,12 @@
 #define MOD_AUTH_OPENIDC_CONST_H_
 
 #ifdef HAVE_CONFIG_H
-#  include "config.h"
-#  undef PACKAGE_NAME
-#  undef PACKAGE_STRING
-#  undef PACKAGE_TARNAME
-#  undef PACKAGE_VERSION
-#  undef PACKAGE_BUGREPORT
+#include "config.h"
+#undef PACKAGE_NAME
+#undef PACKAGE_STRING
+#undef PACKAGE_TARNAME
+#undef PACKAGE_VERSION
+#undef PACKAGE_BUGREPORT
 #endif
 
 #include <stdint.h>
@@ -67,9 +67,9 @@
 #define _oidc_strcpy(__dst, __src) strcpy(__dst, __src)
 #endif
 
-#define _oidc_strlen(s) ( s ? strlen(s) : 0 )
-#define _oidc_strcmp(a, b) ( (a && b) ? apr_strnatcmp(a, b) : -1 )
-#define _oidc_strncmp(a, b, size) ( (a && b) ? strncmp(a, b, size) : -1 )
+#define _oidc_strlen(s) (s ? strlen(s) : 0)
+#define _oidc_strcmp(a, b) ((a && b) ? apr_strnatcmp(a, b) : -1)
+#define _oidc_strncmp(a, b, size) ((a && b) ? strncmp(a, b, size) : -1)
 
 #define _oidc_str_to_int(s) (s ? (int)strtol(s, NULL, 10) : 0)
 

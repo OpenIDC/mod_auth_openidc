@@ -46,8 +46,7 @@
 #include "mod_auth_openidc.h"
 #include "pcre_subst.h"
 
-static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c,
-		const json_t *val, const char *key) {
+static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c, const json_t *val, const char *key) {
 
 	const json_t *elem = NULL;
 	int i = 0;
@@ -91,8 +90,7 @@ static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c,
 
 			} else if (json_is_boolean(elem)) {
 
-				if (_oidc_strcmp((json_is_true(elem) ? "true" : "false"),
-						spec_c) == 0)
+				if (_oidc_strcmp((json_is_true(elem) ? "true" : "false"), spec_c) == 0)
 					return TRUE;
 
 			} else if (json_is_integer(elem)) {
@@ -102,16 +100,13 @@ static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c,
 
 			} else {
 
-				oidc_warn(r,
-						"unhandled in-array JSON object type [%d] for key \"%s\"",
-						elem->type, (const char* ) key);
+				oidc_warn(r, "unhandled in-array JSON object type [%d] for key \"%s\"", elem->type,
+					  (const char *)key);
 			}
-
 		}
 
 	} else {
-		oidc_warn(r, "unhandled JSON object type [%d] for key \"%s\"",
-				val->type, (const char* ) key);
+		oidc_warn(r, "unhandled JSON object type [%d] for key \"%s\"", val->type, (const char *)key);
 	}
 
 	return FALSE;
@@ -136,8 +131,8 @@ static apr_byte_t oidc_authz_match_expression(request_rec *r, const char *spec_c
 
 		error_str = NULL;
 		/* PCRE-compare the string value against the expression */
-		if (oidc_pcre_exec(r->pool, preg, json_string_value(val), (int) _oidc_strlen(json_string_value(val)), &error_str)
-				> 0) {
+		if (oidc_pcre_exec(r->pool, preg, json_string_value(val), (int)_oidc_strlen(json_string_value(val)),
+				   &error_str) > 0) {
 			oidc_debug(r, "value \"%s\" matched regex \"%s\"", json_string_value(val), spec_c);
 			rc = TRUE;
 			goto end;
@@ -156,9 +151,10 @@ static apr_byte_t oidc_authz_match_expression(request_rec *r, const char *spec_c
 
 				error_str = NULL;
 				/* PCRE-compare the string value against the expression */
-				if (oidc_pcre_exec(r->pool, preg, json_string_value(elem), (int) _oidc_strlen(json_string_value(elem)), &error_str)
-						> 0) {
-					oidc_debug(r, "array value \"%s\" matched regex \"%s\"", json_string_value(elem), spec_c);
+				if (oidc_pcre_exec(r->pool, preg, json_string_value(elem),
+						   (int)_oidc_strlen(json_string_value(elem)), &error_str) > 0) {
+					oidc_debug(r, "array value \"%s\" matched regex \"%s\"",
+						   json_string_value(elem), spec_c);
 					rc = TRUE;
 					goto end;
 				} else if (error_str) {
@@ -180,8 +176,7 @@ end:
 /*
  * see if a the Require value matches with a set of provided claims
  */
-apr_byte_t oidc_authz_match_claim(request_rec *r, const char *const attr_spec,
-		json_t *claims) {
+apr_byte_t oidc_authz_match_claim(request_rec *r, const char *const attr_spec, json_t *claims) {
 
 	const char *key;
 	json_t *val;
@@ -197,7 +192,7 @@ apr_byte_t oidc_authz_match_claim(request_rec *r, const char *const attr_spec,
 		key = json_object_iter_key(iter);
 		val = json_object_iter_value(iter);
 
-		oidc_debug(r, "evaluating key \"%s\"", (const char* ) key);
+		oidc_debug(r, "evaluating key \"%s\"", (const char *)key);
 
 		const char *attr_c = key;
 		const char *spec_c = attr_spec;
@@ -233,24 +228,18 @@ apr_byte_t oidc_authz_match_claim(request_rec *r, const char *const attr_spec,
 			spec_c++;
 
 			if (json_is_object(val)) {
-				oidc_debug(r,
-						"attribute chunk matched, evaluating children of key: \"%s\".",
-						key);
-				return oidc_authz_match_claim(r, spec_c,
-						json_object_get(claims, key));
+				oidc_debug(r, "attribute chunk matched, evaluating children of key: \"%s\".", key);
+				return oidc_authz_match_claim(r, spec_c, json_object_get(claims, key));
 			} else if (json_is_array(val)) {
-				oidc_debug(r,
-						"attribute chunk matched, evaluating array values of key: \"%s\".",
-						key);
-				return oidc_authz_match_value(r, spec_c,
-						json_object_get(claims, key), key);
+				oidc_debug(r, "attribute chunk matched, evaluating array values of key: \"%s\".", key);
+				return oidc_authz_match_value(r, spec_c, json_object_get(claims, key), key);
 			} else {
 				oidc_warn(r,
-						"\"%s\" matched, and child nodes or array values should be evaluated, but value is not an object or array.",
-						key);
+					  "\"%s\" matched, and child nodes or array values should be evaluated, but "
+					  "value is not an object or array.",
+					  key);
 				return FALSE;
 			}
-
 		}
 
 		iter = json_object_iter_next(claims, iter);
@@ -264,15 +253,14 @@ apr_byte_t oidc_authz_match_claim(request_rec *r, const char *const attr_spec,
 /*
  * see if a the Require value matches a configured expression
  */
-apr_byte_t oidc_authz_match_claims_expr(request_rec *r,
-		const char *const attr_spec, json_t *claims) {
+apr_byte_t oidc_authz_match_claims_expr(request_rec *r, const char *const attr_spec, json_t *claims) {
 	apr_byte_t rv = FALSE;
 	const char *str = NULL;
 
 	oidc_debug(r, "enter: '%s'", attr_spec);
 
-	str = oidc_util_jq_filter(r, oidc_util_encode_json_object(r, claims,
-			JSON_PRESERVE_ORDER | JSON_COMPACT), attr_spec);
+	str = oidc_util_jq_filter(r, oidc_util_encode_json_object(r, claims, JSON_PRESERVE_ORDER | JSON_COMPACT),
+				  attr_spec);
 	rv = (_oidc_strcmp(str, "true") == 0);
 
 	return rv;
@@ -286,11 +274,9 @@ static void oidc_authz_error_add(request_rec *r, const char *msg) {
 	const char *envvar = NULL;
 	if (r->subprocess_env != NULL) {
 		envvar = apr_table_get(r->subprocess_env, OIDC_AUTHZ_ERROR);
-		oidc_debug(r, "adding %s to environment variable %s=%s", msg,
-				OIDC_AUTHZ_ERROR, envvar);
+		oidc_debug(r, "adding %s to environment variable %s=%s", msg, OIDC_AUTHZ_ERROR, envvar);
 		apr_table_set(r->subprocess_env, OIDC_AUTHZ_ERROR,
-				apr_psprintf(r->pool, "%s%s%s", envvar ? envvar : "",
-						envvar ? "," : "", msg ? msg : ""));
+			      apr_psprintf(r->pool, "%s%s%s", envvar ? envvar : "", envvar ? "," : "", msg ? msg : ""));
 	}
 }
 
@@ -299,8 +285,7 @@ static void oidc_authz_error_add(request_rec *r, const char *msg) {
 /*
  * Apache <2.4 authorization routine: match the claims from the authenticated user against the Require primitive
  */
-int oidc_authz_worker22(request_rec *r, json_t *claims,
-		const require_line * const reqs, int nelts) {
+int oidc_authz_worker22(request_rec *r, json_t *claims, const require_line *const reqs, int nelts) {
 	const int m = r->method_number;
 	const char *token;
 	const char *requirement;
@@ -357,7 +342,8 @@ int oidc_authz_worker22(request_rec *r, json_t *claims,
 
 			if (match_claim_fn(r, token, claims) == TRUE) {
 
-				/* if *any* claim matches, then authorization has succeeded and all of the others are ignored */
+				/* if *any* claim matches, then authorization has succeeded and all of the others are
+				 * ignored */
 				oidc_debug(r, "require claim/expr '%s' matched", token);
 				return OK;
 			}
@@ -371,15 +357,16 @@ int oidc_authz_worker22(request_rec *r, json_t *claims,
 		oidc_debug(r, "no claim/expr statements found, not performing authz");
 		return DECLINED;
 	}
-	/* if there was a "Require claim", but no actual claims, that's cause to warn the admin of an iffy configuration */
+	/* if there was a "Require claim", but no actual claims, that's cause to warn the admin of an iffy configuration
+	 */
 	if (count_oauth_claims == 0) {
-		oidc_warn(r,
-				"'require claim/expr' missing specification(s) in configuration, declining");
+		oidc_warn(r, "'require claim/expr' missing specification(s) in configuration, declining");
 		return DECLINED;
 	}
 
 	/* log the event, also in Apache speak */
-	oidc_debug(r, "authorization denied for require claims (0/%d): '%s'", nelts, nelts > 0 ? reqs[0].requirement : "(none)");
+	oidc_debug(r, "authorization denied for require claims (0/%d): '%s'", nelts,
+		   nelts > 0 ? reqs[0].requirement : "(none)");
 
 	ap_note_auth_failure(r);
 
@@ -391,9 +378,8 @@ int oidc_authz_worker22(request_rec *r, json_t *claims,
 /*
  * Apache >=2.4 authorization routine: match the claims from the authenticated user against the Require primitive
  */
-authz_status oidc_authz_worker24(request_rec *r, json_t *claims,
-		const char *require_args, const void *parsed_require_args,
-		oidc_authz_match_claim_fn_type match_claim_fn) {
+authz_status oidc_authz_worker24(request_rec *r, json_t *claims, const char *require_args,
+				 const void *parsed_require_args, oidc_authz_match_claim_fn_type match_claim_fn) {
 
 	int count_oauth_claims = 0;
 	const char *t, *w, *err = NULL;
@@ -410,8 +396,7 @@ authz_status oidc_authz_worker24(request_rec *r, json_t *claims,
 	if (expr) {
 		t = ap_expr_str_exec(r, expr, &err);
 		if (err) {
-			oidc_error(r, "could not evaluate expression '%s': %s",
-					require_args, err);
+			oidc_error(r, "could not evaluate expression '%s': %s", require_args, err);
 			return AUTHZ_DENIED;
 		}
 	} else {
@@ -435,12 +420,10 @@ authz_status oidc_authz_worker24(request_rec *r, json_t *claims,
 
 	/* if there wasn't anything after the Require claims directive... */
 	if (count_oauth_claims == 0) {
-		oidc_warn(r,
-				"'require claim/expr' missing specification(s) in configuration, denying");
+		oidc_warn(r, "'require claim/expr' missing specification(s) in configuration, denying");
 	}
 
-	oidc_debug(r, "could not match require claim expression '%s'",
-			require_args);
+	oidc_debug(r, "could not match require claim expression '%s'", require_args);
 	oidc_authz_error_add(r, require_args);
 
 	return AUTHZ_DENIED;

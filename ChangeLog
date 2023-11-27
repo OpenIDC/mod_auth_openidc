@@ -1,3 +1,6 @@
+11/27/2023
+- use clang-format-17 for code formatting and reformat all code
+
 11/23/2023
 - add iat and exp claims to request object; closes #1137
 - bump to 2.4.15rc6
