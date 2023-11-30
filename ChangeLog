@@ -1,3 +1,9 @@
+11/30/2023
+- fix SSL server certificate validation when revoking tokens
+  apply `OIDCSSLValidateServer` setting rather than `OIDCOAuthSSLValidateServer` in `oidc_revoke_tokens`
+  see https://github.com/OpenIDC/mod_auth_openidc/discussions/1141; thanks @mschmidt72
+- bump to 2.4.15rc7
+
 11/27/2023
 - use clang-format-17 for code formatting and reformat all code
 
