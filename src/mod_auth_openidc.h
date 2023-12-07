@@ -93,6 +93,10 @@ APLOG_USE_MODULE(auth_openidc);
 #define APR_INT64_MAX INT64_MAX
 #endif
 
+#ifndef apr_time_from_msec
+#define apr_time_from_msec(msec) ((apr_time_t)(msec) * 1000)
+#endif
+
 #define oidc_log(r, level, fmt, ...)                                                                                   \
 	ap_log_rerror(APLOG_MARK, level, 0, r, "%s: %s", __FUNCTION__, apr_psprintf(r->pool, fmt, ##__VA_ARGS__))
 #define oidc_slog(s, level, fmt, ...)                                                                                  \
