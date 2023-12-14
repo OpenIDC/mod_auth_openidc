@@ -50,6 +50,8 @@
 
 #include "mod_auth_openidc.h"
 
+#include "metrics.h"
+
 static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, const char *url);
 
 // TODO:
@@ -1640,6 +1642,8 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg, oidc_sess
 	/* verify current cookie domain against issued cookie domain */
 	if (oidc_check_cookie_domain(r, cfg, session) == FALSE) {
 		*needs_save = FALSE;
+		OIDC_METRICS_COUNTER_ADD(r, cfg, "session", "error", "cookie-domain",
+					 "cookie domain validation errors for existing sessions")
 		return HTTP_UNAUTHORIZED;
 	}
 
@@ -1654,6 +1658,8 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg, oidc_sess
 	if (oidc_check_max_session_duration(r, cfg, session, &rc) == FALSE) {
 		*needs_save = FALSE;
 		// NB: rc was set (e.g. to a 302 auth redirect) by the call to oidc_check_max_session_duration
+		OIDC_METRICS_COUNTER_ADD(r, cfg, "session", "error", "expired",
+					 "sessions that exceeded the maximum duration")
 		return rc;
 	}
 
@@ -1663,6 +1669,8 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg, oidc_sess
 	if (rv == FALSE) {
 		*needs_save = FALSE;
 		oidc_debug(r, "dir_action_on_error_refresh: %d", oidc_cfg_dir_action_on_error_refresh(r));
+		OIDC_METRICS_COUNTER_ADD(r, cfg, "session", "error", "refresh-access-token",
+					 "errors refreshing the access token before expiry in existing sessions")
 		if (error_code != OIDC_REFRESH_ERROR_PARALLEL_REFRESH) {
 			if (oidc_cfg_dir_action_on_error_refresh(r) == OIDC_ON_ERROR_LOGOUT) {
 				return oidc_handle_logout_request(r, cfg, session,
@@ -1681,6 +1689,8 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg, oidc_sess
 	if (rv == FALSE) {
 		*needs_save = FALSE;
 		oidc_debug(r, "action_on_userinfo_error: %d", cfg->action_on_userinfo_error);
+		OIDC_METRICS_COUNTER_ADD(r, cfg, "session", "error", "refresh-user-info",
+					 "errors refreshing claims from the userinfo endpoint in existing sessions")
 		if (error_code != OIDC_REFRESH_ERROR_PARALLEL_REFRESH) {
 			if (cfg->action_on_userinfo_error == OIDC_ON_ERROR_LOGOUT) {
 				return oidc_handle_logout_request(r, cfg, session,
@@ -2111,6 +2121,8 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c, oidc_
 				  "there: %s",
 				  c->default_sso_url);
 			oidc_util_hdr_out_location_set(r, oidc_get_absolute_url(r, c, c->default_sso_url));
+			OIDC_METRICS_COUNTER_ADD(r, c, "authn", "response.error", "state-mismatch",
+						 "state mismatch errors in authentication responses")
 			return HTTP_MOVED_TEMPORARILY;
 		}
 		oidc_error(r,
@@ -2128,8 +2140,14 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c, oidc_
 		}
 
 		// if error text was already produced (e.g. state timeout) then just return with a 400
-		if (apr_table_get(r->subprocess_env, OIDC_ERROR_ENVVAR) != NULL)
+		if (apr_table_get(r->subprocess_env, OIDC_ERROR_ENVVAR) != NULL) {
+			OIDC_METRICS_COUNTER_ADD(r, c, "authn", "response.error", "state-expired",
+						 "state expired errors in authentication responses")
 			return HTTP_BAD_REQUEST;
+		}
+
+		OIDC_METRICS_COUNTER_ADD(r, c, "authn", "response.error", "state-mismatch",
+					 "state expired errors in authentication responses")
 
 		return oidc_util_html_send_error(r, c->error_template, "Invalid Authorization Response",
 						 "Could not match the authorization response to an earlier request via "
@@ -2138,13 +2156,19 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c, oidc_
 	}
 
 	/* see if the response is an error response */
-	if (apr_table_get(params, OIDC_PROTO_ERROR) != NULL)
+	if (apr_table_get(params, OIDC_PROTO_ERROR) != NULL) {
+		OIDC_METRICS_COUNTER_ADD(r, c, "authn", "response.error", "provider",
+					 "errors returned by the provider in authentication responses")
 		return oidc_authorization_response_error(r, c, proto_state, apr_table_get(params, OIDC_PROTO_ERROR),
 							 apr_table_get(params, OIDC_PROTO_ERROR_DESCRIPTION));
+	}
 
 	/* handle the code, implicit or hybrid flow */
-	if (oidc_handle_flows(r, c, proto_state, provider, params, response_mode, &jwt) == FALSE)
+	if (oidc_handle_flows(r, c, proto_state, provider, params, response_mode, &jwt) == FALSE) {
+		OIDC_METRICS_COUNTER_ADD(r, c, "authn", "response.error", "protocol",
+					 "errors handling authentication responses")
 		return oidc_authorization_response_error(r, c, proto_state, "Error in handling response type.", NULL);
+	}
 
 	if (jwt == NULL) {
 		oidc_error(r, "no id_token was provided");
@@ -2205,6 +2229,8 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c, oidc_
 	} else {
 		oidc_error(r, "remote user could not be set");
 		oidc_jwt_destroy(jwt);
+		OIDC_METRICS_COUNTER_ADD(r, c, "authn", "response.error", "remote-user",
+					 "errors identifying the remote user based on provided claims")
 		return oidc_authorization_response_error(
 		    r, c, proto_state, "Remote user could not be set: contact the website administrator", NULL);
 	}
@@ -2214,8 +2240,11 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c, oidc_
 	oidc_jwt_destroy(jwt);
 
 	/* check that we've actually authenticated a user; functions as error handling for oidc_get_remote_user */
-	if (r->user == NULL)
+	if (r->user == NULL) {
+		OIDC_METRICS_COUNTER_ADD(r, c, "authn", "response.error", "remote-user",
+					 "errors identifying the remote user based on provided claims")
 		return HTTP_UNAUTHORIZED;
+	}
 
 	/* log the successful response */
 	oidc_debug(r, "session created and stored, returning to original URL: %s, original method: %s", original_url,
@@ -2430,6 +2459,8 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c, oidc_provider_t *
 
 	int rc;
 
+	OIDC_METRICS_TIMING_START(r, c)
+
 	oidc_debug(r, "enter");
 
 	if (provider == NULL) {
@@ -2444,13 +2475,17 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c, oidc_provider_t *
 			oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_DISCOVERY, "");
 			oidc_debug(r, "defer discovery to the content handler, setting r->user=\"\"");
 			r->user = "";
+
 			return OK;
 		}
 
 		/* we're not using multiple OP's configured in a metadata directory, pick the statically configured OP
 		 */
-		if (oidc_provider_static_config(r, c, &provider) == FALSE)
+		if (oidc_provider_static_config(r, c, &provider) == FALSE) {
+			OIDC_METRICS_COUNTER_ADD(r, c, "authn", "request.error", "provider-config",
+						 "errors retrieving/parsing the provider configuration")
 			return HTTP_INTERNAL_SERVER_ERROR;
+		}
 	}
 
 	/* generate the random nonce value that correlates requests and responses */
@@ -2539,6 +2574,9 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c, oidc_provider_t *
 					   "\"state\" and \"session\" cookies will not be shared between the two!",
 					   r_uri.hostname, o_uri.hostname);
 				oidc_proto_state_destroy(proto_state);
+				OIDC_METRICS_COUNTER_ADD(
+				    r, c, "authn", "request.error", "url",
+				    "errors matching the incoming request URL against the configuration")
 				return HTTP_INTERNAL_SERVER_ERROR;
 			}
 		}
@@ -2550,15 +2588,21 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c, oidc_provider_t *
 				   "\"state\" and \"session\" cookies will not work!!",
 				   c->cookie_domain, o_uri.hostname, original_url);
 			oidc_proto_state_destroy(proto_state);
+			OIDC_METRICS_COUNTER_ADD(r, c, "authn", "request.error", "url",
+						 "errors matching the incoming request URL against the configuration")
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 	}
 
 	/* send off to the OpenID Connect Provider */
 	// TODO: maybe show intermediate/progress screen "redirecting to"
-	return oidc_proto_authorization_request(r, provider, login_hint, oidc_get_redirect_uri_iss(r, c, provider),
-						state, proto_state, id_token_hint, code_challenge, auth_request_params,
-						path_scope);
+	rc = oidc_proto_authorization_request(r, provider, login_hint, oidc_get_redirect_uri_iss(r, c, provider), state,
+					      proto_state, id_token_hint, code_challenge, auth_request_params,
+					      path_scope);
+
+	OIDC_METRICS_TIMING_ADD(r, c, "authn", "request", "authentication requests")
+
+	return rc;
 }
 
 /*
@@ -3900,10 +3944,19 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c, oidc_session_t
 	apr_byte_t needs_save = FALSE;
 	int rc = OK;
 
+	OIDC_METRICS_TIMING_START(r, c)
+
 	if (oidc_proto_is_redirect_authorization_response(r, c)) {
 
 		/* this is an authorization response from the OP using the Basic Client profile or a Hybrid flow*/
-		return oidc_handle_redirect_authorization_response(r, c, session);
+		rc = oidc_handle_redirect_authorization_response(r, c, session);
+
+		OIDC_METRICS_COUNTER_ADD(r, c, "redirect_uri", "authn.response", "redirect",
+					 "authentication responses received in a redirect");
+		OIDC_METRICS_TIMING_ADD(r, c, "authn", "response", "authentication responses")
+
+		return rc;
+
 		/*
 		 *
 		 * Note that we are checking for logout *before* checking for a POST authorization response
@@ -3915,18 +3968,34 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c, oidc_session_t
 		 */
 	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_LOGOUT)) {
 		/* handle logout */
-		return oidc_handle_logout(r, c, session);
+		rc = oidc_handle_logout(r, c, session);
+
+		OIDC_METRICS_COUNTER_ADD(r, c, "redirect_uri", "request", OIDC_REDIRECT_URI_REQUEST_LOGOUT,
+					 "logout requests to the redirect URI");
+
+		return rc;
 
 	} else if (oidc_proto_is_post_authorization_response(r, c)) {
 
 		/* this is an authorization response using the fragment(+POST) response_mode with the Implicit Client
 		 * profile */
-		return oidc_handle_post_authorization_response(r, c, session);
+		rc = oidc_handle_post_authorization_response(r, c, session);
+
+		OIDC_METRICS_COUNTER_ADD(r, c, "redirect_uri", "authn.response", "post",
+					 "authentication responses received in a HTTP POST");
+		OIDC_METRICS_TIMING_ADD(r, c, "authn", "response", "authentication responses")
+
+		return rc;
 
 	} else if (oidc_is_discovery_response(r, c)) {
 
 		/* this is response from the OP discovery page */
-		return oidc_handle_discovery_response(r, c);
+		rc = oidc_handle_discovery_response(r, c);
+
+		OIDC_METRICS_COUNTER_ADD(r, c, "redirect_uri", "discovery", "response",
+					 "discovery responses to the redirect URI");
+
+		return rc;
 
 	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
 		/*
@@ -3935,32 +4004,61 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c, oidc_session_t
 		 * by setting r->user
 		 */
 		r->user = "";
+
+		OIDC_METRICS_COUNTER_ADD(r, c, "redirect_uri", "request", "jwks",
+					 "JWKs retrieval requests to the redirect URI");
+
 		return OK;
 
 	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_SESSION)) {
 
 		/* handle session management request */
-		return oidc_handle_session_management(r, c, session);
+		rc = oidc_handle_session_management(r, c, session);
+
+		OIDC_METRICS_COUNTER_ADD(r, c, "redirect_uri", "request", OIDC_REDIRECT_URI_REQUEST_SESSION,
+					 "session management requests to the redirect URI");
+
+		return rc;
 
 	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REFRESH)) {
 
 		/* handle refresh token request */
-		return oidc_handle_refresh_token_request(r, c, session);
+		rc = oidc_handle_refresh_token_request(r, c, session);
+
+		OIDC_METRICS_COUNTER_ADD(r, c, "redirect_uri", "request", OIDC_REDIRECT_URI_REQUEST_REFRESH,
+					 "refresh token requests to the redirect URI");
+
+		return rc;
 
 	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REQUEST_URI)) {
 
 		/* handle request object by reference request */
-		return oidc_handle_request_uri(r, c);
+		rc = oidc_handle_request_uri(r, c);
+
+		OIDC_METRICS_COUNTER_ADD(r, c, "redirect_uri", "request", OIDC_REDIRECT_URI_REQUEST_REQUEST_URI,
+					 "Request URI calls to the redirect URI");
+
+		return rc;
 
 	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE)) {
 
 		/* handle request to invalidate access token cache */
-		return oidc_handle_remove_at_cache(r, c);
+		rc = oidc_handle_remove_at_cache(r, c);
+
+		OIDC_METRICS_COUNTER_ADD(r, c, "redirect_uri", "request", OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE,
+					 "access token cache removal requests to the redirect URI");
+
+		return rc;
 
 	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REVOKE_SESSION)) {
 
 		/* handle request to revoke a user session */
-		return oidc_handle_revoke_session(r, c);
+		rc = oidc_handle_revoke_session(r, c);
+
+		OIDC_METRICS_COUNTER_ADD(r, c, "redirect_uri", "request", OIDC_REDIRECT_URI_REQUEST_REVOKE_SESSION,
+					 "revoke session requests to the redirect URI");
+
+		return rc;
 
 	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO)) {
 
@@ -3978,13 +4076,21 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c, oidc_session_t
 		if (needs_save)
 			oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_SAVE, "");
 
+		OIDC_METRICS_COUNTER_ADD(r, c, "redirect_uri", "request", OIDC_REDIRECT_URI_REQUEST_INFO,
+					 "info hook requests to the redirect URI");
+
 		return rc;
 
 	} else if ((r->args == NULL) || (_oidc_strcmp(r->args, "") == 0)) {
 
 		/* this is a "bare" request to the redirect URI, indicating implicit flow using the fragment
 		 * response_mode */
-		return oidc_proto_javascript_implicit(r, c);
+		rc = oidc_proto_javascript_implicit(r, c);
+
+		OIDC_METRICS_COUNTER_ADD(r, c, "redirect_uri", "authn.response", "implicit",
+					 "(presumed) implicit authentication responses to the redirect URI");
+
+		return rc;
 	}
 
 	/* this is not an authorization response or logout request */
@@ -3998,12 +4104,19 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c, oidc_session_t
 		//
 		//		/* send user facing error to browser */
 		//		return oidc_util_html_send_error(r, error, descr, OK);
-		return oidc_handle_redirect_authorization_response(r, c, session);
+		rc = oidc_handle_redirect_authorization_response(r, c, session);
+
+		OIDC_METRICS_COUNTER_ADD(r, c, "redirect_uri", "error", "provider",
+					 "provider authentication response errors received on the redirect URI");
+
+		return rc;
 	}
 
 	oidc_error(
 	    r, "The OpenID Connect callback URL received an invalid request: %s; returning HTTP_INTERNAL_SERVER_ERROR",
 	    r->args);
+
+	OIDC_METRICS_COUNTER_ADD(r, c, "redirect_uri", "error", "invalid", "invalid requests to the redirect URI");
 
 	/* something went wrong */
 	return oidc_util_html_send_error(
@@ -4020,6 +4133,8 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c, oidc_session_t
  * main routine: handle OpenID Connect authentication
  */
 static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
+
+	OIDC_METRICS_TIMING_START(r, c);
 
 	if (oidc_get_redirect_uri(r, c) == NULL) {
 		oidc_error(r, "configuration error: the authentication type is set to \"" OIDC_AUTH_TYPE_OPENID_CONNECT
@@ -4113,6 +4228,13 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg *c) {
 		/* strip any cookies that we need to */
 		oidc_strip_cookies(r);
 
+		if (rc == OK) {
+			OIDC_METRICS_TIMING_ADD(r, c, "session", "valid", "successfully validated existing sessions")
+		} else {
+			OIDC_METRICS_COUNTER_ADD(r, c, "session", "error", "generic",
+						 "existing sessions that failed validation")
+		}
+
 		return rc;
 	}
 
@@ -4156,36 +4278,39 @@ static int oidc_check_mixed_userid_oauth(request_rec *r, oidc_cfg *c) {
 int oidc_check_user_id(request_rec *r) {
 
 	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	int rv = DECLINED;
+	const char *current_auth = NULL;
 
 	/* log some stuff about the incoming HTTP request */
 	oidc_debug(r, "incoming request: \"%s?%s\", ap_is_initial_req(r)=%d", r->parsed_uri.path, r->args,
 		   ap_is_initial_req(r));
 
 	/* see if any authentication has been defined at all */
-	const char *current_auth = ap_auth_type(r);
+	current_auth = ap_auth_type(r);
 	if (current_auth == NULL)
-		return DECLINED;
+		current_auth = "declined";
 
 	/* see if we've configured OpenID Connect user authentication for this request */
 	if (strcasecmp(current_auth, OIDC_AUTH_TYPE_OPENID_CONNECT) == 0) {
 
 		r->ap_auth_type = (char *)current_auth;
-		return oidc_check_userid_openidc(r, c);
-	}
+		rv = oidc_check_userid_openidc(r, c);
 
-	/* see if we've configured OAuth 2.0 access control for this request */
-	if (strcasecmp(current_auth, OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
+		/* see if we've configured OAuth 2.0 access control for this request */
+	} else if (strcasecmp(current_auth, OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
 
 		r->ap_auth_type = (char *)current_auth;
-		return oidc_oauth_check_userid(r, c, NULL);
+		rv = oidc_oauth_check_userid(r, c, NULL);
+
+		/* see if we've configured "mixed mode" for this request */
+	} else if (strcasecmp(current_auth, OIDC_AUTH_TYPE_OPENID_BOTH) == 0) {
+
+		rv = oidc_check_mixed_userid_oauth(r, c);
 	}
 
-	/* see if we've configured "mixed mode" for this request */
-	if (strcasecmp(current_auth, OIDC_AUTH_TYPE_OPENID_BOTH) == 0)
-		return oidc_check_mixed_userid_oauth(r, c);
+	OIDC_METRICS_COUNTER_ADD(r, c, "authtype", "handler", current_auth, "incoming requests");
 
-	/* this is not for us but for some other handler */
-	return DECLINED;
+	return rv;
 }
 
 /*
@@ -4445,8 +4570,15 @@ int oidc_content_handler(request_rec *r) {
 	apr_byte_t needs_save = FALSE;
 	oidc_session_t *session = NULL;
 
-	if (oidc_enabled(r) == FALSE)
+	if ((r->parsed_uri.path != NULL) && (c->metrics_path != NULL))
+		if (_oidc_strcmp(r->parsed_uri.path, c->metrics_path) == 0)
+			return oidc_metrics_handle_request(r);
+
+	if (oidc_enabled(r) == FALSE) {
+		OIDC_METRICS_COUNTER_ADD(r, c, "content", "request", "declined",
+					 "requests declined by the content handler")
 		return DECLINED;
+	}
 
 	if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c)) == TRUE) {
 
@@ -4454,6 +4586,9 @@ int oidc_content_handler(request_rec *r) {
 		rc = OK;
 
 		if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO)) {
+
+			OIDC_METRICS_COUNTER_ADD(r, c, "content", "request", "info",
+						 "info hook requests to the content handler")
 
 			/* see if a session was retained in the request state */
 			apr_pool_userdata_get((void **)&session, OIDC_USERDATA_SESSION, r->pool);
@@ -4476,20 +4611,35 @@ int oidc_content_handler(request_rec *r) {
 
 		} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
 
+			OIDC_METRICS_COUNTER_ADD(r, c, "content", "request", "jwks",
+						 "JWKs requests to the content handler")
+
 			/* handle JWKs request */
 			rc = oidc_handle_jwks(r, c);
+
+		} else {
+
+			OIDC_METRICS_COUNTER_ADD(r, c, "content", "request", "unknown",
+						 "unknown requests to the content handler")
 		}
 
 	} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL) {
+
+		OIDC_METRICS_COUNTER_ADD(r, c, "content", "request", "discovery",
+					 "discovery requests to the content handler")
 
 		/* discovery may result in a 200 HTML page or a redirect to an external URL */
 		rc = oidc_discovery(r, c);
 
 	} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_AUTHN) != NULL) {
 
+		OIDC_METRICS_COUNTER_ADD(r, c, "content", "request", "post-preserve",
+					 "POST-preservation requests to the content handler")
+
 		/* sending POST preserve */
 		rc = OK;
-	}
+
+	} /* else: an authenticated request for which content is produced downstream */
 
 	return rc;
 }

@@ -41,7 +41,12 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+// clang-format off
+
 #include "mod_auth_openidc.h"
+#include "metrics.h"
+
+// clang-format on
 
 #include <curl/curl.h>
 
@@ -1124,6 +1129,14 @@ static const char *oidc_set_info_hook_data(cmd_parms *cmd, void *m, const char *
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
+static const char *oidc_set_metrics_hook_data(cmd_parms *cmd, void *m, const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
+	if (cfg->metrics_hook_data == NULL)
+		cfg->metrics_hook_data = apr_hash_make(cmd->pool);
+	apr_hash_set(cfg->metrics_hook_data, arg, APR_HASH_KEY_STRING, arg);
+	return NULL;
+}
+
 static const char *oidc_set_filtered_claims(cmd_parms *cmd, void *m, const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
 	int offset = (int)(long)cmd->info;
@@ -1642,6 +1655,9 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->provider_metadata_refresh_interval = OIDC_DEFAULT_PROVIDER_METADATA_REFRESH_INTERVAL;
 
 	c->info_hook_data = NULL;
+	c->metrics_hook_data = NULL;
+	c->metrics_path = NULL;
+
 	c->black_listed_claims = NULL;
 	c->white_listed_claims = NULL;
 	c->filter_claims_expr = NULL;
@@ -1888,6 +1904,9 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 		: base->provider_metadata_refresh_interval;
 
 	c->info_hook_data = add->info_hook_data != NULL ? add->info_hook_data : base->info_hook_data;
+	c->metrics_hook_data = add->metrics_hook_data != NULL ? add->metrics_hook_data : base->metrics_hook_data;
+	c->metrics_path = add->metrics_path != NULL ? add->metrics_path : base->metrics_path;
+
 	c->black_listed_claims =
 	    add->black_listed_claims != NULL ? add->black_listed_claims : base->black_listed_claims;
 	c->white_listed_claims =
@@ -2439,6 +2458,11 @@ static apr_status_t oidc_cleanup_child(void *data) {
 				oidc_serror(sp, "oidc_cache_mutex_destroy on refresh mutex failed");
 			}
 		}
+		if (cfg->metrics_hook_data != NULL) {
+			if (oidc_metrics_cache_cleanup(sp) != APR_SUCCESS) {
+				oidc_serror(sp, "oidc_metrics_cache_cleanup failed");
+			}
+		}
 		sp = sp->next;
 	}
 
@@ -2548,6 +2572,10 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, se
 			if (oidc_cache_mutex_post_config(sp, cfg->refresh_mutex, "refresh") != TRUE)
 				return HTTP_INTERNAL_SERVER_ERROR;
 		}
+		if (cfg->metrics_hook_data != NULL) {
+			if (oidc_metrics_cache_post_config(s) != TRUE)
+				return HTTP_INTERNAL_SERVER_ERROR;
+		}
 		sp = sp->next;
 	}
 
@@ -2615,6 +2643,11 @@ static void oidc_child_init(apr_pool_t *p, server_rec *s) {
 		if (cfg->refresh_mutex != NULL) {
 			if (oidc_cache_mutex_child_init(p, sp, cfg->refresh_mutex) != APR_SUCCESS) {
 				oidc_serror(sp, "oidc_cache_mutex_child_init on refresh mutex failed");
+			}
+		}
+		if (cfg->metrics_hook_data != NULL) {
+			if (oidc_metrics_cache_child_init(p, s) != APR_SUCCESS) {
+				oidc_serror(sp, "oidc_metrics_cache_child_init failed");
 			}
 		}
 		sp = sp->next;
@@ -3365,6 +3398,16 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, info_hook_data),
 				RSRC_CONF,
 				"The data that will be returned from the info hook."),
+		AP_INIT_ITERATE(OIDCMetricsData,
+				oidc_set_metrics_hook_data,
+				(void *)APR_OFFSETOF(oidc_cfg, metrics_hook_data),
+				RSRC_CONF,
+				"The data that will be returned from the metrics hook."),
+		AP_INIT_TAKE1(OIDCMetricsPublish,
+				oidc_set_string_slot,
+				(void *)APR_OFFSETOF(oidc_cfg, metrics_path),
+				RSRC_CONF,
+				"Define the URL where the metrics will be published (e.g.: /metrics)"),
 		AP_INIT_ITERATE(OIDCBlackListedClaims,
 				oidc_set_filtered_claims,
 				(void *) APR_OFFSETOF(oidc_cfg, black_listed_claims),

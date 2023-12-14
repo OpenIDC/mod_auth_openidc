@@ -510,6 +510,8 @@ typedef struct oidc_cfg {
 	int provider_metadata_refresh_interval;
 
 	apr_hash_t *info_hook_data;
+	apr_hash_t *metrics_hook_data;
+	char *metrics_path;
 
 	apr_hash_t *black_listed_claims;
 	apr_hash_t *white_listed_claims;
@@ -839,6 +841,8 @@ int oidc_oauth_return_www_authenticate(request_rec *r, const char *error, const 
 #define OIDCRedisCacheServer "OIDCRedisCacheServer"
 #define OIDCCookiePath "OIDCCookiePath"
 #define OIDCInfoHook "OIDCInfoHook"
+#define OIDCMetricsData "OIDCMetricsData"
+#define OIDCMetricsPublish "OIDCMetricsPublish"
 #define OIDCWhiteListedClaims "OIDCWhiteListedClaims"
 #define OIDCCryptoPassphrase "OIDCCryptoPassphrase"
 

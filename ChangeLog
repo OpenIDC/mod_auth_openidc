@@ -1,3 +1,7 @@
+12/14/2023
+- add metrics collection capability, configured with OIDCMetricsData and retrieved through OIDCMetricsPublish
+- bump to 2.4.15rc8
+
 11/30/2023
 - fix SSL server certificate validation when revoking tokens
   apply `OIDCSSLValidateServer` setting rather than `OIDCOAuthSSLValidateServer` in `oidc_revoke_tokens`

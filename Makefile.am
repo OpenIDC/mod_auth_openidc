@@ -7,6 +7,7 @@ libauth_openidc_la_SOURCES = \
 	src/cache/file.c \
 	src/cache/shm.c \
 	src/cache/common.c \
+	src/metrics.c \
 	src/oauth.c \
 	src/proto.c \
 	src/config.c \
@@ -56,6 +57,7 @@ noinst_HEADERS = \
 	src/const.h \
 	src/jose.h \
 	src/parse.h \
+	src/metrics.h \
 	src/cache/cache.h \
 	src/pcre_subst.h
 
