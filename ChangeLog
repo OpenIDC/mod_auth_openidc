@@ -1,3 +1,7 @@
+12/15/2023
+- add (and fix) more metrics, including provider requests, authorization and cache
+- bump to 2.4.15rc9
+
 12/14/2023
 - add metrics collection capability, configured with OIDCMetricsData and retrieved through OIDCMetricsPublish
 - bump to 2.4.15rc8

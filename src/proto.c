@@ -43,6 +43,8 @@
 
 #include "mod_auth_openidc.h"
 
+#include "metrics.h"
+
 #include <openssl/opensslconf.h>
 #include <openssl/opensslv.h>
 
@@ -2069,24 +2071,32 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg, oidc_provi
 
 	oidc_debug(r, "enter, endpoint=%s, access_token=%s", provider->userinfo_endpoint_url, access_token);
 
+	OIDC_METRICS_TIMING_START(r, cfg);
+
 	/* get the JSON response */
 	if (provider->userinfo_token_method == OIDC_USER_INFO_TOKEN_METHOD_HEADER) {
 		if (oidc_util_http_get(r, provider->userinfo_endpoint_url, NULL, NULL, access_token,
 				       provider->ssl_validate_server, response, &cfg->http_timeout_long,
-				       &cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL, NULL, NULL) == FALSE)
+				       &cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL, NULL, NULL) == FALSE) {
+			OIDC_METRICS_COUNTER_INC(r, cfg, OM_PROVIDER_USERINFO_ERROR);
 			return FALSE;
+		}
 	} else if (provider->userinfo_token_method == OIDC_USER_INFO_TOKEN_METHOD_POST) {
 		apr_table_t *params = apr_table_make(r->pool, 4);
 		apr_table_setn(params, OIDC_PROTO_ACCESS_TOKEN, access_token);
 		if (oidc_util_http_post_form(r, provider->userinfo_endpoint_url, params, NULL, NULL,
 					     provider->ssl_validate_server, response, &cfg->http_timeout_long,
 					     &cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL, NULL,
-					     NULL) == FALSE)
+					     NULL) == FALSE) {
+			OIDC_METRICS_COUNTER_INC(r, cfg, OM_PROVIDER_USERINFO_ERROR);
 			return FALSE;
+		}
 	} else {
 		oidc_error(r, "unsupported userinfo token presentation method: %d", provider->userinfo_token_method);
 		return FALSE;
 	}
+
+	OIDC_METRICS_TIMING_ADD(r, cfg, OM_PROVIDER_USERINFO);
 
 	json_t *claims = NULL;
 	if (oidc_user_info_response_validate(r, cfg, provider, response, &claims, userinfo_jwt) == FALSE)
@@ -2643,11 +2653,16 @@ static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r, 
 
 	const char *state = oidc_proto_state_get_state(proto_state);
 
+	OIDC_METRICS_TIMING_START(r, c);
+
 	if (oidc_proto_resolve_code(r, c, provider, apr_table_get(params, OIDC_PROTO_CODE), code_verifier, &id_token,
 				    &access_token, &token_type, &expires_in, &refresh_token, state) == FALSE) {
 		oidc_error(r, "failed to resolve the code");
+		OIDC_METRICS_COUNTER_INC(r, c, OM_PROVIDER_TOKEN_ERROR);
 		return FALSE;
 	}
+
+	OIDC_METRICS_TIMING_ADD(r, c, OM_PROVIDER_TOKEN);
 
 	if (oidc_proto_validate_code_response(r, response_type, id_token, access_token, token_type) == FALSE) {
 		oidc_error(r, "code response validation failed");

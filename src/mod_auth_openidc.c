@@ -1064,14 +1064,19 @@ static apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg *c, oidc_ses
 	oidc_debug(r, "refreshing refresh_token: %s", refresh_token);
 	// don't unlock after this since other processes may be waiting for the lock to refresh the same refresh token
 
+	OIDC_METRICS_TIMING_START(r, c);
+
 	/* refresh the tokens by calling the token endpoint */
 	if (oidc_proto_refresh_request(r, c, provider, refresh_token, &s_id_token, &s_access_token, &s_token_type,
 				       &expires_in, &s_refresh_token) == FALSE) {
+		OIDC_METRICS_COUNTER_INC(r, c, OM_PROVIDER_REFRESH_ERROR);
 		oidc_error(r, "access_token could not be refreshed with refresh_token: %s", refresh_token);
 		if (*error_code != OIDC_REFRESH_ERROR_PARALLEL_REFRESH)
 			*error_code = OIDC_REFRESH_ERROR_GENERAL;
 		goto end;
 	}
+
+	OIDC_METRICS_TIMING_ADD(r, c, OM_PROVIDER_REFRESH);
 
 	/* store the new access_token in the session and discard the old one */
 	oidc_session_set_access_token(r, session, s_access_token);
@@ -4327,6 +4332,7 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
 	if (apr_strnatcasecmp((const char *)ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
+		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ERROR_OAUTH20);
 		oidc_debug(r, "setting environment variable %s to \"%s\" for usage in mod_headers",
 			   OIDC_OAUTH_BEARER_SCOPE_ERROR, OIDC_OAUTH_BEARER_SCOPE_ERROR_VALUE);
 		apr_table_set(r->subprocess_env, OIDC_OAUTH_BEARER_SCOPE_ERROR, OIDC_OAUTH_BEARER_SCOPE_ERROR_VALUE);
@@ -4337,12 +4343,14 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 	switch (oidc_dir_cfg_unautz_action(r)) {
 	case OIDC_UNAUTZ_RETURN403:
 	case OIDC_UNAUTZ_RETURN401:
+		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_401);
 		oidc_util_html_send_error(r, c->error_template, "Authorization Error", oidc_dir_cfg_unauthz_arg(r),
 					  HTTP_UNAUTHORIZED);
 		if (c->error_template)
 			r->header_only = 1;
 		return AUTHZ_DENIED;
 	case OIDC_UNAUTZ_RETURN302:
+		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_302);
 		html_head = apr_psprintf(r->pool, "<meta http-equiv=\"refresh\" content=\"0; url=%s\">",
 					 oidc_dir_cfg_unauthz_arg(r));
 		oidc_util_html_send(r, "Authorization Error Redirect", html_head, NULL, NULL, HTTP_UNAUTHORIZED);
@@ -4354,8 +4362,13 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 		 * complete an authentication round trip to the provider, we
 		 * won't redirect the user and thus avoid creating a state cookie
 		 */
-		if (oidc_is_auth_capable_request(r) == FALSE)
+		if (oidc_is_auth_capable_request(r) == FALSE) {
+			OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_401);
 			return AUTHZ_DENIED;
+		}
+
+		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_AUTH);
+
 		break;
 	}
 
@@ -4440,6 +4453,7 @@ static int oidc_handle_unauthorized_user22(request_rec *r) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
 	if (apr_strnatcasecmp((const char *)ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
+		OIDC_COUNTER_INC(r, cfg, OM_AUTHZ_ERROR_OAUTH20);
 		oidc_oauth_return_www_authenticate(r, "insufficient_scope",
 						   "Different scope(s) or other claims required");
 		return HTTP_UNAUTHORIZED;
@@ -4448,16 +4462,19 @@ static int oidc_handle_unauthorized_user22(request_rec *r) {
 	/* see if we've configured OIDCUnAutzAction for this path */
 	switch (oidc_dir_cfg_unautz_action(r)) {
 	case OIDC_UNAUTZ_RETURN403:
+		OIDC_COUNTER_INC(r, cfg, OM_AUTHZ_ACTION_403);
 		if (oidc_dir_cfg_unauthz_arg(r))
 			oidc_util_html_send(r, "Authorization Error", NULL, NULL, oidc_dir_cfg_unauthz_arg(r),
 					    HTTP_FORBIDDEN);
 		return HTTP_FORBIDDEN;
 	case OIDC_UNAUTZ_RETURN401:
+		OIDC_COUNTER_INC(r, cfg, OM_AUTHZ_ACTION_401);
 		if (oidc_dir_cfg_unauthz_arg(r))
 			oidc_util_html_send(r, "Authorization Error", NULL, NULL, oidc_dir_cfg_unauthz_arg(r),
 					    HTTP_UNAUTHORIZED);
 		return HTTP_UNAUTHORIZED;
 	case OIDC_UNAUTZ_RETURN302:
+		OIDC_COUNTER_INC(r, cfg, OM_AUTHZ_ACTION_302);
 		oidc_util_hdr_out_location_set(r, oidc_dir_cfg_unauthz_arg(r));
 		return HTTP_MOVED_TEMPORARILY;
 	case OIDC_UNAUTZ_AUTHENTICATE:
@@ -4466,8 +4483,12 @@ static int oidc_handle_unauthorized_user22(request_rec *r) {
 		 * won't redirect the user and thus avoid creating a state cookie
 		 * for a non-browser (= Javascript) call that will never return from the OP
 		 */
-		if (oidc_is_auth_capable_request(r) == FALSE)
+		if (oidc_is_auth_capable_request(r) == FALSE) {
+			OIDC_COUNTER_INC(r, c, OM_AUTHZ_ACTION_401);
 			return HTTP_UNAUTHORIZED;
+		}
+
+		OIDC_COUNTER_INC(r, cfg, OM_AUTHZ_ACTION_AUTH);
 	}
 
 	return oidc_authenticate_user(r, c, NULL, oidc_get_current_url(r, c->x_forwarded_headers), NULL, NULL, NULL,

@@ -49,6 +49,8 @@
 
 #include "mod_auth_openidc.h"
 
+#include "metrics.h"
+
 #ifdef AP_NEED_SET_MUTEX_PERMS
 #include "unixd.h"
 #endif
@@ -279,11 +281,15 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, 
 		s_key = oidc_cache_get_hashed_key(r, s_secret, key);
 	}
 
+	OIDC_METRICS_TIMING_START(r, cfg);
+
 	/* get the value from the cache */
 	if (cfg->cache->get(r, section, s_key, &cache_value) == FALSE) {
 		rc = FALSE;
 		goto out;
 	}
+
+	OIDC_METRICS_TIMING_ADD(r, cfg, OM_CACHE_READ);
 
 	/* see if it is any good */
 	if ((cache_value == NULL) && (encrypted == 1) && (cfg->crypto_passphrase.secret2 != NULL)) {
@@ -311,14 +317,15 @@ out:
 	/* log the result */
 	msg = apr_psprintf(r->pool, "from %s cache backend for %skey %s", cfg->cache->name,
 			   encrypted ? "encrypted " : "", key);
-	if (rc == TRUE)
+	if (rc == TRUE) {
 		if (*value != NULL)
 			oidc_debug(r, "cache hit: return %d bytes %s", *value ? (int)_oidc_strlen(*value) : 0, msg);
 		else
 			oidc_debug(r, "cache miss %s", msg);
-	else
+	} else {
+		OIDC_METRICS_COUNTER_INC(r, cfg, OM_CACHE_ERROR);
 		oidc_warn(r, "error retrieving value %s", msg);
-
+	}
 	return rc;
 }
 
@@ -356,18 +363,23 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key, 
 		}
 	}
 
+	OIDC_METRICS_TIMING_START(r, cfg);
+
 	/* store the resulting value in the cache */
 	rc = cfg->cache->set(r, section, key, value, expiry);
+
+	OIDC_METRICS_TIMING_ADD(r, cfg, OM_CACHE_WRITE);
 
 out:
 	/* log the result */
 	msg =
 	    apr_psprintf(r->pool, "%d bytes in %s cache backend for %skey %s", (value ? (int)_oidc_strlen(value) : 0),
 			 (cfg->cache->name ? cfg->cache->name : ""), (encrypted ? "encrypted " : ""), (key ? key : ""));
-	if (rc == TRUE)
+	if (rc == TRUE) {
 		oidc_debug(r, "successfully stored %s", msg);
-	else
+	} else {
+		OIDC_METRICS_COUNTER_INC(r, cfg, OM_CACHE_ERROR);
 		oidc_warn(r, "could NOT store %s", msg);
-
+	}
 	return rc;
 }

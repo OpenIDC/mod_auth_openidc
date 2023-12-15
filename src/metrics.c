@@ -48,17 +48,36 @@
 
 #define OM_CLASS_AUTH_TYPE    "authtype"
 #define OM_CLASS_AUTHN        "authn"
+#define OM_CLASS_AUTHZ        "authz"
+#define OM_CLASS_REQUESTS     "requests"
 #define OM_CLASS_SESSION      "session"
+#define OM_CLASS_CACHE        "cache"
 #define OM_CLASS_CONTENT      "content"
 #define OM_CLASS_REDIRECT_URI "redirect_uri"
 
 const oidc_metrics_timing_info_t _oidc_metrics_timings_info[] = {
+
     { OM_AUTHN_REQUEST, OM_CLASS_AUTHN, "request",
         "authentication requests" },
     { OM_AUTHN_RESPONSE, OM_CLASS_AUTHN, "response",
 	    "authentication responses" },
     { OM_SESSION_VALID, OM_CLASS_SESSION, "valid",
         "successfully validated existing sessions" },
+
+    { OM_PROVIDER_METADATA, OM_CLASS_REQUESTS, "metadata",
+        "provider discovery document requests" },
+    { OM_PROVIDER_TOKEN, OM_CLASS_REQUESTS, "token",
+        "provider token requests" },
+    { OM_PROVIDER_REFRESH, OM_CLASS_REQUESTS, "refresh",
+        "provider refresh token requests" },
+    { OM_PROVIDER_USERINFO, OM_CLASS_REQUESTS, "userinfo",
+        "provider userinfo requests" },
+
+    { OM_CACHE_READ, OM_CLASS_CACHE, "read",
+        "cache read requests" },
+    { OM_CACHE_WRITE, OM_CLASS_CACHE, "write",
+        "cache write requests" },
+
 };
 
 const oidc_metrics_counter_info_t _oidc_metrics_counters_info[] = {
@@ -72,19 +91,8 @@ const oidc_metrics_counter_info_t _oidc_metrics_counters_info[] = {
     { OM_AUTHTYPE_DECLINED,       OM_CLASS_AUTH_TYPE, "handler", "declined",
         "incoming requests" },
 
-    { OM_SESSION_ERROR_COOKIE_DOMAIN,        OM_CLASS_SESSION, "error", "cookie-domain",
-         "cookie domain validation errors for existing sessions" },
-    { OM_SESSION_ERROR_EXPIRED,              OM_CLASS_SESSION, "error", "expired",
-        "sessions that exceeded the maximum duration" },
-    { OM_SESSION_ERROR_REFRESH_ACCESS_TOKEN, OM_CLASS_SESSION, "error", "refresh-access-token",
-        "errors refreshing the access token before expiry in existing sessions" },
-    { OM_SESSION_ERROR_REFRESH_USERINFO,     OM_CLASS_SESSION, "error", "refresh-user-info",
-        "errors refreshing claims from the userinfo endpoint in existing sessions" },
-    { OM_SESSION_ERROR_GENERAL,             OM_CLASS_SESSION, "error", "general",
-        "existing sessions that failed validation" },
-
-    { OM_AUTHN_REQUEST_ERROR_URL,            OM_CLASS_AUTHN, "request.error", "url",
-        "errors matching the incoming request URL against the configuration" },
+	{ OM_AUTHN_REQUEST_ERROR_URL, OM_CLASS_AUTHN, "request.error", "url",
+		"errors matching the incoming request URL against the configuration" },
 
     { OM_AUTHN_RESPONSE_ERROR_STATE_MISMATCH, OM_CLASS_AUTHN, "response.error", "state-mismatch",
         "state mismatch errors in authentication responses" },
@@ -96,6 +104,42 @@ const oidc_metrics_counter_info_t _oidc_metrics_counters_info[] = {
         "errors handling authentication responses" },
     { OM_AUTHN_RESPONSE_ERROR_REMOTE_USER,    OM_CLASS_AUTHN, "response.error", "remote-user",
         "errors identifying the remote user based on provided claims" },
+
+    { OM_AUTHZ_ERROR_GENERAL, OM_CLASS_AUTHZ, "error", "general",
+        "authorization errors" },
+    { OM_AUTHZ_ACTION_AUTH, OM_CLASS_AUTHZ, "action", "auth",
+        "step-up authentication requests" },
+	{ OM_AUTHZ_ACTION_401, OM_CLASS_AUTHZ, "action", "401",
+        "401 authorization errors" },
+	{ OM_AUTHZ_ACTION_403, OM_CLASS_AUTHZ, "action", "403",
+        "403 authorization errors" },
+    { OM_AUTHZ_ACTION_302, OM_CLASS_AUTHZ, "action", "302",
+        "302 authorization errors" },
+    { OM_AUTHZ_ERROR_OAUTH20, OM_CLASS_AUTHZ, "error", "oauth20",
+        "AuthType oauth20 authorization errors 401" },
+
+    { OM_PROVIDER_METADATA_ERROR, OM_CLASS_REQUESTS, "provider.metadata", "error"
+        "errors retrieving provider discovery document" },
+    { OM_PROVIDER_TOKEN_ERROR, OM_CLASS_REQUESTS, "provider.token", "error",
+        "errors making a token request to the provider" },
+    { OM_PROVIDER_REFRESH_ERROR, OM_CLASS_REQUESTS, "provider.refresh", "error",
+        "errors refreshing the access token" },
+    { OM_PROVIDER_USERINFO_ERROR, OM_CLASS_REQUESTS, "provider.userinfo", "error",
+        "errors calling the provider userinfo endpoint" },
+
+    { OM_SESSION_ERROR_COOKIE_DOMAIN,        OM_CLASS_SESSION, "error", "cookie-domain",
+         "cookie domain validation errors for existing sessions" },
+    { OM_SESSION_ERROR_EXPIRED,              OM_CLASS_SESSION, "error", "expired",
+        "sessions that exceeded the maximum duration" },
+    { OM_SESSION_ERROR_REFRESH_ACCESS_TOKEN, OM_CLASS_SESSION, "error", "refresh-access-token",
+        "errors refreshing the access token before expiry in existing sessions" },
+    { OM_SESSION_ERROR_REFRESH_USERINFO,     OM_CLASS_SESSION, "error", "refresh-user-info",
+        "errors refreshing claims from the userinfo endpoint in existing sessions" },
+    { OM_SESSION_ERROR_GENERAL,             OM_CLASS_SESSION, "error", "general",
+        "existing sessions that failed validation" },
+
+    { OM_CACHE_ERROR, OM_CLASS_CACHE, "cache", "error",
+        "cache read/write errors" },
 
     { OM_REDIRECT_URI_AUTHN_RESPONSE_REDIRECT, OM_CLASS_REDIRECT_URI, "authn.response", "redirect",
         "authentication responses received in a redirect", },
@@ -138,6 +182,7 @@ const oidc_metrics_counter_info_t _oidc_metrics_counters_info[] = {
         "HTTP POST preservation requests to the content handler" },
     { OM_CONTENT_REQUEST_UNKNOWN,       OM_CLASS_CONTENT, "request", "unknown",
         "unknown requests to the content handler" },
+
 };
 
 // clang-format on

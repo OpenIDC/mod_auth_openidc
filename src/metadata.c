@@ -45,6 +45,8 @@
 
 #include "mod_auth_openidc.h"
 
+#include "metrics.h"
+
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 #define OIDC_METADATA_SUFFIX_PROVIDER "provider"
@@ -663,11 +665,17 @@ apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg, const oidc_jwks
 apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg, const char *issuer, const char *url,
 					   json_t **j_metadata, char **response) {
 
+	OIDC_METRICS_TIMING_START(r, cfg);
+
 	/* get provider metadata from the specified URL with the specified parameters */
 	if (oidc_util_http_get(r, url, NULL, NULL, NULL, cfg->provider.ssl_validate_server, response,
 			       &cfg->http_timeout_short, &cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL, NULL,
-			       NULL) == FALSE)
+			       NULL) == FALSE) {
+		OIDC_METRICS_COUNTER_INC(r, cfg, OM_PROVIDER_METADATA_ERROR);
 		return FALSE;
+	}
+
+	OIDC_METRICS_TIMING_ADD(r, cfg, OM_PROVIDER_METADATA);
 
 	/* decode and see if it is not an error response somehow */
 	if (oidc_util_decode_json_and_check_error(r, *response, j_metadata) == FALSE) {
