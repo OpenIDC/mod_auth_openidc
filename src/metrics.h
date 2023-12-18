@@ -69,8 +69,8 @@ typedef enum {
 } oidc_metrics_timing_type_t;
 
 typedef struct oidc_metrics_timing_info_t {
-	char *name;
-	char *spec;
+	char *class_name;
+	char *label_name;
 	char *desc;
 } oidc_metrics_timing_info_t;
 
@@ -88,7 +88,7 @@ void oidc_metrics_timing_add(request_rec *r, oidc_metrics_timing_type_t type, ap
 
 #define OIDC_METRICS_TIMING_ADD(r, cfg, type)                                                                          \
 	if (cfg->metrics_hook_data != NULL) {                                                                          \
-		if (apr_hash_get(cfg->metrics_hook_data, _oidc_metrics_timings_info[type].name,                        \
+		if (apr_hash_get(cfg->metrics_hook_data, _oidc_metrics_timings_info[type].class_name,                  \
 				 APR_HASH_KEY_STRING) != NULL) {                                                       \
 			oidc_metrics_timing_add(r, type, apr_time_now() - _oidc_metrics_tstart);                       \
 		}                                                                                                      \
@@ -176,7 +176,7 @@ typedef enum {
 } oidc_metrics_counter_type_t;
 
 typedef struct oidc_metrics_counter_info_t {
-	char *name;
+	char *class_name;
 	char *label_name;
 	char *label_value;
 	char *desc;
@@ -188,7 +188,7 @@ void oidc_metrics_counter_inc(request_rec *r, oidc_metrics_counter_type_t type, 
 
 #define OIDC_METRICS_COUNTER_INC_SPEC(r, cfg, type, spec)                                                              \
 	if (cfg->metrics_hook_data != NULL)                                                                            \
-		if (apr_hash_get(cfg->metrics_hook_data, _oidc_metrics_counters_info[type].name,                       \
+		if (apr_hash_get(cfg->metrics_hook_data, _oidc_metrics_counters_info[type].class_name,                 \
 				 APR_HASH_KEY_STRING) != NULL)                                                         \
 			oidc_metrics_counter_inc(r, type, spec);
 

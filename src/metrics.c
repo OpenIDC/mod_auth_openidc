@@ -376,6 +376,16 @@ static json_t *oidc_metrics_server_get(json_t *json, const char *name) {
 	}
 	return j_server;
 }
+
+static inline char *oidc_metrics_hash_key2s(apr_pool_t *pool, const char *hkey, apr_ssize_t klen) {
+	int i = 0;
+	char *key = "";
+	for (i = 0; i < klen; i++)
+		key = apr_psprintf(pool, "%s%02X", key, hkey[i]);
+	key[klen] = '\0';
+	return key;
+}
+
 /*
  * flush the locally gathered metrics data into the global data kept in shared memory
  */
@@ -384,6 +394,8 @@ static void oidc_metrics_store(server_rec *s) {
 	json_t *json = NULL, *j_server = NULL, *j_value = NULL, *j_counters = NULL, *j_timings = NULL, *j_member = NULL;
 	apr_hash_index_t *hi1 = NULL, *hi2 = NULL;
 	const char *name = NULL, *key = NULL;
+	const void *hkey = NULL;
+	apr_ssize_t klen = 0;
 	apr_hash_t *server_hash = NULL;
 	oidc_metrics_timing_t *timing = NULL;
 	oidc_metrics_counter_t *counter = NULL;
@@ -410,7 +422,9 @@ static void oidc_metrics_store(server_rec *s) {
 
 		/* loop over the individual metrics */
 		for (hi2 = apr_hash_first(s->process->pool, server_hash); hi2; hi2 = apr_hash_next(hi2)) {
-			apr_hash_this(hi2, (const void **)&key, NULL, (void **)&counter);
+			apr_hash_this(hi2, &hkey, &klen, (void **)&counter);
+
+			key = oidc_metrics_hash_key2s(s->process->pool, hkey, klen);
 
 			/* get or create the corresponding metric entry in the global metrics */
 			j_value = json_object_get(j_counters, key);
@@ -439,7 +453,9 @@ static void oidc_metrics_store(server_rec *s) {
 
 		/* loop over the individual metrics */
 		for (hi2 = apr_hash_first(s->process->pool, server_hash); hi2; hi2 = apr_hash_next(hi2)) {
-			apr_hash_this(hi2, (const void **)&key, NULL, (void **)&timing);
+			apr_hash_this(hi2, &hkey, &klen, (void **)&timing);
+
+			key = oidc_metrics_hash_key2s(s->process->pool, hkey, klen);
 
 			/* get or create the corresponding metric entry in the global metrics */
 			j_value = json_object_get(j_timings, key);
@@ -477,6 +493,33 @@ unsigned int oidc_metric_random_int(unsigned int mod) {
 	apr_generate_random_bytes((unsigned char *)&v, sizeof(v));
 	return v % mod;
 }
+/*
+ * reset the local hashtables; no apr_hash_clear for performance reasons in oidc_metrics_counter_inc and
+ * oidc_metrics_timer_add since memory allocation for a counter/timing occurs only once per metric now;
+ * assumes the hashtables are locked
+ */
+static void oidc_metrics_reset_hashtables() {
+	apr_hash_index_t *hi1 = NULL, *hi2 = NULL;
+	apr_hash_t *counters = NULL, *timings = NULL;
+	oidc_metrics_counter_t *counter = NULL;
+	oidc_metrics_timing_t *timing = NULL;
+	for (hi1 = apr_hash_first(NULL, _oidc_metrics.counters); hi1; hi1 = apr_hash_next(hi1)) {
+		apr_hash_this(hi1, NULL, NULL, (void **)&counters);
+		for (hi2 = apr_hash_first(NULL, counters); hi2; hi2 = apr_hash_next(hi2)) {
+			apr_hash_this(hi2, NULL, NULL, (void **)&counter);
+			counter->count = 0;
+		}
+	}
+	for (hi1 = apr_hash_first(NULL, _oidc_metrics.timings); hi1; hi1 = apr_hash_next(hi1)) {
+		apr_hash_this(hi1, NULL, NULL, (void **)&timings);
+		for (hi2 = apr_hash_first(NULL, timings); hi2; hi2 = apr_hash_next(hi2)) {
+			apr_hash_this(hi2, NULL, NULL, (void **)&timing);
+			timing->count = 0;
+			timing->sum = 0;
+			_oidc_memset(timing->buckets, 0, OIDC_METRICS_BUCKET_NUM * sizeof(json_int_t));
+		}
+	}
+}
 
 /*
  * thread that periodically writes the local data into the shared memory
@@ -500,8 +543,7 @@ static void *oidc_metrics_thread_run(apr_thread_t *thread, void *data) {
 		oidc_metrics_store(s);
 
 		/* reset the local hashtables */
-		apr_hash_clear(_oidc_metrics.counters);
-		apr_hash_clear(_oidc_metrics.timings);
+		oidc_metrics_reset_hashtables();
 
 		/* unlock the mutex that protects the locally cached metrics */
 		oidc_cache_mutex_unlock(s->process->pool, s, _oidc_metrics_process_mutex);
@@ -650,17 +692,20 @@ static inline apr_hash_t *oidc_metrics_server_hash(request_rec *r, apr_hash_t *t
  * retrieve or create a local hashtable for the specified key
  * NB: assumes local hashtable has been locked
  */
-static inline void *oidc_metrics_get(request_rec *r, const char *key, apr_hash_t *table, size_t size) {
-	void *result = NULL;
+static inline void *oidc_metrics_get(request_rec *r, const void *key, apr_ssize_t klen, apr_hash_t *table,
+				     size_t size) {
+	void *pkey = NULL, *result = NULL;
 	apr_hash_t *server_hash = oidc_metrics_server_hash(r, table);
 
 	/* get the entry to the specified metric */
-	result = apr_hash_get(server_hash, key, APR_HASH_KEY_STRING);
+	result = apr_hash_get(server_hash, key, klen);
 	if (result == NULL) {
-		/* newly create it with the passed value */
+		/* allocate and copy the key in the server process pool */
+		pkey = apr_palloc(r->server->process->pool, klen);
+		_oidc_memcpy(pkey, key, klen);
+		/* allocate the counter/timing structure in the process pool */
 		result = apr_pcalloc(r->server->process->pool, size);
-		// NB: allocate the key in the process pool
-		apr_hash_set(server_hash, apr_pstrdup(r->server->process->pool, key), APR_HASH_KEY_STRING, result);
+		apr_hash_set(server_hash, pkey, klen, result);
 	}
 
 	return result;
@@ -671,33 +716,35 @@ static inline void *oidc_metrics_get(request_rec *r, const char *key, apr_hash_t
  */
 void oidc_metrics_counter_inc(request_rec *r, oidc_metrics_counter_type_t type, const char *spec) {
 	oidc_metrics_counter_t *counter = NULL;
-	char *key = NULL;
+	const void *key = NULL;
+	apr_ssize_t klen = 0;
 
 	/* lock the local metrics cache hashtable */
 	oidc_cache_mutex_lock(r->pool, r->server, _oidc_metrics_process_mutex);
 
 	/* obtain or create the entry for the specified key */
-	key = apr_psprintf(r->server->process->pool, "%s", _oidc_metrics_counters_info[type].name);
-	if ((_oidc_metrics_counters_info[type].label_name) &&
-	    (_oidc_strcmp(_oidc_metrics_counters_info[type].label_name, "") != 0)) {
-		key =
-		    apr_psprintf(r->server->process->pool, "%s.%s", key, _oidc_metrics_counters_info[type].label_name);
-		if ((_oidc_metrics_counters_info[type].label_value) &&
-		    (_oidc_strcmp(_oidc_metrics_counters_info[type].label_value, "") != 0)) {
-			key = apr_psprintf(r->server->process->pool, "%s.%s", key,
-					   _oidc_metrics_counters_info[type].label_value);
-		}
+	if ((spec != NULL) && (_oidc_strcmp(spec, "") != 0)) {
+		key = apr_psprintf(r->server->process->pool, "%d.%s", type, spec);
+		klen = _oidc_strlen(key);
+	} else {
+		key = &type;
+		klen = sizeof(oidc_metrics_timing_type_t);
 	}
-	if ((spec != NULL) && (_oidc_strcmp(spec, "") != 0))
-		key = apr_psprintf(r->server->process->pool, "%s.%s", key, spec);
 
-	counter =
-	    (oidc_metrics_counter_t *)oidc_metrics_get(r, key, _oidc_metrics.counters, sizeof(oidc_metrics_counter_t));
-	counter->spec = spec ? apr_pstrdup(r->server->process->pool, spec) : NULL;
-	counter->type = type;
+	counter = (oidc_metrics_counter_t *)oidc_metrics_get(r, key, klen, _oidc_metrics.counters,
+							     sizeof(oidc_metrics_counter_t));
 
-	if (_is_no_overflow(r->server, counter->count, 1))
-		counter->count++;
+	/* performance */
+	if (counter->count <= 0) {
+		// new counter was created just now or reset earlier
+		counter->spec = spec ? apr_pstrdup(r->server->process->pool, spec) : NULL;
+		counter->type = type;
+		counter->count = 1;
+	} else {
+		// increase after checking possible overflow
+		if (_is_no_overflow(r->server, counter->count, 1))
+			counter->count++;
+	}
 
 	/* unlock the local metrics cache hashtable */
 	oidc_cache_mutex_unlock(r->pool, r->server, _oidc_metrics_process_mutex);
@@ -710,12 +757,11 @@ void oidc_metrics_timing_add(request_rec *r, oidc_metrics_timing_type_t type, ap
 	oidc_metrics_timing_t *timing = NULL;
 	int i = 0;
 
-	const char *key = apr_psprintf(r->pool, "%s.%s", _oidc_metrics_timings_info[type].name,
-				       _oidc_metrics_timings_info[type].spec);
-
 	/* TODO: how can this happen? */
 	if (elapsed < 0) {
-		oidc_warn(r, "discarding metrics timing %s: elapsed (%" APR_TIME_T_FMT ") < 0", key, elapsed);
+		oidc_warn(r, "discarding metrics timing [%s.%s]: elapsed (%" APR_TIME_T_FMT ") < 0",
+			  _oidc_metrics_timings_info[type].class_name, _oidc_metrics_timings_info[type].label_name,
+			  elapsed);
 		return;
 	}
 
@@ -723,15 +769,28 @@ void oidc_metrics_timing_add(request_rec *r, oidc_metrics_timing_type_t type, ap
 	oidc_cache_mutex_lock(r->pool, r->server, _oidc_metrics_process_mutex);
 
 	/* obtain or create the entry for the specified key */
-	timing = oidc_metrics_get(r, key, _oidc_metrics.timings, sizeof(oidc_metrics_timing_t));
-	timing->type = type;
+	timing = oidc_metrics_get(r, &type, sizeof(oidc_metrics_timing_type_t), _oidc_metrics.timings,
+				  sizeof(oidc_metrics_timing_t));
 
-	if (_is_no_overflow(r->server, timing->sum, elapsed)) {
+	/* performance */
+	if (timing->count <= 0) {
+		// new timing was created just now or reset earlier
 		for (i = 0; i < OIDC_METRICS_BUCKET_NUM; i++)
 			if ((elapsed < _oidc_metric_buckets[i].threshold) || (_oidc_metric_buckets[i].threshold == 0))
-				timing->buckets[i]++;
-		timing->sum += elapsed;
-		timing->count++;
+				timing->buckets[i] = 1;
+		timing->sum = elapsed;
+		timing->count = 1;
+		timing->type = type;
+	} else {
+		// increase after checking possible overflow
+		if (_is_no_overflow(r->server, timing->sum, elapsed)) {
+			for (i = 0; i < OIDC_METRICS_BUCKET_NUM; i++)
+				if ((elapsed < _oidc_metric_buckets[i].threshold) ||
+				    (_oidc_metric_buckets[i].threshold == 0))
+					timing->buckets[i]++;
+			timing->sum += elapsed;
+			timing->count++;
+		}
 	}
 
 	/* unlock the local metrics cache hashtable */
@@ -742,14 +801,30 @@ void oidc_metrics_timing_add(request_rec *r, oidc_metrics_timing_type_t type, ap
  * representation handlers
  */
 
+static inline char *oidc_metrics_counter_type2s(apr_pool_t *pool, oidc_metrics_counter_type_t type, json_t *j_spec) {
+	char *s_key =
+	    apr_psprintf(pool, "%s.%s.%s", _oidc_metrics_counters_info[type].class_name,
+			 _oidc_metrics_counters_info[type].label_name, _oidc_metrics_counters_info[type].label_value);
+	if (j_spec != NULL)
+		s_key = apr_psprintf(pool, "%s.%s", s_key, json_string_value(j_spec));
+	return s_key;
+}
+
+static inline char *oidc_metrics_timing_type2s(apr_pool_t *pool, oidc_metrics_timing_type_t type) {
+	return apr_psprintf(pool, "%s.%s", _oidc_metrics_timings_info[type].class_name,
+			    _oidc_metrics_timings_info[type].label_name);
+}
+
 /*
  * JSON with extended descriptions/names
  */
 static int oidc_metrics_handle_json(request_rec *r, char *s_json) {
 
 	json_t *json = NULL, *j_server = NULL, *j_timings, *j_counters, *j_timing = NULL, *j_counter = NULL;
-	const char *s_server = NULL, *s_key = NULL;
+	json_t *o_json = NULL, *o_server = NULL, *o_array = NULL, *o_counter = NULL, *o_timing = NULL;
+	const char *s_server = NULL;
 	json_int_t type = 0;
+	char *str = NULL;
 	json_error_t json_error;
 
 	/* parse the metrics string to JSON */
@@ -760,55 +835,68 @@ static int oidc_metrics_handle_json(request_rec *r, char *s_json) {
 	if (json == NULL)
 		goto end;
 
+	o_json = json_object();
+
 	void *iter1 = json_object_iter(json);
 	while (iter1) {
 		s_server = json_object_iter_key(iter1);
 		j_server = json_object_iter_value(iter1);
 
+		o_server = json_object();
+		json_object_set_new(o_json, s_server, o_server);
+
 		j_counters = json_object_get(j_server, OIDC_METRICS_COUNTERS);
+		o_array = json_array();
+		json_object_set_new(o_server, OIDC_METRICS_COUNTERS, o_array);
 
 		void *iter2 = json_object_iter(j_counters);
 		while (iter2) {
-			s_key = json_object_iter_key(iter2);
 			j_counter = json_object_iter_value(iter2);
+			o_counter = json_deep_copy(j_counter);
 
-			type = json_integer_value(json_object_get(j_counter, OIDC_METRICS_TYPE));
-			json_object_del(j_counter, OIDC_METRICS_TYPE);
+			type = json_integer_value(json_object_get(o_counter, OIDC_METRICS_TYPE));
+			json_object_del(o_counter, OIDC_METRICS_TYPE);
 
-			json_object_set_new(j_counter, OIDC_METRICS_NAME,
-					    json_string(_oidc_metrics_counters_info[type].name));
-			json_object_set_new(j_counter, OIDC_METRICS_LABEL_NAME,
+			json_object_set_new(o_counter, OIDC_METRICS_NAME,
+					    json_string(_oidc_metrics_counters_info[type].class_name));
+			json_object_set_new(o_counter, OIDC_METRICS_LABEL_NAME,
 					    json_string(_oidc_metrics_counters_info[type].label_name));
-			json_object_set_new(j_counter, OIDC_METRICS_LABEL_VALUE,
+			json_object_set_new(o_counter, OIDC_METRICS_LABEL_VALUE,
 					    json_string(_oidc_metrics_counters_info[type].label_value));
-			json_object_set_new(j_counter, OIDC_METRICS_DESC,
+			json_object_set_new(o_counter, OIDC_METRICS_DESC,
 					    json_string(_oidc_metrics_counters_info[type].desc));
+
+			json_array_append_new(o_array, o_counter);
 
 			iter2 = json_object_iter_next(j_counters, iter2);
 		}
 
 		j_timings = json_object_get(j_server, OIDC_METRICS_TIMINGS);
+		o_array = json_array();
+		json_object_set_new(o_server, OIDC_METRICS_TIMINGS, o_array);
 
 		iter2 = json_object_iter(j_timings);
 		while (iter2) {
-			s_key = json_object_iter_key(iter2);
 			j_timing = json_object_iter_value(iter2);
+			o_timing = json_deep_copy(j_timing);
 
-			type = json_integer_value(json_object_get(j_timing, OIDC_METRICS_TYPE));
-			json_object_del(j_timing, OIDC_METRICS_TYPE);
+			type = json_integer_value(json_object_get(o_timing, OIDC_METRICS_TYPE));
+			json_object_del(o_timing, OIDC_METRICS_TYPE);
 
-			json_object_set_new(j_timing, OIDC_METRICS_DESC,
+			json_object_set_new(o_timing, OIDC_METRICS_DESC,
 					    json_string(_oidc_metrics_timings_info[type].desc));
 
+			json_array_append_new(o_array, o_timing);
 			iter2 = json_object_iter_next(j_timings, iter2);
 		}
 		iter1 = json_object_iter_next(json, iter1);
 	}
 
-	char *str = json_dumps(json, JSON_COMPACT | JSON_PRESERVE_ORDER);
+	str = json_dumps(o_json, JSON_COMPACT | JSON_PRESERVE_ORDER);
 	s_json = apr_pstrdup(r->pool, str);
 	free(str);
 
+	json_decref(o_json);
 	json_decref(json);
 
 end:
@@ -835,8 +923,11 @@ static int oidc_metrics_handle_internal(request_rec *r, char *s_json) {
 static int oidc_metrics_handle_status(request_rec *r, char *s_json) {
 	char *msg = "OK\n";
 	char *metric = NULL, *vhost = NULL;
-	json_t *json = NULL, *j_server = NULL, *j_counters = NULL, *j_counter = NULL, *j_member = NULL;
+	json_t *json = NULL, *j_server = NULL, *j_counters = NULL, *j_counter = NULL, *j_member = NULL, *j_spec = NULL;
 	json_error_t json_error;
+	json_int_t type = 0;
+	char *s_key = NULL;
+	void *iter = NULL;
 
 	oidc_util_get_request_parameter(r, OIDC_METRICS_VHOST_PARAM, &vhost);
 	oidc_util_get_request_parameter(r, OIDC_METRICS_COUNTER_PARAM, &metric);
@@ -845,7 +936,6 @@ static int oidc_metrics_handle_status(request_rec *r, char *s_json) {
 		vhost = "localhost";
 
 	if ((metric) && (vhost)) {
-
 		json = json_loads(s_json, 0, &json_error);
 		if (json == NULL)
 			goto end;
@@ -855,12 +945,20 @@ static int oidc_metrics_handle_status(request_rec *r, char *s_json) {
 		j_counters = json_object_get(j_server, OIDC_METRICS_COUNTERS);
 		if (j_counters == NULL)
 			goto end;
-		j_counter = json_object_get(j_counters, metric);
-		if (j_counter == NULL)
-			goto end;
-		j_member = json_object_get(j_counter, OIDC_METRICS_COUNT);
-
-		msg = apr_psprintf(r->pool, "OK: %s\n", _json_int2str(r->pool, json_integer_value(j_member)));
+		iter = json_object_iter(j_counters);
+		while (iter) {
+			j_counter = json_object_iter_value(iter);
+			type = json_integer_value(json_object_get(j_counter, OIDC_METRICS_TYPE));
+			j_spec = json_object_get(j_counter, OIDC_METRICS_SPEC);
+			s_key = oidc_metrics_counter_type2s(r->pool, type, j_spec);
+			if (_oidc_strcmp(s_key, metric) == 0) {
+				j_member = json_object_get(j_counter, OIDC_METRICS_COUNT);
+				msg = apr_psprintf(r->pool, "OK: %s\n",
+						   _json_int2str(r->pool, json_integer_value(j_member)));
+				break;
+			}
+			iter = json_object_iter_next(j_counters, iter);
+		}
 	}
 
 end:
@@ -915,12 +1013,12 @@ static int oidc_metrics_handle_prometheus(request_rec *r, char *s_json) {
 
 		void *iter2 = json_object_iter(j_counters);
 		while (iter2) {
-			s_key = json_object_iter_key(iter2);
 			j_counter = json_object_iter_value(iter2);
 
 			type = json_integer_value(json_object_get(j_counter, OIDC_METRICS_TYPE));
-			s_label = oidc_prometheus_normalize(r, s_server, s_key);
 			j_spec = json_object_get(j_counter, OIDC_METRICS_SPEC);
+			s_key = oidc_metrics_counter_type2s(r->pool, type, j_spec);
+			s_label = oidc_prometheus_normalize(r, s_server, s_key);
 			s_desc = "The number of";
 			if (j_spec)
 				s_desc = apr_psprintf(r->pool, "%s [%s]", s_desc, json_string_value(j_spec));
@@ -929,7 +1027,7 @@ static int oidc_metrics_handle_prometheus(request_rec *r, char *s_json) {
 			s_text = apr_psprintf(r->pool, "%s# TYPE %s counter\n", s_text, s_label);
 			s_text = apr_psprintf(
 			    r->pool, "%s%s", s_text,
-			    oidc_prometheus_normalize(r, s_server, _oidc_metrics_counters_info[type].name));
+			    oidc_prometheus_normalize(r, s_server, _oidc_metrics_counters_info[type].class_name));
 			if (_oidc_metrics_counters_info[type].label_name) {
 				s_text = apr_psprintf(
 				    r->pool, "%s{%s=\"%s\"}", s_text,
@@ -948,12 +1046,11 @@ static int oidc_metrics_handle_prometheus(request_rec *r, char *s_json) {
 
 		iter2 = json_object_iter(j_timings);
 		while (iter2) {
-			s_key = json_object_iter_key(iter2);
 			j_timing = json_object_iter_value(iter2);
 
 			type = json_integer_value(json_object_get(j_timing, OIDC_METRICS_TYPE));
 			json_object_del(j_timing, OIDC_METRICS_TYPE);
-
+			s_key = oidc_metrics_timing_type2s(r->pool, type);
 			s_label = oidc_prometheus_normalize(r, s_server, s_key);
 			s_text = apr_psprintf(r->pool, "%s# HELP %s A histogram of %s.\n", s_text, s_label,
 					      _oidc_metrics_timings_info[type].desc);
