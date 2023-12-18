@@ -1538,7 +1538,7 @@ apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg, oidc_provider
  */
 static apr_byte_t oidc_proto_validate_token_type(request_rec *r, oidc_provider_t *provider, const char *token_type) {
 	/*  we only support bearer/Bearer  */
-	if ((token_type != NULL) && (apr_strnatcasecmp(token_type, OIDC_PROTO_BEARER) != 0) &&
+	if ((token_type != NULL) && (_oidc_strnatcasecmp(token_type, OIDC_PROTO_BEARER) != 0) &&
 	    (provider->userinfo_endpoint_url != NULL)) {
 		oidc_error(r,
 			   "token_type is \"%s\" and UserInfo endpoint (%s) for issuer \"%s\" is set: can only deal "

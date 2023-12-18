@@ -44,6 +44,8 @@
  */
 
 #include "mod_auth_openidc.h"
+
+#include "metrics.h"
 #include "pcre_subst.h"
 
 static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c, const json_t *val, const char *key) {
@@ -308,10 +310,10 @@ int oidc_authz_worker22(request_rec *r, json_t *claims, const require_line *cons
 		token = ap_getword_white(r->pool, &requirement);
 
 		/* see if we've got anything meant for us */
-		if (apr_strnatcasecmp(token, OIDC_REQUIRE_CLAIM_NAME) == 0) {
+		if (_oidc_strnatcasecmp(token, OIDC_REQUIRE_CLAIM_NAME) == 0) {
 			match_claim_fn = oidc_authz_match_claim;
 #ifdef USE_LIBJQ
-		} else if (apr_strnatcasecmp(token, OIDC_REQUIRE_CLAIMS_EXPR_NAME) == 0) {
+		} else if (_oidc_strnatcasecmp(token, OIDC_REQUIRE_CLAIMS_EXPR_NAME) == 0) {
 			match_claim_fn = oidc_authz_match_claims_expr;
 #endif
 		} else {
@@ -381,6 +383,7 @@ int oidc_authz_worker22(request_rec *r, json_t *claims, const require_line *cons
 authz_status oidc_authz_worker24(request_rec *r, json_t *claims, const char *require_args,
 				 const void *parsed_require_args, oidc_authz_match_claim_fn_type match_claim_fn) {
 
+	oidc_cfg *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	int count_oauth_claims = 0;
 	const char *t, *w, *err = NULL;
 	const ap_expr_info_t *expr = parsed_require_args;
@@ -413,6 +416,8 @@ authz_status oidc_authz_worker24(request_rec *r, json_t *claims, const char *req
 		/* see if we can match any of out input claims against this Require'd value */
 		if (match_claim_fn(r, w, claims) == TRUE) {
 
+			OIDC_METRICS_COUNTER_INC_SPEC(r, cfg, OM_AUTHZ_MATCH_REQUIRE_CLAIM, require_args);
+
 			oidc_debug(r, "require claim/expr '%s' matched", w);
 			return AUTHZ_GRANTED;
 		}
@@ -422,6 +427,8 @@ authz_status oidc_authz_worker24(request_rec *r, json_t *claims, const char *req
 	if (count_oauth_claims == 0) {
 		oidc_warn(r, "'require claim/expr' missing specification(s) in configuration, denying");
 	}
+
+	OIDC_METRICS_COUNTER_INC_SPEC(r, cfg, OM_AUTHZ_ERROR_REQUIRE_CLAIM, require_args);
 
 	oidc_debug(r, "could not match require claim expression '%s'", require_args);
 	oidc_authz_error_add(r, require_args);

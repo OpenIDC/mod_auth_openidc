@@ -195,7 +195,7 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 			apr_byte_t known_scheme = 0;
 
 			/* look for the Bearer keyword */
-			if ((apr_strnatcasecmp(ap_getword(r->pool, &auth_line, OIDC_CHAR_SPACE), OIDC_PROTO_BEARER) ==
+			if ((_oidc_strnatcasecmp(ap_getword(r->pool, &auth_line, OIDC_CHAR_SPACE), OIDC_PROTO_BEARER) ==
 			     0) &&
 			    accept_header) {
 
@@ -440,7 +440,7 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg *c, c
 					return FALSE;
 				}
 			} else if (json_is_string(active)) {
-				if (apr_strnatcasecmp(json_string_value(active), "true") != 0) {
+				if (_oidc_strnatcasecmp(json_string_value(active), "true") != 0) {
 					oidc_debug(r,
 						   "\"%s\" string object with value that is not equal to \"true\" "
 						   "found in response JSON object: %s",

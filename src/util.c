@@ -1297,7 +1297,7 @@ const char *oidc_util_set_cookie_append_value(request_rec *r) {
 }
 
 apr_byte_t oidc_util_request_is_secure(request_rec *r, const oidc_cfg *c) {
-	return (apr_strnatcasecmp("https", oidc_get_current_url_scheme(r, c->x_forwarded_headers)) == 0);
+	return (_oidc_strnatcasecmp("https", oidc_get_current_url_scheme(r, c->x_forwarded_headers)) == 0);
 }
 
 /*

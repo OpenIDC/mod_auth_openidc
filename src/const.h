@@ -69,6 +69,7 @@
 
 #define _oidc_strlen(s) (s ? strlen(s) : 0)
 #define _oidc_strcmp(a, b) ((a && b) ? apr_strnatcmp(a, b) : -1)
+#define _oidc_strnatcasecmp(a, b) ((a && b) ? apr_strnatcasecmp(a, b) : -1)
 #define _oidc_strncmp(a, b, size) ((a && b) ? strncmp(a, b, size) : -1)
 
 #define _oidc_str_to_int(s) (s ? (int)strtol(s, NULL, 10) : 0)

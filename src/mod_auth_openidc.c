@@ -838,15 +838,15 @@ static void oidc_log_session_expires(request_rec *r, const char *msg, apr_time_t
 apr_byte_t oidc_is_auth_capable_request(request_rec *r) {
 
 	if ((oidc_util_hdr_in_x_requested_with_get(r) != NULL) &&
-	    (apr_strnatcasecmp(oidc_util_hdr_in_x_requested_with_get(r), OIDC_HTTP_HDR_VAL_XML_HTTP_REQUEST) == 0))
+	    (_oidc_strnatcasecmp(oidc_util_hdr_in_x_requested_with_get(r), OIDC_HTTP_HDR_VAL_XML_HTTP_REQUEST) == 0))
 		return FALSE;
 
 	if ((oidc_util_hdr_in_sec_fetch_mode_get(r) != NULL) &&
-	    (apr_strnatcasecmp(oidc_util_hdr_in_sec_fetch_mode_get(r), OIDC_HTTP_HDR_VAL_NAVIGATE) != 0))
+	    (_oidc_strnatcasecmp(oidc_util_hdr_in_sec_fetch_mode_get(r), OIDC_HTTP_HDR_VAL_NAVIGATE) != 0))
 		return FALSE;
 
 	if ((oidc_util_hdr_in_sec_fetch_dest_get(r) != NULL) &&
-	    (apr_strnatcasecmp(oidc_util_hdr_in_sec_fetch_dest_get(r), OIDC_HTTP_HDR_VAL_DOCUMENT) != 0))
+	    (_oidc_strnatcasecmp(oidc_util_hdr_in_sec_fetch_dest_get(r), OIDC_HTTP_HDR_VAL_DOCUMENT) != 0))
 		return FALSE;
 
 	if ((oidc_util_hdr_in_accept_contains(r, OIDC_CONTENT_TYPE_TEXT_HTML) == FALSE) &&
@@ -2454,7 +2454,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c, oidc_provider_t *
 
 	int rc;
 
-	OIDC_METRICS_TIMING_START(r, c)
+	OIDC_METRICS_TIMING_START(r, c);
 
 	oidc_debug(r, "enter");
 
@@ -3935,7 +3935,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c, oidc_session_t
 	apr_byte_t needs_save = FALSE;
 	int rc = OK;
 
-	OIDC_METRICS_TIMING_START(r, c)
+	OIDC_METRICS_TIMING_START(r, c);
 
 	if (oidc_proto_is_redirect_authorization_response(r, c)) {
 
@@ -4253,6 +4253,15 @@ static int oidc_check_mixed_userid_oauth(request_rec *r, oidc_cfg *c) {
 	return oidc_check_userid_openidc(r, c);
 }
 
+int oidc_fixups(request_rec *r) {
+	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	if (oidc_enabled(r) == TRUE) {
+		OIDC_METRICS_TIMING_REQUEST_ADD(r, c, OM_MOD_AUTH_OPENIDC);
+		return OK;
+	}
+	return DECLINED;
+}
+
 /*
  * generic Apache authentication hook for this module: dispatches to OpenID Connect or OAuth 2.0 specific routines
  */
@@ -4260,41 +4269,39 @@ int oidc_check_user_id(request_rec *r) {
 
 	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	int rv = DECLINED;
-	const char *current_auth = NULL;
+
+	OIDC_METRICS_TIMING_REQUEST_START(r, c);
 
 	/* log some stuff about the incoming HTTP request */
 	oidc_debug(r, "incoming request: \"%s?%s\", ap_is_initial_req(r)=%d", r->parsed_uri.path, r->args,
 		   ap_is_initial_req(r));
 
-	/* see if any authentication has been defined at all */
-	current_auth = ap_auth_type(r);
-
-	if (current_auth == NULL) {
-
+	if (oidc_enabled(r) == FALSE) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHTYPE_DECLINED);
+		return DECLINED;
+	}
 
-		/* see if we've configured OpenID Connect user authentication for this request */
-	} else if (strcasecmp(current_auth, OIDC_AUTH_TYPE_OPENID_CONNECT) == 0) {
+	OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHTYPE_MOD_AUTH_OPENIDC);
+
+	/* see if we've configured OpenID Connect user authentication for this request */
+	if (_oidc_strnatcasecmp(ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_CONNECT) == 0) {
 
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHTYPE_OPENID_CONNECT);
-		r->ap_auth_type = (char *)current_auth;
+		r->ap_auth_type = apr_pstrdup(r->pool, ap_auth_type(r));
 		rv = oidc_check_userid_openidc(r, c);
 
 		/* see if we've configured OAuth 2.0 access control for this request */
-	} else if (strcasecmp(current_auth, OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
+	} else if (_oidc_strnatcasecmp(ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
 
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHTYPE_OAUTH20);
-		r->ap_auth_type = (char *)current_auth;
+		r->ap_auth_type = apr_pstrdup(r->pool, ap_auth_type(r));
 		rv = oidc_oauth_check_userid(r, c, NULL);
 
 		/* see if we've configured "mixed mode" for this request */
-	} else if (strcasecmp(current_auth, OIDC_AUTH_TYPE_OPENID_BOTH) == 0) {
+	} else if (_oidc_strnatcasecmp(ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_BOTH) == 0) {
 
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHTYPE_AUTH_OPENIDC);
 		rv = oidc_check_mixed_userid_oauth(r, c);
-	} else {
-
-		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHTYPE_DECLINED);
 	}
 
 	return rv;
@@ -4331,7 +4338,7 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
 
 	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
-	if (apr_strnatcasecmp((const char *)ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
+	if (_oidc_strnatcasecmp((const char *)ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ERROR_OAUTH20);
 		oidc_debug(r, "setting environment variable %s to \"%s\" for usage in mod_headers",
 			   OIDC_OAUTH_BEARER_SCOPE_ERROR, OIDC_OAUTH_BEARER_SCOPE_ERROR_VALUE);
@@ -4452,7 +4459,7 @@ static int oidc_handle_unauthorized_user22(request_rec *r) {
 
 	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
-	if (apr_strnatcasecmp((const char *)ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
+	if (_oidc_strnatcasecmp((const char *)ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
 		OIDC_COUNTER_INC(r, cfg, OM_AUTHZ_ERROR_OAUTH20);
 		oidc_oauth_return_www_authenticate(r, "insufficient_scope",
 						   "Different scope(s) or other claims required");
@@ -4551,13 +4558,13 @@ apr_byte_t oidc_enabled(request_rec *r) {
 	if (ap_auth_type(r) == NULL)
 		return FALSE;
 
-	if (apr_strnatcasecmp((const char *)ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_CONNECT) == 0)
+	if (_oidc_strnatcasecmp((const char *)ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_CONNECT) == 0)
 		return TRUE;
 
-	if (apr_strnatcasecmp((const char *)ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0)
+	if (_oidc_strnatcasecmp((const char *)ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0)
 		return TRUE;
 
-	if (apr_strnatcasecmp((const char *)ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_BOTH) == 0)
+	if (_oidc_strnatcasecmp((const char *)ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_BOTH) == 0)
 		return TRUE;
 
 	return FALSE;

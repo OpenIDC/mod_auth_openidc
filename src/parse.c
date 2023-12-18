@@ -347,13 +347,13 @@ const char *oidc_parse_cache_shm_entry_size_max(apr_pool_t *pool, const char *ar
  * parse a boolean value from a provided string
  */
 const char *oidc_parse_boolean(apr_pool_t *pool, const char *arg, int *bool_value) {
-	if ((apr_strnatcasecmp(arg, "true") == 0) || (apr_strnatcasecmp(arg, "on") == 0) ||
-	    (apr_strnatcasecmp(arg, "yes") == 0) || (apr_strnatcasecmp(arg, "1") == 0)) {
+	if ((_oidc_strnatcasecmp(arg, "true") == 0) || (_oidc_strnatcasecmp(arg, "on") == 0) ||
+	    (_oidc_strnatcasecmp(arg, "yes") == 0) || (_oidc_strnatcasecmp(arg, "1") == 0)) {
 		*bool_value = TRUE;
 		return NULL;
 	}
-	if ((apr_strnatcasecmp(arg, "false") == 0) || (apr_strnatcasecmp(arg, "off") == 0) ||
-	    (apr_strnatcasecmp(arg, "no") == 0) || (apr_strnatcasecmp(arg, "0") == 0)) {
+	if ((_oidc_strnatcasecmp(arg, "false") == 0) || (_oidc_strnatcasecmp(arg, "off") == 0) ||
+	    (_oidc_strnatcasecmp(arg, "no") == 0) || (_oidc_strnatcasecmp(arg, "0") == 0)) {
 		*bool_value = FALSE;
 		return NULL;
 	}
