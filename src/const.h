@@ -57,6 +57,8 @@
 #define __STDC_WANT_LIB_EXT1__ 1
 #include <string.h>
 
+#include <apr_strings.h>
+
 #ifdef __STDC_LIB_EXT1__
 #define _oidc_memset(b, c, __len) memset_s(b, __len, c, __len)
 #define _oidc_memcpy(__dst, __src, __n) memcpy_s(__dst, __src, __n)
@@ -67,10 +69,18 @@
 #define _oidc_strcpy(__dst, __src) strcpy(__dst, __src)
 #endif
 
-#define _oidc_strlen(s) (s ? strlen(s) : 0)
-#define _oidc_strcmp(a, b) ((a && b) ? apr_strnatcmp(a, b) : -1)
-#define _oidc_strnatcasecmp(a, b) ((a && b) ? apr_strnatcasecmp(a, b) : -1)
-#define _oidc_strncmp(a, b, size) ((a && b) ? strncmp(a, b, size) : -1)
+static inline size_t _oidc_strlen(const char *s) {
+	return (s ? strlen(s) : 0);
+}
+static inline int _oidc_strcmp(const char *a, const char *b) {
+	return ((a && b) ? apr_strnatcmp(a, b) : -1);
+}
+static inline int _oidc_strnatcasecmp(const char *a, const char *b) {
+	return ((a && b) ? apr_strnatcasecmp(a, b) : -1);
+}
+static inline int _oidc_strncmp(const char *a, const char *b, size_t n) {
+	return ((a && b) ? strncmp(a, b, n) : -1);
+}
 
 #define _oidc_str_to_int(s) (s ? (int)strtol(s, NULL, 10) : 0)
 
