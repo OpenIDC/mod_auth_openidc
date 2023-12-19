@@ -43,6 +43,7 @@
 
 #include "mod_auth_openidc.h"
 
+#include "metrics.h"
 #include "pcre_subst.h"
 #include <curl/curl.h>
 #ifdef USE_LIBJQ
@@ -1161,10 +1162,13 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url, const cha
 			/* in case of a request/transfer timeout (which includes the connect timeout) we'll not retry */
 			oidc_error(r, "curl_easy_perform failed with a timeout for %s: [%s]; won't retry", url,
 				   curlError[0] ? curlError : "<n/a>");
+			OIDC_METRICS_COUNTER_INC_SPEC(r, c, OM_PROVIDER_CONNECT_ERROR,
+						      curlError[0] ? curlError : "timeout")
 			break;
 		}
 		oidc_error(r, "curl_easy_perform(%d/%d) failed for %s with: [%s]", i + 1, http_timeout->retries + 1,
 			   url, curlError[0] ? curlError : "<n/a>");
+		OIDC_METRICS_COUNTER_INC_SPEC(r, c, OM_PROVIDER_CONNECT_ERROR, curlError[0] ? curlError : "undefined")
 		/* in case of a connectivity/network glitch we'll back off before retrying */
 		if (i < http_timeout->retries)
 			apr_sleep(http_timeout->retry_interval);
@@ -1174,6 +1178,9 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url, const cha
 
 	curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
 	oidc_debug(r, "HTTP response code=%ld", response_code);
+
+	OIDC_METRICS_COUNTER_INC_SPEC(r, c, OM_PROVIDER_HTTP_RESPONSE_CODE,
+				      apr_psprintf(r->pool, "%ld", response_code));
 
 	*response = apr_pstrmemdup(r->pool, curlBuffer.memory, curlBuffer.size);
 
