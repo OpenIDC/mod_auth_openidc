@@ -290,21 +290,16 @@ static int _oidc_metrics_add_classnames(void *rec, const char *key, const char *
 apr_byte_t oidc_metrics_is_valid_classname(apr_pool_t *pool, const char *name, char **valid_names) {
 	int i = 0;
 	int n = 0;
-	int rv = FALSE;
 	apr_table_t *names = apr_table_make(pool, 1);
 	oidc_metrics_add_classname_ctx_t ctx = {pool, valid_names};
 
 	n = sizeof(_oidc_metrics_timings_info) / sizeof(oidc_metrics_timing_info_t);
 	for (i = 0; i < n; i++) {
-		if (_oidc_strcmp(_oidc_metrics_timings_info[i].class_name, name) == 0)
-			rv = TRUE;
 		apr_table_set(names, _oidc_metrics_timings_info[i].class_name,
 			      _oidc_metrics_timings_info[i].class_name);
 	}
 	n = sizeof(_oidc_metrics_counters_info) / sizeof(oidc_metrics_counter_info_t);
 	for (i = 0; i < n; i++) {
-		if (_oidc_strcmp(_oidc_metrics_counters_info[i].class_name, name) == 0)
-			rv = TRUE;
 		apr_table_set(names, _oidc_metrics_counters_info[i].class_name,
 			      _oidc_metrics_counters_info[i].class_name);
 	}
@@ -312,7 +307,7 @@ apr_byte_t oidc_metrics_is_valid_classname(apr_pool_t *pool, const char *name, c
 	*valid_names = NULL;
 	apr_table_do(_oidc_metrics_add_classnames, &ctx, names, NULL);
 
-	return rv;
+	return (apr_table_get(names, name) != 0);
 }
 
 /*
