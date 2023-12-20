@@ -129,6 +129,7 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_REQUEST_STATE_KEY_DISCOVERY "d"
 #define OIDC_REQUEST_STATE_KEY_AUTHN "a"
 #define OIDC_REQUEST_STATE_KEY_SAVE "s"
+#define OIDC_REQUEST_STATE_TRACE_ID "t"
 
 /* parameter name of the callback URL in the discovery response */
 #define OIDC_DISC_CB_PARAM "oidc_callback"
@@ -284,6 +285,10 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_HDR_X_FORWARDED_PORT 2
 #define OIDC_HDR_X_FORWARDED_PROTO 4
 #define OIDC_HDR_FORWARDED 8
+
+#define OIDC_TRACE_PARENT_OFF 0
+#define OIDC_TRACE_PARENT_PROPAGATE 1
+#define OIDC_TRACE_PARENT_GENERATE 2
 
 typedef apr_byte_t (*oidc_proto_pkce_state)(request_rec *r, char **state);
 typedef apr_byte_t (*oidc_proto_pkce_challenge)(request_rec *r, const char *state, char **code_challenge);
@@ -512,6 +517,7 @@ typedef struct oidc_cfg {
 	apr_hash_t *info_hook_data;
 	apr_hash_t *metrics_hook_data;
 	char *metrics_path;
+	int trace_parent;
 
 	apr_hash_t *black_listed_claims;
 	apr_hash_t *white_listed_claims;
@@ -985,6 +991,7 @@ oidc_jwk_t *oidc_util_key_list_first(const apr_array_header_t *key_list, int kty
 const char *oidc_util_jq_filter(request_rec *r, const char *input, const char *filter);
 char *oidc_util_apr_expr_parse(cmd_parms *cmd, const char *str, oidc_apr_expr_t **expr, apr_byte_t result_is_str);
 const char *oidc_util_apr_expr_exec(request_rec *r, const oidc_apr_expr_t *expr, apr_byte_t result_is_str);
+void oidc_util_set_trace_parent(request_rec *r, oidc_cfg *c, const char *span);
 
 /* HTTP header constants */
 #define OIDC_HTTP_HDR_COOKIE "Cookie"
@@ -1010,6 +1017,7 @@ const char *oidc_util_apr_expr_exec(request_rec *r, const oidc_apr_expr_t *expr,
 #define OIDC_HTTP_HDR_EXPIRES "Expires"
 #define OIDC_HTTP_HDR_X_FRAME_OPTIONS "X-Frame-Options"
 #define OIDC_HTTP_HDR_WWW_AUTHENTICATE "WWW-Authenticate"
+#define OIDC_HTTP_HDR_TRACE_PARENT "traceparent"
 
 #define OIDC_HTTP_HDR_VAL_XML_HTTP_REQUEST "XMLHttpRequest"
 #define OIDC_HTTP_HDR_VAL_NAVIGATE "navigate"
@@ -1032,6 +1040,7 @@ const char *oidc_util_hdr_in_x_forwarded_port_get(const request_rec *r);
 const char *oidc_util_hdr_in_x_forwarded_host_get(const request_rec *r);
 const char *oidc_util_hdr_in_forwarded_get(const request_rec *r);
 const char *oidc_util_hdr_in_host_get(const request_rec *r);
+const char *oidc_util_hdr_in_traceparent_get(const request_rec *r);
 void oidc_util_hdr_out_location_set(const request_rec *r, const char *value);
 const char *oidc_util_hdr_out_location_get(const request_rec *r);
 void oidc_util_hdr_err_out_add(const request_rec *r, const char *name, const char *value);
@@ -1056,15 +1065,15 @@ apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg *c, json_
 
 // oidc_session.c
 typedef struct {
-	char *uuid;		 /* unique id */
-	const char *remote_user; /* user who owns this particular session */
-	json_t *state;		 /* the state for this session, encoded in a JSON object */
-	apr_time_t expiry;	 /* if > 0, the time of expiry of this session */
-	const char *sid;
+	char *uuid;	   /* unique id */
+	char *remote_user; /* user who owns this particular session */
+	json_t *state;	   /* the state for this session, encoded in a JSON object */
+	apr_time_t expiry; /* if > 0, the time of expiry of this session */
+	char *sid;
 } oidc_session_t;
 
 apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **z);
-apr_byte_t oidc_session_get(request_rec *r, oidc_session_t *z, const char *key, const char **value);
+apr_byte_t oidc_session_get(request_rec *r, oidc_session_t *z, const char *key, char **value);
 apr_byte_t oidc_session_set(request_rec *r, oidc_session_t *z, const char *key, const char *value);
 apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z, apr_byte_t first_time);
 apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z);

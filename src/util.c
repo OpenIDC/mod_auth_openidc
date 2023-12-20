@@ -46,6 +46,9 @@
 #include "metrics.h"
 #include "pcre_subst.h"
 #include <curl/curl.h>
+#ifndef WIN32
+#include <unistd.h>
+#endif
 #ifdef USE_LIBJQ
 #include "jq.h"
 #endif
@@ -1079,7 +1082,9 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url, const cha
 #endif
 
 	/* identify this HTTP client */
-	char *useragent = apr_psprintf(r->pool, "%s libcurl-%s %s", NAMEVERSION, LIBCURL_VERSION, OPENSSL_VERSION_TEXT);
+	char *useragent = apr_psprintf(r->pool, "[%s:%u:%lu] %s", r->server->server_hostname,
+				       r->connection->local_addr->port, (unsigned long)getpid(), NAMEVERSION);
+	useragent = apr_psprintf(r->pool, "%s libcurl-%s %s", useragent, LIBCURL_VERSION, OPENSSL_VERSION_TEXT);
 	oidc_debug(r, "set HTTP request header User-Agent to: %s", useragent);
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, useragent);
 
@@ -1121,6 +1126,13 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url, const cha
 		/* set content type */
 		h_list = curl_slist_append(h_list,
 					   apr_psprintf(r->pool, "%s: %s", OIDC_HTTP_HDR_CONTENT_TYPE, content_type));
+	}
+
+	const char *traceparent = oidc_util_hdr_in_traceparent_get(r);
+	if (traceparent && c->trace_parent != OIDC_TRACE_PARENT_OFF) {
+		oidc_debug(r, "propagating traceparent header: %s", traceparent);
+		h_list =
+		    curl_slist_append(h_list, apr_psprintf(r->pool, "%s: %s", OIDC_HTTP_HDR_TRACE_PARENT, traceparent));
 	}
 
 	/* see if we need to add any custom headers */
@@ -2815,6 +2827,10 @@ const char *oidc_util_hdr_in_host_get(const request_rec *r) {
 	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_HOST);
 }
 
+const char *oidc_util_hdr_in_traceparent_get(const request_rec *r) {
+	return oidc_util_hdr_in_get(r, OIDC_HTTP_HDR_TRACE_PARENT);
+}
+
 void oidc_util_hdr_out_location_set(const request_rec *r, const char *value) {
 	oidc_util_hdr_out_set(r, OIDC_HTTP_HDR_LOCATION, value);
 }
@@ -2982,4 +2998,69 @@ const char *oidc_util_apr_expr_exec(request_rec *r, const oidc_apr_expr_t *expr,
 	expr_result = expr->str;
 #endif
 	return expr_result;
+}
+
+#define OIDC_TP_TRACE_ID_LEN 16
+#define OIDC_TP_PARENT_ID_LEN 8
+
+/*
+The following version-format definition is used for version 00.
+version-format   = trace-id "-" parent-id "-" trace-flags
+trace-id         = 32HEXDIGLC  ; 16 bytes array identifier. All zeroes forbidden
+parent-id        = 16HEXDIGLC  ; 8 bytes array identifier. All zeroes forbidden
+trace-flags      = 2HEXDIGLC   ; 8 bit flags. Currently, only one bit is used.
+ */
+void oidc_util_set_trace_parent(request_rec *r, oidc_cfg *c, const char *span) {
+	// apr_table_get(r->subprocess_env, "UNIQUE_ID");
+	unsigned char trace_id[OIDC_TP_TRACE_ID_LEN];
+	unsigned char parent_id[OIDC_TP_PARENT_ID_LEN];
+	unsigned char trace_flags = 0;
+	char *s_parent_id = "", *s_trace_id = "";
+	const char *v = NULL;
+	int i = 0;
+	char *hostname = "localhost";
+	const uint64_t P1 = 7;
+	const uint64_t P2 = 31;
+	uint64_t hash = P1;
+
+	if (c->trace_parent != OIDC_TRACE_PARENT_GENERATE)
+		return;
+
+	if (r->server->server_hostname)
+		hostname = r->server->server_hostname;
+
+	v = oidc_request_state_get(r, OIDC_REQUEST_STATE_TRACE_ID);
+
+	if (span == NULL) {
+		_oidc_memset(parent_id, 0, OIDC_TP_PARENT_ID_LEN);
+		_oidc_memcpy(parent_id, hostname,
+			     _oidc_strlen(hostname) < OIDC_TP_PARENT_ID_LEN ? _oidc_strlen(hostname)
+									    : OIDC_TP_PARENT_ID_LEN);
+	} else {
+		if (v == NULL)
+			oidc_warn(r, "parameter \"span\" is set, but no \"trace-id\" [%s] found in the request state",
+				  OIDC_REQUEST_STATE_TRACE_ID);
+		else
+			oidc_debug(r, "changing \"parent-id\" of current traceparent");
+		for (const char *p = span; *p != 0; p++)
+			hash = hash * P2 + *p;
+		_oidc_memcpy(parent_id, &hash, OIDC_TP_PARENT_ID_LEN);
+	}
+	for (i = 0; i < OIDC_TP_PARENT_ID_LEN; i++)
+		s_parent_id = apr_psprintf(r->pool, "%s%02x", s_parent_id, parent_id[i]);
+
+	if (v == NULL) {
+		apr_generate_random_bytes(trace_id, OIDC_TP_TRACE_ID_LEN);
+		for (i = 0; i < OIDC_TP_TRACE_ID_LEN; i++)
+			s_trace_id = apr_psprintf(r->pool, "%s%02x", s_trace_id, trace_id[i]);
+		oidc_request_state_set(r, OIDC_REQUEST_STATE_TRACE_ID, s_trace_id);
+	} else {
+		s_trace_id = apr_pstrdup(r->pool, v);
+	}
+
+	if (c->metrics_hook_data != NULL)
+		trace_flags = trace_flags | 0x01;
+
+	oidc_util_hdr_in_set(r, OIDC_HTTP_HDR_TRACE_PARENT,
+			     apr_psprintf(r->pool, "00-%s-%s-%02x", s_trace_id, s_parent_id, trace_flags));
 }

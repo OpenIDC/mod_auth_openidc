@@ -689,6 +689,8 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c, const char *access_toke
 		}
 	}
 
+	oidc_util_set_trace_parent(r, c, access_token);
+
 	/* validate the obtained access token against the OAuth AS validation endpoint */
 	json_t *token = NULL;
 	char *s_token = NULL;

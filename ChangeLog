@@ -1,3 +1,8 @@
+12/20/2023
+- generate or propagate traceparent header using OIDCTraceParent; closes #1152; thanks @studersi
+- include hostname,port and process id in User-Agent header on outgoing requests
+- bump to 2.4.15rc12
+
 12/19/2023
 - metrics update:
   - rename "requests" class to "provider"

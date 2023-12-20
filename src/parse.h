@@ -129,6 +129,7 @@ const char *oidc_parse_refresh_access_token_before_expiry(apr_pool_t *pool, cons
 const char *oidc_parse_set_state_input_headers_as(apr_pool_t *pool, const char *arg, apr_byte_t *state_input_headers);
 const char *oidc_parse_x_forwarded_headers(apr_pool_t *pool, const char *arg, apr_byte_t *x_forwarded_headers);
 const char *oidc_parse_outgoing_proxy_auth_type(apr_pool_t *pool, const char *arg, unsigned long *auth_type);
+const char *oidc_parse_trace_parent(apr_pool_t *pool, const char *arg, int *trace_parent);
 
 typedef const char *(*oidc_valid_int_function_t)(apr_pool_t *, int);
 typedef const char *(*oidc_valid_function_t)(apr_pool_t *, const char *);

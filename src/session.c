@@ -105,9 +105,8 @@ void oidc_session_id_new(request_rec *r, oidc_session_t *z) {
  * clear contents of a session
  */
 static void oidc_session_clear(request_rec *r, oidc_session_t *z) {
-	z->uuid = NULL;
 	z->remote_user = NULL;
-	// NB: don't clear sid
+	// NB: don't clear sid or uuid
 	z->expiry = 0;
 	if (z->state) {
 		json_decref(z->state);
@@ -116,7 +115,7 @@ static void oidc_session_clear(request_rec *r, oidc_session_t *z) {
 }
 
 apr_byte_t oidc_session_load_cache_by_uuid(request_rec *r, oidc_cfg *c, const char *uuid, oidc_session_t *z) {
-	const char *stored_uuid = NULL;
+	char *stored_uuid = NULL;
 	char *s_json = NULL;
 	apr_byte_t rc = FALSE;
 
@@ -190,13 +189,6 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, apr
 	apr_byte_t rc = TRUE;
 
 	if (z->state != NULL) {
-
-		if (z->uuid == NULL) {
-			/* get a new id for this session */
-			oidc_session_id_new(r, z);
-			/* store the session id in the cache value so it allows  us to detect cache corruption */
-			oidc_session_set(r, z, OIDC_SESSION_SESSION_ID, z->uuid);
-		}
 
 		if (z->sid != NULL) {
 			oidc_cache_set_sid(r, z->sid, z->uuid, z->expiry);
@@ -282,6 +274,7 @@ apr_byte_t oidc_session_extract(request_rec *r, oidc_session_t *z) {
 
 	oidc_session_get(r, z, OIDC_SESSION_REMOTE_USER_KEY, &z->remote_user);
 	oidc_session_get(r, z, OIDC_SESSION_SID_KEY, &z->sid);
+	oidc_session_get(r, z, OIDC_SESSION_SESSION_ID, &z->uuid);
 
 	rc = TRUE;
 
@@ -301,6 +294,7 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 	/* allocate space for the session object and fill it */
 	oidc_session_t *z = (*zz = apr_pcalloc(r->pool, sizeof(oidc_session_t)));
 	oidc_session_clear(r, z);
+	oidc_session_id_new(r, z);
 	z->sid = NULL;
 
 	if (c->session_type == OIDC_SESSION_TYPE_SERVER_CACHE)
@@ -316,6 +310,8 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 	if (rc == TRUE)
 		rc = oidc_session_extract(r, z);
 
+	oidc_util_set_trace_parent(r, c, z->uuid);
+
 	return rc;
 }
 
@@ -330,6 +326,7 @@ apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z, apr_byte_t first
 	if (z->state != NULL) {
 		oidc_session_set(r, z, OIDC_SESSION_REMOTE_USER_KEY, z->remote_user);
 		json_object_set_new(z->state, OIDC_SESSION_EXPIRY_KEY, json_integer(apr_time_sec(z->expiry)));
+		oidc_session_set(r, z, OIDC_SESSION_SESSION_ID, z->uuid);
 	}
 
 	if (c->session_type == OIDC_SESSION_TYPE_SERVER_CACHE)
@@ -369,7 +366,7 @@ apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z) {
 /*
  * get a value from the session based on the name from a name/value pair
  */
-apr_byte_t oidc_session_get(request_rec *r, oidc_session_t *z, const char *key, const char **value) {
+apr_byte_t oidc_session_get(request_rec *r, oidc_session_t *z, const char *key, char **value) {
 
 	/* just return the value for the key */
 	oidc_json_object_get_string(r->pool, z->state, key, (char **)value, NULL);
@@ -450,7 +447,7 @@ static json_t *oidc_session_get_str2json(request_rec *r, oidc_session_t *z,
 }
 
 static const char *oidc_session_get_key2string(request_rec *r, oidc_session_t *z, const char *key) {
-	const char *s_value = NULL;
+	char *s_value = NULL;
 	oidc_session_get(r, z, key, &s_value);
 	return s_value;
 }

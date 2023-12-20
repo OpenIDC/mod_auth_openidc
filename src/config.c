@@ -293,6 +293,7 @@
 #define OIDCXForwardedHeaders "OIDCXForwardedHeaders"
 #define OIDCUserInfoClaimsExpr "OIDCUserInfoClaimsExpr"
 #define OIDCFilterClaimsExpr "OIDCFilterClaimsExpr"
+#define OIDCTraceParent "OIDCTraceParent"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
@@ -1137,6 +1138,12 @@ static const char *oidc_set_metrics_hook_data(cmd_parms *cmd, void *m, const cha
 	return NULL;
 }
 
+static const char *oidc_set_trace_parent(cmd_parms *cmd, void *struct_ptr, const char *arg) {
+	oidc_cfg *cfg = (oidc_cfg *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
+	const char *rv = oidc_parse_trace_parent(cmd->pool, arg, &cfg->trace_parent);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
 static const char *oidc_set_filtered_claims(cmd_parms *cmd, void *m, const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
 	int offset = (int)(long)cmd->info;
@@ -1657,6 +1664,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->info_hook_data = NULL;
 	c->metrics_hook_data = NULL;
 	c->metrics_path = NULL;
+	c->trace_parent = OIDC_TRACE_PARENT_OFF;
 
 	c->black_listed_claims = NULL;
 	c->white_listed_claims = NULL;
@@ -1906,6 +1914,7 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->info_hook_data = add->info_hook_data != NULL ? add->info_hook_data : base->info_hook_data;
 	c->metrics_hook_data = add->metrics_hook_data != NULL ? add->metrics_hook_data : base->metrics_hook_data;
 	c->metrics_path = add->metrics_path != NULL ? add->metrics_path : base->metrics_path;
+	c->trace_parent = add->trace_parent != OIDC_TRACE_PARENT_OFF ? add->trace_parent : base->trace_parent;
 
 	c->black_listed_claims =
 	    add->black_listed_claims != NULL ? add->black_listed_claims : base->black_listed_claims;
@@ -3409,6 +3418,11 @@ const command_rec oidc_config_cmds[] = {
 				(void *)APR_OFFSETOF(oidc_cfg, metrics_path),
 				RSRC_CONF,
 				"Define the URL where the metrics will be published (e.g.: /metrics)"),
+		AP_INIT_TAKE1(OIDCTraceParent,
+				oidc_set_trace_parent,
+				(void *)APR_OFFSETOF(oidc_cfg, trace_parent),
+				RSRC_CONF,
+				"Define to propagagte or generate a traceparent header"),
 		AP_INIT_ITERATE(OIDCBlackListedClaims,
 				oidc_set_filtered_claims,
 				(void *) APR_OFFSETOF(oidc_cfg, black_listed_claims),

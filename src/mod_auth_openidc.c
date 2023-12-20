@@ -1919,7 +1919,7 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c, oidc_session
 				       const char *original_url, const char *userinfo_jwt) {
 
 	/* store the user in the session */
-	session->remote_user = remoteUser;
+	session->remote_user = apr_pstrdup(r->pool, remoteUser);
 
 	/* set the session expiry to the inactivity timeout */
 	session->expiry = apr_time_now() + apr_time_from_sec(c->session_inactivity_timeout);
@@ -4280,6 +4280,8 @@ int oidc_check_user_id(request_rec *r) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHTYPE_DECLINED);
 		return DECLINED;
 	}
+
+	oidc_util_set_trace_parent(r, c, NULL);
 
 	OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHTYPE_MOD_AUTH_OPENIDC);
 

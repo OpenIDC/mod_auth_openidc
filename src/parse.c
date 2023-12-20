@@ -1119,6 +1119,27 @@ const char *oidc_parse_info_hook_data(apr_pool_t *pool, const char *arg, apr_has
 	return NULL;
 }
 
+#define OIDC_TRACE_PARENT_PROPAGATE_STR "propagate"
+#define OIDC_TRACE_PARENT_GENERATE_STR "generate"
+
+const char *valid_trace_parent_value(apr_pool_t *pool, const char *arg) {
+	static char *options[] = {OIDC_TRACE_PARENT_PROPAGATE_STR, OIDC_TRACE_PARENT_GENERATE_STR, NULL};
+	return oidc_valid_string_option(pool, arg, options);
+}
+
+const char *oidc_parse_trace_parent(apr_pool_t *pool, const char *arg, int *trace_parent) {
+	const char *rv = valid_trace_parent_value(pool, arg);
+	if (rv != NULL)
+		return rv;
+
+	if (_oidc_strcmp(arg, OIDC_TRACE_PARENT_PROPAGATE_STR) == 0)
+		*trace_parent = OIDC_TRACE_PARENT_PROPAGATE;
+	else if (_oidc_strcmp(arg, OIDC_TRACE_PARENT_GENERATE_STR) == 0)
+		*trace_parent = OIDC_TRACE_PARENT_GENERATE;
+
+	return NULL;
+}
+
 #define OIDC_AUTH_REQUEST_METHOD_GET_STR "GET"
 #define OIDC_AUTH_REQEUST_METHOD_POST_STR "POST"
 
