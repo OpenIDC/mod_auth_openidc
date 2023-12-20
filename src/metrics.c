@@ -307,7 +307,7 @@ apr_byte_t oidc_metrics_is_valid_classname(apr_pool_t *pool, const char *name, c
 	*valid_names = NULL;
 	apr_table_do(_oidc_metrics_add_classnames, &ctx, names, NULL);
 
-	return (apr_table_get(names, name) != 0);
+	return (apr_table_get(names, name) != NULL);
 }
 
 /*

@@ -79,7 +79,7 @@ extern const oidc_metrics_timing_info_t _oidc_metrics_timings_info[];
 
 void oidc_metrics_timing_add(request_rec *r, oidc_metrics_timing_type_t type, apr_time_t elapsed);
 
-#define OIDC_METRICS_TIMING_VAR apr_time_t _oidc_metrics_tstart;
+#define OIDC_METRICS_TIMING_VAR apr_time_t _oidc_metrics_tstart = 0;
 
 #define OIDC_METRICS_TIMING_START(r, cfg)                                                                              \
 	OIDC_METRICS_TIMING_VAR                                                                                        \
