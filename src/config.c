@@ -1132,10 +1132,18 @@ static const char *oidc_set_info_hook_data(cmd_parms *cmd, void *m, const char *
 
 static const char *oidc_set_metrics_hook_data(cmd_parms *cmd, void *m, const char *arg) {
 	oidc_cfg *cfg = (oidc_cfg *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
-	if (cfg->metrics_hook_data == NULL)
-		cfg->metrics_hook_data = apr_hash_make(cmd->pool);
-	apr_hash_set(cfg->metrics_hook_data, arg, APR_HASH_KEY_STRING, arg);
-	return NULL;
+	const char *rv = NULL;
+	char *valid_names = NULL;
+	if (oidc_metrics_is_valid_classname(cmd->pool, arg, &valid_names) == TRUE) {
+		if (cfg->metrics_hook_data == NULL)
+			cfg->metrics_hook_data = apr_hash_make(cmd->pool);
+		apr_hash_set(cfg->metrics_hook_data, arg, APR_HASH_KEY_STRING, arg);
+	} else {
+		rv = apr_psprintf(cmd->pool, "undefined metric class name: \"%s\", must be one of [%s]", arg,
+				  valid_names);
+	}
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+	;
 }
 
 static const char *oidc_set_trace_parent(cmd_parms *cmd, void *struct_ptr, const char *arg) {
