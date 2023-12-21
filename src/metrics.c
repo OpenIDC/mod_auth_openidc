@@ -602,7 +602,7 @@ unsigned int oidc_metric_random_int(unsigned int mod) {
 /*
  * thread that periodically writes the local data into the shared memory
  */
-static void *oidc_metrics_thread_run(apr_thread_t *thread, void *data) {
+static void * APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void *data) {
 	server_rec *s = (server_rec *)data;
 
 	/* sleep for a short random time <1s so child processes write-lock on a different frequency */
