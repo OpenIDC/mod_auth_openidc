@@ -595,14 +595,14 @@ static inline apr_interval_time_t oidc_metrics_interval(server_rec *s) {
 
 unsigned int oidc_metric_random_int(unsigned int mod) {
 	unsigned int v;
-	apr_generate_random_bytes((unsigned char *)&v, sizeof(v));
+	oidc_util_random_bytes((unsigned char *)&v, sizeof(v));
 	return v % mod;
 }
 
 /*
  * thread that periodically writes the local data into the shared memory
  */
-static void * APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void *data) {
+static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void *data) {
 	server_rec *s = (server_rec *)data;
 
 	/* sleep for a short random time <1s so child processes write-lock on a different frequency */

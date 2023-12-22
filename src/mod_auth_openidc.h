@@ -898,6 +898,9 @@ void oidc_config_check_x_forwarded(request_rec *r, const apr_byte_t x_forwarded_
 int oidc_jq_filter_cache_ttl(request_rec *r);
 
 // oidc_util.c
+apr_byte_t oidc_util_random_bytes(unsigned char *buf, apr_size_t length);
+apr_byte_t oidc_util_generate_random_bytes(request_rec *r, unsigned char *buf, apr_size_t length);
+apr_byte_t oidc_proto_generate_random_hex_string(request_rec *r, char **hex_str, int byte_len);
 int oidc_strnenvcmp(const char *a, const char *b, int len);
 int oidc_base64url_encode(request_rec *r, char **dst, const char *src, int src_len, int remove_padding);
 int oidc_base64url_decode(apr_pool_t *pool, char **dst, const char *src);

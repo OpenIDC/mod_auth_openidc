@@ -60,63 +60,13 @@
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
-static apr_status_t oidc_proto_generate_random_bytes(request_rec *r, unsigned char *buf, apr_size_t length) {
-	apr_status_t rv = APR_SUCCESS;
-
-#ifndef USE_URANDOM
-
-	oidc_debug(r, "apr_generate_random_bytes call for %" APR_SIZE_T_FMT " bytes", length);
-	rv = apr_generate_random_bytes(buf, length);
-	oidc_debug(r, "apr_generate_random_bytes returned");
-
-#else
-
-	int fd = -1;
-
-	do {
-		apr_ssize_t rc;
-
-		if (fd == -1) {
-			fd = open(DEV_RANDOM, O_RDONLY);
-			if (fd == -1)
-				return errno;
-		}
-
-		do {
-			oidc_debug(r, "read %s for %" APR_SIZE_T_FMT " bytes", DEV_RANDOM, length);
-			rc = read(fd, buf, length);
-			oidc_debug(r, "read %s returned: %" APR_SIZE_T_FMT, DEV_RANDOM " bytes", rc);
-		} while (rc == -1 && errno == EINTR);
-
-		if (rc < 0) {
-			int errnum = errno;
-			close(fd);
-			return errnum;
-		} else if (rc == 0) {
-			close(fd);
-			fd = -1; /* force open() again */
-		} else {
-			buf += rc;
-			length -= rc;
-		}
-	} while (length > 0);
-
-	close(fd);
-
-	rv = APR_SUCCESS;
-
-#endif
-
-	return rv;
-}
-
 /*
  * generate a random string value value of a specified length
  */
 apr_byte_t oidc_proto_generate_random_string(request_rec *r, char **output, int len) {
 	unsigned char *bytes = apr_pcalloc(r->pool, len);
-	if (oidc_proto_generate_random_bytes(r, bytes, len) != APR_SUCCESS) {
-		oidc_error(r, "oidc_proto_generate_random_bytes returned an error");
+	if (oidc_util_generate_random_bytes(r, bytes, len) != TRUE) {
+		oidc_error(r, "oidc_util_generate_random_bytes returned an error");
 		return FALSE;
 	}
 	if (oidc_base64url_encode(r, output, (const char *)bytes, len, TRUE) <= 0) {

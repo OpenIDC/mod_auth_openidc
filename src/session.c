@@ -97,8 +97,7 @@ static apr_byte_t oidc_session_decode(request_rec *r, oidc_cfg *c, oidc_session_
  * generate a unique identifier for a session
  */
 void oidc_session_id_new(request_rec *r, oidc_session_t *z) {
-	oidc_proto_generate_random_string(r, &z->uuid, 20);
-	// for (char *p = z->uuid ; (p && *p); ++p) *p = tolower(*p);
+	oidc_proto_generate_random_hex_string(r, &z->uuid, 20);
 }
 
 /*

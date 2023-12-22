@@ -56,6 +56,81 @@
 /* hrm, should we get rid of this by adding parameters to the (3) functions? */
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
+apr_byte_t oidc_util_random_bytes(unsigned char *buf, apr_size_t length) {
+	apr_byte_t rv = TRUE;
+
+#ifndef USE_URANDOM
+
+	rv = (apr_generate_random_bytes(buf, length) == APR_SUCCESS);
+
+#else
+
+	int fd = -1;
+
+	do {
+		apr_ssize_t rc;
+
+		if (fd == -1) {
+			fd = open(DEV_RANDOM, O_RDONLY);
+			if (fd == -1)
+				return errno;
+		}
+
+		do {
+			rc = read(fd, buf, length);
+		} while (rc == -1 && errno == EINTR);
+
+		if (rc < 0) {
+			int errnum = errno;
+			close(fd);
+			return errnum;
+		} else if (rc == 0) {
+			close(fd);
+			fd = -1; /* force open() again */
+		} else {
+			buf += rc;
+			length -= rc;
+		}
+	} while (length > 0);
+
+	close(fd);
+
+	rv = TRUE;
+
+#endif
+
+	return rv;
+}
+
+apr_byte_t oidc_util_generate_random_bytes(request_rec *r, unsigned char *buf, apr_size_t length) {
+	apr_byte_t rv = TRUE;
+	const char *gen = NULL;
+#ifndef USE_URANDOM
+	gen = "apr";
+#else
+	gen = DEV_RANDOM;
+#endif
+	oidc_debug(r, "oidc_util_random_bytes [%s] call for %" APR_SIZE_T_FMT " bytes", gen, length);
+	rv = oidc_util_random_bytes(buf, length);
+	oidc_debug(r, "oidc_util_random_bytes returned: %d", rv);
+
+	return rv;
+}
+
+apr_byte_t oidc_proto_generate_random_hex_string(request_rec *r, char **hex_str, int byte_len) {
+	unsigned char *bytes = apr_pcalloc(r->pool, byte_len);
+	int i = 0;
+	if (oidc_util_generate_random_bytes(r, bytes, byte_len) != TRUE) {
+		oidc_error(r, "oidc_util_generate_random_bytes returned an error");
+		return FALSE;
+	}
+	*hex_str = "";
+	for (i = 0; i < byte_len; i++)
+		*hex_str = apr_psprintf(r->pool, "%s%02x", *hex_str, bytes[i]);
+
+	return TRUE;
+}
+
 /*
  * base64url encode a string
  */
