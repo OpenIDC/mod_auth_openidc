@@ -1064,6 +1064,29 @@ static void oidc_util_set_curl_ssl_options(request_rec *r, CURL *curl) {
 #endif
 }
 
+char *oidc_util_openssl_version(apr_pool_t *pool) {
+	char *s_version = NULL;
+#ifdef OPENSSL_VERSION_STR
+	s_version = apr_psprintf(pool, "openssl-%s", OPENSSL_VERSION_STR);
+#else
+	s_version = OPENSSL_VERSION_TEXT;
+#endif
+	return s_version;
+}
+
+#define OIDC_USER_AGENT_ENV_VAR "OIDC_USER_AGENT"
+
+static const char *oidc_util_user_agent(request_rec *r) {
+	const char *s_useragent = apr_table_get(r->subprocess_env, OIDC_USER_AGENT_ENV_VAR);
+	if (s_useragent == NULL) {
+		s_useragent = apr_psprintf(r->pool, "[%s:%u:%lu] %s", r->server->server_hostname,
+					   r->connection->local_addr->port, (unsigned long)getpid(), NAMEVERSION);
+		s_useragent = apr_psprintf(r->pool, "%s libcurl-%s %s", s_useragent, LIBCURL_VERSION,
+					   oidc_util_openssl_version(r->pool));
+	}
+	return s_useragent;
+}
+
 /*
  * execute a HTTP (GET or POST) request
  */
@@ -1157,11 +1180,11 @@ static apr_byte_t oidc_util_http_call(request_rec *r, const char *url, const cha
 #endif
 
 	/* identify this HTTP client */
-	char *useragent = apr_psprintf(r->pool, "[%s:%u:%lu] %s", r->server->server_hostname,
-				       r->connection->local_addr->port, (unsigned long)getpid(), NAMEVERSION);
-	useragent = apr_psprintf(r->pool, "%s libcurl-%s %s", useragent, LIBCURL_VERSION, OPENSSL_VERSION_TEXT);
-	oidc_debug(r, "set HTTP request header User-Agent to: %s", useragent);
-	curl_easy_setopt(curl, CURLOPT_USERAGENT, useragent);
+	const char *useragent = oidc_util_user_agent(r);
+	if ((useragent != NULL) && (_oidc_strcmp(useragent, "") != 0)) {
+		oidc_debug(r, "set HTTP request header User-Agent to: %s", useragent);
+		curl_easy_setopt(curl, CURLOPT_USERAGENT, useragent);
+	}
 
 	/* set optional outgoing proxy for the local network */
 	if (outgoing_proxy->host_port) {

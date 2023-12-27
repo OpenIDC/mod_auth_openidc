@@ -915,6 +915,7 @@ apr_byte_t oidc_util_request_is_secure(request_rec *r, const oidc_cfg *c);
 void oidc_util_set_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires,
 			  const char *ext);
 char *oidc_util_get_cookie(request_rec *r, const char *cookieName);
+char *oidc_util_openssl_version(apr_pool_t *pool);
 apr_byte_t oidc_util_http_get(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth,
 			      const char *bearer_token, int ssl_validate_server, char **response,
 			      oidc_http_timeout_t *http_timeout, const oidc_outgoing_proxy_t *outgoing_proxy,

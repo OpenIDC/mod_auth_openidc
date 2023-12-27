@@ -2531,7 +2531,7 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, se
 
 	ap_log_error(APLOG_MARK, APLOG_INFO, 0, s,
 		     "%s - init - cjose %s, %s, EC=%s, GCM=%s, Memcache=%s, Redis=%s, JQ=%s", NAMEVERSION,
-		     cjose_version(), OPENSSL_VERSION_TEXT, OIDC_JOSE_EC_SUPPORT ? "yes" : "no",
+		     cjose_version(), oidc_util_openssl_version(s->process->pool), OIDC_JOSE_EC_SUPPORT ? "yes" : "no",
 		     OIDC_JOSE_GCM_SUPPORT ? "yes" : "no",
 #ifdef USE_MEMCACHE
 		     "yes"
