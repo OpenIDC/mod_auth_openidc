@@ -868,10 +868,15 @@ void oidc_metrics_timing_add(request_rec *r, oidc_metrics_timing_type_t type, ap
 	} else {
 		// increase after checking possible overflow
 		if (_is_no_overflow(r->server, timing->sum, elapsed)) {
-			for (i = 0; i < OIDC_METRICS_BUCKET_NUM; i++)
+			for (i = 0; i < OIDC_METRICS_BUCKET_NUM; i++) {
 				if ((elapsed < _oidc_metric_buckets[i].threshold) ||
-				    (_oidc_metric_buckets[i].threshold == 0))
-					timing->buckets[i]++;
+				    (_oidc_metric_buckets[i].threshold == 0)) {
+					// fill out the remaining buckets and break, as they are ordered
+					for (; i < OIDC_METRICS_BUCKET_NUM; i++)
+						timing->buckets[i]++;
+					break;
+				}
+			}
 			timing->sum += elapsed;
 			timing->count++;
 		}
@@ -1196,9 +1201,9 @@ static int oidc_metric_reset(request_rec *r, int dvalue) {
 		return dvalue;
 
 	sscanf(s_reset, "%s", svalue);
-	if (_oidc_strcmp(svalue, "true") == 0)
+	if (_oidc_strnatcasecmp(svalue, "true") == 0)
 		value = 1;
-	else if (_oidc_strcmp(svalue, "false") == 0)
+	else if (_oidc_strnatcasecmp(svalue, "false") == 0)
 		value = 0;
 
 	return value;
