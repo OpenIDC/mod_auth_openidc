@@ -1,6 +1,7 @@
 12/28/2023
 - set memory alignment of shm cache structs to 64 bytes; see #1067
   should fix running on Raspberry PI / ARMv7 32 bits (arm32v7)
+- make sure the shm cache entry size is a multiple of 8 bytes, see #1067; thanks @sanzinger
 - bump to 2.4.15rc13
 
 12/22/2023

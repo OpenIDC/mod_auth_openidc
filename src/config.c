@@ -116,7 +116,7 @@
 /* default max cache size for shm */
 #define OIDC_DEFAULT_CACHE_SHM_SIZE 10000
 /* default max cache entry size for shm: # value + # key + # overhead */
-#define OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX 16384 + 512 + 17
+#define OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX 16384 + 512 + 32
 /* for issued-at timestamp (iat) checking */
 #define OIDC_DEFAULT_IDTOKEN_IAT_SLACK 600
 /* for file-based caching: clean interval in seconds */

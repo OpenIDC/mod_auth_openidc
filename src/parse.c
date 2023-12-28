@@ -331,7 +331,7 @@ const char *oidc_parse_session_type(apr_pool_t *pool, const char *arg, int *type
 }
 
 /* minimum size of a SHM cache entry */
-#define OIDC_MINIMUM_CACHE_SHM_ENTRY_SIZE_MAX 8192 + 512 + 17 // 8Kb plus overhead
+#define OIDC_MINIMUM_CACHE_SHM_ENTRY_SIZE_MAX 8192 + 512 + 32 // 8Kb plus overhead
 /* maximum size of a SHM cache entry */
 #define OIDC_MAXIMUM_CACHE_SHM_ENTRY_SIZE_MAX 1024 * 1024 // 1Mb incl. overhead
 
@@ -339,8 +339,11 @@ const char *oidc_parse_session_type(apr_pool_t *pool, const char *arg, int *type
  * parse the slot size of a SHM cache entry
  */
 const char *oidc_parse_cache_shm_entry_size_max(apr_pool_t *pool, const char *arg, int *int_value) {
-	return oidc_parse_int_min_max(pool, arg, int_value, OIDC_MINIMUM_CACHE_SHM_ENTRY_SIZE_MAX,
-				      OIDC_MAXIMUM_CACHE_SHM_ENTRY_SIZE_MAX);
+	const char *rv = oidc_parse_int_min_max(pool, arg, int_value, OIDC_MINIMUM_CACHE_SHM_ENTRY_SIZE_MAX,
+						OIDC_MAXIMUM_CACHE_SHM_ENTRY_SIZE_MAX);
+	if ((rv == NULL) && (((*int_value) % 8) != 0))
+		rv = "the slot size must be a multiple of 8";
+	return rv;
 }
 
 /*
