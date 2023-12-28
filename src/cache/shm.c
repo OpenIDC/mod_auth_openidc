@@ -58,7 +58,8 @@ typedef struct oidc_cache_cfg_shm_t {
 #define OIDC_CACHE_SHM_KEY_MAX 512
 
 /* represents one (fixed size) cache entry, cq. name/value string pair */
-typedef struct oidc_cache_shm_entry_t {
+typedef __attribute__((aligned(64))) struct oidc_cache_shm_entry_t {
+
 	/* name of the cache entry */
 	char section_key[OIDC_CACHE_SHM_KEY_MAX];
 	/* last (read) access timestamp */
