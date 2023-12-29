@@ -263,7 +263,13 @@ redisReply *oidc_cache_redis_command(request_rec *r, oidc_cache_cfg_redis_t *con
 	return reply;
 }
 
-#define OIDC_REDIS_MAX_TRIES 2
+#define OIDC_REDIS_MAX_TRIES_ENV_VAR "OIDC_REDIS_MAX_TRIES"
+#define OIDC_REDIS_MAX_TRIES_DEFAULT 2
+
+static int oidc_cache_redis_tries(request_rec *r) {
+	const char *s = r->subprocess_env ? apr_table_get(r->subprocess_env, OIDC_REDIS_MAX_TRIES_ENV_VAR) : NULL;
+	return s ? _oidc_str_to_int(s) : OIDC_REDIS_MAX_TRIES_DEFAULT;
+}
 
 /*
  * execute Redis command and deal with return value
@@ -274,13 +280,15 @@ static redisReply *oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t 
 	char *errstr = NULL;
 	int i = 0;
 	va_list ap;
+	int n = oidc_cache_redis_tries(r);
 
-	/* try to execute a command at max 2 times while reconnecting */
-	for (i = 1; i <= OIDC_REDIS_MAX_TRIES; i++) {
+	/* try to execute a command at max n times while reconnecting */
+	for (i = 1; i <= n; i++) {
 
 		/* connect */
 		if (context->connect(r, context) != APR_SUCCESS)
-			break;
+			/* try again */
+			continue;
 
 		va_start(ap, format);
 		/* execute the actual command */
@@ -293,14 +301,12 @@ static redisReply *oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t 
 			break;
 
 		/* something went wrong, log it */
-		if (i < OIDC_REDIS_MAX_TRIES)
-			oidc_warn(r, "Redis command (attempt=%d/%d to %s:%d) failed, disconnecting: '%s' [%s]", i,
-				  OIDC_REDIS_MAX_TRIES, context->host_str, context->port, errstr,
-				  reply ? reply->str : "<n/a>");
+		if (i < n)
+			oidc_warn(r, "Redis command (attempt=%d/%d to %s:%d) failed, disconnecting: '%s' [%s]", i, n,
+				  context->host_str, context->port, errstr, reply ? reply->str : "<n/a>");
 		else
-			oidc_error(r, "Redis command (attempt=%d/%d to %s:%d) failed, disconnecting: '%s' [%s]", i,
-				   OIDC_REDIS_MAX_TRIES, context->host_str, context->port, errstr,
-				   reply ? reply->str : "<n/a>");
+			oidc_error(r, "Redis command (attempt=%d/%d to %s:%d) failed, disconnecting: '%s' [%s]", i, n,
+				   context->host_str, context->port, errstr, reply ? reply->str : "<n/a>");
 
 		/* free the reply (if there is one allocated) */
 		oidc_cache_redis_reply_free(&reply);

@@ -1,3 +1,7 @@
+12/29/2023
+- fix Redis connnect retries and make it configurable through environment variable OIDC_REDIS_MAX_TRIES
+- bump to 2.4.15rc14
+
 12/28/2023
 - set memory alignment of shm cache structs to 64 bytes; see #1067
   should fix running on Raspberry PI / ARMv7 32 bits (arm32v7)
