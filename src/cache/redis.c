@@ -286,9 +286,15 @@ static redisReply *oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t 
 	for (i = 1; i <= n; i++) {
 
 		/* connect */
-		if (context->connect(r, context) != APR_SUCCESS)
-			/* try again */
+		if (context->connect(r, context) != APR_SUCCESS) {
+			if (i < n)
+				oidc_warn(r, "Redis connect (attempt=%d/%d to %s:%d) failed", i, n, context->host_str,
+					  context->port);
+			else
+				oidc_error(r, "Redis connect (attempt=%d/%d to %s:%d) failed", i, n, context->host_str,
+					   context->port);
 			continue;
+		}
 
 		va_start(ap, format);
 		/* execute the actual command */
