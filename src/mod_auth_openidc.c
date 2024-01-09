@@ -4462,7 +4462,7 @@ static int oidc_handle_unauthorized_user22(request_rec *r) {
 	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
 	if (_oidc_strnatcasecmp((const char *)ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
-		OIDC_METRICS_COUNTER_INC(r, cfg, OM_AUTHZ_ERROR_OAUTH20);
+		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ERROR_OAUTH20);
 		oidc_oauth_return_www_authenticate(r, "insufficient_scope",
 						   "Different scope(s) or other claims required");
 		return HTTP_UNAUTHORIZED;
@@ -4471,19 +4471,19 @@ static int oidc_handle_unauthorized_user22(request_rec *r) {
 	/* see if we've configured OIDCUnAutzAction for this path */
 	switch (oidc_dir_cfg_unautz_action(r)) {
 	case OIDC_UNAUTZ_RETURN403:
-		OIDC_METRICS_COUNTER_INC(r, cfg, OM_AUTHZ_ACTION_403);
+		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_403);
 		if (oidc_dir_cfg_unauthz_arg(r))
 			oidc_util_html_send(r, "Authorization Error", NULL, NULL, oidc_dir_cfg_unauthz_arg(r),
 					    HTTP_FORBIDDEN);
 		return HTTP_FORBIDDEN;
 	case OIDC_UNAUTZ_RETURN401:
-		OIDC_METRICS_COUNTER_INC(r, cfg, OM_AUTHZ_ACTION_401);
+		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_401);
 		if (oidc_dir_cfg_unauthz_arg(r))
 			oidc_util_html_send(r, "Authorization Error", NULL, NULL, oidc_dir_cfg_unauthz_arg(r),
 					    HTTP_UNAUTHORIZED);
 		return HTTP_UNAUTHORIZED;
 	case OIDC_UNAUTZ_RETURN302:
-		OIDC_METRICS_COUNTER_INC(r, cfg, OM_AUTHZ_ACTION_302);
+		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_302);
 		oidc_util_hdr_out_location_set(r, oidc_dir_cfg_unauthz_arg(r));
 		return HTTP_MOVED_TEMPORARILY;
 	case OIDC_UNAUTZ_AUTHENTICATE:
@@ -4497,7 +4497,7 @@ static int oidc_handle_unauthorized_user22(request_rec *r) {
 			return HTTP_UNAUTHORIZED;
 		}
 
-		OIDC_METRICS_COUNTER_INC(r, cfg, OM_AUTHZ_ACTION_AUTH);
+		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_AUTH);
 	}
 
 	return oidc_authenticate_user(r, c, NULL, oidc_get_current_url(r, c->x_forwarded_headers), NULL, NULL, NULL,
