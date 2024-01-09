@@ -1,3 +1,6 @@
+01/09/2024
+- release 2.4.15
+
 12/29/2023
 - fix Redis connnect retries and make it configurable through environment variable OIDC_REDIS_MAX_TRIES
 - bump to 2.4.15rc14
