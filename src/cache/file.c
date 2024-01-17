@@ -408,7 +408,7 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section, const
 	apr_file_unlock(fd);
 	apr_file_close(fd);
 
-	if (rename(path, target) != 0) {
+	if ((rc = apr_file_rename(path, target, r->pool)) != APR_SUCCESS) {
 		oidc_error(r, "cache file: %s could not be renamed to: %s", path, target);
 		return FALSE;
 	}
