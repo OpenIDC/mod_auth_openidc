@@ -1151,6 +1151,7 @@ static const char *oidc_metric_prometheus_normalize_name(apr_pool_t *pool, const
 
 #define OIDC_METRICS_PROMETHEUS_SERVER "server_name"
 #define OIDC_METRICS_PROMETHEUS_BUCKET "bucket"
+#define OIDC_METRICS_PROMETHEUS_SPEC "value"
 
 typedef struct oidc_metric_prometheus_callback_ctx_t {
 	char *s_result;
@@ -1178,15 +1179,13 @@ int oidc_metrics_prometheus_counters(void *rec, const char *key, const char *val
 		while (iter2) {
 			s_spec = json_object_iter_key(iter2);
 			j_spec = json_object_iter_value(iter2);
-			if (_oidc_strcmp(OIDC_METRICS_SPEC_DEFAULT, s_spec) == 0) {
-				s_text = apr_psprintf(ctx->pool, "%s%s{%s=\"%s\"} %s\n", s_text, s_label,
-						      OIDC_METRICS_PROMETHEUS_SERVER, s_server,
-						      _json_int2str(ctx->pool, json_integer_value(j_spec)));
-			} else {
-				s_text = apr_psprintf(ctx->pool, "%s%s{%s=\"%s\",value=\"%s\"} %s\n", s_text, s_label,
-						      OIDC_METRICS_PROMETHEUS_SERVER, s_server, s_spec,
-						      _json_int2str(ctx->pool, json_integer_value(j_spec)));
-			}
+			s_text = apr_psprintf(ctx->pool, "%s%s{%s=\"%s\"", s_text, s_label,
+					      OIDC_METRICS_PROMETHEUS_SERVER, s_server);
+			if (_oidc_strcmp(OIDC_METRICS_SPEC_DEFAULT, s_spec) != 0)
+				s_text = apr_psprintf(ctx->pool, "%s,%s=\"%s\"", s_text, OIDC_METRICS_PROMETHEUS_SPEC,
+						      s_spec);
+			s_text = apr_psprintf(ctx->pool, "%s} %s\n", s_text,
+					      _json_int2str(ctx->pool, json_integer_value(j_spec)));
 			iter2 = json_object_iter_next(j_specs, iter2);
 		}
 		iter1 = json_object_iter_next(o_counter, iter1);
@@ -1217,16 +1216,14 @@ int oidc_metrics_prometheus_timings(void *rec, const char *key, const char *valu
 			s_key = json_object_iter_key(iter3);
 			j_member = json_object_iter_value(iter3);
 			s_bucket = oidc_metrics_prometheus_bucket_label(s_key);
-			if (s_bucket) {
-				s_text = apr_psprintf(ctx->pool, "%s%s_%s{%s,%s=\"%s\"} %s\n", s_text, s_label,
-						      OIDC_METRICS_PROMETHEUS_BUCKET, s_bucket,
-						      OIDC_METRICS_PROMETHEUS_SERVER, s_server,
-						      _json_int2str(ctx->pool, json_integer_value(j_member)));
-			} else {
-				s_text = apr_psprintf(ctx->pool, "%s%s_%s{%s=\"%s\"} %s\n", s_text, s_label, s_key,
-						      OIDC_METRICS_PROMETHEUS_SERVER, s_server,
-						      _json_int2str(ctx->pool, json_integer_value(j_member)));
-			}
+			if (s_bucket)
+				s_text = apr_psprintf(ctx->pool, "%s%s_%s{%s,", s_text, s_label,
+						      OIDC_METRICS_PROMETHEUS_BUCKET, s_bucket);
+			else
+				s_text = apr_psprintf(ctx->pool, "%s%s_%s{", s_text, s_label, s_key);
+
+			s_text = apr_psprintf(ctx->pool, "%s%s=\"%s\"} %s\n", s_text, OIDC_METRICS_PROMETHEUS_SERVER,
+					      s_server, _json_int2str(ctx->pool, json_integer_value(j_member)));
 			iter3 = json_object_iter_next(j_timing, iter3);
 		}
 		iter1 = json_object_iter_next(o_timer, iter1);
