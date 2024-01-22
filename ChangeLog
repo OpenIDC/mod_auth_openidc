@@ -1,5 +1,9 @@
+01/22/2024
+- refactor metrics and fix Prometheus output overlap; closes #1161; see #1162 and #1160; thanks @studersi
+- bump to 2.4.15.1rc0
+
 01/17/2024
-- use `apr_file_rename` in file backend to fix issue with renaming files on windows
+- use `apr_file_rename` in file cache backend to fix issue with renaming files on windows
 
 01/09/2024
 - release 2.4.15

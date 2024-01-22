@@ -71,7 +71,7 @@ typedef enum {
 
 typedef struct oidc_metrics_timing_info_t {
 	char *class_name;
-	char *label_name;
+	char *metric_name;
 	char *desc;
 } oidc_metrics_timing_info_t;
 
@@ -180,8 +180,7 @@ typedef enum {
 
 typedef struct oidc_metrics_counter_info_t {
 	char *class_name;
-	char *label_name;
-	char *label_value;
+	char *metric_name;
 	char *desc;
 } oidc_metrics_counter_info_t;
 
