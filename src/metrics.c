@@ -791,7 +791,7 @@ static inline apr_hash_t *oidc_metrics_server_hash(request_rec *r, apr_hash_t *t
 	apr_hash_t *server_hash = NULL;
 	char *name = "_default_";
 
-	/* obtain the vhost name */
+	/* obtain the server name */
 	if (r->server->server_hostname)
 		name = r->server->server_hostname;
 
@@ -1060,7 +1060,7 @@ static int oidc_metrics_handle_internal(request_rec *r, char *s_json) {
 	return oidc_util_http_send(r, s_json, _oidc_strlen(s_json), OIDC_CONTENT_TYPE_JSON, OK);
 }
 
-#define OIDC_METRICS_VHOST_PARAM "vhost"
+#define OIDC_METRICS_SERVER_PARAM "server_name"
 #define OIDC_METRICS_COUNTER_PARAM "counter"
 #define OIDC_METRICS_SPEC_PARAM "spec"
 
@@ -1069,24 +1069,24 @@ static int oidc_metrics_handle_internal(request_rec *r, char *s_json) {
  */
 static int oidc_metrics_handle_status(request_rec *r, char *s_json) {
 	char *msg = "OK\n";
-	char *metric = NULL, *vhost = NULL, *spec = NULL;
+	char *metric = NULL, *s_server = NULL, *spec = NULL;
 	json_t *json = NULL, *j_server = NULL, *j_counters = NULL, *j_counter = NULL, *j_spec = NULL, *j_specs = NULL;
 	json_int_t type = 0;
 	const char *s_key = NULL, *s_name = NULL;
 	void *iter = NULL;
 
-	oidc_util_get_request_parameter(r, OIDC_METRICS_VHOST_PARAM, &vhost);
+	oidc_util_get_request_parameter(r, OIDC_METRICS_SERVER_PARAM, &s_server);
 	oidc_util_get_request_parameter(r, OIDC_METRICS_COUNTER_PARAM, &metric);
 	oidc_util_get_request_parameter(r, OIDC_METRICS_SPEC_PARAM, &spec);
 
-	if (vhost == NULL)
-		vhost = "localhost";
+	if (s_server == NULL)
+		s_server = "localhost";
 
-	if ((metric) && (vhost)) {
+	if ((metric) && (s_server)) {
 		json = oidc_metrics_json_parse_r(r, s_json);
 		if (json == NULL)
 			goto end;
-		j_server = json_object_get(json, vhost);
+		j_server = json_object_get(json, s_server);
 		if (j_server == NULL)
 			goto end;
 		j_counters = json_object_get(j_server, OIDC_METRICS_COUNTERS);
@@ -1101,8 +1101,9 @@ static int oidc_metrics_handle_status(request_rec *r, char *s_json) {
 			if (_oidc_strcmp(s_name, metric) == 0) {
 				j_specs = json_object_get(j_counter, OIDC_METRICS_SPECS);
 				j_spec = json_object_get(j_specs, _metrics_spec2key(spec));
-				msg = apr_psprintf(r->pool, "OK: %s\n",
-						   _json_int2str(r->pool, json_integer_value(j_spec)));
+				if (j_spec)
+					msg = apr_psprintf(r->pool, "OK: %s\n",
+							   _json_int2str(r->pool, json_integer_value(j_spec)));
 				break;
 			}
 			iter = json_object_iter_next(j_counters, iter);
@@ -1148,7 +1149,7 @@ static const char *oidc_metric_prometheus_normalize_name(apr_pool_t *pool, const
 
 #define OIDC_METRICS_PROMETHEUS_CONTENT_TYPE "text/plain; version=0.0.4"
 
-#define OIDC_METRICS_PROMETHEUS_SERVER "host"
+#define OIDC_METRICS_PROMETHEUS_SERVER "server_name"
 #define OIDC_METRICS_PROMETHEUS_BUCKET "bucket"
 
 typedef struct oidc_metric_prometheus_callback_ctx_t {
