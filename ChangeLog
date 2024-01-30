@@ -1,3 +1,6 @@
+01/30/2024
+- release 2.4.15.1
+
 01/22/2024
 - refactor metrics and fix Prometheus output overlap; closes #1161; see #1162 and #1160; thanks @studersi
 - bump to 2.4.15.1rc0
