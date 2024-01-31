@@ -1451,6 +1451,10 @@ static char *test_current_url(request_rec *r) {
 
 	apr_table_unset(r->headers_in, "Forwarded");
 
+	// it should not crash when Forwarded is not present
+	url = oidc_get_current_url(r, OIDC_HDR_FORWARDED);
+	TST_ASSERT_STR("test_current_url (16)", url, "https://www.example.com/private/?foo=bar&param1=value1");
+
 	apr_table_set(r->headers_in, "Host", "www.example.com");
 
 	return 0;

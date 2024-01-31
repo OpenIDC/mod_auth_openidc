@@ -1,3 +1,7 @@
+01/31/2024
+- avoid crash when Forwarded is not present but OIDCXForwardedHeaders is configured for it; see #1171; thanks @daviddpd
+- bump to 2.4.15.2dev
+
 01/30/2024
 - release 2.4.15.1
 

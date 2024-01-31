@@ -613,6 +613,8 @@ char *oidc_util_javascript_escape(apr_pool_t *pool, const char *s) {
 const char *oidc_util_strcasestr(const char *s1, const char *s2) {
 	const char *s = s1;
 	const char *p = s2;
+	if ((s == NULL) || (p == NULL))
+		return NULL;
 	do {
 		if (!*p)
 			return s1;
@@ -643,7 +645,7 @@ static const char *oidc_util_hdr_forwarded_get(const request_rec *r, const char 
 		if (ptr)
 			*ptr = '\0';
 	}
-	return apr_pstrdup(r->pool, value);
+	return value ? apr_pstrdup(r->pool, value) : NULL;
 }
 
 /*
