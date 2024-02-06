@@ -1,3 +1,8 @@
+02/13/2024
+- CVE-2024-24814: prevent DoS when `OIDCSessionType client-cookie` is set and a crafted Cookie header is supplied
+  https://github.com/OpenIDC/mod_auth_openidc/security/advisories/GHSA-hxr6-w4gc-7vvv
+- release 2.4.15.2
+
 01/31/2024
 - avoid crash when Forwarded is not present but OIDCXForwardedHeaders is configured for it; see #1171; thanks @daviddpd
 - bump to 2.4.15.2dev
