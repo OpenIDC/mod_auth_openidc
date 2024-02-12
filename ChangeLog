@@ -1,5 +1,11 @@
 02/12/2024
 - set Redis default retry interval time to 300 milliseconds (instead of 0.5ms) and make it configurable
+- rewrite handling of parallel refresh token grant requests
+  - temporarily cache the results of the refresh token grant for other (almost) parallel callers
+  - fixes handing on the same server, and improves clustered handling through a best-effort distributed cached lock
+  - improves handling of non-rollover refresh tokens since it avoids unnecessary repeated calls to
+    the token endpoint, unnecessary token issuance and possibly corruption because different tokens  "live"
+    temporarily in the same (conceptual) session in parallel before the session is stored (and the last one wins)
 - bump to 2.4.15.3dev
 
 02/06/2024

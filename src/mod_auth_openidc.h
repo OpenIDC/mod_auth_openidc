@@ -1112,7 +1112,7 @@ void oidc_session_reset_userinfo_last_refresh(request_rec *r, oidc_session_t *z)
 void oidc_session_set_userinfo_refresh_interval(request_rec *r, oidc_session_t *z, const int interval);
 apr_time_t oidc_session_get_userinfo_refresh_interval(request_rec *r, oidc_session_t *z);
 apr_time_t oidc_session_get_userinfo_last_refresh(request_rec *r, oidc_session_t *z);
-void oidc_session_reset_access_token_last_refresh(request_rec *r, oidc_session_t *z);
+void oidc_session_set_access_token_last_refresh(request_rec *r, oidc_session_t *z, apr_time_t ts);
 apr_time_t oidc_session_get_access_token_last_refresh(request_rec *r, oidc_session_t *z);
 void oidc_session_set_request_state(request_rec *r, oidc_session_t *z, const char *request_state);
 const char *oidc_session_get_request_state(request_rec *r, oidc_session_t *z);

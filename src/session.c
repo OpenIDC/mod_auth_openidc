@@ -659,8 +659,8 @@ apr_time_t oidc_session_get_userinfo_last_refresh(request_rec *r, oidc_session_t
 /*
  * access_token last refresh
  */
-void oidc_session_reset_access_token_last_refresh(request_rec *r, oidc_session_t *z) {
-	oidc_session_set_timestamp(r, z, OIDC_SESSION_KEY_ACCESS_TOKEN_LAST_REFRESH, apr_time_now());
+void oidc_session_set_access_token_last_refresh(request_rec *r, oidc_session_t *z, apr_time_t ts) {
+	oidc_session_set_timestamp(r, z, OIDC_SESSION_KEY_ACCESS_TOKEN_LAST_REFRESH, ts);
 }
 
 apr_time_t oidc_session_get_access_token_last_refresh(request_rec *r, oidc_session_t *z) {

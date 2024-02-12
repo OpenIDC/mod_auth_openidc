@@ -1011,18 +1011,154 @@ static void oidc_store_userinfo_claims(request_rec *r, oidc_cfg *c, oidc_session
 		oidc_session_reset_userinfo_last_refresh(r, session);
 }
 
-#define OIDC_REFRESH_ERROR_NONE 1
-#define OIDC_REFRESH_ERROR_GENERAL 2
-#define OIDC_REFRESH_ERROR_PARALLEL_REFRESH 3
+/* JSON object key for the value that holds the refresh token's refresh timestamp */
+#define OIDC_REFRESH_TIMESTAMP "ts"
 
-#define OIDC_PARALLEL_REFRESH_NOT_ALLOWED_ENVVAR "OIDC_PARALLEL_REFRESH_NOT_ALLOWED"
+/*
+ * time-to-live (seconds) for the lock that prevents parallel callers to execute
+ * a refresh grant for the same refresh token; this also presents the maximum time
+ * that callers will be blocked, waiting for another process to finish the refresh
+ * and populate the cache with the results
+ */
+#define OIDC_REFRESH_LOCK_TTL 5
+
+/*
+ *  time-to-live (seconds) for the refresh token cache results
+ *  during that time other callers trying to execute a refresh grant with the same
+ *  refresh token will obtain their results from the cache rather than an actual refresh
+ *  request
+ */
+#define OIDC_REFRESH_CACHE_TTL 30
+
+/* needs to be larger than a few characters for cache compresson to work... */
+#define OIDC_REFRESH_LOCK_VALUE "needstobelargerthanafewcharacters"
+
+/*
+ * cache refresh token grant results for a while to avoid (almost) parallel requests
+ */
+static void oidc_refresh_token_cache_set(request_rec *r, oidc_cfg *c, const char *refresh_token,
+					 const char *s_access_token, const char *s_token_type, int expires_in,
+					 const char *s_id_token, const char *s_refresh_token, apr_time_t *ts) {
+	char *s_json = NULL;
+
+	/* create the JSON representation of the refresh grant results + timestamp */
+	json_t *json = json_object();
+	if (s_access_token)
+		json_object_set_new(json, OIDC_PROTO_ACCESS_TOKEN, json_string(s_access_token));
+	if (s_token_type)
+		json_object_set_new(json, OIDC_PROTO_TOKEN_TYPE, json_string(s_token_type));
+	json_object_set_new(json, OIDC_PROTO_EXPIRES_IN, json_integer(expires_in));
+	if (s_id_token)
+		json_object_set_new(json, OIDC_PROTO_ID_TOKEN, json_string(s_id_token));
+	if (s_refresh_token)
+		json_object_set_new(json, OIDC_PROTO_REFRESH_TOKEN, json_string(s_refresh_token));
+	*ts = apr_time_now();
+	json_object_set_new(json, OIDC_REFRESH_TIMESTAMP, json_integer(apr_time_sec(*ts)));
+
+	/* stringify the JSON object and store it in the cache */
+	s_json = oidc_util_encode_json_object(r, json, JSON_COMPACT);
+	oidc_debug(r, "caching refresh_token (%s) grant results for %d seconds: %s", refresh_token,
+		   OIDC_REFRESH_CACHE_TTL, s_json);
+
+	oidc_cache_set_refresh_token(r, refresh_token, s_json,
+				     apr_time_now() + apr_time_from_sec(OIDC_REFRESH_CACHE_TTL));
+
+	/* cleanup */
+	json_decref(json);
+}
+
+/*
+ * obtain recent refresh token grant results from the cache
+ */
+static apr_byte_t oidc_refresh_token_cache_get(request_rec *r, oidc_cfg *c, const char *refresh_token,
+					       char **s_access_token, char **s_token_type, int *expires_in,
+					       char **s_id_token, char **s_refresh_token, apr_time_t *ts) {
+
+	char *s_json = NULL;
+	json_t *json = NULL, *v = NULL;
+	apr_byte_t rv = FALSE;
+
+	oidc_cache_mutex_lock(r->pool, r->server, c->refresh_mutex);
+
+	/* see if this token was already refreshed recently or is being refreshed */
+	oidc_cache_get_refresh_token(r, refresh_token, &s_json);
+	if (s_json == NULL)
+		goto no_cache_found;
+
+	/* wait for the "other" caller to populate the refresh token response cache results */
+	while ((s_json != NULL) && (_oidc_strcmp(s_json, OIDC_REFRESH_LOCK_VALUE) == 0)) {
+		oidc_warn(r, "existing refresh in progress for %s, back off for 0.5s before re-trying the cache",
+			  refresh_token);
+		apr_sleep(apr_time_from_msec(500));
+		s_json = NULL;
+		oidc_cache_get_refresh_token(r, refresh_token, &s_json);
+	}
+
+	/* check if we have run into a timeout */
+	if ((s_json == NULL) || (_oidc_strcmp(s_json, OIDC_REFRESH_LOCK_VALUE) == 0)) {
+		oidc_warn(r, "timeout waiting for refresh grant cache results");
+		// TODO: now we are going to refresh ourselves with a refresh token that has already been
+		// tried before; that is not great in rolling refresh token setups but I guess we have no
+		// other choice anyhow...
+		goto no_cache_found;
+	}
+
+	/* we should have valid cache results by now */
+	if (oidc_util_decode_json_object(r, s_json, &json) == FALSE)
+		goto no_cache_found;
+
+	oidc_debug(r, "using cached refresh_token (%s) grant results: %s", refresh_token, s_json);
+
+	/* parse the results from the cache into the output parameters */
+	if ((v = json_object_get(json, OIDC_PROTO_ACCESS_TOKEN)))
+		*s_access_token = apr_pstrdup(r->pool, json_string_value(v));
+	if ((v = json_object_get(json, OIDC_PROTO_TOKEN_TYPE)))
+		*s_token_type = apr_pstrdup(r->pool, json_string_value(v));
+	if ((v = json_object_get(json, OIDC_PROTO_EXPIRES_IN)))
+		*expires_in = json_integer_value(v);
+	if ((v = json_object_get(json, OIDC_PROTO_ID_TOKEN)))
+		*s_id_token = apr_pstrdup(r->pool, json_string_value(v));
+	if ((v = json_object_get(json, OIDC_PROTO_REFRESH_TOKEN)))
+		*s_refresh_token = apr_pstrdup(r->pool, json_string_value(v));
+	if ((v = json_object_get(json, OIDC_REFRESH_TIMESTAMP)))
+		*ts = apr_time_from_sec(json_integer_value(v));
+
+	/* cleanup */
+	json_decref(json);
+
+	rv = TRUE;
+
+	goto end;
+
+no_cache_found:
+
+	oidc_debug(r, "locking cache and refreshing %s...", refresh_token);
+
+	/*
+	 * best-effort distributed locking during our upcoming refresh grant execution
+	 *
+	 * note that a small chance/race-condition remains that in a parallel request on
+	 * another server in the same cluster another process just did the same in between
+	 * i.e. calling oidc_cache_get_refresh_token (on entry) and calling
+	 * oidc_cache_set_refresh_token (on exit) hereafter
+	 *
+	 * a process lock (refresh_mutex) in the calling function prevents this at least on the same machine
+	 */
+	oidc_cache_set_refresh_token(r, refresh_token, OIDC_REFRESH_LOCK_VALUE,
+				     apr_time_now() + apr_time_from_sec(OIDC_REFRESH_LOCK_TTL));
+
+end:
+
+	oidc_cache_mutex_unlock(r->pool, r->server, c->refresh_mutex);
+
+	return rv;
+}
 
 /*
  * execute refresh token grant to refresh the existing access token
  */
 static apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg *c, oidc_session_t *session,
-					   oidc_provider_t *provider, char **new_access_token, char **new_id_token,
-					   int *error_code) {
+					   oidc_provider_t *provider, char **new_access_token, char **new_id_token) {
 
 	apr_byte_t rc = FALSE;
 	char *s_id_token = NULL;
@@ -1032,37 +1168,24 @@ static apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg *c, oidc_ses
 	char *s_refresh_token = NULL;
 	oidc_jwt_t *id_token_jwt = NULL;
 	oidc_jose_error_t err;
-	char *value = NULL;
 	const char *refresh_token = NULL;
+	apr_time_t ts = 0;
 
 	oidc_debug(r, "enter");
-
-	oidc_cache_mutex_lock(r->pool, r->server, c->refresh_mutex);
 
 	/* get the refresh token that was stored in the session */
 	refresh_token = oidc_session_get_refresh_token(r, session);
 	if (refresh_token == NULL) {
 		oidc_warn(r, "refresh token routine called but no refresh_token found in the session");
-		*error_code = OIDC_REFRESH_ERROR_GENERAL;
 		goto end;
 	}
 
-	// check if an existing refresh is going on or if it was just exchanged for a new one in another server
-	oidc_cache_get_refresh_token(r, refresh_token, &value);
-	if (value != NULL) {
-		oidc_debug(r, "refresh token routine called again within %d seconds for the same refresh token: %s",
-			   c->http_timeout_long.request_timeout, refresh_token);
-		*error_code = OIDC_REFRESH_ERROR_PARALLEL_REFRESH;
-		if (apr_table_get(r->subprocess_env, OIDC_PARALLEL_REFRESH_NOT_ALLOWED_ENVVAR) != NULL) {
-			oidc_warn(r, "aborting refresh token grant for a refresh token that was already used before");
-			goto end;
-		}
-	}
-	// "lock" the refresh token best effort; this does not work failsafe in a clustered setup...
-	oidc_cache_set_refresh_token(r, refresh_token, refresh_token,
-				     apr_time_now() + apr_time_from_sec(c->http_timeout_long.request_timeout));
+	/* see if it was refreshed very recently and we can re-use the results from the cache */
+	if (oidc_refresh_token_cache_get(r, c, refresh_token, &s_access_token, &s_token_type, &expires_in, &s_id_token,
+					 &s_refresh_token, &ts) == TRUE)
+		goto process;
+
 	oidc_debug(r, "refreshing refresh_token: %s", refresh_token);
-	// don't unlock after this since other processes may be waiting for the lock to refresh the same refresh token
 
 	OIDC_METRICS_TIMING_START(r, c);
 
@@ -1071,19 +1194,23 @@ static apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg *c, oidc_ses
 				       &expires_in, &s_refresh_token) == FALSE) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_PROVIDER_REFRESH_ERROR);
 		oidc_error(r, "access_token could not be refreshed with refresh_token: %s", refresh_token);
-		if (*error_code != OIDC_REFRESH_ERROR_PARALLEL_REFRESH)
-			*error_code = OIDC_REFRESH_ERROR_GENERAL;
 		goto end;
 	}
 
 	OIDC_METRICS_TIMING_ADD(r, c, OM_PROVIDER_REFRESH);
+
+	/* cache the results for other callers */
+	oidc_refresh_token_cache_set(r, c, refresh_token, s_access_token, s_token_type, expires_in, s_id_token,
+				     s_refresh_token, &ts);
+
+process:
 
 	/* store the new access_token in the session and discard the old one */
 	oidc_session_set_access_token(r, session, s_access_token);
 	oidc_session_set_access_token_expires(r, session, expires_in);
 
 	/* reset the access token refresh timestamp */
-	oidc_session_reset_access_token_last_refresh(r, session);
+	oidc_session_set_access_token_last_refresh(r, session, ts);
 
 	/* see if we need to return it as a parameter */
 	if (new_access_token != NULL)
@@ -1125,15 +1252,11 @@ static apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg *c, oidc_ses
 			oidc_jwt_destroy(id_token_jwt);
 	}
 
-	oidc_debug(r, "refreshed refresh_token: %s into %s", refresh_token, s_refresh_token);
-
-	*error_code = OIDC_REFRESH_ERROR_NONE;
+	oidc_debug(r, "replaced refresh_token: %s with %s", refresh_token, s_refresh_token);
 
 	rc = TRUE;
 
 end:
-
-	oidc_cache_mutex_unlock(r->pool, r->server, c->refresh_mutex);
 
 	return rc;
 }
@@ -1143,8 +1266,7 @@ end:
  */
 static const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r, oidc_cfg *c, oidc_provider_t *provider,
 							       const char *access_token, oidc_session_t *session,
-							       char *id_token_sub, char **userinfo_jwt,
-							       int *error_code) {
+							       char *id_token_sub, char **userinfo_jwt) {
 
 	char *result = NULL;
 	char *refreshed_access_token = NULL;
@@ -1192,7 +1314,7 @@ static const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r, o
 
 	/* first call to user info endpoint failed, but this is for an existing session and the access token may have
 	 * just expired, so refresh it */
-	if (oidc_refresh_token_grant(r, c, session, provider, &refreshed_access_token, NULL, error_code) == FALSE) {
+	if (oidc_refresh_token_grant(r, c, session, provider, &refreshed_access_token, NULL) == FALSE) {
 		oidc_error(r, "refreshing access token failed, claims will not be retrieved/refreshed from the "
 			      "userinfo endpoint");
 		result = NULL;
@@ -1223,7 +1345,7 @@ end:
  * get (new) claims from the userinfo endpoint
  */
 static apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r, oidc_cfg *cfg, oidc_session_t *session,
-							     apr_byte_t *needs_save, int *error_code) {
+							     apr_byte_t *needs_save) {
 
 	apr_byte_t rc = TRUE;
 	oidc_provider_t *provider = NULL;
@@ -1259,8 +1381,8 @@ static apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r, oid
 				access_token = oidc_session_get_access_token(r, session);
 
 				/* retrieve the current claims */
-				claims = oidc_retrieve_claims_from_userinfo_endpoint(
-				    r, cfg, provider, access_token, session, NULL, &userinfo_jwt, error_code);
+				claims = oidc_retrieve_claims_from_userinfo_endpoint(r, cfg, provider, access_token,
+										     session, NULL, &userinfo_jwt);
 
 				/* store claims resolved from userinfo endpoint */
 				oidc_store_userinfo_claims(r, cfg, session, provider, claims, userinfo_jwt);
@@ -1369,7 +1491,7 @@ static apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg *cfg, oidc_s
 }
 
 static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg *cfg, oidc_session_t *session,
-							  int ttl_minimum, apr_byte_t *needs_save, int *error_code) {
+							  int ttl_minimum, apr_byte_t *needs_save) {
 
 	const char *s_access_token_expires = NULL;
 	apr_time_t t_expires = -1;
@@ -1408,7 +1530,7 @@ static apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_c
 	if (oidc_get_provider_from_session(r, cfg, session, &provider) == FALSE)
 		return FALSE;
 
-	if (oidc_refresh_token_grant(r, cfg, session, provider, NULL, NULL, error_code) == FALSE) {
+	if (oidc_refresh_token_grant(r, cfg, session, provider, NULL, NULL) == FALSE) {
 		oidc_warn(r, "access_token could not be refreshed");
 		*needs_save = FALSE;
 		return FALSE;
@@ -1630,7 +1752,6 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg, oidc_sess
 	int rc = OK;
 	const char *s_claims = NULL;
 	const char *s_id_token = NULL;
-	int error_code = OIDC_REFRESH_ERROR_NONE;
 
 	oidc_debug(r, "enter");
 
@@ -1667,40 +1788,36 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg, oidc_sess
 	}
 
 	/* if needed, refresh the access token */
-	rv = oidc_refresh_access_token_before_expiry(
-	    r, cfg, session, oidc_cfg_dir_refresh_access_token_before_expiry(r), needs_save, &error_code);
+	rv = oidc_refresh_access_token_before_expiry(r, cfg, session,
+						     oidc_cfg_dir_refresh_access_token_before_expiry(r), needs_save);
 	if (rv == FALSE) {
 		*needs_save = FALSE;
 		oidc_debug(r, "dir_action_on_error_refresh: %d", oidc_cfg_dir_action_on_error_refresh(r));
 		OIDC_METRICS_COUNTER_INC(r, cfg, OM_SESSION_ERROR_REFRESH_ACCESS_TOKEN);
-		if (error_code != OIDC_REFRESH_ERROR_PARALLEL_REFRESH) {
-			if (oidc_cfg_dir_action_on_error_refresh(r) == OIDC_ON_ERROR_LOGOUT) {
-				return oidc_handle_logout_request(r, cfg, session,
-								  oidc_get_absolute_url(r, cfg, cfg->default_slo_url));
-			}
-			if (oidc_cfg_dir_action_on_error_refresh(r) == OIDC_ON_ERROR_AUTHENTICATE) {
-				oidc_session_kill(r, session);
-				return oidc_handle_unauthenticated_user(r, cfg);
-			}
+		if (oidc_cfg_dir_action_on_error_refresh(r) == OIDC_ON_ERROR_LOGOUT) {
+			return oidc_handle_logout_request(r, cfg, session,
+							  oidc_get_absolute_url(r, cfg, cfg->default_slo_url));
+		}
+		if (oidc_cfg_dir_action_on_error_refresh(r) == OIDC_ON_ERROR_AUTHENTICATE) {
+			oidc_session_kill(r, session);
+			return oidc_handle_unauthenticated_user(r, cfg);
 		}
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
 	/* if needed, refresh claims from the user info endpoint */
-	rv = oidc_refresh_claims_from_userinfo_endpoint(r, cfg, session, needs_save, &error_code);
+	rv = oidc_refresh_claims_from_userinfo_endpoint(r, cfg, session, needs_save);
 	if (rv == FALSE) {
 		*needs_save = FALSE;
 		oidc_debug(r, "action_on_userinfo_error: %d", cfg->action_on_userinfo_error);
 		OIDC_METRICS_COUNTER_INC(r, cfg, OM_SESSION_ERROR_REFRESH_USERINFO);
-		if (error_code != OIDC_REFRESH_ERROR_PARALLEL_REFRESH) {
-			if (cfg->action_on_userinfo_error == OIDC_ON_ERROR_LOGOUT) {
-				return oidc_handle_logout_request(r, cfg, session,
-								  oidc_get_absolute_url(r, cfg, cfg->default_slo_url));
-			}
-			if (cfg->action_on_userinfo_error == OIDC_ON_ERROR_AUTHENTICATE) {
-				oidc_session_kill(r, session);
-				return oidc_handle_unauthenticated_user(r, cfg);
-			}
+		if (cfg->action_on_userinfo_error == OIDC_ON_ERROR_LOGOUT) {
+			return oidc_handle_logout_request(r, cfg, session,
+							  oidc_get_absolute_url(r, cfg, cfg->default_slo_url));
+		}
+		if (cfg->action_on_userinfo_error == OIDC_ON_ERROR_AUTHENTICATE) {
+			oidc_session_kill(r, session);
+			return oidc_handle_unauthenticated_user(r, cfg);
 		}
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
@@ -1969,7 +2086,7 @@ static apr_byte_t oidc_save_in_session(request_rec *r, oidc_cfg *c, oidc_session
 		/* store the associated expires_in value */
 		oidc_session_set_access_token_expires(r, session, expires_in);
 		/* reset the access token refresh timestamp */
-		oidc_session_reset_access_token_last_refresh(r, session);
+		oidc_session_set_access_token_last_refresh(r, session, apr_time_now());
 	}
 
 	/* see if we have a refresh_token */
@@ -2174,15 +2291,13 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c, oidc_
 
 	int expires_in = oidc_parse_expires_in(r, apr_table_get(params, OIDC_PROTO_EXPIRES_IN));
 	char *userinfo_jwt = NULL;
-	int error_code = OIDC_REFRESH_ERROR_NONE;
 
 	/*
 	 * optionally resolve additional claims against the userinfo endpoint
 	 * parsed claims are not actually used here but need to be parsed anyway for error checking purposes
 	 */
-	const char *claims =
-	    oidc_retrieve_claims_from_userinfo_endpoint(r, c, provider, apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN),
-							NULL, jwt->payload.sub, &userinfo_jwt, &error_code);
+	const char *claims = oidc_retrieve_claims_from_userinfo_endpoint(
+	    r, c, provider, apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN), NULL, jwt->payload.sub, &userinfo_jwt);
 
 	/* restore the original protected URL that the user was trying to access */
 	const char *original_url = oidc_proto_state_get_original_url(proto_state);
@@ -3319,7 +3434,6 @@ int oidc_handle_logout(request_rec *r, oidc_cfg *c, oidc_session_t *session) {
 	char *error_description = NULL;
 	char *id_token_hint = NULL;
 	char *s_logout_request = NULL;
-	int error_code = OIDC_REFRESH_ERROR_NONE;
 
 	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_LOGOUT, &url);
 
@@ -3349,7 +3463,7 @@ int oidc_handle_logout(request_rec *r, oidc_cfg *c, oidc_session_t *session) {
 	if ((provider != NULL) && (provider->end_session_endpoint != NULL)) {
 
 		if (apr_table_get(r->subprocess_env, OIDC_REFRESH_TOKENS_BEFORE_LOGOUT_ENVVAR) != NULL) {
-			oidc_refresh_token_grant(r, c, session, provider, NULL, &id_token_hint, &error_code);
+			oidc_refresh_token_grant(r, c, session, provider, NULL, &id_token_hint);
 		} else {
 			id_token_hint = (char *)oidc_session_get_idtoken(r, session);
 		}
@@ -3594,7 +3708,6 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c, oidc_s
 	char *error_str = NULL;
 	char *error_description = NULL;
 	apr_byte_t needs_save = TRUE;
-	int refresh_error_code = OIDC_REFRESH_ERROR_NONE;
 
 	/* get the command passed to the session management handler */
 	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_REFRESH, &return_to);
@@ -3640,7 +3753,7 @@ static int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c, oidc_s
 	}
 
 	/* execute the actual refresh grant */
-	if (oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, &refresh_error_code) == FALSE) {
+	if (oidc_refresh_token_grant(r, c, session, provider, NULL, NULL) == FALSE) {
 		oidc_error(r, "access_token could not be refreshed");
 		error_code = "refresh_failed";
 		goto end;
@@ -3747,7 +3860,6 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c, oidc_session_t 
 	char *s_extend_session = NULL;
 	char *r_value = NULL;
 	apr_byte_t b_extend_session = TRUE;
-	int error_code = OIDC_REFRESH_ERROR_NONE;
 
 	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO, &s_format);
 	oidc_util_get_request_parameter(r, OIDC_INFO_PARAM_ACCESS_TOKEN_REFRESH_INTERVAL, &s_interval);
@@ -3798,8 +3910,7 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c, oidc_session_t 
 					return HTTP_INTERNAL_SERVER_ERROR;
 
 				/* execute the actual refresh grant */
-				if (oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, &error_code) ==
-				    FALSE) {
+				if (oidc_refresh_token_grant(r, c, session, provider, NULL, NULL) == FALSE) {
 					oidc_warn(r, "access_token could not be refreshed");
 					return HTTP_INTERNAL_SERVER_ERROR;
 				}
@@ -3822,7 +3933,7 @@ static int oidc_handle_info_request(request_rec *r, oidc_cfg *c, oidc_session_t 
 	 * note that OIDCUserInfoRefreshInterval should be set to control the refresh policy
 	 */
 	if (b_extend_session) {
-		if (oidc_refresh_claims_from_userinfo_endpoint(r, c, session, &needs_save, &error_code) == FALSE) {
+		if (oidc_refresh_claims_from_userinfo_endpoint(r, c, session, &needs_save) == FALSE) {
 			rc = HTTP_INTERNAL_SERVER_ERROR;
 			goto end;
 		}
