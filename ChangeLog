@@ -1,4 +1,8 @@
-02/13/2024
+02/12/2024
+- set Redis default retry interval time to 300 milliseconds (instead of 0.5ms) and make it configurable
+- bump to 2.4.15.3dev
+
+02/06/2024
 - CVE-2024-24814: prevent DoS when `OIDCSessionType client-cookie` is set and a crafted Cookie header is supplied
   https://github.com/OpenIDC/mod_auth_openidc/security/advisories/GHSA-hxr6-w4gc-7vvv
 - release 2.4.15.2

@@ -263,13 +263,22 @@ redisReply *oidc_cache_redis_command(request_rec *r, oidc_cache_cfg_redis_t *con
 	return reply;
 }
 
+static int oidc_cache_redis_env2int(request_rec *r, const char *env_var_name, const int default_value) {
+	const char *s = r->subprocess_env ? apr_table_get(r->subprocess_env, env_var_name) : NULL;
+	return s ? _oidc_str_to_int(s) : default_value;
+}
+
 #define OIDC_REDIS_MAX_TRIES_ENV_VAR "OIDC_REDIS_MAX_TRIES"
 #define OIDC_REDIS_MAX_TRIES_DEFAULT 2
 
-static int oidc_cache_redis_tries(request_rec *r) {
-	const char *s = r->subprocess_env ? apr_table_get(r->subprocess_env, OIDC_REDIS_MAX_TRIES_ENV_VAR) : NULL;
-	return s ? _oidc_str_to_int(s) : OIDC_REDIS_MAX_TRIES_DEFAULT;
-}
+#define OIDC_REDIS_RETRY_INTERVAL_ENV_VAR "OIDC_REDIS_RETRY_INTERVAL"
+#define OIDC_REDIS_RETRY_INTERVAL_DEFAULT 300
+
+#define OIDC_REDIS_WARN_OR_ERROR(cond, r, ...)                                                                         \
+	if (cond)                                                                                                      \
+		oidc_warn(r, ##__VA_ARGS__);                                                                           \
+	else                                                                                                           \
+		oidc_error(r, ##__VA_ARGS__);
 
 /*
  * execute Redis command and deal with return value
@@ -280,20 +289,21 @@ static redisReply *oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t 
 	char *errstr = NULL;
 	int i = 0;
 	va_list ap;
-	int n = oidc_cache_redis_tries(r);
+	int retries = oidc_cache_redis_env2int(r, OIDC_REDIS_MAX_TRIES_ENV_VAR, OIDC_REDIS_MAX_TRIES_DEFAULT);
+	apr_time_t interval = apr_time_from_msec(
+	    oidc_cache_redis_env2int(r, OIDC_REDIS_RETRY_INTERVAL_ENV_VAR, OIDC_REDIS_RETRY_INTERVAL_DEFAULT));
 
 	/* try to execute a command at max n times while reconnecting */
-	for (i = 1; i <= n; i++) {
+	for (i = 1; i <= retries; i++) {
 
 		/* connect */
 		if (context->connect(r, context) != APR_SUCCESS) {
-			if (i < n) {
-				oidc_warn(r, "Redis connect (attempt=%d/%d to %s:%d) failed", i, n, context->host_str,
-					  context->port);
-				apr_sleep(500);
-			} else {
-				oidc_error(r, "Redis connect (attempt=%d/%d to %s:%d) failed", i, n, context->host_str,
-					   context->port);
+			OIDC_REDIS_WARN_OR_ERROR(i < retries, r, "Redis connect (attempt=%d/%d to %s:%d) failed", i,
+						 retries, context->host_str, context->port);
+			if (i < retries) {
+				oidc_debug(r, "wait before retrying: %" APR_TIME_T_FMT " (msec)",
+					   apr_time_as_msec(interval));
+				apr_sleep(interval);
 			}
 			continue;
 		}
@@ -309,12 +319,9 @@ static redisReply *oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t 
 			break;
 
 		/* something went wrong, log it */
-		if (i < n)
-			oidc_warn(r, "Redis command (attempt=%d/%d to %s:%d) failed, disconnecting: '%s' [%s]", i, n,
-				  context->host_str, context->port, errstr, reply ? reply->str : "<n/a>");
-		else
-			oidc_error(r, "Redis command (attempt=%d/%d to %s:%d) failed, disconnecting: '%s' [%s]", i, n,
-				   context->host_str, context->port, errstr, reply ? reply->str : "<n/a>");
+		OIDC_REDIS_WARN_OR_ERROR(
+		    i < retries, r, "Redis command (attempt=%d/%d to %s:%d) failed, disconnecting: '%s' [%s]", i,
+		    retries, context->host_str, context->port, errstr, reply ? reply->str : "<n/a>");
 
 		/* free the reply (if there is one allocated) */
 		oidc_cache_redis_reply_free(&reply);
