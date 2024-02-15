@@ -820,27 +820,34 @@ static apr_byte_t oidc_jose_brotli_uncompress(apr_pool_t *pool, const char *inpu
 
 static apr_byte_t oidc_jose_zlib_compress(apr_pool_t *pool, const char *input, int input_len, char **output,
 					  int *output_len, oidc_jose_error_t *err) {
+	int status = Z_OK;
 	z_stream zlib;
+
 	zlib.zalloc = Z_NULL;
 	zlib.zfree = Z_NULL;
 	zlib.opaque = Z_NULL;
 	zlib.next_in = (Bytef *)input;
 	zlib.avail_in = input_len;
+
 	*output = apr_pcalloc(pool, input_len * 2);
 	zlib.next_out = (Bytef *)(*output);
 	zlib.avail_out = input_len * 2;
-	int deflate_status = Z_OK;
 
-	deflateInit(&zlib, Z_BEST_COMPRESSION);
-
-	deflate_status = deflate(&zlib, Z_FINISH);
-	if (deflate_status != Z_STREAM_END) {
-		oidc_jose_error(err, "deflate failed: %d", deflate_status);
+	status = deflateInit(&zlib, Z_BEST_COMPRESSION);
+	if (status != Z_OK) {
+		oidc_jose_error(err, "deflateInit() failed: %d", status);
 		return FALSE;
 	}
 
-	if (deflateEnd(&zlib) != Z_OK) {
-		oidc_jose_error(err, "deflateEnd failed");
+	status = deflate(&zlib, Z_FINISH);
+	if (status != Z_STREAM_END) {
+		oidc_jose_error(err, "deflate() failed: %d", status);
+		return FALSE;
+	}
+
+	status = deflateEnd(&zlib);
+	if (status != Z_OK) {
+		oidc_jose_error(err, "deflateEnd() failed: %d", status);
 		return FALSE;
 	}
 
@@ -853,45 +860,49 @@ static apr_byte_t oidc_jose_zlib_compress(apr_pool_t *pool, const char *input, i
 
 static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input, int input_len, char **output,
 					    int *output_len, oidc_jose_error_t *err) {
+	int status = Z_OK;
+	size_t len = OIDC_CJOSE_UNCOMPRESS_CHUNK;
+	char *tmp = NULL, *buf = apr_pcalloc(pool, len);
 	z_stream zlib;
+
 	zlib.zalloc = Z_NULL;
 	zlib.zfree = Z_NULL;
 	zlib.opaque = Z_NULL;
 	zlib.avail_in = (uInt)input_len;
 	zlib.next_in = (Bytef *)input;
 	zlib.total_out = 0;
-	size_t uncompLength = OIDC_CJOSE_UNCOMPRESS_CHUNK;
-	char *uncomp = (char *)apr_pcalloc(pool, uncompLength + 1);
 
-	inflateInit(&zlib);
-	int done = 1;
-	while (done) {
-		int inflate_status;
+	status = inflateInit(&zlib);
+	if (status != Z_OK) {
+		oidc_jose_error(err, "inflateInit() failed: %d", status);
+		return FALSE;
+	}
+
+	while (status != Z_STREAM_END) {
 		if (zlib.total_out >= OIDC_CJOSE_UNCOMPRESS_CHUNK) {
-			char *uncomp2 = (char *)apr_pcalloc(pool, uncompLength + OIDC_CJOSE_UNCOMPRESS_CHUNK);
-			_oidc_memcpy(uncomp2, uncomp, uncompLength);
-			uncompLength += OIDC_CJOSE_UNCOMPRESS_CHUNK;
-			uncomp = uncomp2;
+			tmp = apr_pcalloc(pool, len + OIDC_CJOSE_UNCOMPRESS_CHUNK);
+			_oidc_memcpy(tmp, buf, len);
+			len += OIDC_CJOSE_UNCOMPRESS_CHUNK;
+			buf = tmp;
 		}
-		zlib.next_out = (Bytef *)(uncomp + zlib.total_out);
-		zlib.avail_out = (uInt)uncompLength - zlib.total_out;
-		inflate_status = inflate(&zlib, Z_SYNC_FLUSH);
-		if (inflate_status == Z_STREAM_END) {
-			done = 0;
-		} else if (inflate_status != Z_OK) {
-			oidc_jose_error(err, "inflate failed: %d", inflate_status);
+		zlib.next_out = (Bytef *)(buf + zlib.total_out);
+		zlib.avail_out = (uInt)len - zlib.total_out;
+		status = inflate(&zlib, Z_SYNC_FLUSH);
+		if ((status != Z_STREAM_END) && (status != Z_OK)) {
+			oidc_jose_error(err, "inflate() failed: %d", status);
 			inflateEnd(&zlib);
 			return FALSE;
 		}
 	}
 
-	if (inflateEnd(&zlib) != Z_OK) {
-		oidc_jose_error(err, "inflateEnd failed");
+	status = inflateEnd(&zlib);
+	if (status != Z_OK) {
+		oidc_jose_error(err, "inflateEnd() failed: %d", status);
 		return FALSE;
 	}
 
 	*output_len = (int)zlib.total_out;
-	*output = uncomp;
+	*output = buf;
 
 	return TRUE;
 }
