@@ -878,7 +878,7 @@ static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input,
 		return FALSE;
 	}
 
-	while (status != Z_STREAM_END) {
+	while (status == Z_OK) {
 		if (zlib.total_out >= OIDC_CJOSE_UNCOMPRESS_CHUNK) {
 			tmp = apr_pcalloc(pool, len + OIDC_CJOSE_UNCOMPRESS_CHUNK);
 			_oidc_memcpy(tmp, buf, len);
@@ -888,11 +888,12 @@ static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input,
 		zlib.next_out = (Bytef *)(buf + zlib.total_out);
 		zlib.avail_out = (uInt)len - zlib.total_out;
 		status = inflate(&zlib, Z_SYNC_FLUSH);
-		if ((status != Z_STREAM_END) && (status != Z_OK)) {
-			oidc_jose_error(err, "inflate() failed: %d", status);
-			inflateEnd(&zlib);
-			return FALSE;
-		}
+	}
+
+	if (status != Z_STREAM_END) {
+		oidc_jose_error(err, "inflate() failed: %d", status);
+		inflateEnd(&zlib);
+		return FALSE;
 	}
 
 	status = inflateEnd(&zlib);
