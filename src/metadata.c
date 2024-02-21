@@ -597,7 +597,7 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r, oidc_cfg
 		}
 
 		// TODO: add issuer?
-		if (oidc_proto_validate_jwt(r, jwt, NULL, TRUE, FALSE, -1) == FALSE)
+		if (oidc_proto_validate_jwt(r, jwt, NULL, FALSE, FALSE, -1) == FALSE)
 			return FALSE;
 
 		oidc_debug(r, "successfully verified and validated JWKs JWT");

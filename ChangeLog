@@ -1,3 +1,7 @@
+02/21/2024
+- OIDCProviderSignedJwksUri - change to make exp claim optional in signed jwks
+  interop with OpenID Federation specification https://openid.net/specs/openid-federation-1_0-32.html#section-5.2.1 
+
 02/15/2024
 - refactor zlib compression routines and add error checks
 - bump to 2.4.15.4dev
