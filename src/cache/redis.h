@@ -60,6 +60,7 @@ typedef struct oidc_cache_cfg_redis_t {
 	char *passwd;
 	int database;
 	struct timeval connect_timeout;
+	int keepalive;
 	struct timeval timeout;
 	char *host_str;
 	apr_port_t port;
@@ -77,3 +78,9 @@ apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section, const char 
 apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section, const char *key, const char *value,
 				apr_time_t expiry);
 apr_status_t oidc_cache_redis_disconnect(oidc_cache_cfg_redis_t *context);
+
+apr_byte_t oidc_cache_redis_set_keepalive(request_rec *r, redisContext *rctx, const int keepalive);
+apr_byte_t oidc_cache_redis_set_auth(request_rec *r, redisContext *rctx, const char *username, const char *password);
+apr_byte_t oidc_cache_redis_set_database(request_rec *r, redisContext *rctx, const int database);
+redisContext *oidc_cache_redis_connect_with_timeout(request_rec *r, const char *host, int port, struct timeval ct,
+						    struct timeval t, const char *msg);

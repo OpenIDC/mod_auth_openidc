@@ -1,5 +1,10 @@
+02/22/2024
+- enable TCP keepalive on Redis connections by default
+  and make it configurable in `OIDCRedisCacheConnectTimeout <connect-timeout> [0|<keep-alive-interval>]`
+- refactor Redis connect routines
+
 02/21/2024
-- OIDCProviderSignedJwksUri - change to make exp claim optional in signed jwks
+- OIDCProviderSignedJwksUri: make exp claim optional in signed jwks; see #1182; thanks @psteniusubi
   interop with OpenID Federation specification https://openid.net/specs/openid-federation-1_0-32.html#section-5.2.1 
 
 02/15/2024

@@ -1286,3 +1286,18 @@ const char *oidc_parse_outgoing_proxy_auth_type(apr_pool_t *pool, const char *ar
 
 	return NULL;
 }
+
+#define OIDC_REDIS_CONNECT_TIMEOUT_MIN 1
+#define OIDC_REDIS_CONNECT_TIMEOUT_MAX 3600
+
+const char *oidc_parse_redis_connect_timeout(apr_pool_t *pool, const char *arg, int *v) {
+	return oidc_parse_int_min_max(pool, arg, v, OIDC_REDIS_CONNECT_TIMEOUT_MIN, OIDC_REDIS_CONNECT_TIMEOUT_MAX);
+}
+
+// NB: zero for turning off TCP keepalive, which is enabled by default
+#define OIDC_REDIS_KEEPALIVE_TIMEOUT_MIN 0
+#define OIDC_REDIS_KEEPALIVE_TIMEOUT_MAX 3600
+
+const char *oidc_parse_redis_keepalive(apr_pool_t *pool, const char *arg, int *v) {
+	return oidc_parse_int_min_max(pool, arg, v, OIDC_REDIS_KEEPALIVE_TIMEOUT_MIN, OIDC_REDIS_KEEPALIVE_TIMEOUT_MAX);
+}

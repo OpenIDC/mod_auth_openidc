@@ -1334,6 +1334,17 @@ static const char *oidc_set_token_revocation_endpoint(cmd_parms *cmd, void *stru
 	return oidc_set_https_slot(cmd, struct_ptr, args);
 }
 
+static const char *oidc_set_redis_connect_timeout(cmd_parms *cmd, void *struct_ptr, const char *arg1,
+						  const char *arg2) {
+	oidc_cfg *cfg = (oidc_cfg *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
+	const char *rv = NULL;
+	if (arg1)
+		rv = oidc_parse_redis_connect_timeout(cmd->pool, arg1, &cfg->cache_redis_connect_timeout);
+	if ((rv == NULL) && (arg2))
+		rv = oidc_parse_redis_keepalive(cmd->pool, arg2, &cfg->cache_redis_keepalive);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
 int oidc_cfg_dir_refresh_access_token_before_expiry(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
 	if (dir_cfg->refresh_access_token_before_expiry == OIDC_CONFIG_POS_INT_UNSET)
@@ -1621,6 +1632,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->cache_redis_password = NULL;
 	c->cache_redis_database = -1;
 	c->cache_redis_connect_timeout = -1;
+	c->cache_redis_keepalive = -1;
 	c->cache_redis_timeout = -1;
 #endif
 
@@ -1860,6 +1872,8 @@ void *oidc_merge_server_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	    add->cache_redis_database != -1 ? add->cache_redis_database : base->cache_redis_database;
 	c->cache_redis_connect_timeout = add->cache_redis_connect_timeout != -1 ? add->cache_redis_connect_timeout
 										: base->cache_redis_connect_timeout;
+	c->cache_redis_keepalive =
+	    add->cache_redis_keepalive != -1 ? add->cache_redis_keepalive : base->cache_redis_keepalive;
 	c->cache_redis_timeout = add->cache_redis_timeout != -1 ? add->cache_redis_timeout : base->cache_redis_timeout;
 #endif
 
@@ -3297,8 +3311,8 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, cache_redis_database),
 				RSRC_CONF,
 				"Database for the Redis servers."),
-		AP_INIT_TAKE1(OIDCRedisCacheConnectTimeout,
-				oidc_set_int_slot,
+		AP_INIT_TAKE2(OIDCRedisCacheConnectTimeout,
+				oidc_set_redis_connect_timeout,
 				(void*)APR_OFFSETOF(oidc_cfg, cache_redis_connect_timeout),
 				RSRC_CONF,
 				"Timeout for connecting to the Redis servers."),

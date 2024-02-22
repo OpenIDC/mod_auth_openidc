@@ -51,6 +51,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 #define REDIS_CONNECT_TIMEOUT_DEFAULT 5
 #define REDIS_TIMEOUT_DEFAULT 5
+#define REDIS_KEEPALIVE_DEFAULT -1
 
 /* create the cache context */
 static oidc_cache_cfg_redis_t *oidc_cache_redis_cfg_create(apr_pool_t *pool) {
@@ -61,6 +62,7 @@ static oidc_cache_cfg_redis_t *oidc_cache_redis_cfg_create(apr_pool_t *pool) {
 	context->database = -1;
 	context->connect_timeout.tv_sec = REDIS_CONNECT_TIMEOUT_DEFAULT;
 	context->connect_timeout.tv_usec = 0;
+	context->keepalive = REDIS_KEEPALIVE_DEFAULT;
 	context->timeout.tv_sec = REDIS_TIMEOUT_DEFAULT;
 	context->timeout.tv_usec = 0;
 	context->host_str = NULL;
@@ -92,6 +94,9 @@ int oidc_cache_redis_post_config(server_rec *s, oidc_cfg *cfg, const char *name)
 
 	if (cfg->cache_redis_connect_timeout != -1)
 		context->connect_timeout.tv_sec = cfg->cache_redis_connect_timeout;
+
+	if (cfg->cache_redis_keepalive != -1)
+		context->keepalive = cfg->cache_redis_keepalive;
 
 	if (cfg->cache_redis_timeout != -1)
 		context->timeout.tv_sec = cfg->cache_redis_timeout;
@@ -191,69 +196,140 @@ static void oidc_cache_redis_reply_free(redisReply **reply) {
 	}
 }
 
+apr_byte_t oidc_cache_redis_set_keepalive(request_rec *r, redisContext *rctx, const int keepalive) {
+	apr_byte_t rv = TRUE;
+
+	// default is -1
+	if (keepalive == 0) {
+		oidc_debug(r, "not setting redisEnableKeepAlive");
+		goto end;
+	}
+
+#if HIREDIS_MAJOR >= 1 && HIREDIS_MINOR >= 2
+
+	if (keepalive == -1) {
+		oidc_debug(r, "setting redisEnableKeepAlive to the default interval");
+		if (redisEnableKeepAlive(rctx) != REDIS_OK) {
+			oidc_error(r, "redisEnableKeepAlive failed: %s", rctx->errstr);
+			rv = FALSE;
+		}
+		goto end;
+	}
+
+	oidc_debug(r, "setting redisEnableKeepAliveWithInterval: %d", keepalive);
+	if (redisEnableKeepAliveWithInterval(rctx, keepalive) != REDIS_OK) {
+		oidc_error(r, "redisEnableKeepAliveWithInterval failed: %s", rctx->errstr);
+		rv = FALSE;
+	}
+
+#else
+
+	// -1 or > 0
+	oidc_debug(r, "setting redisEnableKeepAlive to the default interval");
+	if (redisEnableKeepAlive(rctx) != REDIS_OK) {
+		oidc_error(r, "redisEnableKeepAlive failed: %s", rctx->errstr);
+		rv = FALSE;
+	}
+
+#endif
+
+end:
+
+	return rv;
+}
+
+apr_byte_t oidc_cache_redis_set_auth(request_rec *r, redisContext *rctx, const char *username, const char *password) {
+	apr_byte_t rv = TRUE;
+	redisReply *reply = NULL;
+
+	if (password == NULL)
+		goto end;
+
+	if (username != NULL)
+		reply = redisCommand(rctx, "AUTH %s %s", username, password);
+	else
+		reply = redisCommand(rctx, "AUTH %s", password);
+
+	if ((reply == NULL) || (reply->type == REDIS_REPLY_ERROR)) {
+		oidc_error(r, "Redis AUTH command failed: '%s' [%s]", rctx->errstr, reply ? reply->str : "<n/a>");
+		rv = FALSE;
+		goto end;
+	}
+
+	oidc_debug(r, "successfully authenticated to the Redis server: %s", reply ? reply->str : "<n/a>");
+
+end:
+
+	oidc_cache_redis_reply_free(&reply);
+
+	return rv;
+}
+
+apr_byte_t oidc_cache_redis_set_database(request_rec *r, redisContext *rctx, const int database) {
+	apr_byte_t rv = TRUE;
+	redisReply *reply = NULL;
+
+	if (database == -1)
+		goto end;
+
+	reply = redisCommand(rctx, "SELECT %d", database);
+	if ((reply == NULL) || (reply->type == REDIS_REPLY_ERROR)) {
+		oidc_error(r, "Redis SELECT command failed: '%s' [%s]", rctx->errstr, reply ? reply->str : "<n/a>");
+		rv = FALSE;
+		goto end;
+	}
+
+	oidc_debug(r, "successfully selected database %d on the Redis server: %s", database,
+		   reply ? reply->str : "<n/a>");
+
+end:
+
+	oidc_cache_redis_reply_free(&reply);
+
+	return rv;
+}
+
+redisContext *oidc_cache_redis_connect_with_timeout(request_rec *r, const char *host, int port, struct timeval ct,
+						    struct timeval t, const char *msg) {
+	redisContext *rctx = NULL;
+
+	oidc_debug(r, "calling redisConnectWithTimeout: %d", (int)ct.tv_sec);
+	rctx = redisConnectWithTimeout(host, port, ct);
+
+	if ((rctx == NULL) || (rctx->err != 0)) {
+		oidc_error(r, "failed to connect to Redis server (%s%s%s:%d): '%s'", msg ? msg : "", msg ? ":" : "",
+			   host, port, rctx != NULL ? rctx->errstr : "");
+		if (rctx)
+			redisFree(rctx);
+		return NULL;
+	}
+
+	oidc_debug(r, "successfully connected to Redis server (%s%s%s:%d)", msg ? msg : "", msg ? ":" : "", host, port);
+
+	if (redisSetTimeout(rctx, t) != REDIS_OK)
+		oidc_error(r, "redisSetTimeout failed: %s", rctx->errstr);
+
+	return rctx;
+}
+
 /*
  * connect to Redis server
  */
 static apr_status_t oidc_cache_redis_connect(request_rec *r, oidc_cache_cfg_redis_t *context) {
 
-	redisReply *reply = NULL;
-
 	if (context->rctx != NULL)
-		goto end;
+		return APR_SUCCESS;
 
-	/* no connection, connect to the configured Redis server */
-	oidc_debug(r, "calling redisConnectWithTimeout");
-	context->rctx = redisConnectWithTimeout(context->host_str, context->port, context->connect_timeout);
+	context->rctx = oidc_cache_redis_connect_with_timeout(r, context->host_str, context->port,
+							      context->connect_timeout, context->timeout, NULL);
+	if (context->rctx == NULL)
+		return APR_EGENERAL;
 
-	/* check for errors */
-	if ((context->rctx == NULL) || (context->rctx->err != 0)) {
-		oidc_error(r, "failed to connect to Redis server (%s:%d): '%s'", context->host_str, context->port,
-			   context->rctx != NULL ? context->rctx->errstr : "");
-		context->disconnect(context);
-		goto end;
-	}
+	oidc_cache_redis_set_keepalive(r, context->rctx, context->keepalive);
+	oidc_cache_redis_set_auth(r, context->rctx, context->username, context->passwd);
+	oidc_cache_redis_set_database(r, context->rctx, context->database);
 
-	/* log the connection */
-	oidc_debug(r, "successfully connected to Redis server (%s:%d)", context->host_str, context->port);
-
-	if (redisSetTimeout(context->rctx, context->timeout) != REDIS_OK)
-		oidc_error(r, "redisSetTimeout failed: %s", context->rctx->errstr);
-
-	/* see if we need to authenticate to the Redis server */
-	if (context->passwd != NULL) {
-		if (context->username != NULL) {
-			reply = redisCommand(context->rctx, "AUTH %s %s", context->username, context->passwd);
-		} else {
-			reply = redisCommand(context->rctx, "AUTH %s", context->passwd);
-		}
-		if ((reply == NULL) || (reply->type == REDIS_REPLY_ERROR))
-			oidc_error(r, "Redis AUTH command (%s:%d) failed: '%s' [%s]", context->host_str, context->port,
-				   context->rctx->errstr, reply ? reply->str : "<n/a>");
-		else
-			oidc_debug(r, "successfully authenticated to the Redis server: %s",
-				   reply ? reply->str : "<n/a>");
-
-		/* free the auth answer */
-		oidc_cache_redis_reply_free(&reply);
-	}
-
-	/* see if we need to set the database */
-	if (context->database != -1) {
-		reply = redisCommand(context->rctx, "SELECT %d", context->database);
-		if ((reply == NULL) || (reply->type == REDIS_REPLY_ERROR))
-			oidc_error(r, "Redis SELECT command (%s:%d) failed: '%s' [%s]", context->host_str,
-				   context->port, context->rctx->errstr, reply ? reply->str : "<n/a>");
-		else
-			oidc_debug(r, "successfully selected database %d on the Redis server: %s", context->database,
-				   reply ? reply->str : "<n/a>");
-
-		/* free the database answer */
-		oidc_cache_redis_reply_free(&reply);
-	}
-
-end:
-
-	return (context->rctx != NULL) ? APR_SUCCESS : APR_EGENERAL;
+	return APR_SUCCESS;
 }
 
 redisReply *oidc_cache_redis_command(request_rec *r, oidc_cache_cfg_redis_t *context, char **errstr, const char *format,
