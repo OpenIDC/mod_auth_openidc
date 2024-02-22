@@ -317,19 +317,33 @@ redisContext *oidc_cache_redis_connect_with_timeout(request_rec *r, const char *
  */
 static apr_status_t oidc_cache_redis_connect(request_rec *r, oidc_cache_cfg_redis_t *context) {
 
+	apr_status_t rv = APR_EGENERAL;
+
 	if (context->rctx != NULL)
 		return APR_SUCCESS;
 
 	context->rctx = oidc_cache_redis_connect_with_timeout(r, context->host_str, context->port,
 							      context->connect_timeout, context->timeout, NULL);
 	if (context->rctx == NULL)
-		return APR_EGENERAL;
+		goto end;
 
-	oidc_cache_redis_set_keepalive(r, context->rctx, context->keepalive);
-	oidc_cache_redis_set_auth(r, context->rctx, context->username, context->passwd);
-	oidc_cache_redis_set_database(r, context->rctx, context->database);
+	if (oidc_cache_redis_set_keepalive(r, context->rctx, context->keepalive) == FALSE)
+		goto end;
 
-	return APR_SUCCESS;
+	if (oidc_cache_redis_set_auth(r, context->rctx, context->username, context->passwd) == FALSE)
+		goto end;
+
+	if (oidc_cache_redis_set_database(r, context->rctx, context->database) == FALSE)
+		goto end;
+
+	rv = APR_SUCCESS;
+
+end:
+
+	if (rv != APR_SUCCESS)
+		context->disconnect(context);
+
+	return rv;
 }
 
 redisReply *oidc_cache_redis_command(request_rec *r, oidc_cache_cfg_redis_t *context, char **errstr, const char *format,
