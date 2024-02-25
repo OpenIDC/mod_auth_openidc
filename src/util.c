@@ -2177,3 +2177,13 @@ void oidc_util_apr_hash_clear(apr_hash_t *ht) {
 		apr_hash_set(ht, key, klen, NULL);
 	}
 }
+
+char *oidc_util_openssl_version(apr_pool_t *pool) {
+	char *s_version = NULL;
+#ifdef OPENSSL_VERSION_STR
+	s_version = apr_psprintf(pool, "openssl-%s", OPENSSL_VERSION_STR);
+#else
+	s_version = OPENSSL_VERSION_TEXT;
+#endif
+	return s_version;
+}
