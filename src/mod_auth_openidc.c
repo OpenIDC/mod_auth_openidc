@@ -1031,7 +1031,7 @@ static void oidc_store_userinfo_claims(request_rec *r, oidc_cfg *c, oidc_session
  */
 #define OIDC_REFRESH_CACHE_TTL 30
 
-/* needs to be larger than a few characters for cache compresson to work... */
+/* needs to be larger than a few characters for cache compression to work... */
 #define OIDC_REFRESH_LOCK_VALUE "needstobelargerthanafewcharacters"
 
 /*

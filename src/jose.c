@@ -1367,8 +1367,8 @@ static apr_byte_t _oidc_jwk_rsa_key_to_jwk(apr_pool_t *pool, EVP_PKEY *pkey, oid
 
 	*fp_len = key_spec.nlen + key_spec.elen;
 	*fp = apr_pcalloc(pool, *fp_len);
-	memcpy(*fp, key_spec.n, key_spec.nlen);
-	memcpy(*fp + key_spec.nlen, key_spec.e, key_spec.elen);
+	_oidc_memcpy(*fp, key_spec.n, key_spec.nlen);
+	_oidc_memcpy(*fp + key_spec.nlen, key_spec.e, key_spec.elen);
 
 	rv = TRUE;
 
@@ -1459,9 +1459,9 @@ static apr_byte_t _oidc_jwk_ec_key_to_jwk(apr_pool_t *pool, EVP_PKEY *pkey, oidc
 	apr_uint32_t b = htonl(crv);
 	*fp_len = sizeof(b) + ec_keyspec.xlen + ec_keyspec.ylen;
 	*fp = apr_pcalloc(pool, *fp_len);
-	memcpy(*fp, &b, sizeof(b));
-	memcpy(*fp + sizeof(b), ec_keyspec.x, ec_keyspec.xlen);
-	memcpy(*fp + sizeof(b) + ec_keyspec.xlen, ec_keyspec.y, ec_keyspec.ylen);
+	_oidc_memcpy(*fp, &b, sizeof(b));
+	_oidc_memcpy(*fp + sizeof(b), ec_keyspec.x, ec_keyspec.xlen);
+	_oidc_memcpy(*fp + sizeof(b) + ec_keyspec.xlen, ec_keyspec.y, ec_keyspec.ylen);
 
 	rv = TRUE;
 
