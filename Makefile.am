@@ -12,6 +12,7 @@ libauth_openidc_la_SOURCES = \
 	src/proto.c \
 	src/config.c \
 	src/util.c \
+	src/http.c \
 	src/authz.c \
 	src/session.c \
 	src/metadata.c \
@@ -55,6 +56,7 @@ endif
 noinst_HEADERS = \
 	src/mod_auth_openidc.h \
 	src/const.h \
+	src/http.h \
 	src/jose.h \
 	src/parse.h \
 	src/metrics.h \

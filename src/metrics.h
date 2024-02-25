@@ -43,6 +43,8 @@
 #ifndef MOD_AUTH_OPENIDC_METRICS_H_
 #define MOD_AUTH_OPENIDC_METRICS_H_
 
+#include <apr_hash.h>
+
 apr_byte_t oidc_metrics_is_valid_classname(apr_pool_t *pool, const char *name, char **valid_names);
 apr_byte_t oidc_metrics_cache_post_config(server_rec *s);
 apr_status_t oidc_metrics_cache_child_init(apr_pool_t *p, server_rec *s);

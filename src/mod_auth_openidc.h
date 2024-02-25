@@ -64,8 +64,10 @@
 #include <apr_uuid.h>
 
 #include "cache/cache.h"
+#include "http.h"
 #include "jose.h"
 #include "parse.h"
+#include "util.h"
 
 #ifdef APLOG_USE_MODULE
 APLOG_USE_MODULE(auth_openidc);
@@ -394,19 +396,6 @@ typedef struct oidc_oauth_t {
 	apr_array_header_t *verify_public_keys;
 } oidc_oauth_t;
 
-typedef struct oidc_outgoing_proxy_t {
-	const char *host_port;
-	const char *username_password;
-	unsigned long auth_type;
-} oidc_outgoing_proxy_t;
-
-typedef struct oidc_http_timeout_t {
-	int request_timeout;
-	int connect_timeout;
-	int retries;
-	apr_time_t retry_interval;
-} oidc_http_timeout_t;
-
 typedef struct oidc_crypto_passphrase_t {
 	char *secret1;
 	char *secret2;
@@ -668,14 +657,6 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_HOOK_INFO_SESSION_REMOTE_USER "remote_user"
 #define OIDC_HOOK_INFO_REFRESH_TOKEN "refresh_token"
 
-#define OIDC_CONTENT_TYPE_JSON "application/json"
-#define OIDC_CONTENT_TYPE_JWT "application/jwt"
-#define OIDC_CONTENT_TYPE_FORM_ENCODED "application/x-www-form-urlencoded"
-#define OIDC_CONTENT_TYPE_IMAGE_PNG "image/png"
-#define OIDC_CONTENT_TYPE_TEXT_HTML "text/html"
-#define OIDC_CONTENT_TYPE_APP_XHTML_XML "application/xhtml+xml"
-#define OIDC_CONTENT_TYPE_ANY "*/*"
-
 #define OIDC_STR_SPACE " "
 #define OIDC_STR_EQUAL "="
 #define OIDC_STR_AMP "&"
@@ -901,47 +882,19 @@ int oidc_strnenvcmp(const char *a, const char *b, int len);
 int oidc_base64url_encode(request_rec *r, char **dst, const char *src, int src_len, int remove_padding);
 int oidc_base64url_decode(apr_pool_t *pool, char **dst, const char *src);
 const char *oidc_get_current_url_host(request_rec *r, const apr_byte_t x_forwarded_headers);
+apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url);
 char *oidc_get_current_url(request_rec *r, const apr_byte_t x_forwarded_headers);
 const char *oidc_get_absolute_url(request_rec *r, oidc_cfg *cfg, const char *url);
 const char *oidc_get_redirect_uri(request_rec *r, oidc_cfg *c);
 const char *oidc_get_redirect_uri_iss(request_rec *r, oidc_cfg *c, oidc_provider_t *provider);
-char *oidc_url_encode(const request_rec *r, const char *str, const char *charsToEncode);
-char *oidc_normalize_header_name(const request_rec *r, const char *str);
 apr_byte_t oidc_util_request_is_secure(request_rec *r, const oidc_cfg *c);
-void oidc_util_set_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires,
-			  const char *ext);
-char *oidc_util_get_cookie(request_rec *r, const char *cookieName);
 char *oidc_util_openssl_version(apr_pool_t *pool);
-apr_byte_t oidc_util_http_get(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth,
-			      const char *bearer_token, int ssl_validate_server, char **response,
-			      oidc_http_timeout_t *http_timeout, const oidc_outgoing_proxy_t *outgoing_proxy,
-			      apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
-			      const char *ssl_key_pwd);
-apr_byte_t oidc_util_http_post_form(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth,
-				    const char *bearer_token, int ssl_validate_server, char **response,
-				    oidc_http_timeout_t *http_timeout, const oidc_outgoing_proxy_t *outgoing_proxy,
-				    apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
-				    const char *ssl_key_pwd);
-apr_byte_t oidc_util_http_post_json(request_rec *r, const char *url, json_t *data, const char *basic_auth,
-				    const char *bearer_token, int ssl_validate_server, char **response,
-				    oidc_http_timeout_t *http_timeout, const oidc_outgoing_proxy_t *outgoing_proxy,
-				    apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
-				    const char *ssl_key_pwd);
 apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url);
-apr_byte_t oidc_util_request_has_parameter(request_rec *r, const char *param);
-apr_byte_t oidc_util_get_request_parameter(request_rec *r, char *name, char **value);
 char *oidc_util_encode_json_object(request_rec *r, json_t *json, size_t flags);
 apr_byte_t oidc_util_decode_json_object(request_rec *r, const char *str, json_t **json);
 apr_byte_t oidc_util_decode_json_and_check_error(request_rec *r, const char *str, json_t **json);
-int oidc_util_http_send(request_rec *r, const char *data, size_t data_len, const char *content_type,
-			int success_rvalue);
 int oidc_util_html_send(request_rec *r, const char *title, const char *html_head, const char *on_load,
 			const char *html_body, int status_code);
-char *oidc_util_escape_string(const request_rec *r, const char *str);
-char *oidc_util_unescape_string(const request_rec *r, const char *str);
-apr_byte_t oidc_util_read_form_encoded_params(request_rec *r, apr_table_t *table, char *data);
-apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table, apr_byte_t propagate,
-				      const char *strip_param_name);
 apr_byte_t oidc_util_file_read(request_rec *r, const char *path, apr_pool_t *pool, char **result);
 apr_byte_t oidc_util_file_write(request_rec *r, const char *path, const char *data);
 apr_byte_t oidc_util_issuer_match(const char *a, const char *b);
@@ -976,16 +929,11 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const oidc_crypto_passphrase_t *
 				char **compact_encoded_jwt);
 apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *passphrase,
 				const char *compact_encoded_jwt, char **s_payload);
-char *oidc_util_get_chunked_cookie(request_rec *r, const char *cookieName, int cookie_chunk_size);
-void oidc_util_set_chunked_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires,
-				  int chunkSize, const char *ext);
 apr_byte_t oidc_util_create_symmetric_key(request_rec *r, const char *client_secret, unsigned int r_key_len,
 					  const char *hash_algo, apr_byte_t set_kid, oidc_jwk_t **jwk);
 apr_hash_t *oidc_util_merge_symmetric_key(apr_pool_t *pool, const apr_array_header_t *keys, oidc_jwk_t *jwk);
-char *oidc_util_http_query_encoded_url(request_rec *r, const char *url, const apr_table_t *params);
 char *oidc_util_get_full_path(apr_pool_t *pool, const char *abs_or_rel_filename);
 apr_byte_t oidc_enabled(request_rec *r);
-char *oidc_util_http_form_encoded_data(request_rec *r, const apr_table_t *params);
 const char *oidc_util_strcasestr(const char *s1, const char *s2);
 oidc_jwk_t *oidc_util_key_list_first(const apr_array_header_t *key_list, int kty, const char *use);
 const char *oidc_util_jq_filter(request_rec *r, const char *input, const char *filter);
@@ -994,58 +942,6 @@ const char *oidc_util_apr_expr_exec(request_rec *r, const oidc_apr_expr_t *expr,
 void oidc_util_set_trace_parent(request_rec *r, oidc_cfg *c, const char *span);
 void oidc_util_apr_hash_clear(apr_hash_t *ht);
 
-/* HTTP header constants */
-#define OIDC_HTTP_HDR_COOKIE "Cookie"
-#define OIDC_HTTP_HDR_SET_COOKIE "Set-Cookie"
-#define OIDC_HTTP_HDR_USER_AGENT "User-Agent"
-#define OIDC_HTTP_HDR_X_FORWARDED_FOR "X-Forwarded-For"
-#define OIDC_HTTP_HDR_CONTENT_TYPE "Content-Type"
-#define OIDC_HTTP_HDR_CONTENT_LENGTH "Content-Length"
-#define OIDC_HTTP_HDR_X_REQUESTED_WITH "X-Requested-With"
-#define OIDC_HTTP_HDR_SEC_FETCH_MODE "Sec-Fetch-Mode"
-#define OIDC_HTTP_HDR_SEC_FETCH_DEST "Sec-Fetch-Dest"
-#define OIDC_HTTP_HDR_ACCEPT "Accept"
-#define OIDC_HTTP_HDR_AUTHORIZATION "Authorization"
-#define OIDC_HTTP_HDR_X_FORWARDED_PROTO "X-Forwarded-Proto"
-#define OIDC_HTTP_HDR_X_FORWARDED_PORT "X-Forwarded-Port"
-#define OIDC_HTTP_HDR_X_FORWARDED_HOST "X-Forwarded-Host"
-#define OIDC_HTTP_HDR_FORWARDED "Forwarded"
-#define OIDC_HTTP_HDR_HOST "Host"
-#define OIDC_HTTP_HDR_LOCATION "Location"
-#define OIDC_HTTP_HDR_CACHE_CONTROL "Cache-Control"
-#define OIDC_HTTP_HDR_PRAGMA "Pragma"
-#define OIDC_HTTP_HDR_P3P "P3P"
-#define OIDC_HTTP_HDR_EXPIRES "Expires"
-#define OIDC_HTTP_HDR_X_FRAME_OPTIONS "X-Frame-Options"
-#define OIDC_HTTP_HDR_WWW_AUTHENTICATE "WWW-Authenticate"
-#define OIDC_HTTP_HDR_TRACE_PARENT "traceparent"
-
-#define OIDC_HTTP_HDR_VAL_XML_HTTP_REQUEST "XMLHttpRequest"
-#define OIDC_HTTP_HDR_VAL_NAVIGATE "navigate"
-#define OIDC_HTTP_HDR_VAL_DOCUMENT "document"
-
-void oidc_util_hdr_in_set(const request_rec *r, const char *name, const char *value);
-const char *oidc_util_hdr_in_cookie_get(const request_rec *r);
-void oidc_util_hdr_in_cookie_set(const request_rec *r, const char *value);
-const char *oidc_util_hdr_in_user_agent_get(const request_rec *r);
-const char *oidc_util_hdr_in_x_forwarded_for_get(const request_rec *r);
-const char *oidc_util_hdr_in_content_type_get(const request_rec *r);
-const char *oidc_util_hdr_in_content_length_get(const request_rec *r);
-const char *oidc_util_hdr_in_x_requested_with_get(const request_rec *r);
-const char *oidc_util_hdr_in_sec_fetch_mode_get(const request_rec *r);
-const char *oidc_util_hdr_in_sec_fetch_dest_get(const request_rec *r);
-const char *oidc_util_hdr_in_accept_get(const request_rec *r);
-const char *oidc_util_hdr_in_authorization_get(const request_rec *r);
-const char *oidc_util_hdr_in_x_forwarded_proto_get(const request_rec *r);
-const char *oidc_util_hdr_in_x_forwarded_port_get(const request_rec *r);
-const char *oidc_util_hdr_in_x_forwarded_host_get(const request_rec *r);
-const char *oidc_util_hdr_in_forwarded_get(const request_rec *r);
-const char *oidc_util_hdr_in_host_get(const request_rec *r);
-const char *oidc_util_hdr_in_traceparent_get(const request_rec *r);
-void oidc_util_hdr_out_location_set(const request_rec *r, const char *value);
-const char *oidc_util_hdr_out_location_get(const request_rec *r);
-void oidc_util_hdr_err_out_add(const request_rec *r, const char *name, const char *value);
-apr_byte_t oidc_util_hdr_in_accept_contains(const request_rec *r, const char *needle);
 apr_byte_t oidc_util_html_send_in_template(request_rec *r, const char *filename, char **static_template_content,
 					   const char *arg1, int arg1_esc, const char *arg2, int arg2_esc,
 					   int status_code);
