@@ -493,7 +493,7 @@ typedef struct oidc_cfg {
 	int cookie_http_only;
 	int cookie_same_site;
 
-	oidc_outgoing_proxy_t outgoing_proxy;
+	oidc_http_outgoing_proxy_t outgoing_proxy;
 
 	oidc_crypto_passphrase_t crypto_passphrase;
 

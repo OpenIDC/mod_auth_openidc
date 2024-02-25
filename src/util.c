@@ -577,9 +577,9 @@ static const char *oidc_get_current_url_scheme(const request_rec *r, const apr_b
 	const char *scheme_str = NULL;
 
 	if (x_forwarded_headers & OIDC_HDR_FORWARDED)
-		scheme_str = oidc_util_hdr_forwarded_get(r, "proto");
+		scheme_str = oidc_http_hdr_forwarded_get(r, "proto");
 	else if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_PROTO)
-		scheme_str = oidc_util_hdr_in_x_forwarded_proto_get(r);
+		scheme_str = oidc_http_hdr_in_x_forwarded_proto_get(r);
 
 	/* if not we'll determine the scheme used to connect to this server */
 	if (scheme_str == NULL) {
@@ -636,7 +636,7 @@ static const char *oidc_get_current_url_port(const request_rec *r, const char *s
 	 */
 
 	if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_PORT)
-		port_str = oidc_util_hdr_in_x_forwarded_port_get(r);
+		port_str = oidc_http_hdr_in_x_forwarded_port_get(r);
 
 	if (port_str)
 		return port_str;
@@ -647,9 +647,9 @@ static const char *oidc_get_current_url_port(const request_rec *r, const char *s
 	 */
 
 	if (x_forwarded_headers & OIDC_HDR_FORWARDED)
-		host_hdr = oidc_util_hdr_forwarded_get(r, "host");
+		host_hdr = oidc_http_hdr_forwarded_get(r, "host");
 	else if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_HOST)
-		host_hdr = oidc_util_hdr_in_x_forwarded_host_get(r);
+		host_hdr = oidc_http_hdr_in_x_forwarded_host_get(r);
 
 	if (host_hdr) {
 		port_str = oidc_get_port_from_host(host_hdr);
@@ -662,7 +662,7 @@ static const char *oidc_get_current_url_port(const request_rec *r, const char *s
 	 * see if we can get the port from the "Host" header; if not
 	 * we'll determine the port locally
 	 */
-	host_hdr = oidc_util_hdr_in_host_get(r);
+	host_hdr = oidc_http_hdr_in_host_get(r);
 	if (host_hdr) {
 		port_str = oidc_get_port_from_host(host_hdr);
 		if (port_str) {
@@ -675,13 +675,13 @@ static const char *oidc_get_current_url_port(const request_rec *r, const char *s
 	 * if X-Forwarded-Proto assume the default port otherwise the
 	 * port should have been set in the X-Forwarded-Port header
 	 */
-	if ((x_forwarded_headers & OIDC_HDR_X_FORWARDED_PROTO) && (oidc_util_hdr_in_x_forwarded_proto_get(r)))
+	if ((x_forwarded_headers & OIDC_HDR_X_FORWARDED_PROTO) && (oidc_http_hdr_in_x_forwarded_proto_get(r)))
 		return NULL;
 
 	/*
 	 * do the same for the Forwarded: proto= header
 	 */
-	if ((x_forwarded_headers & OIDC_HDR_FORWARDED) && (oidc_util_hdr_forwarded_get(r, "proto")))
+	if ((x_forwarded_headers & OIDC_HDR_FORWARDED) && (oidc_http_hdr_forwarded_get(r, "proto")))
 		return NULL;
 
 	/*
@@ -707,12 +707,12 @@ const char *oidc_get_current_url_host(request_rec *r, const apr_byte_t x_forward
 	char *i = NULL;
 
 	if (x_forwarded_headers & OIDC_HDR_FORWARDED)
-		host_str = oidc_util_hdr_forwarded_get(r, "host");
+		host_str = oidc_http_hdr_forwarded_get(r, "host");
 	else if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_HOST)
-		host_str = oidc_util_hdr_in_x_forwarded_host_get(r);
+		host_str = oidc_http_hdr_in_x_forwarded_host_get(r);
 
 	if (host_str == NULL)
-		host_str = oidc_util_hdr_in_host_get(r);
+		host_str = oidc_http_hdr_in_host_get(r);
 	if (host_str) {
 		host_str = apr_pstrdup(r->pool, host_str);
 
@@ -818,7 +818,7 @@ const char *oidc_get_redirect_uri_iss(request_rec *r, oidc_cfg *cfg, oidc_provid
 		redirect_uri =
 		    apr_psprintf(r->pool, "%s%s%s=%s", redirect_uri,
 				 strchr(redirect_uri, OIDC_CHAR_QUERY) != NULL ? OIDC_STR_AMP : OIDC_STR_QUERY,
-				 OIDC_PROTO_ISS, oidc_util_escape_string(r, provider->issuer));
+				 OIDC_PROTO_ISS, oidc_http_escape_string(r, provider->issuer));
 		oidc_debug(r, "determined issuer specific redirect uri: %s", redirect_uri);
 	}
 	return redirect_uri;
@@ -841,7 +841,7 @@ apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url) {
 /*
  * see if the currently accessed path has a certain query parameter
  */
-apr_byte_t oidc_util_request_has_parameter(request_rec *r, const char *param) {
+apr_byte_t oidc_http_request_has_parameter(request_rec *r, const char *param) {
 	if (r->args == NULL)
 		return FALSE;
 	const char *option1 = apr_psprintf(r->pool, "%s=", param);
@@ -852,7 +852,7 @@ apr_byte_t oidc_util_request_has_parameter(request_rec *r, const char *param) {
 /*
  * get a query parameter
  */
-apr_byte_t oidc_util_get_request_parameter(request_rec *r, char *name, char **value) {
+apr_byte_t oidc_http_request_parameter_get(request_rec *r, char *name, char **value) {
 	char *tokenizer_ctx = NULL;
 	char *p = NULL;
 	char *args = NULL;
@@ -871,7 +871,7 @@ apr_byte_t oidc_util_get_request_parameter(request_rec *r, char *name, char **va
 	do {
 		if (p && _oidc_strncmp(p, k_param, k_param_sz) == 0) {
 			*value = apr_pstrdup(r->pool, p + k_param_sz);
-			*value = oidc_util_unescape_string(r, *value);
+			*value = oidc_http_unescape_string(r, *value);
 		}
 		p = apr_strtok(NULL, OIDC_STR_AMP, &tokenizer_ctx);
 	} while (p);
@@ -974,8 +974,7 @@ apr_byte_t oidc_util_decode_json_and_check_error(request_rec *r, const char *str
 /*
  * sends content to the user agent
  */
-int oidc_util_http_send(request_rec *r, const char *data, size_t data_len, const char *content_type,
-			int success_rvalue) {
+int oidc_http_send(request_rec *r, const char *data, size_t data_len, const char *content_type, int success_rvalue) {
 	ap_set_content_type(r, content_type);
 	apr_bucket_brigade *bb = apr_brigade_create(r->pool, r->connection->bucket_alloc);
 	apr_bucket *b = apr_bucket_transient_create(data, data_len, r->connection->bucket_alloc);
@@ -1028,7 +1027,7 @@ int oidc_util_html_send(request_rec *r, const char *title, const char *html_head
 	    r->pool, html, title ? oidc_util_html_escape(r->pool, title) : "", html_head ? html_head : "",
 	    on_load ? apr_psprintf(r->pool, " onload=\"%s()\"", on_load) : "", html_body ? html_body : "<p></p>");
 
-	return oidc_util_http_send(r, html, _oidc_strlen(html), OIDC_CONTENT_TYPE_TEXT_HTML, status_code);
+	return oidc_http_send(r, html, _oidc_strlen(html), OIDC_HTTP_CONTENT_TYPE_TEXT_HTML, status_code);
 }
 
 static char *html_error_template_contents = NULL;
@@ -1076,7 +1075,7 @@ apr_byte_t oidc_util_html_send_in_template(request_rec *r, const char *filename,
 	if (static_template_content) {
 		html = apr_psprintf(r->pool, *static_template_content, oidc_util_template_escape(r, arg1, arg1_esc),
 				    oidc_util_template_escape(r, arg2, arg2_esc));
-		rc = oidc_util_http_send(r, html, _oidc_strlen(html), OIDC_CONTENT_TYPE_TEXT_HTML, status_code);
+		rc = oidc_http_send(r, html, _oidc_strlen(html), OIDC_HTTP_CONTENT_TYPE_TEXT_HTML, status_code);
 	}
 	return rc;
 }
@@ -1170,15 +1169,15 @@ static apr_byte_t oidc_util_read(request_rec *r, char **rbuf) {
 /*
  * read form-encoded parameters from a string in to a table
  */
-apr_byte_t oidc_util_read_form_encoded_params(request_rec *r, apr_table_t *table, char *data) {
+apr_byte_t oidc_http_read_form_encoded_params(request_rec *r, apr_table_t *table, char *data) {
 	const char *key = NULL;
 	const char *val = NULL;
 	const char *p = data;
 
 	while (p && *p && (val = ap_getword(r->pool, &p, OIDC_CHAR_AMP))) {
 		key = ap_getword(r->pool, &val, OIDC_CHAR_EQUAL);
-		key = oidc_util_unescape_string(r, key);
-		val = oidc_util_unescape_string(r, val);
+		key = oidc_http_unescape_string(r, key);
+		val = oidc_http_unescape_string(r, val);
 		oidc_debug(r, "read: %s=%s", key, val);
 		apr_table_set(table, key, val);
 	}
@@ -1201,7 +1200,7 @@ static void oidc_userdata_set_post_param(request_rec *r, const char *post_param_
 /*
  * read the POST parameters in to a table
  */
-apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table, apr_byte_t propagate,
+apr_byte_t oidc_http_read_post_params(request_rec *r, apr_table_t *table, apr_byte_t propagate,
 				      const char *strip_param_name) {
 	apr_byte_t rc = FALSE;
 	char *data = NULL;
@@ -1210,17 +1209,17 @@ apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table, apr_by
 	int i = 0;
 	const char *content_type = NULL;
 
-	content_type = oidc_util_hdr_in_content_type_get(r);
+	content_type = oidc_http_hdr_in_content_type_get(r);
 	if ((r->method_number != M_POST) || (content_type == NULL) ||
-	    (strstr(content_type, OIDC_CONTENT_TYPE_FORM_ENCODED) != content_type)) {
-		oidc_debug(r, "required content-type %s not found", OIDC_CONTENT_TYPE_FORM_ENCODED);
+	    (strstr(content_type, OIDC_HTTP_CONTENT_TYPE_FORM_ENCODED) != content_type)) {
+		oidc_debug(r, "required content-type %s not found", OIDC_HTTP_CONTENT_TYPE_FORM_ENCODED);
 		goto end;
 	}
 
 	if (oidc_util_read(r, &data) != TRUE)
 		goto end;
 
-	rc = oidc_util_read_form_encoded_params(r, table, data);
+	rc = oidc_http_read_form_encoded_params(r, table, data);
 	if (rc != TRUE)
 		goto end;
 
@@ -1453,7 +1452,7 @@ void oidc_util_set_app_info(request_rec *r, const char *s_key, const char *s_val
 			    apr_byte_t as_header, apr_byte_t as_env_var, int pass_as) {
 
 	/* construct the header name, cq. put the prefix in front of a normalized key name */
-	const char *s_name = apr_psprintf(r->pool, "%s%s", claim_prefix, oidc_normalize_header_name(r, s_key));
+	const char *s_name = apr_psprintf(r->pool, "%s%s", claim_prefix, oidc_http_hdr_normalize_name(r, s_key));
 	char *d_value = NULL;
 
 	if (s_value != NULL) {
@@ -1465,7 +1464,7 @@ void oidc_util_set_app_info(request_rec *r, const char *s_key, const char *s_val
 	}
 
 	if (as_header) {
-		oidc_util_hdr_in_set(r, s_name, (d_value != NULL) ? d_value : s_value);
+		oidc_http_hdr_in_set(r, s_name, (d_value != NULL) ? d_value : s_value);
 	}
 
 	if (as_env_var) {
@@ -2165,7 +2164,7 @@ void oidc_util_set_trace_parent(request_rec *r, oidc_cfg *c, const char *span) {
 	if (c->metrics_hook_data != NULL)
 		trace_flags = trace_flags | 0x01;
 
-	oidc_util_hdr_in_set(r, OIDC_HTTP_HDR_TRACE_PARENT,
+	oidc_http_hdr_in_set(r, OIDC_HTTP_HDR_TRACE_PARENT,
 			     apr_psprintf(r->pool, "00-%s-%s-%02x", s_trace_id, s_parent_id, trace_flags));
 }
 

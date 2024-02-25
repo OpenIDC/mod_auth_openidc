@@ -1464,51 +1464,51 @@ static char *test_accept(request_rec *r) {
 
 	// ie 9/10/11
 	apr_table_set(r->headers_in, "Accept", "text/html, application/xhtml+xml, */*");
-	TST_ASSERT("Accept: text/html (ie 9/10/11)", oidc_util_hdr_in_accept_contains(r, "text/html") != 0);
+	TST_ASSERT("Accept: text/html (ie 9/10/11)", oidc_http_hdr_in_accept_contains(r, "text/html") != 0);
 	TST_ASSERT("Accept: application/json (ie 9/10/11)",
-		   oidc_util_hdr_in_accept_contains(r, "application/json") == 0);
+		   oidc_http_hdr_in_accept_contains(r, "application/json") == 0);
 
 	// firefox
 	apr_table_set(r->headers_in, "Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-	TST_ASSERT("Accept: text/html (firefox)", oidc_util_hdr_in_accept_contains(r, "text/html") != 0);
-	TST_ASSERT("Accept: application/json (firefox)", oidc_util_hdr_in_accept_contains(r, "application/json") == 0);
+	TST_ASSERT("Accept: text/html (firefox)", oidc_http_hdr_in_accept_contains(r, "text/html") != 0);
+	TST_ASSERT("Accept: application/json (firefox)", oidc_http_hdr_in_accept_contains(r, "application/json") == 0);
 
 	// chrome/safari
 	apr_table_set(r->headers_in, "Accept",
 		      "application/xml,application/xhtml+xml,text/html;q=0.9, text/plain;q=0.8,image/png,*/*;q=0.5");
-	TST_ASSERT("Accept: text/html (chrome/safari)", oidc_util_hdr_in_accept_contains(r, "text/html") != 0);
+	TST_ASSERT("Accept: text/html (chrome/safari)", oidc_http_hdr_in_accept_contains(r, "text/html") != 0);
 	TST_ASSERT("Accept: application/json (chrome/safari)",
-		   oidc_util_hdr_in_accept_contains(r, "application/json") == 0);
+		   oidc_http_hdr_in_accept_contains(r, "application/json") == 0);
 
 	// safari 5
 	apr_table_set(r->headers_in, "Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-	TST_ASSERT("Accept: text/html (safari 5)", oidc_util_hdr_in_accept_contains(r, "text/html") != 0);
-	TST_ASSERT("Accept: application/json (safari 5)", oidc_util_hdr_in_accept_contains(r, "application/json") == 0);
+	TST_ASSERT("Accept: text/html (safari 5)", oidc_http_hdr_in_accept_contains(r, "text/html") != 0);
+	TST_ASSERT("Accept: application/json (safari 5)", oidc_http_hdr_in_accept_contains(r, "application/json") == 0);
 
 	// ie 8
 	apr_table_set(r->headers_in, "Accept",
 		      "image/jpeg, application/x-ms-application, image/gif, application/xaml+xml, image/pjpeg, "
 		      "application/x-ms-xbap, application/x-shockwave-flash, application/msword, */*");
-	TST_ASSERT("Accept: text/html (ie 8)", oidc_util_hdr_in_accept_contains(r, "text/html") == 0);
-	TST_ASSERT("Accept: */* (ie 8)", oidc_util_hdr_in_accept_contains(r, "*/*") != 0);
-	TST_ASSERT("Accept: application/json (ie 8)", oidc_util_hdr_in_accept_contains(r, "application/json") == 0);
+	TST_ASSERT("Accept: text/html (ie 8)", oidc_http_hdr_in_accept_contains(r, "text/html") == 0);
+	TST_ASSERT("Accept: */* (ie 8)", oidc_http_hdr_in_accept_contains(r, "*/*") != 0);
+	TST_ASSERT("Accept: application/json (ie 8)", oidc_http_hdr_in_accept_contains(r, "application/json") == 0);
 
 	// edge
 	apr_table_set(r->headers_in, "Accept", "text/html, application/xhtml+xml, image/jxr, */*");
-	TST_ASSERT("Accept: text/html (edge)", oidc_util_hdr_in_accept_contains(r, "text/html") != 0);
-	TST_ASSERT("Accept: application/json (edge)", oidc_util_hdr_in_accept_contains(r, "application/json") == 0);
+	TST_ASSERT("Accept: text/html (edge)", oidc_http_hdr_in_accept_contains(r, "text/html") != 0);
+	TST_ASSERT("Accept: application/json (edge)", oidc_http_hdr_in_accept_contains(r, "application/json") == 0);
 
 	// opera
 	apr_table_set(r->headers_in, "Accept",
 		      "text/html, application/xml;q=0.9, application/xhtml+xml, image/png, image/webp, image/jpeg, "
 		      "image/gif, image/x-xbitmap, */*;q=0.1");
-	TST_ASSERT("Accept: text/html (opera)", oidc_util_hdr_in_accept_contains(r, "text/html") != 0);
-	TST_ASSERT("Accept: application/json (opera)", oidc_util_hdr_in_accept_contains(r, "application/json") == 0);
+	TST_ASSERT("Accept: text/html (opera)", oidc_http_hdr_in_accept_contains(r, "text/html") != 0);
+	TST_ASSERT("Accept: application/json (opera)", oidc_http_hdr_in_accept_contains(r, "application/json") == 0);
 
 	// xmlhttprequest
 	apr_table_set(r->headers_in, "Accept", "application/json");
-	TST_ASSERT("Accept: text/html (opera)", oidc_util_hdr_in_accept_contains(r, "text/html") == 0);
-	TST_ASSERT("Accept: application/json (opera)", oidc_util_hdr_in_accept_contains(r, "application/json") != 0);
+	TST_ASSERT("Accept: text/html (opera)", oidc_http_hdr_in_accept_contains(r, "text/html") == 0);
+	TST_ASSERT("Accept: application/json (opera)", oidc_http_hdr_in_accept_contains(r, "application/json") != 0);
 
 	return 0;
 }

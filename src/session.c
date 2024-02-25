@@ -155,7 +155,7 @@ static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 	apr_byte_t rc = FALSE;
 
 	/* get the cookie that should be our uuid/key */
-	char *uuid = oidc_util_get_cookie(r, oidc_cfg_dir_cookie(r));
+	char *uuid = oidc_http_get_cookie(r, oidc_cfg_dir_cookie(r));
 
 	/* get the string-encoded session from the cache based on the key; decryption is based on the cache backend
 	 * config */
@@ -172,7 +172,7 @@ static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 		/* cache backend does not contain an entry for the given key */
 		if (z->state == NULL) {
 			/* delete the session cookie */
-			oidc_util_set_cookie(r, oidc_cfg_dir_cookie(r), "", 0, OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r));
+			oidc_http_set_cookie(r, oidc_cfg_dir_cookie(r), "", 0, OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r));
 		}
 	}
 
@@ -202,7 +202,7 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, apr
 
 		if (rc == TRUE)
 			/* set the uuid in the cookie */
-			oidc_util_set_cookie(
+			oidc_http_set_cookie(
 			    r, oidc_cfg_dir_cookie(r), z->uuid, c->persistent_session_cookie ? z->expiry : -1,
 			    c->cookie_same_site
 				? (first_time ? OIDC_COOKIE_EXT_SAME_SITE_LAX : OIDC_COOKIE_EXT_SAME_SITE_STRICT)
@@ -214,7 +214,7 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, apr
 			oidc_cache_set_sid(r, z->sid, NULL, 0);
 
 		/* clear the cookie */
-		oidc_util_set_cookie(r, oidc_cfg_dir_cookie(r), "", 0, OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r));
+		oidc_http_set_cookie(r, oidc_cfg_dir_cookie(r), "", 0, OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r));
 
 		/* remove the session from the cache */
 		rc = oidc_cache_set_session(r, z->uuid, NULL, 0);
@@ -227,7 +227,7 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, apr
  * load the session from a self-contained client-side cookie
  */
 static apr_byte_t oidc_session_load_cookie(request_rec *r, oidc_cfg *c, oidc_session_t *z) {
-	char *cookieValue = oidc_util_get_chunked_cookie(r, oidc_cfg_dir_cookie(r), c->session_cookie_chunk_size);
+	char *cookieValue = oidc_http_get_chunked_cookie(r, oidc_cfg_dir_cookie(r), c->session_cookie_chunk_size);
 	if ((cookieValue != NULL) && (oidc_session_decode(r, c, z, cookieValue, TRUE) == FALSE))
 		return FALSE;
 	return TRUE;
@@ -242,7 +242,7 @@ static apr_byte_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z, ap
 	if ((z->state != NULL) && (oidc_session_encode(r, c, z, &cookieValue, TRUE) == FALSE))
 		return FALSE;
 
-	oidc_util_set_chunked_cookie(
+	oidc_http_set_chunked_cookie(
 	    r, oidc_cfg_dir_cookie(r), cookieValue, c->persistent_session_cookie ? z->expiry : -1,
 	    c->session_cookie_chunk_size,
 	    (z->state == NULL)	  ? OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r)

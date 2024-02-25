@@ -1048,7 +1048,7 @@ static int oidc_metrics_handle_json(request_rec *r, char *s_json) {
 end:
 
 	/* return the data to the caller */
-	return oidc_util_http_send(r, s_json, _oidc_strlen(s_json), OIDC_CONTENT_TYPE_JSON, OK);
+	return oidc_http_send(r, s_json, _oidc_strlen(s_json), OIDC_HTTP_CONTENT_TYPE_JSON, OK);
 }
 
 /*
@@ -1057,7 +1057,7 @@ end:
 static int oidc_metrics_handle_internal(request_rec *r, char *s_json) {
 	if (s_json == NULL)
 		return HTTP_NOT_FOUND;
-	return oidc_util_http_send(r, s_json, _oidc_strlen(s_json), OIDC_CONTENT_TYPE_JSON, OK);
+	return oidc_http_send(r, s_json, _oidc_strlen(s_json), OIDC_HTTP_CONTENT_TYPE_JSON, OK);
 }
 
 #define OIDC_METRICS_SERVER_PARAM "server_name"
@@ -1075,9 +1075,9 @@ static int oidc_metrics_handle_status(request_rec *r, char *s_json) {
 	const char *s_key = NULL, *s_name = NULL;
 	void *iter = NULL;
 
-	oidc_util_get_request_parameter(r, OIDC_METRICS_SERVER_PARAM, &s_server);
-	oidc_util_get_request_parameter(r, OIDC_METRICS_COUNTER_PARAM, &metric);
-	oidc_util_get_request_parameter(r, OIDC_METRICS_SPEC_PARAM, &spec);
+	oidc_http_request_parameter_get(r, OIDC_METRICS_SERVER_PARAM, &s_server);
+	oidc_http_request_parameter_get(r, OIDC_METRICS_COUNTER_PARAM, &metric);
+	oidc_http_request_parameter_get(r, OIDC_METRICS_SPEC_PARAM, &spec);
 
 	if (s_server == NULL)
 		s_server = "localhost";
@@ -1115,7 +1115,7 @@ end:
 	if (json)
 		json_decref(json);
 
-	return oidc_util_http_send(r, msg, _oidc_strlen(msg), "text/plain", OK);
+	return oidc_http_send(r, msg, _oidc_strlen(msg), "text/plain", OK);
 }
 
 /*
@@ -1282,8 +1282,7 @@ static int oidc_metrics_handle_prometheus(request_rec *r, char *s_json) {
 
 	json_decref(json);
 
-	return oidc_util_http_send(r, ctx.s_result, _oidc_strlen(ctx.s_result), OIDC_METRICS_PROMETHEUS_CONTENT_TYPE,
-				   OK);
+	return oidc_http_send(r, ctx.s_result, _oidc_strlen(ctx.s_result), OIDC_METRICS_PROMETHEUS_CONTENT_TYPE, OK);
 }
 
 /*
@@ -1318,7 +1317,7 @@ static int oidc_metric_reset(request_rec *r, int dvalue) {
 	char svalue[16];
 	int value = 0;
 
-	oidc_util_get_request_parameter(r, OIDC_METRICS_RESET_PARAM, &s_reset);
+	oidc_http_request_parameter_get(r, OIDC_METRICS_RESET_PARAM, &s_reset);
 
 	if (s_reset == NULL)
 		return dvalue;
@@ -1343,7 +1342,7 @@ const oidc_metrics_content_handler_t *oidc_metrics_find_handler(request_rec *r) 
 	int i = 0;
 
 	/* get the specified format */
-	oidc_util_get_request_parameter(r, OIDC_METRICS_FORMAT_PARAM, &s_format);
+	oidc_http_request_parameter_get(r, OIDC_METRICS_FORMAT_PARAM, &s_format);
 
 	if (s_format == NULL)
 		return &_oidc_metrics_handlers[0];

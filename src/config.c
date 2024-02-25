@@ -1282,13 +1282,13 @@ static void oidc_check_x_forwarded_hdr(request_rec *r, const apr_byte_t x_forwar
 
 void oidc_config_check_x_forwarded(request_rec *r, const apr_byte_t x_forwarded_headers) {
 	oidc_check_x_forwarded_hdr(r, x_forwarded_headers, OIDC_HDR_X_FORWARDED_HOST, OIDC_HTTP_HDR_X_FORWARDED_HOST,
-				   oidc_util_hdr_in_x_forwarded_host_get);
+				   oidc_http_hdr_in_x_forwarded_host_get);
 	oidc_check_x_forwarded_hdr(r, x_forwarded_headers, OIDC_HDR_X_FORWARDED_PORT, OIDC_HTTP_HDR_X_FORWARDED_PORT,
-				   oidc_util_hdr_in_x_forwarded_port_get);
+				   oidc_http_hdr_in_x_forwarded_port_get);
 	oidc_check_x_forwarded_hdr(r, x_forwarded_headers, OIDC_HDR_X_FORWARDED_PROTO, OIDC_HTTP_HDR_X_FORWARDED_PROTO,
-				   oidc_util_hdr_in_x_forwarded_proto_get);
+				   oidc_http_hdr_in_x_forwarded_proto_get);
 	oidc_check_x_forwarded_hdr(r, x_forwarded_headers, OIDC_HDR_FORWARDED, OIDC_HTTP_HDR_FORWARDED,
-				   oidc_util_hdr_in_forwarded_get);
+				   oidc_http_hdr_in_forwarded_get);
 }
 
 static const char *oidc_set_redirect_urls_allowed(cmd_parms *cmd, void *m, const char *arg) {
@@ -2743,7 +2743,7 @@ static apr_status_t oidc_filter_in_filter(ap_filter_t *f, apr_bucket_brigade *br
 
 			if (userdata_post_params != NULL) {
 				buf = apr_psprintf(f->r->pool, "%s%s", ctx->nbytes > 0 ? "&" : "",
-						   oidc_util_http_form_encoded_data(f->r, userdata_post_params));
+						   oidc_http_form_encoded_data(f->r, userdata_post_params));
 				b_out =
 				    apr_bucket_heap_create(buf, _oidc_strlen(buf), 0, f->r->connection->bucket_alloc);
 
@@ -2751,8 +2751,8 @@ static apr_status_t oidc_filter_in_filter(ap_filter_t *f, apr_bucket_brigade *br
 
 				ctx->nbytes += _oidc_strlen(buf);
 
-				if (oidc_util_hdr_in_content_length_get(f->r) != NULL)
-					oidc_util_hdr_in_set(f->r, OIDC_HTTP_HDR_CONTENT_LENGTH,
+				if (oidc_http_hdr_in_content_length_get(f->r) != NULL)
+					oidc_http_hdr_in_set(f->r, OIDC_HTTP_HDR_CONTENT_LENGTH,
 							     apr_psprintf(f->r->pool, "%ld", (long)ctx->nbytes));
 
 				apr_pool_userdata_set(NULL, OIDC_USERDATA_POST_PARAMS_KEY, NULL, f->r->pool);

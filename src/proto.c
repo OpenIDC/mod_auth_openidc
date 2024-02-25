@@ -418,7 +418,7 @@ static char *oidc_proto_create_request_uri(request_rec *r, struct oidc_provider_
 			oidc_cache_set_request_uri(r, request_ref, serialized_request_object,
 						   apr_time_now() + apr_time_from_sec(ttl));
 			request_uri = apr_psprintf(r->pool, "%s?%s=%s", resolver_url, OIDC_PROTO_REQUEST_URI,
-						   oidc_util_escape_string(r, request_ref));
+						   oidc_http_escape_string(r, request_ref));
 		}
 	}
 
@@ -531,8 +531,8 @@ void add_auth_request_params(request_rec *r, apr_table_t *params, const char *au
 			apr_table_add(params, key, val);
 			continue;
 		}
-		if (oidc_util_request_has_parameter(r, key) == TRUE) {
-			oidc_util_get_request_parameter(r, key, &val);
+		if (oidc_http_request_has_parameter(r, key) == TRUE) {
+			oidc_http_request_parameter_get(r, key, &val);
 			apr_table_add(params, key, val);
 		}
 	}
@@ -642,15 +642,14 @@ int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *pro
 	} else if (provider->auth_request_method == OIDC_AUTH_REQUEST_METHOD_GET) {
 
 		/* construct the full authorization request URL */
-		authorization_request =
-		    oidc_util_http_query_encoded_url(r, provider->authorization_endpoint_url, params);
+		authorization_request = oidc_http_query_encoded_url(r, provider->authorization_endpoint_url, params);
 
 		// TODO: should also enable this when using the POST binding for the auth request
 		/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
 		if (oidc_post_preserve_javascript(r, authorization_request, NULL, NULL) == FALSE) {
 
 			/* add the redirect location header */
-			oidc_util_hdr_out_location_set(r, authorization_request);
+			oidc_http_hdr_out_location_set(r, authorization_request);
 
 			/* and tell Apache to return an HTTP Redirect (302) message */
 			rv = HTTP_MOVED_TEMPORARILY;
@@ -672,7 +671,7 @@ int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *pro
 	oidc_proto_state_destroy(proto_state);
 
 	/* no cache */
-	oidc_util_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL, "no-cache, no-store, max-age=0");
+	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL, "no-cache, no-store, max-age=0");
 
 	/* log our exit code */
 	oidc_debug(r, "return: %d", rv);
@@ -696,9 +695,9 @@ apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r, oidc_cf
 
 	/* prereq: this is a call to the configured redirect_uri; see if it is a GET with state and id_token or code
 	 * parameters */
-	return ((r->method_number == M_GET) && oidc_util_request_has_parameter(r, OIDC_PROTO_STATE) &&
-		(oidc_util_request_has_parameter(r, OIDC_PROTO_ID_TOKEN) ||
-		 oidc_util_request_has_parameter(r, OIDC_PROTO_CODE)));
+	return ((r->method_number == M_GET) && oidc_http_request_has_parameter(r, OIDC_PROTO_STATE) &&
+		(oidc_http_request_has_parameter(r, OIDC_PROTO_ID_TOKEN) ||
+		 oidc_http_request_has_parameter(r, OIDC_PROTO_CODE)));
 }
 
 /*
@@ -1517,8 +1516,8 @@ static apr_byte_t oidc_proto_endpoint_client_secret_basic(request_rec *r, const 
 		oidc_error(r, "no client secret is configured");
 		return FALSE;
 	}
-	*basic_auth_str = apr_psprintf(r->pool, "%s:%s", oidc_util_escape_string(r, client_id),
-				       oidc_util_escape_string(r, client_secret));
+	*basic_auth_str = apr_psprintf(r->pool, "%s:%s", oidc_http_escape_string(r, client_id),
+				       oidc_http_escape_string(r, client_secret));
 
 	return TRUE;
 }
@@ -1749,12 +1748,12 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg *cf
 	oidc_util_table_add_query_encoded_params(r->pool, params, provider->token_endpoint_params);
 
 	/* send the refresh request to the token endpoint */
-	if (oidc_util_http_post_form(r, provider->token_endpoint_url, params, basic_auth, bearer_auth,
-				     provider->ssl_validate_server, &response, &cfg->http_timeout_long,
-				     &cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r),
-				     oidc_util_get_full_path(r->pool, provider->token_endpoint_tls_client_cert),
-				     oidc_util_get_full_path(r->pool, provider->token_endpoint_tls_client_key),
-				     provider->token_endpoint_tls_client_key_pwd) == FALSE) {
+	if (oidc_http_post_form(r, provider->token_endpoint_url, params, basic_auth, bearer_auth,
+				provider->ssl_validate_server, &response, &cfg->http_timeout_long, &cfg->outgoing_proxy,
+				oidc_dir_cfg_pass_cookies(r),
+				oidc_util_get_full_path(r->pool, provider->token_endpoint_tls_client_cert),
+				oidc_util_get_full_path(r->pool, provider->token_endpoint_tls_client_key),
+				provider->token_endpoint_tls_client_key_pwd) == FALSE) {
 		oidc_warn(r, "error when calling the token endpoint (%s)", provider->token_endpoint_url);
 		return FALSE;
 	}
@@ -1960,10 +1959,10 @@ static apr_byte_t oidc_proto_resolve_composite_claims(request_rec *r, oidc_cfg *
 				const char *endpoint =
 				    json_string_value(json_object_get(value, OIDC_COMPOSITE_CLAIM_ENDPOINT));
 				if ((access_token != NULL) && (endpoint != NULL)) {
-					oidc_util_http_get(r, endpoint, NULL, NULL, access_token,
-							   cfg->provider.ssl_validate_server, &s_json,
-							   &cfg->http_timeout_long, &cfg->outgoing_proxy,
-							   oidc_dir_cfg_pass_cookies(r), NULL, NULL, NULL);
+					oidc_http_get(r, endpoint, NULL, NULL, access_token,
+						      cfg->provider.ssl_validate_server, &s_json,
+						      &cfg->http_timeout_long, &cfg->outgoing_proxy,
+						      oidc_dir_cfg_pass_cookies(r), NULL, NULL, NULL);
 				}
 			}
 			if ((s_json != NULL) && (_oidc_strcmp(s_json, "") != 0)) {
@@ -2025,19 +2024,19 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg, oidc_provi
 
 	/* get the JSON response */
 	if (provider->userinfo_token_method == OIDC_USER_INFO_TOKEN_METHOD_HEADER) {
-		if (oidc_util_http_get(r, provider->userinfo_endpoint_url, NULL, NULL, access_token,
-				       provider->ssl_validate_server, response, &cfg->http_timeout_long,
-				       &cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL, NULL, NULL) == FALSE) {
+		if (oidc_http_get(r, provider->userinfo_endpoint_url, NULL, NULL, access_token,
+				  provider->ssl_validate_server, response, &cfg->http_timeout_long,
+				  &cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL, NULL, NULL) == FALSE) {
 			OIDC_METRICS_COUNTER_INC(r, cfg, OM_PROVIDER_USERINFO_ERROR);
 			return FALSE;
 		}
 	} else if (provider->userinfo_token_method == OIDC_USER_INFO_TOKEN_METHOD_POST) {
 		apr_table_t *params = apr_table_make(r->pool, 4);
 		apr_table_setn(params, OIDC_PROTO_ACCESS_TOKEN, access_token);
-		if (oidc_util_http_post_form(r, provider->userinfo_endpoint_url, params, NULL, NULL,
-					     provider->ssl_validate_server, response, &cfg->http_timeout_long,
-					     &cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL, NULL,
-					     NULL) == FALSE) {
+		if (oidc_http_post_form(r, provider->userinfo_endpoint_url, params, NULL, NULL,
+					provider->ssl_validate_server, response, &cfg->http_timeout_long,
+					&cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL, NULL,
+					NULL) == FALSE) {
 			OIDC_METRICS_COUNTER_INC(r, cfg, OM_PROVIDER_USERINFO_ERROR);
 			return FALSE;
 		}
@@ -2099,9 +2098,9 @@ static apr_byte_t oidc_proto_webfinger_discovery(request_rec *r, oidc_cfg *cfg, 
 	apr_table_setn(params, "rel", "http://openid.net/specs/connect/1.0/issuer");
 
 	char *response = NULL;
-	if (oidc_util_http_get(r, url, params, NULL, NULL, cfg->provider.ssl_validate_server, &response,
-			       &cfg->http_timeout_short, &cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL, NULL,
-			       NULL) == FALSE) {
+	if (oidc_http_get(r, url, params, NULL, NULL, cfg->provider.ssl_validate_server, &response,
+			  &cfg->http_timeout_short, &cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL, NULL,
+			  NULL) == FALSE) {
 		/* errors will have been logged by now */
 		return FALSE;
 	}
