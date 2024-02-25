@@ -55,7 +55,6 @@
 #include "http.h"
 #include "metrics.h"
 #include "parse.h"
-#include "util.h"
 
 #include "mod_auth_openidc.h"
 
