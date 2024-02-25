@@ -4769,7 +4769,7 @@ module AP_MODULE_DECLARE_DATA auth_openidc_module = {
 	oidc_create_dir_config,
 	oidc_merge_dir_config,
 	oidc_create_server_config,
-    oidc_merge_server_config,
+	oidc_merge_server_config,
 	oidc_config_cmds,
 	oidc_register_hooks
 };

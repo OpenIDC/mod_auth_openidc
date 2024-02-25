@@ -1040,3 +1040,39 @@ void oidc_http_set_chunked_cookie(request_rec *r, const char *cookieName, const 
 			     apr_psprintf(r->pool, "%d", chunkCountValue), expires, ext);
 	oidc_http_set_cookie(r, cookieName, "", expires, ext);
 }
+
+char **oidc_http_proxy_auth_options(void) {
+	static char *options[] = {OIDC_HTTP_PROXY_AUTH_BASIC,
+				  OIDC_HTTP_PROXY_AUTH_DIGEST,
+				  OIDC_HTTP_PROXY_AUTH_NTLM,
+				  OIDC_HTTP_PROXY_AUTH_ANY,
+#ifdef CURLAUTH_NEGOTIATE
+				  OIDC_HTTP_PROXY_AUTH_NEGOTIATE,
+#endif
+				  NULL};
+	return options;
+}
+
+unsigned long oidc_http_proxy_s2auth(const char *arg) {
+	if (_oidc_strcmp(arg, OIDC_HTTP_PROXY_AUTH_BASIC) == 0)
+		return CURLAUTH_BASIC;
+	if (_oidc_strcmp(arg, OIDC_HTTP_PROXY_AUTH_DIGEST) == 0)
+		return CURLAUTH_DIGEST;
+	if (_oidc_strcmp(arg, OIDC_HTTP_PROXY_AUTH_NTLM) == 0)
+		return CURLAUTH_NTLM;
+	if (_oidc_strcmp(arg, OIDC_HTTP_PROXY_AUTH_ANY) == 0)
+		return CURLAUTH_ANY;
+#ifdef CURLAUTH_NEGOTIATE
+	if (_oidc_strcmp(arg, OIDC_HTTP_PROXY_AUTH_NEGOTIATE) == 0)
+		return CURLAUTH_NEGOTIATE;
+#endif
+	return CURLAUTH_NONE;
+}
+
+void oidc_http_init(void) {
+	curl_global_init(CURL_GLOBAL_ALL);
+}
+
+void oidc_http_cleanup(void) {
+	curl_global_cleanup();
+}

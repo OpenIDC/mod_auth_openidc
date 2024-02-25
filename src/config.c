@@ -48,8 +48,6 @@
 
 // clang-format on
 
-#include <curl/curl.h>
-
 #define OPENSSL_THREAD_DEFINES
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -2518,7 +2516,7 @@ static apr_status_t oidc_cleanup_parent(void *data) {
 #endif /* (OPENSSL_VERSION_NUMBER < 0x10100000) && defined (OPENSSL_THREADS) && APR_HAS_THREADS */
 
 	EVP_cleanup();
-	curl_global_cleanup();
+	oidc_http_cleanup();
 
 	ap_log_error(APLOG_MARK, APLOG_INFO, 0, (server_rec *)data, "%s - shutdown", NAMEVERSION);
 
@@ -2566,7 +2564,7 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, se
 #endif
 	);
 
-	curl_global_init(CURL_GLOBAL_ALL);
+	oidc_http_init();
 
 #if ((OPENSSL_VERSION_NUMBER < 0x10100000) && defined(OPENSSL_THREADS) && APR_HAS_THREADS)
 	ssl_num_locks = CRYPTO_num_locks();

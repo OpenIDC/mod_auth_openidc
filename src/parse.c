@@ -43,8 +43,6 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#include <curl/curl.h>
-
 #include "mod_auth_openidc.h"
 
 /*
@@ -1249,41 +1247,11 @@ const char *oidc_parse_x_forwarded_headers(apr_pool_t *pool, const char *arg, ap
 	return NULL;
 }
 
-#define OIDC_PROXY_AUTH_BASIC "basic"
-#define OIDC_PROXY_AUTH_DIGEST "digest"
-#define OIDC_PROXY_AUTH_NTLM "ntlm"
-#define OIDC_PROXY_AUTH_ANY "any"
-#ifdef CURLAUTH_NEGOTIATE
-#define OIDC_PROXY_AUTH_NEGOTIATE "negotiate"
-#endif
-
 const char *oidc_parse_outgoing_proxy_auth_type(apr_pool_t *pool, const char *arg, unsigned long *auth_type) {
-	static char *options[] = {OIDC_PROXY_AUTH_BASIC,
-				  OIDC_PROXY_AUTH_DIGEST,
-				  OIDC_PROXY_AUTH_NTLM,
-				  OIDC_PROXY_AUTH_ANY,
-#ifdef CURLAUTH_NEGOTIATE
-				  OIDC_PROXY_AUTH_NEGOTIATE,
-#endif
-				  NULL};
-	const char *rv = oidc_valid_string_option(pool, arg, options);
+	const char *rv = oidc_valid_string_option(pool, arg, oidc_http_proxy_auth_options());
 	if (rv != NULL)
 		return rv;
-
-	if (_oidc_strcmp(arg, OIDC_PROXY_AUTH_BASIC) == 0) {
-		*auth_type = CURLAUTH_BASIC;
-	} else if (_oidc_strcmp(arg, OIDC_PROXY_AUTH_DIGEST) == 0) {
-		*auth_type = CURLAUTH_DIGEST;
-	} else if (_oidc_strcmp(arg, OIDC_PROXY_AUTH_NTLM) == 0) {
-		*auth_type = CURLAUTH_NTLM;
-	} else if (_oidc_strcmp(arg, OIDC_PROXY_AUTH_ANY) == 0) {
-		*auth_type = CURLAUTH_ANY;
-#ifdef CURLAUTH_NEGOTIATE
-	} else if (_oidc_strcmp(arg, OIDC_PROXY_AUTH_NEGOTIATE) == 0) {
-		*auth_type = CURLAUTH_NEGOTIATE;
-#endif
-	}
-
+	*auth_type = oidc_http_proxy_s2auth(arg);
 	return NULL;
 }
 

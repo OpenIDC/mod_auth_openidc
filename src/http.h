@@ -98,6 +98,12 @@ typedef struct oidc_http_timeout_t {
 	apr_time_t retry_interval;
 } oidc_http_timeout_t;
 
+#define OIDC_HTTP_PROXY_AUTH_BASIC "basic"
+#define OIDC_HTTP_PROXY_AUTH_DIGEST "digest"
+#define OIDC_HTTP_PROXY_AUTH_NTLM "ntlm"
+#define OIDC_HTTP_PROXY_AUTH_ANY "any"
+#define OIDC_HTTP_PROXY_AUTH_NEGOTIATE "negotiate"
+
 typedef struct oidc_http_outgoing_proxy_t {
 	const char *host_port;
 	const char *username_password;
@@ -162,5 +168,11 @@ void oidc_http_set_cookie(request_rec *r, const char *cookieName, const char *co
 char *oidc_http_get_chunked_cookie(request_rec *r, const char *cookieName, int chunkSize);
 void oidc_http_set_chunked_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires,
 				  int chunkSize, const char *ext);
+
+char **oidc_http_proxy_auth_options(void);
+unsigned long oidc_http_proxy_s2auth(const char *arg);
+
+void oidc_http_init(void);
+void oidc_http_cleanup(void);
 
 #endif /* MOD_AUTH_OPENIDC_HTTP_H_ */
