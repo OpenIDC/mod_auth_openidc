@@ -214,7 +214,7 @@ static const char *oidc_util_get__oidc_jwt_hdr_dir_a256gcm(request_rec *r, char 
 		compact_encoded_jwt = input;
 	}
 
-	p = strstr(compact_encoded_jwt, "..");
+	p = _oidc_strstr(compact_encoded_jwt, "..");
 	if (p) {
 		_oidc_jwt_hdr_dir_a256gcm = apr_pstrndup(r->server->process->pconf, compact_encoded_jwt,
 							 _oidc_strlen(compact_encoded_jwt) - _oidc_strlen(p) + 2);
@@ -846,7 +846,7 @@ apr_byte_t oidc_http_request_has_parameter(request_rec *r, const char *param) {
 		return FALSE;
 	const char *option1 = apr_psprintf(r->pool, "%s=", param);
 	const char *option2 = apr_psprintf(r->pool, "&%s=", param);
-	return ((strstr(r->args, option1) == r->args) || (strstr(r->args, option2) != NULL)) ? TRUE : FALSE;
+	return ((_oidc_strstr(r->args, option1) == r->args) || (_oidc_strstr(r->args, option2) != NULL)) ? TRUE : FALSE;
 }
 
 /*
@@ -1211,7 +1211,7 @@ apr_byte_t oidc_http_read_post_params(request_rec *r, apr_table_t *table, apr_by
 
 	content_type = oidc_http_hdr_in_content_type_get(r);
 	if ((r->method_number != M_POST) || (content_type == NULL) ||
-	    (strstr(content_type, OIDC_HTTP_CONTENT_TYPE_FORM_ENCODED) != content_type)) {
+	    (_oidc_strstr(content_type, OIDC_HTTP_CONTENT_TYPE_FORM_ENCODED) != content_type)) {
 		oidc_debug(r, "required content-type %s not found", OIDC_HTTP_CONTENT_TYPE_FORM_ENCODED);
 		goto end;
 	}
@@ -1934,7 +1934,7 @@ int oidc_util_cookie_domain_valid(const char *hostname, char *cookie_domain) {
 	// with a ".", ASCII 46
 	if (check_cookie[0] == 46)
 		check_cookie++;
-	p = strstr(hostname, check_cookie);
+	p = _oidc_strstr(hostname, check_cookie);
 
 	if ((p == NULL) || (_oidc_strcmp(check_cookie, p) != 0)) {
 		return FALSE;

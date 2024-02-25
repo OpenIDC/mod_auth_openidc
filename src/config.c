@@ -369,7 +369,7 @@ static const char *oidc_set_http_timeout_slot(cmd_parms *cmd, void *struct_ptr, 
 		http_timeout->connect_timeout = _oidc_str_to_int(arg2);
 	if (arg3) {
 		s = apr_pstrdup(cmd->pool, arg3);
-		p = strstr(s, OIDC_STR_COLON);
+		p = _oidc_strstr(s, OIDC_STR_COLON);
 		if (p) {
 			*p = '\0';
 			p++;

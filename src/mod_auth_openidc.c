@@ -138,7 +138,7 @@ void oidc_scrub_headers(request_rec *r) {
 	 * then see if the claim headers need to be removed on top of that
 	 * (i.e. the prefix does not start with the default OIDC_)
 	 */
-	if ((strstr(prefix, OIDC_DEFAULT_HEADER_PREFIX) != prefix)) {
+	if ((_oidc_strstr(prefix, OIDC_DEFAULT_HEADER_PREFIX) != prefix)) {
 		oidc_scrub_request_headers(r, prefix, NULL);
 	}
 }
@@ -555,7 +555,7 @@ static int oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c, const c
 		while (cookie != NULL) {
 			while (*cookie == OIDC_CHAR_SPACE)
 				cookie++;
-			if (strstr(cookie, oidc_cfg_dir_state_cookie_prefix(r)) == cookie) {
+			if (_oidc_strstr(cookie, oidc_cfg_dir_state_cookie_prefix(r)) == cookie) {
 				char *cookieName = cookie;
 				while (cookie != NULL && *cookie != OIDC_CHAR_EQUAL)
 					cookie++;
@@ -1982,8 +1982,9 @@ static apr_byte_t oidc_set_request_user(request_rec *r, oidc_cfg *c, oidc_provid
 	apr_byte_t post_fix_with_issuer = (claim_name[n - 1] == OIDC_CHAR_AT);
 	if (post_fix_with_issuer == TRUE) {
 		claim_name[n - 1] = '\0';
-		issuer = (strstr(issuer, "https://") == NULL) ? apr_pstrdup(r->pool, issuer)
-							      : apr_pstrdup(r->pool, issuer + _oidc_strlen("https://"));
+		issuer = (_oidc_strstr(issuer, "https://") == NULL)
+			     ? apr_pstrdup(r->pool, issuer)
+			     : apr_pstrdup(r->pool, issuer + _oidc_strlen("https://"));
 	}
 
 	/* extract the username claim (default: "sub") from the id_token payload or user claims */
@@ -2513,12 +2514,12 @@ static int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 			href = apr_psprintf(r->pool, "%s&amp;%s=%s", href, OIDC_DISC_AR_PARAM,
 					    oidc_http_escape_string(r, path_auth_request_params));
 
-		char *display = (strstr(issuer, "https://") == NULL)
+		char *display = (_oidc_strstr(issuer, "https://") == NULL)
 				    ? apr_pstrdup(r->pool, issuer)
 				    : apr_pstrdup(r->pool, issuer + _oidc_strlen("https://"));
 
 		/* strip port number */
-		// char *p = strstr(display, ":");
+		// char *p = _oidc_strstr(display, ":");
 		// if (p != NULL) *p = '\0';
 		/* point back to the redirect_uri, where the selection is handled, with an IDP selection and return_to
 		 * URL */
@@ -2676,7 +2677,7 @@ static int oidc_authenticate_user(request_rec *r, oidc_cfg *c, oidc_provider_t *
 
 	if (c->cookie_domain == NULL) {
 		if (_oidc_strcmp(o_uri.hostname, r_uri.hostname) != 0) {
-			char *p = strstr(o_uri.hostname, r_uri.hostname);
+			char *p = _oidc_strstr(o_uri.hostname, r_uri.hostname);
 			if ((p == NULL) || (_oidc_strcmp(r_uri.hostname, p) != 0)) {
 				oidc_error(r,
 					   "the URL hostname (%s) of the configured " OIDCRedirectURI
@@ -2732,7 +2733,7 @@ static int oidc_target_link_uri_matches_configuration(request_rec *r, oidc_cfg *
 		/* cookie_domain set: see if the target_link_uri matches the redirect_uri host (because the session
 		 * cookie will be set host-wide) */
 		if (_oidc_strcmp(o_uri.hostname, r_uri.hostname) != 0) {
-			char *p = strstr(o_uri.hostname, r_uri.hostname);
+			char *p = _oidc_strstr(o_uri.hostname, r_uri.hostname);
 			if ((p == NULL) || (_oidc_strcmp(r_uri.hostname, p) != 0)) {
 				oidc_error(r,
 					   "the URL hostname (%s) of the configured " OIDCRedirectURI
@@ -2744,7 +2745,7 @@ static int oidc_target_link_uri_matches_configuration(request_rec *r, oidc_cfg *
 		}
 	} else {
 		/* cookie_domain set: see if the target_link_uri is within the cookie_domain */
-		char *p = strstr(o_uri.hostname, cfg->cookie_domain);
+		char *p = _oidc_strstr(o_uri.hostname, cfg->cookie_domain);
 		if ((p == NULL) || (_oidc_strcmp(cfg->cookie_domain, p) != 0)) {
 			oidc_error(r,
 				   "the domain (%s) configured in " OIDCCookieDomain
@@ -2758,7 +2759,7 @@ static int oidc_target_link_uri_matches_configuration(request_rec *r, oidc_cfg *
 	/* see if the cookie_path setting matches the target_link_uri path */
 	char *cookie_path = oidc_cfg_dir_cookie_path(r);
 	if (cookie_path != NULL) {
-		char *p = (o_uri.path != NULL) ? strstr(o_uri.path, cookie_path) : NULL;
+		char *p = (o_uri.path != NULL) ? _oidc_strstr(o_uri.path, cookie_path) : NULL;
 		if (p != o_uri.path) {
 			oidc_error(r,
 				   "the path (%s) configured in " OIDCCookiePath
@@ -2828,7 +2829,7 @@ apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg *c, const char *r
 			url_ipv6_aware = uri.hostname;
 		}
 
-		if ((strstr(c_host, url_ipv6_aware) == NULL) || (strstr(url_ipv6_aware, c_host) == NULL)) {
+		if ((_oidc_strstr(c_host, url_ipv6_aware) == NULL) || (_oidc_strstr(url_ipv6_aware, c_host) == NULL)) {
 			*err_str = apr_pstrdup(r->pool, "Invalid Request");
 			*err_desc = apr_psprintf(
 			    r->pool, "URL value \"%s\" does not match the hostname of the current request \"%s\"",
@@ -2838,19 +2839,19 @@ apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg *c, const char *r
 		}
 	}
 
-	if ((uri.hostname == NULL) && (strstr(url, "/") != url)) {
+	if ((uri.hostname == NULL) && (_oidc_strstr(url, "/") != url)) {
 		*err_str = apr_pstrdup(r->pool, "Malformed URL");
 		*err_desc = apr_psprintf(
 		    r->pool, "No hostname was parsed and it does not seem to be relative, i.e starting with '/': %s",
 		    url);
 		oidc_error(r, "%s: %s", *err_str, *err_desc);
 		return FALSE;
-	} else if ((uri.hostname == NULL) && (strstr(url, "//") == url)) {
+	} else if ((uri.hostname == NULL) && (_oidc_strstr(url, "//") == url)) {
 		*err_str = apr_pstrdup(r->pool, "Malformed URL");
 		*err_desc = apr_psprintf(r->pool, "No hostname was parsed and starting with '//': %s", url);
 		oidc_error(r, "%s: %s", *err_str, *err_desc);
 		return FALSE;
-	} else if ((uri.hostname == NULL) && (strstr(url, "/\\") == url)) {
+	} else if ((uri.hostname == NULL) && (_oidc_strstr(url, "/\\") == url)) {
 		*err_str = apr_pstrdup(r->pool, "Malformed URL");
 		*err_desc = apr_psprintf(r->pool, "No hostname was parsed and starting with '/\\': %s", url);
 		oidc_error(r, "%s: %s", *err_str, *err_desc);
@@ -2858,21 +2859,21 @@ apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg *c, const char *r
 	}
 
 	/* validate the URL to prevent HTTP header splitting */
-	if (((strstr(url, "\n") != NULL) || strstr(url, "\r") != NULL)) {
+	if (((_oidc_strstr(url, "\n") != NULL) || _oidc_strstr(url, "\r") != NULL)) {
 		*err_str = apr_pstrdup(r->pool, "Invalid URL");
 		*err_desc =
 		    apr_psprintf(r->pool, "URL value \"%s\" contains illegal \"\n\" or \"\r\" character(s)", url);
 		oidc_error(r, "%s: %s", *err_str, *err_desc);
 		return FALSE;
 	}
-	if ((strstr(url, "/%09") != NULL) || (oidc_util_strcasestr(url, "/%2f") != NULL) ||
-	    (strstr(url, "/\t") != NULL) || (strstr(url, "/%68") != NULL) ||
+	if ((_oidc_strstr(url, "/%09") != NULL) || (oidc_util_strcasestr(url, "/%2f") != NULL) ||
+	    (_oidc_strstr(url, "/\t") != NULL) || (_oidc_strstr(url, "/%68") != NULL) ||
 	    (oidc_util_strcasestr(url, "/http:") != NULL) || (oidc_util_strcasestr(url, "/https:") != NULL) ||
-	    (oidc_util_strcasestr(url, "/javascript:") != NULL) || (strstr(url, "/〱") != NULL) ||
-	    (strstr(url, "/〵") != NULL) || (strstr(url, "/ゝ") != NULL) || (strstr(url, "/ー") != NULL) ||
-	    (strstr(url, "/ｰ") != NULL) || (strstr(url, "/<") != NULL) ||
-	    (oidc_util_strcasestr(url, "%01javascript:") != NULL) || (strstr(url, "/%5c") != NULL) ||
-	    (strstr(url, "/\\") != NULL)) {
+	    (oidc_util_strcasestr(url, "/javascript:") != NULL) || (_oidc_strstr(url, "/〱") != NULL) ||
+	    (_oidc_strstr(url, "/〵") != NULL) || (_oidc_strstr(url, "/ゝ") != NULL) ||
+	    (_oidc_strstr(url, "/ー") != NULL) || (_oidc_strstr(url, "/ｰ") != NULL) ||
+	    (_oidc_strstr(url, "/<") != NULL) || (oidc_util_strcasestr(url, "%01javascript:") != NULL) ||
+	    (_oidc_strstr(url, "/%5c") != NULL) || (_oidc_strstr(url, "/\\") != NULL)) {
 		*err_str = apr_pstrdup(r->pool, "Invalid URL");
 		*err_desc = apr_psprintf(r->pool, "URL value \"%s\" contains illegal character(s)", url);
 		oidc_error(r, "%s: %s", *err_str, *err_desc);
@@ -2970,7 +2971,7 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 			login_hint = apr_pstrdup(r->pool, user);
 
 		/* normalize the user identifier */
-		if (strstr(user, "https://") != user)
+		if (_oidc_strstr(user, "https://") != user)
 			user = apr_psprintf(r->pool, "https://%s", user);
 
 		/* got an user identifier as input, perform OP discovery with that */
@@ -2985,11 +2986,11 @@ static int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 
 		/* issuer is set now, so let's continue as planned */
 
-	} else if (strstr(issuer, OIDC_STR_AT) != NULL) {
+	} else if (_oidc_strstr(issuer, OIDC_STR_AT) != NULL) {
 
 		if (login_hint == NULL) {
 			login_hint = apr_pstrdup(r->pool, issuer);
-			// char *p = strstr(issuer, OIDC_STR_AT);
+			// char *p = _oidc_strstr(issuer, OIDC_STR_AT);
 			//*p = '\0';
 		}
 
@@ -3238,7 +3239,7 @@ static int oidc_handle_logout_request(request_rec *r, oidc_cfg *c, oidc_session_
 		/* see if this is PF-PA style logout in which case we return a transparent pixel */
 		const char *accept = oidc_http_hdr_in_accept_get(r);
 		if ((_oidc_strcmp(url, OIDC_IMG_STYLE_LOGOUT_PARAM_VALUE) == 0) ||
-		    ((accept) && strstr(accept, OIDC_HTTP_CONTENT_TYPE_IMAGE_PNG))) {
+		    ((accept) && _oidc_strstr(accept, OIDC_HTTP_CONTENT_TYPE_IMAGE_PNG))) {
 			return oidc_http_send(r, (const char *)&oidc_transparent_pixel, sizeof(oidc_transparent_pixel),
 					      OIDC_HTTP_CONTENT_TYPE_IMAGE_PNG, OK);
 		}
@@ -3593,7 +3594,7 @@ static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c,
 	char *origin = apr_pstrdup(r->pool, check_session_iframe);
 	apr_uri_t uri;
 	apr_uri_parse(r->pool, check_session_iframe, &uri);
-	char *p = strstr(origin, uri.path);
+	char *p = _oidc_strstr(origin, uri.path);
 	*p = '\0';
 
 	/* the element identifier for the OP iframe */

@@ -1383,7 +1383,7 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg *cfg, oidc_jwt_t *jwt,
  */
 char *oidc_proto_peek_jwt_header(request_rec *r, const char *compact_encoded_jwt, char **alg, char **enc, char **kid) {
 	char *input = NULL, *result = NULL;
-	char *p = strstr(compact_encoded_jwt ? compact_encoded_jwt : "", ".");
+	char *p = _oidc_strstr(compact_encoded_jwt ? compact_encoded_jwt : "", ".");
 	if (p == NULL) {
 		oidc_warn(r, "could not parse first element separated by \".\" from input");
 		return NULL;

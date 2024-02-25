@@ -286,10 +286,10 @@ const char *oidc_http_hdr_forwarded_get(const request_rec *r, const char *elem) 
 	value = oidc_util_strcasestr(value, item);
 	if (value) {
 		value += _oidc_strlen(item);
-		ptr = strstr(value, ";");
+		ptr = _oidc_strstr(value, ";");
 		if (ptr)
 			*ptr = '\0';
-		ptr = strstr(value, " ");
+		ptr = _oidc_strstr(value, " ");
 		if (ptr)
 			*ptr = '\0';
 	}
@@ -434,7 +434,7 @@ char *oidc_http_form_encoded_data(request_rec *r, const apr_table_t *params) {
 #define OIDC_CURLOPT_SSL_OPTIONS "CURLOPT_SSL_OPTIONS"
 
 #define OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, option, key, val)                                            \
-	if (strstr(env_var_value, option) != NULL) {                                                                   \
+	if (_oidc_strstr(env_var_value, option) != NULL) {                                                             \
 		oidc_debug(r, "curl_easy_setopt (%d) %s (%d)", key, option, val);                                      \
 		curl_easy_setopt(curl, key, val);                                                                      \
 	}

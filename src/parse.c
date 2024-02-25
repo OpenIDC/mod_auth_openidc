@@ -297,7 +297,7 @@ const char *oidc_parse_session_type(apr_pool_t *pool, const char *arg, int *type
 		return rv;
 
 	char *s = apr_pstrdup(pool, arg);
-	char *p = strstr(s, OIDC_SESSION_TYPE_SEPARATOR);
+	char *p = _oidc_strstr(s, OIDC_SESSION_TYPE_SEPARATOR);
 
 	if (p) {
 		*p = '\0';
@@ -595,19 +595,19 @@ const char *oidc_parse_use_enc_kid_key_tuple(apr_pool_t *pool, const char *tuple
 		return "tuple value not set";
 
 	if (use) {
-		if (strstr(tuple, OIDC_KEY_SIG_PREFIX) == tuple) {
+		if (_oidc_strstr(tuple, OIDC_KEY_SIG_PREFIX) == tuple) {
 			*use = OIDC_JOSE_JWK_SIG_STR;
 			tuple += strlen(OIDC_KEY_SIG_PREFIX);
-		} else if (strstr(tuple, OIDC_KEY_ENC_PREFIX) == tuple) {
+		} else if (_oidc_strstr(tuple, OIDC_KEY_ENC_PREFIX) == tuple) {
 			*use = OIDC_JOSE_JWK_ENC_STR;
 			tuple += strlen(OIDC_KEY_ENC_PREFIX);
 		}
 	}
 
 	s = apr_pstrdup(pool, tuple);
-	p = strstr(s, OIDC_KEY_TUPLE_SEPARATOR);
+	p = _oidc_strstr(s, OIDC_KEY_TUPLE_SEPARATOR);
 	if (p && triplet)
-		q = strstr(p + 1, OIDC_KEY_TUPLE_SEPARATOR);
+		q = _oidc_strstr(p + 1, OIDC_KEY_TUPLE_SEPARATOR);
 
 	if (p) {
 		if (q) {
@@ -709,7 +709,7 @@ const char *oidc_parse_pass_userinfo_as(apr_pool_t *pool, const char *v, oidc_pa
 				  OIDC_PASS_USERINFO_AS_JWT_STR, OIDC_PASS_USERINFO_AS_SIGNED_JWT_STR, NULL};
 	const char *rv = NULL;
 
-	char *name = strstr(v, ":");
+	char *name = _oidc_strstr(v, ":");
 	if (name) {
 		*name = '\0';
 		name++;
@@ -800,9 +800,9 @@ static apr_byte_t oidc_parse_oauth_accept_token_in_str2byte(const char *v) {
 		return OIDC_OAUTH_ACCEPT_TOKEN_IN_POST;
 	if (_oidc_strcmp(v, OIDC_OAUTH_ACCEPT_TOKEN_IN_QUERY_STR) == 0)
 		return OIDC_OAUTH_ACCEPT_TOKEN_IN_QUERY;
-	if (strstr(v, OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE_STR) == v)
+	if (_oidc_strstr(v, OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE_STR) == v)
 		return OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE;
-	if (strstr(v, OIDC_OAUTH_ACCEPT_TOKEN_IN_BASIC_STR) == v)
+	if (_oidc_strstr(v, OIDC_OAUTH_ACCEPT_TOKEN_IN_BASIC_STR) == v)
 		return OIDC_OAUTH_ACCEPT_TOKEN_IN_BASIC;
 	return OIDC_OAUTH_ACCEPT_TOKEN_IN_DEFAULT;
 }
@@ -821,7 +821,7 @@ const char *oidc_parse_accept_oauth_token_in(apr_pool_t *pool, const char *arg, 
 	const char *rv = NULL;
 
 	const char *s = apr_pstrdup(pool, arg);
-	char *p = strstr(s, OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE_SEPARATOR);
+	char *p = _oidc_strstr(s, OIDC_OAUTH_ACCEPT_TOKEN_IN_COOKIE_SEPARATOR);
 
 	if (p != NULL) {
 		*p = '\0';

@@ -1124,7 +1124,7 @@ apr_byte_t oidc_jwt_encrypt(apr_pool_t *pool, oidc_jwt_t *jwe, oidc_jwk_t *jwk, 
  */
 apr_byte_t oidc_jose_version_deprecated(apr_pool_t *pool) {
 	char *version = apr_pstrdup(pool, cjose_version());
-	return (strstr(version, OIDC_JOSE_CJOSE_VERSION_DEPRECATED) == version);
+	return (_oidc_strstr(version, OIDC_JOSE_CJOSE_VERSION_DEPRECATED) == version);
 }
 
 /*

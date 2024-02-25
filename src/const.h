@@ -81,6 +81,9 @@ static inline int _oidc_strnatcasecmp(const char *a, const char *b) {
 static inline int _oidc_strncmp(const char *a, const char *b, size_t n) {
 	return ((a && b) ? strncmp(a, b, n) : -1);
 }
+static inline char *_oidc_strstr(const char *a, const char *b) {
+	return ((a && b) ? strstr(a, b) : NULL);
+}
 
 #define _oidc_str_to_int(s) (s ? (int)strtol(s, NULL, 10) : 0)
 

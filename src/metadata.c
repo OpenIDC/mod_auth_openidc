@@ -125,11 +125,11 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 static const char *oidc_metadata_issuer_to_filename(request_rec *r, const char *issuer) {
 
 	/* strip leading https:// */
-	char *p = strstr(issuer, "https://");
+	char *p = _oidc_strstr(issuer, "https://");
 	if (p == issuer) {
 		p = apr_pstrdup(r->pool, issuer + _oidc_strlen("https://"));
 	} else {
-		p = strstr(issuer, "http://");
+		p = _oidc_strstr(issuer, "http://");
 		if (p == issuer) {
 			p = apr_pstrdup(r->pool, issuer + _oidc_strlen("http://"));
 		} else {
@@ -740,10 +740,11 @@ apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg *cfg, const char 
 	}
 
 	/* assemble the URL to the .well-known OpenID metadata */
-	const char *url = apr_psprintf(r->pool, "%s",
-				       ((strstr(issuer, "http://") == issuer) || (strstr(issuer, "https://") == issuer))
-					   ? issuer
-					   : apr_psprintf(r->pool, "https://%s", issuer));
+	const char *url =
+	    apr_psprintf(r->pool, "%s",
+			 ((_oidc_strstr(issuer, "http://") == issuer) || (_oidc_strstr(issuer, "https://") == issuer))
+			     ? issuer
+			     : apr_psprintf(r->pool, "https://%s", issuer));
 	url =
 	    apr_psprintf(r->pool, "%s%s.well-known/openid-configuration", url,
 			 (url && url[_oidc_strlen(url) - 1] != OIDC_CHAR_FORWARD_SLASH) ? OIDC_STR_FORWARD_SLASH : "");
