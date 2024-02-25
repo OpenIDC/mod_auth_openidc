@@ -273,11 +273,6 @@ APLOG_USE_MODULE(auth_openidc);
 #define OIDC_ERROR_ENVVAR "OIDC_ERROR"
 #define OIDC_ERROR_DESC_ENVVAR "OIDC_ERROR_DESC"
 
-/* https://tools.ietf.org/html/draft-ietf-tokbind-ttrp-01 */
-#define OIDC_TB_CFG_PROVIDED_ENV_VAR "Sec-Provided-Token-Binding-ID"
-/* https://www.ietf.org/id/draft-ietf-oauth-mtls-12 */
-#define OIDC_TB_CFG_FINGERPRINT_ENV_VAR "TB_SSL_CLIENT_CERT_FINGERPRINT"
-
 #define OIDC_STATE_INPUT_HEADERS_USER_AGENT 1
 #define OIDC_STATE_INPUT_HEADERS_X_FORWARDED_FOR 2
 
