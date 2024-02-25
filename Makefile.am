@@ -94,6 +94,9 @@ install-exec-local:
 uninstall-local:
 	rm -f $(DESTDIR)@APACHE_MODULEDIR@/mod_auth_openidc.so mod_auth_openidc.la
 
+clean-local:
+	rm -f mod_auth_openidc.la
+	
 LDADD = libauth_openidc.la ${LIBADD}
 
 noinst_PROGRAMS = test/test-cmd
