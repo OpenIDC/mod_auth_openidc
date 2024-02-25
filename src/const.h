@@ -59,6 +59,13 @@
 
 #include <apr_strings.h>
 
+// clang-format off
+
+#include <httpd.h>
+#include <http_log.h>
+
+// clang-format on
+
 #ifdef __STDC_LIB_EXT1__
 #define _oidc_memset(b, c, __len) memset_s(b, __len, c, __len)
 #define _oidc_memcpy(__dst, __src, __n) memcpy_s(__dst, __src, __n)
@@ -86,5 +93,54 @@ static inline char *_oidc_strstr(const char *a, const char *b) {
 }
 
 #define _oidc_str_to_int(s) (s ? (int)strtol(s, NULL, 10) : 0)
+
+#define HAVE_APACHE_24 MODULE_MAGIC_NUMBER_MAJOR >= 20100714
+
+#ifndef OIDC_DEBUG
+#define OIDC_DEBUG APLOG_DEBUG
+#endif
+
+#ifndef APLOG_TRACE1
+#define APLOG_TRACE1 APLOG_DEBUG
+#endif
+
+#ifndef apr_uintptr_t
+#define apr_uintptr_t apr_uint64_t
+#endif
+
+#ifndef APR_UINT32_MAX
+#define APR_UINT32_MAX UINT32_MAX
+#endif
+
+#ifndef APR_INT64_MAX
+#define APR_INT64_MAX INT64_MAX
+#endif
+
+#ifndef apr_time_from_msec
+#define apr_time_from_msec(msec) ((apr_time_t)(msec) * 1000)
+#endif
+
+#define oidc_log(r, level, fmt, ...)                                                                                   \
+	ap_log_rerror(APLOG_MARK, level, 0, r, "%s: %s", __FUNCTION__, apr_psprintf(r->pool, fmt, ##__VA_ARGS__))
+#define oidc_slog(s, level, fmt, ...)                                                                                  \
+	ap_log_error(APLOG_MARK, level, 0, s, "%s: %s", __FUNCTION__,                                                  \
+		     apr_psprintf(s->process->pconf, fmt, ##__VA_ARGS__))
+
+#define oidc_debug(r, fmt, ...) oidc_log(r, OIDC_DEBUG, fmt, ##__VA_ARGS__)
+#define oidc_warn(r, fmt, ...) oidc_log(r, APLOG_WARNING, fmt, ##__VA_ARGS__)
+#define oidc_info(r, fmt, ...) oidc_log(r, APLOG_INFO, fmt, ##__VA_ARGS__)
+#define oidc_error(r, fmt, ...) oidc_log(r, APLOG_ERR, fmt, ##__VA_ARGS__)
+
+#define oidc_sdebug(s, fmt, ...) oidc_slog(s, OIDC_DEBUG, fmt, ##__VA_ARGS__)
+#define oidc_swarn(s, fmt, ...) oidc_slog(s, APLOG_WARNING, fmt, ##__VA_ARGS__)
+#define oidc_serror(s, fmt, ...) oidc_slog(s, APLOG_ERR, fmt, ##__VA_ARGS__)
+
+#ifndef NAMEVER
+#define NAMEVERSION "mod_auth_openidc-0.0.0"
+#else
+#define STRINGIFY(x) #x
+#define TOSTRING(x) STRINGIFY(x)
+#define NAMEVERSION TOSTRING(NAMEVER)
+#endif
 
 #endif /* MOD_AUTH_OPENIDC_CONST_H_ */
