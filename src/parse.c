@@ -597,10 +597,10 @@ const char *oidc_parse_use_enc_kid_key_tuple(apr_pool_t *pool, const char *tuple
 	if (use) {
 		if (_oidc_strstr(tuple, OIDC_KEY_SIG_PREFIX) == tuple) {
 			*use = OIDC_JOSE_JWK_SIG_STR;
-			tuple += strlen(OIDC_KEY_SIG_PREFIX);
+			tuple += _oidc_strlen(OIDC_KEY_SIG_PREFIX);
 		} else if (_oidc_strstr(tuple, OIDC_KEY_ENC_PREFIX) == tuple) {
 			*use = OIDC_JOSE_JWK_ENC_STR;
-			tuple += strlen(OIDC_KEY_ENC_PREFIX);
+			tuple += _oidc_strlen(OIDC_KEY_ENC_PREFIX);
 		}
 	}
 

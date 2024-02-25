@@ -1606,8 +1606,8 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg *cfg,
 	if (oidc_util_json_merge(r, json, jwt->payload.value.json) == FALSE)
 		goto end;
 	s_claims = oidc_util_encode_json_object(r, jwt->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
-	if (oidc_jose_hash_and_base64url_encode(r->pool, OIDC_JOSE_ALG_SHA256, s_claims, strlen(s_claims) + 1, &key,
-						&err) == FALSE) {
+	if (oidc_jose_hash_and_base64url_encode(r->pool, OIDC_JOSE_ALG_SHA256, s_claims, _oidc_strlen(s_claims) + 1,
+						&key, &err) == FALSE) {
 		oidc_error(r, "oidc_jose_hash_and_base64url_encode failed: %s", oidc_jose_e2s(r->pool, err));
 		goto end;
 	}
@@ -2250,7 +2250,7 @@ static int oidc_handle_authorization_response(request_rec *r, oidc_cfg *c, oidc_
 		if (c->error_template) {
 			// retain backwards compatibility
 			int rc = HTTP_BAD_REQUEST;
-			if ((r->user) && (strncmp(r->user, "", 1) == 0)) {
+			if ((r->user) && (_oidc_strncmp(r->user, "", 1) == 0)) {
 				r->header_only = 1;
 				r->user = NULL;
 				rc = OK;

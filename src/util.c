@@ -1417,7 +1417,7 @@ static char *oidc_util_utf8_to_latin1(request_rec *r, const char *src) {
 	int i = 0;
 	if (src == NULL)
 		return NULL;
-	dst = apr_pcalloc(r->pool, strlen(src) + 1);
+	dst = apr_pcalloc(r->pool, _oidc_strlen(src) + 1);
 	while (*src != '\0') {
 		ch = (unsigned char)(*src);
 		if (ch <= 0x7f)
