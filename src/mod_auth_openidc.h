@@ -67,7 +67,6 @@
 #include "http.h"
 #include "jose.h"
 #include "parse.h"
-#include "util.h"
 
 #ifdef APLOG_USE_MODULE
 APLOG_USE_MODULE(auth_openidc);
