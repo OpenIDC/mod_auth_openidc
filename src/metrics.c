@@ -660,8 +660,8 @@ static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void 
 		oidc_metrics_store(s);
 
 		/* reset the local hashtables */
-		apr_hash_clear(_oidc_metrics.counters);
-		apr_hash_clear(_oidc_metrics.timings);
+		oidc_util_apr_hash_clear(_oidc_metrics.counters);
+		oidc_util_apr_hash_clear(_oidc_metrics.timings);
 
 		/* unlock the mutex that protects the locally cached metrics */
 		oidc_cache_mutex_unlock(s->process->pool, s, _oidc_metrics_process_mutex);

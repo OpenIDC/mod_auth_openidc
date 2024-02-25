@@ -3165,3 +3165,13 @@ void oidc_util_set_trace_parent(request_rec *r, oidc_cfg *c, const char *span) {
 	oidc_util_hdr_in_set(r, OIDC_HTTP_HDR_TRACE_PARENT,
 			     apr_psprintf(r->pool, "00-%s-%s-%02x", s_trace_id, s_parent_id, trace_flags));
 }
+
+void oidc_util_apr_hash_clear(apr_hash_t *ht) {
+	apr_hash_index_t *hi = NULL;
+	const void *key = NULL;
+	apr_ssize_t klen = 0;
+	for (hi = apr_hash_first(NULL, ht); hi; hi = apr_hash_next(hi)) {
+		apr_hash_this(hi, &key, &klen, NULL);
+		apr_hash_set(ht, key, klen, NULL);
+	}
+}

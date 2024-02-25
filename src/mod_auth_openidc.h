@@ -997,6 +997,7 @@ const char *oidc_util_jq_filter(request_rec *r, const char *input, const char *f
 char *oidc_util_apr_expr_parse(cmd_parms *cmd, const char *str, oidc_apr_expr_t **expr, apr_byte_t result_is_str);
 const char *oidc_util_apr_expr_exec(request_rec *r, const oidc_apr_expr_t *expr, apr_byte_t result_is_str);
 void oidc_util_set_trace_parent(request_rec *r, oidc_cfg *c, const char *span);
+void oidc_util_apr_hash_clear(apr_hash_t *ht);
 
 /* HTTP header constants */
 #define OIDC_HTTP_HDR_COOKIE "Cookie"

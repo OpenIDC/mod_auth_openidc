@@ -1,3 +1,6 @@
+02/25/2024
+- implement oidc_util_apr_hash_clear so clearing hashtables works with older versions of libapr 
+
 02/22/2024
 - enable TCP keepalive on Redis connections by default
   and make it configurable in `OIDCRedisCacheConnectTimeout <connect-timeout> [0|<keep-alive-interval>]`
