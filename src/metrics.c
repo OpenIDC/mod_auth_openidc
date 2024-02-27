@@ -213,7 +213,7 @@ static oidc_metrics_bucket_t _oidc_metric_buckets[] = {
 
 // clang-format on
 
-static const int OIDC_METRICS_BUCKET_NUM = sizeof(_oidc_metric_buckets) / sizeof(oidc_metrics_bucket_t);
+#define OIDC_METRICS_BUCKET_NUM sizeof(_oidc_metric_buckets) / sizeof(oidc_metrics_bucket_t)
 
 // NB: matters for Prometheus formatting
 #define OIDC_METRICS_SUM "sum"
