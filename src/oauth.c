@@ -42,6 +42,7 @@
  */
 
 #include "handle/handle.h"
+#include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "parse.h"
 
@@ -662,7 +663,16 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c, const char *access_toke
 		/* check if this is a request for the public (encryption) keys */
 		if (oidc_http_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
 
-			return oidc_handle_jwks(r, c);
+			OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_JWKS);
+
+			/*
+			 * Will be handled in the content handler; avoid:
+			 * No authentication done but request not allowed without authentication
+			 * by setting r->user
+			 */
+			r->user = "";
+
+			return OK;
 
 			/* check if this is a request to remove the access token from the cache */
 		} else if (oidc_http_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE)) {

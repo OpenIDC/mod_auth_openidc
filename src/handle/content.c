@@ -95,7 +95,7 @@ int oidc_content_handler(request_rec *r) {
 			OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_JWKS);
 
 			/* handle JWKs request */
-			rc = oidc_handle_jwks(r, c);
+			rc = oidc_jwks_request(r, c);
 
 		} else {
 

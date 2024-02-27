@@ -45,7 +45,7 @@
 /*
  * handle request for JWKs
  */
-int oidc_handle_jwks(request_rec *r, oidc_cfg *c) {
+int oidc_jwks_request(request_rec *r, oidc_cfg *c) {
 	/* pickup requested JWKs type */
 	//	char *jwks_type = NULL;
 	//	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS, &jwks_type);

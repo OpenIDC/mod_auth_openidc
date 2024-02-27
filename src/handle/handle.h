@@ -70,6 +70,9 @@ int oidc_discovery_response(request_rec *r, oidc_cfg *c);
 // info.c
 int oidc_info_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, apr_byte_t needs_save);
 
+// jwks_c.
+int oidc_jwks_request(request_rec *r, oidc_cfg *c);
+
 apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg *cfg, oidc_session_t *session,
 						   int ttl_minimum, apr_byte_t *needs_save);
 int oidc_handle_logout(request_rec *r, oidc_cfg *c, oidc_session_t *session);
@@ -96,4 +99,3 @@ void oidc_store_userinfo_claims(request_rec *r, oidc_cfg *c, oidc_session_t *ses
 const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r, oidc_cfg *c, oidc_provider_t *provider,
 							const char *access_token, oidc_session_t *session,
 							char *id_token_sub, char **userinfo_jwt);
-int oidc_handle_jwks(request_rec *r, oidc_cfg *c);
