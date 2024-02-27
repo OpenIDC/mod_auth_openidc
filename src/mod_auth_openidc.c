@@ -1581,7 +1581,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c, oidc_session_t
 		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE);
 
 		/* handle request to invalidate access token cache */
-		rc = oidc_handle_remove_at_cache(r, c);
+		rc = oidc_revoke_at_cache_remove(r, c);
 
 		return rc;
 
@@ -1590,7 +1590,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c, oidc_session_t
 		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_REVOKE_SESSION);
 
 		/* handle request to revoke a user session */
-		rc = oidc_handle_revoke_session(r, c);
+		rc = oidc_revoke_session(r, c);
 
 		return rc;
 

@@ -678,7 +678,7 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg *c, const char *access_toke
 		} else if (oidc_http_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE)) {
 
 			/* handle request to invalidate access token cache */
-			return oidc_handle_remove_at_cache(r, c);
+			return oidc_revoke_at_cache_remove(r, c);
 		}
 	}
 

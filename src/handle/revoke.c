@@ -42,7 +42,7 @@
 
 #include "handle/handle.h"
 
-int oidc_handle_revoke_session(request_rec *r, oidc_cfg *c) {
+int oidc_revoke_session(request_rec *r, oidc_cfg *c) {
 	apr_byte_t rc = FALSE;
 	char *session_id = NULL;
 
@@ -63,7 +63,7 @@ int oidc_handle_revoke_session(request_rec *r, oidc_cfg *c) {
 /*
  * handle a request to invalidate a cached access token introspection result
  */
-int oidc_handle_remove_at_cache(request_rec *r, oidc_cfg *c) {
+int oidc_revoke_at_cache_remove(request_rec *r, oidc_cfg *c) {
 	char *access_token = NULL;
 	oidc_http_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE, &access_token);
 
