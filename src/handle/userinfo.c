@@ -45,7 +45,7 @@
 /*
  * store claims resolved from the userinfo endpoint in the session
  */
-void oidc_store_userinfo_claims(request_rec *r, oidc_cfg *c, oidc_session_t *session, oidc_provider_t *provider,
+void oidc_userinfo_store_claims(request_rec *r, oidc_cfg *c, oidc_session_t *session, oidc_provider_t *provider,
 				const char *claims, const char *userinfo_jwt) {
 
 	oidc_debug(r, "enter");
@@ -81,9 +81,9 @@ void oidc_store_userinfo_claims(request_rec *r, oidc_cfg *c, oidc_session_t *ses
 /*
  * retrieve claims from the userinfo endpoint and return the stringified response
  */
-const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r, oidc_cfg *c, oidc_provider_t *provider,
-							const char *access_token, oidc_session_t *session,
-							char *id_token_sub, char **userinfo_jwt) {
+const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg *c, oidc_provider_t *provider,
+					  const char *access_token, oidc_session_t *session, char *id_token_sub,
+					  char **userinfo_jwt) {
 
 	char *result = NULL;
 	char *refreshed_access_token = NULL;
@@ -161,8 +161,8 @@ end:
 /*
  * get (new) claims from the userinfo endpoint
  */
-apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r, oidc_cfg *cfg, oidc_session_t *session,
-						      apr_byte_t *needs_save) {
+apr_byte_t oidc_userinfo_refresh_claims(request_rec *r, oidc_cfg *cfg, oidc_session_t *session,
+					apr_byte_t *needs_save) {
 
 	apr_byte_t rc = TRUE;
 	oidc_provider_t *provider = NULL;
@@ -198,11 +198,11 @@ apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r, oidc_cfg *
 				access_token = oidc_session_get_access_token(r, session);
 
 				/* retrieve the current claims */
-				claims = oidc_retrieve_claims_from_userinfo_endpoint(r, cfg, provider, access_token,
-										     session, NULL, &userinfo_jwt);
+				claims = oidc_userinfo_retrieve_claims(r, cfg, provider, access_token, session, NULL,
+								       &userinfo_jwt);
 
 				/* store claims resolved from userinfo endpoint */
-				oidc_store_userinfo_claims(r, cfg, session, provider, claims, userinfo_jwt);
+				oidc_userinfo_store_claims(r, cfg, session, provider, claims, userinfo_jwt);
 
 				if (claims == NULL) {
 					*needs_save = FALSE;

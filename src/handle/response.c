@@ -267,7 +267,7 @@ static apr_byte_t oidc_response_save_in_session(request_rec *r, oidc_cfg *c, oid
 	oidc_session_set_userinfo_refresh_interval(r, session, provider->userinfo_refresh_interval);
 
 	/* store claims resolved from userinfo endpoint */
-	oidc_store_userinfo_claims(r, c, session, provider, claims, userinfo_jwt);
+	oidc_userinfo_store_claims(r, c, session, provider, claims, userinfo_jwt);
 
 	/* see if we have an access_token */
 	if (access_token != NULL) {
@@ -616,7 +616,7 @@ static int oidc_response_process(request_rec *r, oidc_cfg *c, oidc_session_t *se
 	 * optionally resolve additional claims against the userinfo endpoint
 	 * parsed claims are not actually used here but need to be parsed anyway for error checking purposes
 	 */
-	const char *claims = oidc_retrieve_claims_from_userinfo_endpoint(
+	const char *claims = oidc_userinfo_retrieve_claims(
 	    r, c, provider, apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN), NULL, jwt->payload.sub, &userinfo_jwt);
 
 	/* restore the original protected URL that the user was trying to access */

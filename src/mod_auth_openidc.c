@@ -1129,7 +1129,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg, oidc_sess
 	}
 
 	/* if needed, refresh claims from the user info endpoint */
-	rv = oidc_refresh_claims_from_userinfo_endpoint(r, cfg, session, needs_save);
+	rv = oidc_userinfo_refresh_claims(r, cfg, session, needs_save);
 	if (rv == FALSE) {
 		*needs_save = FALSE;
 		oidc_debug(r, "action_on_userinfo_error: %d", cfg->action_on_userinfo_error);

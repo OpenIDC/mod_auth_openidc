@@ -128,7 +128,7 @@ int oidc_info_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, apr_
 	 * note that OIDCUserInfoRefreshInterval should be set to control the refresh policy
 	 */
 	if (b_extend_session) {
-		if (oidc_refresh_claims_from_userinfo_endpoint(r, c, session, &needs_save) == FALSE) {
+		if (oidc_userinfo_refresh_claims(r, c, session, &needs_save) == FALSE) {
 			rc = HTTP_INTERNAL_SERVER_ERROR;
 			goto end;
 		}
