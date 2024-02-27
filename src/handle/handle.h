@@ -42,21 +42,21 @@
 
 #include "mod_auth_openidc.h"
 
+extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
+
+// authz.c
 typedef apr_byte_t (*oidc_authz_match_claim_fn_type)(request_rec *, const char *const, json_t *);
 apr_byte_t oidc_authz_match_claim(request_rec *r, const char *const attr_spec, json_t *claims);
-#ifdef USE_LIBJQ
-apr_byte_t oidc_authz_match_claims_expr(request_rec *r, const char *const attr_spec, json_t *claims);
-#endif
 #if HAVE_APACHE_24
 #ifdef USE_LIBJQ
-authz_status oidc_authz_checker_claims_expr(request_rec *r, const char *require_args, const void *parsed_require_args);
+authz_status oidc_authz_24_checker_claims_expr(request_rec *r, const char *require_args,
+					       const void *parsed_require_args);
 #endif
-authz_status oidc_authz_checker_claim(request_rec *r, const char *require_args, const void *parsed_require_args);
-authz_status oidc_authz_worker24(request_rec *r, json_t *claims, const char *require_args,
-				 const void *parsed_require_args, oidc_authz_match_claim_fn_type match_claim_fn);
+authz_status oidc_authz_24_checker_claim(request_rec *r, const char *require_args, const void *parsed_require_args);
+authz_status oidc_authz_24_worker(request_rec *r, json_t *claims, const char *require_args,
+				  const void *parsed_require_args, oidc_authz_match_claim_fn_type match_claim_fn);
 #else
-int oidc_authz_worker22(request_rec *r, json_t *claims, const require_line *const reqs, int nelts);
-int oidc_auth_checker(request_rec *r);
+int oidc_authz_22_checker(request_rec *r);
 #endif
 
 int oidc_discovery(request_rec *r, oidc_cfg *cfg);

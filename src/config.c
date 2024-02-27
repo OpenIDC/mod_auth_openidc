@@ -2642,12 +2642,12 @@ static const char *oidc_parse_config(cmd_parms *cmd, const char *require_line, c
 }
 
 static const authz_provider oidc_authz_claim_provider = {
-    &oidc_authz_checker_claim,
+    &oidc_authz_24_checker_claim,
     &oidc_parse_config,
 };
 #ifdef USE_LIBJQ
 static const authz_provider oidc_authz_claims_expr_provider = {
-    &oidc_authz_checker_claims_expr,
+    &oidc_authz_24_checker_claims_expr,
     NULL,
 };
 #endif
@@ -2802,7 +2802,7 @@ void oidc_register_hooks(apr_pool_t *pool) {
 #else
 	static const char *const authzSucc[] = {"mod_authz_user.c", NULL};
 	ap_hook_check_user_id(oidc_check_user_id, NULL, NULL, APR_HOOK_MIDDLE);
-	ap_hook_auth_checker(oidc_auth_checker, NULL, authzSucc, APR_HOOK_MIDDLE);
+	ap_hook_auth_checker(oidc_authz_22_checker, NULL, authzSucc, APR_HOOK_MIDDLE);
 #endif
 }
 

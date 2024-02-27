@@ -251,7 +251,7 @@ apr_byte_t oidc_authz_match_claim(request_rec *r, const char *const attr_spec, j
 /*
  * see if a the Require value matches a configured expression
  */
-apr_byte_t oidc_authz_match_claims_expr(request_rec *r, const char *const attr_spec, json_t *claims) {
+static apr_byte_t oidc_authz_match_claims_expr(request_rec *r, const char *const attr_spec, json_t *claims) {
 	apr_byte_t rv = FALSE;
 	const char *str = NULL;
 
@@ -297,8 +297,8 @@ static void oidc_authz_get_claims_and_idtoken(request_rec *r, json_t **claims, j
 /*
  * Apache >=2.4 authorization routine: match the claims from the authenticated user against the Require primitive
  */
-authz_status oidc_authz_worker24(request_rec *r, json_t *claims, const char *require_args,
-				 const void *parsed_require_args, oidc_authz_match_claim_fn_type match_claim_fn) {
+authz_status oidc_authz_24_worker(request_rec *r, json_t *claims, const char *require_args,
+				  const void *parsed_require_args, oidc_authz_match_claim_fn_type match_claim_fn) {
 
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	int count_oauth_claims = 0;
@@ -360,7 +360,7 @@ authz_status oidc_authz_worker24(request_rec *r, json_t *claims, const char *req
 /*
  * find out which action we need to take when encountering an unauthorized request
  */
-static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
+static authz_status oidc_authz_24_unauthorized_user(request_rec *r) {
 
 	char *html_head = NULL;
 
@@ -431,8 +431,8 @@ static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
  * generic Apache >=2.4 authorization hook for this module
  * handles both OpenID Connect or OAuth 2.0 in the same way, based on the claims stored in the session
  */
-authz_status oidc_authz_checker(request_rec *r, const char *require_args, const void *parsed_require_args,
-				oidc_authz_match_claim_fn_type match_claim_fn) {
+authz_status oidc_authz_24_checker(request_rec *r, const char *require_args, const void *parsed_require_args,
+				   oidc_authz_match_claim_fn_type match_claim_fn) {
 
 	oidc_debug(r, "enter: (r->user=%s) require_args=\"%s\"", r->user, require_args);
 
@@ -456,7 +456,7 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args, const 
 
 	/* dispatch to the >=2.4 specific authz routine */
 	authz_status rc =
-	    oidc_authz_worker24(r, claims ? claims : id_token, require_args, parsed_require_args, match_claim_fn);
+	    oidc_authz_24_worker(r, claims ? claims : id_token, require_args, parsed_require_args, match_claim_fn);
 
 	/* cleanup */
 	if (claims)
@@ -465,18 +465,19 @@ authz_status oidc_authz_checker(request_rec *r, const char *require_args, const 
 		json_decref(id_token);
 
 	if ((rc == AUTHZ_DENIED) && ap_auth_type(r))
-		rc = oidc_handle_unauthorized_user24(r);
+		rc = oidc_authz_24_unauthorized_user(r);
 
 	return rc;
 }
 
-authz_status oidc_authz_checker_claim(request_rec *r, const char *require_args, const void *parsed_require_args) {
-	return oidc_authz_checker(r, require_args, parsed_require_args, oidc_authz_match_claim);
+authz_status oidc_authz_24_checker_claim(request_rec *r, const char *require_args, const void *parsed_require_args) {
+	return oidc_authz_24_checker(r, require_args, parsed_require_args, oidc_authz_match_claim);
 }
 
 #ifdef USE_LIBJQ
-authz_status oidc_authz_checker_claims_expr(request_rec *r, const char *require_args, const void *parsed_require_args) {
-	return oidc_authz_checker(r, require_args, parsed_require_args, oidc_authz_match_claims_expr);
+authz_status oidc_authz_24_checker_claims_expr(request_rec *r, const char *require_args,
+					       const void *parsed_require_args) {
+	return oidc_authz_24_checker(r, require_args, parsed_require_args, oidc_authz_match_claims_expr);
 }
 #endif
 
@@ -485,7 +486,7 @@ authz_status oidc_authz_checker_claims_expr(request_rec *r, const char *require_
 /*
  * Apache <2.4 authorization routine: match the claims from the authenticated user against the Require primitive
  */
-int oidc_authz_worker22(request_rec *r, json_t *claims, const require_line *const reqs, int nelts) {
+static int oidc_authz_22_worker(request_rec *r, json_t *claims, const require_line *const reqs, int nelts) {
 	const int m = r->method_number;
 	const char *token;
 	const char *requirement;
@@ -576,7 +577,7 @@ int oidc_authz_worker22(request_rec *r, json_t *claims, const require_line *cons
 /*
  * find out which action we need to take when encountering an unauthorized request
  */
-static int oidc_handle_unauthorized_user22(request_rec *r) {
+static int oidc_authz_22_unauthorized_user(request_rec *r) {
 
 	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
@@ -627,7 +628,7 @@ static int oidc_handle_unauthorized_user22(request_rec *r) {
  * generic Apache <2.4 authorization hook for this module
  * handles both OpenID Connect and OAuth 2.0 in the same way, based on the claims stored in the request context
  */
-int oidc_auth_checker(request_rec *r) {
+int oidc_authz_22_checker(request_rec *r) {
 
 	/* check for anonymous access and PASS mode */
 	if ((r->user != NULL) && (_oidc_strlen(r->user) == 0)) {
@@ -659,7 +660,7 @@ int oidc_auth_checker(request_rec *r) {
 		oidc_util_json_merge(r, id_token, claims);
 
 	/* dispatch to the <2.4 specific authz routine */
-	int rc = oidc_authz_worker22(r, claims ? claims : id_token, reqs, reqs_arr->nelts);
+	int rc = oidc_authz_22_worker(r, claims ? claims : id_token, reqs, reqs_arr->nelts);
 
 	/* cleanup */
 	if (claims)
@@ -668,7 +669,7 @@ int oidc_auth_checker(request_rec *r) {
 		json_decref(id_token);
 
 	if ((rc == HTTP_UNAUTHORIZED) && ap_auth_type(r))
-		rc = oidc_handle_unauthorized_user22(r);
+		rc = oidc_authz_22_unauthorized_user(r);
 
 	return rc;
 }

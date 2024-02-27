@@ -58,6 +58,8 @@
 
 #include "mod_auth_openidc.h"
 
+extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
+
 /*
  * escape a string
  */
