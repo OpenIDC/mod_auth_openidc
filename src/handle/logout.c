@@ -48,7 +48,7 @@
  * revoke refresh token and access token stored in the session if the
  * OP has an RFC 7009 compliant token revocation endpoint
  */
-static void oidc_revoke_tokens(request_rec *r, oidc_cfg *c, oidc_session_t *session) {
+static void oidc_logout_revoke_tokens(request_rec *r, oidc_cfg *c, oidc_session_t *session) {
 
 	char *response = NULL;
 	char *basic_auth = NULL;
@@ -111,7 +111,7 @@ out:
 	oidc_debug(r, "leave");
 }
 
-static apr_byte_t oidc_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg *cfg, oidc_provider_t *provider) {
+static apr_byte_t oidc_logout_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg *cfg, oidc_provider_t *provider) {
 
 	char *uuid = NULL;
 	oidc_session_t session;
@@ -141,7 +141,7 @@ static apr_byte_t oidc_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg *cfg, 
 	if (cfg->session_type != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
 		if (oidc_session_load_cache_by_uuid(r, cfg, uuid, &session) != FALSE)
 			if (oidc_session_extract(r, &session) != FALSE)
-				oidc_revoke_tokens(r, cfg, &session);
+				oidc_logout_revoke_tokens(r, cfg, &session);
 	}
 
 	// clear the session cache
@@ -152,17 +152,17 @@ static apr_byte_t oidc_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg *cfg, 
 	return FALSE;
 }
 
-static apr_uint32_t oidc_transparent_pixel[17] = {
+static apr_uint32_t oidc_logout_transparent_pixel[17] = {
     0x474e5089, 0x0a1a0a0d, 0x0d000000, 0x52444849, 0x01000000, 0x01000000, 0x00000408, 0x0c1cb500, 0x00000002,
     0x4144490b, 0x639c7854, 0x0000cffa, 0x02010702, 0x71311c9a, 0x00000000, 0x444e4549, 0x826042ae};
 
-static apr_byte_t oidc_is_front_channel_logout(const char *logout_param_value) {
+static apr_byte_t oidc_logout_is_front_channel(const char *logout_param_value) {
 	return ((logout_param_value != NULL) &&
 		((_oidc_strcmp(logout_param_value, OIDC_GET_STYLE_LOGOUT_PARAM_VALUE) == 0) ||
 		 (_oidc_strcmp(logout_param_value, OIDC_IMG_STYLE_LOGOUT_PARAM_VALUE) == 0)));
 }
 
-static apr_byte_t oidc_is_back_channel_logout(const char *logout_param_value) {
+static apr_byte_t oidc_logout_is_back_channel(const char *logout_param_value) {
 	return ((logout_param_value != NULL) &&
 		(_oidc_strcmp(logout_param_value, OIDC_BACKCHANNEL_STYLE_LOGOUT_PARAM_VALUE) == 0));
 }
@@ -170,7 +170,7 @@ static apr_byte_t oidc_is_back_channel_logout(const char *logout_param_value) {
 /*
  * handle a local logout
  */
-int oidc_handle_logout_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, const char *url) {
+int oidc_logout_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, const char *url) {
 
 	int no_session_provided = 1;
 
@@ -179,7 +179,7 @@ int oidc_handle_logout_request(request_rec *r, oidc_cfg *c, oidc_session_t *sess
 	/* if there's no remote_user then there's no (stored) session to kill */
 	if (session->remote_user != NULL) {
 		no_session_provided = 0;
-		oidc_revoke_tokens(r, c, session);
+		oidc_logout_revoke_tokens(r, c, session);
 	}
 
 	/*
@@ -190,7 +190,7 @@ int oidc_handle_logout_request(request_rec *r, oidc_cfg *c, oidc_session_t *sess
 	oidc_session_kill(r, session);
 
 	/* see if this is the OP calling us */
-	if (oidc_is_front_channel_logout(url)) {
+	if (oidc_logout_is_front_channel(url)) {
 
 		/*
 		 * If no session was provided look for the sid and iss parameters in
@@ -219,7 +219,7 @@ int oidc_handle_logout_request(request_rec *r, oidc_cfg *c, oidc_session_t *sess
 						provider = NULL;
 				}
 				if (provider) {
-					oidc_cleanup_by_sid(r, sid, c, provider);
+					oidc_logout_cleanup_by_sid(r, sid, c, provider);
 				} else {
 					oidc_info(r, "No provider for front channel logout found");
 				}
@@ -238,8 +238,9 @@ int oidc_handle_logout_request(request_rec *r, oidc_cfg *c, oidc_session_t *sess
 		const char *accept = oidc_http_hdr_in_accept_get(r);
 		if ((_oidc_strcmp(url, OIDC_IMG_STYLE_LOGOUT_PARAM_VALUE) == 0) ||
 		    ((accept) && _oidc_strstr(accept, OIDC_HTTP_CONTENT_TYPE_IMAGE_PNG))) {
-			return oidc_http_send(r, (const char *)&oidc_transparent_pixel, sizeof(oidc_transparent_pixel),
-					      OIDC_HTTP_CONTENT_TYPE_IMAGE_PNG, OK);
+			return oidc_http_send(r, (const char *)&oidc_logout_transparent_pixel,
+					      sizeof(oidc_logout_transparent_pixel), OIDC_HTTP_CONTENT_TYPE_IMAGE_PNG,
+					      OK);
 		}
 
 		/* standard HTTP based logout: should be called in an iframe from the OP */
@@ -264,7 +265,7 @@ int oidc_handle_logout_request(request_rec *r, oidc_cfg *c, oidc_session_t *sess
  */
 #define OIDC_EVENTS_BLOGOUT_KEY "http://schemas.openid.net/event/backchannel-logout"
 
-static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
+static int oidc_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 
 	oidc_debug(r, "enter");
 
@@ -397,7 +398,7 @@ static int oidc_handle_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 		goto out;
 	}
 
-	oidc_cleanup_by_sid(r, sid, cfg, provider);
+	oidc_logout_cleanup_by_sid(r, sid, cfg, provider);
 
 	rc = OK;
 
@@ -423,7 +424,7 @@ out:
 /*
  * perform (single) logout
  */
-int oidc_handle_logout(request_rec *r, oidc_cfg *c, oidc_session_t *session) {
+int oidc_logout(request_rec *r, oidc_cfg *c, oidc_session_t *session) {
 
 	oidc_provider_t *provider = NULL;
 	/* pickup the command or URL where the user wants to go after logout */
@@ -437,10 +438,10 @@ int oidc_handle_logout(request_rec *r, oidc_cfg *c, oidc_session_t *session) {
 
 	oidc_debug(r, "enter (url=%s)", url);
 
-	if (oidc_is_front_channel_logout(url)) {
-		return oidc_handle_logout_request(r, c, session, url);
-	} else if (oidc_is_back_channel_logout(url)) {
-		return oidc_handle_logout_backchannel(r, c);
+	if (oidc_logout_is_front_channel(url)) {
+		return oidc_logout_request(r, c, session, url);
+	} else if (oidc_logout_is_back_channel(url)) {
+		return oidc_logout_backchannel(r, c);
 	}
 
 	if ((url == NULL) || (_oidc_strcmp(url, "") == 0)) {
@@ -496,5 +497,5 @@ int oidc_handle_logout(request_rec *r, oidc_cfg *c, oidc_session_t *session) {
 		url = s_logout_request;
 	}
 
-	return oidc_handle_logout_request(r, c, session, url);
+	return oidc_logout_request(r, c, session, url);
 }

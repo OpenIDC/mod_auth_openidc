@@ -73,10 +73,12 @@ int oidc_info_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, apr_
 // jwks_c.
 int oidc_jwks_request(request_rec *r, oidc_cfg *c);
 
+// logout.c
+int oidc_logout(request_rec *r, oidc_cfg *c, oidc_session_t *session);
+int oidc_logout_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, const char *url);
+
 apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg *cfg, oidc_session_t *session,
 						   int ttl_minimum, apr_byte_t *needs_save);
-int oidc_handle_logout(request_rec *r, oidc_cfg *c, oidc_session_t *session);
-int oidc_handle_logout_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, const char *url);
 apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r, oidc_cfg *cfg, oidc_session_t *session,
 						      apr_byte_t *needs_save);
 int oidc_handle_redirect_authorization_response(request_rec *r, oidc_cfg *c, oidc_session_t *session);

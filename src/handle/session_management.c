@@ -158,7 +158,7 @@ int oidc_handle_session_management(request_rec *r, oidc_cfg *c, oidc_session_t *
 		oidc_debug(
 		    r,
 		    "[session=logout] calling oidc_handle_logout_request because of session mgmt local logout call.");
-		return oidc_handle_logout_request(r, c, session, oidc_get_absolute_url(r, c, c->default_slo_url));
+		return oidc_logout_request(r, c, session, oidc_get_absolute_url(r, c, c->default_slo_url));
 	}
 
 	if (oidc_get_provider_from_session(r, c, session, &provider) == FALSE) {

@@ -1241,7 +1241,7 @@ static char *test_logout_request(request_rec *r) {
 
 	r->args = "logout=https%3A%2F%2Fwww.example.com%2Floggedout";
 
-	TST_ASSERT("oidc_handle_logout (1)", oidc_handle_logout(r, c, session) == HTTP_MOVED_TEMPORARILY);
+	TST_ASSERT("oidc_handle_logout (1)", oidc_logout(r, c, session) == HTTP_MOVED_TEMPORARILY);
 	TST_ASSERT_STR(
 	    "oidc_handle_logout (2)", apr_table_get(r->headers_out, "Location"),
 	    "https://idp.example.com/"
