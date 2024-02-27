@@ -19,7 +19,6 @@
 
 /***************************************************************************
  * Copyright (C) 2017-2024 ZmartZone Holding BV
- * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
  * DISCLAIMER OF WARRANTIES:
@@ -38,13 +37,10 @@
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * mostly copied from mod_auth_cas
- *
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#include "mod_auth_openidc.h"
-
+#include "handle/handle.h"
 #include "metrics.h"
 #include "pcre_subst.h"
 
@@ -282,7 +278,209 @@ static void oidc_authz_error_add(request_rec *r, const char *msg) {
 	}
 }
 
-#if !(HAVE_APACHE_24)
+/*
+ * get the claims and id_token from request state
+ */
+static void oidc_authz_get_claims_and_idtoken(request_rec *r, json_t **claims, json_t **id_token) {
+
+	const char *s_claims = oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_CLAIMS);
+	if (s_claims != NULL)
+		oidc_util_decode_json_object(r, s_claims, claims);
+
+	const char *s_id_token = oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_IDTOKEN);
+	if (s_id_token != NULL)
+		oidc_util_decode_json_object(r, s_id_token, id_token);
+}
+
+#if HAVE_APACHE_24
+
+/*
+ * Apache >=2.4 authorization routine: match the claims from the authenticated user against the Require primitive
+ */
+authz_status oidc_authz_worker24(request_rec *r, json_t *claims, const char *require_args,
+				 const void *parsed_require_args, oidc_authz_match_claim_fn_type match_claim_fn) {
+
+	oidc_cfg *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	int count_oauth_claims = 0;
+	const char *t, *w, *err = NULL;
+	const ap_expr_info_t *expr = parsed_require_args;
+
+	/* needed for anonymous authentication */
+	if (r->user == NULL)
+		return AUTHZ_DENIED_NO_USER;
+
+	/* if no claims, impossible to satisfy */
+	if (!claims)
+		return AUTHZ_DENIED;
+
+	if (expr) {
+		t = ap_expr_str_exec(r, expr, &err);
+		if (err) {
+			oidc_error(r, "could not evaluate expression '%s': %s", require_args, err);
+			return AUTHZ_DENIED;
+		}
+	} else {
+		t = require_args;
+	}
+
+	/* loop over the Required specifications */
+	while ((w = ap_getword_conf(r->pool, &t)) && w[0]) {
+
+		count_oauth_claims++;
+
+		oidc_debug(r, "evaluating claim/expr specification: %s", w);
+
+		/* see if we can match any of out input claims against this Require'd value */
+		if (match_claim_fn(r, w, claims) == TRUE) {
+
+			OIDC_METRICS_COUNTER_INC_SPEC(r, cfg, OM_AUTHZ_MATCH_REQUIRE_CLAIM, require_args);
+
+			oidc_debug(r, "require claim/expr '%s' matched", w);
+			return AUTHZ_GRANTED;
+		}
+	}
+
+	/* if there wasn't anything after the Require claims directive... */
+	if (count_oauth_claims == 0) {
+		oidc_warn(r, "'require claim/expr' missing specification(s) in configuration, denying");
+	}
+
+	OIDC_METRICS_COUNTER_INC_SPEC(r, cfg, OM_AUTHZ_ERROR_REQUIRE_CLAIM, require_args);
+
+	oidc_debug(r, "could not match require claim expression '%s'", require_args);
+	oidc_authz_error_add(r, require_args);
+
+	return AUTHZ_DENIED;
+}
+
+#define OIDC_OAUTH_BEARER_SCOPE_ERROR "OIDC_OAUTH_BEARER_SCOPE_ERROR"
+#define OIDC_OAUTH_BEARER_SCOPE_ERROR_VALUE                                                                            \
+	"Bearer error=\"insufficient_scope\", error_description=\"Different scope(s) or other claims required\""
+
+/*
+ * find out which action we need to take when encountering an unauthorized request
+ */
+static authz_status oidc_handle_unauthorized_user24(request_rec *r) {
+
+	char *html_head = NULL;
+
+	oidc_debug(r, "enter");
+
+	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+
+	if (_oidc_strnatcasecmp((const char *)ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
+		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ERROR_OAUTH20);
+		oidc_debug(r, "setting environment variable %s to \"%s\" for usage in mod_headers",
+			   OIDC_OAUTH_BEARER_SCOPE_ERROR, OIDC_OAUTH_BEARER_SCOPE_ERROR_VALUE);
+		apr_table_set(r->subprocess_env, OIDC_OAUTH_BEARER_SCOPE_ERROR, OIDC_OAUTH_BEARER_SCOPE_ERROR_VALUE);
+		return AUTHZ_DENIED;
+	}
+
+	/* see if we've configured OIDCUnAutzAction for this path */
+	switch (oidc_dir_cfg_unautz_action(r)) {
+	case OIDC_UNAUTZ_RETURN403:
+	case OIDC_UNAUTZ_RETURN401:
+		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_401);
+		oidc_util_html_send_error(r, c->error_template, "Authorization Error", oidc_dir_cfg_unauthz_arg(r),
+					  HTTP_UNAUTHORIZED);
+		if (c->error_template)
+			r->header_only = 1;
+		return AUTHZ_DENIED;
+	case OIDC_UNAUTZ_RETURN302:
+		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_302);
+		html_head = apr_psprintf(r->pool, "<meta http-equiv=\"refresh\" content=\"0; url=%s\">",
+					 oidc_dir_cfg_unauthz_arg(r));
+		oidc_util_html_send(r, "Authorization Error Redirect", html_head, NULL, NULL, HTTP_UNAUTHORIZED);
+		r->header_only = 1;
+		return AUTHZ_DENIED;
+	case OIDC_UNAUTZ_AUTHENTICATE:
+		/*
+		 * exception handling: if this looks like an HTTP request that cannot
+		 * complete an authentication round trip to the provider, we
+		 * won't redirect the user and thus avoid creating a state cookie
+		 */
+		if (oidc_is_auth_capable_request(r) == FALSE) {
+			OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_401);
+			return AUTHZ_DENIED;
+		}
+
+		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_AUTH);
+
+		break;
+	}
+
+	oidc_authenticate_user(r, c, NULL, oidc_get_current_url(r, c->x_forwarded_headers), NULL, NULL, NULL,
+			       oidc_dir_cfg_path_auth_request_params(r), oidc_dir_cfg_path_scope(r));
+
+	const char *location = oidc_http_hdr_out_location_get(r);
+
+	if ((oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL) && (location == NULL))
+		return AUTHZ_GRANTED;
+
+	if (location != NULL) {
+		oidc_debug(r, "send HTML refresh with authorization redirect: %s", location);
+		html_head = apr_psprintf(r->pool, "<meta http-equiv=\"refresh\" content=\"0; url=%s\">", location);
+		oidc_util_html_send(r, "Stepup Authentication", html_head, NULL, NULL, HTTP_UNAUTHORIZED);
+		r->header_only = 1;
+	}
+
+	return AUTHZ_DENIED;
+}
+
+/*
+ * generic Apache >=2.4 authorization hook for this module
+ * handles both OpenID Connect or OAuth 2.0 in the same way, based on the claims stored in the session
+ */
+authz_status oidc_authz_checker(request_rec *r, const char *require_args, const void *parsed_require_args,
+				oidc_authz_match_claim_fn_type match_claim_fn) {
+
+	oidc_debug(r, "enter: (r->user=%s) require_args=\"%s\"", r->user, require_args);
+
+	/* check for anonymous access and PASS mode */
+	if ((r->user != NULL) && (_oidc_strlen(r->user) == 0)) {
+		if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
+			return AUTHZ_GRANTED;
+		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
+			return AUTHZ_GRANTED;
+		if (r->method_number == M_OPTIONS)
+			return AUTHZ_GRANTED;
+	}
+
+	/* get the set of claims from the request state (they've been set in the authentication part earlier */
+	json_t *claims = NULL, *id_token = NULL;
+	oidc_authz_get_claims_and_idtoken(r, &claims, &id_token);
+
+	/* merge id_token claims (e.g. "iss") in to claims json object */
+	if (claims)
+		oidc_util_json_merge(r, id_token, claims);
+
+	/* dispatch to the >=2.4 specific authz routine */
+	authz_status rc =
+	    oidc_authz_worker24(r, claims ? claims : id_token, require_args, parsed_require_args, match_claim_fn);
+
+	/* cleanup */
+	if (claims)
+		json_decref(claims);
+	if (id_token)
+		json_decref(id_token);
+
+	if ((rc == AUTHZ_DENIED) && ap_auth_type(r))
+		rc = oidc_handle_unauthorized_user24(r);
+
+	return rc;
+}
+
+authz_status oidc_authz_checker_claim(request_rec *r, const char *require_args, const void *parsed_require_args) {
+	return oidc_authz_checker(r, require_args, parsed_require_args, oidc_authz_match_claim);
+}
+
+#ifdef USE_LIBJQ
+authz_status oidc_authz_checker_claims_expr(request_rec *r, const char *require_args, const void *parsed_require_args) {
+	return oidc_authz_checker(r, require_args, parsed_require_args, oidc_authz_match_claims_expr);
+}
+#endif
+
+#else
 
 /*
  * Apache <2.4 authorization routine: match the claims from the authenticated user against the Require primitive
@@ -375,65 +573,104 @@ int oidc_authz_worker22(request_rec *r, json_t *claims, const require_line *cons
 	return HTTP_UNAUTHORIZED;
 }
 
-#else
+/*
+ * find out which action we need to take when encountering an unauthorized request
+ */
+static int oidc_handle_unauthorized_user22(request_rec *r) {
+
+	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+
+	if (_oidc_strnatcasecmp((const char *)ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
+		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ERROR_OAUTH20);
+		oidc_oauth_return_www_authenticate(r, "insufficient_scope",
+						   "Different scope(s) or other claims required");
+		return HTTP_UNAUTHORIZED;
+	}
+
+	/* see if we've configured OIDCUnAutzAction for this path */
+	switch (oidc_dir_cfg_unautz_action(r)) {
+	case OIDC_UNAUTZ_RETURN403:
+		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_403);
+		if (oidc_dir_cfg_unauthz_arg(r))
+			oidc_util_html_send(r, "Authorization Error", NULL, NULL, oidc_dir_cfg_unauthz_arg(r),
+					    HTTP_FORBIDDEN);
+		return HTTP_FORBIDDEN;
+	case OIDC_UNAUTZ_RETURN401:
+		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_401);
+		if (oidc_dir_cfg_unauthz_arg(r))
+			oidc_util_html_send(r, "Authorization Error", NULL, NULL, oidc_dir_cfg_unauthz_arg(r),
+					    HTTP_UNAUTHORIZED);
+		return HTTP_UNAUTHORIZED;
+	case OIDC_UNAUTZ_RETURN302:
+		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_302);
+		oidc_http_hdr_out_location_set(r, oidc_dir_cfg_unauthz_arg(r));
+		return HTTP_MOVED_TEMPORARILY;
+	case OIDC_UNAUTZ_AUTHENTICATE:
+		/*
+		 * exception handling: if this looks like a XMLHttpRequest call we
+		 * won't redirect the user and thus avoid creating a state cookie
+		 * for a non-browser (= Javascript) call that will never return from the OP
+		 */
+		if (oidc_is_auth_capable_request(r) == FALSE) {
+			OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_401);
+			return HTTP_UNAUTHORIZED;
+		}
+
+		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_AUTH);
+	}
+
+	return oidc_authenticate_user(r, c, NULL, oidc_get_current_url(r, c->x_forwarded_headers), NULL, NULL, NULL,
+				      oidc_dir_cfg_path_auth_request_params(r), oidc_dir_cfg_path_scope(r));
+}
 
 /*
- * Apache >=2.4 authorization routine: match the claims from the authenticated user against the Require primitive
+ * generic Apache <2.4 authorization hook for this module
+ * handles both OpenID Connect and OAuth 2.0 in the same way, based on the claims stored in the request context
  */
-authz_status oidc_authz_worker24(request_rec *r, json_t *claims, const char *require_args,
-				 const void *parsed_require_args, oidc_authz_match_claim_fn_type match_claim_fn) {
+int oidc_auth_checker(request_rec *r) {
 
-	oidc_cfg *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
-	int count_oauth_claims = 0;
-	const char *t, *w, *err = NULL;
-	const ap_expr_info_t *expr = parsed_require_args;
-
-	/* needed for anonymous authentication */
-	if (r->user == NULL)
-		return AUTHZ_DENIED_NO_USER;
-
-	/* if no claims, impossible to satisfy */
-	if (!claims)
-		return AUTHZ_DENIED;
-
-	if (expr) {
-		t = ap_expr_str_exec(r, expr, &err);
-		if (err) {
-			oidc_error(r, "could not evaluate expression '%s': %s", require_args, err);
-			return AUTHZ_DENIED;
-		}
-	} else {
-		t = require_args;
+	/* check for anonymous access and PASS mode */
+	if ((r->user != NULL) && (_oidc_strlen(r->user) == 0)) {
+		r->user = NULL;
+		if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
+			return OK;
+		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
+			return OK;
+		if (r->method_number == M_OPTIONS)
+			return OK;
 	}
 
-	/* loop over the Required specifications */
-	while ((w = ap_getword_conf(r->pool, &t)) && w[0]) {
+	/* get the set of claims from the request state (they've been set in the authentication part earlier */
+	json_t *claims = NULL, *id_token = NULL;
+	oidc_authz_get_claims_and_idtoken(r, &claims, &id_token);
 
-		count_oauth_claims++;
+	/* get the Require statements */
+	const apr_array_header_t *const reqs_arr = ap_requires(r);
 
-		oidc_debug(r, "evaluating claim/expr specification: %s", w);
-
-		/* see if we can match any of out input claims against this Require'd value */
-		if (match_claim_fn(r, w, claims) == TRUE) {
-
-			OIDC_METRICS_COUNTER_INC_SPEC(r, cfg, OM_AUTHZ_MATCH_REQUIRE_CLAIM, require_args);
-
-			oidc_debug(r, "require claim/expr '%s' matched", w);
-			return AUTHZ_GRANTED;
-		}
+	/* see if we have any */
+	const require_line *const reqs = reqs_arr ? (require_line *)reqs_arr->elts : NULL;
+	if (!reqs_arr) {
+		oidc_debug(r, "no require statements found, so declining to perform authorization.");
+		return DECLINED;
 	}
 
-	/* if there wasn't anything after the Require claims directive... */
-	if (count_oauth_claims == 0) {
-		oidc_warn(r, "'require claim/expr' missing specification(s) in configuration, denying");
-	}
+	/* merge id_token claims (e.g. "iss") in to claims json object */
+	if (claims)
+		oidc_util_json_merge(r, id_token, claims);
 
-	OIDC_METRICS_COUNTER_INC_SPEC(r, cfg, OM_AUTHZ_ERROR_REQUIRE_CLAIM, require_args);
+	/* dispatch to the <2.4 specific authz routine */
+	int rc = oidc_authz_worker22(r, claims ? claims : id_token, reqs, reqs_arr->nelts);
 
-	oidc_debug(r, "could not match require claim expression '%s'", require_args);
-	oidc_authz_error_add(r, require_args);
+	/* cleanup */
+	if (claims)
+		json_decref(claims);
+	if (id_token)
+		json_decref(id_token);
 
-	return AUTHZ_DENIED;
+	if ((rc == HTTP_UNAUTHORIZED) && ap_auth_type(r))
+		rc = oidc_handle_unauthorized_user22(r);
+
+	return rc;
 }
 
 #endif

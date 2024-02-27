@@ -7,13 +7,24 @@ libauth_openidc_la_SOURCES = \
 	src/cache/file.c \
 	src/cache/shm.c \
 	src/cache/common.c \
+	src/handle/authz.c \
+	src/handle/info.c \
+	src/handle/refresh.c	\
+	src/handle/revoke.c \
+	src/handle/content.c \
+	src/handle/jwks.c \
+	src/handle/request_uri.c \
+	src/handle/session_management.c \
+	src/handle/discovery.c \
+	src/handle/logout.c \
+	src/handle/response.c \
+	src/handle/userinfo.c \
 	src/metrics.c \
 	src/oauth.c \
 	src/proto.c \
 	src/config.c \
 	src/util.c \
 	src/http.c \
-	src/authz.c \
 	src/session.c \
 	src/metadata.c \
 	src/jose.c \
@@ -55,6 +66,7 @@ endif
 
 noinst_HEADERS = \
 	src/mod_auth_openidc.h \
+	src/handle/handle.h \
 	src/const.h \
 	src/http.h \
 	src/jose.h \

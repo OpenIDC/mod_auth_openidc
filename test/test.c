@@ -42,6 +42,7 @@
  *
  **************************************************************************/
 
+#include "handle/handle.h"
 #include "mod_auth_openidc.h"
 
 #include <openssl/evp.h>

@@ -41,12 +41,9 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-// clang-format off
-
-#include "mod_auth_openidc.h"
+#include "handle/handle.h"
 #include "metrics.h"
-
-// clang-format on
+#include "mod_auth_openidc.h"
 
 #define OPENSSL_THREAD_DEFINES
 #include <openssl/err.h>

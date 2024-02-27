@@ -41,7 +41,9 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+#include "handle/handle.h"
 #include "mod_auth_openidc.h"
+#include "parse.h"
 
 apr_byte_t oidc_oauth_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg, const char *issuer, const char *url,
 						 json_t **j_metadata, char **response) {

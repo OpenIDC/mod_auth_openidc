@@ -72,6 +72,10 @@
 APLOG_USE_MODULE(auth_openidc);
 #endif
 
+#define OIDC_AUTH_TYPE_OPENID_CONNECT "openid-connect"
+#define OIDC_AUTH_TYPE_OPENID_OAUTH20 "oauth20"
+#define OIDC_AUTH_TYPE_OPENID_BOTH "auth-openidc"
+
 /* keys for storing info in the request state */
 #define OIDC_REQUEST_STATE_KEY_IDTOKEN "i"
 #define OIDC_REQUEST_STATE_KEY_CLAIMS "c"
@@ -464,28 +468,38 @@ typedef struct oidc_cfg {
 	oidc_cache_mutex_t *refresh_mutex;
 } oidc_cfg;
 
+typedef struct {
+	char *uuid;	   /* unique id */
+	char *remote_user; /* user who owns this particular session */
+	json_t *state;	   /* the state for this session, encoded in a JSON object */
+	apr_time_t expiry; /* if > 0, the time of expiry of this session */
+	char *sid;
+} oidc_session_t;
+
 void oidc_pre_config_init();
 int oidc_fixups(request_rec *r);
 int oidc_check_user_id(request_rec *r);
-#if HAVE_APACHE_24
-authz_status oidc_authz_checker_claim(request_rec *r, const char *require_args, const void *parsed_require_args);
-#ifdef USE_LIBJQ
-authz_status oidc_authz_checker_claims_expr(request_rec *r, const char *require_args, const void *parsed_require_args);
-#endif
-#else
-int oidc_auth_checker(request_rec *r);
-#endif
 void oidc_request_state_set(request_rec *r, const char *key, const char *value);
 const char *oidc_request_state_get(request_rec *r, const char *key);
-int oidc_handle_jwks(request_rec *r, oidc_cfg *c);
-int oidc_handle_remove_at_cache(request_rec *r, oidc_cfg *c);
-apr_byte_t oidc_post_preserve_javascript(request_rec *r, const char *location, char **javascript,
-					 char **javascript_method);
 void oidc_scrub_headers(request_rec *r);
 void oidc_strip_cookies(request_rec *r);
-int oidc_content_handler(request_rec *r);
 apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name, const char *replace, const char *reg_exp,
 				json_t *json, char **request_user);
+int oidc_authenticate_user(request_rec *r, oidc_cfg *c, oidc_provider_t *provider, const char *original_url,
+			   const char *login_hint, const char *id_token_hint, const char *prompt,
+			   const char *auth_request_params, const char *path_scope);
+apr_byte_t oidc_get_provider_from_session(request_rec *r, oidc_cfg *c, oidc_session_t *session,
+					  oidc_provider_t **provider);
+apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg *cfg, oidc_session_t *session, apr_byte_t *needs_save);
+void oidc_log_session_expires(request_rec *r, const char *msg, apr_time_t session_expires);
+apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg *c, oidc_provider_t **provider);
+const char *oidc_original_request_method(request_rec *r, oidc_cfg *cfg, apr_byte_t handle_discovery_response);
+oidc_provider_t *oidc_get_provider_for_issuer(request_rec *r, oidc_cfg *c, const char *issuer,
+					      apr_byte_t allow_discovery);
+char *oidc_get_state_cookie_name(request_rec *r, const char *state);
+int oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg *c, const char *currentCookieName, int delete_oldest);
+char *oidc_get_browser_state_hash(request_rec *r, oidc_cfg *c, const char *nonce);
+apr_byte_t oidc_is_auth_capable_request(request_rec *r);
 
 #define OIDC_REDIRECT_URI_REQUEST_INFO "info"
 #define OIDC_REDIRECT_URI_REQUEST_LOGOUT "logout"
@@ -738,18 +752,6 @@ apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg *cfg, oidc_provide
 apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg *c, const char *redirect_to_url,
 				      apr_byte_t restrict_to_host, char **err_str, char **err_desc);
 
-// oidc_authz.c
-typedef apr_byte_t (*oidc_authz_match_claim_fn_type)(request_rec *, const char *const, json_t *);
-apr_byte_t oidc_authz_match_claim(request_rec *r, const char *const attr_spec, json_t *claims);
-#ifdef USE_LIBJQ
-apr_byte_t oidc_authz_match_claims_expr(request_rec *r, const char *const attr_spec, json_t *claims);
-#endif
-#if HAVE_APACHE_24
-authz_status oidc_authz_worker24(request_rec *r, json_t *claims, const char *require_args,
-				 const void *parsed_require_args, oidc_authz_match_claim_fn_type match_claim_fn);
-#else
-int oidc_authz_worker22(request_rec *r, json_t *claims, const require_line *const reqs, int nelts);
-#endif
 int oidc_oauth_return_www_authenticate(request_rec *r, const char *error, const char *error_description);
 
 // oidc_config.c
@@ -908,14 +910,6 @@ apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg *cfg, const oidc_jwks
 apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg *c, json_t *j_provider);
 
 // oidc_session.c
-typedef struct {
-	char *uuid;	   /* unique id */
-	char *remote_user; /* user who owns this particular session */
-	json_t *state;	   /* the state for this session, encoded in a JSON object */
-	apr_time_t expiry; /* if > 0, the time of expiry of this session */
-	char *sid;
-} oidc_session_t;
-
 apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **z);
 apr_byte_t oidc_session_get(request_rec *r, oidc_session_t *z, const char *key, char **value);
 apr_byte_t oidc_session_set(request_rec *r, oidc_session_t *z, const char *key, const char *value);
@@ -925,8 +919,6 @@ apr_byte_t oidc_session_free(request_rec *r, oidc_session_t *z);
 apr_byte_t oidc_session_extract(request_rec *r, oidc_session_t *z);
 apr_byte_t oidc_session_load_cache_by_uuid(request_rec *r, oidc_cfg *c, const char *uuid, oidc_session_t *z);
 void oidc_session_id_new(request_rec *r, oidc_session_t *z);
-
-int oidc_handle_logout(request_rec *r, oidc_cfg *c, oidc_session_t *session);
 
 void oidc_session_set_userinfo_jwt(request_rec *r, oidc_session_t *z, const char *userinfo_jwt);
 const char *oidc_session_get_userinfo_jwt(request_rec *r, oidc_session_t *z);
@@ -963,7 +955,5 @@ const char *oidc_session_get_session_state(request_rec *r, oidc_session_t *z);
 void oidc_session_set_issuer(request_rec *r, oidc_session_t *z, const char *issuer);
 const char *oidc_session_get_issuer(request_rec *r, oidc_session_t *z);
 void oidc_session_set_client_id(request_rec *r, oidc_session_t *z, const char *client_id);
-apr_byte_t oidc_is_auth_capable_request(request_rec *r);
-char *oidc_parse_base64(apr_pool_t *pool, const char *input, char **output, int *output_len);
 
 #endif /* MOD_AUTH_OPENIDC_H_ */

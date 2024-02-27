@@ -138,5 +138,6 @@ typedef const char *(*oidc_valid_function_t)(apr_pool_t *, const char *);
 const char *oidc_valid_string_in_array(apr_pool_t *pool, json_t *json, const char *key,
 				       oidc_valid_function_t valid_function, char **value, apr_byte_t optional,
 				       const char *preference);
+char *oidc_parse_base64(apr_pool_t *pool, const char *input, char **output, int *output_len);
 
 #endif /* MOD_AUTH_OPENIDC_PARSE_H_ */
