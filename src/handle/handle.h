@@ -77,22 +77,22 @@ int oidc_jwks_request(request_rec *r, oidc_cfg *c);
 int oidc_logout(request_rec *r, oidc_cfg *c, oidc_session_t *session);
 int oidc_logout_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, const char *url);
 
+// refresh.c
+apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg *c, oidc_session_t *session, oidc_provider_t *provider,
+				    char **new_access_token, char **new_id_token);
+int oidc_refresh_token_request(request_rec *r, oidc_cfg *c, oidc_session_t *session);
 apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg *cfg, oidc_session_t *session,
 						   int ttl_minimum, apr_byte_t *needs_save);
-apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r, oidc_cfg *cfg, oidc_session_t *session,
-						      apr_byte_t *needs_save);
+
 int oidc_handle_redirect_authorization_response(request_rec *r, oidc_cfg *c, oidc_session_t *session);
 int oidc_handle_post_authorization_response(request_rec *r, oidc_cfg *c, oidc_session_t *session);
 int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c);
 int oidc_handle_session_management(request_rec *r, oidc_cfg *c, oidc_session_t *session);
-int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c, oidc_session_t *session);
 int oidc_handle_request_uri(request_rec *r, oidc_cfg *c);
 int oidc_handle_revoke_session(request_rec *r, oidc_cfg *c);
 int oidc_handle_remove_at_cache(request_rec *r, oidc_cfg *c);
 apr_byte_t oidc_post_preserve_javascript(request_rec *r, const char *location, char **javascript,
 					 char **javascript_method);
-apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg *c, oidc_session_t *session, oidc_provider_t *provider,
-				    char **new_access_token, char **new_id_token);
 void oidc_proto_add_request_param(request_rec *r, struct oidc_provider_t *provider, const char *redirect_uri,
 				  apr_table_t *params);
 char *oidc_make_sid_iss_unique(request_rec *r, const char *sid, const char *issuer);
@@ -101,3 +101,5 @@ void oidc_store_userinfo_claims(request_rec *r, oidc_cfg *c, oidc_session_t *ses
 const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r, oidc_cfg *c, oidc_provider_t *provider,
 							const char *access_token, oidc_session_t *session,
 							char *id_token_sub, char **userinfo_jwt);
+apr_byte_t oidc_refresh_claims_from_userinfo_endpoint(request_rec *r, oidc_cfg *cfg, oidc_session_t *session,
+						      apr_byte_t *needs_save);

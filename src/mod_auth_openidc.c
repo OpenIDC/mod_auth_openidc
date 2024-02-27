@@ -1563,7 +1563,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c, oidc_session_t
 		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_REFRESH);
 
 		/* handle refresh token request */
-		rc = oidc_handle_refresh_token_request(r, c, session);
+		rc = oidc_refresh_token_request(r, c, session);
 
 		return rc;
 

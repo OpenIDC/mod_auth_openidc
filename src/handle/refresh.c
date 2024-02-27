@@ -296,7 +296,7 @@ end:
 /*
  * handle refresh token request
  */
-int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c, oidc_session_t *session) {
+int oidc_refresh_token_request(request_rec *r, oidc_cfg *c, oidc_session_t *session) {
 
 	char *return_to = NULL;
 	char *r_access_token = NULL;
