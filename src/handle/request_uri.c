@@ -52,8 +52,8 @@
  * copied and/or deleted to/from the protected request object based on the settings specified
  * in the "copy_from_request"/"copy_and_remove_from_request" JSON array in the request object
  */
-static apr_byte_t oidc_proto_param_needs_action(json_t *request_object_config, const char *parameter_name,
-						const char *action) {
+static apr_byte_t oidc_request_uri_param_needs_action(json_t *request_object_config, const char *parameter_name,
+						      const char *action) {
 	json_t *copy_from_request = json_object_get(request_object_config, action);
 	size_t index = 0;
 	while (index < json_array_size(copy_from_request)) {
@@ -67,25 +67,26 @@ static apr_byte_t oidc_proto_param_needs_action(json_t *request_object_config, c
 }
 
 /* context structure for copying request parameters */
-typedef struct oidc_proto_copy_req_ctx_t {
+typedef struct oidc_request_uri_copy_req_ctx_t {
 	request_rec *r;
 	json_t *request_object_config;
 	oidc_jwt_t *request_object;
 	apr_table_t *params2;
-} oidc_proto_copy_req_ctx_t;
+} oidc_request_uri_copy_req_ctx_t;
 
 /*
  * copy a parameter key/value from the authorizion request to the
  * request object if the configuration setting says to include it
  */
-static int oidc_proto_copy_from_request(void *rec, const char *name, const char *value) {
-	oidc_proto_copy_req_ctx_t *ctx = (oidc_proto_copy_req_ctx_t *)rec;
+static int oidc_request_uri_copy_from_request(void *rec, const char *name, const char *value) {
+	oidc_request_uri_copy_req_ctx_t *ctx = (oidc_request_uri_copy_req_ctx_t *)rec;
 
 	oidc_debug(ctx->r, "processing name: %s, value: %s", name, value);
 
-	if (oidc_proto_param_needs_action(ctx->request_object_config, name, OIDC_REQUEST_OJBECT_COPY_FROM_REQUEST) ||
-	    oidc_proto_param_needs_action(ctx->request_object_config, name,
-					  OIDC_REQUEST_OJBECT_COPY_AND_REMOVE_FROM_REQUEST)) {
+	if (oidc_request_uri_param_needs_action(ctx->request_object_config, name,
+						OIDC_REQUEST_OJBECT_COPY_FROM_REQUEST) ||
+	    oidc_request_uri_param_needs_action(ctx->request_object_config, name,
+						OIDC_REQUEST_OJBECT_COPY_AND_REMOVE_FROM_REQUEST)) {
 		json_t *result = NULL;
 		json_error_t json_error;
 		result = json_loads(value, JSON_DECODE_ANY, &json_error);
@@ -97,8 +98,8 @@ static int oidc_proto_copy_from_request(void *rec, const char *name, const char 
 			json_decref(result);
 		}
 
-		if (oidc_proto_param_needs_action(ctx->request_object_config, name,
-						  OIDC_REQUEST_OJBECT_COPY_AND_REMOVE_FROM_REQUEST)) {
+		if (oidc_request_uri_param_needs_action(ctx->request_object_config, name,
+							OIDC_REQUEST_OJBECT_COPY_AND_REMOVE_FROM_REQUEST)) {
 			apr_table_set(ctx->params2, name, name);
 		}
 	}
@@ -109,13 +110,13 @@ static int oidc_proto_copy_from_request(void *rec, const char *name, const char 
 /*
  * delete a parameter key/value from the authorizion request if the configuration setting says to remove it
  */
-static int oidc_proto_delete_from_request(void *rec, const char *name, const char *value) {
-	oidc_proto_copy_req_ctx_t *ctx = (oidc_proto_copy_req_ctx_t *)rec;
+static int oidc_request_uri_delete_from_request(void *rec, const char *name, const char *value) {
+	oidc_request_uri_copy_req_ctx_t *ctx = (oidc_request_uri_copy_req_ctx_t *)rec;
 
 	oidc_debug(ctx->r, "deleting from query parameters: name: %s, value: %s", name, value);
 
-	if (oidc_proto_param_needs_action(ctx->request_object_config, name,
-					  OIDC_REQUEST_OJBECT_COPY_AND_REMOVE_FROM_REQUEST)) {
+	if (oidc_request_uri_param_needs_action(ctx->request_object_config, name,
+						OIDC_REQUEST_OJBECT_COPY_AND_REMOVE_FROM_REQUEST)) {
 		apr_table_unset(ctx->params2, name);
 	}
 
@@ -125,8 +126,9 @@ static int oidc_proto_delete_from_request(void *rec, const char *name, const cha
 /*
  * obtain the public key for a provider to encrypt the request object with
  */
-apr_byte_t oidc_proto_get_encryption_jwk_by_type(request_rec *r, oidc_cfg *cfg, struct oidc_provider_t *provider,
-						 int key_type, oidc_jwk_t **jwk) {
+static apr_byte_t oidc_request_uri_encryption_jwk_by_type(request_rec *r, oidc_cfg *cfg,
+							  struct oidc_provider_t *provider, int key_type,
+							  oidc_jwk_t **jwk) {
 
 	oidc_jose_error_t err;
 	json_t *j_jwks = NULL;
@@ -185,8 +187,8 @@ apr_byte_t oidc_proto_get_encryption_jwk_by_type(request_rec *r, oidc_cfg *cfg, 
 /*
  * generate a request object
  */
-static char *oidc_proto_create_request_object(request_rec *r, struct oidc_provider_t *provider,
-					      json_t *request_object_config, apr_table_t *params, int ttl) {
+static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provider_t *provider,
+					     json_t *request_object_config, apr_table_t *params, int ttl) {
 
 	oidc_jwk_t *sjwk = NULL;
 	int jwk_needs_destroy = 0;
@@ -211,12 +213,12 @@ static char *oidc_proto_create_request_object(request_rec *r, struct oidc_provid
 
 	/* copy parameters from the authorization request as configured in the .conf file */
 	apr_table_t *delete_from_query_params = apr_table_make(r->pool, 0);
-	oidc_proto_copy_req_ctx_t data = {r, request_object_config, request_object, delete_from_query_params};
-	apr_table_do(oidc_proto_copy_from_request, &data, params, NULL);
+	oidc_request_uri_copy_req_ctx_t data = {r, request_object_config, request_object, delete_from_query_params};
+	apr_table_do(oidc_request_uri_copy_from_request, &data, params, NULL);
 
 	/* delete parameters from the query parameters of the authorization request as configured in the .conf file */
 	data.params2 = params;
-	apr_table_do(oidc_proto_delete_from_request, &data, delete_from_query_params, NULL);
+	apr_table_do(oidc_request_uri_delete_from_request, &data, delete_from_query_params, NULL);
 
 	/* debug logging */
 	oidc_debug(r, "request object: %s",
@@ -302,7 +304,7 @@ static char *oidc_proto_create_request_object(request_rec *r, struct oidc_provid
 		switch (oidc_jwt_alg2kty(jwe)) {
 		case CJOSE_JWK_KTY_RSA:
 		case CJOSE_JWK_KTY_EC:
-			oidc_proto_get_encryption_jwk_by_type(r, cfg, provider, oidc_jwt_alg2kty(jwe), &ejwk);
+			oidc_request_uri_encryption_jwk_by_type(r, cfg, provider, oidc_jwt_alg2kty(jwe), &ejwk);
 			break;
 		case CJOSE_JWK_KTY_OCT:
 			oidc_util_create_symmetric_key(r, provider->client_secret, oidc_alg2keysize(jwe->header.alg),
@@ -359,9 +361,8 @@ static char *oidc_proto_create_request_object(request_rec *r, struct oidc_provid
 /*
  * generate a request object and pass it by reference in the authorization request
  */
-static char *oidc_proto_create_request_uri(request_rec *r, struct oidc_provider_t *provider,
-					   json_t *request_object_config, const char *redirect_uri, apr_table_t *params,
-					   int ttl) {
+static char *oidc_request_uri_create(request_rec *r, struct oidc_provider_t *provider, json_t *request_object_config,
+				     const char *redirect_uri, apr_table_t *params, int ttl) {
 
 	oidc_debug(r, "enter");
 
@@ -373,7 +374,7 @@ static char *oidc_proto_create_request_uri(request_rec *r, struct oidc_provider_
 		resolver_url = apr_pstrdup(r->pool, redirect_uri);
 
 	char *serialized_request_object =
-	    oidc_proto_create_request_object(r, provider, request_object_config, params, ttl);
+	    oidc_request_uri_request_object(r, provider, request_object_config, params, ttl);
 
 	/* generate a temporary reference, store the request object in the cache and generate a Request URI that
 	 * references it */
@@ -394,8 +395,8 @@ static char *oidc_proto_create_request_uri(request_rec *r, struct oidc_provider_
 /*
  * Generic function to generate request/request_object parameter with value
  */
-void oidc_proto_add_request_param(request_rec *r, struct oidc_provider_t *provider, const char *redirect_uri,
-				  apr_table_t *params) {
+void oidc_request_uri_add_request_param(request_rec *r, struct oidc_provider_t *provider, const char *redirect_uri,
+					apr_table_t *params) {
 
 	/* parse the request object configuration from a string in to a JSON structure */
 	json_t *request_object_config = NULL;
@@ -429,11 +430,11 @@ void oidc_proto_add_request_param(request_rec *r, struct oidc_provider_t *provid
 	oidc_json_object_get_int(request_object_config, "ttl", &ttl, OIDC_REQUEST_OBJECT_TTL_DEFAULT);
 	if (_oidc_strcmp(parameter, OIDC_PROTO_REQUEST_URI) == 0) {
 		/* parameter is "request_uri" */
-		value = oidc_proto_create_request_uri(r, provider, request_object_config, redirect_uri, params, ttl);
+		value = oidc_request_uri_create(r, provider, request_object_config, redirect_uri, params, ttl);
 		apr_table_set(params, OIDC_PROTO_REQUEST_URI, value);
 	} else {
 		/* parameter is "request" */
-		value = oidc_proto_create_request_object(r, provider, request_object_config, params, ttl);
+		value = oidc_request_uri_request_object(r, provider, request_object_config, params, ttl);
 		apr_table_set(params, OIDC_PROTO_REQUEST_OBJECT, value);
 	}
 }
@@ -441,7 +442,7 @@ void oidc_proto_add_request_param(request_rec *r, struct oidc_provider_t *provid
 /*
  * handle request object by reference request
  */
-int oidc_handle_request_uri(request_rec *r, oidc_cfg *c) {
+int oidc_request_uri(request_rec *r, oidc_cfg *c) {
 
 	char *request_ref = NULL;
 	oidc_http_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_REQUEST_URI, &request_ref);

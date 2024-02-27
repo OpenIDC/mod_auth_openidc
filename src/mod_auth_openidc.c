@@ -1572,7 +1572,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c, oidc_session_t
 		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_REQUEST_URI);
 
 		/* handle request object by reference request */
-		rc = oidc_handle_request_uri(r, c);
+		rc = oidc_request_uri(r, c);
 
 		return rc;
 

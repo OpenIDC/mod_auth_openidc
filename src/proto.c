@@ -235,7 +235,7 @@ int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *pro
 
 	/* add request parameter (request or request_uri) if set */
 	if (provider->request_object != NULL)
-		oidc_proto_add_request_param(r, provider, redirect_uri, params);
+		oidc_request_uri_add_request_param(r, provider, redirect_uri, params);
 
 	/* send the full authentication request via POST or GET */
 	if (provider->auth_request_method == OIDC_AUTH_REQUEST_METHOD_POST) {
