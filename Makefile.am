@@ -8,16 +8,17 @@ libauth_openidc_la_SOURCES = \
 	src/cache/shm.c \
 	src/cache/common.c \
 	src/handle/authz.c \
-	src/handle/info.c \
-	src/handle/refresh.c	\
-	src/handle/revoke.c \
 	src/handle/content.c \
-	src/handle/jwks.c \
-	src/handle/request_uri.c \
-	src/handle/session_management.c \
 	src/handle/discovery.c \
+	src/handle/info.c \
+	src/handle/jwks.c \
 	src/handle/logout.c \
+	src/handle/refresh.c	\
+	src/handle/request_uri.c \
+	src/handle/request.c \
 	src/handle/response.c \
+	src/handle/revoke.c \
+	src/handle/session_management.c \
 	src/handle/userinfo.c \
 	src/metrics.c \
 	src/oauth.c \

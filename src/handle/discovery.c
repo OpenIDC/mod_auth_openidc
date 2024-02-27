@@ -333,8 +333,8 @@ int oidc_discovery_response(request_rec *r, oidc_cfg *c) {
 				    HTTP_INTERNAL_SERVER_ERROR);
 			}
 		}
-		return oidc_authenticate_user(r, c, NULL, target_link_uri, login_hint, NULL, NULL, auth_request_params,
-					      path_scopes);
+		return oidc_request_authenticate_user(r, c, NULL, target_link_uri, login_hint, NULL, NULL,
+						      auth_request_params, path_scopes);
 	}
 
 	/* find out if the user entered an account name or selected an OP manually */
@@ -405,8 +405,8 @@ int oidc_discovery_response(request_rec *r, oidc_cfg *c) {
 			return OK;
 		} else {
 			/* now we've got a selected OP, send the user there to authenticate */
-			return oidc_authenticate_user(r, c, provider, target_link_uri, login_hint, NULL, NULL,
-						      auth_request_params, path_scopes);
+			return oidc_request_authenticate_user(r, c, provider, target_link_uri, login_hint, NULL, NULL,
+							      auth_request_params, path_scopes);
 		}
 	}
 

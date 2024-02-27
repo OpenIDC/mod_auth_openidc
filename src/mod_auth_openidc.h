@@ -485,9 +485,6 @@ void oidc_scrub_headers(request_rec *r);
 void oidc_strip_cookies(request_rec *r);
 apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name, const char *replace, const char *reg_exp,
 				json_t *json, char **request_user);
-int oidc_authenticate_user(request_rec *r, oidc_cfg *c, oidc_provider_t *provider, const char *original_url,
-			   const char *login_hint, const char *id_token_hint, const char *prompt,
-			   const char *auth_request_params, const char *path_scope);
 apr_byte_t oidc_get_provider_from_session(request_rec *r, oidc_cfg *c, oidc_session_t *session,
 					  oidc_provider_t **provider);
 apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg *cfg, oidc_session_t *session, apr_byte_t *needs_save);

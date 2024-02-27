@@ -89,6 +89,11 @@ void oidc_request_uri_add_request_param(request_rec *r, struct oidc_provider_t *
 					apr_table_t *params);
 int oidc_request_uri(request_rec *r, oidc_cfg *c);
 
+// request.c
+int oidc_request_authenticate_user(request_rec *r, oidc_cfg *c, oidc_provider_t *provider, const char *original_url,
+				   const char *login_hint, const char *id_token_hint, const char *prompt,
+				   const char *auth_request_params, const char *path_scope);
+
 // response.c
 apr_byte_t oidc_response_post_preserve_javascript(request_rec *r, const char *location, char **javascript,
 						  char **javascript_method);

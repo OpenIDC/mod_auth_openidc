@@ -409,8 +409,8 @@ static authz_status oidc_authz_24_unauthorized_user(request_rec *r) {
 		break;
 	}
 
-	oidc_authenticate_user(r, c, NULL, oidc_get_current_url(r, c->x_forwarded_headers), NULL, NULL, NULL,
-			       oidc_dir_cfg_path_auth_request_params(r), oidc_dir_cfg_path_scope(r));
+	oidc_request_authenticate_user(r, c, NULL, oidc_get_current_url(r, c->x_forwarded_headers), NULL, NULL, NULL,
+				       oidc_dir_cfg_path_auth_request_params(r), oidc_dir_cfg_path_scope(r));
 
 	const char *location = oidc_http_hdr_out_location_get(r);
 
@@ -620,8 +620,9 @@ static int oidc_authz_22_unauthorized_user(request_rec *r) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_AUTH);
 	}
 
-	return oidc_authenticate_user(r, c, NULL, oidc_get_current_url(r, c->x_forwarded_headers), NULL, NULL, NULL,
-				      oidc_dir_cfg_path_auth_request_params(r), oidc_dir_cfg_path_scope(r));
+	return oidc_request_authenticate_user(r, c, NULL, oidc_get_current_url(r, c->x_forwarded_headers), NULL, NULL,
+					      NULL, oidc_dir_cfg_path_auth_request_params(r),
+					      oidc_dir_cfg_path_scope(r));
 }
 
 /*
