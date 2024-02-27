@@ -1491,7 +1491,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c, oidc_session_t
 		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_AUTHN_RESPONSE_REDIRECT);
 
 		/* this is an authorization response from the OP using the Basic Client profile or a Hybrid flow*/
-		rc = oidc_handle_redirect_authorization_response(r, c, session);
+		rc = oidc_response_authorization_redirect(r, c, session);
 
 		OIDC_METRICS_TIMING_ADD(r, c, OM_AUTHN_RESPONSE);
 
@@ -1521,7 +1521,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c, oidc_session_t
 
 		/* this is an authorization response using the fragment(+POST) response_mode with the Implicit Client
 		 * profile */
-		rc = oidc_handle_post_authorization_response(r, c, session);
+		rc = oidc_response_authorization_post(r, c, session);
 
 		OIDC_METRICS_TIMING_ADD(r, c, OM_AUTHN_RESPONSE);
 
@@ -1638,7 +1638,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c, oidc_session_t
 		//
 		//		/* send user facing error to browser */
 		//		return oidc_util_html_send_error(r, error, descr, OK);
-		rc = oidc_handle_redirect_authorization_response(r, c, session);
+		rc = oidc_response_authorization_redirect(r, c, session);
 
 		return rc;
 	}

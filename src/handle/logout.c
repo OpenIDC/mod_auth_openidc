@@ -125,7 +125,7 @@ static apr_byte_t oidc_logout_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg
 	//	     and memory-based caching doesn't suffer from this (different shm segments)?
 	//	   - it will result in 400 errors returned from backchannel logout calls to the other hosts...
 
-	sid = oidc_make_sid_iss_unique(r, sid, provider->issuer);
+	sid = oidc_response_make_sid_iss_unique(r, sid, provider->issuer);
 	oidc_cache_get_sid(r, sid, &uuid);
 	if (uuid == NULL) {
 		// this may happen when we are the caller

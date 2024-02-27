@@ -99,7 +99,7 @@ int oidc_discovery_request(request_rec *r, oidc_cfg *cfg) {
 		oidc_http_set_cookie(r, OIDC_CSRF_NAME, csrf, -1, OIDC_COOKIE_SAMESITE_STRICT(cfg, r));
 
 		/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
-		if (oidc_post_preserve_javascript(r, url, NULL, NULL) == TRUE)
+		if (oidc_response_post_preserve_javascript(r, url, NULL, NULL) == TRUE)
 			return OK;
 
 		/* do the actual redirect to an external discovery page */
@@ -178,7 +178,7 @@ int oidc_discovery_request(request_rec *r, oidc_cfg *cfg) {
 
 	char *javascript = NULL, *javascript_method = NULL;
 	char *html_head = "<style type=\"text/css\">body {text-align: center}</style>";
-	if (oidc_post_preserve_javascript(r, NULL, &javascript, &javascript_method) == TRUE)
+	if (oidc_response_post_preserve_javascript(r, NULL, &javascript, &javascript_method) == TRUE)
 		html_head = apr_psprintf(r->pool, "%s%s", html_head, javascript);
 
 	/* now send the HTML contents to the user agent */

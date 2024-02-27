@@ -89,15 +89,16 @@ void oidc_request_uri_add_request_param(request_rec *r, struct oidc_provider_t *
 					apr_table_t *params);
 int oidc_request_uri(request_rec *r, oidc_cfg *c);
 
-int oidc_handle_redirect_authorization_response(request_rec *r, oidc_cfg *c, oidc_session_t *session);
-int oidc_handle_post_authorization_response(request_rec *r, oidc_cfg *c, oidc_session_t *session);
-int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c);
+// response.c
+apr_byte_t oidc_response_post_preserve_javascript(request_rec *r, const char *location, char **javascript,
+						  char **javascript_method);
+char *oidc_response_make_sid_iss_unique(request_rec *r, const char *sid, const char *issuer);
+int oidc_response_authorization_redirect(request_rec *r, oidc_cfg *c, oidc_session_t *session);
+int oidc_response_authorization_post(request_rec *r, oidc_cfg *c, oidc_session_t *session);
+
 int oidc_handle_session_management(request_rec *r, oidc_cfg *c, oidc_session_t *session);
 int oidc_handle_revoke_session(request_rec *r, oidc_cfg *c);
 int oidc_handle_remove_at_cache(request_rec *r, oidc_cfg *c);
-apr_byte_t oidc_post_preserve_javascript(request_rec *r, const char *location, char **javascript,
-					 char **javascript_method);
-char *oidc_make_sid_iss_unique(request_rec *r, const char *sid, const char *issuer);
 void oidc_store_userinfo_claims(request_rec *r, oidc_cfg *c, oidc_session_t *session, oidc_provider_t *provider,
 				const char *claims, const char *userinfo_jwt);
 const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r, oidc_cfg *c, oidc_provider_t *provider,

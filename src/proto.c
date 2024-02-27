@@ -250,7 +250,7 @@ int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *pro
 
 		// TODO: should also enable this when using the POST binding for the auth request
 		/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
-		if (oidc_post_preserve_javascript(r, authorization_request, NULL, NULL) == FALSE) {
+		if (oidc_response_post_preserve_javascript(r, authorization_request, NULL, NULL) == FALSE) {
 
 			/* add the redirect location header */
 			oidc_http_hdr_out_location_set(r, authorization_request);
