@@ -48,7 +48,7 @@
 /*
  * handle request for session info
  */
-int oidc_handle_info_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, apr_byte_t needs_save) {
+int oidc_info_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, apr_byte_t needs_save) {
 	int rc = HTTP_UNAUTHORIZED;
 	char *s_format = NULL;
 	char *s_interval = NULL;

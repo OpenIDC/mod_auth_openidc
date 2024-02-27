@@ -59,10 +59,16 @@ authz_status oidc_authz_24_worker(request_rec *r, json_t *claims, const char *re
 int oidc_authz_22_checker(request_rec *r);
 #endif
 
+// content.c
+int oidc_content_handler(request_rec *r);
+
 // discovery.c
 int oidc_discovery_request(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_is_discovery_response(request_rec *r, oidc_cfg *cfg);
 int oidc_discovery_response(request_rec *r, oidc_cfg *c);
+
+// info.c
+int oidc_info_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, apr_byte_t needs_save);
 
 apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg *cfg, oidc_session_t *session,
 						   int ttl_minimum, apr_byte_t *needs_save);
@@ -77,13 +83,11 @@ int oidc_handle_session_management(request_rec *r, oidc_cfg *c, oidc_session_t *
 int oidc_handle_refresh_token_request(request_rec *r, oidc_cfg *c, oidc_session_t *session);
 int oidc_handle_request_uri(request_rec *r, oidc_cfg *c);
 int oidc_handle_revoke_session(request_rec *r, oidc_cfg *c);
-int oidc_content_handler(request_rec *r);
 int oidc_handle_remove_at_cache(request_rec *r, oidc_cfg *c);
 apr_byte_t oidc_post_preserve_javascript(request_rec *r, const char *location, char **javascript,
 					 char **javascript_method);
 apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg *c, oidc_session_t *session, oidc_provider_t *provider,
 				    char **new_access_token, char **new_id_token);
-int oidc_handle_info_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, apr_byte_t needs_save);
 void oidc_proto_add_request_param(request_rec *r, struct oidc_provider_t *provider, const char *redirect_uri,
 				  apr_table_t *params);
 char *oidc_make_sid_iss_unique(request_rec *r, const char *sid, const char *issuer);

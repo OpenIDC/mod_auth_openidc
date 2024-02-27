@@ -85,7 +85,7 @@ int oidc_content_handler(request_rec *r) {
 			needs_save = (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_SAVE) != NULL);
 
 			/* handle request for session info */
-			rc = oidc_handle_info_request(r, c, session, needs_save);
+			rc = oidc_info_request(r, c, session, needs_save);
 
 			/* free resources allocated for the session */
 			oidc_session_free(r, session);
