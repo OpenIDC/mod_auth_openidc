@@ -59,8 +59,11 @@ authz_status oidc_authz_24_worker(request_rec *r, json_t *claims, const char *re
 int oidc_authz_22_checker(request_rec *r);
 #endif
 
-int oidc_discovery(request_rec *r, oidc_cfg *cfg);
+// discovery.c
+int oidc_discovery_request(request_rec *r, oidc_cfg *cfg);
 apr_byte_t oidc_is_discovery_response(request_rec *r, oidc_cfg *cfg);
+int oidc_discovery_response(request_rec *r, oidc_cfg *c);
+
 apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg *cfg, oidc_session_t *session,
 						   int ttl_minimum, apr_byte_t *needs_save);
 int oidc_handle_logout(request_rec *r, oidc_cfg *c, oidc_session_t *session);

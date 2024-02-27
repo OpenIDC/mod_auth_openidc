@@ -107,7 +107,7 @@ int oidc_content_handler(request_rec *r) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_DISCOVERY);
 
 		/* discovery may result in a 200 HTML page or a redirect to an external URL */
-		rc = oidc_discovery(r, c);
+		rc = oidc_discovery_request(r, c);
 
 	} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_AUTHN) != NULL) {
 

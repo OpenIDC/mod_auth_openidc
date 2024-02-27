@@ -57,7 +57,7 @@ apr_byte_t oidc_is_discovery_response(request_rec *r, oidc_cfg *cfg) {
 /*
  * present the user with an OP selection screen
  */
-int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
+int oidc_discovery_request(request_rec *r, oidc_cfg *cfg) {
 
 	oidc_debug(r, "enter");
 
@@ -188,7 +188,7 @@ int oidc_discovery(request_rec *r, oidc_cfg *cfg) {
 /*
  * check if the target_link_uri matches to configuration settings to prevent an open redirect
  */
-static int oidc_target_link_uri_matches_configuration(request_rec *r, oidc_cfg *cfg, const char *target_link_uri) {
+static int oidc_discovery_target_link_uri_match(request_rec *r, oidc_cfg *cfg, const char *target_link_uri) {
 
 	apr_uri_t o_uri;
 	apr_uri_parse(r->pool, target_link_uri, &o_uri);
@@ -259,7 +259,7 @@ static int oidc_target_link_uri_matches_configuration(request_rec *r, oidc_cfg *
 /*
  * handle a response from an IDP discovery page and/or handle 3rd-party initiated SSO
  */
-int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
+int oidc_discovery_response(request_rec *r, oidc_cfg *c) {
 
 	/* variables to hold the values returned in the response */
 	char *issuer = NULL, *target_link_uri = NULL, *login_hint = NULL, *auth_request_params = NULL, *csrf_cookie,
@@ -308,7 +308,7 @@ int oidc_handle_discovery_response(request_rec *r, oidc_cfg *c) {
 	}
 
 	/* do open redirect prevention, step 1 */
-	if (oidc_target_link_uri_matches_configuration(r, c, target_link_uri) == FALSE) {
+	if (oidc_discovery_target_link_uri_match(r, c, target_link_uri) == FALSE) {
 		return oidc_util_html_send_error(r, c->error_template, "Invalid Request",
 						 "\"target_link_uri\" parameter does not match configuration settings, "
 						 "aborting to prevent an open redirect.",

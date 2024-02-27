@@ -1532,7 +1532,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c, oidc_session_t
 		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_DISCOVERY_RESPONSE);
 
 		/* this is response from the OP discovery page */
-		rc = oidc_handle_discovery_response(r, c);
+		rc = oidc_discovery_response(r, c);
 
 		return rc;
 
