@@ -100,7 +100,10 @@ int oidc_response_authorization_post(request_rec *r, oidc_cfg *c, oidc_session_t
 int oidc_revoke_session(request_rec *r, oidc_cfg *c);
 int oidc_revoke_at_cache_remove(request_rec *r, oidc_cfg *c);
 
-int oidc_handle_session_management(request_rec *r, oidc_cfg *c, oidc_session_t *session);
+// session_management.c
+int oidc_session_management(request_rec *r, oidc_cfg *c, oidc_session_t *session);
+
+// userinfo.c
 void oidc_store_userinfo_claims(request_rec *r, oidc_cfg *c, oidc_session_t *session, oidc_provider_t *provider,
 				const char *claims, const char *userinfo_jwt);
 const char *oidc_retrieve_claims_from_userinfo_endpoint(request_rec *r, oidc_cfg *c, oidc_provider_t *provider,

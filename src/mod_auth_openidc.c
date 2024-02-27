@@ -1554,7 +1554,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg *c, oidc_session_t
 		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_SESSION);
 
 		/* handle session management request */
-		rc = oidc_handle_session_management(r, c, session);
+		rc = oidc_session_management(r, c, session);
 
 		return rc;
 

@@ -43,15 +43,15 @@
 #include "handle/handle.h"
 #include "metrics.h"
 
-static int oidc_handle_session_management_iframe_op(request_rec *r, oidc_cfg *c, oidc_session_t *session,
-						    const char *check_session_iframe) {
+static int oidc_session_management_iframe_op(request_rec *r, oidc_cfg *c, oidc_session_t *session,
+					     const char *check_session_iframe) {
 	oidc_debug(r, "enter");
 	oidc_http_hdr_out_location_set(r, check_session_iframe);
 	return HTTP_MOVED_TEMPORARILY;
 }
 
-static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c, oidc_session_t *session,
-						    const char *client_id, const char *check_session_iframe) {
+static int oidc_session_management_iframe_rp(request_rec *r, oidc_cfg *c, oidc_session_t *session,
+					     const char *client_id, const char *check_session_iframe) {
 
 	oidc_debug(r, "enter");
 
@@ -141,7 +141,7 @@ static int oidc_handle_session_management_iframe_rp(request_rec *r, oidc_cfg *c,
 /*
  * handle session management request
  */
-int oidc_handle_session_management(request_rec *r, oidc_cfg *c, oidc_session_t *session) {
+int oidc_session_management(request_rec *r, oidc_cfg *c, oidc_session_t *session) {
 	char *cmd = NULL;
 	const char *id_token_hint = NULL;
 	oidc_provider_t *provider = NULL;
@@ -169,7 +169,7 @@ int oidc_handle_session_management(request_rec *r, oidc_cfg *c, oidc_session_t *
 	/* see if this is a request for the OP iframe */
 	if (_oidc_strcmp("iframe_op", cmd) == 0) {
 		if (provider->check_session_iframe != NULL) {
-			return oidc_handle_session_management_iframe_op(r, c, session, provider->check_session_iframe);
+			return oidc_session_management_iframe_op(r, c, session, provider->check_session_iframe);
 		}
 		return HTTP_NOT_FOUND;
 	}
@@ -177,8 +177,8 @@ int oidc_handle_session_management(request_rec *r, oidc_cfg *c, oidc_session_t *
 	/* see if this is a request for the RP iframe */
 	if (_oidc_strcmp("iframe_rp", cmd) == 0) {
 		if ((provider->client_id != NULL) && (provider->check_session_iframe != NULL)) {
-			return oidc_handle_session_management_iframe_rp(r, c, session, provider->client_id,
-									provider->check_session_iframe);
+			return oidc_session_management_iframe_rp(r, c, session, provider->client_id,
+								 provider->check_session_iframe);
 		}
 		oidc_debug(r, "iframe_rp command issued but no client (%s) and/or no check_session_iframe (%s) set",
 			   provider->client_id, provider->check_session_iframe);
