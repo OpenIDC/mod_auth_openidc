@@ -1,3 +1,6 @@
+02/28/2024
+- optimize performance by skipping JSON processing when `OIDCPassClaimsAs none` is set
+
 02/25/2024
 - implement oidc_util_apr_hash_clear so clearing hashtables works with older versions of libapr 
 - refactor/extract HTTP functions

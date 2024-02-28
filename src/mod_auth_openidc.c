@@ -547,6 +547,13 @@ static apr_byte_t oidc_set_app_claims(request_rec *r, const oidc_cfg *const cfg,
 
 	json_t *j_claims = NULL;
 
+	apr_byte_t pass_headers = oidc_cfg_dir_pass_info_in_headers(r);
+	apr_byte_t pass_envvars = oidc_cfg_dir_pass_info_in_envvars(r);
+
+	// optimize performance when `OIDCPassClaimsAs none` is set
+	if ((pass_headers == FALSE) && (pass_headers == FALSE))
+		return TRUE;
+
 	/* decode the string-encoded attributes in to a JSON structure */
 	if (s_claims != NULL) {
 		if (oidc_util_decode_json_object(r, s_claims, &j_claims) == FALSE)
@@ -555,9 +562,8 @@ static apr_byte_t oidc_set_app_claims(request_rec *r, const oidc_cfg *const cfg,
 
 	/* set the resolved claims a HTTP headers for the application */
 	if (j_claims != NULL) {
-		oidc_util_set_app_infos(r, j_claims, oidc_cfg_claim_prefix(r), cfg->claim_delimiter,
-					oidc_cfg_dir_pass_info_in_headers(r), oidc_cfg_dir_pass_info_in_envvars(r),
-					oidc_cfg_dir_pass_info_encoding(r));
+		oidc_util_set_app_infos(r, j_claims, oidc_cfg_claim_prefix(r), cfg->claim_delimiter, pass_headers,
+					pass_envvars, oidc_cfg_dir_pass_info_encoding(r));
 
 		/* release resources */
 		json_decref(j_claims);
