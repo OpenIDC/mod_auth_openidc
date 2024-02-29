@@ -258,8 +258,28 @@ static char *oidc_cache_get_hashed_key(request_rec *r, const char *key) {
 /*
  * hash a cache key plus a crypto passphrase so the result is suitable as an randomized cache key
  */
-static char *oidc_cache_get_hashed_key_secret(request_rec *r, const char *passphrase, const char *key) {
+static inline char *oidc_cache_get_hashed_key_secret(request_rec *r, const char *passphrase, const char *key) {
 	return oidc_cache_get_hashed_key(r, apr_psprintf(r->pool, "%s:%s", passphrase, key));
+}
+
+/*
+ * construct a cache key
+ */
+static apr_byte_t oidc_cache_get_key(request_rec *r, const char *s_key, const char *s_secret, int encrypted,
+				     const char **r_key) {
+	/* see if encryption is turned on, so we'll hash passphrase+key */
+	if (encrypted == 1) {
+		if (s_secret == NULL) {
+			oidc_error(r, "could not decrypt cache entry because " OIDCCryptoPassphrase " is not set");
+			return FALSE;
+		}
+		*r_key = oidc_cache_get_hashed_key_secret(r, s_secret, s_key);
+	} else if (_oidc_strlen(s_key) >= OIDC_CACHE_KEY_SIZE_MAX) {
+		*r_key = oidc_cache_get_hashed_key(r, s_key);
+	} else {
+		*r_key = s_key;
+	}
+	return TRUE;
 }
 
 /*
@@ -269,62 +289,54 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, 
 
 	oidc_cfg *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	int encrypted = oidc_cfg_cache_encrypt(r);
-	apr_byte_t rc = TRUE;
+	apr_byte_t rc = FALSE;
 	char *msg = NULL;
 	const char *s_key = NULL;
 	char *cache_value = NULL, *s_secret = NULL;
 
 	oidc_debug(r, "enter: %s (section=%s, decrypt=%d, type=%s)", key, section, encrypted, cfg->cache->name);
 
-	s_key = key;
-	/* see if encryption is turned on */
-	if (encrypted == 1) {
-		if (cfg->crypto_passphrase.secret1 == NULL) {
-			oidc_error(r, "could not decrypt cache entry because " OIDCCryptoPassphrase " is not set");
-			goto out;
-		}
-		s_secret = cfg->crypto_passphrase.secret1;
-		s_key = oidc_cache_get_hashed_key_secret(r, s_secret, key);
-	} else if (_oidc_strlen(key) >= OIDC_CACHE_KEY_SIZE_MAX) {
-		s_key = oidc_cache_get_hashed_key(r, key);
-	}
+	s_secret = cfg->crypto_passphrase.secret1;
+	if (oidc_cache_get_key(r, key, s_secret, encrypted, &s_key) == FALSE)
+		goto end;
 
 	OIDC_METRICS_TIMING_START(r, cfg);
 
 	/* get the value from the cache */
-	if (cfg->cache->get(r, section, s_key, &cache_value) == FALSE) {
-		rc = FALSE;
-		goto out;
-	}
-
-	OIDC_METRICS_TIMING_ADD(r, cfg, OM_CACHE_READ);
+	if (cfg->cache->get(r, section, s_key, &cache_value) == FALSE)
+		goto end;
 
 	/* see if it is any good */
 	if ((cache_value == NULL) && (encrypted == 1) && (cfg->crypto_passphrase.secret2 != NULL)) {
 		oidc_debug(r, "2nd try with previous passphrase");
 		s_secret = cfg->crypto_passphrase.secret2;
-		s_key = oidc_cache_get_hashed_key_secret(r, s_secret, key);
-		if (cfg->cache->get(r, section, s_key, &cache_value) == FALSE) {
-			rc = FALSE;
-			goto out;
-		}
+		if (oidc_cache_get_key(r, key, s_secret, encrypted, &s_key) == FALSE)
+			goto end;
+		if (cfg->cache->get(r, section, s_key, &cache_value) == FALSE)
+			goto end;
 	}
 
+	OIDC_METRICS_TIMING_ADD(r, cfg, OM_CACHE_READ);
+
+	rc = TRUE;
+
 	if (cache_value == NULL)
-		goto out;
+		goto end;
 
 	/* see if encryption is turned on */
 	if (encrypted == 0) {
 		*value = apr_pstrdup(r->pool, cache_value);
-		goto out;
+		goto end;
 	}
 
 	rc = oidc_cache_crypto_decrypt(r, cache_value, s_secret, value);
 
-out:
+end:
+
 	/* log the result */
 	msg = apr_psprintf(r->pool, "from %s cache backend for %skey %s", cfg->cache->name,
 			   encrypted ? "encrypted " : "", key);
+
 	if (rc == TRUE) {
 		if (*value != NULL)
 			oidc_debug(r, "cache hit: return %d bytes %s", *value ? (int)_oidc_strlen(*value) : 0, msg);
@@ -334,6 +346,7 @@ out:
 		OIDC_METRICS_COUNTER_INC(r, cfg, OM_CACHE_ERROR);
 		oidc_warn(r, "error retrieving value %s", msg);
 	}
+
 	return rc;
 }
 
@@ -347,39 +360,31 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key, 
 	char *encoded = NULL;
 	apr_byte_t rc = FALSE;
 	char *msg = NULL;
+	const char *s_key = NULL;
 
 	oidc_debug(r, "enter: %s (section=%s, len=%d, encrypt=%d, ttl(s)=%" APR_TIME_T_FMT ", type=%s)", key, section,
 		   value ? (int)_oidc_strlen(value) : 0, encrypted, apr_time_sec(expiry - apr_time_now()),
 		   cfg->cache->name);
 
+	if (oidc_cache_get_key(r, key, cfg->crypto_passphrase.secret1, encrypted, &s_key) == FALSE)
+		goto end;
+
 	/* see if we need to encrypt */
-	if (encrypted == 1) {
-		if (cfg->crypto_passphrase.secret1 == NULL) {
-			oidc_error(r, "could not encrypt cache entry because " OIDCCryptoPassphrase " is not set");
-			goto out;
-		}
-
-		key = oidc_cache_get_hashed_key_secret(r, cfg->crypto_passphrase.secret1, key);
-		if (key == NULL)
-			goto out;
-
-		if (value != NULL) {
-			if (oidc_cache_crypto_encrypt(r, value, &cfg->crypto_passphrase, &encoded) == FALSE)
-				goto out;
-			value = encoded;
-		}
-	} else if (_oidc_strlen(key) >= OIDC_CACHE_KEY_SIZE_MAX) {
-		key = oidc_cache_get_hashed_key(r, key);
+	if ((encrypted == 1) && (value != NULL)) {
+		if (oidc_cache_crypto_encrypt(r, value, &cfg->crypto_passphrase, &encoded) == FALSE)
+			goto end;
+		value = encoded;
 	}
 
 	OIDC_METRICS_TIMING_START(r, cfg);
 
 	/* store the resulting value in the cache */
-	rc = cfg->cache->set(r, section, key, value, expiry);
+	rc = cfg->cache->set(r, section, s_key, value, expiry);
 
 	OIDC_METRICS_TIMING_ADD(r, cfg, OM_CACHE_WRITE);
 
-out:
+end:
+
 	/* log the result */
 	msg =
 	    apr_psprintf(r->pool, "%d bytes in %s cache backend for %skey %s", (value ? (int)_oidc_strlen(value) : 0),
@@ -390,5 +395,6 @@ out:
 		OIDC_METRICS_COUNTER_INC(r, cfg, OM_CACHE_ERROR);
 		oidc_warn(r, "could NOT store %s", msg);
 	}
+
 	return rc;
 }
