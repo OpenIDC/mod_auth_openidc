@@ -228,15 +228,16 @@ apr_byte_t oidc_cache_mutex_destroy(server_rec *s, oidc_cache_mutex_t *m) {
 /*
  * AES GCM encrypt using the crypto passphrase as symmetric key
  */
-static apr_byte_t oidc_cache_crypto_encrypt(request_rec *r, const char *plaintext,
-					    const oidc_crypto_passphrase_t *passphrase, char **result) {
+static inline apr_byte_t oidc_cache_crypto_encrypt(request_rec *r, const char *plaintext,
+						   const oidc_crypto_passphrase_t *passphrase, char **result) {
 	return oidc_util_jwt_create(r, passphrase, plaintext, result);
 }
 
 /*
  * AES GCM decrypt using the crypto passphrase as symmetric key
  */
-static apr_byte_t oidc_cache_crypto_decrypt(request_rec *r, const char *cache_value, char *secret, char **plaintext) {
+static inline apr_byte_t oidc_cache_crypto_decrypt(request_rec *r, const char *cache_value, char *secret,
+						   char **plaintext) {
 	oidc_crypto_passphrase_t passphrase;
 	passphrase.secret1 = secret;
 	passphrase.secret2 = NULL;
@@ -246,7 +247,7 @@ static apr_byte_t oidc_cache_crypto_decrypt(request_rec *r, const char *cache_va
 /*
  * hash a cache key, useful for large keys e.g. JWT access/refresh tokens
  */
-static char *oidc_cache_get_hashed_key(request_rec *r, const char *key) {
+static inline char *oidc_cache_get_hashed_key(request_rec *r, const char *key) {
 	char *output = NULL;
 	if (oidc_util_hash_string_and_base64url_encode(r, OIDC_JOSE_ALG_SHA256, key, &output) == FALSE) {
 		oidc_error(r, "oidc_util_hash_string_and_base64url_encode returned an error");
@@ -256,24 +257,17 @@ static char *oidc_cache_get_hashed_key(request_rec *r, const char *key) {
 }
 
 /*
- * hash a cache key plus a crypto passphrase so the result is suitable as an randomized cache key
- */
-static inline char *oidc_cache_get_hashed_key_secret(request_rec *r, const char *passphrase, const char *key) {
-	return oidc_cache_get_hashed_key(r, apr_psprintf(r->pool, "%s:%s", passphrase, key));
-}
-
-/*
  * construct a cache key
  */
-static apr_byte_t oidc_cache_get_key(request_rec *r, const char *s_key, const char *s_secret, int encrypted,
-				     const char **r_key) {
+static inline apr_byte_t oidc_cache_get_key(request_rec *r, const char *s_key, const char *s_secret, int encrypted,
+					    const char **r_key) {
 	/* see if encryption is turned on, so we'll hash passphrase+key */
 	if (encrypted == 1) {
 		if (s_secret == NULL) {
 			oidc_error(r, "could not decrypt cache entry because " OIDCCryptoPassphrase " is not set");
 			return FALSE;
 		}
-		*r_key = oidc_cache_get_hashed_key_secret(r, s_secret, s_key);
+		*r_key = oidc_cache_get_hashed_key(r, apr_psprintf(r->pool, "%s:%s", s_secret, s_key));
 	} else if (_oidc_strlen(s_key) >= OIDC_CACHE_KEY_SIZE_MAX) {
 		*r_key = oidc_cache_get_hashed_key(r, s_key);
 	} else {
