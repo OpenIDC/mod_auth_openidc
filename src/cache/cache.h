@@ -50,6 +50,13 @@
 #include <apr_shm.h>
 #include <httpd.h>
 
+/*
+ * The maximum cache key size:
+ * must be greater than a base64url encoded sha256 hash result (32 bytes) and must
+ * be a multiple of 8 since OIDC_CACHE_SHM_KEY_MAX is derived from it (memory alignment)
+ */
+#define OIDC_CACHE_KEY_SIZE_MAX 512
+
 typedef void *(*oidc_cache_cfg_create)(apr_pool_t *pool);
 typedef int (*oidc_cache_post_config_function)(server_rec *s);
 typedef int (*oidc_cache_child_init_function)(apr_pool_t *p, server_rec *s);

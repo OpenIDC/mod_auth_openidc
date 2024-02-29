@@ -1,3 +1,12 @@
+02/29/2024
+- hash the cache key if it is larger than 512 bytes so large cache key entries (i.e. for JWT tokens)
+  are no longer a problem in unencrypted SHM cache configs, i.e. the default shared memory cache setup;
+  see issues/discussions on "could not construct cache key since key size is too large"
+  this is relevant for OAuth 2.0 RS configs with JWT access tokens and OpenID Connect RP
+  configs where OIDCRefreshAccessTokenBeforeExpiry/OIDCUserInfoRefreshInterval is set and
+  a JWT refresh token is returned
+- fix debug printout of cache key in oidc_cache_get
+
 02/28/2024
 - optimize performance by skipping JSON processing when `OIDCPassClaimsAs none` is set
 

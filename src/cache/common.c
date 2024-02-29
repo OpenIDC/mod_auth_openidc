@@ -244,16 +244,22 @@ static apr_byte_t oidc_cache_crypto_decrypt(request_rec *r, const char *cache_va
 }
 
 /*
- * hash a cache key and a crypto passphrase so the result is suitable as an randomized cache key
+ * hash a cache key, useful for large keys e.g. JWT access/refresh tokens
  */
-static char *oidc_cache_get_hashed_key(request_rec *r, const char *passphrase, const char *key) {
-	const char *input = apr_psprintf(r->pool, "%s:%s", passphrase, key);
+static char *oidc_cache_get_hashed_key(request_rec *r, const char *key) {
 	char *output = NULL;
-	if (oidc_util_hash_string_and_base64url_encode(r, OIDC_JOSE_ALG_SHA256, input, &output) == FALSE) {
+	if (oidc_util_hash_string_and_base64url_encode(r, OIDC_JOSE_ALG_SHA256, key, &output) == FALSE) {
 		oidc_error(r, "oidc_util_hash_string_and_base64url_encode returned an error");
 		return NULL;
 	}
 	return output;
+}
+
+/*
+ * hash a cache key plus a crypto passphrase so the result is suitable as an randomized cache key
+ */
+static char *oidc_cache_get_hashed_key_secret(request_rec *r, const char *passphrase, const char *key) {
+	return oidc_cache_get_hashed_key(r, apr_psprintf(r->pool, "%s:%s", passphrase, key));
 }
 
 /*
@@ -268,7 +274,7 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, 
 	const char *s_key = NULL;
 	char *cache_value = NULL, *s_secret = NULL;
 
-	oidc_debug(r, "enter: %s (section=%s, decrypt=%d, type=%s)", section, section, encrypted, cfg->cache->name);
+	oidc_debug(r, "enter: %s (section=%s, decrypt=%d, type=%s)", key, section, encrypted, cfg->cache->name);
 
 	s_key = key;
 	/* see if encryption is turned on */
@@ -278,7 +284,9 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, 
 			goto out;
 		}
 		s_secret = cfg->crypto_passphrase.secret1;
-		s_key = oidc_cache_get_hashed_key(r, s_secret, key);
+		s_key = oidc_cache_get_hashed_key_secret(r, s_secret, key);
+	} else if (_oidc_strlen(key) >= OIDC_CACHE_KEY_SIZE_MAX) {
+		s_key = oidc_cache_get_hashed_key(r, key);
 	}
 
 	OIDC_METRICS_TIMING_START(r, cfg);
@@ -295,7 +303,7 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, 
 	if ((cache_value == NULL) && (encrypted == 1) && (cfg->crypto_passphrase.secret2 != NULL)) {
 		oidc_debug(r, "2nd try with previous passphrase");
 		s_secret = cfg->crypto_passphrase.secret2;
-		s_key = oidc_cache_get_hashed_key(r, s_secret, key);
+		s_key = oidc_cache_get_hashed_key_secret(r, s_secret, key);
 		if (cfg->cache->get(r, section, s_key, &cache_value) == FALSE) {
 			rc = FALSE;
 			goto out;
@@ -346,13 +354,12 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key, 
 
 	/* see if we need to encrypt */
 	if (encrypted == 1) {
-
 		if (cfg->crypto_passphrase.secret1 == NULL) {
 			oidc_error(r, "could not encrypt cache entry because " OIDCCryptoPassphrase " is not set");
 			goto out;
 		}
 
-		key = oidc_cache_get_hashed_key(r, cfg->crypto_passphrase.secret1, key);
+		key = oidc_cache_get_hashed_key_secret(r, cfg->crypto_passphrase.secret1, key);
 		if (key == NULL)
 			goto out;
 
@@ -361,6 +368,8 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key, 
 				goto out;
 			value = encoded;
 		}
+	} else if (_oidc_strlen(key) >= OIDC_CACHE_KEY_SIZE_MAX) {
+		key = oidc_cache_get_hashed_key(r, key);
 	}
 
 	OIDC_METRICS_TIMING_START(r, cfg);
