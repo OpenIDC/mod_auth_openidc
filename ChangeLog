@@ -3,6 +3,7 @@
 - fix for "expires_in" string values returned from the token endpoint that would be interpreted as 0
   this fixes using OIDCRefreshAccessTokenBeforeExpiry or OIDCUserInfoRefreshInterval with (older)
   Azure AD configs that would result in a token refresh on every request since 2.4.15 or a 401 in 2.4.14.4
+- fix setting the "exp" claim in userinfo signed JWTs (exp would be now+0) and caching when ttl set to 0 or ""
 
 02/29/2024
 - hash the cache key if it is larger than 512 bytes so large cache key entries (i.e. for JWT tokens)

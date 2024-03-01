@@ -812,20 +812,13 @@ apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg *cfg, oidc_session_
 	return TRUE;
 }
 
-#define OIDC_USERINFO_SIGNED_JWT_EXPIRE_DEFAULT 0
+#define OIDC_USERINFO_SIGNED_JWT_EXP_DEFAULT 60
+#define OIDC_USERINFO_SIGNED_JWT_CACHE_TTL_DEFAULT -1
 #define OIDC_USERINFO_SIGNED_JWT_CACHE_TTL_ENVVAR "OIDC_USERINFO_SIGNED_JWT_CACHE_TTL"
 
 static int oidc_userinfo_signed_jwt_cache_ttl(request_rec *r) {
 	const char *s_ttl = apr_table_get(r->subprocess_env, OIDC_USERINFO_SIGNED_JWT_CACHE_TTL_ENVVAR);
-	return (s_ttl ? _oidc_str_to_int(s_ttl) : OIDC_USERINFO_SIGNED_JWT_EXPIRE_DEFAULT);
-}
-
-#define OIDC_JQ_FILTER_EXPIRE_DEFAULT 600
-#define OIDC_JQ_FILTER_CACHE_TTL_ENVVAR "OIDC_JQ_FILTER_CACHE_TTL"
-
-int oidc_jq_filter_cache_ttl(request_rec *r) {
-	const char *s_ttl = apr_table_get(r->subprocess_env, OIDC_JQ_FILTER_CACHE_TTL_ENVVAR);
-	return (s_ttl ? _oidc_str_to_int(s_ttl) : OIDC_JQ_FILTER_EXPIRE_DEFAULT);
+	return (s_ttl ? _oidc_str_to_int(s_ttl) : OIDC_USERINFO_SIGNED_JWT_CACHE_TTL_DEFAULT);
 }
 
 static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg *cfg, oidc_session_t *session,
@@ -883,7 +876,7 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg *cfg,
 	}
 
 	ttl = oidc_userinfo_signed_jwt_cache_ttl(r);
-	if (ttl != 0)
+	if (ttl > -1)
 		oidc_cache_get_signed_jwt(r, key, cser);
 
 	if (*cser != NULL) {
@@ -902,11 +895,10 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg *cfg,
 	}
 	if (json_object_get(jwt->payload.value.json, OIDC_CLAIM_EXP) == NULL) {
 		access_token_expires = oidc_session_get_access_token_expires(r, session);
-		json_object_set_new(
-		    jwt->payload.value.json, OIDC_CLAIM_EXP,
-		    json_integer(access_token_expires > 0
-				     ? access_token_expires
-				     : apr_time_sec(apr_time_now()) + OIDC_USERINFO_SIGNED_JWT_EXPIRE_DEFAULT));
+		json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_EXP,
+				    json_integer(access_token_expires > 0 ? access_token_expires
+									  : apr_time_sec(apr_time_now()) +
+										OIDC_USERINFO_SIGNED_JWT_EXP_DEFAULT));
 	}
 
 	if (oidc_jwt_sign(r->pool, jwt, jwk, FALSE, &err) == FALSE) {
@@ -920,19 +912,24 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg *cfg,
 		goto end;
 	}
 
-	if (ttl != 0) {
-		if (apr_table_get(r->subprocess_env, OIDC_USERINFO_SIGNED_JWT_CACHE_TTL_ENVVAR) == NULL) {
-			oidc_json_object_get_int(jwt->payload.value.json, OIDC_CLAIM_EXP, &exp, 0);
-			if (exp != 0)
-				expiry = apr_time_from_sec(exp);
-		}
-		if (expiry == 0)
-			expiry = apr_time_now() + apr_time_from_sec(ttl);
-		oidc_debug(r, "caching signed JWT with ~ttl(%ld)", apr_time_sec(expiry - apr_time_now()));
-		oidc_cache_set_signed_jwt(r, key, *cser, expiry);
+	rv = TRUE;
+
+	if (ttl < 0)
+		goto end;
+
+	if (ttl == 0) {
+		// need to get the cache ttl from the exp claim
+		oidc_json_object_get_int(jwt->payload.value.json, OIDC_CLAIM_EXP, &exp, 0);
+		// actually the exp claim always exists by now
+		expiry = (exp > 0) ? apr_time_from_sec(exp)
+				   : apr_time_now() + apr_time_from_sec(OIDC_USERINFO_SIGNED_JWT_EXP_DEFAULT);
+	} else {
+		// ttl > 0
+		expiry = apr_time_now() + apr_time_from_sec(ttl);
 	}
 
-	rv = TRUE;
+	oidc_debug(r, "caching signed JWT with ~ttl(%ld)", apr_time_sec(expiry - apr_time_now()));
+	oidc_cache_set_signed_jwt(r, key, *cser, expiry);
 
 end:
 

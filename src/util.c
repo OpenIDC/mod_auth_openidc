@@ -1986,6 +1986,14 @@ static const char *oidc_util_jq_exec(request_rec *r, jq_state *jq, struct jv_par
 	return rv;
 }
 
+#define OIDC_JQ_FILTER_EXPIRE_DEFAULT 600
+#define OIDC_JQ_FILTER_CACHE_TTL_ENVVAR "OIDC_JQ_FILTER_CACHE_TTL"
+
+static int oidc_jq_filter_cache_ttl(request_rec *r) {
+	const char *s_ttl = apr_table_get(r->subprocess_env, OIDC_JQ_FILTER_CACHE_TTL_ENVVAR);
+	return (s_ttl ? _oidc_str_to_int(s_ttl) : OIDC_JQ_FILTER_EXPIRE_DEFAULT);
+}
+
 #endif
 
 const char *oidc_util_jq_filter(request_rec *r, const char *input, const char *filter) {
@@ -2011,7 +2019,7 @@ const char *oidc_util_jq_filter(request_rec *r, const char *input, const char *f
 	oidc_debug(r, "processing filter: %s", filter);
 
 	ttl = oidc_jq_filter_cache_ttl(r);
-	if (ttl != 0) {
+	if (ttl > 0) {
 		if (oidc_util_hash_string_and_base64url_encode(
 			r, OIDC_JOSE_ALG_SHA256, apr_pstrcat(r->pool, input, filter, NULL), &key) == FALSE) {
 			oidc_error(r, "oidc_util_hash_string_and_base64url_encode returned an error");
