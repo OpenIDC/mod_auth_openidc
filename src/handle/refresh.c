@@ -384,7 +384,6 @@ end:
 apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg *cfg, oidc_session_t *session,
 						   int ttl_minimum, apr_byte_t *needs_save) {
 
-	const char *s_access_token_expires = NULL;
 	apr_time_t t_expires = -1;
 	oidc_provider_t *provider = NULL;
 
@@ -393,8 +392,8 @@ apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg *cfg
 	if (ttl_minimum < 0)
 		return TRUE;
 
-	s_access_token_expires = oidc_session_get_access_token_expires(r, session);
-	if (s_access_token_expires == NULL) {
+	t_expires = oidc_session_get_access_token_expires(r, session);
+	if (t_expires == -1) {
 		oidc_debug(r, "no access token expires_in stored in the session (i.e. returned from in the "
 			      "authorization response), so cannot refresh the access token based on TTL requirement");
 		return FALSE;
@@ -403,11 +402,6 @@ apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg *cfg
 	if (oidc_session_get_refresh_token(r, session) == NULL) {
 		oidc_debug(r, "no refresh token stored in the session, so cannot refresh the access token based on TTL "
 			      "requirement");
-		return FALSE;
-	}
-
-	if (sscanf(s_access_token_expires, "%" APR_TIME_T_FMT, &t_expires) != 1) {
-		oidc_error(r, "could not parse s_access_token_expires %s", s_access_token_expires);
 		return FALSE;
 	}
 

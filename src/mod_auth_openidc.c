@@ -776,7 +776,7 @@ apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg *cfg, oidc_session_
 	}
 
 	/* set the expiry timestamp in the app headers/variables */
-	const char *access_token_expires = oidc_session_get_access_token_expires(r, session);
+	const char *access_token_expires = oidc_session_get_access_token_expires_str(r, session);
 	if ((oidc_cfg_dir_pass_access_token(r) != 0) && access_token_expires != NULL) {
 		/* pass it to the app in a header or environment variable */
 		oidc_util_set_app_info(r, OIDC_APP_INFO_ACCESS_TOKEN_EXP, access_token_expires,
@@ -834,7 +834,7 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg *cfg,
 	oidc_jwt_t *jwt = NULL;
 	oidc_jwk_t *jwk = NULL;
 	oidc_jose_error_t err;
-	const char *access_token_expires = NULL;
+	apr_time_t access_token_expires = -1;
 	char *jti = NULL;
 	char *key = NULL;
 	json_t *json = NULL;
@@ -902,10 +902,11 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg *cfg,
 	}
 	if (json_object_get(jwt->payload.value.json, OIDC_CLAIM_EXP) == NULL) {
 		access_token_expires = oidc_session_get_access_token_expires(r, session);
-		json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_EXP,
-				    json_integer(access_token_expires ? _oidc_str_to_int(access_token_expires)
-								      : apr_time_sec(apr_time_now()) +
-									    OIDC_USERINFO_SIGNED_JWT_EXPIRE_DEFAULT));
+		json_object_set_new(
+		    jwt->payload.value.json, OIDC_CLAIM_EXP,
+		    json_integer(access_token_expires != -1
+				     ? access_token_expires
+				     : apr_time_sec(apr_time_now()) + OIDC_USERINFO_SIGNED_JWT_EXPIRE_DEFAULT));
 	}
 
 	if (oidc_jwt_sign(r->pool, jwt, jwk, FALSE, &err) == FALSE) {

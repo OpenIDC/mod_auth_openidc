@@ -594,13 +594,18 @@ const char *oidc_session_get_access_token(request_rec *r, oidc_session_t *z) {
  */
 void oidc_session_set_access_token_expires(request_rec *r, oidc_session_t *z, const int expires_in) {
 	if (expires_in != -1) {
-		oidc_session_set(r, z, OIDC_SESSION_KEY_ACCESSTOKEN_EXPIRES,
-				 apr_psprintf(r->pool, "%" APR_TIME_T_FMT, apr_time_sec(apr_time_now()) + expires_in));
+		oidc_debug(r, "storing access token expires_in in the session: %d", expires_in);
+		oidc_session_set_timestamp(r, z, OIDC_SESSION_KEY_ACCESSTOKEN_EXPIRES,
+					   apr_time_now() + apr_time_from_sec(expires_in));
 	}
 }
 
-const char *oidc_session_get_access_token_expires(request_rec *r, oidc_session_t *z) {
-	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_ACCESSTOKEN_EXPIRES);
+apr_time_t oidc_session_get_access_token_expires(request_rec *r, oidc_session_t *z) {
+	return apr_time_sec(oidc_session_get_key2timestamp(r, z, OIDC_SESSION_KEY_ACCESSTOKEN_EXPIRES));
+}
+
+const char *oidc_session_get_access_token_expires_str(request_rec *r, oidc_session_t *z) {
+	return apr_psprintf(r->pool, "%" APR_TIME_T_FMT, oidc_session_get_access_token_expires(r, z));
 }
 
 /*

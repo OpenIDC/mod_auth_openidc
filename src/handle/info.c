@@ -143,7 +143,7 @@ int oidc_info_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, apr_
 
 	/* include the access token expiry timestamp in the session info */
 	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_ACCES_TOKEN_EXP, APR_HASH_KEY_STRING)) {
-		const char *access_token_expires = oidc_session_get_access_token_expires(r, session);
+		const char *access_token_expires = oidc_session_get_access_token_expires_str(r, session);
 		if (access_token_expires != NULL)
 			json_object_set_new(json, OIDC_HOOK_INFO_ACCES_TOKEN_EXP, json_string(access_token_expires));
 	}

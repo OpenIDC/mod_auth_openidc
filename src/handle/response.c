@@ -468,16 +468,6 @@ static apr_byte_t oidc_response_flows(request_rec *r, oidc_cfg *c, oidc_proto_st
 }
 
 /*
- * parse the expiry for the access token
- */
-static int oidc_response_parse_expires_in(request_rec *r, const char *expires_in) {
-	int number = _oidc_str_to_int(expires_in);
-	if (number <= 0)
-		oidc_warn(r, "could not parse \"expires_in\" value (%s) into a positive integer", expires_in);
-	return number;
-}
-
-/*
  * set the unique user identifier that will be propagated in the Apache r->user and REMOTE_USER variables
  */
 static apr_byte_t oidc_response_set_request_user(request_rec *r, oidc_cfg *c, oidc_provider_t *provider,
@@ -609,7 +599,9 @@ static int oidc_response_process(request_rec *r, oidc_cfg *c, oidc_session_t *se
 		return oidc_response_authorization_error(r, c, proto_state, "No id_token was provided.", NULL);
 	}
 
-	int expires_in = oidc_response_parse_expires_in(r, apr_table_get(params, OIDC_PROTO_EXPIRES_IN));
+	int expires_in = apr_table_get(params, OIDC_PROTO_EXPIRES_IN)
+			     ? _oidc_str_to_int(apr_table_get(params, OIDC_PROTO_EXPIRES_IN))
+			     : -1;
 	char *userinfo_jwt = NULL;
 
 	/*

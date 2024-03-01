@@ -1332,6 +1332,19 @@ apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg *cfg, const c
 }
 
 /*
+ * parse the expiry for the access token
+ */
+static int oidc_proto_parse_expires_in(request_rec *r, const char *expires_in, const int default_value) {
+	int number = _oidc_str_to_int(expires_in);
+	if (number <= 0) {
+		oidc_warn(r, "could not parse \"expires_in\" value (%s) into a positive integer", expires_in);
+		number = default_value;
+	}
+	oidc_debug(r, "return: %d", number);
+	return number;
+}
+
+/*
  * send a code/refresh request to the token endpoint and return the parsed contents
  */
 static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider,
@@ -1341,6 +1354,7 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg *cf
 	char *response = NULL;
 	char *basic_auth = NULL;
 	char *bearer_auth = NULL;
+	json_t *j_result = NULL, *j_expires_in = NULL;
 
 	/* add the token endpoint authentication credentials */
 	if (oidc_proto_token_endpoint_auth(r, cfg, provider->token_endpoint_auth, provider->client_id,
@@ -1363,18 +1377,17 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg *cf
 	}
 
 	/* check for errors, the response itself will have been logged already */
-	json_t *result = NULL;
-	if (oidc_util_decode_json_and_check_error(r, response, &result) == FALSE)
+	if (oidc_util_decode_json_and_check_error(r, response, &j_result) == FALSE)
 		return FALSE;
 
 	/* get the id_token from the parsed response */
-	oidc_json_object_get_string(r->pool, result, OIDC_PROTO_ID_TOKEN, id_token, NULL);
+	oidc_json_object_get_string(r->pool, j_result, OIDC_PROTO_ID_TOKEN, id_token, NULL);
 
 	/* get the access_token from the parsed response */
-	oidc_json_object_get_string(r->pool, result, OIDC_PROTO_ACCESS_TOKEN, access_token, NULL);
+	oidc_json_object_get_string(r->pool, j_result, OIDC_PROTO_ACCESS_TOKEN, access_token, NULL);
 
 	/* get the token type from the parsed response */
-	oidc_json_object_get_string(r->pool, result, OIDC_PROTO_TOKEN_TYPE, token_type, NULL);
+	oidc_json_object_get_string(r->pool, j_result, OIDC_PROTO_TOKEN_TYPE, token_type, NULL);
 
 	/* check the new token type */
 	if (token_type != NULL) {
@@ -1384,13 +1397,21 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg *cf
 		}
 	}
 
-	/* get the expires_in value */
-	oidc_json_object_get_int(result, OIDC_PROTO_EXPIRES_IN, expires_in, -1);
+	/* get the access token expires_in value */
+	*expires_in = -1;
+	j_expires_in = json_object_get(j_result, OIDC_PROTO_EXPIRES_IN);
+	if (j_expires_in != NULL) {
+		/* cater for string values (old Azure AD) */
+		if (json_is_string(j_expires_in))
+			*expires_in = oidc_proto_parse_expires_in(r, json_string_value(j_expires_in), -1);
+		else if (json_is_integer(j_expires_in))
+			*expires_in = json_integer_value(j_expires_in);
+	}
 
 	/* get the refresh_token from the parsed response */
-	oidc_json_object_get_string(r->pool, result, OIDC_PROTO_REFRESH_TOKEN, refresh_token, NULL);
+	oidc_json_object_get_string(r->pool, j_result, OIDC_PROTO_REFRESH_TOKEN, refresh_token, NULL);
 
-	json_decref(result);
+	json_decref(j_result);
 
 	return TRUE;
 }
