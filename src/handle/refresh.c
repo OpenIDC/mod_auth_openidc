@@ -393,7 +393,7 @@ apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg *cfg
 		return TRUE;
 
 	t_expires = oidc_session_get_access_token_expires(r, session);
-	if (t_expires == -1) {
+	if (t_expires <= 0) {
 		oidc_debug(r, "no access token expires_in stored in the session (i.e. returned from in the "
 			      "authorization response), so cannot refresh the access token based on TTL requirement");
 		return FALSE;

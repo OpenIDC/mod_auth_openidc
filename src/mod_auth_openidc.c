@@ -904,7 +904,7 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg *cfg,
 		access_token_expires = oidc_session_get_access_token_expires(r, session);
 		json_object_set_new(
 		    jwt->payload.value.json, OIDC_CLAIM_EXP,
-		    json_integer(access_token_expires != -1
+		    json_integer(access_token_expires > 0
 				     ? access_token_expires
 				     : apr_time_sec(apr_time_now()) + OIDC_USERINFO_SIGNED_JWT_EXPIRE_DEFAULT));
 	}
