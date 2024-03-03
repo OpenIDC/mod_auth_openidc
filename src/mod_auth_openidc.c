@@ -1064,8 +1064,8 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg, oidc_sess
 		oidc_debug(r, "dir_action_on_error_refresh: %d", oidc_cfg_dir_action_on_error_refresh(r));
 		OIDC_METRICS_COUNTER_INC(r, cfg, OM_SESSION_ERROR_REFRESH_ACCESS_TOKEN);
 		if (oidc_cfg_dir_action_on_error_refresh(r) == OIDC_ON_ERROR_LOGOUT) {
-			return oidc_logout_request(r, cfg, session,
-						   oidc_get_absolute_url(r, cfg, cfg->default_slo_url));
+			return oidc_logout_request(r, cfg, session, oidc_get_absolute_url(r, cfg, cfg->default_slo_url),
+						   FALSE);
 		}
 		if (oidc_cfg_dir_action_on_error_refresh(r) == OIDC_ON_ERROR_AUTHENTICATE) {
 			oidc_session_kill(r, session);
@@ -1081,8 +1081,8 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg *cfg, oidc_sess
 		oidc_debug(r, "action_on_userinfo_error: %d", cfg->action_on_userinfo_error);
 		OIDC_METRICS_COUNTER_INC(r, cfg, OM_SESSION_ERROR_REFRESH_USERINFO);
 		if (cfg->action_on_userinfo_error == OIDC_ON_ERROR_LOGOUT) {
-			return oidc_logout_request(r, cfg, session,
-						   oidc_get_absolute_url(r, cfg, cfg->default_slo_url));
+			return oidc_logout_request(r, cfg, session, oidc_get_absolute_url(r, cfg, cfg->default_slo_url),
+						   FALSE);
 		}
 		if (cfg->action_on_userinfo_error == OIDC_ON_ERROR_AUTHENTICATE) {
 			oidc_session_kill(r, session);

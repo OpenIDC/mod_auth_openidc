@@ -75,7 +75,8 @@ int oidc_jwks_request(request_rec *r, oidc_cfg *c);
 
 // logout.c
 int oidc_logout(request_rec *r, oidc_cfg *c, oidc_session_t *session);
-int oidc_logout_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, const char *url);
+int oidc_logout_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, const char *url,
+			apr_byte_t revoke_tokens);
 
 // refresh.c
 apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg *c, oidc_session_t *session, oidc_provider_t *provider,

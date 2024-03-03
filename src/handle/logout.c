@@ -111,7 +111,8 @@ out:
 	oidc_debug(r, "leave");
 }
 
-static apr_byte_t oidc_logout_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg *cfg, oidc_provider_t *provider) {
+static apr_byte_t oidc_logout_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg *cfg, oidc_provider_t *provider,
+					     apr_byte_t revoke_tokens) {
 
 	char *uuid = NULL;
 	oidc_session_t session;
@@ -139,7 +140,7 @@ static apr_byte_t oidc_logout_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg
 
 	// revoke tokens if we can get a handle on those
 	if (cfg->session_type != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
-		if (oidc_session_load_cache_by_uuid(r, cfg, uuid, &session) != FALSE)
+		if ((oidc_session_load_cache_by_uuid(r, cfg, uuid, &session) != FALSE) && (revoke_tokens == TRUE))
 			if (oidc_session_extract(r, &session) != FALSE)
 				oidc_logout_revoke_tokens(r, cfg, &session);
 	}
@@ -170,7 +171,8 @@ static apr_byte_t oidc_logout_is_back_channel(const char *logout_param_value) {
 /*
  * handle a local logout
  */
-int oidc_logout_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, const char *url) {
+int oidc_logout_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, const char *url,
+			apr_byte_t revoke_tokens) {
 
 	int no_session_provided = 1;
 
@@ -179,7 +181,8 @@ int oidc_logout_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, co
 	/* if there's no remote_user then there's no (stored) session to kill */
 	if (session->remote_user != NULL) {
 		no_session_provided = 0;
-		oidc_logout_revoke_tokens(r, c, session);
+		if (revoke_tokens)
+			oidc_logout_revoke_tokens(r, c, session);
 	}
 
 	/*
@@ -219,7 +222,7 @@ int oidc_logout_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, co
 						provider = NULL;
 				}
 				if (provider) {
-					oidc_logout_cleanup_by_sid(r, sid, c, provider);
+					oidc_logout_cleanup_by_sid(r, sid, c, provider, revoke_tokens);
 				} else {
 					oidc_info(r, "No provider for front channel logout found");
 				}
@@ -398,7 +401,8 @@ static int oidc_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 		goto out;
 	}
 
-	oidc_logout_cleanup_by_sid(r, sid, cfg, provider);
+	// a backchannel logout comes from the provider, so no need to revoke the tokens
+	oidc_logout_cleanup_by_sid(r, sid, cfg, provider, FALSE);
 
 	rc = OK;
 
@@ -439,7 +443,7 @@ int oidc_logout(request_rec *r, oidc_cfg *c, oidc_session_t *session) {
 	oidc_debug(r, "enter (url=%s)", url);
 
 	if (oidc_logout_is_front_channel(url)) {
-		return oidc_logout_request(r, c, session, url);
+		return oidc_logout_request(r, c, session, url, TRUE);
 	} else if (oidc_logout_is_back_channel(url)) {
 		return oidc_logout_backchannel(r, c);
 	}
@@ -497,5 +501,5 @@ int oidc_logout(request_rec *r, oidc_cfg *c, oidc_session_t *session) {
 		url = s_logout_request;
 	}
 
-	return oidc_logout_request(r, c, session, url);
+	return oidc_logout_request(r, c, session, url, TRUE);
 }
