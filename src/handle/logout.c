@@ -86,7 +86,7 @@ static void oidc_logout_revoke_tokens(request_rec *r, oidc_cfg *c, oidc_session_
 		apr_table_setn(params, OIDC_PROTO_TOKEN, token);
 
 		if (oidc_http_post_form(r, provider->revocation_endpoint_url, params, basic_auth, bearer_auth,
-					c->provider.ssl_validate_server, &response, &c->http_timeout_long,
+					c->provider.ssl_validate_server, &response, NULL, &c->http_timeout_long,
 					&c->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL, NULL, NULL) == FALSE) {
 			oidc_warn(r, "revoking refresh token failed");
 		}
@@ -100,7 +100,7 @@ static void oidc_logout_revoke_tokens(request_rec *r, oidc_cfg *c, oidc_session_
 		apr_table_setn(params, OIDC_PROTO_TOKEN, token);
 
 		if (oidc_http_post_form(r, provider->revocation_endpoint_url, params, basic_auth, bearer_auth,
-					c->provider.ssl_validate_server, &response, &c->http_timeout_long,
+					c->provider.ssl_validate_server, &response, NULL, &c->http_timeout_long,
 					&c->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL, NULL, NULL) == FALSE) {
 			oidc_warn(r, "revoking access token failed");
 		}

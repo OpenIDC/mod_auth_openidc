@@ -1354,8 +1354,8 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg *cf
 
 	/* send the refresh request to the token endpoint */
 	if (oidc_http_post_form(r, provider->token_endpoint_url, params, basic_auth, bearer_auth,
-				provider->ssl_validate_server, &response, &cfg->http_timeout_long, &cfg->outgoing_proxy,
-				oidc_dir_cfg_pass_cookies(r),
+				provider->ssl_validate_server, &response, NULL, &cfg->http_timeout_long,
+				&cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r),
 				oidc_util_get_full_path(r->pool, provider->token_endpoint_tls_client_cert),
 				oidc_util_get_full_path(r->pool, provider->token_endpoint_tls_client_key),
 				provider->token_endpoint_tls_client_key_pwd) == FALSE) {
@@ -1572,7 +1572,7 @@ static apr_byte_t oidc_proto_resolve_composite_claims(request_rec *r, oidc_cfg *
 				    json_string_value(json_object_get(value, OIDC_COMPOSITE_CLAIM_ENDPOINT));
 				if ((access_token != NULL) && (endpoint != NULL)) {
 					oidc_http_get(r, endpoint, NULL, NULL, access_token,
-						      cfg->provider.ssl_validate_server, &s_json,
+						      cfg->provider.ssl_validate_server, &s_json, NULL,
 						      &cfg->http_timeout_long, &cfg->outgoing_proxy,
 						      oidc_dir_cfg_pass_cookies(r), NULL, NULL, NULL);
 				}
@@ -1628,7 +1628,7 @@ static apr_byte_t oidc_proto_resolve_composite_claims(request_rec *r, oidc_cfg *
  */
 apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider,
 				       const char *id_token_sub, const char *access_token, char **response,
-				       char **userinfo_jwt) {
+				       char **userinfo_jwt, long *response_code) {
 
 	oidc_debug(r, "enter, endpoint=%s, access_token=%s", provider->userinfo_endpoint_url, access_token);
 
@@ -1637,7 +1637,7 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg, oidc_provi
 	/* get the JSON response */
 	if (provider->userinfo_token_method == OIDC_USER_INFO_TOKEN_METHOD_HEADER) {
 		if (oidc_http_get(r, provider->userinfo_endpoint_url, NULL, NULL, access_token,
-				  provider->ssl_validate_server, response, &cfg->http_timeout_long,
+				  provider->ssl_validate_server, response, response_code, &cfg->http_timeout_long,
 				  &cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL, NULL, NULL) == FALSE) {
 			OIDC_METRICS_COUNTER_INC(r, cfg, OM_PROVIDER_USERINFO_ERROR);
 			return FALSE;
@@ -1646,7 +1646,7 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg, oidc_provi
 		apr_table_t *params = apr_table_make(r->pool, 4);
 		apr_table_setn(params, OIDC_PROTO_ACCESS_TOKEN, access_token);
 		if (oidc_http_post_form(r, provider->userinfo_endpoint_url, params, NULL, NULL,
-					provider->ssl_validate_server, response, &cfg->http_timeout_long,
+					provider->ssl_validate_server, response, response_code, &cfg->http_timeout_long,
 					&cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL, NULL,
 					NULL) == FALSE) {
 			OIDC_METRICS_COUNTER_INC(r, cfg, OM_PROVIDER_USERINFO_ERROR);
@@ -1710,7 +1710,7 @@ static apr_byte_t oidc_proto_webfinger_discovery(request_rec *r, oidc_cfg *cfg, 
 	apr_table_setn(params, "rel", "http://openid.net/specs/connect/1.0/issuer");
 
 	char *response = NULL;
-	if (oidc_http_get(r, url, params, NULL, NULL, cfg->provider.ssl_validate_server, &response,
+	if (oidc_http_get(r, url, params, NULL, NULL, cfg->provider.ssl_validate_server, &response, NULL,
 			  &cfg->http_timeout_short, &cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL, NULL,
 			  NULL) == FALSE) {
 		/* errors will have been logged by now */

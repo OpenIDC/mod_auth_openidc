@@ -139,17 +139,17 @@ const char *oidc_http_hdr_forwarded_get(const request_rec *r, const char *elem);
 
 char *oidc_http_hdr_normalize_name(const request_rec *r, const char *str);
 apr_byte_t oidc_http_get(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth,
-			 const char *bearer_token, int ssl_validate_server, char **response,
+			 const char *bearer_token, int ssl_validate_server, char **response, long *response_code,
 			 oidc_http_timeout_t *http_timeout, const oidc_http_outgoing_proxy_t *outgoing_proxy,
 			 apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
 			 const char *ssl_key_pwd);
 apr_byte_t oidc_http_post_form(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth,
-			       const char *bearer_token, int ssl_validate_server, char **response,
+			       const char *bearer_token, int ssl_validate_server, char **response, long *response_code,
 			       oidc_http_timeout_t *http_timeout, const oidc_http_outgoing_proxy_t *outgoing_proxy,
 			       apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
 			       const char *ssl_key_pwd);
 apr_byte_t oidc_http_post_json(request_rec *r, const char *url, json_t *data, const char *basic_auth,
-			       const char *bearer_token, int ssl_validate_server, char **response,
+			       const char *bearer_token, int ssl_validate_server, char **response, long *response_code,
 			       oidc_http_timeout_t *http_timeout, const oidc_http_outgoing_proxy_t *outgoing_proxy,
 			       apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
 			       const char *ssl_key_pwd);

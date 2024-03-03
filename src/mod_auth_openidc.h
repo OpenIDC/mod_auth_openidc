@@ -695,7 +695,7 @@ apr_byte_t oidc_proto_refresh_request(request_rec *r, oidc_cfg *cfg, oidc_provid
 				      char **refresh_token);
 apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider,
 				       const char *id_token_sub, const char *access_token, char **response,
-				       char **userinfo_jwt);
+				       char **userinfo_jwt, long *response_code);
 apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg *cfg, const char *acct, char **issuer);
 apr_byte_t oidc_proto_url_based_discovery(request_rec *r, oidc_cfg *cfg, const char *url, char **issuer);
 apr_byte_t oidc_proto_parse_idtoken(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider, const char *id_token,

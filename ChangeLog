@@ -2,6 +2,7 @@
 - refactor integer and timestamp handling
 - fix default HTTP short retry interval setting
 - accept 0 in OIDCUserInfoRefreshInterval
+- userinfo refresh: don't try to refresh the access token and retry when a connectivity error has occurred
 
 03/01/2024
 - accept strings as well as integers in the "expires_in" claim from the token endpoint

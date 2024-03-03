@@ -88,6 +88,7 @@ const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg *c, oidc_prov
 	char *result = NULL;
 	char *refreshed_access_token = NULL;
 	json_t *id_token_claims = NULL;
+	long response_code = 0;
 
 	oidc_debug(r, "enter");
 
@@ -118,13 +119,22 @@ const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg *c, oidc_prov
 	// routines)
 
 	/* try to get claims from the userinfo endpoint using the provided access token */
-	if (oidc_proto_resolve_userinfo(r, c, provider, id_token_sub, access_token, &result, userinfo_jwt) == TRUE)
+	if (oidc_proto_resolve_userinfo(r, c, provider, id_token_sub, access_token, &result, userinfo_jwt,
+					&response_code) == TRUE)
 		goto end;
 
 	/* see if this is the initial call to the user info endpoint upon receiving the authorization response */
 	if (session == NULL) {
 		oidc_error(r, "resolving user info claims with the provided access token failed, nothing will be "
 			      "stored in the session");
+		result = NULL;
+		goto end;
+	}
+
+	// a connectivity error rather than a HTTP error; may want to check for anything != 401
+	if (response_code == 0) {
+		oidc_error(r, "resolving user info claims failed with a connectivity error, no attempt will be made to "
+			      "refresh the access token and try again");
 		result = NULL;
 		goto end;
 	}
@@ -139,8 +149,8 @@ const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg *c, oidc_prov
 	}
 
 	/* try again with the new access token */
-	if (oidc_proto_resolve_userinfo(r, c, provider, id_token_sub, refreshed_access_token, &result, userinfo_jwt) ==
-	    FALSE) {
+	if (oidc_proto_resolve_userinfo(r, c, provider, id_token_sub, refreshed_access_token, &result, userinfo_jwt,
+					NULL) == FALSE) {
 
 		oidc_error(r, "resolving user info claims with the refreshed access token failed, nothing will be "
 			      "stored in the session");

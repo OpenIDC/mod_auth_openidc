@@ -545,8 +545,8 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg *cfg, o
 
 	/* dynamically register the client with the specified parameters */
 	if (oidc_http_post_json(r, provider->registration_endpoint_url, data, NULL, provider->registration_token,
-				provider->ssl_validate_server, response, &cfg->http_timeout_short, &cfg->outgoing_proxy,
-				oidc_dir_cfg_pass_cookies(r), NULL, NULL, NULL) == FALSE) {
+				provider->ssl_validate_server, response, NULL, &cfg->http_timeout_short,
+				&cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL, NULL, NULL) == FALSE) {
 		json_decref(data);
 		return FALSE;
 	}
@@ -571,7 +571,7 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r, oidc_cfg
 	const char *url = (jwks_uri->signed_uri != NULL) ? jwks_uri->signed_uri : jwks_uri->uri;
 
 	/* get the JWKs from the specified URL with the specified parameters */
-	if (oidc_http_get(r, url, NULL, NULL, NULL, ssl_validate_server, &response, &cfg->http_timeout_long,
+	if (oidc_http_get(r, url, NULL, NULL, NULL, ssl_validate_server, &response, NULL, &cfg->http_timeout_long,
 			  &cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL, NULL, NULL) == FALSE)
 		return FALSE;
 
@@ -668,7 +668,7 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg *cfg, const 
 	OIDC_METRICS_TIMING_START(r, cfg);
 
 	/* get provider metadata from the specified URL with the specified parameters */
-	if (oidc_http_get(r, url, NULL, NULL, NULL, cfg->provider.ssl_validate_server, response,
+	if (oidc_http_get(r, url, NULL, NULL, NULL, cfg->provider.ssl_validate_server, response, NULL,
 			  &cfg->http_timeout_short, &cfg->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL, NULL,
 			  NULL) == FALSE) {
 		OIDC_METRICS_COUNTER_INC(r, cfg, OM_PROVIDER_METADATA_ERROR);
