@@ -405,7 +405,7 @@ apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg *cfg
 		return FALSE;
 	}
 
-	t_expires = apr_time_from_sec(t_expires - ttl_minimum);
+	t_expires = t_expires - apr_time_from_sec(ttl_minimum);
 
 	oidc_debug(r, "refresh needed in: %" APR_TIME_T_FMT " seconds", apr_time_sec(t_expires - apr_time_now()));
 

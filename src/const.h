@@ -91,8 +91,18 @@ static inline int _oidc_strncmp(const char *a, const char *b, size_t n) {
 static inline char *_oidc_strstr(const char *a, const char *b) {
 	return ((a && b) ? strstr(a, b) : NULL);
 }
-
-#define _oidc_str_to_int(s) (s ? (int)strtol(s, NULL, 10) : 0)
+static inline apr_time_t _oidc_str_to_time(const char *s, const apr_time_t default_value) {
+	apr_time_t v = default_value;
+	if (s)
+		sscanf(s, "%" APR_TIME_T_FMT, &v);
+	return v;
+}
+static inline int _oidc_str_to_int(const char *s, const int default_value) {
+	int v = default_value;
+	if (s)
+		v = strtol(s, NULL, 10);
+	return v;
+}
 
 #define HAVE_APACHE_24 MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 

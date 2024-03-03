@@ -776,7 +776,7 @@ apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg *cfg, oidc_session_
 	}
 
 	/* set the expiry timestamp in the app headers/variables */
-	const char *access_token_expires = oidc_session_get_access_token_expires_str(r, session);
+	const char *access_token_expires = oidc_session_get_access_token_expires2str(r, session);
 	if ((oidc_cfg_dir_pass_access_token(r) != 0) && access_token_expires != NULL) {
 		/* pass it to the app in a header or environment variable */
 		oidc_util_set_app_info(r, OIDC_APP_INFO_ACCESS_TOKEN_EXP, access_token_expires,
@@ -818,7 +818,7 @@ apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg *cfg, oidc_session_
 
 static int oidc_userinfo_signed_jwt_cache_ttl(request_rec *r) {
 	const char *s_ttl = apr_table_get(r->subprocess_env, OIDC_USERINFO_SIGNED_JWT_CACHE_TTL_ENVVAR);
-	return (s_ttl ? _oidc_str_to_int(s_ttl) : OIDC_USERINFO_SIGNED_JWT_CACHE_TTL_DEFAULT);
+	return _oidc_str_to_int(s_ttl, OIDC_USERINFO_SIGNED_JWT_CACHE_TTL_DEFAULT);
 }
 
 static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg *cfg, oidc_session_t *session,
@@ -896,7 +896,7 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg *cfg,
 	if (json_object_get(jwt->payload.value.json, OIDC_CLAIM_EXP) == NULL) {
 		access_token_expires = oidc_session_get_access_token_expires(r, session);
 		json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_EXP,
-				    json_integer(access_token_expires > 0 ? access_token_expires
+				    json_integer(access_token_expires > 0 ? apr_time_sec(access_token_expires)
 									  : apr_time_sec(apr_time_now()) +
 										OIDC_USERINFO_SIGNED_JWT_EXP_DEFAULT));
 	}

@@ -92,10 +92,10 @@
 #define OIDC_HTTP_HDR_VAL_DOCUMENT "document"
 
 typedef struct oidc_http_timeout_t {
-	int request_timeout;
-	int connect_timeout;
+	int request_timeout; // in seconds
+	int connect_timeout; // in seconds
 	int retries;
-	apr_time_t retry_interval;
+	int retry_interval; // in milliseconds
 } oidc_http_timeout_t;
 
 #define OIDC_HTTP_PROXY_AUTH_BASIC "basic"

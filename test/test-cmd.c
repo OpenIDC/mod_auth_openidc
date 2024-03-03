@@ -330,7 +330,7 @@ int enckey(int argc, char **argv, apr_pool_t *pool) {
 	request_rec *r = request_setup(pool);
 
 	oidc_jwk_t *jwk = NULL;
-	if (oidc_util_create_symmetric_key(r, argv[2], argc > 4 ? _oidc_str_to_int(argv[4]) : 0,
+	if (oidc_util_create_symmetric_key(r, argv[2], argc > 4 ? _oidc_str_to_int(argv[4], 0) : 0,
 					   argc > 3 ? argv[3] : NULL, FALSE, &jwk) == FALSE) {
 		fprintf(stderr, "oidc_util_create_symmetric_key failed");
 		return -1;
@@ -394,13 +394,12 @@ int hash_base64url(int argc, char **argv, apr_pool_t *pool) {
 int timestamp(int argc, char **argv, apr_pool_t *pool) {
 	if (argc <= 2)
 		return usage(argc, argv, "timestamp <seconds>");
-	int delta = _oidc_str_to_int(argv[2]);
+	int delta = _oidc_str_to_int(argv[2], 0);
 	apr_time_t t1 = apr_time_now() + apr_time_from_sec(delta);
 	char *s = apr_psprintf(pool, "%" APR_TIME_T_FMT, t1);
 	fprintf(stderr, "timestamp (1) = %s\n", s);
 
-	apr_time_t t2;
-	sscanf(s, "%" APR_TIME_T_FMT, &t2);
+	apr_time_t t2 = _oidc_str_to_time(s, -1);
 	fprintf(stderr, "timestamp (2) = %" APR_TIME_T_FMT "\n", t2);
 
 	char buf[APR_RFC822_DATE_LEN + 1];
@@ -418,7 +417,7 @@ int uuid(int argc, char **argv, apr_pool_t *pool) {
 	oidc_session_t z;
 
 	if (argc > 2)
-		n = _oidc_str_to_int(argv[2]);
+		n = _oidc_str_to_int(argv[2], n);
 
 	request_rec *r = request_setup(pool);
 

@@ -89,7 +89,7 @@
 /* nr of retries for HTTP calls that should take a short time */
 #define OIDC_DEFAULT_HTTP_RETRIES_SHORT 1
 /* retry interval in milliseconds for HTTP calls that should take a short time */
-#define OIDC_DEFAULT_HTTP_RETRY_INTERVAL_SHORT 500
+#define OIDC_DEFAULT_HTTP_RETRY_INTERVAL_SHORT 300
 /* default session storage type */
 #define OIDC_DEFAULT_SESSION_TYPE OIDC_SESSION_TYPE_SERVER_CACHE
 /* default client-cookie chunking size */
@@ -133,7 +133,7 @@
 /* default OAuth 2.0 non-spec compliant introspection expiry claim required */
 #define OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_REQUIRED TRUE
 /* default refresh interval in seconds after which claims from the user info endpoint should be refreshed */
-#define OIDC_DEFAULT_USERINFO_REFRESH_INTERVAL 0
+#define OIDC_DEFAULT_USERINFO_REFRESH_INTERVAL -1
 /* default for preserving POST parameters across authentication requests */
 #define OIDC_DEFAULT_PRESERVE_POST 0
 /* default for passing the access token in a header/environment variable */
@@ -361,18 +361,18 @@ static const char *oidc_set_http_timeout_slot(cmd_parms *cmd, void *struct_ptr, 
 	int offset = (int)(long)cmd->info;
 	oidc_http_timeout_t *http_timeout = (oidc_http_timeout_t *)((char *)cfg + offset);
 	if (arg1)
-		http_timeout->request_timeout = _oidc_str_to_int(arg1);
+		http_timeout->request_timeout = _oidc_str_to_int(arg1, http_timeout->request_timeout);
 	if (arg2)
-		http_timeout->connect_timeout = _oidc_str_to_int(arg2);
+		http_timeout->connect_timeout = _oidc_str_to_int(arg2, http_timeout->connect_timeout);
 	if (arg3) {
 		s = apr_pstrdup(cmd->pool, arg3);
 		p = _oidc_strstr(s, OIDC_STR_COLON);
 		if (p) {
 			*p = '\0';
 			p++;
-			http_timeout->retry_interval = apr_time_from_msec(_oidc_str_to_int(p));
+			http_timeout->retry_interval = _oidc_str_to_int(p, http_timeout->retry_interval);
 		}
-		http_timeout->retries = _oidc_str_to_int(s);
+		http_timeout->retries = _oidc_str_to_int(s, http_timeout->retries);
 	}
 	return NULL;
 }
@@ -1645,7 +1645,7 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->http_timeout_short.request_timeout = OIDC_DEFAULT_HTTP_REQUEST_TIMEOUT_SHORT;
 	c->http_timeout_short.connect_timeout = OIDC_DEFAULT_HTTP_CONNECT_TIMEOUT_SHORT;
 	c->http_timeout_short.retries = OIDC_DEFAULT_HTTP_RETRIES_SHORT;
-	c->http_timeout_long.retry_interval = OIDC_DEFAULT_HTTP_RETRY_INTERVAL_SHORT;
+	c->http_timeout_short.retry_interval = OIDC_DEFAULT_HTTP_RETRY_INTERVAL_SHORT;
 	c->state_timeout = OIDC_DEFAULT_STATE_TIMEOUT;
 	c->max_number_of_state_cookies = OIDC_CONFIG_POS_INT_UNSET;
 	c->delete_oldest_state_cookies = OIDC_CONFIG_POS_INT_UNSET;

@@ -1991,7 +1991,7 @@ static const char *oidc_util_jq_exec(request_rec *r, jq_state *jq, struct jv_par
 
 static int oidc_jq_filter_cache_ttl(request_rec *r) {
 	const char *s_ttl = apr_table_get(r->subprocess_env, OIDC_JQ_FILTER_CACHE_TTL_ENVVAR);
-	return (s_ttl ? _oidc_str_to_int(s_ttl) : OIDC_JQ_FILTER_EXPIRE_DEFAULT);
+	return _oidc_str_to_int(s_ttl, OIDC_JQ_FILTER_EXPIRE_DEFAULT);
 }
 
 #endif

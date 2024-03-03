@@ -599,9 +599,7 @@ static int oidc_response_process(request_rec *r, oidc_cfg *c, oidc_session_t *se
 		return oidc_response_authorization_error(r, c, proto_state, "No id_token was provided.", NULL);
 	}
 
-	int expires_in = apr_table_get(params, OIDC_PROTO_EXPIRES_IN)
-			     ? _oidc_str_to_int(apr_table_get(params, OIDC_PROTO_EXPIRES_IN))
-			     : -1;
+	int expires_in = _oidc_str_to_int(apr_table_get(params, OIDC_PROTO_EXPIRES_IN), -1);
 	char *userinfo_jwt = NULL;
 
 	/*

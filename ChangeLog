@@ -1,3 +1,8 @@
+04/02/2024
+- refactor integer and timestamp handling
+- fix default HTTP short retry interval setting
+- accept 0 in OIDCUserInfoRefreshInterval
+
 03/01/2024
 - accept strings as well as integers in the "expires_in" claim from the token endpoint
 - fix for "expires_in" string values returned from the token endpoint that would be interpreted as 0

@@ -531,7 +531,7 @@ static apr_byte_t oidc_http_call(request_rec *r, const char *url, const char *da
 		   "pass_cookies=%pp, ssl_cert=%s, ssl_key=%s, ssl_key_pwd=%s",
 		   url, data, content_type, basic_auth ? "****" : "null", bearer_token, ssl_validate_server,
 		   http_timeout->request_timeout, http_timeout->connect_timeout, http_timeout->retries,
-		   (int)http_timeout->retry_interval, outgoing_proxy->host_port,
+		   http_timeout->retry_interval, outgoing_proxy->host_port,
 		   outgoing_proxy->username_password ? "****" : "(null)", (int)outgoing_proxy->auth_type, pass_cookies,
 		   ssl_cert, ssl_key, ssl_key_pwd ? "****" : "(null)");
 
@@ -699,7 +699,7 @@ static apr_byte_t oidc_http_call(request_rec *r, const char *url, const char *da
 		OIDC_METRICS_COUNTER_INC_SPEC(r, c, OM_PROVIDER_CONNECT_ERROR, curlError[0] ? curlError : "undefined")
 		/* in case of a connectivity/network glitch we'll back off before retrying */
 		if (i < http_timeout->retries)
-			apr_sleep(http_timeout->retry_interval);
+			apr_sleep(apr_time_from_msec(http_timeout->retry_interval));
 	}
 	if (rv == FALSE)
 		goto end;
@@ -952,11 +952,7 @@ static char *oidc_http_get_chunk_count_name(request_rec *r, const char *cookieNa
 static int oidc_http_get_chunked_count(request_rec *r, const char *cookieName) {
 	int chunkCount = 0;
 	char *chunkCountValue = oidc_http_get_cookie(r, oidc_http_get_chunk_count_name(r, cookieName));
-	if (chunkCountValue != NULL) {
-		chunkCount = _oidc_str_to_int(chunkCountValue);
-		if (*chunkCountValue == '\0')
-			chunkCount = 0;
-	}
+	chunkCount = _oidc_str_to_int(chunkCountValue, 0);
 	return chunkCount;
 }
 

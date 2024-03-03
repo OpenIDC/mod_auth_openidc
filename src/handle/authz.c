@@ -60,7 +60,7 @@ static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c, con
 		/* see if it is a integer and it equals the Require'd value */
 	} else if (json_is_integer(val)) {
 
-		if (json_integer_value(val) == _oidc_str_to_int(spec_c))
+		if (json_integer_value(val) == _oidc_str_to_int(spec_c, -1))
 			return TRUE;
 
 		/* see if it is a boolean and it (case-insensitively) matches the Require'd value */
@@ -93,7 +93,7 @@ static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec_c, con
 
 			} else if (json_is_integer(elem)) {
 
-				if (json_integer_value(elem) == _oidc_str_to_int(spec_c))
+				if (json_integer_value(elem) == _oidc_str_to_int(spec_c, -1))
 					return TRUE;
 
 			} else {

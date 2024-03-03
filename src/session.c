@@ -198,8 +198,8 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, apr
 		char *s_value = NULL;
 		if (oidc_session_encode(r, c, z, &s_value, FALSE) == FALSE)
 			return FALSE;
-		rc = oidc_cache_set_session(r, z->uuid, s_value, z->expiry);
 
+		rc = oidc_cache_set_session(r, z->uuid, s_value, z->expiry);
 		if (rc == TRUE)
 			/* set the uuid in the cookie */
 			oidc_http_set_cookie(
@@ -252,17 +252,20 @@ static apr_byte_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z, ap
 	return TRUE;
 }
 
+static inline apr_time_t oidc_session_get_key2timestamp(request_rec *r, oidc_session_t *z, const char *key) {
+	int value = -1;
+	oidc_json_object_get_int(z->state, key, &value, -1);
+	return (value > -1) ? apr_time_from_sec(value) : -1;
+}
+
 apr_byte_t oidc_session_extract(request_rec *r, oidc_session_t *z) {
 	apr_byte_t rc = FALSE;
 
 	if (z->state == NULL)
 		goto out;
 
-	json_t *j_expires = json_object_get(z->state, OIDC_SESSION_EXPIRY_KEY);
-	if (j_expires)
-		z->expiry = apr_time_from_sec(json_integer_value(j_expires));
-
 	/* check whether it has expired */
+	z->expiry = oidc_session_get_key2timestamp(r, z, OIDC_SESSION_EXPIRY_KEY);
 	if (apr_time_now() > z->expiry) {
 
 		oidc_warn(r, "session restored from cache has expired");
@@ -314,6 +317,14 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 	return rc;
 }
 
+static void oidc_session_set_timestamp(request_rec *r, oidc_session_t *z, const char *key, const apr_time_t timestamp) {
+	if (timestamp > -1) {
+		if (z->state == NULL)
+			z->state = json_object();
+		json_object_set_new(z->state, key, json_integer(apr_time_sec(timestamp)));
+	}
+}
+
 /*
  * save a session to cache/cookie
  */
@@ -324,7 +335,7 @@ apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z, apr_byte_t first
 
 	if (z->state != NULL) {
 		oidc_session_set(r, z, OIDC_SESSION_REMOTE_USER_KEY, z->remote_user);
-		json_object_set_new(z->state, OIDC_SESSION_EXPIRY_KEY, json_integer(apr_time_sec(z->expiry)));
+		oidc_session_set_timestamp(r, z, OIDC_SESSION_EXPIRY_KEY, z->expiry);
 		oidc_session_set(r, z, OIDC_SESSION_SESSION_ID, z->uuid);
 	}
 
@@ -431,11 +442,6 @@ apr_byte_t oidc_session_set(request_rec *r, oidc_session_t *z, const char *key, 
  */
 typedef const char *(*oidc_session_get_str_function)(request_rec *r, oidc_session_t *z);
 
-static void oidc_session_set_timestamp(request_rec *r, oidc_session_t *z, const char *key, const apr_time_t timestamp) {
-	if (timestamp != -1)
-		oidc_session_set(r, z, key, apr_psprintf(r->pool, "%" APR_TIME_T_FMT, apr_time_sec(timestamp)));
-}
-
 static json_t *oidc_session_get_str2json(request_rec *r, oidc_session_t *z,
 					 oidc_session_get_str_function session_get_str_fn) {
 	json_t *json = NULL;
@@ -449,14 +455,6 @@ static const char *oidc_session_get_key2string(request_rec *r, oidc_session_t *z
 	char *s_value = NULL;
 	oidc_session_get(r, z, key, &s_value);
 	return s_value;
-}
-
-static apr_time_t oidc_session_get_key2timestamp(request_rec *r, oidc_session_t *z, const char *key) {
-	apr_time_t t_expires = 0;
-	const char *s_expires = oidc_session_get_key2string(r, z, key);
-	if (s_expires != NULL)
-		sscanf(s_expires, "%" APR_TIME_T_FMT, &t_expires);
-	return apr_time_from_sec(t_expires);
 }
 
 #define OIDC_SESSION_WARN_CLAIM_SIZE 1024 * 8
@@ -480,7 +478,7 @@ void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, const c
 	if (r->subprocess_env != NULL) {
 		s = apr_table_get(r->subprocess_env, OIDC_SESSION_WARN_CLAIM_SIZE_VAR);
 		if (s) {
-			warn_claim_size = _oidc_str_to_int(s);
+			warn_claim_size = _oidc_str_to_int(s, OIDC_SESSION_WARN_CLAIM_SIZE);
 			oidc_debug(r, "warn_claim_size set to %d in environment variable %s", warn_claim_size,
 				   OIDC_SESSION_WARN_CLAIM_SIZE_VAR);
 		}
@@ -593,7 +591,7 @@ const char *oidc_session_get_access_token(request_rec *r, oidc_session_t *z) {
  * access token expires
  */
 void oidc_session_set_access_token_expires(request_rec *r, oidc_session_t *z, const int expires_in) {
-	if (expires_in != -1) {
+	if (expires_in > -1) {
 		oidc_debug(r, "storing access token expires_in in the session: %d", expires_in);
 		oidc_session_set_timestamp(r, z, OIDC_SESSION_KEY_ACCESSTOKEN_EXPIRES,
 					   apr_time_now() + apr_time_from_sec(expires_in));
@@ -601,11 +599,12 @@ void oidc_session_set_access_token_expires(request_rec *r, oidc_session_t *z, co
 }
 
 apr_time_t oidc_session_get_access_token_expires(request_rec *r, oidc_session_t *z) {
-	return apr_time_sec(oidc_session_get_key2timestamp(r, z, OIDC_SESSION_KEY_ACCESSTOKEN_EXPIRES));
+	return oidc_session_get_key2timestamp(r, z, OIDC_SESSION_KEY_ACCESSTOKEN_EXPIRES);
 }
 
-const char *oidc_session_get_access_token_expires_str(request_rec *r, oidc_session_t *z) {
-	return apr_psprintf(r->pool, "%" APR_TIME_T_FMT, oidc_session_get_access_token_expires(r, z));
+const char *oidc_session_get_access_token_expires2str(request_rec *r, oidc_session_t *z) {
+	apr_time_t expires = oidc_session_get_access_token_expires(r, z);
+	return (expires > -1) ? apr_psprintf(r->pool, "%" APR_TIME_T_FMT, apr_time_sec(expires)) : NULL;
 }
 
 /*
@@ -646,7 +645,10 @@ const char *oidc_session_get_cookie_domain(request_rec *r, oidc_session_t *z) {
  */
 
 void oidc_session_set_userinfo_refresh_interval(request_rec *r, oidc_session_t *z, const int interval) {
-	oidc_session_set_timestamp(r, z, OIDC_SESSION_KEY_USERINFO_REFRESH_INTERVAL, apr_time_from_sec(interval));
+	// avoid apr_time_from_sec calculation on -1
+	if (interval > -1)
+		oidc_session_set_timestamp(r, z, OIDC_SESSION_KEY_USERINFO_REFRESH_INTERVAL,
+					   apr_time_from_sec(interval));
 }
 
 apr_time_t oidc_session_get_userinfo_refresh_interval(request_rec *r, oidc_session_t *z) {

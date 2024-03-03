@@ -119,7 +119,7 @@ static int oidc_session_management_iframe_rp(request_rec *r, oidc_cfg *c, oidc_s
 
 	char *s_poll_interval = NULL;
 	oidc_http_request_parameter_get(r, "poll", &s_poll_interval);
-	int poll_interval = s_poll_interval ? _oidc_str_to_int(s_poll_interval) : 0;
+	int poll_interval = _oidc_str_to_int(s_poll_interval, 0);
 	if ((poll_interval <= 0) || (poll_interval > 3600 * 24))
 		poll_interval = 3000;
 

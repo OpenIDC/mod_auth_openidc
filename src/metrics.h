@@ -106,12 +106,14 @@ void oidc_metrics_timing_add(request_rec *r, oidc_metrics_timing_type_t type, ap
 
 #define OIDC_METRICS_TIMING_REQUEST_ADD(r, cfg, type)                                                                  \
 	OIDC_METRICS_TIMING_VAR                                                                                        \
-	const char *v = NULL;                                                                                          \
 	if (cfg->metrics_hook_data != NULL) {                                                                          \
-		v = oidc_request_state_get(r, OIDC_METRICS_REQUEST_STATE_TIMER_KEY);                                   \
-		if (v) {                                                                                               \
-			sscanf(v, "%" APR_TIME_T_FMT, &_oidc_metrics_tstart);                                          \
+		_oidc_metrics_tstart =                                                                                 \
+		    _oidc_str_to_time(oidc_request_state_get(r, OIDC_METRICS_REQUEST_STATE_TIMER_KEY), -1);            \
+		if (_oidc_metrics_tstart > -1) {                                                                       \
 			OIDC_METRICS_TIMING_ADD(r, cfg, type);                                                         \
+		} else {                                                                                               \
+			oidc_warn(r,                                                                                   \
+				  "metrics: could not add timing because start timer was not found in request state"); \
 		}                                                                                                      \
 	}
 

@@ -55,6 +55,7 @@ int oidc_info_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, apr_
 	char *s_extend_session = NULL;
 	char *r_value = NULL;
 	apr_byte_t b_extend_session = TRUE;
+	apr_time_t t_interval = -1;
 
 	oidc_http_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_INFO, &s_format);
 	oidc_http_request_parameter_get(r, OIDC_INFO_PARAM_ACCESS_TOKEN_REFRESH_INTERVAL, &s_interval);
@@ -86,8 +87,8 @@ int oidc_info_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, apr_
 	/* see if we can and need to refresh the access token */
 	if ((s_interval != NULL) && (oidc_session_get_refresh_token(r, session) != NULL)) {
 
-		apr_time_t t_interval;
-		if (sscanf(s_interval, "%" APR_TIME_T_FMT, &t_interval) == 1) {
+		t_interval = _oidc_str_to_time(s_interval, -1);
+		if (t_interval > -1) {
 			t_interval = apr_time_from_sec(t_interval);
 
 			/* get the last refresh timestamp from the session info */
@@ -143,7 +144,7 @@ int oidc_info_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, apr_
 
 	/* include the access token expiry timestamp in the session info */
 	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_ACCES_TOKEN_EXP, APR_HASH_KEY_STRING)) {
-		const char *access_token_expires = oidc_session_get_access_token_expires_str(r, session);
+		const char *access_token_expires = oidc_session_get_access_token_expires2str(r, session);
 		if (access_token_expires != NULL)
 			json_object_set_new(json, OIDC_HOOK_INFO_ACCES_TOKEN_EXP, json_string(access_token_expires));
 	}

@@ -355,7 +355,7 @@ redisReply *oidc_cache_redis_command(request_rec *r, oidc_cache_cfg_redis_t *con
 
 static int oidc_cache_redis_env2int(request_rec *r, const char *env_var_name, const int default_value) {
 	const char *s = r->subprocess_env ? apr_table_get(r->subprocess_env, env_var_name) : NULL;
-	return s ? _oidc_str_to_int(s) : default_value;
+	return _oidc_str_to_int(s, default_value);
 }
 
 #define OIDC_REDIS_MAX_TRIES_ENV_VAR "OIDC_REDIS_MAX_TRIES"

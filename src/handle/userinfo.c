@@ -175,7 +175,7 @@ apr_byte_t oidc_userinfo_refresh_claims(request_rec *r, oidc_cfg *cfg, oidc_sess
 
 	oidc_debug(r, "interval=%" APR_TIME_T_FMT, apr_time_sec(interval));
 
-	if (interval > 0) {
+	if (interval > -1) {
 
 		/* get the current provider info */
 		if (oidc_get_provider_from_session(r, cfg, session, &provider) == FALSE) {

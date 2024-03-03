@@ -321,9 +321,7 @@ static inline char *oidc_metrics_storage_get(server_rec *s) {
  * retrieve environment variable integer with default setting
  */
 static inline int oidc_metrics_get_env_int(const char *name, int dval) {
-	int v;
-	const char *env = getenv(name);
-	return (((env) && (sscanf(env, "%d", &v) == 1)) ? v : dval);
+	return _oidc_str_to_int(getenv(name), dval);
 }
 
 #define OIDC_METRICS_CACHE_JSON_MAX_ENV_VAR "OIDC_METRICS_CACHE_JSON_MAX"
