@@ -101,6 +101,12 @@ apr_byte_t oidc_response_post_preserve_javascript(request_rec *r, const char *lo
 char *oidc_response_make_sid_iss_unique(request_rec *r, const char *sid, const char *issuer);
 int oidc_response_authorization_redirect(request_rec *r, oidc_cfg *c, oidc_session_t *session);
 int oidc_response_authorization_post(request_rec *r, oidc_cfg *c, oidc_session_t *session);
+apr_byte_t oidc_response_save_in_session(request_rec *r, oidc_cfg *c, oidc_session_t *session,
+						oidc_provider_t *provider, const char *remoteUser, const char *id_token,
+						oidc_jwt_t *id_token_jwt, const char *claims, const char *access_token,
+						const int expires_in, const char *refresh_token,
+						const char *session_state, const char *state, const char *original_url,
+						const char *userinfo_jwt);
 
 // revoke.c
 int oidc_revoke_session(request_rec *r, oidc_cfg *c);
