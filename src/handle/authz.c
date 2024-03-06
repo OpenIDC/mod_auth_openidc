@@ -94,35 +94,42 @@ static oidc_authz_json_handler_t _oidc_authz_json_handlers[] = {
 // clang-format on
 
 static apr_byte_t oidc_authz_match_json_array(request_rec *r, const char *spec, json_t *val, const char *key) {
-	int j = 0, i = 0;
+	int i = 0;
 	json_t *e = NULL;
+	oidc_authz_json_handler_t *h = NULL;
 
-	for (j = 0; j < json_array_size(val); j++) {
-		e = json_array_get(val, j);
+	// loop over the elements in the array, trying to find a match
+	for (i = 0; i < json_array_size(val); i++) {
+		e = json_array_get(val, i);
 
-		for (i = 0; _oidc_authz_json_handlers[i].handler; i++) {
-			if (_oidc_authz_json_handlers[i].type == json_typeof(e)) {
-				if (_oidc_authz_json_handlers[i].handler(r, spec, e, key) == TRUE)
+		// loop over the JSON object type handlers
+		for (h = _oidc_authz_json_handlers; h->handler; h++) {
+			if (h->type == json_typeof(e)) {
+				// avoid recursing into a nested array; matching need to be done with the "." syntax
+				if (json_typeof(e) == JSON_ARRAY)
+					// we want h->handler to end up as NULL to printout a warning at the end
+					continue;
+				// break out of the loop because we found a handler, and possibly a match
+				if (h->handler(r, spec, e, key) == TRUE)
 					return TRUE;
 				break;
 			}
 		}
-
-		if (_oidc_authz_json_handlers[i].handler == NULL)
-			oidc_warn(r, "unhandled in-array JSON object type [%d] for key \"%s\"", json_typeof(val), key);
+		if (h->handler == NULL)
+			oidc_warn(r, "unhandled in-array JSON object type [%d] for key \"%s\"", json_typeof(e), key);
+		// else: just no match, continue with the next array element
 	}
-
 	return FALSE;
 }
 
 static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec, json_t *val, const char *key) {
-	int i = 0;
+	oidc_authz_json_handler_t *h = NULL;
 
 	oidc_debug(r, "matching: spec=%s, key=%s", spec, key);
 
-	for (i = 0; _oidc_authz_json_handlers[i].handler; i++) {
-		if (_oidc_authz_json_handlers[i].type == json_typeof(val))
-			return _oidc_authz_json_handlers[i].handler(r, spec, val, key);
+	for (h = _oidc_authz_json_handlers; h->handler; h++) {
+		if (h->type == json_typeof(val))
+			return h->handler(r, spec, val, key);
 	}
 
 	oidc_warn(r, "unhandled JSON object type [%d] for key \"%s\"", json_typeof(val), (const char *)key);
@@ -168,25 +175,25 @@ static oidc_authz_pcre_handler_t _oidc_authz_pcre_handlers[] = {
 static apr_byte_t oidc_authz_match_pcre_array(request_rec *r, const char *spec, json_t *val, const char *key,
 					      struct oidc_pcre *preg) {
 
-	int j = 0, i = 0;
+	int i = 0;
 	json_t *e = NULL;
 
-	for (j = 0; j < json_array_size(val); j++) {
-		e = json_array_get(val, j);
+	// loop over the elements in the array, trying to find a match
+	for (i = 0; i < json_array_size(val); i++) {
+		e = json_array_get(val, i);
 
-		for (i = 0; _oidc_authz_pcre_handlers[i].handler; i++) {
-			if (_oidc_authz_pcre_handlers[i].type == json_typeof(e)) {
-				if (_oidc_authz_pcre_handlers[i].handler(r, spec, e, key, preg) == TRUE)
-					return TRUE;
-				break;
-			}
+		if (json_typeof(e) == JSON_STRING) {
+
+			if (oidc_authz_match_pcre_string(r, spec, e, key, preg) == TRUE)
+				return TRUE;
+
+			// need to free any failed match to avoid a memory leak in subsequent calls to oidc_pcre_exec
+			oidc_pcre_free_match(preg);
+
+			continue;
 		}
 
-		// need to free any failed match to avoid a memory leak in repeated calls to oidc_pcre_exec
-		oidc_pcre_free_match(preg);
-
-		if (_oidc_authz_json_handlers[i].handler == NULL)
-			oidc_warn(r, "unhandled in-array JSON object type [%d] for key \"%s\"", json_typeof(val), key);
+		oidc_warn(r, "unhandled non-string in-array JSON object type [%d] for key \"%s\"", json_typeof(e), key);
 	}
 
 	return FALSE;
@@ -196,22 +203,27 @@ static apr_byte_t oidc_authz_match_pcre(request_rec *r, const char *spec, json_t
 	apr_byte_t rc = FALSE;
 	struct oidc_pcre *preg = NULL;
 	char *s_err = NULL;
-	int i = 0;
+	oidc_authz_pcre_handler_t *h = NULL;
 
 	preg = oidc_pcre_compile(r->pool, spec, &s_err);
-
 	if (preg == NULL) {
 		oidc_error(r, "pattern [%s] is not a valid regular expression: %s", spec, s_err ? s_err : "<n/a>");
 		return FALSE;
 	}
 
-	for (i = 0; _oidc_authz_pcre_handlers[i].handler; i++) {
-		if (_oidc_authz_pcre_handlers[i].type == json_typeof(val)) {
-			rc = _oidc_authz_pcre_handlers[i].handler(r, spec, val, key, preg);
-			if (rc == TRUE)
-				break;
+	// loop over the JSON object PCRE handlers
+	for (h = _oidc_authz_pcre_handlers; h->handler; h++) {
+		if (h->type == json_typeof(val)) {
+			// break out of the loop because we found a handler, and possibly a match
+			if (h->handler(r, spec, val, key, preg) == TRUE)
+				rc = TRUE;
+			break;
 		}
 	}
+
+	// see if we have found an object handler
+	if (h->handler == NULL)
+		oidc_warn(r, "unhandled JSON object type [%d] for key \"%s\"", json_typeof(val), key);
 
 	oidc_pcre_free(preg);
 

@@ -1527,7 +1527,7 @@ static char *test_authz_worker(request_rec *r) {
 
 	r->user = "dummy";
 
-// clang-format off
+	// clang-format off
 
 	claims =
 "{"
@@ -1575,7 +1575,7 @@ static char *test_authz_worker(request_rec *r) {
 "}"
 ;
 
-// clang-format on
+	// clang-format on
 
 	json = json_loads(claims, 0, &err);
 	TST_ASSERT(apr_psprintf(r->pool, "JSON parsed [%s]", json ? "ok" : err.text), json != NULL);
