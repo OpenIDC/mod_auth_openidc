@@ -231,7 +231,7 @@ static apr_byte_t oidc_authz_separator_dot(request_rec *r, const char *spec, jso
 
 // clang-format off
 static oidc_authz_json_handler_t _oidc_authz_separator_handlers[] = {
-	// there's a tiny bit of overloading going, applying a char as an int index
+	// there's a some overloading going here, applying a char as an int index
 	{ OIDC_CHAR_COLON, oidc_authz_match_value },
 	{ OIDC_CHAR_TILDE, oidc_authz_match_pcre },
 	{ OIDC_CHAR_DOT, oidc_authz_separator_dot },
@@ -244,15 +244,15 @@ static oidc_authz_json_handler_t _oidc_authz_separator_handlers[] = {
  */
 apr_byte_t oidc_authz_match_claim(request_rec *r, const char *const attr_spec, json_t *claims) {
 
-	const char *key = NULL;
+	const char *key = NULL, *attr_c = NULL, *spec_c = NULL;
 	json_t *val = NULL;
 	int i = 0;
 
-	/* if we don't have any claims, they can never match any Require claim primitive */
+	// if we don't have any claims, they can never match any Require claim primitive
 	if (claims == NULL)
 		return FALSE;
 
-	/* loop over all of the user claims */
+	// loop over all of the user claims to find one that matches the attr_spec
 	void *iter = json_object_iter(claims);
 	while (iter) {
 
@@ -261,18 +261,20 @@ apr_byte_t oidc_authz_match_claim(request_rec *r, const char *const attr_spec, j
 
 		oidc_debug(r, "evaluating key \"%s\"", (const char *)key);
 
-		const char *attr_c = key;
-		const char *spec_c = attr_spec;
+		// initialize pointers for traversing the attribute name and the Require spec
+		attr_c = key;
+		spec_c = attr_spec;
 
-		/* walk both strings until we get to the end of either or we find a differing character */
+		// walk both strings until we get to the end of either or we find a differing character
 		while ((*attr_c) && (*spec_c) && (*attr_c) == (*spec_c)) {
 			attr_c++;
 			spec_c++;
 		}
 
 		for (i = 0; (!(*attr_c)) && _oidc_authz_separator_handlers[i].handler; i++) {
+			// there's a some overloading going here, applying a char as an int index
 			if (_oidc_authz_separator_handlers[i].type == (*spec_c)) {
-				/* skip the separator */
+				// skip the separator
 				spec_c++;
 				if (_oidc_authz_separator_handlers[i].handler(r, spec_c, val, key) == TRUE)
 					return TRUE;
