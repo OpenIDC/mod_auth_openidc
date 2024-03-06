@@ -1,4 +1,9 @@
-04/02/2024
+03/06/2024
+- add support for JSON real and null value matching in Require claim statements
+- fix evaluation of PCRE expressions for nested claims
+- refactor handle/authz.c
+
+03/04/2024
 - refactor integer and timestamp handling
 - fix default HTTP short retry interval setting
 - accept 0 in OIDCUserInfoRefreshInterval

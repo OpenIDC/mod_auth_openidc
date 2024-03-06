@@ -1529,6 +1529,8 @@ static char *test_authz_worker(request_rec *r) {
 
 	claims = "{"
 		 "\"sub\": \"stef\","
+		 "\"areal\": 1.1,"
+		 "\"anull\": null,"
 		 "\"nested\": {"
 		 "\"level1\": {"
 		 "\"level2\": \"hans\""
@@ -1665,6 +1667,21 @@ static char *test_authz_worker(request_rec *r) {
 	parsed_require_args->filename = require_args;
 	rc = oidc_authz_24_worker(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
 	TST_ASSERT("auth status (18: key in namespaced array)", rc == AUTHZ_GRANTED);
+
+	require_args = "Require claim areal:1.1";
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_24_worker(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (19: simple real claim)", rc == AUTHZ_GRANTED);
+
+	require_args = "Require claim anull:null";
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_24_worker(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (20: simple null claim)", rc == AUTHZ_GRANTED);
+
+	require_args = "Require claim areal:null";
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_24_worker(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (21: simple not null claim)", rc == AUTHZ_DENIED);
 
 	json_decref(json);
 
