@@ -101,13 +101,16 @@ static apr_byte_t oidc_authz_match_json_array(request_rec *r, const char *spec, 
 		e = json_array_get(val, j);
 
 		for (i = 0; _oidc_authz_json_handlers[i].handler; i++) {
-			if (_oidc_authz_json_handlers[i].type == json_typeof(e))
+			if (_oidc_authz_json_handlers[i].type == json_typeof(e)) {
 				if (_oidc_authz_json_handlers[i].handler(r, spec, e, key) == TRUE)
 					return TRUE;
+				break;
+			}
 		}
-	}
 
-	oidc_warn(r, "unhandled in-array JSON object type [%d] for key \"%s\"", json_typeof(val), key);
+		if (_oidc_authz_json_handlers[i].handler == NULL)
+			oidc_warn(r, "unhandled in-array JSON object type [%d] for key \"%s\"", json_typeof(val), key);
+	}
 
 	return FALSE;
 }
@@ -172,15 +175,19 @@ static apr_byte_t oidc_authz_match_pcre_array(request_rec *r, const char *spec, 
 		e = json_array_get(val, j);
 
 		for (i = 0; _oidc_authz_pcre_handlers[i].handler; i++) {
-			if (_oidc_authz_pcre_handlers[i].type == json_typeof(e))
+			if (_oidc_authz_pcre_handlers[i].type == json_typeof(e)) {
 				if (_oidc_authz_pcre_handlers[i].handler(r, spec, e, key, preg) == TRUE)
 					return TRUE;
-			// NB: need to free the match to avoid a memory leak
-			oidc_pcre_free_match(preg);
+				break;
+			}
 		}
-	}
 
-	oidc_warn(r, "unhandled in-array JSON object type [%d] for key \"%s\"", json_typeof(val), key);
+		// need to free any failed match to avoid a memory leak in repeated calls to oidc_pcre_exec
+		oidc_pcre_free_match(preg);
+
+		if (_oidc_authz_json_handlers[i].handler == NULL)
+			oidc_warn(r, "unhandled in-array JSON object type [%d] for key \"%s\"", json_typeof(val), key);
+	}
 
 	return FALSE;
 }
