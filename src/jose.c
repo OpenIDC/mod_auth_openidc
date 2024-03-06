@@ -438,6 +438,42 @@ apr_byte_t oidc_jwk_parse_json(apr_pool_t *pool, json_t *json, oidc_jwk_t **jwk,
 	return (*jwk != NULL);
 }
 
+apr_byte_t oidc_jwks_parse_json(apr_pool_t *pool, json_t *json, apr_array_header_t **jwk_list, oidc_jose_error_t *err) {
+	const json_t *keys = json_object_get(json, OIDC_JOSE_JWKS_KEYS_STR);
+	if ((keys == NULL) || (!json_is_array(keys))) {
+		oidc_jose_error(err, "JWKS did not contain \"" OIDC_JOSE_JWKS_KEYS_STR "\" array");
+		return FALSE;
+	}
+	*jwk_list = apr_array_make(pool, json_array_size(keys), sizeof(oidc_jwk_t *));
+	for (int i = 0; i < json_array_size(keys); i++) {
+		json_t *elem = json_array_get(keys, i);
+		if (elem == NULL)
+			continue;
+		oidc_jwk_t *jwk;
+		if (oidc_jwk_parse_json(pool, elem, &jwk, err) != TRUE) {
+			return FALSE;
+		}
+		APR_ARRAY_PUSH(*jwk_list, oidc_jwk_t *) = jwk;
+	}
+	return TRUE;
+}
+
+apr_byte_t oidc_is_jwk(json_t *json) {
+	const json_t *kty = json_object_get(json, OIDC_JOSE_JWK_KTY_STR);
+	if ((kty == NULL) || (!json_is_string(kty))) {
+		return FALSE;
+	}
+	return TRUE;
+}
+
+apr_byte_t oidc_is_jwks(json_t *json) {
+	const json_t *keys = json_object_get(json, OIDC_JOSE_JWKS_KEYS_STR);
+	if ((keys == NULL) || (!json_is_array(keys))) {
+		return FALSE;
+	}
+	return TRUE;
+}
+
 /*
  * convert a JWK struct to a JSON string
  */

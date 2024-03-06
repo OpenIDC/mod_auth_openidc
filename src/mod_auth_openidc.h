@@ -256,7 +256,7 @@ typedef struct oidc_jwks_uri_t {
 	char *uri;
 	int refresh_interval;
 	char *signed_uri;
-	oidc_jwk_t *jwk;
+	apr_array_header_t *jwk_list;
 } oidc_jwks_uri_t;
 
 typedef struct oidc_provider_t {
