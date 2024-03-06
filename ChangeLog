@@ -1,6 +1,6 @@
 03/06/2024
 - add support for JSON real and null value matching in Require claim statements
-- fix evaluation of PCRE expressions for nested claims
+- fix evaluation Require statements for nested array claims
 - refactor handle/authz.c
 
 03/04/2024

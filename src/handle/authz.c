@@ -231,25 +231,40 @@ static apr_byte_t oidc_authz_match_pcre(request_rec *r, const char *spec, json_t
 }
 
 static apr_byte_t oidc_authz_separator_dot(request_rec *r, const char *spec, json_t *val, const char *key) {
-	if ((!json_is_object(val)) && (!json_is_array(val))) {
-		oidc_warn(r,
-			  "\"%s\" matched, and child nodes or array values should be evaluated, but "
-			  "value is not an object or array.",
-			  key);
-		return FALSE;
+	if (json_is_object(val)) {
+		oidc_debug(r, "attribute chunk matched, evaluating children of key: \"%s\".", key);
+		return oidc_authz_match_claim(r, spec, val);
 	}
-	return oidc_authz_match_claim(r, spec, val);
+	oidc_warn(r,
+		  "JSON key \"%s\" matched a \".\" and child nodes should be evaluated, but the corresponding JSON "
+		  "value is not an object",
+		  key);
+	return FALSE;
 }
 
 // clang-format off
 static oidc_authz_json_handler_t _oidc_authz_separator_handlers[] = {
-	// there's a some overloading going here, applying a char as an int index
+		// there's some overloading going on here, applying a char as an int index
 	{ OIDC_CHAR_COLON, oidc_authz_match_value },
 	{ OIDC_CHAR_TILDE, oidc_authz_match_pcre },
 	{ OIDC_CHAR_DOT, oidc_authz_separator_dot },
 	{ 0, NULL}
 };
 // clang-format on
+
+static apr_byte_t oidc_auth_handle_separator(request_rec *r, const char *key, json_t *val, const char *spec) {
+	oidc_authz_json_handler_t *h = NULL;
+	for (h = _oidc_authz_separator_handlers; h->handler; h++) {
+		// there's some overloading going on here, applying a char as an int index
+		if (h->type == (*spec)) {
+			// skip the separator
+			spec++;
+			if (h->handler(r, spec, val, key) == TRUE)
+				return TRUE;
+		}
+	}
+	return FALSE;
+}
 
 /*
  * see if a the Require value matches with a set of provided claims
@@ -258,7 +273,6 @@ apr_byte_t oidc_authz_match_claim(request_rec *r, const char *const attr_spec, j
 
 	const char *key = NULL, *attr_c = NULL, *spec_c = NULL;
 	json_t *val = NULL;
-	int i = 0;
 
 	// if we don't have any claims, they can never match any Require claim primitive
 	if (claims == NULL)
@@ -283,15 +297,8 @@ apr_byte_t oidc_authz_match_claim(request_rec *r, const char *const attr_spec, j
 			spec_c++;
 		}
 
-		for (i = 0; (!(*attr_c)) && _oidc_authz_separator_handlers[i].handler; i++) {
-			// there's a some overloading going here, applying a char as an int index
-			if (_oidc_authz_separator_handlers[i].type == (*spec_c)) {
-				// skip the separator
-				spec_c++;
-				if (_oidc_authz_separator_handlers[i].handler(r, spec_c, val, key) == TRUE)
-					return TRUE;
-			}
-		}
+		if ((!(*attr_c)) && (oidc_auth_handle_separator(r, key, val, spec_c) == TRUE))
+			return TRUE;
 
 		iter = json_object_iter_next(claims, iter);
 	}
