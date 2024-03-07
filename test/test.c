@@ -1527,53 +1527,62 @@ static char *test_authz_worker(request_rec *r) {
 
 	r->user = "dummy";
 
-	claims = "{"
-		 "\"sub\": \"stef\","
-		 "\"areal\": 1.1,"
-		 "\"anull\": null,"
-		 "\"nested\": {"
-		 "\"level1\": {"
-		 "\"level2\": \"hans\""
-		 "},"
-		 "\"nestedarray\": ["
-		 "\"b\","
-		 "\"c\","
-		 "true"
-		 "],"
-		 "\"somebool\": false"
-		 "},"
-		 "\"somearray\": ["
-		 "\"one\","
-		 "\"two\","
-		 "\"three\""
-		 "],"
-		 "\"somebool\": false,"
+	// clang-format off
 
-		 "\"realm_access\": {"
-		 "\"roles\": ["
-		 "\"someRole1\","
-		 "\"someRole2\""
-		 "]"
-		 "},"
+	claims =
+"{"
+	"\"sub\": \"stef\","
+	"\"areal\": 1.1,"
+	"\"anull\": null,"
+	"\"anint\": 99,"
+	"\"anegativeint\": -99,"
+	"\"aminusoneint\": -1,"
+	"\"nested\": {"
+		"\"level1\": {"
+			"\"level2\": \"hans\""
+		"},"
+		"\"nestedarray\": ["
+			"\"b\","
+			"\"c\","
+			"true,"
+			"\"false\","
+			"["
+				"\"d\","
+				"\"e\""
+			"]"
+		"],"
+		"\"somebool\": false"
+	"},"
+	"\"somearray\": ["
+		"\"one\","
+		"\"two\","
+		"\"three\""
+	"],"
+	"\"somebool\": false,"
+	"\"realm_access\": {"
+		"\"roles\": ["
+			"\"someRole1\","
+			"\"someRole2\""
+		"]"
+	"},"
+	"\"resource_access\": {"
+		"\"someClient\": {"
+			"\"roles\": ["
+				"\"someRole3\","
+				"\"someRole4\""
+			"]"
+		"}"
+	"},"
+	"\"https://test.com/pay\": \"alot\","
+	"\"https://company.com/productAccess\": ["
+		"\"snake2\","
+		"\"snake2ref\","
+		"\"fxt\""
+	"]"
+"}"
+;
 
-		 "\"resource_access\": {"
-		 "\"someClient\": {"
-		 "\"roles\": ["
-		 "\"someRole3\","
-		 "\"someRole4\""
-		 "]"
-		 "}"
-		 "},"
-
-		 "\"https://test.com/pay\": \"alot\","
-
-		 "\"https://company.com/productAccess\": ["
-		 "\"snake2\","
-		 "\"snake2ref\","
-		 "\"fxt\""
-		 "]"
-
-		 "}";
+	// clang-format on
 
 	json = json_loads(claims, 0, &err);
 	TST_ASSERT(apr_psprintf(r->pool, "JSON parsed [%s]", json ? "ok" : err.text), json != NULL);
@@ -1636,32 +1645,32 @@ static char *test_authz_worker(request_rec *r) {
 	require_args = "Require claim nested.level1.level2~.an.";
 	parsed_require_args->filename = require_args;
 	rc = oidc_authz_24_worker(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
-	TST_ASSERT("auth status (12: nested expression)", rc == AUTHZ_GRANTED);
+	TST_ASSERT("auth status (12: nested pcre expression)", rc == AUTHZ_GRANTED);
 
 	require_args = "Require claim nested.level1.level2~zan.";
 	parsed_require_args->filename = require_args;
 	rc = oidc_authz_24_worker(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
-	TST_ASSERT("auth status (13: nested expression)", rc == AUTHZ_DENIED);
+	TST_ASSERT("auth status (13: nested pcre expression)", rc == AUTHZ_DENIED);
 
 	require_args = "Require claim nested.nestedarray~.";
 	parsed_require_args->filename = require_args;
 	rc = oidc_authz_24_worker(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
-	TST_ASSERT("auth status (14: nested array expression)", rc == AUTHZ_GRANTED);
+	TST_ASSERT("auth status (14: nested array pcre expression)", rc == AUTHZ_GRANTED);
 
 	require_args = "Require claim nested.nestedarray~.b";
 	parsed_require_args->filename = require_args;
 	rc = oidc_authz_24_worker(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
-	TST_ASSERT("auth status (15: nested array expression)", rc == AUTHZ_DENIED);
+	TST_ASSERT("auth status (15: nested array pcre expression)", rc == AUTHZ_DENIED);
 
 	require_args = "Require claim email~...$";
 	parsed_require_args->filename = require_args;
 	rc = oidc_authz_24_worker(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
-	TST_ASSERT("auth status (16: expression)", rc == AUTHZ_DENIED);
+	TST_ASSERT("auth status (16: pcre expression)", rc == AUTHZ_DENIED);
 
 	require_args = "Require claim sub~...$";
 	parsed_require_args->filename = require_args;
 	rc = oidc_authz_24_worker(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
-	TST_ASSERT("auth status (17: expression)", rc == AUTHZ_GRANTED);
+	TST_ASSERT("auth status (17: pcre expression)", rc == AUTHZ_GRANTED);
 
 	require_args = "Require claim https://company.com/productAccess:snake2";
 	parsed_require_args->filename = require_args;
@@ -1682,6 +1691,31 @@ static char *test_authz_worker(request_rec *r) {
 	parsed_require_args->filename = require_args;
 	rc = oidc_authz_24_worker(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
 	TST_ASSERT("auth status (21: simple not null claim)", rc == AUTHZ_DENIED);
+
+	require_args = "Require claim anint:99";
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_24_worker(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (22: simple int claim)", rc == AUTHZ_GRANTED);
+
+	require_args = "Require claim anint:100";
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_24_worker(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (23: simple int claim)", rc == AUTHZ_DENIED);
+
+	require_args = "Require claim anegativeint:-99";
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_24_worker(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (24: simple negative int claim)", rc == AUTHZ_GRANTED);
+
+	require_args = "Require claim anegativeint:$99";
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_24_worker(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (25: simple int parse error claim)", rc == AUTHZ_DENIED);
+
+	require_args = "Require claim aminusoneint:-1";
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_24_worker(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (26: simple -1 int claim)", rc == AUTHZ_GRANTED);
 
 	json_decref(json);
 
