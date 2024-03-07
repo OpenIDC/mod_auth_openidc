@@ -1,3 +1,6 @@
+03/07/2024
+- OIDCProviderSignedJwksUri: accept verification key set formatted as either JWK or JWKS
+
 03/06/2024
 - add support for JSON real and null value matching in Require claim statements
 - fix evaluation of PCRE expressions for nested claims
