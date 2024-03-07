@@ -20,6 +20,7 @@
 /depcomp
 /*.rpm
 /install-sh
+/install-sh~
 /*.la
 /libtool
 /ltmain.sh
