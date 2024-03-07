@@ -1534,6 +1534,9 @@ static char *test_authz_worker(request_rec *r) {
 	"\"sub\": \"stef\","
 	"\"areal\": 1.1,"
 	"\"anull\": null,"
+	"\"anint\": 99,"
+	"\"anegativeint\": -99,"
+	"\"aminusoneint\": -1,"
 	"\"nested\": {"
 		"\"level1\": {"
 			"\"level2\": \"hans\""
@@ -1688,6 +1691,31 @@ static char *test_authz_worker(request_rec *r) {
 	parsed_require_args->filename = require_args;
 	rc = oidc_authz_24_worker(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
 	TST_ASSERT("auth status (21: simple not null claim)", rc == AUTHZ_DENIED);
+
+	require_args = "Require claim anint:99";
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_24_worker(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (22: simple int claim)", rc == AUTHZ_GRANTED);
+
+	require_args = "Require claim anint:100";
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_24_worker(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (23: simple int claim)", rc == AUTHZ_DENIED);
+
+	require_args = "Require claim anegativeint:-99";
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_24_worker(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (24: simple negative int claim)", rc == AUTHZ_GRANTED);
+
+	require_args = "Require claim anegativeint:$99";
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_24_worker(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (25: simple int parse error claim)", rc == AUTHZ_DENIED);
+
+	require_args = "Require claim aminusoneint:-1";
+	parsed_require_args->filename = require_args;
+	rc = oidc_authz_24_worker(r, json, require_args, parsed_require_args, oidc_authz_match_claim);
+	TST_ASSERT("auth status (26: simple -1 int claim)", rc == AUTHZ_GRANTED);
 
 	json_decref(json);
 

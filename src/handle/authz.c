@@ -49,25 +49,42 @@ static apr_byte_t oidc_authz_match_json_string(request_rec *r, const char *spec,
 }
 
 static apr_byte_t oidc_authz_match_json_integer(request_rec *r, const char *spec, json_t *val, const char *key) {
-	// TODO: handle matching of -1 as a spec...
-	return (json_integer_value(val) == _oidc_str_to_int(spec, -1));
+	json_int_t i = 0;
+	if ((spec == NULL) || (val == NULL))
+		return FALSE;
+	if (sscanf(spec, "%" JSON_INTEGER_FORMAT, &i) != 1) {
+		oidc_warn(r, "integer parsing error for spec input: %s", spec);
+		return FALSE;
+	}
+	return (json_integer_value(val) == i);
 }
 
 static apr_byte_t oidc_authz_match_json_real(request_rec *r, const char *spec, json_t *val, const char *key) {
-	double num = 0;
-	return (sscanf(spec, "%lf", &num) == 1) ? (json_real_value(val) == num) : FALSE;
-	return FALSE;
+	double d = 0;
+	if ((spec == NULL) || (val == NULL))
+		return FALSE;
+	if (sscanf(spec, "%lf", &d) != 1) {
+		oidc_warn(r, "double parsing error for spec input: %s", spec);
+		return FALSE;
+	}
+	return (json_real_value(val) == d);
 }
 
 static apr_byte_t oidc_authz_match_json_true(request_rec *r, const char *spec, json_t *val, const char *key) {
+	if ((spec == NULL) || (val == NULL))
+		return FALSE;
 	return (_oidc_strcmp(spec, "true") == 0);
 }
 
 static apr_byte_t oidc_authz_match_json_false(request_rec *r, const char *spec, json_t *val, const char *key) {
+	if ((spec == NULL) || (val == NULL))
+		return FALSE;
 	return (_oidc_strcmp(spec, "false") == 0);
 }
 
 static apr_byte_t oidc_authz_match_json_null(request_rec *r, const char *spec, json_t *val, const char *key) {
+	if ((spec == NULL) || (val == NULL))
+		return FALSE;
 	return (_oidc_strcmp(spec, "null") == 0);
 }
 
@@ -98,6 +115,9 @@ static apr_byte_t oidc_authz_match_json_array(request_rec *r, const char *spec, 
 	json_t *e = NULL;
 	oidc_authz_json_handler_t *h = NULL;
 
+	if ((spec == NULL) || (val == NULL) || (key == NULL))
+		return FALSE;
+
 	// loop over the elements in the array, trying to find a match
 	for (i = 0; i < json_array_size(val); i++) {
 		e = json_array_get(val, i);
@@ -125,6 +145,9 @@ static apr_byte_t oidc_authz_match_json_array(request_rec *r, const char *spec, 
 static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec, json_t *val, const char *key) {
 	oidc_authz_json_handler_t *h = NULL;
 
+	if ((spec == NULL) || (val == NULL) || (key == NULL))
+		return FALSE;
+
 	oidc_debug(r, "matching: spec=%s, key=%s", spec, key);
 
 	for (h = _oidc_authz_json_handlers; h->handler; h++) {
@@ -149,6 +172,9 @@ static apr_byte_t oidc_authz_match_pcre_string(request_rec *r, const char *spec,
 					       struct oidc_pcre *preg) {
 	char *s_err = NULL;
 	const char *s = json_string_value(val);
+
+	if ((spec == NULL) || (val == NULL) || (key == NULL) || (preg == NULL))
+		return FALSE;
 
 	if (oidc_pcre_exec(r->pool, preg, s, (int)_oidc_strlen(s), &s_err) <= 0) {
 		if (s_err)
@@ -178,6 +204,9 @@ static apr_byte_t oidc_authz_match_pcre_array(request_rec *r, const char *spec, 
 	int i = 0;
 	json_t *e = NULL;
 
+	if ((spec == NULL) || (val == NULL) || (key == NULL) || (preg == NULL))
+		return FALSE;
+
 	// loop over the elements in the array, trying to find a match
 	for (i = 0; i < json_array_size(val); i++) {
 		e = json_array_get(val, i);
@@ -205,6 +234,9 @@ static apr_byte_t oidc_authz_match_pcre(request_rec *r, const char *spec, json_t
 	char *s_err = NULL;
 	oidc_authz_pcre_handler_t *h = NULL;
 
+	if ((spec == NULL) || (val == NULL) || (key == NULL))
+		return FALSE;
+
 	preg = oidc_pcre_compile(r->pool, spec, &s_err);
 	if (preg == NULL) {
 		oidc_error(r, "pattern [%s] is not a valid regular expression: %s", spec, s_err ? s_err : "<n/a>");
@@ -231,6 +263,8 @@ static apr_byte_t oidc_authz_match_pcre(request_rec *r, const char *spec, json_t
 }
 
 static apr_byte_t oidc_authz_separator_dot(request_rec *r, const char *spec, json_t *val, const char *key) {
+	if ((spec == NULL) || (val == NULL) || (key == NULL))
+		return FALSE;
 	if (json_is_object(val)) {
 		oidc_debug(r, "attribute chunk matched, evaluating children of key: \"%s\".", key);
 		return oidc_authz_match_claim(r, spec, val);
@@ -254,6 +288,8 @@ static oidc_authz_json_handler_t _oidc_authz_separator_handlers[] = {
 
 static apr_byte_t oidc_auth_handle_separator(request_rec *r, const char *key, json_t *val, const char *spec) {
 	oidc_authz_json_handler_t *h = NULL;
+	if ((spec == NULL) || (val == NULL) || (key == NULL))
+		return FALSE;
 	for (h = _oidc_authz_separator_handlers; h->handler; h++) {
 		// there's some overloading going on here, applying a char as an int index
 		if (h->type == (*spec)) {

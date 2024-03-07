@@ -947,6 +947,8 @@ apr_byte_t oidc_util_decode_json_object(request_rec *r, const char *str, json_t 
  * encode a JSON object
  */
 char *oidc_util_encode_json_object(request_rec *r, json_t *json, size_t flags) {
+	if (json == NULL)
+		return NULL;
 	char *s = json_dumps(json, flags);
 	char *s_value = apr_pstrdup(r->pool, s);
 	free(s);
