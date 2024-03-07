@@ -1,3 +1,6 @@
+03/07/2024
+- properly handle parse errors in Require claim integer statements
+
 03/06/2024
 - add support for JSON real and null value matching in Require claim statements
 - fix evaluation Require statements for nested array claims
