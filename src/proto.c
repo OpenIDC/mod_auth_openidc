@@ -789,9 +789,9 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, oidc_jwt_t *jwt, 
 	oidc_debug(r, "search for kid \"%s\" or thumbprint x5t \"%s\"", jwt->header.kid, x5t);
 
 	/* get the "keys" JSON array from the JWKs object */
-	json_t *keys = json_object_get(j_jwks, OIDC_JWK_KEYS);
+	json_t *keys = json_object_get(j_jwks, OIDC_JOSE_JWKS_KEYS_STR);
 	if ((keys == NULL) || !(json_is_array(keys))) {
-		oidc_error(r, "\"%s\" array element is not a JSON array", OIDC_JWK_KEYS);
+		oidc_error(r, "\"%s\" array element is not a JSON array", OIDC_JOSE_JWKS_KEYS_STR);
 		return FALSE;
 	}
 

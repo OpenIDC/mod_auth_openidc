@@ -74,7 +74,7 @@ extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 #define OIDC_METADATA_CLIENT_SECRET "client_secret"
 #define OIDC_METADATA_CLIENT_SECRET_EXPIRES_AT "client_secret_expires_at"
 
-#define OIDC_METADATA_KEYS "keys"
+#define OIDC_METADATA_KEYS OIDC_JOSE_JWKS_KEYS_STR
 
 #define OIDC_METADATA_CLIENT_JWKS_URI "client_jwks_uri"
 #define OIDC_METADATA_ID_TOKEN_SIGNED_RESPONSE_ALG "id_token_signed_response_alg"
@@ -1104,13 +1104,13 @@ static void oidc_metadata_get_jwks(request_rec *r, json_t *json, apr_array_heade
 	oidc_jwk_t *jwk = NULL;
 	json_t *elem = NULL;
 
-	keys = json_object_get(json, OIDC_JWK_KEYS);
+	keys = json_object_get(json, OIDC_JOSE_JWKS_KEYS_STR);
 	if (keys == NULL)
 		return;
 
 	if (!json_is_array(keys)) {
 		oidc_error(r, "trying to parse a list of JWKs but the value for key \"%s\" is not a JSON array",
-			   OIDC_JWK_KEYS);
+				OIDC_JOSE_JWKS_KEYS_STR);
 		return;
 	}
 

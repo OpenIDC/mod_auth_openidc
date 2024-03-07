@@ -597,8 +597,6 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_CLAIM_SID "sid"
 #define OIDC_CLAIM_EVENTS "events"
 
-#define OIDC_JWK_KEYS "keys"
-
 #define OIDC_HOOK_INFO_FORMAT_JSON "json"
 #define OIDC_HOOK_INFO_FORMAT_HTML "html"
 #define OIDC_HOOK_INFO_TIMESTAMP "iat"
