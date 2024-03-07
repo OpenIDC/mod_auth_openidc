@@ -1303,10 +1303,31 @@ static const char *oidc_set_signed_jwks_uri(cmd_parms *cmd, void *m, const char 
 		if (rv != NULL)
 			return OIDC_CONFIG_DIR_RV(cmd, rv);
 	}
-	cfg->provider.jwks_uri.jwk = oidc_jwk_parse(cmd->pool, arg2, &err);
-	if (cfg->provider.jwks_uri.jwk == NULL) {
-		return apr_psprintf(cmd->pool, "oidc_jwk_parse failed: %s", oidc_jose_e2s(cmd->pool, err));
+	json_error_t json_error;
+	json_t *json = json_loads(arg2, 0, &json_error);
+	if (json == NULL) {
+		return apr_psprintf(cmd->pool, "oidc_set_signed_jwks_uri failed: %s", json_error.text);
 	}
+	if (oidc_is_jwk(json)) {
+		oidc_jwk_t *jwk = NULL;
+		if (oidc_jwk_parse_json(cmd->pool, json, &jwk, &err) != TRUE) {
+			json_decref(json);
+			return apr_psprintf(cmd->pool, "oidc_set_signed_jwks_uri failed: %s",
+					    oidc_jose_e2s(cmd->pool, err));
+		}
+		cfg->provider.jwks_uri.jwk_list = apr_array_make(cmd->pool, 1, sizeof(oidc_jwk_t *));
+		APR_ARRAY_PUSH(cfg->provider.jwks_uri.jwk_list, oidc_jwk_t *) = jwk;
+	} else if (oidc_is_jwks(json)) {
+		if (oidc_jwks_parse_json(cmd->pool, json, &cfg->provider.jwks_uri.jwk_list, &err) != TRUE) {
+			json_decref(json);
+			return apr_psprintf(cmd->pool, "oidc_set_signed_jwks_uri failed: %s",
+					    oidc_jose_e2s(cmd->pool, err));
+		}
+	} else {
+		json_decref(json);
+		return apr_psprintf(cmd->pool, "oidc_set_signed_jwks_uri failed: invalid jwks argument");
+	}
+	json_decref(json);
 	return NULL;
 }
 
@@ -1364,8 +1385,7 @@ char *oidc_cfg_dir_state_cookie_prefix(request_rec *r) {
 }
 
 static void oidc_cfg_provider_destroy(oidc_provider_t *provider) {
-	if (provider->jwks_uri.jwk)
-		oidc_jwk_destroy(provider->jwks_uri.jwk);
+	oidc_jwk_list_destroy(provider->jwks_uri.jwk_list);
 	oidc_jwk_list_destroy(provider->verify_public_keys);
 	oidc_jwk_list_destroy(provider->client_keys);
 }
@@ -1397,7 +1417,7 @@ static void oidc_cfg_provider_init(oidc_provider_t *provider) {
 	provider->jwks_uri.uri = NULL;
 	provider->jwks_uri.refresh_interval = OIDC_DEFAULT_JWKS_REFRESH_INTERVAL;
 	provider->jwks_uri.signed_uri = NULL;
-	provider->jwks_uri.jwk = NULL;
+	provider->jwks_uri.jwk_list = NULL;
 	provider->verify_public_keys = NULL;
 	provider->backchannel_logout_supported = OIDC_CONFIG_POS_INT_UNSET;
 
@@ -1456,7 +1476,8 @@ static void oidc_merge_provider_config(apr_pool_t *pool, oidc_provider_t *dst, c
 					     : base->jwks_uri.refresh_interval;
 	dst->jwks_uri.signed_uri =
 	    add->jwks_uri.signed_uri != NULL ? add->jwks_uri.signed_uri : base->jwks_uri.signed_uri;
-	dst->jwks_uri.jwk = oidc_jwk_copy(pool, add->jwks_uri.jwk != NULL ? add->jwks_uri.jwk : base->jwks_uri.jwk);
+	dst->jwks_uri.jwk_list =
+	    oidc_jwk_list_copy(pool, add->jwks_uri.jwk_list != NULL ? add->jwks_uri.jwk_list : base->jwks_uri.jwk_list);
 	dst->verify_public_keys = oidc_jwk_list_copy(pool, add->verify_public_keys != NULL ? add->verify_public_keys
 											   : base->verify_public_keys);
 	dst->client_id = add->client_id != NULL ? add->client_id : base->client_id;

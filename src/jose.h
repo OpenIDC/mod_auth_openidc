@@ -86,6 +86,9 @@
 #define OIDC_JOSE_JWK_SIG_STR "sig"	    // use signature type
 #define OIDC_JOSE_JWK_ENC_STR "enc"	    // use encryption type
 
+/* the OIDC jwks fields from RFC 5741 */
+#define OIDC_JOSE_JWKS_KEYS_STR "keys" // Array of JWKs
+
 /* struct for returning errors to the caller */
 typedef struct {
 	char source[OIDC_JOSE_ERROR_SOURCE_LENGTH];
@@ -171,11 +174,17 @@ typedef struct oidc_jwk_t {
 /* decrypt a JWT */
 apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json, apr_hash_t *keys, char **plaintext,
 			    int *plaintext_len, oidc_jose_error_t *err, apr_byte_t import_must_succeed);
-/* parse a JSON string to a JWK struct */
+/* parse a JSON string (JWK) to a JWK struct */
 oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, const char *s_json, oidc_jose_error_t *err);
 oidc_jwk_t *oidc_jwk_copy(apr_pool_t *pool, const oidc_jwk_t *jwk);
-/* parse a JSON object in to a JWK struct */
+/* parse a JSON object (JWK) in to a JWK struct */
 apr_byte_t oidc_jwk_parse_json(apr_pool_t *pool, json_t *json, oidc_jwk_t **jwk, oidc_jose_error_t *err);
+/* parse a JSON object (JWKS) to a list of JWK structs */
+apr_byte_t oidc_jwks_parse_json(apr_pool_t *pool, json_t *json, apr_array_header_t **jwk_list, oidc_jose_error_t *err);
+/* test if JSON object looks like JWK */
+apr_byte_t oidc_is_jwk(json_t *json);
+/* test if JSON object looks like JWKS */
+apr_byte_t oidc_is_jwks(json_t *json);
 /* convert a JWK struct to a JSON string */
 apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_json, oidc_jose_error_t *err);
 /* destroy resources allocated for a JWK struct */

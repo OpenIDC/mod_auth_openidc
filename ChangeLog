@@ -1,4 +1,5 @@
 03/07/2024
+- OIDCProviderSignedJwksUri: accept verification key set formatted as either JWK or JWKS
 - properly handle parse errors in Require claim integer statements
 
 03/06/2024
