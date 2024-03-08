@@ -3327,7 +3327,7 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, cache_redis_database),
 				RSRC_CONF,
 				"Database for the Redis servers."),
-		AP_INIT_TAKE2(OIDCRedisCacheConnectTimeout,
+		AP_INIT_TAKE12(OIDCRedisCacheConnectTimeout,
 				oidc_set_redis_connect_timeout,
 				(void*)APR_OFFSETOF(oidc_cfg, cache_redis_connect_timeout),
 				RSRC_CONF,
