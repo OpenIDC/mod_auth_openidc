@@ -1,3 +1,6 @@
+03/11/2024
+- avoid warning about setting a self-provided default value in the provider config
+
 03/07/2024
 - OIDCProviderSignedJwksUri: accept verification key set formatted as either JWK or JWKS
   see #1191; thanks @psteniusubi
