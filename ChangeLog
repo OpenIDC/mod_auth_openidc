@@ -1,5 +1,7 @@
 03/12/2024
 - release 2.4.15.4
+- fix setting the default PCKE method to "none" in a multi-provider setup
+- bump to 2.4.15.5dev
 
 03/11/2024
 - avoid warning about setting a self-provided default value in the provider config

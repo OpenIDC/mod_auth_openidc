@@ -1230,10 +1230,10 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg, json_t *j_con
 
 	/* get the PKCE method to use */
 	char *pkce_method = NULL;
+	/* NB: pass "none" rather than NULL to allow fallback when the default in base is explicitly set to "none" */
 	oidc_metadata_get_valid_string(r, j_conf, OIDC_METADATA_PKCE_METHOD, oidc_valid_pkce_method, &pkce_method,
-				       cfg->provider.pkce ? cfg->provider.pkce->method : NULL);
-	if (pkce_method != NULL)
-		oidc_parse_pkce_type(r->pool, pkce_method, &provider->pkce);
+				       cfg->provider.pkce ? cfg->provider.pkce->method : "none");
+	oidc_parse_pkce_type(r->pool, pkce_method, &provider->pkce);
 
 	/* get the client name */
 	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_CLIENT_NAME, &provider->client_name,
