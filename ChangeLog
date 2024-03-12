@@ -1,3 +1,6 @@
+03/12/2024
+- release 2.4.15.4
+
 03/11/2024
 - avoid warning about setting a self-provided default value in the provider config
 

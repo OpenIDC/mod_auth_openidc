@@ -89,7 +89,7 @@ static inline int _oidc_strncmp(const char *a, const char *b, size_t n) {
 	return ((a && b) ? strncmp(a, b, n) : -1);
 }
 static inline char *_oidc_strstr(const char *a, const char *b) {
-	return ((a && b) ? strstr(a, b) : NULL);
+	return ((a && b) ? (char *)strstr(a, b) : NULL);
 }
 static inline apr_time_t _oidc_str_to_time(const char *s, const apr_time_t default_value) {
 	apr_time_t v = default_value;
