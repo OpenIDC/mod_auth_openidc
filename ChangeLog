@@ -2,6 +2,7 @@
 - fix compilation without libhiredis; closes #1195 ; thanks @HolgerHees
   conditionally define oidc_set_redis_connect_timeout
 - fix `OIDCPassClaimsAs environment` bug introduced in 2.4.15.4; see #1196; thanks @HolgerHees
+- release 2.4.15.5
 
 03/12/2024
 - release 2.4.15.4
