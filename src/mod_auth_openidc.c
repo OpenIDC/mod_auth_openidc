@@ -551,7 +551,7 @@ static apr_byte_t oidc_set_app_claims(request_rec *r, const oidc_cfg *const cfg,
 	apr_byte_t pass_envvars = oidc_cfg_dir_pass_info_in_envvars(r);
 
 	// optimize performance when `OIDCPassClaimsAs none` is set
-	if ((pass_headers == FALSE) && (pass_headers == FALSE))
+	if ((pass_headers == FALSE) && (pass_envvars == FALSE))
 		return TRUE;
 
 	/* decode the string-encoded attributes in to a JSON structure */
