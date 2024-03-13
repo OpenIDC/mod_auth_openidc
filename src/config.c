@@ -1350,6 +1350,8 @@ static const char *oidc_set_token_revocation_endpoint(cmd_parms *cmd, void *stru
 	return oidc_set_https_slot(cmd, struct_ptr, args);
 }
 
+#ifdef USE_LIBHIREDIS
+
 static const char *oidc_set_redis_connect_timeout(cmd_parms *cmd, void *struct_ptr, const char *arg1,
 						  const char *arg2) {
 	oidc_cfg *cfg = (oidc_cfg *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
@@ -1360,6 +1362,8 @@ static const char *oidc_set_redis_connect_timeout(cmd_parms *cmd, void *struct_p
 		rv = oidc_parse_redis_keepalive(cmd->pool, arg2, &cfg->cache_redis_keepalive);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
+
+#endif
 
 int oidc_cfg_dir_refresh_access_token_before_expiry(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);

@@ -1,3 +1,7 @@
+03/13/2024
+- fix compilation without libhiredis; closes #1195 ; thanks @HolgerHees
+  conditionally define oidc_set_redis_connect_timeout
+
 03/12/2024
 - release 2.4.15.4
 - fix setting the default PCKE method to "none" in a multi-provider setup
