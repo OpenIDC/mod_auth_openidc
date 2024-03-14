@@ -2,6 +2,8 @@
 - fix userinfo refresh interval parsing; closes #1200; thanks @HolgerHees
   avoid refreshing userinfo on each request until access token expiry
 - store interval as JSON integer in session
+- use SameSite=Lax when OIDCCookieSameSite is On (also by default) instead of
+  Strict as overriding from Lax to Strict does not work reliably anymore (Chrome)
 - release 2.4.15.6
 
 03/13/2024
