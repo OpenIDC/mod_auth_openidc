@@ -2,6 +2,7 @@
 - fix userinfo refresh interval parsing; closes #1200; thanks @HolgerHees
   avoid refreshing userinfo on each request until access token expiry
 - store interval as JSON integer in session
+- release 2.4.15.6
 
 03/13/2024
 - fix compilation without libhiredis; closes #1195 ; thanks @HolgerHees
