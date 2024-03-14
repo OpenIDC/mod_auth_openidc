@@ -1,3 +1,8 @@
+03/14/2024
+- fix userinfo refresh interval parsing; closes #1200; thanks @HolgerHees
+  avoid refreshing userinfo on each request until access token expiry
+- store interval as JSON integer in session
+
 03/13/2024
 - fix compilation without libhiredis; closes #1195 ; thanks @HolgerHees
   conditionally define oidc_set_redis_connect_timeout

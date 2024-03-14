@@ -74,7 +74,7 @@ void oidc_userinfo_store_claims(request_rec *r, oidc_cfg *c, oidc_session_t *ses
 	}
 
 	/* store the last refresh time if we've configured a userinfo refresh interval */
-	if (provider->userinfo_refresh_interval > 0)
+	if (provider->userinfo_refresh_interval > -1)
 		oidc_session_reset_userinfo_last_refresh(r, session);
 }
 
@@ -180,10 +180,10 @@ apr_byte_t oidc_userinfo_refresh_claims(request_rec *r, oidc_cfg *cfg, oidc_sess
 	const char *access_token = NULL;
 	char *userinfo_jwt = NULL;
 
-	/* see if we can do anything here, i.e. a refresh interval is configured */
-	apr_time_t interval = oidc_session_get_userinfo_refresh_interval(r, session);
+	/* see int we can do anything here, i.e. a refresh interval is configured */
+	int interval = oidc_session_get_userinfo_refresh_interval(r, session);
 
-	oidc_debug(r, "interval=%" APR_TIME_T_FMT, apr_time_sec(interval));
+	oidc_debug(r, "interval=%d", interval);
 
 	if (interval > -1) {
 

@@ -1450,6 +1450,9 @@ static void oidc_cfg_provider_init(oidc_provider_t *provider) {
 	provider->userinfo_encrypted_response_enc = NULL;
 	provider->userinfo_token_method = OIDC_USER_INFO_TOKEN_METHOD_HEADER;
 	provider->auth_request_method = OIDC_DEFAULT_AUTH_REQUEST_METHOD;
+
+	provider->userinfo_refresh_interval = OIDC_DEFAULT_USERINFO_REFRESH_INTERVAL;
+	provider->request_object = NULL;
 }
 
 oidc_provider_t *oidc_cfg_provider_create(apr_pool_t *pool) {
@@ -1695,9 +1698,6 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->error_template = NULL;
 	c->post_preserve_template = NULL;
 	c->post_restore_template = NULL;
-
-	c->provider.userinfo_refresh_interval = OIDC_DEFAULT_USERINFO_REFRESH_INTERVAL;
-	c->provider.request_object = NULL;
 
 	c->provider_metadata_refresh_interval = OIDC_DEFAULT_PROVIDER_METADATA_REFRESH_INTERVAL;
 

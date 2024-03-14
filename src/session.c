@@ -252,6 +252,12 @@ static apr_byte_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z, ap
 	return TRUE;
 }
 
+static inline int oidc_session_get_int(request_rec *r, oidc_session_t *z, const char *key, int def_val) {
+	int v;
+	oidc_json_object_get_int(z->state, key, &v, def_val);
+	return v;
+}
+
 static inline apr_time_t oidc_session_get_key2timestamp(request_rec *r, oidc_session_t *z, const char *key) {
 	int value = -1;
 	oidc_json_object_get_int(z->state, key, &value, -1);
@@ -317,12 +323,15 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 	return rc;
 }
 
+static void oidc_session_set_int(request_rec *r, oidc_session_t *z, const char *key, int v) {
+	if (z->state == NULL)
+		z->state = json_object();
+	json_object_set_new(z->state, key, json_integer(v));
+}
+
 static void oidc_session_set_timestamp(request_rec *r, oidc_session_t *z, const char *key, const apr_time_t timestamp) {
-	if (timestamp > -1) {
-		if (z->state == NULL)
-			z->state = json_object();
-		json_object_set_new(z->state, key, json_integer(apr_time_sec(timestamp)));
-	}
+	if (timestamp > -1)
+		oidc_session_set_int(r, z, key, apr_time_sec(timestamp));
 }
 
 /*
@@ -645,14 +654,11 @@ const char *oidc_session_get_cookie_domain(request_rec *r, oidc_session_t *z) {
  */
 
 void oidc_session_set_userinfo_refresh_interval(request_rec *r, oidc_session_t *z, const int interval) {
-	// avoid apr_time_from_sec calculation on -1
-	if (interval > -1)
-		oidc_session_set_timestamp(r, z, OIDC_SESSION_KEY_USERINFO_REFRESH_INTERVAL,
-					   apr_time_from_sec(interval));
+	oidc_session_set_int(r, z, OIDC_SESSION_KEY_USERINFO_REFRESH_INTERVAL, interval);
 }
 
-apr_time_t oidc_session_get_userinfo_refresh_interval(request_rec *r, oidc_session_t *z) {
-	return oidc_session_get_key2timestamp(r, z, OIDC_SESSION_KEY_USERINFO_REFRESH_INTERVAL);
+int oidc_session_get_userinfo_refresh_interval(request_rec *r, oidc_session_t *z) {
+	return oidc_session_get_int(r, z, OIDC_SESSION_KEY_USERINFO_REFRESH_INTERVAL, -1);
 }
 
 void oidc_session_reset_userinfo_last_refresh(request_rec *r, oidc_session_t *z) {
