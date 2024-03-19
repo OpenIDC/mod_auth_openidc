@@ -317,6 +317,7 @@ typedef struct oidc_dir_cfg {
 	oidc_apr_expr_t *path_auth_request_expr;
 	oidc_apr_expr_t *path_scope_expr;
 	oidc_apr_expr_t *unauth_expression;
+	oidc_apr_expr_t *unautz_expression;
 	oidc_apr_expr_t *userinfo_claims_expr;
 	int refresh_access_token_before_expiry;
 	int action_on_error_refresh;
@@ -1075,6 +1076,13 @@ static const char *oidc_set_unautz_action(cmd_parms *cmd, void *m, const char *a
 	oidc_dir_cfg *dir_cfg = (oidc_dir_cfg *)m;
 	const char *rv = oidc_parse_unautz_action(cmd->pool, arg1, &dir_cfg->unautz_action);
 	if ((rv == NULL) && (arg2 != NULL)) {
+		if (dir_cfg->unautz_action == OIDC_UNAUTZ_AUTHENTICATE) {
+			rv = oidc_util_apr_expr_parse(cmd, arg2, &dir_cfg->unautz_expression,
+				FALSE);
+			if (rv != NULL) {
+				return rv;
+			}
+		}	
 		dir_cfg->unauthz_arg = apr_pstrdup(cmd->pool, arg2);
 	} else if (dir_cfg->unautz_action == OIDC_UNAUTZ_RETURN302) {
 		rv =
@@ -2020,6 +2028,7 @@ void *oidc_create_dir_config(apr_pool_t *pool, char *path) {
 	c->authn_header = OIDC_CONFIG_STRING_UNSET;
 	c->unauth_action = OIDC_CONFIG_POS_INT_UNSET;
 	c->unauth_expression = NULL;
+	c->unautz_expression = NULL;
 	c->unautz_action = OIDC_CONFIG_POS_INT_UNSET;
 	c->unauthz_arg = NULL;
 	c->pass_cookies = NULL;
@@ -2166,11 +2175,24 @@ apr_byte_t oidc_dir_cfg_unauth_expr_is_set(request_rec *r) {
 	return (dir_cfg->unauth_expression != NULL) ? TRUE : FALSE;
 }
 
+apr_byte_t oidc_dir_cfg_unautz_expr_is_set(request_rec *r) {
+	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	return (dir_cfg->unautz_expression != NULL) ? TRUE : FALSE;
+}
+
 int oidc_dir_cfg_unautz_action(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	const char *rv = NULL;
+
 	if (dir_cfg->unautz_action == OIDC_CONFIG_POS_INT_UNSET)
 		return OIDC_DEFAULT_UNAUTZ_ACTION;
-	return dir_cfg->unautz_action;
+		
+	if (dir_cfg->unauth_expression == NULL)
+		return dir_cfg->unautz_action;
+	
+	rv = oidc_util_apr_expr_exec(r, dir_cfg->unautz_expression, FALSE);
+
+	return (rv != NULL) ? dir_cfg->unautz_action : OIDC_DEFAULT_UNAUTZ_ACTION;
 }
 
 char *oidc_dir_cfg_unauthz_arg(request_rec *r) {
@@ -2233,6 +2255,7 @@ void *oidc_merge_dir_config(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->unauth_action = add->unauth_action != OIDC_CONFIG_POS_INT_UNSET ? add->unauth_action : base->unauth_action;
 	c->unauth_expression = add->unauth_expression != NULL ? add->unauth_expression : base->unauth_expression;
 	c->unautz_action = add->unautz_action != OIDC_CONFIG_POS_INT_UNSET ? add->unautz_action : base->unautz_action;
+	c->unautz_expression = add->unautz_expression != NULL ? add->unautz_expression : base->unautz_expression;
 	c->unauthz_arg = add->unauthz_arg != NULL ? add->unauthz_arg : base->unauthz_arg;
 
 	c->pass_cookies = add->pass_cookies != NULL ? add->pass_cookies : base->pass_cookies;

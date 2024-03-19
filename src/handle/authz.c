@@ -495,7 +495,8 @@ static authz_status oidc_authz_24_unauthorized_user(request_rec *r) {
 		 * complete an authentication round trip to the provider, we
 		 * won't redirect the user and thus avoid creating a state cookie
 		 */
-		if (oidc_is_auth_capable_request(r) == FALSE) {
+		 if ((oidc_dir_cfg_unautz_expr_is_set(r) == FALSE)
+				&& (oidc_is_auth_capable_request(r) == FALSE)) {
 			OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_401);
 			return AUTHZ_DENIED;
 		}
