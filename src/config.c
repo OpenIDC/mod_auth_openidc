@@ -1358,6 +1358,8 @@ static const char *oidc_set_token_revocation_endpoint(cmd_parms *cmd, void *stru
 	return oidc_set_https_slot(cmd, struct_ptr, args);
 }
 
+#ifdef USE_LIBHIREDIS
+
 static const char *oidc_set_redis_connect_timeout(cmd_parms *cmd, void *struct_ptr, const char *arg1,
 						  const char *arg2) {
 	oidc_cfg *cfg = (oidc_cfg *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
@@ -1368,6 +1370,8 @@ static const char *oidc_set_redis_connect_timeout(cmd_parms *cmd, void *struct_p
 		rv = oidc_parse_redis_keepalive(cmd->pool, arg2, &cfg->cache_redis_keepalive);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
+
+#endif
 
 int oidc_cfg_dir_refresh_access_token_before_expiry(request_rec *r) {
 	oidc_dir_cfg *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
@@ -1454,6 +1458,9 @@ static void oidc_cfg_provider_init(oidc_provider_t *provider) {
 	provider->userinfo_encrypted_response_enc = NULL;
 	provider->userinfo_token_method = OIDC_USER_INFO_TOKEN_METHOD_HEADER;
 	provider->auth_request_method = OIDC_DEFAULT_AUTH_REQUEST_METHOD;
+
+	provider->userinfo_refresh_interval = OIDC_DEFAULT_USERINFO_REFRESH_INTERVAL;
+	provider->request_object = NULL;
 }
 
 oidc_provider_t *oidc_cfg_provider_create(apr_pool_t *pool) {
@@ -1699,9 +1706,6 @@ void *oidc_create_server_config(apr_pool_t *pool, server_rec *svr) {
 	c->error_template = NULL;
 	c->post_preserve_template = NULL;
 	c->post_restore_template = NULL;
-
-	c->provider.userinfo_refresh_interval = OIDC_DEFAULT_USERINFO_REFRESH_INTERVAL;
-	c->provider.request_object = NULL;
 
 	c->provider_metadata_refresh_interval = OIDC_DEFAULT_PROVIDER_METADATA_REFRESH_INTERVAL;
 
@@ -3350,7 +3354,7 @@ const command_rec oidc_config_cmds[] = {
 				(void*)APR_OFFSETOF(oidc_cfg, cache_redis_database),
 				RSRC_CONF,
 				"Database for the Redis servers."),
-		AP_INIT_TAKE2(OIDCRedisCacheConnectTimeout,
+		AP_INIT_TAKE12(OIDCRedisCacheConnectTimeout,
 				oidc_set_redis_connect_timeout,
 				(void*)APR_OFFSETOF(oidc_cfg, cache_redis_connect_timeout),
 				RSRC_CONF,

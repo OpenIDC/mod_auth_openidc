@@ -1090,9 +1090,12 @@ void oidc_metadata_get_valid_int(request_rec *r, const json_t *json, const char 
 	oidc_json_object_get_int(json, key, &v, default_int_value);
 	const char *rv = valid_int_function(r->pool, v);
 	if (rv != NULL) {
-		oidc_warn(r, "integer value %d for key \"%s\" is invalid: %s; using default: %d", v, key, rv,
-			  default_int_value);
-		v = default_int_value;
+		// assume the provided default is valid, i.e. "unset" -1, so nothing to warn about
+		if (v != default_int_value) {
+			oidc_warn(r, "integer value %d for key \"%s\" is invalid: %s; using default: %d", v, key, rv,
+				  default_int_value);
+			v = default_int_value;
+		}
 	}
 	*int_value = v;
 }
@@ -1110,7 +1113,7 @@ static void oidc_metadata_get_jwks(request_rec *r, json_t *json, apr_array_heade
 
 	if (!json_is_array(keys)) {
 		oidc_error(r, "trying to parse a list of JWKs but the value for key \"%s\" is not a JSON array",
-				OIDC_JOSE_JWKS_KEYS_STR);
+			   OIDC_JOSE_JWKS_KEYS_STR);
 		return;
 	}
 
@@ -1227,10 +1230,10 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg *cfg, json_t *j_con
 
 	/* get the PKCE method to use */
 	char *pkce_method = NULL;
+	/* NB: pass "none" rather than NULL to allow fallback when the default in base is explicitly set to "none" */
 	oidc_metadata_get_valid_string(r, j_conf, OIDC_METADATA_PKCE_METHOD, oidc_valid_pkce_method, &pkce_method,
-				       cfg->provider.pkce ? cfg->provider.pkce->method : NULL);
-	if (pkce_method != NULL)
-		oidc_parse_pkce_type(r->pool, pkce_method, &provider->pkce);
+				       cfg->provider.pkce ? cfg->provider.pkce->method : "none");
+	oidc_parse_pkce_type(r->pool, pkce_method, &provider->pkce);
 
 	/* get the client name */
 	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_CLIENT_NAME, &provider->client_name,
