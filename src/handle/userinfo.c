@@ -198,11 +198,14 @@ apr_byte_t oidc_userinfo_refresh_claims(request_rec *r, oidc_cfg *cfg, oidc_sess
 			/* get the last refresh timestamp from the session info */
 			apr_time_t last_refresh = oidc_session_get_userinfo_last_refresh(r, session);
 
-			oidc_debug(r, "refresh needed in: %" APR_TIME_T_FMT " seconds",
-				   apr_time_sec(last_refresh + interval - apr_time_now()));
+			oidc_debug(r,
+				   "refresh needed in: %" APR_TIME_T_FMT " seconds (last_refresh=%" APR_TIME_T_FMT
+				   ", interval=%d, now=%" APR_TIME_T_FMT ")",
+				   apr_time_sec(last_refresh + apr_time_from_sec(interval) - apr_time_now()),
+				   apr_time_sec(last_refresh), interval, apr_time_sec(apr_time_now()));
 
 			/* see if we need to refresh again */
-			if (last_refresh + interval < apr_time_now()) {
+			if (last_refresh + apr_time_from_sec(interval) < apr_time_now()) {
 
 				/* get the current access token */
 				access_token = oidc_session_get_access_token(r, session);

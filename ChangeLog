@@ -1,3 +1,6 @@
+03/29/2024
+- fix OIDCUserInfoRefreshInterval, interval seconds would be interpreted as microseconds
+
 03/14/2024
 - fix userinfo refresh interval parsing; closes #1200; thanks @HolgerHees
   avoid refreshing userinfo on each request until access token expiry
