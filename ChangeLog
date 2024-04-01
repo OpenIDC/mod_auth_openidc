@@ -1,3 +1,6 @@
+04/01/2024
+- release 2.4.15.7
+
 03/29/2024
 - fix OIDCUserInfoRefreshInterval, interval seconds would be interpreted as microseconds
 
