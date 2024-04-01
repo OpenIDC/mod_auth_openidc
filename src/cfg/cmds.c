@@ -151,7 +151,7 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_TAKE12,
 		OIDCStateMaxNumberOfCookies,
 		max_number_of_state_cookies,
-		"Maximun number of parallel state cookies i.e. outstanding authorization requests and whether to delete the oldest cookie(s)."),
+		"Maximum number of parallel state cookies i.e. outstanding authorization requests and whether to delete the oldest cookie(s)."),
 	OIDC_CFG_CMD(
 		AP_INIT_TAKE1,
 		OIDCSessionInactivityTimeout,
@@ -339,7 +339,7 @@ const command_rec oidc_cfg_cmds[] = {
 	OIDC_CFG_CMD(
 		AP_INIT_TAKE1,
 		OIDCRedisCachePassword,
-		cache_redis_username,
+		cache_redis_password,
 		"Password for authentication to the Redis server."),
 	OIDC_CFG_CMD(
 		AP_INIT_TAKE1,

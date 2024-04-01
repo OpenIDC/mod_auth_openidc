@@ -111,6 +111,7 @@ OIDC_CFG_MEMBER_FUNCS_DECL(cache_memcache_ttl, int)
 
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_redis_server, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_redis_username, const char *)
+OIDC_CFG_MEMBER_FUNCS_DECL(cache_redis_password, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_redis_database, int)
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_redis_timeout, int)
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_redis_connect_timeout, int, const char *)
