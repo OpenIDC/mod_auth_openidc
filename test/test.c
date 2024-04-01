@@ -44,11 +44,13 @@
 
 #include "handle/handle.h"
 #include "mod_auth_openidc.h"
+#include "proto.h"
 
+#include "cfg/cfg_int.h"
+#include "cfg/dir.h"
+#include "util.h"
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
-
-extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 static int test_nr_run = 0;
 static char TST_ERR_MSG[4096];
@@ -1191,19 +1193,12 @@ static char *test_proto_validate_code(request_rec *r) {
 
 static char *test_proto_authorization_request(request_rec *r) {
 
-	oidc_provider_t provider;
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
 
-	_oidc_memset(&provider, 0, sizeof(provider));
-
-	provider.issuer = "https://idp.example.com";
-	provider.authorization_endpoint_url = "https://idp.example.com/authorize";
-	provider.scope = "openid";
-	provider.client_id = "client_id";
-	provider.client_secret = NULL;
-	provider.response_type = "code";
-	provider.auth_request_params = "jan=piet&foo=#";
-	provider.request_object = NULL;
-	provider.auth_request_method = OIDC_AUTH_REQUEST_METHOD_GET;
+	oidc_cfg_provider_issuer_set(r->pool, provider, "https://idp.example.com");
+	oidc_cfg_provider_authorization_endpoint_url_set(r->pool, provider, "https://idp.example.com/authorize");
+	oidc_cfg_provider_client_id_set(r->pool, provider, "client_id");
+	oidc_cfg_provider_auth_request_params_set(r->pool, provider, "jan=piet&foo=#");
 
 	const char *redirect_uri = "https://www.example.com/protected/";
 	const char *state = "12345";
@@ -1212,12 +1207,12 @@ static char *test_proto_authorization_request(request_rec *r) {
 	oidc_proto_state_set_nonce(proto_state, "anonce");
 	oidc_proto_state_set_original_url(proto_state, "https://localhost/protected/index.php");
 	oidc_proto_state_set_original_method(proto_state, OIDC_METHOD_GET);
-	oidc_proto_state_set_issuer(proto_state, provider.issuer);
-	oidc_proto_state_set_response_type(proto_state, provider.response_type);
+	oidc_proto_state_set_issuer(proto_state, oidc_cfg_provider_issuer_get(provider));
+	oidc_proto_state_set_response_type(proto_state, oidc_cfg_provider_response_type_get(provider));
 	oidc_proto_state_set_timestamp_now(proto_state);
 
 	TST_ASSERT("oidc_proto_authorization_request (1)",
-		   oidc_proto_authorization_request(r, &provider, NULL, redirect_uri, state, proto_state, NULL, NULL,
+		   oidc_proto_authorization_request(r, provider, NULL, redirect_uri, state, proto_state, NULL, NULL,
 						    NULL, NULL) == HTTP_MOVED_TEMPORARILY);
 
 	TST_ASSERT_STR("oidc_proto_authorization_request (2)", apr_table_get(r->headers_out, "Location"),
@@ -1230,14 +1225,15 @@ static char *test_proto_authorization_request(request_rec *r) {
 
 static char *test_logout_request(request_rec *r) {
 
-	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	oidc_session_t *session = NULL;
 
 	oidc_session_load(r, &session);
-	oidc_session_set_issuer(r, session, c->provider.issuer);
+	oidc_session_set_issuer(r, session, oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(c)));
 
-	c->provider.end_session_endpoint = "https://idp.example.com/endsession";
-	c->provider.logout_request_params = "client_id=myclient&foo=bar";
+	oidc_cfg_provider_end_session_endpoint_set(r->pool, oidc_cfg_provider_get(c),
+						   "https://idp.example.com/endsession");
+	oidc_cfg_provider_logout_request_params_set(r->pool, oidc_cfg_provider_get(c), "client_id=myclient&foo=bar");
 
 	r->args = "logout=https%3A%2F%2Fwww.example.com%2Floggedout";
 
@@ -1252,7 +1248,7 @@ static char *test_logout_request(request_rec *r) {
 
 static char *test_proto_validate_nonce(request_rec *r) {
 
-	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	const char *nonce = "avSk7S69G4kEE8Km4bPiOjrfChHt6nO4Z397Lp_bQnc,";
 
 	/*
@@ -1291,8 +1287,10 @@ static char *test_proto_validate_nonce(request_rec *r) {
 	oidc_jose_error_t err;
 	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(r->pool, s_jwt, &jwt, NULL, FALSE, &err), r->pool, err);
 
-	TST_ASSERT("oidc_proto_validate_nonce (1)", oidc_proto_validate_nonce(r, c, &c->provider, nonce, jwt));
-	TST_ASSERT("oidc_proto_validate_nonce (2)", oidc_proto_validate_nonce(r, c, &c->provider, nonce, jwt) == FALSE);
+	TST_ASSERT("oidc_proto_validate_nonce (1)",
+		   oidc_proto_validate_nonce(r, c, oidc_cfg_provider_get(c), nonce, jwt));
+	TST_ASSERT("oidc_proto_validate_nonce (2)",
+		   oidc_proto_validate_nonce(r, c, oidc_cfg_provider_get(c), nonce, jwt) == FALSE);
 
 	oidc_jwt_destroy(jwt);
 
@@ -1322,10 +1320,10 @@ static char *test_proto_validate_jwt(request_rec *r) {
 	s_jwt_payload = apr_psprintf(r->pool, s_jwt_payload, now, s_issuer, now + 600);
 
 	char *s_jwt_header_encoded = NULL;
-	oidc_base64url_encode(r, &s_jwt_header_encoded, s_jwt_header, _oidc_strlen(s_jwt_header), 1);
+	oidc_util_base64url_encode(r, &s_jwt_header_encoded, s_jwt_header, _oidc_strlen(s_jwt_header), 1);
 
 	char *s_jwt_payload_encoded = NULL;
-	oidc_base64url_encode(r, &s_jwt_payload_encoded, s_jwt_payload, _oidc_strlen(s_jwt_payload), 1);
+	oidc_util_base64url_encode(r, &s_jwt_payload_encoded, s_jwt_payload, _oidc_strlen(s_jwt_payload), 1);
 
 	char *s_jwt_message = apr_psprintf(r->pool, "%s.%s", s_jwt_header_encoded, s_jwt_payload_encoded);
 
@@ -1337,7 +1335,7 @@ static char *test_proto_validate_jwt(request_rec *r) {
 				(const unsigned char *)s_jwt_message, _oidc_strlen(s_jwt_message), md, &md_len) != 0);
 
 	char *s_jwt_signature_encoded = NULL;
-	oidc_base64url_encode(r, &s_jwt_signature_encoded, (const char *)md, md_len, 1);
+	oidc_util_base64url_encode(r, &s_jwt_signature_encoded, (const char *)md, md_len, 1);
 
 	char *s_jwt =
 	    apr_psprintf(r->pool, "%s.%s.%s", s_jwt_header_encoded, s_jwt_payload_encoded, s_jwt_signature_encoded);
@@ -1890,7 +1888,7 @@ static char *test_open_redirect(request_rec *r) {
 	// https://github.com/payloadbox/open-redirect-payload-list
 	filename = apr_psprintf(r->pool, "%s/%s", dir, "/test/open-redirect-payload-list.txt");
 
-	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
 	TST_OPEN_REDIRECT("https://www.example.com/somewhere", TRUE);
 	TST_OPEN_REDIRECT("https://evil.example.com/somewhere", FALSE);
@@ -1921,17 +1919,18 @@ static char *test_set_app_infos(request_rec *r) {
 					  &claims);
 	TST_ASSERT("valid JSON", rc == TRUE);
 
-	oidc_util_set_app_infos(r, claims, "OIDC_CLAIM_", ",", TRUE, FALSE, 0);
+	oidc_util_set_app_infos(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
 	TST_ASSERT_STR("header plain simple", apr_table_get(r->headers_in, "OIDC_CLAIM_simple"), "hans");
 	TST_ASSERT_STR("header plain name", apr_table_get(r->headers_in, "OIDC_CLAIM_name"), "G\u00DCnther");
 	TST_ASSERT_STR("header plain dagger", apr_table_get(r->headers_in, "OIDC_CLAIM_dagger"), "D\u2020gger");
 
-	oidc_util_set_app_infos(r, claims, "OIDC_CLAIM_", ",", TRUE, FALSE, OIDC_PASS_APP_INFO_AS_BASE64URL);
+	oidc_util_set_app_infos(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS,
+				OIDC_APPINFO_ENCODING_BASE64URL);
 	TST_ASSERT_STR("header base64url simple", apr_table_get(r->headers_in, "OIDC_CLAIM_simple"), "aGFucw");
 	TST_ASSERT_STR("header base64url name", apr_table_get(r->headers_in, "OIDC_CLAIM_name"), "R8OcbnRoZXI");
 	TST_ASSERT_STR("header base64url dagger", apr_table_get(r->headers_in, "OIDC_CLAIM_dagger"), "ROKAoGdnZXI");
 
-	oidc_util_set_app_infos(r, claims, "OIDC_CLAIM_", ",", TRUE, FALSE, OIDC_PASS_APP_INFO_AS_LATIN1);
+	oidc_util_set_app_infos(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_LATIN1);
 	TST_ASSERT_STR("header latin1 simple", apr_table_get(r->headers_in, "OIDC_CLAIM_simple"), "hans");
 	TST_ASSERT_STR("header latin1 name", apr_table_get(r->headers_in, "OIDC_CLAIM_name"), "G\xDCnther");
 	TST_ASSERT_STR("header latin1 dagger", apr_table_get(r->headers_in, "OIDC_CLAIM_dagger"), "D?gger");
@@ -1992,8 +1991,6 @@ static char *all_tests(apr_pool_t *pool, request_rec *r) {
 	return 0;
 }
 
-typedef struct oidc_dir_cfg oidc_dir_cfg;
-
 static request_rec *test_setup(apr_pool_t *pool) {
 	const unsigned int kIdx = 0;
 	const unsigned int kEls = kIdx + 1;
@@ -2029,14 +2026,16 @@ static request_rec *test_setup(apr_pool_t *pool) {
 	apr_uri_parse(request->pool, "https://www.example.com/bla?foo=bar&param1=value1", &request->parsed_uri);
 
 	auth_openidc_module.module_index = kIdx;
-	oidc_cfg *cfg = oidc_create_server_config(request->pool, request->server);
-	cfg->provider.issuer = "https://idp.example.com";
-	cfg->provider.authorization_endpoint_url = "https://idp.example.com/authorize";
-	cfg->provider.scope = "openid";
-	cfg->provider.client_id = "client_id";
+	oidc_cfg_t *cfg = oidc_cfg_server_create(request->pool, request->server);
+
+	oidc_cfg_provider_issuer_set(pool, oidc_cfg_provider_get(cfg), "https://idp.example.com");
+	oidc_cfg_provider_authorization_endpoint_url_set(pool, oidc_cfg_provider_get(cfg),
+							 "https://idp.example.com/authorize");
+	oidc_cfg_provider_client_id_set(pool, oidc_cfg_provider_get(cfg), "client_id");
+
 	cfg->redirect_uri = "https://www.example.com/protected/";
 
-	oidc_dir_cfg *d_cfg = oidc_create_dir_config(request->pool, NULL);
+	oidc_dir_cfg_t *d_cfg = oidc_cfg_dir_config_create(request->pool, NULL);
 
 	request->server->module_config = apr_pcalloc(request->pool, sizeof(ap_conf_vector_t *) * kEls);
 	request->per_dir_config = apr_pcalloc(request->pool, sizeof(ap_conf_vector_t *) * kEls);
@@ -2044,13 +2043,13 @@ static request_rec *test_setup(apr_pool_t *pool) {
 	ap_set_module_config(request->per_dir_config, &auth_openidc_module, d_cfg);
 
 	cfg->crypto_passphrase.secret1 = "12345678901234567890123456789012";
-	cfg->cache = &oidc_cache_shm;
-	cfg->cache_cfg = NULL;
-	cfg->cache_shm_size_max = 500;
-	cfg->cache_shm_entry_size_max = 16384 + 255 + 17;
-	cfg->cache_encrypt = 1;
-	if (cfg->cache->post_config(request->server) != OK) {
-		printf("cfg->cache->post_config failed!\n");
+	cfg->cache.impl = &oidc_cache_shm;
+	cfg->cache.cfg = NULL;
+	cfg->cache.shm_size_max = 500;
+	cfg->cache.shm_entry_size_max = 16384 + 255 + 17;
+	cfg->cache.encrypt = 1;
+	if (cfg->cache.impl->post_config(request->server) != OK) {
+		printf("cfg->cache.impl->post_config failed!\n");
 		exit(-1);
 	}
 

@@ -47,15 +47,16 @@
 #include <unistd.h>
 #endif
 
-#include "mod_auth_openidc.h"
-
+#include "cache/cache.h"
+#include "cfg/cache.h"
+#include "cfg/cfg_int.h"
+#include "jose.h"
 #include "metrics.h"
+#include "util.h"
 
 #ifdef AP_NEED_SET_MUTEX_PERMS
 #include "unixd.h"
 #endif
-
-extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 /* create the cache lock context */
 oidc_cache_mutex_t *oidc_cache_mutex_create(apr_pool_t *pool, apr_byte_t global) {
@@ -281,14 +282,14 @@ static inline apr_byte_t oidc_cache_get_key(request_rec *r, const char *s_key, c
  */
 apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, char **value) {
 
-	oidc_cfg *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
-	int encrypted = oidc_cfg_cache_encrypt(r);
+	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	int encrypted = oidc_cfg_cache_encrypt_get(cfg);
 	apr_byte_t rc = FALSE;
 	char *msg = NULL;
 	const char *s_key = NULL;
 	char *cache_value = NULL, *s_secret = NULL;
 
-	oidc_debug(r, "enter: %s (section=%s, decrypt=%d, type=%s)", key, section, encrypted, cfg->cache->name);
+	oidc_debug(r, "enter: %s (section=%s, decrypt=%d, type=%s)", key, section, encrypted, cfg->cache.impl->name);
 
 	s_secret = cfg->crypto_passphrase.secret1;
 	if (oidc_cache_get_key(r, key, s_secret, encrypted, &s_key) == FALSE)
@@ -297,7 +298,7 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, 
 	OIDC_METRICS_TIMING_START(r, cfg);
 
 	/* get the value from the cache */
-	if (cfg->cache->get(r, section, s_key, &cache_value) == FALSE)
+	if (cfg->cache.impl->get(r, section, s_key, &cache_value) == FALSE)
 		goto end;
 
 	/* see if it is any good */
@@ -306,7 +307,7 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, 
 		s_secret = cfg->crypto_passphrase.secret2;
 		if (oidc_cache_get_key(r, key, s_secret, encrypted, &s_key) == FALSE)
 			goto end;
-		if (cfg->cache->get(r, section, s_key, &cache_value) == FALSE)
+		if (cfg->cache.impl->get(r, section, s_key, &cache_value) == FALSE)
 			goto end;
 	}
 
@@ -328,7 +329,7 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, 
 end:
 
 	/* log the result */
-	msg = apr_psprintf(r->pool, "from %s cache backend for %skey %s", cfg->cache->name,
+	msg = apr_psprintf(r->pool, "from %s cache backend for %skey %s", cfg->cache.impl->name,
 			   encrypted ? "encrypted " : "", key);
 
 	if (rc == TRUE) {
@@ -349,8 +350,8 @@ end:
  */
 apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key, const char *value, apr_time_t expiry) {
 
-	oidc_cfg *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
-	int encrypted = oidc_cfg_cache_encrypt(r);
+	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	int encrypted = oidc_cfg_cache_encrypt_get(cfg);
 	char *encoded = NULL;
 	apr_byte_t rc = FALSE;
 	char *msg = NULL;
@@ -358,7 +359,7 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key, 
 
 	oidc_debug(r, "enter: %s (section=%s, len=%d, encrypt=%d, ttl(s)=%" APR_TIME_T_FMT ", type=%s)", key, section,
 		   value ? (int)_oidc_strlen(value) : 0, encrypted, apr_time_sec(expiry - apr_time_now()),
-		   cfg->cache->name);
+		   cfg->cache.impl->name);
 
 	if (oidc_cache_get_key(r, key, cfg->crypto_passphrase.secret1, encrypted, &s_key) == FALSE)
 		goto end;
@@ -373,16 +374,16 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key, 
 	OIDC_METRICS_TIMING_START(r, cfg);
 
 	/* store the resulting value in the cache */
-	rc = cfg->cache->set(r, section, s_key, value, expiry);
+	rc = cfg->cache.impl->set(r, section, s_key, value, expiry);
 
 	OIDC_METRICS_TIMING_ADD(r, cfg, OM_CACHE_WRITE);
 
 end:
 
 	/* log the result */
-	msg =
-	    apr_psprintf(r->pool, "%d bytes in %s cache backend for %skey %s", (value ? (int)_oidc_strlen(value) : 0),
-			 (cfg->cache->name ? cfg->cache->name : ""), (encrypted ? "encrypted " : ""), (key ? key : ""));
+	msg = apr_psprintf(r->pool, "%d bytes in %s cache backend for %skey %s", (value ? (int)_oidc_strlen(value) : 0),
+			   (cfg->cache.impl->name ? cfg->cache.impl->name : ""), (encrypted ? "encrypted " : ""),
+			   (key ? key : ""));
 	if (rc == TRUE) {
 		oidc_debug(r, "successfully stored %s", msg);
 	} else {

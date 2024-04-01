@@ -40,11 +40,23 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#include "mod_auth_openidc.h"
+#ifndef _MOD_AUTH_OPENIDC_HANDLE_H_
+#define _MOD_AUTH_OPENIDC_HANDLE_H_
 
-extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
+#include "const.h" // for the PACKAGE_* defines
+#include "jose.h"
+#include "session.h"
+#include <http_request.h>
+#include <jansson.h>
+#include <mod_auth.h>
 
 // authz.c
+/* the name of the keyword that follows the Require primitive to indicate claims-based authorization */
+#define OIDC_REQUIRE_CLAIM_NAME "claim"
+#ifdef USE_LIBJQ
+/* the name of the keyword that follows the Require primitive to indicate claims-expression-based authorization */
+#define OIDC_REQUIRE_CLAIMS_EXPR_NAME "claims_expr"
+#endif
 typedef apr_byte_t (*oidc_authz_match_claim_fn_type)(request_rec *, const char *const, json_t *);
 apr_byte_t oidc_authz_match_claim(request_rec *r, const char *const attr_spec, json_t *claims);
 #if HAVE_APACHE_24
@@ -63,35 +75,35 @@ int oidc_authz_22_checker(request_rec *r);
 int oidc_content_handler(request_rec *r);
 
 // discovery.c
-int oidc_discovery_request(request_rec *r, oidc_cfg *cfg);
-apr_byte_t oidc_is_discovery_response(request_rec *r, oidc_cfg *cfg);
-int oidc_discovery_response(request_rec *r, oidc_cfg *c);
+int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg);
+apr_byte_t oidc_is_discovery_response(request_rec *r, oidc_cfg_t *cfg);
+int oidc_discovery_response(request_rec *r, oidc_cfg_t *c);
 
 // info.c
-int oidc_info_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, apr_byte_t needs_save);
+int oidc_info_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, apr_byte_t needs_save);
 
 // jwks_c.
-int oidc_jwks_request(request_rec *r, oidc_cfg *c);
+int oidc_jwks_request(request_rec *r, oidc_cfg_t *c);
 
 // logout.c
-int oidc_logout(request_rec *r, oidc_cfg *c, oidc_session_t *session);
-int oidc_logout_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, const char *url,
+int oidc_logout(request_rec *r, oidc_cfg_t *c, oidc_session_t *session);
+int oidc_logout_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, const char *url,
 			apr_byte_t revoke_tokens);
 
 // refresh.c
-apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg *c, oidc_session_t *session, oidc_provider_t *provider,
+apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, oidc_provider_t *provider,
 				    char **new_access_token, char **new_id_token);
-int oidc_refresh_token_request(request_rec *r, oidc_cfg *c, oidc_session_t *session);
-apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg *cfg, oidc_session_t *session,
+int oidc_refresh_token_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session);
+apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session,
 						   int ttl_minimum, apr_byte_t *needs_save);
 
 // request_uri.c
 void oidc_request_uri_add_request_param(request_rec *r, struct oidc_provider_t *provider, const char *redirect_uri,
 					apr_table_t *params);
-int oidc_request_uri(request_rec *r, oidc_cfg *c);
+int oidc_request_uri(request_rec *r, oidc_cfg_t *c);
 
 // request.c
-int oidc_request_authenticate_user(request_rec *r, oidc_cfg *c, oidc_provider_t *provider, const char *original_url,
+int oidc_request_authenticate_user(request_rec *r, oidc_cfg_t *c, oidc_provider_t *provider, const char *original_url,
 				   const char *login_hint, const char *id_token_hint, const char *prompt,
 				   const char *auth_request_params, const char *path_scope);
 
@@ -99,25 +111,28 @@ int oidc_request_authenticate_user(request_rec *r, oidc_cfg *c, oidc_provider_t 
 apr_byte_t oidc_response_post_preserve_javascript(request_rec *r, const char *location, char **javascript,
 						  char **javascript_method);
 char *oidc_response_make_sid_iss_unique(request_rec *r, const char *sid, const char *issuer);
-int oidc_response_authorization_redirect(request_rec *r, oidc_cfg *c, oidc_session_t *session);
-int oidc_response_authorization_post(request_rec *r, oidc_cfg *c, oidc_session_t *session);
-apr_byte_t oidc_response_save_in_session(request_rec *r, oidc_cfg *c, oidc_session_t *session,
+int oidc_response_authorization_redirect(request_rec *r, oidc_cfg_t *c, oidc_session_t *session);
+int oidc_response_authorization_post(request_rec *r, oidc_cfg_t *c, oidc_session_t *session);
+apr_byte_t oidc_response_save_in_session(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
 					 oidc_provider_t *provider, const char *remoteUser, const char *id_token,
 					 oidc_jwt_t *id_token_jwt, const char *claims, const char *access_token,
 					 const int expires_in, const char *refresh_token, const char *session_state,
 					 const char *state, const char *original_url, const char *userinfo_jwt);
 
 // revoke.c
-int oidc_revoke_session(request_rec *r, oidc_cfg *c);
-int oidc_revoke_at_cache_remove(request_rec *r, oidc_cfg *c);
+int oidc_revoke_session(request_rec *r, oidc_cfg_t *c);
+int oidc_revoke_at_cache_remove(request_rec *r, oidc_cfg_t *c);
 
 // session_management.c
-int oidc_session_management(request_rec *r, oidc_cfg *c, oidc_session_t *session);
+int oidc_session_management(request_rec *r, oidc_cfg_t *c, oidc_session_t *session);
 
 // userinfo.c
-void oidc_userinfo_store_claims(request_rec *r, oidc_cfg *c, oidc_session_t *session, oidc_provider_t *provider,
+void oidc_userinfo_store_claims(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, oidc_provider_t *provider,
 				const char *claims, const char *userinfo_jwt);
-const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg *c, oidc_provider_t *provider,
+const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg_t *c, oidc_provider_t *provider,
 					  const char *access_token, oidc_session_t *session, char *id_token_sub,
 					  char **userinfo_jwt);
-apr_byte_t oidc_userinfo_refresh_claims(request_rec *r, oidc_cfg *cfg, oidc_session_t *session, apr_byte_t *needs_save);
+apr_byte_t oidc_userinfo_refresh_claims(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session,
+					apr_byte_t *needs_save);
+
+#endif // _MOD_AUTH_OPENIDC_HANDLE_H_

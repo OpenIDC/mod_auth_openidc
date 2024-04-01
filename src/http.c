@@ -51,14 +51,12 @@
 #include <curl/curl.h>
 #include <openssl/opensslv.h>
 
+#include "cfg/dir.h"
 #include "const.h"
 #include "http.h"
 #include "metrics.h"
-#include "parse.h"
-
-#include "mod_auth_openidc.h"
-
-extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
+#include "proto.h"
+#include "util.h"
 
 /*
  * escape a string
@@ -511,8 +509,9 @@ static const char *oidc_http_user_agent(request_rec *r) {
 static apr_byte_t oidc_http_call(request_rec *r, const char *url, const char *data, const char *content_type,
 				 const char *basic_auth, const char *bearer_token, int ssl_validate_server,
 				 char **response, long *response_code, oidc_http_timeout_t *http_timeout,
-				 const oidc_http_outgoing_proxy_t *outgoing_proxy, apr_array_header_t *pass_cookies,
-				 const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd) {
+				 const oidc_http_outgoing_proxy_t *outgoing_proxy,
+				 const apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
+				 const char *ssl_key_pwd) {
 
 	char curlError[CURL_ERROR_SIZE];
 	oidc_curl_buffer curlBuffer;
@@ -522,7 +521,7 @@ static apr_byte_t oidc_http_call(request_rec *r, const char *url, const char *da
 	CURLcode res = CURLE_OK;
 	long http_code = 0;
 	apr_byte_t rv = FALSE;
-	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
 	/* do some logging about the inputs */
 	oidc_debug(r,
@@ -579,8 +578,8 @@ static apr_byte_t oidc_http_call(request_rec *r, const char *url, const char *da
 
 	oidc_http_set_curl_ssl_options(r, curl);
 
-	if (c->ca_bundle_path != NULL)
-		curl_easy_setopt(curl, CURLOPT_CAINFO, c->ca_bundle_path);
+	if (oidc_cfg_ca_bundle_path_get(c) != NULL)
+		curl_easy_setopt(curl, CURLOPT_CAINFO, oidc_cfg_ca_bundle_path_get(c));
 
 #ifdef WIN32
 	else {
@@ -645,7 +644,7 @@ static apr_byte_t oidc_http_call(request_rec *r, const char *url, const char *da
 	}
 
 	const char *traceparent = oidc_http_hdr_in_traceparent_get(r);
-	if (traceparent && c->trace_parent != OIDC_TRACE_PARENT_OFF) {
+	if (traceparent && oidc_cfg_trace_parent_get(c) != OIDC_TRACE_PARENT_OFF) {
 		oidc_debug(r, "propagating traceparent header: %s", traceparent);
 		h_list =
 		    curl_slist_append(h_list, apr_psprintf(r->pool, "%s: %s", OIDC_HTTP_HDR_TRACE_PARENT, traceparent));
@@ -733,7 +732,7 @@ end:
 apr_byte_t oidc_http_get(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth,
 			 const char *bearer_token, int ssl_validate_server, char **response, long *response_code,
 			 oidc_http_timeout_t *http_timeout, const oidc_http_outgoing_proxy_t *outgoing_proxy,
-			 apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
+			 const apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
 			 const char *ssl_key_pwd) {
 	char *query_url = oidc_http_query_encoded_url(r, url, params);
 	return oidc_http_call(r, query_url, NULL, NULL, basic_auth, bearer_token, ssl_validate_server, response,
@@ -747,7 +746,7 @@ apr_byte_t oidc_http_get(request_rec *r, const char *url, const apr_table_t *par
 apr_byte_t oidc_http_post_form(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth,
 			       const char *bearer_token, int ssl_validate_server, char **response, long *response_code,
 			       oidc_http_timeout_t *http_timeout, const oidc_http_outgoing_proxy_t *outgoing_proxy,
-			       apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
+			       const apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
 			       const char *ssl_key_pwd) {
 	char *data = oidc_http_form_encoded_data(r, params);
 	return oidc_http_call(r, url, data, OIDC_HTTP_CONTENT_TYPE_FORM_ENCODED, basic_auth, bearer_token,
@@ -761,7 +760,7 @@ apr_byte_t oidc_http_post_form(request_rec *r, const char *url, const apr_table_
 apr_byte_t oidc_http_post_json(request_rec *r, const char *url, json_t *json, const char *basic_auth,
 			       const char *bearer_token, int ssl_validate_server, char **response, long *response_code,
 			       oidc_http_timeout_t *http_timeout, const oidc_http_outgoing_proxy_t *outgoing_proxy,
-			       apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
+			       const apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
 			       const char *ssl_key_pwd) {
 	char *data = json != NULL ? oidc_util_encode_json_object(r, json, JSON_COMPACT) : NULL;
 	return oidc_http_call(r, url, data, OIDC_HTTP_CONTENT_TYPE_JSON, basic_auth, bearer_token, ssl_validate_server,
@@ -787,10 +786,10 @@ static char *oidc_http_get_path(request_rec *r) {
 /*
  * get the cookie path setting and check that it matches the request path; cook it up if it is not set
  */
-static char *oidc_http_get_cookie_path(request_rec *r) {
-	char *rv = NULL;
+static const char *oidc_http_get_cookie_path(request_rec *r) {
+	const char *rv = NULL;
 	char *requestPath = oidc_http_get_path(r);
-	char *cookie_path = oidc_cfg_dir_cookie_path(r);
+	const char *cookie_path = oidc_cfg_dir_cookie_path_get(r);
 	if (cookie_path != NULL) {
 		if (_oidc_strncmp(cookie_path, requestPath, _oidc_strlen(cookie_path)) == 0)
 			rv = cookie_path;
@@ -839,7 +838,7 @@ static const char *oidc_http_set_cookie_append_value(request_rec *r) {
 void oidc_http_set_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires,
 			  const char *ext) {
 
-	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	char *headerString = NULL;
 	char *expiresString = NULL;
 	const char *appendString = NULL;
@@ -866,14 +865,14 @@ void oidc_http_set_cookie(request_rec *r, const char *cookieName, const char *co
 		headerString =
 		    apr_psprintf(r->pool, "%s; %s=%s", headerString, OIDC_HTTP_COOKIE_FLAG_EXPIRES, expiresString);
 
-	if (c->cookie_domain != NULL)
-		headerString =
-		    apr_psprintf(r->pool, "%s; %s=%s", headerString, OIDC_HTTP_COOKIE_FLAG_DOMAIN, c->cookie_domain);
+	if (oidc_cfg_cookie_domain_get(c) != NULL)
+		headerString = apr_psprintf(r->pool, "%s; %s=%s", headerString, OIDC_HTTP_COOKIE_FLAG_DOMAIN,
+					    oidc_cfg_cookie_domain_get(c));
 
 	if (oidc_util_request_is_secure(r, c))
 		headerString = apr_psprintf(r->pool, "%s; %s", headerString, OIDC_HTTP_COOKIE_FLAG_SECURE);
 
-	if (c->cookie_http_only != FALSE)
+	if (oidc_cfg_cookie_http_only_get(c) != FALSE)
 		headerString = apr_psprintf(r->pool, "%s; %s", headerString, OIDC_HTTP_COOKIE_FLAG_HTTP_ONLY);
 
 	appendString = oidc_http_set_cookie_append_value(r);
@@ -1042,15 +1041,15 @@ void oidc_http_set_chunked_cookie(request_rec *r, const char *cookieName, const 
 	oidc_http_set_cookie(r, cookieName, "", expires, ext);
 }
 
-char **oidc_http_proxy_auth_options(void) {
-	static char *options[] = {OIDC_HTTP_PROXY_AUTH_BASIC,
-				  OIDC_HTTP_PROXY_AUTH_DIGEST,
-				  OIDC_HTTP_PROXY_AUTH_NTLM,
-				  OIDC_HTTP_PROXY_AUTH_ANY,
+const char **oidc_http_proxy_auth_options(void) {
+	static const char *options[] = {OIDC_HTTP_PROXY_AUTH_BASIC,
+					OIDC_HTTP_PROXY_AUTH_DIGEST,
+					OIDC_HTTP_PROXY_AUTH_NTLM,
+					OIDC_HTTP_PROXY_AUTH_ANY,
 #ifdef CURLAUTH_NEGOTIATE
-				  OIDC_HTTP_PROXY_AUTH_NEGOTIATE,
+					OIDC_HTTP_PROXY_AUTH_NEGOTIATE,
 #endif
-				  NULL};
+					NULL};
 	return options;
 }
 

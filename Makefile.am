@@ -4,6 +4,13 @@ noinst_LTLIBRARIES = libauth_openidc.la
 
 libauth_openidc_la_SOURCES = \
 	src/mod_auth_openidc.c \
+	src/cfg/cfg.c \
+	src/cfg/cache.c \
+	src/cfg/provider.c \
+	src/cfg/oauth.c \
+	src/cfg/dir.c \
+	src/cfg/parse.c \
+	src/cfg/cmds.c \
 	src/cache/file.c \
 	src/cache/shm.c \
 	src/cache/common.c \
@@ -23,16 +30,14 @@ libauth_openidc_la_SOURCES = \
 	src/metrics.c \
 	src/oauth.c \
 	src/proto.c \
-	src/config.c \
 	src/util.c \
 	src/http.c \
 	src/session.c \
 	src/metadata.c \
 	src/jose.c \
-	src/parse.c \
 	src/pcre_subst.c
 
-AM_CFLAGS = -DNAMEVER="@NAMEVER@" -I$(top_srcdir)/src @APACHE_CFLAGS@ @OPENSSL_CFLAGS@ @CURL_CFLAGS@ @JANSSON_CFLAGS@ @CJOSE_CFLAGS@ @PCRE_CFLAGS@
+AM_CFLAGS = -DNAMEVER="@NAMEVER@" -I${top_srcdir}/src @APACHE_CFLAGS@ @OPENSSL_CFLAGS@ @CURL_CFLAGS@ @JANSSON_CFLAGS@ @CJOSE_CFLAGS@ @PCRE_CFLAGS@
 AM_CPPFLAGS = @APACHE_CPPFLAGS@
 AM_LDFLAGS = @APACHE_LDFLAGS@
 LIBADD = @APACHE_LIBS@ @OPENSSL_LIBS@ @CURL_LIBS@ @JANSSON_LIBS@ @CJOSE_LIBS@ @PCRE_LIBS@
@@ -66,14 +71,25 @@ LIBADD += @ZLIB_LIBS@
 endif
 
 noinst_HEADERS = \
+	src/cfg/cfg.h \
+	src/cfg/cfg_int.h \
+	src/cfg/cache.h \
+	src/cfg/provider.h \
+	src/cfg/oauth.h \
+	src/cfg/dir.h \
+	src/cfg/parse.h \
 	src/mod_auth_openidc.h \
 	src/handle/handle.h \
-	src/const.h \
-	src/http.h \
-	src/jose.h \
-	src/parse.h \
-	src/metrics.h \
 	src/cache/cache.h \
+	src/proto.h \
+	src/oauth.h \
+	src/metadata.h \
+	src/session.h \
+	src/jose.h \
+	src/http.h \
+	src/util.h \
+	src/metrics.h \
+	src/const.h \
 	src/pcre_subst.h
 
 if HAVE_LIBHIREDIS
@@ -109,7 +125,7 @@ uninstall-local:
 
 clean-local:
 	rm -f mod_auth_openidc.la
-	
+
 LDADD = libauth_openidc.la ${LIBADD}
 
 noinst_PROGRAMS = test/test-cmd
@@ -123,4 +139,4 @@ test_test_SOURCES = test/test.c test/stub.c
 test_test_CFLAGS = ${AM_CFLAGS} -fPIC
 
 clang-format:
-	clang-format -style=file -i `find . -name *.[ch]`
+	clang-format -style=file -i `find . -name *.[ch]  -maxdepth 4 `

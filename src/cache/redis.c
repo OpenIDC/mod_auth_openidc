@@ -43,11 +43,10 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#include "redis.h"
+#include "cache/redis.h"
+#include "cfg/cfg_int.h"
 
 // TODO: proper Redis error reporting (server unreachable etc.)
-
-extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 #define REDIS_CONNECT_TIMEOUT_DEFAULT 5
 #define REDIS_TIMEOUT_DEFAULT 5
@@ -71,35 +70,35 @@ static oidc_cache_cfg_redis_t *oidc_cache_redis_cfg_create(apr_pool_t *pool) {
 	return context;
 }
 
-int oidc_cache_redis_post_config(server_rec *s, oidc_cfg *cfg, const char *name) {
+int oidc_cache_redis_post_config(server_rec *s, oidc_cfg_t *cfg, const char *name) {
 	oidc_cache_cfg_redis_t *context = oidc_cache_redis_cfg_create(s->process->pool);
-	cfg->cache_cfg = context;
+	cfg->cache.cfg = context;
 
 	/* parse the host:post tuple from the configuration */
-	if (cfg->cache_redis_server == NULL) {
+	if (cfg->cache.redis_server == NULL) {
 		oidc_serror(s,
 			    "cache type is set to \"redis\", but no valid " OIDCRedisCacheServer " setting was found");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	if (cfg->cache_redis_username != NULL) {
-		context->username = apr_pstrdup(s->process->pool, cfg->cache_redis_username);
+	if (cfg->cache.redis_username != NULL) {
+		context->username = apr_pstrdup(s->process->pool, cfg->cache.redis_username);
 	}
-	if (cfg->cache_redis_password != NULL) {
-		context->passwd = apr_pstrdup(s->process->pool, cfg->cache_redis_password);
+	if (cfg->cache.redis_password != NULL) {
+		context->passwd = apr_pstrdup(s->process->pool, cfg->cache.redis_password);
 	}
 
-	if (cfg->cache_redis_database != -1)
-		context->database = cfg->cache_redis_database;
+	if (oidc_cfg_cache_redis_database_get(cfg) != OIDC_CONFIG_POS_INT_UNSET)
+		context->database = oidc_cfg_cache_redis_database_get(cfg);
 
-	if (cfg->cache_redis_connect_timeout != -1)
-		context->connect_timeout.tv_sec = cfg->cache_redis_connect_timeout;
+	if (oidc_cfg_cache_redis_connect_timeout_get(cfg) != OIDC_CONFIG_POS_INT_UNSET)
+		context->connect_timeout.tv_sec = oidc_cfg_cache_redis_connect_timeout_get(cfg);
 
-	if (cfg->cache_redis_keepalive != -1)
-		context->keepalive = cfg->cache_redis_keepalive;
+	if (oidc_cfg_cache_redis_keepalive_get(cfg) != OIDC_CONFIG_POS_INT_UNSET)
+		context->keepalive = oidc_cfg_cache_redis_keepalive_get(cfg);
 
-	if (cfg->cache_redis_timeout != -1)
-		context->timeout.tv_sec = cfg->cache_redis_timeout;
+	if (oidc_cfg_cache_redis_timeout_get(cfg) != OIDC_CONFIG_POS_INT_UNSET)
+		context->timeout.tv_sec = oidc_cfg_cache_redis_timeout_get(cfg);
 
 	if (oidc_cache_mutex_post_config(s, context->mutex, name) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
@@ -128,33 +127,33 @@ apr_status_t oidc_cache_redis_disconnect(oidc_cache_cfg_redis_t *context) {
 static int oidc_cache_redis_post_config_impl(server_rec *s) {
 	apr_status_t rv = APR_SUCCESS;
 	oidc_cache_cfg_redis_t *context = NULL;
-	oidc_cfg *cfg = (oidc_cfg *)ap_get_module_config(s->module_config, &auth_openidc_module);
+	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(s->module_config, &auth_openidc_module);
 
-	if (cfg->cache_cfg != NULL)
+	if (cfg->cache.cfg != NULL)
 		return OK;
 
 	if (oidc_cache_redis_post_config(s, cfg, "redis") != OK)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
-	context = (oidc_cache_cfg_redis_t *)cfg->cache_cfg;
+	context = (oidc_cache_cfg_redis_t *)cfg->cache.cfg;
 
 	/* parse the host:post tuple from the configuration */
-	if (cfg->cache_redis_server == NULL) {
+	if (cfg->cache.redis_server == NULL) {
 		oidc_serror(s,
 			    "cache type is set to \"redis\", but no valid " OIDCRedisCacheServer " setting was found");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
 	char *scope_id;
-	rv = apr_parse_addr_port(&context->host_str, &scope_id, &context->port, cfg->cache_redis_server,
+	rv = apr_parse_addr_port(&context->host_str, &scope_id, &context->port, cfg->cache.redis_server,
 				 s->process->pool);
 	if (rv != APR_SUCCESS) {
-		oidc_serror(s, "failed to parse cache server: '%s'", cfg->cache_redis_server);
+		oidc_serror(s, "failed to parse cache server: '%s'", cfg->cache.redis_server);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
 	if (context->host_str == NULL) {
-		oidc_serror(s, "failed to parse cache server, no hostname specified: '%s'", cfg->cache_redis_server);
+		oidc_serror(s, "failed to parse cache server, no hostname specified: '%s'", cfg->cache.redis_server);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -172,8 +171,8 @@ static int oidc_cache_redis_post_config_impl(server_rec *s) {
  * initialize the Redis cache in a child process
  */
 int oidc_cache_redis_child_init(apr_pool_t *p, server_rec *s) {
-	oidc_cfg *cfg = ap_get_module_config(s->module_config, &auth_openidc_module);
-	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *)cfg->cache_cfg;
+	oidc_cfg_t *cfg = ap_get_module_config(s->module_config, &auth_openidc_module);
+	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *)cfg->cache.cfg;
 
 	/* initialize the lock for the child process */
 	return oidc_cache_mutex_child_init(p, s, context->mutex);
@@ -428,8 +427,8 @@ static redisReply *oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t 
  */
 apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section, const char *key, char **value) {
 
-	oidc_cfg *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
-	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *)cfg->cache_cfg;
+	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *)cfg->cache.cfg;
 	redisReply *reply = NULL;
 	apr_byte_t rv = FALSE;
 
@@ -486,8 +485,8 @@ end:
 apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section, const char *key, const char *value,
 				apr_time_t expiry) {
 
-	oidc_cfg *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
-	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *)cfg->cache_cfg;
+	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *)cfg->cache.cfg;
 	redisReply *reply = NULL;
 	apr_byte_t rv = FALSE;
 	apr_uint32_t timeout;
@@ -525,24 +524,30 @@ apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section, const char 
 }
 
 static int oidc_cache_redis_destroy_impl(server_rec *s) {
-	oidc_cfg *cfg = (oidc_cfg *)ap_get_module_config(s->module_config, &auth_openidc_module);
-	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *)cfg->cache_cfg;
+	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(s->module_config, &auth_openidc_module);
+	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *)cfg->cache.cfg;
 
 	if (context != NULL) {
 		oidc_cache_mutex_lock(s->process->pool, s, context->mutex);
 		context->disconnect(context);
 		oidc_cache_mutex_unlock(s->process->pool, s, context->mutex);
 		oidc_cache_mutex_destroy(s, context->mutex);
-		cfg->cache_cfg = NULL;
+		cfg->cache.cfg = NULL;
 	}
 
 	return APR_SUCCESS;
 }
 
-oidc_cache_t oidc_cache_redis = {"redis",
-				 1,
-				 oidc_cache_redis_post_config_impl,
-				 oidc_cache_redis_child_init,
-				 oidc_cache_redis_get,
-				 oidc_cache_redis_set,
-				 oidc_cache_redis_destroy_impl};
+// clang-format off
+
+oidc_cache_t oidc_cache_redis = {
+	"redis",
+	1,
+	oidc_cache_redis_post_config_impl,
+	oidc_cache_redis_child_init,
+	oidc_cache_redis_get,
+	oidc_cache_redis_set,
+	oidc_cache_redis_destroy_impl
+};
+
+// clang-format on

@@ -41,14 +41,19 @@
  */
 
 #include "handle/handle.h"
+#include "mod_auth_openidc.h"
+#include "util.h"
 
 #define OIDC_INFO_PARAM_ACCESS_TOKEN_REFRESH_INTERVAL "access_token_refresh_interval"
 #define OIDC_INFO_PARAM_EXTEND_SESSION "extend_session"
 
+#define OIDC_HOOK_INFO_FORMAT_JSON "json"
+#define OIDC_HOOK_INFO_FORMAT_HTML "html"
+
 /*
  * handle request for session info
  */
-int oidc_info_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, apr_byte_t needs_save) {
+int oidc_info_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, apr_byte_t needs_save) {
 	int rc = HTTP_UNAUTHORIZED;
 	char *s_format = NULL;
 	char *s_interval = NULL;
@@ -79,7 +84,7 @@ int oidc_info_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, apr_
 	/* set the user in the main request for further (incl. sub-request and authz) processing */
 	r->user = apr_pstrdup(r->pool, session->remote_user);
 
-	if (c->info_hook_data == NULL) {
+	if (oidc_cfg_info_hook_data_get(c) == NULL) {
 		oidc_warn(r, "no data configured to return in " OIDCInfoHook);
 		return HTTP_NOT_FOUND;
 	}
@@ -119,7 +124,7 @@ int oidc_info_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, apr_
 	json_t *json = json_object();
 
 	/* add a timestamp of creation in there for the caller */
-	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_TIMESTAMP, APR_HASH_KEY_STRING)) {
+	if (apr_hash_get(oidc_cfg_info_hook_data_get(c), OIDC_HOOK_INFO_TIMESTAMP, APR_HASH_KEY_STRING)) {
 		json_object_set_new(json, OIDC_HOOK_INFO_TIMESTAMP, json_integer(apr_time_sec(apr_time_now())));
 	}
 
@@ -136,34 +141,34 @@ int oidc_info_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, apr_
 	}
 
 	/* include the access token in the session info */
-	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_ACCES_TOKEN, APR_HASH_KEY_STRING)) {
+	if (apr_hash_get(oidc_cfg_info_hook_data_get(c), OIDC_HOOK_INFO_ACCES_TOKEN, APR_HASH_KEY_STRING)) {
 		const char *access_token = oidc_session_get_access_token(r, session);
 		if (access_token != NULL)
 			json_object_set_new(json, OIDC_HOOK_INFO_ACCES_TOKEN, json_string(access_token));
 	}
 
 	/* include the access token expiry timestamp in the session info */
-	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_ACCES_TOKEN_EXP, APR_HASH_KEY_STRING)) {
+	if (apr_hash_get(oidc_cfg_info_hook_data_get(c), OIDC_HOOK_INFO_ACCES_TOKEN_EXP, APR_HASH_KEY_STRING)) {
 		const char *access_token_expires = oidc_session_get_access_token_expires2str(r, session);
 		if (access_token_expires != NULL)
 			json_object_set_new(json, OIDC_HOOK_INFO_ACCES_TOKEN_EXP, json_string(access_token_expires));
 	}
 
 	/* include the serialized id_token (id_token_hint) in the session info */
-	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_ID_TOKEN_HINT, APR_HASH_KEY_STRING)) {
+	if (apr_hash_get(oidc_cfg_info_hook_data_get(c), OIDC_HOOK_INFO_ID_TOKEN_HINT, APR_HASH_KEY_STRING)) {
 		const char *s_id_token = oidc_session_get_idtoken(r, session);
 		if (s_id_token != NULL)
 			json_object_set_new(json, OIDC_HOOK_INFO_ID_TOKEN_HINT, json_string(s_id_token));
 	}
 
 	/* include the id_token claims in the session info */
-	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_ID_TOKEN, APR_HASH_KEY_STRING)) {
+	if (apr_hash_get(oidc_cfg_info_hook_data_get(c), OIDC_HOOK_INFO_ID_TOKEN, APR_HASH_KEY_STRING)) {
 		json_t *id_token = oidc_session_get_idtoken_claims_json(r, session);
 		if (id_token)
 			json_object_set_new(json, OIDC_HOOK_INFO_ID_TOKEN, id_token);
 	}
 
-	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_USER_INFO, APR_HASH_KEY_STRING)) {
+	if (apr_hash_get(oidc_cfg_info_hook_data_get(c), OIDC_HOOK_INFO_USER_INFO, APR_HASH_KEY_STRING)) {
 		/* include the claims from the userinfo endpoint the session info */
 		json_t *claims = oidc_session_get_userinfo_claims_json(r, session);
 		if (claims)
@@ -171,29 +176,29 @@ int oidc_info_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, apr_
 	}
 
 	/* include the maximum session lifetime in the session info */
-	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_SESSION_EXP, APR_HASH_KEY_STRING)) {
+	if (apr_hash_get(oidc_cfg_info_hook_data_get(c), OIDC_HOOK_INFO_SESSION_EXP, APR_HASH_KEY_STRING)) {
 		apr_time_t session_expires = oidc_session_get_session_expires(r, session);
 		json_object_set_new(json, OIDC_HOOK_INFO_SESSION_EXP, json_integer(apr_time_sec(session_expires)));
 	}
 
 	/* include the inactivity timeout in the session info */
-	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_SESSION_TIMEOUT, APR_HASH_KEY_STRING)) {
+	if (apr_hash_get(oidc_cfg_info_hook_data_get(c), OIDC_HOOK_INFO_SESSION_TIMEOUT, APR_HASH_KEY_STRING)) {
 		json_object_set_new(json, OIDC_HOOK_INFO_SESSION_TIMEOUT, json_integer(apr_time_sec(session->expiry)));
 	}
 
 	/* include the remote_user in the session info */
-	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_SESSION_REMOTE_USER, APR_HASH_KEY_STRING)) {
+	if (apr_hash_get(oidc_cfg_info_hook_data_get(c), OIDC_HOOK_INFO_SESSION_REMOTE_USER, APR_HASH_KEY_STRING)) {
 		json_object_set_new(json, OIDC_HOOK_INFO_SESSION_REMOTE_USER, json_string(session->remote_user));
 	}
 
-	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_SESSION, APR_HASH_KEY_STRING)) {
+	if (apr_hash_get(oidc_cfg_info_hook_data_get(c), OIDC_HOOK_INFO_SESSION, APR_HASH_KEY_STRING)) {
 		json_t *j_session = json_object();
 		json_object_set(j_session, OIDC_HOOK_INFO_SESSION_STATE, session->state);
 		json_object_set_new(j_session, OIDC_HOOK_INFO_SESSION_UUID, json_string(session->uuid));
 		json_object_set_new(json, OIDC_HOOK_INFO_SESSION, j_session);
 	}
 
-	if (apr_hash_get(c->info_hook_data, OIDC_HOOK_INFO_REFRESH_TOKEN, APR_HASH_KEY_STRING)) {
+	if (apr_hash_get(oidc_cfg_info_hook_data_get(c), OIDC_HOOK_INFO_REFRESH_TOKEN, APR_HASH_KEY_STRING)) {
 		/* include the refresh token in the session info */
 		const char *refresh_token = oidc_session_get_refresh_token(r, session);
 		if (refresh_token != NULL)

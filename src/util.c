@@ -41,7 +41,10 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+#include "util.h"
+#include "cfg/dir.h"
 #include "mod_auth_openidc.h"
+#include "proto.h"
 
 #include "metrics.h"
 #include "pcre_subst.h"
@@ -49,8 +52,11 @@
 #include "jq.h"
 #endif
 
-/* hrm, should we get rid of this by adding parameters to the (3) functions? */
-extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
+#include <apr_base64.h>
+#include <apr_lib.h>
+
+#include <http_protocol.h>
+#include <httpd.h>
 
 apr_byte_t oidc_util_random_bytes(unsigned char *buf, apr_size_t length) {
 	apr_byte_t rv = TRUE;
@@ -113,7 +119,7 @@ apr_byte_t oidc_util_generate_random_bytes(request_rec *r, unsigned char *buf, a
 	return rv;
 }
 
-apr_byte_t oidc_proto_generate_random_hex_string(request_rec *r, char **hex_str, int byte_len) {
+apr_byte_t oidc_util_generate_random_hex_string(request_rec *r, char **hex_str, int byte_len) {
 	unsigned char *bytes = apr_pcalloc(r->pool, byte_len);
 	int i = 0;
 	if (oidc_util_generate_random_bytes(r, bytes, byte_len) != TRUE) {
@@ -128,9 +134,25 @@ apr_byte_t oidc_proto_generate_random_hex_string(request_rec *r, char **hex_str,
 }
 
 /*
+ * generate a random string value value of a specified length
+ */
+apr_byte_t oidc_util_generate_random_string(request_rec *r, char **output, int len) {
+	unsigned char *bytes = apr_pcalloc(r->pool, len);
+	if (oidc_util_generate_random_bytes(r, bytes, len) != TRUE) {
+		oidc_error(r, "oidc_util_generate_random_bytes returned an error");
+		return FALSE;
+	}
+	if (oidc_util_base64url_encode(r, output, (const char *)bytes, len, TRUE) <= 0) {
+		oidc_error(r, "oidc_base64url_encode returned an error");
+		return FALSE;
+	}
+	return TRUE;
+}
+
+/*
  * base64url encode a string
  */
-int oidc_base64url_encode(request_rec *r, char **dst, const char *src, int src_len, int remove_padding) {
+int oidc_util_base64url_encode(request_rec *r, char **dst, const char *src, int src_len, int remove_padding) {
 	if ((src == NULL) || (src_len <= 0)) {
 		oidc_error(r, "not encoding anything; src=NULL and/or src_len<1");
 		return -1;
@@ -163,9 +185,21 @@ int oidc_base64url_encode(request_rec *r, char **dst, const char *src, int src_l
 }
 
 /*
+ * parse a base64 encoded binary value from the provided string
+ */
+char *oidc_util_base64_decode(apr_pool_t *pool, const char *input, char **output, int *output_len) {
+	int len = apr_base64_decode_len(input);
+	*output = apr_pcalloc(pool, len);
+	*output_len = apr_base64_decode(*output, input);
+	if (*output_len <= 0)
+		return apr_psprintf(pool, "base64-decoding of \"%s\" failed", input);
+	return NULL;
+}
+
+/*
  * base64url decode a string
  */
-int oidc_base64url_decode(apr_pool_t *pool, char **dst, const char *src) {
+int oidc_util_base64url_decode(apr_pool_t *pool, char **dst, const char *src) {
 	if (src == NULL) {
 		return -1;
 	}
@@ -192,9 +226,10 @@ int oidc_base64url_decode(apr_pool_t *pool, char **dst, const char *src) {
 	default:
 		return 0;
 	}
-	int dlen = apr_base64_decode_len(dec);
-	*dst = apr_palloc(pool, dlen);
-	return apr_base64_decode(*dst, dec);
+
+	int dlen = -1;
+	oidc_util_base64_decode(pool, dec, dst, &dlen);
+	return dlen;
 }
 
 static const char *oidc_util_get__oidc_jwt_hdr_dir_a256gcm(request_rec *r, char *input) {
@@ -572,7 +607,7 @@ const char *oidc_util_strcasestr(const char *s1, const char *s2) {
 /*
  * get the URL scheme that is currently being accessed
  */
-static const char *oidc_get_current_url_scheme(const request_rec *r, const apr_byte_t x_forwarded_headers) {
+static const char *oidc_get_current_url_scheme(const request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers) {
 	/* first see if there's a proxy/load-balancer in front of us */
 	const char *scheme_str = NULL;
 
@@ -624,8 +659,7 @@ static const char *oidc_get_port_from_host(const char *host_hdr) {
 /*
  * get the URL port that is currently being accessed
  */
-static const char *oidc_get_current_url_port(const request_rec *r, const char *scheme_str,
-					     const apr_byte_t x_forwarded_headers) {
+static const char *oidc_get_current_url_port(const request_rec *r, const char *scheme_str, int x_forwarded_headers) {
 
 	const char *host_hdr = NULL;
 	const char *port_str = NULL;
@@ -701,7 +735,7 @@ static const char *oidc_get_current_url_port(const request_rec *r, const char *s
 /*
  * get the hostname part of the URL that is currently being accessed
  */
-const char *oidc_get_current_url_host(request_rec *r, const apr_byte_t x_forwarded_headers) {
+const char *oidc_get_current_url_host(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers) {
 	const char *host_str = NULL;
 	char *p = NULL;
 	char *i = NULL;
@@ -735,13 +769,13 @@ const char *oidc_get_current_url_host(request_rec *r, const apr_byte_t x_forward
 /*
  * get the base part of the current URL (scheme + host (+ port))
  */
-static const char *oidc_get_current_url_base(request_rec *r, const apr_byte_t x_forwarded_headers) {
+static const char *oidc_get_current_url_base(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers) {
 
 	const char *scheme_str = NULL;
 	const char *host_str = NULL;
 	const char *port_str = NULL;
 
-	oidc_config_check_x_forwarded(r, x_forwarded_headers);
+	oidc_cfg_x_forwarded_headers_check(r, x_forwarded_headers);
 
 	scheme_str = oidc_get_current_url_scheme(r, x_forwarded_headers);
 	host_str = oidc_get_current_url_host(r, x_forwarded_headers);
@@ -756,7 +790,7 @@ static const char *oidc_get_current_url_base(request_rec *r, const apr_byte_t x_
 /*
  * get the URL that is currently being accessed
  */
-char *oidc_get_current_url(request_rec *r, const apr_byte_t x_forwarded_headers) {
+char *oidc_get_current_url(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers) {
 	char *url = NULL;
 	char *path = NULL;
 	apr_uri_t uri;
@@ -786,39 +820,40 @@ char *oidc_get_current_url(request_rec *r, const apr_byte_t x_forwarded_headers)
 /*
  * infer a full absolute URL from the (optional) relative one
  */
-const char *oidc_get_absolute_url(request_rec *r, oidc_cfg *cfg, const char *url) {
+const char *oidc_get_absolute_url(request_rec *r, oidc_cfg_t *cfg, const char *url) {
 	if ((url != NULL) && (url[0] == OIDC_CHAR_FORWARD_SLASH)) {
-		url = apr_pstrcat(r->pool, oidc_get_current_url_base(r, cfg->x_forwarded_headers), url, NULL);
+		url = apr_pstrcat(r->pool, oidc_get_current_url_base(r, oidc_cfg_x_forwarded_headers_get(cfg)), url,
+				  NULL);
 		oidc_debug(r, "determined absolute url: %s", url);
 	}
 	return url;
 }
 
-apr_byte_t oidc_util_request_is_secure(request_rec *r, const oidc_cfg *c) {
-	return (_oidc_strnatcasecmp("https", oidc_get_current_url_scheme(r, c->x_forwarded_headers)) == 0);
+apr_byte_t oidc_util_request_is_secure(request_rec *r, oidc_cfg_t *c) {
+	return (_oidc_strnatcasecmp("https", oidc_get_current_url_scheme(r, oidc_cfg_x_forwarded_headers_get(c))) == 0);
 }
 
 /*
  * determine absolute Redirect URI
  */
-const char *oidc_get_redirect_uri(request_rec *r, oidc_cfg *cfg) {
-	return oidc_get_absolute_url(r, cfg, cfg->redirect_uri);
+const char *oidc_get_redirect_uri(request_rec *r, oidc_cfg_t *cfg) {
+	return oidc_get_absolute_url(r, cfg, oidc_cfg_redirect_uri_get(cfg));
 }
 
 /*
  * determine absolute redirect uri that is issuer specific
  */
-const char *oidc_get_redirect_uri_iss(request_rec *r, oidc_cfg *cfg, oidc_provider_t *provider) {
+const char *oidc_get_redirect_uri_iss(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider) {
 	const char *redirect_uri = oidc_get_redirect_uri(r, cfg);
 	if (redirect_uri == NULL) {
 		oidc_error(r, "redirect URI is NULL");
 		return NULL;
 	}
-	if (provider->issuer_specific_redirect_uri != 0) {
+	if (oidc_cfg_provider_issuer_specific_redirect_uri_get(provider) != 0) {
 		redirect_uri =
 		    apr_psprintf(r->pool, "%s%s%s=%s", redirect_uri,
 				 strchr(redirect_uri, OIDC_CHAR_QUERY) != NULL ? OIDC_STR_AMP : OIDC_STR_QUERY,
-				 OIDC_PROTO_ISS, oidc_http_escape_string(r, provider->issuer));
+				 OIDC_PROTO_ISS, oidc_http_escape_string(r, oidc_cfg_provider_issuer_get(provider)));
 		oidc_debug(r, "determined issuer specific redirect uri: %s", redirect_uri);
 	}
 	return redirect_uri;
@@ -1035,14 +1070,6 @@ int oidc_util_html_send(request_rec *r, const char *title, const char *html_head
 static char *html_error_template_contents = NULL;
 
 /*
- * get the full path to a file based on an (already) absolute filename or a filename
- * that is relative to the Apache root directory
- */
-char *oidc_util_get_full_path(apr_pool_t *pool, const char *abs_or_rel_filename) {
-	return abs_or_rel_filename ? ap_server_root_relative(pool, abs_or_rel_filename) : NULL;
-}
-
-/*
  * escape characters in an HTML/Javascript template
  */
 static char *oidc_util_template_escape(request_rec *r, const char *arg, int escape) {
@@ -1063,14 +1090,12 @@ static char *oidc_util_template_escape(request_rec *r, const char *arg, int esca
 apr_byte_t oidc_util_html_send_in_template(request_rec *r, const char *filename, char **static_template_content,
 					   const char *arg1, int arg1_esc, const char *arg2, int arg2_esc,
 					   int status_code) {
-	char *fullname = NULL;
 	char *html = NULL;
 	int rc = status_code;
 	if (*static_template_content == NULL) {
-		fullname = oidc_util_get_full_path(r->pool, filename);
 		// NB: templates go into the server process pool
-		if (oidc_util_file_read(r, fullname, r->server->process->pool, static_template_content) == FALSE) {
-			oidc_error(r, "could not read template: %s", fullname);
+		if (oidc_util_file_read(r, filename, r->server->process->pool, static_template_content) == FALSE) {
+			oidc_error(r, "could not read template: %s", filename);
 			*static_template_content = NULL;
 		}
 	}
@@ -1093,7 +1118,7 @@ int oidc_util_html_send_error(request_rec *r, const char *html_template, const c
 
 	if (html_template != NULL) {
 
-		if (_oidc_strcmp(html_template, "deprecated") != 0) {
+		if (_oidc_strcmp(html_template, OIDC_HTML_ERROR_TEMPLATE_DEPRECATED) != 0) {
 
 			rc = oidc_util_html_send_in_template(r, html_template, &html_error_template_contents, error,
 							     OIDC_POST_PRESERVE_ESCAPE_HTML, description,
@@ -1122,6 +1147,9 @@ int oidc_util_html_send_error(request_rec *r, const char *html_template, const c
 
 	return rc;
 }
+
+/* the maximum size of data that we accept in a single POST value: 1MB */
+#define OIDC_MAX_POST_DATA_LEN 1024 * 1024
 
 /*
  * read all bytes from the HTTP request
@@ -1451,25 +1479,25 @@ static char *oidc_util_utf8_to_latin1(request_rec *r, const char *src) {
  * set a HTTP header and/or environment variable to pass information to the application
  */
 void oidc_util_set_app_info(request_rec *r, const char *s_key, const char *s_value, const char *claim_prefix,
-			    apr_byte_t as_header, apr_byte_t as_env_var, int pass_as) {
+			    oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding) {
 
 	/* construct the header name, cq. put the prefix in front of a normalized key name */
 	const char *s_name = apr_psprintf(r->pool, "%s%s", claim_prefix, oidc_http_hdr_normalize_name(r, s_key));
 	char *d_value = NULL;
 
 	if (s_value != NULL) {
-		if (pass_as == OIDC_PASS_APP_INFO_AS_BASE64URL) {
-			oidc_base64url_encode(r, &d_value, s_value, _oidc_strlen(s_value), TRUE);
-		} else if (pass_as == OIDC_PASS_APP_INFO_AS_LATIN1) {
+		if (encoding == OIDC_APPINFO_ENCODING_BASE64URL) {
+			oidc_util_base64url_encode(r, &d_value, s_value, _oidc_strlen(s_value), TRUE);
+		} else if (encoding == OIDC_APPINFO_ENCODING_LATIN1) {
 			d_value = oidc_util_utf8_to_latin1(r, s_value);
 		}
 	}
 
-	if (as_header) {
+	if (pass_in & OIDC_APPINFO_PASS_HEADERS) {
 		oidc_http_hdr_in_set(r, s_name, (d_value != NULL) ? d_value : s_value);
 	}
 
-	if (as_env_var) {
+	if (pass_in & OIDC_APPINFO_PASS_ENVVARS) {
 
 		/* do some logging about this event */
 		oidc_debug(r, "setting environment variable \"%s: %s\"", s_name, (d_value != NULL) ? d_value : s_value);
@@ -1482,7 +1510,7 @@ void oidc_util_set_app_info(request_rec *r, const char *s_key, const char *s_val
  * set the user/claims information from the session in HTTP headers passed on to the application
  */
 void oidc_util_set_app_infos(request_rec *r, json_t *j_attrs, const char *claim_prefix, const char *claim_delimiter,
-			     apr_byte_t as_header, apr_byte_t as_env_var, int pass_as) {
+			     oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding) {
 
 	char s_int[255];
 	json_t *j_value = NULL;
@@ -1511,21 +1539,20 @@ void oidc_util_set_app_infos(request_rec *r, json_t *j_attrs, const char *claim_
 
 			/* set the single string in the application header whose name is based on the key and the prefix
 			 */
-			oidc_util_set_app_info(r, s_key, json_string_value(j_value), claim_prefix, as_header,
-					       as_env_var, pass_as);
+			oidc_util_set_app_info(r, s_key, json_string_value(j_value), claim_prefix, pass_in, encoding);
 
 		} else if (json_is_boolean(j_value)) {
 
 			/* set boolean value in the application header whose name is based on the key and the prefix */
-			oidc_util_set_app_info(r, s_key, (json_is_true(j_value) ? "1" : "0"), claim_prefix, as_header,
-					       as_env_var, pass_as);
+			oidc_util_set_app_info(r, s_key, (json_is_true(j_value) ? "1" : "0"), claim_prefix, pass_in,
+					       encoding);
 
 		} else if (json_is_integer(j_value)) {
 
 			if (snprintf(s_int, 255, "%ld", (long)json_integer_value(j_value)) > 0) {
 				/* set long value in the application header whose name is based on the key and the
 				 * prefix */
-				oidc_util_set_app_info(r, s_key, s_int, claim_prefix, as_header, as_env_var, pass_as);
+				oidc_util_set_app_info(r, s_key, s_int, claim_prefix, pass_in, encoding);
 			} else {
 				oidc_warn(r, "could not convert JSON number to string (> 255 characters?), skipping");
 			}
@@ -1534,13 +1561,13 @@ void oidc_util_set_app_infos(request_rec *r, json_t *j_attrs, const char *claim_
 
 			/* set float value in the application header whose name is based on the key and the prefix */
 			oidc_util_set_app_info(r, s_key, apr_psprintf(r->pool, "%lf", json_real_value(j_value)),
-					       claim_prefix, as_header, as_env_var, pass_as);
+					       claim_prefix, pass_in, encoding);
 
 		} else if (json_is_object(j_value)) {
 
 			/* set json value in the application header whose name is based on the key and the prefix */
 			oidc_util_set_app_info(r, s_key, oidc_util_encode_json_object(r, j_value, 0), claim_prefix,
-					       as_header, as_env_var, pass_as);
+					       pass_in, encoding);
 
 			/* check if it is a multi-value string */
 		} else if (json_is_array(j_value)) {
@@ -1593,7 +1620,7 @@ void oidc_util_set_app_infos(request_rec *r, json_t *j_attrs, const char *claim_
 			}
 
 			/* set the concatenated string */
-			oidc_util_set_app_info(r, s_key, s_concat, claim_prefix, as_header, as_env_var, pass_as);
+			oidc_util_set_app_info(r, s_key, s_concat, claim_prefix, pass_in, encoding);
 
 		} else {
 
@@ -1814,7 +1841,7 @@ apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char
 		return FALSE;
 	}
 
-	if (oidc_base64url_encode(r, output, (const char *)hashed, hashed_len, TRUE) <= 0) {
+	if (oidc_util_base64url_encode(r, output, (const char *)hashed, hashed_len, TRUE) <= 0) {
 		oidc_error(r, "oidc_base64url_encode returned an error: %s", err.text);
 		return FALSE;
 	}
@@ -1929,9 +1956,9 @@ out:
 	return rv;
 }
 
-int oidc_util_cookie_domain_valid(const char *hostname, char *cookie_domain) {
+int oidc_util_cookie_domain_valid(const char *hostname, const char *cookie_domain) {
 	char *p = NULL;
-	char *check_cookie = cookie_domain;
+	const char *check_cookie = cookie_domain;
 	// Skip past the first char of a cookie_domain that starts
 	// with a ".", ASCII 46
 	if (check_cookie[0] == 46)
@@ -2072,6 +2099,91 @@ end:
 	return result;
 }
 
+#define OIDC_TP_TRACE_ID_LEN 16
+#define OIDC_TP_PARENT_ID_LEN 8
+
+/*
+The following version-format definition is used for version 00.
+version-format   = trace-id "-" parent-id "-" trace-flags
+trace-id         = 32HEXDIGLC  ; 16 bytes array identifier. All zeroes forbidden
+parent-id        = 16HEXDIGLC  ; 8 bytes array identifier. All zeroes forbidden
+trace-flags      = 2HEXDIGLC   ; 8 bit flags. Currently, only one bit is used.
+ */
+void oidc_util_set_trace_parent(request_rec *r, oidc_cfg_t *c, const char *span) {
+	// apr_table_get(r->subprocess_env, "UNIQUE_ID");
+	unsigned char trace_id[OIDC_TP_TRACE_ID_LEN];
+	unsigned char parent_id[OIDC_TP_PARENT_ID_LEN];
+	unsigned char trace_flags = 0;
+	char *s_parent_id = "", *s_trace_id = "";
+	const char *v = NULL;
+	int i = 0;
+	char *hostname = "localhost";
+	const uint64_t P1 = 7;
+	const uint64_t P2 = 31;
+	uint64_t hash = P1;
+
+	if (oidc_cfg_trace_parent_get(c) != OIDC_TRACE_PARENT_GENERATE)
+		return;
+
+	if (r->server->server_hostname)
+		hostname = r->server->server_hostname;
+
+	v = oidc_request_state_get(r, OIDC_REQUEST_STATE_TRACE_ID);
+
+	if (span == NULL) {
+		_oidc_memset(parent_id, 0, OIDC_TP_PARENT_ID_LEN);
+		_oidc_memcpy(parent_id, hostname,
+			     _oidc_strlen(hostname) < OIDC_TP_PARENT_ID_LEN ? _oidc_strlen(hostname)
+									    : OIDC_TP_PARENT_ID_LEN);
+	} else {
+		if (v == NULL)
+			oidc_warn(r, "parameter \"span\" is set, but no \"trace-id\" [%s] found in the request state",
+				  OIDC_REQUEST_STATE_TRACE_ID);
+		else
+			oidc_debug(r, "changing \"parent-id\" of current traceparent");
+		for (const char *p = span; *p != 0; p++)
+			hash = hash * P2 + *p;
+		_oidc_memcpy(parent_id, &hash, OIDC_TP_PARENT_ID_LEN);
+	}
+	for (i = 0; i < OIDC_TP_PARENT_ID_LEN; i++)
+		s_parent_id = apr_psprintf(r->pool, "%s%02x", s_parent_id, parent_id[i]);
+
+	if (v == NULL) {
+		apr_generate_random_bytes(trace_id, OIDC_TP_TRACE_ID_LEN);
+		for (i = 0; i < OIDC_TP_TRACE_ID_LEN; i++)
+			s_trace_id = apr_psprintf(r->pool, "%s%02x", s_trace_id, trace_id[i]);
+		oidc_request_state_set(r, OIDC_REQUEST_STATE_TRACE_ID, s_trace_id);
+	} else {
+		s_trace_id = apr_pstrdup(r->pool, v);
+	}
+
+	if (oidc_cfg_metrics_hook_data_get(c) != NULL)
+		trace_flags = trace_flags | 0x01;
+
+	oidc_http_hdr_in_set(r, OIDC_HTTP_HDR_TRACE_PARENT,
+			     apr_psprintf(r->pool, "00-%s-%s-%02x", s_trace_id, s_parent_id, trace_flags));
+}
+
+void oidc_util_apr_hash_clear(apr_hash_t *ht) {
+	apr_hash_index_t *hi = NULL;
+	const void *key = NULL;
+	apr_ssize_t klen = 0;
+	for (hi = apr_hash_first(NULL, ht); hi; hi = apr_hash_next(hi)) {
+		apr_hash_this(hi, &key, &klen, NULL);
+		apr_hash_set(ht, key, klen, NULL);
+	}
+}
+
+char *oidc_util_openssl_version(apr_pool_t *pool) {
+	char *s_version = NULL;
+#ifdef OPENSSL_VERSION_STR
+	s_version = apr_psprintf(pool, "openssl-%s", OPENSSL_VERSION_STR);
+#else
+	s_version = OPENSSL_VERSION_TEXT;
+#endif
+	return s_version;
+}
+
 char *oidc_util_apr_expr_parse(cmd_parms *cmd, const char *str, oidc_apr_expr_t **expr, apr_byte_t result_is_str) {
 	char *rv = NULL;
 	if ((str == NULL) || (expr == NULL))
@@ -2111,89 +2223,4 @@ const char *oidc_util_apr_expr_exec(request_rec *r, const oidc_apr_expr_t *expr,
 	expr_result = expr->str;
 #endif
 	return expr_result;
-}
-
-#define OIDC_TP_TRACE_ID_LEN 16
-#define OIDC_TP_PARENT_ID_LEN 8
-
-/*
-The following version-format definition is used for version 00.
-version-format   = trace-id "-" parent-id "-" trace-flags
-trace-id         = 32HEXDIGLC  ; 16 bytes array identifier. All zeroes forbidden
-parent-id        = 16HEXDIGLC  ; 8 bytes array identifier. All zeroes forbidden
-trace-flags      = 2HEXDIGLC   ; 8 bit flags. Currently, only one bit is used.
- */
-void oidc_util_set_trace_parent(request_rec *r, oidc_cfg *c, const char *span) {
-	// apr_table_get(r->subprocess_env, "UNIQUE_ID");
-	unsigned char trace_id[OIDC_TP_TRACE_ID_LEN];
-	unsigned char parent_id[OIDC_TP_PARENT_ID_LEN];
-	unsigned char trace_flags = 0;
-	char *s_parent_id = "", *s_trace_id = "";
-	const char *v = NULL;
-	int i = 0;
-	char *hostname = "localhost";
-	const uint64_t P1 = 7;
-	const uint64_t P2 = 31;
-	uint64_t hash = P1;
-
-	if (c->trace_parent != OIDC_TRACE_PARENT_GENERATE)
-		return;
-
-	if (r->server->server_hostname)
-		hostname = r->server->server_hostname;
-
-	v = oidc_request_state_get(r, OIDC_REQUEST_STATE_TRACE_ID);
-
-	if (span == NULL) {
-		_oidc_memset(parent_id, 0, OIDC_TP_PARENT_ID_LEN);
-		_oidc_memcpy(parent_id, hostname,
-			     _oidc_strlen(hostname) < OIDC_TP_PARENT_ID_LEN ? _oidc_strlen(hostname)
-									    : OIDC_TP_PARENT_ID_LEN);
-	} else {
-		if (v == NULL)
-			oidc_warn(r, "parameter \"span\" is set, but no \"trace-id\" [%s] found in the request state",
-				  OIDC_REQUEST_STATE_TRACE_ID);
-		else
-			oidc_debug(r, "changing \"parent-id\" of current traceparent");
-		for (const char *p = span; *p != 0; p++)
-			hash = hash * P2 + *p;
-		_oidc_memcpy(parent_id, &hash, OIDC_TP_PARENT_ID_LEN);
-	}
-	for (i = 0; i < OIDC_TP_PARENT_ID_LEN; i++)
-		s_parent_id = apr_psprintf(r->pool, "%s%02x", s_parent_id, parent_id[i]);
-
-	if (v == NULL) {
-		apr_generate_random_bytes(trace_id, OIDC_TP_TRACE_ID_LEN);
-		for (i = 0; i < OIDC_TP_TRACE_ID_LEN; i++)
-			s_trace_id = apr_psprintf(r->pool, "%s%02x", s_trace_id, trace_id[i]);
-		oidc_request_state_set(r, OIDC_REQUEST_STATE_TRACE_ID, s_trace_id);
-	} else {
-		s_trace_id = apr_pstrdup(r->pool, v);
-	}
-
-	if (c->metrics_hook_data != NULL)
-		trace_flags = trace_flags | 0x01;
-
-	oidc_http_hdr_in_set(r, OIDC_HTTP_HDR_TRACE_PARENT,
-			     apr_psprintf(r->pool, "00-%s-%s-%02x", s_trace_id, s_parent_id, trace_flags));
-}
-
-void oidc_util_apr_hash_clear(apr_hash_t *ht) {
-	apr_hash_index_t *hi = NULL;
-	const void *key = NULL;
-	apr_ssize_t klen = 0;
-	for (hi = apr_hash_first(NULL, ht); hi; hi = apr_hash_next(hi)) {
-		apr_hash_this(hi, &key, &klen, NULL);
-		apr_hash_set(ht, key, klen, NULL);
-	}
-}
-
-char *oidc_util_openssl_version(apr_pool_t *pool) {
-	char *s_version = NULL;
-#ifdef OPENSSL_VERSION_STR
-	s_version = apr_psprintf(pool, "openssl-%s", OPENSSL_VERSION_STR);
-#else
-	s_version = OPENSSL_VERSION_TEXT;
-#endif
-	return s_version;
 }

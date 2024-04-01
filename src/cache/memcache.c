@@ -43,12 +43,11 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#include "mod_auth_openidc.h"
+#include "cfg/cache.h"
+#include "cfg/cfg_int.h"
 #include <ap_mpm.h>
 #include <apr_memcache.h>
 #include <apr_optional.h>
-
-extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 /*
  * avoid including mod_http2.h (assume the function signature is stable)
@@ -71,12 +70,12 @@ static void *oidc_cache_memcache_cfg_create(apr_pool_t *pool) {
  * initialize the memcache struct to a number of memcache servers
  */
 static int oidc_cache_memcache_post_config(server_rec *s) {
-	oidc_cfg *cfg = (oidc_cfg *)ap_get_module_config(s->module_config, &auth_openidc_module);
+	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(s->module_config, &auth_openidc_module);
 
-	if (cfg->cache_cfg != NULL)
+	if (cfg->cache.cfg != NULL)
 		return APR_SUCCESS;
 	oidc_cache_cfg_memcache_t *context = oidc_cache_memcache_cfg_create(s->process->pool);
-	cfg->cache_cfg = context;
+	cfg->cache.cfg = context;
 
 	apr_status_t rv = APR_SUCCESS;
 	int nservers = 0;
@@ -87,14 +86,14 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 	int max_threads, minw, maxw;
 	apr_uint32_t min, smax, hmax, ttl;
 
-	if (cfg->cache_memcache_servers == NULL) {
+	if (oidc_cfg_cache_memcache_servers_get(cfg) == NULL) {
 		oidc_serror(s, "cache type is set to \"memcache\", but no valid " OIDCMemCacheServers
 			       " setting was found");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
 	/* loop over the provided memcache servers to find out the number of servers configured */
-	char *cache_config = apr_pstrdup(p, cfg->cache_memcache_servers);
+	char *cache_config = apr_pstrdup(p, oidc_cfg_cache_memcache_servers_get(cfg));
 	split = apr_strtok(cache_config, OIDC_STR_SPACE, &tok);
 	while (split) {
 		nservers++;
@@ -122,10 +121,10 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 		 */
 		max_threads = max_threads - 1 + maxw;
 	}
-	min = cfg->cache_memcache_min;
-	smax = cfg->cache_memcache_smax;
-	hmax = cfg->cache_memcache_hmax;
-	ttl = cfg->cache_memcache_ttl;
+	min = oidc_cfg_cache_memcache_min_get(cfg);
+	smax = oidc_cfg_cache_memcache_smax_get(cfg);
+	hmax = oidc_cfg_cache_memcache_hmax_get(cfg);
+	ttl = oidc_cfg_cache_memcache_ttl_get(cfg);
 	if (max_threads > 0 && hmax == 0) {
 		hmax = max_threads;
 		if (smax == 0) {
@@ -154,7 +153,7 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 		min = smax;
 	}
 	/* loop again over the provided servers */
-	cache_config = apr_pstrdup(p, cfg->cache_memcache_servers);
+	cache_config = apr_pstrdup(p, oidc_cfg_cache_memcache_servers_get(cfg));
 	split = apr_strtok(cache_config, OIDC_STR_SPACE, &tok);
 	while (split) {
 		apr_memcache_server_t *st;
@@ -236,8 +235,8 @@ static apr_byte_t oidc_cache_memcache_status(request_rec *r, oidc_cache_cfg_memc
  */
 static apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *section, const char *key, char **value) {
 
-	oidc_cfg *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
-	oidc_cache_cfg_memcache_t *context = (oidc_cache_cfg_memcache_t *)cfg->cache_cfg;
+	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cache_cfg_memcache_t *context = (oidc_cache_cfg_memcache_t *)cfg->cache.cfg;
 
 	apr_size_t len = 0;
 
@@ -287,8 +286,8 @@ static apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *section, c
 static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *section, const char *key, const char *value,
 					  apr_time_t expiry) {
 
-	oidc_cfg *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
-	oidc_cache_cfg_memcache_t *context = (oidc_cache_cfg_memcache_t *)cfg->cache_cfg;
+	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cache_cfg_memcache_t *context = (oidc_cache_cfg_memcache_t *)cfg->cache.cfg;
 
 	apr_status_t rv = APR_SUCCESS;
 
@@ -323,5 +322,16 @@ static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *section, c
 	return (rv == APR_SUCCESS);
 }
 
+// clang-format off
+
 oidc_cache_t oidc_cache_memcache = {
-    "memcache", 1, oidc_cache_memcache_post_config, NULL, oidc_cache_memcache_get, oidc_cache_memcache_set, NULL};
+    "memcache",
+	1,
+	oidc_cache_memcache_post_config,
+	NULL,
+	oidc_cache_memcache_get,
+	oidc_cache_memcache_set,
+	NULL
+};
+
+// clang-format on

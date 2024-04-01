@@ -40,17 +40,20 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+#include "cfg/dir.h"
 #include "handle/handle.h"
 #include "metrics.h"
+#include "mod_auth_openidc.h"
+#include "util.h"
 
-static int oidc_session_management_iframe_op(request_rec *r, oidc_cfg *c, oidc_session_t *session,
+static int oidc_session_management_iframe_op(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
 					     const char *check_session_iframe) {
 	oidc_debug(r, "enter");
 	oidc_http_hdr_out_location_set(r, check_session_iframe);
 	return HTTP_MOVED_TEMPORARILY;
 }
 
-static int oidc_session_management_iframe_rp(request_rec *r, oidc_cfg *c, oidc_session_t *session,
+static int oidc_session_management_iframe_rp(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
 					     const char *client_id, const char *check_session_iframe) {
 
 	oidc_debug(r, "enter");
@@ -141,7 +144,7 @@ static int oidc_session_management_iframe_rp(request_rec *r, oidc_cfg *c, oidc_s
 /*
  * handle session management request
  */
-int oidc_session_management(request_rec *r, oidc_cfg *c, oidc_session_t *session) {
+int oidc_session_management(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 	char *cmd = NULL;
 	const char *id_token_hint = NULL;
 	oidc_provider_t *provider = NULL;
@@ -158,7 +161,8 @@ int oidc_session_management(request_rec *r, oidc_cfg *c, oidc_session_t *session
 		oidc_debug(
 		    r,
 		    "[session=logout] calling oidc_handle_logout_request because of session mgmt local logout call.");
-		return oidc_logout_request(r, c, session, oidc_get_absolute_url(r, c, c->default_slo_url), TRUE);
+		return oidc_logout_request(r, c, session, oidc_get_absolute_url(r, c, oidc_cfg_default_slo_url_get(c)),
+					   TRUE);
 	}
 
 	if (oidc_get_provider_from_session(r, c, session, &provider) == FALSE) {
@@ -168,20 +172,24 @@ int oidc_session_management(request_rec *r, oidc_cfg *c, oidc_session_t *session
 
 	/* see if this is a request for the OP iframe */
 	if (_oidc_strcmp("iframe_op", cmd) == 0) {
-		if (provider->check_session_iframe != NULL) {
-			return oidc_session_management_iframe_op(r, c, session, provider->check_session_iframe);
+		if (oidc_cfg_provider_check_session_iframe_get(provider) != NULL) {
+			return oidc_session_management_iframe_op(r, c, session,
+								 oidc_cfg_provider_check_session_iframe_get(provider));
 		}
 		return HTTP_NOT_FOUND;
 	}
 
 	/* see if this is a request for the RP iframe */
 	if (_oidc_strcmp("iframe_rp", cmd) == 0) {
-		if ((provider->client_id != NULL) && (provider->check_session_iframe != NULL)) {
-			return oidc_session_management_iframe_rp(r, c, session, provider->client_id,
-								 provider->check_session_iframe);
+		if ((oidc_cfg_provider_client_id_get(provider) != NULL) &&
+		    (oidc_cfg_provider_check_session_iframe_get(provider) != NULL)) {
+			return oidc_session_management_iframe_rp(r, c, session,
+								 oidc_cfg_provider_client_id_get(provider),
+								 oidc_cfg_provider_check_session_iframe_get(provider));
 		}
 		oidc_debug(r, "iframe_rp command issued but no client (%s) and/or no check_session_iframe (%s) set",
-			   provider->client_id, provider->check_session_iframe);
+			   oidc_cfg_provider_client_id_get(provider),
+			   oidc_cfg_provider_check_session_iframe_get(provider));
 		return HTTP_NOT_FOUND;
 	}
 
@@ -197,7 +205,8 @@ int oidc_session_management(request_rec *r, oidc_cfg *c, oidc_session_t *session
 		return oidc_request_authenticate_user(
 		    r, c, provider,
 		    apr_psprintf(r->pool, "%s?session=iframe_rp", oidc_get_redirect_uri_iss(r, c, provider)), NULL,
-		    id_token_hint, "none", oidc_dir_cfg_path_auth_request_params(r), oidc_dir_cfg_path_scope(r));
+		    id_token_hint, "none", oidc_cfg_dir_path_auth_request_params_get(r),
+		    oidc_cfg_dir_path_scope_get(r));
 	}
 
 	/* handle failure in fallthrough */

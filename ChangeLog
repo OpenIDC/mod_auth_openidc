@@ -1,3 +1,15 @@
+04/02/2024
+- major rewrite of config primitive handling:
+  - split out over different files, use header files consistently
+  - encapsulate config record with getters/setters
+  - allow overriding defined global configuration primitives to their default value on the individual vhost level
+  - apply input/boundary checking on all configuration values, shared with provider metadata parsing
+  - various fixes to applying default config values and allowing primitives in vhost/directory scopes
+- return HTTTP 502 when refreshing acces token or userinfo fails (default: "502_on_error")
+- use a singleton token refresh mutex
+- add support for OIDCOAuthIntrospectionEndpointKeyPassword
+- bump to 2.4.16dev
+
 04/01/2024
 - release 2.4.15.7
 

@@ -41,8 +41,8 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#ifndef MOD_AUTH_OPENIDC_HTTP_H_
-#define MOD_AUTH_OPENIDC_HTTP_H_
+#ifndef _MOD_AUTH_OPENIDC_HTTP_H_
+#define _MOD_AUTH_OPENIDC_HTTP_H_
 
 #include <apr.h>
 #include <apr_time.h>
@@ -141,17 +141,17 @@ char *oidc_http_hdr_normalize_name(const request_rec *r, const char *str);
 apr_byte_t oidc_http_get(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth,
 			 const char *bearer_token, int ssl_validate_server, char **response, long *response_code,
 			 oidc_http_timeout_t *http_timeout, const oidc_http_outgoing_proxy_t *outgoing_proxy,
-			 apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
+			 const apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
 			 const char *ssl_key_pwd);
 apr_byte_t oidc_http_post_form(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth,
 			       const char *bearer_token, int ssl_validate_server, char **response, long *response_code,
 			       oidc_http_timeout_t *http_timeout, const oidc_http_outgoing_proxy_t *outgoing_proxy,
-			       apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
+			       const apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
 			       const char *ssl_key_pwd);
 apr_byte_t oidc_http_post_json(request_rec *r, const char *url, json_t *data, const char *basic_auth,
 			       const char *bearer_token, int ssl_validate_server, char **response, long *response_code,
 			       oidc_http_timeout_t *http_timeout, const oidc_http_outgoing_proxy_t *outgoing_proxy,
-			       apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
+			       const apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
 			       const char *ssl_key_pwd);
 apr_byte_t oidc_http_request_has_parameter(request_rec *r, const char *param);
 apr_byte_t oidc_http_request_parameter_get(request_rec *r, char *name, char **value);
@@ -169,10 +169,10 @@ char *oidc_http_get_chunked_cookie(request_rec *r, const char *cookieName, int c
 void oidc_http_set_chunked_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires,
 				  int chunkSize, const char *ext);
 
-char **oidc_http_proxy_auth_options(void);
+const char **oidc_http_proxy_auth_options(void);
 unsigned long oidc_http_proxy_s2auth(const char *arg);
 
 void oidc_http_init(void);
 void oidc_http_cleanup(void);
 
-#endif /* MOD_AUTH_OPENIDC_HTTP_H_ */
+#endif /* _MOD_AUTH_OPENIDC_HTTP_H_ */

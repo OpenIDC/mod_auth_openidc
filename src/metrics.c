@@ -42,9 +42,11 @@
 
 // clang-format off
 
-#include "mod_auth_openidc.h"
+#include "util.h"
 #include "metrics.h"
 #include <limits.h>
+#include <apr_shm.h>
+#include <apr_lib.h>
 
 // NB: formatting matters for docs script from here until clang-format on
 
@@ -1140,7 +1142,7 @@ static const char *oidc_metric_prometheus_normalize_name(apr_pool_t *pool, const
 	char *label = apr_psprintf(pool, "%s", name);
 	int i = 0;
 	for (i = 0; i < _oidc_strlen(label); i++)
-		if (isalnum(label[i]) == 0)
+		if (apr_isalnum(label[i]) == 0)
 			label[i] = '_';
 	return apr_psprintf(pool, "%s_%s", OIDC_METRICS_PROMETHEUS_PREFIX, label);
 }

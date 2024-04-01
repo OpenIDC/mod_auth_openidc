@@ -40,9 +40,14 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+#include "cfg/dir.h"
 #include "handle/handle.h"
+#include "http_protocol.h"
 #include "metrics.h"
+#include "mod_auth_openidc.h"
 #include "pcre_subst.h"
+#include "proto.h"
+#include "util.h"
 
 static apr_byte_t oidc_authz_match_json_string(request_rec *r, const char *spec, json_t *val, const char *key) {
 	return (_oidc_strcmp(json_string_value(val), spec) == 0);
@@ -396,7 +401,7 @@ static void oidc_authz_get_claims_and_idtoken(request_rec *r, json_t **claims, j
 authz_status oidc_authz_24_worker(request_rec *r, json_t *claims, const char *require_args,
 				  const void *parsed_require_args, oidc_authz_match_claim_fn_type match_claim_fn) {
 
-	oidc_cfg *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	int count_oauth_claims = 0;
 	const char *t, *w, *err = NULL;
 	const ap_expr_info_t *expr = parsed_require_args;
@@ -462,7 +467,7 @@ static authz_status oidc_authz_24_unauthorized_user(request_rec *r) {
 
 	oidc_debug(r, "enter");
 
-	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
 	if (_oidc_strnatcasecmp((const char *)ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ERROR_OAUTH20);
@@ -473,19 +478,19 @@ static authz_status oidc_authz_24_unauthorized_user(request_rec *r) {
 	}
 
 	/* see if we've configured OIDCUnAutzAction for this path */
-	switch (oidc_dir_cfg_unautz_action(r)) {
+	switch (oidc_cfg_dir_unautz_action_get(r)) {
 	case OIDC_UNAUTZ_RETURN403:
 	case OIDC_UNAUTZ_RETURN401:
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_401);
-		oidc_util_html_send_error(r, c->error_template, "Authorization Error", oidc_dir_cfg_unauthz_arg(r),
-					  HTTP_UNAUTHORIZED);
-		if (c->error_template)
+		oidc_util_html_send_error(r, oidc_cfg_html_error_template_get(c), "Authorization Error",
+					  oidc_cfg_dir_unauthz_arg_get(r), HTTP_UNAUTHORIZED);
+		if (oidc_cfg_html_error_template_get(c))
 			r->header_only = 1;
 		return AUTHZ_DENIED;
 	case OIDC_UNAUTZ_RETURN302:
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_302);
 		html_head = apr_psprintf(r->pool, "<meta http-equiv=\"refresh\" content=\"0; url=%s\">",
-					 oidc_dir_cfg_unauthz_arg(r));
+					 oidc_cfg_dir_unauthz_arg_get(r));
 		oidc_util_html_send(r, "Authorization Error Redirect", html_head, NULL, NULL, HTTP_UNAUTHORIZED);
 		r->header_only = 1;
 		return AUTHZ_DENIED;
@@ -505,8 +510,9 @@ static authz_status oidc_authz_24_unauthorized_user(request_rec *r) {
 		break;
 	}
 
-	oidc_request_authenticate_user(r, c, NULL, oidc_get_current_url(r, c->x_forwarded_headers), NULL, NULL, NULL,
-				       oidc_dir_cfg_path_auth_request_params(r), oidc_dir_cfg_path_scope(r));
+	oidc_request_authenticate_user(r, c, NULL, oidc_get_current_url(r, oidc_cfg_x_forwarded_headers_get(c)), NULL,
+				       NULL, NULL, oidc_cfg_dir_path_auth_request_params_get(r),
+				       oidc_cfg_dir_path_scope_get(r));
 
 	const char *location = oidc_http_hdr_out_location_get(r);
 
@@ -534,7 +540,7 @@ authz_status oidc_authz_24_checker(request_rec *r, const char *require_args, con
 
 	/* check for anonymous access and PASS mode */
 	if ((r->user != NULL) && (_oidc_strlen(r->user) == 0)) {
-		if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
+		if (oidc_cfg_dir_unauth_action_get(r) == OIDC_UNAUTH_PASS)
 			return AUTHZ_GRANTED;
 		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
 			return AUTHZ_GRANTED;
@@ -675,32 +681,32 @@ static int oidc_authz_22_worker(request_rec *r, json_t *claims, const require_li
  */
 static int oidc_authz_22_unauthorized_user(request_rec *r) {
 
-	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
 	if (_oidc_strnatcasecmp((const char *)ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ERROR_OAUTH20);
-		oidc_oauth_return_www_authenticate(r, "insufficient_scope",
+		oidc_proto_return_www_authenticate(r, "insufficient_scope",
 						   "Different scope(s) or other claims required");
 		return HTTP_UNAUTHORIZED;
 	}
 
 	/* see if we've configured OIDCUnAutzAction for this path */
-	switch (oidc_dir_cfg_unautz_action(r)) {
+	switch (oidc_cfg_dir_unautz_action_get(r)) {
 	case OIDC_UNAUTZ_RETURN403:
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_403);
-		if (oidc_dir_cfg_unauthz_arg(r))
-			oidc_util_html_send(r, "Authorization Error", NULL, NULL, oidc_dir_cfg_unauthz_arg(r),
+		if (oidc_cfg_dir_unauthz_arg_get(r))
+			oidc_util_html_send(r, "Authorization Error", NULL, NULL, oidc_cfg_dir_unauthz_arg_get(r),
 					    HTTP_FORBIDDEN);
 		return HTTP_FORBIDDEN;
 	case OIDC_UNAUTZ_RETURN401:
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_401);
-		if (oidc_dir_cfg_unauthz_arg(r))
-			oidc_util_html_send(r, "Authorization Error", NULL, NULL, oidc_dir_cfg_unauthz_arg(r),
+		if (oidc_cfg_dir_unauthz_arg_get(r))
+			oidc_util_html_send(r, "Authorization Error", NULL, NULL, oidc_cfg_dir_unauthz_arg_get(r),
 					    HTTP_UNAUTHORIZED);
 		return HTTP_UNAUTHORIZED;
 	case OIDC_UNAUTZ_RETURN302:
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_302);
-		oidc_http_hdr_out_location_set(r, oidc_dir_cfg_unauthz_arg(r));
+		oidc_http_hdr_out_location_set(r, oidc_cfg_dir_unauthz_arg_get(r));
 		return HTTP_MOVED_TEMPORARILY;
 	case OIDC_UNAUTZ_AUTHENTICATE:
 		/*
@@ -716,9 +722,9 @@ static int oidc_authz_22_unauthorized_user(request_rec *r) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_AUTH);
 	}
 
-	return oidc_request_authenticate_user(r, c, NULL, oidc_get_current_url(r, c->x_forwarded_headers), NULL, NULL,
-					      NULL, oidc_dir_cfg_path_auth_request_params(r),
-					      oidc_dir_cfg_path_scope(r));
+	return oidc_request_authenticate_user(r, c, NULL, oidc_get_current_url(r, oidc_cfg_x_forwarded_headers_get(c)),
+					      NULL, NULL, NULL, oidc_cfg_dir_path_auth_request_params_get(r),
+					      oidc_cfg_dir_path_scope_get(r));
 }
 
 /*
@@ -730,7 +736,7 @@ int oidc_authz_22_checker(request_rec *r) {
 	/* check for anonymous access and PASS mode */
 	if ((r->user != NULL) && (_oidc_strlen(r->user) == 0)) {
 		r->user = NULL;
-		if (oidc_dir_cfg_unauth_action(r) == OIDC_UNAUTH_PASS)
+		if (oidc_cfg_dir_unauth_action_get(r) == OIDC_UNAUTH_PASS)
 			return OK;
 		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
 			return OK;

@@ -43,9 +43,9 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#include "mod_auth_openidc.h"
-
-extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
+#include "cfg/cache.h"
+#include "cfg/cfg_int.h"
+#include "util.h"
 
 /*
  * header structure that holds the metadata info for a cache file entry
@@ -64,10 +64,10 @@ typedef struct {
 
 /* post config routine */
 int oidc_cache_file_post_config(server_rec *s) {
-	oidc_cfg *cfg = (oidc_cfg *)ap_get_module_config(s->module_config, &auth_openidc_module);
-	if (cfg->cache_file_dir == NULL) {
+	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(s->module_config, &auth_openidc_module);
+	if (cfg->cache.file_dir == NULL) {
 		/* by default we'll use the OS specified /tmp dir for cache files */
-		apr_temp_dir_get((const char **)&cfg->cache_file_dir, s->process->pool);
+		apr_temp_dir_get((const char **)&cfg->cache.file_dir, s->process->pool);
 	}
 	return OK;
 }
@@ -83,8 +83,8 @@ static const char *oidc_cache_file_name(request_rec *r, const char *section, con
  * return the fully qualified path name to a cache file for a specified key
  */
 static const char *oidc_cache_file_path(request_rec *r, const char *section, const char *key) {
-	oidc_cfg *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
-	return apr_psprintf(r->pool, "%s/%s", cfg->cache_file_dir, oidc_cache_file_name(r, section, key));
+	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	return apr_psprintf(r->pool, "%s/%s", cfg->cache.file_dir, oidc_cache_file_name(r, section, key));
 }
 
 /*
@@ -240,7 +240,7 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 	oidc_cache_file_info_t info;
 	char s_err[128];
 
-	oidc_cfg *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
 	/* get the path to the metadata file that holds "last cleaned" metadata info */
 	const char *metadata_path = oidc_cache_file_path(r, "cache-file", OIDC_CACHE_FILE_LAST_CLEANED);
@@ -249,13 +249,13 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 	if ((rc = apr_stat(&fi, metadata_path, APR_FINFO_MTIME, r->pool)) == APR_SUCCESS) {
 
 		/* really only clean once per so much time, check that we haven not recently run */
-		if (apr_time_now() < fi.mtime + apr_time_from_sec(cfg->cache_file_clean_interval)) {
+		if (apr_time_now() < fi.mtime + apr_time_from_sec(oidc_cfg_cache_file_clean_interval_get(cfg))) {
 			oidc_debug(
 			    r,
 			    "last cleanup call was less than %d seconds ago (next one as early as in %" APR_TIME_T_FMT
 			    " secs)",
-			    cfg->cache_file_clean_interval,
-			    apr_time_sec(fi.mtime + apr_time_from_sec(cfg->cache_file_clean_interval) -
+			    oidc_cfg_cache_file_clean_interval_get(cfg),
+			    apr_time_sec(fi.mtime + apr_time_from_sec(oidc_cfg_cache_file_clean_interval_get(cfg)) -
 					 apr_time_now()));
 			return APR_SUCCESS;
 		}
@@ -284,8 +284,8 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 	}
 
 	/* time to clean, open the cache directory */
-	if ((rc = apr_dir_open(&dir, cfg->cache_file_dir, r->pool)) != APR_SUCCESS) {
-		oidc_error(r, "error opening cache directory '%s' for cleaning (%s)", cfg->cache_file_dir,
+	if ((rc = apr_dir_open(&dir, cfg->cache.file_dir, r->pool)) != APR_SUCCESS) {
+		oidc_error(r, "error opening cache directory '%s' for cleaning (%s)", cfg->cache.file_dir,
 			   apr_strerror(rc, s_err, sizeof(s_err)));
 		return rc;
 	}
@@ -306,7 +306,7 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 				continue;
 
 			/* get the fully qualified path to the cache file and open it */
-			const char *path = apr_psprintf(r->pool, "%s/%s", cfg->cache_file_dir, fi.name);
+			const char *path = apr_psprintf(r->pool, "%s/%s", cfg->cache.file_dir, fi.name);
 			if ((rc = apr_file_open(&fd, path, APR_FOPEN_READ, APR_OS_DEFAULT, r->pool)) != APR_SUCCESS) {
 				oidc_error(r, "unable to open cache entry \"%s\" (%s)", path,
 					   apr_strerror(rc, s_err, sizeof(s_err)));
@@ -361,7 +361,7 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section, const
 	char s_err[128];
 	char *rnd = NULL;
 
-	oidc_proto_generate_nonce(r, &rnd, 12);
+	oidc_util_generate_random_string(r, &rnd, 12);
 
 	/* get the fully qualified path to the cache file based on the key name */
 	const char *target = oidc_cache_file_path(r, section, key);
@@ -421,5 +421,16 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section, const
 	return (rc == APR_SUCCESS);
 }
 
-oidc_cache_t oidc_cache_file = {"file", 1, oidc_cache_file_post_config, NULL, oidc_cache_file_get, oidc_cache_file_set,
-				NULL};
+// clang-format off
+
+oidc_cache_t oidc_cache_file = {
+	"file",
+	1,
+	oidc_cache_file_post_config,
+	NULL,
+	oidc_cache_file_get,
+	oidc_cache_file_set,
+	NULL
+};
+
+// clang-format on

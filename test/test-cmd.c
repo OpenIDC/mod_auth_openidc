@@ -42,8 +42,14 @@
  *
  **************************************************************************/
 
-#include <mod_auth_openidc.h>
-
+#include "cfg/cfg.h"
+#include "cfg/cfg_int.h"
+#include "cfg/dir.h"
+#include "cfg/provider.h"
+#include "jose.h"
+#include "session.h"
+#include "util.h"
+#include <apr_base64.h>
 #include <openssl/pem.h>
 
 int usage(int argc, char **argv, const char *msg) {
@@ -259,10 +265,6 @@ int key2jwk(int argc, char **argv, apr_pool_t *pool) {
 	return 0;
 }
 
-extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
-
-typedef struct oidc_dir_cfg oidc_dir_cfg;
-
 static request_rec *request_setup(apr_pool_t *pool) {
 	const unsigned int kIdx = 0;
 	const unsigned int kEls = kIdx + 1;
@@ -296,25 +298,27 @@ static request_rec *request_setup(apr_pool_t *pool) {
 	apr_uri_parse(request->pool, "https://www.example.com/bla?foo=bar&param1=value1", &request->parsed_uri);
 
 	auth_openidc_module.module_index = kIdx;
-	oidc_cfg *cfg = oidc_create_server_config(request->pool, request->server);
-	cfg->provider.issuer = "https://idp.example.com";
-	cfg->provider.authorization_endpoint_url = "https://idp.example.com/authorize";
-	cfg->provider.scope = "openid";
-	cfg->provider.client_id = "client_id";
+	oidc_cfg_t *cfg = oidc_cfg_server_create(request->pool, request->server);
+
+	oidc_cfg_provider_issuer_set(pool, oidc_cfg_provider_get(cfg), "https://idp.example.com");
+	oidc_cfg_provider_authorization_endpoint_url_set(pool, oidc_cfg_provider_get(cfg),
+							 "https://idp.example.com/authorize");
+	oidc_cfg_provider_scope_set(pool, oidc_cfg_provider_get(cfg), "openid");
+	oidc_cfg_provider_client_id_set(pool, oidc_cfg_provider_get(cfg), "client_id");
 	cfg->redirect_uri = "https://www.example.com/protected/";
 
-	oidc_dir_cfg *d_cfg = oidc_create_dir_config(request->pool, NULL);
+	oidc_dir_cfg_t *d_cfg = oidc_cfg_dir_config_create(request->pool, NULL);
 
 	request->server->module_config = apr_pcalloc(request->pool, sizeof(ap_conf_vector_t *) * kEls);
 	request->per_dir_config = apr_pcalloc(request->pool, sizeof(ap_conf_vector_t *) * kEls);
 	ap_set_module_config(request->server->module_config, &auth_openidc_module, cfg);
 	ap_set_module_config(request->per_dir_config, &auth_openidc_module, d_cfg);
 
-	cfg->cache = &oidc_cache_shm;
-	cfg->cache_cfg = NULL;
-	cfg->cache_shm_size_max = 500;
-	cfg->cache_shm_entry_size_max = 16384 + 255 + 17;
-	if (cfg->cache->post_config(request->server) != OK) {
+	cfg->cache.impl = &oidc_cache_shm;
+	cfg->cache.cfg = NULL;
+	cfg->cache.shm_size_max = 500;
+	cfg->cache.shm_entry_size_max = 16384 + 255 + 17;
+	if (cfg->cache.impl->post_config(request->server) != OK) {
 		printf("cfg->cache->post_config failed!\n");
 		exit(-1);
 	}

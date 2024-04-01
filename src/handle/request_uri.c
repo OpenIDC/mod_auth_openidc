@@ -41,6 +41,10 @@
  */
 
 #include "handle/handle.h"
+#include "metadata.h"
+#include "mod_auth_openidc.h"
+#include "proto.h"
+#include "util.h"
 
 #define OIDC_REQUEST_OJBECT_COPY_FROM_REQUEST "copy_from_request"
 #define OIDC_REQUEST_OJBECT_COPY_AND_REMOVE_FROM_REQUEST "copy_and_remove_from_request"
@@ -126,7 +130,7 @@ static int oidc_request_uri_delete_from_request(void *rec, const char *name, con
 /*
  * obtain the public key for a provider to encrypt the request object with
  */
-static apr_byte_t oidc_request_uri_encryption_jwk_by_type(request_rec *r, oidc_cfg *cfg,
+static apr_byte_t oidc_request_uri_encryption_jwk_by_type(request_rec *r, oidc_cfg_t *cfg,
 							  struct oidc_provider_t *provider, int key_type,
 							  oidc_jwk_t **jwk) {
 
@@ -138,7 +142,8 @@ static apr_byte_t oidc_request_uri_encryption_jwk_by_type(request_rec *r, oidc_c
 	int i = 0;
 
 	/* TODO: forcefully refresh now; we may want to relax that */
-	oidc_metadata_jwks_get(r, cfg, &provider->jwks_uri, provider->ssl_validate_server, &j_jwks, &force_refresh);
+	oidc_metadata_jwks_get(r, cfg, oidc_cfg_provider_jwks_uri_get(provider),
+			       oidc_cfg_provider_ssl_validate_server_get(provider), &j_jwks, &force_refresh);
 
 	if (j_jwks == NULL) {
 		oidc_error(r, "could not retrieve JSON Web Keys");
@@ -195,14 +200,16 @@ static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provide
 
 	oidc_debug(r, "enter");
 
-	oidc_cfg *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
 	/* create the request object value */
 	oidc_jwt_t *request_object = oidc_jwt_new(r->pool, TRUE, TRUE);
 
 	/* set basic values: iss, aud, iat and exp */
-	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_ISS, json_string(provider->client_id));
-	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_AUD, json_string(provider->issuer));
+	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_ISS,
+			    json_string(oidc_cfg_provider_client_id_get(provider)));
+	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_AUD,
+			    json_string(oidc_cfg_provider_issuer_get(provider)));
 	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_IAT,
 			    json_integer(apr_time_sec(apr_time_now())));
 	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_EXP,
@@ -241,10 +248,13 @@ static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provide
 		switch (kty) {
 		case CJOSE_JWK_KTY_RSA:
 		case CJOSE_JWK_KTY_EC:
-			if ((provider->client_keys != NULL) || (cfg->private_keys != NULL)) {
-				sjwk = provider->client_keys
-					   ? oidc_util_key_list_first(provider->client_keys, kty, OIDC_JOSE_JWK_SIG_STR)
-					   : oidc_util_key_list_first(cfg->private_keys, kty, OIDC_JOSE_JWK_SIG_STR);
+			if ((oidc_cfg_provider_client_keys_get(provider) != NULL) ||
+			    (oidc_cfg_private_keys_get(cfg) != NULL)) {
+				sjwk = oidc_cfg_provider_client_keys_get(provider)
+					   ? oidc_util_key_list_first(oidc_cfg_provider_client_keys_get(provider), kty,
+								      OIDC_JOSE_JWK_SIG_STR)
+					   : oidc_util_key_list_first(oidc_cfg_private_keys_get(cfg), kty,
+								      OIDC_JOSE_JWK_SIG_STR);
 				if (sjwk && sjwk->kid)
 					request_object->header.kid = apr_pstrdup(r->pool, sjwk->kid);
 				else
@@ -255,7 +265,8 @@ static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provide
 			}
 			break;
 		case CJOSE_JWK_KTY_OCT:
-			oidc_util_create_symmetric_key(r, provider->client_secret, 0, NULL, FALSE, &sjwk);
+			oidc_util_create_symmetric_key(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, FALSE,
+						       &sjwk);
 			jwk_needs_destroy = 1;
 			break;
 		default:
@@ -307,8 +318,9 @@ static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provide
 			oidc_request_uri_encryption_jwk_by_type(r, cfg, provider, oidc_jwt_alg2kty(jwe), &ejwk);
 			break;
 		case CJOSE_JWK_KTY_OCT:
-			oidc_util_create_symmetric_key(r, provider->client_secret, oidc_alg2keysize(jwe->header.alg),
-						       OIDC_JOSE_ALG_SHA256, FALSE, &ejwk);
+			oidc_util_create_symmetric_key(r, oidc_cfg_provider_client_secret_get(provider),
+						       oidc_alg2keysize(jwe->header.alg), OIDC_JOSE_ALG_SHA256, FALSE,
+						       &ejwk);
 			break;
 		default:
 			oidc_error(r, "unsupported encryption algorithm, no key type for algorithm: %s",
@@ -381,7 +393,7 @@ static char *oidc_request_uri_create(request_rec *r, struct oidc_provider_t *pro
 	char *request_uri = NULL;
 	if (serialized_request_object != NULL) {
 		char *request_ref = NULL;
-		if (oidc_proto_generate_random_string(r, &request_ref, 16) == TRUE) {
+		if (oidc_util_generate_random_string(r, &request_ref, 16) == TRUE) {
 			oidc_cache_set_request_uri(r, request_ref, serialized_request_object,
 						   apr_time_now() + apr_time_from_sec(ttl));
 			request_uri = apr_psprintf(r->pool, "%s?%s=%s", resolver_url, OIDC_PROTO_REQUEST_URI,
@@ -400,7 +412,8 @@ void oidc_request_uri_add_request_param(request_rec *r, struct oidc_provider_t *
 
 	/* parse the request object configuration from a string in to a JSON structure */
 	json_t *request_object_config = NULL;
-	if (oidc_util_decode_json_object(r, provider->request_object, &request_object_config) == FALSE)
+	if (oidc_util_decode_json_object(r, oidc_cfg_provider_request_object_get(provider), &request_object_config) ==
+	    FALSE)
 		return;
 
 	/* request_uri is used as default parameter for sending Request Object */
@@ -442,7 +455,7 @@ void oidc_request_uri_add_request_param(request_rec *r, struct oidc_provider_t *
 /*
  * handle request object by reference request
  */
-int oidc_request_uri(request_rec *r, oidc_cfg *c) {
+int oidc_request_uri(request_rec *r, oidc_cfg_t *c) {
 
 	char *request_ref = NULL;
 	oidc_http_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_REQUEST_URI, &request_ref);

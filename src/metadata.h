@@ -40,42 +40,23 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#include "handle/handle.h"
-#include "mod_auth_openidc.h"
+#ifndef _MOD_AUTH_OPENIDC_METADATA_H_
+#define _MOD_AUTH_OPENIDC_METADATA_H_
 
-int oidc_revoke_session(request_rec *r, oidc_cfg_t *c) {
-	apr_byte_t rc = FALSE;
-	char *session_id = NULL;
+#include "cfg/cfg.h"
+#include "cfg/provider.h"
 
-	oidc_http_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_REVOKE_SESSION, &session_id);
-	if (session_id == NULL)
-		return HTTP_BAD_REQUEST;
+apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg_t *cfg, const char *issuer, json_t **j_provider,
+				      apr_byte_t allow_discovery);
+apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg, const char *issuer, const char *url,
+					   json_t **j_metadata, char **response);
+apr_byte_t oidc_metadata_provider_parse(request_rec *r, oidc_cfg_t *cfg, json_t *j_provider, oidc_provider_t *provider);
+apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, oidc_cfg_t *cfg, json_t *j_provider, const char *issuer);
+apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg_t *cfg, apr_array_header_t **arr);
+apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg_t *cfg, const char *selected, oidc_provider_t **provider,
+			     apr_byte_t allow_discovery);
+apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg_t *cfg, const oidc_jwks_uri_t *jwks_uri,
+				  int ssl_validate_server, json_t **j_jwks, apr_byte_t *refresh);
+apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, json_t *j_provider);
 
-	if (oidc_cfg_session_type_get(c) == OIDC_SESSION_TYPE_SERVER_CACHE)
-		rc = oidc_cache_set_session(r, session_id, NULL, 0);
-	else
-		oidc_warn(r, "cannot revoke session because server side caching is not in use");
-
-	r->user = "";
-
-	return (rc == TRUE) ? OK : HTTP_INTERNAL_SERVER_ERROR;
-}
-
-/*
- * handle a request to invalidate a cached access token introspection result
- */
-int oidc_revoke_at_cache_remove(request_rec *r, oidc_cfg_t *c) {
-	char *access_token = NULL;
-	oidc_http_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE, &access_token);
-
-	char *cache_entry = NULL;
-	oidc_cache_get_access_token(r, access_token, &cache_entry);
-	if (cache_entry == NULL) {
-		oidc_error(r, "no cached access token found for value: %s", access_token);
-		return HTTP_NOT_FOUND;
-	}
-
-	oidc_cache_set_access_token(r, access_token, NULL, 0);
-
-	return OK;
-}
+#endif /* _MOD_AUTH_OPENIDC_METADATA_H_ */

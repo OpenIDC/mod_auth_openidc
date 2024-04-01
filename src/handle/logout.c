@@ -40,7 +40,11 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+#include "cfg/dir.h"
 #include "handle/handle.h"
+#include "mod_auth_openidc.h"
+#include "proto.h"
+#include "util.h"
 
 #define OIDC_DONT_REVOKE_TOKENS_BEFORE_LOGOUT_ENVVAR "OIDC_DONT_REVOKE_TOKENS_BEFORE_LOGOUT"
 
@@ -48,7 +52,7 @@
  * revoke refresh token and access token stored in the session if the
  * OP has an RFC 7009 compliant token revocation endpoint
  */
-static void oidc_logout_revoke_tokens(request_rec *r, oidc_cfg *c, oidc_session_t *session) {
+static void oidc_logout_revoke_tokens(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 
 	char *response = NULL;
 	char *basic_auth = NULL;
@@ -66,28 +70,32 @@ static void oidc_logout_revoke_tokens(request_rec *r, oidc_cfg *c, oidc_session_
 		goto out;
 
 	oidc_debug(r, "revocation_endpoint=%s",
-		   provider->revocation_endpoint_url ? provider->revocation_endpoint_url : "(null)");
+		   oidc_cfg_provider_revocation_endpoint_url_get(provider)
+		       ? oidc_cfg_provider_revocation_endpoint_url_get(provider)
+		       : "(null)");
 
-	if ((provider->revocation_endpoint_url == NULL) || (_oidc_strcmp(provider->revocation_endpoint_url, "") == 0))
+	if ((oidc_cfg_provider_revocation_endpoint_url_get(provider) == NULL) ||
+	    (_oidc_strcmp(oidc_cfg_provider_revocation_endpoint_url_get(provider), "") == 0))
 		goto out;
 
 	params = apr_table_make(r->pool, 4);
 
 	// add the token endpoint authentication credentials to the revocation endpoint call...
-	if (oidc_proto_token_endpoint_auth(r, c, provider->token_endpoint_auth, provider->client_id,
-					   provider->client_secret, provider->client_keys, provider->token_endpoint_url,
-					   params, NULL, &basic_auth, &bearer_auth) == FALSE)
+	if (oidc_proto_token_endpoint_auth(
+		r, c, oidc_cfg_provider_token_endpoint_auth_get(provider), oidc_cfg_provider_client_id_get(provider),
+		oidc_cfg_provider_client_secret_get(provider), oidc_cfg_provider_client_keys_get(provider),
+		oidc_cfg_provider_token_endpoint_url_get(provider), params, NULL, &basic_auth, &bearer_auth) == FALSE)
 		goto out;
 
-	// TODO: use oauth.ssl_validate_server ...
 	token = oidc_session_get_refresh_token(r, session);
 	if (token != NULL) {
 		apr_table_setn(params, OIDC_PROTO_TOKEN_TYPE_HINT, OIDC_PROTO_REFRESH_TOKEN);
 		apr_table_setn(params, OIDC_PROTO_TOKEN, token);
 
-		if (oidc_http_post_form(r, provider->revocation_endpoint_url, params, basic_auth, bearer_auth,
-					c->provider.ssl_validate_server, &response, NULL, &c->http_timeout_long,
-					&c->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL, NULL, NULL) == FALSE) {
+		if (oidc_http_post_form(r, oidc_cfg_provider_revocation_endpoint_url_get(provider), params, basic_auth,
+					bearer_auth, oidc_cfg_provider_ssl_validate_server_get(provider), &response,
+					NULL, oidc_cfg_http_timeout_long_get(c), oidc_cfg_outgoing_proxy_get(c),
+					oidc_cfg_dir_pass_cookies_get(r), NULL, NULL, NULL) == FALSE) {
 			oidc_warn(r, "revoking refresh token failed");
 		}
 		apr_table_unset(params, OIDC_PROTO_TOKEN_TYPE_HINT);
@@ -99,9 +107,10 @@ static void oidc_logout_revoke_tokens(request_rec *r, oidc_cfg *c, oidc_session_
 		apr_table_setn(params, OIDC_PROTO_TOKEN_TYPE_HINT, OIDC_PROTO_ACCESS_TOKEN);
 		apr_table_setn(params, OIDC_PROTO_TOKEN, token);
 
-		if (oidc_http_post_form(r, provider->revocation_endpoint_url, params, basic_auth, bearer_auth,
-					c->provider.ssl_validate_server, &response, NULL, &c->http_timeout_long,
-					&c->outgoing_proxy, oidc_dir_cfg_pass_cookies(r), NULL, NULL, NULL) == FALSE) {
+		if (oidc_http_post_form(r, oidc_cfg_provider_revocation_endpoint_url_get(provider), params, basic_auth,
+					bearer_auth, oidc_cfg_provider_ssl_validate_server_get(provider), &response,
+					NULL, oidc_cfg_http_timeout_long_get(c), oidc_cfg_outgoing_proxy_get(c),
+					oidc_cfg_dir_pass_cookies_get(r), NULL, NULL, NULL) == FALSE) {
 			oidc_warn(r, "revoking access token failed");
 		}
 	}
@@ -111,13 +120,13 @@ out:
 	oidc_debug(r, "leave");
 }
 
-static apr_byte_t oidc_logout_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg *cfg, oidc_provider_t *provider,
+static apr_byte_t oidc_logout_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg_t *cfg, oidc_provider_t *provider,
 					     apr_byte_t revoke_tokens) {
 
 	char *uuid = NULL;
 	oidc_session_t session;
 
-	oidc_debug(r, "enter (sid=%s,iss=%s)", sid, provider->issuer);
+	oidc_debug(r, "enter (sid=%s,iss=%s)", sid, oidc_cfg_provider_issuer_get(provider));
 
 	// TODO: when dealing with sub instead of a true sid, we'll be killing all sessions for
 	//	   a specific user, across hosts that share the *same* cache backend
@@ -126,7 +135,7 @@ static apr_byte_t oidc_logout_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg
 	//	     and memory-based caching doesn't suffer from this (different shm segments)?
 	//	   - it will result in 400 errors returned from backchannel logout calls to the other hosts...
 
-	sid = oidc_response_make_sid_iss_unique(r, sid, provider->issuer);
+	sid = oidc_response_make_sid_iss_unique(r, sid, oidc_cfg_provider_issuer_get(provider));
 	oidc_cache_get_sid(r, sid, &uuid);
 	if (uuid == NULL) {
 		// this may happen when we are the caller
@@ -139,7 +148,7 @@ static apr_byte_t oidc_logout_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg
 	}
 
 	// revoke tokens if we can get a handle on those
-	if (cfg->session_type != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
+	if (oidc_cfg_session_type_get(cfg) != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
 		if ((oidc_session_load_cache_by_uuid(r, cfg, uuid, &session) != FALSE) && (revoke_tokens == TRUE))
 			if (oidc_session_extract(r, &session) != FALSE)
 				oidc_logout_revoke_tokens(r, cfg, &session);
@@ -171,7 +180,7 @@ static apr_byte_t oidc_logout_is_back_channel(const char *logout_param_value) {
 /*
  * handle a local logout
  */
-int oidc_logout_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, const char *url,
+int oidc_logout_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, const char *url,
 			apr_byte_t revoke_tokens) {
 
 	int no_session_provided = 1;
@@ -234,8 +243,7 @@ int oidc_logout_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, co
 		oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_PRAGMA, "no-cache");
 		oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_P3P, "CAO PSA OUR");
 		oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_EXPIRES, "0");
-		oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_X_FRAME_OPTIONS,
-					  c->logout_x_frame_options ? c->logout_x_frame_options : "DENY");
+		oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_X_FRAME_OPTIONS, oidc_cfg_logout_x_frame_options_get(c));
 
 		/* see if this is PF-PA style logout in which case we return a transparent pixel */
 		const char *accept = oidc_http_hdr_in_accept_get(r);
@@ -268,7 +276,7 @@ int oidc_logout_request(request_rec *r, oidc_cfg *c, oidc_session_t *session, co
  */
 #define OIDC_EVENTS_BLOGOUT_KEY "http://schemas.openid.net/event/backchannel-logout"
 
-static int oidc_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
+static int oidc_logout_backchannel(request_rec *r, oidc_cfg_t *cfg) {
 
 	oidc_debug(r, "enter");
 
@@ -295,8 +303,9 @@ static int oidc_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 
 	// TODO: jwk symmetric key based on provider
 
-	if (oidc_jwt_parse(r->pool, logout_token, &jwt, oidc_util_merge_symmetric_key(r->pool, cfg->private_keys, NULL),
-			   FALSE, &err) == FALSE) {
+	if (oidc_jwt_parse(r->pool, logout_token, &jwt,
+			   oidc_util_merge_symmetric_key(r->pool, oidc_cfg_private_keys_get(cfg), NULL), FALSE,
+			   &err) == FALSE) {
 		oidc_error(r, "oidc_jwt_parse failed: %s", oidc_jose_e2s(r->pool, err));
 		goto out;
 	}
@@ -312,29 +321,33 @@ static int oidc_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 		goto out;
 	}
 
-	if ((provider->id_token_signed_response_alg != NULL) &&
-	    (_oidc_strcmp(provider->id_token_signed_response_alg, jwt->header.alg) != 0)) {
+	if ((oidc_cfg_provider_id_token_signed_response_alg_get(provider) != NULL) &&
+	    (_oidc_strcmp(oidc_cfg_provider_id_token_signed_response_alg_get(provider), jwt->header.alg) != 0)) {
 		oidc_error(r, "logout token is signed using wrong algorithm: %s != %s", jwt->header.alg,
-			   provider->id_token_signed_response_alg);
+			   oidc_cfg_provider_id_token_signed_response_alg_get(provider));
 		goto out;
 	}
 
 	// TODO: destroy the JWK used for decryption
 
 	jwk = NULL;
-	if (oidc_util_create_symmetric_key(r, provider->client_secret, 0, NULL, TRUE, &jwk) == FALSE)
+	if (oidc_util_create_symmetric_key(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, TRUE, &jwk) ==
+	    FALSE)
 		return FALSE;
 
-	if (oidc_proto_jwt_verify(r, cfg, jwt, &provider->jwks_uri, provider->ssl_validate_server,
-				  oidc_util_merge_symmetric_key(r->pool, provider->verify_public_keys, jwk),
-				  provider->id_token_signed_response_alg) == FALSE) {
+	if (oidc_proto_jwt_verify(
+		r, cfg, jwt, oidc_cfg_provider_jwks_uri_get(provider),
+		oidc_cfg_provider_ssl_validate_server_get(provider),
+		oidc_util_merge_symmetric_key(r->pool, oidc_cfg_provider_verify_public_keys_get(provider), jwk),
+		oidc_cfg_provider_id_token_signed_response_alg_get(provider)) == FALSE) {
 
 		oidc_error(r, "id_token signature could not be validated, aborting");
 		goto out;
 	}
 
-	if (oidc_proto_validate_jwt(r, jwt, provider->validate_issuer ? provider->issuer : NULL, FALSE, FALSE,
-				    provider->idtoken_iat_slack) == FALSE)
+	if (oidc_proto_validate_jwt(
+		r, jwt, oidc_cfg_provider_validate_issuer_get(provider) ? oidc_cfg_provider_issuer_get(provider) : NULL,
+		FALSE, FALSE, oidc_cfg_provider_idtoken_iat_slack_get(provider)) == FALSE)
 		goto out;
 
 	/* verify the "aud" and "azp" values */
@@ -377,7 +390,7 @@ static int oidc_logout_backchannel(request_rec *r, oidc_cfg *cfg) {
 
 	/* jti cache duration is the configured replay prevention window for token issuance plus 10 seconds for safety
 	 */
-	apr_time_t jti_cache_duration = apr_time_from_sec(provider->idtoken_iat_slack * 2 + 10);
+	apr_time_t jti_cache_duration = apr_time_from_sec(oidc_cfg_provider_idtoken_iat_slack_get(provider) * 2 + 10);
 
 	/* store it in the cache for the calculated duration */
 	oidc_cache_set_jti(r, jti, jti, apr_time_now() + jti_cache_duration);
@@ -428,7 +441,7 @@ out:
 /*
  * perform (single) logout
  */
-int oidc_logout(request_rec *r, oidc_cfg *c, oidc_session_t *session) {
+int oidc_logout(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 
 	oidc_provider_t *provider = NULL;
 	/* pickup the command or URL where the user wants to go after logout */
@@ -450,20 +463,20 @@ int oidc_logout(request_rec *r, oidc_cfg *c, oidc_session_t *session) {
 
 	if ((url == NULL) || (_oidc_strcmp(url, "") == 0)) {
 
-		url = apr_pstrdup(r->pool, oidc_get_absolute_url(r, c, c->default_slo_url));
+		url = apr_pstrdup(r->pool, oidc_get_absolute_url(r, c, oidc_cfg_default_slo_url_get(c)));
 
 	} else {
 
 		/* do input validation on the logout parameter value */
 		if (oidc_validate_redirect_url(r, c, url, TRUE, &error_str, &error_description) == FALSE) {
-			return oidc_util_html_send_error(r, c->error_template, error_str, error_description,
-							 HTTP_BAD_REQUEST);
+			return oidc_util_html_send_error(r, oidc_cfg_html_error_template_get(c), error_str,
+							 error_description, HTTP_BAD_REQUEST);
 		}
 	}
 
 	oidc_get_provider_from_session(r, c, session, &provider);
 
-	if ((provider != NULL) && (provider->end_session_endpoint != NULL)) {
+	if ((provider != NULL) && (oidc_cfg_provider_end_session_endpoint_get(provider) != NULL)) {
 
 		if (apr_table_get(r->subprocess_env, OIDC_REFRESH_TOKENS_BEFORE_LOGOUT_ENVVAR) != NULL) {
 			oidc_refresh_token_grant(r, c, session, provider, NULL, &id_token_hint);
@@ -471,7 +484,7 @@ int oidc_logout(request_rec *r, oidc_cfg *c, oidc_session_t *session) {
 			id_token_hint = (char *)oidc_session_get_idtoken(r, session);
 		}
 
-		s_logout_request = apr_pstrdup(r->pool, provider->end_session_endpoint);
+		s_logout_request = apr_pstrdup(r->pool, oidc_cfg_provider_end_session_endpoint_get(provider));
 		if (id_token_hint != NULL) {
 			s_logout_request = apr_psprintf(
 			    r->pool, "%s%s" OIDC_PROTO_ID_TOKEN_HINT "=%s", s_logout_request,
@@ -488,12 +501,12 @@ int oidc_logout(request_rec *r, oidc_cfg *c, oidc_session_t *session) {
 			    oidc_http_escape_string(r, url));
 		}
 
-		if (provider->logout_request_params != NULL) {
+		if (oidc_cfg_provider_logout_request_params_get(provider) != NULL) {
 			s_logout_request = apr_psprintf(
 			    r->pool, "%s%s%s", s_logout_request,
 			    strchr(s_logout_request ? s_logout_request : "", OIDC_CHAR_QUERY) != NULL ? OIDC_STR_AMP
 												      : OIDC_STR_QUERY,
-			    provider->logout_request_params);
+			    oidc_cfg_provider_logout_request_params_get(provider));
 		}
 		// char *state = NULL;
 		// oidc_proto_generate_nonce(r, &state, 8);

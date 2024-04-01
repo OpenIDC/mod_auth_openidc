@@ -43,8 +43,8 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#ifndef MOD_AUTH_OPENIDC_JOSE_H_
-#define MOD_AUTH_OPENIDC_JOSE_H_
+#ifndef _MOD_AUTH_OPENIDC_JOSE_H_
+#define _MOD_AUTH_OPENIDC_JOSE_H_
 
 #include "const.h"
 
@@ -278,4 +278,4 @@ unsigned int oidc_alg2keysize(const char *alg);
 apr_byte_t oidc_jwk_pem_bio_to_jwk(apr_pool_t *pool, BIO *input, const char *kid, oidc_jwk_t **jwk, int is_private_key,
 				   oidc_jose_error_t *err);
 
-#endif /* MOD_AUTH_OPENIDC_JOSE_H_ */
+#endif /* _MOD_AUTH_OPENIDC_JOSE_H_ */

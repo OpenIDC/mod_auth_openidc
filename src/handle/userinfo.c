@@ -40,12 +40,15 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+#include "cfg/provider.h"
 #include "handle/handle.h"
+#include "mod_auth_openidc.h"
+#include "proto.h"
 
 /*
  * store claims resolved from the userinfo endpoint in the session
  */
-void oidc_userinfo_store_claims(request_rec *r, oidc_cfg *c, oidc_session_t *session, oidc_provider_t *provider,
+void oidc_userinfo_store_claims(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, oidc_provider_t *provider,
 				const char *claims, const char *userinfo_jwt) {
 
 	oidc_debug(r, "enter");
@@ -59,7 +62,7 @@ void oidc_userinfo_store_claims(request_rec *r, oidc_cfg *c, oidc_session_t *ses
 		 */
 		oidc_session_set_userinfo_claims(r, session, claims);
 
-		if (c->session_type != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
+		if (oidc_cfg_session_type_get(c) != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
 			/* this will also clear the entry if a JWT was not returned at this point */
 			oidc_session_set_userinfo_jwt(r, session, userinfo_jwt);
 		}
@@ -74,14 +77,14 @@ void oidc_userinfo_store_claims(request_rec *r, oidc_cfg *c, oidc_session_t *ses
 	}
 
 	/* store the last refresh time if we've configured a userinfo refresh interval */
-	if (provider->userinfo_refresh_interval > -1)
+	if (oidc_cfg_provider_userinfo_refresh_interval_get(provider) > -1)
 		oidc_session_reset_userinfo_last_refresh(r, session);
 }
 
 /*
  * retrieve claims from the userinfo endpoint and return the stringified response
  */
-const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg *c, oidc_provider_t *provider,
+const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg_t *c, oidc_provider_t *provider,
 					  const char *access_token, oidc_session_t *session, char *id_token_sub,
 					  char **userinfo_jwt) {
 
@@ -93,7 +96,7 @@ const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg *c, oidc_prov
 	oidc_debug(r, "enter");
 
 	/* see if a userinfo endpoint is set, otherwise there's nothing to do for us */
-	if (provider->userinfo_endpoint_url == NULL) {
+	if (oidc_cfg_provider_userinfo_endpoint_url_get(provider) == NULL) {
 		oidc_debug(r, "not retrieving userinfo claims because userinfo_endpoint is not set");
 		goto end;
 	}
@@ -171,7 +174,7 @@ end:
 /*
  * get (new) claims from the userinfo endpoint
  */
-apr_byte_t oidc_userinfo_refresh_claims(request_rec *r, oidc_cfg *cfg, oidc_session_t *session,
+apr_byte_t oidc_userinfo_refresh_claims(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session,
 					apr_byte_t *needs_save) {
 
 	apr_byte_t rc = TRUE;
@@ -193,7 +196,7 @@ apr_byte_t oidc_userinfo_refresh_claims(request_rec *r, oidc_cfg *cfg, oidc_sess
 			return FALSE;
 		}
 
-		if (provider->userinfo_endpoint_url != NULL) {
+		if (oidc_cfg_provider_userinfo_endpoint_url_get(provider) != NULL) {
 
 			/* get the last refresh timestamp from the session info */
 			apr_time_t last_refresh = oidc_session_get_userinfo_last_refresh(r, session);
