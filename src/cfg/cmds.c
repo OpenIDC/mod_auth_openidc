@@ -772,10 +772,10 @@ const command_rec oidc_cfg_cmds[] = {
 		pass_userinfo_as,
 		"The format in which the userinfo is passed in (a) header(s); must be one or more of: claims | json | jwt | signed_jwt"),
 #ifdef USE_LIBJQ
-    OIDC_CFG_CMD_DIR(
+	OIDC_CFG_CMD_DIR(
 		AP_INIT_TAKE1,
-    	OIDCUserInfoClaimsExpr,
-    	userinfo_claims_expr,
+		OIDCUserInfoClaimsExpr,
+		userinfo_claims_expr,
 		"Sets the JQ expression to be executed on the claims from the userinfo endpoint stored in the session before propagating them"),
 #endif
 		{ NULL }
