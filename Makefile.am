@@ -139,4 +139,4 @@ test_test_SOURCES = test/test.c test/stub.c
 test_test_CFLAGS = ${AM_CFLAGS} -fPIC
 
 clang-format:
-	clang-format -style=file -i `find . -name *.[ch]  -maxdepth 4 `
+	clang-format -style=file -i $$(find . -name *.[ch] -maxdepth 4)
