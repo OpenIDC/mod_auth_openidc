@@ -32,13 +32,13 @@ set of claims provided in the `id_token`/ `userinfo` claims, see [here](https://
 Clustering for resilience and performance can be configured using one of the supported cache backends options as
 listed [here](https://github.com/OpenIDC/mod_auth_openidc/wiki/Caching).
 
-For an exhaustive description of all configuration options, see the file [`auth_openidc.conf`](https://github.com/OpenIDC/mod_auth_openidc/blob/master/auth_openidc.conf). 
+For a complete overview of all configuration options, see the file [`auth_openidc.conf`](https://github.com/OpenIDC/mod_auth_openidc/blob/master/auth_openidc.conf). 
 This file can also serve as an include file for `httpd.conf`.
 
 Interoperability
 ----------------
 
-*mod_auth_openidc* is [OpenID Certified™](https://openid.net/certification/#RPs) and supports the following specifications:
+*mod_auth_openidc* is [OpenID Certified™](https://openid.net/certification/#OPENID-RP-P) and supports the following specifications:
 - [OpenID Connect Core 1.0](http://openid.net/specs/openid-connect-core-1_0.html) *(Basic, Implicit, Hybrid and Refresh flows)*
 - [OpenID Connect Discovery 1.0](http://openid.net/specs/openid-connect-discovery-1_0.html)
 - [OpenID Connect Dynamic Client Registration 1.0](http://openid.net/specs/openid-connect-registration-1_0.html)
@@ -144,5 +144,5 @@ and [more](https://github.com/OpenIDC/mod_auth_openidc/wiki/Useful-Links)
 Disclaimer
 ----------
 
-*This software is open sourced by OpenIDC, subsidiary of ZmartZone Holding B.V. For commercial services
+*This software is open sourced by OpenIDC, a subsidiary of ZmartZone Holding B.V. For commercial services
 you can contact [OpenIDC](https://www.openidc.com) as described above in the [Support](#support) section.*
