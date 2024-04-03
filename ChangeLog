@@ -1,3 +1,9 @@
+04/03/2024
+- when an expression is configured for OIDCUnAuthAction (i.e. in the 2nd argument), also apply
+  it to OIDCUnAutzAction so that it can be used to enable step-up authentication for SPAs with
+  non-conformant browsers (some versions of Safari) and in (potentially insecure) iframes
+  see #1205; thanks @ryanwilliamnicholls
+  
 04/02/2024
 - major rewrite of config primitive handling:
   - split out over different files, use header files consistently

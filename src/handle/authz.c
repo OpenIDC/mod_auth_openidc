@@ -499,8 +499,16 @@ static authz_status oidc_authz_24_unauthorized_user(request_rec *r) {
 		 * exception handling: if this looks like an HTTP request that cannot
 		 * complete an authentication round trip to the provider, we
 		 * won't redirect the user and thus avoid creating a state cookie
+		 *
+		 * NB: when the expression argument to OIDCUnAuthAction is configured,
+		 * it is re-used here to detect XHR requests.
 		 */
-		if (oidc_is_auth_capable_request(r) == FALSE) {
+		if (oidc_cfg_dir_unauth_expr_is_set(r) == TRUE) {
+			if (oidc_cfg_dir_unauth_action_get(r) != OIDC_UNAUTH_AUTHENTICATE) {
+				OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_401);
+				return AUTHZ_DENIED;
+			}
+		} else if (oidc_is_auth_capable_request(r) == FALSE) {
 			OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_401);
 			return AUTHZ_DENIED;
 		}
