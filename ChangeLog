@@ -1,3 +1,6 @@
+04/05/2024
+- add debug printout for OIDCUnAuthAction expression evaluation
+
 04/03/2024
 - when an expression is configured for OIDCUnAuthAction (i.e. in the 2nd argument), also apply
   it to OIDCUnAutzAction so that it can be used to enable step-up authentication for SPAs with

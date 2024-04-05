@@ -333,18 +333,29 @@ const char *oidc_cmd_dir_pass_claims_as_set(cmd_parms *cmd, void *m, const char 
 #define OIDC_UNAUTH_RETURN410_STR "410"
 #define OIDC_UNAUTH_RETURN407_STR "407"
 
+static const oidc_cfg_option_t unauth_action_options[] = {{OIDC_UNAUTH_AUTHENTICATE, OIDC_UNAUTH_AUTHENTICATE_STR},
+							  {OIDC_UNAUTH_PASS, OIDC_UNAUTH_PASS_STR},
+							  {OIDC_UNAUTH_RETURN401, OIDC_UNAUTH_RETURN401_STR},
+							  {OIDC_UNAUTH_RETURN410, OIDC_UNAUTH_RETURN410_STR},
+							  {OIDC_UNAUTH_RETURN407, OIDC_UNAUTH_RETURN407_STR}};
+
+static const char *oidc_cfg_dir_unauth_action2str(oidc_unauth_action_t action) {
+	int i = 0;
+	for (i = 0; i < OIDC_CFG_OPTIONS_SIZE(unauth_action_options); i++) {
+		if (action == unauth_action_options[i].val)
+			return unauth_action_options[i].str;
+	}
+	return NULL;
+}
+
 /*
  * define how to act on unauthenticated requests
  */
 const char *oidc_cmd_dir_unauth_action_set(cmd_parms *cmd, void *m, const char *arg1, const char *arg2) {
 	oidc_dir_cfg_t *dir_cfg = (oidc_dir_cfg_t *)m;
-	static const oidc_cfg_option_t options[] = {{OIDC_UNAUTH_AUTHENTICATE, OIDC_UNAUTH_AUTHENTICATE_STR},
-						    {OIDC_UNAUTH_PASS, OIDC_UNAUTH_PASS_STR},
-						    {OIDC_UNAUTH_RETURN401, OIDC_UNAUTH_RETURN401_STR},
-						    {OIDC_UNAUTH_RETURN410, OIDC_UNAUTH_RETURN410_STR},
-						    {OIDC_UNAUTH_RETURN407, OIDC_UNAUTH_RETURN407_STR}};
-	const char *rv = oidc_cfg_parse_option(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg1,
-					       (int *)&dir_cfg->unauth_action);
+	const char *rv =
+	    oidc_cfg_parse_option(cmd->pool, unauth_action_options, OIDC_CFG_OPTIONS_SIZE(unauth_action_options), arg1,
+				  (int *)&dir_cfg->unauth_action);
 	if (rv == NULL)
 		rv = oidc_util_apr_expr_parse(cmd, arg2, &dir_cfg->unauth_expression, FALSE);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
@@ -528,17 +539,29 @@ OIDC_CFG_DIR_MEMBER_FUNC_GET(strip_cookies, const apr_array_header_t *, NULL, NU
 
 oidc_unauth_action_t oidc_cfg_dir_unauth_action_get(request_rec *r) {
 	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
-	const char *rv = NULL;
+	const char *s = NULL;
+	oidc_unauth_action_t action = OIDC_CONFIG_POS_INT_UNSET;
 
-	if (dir_cfg->unauth_action == OIDC_CONFIG_POS_INT_UNSET)
-		return OIDC_DEFAULT_UNAUTH_ACTION;
+	if (dir_cfg->unauth_action == OIDC_CONFIG_POS_INT_UNSET) {
+		action = OIDC_DEFAULT_UNAUTH_ACTION;
+		goto end;
+	}
 
-	if (dir_cfg->unauth_expression == NULL)
-		return dir_cfg->unauth_action;
+	if (dir_cfg->unauth_expression == NULL) {
+		action = dir_cfg->unauth_action;
+		goto end;
+	}
 
-	rv = oidc_util_apr_expr_exec(r, dir_cfg->unauth_expression, FALSE);
+	s = oidc_util_apr_expr_exec(r, dir_cfg->unauth_expression, FALSE);
 
-	return (rv != NULL) ? dir_cfg->unauth_action : OIDC_DEFAULT_UNAUTH_ACTION;
+	action = (s != NULL) ? dir_cfg->unauth_action : OIDC_DEFAULT_UNAUTH_ACTION;
+
+	oidc_debug(r, "expression evaluation resulted in: %s (%s) for: %s", oidc_cfg_dir_unauth_action2str(action),
+		   s != NULL ? "true" : "false (default)", dir_cfg->unauth_expression->str);
+
+end:
+
+	return action;
 }
 
 apr_byte_t oidc_cfg_dir_unauth_expr_is_set(request_rec *r) {
