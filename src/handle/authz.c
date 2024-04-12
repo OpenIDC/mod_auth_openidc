@@ -554,6 +554,10 @@ authz_status oidc_authz_24_checker(request_rec *r, const char *require_args, con
 			return AUTHZ_GRANTED;
 		if (r->method_number == M_OPTIONS)
 			return AUTHZ_GRANTED;
+		/* avoid mixing error content when preserving POST data has a claim condition */
+		if ((r->method_number == M_POST) && (oidc_cfg_dir_preserve_post_get(r) == 1)) {
+			return AUTHZ_GRANTED;
+		}
 	}
 
 	/* get the set of claims from the request state (they've been set in the authentication part earlier */
