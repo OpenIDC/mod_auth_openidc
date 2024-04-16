@@ -49,13 +49,14 @@
 #include <apr_file_io.h>
 #include <apr_strings.h>
 
+/* separators used in "flattened" string/option lists */
 #define OIDC_LIST_OPTIONS_START "["
 #define OIDC_LIST_OPTIONS_END "]"
 #define OIDC_LIST_OPTIONS_SEPARATOR "|"
 #define OIDC_LIST_OPTIONS_QUOTE "'"
 
 /*
- * flatten the list of string options, separated by the specified separator char
+ * flatten the provided list of string options
  */
 char *oidc_cfg_parse_flatten_options(apr_pool_t *pool, const char *options[]) {
 	int i = 0;
@@ -90,6 +91,9 @@ const char *oidc_cfg_parse_is_valid_option(apr_pool_t *pool, const char *arg, co
 	return NULL;
 }
 
+/*
+ * flatten the provided list of n options
+ */
 char *oidc_cfg_parse_options_flatten(apr_pool_t *pool, const oidc_cfg_option_t options[], int n) {
 	char *result = apr_psprintf(pool, "%s%s%s%s", OIDC_LIST_OPTIONS_QUOTE, options[--n].str,
 				    OIDC_LIST_OPTIONS_QUOTE, OIDC_LIST_OPTIONS_END);
@@ -99,6 +103,9 @@ char *oidc_cfg_parse_options_flatten(apr_pool_t *pool, const oidc_cfg_option_t o
 	return apr_psprintf(pool, "%s%s", OIDC_LIST_OPTIONS_START, result);
 }
 
+/*
+ * parse an value provided as an option string into the corresponding integer/enum
+ */
 char *oidc_cfg_parse_option(apr_pool_t *pool, const oidc_cfg_option_t options[], int n, const char *arg, int *v) {
 	int i = 0;
 	while ((i < n) && (_oidc_strcmp(arg, options[i].str) != 0))
@@ -126,6 +133,9 @@ const char *oidc_cfg_parse_is_valid_int(apr_pool_t *pool, int value, int min_val
 	return NULL;
 }
 
+/*
+ * parse a string into a boolean
+ */
 const char *oidc_cfg_parse_boolean(apr_pool_t *pool, const char *arg, int *bool_value) {
 	if ((_oidc_strnatcasecmp(arg, "true") == 0) || (_oidc_strnatcasecmp(arg, "on") == 0) ||
 	    (_oidc_strnatcasecmp(arg, "yes") == 0) || (_oidc_strnatcasecmp(arg, "1") == 0)) {
@@ -140,6 +150,9 @@ const char *oidc_cfg_parse_boolean(apr_pool_t *pool, const char *arg, int *bool_
 	return apr_psprintf(pool, "oidc_parse_boolean: could not parse boolean value from \"%s\"", arg);
 }
 
+/*
+ * parse a string into an integer
+ */
 const char *oidc_cfg_parse_int(apr_pool_t *pool, const char *arg, int *int_value) {
 	int v = -1;
 	if ((arg == NULL) || (*arg == '\0') || (_oidc_strcmp(arg, "") == 0))
@@ -150,6 +163,9 @@ const char *oidc_cfg_parse_int(apr_pool_t *pool, const char *arg, int *int_value
 	return NULL;
 }
 
+/*
+ * parse a string into an integer if it is in a valid min/max range
+ */
 const char *oidc_cfg_parse_int_min_max(apr_pool_t *pool, const char *arg, int *int_value, int min_value,
 				       int max_value) {
 	int v = 0;
@@ -164,6 +180,9 @@ const char *oidc_cfg_parse_int_min_max(apr_pool_t *pool, const char *arg, int *i
 	return NULL;
 }
 
+/*
+ * check if a string is a valid URL starting with either scheme1 or scheme2 (if not NULL)
+ */
 static const char *oidc_cfg_parse_is_valid_url_scheme(apr_pool_t *pool, const char *arg, const char *scheme1,
 						      const char *scheme2) {
 
@@ -195,16 +214,25 @@ static const char *oidc_cfg_parse_is_valid_url_scheme(apr_pool_t *pool, const ch
 	return NULL;
 }
 
+/*
+ * check if a string is a valid URL string with the specified scheme
+ */
 const char *oidc_cfg_parse_is_valid_url(apr_pool_t *pool, const char *arg, const char *scheme) {
 	return oidc_cfg_parse_is_valid_url_scheme(pool, arg, scheme, NULL);
 }
 
+/*
+ * check if a string is a valid http or https URL
+ */
 const char *oidc_cfg_parse_is_valid_http_url(apr_pool_t *pool, const char *arg) {
 	return oidc_cfg_parse_is_valid_url_scheme(pool, arg, "https", "http");
 }
 
 #define OIDC_CFG_PARSE_STR_ERROR_MAX 128
 
+/*
+ * return an error retrieved from apr_strerror as a config error
+ */
 static const char *oidc_cfg_parse_io_error(apr_pool_t *pool, const char *action, const char *type, const char *name,
 					   apr_status_t rc) {
 	char s_err[OIDC_CFG_PARSE_STR_ERROR_MAX];
@@ -212,6 +240,9 @@ static const char *oidc_cfg_parse_io_error(apr_pool_t *pool, const char *action,
 			    apr_strerror(rc, s_err, OIDC_CFG_PARSE_STR_ERROR_MAX));
 }
 
+/*
+ * parse a string into a directory name if it exists and is accessible
+ */
 const char *oidc_cfg_parse_dirname(apr_pool_t *pool, const char *arg, char **value) {
 	apr_status_t rc = APR_SUCCESS;
 	apr_dir_t *dir = NULL;
@@ -225,6 +256,9 @@ const char *oidc_cfg_parse_dirname(apr_pool_t *pool, const char *arg, char **val
 	return NULL;
 }
 
+/*
+ * parse a string into a file name if it exists and is accessible
+ */
 const char *oidc_cfg_parse_filename(apr_pool_t *pool, const char *arg, char **value) {
 	apr_file_t *fd = NULL;
 	apr_status_t rc = APR_SUCCESS;
@@ -239,6 +273,9 @@ const char *oidc_cfg_parse_filename(apr_pool_t *pool, const char *arg, char **va
 	return NULL;
 }
 
+/*
+ * parse a string a relative path or an absolute http/https URL
+ */
 const char *oidc_cfg_parse_relative_or_absolute_url(apr_pool_t *pool, const char *arg, char **value) {
 	const char *rv = NULL;
 	apr_uri_t uri;
@@ -536,6 +573,9 @@ const char *oidc_cfg_parse_public_key_files(apr_pool_t *pool, const char *arg, a
 	return NULL;
 }
 
+/*
+ * parse a triplet of 3 provided config values into a remote_user_claim struct
+ */
 const char *oidc_parse_remote_user_claim(apr_pool_t *pool, const char *v1, const char *v2, const char *v3,
 					 oidc_remote_user_claim_t *remote_user_claim) {
 	remote_user_claim->claim_name = v1;
@@ -546,6 +586,9 @@ const char *oidc_parse_remote_user_claim(apr_pool_t *pool, const char *v1, const
 	return NULL;
 }
 
+/*
+ * parse a triplet of 3 provided config values into a http_timeout struct
+ */
 const char *oidc_cfg_parse_http_timeout(apr_pool_t *pool, const char *arg1, const char *arg2, const char *arg3,
 					oidc_http_timeout_t *http_timeout) {
 	char *s = NULL, *p = NULL;
