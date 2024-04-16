@@ -1,3 +1,210 @@
+04/01/2024
+- release 2.4.15.7
+
+03/29/2024
+- fix OIDCUserInfoRefreshInterval, interval seconds would be interpreted as microseconds
+
+03/14/2024
+- fix userinfo refresh interval parsing; closes #1200; thanks @HolgerHees
+  avoid refreshing userinfo on each request until access token expiry
+- store interval as JSON integer in session
+- use SameSite=Lax when OIDCCookieSameSite is On (also by default) instead of
+  Strict as overriding from Lax to Strict does not work reliably anymore (Chrome)
+- release 2.4.15.6
+
+03/13/2024
+- fix compilation without libhiredis; closes #1195 ; thanks @HolgerHees
+  conditionally define oidc_set_redis_connect_timeout
+- fix `OIDCPassClaimsAs environment` bug introduced in 2.4.15.4; see #1196; thanks @HolgerHees
+- release 2.4.15.5
+
+03/12/2024
+- release 2.4.15.4
+- fix setting the default PCKE method to "none" in a multi-provider setup
+- bump to 2.4.15.5dev
+
+03/11/2024
+- avoid warning about setting a self-provided default value in the provider config
+
+03/07/2024
+- OIDCProviderSignedJwksUri: accept verification key set formatted as either JWK or JWKS
+  see #1191; thanks @psteniusubi
+- properly handle parse errors in Require claim integer statements
+
+03/06/2024
+- add support for JSON real and null value matching in Require claim statements
+- fix evaluation Require statements for nested array claims
+- refactor handle/authz.c
+
+03/04/2024
+- refactor integer and timestamp handling
+- fix default HTTP short retry interval setting
+- accept 0 in OIDCUserInfoRefreshInterval
+- userinfo refresh: don't try to refresh the access token and retry when a connectivity error has occurred
+- logout: don't try to revoke tokens on post-access-token-refresh or post-userinfo-refresh-errors logouts
+
+03/01/2024
+- accept strings as well as integers in the "expires_in" claim from the token endpoint
+- fix for "expires_in" string values returned from the token endpoint that would be interpreted as 0
+  this fixes using OIDCRefreshAccessTokenBeforeExpiry or OIDCUserInfoRefreshInterval with (older)
+  Azure AD configs that would result in a token refresh on every request since 2.4.15 or a 401 in 2.4.14.4
+- fix setting the "exp" claim in userinfo signed JWTs (exp would be now+0) when no expires_in is returned
+  by the OP
+- fix signed JWT caching when ttl set to 0 or "" which should apply the exp claim as the cache ttl
+
+02/29/2024
+- hash the cache key if it is larger than 512 bytes so large cache key entries (i.e. for JWT tokens)
+  are no longer a problem in unencrypted SHM cache configs, i.e. the default shared memory cache setup;
+  see issues/discussions on "could not construct cache key since key size is too large"
+  this is relevant for OAuth 2.0 RS configs with JWT access tokens and OpenID Connect RP
+  configs where OIDCRefreshAccessTokenBeforeExpiry/OIDCUserInfoRefreshInterval is set and
+  a JWT refresh token is returned
+- fix debug printout of cache key in oidc_cache_get
+
+02/28/2024
+- optimize performance by skipping JSON processing when `OIDCPassClaimsAs none` is set
+
+02/25/2024
+- implement oidc_util_apr_hash_clear so clearing hashtables works with older versions of libapr 
+- refactor/extract HTTP functions
+
+02/22/2024
+- enable TCP keepalive on Redis connections by default
+  and make it configurable in `OIDCRedisCacheConnectTimeout <connect-timeout> [0|<keep-alive-interval>]`
+- refactor Redis connect routines
+
+02/21/2024
+- OIDCProviderSignedJwksUri: make exp claim optional in signed jwks; see #1182; thanks @psteniusubi
+  interop with OpenID Federation specification https://openid.net/specs/openid-federation-1_0-32.html#section-5.2.1 
+
+02/15/2024
+- refactor zlib compression routines and add error checks
+- bump to 2.4.15.4dev
+
+02/13/2024
+- release 2.4.15.3
+
+02/12/2024
+- set Redis default retry interval time to 300 milliseconds (instead of 0.5ms) and make it configurable
+- rewrite handling of parallel refresh token grant requests
+  - temporarily cache the results of the refresh token grant for other (almost) parallel callers
+  - fixes handing on the same server, and improves clustered handling through a best-effort distributed cached lock
+  - improves handling of non-rollover refresh tokens since it avoids unnecessary repeated calls to
+    the token endpoint, unnecessary token issuance and possibly corruption because different tokens  "live"
+    temporarily in the same (conceptual) session in parallel before the session is stored (and the last one wins)
+- bump to 2.4.15.3dev
+
+02/06/2024
+- CVE-2024-24814: prevent DoS when `OIDCSessionType client-cookie` is set and a crafted Cookie header is supplied
+  https://github.com/OpenIDC/mod_auth_openidc/security/advisories/GHSA-hxr6-w4gc-7vvv
+- release 2.4.15.2
+
+01/31/2024
+- avoid crash when Forwarded is not present but OIDCXForwardedHeaders is configured for it; see #1171; thanks @daviddpd
+- bump to 2.4.15.2dev
+
+01/30/2024
+- release 2.4.15.1
+
+01/22/2024
+- refactor metrics and fix Prometheus output overlap; closes #1161; see #1162 and #1160; thanks @studersi
+- bump to 2.4.15.1rc0
+
+01/17/2024
+- use `apr_file_rename` in file cache backend to fix issue with renaming files on windows
+
+01/09/2024
+- release 2.4.15
+
+12/29/2023
+- fix Redis connnect retries and make it configurable through environment variable OIDC_REDIS_MAX_TRIES
+- bump to 2.4.15rc14
+
+12/28/2023
+- set memory alignment of shm cache structs to 64 bytes; see #1067
+  should fix running on Raspberry PI / ARMv7 32 bits (arm32v7)
+- make sure the shm cache entry size is a multiple of 8 bytes, see #1067; thanks @sanzinger
+- bump to 2.4.15rc13
+
+12/22/2023
+- generate 20-byte lowercase hexadecimal session identifiers
+
+12/20/2023
+- generate or propagate traceparent header using OIDCTraceParent; closes #1152; thanks @studersi
+- include hostname,port and process id in User-Agent header on outgoing requests
+- bump to 2.4.15rc12
+
+12/19/2023
+- metrics update:
+  - rename "requests" class to "provider"
+  - don't include label name in metric name
+  - add HTTP response code and connectivity counters
+  - reset counters in shared memory rather than removing
+  - performance
+- bump to 2.4.15rc11
+
+12/18/2023
+- metrics refactoring and extension
+- bump to 2.4.15rc10
+
+12/15/2023
+- add (and fix) more metrics, including provider requests, authorization and cache
+- bump to 2.4.15rc9
+
+12/14/2023
+- add metrics collection capability, configured with OIDCMetricsData and retrieved through OIDCMetricsPublish
+- bump to 2.4.15rc8
+
+11/30/2023
+- fix SSL server certificate validation when revoking tokens
+  apply `OIDCSSLValidateServer` setting rather than `OIDCOAuthSSLValidateServer` in `oidc_revoke_tokens`
+  see https://github.com/OpenIDC/mod_auth_openidc/discussions/1141; thanks @mschmidt72
+- bump to 2.4.15rc7
+
+11/27/2023
+- use clang-format-17 for code formatting and reformat all code
+
+11/23/2023
+- add iat and exp claims to request object; closes #1137
+- bump to 2.4.15rc6
+
+11/22/2023
+- populate User-Agent header in outgoing HTTP requests with mod_auth_openidc, libcurl and OpenSSL
+  version information and log it for debugging purposes
+- bump to 2.4.15rc5
+
+11/08/2023
+- improve error message in case of curl timeouts
+- bump to 2.4.15rc4
+
+11/02/2023
+- apply ISO-8859-1 ("latin1") as default encoding mechanism for claim values passed in headers and environment
+  variables to comply with https://www.rfc-editor.org/rfc/rfc5987; see #957; use "OIDCPassClaimsAs <any> none"
+  for backwards compatibility
+- bump to 2.4.15rc3
+
+11/01/2023
+- avoid warnings on cache misses (regression introduced in 2.4.15rc1)
+- bump to 2.4.15rc2
+
+10/31/2023
+- add capability to seamlessly rollover OIDCCryptoPassphrase using a (temporary) 2nd value that holds the old one
+- bump to 2.4.15rc1
+- remove obsolete support for Token Binding https://www.rfc-editor.org/rfc/rfc8471.html (id_token, access_token, session cookie)
+- use only the User-Agent header as input for the state browser fingerprinting by default (no X-Forwarded-For)
+  as cloud environments increasingly use dynamic proxy IPs in front
+- use PKCE S256 by default; disable by configuring "OIDCPKCEMethod none"
+- use SameSite cookies Strict by default; disable by configuring "OIDCCookieSameSite Off"
+ 
+10/30/2023
+- do not apply logout_on_error and authenticate_on_error when a parallel refresh token request is detected
+  see https://github.com/OpenIDC/mod_auth_openidc/discussions/1132; thanks @esunke
+- restore backwards compatibility wrt. allowing parallel refresh token requests by default, and add an
+  option to prevent that (i.e. in case of rolling refresh tokens) using envvar OIDC_PARALLEL_REFRESH_NOT_ALLOWED
+- return HTTP 500 on token refresh errors instead of HTTP 401
+- retry failed outgoing HTTP requests and add options to configure it in OIDCHTTPTimeoutLong/OIDCHTTPTimeoutShort
+- bump to 2.4.15rc0
+  
 10/12/2023
 - release 2.4.14.4
 

@@ -45,13 +45,13 @@
     <ClInclude Include="src\cache\redis.h">
       <Filter>src\cache</Filter>
     </ClInclude>
+    <ClInclude Include="src\metrics.h">
+      <Filter>src</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
       <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\authz.c">
-      <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="src\config.c">
       <Filter>src</Filter>
@@ -97,6 +97,9 @@
     </ClCompile>
     <ClCompile Include="src\cache\shm.c">
       <Filter>src\cache</Filter>
+    </ClCompile>
+    <ClCompile Include="src\metrics.c">
+      <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

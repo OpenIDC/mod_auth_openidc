@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2023 ZmartZone Holding BV
+ * Copyright (C) 2017-2024 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -49,10 +49,10 @@
 
 struct oidc_cache_cfg_redis_t;
 
-typedef apr_status_t (*oidc_cache_redis_connect_function_t)(request_rec*, struct oidc_cache_cfg_redis_t*);
-typedef redisReply* (*oidc_cache_redis_command_function_t)(request_rec*, struct oidc_cache_cfg_redis_t*,
-		char**, const char *format, va_list ap);
-typedef apr_status_t (*oidc_cache_redis_disconnect_function_t)(struct oidc_cache_cfg_redis_t*);
+typedef apr_status_t (*oidc_cache_redis_connect_function_t)(request_rec *, struct oidc_cache_cfg_redis_t *);
+typedef redisReply *(*oidc_cache_redis_command_function_t)(request_rec *, struct oidc_cache_cfg_redis_t *, char **,
+							   const char *format, va_list ap);
+typedef apr_status_t (*oidc_cache_redis_disconnect_function_t)(struct oidc_cache_cfg_redis_t *);
 
 typedef struct oidc_cache_cfg_redis_t {
 	oidc_cache_mutex_t *mutex;
@@ -60,6 +60,7 @@ typedef struct oidc_cache_cfg_redis_t {
 	char *passwd;
 	int database;
 	struct timeval connect_timeout;
+	int keepalive;
 	struct timeval timeout;
 	char *host_str;
 	apr_port_t port;
@@ -71,11 +72,15 @@ typedef struct oidc_cache_cfg_redis_t {
 
 int oidc_cache_redis_post_config(server_rec *s, oidc_cfg *cfg, const char *name);
 int oidc_cache_redis_child_init(apr_pool_t *p, server_rec *s);
-redisReply* oidc_cache_redis_command(request_rec *r,
-		oidc_cache_cfg_redis_t *context, char **errstr, const char *format,
-		va_list ap);
-apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section,
-		const char *key, char **value);
-apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section,
-		const char *key, const char *value, apr_time_t expiry);
+redisReply *oidc_cache_redis_command(request_rec *r, oidc_cache_cfg_redis_t *context, char **errstr, const char *format,
+				     va_list ap);
+apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section, const char *key, char **value);
+apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section, const char *key, const char *value,
+				apr_time_t expiry);
 apr_status_t oidc_cache_redis_disconnect(oidc_cache_cfg_redis_t *context);
+
+apr_byte_t oidc_cache_redis_set_keepalive(request_rec *r, redisContext *rctx, const int keepalive);
+apr_byte_t oidc_cache_redis_set_auth(request_rec *r, redisContext *rctx, const char *username, const char *password);
+apr_byte_t oidc_cache_redis_set_database(request_rec *r, redisContext *rctx, const int database);
+redisContext *oidc_cache_redis_connect_with_timeout(request_rec *r, const char *host, int port, struct timeval ct,
+						    struct timeval t, const char *msg);
