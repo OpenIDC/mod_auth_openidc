@@ -19,6 +19,9 @@
     <Filter Include="src\cache">
       <UniqueIdentifier>{35c778c2-551c-480a-b5b6-571593a1940a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="src\handle">
+      <UniqueIdentifier>{b8871657-05ff-4315-ac45-a68eb7d9eb02}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h">
@@ -46,6 +49,12 @@
       <Filter>src\cache</Filter>
     </ClInclude>
     <ClInclude Include="src\metrics.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="src\handle\handle.h">
+      <Filter>src\handle</Filter>
+    </ClInclude>
+    <ClInclude Include="src\http.h">
       <Filter>src</Filter>
     </ClInclude>
   </ItemGroup>
@@ -99,6 +108,48 @@
       <Filter>src\cache</Filter>
     </ClCompile>
     <ClCompile Include="src\metrics.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\handle\authz.c">
+      <Filter>src\handle</Filter>
+    </ClCompile>
+    <ClCompile Include="src\handle\content.c">
+      <Filter>src\handle</Filter>
+    </ClCompile>
+    <ClCompile Include="src\handle\discovery.c">
+      <Filter>src\handle</Filter>
+    </ClCompile>
+    <ClCompile Include="src\handle\info.c">
+      <Filter>src\handle</Filter>
+    </ClCompile>
+    <ClCompile Include="src\handle\jwks.c">
+      <Filter>src\handle</Filter>
+    </ClCompile>
+    <ClCompile Include="src\handle\logout.c">
+      <Filter>src\handle</Filter>
+    </ClCompile>
+    <ClCompile Include="src\handle\refresh.c">
+      <Filter>src\handle</Filter>
+    </ClCompile>
+    <ClCompile Include="src\handle\request.c">
+      <Filter>src\handle</Filter>
+    </ClCompile>
+    <ClCompile Include="src\handle\request_uri.c">
+      <Filter>src\handle</Filter>
+    </ClCompile>
+    <ClCompile Include="src\handle\response.c">
+      <Filter>src\handle</Filter>
+    </ClCompile>
+    <ClCompile Include="src\handle\revoke.c">
+      <Filter>src\handle</Filter>
+    </ClCompile>
+    <ClCompile Include="src\handle\session_management.c">
+      <Filter>src\handle</Filter>
+    </ClCompile>
+    <ClCompile Include="src\handle\userinfo.c">
+      <Filter>src\handle</Filter>
+    </ClCompile>
+    <ClCompile Include="src\http.c">
       <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>

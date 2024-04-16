@@ -49,7 +49,7 @@
 
 #include "..\mod_auth_openidc.h"
 
-#include "..\metrics.h"
+#include "metrics.h"
 
 #ifdef AP_NEED_SET_MUTEX_PERMS
 #include "unixd.h"
