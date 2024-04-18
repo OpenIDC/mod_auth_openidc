@@ -1,6 +1,6 @@
 /*************************************************
-*      PCRE string replacement                   *
-*************************************************/
+ *      PCRE string replacement                   *
+ *************************************************/
 
 /*
 PCRE is a library of functions to support regular expressions whose syntax
@@ -10,7 +10,7 @@ perform PERL style replacements with PCRE.
 
 Written by: Bert Driehuis <driehuis@playbeing.org>
 
-           Copyright (c) 2000 Bert Driehuis
+	   Copyright (c) 2000 Bert Driehuis
 
 -----------------------------------------------------------------------------
 Permission is granted to anyone to use this software for any purpose on any
@@ -40,18 +40,18 @@ restrictions:
 #include <apr_pools.h>
 #include <apr_strings.h>
 
-#define OIDC_PCRE_MAXCAPTURE	255
+#define OIDC_PCRE_MAXCAPTURE 255
 #define OIDC_UTIL_REGEXP_MATCH_SIZE 30
 #define OIDC_UTIL_REGEXP_MATCH_NR 1
 
 struct oidc_pcre;
 
-struct oidc_pcre* oidc_pcre_compile(apr_pool_t *pool, const char *regexp, char **error_str);
-char* oidc_pcre_subst(apr_pool_t *pool, const struct oidc_pcre*, const char*, int, const char*);
-int oidc_pcre_exec(apr_pool_t*, struct oidc_pcre*, const char*, int, char**);
-void oidc_pcre_free(struct oidc_pcre*);
-void oidc_pcre_free_match(struct oidc_pcre*);
-int oidc_pcre_get_substring(apr_pool_t *pool, const struct oidc_pcre*, const char *input, int rc,
-		char **sub_str, char **error_str);
+struct oidc_pcre *oidc_pcre_compile(apr_pool_t *pool, const char *regexp, char **error_str);
+char *oidc_pcre_subst(apr_pool_t *pool, const struct oidc_pcre *, const char *, int, const char *);
+int oidc_pcre_exec(apr_pool_t *, struct oidc_pcre *, const char *, int, char **);
+void oidc_pcre_free(struct oidc_pcre *);
+void oidc_pcre_free_match(struct oidc_pcre *);
+int oidc_pcre_get_substring(apr_pool_t *pool, const struct oidc_pcre *, const char *input, int rc, char **sub_str,
+			    char **error_str);
 
 #endif /* MOD_AUTH_OPENIDC_PCRE_SUBST_H_ */

@@ -7,11 +7,25 @@ libauth_openidc_la_SOURCES = \
 	src/cache/file.c \
 	src/cache/shm.c \
 	src/cache/common.c \
+	src/handle/authz.c \
+	src/handle/content.c \
+	src/handle/discovery.c \
+	src/handle/info.c \
+	src/handle/jwks.c \
+	src/handle/logout.c \
+	src/handle/refresh.c	\
+	src/handle/request_uri.c \
+	src/handle/request.c \
+	src/handle/response.c \
+	src/handle/revoke.c \
+	src/handle/session_management.c \
+	src/handle/userinfo.c \
+	src/metrics.c \
 	src/oauth.c \
 	src/proto.c \
 	src/config.c \
 	src/util.c \
-	src/authz.c \
+	src/http.c \
 	src/session.c \
 	src/metadata.c \
 	src/jose.c \
@@ -53,9 +67,12 @@ endif
 
 noinst_HEADERS = \
 	src/mod_auth_openidc.h \
+	src/handle/handle.h \
 	src/const.h \
+	src/http.h \
 	src/jose.h \
 	src/parse.h \
+	src/metrics.h \
 	src/cache/cache.h \
 	src/pcre_subst.h
 
@@ -90,6 +107,9 @@ install-exec-local:
 uninstall-local:
 	rm -f $(DESTDIR)@APACHE_MODULEDIR@/mod_auth_openidc.so mod_auth_openidc.la
 
+clean-local:
+	rm -f mod_auth_openidc.la
+	
 LDADD = libauth_openidc.la ${LIBADD}
 
 noinst_PROGRAMS = test/test-cmd
@@ -101,3 +121,6 @@ TESTS = test/test
 check_PROGRAMS = test/test
 test_test_SOURCES = test/test.c test/stub.c
 test_test_CFLAGS = ${AM_CFLAGS} -fPIC
+
+clang-format:
+	clang-format -style=file -i `find . -name *.[ch]`

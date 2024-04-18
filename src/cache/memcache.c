@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2023 ZmartZone Holding BV
+ * Copyright (C) 2017-2024 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -44,16 +44,16 @@
  */
 
 #include "mod_auth_openidc.h"
+#include <ap_mpm.h>
 #include <apr_memcache.h>
 #include <apr_optional.h>
-#include <ap_mpm.h>
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 /*
  * avoid including mod_http2.h (assume the function signature is stable)
  */
-APR_DECLARE_OPTIONAL_FN(void, http2_get_num_workers, (server_rec *s, int *minw, int *max));
+APR_DECLARE_OPTIONAL_FN(void, http2_get_num_workers, (server_rec * s, int *minw, int *max));
 
 typedef struct oidc_cache_cfg_memcache_t {
 	/* cache_type = memcache: memcache ptr */
@@ -62,8 +62,7 @@ typedef struct oidc_cache_cfg_memcache_t {
 
 /* create the cache context */
 static void *oidc_cache_memcache_cfg_create(apr_pool_t *pool) {
-	oidc_cache_cfg_memcache_t *context = apr_pcalloc(pool,
-			sizeof(oidc_cache_cfg_memcache_t));
+	oidc_cache_cfg_memcache_t *context = apr_pcalloc(pool, sizeof(oidc_cache_cfg_memcache_t));
 	context->cache_memcache = NULL;
 	return context;
 }
@@ -72,27 +71,25 @@ static void *oidc_cache_memcache_cfg_create(apr_pool_t *pool) {
  * initialize the memcache struct to a number of memcache servers
  */
 static int oidc_cache_memcache_post_config(server_rec *s) {
-	oidc_cfg *cfg = (oidc_cfg *) ap_get_module_config(s->module_config,
-			&auth_openidc_module);
+	oidc_cfg *cfg = (oidc_cfg *)ap_get_module_config(s->module_config, &auth_openidc_module);
 
 	if (cfg->cache_cfg != NULL)
 		return APR_SUCCESS;
-	oidc_cache_cfg_memcache_t *context = oidc_cache_memcache_cfg_create(
-			s->process->pool);
+	oidc_cache_cfg_memcache_t *context = oidc_cache_memcache_cfg_create(s->process->pool);
 	cfg->cache_cfg = context;
 
 	apr_status_t rv = APR_SUCCESS;
 	int nservers = 0;
-	char* split;
-	char* tok;
+	char *split;
+	char *tok;
 	apr_pool_t *p = s->process->pool;
-	APR_OPTIONAL_FN_TYPE(http2_get_num_workers) *get_h2_num_workers;
+	APR_OPTIONAL_FN_TYPE(http2_get_num_workers) * get_h2_num_workers;
 	int max_threads, minw, maxw;
 	apr_uint32_t min, smax, hmax, ttl;
 
 	if (cfg->cache_memcache_servers == NULL) {
-		oidc_serror(s,
-				"cache type is set to \"memcache\", but no valid " OIDCMemCacheServers " setting was found");
+		oidc_serror(s, "cache type is set to \"memcache\", but no valid " OIDCMemCacheServers
+			       " setting was found");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -107,8 +104,7 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 	/* allocated space for the number of servers */
 	rv = apr_memcache_create(p, nservers, 0, &context->cache_memcache);
 	if (rv != APR_SUCCESS) {
-		oidc_serror(s, "failed to create memcache object of '%d' size",
-				nservers);
+		oidc_serror(s, "failed to create memcache object of '%d' size", nservers);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -137,7 +133,7 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 		}
 		// a default min value of 1 does not work at least on Mac OS X
 		// so retain backwards compatibility for now with 0
-		//if (min == 0) {
+		// if (min == 0) {
 		//	min = hmax;
 		//}
 	} else {
@@ -161,9 +157,9 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 	cache_config = apr_pstrdup(p, cfg->cache_memcache_servers);
 	split = apr_strtok(cache_config, OIDC_STR_SPACE, &tok);
 	while (split) {
-		apr_memcache_server_t* st;
-		char* host_str;
-		char* scope_id;
+		apr_memcache_server_t *st;
+		char *host_str;
+		char *scope_id;
 		apr_port_t port;
 
 		/* parse out host and port */
@@ -174,22 +170,20 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 		}
 
 		if (host_str == NULL) {
-			oidc_serror(s,
-					"failed to parse cache server, no hostname specified: '%s'",
-					split);
+			oidc_serror(s, "failed to parse cache server, no hostname specified: '%s'", split);
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 
 		if (port == 0)
 			port = 11211;
 
-		oidc_sdebug(s, "creating server: %s:%d, min=%d, smax=%d, hmax=%d, ttl=%d", host_str, port, min, smax, hmax, ttl);
+		oidc_sdebug(s, "creating server: %s:%d, min=%d, smax=%d, hmax=%d, ttl=%d", host_str, port, min, smax,
+			    hmax, ttl);
 
 		/* create the memcache server struct */
 		rv = apr_memcache_server_create(p, host_str, port, min, smax, hmax, ttl, &st);
 		if (rv != APR_SUCCESS) {
-			oidc_serror(s, "failed to create cache server: %s:%d", host_str,
-					port);
+			oidc_serror(s, "failed to create cache server: %s:%d", host_str, port);
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 
@@ -207,39 +201,33 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 	return OK;
 }
 
-#define OIDC_CACHE_MEMCACHE_STATUS_ERR_SIZE  64
+#define OIDC_CACHE_MEMCACHE_STATUS_ERR_SIZE 64
 
 /*
  * printout readable error messages about memcache failures
  */
-static void oidc_cache_memcache_log_status_error(request_rec *r, const char *s,
-		apr_status_t rv) {
+static void oidc_cache_memcache_log_status_error(request_rec *r, const char *s, apr_status_t rv) {
 	char s_err[OIDC_CACHE_MEMCACHE_STATUS_ERR_SIZE];
 	apr_strerror(rv, s_err, OIDC_CACHE_MEMCACHE_STATUS_ERR_SIZE);
-	oidc_error(r,
-			"%s returned an error: [%s]; check your that your memcache server is available/accessible.",
-			s, s_err);
+	oidc_error(r, "%s returned an error: [%s]; check your that your memcache server is available/accessible.", s,
+		   s_err);
 }
 
 /*
  * assemble single key name based on section/key input
  */
-static char *oidc_cache_memcache_get_key(apr_pool_t *pool, const char *section,
-		const char *key) {
+static char *oidc_cache_memcache_get_key(apr_pool_t *pool, const char *section, const char *key) {
 	return apr_psprintf(pool, "%s:%s", section, key);
 }
 
 /*
  * check dead/alive status for all servers
  */
-static apr_byte_t oidc_cache_memcache_status(request_rec *r,
-		oidc_cache_cfg_memcache_t *context) {
+static apr_byte_t oidc_cache_memcache_status(request_rec *r, oidc_cache_cfg_memcache_t *context) {
 	int rc = TRUE;
 	int i;
 	for (i = 0; rc && i < context->cache_memcache->ntotal; i++)
-		rc = rc
-		&& (context->cache_memcache->live_servers[0]->status
-				!= APR_MC_SERVER_DEAD);
+		rc = rc && (context->cache_memcache->live_servers[0]->status != APR_MC_SERVER_DEAD);
 	return rc;
 }
 
@@ -248,12 +236,14 @@ static apr_byte_t oidc_cache_memcache_status(request_rec *r,
  */
 static apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *section, const char *key, char **value) {
 
-	oidc_cfg *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module); oidc_cache_cfg_memcache_t *context = (oidc_cache_cfg_memcache_t *) cfg->cache_cfg;
+	oidc_cfg *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cache_cfg_memcache_t *context = (oidc_cache_cfg_memcache_t *)cfg->cache_cfg;
 
 	apr_size_t len = 0;
 
 	/* get it */
-	apr_status_t rv = apr_memcache_getp(context->cache_memcache, r->pool, oidc_cache_memcache_get_key(r->pool, section, key), value, &len, NULL);
+	apr_status_t rv = apr_memcache_getp(context->cache_memcache, r->pool,
+					    oidc_cache_memcache_get_key(r->pool, section, key), value, &len, NULL);
 
 	if (rv == APR_NOTFOUND) {
 
@@ -264,9 +254,11 @@ static apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *section, c
 
 			oidc_cache_memcache_log_status_error(r, "apr_memcache_getp", rv);
 
-			return FALSE; }
+			return FALSE;
+		}
 
-		oidc_debug(r, "apr_memcache_getp: key %s not found in cache", oidc_cache_memcache_get_key(r->pool, section, key));
+		oidc_debug(r, "apr_memcache_getp: key %s not found in cache",
+			   oidc_cache_memcache_get_key(r->pool, section, key));
 
 		return TRUE;
 
@@ -274,35 +266,41 @@ static apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *section, c
 
 		oidc_cache_memcache_log_status_error(r, "apr_memcache_getp", rv);
 
-		return FALSE; }
+		return FALSE;
+	}
 
 	/* do sanity checking on the string value */
-	if ((*value) && (_oidc_strlen(*value) != len)) { oidc_error(r, "apr_memcache_getp returned less bytes than expected: _oidc_strlen(value) [%zu] != len [%" APR_SIZE_T_FMT "]", _oidc_strlen(*value), len); return FALSE; }
+	if ((*value) && (_oidc_strlen(*value) != len)) {
+		oidc_error(r,
+			   "apr_memcache_getp returned less bytes than expected: _oidc_strlen(value) [%zu] != len "
+			   "[%" APR_SIZE_T_FMT "]",
+			   _oidc_strlen(*value), len);
+		return FALSE;
+	}
 
-	return TRUE; }
+	return TRUE;
+}
 
 /*
  * store a name/value pair in memcache
  */
-static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *section,
-		const char *key, const char *value, apr_time_t expiry) {
+static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *section, const char *key, const char *value,
+					  apr_time_t expiry) {
 
-	oidc_cfg *cfg = ap_get_module_config(r->server->module_config,
-			&auth_openidc_module);
-	oidc_cache_cfg_memcache_t *context =
-			(oidc_cache_cfg_memcache_t *) cfg->cache_cfg;
+	oidc_cfg *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cache_cfg_memcache_t *context = (oidc_cache_cfg_memcache_t *)cfg->cache_cfg;
 
 	apr_status_t rv = APR_SUCCESS;
 
 	/* see if we should be clearing this entry */
 	if (value == NULL) {
 
-		rv = apr_memcache_delete(context->cache_memcache,
-				oidc_cache_memcache_get_key(r->pool, section, key), 0);
+		rv =
+		    apr_memcache_delete(context->cache_memcache, oidc_cache_memcache_get_key(r->pool, section, key), 0);
 
 		if (rv == APR_NOTFOUND) {
 			oidc_debug(r, "apr_memcache_delete: key %s not found in cache",
-					oidc_cache_memcache_get_key(r->pool, section, key));
+				   oidc_cache_memcache_get_key(r->pool, section, key));
 			rv = APR_SUCCESS;
 		} else if (rv != APR_SUCCESS) {
 			oidc_cache_memcache_log_status_error(r, "apr_memcache_delete", rv);
@@ -314,9 +312,8 @@ static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *section,
 		apr_uint32_t timeout = apr_time_sec(expiry);
 
 		/* store it */
-		rv = apr_memcache_set(context->cache_memcache,
-				oidc_cache_memcache_get_key(r->pool, section, key),
-				(char *) value, _oidc_strlen(value), timeout, 0);
+		rv = apr_memcache_set(context->cache_memcache, oidc_cache_memcache_get_key(r->pool, section, key),
+				      (char *)value, _oidc_strlen(value), timeout, 0);
 
 		if (rv != APR_SUCCESS) {
 			oidc_cache_memcache_log_status_error(r, "apr_memcache_set", rv);
@@ -327,11 +324,4 @@ static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *section,
 }
 
 oidc_cache_t oidc_cache_memcache = {
-		"memcache",
-		1,
-		oidc_cache_memcache_post_config,
-		NULL,
-		oidc_cache_memcache_get,
-		oidc_cache_memcache_set,
-		NULL
-};
+    "memcache", 1, oidc_cache_memcache_post_config, NULL, oidc_cache_memcache_get, oidc_cache_memcache_set, NULL};

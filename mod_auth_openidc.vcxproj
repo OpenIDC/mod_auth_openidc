@@ -78,13 +78,13 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(IncludePath);$(ProjectDir)target\httpd-latest\Apache24\include;$(ProjectDir)cjose\include;$(ProjectDir)vcpkg\installed\x86-windows\include</IncludePath>
+    <IncludePath>$(IncludePath);$(ProjectDir)target\httpd-latest\Apache24\include;$(ProjectDir)cjose\include;$(ProjectDir)vcpkg\installed\x86-windows\include;$(ProjectDir)\src</IncludePath>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(ProjectDir)\target\httpd-latest\Apache24\include;$(ProjectDir)cjose\include;$(ProjectDir)\vcpkg\installed\x64-windows\include;$(IncludePath)</IncludePath>
+    <IncludePath>$(ProjectDir)\target\httpd-latest\Apache24\include;$(ProjectDir)cjose\include;$(ProjectDir)\vcpkg\installed\x64-windows\include;$(ProjectDir)\src;$(IncludePath)</IncludePath>
     <LibraryPath>$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -154,7 +154,10 @@
   <ItemGroup>
     <ClInclude Include="src\cache\cache.h" />
     <ClInclude Include="src\cache\redis.h" />
+    <ClInclude Include="src\handle\handle.h" />
+    <ClInclude Include="src\http.h" />
     <ClInclude Include="src\jose.h" />
+    <ClInclude Include="src\metrics.h" />
     <ClInclude Include="src\mod_auth_openidc.h" />
     <ClInclude Include="src\parse.h" />
     <ClInclude Include="src\pcre_subst.h" />
@@ -162,7 +165,6 @@
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\authz.c" />
     <ClCompile Include="src\cache\common.c" />
     <ClCompile Include="src\cache\file.c" />
     <ClCompile Include="src\cache\memcache.c">
@@ -175,8 +177,23 @@
     </ClCompile>
     <ClCompile Include="src\cache\shm.c" />
     <ClCompile Include="src\config.c" />
+    <ClCompile Include="src\handle\authz.c" />
+    <ClCompile Include="src\handle\content.c" />
+    <ClCompile Include="src\handle\discovery.c" />
+    <ClCompile Include="src\handle\info.c" />
+    <ClCompile Include="src\handle\jwks.c" />
+    <ClCompile Include="src\handle\logout.c" />
+    <ClCompile Include="src\handle\refresh.c" />
+    <ClCompile Include="src\handle\request.c" />
+    <ClCompile Include="src\handle\request_uri.c" />
+    <ClCompile Include="src\handle\response.c" />
+    <ClCompile Include="src\handle\revoke.c" />
+    <ClCompile Include="src\handle\session_management.c" />
+    <ClCompile Include="src\handle\userinfo.c" />
+    <ClCompile Include="src\http.c" />
     <ClCompile Include="src\jose.c" />
     <ClCompile Include="src\metadata.c" />
+    <ClCompile Include="src\metrics.c" />
     <ClCompile Include="src\mod_auth_openidc.c" />
     <ClCompile Include="src\oauth.c" />
     <ClCompile Include="src\parse.c" />
