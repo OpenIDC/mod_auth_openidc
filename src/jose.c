@@ -71,7 +71,25 @@
 #define snprintf _snprintf
 #endif
 
-/* to extract a b64 encoded certificate representation as a single string */
+/*
+ * assemble an error report
+ */
+static void _oidc_jose_error_set(oidc_jose_error_t *error, const char *source, const int line, const char *function,
+			  const char *fmt, ...) {
+	if (error == NULL)
+		return;
+	snprintf(error->source, OIDC_JOSE_ERROR_SOURCE_LENGTH, "%s", source);
+	error->line = line;
+	snprintf(error->function, OIDC_JOSE_ERROR_FUNCTION_LENGTH, "%s", function);
+	va_list ap;
+	va_start(ap, fmt);
+	vsnprintf(error->text, OIDC_JOSE_ERROR_TEXT_LENGTH, fmt ? fmt : "(null)", ap);
+	va_end(ap);
+}
+
+/*
+ * extract a b64 encoded certificate representation as a single string
+ */
 static int oidc_jose_util_get_b64encoded_certificate_data(apr_pool_t *p, X509 *x509_cert,
 							  char **b64_encoded_certificate, oidc_jose_error_t *err) {
 	int rc = 0;
@@ -124,22 +142,6 @@ end:
 
 /* definition follows */
 static char *internal_cjose_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *oidc_jwk, oidc_jose_error_t *oidc_err);
-
-/*
- * assemble an error report
- */
-void _oidc_jose_error_set(oidc_jose_error_t *error, const char *source, const int line, const char *function,
-			  const char *fmt, ...) {
-	if (error == NULL)
-		return;
-	snprintf(error->source, OIDC_JOSE_ERROR_SOURCE_LENGTH, "%s", source);
-	error->line = line;
-	snprintf(error->function, OIDC_JOSE_ERROR_FUNCTION_LENGTH, "%s", function);
-	va_list ap;
-	va_start(ap, fmt);
-	vsnprintf(error->text, OIDC_JOSE_ERROR_TEXT_LENGTH, fmt ? fmt : "(null)", ap);
-	va_end(ap);
-}
 
 /*
  * set a header value in a JWT
@@ -368,6 +370,9 @@ end:
 	return result;
 }
 
+/*
+ * copy a JWK by converting oidc_jwk_t to JSON and parsing it back
+ */
 oidc_jwk_t *oidc_jwk_copy(apr_pool_t *pool, const oidc_jwk_t *src) {
 	char *s_json = NULL;
 	oidc_jose_error_t err;
@@ -405,6 +410,9 @@ void oidc_jwk_list_destroy_hash(apr_hash_t *keys) {
 	}
 }
 
+/*
+ * copy a list (array) of JWKs
+ */
 apr_array_header_t *oidc_jwk_list_copy(apr_pool_t *pool, apr_array_header_t *src) {
 	apr_array_header_t *dst = NULL;
 	int i = 0;
@@ -419,6 +427,9 @@ apr_array_header_t *oidc_jwk_list_copy(apr_pool_t *pool, apr_array_header_t *src
 	return dst;
 }
 
+/*
+ * destroy a list (array) of JWKs
+ */
 void oidc_jwk_list_destroy(apr_array_header_t *keys_list) {
 	if (keys_list == NULL)
 		return;
@@ -438,6 +449,9 @@ apr_byte_t oidc_jwk_parse_json(apr_pool_t *pool, json_t *json, oidc_jwk_t **jwk,
 	return (*jwk != NULL);
 }
 
+/*
+ * parse a set of JWKs into a list (array) of JWK structs
+ */
 apr_byte_t oidc_jwks_parse_json(apr_pool_t *pool, json_t *json, apr_array_header_t **jwk_list, oidc_jose_error_t *err) {
 	const json_t *keys = json_object_get(json, OIDC_JOSE_JWKS_KEYS_STR);
 	if ((keys == NULL) || (!json_is_array(keys))) {
@@ -458,6 +472,9 @@ apr_byte_t oidc_jwks_parse_json(apr_pool_t *pool, json_t *json, apr_array_header
 	return TRUE;
 }
 
+/*
+ * check if a JSON object is a JWK
+ */
 apr_byte_t oidc_is_jwk(json_t *json) {
 	const json_t *kty = json_object_get(json, OIDC_JOSE_JWK_KTY_STR);
 	if ((kty == NULL) || (!json_is_string(kty))) {
@@ -466,6 +483,9 @@ apr_byte_t oidc_is_jwk(json_t *json) {
 	return TRUE;
 }
 
+/*
+ * check if a JSON object is a set JWKs
+ */
 apr_byte_t oidc_is_jwks(json_t *json) {
 	const json_t *keys = json_object_get(json, OIDC_JOSE_JWKS_KEYS_STR);
 	if ((keys == NULL) || (!json_is_array(keys))) {
@@ -826,6 +846,9 @@ apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json, apr_hash_t
 
 #ifdef USE_LIBBROTLI
 
+/*
+ * deflate using libbrotli
+ */
 static apr_byte_t oidc_jose_brotli_compress(apr_pool_t *pool, const char *input, int input_len, char **output,
 					    int *output_len, oidc_jose_error_t *err) {
 	size_t len = BrotliEncoderMaxCompressedSize(input_len);
@@ -839,6 +862,9 @@ static apr_byte_t oidc_jose_brotli_compress(apr_pool_t *pool, const char *input,
 	return TRUE;
 }
 
+/*
+ * inflate using libbrotli
+ */
 static apr_byte_t oidc_jose_brotli_uncompress(apr_pool_t *pool, const char *input, int input_len, char **output,
 					      int *output_len, oidc_jose_error_t *err) {
 	size_t len = 4 * input_len;
@@ -854,6 +880,9 @@ static apr_byte_t oidc_jose_brotli_uncompress(apr_pool_t *pool, const char *inpu
 
 #elif USE_ZLIB
 
+/*
+ * deflate using zlib
+ */
 static apr_byte_t oidc_jose_zlib_compress(apr_pool_t *pool, const char *input, int input_len, char **output,
 					  int *output_len, oidc_jose_error_t *err) {
 	int status = Z_OK;
@@ -894,6 +923,9 @@ static apr_byte_t oidc_jose_zlib_compress(apr_pool_t *pool, const char *input, i
 
 #define OIDC_CJOSE_UNCOMPRESS_CHUNK 8192
 
+/*
+ * inflate using zlib
+ */
 static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input, int input_len, char **output,
 					    int *output_len, oidc_jose_error_t *err) {
 	int status = Z_OK;
@@ -946,6 +978,9 @@ static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input,
 
 #endif
 
+/*
+ * compress using (compile-time) zlib or libbrotli, otherwise just plain copy
+ */
 apr_byte_t oidc_jose_compress(apr_pool_t *pool, const char *input, int input_len, char **output, int *output_len,
 			      oidc_jose_error_t *err) {
 #ifdef USE_LIBBROTLI
@@ -959,6 +994,9 @@ apr_byte_t oidc_jose_compress(apr_pool_t *pool, const char *input, int input_len
 #endif
 }
 
+/*
+ * decompress using (compile-time) zlib or libbrotli, otherwise just plain copy
+ */
 apr_byte_t oidc_jose_uncompress(apr_pool_t *pool, const char *input, int input_len, char **output, int *output_len,
 				oidc_jose_error_t *err) {
 #ifdef USE_LIBBROTLI
@@ -1038,7 +1076,9 @@ apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json, oidc_jwt_t *
 	return TRUE;
 }
 
-/* destroy resources allocated for JWT */
+/*
+ * destroy resources allocated for JWT
+ */
 void oidc_jwt_destroy(oidc_jwt_t *jwt) {
 	if (jwt) {
 		if (jwt->header.value.json) {
@@ -1059,7 +1099,7 @@ void oidc_jwt_destroy(oidc_jwt_t *jwt) {
 }
 
 /*
- * sign JWT
+ * sign a JWT
  */
 apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk, apr_byte_t compress,
 			 oidc_jose_error_t *err) {
@@ -1117,7 +1157,7 @@ void EVP_MD_CTX_free(EVP_MD_CTX *ctx) {
 #endif
 
 /*
- * encrypt JWT
+ * encrypt a JWT
  */
 apr_byte_t oidc_jwt_encrypt(apr_pool_t *pool, oidc_jwt_t *jwe, oidc_jwk_t *jwk, const char *payload, int payload_len,
 			    char **serialized, oidc_jose_error_t *err) {
@@ -1164,7 +1204,7 @@ apr_byte_t oidc_jose_version_deprecated(apr_pool_t *pool) {
 }
 
 /*
- * verify the signature on a JWT
+ * verify the signature of a JWT
  */
 apr_byte_t oidc_jwt_verify(apr_pool_t *pool, oidc_jwt_t *jwt, apr_hash_t *keys, oidc_jose_error_t *err) {
 	apr_byte_t rc = FALSE;
@@ -1293,7 +1333,7 @@ apr_byte_t oidc_jose_hash_string(apr_pool_t *pool, const char *alg, const char *
 }
 
 /*
- * return hash length
+ * return hash length for the specified JOSE algorithm
  */
 int oidc_jose_hash_length(const char *alg) {
 	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_RS256) == 0) || (_oidc_strcmp(alg, CJOSE_HDR_ALG_PS256) == 0) ||
@@ -1311,6 +1351,9 @@ int oidc_jose_hash_length(const char *alg) {
 	return 0;
 }
 
+/*
+ * read an x509 certificate and its public key from the provided input
+ */
 static apr_byte_t oidc_jwk_x509_read(apr_pool_t *pool, BIO *input, char **encoded_certificate, EVP_PKEY **pkey,
 				     X509 **rx509, oidc_jose_error_t *err) {
 	apr_byte_t rv = FALSE;
@@ -1346,6 +1389,9 @@ end:
 	return rv;
 }
 
+/*
+ * extract a JWK struct and a fingerprint from an OpenSSL RSA key
+ */
 static apr_byte_t _oidc_jwk_rsa_key_to_jwk(apr_pool_t *pool, EVP_PKEY *pkey, oidc_jwk_t **oidc_jwk, char **fp,
 					   int *fp_len, oidc_jose_error_t *err) {
 	apr_byte_t rv = FALSE;
@@ -1424,6 +1470,9 @@ end:
 
 #if (OIDC_JOSE_EC_SUPPORT)
 
+/*
+ * extract a JWK struct and a fingerprint from an OpenSSL Elliptic Curve key
+ */
 static apr_byte_t _oidc_jwk_ec_key_to_jwk(apr_pool_t *pool, EVP_PKEY *pkey, oidc_jwk_t **oidc_jwk, char **fp,
 					  int *fp_len, oidc_jose_error_t *err) {
 	apr_byte_t rv = FALSE;

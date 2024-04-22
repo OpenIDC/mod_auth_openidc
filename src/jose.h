@@ -100,7 +100,6 @@ typedef struct {
 /*
  * error handling functions
  */
-void _oidc_jose_error_set(oidc_jose_error_t *, const char *, const int, const char *, const char *msg, ...);
 #define oidc_jose_error(err, msg, ...) _oidc_jose_error_set(err, __FILE__, __LINE__, __FUNCTION__, msg, ##__VA_ARGS__)
 #define oidc_jose_error_openssl(err, msg, ...)                                                                         \
 	_oidc_jose_error_set(err, __FILE__, __LINE__, __FUNCTION__, "%s() failed: %s", msg,                            \
