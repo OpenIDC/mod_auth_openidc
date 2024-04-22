@@ -107,16 +107,16 @@ int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg) {
 		char *url =
 		    apr_psprintf(r->pool, "%s%s%s=%s&%s=%s&%s=%s&%s=%s", discover_url,
 				 strchr(discover_url, OIDC_CHAR_QUERY) != NULL ? OIDC_STR_AMP : OIDC_STR_QUERY,
-				 OIDC_DISC_RT_PARAM, oidc_http_escape_string(r, current_url), OIDC_DISC_RM_PARAM,
-				 method, OIDC_DISC_CB_PARAM, oidc_http_escape_string(r, oidc_get_redirect_uri(r, cfg)),
-				 OIDC_CSRF_NAME, oidc_http_escape_string(r, csrf));
+				 OIDC_DISC_RT_PARAM, oidc_http_url_encode(r, current_url), OIDC_DISC_RM_PARAM,
+				 method, OIDC_DISC_CB_PARAM, oidc_http_url_encode(r, oidc_get_redirect_uri(r, cfg)),
+				 OIDC_CSRF_NAME, oidc_http_url_encode(r, csrf));
 
 		if (path_scopes != NULL)
 			url = apr_psprintf(r->pool, "%s&%s=%s", url, OIDC_DISC_SC_PARAM,
-					   oidc_http_escape_string(r, path_scopes));
+					   oidc_http_url_encode(r, path_scopes));
 		if (path_auth_request_params != NULL)
 			url = apr_psprintf(r->pool, "%s&%s=%s", url, OIDC_DISC_AR_PARAM,
-					   oidc_http_escape_string(r, path_auth_request_params));
+					   oidc_http_url_encode(r, path_auth_request_params));
 
 		/* log what we're about to do */
 		oidc_debug(r, "redirecting to external discovery page: %s", url);
@@ -153,15 +153,15 @@ int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg) {
 
 		char *href = apr_psprintf(
 		    r->pool, "%s?%s=%s&amp;%s=%s&amp;%s=%s&amp;%s=%s", oidc_get_redirect_uri(r, cfg),
-		    OIDC_DISC_OP_PARAM, oidc_http_escape_string(r, issuer), OIDC_DISC_RT_PARAM,
-		    oidc_http_escape_string(r, current_url), OIDC_DISC_RM_PARAM, method, OIDC_CSRF_NAME, csrf);
+		    OIDC_DISC_OP_PARAM, oidc_http_url_encode(r, issuer), OIDC_DISC_RT_PARAM,
+		    oidc_http_url_encode(r, current_url), OIDC_DISC_RM_PARAM, method, OIDC_CSRF_NAME, csrf);
 
 		if (path_scopes != NULL)
 			href = apr_psprintf(r->pool, "%s&amp;%s=%s", href, OIDC_DISC_SC_PARAM,
-					    oidc_http_escape_string(r, path_scopes));
+					    oidc_http_url_encode(r, path_scopes));
 		if (path_auth_request_params != NULL)
 			href = apr_psprintf(r->pool, "%s&amp;%s=%s", href, OIDC_DISC_AR_PARAM,
-					    oidc_http_escape_string(r, path_auth_request_params));
+					    oidc_http_url_encode(r, path_auth_request_params));
 
 		char *display = (_oidc_strstr(issuer, "https://") == NULL)
 				    ? apr_pstrdup(r->pool, issuer)

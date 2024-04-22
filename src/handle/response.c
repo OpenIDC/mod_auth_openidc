@@ -138,8 +138,8 @@ apr_byte_t oidc_response_post_preserve_javascript(request_rec *r, const char *lo
 	int i;
 	char *json = "";
 	for (i = 0; i < arr->nelts; i++) {
-		json = apr_psprintf(r->pool, "%s'%s': '%s'%s", json, oidc_http_escape_string(r, elts[i].key),
-				    oidc_http_escape_string(r, elts[i].val), i < arr->nelts - 1 ? "," : "");
+		json = apr_psprintf(r->pool, "%s'%s': '%s'%s", json, oidc_http_url_encode(r, elts[i].key),
+				    oidc_http_url_encode(r, elts[i].val), i < arr->nelts - 1 ? "," : "");
 	}
 	json = apr_psprintf(r->pool, "{ %s }", json);
 

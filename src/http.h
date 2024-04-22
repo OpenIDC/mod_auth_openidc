@@ -110,8 +110,8 @@ typedef struct oidc_http_outgoing_proxy_t {
 	unsigned long auth_type;
 } oidc_http_outgoing_proxy_t;
 
-char *oidc_http_escape_string(const request_rec *r, const char *str);
-char *oidc_http_unescape_string(const request_rec *r, const char *str);
+char *oidc_http_url_encode(const request_rec *r, const char *str);
+char *oidc_http_url_decode(const request_rec *r, const char *str);
 
 void oidc_http_hdr_err_out_add(const request_rec *r, const char *name, const char *value);
 void oidc_http_hdr_in_set(const request_rec *r, const char *name, const char *value);

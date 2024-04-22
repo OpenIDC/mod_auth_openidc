@@ -146,7 +146,7 @@ static const char *oidc_metadata_issuer_to_filename(request_rec *r, const char *
 	if (p[n - 1] == OIDC_CHAR_FORWARD_SLASH)
 		p[n - 1] = '\0';
 
-	return oidc_http_escape_string(r, p);
+	return oidc_http_url_encode(r, p);
 }
 
 /*
@@ -156,7 +156,7 @@ static const char *oidc_metadata_filename_to_issuer(request_rec *r, const char *
 	char *result = apr_pstrdup(r->pool, filename);
 	char *p = strrchr(result, OIDC_CHAR_DOT);
 	*p = '\0';
-	p = oidc_http_unescape_string(r, result);
+	p = oidc_http_url_decode(r, result);
 	return apr_psprintf(r->pool, "https://%s", p);
 }
 

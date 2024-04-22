@@ -76,7 +76,7 @@ int oidc_cache_file_post_config(server_rec *s) {
  * return the cache file name for a specified key
  */
 static const char *oidc_cache_file_name(request_rec *r, const char *section, const char *key) {
-	return apr_psprintf(r->pool, "%s%s-%s", OIDC_CACHE_FILE_PREFIX, section, oidc_http_escape_string(r, key));
+	return apr_psprintf(r->pool, "%s%s-%s", OIDC_CACHE_FILE_PREFIX, section, oidc_http_url_encode(r, key));
 }
 
 /*

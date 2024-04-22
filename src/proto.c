@@ -1117,8 +1117,8 @@ static apr_byte_t oidc_proto_endpoint_client_secret_basic(request_rec *r, const 
 		oidc_error(r, "no client secret is configured");
 		return FALSE;
 	}
-	*basic_auth_str = apr_psprintf(r->pool, "%s:%s", oidc_http_escape_string(r, client_id),
-				       oidc_http_escape_string(r, client_secret));
+	*basic_auth_str = apr_psprintf(r->pool, "%s:%s", oidc_http_url_encode(r, client_id),
+				       oidc_http_url_encode(r, client_secret));
 
 	return TRUE;
 }

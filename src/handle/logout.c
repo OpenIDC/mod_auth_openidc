@@ -490,7 +490,7 @@ int oidc_logout(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 			    r->pool, "%s%s" OIDC_PROTO_ID_TOKEN_HINT "=%s", s_logout_request,
 			    strchr(s_logout_request ? s_logout_request : "", OIDC_CHAR_QUERY) != NULL ? OIDC_STR_AMP
 												      : OIDC_STR_QUERY,
-			    oidc_http_escape_string(r, id_token_hint));
+			    oidc_http_url_encode(r, id_token_hint));
 		}
 
 		if (url != NULL) {
@@ -498,7 +498,7 @@ int oidc_logout(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 			    r->pool, "%s%spost_logout_redirect_uri=%s", s_logout_request,
 			    strchr(s_logout_request ? s_logout_request : "", OIDC_CHAR_QUERY) != NULL ? OIDC_STR_AMP
 												      : OIDC_STR_QUERY,
-			    oidc_http_escape_string(r, url));
+			    oidc_http_url_encode(r, url));
 		}
 
 		if (oidc_cfg_provider_logout_request_params_get(provider) != NULL) {

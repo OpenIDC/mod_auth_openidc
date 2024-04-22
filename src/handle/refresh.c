@@ -377,7 +377,7 @@ end:
 		return_to =
 		    apr_psprintf(r->pool, "%s%serror_code=%s", return_to,
 				 strchr(return_to ? return_to : "", OIDC_CHAR_QUERY) ? OIDC_STR_AMP : OIDC_STR_QUERY,
-				 oidc_http_escape_string(r, error_code));
+				 oidc_http_url_encode(r, error_code));
 
 	/* add the redirect location header */
 	oidc_http_hdr_out_location_set(r, return_to);

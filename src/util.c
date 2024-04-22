@@ -853,7 +853,7 @@ const char *oidc_get_redirect_uri_iss(request_rec *r, oidc_cfg_t *cfg, oidc_prov
 		redirect_uri =
 		    apr_psprintf(r->pool, "%s%s%s=%s", redirect_uri,
 				 strchr(redirect_uri, OIDC_CHAR_QUERY) != NULL ? OIDC_STR_AMP : OIDC_STR_QUERY,
-				 OIDC_PROTO_ISS, oidc_http_escape_string(r, oidc_cfg_provider_issuer_get(provider)));
+				 OIDC_PROTO_ISS, oidc_http_url_encode(r, oidc_cfg_provider_issuer_get(provider)));
 		oidc_debug(r, "determined issuer specific redirect uri: %s", redirect_uri);
 	}
 	return redirect_uri;
@@ -906,7 +906,7 @@ apr_byte_t oidc_http_request_parameter_get(request_rec *r, char *name, char **va
 	do {
 		if (p && _oidc_strncmp(p, k_param, k_param_sz) == 0) {
 			*value = apr_pstrdup(r->pool, p + k_param_sz);
-			*value = oidc_http_unescape_string(r, *value);
+			*value = oidc_http_url_decode(r, *value);
 		}
 		p = apr_strtok(NULL, OIDC_STR_AMP, &tokenizer_ctx);
 	} while (p);
@@ -1206,8 +1206,8 @@ apr_byte_t oidc_http_read_form_encoded_params(request_rec *r, apr_table_t *table
 
 	while (p && *p && (val = ap_getword(r->pool, &p, OIDC_CHAR_AMP))) {
 		key = ap_getword(r->pool, &val, OIDC_CHAR_EQUAL);
-		key = oidc_http_unescape_string(r, key);
-		val = oidc_http_unescape_string(r, val);
+		key = oidc_http_url_decode(r, key);
+		val = oidc_http_url_decode(r, val);
 		oidc_debug(r, "read: %s=%s", key, val);
 		apr_table_set(table, key, val);
 	}

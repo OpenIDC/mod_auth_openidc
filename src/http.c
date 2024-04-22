@@ -59,9 +59,14 @@
 #include "util.h"
 
 /*
- * escape a string
+ * URL-encode a string
  */
-char *oidc_http_escape_string(const request_rec *r, const char *str) {
+char *oidc_http_url_encode(const request_rec *r, const char *str) {
+	/*
+	 * cuRL does not allow us to share the same handle in multiple threads
+	 * see: https://curl.se/libcurl/c/threadsafe.html
+	 * so we can not not use a global variable here and optimize performance
+	 */
 	CURL *curl = NULL;
 	if (str == NULL)
 		return "";
@@ -82,9 +87,9 @@ char *oidc_http_escape_string(const request_rec *r, const char *str) {
 }
 
 /*
- * unescape a string
+ * URL-decode a string
  */
-char *oidc_http_unescape_string(const request_rec *r, const char *str) {
+char *oidc_http_url_decode(const request_rec *r, const char *str) {
 	CURL *curl = NULL;
 
 	if (str == NULL)
@@ -115,6 +120,9 @@ char *oidc_http_unescape_string(const request_rec *r, const char *str) {
 	return rv;
 }
 
+/*
+ * obtain a HTTP request header value
+ */
 static const char *oidc_http_hdr_in_get(const request_rec *r, const char *name) {
 	const char *value = apr_table_get(r->headers_in, name);
 	if (value)
@@ -122,6 +130,9 @@ static const char *oidc_http_hdr_in_get(const request_rec *r, const char *name) 
 	return value;
 }
 
+/*
+ * obtain the left-most element of a multi-valued HTTP header value
+ */
 static const char *oidc_http_hdr_in_get_left_most_only(const request_rec *r, const char *name, const char *separator) {
 	char *last = NULL;
 	const char *value = oidc_http_hdr_in_get(r, name);
@@ -130,6 +141,9 @@ static const char *oidc_http_hdr_in_get_left_most_only(const request_rec *r, con
 	return NULL;
 }
 
+/*
+ * check if a multi-valued HTTP request header contains a specified value
+ */
 static apr_byte_t oidc_http_hdr_in_contains(const request_rec *r, const char *name, const char *separator,
 					    const char postfix_separator, const char *needle) {
 	char *ctx = NULL, *elem = NULL;
@@ -152,6 +166,9 @@ static apr_byte_t oidc_http_hdr_in_contains(const request_rec *r, const char *na
 	return rc;
 }
 
+/*
+ * set a HTTP response header; table could be headers_out or err_headers_out
+ */
 static void oidc_http_hdr_table_set(const request_rec *r, apr_table_t *table, const char *name, const char *value) {
 
 	if (value != NULL) {
@@ -181,103 +198,178 @@ static void oidc_http_hdr_table_set(const request_rec *r, apr_table_t *table, co
 	}
 }
 
+/*
+ * set a (regular) HTTP response header
+ */
 static void oidc_http_hdr_out_set(const request_rec *r, const char *name, const char *value) {
 	oidc_http_hdr_table_set(r, r->headers_out, name, value);
 }
 
+/*
+ * obtain a HTTP response header value
+ */
 static const char *oidc_http_hdr_out_get(const request_rec *r, const char *name) {
 	return apr_table_get(r->headers_out, name);
 }
 
+/*
+ * set a HTTP response header on all responses, included errors and redirects
+ */
 void oidc_http_hdr_err_out_add(const request_rec *r, const char *name, const char *value) {
 	oidc_debug(r, "%s: %s", name, value);
 	apr_table_add(r->err_headers_out, name, value);
 }
 
+/*
+ * set an HTTP request header
+ */
 void oidc_http_hdr_in_set(const request_rec *r, const char *name, const char *value) {
 	oidc_http_hdr_table_set(r, r->headers_in, name, value);
 }
 
+/*
+ * obtain a HTTP request cookie value
+ */
 const char *oidc_http_hdr_in_cookie_get(const request_rec *r) {
 	return oidc_http_hdr_in_get(r, OIDC_HTTP_HDR_COOKIE);
 }
 
+/*
+ * set a HTTP request cookie value
+ */
 void oidc_http_hdr_in_cookie_set(const request_rec *r, const char *value) {
 	oidc_http_hdr_in_set(r, OIDC_HTTP_HDR_COOKIE, value);
 }
 
+/*
+ * obtain the User-Agent header value from the HTTP request
+ */
 const char *oidc_http_hdr_in_user_agent_get(const request_rec *r) {
 	return oidc_http_hdr_in_get(r, OIDC_HTTP_HDR_USER_AGENT);
 }
 
+/*
+ * obtain the X-Forwarded-For header value from the HTTP request
+ */
 const char *oidc_http_hdr_in_x_forwarded_for_get(const request_rec *r) {
 	return oidc_http_hdr_in_get_left_most_only(r, OIDC_HTTP_HDR_X_FORWARDED_FOR, OIDC_STR_COMMA OIDC_STR_SPACE);
 }
 
+/*
+ * obtain the Content-Type header value from the HTTP request
+ */
 const char *oidc_http_hdr_in_content_type_get(const request_rec *r) {
 	return oidc_http_hdr_in_get(r, OIDC_HTTP_HDR_CONTENT_TYPE);
 }
 
+/*
+ * obtain the Content-Length header value from the HTTP request
+ */
 const char *oidc_http_hdr_in_content_length_get(const request_rec *r) {
 	return oidc_http_hdr_in_get(r, OIDC_HTTP_HDR_CONTENT_LENGTH);
 }
 
+/*
+ * obtain the X-Requested-With header value from the HTTP request
+ */
 const char *oidc_http_hdr_in_x_requested_with_get(const request_rec *r) {
 	return oidc_http_hdr_in_get(r, OIDC_HTTP_HDR_X_REQUESTED_WITH);
 }
 
+/*
+ * obtain the Sec-Fetch-Mode header value from the HTTP request
+ */
 const char *oidc_http_hdr_in_sec_fetch_mode_get(const request_rec *r) {
 	return oidc_http_hdr_in_get(r, OIDC_HTTP_HDR_SEC_FETCH_MODE);
 }
 
+/*
+ * obtain the Sec-Fetch-Dest header value from the HTTP request
+ */
 const char *oidc_http_hdr_in_sec_fetch_dest_get(const request_rec *r) {
 	return oidc_http_hdr_in_get(r, OIDC_HTTP_HDR_SEC_FETCH_DEST);
 }
 
+/*
+ * obtain the Accept header value from the HTTP request
+ */
 const char *oidc_http_hdr_in_accept_get(const request_rec *r) {
 	return oidc_http_hdr_in_get(r, OIDC_HTTP_HDR_ACCEPT);
 }
 
+/*
+ * check if a specified value exists in the HTTP Accept request header
+ */
 apr_byte_t oidc_http_hdr_in_accept_contains(const request_rec *r, const char *needle) {
 	return oidc_http_hdr_in_contains(r, OIDC_HTTP_HDR_ACCEPT, OIDC_STR_COMMA, OIDC_CHAR_SEMI_COLON, needle);
 }
 
+/*
+ * obtain the Authorization header value from the HTTP request
+ */
 const char *oidc_http_hdr_in_authorization_get(const request_rec *r) {
 	return oidc_http_hdr_in_get(r, OIDC_HTTP_HDR_AUTHORIZATION);
 }
 
+/*
+ * obtain the X-Forwarded-Proto header value from the HTTP request
+ */
 const char *oidc_http_hdr_in_x_forwarded_proto_get(const request_rec *r) {
 	return oidc_http_hdr_in_get_left_most_only(r, OIDC_HTTP_HDR_X_FORWARDED_PROTO, OIDC_STR_COMMA OIDC_STR_SPACE);
 }
 
+/*
+ * obtain the X-Forwarded-Port header value from the HTTP request
+ */
 const char *oidc_http_hdr_in_x_forwarded_port_get(const request_rec *r) {
 	return oidc_http_hdr_in_get_left_most_only(r, OIDC_HTTP_HDR_X_FORWARDED_PORT, OIDC_STR_COMMA OIDC_STR_SPACE);
 }
 
+/*
+ * obtain the X-Forwarded-Host header value from the HTTP request
+ */
 const char *oidc_http_hdr_in_x_forwarded_host_get(const request_rec *r) {
 	return oidc_http_hdr_in_get_left_most_only(r, OIDC_HTTP_HDR_X_FORWARDED_HOST, OIDC_STR_COMMA OIDC_STR_SPACE);
 }
 
+/*
+ * obtain the Forwarded header value from the HTTP request
+ */
 const char *oidc_http_hdr_in_forwarded_get(const request_rec *r) {
 	return oidc_http_hdr_in_get_left_most_only(r, OIDC_HTTP_HDR_FORWARDED, OIDC_STR_COMMA);
 }
 
+/*
+ * obtain the Host header value from the HTTP request
+ */
 const char *oidc_http_hdr_in_host_get(const request_rec *r) {
 	return oidc_http_hdr_in_get(r, OIDC_HTTP_HDR_HOST);
 }
 
+/*
+ * obtain the traceparent header value from the HTTP request
+ */
 const char *oidc_http_hdr_in_traceparent_get(const request_rec *r) {
 	return oidc_http_hdr_in_get(r, OIDC_HTTP_HDR_TRACE_PARENT);
 }
 
+/*
+ * set the Location header value in the HTTP response
+ */
 void oidc_http_hdr_out_location_set(const request_rec *r, const char *value) {
 	oidc_http_hdr_out_set(r, OIDC_HTTP_HDR_LOCATION, value);
 }
 
+/*
+ * obtain the Location header value from the HTTP response
+ */
 const char *oidc_http_hdr_out_location_get(const request_rec *r) {
 	return oidc_http_hdr_out_get(r, OIDC_HTTP_HDR_LOCATION);
 }
 
+/*
+ * obtain a specified value from the Forwarded header in the HTTP request
+ */
 const char *oidc_http_hdr_forwarded_get(const request_rec *r, const char *elem) {
 	const char *value = NULL;
 	char *ptr = NULL;
@@ -385,7 +477,7 @@ static int oidc_http_add_form_url_encoded_param(void *rec, const char *key, cons
 	const char *sep = ctx->encoded_params ? OIDC_STR_AMP : "";
 	ctx->encoded_params =
 	    apr_psprintf(ctx->r->pool, "%s%s%s=%s", ctx->encoded_params ? ctx->encoded_params : "", sep,
-			 oidc_http_escape_string(ctx->r, key), oidc_http_escape_string(ctx->r, value));
+			 oidc_http_url_encode(ctx->r, key), oidc_http_url_encode(ctx->r, value));
 	return 1;
 }
 
@@ -492,6 +584,9 @@ static void oidc_http_set_curl_ssl_options(request_rec *r, CURL *curl) {
 
 #define OIDC_USER_AGENT_ENV_VAR "OIDC_USER_AGENT"
 
+/*
+ * construct our User-Agent header for outgoing requests
+ */
 static const char *oidc_http_user_agent(request_rec *r) {
 	const char *s_useragent = apr_table_get(r->subprocess_env, OIDC_USER_AGENT_ENV_VAR);
 	if (s_useragent == NULL) {
@@ -816,6 +911,10 @@ static const char *oidc_http_get_cookie_path(request_rec *r) {
 
 #define OIDC_SET_COOKIE_APPEND_ENV_VAR "OIDC_SET_COOKIE_APPEND"
 
+/*
+ * obtain the value configured in the OIDC_SET_COOKIE_APPEND environment variable
+ * which is to be added to the HTTP Set-Cookie response header
+ */
 static const char *oidc_http_set_cookie_append_value(request_rec *r) {
 	const char *env_var_value = NULL;
 
@@ -1041,6 +1140,9 @@ void oidc_http_set_chunked_cookie(request_rec *r, const char *cookieName, const 
 	oidc_http_set_cookie(r, cookieName, "", expires, ext);
 }
 
+/*
+ * construct the HTTP outgoing proxy options
+ */
 const char **oidc_http_proxy_auth_options(void) {
 	static const char *options[] = {OIDC_HTTP_PROXY_AUTH_BASIC,
 					OIDC_HTTP_PROXY_AUTH_DIGEST,
@@ -1053,6 +1155,9 @@ const char **oidc_http_proxy_auth_options(void) {
 	return options;
 }
 
+/*
+ * return the CURL enum value for the HTTP outgoing proxy options
+ */
 unsigned long oidc_http_proxy_s2auth(const char *arg) {
 	if (_oidc_strcmp(arg, OIDC_HTTP_PROXY_AUTH_BASIC) == 0)
 		return CURLAUTH_BASIC;
@@ -1069,10 +1174,16 @@ unsigned long oidc_http_proxy_s2auth(const char *arg) {
 	return CURLAUTH_NONE;
 }
 
+/*
+ * initialize the HTTP/cURL environment
+ */
 void oidc_http_init(void) {
 	curl_global_init(CURL_GLOBAL_ALL);
 }
 
+/*
+ * clean up the HTTP/cURL environment
+ */
 void oidc_http_cleanup(void) {
 	curl_global_cleanup();
 }
