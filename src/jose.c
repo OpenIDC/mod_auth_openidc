@@ -75,7 +75,7 @@
  * assemble an error report
  */
 static void _oidc_jose_error_set(oidc_jose_error_t *error, const char *source, const int line, const char *function,
-			  const char *fmt, ...) {
+				 const char *fmt, ...) {
 	if (error == NULL)
 		return;
 	snprintf(error->source, OIDC_JOSE_ERROR_SOURCE_LENGTH, "%s", source);

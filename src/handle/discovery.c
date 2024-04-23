@@ -107,8 +107,8 @@ int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg) {
 		char *url =
 		    apr_psprintf(r->pool, "%s%s%s=%s&%s=%s&%s=%s&%s=%s", discover_url,
 				 strchr(discover_url, OIDC_CHAR_QUERY) != NULL ? OIDC_STR_AMP : OIDC_STR_QUERY,
-				 OIDC_DISC_RT_PARAM, oidc_http_url_encode(r, current_url), OIDC_DISC_RM_PARAM,
-				 method, OIDC_DISC_CB_PARAM, oidc_http_url_encode(r, oidc_get_redirect_uri(r, cfg)),
+				 OIDC_DISC_RT_PARAM, oidc_http_url_encode(r, current_url), OIDC_DISC_RM_PARAM, method,
+				 OIDC_DISC_CB_PARAM, oidc_http_url_encode(r, oidc_get_redirect_uri(r, cfg)),
 				 OIDC_CSRF_NAME, oidc_http_url_encode(r, csrf));
 
 		if (path_scopes != NULL)

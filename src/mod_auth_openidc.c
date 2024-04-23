@@ -398,20 +398,26 @@ const char *oidc_original_request_method(request_rec *r, oidc_cfg_t *cfg, apr_by
 	return method;
 }
 
+// element in a list of state cookies
 typedef struct oidc_state_cookies_t {
 	char *name;
 	apr_time_t timestamp;
 	struct oidc_state_cookies_t *next;
 } oidc_state_cookies_t;
 
+/*
+ * delete superfluous state cookies i.e. exceeding the maximum, starting with the oldest ones
+ */
 static int oidc_delete_oldest_state_cookies(request_rec *r, oidc_cfg_t *c, int number_of_valid_state_cookies,
 					    int max_number_of_state_cookies, oidc_state_cookies_t *first) {
 	oidc_state_cookies_t *cur = NULL, *prev = NULL, *prev_oldest = NULL, *oldest = NULL;
+	// loop over the list of state cookies, deleting the oldest one until we reach an acceptable number
 	while (number_of_valid_state_cookies >= max_number_of_state_cookies) {
 		oldest = first;
 		prev_oldest = NULL;
 		prev = first;
 		cur = first ? first->next : NULL;
+		// find the oldest state cookie in the list (stored in "oldest")
 		while (cur) {
 			if ((cur->timestamp < oldest->timestamp)) {
 				oldest = cur;
@@ -832,11 +838,17 @@ apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg_t *cfg, oidc_sessio
 #define OIDC_USERINFO_SIGNED_JWT_CACHE_TTL_DEFAULT -1
 #define OIDC_USERINFO_SIGNED_JWT_CACHE_TTL_ENVVAR "OIDC_USERINFO_SIGNED_JWT_CACHE_TTL"
 
+/*
+ * obtain the signed JWT cache TTL from the environment variables
+ */
 static int oidc_userinfo_signed_jwt_cache_ttl(request_rec *r) {
 	const char *s_ttl = apr_table_get(r->subprocess_env, OIDC_USERINFO_SIGNED_JWT_CACHE_TTL_ENVVAR);
 	return _oidc_str_to_int(s_ttl, OIDC_USERINFO_SIGNED_JWT_CACHE_TTL_DEFAULT);
 }
 
+/*
+ * create a signed JWT with s_claims payload and return the serialized form in cser
+ */
 static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session,
 						  const char *s_claims, char **cser) {
 	apr_byte_t rv = FALSE;
@@ -959,6 +971,9 @@ end:
 	return rv;
 }
 
+/*
+ * pass the userinfo claims to headers and/or environment variables, encoded as configured
+ */
 static void oidc_pass_userinfo_as(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session, const char *s_claims,
 				  oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding) {
 	const apr_array_header_t *pass_userinfo_as = NULL;
@@ -1188,6 +1203,9 @@ apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name, const ch
 
 #define OIDC_MAX_URL_LENGTH 8192 * 2
 
+/*
+ * avoid cross site request forgery on the redirect_to_url
+ */
 apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg_t *c, const char *redirect_to_url,
 				      apr_byte_t restrict_to_host, char **err_str, char **err_desc) {
 	apr_uri_t uri;
@@ -1662,6 +1680,9 @@ int oidc_check_user_id(request_rec *r) {
 	return rv;
 }
 
+/*
+ * check of mod_auth_openidc needs to handle this request
+ */
 apr_byte_t oidc_enabled(request_rec *r) {
 	if (ap_auth_type(r) == NULL)
 		return FALSE;
@@ -1895,6 +1916,9 @@ static void oidc_ssl_id_callback(CRYPTO_THREADID *id) {
 
 #endif /* defined(OPENSSL_THREADS) && APR_HAS_THREADS */
 
+/*
+ * cleanup resources allocated in a child process
+ */
 static apr_status_t oidc_cleanup_child(void *data) {
 	server_rec *sp = (server_rec *)data;
 	while (sp != NULL) {
@@ -1906,6 +1930,9 @@ static apr_status_t oidc_cleanup_child(void *data) {
 	return APR_SUCCESS;
 }
 
+/*
+ * cleanup resources allocated in a parent process
+ */
 static apr_status_t oidc_cleanup_parent(void *data) {
 
 	oidc_cleanup_child(data);
@@ -2028,6 +2055,9 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, se
 
 #if HAVE_APACHE_24
 
+/*
+ * parse an Apache expression in the configured require value
+ */
 static const char *oidc_parse_config(cmd_parms *cmd, const char *require_line, const void **parsed_require_line) {
 	const char *expr_err = NULL;
 	ap_expr_info_t *expr;
@@ -2070,6 +2100,9 @@ static void oidc_child_init(apr_pool_t *p, server_rec *s) {
 
 static const char oidcFilterName[] = "oidc_filter_in_filter";
 
+/*
+ * add filter for inserting POST data
+ */
 static void oidc_filter_in_insert_filter(request_rec *r) {
 
 	if (oidc_enabled(r) == FALSE)
@@ -2091,6 +2124,9 @@ typedef struct oidc_filter_in_context {
 	apr_size_t nbytes;
 } oidc_filter_in_context;
 
+/*
+ * execute filter for inserting POST data
+ */
 static apr_status_t oidc_filter_in_filter(ap_filter_t *f, apr_bucket_brigade *brigade, ap_input_mode_t mode,
 					  apr_read_type_e block, apr_off_t nbytes) {
 	oidc_filter_in_context *ctx = NULL;

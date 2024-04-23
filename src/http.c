@@ -475,9 +475,8 @@ static int oidc_http_add_form_url_encoded_param(void *rec, const char *key, cons
 		       ? "***"
 		       : (value ? value : ""));
 	const char *sep = ctx->encoded_params ? OIDC_STR_AMP : "";
-	ctx->encoded_params =
-	    apr_psprintf(ctx->r->pool, "%s%s%s=%s", ctx->encoded_params ? ctx->encoded_params : "", sep,
-			 oidc_http_url_encode(ctx->r, key), oidc_http_url_encode(ctx->r, value));
+	ctx->encoded_params = apr_psprintf(ctx->r->pool, "%s%s%s=%s", ctx->encoded_params ? ctx->encoded_params : "",
+					   sep, oidc_http_url_encode(ctx->r, key), oidc_http_url_encode(ctx->r, value));
 	return 1;
 }
 
