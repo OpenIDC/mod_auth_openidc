@@ -1,3 +1,7 @@
+04/23/2024
+- disable support for the RSA PKCS v1.5 JWE encryption algorithm as it is deemed unsafe
+  due to the Marvin attack and is removed from libcjose as well
+
 04/05/2024
 - add debug printout for OIDCUnAuthAction expression evaluation
 

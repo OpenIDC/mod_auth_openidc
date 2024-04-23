@@ -228,7 +228,7 @@ static int oidc_alg2kty(const char *alg) {
 	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_A128KW) == 0) || (_oidc_strcmp(alg, CJOSE_HDR_ALG_A192KW) == 0) ||
 	    (_oidc_strcmp(alg, CJOSE_HDR_ALG_A256KW) == 0))
 		return CJOSE_JWK_KTY_OCT;
-	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_RSA1_5) == 0) || (_oidc_strcmp(alg, CJOSE_HDR_ALG_RSA_OAEP) == 0))
+	if (_oidc_strcmp(alg, CJOSE_HDR_ALG_RSA_OAEP) == 0)
 		return CJOSE_JWK_KTY_RSA;
 	return -1;
 }
@@ -631,7 +631,6 @@ apr_byte_t oidc_jose_jws_algorithm_is_supported(apr_pool_t *pool, const char *al
  */
 apr_array_header_t *oidc_jose_jwe_supported_algorithms(apr_pool_t *pool) {
 	apr_array_header_t *result = apr_array_make(pool, 4, sizeof(const char *));
-	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_RSA1_5;
 	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_A128KW;
 	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_A192KW;
 	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_A256KW;
