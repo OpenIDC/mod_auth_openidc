@@ -1108,6 +1108,9 @@ apr_byte_t oidc_metadata_provider_parse(request_rec *r, oidc_cfg_t *cfg, json_t 
 	return TRUE;
 }
 
+/*
+ * parse the JSON OAuth 2.0 provider metadata in to the cfg->oauth struct
+ */
 apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, json_t *j_provider) {
 
 	char *issuer = NULL, *value = NULL;
@@ -1174,6 +1177,9 @@ void oidc_metadata_get_valid_string(request_rec *r, json_t *json, const char *ke
 	*str_value = v;
 }
 
+/*
+ * parse a set of JWKs from a JSON metadata object
+ */
 static void oidc_metadata_get_jwks(request_rec *r, json_t *json, apr_array_header_t **jwk_list) {
 	json_t *keys = NULL;
 	int i = 0;
