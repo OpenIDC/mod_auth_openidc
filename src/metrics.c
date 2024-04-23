@@ -272,11 +272,15 @@ typedef struct oidc_metrics_timing_t {
 	json_int_t count;
 } oidc_metrics_timing_t;
 
+// context holder for parsing valid classnames
 typedef struct oidc_metrics_add_classname_ctx_t {
 	apr_pool_t *pool;
 	char **valid_names;
 } oidc_metrics_add_classname_ctx_t;
 
+/*
+ * loop function for parsing valid classnames
+ */
 static int _oidc_metrics_add_classnames(void *rec, const char *key, const char *value) {
 	oidc_metrics_add_classname_ctx_t *ctx = (oidc_metrics_add_classname_ctx_t *)rec;
 	*ctx->valid_names = apr_psprintf(ctx->pool, "%s%s%s", *ctx->valid_names ? *ctx->valid_names : "",
@@ -284,6 +288,9 @@ static int _oidc_metrics_add_classnames(void *rec, const char *key, const char *
 	return 1;
 }
 
+/*
+ * check if the provided value is a valid classname
+ */
 apr_byte_t oidc_metrics_is_valid_classname(apr_pool_t *pool, const char *name, char **valid_names) {
 	int i = 0;
 	int n = 0;
@@ -354,12 +361,18 @@ static inline void oidc_metrics_storage_set(server_rec *s, const char *value) {
 	}
 }
 
+/*
+ * parse a string into a JSON object
+ */
 static json_t *oidc_metrics_json_load(char *s_json, json_error_t *json_error) {
 	if (s_json == NULL)
 		s_json = "{}";
 	return json_loads(s_json, 0, json_error);
 }
 
+/*
+ * parse a string into a JSON object in a server_rec context
+ */
 static json_t *oidc_metrics_json_parse_s(server_rec *s, char *s_json) {
 	json_error_t json_error;
 	json_t *json = oidc_metrics_json_load(s_json, &json_error);
@@ -469,6 +482,9 @@ static void oidc_metrics_timings_update(server_rec *s, const json_t *entry, cons
 
 #define OIDC_METRICS_SPEC_DEFAULT "_"
 
+/*
+ * spec identifier helper to make sure it is not empty
+ */
 static inline const char *_metrics_spec2key(const char *spec) {
 	return (spec && _oidc_strcmp(spec, "") != 0) ? spec : OIDC_METRICS_SPEC_DEFAULT;
 }
@@ -536,10 +552,16 @@ static json_t *oidc_metrics_server_get(json_t *json, const char *name) {
 	return j_server;
 }
 
+/*
+ * convert an enum type value to its corresponding string
+ */
 static inline char *oidc_metrics_type2key(apr_pool_t *pool, unsigned int type) {
 	return apr_psprintf(pool, "%u", type);
 }
 
+/*
+ * convert a string key type to an enum type
+ */
 static inline unsigned int oidc_metrics_key2type(const char *key) {
 	unsigned int type = 0;
 	sscanf(key, "%u", &type);
@@ -627,11 +649,17 @@ static void oidc_metrics_store(server_rec *s) {
 
 #define OIDC_METRICS_CACHE_STORAGE_INTERVAL_ENV_VAR "OIDC_METRICS_CACHE_STORAGE_INTERVAL"
 
+/*
+ * obtain the metrics flush interval from the environment variables
+ */
 static inline apr_interval_time_t oidc_metrics_interval(server_rec *s) {
 	return apr_time_from_msec(oidc_metrics_get_env_int(OIDC_METRICS_CACHE_STORAGE_INTERVAL_ENV_VAR,
 							   OIDC_METRICS_CACHE_STORAGE_INTERVAL_DEFAULT));
 }
 
+/*
+ * generate a random integer value in the specified modulo range
+ */
 unsigned int oidc_metric_random_int(unsigned int mod) {
 	unsigned int v;
 	oidc_util_random_bytes((unsigned char *)&v, sizeof(v));
@@ -941,16 +969,25 @@ void oidc_metrics_timing_add(request_rec *r, oidc_metrics_timing_type_t type, ap
  * representation handlers
  */
 
+/*
+ * convert in integer counter enum type to its corresponding string name
+ */
 static inline char *oidc_metrics_counter_type2s(apr_pool_t *pool, unsigned int type) {
 	return apr_psprintf(pool, "%s.%s", _oidc_metrics_counters_info[type].class_name,
 			    _oidc_metrics_counters_info[type].metric_name);
 }
 
+/*
+ * convert in integer timings enum type to its corresponding string name
+ */
 static inline char *oidc_metrics_timing_type2s(apr_pool_t *pool, unsigned int type) {
 	return apr_psprintf(pool, "%s.%s", _oidc_metrics_timings_info[type].class_name,
 			    _oidc_metrics_timings_info[type].metric_name);
 }
 
+/*
+ * parse a string into a JSON object in the request_rec context
+ */
 static json_t *oidc_metrics_json_parse_r(request_rec *r, char *s_json) {
 	json_error_t json_error;
 	json_t *json = oidc_metrics_json_load(s_json, &json_error);
@@ -1153,11 +1190,15 @@ static const char *oidc_metric_prometheus_normalize_name(apr_pool_t *pool, const
 #define OIDC_METRICS_PROMETHEUS_BUCKET "bucket"
 #define OIDC_METRICS_PROMETHEUS_SPEC "value"
 
+// loop context for Prometheus output
 typedef struct oidc_metric_prometheus_callback_ctx_t {
 	char *s_result;
 	apr_pool_t *pool;
 } oidc_metric_prometheus_callback_ctx_t;
 
+/*
+ * loop function for converting counter metrics to Prometheus output
+ */
 int oidc_metrics_prometheus_counters(void *rec, const char *key, const char *value) {
 	const char *s_server = NULL, *s_spec = NULL;
 	json_t *j_counter = NULL, *j_specs = NULL, *j_spec = NULL;
@@ -1194,6 +1235,10 @@ int oidc_metrics_prometheus_counters(void *rec, const char *key, const char *val
 	json_decref(o_counter);
 	return 1;
 }
+
+/*
+ * loop function for converting timing metrics to Prometheus output
+ */
 
 int oidc_metrics_prometheus_timings(void *rec, const char *key, const char *value) {
 	const char *s_server = NULL, *s_key = NULL, *s_bucket = NULL;
@@ -1255,6 +1300,9 @@ static void oidc_metrics_prometheus_convert(apr_table_t *table, const char *serv
 	}
 }
 
+/*
+ * generate output in Prometheus formatting
+ */
 static int oidc_metrics_handle_prometheus(request_rec *r, char *s_json) {
 	json_t *json = NULL, *j_server = NULL;
 	const char *s_server = NULL;
@@ -1291,12 +1339,14 @@ static int oidc_metrics_handle_prometheus(request_rec *r, char *s_json) {
 
 typedef int (*oidc_metrics_handler_function_t)(request_rec *, char *);
 
+// holder for output function callback context
 typedef struct oidc_metrics_handler_t {
 	const char *format;
 	oidc_metrics_handler_function_t callback;
 	int reset;
 } oidc_metrics_content_handler_t;
 
+// output handlers
 const oidc_metrics_content_handler_t _oidc_metrics_handlers[] = {
     // first is default
     {"prometheus", oidc_metrics_handle_prometheus, 1},
