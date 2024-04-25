@@ -53,6 +53,9 @@
 
 #include <apr_lib.h>
 
+/*
+ * retrieve the OAuth 2.0 metadata discovery document from the specified URL
+ */
 apr_byte_t oidc_oauth_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg, const char *issuer, const char *url,
 						 json_t **j_metadata, char **response) {
 
@@ -79,6 +82,9 @@ apr_byte_t oidc_oauth_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg
 	return TRUE;
 }
 
+/*
+ * obtain the OAuth 2.0 configuration settings, possibly by retrieving the metadata document
+ */
 static apr_byte_t oidc_oauth_provider_config(request_rec *r, oidc_cfg_t *c) {
 
 	json_t *j_provider = NULL;
@@ -335,6 +341,9 @@ static apr_byte_t oidc_oauth_parse_and_cache_token_expiry(request_rec *r, oidc_c
 #define OIDC_OAUTH_CACHE_KEY_RESPONSE "r"
 #define OIDC_OAUTH_CACHE_KEY_TIMESTAMP "t"
 
+/*
+ * cache the OAuth 2.0 introspection results for the specified access token
+ */
 static apr_byte_t oidc_oauth_cache_access_token(request_rec *r, oidc_cfg_t *c, apr_time_t cache_until,
 						const char *access_token, json_t *json) {
 
@@ -361,6 +370,9 @@ static apr_byte_t oidc_oauth_cache_access_token(request_rec *r, oidc_cfg_t *c, a
 	return TRUE;
 }
 
+/*
+ * retrieve the OAuth 2.0 introspection results from the cache, for a previously introspected access token
+ */
 static apr_byte_t oidc_oauth_get_cached_access_token(request_rec *r, oidc_cfg_t *c, const char *access_token,
 						     json_t **json) {
 	json_t *cache_entry = NULL;
