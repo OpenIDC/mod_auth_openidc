@@ -104,7 +104,10 @@ static int oidc_proto_html_post(request_rec *r, const char *url, apr_table_t *pa
 	return oidc_util_html_send(r, "Submitting...", NULL, "document.forms[0].submit", html_body, OK);
 }
 
-void add_auth_request_params(request_rec *r, apr_table_t *params, const char *auth_request_params) {
+/*
+ * add extra configured authentication request parameters (global or per-path)
+ */
+static void oidc_proto_auth_request_params_add(request_rec *r, apr_table_t *params, const char *auth_request_params) {
 	char *key = NULL;
 	char *val = NULL;
 
@@ -215,10 +218,10 @@ int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *pro
 		apr_table_setn(params, OIDC_PROTO_PROMPT, prompt);
 
 	/* add any statically configured custom authorization request parameters */
-	add_auth_request_params(r, params, oidc_cfg_provider_auth_request_params_get(provider));
+	oidc_proto_auth_request_params_add(r, params, oidc_cfg_provider_auth_request_params_get(provider));
 
 	/* add any dynamically configured custom authorization request parameters */
-	add_auth_request_params(r, params, auth_request_params);
+	oidc_proto_auth_request_params_add(r, params, auth_request_params);
 
 	/* add request parameter (request or request_uri) if set */
 	if (oidc_cfg_provider_request_object_get(provider) != NULL)
@@ -372,24 +375,39 @@ oidc_proto_pkce_t oidc_pkce_s256 = {OIDC_PKCE_METHOD_S256, oidc_proto_pkce_state
 #define OIDC_PROTO_STATE_PKCE_STATE "ps"
 #define OIDC_PROTO_STATE_STATE "s"
 
+/*
+ * retrieve a string from the state object
+ */
 static const char *oidc_proto_state_get_string_value(oidc_proto_state_t *proto_state, const char *name) {
 	json_t *v = json_object_get(proto_state, name);
 	return v ? json_string_value(v) : NULL;
 }
 
+/*
+ * set a string value in the state object
+ */
 static void oidc_proto_state_set_string_value(oidc_proto_state_t *proto_state, const char *name, const char *value) {
 	json_object_set_new(proto_state, name, json_string(value));
 }
 
+/*
+ * create a new state object
+ */
 oidc_proto_state_t *oidc_proto_state_new() {
 	return json_object();
 }
 
+/*
+ * free up resources allocated for a state object
+ */
 void oidc_proto_state_destroy(oidc_proto_state_t *proto_state) {
 	json_decref(proto_state);
 }
 
-apr_byte_t oidc_proto_check_crypto_passphrase(request_rec *r, oidc_cfg_t *c, const char *action) {
+/*
+ * sanity check on the configuration of OIDCCryptoPassphrase
+ */
+static apr_byte_t oidc_proto_check_crypto_passphrase(request_rec *r, oidc_cfg_t *c, const char *action) {
 	if (oidc_cfg_crypto_passphrase_secret1_get(c) == NULL) {
 		oidc_error(r,
 			   "cannot %s state cookie because " OIDCCryptoPassphrase
@@ -401,6 +419,9 @@ apr_byte_t oidc_proto_check_crypto_passphrase(request_rec *r, oidc_cfg_t *c, con
 	return TRUE;
 }
 
+/*
+ * parse a state object from the provided cookie value
+ */
 oidc_proto_state_t *oidc_proto_state_from_cookie(request_rec *r, oidc_cfg_t *c, const char *cookieValue) {
 	char *s_payload = NULL;
 	json_t *result = NULL;
@@ -411,6 +432,9 @@ oidc_proto_state_t *oidc_proto_state_from_cookie(request_rec *r, oidc_cfg_t *c, 
 	return result;
 }
 
+/*
+ * serialize a state object to a signed JWT cookie value
+ */
 char *oidc_proto_state_to_cookie(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state) {
 	char *cookieValue = NULL;
 	if (oidc_proto_check_crypto_passphrase(r, c, "create") == FALSE)
@@ -420,87 +444,150 @@ char *oidc_proto_state_to_cookie(request_rec *r, oidc_cfg_t *c, oidc_proto_state
 	return cookieValue;
 }
 
+/*
+ * serialize a state object to a string (for logging/debugging purposes)
+ */
 char *oidc_proto_state_to_string(request_rec *r, oidc_proto_state_t *proto_state) {
 	return oidc_util_encode_json_object(r, proto_state, JSON_COMPACT);
 }
 
+/*
+ * retrieve the issuer value from the state object
+ */
 const char *oidc_proto_state_get_issuer(oidc_proto_state_t *proto_state) {
 	return oidc_proto_state_get_string_value(proto_state, OIDC_PROTO_STATE_ISSUER);
 }
 
+/*
+ * retrieve the nonce value from the state object
+ */
 const char *oidc_proto_state_get_nonce(oidc_proto_state_t *proto_state) {
 	return oidc_proto_state_get_string_value(proto_state, OIDC_PROTO_STATE_NONCE);
 }
 
+/*
+ * retrieve the timestamp value from the state object
+ */
 apr_time_t oidc_proto_state_get_timestamp(oidc_proto_state_t *proto_state) {
 	json_t *v = json_object_get(proto_state, OIDC_PROTO_STATE_TIMESTAMP);
 	return v ? apr_time_from_sec(json_integer_value(v)) : -1;
 }
 
+/*
+ * retrieve the prompt value from the state object
+ */
 const char *oidc_proto_state_get_prompt(oidc_proto_state_t *proto_state) {
 	return oidc_proto_state_get_string_value(proto_state, OIDC_PROTO_STATE_PROMPT);
 }
 
+/*
+ * retrieve the response type value from the state object
+ */
 const char *oidc_proto_state_get_response_type(oidc_proto_state_t *proto_state) {
 	return oidc_proto_state_get_string_value(proto_state, OIDC_PROTO_STATE_RESPONSE_TYPE);
 }
 
+/*
+ * retrieve the response mode value from the state object
+ */
 const char *oidc_proto_state_get_response_mode(oidc_proto_state_t *proto_state) {
 	return oidc_proto_state_get_string_value(proto_state, OIDC_PROTO_STATE_RESPONSE_MODE);
 }
 
+/*
+ * retrieve the original URL value from the state object
+ */
 const char *oidc_proto_state_get_original_url(oidc_proto_state_t *proto_state) {
 	return oidc_proto_state_get_string_value(proto_state, OIDC_PROTO_STATE_ORIGINAL_URL);
 }
 
+/*
+ * retrieve the original HTTP method value from the state object
+ */
 const char *oidc_proto_state_get_original_method(oidc_proto_state_t *proto_state) {
 	return oidc_proto_state_get_string_value(proto_state, OIDC_PROTO_STATE_ORIGINAL_METHOD);
 }
 
+/*
+ * retrieve the state (URL parameter) value from the state object
+ */
 const char *oidc_proto_state_get_state(oidc_proto_state_t *proto_state) {
 	return oidc_proto_state_get_string_value(proto_state, OIDC_PROTO_STATE_STATE);
 }
 
+/*
+ * retrieve the PKCE state value from the state object
+ */
 const char *oidc_proto_state_get_pkce_state(oidc_proto_state_t *proto_state) {
 	return oidc_proto_state_get_string_value(proto_state, OIDC_PROTO_STATE_PKCE_STATE);
 }
 
+/*
+ * set the state (URL parameter) value in the state object
+ */
 void oidc_proto_state_set_state(oidc_proto_state_t *proto_state, const char *state) {
 	oidc_proto_state_set_string_value(proto_state, OIDC_PROTO_STATE_STATE, state);
 }
 
+/*
+ * set the issuer value in the state object
+ */
 void oidc_proto_state_set_issuer(oidc_proto_state_t *proto_state, const char *issuer) {
 	oidc_proto_state_set_string_value(proto_state, OIDC_PROTO_STATE_ISSUER, issuer);
 }
 
+/*
+ * set the original URL value in the state object
+ */
 void oidc_proto_state_set_original_url(oidc_proto_state_t *proto_state, const char *original_url) {
 	oidc_proto_state_set_string_value(proto_state, OIDC_PROTO_STATE_ORIGINAL_URL, original_url);
 }
 
+/*
+ * set the original HTTP method value in the state object
+ */
 void oidc_proto_state_set_original_method(oidc_proto_state_t *proto_state, const char *original_method) {
 	oidc_proto_state_set_string_value(proto_state, OIDC_PROTO_STATE_ORIGINAL_METHOD, original_method);
 }
 
+/*
+ * set the response mode value in the state object
+ */
 void oidc_proto_state_set_response_mode(oidc_proto_state_t *proto_state, const char *response_mode) {
 	oidc_proto_state_set_string_value(proto_state, OIDC_PROTO_STATE_RESPONSE_MODE, response_mode);
 }
 
+/*
+ * set the response type value in the state object
+ */
 void oidc_proto_state_set_response_type(oidc_proto_state_t *proto_state, const char *response_type) {
 	oidc_proto_state_set_string_value(proto_state, OIDC_PROTO_STATE_RESPONSE_TYPE, response_type);
 }
 
+/*
+ * set the nonce value in the state object
+ */
 void oidc_proto_state_set_nonce(oidc_proto_state_t *proto_state, const char *nonce) {
 	oidc_proto_state_set_string_value(proto_state, OIDC_PROTO_STATE_NONCE, nonce);
 }
 
+/*
+ * set the prompt value in the state object
+ */
 void oidc_proto_state_set_prompt(oidc_proto_state_t *proto_state, const char *prompt) {
 	oidc_proto_state_set_string_value(proto_state, OIDC_PROTO_STATE_PROMPT, prompt);
 }
 
+/*
+ * set the PKCE state value in the state object
+ */
 void oidc_proto_state_set_pkce_state(oidc_proto_state_t *proto_state, const char *pkce_state) {
 	oidc_proto_state_set_string_value(proto_state, OIDC_PROTO_STATE_PKCE_STATE, pkce_state);
 }
 
+/*
+ * set the current time as timestamp value in the state object
+ */
 void oidc_proto_state_set_timestamp_now(oidc_proto_state_t *proto_state) {
 	json_object_set_new(proto_state, OIDC_PROTO_STATE_TIMESTAMP, json_integer(apr_time_sec(apr_time_now())));
 }
@@ -1186,6 +1273,9 @@ static apr_byte_t oidc_proto_jwt_sign_and_add(request_rec *r, apr_table_t *param
 
 #define OIDC_PROTO_JWT_ASSERTION_SYMMETRIC_ALG CJOSE_HDR_ALG_HS256
 
+/*
+ * create a JWT assertion signed with the client secret and add it to the HTTP request as endpoint authentication
+ */
 static apr_byte_t oidc_proto_endpoint_auth_client_secret_jwt(request_rec *r, const char *client_id,
 							     const char *client_secret, const char *audience,
 							     apr_table_t *params) {
@@ -1215,6 +1305,9 @@ static apr_byte_t oidc_proto_endpoint_auth_client_secret_jwt(request_rec *r, con
 	return TRUE;
 }
 
+/*
+ * helper function that returns the bearer access token as the endpoint authentication method if configured
+ */
 static apr_byte_t oidc_proto_endpoint_access_token_bearer(request_rec *r, oidc_cfg_t *cfg,
 							  const char *bearer_access_token, char **bearer_auth_str) {
 
@@ -1232,6 +1325,10 @@ static apr_byte_t oidc_proto_endpoint_access_token_bearer(request_rec *r, oidc_c
 
 #define OIDC_PROTO_JWT_ASSERTION_ASYMMETRIC_ALG CJOSE_HDR_ALG_RS256
 
+/*
+ * create a JWT assertion signed with the configured private key and add it to the HTTP request as endpoint
+ * authentication
+ */
 static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r, oidc_cfg_t *cfg, const char *client_id,
 							   const apr_array_header_t *client_keys, const char *audience,
 							   apr_table_t *params) {
@@ -1275,6 +1372,9 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r, oidc_
 	return TRUE;
 }
 
+/*
+ * add the configured token endpoint authentication method to the request (or return it in the *_auth_str parameters)
+ */
 apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg_t *cfg, const char *token_endpoint_auth,
 					  const char *client_id, const char *client_secret,
 					  const apr_array_header_t *client_keys, const char *audience,
@@ -1451,8 +1551,12 @@ apr_byte_t oidc_proto_refresh_request(request_rec *r, oidc_cfg_t *cfg, oidc_prov
 						 expires_in, refresh_token);
 }
 
-static apr_byte_t oidc_proto_user_info_response_validate(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
-							 char **response, json_t **claims, char **userinfo_jwt) {
+/*
+ * validate the response from the userinfo endpoint:
+ * if the response is an encrypted and/or signed JWT, decrypt/verify it before validating it
+ */
+static apr_byte_t oidc_proto_userinfo_response_validate(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
+							char **response, json_t **claims, char **userinfo_jwt) {
 
 	oidc_debug(r,
 		   "enter: userinfo_signed_response_alg=%s, userinfo_encrypted_response_alg=%s, "
@@ -1542,7 +1646,10 @@ static apr_byte_t oidc_proto_user_info_response_validate(request_rec *r, oidc_cf
 #define OIDC_COMPOSITE_CLAIM_ACCESS_TOKEN OIDC_PROTO_ACCESS_TOKEN
 #define OIDC_COMPOSITE_CLAIM_ENDPOINT "endpoint"
 
-static apr_byte_t oidc_proto_resolve_composite_claims(request_rec *r, oidc_cfg_t *cfg, json_t *claims) {
+/*
+ * if the userinfo response contains composite claims then resolve those
+ */
+static apr_byte_t oidc_proto_userinfo_request_composite_claims(request_rec *r, oidc_cfg_t *cfg, json_t *claims) {
 	const char *key;
 	json_t *value;
 	void *iter;
@@ -1637,7 +1744,7 @@ static apr_byte_t oidc_proto_resolve_composite_claims(request_rec *r, oidc_cfg_t
 /*
  * get claims from the OP UserInfo endpoint using the provided access_token
  */
-apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
+apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
 				       const char *id_token_sub, const char *access_token, char **response,
 				       char **userinfo_jwt, long *response_code) {
 
@@ -1674,10 +1781,10 @@ apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg_t *cfg, oidc_pro
 	OIDC_METRICS_TIMING_ADD(r, cfg, OM_PROVIDER_USERINFO);
 
 	json_t *claims = NULL;
-	if (oidc_proto_user_info_response_validate(r, cfg, provider, response, &claims, userinfo_jwt) == FALSE)
+	if (oidc_proto_userinfo_response_validate(r, cfg, provider, response, &claims, userinfo_jwt) == FALSE)
 		return FALSE;
 
-	if (oidc_proto_resolve_composite_claims(r, cfg, claims) == TRUE)
+	if (oidc_proto_userinfo_request_composite_claims(r, cfg, claims) == TRUE)
 		*response = oidc_util_encode_json_object(r, claims, JSON_PRESERVE_ORDER | JSON_COMPACT);
 
 	char *user_info_sub = NULL;
@@ -1821,6 +1928,10 @@ apr_byte_t oidc_proto_url_based_discovery(request_rec *r, oidc_cfg_t *cfg, const
 	return oidc_proto_webfinger_discovery(r, cfg, url, domain, issuer);
 }
 
+/*
+ * return the Javascript code used to handle an Implicit grant type
+ * i.e. that posts the data returned by the OP in the URL fragment to the OIDCRedirectURI
+ */
 int oidc_proto_javascript_implicit(request_rec *r, oidc_cfg_t *c) {
 
 	oidc_debug(r, "enter");

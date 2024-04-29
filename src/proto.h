@@ -172,7 +172,7 @@ apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r, oidc_cf
 apr_byte_t oidc_proto_refresh_request(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider, const char *rtoken,
 				      char **id_token, char **access_token, char **token_type, int *expires_in,
 				      char **refresh_token);
-apr_byte_t oidc_proto_resolve_userinfo(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
+apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
 				       const char *id_token_sub, const char *access_token, char **response,
 				       char **userinfo_jwt, long *response_code);
 apr_byte_t oidc_proto_account_based_discovery(request_rec *r, oidc_cfg_t *cfg, const char *acct, char **issuer);

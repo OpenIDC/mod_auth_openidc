@@ -122,7 +122,7 @@ const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg_t *c, oidc_pr
 	// routines)
 
 	/* try to get claims from the userinfo endpoint using the provided access token */
-	if (oidc_proto_resolve_userinfo(r, c, provider, id_token_sub, access_token, &result, userinfo_jwt,
+	if (oidc_proto_userinfo_request(r, c, provider, id_token_sub, access_token, &result, userinfo_jwt,
 					&response_code) == TRUE)
 		goto end;
 
@@ -152,7 +152,7 @@ const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg_t *c, oidc_pr
 	}
 
 	/* try again with the new access token */
-	if (oidc_proto_resolve_userinfo(r, c, provider, id_token_sub, refreshed_access_token, &result, userinfo_jwt,
+	if (oidc_proto_userinfo_request(r, c, provider, id_token_sub, refreshed_access_token, &result, userinfo_jwt,
 					NULL) == FALSE) {
 
 		oidc_error(r, "resolving user info claims with the refreshed access token failed, nothing will be "
