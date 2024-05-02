@@ -56,6 +56,10 @@
 /* the name of the sid attribute in the session */
 #define OIDC_SESSION_SID_KEY "sid"
 
+/*
+ * encode/serialize the session object/data into a string, possibly a serialized encrypted JWT when encryption is
+ * requested
+ */
 static apr_byte_t oidc_session_encode(request_rec *r, oidc_cfg_t *c, oidc_session_t *z, char **s_value,
 				      apr_byte_t encrypt) {
 
@@ -74,6 +78,9 @@ static apr_byte_t oidc_session_encode(request_rec *r, oidc_cfg_t *c, oidc_sessio
 	return TRUE;
 }
 
+/*
+ * parse a session object from the provided string, which may be an encrypted JWT is encryption is on
+ */
 static apr_byte_t oidc_session_decode(request_rec *r, oidc_cfg_t *c, oidc_session_t *z, const char *s_json,
 				      apr_byte_t encrypt) {
 	char *s_payload = NULL;
@@ -113,6 +120,9 @@ static void oidc_session_clear(request_rec *r, oidc_session_t *z) {
 	}
 }
 
+/*
+ * load the session from the session cache, indexed by its uuid session id
+ */
 apr_byte_t oidc_session_load_cache_by_uuid(request_rec *r, oidc_cfg_t *c, const char *uuid, oidc_session_t *z) {
 	char *stored_uuid = NULL;
 	char *s_json = NULL;
@@ -253,18 +263,27 @@ static apr_byte_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z, ap
 	return TRUE;
 }
 
+/*
+ * retrieve an integer from the session state
+ */
 static inline int oidc_session_get_int(request_rec *r, oidc_session_t *z, const char *key, int def_val) {
 	int v;
 	oidc_json_object_get_int(z->state, key, &v, def_val);
 	return v;
 }
 
+/*
+ * retrieve a timestamp from the session state
+ */
 static inline apr_time_t oidc_session_get_key2timestamp(request_rec *r, oidc_session_t *z, const char *key) {
 	int value = -1;
 	oidc_json_object_get_int(z->state, key, &value, -1);
 	return (value > -1) ? apr_time_from_sec(value) : -1;
 }
 
+/*
+ * parse data from the session state into the session struct members
+ */
 apr_byte_t oidc_session_extract(request_rec *r, oidc_session_t *z) {
 	apr_byte_t rc = FALSE;
 
@@ -324,12 +343,18 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 	return rc;
 }
 
+/*
+ * store an integer value into the session state
+ */
 static void oidc_session_set_int(request_rec *r, oidc_session_t *z, const char *key, int v) {
 	if (z->state == NULL)
 		z->state = json_object();
 	json_object_set_new(z->state, key, json_integer(v));
 }
 
+/*
+ * store a timestamp value into the session state
+ */
 static void oidc_session_set_timestamp(request_rec *r, oidc_session_t *z, const char *key, const apr_time_t timestamp) {
 	if (timestamp > -1)
 		oidc_session_set_int(r, z, key, apr_time_sec(timestamp));
@@ -470,6 +495,10 @@ static const char *oidc_session_get_key2string(request_rec *r, oidc_session_t *z
 #define OIDC_SESSION_WARN_CLAIM_SIZE 1024 * 8
 #define OIDC_SESSION_WARN_CLAIM_SIZE_VAR "OIDC_SESSION_WARN_CLAIM_SIZE"
 
+/*
+ * apply whitelisting/blacklisting and a JQ filter  to the provided (serialized JSON) claims
+ * session_key may refer to id_token claims or userinfo claims
+ */
 void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, const char *session_key, const char *claims) {
 	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
