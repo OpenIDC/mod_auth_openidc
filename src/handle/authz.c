@@ -518,7 +518,7 @@ static authz_status oidc_authz_24_unauthorized_user(request_rec *r) {
 		break;
 	}
 
-	oidc_request_authenticate_user(r, c, NULL, oidc_get_current_url(r, oidc_cfg_x_forwarded_headers_get(c)), NULL,
+	oidc_request_authenticate_user(r, c, NULL, oidc_util_current_url(r, oidc_cfg_x_forwarded_headers_get(c)), NULL,
 				       NULL, NULL, oidc_cfg_dir_path_auth_request_params_get(r),
 				       oidc_cfg_dir_path_scope_get(r));
 
@@ -730,7 +730,7 @@ static int oidc_authz_22_unauthorized_user(request_rec *r) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_AUTH);
 	}
 
-	return oidc_request_authenticate_user(r, c, NULL, oidc_get_current_url(r, oidc_cfg_x_forwarded_headers_get(c)),
+	return oidc_request_authenticate_user(r, c, NULL, oidc_util_current_url(r, oidc_cfg_x_forwarded_headers_get(c)),
 					      NULL, NULL, NULL, oidc_cfg_dir_path_auth_request_params_get(r),
 					      oidc_cfg_dir_path_scope_get(r));
 }

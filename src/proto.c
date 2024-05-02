@@ -125,8 +125,8 @@ static void oidc_proto_auth_request_params_add(request_rec *r, apr_table_t *para
 			apr_table_add(params, key, val);
 			continue;
 		}
-		if (oidc_http_request_has_parameter(r, key) == TRUE) {
-			oidc_http_request_parameter_get(r, key, &val);
+		if (oidc_util_request_has_parameter(r, key) == TRUE) {
+			oidc_util_request_parameter_get(r, key, &val);
 			apr_table_add(params, key, val);
 		}
 	}
@@ -291,9 +291,9 @@ apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r, oidc_cf
 
 	/* prereq: this is a call to the configured redirect_uri; see if it is a GET with state and id_token or code
 	 * parameters */
-	return ((r->method_number == M_GET) && oidc_http_request_has_parameter(r, OIDC_PROTO_STATE) &&
-		(oidc_http_request_has_parameter(r, OIDC_PROTO_ID_TOKEN) ||
-		 oidc_http_request_has_parameter(r, OIDC_PROTO_CODE)));
+	return ((r->method_number == M_GET) && oidc_util_request_has_parameter(r, OIDC_PROTO_STATE) &&
+		(oidc_util_request_has_parameter(r, OIDC_PROTO_ID_TOKEN) ||
+		 oidc_util_request_has_parameter(r, OIDC_PROTO_CODE)));
 }
 
 /*
@@ -926,7 +926,7 @@ static apr_byte_t oidc_proto_get_key_from_jwks(request_rec *r, oidc_jwt_t *jwt, 
 
 		/* we are looking for a specific x5t, get the x5t from the current element */
 		char *s_x5t = NULL;
-		oidc_json_object_get_string(r->pool, elem, OIDC_JOSE_JWK_X5T_STR, &s_x5t, NULL);
+		oidc_util_json_object_get_string(r->pool, elem, OIDC_JOSE_JWK_X5T_STR, &s_x5t, NULL);
 		/* compare the requested thumbprint against the current element */
 		if ((s_x5t != NULL) && (x5t != NULL) && (_oidc_strcmp(x5t, s_x5t) == 0)) {
 			oidc_jwk_to_json(r->pool, jwk, &jwk_json, &err);
@@ -1471,13 +1471,13 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *
 		return FALSE;
 
 	/* get the id_token from the parsed response */
-	oidc_json_object_get_string(r->pool, j_result, OIDC_PROTO_ID_TOKEN, id_token, NULL);
+	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_ID_TOKEN, id_token, NULL);
 
 	/* get the access_token from the parsed response */
-	oidc_json_object_get_string(r->pool, j_result, OIDC_PROTO_ACCESS_TOKEN, access_token, NULL);
+	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_ACCESS_TOKEN, access_token, NULL);
 
 	/* get the token type from the parsed response */
-	oidc_json_object_get_string(r->pool, j_result, OIDC_PROTO_TOKEN_TYPE, token_type, NULL);
+	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_TOKEN_TYPE, token_type, NULL);
 
 	/* check the new token type */
 	if (token_type != NULL) {
@@ -1499,7 +1499,7 @@ static apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *
 	}
 
 	/* get the refresh_token from the parsed response */
-	oidc_json_object_get_string(r->pool, j_result, OIDC_PROTO_REFRESH_TOKEN, refresh_token, NULL);
+	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_REFRESH_TOKEN, refresh_token, NULL);
 
 	json_decref(j_result);
 
@@ -1519,7 +1519,7 @@ static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg_t *cfg, oidc_
 	apr_table_t *params = apr_table_make(r->pool, 5);
 	apr_table_setn(params, OIDC_PROTO_GRANT_TYPE, OIDC_PROTO_GRANT_TYPE_AUTHZ_CODE);
 	apr_table_setn(params, OIDC_PROTO_CODE, code);
-	apr_table_set(params, OIDC_PROTO_REDIRECT_URI, oidc_get_redirect_uri_iss(r, cfg, provider));
+	apr_table_set(params, OIDC_PROTO_REDIRECT_URI, oidc_util_redirect_uri_iss(r, cfg, provider));
 
 	if (code_verifier)
 		apr_table_setn(params, OIDC_PROTO_CODE_VERIFIER, code_verifier);

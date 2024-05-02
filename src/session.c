@@ -268,7 +268,7 @@ static apr_byte_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z, ap
  */
 static inline int oidc_session_get_int(request_rec *r, oidc_session_t *z, const char *key, int def_val) {
 	int v;
-	oidc_json_object_get_int(z->state, key, &v, def_val);
+	oidc_util_json_object_get_int(z->state, key, &v, def_val);
 	return v;
 }
 
@@ -277,7 +277,7 @@ static inline int oidc_session_get_int(request_rec *r, oidc_session_t *z, const 
  */
 static inline apr_time_t oidc_session_get_key2timestamp(request_rec *r, oidc_session_t *z, const char *key) {
 	int value = -1;
-	oidc_json_object_get_int(z->state, key, &value, -1);
+	oidc_util_json_object_get_int(z->state, key, &value, -1);
 	return (value > -1) ? apr_time_from_sec(value) : -1;
 }
 
@@ -414,7 +414,7 @@ apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z) {
 apr_byte_t oidc_session_get(request_rec *r, oidc_session_t *z, const char *key, char **value) {
 
 	/* just return the value for the key */
-	oidc_json_object_get_string(r->pool, z->state, key, (char **)value, NULL);
+	oidc_util_json_object_get_string(r->pool, z->state, key, (char **)value, NULL);
 
 	return TRUE;
 }

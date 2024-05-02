@@ -220,7 +220,7 @@ static apr_byte_t oidc_metadata_is_valid_uri(request_rec *r, const char *type, c
 					     const char *key, char **value, apr_byte_t is_mandatory) {
 
 	char *s_value = NULL;
-	oidc_json_object_get_string(r->pool, json, key, &s_value, NULL);
+	oidc_util_json_object_get_string(r->pool, json, key, &s_value, NULL);
 
 	if (s_value == NULL) {
 		if (is_mandatory) {
@@ -285,7 +285,7 @@ apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, oidc_cfg_t *cfg, json
 
 	/* get the "issuer" from the provider metadata and double-check that it matches what we looked for */
 	char *s_issuer = NULL;
-	oidc_json_object_get_string(r->pool, j_provider, OIDC_METADATA_ISSUER, &s_issuer, NULL);
+	oidc_util_json_object_get_string(r->pool, j_provider, OIDC_METADATA_ISSUER, &s_issuer, NULL);
 	if (s_issuer == NULL) {
 		oidc_error(r, "provider (%s) JSON metadata did not contain an \"" OIDC_METADATA_ISSUER "\" string",
 			   issuer);
@@ -378,7 +378,7 @@ static apr_byte_t oidc_metadata_client_is_valid(request_rec *r, json_t *j_client
 
 	/* get a handle to the client_id we need to use for this provider */
 	str = NULL;
-	oidc_json_object_get_string(r->pool, j_client, OIDC_METADATA_CLIENT_ID, &str, NULL);
+	oidc_util_json_object_get_string(r->pool, j_client, OIDC_METADATA_CLIENT_ID, &str, NULL);
 	if (str == NULL) {
 		oidc_error(r, "client (%s) JSON metadata did not contain a \"" OIDC_METADATA_CLIENT_ID "\" string",
 			   issuer);
@@ -387,7 +387,7 @@ static apr_byte_t oidc_metadata_client_is_valid(request_rec *r, json_t *j_client
 
 	/* get a handle to the client_secret we need to use for this provider */
 	str = NULL;
-	oidc_json_object_get_string(r->pool, j_client, OIDC_METADATA_CLIENT_SECRET, &str, NULL);
+	oidc_util_json_object_get_string(r->pool, j_client, OIDC_METADATA_CLIENT_SECRET, &str, NULL);
 	if (str == NULL) {
 		oidc_warn(r, "client (%s) JSON metadata did not contain a \"" OIDC_METADATA_CLIENT_SECRET "\" string",
 			  issuer);
@@ -442,7 +442,7 @@ static apr_byte_t oidc_metadata_jwks_is_valid(request_rec *r, const char *url, c
 static apr_byte_t oidc_metadata_conf_jose_is_supported(request_rec *r, json_t *j_conf, const char *issuer,
 						       const char *key, oidc_valid_function_t valid_function) {
 	char *s_value = NULL;
-	oidc_json_object_get_string(r->pool, j_conf, key, &s_value, NULL);
+	oidc_util_json_object_get_string(r->pool, j_conf, key, &s_value, NULL);
 	if (s_value == NULL)
 		return TRUE;
 	const char *rv = valid_function(r->pool, s_value);
@@ -493,7 +493,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg,
 	json_t *data = json_object();
 	json_object_set_new(data, OIDC_METADATA_CLIENT_NAME, json_string(oidc_cfg_provider_client_name_get(provider)));
 	json_object_set_new(data, OIDC_METADATA_REDIRECT_URIS,
-			    json_pack("[s]", oidc_get_redirect_uri_iss(r, cfg, provider)));
+			    json_pack("[s]", oidc_util_redirect_uri_iss(r, cfg, provider)));
 
 	json_t *response_types = json_array();
 	apr_array_header_t *flows = oidc_proto_supported_flows(r->pool);
@@ -520,7 +520,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg,
 				    json_string(oidc_cfg_provider_client_jwks_uri_get(provider)));
 	} else if (oidc_cfg_public_keys_get(cfg) != NULL) {
 		json_object_set_new(data, OIDC_METADATA_JWKS_URI,
-				    json_string(apr_psprintf(r->pool, "%s?%s=rsa", oidc_get_redirect_uri(r, cfg),
+				    json_string(apr_psprintf(r->pool, "%s?%s=rsa", oidc_util_redirect_uri(r, cfg),
 							     OIDC_REDIRECT_URI_REQUEST_JWKS)));
 	}
 
@@ -556,28 +556,29 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg,
 						 &request_object_config) == TRUE) {
 			json_t *crypto = json_object_get(request_object_config, "crypto");
 			char *alg = "none";
-			oidc_json_object_get_string(r->pool, crypto, "sign_alg", &alg, "none");
+			oidc_util_json_object_get_string(r->pool, crypto, "sign_alg", &alg, "none");
 			json_object_set_new(data, "request_object_signing_alg", json_string(alg));
 			json_decref(request_object_config);
 		}
 	}
 
-	json_object_set_new(data, OIDC_METADATA_INITIATE_LOGIN_URI, json_string(oidc_get_redirect_uri(r, cfg)));
+	json_object_set_new(data, OIDC_METADATA_INITIATE_LOGIN_URI, json_string(oidc_util_redirect_uri(r, cfg)));
 
 	json_object_set_new(
 	    data, OIDC_METADATA_FRONTCHANNEL_LOGOUT_URI,
-	    json_string(apr_psprintf(r->pool, "%s?%s=%s", oidc_get_redirect_uri(r, cfg),
+	    json_string(apr_psprintf(r->pool, "%s?%s=%s", oidc_util_redirect_uri(r, cfg),
 				     OIDC_REDIRECT_URI_REQUEST_LOGOUT, OIDC_GET_STYLE_LOGOUT_PARAM_VALUE)));
 
 	// TODO: may want to add backchannel_logout_session_required
 	json_object_set_new(
 	    data, OIDC_METADATA_BACKCHANNEL_LOGOUT_URI,
-	    json_string(apr_psprintf(r->pool, "%s?%s=%s", oidc_get_redirect_uri(r, cfg),
+	    json_string(apr_psprintf(r->pool, "%s?%s=%s", oidc_util_redirect_uri(r, cfg),
 				     OIDC_REDIRECT_URI_REQUEST_LOGOUT, OIDC_BACKCHANNEL_STYLE_LOGOUT_PARAM_VALUE)));
 
 	if (oidc_cfg_default_slo_url_get(cfg) != NULL) {
-		json_object_set_new(data, OIDC_METADATA_POST_LOGOUT_REDIRECT_URIS,
-				    json_pack("[s]", oidc_get_absolute_url(r, cfg, oidc_cfg_default_slo_url_get(cfg))));
+		json_object_set_new(
+		    data, OIDC_METADATA_POST_LOGOUT_REDIRECT_URIS,
+		    json_pack("[s]", oidc_util_absolute_url(r, cfg, oidc_cfg_default_slo_url_get(cfg))));
 	}
 
 	/* add any custom JSON in to the registration request */
@@ -967,8 +968,8 @@ apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg_t *cfg, apr_array_header_
 static void oidc_metadata_parse_boolean(request_rec *r, json_t *json, const char *key, int *value, int default_value) {
 	int int_value = 0;
 	char *s_value = NULL;
-	if (oidc_json_object_get_bool(json, key, &int_value, default_value) == FALSE) {
-		oidc_json_object_get_string(r->pool, json, key, &s_value, NULL);
+	if (oidc_util_json_object_get_bool(json, key, &int_value, default_value) == FALSE) {
+		oidc_util_json_object_get_string(r->pool, json, key, &s_value, NULL);
 		if (s_value != NULL) {
 			const char *rv = oidc_cfg_parse_boolean(r->pool, s_value, &int_value);
 			if (rv != NULL) {
@@ -976,7 +977,7 @@ static void oidc_metadata_parse_boolean(request_rec *r, json_t *json, const char
 				int_value = default_value;
 			}
 		} else {
-			oidc_json_object_get_int(json, key, &int_value, default_value);
+			oidc_util_json_object_get_int(json, key, &int_value, default_value);
 		}
 	}
 	*value = (int_value != 0) ? TRUE : FALSE;
@@ -1020,7 +1021,7 @@ apr_byte_t oidc_metadata_provider_parse(request_rec *r, oidc_cfg_t *cfg, json_t 
 
 	if (oidc_cfg_provider_issuer_get(provider) == NULL) {
 		/* get the "issuer" from the provider metadata */
-		oidc_json_object_get_string(r->pool, j_provider, OIDC_METADATA_ISSUER, &value, NULL);
+		oidc_util_json_object_get_string(r->pool, j_provider, OIDC_METADATA_ISSUER, &value, NULL);
 		OIDC_METADATA_PROVIDER_SET(issuer, value, rv);
 	}
 
@@ -1117,7 +1118,7 @@ apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, jso
 	const char *rv = NULL;
 
 	/* get the "issuer" from the provider metadata */
-	oidc_json_object_get_string(r->pool, j_provider, OIDC_METADATA_ISSUER, &issuer, NULL);
+	oidc_util_json_object_get_string(r->pool, j_provider, OIDC_METADATA_ISSUER, &issuer, NULL);
 
 	// TOOD: should check for "if c->oauth.introspection_endpoint_url == NULL and
 	//       allocate the string from the process/config pool
@@ -1126,7 +1127,7 @@ apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, jso
 	// https://groups.google.com/forum/#!topic/mod_auth_openidc/o1K_1Yh-TQA
 
 	/* get a handle to the introspection endpoint */
-	oidc_json_object_get_string(r->pool, j_provider, OIDC_METADATA_INTROSPECTION_ENDPOINT, &value, NULL);
+	oidc_util_json_object_get_string(r->pool, j_provider, OIDC_METADATA_INTROSPECTION_ENDPOINT, &value, NULL);
 	if (value != NULL) {
 		rv = oidc_cfg_oauth_introspection_endpoint_url_set(r->pool, c, value);
 		if (rv != NULL)
@@ -1134,7 +1135,7 @@ apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, jso
 	}
 
 	/* get a handle to the jwks_uri endpoint */
-	oidc_json_object_get_string(r->pool, j_provider, OIDC_METADATA_JWKS_URI, &value, NULL);
+	oidc_util_json_object_get_string(r->pool, j_provider, OIDC_METADATA_JWKS_URI, &value, NULL);
 	if (value != NULL) {
 		rv = oidc_cfg_oauth_verify_jwks_uri_set(r->pool, c, value);
 		if (rv != NULL)
@@ -1165,7 +1166,7 @@ apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, jso
 void oidc_metadata_get_valid_string(request_rec *r, json_t *json, const char *key, oidc_valid_function_t valid_function,
 				    char **str_value, const char *default_str_value) {
 	char *v = NULL;
-	oidc_json_object_get_string(r->pool, json, key, &v, default_str_value);
+	oidc_util_json_object_get_string(r->pool, json, key, &v, default_str_value);
 	if (v != NULL) {
 		const char *rv = valid_function(r->pool, v);
 		if (rv != NULL) {
@@ -1222,8 +1223,8 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg_t *cfg, json_t *j_c
 	int ivalue = OIDC_CONFIG_POS_INT_UNSET;
 	apr_array_header_t *keys = NULL;
 
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_CLIENT_JWKS_URI, &value,
-				    oidc_cfg_provider_client_jwks_uri_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_string(r->pool, j_conf, OIDC_METADATA_CLIENT_JWKS_URI, &value,
+					 oidc_cfg_provider_client_jwks_uri_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(client_jwks_uri, value, rv)
 
 	oidc_metadata_get_jwks(r, j_conf, &keys);
@@ -1240,29 +1241,35 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg_t *cfg, json_t *j_c
 		oidc_error(r, "oidc_cfg_provider_signed_jwks_uri_keys_set: %s", rv);
 
 	/* get the (optional) signing & encryption settings for the id_token */
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_ID_TOKEN_SIGNED_RESPONSE_ALG, &value,
-				    oidc_cfg_provider_id_token_signed_response_alg_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_string(
+	    r->pool, j_conf, OIDC_METADATA_ID_TOKEN_SIGNED_RESPONSE_ALG, &value,
+	    oidc_cfg_provider_id_token_signed_response_alg_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(id_token_signed_response_alg, value, rv)
 
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_ID_TOKEN_ENCRYPTED_RESPONSE_ALG, &value,
-				    oidc_cfg_provider_id_token_encrypted_response_alg_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_string(
+	    r->pool, j_conf, OIDC_METADATA_ID_TOKEN_ENCRYPTED_RESPONSE_ALG, &value,
+	    oidc_cfg_provider_id_token_encrypted_response_alg_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(id_token_encrypted_response_alg, value, rv)
 
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_ID_TOKEN_ENCRYPTED_RESPONSE_ENC, &value,
-				    oidc_cfg_provider_id_token_encrypted_response_enc_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_string(
+	    r->pool, j_conf, OIDC_METADATA_ID_TOKEN_ENCRYPTED_RESPONSE_ENC, &value,
+	    oidc_cfg_provider_id_token_encrypted_response_enc_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(id_token_encrypted_response_enc, value, rv)
 
 	/* get the (optional) signing & encryption settings for the userinfo response */
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_USERINFO_SIGNED_RESPONSE_ALG, &value,
-				    oidc_cfg_provider_userinfo_signed_response_alg_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_string(
+	    r->pool, j_conf, OIDC_METADATA_USERINFO_SIGNED_RESPONSE_ALG, &value,
+	    oidc_cfg_provider_userinfo_signed_response_alg_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(userinfo_signed_response_alg, value, rv)
 
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_USERINFO_ENCRYPTED_RESPONSE_ALG, &value,
-				    oidc_cfg_provider_userinfo_encrypted_response_alg_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_string(
+	    r->pool, j_conf, OIDC_METADATA_USERINFO_ENCRYPTED_RESPONSE_ALG, &value,
+	    oidc_cfg_provider_userinfo_encrypted_response_alg_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(userinfo_encrypted_response_alg, value, rv)
 
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_USERINFO_ENCRYPTED_RESPONSE_ENC, &value,
-				    oidc_cfg_provider_userinfo_encrypted_response_enc_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_string(
+	    r->pool, j_conf, OIDC_METADATA_USERINFO_ENCRYPTED_RESPONSE_ENC, &value,
+	    oidc_cfg_provider_userinfo_encrypted_response_enc_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(userinfo_encrypted_response_enc, value, rv)
 
 	/* find out if we need to perform SSL server certificate validation on the token_endpoint and user_info_endpoint
@@ -1278,66 +1285,66 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg_t *cfg, json_t *j_c
 	/* find out what scopes we should be requesting from this provider */
 	// TODO: use the provider "scopes_supported" to mix-and-match with what we've configured for the client
 	// TODO: check that "openid" is always included in the configured scopes, right?
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_SCOPE, &value,
-				    oidc_cfg_provider_scope_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_string(r->pool, j_conf, OIDC_METADATA_SCOPE, &value,
+					 oidc_cfg_provider_scope_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(scope, value, rv)
 
 	/* see if we've got a custom JWKs refresh interval */
-	oidc_json_object_get_int(j_conf, OIDC_METADATA_JWKS_REFRESH_INTERVAL, &ivalue,
-				 oidc_cfg_provider_jwks_uri_refresh_interval_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_int(j_conf, OIDC_METADATA_JWKS_REFRESH_INTERVAL, &ivalue,
+				      oidc_cfg_provider_jwks_uri_refresh_interval_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET_INT(jwks_uri_refresh_interval, ivalue, rv)
 
 	/* see if we've got a custom IAT slack interval */
-	oidc_json_object_get_int(j_conf, OIDC_METADATA_IDTOKEN_IAT_SLACK, &ivalue,
-				 oidc_cfg_provider_idtoken_iat_slack_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_int(j_conf, OIDC_METADATA_IDTOKEN_IAT_SLACK, &ivalue,
+				      oidc_cfg_provider_idtoken_iat_slack_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET_INT(idtoken_iat_slack, ivalue, rv)
 
 	/* see if we've got a custom max session duration */
-	oidc_json_object_get_int(j_conf, OIDC_METADATA_SESSION_MAX_DURATION, &ivalue,
-				 oidc_cfg_provider_session_max_duration_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_int(j_conf, OIDC_METADATA_SESSION_MAX_DURATION, &ivalue,
+				      oidc_cfg_provider_session_max_duration_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET_INT(session_max_duration, ivalue, rv)
 
 	/* see if we've got custom authentication request parameter values */
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_AUTH_REQUEST_PARAMS, &value,
-				    oidc_cfg_provider_auth_request_params_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_string(r->pool, j_conf, OIDC_METADATA_AUTH_REQUEST_PARAMS, &value,
+					 oidc_cfg_provider_auth_request_params_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(auth_request_params, value, rv)
 
 	/* see if we've got custom logout request parameter values */
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_LOGOUT_REQUEST_PARAMS, &value,
-				    oidc_cfg_provider_logout_request_params_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_string(r->pool, j_conf, OIDC_METADATA_LOGOUT_REQUEST_PARAMS, &value,
+					 oidc_cfg_provider_logout_request_params_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(logout_request_params, value, rv)
 
 	/* see if we've got custom token endpoint parameter values */
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_TOKEN_ENDPOINT_PARAMS, &value,
-				    oidc_cfg_provider_token_endpoint_params_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_string(r->pool, j_conf, OIDC_METADATA_TOKEN_ENDPOINT_PARAMS, &value,
+					 oidc_cfg_provider_token_endpoint_params_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(token_endpoint_params, value, rv)
 
 	/* get the response mode to use */
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_RESPONSE_MODE, &value,
-				    oidc_cfg_provider_response_mode_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_string(r->pool, j_conf, OIDC_METADATA_RESPONSE_MODE, &value,
+					 oidc_cfg_provider_response_mode_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(response_mode, value, rv)
 
 	/* get the PKCE method to use */
 	/* NB: pass "none" rather than NULL to allow fallback when the default in base is explicitly set to "none" */
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_PKCE_METHOD, &value,
-				    oidc_cfg_provider_pkce_get(oidc_cfg_provider_get(cfg))
-					? oidc_cfg_provider_pkce_get(oidc_cfg_provider_get(cfg))->method
-					: OIDC_PKCE_METHOD_NONE);
+	oidc_util_json_object_get_string(r->pool, j_conf, OIDC_METADATA_PKCE_METHOD, &value,
+					 oidc_cfg_provider_pkce_get(oidc_cfg_provider_get(cfg))
+					     ? oidc_cfg_provider_pkce_get(oidc_cfg_provider_get(cfg))->method
+					     : OIDC_PKCE_METHOD_NONE);
 	OIDC_METADATA_PROVIDER_SET(pkce, value, rv)
 
 	/* get the client name */
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_CLIENT_NAME, &value,
-				    oidc_cfg_provider_client_name_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_string(r->pool, j_conf, OIDC_METADATA_CLIENT_NAME, &value,
+					 oidc_cfg_provider_client_name_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(client_name, value, rv)
 
 	/* get the client contact */
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_CLIENT_CONTACT, &value,
-				    oidc_cfg_provider_client_contact_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_string(r->pool, j_conf, OIDC_METADATA_CLIENT_CONTACT, &value,
+					 oidc_cfg_provider_client_contact_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(client_contact, value, rv)
 
 	/* get the token endpoint authentication method */
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_TOKEN_ENDPOINT_AUTH, &value,
-				    oidc_cfg_provider_token_endpoint_auth_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_string(r->pool, j_conf, OIDC_METADATA_TOKEN_ENDPOINT_AUTH, &value,
+					 oidc_cfg_provider_token_endpoint_auth_get(oidc_cfg_provider_get(cfg)));
 	if (value != NULL) {
 		rv = oidc_cfg_provider_token_endpoint_auth_set(r->pool, cfg, provider, value);
 		if (rv != NULL)
@@ -1345,45 +1352,47 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg_t *cfg, json_t *j_c
 	}
 
 	/* get the dynamic client registration token */
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_REGISTRATION_TOKEN, &value,
-				    oidc_cfg_provider_registration_token_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_string(r->pool, j_conf, OIDC_METADATA_REGISTRATION_TOKEN, &value,
+					 oidc_cfg_provider_registration_token_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(registration_token, value, rv)
 
 	/* see if we've got custom registration request parameter values */
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_REGISTRATION_ENDPOINT_JSON, &value,
-				    oidc_cfg_provider_registration_endpoint_json_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_string(r->pool, j_conf, OIDC_METADATA_REGISTRATION_ENDPOINT_JSON, &value,
+					 oidc_cfg_provider_registration_endpoint_json_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(registration_endpoint_json, value, rv)
 
 	/* get the flow to use; let the .client file set it otherwise (pass NULL as default value) */
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_RESPONSE_TYPE, &value,
-				    oidc_cfg_provider_response_type_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_string(r->pool, j_conf, OIDC_METADATA_RESPONSE_TYPE, &value,
+					 oidc_cfg_provider_response_type_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(response_type, value, rv)
 
 	/* see if we've got a custom user info refresh interval */
-	oidc_json_object_get_int(j_conf, OIDC_METADATA_USERINFO_REFRESH_INTERVAL, &ivalue,
-				 oidc_cfg_provider_userinfo_refresh_interval_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_int(j_conf, OIDC_METADATA_USERINFO_REFRESH_INTERVAL, &ivalue,
+				      oidc_cfg_provider_userinfo_refresh_interval_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET_INT(userinfo_refresh_interval, ivalue, rv)
 
 	/* TLS client cert auth settings */
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_CERT, &value,
-				    oidc_cfg_provider_token_endpoint_tls_client_cert_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_string(
+	    r->pool, j_conf, OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_CERT, &value,
+	    oidc_cfg_provider_token_endpoint_tls_client_cert_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(token_endpoint_tls_client_cert, value, rv)
 
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_KEY, &value,
-				    oidc_cfg_provider_token_endpoint_tls_client_key_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_string(
+	    r->pool, j_conf, OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_KEY, &value,
+	    oidc_cfg_provider_token_endpoint_tls_client_key_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(token_endpoint_tls_client_key, value, rv)
 
-	oidc_json_object_get_string(
+	oidc_util_json_object_get_string(
 	    r->pool, j_conf, OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_KEY_PWD, &value,
 	    oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(token_endpoint_tls_client_key_pwd, value, rv)
 
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_REQUEST_OBJECT, &value,
-				    oidc_cfg_provider_request_object_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_string(r->pool, j_conf, OIDC_METADATA_REQUEST_OBJECT, &value,
+					 oidc_cfg_provider_request_object_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(request_object, value, rv)
 
 	/* see if we've got a custom userinfo endpoint token presentation method */
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_USERINFO_TOKEN_METHOD, &value, NULL);
+	oidc_util_json_object_get_string(r->pool, j_conf, OIDC_METADATA_USERINFO_TOKEN_METHOD, &value, NULL);
 	if (value) {
 		rv = oidc_cfg_provider_userinfo_token_method_set(r->pool, provider, value);
 		if (rv != NULL)
@@ -1394,7 +1403,7 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg_t *cfg, json_t *j_c
 	}
 
 	/* see if we've got a custom HTTP method for passing the auth request */
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_AUTH_REQUEST_METHOD, &value, NULL);
+	oidc_util_json_object_get_string(r->pool, j_conf, OIDC_METADATA_AUTH_REQUEST_METHOD, &value, NULL);
 	if (value) {
 		rv = oidc_cfg_provider_auth_request_method_set(r->pool, provider, value);
 		if (rv != NULL)
@@ -1421,15 +1430,15 @@ apr_byte_t oidc_metadata_client_parse(request_rec *r, oidc_cfg_t *cfg, json_t *j
 	char *value = NULL;
 
 	/* get a handle to the client_id we need to use for this provider */
-	oidc_json_object_get_string(r->pool, j_client, OIDC_METADATA_CLIENT_ID, &value, NULL);
+	oidc_util_json_object_get_string(r->pool, j_client, OIDC_METADATA_CLIENT_ID, &value, NULL);
 	OIDC_METADATA_PROVIDER_SET(client_id, value, rv)
 
 	/* get a handle to the client_secret we need to use for this provider */
-	oidc_json_object_get_string(r->pool, j_client, OIDC_METADATA_CLIENT_SECRET, &value, NULL);
+	oidc_util_json_object_get_string(r->pool, j_client, OIDC_METADATA_CLIENT_SECRET, &value, NULL);
 	OIDC_METADATA_PROVIDER_SET(client_secret, value, rv)
 
 	/* see if the token endpoint auth method defined in the client metadata overrides the provider one */
-	oidc_json_object_get_string(r->pool, j_client, OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHOD, &value, NULL);
+	oidc_util_json_object_get_string(r->pool, j_client, OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHOD, &value, NULL);
 	if (value != NULL) {
 		rv = oidc_cfg_provider_token_endpoint_auth_set(r->pool, cfg, provider, value);
 		if (rv != NULL)
@@ -1460,8 +1469,9 @@ apr_byte_t oidc_metadata_client_parse(request_rec *r, oidc_cfg_t *cfg, json_t *j
 		}
 	}
 
-	oidc_json_object_get_string(r->pool, j_client, OIDC_METADATA_ID_TOKEN_SIGNED_RESPONSE_ALG, &value,
-				    oidc_cfg_provider_id_token_signed_response_alg_get(oidc_cfg_provider_get(cfg)));
+	oidc_util_json_object_get_string(
+	    r->pool, j_client, OIDC_METADATA_ID_TOKEN_SIGNED_RESPONSE_ALG, &value,
+	    oidc_cfg_provider_id_token_signed_response_alg_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(id_token_signed_response_alg, value, rv)
 
 	// TODO: id_token_encrypted_response_alg etc.?

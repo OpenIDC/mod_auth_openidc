@@ -153,11 +153,12 @@ apr_byte_t oidc_http_post_json(request_rec *r, const char *url, json_t *data, co
 			       oidc_http_timeout_t *http_timeout, const oidc_http_outgoing_proxy_t *outgoing_proxy,
 			       const apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
 			       const char *ssl_key_pwd);
-apr_byte_t oidc_http_request_has_parameter(request_rec *r, const char *param);
-apr_byte_t oidc_http_request_parameter_get(request_rec *r, char *name, char **value);
-int oidc_http_send(request_rec *r, const char *data, size_t data_len, const char *content_type, int success_rvalue);
-apr_byte_t oidc_http_read_form_encoded_params(request_rec *r, apr_table_t *table, char *data);
-apr_byte_t oidc_http_read_post_params(request_rec *r, apr_table_t *table, apr_byte_t propagate,
+apr_byte_t oidc_util_request_has_parameter(request_rec *r, const char *param);
+apr_byte_t oidc_util_request_parameter_get(request_rec *r, char *name, char **value);
+int oidc_util_http_send(request_rec *r, const char *data, size_t data_len, const char *content_type,
+			int success_rvalue);
+apr_byte_t oidc_util_read_form_encoded_params(request_rec *r, apr_table_t *table, char *data);
+apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table, apr_byte_t propagate,
 				      const char *strip_param_name);
 char *oidc_http_query_encoded_url(request_rec *r, const char *url, const apr_table_t *params);
 char *oidc_http_form_encoded_data(request_rec *r, const apr_table_t *params);

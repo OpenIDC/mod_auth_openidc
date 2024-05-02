@@ -216,9 +216,9 @@ int oidc_logout_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, 
 			char *sid, *iss;
 			oidc_provider_t *provider = NULL;
 
-			if (oidc_http_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_SID, &sid) != FALSE) {
+			if (oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_SID, &sid) != FALSE) {
 
-				if (oidc_http_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_ISS, &iss) != FALSE) {
+				if (oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_ISS, &iss) != FALSE) {
 					provider = oidc_get_provider_for_issuer(r, c, iss, FALSE);
 				} else {
 					/*
@@ -249,9 +249,9 @@ int oidc_logout_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, 
 		const char *accept = oidc_http_hdr_in_accept_get(r);
 		if ((_oidc_strcmp(url, OIDC_IMG_STYLE_LOGOUT_PARAM_VALUE) == 0) ||
 		    ((accept) && _oidc_strstr(accept, OIDC_HTTP_CONTENT_TYPE_IMAGE_PNG))) {
-			return oidc_http_send(r, (const char *)&oidc_logout_transparent_pixel,
-					      sizeof(oidc_logout_transparent_pixel), OIDC_HTTP_CONTENT_TYPE_IMAGE_PNG,
-					      OK);
+			return oidc_util_http_send(r, (const char *)&oidc_logout_transparent_pixel,
+						   sizeof(oidc_logout_transparent_pixel),
+						   OIDC_HTTP_CONTENT_TYPE_IMAGE_PNG, OK);
 		}
 
 		/* standard HTTP based logout: should be called in an iframe from the OP */
@@ -289,7 +289,7 @@ static int oidc_logout_backchannel(request_rec *r, oidc_cfg_t *cfg) {
 	int rc = HTTP_BAD_REQUEST;
 
 	apr_table_t *params = apr_table_make(r->pool, 8);
-	if (oidc_http_read_post_params(r, params, FALSE, NULL) == FALSE) {
+	if (oidc_util_read_post_params(r, params, FALSE, NULL) == FALSE) {
 		oidc_error(r, "could not read POST-ed parameters to the logout endpoint");
 		goto out;
 	}
@@ -368,14 +368,14 @@ static int oidc_logout_backchannel(request_rec *r, oidc_cfg_t *cfg) {
 	}
 
 	char *nonce = NULL;
-	oidc_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_NONCE, &nonce, NULL);
+	oidc_util_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_NONCE, &nonce, NULL);
 	if (nonce != NULL) {
 		oidc_error(r, "rejecting logout request/token since it contains a \"%s\" claim", OIDC_CLAIM_NONCE);
 		goto out;
 	}
 
 	char *jti = NULL;
-	oidc_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_JTI, &jti, NULL);
+	oidc_util_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_JTI, &jti, NULL);
 	if (jti != NULL) {
 		char *replay = NULL;
 		oidc_cache_get_jti(r, jti, &replay);
@@ -395,7 +395,7 @@ static int oidc_logout_backchannel(request_rec *r, oidc_cfg_t *cfg) {
 	/* store it in the cache for the calculated duration */
 	oidc_cache_set_jti(r, jti, jti, apr_time_now() + jti_cache_duration);
 
-	oidc_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_EVENTS, &sid, NULL);
+	oidc_util_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_EVENTS, &sid, NULL);
 
 	// TODO: by-spec we should cater for the fact that "sid" has been provided
 	//       in the id_token returned in the authentication request, but "sub"
@@ -405,7 +405,7 @@ static int oidc_logout_backchannel(request_rec *r, oidc_cfg_t *cfg) {
 	//       this for logout
 	//       (and probably call us multiple times or the same sub if needed)
 
-	oidc_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_SID, &sid, NULL);
+	oidc_util_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_SID, &sid, NULL);
 	if (sid == NULL)
 		sid = jwt->payload.sub;
 
@@ -451,7 +451,7 @@ int oidc_logout(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 	char *id_token_hint = NULL;
 	char *s_logout_request = NULL;
 
-	oidc_http_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_LOGOUT, &url);
+	oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_LOGOUT, &url);
 
 	oidc_debug(r, "enter (url=%s)", url);
 
@@ -463,7 +463,7 @@ int oidc_logout(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 
 	if ((url == NULL) || (_oidc_strcmp(url, "") == 0)) {
 
-		url = apr_pstrdup(r->pool, oidc_get_absolute_url(r, c, oidc_cfg_default_slo_url_get(c)));
+		url = apr_pstrdup(r->pool, oidc_util_absolute_url(r, c, oidc_cfg_default_slo_url_get(c)));
 
 	} else {
 

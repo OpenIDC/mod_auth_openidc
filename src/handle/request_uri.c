@@ -237,7 +237,7 @@ static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provide
 
 	/* get the crypto settings from the configuration */
 	json_t *crypto = json_object_get(request_object_config, "crypto");
-	oidc_json_object_get_string(r->pool, crypto, "sign_alg", &request_object->header.alg, "none");
+	oidc_util_json_object_get_string(r->pool, crypto, "sign_alg", &request_object->header.alg, "none");
 
 	/* see if we need to sign the request object */
 	if (_oidc_strcmp(request_object->header.alg, "none") != 0) {
@@ -302,8 +302,8 @@ static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provide
 		return NULL;
 	}
 
-	oidc_json_object_get_string(r->pool, crypto, "crypt_alg", &jwe->header.alg, NULL);
-	oidc_json_object_get_string(r->pool, crypto, "crypt_enc", &jwe->header.enc, NULL);
+	oidc_util_json_object_get_string(r->pool, crypto, "crypt_alg", &jwe->header.alg, NULL);
+	oidc_util_json_object_get_string(r->pool, crypto, "crypt_enc", &jwe->header.enc, NULL);
 
 	char *cser = oidc_jwt_serialize(r->pool, request_object, &err);
 
@@ -440,7 +440,7 @@ void oidc_request_uri_add_request_param(request_rec *r, struct oidc_provider_t *
 	/* create request value */
 	char *value = NULL;
 	int ttl = OIDC_REQUEST_OBJECT_TTL_DEFAULT;
-	oidc_json_object_get_int(request_object_config, "ttl", &ttl, OIDC_REQUEST_OBJECT_TTL_DEFAULT);
+	oidc_util_json_object_get_int(request_object_config, "ttl", &ttl, OIDC_REQUEST_OBJECT_TTL_DEFAULT);
 	if (_oidc_strcmp(parameter, OIDC_PROTO_REQUEST_URI) == 0) {
 		/* parameter is "request_uri" */
 		value = oidc_request_uri_create(r, provider, request_object_config, redirect_uri, params, ttl);
@@ -458,7 +458,7 @@ void oidc_request_uri_add_request_param(request_rec *r, struct oidc_provider_t *
 int oidc_request_uri(request_rec *r, oidc_cfg_t *c) {
 
 	char *request_ref = NULL;
-	oidc_http_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_REQUEST_URI, &request_ref);
+	oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_REQUEST_URI, &request_ref);
 	if (request_ref == NULL) {
 		oidc_error(r, "no \"%s\" parameter found", OIDC_REDIRECT_URI_REQUEST_REQUEST_URI);
 		return HTTP_BAD_REQUEST;
@@ -474,5 +474,5 @@ int oidc_request_uri(request_rec *r, oidc_cfg_t *c) {
 
 	oidc_cache_set_request_uri(r, request_ref, NULL, 0);
 
-	return oidc_http_send(r, jwt, _oidc_strlen(jwt), OIDC_HTTP_CONTENT_TYPE_JWT, OK);
+	return oidc_util_http_send(r, jwt, _oidc_strlen(jwt), OIDC_HTTP_CONTENT_TYPE_JWT, OK);
 }

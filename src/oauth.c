@@ -252,14 +252,14 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 	if ((*access_token == NULL) && (r->method_number == M_POST) &&
 	    (accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_POST)) {
 		apr_table_t *params = apr_table_make(r->pool, 8);
-		if (oidc_http_read_post_params(r, params, TRUE, OIDC_PROTO_ACCESS_TOKEN) == TRUE) {
+		if (oidc_util_read_post_params(r, params, TRUE, OIDC_PROTO_ACCESS_TOKEN) == TRUE) {
 			*access_token = apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN);
 		}
 	}
 
 	if ((*access_token == NULL) && (accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_QUERY)) {
 		apr_table_t *params = apr_table_make(r->pool, 8);
-		oidc_http_read_form_encoded_params(r, params, r->args);
+		oidc_util_read_form_encoded_params(r, params, r->args);
 		*access_token = apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN);
 	}
 
@@ -667,10 +667,10 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg_t *c, const char *access_to
 		}
 
 		/* check if this is a request to the "special" handler (Redirect URI) */
-	} else if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c))) {
+	} else if (oidc_util_request_matches_url(r, oidc_util_redirect_uri(r, c))) {
 
 		/* check if this is a request for the public (encryption) keys */
-		if (oidc_http_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
+		if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
 
 			OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_JWKS);
 
@@ -684,7 +684,7 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg_t *c, const char *access_to
 			return OK;
 
 			/* check if this is a request to remove the access token from the cache */
-		} else if (oidc_http_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE)) {
+		} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE)) {
 
 			/* handle request to invalidate access token cache */
 			return oidc_revoke_at_cache_remove(r, c);

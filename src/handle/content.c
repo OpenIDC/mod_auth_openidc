@@ -64,12 +64,12 @@ int oidc_content_handler(request_rec *r) {
 		return DECLINED;
 	}
 
-	if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c)) == TRUE) {
+	if (oidc_util_request_matches_url(r, oidc_util_redirect_uri(r, c)) == TRUE) {
 
 		/* requests to the redirect URI are handled and finished here */
 		rc = OK;
 
-		if (oidc_http_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO)) {
+		if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO)) {
 
 			OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_INFO);
 
@@ -92,7 +92,7 @@ int oidc_content_handler(request_rec *r) {
 			/* free resources allocated for the session */
 			oidc_session_free(r, session);
 
-		} else if (oidc_http_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
+		} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
 
 			OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_JWKS);
 

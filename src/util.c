@@ -58,6 +58,9 @@
 #include <http_protocol.h>
 #include <httpd.h>
 
+/*
+ * generate a number of random bytes, either using libapr or urandom (no per-request logging)
+ */
 apr_byte_t oidc_util_random_bytes(unsigned char *buf, apr_size_t length) {
 	apr_byte_t rv = TRUE;
 
@@ -104,6 +107,9 @@ apr_byte_t oidc_util_random_bytes(unsigned char *buf, apr_size_t length) {
 	return rv;
 }
 
+/*
+ * generate a number of random bytes, either using libapr or urandom
+ */
 apr_byte_t oidc_util_generate_random_bytes(request_rec *r, unsigned char *buf, apr_size_t length) {
 	apr_byte_t rv = TRUE;
 	const char *gen = NULL;
@@ -119,6 +125,9 @@ apr_byte_t oidc_util_generate_random_bytes(request_rec *r, unsigned char *buf, a
 	return rv;
 }
 
+/*
+ * generate a random string of (lowercase) hexadecimal characters, representing byte_len bytes
+ */
 apr_byte_t oidc_util_generate_random_hex_string(request_rec *r, char **hex_str, int byte_len) {
 	unsigned char *bytes = apr_pcalloc(r->pool, byte_len);
 	int i = 0;
@@ -134,7 +143,7 @@ apr_byte_t oidc_util_generate_random_hex_string(request_rec *r, char **hex_str, 
 }
 
 /*
- * generate a random string value value of a specified length
+ * generate a random string value value of a specified byte length
  */
 apr_byte_t oidc_util_generate_random_string(request_rec *r, char **output, int len) {
 	unsigned char *bytes = apr_pcalloc(r->pool, len);
@@ -232,7 +241,10 @@ int oidc_util_base64url_decode(apr_pool_t *pool, char **dst, const char *src) {
 	return dlen;
 }
 
-static const char *oidc_util_get__oidc_jwt_hdr_dir_a256gcm(request_rec *r, char *input) {
+/*
+ * return the serialized header part of a A256GCM encrypted JWT (input)
+ */
+static const char *oidc_util_jwt_hdr_dir_a256gcm(request_rec *r, char *input) {
 	char *compact_encoded_jwt = NULL;
 	char *p = NULL;
 	static const char *_oidc_jwt_hdr_dir_a256gcm = NULL;
@@ -258,6 +270,9 @@ static const char *oidc_util_get__oidc_jwt_hdr_dir_a256gcm(request_rec *r, char 
 	return _oidc_jwt_hdr_dir_a256gcm;
 }
 
+/*
+ * helper function to override a variable value with an optionally provided environment variable
+ */
 static apr_byte_t oidc_util_env_var_override(request_rec *r, const char *env_var_name, apr_byte_t return_when_set) {
 	const char *s = NULL;
 	if (r->subprocess_env == NULL)
@@ -268,6 +283,9 @@ static apr_byte_t oidc_util_env_var_override(request_rec *r, const char *env_var
 
 #define OIDC_JWT_INTERNAL_NO_COMPRESS_ENV_VAR "OIDC_JWT_INTERNAL_NO_COMPRESS"
 
+/*
+ * check if we need to compress (internal) encrypted JWTs or not
+ */
 static apr_byte_t oidc_util_jwt_internal_compress(request_rec *r) {
 	// avoid compressing JWTs that need to be compatible with external producers/consumers
 	return oidc_util_env_var_override(r, OIDC_JWT_INTERNAL_NO_COMPRESS_ENV_VAR, FALSE);
@@ -275,11 +293,17 @@ static apr_byte_t oidc_util_jwt_internal_compress(request_rec *r) {
 
 #define OIDC_JWT_INTERNAL_STRIP_HDR_ENV_VAR "OIDC_JWT_INTERNAL_STRIP_HDR"
 
+/*
+ * check if we need to strip the header from (internal) encrypted JWTs or not
+ */
 static apr_byte_t oidc_util_jwt_internal_strip_header(request_rec *r) {
 	// avoid stripping JWT headers that need to be compatible with external producers/consumers
 	return oidc_util_env_var_override(r, OIDC_JWT_INTERNAL_STRIP_HDR_ENV_VAR, TRUE);
 }
 
+/*
+ * create an encrypted JWT for internal purposes (i.e. state cookie, session cookie, or encrypted cache value)
+ */
 apr_byte_t oidc_util_jwt_create(request_rec *r, const oidc_crypto_passphrase_t *passphrase, const char *s_payload,
 				char **compact_encoded_jwt) {
 
@@ -326,7 +350,7 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const oidc_crypto_passphrase_t *
 	}
 
 	if ((*compact_encoded_jwt != NULL) && (oidc_util_jwt_internal_strip_header(r)))
-		*compact_encoded_jwt += _oidc_strlen(oidc_util_get__oidc_jwt_hdr_dir_a256gcm(r, *compact_encoded_jwt));
+		*compact_encoded_jwt += _oidc_strlen(oidc_util_jwt_hdr_dir_a256gcm(r, *compact_encoded_jwt));
 
 	rv = TRUE;
 
@@ -340,6 +364,9 @@ end:
 	return rv;
 }
 
+/*
+ * verify an encrypted JWT for internal purposes
+ */
 apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *passphrase,
 				const char *compact_encoded_jwt, char **s_payload) {
 
@@ -358,7 +385,7 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *
 
 	if (oidc_util_jwt_internal_strip_header(r))
 		compact_encoded_jwt =
-		    apr_pstrcat(r->pool, oidc_util_get__oidc_jwt_hdr_dir_a256gcm(r, NULL), compact_encoded_jwt, NULL);
+		    apr_pstrcat(r->pool, oidc_util_jwt_hdr_dir_a256gcm(r, NULL), compact_encoded_jwt, NULL);
 
 	oidc_proto_peek_jwt_header(r, compact_encoded_jwt, &alg, &enc, &kid);
 	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_DIR) != 0) || (_oidc_strcmp(enc, CJOSE_HDR_ENC_A256GCM) != 0)) {
@@ -415,7 +442,7 @@ end:
 /*
  * convert a character to an ENVIRONMENT-variable-safe variant
  */
-int oidc_char_to_env(int c) {
+static int oidc_util_char_to_env(int c) {
 	return apr_isalnum(c) ? apr_toupper(c) : '_';
 }
 
@@ -427,7 +454,7 @@ int oidc_char_to_env(int c) {
  * first argument's conversion to an environment variable is less
  * than, equal to, or greater than the second.
  */
-int oidc_strnenvcmp(const char *a, const char *b, int len) {
+int oidc_util_strnenvcmp(const char *a, const char *b, int len) {
 	int d = 0;
 	int i = 0;
 	while (1) {
@@ -449,7 +476,7 @@ int oidc_strnenvcmp(const char *a, const char *b, int len) {
 
 		/* Normalize the characters as for conversion to an
 		 * environment variable. */
-		d = oidc_char_to_env(*a) - oidc_char_to_env(*b);
+		d = oidc_util_char_to_env(*a) - oidc_util_char_to_env(*b);
 		if (d)
 			return d;
 
@@ -584,6 +611,9 @@ char *oidc_util_javascript_escape(apr_pool_t *pool, const char *s) {
 	return output;
 }
 
+/*
+ * find a needle (s2) in a haystack (s1) using case-insensitive string compare
+ */
 const char *oidc_util_strcasestr(const char *s1, const char *s2) {
 	const char *s = s1;
 	const char *p = s2;
@@ -607,7 +637,7 @@ const char *oidc_util_strcasestr(const char *s1, const char *s2) {
 /*
  * get the URL scheme that is currently being accessed
  */
-static const char *oidc_get_current_url_scheme(const request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers) {
+static const char *oidc_util_current_url_scheme(const request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers) {
 	/* first see if there's a proxy/load-balancer in front of us */
 	const char *scheme_str = NULL;
 
@@ -636,9 +666,9 @@ static const char *oidc_get_current_url_scheme(const request_rec *r, oidc_hdr_x_
 }
 
 /*
- * get the Port part that is currently being accessed
+ * get the port part from a Host header
  */
-static const char *oidc_get_port_from_host(const char *host_hdr) {
+static const char *oidc_util_port_from_host(const char *host_hdr) {
 	char *p = NULL;
 	char *i = NULL;
 
@@ -686,7 +716,7 @@ static const char *oidc_get_current_url_port(const request_rec *r, const char *s
 		host_hdr = oidc_http_hdr_in_x_forwarded_host_get(r);
 
 	if (host_hdr) {
-		port_str = oidc_get_port_from_host(host_hdr);
+		port_str = oidc_util_port_from_host(host_hdr);
 		if (port_str)
 			port_str++;
 		return port_str;
@@ -698,7 +728,7 @@ static const char *oidc_get_current_url_port(const request_rec *r, const char *s
 	 */
 	host_hdr = oidc_http_hdr_in_host_get(r);
 	if (host_hdr) {
-		port_str = oidc_get_port_from_host(host_hdr);
+		port_str = oidc_util_port_from_host(host_hdr);
 		if (port_str) {
 			port_str++;
 			return port_str;
@@ -735,7 +765,7 @@ static const char *oidc_get_current_url_port(const request_rec *r, const char *s
 /*
  * get the hostname part of the URL that is currently being accessed
  */
-const char *oidc_get_current_url_host(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers) {
+const char *oidc_util_current_url_host(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers) {
 	const char *host_str = NULL;
 	char *p = NULL;
 	char *i = NULL;
@@ -777,8 +807,8 @@ static const char *oidc_get_current_url_base(request_rec *r, oidc_hdr_x_forwarde
 
 	oidc_cfg_x_forwarded_headers_check(r, x_forwarded_headers);
 
-	scheme_str = oidc_get_current_url_scheme(r, x_forwarded_headers);
-	host_str = oidc_get_current_url_host(r, x_forwarded_headers);
+	scheme_str = oidc_util_current_url_scheme(r, x_forwarded_headers);
+	host_str = oidc_util_current_url_host(r, x_forwarded_headers);
 	port_str = oidc_get_current_url_port(r, scheme_str, x_forwarded_headers);
 	port_str = port_str ? apr_psprintf(r->pool, ":%s", port_str) : "";
 
@@ -790,7 +820,7 @@ static const char *oidc_get_current_url_base(request_rec *r, oidc_hdr_x_forwarde
 /*
  * get the URL that is currently being accessed
  */
-char *oidc_get_current_url(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers) {
+char *oidc_util_current_url(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers) {
 	char *url = NULL;
 	char *path = NULL;
 	apr_uri_t uri;
@@ -820,7 +850,7 @@ char *oidc_get_current_url(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_he
 /*
  * infer a full absolute URL from the (optional) relative one
  */
-const char *oidc_get_absolute_url(request_rec *r, oidc_cfg_t *cfg, const char *url) {
+const char *oidc_util_absolute_url(request_rec *r, oidc_cfg_t *cfg, const char *url) {
 	if ((url != NULL) && (url[0] == OIDC_CHAR_FORWARD_SLASH)) {
 		url = apr_pstrcat(r->pool, oidc_get_current_url_base(r, oidc_cfg_x_forwarded_headers_get(cfg)), url,
 				  NULL);
@@ -829,22 +859,26 @@ const char *oidc_get_absolute_url(request_rec *r, oidc_cfg_t *cfg, const char *u
 	return url;
 }
 
+/*
+ * check if the request is on a secure HTTPs (TLS) connection
+ */
 apr_byte_t oidc_util_request_is_secure(request_rec *r, oidc_cfg_t *c) {
-	return (_oidc_strnatcasecmp("https", oidc_get_current_url_scheme(r, oidc_cfg_x_forwarded_headers_get(c))) == 0);
+	return (_oidc_strnatcasecmp("https", oidc_util_current_url_scheme(r, oidc_cfg_x_forwarded_headers_get(c))) ==
+		0);
 }
 
 /*
- * determine absolute Redirect URI
+ * return absolute Redirect URI
  */
-const char *oidc_get_redirect_uri(request_rec *r, oidc_cfg_t *cfg) {
-	return oidc_get_absolute_url(r, cfg, oidc_cfg_redirect_uri_get(cfg));
+const char *oidc_util_redirect_uri(request_rec *r, oidc_cfg_t *cfg) {
+	return oidc_util_absolute_url(r, cfg, oidc_cfg_redirect_uri_get(cfg));
 }
 
 /*
  * determine absolute redirect uri that is issuer specific
  */
-const char *oidc_get_redirect_uri_iss(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider) {
-	const char *redirect_uri = oidc_get_redirect_uri(r, cfg);
+const char *oidc_util_redirect_uri_iss(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider) {
+	const char *redirect_uri = oidc_util_redirect_uri(r, cfg);
 	if (redirect_uri == NULL) {
 		oidc_error(r, "redirect URI is NULL");
 		return NULL;
@@ -876,7 +910,7 @@ apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url) {
 /*
  * see if the currently accessed path has a certain query parameter
  */
-apr_byte_t oidc_http_request_has_parameter(request_rec *r, const char *param) {
+apr_byte_t oidc_util_request_has_parameter(request_rec *r, const char *param) {
 	if (r->args == NULL)
 		return FALSE;
 	const char *option1 = apr_psprintf(r->pool, "%s=", param);
@@ -887,7 +921,7 @@ apr_byte_t oidc_http_request_has_parameter(request_rec *r, const char *param) {
 /*
  * get a query parameter
  */
-apr_byte_t oidc_http_request_parameter_get(request_rec *r, char *name, char **value) {
+apr_byte_t oidc_util_request_parameter_get(request_rec *r, char *name, char **value) {
 	char *tokenizer_ctx = NULL;
 	char *p = NULL;
 	char *args = NULL;
@@ -1011,7 +1045,8 @@ apr_byte_t oidc_util_decode_json_and_check_error(request_rec *r, const char *str
 /*
  * sends content to the user agent
  */
-int oidc_http_send(request_rec *r, const char *data, size_t data_len, const char *content_type, int success_rvalue) {
+int oidc_util_http_send(request_rec *r, const char *data, size_t data_len, const char *content_type,
+			int success_rvalue) {
 	ap_set_content_type(r, content_type);
 	apr_bucket_brigade *bb = apr_brigade_create(r->pool, r->connection->bucket_alloc);
 	apr_bucket *b = apr_bucket_transient_create(data, data_len, r->connection->bucket_alloc);
@@ -1064,7 +1099,7 @@ int oidc_util_html_send(request_rec *r, const char *title, const char *html_head
 	    r->pool, html, title ? oidc_util_html_escape(r->pool, title) : "", html_head ? html_head : "",
 	    on_load ? apr_psprintf(r->pool, " onload=\"%s()\"", on_load) : "", html_body ? html_body : "<p></p>");
 
-	return oidc_http_send(r, html, _oidc_strlen(html), OIDC_HTTP_CONTENT_TYPE_TEXT_HTML, status_code);
+	return oidc_util_http_send(r, html, _oidc_strlen(html), OIDC_HTTP_CONTENT_TYPE_TEXT_HTML, status_code);
 }
 
 static char *html_error_template_contents = NULL;
@@ -1102,7 +1137,7 @@ apr_byte_t oidc_util_html_send_in_template(request_rec *r, const char *filename,
 	if (static_template_content) {
 		html = apr_psprintf(r->pool, *static_template_content, oidc_util_template_escape(r, arg1, arg1_esc),
 				    oidc_util_template_escape(r, arg2, arg2_esc));
-		rc = oidc_http_send(r, html, _oidc_strlen(html), OIDC_HTTP_CONTENT_TYPE_TEXT_HTML, status_code);
+		rc = oidc_util_http_send(r, html, _oidc_strlen(html), OIDC_HTTP_CONTENT_TYPE_TEXT_HTML, status_code);
 	}
 	return rc;
 }
@@ -1199,7 +1234,7 @@ static apr_byte_t oidc_util_read(request_rec *r, char **rbuf) {
 /*
  * read form-encoded parameters from a string in to a table
  */
-apr_byte_t oidc_http_read_form_encoded_params(request_rec *r, apr_table_t *table, char *data) {
+apr_byte_t oidc_util_read_form_encoded_params(request_rec *r, apr_table_t *table, char *data) {
 	const char *key = NULL;
 	const char *val = NULL;
 	const char *p = data;
@@ -1218,7 +1253,8 @@ apr_byte_t oidc_http_read_form_encoded_params(request_rec *r, apr_table_t *table
 	return TRUE;
 }
 
-static void oidc_userdata_set_post_param(request_rec *r, const char *post_param_name, const char *post_param_value) {
+static void oidc_util_userdata_set_post_param(request_rec *r, const char *post_param_name,
+					      const char *post_param_value) {
 	apr_table_t *userdata_post_params = NULL;
 	apr_pool_userdata_get((void **)&userdata_post_params, OIDC_USERDATA_POST_PARAMS_KEY, r->pool);
 	if (userdata_post_params == NULL)
@@ -1230,7 +1266,7 @@ static void oidc_userdata_set_post_param(request_rec *r, const char *post_param_
 /*
  * read the POST parameters in to a table
  */
-apr_byte_t oidc_http_read_post_params(request_rec *r, apr_table_t *table, apr_byte_t propagate,
+apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table, apr_byte_t propagate,
 				      const char *strip_param_name) {
 	apr_byte_t rc = FALSE;
 	char *data = NULL;
@@ -1249,7 +1285,7 @@ apr_byte_t oidc_http_read_post_params(request_rec *r, apr_table_t *table, apr_by
 	if (oidc_util_read(r, &data) != TRUE)
 		goto end;
 
-	rc = oidc_http_read_form_encoded_params(r, table, data);
+	rc = oidc_util_read_form_encoded_params(r, table, data);
 	if (rc != TRUE)
 		goto end;
 
@@ -1260,7 +1296,7 @@ apr_byte_t oidc_http_read_post_params(request_rec *r, apr_table_t *table, apr_by
 	elts = (const apr_table_entry_t *)arr->elts;
 	for (i = 0; i < arr->nelts; i++)
 		if (_oidc_strcmp(elts[i].key, strip_param_name) != 0)
-			oidc_userdata_set_post_param(r, elts[i].key, elts[i].val);
+			oidc_util_userdata_set_post_param(r, elts[i].key, elts[i].val);
 
 end:
 
@@ -1440,6 +1476,9 @@ apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack, cons
 	return (i == json_array_size(haystack)) ? FALSE : TRUE;
 }
 
+/*
+ * convert a claim value from UTF-8 to the Latin1 character set
+ */
 static char *oidc_util_utf8_to_latin1(request_rec *r, const char *src) {
 	char *dst = "";
 	unsigned int cp = 0;
@@ -1684,8 +1723,8 @@ apr_byte_t oidc_util_spaced_string_contains(apr_pool_t *pool, const char *str, c
 /*
  * get (optional) string from a JSON object
  */
-apr_byte_t oidc_json_object_get_string(apr_pool_t *pool, json_t *json, const char *name, char **value,
-				       const char *default_value) {
+apr_byte_t oidc_util_json_object_get_string(apr_pool_t *pool, json_t *json, const char *name, char **value,
+					    const char *default_value) {
 	*value = default_value ? apr_pstrdup(pool, default_value) : NULL;
 	if (json != NULL) {
 		json_t *v = json_object_get(json, name);
@@ -1699,7 +1738,7 @@ apr_byte_t oidc_json_object_get_string(apr_pool_t *pool, json_t *json, const cha
 /*
  * get (optional) int from a JSON object
  */
-apr_byte_t oidc_json_object_get_int(const json_t *json, const char *name, int *value, const int default_value) {
+apr_byte_t oidc_util_json_object_get_int(const json_t *json, const char *name, int *value, const int default_value) {
 	const json_t *v = NULL;
 	*value = default_value;
 	if (json != NULL) {
@@ -1714,7 +1753,7 @@ apr_byte_t oidc_json_object_get_int(const json_t *json, const char *name, int *v
 /*
  * get (optional) boolean from a JSON object
  */
-apr_byte_t oidc_json_object_get_bool(const json_t *json, const char *name, int *value, const int default_value) {
+apr_byte_t oidc_util_json_object_get_bool(const json_t *json, const char *name, int *value, const int default_value) {
 	const json_t *v = NULL;
 	*value = default_value;
 	if (json != NULL) {
@@ -1849,7 +1888,7 @@ apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char
 }
 
 /*
- * merge two key sets
+ * merge the provided array of keys (k2) into a hash table of keys (k1)
  */
 apr_hash_t *oidc_util_merge_key_sets(apr_pool_t *pool, apr_hash_t *k1, const apr_array_header_t *k2) {
 	apr_hash_t *rv = k1 ? apr_hash_copy(pool, k1) : apr_hash_make(pool);
@@ -1864,6 +1903,9 @@ apr_hash_t *oidc_util_merge_key_sets(apr_pool_t *pool, apr_hash_t *k1, const apr
 	return rv;
 }
 
+/*
+ * merge two hash tables with key sets
+ */
 apr_hash_t *oidc_util_merge_key_sets_hash(apr_pool_t *pool, apr_hash_t *k1, apr_hash_t *k2) {
 	if (k1 == NULL) {
 		if (k2 == NULL)
@@ -1925,7 +1967,6 @@ out:
 /*
  * regexp match
  */
-
 apr_byte_t oidc_util_regexp_first_match(apr_pool_t *pool, const char *input, const char *regexp, char **output,
 					char **error_str) {
 	apr_byte_t rv = FALSE;
@@ -1956,7 +1997,10 @@ out:
 	return rv;
 }
 
-int oidc_util_cookie_domain_valid(const char *hostname, const char *cookie_domain) {
+/*
+ * check if the provided cookie domain value is valid
+ */
+apr_byte_t oidc_util_cookie_domain_valid(const char *hostname, const char *cookie_domain) {
 	char *p = NULL;
 	const char *check_cookie = cookie_domain;
 	// Skip past the first char of a cookie_domain that starts
@@ -1971,6 +2015,9 @@ int oidc_util_cookie_domain_valid(const char *hostname, const char *cookie_domai
 	return TRUE;
 }
 
+/*
+ * return the first JWK that matches a provided key type and use from an array of JWKs
+ */
 oidc_jwk_t *oidc_util_key_list_first(const apr_array_header_t *key_list, int kty, const char *use) {
 	oidc_jwk_t *rv = NULL;
 	int i = 0;
@@ -1989,6 +2036,9 @@ oidc_jwk_t *oidc_util_key_list_first(const apr_array_header_t *key_list, int kty
 
 #ifdef USE_LIBJQ
 
+/*
+ * execute a JQ expression
+ */
 static const char *oidc_util_jq_exec(request_rec *r, jq_state *jq, struct jv_parser *parser) {
 	const char *rv = NULL;
 	jv value, elem, str, msg;
@@ -2018,6 +2068,9 @@ static const char *oidc_util_jq_exec(request_rec *r, jq_state *jq, struct jv_par
 #define OIDC_JQ_FILTER_EXPIRE_DEFAULT 600
 #define OIDC_JQ_FILTER_CACHE_TTL_ENVVAR "OIDC_JQ_FILTER_CACHE_TTL"
 
+/*
+ * return the JQ expression result cache expiry
+ */
 static int oidc_jq_filter_cache_ttl(request_rec *r) {
 	const char *s_ttl = apr_table_get(r->subprocess_env, OIDC_JQ_FILTER_CACHE_TTL_ENVVAR);
 	return _oidc_str_to_int(s_ttl, OIDC_JQ_FILTER_EXPIRE_DEFAULT);
@@ -2025,6 +2078,9 @@ static int oidc_jq_filter_cache_ttl(request_rec *r) {
 
 #endif
 
+/*
+ * apply a JQ expression/filter to the provided JSON input
+ */
 const char *oidc_util_jq_filter(request_rec *r, const char *input, const char *filter) {
 	const char *result = input;
 #ifdef USE_LIBJQ
@@ -2164,6 +2220,9 @@ void oidc_util_set_trace_parent(request_rec *r, oidc_cfg_t *c, const char *span)
 			     apr_psprintf(r->pool, "00-%s-%s-%02x", s_trace_id, s_parent_id, trace_flags));
 }
 
+/*
+ * clear the contents of a hash table (used for older versions of libapr missing this)
+ */
 void oidc_util_apr_hash_clear(apr_hash_t *ht) {
 	apr_hash_index_t *hi = NULL;
 	const void *key = NULL;
@@ -2174,6 +2233,9 @@ void oidc_util_apr_hash_clear(apr_hash_t *ht) {
 	}
 }
 
+/*
+ * return the OpenSSL version we compiled against
+ */
 char *oidc_util_openssl_version(apr_pool_t *pool) {
 	char *s_version = NULL;
 #ifdef OPENSSL_VERSION_STR
@@ -2184,6 +2246,9 @@ char *oidc_util_openssl_version(apr_pool_t *pool) {
 	return s_version;
 }
 
+/*
+ * parse an Apache expression
+ */
 char *oidc_util_apr_expr_parse(cmd_parms *cmd, const char *str, oidc_apr_expr_t **expr, apr_byte_t result_is_str) {
 	char *rv = NULL;
 	if ((str == NULL) || (expr == NULL))
@@ -2204,6 +2269,9 @@ char *oidc_util_apr_expr_parse(cmd_parms *cmd, const char *str, oidc_apr_expr_t 
 	return rv;
 }
 
+/*
+ * execute an Apache expression
+ */
 const char *oidc_util_apr_expr_exec(request_rec *r, const oidc_apr_expr_t *expr, apr_byte_t result_is_str) {
 	const char *expr_result = NULL;
 	if (expr == NULL)

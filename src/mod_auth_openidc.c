@@ -92,7 +92,7 @@ static void oidc_scrub_request_headers(request_rec *r, const char *claim_prefix,
 
 		/* is this header's name equivalent to a header that needs scrubbing? */
 		const char *hdr = (k != NULL) && (scrub != NULL) ? apr_hash_get(scrub, k, APR_HASH_KEY_STRING) : NULL;
-		const int header_matches = (hdr != NULL) && (oidc_strnenvcmp(k, hdr, -1) == 0);
+		const int header_matches = (hdr != NULL) && (oidc_util_strnenvcmp(k, hdr, -1) == 0);
 
 		/*
 		 * would this header be interpreted as a mod_auth_openidc attribute? Note
@@ -102,7 +102,7 @@ static void oidc_scrub_request_headers(request_rec *r, const char *claim_prefix,
 		 * would match.
 		 */
 		const int prefix_matches =
-		    (k != NULL) && prefix_len && (oidc_strnenvcmp(k, claim_prefix, prefix_len) == 0);
+		    (k != NULL) && prefix_len && (oidc_util_strnenvcmp(k, claim_prefix, prefix_len) == 0);
 
 		/* add to the clean_headers if non-suspicious, skip and report otherwise */
 		if (!prefix_matches && !header_matches) {
@@ -372,9 +372,9 @@ const char *oidc_original_request_method(request_rec *r, oidc_cfg_t *cfg, apr_by
 	const char *method = OIDC_METHOD_GET;
 
 	char *m = NULL;
-	if ((handle_discovery_response == TRUE) && (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, cfg))) &&
+	if ((handle_discovery_response == TRUE) && (oidc_util_request_matches_url(r, oidc_util_redirect_uri(r, cfg))) &&
 	    (oidc_is_discovery_response(r, cfg))) {
-		oidc_http_request_parameter_get(r, OIDC_DISC_RM_PARAM, &m);
+		oidc_util_request_parameter_get(r, OIDC_DISC_RM_PARAM, &m);
 		if (m != NULL)
 			method = apr_pstrdup(r->pool, m);
 	} else {
@@ -668,7 +668,7 @@ static int oidc_handle_unauthenticated_user(request_rec *r, oidc_cfg_t *c) {
 	 * else: no session (regardless of whether it is main or sub-request),
 	 * and we need to authenticate the user
 	 */
-	return oidc_request_authenticate_user(r, c, NULL, oidc_get_current_url(r, oidc_cfg_x_forwarded_headers_get(c)),
+	return oidc_request_authenticate_user(r, c, NULL, oidc_util_current_url(r, oidc_cfg_x_forwarded_headers_get(c)),
 					      NULL, NULL, NULL, oidc_cfg_dir_path_auth_request_params_get(r),
 					      oidc_cfg_dir_path_scope_get(r));
 }
@@ -709,7 +709,7 @@ static apr_byte_t oidc_check_max_session_duration(request_rec *r, oidc_cfg_t *cf
 static apr_byte_t oidc_check_cookie_domain(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session) {
 	const char *c_cookie_domain = oidc_cfg_cookie_domain_get(cfg)
 					  ? oidc_cfg_cookie_domain_get(cfg)
-					  : oidc_get_current_url_host(r, oidc_cfg_x_forwarded_headers_get(cfg));
+					  : oidc_util_current_url_host(r, oidc_cfg_x_forwarded_headers_get(cfg));
 	const char *s_cookie_domain = oidc_session_get_cookie_domain(r, session);
 	if ((s_cookie_domain == NULL) || (_oidc_strcmp(c_cookie_domain, s_cookie_domain) != 0)) {
 		oidc_warn(r,
@@ -888,7 +888,7 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg_t *cf
 	}
 
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_AUD,
-			    json_string(oidc_get_current_url(r, oidc_cfg_x_forwarded_headers_get(cfg))));
+			    json_string(oidc_util_current_url(r, oidc_cfg_x_forwarded_headers_get(cfg))));
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_ISS,
 			    json_string(oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(cfg))));
 
@@ -948,7 +948,7 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg_t *cf
 
 	if (ttl == 0) {
 		// need to get the cache ttl from the exp claim
-		oidc_json_object_get_int(jwt->payload.value.json, OIDC_CLAIM_EXP, &exp, 0);
+		oidc_util_json_object_get_int(jwt->payload.value.json, OIDC_CLAIM_EXP, &exp, 0);
 		// actually the exp claim always exists by now
 		expiry = (exp > 0) ? apr_time_from_sec(exp)
 				   : apr_time_now() + apr_time_from_sec(OIDC_USERINFO_SIGNED_JWT_EXP_DEFAULT);
@@ -1094,7 +1094,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg_t *cfg, oidc_se
 		OIDC_METRICS_COUNTER_INC(r, cfg, OM_SESSION_ERROR_REFRESH_ACCESS_TOKEN);
 		if (oidc_cfg_dir_action_on_error_refresh_get(r) == OIDC_ON_ERROR_LOGOUT) {
 			return oidc_logout_request(
-			    r, cfg, session, oidc_get_absolute_url(r, cfg, oidc_cfg_default_slo_url_get(cfg)), FALSE);
+			    r, cfg, session, oidc_util_absolute_url(r, cfg, oidc_cfg_default_slo_url_get(cfg)), FALSE);
 		}
 		if (oidc_cfg_dir_action_on_error_refresh_get(r) == OIDC_ON_ERROR_AUTH) {
 			oidc_session_kill(r, session);
@@ -1111,7 +1111,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg_t *cfg, oidc_se
 		OIDC_METRICS_COUNTER_INC(r, cfg, OM_SESSION_ERROR_REFRESH_USERINFO);
 		if (oidc_cfg_action_on_userinfo_error_get(cfg) == OIDC_ON_ERROR_LOGOUT) {
 			return oidc_logout_request(
-			    r, cfg, session, oidc_get_absolute_url(r, cfg, oidc_cfg_default_slo_url_get(cfg)), FALSE);
+			    r, cfg, session, oidc_util_absolute_url(r, cfg, oidc_cfg_default_slo_url_get(cfg)), FALSE);
 		}
 		if (oidc_cfg_action_on_userinfo_error_get(cfg) == OIDC_ON_ERROR_AUTH) {
 			oidc_session_kill(r, session);
@@ -1241,7 +1241,7 @@ apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg_t *c, const char 
 			return FALSE;
 		}
 	} else if ((uri.hostname != NULL) && (restrict_to_host == TRUE)) {
-		c_host = oidc_get_current_url_host(r, oidc_cfg_x_forwarded_headers_get(c));
+		c_host = oidc_util_current_url_host(r, oidc_cfg_x_forwarded_headers_get(c));
 
 		if (strchr(uri.hostname, ':')) { /* v6 literal */
 			url_ipv6_aware = apr_pstrcat(r->pool, "[", uri.hostname, "]", NULL);
@@ -1332,7 +1332,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session
 		 * as an authorization response; alternatively we could assume that a POST response has no
 		 * parameters
 		 */
-	} else if (oidc_http_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_LOGOUT)) {
+	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_LOGOUT)) {
 
 		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_LOGOUT);
 
@@ -1362,7 +1362,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session
 
 		return rc;
 
-	} else if (oidc_http_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
+	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
 
 		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_JWKS);
 
@@ -1375,7 +1375,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session
 
 		return OK;
 
-	} else if (oidc_http_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_SESSION)) {
+	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_SESSION)) {
 
 		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_SESSION);
 
@@ -1384,7 +1384,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session
 
 		return rc;
 
-	} else if (oidc_http_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REFRESH)) {
+	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REFRESH)) {
 
 		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_REFRESH);
 
@@ -1393,7 +1393,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session
 
 		return rc;
 
-	} else if (oidc_http_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REQUEST_URI)) {
+	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REQUEST_URI)) {
 
 		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_REQUEST_URI);
 
@@ -1402,7 +1402,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session
 
 		return rc;
 
-	} else if (oidc_http_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE)) {
+	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE)) {
 
 		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE);
 
@@ -1411,7 +1411,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session
 
 		return rc;
 
-	} else if (oidc_http_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REVOKE_SESSION)) {
+	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REVOKE_SESSION)) {
 
 		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_REVOKE_SESSION);
 
@@ -1420,7 +1420,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session
 
 		return rc;
 
-	} else if (oidc_http_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO)) {
+	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO)) {
 
 		if (session->remote_user == NULL)
 			return HTTP_UNAUTHORIZED;
@@ -1454,7 +1454,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session
 	/* this is not an authorization response or logout request */
 
 	/* check for "error" response */
-	if (oidc_http_request_has_parameter(r, OIDC_PROTO_ERROR)) {
+	if (oidc_util_request_has_parameter(r, OIDC_PROTO_ERROR)) {
 
 		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_ERROR_PROVIDER);
 
@@ -1489,7 +1489,7 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg_t *c) {
 
 	OIDC_METRICS_TIMING_START(r, c);
 
-	if (oidc_get_redirect_uri(r, c) == NULL) {
+	if (oidc_util_redirect_uri(r, c) == NULL) {
 		oidc_error(r, "configuration error: the authentication type is set to \"" OIDC_AUTH_TYPE_OPENID_CONNECT
 			      "\" but " OIDCRedirectURI " has not been set");
 		return HTTP_INTERNAL_SERVER_ERROR;
@@ -1545,7 +1545,7 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg_t *c) {
 	oidc_session_load(r, &session);
 
 	/* see if the initial request is to the redirect URI; this handles potential logout too */
-	if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c))) {
+	if (oidc_util_request_matches_url(r, oidc_util_redirect_uri(r, c))) {
 
 		/* handle request to the redirect_uri */
 		rc = oidc_handle_redirect_uri_request(r, c, session);
