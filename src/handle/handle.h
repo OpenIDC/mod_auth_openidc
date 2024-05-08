@@ -79,6 +79,10 @@ int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg);
 apr_byte_t oidc_is_discovery_response(request_rec *r, oidc_cfg_t *cfg);
 int oidc_discovery_response(request_rec *r, oidc_cfg_t *c);
 
+// fedcm.c
+int oidc_fedcm_request(request_rec *r, struct oidc_provider_t *provider, const char *redirect_uri, const char *state,
+		       const char *nonce);
+
 // info.c
 int oidc_info_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, apr_byte_t needs_save);
 

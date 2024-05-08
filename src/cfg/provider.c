@@ -321,11 +321,15 @@ OIDC_PROVIDER_MEMBER_FUNCS_PARSE_STR(userinfo_encrypted_response_enc, oidc_cfg_p
 
 #define OIDC_AUTH_REQUEST_METHOD_GET_STR "GET"
 #define OIDC_AUTH_REQUEST_METHOD_POST_STR "POST"
+#define OIDC_AUTH_REQUEST_METHOD_FEDCM_STR "FedCM"
 
 static const char *oidc_cfg_provider_parse_auth_request_method(apr_pool_t *pool, const char *arg,
 							       oidc_auth_request_method_t *method) {
-	static const oidc_cfg_option_t options[] = {{OIDC_AUTH_REQUEST_METHOD_GET, OIDC_AUTH_REQUEST_METHOD_GET_STR},
-						    {OIDC_AUTH_REQUEST_METHOD_POST, OIDC_AUTH_REQUEST_METHOD_POST_STR}};
+	static const oidc_cfg_option_t options[] = {
+	    {OIDC_AUTH_REQUEST_METHOD_GET, OIDC_AUTH_REQUEST_METHOD_GET_STR},
+	    {OIDC_AUTH_REQUEST_METHOD_POST, OIDC_AUTH_REQUEST_METHOD_POST_STR},
+	    {OIDC_AUTH_REQUEST_METHOD_FEDCM, OIDC_AUTH_REQUEST_METHOD_FEDCM_STR},
+	};
 	return oidc_cfg_parse_option(pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg, (int *)method);
 }
 

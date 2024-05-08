@@ -71,6 +71,7 @@ typedef struct oidc_proto_pkce_t {
 typedef enum {
 	OIDC_AUTH_REQUEST_METHOD_GET = 1,
 	OIDC_AUTH_REQUEST_METHOD_POST = 2,
+	OIDC_AUTH_REQUEST_METHOD_FEDCM = 3,
 } oidc_auth_request_method_t;
 
 typedef enum {

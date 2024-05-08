@@ -257,6 +257,10 @@ int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *pro
 			rv = OK;
 		}
 
+	} else if (oidc_cfg_provider_auth_request_method_get(provider) == OIDC_AUTH_REQUEST_METHOD_FEDCM) {
+
+		rv = oidc_fedcm_request(r, provider, redirect_uri, state, nonce);
+
 	} else {
 		oidc_error(r, "oidc_cfg_provider_auth_request_method_get(provider) set to an unknown value: %d",
 			   oidc_cfg_provider_auth_request_method_get(provider));

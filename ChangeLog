@@ -1,3 +1,7 @@
+05/08/2024
+- initial support for the Federated Credential Management (FedCM) API
+  https://developers.google.com/privacy-sandbox/3pcd/fedcm
+  
 04/23/2024
 - disable support for the RSA PKCS v1.5 JWE encryption algorithm as it is deemed unsafe
   due to the Marvin attack and is removed from libcjose as well
