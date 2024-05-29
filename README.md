@@ -59,7 +59,7 @@ For questions, issues and suggestions use the Github Discussions forum at:
   [https://github.com/OpenIDC/mod_auth_openidc/discussions](https://github.com/OpenIDC/mod_auth_openidc/discussions)
 
 #### Commercial
-For commercial support contracts, professional services, training and use-case specific support please contact:  
+For commercial - subscription based - support and licensing please contact:  
   [sales@openidc.com](mailto:sales@openidc.com)  
 
 How to Use It  
