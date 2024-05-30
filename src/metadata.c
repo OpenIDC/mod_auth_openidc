@@ -65,6 +65,7 @@
 #define OIDC_METADATA_INTROSPECTION_ENDPOINT "introspection_endpoint"
 #define OIDC_METADATA_USERINFO_ENDPOINT "userinfo_endpoint"
 #define OIDC_METADATA_REVOCATION_ENDPOINT "revocation_endpoint"
+#define OIDC_METADATA_PAR_ENDPOINT "pushed_authorization_request_endpoint"
 #define OIDC_METADATA_JWKS_URI "jwks_uri"
 #define OIDC_METADATA_SIGNED_JWKS_URI "signed_jwks_uri"
 #define OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED "token_endpoint_auth_methods_supported"
@@ -1047,6 +1048,12 @@ apr_byte_t oidc_metadata_provider_parse(request_rec *r, oidc_cfg_t *cfg, json_t 
 		oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER, oidc_cfg_provider_issuer_get(provider),
 					j_provider, OIDC_METADATA_REVOCATION_ENDPOINT, &value, NULL);
 		OIDC_METADATA_PROVIDER_SET(revocation_endpoint_url, value, rv)
+	}
+
+	if (oidc_cfg_provider_pushed_authorization_request_endpoint_url_get(provider) == NULL) {
+		oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER, oidc_cfg_provider_issuer_get(provider),
+					j_provider, OIDC_METADATA_PAR_ENDPOINT, &value, NULL);
+		OIDC_METADATA_PROVIDER_SET(pushed_authorization_request_endpoint_url, value, rv)
 	}
 
 	if (oidc_cfg_provider_jwks_uri_uri_get(provider) == NULL) {

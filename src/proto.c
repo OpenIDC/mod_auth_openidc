@@ -133,6 +133,65 @@ static void oidc_proto_auth_request_params_add(request_rec *r, apr_table_t *para
 }
 
 /*
+ * send a Pushed Authorization Request tot the Provider
+ */
+static int oidc_proto_pushed_authorization_request(request_rec *r, struct oidc_provider_t *provider,
+						   apr_table_t *params) {
+	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	char *response = NULL, *basic_auth = NULL, *bearer_auth = NULL;
+	char *request_uri = NULL;
+	int expires_in = 0;
+	char *authorization_request = NULL;
+	json_t *j_result = NULL;
+	int rv = HTTP_INTERNAL_SERVER_ERROR;
+	const char *endpoint_url = oidc_cfg_provider_pushed_authorization_request_endpoint_url_get(provider);
+
+	oidc_debug(r, "enter");
+
+	if (endpoint_url == NULL) {
+		oidc_error(r, "the Provider's OAuth 2.0 Pushed Authorization Request endpoint URL is not set, PAR "
+			      "cannot be used");
+		goto out;
+	}
+
+	/* add the token endpoint authentication credentials to the pushed authorization request */
+	if (oidc_proto_token_endpoint_auth(
+		r, cfg, oidc_cfg_provider_token_endpoint_auth_get(provider), oidc_cfg_provider_client_id_get(provider),
+		oidc_cfg_provider_client_secret_get(provider), oidc_cfg_provider_client_keys_get(provider),
+		oidc_cfg_provider_token_endpoint_url_get(provider), params, NULL, &basic_auth, &bearer_auth) == FALSE)
+		goto out;
+
+	if (oidc_http_post_form(r, endpoint_url, params, basic_auth, bearer_auth,
+				oidc_cfg_provider_ssl_validate_server_get(provider), &response, NULL,
+				oidc_cfg_http_timeout_long_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
+				oidc_cfg_dir_pass_cookies_get(r), NULL, NULL, NULL) == FALSE)
+		goto out;
+
+	/* check for errors, the response itself will have been logged already */
+	if (oidc_util_decode_json_and_check_error(r, response, &j_result) == FALSE)
+		goto out;
+
+	/* get the request_uri from the parsed response */
+	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_REQUEST_URI, &request_uri, NULL);
+
+	/* get the expires_in value from the parsed response */
+	oidc_util_json_object_get_int(j_result, OIDC_PROTO_EXPIRES_IN, &expires_in, 60);
+
+	/* assemble the resulting authentication request and redirect */
+	apr_table_clear(params);
+	apr_table_setn(params, OIDC_PROTO_CLIENT_ID, oidc_cfg_provider_client_id_get(provider));
+	apr_table_setn(params, OIDC_PROTO_REQUEST_URI, request_uri);
+	authorization_request =
+	    oidc_http_query_encoded_url(r, oidc_cfg_provider_authorization_endpoint_url_get(provider), params);
+	oidc_http_hdr_out_location_set(r, authorization_request);
+	rv = HTTP_MOVED_TEMPORARILY;
+
+out:
+
+	return rv;
+}
+
+/*
  * send an OpenID Connect authorization request to the specified provider
  */
 int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *login_hint,
@@ -232,6 +291,10 @@ int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *pro
 
 		/* construct a HTML POST auto-submit page with the authorization request parameters */
 		rv = oidc_proto_html_post(r, oidc_cfg_provider_authorization_endpoint_url_get(provider), params);
+
+	} else if (oidc_cfg_provider_auth_request_method_get(provider) == OIDC_AUTH_REQUEST_METHOD_PAR) {
+
+		rv = oidc_proto_pushed_authorization_request(r, provider, params);
 
 	} else if (oidc_cfg_provider_auth_request_method_get(provider) == OIDC_AUTH_REQUEST_METHOD_GET) {
 

@@ -55,6 +55,7 @@ struct oidc_provider_t {
 	char *userinfo_endpoint_url;
 	char *revocation_endpoint_url;
 	char *registration_endpoint_url;
+	char *pushed_authorization_request_endpoint_url;
 	char *check_session_iframe;
 	char *end_session_endpoint;
 	oidc_jwks_uri_t jwks_uri;
@@ -267,6 +268,7 @@ OIDC_PROVIDER_MEMBER_FUNCS_URL(token_endpoint_url)
 OIDC_PROVIDER_MEMBER_FUNCS_STR(token_endpoint_params, NULL)
 OIDC_PROVIDER_MEMBER_FUNCS_URL(userinfo_endpoint_url)
 OIDC_PROVIDER_MEMBER_FUNCS_URL(registration_endpoint_url)
+OIDC_PROVIDER_MEMBER_FUNCS_URL(pushed_authorization_request_endpoint_url)
 OIDC_PROVIDER_MEMBER_FUNCS_URL(check_session_iframe)
 OIDC_PROVIDER_MEMBER_FUNCS_URL(end_session_endpoint)
 OIDC_PROVIDER_MEMBER_FUNCS_STR(client_contact, NULL)
@@ -321,11 +323,15 @@ OIDC_PROVIDER_MEMBER_FUNCS_PARSE_STR(userinfo_encrypted_response_enc, oidc_cfg_p
 
 #define OIDC_AUTH_REQUEST_METHOD_GET_STR "GET"
 #define OIDC_AUTH_REQUEST_METHOD_POST_STR "POST"
+#define OIDC_AUTH_REQUEST_METHOD_PAR_STR "PAR"
 
 static const char *oidc_cfg_provider_parse_auth_request_method(apr_pool_t *pool, const char *arg,
 							       oidc_auth_request_method_t *method) {
-	static const oidc_cfg_option_t options[] = {{OIDC_AUTH_REQUEST_METHOD_GET, OIDC_AUTH_REQUEST_METHOD_GET_STR},
-						    {OIDC_AUTH_REQUEST_METHOD_POST, OIDC_AUTH_REQUEST_METHOD_POST_STR}};
+	static const oidc_cfg_option_t options[] = {
+	    {OIDC_AUTH_REQUEST_METHOD_GET, OIDC_AUTH_REQUEST_METHOD_GET_STR},
+	    {OIDC_AUTH_REQUEST_METHOD_POST, OIDC_AUTH_REQUEST_METHOD_POST_STR},
+	    {OIDC_AUTH_REQUEST_METHOD_PAR, OIDC_AUTH_REQUEST_METHOD_PAR_STR},
+	};
 	return oidc_cfg_parse_option(pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg, (int *)method);
 }
 
@@ -590,6 +596,7 @@ static void oidc_cfg_provider_init(oidc_provider_t *provider) {
 	provider->token_endpoint_tls_client_key_pwd = NULL;
 	provider->registration_endpoint_url = NULL;
 	provider->registration_endpoint_json = NULL;
+	provider->pushed_authorization_request_endpoint_url = NULL;
 	provider->check_session_iframe = NULL;
 	provider->end_session_endpoint = NULL;
 	provider->jwks_uri.uri = NULL;
@@ -673,6 +680,9 @@ void oidc_cfg_provider_merge(apr_pool_t *pool, oidc_provider_t *dst, const oidc_
 	    add->registration_endpoint_url != NULL ? add->registration_endpoint_url : base->registration_endpoint_url;
 	dst->registration_endpoint_json = add->registration_endpoint_json != NULL ? add->registration_endpoint_json
 										  : base->registration_endpoint_json;
+	dst->pushed_authorization_request_endpoint_url = add->pushed_authorization_request_endpoint_url != NULL
+							     ? add->pushed_authorization_request_endpoint_url
+							     : base->pushed_authorization_request_endpoint_url;
 
 	dst->check_session_iframe =
 	    add->check_session_iframe != NULL ? add->check_session_iframe : base->check_session_iframe;

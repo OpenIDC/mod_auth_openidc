@@ -71,6 +71,7 @@ typedef struct oidc_proto_pkce_t {
 typedef enum {
 	OIDC_AUTH_REQUEST_METHOD_GET = 1,
 	OIDC_AUTH_REQUEST_METHOD_POST = 2,
+	OIDC_AUTH_REQUEST_METHOD_PAR = 3,
 } oidc_auth_request_method_t;
 
 typedef enum {
@@ -98,6 +99,7 @@ typedef struct oidc_jwks_uri_t {
 #define OIDCProviderRegistrationEndpointJson "OIDCProviderRegistrationEndpointJson"
 #define OIDCProviderUserInfoEndpoint "OIDCProviderUserInfoEndpoint"
 #define OIDCProviderRevocationEndpoint "OIDCProviderRevocationEndpoint"
+#define OIDCProviderPushedAuthorizationRequestEndpoint "OIDCProviderPushedAuthorizationRequestEndpoint"
 #define OIDCProviderCheckSessionIFrame "OIDCProviderCheckSessionIFrame"
 #define OIDCProviderEndSessionEndpoint "OIDCProviderEndSessionEndpoint"
 #define OIDCProviderBackChannelLogoutSupported "OIDCProviderBackChannelLogoutSupported"
@@ -176,6 +178,7 @@ OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_DECL(token_endpoint_params)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_DECL(userinfo_endpoint_url)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_DECL(revocation_endpoint_url)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_DECL(registration_endpoint_url)
+OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_DECL(pushed_authorization_request_endpoint_url);
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_DECL(check_session_iframe)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_DECL(end_session_endpoint)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_DECL(client_id)

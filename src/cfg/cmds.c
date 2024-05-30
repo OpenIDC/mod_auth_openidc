@@ -407,6 +407,11 @@ const command_rec oidc_cfg_cmds[] = {
 		"Define the RFC 7009 Token Revocation Endpoint URL (e.g.: https://localhost:9031/as/revoke_token.oauth2)"),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_TAKE1,
+		OIDCProviderPushedAuthorizationRequestEndpoint,
+		pushed_authorization_request_endpoint_url,
+		"Define the OAuth 2.0 Pushed Authorization Endpoint URL (e.g.: https://localhost:9031/as/par.oauth2)"),
+	OIDC_CFG_CMD_PROVIDER(
+		AP_INIT_TAKE1,
 		OIDCProviderCheckSessionIFrame,
 		check_session_iframe,
 		"Define the OpenID OP Check Session iFrame URL."),
