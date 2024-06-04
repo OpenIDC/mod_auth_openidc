@@ -202,7 +202,7 @@ char *oidc_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jose_error_t *e
 		cser = apr_pstrmemdup(pool, out, out_len);
 		cjose_get_dealloc()(out);
 
-		free(s_payload);
+		cjose_get_dealloc()(s_payload);
 
 		cser = apr_psprintf(pool, "%s.%s.", OIDC_JOSE_HDR_ALG_NONE, cser);
 	}
@@ -445,7 +445,7 @@ void oidc_jwk_list_destroy(apr_array_header_t *keys_list) {
 apr_byte_t oidc_jwk_parse_json(apr_pool_t *pool, json_t *json, oidc_jwk_t **jwk, oidc_jose_error_t *err) {
 	char *s_json = json_dumps(json, 0);
 	*jwk = oidc_jwk_parse(pool, s_json, err);
-	free(s_json);
+	cjose_get_dealloc()(s_json);
 	return (*jwk != NULL);
 }
 
@@ -502,7 +502,7 @@ apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_js
 	if (s == NULL)
 		return FALSE;
 	*s_json = apr_pstrdup(pool, s);
-	free(s);
+	cjose_get_dealloc()(s);
 	return TRUE;
 }
 
@@ -1038,7 +1038,7 @@ apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json, oidc_jwt_t *
 	jwt->header.value.json = json_deep_copy((json_t *)hdr);
 	char *str = json_dumps(jwt->header.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
 	jwt->header.value.str = apr_pstrdup(pool, str);
-	free(str);
+	cjose_get_dealloc()(str);
 
 	jwt->header.alg = apr_pstrdup(pool, cjose_header_get(hdr, CJOSE_HDR_ALG, &cjose_err));
 	jwt->header.enc = apr_pstrdup(pool, cjose_header_get(hdr, CJOSE_HDR_ENC, &cjose_err));
@@ -1125,7 +1125,7 @@ apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk, apr
 	if (compress == TRUE) {
 		if (oidc_jose_compress(pool, (char *)plaintext, _oidc_strlen(plaintext), &s_payload, &payload_len,
 				       err) == FALSE) {
-			free(plaintext);
+			cjose_get_dealloc()(plaintext);
 			return FALSE;
 		}
 	} else {
@@ -1135,7 +1135,7 @@ apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk, apr
 	}
 
 	jwt->cjose_jws = cjose_jws_sign(jwk->cjose_jwk, hdr, (const uint8_t *)s_payload, payload_len, &cjose_err);
-	free(plaintext);
+	cjose_get_dealloc()(plaintext);
 
 	if (jwt->cjose_jws == NULL) {
 		oidc_jose_error(err, "cjose_jws_sign failed: %s", oidc_cjose_e2s(pool, cjose_err));
@@ -1883,7 +1883,7 @@ static char *internal_cjose_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *oidc
 to_json_cleanup:
 
 	if (cjose_jwk_json)
-		free(cjose_jwk_json);
+		cjose_get_dealloc()(cjose_jwk_json);
 	if (json)
 		json_decref(json);
 

@@ -188,6 +188,9 @@ static int oidc_proto_pushed_authorization_request(request_rec *r, struct oidc_p
 
 out:
 
+	if (j_result)
+		json_decref(j_result);
+
 	return rv;
 }
 
@@ -2773,6 +2776,9 @@ char *oidc_proto_dpop(request_rec *r, oidc_cfg_t *cfg, const char *url, const ch
 	}
 
 end:
+
+	if (s_jwk)
+		cjose_get_dealloc()(s_jwk);
 
 	if (jwt)
 		oidc_jwt_destroy(jwt);
