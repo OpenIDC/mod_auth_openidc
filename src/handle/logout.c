@@ -93,9 +93,10 @@ static void oidc_logout_revoke_tokens(request_rec *r, oidc_cfg_t *c, oidc_sessio
 		apr_table_setn(params, OIDC_PROTO_TOKEN, token);
 
 		if (oidc_http_post_form(r, oidc_cfg_provider_revocation_endpoint_url_get(provider), params, basic_auth,
-					bearer_auth, oidc_cfg_provider_ssl_validate_server_get(provider), &response,
-					NULL, oidc_cfg_http_timeout_long_get(c), oidc_cfg_outgoing_proxy_get(c),
-					oidc_cfg_dir_pass_cookies_get(r), NULL, NULL, NULL) == FALSE) {
+					bearer_auth, NULL, oidc_cfg_provider_ssl_validate_server_get(provider),
+					&response, NULL, oidc_cfg_http_timeout_long_get(c),
+					oidc_cfg_outgoing_proxy_get(c), oidc_cfg_dir_pass_cookies_get(r), NULL, NULL,
+					NULL) == FALSE) {
 			oidc_warn(r, "revoking refresh token failed");
 		}
 		apr_table_unset(params, OIDC_PROTO_TOKEN_TYPE_HINT);
@@ -108,9 +109,10 @@ static void oidc_logout_revoke_tokens(request_rec *r, oidc_cfg_t *c, oidc_sessio
 		apr_table_setn(params, OIDC_PROTO_TOKEN, token);
 
 		if (oidc_http_post_form(r, oidc_cfg_provider_revocation_endpoint_url_get(provider), params, basic_auth,
-					bearer_auth, oidc_cfg_provider_ssl_validate_server_get(provider), &response,
-					NULL, oidc_cfg_http_timeout_long_get(c), oidc_cfg_outgoing_proxy_get(c),
-					oidc_cfg_dir_pass_cookies_get(r), NULL, NULL, NULL) == FALSE) {
+					bearer_auth, NULL, oidc_cfg_provider_ssl_validate_server_get(provider),
+					&response, NULL, oidc_cfg_http_timeout_long_get(c),
+					oidc_cfg_outgoing_proxy_get(c), oidc_cfg_dir_pass_cookies_get(r), NULL, NULL,
+					NULL) == FALSE) {
 			oidc_warn(r, "revoking access token failed");
 		}
 	}

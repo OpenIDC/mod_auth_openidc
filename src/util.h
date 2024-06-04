@@ -70,7 +70,6 @@ apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url);
 char *oidc_util_current_url(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers);
 const char *oidc_util_absolute_url(request_rec *r, oidc_cfg_t *cfg, const char *url);
 const char *oidc_util_redirect_uri(request_rec *r, oidc_cfg_t *c);
-const char *oidc_util_redirect_uri_iss(request_rec *r, oidc_cfg_t *c, oidc_provider_t *provider);
 apr_byte_t oidc_util_request_is_secure(request_rec *r, oidc_cfg_t *c);
 char *oidc_util_openssl_version(apr_pool_t *pool);
 apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url);

@@ -122,7 +122,7 @@
 #define OIDC_METADATA_REQUEST_OBJECT "request_object"
 #define OIDC_METADATA_USERINFO_TOKEN_METHOD "userinfo_token_method"
 #define OIDC_METADATA_AUTH_REQUEST_METHOD "auth_request_method"
-#define OIDC_METADATA_ISSUER_SPECIFIC_REDIRECT_URI "issuer_specific_redirect_uri"
+#define OIDC_METADATA_RESPONSE_REQUIRE_ISS "response_require_iss"
 
 /*
  * get the metadata filename for a specified issuer (cq. urlencode it)
@@ -493,8 +493,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg,
 	/* assemble the JSON registration request */
 	json_t *data = json_object();
 	json_object_set_new(data, OIDC_METADATA_CLIENT_NAME, json_string(oidc_cfg_provider_client_name_get(provider)));
-	json_object_set_new(data, OIDC_METADATA_REDIRECT_URIS,
-			    json_pack("[s]", oidc_util_redirect_uri_iss(r, cfg, provider)));
+	json_object_set_new(data, OIDC_METADATA_REDIRECT_URIS, json_pack("[s]", oidc_util_redirect_uri(r, cfg)));
 
 	json_t *response_types = json_array();
 	apr_array_header_t *flows = oidc_proto_supported_flows(r->pool);
@@ -594,7 +593,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg,
 
 	/* dynamically register the client with the specified parameters */
 	if (oidc_http_post_json(r, oidc_cfg_provider_registration_endpoint_url_get(provider), data, NULL,
-				oidc_cfg_provider_registration_token_get(provider),
+				oidc_cfg_provider_registration_token_get(provider), NULL,
 				oidc_cfg_provider_ssl_validate_server_get(provider), response, NULL,
 				oidc_cfg_http_timeout_short_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
 				oidc_cfg_dir_pass_cookies_get(r), NULL, NULL, NULL) == FALSE) {
@@ -623,7 +622,7 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r, oidc_cfg
 	const char *url = (jwks_uri->signed_uri != NULL) ? jwks_uri->signed_uri : jwks_uri->uri;
 
 	/* get the JWKs from the specified URL with the specified parameters */
-	if (oidc_http_get(r, url, NULL, NULL, NULL, ssl_validate_server, &response, NULL,
+	if (oidc_http_get(r, url, NULL, NULL, NULL, NULL, ssl_validate_server, &response, NULL,
 			  oidc_cfg_http_timeout_long_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
 			  oidc_cfg_dir_pass_cookies_get(r), NULL, NULL, NULL) == FALSE)
 		return FALSE;
@@ -733,7 +732,7 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg, cons
 	OIDC_METRICS_TIMING_START(r, cfg);
 
 	/* get provider metadata from the specified URL with the specified parameters */
-	if (oidc_http_get(r, url, NULL, NULL, NULL,
+	if (oidc_http_get(r, url, NULL, NULL, NULL, NULL,
 			  oidc_cfg_provider_ssl_validate_server_get(oidc_cfg_provider_get(cfg)), response, NULL,
 			  oidc_cfg_http_timeout_short_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
 			  oidc_cfg_dir_pass_cookies_get(r), NULL, NULL, NULL) == FALSE) {
@@ -1421,9 +1420,9 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg_t *cfg, json_t *j_c
 	}
 
 	/* get the issuer specific redirect URI option */
-	oidc_metadata_parse_boolean(r, j_conf, OIDC_METADATA_ISSUER_SPECIFIC_REDIRECT_URI, &ivalue,
-				    oidc_cfg_provider_issuer_specific_redirect_uri_get(oidc_cfg_provider_get(cfg)));
-	OIDC_METADATA_PROVIDER_SET_INT(issuer_specific_redirect_uri, ivalue, rv)
+	oidc_metadata_parse_boolean(r, j_conf, OIDC_METADATA_RESPONSE_REQUIRE_ISS, &ivalue,
+				    oidc_cfg_provider_response_require_iss_get(oidc_cfg_provider_get(cfg)));
+	OIDC_METADATA_PROVIDER_SET_INT(response_require_iss, ivalue, rv)
 
 	return TRUE;
 }

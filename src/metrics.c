@@ -145,11 +145,13 @@ const oidc_metrics_counter_info_t _oidc_metrics_counters_info[] = {
   { OM_CLASS_REDIRECT_URI, "request.remove_at_cache", "access token cache removal requests to the redirect URI", },
   { OM_CLASS_REDIRECT_URI, "request.session",         "revoke session requests to the redirect URI", },
   { OM_CLASS_REDIRECT_URI, "request.info",            "info hook requests to the redirect URI", },
+  { OM_CLASS_REDIRECT_URI, "request.dpop",            "DPoP requests to the redirect URI", },
   { OM_CLASS_REDIRECT_URI, "error.provider",          "provider authentication response errors received at the redirect URI", },
   { OM_CLASS_REDIRECT_URI, "error.invalid",           "invalid requests to the redirect URI", },
 
   { OM_CLASS_CONTENT, "request.declined",      "requests declined by the content handler" },
   { OM_CLASS_CONTENT, "request.info",          "info hook requests to the content handler" },
+  { OM_CLASS_CONTENT, "request.dpop",          "DPoP requests to the content handler" },
   { OM_CLASS_CONTENT, "request.jwks",          "JWKs requests to the content handler" },
   { OM_CLASS_CONTENT, "request.discovery",     "discovery requests to the content handler" },
   { OM_CLASS_CONTENT, "request.post-preserve", "HTTP POST preservation requests to the content handler" },

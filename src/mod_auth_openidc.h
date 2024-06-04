@@ -88,6 +88,7 @@
 #define OIDC_METHOD_FORM_POST "form_post"
 
 #define OIDC_REDIRECT_URI_REQUEST_INFO "info"
+#define OIDC_REDIRECT_URI_REQUEST_DPOP "dpop"
 #define OIDC_REDIRECT_URI_REQUEST_LOGOUT "logout"
 #define OIDC_REDIRECT_URI_REQUEST_JWKS "jwks"
 #define OIDC_REDIRECT_URI_REQUEST_SESSION "session"
@@ -112,6 +113,11 @@
 #define OIDC_CLAIM_TARGET_LINK_URI "target_link_uri"
 #define OIDC_CLAIM_SID "sid"
 #define OIDC_CLAIM_EVENTS "events"
+#define OIDC_CLAIM_TYP "typ"
+#define OIDC_CLAIM_JWK "jwk"
+#define OIDC_CLAIM_HTM "htm"
+#define OIDC_CLAIM_HTU "htu"
+#define OIDC_CLAIM_ATH "ath"
 
 #define OIDC_APP_INFO_REFRESH_TOKEN "refresh_token"
 #define OIDC_APP_INFO_ACCESS_TOKEN "access_token"

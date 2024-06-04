@@ -1420,6 +1420,21 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session
 
 		return rc;
 
+	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_DPOP)) {
+
+		if (session->remote_user == NULL)
+			return HTTP_UNAUTHORIZED;
+
+		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_DPOP);
+
+		r->user = session->remote_user;
+
+		// retain this session across the authentication and content handler phases
+		// by storing it in the request state
+		apr_pool_userdata_set(session, OIDC_USERDATA_SESSION, NULL, r->pool);
+
+		return OK;
+
 	} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO)) {
 
 		if (session->remote_user == NULL)
@@ -1430,7 +1445,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session
 		// need to establish user/claims for authorization purposes
 		rc = oidc_handle_existing_session(r, c, session, &needs_save);
 
-		// retain this session across the authentication hand content handler phases
+		// retain this session across the authentication and content handler phases
 		// by storing it in the request state
 		apr_pool_userdata_set(session, OIDC_USERDATA_SESSION, NULL, r->pool);
 

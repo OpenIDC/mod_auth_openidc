@@ -875,25 +875,6 @@ const char *oidc_util_redirect_uri(request_rec *r, oidc_cfg_t *cfg) {
 }
 
 /*
- * determine absolute redirect uri that is issuer specific
- */
-const char *oidc_util_redirect_uri_iss(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider) {
-	const char *redirect_uri = oidc_util_redirect_uri(r, cfg);
-	if (redirect_uri == NULL) {
-		oidc_error(r, "redirect URI is NULL");
-		return NULL;
-	}
-	if (oidc_cfg_provider_issuer_specific_redirect_uri_get(provider) != 0) {
-		redirect_uri =
-		    apr_psprintf(r->pool, "%s%s%s=%s", redirect_uri,
-				 strchr(redirect_uri, OIDC_CHAR_QUERY) != NULL ? OIDC_STR_AMP : OIDC_STR_QUERY,
-				 OIDC_PROTO_ISS, oidc_http_url_encode(r, oidc_cfg_provider_issuer_get(provider)));
-		oidc_debug(r, "determined issuer specific redirect uri: %s", redirect_uri);
-	}
-	return redirect_uri;
-}
-
-/*
  * see if the currently accessed path matches a path from a defined URL
  */
 apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url) {

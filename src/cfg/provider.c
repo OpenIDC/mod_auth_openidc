@@ -94,7 +94,7 @@ struct oidc_provider_t {
 	oidc_userinfo_token_method_t userinfo_token_method;
 	char *request_object;
 	oidc_auth_request_method_t auth_request_method;
-	int issuer_specific_redirect_uri;
+	int response_require_iss;
 };
 
 #define OIDC_PROVIDER_MEMBER_FUNCS_TYPE_DEF(member, type, def_val)                                                     \
@@ -297,10 +297,10 @@ OIDC_PROVIDER_MEMBER_FUNCS_FLAG(ssl_validate_server, OIDC_DEFAULT_SSL_VALIDATE_S
 #define OIDC_DEFAULT_VALIDATE_ISSUER 1
 OIDC_PROVIDER_MEMBER_FUNCS_FLAG(validate_issuer, OIDC_DEFAULT_VALIDATE_ISSUER)
 
-// define whether the issuer will be added to the redirect uri by default to mitigate the IDP mixup attack
-// only used from metadata in multi-provider setups
-#define OIDC_DEFAULT_PROVIDER_ISSUER_SPECIFIC_REDIRECT_URI 0
-OIDC_PROVIDER_MEMBER_FUNCS_FLAG(issuer_specific_redirect_uri, OIDC_DEFAULT_PROVIDER_ISSUER_SPECIFIC_REDIRECT_URI)
+// define whether the iss parameter will be required in the response to the redirect uri by default to mitigate the IDP
+// mixup attack only used from metadata in multi-provider setups
+#define OIDC_DEFAULT_PROVIDER_RESPONSE_REQUIRE_ISS 0
+OIDC_PROVIDER_MEMBER_FUNCS_FLAG(response_require_iss, OIDC_DEFAULT_PROVIDER_RESPONSE_REQUIRE_ISS)
 // only used from metadata in multi-provider setups
 OIDC_PROVIDER_MEMBER_FUNCS_STR(registration_token, NULL)
 
@@ -635,7 +635,7 @@ static void oidc_cfg_provider_init(oidc_provider_t *provider) {
 	provider->userinfo_refresh_interval = OIDC_CONFIG_POS_INT_UNSET;
 	provider->request_object = NULL;
 
-	provider->issuer_specific_redirect_uri = OIDC_CONFIG_POS_INT_UNSET;
+	provider->response_require_iss = OIDC_CONFIG_POS_INT_UNSET;
 }
 
 void oidc_cfg_provider_merge(apr_pool_t *pool, oidc_provider_t *dst, const oidc_provider_t *base,
@@ -744,9 +744,8 @@ void oidc_cfg_provider_merge(apr_pool_t *pool, oidc_provider_t *dst, const oidc_
 					     : base->userinfo_refresh_interval;
 	dst->request_object = add->request_object != NULL ? add->request_object : base->request_object;
 
-	dst->issuer_specific_redirect_uri = add->issuer_specific_redirect_uri != OIDC_CONFIG_POS_INT_UNSET
-						? add->issuer_specific_redirect_uri
-						: base->issuer_specific_redirect_uri;
+	dst->response_require_iss = add->response_require_iss != OIDC_CONFIG_POS_INT_UNSET ? add->response_require_iss
+											   : base->response_require_iss;
 }
 
 oidc_provider_t *oidc_cfg_provider_create(apr_pool_t *pool) {

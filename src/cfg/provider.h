@@ -215,7 +215,7 @@ OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_DECL(ssl_validate_server)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_DECL(validate_issuer)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_DECL(idtoken_iat_slack)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_DECL(session_max_duration)
-OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_DECL(issuer_specific_redirect_uri)
+OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_DECL(response_require_iss)
 // ints with 2 args
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_DECL(userinfo_refresh_interval, const char *)
 

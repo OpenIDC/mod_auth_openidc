@@ -79,6 +79,9 @@ int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg);
 apr_byte_t oidc_is_discovery_response(request_rec *r, oidc_cfg_t *cfg);
 int oidc_discovery_response(request_rec *r, oidc_cfg_t *c);
 
+// dpop.c
+int oidc_dpop_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session);
+
 // info.c
 int oidc_info_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, apr_byte_t needs_save);
 

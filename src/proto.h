@@ -113,6 +113,7 @@
 
 #define OIDC_PROTO_BEARER "Bearer"
 #define OIDC_PROTO_BASIC "Basic"
+#define OIDC_PROTO_DPOP "DPoP"
 
 #define OIDC_PKCE_METHOD_PLAIN "plain"
 #define OIDC_PKCE_METHOD_S256 "S256"
@@ -227,5 +228,6 @@ apr_byte_t oidc_proto_validate_nonce(request_rec *r, oidc_cfg_t *cfg, oidc_provi
 				     oidc_jwt_t *jwt);
 
 int oidc_proto_return_www_authenticate(request_rec *r, const char *error, const char *error_description);
+char *oidc_proto_dpop(request_rec *r, oidc_cfg_t *cfg, const char *url, const char *method, const char *access_token);
 
 #endif /* _MOD_AUTH_OPENIDC_PROTO_H_ */

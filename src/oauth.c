@@ -60,7 +60,7 @@ apr_byte_t oidc_oauth_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg
 						 json_t **j_metadata, char **response) {
 
 	/* get provider metadata from the specified URL with the specified parameters */
-	if (oidc_http_get(r, url, NULL, NULL, NULL, oidc_cfg_oauth_ssl_validate_server_get(cfg), response, NULL,
+	if (oidc_http_get(r, url, NULL, NULL, NULL, NULL, oidc_cfg_oauth_ssl_validate_server_get(cfg), response, NULL,
 			  oidc_cfg_http_timeout_short_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
 			  oidc_cfg_dir_pass_cookies_get(r), NULL, NULL, NULL) == FALSE)
 		return FALSE;
@@ -172,14 +172,14 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg_t *c
 	/* call the endpoint with the constructed parameter set and return the resulting response */
 	return oidc_cfg_oauth_introspection_endpoint_method_get(c) == OIDC_INTROSPECTION_METHOD_GET
 		   ? oidc_http_get(r, oidc_cfg_oauth_introspection_endpoint_url_get(c), params, basic_auth, bearer_auth,
-				   oidc_cfg_oauth_ssl_validate_server_get(c), response, NULL,
+				   NULL, oidc_cfg_oauth_ssl_validate_server_get(c), response, NULL,
 				   oidc_cfg_http_timeout_long_get(c), oidc_cfg_outgoing_proxy_get(c),
 				   oidc_cfg_dir_pass_cookies_get(r),
 				   oidc_cfg_oauth_introspection_endpoint_tls_client_cert_get(c),
 				   oidc_cfg_oauth_introspection_endpoint_tls_client_key_get(c),
 				   oidc_cfg_oauth_introspection_endpoint_tls_client_key_pwd_get(c))
 		   : oidc_http_post_form(r, oidc_cfg_oauth_introspection_endpoint_url_get(c), params, basic_auth,
-					 bearer_auth, oidc_cfg_oauth_ssl_validate_server_get(c), response, NULL,
+					 bearer_auth, NULL, oidc_cfg_oauth_ssl_validate_server_get(c), response, NULL,
 					 oidc_cfg_http_timeout_long_get(c), oidc_cfg_outgoing_proxy_get(c),
 					 oidc_cfg_dir_pass_cookies_get(r),
 					 oidc_cfg_oauth_introspection_endpoint_tls_client_cert_get(c),

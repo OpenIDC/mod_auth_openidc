@@ -203,8 +203,7 @@ int oidc_session_management(request_rec *r, oidc_cfg_t *c, oidc_session_t *sessi
 		 *       session now?
 		 */
 		return oidc_request_authenticate_user(
-		    r, c, provider,
-		    apr_psprintf(r->pool, "%s?session=iframe_rp", oidc_util_redirect_uri_iss(r, c, provider)), NULL,
+		    r, c, provider, apr_psprintf(r->pool, "%s?session=iframe_rp", oidc_util_redirect_uri(r, c)), NULL,
 		    id_token_hint, "none", oidc_cfg_dir_path_auth_request_params_get(r),
 		    oidc_cfg_dir_path_scope_get(r));
 	}

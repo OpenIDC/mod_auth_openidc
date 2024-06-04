@@ -600,12 +600,12 @@ static const char *oidc_http_user_agent(request_rec *r) {
 /*
  * execute a HTTP (GET or POST) request
  */
-static apr_byte_t oidc_http_call(request_rec *r, const char *url, const char *data, const char *content_type,
-				 const char *basic_auth, const char *bearer_token, int ssl_validate_server,
-				 char **response, long *response_code, oidc_http_timeout_t *http_timeout,
-				 const oidc_http_outgoing_proxy_t *outgoing_proxy,
-				 const apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
-				 const char *ssl_key_pwd) {
+static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char *data, const char *content_type,
+				    const char *basic_auth, const char *access_token, const char *dpop,
+				    int ssl_validate_server, char **response, long *response_code,
+				    oidc_http_timeout_t *http_timeout, const oidc_http_outgoing_proxy_t *outgoing_proxy,
+				    const apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
+				    const char *ssl_key_pwd) {
 
 	char curlError[CURL_ERROR_SIZE];
 	oidc_curl_buffer curlBuffer;
@@ -619,10 +619,10 @@ static apr_byte_t oidc_http_call(request_rec *r, const char *url, const char *da
 
 	/* do some logging about the inputs */
 	oidc_debug(r,
-		   "url=%s, data=%s, content_type=%s, basic_auth=%s, bearer_token=%s, ssl_validate_server=%d, "
+		   "url=%s, data=%s, content_type=%s, basic_auth=%s, access_token=%s, dpop=%s, ssl_validate_server=%d, "
 		   "request_timeout=%d, connect_timeout=%d, retries=%d, retry_interval=%d, outgoing_proxy=%s:%s:%d, "
 		   "pass_cookies=%pp, ssl_cert=%s, ssl_key=%s, ssl_key_pwd=%s",
-		   url, data, content_type, basic_auth ? "****" : "null", bearer_token, ssl_validate_server,
+		   url, data, content_type, basic_auth ? "****" : "null", access_token, dpop, ssl_validate_server,
 		   http_timeout->request_timeout, http_timeout->connect_timeout, http_timeout->retries,
 		   http_timeout->retry_interval, outgoing_proxy->host_port,
 		   outgoing_proxy->username_password ? "****" : "(null)", (int)outgoing_proxy->auth_type, pass_cookies,
@@ -706,9 +706,10 @@ static apr_byte_t oidc_http_call(request_rec *r, const char *url, const char *da
 			curl_easy_setopt(curl, CURLOPT_PROXYAUTH, outgoing_proxy->auth_type);
 	}
 
-	/* see if we need to add token in the Bearer Authorization header */
-	if (bearer_token != NULL) {
-		h_list = curl_slist_append(h_list, apr_psprintf(r->pool, "Authorization: Bearer %s", bearer_token));
+	/* see if we need to add token in the Bearer/DPoP Authorization header */
+	if (access_token != NULL) {
+		h_list = curl_slist_append(h_list, apr_psprintf(r->pool, "%s: %s %s", OIDC_HTTP_HDR_AUTHORIZATION,
+								dpop ? "DPoP" : "Bearer", access_token));
 	}
 
 	/* see if we need to perform HTTP basic authentication to the remote site */
@@ -742,6 +743,11 @@ static apr_byte_t oidc_http_call(request_rec *r, const char *url, const char *da
 		oidc_debug(r, "propagating traceparent header: %s", traceparent);
 		h_list =
 		    curl_slist_append(h_list, apr_psprintf(r->pool, "%s: %s", OIDC_HTTP_HDR_TRACE_PARENT, traceparent));
+	}
+
+	if (dpop != NULL) {
+		oidc_debug(r, "appending DPoP header (len=%d)", (int)strlen(dpop));
+		h_list = curl_slist_append(h_list, apr_psprintf(r->pool, "%s: %s", OIDC_HTTP_HDR_DPOP, dpop));
 	}
 
 	/* see if we need to add any custom headers */
@@ -824,42 +830,42 @@ end:
  * execute HTTP GET request
  */
 apr_byte_t oidc_http_get(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth,
-			 const char *bearer_token, int ssl_validate_server, char **response, long *response_code,
-			 oidc_http_timeout_t *http_timeout, const oidc_http_outgoing_proxy_t *outgoing_proxy,
-			 const apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
-			 const char *ssl_key_pwd) {
+			 const char *access_token, const char *dpop, int ssl_validate_server, char **response,
+			 long *response_code, oidc_http_timeout_t *http_timeout,
+			 const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,
+			 const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd) {
 	char *query_url = oidc_http_query_encoded_url(r, url, params);
-	return oidc_http_call(r, query_url, NULL, NULL, basic_auth, bearer_token, ssl_validate_server, response,
-			      response_code, http_timeout, outgoing_proxy, pass_cookies, ssl_cert, ssl_key,
-			      ssl_key_pwd);
+	return oidc_http_request(r, query_url, NULL, NULL, basic_auth, access_token, dpop, ssl_validate_server,
+				 response, response_code, http_timeout, outgoing_proxy, pass_cookies, ssl_cert, ssl_key,
+				 ssl_key_pwd);
 }
 
 /*
  * execute HTTP POST request with form-encoded data
  */
 apr_byte_t oidc_http_post_form(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth,
-			       const char *bearer_token, int ssl_validate_server, char **response, long *response_code,
-			       oidc_http_timeout_t *http_timeout, const oidc_http_outgoing_proxy_t *outgoing_proxy,
-			       const apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
-			       const char *ssl_key_pwd) {
+			       const char *access_token, const char *dpop, int ssl_validate_server, char **response,
+			       long *response_code, oidc_http_timeout_t *http_timeout,
+			       const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,
+			       const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd) {
 	char *data = oidc_http_form_encoded_data(r, params);
-	return oidc_http_call(r, url, data, OIDC_HTTP_CONTENT_TYPE_FORM_ENCODED, basic_auth, bearer_token,
-			      ssl_validate_server, response, response_code, http_timeout, outgoing_proxy, pass_cookies,
-			      ssl_cert, ssl_key, ssl_key_pwd);
+	return oidc_http_request(r, url, data, OIDC_HTTP_CONTENT_TYPE_FORM_ENCODED, basic_auth, access_token, dpop,
+				 ssl_validate_server, response, response_code, http_timeout, outgoing_proxy,
+				 pass_cookies, ssl_cert, ssl_key, ssl_key_pwd);
 }
 
 /*
  * execute HTTP POST request with JSON-encoded data
  */
 apr_byte_t oidc_http_post_json(request_rec *r, const char *url, json_t *json, const char *basic_auth,
-			       const char *bearer_token, int ssl_validate_server, char **response, long *response_code,
-			       oidc_http_timeout_t *http_timeout, const oidc_http_outgoing_proxy_t *outgoing_proxy,
-			       const apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
-			       const char *ssl_key_pwd) {
+			       const char *access_token, const char *dpop, int ssl_validate_server, char **response,
+			       long *response_code, oidc_http_timeout_t *http_timeout,
+			       const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,
+			       const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd) {
 	char *data = json != NULL ? oidc_util_encode_json_object(r, json, JSON_COMPACT) : NULL;
-	return oidc_http_call(r, url, data, OIDC_HTTP_CONTENT_TYPE_JSON, basic_auth, bearer_token, ssl_validate_server,
-			      response, response_code, http_timeout, outgoing_proxy, pass_cookies, ssl_cert, ssl_key,
-			      ssl_key_pwd);
+	return oidc_http_request(r, url, data, OIDC_HTTP_CONTENT_TYPE_JSON, basic_auth, access_token, dpop,
+				 ssl_validate_server, response, response_code, http_timeout, outgoing_proxy,
+				 pass_cookies, ssl_cert, ssl_key, ssl_key_pwd);
 }
 
 /*

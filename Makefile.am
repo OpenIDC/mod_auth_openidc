@@ -17,6 +17,7 @@ libauth_openidc_la_SOURCES = \
 	src/handle/authz.c \
 	src/handle/content.c \
 	src/handle/discovery.c \
+	src/handle/dpop.c \
 	src/handle/info.c \
 	src/handle/jwks.c \
 	src/handle/logout.c \
