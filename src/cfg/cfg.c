@@ -48,7 +48,7 @@
 #include "cfg/provider.h"
 #include "jose.h"
 #include "metrics.h"
-#include "proto.h"
+#include "proto/proto.h"
 #include "session.h"
 #include "util.h"
 

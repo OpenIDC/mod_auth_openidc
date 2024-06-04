@@ -44,7 +44,7 @@
 #include "cfg/cfg_int.h"
 #include "cfg/parse.h"
 #include "jose.h"
-#include "proto.h"
+#include "proto/proto.h"
 
 struct oidc_oauth_t {
 

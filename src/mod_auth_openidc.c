@@ -56,7 +56,7 @@
 #include "metadata.h"
 #include "metrics.h"
 #include "oauth.h"
-#include "proto.h"
+#include "proto/proto.h"
 #include "util.h"
 
 #define OPENSSL_THREAD_DEFINES

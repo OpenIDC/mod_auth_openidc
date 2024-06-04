@@ -40,33 +40,66 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#include "handle/handle.h"
-#include "metadata.h"
-#include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "util.h"
 
 /*
- * handle request object by reference request
+ * PCKE "plain" proto state
  */
-int oidc_request_uri(request_rec *r, oidc_cfg_t *c) {
-
-	char *request_ref = NULL;
-	oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_REQUEST_URI, &request_ref);
-	if (request_ref == NULL) {
-		oidc_error(r, "no \"%s\" parameter found", OIDC_REDIRECT_URI_REQUEST_REQUEST_URI);
-		return HTTP_BAD_REQUEST;
-	}
-
-	char *jwt = NULL;
-	oidc_cache_get_request_uri(r, request_ref, &jwt);
-	if (jwt == NULL) {
-		oidc_error(r, "no cached JWT found for %s reference: %s", OIDC_REDIRECT_URI_REQUEST_REQUEST_URI,
-			   request_ref);
-		return HTTP_NOT_FOUND;
-	}
-
-	oidc_cache_set_request_uri(r, request_ref, NULL, 0);
-
-	return oidc_util_http_send(r, jwt, _oidc_strlen(jwt), OIDC_HTTP_CONTENT_TYPE_JWT, OK);
+static apr_byte_t oidc_proto_pkce_state_plain(request_rec *r, char **state) {
+	return oidc_util_generate_random_string(r, state, OIDC_PROTO_CODE_VERIFIER_LENGTH);
 }
+
+/*
+ * PCKE "plain" code_challenge
+ */
+static apr_byte_t oidc_proto_pkce_challenge_plain(request_rec *r, const char *state, char **code_challenge) {
+	*code_challenge = apr_pstrdup(r->pool, state);
+	return TRUE;
+}
+
+/*
+ * PCKE "plain" code_verifier
+ */
+static apr_byte_t oidc_proto_pkce_verifier_plain(request_rec *r, const char *state, char **code_verifier) {
+	*code_verifier = apr_pstrdup(r->pool, state);
+	return TRUE;
+}
+
+/*
+ * PCKE "s256" proto state
+ */
+static apr_byte_t oidc_proto_pkce_state_s256(request_rec *r, char **state) {
+	return oidc_util_generate_random_string(r, state, OIDC_PROTO_CODE_VERIFIER_LENGTH);
+}
+
+/*
+ * PCKE "s256" code_challenge
+ */
+static apr_byte_t oidc_proto_pkce_challenge_s256(request_rec *r, const char *state, char **code_challenge) {
+	if (oidc_util_hash_string_and_base64url_encode(r, OIDC_JOSE_ALG_SHA256, state, code_challenge) == FALSE) {
+		oidc_error(r, "oidc_util_hash_string_and_base64url_encode returned an error for the code verifier");
+		return FALSE;
+	}
+	return TRUE;
+}
+
+/*
+ * PCKE "s256" code_verifier
+ */
+static apr_byte_t oidc_proto_pkce_verifier_s256(request_rec *r, const char *state, char **code_verifier) {
+	*code_verifier = apr_pstrdup(r->pool, state);
+	return TRUE;
+}
+
+/*
+ * PKCE plain
+ */
+oidc_proto_pkce_t oidc_pkce_plain = {OIDC_PKCE_METHOD_PLAIN, oidc_proto_pkce_state_plain,
+				     oidc_proto_pkce_verifier_plain, oidc_proto_pkce_challenge_plain};
+
+/*
+ * PKCE s256
+ */
+oidc_proto_pkce_t oidc_pkce_s256 = {OIDC_PKCE_METHOD_S256, oidc_proto_pkce_state_s256, oidc_proto_pkce_verifier_s256,
+				    oidc_proto_pkce_challenge_s256};

@@ -48,7 +48,7 @@
 #include "metadata.h"
 #include "metrics.h"
 #include "mod_auth_openidc.h"
-#include "proto.h"
+#include "proto/proto.h"
 #include "util.h"
 
 #include <apr_lib.h>

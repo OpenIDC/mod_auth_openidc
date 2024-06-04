@@ -44,7 +44,7 @@
 #include "util.h"
 #include "cfg/dir.h"
 #include "mod_auth_openidc.h"
-#include "proto.h"
+#include "proto/proto.h"
 
 #include "metrics.h"
 #include "pcre_subst.h"
@@ -57,6 +57,16 @@
 
 #include <http_protocol.h>
 #include <httpd.h>
+
+#ifdef USE_URANDOM
+
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#define DEV_RANDOM "/dev/urandom"
+
+#endif
 
 /*
  * generate a number of random bytes, either using libapr or urandom (no per-request logging)

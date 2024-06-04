@@ -43,7 +43,7 @@
 #include "handle/handle.h"
 #include "metrics.h"
 #include "mod_auth_openidc.h"
-#include "proto.h"
+#include "proto/proto.h"
 #include "session.h"
 #include "util.h"
 

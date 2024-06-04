@@ -50,7 +50,7 @@
 #include "cfg/provider.h"
 #include "metrics.h"
 #include "mod_auth_openidc.h"
-#include "proto.h"
+#include "proto/proto.h"
 #include "util.h"
 
 #define OIDC_METADATA_SUFFIX_PROVIDER "provider"

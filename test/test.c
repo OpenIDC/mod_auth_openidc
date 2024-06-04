@@ -44,7 +44,7 @@
 
 #include "handle/handle.h"
 #include "mod_auth_openidc.h"
-#include "proto.h"
+#include "proto/proto.h"
 
 #include "cfg/cfg_int.h"
 #include "cfg/dir.h"

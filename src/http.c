@@ -55,7 +55,7 @@
 #include "const.h"
 #include "http.h"
 #include "metrics.h"
-#include "proto.h"
+#include "proto/proto.h"
 #include "util.h"
 
 /*

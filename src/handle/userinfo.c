@@ -43,7 +43,7 @@
 #include "cfg/provider.h"
 #include "handle/handle.h"
 #include "mod_auth_openidc.h"
-#include "proto.h"
+#include "proto/proto.h"
 
 /*
  * store claims resolved from the userinfo endpoint in the session

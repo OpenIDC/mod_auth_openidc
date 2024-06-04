@@ -101,8 +101,6 @@ apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg_t *c
 						   int ttl_minimum, apr_byte_t *needs_save);
 
 // request_uri.c
-void oidc_request_uri_add_request_param(request_rec *r, struct oidc_provider_t *provider, const char *redirect_uri,
-					apr_table_t *params);
 int oidc_request_uri(request_rec *r, oidc_cfg_t *c);
 
 // request.c

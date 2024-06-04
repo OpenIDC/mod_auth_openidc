@@ -46,7 +46,7 @@
 #include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "pcre_subst.h"
-#include "proto.h"
+#include "proto/proto.h"
 #include "util.h"
 
 static apr_byte_t oidc_authz_match_json_string(request_rec *r, const char *spec, json_t *val, const char *key) {

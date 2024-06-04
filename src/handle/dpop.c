@@ -42,7 +42,7 @@
 
 #include "handle/handle.h"
 #include "mod_auth_openidc.h"
-#include "proto.h"
+#include "proto/proto.h"
 #include "util.h"
 
 #define OIDC_DPOP_PARAM_URL "url"

@@ -43,7 +43,7 @@
 #include "cfg/provider.h"
 #include "cfg/cfg_int.h"
 #include "cfg/parse.h"
-#include "proto.h"
+#include "proto/proto.h"
 
 struct oidc_provider_t {
 	char *metadata_url;

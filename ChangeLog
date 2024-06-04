@@ -1,6 +1,11 @@
+TODO:
+- store token type to pass into oidc_http_get/post calls (bearer/dpop)
+- implement DPoP off|optional|required (default: off)
+- support server provided nonce
+- certify for OIDC and FAPI2
+
 06/04/2024
 - add (client) support for RFC 9449 OAuth 2.0 Demonstrating Proof of Possession (DPoP)
-  TODO: must support server provided nonce
 - replace multi-provider .conf "issuer_specific_redirect_uri" boolean with "response_require_iss" boolean
 - tighten up the "aud" claim validation in ID tokens
 - add support for the FAPI 2.0 Security Profile https://openid.net/specs/fapi-2_0-security-profile-ID2.html

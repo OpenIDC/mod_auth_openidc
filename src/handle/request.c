@@ -43,7 +43,7 @@
 #include "handle/handle.h"
 #include "metrics.h"
 #include "mod_auth_openidc.h"
-#include "proto.h"
+#include "proto/proto.h"
 #include "util.h"
 
 static int oidc_request_check_cookie_domain(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,

@@ -44,7 +44,7 @@
 #include "handle/handle.h"
 #include "metadata.h"
 #include "mod_auth_openidc.h"
-#include "proto.h"
+#include "proto/proto.h"
 #include "util.h"
 
 /* parameter name of the callback URL in the discovery response */
@@ -375,7 +375,7 @@ int oidc_discovery_response(request_rec *r, oidc_cfg_t *c) {
 			user = apr_psprintf(r->pool, "https://%s", user);
 
 		/* got an user identifier as input, perform OP discovery with that */
-		if (oidc_proto_url_based_discovery(r, c, user, &issuer) == FALSE) {
+		if (oidc_proto_discovery_url_based(r, c, user, &issuer) == FALSE) {
 
 			/* something did not work out, show a user facing error */
 			return oidc_util_html_send_error(r, oidc_cfg_html_error_template_get(c), "Invalid Request",
@@ -395,7 +395,7 @@ int oidc_discovery_response(request_rec *r, oidc_cfg_t *c) {
 		}
 
 		/* got an account name as input, perform OP discovery with that */
-		if (oidc_proto_account_based_discovery(r, c, issuer, &issuer) == FALSE) {
+		if (oidc_proto_discovery_account_based(r, c, issuer, &issuer) == FALSE) {
 
 			/* something did not work out, show a user facing error */
 			return oidc_util_html_send_error(r, oidc_cfg_html_error_template_get(c), "Invalid Request",
