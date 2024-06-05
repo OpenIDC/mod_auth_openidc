@@ -226,8 +226,8 @@ apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg_t *c, oidc_session_
 	OIDC_METRICS_TIMING_START(r, c);
 
 	/* refresh the tokens by calling the token endpoint */
-	if (oidc_proto_refresh_request(r, c, provider, refresh_token, &s_id_token, &s_access_token, &s_token_type,
-				       &expires_in, &s_refresh_token) == FALSE) {
+	if (oidc_proto_token_refresh_request(r, c, provider, refresh_token, &s_id_token, &s_access_token, &s_token_type,
+					     &expires_in, &s_refresh_token) == FALSE) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_PROVIDER_REFRESH_ERROR);
 		oidc_error(r, "access_token could not be refreshed with refresh_token: %s", refresh_token);
 		goto end;

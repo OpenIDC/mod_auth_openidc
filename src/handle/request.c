@@ -241,8 +241,8 @@ int oidc_request_authenticate_user(request_rec *r, oidc_cfg_t *c, oidc_provider_
 
 	/* send off to the OpenID Connect Provider */
 	// TODO: maybe show intermediate/progress screen "redirecting to"
-	rc = oidc_proto_authorization_request(r, provider, login_hint, oidc_util_redirect_uri(r, c), state, proto_state,
-					      id_token_hint, code_challenge, auth_request_params, path_scope);
+	rc = oidc_proto_request_auth(r, provider, login_hint, oidc_util_redirect_uri(r, c), state, proto_state,
+				     id_token_hint, code_challenge, auth_request_params, path_scope);
 
 	OIDC_METRICS_TIMING_ADD(r, c, OM_AUTHN_REQUEST);
 

@@ -495,7 +495,7 @@ static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provide
 	json_decref(request_object_config);
 
 	oidc_debug(r, "serialized request object JWT header = \"%s\"",
-		   oidc_proto_peek_jwt_header(r, serialized_request_object, NULL, NULL, NULL));
+		   oidc_proto_jwt_header_peek(r, serialized_request_object, NULL, NULL, NULL));
 	oidc_debug(r, "serialized request object = \"%s\"", serialized_request_object);
 
 	return serialized_request_object;
@@ -587,10 +587,10 @@ static void oidc_proto_request_uri_request_param_add(request_rec *r, struct oidc
 /*
  * send an OpenID Connect authorization request to the specified provider
  */
-int oidc_proto_authorization_request(request_rec *r, struct oidc_provider_t *provider, const char *login_hint,
-				     const char *redirect_uri, const char *state, oidc_proto_state_t *proto_state,
-				     const char *id_token_hint, const char *code_challenge,
-				     const char *auth_request_params, const char *path_scope) {
+int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, const char *login_hint,
+			    const char *redirect_uri, const char *state, oidc_proto_state_t *proto_state,
+			    const char *id_token_hint, const char *code_challenge, const char *auth_request_params,
+			    const char *path_scope) {
 
 	/* log some stuff */
 	oidc_debug(r,

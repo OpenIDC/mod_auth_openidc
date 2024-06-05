@@ -1302,6 +1302,44 @@ apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg_t *c, const char 
 
 	return TRUE;
 }
+
+/*
+ * return the Javascript code used to handle an Implicit grant type
+ * i.e. that posts the data returned by the OP in the URL fragment to the OIDCRedirectURI
+ */
+static int oidc_javascript_implicit(request_rec *r, oidc_cfg_t *c) {
+
+	oidc_debug(r, "enter");
+
+	const char *java_script =
+	    "    <script type=\"text/javascript\">\n"
+	    "      function postOnLoad() {\n"
+	    "        encoded = location.hash.substring(1).split('&');\n"
+	    "        for (i = 0; i < encoded.length; i++) {\n"
+	    "          encoded[i].replace(/\\+/g, ' ');\n"
+	    "          var n = encoded[i].indexOf('=');\n"
+	    "          var input = document.createElement('input');\n"
+	    "          input.type = 'hidden';\n"
+	    "          input.name = decodeURIComponent(encoded[i].substring(0, n));\n"
+	    "          input.value = decodeURIComponent(encoded[i].substring(n+1));\n"
+	    "          document.forms[0].appendChild(input);\n"
+	    "        }\n"
+	    "        document.forms[0].action = window.location.href.substr(0, window.location.href.indexOf('#'));\n"
+	    "        document.forms[0].submit();\n"
+	    "      }\n"
+	    "    </script>\n";
+
+	const char *html_body = "    <p>Submitting...</p>\n"
+				"    <form method=\"post\" action=\"\">\n"
+				"      <p>\n"
+				"        <input type=\"hidden\" name=\"" OIDC_PROTO_RESPONSE_MODE
+				"\" value=\"" OIDC_PROTO_RESPONSE_MODE_FRAGMENT "\">\n"
+				"      </p>\n"
+				"    </form>\n";
+
+	return oidc_util_html_send(r, "Submitting...", java_script, "postOnLoad", html_body, OK);
+}
+
 /*
  * handle all requests to the redirect_uri
  */
@@ -1312,7 +1350,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session
 
 	OIDC_METRICS_TIMING_START(r, c);
 
-	if (oidc_proto_is_redirect_authorization_response(r, c)) {
+	if (oidc_proto_response_is_redirect(r, c)) {
 
 		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_AUTHN_RESPONSE_REDIRECT);
 
@@ -1341,7 +1379,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session
 
 		return rc;
 
-	} else if (oidc_proto_is_post_authorization_response(r, c)) {
+	} else if (oidc_proto_response_is_post(r, c)) {
 
 		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_AUTHN_RESPONSE_POST);
 
@@ -1461,7 +1499,7 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session
 
 		/* this is a "bare" request to the redirect URI, indicating implicit flow using the fragment
 		 * response_mode */
-		rc = oidc_proto_javascript_implicit(r, c);
+		rc = oidc_javascript_implicit(r, c);
 
 		return rc;
 	}

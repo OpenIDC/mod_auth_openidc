@@ -909,7 +909,7 @@ static char *test_proto_validate_access_token(request_rec *r) {
 
 	const char *access_token = "jHkWEdUXMU1BwAsC4vtUsZwnNvTIxEl0z9K3vx5KF0Y";
 	TST_ASSERT("oidc_proto_validate_access_token",
-		   oidc_proto_validate_access_token(r, NULL, jwt, "id_token token", access_token));
+		   oidc_proto_idtoken_validate_access_token(r, NULL, jwt, "id_token token", access_token));
 
 	oidc_jwt_destroy(jwt);
 
@@ -937,7 +937,7 @@ static char *test_proto_validate_code(request_rec *r) {
 	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(r->pool, s, &jwt, NULL, FALSE, &err), r->pool, err);
 
 	const char *code = "Qcb0Orv1zh30vL1MPRsbm-diHiMwcLyZvn1arpZv-Jxf_11jnpEX3Tgfvk";
-	TST_ASSERT("oidc_proto_validate_code", oidc_proto_validate_code(r, NULL, jwt, "code id_token", code));
+	TST_ASSERT("oidc_proto_validate_code", oidc_proto_idtoken_validate_code(r, NULL, jwt, "code id_token", code));
 
 	oidc_jwt_destroy(jwt);
 
@@ -965,8 +965,8 @@ static char *test_proto_authorization_request(request_rec *r) {
 	oidc_proto_state_set_timestamp_now(proto_state);
 
 	TST_ASSERT("oidc_proto_authorization_request (1)",
-		   oidc_proto_authorization_request(r, provider, NULL, redirect_uri, state, proto_state, NULL, NULL,
-						    NULL, NULL) == HTTP_MOVED_TEMPORARILY);
+		   oidc_proto_request_auth(r, provider, NULL, redirect_uri, state, proto_state, NULL, NULL, NULL,
+					   NULL) == HTTP_MOVED_TEMPORARILY);
 
 	TST_ASSERT_STR("oidc_proto_authorization_request (2)", apr_table_get(r->headers_out, "Location"),
 		       "https://idp.example.com/"
@@ -1041,9 +1041,9 @@ static char *test_proto_validate_nonce(request_rec *r) {
 	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(r->pool, s_jwt, &jwt, NULL, FALSE, &err), r->pool, err);
 
 	TST_ASSERT("oidc_proto_validate_nonce (1)",
-		   oidc_proto_validate_nonce(r, c, oidc_cfg_provider_get(c), nonce, jwt));
+		   oidc_proto_idtoken_validate_nonce(r, c, oidc_cfg_provider_get(c), nonce, jwt));
 	TST_ASSERT("oidc_proto_validate_nonce (2)",
-		   oidc_proto_validate_nonce(r, c, oidc_cfg_provider_get(c), nonce, jwt) == FALSE);
+		   oidc_proto_idtoken_validate_nonce(r, c, oidc_cfg_provider_get(c), nonce, jwt) == FALSE);
 
 	oidc_jwt_destroy(jwt);
 
@@ -1104,7 +1104,7 @@ static char *test_proto_validate_jwt(request_rec *r) {
 		       oidc_jwt_verify(r->pool, jwt, oidc_util_merge_symmetric_key(r->pool, NULL, jwk), &err), r->pool,
 		       err);
 
-	TST_ASSERT_ERR("oidc_proto_validate_jwt", oidc_proto_validate_jwt(r, jwt, s_issuer, TRUE, TRUE, 10), r->pool,
+	TST_ASSERT_ERR("oidc_proto_validate_jwt", oidc_proto_jwt_validate(r, jwt, s_issuer, TRUE, TRUE, 10), r->pool,
 		       err);
 
 	oidc_jwk_destroy(jwk);

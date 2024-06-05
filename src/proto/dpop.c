@@ -47,7 +47,8 @@
 /*
  * generate a DPoP proof for the specified URL/method/access_token
  */
-char *oidc_proto_dpop(request_rec *r, oidc_cfg_t *cfg, const char *url, const char *method, const char *access_token) {
+char *oidc_proto_dpop_create(request_rec *r, oidc_cfg_t *cfg, const char *url, const char *method,
+			     const char *access_token) {
 	// TODO: share with create_userinfo_jwt
 	oidc_jwt_t *jwt = NULL;
 	oidc_jwk_t *jwk = NULL;

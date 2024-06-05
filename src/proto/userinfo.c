@@ -63,7 +63,7 @@ static apr_byte_t oidc_proto_userinfo_response_validate(request_rec *r, oidc_cfg
 	if ((oidc_cfg_provider_userinfo_signed_response_alg_get(provider) != NULL) ||
 	    (oidc_cfg_provider_userinfo_encrypted_response_alg_get(provider) != NULL) ||
 	    (oidc_cfg_provider_userinfo_encrypted_response_enc_get(provider) != NULL)) {
-		oidc_debug(r, "JWT header=%s", oidc_proto_peek_jwt_header(r, *response, &alg, NULL, NULL));
+		oidc_debug(r, "JWT header=%s", oidc_proto_jwt_header_peek(r, *response, &alg, NULL, NULL));
 	}
 
 	oidc_jose_error_t err;
@@ -251,8 +251,8 @@ apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, oidc_pro
 	/* get the JSON response */
 	if (oidc_cfg_provider_userinfo_token_method_get(provider) == OIDC_USER_INFO_TOKEN_METHOD_HEADER) {
 		if (oidc_cfg_provider_response_require_iss_get(provider))
-			dpop = oidc_proto_dpop(r, cfg, oidc_cfg_provider_userinfo_endpoint_url_get(provider), "GET",
-					       access_token);
+			dpop = oidc_proto_dpop_create(r, cfg, oidc_cfg_provider_userinfo_endpoint_url_get(provider),
+						      "GET", access_token);
 		if (oidc_http_get(r, oidc_cfg_provider_userinfo_endpoint_url_get(provider), NULL, NULL, access_token,
 				  dpop, oidc_cfg_provider_ssl_validate_server_get(provider), response, response_code,
 				  oidc_cfg_http_timeout_long_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
@@ -264,8 +264,8 @@ apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, oidc_pro
 		apr_table_t *params = apr_table_make(r->pool, 4);
 		apr_table_setn(params, OIDC_PROTO_ACCESS_TOKEN, access_token);
 		if (oidc_cfg_provider_response_require_iss_get(provider))
-			dpop = oidc_proto_dpop(r, cfg, oidc_cfg_provider_userinfo_endpoint_url_get(provider), "POST",
-					       access_token);
+			dpop = oidc_proto_dpop_create(r, cfg, oidc_cfg_provider_userinfo_endpoint_url_get(provider),
+						      "POST", access_token);
 		if (oidc_http_post_form(r, oidc_cfg_provider_userinfo_endpoint_url_get(provider), params, NULL, NULL,
 					dpop, oidc_cfg_provider_ssl_validate_server_get(provider), response,
 					response_code, oidc_cfg_http_timeout_long_get(cfg),

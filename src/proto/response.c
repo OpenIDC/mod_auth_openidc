@@ -47,7 +47,7 @@
 /*
  * indicate whether the incoming HTTP POST request is an OpenID Connect Authorization Response
  */
-apr_byte_t oidc_proto_is_post_authorization_response(request_rec *r, oidc_cfg_t *cfg) {
+apr_byte_t oidc_proto_response_is_post(request_rec *r, oidc_cfg_t *cfg) {
 
 	/* prereq: this is a call to the configured redirect_uri; see if it is a POST */
 	return (r->method_number == M_POST);
@@ -56,7 +56,7 @@ apr_byte_t oidc_proto_is_post_authorization_response(request_rec *r, oidc_cfg_t 
 /*
  * indicate whether the incoming HTTP GET request is an OpenID Connect Authorization Response
  */
-apr_byte_t oidc_proto_is_redirect_authorization_response(request_rec *r, oidc_cfg_t *cfg) {
+apr_byte_t oidc_proto_response_is_redirect(request_rec *r, oidc_cfg_t *cfg) {
 
 	/* prereq: this is a call to the configured redirect_uri; see if it is a GET with id_token or code
 	 * parameters */
@@ -274,11 +274,11 @@ static apr_byte_t oidc_proto_parse_idtoken_and_validate_code(request_rec *r, oid
 	    (oidc_util_spaced_string_contains(r->pool, response_type, OIDC_PROTO_RESPONSE_TYPE_IDTOKEN) == FALSE);
 
 	const char *nonce = oidc_proto_state_get_nonce(proto_state);
-	if (oidc_proto_parse_idtoken(r, c, provider, id_token, nonce, jwt, is_code_flow) == FALSE)
+	if (oidc_proto_idtoken_parse(r, c, provider, id_token, nonce, jwt, is_code_flow) == FALSE)
 		return FALSE;
 
 	if ((must_validate_code == TRUE) &&
-	    (oidc_proto_validate_code(r, provider, *jwt, response_type, code) == FALSE)) {
+	    (oidc_proto_idtoken_validate_code(r, provider, *jwt, response_type, code) == FALSE)) {
 		oidc_jwt_destroy(*jwt);
 		*jwt = NULL;
 		return FALSE;
@@ -374,10 +374,9 @@ static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r, 
 /*
  * handle the "code id_token" response type
  */
-apr_byte_t oidc_proto_authorization_response_code_idtoken(request_rec *r, oidc_cfg_t *c,
-							  oidc_proto_state_t *proto_state, oidc_provider_t *provider,
-							  apr_table_t *params, const char *response_mode,
-							  oidc_jwt_t **jwt) {
+apr_byte_t oidc_proto_response_code_idtoken(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,
+					    oidc_provider_t *provider, apr_table_t *params, const char *response_mode,
+					    oidc_jwt_t **jwt) {
 
 	oidc_debug(r, "enter");
 
@@ -408,10 +407,9 @@ apr_byte_t oidc_proto_authorization_response_code_idtoken(request_rec *r, oidc_c
 /*
  * handle the "code token" response type
  */
-apr_byte_t oidc_proto_handle_authorization_response_code_token(request_rec *r, oidc_cfg_t *c,
-							       oidc_proto_state_t *proto_state,
-							       oidc_provider_t *provider, apr_table_t *params,
-							       const char *response_mode, oidc_jwt_t **jwt) {
+apr_byte_t oidc_proto_response_code_token(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,
+					  oidc_provider_t *provider, apr_table_t *params, const char *response_mode,
+					  oidc_jwt_t **jwt) {
 
 	oidc_debug(r, "enter");
 
@@ -440,9 +438,9 @@ apr_byte_t oidc_proto_handle_authorization_response_code_token(request_rec *r, o
 /*
  * handle the "code" response type
  */
-apr_byte_t oidc_proto_handle_authorization_response_code(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,
-							 oidc_provider_t *provider, apr_table_t *params,
-							 const char *response_mode, oidc_jwt_t **jwt) {
+apr_byte_t oidc_proto_response_code(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,
+				    oidc_provider_t *provider, apr_table_t *params, const char *response_mode,
+				    oidc_jwt_t **jwt) {
 
 	oidc_debug(r, "enter");
 
@@ -475,8 +473,8 @@ apr_byte_t oidc_proto_handle_authorization_response_code(request_rec *r, oidc_cf
 	 * in this flow it is actually optional to check the access token against the at_hash
 	 */
 	if ((apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN) != NULL) &&
-	    (oidc_proto_validate_access_token(r, provider, *jwt, response_type,
-					      apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN)) == FALSE)) {
+	    (oidc_proto_idtoken_validate_access_token(r, provider, *jwt, response_type,
+						      apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN)) == FALSE)) {
 		oidc_jwt_destroy(*jwt);
 		*jwt = NULL;
 		return FALSE;
@@ -508,10 +506,9 @@ static apr_byte_t oidc_proto_handle_implicit_flow(request_rec *r, oidc_cfg_t *c,
 /*
  * handle the "code id_token token" response type
  */
-apr_byte_t oidc_proto_authorization_response_code_idtoken_token(request_rec *r, oidc_cfg_t *c,
-								oidc_proto_state_t *proto_state,
-								oidc_provider_t *provider, apr_table_t *params,
-								const char *response_mode, oidc_jwt_t **jwt) {
+apr_byte_t oidc_proto_response_code_idtoken_token(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,
+						  oidc_provider_t *provider, apr_table_t *params,
+						  const char *response_mode, oidc_jwt_t **jwt) {
 
 	oidc_debug(r, "enter");
 
@@ -521,8 +518,8 @@ apr_byte_t oidc_proto_authorization_response_code_idtoken_token(request_rec *r, 
 	    FALSE)
 		return FALSE;
 
-	if (oidc_proto_validate_access_token(r, provider, *jwt, response_type,
-					     apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN)) == FALSE)
+	if (oidc_proto_idtoken_validate_access_token(r, provider, *jwt, response_type,
+						     apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN)) == FALSE)
 		return FALSE;
 
 	/* clear parameters that should only be set from the token endpoint */
@@ -537,10 +534,9 @@ apr_byte_t oidc_proto_authorization_response_code_idtoken_token(request_rec *r, 
 /*
  * handle the "id_token token" response type
  */
-apr_byte_t oidc_proto_handle_authorization_response_idtoken_token(request_rec *r, oidc_cfg_t *c,
-								  oidc_proto_state_t *proto_state,
-								  oidc_provider_t *provider, apr_table_t *params,
-								  const char *response_mode, oidc_jwt_t **jwt) {
+apr_byte_t oidc_proto_response_idtoken_token(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,
+					     oidc_provider_t *provider, apr_table_t *params, const char *response_mode,
+					     oidc_jwt_t **jwt) {
 
 	oidc_debug(r, "enter");
 
@@ -550,8 +546,8 @@ apr_byte_t oidc_proto_handle_authorization_response_idtoken_token(request_rec *r
 	    FALSE)
 		return FALSE;
 
-	if (oidc_proto_validate_access_token(r, provider, *jwt, response_type,
-					     apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN)) == FALSE)
+	if (oidc_proto_idtoken_validate_access_token(r, provider, *jwt, response_type,
+						     apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN)) == FALSE)
 		return FALSE;
 
 	/* clear parameters that should not be part of this flow */
@@ -563,10 +559,9 @@ apr_byte_t oidc_proto_handle_authorization_response_idtoken_token(request_rec *r
 /*
  * handle the "id_token" response type
  */
-apr_byte_t oidc_proto_handle_authorization_response_idtoken(request_rec *r, oidc_cfg_t *c,
-							    oidc_proto_state_t *proto_state, oidc_provider_t *provider,
-							    apr_table_t *params, const char *response_mode,
-							    oidc_jwt_t **jwt) {
+apr_byte_t oidc_proto_response_idtoken(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,
+				       oidc_provider_t *provider, apr_table_t *params, const char *response_mode,
+				       oidc_jwt_t **jwt) {
 
 	oidc_debug(r, "enter");
 

@@ -554,7 +554,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 						       json_t **token, char **response) {
 
 	oidc_debug(r, "enter: JWT access_token header=%s",
-		   oidc_proto_peek_jwt_header(r, access_token, NULL, NULL, NULL));
+		   oidc_proto_jwt_header_peek(r, access_token, NULL, NULL, NULL));
 
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
@@ -580,7 +580,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 	 * validate the access token JWT by validating the (optional) exp claim
 	 * don't enforce anything around iat since it doesn't make much sense for access tokens
 	 */
-	if (oidc_proto_validate_jwt(r, jwt, NULL, FALSE, FALSE, -1) == FALSE) {
+	if (oidc_proto_jwt_validate(r, jwt, NULL, FALSE, FALSE, -1) == FALSE) {
 		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}

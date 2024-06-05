@@ -347,13 +347,13 @@ static int oidc_logout_backchannel(request_rec *r, oidc_cfg_t *cfg) {
 		goto out;
 	}
 
-	if (oidc_proto_validate_jwt(
+	if (oidc_proto_jwt_validate(
 		r, jwt, oidc_cfg_provider_validate_issuer_get(provider) ? oidc_cfg_provider_issuer_get(provider) : NULL,
 		FALSE, FALSE, oidc_cfg_provider_idtoken_iat_slack_get(provider)) == FALSE)
 		goto out;
 
 	/* verify the "aud" and "azp" values */
-	if (oidc_proto_validate_aud_and_azp(r, cfg, provider, &jwt->payload) == FALSE)
+	if (oidc_proto_idtoken_validate_aud_and_azp(r, cfg, provider, &jwt->payload) == FALSE)
 		goto out;
 
 	json_t *events = json_object_get(jwt->payload.value.json, OIDC_CLAIM_EVENTS);

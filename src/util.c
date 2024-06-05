@@ -397,7 +397,7 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *
 		compact_encoded_jwt =
 		    apr_pstrcat(r->pool, oidc_util_jwt_hdr_dir_a256gcm(r, NULL), compact_encoded_jwt, NULL);
 
-	oidc_proto_peek_jwt_header(r, compact_encoded_jwt, &alg, &enc, &kid);
+	oidc_proto_jwt_header_peek(r, compact_encoded_jwt, &alg, &enc, &kid);
 	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_DIR) != 0) || (_oidc_strcmp(enc, CJOSE_HDR_ENC_A256GCM) != 0)) {
 		oidc_error(r, "corrupted JWE header, alg=\"%s\" enc=\"%s\"", alg, enc);
 		goto end;

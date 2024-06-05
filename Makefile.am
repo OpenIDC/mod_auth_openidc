@@ -31,12 +31,15 @@ libauth_openidc_la_SOURCES = \
 	src/proto/auth.c \
 	src/proto/discovery.c \
 	src/proto/dpop.c \
+	src/proto/id_token.c \
 	src/proto/jwks.c \
+	src/proto/jwt.c \
 	src/proto/pkce.c \
 	src/proto/proto.c \
 	src/proto/request.c \
 	src/proto/response.c \
 	src/proto/state.c \
+	src/proto/token.c \
 	src/proto/userinfo.c \
 	src/metrics.c \
 	src/oauth.c \
