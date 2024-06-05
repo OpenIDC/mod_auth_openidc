@@ -1,8 +1,5 @@
-TODO:
-- store token type to pass into oidc_http_get/post calls (bearer/dpop)
-- implement DPoP off|optional|required (default: off)
-- support server provided nonce
-- certify for OIDC and FAPI2
+06/05/2024
+- add "nbf" claim in the Request Object as per https://openid.net/specs/openid-financial-api-part-2-1_0-final.html#rfc.section.5.2.2
 
 06/04/2024
 - add (client) support for RFC 9449 OAuth 2.0 Demonstrating Proof of Possession (DPoP)

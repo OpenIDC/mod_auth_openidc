@@ -1040,9 +1040,9 @@ static char *test_proto_validate_nonce(request_rec *r) {
 	oidc_jose_error_t err;
 	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(r->pool, s_jwt, &jwt, NULL, FALSE, &err), r->pool, err);
 
-	TST_ASSERT("oidc_proto_validate_nonce (1)",
+	TST_ASSERT("oidc_proto_idtoken_validate_nonce (1)",
 		   oidc_proto_idtoken_validate_nonce(r, c, oidc_cfg_provider_get(c), nonce, jwt));
-	TST_ASSERT("oidc_proto_validate_nonce (2)",
+	TST_ASSERT("oidc_proto_idtoken_validate_nonce (2)",
 		   oidc_proto_idtoken_validate_nonce(r, c, oidc_cfg_provider_get(c), nonce, jwt) == FALSE);
 
 	oidc_jwt_destroy(jwt);

@@ -106,6 +106,7 @@
 #define OIDC_CLAIM_JTI "jti"
 #define OIDC_CLAIM_EXP "exp"
 #define OIDC_CLAIM_IAT "iat"
+#define OIDC_CLAIM_NBF "nbf"
 #define OIDC_CLAIM_NONCE "nonce"
 #define OIDC_CLAIM_AT_HASH "at_hash"
 #define OIDC_CLAIM_C_HASH "c_hash"

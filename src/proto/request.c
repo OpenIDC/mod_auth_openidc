@@ -343,6 +343,8 @@ static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provide
 			    json_string(oidc_cfg_provider_issuer_get(provider)));
 	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_IAT,
 			    json_integer(apr_time_sec(apr_time_now())));
+	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_NBF,
+			    json_integer(apr_time_sec(apr_time_now())));
 	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_EXP,
 			    json_integer(apr_time_sec(apr_time_now()) + ttl));
 
