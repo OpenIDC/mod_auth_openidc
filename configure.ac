@@ -1,4 +1,4 @@
-AC_INIT([mod_auth_openidc],[3.3.0],[hans.zandbelt@openidc.com])
+AC_INIT([mod_auth_openidc],[3.4.0],[hans.zandbelt@openidc.com])
 
 AM_INIT_AUTOMAKE([foreign no-define subdir-objects])
 AC_CONFIG_MACRO_DIRS([m4])
@@ -27,11 +27,11 @@ AC_SUBST(APR_LIBS)
 AC_SUBST(APACHE_CFLAGS)
 AC_ARG_VAR(APXS_OPTS, [additional command line options to pass to apxs])
 
-PKG_CHECK_MODULES(OAUTH2, [liboauth2 >= 1.4.5.2])
+PKG_CHECK_MODULES(OAUTH2, [liboauth2 >= 1.6.2])
 AC_SUBST(OAUTH2_CFLAGS)
 AC_SUBST(OAUTH2_LIBS)
 
-PKG_CHECK_MODULES(OAUTH2_APACHE, [liboauth2_apache >= 1.4.5.2])
+PKG_CHECK_MODULES(OAUTH2_APACHE, [liboauth2_apache >= 1.6.2])
 AC_SUBST(OAUTH2_APACHE_CFLAGS)
 AC_SUBST(OAUTH2_APACHE_LIBS)
 

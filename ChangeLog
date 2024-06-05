@@ -1,3 +1,7 @@
+06/05/2024
+- depend on liboauth2 >= 1.6.2
+- release 3.4.0
+
 12/06/2022
 - change Makefile install procedure
 - depend on liboauth 1.4.5.2
