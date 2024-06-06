@@ -449,6 +449,8 @@ apr_byte_t oidc_session_set(request_rec *r, oidc_session_t *z, const char *key, 
 #define OIDC_SESSION_KEY_IDTOKEN "idt"
 /* key for storing the access_token in the session context */
 #define OIDC_SESSION_KEY_ACCESSTOKEN "at"
+/* key for storing the access_token type in the session context */
+#define OIDC_SESSION_KEY_ACCESSTOKEN_TYPE "att"
 /* key for storing the access_token expiry in the session context */
 #define OIDC_SESSION_KEY_ACCESSTOKEN_EXPIRES "ate"
 /* key for storing the refresh_token in the session context */
@@ -624,6 +626,17 @@ void oidc_session_set_access_token(request_rec *r, oidc_session_t *z, const char
 
 const char *oidc_session_get_access_token(request_rec *r, oidc_session_t *z) {
 	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_ACCESSTOKEN);
+}
+
+/*
+ * access token type
+ */
+void oidc_session_set_access_token_type(request_rec *r, oidc_session_t *z, const char *token_type) {
+	oidc_session_set(r, z, OIDC_SESSION_KEY_ACCESSTOKEN_TYPE, token_type);
+}
+
+const char *oidc_session_get_access_token_type(request_rec *r, oidc_session_t *z) {
+	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_ACCESSTOKEN_TYPE);
 }
 
 /*

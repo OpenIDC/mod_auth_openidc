@@ -797,6 +797,14 @@ apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg_t *cfg, oidc_sessio
 				       encoding);
 	}
 
+	/* set the access_token type in the app headers/variables */
+	const char *access_token_type = oidc_session_get_access_token_type(r, session);
+	if ((oidc_cfg_dir_pass_access_token_get(r) != 0) && access_token_type != NULL) {
+		/* pass it to the app in a header or environment variable */
+		oidc_util_set_app_info(r, OIDC_APP_INFO_ACCESS_TOKEN_TYPE, access_token, OIDC_DEFAULT_HEADER_PREFIX,
+				       pass_in, encoding);
+	}
+
 	/* set the expiry timestamp in the app headers/variables */
 	const char *access_token_expires = oidc_session_get_access_token_expires2str(r, session);
 	if ((oidc_cfg_dir_pass_access_token_get(r) != 0) && access_token_expires != NULL) {

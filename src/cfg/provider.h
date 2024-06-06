@@ -74,10 +74,17 @@ typedef enum {
 	OIDC_AUTH_REQUEST_METHOD_PAR = 3,
 } oidc_auth_request_method_t;
 
+/* methods to send an access token in a userinfo request */
 typedef enum {
 	OIDC_USER_INFO_TOKEN_METHOD_HEADER = 1,
 	OIDC_USER_INFO_TOKEN_METHOD_POST = 2,
 } oidc_userinfo_token_method_t;
+
+typedef enum {
+	OIDC_DPOP_MODE_OFF = 1,
+	OIDC_DPOP_MODE_OPTIONAL = 2,
+	OIDC_DPOP_MODE_REQUIRED = 3,
+} oidc_dpop_mode_t;
 
 typedef struct oidc_jwks_uri_t {
 	const char *uri;
@@ -109,6 +116,7 @@ typedef struct oidc_jwks_uri_t {
 #define OIDCResponseType "OIDCResponseType"
 #define OIDCProviderAuthRequestMethod "OIDCProviderAuthRequestMethod"
 #define OIDCPKCEMethod "OIDCPKCEMethod"
+#define OIDCDPoPMode "OIDCDPoPMode"
 #define OIDCResponseMode "OIDCResponseMode"
 #define OIDCClientJwksUri "OIDCClientJwksUri"
 #define OIDCIDTokenSignedResponseAlg "OIDCIDTokenSignedResponseAlg"
@@ -222,6 +230,7 @@ OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_DECL(userinfo_refresh_interval, const char *)
 // for metadata.c
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_INT_DECL(userinfo_token_method, oidc_userinfo_token_method_t)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_INT_DECL(auth_request_method, oidc_auth_request_method_t)
+OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_INT_DECL(dpop_mode, oidc_dpop_mode_t)
 
 // types
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_TYPE_DECL(pkce, const oidc_proto_pkce_t *)

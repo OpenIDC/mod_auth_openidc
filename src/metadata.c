@@ -110,6 +110,7 @@
 #define OIDC_METADATA_TOKEN_ENDPOINT_PARAMS "token_endpoint_params"
 #define OIDC_METADATA_RESPONSE_MODE "response_mode"
 #define OIDC_METADATA_PKCE_METHOD "pkce_method"
+#define OIDC_METADATA_DPOP_MODE "dpop_mode"
 #define OIDC_METADATA_CLIENT_CONTACT "client_contact"
 #define OIDC_METADATA_TOKEN_ENDPOINT_AUTH "token_endpoint_auth"
 #define OIDC_METADATA_REGISTRATION_TOKEN "registration_token"
@@ -1338,6 +1339,17 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg_t *cfg, json_t *j_c
 					     : OIDC_PKCE_METHOD_NONE);
 	OIDC_METADATA_PROVIDER_SET(pkce, value, rv)
 
+	/* see if we've got a custom DPoP mode */
+	oidc_util_json_object_get_string(r->pool, j_conf, OIDC_METADATA_DPOP_MODE, &value, NULL);
+	if (value) {
+		rv = oidc_cfg_provider_dpop_mode_set(r->pool, provider, value);
+		if (rv != NULL)
+			oidc_error(r, "oidc_cfg_provider_dpop_mode_set: %s", rv);
+	} else {
+		oidc_cfg_provider_dpop_mode_int_set(provider,
+						    oidc_cfg_provider_dpop_mode_get(oidc_cfg_provider_get(cfg)));
+	}
+
 	/* get the client name */
 	oidc_util_json_object_get_string(r->pool, j_conf, OIDC_METADATA_CLIENT_NAME, &value,
 					 oidc_cfg_provider_client_name_get(oidc_cfg_provider_get(cfg)));
@@ -1402,7 +1414,7 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg_t *cfg, json_t *j_c
 	if (value) {
 		rv = oidc_cfg_provider_userinfo_token_method_set(r->pool, provider, value);
 		if (rv != NULL)
-			oidc_error(r, "oidc_cfg_provider_userinfo_token_method_get: %s", rv);
+			oidc_error(r, "oidc_cfg_provider_userinfo_token_method_set: %s", rv);
 	} else {
 		oidc_cfg_provider_userinfo_token_method_int_set(
 		    provider, oidc_cfg_provider_userinfo_token_method_get(oidc_cfg_provider_get(cfg)));

@@ -1,3 +1,7 @@
+06/06/2024
+- add OIDCDPoPMode [off|optional|required] primitive
+- store the token_type in the session
+
 06/05/2024
 - add "nbf" claim in the Request Object as per https://openid.net/specs/openid-financial-api-part-2-1_0-final.html#rfc.section.5.2.2
 

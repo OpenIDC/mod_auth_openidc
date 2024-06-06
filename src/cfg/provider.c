@@ -82,6 +82,7 @@ struct oidc_provider_t {
 	char *logout_request_params;
 	int session_max_duration;
 	oidc_proto_pkce_t *pkce;
+	oidc_dpop_mode_t dpop_mode;
 	int userinfo_refresh_interval;
 	apr_array_header_t *client_keys;
 	char *client_jwks_uri;
@@ -260,6 +261,26 @@ const char *oidc_cfg_provider_pkce_set(apr_pool_t *pool, oidc_provider_t *provid
 }
 
 OIDC_PROVIDER_MEMBER_FUNCS_TYPE_DEF(pkce, const oidc_proto_pkce_t *, OIDC_DEFAULT_PROVIDER_PKCE)
+
+/*
+ * DPoP
+ */
+#define OIDC_DPOP_MODE_OFF_STR "off"
+#define OIDC_DPOP_MODE_OPTIONAL_STR "optional"
+#define OIDC_DPOP_MODE_REQUIRED_STR "required"
+
+static const char *oidc_cfg_provider_parse_dop_method(apr_pool_t *pool, const char *arg, oidc_dpop_mode_t *mode) {
+	static const oidc_cfg_option_t options[] = {
+	    {OIDC_DPOP_MODE_OFF, OIDC_DPOP_MODE_OFF_STR},
+	    {OIDC_DPOP_MODE_OPTIONAL, OIDC_DPOP_MODE_OPTIONAL_STR},
+	    {OIDC_DPOP_MODE_REQUIRED, OIDC_DPOP_MODE_REQUIRED_STR},
+	};
+	return oidc_cfg_parse_option(pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg, (int *)mode);
+}
+
+#define OIDC_DEFAULT_DPOP_MODE OIDC_DPOP_MODE_OFF
+OIDC_PROVIDER_MEMBER_FUNCS_STR_INT(dpop_mode, oidc_cfg_provider_parse_dop_method, oidc_dpop_mode_t,
+				   OIDC_DEFAULT_DPOP_MODE)
 
 OIDC_PROVIDER_MEMBER_FUNCS_STR(issuer, NULL)
 OIDC_PROVIDER_MEMBER_FUNCS_URL(authorization_endpoint_url)
@@ -619,6 +640,7 @@ static void oidc_cfg_provider_init(oidc_provider_t *provider) {
 	provider->auth_request_params = NULL;
 	provider->logout_request_params = NULL;
 	provider->pkce = NULL;
+	provider->dpop_mode = OIDC_CONFIG_POS_INT_UNSET;
 
 	provider->client_jwks_uri = NULL;
 	provider->client_keys = NULL;
@@ -711,6 +733,7 @@ void oidc_cfg_provider_merge(apr_pool_t *pool, oidc_provider_t *dst, const oidc_
 	dst->logout_request_params =
 	    add->logout_request_params != NULL ? add->logout_request_params : base->logout_request_params;
 	dst->pkce = add->pkce != NULL ? add->pkce : base->pkce;
+	dst->dpop_mode = add->dpop_mode != OIDC_CONFIG_POS_INT_UNSET ? add->dpop_mode : base->dpop_mode;
 
 	dst->client_jwks_uri = add->client_jwks_uri != NULL ? add->client_jwks_uri : base->client_jwks_uri;
 	dst->client_keys = add->client_keys != NULL ? add->client_keys : base->client_keys;

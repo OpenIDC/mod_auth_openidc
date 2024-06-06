@@ -194,7 +194,7 @@ end:
  * execute refresh token grant to refresh the existing access token
  */
 apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, oidc_provider_t *provider,
-				    char **new_access_token, char **new_id_token) {
+				    char **new_access_token, char **new_access_token_type, char **new_id_token) {
 
 	apr_byte_t rc = FALSE;
 	char *s_id_token = NULL;
@@ -243,6 +243,7 @@ process:
 
 	/* store the new access_token in the session and discard the old one */
 	oidc_session_set_access_token(r, session, s_access_token);
+	oidc_session_set_access_token_type(r, session, s_token_type);
 	oidc_session_set_access_token_expires(r, session, expires_in);
 
 	/* reset the access token refresh timestamp */
@@ -251,6 +252,8 @@ process:
 	/* see if we need to return it as a parameter */
 	if (new_access_token != NULL)
 		*new_access_token = s_access_token;
+	if (new_access_token_type != NULL)
+		*new_access_token_type = s_token_type;
 
 	/* if we have a new refresh token (rolling refresh), store it in the session and overwrite the old one */
 	if (s_refresh_token != NULL)
@@ -353,7 +356,7 @@ int oidc_refresh_token_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *se
 	}
 
 	/* execute the actual refresh grant */
-	if (oidc_refresh_token_grant(r, c, session, provider, NULL, NULL) == FALSE) {
+	if (oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, NULL) == FALSE) {
 		oidc_error(r, "access_token could not be refreshed");
 		error_code = "refresh_failed";
 		goto end;
@@ -421,7 +424,7 @@ apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg_t *c
 	if (oidc_get_provider_from_session(r, cfg, session, &provider) == FALSE)
 		return FALSE;
 
-	if (oidc_refresh_token_grant(r, cfg, session, provider, NULL, NULL) == FALSE) {
+	if (oidc_refresh_token_grant(r, cfg, session, provider, NULL, NULL, NULL) == FALSE) {
 		oidc_warn(r, "access_token could not be refreshed");
 		*needs_save = FALSE;
 		return FALSE;

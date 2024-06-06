@@ -239,18 +239,19 @@ static apr_byte_t oidc_proto_userinfo_request_composite_claims(request_rec *r, o
  * get claims from the OP UserInfo endpoint using the provided access_token
  */
 apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
-				       const char *id_token_sub, const char *access_token, char **response,
-				       char **userinfo_jwt, long *response_code) {
+				       const char *id_token_sub, const char *access_token,
+				       const char *access_token_type, char **response, char **userinfo_jwt,
+				       long *response_code) {
 	char *dpop = NULL;
 
-	oidc_debug(r, "enter, endpoint=%s, access_token=%s", oidc_cfg_provider_userinfo_endpoint_url_get(provider),
-		   access_token);
+	oidc_debug(r, "enter, endpoint=%s, access_token=%s, token_type=%s",
+		   oidc_cfg_provider_userinfo_endpoint_url_get(provider), access_token, access_token_type);
 
 	OIDC_METRICS_TIMING_START(r, cfg);
 
 	/* get the JSON response */
 	if (oidc_cfg_provider_userinfo_token_method_get(provider) == OIDC_USER_INFO_TOKEN_METHOD_HEADER) {
-		if (oidc_cfg_provider_response_require_iss_get(provider))
+		if (_oidc_strnatcasecmp(access_token_type, OIDC_PROTO_DPOP) == 0)
 			dpop = oidc_proto_dpop_create(r, cfg, oidc_cfg_provider_userinfo_endpoint_url_get(provider),
 						      "GET", access_token);
 		if (oidc_http_get(r, oidc_cfg_provider_userinfo_endpoint_url_get(provider), NULL, NULL, access_token,
@@ -263,7 +264,7 @@ apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, oidc_pro
 	} else if (oidc_cfg_provider_userinfo_token_method_get(provider) == OIDC_USER_INFO_TOKEN_METHOD_POST) {
 		apr_table_t *params = apr_table_make(r->pool, 4);
 		apr_table_setn(params, OIDC_PROTO_ACCESS_TOKEN, access_token);
-		if (oidc_cfg_provider_response_require_iss_get(provider))
+		if (_oidc_strnatcasecmp(access_token_type, OIDC_PROTO_DPOP) == 0)
 			dpop = oidc_proto_dpop_create(r, cfg, oidc_cfg_provider_userinfo_endpoint_url_get(provider),
 						      "POST", access_token);
 		if (oidc_http_post_form(r, oidc_cfg_provider_userinfo_endpoint_url_get(provider), params, NULL, NULL,

@@ -95,7 +95,7 @@ int oidc_logout_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, 
 
 // refresh.c
 apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, oidc_provider_t *provider,
-				    char **new_access_token, char **new_id_token);
+				    char **new_access_token, char **new_access_token_type, char **new_id_token);
 int oidc_refresh_token_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session);
 apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session,
 						   int ttl_minimum, apr_byte_t *needs_save);
@@ -117,8 +117,9 @@ int oidc_response_authorization_post(request_rec *r, oidc_cfg_t *c, oidc_session
 apr_byte_t oidc_response_save_in_session(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
 					 oidc_provider_t *provider, const char *remoteUser, const char *id_token,
 					 oidc_jwt_t *id_token_jwt, const char *claims, const char *access_token,
-					 const int expires_in, const char *refresh_token, const char *session_state,
-					 const char *state, const char *original_url, const char *userinfo_jwt);
+					 const char *access_token_type, const int expires_in, const char *refresh_token,
+					 const char *session_state, const char *state, const char *original_url,
+					 const char *userinfo_jwt);
 
 // revoke.c
 int oidc_revoke_session(request_rec *r, oidc_cfg_t *c);
@@ -131,8 +132,8 @@ int oidc_session_management(request_rec *r, oidc_cfg_t *c, oidc_session_t *sessi
 void oidc_userinfo_store_claims(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, oidc_provider_t *provider,
 				const char *claims, const char *userinfo_jwt);
 const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg_t *c, oidc_provider_t *provider,
-					  const char *access_token, oidc_session_t *session, char *id_token_sub,
-					  char **userinfo_jwt);
+					  const char *access_token, const char *access_token_type,
+					  oidc_session_t *session, char *id_token_sub, char **userinfo_jwt);
 apr_byte_t oidc_userinfo_refresh_claims(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session,
 					apr_byte_t *needs_save);
 

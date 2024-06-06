@@ -122,6 +122,7 @@
 
 #define OIDC_APP_INFO_REFRESH_TOKEN "refresh_token"
 #define OIDC_APP_INFO_ACCESS_TOKEN "access_token"
+#define OIDC_APP_INFO_ACCESS_TOKEN_TYPE "access_token_type"
 #define OIDC_APP_INFO_ACCESS_TOKEN_EXP "access_token_expires"
 #define OIDC_APP_INFO_ID_TOKEN "id_token"
 #define OIDC_APP_INFO_ID_TOKEN_PAYLOAD "id_token_payload"

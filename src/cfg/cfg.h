@@ -117,6 +117,7 @@ typedef enum {
 
 #define OIDC_HOOK_INFO_TIMESTAMP "iat"
 #define OIDC_HOOK_INFO_ACCES_TOKEN "access_token"
+#define OIDC_HOOK_INFO_ACCES_TOKEN_TYPE "access_token_type"
 #define OIDC_HOOK_INFO_ACCES_TOKEN_EXP "access_token_expires"
 #define OIDC_HOOK_INFO_ID_TOKEN_HINT "id_token_hint"
 #define OIDC_HOOK_INFO_ID_TOKEN "id_token"

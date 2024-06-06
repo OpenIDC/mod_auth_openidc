@@ -81,6 +81,8 @@ void oidc_session_set_idtoken(request_rec *r, oidc_session_t *z, const char *s_i
 const char *oidc_session_get_idtoken(request_rec *r, oidc_session_t *z);
 void oidc_session_set_access_token(request_rec *r, oidc_session_t *z, const char *access_token);
 const char *oidc_session_get_access_token(request_rec *r, oidc_session_t *z);
+void oidc_session_set_access_token_type(request_rec *r, oidc_session_t *z, const char *token_type);
+const char *oidc_session_get_access_token_type(request_rec *r, oidc_session_t *z);
 void oidc_session_set_access_token_expires(request_rec *r, oidc_session_t *z, const int expires_in);
 apr_time_t oidc_session_get_access_token_expires(request_rec *r, oidc_session_t *z);
 const char *oidc_session_get_access_token_expires2str(request_rec *r, oidc_session_t *z);

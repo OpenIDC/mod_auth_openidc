@@ -85,11 +85,12 @@ void oidc_userinfo_store_claims(request_rec *r, oidc_cfg_t *c, oidc_session_t *s
  * retrieve claims from the userinfo endpoint and return the stringified response
  */
 const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg_t *c, oidc_provider_t *provider,
-					  const char *access_token, oidc_session_t *session, char *id_token_sub,
-					  char **userinfo_jwt) {
+					  const char *access_token, const char *access_token_type,
+					  oidc_session_t *session, char *id_token_sub, char **userinfo_jwt) {
 
 	char *result = NULL;
 	char *refreshed_access_token = NULL;
+	char *refreshed_access_token_type = NULL;
 	json_t *id_token_claims = NULL;
 	long response_code = 0;
 
@@ -122,8 +123,8 @@ const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg_t *c, oidc_pr
 	// routines)
 
 	/* try to get claims from the userinfo endpoint using the provided access token */
-	if (oidc_proto_userinfo_request(r, c, provider, id_token_sub, access_token, &result, userinfo_jwt,
-					&response_code) == TRUE)
+	if (oidc_proto_userinfo_request(r, c, provider, id_token_sub, access_token, access_token_type, &result,
+					userinfo_jwt, &response_code) == TRUE)
 		goto end;
 
 	/* see if this is the initial call to the user info endpoint upon receiving the authorization response */
@@ -144,7 +145,8 @@ const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg_t *c, oidc_pr
 
 	/* first call to user info endpoint failed, but this is for an existing session and the access token may have
 	 * just expired, so refresh it */
-	if (oidc_refresh_token_grant(r, c, session, provider, &refreshed_access_token, NULL) == FALSE) {
+	if (oidc_refresh_token_grant(r, c, session, provider, &refreshed_access_token, &refreshed_access_token_type,
+				     NULL) == FALSE) {
 		oidc_error(r, "refreshing access token failed, claims will not be retrieved/refreshed from the "
 			      "userinfo endpoint");
 		result = NULL;
@@ -152,8 +154,8 @@ const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg_t *c, oidc_pr
 	}
 
 	/* try again with the new access token */
-	if (oidc_proto_userinfo_request(r, c, provider, id_token_sub, refreshed_access_token, &result, userinfo_jwt,
-					NULL) == FALSE) {
+	if (oidc_proto_userinfo_request(r, c, provider, id_token_sub, refreshed_access_token,
+					refreshed_access_token_type, &result, userinfo_jwt, NULL) == FALSE) {
 
 		oidc_error(r, "resolving user info claims with the refreshed access token failed, nothing will be "
 			      "stored in the session");
@@ -181,6 +183,7 @@ apr_byte_t oidc_userinfo_refresh_claims(request_rec *r, oidc_cfg_t *cfg, oidc_se
 	oidc_provider_t *provider = NULL;
 	const char *claims = NULL;
 	const char *access_token = NULL;
+	const char *access_token_type = NULL;
 	char *userinfo_jwt = NULL;
 
 	/* see int we can do anything here, i.e. a refresh interval is configured */
@@ -212,10 +215,11 @@ apr_byte_t oidc_userinfo_refresh_claims(request_rec *r, oidc_cfg_t *cfg, oidc_se
 
 				/* get the current access token */
 				access_token = oidc_session_get_access_token(r, session);
+				access_token_type = oidc_session_get_access_token_type(r, session);
 
 				/* retrieve the current claims */
-				claims = oidc_userinfo_retrieve_claims(r, cfg, provider, access_token, session, NULL,
-								       &userinfo_jwt);
+				claims = oidc_userinfo_retrieve_claims(r, cfg, provider, access_token,
+								       access_token_type, session, NULL, &userinfo_jwt);
 
 				/* store claims resolved from userinfo endpoint */
 				oidc_userinfo_store_claims(r, cfg, session, provider, claims, userinfo_jwt);

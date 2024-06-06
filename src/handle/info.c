@@ -111,7 +111,7 @@ int oidc_info_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, ap
 					return HTTP_INTERNAL_SERVER_ERROR;
 
 				/* execute the actual refresh grant */
-				if (oidc_refresh_token_grant(r, c, session, provider, NULL, NULL) == FALSE) {
+				if (oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, NULL) == FALSE) {
 					oidc_warn(r, "access_token could not be refreshed");
 					return HTTP_INTERNAL_SERVER_ERROR;
 				}
@@ -145,6 +145,9 @@ int oidc_info_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, ap
 		const char *access_token = oidc_session_get_access_token(r, session);
 		if (access_token != NULL)
 			json_object_set_new(json, OIDC_HOOK_INFO_ACCES_TOKEN, json_string(access_token));
+		const char *access_token_type = oidc_session_get_access_token_type(r, session);
+		if (access_token_type != NULL)
+			json_object_set_new(json, OIDC_HOOK_INFO_ACCES_TOKEN_TYPE, json_string(access_token_type));
 	}
 
 	/* include the access token expiry timestamp in the session info */

@@ -225,8 +225,9 @@ char *oidc_response_make_sid_iss_unique(request_rec *r, const char *sid, const c
 apr_byte_t oidc_response_save_in_session(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
 					 oidc_provider_t *provider, const char *remoteUser, const char *id_token,
 					 oidc_jwt_t *id_token_jwt, const char *claims, const char *access_token,
-					 const int expires_in, const char *refresh_token, const char *session_state,
-					 const char *state, const char *original_url, const char *userinfo_jwt) {
+					 const char *access_token_type, const int expires_in, const char *refresh_token,
+					 const char *session_state, const char *state, const char *original_url,
+					 const char *userinfo_jwt) {
 
 	/* store the user in the session */
 	session->remote_user = apr_pstrdup(r->pool, remoteUser);
@@ -278,6 +279,8 @@ apr_byte_t oidc_response_save_in_session(request_rec *r, oidc_cfg_t *c, oidc_ses
 	if (access_token != NULL) {
 		/* store the access_token in the session context */
 		oidc_session_set_access_token(r, session, access_token);
+		/* store the access_token in the session context */
+		oidc_session_set_access_token_type(r, session, access_token_type);
 		/* store the associated expires_in value */
 		oidc_session_set_access_token_expires(r, session, expires_in);
 		/* reset the access token refresh timestamp */
@@ -614,7 +617,8 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 	 * parsed claims are not actually used here but need to be parsed anyway for error checking purposes
 	 */
 	const char *claims = oidc_userinfo_retrieve_claims(
-	    r, c, provider, apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN), NULL, jwt->payload.sub, &userinfo_jwt);
+	    r, c, provider, apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN),
+	    apr_table_get(params, OIDC_PROTO_TOKEN_TYPE), NULL, jwt->payload.sub, &userinfo_jwt);
 
 	/* restore the original protected URL that the user was trying to access */
 	const char *original_url = oidc_proto_state_get_original_url(proto_state);
@@ -644,8 +648,8 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 		/* store resolved information in the session */
 		if (oidc_response_save_in_session(
 			r, c, session, provider, r->user, apr_table_get(params, OIDC_PROTO_ID_TOKEN), jwt, claims,
-			apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN), expires_in,
-			apr_table_get(params, OIDC_PROTO_REFRESH_TOKEN),
+			apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN), apr_table_get(params, OIDC_PROTO_TOKEN_TYPE),
+			expires_in, apr_table_get(params, OIDC_PROTO_REFRESH_TOKEN),
 			apr_table_get(params, OIDC_PROTO_SESSION_STATE), apr_table_get(params, OIDC_PROTO_STATE),
 			original_url, userinfo_jwt) == FALSE) {
 			oidc_proto_state_destroy(proto_state);

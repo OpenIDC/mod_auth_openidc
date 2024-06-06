@@ -63,7 +63,6 @@ char *oidc_proto_dpop_create(request_rec *r, oidc_cfg_t *cfg, const char *url, c
 
 	jwk = oidc_util_key_list_first(oidc_cfg_private_keys_get(cfg), -1, OIDC_JOSE_JWK_SIG_STR);
 	if (jwk == NULL) {
-		// TODO: may become an error once DPoP is required by config
 		oidc_debug(r, "no RSA/EC private signing keys have been configured (in " OIDCPrivateKeyFiles ")");
 		goto end;
 	}

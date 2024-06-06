@@ -58,6 +58,7 @@ static apr_byte_t oidc_proto_validate_token_type(request_rec *r, oidc_provider_t
 			   oidc_cfg_provider_issuer_get(provider), OIDC_PROTO_BEARER, OIDC_PROTO_DPOP);
 		return FALSE;
 	}
+
 	return TRUE;
 }
 
@@ -85,7 +86,7 @@ apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, oi
 	oidc_util_table_add_query_encoded_params(r->pool, params,
 						 oidc_cfg_provider_token_endpoint_params_get(provider));
 
-	if (oidc_cfg_provider_response_require_iss_get(provider))
+	if (oidc_cfg_provider_dpop_mode_get(provider) != OIDC_DPOP_MODE_OFF)
 		dpop = oidc_proto_dpop_create(r, cfg, oidc_cfg_provider_token_endpoint_url_get(provider), "POST", NULL);
 
 	/* send the request to the token endpoint */
@@ -114,11 +115,19 @@ apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, oi
 	/* get the token type from the parsed response */
 	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_TOKEN_TYPE, token_type, NULL);
 
+	/* check if DPoP is required */
+	if ((oidc_cfg_provider_dpop_mode_get(provider) == OIDC_DPOP_MODE_REQUIRED) &&
+	    (_oidc_strnatcasecmp(*token_type, OIDC_PROTO_DPOP) != 0)) {
+		oidc_error(r, "access token type is \"%s\" but \"%s\" is required", *token_type, OIDC_PROTO_DPOP);
+		return FALSE;
+	}
+
 	/* check the new token type */
 	if (token_type != NULL) {
 		if (oidc_proto_validate_token_type(r, provider, *token_type) == FALSE) {
-			oidc_warn(r, "access token type did not validate, dropping it");
+			oidc_warn(r, "access token type \"%s\" did not validate, dropping it", *token_type);
 			*access_token = NULL;
+			*token_type = NULL;
 		}
 	}
 

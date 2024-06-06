@@ -481,7 +481,7 @@ int oidc_logout(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 	if ((provider != NULL) && (oidc_cfg_provider_end_session_endpoint_get(provider) != NULL)) {
 
 		if (apr_table_get(r->subprocess_env, OIDC_REFRESH_TOKENS_BEFORE_LOGOUT_ENVVAR) != NULL) {
-			oidc_refresh_token_grant(r, c, session, provider, NULL, &id_token_hint);
+			oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, &id_token_hint);
 		} else {
 			id_token_hint = (char *)oidc_session_get_idtoken(r, session);
 		}

@@ -547,6 +547,11 @@ const command_rec oidc_cfg_cmds[] = {
 		"The RFC 7636 PCKE mode used; must be one of \"plain\" or \"S256\""),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_TAKE1,
+		OIDCDPoPMode,
+		dpop_mode,
+		"The RFC 9449 DPoP mode used; must be one of \"off\", \"optional\" or \"required\""),
+	OIDC_CFG_CMD_PROVIDER(
+		AP_INIT_TAKE1,
 		OIDCClientID,
 		client_id,
 		"Client identifier used in calls to OpenID Connect OP."),
