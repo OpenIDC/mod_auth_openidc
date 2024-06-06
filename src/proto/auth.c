@@ -84,8 +84,6 @@ static apr_byte_t oidc_proto_endpoint_client_secret_post(request_rec *r, const c
 	return TRUE;
 }
 
-#define OIDC_PROTO_ASSERTION_JTI_LEN 16
-
 /*
  * helper function to create a JWT assertion for endpoint authentication
  */
@@ -95,7 +93,7 @@ static apr_byte_t oidc_proto_jwt_create(request_rec *r, const char *client_id, c
 	oidc_jwt_t *jwt = *out;
 
 	char *jti = NULL;
-	oidc_util_generate_random_string(r, &jti, OIDC_PROTO_ASSERTION_JTI_LEN);
+	oidc_util_generate_random_string(r, &jti, OIDC_PROTO_JWT_JTI_LEN);
 
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_ISS, json_string(client_id));
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_SUB, json_string(client_id));
@@ -111,18 +109,10 @@ static apr_byte_t oidc_proto_jwt_create(request_rec *r, const char *client_id, c
  * helper function to add a JWT assertion to the HTTP request as endpoint authentication
  */
 static apr_byte_t oidc_proto_jwt_sign_and_add(request_rec *r, apr_table_t *params, oidc_jwt_t *jwt, oidc_jwk_t *jwk) {
-	oidc_jose_error_t err;
+	char *cser = NULL;
 
-	if (oidc_jwt_sign(r->pool, jwt, jwk, FALSE, &err) == FALSE) {
-		oidc_error(r, "signing JWT failed: %s", oidc_jose_e2s(r->pool, err));
+	if (oidc_proto_jwt_sign_and_serialize(r, jwk, jwt, &cser) == FALSE)
 		return FALSE;
-	}
-
-	char *cser = oidc_jwt_serialize(r->pool, jwt, &err);
-	if (cser == NULL) {
-		oidc_error(r, "oidc_jwt_serialize failed: %s", oidc_jose_e2s(r->pool, err));
-		return FALSE;
-	}
 
 	apr_table_setn(params, OIDC_PROTO_CLIENT_ASSERTION_TYPE, OIDC_PROTO_CLIENT_ASSERTION_TYPE_JWT_BEARER);
 	apr_table_set(params, OIDC_PROTO_CLIENT_ASSERTION, cser);

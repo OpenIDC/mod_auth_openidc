@@ -44,6 +44,8 @@
 #include "proto/proto.h"
 #include "util.h"
 
+#define OIDC_PROTO_DPOP_JWT_TYP "dpop+jwt"
+
 /*
  * generate a DPoP proof for the specified URL/method/access_token
  */
@@ -61,32 +63,14 @@ char *oidc_proto_dpop_create(request_rec *r, oidc_cfg_t *cfg, const char *url, c
 
 	oidc_debug(r, "enter");
 
-	jwk = oidc_util_key_list_first(oidc_cfg_private_keys_get(cfg), -1, OIDC_JOSE_JWK_SIG_STR);
-	if (jwk == NULL) {
-		oidc_debug(r, "no RSA/EC private signing keys have been configured (in " OIDCPrivateKeyFiles ")");
-		goto end;
-	}
-
-	jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
-	if (jwt == NULL)
+	if (oidc_proto_jwt_create_from_first_pkey(r, cfg, &jwk, &jwt, TRUE) == FALSE)
 		goto end;
 
-	jwt->header.kid = apr_pstrdup(r->pool, jwk->kid);
-
-	if (jwk->kty == CJOSE_JWK_KTY_RSA)
-		jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_PS256);
-	else if (jwk->kty == CJOSE_JWK_KTY_EC)
-		jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_ES256);
-	else {
-		oidc_error(r, "no usable RSA/EC signing keys has been configured (in " OIDCPrivateKeyFiles ")");
-		goto end;
-	}
-
-	json_object_set_new(jwt->header.value.json, OIDC_CLAIM_TYP, json_string("dpop+jwt"));
+	json_object_set_new(jwt->header.value.json, OIDC_CLAIM_TYP, json_string(OIDC_PROTO_DPOP_JWT_TYP));
 	s_jwk = cjose_jwk_to_json(jwk->cjose_jwk, 0, &cjose_err);
 	cjose_header_set_raw(jwt->header.value.json, OIDC_CLAIM_JWK, s_jwk, &cjose_err);
 
-	oidc_util_generate_random_string(r, &jti, 16);
+	oidc_util_generate_random_string(r, &jti, OIDC_PROTO_JWT_JTI_LEN);
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_JTI, json_string(jti));
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_HTM, json_string(method));
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_HTU, json_string(url));
@@ -101,16 +85,8 @@ char *oidc_proto_dpop_create(request_rec *r, oidc_cfg_t *cfg, const char *url, c
 		json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_ATH, json_string(ath));
 	}
 
-	if (oidc_jwt_sign(r->pool, jwt, jwk, FALSE, &err) == FALSE) {
-		oidc_error(r, "oidc_jwt_sign failed: %s", oidc_jose_e2s(r->pool, err));
+	if (oidc_proto_jwt_sign_and_serialize(r, jwk, jwt, &cser) == FALSE)
 		goto end;
-	}
-
-	cser = oidc_jwt_serialize(r->pool, jwt, &err);
-	if (cser == NULL) {
-		oidc_error(r, "oidc_jwt_serialize failed: %s", oidc_jose_e2s(r->pool, err));
-		goto end;
-	}
 
 end:
 

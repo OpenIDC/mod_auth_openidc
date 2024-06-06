@@ -244,3 +244,61 @@ char *oidc_proto_jwt_header_peek(request_rec *r, const char *compact_encoded_jwt
 	}
 	return result;
 }
+
+apr_byte_t oidc_proto_jwt_create_from_first_pkey(request_rec *r, oidc_cfg_t *cfg, oidc_jwk_t **jwk, oidc_jwt_t **jwt,
+						 apr_byte_t use_psa_for_rsa) {
+	apr_byte_t rv = FALSE;
+
+	oidc_debug(r, "enter");
+
+	*jwk = oidc_util_key_list_first(oidc_cfg_private_keys_get(cfg), -1, OIDC_JOSE_JWK_SIG_STR);
+	// TODO: detect at config time
+	if (jwk == NULL) {
+		oidc_error(r, "no RSA/EC private signing keys have been configured (in " OIDCPrivateKeyFiles ")");
+		goto end;
+	}
+
+	*jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	if (*jwt == NULL)
+		goto end;
+
+	(*jwt)->header.kid = apr_pstrdup(r->pool, (*jwk)->kid);
+
+	if ((*jwk)->kty == CJOSE_JWK_KTY_RSA)
+		(*jwt)->header.alg = apr_pstrdup(r->pool, use_psa_for_rsa ? CJOSE_HDR_ALG_PS256 : CJOSE_HDR_ALG_RS256);
+	else if ((*jwk)->kty == CJOSE_JWK_KTY_EC)
+		(*jwt)->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_ES256);
+	else {
+		oidc_error(r, "no usable RSA/EC signing keys has been configured (in " OIDCPrivateKeyFiles ")");
+		goto end;
+	}
+
+	rv = TRUE;
+
+end:
+
+	// also in case of errors, jwt will be destroyed in the caller function
+	return rv;
+}
+
+apr_byte_t oidc_proto_jwt_sign_and_serialize(request_rec *r, oidc_jwk_t *jwk, oidc_jwt_t *jwt, char **cser) {
+	apr_byte_t rv = FALSE;
+	oidc_jose_error_t err;
+
+	if (oidc_jwt_sign(r->pool, jwt, jwk, FALSE, &err) == FALSE) {
+		oidc_error(r, "oidc_jwt_sign failed: %s", oidc_jose_e2s(r->pool, err));
+		goto end;
+	}
+
+	*cser = oidc_jwt_serialize(r->pool, jwt, &err);
+	if (*cser == NULL) {
+		oidc_error(r, "oidc_jwt_serialize failed: %s", oidc_jose_e2s(r->pool, err));
+		goto end;
+	}
+
+	rv = TRUE;
+
+end:
+
+	return rv;
+}

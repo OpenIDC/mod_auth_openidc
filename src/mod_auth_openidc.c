@@ -873,27 +873,8 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg_t *cf
 
 	oidc_debug(r, "enter: %s", s_claims);
 
-	jwk = oidc_util_key_list_first(oidc_cfg_private_keys_get(cfg), -1, OIDC_JOSE_JWK_SIG_STR);
-	// TODO: detect at config time
-	if (jwk == NULL) {
-		oidc_error(r, "no RSA/EC private signing keys have been configured (in " OIDCPrivateKeyFiles ")");
+	if (oidc_proto_jwt_create_from_first_pkey(r, cfg, &jwk, &jwt, FALSE) == FALSE)
 		goto end;
-	}
-
-	jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
-	if (jwt == NULL)
-		goto end;
-
-	jwt->header.kid = apr_pstrdup(r->pool, jwk->kid);
-
-	if (jwk->kty == CJOSE_JWK_KTY_RSA)
-		jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_RS256);
-	else if (jwk->kty == CJOSE_JWK_KTY_EC)
-		jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_ES256);
-	else {
-		oidc_error(r, "no usable RSA/EC signing keys has been configured (in " OIDCPrivateKeyFiles ")");
-		goto end;
-	}
 
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_AUD,
 			    json_string(oidc_util_current_url(r, oidc_cfg_x_forwarded_headers_get(cfg))));
@@ -923,7 +904,7 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg_t *cf
 	}
 
 	if (json_object_get(jwt->payload.value.json, OIDC_CLAIM_JTI) == NULL) {
-		oidc_util_generate_random_string(r, &jti, 16);
+		oidc_util_generate_random_string(r, &jti, OIDC_PROTO_JWT_JTI_LEN);
 		json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_JTI, json_string(jti));
 	}
 	if (json_object_get(jwt->payload.value.json, OIDC_CLAIM_IAT) == NULL) {
@@ -938,16 +919,8 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg_t *cf
 										OIDC_USERINFO_SIGNED_JWT_EXP_DEFAULT));
 	}
 
-	if (oidc_jwt_sign(r->pool, jwt, jwk, FALSE, &err) == FALSE) {
-		oidc_error(r, "oidc_jwt_sign failed: %s", oidc_jose_e2s(r->pool, err));
+	if (oidc_proto_jwt_sign_and_serialize(r, jwk, jwt, cser) == FALSE)
 		goto end;
-	}
-
-	*cser = oidc_jwt_serialize(r->pool, jwt, &err);
-	if (*cser == NULL) {
-		oidc_error(r, "oidc_jwt_serialize failed: %s", oidc_jose_e2s(r->pool, err));
-		goto end;
-	}
 
 	rv = TRUE;
 

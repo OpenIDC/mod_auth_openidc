@@ -120,32 +120,6 @@
 
 typedef json_t oidc_proto_state_t;
 
-// id_token.c
-apr_byte_t oidc_proto_idtoken_parse(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider, const char *id_token,
-				    const char *nonce, oidc_jwt_t **jwt, apr_byte_t is_code_flow);
-apr_byte_t oidc_proto_idtoken_validate_aud_and_azp(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
-						   oidc_jwt_payload_t *id_token_payload);
-// non-static for test.c
-apr_byte_t oidc_proto_idtoken_validate_access_token(request_rec *r, oidc_provider_t *provider, oidc_jwt_t *jwt,
-						    const char *response_type, const char *access_token);
-apr_byte_t oidc_proto_idtoken_validate_code(request_rec *r, oidc_provider_t *provider, oidc_jwt_t *jwt,
-					    const char *response_type, const char *code);
-apr_byte_t oidc_proto_idtoken_validate_nonce(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
-					     const char *nonce, oidc_jwt_t *jwt);
-
-// jwt.c
-char *oidc_proto_jwt_header_peek(request_rec *r, const char *jwt, char **alg, char **enc, char **kid);
-apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri,
-				 int ssl_validate_server, apr_hash_t *symmetric_keys, const char *alg);
-apr_byte_t oidc_proto_jwt_validate(request_rec *r, oidc_jwt_t *jwt, const char *iss, apr_byte_t exp_is_mandatory,
-				   apr_byte_t iat_is_mandatory, int iat_slack);
-
-// proto.c
-apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce, int len);
-apr_array_header_t *oidc_proto_supported_flows(apr_pool_t *pool);
-apr_byte_t oidc_proto_flow_is_supported(apr_pool_t *pool, const char *flow);
-int oidc_proto_return_www_authenticate(request_rec *r, const char *error, const char *error_description);
-
 // auth.c
 apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg_t *cfg, const char *token_endpoint_auth,
 					  const char *client_id, const char *client_secret,
@@ -161,9 +135,35 @@ apr_byte_t oidc_proto_discovery_url_based(request_rec *r, oidc_cfg_t *cfg, const
 char *oidc_proto_dpop_create(request_rec *r, oidc_cfg_t *cfg, const char *url, const char *method,
 			     const char *access_token);
 
+// id_token.c
+apr_byte_t oidc_proto_idtoken_parse(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider, const char *id_token,
+				    const char *nonce, oidc_jwt_t **jwt, apr_byte_t is_code_flow);
+apr_byte_t oidc_proto_idtoken_validate_aud_and_azp(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
+						   oidc_jwt_payload_t *id_token_payload);
+// non-static for test.c
+apr_byte_t oidc_proto_idtoken_validate_access_token(request_rec *r, oidc_provider_t *provider, oidc_jwt_t *jwt,
+						    const char *response_type, const char *access_token);
+apr_byte_t oidc_proto_idtoken_validate_code(request_rec *r, oidc_provider_t *provider, oidc_jwt_t *jwt,
+					    const char *response_type, const char *code);
+apr_byte_t oidc_proto_idtoken_validate_nonce(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
+					     const char *nonce, oidc_jwt_t *jwt);
+
 // jwks.c
 apr_byte_t oidc_proto_jwks_uri_keys(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri,
 				    int ssl_validate_server, apr_hash_t *keys, apr_byte_t *force_refresh);
+
+// jwt.c
+
+#define OIDC_PROTO_JWT_JTI_LEN 16
+
+apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri,
+				 int ssl_validate_server, apr_hash_t *symmetric_keys, const char *alg);
+apr_byte_t oidc_proto_jwt_validate(request_rec *r, oidc_jwt_t *jwt, const char *iss, apr_byte_t exp_is_mandatory,
+				   apr_byte_t iat_is_mandatory, int iat_slack);
+char *oidc_proto_jwt_header_peek(request_rec *r, const char *jwt, char **alg, char **enc, char **kid);
+apr_byte_t oidc_proto_jwt_create_from_first_pkey(request_rec *r, oidc_cfg_t *cfg, oidc_jwk_t **jwk, oidc_jwt_t **jwt,
+						 apr_byte_t use_psa_for_rsa);
+apr_byte_t oidc_proto_jwt_sign_and_serialize(request_rec *r, oidc_jwk_t *jwk, oidc_jwt_t *jwt, char **cser);
 
 // pkce.c
 #define OIDC_PKCE_METHOD_PLAIN "plain"
@@ -178,6 +178,12 @@ extern oidc_proto_pkce_t oidc_pkce_s256;
 
 const char *oidc_proto_state_get_pkce_state(oidc_proto_state_t *proto_state);
 void oidc_proto_state_set_pkce_state(oidc_proto_state_t *proto_state, const char *pkce_state);
+
+// proto.c
+apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce, int len);
+apr_array_header_t *oidc_proto_supported_flows(apr_pool_t *pool);
+apr_byte_t oidc_proto_flow_is_supported(apr_pool_t *pool, const char *flow);
+int oidc_proto_return_www_authenticate(request_rec *r, const char *error, const char *error_description);
 
 // request.c
 int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, const char *login_hint,
