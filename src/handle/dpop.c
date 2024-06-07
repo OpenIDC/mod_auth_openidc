@@ -46,12 +46,14 @@
 #include "util.h"
 
 #define OIDC_DPOP_PARAM_URL "url"
+#define OIDC_DPOP_PARAM_NONCE "nonce"
 #define OIDC_DPOP_PARAM_METHOD "method"
 
 int oidc_dpop_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 	int rc = HTTP_BAD_REQUEST;
 	char *s_url = NULL;
 	char *s_access_token = NULL;
+	char *s_nonce = NULL;
 	const char *session_access_token = NULL;
 	char *s_method = NULL;
 	char *s_dpop = NULL;
@@ -87,6 +89,9 @@ int oidc_dpop_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 		goto end;
 	}
 
+	/* retrieve the optional nonce parameter */
+	oidc_util_request_parameter_get(r, OIDC_DPOP_PARAM_NONCE, &s_nonce);
+
 	/* parse the optional HTTP method parameter */
 	oidc_util_request_parameter_get(r, OIDC_DPOP_PARAM_METHOD, &s_method);
 	if (_oidc_strnatcasecmp(s_method, "post") == 0)
@@ -114,7 +119,7 @@ int oidc_dpop_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 	}
 
 	/* create the DPoP header value */
-	s_dpop = oidc_proto_dpop_create(r, c, s_url, s_method, s_access_token, NULL);
+	s_dpop = oidc_proto_dpop_create(r, c, s_url, s_method, s_access_token, s_nonce);
 	if (s_dpop == NULL) {
 		oidc_error(r, "creating the DPoP proof value failed");
 		rc = HTTP_INTERNAL_SERVER_ERROR;
