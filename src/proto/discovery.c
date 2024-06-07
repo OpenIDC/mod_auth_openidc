@@ -61,7 +61,7 @@ static apr_byte_t oidc_proto_webfinger_discovery(request_rec *r, oidc_cfg_t *cfg
 
 	char *response = NULL;
 	if (oidc_http_get(r, url, params, NULL, NULL, NULL,
-			  oidc_cfg_provider_ssl_validate_server_get(oidc_cfg_provider_get(cfg)), &response, NULL,
+			  oidc_cfg_provider_ssl_validate_server_get(oidc_cfg_provider_get(cfg)), &response, NULL, NULL,
 			  oidc_cfg_http_timeout_short_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
 			  oidc_cfg_dir_pass_cookies_get(r), NULL, NULL, NULL) == FALSE) {
 		/* errors will have been logged by now */

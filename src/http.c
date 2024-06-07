@@ -416,28 +416,28 @@ char *oidc_http_hdr_normalize_name(const request_rec *r, const char *str) {
 }
 
 /* buffer to hold HTTP call responses */
-typedef struct oidc_curl_buffer {
+typedef struct oidc_curl_resp_data_ctx_t {
 	request_rec *r;
 	char *memory;
 	size_t size;
-} oidc_curl_buffer;
+} oidc_curl_resp_data_ctx_t;
 
 /* maximum acceptable size of HTTP responses: 10 Mb */
-#define OIDC_CURL_MAX_RESPONSE_SIZE 1024 * 1024 * 10
+#define OIDC_CURL_RESPONSE_DATA_SIZE_MAX 1024 * 1024 * 10
 
 /*
  * callback for CURL to write bytes that come back from an HTTP call
  */
-size_t oidc_curl_write(void *contents, size_t size, size_t nmemb, void *userp) {
+static size_t oidc_http_response_data(void *contents, size_t size, size_t nmemb, void *userp) {
 	size_t realsize = size * nmemb;
-	oidc_curl_buffer *mem = (oidc_curl_buffer *)userp;
+	oidc_curl_resp_data_ctx_t *mem = (oidc_curl_resp_data_ctx_t *)userp;
 
 	/* check if we don't run over the maximum buffer/memory size for HTTP responses */
-	if (mem->size + realsize > OIDC_CURL_MAX_RESPONSE_SIZE) {
+	if (mem->size + realsize > OIDC_CURL_RESPONSE_DATA_SIZE_MAX) {
 		oidc_error(
 		    mem->r,
 		    "HTTP response larger than maximum allowed size: current size=%ld, additional size=%ld, max=%d",
-		    (long)mem->size, (long)realsize, OIDC_CURL_MAX_RESPONSE_SIZE);
+		    (long)mem->size, (long)realsize, OIDC_CURL_RESPONSE_DATA_SIZE_MAX);
 		return 0;
 	}
 
@@ -457,6 +457,67 @@ size_t oidc_curl_write(void *contents, size_t size, size_t nmemb, void *userp) {
 	mem->memory[mem->size] = 0;
 
 	return realsize;
+}
+
+/* buffer to hold HTTP response headers */
+typedef struct oidc_curl_resp_hdr_ctx_t {
+	request_rec *r;
+	apr_hash_t *hdrs;
+} oidc_curl_resp_hdr_ctx_t;
+
+/*
+ * callback for CURL to write response headers that come back from an HTTP call
+ */
+static size_t oidc_http_response_header(char *buffer, size_t size, size_t nitems, void *userdata) {
+	/* received header is nitems * size long in 'buffer' NOT ZERO TERMINATED */
+	oidc_curl_resp_hdr_ctx_t *ctx = (oidc_curl_resp_hdr_ctx_t *)userdata;
+	char *hdr = NULL, *value = NULL, *h_name = NULL;
+	apr_hash_index_t *hi = NULL;
+	apr_ssize_t h_len = 0;
+	int i = 0;
+
+	/* see if there is a header to search for */
+	if ((ctx->hdrs == NULL) || (apr_hash_count(ctx->hdrs) == 0))
+		goto end;
+
+	/* make hdr a \0 terminated string for easier processing */
+	hdr = apr_pstrndup(ctx->r->pool, buffer, nitems * size);
+
+	/* search for a name: value pair */
+	value = _oidc_strstr(hdr, OIDC_STR_COLON);
+	if (value == NULL)
+		goto end;
+
+	/* split the header name and value */
+	*value = '\0';
+
+	/* see if there's any header value characters at all after the colon */
+	if (_oidc_strlen(hdr) < nitems * size) {
+		value++;
+		/* skip spaces after the colon */
+		while (*value == ' ')
+			value++;
+		/* remove trailing /r/n */
+		i = strlen(value) - 1;
+		while ((value[i] == '\r') || (value[i] == '\n'))
+			value[i--] = '\0';
+	}
+
+	// TODO: would be faster to use all lowercase keys
+
+	/* check if the caller is interested in the value of the current response header */
+	for (hi = apr_hash_first(NULL, ctx->hdrs); hi; hi = apr_hash_next(hi)) {
+		apr_hash_this(hi, (const void **)&h_name, &h_len, NULL);
+		if (_oidc_strnatcasecmp(hdr, h_name) == 0) {
+			oidc_debug(ctx->r, "returning response header: %s: %s", h_name, value);
+			apr_hash_set(ctx->hdrs, h_name, APR_HASH_KEY_STRING, apr_pstrdup(ctx->r->pool, value));
+			break;
+		}
+	}
+
+end:
+
+	return nitems * size;
 }
 
 /* context structure for encoding parameters */
@@ -603,12 +664,14 @@ static const char *oidc_http_user_agent(request_rec *r) {
 static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char *data, const char *content_type,
 				    const char *basic_auth, const char *access_token, const char *dpop,
 				    int ssl_validate_server, char **response, long *response_code,
-				    oidc_http_timeout_t *http_timeout, const oidc_http_outgoing_proxy_t *outgoing_proxy,
+				    apr_hash_t *response_hdrs, oidc_http_timeout_t *http_timeout,
+				    const oidc_http_outgoing_proxy_t *outgoing_proxy,
 				    const apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
 				    const char *ssl_key_pwd) {
 
-	char curlError[CURL_ERROR_SIZE];
-	oidc_curl_buffer curlBuffer;
+	char curl_err[CURL_ERROR_SIZE];
+	oidc_curl_resp_data_ctx_t d_buf = {r, NULL, 0};
+	oidc_curl_resp_hdr_ctx_t h_buf = {r, response_hdrs};
 	CURL *curl = NULL;
 	struct curl_slist *h_list = NULL;
 	int i = 0;
@@ -635,13 +698,13 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 	}
 
 	/* set the error buffer as empty before performing a request */
-	curlError[0] = 0;
+	curl_err[0] = 0;
 
 	/* some of these are not really required */
 	curl_easy_setopt(curl, CURLOPT_HEADER, 0L);
 	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
 	curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
-	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curlError);
+	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curl_err);
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 	curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L);
 
@@ -649,12 +712,13 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 	curl_easy_setopt(curl, CURLOPT_TIMEOUT, http_timeout->request_timeout);
 	curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, http_timeout->connect_timeout);
 
-	/* setup the buffer where the response will be written to */
-	curlBuffer.r = r;
-	curlBuffer.memory = NULL;
-	curlBuffer.size = 0;
-	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, oidc_curl_write);
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&curlBuffer);
+	/* setup the buffer where the response data will be written to */
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, oidc_http_response_data);
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&d_buf);
+
+	/* setup the buffer where the response headers will be written to */
+	curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, oidc_http_response_header);
+	curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *)&h_buf);
 
 #ifndef LIBCURL_NO_CURLPROTO
 #if LIBCURL_VERSION_NUM >= 0x075500
@@ -788,14 +852,14 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 		if (res == CURLE_OPERATION_TIMEDOUT) {
 			/* in case of a request/transfer timeout (which includes the connect timeout) we'll not retry */
 			oidc_error(r, "curl_easy_perform failed with a timeout for %s: [%s]; won't retry", url,
-				   curlError[0] ? curlError : "<n/a>");
+				   curl_err[0] ? curl_err : "<n/a>");
 			OIDC_METRICS_COUNTER_INC_SPEC(r, c, OM_PROVIDER_CONNECT_ERROR,
-						      curlError[0] ? curlError : "timeout")
+						      curl_err[0] ? curl_err : "timeout")
 			break;
 		}
 		oidc_error(r, "curl_easy_perform(%d/%d) failed for %s with: [%s]", i + 1, http_timeout->retries + 1,
-			   url, curlError[0] ? curlError : "<n/a>");
-		OIDC_METRICS_COUNTER_INC_SPEC(r, c, OM_PROVIDER_CONNECT_ERROR, curlError[0] ? curlError : "undefined")
+			   url, curl_err[0] ? curl_err : "<n/a>");
+		OIDC_METRICS_COUNTER_INC_SPEC(r, c, OM_PROVIDER_CONNECT_ERROR, curl_err[0] ? curl_err : "undefined")
 		/* in case of a connectivity/network glitch we'll back off before retrying */
 		if (i < http_timeout->retries)
 			apr_sleep(apr_time_from_msec(http_timeout->retry_interval));
@@ -808,7 +872,7 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 
 	OIDC_METRICS_COUNTER_INC_SPEC(r, c, OM_PROVIDER_HTTP_RESPONSE_CODE, apr_psprintf(r->pool, "%ld", http_code));
 
-	*response = apr_pstrmemdup(r->pool, curlBuffer.memory, curlBuffer.size);
+	*response = apr_pstrmemdup(r->pool, d_buf.memory, d_buf.size);
 	if (response_code)
 		*response_code = http_code;
 
@@ -831,13 +895,13 @@ end:
  */
 apr_byte_t oidc_http_get(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth,
 			 const char *access_token, const char *dpop, int ssl_validate_server, char **response,
-			 long *response_code, oidc_http_timeout_t *http_timeout,
+			 long *response_code, apr_hash_t *response_hdrs, oidc_http_timeout_t *http_timeout,
 			 const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,
 			 const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd) {
 	char *query_url = oidc_http_query_encoded_url(r, url, params);
 	return oidc_http_request(r, query_url, NULL, NULL, basic_auth, access_token, dpop, ssl_validate_server,
-				 response, response_code, http_timeout, outgoing_proxy, pass_cookies, ssl_cert, ssl_key,
-				 ssl_key_pwd);
+				 response, response_code, response_hdrs, http_timeout, outgoing_proxy, pass_cookies,
+				 ssl_cert, ssl_key, ssl_key_pwd);
 }
 
 /*
@@ -845,13 +909,13 @@ apr_byte_t oidc_http_get(request_rec *r, const char *url, const apr_table_t *par
  */
 apr_byte_t oidc_http_post_form(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth,
 			       const char *access_token, const char *dpop, int ssl_validate_server, char **response,
-			       long *response_code, oidc_http_timeout_t *http_timeout,
+			       long *response_code, apr_hash_t *response_hdrs, oidc_http_timeout_t *http_timeout,
 			       const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,
 			       const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd) {
 	char *data = oidc_http_form_encoded_data(r, params);
 	return oidc_http_request(r, url, data, OIDC_HTTP_CONTENT_TYPE_FORM_ENCODED, basic_auth, access_token, dpop,
-				 ssl_validate_server, response, response_code, http_timeout, outgoing_proxy,
-				 pass_cookies, ssl_cert, ssl_key, ssl_key_pwd);
+				 ssl_validate_server, response, response_code, response_hdrs, http_timeout,
+				 outgoing_proxy, pass_cookies, ssl_cert, ssl_key, ssl_key_pwd);
 }
 
 /*
@@ -859,13 +923,13 @@ apr_byte_t oidc_http_post_form(request_rec *r, const char *url, const apr_table_
  */
 apr_byte_t oidc_http_post_json(request_rec *r, const char *url, json_t *json, const char *basic_auth,
 			       const char *access_token, const char *dpop, int ssl_validate_server, char **response,
-			       long *response_code, oidc_http_timeout_t *http_timeout,
+			       long *response_code, apr_hash_t *response_hdrs, oidc_http_timeout_t *http_timeout,
 			       const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,
 			       const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd) {
 	char *data = json != NULL ? oidc_util_encode_json_object(r, json, JSON_COMPACT) : NULL;
 	return oidc_http_request(r, url, data, OIDC_HTTP_CONTENT_TYPE_JSON, basic_auth, access_token, dpop,
-				 ssl_validate_server, response, response_code, http_timeout, outgoing_proxy,
-				 pass_cookies, ssl_cert, ssl_key, ssl_key_pwd);
+				 ssl_validate_server, response, response_code, response_hdrs, http_timeout,
+				 outgoing_proxy, pass_cookies, ssl_cert, ssl_key, ssl_key_pwd);
 }
 
 /*

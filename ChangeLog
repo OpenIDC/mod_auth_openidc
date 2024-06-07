@@ -1,3 +1,7 @@
+06/07/2024
+- return response headers from outgoing HTTP requests to callers
+- support DPoP nonces to the token endpoint
+
 06/06/2024
 - add OIDCDPoPMode [off|optional|required] primitive
 - store the token_type in the session

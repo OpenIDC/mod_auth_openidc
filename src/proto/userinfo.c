@@ -183,7 +183,7 @@ static apr_byte_t oidc_proto_userinfo_request_composite_claims(request_rec *r, o
 					oidc_http_get(
 					    r, endpoint, NULL, NULL, access_token, NULL,
 					    oidc_cfg_provider_ssl_validate_server_get(oidc_cfg_provider_get(cfg)),
-					    &s_json, NULL, oidc_cfg_http_timeout_long_get(cfg),
+					    &s_json, NULL, NULL, oidc_cfg_http_timeout_long_get(cfg),
 					    oidc_cfg_outgoing_proxy_get(cfg), oidc_cfg_dir_pass_cookies_get(r), NULL,
 					    NULL, NULL);
 				}
@@ -253,10 +253,10 @@ apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, oidc_pro
 	if (oidc_cfg_provider_userinfo_token_method_get(provider) == OIDC_USER_INFO_TOKEN_METHOD_HEADER) {
 		if (_oidc_strnatcasecmp(access_token_type, OIDC_PROTO_DPOP) == 0)
 			dpop = oidc_proto_dpop_create(r, cfg, oidc_cfg_provider_userinfo_endpoint_url_get(provider),
-						      "GET", access_token);
+						      "GET", access_token, NULL);
 		if (oidc_http_get(r, oidc_cfg_provider_userinfo_endpoint_url_get(provider), NULL, NULL, access_token,
 				  dpop, oidc_cfg_provider_ssl_validate_server_get(provider), response, response_code,
-				  oidc_cfg_http_timeout_long_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
+				  NULL, oidc_cfg_http_timeout_long_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
 				  oidc_cfg_dir_pass_cookies_get(r), NULL, NULL, NULL) == FALSE) {
 			OIDC_METRICS_COUNTER_INC(r, cfg, OM_PROVIDER_USERINFO_ERROR);
 			return FALSE;
@@ -266,10 +266,10 @@ apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, oidc_pro
 		apr_table_setn(params, OIDC_PROTO_ACCESS_TOKEN, access_token);
 		if (_oidc_strnatcasecmp(access_token_type, OIDC_PROTO_DPOP) == 0)
 			dpop = oidc_proto_dpop_create(r, cfg, oidc_cfg_provider_userinfo_endpoint_url_get(provider),
-						      "POST", access_token);
+						      "POST", access_token, NULL);
 		if (oidc_http_post_form(r, oidc_cfg_provider_userinfo_endpoint_url_get(provider), params, NULL, NULL,
 					dpop, oidc_cfg_provider_ssl_validate_server_get(provider), response,
-					response_code, oidc_cfg_http_timeout_long_get(cfg),
+					response_code, NULL, oidc_cfg_http_timeout_long_get(cfg),
 					oidc_cfg_outgoing_proxy_get(cfg), oidc_cfg_dir_pass_cookies_get(r), NULL, NULL,
 					NULL) == FALSE) {
 			OIDC_METRICS_COUNTER_INC(r, cfg, OM_PROVIDER_USERINFO_ERROR);

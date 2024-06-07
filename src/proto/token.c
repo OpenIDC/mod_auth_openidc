@@ -69,42 +69,86 @@ apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, oi
 					     apr_table_t *params, char **id_token, char **access_token,
 					     char **token_type, int *expires_in, char **refresh_token) {
 
+	apr_byte_t rv = FALSE;
 	char *response = NULL;
 	char *basic_auth = NULL;
 	char *bearer_auth = NULL;
 	char *dpop = NULL;
-	json_t *j_result = NULL, *j_expires_in = NULL;
+	char *dpop_nonce = NULL;
+	apr_hash_t *response_hdrs = NULL;
+	json_t *j_result = NULL, *j_expires_in = NULL, *j_error = NULL;
 
 	/* add the token endpoint authentication credentials */
 	if (oidc_proto_token_endpoint_auth(
 		r, cfg, oidc_cfg_provider_token_endpoint_auth_get(provider), oidc_cfg_provider_client_id_get(provider),
 		oidc_cfg_provider_client_secret_get(provider), oidc_cfg_provider_client_keys_get(provider),
 		oidc_cfg_provider_token_endpoint_url_get(provider), params, NULL, &basic_auth, &bearer_auth) == FALSE)
-		return FALSE;
+		goto end;
 
 	/* add any configured extra static parameters to the token endpoint */
 	oidc_util_table_add_query_encoded_params(r->pool, params,
 						 oidc_cfg_provider_token_endpoint_params_get(provider));
 
-	if (oidc_cfg_provider_dpop_mode_get(provider) != OIDC_DPOP_MODE_OFF)
-		dpop = oidc_proto_dpop_create(r, cfg, oidc_cfg_provider_token_endpoint_url_get(provider), "POST", NULL);
+	if (oidc_cfg_provider_dpop_mode_get(provider) != OIDC_DPOP_MODE_OFF) {
+
+		response_hdrs = apr_hash_make(r->pool);
+		apr_hash_set(response_hdrs, OIDC_HTTP_HDR_AUTHORIZATION, APR_HASH_KEY_STRING, "");
+		apr_hash_set(response_hdrs, OIDC_HTTP_HDR_DPOP_NONCE, APR_HASH_KEY_STRING, "");
+		apr_hash_set(response_hdrs, OIDC_HTTP_HDR_CONTENT_TYPE, APR_HASH_KEY_STRING, "");
+
+		dpop = oidc_proto_dpop_create(r, cfg, oidc_cfg_provider_token_endpoint_url_get(provider), "POST", NULL,
+					      NULL);
+	}
 
 	/* send the request to the token endpoint */
 	if (oidc_http_post_form(r, oidc_cfg_provider_token_endpoint_url_get(provider), params, basic_auth, bearer_auth,
 				dpop, oidc_cfg_provider_ssl_validate_server_get(provider), &response, NULL,
-				oidc_cfg_http_timeout_long_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
+				response_hdrs, oidc_cfg_http_timeout_long_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
 				oidc_cfg_dir_pass_cookies_get(r),
 				oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider),
 				oidc_cfg_provider_token_endpoint_tls_client_key_get(provider),
 				oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider)) == FALSE) {
-		oidc_warn(r, "error when calling the token endpoint (%s)",
-			  oidc_cfg_provider_token_endpoint_url_get(provider));
-		return FALSE;
+		oidc_error(r, "error when calling the token endpoint (%s)",
+			   oidc_cfg_provider_token_endpoint_url_get(provider));
+		goto end;
 	}
 
 	/* check for errors, the response itself will have been logged already */
-	if (oidc_util_decode_json_and_check_error(r, response, &j_result) == FALSE)
-		return FALSE;
+	if (oidc_util_decode_json_and_check_error(r, response, &j_result) == FALSE) {
+
+		j_error = json_object_get(j_result, OIDC_PROTO_ERROR);
+		if ((j_error == NULL) || (!json_is_string(j_error)) ||
+		    (_oidc_strcmp(json_string_value(j_error), OIDC_PROTO_DPOP_USE_NONCE) != 0))
+			goto end;
+
+		json_decref(j_result);
+
+		/* try again with a DPoP nonce provided by the server */
+		dpop_nonce = (char *)apr_hash_get(response_hdrs, OIDC_HTTP_HDR_DPOP_NONCE, APR_HASH_KEY_STRING);
+		if (dpop_nonce == NULL) {
+			oidc_error(r, "error is \"%s\" but no \"%s\" header found", OIDC_PROTO_DPOP_USE_NONCE,
+				   OIDC_HTTP_HDR_DPOP_NONCE);
+			goto end;
+		}
+
+		dpop = oidc_proto_dpop_create(r, cfg, oidc_cfg_provider_token_endpoint_url_get(provider), "POST", NULL,
+					      dpop_nonce);
+
+		if (oidc_http_post_form(r, oidc_cfg_provider_token_endpoint_url_get(provider), params, basic_auth,
+					bearer_auth, dpop, oidc_cfg_provider_ssl_validate_server_get(provider),
+					&response, NULL, NULL, oidc_cfg_http_timeout_long_get(cfg),
+					oidc_cfg_outgoing_proxy_get(cfg), oidc_cfg_dir_pass_cookies_get(r),
+					oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider),
+					oidc_cfg_provider_token_endpoint_tls_client_key_get(provider),
+					oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider)) == FALSE) {
+			oidc_error(r, "error when calling the token endpoint (%s)",
+				   oidc_cfg_provider_token_endpoint_url_get(provider));
+			goto end;
+		}
+
+		if (oidc_util_decode_json_and_check_error(r, response, &j_result) == FALSE)
+			goto end;
+	}
 
 	/* get the id_token from the parsed response */
 	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_ID_TOKEN, id_token, NULL);
@@ -119,7 +163,7 @@ apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, oi
 	if ((oidc_cfg_provider_dpop_mode_get(provider) == OIDC_DPOP_MODE_REQUIRED) &&
 	    (_oidc_strnatcasecmp(*token_type, OIDC_PROTO_DPOP) != 0)) {
 		oidc_error(r, "access token type is \"%s\" but \"%s\" is required", *token_type, OIDC_PROTO_DPOP);
-		return FALSE;
+		goto end;
 	}
 
 	/* check the new token type */
@@ -145,9 +189,14 @@ apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, oi
 	/* get the refresh_token from the parsed response */
 	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_REFRESH_TOKEN, refresh_token, NULL);
 
-	json_decref(j_result);
+	rv = TRUE;
 
-	return TRUE;
+end:
+
+	if (j_result)
+		json_decref(j_result);
+
+	return rv;
 }
 
 /*

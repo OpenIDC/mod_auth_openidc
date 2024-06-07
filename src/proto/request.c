@@ -104,7 +104,7 @@ static int oidc_proto_request_auth_push(request_rec *r, struct oidc_provider_t *
 		goto out;
 
 	if (oidc_http_post_form(r, endpoint_url, params, basic_auth, bearer_auth, NULL,
-				oidc_cfg_provider_ssl_validate_server_get(provider), &response, NULL,
+				oidc_cfg_provider_ssl_validate_server_get(provider), &response, NULL, NULL,
 				oidc_cfg_http_timeout_long_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
 				oidc_cfg_dir_pass_cookies_get(r), NULL, NULL, NULL) == FALSE)
 		goto out;

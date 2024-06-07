@@ -595,7 +595,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg,
 	/* dynamically register the client with the specified parameters */
 	if (oidc_http_post_json(r, oidc_cfg_provider_registration_endpoint_url_get(provider), data, NULL,
 				oidc_cfg_provider_registration_token_get(provider), NULL,
-				oidc_cfg_provider_ssl_validate_server_get(provider), response, NULL,
+				oidc_cfg_provider_ssl_validate_server_get(provider), response, NULL, NULL,
 				oidc_cfg_http_timeout_short_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
 				oidc_cfg_dir_pass_cookies_get(r), NULL, NULL, NULL) == FALSE) {
 		json_decref(data);
@@ -623,7 +623,7 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r, oidc_cfg
 	const char *url = (jwks_uri->signed_uri != NULL) ? jwks_uri->signed_uri : jwks_uri->uri;
 
 	/* get the JWKs from the specified URL with the specified parameters */
-	if (oidc_http_get(r, url, NULL, NULL, NULL, NULL, ssl_validate_server, &response, NULL,
+	if (oidc_http_get(r, url, NULL, NULL, NULL, NULL, ssl_validate_server, &response, NULL, NULL,
 			  oidc_cfg_http_timeout_long_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
 			  oidc_cfg_dir_pass_cookies_get(r), NULL, NULL, NULL) == FALSE)
 		return FALSE;
@@ -734,7 +734,7 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg, cons
 
 	/* get provider metadata from the specified URL with the specified parameters */
 	if (oidc_http_get(r, url, NULL, NULL, NULL, NULL,
-			  oidc_cfg_provider_ssl_validate_server_get(oidc_cfg_provider_get(cfg)), response, NULL,
+			  oidc_cfg_provider_ssl_validate_server_get(oidc_cfg_provider_get(cfg)), response, NULL, NULL,
 			  oidc_cfg_http_timeout_short_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
 			  oidc_cfg_dir_pass_cookies_get(r), NULL, NULL, NULL) == FALSE) {
 		OIDC_METRICS_COUNTER_INC(r, cfg, OM_PROVIDER_METADATA_ERROR);

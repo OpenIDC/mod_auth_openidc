@@ -114,6 +114,7 @@
 #define OIDC_PROTO_BEARER "Bearer"
 #define OIDC_PROTO_BASIC "Basic"
 #define OIDC_PROTO_DPOP "DPoP"
+#define OIDC_PROTO_DPOP_USE_NONCE "use_dpop_nonce"
 
 /* nonce bytes length */
 #define OIDC_PROTO_NONCE_LENGTH 32
@@ -133,7 +134,7 @@ apr_byte_t oidc_proto_discovery_url_based(request_rec *r, oidc_cfg_t *cfg, const
 
 // dpop.c
 char *oidc_proto_dpop_create(request_rec *r, oidc_cfg_t *cfg, const char *url, const char *method,
-			     const char *access_token);
+			     const char *access_token, const char *nonce);
 
 // id_token.c
 apr_byte_t oidc_proto_idtoken_parse(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider, const char *id_token,

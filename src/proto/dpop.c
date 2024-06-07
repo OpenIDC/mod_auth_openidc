@@ -50,7 +50,7 @@
  * generate a DPoP proof for the specified URL/method/access_token
  */
 char *oidc_proto_dpop_create(request_rec *r, oidc_cfg_t *cfg, const char *url, const char *method,
-			     const char *access_token) {
+			     const char *access_token, const char *nonce) {
 	// TODO: share with create_userinfo_jwt
 	oidc_jwt_t *jwt = NULL;
 	oidc_jwk_t *jwk = NULL;
@@ -76,7 +76,7 @@ char *oidc_proto_dpop_create(request_rec *r, oidc_cfg_t *cfg, const char *url, c
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_HTU, json_string(url));
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_IAT, json_integer(apr_time_sec(apr_time_now())));
 
-	if (access_token) {
+	if (access_token != NULL) {
 		if (oidc_jose_hash_and_base64url_encode(r->pool, OIDC_JOSE_ALG_SHA256, access_token,
 							strlen(access_token), &ath, &err) == FALSE) {
 			oidc_error(r, "oidc_jose_hash_and_base64url_encode failed: %s", oidc_jose_e2s(r->pool, err));
@@ -84,6 +84,9 @@ char *oidc_proto_dpop_create(request_rec *r, oidc_cfg_t *cfg, const char *url, c
 		}
 		json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_ATH, json_string(ath));
 	}
+
+	if (nonce != NULL)
+		json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_NONCE, json_string(nonce));
 
 	if (oidc_proto_jwt_sign_and_serialize(r, jwk, jwt, &cser) == FALSE)
 		goto end;

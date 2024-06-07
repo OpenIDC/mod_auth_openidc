@@ -45,6 +45,7 @@
 #define _MOD_AUTH_OPENIDC_HTTP_H_
 
 #include <apr.h>
+#include <apr_hash.h>
 #include <apr_time.h>
 // clang-format off
 #include <httpd.h>
@@ -87,6 +88,7 @@
 #define OIDC_HTTP_HDR_WWW_AUTHENTICATE "WWW-Authenticate"
 #define OIDC_HTTP_HDR_TRACE_PARENT "traceparent"
 #define OIDC_HTTP_HDR_DPOP "DPoP"
+#define OIDC_HTTP_HDR_DPOP_NONCE "DPoP-Nonce"
 
 #define OIDC_HTTP_HDR_VAL_XML_HTTP_REQUEST "XMLHttpRequest"
 #define OIDC_HTTP_HDR_VAL_NAVIGATE "navigate"
@@ -141,17 +143,17 @@ const char *oidc_http_hdr_forwarded_get(const request_rec *r, const char *elem);
 char *oidc_http_hdr_normalize_name(const request_rec *r, const char *str);
 apr_byte_t oidc_http_get(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth,
 			 const char *access_token, const char *dpop, int ssl_validate_server, char **response,
-			 long *response_code, oidc_http_timeout_t *http_timeout,
+			 long *response_code, apr_hash_t *response_hdrs, oidc_http_timeout_t *http_timeout,
 			 const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,
 			 const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd);
 apr_byte_t oidc_http_post_form(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth,
 			       const char *access_token, const char *dpop, int ssl_validate_server, char **response,
-			       long *response_code, oidc_http_timeout_t *http_timeout,
+			       long *response_code, apr_hash_t *response_hdrs, oidc_http_timeout_t *http_timeout,
 			       const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,
 			       const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd);
 apr_byte_t oidc_http_post_json(request_rec *r, const char *url, json_t *data, const char *basic_auth,
 			       const char *access_token, const char *dpop, int ssl_validate_server, char **response,
-			       long *response_code, oidc_http_timeout_t *http_timeout,
+			       long *response_code, apr_hash_t *response_hdrs, oidc_http_timeout_t *http_timeout,
 			       const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,
 			       const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd);
 apr_byte_t oidc_util_request_has_parameter(request_rec *r, const char *param);
