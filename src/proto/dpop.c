@@ -46,19 +46,43 @@
 
 #define OIDC_PROTO_DPOP_JWT_TYP "dpop+jwt"
 
+apr_byte_t oidc_proto_dpop_use_nonce(request_rec *r, oidc_cfg_t *cfg, json_t *j_result, apr_hash_t *response_hdrs,
+				     const char *url, const char *method, const char *access_token, char **dpop) {
+	apr_byte_t rv = FALSE;
+	char *dpop_nonce = NULL;
+
+	json_t *j_error = json_object_get(j_result, OIDC_PROTO_ERROR);
+	if ((j_error == NULL) || (!json_is_string(j_error)) ||
+	    (_oidc_strcmp(json_string_value(j_error), OIDC_PROTO_DPOP_USE_NONCE) != 0))
+		goto end;
+
+	/* try again with a DPoP nonce provided by the server */
+	dpop_nonce = (char *)apr_hash_get(response_hdrs, OIDC_HTTP_HDR_DPOP_NONCE, APR_HASH_KEY_STRING);
+	if (dpop_nonce == NULL) {
+		oidc_error(r, "error is \"%s\" but no \"%s\" header found", OIDC_PROTO_DPOP_USE_NONCE,
+			   OIDC_HTTP_HDR_DPOP_NONCE);
+		goto end;
+	}
+
+	rv = oidc_proto_dpop_create(r, cfg, url, method, access_token, dpop_nonce, dpop);
+
+end:
+
+	return rv;
+}
+
 /*
  * generate a DPoP proof for the specified URL/method/access_token
  */
-char *oidc_proto_dpop_create(request_rec *r, oidc_cfg_t *cfg, const char *url, const char *method,
-			     const char *access_token, const char *nonce) {
-	// TODO: share with create_userinfo_jwt
+apr_byte_t oidc_proto_dpop_create(request_rec *r, oidc_cfg_t *cfg, const char *url, const char *method,
+				  const char *access_token, const char *nonce, char **dpop) {
+	apr_byte_t rv = FALSE;
 	oidc_jwt_t *jwt = NULL;
 	oidc_jwk_t *jwk = NULL;
 	oidc_jose_error_t err;
 	char *jti = NULL;
 	cjose_err cjose_err;
 	char *s_jwk = NULL;
-	char *cser = NULL;
 	char *ath = NULL;
 
 	oidc_debug(r, "enter");
@@ -88,8 +112,10 @@ char *oidc_proto_dpop_create(request_rec *r, oidc_cfg_t *cfg, const char *url, c
 	if (nonce != NULL)
 		json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_NONCE, json_string(nonce));
 
-	if (oidc_proto_jwt_sign_and_serialize(r, jwk, jwt, &cser) == FALSE)
+	if (oidc_proto_jwt_sign_and_serialize(r, jwk, jwt, dpop) == FALSE)
 		goto end;
+
+	rv = TRUE;
 
 end:
 
@@ -99,5 +125,5 @@ end:
 	if (jwt)
 		oidc_jwt_destroy(jwt);
 
-	return cser;
+	return rv;
 }

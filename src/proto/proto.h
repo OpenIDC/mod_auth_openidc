@@ -133,8 +133,10 @@ apr_byte_t oidc_proto_discovery_account_based(request_rec *r, oidc_cfg_t *cfg, c
 apr_byte_t oidc_proto_discovery_url_based(request_rec *r, oidc_cfg_t *cfg, const char *url, char **issuer);
 
 // dpop.c
-char *oidc_proto_dpop_create(request_rec *r, oidc_cfg_t *cfg, const char *url, const char *method,
-			     const char *access_token, const char *nonce);
+apr_byte_t oidc_proto_dpop_create(request_rec *r, oidc_cfg_t *cfg, const char *url, const char *method,
+				  const char *access_token, const char *nonce, char **dpop);
+apr_byte_t oidc_proto_dpop_use_nonce(request_rec *r, oidc_cfg_t *cfg, json_t *j_result, apr_hash_t *response_hdrs,
+				     const char *url, const char *method, const char *access_token, char **dpop);
 
 // id_token.c
 apr_byte_t oidc_proto_idtoken_parse(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider, const char *id_token,

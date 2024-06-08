@@ -119,8 +119,8 @@ int oidc_dpop_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 	}
 
 	/* create the DPoP header value */
-	s_dpop = oidc_proto_dpop_create(r, c, s_url, s_method, s_access_token, s_nonce);
-	if (s_dpop == NULL) {
+	if ((oidc_proto_dpop_create(r, c, s_url, s_method, s_access_token, s_nonce, &s_dpop) == FALSE) ||
+	    (s_dpop == NULL)) {
 		oidc_error(r, "creating the DPoP proof value failed");
 		rc = HTTP_INTERNAL_SERVER_ERROR;
 		goto end;

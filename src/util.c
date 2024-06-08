@@ -955,7 +955,7 @@ static apr_byte_t oidc_util_json_string_print(request_rec *r, json_t *result, co
 /*
  * check a JSON object for "error" results and printout
  */
-static apr_byte_t oidc_util_check_json_error(request_rec *r, json_t *json) {
+apr_byte_t oidc_util_check_json_error(request_rec *r, json_t *json) {
 	if (oidc_util_json_string_print(r, json, OIDC_PROTO_ERROR, "oidc_util_check_json_error") == TRUE) {
 		oidc_util_json_string_print(r, json, OIDC_PROTO_ERROR_DESCRIPTION, "oidc_util_check_json_error");
 		return TRUE;
@@ -968,8 +968,7 @@ static apr_byte_t oidc_util_check_json_error(request_rec *r, json_t *json) {
 /*
  * parse a JSON object
  */
-apr_byte_t oidc_util_decode_json_object(request_rec *r, const char *str, json_t **json) {
-
+apr_byte_t oidc_util_decode_json_object_err(request_rec *r, const char *str, json_t **json, apr_byte_t log_err) {
 	if (str == NULL)
 		return FALSE;
 
@@ -978,29 +977,39 @@ apr_byte_t oidc_util_decode_json_object(request_rec *r, const char *str, json_t 
 
 	/* decode the JSON contents of the buffer */
 	if (*json == NULL) {
-		/* something went wrong */
+		if (log_err) {
+			/* something went wrong */
 #if JANSSON_VERSION_HEX >= 0x020B00
-		if (json_error_code(&json_error) == json_error_null_character) {
-			oidc_error(r, "JSON parsing returned an error: %s", json_error.text);
-		} else {
+			if (json_error_code(&json_error) == json_error_null_character) {
+				oidc_error(r, "JSON parsing returned an error: %s", json_error.text);
+			} else {
 #endif
-			oidc_error(r, "JSON parsing returned an error: %s (%s)", json_error.text,
-				   apr_pstrndup(r->pool, str, OIDC_JSON_MAX_ERROR_STR));
+				oidc_error(r, "JSON parsing returned an error: %s (%s)", json_error.text,
+					   apr_pstrndup(r->pool, str, OIDC_JSON_MAX_ERROR_STR));
 #if JANSSON_VERSION_HEX >= 0x020B00
+			}
+#endif
 		}
-#endif
 		return FALSE;
 	}
 
 	if (!json_is_object(*json)) {
 		/* oops, no JSON */
-		oidc_error(r, "parsed JSON did not contain a JSON object");
-		json_decref(*json);
-		*json = NULL;
-		return FALSE;
+		if (log_err) {
+			oidc_error(r, "parsed JSON did not contain a JSON object");
+			json_decref(*json);
+			*json = NULL;
+			return FALSE;
+		}
+
+		return TRUE;
 	}
 
 	return TRUE;
+}
+
+apr_byte_t oidc_util_decode_json_object(request_rec *r, const char *str, json_t **json) {
+	return oidc_util_decode_json_object_err(r, str, json, TRUE);
 }
 
 /*

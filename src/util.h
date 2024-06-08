@@ -57,7 +57,9 @@ apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char
 apr_byte_t oidc_util_create_symmetric_key(request_rec *r, const char *client_secret, unsigned int r_key_len,
 					  const char *hash_algo, apr_byte_t set_kid, oidc_jwk_t **jwk);
 char *oidc_util_encode_json_object(request_rec *r, json_t *json, size_t flags);
+apr_byte_t oidc_util_decode_json_object_err(request_rec *r, const char *str, json_t **json, apr_byte_t log_err);
 apr_byte_t oidc_util_decode_json_object(request_rec *r, const char *str, json_t **json);
+apr_byte_t oidc_util_check_json_error(request_rec *r, json_t *json);
 apr_byte_t oidc_util_random_bytes(unsigned char *buf, apr_size_t length);
 apr_byte_t oidc_util_generate_random_bytes(request_rec *r, unsigned char *buf, apr_size_t length);
 apr_byte_t oidc_util_generate_random_hex_string(request_rec *r, char **hex_str, int byte_len);

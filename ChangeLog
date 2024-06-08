@@ -1,3 +1,6 @@
+08/08/2024
+- support DPoP nonces to the userinfo endpoint
+
 06/07/2024
 - return response headers from outgoing HTTP requests to callers
 - support DPoP nonces to the token endpoint
