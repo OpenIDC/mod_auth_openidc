@@ -57,19 +57,19 @@ static apr_byte_t oidc_proto_userinfo_response_jwt_parse(request_rec *r, oidc_cf
 	oidc_jwt_t *jwt = NULL;
 	char *alg = NULL;
 	char *payload = NULL;
+	char *s_jwt_hdr = oidc_proto_jwt_header_peek(r, *response, &alg, NULL, NULL);
+
+	if (s_jwt_hdr == NULL) {
+		oidc_error(r, "no JSON/JWT could be parsed from the userinfo endpoint response");
+		goto end;
+	}
 
 	oidc_debug(r,
-		   "enter: userinfo_signed_response_alg=%s, userinfo_encrypted_response_alg=%s, "
+		   "enter: JWT header=%s, userinfo_signed_response_alg=%s, userinfo_encrypted_response_alg=%s, "
 		   "userinfo_encrypted_response_enc=%s",
-		   oidc_cfg_provider_userinfo_signed_response_alg_get(provider),
+		   s_jwt_hdr, oidc_cfg_provider_userinfo_signed_response_alg_get(provider),
 		   oidc_cfg_provider_userinfo_encrypted_response_alg_get(provider),
 		   oidc_cfg_provider_userinfo_encrypted_response_enc_get(provider));
-
-	if ((oidc_cfg_provider_userinfo_signed_response_alg_get(provider) != NULL) ||
-	    (oidc_cfg_provider_userinfo_encrypted_response_alg_get(provider) != NULL) ||
-	    (oidc_cfg_provider_userinfo_encrypted_response_enc_get(provider) != NULL)) {
-		oidc_debug(r, "JWT header=%s", oidc_proto_jwt_header_peek(r, *response, &alg, NULL, NULL));
-	}
 
 	if (oidc_util_create_symmetric_key(r, oidc_cfg_provider_client_secret_get(provider), oidc_alg2keysize(alg),
 					   OIDC_JOSE_ALG_SHA256, TRUE, &jwk) == FALSE)
@@ -81,47 +81,49 @@ static apr_byte_t oidc_proto_userinfo_response_jwt_parse(request_rec *r, oidc_cf
 				     &payload, NULL, &err, TRUE) == FALSE) {
 			oidc_error(r, "oidc_jwe_decrypt failed: %s", oidc_jose_e2s(r->pool, err));
 			goto end;
-		} else {
-			oidc_debug(r, "successfully decrypted JWE returned from userinfo endpoint: %s", payload);
-			*response = payload;
 		}
+		oidc_debug(r, "successfully decrypted JWE returned from userinfo endpoint: %s", payload);
+		*response = payload;
 	}
 
-	if (oidc_cfg_provider_userinfo_signed_response_alg_get(provider) != NULL) {
-		if (oidc_jwt_parse(r->pool, *response, &jwt,
-				   oidc_util_merge_symmetric_key(r->pool, oidc_cfg_private_keys_get(cfg), jwk), FALSE,
-				   &err) == FALSE) {
-			oidc_error(r, "oidc_jwt_parse failed: %s", oidc_jose_e2s(r->pool, err));
-			goto end;
-		}
-		oidc_debug(r, "successfully parsed JWT with header=%s, and payload=%s", jwt->header.value.str,
-			   jwt->payload.value.str);
-
-		// disard the encryption key and load the signing key
-		oidc_jwk_destroy(jwk);
-		jwk = NULL;
-
-		if (oidc_util_create_symmetric_key(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, TRUE,
-						   &jwk) == FALSE)
-			goto end;
-
-		if (oidc_proto_jwt_verify(r, cfg, jwt, oidc_cfg_provider_jwks_uri_get(provider),
-					  oidc_cfg_provider_ssl_validate_server_get(provider),
-					  oidc_util_merge_symmetric_key(r->pool, NULL, jwk),
-					  oidc_cfg_provider_userinfo_signed_response_alg_get(provider)) == FALSE) {
-
-			oidc_error(r, "JWT signature could not be validated, aborting");
-			goto end;
-		}
-		oidc_debug(r, "successfully verified signed JWT returned from userinfo endpoint: %s",
-			   jwt->payload.value.str);
-
-		*userinfo_jwt = apr_pstrdup(r->pool, *response);
-		*claims = json_deep_copy(jwt->payload.value.json);
-		*response = apr_pstrdup(r->pool, jwt->payload.value.str);
-
-		rv = TRUE;
+	if (oidc_cfg_provider_userinfo_signed_response_alg_get(provider) == NULL) {
+		oidc_error(r, "no signed userinfo response algorithm configured to verify the JWT returned from the "
+			      "userinfo endpoint");
+		goto end;
 	}
+
+	if (oidc_jwt_parse(r->pool, *response, &jwt,
+			   oidc_util_merge_symmetric_key(r->pool, oidc_cfg_private_keys_get(cfg), jwk), FALSE,
+			   &err) == FALSE) {
+		oidc_error(r, "oidc_jwt_parse failed: %s", oidc_jose_e2s(r->pool, err));
+		goto end;
+	}
+	oidc_debug(r, "successfully parsed JWT with header=%s, and payload=%s", jwt->header.value.str,
+		   jwt->payload.value.str);
+
+	// discard the encryption key and load the signing key
+	oidc_jwk_destroy(jwk);
+	jwk = NULL;
+
+	if (oidc_util_create_symmetric_key(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, TRUE, &jwk) ==
+	    FALSE)
+		goto end;
+
+	if (oidc_proto_jwt_verify(r, cfg, jwt, oidc_cfg_provider_jwks_uri_get(provider),
+				  oidc_cfg_provider_ssl_validate_server_get(provider),
+				  oidc_util_merge_symmetric_key(r->pool, NULL, jwk),
+				  oidc_cfg_provider_userinfo_signed_response_alg_get(provider)) == FALSE) {
+
+		oidc_error(r, "JWT signature could not be validated, aborting");
+		goto end;
+	}
+	oidc_debug(r, "successfully verified signed JWT returned from userinfo endpoint: %s", jwt->payload.value.str);
+
+	*userinfo_jwt = apr_pstrdup(r->pool, *response);
+	*claims = json_deep_copy(jwt->payload.value.json);
+	*response = apr_pstrdup(r->pool, jwt->payload.value.str);
+
+	rv = TRUE;
 
 end:
 
