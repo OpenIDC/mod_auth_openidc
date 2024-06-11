@@ -40,6 +40,7 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+#include "metrics.h"
 #include "proto/proto.h"
 #include "util.h"
 
@@ -68,6 +69,9 @@ static apr_byte_t oidc_proto_validate_token_type(request_rec *r, oidc_provider_t
 static apr_byte_t oidc_proto_token_endpoint_call(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
 						 apr_table_t *params, const char *basic_auth, const char *bearer_auth,
 						 const char *dpop, char **response, apr_hash_t *response_hdrs) {
+
+	OIDC_METRICS_TIMING_START(r, cfg);
+
 	// oidc_debug(r, "cert=%s, key=%s, pwd=%s", oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider),
 	// oidc_cfg_provider_token_endpoint_tls_client_key_get(provider),
 	// oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider));
@@ -82,6 +86,9 @@ static apr_byte_t oidc_proto_token_endpoint_call(request_rec *r, oidc_cfg_t *cfg
 			   oidc_cfg_provider_token_endpoint_url_get(provider));
 		return FALSE;
 	}
+
+	OIDC_METRICS_TIMING_ADD(r, cfg, OM_PROVIDER_TOKEN);
+
 	return TRUE;
 }
 

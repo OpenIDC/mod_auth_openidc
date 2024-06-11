@@ -333,16 +333,12 @@ static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r, 
 
 	const char *state = oidc_proto_state_get_state(proto_state);
 
-	OIDC_METRICS_TIMING_START(r, c);
-
 	if (oidc_proto_resolve_code(r, c, provider, apr_table_get(params, OIDC_PROTO_CODE), code_verifier, &id_token,
 				    &access_token, &token_type, &expires_in, &refresh_token, state) == FALSE) {
 		oidc_error(r, "failed to resolve the code");
 		OIDC_METRICS_COUNTER_INC(r, c, OM_PROVIDER_TOKEN_ERROR);
 		return FALSE;
 	}
-
-	OIDC_METRICS_TIMING_ADD(r, c, OM_PROVIDER_TOKEN);
 
 	if (oidc_proto_validate_code_response(r, response_type, id_token, access_token, token_type) == FALSE) {
 		oidc_error(r, "code response validation failed");

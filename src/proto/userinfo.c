@@ -242,6 +242,9 @@ static apr_byte_t oidc_proto_userinfo_request_composite_claims(request_rec *r, o
 static apr_byte_t oidc_proto_userinfo_endpoint_call(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
 						    const char *access_token, const char *dpop, char **response,
 						    long *response_code, apr_hash_t *response_hdrs) {
+
+	OIDC_METRICS_TIMING_START(r, cfg);
+
 	/* get the JSON response */
 	if (oidc_cfg_provider_userinfo_token_method_get(provider) == OIDC_USER_INFO_TOKEN_METHOD_HEADER) {
 		if (oidc_http_get(r, oidc_cfg_provider_userinfo_endpoint_url_get(provider), NULL, NULL, access_token,
@@ -267,6 +270,9 @@ static apr_byte_t oidc_proto_userinfo_endpoint_call(request_rec *r, oidc_cfg_t *
 			   oidc_cfg_provider_userinfo_token_method_get(provider));
 		return FALSE;
 	}
+
+	OIDC_METRICS_TIMING_ADD(r, cfg, OM_PROVIDER_USERINFO);
+
 	return TRUE;
 }
 
@@ -287,8 +293,6 @@ apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, oidc_pro
 	oidc_debug(r, "enter, endpoint=%s, access_token=%s, token_type=%s",
 		   oidc_cfg_provider_userinfo_endpoint_url_get(provider), access_token, access_token_type);
 
-	OIDC_METRICS_TIMING_START(r, cfg);
-
 	if (_oidc_strnatcasecmp(access_token_type, OIDC_PROTO_DPOP) == 0) {
 		response_hdrs = apr_hash_make(r->pool);
 		apr_hash_set(response_hdrs, OIDC_HTTP_HDR_AUTHORIZATION, APR_HASH_KEY_STRING, "");
@@ -302,8 +306,6 @@ apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, oidc_pro
 	if (oidc_proto_userinfo_endpoint_call(r, cfg, provider, access_token, dpop, response, response_code,
 					      response_hdrs) == FALSE)
 		goto end;
-
-	OIDC_METRICS_TIMING_ADD(r, cfg, OM_PROVIDER_USERINFO);
 
 	if (oidc_util_decode_json_object_err(r, *response, &j_result, FALSE) == FALSE) {
 
