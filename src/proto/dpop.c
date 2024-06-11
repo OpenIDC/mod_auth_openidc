@@ -68,6 +68,8 @@ apr_byte_t oidc_proto_dpop_use_nonce(request_rec *r, oidc_cfg_t *cfg, json_t *j_
 
 end:
 
+	oidc_debug(r, "leave: %d, dpop=%s", rv, *dpop ? "true" : "false");
+
 	return rv;
 }
 

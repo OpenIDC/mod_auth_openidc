@@ -68,6 +68,9 @@ static apr_byte_t oidc_proto_validate_token_type(request_rec *r, oidc_provider_t
 static apr_byte_t oidc_proto_token_endpoint_call(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
 						 apr_table_t *params, const char *basic_auth, const char *bearer_auth,
 						 const char *dpop, char **response, apr_hash_t *response_hdrs) {
+	// oidc_debug(r, "cert=%s, key=%s, pwd=%s", oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider),
+	// oidc_cfg_provider_token_endpoint_tls_client_key_get(provider),
+	// oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider));
 	if (oidc_http_post_form(r, oidc_cfg_provider_token_endpoint_url_get(provider), params, basic_auth, bearer_auth,
 				dpop, oidc_cfg_provider_ssl_validate_server_get(provider), response, NULL,
 				response_hdrs, oidc_cfg_http_timeout_long_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
@@ -126,9 +129,14 @@ apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, oi
 					   response_hdrs) == FALSE)
 		goto end;
 
-	/* check for errors, the response itself will have been logged already */
-	if (oidc_util_decode_json_and_check_error(r, response, &j_result) == FALSE) {
+	/* decode the response into a JSON object */
+	if (oidc_util_decode_json_object_err(r, response, &j_result, TRUE) == FALSE)
+		goto end;
 
+	/* check for errors, the response itself will have been logged already */
+	if (oidc_util_check_json_error(r, j_result) == TRUE) {
+
+		dpop = NULL;
 		if (oidc_proto_dpop_use_nonce(r, cfg, j_result, response_hdrs,
 					      oidc_cfg_provider_token_endpoint_url_get(provider), "POST", NULL,
 					      &dpop) == FALSE)
