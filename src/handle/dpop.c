@@ -45,6 +45,8 @@
 #include "proto/proto.h"
 #include "util.h"
 
+#include <ap_mmn.h>
+
 #define OIDC_DPOP_PARAM_URL "url"
 #define OIDC_DPOP_PARAM_NONCE "nonce"
 #define OIDC_DPOP_PARAM_METHOD "method"
@@ -58,6 +60,13 @@ int oidc_dpop_request(request_rec *r, oidc_cfg_t *c) {
 	char *s_dpop = NULL;
 	char *s_response = NULL;
 	json_t *json = NULL;
+	char *remote_ip = NULL;
+
+#if AP_MODULE_MAGIC_AT_LEAST(20111130, 0)
+	remote_ip = r->useragent_ip;
+#else
+	remote_ip = r->connection->remote_ip;
+#endif
 
 	if (apr_hash_get(oidc_cfg_info_hook_data_get(c), OIDC_HOOK_INFO_DPOP, APR_HASH_KEY_STRING) == NULL) {
 		oidc_error(r, "DPoP hook called but \"dpop\" is not enabled in %s", OIDCInfoHook);
@@ -65,15 +74,14 @@ int oidc_dpop_request(request_rec *r, oidc_cfg_t *c) {
 	}
 
 	/* try to make sure that the proof-of-possession semantics are preserved */
-	if ((_oidc_strnatcasecmp(r->useragent_ip, r->connection->local_ip) != 0) &&
+	if ((_oidc_strnatcasecmp(remote_ip, r->connection->local_ip) != 0) &&
 	    (apr_table_get(r->subprocess_env, "OIDC_DPOP_API_INSECURE") == 0)) {
 		oidc_warn(
 		    r,
 		    "reject DPoP creation request from remote host: you should create a separate virtual (sub)host "
-		    "that requires client certificate authentication to allow and proxy this request "
-		    "(r->useragent_ip=%s, "
+		    "that requires client certificate authentication to allow and proxy this request (remote_ip=%s, "
 		    "r->connection->local_ip=%s)",
-		    r->useragent_ip, r->connection->local_ip);
+		    remote_ip, r->connection->local_ip);
 		rc = HTTP_UNAUTHORIZED;
 		goto end;
 	}
