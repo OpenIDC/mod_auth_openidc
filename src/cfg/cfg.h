@@ -129,6 +129,7 @@ typedef enum {
 #define OIDC_HOOK_INFO_SESSION_TIMEOUT "timeout"
 #define OIDC_HOOK_INFO_SESSION_REMOTE_USER "remote_user"
 #define OIDC_HOOK_INFO_REFRESH_TOKEN "refresh_token"
+#define OIDC_HOOK_INFO_DPOP "dpop"
 
 #define OIDC_HTML_ERROR_TEMPLATE_DEPRECATED "deprecated"
 

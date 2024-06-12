@@ -49,16 +49,20 @@
 #define OIDC_DPOP_PARAM_NONCE "nonce"
 #define OIDC_DPOP_PARAM_METHOD "method"
 
-int oidc_dpop_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
+int oidc_dpop_request(request_rec *r, oidc_cfg_t *c) {
 	int rc = HTTP_BAD_REQUEST;
 	char *s_url = NULL;
 	char *s_access_token = NULL;
 	char *s_nonce = NULL;
-	const char *session_access_token = NULL;
 	char *s_method = NULL;
 	char *s_dpop = NULL;
 	char *s_response = NULL;
 	json_t *json = NULL;
+
+	if (apr_hash_get(oidc_cfg_info_hook_data_get(c), OIDC_HOOK_INFO_DPOP, APR_HASH_KEY_STRING) == NULL) {
+		oidc_error(r, "DPoP hook called but \"dpop\" is not enabled in %s", OIDCInfoHook);
+		goto end;
+	}
 
 	/* try to make sure that the proof-of-possession semantics are preserved */
 	if ((_oidc_strnatcasecmp(r->useragent_ip, r->connection->local_ip) != 0) &&
@@ -98,25 +102,6 @@ int oidc_dpop_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 		s_method = "POST";
 	else if ((_oidc_strnatcasecmp(s_method, "get") == 0) || (s_method == NULL))
 		s_method = "GET";
-
-	/* check that we actually have a user session and this is someone calling with a proper session cookie */
-	if (session->remote_user == NULL) {
-		oidc_warn(r, "no user session found");
-		rc = HTTP_UNAUTHORIZED;
-		goto end;
-	}
-
-	session_access_token = oidc_session_get_access_token(r, session);
-	if (session_access_token == NULL) {
-		oidc_error(r, "no \"access_token\" was found in the session");
-		goto end;
-	}
-
-	if (_oidc_strcmp(s_access_token, session_access_token) != 0) {
-		oidc_error(r, "the provided \"access_token\" parameter is not matching the current access token stored "
-			      "in the user session");
-		goto end;
-	}
 
 	/* create the DPoP header value */
 	if ((oidc_proto_dpop_create(r, c, s_url, s_method, s_access_token, s_nonce, &s_dpop) == FALSE) ||

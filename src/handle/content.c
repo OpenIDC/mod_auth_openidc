@@ -96,18 +96,8 @@ int oidc_content_handler(request_rec *r) {
 
 			OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_DPOP);
 
-			/* see if a session was retained in the request state */
-			apr_pool_userdata_get((void **)&session, OIDC_USERDATA_SESSION, r->pool);
-
-			/* if no retained session was found, load it from the cache or create a new one*/
-			if (session != NULL)
-				/* handle request to create a DPoP proof */
-				rc = oidc_dpop_request(r, c, session);
-			else
-				rc = HTTP_UNAUTHORIZED;
-
-			/* free resources allocated for the session */
-			oidc_session_free(r, session);
+			/* handle request to create a DPoP proof */
+			rc = oidc_dpop_request(r, c);
 
 		} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
 

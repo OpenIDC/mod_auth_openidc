@@ -325,11 +325,19 @@ OIDC_CFG_MEMBER_FUNC_GET(filter_claims_expr, oidc_apr_expr_t *)
  */
 const char *oidc_cmd_info_hook_data_set(cmd_parms *cmd, void *m, const char *arg) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
-	static const char *options[] = {
-	    OIDC_HOOK_INFO_TIMESTAMP,		OIDC_HOOK_INFO_ACCES_TOKEN, OIDC_HOOK_INFO_ACCES_TOKEN_EXP,
-	    OIDC_HOOK_INFO_ID_TOKEN_HINT,	OIDC_HOOK_INFO_ID_TOKEN,    OIDC_HOOK_INFO_USER_INFO,
-	    OIDC_HOOK_INFO_REFRESH_TOKEN,	OIDC_HOOK_INFO_SESSION_EXP, OIDC_HOOK_INFO_SESSION_TIMEOUT,
-	    OIDC_HOOK_INFO_SESSION_REMOTE_USER, OIDC_HOOK_INFO_SESSION,	    NULL};
+	static const char *options[] = {OIDC_HOOK_INFO_TIMESTAMP,
+					OIDC_HOOK_INFO_ACCES_TOKEN,
+					OIDC_HOOK_INFO_ACCES_TOKEN_EXP,
+					OIDC_HOOK_INFO_ID_TOKEN_HINT,
+					OIDC_HOOK_INFO_ID_TOKEN,
+					OIDC_HOOK_INFO_USER_INFO,
+					OIDC_HOOK_INFO_REFRESH_TOKEN,
+					OIDC_HOOK_INFO_SESSION_EXP,
+					OIDC_HOOK_INFO_SESSION_TIMEOUT,
+					OIDC_HOOK_INFO_SESSION_REMOTE_USER,
+					OIDC_HOOK_INFO_SESSION,
+					OIDC_HOOK_INFO_DPOP,
+					NULL};
 	const char *rv = oidc_cfg_parse_is_valid_option(cmd->pool, arg, options);
 	if (rv != NULL)
 		return OIDC_CONFIG_DIR_RV(cmd, rv);
