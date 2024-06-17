@@ -546,7 +546,7 @@ const command_rec oidc_cfg_cmds[] = {
 		pkce,
 		"The RFC 7636 PCKE mode used; must be one of \"plain\" or \"S256\""),
 	OIDC_CFG_CMD_PROVIDER(
-		AP_INIT_TAKE1,
+		AP_INIT_TAKE12,
 		OIDCDPoPMode,
 		dpop_mode,
 		"The RFC 9449 DPoP mode used; must be one of \"off\", \"optional\" or \"required\""),

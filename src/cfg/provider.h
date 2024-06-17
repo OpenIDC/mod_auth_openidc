@@ -226,11 +226,12 @@ OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_DECL(session_max_duration)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_DECL(response_require_iss)
 // ints with 2 args
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_DECL(userinfo_refresh_interval, const char *)
+OIDC_CFG_PROVIDER_MEMBER_FUNCS_TYPE_DECL(dpop_mode, oidc_dpop_mode_t, const char *)
+void OIDC_CFG_MEMBER_FUNC_NAME(dpop_mode, cfg_provider, int_set)(oidc_provider_t *provider, oidc_dpop_mode_t arg);
 
 // for metadata.c
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_INT_DECL(userinfo_token_method, oidc_userinfo_token_method_t)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_INT_DECL(auth_request_method, oidc_auth_request_method_t)
-OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_INT_DECL(dpop_mode, oidc_dpop_mode_t)
 
 // types
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_TYPE_DECL(pkce, const oidc_proto_pkce_t *)

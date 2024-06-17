@@ -325,19 +325,11 @@ OIDC_CFG_MEMBER_FUNC_GET(filter_claims_expr, oidc_apr_expr_t *)
  */
 const char *oidc_cmd_info_hook_data_set(cmd_parms *cmd, void *m, const char *arg) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
-	static const char *options[] = {OIDC_HOOK_INFO_TIMESTAMP,
-					OIDC_HOOK_INFO_ACCES_TOKEN,
-					OIDC_HOOK_INFO_ACCES_TOKEN_EXP,
-					OIDC_HOOK_INFO_ID_TOKEN_HINT,
-					OIDC_HOOK_INFO_ID_TOKEN,
-					OIDC_HOOK_INFO_USER_INFO,
-					OIDC_HOOK_INFO_REFRESH_TOKEN,
-					OIDC_HOOK_INFO_SESSION_EXP,
-					OIDC_HOOK_INFO_SESSION_TIMEOUT,
-					OIDC_HOOK_INFO_SESSION_REMOTE_USER,
-					OIDC_HOOK_INFO_SESSION,
-					OIDC_HOOK_INFO_DPOP,
-					NULL};
+	static const char *options[] = {
+	    OIDC_HOOK_INFO_TIMESTAMP,		OIDC_HOOK_INFO_ACCES_TOKEN, OIDC_HOOK_INFO_ACCES_TOKEN_EXP,
+	    OIDC_HOOK_INFO_ID_TOKEN_HINT,	OIDC_HOOK_INFO_ID_TOKEN,    OIDC_HOOK_INFO_USER_INFO,
+	    OIDC_HOOK_INFO_REFRESH_TOKEN,	OIDC_HOOK_INFO_SESSION_EXP, OIDC_HOOK_INFO_SESSION_TIMEOUT,
+	    OIDC_HOOK_INFO_SESSION_REMOTE_USER, OIDC_HOOK_INFO_SESSION,	    NULL};
 	const char *rv = oidc_cfg_parse_is_valid_option(cmd->pool, arg, options);
 	if (rv != NULL)
 		return OIDC_CONFIG_DIR_RV(cmd, rv);
@@ -381,7 +373,10 @@ const char *oidc_cmd_trace_parent_set(cmd_parms *cmd, void *struct_ptr, const ch
 }
 
 #define OIDC_DEFAULT_TRACE_PARENT OIDC_TRACE_PARENT_OFF
-OIDC_CFG_MEMBER_FUNC_TYPE_GET(trace_parent, oidc_trace_parent_t, OIDC_TRACE_PARENT_OFF)
+OIDC_CFG_MEMBER_FUNC_TYPE_GET(trace_parent, oidc_trace_parent_t, OIDC_DEFAULT_TRACE_PARENT)
+
+#define OIDC_DEFAULT_DPOP_API_ENABLED 0
+OIDC_CFG_MEMBER_FUNC_TYPE_GET(dpop_api_enabled, int, OIDC_DEFAULT_DPOP_API_ENABLED)
 
 const char *oidc_cmd_claim_prefix_set(cmd_parms *cmd, void *struct_ptr, const char *args) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
@@ -676,6 +671,7 @@ void *oidc_cfg_server_create(apr_pool_t *pool, server_rec *svr) {
 	c->metrics_hook_data = NULL;
 	c->metrics_path = NULL;
 	c->trace_parent = OIDC_CONFIG_POS_INT_UNSET;
+	c->dpop_api_enabled = OIDC_CONFIG_POS_INT_UNSET;
 
 	c->black_listed_claims = NULL;
 	c->white_listed_claims = NULL;
@@ -816,6 +812,8 @@ void *oidc_cfg_server_merge(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->metrics_hook_data = add->metrics_hook_data != NULL ? add->metrics_hook_data : base->metrics_hook_data;
 	c->metrics_path = add->metrics_path != NULL ? add->metrics_path : base->metrics_path;
 	c->trace_parent = add->trace_parent != OIDC_CONFIG_POS_INT_UNSET ? add->trace_parent : base->trace_parent;
+	c->dpop_api_enabled =
+	    add->dpop_api_enabled != OIDC_CONFIG_POS_INT_UNSET ? add->dpop_api_enabled : base->dpop_api_enabled;
 
 	c->black_listed_claims =
 	    add->black_listed_claims != NULL ? add->black_listed_claims : base->black_listed_claims;

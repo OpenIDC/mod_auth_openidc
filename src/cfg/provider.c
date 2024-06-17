@@ -279,8 +279,31 @@ static const char *oidc_cfg_provider_parse_dop_method(apr_pool_t *pool, const ch
 }
 
 #define OIDC_DEFAULT_DPOP_MODE OIDC_DPOP_MODE_OFF
-OIDC_PROVIDER_MEMBER_FUNCS_STR_INT(dpop_mode, oidc_cfg_provider_parse_dop_method, oidc_dpop_mode_t,
-				   OIDC_DEFAULT_DPOP_MODE)
+
+OIDC_PROVIDER_MEMBER_GET_INT_DEF(dpop_mode, oidc_dpop_mode_t, OIDC_DEFAULT_DPOP_MODE)
+
+void oidc_cfg_provider_dpop_mode_int_set(oidc_provider_t *provider, oidc_dpop_mode_t arg) {
+	provider->dpop_mode = arg;
+}
+
+const char *oidc_cfg_provider_dpop_mode_set(apr_pool_t *pool, oidc_provider_t *provider, const char *arg) {
+	const char *rv = NULL;
+	oidc_dpop_mode_t v;
+	rv = oidc_cfg_provider_parse_dop_method(pool, arg, &v);
+	if (rv == NULL)
+		provider->dpop_mode = v;
+	else
+		provider->dpop_mode = OIDC_DEFAULT_DPOP_MODE;
+	return rv;
+}
+
+const char *oidc_cmd_provider_dpop_mode_set(cmd_parms *cmd, void *ptr, const char *arg1, const char *arg2) {
+	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
+	const char *rv = oidc_cfg_provider_dpop_mode_set(cmd->pool, cfg->provider, arg1);
+	if ((rv == NULL) && (arg2))
+		rv = oidc_cfg_parse_boolean(cmd->pool, arg2, &cfg->dpop_api_enabled);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
 
 OIDC_PROVIDER_MEMBER_FUNCS_STR(issuer, NULL)
 OIDC_PROVIDER_MEMBER_FUNCS_URL(authorization_endpoint_url)

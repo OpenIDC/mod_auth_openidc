@@ -129,7 +129,6 @@ typedef enum {
 #define OIDC_HOOK_INFO_SESSION_TIMEOUT "timeout"
 #define OIDC_HOOK_INFO_SESSION_REMOTE_USER "remote_user"
 #define OIDC_HOOK_INFO_REFRESH_TOKEN "refresh_token"
-#define OIDC_HOOK_INFO_DPOP "dpop"
 
 #define OIDC_HTML_ERROR_TEMPLATE_DEPRECATED "deprecated"
 
@@ -237,6 +236,7 @@ OIDC_CFG_MEMBER_FUNCS_DECL(redirect_urls_allowed, apr_hash_t *)
 OIDC_CFG_MEMBER_FUNCS_DECL(ca_bundle_path, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(logout_x_frame_options, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(x_forwarded_headers, oidc_hdr_x_forwarded_t)
+OIDC_CFG_MEMBER_FUNCS_DECL(dpop_api_enabled, int)
 
 // 2 args
 OIDC_CFG_MEMBER_FUNCS_DECL(post_preserve_templates, const char *, const char *)

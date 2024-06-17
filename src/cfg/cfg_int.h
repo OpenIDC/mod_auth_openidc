@@ -189,6 +189,7 @@ struct oidc_cfg_t {
 
 	apr_hash_t *metrics_hook_data;
 	char *metrics_path;
+	int dpop_api_enabled;
 
 	/* directory that holds the provider & client metadata files */
 	char *metadata_dir;

@@ -68,8 +68,8 @@ int oidc_dpop_request(request_rec *r, oidc_cfg_t *c) {
 	remote_ip = r->connection->remote_ip;
 #endif
 
-	if (apr_hash_get(oidc_cfg_info_hook_data_get(c), OIDC_HOOK_INFO_DPOP, APR_HASH_KEY_STRING) == NULL) {
-		oidc_error(r, "DPoP hook called but \"dpop\" is not enabled in %s", OIDCInfoHook);
+	if (!oidc_cfg_dpop_api_enabled_get(c)) {
+		oidc_error(r, "DPoP hook called but the DPoP API is not enabled in %s", OIDCDPoPMode);
 		goto end;
 	}
 
