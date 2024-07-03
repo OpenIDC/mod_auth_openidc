@@ -759,7 +759,7 @@ void oidc_cfg_provider_merge(apr_pool_t *pool, oidc_provider_t *dst, const oidc_
 	dst->dpop_mode = add->dpop_mode != OIDC_CONFIG_POS_INT_UNSET ? add->dpop_mode : base->dpop_mode;
 
 	dst->client_jwks_uri = add->client_jwks_uri != NULL ? add->client_jwks_uri : base->client_jwks_uri;
-	dst->client_keys = add->client_keys != NULL ? add->client_keys : base->client_keys;
+	dst->client_keys = oidc_jwk_list_copy(pool, add->client_keys != NULL ? add->client_keys : base->client_keys);
 
 	dst->id_token_signed_response_alg = add->id_token_signed_response_alg != NULL
 						? add->id_token_signed_response_alg

@@ -1,3 +1,6 @@
+07/03/2024
+- cfg/provider: use oidc_jwk_list_copy when merging client_keys
+
 06/18/2024
 - memcache: correct dead server check on APR_NOTFOUND; see #1230; thanks @rpluem-vf
 
