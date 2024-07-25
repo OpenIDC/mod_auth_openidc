@@ -1,7 +1,21 @@
 @echo Requires git installed and an account on github
 @set STARTTIME=%time% 
 
-git submodule update --init --recursive
+
+SET /P TRUSTSUBMODULE=Do you want to reset all submodules? (Choose Y first time you run or retest) (Y/[N])?
+IF /I "%TRUSTSUBMODULE%" NEQ "Y" GOTO SKIP_SUBMODULE
+
+REM Remove all untracked content of the module
+git submodule foreach --recursive git clean -xfd
+REM Force all changed track files to be default values.
+git submodule foreach --recursive git reset --hard
+REM Update to the Latest and greatest in the submodule
+git submodule update --recursive --remote
+
+@ECHO Copy over changes to cjose so they compile on windows
+xcopy changes\*.* /r /q /y /s
+
+:SKIP_SUBMODULE
 
 if "%VSINSTALLDIR%"=="" call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
 
@@ -20,9 +34,6 @@ call bootstrap-vcpkg.bat
 cd..
 
 :VCPKG_INSTALLED
-
-@echo Over changes to cjose so it compiles on windows
-xcopy changes\*.* /r /q /y /s
 
 @echo Downloading Apache http x32 and x64 zip files.
 powershell .\download.ps1
