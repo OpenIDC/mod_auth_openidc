@@ -1,3 +1,6 @@
+08/23/2024
+- release 2.4.16
+
 07/03/2024
 - cfg/provider: use oidc_jwk_list_copy when merging client_keys
 
