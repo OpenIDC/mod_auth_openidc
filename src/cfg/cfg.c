@@ -423,8 +423,12 @@ const char *oidc_cmd_x_forwarded_headers_set(cmd_parms *cmd, void *m, const char
 						    {OIDC_HDR_FORWARDED, OIDC_HTTP_HDR_FORWARDED}};
 	int v = OIDC_CONFIG_POS_INT_UNSET;
 	const char *rv = oidc_cfg_parse_option(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg, &v);
-	if ((rv == NULL) && (v != OIDC_CONFIG_POS_INT_UNSET))
+	if ((rv == NULL) && (v != OIDC_CONFIG_POS_INT_UNSET)) {
+		// NB: cannot use |= with UNSET/-1 !
+		if (cfg->x_forwarded_headers == OIDC_CONFIG_POS_INT_UNSET)
+			cfg->x_forwarded_headers = OIDC_HDR_NONE;
 		cfg->x_forwarded_headers |= v;
+	}
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
