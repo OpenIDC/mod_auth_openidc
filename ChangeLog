@@ -2,6 +2,7 @@
 - re-introduce OIDCSessionMaxDuration 0; see #1252
 - bump to 2.4.16.2dev
 - add some resilience when both Forwarded and X-Forwarded-* are configured
+- fix disabled OIDCStateCookiePrefix command; closes #1254; thanks @damisanet
 
 08/26/2024
 - fix parsing OIDCXForwardedHeaders; closes #1250; thanks @maltesmann

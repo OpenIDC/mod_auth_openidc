@@ -723,6 +723,11 @@ const command_rec oidc_cfg_cmds[] = {
 		"Define the cookie path for the session cookie."),
 	OIDC_CFG_CMD_DIR(
 		AP_INIT_TAKE1,
+		OIDCStateCookiePrefix,
+		state_cookie_prefix,
+		"Define the cookie prefix for the state cookie."),
+	OIDC_CFG_CMD_DIR(
+		AP_INIT_TAKE1,
 		OIDCCookie,
 		cookie,
 		"Define the cookie name for the session cookie."),
