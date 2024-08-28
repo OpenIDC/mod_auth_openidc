@@ -125,8 +125,6 @@ struct oidc_cfg_t {
 	/* (optional) default URL to go to after logout */
 	char *default_slo_url;
 
-	/* HTML to display error messages+description */
-	char *error_template;
 	/* Javascript template to preserve POST data */
 	char *post_preserve_template;
 	/* Javascript template to restore POST data */

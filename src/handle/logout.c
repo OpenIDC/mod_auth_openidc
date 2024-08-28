@@ -471,8 +471,7 @@ int oidc_logout(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 
 		/* do input validation on the logout parameter value */
 		if (oidc_validate_redirect_url(r, c, url, TRUE, &error_str, &error_description) == FALSE) {
-			return oidc_util_html_send_error(r, oidc_cfg_html_error_template_get(c), error_str,
-							 error_description, HTTP_BAD_REQUEST);
+			return oidc_util_html_send_error(r, error_str, error_description, HTTP_BAD_REQUEST);
 		}
 	}
 

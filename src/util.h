@@ -81,8 +81,7 @@ int oidc_util_html_send(request_rec *r, const char *title, const char *html_head
 apr_byte_t oidc_util_file_read(request_rec *r, const char *path, apr_pool_t *pool, char **result);
 apr_byte_t oidc_util_file_write(request_rec *r, const char *path, const char *data);
 apr_byte_t oidc_util_issuer_match(const char *a, const char *b);
-int oidc_util_html_send_error(request_rec *r, const char *html_template, const char *error, const char *description,
-			      int status_code);
+int oidc_util_html_send_error(request_rec *r, const char *error, const char *description, int status_code);
 apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack, const char *needle);
 void oidc_util_set_app_info(request_rec *r, const char *s_key, const char *s_value, const char *claim_prefix,
 			    oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding);

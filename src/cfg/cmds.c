@@ -178,11 +178,6 @@ const command_rec oidc_cfg_cmds[] = {
 		session_cookie_chunk_size,
 		"Chunk size for client-cookie session storage type in bytes. Defaults to 4k. Set 0 to suppress chunking."),
 	OIDC_CFG_CMD(
-		AP_INIT_TAKE1,
-		OIDCHTMLErrorTemplate,
-		html_error_template,
-		"Name of a HTML error template: needs to contain two \"%s\" characters, one for the error message, one for the description."),
-	OIDC_CFG_CMD(
 		AP_INIT_TAKE2,
 		OIDCPreservePostTemplates,
 		post_preserve_templates,

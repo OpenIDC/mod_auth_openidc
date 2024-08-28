@@ -495,25 +495,6 @@ const char *oidc_cmd_post_preserve_templates_set(cmd_parms *cmd, void *m, const 
 OIDC_CFG_MEMBER_FUNC_GET(post_preserve_template, const char *)
 OIDC_CFG_MEMBER_FUNC_GET(post_restore_template, const char *)
 
-const char *oidc_cmd_html_error_template_set(cmd_parms *cmd, void *ptr, const char *arg) {
-	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
-	oidc_swarn(
-	    cmd->server, OIDCHTMLErrorTemplate
-	    " is deprecated; please use the standard Apache features to deal with the " OIDC_ERROR_ENVVAR
-	    " and " OIDC_ERROR_DESC_ENVVAR
-	    " environment variables set by this module, see: https://httpd.apache.org/docs/2.4/custom-error.html");
-	const char *rv = NULL;
-	if (_oidc_strcmp(arg, OIDC_HTML_ERROR_TEMPLATE_DEPRECATED) == 0)
-		cfg->error_template = OIDC_HTML_ERROR_TEMPLATE_DEPRECATED;
-	else
-		rv = oidc_cfg_parse_filename(cmd->pool, arg, &cfg->error_template);
-	return OIDC_CONFIG_DIR_RV(cmd, rv);
-}
-
-const char *oidc_cfg_html_error_template_get(oidc_cfg_t *cfg) {
-	return cfg->error_template;
-}
-
 const char *oidc_cmd_ca_bundle_path_set(cmd_parms *cmd, void *ptr, const char *arg) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
 	const char *rv = oidc_cfg_parse_filename(cmd->pool, arg, &cfg->ca_bundle_path);
@@ -665,7 +646,6 @@ void *oidc_cfg_server_create(apr_pool_t *pool, server_rec *svr) {
 	c->crypto_passphrase.secret1 = NULL;
 	c->crypto_passphrase.secret2 = NULL;
 
-	c->error_template = NULL;
 	c->post_preserve_template = NULL;
 	c->post_restore_template = NULL;
 
@@ -802,7 +782,6 @@ void *oidc_cfg_server_merge(apr_pool_t *pool, void *BASE, void *ADD) {
 		c->crypto_passphrase.secret2 = base->crypto_passphrase.secret2;
 	}
 
-	c->error_template = add->error_template != NULL ? add->error_template : base->error_template;
 	c->post_preserve_template =
 	    add->post_preserve_template != NULL ? add->post_preserve_template : base->post_preserve_template;
 	c->post_restore_template =

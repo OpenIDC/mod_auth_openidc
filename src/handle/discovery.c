@@ -137,7 +137,7 @@ int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg) {
 	/* get a list of all providers configured in the metadata directory */
 	apr_array_header_t *arr = NULL;
 	if (oidc_metadata_list(r, cfg, &arr) == FALSE)
-		return oidc_util_html_send_error(r, oidc_cfg_html_error_template_get(cfg), "Configuration Error",
+		return oidc_util_html_send_error(r, "Configuration Error",
 						 "No configured providers found, contact your administrator",
 						 HTTP_UNAUTHORIZED);
 
@@ -324,7 +324,7 @@ int oidc_discovery_response(request_rec *r, oidc_cfg_t *c) {
 
 	if (target_link_uri == NULL) {
 		if (oidc_cfg_default_sso_url_get(c) == NULL) {
-			return oidc_util_html_send_error(r, oidc_cfg_html_error_template_get(c), "Invalid Request",
+			return oidc_util_html_send_error(r, "Invalid Request",
 							 "SSO to this module without specifying a \"target_link_uri\" "
 							 "parameter is not possible because " OIDCDefaultURL
 							 " is not set.",
@@ -335,7 +335,7 @@ int oidc_discovery_response(request_rec *r, oidc_cfg_t *c) {
 
 	/* do open redirect prevention, step 1 */
 	if (oidc_discovery_target_link_uri_match(r, c, target_link_uri) == FALSE) {
-		return oidc_util_html_send_error(r, oidc_cfg_html_error_template_get(c), "Invalid Request",
+		return oidc_util_html_send_error(r, "Invalid Request",
 						 "\"target_link_uri\" parameter does not match configuration settings, "
 						 "aborting to prevent an open redirect.",
 						 HTTP_UNAUTHORIZED);
@@ -343,8 +343,7 @@ int oidc_discovery_response(request_rec *r, oidc_cfg_t *c) {
 
 	/* do input validation on the target_link_uri parameter value, step 2 */
 	if (oidc_validate_redirect_url(r, c, target_link_uri, TRUE, &error_str, &error_description) == FALSE) {
-		return oidc_util_html_send_error(r, oidc_cfg_html_error_template_get(c), error_str, error_description,
-						 HTTP_UNAUTHORIZED);
+		return oidc_util_html_send_error(r, error_str, error_description, HTTP_UNAUTHORIZED);
 	}
 
 	/* see if this is a static setup */
@@ -352,7 +351,7 @@ int oidc_discovery_response(request_rec *r, oidc_cfg_t *c) {
 		if ((oidc_provider_static_config(r, c, &provider) == TRUE) && (issuer != NULL)) {
 			if (_oidc_strcmp(oidc_cfg_provider_issuer_get(provider), issuer) != 0) {
 				return oidc_util_html_send_error(
-				    r, oidc_cfg_html_error_template_get(c), "Invalid Request",
+				    r, "Invalid Request",
 				    apr_psprintf(
 					r->pool,
 					"The \"iss\" value must match the configured providers' one (%s != %s).",
@@ -378,7 +377,7 @@ int oidc_discovery_response(request_rec *r, oidc_cfg_t *c) {
 		if (oidc_proto_discovery_url_based(r, c, user, &issuer) == FALSE) {
 
 			/* something did not work out, show a user facing error */
-			return oidc_util_html_send_error(r, oidc_cfg_html_error_template_get(c), "Invalid Request",
+			return oidc_util_html_send_error(r, "Invalid Request",
 							 "Could not resolve the provided user identifier to an OpenID "
 							 "Connect provider; check your syntax.",
 							 HTTP_NOT_FOUND);
@@ -398,7 +397,7 @@ int oidc_discovery_response(request_rec *r, oidc_cfg_t *c) {
 		if (oidc_proto_discovery_account_based(r, c, issuer, &issuer) == FALSE) {
 
 			/* something did not work out, show a user facing error */
-			return oidc_util_html_send_error(r, oidc_cfg_html_error_template_get(c), "Invalid Request",
+			return oidc_util_html_send_error(r, "Invalid Request",
 							 "Could not resolve the provided account name to an OpenID "
 							 "Connect provider; check your syntax.",
 							 HTTP_NOT_FOUND);
@@ -439,7 +438,7 @@ int oidc_discovery_response(request_rec *r, oidc_cfg_t *c) {
 	}
 
 	/* something went wrong */
-	return oidc_util_html_send_error(r, oidc_cfg_html_error_template_get(c), "Invalid Request",
+	return oidc_util_html_send_error(r, "Invalid Request",
 					 "Could not find valid provider metadata for the selected OpenID Connect "
 					 "provider; contact the administrator",
 					 HTTP_NOT_FOUND);

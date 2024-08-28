@@ -67,7 +67,6 @@
 #define OIDCMetadataDir "OIDCMetadataDir"
 #define OIDCSessionCacheFallbackToCookie "OIDCSessionCacheFallbackToCookie"
 #define OIDCSessionCookieChunkSize "OIDCSessionCookieChunkSize"
-#define OIDCHTMLErrorTemplate "OIDCHTMLErrorTemplate"
 #define OIDCPreservePostTemplates "OIDCPreservePostTemplates"
 #define OIDCProviderMetadataRefreshInterval "OIDCProviderMetadataRefreshInterval"
 #define OIDCBlackListedClaims "OIDCBlackListedClaims"

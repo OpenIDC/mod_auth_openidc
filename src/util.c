@@ -1102,8 +1102,6 @@ int oidc_util_html_send(request_rec *r, const char *title, const char *html_head
 	return oidc_util_http_send(r, html, _oidc_strlen(html), OIDC_HTTP_CONTENT_TYPE_TEXT_HTML, status_code);
 }
 
-static char *html_error_template_contents = NULL;
-
 /*
  * escape characters in an HTML/Javascript template
  */
@@ -1145,34 +1143,7 @@ apr_byte_t oidc_util_html_send_in_template(request_rec *r, const char *filename,
 /*
  * send a user-facing error to the browser
  */
-int oidc_util_html_send_error(request_rec *r, const char *html_template, const char *error, const char *description,
-			      int status_code) {
-
-	char *html = "";
-	int rc = status_code;
-
-	if (html_template != NULL) {
-
-		if (_oidc_strcmp(html_template, OIDC_HTML_ERROR_TEMPLATE_DEPRECATED) != 0) {
-
-			rc = oidc_util_html_send_in_template(r, html_template, &html_error_template_contents, error,
-							     OIDC_POST_PRESERVE_ESCAPE_HTML, description,
-							     OIDC_POST_PRESERVE_ESCAPE_HTML, status_code);
-
-		} else {
-
-			if (error != NULL) {
-				html = apr_psprintf(r->pool, "%s<p>Error: <pre>%s</pre></p>", html,
-						    oidc_util_html_escape(r->pool, error));
-			}
-			if (description != NULL) {
-				html = apr_psprintf(r->pool, "%s<p>Description: <pre>%s</pre></p>", html,
-						    oidc_util_html_escape(r->pool, description));
-			}
-
-			rc = oidc_util_html_send(r, "Error", NULL, NULL, html, status_code);
-		}
-	}
+int oidc_util_html_send_error(request_rec *r, const char *error, const char *description, int status_code) {
 
 	oidc_debug(r, "setting " OIDC_ERROR_ENVVAR " environment variable to: %s", error);
 	apr_table_set(r->subprocess_env, OIDC_ERROR_ENVVAR, error ? error : "");
@@ -1180,7 +1151,7 @@ int oidc_util_html_send_error(request_rec *r, const char *html_template, const c
 	oidc_debug(r, "setting " OIDC_ERROR_DESC_ENVVAR " environment variable to: %s", description);
 	apr_table_set(r->subprocess_env, OIDC_ERROR_DESC_ENVVAR, description ? description : "");
 
-	return rc;
+	return status_code;
 }
 
 /* the maximum size of data that we accept in a single POST value: 1MB */

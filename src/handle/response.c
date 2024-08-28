@@ -75,9 +75,8 @@ static int oidc_response_authorization_error(request_rec *r, oidc_cfg_t *c, oidc
 	if ((prompt != NULL) && (_oidc_strcmp(prompt, OIDC_PROTO_PROMPT_NONE) == 0)) {
 		return oidc_response_redirect_parent_window_to_logout(r, c);
 	}
-	return oidc_util_html_send_error(
-	    r, oidc_cfg_html_error_template_get(c), apr_psprintf(r->pool, "OpenID Connect Provider error: %s", error),
-	    error_description, oidc_cfg_html_error_template_get(c) ? OK : HTTP_BAD_REQUEST);
+	return oidc_util_html_send_error(r, apr_psprintf(r->pool, "OpenID Connect Provider error: %s", error),
+					 error_description, HTTP_BAD_REQUEST);
 }
 
 /* handle the browser back on an authorization response */
@@ -380,7 +379,7 @@ static apr_byte_t oidc_response_proto_state_restore(request_rec *r, oidc_cfg_t *
 		if ((oidc_cfg_default_sso_url_get(c) == NULL) ||
 		    (apr_table_get(r->subprocess_env, "OIDC_NO_DEFAULT_URL_ON_STATE_TIMEOUT") != NULL)) {
 			oidc_util_html_send_error(
-			    r, oidc_cfg_html_error_template_get(c), "Invalid Authentication Response",
+			    r, "Invalid Authentication Response",
 			    apr_psprintf(r->pool,
 					 "This is due to a timeout; please restart your authentication session by "
 					 "re-entering the URL/bookmark you originally wanted to access: %s",
@@ -564,18 +563,6 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 		oidc_error(r,
 			   "invalid authorization response state and no default SSO URL is set, sending an error...");
 
-		if (oidc_cfg_html_error_template_get(c)) {
-			// retain backwards compatibility
-			int rc = HTTP_BAD_REQUEST;
-			if ((r->user) && (_oidc_strncmp(r->user, "", 1) == 0)) {
-				r->header_only = 1;
-				r->user = NULL;
-				rc = OK;
-			}
-			OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_STATE_MISMATCH);
-			return rc;
-		}
-
 		// if error text was already produced (e.g. state timeout) then just return with a 400
 		if (apr_table_get(r->subprocess_env, OIDC_ERROR_ENVVAR) != NULL) {
 			OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_STATE_EXPIRED);
@@ -584,8 +571,7 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_STATE_MISMATCH);
 
-		return oidc_util_html_send_error(r, oidc_cfg_html_error_template_get(c),
-						 "Invalid Authorization Response",
+		return oidc_util_html_send_error(r, "Invalid Authorization Response",
 						 "Could not match the authorization response to an earlier request via "
 						 "the state parameter and corresponding state cookie",
 						 HTTP_BAD_REQUEST);
@@ -721,7 +707,7 @@ int oidc_response_authorization_post(request_rec *r, oidc_cfg_t *c, oidc_session
 	    ((apr_table_elts(params)->nelts == 1) && apr_table_get(params, OIDC_PROTO_RESPONSE_MODE) &&
 	     (_oidc_strcmp(apr_table_get(params, OIDC_PROTO_RESPONSE_MODE), OIDC_PROTO_RESPONSE_MODE_FRAGMENT) == 0))) {
 		return oidc_util_html_send_error(
-		    r, oidc_cfg_html_error_template_get(c), "Invalid Request",
+		    r, "Invalid Request",
 		    "You've hit an OpenID Connect Redirect URI with no parameters, this is an invalid request; you "
 		    "should not open this URL in your browser directly, or have the server administrator use a "
 		    "different " OIDCRedirectURI " setting.",

@@ -482,10 +482,7 @@ static authz_status oidc_authz_24_unauthorized_user(request_rec *r) {
 	case OIDC_UNAUTZ_RETURN403:
 	case OIDC_UNAUTZ_RETURN401:
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_401);
-		oidc_util_html_send_error(r, oidc_cfg_html_error_template_get(c), "Authorization Error",
-					  oidc_cfg_dir_unauthz_arg_get(r), HTTP_UNAUTHORIZED);
-		if (oidc_cfg_html_error_template_get(c))
-			r->header_only = 1;
+		oidc_util_html_send_error(r, "Authorization Error", oidc_cfg_dir_unauthz_arg_get(r), HTTP_UNAUTHORIZED);
 		return AUTHZ_DENIED;
 	case OIDC_UNAUTZ_RETURN302:
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_302);
