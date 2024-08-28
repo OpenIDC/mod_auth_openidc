@@ -653,7 +653,7 @@ static const char *oidc_util_current_url_scheme(const request_rec *r, oidc_hdr_x
 
 	if (x_forwarded_headers & OIDC_HDR_FORWARDED)
 		scheme_str = oidc_http_hdr_forwarded_get(r, "proto");
-	else if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_PROTO)
+	if ((scheme_str == NULL) && (x_forwarded_headers & OIDC_HDR_X_FORWARDED_PROTO))
 		scheme_str = oidc_http_hdr_in_x_forwarded_proto_get(r);
 
 	/* if not we'll determine the scheme used to connect to this server */
@@ -722,7 +722,7 @@ static const char *oidc_get_current_url_port(const request_rec *r, const char *s
 
 	if (x_forwarded_headers & OIDC_HDR_FORWARDED)
 		host_hdr = oidc_http_hdr_forwarded_get(r, "host");
-	else if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_HOST)
+	if ((host_hdr == NULL) && (x_forwarded_headers & OIDC_HDR_X_FORWARDED_HOST))
 		host_hdr = oidc_http_hdr_in_x_forwarded_host_get(r);
 
 	if (host_hdr) {
@@ -782,7 +782,7 @@ const char *oidc_util_current_url_host(request_rec *r, oidc_hdr_x_forwarded_t x_
 
 	if (x_forwarded_headers & OIDC_HDR_FORWARDED)
 		host_str = oidc_http_hdr_forwarded_get(r, "host");
-	else if (x_forwarded_headers & OIDC_HDR_X_FORWARDED_HOST)
+	if ((host_str == NULL) && (x_forwarded_headers & OIDC_HDR_X_FORWARDED_HOST))
 		host_str = oidc_http_hdr_in_x_forwarded_host_get(r);
 
 	if (host_str == NULL)
