@@ -409,8 +409,28 @@ OIDC_PROVIDER_MEMBER_FUNCS_INT(idtoken_iat_slack, oidc_cfg_parse_int, OIDC_IDTOK
 #define OIDC_SESSION_MAX_DURATION_MAX 3600 * 24 * 365
 #define OIDC_DEFAULT_SESSION_MAX_DURATION 3600 * 8
 
-OIDC_PROVIDER_MEMBER_FUNCS_INT(session_max_duration, oidc_cfg_parse_int, OIDC_SESSION_MAX_DURATION_MIN,
-			       OIDC_SESSION_MAX_DURATION_MAX, OIDC_DEFAULT_SESSION_MAX_DURATION)
+const char *oidc_cfg_provider_session_max_duration_set(apr_pool_t *pool, oidc_provider_t *provider, int arg) {
+	const char *rv = NULL;
+	if (arg != 0)
+		rv = oidc_cfg_parse_is_valid_int(pool, arg, OIDC_SESSION_MAX_DURATION_MIN,
+						 OIDC_SESSION_MAX_DURATION_MAX);
+	if (rv == NULL)
+		provider->session_max_duration = arg;
+	else
+		provider->session_max_duration = OIDC_DEFAULT_SESSION_MAX_DURATION;
+	return rv;
+}
+
+const char *oidc_cmd_provider_session_max_duration_set(cmd_parms *cmd, void *ptr, const char *arg) {
+	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
+	int v = -1;
+	const char *rv = oidc_cfg_parse_int(cmd->pool, arg, &v);
+	if (rv == NULL)
+		rv = oidc_cfg_provider_session_max_duration_set(cmd->pool, cfg->provider, v);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
+OIDC_PROVIDER_MEMBER_GET_INT_DEF(session_max_duration, int, OIDC_DEFAULT_SESSION_MAX_DURATION)
 
 #define OIDC_JWKS_REFRESH_INTERVAL_MIN 300
 #define OIDC_JWKS_REFRESH_INTERVAL_MAX 3600 * 24 * 365
