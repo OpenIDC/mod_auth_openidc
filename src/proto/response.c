@@ -327,7 +327,7 @@ static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r, 
 	char *refresh_token = NULL;
 	char *code_verifier = NULL;
 
-	if (oidc_cfg_provider_pkce_get(provider) != NULL)
+	if (oidc_cfg_provider_pkce_get(provider) != &oidc_pkce_none)
 		oidc_cfg_provider_pkce_get(provider)->verifier(r, oidc_proto_state_get_pkce_state(proto_state),
 							       &code_verifier);
 

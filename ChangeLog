@@ -1,3 +1,6 @@
+08/29/2024
+- fix setting OIDCPKCEMethod none; closes #1256; thanks @eoliphan
+
 08/28/2024
 - re-introduce OIDCSessionMaxDuration 0; see #1252
 - bump to 2.4.16.2dev

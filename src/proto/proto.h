@@ -178,6 +178,7 @@ apr_byte_t oidc_proto_jwt_sign_and_serialize(request_rec *r, oidc_jwk_t *jwk, oi
 
 extern oidc_proto_pkce_t oidc_pkce_plain;
 extern oidc_proto_pkce_t oidc_pkce_s256;
+extern oidc_proto_pkce_t oidc_pkce_none;
 
 const char *oidc_proto_state_get_pkce_state(oidc_proto_state_t *proto_state);
 void oidc_proto_state_set_pkce_state(oidc_proto_state_t *proto_state, const char *pkce_state);

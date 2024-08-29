@@ -650,7 +650,7 @@ int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, co
 		apr_table_setn(params, OIDC_PROTO_NONCE, nonce);
 
 	/* add PKCE code challenge if set */
-	if ((code_challenge != NULL) && (oidc_cfg_provider_pkce_get(provider) != NULL)) {
+	if ((code_challenge != NULL) && (oidc_cfg_provider_pkce_get(provider) != &oidc_pkce_none)) {
 		apr_table_setn(params, OIDC_PROTO_CODE_CHALLENGE, code_challenge);
 		apr_table_setn(params, OIDC_PROTO_CODE_CHALLENGE_METHOD, oidc_cfg_provider_pkce_get(provider)->method);
 	}

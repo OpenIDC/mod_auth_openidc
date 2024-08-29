@@ -103,3 +103,8 @@ oidc_proto_pkce_t oidc_pkce_plain = {OIDC_PKCE_METHOD_PLAIN, oidc_proto_pkce_sta
  */
 oidc_proto_pkce_t oidc_pkce_s256 = {OIDC_PKCE_METHOD_S256, oidc_proto_pkce_state_s256, oidc_proto_pkce_verifier_s256,
 				    oidc_proto_pkce_challenge_s256};
+
+/*
+ * PKCE none
+ */
+oidc_proto_pkce_t oidc_pkce_none = {OIDC_PKCE_METHOD_NONE, NULL, NULL, NULL};

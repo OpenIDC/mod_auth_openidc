@@ -186,7 +186,7 @@ int oidc_request_authenticate_user(request_rec *r, oidc_cfg_t *c, oidc_provider_
 
 	if ((oidc_util_spaced_string_contains(r->pool, oidc_cfg_provider_response_type_get(provider),
 					      OIDC_PROTO_CODE) == TRUE) &&
-	    (oidc_cfg_provider_pkce_get(provider) != NULL)) {
+	    (oidc_cfg_provider_pkce_get(provider) != &oidc_pkce_none)) {
 
 		/* generate the code verifier value that correlates authorization requests and code exchange requests */
 		if (oidc_cfg_provider_pkce_get(provider)->state(r, &pkce_state) == FALSE)

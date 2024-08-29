@@ -254,7 +254,7 @@ const char *oidc_cfg_provider_pkce_set(apr_pool_t *pool, oidc_provider_t *provid
 		provider->pkce = &oidc_pkce_s256;
 		return NULL;
 	} else if (_oidc_strcmp(arg, OIDC_PKCE_METHOD_NONE) == 0) {
-		provider->pkce = NULL;
+		provider->pkce = &oidc_pkce_none;
 		return NULL;
 	}
 	return oidc_cfg_parse_is_valid_option(pool, arg, options);
