@@ -1332,7 +1332,6 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg_t *cfg, json_t *j_c
 	OIDC_METADATA_PROVIDER_SET(response_mode, value, rv)
 
 	/* get the PKCE method to use */
-	/* NB: pass "none" rather than NULL to allow fallback when the default in base is explicitly set to "none" */
 	oidc_util_json_object_get_string(r->pool, j_conf, OIDC_METADATA_PKCE_METHOD, &value,
 					 oidc_cfg_provider_pkce_get(oidc_cfg_provider_get(cfg))->method);
 	OIDC_METADATA_PROVIDER_SET(pkce, value, rv)
