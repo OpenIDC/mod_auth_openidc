@@ -130,9 +130,9 @@ OIDC_CFG_MEMBER_FUNCS_CACHE_BOOL(encrypt, cfg->cache.impl->encrypt_by_default)
  */
 
 /* minimum shm cache size i.e. minimum number of entries  */
-#define OIDC_CACHE_SHM_SIZE_MAX 128
+#define OIDC_CACHE_SHM_SIZE_MIN 128
 /* maximum shm cache size i.e. maximum number of entries  */
-#define OIDC_CACHE_SHM_SIZE_MIN 1024 * 1024 * 1024
+#define OIDC_CACHE_SHM_SIZE_MAX 1024 * 1024 * 1024
 /* default shm cache size i.e. the number of pre-allocated entries in the shm cache */
 #define OIDC_DEFAULT_CACHE_SHM_SIZE 10000
 

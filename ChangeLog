@@ -1,3 +1,6 @@
+09/05/2024
+- fix OIDCCacheShmMax min/max settings; see #1260; thanks @bbartke
+
 08/30/2024
 - release 2.4.16.2
 
