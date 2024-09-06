@@ -89,7 +89,7 @@ int oidc_cache_shm_post_config(server_rec *s) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(s->module_config, &auth_openidc_module);
 
 	if (cfg->cache.cfg != NULL)
-		return APR_SUCCESS;
+		return OK;
 	oidc_cache_cfg_shm_t *context = oidc_cache_shm_cfg_create(s->process->pconf);
 	cfg->cache.cfg = context;
 
