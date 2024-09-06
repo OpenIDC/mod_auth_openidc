@@ -1,6 +1,6 @@
 09/06/2024
 - allow overriding globally set OIDCCacheType back to shm in vhosts
-- correct typo in child initialization routines when using multiple vhosts; closes @1208; thanks @studersi
+- correct typo in child initialization routines when using multiple vhosts; closes #1208; thanks @studersi
   this fixes possible segmentation faults when using Redis and Metrics settings in vhosts
 
 09/05/2024
