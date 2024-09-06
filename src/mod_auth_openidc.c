@@ -2118,7 +2118,7 @@ static void oidc_child_init(apr_pool_t *p, server_rec *s) {
 	server_rec *sp = s;
 	while (sp != NULL) {
 		oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(sp->module_config, &auth_openidc_module);
-		oidc_cfg_child_init(p, cfg, s);
+		oidc_cfg_child_init(p, cfg, sp);
 		sp = sp->next;
 	}
 	apr_pool_cleanup_register(p, s, oidc_cleanup_child, apr_pool_cleanup_null);
