@@ -174,6 +174,9 @@ int oidc_cache_redis_child_init(apr_pool_t *p, server_rec *s) {
 	oidc_cfg_t *cfg = ap_get_module_config(s->module_config, &auth_openidc_module);
 	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *)cfg->cache.cfg;
 
+	oidc_slog(s, APLOG_TRACE1, "init: %pp (t=%s, m=%pp, s=%pp, g=%d)", context, cfg->cache.impl->name,
+		  context ? context->mutex : 0, s, (context && context->mutex) ? context->mutex->is_global : -1);
+
 	/* initialize the lock for the child process */
 	return oidc_cache_mutex_child_init(p, s, context->mutex);
 }
