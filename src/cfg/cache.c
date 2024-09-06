@@ -344,7 +344,7 @@ static void oidc_cfg_cache_redis_merge_server_config(oidc_cfg_t *c, oidc_cfg_t *
  * generic
  */
 void oidc_cfg_cache_create_server_config(oidc_cfg_t *c) {
-	c->cache.impl = &oidc_cache_shm;
+	c->cache.impl = NULL;
 	c->cache.cfg = NULL;
 	c->cache.encrypt = OIDC_CONFIG_POS_INT_UNSET;
 	oidc_cfg_cache_shm_create_server_config(c);
@@ -358,7 +358,7 @@ void oidc_cfg_cache_create_server_config(oidc_cfg_t *c) {
 }
 
 void oidc_cfg_cache_merge_server_config(oidc_cfg_t *c, oidc_cfg_t *base, oidc_cfg_t *add) {
-	c->cache.impl = (add->cache.impl != &oidc_cache_shm) ? add->cache.impl : base->cache.impl;
+	c->cache.impl = (add->cache.impl != NULL) ? add->cache.impl : base->cache.impl;
 	c->cache.encrypt = add->cache.encrypt != OIDC_CONFIG_POS_INT_UNSET ? add->cache.encrypt : base->cache.encrypt;
 	c->cache.cfg = NULL;
 	oidc_cfg_cache_shm_merge_server_config(c, base, add);

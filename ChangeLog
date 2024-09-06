@@ -1,5 +1,9 @@
+09/06/2024
+- allow overriding globally set OIDCCacheType back to shm in vhosts
+
 09/05/2024
 - fix OIDCCacheShmMax min/max settings; see #1260; thanks @bbartke
+- bump to 2.4.16.3dev
 
 08/30/2024
 - release 2.4.16.2

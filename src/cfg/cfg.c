@@ -858,6 +858,8 @@ oidc_cache_mutex_t *oidc_cfg_refresh_mutex_get(oidc_cfg_t *cfg) {
 }
 
 int oidc_cfg_post_config(oidc_cfg_t *cfg, server_rec *s) {
+	if (cfg->cache.impl == NULL)
+		cfg->cache.impl = &oidc_cache_shm;
 	if (cfg->cache.impl->post_config != NULL) {
 		if (cfg->cache.impl->post_config(s) != OK)
 			return HTTP_INTERNAL_SERVER_ERROR;
