@@ -210,10 +210,10 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 			oidc_debug(r, "authorization header found");
 
 			apr_byte_t known_scheme = 0;
+			char *scheme = ap_getword(r->pool, &auth_line, OIDC_CHAR_SPACE);
 
 			/* look for the Bearer keyword */
-			if ((_oidc_strnatcasecmp(ap_getword(r->pool, &auth_line, OIDC_CHAR_SPACE), OIDC_PROTO_BEARER) ==
-			     0) &&
+			if ((_oidc_strnatcasecmp(scheme, OIDC_PROTO_BEARER) == 0) &&
 			    (accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_HEADER)) {
 
 				/* skip any spaces after the Bearer keyword */
@@ -226,7 +226,8 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 
 				known_scheme = 1;
 
-			} else if (accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_BASIC) {
+			} else if ((_oidc_strnatcasecmp(scheme, OIDC_PROTO_BASIC) == 0) &&
+				   (accept_token_in & OIDC_OAUTH_ACCEPT_TOKEN_IN_BASIC)) {
 
 				char *decoded_line;
 				int decoded_len;
@@ -244,7 +245,7 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 			}
 
 			if (known_scheme == 0) {
-				oidc_warn(r, "client used unsupported authentication scheme: %s", r->uri);
+				oidc_warn(r, "client used unsupported authentication scheme: %s", scheme);
 			}
 		}
 	}
