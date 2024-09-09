@@ -225,7 +225,7 @@ const char *oidc_cmd_dir_accept_oauth_token_in_set(cmd_parms *cmd, void *m, cons
 	}
 
 	rv = oidc_cfg_parse_option(cmd->pool, oidc_oauth_accept_token_in_options,
-				   OIDC_CFG_OPTIONS_SIZE(oidc_oauth_accept_token_in_options), arg, &v);
+				   OIDC_CFG_OPTIONS_SIZE(oidc_oauth_accept_token_in_options), s, &v);
 	if (rv != NULL)
 		return OIDC_CONFIG_DIR_RV(cmd, rv);
 
