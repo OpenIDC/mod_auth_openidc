@@ -1,3 +1,7 @@
+09/11/2024
+- change warnings about not passing unknown claim types into debug messages; see #1263; thanks @nclarkau
+- bump to 2.4.16.4rc1
+
 09/09/2024
 - fix accepting custom cookie names in OIDCOAuthAcceptTokenAs cookie:<name>; see #1261; thanks @bbartke
 - bump to 2.4.16.4rc0

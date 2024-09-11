@@ -1622,10 +1622,10 @@ void oidc_util_set_app_infos(request_rec *r, json_t *j_attrs, const char *claim_
 				} else {
 
 					/* don't know how to handle a non-string array element */
-					oidc_warn(r,
-						  "unhandled in-array JSON object type [%d] for key \"%s\" when "
-						  "parsing claims array elements",
-						  elem->type, s_key);
+					oidc_debug(r,
+						   "unhandled in-array JSON object type [%d] for key \"%s\" when "
+						   "parsing claims array elements",
+						   elem->type, s_key);
 				}
 			}
 
@@ -1635,8 +1635,8 @@ void oidc_util_set_app_infos(request_rec *r, json_t *j_attrs, const char *claim_
 		} else {
 
 			/* no string and no array, so unclear how to handle this */
-			oidc_warn(r, "unhandled JSON object type [%d] for key \"%s\" when parsing claims",
-				  j_value->type, s_key);
+			oidc_debug(r, "unhandled JSON object type [%d] for key \"%s\" when parsing claims",
+				   j_value->type, s_key);
 		}
 
 		iter = json_object_iter_next(j_attrs, iter);
