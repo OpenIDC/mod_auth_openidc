@@ -45,6 +45,7 @@
 #include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
+#include "state.h"
 #include "util.h"
 
 /*
@@ -338,10 +339,10 @@ static apr_byte_t oidc_response_proto_state_restore(request_rec *r, oidc_cfg_t *
 
 	oidc_debug(r, "enter");
 
-	const char *cookieName = oidc_get_state_cookie_name(r, state);
+	const char *cookieName = oidc_state_cookie_name(r, state);
 
 	/* clean expired state cookies to avoid pollution */
-	oidc_clean_expired_state_cookies(r, c, cookieName, FALSE);
+	oidc_state_cookies_clean_expired(r, c, cookieName, FALSE);
 
 	/* get the state cookie value first */
 	char *cookieValue = oidc_http_get_cookie(r, cookieName);
@@ -360,7 +361,7 @@ static apr_byte_t oidc_response_proto_state_restore(request_rec *r, oidc_cfg_t *
 	const char *nonce = oidc_proto_state_get_nonce(*proto_state);
 
 	/* calculate the hash of the browser fingerprint concatenated with the nonce */
-	char *calc = oidc_get_browser_state_hash(r, c, nonce);
+	char *calc = oidc_state_browser_fingerprint(r, c, nonce);
 	/* compare the calculated hash with the value provided in the authorization response */
 	if (_oidc_strcmp(calc, state) != 0) {
 		oidc_error(

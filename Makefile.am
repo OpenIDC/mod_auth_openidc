@@ -4,6 +4,7 @@ noinst_LTLIBRARIES = libauth_openidc.la
 
 libauth_openidc_la_SOURCES = \
 	src/mod_auth_openidc.c \
+	src/state.c \
 	src/cfg/cfg.c \
 	src/cfg/cache.c \
 	src/cfg/provider.c \
@@ -92,6 +93,7 @@ noinst_HEADERS = \
 	src/cfg/dir.h \
 	src/cfg/parse.h \
 	src/mod_auth_openidc.h \
+	src/state.h \
 	src/handle/handle.h \
 	src/proto/proto.h \
 	src/cache/cache.h \

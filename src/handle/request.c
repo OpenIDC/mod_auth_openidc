@@ -44,6 +44,7 @@
 #include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
+#include "state.h"
 #include "util.h"
 
 static int oidc_request_check_cookie_domain(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,
@@ -120,7 +121,7 @@ static int oidc_request_authorization_set_cookie(request_rec *r, oidc_cfg_t *c, 
 	 * try to avoid the number of state cookies exceeding a max
 	 */
 	int number_of_cookies =
-	    oidc_clean_expired_state_cookies(r, c, NULL, oidc_cfg_delete_oldest_state_cookies_get(c));
+	    oidc_state_cookies_clean_expired(r, c, NULL, oidc_cfg_delete_oldest_state_cookies_get(c));
 	int max_number_of_cookies = oidc_cfg_max_number_of_state_cookies_get(c);
 	if ((max_number_of_cookies > 0) && (number_of_cookies >= max_number_of_cookies)) {
 		oidc_warn(r,
@@ -131,7 +132,7 @@ static int oidc_request_authorization_set_cookie(request_rec *r, oidc_cfg_t *c, 
 	}
 
 	/* assemble the cookie name for the state cookie */
-	const char *cookieName = oidc_get_state_cookie_name(r, state);
+	const char *cookieName = oidc_state_cookie_name(r, state);
 
 	/* set it as a cookie */
 	oidc_http_set_cookie(r, cookieName, cookieValue, -1, OIDC_COOKIE_SAMESITE_LAX(c, r));
@@ -221,7 +222,7 @@ int oidc_request_authenticate_user(request_rec *r, oidc_cfg_t *c, oidc_provider_
 		oidc_proto_state_set_pkce_state(proto_state, pkce_state);
 
 	/* get a hash value that fingerprints the browser concatenated with the random input */
-	const char *state = oidc_get_browser_state_hash(r, c, nonce);
+	const char *state = oidc_state_browser_fingerprint(r, c, nonce);
 
 	/*
 	 * create state that restores the context when the authorization response comes in

@@ -151,9 +151,7 @@ apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg_t *c, oidc_provi
 const char *oidc_original_request_method(request_rec *r, oidc_cfg_t *cfg, apr_byte_t handle_discovery_response);
 oidc_provider_t *oidc_get_provider_for_issuer(request_rec *r, oidc_cfg_t *c, const char *issuer,
 					      apr_byte_t allow_discovery);
-char *oidc_get_state_cookie_name(request_rec *r, const char *state);
 int oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg_t *c, const char *currentCookieName, int delete_oldest);
-char *oidc_get_browser_state_hash(request_rec *r, oidc_cfg_t *c, const char *nonce);
 apr_byte_t oidc_is_auth_capable_request(request_rec *r);
 apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg_t *c, const char *redirect_to_url,
 				      apr_byte_t restrict_to_host, char **err_str, char **err_desc);
