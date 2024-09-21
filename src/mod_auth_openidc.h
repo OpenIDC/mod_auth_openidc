@@ -157,5 +157,6 @@ char *oidc_get_browser_state_hash(request_rec *r, oidc_cfg_t *c, const char *non
 apr_byte_t oidc_is_auth_capable_request(request_rec *r);
 apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg_t *c, const char *redirect_to_url,
 				      apr_byte_t restrict_to_host, char **err_str, char **err_desc);
+apr_byte_t oidc_set_app_claims(request_rec *r, oidc_cfg_t *cfg, const char *s_claims);
 
 #endif /* _MOD_AUTH_OPENIDC_H_ */
