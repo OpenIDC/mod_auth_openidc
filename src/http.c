@@ -498,7 +498,7 @@ static size_t oidc_http_response_header(char *buffer, size_t size, size_t nitems
 		while (*value == ' ')
 			value++;
 		/* remove trailing /r/n */
-		i = strlen(value) - 1;
+		i = _oidc_strlen(value) - 1;
 		while ((value[i] == '\r') || (value[i] == '\n'))
 			value[i--] = '\0';
 	}
@@ -810,7 +810,7 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 	}
 
 	if (dpop != NULL) {
-		oidc_debug(r, "appending DPoP header (len=%d)", (int)strlen(dpop));
+		oidc_debug(r, "appending DPoP header (len=%d)", (int)_oidc_strlen(dpop));
 		h_list = curl_slist_append(h_list, apr_psprintf(r->pool, "%s: %s", OIDC_HTTP_HDR_DPOP, dpop));
 	}
 
