@@ -163,8 +163,11 @@ int verify(int argc, char **argv, apr_pool_t *pool) {
 		return -1;
 	}
 
+	json_error_t json_error;
+	json_t *json = json_loads(s_jwk, 0, &json_error);
+
 	oidc_jose_error_t oidc_err;
-	oidc_jwk_t *jwk = oidc_jwk_parse(pool, s_jwk, &oidc_err);
+	oidc_jwk_t *jwk = oidc_jwk_parse(pool, json, &oidc_err);
 	if (jwk == NULL) {
 		fprintf(stderr, "could not import JWK: %s [file: %s, function: %s, line: %d]\n", oidc_err.text,
 			oidc_err.source, oidc_err.function, oidc_err.line);
@@ -189,6 +192,7 @@ int verify(int argc, char **argv, apr_pool_t *pool) {
 
 	cjose_jws_release(jws);
 	oidc_jwk_destroy(jwk);
+	json_decref(json);
 
 	return 0;
 }
@@ -206,9 +210,12 @@ int decrypt(int argc, char **argv, apr_pool_t *pool) {
 		return -1;
 
 	apr_hash_t *keys = apr_hash_make(pool);
-	oidc_jose_error_t oidc_err;
 
-	oidc_jwk_t *jwk = oidc_jwk_parse(pool, s_jwk, &oidc_err);
+	json_error_t json_error;
+	json_t *json = json_loads(s_jwk, 0, &json_error);
+
+	oidc_jose_error_t oidc_err;
+	oidc_jwk_t *jwk = oidc_jwk_parse(pool, json, &oidc_err);
 	if (jwk == NULL) {
 		fprintf(stderr, "could not import JWK: %s [file: %s, function: %s, line: %d]\n", oidc_err.text,
 			oidc_err.source, oidc_err.function, oidc_err.line);
@@ -226,6 +233,7 @@ int decrypt(int argc, char **argv, apr_pool_t *pool) {
 
 	fprintf(stdout, "%s", plaintext);
 	oidc_jwk_destroy(jwk);
+	json_decref(json);
 
 	return 0;
 }

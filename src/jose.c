@@ -332,17 +332,17 @@ static oidc_jwk_t *oidc_jwk_from_cjose(apr_pool_t *pool, cjose_jwk_t *cjose_jwk,
 /*
  * parse a JSON string to a JWK struct
  */
-oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, const char *s_json, oidc_jose_error_t *err) {
+oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, json_t *json, oidc_jose_error_t *err) {
 	oidc_jwk_t *result = NULL;
 	cjose_jwk_t *cjose_jwk = NULL;
 	cjose_err cjose_err;
-	json_error_t json_error;
 	oidc_jose_error_t x5c_err;
 	char *use = NULL;
+	json_t *v = NULL;
 
-	json_t *json = json_loads(s_json, 0, &json_error);
-	if (json == NULL) {
-		oidc_jose_error(err, "could not parse JWK: %s (%s)", json_error.text, s_json);
+	char *s_json = json_dumps(json, 0);
+	if (s_json == NULL) {
+		oidc_jose_error(err, "could not serialize JWK");
 		goto end;
 	}
 
@@ -362,10 +362,22 @@ oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, const char *s_json, oidc_jose_error
 
 	result = oidc_jwk_from_cjose(pool, cjose_jwk, use);
 
+	// TODO: parse the optional x5c array
+
+	// set x5t#256
+	v = json_object_get(json, OIDC_JOSE_JWK_X5T256_STR);
+	if (v)
+		result->x5t_S256 = apr_pstrdup(pool, json_string_value(v));
+
+	// set x5t
+	v = json_object_get(json, OIDC_JOSE_JWK_X5T_STR);
+	if (v)
+		result->x5t = apr_pstrdup(pool, json_string_value(v));
+
 end:
 
-	if (json)
-		json_decref(json);
+	if (s_json)
+		free(s_json);
 
 	return result;
 }
@@ -374,11 +386,22 @@ end:
  * copy a JWK by converting oidc_jwk_t to JSON and parsing it back
  */
 oidc_jwk_t *oidc_jwk_copy(apr_pool_t *pool, const oidc_jwk_t *src) {
-	char *s_json = NULL;
-	oidc_jose_error_t err;
-	if (oidc_jwk_to_json(pool, src, &s_json, &err) == FALSE)
-		return NULL;
-	return oidc_jwk_parse(pool, s_json, &err);
+	int i = 0;
+	cjose_err err;
+	oidc_jwk_t *dst = oidc_jwk_new(pool);
+	dst->cjose_jwk = cjose_jwk_retain(src->cjose_jwk, &err);
+	dst->kid = apr_pstrdup(pool, src->kid);
+	dst->kty = src->kty;
+	dst->use = apr_pstrdup(pool, src->use);
+	dst->x5c = NULL;
+	if (src->x5c) {
+		dst->x5c = apr_array_make(pool, src->x5c->nelts, sizeof(char *));
+		for (i = 0; i < src->x5c->nelts; i++)
+			APR_ARRAY_PUSH(dst->x5c, char *) = APR_ARRAY_IDX(src->x5c, i, char *);
+	}
+	dst->x5t = apr_pstrdup(pool, src->x5t);
+	dst->x5t_S256 = apr_pstrdup(pool, src->x5t_S256);
+	return dst;
 }
 
 /*
@@ -443,9 +466,7 @@ void oidc_jwk_list_destroy(apr_array_header_t *keys_list) {
  * parse a JSON object in to a JWK struct
  */
 apr_byte_t oidc_jwk_parse_json(apr_pool_t *pool, json_t *json, oidc_jwk_t **jwk, oidc_jose_error_t *err) {
-	char *s_json = json_dumps(json, 0);
-	*jwk = oidc_jwk_parse(pool, s_json, err);
-	cjose_get_dealloc()(s_json);
+	*jwk = oidc_jwk_parse(pool, json, err);
 	return (*jwk != NULL);
 }
 

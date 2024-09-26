@@ -1,3 +1,8 @@
+09/26/2024
+- fix oidc_jwk_copy wrt. "x5t", which broke private_key_jwt authentication to Azure AD since 2.4.13
+  see #1269; thanks @uoe-pjackson
+- bump to 2.4.16.4rc2
+
 09/21/2024
 - refactor state and userinfo
 

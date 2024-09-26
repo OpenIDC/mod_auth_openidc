@@ -119,9 +119,12 @@ static int TST_RC;
 		return message;
 
 static char *_jwk_parse(apr_pool_t *pool, const char *s, oidc_jwk_t **jwk, oidc_jose_error_t *err) {
-	oidc_jwk_t *k = oidc_jwk_parse(pool, s, err);
+	json_error_t json_err;
+	json_t *json = json_loads(s, 0, &json_err);
+	oidc_jwk_t *k = oidc_jwk_parse(pool, json, err);
 	TST_ASSERT_ERR("oidc_jwk_parse", k != NULL, pool, (*err));
 	*jwk = k;
+	json_decref(json);
 	return 0;
 }
 
@@ -777,6 +780,42 @@ static char *test_jwk_parse_json(apr_pool_t *pool) {
 	return 0;
 }
 
+static char *test_jwk_copy(apr_pool_t *pool) {
+	oidc_jose_error_t err;
+	char *s = NULL;
+	oidc_jwk_t *jwk1 = NULL;
+	oidc_jwk_t *jwk2 = NULL;
+
+	s = "{"
+	    "\"kty\": \"RSA\","
+	    "\"kid\": \"bilbo.baggins@hobbiton.example\","
+	    "\"use\": \"sig\","
+	    "\"n\": \"n4EPtAOCc9AlkeQHPzHStgAbgs7bTZLwUBZdR8_KuKPEHLd4rHVTeT"
+	    "-O-XV2jRojdNhxJWTDvNd7nqQ0VEiZQHz_AJmSCpMaJMRBSFKrKb2wqV"
+	    "wGU_NsYOYL-QtiWN2lbzcEe6XC0dApr5ydQLrHqkHHig3RBordaZ6Aj-"
+	    "oBHqFEHYpPe7Tpe-OfVfHd1E6cS6M1FZcD1NNLYD5lFHpPI9bTwJlsde"
+	    "3uhGqC0ZCuEHg8lhzwOHrtIQbS0FVbb9k3-tVTU4fg_3L_vniUFAKwuC"
+	    "LqKnS2BYwdq_mzSnbLY7h_qixoR7jig3__kRhuaxwUkRz5iaiQkqgc5g"
+	    "HdrNP5zw\","
+	    "\"e\": \"AQAB\","
+	    "\"x5t\": \"myx5t\","
+	    "\"x5t#S256\": \"myx5t#S256\""
+	    "}";
+
+	jwk1 = NULL;
+	TST_ASSERT_ERR("oidc_jwk_parse", _jwk_parse(pool, s, &jwk1, &err) == 0, pool, err);
+	jwk2 = oidc_jwk_copy(pool, jwk1);
+
+	TST_ASSERT_STR("oidc_jwk_parse (x5t)", jwk1->x5t, "myx5t");
+	TST_ASSERT_STR("oidc_jwk_parse (x5t#S256)", jwk1->x5t_S256, "myx5t#S256");
+	TST_ASSERT_STR("oidc_jwk_copy (x5t)", jwk2->x5t, "myx5t");
+	TST_ASSERT_STR("oidc_jwk_copy (x5t#S256)", jwk2->x5t_S256, "myx5t#S256");
+
+	oidc_jwk_destroy(jwk2);
+	oidc_jwk_destroy(jwk1);
+
+	return 0;
+}
 static char *test_plaintext_decrypt_symmetric(apr_pool_t *pool) {
 	oidc_jose_error_t err;
 	apr_hash_t *keys = apr_hash_make(pool);
@@ -1703,6 +1742,7 @@ static char *all_tests(apr_pool_t *pool, request_rec *r) {
 	TST_RUN(test_jwt_get_string, pool);
 
 	TST_RUN(test_jwk_parse_json, pool);
+	TST_RUN(test_jwk_copy, pool);
 	TST_RUN(test_plaintext_decrypt_symmetric, pool);
 
 #if (OPENSSL_VERSION_NUMBER >= 0x1000100f)
