@@ -202,7 +202,7 @@ char *oidc_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jose_error_t *e
 		cser = apr_pstrmemdup(pool, out, out_len);
 		cjose_get_dealloc()(out);
 
-		cjose_get_dealloc()(s_payload);
+		free(s_payload);
 
 		cser = apr_psprintf(pool, "%s.%s.", OIDC_JOSE_HDR_ALG_NONE, cser);
 	}
@@ -340,7 +340,7 @@ oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, json_t *json, oidc_jose_error_t *er
 	char *use = NULL;
 	json_t *v = NULL;
 
-	char *s_json = json_dumps(json, 0);
+	char *s_json = json_dumps(json, JSON_PRESERVE_ORDER | JSON_COMPACT);
 	if (s_json == NULL) {
 		oidc_jose_error(err, "could not serialize JWK");
 		goto end;
@@ -523,7 +523,7 @@ apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_js
 	if (s == NULL)
 		return FALSE;
 	*s_json = apr_pstrdup(pool, s);
-	cjose_get_dealloc()(s);
+	free(s);
 	return TRUE;
 }
 
@@ -1059,7 +1059,7 @@ apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json, oidc_jwt_t *
 	jwt->header.value.json = json_deep_copy((json_t *)hdr);
 	char *str = json_dumps(jwt->header.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
 	jwt->header.value.str = apr_pstrdup(pool, str);
-	cjose_get_dealloc()(str);
+	free(str);
 
 	jwt->header.alg = apr_pstrdup(pool, cjose_header_get(hdr, CJOSE_HDR_ALG, &cjose_err));
 	jwt->header.enc = apr_pstrdup(pool, cjose_header_get(hdr, CJOSE_HDR_ENC, &cjose_err));
@@ -1146,7 +1146,7 @@ apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk, apr
 	if (compress == TRUE) {
 		if (oidc_jose_compress(pool, (char *)plaintext, _oidc_strlen(plaintext), &s_payload, &payload_len,
 				       err) == FALSE) {
-			cjose_get_dealloc()(plaintext);
+			free(plaintext);
 			return FALSE;
 		}
 	} else {
@@ -1156,7 +1156,7 @@ apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk, apr
 	}
 
 	jwt->cjose_jws = cjose_jws_sign(jwk->cjose_jwk, hdr, (const uint8_t *)s_payload, payload_len, &cjose_err);
-	cjose_get_dealloc()(plaintext);
+	free(plaintext);
 
 	if (jwt->cjose_jws == NULL) {
 		oidc_jose_error(err, "cjose_jws_sign failed: %s", oidc_cjose_e2s(pool, cjose_err));

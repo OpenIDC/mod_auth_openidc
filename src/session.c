@@ -545,7 +545,9 @@ void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, const c
 		}
 
 		if (is_allowed == TRUE) {
-			s = value ? oidc_util_encode_json_object(r, value, JSON_COMPACT | JSON_ENCODE_ANY) : "";
+			s = value ? oidc_util_encode_json_object(r, value,
+								 JSON_PRESERVE_ORDER | JSON_COMPACT | JSON_ENCODE_ANY)
+				  : "";
 			if (_oidc_strlen(s) > warn_claim_size)
 				oidc_warn(r,
 					  "(encoded) value size of [%s] claim \"%s\" is larger than %d; consider "
@@ -558,7 +560,7 @@ void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, const c
 		iter = json_object_iter_next(src, iter);
 	}
 
-	const char *filtered_claims = oidc_util_encode_json_object(r, dst, JSON_COMPACT);
+	const char *filtered_claims = oidc_util_encode_json_object(r, dst, JSON_PRESERVE_ORDER | JSON_COMPACT);
 	filtered_claims = oidc_util_jq_filter(r, filtered_claims,
 					      oidc_util_apr_expr_exec(r, oidc_cfg_filter_claims_expr_get(c), TRUE));
 	json_decref(dst);

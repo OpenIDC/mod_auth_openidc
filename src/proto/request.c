@@ -361,8 +361,9 @@ static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provide
 	apr_table_do(oidc_request_uri_delete_from_request, &data, delete_from_query_params, NULL);
 
 	/* debug logging */
-	oidc_debug(r, "request object: %s",
-		   oidc_util_encode_json_object(r, request_object->payload.value.json, JSON_COMPACT));
+	oidc_debug(
+	    r, "request object: %s",
+	    oidc_util_encode_json_object(r, request_object->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT));
 
 	char *serialized_request_object = NULL;
 	oidc_jose_error_t err;

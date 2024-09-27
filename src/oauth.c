@@ -535,7 +535,7 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg_t *c,
 	}
 
 	/* stringify the response */
-	*response = oidc_util_encode_json_object(r, *token, JSON_COMPACT);
+	*response = oidc_util_encode_json_object(r, *token, JSON_PRESERVE_ORDER | JSON_COMPACT);
 
 	return TRUE;
 }

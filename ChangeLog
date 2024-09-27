@@ -1,3 +1,7 @@
+09/27/2024
+- correct usage of free() for json_dumps return values instead of cjose_get_dealloc()()
+- use compact encoding and preserve order where appropriate for most calls to json_dumps
+
 09/26/2024
 - fix oidc_jwk_copy wrt. "x5t", which broke private_key_jwt authentication to Azure AD since 2.4.13
   see #1269; thanks @uoe-pjackson
