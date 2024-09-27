@@ -358,7 +358,7 @@ static apr_byte_t oidc_authz_match_claims_expr(request_rec *r, const char *const
 
 	oidc_debug(r, "enter: '%s'", attr_spec);
 
-	str = oidc_util_jq_filter(r, oidc_util_encode_json_object(r, claims, JSON_PRESERVE_ORDER | JSON_COMPACT),
+	str = oidc_util_jq_filter(r, oidc_util_encode_json(r->pool, claims, JSON_PRESERVE_ORDER | JSON_COMPACT),
 				  attr_spec);
 	rv = (_oidc_strcmp(str, "true") == 0);
 

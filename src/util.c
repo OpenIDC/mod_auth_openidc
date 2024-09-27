@@ -945,9 +945,8 @@ apr_byte_t oidc_util_request_parameter_get(request_rec *r, char *name, char **va
 static apr_byte_t oidc_util_json_string_print(request_rec *r, json_t *result, const char *key, const char *log) {
 	json_t *value = json_object_get(result, key);
 	if (value != NULL && !json_is_null(value)) {
-		oidc_error(
-		    r, "%s: response contained an \"%s\" entry with value: \"%s\"", log, key,
-		    oidc_util_encode_json_object(r, value, JSON_PRESERVE_ORDER | JSON_COMPACT | JSON_ENCODE_ANY));
+		oidc_error(r, "%s: response contained an \"%s\" entry with value: \"%s\"", log, key,
+			   oidc_util_encode_json(r->pool, value, JSON_PRESERVE_ORDER | JSON_COMPACT | JSON_ENCODE_ANY));
 		return TRUE;
 	}
 	return FALSE;
@@ -1016,11 +1015,11 @@ apr_byte_t oidc_util_decode_json_object(request_rec *r, const char *str, json_t 
 /*
  * encode a JSON object
  */
-char *oidc_util_encode_json_object(request_rec *r, json_t *json, size_t flags) {
+char *oidc_util_encode_json(apr_pool_t *pool, json_t *json, size_t flags) {
 	if (json == NULL)
 		return NULL;
 	char *s = json_dumps(json, flags);
-	char *s_value = apr_pstrdup(r->pool, s);
+	char *s_value = apr_pstrdup(pool, s);
 	free(s);
 	return s_value;
 }
@@ -1574,7 +1573,7 @@ void oidc_util_set_app_infos(request_rec *r, json_t *j_attrs, const char *claim_
 
 			/* set json value in the application header whose name is based on the key and the prefix */
 			oidc_util_set_app_info(
-			    r, s_key, oidc_util_encode_json_object(r, j_value, JSON_PRESERVE_ORDER | JSON_COMPACT),
+			    r, s_key, oidc_util_encode_json(r->pool, j_value, JSON_PRESERVE_ORDER | JSON_COMPACT),
 			    claim_prefix, pass_in, encoding);
 
 			/* check if it is a multi-value string */
@@ -1747,8 +1746,8 @@ apr_byte_t oidc_util_json_merge(request_rec *r, json_t *src, json_t *dst) {
 	if ((src == NULL) || (dst == NULL))
 		return FALSE;
 
-	oidc_debug(r, "src=%s, dst=%s", oidc_util_encode_json_object(r, src, JSON_PRESERVE_ORDER | JSON_COMPACT),
-		   oidc_util_encode_json_object(r, dst, JSON_PRESERVE_ORDER | JSON_COMPACT));
+	oidc_debug(r, "src=%s, dst=%s", oidc_util_encode_json(r->pool, src, JSON_PRESERVE_ORDER | JSON_COMPACT),
+		   oidc_util_encode_json(r->pool, dst, JSON_PRESERVE_ORDER | JSON_COMPACT));
 
 	iter = json_object_iter(src);
 	while (iter) {
@@ -1758,7 +1757,7 @@ apr_byte_t oidc_util_json_merge(request_rec *r, json_t *src, json_t *dst) {
 		iter = json_object_iter_next(src, iter);
 	}
 
-	oidc_debug(r, "result dst=%s", oidc_util_encode_json_object(r, dst, JSON_PRESERVE_ORDER | JSON_COMPACT));
+	oidc_debug(r, "result dst=%s", oidc_util_encode_json(r->pool, dst, JSON_PRESERVE_ORDER | JSON_COMPACT));
 
 	return TRUE;
 }

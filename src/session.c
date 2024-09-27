@@ -64,7 +64,7 @@ static apr_byte_t oidc_session_encode(request_rec *r, oidc_cfg_t *c, oidc_sessio
 				      apr_byte_t encrypt) {
 
 	if (encrypt == FALSE) {
-		*s_value = oidc_util_encode_json_object(r, z->state, JSON_COMPACT);
+		*s_value = oidc_util_encode_json(r->pool, z->state, JSON_COMPACT);
 		return (*s_value != NULL);
 	} else if (oidc_cfg_crypto_passphrase_secret1_get(c) == NULL) {
 		oidc_error(r, "cannot encrypt session state because " OIDCCryptoPassphrase " is not set");
@@ -72,7 +72,7 @@ static apr_byte_t oidc_session_encode(request_rec *r, oidc_cfg_t *c, oidc_sessio
 	}
 
 	if (oidc_util_jwt_create(r, oidc_cfg_crypto_passphrase_get(c),
-				 oidc_util_encode_json_object(r, z->state, JSON_COMPACT), s_value) == FALSE)
+				 oidc_util_encode_json(r->pool, z->state, JSON_COMPACT), s_value) == FALSE)
 		return FALSE;
 
 	return TRUE;
@@ -545,8 +545,8 @@ void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, const c
 		}
 
 		if (is_allowed == TRUE) {
-			s = value ? oidc_util_encode_json_object(r, value,
-								 JSON_PRESERVE_ORDER | JSON_COMPACT | JSON_ENCODE_ANY)
+			s = value ? oidc_util_encode_json(r->pool, value,
+							  JSON_PRESERVE_ORDER | JSON_COMPACT | JSON_ENCODE_ANY)
 				  : "";
 			if (_oidc_strlen(s) > warn_claim_size)
 				oidc_warn(r,
@@ -560,7 +560,7 @@ void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, const c
 		iter = json_object_iter_next(src, iter);
 	}
 
-	const char *filtered_claims = oidc_util_encode_json_object(r, dst, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	const char *filtered_claims = oidc_util_encode_json(r->pool, dst, JSON_PRESERVE_ORDER | JSON_COMPACT);
 	filtered_claims = oidc_util_jq_filter(r, filtered_claims,
 					      oidc_util_apr_expr_exec(r, oidc_cfg_filter_claims_expr_get(c), TRUE));
 	json_decref(dst);

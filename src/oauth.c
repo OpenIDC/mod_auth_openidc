@@ -360,7 +360,7 @@ static apr_byte_t oidc_oauth_cache_access_token(request_rec *r, oidc_cfg_t *c, a
 	json_t *cache_entry = json_object();
 	json_object_set(cache_entry, OIDC_OAUTH_CACHE_KEY_RESPONSE, json);
 	json_object_set_new(cache_entry, OIDC_OAUTH_CACHE_KEY_TIMESTAMP, json_integer(apr_time_sec(apr_time_now())));
-	char *cache_value = oidc_util_encode_json_object(r, cache_entry, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	char *cache_value = oidc_util_encode_json(r->pool, cache_entry, JSON_PRESERVE_ORDER | JSON_COMPACT);
 
 	/* set it in the cache so subsequent request don't need to validate the access_token and get the claims anymore
 	 */
@@ -535,7 +535,7 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg_t *c,
 	}
 
 	/* stringify the response */
-	*response = oidc_util_encode_json_object(r, *token, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	*response = oidc_util_encode_json(r->pool, *token, JSON_PRESERVE_ORDER | JSON_COMPACT);
 
 	return TRUE;
 }

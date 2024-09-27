@@ -122,7 +122,7 @@ int oidc_dpop_request(request_rec *r, oidc_cfg_t *c) {
 	/* assemble and serialize the JSON response object */
 	json = json_object();
 	json_object_set_new(json, OIDC_HTTP_HDR_DPOP, json_string(s_dpop));
-	s_response = oidc_util_encode_json_object(r, json, JSON_COMPACT | JSON_PRESERVE_ORDER);
+	s_response = oidc_util_encode_json(r->pool, json, JSON_COMPACT | JSON_PRESERVE_ORDER);
 
 	/* return the serialized JSON response */
 	rc = oidc_util_http_send(r, s_response, _oidc_strlen(s_response), OIDC_HTTP_CONTENT_TYPE_JSON, OK);

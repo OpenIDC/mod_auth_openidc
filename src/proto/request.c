@@ -363,7 +363,7 @@ static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provide
 	/* debug logging */
 	oidc_debug(
 	    r, "request object: %s",
-	    oidc_util_encode_json_object(r, request_object->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT));
+	    oidc_util_encode_json(r->pool, request_object->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT));
 
 	char *serialized_request_object = NULL;
 	oidc_jose_error_t err;

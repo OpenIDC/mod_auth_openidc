@@ -87,7 +87,7 @@ void oidc_proto_state_destroy(oidc_proto_state_t *proto_state) {
  * serialize a state object to a string (for logging/debugging purposes)
  */
 char *oidc_proto_state_to_string(request_rec *r, oidc_proto_state_t *proto_state) {
-	return oidc_util_encode_json_object(r, proto_state, JSON_COMPACT);
+	return oidc_util_encode_json(r->pool, proto_state, JSON_COMPACT);
 }
 
 /*
@@ -267,6 +267,6 @@ char *oidc_proto_state_to_cookie(request_rec *r, oidc_cfg_t *c, oidc_proto_state
 	if (oidc_proto_check_crypto_passphrase(r, c, "create") == FALSE)
 		return NULL;
 	oidc_util_jwt_create(r, oidc_cfg_crypto_passphrase_get(c),
-			     oidc_util_encode_json_object(r, proto_state, JSON_COMPACT), &cookieValue);
+			     oidc_util_encode_json(r->pool, proto_state, JSON_COMPACT), &cookieValue);
 	return cookieValue;
 }

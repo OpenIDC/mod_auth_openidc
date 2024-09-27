@@ -92,7 +92,7 @@ static void oidc_refresh_token_cache_set(request_rec *r, oidc_cfg_t *c, const ch
 	json_object_set_new(json, OIDC_REFRESH_TIMESTAMP, json_integer(apr_time_sec(*ts)));
 
 	/* stringify the JSON object and store it in the cache */
-	s_json = oidc_util_encode_json_object(r, json, JSON_COMPACT);
+	s_json = oidc_util_encode_json(r->pool, json, JSON_COMPACT);
 	oidc_debug(r, "caching refresh_token (%s) grant results for %d seconds: %s", refresh_token,
 		   OIDC_REFRESH_CACHE_TTL, s_json);
 

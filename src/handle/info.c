@@ -224,12 +224,12 @@ int oidc_info_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, ap
 
 	if (_oidc_strcmp(OIDC_HOOK_INFO_FORMAT_JSON, s_format) == 0) {
 		/* JSON-encode the result */
-		r_value = oidc_util_encode_json_object(r, json, JSON_PRESERVE_ORDER);
+		r_value = oidc_util_encode_json(r->pool, json, JSON_PRESERVE_ORDER);
 		/* return the stringified JSON result */
 		rc = oidc_util_http_send(r, r_value, _oidc_strlen(r_value), OIDC_HTTP_CONTENT_TYPE_JSON, OK);
 	} else if (_oidc_strcmp(OIDC_HOOK_INFO_FORMAT_HTML, s_format) == 0) {
 		/* JSON-encode the result */
-		r_value = oidc_util_encode_json_object(r, json, JSON_PRESERVE_ORDER | JSON_INDENT(2));
+		r_value = oidc_util_encode_json(r->pool, json, JSON_PRESERVE_ORDER | JSON_INDENT(2));
 		rc = oidc_util_html_send(r, "Session Info", NULL, NULL, apr_psprintf(r->pool, "<pre>%s</pre>", r_value),
 					 OK);
 	}

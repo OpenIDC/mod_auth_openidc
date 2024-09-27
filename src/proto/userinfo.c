@@ -341,7 +341,7 @@ apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, oidc_pro
 	}
 
 	if (oidc_proto_userinfo_request_composite_claims(r, cfg, j_result) == TRUE)
-		*response = oidc_util_encode_json_object(r, j_result, JSON_PRESERVE_ORDER | JSON_COMPACT);
+		*response = oidc_util_encode_json(r->pool, j_result, JSON_PRESERVE_ORDER | JSON_COMPACT);
 
 	char *user_info_sub = NULL;
 	oidc_jose_get_string(r->pool, j_result, OIDC_CLAIM_SUB, FALSE, &user_info_sub, NULL);
