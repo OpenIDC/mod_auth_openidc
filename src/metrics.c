@@ -431,9 +431,7 @@ static inline void oidc_metrics_storage_reset(server_rec *s) {
 	}
 
 	/* serialize the metrics data, preserve order is required for Prometheus */
-	char *str = json_dumps(json, JSON_COMPACT | JSON_PRESERVE_ORDER);
-	s_json = apr_pstrdup(s->process->pool, str);
-	free(str);
+	s_json = oidc_util_encode_json(s->process->pool, json, JSON_COMPACT | JSON_PRESERVE_ORDER);
 
 	/* free the JSON data */
 	json_decref(json);
@@ -635,9 +633,7 @@ static void oidc_metrics_store(server_rec *s) {
 	}
 
 	/* serialize the metrics data, preserve order is required for Prometheus */
-	char *str = json_dumps(json, JSON_COMPACT | JSON_PRESERVE_ORDER);
-	s_json = apr_pstrdup(s->process->pool, str);
-	free(str);
+	s_json = oidc_util_encode_json(s->process->pool, json, JSON_COMPACT | JSON_PRESERVE_ORDER);
 
 	/* free the JSON data */
 	json_decref(json);
@@ -1009,7 +1005,6 @@ static int oidc_metrics_handle_json(request_rec *r, char *s_json) {
 	       *o_timing = NULL, *o_spec = NULL;
 	const char *s_server = NULL;
 	unsigned int type = 0;
-	char *str = NULL;
 
 	/* parse the metrics string to JSON */
 	json = oidc_metrics_json_parse_r(r, s_json);
@@ -1077,9 +1072,7 @@ static int oidc_metrics_handle_json(request_rec *r, char *s_json) {
 		iter1 = json_object_iter_next(json, iter1);
 	}
 
-	str = json_dumps(o_json, JSON_COMPACT | JSON_PRESERVE_ORDER);
-	s_json = apr_pstrdup(r->pool, str);
-	free(str);
+	s_json = oidc_util_encode_json(r->pool, o_json, JSON_COMPACT | JSON_PRESERVE_ORDER);
 
 	json_decref(o_json);
 	json_decref(json);
