@@ -338,7 +338,8 @@ oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, json_t *json, oidc_jose_error_t *er
 	cjose_err cjose_err;
 	oidc_jose_error_t x5c_err;
 	char *use = NULL;
-	json_t *v = NULL;
+	json_t *v = NULL, *e = NULL;
+	int i = 0;
 
 	char *s_json = json_dumps(json, JSON_PRESERVE_ORDER | JSON_COMPACT);
 	if (s_json == NULL) {
@@ -362,7 +363,16 @@ oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, json_t *json, oidc_jose_error_t *er
 
 	result = oidc_jwk_from_cjose(pool, cjose_jwk, use);
 
-	// TODO: parse the optional x5c array
+	// set x5c array
+	v = json_object_get(json, OIDC_JOSE_JWK_X5C_STR);
+	if (v && json_is_array(v)) {
+		result->x5c = apr_array_make(pool, json_array_size(v), sizeof(char *));
+		for (i = 0; i < json_array_size(v); i++) {
+			e = json_array_get(v, i);
+			if (json_is_string(e))
+				APR_ARRAY_PUSH(result->x5c, char *) = apr_pstrdup(pool, json_string_value(e));
+		}
+	}
 
 	// set x5t#256
 	v = json_object_get(json, OIDC_JOSE_JWK_X5T256_STR);
