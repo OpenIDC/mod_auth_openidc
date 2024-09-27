@@ -3,6 +3,7 @@
 - use compact encoding and preserve order where appropriate for most calls to json_dumps
 - replace json_dumps/free combos with oidc_util_encode_json
 - refactor oidc_jwk_to_json
+- bump to 2.4.16.4rc3
 
 09/26/2024
 - fix oidc_jwk_copy wrt. "x5t", which broke private_key_jwt authentication to Azure AD since 2.4.13
