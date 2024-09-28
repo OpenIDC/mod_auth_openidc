@@ -181,30 +181,42 @@ const char *oidc_jwt_hdr_get(oidc_jwt_t *jwt, const char *key) {
 /*
  * perform compact serialization on a JWT and return the resulting string
  */
-char *oidc_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jose_error_t *err) {
+char *oidc_jose_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jose_error_t *err) {
 	cjose_err cjose_err;
-	const char *cser = NULL;
-	if (_oidc_strcmp(jwt->header.alg, CJOSE_HDR_ALG_NONE) != 0) {
-		if (cjose_jws_export(jwt->cjose_jws, &cser, &cjose_err) == FALSE) {
+	char *result = NULL, *s_payload = NULL, *out = NULL;
+	size_t out_len;
+
+	if (_oidc_strcmp(jwt->header.alg, CJOSE_HDR_ALG_NONE) == 0) {
+
+		s_payload = oidc_util_encode_json(pool, jwt->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
+		if (s_payload == NULL) {
+			oidc_jose_error(err, "oidc_util_encode_json failed");
+			return NULL;
+		}
+
+		// out is allocated by cjose and must be freed explicitly by cjose_get_dealloc()()
+		if (cjose_base64url_encode((const uint8_t *)s_payload, _oidc_strlen(s_payload), &out, &out_len,
+					   &cjose_err) == FALSE) {
+			oidc_jose_error(err, "cjose_base64url_encode failed: %s", oidc_cjose_e2s(pool, cjose_err));
+			return NULL;
+		}
+
+		result = apr_pstrmemdup(pool, out, out_len);
+		cjose_get_dealloc()(out);
+		result = apr_psprintf(pool, "%s.%s.", OIDC_JOSE_HDR_ALG_NONE, result);
+
+	} else {
+
+		// out: "the returned string pointer is owned by the JWS, the caller should not attempt to free it directly"
+		if (cjose_jws_export(jwt->cjose_jws, (const char **)&out, &cjose_err) == FALSE) {
 			oidc_jose_error(err, "cjose_jws_export failed: %s", oidc_cjose_e2s(pool, cjose_err));
 			return NULL;
 		}
-	} else {
 
-		char *s_payload =
-		    oidc_util_encode_json(pool, jwt->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
-
-		char *out = NULL;
-		size_t out_len;
-		if (cjose_base64url_encode((const uint8_t *)s_payload, _oidc_strlen(s_payload), &out, &out_len,
-					   &cjose_err) == FALSE)
-			return NULL;
-		cser = apr_pstrmemdup(pool, out, out_len);
-		cjose_get_dealloc()(out);
-
-		cser = apr_psprintf(pool, "%s.%s.", OIDC_JOSE_HDR_ALG_NONE, cser);
+		result = apr_pstrdup(pool, out);
 	}
-	return apr_pstrdup(pool, cser);
+
+	return result;
 }
 
 /*
@@ -530,7 +542,6 @@ apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_js
 	json_t *json = NULL, *temp = NULL;
 	json_error_t json_error;
 	int i = 0;
-	void *iter = NULL;
 
 	// input sanity checks
 	if ((jwk == NULL) || (s_json == NULL))

@@ -544,8 +544,8 @@ static char *test_jwt_sign_verify(apr_pool_t *pool) {
 	jwt->header.alg = apr_pstrdup(pool, CJOSE_HDR_ALG_RS256);
 
 	TST_ASSERT_ERR("oidc_jwt_sign (rsa)", oidc_jwt_sign(pool, jwt, jwk, FALSE, &err), pool, err);
-	cser = oidc_jwt_serialize(pool, jwt, &err);
-	TST_ASSERT_ERR("oidc_jwt_serialize (rsa)", cser != NULL, pool, err);
+	cser = oidc_jose_jwt_serialize(pool, jwt, &err);
+	TST_ASSERT_ERR("oidc_jose_jwt_serialize (rsa)", cser != NULL, pool, err);
 
 	oidc_jwt_t *rsa_jwt = NULL;
 	TST_ASSERT_ERR("oidc_jwt_parse (rsa)", oidc_jwt_parse(pool, cser, &rsa_jwt, NULL, FALSE, &err), pool, err);
@@ -563,8 +563,8 @@ static char *test_jwt_sign_verify(apr_pool_t *pool) {
 	jwt->header.alg = apr_pstrdup(pool, "HS256");
 
 	TST_ASSERT_ERR("oidc_jwt_sign (hmac)", oidc_jwt_sign(pool, jwt, jwk, FALSE, &err), pool, err);
-	cser = oidc_jwt_serialize(pool, jwt, &err);
-	TST_ASSERT_ERR("oidc_jwt_serialize (hmac)", cser != NULL, pool, err);
+	cser = oidc_jose_jwt_serialize(pool, jwt, &err);
+	TST_ASSERT_ERR("oidc_jose_jwt_serialize (hmac)", cser != NULL, pool, err);
 
 	oidc_jwt_t *hmac_jwt = NULL;
 	TST_ASSERT_ERR("oidc_jwt_parse (rsa)", oidc_jwt_parse(pool, cser, &hmac_jwt, NULL, FALSE, &err), pool, err);

@@ -257,7 +257,7 @@ apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk, apr
 /* verify a JWT a key in a list of JWKs */
 apr_byte_t oidc_jwt_verify(apr_pool_t *pool, oidc_jwt_t *jwt, apr_hash_t *keys, oidc_jose_error_t *err);
 /* perform compact serialization on a JWT and return the resulting string */
-char *oidc_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jose_error_t *err);
+char *oidc_jose_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jose_error_t *err);
 /* encrypt JWT */
 apr_byte_t oidc_jwt_encrypt(apr_pool_t *pool, oidc_jwt_t *jwe, oidc_jwk_t *jwk, const char *payload, int payload_len,
 			    char **serialized, oidc_jose_error_t *err);

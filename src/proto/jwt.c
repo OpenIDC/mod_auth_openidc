@@ -290,9 +290,9 @@ apr_byte_t oidc_proto_jwt_sign_and_serialize(request_rec *r, oidc_jwk_t *jwk, oi
 		goto end;
 	}
 
-	*cser = oidc_jwt_serialize(r->pool, jwt, &err);
+	*cser = oidc_jose_jwt_serialize(r->pool, jwt, &err);
 	if (*cser == NULL) {
-		oidc_error(r, "oidc_jwt_serialize failed: %s", oidc_jose_e2s(r->pool, err));
+		oidc_error(r, "oidc_jose_jwt_serialize failed: %s", oidc_jose_e2s(r->pool, err));
 		goto end;
 	}
 

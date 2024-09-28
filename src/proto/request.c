@@ -439,7 +439,7 @@ static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provide
 	oidc_util_json_object_get_string(r->pool, crypto, "crypt_alg", &jwe->header.alg, NULL);
 	oidc_util_json_object_get_string(r->pool, crypto, "crypt_enc", &jwe->header.enc, NULL);
 
-	char *cser = oidc_jwt_serialize(r->pool, request_object, &err);
+	char *cser = oidc_jose_jwt_serialize(r->pool, request_object, &err);
 
 	/* see if we need to encrypt the request object */
 	if (jwe->header.alg != NULL) {
