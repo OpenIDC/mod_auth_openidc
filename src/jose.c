@@ -525,58 +525,38 @@ apr_byte_t oidc_is_jwks(json_t *json) {
  */
 apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_json, oidc_jose_error_t *oidc_err) {
 	apr_byte_t rv = FALSE;
-	char *cjose_jwk_json = NULL;
+	char *s_cjose = NULL;
 	cjose_err err;
 	json_t *json = NULL, *temp = NULL;
 	json_error_t json_error;
 	int i = 0;
 	void *iter = NULL;
 
-	if (!jwk) {
-		oidc_jose_error(oidc_err, "oidc_jwk_to_json failed: NULL oidc_jwk");
+	// input sanity checks
+	if ((jwk == NULL) || (s_json == NULL))
+		goto end;
+
+	// get the JWK string representation from cjose
+	s_cjose = cjose_jwk_to_json(jwk->cjose_jwk, TRUE, &err);
+	if (s_cjose == NULL) {
+		oidc_jose_error(oidc_err, "oidc_jwk_to_json: cjose_jwk_to_json failed: %s", oidc_cjose_e2s(pool, err));
 		goto end;
 	}
 
-	// get current
-	cjose_jwk_json = cjose_jwk_to_json(jwk->cjose_jwk, TRUE, &err);
-
-	if (cjose_jwk_json == NULL) {
-		oidc_jose_error(oidc_err, "cjose_jwk_to_json failed: %s", oidc_cjose_e2s(pool, err));
+	json = json_loads(s_cjose, 0, &json_error);
+	if (json == NULL) {
+		oidc_jose_error(oidc_err, "oidc_jwk_to_json: json_loads failed");
 		goto end;
 	}
-
-	temp = json_loads(cjose_jwk_json, 0, &json_error);
-	if (!temp) {
-		oidc_jose_error(oidc_err, "json_loads failed");
-		goto end;
-	}
-
-	json = json_object();
 
 	if (jwk->use)
 		json_object_set_new(json, OIDC_JOSE_JWK_USE_STR, json_string(jwk->use));
 
-	iter = json_object_iter(temp);
-	while (iter) {
-		json_object_set(json, json_object_iter_key(iter), json_object_iter_value(iter));
-		iter = json_object_iter_next(temp, iter);
-	}
-	json_decref(temp);
-	temp = NULL;
-
 	// set x5c
 	if ((jwk->x5c != NULL) && (jwk->x5c->nelts > 0)) {
 		temp = json_array();
-		if (temp == NULL) {
-			oidc_jose_error(oidc_err, "json_array failed");
-			goto end;
-		}
-		for (i = 0; i < jwk->x5c->nelts; i++) {
-			if (json_array_append_new(temp, json_string(APR_ARRAY_IDX(jwk->x5c, i, const char *))) == -1) {
-				oidc_jose_error(oidc_err, "json_array_append failed");
-				goto end;
-			}
-		}
+		for (i = 0; i < jwk->x5c->nelts; i++)
+			json_array_append_new(temp, json_string(APR_ARRAY_IDX(jwk->x5c, i, const char *)));
 		json_object_set_new(json, OIDC_JOSE_JWK_X5C_STR, temp);
 	}
 
@@ -595,10 +575,10 @@ apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_js
 
 end:
 
-	if (cjose_jwk_json)
-		cjose_get_dealloc()(cjose_jwk_json);
 	if (json)
 		json_decref(json);
+	if (s_cjose)
+		cjose_get_dealloc()(s_cjose);
 
 	return rv;
 }
