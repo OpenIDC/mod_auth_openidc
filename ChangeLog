@@ -1,3 +1,6 @@
+09/29/2024
+- release 2.4.16.4
+
 09/27/2024
 - correct usage of free() for json_dumps return values instead of cjose_get_dealloc()()
 - use compact encoding and preserve order where appropriate for most calls to json_dumps

@@ -207,7 +207,8 @@ char *oidc_jose_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jose_error
 
 	} else {
 
-		// out: "the returned string pointer is owned by the JWS, the caller should not attempt to free it directly"
+		// out: "the returned string pointer is owned by the JWS, the caller should not attempt to free it
+		// directly"
 		if (cjose_jws_export(jwt->cjose_jws, (const char **)&out, &cjose_err) == FALSE) {
 			oidc_jose_error(err, "cjose_jws_export failed: %s", oidc_cjose_e2s(pool, cjose_err));
 			return NULL;
