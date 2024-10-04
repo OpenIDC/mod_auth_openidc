@@ -92,6 +92,8 @@ apr_byte_t oidc_util_spaced_string_equals(apr_pool_t *pool, const char *a, const
 apr_byte_t oidc_util_spaced_string_contains(apr_pool_t *pool, const char *str, const char *match);
 apr_byte_t oidc_util_json_object_get_string(apr_pool_t *pool, json_t *json, const char *name, char **value,
 					    const char *default_value);
+apr_byte_t oidc_util_json_object_get_string_array(apr_pool_t *pool, json_t *json, const char *name,
+						  apr_array_header_t **value, const apr_array_header_t *default_value);
 apr_byte_t oidc_util_json_object_get_int(const json_t *json, const char *name, int *value, const int default_value);
 apr_byte_t oidc_util_json_object_get_bool(const json_t *json, const char *name, int *value, const int default_value);
 char *oidc_util_html_escape(apr_pool_t *pool, const char *input);

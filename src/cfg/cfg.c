@@ -52,6 +52,13 @@
 #include "session.h"
 #include "util.h"
 
+const char *oidc_cfg_string_list_add(apr_pool_t *pool, apr_array_header_t **list, const char *arg) {
+	if (*list == NULL)
+		*list = apr_array_make(pool, 1, sizeof(const char *));
+	APR_ARRAY_PUSH(*list, const char *) = arg;
+	return NULL;
+}
+
 #define OIDC_DEFAULT_ACTION_ON_USERINFO_ERROR OIDC_ON_ERROR_502
 OIDC_CFG_MEMBER_FUNC_TYPE_GET(action_on_userinfo_error, oidc_on_error_action_t, OIDC_DEFAULT_ACTION_ON_USERINFO_ERROR)
 

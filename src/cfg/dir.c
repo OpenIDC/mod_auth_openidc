@@ -244,21 +244,14 @@ const char *oidc_cmd_dir_accept_oauth_token_in_set(cmd_parms *cmd, void *m, cons
 /*
  * specify cookies names to pass/strip
  */
-static const char *oidc_cfg_dir_cookie_names_set(apr_pool_t *pool, apr_array_header_t **cookie_names, const char *arg) {
-	if (*cookie_names == NULL)
-		*cookie_names = apr_array_make(pool, 3, sizeof(const char *));
-	APR_ARRAY_PUSH(*cookie_names, const char *) = arg;
-	return NULL;
-}
-
 const char *oidc_cmd_dir_strip_cookies_set(cmd_parms *cmd, void *m, const char *arg) {
 	oidc_dir_cfg_t *dir_cfg = (oidc_dir_cfg_t *)m;
-	return oidc_cfg_dir_cookie_names_set(cmd->pool, &dir_cfg->strip_cookies, arg);
+	return oidc_cfg_string_list_add(cmd->pool, &dir_cfg->strip_cookies, arg);
 }
 
 const char *oidc_cmd_dir_pass_cookies_set(cmd_parms *cmd, void *m, const char *arg) {
 	oidc_dir_cfg_t *dir_cfg = (oidc_dir_cfg_t *)m;
-	return oidc_cfg_dir_cookie_names_set(cmd->pool, &dir_cfg->pass_cookies, arg);
+	return oidc_cfg_string_list_add(cmd->pool, &dir_cfg->pass_cookies, arg);
 }
 
 #define OIDC_CFG_DIR_MEMBER_FUNC_GET(member, type, def_val, unset_val)                                                 \

@@ -122,6 +122,7 @@ typedef struct oidc_jwks_uri_t {
 #define OIDCIDTokenSignedResponseAlg "OIDCIDTokenSignedResponseAlg"
 #define OIDCIDTokenEncryptedResponseAlg "OIDCIDTokenEncryptedResponseAlg"
 #define OIDCIDTokenEncryptedResponseEnc "OIDCIDTokenEncryptedResponseEnc"
+#define OIDCIDTokenAudValues "OIDCIDTokenAudValues"
 #define OIDCUserInfoSignedResponseAlg "OIDCUserInfoSignedResponseAlg"
 #define OIDCUserInfoEncryptedResponseAlg "OIDCUserInfoEncryptedResponseAlg"
 #define OIDCUserInfoEncryptedResponseEnc "OIDCUserInfoEncryptedResponseEnc"
@@ -178,6 +179,11 @@ typedef struct oidc_jwks_uri_t {
 	OIDC_CFG_PROVIDER_MEMBER_FUNCS_TYPE_DECL(member, type)                                                         \
 	void OIDC_CFG_MEMBER_FUNC_NAME(member, cfg_provider, int_set)(oidc_provider_t * provider, type arg);
 
+#define OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_LIST_DECL(member)                                                           \
+	OIDC_CFG_PROVIDER_MEMBER_FUNCS_TYPE_DECL(member, const apr_array_header_t *)                                   \
+	const char *OIDC_CFG_MEMBER_FUNC_NAME(member, cfg_provider, set_str_list)(apr_pool_t *, oidc_provider_t *,     \
+										  apr_array_header_t *);
+
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_DECL(metadata_url)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_DECL(issuer)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_DECL(authorization_endpoint_url);
@@ -211,6 +217,9 @@ OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_DECL(userinfo_signed_response_alg)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_DECL(userinfo_encrypted_response_alg)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_DECL(userinfo_encrypted_response_enc)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_DECL(request_object)
+
+// string list
+OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_LIST_DECL(id_token_aud_values)
 
 // keys
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_KEYS_DECL(verify_public_keys)

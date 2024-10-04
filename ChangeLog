@@ -1,3 +1,12 @@
+10/04/2024
+- ensure backwards compatibility with versions <2.4.16.x when a JSON array of string values
+  is provided in the "aud" claim of the ID token; required by (at least) Oracle IDCS
+  see #1272 and #1273; thanks @lufik and @tydalforce
+- add OIDCIDTokenAudValues configuration primitive that allows for explicit (and exhaustive)
+  configuration of the list of accepted values in the "aud" claim of the ID token
+  e.g. as required for passing FAPI 2 conformance testing
+- bump to 2.4.16.5rc0
+
 09/29/2024
 - release 2.4.16.4
 

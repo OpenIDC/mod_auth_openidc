@@ -85,6 +85,7 @@
 #define OIDC_METADATA_ID_TOKEN_SIGNED_RESPONSE_ALG "id_token_signed_response_alg"
 #define OIDC_METADATA_ID_TOKEN_ENCRYPTED_RESPONSE_ALG "id_token_encrypted_response_alg"
 #define OIDC_METADATA_ID_TOKEN_ENCRYPTED_RESPONSE_ENC "id_token_encrypted_response_enc"
+#define OIDC_METADATA_ID_TOKEN_AUD_VALUES "id_token_aud_values"
 #define OIDC_METADATA_USERINFO_SIGNED_RESPONSE_ALG "userinfo_signed_response_alg"
 #define OIDC_METADATA_USERINFO_ENCRYPTED_RESPONSE_ALG "userinfo_encrypted_response_alg"
 #define OIDC_METADATA_USERINFO_ENCRYPTED_RESPONSE_ENC "userinfo_encrypted_response_enc"
@@ -1228,7 +1229,7 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg_t *cfg, json_t *j_c
 	const char *rv = NULL;
 	char *value = NULL;
 	int ivalue = OIDC_CONFIG_POS_INT_UNSET;
-	apr_array_header_t *keys = NULL;
+	apr_array_header_t *keys = NULL, *auds = NULL;
 
 	oidc_util_json_object_get_string(r->pool, j_conf, OIDC_METADATA_CLIENT_JWKS_URI, &value,
 					 oidc_cfg_provider_client_jwks_uri_get(oidc_cfg_provider_get(cfg)));
@@ -1262,6 +1263,14 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg_t *cfg, json_t *j_c
 	    r->pool, j_conf, OIDC_METADATA_ID_TOKEN_ENCRYPTED_RESPONSE_ENC, &value,
 	    oidc_cfg_provider_id_token_encrypted_response_enc_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(id_token_encrypted_response_enc, value, rv)
+
+	oidc_util_json_object_get_string_array(r->pool, j_conf, OIDC_METADATA_ID_TOKEN_AUD_VALUES, &auds,
+					       oidc_cfg_provider_id_token_aud_values_get(oidc_cfg_provider_get(cfg)));
+	if (auds != NULL) {
+		rv = oidc_cfg_provider_id_token_aud_values_set_str_list(r->pool, provider, auds);
+		if (rv != NULL)
+			oidc_error(r, "oidc_cfg_provider_aud_values_set: %s", rv);
+	}
 
 	/* get the (optional) signing & encryption settings for the userinfo response */
 	oidc_util_json_object_get_string(

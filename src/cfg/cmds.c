@@ -466,6 +466,11 @@ const command_rec oidc_cfg_cmds[] = {
 		id_token_encrypted_response_enc,
 		"The algorithm that the OP should use to encrypt to the id_token with the Content Encryption Key (used only in dynamic client registration); must be one of [A128CBC-HS256|A256CBC-HS512|A256GCM]"),
 	OIDC_CFG_CMD_PROVIDER(
+		AP_INIT_ITERATE,
+		OIDCIDTokenAudValues,
+		id_token_aud_values,
+		"Accepted \"aud\" claim values in the ID token."),
+	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_TAKE1,
 		OIDCUserInfoSignedResponseAlg,
 		userinfo_signed_response_alg,

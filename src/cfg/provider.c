@@ -89,6 +89,7 @@ struct oidc_provider_t {
 	char *id_token_signed_response_alg;
 	char *id_token_encrypted_response_alg;
 	char *id_token_encrypted_response_enc;
+	apr_array_header_t *id_token_aud_values;
 	char *userinfo_signed_response_alg;
 	char *userinfo_encrypted_response_alg;
 	char *userinfo_encrypted_response_enc;
@@ -239,6 +240,28 @@ OIDC_PROVIDER_TYPE_MEMBER_FUNCS_PASSPHRASE(token_endpoint_tls_client_key_pwd)
 
 OIDC_PROVIDER_MEMBER_FUNCS_KEYS(verify_public_keys)
 OIDC_PROVIDER_MEMBER_FUNCS_KEYS(client_keys)
+
+/*
+ * string list
+ */
+
+#define OIDC_PROVIDER_MEMBER_FUNCS_STR_LIST(member)                                                                    \
+                                                                                                                       \
+	const char *oidc_cfg_provider_##member##_set_str_list(apr_pool_t *pool, oidc_provider_t *provider,             \
+							      apr_array_header_t *arg) {                               \
+		provider->member = arg;                                                                                \
+		return NULL;                                                                                           \
+	}                                                                                                              \
+                                                                                                                       \
+	const char *oidc_cfg_provider_##member##_set(apr_pool_t *pool, oidc_provider_t *provider, const char *arg) {   \
+		return oidc_cfg_string_list_add(pool, &provider->member, arg);                                         \
+	}                                                                                                              \
+	OIDC_PROVIDER_MEMBER_FUNCS_TYPE_DEF(member, const apr_array_header_t *, NULL)
+
+/*
+ * id token aud values
+ */
+OIDC_PROVIDER_MEMBER_FUNCS_STR_LIST(id_token_aud_values)
 
 /*
  * PKCE
@@ -701,6 +724,8 @@ static void oidc_cfg_provider_init(oidc_provider_t *provider) {
 	provider->request_object = NULL;
 
 	provider->response_require_iss = OIDC_CONFIG_POS_INT_UNSET;
+
+	provider->id_token_aud_values = NULL;
 }
 
 void oidc_cfg_provider_merge(apr_pool_t *pool, oidc_provider_t *dst, const oidc_provider_t *base,
@@ -812,6 +837,9 @@ void oidc_cfg_provider_merge(apr_pool_t *pool, oidc_provider_t *dst, const oidc_
 
 	dst->response_require_iss = add->response_require_iss != OIDC_CONFIG_POS_INT_UNSET ? add->response_require_iss
 											   : base->response_require_iss;
+
+	dst->id_token_aud_values =
+	    add->id_token_aud_values != NULL ? add->id_token_aud_values : base->id_token_aud_values;
 }
 
 oidc_provider_t *oidc_cfg_provider_create(apr_pool_t *pool) {
