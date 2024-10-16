@@ -1,3 +1,6 @@
+10/16/2024
+- release 2.4.16.5
+
 10/04/2024
 - ensure backwards compatibility with versions <2.4.16.x when a JSON array of string values
   is provided in the "aud" claim of the ID token; required by (at least) Oracle IDCS
