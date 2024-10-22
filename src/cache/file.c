@@ -246,7 +246,7 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 	const char *metadata_path = oidc_cache_file_path(r, "cache-file", OIDC_CACHE_FILE_LAST_CLEANED);
 
 	/* open the metadata file if it exists */
-	if ((rc = apr_stat(&fi, metadata_path, APR_FINFO_MTIME, r->pool)) == APR_SUCCESS) {
+	if (apr_stat(&fi, metadata_path, APR_FINFO_MTIME, r->pool) == APR_SUCCESS) {
 
 		/* really only clean once per so much time, check that we haven not recently run */
 		if (apr_time_now() < fi.mtime + apr_time_from_sec(oidc_cfg_cache_file_clean_interval_get(cfg))) {
@@ -399,11 +399,11 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section, const
 	info.len = _oidc_strlen(value) + 1;
 
 	/* write the header */
-	if ((rc = oidc_cache_file_write(r, path, fd, &info, sizeof(oidc_cache_file_info_t))) != APR_SUCCESS)
+	if (oidc_cache_file_write(r, path, fd, &info, sizeof(oidc_cache_file_info_t)) != APR_SUCCESS)
 		return FALSE;
 
 	/* next write the value */
-	rc = oidc_cache_file_write(r, path, fd, (void *)value, info.len);
+	oidc_cache_file_write(r, path, fd, (void *)value, info.len);
 
 	/* unlock and close the written file */
 	apr_file_unlock(fd);

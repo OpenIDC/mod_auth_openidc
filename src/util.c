@@ -1120,9 +1120,8 @@ static char *oidc_util_template_escape(request_rec *r, const char *arg, int esca
 /*
  * fill and send a HTML template
  */
-apr_byte_t oidc_util_html_send_in_template(request_rec *r, const char *filename, char **static_template_content,
-					   const char *arg1, int arg1_esc, const char *arg2, int arg2_esc,
-					   int status_code) {
+int oidc_util_html_send_in_template(request_rec *r, const char *filename, char **static_template_content,
+				    const char *arg1, int arg1_esc, const char *arg2, int arg2_esc, int status_code) {
 	char *html = NULL;
 	int rc = status_code;
 	if (*static_template_content == NULL) {
@@ -1451,7 +1450,7 @@ apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack, cons
  * convert a claim value from UTF-8 to the Latin1 character set
  */
 static char *oidc_util_utf8_to_latin1(request_rec *r, const char *src) {
-	char *dst = "";
+	char *dst = NULL;
 	unsigned int cp = 0;
 	unsigned char ch;
 	int i = 0;

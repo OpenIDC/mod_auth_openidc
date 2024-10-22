@@ -113,9 +113,8 @@ oidc_jwk_t *oidc_util_key_list_first(const apr_array_header_t *key_list, int kty
 const char *oidc_util_jq_filter(request_rec *r, const char *input, const char *filter);
 void oidc_util_set_trace_parent(request_rec *r, oidc_cfg_t *c, const char *span);
 void oidc_util_apr_hash_clear(apr_hash_t *ht);
-apr_byte_t oidc_util_html_send_in_template(request_rec *r, const char *filename, char **static_template_content,
-					   const char *arg1, int arg1_esc, const char *arg2, int arg2_esc,
-					   int status_code);
+int oidc_util_html_send_in_template(request_rec *r, const char *filename, char **static_template_content,
+				    const char *arg1, int arg1_esc, const char *arg2, int arg2_esc, int status_code);
 char *oidc_util_apr_expr_parse(cmd_parms *cmd, const char *str, oidc_apr_expr_t **expr, apr_byte_t result_is_str);
 const char *oidc_util_apr_expr_exec(request_rec *r, const oidc_apr_expr_t *expr, apr_byte_t result_is_str);
 
