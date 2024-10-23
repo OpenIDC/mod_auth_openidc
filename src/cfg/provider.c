@@ -492,7 +492,7 @@ const char *oidc_cfg_provider_jwks_uri_uri_get(oidc_provider_t *provider) {
 }
 
 const char *oidc_cfg_provider_jwks_uri_set(apr_pool_t *pool, oidc_provider_t *provider, const char *arg) {
-	const char *rv = oidc_cfg_parse_is_valid_url(pool, arg, "https");
+	const char *rv = oidc_cfg_parse_is_valid_http_url(pool, arg);
 	if (rv == NULL)
 		provider->jwks_uri.uri = apr_pstrdup(pool, arg);
 	return rv;
@@ -556,7 +556,7 @@ const char *oidc_cfg_provider_signed_jwks_uri_set(apr_pool_t *pool, oidc_provide
 	json_t *json = NULL;
 
 	if ((arg1 != NULL) && (_oidc_strcmp(arg1, "") != 0)) {
-		rv = oidc_cfg_parse_is_valid_url(pool, arg1, "https");
+		rv = oidc_cfg_parse_is_valid_http_url(pool, arg1);
 		if (rv != NULL)
 			goto end;
 		provider->jwks_uri.signed_uri = apr_pstrdup(pool, arg1);
