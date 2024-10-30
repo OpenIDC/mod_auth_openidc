@@ -224,9 +224,8 @@ int oidc_logout_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, 
 					provider = oidc_get_provider_for_issuer(r, c, iss, FALSE);
 				} else {
 					/*
-					 * Azure AD seems to such a non spec compliant provider.
-					 * In this case try our luck with the static config if
-					 * possible.
+					 * Microsoft Entra ID / Azure AD seems to such a non spec compliant provider.
+					 * In this case try our luck with the static config if possible.
 					 */
 					oidc_debug(r, "OP did not provide an iss as parameter");
 					if (oidc_provider_static_config(r, c, &provider) == FALSE)

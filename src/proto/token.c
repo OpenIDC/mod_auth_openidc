@@ -188,7 +188,7 @@ apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, oi
 	*expires_in = -1;
 	j_expires_in = json_object_get(j_result, OIDC_PROTO_EXPIRES_IN);
 	if (j_expires_in != NULL) {
-		/* cater for string values (old Azure AD) */
+		/* cater for string values (old Microsoft Entra ID / Azure AD) */
 		if (json_is_string(j_expires_in))
 			*expires_in = _oidc_str_to_int(json_string_value(j_expires_in), -1);
 		else if (json_is_integer(j_expires_in))
