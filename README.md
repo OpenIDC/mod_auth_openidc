@@ -136,7 +136,7 @@ For details on configuring multiple providers see the [Wiki](https://github.com/
 See the [Wiki](https://github.com/OpenIDC/mod_auth_openidc/wiki) for configuration docs for other OpenID Connect Providers:
 - [GLUU Server](https://github.com/OpenIDC/mod_auth_openidc/wiki/Gluu-Server)
 - [Keycloak](https://github.com/OpenIDC/mod_auth_openidc/wiki/Keycloak)
-- [Microsoft Entra ID (Azure AD)](https://github.com/OpenIDC/mod_auth_openidc/wiki/Microsoft-Entra-ID---Azure-AD)
+- [Microsoft Entra ID (Azure AD)](https://github.com/OpenIDC/mod_auth_openidc/wiki/Microsoft-Entra-ID--(Azure-AD))
 - [Sign in with Apple](https://github.com/OpenIDC/mod_auth_openidc/wiki/Sign-in-with-Apple)
 - [Curity Identity Server](https://github.com/OpenIDC/mod_auth_openidc/wiki/Curity-Identity-Server)
 - [LemonLDAP::NG](https://github.com/OpenIDC/mod_auth_openidc/wiki/LemonLDAP::NG)
