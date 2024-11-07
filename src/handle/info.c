@@ -45,7 +45,6 @@
 #include "util.h"
 
 #define OIDC_INFO_PARAM_ACCESS_TOKEN_REFRESH_INTERVAL "access_token_refresh_interval"
-#define OIDC_INFO_PARAM_EXTEND_SESSION "extend_session"
 
 #define OIDC_HOOK_INFO_FORMAT_JSON "json"
 #define OIDC_HOOK_INFO_FORMAT_HTML "html"
@@ -209,9 +208,8 @@ int oidc_info_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, ap
 	}
 
 	/* pass the tokens to the application and save the session, possibly updating the expiry */
-	if (b_extend_session)
-		if (oidc_session_pass_tokens(r, c, session, &needs_save) == FALSE)
-			oidc_warn(r, "error passing tokens");
+	if (oidc_session_pass_tokens(r, c, session, b_extend_session, &needs_save) == FALSE)
+		oidc_warn(r, "error passing tokens");
 
 	/* check if something was updated in the session and we need to save it again */
 	if (b_extend_session && needs_save) {

@@ -1,3 +1,9 @@
+11/07/2024
+- info: fix requests to the info hook with extend_session=false; see #1279; thanks @fnieri-cdp
+  - properly reflect the (unmodified) inactivity timeout in the response ("timeout")
+  - avoid refreshing an access token (since the session is not saved)
+  - avoid refreshing claims from the user info endpoint, and possibly refreshing the access token
+
 10/23/2024
 - metadata: allow plain HTTP URLs in metadata elements `jwks_uri` and `signed_jwks_uri`
   to ensure backwards compatibility with <=2.4.15.7 and to support private/test deployments

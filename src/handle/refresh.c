@@ -363,7 +363,7 @@ int oidc_refresh_token_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *se
 	}
 
 	/* pass the tokens to the application, possibly updating the expiry */
-	if (oidc_session_pass_tokens(r, c, session, &needs_save) == FALSE) {
+	if (oidc_session_pass_tokens(r, c, session, TRUE, &needs_save) == FALSE) {
 		error_code = "session_corruption";
 		goto end;
 	}

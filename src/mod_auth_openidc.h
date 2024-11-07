@@ -99,6 +99,8 @@
 #define OIDC_REDIRECT_URI_REQUEST_SID "sid"
 #define OIDC_REDIRECT_URI_REQUEST_ISS "iss"
 
+#define OIDC_INFO_PARAM_EXTEND_SESSION "extend_session"
+
 #define OIDC_CLAIM_ISS "iss"
 #define OIDC_CLAIM_AUD "aud"
 #define OIDC_CLAIM_AZP "azp"
@@ -145,7 +147,8 @@ apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name, const ch
 				json_t *json, char **request_user);
 apr_byte_t oidc_get_provider_from_session(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
 					  oidc_provider_t **provider);
-apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session, apr_byte_t *needs_save);
+apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session, apr_byte_t extend_session,
+				    apr_byte_t *needs_save);
 void oidc_log_session_expires(request_rec *r, const char *msg, apr_time_t session_expires);
 apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg_t *c, oidc_provider_t **provider);
 const char *oidc_original_request_method(request_rec *r, oidc_cfg_t *cfg, apr_byte_t handle_discovery_response);
