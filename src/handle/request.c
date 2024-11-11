@@ -42,19 +42,22 @@
 
 #include "handle/handle.h"
 #include "metrics.h"
+#include "mod_auth_openidc.h"
+#include "proto/proto.h"
+#include "state.h"
+#include "util.h"
 
-static int oidc_request_check_cookie_domain(request_rec *r, oidc_cfg *c, oidc_proto_state_t *proto_state,
+static int oidc_request_check_cookie_domain(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,
 					    const char *original_url) {
 	/*
 	 * printout errors if Cookie settings are not going to work
-	 * TODO: separate this code out into its own function
 	 */
 	apr_uri_t o_uri;
 	_oidc_memset(&o_uri, 0, sizeof(apr_uri_t));
 	apr_uri_t r_uri;
 	_oidc_memset(&r_uri, 0, sizeof(apr_uri_t));
 	apr_uri_parse(r->pool, original_url, &o_uri);
-	apr_uri_parse(r->pool, oidc_get_redirect_uri(r, c), &r_uri);
+	apr_uri_parse(r->pool, oidc_util_redirect_uri(r, c), &r_uri);
 	if ((_oidc_strcmp(o_uri.scheme, r_uri.scheme) != 0) && (_oidc_strcmp(r_uri.scheme, "https") == 0)) {
 		oidc_error(r,
 			   "the URL scheme (%s) of the configured " OIDCRedirectURI
@@ -65,7 +68,7 @@ static int oidc_request_check_cookie_domain(request_rec *r, oidc_cfg *c, oidc_pr
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	if (c->cookie_domain == NULL) {
+	if (oidc_cfg_cookie_domain_get(c) == NULL) {
 		if (_oidc_strcmp(o_uri.hostname, r_uri.hostname) != 0) {
 			char *p = _oidc_strstr(o_uri.hostname, r_uri.hostname);
 			if ((p == NULL) || (_oidc_strcmp(r_uri.hostname, p) != 0)) {
@@ -80,12 +83,12 @@ static int oidc_request_check_cookie_domain(request_rec *r, oidc_cfg *c, oidc_pr
 			}
 		}
 	} else {
-		if (!oidc_util_cookie_domain_valid(r_uri.hostname, c->cookie_domain)) {
+		if (!oidc_util_cookie_domain_valid(r_uri.hostname, oidc_cfg_cookie_domain_get(c))) {
 			oidc_error(r,
 				   "the domain (%s) configured in " OIDCCookieDomain
 				   " does not match the URL hostname (%s) of the URL being accessed (%s): setting "
 				   "\"state\" and \"session\" cookies will not work!!",
-				   c->cookie_domain, o_uri.hostname, original_url);
+				   oidc_cfg_cookie_domain_get(c), o_uri.hostname, original_url);
 			oidc_proto_state_destroy(proto_state);
 			OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_REQUEST_ERROR_URL);
 			return HTTP_INTERNAL_SERVER_ERROR;
@@ -95,11 +98,14 @@ static int oidc_request_check_cookie_domain(request_rec *r, oidc_cfg *c, oidc_pr
 	return OK;
 }
 
+#define OIDC_COOKIE_SAMESITE_LAX(c, r)                                                                                 \
+	oidc_cfg_cookie_same_site_get(c) ? OIDC_COOKIE_EXT_SAME_SITE_LAX : OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r)
+
 /*
  * set the state that is maintained between an authorization request and an authorization response
  * in a cookie in the browser that is cryptographically bound to that state
  */
-static int oidc_request_authorization_set_cookie(request_rec *r, oidc_cfg *c, const char *state,
+static int oidc_request_authorization_set_cookie(request_rec *r, oidc_cfg_t *c, const char *state,
 						 oidc_proto_state_t *proto_state) {
 	/*
 	 * create a cookie consisting of 8 elements:
@@ -114,39 +120,19 @@ static int oidc_request_authorization_set_cookie(request_rec *r, oidc_cfg *c, co
 	 * clean expired state cookies to avoid pollution and optionally
 	 * try to avoid the number of state cookies exceeding a max
 	 */
-	int number_of_cookies = oidc_clean_expired_state_cookies(r, c, NULL, oidc_cfg_delete_oldest_state_cookies(c));
-	int max_number_of_cookies = oidc_cfg_max_number_of_state_cookies(c);
+	int number_of_cookies =
+	    oidc_state_cookies_clean_expired(r, c, NULL, oidc_cfg_delete_oldest_state_cookies_get(c));
+	int max_number_of_cookies = oidc_cfg_max_number_of_state_cookies_get(c);
 	if ((max_number_of_cookies > 0) && (number_of_cookies >= max_number_of_cookies)) {
-
 		oidc_warn(r,
 			  "the number of existing, valid state cookies (%d) has exceeded the limit (%d), no additional "
 			  "authorization request + state cookie can be generated, aborting the request",
 			  number_of_cookies, max_number_of_cookies);
-		/*
-		 * TODO: the html_send code below caters for the case that there's a user behind a
-		 * browser generating this request, rather than a piece of XHR code; how would an
-		 * XHR client handle this?
-		 */
-
-		/*
-		 * it appears that sending content with a 503 turns the HTTP status code
-		 * into a 200 so we'll avoid that for now: the user will see Apache specific
-		 * readable text anyway
-		 *
-		 return oidc_util_html_send_error(r, c->error_template,
-		 "Too Many Outstanding Requests",
-		 apr_psprintf(r->pool,
-		 "No authentication request could be generated since there are too many outstanding authentication
-		 requests already; you may have to wait up to %d seconds to be able to create a new request",
-		 c->state_timeout),
-		 HTTP_SERVICE_UNAVAILABLE);
-		 */
-
 		return HTTP_SERVICE_UNAVAILABLE;
 	}
 
 	/* assemble the cookie name for the state cookie */
-	const char *cookieName = oidc_get_state_cookie_name(r, state);
+	const char *cookieName = oidc_state_cookie_name(r, state);
 
 	/* set it as a cookie */
 	oidc_http_set_cookie(r, cookieName, cookieValue, -1, OIDC_COOKIE_SAMESITE_LAX(c, r));
@@ -157,7 +143,7 @@ static int oidc_request_authorization_set_cookie(request_rec *r, oidc_cfg *c, co
 /*
  * authenticate the user to the selected OP, if the OP is not selected yet perform discovery first
  */
-int oidc_request_authenticate_user(request_rec *r, oidc_cfg *c, oidc_provider_t *provider, const char *original_url,
+int oidc_request_authenticate_user(request_rec *r, oidc_cfg_t *c, oidc_provider_t *provider, const char *original_url,
 				   const char *login_hint, const char *id_token_hint, const char *prompt,
 				   const char *auth_request_params, const char *path_scope) {
 
@@ -171,7 +157,7 @@ int oidc_request_authenticate_user(request_rec *r, oidc_cfg *c, oidc_provider_t 
 
 		// TODO: should we use an explicit redirect to the discovery endpoint (maybe a "discovery" param to the
 		// redirect_uri)?
-		if (c->metadata_dir != NULL) {
+		if (oidc_cfg_metadata_dir_get(c) != NULL) {
 			/*
 			 * No authentication done but request not allowed without authentication
 			 * by setting r->user
@@ -199,15 +185,16 @@ int oidc_request_authenticate_user(request_rec *r, oidc_cfg *c, oidc_provider_t 
 	char *pkce_state = NULL;
 	char *code_challenge = NULL;
 
-	if ((oidc_util_spaced_string_contains(r->pool, provider->response_type, OIDC_PROTO_CODE) == TRUE) &&
-	    (provider->pkce != NULL)) {
+	if ((oidc_util_spaced_string_contains(r->pool, oidc_cfg_provider_response_type_get(provider),
+					      OIDC_PROTO_CODE) == TRUE) &&
+	    (oidc_cfg_provider_pkce_get(provider) != &oidc_pkce_none)) {
 
 		/* generate the code verifier value that correlates authorization requests and code exchange requests */
-		if (provider->pkce->state(r, &pkce_state) == FALSE)
+		if (oidc_cfg_provider_pkce_get(provider)->state(r, &pkce_state) == FALSE)
 			return HTTP_INTERNAL_SERVER_ERROR;
 
 		/* generate the PKCE code challenge */
-		if (provider->pkce->challenge(r, pkce_state, &code_challenge) == FALSE)
+		if (oidc_cfg_provider_pkce_get(provider)->challenge(r, pkce_state, &code_challenge) == FALSE)
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -223,19 +210,19 @@ int oidc_request_authenticate_user(request_rec *r, oidc_cfg *c, oidc_provider_t 
 	}
 
 	oidc_proto_state_set_original_method(proto_state, oidc_original_request_method(r, c, TRUE));
-	oidc_proto_state_set_issuer(proto_state, provider->issuer);
-	oidc_proto_state_set_response_type(proto_state, provider->response_type);
+	oidc_proto_state_set_issuer(proto_state, oidc_cfg_provider_issuer_get(provider));
+	oidc_proto_state_set_response_type(proto_state, oidc_cfg_provider_response_type_get(provider));
 	oidc_proto_state_set_nonce(proto_state, nonce);
 	oidc_proto_state_set_timestamp_now(proto_state);
-	if (provider->response_mode)
-		oidc_proto_state_set_response_mode(proto_state, provider->response_mode);
+	if (oidc_cfg_provider_response_mode_get(provider))
+		oidc_proto_state_set_response_mode(proto_state, oidc_cfg_provider_response_mode_get(provider));
 	if (prompt)
 		oidc_proto_state_set_prompt(proto_state, prompt);
 	if (pkce_state)
 		oidc_proto_state_set_pkce_state(proto_state, pkce_state);
 
 	/* get a hash value that fingerprints the browser concatenated with the random input */
-	const char *state = oidc_get_browser_state_hash(r, c, nonce);
+	const char *state = oidc_state_browser_fingerprint(r, c, nonce);
 
 	/*
 	 * create state that restores the context when the authorization response comes in
@@ -255,9 +242,8 @@ int oidc_request_authenticate_user(request_rec *r, oidc_cfg *c, oidc_provider_t 
 
 	/* send off to the OpenID Connect Provider */
 	// TODO: maybe show intermediate/progress screen "redirecting to"
-	rc = oidc_proto_authorization_request(r, provider, login_hint, oidc_get_redirect_uri_iss(r, c, provider), state,
-					      proto_state, id_token_hint, code_challenge, auth_request_params,
-					      path_scope);
+	rc = oidc_proto_request_auth(r, provider, login_hint, oidc_util_redirect_uri(r, c), state, proto_state,
+				     id_token_hint, code_challenge, auth_request_params, path_scope);
 
 	OIDC_METRICS_TIMING_ADD(r, c, OM_AUTHN_REQUEST);
 

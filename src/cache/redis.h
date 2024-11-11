@@ -43,9 +43,11 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#include "hiredis/hiredis.h"
+#ifndef _MOD_AUTH_OPENIDC_REDIS_H_
+#define _MOD_AUTH_OPENIDC_REDIS_H_
 
-#include "mod_auth_openidc.h"
+#include "cfg/cache.h"
+#include "hiredis/hiredis.h"
 
 struct oidc_cache_cfg_redis_t;
 
@@ -70,7 +72,7 @@ typedef struct oidc_cache_cfg_redis_t {
 	oidc_cache_redis_disconnect_function_t disconnect;
 } oidc_cache_cfg_redis_t;
 
-int oidc_cache_redis_post_config(server_rec *s, oidc_cfg *cfg, const char *name);
+int oidc_cache_redis_post_config(server_rec *s, oidc_cfg_t *cfg, const char *name);
 int oidc_cache_redis_child_init(apr_pool_t *p, server_rec *s);
 redisReply *oidc_cache_redis_command(request_rec *r, oidc_cache_cfg_redis_t *context, char **errstr, const char *format,
 				     va_list ap);
@@ -84,3 +86,5 @@ apr_byte_t oidc_cache_redis_set_auth(request_rec *r, redisContext *rctx, const c
 apr_byte_t oidc_cache_redis_set_database(request_rec *r, redisContext *rctx, const int database);
 redisContext *oidc_cache_redis_connect_with_timeout(request_rec *r, const char *host, int port, struct timeval ct,
 						    struct timeval t, const char *msg);
+
+#endif // _MOD_AUTH_OPENIDC_REDIS_H_

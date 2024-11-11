@@ -71,7 +71,27 @@
 #define snprintf _snprintf
 #endif
 
-/* to extract a b64 encoded certificate representation as a single string */
+#include "util.h"
+
+/*
+ * assemble an error report
+ */
+static void _oidc_jose_error_set(oidc_jose_error_t *error, const char *source, const int line, const char *function,
+				 const char *fmt, ...) {
+	if (error == NULL)
+		return;
+	snprintf(error->source, OIDC_JOSE_ERROR_SOURCE_LENGTH, "%s", source);
+	error->line = line;
+	snprintf(error->function, OIDC_JOSE_ERROR_FUNCTION_LENGTH, "%s", function);
+	va_list ap;
+	va_start(ap, fmt);
+	vsnprintf(error->text, OIDC_JOSE_ERROR_TEXT_LENGTH, fmt ? fmt : "(null)", ap);
+	va_end(ap);
+}
+
+/*
+ * extract a b64 encoded certificate representation as a single string
+ */
 static int oidc_jose_util_get_b64encoded_certificate_data(apr_pool_t *p, X509 *x509_cert,
 							  char **b64_encoded_certificate, oidc_jose_error_t *err) {
 	int rc = 0;
@@ -122,25 +142,6 @@ end:
 	return rc;
 }
 
-/* definition follows */
-static char *internal_cjose_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *oidc_jwk, oidc_jose_error_t *oidc_err);
-
-/*
- * assemble an error report
- */
-void _oidc_jose_error_set(oidc_jose_error_t *error, const char *source, const int line, const char *function,
-			  const char *fmt, ...) {
-	if (error == NULL)
-		return;
-	snprintf(error->source, OIDC_JOSE_ERROR_SOURCE_LENGTH, "%s", source);
-	error->line = line;
-	snprintf(error->function, OIDC_JOSE_ERROR_FUNCTION_LENGTH, "%s", function);
-	va_list ap;
-	va_start(ap, fmt);
-	vsnprintf(error->text, OIDC_JOSE_ERROR_TEXT_LENGTH, fmt ? fmt : "(null)", ap);
-	va_end(ap);
-}
-
 /*
  * set a header value in a JWT
  */
@@ -180,31 +181,43 @@ const char *oidc_jwt_hdr_get(oidc_jwt_t *jwt, const char *key) {
 /*
  * perform compact serialization on a JWT and return the resulting string
  */
-char *oidc_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jose_error_t *err) {
+char *oidc_jose_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jose_error_t *err) {
 	cjose_err cjose_err;
-	const char *cser = NULL;
-	if (_oidc_strcmp(jwt->header.alg, CJOSE_HDR_ALG_NONE) != 0) {
-		if (cjose_jws_export(jwt->cjose_jws, &cser, &cjose_err) == FALSE) {
+	char *result = NULL, *s_payload = NULL, *out = NULL;
+	size_t out_len;
+
+	if (_oidc_strcmp(jwt->header.alg, CJOSE_HDR_ALG_NONE) == 0) {
+
+		s_payload = oidc_util_encode_json(pool, jwt->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
+		if (s_payload == NULL) {
+			oidc_jose_error(err, "oidc_util_encode_json failed");
+			return NULL;
+		}
+
+		// out is allocated by cjose and must be freed explicitly by cjose_get_dealloc()()
+		if (cjose_base64url_encode((const uint8_t *)s_payload, _oidc_strlen(s_payload), &out, &out_len,
+					   &cjose_err) == FALSE) {
+			oidc_jose_error(err, "cjose_base64url_encode failed: %s", oidc_cjose_e2s(pool, cjose_err));
+			return NULL;
+		}
+
+		result = apr_pstrmemdup(pool, out, out_len);
+		cjose_get_dealloc()(out);
+		result = apr_psprintf(pool, "%s.%s.", OIDC_JOSE_HDR_ALG_NONE, result);
+
+	} else {
+
+		// out: "the returned string pointer is owned by the JWS, the caller should not attempt to free it
+		// directly"
+		if (cjose_jws_export(jwt->cjose_jws, (const char **)&out, &cjose_err) == FALSE) {
 			oidc_jose_error(err, "cjose_jws_export failed: %s", oidc_cjose_e2s(pool, cjose_err));
 			return NULL;
 		}
-	} else {
 
-		char *s_payload = json_dumps(jwt->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
-
-		char *out = NULL;
-		size_t out_len;
-		if (cjose_base64url_encode((const uint8_t *)s_payload, _oidc_strlen(s_payload), &out, &out_len,
-					   &cjose_err) == FALSE)
-			return NULL;
-		cser = apr_pstrmemdup(pool, out, out_len);
-		cjose_get_dealloc()(out);
-
-		free(s_payload);
-
-		cser = apr_psprintf(pool, "%s.%s.", OIDC_JOSE_HDR_ALG_NONE, cser);
+		result = apr_pstrdup(pool, out);
 	}
-	return apr_pstrdup(pool, cser);
+
+	return result;
 }
 
 /*
@@ -226,7 +239,7 @@ static int oidc_alg2kty(const char *alg) {
 	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_A128KW) == 0) || (_oidc_strcmp(alg, CJOSE_HDR_ALG_A192KW) == 0) ||
 	    (_oidc_strcmp(alg, CJOSE_HDR_ALG_A256KW) == 0))
 		return CJOSE_JWK_KTY_OCT;
-	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_RSA1_5) == 0) || (_oidc_strcmp(alg, CJOSE_HDR_ALG_RSA_OAEP) == 0))
+	if (_oidc_strcmp(alg, CJOSE_HDR_ALG_RSA_OAEP) == 0)
 		return CJOSE_JWK_KTY_RSA;
 	return -1;
 }
@@ -330,17 +343,18 @@ static oidc_jwk_t *oidc_jwk_from_cjose(apr_pool_t *pool, cjose_jwk_t *cjose_jwk,
 /*
  * parse a JSON string to a JWK struct
  */
-oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, const char *s_json, oidc_jose_error_t *err) {
+oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, json_t *json, oidc_jose_error_t *err) {
 	oidc_jwk_t *result = NULL;
 	cjose_jwk_t *cjose_jwk = NULL;
 	cjose_err cjose_err;
-	json_error_t json_error;
 	oidc_jose_error_t x5c_err;
 	char *use = NULL;
+	json_t *v = NULL, *e = NULL;
+	int i = 0;
 
-	json_t *json = json_loads(s_json, 0, &json_error);
-	if (json == NULL) {
-		oidc_jose_error(err, "could not parse JWK: %s (%s)", json_error.text, s_json);
+	char *s_json = oidc_util_encode_json(pool, json, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	if (s_json == NULL) {
+		oidc_jose_error(err, "could not serialize JWK");
 		goto end;
 	}
 
@@ -360,20 +374,52 @@ oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, const char *s_json, oidc_jose_error
 
 	result = oidc_jwk_from_cjose(pool, cjose_jwk, use);
 
-end:
+	// set x5c array
+	v = json_object_get(json, OIDC_JOSE_JWK_X5C_STR);
+	if (v && json_is_array(v)) {
+		result->x5c = apr_array_make(pool, json_array_size(v), sizeof(char *));
+		for (i = 0; i < json_array_size(v); i++) {
+			e = json_array_get(v, i);
+			if (json_is_string(e))
+				APR_ARRAY_PUSH(result->x5c, char *) = apr_pstrdup(pool, json_string_value(e));
+		}
+	}
 
-	if (json)
-		json_decref(json);
+	// set x5t#256
+	v = json_object_get(json, OIDC_JOSE_JWK_X5T256_STR);
+	if (v)
+		result->x5t_S256 = apr_pstrdup(pool, json_string_value(v));
+
+	// set x5t
+	v = json_object_get(json, OIDC_JOSE_JWK_X5T_STR);
+	if (v)
+		result->x5t = apr_pstrdup(pool, json_string_value(v));
+
+end:
 
 	return result;
 }
 
+/*
+ * copy a JWK by converting oidc_jwk_t to JSON and parsing it back
+ */
 oidc_jwk_t *oidc_jwk_copy(apr_pool_t *pool, const oidc_jwk_t *src) {
-	char *s_json = NULL;
-	oidc_jose_error_t err;
-	if (oidc_jwk_to_json(pool, src, &s_json, &err) == FALSE)
-		return NULL;
-	return oidc_jwk_parse(pool, s_json, &err);
+	int i = 0;
+	cjose_err err;
+	oidc_jwk_t *dst = oidc_jwk_new(pool);
+	dst->cjose_jwk = cjose_jwk_retain(src->cjose_jwk, &err);
+	dst->kid = apr_pstrdup(pool, src->kid);
+	dst->kty = src->kty;
+	dst->use = apr_pstrdup(pool, src->use);
+	dst->x5c = NULL;
+	if (src->x5c) {
+		dst->x5c = apr_array_make(pool, src->x5c->nelts, sizeof(char *));
+		for (i = 0; i < src->x5c->nelts; i++)
+			APR_ARRAY_PUSH(dst->x5c, char *) = APR_ARRAY_IDX(src->x5c, i, char *);
+	}
+	dst->x5t = apr_pstrdup(pool, src->x5t);
+	dst->x5t_S256 = apr_pstrdup(pool, src->x5t_S256);
+	return dst;
 }
 
 /*
@@ -406,6 +452,9 @@ void oidc_jwk_list_destroy_hash(apr_hash_t *keys) {
 	apr_hash_clear(keys);
 }
 
+/*
+ * copy a list (array) of JWKs
+ */
 apr_array_header_t *oidc_jwk_list_copy(apr_pool_t *pool, apr_array_header_t *src) {
 	apr_array_header_t *dst = NULL;
 	int i = 0;
@@ -420,6 +469,9 @@ apr_array_header_t *oidc_jwk_list_copy(apr_pool_t *pool, apr_array_header_t *src
 	return dst;
 }
 
+/*
+ * destroy a list (array) of JWKs
+ */
 void oidc_jwk_list_destroy(apr_array_header_t *keys_list) {
 	if (keys_list == NULL)
 		return;
@@ -433,12 +485,13 @@ void oidc_jwk_list_destroy(apr_array_header_t *keys_list) {
  * parse a JSON object in to a JWK struct
  */
 apr_byte_t oidc_jwk_parse_json(apr_pool_t *pool, json_t *json, oidc_jwk_t **jwk, oidc_jose_error_t *err) {
-	char *s_json = json_dumps(json, 0);
-	*jwk = oidc_jwk_parse(pool, s_json, err);
-	free(s_json);
+	*jwk = oidc_jwk_parse(pool, json, err);
 	return (*jwk != NULL);
 }
 
+/*
+ * parse a set of JWKs into a list (array) of JWK structs
+ */
 apr_byte_t oidc_jwks_parse_json(apr_pool_t *pool, json_t *json, apr_array_header_t **jwk_list, oidc_jose_error_t *err) {
 	const json_t *keys = json_object_get(json, OIDC_JOSE_JWKS_KEYS_STR);
 	if ((keys == NULL) || (!json_is_array(keys))) {
@@ -459,6 +512,9 @@ apr_byte_t oidc_jwks_parse_json(apr_pool_t *pool, json_t *json, apr_array_header
 	return TRUE;
 }
 
+/*
+ * check if a JSON object is a JWK
+ */
 apr_byte_t oidc_is_jwk(json_t *json) {
 	const json_t *kty = json_object_get(json, OIDC_JOSE_JWK_KTY_STR);
 	if ((kty == NULL) || (!json_is_string(kty))) {
@@ -467,6 +523,9 @@ apr_byte_t oidc_is_jwk(json_t *json) {
 	return TRUE;
 }
 
+/*
+ * check if a JSON object is a set JWKs
+ */
 apr_byte_t oidc_is_jwks(json_t *json) {
 	const json_t *keys = json_object_get(json, OIDC_JOSE_JWKS_KEYS_STR);
 	if ((keys == NULL) || (!json_is_array(keys))) {
@@ -476,15 +535,65 @@ apr_byte_t oidc_is_jwks(json_t *json) {
 }
 
 /*
- * convert a JWK struct to a JSON string
+ * produce the serialized JSON  JWK representation from an oidc_jwk_t structure
  */
-apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_json, oidc_jose_error_t *err) {
-	char *s = internal_cjose_jwk_to_json(pool, jwk, err);
-	if (s == NULL)
-		return FALSE;
-	*s_json = apr_pstrdup(pool, s);
-	free(s);
-	return TRUE;
+apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_json, oidc_jose_error_t *oidc_err) {
+	apr_byte_t rv = FALSE;
+	char *s_cjose = NULL;
+	cjose_err err;
+	json_t *json = NULL, *temp = NULL;
+	json_error_t json_error;
+	int i = 0;
+
+	// input sanity checks
+	if ((jwk == NULL) || (s_json == NULL))
+		goto end;
+
+	// get the JWK string representation from cjose
+	s_cjose = cjose_jwk_to_json(jwk->cjose_jwk, TRUE, &err);
+	if (s_cjose == NULL) {
+		oidc_jose_error(oidc_err, "oidc_jwk_to_json: cjose_jwk_to_json failed: %s", oidc_cjose_e2s(pool, err));
+		goto end;
+	}
+
+	json = json_loads(s_cjose, 0, &json_error);
+	if (json == NULL) {
+		oidc_jose_error(oidc_err, "oidc_jwk_to_json: json_loads failed");
+		goto end;
+	}
+
+	if (jwk->use)
+		json_object_set_new(json, OIDC_JOSE_JWK_USE_STR, json_string(jwk->use));
+
+	// set x5c
+	if ((jwk->x5c != NULL) && (jwk->x5c->nelts > 0)) {
+		temp = json_array();
+		for (i = 0; i < jwk->x5c->nelts; i++)
+			json_array_append_new(temp, json_string(APR_ARRAY_IDX(jwk->x5c, i, const char *)));
+		json_object_set_new(json, OIDC_JOSE_JWK_X5C_STR, temp);
+	}
+
+	// set x5t#256
+	if (jwk->x5t_S256 != NULL)
+		json_object_set_new(json, OIDC_JOSE_JWK_X5T256_STR, json_string(jwk->x5t_S256));
+
+	// set x5t
+	if (jwk->x5t != NULL)
+		json_object_set_new(json, OIDC_JOSE_JWK_X5T_STR, json_string(jwk->x5t));
+
+	// generate the string ...
+	*s_json = oidc_util_encode_json(pool, json, JSON_ENCODE_ANY | JSON_COMPACT | JSON_PRESERVE_ORDER);
+
+	rv = (*s_json != NULL);
+
+end:
+
+	if (json)
+		json_decref(json);
+	if (s_cjose)
+		cjose_get_dealloc()(s_cjose);
+
+	return rv;
 }
 
 /*
@@ -612,7 +721,6 @@ apr_byte_t oidc_jose_jws_algorithm_is_supported(apr_pool_t *pool, const char *al
  */
 apr_array_header_t *oidc_jose_jwe_supported_algorithms(apr_pool_t *pool) {
 	apr_array_header_t *result = apr_array_make(pool, 4, sizeof(const char *));
-	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_RSA1_5;
 	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_A128KW;
 	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_A192KW;
 	APR_ARRAY_PUSH(result, const char *) = CJOSE_HDR_ALG_A256KW;
@@ -827,6 +935,9 @@ apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json, apr_hash_t
 
 #ifdef USE_LIBBROTLI
 
+/*
+ * deflate using libbrotli
+ */
 static apr_byte_t oidc_jose_brotli_compress(apr_pool_t *pool, const char *input, int input_len, char **output,
 					    int *output_len, oidc_jose_error_t *err) {
 	size_t len = BrotliEncoderMaxCompressedSize(input_len);
@@ -840,6 +951,9 @@ static apr_byte_t oidc_jose_brotli_compress(apr_pool_t *pool, const char *input,
 	return TRUE;
 }
 
+/*
+ * inflate using libbrotli
+ */
 static apr_byte_t oidc_jose_brotli_uncompress(apr_pool_t *pool, const char *input, int input_len, char **output,
 					      int *output_len, oidc_jose_error_t *err) {
 	size_t len = 4 * input_len;
@@ -855,6 +969,9 @@ static apr_byte_t oidc_jose_brotli_uncompress(apr_pool_t *pool, const char *inpu
 
 #elif USE_ZLIB
 
+/*
+ * deflate using zlib
+ */
 static apr_byte_t oidc_jose_zlib_compress(apr_pool_t *pool, const char *input, int input_len, char **output,
 					  int *output_len, oidc_jose_error_t *err) {
 	int status = Z_OK;
@@ -895,6 +1012,9 @@ static apr_byte_t oidc_jose_zlib_compress(apr_pool_t *pool, const char *input, i
 
 #define OIDC_CJOSE_UNCOMPRESS_CHUNK 8192
 
+/*
+ * inflate using zlib
+ */
 static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input, int input_len, char **output,
 					    int *output_len, oidc_jose_error_t *err) {
 	int status = Z_OK;
@@ -947,6 +1067,9 @@ static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input,
 
 #endif
 
+/*
+ * compress using (compile-time) zlib or libbrotli, otherwise just plain copy
+ */
 apr_byte_t oidc_jose_compress(apr_pool_t *pool, const char *input, int input_len, char **output, int *output_len,
 			      oidc_jose_error_t *err) {
 #ifdef USE_LIBBROTLI
@@ -960,6 +1083,9 @@ apr_byte_t oidc_jose_compress(apr_pool_t *pool, const char *input, int input_len
 #endif
 }
 
+/*
+ * decompress using (compile-time) zlib or libbrotli, otherwise just plain copy
+ */
 apr_byte_t oidc_jose_uncompress(apr_pool_t *pool, const char *input, int input_len, char **output, int *output_len,
 				oidc_jose_error_t *err) {
 #ifdef USE_LIBBROTLI
@@ -1000,9 +1126,7 @@ apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json, oidc_jwt_t *
 
 	cjose_header_t *hdr = cjose_jws_get_protected(jwt->cjose_jws);
 	jwt->header.value.json = json_deep_copy((json_t *)hdr);
-	char *str = json_dumps(jwt->header.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
-	jwt->header.value.str = apr_pstrdup(pool, str);
-	free(str);
+	jwt->header.value.str = oidc_util_encode_json(pool, jwt->header.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
 
 	jwt->header.alg = apr_pstrdup(pool, cjose_header_get(hdr, CJOSE_HDR_ALG, &cjose_err));
 	jwt->header.enc = apr_pstrdup(pool, cjose_header_get(hdr, CJOSE_HDR_ENC, &cjose_err));
@@ -1039,7 +1163,9 @@ apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json, oidc_jwt_t *
 	return TRUE;
 }
 
-/* destroy resources allocated for JWT */
+/*
+ * destroy resources allocated for JWT
+ */
 void oidc_jwt_destroy(oidc_jwt_t *jwt) {
 	if (jwt) {
 		if (jwt->header.value.json) {
@@ -1060,7 +1186,7 @@ void oidc_jwt_destroy(oidc_jwt_t *jwt) {
 }
 
 /*
- * sign JWT
+ * sign a JWT
  */
 apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk, apr_byte_t compress,
 			 oidc_jose_error_t *err) {
@@ -1080,24 +1206,22 @@ apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk, apr
 		cjose_jws_release(jwt->cjose_jws);
 
 	cjose_err cjose_err;
-	char *plaintext = json_dumps(jwt->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	char *plaintext = oidc_util_encode_json(pool, jwt->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
 
 	char *s_payload = NULL;
 	int payload_len = 0;
 	if (compress == TRUE) {
 		if (oidc_jose_compress(pool, (char *)plaintext, _oidc_strlen(plaintext), &s_payload, &payload_len,
 				       err) == FALSE) {
-			free(plaintext);
 			return FALSE;
 		}
 	} else {
 		s_payload = plaintext;
 		payload_len = _oidc_strlen(plaintext);
-		jwt->payload.value.str = apr_pstrdup(pool, s_payload);
+		jwt->payload.value.str = plaintext;
 	}
 
 	jwt->cjose_jws = cjose_jws_sign(jwk->cjose_jwk, hdr, (const uint8_t *)s_payload, payload_len, &cjose_err);
-	free(plaintext);
 
 	if (jwt->cjose_jws == NULL) {
 		oidc_jose_error(err, "cjose_jws_sign failed: %s", oidc_cjose_e2s(pool, cjose_err));
@@ -1118,7 +1242,7 @@ void EVP_MD_CTX_free(EVP_MD_CTX *ctx) {
 #endif
 
 /*
- * encrypt JWT
+ * encrypt a JWT
  */
 apr_byte_t oidc_jwt_encrypt(apr_pool_t *pool, oidc_jwt_t *jwe, oidc_jwk_t *jwk, const char *payload, int payload_len,
 			    char **serialized, oidc_jose_error_t *err) {
@@ -1165,7 +1289,7 @@ apr_byte_t oidc_jose_version_deprecated(apr_pool_t *pool) {
 }
 
 /*
- * verify the signature on a JWT
+ * verify the signature of a JWT
  */
 apr_byte_t oidc_jwt_verify(apr_pool_t *pool, oidc_jwt_t *jwt, apr_hash_t *keys, oidc_jose_error_t *err) {
 	apr_byte_t rc = FALSE;
@@ -1294,7 +1418,7 @@ apr_byte_t oidc_jose_hash_string(apr_pool_t *pool, const char *alg, const char *
 }
 
 /*
- * return hash length
+ * return hash length for the specified JOSE algorithm
  */
 int oidc_jose_hash_length(const char *alg) {
 	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_RS256) == 0) || (_oidc_strcmp(alg, CJOSE_HDR_ALG_PS256) == 0) ||
@@ -1312,6 +1436,9 @@ int oidc_jose_hash_length(const char *alg) {
 	return 0;
 }
 
+/*
+ * read an x509 certificate and its public key from the provided input
+ */
 static apr_byte_t oidc_jwk_x509_read(apr_pool_t *pool, BIO *input, char **encoded_certificate, EVP_PKEY **pkey,
 				     X509 **rx509, oidc_jose_error_t *err) {
 	apr_byte_t rv = FALSE;
@@ -1347,6 +1474,9 @@ end:
 	return rv;
 }
 
+/*
+ * extract a JWK struct and a fingerprint from an OpenSSL RSA key
+ */
 static apr_byte_t _oidc_jwk_rsa_key_to_jwk(apr_pool_t *pool, EVP_PKEY *pkey, oidc_jwk_t **oidc_jwk, char **fp,
 					   int *fp_len, oidc_jose_error_t *err) {
 	apr_byte_t rv = FALSE;
@@ -1425,6 +1555,9 @@ end:
 
 #if (OIDC_JOSE_EC_SUPPORT)
 
+/*
+ * extract a JWK struct and a fingerprint from an OpenSSL Elliptic Curve key
+ */
 static apr_byte_t _oidc_jwk_ec_key_to_jwk(apr_pool_t *pool, EVP_PKEY *pkey, oidc_jwk_t **oidc_jwk, char **fp,
 					  int *fp_len, oidc_jose_error_t *err) {
 	apr_byte_t rv = FALSE;
@@ -1756,89 +1889,4 @@ apr_byte_t oidc_jwk_parse_pem_private_key(apr_pool_t *pool, const char *kid, con
 apr_byte_t oidc_jwk_parse_pem_public_key(apr_pool_t *pool, const char *kid, const char *filename, oidc_jwk_t **jwk,
 					 oidc_jose_error_t *err) {
 	return oidc_jwk_parse_pem_key(pool, FALSE, kid, filename, jwk, err);
-}
-
-/*
- * produce the string jwk representation from an oidc_jwk_t structure
- */
-static char *internal_cjose_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *oidc_jwk, oidc_jose_error_t *oidc_err) {
-	char *result = NULL, *cjose_jwk_json;
-	cjose_err err;
-	json_t *json = NULL, *temp = NULL;
-	json_error_t json_error;
-	int i = 0;
-	void *iter = NULL;
-
-	if (!oidc_jwk) {
-		oidc_jose_error(oidc_err, "internal_cjose_jwk_to_json failed: NULL oidc_jwk");
-		return NULL;
-	}
-
-	// get current
-	cjose_jwk_json = cjose_jwk_to_json(oidc_jwk->cjose_jwk, TRUE, &err);
-
-	if (cjose_jwk_json == NULL) {
-		oidc_jose_error(oidc_err, "cjose_jwk_to_json failed: %s", oidc_cjose_e2s(pool, err));
-		goto to_json_cleanup;
-	}
-
-	temp = json_loads(cjose_jwk_json, 0, &json_error);
-	if (!temp) {
-		oidc_jose_error(oidc_err, "json_loads failed");
-		goto to_json_cleanup;
-	}
-
-	json = json_object();
-
-	if (oidc_jwk->use)
-		json_object_set_new(json, OIDC_JOSE_JWK_USE_STR, json_string(oidc_jwk->use));
-
-	iter = json_object_iter(temp);
-	while (iter) {
-		json_object_set(json, json_object_iter_key(iter), json_object_iter_value(iter));
-		iter = json_object_iter_next(temp, iter);
-	}
-	json_decref(temp);
-	temp = NULL;
-
-	// set x5c
-	if ((oidc_jwk->x5c != NULL) && (oidc_jwk->x5c->nelts > 0)) {
-		temp = json_array();
-		if (temp == NULL) {
-			oidc_jose_error(oidc_err, "json_array failed");
-			goto to_json_cleanup;
-		}
-		for (i = 0; i < oidc_jwk->x5c->nelts; i++) {
-			if (json_array_append_new(temp, json_string(APR_ARRAY_IDX(oidc_jwk->x5c, i, const char *))) ==
-			    -1) {
-				oidc_jose_error(oidc_err, "json_array_append failed");
-				goto to_json_cleanup;
-			}
-		}
-		json_object_set_new(json, OIDC_JOSE_JWK_X5C_STR, temp);
-	}
-
-	// set x5t#256
-	if (oidc_jwk->x5t_S256 != NULL)
-		json_object_set_new(json, OIDC_JOSE_JWK_X5T256_STR, json_string(oidc_jwk->x5t_S256));
-
-	// set x5t
-	if (oidc_jwk->x5t != NULL)
-		json_object_set_new(json, OIDC_JOSE_JWK_X5T_STR, json_string(oidc_jwk->x5t));
-
-	// generate the string ...
-	result = json_dumps(json, JSON_ENCODE_ANY | JSON_COMPACT | JSON_PRESERVE_ORDER);
-	if (!result) {
-		oidc_jose_error(oidc_err, "json_dumps failed");
-		goto to_json_cleanup;
-	}
-
-to_json_cleanup:
-
-	if (cjose_jwk_json)
-		free(cjose_jwk_json);
-	if (json)
-		json_decref(json);
-
-	return result;
 }

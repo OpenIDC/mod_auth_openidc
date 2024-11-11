@@ -41,16 +41,17 @@
  */
 
 #include "handle/handle.h"
+#include "mod_auth_openidc.h"
 
-int oidc_revoke_session(request_rec *r, oidc_cfg *c) {
+int oidc_revoke_session(request_rec *r, oidc_cfg_t *c) {
 	apr_byte_t rc = FALSE;
 	char *session_id = NULL;
 
-	oidc_http_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_REVOKE_SESSION, &session_id);
+	oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_REVOKE_SESSION, &session_id);
 	if (session_id == NULL)
 		return HTTP_BAD_REQUEST;
 
-	if (c->session_type == OIDC_SESSION_TYPE_SERVER_CACHE)
+	if (oidc_cfg_session_type_get(c) == OIDC_SESSION_TYPE_SERVER_CACHE)
 		rc = oidc_cache_set_session(r, session_id, NULL, 0);
 	else
 		oidc_warn(r, "cannot revoke session because server side caching is not in use");
@@ -63,9 +64,9 @@ int oidc_revoke_session(request_rec *r, oidc_cfg *c) {
 /*
  * handle a request to invalidate a cached access token introspection result
  */
-int oidc_revoke_at_cache_remove(request_rec *r, oidc_cfg *c) {
+int oidc_revoke_at_cache_remove(request_rec *r, oidc_cfg_t *c) {
 	char *access_token = NULL;
-	oidc_http_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE, &access_token);
+	oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE, &access_token);
 
 	char *cache_entry = NULL;
 	oidc_cache_get_access_token(r, access_token, &cache_entry);

@@ -41,10 +41,11 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#ifndef MOD_AUTH_OPENIDC_HTTP_H_
-#define MOD_AUTH_OPENIDC_HTTP_H_
+#ifndef _MOD_AUTH_OPENIDC_HTTP_H_
+#define _MOD_AUTH_OPENIDC_HTTP_H_
 
 #include <apr.h>
+#include <apr_hash.h>
 #include <apr_time.h>
 // clang-format off
 #include <httpd.h>
@@ -86,6 +87,8 @@
 #define OIDC_HTTP_HDR_X_FRAME_OPTIONS "X-Frame-Options"
 #define OIDC_HTTP_HDR_WWW_AUTHENTICATE "WWW-Authenticate"
 #define OIDC_HTTP_HDR_TRACE_PARENT "traceparent"
+#define OIDC_HTTP_HDR_DPOP "DPoP"
+#define OIDC_HTTP_HDR_DPOP_NONCE "DPoP-Nonce"
 
 #define OIDC_HTTP_HDR_VAL_XML_HTTP_REQUEST "XMLHttpRequest"
 #define OIDC_HTTP_HDR_VAL_NAVIGATE "navigate"
@@ -110,8 +113,8 @@ typedef struct oidc_http_outgoing_proxy_t {
 	unsigned long auth_type;
 } oidc_http_outgoing_proxy_t;
 
-char *oidc_http_escape_string(const request_rec *r, const char *str);
-char *oidc_http_unescape_string(const request_rec *r, const char *str);
+char *oidc_http_url_encode(const request_rec *r, const char *str);
+char *oidc_http_url_decode(const request_rec *r, const char *str);
 
 void oidc_http_hdr_err_out_add(const request_rec *r, const char *name, const char *value);
 void oidc_http_hdr_in_set(const request_rec *r, const char *name, const char *value);
@@ -139,25 +142,26 @@ const char *oidc_http_hdr_forwarded_get(const request_rec *r, const char *elem);
 
 char *oidc_http_hdr_normalize_name(const request_rec *r, const char *str);
 apr_byte_t oidc_http_get(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth,
-			 const char *bearer_token, int ssl_validate_server, char **response, long *response_code,
-			 oidc_http_timeout_t *http_timeout, const oidc_http_outgoing_proxy_t *outgoing_proxy,
-			 apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
-			 const char *ssl_key_pwd);
+			 const char *access_token, const char *dpop, int ssl_validate_server, char **response,
+			 long *response_code, apr_hash_t *response_hdrs, oidc_http_timeout_t *http_timeout,
+			 const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,
+			 const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd);
 apr_byte_t oidc_http_post_form(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth,
-			       const char *bearer_token, int ssl_validate_server, char **response, long *response_code,
-			       oidc_http_timeout_t *http_timeout, const oidc_http_outgoing_proxy_t *outgoing_proxy,
-			       apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
-			       const char *ssl_key_pwd);
+			       const char *access_token, const char *dpop, int ssl_validate_server, char **response,
+			       long *response_code, apr_hash_t *response_hdrs, oidc_http_timeout_t *http_timeout,
+			       const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,
+			       const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd);
 apr_byte_t oidc_http_post_json(request_rec *r, const char *url, json_t *data, const char *basic_auth,
-			       const char *bearer_token, int ssl_validate_server, char **response, long *response_code,
-			       oidc_http_timeout_t *http_timeout, const oidc_http_outgoing_proxy_t *outgoing_proxy,
-			       apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
-			       const char *ssl_key_pwd);
-apr_byte_t oidc_http_request_has_parameter(request_rec *r, const char *param);
-apr_byte_t oidc_http_request_parameter_get(request_rec *r, char *name, char **value);
-int oidc_http_send(request_rec *r, const char *data, size_t data_len, const char *content_type, int success_rvalue);
-apr_byte_t oidc_http_read_form_encoded_params(request_rec *r, apr_table_t *table, char *data);
-apr_byte_t oidc_http_read_post_params(request_rec *r, apr_table_t *table, apr_byte_t propagate,
+			       const char *access_token, const char *dpop, int ssl_validate_server, char **response,
+			       long *response_code, apr_hash_t *response_hdrs, oidc_http_timeout_t *http_timeout,
+			       const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,
+			       const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd);
+apr_byte_t oidc_util_request_has_parameter(request_rec *r, const char *param);
+apr_byte_t oidc_util_request_parameter_get(request_rec *r, char *name, char **value);
+int oidc_util_http_send(request_rec *r, const char *data, size_t data_len, const char *content_type,
+			int success_rvalue);
+apr_byte_t oidc_util_read_form_encoded_params(request_rec *r, apr_table_t *table, char *data);
+apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table, apr_byte_t propagate,
 				      const char *strip_param_name);
 char *oidc_http_query_encoded_url(request_rec *r, const char *url, const apr_table_t *params);
 char *oidc_http_form_encoded_data(request_rec *r, const apr_table_t *params);
@@ -169,10 +173,10 @@ char *oidc_http_get_chunked_cookie(request_rec *r, const char *cookieName, int c
 void oidc_http_set_chunked_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires,
 				  int chunkSize, const char *ext);
 
-char **oidc_http_proxy_auth_options(void);
+const char **oidc_http_proxy_auth_options(void);
 unsigned long oidc_http_proxy_s2auth(const char *arg);
 
 void oidc_http_init(void);
 void oidc_http_cleanup(void);
 
-#endif /* MOD_AUTH_OPENIDC_HTTP_H_ */
+#endif /* _MOD_AUTH_OPENIDC_HTTP_H_ */

@@ -46,8 +46,8 @@
 #ifndef _MOD_AUTH_OPENIDC_CACHE_H_
 #define _MOD_AUTH_OPENIDC_CACHE_H_
 
+#include "const.h" // for the PACKAGE_* defines
 #include <apr_global_mutex.h>
-#include <apr_shm.h>
 #include <httpd.h>
 
 /*

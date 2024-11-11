@@ -38,20 +38,22 @@ set of claims provided in the `id_token`/ `userinfo` claims, see [here](https://
 Clustering for resilience and performance can be configured using one of the supported cache backends options as
 listed [here](https://github.com/OpenIDC/mod_auth_openidc/wiki/Caching).
 
-For an exhaustive description of all configuration options, see the file [`auth_openidc.conf`](https://github.com/OpenIDC/mod_auth_openidc/blob/master/auth_openidc.conf). 
+For a complete overview of all configuration options, see the file [`auth_openidc.conf`](https://github.com/OpenIDC/mod_auth_openidc/blob/master/auth_openidc.conf). 
 This file can also serve as an include file for `httpd.conf`.
 
 Interoperability
 ----------------
 
-*mod_auth_openidc* is [OpenID Certified™](https://openid.net/certification/#RPs) and supports the following specifications:
-
+*mod_auth_openidc* is [OpenID Certified™](https://openid.net/certification/#OPENID-RP-P) and supports the following specifications:
 - [OpenID Connect Core 1.0](http://openid.net/specs/openid-connect-core-1_0.html) *(Basic, Implicit, Hybrid and Refresh flows)*
 - [OpenID Connect Discovery 1.0](http://openid.net/specs/openid-connect-discovery-1_0.html)
 - [OpenID Connect Dynamic Client Registration 1.0](http://openid.net/specs/openid-connect-registration-1_0.html)
-- [OAuth 2.0 Multiple Response Type Encoding Practices 1.0](http://openid.net/specs/oauth-v2-multiple-response-types-1_0.html)
+- [RFC 7636 - Proof Key for Code Exchange by OAuth Public Clients](https://datatracker.ietf.org/doc/html/rfc7636)
+- [RFC 9126 - OAuth 2.0 Pushed Authorization Requests](https://datatracker.ietf.org/doc/html/rfc9126)
+- [RFC 9449 - OAuth 2.0 Demonstrating Proof of Possession (DPoP)](https://tools.ietf.org/html/rfc9449)
+- [FAPI 2.0 Security Profile](https://openid.net/specs/fapi-2_0-security-profile-ID2.html)
 - [OAuth 2.0 Form Post Response Mode 1.0](http://openid.net/specs/oauth-v2-form-post-response-mode-1_0.html)
-- [RFC7 7636 - Proof Key for Code Exchange by OAuth Public Clients](https://tools.ietf.org/html/rfc7636)
+- [OAuth 2.0 Multiple Response Type Encoding Practices 1.0](http://openid.net/specs/oauth-v2-multiple-response-types-1_0.html)
 - [OpenID Connect Session Management 1.0](http://openid.net/specs/openid-connect-session-1_0.html) *see the [Wiki](https://github.com/OpenIDC/mod_auth_openidc/wiki/OpenID-Connect-Session-Management) for information on how to configure it)*
 - [OpenID Connect Front-Channel Logout 1.0](http://openid.net/specs/openid-connect-frontchannel-1_0.html)
 - [OpenID Connect Back-Channel Logout 1.0](https://openid.net/specs/openid-connect-backchannel-1_0.html)
@@ -69,7 +71,7 @@ For questions, issues and suggestions use the Github Discussions forum at:
   [https://github.com/OpenIDC/mod_auth_openidc/discussions](https://github.com/OpenIDC/mod_auth_openidc/discussions)
 
 #### Commercial
-For commercial support contracts, professional services, training and use-case specific support please contact:  
+For commercial - subscription based - support and licensing please contact:  
   [sales@openidc.com](mailto:sales@openidc.com)  
 
 How to Use It  
@@ -154,5 +156,5 @@ and [more](https://github.com/OpenIDC/mod_auth_openidc/wiki/Useful-Links)
 Disclaimer
 ----------
 
-*This software is open sourced by OpenIDC, subsidiary of ZmartZone Holding B.V. For commercial services
+*This software is open sourced by OpenIDC, a subsidiary of ZmartZone Holding B.V. For commercial services
 you can contact [OpenIDC](https://www.openidc.com) as described above in the [Support](#support) section.*

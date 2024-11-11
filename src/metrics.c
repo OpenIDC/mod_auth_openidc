@@ -42,9 +42,11 @@
 
 // clang-format off
 
-#include "mod_auth_openidc.h"
+#include "util.h"
 #include "metrics.h"
 #include <limits.h>
+#include <apr_shm.h>
+#include <apr_lib.h>
 
 // NB: formatting matters for docs script from here until clang-format on
 
@@ -143,11 +145,13 @@ const oidc_metrics_counter_info_t _oidc_metrics_counters_info[] = {
   { OM_CLASS_REDIRECT_URI, "request.remove_at_cache", "access token cache removal requests to the redirect URI", },
   { OM_CLASS_REDIRECT_URI, "request.session",         "revoke session requests to the redirect URI", },
   { OM_CLASS_REDIRECT_URI, "request.info",            "info hook requests to the redirect URI", },
+  { OM_CLASS_REDIRECT_URI, "request.dpop",            "DPoP requests to the redirect URI", },
   { OM_CLASS_REDIRECT_URI, "error.provider",          "provider authentication response errors received at the redirect URI", },
   { OM_CLASS_REDIRECT_URI, "error.invalid",           "invalid requests to the redirect URI", },
 
   { OM_CLASS_CONTENT, "request.declined",      "requests declined by the content handler" },
   { OM_CLASS_CONTENT, "request.info",          "info hook requests to the content handler" },
+  { OM_CLASS_CONTENT, "request.dpop",          "DPoP requests to the content handler" },
   { OM_CLASS_CONTENT, "request.jwks",          "JWKs requests to the content handler" },
   { OM_CLASS_CONTENT, "request.discovery",     "discovery requests to the content handler" },
   { OM_CLASS_CONTENT, "request.post-preserve", "HTTP POST preservation requests to the content handler" },
@@ -270,11 +274,15 @@ typedef struct oidc_metrics_timing_t {
 	json_int_t count;
 } oidc_metrics_timing_t;
 
+// context holder for parsing valid classnames
 typedef struct oidc_metrics_add_classname_ctx_t {
 	apr_pool_t *pool;
 	char **valid_names;
 } oidc_metrics_add_classname_ctx_t;
 
+/*
+ * loop function for parsing valid classnames
+ */
 static int _oidc_metrics_add_classnames(void *rec, const char *key, const char *value) {
 	oidc_metrics_add_classname_ctx_t *ctx = (oidc_metrics_add_classname_ctx_t *)rec;
 	*ctx->valid_names = apr_psprintf(ctx->pool, "%s%s%s", *ctx->valid_names ? *ctx->valid_names : "",
@@ -282,6 +290,9 @@ static int _oidc_metrics_add_classnames(void *rec, const char *key, const char *
 	return 1;
 }
 
+/*
+ * check if the provided value is a valid classname
+ */
 apr_byte_t oidc_metrics_is_valid_classname(apr_pool_t *pool, const char *name, char **valid_names) {
 	int i = 0;
 	int n = 0;
@@ -352,12 +363,18 @@ static inline void oidc_metrics_storage_set(server_rec *s, const char *value) {
 	}
 }
 
+/*
+ * parse a string into a JSON object
+ */
 static json_t *oidc_metrics_json_load(char *s_json, json_error_t *json_error) {
 	if (s_json == NULL)
 		s_json = "{}";
 	return json_loads(s_json, 0, json_error);
 }
 
+/*
+ * parse a string into a JSON object in a server_rec context
+ */
 static json_t *oidc_metrics_json_parse_s(server_rec *s, char *s_json) {
 	json_error_t json_error;
 	json_t *json = oidc_metrics_json_load(s_json, &json_error);
@@ -414,9 +431,7 @@ static inline void oidc_metrics_storage_reset(server_rec *s) {
 	}
 
 	/* serialize the metrics data, preserve order is required for Prometheus */
-	char *str = json_dumps(json, JSON_COMPACT | JSON_PRESERVE_ORDER);
-	s_json = apr_pstrdup(s->process->pool, str);
-	free(str);
+	s_json = oidc_util_encode_json(s->process->pool, json, JSON_COMPACT | JSON_PRESERVE_ORDER);
 
 	/* free the JSON data */
 	json_decref(json);
@@ -467,6 +482,9 @@ static void oidc_metrics_timings_update(server_rec *s, const json_t *entry, cons
 
 #define OIDC_METRICS_SPEC_DEFAULT "_"
 
+/*
+ * spec identifier helper to make sure it is not empty
+ */
 static inline const char *_metrics_spec2key(const char *spec) {
 	return (spec && _oidc_strcmp(spec, "") != 0) ? spec : OIDC_METRICS_SPEC_DEFAULT;
 }
@@ -534,10 +552,16 @@ static json_t *oidc_metrics_server_get(json_t *json, const char *name) {
 	return j_server;
 }
 
+/*
+ * convert an enum type value to its corresponding string
+ */
 static inline char *oidc_metrics_type2key(apr_pool_t *pool, unsigned int type) {
 	return apr_psprintf(pool, "%u", type);
 }
 
+/*
+ * convert a string key type to an enum type
+ */
 static inline unsigned int oidc_metrics_key2type(const char *key) {
 	unsigned int type = 0;
 	sscanf(key, "%u", &type);
@@ -609,9 +633,7 @@ static void oidc_metrics_store(server_rec *s) {
 	}
 
 	/* serialize the metrics data, preserve order is required for Prometheus */
-	char *str = json_dumps(json, JSON_COMPACT | JSON_PRESERVE_ORDER);
-	s_json = apr_pstrdup(s->process->pool, str);
-	free(str);
+	s_json = oidc_util_encode_json(s->process->pool, json, JSON_COMPACT | JSON_PRESERVE_ORDER);
 
 	/* free the JSON data */
 	json_decref(json);
@@ -625,11 +647,17 @@ static void oidc_metrics_store(server_rec *s) {
 
 #define OIDC_METRICS_CACHE_STORAGE_INTERVAL_ENV_VAR "OIDC_METRICS_CACHE_STORAGE_INTERVAL"
 
+/*
+ * obtain the metrics flush interval from the environment variables
+ */
 static inline apr_interval_time_t oidc_metrics_interval(server_rec *s) {
 	return apr_time_from_msec(oidc_metrics_get_env_int(OIDC_METRICS_CACHE_STORAGE_INTERVAL_ENV_VAR,
 							   OIDC_METRICS_CACHE_STORAGE_INTERVAL_DEFAULT));
 }
 
+/*
+ * generate a random integer value in the specified modulo range
+ */
 unsigned int oidc_metric_random_int(unsigned int mod) {
 	unsigned int v;
 	oidc_util_random_bytes((unsigned char *)&v, sizeof(v));
@@ -939,16 +967,25 @@ void oidc_metrics_timing_add(request_rec *r, oidc_metrics_timing_type_t type, ap
  * representation handlers
  */
 
+/*
+ * convert in integer counter enum type to its corresponding string name
+ */
 static inline char *oidc_metrics_counter_type2s(apr_pool_t *pool, unsigned int type) {
 	return apr_psprintf(pool, "%s.%s", _oidc_metrics_counters_info[type].class_name,
 			    _oidc_metrics_counters_info[type].metric_name);
 }
 
+/*
+ * convert in integer timings enum type to its corresponding string name
+ */
 static inline char *oidc_metrics_timing_type2s(apr_pool_t *pool, unsigned int type) {
 	return apr_psprintf(pool, "%s.%s", _oidc_metrics_timings_info[type].class_name,
 			    _oidc_metrics_timings_info[type].metric_name);
 }
 
+/*
+ * parse a string into a JSON object in the request_rec context
+ */
 static json_t *oidc_metrics_json_parse_r(request_rec *r, char *s_json) {
 	json_error_t json_error;
 	json_t *json = oidc_metrics_json_load(s_json, &json_error);
@@ -968,7 +1005,6 @@ static int oidc_metrics_handle_json(request_rec *r, char *s_json) {
 	       *o_timing = NULL, *o_spec = NULL;
 	const char *s_server = NULL;
 	unsigned int type = 0;
-	char *str = NULL;
 
 	/* parse the metrics string to JSON */
 	json = oidc_metrics_json_parse_r(r, s_json);
@@ -1036,9 +1072,7 @@ static int oidc_metrics_handle_json(request_rec *r, char *s_json) {
 		iter1 = json_object_iter_next(json, iter1);
 	}
 
-	str = json_dumps(o_json, JSON_COMPACT | JSON_PRESERVE_ORDER);
-	s_json = apr_pstrdup(r->pool, str);
-	free(str);
+	s_json = oidc_util_encode_json(r->pool, o_json, JSON_COMPACT | JSON_PRESERVE_ORDER);
 
 	json_decref(o_json);
 	json_decref(json);
@@ -1046,7 +1080,7 @@ static int oidc_metrics_handle_json(request_rec *r, char *s_json) {
 end:
 
 	/* return the data to the caller */
-	return oidc_http_send(r, s_json, _oidc_strlen(s_json), OIDC_HTTP_CONTENT_TYPE_JSON, OK);
+	return oidc_util_http_send(r, s_json, _oidc_strlen(s_json), OIDC_HTTP_CONTENT_TYPE_JSON, OK);
 }
 
 /*
@@ -1055,7 +1089,7 @@ end:
 static int oidc_metrics_handle_internal(request_rec *r, char *s_json) {
 	if (s_json == NULL)
 		return HTTP_NOT_FOUND;
-	return oidc_http_send(r, s_json, _oidc_strlen(s_json), OIDC_HTTP_CONTENT_TYPE_JSON, OK);
+	return oidc_util_http_send(r, s_json, _oidc_strlen(s_json), OIDC_HTTP_CONTENT_TYPE_JSON, OK);
 }
 
 #define OIDC_METRICS_SERVER_PARAM "server_name"
@@ -1073,9 +1107,9 @@ static int oidc_metrics_handle_status(request_rec *r, char *s_json) {
 	const char *s_key = NULL, *s_name = NULL;
 	void *iter = NULL;
 
-	oidc_http_request_parameter_get(r, OIDC_METRICS_SERVER_PARAM, &s_server);
-	oidc_http_request_parameter_get(r, OIDC_METRICS_COUNTER_PARAM, &metric);
-	oidc_http_request_parameter_get(r, OIDC_METRICS_SPEC_PARAM, &spec);
+	oidc_util_request_parameter_get(r, OIDC_METRICS_SERVER_PARAM, &s_server);
+	oidc_util_request_parameter_get(r, OIDC_METRICS_COUNTER_PARAM, &metric);
+	oidc_util_request_parameter_get(r, OIDC_METRICS_SPEC_PARAM, &spec);
 
 	if (s_server == NULL)
 		s_server = "localhost";
@@ -1113,7 +1147,7 @@ end:
 	if (json)
 		json_decref(json);
 
-	return oidc_http_send(r, msg, _oidc_strlen(msg), "text/plain", OK);
+	return oidc_util_http_send(r, msg, _oidc_strlen(msg), "text/plain", OK);
 }
 
 /*
@@ -1140,7 +1174,7 @@ static const char *oidc_metric_prometheus_normalize_name(apr_pool_t *pool, const
 	char *label = apr_psprintf(pool, "%s", name);
 	int i = 0;
 	for (i = 0; i < _oidc_strlen(label); i++)
-		if (isalnum(label[i]) == 0)
+		if (apr_isalnum(label[i]) == 0)
 			label[i] = '_';
 	return apr_psprintf(pool, "%s_%s", OIDC_METRICS_PROMETHEUS_PREFIX, label);
 }
@@ -1151,11 +1185,15 @@ static const char *oidc_metric_prometheus_normalize_name(apr_pool_t *pool, const
 #define OIDC_METRICS_PROMETHEUS_BUCKET "bucket"
 #define OIDC_METRICS_PROMETHEUS_SPEC "value"
 
+// loop context for Prometheus output
 typedef struct oidc_metric_prometheus_callback_ctx_t {
 	char *s_result;
 	apr_pool_t *pool;
 } oidc_metric_prometheus_callback_ctx_t;
 
+/*
+ * loop function for converting counter metrics to Prometheus output
+ */
 int oidc_metrics_prometheus_counters(void *rec, const char *key, const char *value) {
 	const char *s_server = NULL, *s_spec = NULL;
 	json_t *j_counter = NULL, *j_specs = NULL, *j_spec = NULL;
@@ -1192,6 +1230,10 @@ int oidc_metrics_prometheus_counters(void *rec, const char *key, const char *val
 	json_decref(o_counter);
 	return 1;
 }
+
+/*
+ * loop function for converting timing metrics to Prometheus output
+ */
 
 int oidc_metrics_prometheus_timings(void *rec, const char *key, const char *value) {
 	const char *s_server = NULL, *s_key = NULL, *s_bucket = NULL;
@@ -1253,6 +1295,9 @@ static void oidc_metrics_prometheus_convert(apr_table_t *table, const char *serv
 	}
 }
 
+/*
+ * generate output in Prometheus formatting
+ */
 static int oidc_metrics_handle_prometheus(request_rec *r, char *s_json) {
 	json_t *json = NULL, *j_server = NULL;
 	const char *s_server = NULL;
@@ -1280,7 +1325,8 @@ static int oidc_metrics_handle_prometheus(request_rec *r, char *s_json) {
 
 	json_decref(json);
 
-	return oidc_http_send(r, ctx.s_result, _oidc_strlen(ctx.s_result), OIDC_METRICS_PROMETHEUS_CONTENT_TYPE, OK);
+	return oidc_util_http_send(r, ctx.s_result, _oidc_strlen(ctx.s_result), OIDC_METRICS_PROMETHEUS_CONTENT_TYPE,
+				   OK);
 }
 
 /*
@@ -1289,12 +1335,14 @@ static int oidc_metrics_handle_prometheus(request_rec *r, char *s_json) {
 
 typedef int (*oidc_metrics_handler_function_t)(request_rec *, char *);
 
+// holder for output function callback context
 typedef struct oidc_metrics_handler_t {
 	const char *format;
 	oidc_metrics_handler_function_t callback;
 	int reset;
 } oidc_metrics_content_handler_t;
 
+// output handlers
 const oidc_metrics_content_handler_t _oidc_metrics_handlers[] = {
     // first is default
     {"prometheus", oidc_metrics_handle_prometheus, 1},
@@ -1315,7 +1363,7 @@ static int oidc_metric_reset(request_rec *r, int dvalue) {
 	char svalue[16];
 	int value = 0;
 
-	oidc_http_request_parameter_get(r, OIDC_METRICS_RESET_PARAM, &s_reset);
+	oidc_util_request_parameter_get(r, OIDC_METRICS_RESET_PARAM, &s_reset);
 
 	if (s_reset == NULL)
 		return dvalue;
@@ -1340,7 +1388,7 @@ const oidc_metrics_content_handler_t *oidc_metrics_find_handler(request_rec *r) 
 	int i = 0;
 
 	/* get the specified format */
-	oidc_http_request_parameter_get(r, OIDC_METRICS_FORMAT_PARAM, &s_format);
+	oidc_util_request_parameter_get(r, OIDC_METRICS_FORMAT_PARAM, &s_format);
 
 	if (s_format == NULL)
 		return &_oidc_metrics_handlers[0];

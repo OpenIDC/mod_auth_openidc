@@ -42,19 +42,21 @@
 
 #include "handle/handle.h"
 #include "metrics.h"
+#include "mod_auth_openidc.h"
+#include "util.h"
 
 /*
  * handle content generating requests
  */
 int oidc_content_handler(request_rec *r) {
-	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	int rc = DECLINED;
 	/* track if the session needs to be updated/saved into the cache */
 	apr_byte_t needs_save = FALSE;
 	oidc_session_t *session = NULL;
 
-	if ((r->parsed_uri.path != NULL) && (c->metrics_path != NULL))
-		if (_oidc_strcmp(r->parsed_uri.path, c->metrics_path) == 0)
+	if ((r->parsed_uri.path != NULL) && (oidc_cfg_metrics_path_get(c) != NULL))
+		if (_oidc_strcmp(r->parsed_uri.path, oidc_cfg_metrics_path_get(c)) == 0)
 			return oidc_metrics_handle_request(r);
 
 	if (oidc_enabled(r) == FALSE) {
@@ -62,12 +64,12 @@ int oidc_content_handler(request_rec *r) {
 		return DECLINED;
 	}
 
-	if (oidc_util_request_matches_url(r, oidc_get_redirect_uri(r, c)) == TRUE) {
+	if (oidc_util_request_matches_url(r, oidc_util_redirect_uri(r, c)) == TRUE) {
 
 		/* requests to the redirect URI are handled and finished here */
 		rc = OK;
 
-		if (oidc_http_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO)) {
+		if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO)) {
 
 			OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_INFO);
 
@@ -90,7 +92,14 @@ int oidc_content_handler(request_rec *r) {
 			/* free resources allocated for the session */
 			oidc_session_free(r, session);
 
-		} else if (oidc_http_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
+		} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_DPOP)) {
+
+			OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_DPOP);
+
+			/* handle request to create a DPoP proof */
+			rc = oidc_dpop_request(r, c);
+
+		} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
 
 			OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_JWKS);
 

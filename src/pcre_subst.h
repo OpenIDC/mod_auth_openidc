@@ -32,8 +32,8 @@ restrictions:
    supersede any condition above with which it is incompatible.
 */
 
-#ifndef MOD_AUTH_OPENIDC_PCRE_SUBST_H_
-#define MOD_AUTH_OPENIDC_PCRE_SUBST_H_
+#ifndef _MOD_AUTH_OPENIDC_PCRE_SUBST_H_
+#define _MOD_AUTH_OPENIDC_PCRE_SUBST_H_
 
 #include "const.h"
 
@@ -54,4 +54,4 @@ void oidc_pcre_free_match(struct oidc_pcre *);
 int oidc_pcre_get_substring(apr_pool_t *pool, const struct oidc_pcre *, const char *input, int rc, char **sub_str,
 			    char **error_str);
 
-#endif /* MOD_AUTH_OPENIDC_PCRE_SUBST_H_ */
+#endif /* _MOD_AUTH_OPENIDC_PCRE_SUBST_H_ */
