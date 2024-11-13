@@ -53,8 +53,6 @@
 #include "proto/proto.h"
 #include "util.h"
 
-#define TOSTRING(x) #x
-
 #define OIDC_METADATA_SUFFIX_PROVIDER "provider"
 #define OIDC_METADATA_SUFFIX_CLIENT "client"
 #define OIDC_METADATA_SUFFIX_CONF "conf"

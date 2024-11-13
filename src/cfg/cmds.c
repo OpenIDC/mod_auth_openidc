@@ -255,36 +255,19 @@ const command_rec oidc_cfg_cmds[] = {
 
 	// cache
 
-	// Define the base part of the string
-	#define CACHE_BACKEND_BASE "cache backend must be one of ['shm'|"
-
-	// Define conditional components as empty strings if not used
-#ifdef USE_MEMCACHE
-	#define CACHE_BACKEND_MEMCACHE "'memcache'|"
-#else
-	#define CACHE_BACKEND_MEMCACHE ""
-#endif
-
-#ifdef USE_LIBHIREDIS
-	#define CACHE_BACKEND_REDIS "'redis'|"
-#else
-	#define CACHE_BACKEND_REDIS ""
-#endif
-
-	// Define the end of the string
-	#define CACHE_BACKEND_FILE "'file']."
-
-	// Construct the full cache options string
-	#define CACHE_BACKEND_OPTIONS CACHE_BACKEND_BASE CACHE_BACKEND_MEMCACHE CACHE_BACKEND_REDIS CACHE_BACKEND_FILE
-
-	// Pass the constructed string to AP_INIT_TAKE1
 	AP_INIT_TAKE1(
 		OIDCCacheType,
 		oidc_cmd_cache_type_set,
 		NULL,
 		RSRC_CONF,
-		CACHE_BACKEND_OPTIONS
-	),
+		"cache backend must be one of ['shm'|",
+#ifdef USE_MEMCACHE
+		"'memcache'|"
+#endif
+#ifdef USE_LIBHIREDIS
+		"'redis'|"
+#endif
+		"'file']."),
 	OIDC_CFG_CMD(
 		AP_INIT_TAKE1,
 		OIDCCacheEncrypt,
