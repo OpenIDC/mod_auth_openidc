@@ -521,8 +521,32 @@ OIDC_CFG_MEMBER_FUNC_GET(metadata_dir, const char *)
 #define OIDC_DEFAULT_COOKIE_HTTPONLY 1
 OIDC_CFG_MEMBER_FUNCS_BOOL(cookie_http_only, OIDC_DEFAULT_COOKIE_HTTPONLY)
 
-#define OIDC_DEFAULT_COOKIE_SAME_SITE 1
-OIDC_CFG_MEMBER_FUNCS_BOOL(cookie_same_site, OIDC_DEFAULT_COOKIE_SAME_SITE)
+#define OIDC_SAMESITE_COOKIE_OFF_STR "Off"
+#define OIDC_SAMESITE_COOKIE_ON_STR "On"
+#define OIDC_SAMESITE_COOKIE_DISABLED_STR "Disabled"
+#define OIDC_SAMESITE_COOKIE_NONE_STR "None"
+#define OIDC_SAMESITE_COOKIE_LAX_STR "Lax"
+#define OIDC_SAMESITE_COOKIE_STRICT_STR "Strict"
+
+/*
+ * define which header we use for calculating the fingerprint of the state during authentication
+ */
+const char *oidc_cmd_cookie_same_site_set(cmd_parms *cmd, void *m, const char *arg) {
+	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
+	// NB: On is made equal to Lax here and Off is equal to None (backwards compatibility)
+	static const oidc_cfg_option_t options[] = {{OIDC_SAMESITE_COOKIE_NONE, OIDC_SAMESITE_COOKIE_OFF_STR},
+						    {OIDC_SAMESITE_COOKIE_LAX, OIDC_SAMESITE_COOKIE_ON_STR},
+						    {OIDC_SAMESITE_COOKIE_DISABLED, OIDC_SAMESITE_COOKIE_DISABLED_STR},
+						    {OIDC_SAMESITE_COOKIE_NONE, OIDC_SAMESITE_COOKIE_NONE_STR},
+						    {OIDC_SAMESITE_COOKIE_LAX, OIDC_SAMESITE_COOKIE_LAX_STR},
+						    {OIDC_SAMESITE_COOKIE_STRICT, OIDC_SAMESITE_COOKIE_STRICT_STR}};
+	const char *rv = oidc_cfg_parse_option_ignore_case(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg,
+							   (int *)&cfg->cookie_same_site);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
+#define OIDC_DEFAULT_COOKIE_SAME_SITE OIDC_SAMESITE_COOKIE_LAX
+OIDC_CFG_MEMBER_FUNC_TYPE_GET(cookie_same_site, oidc_samesite_cookie_t, OIDC_DEFAULT_COOKIE_SAME_SITE)
 
 #define OIDC_DEFAULT_SESSION_FALLBACK_TO_COOKIE 0
 OIDC_CFG_MEMBER_FUNCS_BOOL(session_cache_fallback_to_cookie, OIDC_DEFAULT_SESSION_FALLBACK_TO_COOKIE)

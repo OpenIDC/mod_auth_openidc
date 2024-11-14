@@ -132,10 +132,6 @@
 #define OIDC_APP_INFO_USERINFO_JWT "userinfo_jwt"
 #define OIDC_APP_INFO_SIGNED_JWT "signed_jwt"
 
-#define OIDC_COOKIE_EXT_SAME_SITE_LAX "SameSite=Lax"
-#define OIDC_COOKIE_EXT_SAME_SITE_STRICT "SameSite=Strict"
-#define OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r) oidc_util_request_is_secure(r, c) ? "SameSite=None" : NULL
-
 int oidc_check_user_id(request_rec *r);
 int oidc_fixups(request_rec *r);
 apr_byte_t oidc_enabled(request_rec *r);

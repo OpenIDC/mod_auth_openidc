@@ -51,6 +51,8 @@ typedef struct oidc_cfg_option_t {
 } oidc_cfg_option_t;
 
 char *oidc_cfg_parse_option(apr_pool_t *pool, const oidc_cfg_option_t options[], int n, const char *arg, int *v);
+char *oidc_cfg_parse_option_ignore_case(apr_pool_t *pool, const oidc_cfg_option_t options[], int n, const char *arg,
+					int *v);
 char *oidc_cfg_parse_options_flatten(apr_pool_t *pool, const oidc_cfg_option_t options[], int n);
 
 char *oidc_cfg_parse_flatten_options(apr_pool_t *pool, const char *options[]);

@@ -662,6 +662,12 @@ apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg_t *cfg, oidc_sessio
 		}
 	}
 
+	// if this is a newly created session, we'll write it again to update the samesite setting on the session cookie
+	if (oidc_session_get_session_new(r, session)) {
+		*needs_save = TRUE;
+		oidc_session_set_session_new(r, session, 0);
+	}
+
 	/* log message about session expiry */
 	oidc_log_session_expires(r, "session inactivity timeout", session->expiry);
 

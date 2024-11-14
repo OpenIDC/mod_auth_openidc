@@ -107,5 +107,7 @@ const char *oidc_session_get_session_state(request_rec *r, oidc_session_t *z);
 void oidc_session_set_issuer(request_rec *r, oidc_session_t *z, const char *issuer);
 const char *oidc_session_get_issuer(request_rec *r, oidc_session_t *z);
 void oidc_session_set_client_id(request_rec *r, oidc_session_t *z, const char *client_id);
+void oidc_session_set_session_new(request_rec *r, oidc_session_t *z, const int is_new);
+int oidc_session_get_session_new(request_rec *r, oidc_session_t *z);
 
 #endif /* _MOD_AUTH_OPENIDC_SESSION_H_ */

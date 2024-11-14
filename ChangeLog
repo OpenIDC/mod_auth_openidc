@@ -1,3 +1,13 @@
+11/14/2024
+- allow specific settings Strict|Lax|None|Disabled for OIDCCookieSameSite in addition to On(=Lax)|Off(=None)
+  - fix: default behaviour Lax
+  - fix: apply OIDCCookieSameSite Off/None properly to state cookies instead of always setting Lax
+  - re-introduces the option to configure a Strict SameSite session cookie policy, which will turn the initial
+    Lax session cookie - set upon receving the response to the Redirect URI - into a Strict session cookie
+    immediately after the first application request
+  - allows for a "Disabled" value that does not set any SameSite flag on the cookies, in which case a browser
+    falls back to its default browser behaviour (which should be Lax by spec)
+
 11/07/2024
 - info: fix requests to the info hook with extend_session=false; see #1279; thanks @fnieri-cdp
   - properly reflect the (unmodified) inactivity timeout in the response ("timeout")

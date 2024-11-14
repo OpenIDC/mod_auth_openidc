@@ -94,6 +94,10 @@
 #define OIDC_HTTP_HDR_VAL_NAVIGATE "navigate"
 #define OIDC_HTTP_HDR_VAL_DOCUMENT "document"
 
+#define OIDC_HTTP_COOKIE_SAMESITE_LAX "SameSite=Lax"
+#define OIDC_HTTP_COOKIE_SAMESITE_STRICT "SameSite=Strict"
+#define OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r) oidc_util_request_is_secure(r, c) ? "SameSite=None" : NULL
+
 typedef struct oidc_http_timeout_t {
 	int request_timeout; // in seconds
 	int connect_timeout; // in seconds

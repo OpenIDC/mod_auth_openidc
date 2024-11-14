@@ -139,7 +139,7 @@ static int oidc_state_cookies_delete_oldest(request_rec *r, oidc_cfg_t *c, int n
 		if (oldest) {
 			oidc_warn(r, "deleting oldest state cookie: %s (time until expiry %" APR_TIME_T_FMT " seconds)",
 				  oldest->name, apr_time_sec(oldest->timestamp - apr_time_now()));
-			oidc_http_set_cookie(r, oldest->name, "", 0, OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r));
+			oidc_http_set_cookie(r, oldest->name, "", 0, OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r));
 			if (prev_oldest)
 				prev_oldest->next = oldest->next;
 			else
@@ -186,7 +186,7 @@ int oidc_state_cookies_clean_expired(request_rec *r, oidc_cfg_t *c, const char *
 								    oidc_proto_state_get_original_url(proto_state));
 								oidc_http_set_cookie(
 								    r, cookieName, "", 0,
-								    OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r));
+								    OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r));
 							} else {
 								if (first == NULL) {
 									first = apr_pcalloc(
@@ -209,7 +209,7 @@ int oidc_state_cookies_clean_expired(request_rec *r, oidc_cfg_t *c, const char *
 							    "state cookie could not be retrieved/decoded, deleting: %s",
 							    cookieName);
 							oidc_http_set_cookie(r, cookieName, "", 0,
-									     OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r));
+									     OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r));
 						}
 					}
 				}
