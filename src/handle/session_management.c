@@ -40,17 +40,20 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+#include "cfg/dir.h"
 #include "handle/handle.h"
 #include "metrics.h"
+#include "mod_auth_openidc.h"
+#include "util.h"
 
-static int oidc_session_management_iframe_op(request_rec *r, oidc_cfg *c, oidc_session_t *session,
+static int oidc_session_management_iframe_op(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
 					     const char *check_session_iframe) {
 	oidc_debug(r, "enter");
 	oidc_http_hdr_out_location_set(r, check_session_iframe);
 	return HTTP_MOVED_TEMPORARILY;
 }
 
-static int oidc_session_management_iframe_rp(request_rec *r, oidc_cfg *c, oidc_session_t *session,
+static int oidc_session_management_iframe_rp(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
 					     const char *client_id, const char *check_session_iframe) {
 
 	oidc_debug(r, "enter");
@@ -118,19 +121,19 @@ static int oidc_session_management_iframe_rp(request_rec *r, oidc_cfg *c, oidc_s
 	}
 
 	char *s_poll_interval = NULL;
-	oidc_http_request_parameter_get(r, "poll", &s_poll_interval);
+	oidc_util_request_parameter_get(r, "poll", &s_poll_interval);
 	int poll_interval = _oidc_str_to_int(s_poll_interval, 0);
 	if ((poll_interval <= 0) || (poll_interval > 3600 * 24))
 		poll_interval = 3000;
 
 	char *login_uri = NULL, *error_str = NULL, *error_description = NULL;
-	oidc_http_request_parameter_get(r, "login_uri", &login_uri);
+	oidc_util_request_parameter_get(r, "login_uri", &login_uri);
 	if ((login_uri != NULL) &&
 	    (oidc_validate_redirect_url(r, c, login_uri, FALSE, &error_str, &error_description) == FALSE)) {
 		return HTTP_BAD_REQUEST;
 	}
 
-	const char *redirect_uri = oidc_get_redirect_uri(r, c);
+	const char *redirect_uri = oidc_util_redirect_uri(r, c);
 
 	java_script = apr_psprintf(r->pool, java_script, origin, client_id, session_state ? session_state : "",
 				   login_uri ? login_uri : "", op_iframe_id, poll_interval, redirect_uri, redirect_uri);
@@ -141,13 +144,13 @@ static int oidc_session_management_iframe_rp(request_rec *r, oidc_cfg *c, oidc_s
 /*
  * handle session management request
  */
-int oidc_session_management(request_rec *r, oidc_cfg *c, oidc_session_t *session) {
+int oidc_session_management(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 	char *cmd = NULL;
 	const char *id_token_hint = NULL;
 	oidc_provider_t *provider = NULL;
 
 	/* get the command passed to the session management handler */
-	oidc_http_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_SESSION, &cmd);
+	oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_SESSION, &cmd);
 	if (cmd == NULL) {
 		oidc_error(r, "session management handler called with no command");
 		return HTTP_INTERNAL_SERVER_ERROR;
@@ -158,7 +161,8 @@ int oidc_session_management(request_rec *r, oidc_cfg *c, oidc_session_t *session
 		oidc_debug(
 		    r,
 		    "[session=logout] calling oidc_handle_logout_request because of session mgmt local logout call.");
-		return oidc_logout_request(r, c, session, oidc_get_absolute_url(r, c, c->default_slo_url), TRUE);
+		return oidc_logout_request(r, c, session, oidc_util_absolute_url(r, c, oidc_cfg_default_slo_url_get(c)),
+					   TRUE);
 	}
 
 	if (oidc_get_provider_from_session(r, c, session, &provider) == FALSE) {
@@ -168,20 +172,24 @@ int oidc_session_management(request_rec *r, oidc_cfg *c, oidc_session_t *session
 
 	/* see if this is a request for the OP iframe */
 	if (_oidc_strcmp("iframe_op", cmd) == 0) {
-		if (provider->check_session_iframe != NULL) {
-			return oidc_session_management_iframe_op(r, c, session, provider->check_session_iframe);
+		if (oidc_cfg_provider_check_session_iframe_get(provider) != NULL) {
+			return oidc_session_management_iframe_op(r, c, session,
+								 oidc_cfg_provider_check_session_iframe_get(provider));
 		}
 		return HTTP_NOT_FOUND;
 	}
 
 	/* see if this is a request for the RP iframe */
 	if (_oidc_strcmp("iframe_rp", cmd) == 0) {
-		if ((provider->client_id != NULL) && (provider->check_session_iframe != NULL)) {
-			return oidc_session_management_iframe_rp(r, c, session, provider->client_id,
-								 provider->check_session_iframe);
+		if ((oidc_cfg_provider_client_id_get(provider) != NULL) &&
+		    (oidc_cfg_provider_check_session_iframe_get(provider) != NULL)) {
+			return oidc_session_management_iframe_rp(r, c, session,
+								 oidc_cfg_provider_client_id_get(provider),
+								 oidc_cfg_provider_check_session_iframe_get(provider));
 		}
 		oidc_debug(r, "iframe_rp command issued but no client (%s) and/or no check_session_iframe (%s) set",
-			   provider->client_id, provider->check_session_iframe);
+			   oidc_cfg_provider_client_id_get(provider),
+			   oidc_cfg_provider_check_session_iframe_get(provider));
 		return HTTP_NOT_FOUND;
 	}
 
@@ -195,9 +203,9 @@ int oidc_session_management(request_rec *r, oidc_cfg *c, oidc_session_t *session
 		 *       session now?
 		 */
 		return oidc_request_authenticate_user(
-		    r, c, provider,
-		    apr_psprintf(r->pool, "%s?session=iframe_rp", oidc_get_redirect_uri_iss(r, c, provider)), NULL,
-		    id_token_hint, "none", oidc_dir_cfg_path_auth_request_params(r), oidc_dir_cfg_path_scope(r));
+		    r, c, provider, apr_psprintf(r->pool, "%s?session=iframe_rp", oidc_util_redirect_uri(r, c)), NULL,
+		    id_token_hint, "none", oidc_cfg_dir_path_auth_request_params_get(r),
+		    oidc_cfg_dir_path_scope_get(r));
 	}
 
 	/* handle failure in fallthrough */

@@ -43,8 +43,8 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#ifndef MOD_AUTH_OPENIDC_JOSE_H_
-#define MOD_AUTH_OPENIDC_JOSE_H_
+#ifndef _MOD_AUTH_OPENIDC_JOSE_H_
+#define _MOD_AUTH_OPENIDC_JOSE_H_
 
 #include "const.h"
 
@@ -100,7 +100,6 @@ typedef struct {
 /*
  * error handling functions
  */
-void _oidc_jose_error_set(oidc_jose_error_t *, const char *, const int, const char *, const char *msg, ...);
 #define oidc_jose_error(err, msg, ...) _oidc_jose_error_set(err, __FILE__, __LINE__, __FUNCTION__, msg, ##__VA_ARGS__)
 #define oidc_jose_error_openssl(err, msg, ...)                                                                         \
 	_oidc_jose_error_set(err, __FILE__, __LINE__, __FUNCTION__, "%s() failed: %s", msg,                            \
@@ -175,7 +174,7 @@ typedef struct oidc_jwk_t {
 apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json, apr_hash_t *keys, char **plaintext,
 			    int *plaintext_len, oidc_jose_error_t *err, apr_byte_t import_must_succeed);
 /* parse a JSON string (JWK) to a JWK struct */
-oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, const char *s_json, oidc_jose_error_t *err);
+oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, json_t *json, oidc_jose_error_t *err);
 oidc_jwk_t *oidc_jwk_copy(apr_pool_t *pool, const oidc_jwk_t *jwk);
 /* parse a JSON object (JWK) in to a JWK struct */
 apr_byte_t oidc_jwk_parse_json(apr_pool_t *pool, json_t *json, oidc_jwk_t **jwk, oidc_jose_error_t *err);
@@ -258,7 +257,7 @@ apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk, apr
 /* verify a JWT a key in a list of JWKs */
 apr_byte_t oidc_jwt_verify(apr_pool_t *pool, oidc_jwt_t *jwt, apr_hash_t *keys, oidc_jose_error_t *err);
 /* perform compact serialization on a JWT and return the resulting string */
-char *oidc_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jose_error_t *err);
+char *oidc_jose_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jose_error_t *err);
 /* encrypt JWT */
 apr_byte_t oidc_jwt_encrypt(apr_pool_t *pool, oidc_jwt_t *jwe, oidc_jwk_t *jwk, const char *payload, int payload_len,
 			    char **serialized, oidc_jose_error_t *err);
@@ -278,4 +277,4 @@ unsigned int oidc_alg2keysize(const char *alg);
 apr_byte_t oidc_jwk_pem_bio_to_jwk(apr_pool_t *pool, BIO *input, const char *kid, oidc_jwk_t **jwk, int is_private_key,
 				   oidc_jose_error_t *err);
 
-#endif /* MOD_AUTH_OPENIDC_JOSE_H_ */
+#endif /* _MOD_AUTH_OPENIDC_JOSE_H_ */

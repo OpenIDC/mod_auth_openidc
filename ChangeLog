@@ -1,3 +1,126 @@
+10/16/2024
+- release 2.4.16.5
+
+10/04/2024
+- ensure backwards compatibility with versions <2.4.16.x when a JSON array of string values
+  is provided in the "aud" claim of the ID token; required by (at least) Oracle IDCS
+  see #1272 and #1273; thanks @lufik and @tydalforce
+- add OIDCIDTokenAudValues configuration primitive that allows for explicit (and exhaustive)
+  configuration of the list of accepted values in the "aud" claim of the ID token
+  e.g. as required for passing FAPI 2 conformance testing
+- bump to 2.4.16.5rc0
+
+09/29/2024
+- release 2.4.16.4
+
+09/27/2024
+- correct usage of free() for json_dumps return values instead of cjose_get_dealloc()()
+- use compact encoding and preserve order where appropriate for most calls to json_dumps
+- replace json_dumps/free combos with oidc_util_encode_json
+- refactor oidc_jwk_to_json
+- bump to 2.4.16.4rc3
+
+09/26/2024
+- fix oidc_jwk_copy wrt. "x5t", which broke private_key_jwt authentication to Azure AD since 2.4.13
+  see #1269; thanks @uoe-pjackson
+- bump to 2.4.16.4rc2
+
+09/21/2024
+- refactor state and userinfo
+
+09/11/2024
+- change warnings about not passing unknown claim types into debug messages; see #1263; thanks @nclarkau
+- bump to 2.4.16.4rc1
+
+09/09/2024
+- fix accepting custom cookie names in OIDCOAuthAcceptTokenAs cookie:<name>; see #1261; thanks @bbartke
+- bump to 2.4.16.4rc0
+- improve basic authentication parsing when using OIDCOAuthAcceptTokenAs basic
+
+09/06/2024
+- allow overriding globally set OIDCCacheType back to shm in vhosts
+- correct typo in child initialization routines when using multiple vhosts; closes #1208; thanks @studersi
+  this fixes possible segmentation faults when using Redis and Metrics settings in vhosts
+- release 2.4.16.3
+
+09/05/2024
+- fix OIDCCacheShmMax min/max settings; see #1260; thanks @bbartke
+- bump to 2.4.16.3dev
+
+08/30/2024
+- release 2.4.16.2
+
+08/29/2024
+- fix setting OIDCPKCEMethod none; closes #1256; thanks @eoliphan
+
+08/28/2024
+- re-introduce OIDCSessionMaxDuration 0; see #1252
+- bump to 2.4.16.2dev
+- add some resilience when both Forwarded and X-Forwarded-* are configured
+- fix disabled OIDCStateCookiePrefix command; closes #1254; thanks @damisanet
+- remove support for OIDCHTMLErrorTemplate, deprecated since 2.4.14
+
+08/26/2024
+- fix parsing OIDCXForwardedHeaders; closes #1250; thanks @maltesmann
+- release 2.4.16.1
+
+08/23/2024
+- release 2.4.16
+
+07/03/2024
+- cfg/provider: use oidc_jwk_list_copy when merging client_keys
+
+06/18/2024
+- memcache: correct dead server check on APR_NOTFOUND; see #1230; thanks @rpluem-vf
+
+06/08/2024
+- support DPoP nonces to the userinfo endpoint
+
+06/07/2024
+- return response headers from outgoing HTTP requests to callers
+- support DPoP nonces to the token endpoint
+
+06/06/2024
+- add OIDCDPoPMode [off|optional|required] primitive
+- store the token_type in the session
+
+06/05/2024
+- add "nbf" claim in the Request Object as per https://openid.net/specs/openid-financial-api-part-2-1_0-final.html#rfc.section.5.2.2
+
+06/04/2024
+- add (client) support for RFC 9449 OAuth 2.0 Demonstrating Proof of Possession (DPoP)
+- replace multi-provider .conf "issuer_specific_redirect_uri" boolean with "response_require_iss" boolean
+- tighten up the "aud" claim validation in ID tokens
+- add support for the FAPI 2.0 Security Profile https://openid.net/specs/fapi-2_0-security-profile-ID2.html
+
+05/30/2024
+- add support for RFC 9126 OAuth 2.0 Pushed Authorization Requests
+
+04/23/2024
+- disable support for the RSA PKCS v1.5 JWE encryption algorithm as it is deemed unsafe
+  due to the Marvin attack and is removed from libcjose as well
+
+04/05/2024
+- add debug printout for OIDCUnAuthAction expression evaluation
+
+04/03/2024
+- when an expression is configured for OIDCUnAuthAction (i.e. in the 2nd argument), also apply
+  it to OIDCUnAutzAction so that it can be used to enable step-up authentication for SPAs with
+  non-conformant browsers (some versions of Safari) and in (potentially insecure) iframes
+  see #1205; thanks @ryanwilliamnicholls
+  
+04/02/2024
+- major rewrite of config primitive handling:
+  - split out over different files, use header files consistently
+  - encapsulate config record with getters/setters
+  - allow overriding defined global configuration primitives to their default value on the individual vhost level
+  - apply input/boundary checking on all configuration values, shared with provider metadata parsing
+  - various fixes to applying default config values and allowing primitives in vhost/directory scopes
+- return HTTTP 502 when refreshing acces token or userinfo fails (default: "502_on_error")
+- use a singleton token refresh mutex
+- add support for OIDCOAuthIntrospectionEndpointKeyPassword
+- bump to 2.4.16dev
+
 04/01/2024
 - release 2.4.15.7
 

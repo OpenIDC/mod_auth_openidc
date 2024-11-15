@@ -123,7 +123,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;NAMEVER=mod_auth_openidc=2.4.16.5</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
@@ -141,7 +141,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions);WIN32;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions);WIN32;_CRT_SECURE_NO_WARNINGS;NAMEVER=mod_auth_openidc=2.4.16.5</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
@@ -159,7 +159,6 @@
     <ClInclude Include="src\jose.h" />
     <ClInclude Include="src\metrics.h" />
     <ClInclude Include="src\mod_auth_openidc.h" />
-    <ClInclude Include="src\parse.h" />
     <ClInclude Include="src\pcre_subst.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
@@ -175,11 +174,13 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="src\cache\shm.c" />
-    <ClCompile Include="src\config.c" />
+	<ClCompile Include="src\cache\shm.c" />
     <ClCompile Include="src\handle\authz.c" />
     <ClCompile Include="src\handle\content.c" />
     <ClCompile Include="src\handle\discovery.c" />
+	<ClCompile Include="src\handle\dpop.c">
+		<ObjectFileName>$(IntDir)dpop_handle.obj</ObjectFileName>
+    </ClCompile>
     <ClCompile Include="src\handle\info.c" />
     <ClCompile Include="src\handle\jwks.c" />
     <ClCompile Include="src\handle\logout.c" />
@@ -196,10 +197,73 @@
     <ClCompile Include="src\metrics.c" />
     <ClCompile Include="src\mod_auth_openidc.c" />
     <ClCompile Include="src\oauth.c" />
-    <ClCompile Include="src\parse.c" />
+    <ClCompile Include="src\cfg\cache.c">
+		<ObjectFileName>$(IntDir)cache_cfg.obj</ObjectFileName>
+    </ClCompile>
+	<ClCompile Include="src\cfg\cfg.c">
+		<ObjectFileName>$(IntDir)cfg_cfg.obj</ObjectFileName>
+    </ClCompile>
+	<ClCompile Include="src\cfg\cmds.c">
+		<ObjectFileName>$(IntDir)cmds_cfg.obj</ObjectFileName>
+    </ClCompile>
+	<ClCompile Include="src\cfg\dir.c">
+		<ObjectFileName>$(IntDir)dir_cfg.obj</ObjectFileName>
+    </ClCompile>
+	<ClCompile Include="src\cfg\oauth.c">
+		<ObjectFileName>$(IntDir)oauth_cfg.obj</ObjectFileName>
+    </ClCompile>
+	<ClCompile Include="src\cfg\parse.c">
+		<ObjectFileName>$(IntDir)parse_cfg.obj</ObjectFileName>
+    </ClCompile>
+	<ClCompile Include="src\cfg\provider.c">
+		<ObjectFileName>$(IntDir)provider_cfg.obj</ObjectFileName>
+    </ClCompile>
     <ClCompile Include="src\pcre_subst.c" />
-    <ClCompile Include="src\proto.c" />
-    <ClCompile Include="src\session.c" />
+    <ClCompile Include="src\proto\auth.c">
+		<ObjectFileName>$(IntDir)auth_proto.obj</ObjectFileName>
+    </ClCompile>
+	<ClCompile Include="src\proto\discovery.c">
+		<ObjectFileName>$(IntDir)discovery_proto.obj</ObjectFileName>
+    </ClCompile>
+	<ClCompile Include="src\proto\dpop.c">
+		<ObjectFileName>$(IntDir)dpop_proto.obj</ObjectFileName>
+    </ClCompile>
+	<ClCompile Include="src\proto\id_token.c">
+		<ObjectFileName>$(IntDir)id_token_proto.obj</ObjectFileName>
+    </ClCompile>
+	<ClCompile Include="src\proto\jwks.c">
+		<ObjectFileName>$(IntDir)jwks_proto.obj</ObjectFileName>
+    </ClCompile>
+	<ClCompile Include="src\proto\jwt.c">
+		<ObjectFileName>$(IntDir)jwt_proto.obj</ObjectFileName>
+    </ClCompile>
+	<ClCompile Include="src\proto\pkce.c">
+		<ObjectFileName>$(IntDir)pkce_proto.obj</ObjectFileName>
+    </ClCompile>
+	<ClCompile Include="src\proto\proto.c">
+		<ObjectFileName>$(IntDir)proto_proto.obj</ObjectFileName>
+    </ClCompile>
+	<ClCompile Include="src\proto\request.c">
+		<ObjectFileName>$(IntDir)request_proto.obj</ObjectFileName>
+    </ClCompile>
+	<ClCompile Include="src\proto\response.c">
+		<ObjectFileName>$(IntDir)response_proto.obj</ObjectFileName>
+    </ClCompile>
+	<ClCompile Include="src\proto\state.c">
+      <ObjectFileName>$(IntDir)state_proto.obj</ObjectFileName>
+    </ClCompile>
+	<ClCompile Include="src\proto\token.c">
+		<ObjectFileName>$(IntDir)token_proto.obj</ObjectFileName>
+    </ClCompile>
+	<ClCompile Include="src\proto\userinfo.c">
+		<ObjectFileName>$(IntDir)userinfo_proto.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="src\session.c">
+		<ObjectFileName>$(IntDir)session.obj</ObjectFileName>
+    </ClCompile>
+	<ClCompile Include="src\state.c">
+		<ObjectFileName>$(IntDir)state.obj</ObjectFileName>
+    </ClCompile>
     <ClCompile Include="src\util.c" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>

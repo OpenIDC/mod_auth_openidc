@@ -40,10 +40,12 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#ifndef MOD_AUTH_OPENIDC_METRICS_H_
-#define MOD_AUTH_OPENIDC_METRICS_H_
+#ifndef _MOD_AUTH_OPENIDC_METRICS_H_
+#define _MOD_AUTH_OPENIDC_METRICS_H_
 
+#include "const.h" // for the PACKAGE_* defines
 #include <apr_hash.h>
+#include <httpd.h>
 
 apr_byte_t oidc_metrics_is_valid_classname(apr_pool_t *pool, const char *name, char **valid_names);
 apr_byte_t oidc_metrics_cache_post_config(server_rec *s);
@@ -85,13 +87,13 @@ void oidc_metrics_timing_add(request_rec *r, oidc_metrics_timing_type_t type, ap
 
 #define OIDC_METRICS_TIMING_START(r, cfg)                                                                              \
 	OIDC_METRICS_TIMING_VAR                                                                                        \
-	if (cfg->metrics_hook_data != NULL) {                                                                          \
+	if (oidc_cfg_metrics_hook_data_get(cfg) != NULL) {                                                             \
 		_oidc_metrics_tstart = apr_time_now();                                                                 \
 	}
 
 #define OIDC_METRICS_TIMING_ADD(r, cfg, type)                                                                          \
-	if (cfg->metrics_hook_data != NULL) {                                                                          \
-		if (apr_hash_get(cfg->metrics_hook_data, _oidc_metrics_timings_info[type].class_name,                  \
+	if (oidc_cfg_metrics_hook_data_get(cfg) != NULL) {                                                             \
+		if (apr_hash_get(oidc_cfg_metrics_hook_data_get(cfg), _oidc_metrics_timings_info[type].class_name,     \
 				 APR_HASH_KEY_STRING) != NULL) {                                                       \
 			oidc_metrics_timing_add(r, type, apr_time_now() - _oidc_metrics_tstart);                       \
 		}                                                                                                      \
@@ -99,14 +101,14 @@ void oidc_metrics_timing_add(request_rec *r, oidc_metrics_timing_type_t type, ap
 #define OIDC_METRICS_REQUEST_STATE_TIMER_KEY "oidc-metrics-request-timer"
 
 #define OIDC_METRICS_TIMING_REQUEST_START(r, cfg)                                                                      \
-	if (cfg->metrics_hook_data != NULL) {                                                                          \
+	if (oidc_cfg_metrics_hook_data_get(cfg) != NULL) {                                                             \
 		oidc_request_state_set(r, OIDC_METRICS_REQUEST_STATE_TIMER_KEY,                                        \
 				       apr_psprintf(r->pool, "%" APR_TIME_T_FMT, apr_time_now()));                     \
 	}
 
 #define OIDC_METRICS_TIMING_REQUEST_ADD(r, cfg, type)                                                                  \
 	OIDC_METRICS_TIMING_VAR                                                                                        \
-	if (cfg->metrics_hook_data != NULL) {                                                                          \
+	if (oidc_cfg_metrics_hook_data_get(cfg) != NULL) {                                                             \
 		_oidc_metrics_tstart =                                                                                 \
 		    _oidc_str_to_time(oidc_request_state_get(r, OIDC_METRICS_REQUEST_STATE_TIMER_KEY), -1);            \
 		if (_oidc_metrics_tstart > -1) {                                                                       \
@@ -170,11 +172,13 @@ typedef enum {
 	OM_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE,
 	OM_REDIRECT_URI_REQUEST_REVOKE_SESSION,
 	OM_REDIRECT_URI_REQUEST_INFO,
+	OM_REDIRECT_URI_REQUEST_DPOP,
 	OM_REDIRECT_URI_ERROR_PROVIDER,
 	OM_REDIRECT_URI_ERROR_INVALID,
 
 	OM_CONTENT_REQUEST_DECLINED,
 	OM_CONTENT_REQUEST_INFO,
+	OM_CONTENT_REQUEST_DPOP,
 	OM_CONTENT_REQUEST_JWKS,
 	OM_CONTENT_REQUEST_DISCOVERY,
 	OM_CONTENT_REQUEST_POST_PRESERVE,
@@ -193,11 +197,11 @@ extern const oidc_metrics_counter_info_t _oidc_metrics_counters_info[];
 void oidc_metrics_counter_inc(request_rec *r, oidc_metrics_counter_type_t type, const char *spec);
 
 #define OIDC_METRICS_COUNTER_INC_SPEC(r, cfg, type, spec)                                                              \
-	if (cfg->metrics_hook_data != NULL)                                                                            \
-		if (apr_hash_get(cfg->metrics_hook_data, _oidc_metrics_counters_info[type].class_name,                 \
+	if (oidc_cfg_metrics_hook_data_get(cfg) != NULL)                                                               \
+		if (apr_hash_get(oidc_cfg_metrics_hook_data_get(cfg), _oidc_metrics_counters_info[type].class_name,    \
 				 APR_HASH_KEY_STRING) != NULL)                                                         \
 			oidc_metrics_counter_inc(r, type, spec);
 
 #define OIDC_METRICS_COUNTER_INC(r, cfg, type) OIDC_METRICS_COUNTER_INC_SPEC(r, cfg, type, NULL);
 
-#endif /* MOD_AUTH_OPENIDC_METRICS_H_ */
+#endif /* _MOD_AUTH_OPENIDC_METRICS_H_ */

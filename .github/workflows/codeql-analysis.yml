@@ -28,7 +28,7 @@ jobs:
         sudo apt-get install -y libjansson-dev libcurl4-openssl-dev libhiredis-dev
 
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v2
+      uses: github/codeql-action/init@v3
       with:
         languages: ${{ matrix.language }}
 
@@ -38,4 +38,4 @@ jobs:
        make check
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v2
+      uses: github/codeql-action/analyze@v3

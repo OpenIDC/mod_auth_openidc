@@ -41,8 +41,8 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#ifndef MOD_AUTH_OPENIDC_CONST_H_
-#define MOD_AUTH_OPENIDC_CONST_H_
+#ifndef _MOD_AUTH_OPENIDC_CONST_H_
+#define _MOD_AUTH_OPENIDC_CONST_H_
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -153,4 +153,28 @@ static inline int _oidc_str_to_int(const char *s, const int default_value) {
 #define NAMEVERSION TOSTRING(NAMEVER)
 #endif
 
-#endif /* MOD_AUTH_OPENIDC_CONST_H_ */
+#define OIDC_CHAR_EQUAL '='
+#define OIDC_CHAR_COLON ':'
+#define OIDC_CHAR_TILDE '~'
+#define OIDC_CHAR_SPACE ' '
+#define OIDC_CHAR_COMMA ','
+#define OIDC_CHAR_QUERY '?'
+#define OIDC_CHAR_DOT '.'
+#define OIDC_CHAR_AT '@'
+#define OIDC_CHAR_FORWARD_SLASH '/'
+#define OIDC_CHAR_PIPE '|'
+#define OIDC_CHAR_AMP '&'
+#define OIDC_CHAR_SEMI_COLON ';'
+
+#define OIDC_STR_SPACE " "
+#define OIDC_STR_EQUAL "="
+#define OIDC_STR_AMP "&"
+#define OIDC_STR_QUERY "?"
+#define OIDC_STR_COLON ":"
+#define OIDC_STR_SEMI_COLON ";"
+#define OIDC_STR_FORWARD_SLASH "/"
+#define OIDC_STR_AT "@"
+#define OIDC_STR_COMMA ","
+#define OIDC_STR_HASH "#"
+
+#endif /* _MOD_AUTH_OPENIDC_CONST_H_ */

@@ -1,0 +1,6 @@
+/cmds.inc
+/.deps/
+/.dirstamp
+/.libs/
+/*.lo
+/*.o

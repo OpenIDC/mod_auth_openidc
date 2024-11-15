@@ -44,11 +44,13 @@
 
 #include "handle/handle.h"
 #include "mod_auth_openidc.h"
+#include "proto/proto.h"
 
+#include "cfg/cfg_int.h"
+#include "cfg/dir.h"
+#include "util.h"
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
-
-extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
 static int test_nr_run = 0;
 static char TST_ERR_MSG[4096];
@@ -117,9 +119,12 @@ static int TST_RC;
 		return message;
 
 static char *_jwk_parse(apr_pool_t *pool, const char *s, oidc_jwk_t **jwk, oidc_jose_error_t *err) {
-	oidc_jwk_t *k = oidc_jwk_parse(pool, s, err);
+	json_error_t json_err;
+	json_t *json = json_loads(s, 0, &json_err);
+	oidc_jwk_t *k = oidc_jwk_parse(pool, json, err);
 	TST_ASSERT_ERR("oidc_jwk_parse", k != NULL, pool, (*err));
 	*jwk = k;
+	json_decref(json);
 	return 0;
 }
 
@@ -539,8 +544,8 @@ static char *test_jwt_sign_verify(apr_pool_t *pool) {
 	jwt->header.alg = apr_pstrdup(pool, CJOSE_HDR_ALG_RS256);
 
 	TST_ASSERT_ERR("oidc_jwt_sign (rsa)", oidc_jwt_sign(pool, jwt, jwk, FALSE, &err), pool, err);
-	cser = oidc_jwt_serialize(pool, jwt, &err);
-	TST_ASSERT_ERR("oidc_jwt_serialize (rsa)", cser != NULL, pool, err);
+	cser = oidc_jose_jwt_serialize(pool, jwt, &err);
+	TST_ASSERT_ERR("oidc_jose_jwt_serialize (rsa)", cser != NULL, pool, err);
 
 	oidc_jwt_t *rsa_jwt = NULL;
 	TST_ASSERT_ERR("oidc_jwt_parse (rsa)", oidc_jwt_parse(pool, cser, &rsa_jwt, NULL, FALSE, &err), pool, err);
@@ -558,8 +563,8 @@ static char *test_jwt_sign_verify(apr_pool_t *pool) {
 	jwt->header.alg = apr_pstrdup(pool, "HS256");
 
 	TST_ASSERT_ERR("oidc_jwt_sign (hmac)", oidc_jwt_sign(pool, jwt, jwk, FALSE, &err), pool, err);
-	cser = oidc_jwt_serialize(pool, jwt, &err);
-	TST_ASSERT_ERR("oidc_jwt_serialize (hmac)", cser != NULL, pool, err);
+	cser = oidc_jose_jwt_serialize(pool, jwt, &err);
+	TST_ASSERT_ERR("oidc_jose_jwt_serialize (hmac)", cser != NULL, pool, err);
 
 	oidc_jwt_t *hmac_jwt = NULL;
 	TST_ASSERT_ERR("oidc_jwt_parse (rsa)", oidc_jwt_parse(pool, cser, &hmac_jwt, NULL, FALSE, &err), pool, err);
@@ -772,159 +777,83 @@ static char *test_jwk_parse_json(apr_pool_t *pool) {
 		       _jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
 	oidc_jwk_destroy(jwk);
 
-	return 0;
-}
+	s = "{\"kty\":\"RSA\",\"kid\":\"IbLjLR7-C1q0-ypkueZxGIJwBQNaLg46DZMpnPW1kps\",\"e\":\"AQAB\",\"n\":"
+	    "\"iGeTXbfV5bMppx7o7qMLCuVIKqbBa_qOzBiNNpe0K8rjg7-1z9GCuSlqbZtM0_5BQ6bGonnSPD--"
+	    "PowhFdivS4WNA33O0Kl1tQ0wdH3TOnwueIO9ahfW4q0BGFvMObneK-tjwiNMj1l-cZt8pvuS-3LtTWIzC-"
+	    "hTZM4caUmy5olm5PVdmru6C6V5rxkbYBPITFSzl5mpuo_C6RV_MYRwAh60ghs2OEvIWDrJkZnYaF7sjHC9j-"
+	    "4kfcM5oY7Zhg8KuHyloudYNzlqjVAPd0MbkLkh1pa8fmHsnN6cgfXYtFK7Z8WjYDUAhTH1JjZCVSFN55A-"
+	    "51dgD4cQNzieLEEkJw\",\"x5c\":[\"MIICnTCCAYUCBgFuk1+"
+	    "FLDANBgkqhkiG9w0BAQsFADASMRAwDgYDVQQDDAd2aW5jZW50MB4XDTE5MTEyMjEzNDcyMVoXDTI5MTEyMjEzNDkwMVowEj"
+	    "EQMA4GA1UEAwwHdmluY2VudDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAIhnk1231eWzKace6O6jCwrlSCqmw"
+	    "Wv6jswYjTaXtCvK44O/tc/Rgrkpam2bTNP+QUOmxqJ50jw/"
+	    "vj6MIRXYr0uFjQN9ztCpdbUNMHR90zp8LniDvWoX1uKtARhbzDm53ivrY8IjTI9ZfnGbfKb7kvty7U1iMwvoU2TOHGlJsua"
+	    "JZuT1XZq7ugulea8ZG2ATyExUs5eZqbqPwukVfzGEcAIetIIbNjhLyFg6yZGZ2Ghe7IxwvY/"
+	    "uJH3DOaGO2YYPCrh8paLnWDc5ao1QD3dDG5C5IdaWvH5h7JzenIH12LRSu2fFo2A1AIUx9SY2QlUhTeeQPudXYA+"
+	    "HEDc4nixBJCcCAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAfAo40il4qw7DfOkke0p1ZFAgLQQS3J5hYNDSRvVv+vxkk9o/"
+	    "N++zTMoHbfcDcU5BdVH6Qsr/12PXPX7Ur5WYDq+bWGAK3MAaGtZlmycFeVhoVRfab4TUWUy43H3VyFUNqjGRAVJ/"
+	    "VD1RW3fJ18KrQTN2fcKSd88Jqt5TvjROKghq95+8BQtlhrR/"
+	    "sQVrjgYwc+eU9ljWI56MQXbpHstl9IewMXnusSPxKRTbutjaxzKaoXRTUncPL6ga0SSxOTdKksM4ZYpPnq0B93silb+"
+	    "0qs8aJraGzjAmLE30opfufP+roth19VJxAfYsW5mgAmXP9kEAF+iWB8FB4/"
+	    "Q4noNG8Q==\"],\"x5t#S256\":\"hMVJ55Mqi4uAQIztPKUmL2MSfy6iN1Lr3J1CNGAIBms\",\"x5t\":\"0oN6Bx-"
+	    "eh6VAmNw1I7o3Dd9JPwE\"}";
 
-static char *test_plaintext_decrypt(apr_pool_t *pool) {
-
-	// from http://tools.ietf.org/html/draft-ietf-jose-json-web-encryption-30
-	// A.2.  Example JWE using RSAES-PKCS1-V1_5 and AES_128_CBC_HMAC_SHA_256
-	char *s = apr_pstrdup(
-	    pool, "eyJhbGciOiJSU0ExXzUiLCJlbmMiOiJBMTI4Q0JDLUhTMjU2In0"
-		  ".UGhIOguC7IuEvf_NPVaXsGMoLOmwvc1GyqlIKOK1nN94nHPoltGRhWhw7Zx0-kFm1NJn8LE9XShH59_"
-		  "i8J0PH5ZZyNfGy2xGdULU7sHNF6Gp2vPLgNZ__deLKxGHZ7PcHALUzoOegEI-8E66jX2E4zyJKx-YxzZIItRzC5hlRirb6Y5Cl_"
-		  "p-ko3YvkkysZIFNPccxRU7qve1WYPxqbb2Yw8kZqa2rMWI5ng8OtvzlV7elprCbuPhcCdZ6XDP0_F8rkXds2vE4X-"
-		  "ncOIM8hAYHHi29NX0mcKiRaD0-D-ljQTP-cFPgwCp6X-nZZd9OHBv-B3oWh2TbqmScqXMR4gp_A"
-		  ".AxY8DCtDaGlsbGljb3RoZQ"
-		  ".KDlTtXchhZTGufMYmOYGS4HffxPSUrfmqCHXaI9wOGY"
-		  ".9hH0vgRfYgPnAHOd8stkvw");
-
-	char *k = "{\"kty\":\"RSA\","
-		  "\"n\":"
-		  "\"sXchDaQebHnPiGvyDOAT4saGEUetSyo9MKLOoWFsueri23bOdgWp4Dy1WlUzewbgBHod5pcM9H95GQRV3JDXboIRROSBigeC5y"
-		  "jU1hGzHHyXss8UDprecbAYxknTcQkhslANGRUZmdTOQ5qTRsLAt6BTYuyvVRdhS8exSZEy_c4gs_7svlJJQ4H9_NxsiIoLwAEk7-"
-		  "Q3UXERGYw_75IDrGA84-lA_-Ct4eTlXHBIY2EaV7t7LjJaynVJCpkv4LKjTTAumiGUIuQhrNhZLuF_RJLqHpM2kgWFLU7-"
-		  "VTdL1VbC2tejvcI2BlMkEpk1BzBZI0KQB0GaDWFLN-aEAw3vRw\","
-		  "\"e\":\"AQAB\","
-		  "\"d\":\"VFCWOqXr8nvZNyaaJLXdnNPXZKRaWCjkU5Q2egQQpTBMwhprMzWzpR8Sxq1OPThh_"
-		  "J6MUD8Z35wky9b8eEO0pwNS8xlh1lOFRRBoNqDIKVOku0aZb-rynq8cxjDTLZQ6Fz7jSjR1Klop-YKaUHc9GsEofQqYruPhzSA-"
-		  "QgajZGPbE_0ZaVDJHfyd7UUBUKunFMScbflYAAOYJqVIVwaYR5zWEEceUjNnTNo_CVSj-"
-		  "VvXLO5VZfCUAVLgW4dpf1SrtZjSt34YLsRarSb127reG_DUwg9Ch-"
-		  "KyvjT1SkHgUWRVGcyly7uvVGRSDwsXypdrNinPA4jlhoNdizK2zF2CWQ\""
-		  "}";
-
-	oidc_jose_error_t err;
-	apr_hash_t *keys = apr_hash_make(pool);
-	oidc_jwk_t *jwk = NULL;
-
-	TST_ASSERT_ERR("oidc_jwk_parse", _jwk_parse(pool, k, &jwk, &err) == 0, pool, err);
-	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
-
-	cjose_err cjose_err;
-	cjose_jwe_t *jwe = cjose_jwe_import(s, _oidc_strlen(s), &cjose_err);
-	TST_ASSERT_CJOSE_ERR("cjose_jwe_import", jwe != NULL, pool, cjose_err);
-
-	size_t content_len = 0;
-	uint8_t *decrypted = cjose_jwe_decrypt(jwe, jwk->cjose_jwk, &content_len, &cjose_err);
-	TST_ASSERT_CJOSE_ERR("cjose_jwe_decrypt", decrypted != NULL, pool, cjose_err);
-
-	TST_ASSERT_STRN("decrypted", (const char *)decrypted, "Live long and prosper.", content_len);
-
-	cjose_get_dealloc()(decrypted);
+	jwk = NULL;
+	TST_ASSERT_ERR("oidc_jwk_parse (x5c)", _jwk_parse(pool, s, &jwk, &err) == 0, pool, err);
+	TST_ASSERT_STR("oidc_jwk_parse (x5c)", APR_ARRAY_IDX(jwk->x5c, 0, char *),
+		       "MIICnTCCAYUCBgFuk1+"
+		       "FLDANBgkqhkiG9w0BAQsFADASMRAwDgYDVQQDDAd2aW5jZW50MB4XDTE5MTEyMjEzNDcyMVoXDTI5MTEyMjEzNDkwMVowEj"
+		       "EQMA4GA1UEAwwHdmluY2VudDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAIhnk1231eWzKace6O6jCwrlSCqmw"
+		       "Wv6jswYjTaXtCvK44O/tc/Rgrkpam2bTNP+QUOmxqJ50jw/"
+		       "vj6MIRXYr0uFjQN9ztCpdbUNMHR90zp8LniDvWoX1uKtARhbzDm53ivrY8IjTI9ZfnGbfKb7kvty7U1iMwvoU2TOHGlJsua"
+		       "JZuT1XZq7ugulea8ZG2ATyExUs5eZqbqPwukVfzGEcAIetIIbNjhLyFg6yZGZ2Ghe7IxwvY/"
+		       "uJH3DOaGO2YYPCrh8paLnWDc5ao1QD3dDG5C5IdaWvH5h7JzenIH12LRSu2fFo2A1AIUx9SY2QlUhTeeQPudXYA+"
+		       "HEDc4nixBJCcCAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAfAo40il4qw7DfOkke0p1ZFAgLQQS3J5hYNDSRvVv+vxkk9o/"
+		       "N++zTMoHbfcDcU5BdVH6Qsr/12PXPX7Ur5WYDq+bWGAK3MAaGtZlmycFeVhoVRfab4TUWUy43H3VyFUNqjGRAVJ/"
+		       "VD1RW3fJ18KrQTN2fcKSd88Jqt5TvjROKghq95+8BQtlhrR/"
+		       "sQVrjgYwc+eU9ljWI56MQXbpHstl9IewMXnusSPxKRTbutjaxzKaoXRTUncPL6ga0SSxOTdKksM4ZYpPnq0B93silb+"
+		       "0qs8aJraGzjAmLE30opfufP+roth19VJxAfYsW5mgAmXP9kEAF+iWB8FB4/"
+		       "Q4noNG8Q==");
 	oidc_jwk_destroy(jwk);
-	cjose_jwe_release(jwe);
 
 	return 0;
 }
 
-static char *test_plaintext_decrypt2(apr_pool_t *pool) {
-
-	// http://tools.ietf.org/html/draft-ietf-jose-cookbook-08#section-5.1.5
-	// 5.1.  Key Encryption using RSA v1.5 and AES-HMAC-SHA2
-	char *s = apr_pstrdup(pool, "eyJhbGciOiJSU0ExXzUiLCJraWQiOiJmcm9kby5iYWdnaW5zQGhvYmJpdG9uLm"
-				    "V4YW1wbGUiLCJlbmMiOiJBMTI4Q0JDLUhTMjU2In0"
-				    "."
-				    "laLxI0j-nLH-_BgLOXMozKxmy9gffy2gTdvqzfTihJBuuzxg0V7yk1WClnQePF"
-				    "vG2K-pvSlWc9BRIazDrn50RcRai__3TDON395H3c62tIouJJ4XaRvYHFjZTZ2G"
-				    "Xfz8YAImcc91Tfk0WXC2F5Xbb71ClQ1DDH151tlpH77f2ff7xiSxh9oSewYrcG"
-				    "TSLUeeCt36r1Kt3OSj7EyBQXoZlN7IxbyhMAfgIe7Mv1rOTOI5I8NQqeXXW8Vl"
-				    "zNmoxaGMny3YnGir5Wf6Qt2nBq4qDaPdnaAuuGUGEecelIO1wx1BpyIfgvfjOh"
-				    "MBs9M8XL223Fg47xlGsMXdfuY-4jaqVw"
-				    "."
-				    "bbd5sTkYwhAIqfHsx8DayA"
-				    "."
-				    "0fys_TY_na7f8dwSfXLiYdHaA2DxUjD67ieF7fcVbIR62JhJvGZ4_FNVSiGc_r"
-				    "aa0HnLQ6s1P2sv3Xzl1p1l_o5wR_RsSzrS8Z-wnI3Jvo0mkpEEnlDmZvDu_k8O"
-				    "WzJv7eZVEqiWKdyVzFhPpiyQU28GLOpRc2VbVbK4dQKPdNTjPPEmRqcaGeTWZV"
-				    "yeSUvf5k59yJZxRuSvWFf6KrNtmRdZ8R4mDOjHSrM_s8uwIFcqt4r5GX8TKaI0"
-				    "zT5CbL5Qlw3sRc7u_hg0yKVOiRytEAEs3vZkcfLkP6nbXdC_PkMdNS-ohP78T2"
-				    "O6_7uInMGhFeX4ctHG7VelHGiT93JfWDEQi5_V9UN1rhXNrYu-0fVMkZAKX3VW"
-				    "i7lzA6BP430m"
-				    "."
-				    "kvKuFBXHe5mQr4lqgobAUg");
-
-	char *k = "{"
-		  "\"kty\": \"RSA\","
-		  "\"kid\": \"frodo.baggins@hobbiton.example\","
-		  "\"use\": \"enc\","
-		  "\"n\": \"maxhbsmBtdQ3CNrKvprUE6n9lYcregDMLYNeTAWcLj8NnPU9XIYegT"
-		  "HVHQjxKDSHP2l-F5jS7sppG1wgdAqZyhnWvXhYNvcM7RfgKxqNx_xAHx"
-		  "6f3yy7s-M9PSNCwPC2lh6UAkR4I00EhV9lrypM9Pi4lBUop9t5fS9W5U"
-		  "NwaAllhrd-osQGPjIeI1deHTwx-ZTHu3C60Pu_LJIl6hKn9wbwaUmA4c"
-		  "R5Bd2pgbaY7ASgsjCUbtYJaNIHSoHXprUdJZKUMAzV0WOKPfA6OPI4oy"
-		  "pBadjvMZ4ZAj3BnXaSYsEZhaueTXvZB4eZOAjIyh2e_VOIKVMsnDrJYA"
-		  "VotGlvMQ\","
-		  "\"e\": \"AQAB\","
-		  "\"d\": \"Kn9tgoHfiTVi8uPu5b9TnwyHwG5dK6RE0uFdlpCGnJN7ZEi963R7wy"
-		  "bQ1PLAHmpIbNTztfrheoAniRV1NCIqXaW_qS461xiDTp4ntEPnqcKsyO"
-		  "5jMAji7-CL8vhpYYowNFvIesgMoVaPRYMYT9TW63hNM0aWs7USZ_hLg6"
-		  "Oe1mY0vHTI3FucjSM86Nff4oIENt43r2fspgEPGRrdE6fpLc9Oaq-qeP"
-		  "1GFULimrRdndm-P8q8kvN3KHlNAtEgrQAgTTgz80S-3VD0FgWfgnb1PN"
-		  "miuPUxO8OpI9KDIfu_acc6fg14nsNaJqXe6RESvhGPH2afjHqSy_Fd2v"
-		  "pzj85bQQ\","
-		  "\"p\": \"2DwQmZ43FoTnQ8IkUj3BmKRf5Eh2mizZA5xEJ2MinUE3sdTYKSLtaE"
-		  "oekX9vbBZuWxHdVhM6UnKCJ_2iNk8Z0ayLYHL0_G21aXf9-unynEpUsH"
-		  "7HHTklLpYAzOOx1ZgVljoxAdWNn3hiEFrjZLZGS7lOH-a3QQlDDQoJOJ"
-		  "2VFmU\","
-		  "\"q\": \"te8LY4-W7IyaqH1ExujjMqkTAlTeRbv0VLQnfLY2xINnrWdwiQ93_V"
-		  "F099aP1ESeLja2nw-6iKIe-qT7mtCPozKfVtUYfz5HrJ_XY2kfexJINb"
-		  "9lhZHMv5p1skZpeIS-GPHCC6gRlKo1q-idn_qxyusfWv7WAxlSVfQfk8"
-		  "d6Et0\","
-		  "\"dp\": \"UfYKcL_or492vVc0PzwLSplbg4L3-Z5wL48mwiswbpzOyIgd2xHTH"
-		  "QmjJpFAIZ8q-zf9RmgJXkDrFs9rkdxPtAsL1WYdeCT5c125Fkdg317JV"
-		  "RDo1inX7x2Kdh8ERCreW8_4zXItuTl_KiXZNU5lvMQjWbIw2eTx1lpsf"
-		  "lo0rYU\","
-		  "\"dq\": \"iEgcO-QfpepdH8FWd7mUFyrXdnOkXJBCogChY6YKuIHGc_p8Le9Mb"
-		  "pFKESzEaLlN1Ehf3B6oGBl5Iz_ayUlZj2IoQZ82znoUrpa9fVYNot87A"
-		  "CfzIG7q9Mv7RiPAderZi03tkVXAdaBau_9vs5rS-7HMtxkVrxSUvJY14"
-		  "TkXlHE\","
-		  "\"qi\": \"kC-lzZOqoFaZCr5l0tOVtREKoVqaAYhQiqIRGL-MzS4sCmRkxm5vZ"
-		  "lXYx6RtE1n_AagjqajlkjieGlxTTThHD8Iga6foGBMaAr5uR1hGQpSc7"
-		  "Gl7CF1DZkBJMTQN6EshYzZfxW08mIO8M6Rzuh0beL6fG9mkDcIyPrBXx"
-		  "2bQ_mM\""
-		  "}";
-
+static char *test_jwk_copy(apr_pool_t *pool) {
 	oidc_jose_error_t err;
-	apr_hash_t *keys = apr_hash_make(pool);
-	oidc_jwk_t *jwk = NULL;
+	char *s = NULL;
+	oidc_jwk_t *jwk1 = NULL;
+	oidc_jwk_t *jwk2 = NULL;
 
-	TST_ASSERT_ERR("oidc_jwk_parse", _jwk_parse(pool, k, &jwk, &err) == 0, pool, err);
+	s = "{"
+	    "\"kty\": \"RSA\","
+	    "\"kid\": \"bilbo.baggins@hobbiton.example\","
+	    "\"use\": \"sig\","
+	    "\"n\": \"n4EPtAOCc9AlkeQHPzHStgAbgs7bTZLwUBZdR8_KuKPEHLd4rHVTeT"
+	    "-O-XV2jRojdNhxJWTDvNd7nqQ0VEiZQHz_AJmSCpMaJMRBSFKrKb2wqV"
+	    "wGU_NsYOYL-QtiWN2lbzcEe6XC0dApr5ydQLrHqkHHig3RBordaZ6Aj-"
+	    "oBHqFEHYpPe7Tpe-OfVfHd1E6cS6M1FZcD1NNLYD5lFHpPI9bTwJlsde"
+	    "3uhGqC0ZCuEHg8lhzwOHrtIQbS0FVbb9k3-tVTU4fg_3L_vniUFAKwuC"
+	    "LqKnS2BYwdq_mzSnbLY7h_qixoR7jig3__kRhuaxwUkRz5iaiQkqgc5g"
+	    "HdrNP5zw\","
+	    "\"e\": \"AQAB\","
+	    "\"x5t\": \"myx5t\","
+	    "\"x5t#S256\": \"myx5t#S256\""
+	    "}";
 
-	apr_hash_set(keys, "frodo.baggins@hobbiton.example", APR_HASH_KEY_STRING, jwk);
+	jwk1 = NULL;
+	TST_ASSERT_ERR("oidc_jwk_parse", _jwk_parse(pool, s, &jwk1, &err) == 0, pool, err);
+	jwk2 = oidc_jwk_copy(pool, jwk1);
 
-	cjose_err cjose_err;
-	cjose_jwe_t *jwe = cjose_jwe_import(s, _oidc_strlen(s), &cjose_err);
-	TST_ASSERT_CJOSE_ERR("cjose_jwe_import", jwe != NULL, pool, cjose_err);
+	TST_ASSERT_STR("oidc_jwk_parse (x5t)", jwk1->x5t, "myx5t");
+	TST_ASSERT_STR("oidc_jwk_parse (x5t#S256)", jwk1->x5t_S256, "myx5t#S256");
+	TST_ASSERT_STR("oidc_jwk_copy (x5t)", jwk2->x5t, "myx5t");
+	TST_ASSERT_STR("oidc_jwk_copy (x5t#S256)", jwk2->x5t_S256, "myx5t#S256");
 
-	size_t content_len = 0;
-	uint8_t *decrypted = cjose_jwe_decrypt(jwe, jwk->cjose_jwk, &content_len, &cjose_err);
-	TST_ASSERT_CJOSE_ERR("cjose_jwe_decrypt", decrypted != NULL, pool, cjose_err);
-
-	TST_ASSERT_STRN("decrypted", (const char *)decrypted,
-			"You can trust us to stick with you through thick and "
-			"thin\u2013to the bitter end. And you can trust us to "
-			"keep any secret of yours\u2013closer than you keep it "
-			"yourself. But you cannot trust us to let you face trouble "
-			"alone, and go off without a word. We are your friends, Frodo.",
-			content_len);
-
-	cjose_get_dealloc()(decrypted);
-	oidc_jwk_destroy(jwk);
-	cjose_jwe_release(jwe);
+	oidc_jwk_destroy(jwk2);
+	oidc_jwk_destroy(jwk1);
 
 	return 0;
 }
-
 static char *test_plaintext_decrypt_symmetric(apr_pool_t *pool) {
 	oidc_jose_error_t err;
 	apr_hash_t *keys = apr_hash_make(pool);
@@ -956,103 +885,6 @@ static char *test_plaintext_decrypt_symmetric(apr_pool_t *pool) {
 	cjose_get_dealloc()(decrypted);
 	oidc_jwk_destroy(jwk);
 	cjose_jwe_release(jwe);
-
-	return 0;
-}
-
-static char *test_jwt_decrypt(apr_pool_t *pool) {
-
-	// https://tools.ietf.org/html/draft-ietf-oauth-json-web-token-32#appendix-A.1
-	// A.2.  Example Nested JWT
-	char *s = apr_pstrdup(pool, "eyJhbGciOiJSU0ExXzUiLCJlbmMiOiJBMTI4Q0JDLUhTMjU2IiwiY3R5IjoiSldU"
-				    "In0."
-				    "g_hEwksO1Ax8Qn7HoN-BVeBoa8FXe0kpyk_XdcSmxvcM5_P296JXXtoHISr_DD_M"
-				    "qewaQSH4dZOQHoUgKLeFly-9RI11TG-_Ge1bZFazBPwKC5lJ6OLANLMd0QSL4fYE"
-				    "b9ERe-epKYE3xb2jfY1AltHqBO-PM6j23Guj2yDKnFv6WO72tteVzm_2n17SBFvh"
-				    "DuR9a2nHTE67pe0XGBUS_TK7ecA-iVq5COeVdJR4U4VZGGlxRGPLRHvolVLEHx6D"
-				    "YyLpw30Ay9R6d68YCLi9FYTq3hIXPK_-dmPlOUlKvPr1GgJzRoeC9G5qCvdcHWsq"
-				    "JGTO_z3Wfo5zsqwkxruxwA."
-				    "UmVkbW9uZCBXQSA5ODA1Mg."
-				    "VwHERHPvCNcHHpTjkoigx3_ExK0Qc71RMEParpatm0X_qpg-w8kozSjfNIPPXiTB"
-				    "BLXR65CIPkFqz4l1Ae9w_uowKiwyi9acgVztAi-pSL8GQSXnaamh9kX1mdh3M_TT"
-				    "-FZGQFQsFhu0Z72gJKGdfGE-OE7hS1zuBD5oEUfk0Dmb0VzWEzpxxiSSBbBAzP10"
-				    "l56pPfAtrjEYw-7ygeMkwBl6Z_mLS6w6xUgKlvW6ULmkV-uLC4FUiyKECK4e3WZY"
-				    "Kw1bpgIqGYsw2v_grHjszJZ-_I5uM-9RA8ycX9KqPRp9gc6pXmoU_-27ATs9XCvr"
-				    "ZXUtK2902AUzqpeEUJYjWWxSNsS-r1TJ1I-FMJ4XyAiGrfmo9hQPcNBYxPz3GQb2"
-				    "8Y5CLSQfNgKSGt0A4isp1hBUXBHAndgtcslt7ZoQJaKe_nNJgNliWtWpJ_ebuOpE"
-				    "l8jdhehdccnRMIwAmU1n7SPkmhIl1HlSOpvcvDfhUN5wuqU955vOBvfkBOh5A11U"
-				    "zBuo2WlgZ6hYi9-e3w29bR0C2-pp3jbqxEDw3iWaf2dc5b-LnR0FEYXvI_tYk5rd"
-				    "_J9N0mg0tQ6RbpxNEMNoA9QWk5lgdPvbh9BaO195abQ."
-				    "AVO9iT5AV4CzvDJCdhSFlQ");
-
-	char *ek = "{\"kty\":\"RSA\","
-		   "\"n\":"
-		   "\"sXchDaQebHnPiGvyDOAT4saGEUetSyo9MKLOoWFsueri23bOdgWp4Dy1WlUzewbgBHod5pcM9H95GQRV3JDXboIRROSBigeC5"
-		   "yjU1hGzHHyXss8UDprecbAYxknTcQkhslANGRUZmdTOQ5qTRsLAt6BTYuyvVRdhS8exSZEy_c4gs_7svlJJQ4H9_"
-		   "NxsiIoLwAEk7-Q3UXERGYw_75IDrGA84-lA_-Ct4eTlXHBIY2EaV7t7LjJaynVJCpkv4LKjTTAumiGUIuQhrNhZLuF_"
-		   "RJLqHpM2kgWFLU7-VTdL1VbC2tejvcI2BlMkEpk1BzBZI0KQB0GaDWFLN-aEAw3vRw\","
-		   "\"e\":\"AQAB\","
-		   "\"d\":\"VFCWOqXr8nvZNyaaJLXdnNPXZKRaWCjkU5Q2egQQpTBMwhprMzWzpR8Sxq1OPThh_"
-		   "J6MUD8Z35wky9b8eEO0pwNS8xlh1lOFRRBoNqDIKVOku0aZb-rynq8cxjDTLZQ6Fz7jSjR1Klop-YKaUHc9GsEofQqYruPhzSA-"
-		   "QgajZGPbE_0ZaVDJHfyd7UUBUKunFMScbflYAAOYJqVIVwaYR5zWEEceUjNnTNo_CVSj-"
-		   "VvXLO5VZfCUAVLgW4dpf1SrtZjSt34YLsRarSb127reG_DUwg9Ch-"
-		   "KyvjT1SkHgUWRVGcyly7uvVGRSDwsXypdrNinPA4jlhoNdizK2zF2CWQ\""
-		   "}";
-
-	char *sk = "{"
-		   "\"kty\":\"RSA\","
-		   "\"n\":\"ofgWCuLjybRlzo0tZWJjNiuSfb4p4fAkd_wWJcyQoTbji9k0l8W26mPddx"
-		   "HmfHQp-Vaw-4qPCJrcS2mJPMEzP1Pt0Bm4d4QlL-yRT-SFd2lZS-pCgNMs"
-		   "D1W_YpRPEwOWvG6b32690r2jZ47soMZo9wGzjb_7OMg0LOL-bSf63kpaSH"
-		   "SXndS5z5rexMdbBYUsLA9e-KXBdQOS-UTo7WTBEMa2R2CapHg665xsmtdV"
-		   "MTBQY4uDZlxvb3qCo5ZwKh9kG4LT6_I5IhlJH7aGhyxXFvUK-DWNmoudF8"
-		   "NAco9_h9iaGNj8q2ethFkMLs91kzk2PAcDTW9gb54h4FRWyuXpoQ\","
-		   "\"e\":\"AQAB\","
-		   "\"d\":\"Eq5xpGnNCivDflJsRQBXHx1hdR1k6Ulwe2JZD50LpXyWPEAeP88vLNO97I"
-		   "jlA7_GQ5sLKMgvfTeXZx9SE-7YwVol2NXOoAJe46sui395IW_GO-pWJ1O0"
-		   "BkTGoVEn2bKVRUCgu-GjBVaYLU6f3l9kJfFNS3E0QbVdxzubSu3Mkqzjkn"
-		   "439X0M_V51gfpRLI9JYanrC4D4qAdGcopV_0ZHHzQlBjudU2QvXt4ehNYT"
-		   "CBr6XCLQUShb1juUO1ZdiYoFaFQT5Tw8bGUl_x_jTj3ccPDVZFD9pIuhLh"
-		   "BOneufuBiB4cS98l2SR_RQyGWSeWjnczT0QU91p1DhOVRuOopznQ\","
-		   "\"p\":\"4BzEEOtIpmVdVEZNCqS7baC4crd0pqnRH_5IB3jw3bcxGn6QLvnEtfdUdi"
-		   "YrqBdss1l58BQ3KhooKeQTa9AB0Hw_Py5PJdTJNPY8cQn7ouZ2KKDcmnPG"
-		   "BY5t7yLc1QlQ5xHdwW1VhvKn-nXqhJTBgIPgtldC-KDV5z-y2XDwGUc\","
-		   "\"q\":\"uQPEfgmVtjL0Uyyx88GZFF1fOunH3-7cepKmtH4pxhtCoHqpWmT8YAmZxa"
-		   "ewHgHAjLYsp1ZSe7zFYHj7C6ul7TjeLQeZD_YwD66t62wDmpe_HlB-TnBA"
-		   "-njbglfIsRLtXlnDzQkv5dTltRJ11BKBBypeeF6689rjcJIDEz9RWdc\","
-		   "\"dp\":\"BwKfV3Akq5_MFZDFZCnW-wzl-CCo83WoZvnLQwCTeDv8uzluRSnm71I3Q"
-		   "CLdhrqE2e9YkxvuxdBfpT_PI7Yz-FOKnu1R6HsJeDCjn12Sk3vmAktV2zb"
-		   "34MCdy7cpdTh_YVr7tss2u6vneTwrA86rZtu5Mbr1C1XsmvkxHQAdYo0\","
-		   "\"dq\":\"h_96-mK1R_7glhsum81dZxjTnYynPbZpHziZjeeHcXYsXaaMwkOlODsWa"
-		   "7I9xXDoRwbKgB719rrmI2oKr6N3Do9U0ajaHF-NKJnwgjMd2w9cjz3_-ky"
-		   "NlxAr2v4IKhGNpmM5iIgOS1VZnOZ68m6_pbLBSp3nssTdlqvd0tIiTHU\","
-		   "\"qi\":\"IYd7DHOhrWvxkwPQsRM2tOgrjbcrfvtQJipd-DlcxyVuuM9sQLdgjVk2o"
-		   "y26F0EmpScGLq2MowX7fhd_QJQ3ydy5cY7YIBi87w93IKLEdfnbJtoOPLU"
-		   "W0ITrJReOgo1cq9SbsxYawBgfp_gh6A5603k2-ZQwVK0JKSHuLFkuQ3U\""
-		   "}";
-
-	oidc_jose_error_t err;
-	apr_hash_t *keys = apr_hash_make(pool);
-	oidc_jwk_t *jwk_e = NULL;
-	oidc_jwk_t *jwk_s = NULL;
-	oidc_jwt_t *jwt = NULL;
-
-	TST_ASSERT_ERR("oidc_jwk_parse (encryption key)", _jwk_parse(pool, ek, &jwk_e, &err) == 0, pool, err);
-	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk_e);
-
-	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(pool, s, &jwt, keys, FALSE, &err), pool, err);
-	oidc_jwk_destroy(jwk_e);
-
-	TST_ASSERT_ERR("oidc_jwk_parse (signing key)", _jwk_parse(pool, sk, &jwk_s, &err) == 0, pool, err);
-	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk_s);
-	TST_ASSERT_ERR("oidc_jwt_verify", oidc_jwt_verify(pool, jwt, keys, &err), pool, err);
-	oidc_jwk_destroy(jwk_s);
-
-	TST_ASSERT_STR("header.alg", jwt->header.alg, CJOSE_HDR_ALG_RS256);
-	TST_ASSERT_STR("payload.iss", jwt->payload.iss, "joe");
-	TST_ASSERT_LONG("payload.exp", (long)jwt->payload.exp, 1300819380L);
-
-	oidc_jwt_destroy(jwt);
 
 	return 0;
 }
@@ -1154,7 +986,7 @@ static char *test_proto_validate_access_token(request_rec *r) {
 
 	const char *access_token = "jHkWEdUXMU1BwAsC4vtUsZwnNvTIxEl0z9K3vx5KF0Y";
 	TST_ASSERT("oidc_proto_validate_access_token",
-		   oidc_proto_validate_access_token(r, NULL, jwt, "id_token token", access_token));
+		   oidc_proto_idtoken_validate_access_token(r, NULL, jwt, "id_token token", access_token));
 
 	oidc_jwt_destroy(jwt);
 
@@ -1182,7 +1014,7 @@ static char *test_proto_validate_code(request_rec *r) {
 	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(r->pool, s, &jwt, NULL, FALSE, &err), r->pool, err);
 
 	const char *code = "Qcb0Orv1zh30vL1MPRsbm-diHiMwcLyZvn1arpZv-Jxf_11jnpEX3Tgfvk";
-	TST_ASSERT("oidc_proto_validate_code", oidc_proto_validate_code(r, NULL, jwt, "code id_token", code));
+	TST_ASSERT("oidc_proto_validate_code", oidc_proto_idtoken_validate_code(r, NULL, jwt, "code id_token", code));
 
 	oidc_jwt_destroy(jwt);
 
@@ -1191,19 +1023,12 @@ static char *test_proto_validate_code(request_rec *r) {
 
 static char *test_proto_authorization_request(request_rec *r) {
 
-	oidc_provider_t provider;
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
 
-	_oidc_memset(&provider, 0, sizeof(provider));
-
-	provider.issuer = "https://idp.example.com";
-	provider.authorization_endpoint_url = "https://idp.example.com/authorize";
-	provider.scope = "openid";
-	provider.client_id = "client_id";
-	provider.client_secret = NULL;
-	provider.response_type = "code";
-	provider.auth_request_params = "jan=piet&foo=#";
-	provider.request_object = NULL;
-	provider.auth_request_method = OIDC_AUTH_REQUEST_METHOD_GET;
+	oidc_cfg_provider_issuer_set(r->pool, provider, "https://idp.example.com");
+	oidc_cfg_provider_authorization_endpoint_url_set(r->pool, provider, "https://idp.example.com/authorize");
+	oidc_cfg_provider_client_id_set(r->pool, provider, "client_id");
+	oidc_cfg_provider_auth_request_params_set(r->pool, provider, "jan=piet&foo=#");
 
 	const char *redirect_uri = "https://www.example.com/protected/";
 	const char *state = "12345";
@@ -1212,13 +1037,13 @@ static char *test_proto_authorization_request(request_rec *r) {
 	oidc_proto_state_set_nonce(proto_state, "anonce");
 	oidc_proto_state_set_original_url(proto_state, "https://localhost/protected/index.php");
 	oidc_proto_state_set_original_method(proto_state, OIDC_METHOD_GET);
-	oidc_proto_state_set_issuer(proto_state, provider.issuer);
-	oidc_proto_state_set_response_type(proto_state, provider.response_type);
+	oidc_proto_state_set_issuer(proto_state, oidc_cfg_provider_issuer_get(provider));
+	oidc_proto_state_set_response_type(proto_state, oidc_cfg_provider_response_type_get(provider));
 	oidc_proto_state_set_timestamp_now(proto_state);
 
 	TST_ASSERT("oidc_proto_authorization_request (1)",
-		   oidc_proto_authorization_request(r, &provider, NULL, redirect_uri, state, proto_state, NULL, NULL,
-						    NULL, NULL) == HTTP_MOVED_TEMPORARILY);
+		   oidc_proto_request_auth(r, provider, NULL, redirect_uri, state, proto_state, NULL, NULL, NULL,
+					   NULL) == HTTP_MOVED_TEMPORARILY);
 
 	TST_ASSERT_STR("oidc_proto_authorization_request (2)", apr_table_get(r->headers_out, "Location"),
 		       "https://idp.example.com/"
@@ -1230,14 +1055,15 @@ static char *test_proto_authorization_request(request_rec *r) {
 
 static char *test_logout_request(request_rec *r) {
 
-	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	oidc_session_t *session = NULL;
 
 	oidc_session_load(r, &session);
-	oidc_session_set_issuer(r, session, c->provider.issuer);
+	oidc_session_set_issuer(r, session, oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(c)));
 
-	c->provider.end_session_endpoint = "https://idp.example.com/endsession";
-	c->provider.logout_request_params = "client_id=myclient&foo=bar";
+	oidc_cfg_provider_end_session_endpoint_set(r->pool, oidc_cfg_provider_get(c),
+						   "https://idp.example.com/endsession");
+	oidc_cfg_provider_logout_request_params_set(r->pool, oidc_cfg_provider_get(c), "client_id=myclient&foo=bar");
 
 	r->args = "logout=https%3A%2F%2Fwww.example.com%2Floggedout";
 
@@ -1252,7 +1078,7 @@ static char *test_logout_request(request_rec *r) {
 
 static char *test_proto_validate_nonce(request_rec *r) {
 
-	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	const char *nonce = "avSk7S69G4kEE8Km4bPiOjrfChHt6nO4Z397Lp_bQnc,";
 
 	/*
@@ -1291,8 +1117,10 @@ static char *test_proto_validate_nonce(request_rec *r) {
 	oidc_jose_error_t err;
 	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(r->pool, s_jwt, &jwt, NULL, FALSE, &err), r->pool, err);
 
-	TST_ASSERT("oidc_proto_validate_nonce (1)", oidc_proto_validate_nonce(r, c, &c->provider, nonce, jwt));
-	TST_ASSERT("oidc_proto_validate_nonce (2)", oidc_proto_validate_nonce(r, c, &c->provider, nonce, jwt) == FALSE);
+	TST_ASSERT("oidc_proto_idtoken_validate_nonce (1)",
+		   oidc_proto_idtoken_validate_nonce(r, c, oidc_cfg_provider_get(c), nonce, jwt));
+	TST_ASSERT("oidc_proto_idtoken_validate_nonce (2)",
+		   oidc_proto_idtoken_validate_nonce(r, c, oidc_cfg_provider_get(c), nonce, jwt) == FALSE);
 
 	oidc_jwt_destroy(jwt);
 
@@ -1322,10 +1150,10 @@ static char *test_proto_validate_jwt(request_rec *r) {
 	s_jwt_payload = apr_psprintf(r->pool, s_jwt_payload, now, s_issuer, now + 600);
 
 	char *s_jwt_header_encoded = NULL;
-	oidc_base64url_encode(r, &s_jwt_header_encoded, s_jwt_header, _oidc_strlen(s_jwt_header), 1);
+	oidc_util_base64url_encode(r, &s_jwt_header_encoded, s_jwt_header, _oidc_strlen(s_jwt_header), 1);
 
 	char *s_jwt_payload_encoded = NULL;
-	oidc_base64url_encode(r, &s_jwt_payload_encoded, s_jwt_payload, _oidc_strlen(s_jwt_payload), 1);
+	oidc_util_base64url_encode(r, &s_jwt_payload_encoded, s_jwt_payload, _oidc_strlen(s_jwt_payload), 1);
 
 	char *s_jwt_message = apr_psprintf(r->pool, "%s.%s", s_jwt_header_encoded, s_jwt_payload_encoded);
 
@@ -1337,7 +1165,7 @@ static char *test_proto_validate_jwt(request_rec *r) {
 				(const unsigned char *)s_jwt_message, _oidc_strlen(s_jwt_message), md, &md_len) != 0);
 
 	char *s_jwt_signature_encoded = NULL;
-	oidc_base64url_encode(r, &s_jwt_signature_encoded, (const char *)md, md_len, 1);
+	oidc_util_base64url_encode(r, &s_jwt_signature_encoded, (const char *)md, md_len, 1);
 
 	char *s_jwt =
 	    apr_psprintf(r->pool, "%s.%s.%s", s_jwt_header_encoded, s_jwt_payload_encoded, s_jwt_signature_encoded);
@@ -1353,7 +1181,7 @@ static char *test_proto_validate_jwt(request_rec *r) {
 		       oidc_jwt_verify(r->pool, jwt, oidc_util_merge_symmetric_key(r->pool, NULL, jwk), &err), r->pool,
 		       err);
 
-	TST_ASSERT_ERR("oidc_proto_validate_jwt", oidc_proto_validate_jwt(r, jwt, s_issuer, TRUE, TRUE, 10), r->pool,
+	TST_ASSERT_ERR("oidc_proto_validate_jwt", oidc_proto_jwt_validate(r, jwt, s_issuer, TRUE, TRUE, 10), r->pool,
 		       err);
 
 	oidc_jwk_destroy(jwk);
@@ -1369,61 +1197,61 @@ static char *test_current_url(request_rec *r) {
 	r->uri = "/test";
 	r->unparsed_uri = apr_pstrcat(r->pool, r->uri, "?", r->args, NULL);
 
-	url = oidc_get_current_url(r, 0);
+	url = oidc_util_current_url(r, 0);
 	TST_ASSERT_STR("test_current_url (1)", url, "https://www.example.com/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Host", "www.outer.com");
-	url = oidc_get_current_url(r, 0);
+	url = oidc_util_current_url(r, 0);
 	TST_ASSERT_STR("test_current_url (2a)", url, "https://www.example.com/test?foo=bar&param1=value1");
-	url = oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_HOST);
+	url = oidc_util_current_url(r, OIDC_HDR_X_FORWARDED_HOST);
 	TST_ASSERT_STR("test_current_url (2b)", url, "https://www.outer.com/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Host", "www.outer.com:654");
-	url = oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_HOST);
+	url = oidc_util_current_url(r, OIDC_HDR_X_FORWARDED_HOST);
 	TST_ASSERT_STR("test_current_url (3)", url, "https://www.outer.com:654/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Port", "321");
-	url = oidc_get_current_url(r, 0);
+	url = oidc_util_current_url(r, 0);
 	TST_ASSERT_STR("test_current_url (4a)", url, "https://www.example.com/test?foo=bar&param1=value1");
-	url = oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_HOST);
+	url = oidc_util_current_url(r, OIDC_HDR_X_FORWARDED_HOST);
 	TST_ASSERT_STR("test_current_url (4b)", url, "https://www.outer.com:654/test?foo=bar&param1=value1");
-	url = oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT);
+	url = oidc_util_current_url(r, OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT);
 	TST_ASSERT_STR("test_current_url (4)", url, "https://www.outer.com:321/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Proto", "http");
-	url = oidc_get_current_url(r, 0);
+	url = oidc_util_current_url(r, 0);
 	TST_ASSERT_STR("test_current_url (5a)", url, "https://www.example.com/test?foo=bar&param1=value1");
-	url = oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_HOST);
+	url = oidc_util_current_url(r, OIDC_HDR_X_FORWARDED_HOST);
 	TST_ASSERT_STR("test_current_url (5b)", url, "https://www.outer.com:654/test?foo=bar&param1=value1");
-	url = oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT);
+	url = oidc_util_current_url(r, OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT);
 	TST_ASSERT_STR("test_current_url (5c)", url, "https://www.outer.com:321/test?foo=bar&param1=value1");
-	url =
-	    oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT | OIDC_HDR_X_FORWARDED_PROTO);
+	url = oidc_util_current_url(r,
+				    OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT | OIDC_HDR_X_FORWARDED_PROTO);
 	TST_ASSERT_STR("test_current_url (5d)", url, "http://www.outer.com:321/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Proto", "https , http");
-	url =
-	    oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT | OIDC_HDR_X_FORWARDED_PROTO);
+	url = oidc_util_current_url(r,
+				    OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT | OIDC_HDR_X_FORWARDED_PROTO);
 	TST_ASSERT_STR("test_current_url (6)", url, "https://www.outer.com:321/test?foo=bar&param1=value1");
 
 	apr_table_unset(r->headers_in, "X-Forwarded-Host");
 	apr_table_unset(r->headers_in, "X-Forwarded-Port");
-	url = oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_PROTO);
+	url = oidc_util_current_url(r, OIDC_HDR_X_FORWARDED_PROTO);
 	TST_ASSERT_STR("test_current_url (7)", url, "https://www.example.com/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Proto", "http ");
 	apr_table_set(r->headers_in, "Host", "remotehost:8380");
 	r->uri = "http://remotehost:8380/private/";
-	url = oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_PROTO);
+	url = oidc_util_current_url(r, OIDC_HDR_X_FORWARDED_PROTO);
 	TST_ASSERT_STR("test_current_url (8)", url, "http://remotehost:8380/private/?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "Host", "[fd04:41b1:1170:28:16b0:446b:9fb7:7118]:8380");
-	url = oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_PROTO);
+	url = oidc_util_current_url(r, OIDC_HDR_X_FORWARDED_PROTO);
 	TST_ASSERT_STR("test_current_url (9)", url,
 		       "http://[fd04:41b1:1170:28:16b0:446b:9fb7:7118]:8380/private/?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "Host", "[fd04:41b1:1170:28:16b0:446b:9fb7:7118]");
-	url = oidc_get_current_url(r, OIDC_HDR_X_FORWARDED_PROTO);
+	url = oidc_util_current_url(r, OIDC_HDR_X_FORWARDED_PROTO);
 	TST_ASSERT_STR("test_current_url (10)", url,
 		       "http://[fd04:41b1:1170:28:16b0:446b:9fb7:7118]/private/?foo=bar&param1=value1");
 
@@ -1431,29 +1259,29 @@ static char *test_current_url(request_rec *r) {
 	apr_table_unset(r->headers_in, "Host");
 
 	apr_table_set(r->headers_in, "Forwarded", "host=www.outer.com");
-	url = oidc_get_current_url(r, OIDC_HDR_FORWARDED);
+	url = oidc_util_current_url(r, OIDC_HDR_FORWARDED);
 	TST_ASSERT_STR("test_current_url (11)", url, "https://www.outer.com/private/?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "Forwarded", "proto=http");
-	url = oidc_get_current_url(r, OIDC_HDR_FORWARDED);
+	url = oidc_util_current_url(r, OIDC_HDR_FORWARDED);
 	TST_ASSERT_STR("test_current_url (12)", url, "http://www.example.com/private/?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "Forwarded", "host=www.outer.com:8443");
-	url = oidc_get_current_url(r, OIDC_HDR_FORWARDED);
+	url = oidc_util_current_url(r, OIDC_HDR_FORWARDED);
 	TST_ASSERT_STR("test_current_url (13)", url, "https://www.outer.com:8443/private/?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "Forwarded", "proto=http; host=www.outer.com:8080");
-	url = oidc_get_current_url(r, OIDC_HDR_FORWARDED);
+	url = oidc_util_current_url(r, OIDC_HDR_FORWARDED);
 	TST_ASSERT_STR("test_current_url (14)", url, "http://www.outer.com:8080/private/?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "Forwarded", "host=www.outer.com:8080; proto=http");
-	url = oidc_get_current_url(r, OIDC_HDR_FORWARDED);
+	url = oidc_util_current_url(r, OIDC_HDR_FORWARDED);
 	TST_ASSERT_STR("test_current_url (15)", url, "http://www.outer.com:8080/private/?foo=bar&param1=value1");
 
 	apr_table_unset(r->headers_in, "Forwarded");
 
 	// it should not crash when Forwarded is not present
-	url = oidc_get_current_url(r, OIDC_HDR_FORWARDED);
+	url = oidc_util_current_url(r, OIDC_HDR_FORWARDED);
 	TST_ASSERT_STR("test_current_url (16)", url, "https://www.example.com/private/?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "Host", "www.example.com");
@@ -1890,7 +1718,7 @@ static char *test_open_redirect(request_rec *r) {
 	// https://github.com/payloadbox/open-redirect-payload-list
 	filename = apr_psprintf(r->pool, "%s/%s", dir, "/test/open-redirect-payload-list.txt");
 
-	oidc_cfg *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
 	TST_OPEN_REDIRECT("https://www.example.com/somewhere", TRUE);
 	TST_OPEN_REDIRECT("https://evil.example.com/somewhere", FALSE);
@@ -1921,17 +1749,18 @@ static char *test_set_app_infos(request_rec *r) {
 					  &claims);
 	TST_ASSERT("valid JSON", rc == TRUE);
 
-	oidc_util_set_app_infos(r, claims, "OIDC_CLAIM_", ",", TRUE, FALSE, 0);
+	oidc_util_set_app_infos(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
 	TST_ASSERT_STR("header plain simple", apr_table_get(r->headers_in, "OIDC_CLAIM_simple"), "hans");
 	TST_ASSERT_STR("header plain name", apr_table_get(r->headers_in, "OIDC_CLAIM_name"), "G\u00DCnther");
 	TST_ASSERT_STR("header plain dagger", apr_table_get(r->headers_in, "OIDC_CLAIM_dagger"), "D\u2020gger");
 
-	oidc_util_set_app_infos(r, claims, "OIDC_CLAIM_", ",", TRUE, FALSE, OIDC_PASS_APP_INFO_AS_BASE64URL);
+	oidc_util_set_app_infos(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS,
+				OIDC_APPINFO_ENCODING_BASE64URL);
 	TST_ASSERT_STR("header base64url simple", apr_table_get(r->headers_in, "OIDC_CLAIM_simple"), "aGFucw");
 	TST_ASSERT_STR("header base64url name", apr_table_get(r->headers_in, "OIDC_CLAIM_name"), "R8OcbnRoZXI");
 	TST_ASSERT_STR("header base64url dagger", apr_table_get(r->headers_in, "OIDC_CLAIM_dagger"), "ROKAoGdnZXI");
 
-	oidc_util_set_app_infos(r, claims, "OIDC_CLAIM_", ",", TRUE, FALSE, OIDC_PASS_APP_INFO_AS_LATIN1);
+	oidc_util_set_app_infos(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_LATIN1);
 	TST_ASSERT_STR("header latin1 simple", apr_table_get(r->headers_in, "OIDC_CLAIM_simple"), "hans");
 	TST_ASSERT_STR("header latin1 name", apr_table_get(r->headers_in, "OIDC_CLAIM_name"), "G\xDCnther");
 	TST_ASSERT_STR("header latin1 dagger", apr_table_get(r->headers_in, "OIDC_CLAIM_dagger"), "D?gger");
@@ -1951,11 +1780,9 @@ static char *all_tests(apr_pool_t *pool, request_rec *r) {
 	TST_RUN(test_jwt_get_string, pool);
 
 	TST_RUN(test_jwk_parse_json, pool);
-	TST_RUN(test_plaintext_decrypt, pool);
-	TST_RUN(test_plaintext_decrypt2, pool);
+	TST_RUN(test_jwk_copy, pool);
 	TST_RUN(test_plaintext_decrypt_symmetric, pool);
 
-	TST_RUN(test_jwt_decrypt, pool);
 #if (OPENSSL_VERSION_NUMBER >= 0x1000100f)
 	TST_RUN(test_jwt_decrypt_gcm, pool);
 #endif
@@ -1992,8 +1819,6 @@ static char *all_tests(apr_pool_t *pool, request_rec *r) {
 	return 0;
 }
 
-typedef struct oidc_dir_cfg oidc_dir_cfg;
-
 static request_rec *test_setup(apr_pool_t *pool) {
 	const unsigned int kIdx = 0;
 	const unsigned int kEls = kIdx + 1;
@@ -2029,14 +1854,16 @@ static request_rec *test_setup(apr_pool_t *pool) {
 	apr_uri_parse(request->pool, "https://www.example.com/bla?foo=bar&param1=value1", &request->parsed_uri);
 
 	auth_openidc_module.module_index = kIdx;
-	oidc_cfg *cfg = oidc_create_server_config(request->pool, request->server);
-	cfg->provider.issuer = "https://idp.example.com";
-	cfg->provider.authorization_endpoint_url = "https://idp.example.com/authorize";
-	cfg->provider.scope = "openid";
-	cfg->provider.client_id = "client_id";
+	oidc_cfg_t *cfg = oidc_cfg_server_create(request->pool, request->server);
+
+	oidc_cfg_provider_issuer_set(pool, oidc_cfg_provider_get(cfg), "https://idp.example.com");
+	oidc_cfg_provider_authorization_endpoint_url_set(pool, oidc_cfg_provider_get(cfg),
+							 "https://idp.example.com/authorize");
+	oidc_cfg_provider_client_id_set(pool, oidc_cfg_provider_get(cfg), "client_id");
+
 	cfg->redirect_uri = "https://www.example.com/protected/";
 
-	oidc_dir_cfg *d_cfg = oidc_create_dir_config(request->pool, NULL);
+	oidc_dir_cfg_t *d_cfg = oidc_cfg_dir_config_create(request->pool, NULL);
 
 	request->server->module_config = apr_pcalloc(request->pool, sizeof(ap_conf_vector_t *) * kEls);
 	request->per_dir_config = apr_pcalloc(request->pool, sizeof(ap_conf_vector_t *) * kEls);
@@ -2044,13 +1871,13 @@ static request_rec *test_setup(apr_pool_t *pool) {
 	ap_set_module_config(request->per_dir_config, &auth_openidc_module, d_cfg);
 
 	cfg->crypto_passphrase.secret1 = "12345678901234567890123456789012";
-	cfg->cache = &oidc_cache_shm;
-	cfg->cache_cfg = NULL;
-	cfg->cache_shm_size_max = 500;
-	cfg->cache_shm_entry_size_max = 16384 + 255 + 17;
-	cfg->cache_encrypt = 1;
-	if (cfg->cache->post_config(request->server) != OK) {
-		printf("cfg->cache->post_config failed!\n");
+	cfg->cache.impl = &oidc_cache_shm;
+	cfg->cache.cfg = NULL;
+	cfg->cache.shm_size_max = 500;
+	cfg->cache.shm_entry_size_max = 16384 + 255 + 17;
+	cfg->cache.encrypt = 1;
+	if (cfg->cache.impl->post_config(request->server) != OK) {
+		printf("cfg->cache.impl->post_config failed!\n");
 		exit(-1);
 	}
 
