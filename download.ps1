@@ -29,6 +29,6 @@ if(!(Test-Path $targetFolder)){
 	Write-Host "Folder $targetFolder already exists"
 }
 
-download -URL 'https://www.apachelounge.com/download/VS17/binaries/httpd-2.4.62-240718-win64-VS17.zip' -Destination "$PSScriptRoot\target\httpd-latest.zip"
+download -URL 'https://www.apachelounge.com/download/VS17/binaries/httpd-2.4.62-240904-win64-VS17.zip' -Destination "$PSScriptRoot\target\httpd-latest.zip"
 
 
