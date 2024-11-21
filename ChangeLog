@@ -1,3 +1,7 @@
+11/21/2024
+- add option to set local address for outgoing HTTP requests; see #1283; thanks @studersi
+  using e.g. SetEnvIfExpr true OIDC_CURL_INTERFACE=192.168.10.2
+
 11/14/2024
 - allow specific settings Strict|Lax|None|Disabled for OIDCCookieSameSite in addition to On(=Lax)|Off(=None)
   - fix: default behaviour Lax

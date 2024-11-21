@@ -658,6 +658,15 @@ static const char *oidc_http_user_agent(request_rec *r) {
 	return s_useragent;
 }
 
+#define OIDC_CURL_INTERFACE_ENV_VAR "OIDC_CURL_INTERFACE"
+
+/*
+ * construct our local address/interface for outgoing requests
+ */
+static const char *oidc_http_interface(request_rec *r) {
+	return apr_table_get(r->subprocess_env, OIDC_CURL_INTERFACE_ENV_VAR);
+}
+
 /*
  * execute a HTTP (GET or POST) request
  */
@@ -755,10 +764,24 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 #endif
 
 	/* identify this HTTP client */
-	const char *useragent = oidc_http_user_agent(r);
-	if ((useragent != NULL) && (_oidc_strcmp(useragent, "") != 0)) {
-		oidc_debug(r, "set HTTP request header User-Agent to: %s", useragent);
-		curl_easy_setopt(curl, CURLOPT_USERAGENT, useragent);
+	const char *s_useragent = oidc_http_user_agent(r);
+	if ((s_useragent != NULL) && (_oidc_strcmp(s_useragent, "") != 0)) {
+		oidc_debug(r, "set HTTP request header User-Agent to: %s", s_useragent);
+		curl_easy_setopt(curl, CURLOPT_USERAGENT, s_useragent);
+	}
+
+	/* set the local interface if defined */
+	const char *s_interface = oidc_http_interface(r);
+	if ((s_interface != NULL) && (_oidc_strcmp(s_interface, "") != 0)) {
+#if LIBCURL_VERSION_NUM >= 0x073000
+		oidc_debug(r, "set local interface to: %s", s_interface);
+		if (curl_easy_setopt(curl, CURLOPT_INTERFACE, s_interface) != CURLE_OK)
+			oidc_warn(r, "could not set local interface to: %s", s_interface);
+#else
+		oidc_warn(
+		    r, "local interface is configured to %s, but the cURL version in use does not support setting this",
+		    s_interface);
+#endif
 	}
 
 	/* set optional outgoing proxy for the local network */
@@ -850,7 +873,8 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 			break;
 		}
 		if (res == CURLE_OPERATION_TIMEDOUT) {
-			/* in case of a request/transfer timeout (which includes the connect timeout) we'll not retry */
+			/* in case of a request/transfer timeout (which includes the connect timeout) we'll not
+			 * retry */
 			oidc_error(r, "curl_easy_perform failed with a timeout for %s: [%s]; won't retry", url,
 				   curl_err[0] ? curl_err : "<n/a>");
 			OIDC_METRICS_COUNTER_INC_SPEC(r, c, OM_PROVIDER_CONNECT_ERROR,
@@ -1052,13 +1076,13 @@ void oidc_http_set_cookie(request_rec *r, const char *cookieName, const char *co
 	/* sanity check on overall cookie value size */
 	if (_oidc_strlen(headerString) > OIDC_HTTP_COOKIE_MAX_SIZE) {
 		oidc_warn(r,
-			  "the length of the cookie value (%d) is greater than %d(!) bytes, this may not work with all "
-			  "browsers/server combinations: consider switching to a server side caching!",
+			  "the length of the cookie value (%d) is greater than %d(!) bytes, this may not work "
+			  "with all browsers/server combinations: consider switching to a server side caching!",
 			  (int)_oidc_strlen(headerString), OIDC_HTTP_COOKIE_MAX_SIZE);
 	}
 
-	/* use r->err_headers_out so we always print our headers (even on 302 redirect) - headers_out only prints on 2xx
-	 * responses */
+	/* use r->err_headers_out so we always print our headers (even on 302 redirect) - headers_out only
+	 * prints on 2xx responses */
 	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_SET_COOKIE, headerString);
 }
 
