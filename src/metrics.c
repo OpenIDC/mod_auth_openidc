@@ -705,7 +705,7 @@ static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void 
 /*
  * NB: global, yet called for each vhost that has metrics enabled!
  */
-apr_byte_t oidc_metrics_cache_post_config(server_rec *s) {
+apr_byte_t oidc_metrics_post_config(server_rec *s) {
 
 	/* make sure it gets executed exactly once! */
 	if (_oidc_metrics_cache != NULL)
@@ -752,7 +752,7 @@ apr_byte_t oidc_metrics_cache_post_config(server_rec *s) {
 /*
  * NB: global, yet called for each vhost that has metrics enabled!
  */
-apr_status_t oidc_metrics_cache_child_init(apr_pool_t *p, server_rec *s) {
+apr_status_t oidc_metrics_child_init(apr_pool_t *p, server_rec *s) {
 
 	/* make sure this executes only once per child */
 	if (_oidc_metrics_is_parent == FALSE)
@@ -777,7 +777,7 @@ apr_status_t oidc_metrics_cache_child_init(apr_pool_t *p, server_rec *s) {
 /*
  * NB: global, yet called for each vhost that has metrics enabled!
  */
-apr_status_t oidc_metrics_cache_cleanup(server_rec *s) {
+apr_status_t oidc_metrics_cleanup(server_rec *s) {
 
 	/* make sure it gets executed exactly once! */
 	if (_oidc_metrics_cache == NULL)

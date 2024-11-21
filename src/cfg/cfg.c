@@ -901,7 +901,7 @@ int oidc_cfg_post_config(oidc_cfg_t *cfg, server_rec *s) {
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
 	if (cfg->metrics_hook_data != NULL) {
-		if (oidc_metrics_cache_post_config(s) != TRUE)
+		if (oidc_metrics_post_config(s) != TRUE)
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
 	return OK;
@@ -919,7 +919,7 @@ void oidc_cfg_child_init(apr_pool_t *pool, oidc_cfg_t *cfg, server_rec *s) {
 		}
 	}
 	if (cfg->metrics_hook_data != NULL) {
-		if (oidc_metrics_cache_child_init(pool, s) != APR_SUCCESS) {
+		if (oidc_metrics_child_init(pool, s) != APR_SUCCESS) {
 			oidc_serror(s, "oidc_metrics_cache_child_init failed");
 		}
 	}
@@ -939,7 +939,7 @@ void oidc_cfg_cleanup_child(oidc_cfg_t *cfg, server_rec *s) {
 		_oidc_refresh_mutex = NULL;
 	}
 	if (cfg->metrics_hook_data != NULL) {
-		if (oidc_metrics_cache_cleanup(s) != APR_SUCCESS) {
+		if (oidc_metrics_cleanup(s) != APR_SUCCESS) {
 			oidc_serror(s, "oidc_metrics_cache_cleanup failed");
 		}
 	}
