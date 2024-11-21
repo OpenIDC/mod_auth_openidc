@@ -940,7 +940,7 @@ void oidc_cfg_cleanup_child(oidc_cfg_t *cfg, server_rec *s) {
 	}
 	if (cfg->metrics_hook_data != NULL) {
 		if (oidc_metrics_cleanup(s) != APR_SUCCESS) {
-			oidc_serror(s, "oidc_metrics_cache_cleanup failed");
+			oidc_serror(s, "oidc_metrics_cleanup failed");
 		}
 	}
 }
