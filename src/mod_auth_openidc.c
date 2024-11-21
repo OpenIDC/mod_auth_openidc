@@ -1784,7 +1784,11 @@ static void oidc_child_init(apr_pool_t *p, server_rec *s) {
 		oidc_cfg_child_init(p, cfg, sp);
 		sp = sp->next;
 	}
-	apr_pool_cleanup_register(p, s, apr_pool_cleanup_null, oidc_cleanup_child);
+	/*
+	 * NB: don't pass oidc_cleanup_child as the child cleanup routine parameter
+	 *     because that does not actually get called upon child cleanup...
+	 */
+	apr_pool_cleanup_register(p, s, oidc_cleanup_child, apr_pool_cleanup_null);
 }
 
 static const char oidcFilterName[] = "oidc_filter_in_filter";

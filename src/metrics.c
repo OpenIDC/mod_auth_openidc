@@ -677,7 +677,10 @@ static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void 
 	while (_oidc_metrics_thread_exit == FALSE) {
 
 		apr_sleep(oidc_metrics_interval(s));
-		// NB: no exit here because we need to write our local metrics into the cache before exiting
+
+		// NB: exit here because the parent thread may have cleaned up the shared memory segment
+		if (_oidc_metrics_thread_exit == TRUE)
+			break;
 
 		/* lock the mutex that protects the locally cached metrics */
 		oidc_cache_mutex_lock(s->process->pool, s, _oidc_metrics_process_mutex);
@@ -778,17 +781,18 @@ apr_status_t oidc_metrics_child_init(apr_pool_t *p, server_rec *s) {
  * NB: global, yet called for each vhost that has metrics enabled!
  */
 apr_status_t oidc_metrics_cleanup(server_rec *s) {
+	apr_status_t rv = APR_SUCCESS;
 
 	/* make sure it gets executed exactly once! */
-	if (_oidc_metrics_cache == NULL)
+	if ((_oidc_metrics_cache == NULL) || (_oidc_metrics_thread_exit == TRUE) || (_oidc_metrics_thread == NULL))
 		return APR_SUCCESS;
 
-	/* signal the collector thread to exit and wait (at max 5 seconds) for it to flush its data and exit */
+	/* signal the collector thread to exit */
 	_oidc_metrics_thread_exit = TRUE;
-	apr_status_t rv = APR_SUCCESS;
 	apr_thread_join(&rv, _oidc_metrics_thread);
 	if (rv != APR_SUCCESS)
-		return rv;
+		oidc_serror(s, "apr_thread_join failed");
+	_oidc_metrics_thread = NULL;
 
 	/* delete the shared memory segment if we are in the parent process */
 	if (_oidc_metrics_is_parent == TRUE)
@@ -798,12 +802,14 @@ apr_status_t oidc_metrics_cleanup(server_rec *s) {
 	/* delete the process mutex that guards the local metrics data */
 	if (oidc_cache_mutex_destroy(s, _oidc_metrics_process_mutex) == FALSE)
 		return APR_EGENERAL;
+	_oidc_metrics_process_mutex = NULL;
 
 	/* delete the process mutex that guards the global shared memory segment */
 	if (oidc_cache_mutex_destroy(s, _oidc_metrics_global_mutex) == FALSE)
 		return APR_EGENERAL;
+	_oidc_metrics_global_mutex = NULL;
 
-	return rv;
+	return APR_SUCCESS;
 }
 
 /*
