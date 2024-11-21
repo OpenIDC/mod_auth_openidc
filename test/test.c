@@ -1041,11 +1041,11 @@ static char *test_proto_authorization_request(request_rec *r) {
 	oidc_proto_state_set_response_type(proto_state, oidc_cfg_provider_response_type_get(provider));
 	oidc_proto_state_set_timestamp_now(proto_state);
 
-	TST_ASSERT("oidc_proto_authorization_request (1)",
+	TST_ASSERT("oidc_proto_request_auth (1)",
 		   oidc_proto_request_auth(r, provider, NULL, redirect_uri, state, proto_state, NULL, NULL, NULL,
 					   NULL) == HTTP_MOVED_TEMPORARILY);
 
-	TST_ASSERT_STR("oidc_proto_authorization_request (2)", apr_table_get(r->headers_out, "Location"),
+	TST_ASSERT_STR("oidc_proto_request_auth (2)", apr_table_get(r->headers_out, "Location"),
 		       "https://idp.example.com/"
 		       "authorize?response_type=code&scope=openid&client_id=client_id&state=12345&redirect_uri=https%"
 		       "3A%2F%2Fwww.example.com%2Fprotected%2F&nonce=anonce&jan=piet&foo=bar");
