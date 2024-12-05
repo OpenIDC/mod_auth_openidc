@@ -478,6 +478,11 @@ const char *oidc_cmd_provider_jwks_uri_refresh_interval_set(cmd_parms *cmd, void
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
+int oidc_cfg_jwks_uri_refresh_interval_get(const oidc_jwks_uri_t *jwks_uri) {
+	return jwks_uri->refresh_interval != OIDC_CONFIG_POS_INT_UNSET ? jwks_uri->refresh_interval
+								       : OIDC_DEFAULT_JWKS_REFRESH_INTERVAL;
+}
+
 int oidc_cfg_provider_jwks_uri_refresh_interval_get(oidc_provider_t *provider) {
 	return provider->jwks_uri.refresh_interval != OIDC_CONFIG_POS_INT_UNSET ? provider->jwks_uri.refresh_interval
 										: OIDC_DEFAULT_JWKS_REFRESH_INTERVAL;

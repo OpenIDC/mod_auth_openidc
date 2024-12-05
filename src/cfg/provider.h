@@ -227,6 +227,7 @@ OIDC_CFG_PROVIDER_MEMBER_FUNCS_KEYS_DECL(client_keys)
 
 // ints
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_DECL(jwks_uri_refresh_interval)
+int oidc_cfg_jwks_uri_refresh_interval_get(const oidc_jwks_uri_t *jwks_uri);
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_DECL(backchannel_logout_supported)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_DECL(ssl_validate_server)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_DECL(validate_issuer)

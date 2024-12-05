@@ -1,3 +1,8 @@
+12/05/2024
+- metadata: fix caching of JWKs from jwks_uri when using the default expiry setting (i.e. not using OIDCJWKSRefreshInterval)
+  and avoid fetching JWKs from the jwks_uri for each user login; also addresses Redis cache
+  error entries the log [ERR invalid expire time in 'setex' command]
+
 11/21/2024
 - add option to set local address for outgoing HTTP requests; see #1283; thanks @studersi
   using e.g. SetEnvIfExpr true OIDC_CURL_INTERFACE=192.168.10.2

@@ -684,7 +684,7 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r, oidc_cfg
 
 	/* store the JWKs in the cache */
 	oidc_cache_set_jwks(r, oidc_metadata_jwks_cache_key(jwks_uri), response,
-			    apr_time_now() + apr_time_from_sec(jwks_uri->refresh_interval));
+			    apr_time_now() + apr_time_from_sec(oidc_cfg_jwks_uri_refresh_interval_get(jwks_uri)));
 
 	return TRUE;
 }
