@@ -86,7 +86,13 @@ apr_byte_t oidc_cache_mutex_post_config(server_rec *s, oidc_cache_mutex_t *m, co
 	const char *dir;
 
 	/* construct the mutex filename */
-	apr_temp_dir_get(&dir, s->process->pool);
+	rv = apr_temp_dir_get(&dir, s->process->pool);
+	if (rv != APR_SUCCESS) {
+		oidc_serror(s, "apr_temp_dir_get failed: could not find a temp dir: %s",
+			    oidc_cache_status2str(s->process->pool, rv));
+		return FALSE;
+	}
+
 	m->mutex_filename =
 	    apr_psprintf(s->process->pool, "%s/mod_auth_openidc_%s_mutex.%ld.%pp", dir, type, (long int)getpid(), s);
 

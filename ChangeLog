@@ -2,6 +2,8 @@
 - metadata: fix caching of JWKs from jwks_uri when using the default expiry setting (i.e. not using OIDCJWKSRefreshInterval)
   and avoid fetching JWKs from the jwks_uri for each user login; also addresses Redis cache
   error entries the log [ERR invalid expire time in 'setex' command]
+- avoid segfault and improve error reporting in case apr_temp_dir_get fails when a temp directory cannot be found
+  on the system upon initalizing cache mutexes and file cache; see #1288; thanks @ErmakovDmitriy
 
 11/21/2024
 - add option to set local address for outgoing HTTP requests; see #1283; thanks @studersi

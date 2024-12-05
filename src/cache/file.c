@@ -64,10 +64,16 @@ typedef struct {
 
 /* post config routine */
 int oidc_cache_file_post_config(server_rec *s) {
+	apr_status_t rv = APR_SUCCESS;
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(s->module_config, &auth_openidc_module);
 	if (cfg->cache.file_dir == NULL) {
 		/* by default we'll use the OS specified /tmp dir for cache files */
-		apr_temp_dir_get((const char **)&cfg->cache.file_dir, s->process->pool);
+		rv = apr_temp_dir_get((const char **)&cfg->cache.file_dir, s->process->pool);
+		if (rv != APR_SUCCESS) {
+			oidc_serror(s, "apr_temp_dir_get failed: could not find a temp dir: %s",
+				    oidc_cache_status2str(s->process->pool, rv));
+			return HTTP_INTERNAL_SERVER_ERROR;
+		}
 	}
 	return OK;
 }
