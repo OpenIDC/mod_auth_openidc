@@ -1,3 +1,6 @@
+12/09/2024
+- release 2.4.16.6
+
 12/05/2024
 - metadata: fix caching of JWKs from jwks_uri when using the default expiry setting (i.e. not using OIDCJWKSRefreshInterval)
   and avoid fetching JWKs from the jwks_uri for each user login; also addresses Redis cache
