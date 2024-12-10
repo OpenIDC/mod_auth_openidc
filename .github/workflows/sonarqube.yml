@@ -20,6 +20,8 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y apache2-dev libcjose-dev libssl-dev check pkg-config
           sudo apt-get install -y libjansson-dev libcurl4-openssl-dev libhiredis-dev libpcre2-dev
+      - name: Install sonar-scanner and build-wrapper
+        uses: SonarSource/sonarcloud-github-c-cpp@v3
       - name: Run build-wrapper
         run: |
           ./autogen.sh
