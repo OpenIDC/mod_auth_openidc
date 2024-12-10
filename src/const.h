@@ -104,6 +104,10 @@ static inline int _oidc_str_to_int(const char *s, const int default_value) {
 	return v;
 }
 
+#ifdef WIN32
+#define snprintf _snprintf
+#endif
+
 #define HAVE_APACHE_24 MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 
 #ifndef OIDC_DEBUG

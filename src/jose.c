@@ -67,10 +67,6 @@
 #include <openssl/core_names.h>
 #endif
 
-#ifdef WIN32
-#define snprintf _snprintf
-#endif
-
 #include "util.h"
 
 /*

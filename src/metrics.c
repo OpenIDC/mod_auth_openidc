@@ -237,7 +237,7 @@ static oidc_metrics_bucket_t _oidc_metric_buckets[] = {
  */
 static inline char *_json_int2str(apr_pool_t *pool, json_int_t n) {
 	char s[255];
-	sprintf(s, "%" JSON_INTEGER_FORMAT, n);
+	snprintf(s, 255, "%" JSON_INTEGER_FORMAT, n);
 	return apr_pstrdup(pool, s);
 }
 

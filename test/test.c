@@ -61,23 +61,23 @@ static int TST_RC;
 #define TST_ASSERT(message, expression)                                                                                \
 	TST_RC = (expression);                                                                                         \
 	if (!TST_RC) {                                                                                                 \
-		sprintf(TST_ERR_MSG, TST_FORMAT("%d"), __FUNCTION__, message, TST_RC, 1);                              \
+		snprintf(TST_ERR_MSG, 4096, TST_FORMAT("%d"), __FUNCTION__, message, TST_RC, 1);                       \
 		return TST_ERR_MSG;                                                                                    \
 	}
 
 #define TST_ASSERT_ERR(message, expression, pool, err)                                                                 \
 	TST_RC = (expression);                                                                                         \
 	if (!TST_RC) {                                                                                                 \
-		sprintf(TST_ERR_MSG, TST_FORMAT("%d") " %s", __FUNCTION__, message, TST_RC, 1,                         \
-			oidc_jose_e2s(pool, err));                                                                     \
+		snprintf(TST_ERR_MSG, 4096, TST_FORMAT("%d") " %s", __FUNCTION__, message, TST_RC, 1,                  \
+			 oidc_jose_e2s(pool, err));                                                                    \
 		return TST_ERR_MSG;                                                                                    \
 	}
 
 #define TST_ASSERT_CJOSE_ERR(message, expression, pool, cjose_err)                                                     \
 	TST_RC = (expression);                                                                                         \
 	if (!TST_RC) {                                                                                                 \
-		sprintf(TST_ERR_MSG, TST_FORMAT("%d") " %s", __FUNCTION__, message, TST_RC, 1,                         \
-			oidc_cjose_e2s(pool, cjose_err));                                                              \
+		snprintf(TST_ERR_MSG, 4096, TST_FORMAT("%d") " %s", __FUNCTION__, message, TST_RC, 1,                  \
+			 oidc_cjose_e2s(pool, cjose_err));                                                             \
 		return TST_ERR_MSG;                                                                                    \
 	}
 
@@ -85,8 +85,8 @@ static int TST_RC;
 	TST_RC =                                                                                                       \
 	    (result && expected) ? (_oidc_strcmp(result, expected) != 0) : ((result != NULL) || (expected != NULL));   \
 	if (TST_RC) {                                                                                                  \
-		sprintf(TST_ERR_MSG, TST_FORMAT("%s"), __FUNCTION__, message, result ? result : "(null)",              \
-			expected ? expected : "(null)");                                                               \
+		snprintf(TST_ERR_MSG, 4096, TST_FORMAT("%s"), __FUNCTION__, message, result ? result : "(null)",       \
+			 expected ? expected : "(null)");                                                              \
 		return TST_ERR_MSG;                                                                                    \
 	}
 
@@ -94,21 +94,21 @@ static int TST_RC;
 	TST_RC = (result && expected) ? (_oidc_strncmp(result, expected, len) != 0)                                    \
 				      : ((result != NULL) || (expected != NULL));                                      \
 	if (TST_RC) {                                                                                                  \
-		sprintf(TST_ERR_MSG, TST_FORMAT("%s"), __FUNCTION__, message, result ? result : "(null)",              \
-			expected ? expected : "(null)");                                                               \
+		snprintf(TST_ERR_MSG, 4096, TST_FORMAT("%s"), __FUNCTION__, message, result ? result : "(null)",       \
+			 expected ? expected : "(null)");                                                              \
 		return TST_ERR_MSG;                                                                                    \
 	}
 
 #define TST_ASSERT_LONG(message, result, expected)                                                                     \
 	if (result != expected) {                                                                                      \
-		sprintf(TST_ERR_MSG, TST_FORMAT("%ld"), __FUNCTION__, message, result, expected);                      \
+		snprintf(TST_ERR_MSG, 4096, TST_FORMAT("%ld"), __FUNCTION__, message, result, expected);               \
 		return TST_ERR_MSG;                                                                                    \
 	}
 
 #define TST_ASSERT_BYTE(message, result, expected)                                                                     \
 	if (result != expected) {                                                                                      \
-		sprintf(TST_ERR_MSG, TST_FORMAT("%s"), __FUNCTION__, message, result ? "TRUE" : "FALSE",               \
-			expected ? "TRUE" : "FALSE");                                                                  \
+		snprintf(TST_ERR_MSG, 4096, TST_FORMAT("%s"), __FUNCTION__, message, result ? "TRUE" : "FALSE",        \
+			 expected ? "TRUE" : "FALSE");                                                                 \
 		return TST_ERR_MSG;                                                                                    \
 	}
 
@@ -140,8 +140,8 @@ static char *test_private_key_parse(apr_pool_t *pool) {
 	const char ecPrivateKeyFile[512];
 
 	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
-	sprintf((char *)rsaPrivateKeyFile, "%s/%s", dir, "/test/private.pem");
-	sprintf((char *)ecPrivateKeyFile, "%s/%s", dir, "/test/ecpriv.key");
+	snprintf((char *)rsaPrivateKeyFile, 512, "%s/%s", dir, "/test/private.pem");
+	snprintf((char *)ecPrivateKeyFile, 512, "%s/%s", dir, "/test/ecpriv.key");
 
 	input = BIO_new(BIO_s_file());
 	TST_ASSERT_ERR("test_private_key_parse_BIO_new_RSA_private_key", input != NULL, pool, err);
@@ -204,9 +204,9 @@ static char *test_public_key_parse(apr_pool_t *pool) {
 	const char certificateFile[512];
 	const char ecCertificateFile[512];
 	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
-	sprintf((char *)publicKeyFile, "%s/%s", dir, "/test/public.pem");
-	sprintf((char *)certificateFile, "%s/%s", dir, "/test/certificate.pem");
-	sprintf((char *)ecCertificateFile, "%s/%s", dir, "/test/eccert.pem");
+	snprintf((char *)publicKeyFile, 512, "%s/%s", dir, "/test/public.pem");
+	snprintf((char *)certificateFile, 512, "%s/%s", dir, "/test/certificate.pem");
+	snprintf((char *)ecCertificateFile, 512, "%s/%s", dir, "/test/eccert.pem");
 
 	input = BIO_new(BIO_s_file());
 	TST_ASSERT_ERR("test_public_key_parse_BIO_new_public_key", input != NULL, pool, err);
