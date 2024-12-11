@@ -1657,6 +1657,9 @@ apr_hash_t *oidc_util_spaced_string_to_hashtable(apr_pool_t *pool, const char *s
  */
 apr_byte_t oidc_util_spaced_string_equals(apr_pool_t *pool, const char *a, const char *b) {
 
+	const void *k = NULL;
+	void *v = NULL;
+
 	/* parse both entries as hash tables */
 	apr_hash_t *ht_a = oidc_util_spaced_string_to_hashtable(pool, a);
 	apr_hash_t *ht_b = oidc_util_spaced_string_to_hashtable(pool, b);
@@ -1668,9 +1671,7 @@ apr_byte_t oidc_util_spaced_string_equals(apr_pool_t *pool, const char *a, const
 	/* then loop over all entries */
 	apr_hash_index_t *hi;
 	for (hi = apr_hash_first(NULL, ht_a); hi; hi = apr_hash_next(hi)) {
-		const char *k;
-		const char *v;
-		apr_hash_this(hi, (const void **)&k, NULL, (void **)&v);
+		apr_hash_this(hi, &k, NULL, &v);
 		if (apr_hash_get(ht_b, k, APR_HASH_KEY_STRING) == NULL)
 			return FALSE;
 	}
