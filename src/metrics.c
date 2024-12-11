@@ -1200,11 +1200,11 @@ typedef struct oidc_metric_prometheus_callback_ctx_t {
 /*
  * loop function for converting counter metrics to Prometheus output
  */
-int oidc_metrics_prometheus_counters(void *rec, const char *key, const char *value) {
+static int oidc_metrics_prometheus_counters(oidc_metric_prometheus_callback_ctx_t *ctx, const char *key,
+					    json_t *value) {
 	const char *s_server = NULL, *s_spec = NULL;
 	json_t *j_counter = NULL, *j_specs = NULL, *j_spec = NULL;
-	oidc_metric_prometheus_callback_ctx_t *ctx = (oidc_metric_prometheus_callback_ctx_t *)rec;
-	json_t *o_counter = (json_t *)value;
+	json_t *o_counter = value;
 	unsigned int type = oidc_metrics_key2type(key);
 	const char *s_label =
 	    oidc_metric_prometheus_normalize_name(ctx->pool, oidc_metrics_counter_type2s(ctx->pool, type));
@@ -1241,11 +1241,10 @@ int oidc_metrics_prometheus_counters(void *rec, const char *key, const char *val
  * loop function for converting timing metrics to Prometheus output
  */
 
-int oidc_metrics_prometheus_timings(void *rec, const char *key, const char *value) {
+static int oidc_metrics_prometheus_timings(oidc_metric_prometheus_callback_ctx_t *ctx, const char *key, json_t *value) {
 	const char *s_server = NULL, *s_key = NULL, *s_bucket = NULL;
 	json_t *j_timing = NULL, *j_member = NULL;
-	oidc_metric_prometheus_callback_ctx_t *ctx = (oidc_metric_prometheus_callback_ctx_t *)rec;
-	json_t *o_timer = (json_t *)value;
+	json_t *o_timer = value;
 	unsigned int type = oidc_metrics_key2type(key);
 	const char *s_label =
 	    oidc_metric_prometheus_normalize_name(ctx->pool, oidc_metrics_timing_type2s(ctx->pool, type));
@@ -1282,20 +1281,20 @@ int oidc_metrics_prometheus_timings(void *rec, const char *key, const char *valu
 /*
  * take a list of metrics from a server indexed list and add it to a type indexed list
  */
-static void oidc_metrics_prometheus_convert(apr_table_t *table, const char *server, json_t *list) {
+static void oidc_metrics_prometheus_convert(apr_hash_t *hash, const char *server, json_t *list) {
 	const char *type = NULL;
 	json_t *src = NULL, *dst = NULL;
 	void *iter = json_object_iter(list);
 	while (iter) {
 		type = json_object_iter_key(iter);
 		src = json_object_iter_value(iter);
-		dst = (json_t *)apr_table_get(table, type);
+		dst = (json_t *)apr_hash_get(hash, type, APR_HASH_KEY_STRING);
 		if (dst) {
 			json_object_set(dst, server, src);
 		} else {
 			dst = json_object();
 			json_object_set(dst, server, src);
-			apr_table_setn(table, type, (const char *)dst);
+			apr_hash_set(hash, type, APR_HASH_KEY_STRING, dst);
 		}
 		iter = json_object_iter_next(list, iter);
 	}
@@ -1307,8 +1306,12 @@ static void oidc_metrics_prometheus_convert(apr_table_t *table, const char *serv
 static int oidc_metrics_handle_prometheus(request_rec *r, char *s_json) {
 	json_t *json = NULL, *j_server = NULL;
 	const char *s_server = NULL;
-	apr_table_t *t_counters = apr_table_make(r->pool, 1);
-	apr_table_t *t_timings = apr_table_make(r->pool, 1);
+	apr_hash_t *t_counters = apr_hash_make(r->pool);
+	apr_hash_t *t_timings = apr_hash_make(r->pool);
+	apr_hash_index_t *hi = NULL;
+	const char *name = NULL;
+	void *value = NULL;
+
 	oidc_metric_prometheus_callback_ctx_t ctx = {"", r->pool};
 	void *iter = NULL;
 
@@ -1326,8 +1329,15 @@ static int oidc_metrics_handle_prometheus(request_rec *r, char *s_json) {
 		iter = json_object_iter_next(json, iter);
 	}
 
-	apr_table_do(oidc_metrics_prometheus_counters, &ctx, t_counters, NULL);
-	apr_table_do(oidc_metrics_prometheus_timings, &ctx, t_timings, NULL);
+	for (hi = apr_hash_first(r->pool, t_counters); hi; hi = apr_hash_next(hi)) {
+		apr_hash_this(hi, (const void **)&name, NULL, &value);
+		oidc_metrics_prometheus_counters(&ctx, name, value);
+	}
+
+	for (hi = apr_hash_first(r->pool, t_timings); hi; hi = apr_hash_next(hi)) {
+		apr_hash_this(hi, (const void **)&name, NULL, &value);
+		oidc_metrics_prometheus_timings(&ctx, name, value);
+	}
 
 	json_decref(json);
 
