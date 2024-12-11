@@ -1,6 +1,7 @@
 12/11/2024
 - code: loop over authz arrays with index instead of pointer
 - code: avoid embedding defines in macro arguments
+- code: avoid cast warnings
 
 12/10/2024
 - github: add SonarQube analysis to Github workflows

@@ -719,7 +719,7 @@ int oidc_response_authorization_post(request_rec *r, oidc_cfg_t *c, oidc_session
 	}
 
 	/* get the parameters */
-	response_mode = (char *)apr_table_get(params, OIDC_PROTO_RESPONSE_MODE);
+	response_mode = apr_table_get(params, OIDC_PROTO_RESPONSE_MODE);
 
 	/* do the actual implicit work */
 	return oidc_response_process(r, c, session, params,

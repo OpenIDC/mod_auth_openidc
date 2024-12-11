@@ -126,7 +126,7 @@ static apr_status_t oidc_cache_file_read(request_rec *r, const char *path, apr_f
 /*
  * write a specified number of bytes from a buffer to a cache file
  */
-static apr_status_t oidc_cache_file_write(request_rec *r, const char *path, apr_file_t *fd, void *buf,
+static apr_status_t oidc_cache_file_write(request_rec *r, const char *path, apr_file_t *fd, const void *buf,
 					  const apr_size_t len) {
 
 	apr_status_t rc = APR_SUCCESS;
@@ -409,7 +409,7 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section, const
 		return FALSE;
 
 	/* next write the value */
-	oidc_cache_file_write(r, path, fd, (void *)value, info.len);
+	oidc_cache_file_write(r, path, fd, (const void *)value, info.len);
 
 	/* unlock and close the written file */
 	apr_file_unlock(fd);
