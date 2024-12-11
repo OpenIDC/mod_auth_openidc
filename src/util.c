@@ -1209,7 +1209,7 @@ apr_byte_t oidc_util_read_form_encoded_params(request_rec *r, apr_table_t *table
 	const char *val = NULL;
 	const char *p = data;
 
-	while ((p) && (*p)) {
+	while (p && (*p)) {
 		val = ap_getword(r->pool, &p, OIDC_CHAR_AMP);
 		if (val == NULL)
 			break;
@@ -1649,7 +1649,7 @@ apr_hash_t *oidc_util_spaced_string_to_hashtable(apr_pool_t *pool, const char *s
 	char *val;
 	const char *data = apr_pstrdup(pool, str);
 	apr_hash_t *result = apr_hash_make(pool);
-	while ((data) && (*data)) {
+	while (data && (*data)) {
 		val = ap_getword_white(pool, &data);
 		if (val == NULL)
 			break;
@@ -1793,10 +1793,11 @@ apr_byte_t oidc_util_json_merge(request_rec *r, json_t *src, json_t *dst) {
  * add query encoded parameters to a table
  */
 void oidc_util_table_add_query_encoded_params(apr_pool_t *pool, apr_table_t *table, const char *params) {
-	char *key = NULL, *value = NULL;
+	char *key = NULL;
+	char *value = NULL;
 	const char *v = NULL;
 	const char *p = params;
-	while ((p) && (*p)) {
+	while (p && (*p)) {
 		v = ap_getword(pool, &p, OIDC_CHAR_AMP);
 		if (v == NULL)
 			break;
