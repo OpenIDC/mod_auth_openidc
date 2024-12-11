@@ -1,3 +1,6 @@
+12/11/2024
+- code: loop over authz arrays with index instead of pointer
+
 12/10/2024
 - github: add SonarQube analysis to Github workflows
 - code: use snprintf instead of sprintf
