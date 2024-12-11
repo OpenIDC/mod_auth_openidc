@@ -1665,28 +1665,28 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, se
 		return OK;
 	}
 
+#ifdef USE_MEMCACHE
+#define _OIDC_USE_MEMCACHE "yes"
+#else
+#define _OIDC_USE_MEMCACHE "no"
+#endif
+
+#ifdef USE_LIBHIREDIS
+#define _OIDC_USE_REDIS "yes"
+#else
+#define _OIDC_USE_REDIS "no"
+#endif
+
+#ifdef USE_LIBJQ
+#define _OIDC_USE_JQ "yes"
+#else
+#define _OIDC_USE_JQ "no"
+#endif
+
 	ap_log_error(APLOG_MARK, APLOG_INFO, 0, s,
 		     "%s - init - cjose %s, %s, EC=%s, GCM=%s, Memcache=%s, Redis=%s, JQ=%s", NAMEVERSION,
 		     cjose_version(), oidc_util_openssl_version(s->process->pool), OIDC_JOSE_EC_SUPPORT ? "yes" : "no",
-		     OIDC_JOSE_GCM_SUPPORT ? "yes" : "no",
-#ifdef USE_MEMCACHE
-		     "yes"
-#else
-		     "no"
-#endif
-		     ,
-#ifdef USE_LIBHIREDIS
-		     "yes"
-#else
-		     "no"
-#endif
-		     ,
-#ifdef USE_LIBJQ
-		     "yes"
-#else
-		     "no"
-#endif
-	);
+		     OIDC_JOSE_GCM_SUPPORT ? "yes" : "no", _OIDC_USE_MEMCACHE, _OIDC_USE_REDIS, _OIDC_USE_JQ);
 
 	oidc_http_init();
 

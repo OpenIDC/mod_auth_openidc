@@ -255,19 +255,23 @@ const command_rec oidc_cfg_cmds[] = {
 
 	// cache
 
+#ifdef USE_MEMCACHE
+#define _OIDC_CMDS_CACHE_TYPE_MEMCACHE "'memcache'|"
+#else
+#define _OIDC_CMDS_CACHE_TYPE_MEMCACHE
+#endif
+#ifdef USE_LIBHIREDIS
+#define _OIDC_CMDS_CACHE_TYPE_REDIS "'redis'|"
+#else
+#define _OIDC_CMDS_CACHE_TYPE_REDIS
+#endif
+
 	AP_INIT_TAKE1(
 		OIDCCacheType,
 		oidc_cmd_cache_type_set,
 		NULL,
 		RSRC_CONF,
-		"cache backend must be one of ['shm'|"
-#ifdef USE_MEMCACHE
-		"'memcache'|"
-#endif
-#ifdef USE_LIBHIREDIS
-		"'redis'|"
-#endif
-		"'file']."),
+		"cache backend must be one of ['shm'|" _OIDC_CMDS_CACHE_TYPE_MEMCACHE _OIDC_CMDS_CACHE_TYPE_REDIS "'file']."),
 	OIDC_CFG_CMD(
 		AP_INIT_TAKE1,
 		OIDCCacheEncrypt,
