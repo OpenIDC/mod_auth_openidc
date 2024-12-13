@@ -181,7 +181,8 @@ ap_expr_parse_cmd_mi(const cmd_parms *cmd, const char *expr, unsigned int flags,
 }
 
 AP_DECLARE(const char *) ap_expr_str_exec(request_rec *r, const ap_expr_info_t *expr, const char **err) {
-	err = NULL;
+	if (err)
+		*err = NULL;
 	return expr->filename;
 }
 
