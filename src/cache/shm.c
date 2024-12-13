@@ -302,7 +302,7 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section, const 
 	if (value != NULL) {
 
 		/* fill out the entry with the provided data */
-		_oidc_strcpy(t->section_key, section_key);
+		strncpy(t->section_key, section_key, OIDC_CACHE_SHM_KEY_MAX);
 		_oidc_strcpy(t->value, value);
 		t->expires = expiry;
 		t->access = current_time;
