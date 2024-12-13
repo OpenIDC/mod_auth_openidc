@@ -3,7 +3,7 @@
 - correct the check for the optional token_type parameter returned from a token endpoint request
 - initialize oidc_jose_error_t err variable in oidc_util_create_symmetric_key
 - refactor oidc_util_port_from_host and avoid potential crash on non-conformant literal IPv6 addresses
-- use strncpy for section key string copy in shm.c
+- add and use _oidc_strncpy for section key string copy in shm.c
 
 12/11/2024
 - code: loop over authz arrays with index instead of pointer
