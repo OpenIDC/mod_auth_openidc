@@ -1121,7 +1121,7 @@ int oidc_util_html_send_in_template(request_rec *r, const char *filename, char *
 			*static_template_content = NULL;
 		}
 	}
-	if (static_template_content) {
+	if (*static_template_content) {
 		html = apr_psprintf(r->pool, *static_template_content, oidc_util_template_escape(r, arg1, arg1_esc),
 				    oidc_util_template_escape(r, arg2, arg2_esc));
 		rc = oidc_util_http_send(r, html, _oidc_strlen(html), OIDC_HTTP_CONTENT_TYPE_TEXT_HTML, status_code);

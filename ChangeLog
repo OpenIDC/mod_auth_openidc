@@ -6,6 +6,7 @@
 - add and use _oidc_strncpy for section key string copy in shm.c
 - correct check for private key return value from oidc_proto_jwt_create_from_first_pkey
   and avoid NULL pointer dereferencing when no private keys have been configured
+- correct check for *static_template_content in oidc_util_html_send_in_template in util.c
 
 12/11/2024
 - code: loop over authz arrays with index instead of pointer
