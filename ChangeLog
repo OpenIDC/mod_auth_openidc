@@ -4,6 +4,8 @@
 - initialize oidc_jose_error_t err variable in oidc_util_create_symmetric_key
 - refactor oidc_util_port_from_host and avoid potential crash on non-conformant literal IPv6 addresses
 - add and use _oidc_strncpy for section key string copy in shm.c
+- correct check for private key return value from oidc_proto_jwt_create_from_first_pkey
+  and avoid NULL pointer dereferencing when no private keys have been configured
 
 12/11/2024
 - code: loop over authz arrays with index instead of pointer

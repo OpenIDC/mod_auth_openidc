@@ -253,7 +253,7 @@ apr_byte_t oidc_proto_jwt_create_from_first_pkey(request_rec *r, oidc_cfg_t *cfg
 
 	*jwk = oidc_util_key_list_first(oidc_cfg_private_keys_get(cfg), -1, OIDC_JOSE_JWK_SIG_STR);
 	// TODO: detect at config time
-	if (jwk == NULL) {
+	if (*jwk == NULL) {
 		oidc_error(r, "no RSA/EC private signing keys have been configured (in " OIDCPrivateKeyFiles ")");
 		goto end;
 	}
