@@ -676,24 +676,17 @@ static const char *oidc_util_current_url_scheme(const request_rec *r, oidc_hdr_x
 }
 
 /*
- * get the port part from a Host header
+ * get the port part from a Host header, taking into account IPv5 literal addresses
  */
 static const char *oidc_util_port_from_host(const char *host_hdr) {
-	char *p = NULL;
-	char *i = NULL;
+	const char *p = NULL;
 
-	if (host_hdr) {
-		if (host_hdr[0] == '[') {
-			i = strchr(host_hdr, ']');
-			p = strchr(i, OIDC_CHAR_COLON);
-		} else {
-			p = strchr(host_hdr, OIDC_CHAR_COLON);
-		}
-	}
-	if (p)
-		return p;
+	if (host_hdr && host_hdr[0] == '[')
+		p = strchr(host_hdr, ']');
 	else
-		return NULL;
+		p = host_hdr;
+
+	return p ? strchr(p, OIDC_CHAR_COLON) : NULL;
 }
 
 /*
