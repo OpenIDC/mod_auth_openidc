@@ -1,3 +1,6 @@
+12/13/2024
+- avoid potentional memory leak on cURL handle if curl_easy_escape/curl_easy_unescape fails
+
 12/11/2024
 - code: loop over authz arrays with index instead of pointer
 - code: avoid embedding defines in macro arguments

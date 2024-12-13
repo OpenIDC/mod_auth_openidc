@@ -67,22 +67,34 @@ char *oidc_http_url_encode(const request_rec *r, const char *str) {
 	 * see: https://curl.se/libcurl/c/threadsafe.html
 	 * so we can not not use a global variable here and optimize performance
 	 */
+	char *rv = "";
+	char *result = NULL;
 	CURL *curl = NULL;
+
 	if (str == NULL)
-		return "";
+		goto end;
+
 	curl = curl_easy_init();
 	if (curl == NULL) {
 		oidc_error(r, "curl_easy_init() error");
-		return "";
+		goto end;
 	}
-	char *result = curl_easy_escape(curl, str, 0);
+
+	result = curl_easy_escape(curl, str, 0);
 	if (result == NULL) {
 		oidc_error(r, "curl_easy_escape() error");
-		return "";
+		goto end;
 	}
-	char *rv = apr_pstrdup(r->pool, result);
-	curl_free(result);
-	curl_easy_cleanup(curl);
+
+	rv = apr_pstrdup(r->pool, result);
+
+end:
+
+	if (result)
+		curl_free(result);
+	if (curl)
+		curl_easy_cleanup(curl);
+
 	return rv;
 }
 
@@ -90,33 +102,47 @@ char *oidc_http_url_encode(const request_rec *r, const char *str) {
  * URL-decode a string
  */
 char *oidc_http_url_decode(const request_rec *r, const char *str) {
+	char *rv = "";
+	char *result = NULL;
 	CURL *curl = NULL;
+	int counter = 0;
+	char *replaced = NULL;
 
 	if (str == NULL)
-		return "";
+		goto end;
 
 	curl = curl_easy_init();
 	if (curl == NULL) {
 		oidc_error(r, "curl_easy_init() error");
-		return "";
+		goto end;
 	}
-	int counter = 0;
-	char *replaced = (char *)str;
+
+	replaced = (char *)str;
 	while (str[counter] != '\0') {
 		if (str[counter] == '+') {
 			replaced[counter] = ' ';
 		}
 		counter++;
 	}
-	char *result = curl_easy_unescape(curl, replaced, 0, 0);
+
+	result = curl_easy_unescape(curl, replaced, 0, 0);
+
 	if (result == NULL) {
 		oidc_error(r, "curl_easy_unescape() error");
-		return "";
+		goto end;
 	}
-	char *rv = apr_pstrdup(r->pool, result);
-	curl_free(result);
-	curl_easy_cleanup(curl);
+
+	rv = apr_pstrdup(r->pool, result);
+
 	// oidc_debug(r, "input=\"%s\", output=\"%s\"", str, rv);
+
+end:
+
+	if (result)
+		curl_free(result);
+	if (curl)
+		curl_easy_cleanup(curl);
+
 	return rv;
 }
 
