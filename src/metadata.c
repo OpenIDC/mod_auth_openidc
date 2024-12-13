@@ -657,8 +657,7 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r, oidc_cfg
 
 		if (oidc_jwt_verify(r->pool, jwt, keys, &err) == FALSE) {
 			oidc_error(r, "verifying JWT failed: %s", oidc_jose_e2s(r->pool, err));
-			if (jwt != NULL)
-				oidc_jwt_destroy(jwt);
+			oidc_jwt_destroy(jwt);
 			return FALSE;
 		}
 
