@@ -176,7 +176,7 @@ apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, oi
 	}
 
 	/* check the new token type */
-	if (token_type != NULL) {
+	if (*token_type != NULL) {
 		if (oidc_proto_validate_token_type(r, provider, *token_type) == FALSE) {
 			oidc_warn(r, "access token type \"%s\" did not validate, dropping it", *token_type);
 			*access_token = NULL;

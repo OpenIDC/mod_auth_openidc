@@ -1,5 +1,6 @@
 12/13/2024
 - avoid potentional memory leak on cURL handle if curl_easy_escape/curl_easy_unescape fails
+- correct the check for the optional token_type parameter returned from a token endpoint request
 
 12/11/2024
 - code: loop over authz arrays with index instead of pointer
