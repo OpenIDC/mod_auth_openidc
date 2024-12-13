@@ -1,6 +1,7 @@
 12/13/2024
 - avoid potentional memory leak on cURL handle if curl_easy_escape/curl_easy_unescape fails
 - correct the check for the optional token_type parameter returned from a token endpoint request
+- initialize oidc_jose_error_t err variable in oidc_util_create_symmetric_key
 
 12/11/2024
 - code: loop over authz arrays with index instead of pointer

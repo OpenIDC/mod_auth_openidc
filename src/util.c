@@ -1814,7 +1814,7 @@ void oidc_util_table_add_query_encoded_params(apr_pool_t *pool, apr_table_t *tab
  */
 apr_byte_t oidc_util_create_symmetric_key(request_rec *r, const char *client_secret, unsigned int r_key_len,
 					  const char *hash_algo, apr_byte_t set_kid, oidc_jwk_t **jwk) {
-	oidc_jose_error_t err;
+	oidc_jose_error_t err = {{'\0'}, 0, {'\0'}, {'\0'}};
 	unsigned char *key = NULL;
 	unsigned int key_len;
 
