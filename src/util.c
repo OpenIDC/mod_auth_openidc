@@ -383,7 +383,6 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *
 	apr_byte_t rv = FALSE;
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
-	oidc_jwt_t *jwt = NULL;
 	char *payload = NULL;
 	int payload_len = 0;
 	char *plaintext = NULL;
@@ -443,8 +442,6 @@ end:
 
 	if (jwk != NULL)
 		oidc_jwk_destroy(jwk);
-	if (jwt != NULL)
-		oidc_jwt_destroy(jwt);
 
 	return rv;
 }
