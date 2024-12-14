@@ -1,6 +1,7 @@
 [![Build Status](https://github.com/OpenIDC/mod_auth_openidc/actions/workflows/build.yml/badge.svg)](https://github.com/OpenIDC/mod_auth_openidc/actions/workflows/build.yml)
 [<img width="184" height="96" align="right" src="http://openid.net/wordpress-content/uploads/2016/05/oid-l-certification-mark-l-cmyk-150dpi-90mm.jpg" alt="OpenID Certification">](https://openid.net/certification)
 [![CodeQL Analysis](https://github.com/OpenIDC/mod_auth_openidc/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/OpenIDC/mod_auth_openidc/actions/workflows/codeql-analysis.yml)
+[![Coverity Scan Build Status](https://scan.coverity.com/projects/31119/badge.svg)](https://scan.coverity.com/projects/openidc-mod_auth_openidc)
 
 mod_auth_openidc
 ================
