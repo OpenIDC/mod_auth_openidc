@@ -317,8 +317,8 @@ static request_rec *request_setup(apr_pool_t *pool) {
 
 	oidc_dir_cfg_t *d_cfg = oidc_cfg_dir_config_create(request->pool, NULL);
 
-	request->server->module_config = apr_pcalloc(request->pool, sizeof(ap_conf_vector_t *) * kEls);
-	request->per_dir_config = apr_pcalloc(request->pool, sizeof(ap_conf_vector_t *) * kEls);
+	request->server->module_config = apr_pcalloc(request->pool, sizeof(void) * kEls);
+	request->per_dir_config = apr_pcalloc(request->pool, sizeof(void) * kEls);
 	ap_set_module_config(request->server->module_config, &auth_openidc_module, cfg);
 	ap_set_module_config(request->per_dir_config, &auth_openidc_module, d_cfg);
 
@@ -430,7 +430,7 @@ int uuid(int argc, char **argv, apr_pool_t *pool) {
 
 	if (argc > 2) {
 		n = _oidc_str_to_int(argv[2], n);
-		if ((n < 0) || (n > 25000000 * 10))
+		if (n > 25000000 * 10)
 			n = 25000000;
 	}
 

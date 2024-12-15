@@ -534,7 +534,9 @@ static int oidc_cache_redis_destroy_impl(server_rec *s) {
 		oidc_cache_mutex_lock(s->process->pool, s, context->mutex);
 		context->disconnect(context);
 		oidc_cache_mutex_unlock(s->process->pool, s, context->mutex);
-		oidc_cache_mutex_destroy(s, context->mutex);
+		if (oidc_cache_mutex_destroy(s, context->mutex) != TRUE) {
+			oidc_serror(s, "oidc_cache_mutex_destroy on refresh mutex failed");
+		}
 		cfg->cache.cfg = NULL;
 	}
 

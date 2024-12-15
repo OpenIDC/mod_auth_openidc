@@ -143,7 +143,7 @@ static int oidc_state_cookies_delete_oldest(request_rec *r, oidc_cfg_t *c, int n
 			if (prev_oldest)
 				prev_oldest->next = oldest->next;
 			else
-				first = first ? first->next : NULL;
+				first = first->next;
 		}
 		number_of_valid_state_cookies--;
 	}

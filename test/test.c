@@ -1865,8 +1865,8 @@ static request_rec *test_setup(apr_pool_t *pool) {
 
 	oidc_dir_cfg_t *d_cfg = oidc_cfg_dir_config_create(request->pool, NULL);
 
-	request->server->module_config = apr_pcalloc(request->pool, sizeof(void *) * kEls);
-	request->per_dir_config = apr_pcalloc(request->pool, sizeof(void *) * kEls);
+	request->server->module_config = apr_pcalloc(request->pool, sizeof(void) * kEls);
+	request->per_dir_config = apr_pcalloc(request->pool, sizeof(void) * kEls);
 	ap_set_module_config(request->server->module_config, &auth_openidc_module, cfg);
 	ap_set_module_config(request->per_dir_config, &auth_openidc_module, d_cfg);
 
