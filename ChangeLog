@@ -1,3 +1,6 @@
+12/15/2024
+- add Coverity Github action
+
 12/13/2024
 - address warnings from static code analysis tool Coverity
   - code: avoid potentional memory leak on cURL handle if curl_easy_escape/curl_easy_unescape fails

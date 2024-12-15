@@ -678,18 +678,18 @@ static const char *oidc_util_current_url_scheme(const request_rec *r, oidc_hdr_x
 static const char *oidc_util_port_from_host_hdr(const char *host_hdr) {
 	const char *p = NULL;
 
-	if (host_hdr == NULL)
-		return NULL;
-
 	// check for an IPv6 literal addresses
-	if (host_hdr[0] == '[')
+	if (host_hdr && host_hdr[0] == '[')
 		p = strchr(host_hdr, ']');
 	else
 		p = host_hdr;
 
-	if ((p = strchr(p, OIDC_CHAR_COLON)))
+	if (p) {
+		p = strchr(p, OIDC_CHAR_COLON);
 		// skip over the ":" to point to the actual port number
-		p++;
+		if (p)
+			p++;
+	}
 
 	return p;
 }
