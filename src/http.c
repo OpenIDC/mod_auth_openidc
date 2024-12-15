@@ -611,59 +611,62 @@ char *oidc_http_form_encoded_data(request_rec *r, const apr_table_t *params) {
 
 #define OIDC_CURLOPT_SSL_OPTIONS "CURLOPT_SSL_OPTIONS"
 
-#define OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, option, key, val)                                            \
+#define OIDC_HTTP_SET_CURL_OPTION(r, curl, code, env_var_value, option, key, val)                                      \
 	if (_oidc_strstr(env_var_value, option) != NULL) {                                                             \
 		oidc_debug(r, "curl_easy_setopt (%d) %s (%d)", key, option, val);                                      \
-		curl_easy_setopt(curl, key, val);                                                                      \
+		code = curl_easy_setopt(curl, key, val);                                                               \
+		if (code != CURLE_OK)                                                                                  \
+			oidc_error(r, "curl_easy_setopt for '%s' failed with: %s", option, curl_easy_strerror(code));  \
 	}
 
 static void oidc_http_set_curl_ssl_options(request_rec *r, CURL *curl) {
 	const char *env_var_value = NULL;
+	CURLcode code = CURLE_OK;
 	if (r->subprocess_env != NULL)
 		env_var_value = apr_table_get(r->subprocess_env, OIDC_CURLOPT_SSL_OPTIONS);
 	if (env_var_value == NULL)
 		return;
 	oidc_debug(r, "SSL options environment variable %s=%s found", OIDC_CURLOPT_SSL_OPTIONS, env_var_value);
 #if LIBCURL_VERSION_NUM >= 0x071900
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURLSSLOPT_ALLOW_BEAST", CURLOPT_SSL_OPTIONS,
+	OIDC_HTTP_SET_CURL_OPTION(r, curl, code, env_var_value, "CURLSSLOPT_ALLOW_BEAST", CURLOPT_SSL_OPTIONS,
 				  CURLSSLOPT_ALLOW_BEAST)
 #endif
 #if LIBCURL_VERSION_NUM >= 0x072c00
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURLSSLOPT_NO_REVOKE", CURLOPT_SSL_OPTIONS,
+	OIDC_HTTP_SET_CURL_OPTION(r, curl, code, env_var_value, "CURLSSLOPT_NO_REVOKE", CURLOPT_SSL_OPTIONS,
 				  CURLSSLOPT_NO_REVOKE)
 #endif
 #if LIBCURL_VERSION_NUM >= 0x074400
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURLSSLOPT_NO_PARTIALCHAIN", CURLOPT_SSL_OPTIONS,
+	OIDC_HTTP_SET_CURL_OPTION(r, curl, code, env_var_value, "CURLSSLOPT_NO_PARTIALCHAIN", CURLOPT_SSL_OPTIONS,
 				  CURLSSLOPT_NO_PARTIALCHAIN)
 #endif
 #if LIBCURL_VERSION_NUM >= 0x074600
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURLSSLOPT_REVOKE_BEST_EFFORT", CURLOPT_SSL_OPTIONS,
+	OIDC_HTTP_SET_CURL_OPTION(r, curl, code, env_var_value, "CURLSSLOPT_REVOKE_BEST_EFFORT", CURLOPT_SSL_OPTIONS,
 				  CURLSSLOPT_REVOKE_BEST_EFFORT)
 #endif
 #if LIBCURL_VERSION_NUM >= 0x074700
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURLSSLOPT_NATIVE_CA", CURLOPT_SSL_OPTIONS,
+	OIDC_HTTP_SET_CURL_OPTION(r, curl, code, env_var_value, "CURLSSLOPT_NATIVE_CA", CURLOPT_SSL_OPTIONS,
 				  CURLSSLOPT_NATIVE_CA)
 #endif
 #if LIBCURL_VERSION_NUM >= 0x072200
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURL_SSLVERSION_TLSv1_0", CURLOPT_SSLVERSION,
+	OIDC_HTTP_SET_CURL_OPTION(r, curl, code, env_var_value, "CURL_SSLVERSION_TLSv1_0", CURLOPT_SSLVERSION,
 				  CURL_SSLVERSION_TLSv1_0)
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURL_SSLVERSION_TLSv1_1", CURLOPT_SSLVERSION,
+	OIDC_HTTP_SET_CURL_OPTION(r, curl, code, env_var_value, "CURL_SSLVERSION_TLSv1_1", CURLOPT_SSLVERSION,
 				  CURL_SSLVERSION_TLSv1_1)
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURL_SSLVERSION_TLSv1_2", CURLOPT_SSLVERSION,
+	OIDC_HTTP_SET_CURL_OPTION(r, curl, code, env_var_value, "CURL_SSLVERSION_TLSv1_2", CURLOPT_SSLVERSION,
 				  CURL_SSLVERSION_TLSv1_2)
 #endif
 #if LIBCURL_VERSION_NUM >= 0x073400
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURL_SSLVERSION_TLSv1_3", CURLOPT_SSLVERSION,
+	OIDC_HTTP_SET_CURL_OPTION(r, curl, code, env_var_value, "CURL_SSLVERSION_TLSv1_3", CURLOPT_SSLVERSION,
 				  CURL_SSLVERSION_TLSv1_3)
 #endif
 #if LIBCURL_VERSION_NUM >= 0x073600
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURL_SSLVERSION_MAX_TLSv1_0", CURLOPT_SSLVERSION,
+	OIDC_HTTP_SET_CURL_OPTION(r, curl, code, env_var_value, "CURL_SSLVERSION_MAX_TLSv1_0", CURLOPT_SSLVERSION,
 				  CURL_SSLVERSION_MAX_TLSv1_0)
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURL_SSLVERSION_MAX_TLSv1_1", CURLOPT_SSLVERSION,
+	OIDC_HTTP_SET_CURL_OPTION(r, curl, code, env_var_value, "CURL_SSLVERSION_MAX_TLSv1_1", CURLOPT_SSLVERSION,
 				  CURL_SSLVERSION_MAX_TLSv1_1)
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURL_SSLVERSION_MAX_TLSv1_2", CURLOPT_SSLVERSION,
+	OIDC_HTTP_SET_CURL_OPTION(r, curl, code, env_var_value, "CURL_SSLVERSION_MAX_TLSv1_2", CURLOPT_SSLVERSION,
 				  CURL_SSLVERSION_MAX_TLSv1_2)
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURL_SSLVERSION_MAX_TLSv1_3", CURLOPT_SSLVERSION,
+	OIDC_HTTP_SET_CURL_OPTION(r, curl, code, env_var_value, "CURL_SSLVERSION_MAX_TLSv1_3", CURLOPT_SSLVERSION,
 				  CURL_SSLVERSION_MAX_TLSv1_3)
 #endif
 }
