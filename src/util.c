@@ -673,17 +673,25 @@ static const char *oidc_util_current_url_scheme(const request_rec *r, oidc_hdr_x
 }
 
 /*
- * get the port part from a Host header, taking into account IPv5 literal addresses
+ * get the port from a Host or X-Forwarded-Host header
  */
-static const char *oidc_util_port_from_host(const char *host_hdr) {
+static const char *oidc_util_port_from_host_hdr(const char *host_hdr) {
 	const char *p = NULL;
 
-	if (host_hdr && host_hdr[0] == '[')
+	if (host_hdr == NULL)
+		return NULL;
+
+	// check for an IPv6 literal addresses
+	if (host_hdr[0] == '[')
 		p = strchr(host_hdr, ']');
 	else
 		p = host_hdr;
 
-	return p ? strchr(p, OIDC_CHAR_COLON) : NULL;
+	if ((p = strchr(p, OIDC_CHAR_COLON)))
+		// skip over the ":" to point to the actual port number
+		p++;
+
+	return p;
 }
 
 /*
@@ -715,25 +723,16 @@ static const char *oidc_get_current_url_port(const request_rec *r, const char *s
 	if ((host_hdr == NULL) && (x_forwarded_headers & OIDC_HDR_X_FORWARDED_HOST))
 		host_hdr = oidc_http_hdr_in_x_forwarded_host_get(r);
 
-	if (host_hdr) {
-		port_str = oidc_util_port_from_host(host_hdr);
-		if (port_str)
-			port_str++;
-		return port_str;
-	}
+	if (host_hdr)
+		return oidc_util_port_from_host_hdr(host_hdr);
 
 	/*
 	 * see if we can get the port from the "Host" header; if not
 	 * we'll determine the port locally
 	 */
 	host_hdr = oidc_http_hdr_in_host_get(r);
-	if (host_hdr) {
-		port_str = oidc_util_port_from_host(host_hdr);
-		if (port_str) {
-			port_str++;
-			return port_str;
-		}
-	}
+	if (host_hdr)
+		return oidc_util_port_from_host_hdr(host_hdr);
 
 	/*
 	 * if X-Forwarded-Proto assume the default port otherwise the
