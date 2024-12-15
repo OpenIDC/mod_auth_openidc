@@ -78,7 +78,7 @@ int file_read(apr_pool_t *pool, const char *path, char **rbuf) {
 	*rbuf = apr_pcalloc(pool, len + 1);
 
 	rc = apr_file_read_full(fd, *rbuf, len, &bytes_read);
-	if (rc != APR_SUCCESS) {
+	if ((rc != APR_SUCCESS) || (bytes_read < 1)) {
 		fprintf(stderr, "could not read file %s: %s", path, apr_strerror(rc, s_err, sizeof(s_err)));
 		return -1;
 	}
@@ -86,7 +86,7 @@ int file_read(apr_pool_t *pool, const char *path, char **rbuf) {
 	(*rbuf)[bytes_read] = '\0';
 
 	bytes_read--;
-	while ((*rbuf)[bytes_read] == '\n') {
+	while ((bytes_read > 0) && ((*rbuf)[bytes_read] == '\n')) {
 		(*rbuf)[bytes_read] = '\0';
 		bytes_read--;
 	}
@@ -134,7 +134,7 @@ int sign(int argc, char **argv, apr_pool_t *pool) {
 		return -1;
 	}
 
-	fprintf(stdout, "%s", cser);
+	fprintf(stdout, "%s\n", cser);
 
 	cjose_jws_release(jws);
 	cjose_jwk_release(jwk);
@@ -428,8 +428,11 @@ int uuid(int argc, char **argv, apr_pool_t *pool) {
 	unsigned long i = 0;
 	oidc_session_t z;
 
-	if (argc > 2)
+	if (argc > 2) {
 		n = _oidc_str_to_int(argv[2], n);
+		if ((n < 0) || (n > 25000000 * 10))
+			n = 25000000;
+	}
 
 	request_rec *r = request_setup(pool);
 

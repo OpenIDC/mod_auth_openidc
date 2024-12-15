@@ -129,7 +129,7 @@ static char *_jwk_parse(apr_pool_t *pool, const char *s, oidc_jwk_t **jwk, oidc_
 }
 
 static char *test_private_key_parse(apr_pool_t *pool) {
-	oidc_jose_error_t err;
+	oidc_jose_error_t err = {{'\0'}, 0, {'\0'}, {'\0'}};
 	BIO *input = NULL;
 	oidc_jwk_t *jwk = NULL;
 	int isPrivateKey = 1;
@@ -191,7 +191,7 @@ static char *test_private_key_parse(apr_pool_t *pool) {
 
 static char *test_public_key_parse(apr_pool_t *pool) {
 
-	oidc_jose_error_t err;
+	oidc_jose_error_t err = {{'\0'}, 0, {'\0'}, {'\0'}};
 	oidc_jwk_t *jwk, *jwkCert = NULL;
 
 	BIO *input, *inputCert = NULL;
@@ -1865,8 +1865,8 @@ static request_rec *test_setup(apr_pool_t *pool) {
 
 	oidc_dir_cfg_t *d_cfg = oidc_cfg_dir_config_create(request->pool, NULL);
 
-	request->server->module_config = apr_pcalloc(request->pool, sizeof(ap_conf_vector_t *) * kEls);
-	request->per_dir_config = apr_pcalloc(request->pool, sizeof(ap_conf_vector_t *) * kEls);
+	request->server->module_config = apr_pcalloc(request->pool, sizeof(void *) * kEls);
+	request->per_dir_config = apr_pcalloc(request->pool, sizeof(void *) * kEls);
 	ap_set_module_config(request->server->module_config, &auth_openidc_module, cfg);
 	ap_set_module_config(request->per_dir_config, &auth_openidc_module, d_cfg);
 
