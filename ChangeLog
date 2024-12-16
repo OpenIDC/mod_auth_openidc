@@ -5,6 +5,7 @@
 - code: declare introspection_endpoint_method member as int so it can be set to OIDC_CONFIG_POS_INT_UNSET without warning
 - code: check return value of oidc_get_provider_from_session and oidc_refresh_token_grant in logout.c
 - code: avoid potential crash on non-conformant literal IPv6 adresses in oidc_util_current_url_host
+- code: apply boundary checks on oidc_metrics_shm_size and use a global static for performance reasons
 
 12/15/2024
 - add Coverity Github action

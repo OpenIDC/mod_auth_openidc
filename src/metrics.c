@@ -337,11 +337,22 @@ static inline int oidc_metrics_get_env_int(const char *name, int dval) {
 
 #define OIDC_METRICS_CACHE_JSON_MAX_ENV_VAR "OIDC_METRICS_CACHE_JSON_MAX"
 
+static apr_size_t _oidc_metrics_shm_size = 0;
+
 /*
  * get the size of the to-be-allocated shared memory segment
  */
-static inline int oidc_metrics_shm_size(server_rec *s) {
-	return oidc_metrics_get_env_int(OIDC_METRICS_CACHE_JSON_MAX_ENV_VAR, OIDC_METRICS_CACHE_JSON_MAX_DEFAULT);
+static inline apr_size_t oidc_metrics_shm_size(server_rec *s) {
+	if (_oidc_metrics_shm_size == 0) {
+		int n =
+		    oidc_metrics_get_env_int(OIDC_METRICS_CACHE_JSON_MAX_ENV_VAR, OIDC_METRICS_CACHE_JSON_MAX_DEFAULT);
+		if ((n < 1) || (n > 1024 * 256 * 4 * 100)) {
+			oidc_serror(s, "environment value %s out of bounds, fallback to default",
+				    OIDC_METRICS_CACHE_JSON_MAX_ENV_VAR);
+			_oidc_metrics_shm_size = OIDC_METRICS_CACHE_JSON_MAX_DEFAULT;
+		}
+	}
+	return _oidc_metrics_shm_size;
 }
 
 /*
@@ -354,7 +365,7 @@ static inline void oidc_metrics_storage_set(server_rec *s, const char *value) {
 		if (n > oidc_metrics_shm_size(s))
 			oidc_serror(s,
 				    "json value too large: set or increase system environment variable %s to a value "
-				    "larger than %d",
+				    "larger than %" APR_SIZE_T_FMT,
 				    OIDC_METRICS_CACHE_JSON_MAX_ENV_VAR, oidc_metrics_shm_size(s));
 		else
 			_oidc_memcpy(p, value, n);
