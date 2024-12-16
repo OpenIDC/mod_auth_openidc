@@ -1,6 +1,8 @@
+12/16/2024
+- http: report errors when curl_easy_setopt fails and improve macro usage
+
 12/15/2024
 - add Coverity Github action
-- http: report errors when curl_easy_setopt fails for CURLOPT_SSL_OPTIONS
 
 12/13/2024
 - address warnings from static code analysis tool Coverity
