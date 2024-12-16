@@ -767,7 +767,6 @@ static const char *oidc_get_current_url_port(const request_rec *r, const char *s
 const char *oidc_util_current_url_host(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers) {
 	const char *host_str = NULL;
 	char *p = NULL;
-	char *i = NULL;
 
 	if (x_forwarded_headers & OIDC_HDR_FORWARDED)
 		host_str = oidc_http_hdr_forwarded_get(r, "host");
@@ -780,8 +779,9 @@ const char *oidc_util_current_url_host(request_rec *r, oidc_hdr_x_forwarded_t x_
 		host_str = apr_pstrdup(r->pool, host_str);
 
 		if (host_str[0] == '[') {
-			i = strchr(host_str, ']');
-			p = strchr(i, OIDC_CHAR_COLON);
+			p = strchr(host_str, ']');
+			if (p)
+				p = strchr(p, OIDC_CHAR_COLON);
 		} else {
 			p = strchr(host_str, OIDC_CHAR_COLON);
 		}
@@ -792,6 +792,7 @@ const char *oidc_util_current_url_host(request_rec *r, oidc_hdr_x_forwarded_t x_
 		/* no Host header, HTTP 1.0 */
 		host_str = ap_get_server_name(r);
 	}
+
 	return host_str;
 }
 
