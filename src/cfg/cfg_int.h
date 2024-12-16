@@ -87,14 +87,14 @@ struct oidc_cfg_cache_t {
 	/* cache_type= memcache: list of memcache host/port servers to use */
 	char *memcache_servers;
 	/* cache_type= memcache: minimum number of connections to each memcache server per process*/
-	apr_uint32_t memcache_min;
+	int memcache_min;
 	/* cache_type= memcache: soft maximum number of connections to each memcache server per process */
-	apr_uint32_t memcache_smax;
+	int memcache_smax;
 	/* cache_type= memcache: hard maximum number of connections to each memcache server per process */
-	apr_uint32_t memcache_hmax;
+	int memcache_hmax;
 	/* cache_type= memcache: maximum time in microseconds a connection to a memcache server can be idle before being
 	 * closed */
-	apr_uint32_t memcache_ttl;
+	int memcache_ttl;
 #endif
 
 	/*
