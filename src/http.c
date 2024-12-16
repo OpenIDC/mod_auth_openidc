@@ -773,8 +773,9 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 
 	oidc_http_set_curl_ssl_options(r, curl);
 
-	if (oidc_cfg_ca_bundle_path_get(c) != NULL)
+	if (oidc_cfg_ca_bundle_path_get(c) != NULL) {
 		OIDC_HTTP_CURL_SETOPT(CURLOPT_CAINFO, oidc_cfg_ca_bundle_path_get(c));
+	}
 
 #ifdef WIN32
 	else {
@@ -783,10 +784,11 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 		char *retval = (char *)malloc(sizeof(TCHAR) * (MAX_PATH + 1));
 		retval[0] = '\0';
 		buflen = SearchPath(NULL, "curl-ca-bundle.crt", NULL, MAX_PATH + 1, retval, &ptr);
-		if (buflen > 0)
+		if (buflen > 0) {
 			OIDC_HTTP_CURL_SETOPT(CURLOPT_CAINFO, retval);
-		else
+		} else {
 			oidc_warn(r, "no curl-ca-bundle.crt file found in path");
+		}
 		free(retval);
 	}
 #endif
@@ -814,10 +816,12 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 	/* set optional outgoing proxy for the local network */
 	if (outgoing_proxy->host_port) {
 		OIDC_HTTP_CURL_SETOPT(CURLOPT_PROXY, outgoing_proxy->host_port);
-		if (outgoing_proxy->username_password)
+		if (outgoing_proxy->username_password) {
 			OIDC_HTTP_CURL_SETOPT(CURLOPT_PROXYUSERPWD, outgoing_proxy->username_password);
-		if (outgoing_proxy->auth_type != OIDC_CONFIG_POS_INT_UNSET)
+		}
+		if (outgoing_proxy->auth_type != OIDC_CONFIG_POS_INT_UNSET) {
 			OIDC_HTTP_CURL_SETOPT(CURLOPT_PROXYAUTH, outgoing_proxy->auth_type);
+		}
 	}
 
 	/* see if we need to add token in the Bearer/DPoP Authorization header */
@@ -832,12 +836,15 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 		OIDC_HTTP_CURL_SETOPT(CURLOPT_USERPWD, basic_auth);
 	}
 
-	if (ssl_cert != NULL)
+	if (ssl_cert != NULL) {
 		OIDC_HTTP_CURL_SETOPT(CURLOPT_SSLCERT, ssl_cert);
-	if (ssl_key != NULL)
+	}
+	if (ssl_key != NULL) {
 		OIDC_HTTP_CURL_SETOPT(CURLOPT_SSLKEY, ssl_key);
-	if (ssl_key_pwd != NULL)
+	}
+	if (ssl_key_pwd != NULL) {
 		OIDC_HTTP_CURL_SETOPT(CURLOPT_KEYPASSWD, ssl_key_pwd);
+	}
 
 	if (data != NULL) {
 		/* set POST data */
@@ -865,8 +872,9 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 	}
 
 	/* see if we need to add any custom headers */
-	if (h_list != NULL)
+	if (h_list != NULL) {
 		OIDC_HTTP_CURL_SETOPT(CURLOPT_HTTPHEADER, h_list);
+	}
 
 	if (pass_cookies != NULL) {
 		/* gather cookies that we need to pass on from the incoming request */
