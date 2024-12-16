@@ -117,9 +117,9 @@ char *oidc_http_url_decode(const request_rec *r, const char *str) {
 		goto end;
 	}
 
-	replaced = (char *)str;
-	while (str[counter] != '\0') {
-		if (str[counter] == '+') {
+	replaced = apr_pstrdup(r->pool, str);
+	while (replaced[counter] != '\0') {
+		if (replaced[counter] == '+') {
 			replaced[counter] = ' ';
 		}
 		counter++;
