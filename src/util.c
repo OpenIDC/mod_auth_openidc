@@ -535,7 +535,7 @@ char *oidc_util_html_escape(apr_pool_t *pool, const char *s) {
 char *oidc_util_javascript_escape(apr_pool_t *pool, const char *s) {
 	const char *cp = NULL;
 	char *output = NULL;
-	size_t outputlen = 0;
+	int outputlen = 0;
 	int i = 0;
 
 	if (s == NULL) {
