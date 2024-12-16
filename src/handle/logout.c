@@ -474,12 +474,14 @@ int oidc_logout(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 		}
 	}
 
-	oidc_get_provider_from_session(r, c, session, &provider);
+	if (oidc_get_provider_from_session(r, c, session, &provider) == FALSE)
+		oidc_warn(r, "oidc_get_provider_from_session failed");
 
 	if ((provider != NULL) && (oidc_cfg_provider_end_session_endpoint_get(provider) != NULL)) {
 
 		if (apr_table_get(r->subprocess_env, OIDC_REFRESH_TOKENS_BEFORE_LOGOUT_ENVVAR) != NULL) {
-			oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, &id_token_hint);
+			if (oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, &id_token_hint) == FALSE)
+				oidc_warn(r, "id_token_hint could not be refreshed before logout");
 		} else {
 			id_token_hint = apr_pstrdup(r->pool, oidc_session_get_idtoken(r, session));
 		}

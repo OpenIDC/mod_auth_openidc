@@ -3,6 +3,7 @@
 - code: declare enum members as int so they can be set to OIDC_CONFIG_POS_INT_UNSET without warning
 - code: declare memcache members as int so they can be set to OIDC_CONFIG_POS_INT_UNSET without warning
 - code: declare introspection_endpoint_method member as int so it can be set to OIDC_CONFIG_POS_INT_UNSET without warning
+- code: check return value of oidc_get_provider_from_session and oidc_refresh_token_grant in logout.c
 
 12/15/2024
 - add Coverity Github action
