@@ -752,12 +752,12 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 	/* setup the buffer where the response data will be written to */
 	OIDC_HTTP_CURL_SETOPT(CURLOPT_WRITEFUNCTION, oidc_http_response_data);
 	// coverity[suspicious_sizeof]
-	OIDC_HTTP_CURL_SETOPT(CURLOPT_WRITEDATA, &d_buf);
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_WRITEDATA, (void *)&d_buf);
 
 	/* setup the buffer where the response headers will be written to */
 	OIDC_HTTP_CURL_SETOPT(CURLOPT_HEADERFUNCTION, oidc_http_response_header);
 	// coverity[suspicious_sizeof]
-	OIDC_HTTP_CURL_SETOPT(CURLOPT_HEADERDATA, &h_buf);
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_HEADERDATA, (void *)&h_buf);
 
 #ifndef LIBCURL_NO_CURLPROTO
 #if LIBCURL_VERSION_NUM >= 0x075500
