@@ -632,7 +632,8 @@ const char *oidc_cmd_provider_userinfo_refresh_interval_set(cmd_parms *cmd, void
 	if (rv == NULL)
 		rv = oidc_cfg_provider_userinfo_refresh_interval_set(cmd->pool, cfg->provider, v);
 	if ((rv == NULL) && (arg2))
-		rv = oidc_cfg_parse_action_on_error_refresh_as(cmd->pool, arg2, &cfg->action_on_userinfo_error);
+		rv = oidc_cfg_parse_action_on_error_refresh_as(
+		    cmd->pool, arg2, (oidc_on_error_action_t *)&cfg->action_on_userinfo_error);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 

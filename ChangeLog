@@ -1,5 +1,6 @@
 12/16/2024
 - http: report errors when curl_easy_setopt fails and improve macro usage
+- code: declare enum members as int so they can be set to OIDC_CONFIG_POS_INT_UNSET without warning
 
 12/15/2024
 - add Coverity Github action

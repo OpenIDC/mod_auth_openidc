@@ -53,14 +53,14 @@ struct oidc_dir_cfg_t {
 	char *cookie_path;
 	char *cookie;
 	char *authn_header;
-	oidc_unauth_action_t unauth_action;
-	oidc_unautz_action_t unautz_action;
+	int unauth_action;
+	int unautz_action;
 	char *unauthz_arg;
 	apr_array_header_t *pass_cookies;
 	apr_array_header_t *strip_cookies;
-	oidc_appinfo_pass_in_t pass_info_in;
-	oidc_appinfo_encoding_t pass_info_encoding;
-	oidc_oauth_accept_token_in_t oauth_accept_token_in;
+	int pass_info_in;
+	int pass_info_encoding;
+	int oauth_accept_token_in;
 	apr_hash_t *oauth_accept_token_options;
 	int oauth_token_introspect_interval;
 	int preserve_post;
@@ -71,11 +71,11 @@ struct oidc_dir_cfg_t {
 	oidc_apr_expr_t *unauth_expression;
 	oidc_apr_expr_t *userinfo_claims_expr;
 	int refresh_access_token_before_expiry;
-	oidc_on_error_action_t action_on_error_refresh;
-	oidc_on_error_action_t action_on_userinfo_refresh;
+	int action_on_error_refresh;
+	int action_on_userinfo_refresh;
 	char *state_cookie_prefix;
 	apr_array_header_t *pass_userinfo_as;
-	oidc_pass_idtoken_as_t pass_idtoken_as;
+	int pass_idtoken_as;
 };
 
 #define OIDC_PASS_ID_TOKEN_AS_CLAIMS_STR "claims"
@@ -422,7 +422,8 @@ const char *oidc_cmd_dir_refresh_access_token_before_expiry_set(cmd_parms *cmd, 
 		goto end;
 
 	if (arg2)
-		rv = oidc_cfg_parse_action_on_error_refresh_as(cmd->pool, arg2, &dir_cfg->action_on_error_refresh);
+		rv = oidc_cfg_parse_action_on_error_refresh_as(
+		    cmd->pool, arg2, (oidc_on_error_action_t *)&dir_cfg->action_on_error_refresh);
 
 end:
 

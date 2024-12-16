@@ -150,12 +150,12 @@ struct oidc_cfg_t {
 	int session_cookie_chunk_size;
 	char *cookie_domain;
 	int cookie_http_only;
-	oidc_samesite_cookie_t cookie_same_site;
+	int cookie_same_site;
 
 	int state_timeout;
 	int max_number_of_state_cookies;
 	int delete_oldest_state_cookies;
-	oidc_state_input_hdrs_t state_input_headers;
+	int state_input_headers;
 
 	int session_inactivity_timeout;
 	int provider_metadata_refresh_interval;
@@ -181,9 +181,9 @@ struct oidc_cfg_t {
 	apr_hash_t *redirect_urls_allowed;
 	char *ca_bundle_path;
 	char *logout_x_frame_options;
-	oidc_hdr_x_forwarded_t x_forwarded_headers;
-	oidc_on_error_action_t action_on_userinfo_error;
-	oidc_trace_parent_t trace_parent;
+	int x_forwarded_headers;
+	int action_on_userinfo_error;
+	int trace_parent;
 
 	apr_hash_t *metrics_hook_data;
 	char *metrics_path;
