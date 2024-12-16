@@ -306,7 +306,7 @@ const char *oidc_cmd_dir_pass_claims_as_set(cmd_parms *cmd, void *m, const char 
 							 {OIDC_APPINFO_PASS_BOTH, OIDC_APPINFO_PASS_BOTH_STR}};
 
 	rv = oidc_cfg_parse_option(cmd->pool, pass_options, OIDC_CFG_OPTIONS_SIZE(pass_options), arg1,
-				   (int *)&dir_cfg->pass_info_in);
+				   &dir_cfg->pass_info_in);
 
 	static const oidc_cfg_option_t encoding_options[] = {
 	    {OIDC_APPINFO_ENCODING_NONE, OIDC_APPINFO_ENCODING_NONE_STR},
@@ -315,7 +315,7 @@ const char *oidc_cmd_dir_pass_claims_as_set(cmd_parms *cmd, void *m, const char 
 
 	if ((rv == NULL) && (arg2 != NULL))
 		rv = oidc_cfg_parse_option(cmd->pool, encoding_options, OIDC_CFG_OPTIONS_SIZE(encoding_options), arg2,
-					   (int *)&dir_cfg->pass_info_encoding);
+					   &dir_cfg->pass_info_encoding);
 
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
@@ -348,7 +348,7 @@ const char *oidc_cmd_dir_unauth_action_set(cmd_parms *cmd, void *m, const char *
 	oidc_dir_cfg_t *dir_cfg = (oidc_dir_cfg_t *)m;
 	const char *rv =
 	    oidc_cfg_parse_option(cmd->pool, unauth_action_options, OIDC_CFG_OPTIONS_SIZE(unauth_action_options), arg1,
-				  (int *)&dir_cfg->unauth_action);
+				  &dir_cfg->unauth_action);
 	if (rv == NULL)
 		rv = oidc_util_apr_expr_parse(cmd, arg2, &dir_cfg->unauth_expression, FALSE);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
@@ -368,8 +368,8 @@ const char *oidc_cmd_dir_unautz_action_set(cmd_parms *cmd, void *m, const char *
 						    {OIDC_UNAUTZ_RETURN401, OIDC_UNAUTZ_RETURN401_STR},
 						    {OIDC_UNAUTZ_AUTHENTICATE, OIDC_UNAUTZ_AUTHENTICATE_STR},
 						    {OIDC_UNAUTZ_RETURN302, OIDC_UNAUTZ_RETURN302_STR}};
-	const char *rv = oidc_cfg_parse_option(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg1,
-					       (int *)&dir_cfg->unautz_action);
+	const char *rv =
+	    oidc_cfg_parse_option(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg1, &dir_cfg->unautz_action);
 	if ((rv == NULL) && (arg2 != NULL)) {
 		dir_cfg->unauthz_arg = apr_pstrdup(cmd->pool, arg2);
 	} else if (dir_cfg->unautz_action == OIDC_UNAUTZ_RETURN302) {

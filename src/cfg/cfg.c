@@ -375,7 +375,7 @@ const char *oidc_cmd_trace_parent_set(cmd_parms *cmd, void *struct_ptr, const ch
 						    {OIDC_TRACE_PARENT_PROPAGATE, OIDC_TRACE_PARENT_PROPAGATE_STR},
 						    {OIDC_TRACE_PARENT_GENERATE, OIDC_TRACE_PARENT_GENERATE_STR}};
 	const char *rv =
-	    oidc_cfg_parse_option(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg, (int *)&cfg->trace_parent);
+	    oidc_cfg_parse_option(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg, &cfg->trace_parent);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -481,8 +481,8 @@ const char *oidc_cmd_state_input_headers_set(cmd_parms *cmd, void *m, const char
 	    {OIDC_STATE_INPUT_HEADERS_X_FORWARDED_FOR, OIDC_STATE_INPUT_HEADERS_AS_X_FORWARDED_FOR},
 	    {OIDC_STATE_INPUT_HEADERS_USER_AGENT | OIDC_STATE_INPUT_HEADERS_X_FORWARDED_FOR,
 	     OIDC_STATE_INPUT_HEADERS_AS_BOTH}};
-	const char *rv = oidc_cfg_parse_option(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg,
-					       (int *)&cfg->state_input_headers);
+	const char *rv =
+	    oidc_cfg_parse_option(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg, &cfg->state_input_headers);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -541,7 +541,7 @@ const char *oidc_cmd_cookie_same_site_set(cmd_parms *cmd, void *m, const char *a
 						    {OIDC_SAMESITE_COOKIE_LAX, OIDC_SAMESITE_COOKIE_LAX_STR},
 						    {OIDC_SAMESITE_COOKIE_STRICT, OIDC_SAMESITE_COOKIE_STRICT_STR}};
 	const char *rv = oidc_cfg_parse_option_ignore_case(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg,
-							   (int *)&cfg->cookie_same_site);
+							   &cfg->cookie_same_site);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
