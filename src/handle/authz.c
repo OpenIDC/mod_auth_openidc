@@ -295,10 +295,9 @@ static oidc_authz_json_handler_t _oidc_authz_separator_handlers[] = {
 // clang-format on
 
 static apr_byte_t oidc_auth_handle_separator(request_rec *r, const char *key, json_t *val, const char *spec) {
-	int i = 0;
 	if ((spec == NULL) || (val == NULL) || (key == NULL))
 		return FALSE;
-	for (i = 0; i < OIDC_AUTHZ_SEPARATOR_HANDLERS_NUMBER; i++) {
+	for (int i = 0; i < OIDC_AUTHZ_SEPARATOR_HANDLERS_NUMBER; i++) {
 		// there's some overloading going on here, applying a char as an int index
 		if (_oidc_authz_separator_handlers[i].type == (*spec)) {
 			// skip the separator
