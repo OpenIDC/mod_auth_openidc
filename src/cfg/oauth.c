@@ -59,7 +59,7 @@ struct oidc_oauth_t {
 	char *client_secret;
 
 	char *introspection_endpoint_url;
-	oidc_oauth_introspection_endpoint_method_t introspection_endpoint_method;
+	int introspection_endpoint_method;
 	char *introspection_token_param_name;
 	char *introspection_endpoint_params;
 	char *introspection_endpoint_auth;
