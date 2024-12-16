@@ -350,6 +350,8 @@ static inline apr_size_t oidc_metrics_shm_size(server_rec *s) {
 			oidc_serror(s, "environment value %s out of bounds, fallback to default",
 				    OIDC_METRICS_CACHE_JSON_MAX_ENV_VAR);
 			_oidc_metrics_shm_size = OIDC_METRICS_CACHE_JSON_MAX_DEFAULT;
+		} else {
+			_oidc_metrics_shm_size = n;
 		}
 	}
 	return _oidc_metrics_shm_size;
