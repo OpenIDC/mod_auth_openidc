@@ -103,9 +103,8 @@ int oidc_cache_shm_post_config(server_rec *s) {
 	}
 
 	/* initialize the whole segment to '/0' */
-	int i;
 	oidc_cache_shm_entry_t *t = apr_shm_baseaddr_get(context->shm);
-	for (i = 0; i < cfg->cache.shm_size_max; i++, OIDC_CACHE_SHM_ADD_OFFSET(t, cfg->cache.shm_entry_size_max)) {
+	for (int i = 0; i < cfg->cache.shm_size_max; i++, OIDC_CACHE_SHM_ADD_OFFSET(t, cfg->cache.shm_entry_size_max)) {
 		t->section_key[0] = '\0';
 		t->access = 0;
 	}
@@ -220,11 +219,12 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section, const 
 	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *)cfg->cache.cfg;
 
-	oidc_cache_shm_entry_t *match, *free, *lru;
-	oidc_cache_shm_entry_t *t;
-	apr_time_t current_time;
-	int i;
-	apr_time_t age;
+	oidc_cache_shm_entry_t *match = NULL;
+	oidc_cache_shm_entry_t *free = NULL;
+	oidc_cache_shm_entry_t *lru = NULL;
+	oidc_cache_shm_entry_t *t = NULL;
+	apr_time_t current_time = 0;
+	apr_time_t age = 0;
 
 	const char *section_key = oidc_cache_shm_get_key(r, section, key);
 	if (section_key == NULL)
@@ -255,7 +255,7 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section, const 
 	match = NULL;
 	free = NULL;
 	lru = t;
-	for (i = 0; i < cfg->cache.shm_size_max; i++, OIDC_CACHE_SHM_ADD_OFFSET(t, cfg->cache.shm_entry_size_max)) {
+	for (int i = 0; i < cfg->cache.shm_size_max; i++, OIDC_CACHE_SHM_ADD_OFFSET(t, cfg->cache.shm_entry_size_max)) {
 
 		/* see if this slot is free */
 		if (t->section_key[0] == '\0') {
@@ -327,7 +327,7 @@ static int oidc_cache_shm_destroy(server_rec *s) {
 	oidc_slog(s, APLOG_TRACE1, "destroy: %pp (shm=%pp,s=%pp, p=%d)", context, context ? context->shm : 0, s,
 		  context ? context->is_parent : -1);
 
-	if ((context) && (context->is_parent == TRUE) && (context->shm) && (context->mutex)) {
+	if (context && (context->is_parent == TRUE) && (context->shm) && (context->mutex)) {
 		oidc_cache_mutex_lock(s->process->pool, s, context->mutex);
 		rv = apr_shm_destroy(context->shm);
 		oidc_sdebug(s, "apr_shm_destroy returned: %d", rv);
@@ -335,7 +335,7 @@ static int oidc_cache_shm_destroy(server_rec *s) {
 		oidc_cache_mutex_unlock(s->process->pool, s, context->mutex);
 	}
 
-	if ((context) && (context->mutex)) {
+	if (context && (context->mutex)) {
 		if (oidc_cache_mutex_destroy(s, context->mutex) != TRUE)
 			rv = APR_EGENERAL;
 		context->mutex = NULL;

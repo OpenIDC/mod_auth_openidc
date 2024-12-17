@@ -197,10 +197,12 @@ extern const oidc_metrics_counter_info_t _oidc_metrics_counters_info[];
 void oidc_metrics_counter_inc(request_rec *r, oidc_metrics_counter_type_t type, const char *spec);
 
 #define OIDC_METRICS_COUNTER_INC_SPEC(r, cfg, type, spec)                                                              \
-	if (oidc_cfg_metrics_hook_data_get(cfg) != NULL)                                                               \
+	if (oidc_cfg_metrics_hook_data_get(cfg) != NULL) {                                                             \
 		if (apr_hash_get(oidc_cfg_metrics_hook_data_get(cfg), _oidc_metrics_counters_info[type].class_name,    \
-				 APR_HASH_KEY_STRING) != NULL)                                                         \
-			oidc_metrics_counter_inc(r, type, spec);
+				 APR_HASH_KEY_STRING) != NULL) {                                                       \
+			oidc_metrics_counter_inc(r, type, spec);                                                       \
+		}                                                                                                      \
+	}
 
 #define OIDC_METRICS_COUNTER_INC(r, cfg, type) OIDC_METRICS_COUNTER_INC_SPEC(r, cfg, type, NULL);
 

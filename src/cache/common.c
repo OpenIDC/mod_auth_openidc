@@ -218,7 +218,7 @@ apr_byte_t oidc_cache_mutex_destroy(server_rec *s, oidc_cache_mutex_t *m) {
 
 	oidc_slog(s, APLOG_TRACE1, "init: %pp (m=%pp,s=%pp, p=%d)", m, m->gmutex ? m->gmutex : 0, s, m->is_parent);
 
-	if ((m) && (m->is_parent == TRUE)) {
+	if (m && (m->is_parent == TRUE)) {
 		if ((m->is_global) && (m->gmutex)) {
 			rv = apr_global_mutex_destroy(m->gmutex);
 			m->gmutex = NULL;
@@ -293,7 +293,8 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, 
 	apr_byte_t rc = FALSE;
 	char *msg = NULL;
 	const char *s_key = NULL;
-	char *cache_value = NULL, *s_secret = NULL;
+	char *cache_value = NULL;
+	char *s_secret = NULL;
 
 	oidc_debug(r, "enter: %s (section=%s, decrypt=%d, type=%s)", key, section, encrypted, cfg->cache.impl->name);
 

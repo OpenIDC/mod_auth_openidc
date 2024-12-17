@@ -78,13 +78,19 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 	cfg->cache.cfg = context;
 
 	apr_status_t rv = APR_SUCCESS;
-	int nservers = 0;
+	apr_uint16_t nservers = 0;
 	char *split;
 	char *tok;
 	apr_pool_t *p = s->process->pool;
 	APR_OPTIONAL_FN_TYPE(http2_get_num_workers) * get_h2_num_workers;
-	int max_threads, minw, maxw;
-	apr_uint32_t min, smax, hmax, ttl;
+	int max_threads = 0;
+	int minw = 0;
+	int maxw = 0;
+	apr_uint32_t min = 0;
+	apr_uint32_t smax = 0;
+	apr_uint32_t hmax = 0;
+	apr_uint32_t ttl = 0;
+	;
 
 	if (oidc_cfg_cache_memcache_servers_get(cfg) == NULL) {
 		oidc_serror(s, "cache type is set to \"memcache\", but no valid " OIDCMemCacheServers
@@ -222,9 +228,8 @@ static char *oidc_cache_memcache_get_key(apr_pool_t *pool, const char *section, 
 /*
  * check dead/alive status for all servers
  */
-static apr_byte_t oidc_cache_memcache_status(request_rec *r, oidc_cache_cfg_memcache_t *context) {
-	int i = 0;
-	for (i = 0; i < context->cache_memcache->ntotal; i++) {
+static apr_byte_t oidc_cache_memcache_status(const oidc_cache_cfg_memcache_t *context) {
+	for (int i = 0; i < context->cache_memcache->ntotal; i++) {
 		if (context->cache_memcache->live_servers[i]->status != APR_MC_SERVER_DEAD)
 			return TRUE;
 	}
@@ -250,7 +255,7 @@ static apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *section, c
 		/*
 		 * NB: workaround the fact that the apr_memcache returns APR_NOTFOUND if a server has been marked dead
 		 */
-		if (oidc_cache_memcache_status(r, context) == FALSE) {
+		if (oidc_cache_memcache_status(context) == FALSE) {
 
 			oidc_cache_memcache_log_status_error(r, "apr_memcache_getp", rv);
 
@@ -309,7 +314,7 @@ static apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *section, c
 	} else {
 
 		/* calculate the timeout as a Unix timestamp which allows values > 30 days */
-		apr_uint32_t timeout = apr_time_sec(expiry);
+		apr_uint32_t timeout = (apr_uint32_t)apr_time_sec(expiry);
 
 		/* store it */
 		rv = apr_memcache_set(context->cache_memcache, oidc_cache_memcache_get_key(r->pool, section, key),
