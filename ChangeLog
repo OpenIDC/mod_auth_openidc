@@ -1,3 +1,6 @@
+01/02/2025
+- add a configuration check for public/private keys when using DPoP; closes #1293; thanks @ahus1
+
 12/17/2024
 - code: address SonarQube warnings in src/cache/*.c
 

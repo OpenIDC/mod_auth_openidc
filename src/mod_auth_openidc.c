@@ -1470,6 +1470,15 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg_t *c) {
 		}
 	}
 
+	if (oidc_cfg_provider_dpop_mode_get(oidc_cfg_provider_get(c)) != OIDC_DPOP_MODE_OFF) {
+		if (oidc_util_key_list_first(oidc_cfg_private_keys_get(c), -1, OIDC_JOSE_JWK_SIG_STR) == NULL) {
+			oidc_serror(s,
+				    "'" OIDCDPoPMode "' is configured but the required signing keys have not been "
+						     "provided in '" OIDCPrivateKeyFiles "'/'" OIDCPublicKeyFiles "'");
+			return HTTP_INTERNAL_SERVER_ERROR;
+		}
+	}
+
 	return OK;
 }
 
