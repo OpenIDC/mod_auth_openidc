@@ -480,7 +480,7 @@ OIDC_CFG_DIR_MEMBER_FUNC_STR(authn_header, const char *, OIDC_DEFAULT_AUTHN_HEAD
 #define OIDC_DEFAULT_PASS_APPINFO_IN OIDC_APPINFO_PASS_BOTH
 OIDC_CFG_DIR_MEMBER_FUNC_INT_GET(pass_info_in, oidc_appinfo_pass_in_t, OIDC_DEFAULT_PASS_APPINFO_IN)
 
-/* default for passing app info in base64 encoded format */
+/* default for passing app info in a specific encoding */
 #define OIDC_DEFAULT_APPINFO_ENCODING OIDC_APPINFO_ENCODING_LATIN1
 OIDC_CFG_DIR_MEMBER_FUNC_INT_GET(pass_info_encoding, oidc_appinfo_encoding_t, OIDC_DEFAULT_APPINFO_ENCODING)
 
