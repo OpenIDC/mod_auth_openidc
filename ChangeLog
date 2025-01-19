@@ -1,3 +1,6 @@
+01/19/2025
+- jose: prevent memory leaks when zlib compressing (deflate) fails in oidc_jose_zlib_compress
+
 01/02/2025
 - add a configuration check for public/private keys when using DPoP; closes #1293; thanks @ahus1
 - update copyright year to 2025
