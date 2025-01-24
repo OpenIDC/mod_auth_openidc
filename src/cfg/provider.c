@@ -662,7 +662,7 @@ const char *oidc_cmd_provider_revocation_endpoint_url_set(cmd_parms *cmd, void *
 		cfg->provider->revocation_endpoint_url = "";
 		return NULL;
 	}
-	return oidc_cfg_provider_revocation_endpoint_url_set(cmd->pool, cfg->provider, args);
+	return oidc_cfg_provider_revocation_endpoint_url_set(cmd->pool, cfg->provider, w);
 }
 
 const char *oidc_cfg_provider_revocation_endpoint_url_get(oidc_provider_t *provider) {
