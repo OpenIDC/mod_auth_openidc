@@ -2,6 +2,7 @@
 - add OIDCProfile to configure OpenID Connect profile behaviours for, so far "FAPI20" only, which configures:
   Authentication Request method, DPoP, PKCE, ID token aud values requirements
   token endpoint JWT authentication "aud" values, "iss" parameter requirement in authentication reponses
+- release 2.4.16.7
 
 01/24/2025
 - fix OIDCProviderRevocationEndpoint when not setting it to ""; see #1301; thanks @tarteens
