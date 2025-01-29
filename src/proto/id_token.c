@@ -128,7 +128,7 @@ apr_byte_t oidc_proto_idtoken_validate_aud_and_azp(request_rec *r, oidc_cfg_t *c
 	json_t *aud = json_object_get(id_token_payload->value.json, OIDC_CLAIM_AUD);
 	if (aud != NULL) {
 
-		arr = oidc_cfg_provider_id_token_aud_values_get(provider);
+		arr = oidc_proto_profile_id_token_aud_values_get(r->pool, provider);
 
 		/* check if it is a single-value */
 		if (json_is_string(aud)) {

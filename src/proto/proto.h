@@ -121,6 +121,14 @@
 
 typedef json_t oidc_proto_state_t;
 
+// profile.c
+oidc_auth_request_method_t oidc_proto_profile_auth_request_method_get(oidc_provider_t *provider);
+const char *oidc_proto_profile_token_endpoint_auth_aud(oidc_provider_t *provider);
+const apr_array_header_t *oidc_proto_profile_id_token_aud_values_get(apr_pool_t *pool, oidc_provider_t *provider);
+const oidc_proto_pkce_t *oidc_proto_profile_pkce_get(oidc_provider_t *provider);
+oidc_dpop_mode_t oidc_proto_profile_dpop_mode_get(oidc_provider_t *provider);
+int oidc_proto_profile_response_require_iss_get(oidc_provider_t *provider);
+
 // auth.c
 apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg_t *cfg, const char *token_endpoint_auth,
 					  const char *client_id, const char *client_secret,

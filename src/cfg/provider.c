@@ -96,6 +96,7 @@ struct oidc_provider_t {
 	oidc_userinfo_token_method_t userinfo_token_method;
 	char *request_object;
 	oidc_auth_request_method_t auth_request_method;
+	oidc_profile_t profile;
 	int response_require_iss;
 };
 
@@ -669,6 +670,17 @@ const char *oidc_cfg_provider_revocation_endpoint_url_get(oidc_provider_t *provi
 	return provider->revocation_endpoint_url;
 }
 
+#define OIDC_PROFILE_OIDC10_STR "OIDC10"
+#define OIDC_PROFILE_FAPI20_STR "FAPI20"
+
+const char *oidc_cfg_provider_parse_profile(apr_pool_t *pool, const char *arg, oidc_profile_t *profile) {
+	static const oidc_cfg_option_t options[] = {{OIDC_PROFILE_OIDC10, OIDC_PROFILE_OIDC10_STR},
+						    {OIDC_PROFILE_FAPI20, OIDC_PROFILE_FAPI20_STR}};
+	return oidc_cfg_parse_option(pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg, (int *)profile);
+}
+#define OIDC_DEFAULT_PROFILE OIDC_PROFILE_OIDC10
+OIDC_PROVIDER_MEMBER_FUNCS_STR_INT(profile, oidc_cfg_provider_parse_profile, oidc_profile_t, OIDC_DEFAULT_PROFILE)
+
 /*
  * base
  */
@@ -732,6 +744,7 @@ static void oidc_cfg_provider_init(oidc_provider_t *provider) {
 	provider->response_require_iss = OIDC_CONFIG_POS_INT_UNSET;
 
 	provider->id_token_aud_values = NULL;
+	provider->profile = OIDC_CONFIG_POS_INT_UNSET;
 }
 
 void oidc_cfg_provider_merge(apr_pool_t *pool, oidc_provider_t *dst, const oidc_provider_t *base,
@@ -846,6 +859,7 @@ void oidc_cfg_provider_merge(apr_pool_t *pool, oidc_provider_t *dst, const oidc_
 
 	dst->id_token_aud_values =
 	    add->id_token_aud_values != NULL ? add->id_token_aud_values : base->id_token_aud_values;
+	dst->profile = add->profile != OIDC_CONFIG_POS_INT_UNSET ? add->profile : base->profile;
 }
 
 oidc_provider_t *oidc_cfg_provider_create(apr_pool_t *pool) {

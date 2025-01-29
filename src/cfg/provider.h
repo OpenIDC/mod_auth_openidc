@@ -93,6 +93,11 @@ typedef struct oidc_jwks_uri_t {
 	apr_array_header_t *jwk_list;
 } oidc_jwks_uri_t;
 
+typedef enum {
+	OIDC_PROFILE_OIDC10 = 1,
+	OIDC_PROFILE_FAPI20 = 2,
+} oidc_profile_t;
+
 // NB: need the primitive strings and the declarations of the custom
 //     set routines here because the commands are included in config.c.
 //     via include "cmds.inc"
@@ -115,6 +120,7 @@ typedef struct oidc_jwks_uri_t {
 #define OIDCProviderVerifyCertFiles "OIDCProviderVerifyCertFiles"
 #define OIDCResponseType "OIDCResponseType"
 #define OIDCProviderAuthRequestMethod "OIDCProviderAuthRequestMethod"
+#define OIDCProfile "OIDCProfile"
 #define OIDCPKCEMethod "OIDCPKCEMethod"
 #define OIDCDPoPMode "OIDCDPoPMode"
 #define OIDCResponseMode "OIDCResponseMode"
@@ -242,6 +248,7 @@ void OIDC_CFG_MEMBER_FUNC_NAME(dpop_mode, cfg_provider, int_set)(oidc_provider_t
 // for metadata.c
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_INT_DECL(userinfo_token_method, oidc_userinfo_token_method_t)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_INT_DECL(auth_request_method, oidc_auth_request_method_t)
+OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_INT_DECL(profile, oidc_profile_t)
 
 // types
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_TYPE_DECL(pkce, const oidc_proto_pkce_t *)

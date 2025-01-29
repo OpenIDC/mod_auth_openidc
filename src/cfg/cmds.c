@@ -594,6 +594,11 @@ const command_rec oidc_cfg_cmds[] = {
 		OIDCProviderAuthRequestMethod,
 		auth_request_method,
 		"HTTP method used to send the authentication request to the provider (GET or POST)."),
+	OIDC_CFG_CMD_PROVIDER(
+		AP_INIT_TAKE1,
+		OIDCProfile,
+		profile,
+		"OpenID Connect Profile."),
 
 	// oauth
 

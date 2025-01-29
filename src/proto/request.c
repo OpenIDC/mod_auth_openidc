@@ -100,7 +100,7 @@ static int oidc_proto_request_auth_push(request_rec *r, struct oidc_provider_t *
 	if (oidc_proto_token_endpoint_auth(
 		r, cfg, oidc_cfg_provider_token_endpoint_auth_get(provider), oidc_cfg_provider_client_id_get(provider),
 		oidc_cfg_provider_client_secret_get(provider), oidc_cfg_provider_client_keys_get(provider),
-		oidc_cfg_provider_issuer_get(provider), params, NULL, &basic_auth, &bearer_auth) == FALSE)
+		oidc_proto_profile_token_endpoint_auth_aud(provider), params, NULL, &basic_auth, &bearer_auth) == FALSE)
 		goto out;
 
 	if (oidc_http_post_form(r, endpoint_url, params, basic_auth, bearer_auth, NULL,
@@ -651,9 +651,9 @@ int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, co
 		apr_table_setn(params, OIDC_PROTO_NONCE, nonce);
 
 	/* add PKCE code challenge if set */
-	if ((code_challenge != NULL) && (oidc_cfg_provider_pkce_get(provider) != &oidc_pkce_none)) {
+	if ((code_challenge != NULL) && (oidc_proto_profile_pkce_get(provider) != &oidc_pkce_none)) {
 		apr_table_setn(params, OIDC_PROTO_CODE_CHALLENGE, code_challenge);
-		apr_table_setn(params, OIDC_PROTO_CODE_CHALLENGE_METHOD, oidc_cfg_provider_pkce_get(provider)->method);
+		apr_table_setn(params, OIDC_PROTO_CODE_CHALLENGE_METHOD, oidc_proto_profile_pkce_get(provider)->method);
 	}
 
 	/* add the response_mode if explicitly set */
@@ -685,17 +685,17 @@ int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, co
 		oidc_proto_request_uri_request_param_add(r, provider, redirect_uri, params);
 
 	/* send the full authentication request via POST or GET */
-	if (oidc_cfg_provider_auth_request_method_get(provider) == OIDC_AUTH_REQUEST_METHOD_POST) {
+	if (oidc_proto_profile_auth_request_method_get(provider) == OIDC_AUTH_REQUEST_METHOD_POST) {
 
 		/* construct a HTML POST auto-submit page with the authorization request parameters */
 		rv =
 		    oidc_proto_request_html_post(r, oidc_cfg_provider_authorization_endpoint_url_get(provider), params);
 
-	} else if (oidc_cfg_provider_auth_request_method_get(provider) == OIDC_AUTH_REQUEST_METHOD_PAR) {
+	} else if (oidc_proto_profile_auth_request_method_get(provider) == OIDC_AUTH_REQUEST_METHOD_PAR) {
 
 		rv = oidc_proto_request_auth_push(r, provider, params);
 
-	} else if (oidc_cfg_provider_auth_request_method_get(provider) == OIDC_AUTH_REQUEST_METHOD_GET) {
+	} else if (oidc_proto_profile_auth_request_method_get(provider) == OIDC_AUTH_REQUEST_METHOD_GET) {
 
 		/* construct the full authorization request URL */
 		authorization_request =
@@ -721,7 +721,7 @@ int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, co
 
 	} else {
 		oidc_error(r, "oidc_cfg_provider_auth_request_method_get(provider) set to an unknown value: %d",
-			   oidc_cfg_provider_auth_request_method_get(provider));
+			   oidc_proto_profile_auth_request_method_get(provider));
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 

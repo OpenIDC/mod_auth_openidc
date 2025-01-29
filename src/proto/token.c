@@ -111,14 +111,14 @@ apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, oi
 	if (oidc_proto_token_endpoint_auth(
 		r, cfg, oidc_cfg_provider_token_endpoint_auth_get(provider), oidc_cfg_provider_client_id_get(provider),
 		oidc_cfg_provider_client_secret_get(provider), oidc_cfg_provider_client_keys_get(provider),
-		oidc_cfg_provider_token_endpoint_url_get(provider), params, NULL, &basic_auth, &bearer_auth) == FALSE)
+		oidc_proto_profile_token_endpoint_auth_aud(provider), params, NULL, &basic_auth, &bearer_auth) == FALSE)
 		goto end;
 
 	/* add any configured extra static parameters to the token endpoint */
 	oidc_util_table_add_query_encoded_params(r->pool, params,
 						 oidc_cfg_provider_token_endpoint_params_get(provider));
 
-	if (oidc_cfg_provider_dpop_mode_get(provider) != OIDC_DPOP_MODE_OFF) {
+	if (oidc_proto_profile_dpop_mode_get(provider) != OIDC_DPOP_MODE_OFF) {
 
 		response_hdrs = apr_hash_make(r->pool);
 		apr_hash_set(response_hdrs, OIDC_HTTP_HDR_AUTHORIZATION, APR_HASH_KEY_STRING, "");
@@ -127,7 +127,7 @@ apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, oi
 
 		if ((oidc_proto_dpop_create(r, cfg, oidc_cfg_provider_token_endpoint_url_get(provider), "POST", NULL,
 					    NULL, &dpop) == FALSE) &&
-		    (oidc_cfg_provider_dpop_mode_get(provider) == OIDC_DPOP_MODE_REQUIRED))
+		    (oidc_proto_profile_dpop_mode_get(provider) == OIDC_DPOP_MODE_REQUIRED))
 			goto end;
 	}
 
@@ -169,7 +169,7 @@ apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, oi
 	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_TOKEN_TYPE, token_type, NULL);
 
 	/* check if DPoP is required */
-	if ((oidc_cfg_provider_dpop_mode_get(provider) == OIDC_DPOP_MODE_REQUIRED) &&
+	if ((oidc_proto_profile_dpop_mode_get(provider) == OIDC_DPOP_MODE_REQUIRED) &&
 	    (_oidc_strnatcasecmp(*token_type, OIDC_PROTO_DPOP) != 0)) {
 		oidc_error(r, "access token type is \"%s\" but \"%s\" is required", *token_type, OIDC_PROTO_DPOP);
 		goto end;
