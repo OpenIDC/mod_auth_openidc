@@ -1,3 +1,9 @@
+02/13/2025
+- metrics: add support for claim value counters in OIDCMetricsData
+- metrics: do not reset Prometheus counters by default, only when explicitly specified
+- metrics: reset to 0 in case of an integer overflow
+- bump to 2.4.16.8rc0
+
 01/29/2025
 - add OIDCProfile to configure OpenID Connect profile behaviours for, so far "FAPI20" only, which configures:
   Authentication Request method, DPoP, PKCE, ID token aud values requirements

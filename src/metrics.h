@@ -145,6 +145,9 @@ typedef enum {
 	OM_AUTHZ_MATCH_REQUIRE_CLAIM,
 	OM_AUTHZ_ERROR_REQUIRE_CLAIM,
 
+	OM_CLAIM_ID_TOKEN,
+	OM_CLAIM_USER_INFO,
+
 	OM_PROVIDER_METADATA_ERROR,
 	OM_PROVIDER_TOKEN_ERROR,
 	OM_PROVIDER_REFRESH_ERROR,
@@ -194,16 +197,26 @@ typedef struct oidc_metrics_counter_info_t {
 
 extern const oidc_metrics_counter_info_t _oidc_metrics_counters_info[];
 
-void oidc_metrics_counter_inc(request_rec *r, oidc_metrics_counter_type_t type, const char *spec);
+void oidc_metrics_counter_inc(request_rec *r, oidc_metrics_counter_type_t type, const char *name, const char *value);
 
-#define OIDC_METRICS_COUNTER_INC_SPEC(r, cfg, type, spec)                                                              \
+// TODO: name is a bit overloaded here, since when not NULL, it will also result in including the metric_name
+static inline const char *_oidc_metrics_type_name2s(apr_pool_t *pool, unsigned int type, const char *name) {
+	return apr_psprintf(pool, "%s%s%s%s%s", _oidc_metrics_counters_info[type].class_name, name ? "." : "",
+			    name ? _oidc_metrics_counters_info[type].metric_name : "", name ? "." : "",
+			    name ? name : "");
+}
+
+#define OIDC_METRICS_COUNTER_INC_NAME_VALUE(r, cfg, type, name, value)                                                 \
 	if (oidc_cfg_metrics_hook_data_get(cfg) != NULL) {                                                             \
-		if (apr_hash_get(oidc_cfg_metrics_hook_data_get(cfg), _oidc_metrics_counters_info[type].class_name,    \
+		if (apr_hash_get(oidc_cfg_metrics_hook_data_get(cfg), _oidc_metrics_type_name2s(r->pool, type, name),  \
 				 APR_HASH_KEY_STRING) != NULL) {                                                       \
-			oidc_metrics_counter_inc(r, type, spec);                                                       \
+			oidc_metrics_counter_inc(r, type, name, value);                                                \
 		}                                                                                                      \
 	}
 
-#define OIDC_METRICS_COUNTER_INC(r, cfg, type) OIDC_METRICS_COUNTER_INC_SPEC(r, cfg, type, NULL);
+#define OIDC_METRICS_COUNTER_INC_VALUE(r, cfg, type, value)                                                            \
+	OIDC_METRICS_COUNTER_INC_NAME_VALUE(r, cfg, type, NULL, value)
+
+#define OIDC_METRICS_COUNTER_INC(r, cfg, type) OIDC_METRICS_COUNTER_INC_NAME_VALUE(r, cfg, type, NULL, NULL)
 
 #endif /* _MOD_AUTH_OPENIDC_METRICS_H_ */

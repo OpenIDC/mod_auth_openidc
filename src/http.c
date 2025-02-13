@@ -914,13 +914,13 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 			 * retry */
 			oidc_error(r, "curl_easy_perform failed with a timeout for %s: [%s]; won't retry", url,
 				   curl_err[0] ? curl_err : "<n/a>");
-			OIDC_METRICS_COUNTER_INC_SPEC(r, c, OM_PROVIDER_CONNECT_ERROR,
-						      curl_err[0] ? curl_err : "timeout")
+			OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_CONNECT_ERROR,
+						       curl_err[0] ? curl_err : "timeout")
 			break;
 		}
 		oidc_error(r, "curl_easy_perform(%d/%d) failed for %s with: [%s]", i + 1, http_timeout->retries + 1,
 			   url, curl_err[0] ? curl_err : "<n/a>");
-		OIDC_METRICS_COUNTER_INC_SPEC(r, c, OM_PROVIDER_CONNECT_ERROR, curl_err[0] ? curl_err : "undefined")
+		OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_CONNECT_ERROR, curl_err[0] ? curl_err : "undefined")
 		/* in case of a connectivity/network glitch we'll back off before retrying */
 		if (i < http_timeout->retries)
 			apr_sleep(apr_time_from_msec(http_timeout->retry_interval));
@@ -931,7 +931,7 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 	curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
 	oidc_debug(r, "HTTP response code=%ld", http_code);
 
-	OIDC_METRICS_COUNTER_INC_SPEC(r, c, OM_PROVIDER_HTTP_RESPONSE_CODE, apr_psprintf(r->pool, "%ld", http_code));
+	OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_HTTP_RESPONSE_CODE, apr_psprintf(r->pool, "%ld", http_code));
 
 	*response = apr_pstrmemdup(r->pool, d_buf.memory, d_buf.size);
 	if (response_code)

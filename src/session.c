@@ -42,6 +42,7 @@
  */
 
 #include "cfg/dir.h"
+#include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "util.h"
 
@@ -574,6 +575,16 @@ void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, const c
 					  "or increase the warning limit with environment variable %s",
 					  session_key, name, warn_claim_size, OIDC_SESSION_WARN_CLAIM_SIZE_VAR);
 			json_object_set(dst, name, value);
+
+			if (_oidc_strcmp(session_key, OIDC_SESSION_KEY_USERINFO_CLAIMS) == 0) {
+				OIDC_METRICS_COUNTER_INC_NAME_VALUE(r, c, OM_CLAIM_USER_INFO, name,
+								    json_is_string(value) ? json_string_value(value)
+											  : s);
+			} else {
+				OIDC_METRICS_COUNTER_INC_NAME_VALUE(r, c, OM_CLAIM_ID_TOKEN, name,
+								    json_is_string(value) ? json_string_value(value)
+											  : s);
+			}
 		}
 
 		iter = json_object_iter_next(src, iter);

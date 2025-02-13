@@ -436,7 +436,7 @@ authz_status oidc_authz_24_worker(request_rec *r, json_t *claims, const char *re
 		/* see if we can match any of out input claims against this Require'd value */
 		if (match_claim_fn(r, w, claims) == TRUE) {
 
-			OIDC_METRICS_COUNTER_INC_SPEC(r, cfg, OM_AUTHZ_MATCH_REQUIRE_CLAIM, require_args);
+			OIDC_METRICS_COUNTER_INC_VALUE(r, cfg, OM_AUTHZ_MATCH_REQUIRE_CLAIM, require_args);
 
 			oidc_debug(r, "require claim/expr '%s' matched", w);
 			return AUTHZ_GRANTED;
@@ -448,7 +448,7 @@ authz_status oidc_authz_24_worker(request_rec *r, json_t *claims, const char *re
 		oidc_warn(r, "'require claim/expr' missing specification(s) in configuration, denying");
 	}
 
-	OIDC_METRICS_COUNTER_INC_SPEC(r, cfg, OM_AUTHZ_ERROR_REQUIRE_CLAIM, require_args);
+	OIDC_METRICS_COUNTER_INC_VALUE(r, cfg, OM_AUTHZ_ERROR_REQUIRE_CLAIM, require_args);
 
 	oidc_debug(r, "could not match require claim expression '%s'", require_args);
 	oidc_authz_error_add(r, require_args);
