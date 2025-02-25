@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -67,10 +67,16 @@ typedef struct {
 
 /* post config routine */
 int oidc_cache_file_post_config(server_rec *s) {
+	apr_status_t rv = APR_SUCCESS;
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(s->module_config, &auth_openidc_module);
 	if (cfg->cache.file_dir == NULL) {
 		/* by default we'll use the OS specified /tmp dir for cache files */
-		apr_temp_dir_get((const char **)&cfg->cache.file_dir, s->process->pool);
+		rv = apr_temp_dir_get((const char **)&cfg->cache.file_dir, s->process->pool);
+		if (rv != APR_SUCCESS) {
+			oidc_serror(s, "apr_temp_dir_get failed: could not find a temp dir: %s",
+				    oidc_cache_status2str(s->process->pool, rv));
+			return HTTP_INTERNAL_SERVER_ERROR;
+		}
 	}
 	return OK;
 }
@@ -123,7 +129,7 @@ static apr_status_t oidc_cache_file_read(request_rec *r, const char *path, apr_f
 /*
  * write a specified number of bytes from a buffer to a cache file
  */
-static apr_status_t oidc_cache_file_write(request_rec *r, const char *path, apr_file_t *fd, void *buf,
+static apr_status_t oidc_cache_file_write(request_rec *r, const char *path, apr_file_t *fd, const void *buf,
 					  const apr_size_t len) {
 
 	apr_status_t rc = APR_SUCCESS;
@@ -249,7 +255,7 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 	const char *metadata_path = oidc_cache_file_path(r, "cache-file", OIDC_CACHE_FILE_LAST_CLEANED);
 
 	/* open the metadata file if it exists */
-	if ((rc = apr_stat(&fi, metadata_path, APR_FINFO_MTIME, r->pool)) == APR_SUCCESS) {
+	if (apr_stat(&fi, metadata_path, APR_FINFO_MTIME, r->pool) == APR_SUCCESS) {
 
 		/* really only clean once per so much time, check that we haven not recently run */
 		if (apr_time_now() < fi.mtime + apr_time_from_sec(oidc_cfg_cache_file_clean_interval_get(cfg))) {
@@ -304,8 +310,8 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 			/* skip non-cache entries, cq. the ".", ".." and the metadata file */
 			if ((fi.name[0] == OIDC_CHAR_DOT) ||
 			    (_oidc_strstr(fi.name, OIDC_CACHE_FILE_PREFIX) != fi.name) ||
-			    ((_oidc_strcmp(fi.name,
-					   oidc_cache_file_name(r, "cache-file", OIDC_CACHE_FILE_LAST_CLEANED)) == 0)))
+			    (_oidc_strcmp(fi.name,
+					  oidc_cache_file_name(r, "cache-file", OIDC_CACHE_FILE_LAST_CLEANED)) == 0))
 				continue;
 
 			/* get the fully qualified path to the cache file and open it */
@@ -402,11 +408,11 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section, const
 	info.len = _oidc_strlen(value) + 1;
 
 	/* write the header */
-	if ((rc = oidc_cache_file_write(r, path, fd, &info, sizeof(oidc_cache_file_info_t))) != APR_SUCCESS)
+	if (oidc_cache_file_write(r, path, fd, &info, sizeof(oidc_cache_file_info_t)) != APR_SUCCESS)
 		return FALSE;
 
 	/* next write the value */
-	rc = oidc_cache_file_write(r, path, fd, (void *)value, info.len);
+	oidc_cache_file_write(r, path, fd, (const void *)value, info.len);
 
 	/* unlock and close the written file */
 	apr_file_unlock(fd);

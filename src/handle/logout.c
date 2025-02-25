@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * All rights reserved.
  *
  * DISCLAIMER OF WARRANTIES:
@@ -84,7 +84,7 @@ static void oidc_logout_revoke_tokens(request_rec *r, oidc_cfg_t *c, oidc_sessio
 	if (oidc_proto_token_endpoint_auth(
 		r, c, oidc_cfg_provider_token_endpoint_auth_get(provider), oidc_cfg_provider_client_id_get(provider),
 		oidc_cfg_provider_client_secret_get(provider), oidc_cfg_provider_client_keys_get(provider),
-		oidc_cfg_provider_token_endpoint_url_get(provider), params, NULL, &basic_auth, &bearer_auth) == FALSE)
+		oidc_proto_profile_token_endpoint_auth_aud(provider), params, NULL, &basic_auth, &bearer_auth) == FALSE)
 		goto out;
 
 	token = oidc_session_get_refresh_token(r, session);
@@ -224,9 +224,8 @@ int oidc_logout_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, 
 					provider = oidc_get_provider_for_issuer(r, c, iss, FALSE);
 				} else {
 					/*
-					 * Azure AD seems to such a non spec compliant provider.
-					 * In this case try our luck with the static config if
-					 * possible.
+					 * Microsoft Entra ID / Azure AD seems to such a non spec compliant provider.
+					 * In this case try our luck with the static config if possible.
 					 */
 					oidc_debug(r, "OP did not provide an iss as parameter");
 					if (oidc_provider_static_config(r, c, &provider) == FALSE)
@@ -475,14 +474,16 @@ int oidc_logout(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 		}
 	}
 
-	oidc_get_provider_from_session(r, c, session, &provider);
+	if (oidc_get_provider_from_session(r, c, session, &provider) == FALSE)
+		oidc_warn(r, "oidc_get_provider_from_session failed");
 
 	if ((provider != NULL) && (oidc_cfg_provider_end_session_endpoint_get(provider) != NULL)) {
 
 		if (apr_table_get(r->subprocess_env, OIDC_REFRESH_TOKENS_BEFORE_LOGOUT_ENVVAR) != NULL) {
-			oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, &id_token_hint);
+			if (oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, &id_token_hint) == FALSE)
+				oidc_warn(r, "id_token_hint could not be refreshed before logout");
 		} else {
-			id_token_hint = (char *)oidc_session_get_idtoken(r, session);
+			id_token_hint = apr_pstrdup(r->pool, oidc_session_get_idtoken(r, session));
 		}
 
 		s_logout_request = apr_pstrdup(r->pool, oidc_cfg_provider_end_session_endpoint_get(provider));

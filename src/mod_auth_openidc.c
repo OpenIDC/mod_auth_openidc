@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -599,7 +599,8 @@ static void oidc_copy_tokens_to_request_state(request_rec *r, oidc_session_t *se
 /*
  * pass refresh_token, access_token and access_token_expires as headers/environment variables to the application
  */
-apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session, apr_byte_t *needs_save) {
+apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session, apr_byte_t extend_session,
+				    apr_byte_t *needs_save) {
 
 	oidc_appinfo_pass_in_t pass_in = oidc_cfg_dir_pass_info_in_get(r);
 	oidc_appinfo_encoding_t encoding = oidc_cfg_dir_pass_info_encoding_get(r);
@@ -636,27 +637,35 @@ apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg_t *cfg, oidc_sessio
 				       OIDC_DEFAULT_HEADER_PREFIX, pass_in, encoding);
 	}
 
-	/*
-	 * reset the session inactivity timer
-	 * but only do this once per 10% of the inactivity timeout interval (with a max to 60 seconds)
-	 * for performance reasons
-	 *
-	 * now there's a small chance that the session ends 10% (or a minute) earlier than configured/expected
-	 * cq. when there's a request after a recent save (so no update) and then no activity happens until
-	 * a request comes in just before the session should expire
-	 * ("recent" and "just before" refer to 10%-with-a-max-of-60-seconds of the inactivity interval after
-	 * the start/last-update and before the expiry of the session respectively)
-	 *
-	 * this is be deemed acceptable here because of performance gain
-	 */
-	apr_time_t interval = apr_time_from_sec(oidc_cfg_session_inactivity_timeout_get(cfg));
-	apr_time_t now = apr_time_now();
-	apr_time_t slack = interval / 10;
-	if (slack > apr_time_from_sec(60))
-		slack = apr_time_from_sec(60);
-	if (session->expiry - now < interval - slack) {
-		session->expiry = now + interval;
+	if (extend_session) {
+		/*
+		 * reset the session inactivity timer
+		 * but only do this once per 10% of the inactivity timeout interval (with a max to 60 seconds)
+		 * for performance reasons
+		 *
+		 * now there's a small chance that the session ends 10% (or a minute) earlier than configured/expected
+		 * cq. when there's a request after a recent save (so no update) and then no activity happens until
+		 * a request comes in just before the session should expire
+		 * ("recent" and "just before" refer to 10%-with-a-max-of-60-seconds of the inactivity interval after
+		 * the start/last-update and before the expiry of the session respectively)
+		 *
+		 * this is be deemed acceptable here because of performance gain
+		 */
+		apr_time_t interval = apr_time_from_sec(oidc_cfg_session_inactivity_timeout_get(cfg));
+		apr_time_t now = apr_time_now();
+		apr_time_t slack = interval / 10;
+		if (slack > apr_time_from_sec(60))
+			slack = apr_time_from_sec(60);
+		if (session->expiry - now < interval - slack) {
+			session->expiry = now + interval;
+			*needs_save = TRUE;
+		}
+	}
+
+	// if this is a newly created session, we'll write it again to update the samesite setting on the session cookie
+	if (oidc_session_get_session_new(r, session)) {
 		*needs_save = TRUE;
+		oidc_session_set_session_new(r, session, 0);
 	}
 
 	/* log message about session expiry */
@@ -669,7 +678,7 @@ apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg_t *cfg, oidc_sessio
  * handle the case where we have identified an existing authentication session for a user
  */
 static int oidc_handle_existing_session(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session,
-					apr_byte_t *needs_save) {
+					apr_byte_t extend_session, apr_byte_t *needs_save) {
 
 	apr_byte_t rv = FALSE;
 	int rc = OK;
@@ -710,39 +719,44 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg_t *cfg, oidc_se
 		return rc;
 	}
 
-	/* if needed, refresh the access token */
-	rv = oidc_refresh_access_token_before_expiry(
-	    r, cfg, session, oidc_cfg_dir_refresh_access_token_before_expiry_get(r), needs_save);
-	if (rv == FALSE) {
-		*needs_save = FALSE;
-		oidc_debug(r, "dir_action_on_error_refresh: %d", oidc_cfg_dir_action_on_error_refresh_get(r));
-		OIDC_METRICS_COUNTER_INC(r, cfg, OM_SESSION_ERROR_REFRESH_ACCESS_TOKEN);
-		if (oidc_cfg_dir_action_on_error_refresh_get(r) == OIDC_ON_ERROR_LOGOUT) {
-			return oidc_logout_request(
-			    r, cfg, session, oidc_util_absolute_url(r, cfg, oidc_cfg_default_slo_url_get(cfg)), FALSE);
-		}
-		if (oidc_cfg_dir_action_on_error_refresh_get(r) == OIDC_ON_ERROR_AUTH) {
-			oidc_session_kill(r, session);
-			return oidc_handle_unauthenticated_user(r, cfg);
-		}
-		return HTTP_BAD_GATEWAY;
-	}
+	if (extend_session) {
 
-	/* if needed, refresh claims from the user info endpoint */
-	rv = oidc_userinfo_refresh_claims(r, cfg, session, needs_save);
-	if (rv == FALSE) {
-		*needs_save = FALSE;
-		oidc_debug(r, "action_on_userinfo_error: %d", oidc_cfg_action_on_userinfo_error_get(cfg));
-		OIDC_METRICS_COUNTER_INC(r, cfg, OM_SESSION_ERROR_REFRESH_USERINFO);
-		if (oidc_cfg_action_on_userinfo_error_get(cfg) == OIDC_ON_ERROR_LOGOUT) {
-			return oidc_logout_request(
-			    r, cfg, session, oidc_util_absolute_url(r, cfg, oidc_cfg_default_slo_url_get(cfg)), FALSE);
+		/* if needed, refresh the access token */
+		rv = oidc_refresh_access_token_before_expiry(
+		    r, cfg, session, oidc_cfg_dir_refresh_access_token_before_expiry_get(r), needs_save);
+		if (rv == FALSE) {
+			*needs_save = FALSE;
+			oidc_debug(r, "dir_action_on_error_refresh: %d", oidc_cfg_dir_action_on_error_refresh_get(r));
+			OIDC_METRICS_COUNTER_INC(r, cfg, OM_SESSION_ERROR_REFRESH_ACCESS_TOKEN);
+			if (oidc_cfg_dir_action_on_error_refresh_get(r) == OIDC_ON_ERROR_LOGOUT) {
+				return oidc_logout_request(
+				    r, cfg, session, oidc_util_absolute_url(r, cfg, oidc_cfg_default_slo_url_get(cfg)),
+				    FALSE);
+			}
+			if (oidc_cfg_dir_action_on_error_refresh_get(r) == OIDC_ON_ERROR_AUTH) {
+				oidc_session_kill(r, session);
+				return oidc_handle_unauthenticated_user(r, cfg);
+			}
+			return HTTP_BAD_GATEWAY;
 		}
-		if (oidc_cfg_action_on_userinfo_error_get(cfg) == OIDC_ON_ERROR_AUTH) {
-			oidc_session_kill(r, session);
-			return oidc_handle_unauthenticated_user(r, cfg);
+
+		/* if needed, refresh claims from the user info endpoint */
+		rv = oidc_userinfo_refresh_claims(r, cfg, session, needs_save);
+		if (rv == FALSE) {
+			*needs_save = FALSE;
+			oidc_debug(r, "action_on_userinfo_error: %d", oidc_cfg_action_on_userinfo_error_get(cfg));
+			OIDC_METRICS_COUNTER_INC(r, cfg, OM_SESSION_ERROR_REFRESH_USERINFO);
+			if (oidc_cfg_action_on_userinfo_error_get(cfg) == OIDC_ON_ERROR_LOGOUT) {
+				return oidc_logout_request(
+				    r, cfg, session, oidc_util_absolute_url(r, cfg, oidc_cfg_default_slo_url_get(cfg)),
+				    FALSE);
+			}
+			if (oidc_cfg_action_on_userinfo_error_get(cfg) == OIDC_ON_ERROR_AUTH) {
+				oidc_session_kill(r, session);
+				return oidc_handle_unauthenticated_user(r, cfg);
+			}
+			return HTTP_BAD_GATEWAY;
 		}
-		return HTTP_BAD_GATEWAY;
 	}
 
 	/* set the user authentication HTTP header if set and required */
@@ -777,7 +791,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg_t *cfg, oidc_se
 	}
 
 	/* pass the at, rt and at expiry to the application, possibly update the session expiry */
-	if (oidc_session_pass_tokens(r, cfg, session, needs_save) == FALSE)
+	if (oidc_session_pass_tokens(r, cfg, session, extend_session, needs_save) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
 	oidc_userinfo_pass_as(r, cfg, session, s_claims, pass_in, encoding);
@@ -971,6 +985,7 @@ static int oidc_javascript_implicit(request_rec *r, oidc_cfg_t *c) {
 int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 
 	apr_byte_t needs_save = FALSE;
+	char *s_extend_session = NULL;
 	int rc = OK;
 
 	OIDC_METRICS_TIMING_START(r, c);
@@ -1098,8 +1113,12 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session
 
 		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_INFO);
 
+		oidc_util_request_parameter_get(r, OIDC_INFO_PARAM_EXTEND_SESSION, &s_extend_session);
+
 		// need to establish user/claims for authorization purposes
-		rc = oidc_handle_existing_session(r, c, session, &needs_save);
+		rc = oidc_handle_existing_session(
+		    r, c, session, (s_extend_session == NULL) || (_oidc_strcmp(s_extend_session, "false") != 0),
+		    &needs_save);
 
 		// retain this session across the authentication and content handler phases
 		// by storing it in the request state
@@ -1233,7 +1252,7 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg_t *c) {
 	} else if (session->remote_user != NULL) {
 
 		/* this is initial request and we already have a session */
-		rc = oidc_handle_existing_session(r, c, session, &needs_save);
+		rc = oidc_handle_existing_session(r, c, session, TRUE, &needs_save);
 		if (rc == OK) {
 
 			/* check if something was updated in the session and we need to save it again */
@@ -1451,6 +1470,14 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg_t *c) {
 		}
 	}
 
+	if (oidc_proto_profile_dpop_mode_get(oidc_cfg_provider_get(c)) != OIDC_DPOP_MODE_OFF) {
+		if (oidc_util_key_list_first(oidc_cfg_private_keys_get(c), -1, OIDC_JOSE_JWK_SIG_STR) == NULL) {
+			oidc_serror(s, "'" OIDCDPoPMode "' is configured but the required signing keys have not been "
+				       "provided in '" OIDCPrivateKeyFiles "'/'" OIDCPublicKeyFiles "'");
+			return HTTP_INTERNAL_SERVER_ERROR;
+		}
+	}
+
 	return OK;
 }
 
@@ -1646,28 +1673,28 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, se
 		return OK;
 	}
 
+#ifdef USE_MEMCACHE
+#define _OIDC_USE_MEMCACHE "yes"
+#else
+#define _OIDC_USE_MEMCACHE "no"
+#endif
+
+#ifdef USE_LIBHIREDIS
+#define _OIDC_USE_REDIS "yes"
+#else
+#define _OIDC_USE_REDIS "no"
+#endif
+
+#ifdef USE_LIBJQ
+#define _OIDC_USE_JQ "yes"
+#else
+#define _OIDC_USE_JQ "no"
+#endif
+
 	ap_log_error(APLOG_MARK, APLOG_INFO, 0, s,
 		     "%s - init - cjose %s, %s, EC=%s, GCM=%s, Memcache=%s, Redis=%s, JQ=%s", NAMEVERSION,
 		     cjose_version(), oidc_util_openssl_version(s->process->pool), OIDC_JOSE_EC_SUPPORT ? "yes" : "no",
-		     OIDC_JOSE_GCM_SUPPORT ? "yes" : "no",
-#ifdef USE_MEMCACHE
-		     "yes"
-#else
-		     "no"
-#endif
-		     ,
-#ifdef USE_LIBHIREDIS
-		     "yes"
-#else
-		     "no"
-#endif
-		     ,
-#ifdef USE_LIBJQ
-		     "yes"
-#else
-		     "no"
-#endif
-	);
+		     OIDC_JOSE_GCM_SUPPORT ? "yes" : "no", _OIDC_USE_MEMCACHE, _OIDC_USE_REDIS, _OIDC_USE_JQ);
 
 	oidc_http_init();
 
@@ -1765,6 +1792,10 @@ static void oidc_child_init(apr_pool_t *p, server_rec *s) {
 		oidc_cfg_child_init(p, cfg, sp);
 		sp = sp->next;
 	}
+	/*
+	 * NB: don't pass oidc_cleanup_child as the child cleanup routine parameter
+	 *     because that does not actually get called upon child cleanup...
+	 */
 	apr_pool_cleanup_register(p, s, oidc_cleanup_child, apr_pool_cleanup_null);
 }
 

@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * All rights reserved.
  *
  * DISCLAIMER OF WARRANTIES:
@@ -375,7 +375,7 @@ const char *oidc_cmd_trace_parent_set(cmd_parms *cmd, void *struct_ptr, const ch
 						    {OIDC_TRACE_PARENT_PROPAGATE, OIDC_TRACE_PARENT_PROPAGATE_STR},
 						    {OIDC_TRACE_PARENT_GENERATE, OIDC_TRACE_PARENT_GENERATE_STR}};
 	const char *rv =
-	    oidc_cfg_parse_option(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg, (int *)&cfg->trace_parent);
+	    oidc_cfg_parse_option(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg, &cfg->trace_parent);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -481,8 +481,8 @@ const char *oidc_cmd_state_input_headers_set(cmd_parms *cmd, void *m, const char
 	    {OIDC_STATE_INPUT_HEADERS_X_FORWARDED_FOR, OIDC_STATE_INPUT_HEADERS_AS_X_FORWARDED_FOR},
 	    {OIDC_STATE_INPUT_HEADERS_USER_AGENT | OIDC_STATE_INPUT_HEADERS_X_FORWARDED_FOR,
 	     OIDC_STATE_INPUT_HEADERS_AS_BOTH}};
-	const char *rv = oidc_cfg_parse_option(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg,
-					       (int *)&cfg->state_input_headers);
+	const char *rv =
+	    oidc_cfg_parse_option(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg, &cfg->state_input_headers);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -521,8 +521,32 @@ OIDC_CFG_MEMBER_FUNC_GET(metadata_dir, const char *)
 #define OIDC_DEFAULT_COOKIE_HTTPONLY 1
 OIDC_CFG_MEMBER_FUNCS_BOOL(cookie_http_only, OIDC_DEFAULT_COOKIE_HTTPONLY)
 
-#define OIDC_DEFAULT_COOKIE_SAME_SITE 1
-OIDC_CFG_MEMBER_FUNCS_BOOL(cookie_same_site, OIDC_DEFAULT_COOKIE_SAME_SITE)
+#define OIDC_SAMESITE_COOKIE_OFF_STR "Off"
+#define OIDC_SAMESITE_COOKIE_ON_STR "On"
+#define OIDC_SAMESITE_COOKIE_DISABLED_STR "Disabled"
+#define OIDC_SAMESITE_COOKIE_NONE_STR "None"
+#define OIDC_SAMESITE_COOKIE_LAX_STR "Lax"
+#define OIDC_SAMESITE_COOKIE_STRICT_STR "Strict"
+
+/*
+ * define which header we use for calculating the fingerprint of the state during authentication
+ */
+const char *oidc_cmd_cookie_same_site_set(cmd_parms *cmd, void *m, const char *arg) {
+	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
+	// NB: On is made equal to Lax here and Off is equal to None (backwards compatibility)
+	static const oidc_cfg_option_t options[] = {{OIDC_SAMESITE_COOKIE_NONE, OIDC_SAMESITE_COOKIE_OFF_STR},
+						    {OIDC_SAMESITE_COOKIE_LAX, OIDC_SAMESITE_COOKIE_ON_STR},
+						    {OIDC_SAMESITE_COOKIE_DISABLED, OIDC_SAMESITE_COOKIE_DISABLED_STR},
+						    {OIDC_SAMESITE_COOKIE_NONE, OIDC_SAMESITE_COOKIE_NONE_STR},
+						    {OIDC_SAMESITE_COOKIE_LAX, OIDC_SAMESITE_COOKIE_LAX_STR},
+						    {OIDC_SAMESITE_COOKIE_STRICT, OIDC_SAMESITE_COOKIE_STRICT_STR}};
+	const char *rv = oidc_cfg_parse_option_ignore_case(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg,
+							   &cfg->cookie_same_site);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
+#define OIDC_DEFAULT_COOKIE_SAME_SITE OIDC_SAMESITE_COOKIE_LAX
+OIDC_CFG_MEMBER_FUNC_TYPE_GET(cookie_same_site, oidc_samesite_cookie_t, OIDC_DEFAULT_COOKIE_SAME_SITE)
 
 #define OIDC_DEFAULT_SESSION_FALLBACK_TO_COOKIE 0
 OIDC_CFG_MEMBER_FUNCS_BOOL(session_cache_fallback_to_cookie, OIDC_DEFAULT_SESSION_FALLBACK_TO_COOKIE)
@@ -877,7 +901,7 @@ int oidc_cfg_post_config(oidc_cfg_t *cfg, server_rec *s) {
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
 	if (cfg->metrics_hook_data != NULL) {
-		if (oidc_metrics_cache_post_config(s) != TRUE)
+		if (oidc_metrics_post_config(s) != TRUE)
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
 	return OK;
@@ -895,7 +919,7 @@ void oidc_cfg_child_init(apr_pool_t *pool, oidc_cfg_t *cfg, server_rec *s) {
 		}
 	}
 	if (cfg->metrics_hook_data != NULL) {
-		if (oidc_metrics_cache_child_init(pool, s) != APR_SUCCESS) {
+		if (oidc_metrics_child_init(pool, s) != APR_SUCCESS) {
 			oidc_serror(s, "oidc_metrics_cache_child_init failed");
 		}
 	}
@@ -915,8 +939,8 @@ void oidc_cfg_cleanup_child(oidc_cfg_t *cfg, server_rec *s) {
 		_oidc_refresh_mutex = NULL;
 	}
 	if (cfg->metrics_hook_data != NULL) {
-		if (oidc_metrics_cache_cleanup(s) != APR_SUCCESS) {
-			oidc_serror(s, "oidc_metrics_cache_cleanup failed");
+		if (oidc_metrics_cleanup(s) != APR_SUCCESS) {
+			oidc_serror(s, "oidc_metrics_cleanup failed");
 		}
 	}
 }

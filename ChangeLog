@@ -1,3 +1,110 @@
+02/17/2025
+- release 2.4.16.8
+
+02/13/2025
+- metrics: add support for claim value counters in OIDCMetricsData
+- metrics: do not reset Prometheus counters by default, only when explicitly specified
+- metrics: reset to 0 in case of an integer overflow
+- bump to 2.4.16.8rc0
+
+01/29/2025
+- add OIDCProfile to configure OpenID Connect profile behaviours for, so far "FAPI20" only, which configures:
+  Authentication Request method, DPoP, PKCE, ID token aud values requirements
+  token endpoint JWT authentication "aud" values, "iss" parameter requirement in authentication reponses
+- release 2.4.16.7
+
+01/24/2025
+- fix OIDCProviderRevocationEndpoint when not setting it to ""; see #1301; thanks @tarteens
+
+01/19/2025
+- jose: prevent memory leaks when zlib compressing (deflate) fails in oidc_jose_zlib_compress
+
+01/02/2025
+- add a configuration check for public/private keys when using DPoP; closes #1293; thanks @ahus1
+- update copyright year to 2025
+
+12/17/2024
+- code: address SonarQube warnings in src/cache/*.c
+
+12/16/2024
+- http: report errors when curl_easy_setopt fails and improve macro usage
+- address warnings from static code analysis tool Coverity
+  - code: declare enum members as int so they can be set to OIDC_CONFIG_POS_INT_UNSET without warning
+  - code: declare memcache members as int so they can be set to OIDC_CONFIG_POS_INT_UNSET without warning
+  - code: declare introspection_endpoint_method member as int so it can be set to OIDC_CONFIG_POS_INT_UNSET without warning
+  - code: check return value of oidc_get_provider_from_session and oidc_refresh_token_grant in logout.c
+  - code: avoid potential crash on non-conformant literal IPv6 adresses in oidc_util_current_url_host
+  - code: apply boundary checks on oidc_metrics_shm_size and use a global static for performance reasons
+
+12/15/2024
+- add Coverity Github action
+
+12/13/2024
+- address warnings from static code analysis tool Coverity
+  - code: avoid potentional memory leak on cURL handle if curl_easy_escape/curl_easy_unescape fails
+  - code: correct the check for the optional token_type parameter returned from a token endpoint request
+  - code: initialize oidc_jose_error_t err variable in oidc_util_create_symmetric_key
+  - code: refactor oidc_util_port_from_host and avoid potential crash on non-conformant literal IPv6 addresses
+  - code: add and use _oidc_strncpy for section key string copy in shm.c
+  - code: correct check for private key return value from oidc_proto_jwt_create_from_first_pkey
+    and avoid NULL pointer dereferencing when no private keys have been configured
+  - code: correct check for *static_template_content in oidc_util_html_send_in_template in util.c
+
+12/11/2024
+- address warnings from static code analysis tool SonarQube
+  - code: loop over authz arrays with index instead of pointer
+  - code: avoid embedding defines in macro arguments
+  - code: avoid cast warnings
+  - code: add comment to empty functions
+  - code: remove any side effects from right hand operands of logical && operator
+
+12/10/2024
+- github: add SonarQube analysis to Github workflows
+- address warnings from static code analysis tool SonarQube
+  - code: use snprintf instead of sprintf
+  - code: move _snprintf define to const.h
+- bump to 2.4.16.7dev
+
+12/09/2024
+- release 2.4.16.6
+
+12/05/2024
+- metadata: fix caching of JWKs from jwks_uri when using the default expiry setting (i.e. not using OIDCJWKSRefreshInterval)
+  and avoid fetching JWKs from the jwks_uri for each user login; also addresses Redis cache
+  error entries the log [ERR invalid expire time in 'setex' command]
+- avoid segfault and improve error reporting in case apr_temp_dir_get fails when a temp directory cannot be found
+  on the system upon initalizing cache mutexes and file cache; see #1288; thanks @ErmakovDmitriy
+
+11/21/2024
+- add option to set local address for outgoing HTTP requests; see #1283; thanks @studersi
+  using e.g. SetEnvIfExpr true OIDC_CURL_INTERFACE=192.168.10.2
+- try and address metris cleanup segmentation fault on shutdown; see #1207
+  by not flushing metrics to the shared memory segment upon exit
+
+11/14/2024
+- allow specific settings Strict|Lax|None|Disabled for OIDCCookieSameSite in addition to On(=Lax)|Off(=None)
+  - fix: default behaviour Lax
+  - fix: apply OIDCCookieSameSite Off/None properly to state cookies instead of always setting Lax
+  - re-introduces the option to configure a Strict SameSite session cookie policy, which will turn the initial
+    Lax session cookie - set upon receving the response to the Redirect URI - into a Strict session cookie
+    immediately after the first application request
+  - allows for a "Disabled" value that does not set any SameSite flag on the cookies, in which case a browser
+    falls back to its default browser behaviour (which should be Lax by spec)
+
+11/07/2024
+- info: fix requests to the info hook with extend_session=false; see #1279; thanks @fnieri-cdp
+  - properly reflect the (unmodified) inactivity timeout in the response ("timeout")
+  - avoid refreshing an access token (since the session is not saved)
+  - avoid refreshing claims from the user info endpoint, and possibly refreshing the access token
+
+10/23/2024
+- metadata: allow plain HTTP URLs in metadata elements `jwks_uri` and `signed_jwks_uri`
+  to ensure backwards compatibility with <=2.4.15.7 and to support private/test deployments
+
+10/22/2024
+- address warnings from static code analysis tool CodeChecker
+- bump to 2.4.16.6dev
+
 10/16/2024
 - release 2.4.16.5
 

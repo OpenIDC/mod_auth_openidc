@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -383,7 +383,6 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *
 	apr_byte_t rv = FALSE;
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
-	oidc_jwt_t *jwt = NULL;
 	char *payload = NULL;
 	int payload_len = 0;
 	char *plaintext = NULL;
@@ -443,8 +442,6 @@ end:
 
 	if (jwk != NULL)
 		oidc_jwk_destroy(jwk);
-	if (jwt != NULL)
-		oidc_jwt_destroy(jwt);
 
 	return rv;
 }
@@ -538,7 +535,7 @@ char *oidc_util_html_escape(apr_pool_t *pool, const char *s) {
 char *oidc_util_javascript_escape(apr_pool_t *pool, const char *s) {
 	const char *cp = NULL;
 	char *output = NULL;
-	size_t outputlen = 0;
+	int outputlen = 0;
 	int i = 0;
 
 	if (s == NULL) {
@@ -676,24 +673,25 @@ static const char *oidc_util_current_url_scheme(const request_rec *r, oidc_hdr_x
 }
 
 /*
- * get the port part from a Host header
+ * get the port from a Host or X-Forwarded-Host header
  */
-static const char *oidc_util_port_from_host(const char *host_hdr) {
-	char *p = NULL;
-	char *i = NULL;
+static const char *oidc_util_port_from_host_hdr(const char *host_hdr) {
+	const char *p = NULL;
 
-	if (host_hdr) {
-		if (host_hdr[0] == '[') {
-			i = strchr(host_hdr, ']');
-			p = strchr(i, OIDC_CHAR_COLON);
-		} else {
-			p = strchr(host_hdr, OIDC_CHAR_COLON);
-		}
-	}
-	if (p)
-		return p;
+	// check for an IPv6 literal addresses
+	if (host_hdr && host_hdr[0] == '[')
+		p = strchr(host_hdr, ']');
 	else
-		return NULL;
+		p = host_hdr;
+
+	if (p) {
+		p = strchr(p, OIDC_CHAR_COLON);
+		// skip over the ":" to point to the actual port number
+		if (p)
+			p++;
+	}
+
+	return p;
 }
 
 /*
@@ -725,25 +723,16 @@ static const char *oidc_get_current_url_port(const request_rec *r, const char *s
 	if ((host_hdr == NULL) && (x_forwarded_headers & OIDC_HDR_X_FORWARDED_HOST))
 		host_hdr = oidc_http_hdr_in_x_forwarded_host_get(r);
 
-	if (host_hdr) {
-		port_str = oidc_util_port_from_host(host_hdr);
-		if (port_str)
-			port_str++;
-		return port_str;
-	}
+	if (host_hdr)
+		return oidc_util_port_from_host_hdr(host_hdr);
 
 	/*
 	 * see if we can get the port from the "Host" header; if not
 	 * we'll determine the port locally
 	 */
 	host_hdr = oidc_http_hdr_in_host_get(r);
-	if (host_hdr) {
-		port_str = oidc_util_port_from_host(host_hdr);
-		if (port_str) {
-			port_str++;
-			return port_str;
-		}
-	}
+	if (host_hdr)
+		return oidc_util_port_from_host_hdr(host_hdr);
 
 	/*
 	 * if X-Forwarded-Proto assume the default port otherwise the
@@ -778,7 +767,6 @@ static const char *oidc_get_current_url_port(const request_rec *r, const char *s
 const char *oidc_util_current_url_host(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers) {
 	const char *host_str = NULL;
 	char *p = NULL;
-	char *i = NULL;
 
 	if (x_forwarded_headers & OIDC_HDR_FORWARDED)
 		host_str = oidc_http_hdr_forwarded_get(r, "host");
@@ -791,8 +779,9 @@ const char *oidc_util_current_url_host(request_rec *r, oidc_hdr_x_forwarded_t x_
 		host_str = apr_pstrdup(r->pool, host_str);
 
 		if (host_str[0] == '[') {
-			i = strchr(host_str, ']');
-			p = strchr(i, OIDC_CHAR_COLON);
+			p = strchr(host_str, ']');
+			if (p)
+				p = strchr(p, OIDC_CHAR_COLON);
 		} else {
 			p = strchr(host_str, OIDC_CHAR_COLON);
 		}
@@ -803,6 +792,7 @@ const char *oidc_util_current_url_host(request_rec *r, oidc_hdr_x_forwarded_t x_
 		/* no Host header, HTTP 1.0 */
 		host_str = ap_get_server_name(r);
 	}
+
 	return host_str;
 }
 
@@ -1120,9 +1110,8 @@ static char *oidc_util_template_escape(request_rec *r, const char *arg, int esca
 /*
  * fill and send a HTML template
  */
-apr_byte_t oidc_util_html_send_in_template(request_rec *r, const char *filename, char **static_template_content,
-					   const char *arg1, int arg1_esc, const char *arg2, int arg2_esc,
-					   int status_code) {
+int oidc_util_html_send_in_template(request_rec *r, const char *filename, char **static_template_content,
+				    const char *arg1, int arg1_esc, const char *arg2, int arg2_esc, int status_code) {
 	char *html = NULL;
 	int rc = status_code;
 	if (*static_template_content == NULL) {
@@ -1132,7 +1121,7 @@ apr_byte_t oidc_util_html_send_in_template(request_rec *r, const char *filename,
 			*static_template_content = NULL;
 		}
 	}
-	if (static_template_content) {
+	if (*static_template_content) {
 		html = apr_psprintf(r->pool, *static_template_content, oidc_util_template_escape(r, arg1, arg1_esc),
 				    oidc_util_template_escape(r, arg2, arg2_esc));
 		rc = oidc_util_http_send(r, html, _oidc_strlen(html), OIDC_HTTP_CONTENT_TYPE_TEXT_HTML, status_code);
@@ -1210,7 +1199,10 @@ apr_byte_t oidc_util_read_form_encoded_params(request_rec *r, apr_table_t *table
 	const char *val = NULL;
 	const char *p = data;
 
-	while (p && *p && (val = ap_getword(r->pool, &p, OIDC_CHAR_AMP))) {
+	while (p && (*p)) {
+		val = ap_getword(r->pool, &p, OIDC_CHAR_AMP);
+		if (val == NULL)
+			break;
 		key = ap_getword(r->pool, &val, OIDC_CHAR_EQUAL);
 		key = oidc_http_url_decode(r, key);
 		val = oidc_http_url_decode(r, val);
@@ -1451,7 +1443,7 @@ apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack, cons
  * convert a claim value from UTF-8 to the Latin1 character set
  */
 static char *oidc_util_utf8_to_latin1(request_rec *r, const char *src) {
-	char *dst = "";
+	char *dst = NULL;
 	unsigned int cp = 0;
 	unsigned char ch;
 	int i = 0;
@@ -1647,7 +1639,10 @@ apr_hash_t *oidc_util_spaced_string_to_hashtable(apr_pool_t *pool, const char *s
 	char *val;
 	const char *data = apr_pstrdup(pool, str);
 	apr_hash_t *result = apr_hash_make(pool);
-	while (*data && (val = ap_getword_white(pool, &data))) {
+	while (data && (*data)) {
+		val = ap_getword_white(pool, &data);
+		if (val == NULL)
+			break;
 		apr_hash_set(result, val, APR_HASH_KEY_STRING, val);
 	}
 	return result;
@@ -1657,6 +1652,9 @@ apr_hash_t *oidc_util_spaced_string_to_hashtable(apr_pool_t *pool, const char *s
  * compare two space separated value types
  */
 apr_byte_t oidc_util_spaced_string_equals(apr_pool_t *pool, const char *a, const char *b) {
+
+	const void *k = NULL;
+	void *v = NULL;
 
 	/* parse both entries as hash tables */
 	apr_hash_t *ht_a = oidc_util_spaced_string_to_hashtable(pool, a);
@@ -1669,9 +1667,7 @@ apr_byte_t oidc_util_spaced_string_equals(apr_pool_t *pool, const char *a, const
 	/* then loop over all entries */
 	apr_hash_index_t *hi;
 	for (hi = apr_hash_first(NULL, ht_a); hi; hi = apr_hash_next(hi)) {
-		const char *k;
-		const char *v;
-		apr_hash_this(hi, (const void **)&k, NULL, (void **)&v);
+		apr_hash_this(hi, &k, NULL, &v);
 		if (apr_hash_get(ht_b, k, APR_HASH_KEY_STRING) == NULL)
 			return FALSE;
 	}
@@ -1787,16 +1783,19 @@ apr_byte_t oidc_util_json_merge(request_rec *r, json_t *src, json_t *dst) {
  * add query encoded parameters to a table
  */
 void oidc_util_table_add_query_encoded_params(apr_pool_t *pool, apr_table_t *table, const char *params) {
-	if (params != NULL) {
-		char *key = NULL;
-		const char *val = NULL;
-		const char *p = params;
-		while (*p && (val = ap_getword(pool, &p, OIDC_CHAR_AMP))) {
-			key = ap_getword(pool, &val, OIDC_CHAR_EQUAL);
-			ap_unescape_url((char *)key);
-			ap_unescape_url((char *)val);
-			apr_table_add(table, key, val);
-		}
+	char *key = NULL;
+	char *value = NULL;
+	const char *v = NULL;
+	const char *p = params;
+	while (p && (*p)) {
+		v = ap_getword(pool, &p, OIDC_CHAR_AMP);
+		if (v == NULL)
+			break;
+		key = apr_pstrdup(pool, ap_getword(pool, &v, OIDC_CHAR_EQUAL));
+		ap_unescape_url(key);
+		value = apr_pstrdup(pool, v);
+		ap_unescape_url(value);
+		apr_table_addn(table, key, value);
 	}
 }
 
@@ -1805,7 +1804,7 @@ void oidc_util_table_add_query_encoded_params(apr_pool_t *pool, apr_table_t *tab
  */
 apr_byte_t oidc_util_create_symmetric_key(request_rec *r, const char *client_secret, unsigned int r_key_len,
 					  const char *hash_algo, apr_byte_t set_kid, oidc_jwk_t **jwk) {
-	oidc_jose_error_t err;
+	oidc_jose_error_t err = {{'\0'}, 0, {'\0'}, {'\0'}};
 	unsigned char *key = NULL;
 	unsigned int key_len;
 

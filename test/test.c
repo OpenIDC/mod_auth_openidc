@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -61,23 +61,23 @@ static int TST_RC;
 #define TST_ASSERT(message, expression)                                                                                \
 	TST_RC = (expression);                                                                                         \
 	if (!TST_RC) {                                                                                                 \
-		sprintf(TST_ERR_MSG, TST_FORMAT("%d"), __FUNCTION__, message, TST_RC, 1);                              \
+		snprintf(TST_ERR_MSG, 4096, TST_FORMAT("%d"), __FUNCTION__, message, TST_RC, 1);                       \
 		return TST_ERR_MSG;                                                                                    \
 	}
 
 #define TST_ASSERT_ERR(message, expression, pool, err)                                                                 \
 	TST_RC = (expression);                                                                                         \
 	if (!TST_RC) {                                                                                                 \
-		sprintf(TST_ERR_MSG, TST_FORMAT("%d") " %s", __FUNCTION__, message, TST_RC, 1,                         \
-			oidc_jose_e2s(pool, err));                                                                     \
+		snprintf(TST_ERR_MSG, 4096, TST_FORMAT("%d") " %s", __FUNCTION__, message, TST_RC, 1,                  \
+			 oidc_jose_e2s(pool, err));                                                                    \
 		return TST_ERR_MSG;                                                                                    \
 	}
 
 #define TST_ASSERT_CJOSE_ERR(message, expression, pool, cjose_err)                                                     \
 	TST_RC = (expression);                                                                                         \
 	if (!TST_RC) {                                                                                                 \
-		sprintf(TST_ERR_MSG, TST_FORMAT("%d") " %s", __FUNCTION__, message, TST_RC, 1,                         \
-			oidc_cjose_e2s(pool, cjose_err));                                                              \
+		snprintf(TST_ERR_MSG, 4096, TST_FORMAT("%d") " %s", __FUNCTION__, message, TST_RC, 1,                  \
+			 oidc_cjose_e2s(pool, cjose_err));                                                             \
 		return TST_ERR_MSG;                                                                                    \
 	}
 
@@ -85,8 +85,8 @@ static int TST_RC;
 	TST_RC =                                                                                                       \
 	    (result && expected) ? (_oidc_strcmp(result, expected) != 0) : ((result != NULL) || (expected != NULL));   \
 	if (TST_RC) {                                                                                                  \
-		sprintf(TST_ERR_MSG, TST_FORMAT("%s"), __FUNCTION__, message, result ? result : "(null)",              \
-			expected ? expected : "(null)");                                                               \
+		snprintf(TST_ERR_MSG, 4096, TST_FORMAT("%s"), __FUNCTION__, message, result ? result : "(null)",       \
+			 expected ? expected : "(null)");                                                              \
 		return TST_ERR_MSG;                                                                                    \
 	}
 
@@ -94,21 +94,21 @@ static int TST_RC;
 	TST_RC = (result && expected) ? (_oidc_strncmp(result, expected, len) != 0)                                    \
 				      : ((result != NULL) || (expected != NULL));                                      \
 	if (TST_RC) {                                                                                                  \
-		sprintf(TST_ERR_MSG, TST_FORMAT("%s"), __FUNCTION__, message, result ? result : "(null)",              \
-			expected ? expected : "(null)");                                                               \
+		snprintf(TST_ERR_MSG, 4096, TST_FORMAT("%s"), __FUNCTION__, message, result ? result : "(null)",       \
+			 expected ? expected : "(null)");                                                              \
 		return TST_ERR_MSG;                                                                                    \
 	}
 
 #define TST_ASSERT_LONG(message, result, expected)                                                                     \
 	if (result != expected) {                                                                                      \
-		sprintf(TST_ERR_MSG, TST_FORMAT("%ld"), __FUNCTION__, message, result, expected);                      \
+		snprintf(TST_ERR_MSG, 4096, TST_FORMAT("%ld"), __FUNCTION__, message, result, expected);               \
 		return TST_ERR_MSG;                                                                                    \
 	}
 
 #define TST_ASSERT_BYTE(message, result, expected)                                                                     \
 	if (result != expected) {                                                                                      \
-		sprintf(TST_ERR_MSG, TST_FORMAT("%s"), __FUNCTION__, message, result ? "TRUE" : "FALSE",               \
-			expected ? "TRUE" : "FALSE");                                                                  \
+		snprintf(TST_ERR_MSG, 4096, TST_FORMAT("%s"), __FUNCTION__, message, result ? "TRUE" : "FALSE",        \
+			 expected ? "TRUE" : "FALSE");                                                                 \
 		return TST_ERR_MSG;                                                                                    \
 	}
 
@@ -129,7 +129,7 @@ static char *_jwk_parse(apr_pool_t *pool, const char *s, oidc_jwk_t **jwk, oidc_
 }
 
 static char *test_private_key_parse(apr_pool_t *pool) {
-	oidc_jose_error_t err;
+	oidc_jose_error_t err = {{'\0'}, 0, {'\0'}, {'\0'}};
 	BIO *input = NULL;
 	oidc_jwk_t *jwk = NULL;
 	int isPrivateKey = 1;
@@ -140,8 +140,8 @@ static char *test_private_key_parse(apr_pool_t *pool) {
 	const char ecPrivateKeyFile[512];
 
 	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
-	sprintf((char *)rsaPrivateKeyFile, "%s/%s", dir, "/test/private.pem");
-	sprintf((char *)ecPrivateKeyFile, "%s/%s", dir, "/test/ecpriv.key");
+	snprintf((char *)rsaPrivateKeyFile, 512, "%s/%s", dir, "/test/private.pem");
+	snprintf((char *)ecPrivateKeyFile, 512, "%s/%s", dir, "/test/ecpriv.key");
 
 	input = BIO_new(BIO_s_file());
 	TST_ASSERT_ERR("test_private_key_parse_BIO_new_RSA_private_key", input != NULL, pool, err);
@@ -191,7 +191,7 @@ static char *test_private_key_parse(apr_pool_t *pool) {
 
 static char *test_public_key_parse(apr_pool_t *pool) {
 
-	oidc_jose_error_t err;
+	oidc_jose_error_t err = {{'\0'}, 0, {'\0'}, {'\0'}};
 	oidc_jwk_t *jwk, *jwkCert = NULL;
 
 	BIO *input, *inputCert = NULL;
@@ -204,9 +204,9 @@ static char *test_public_key_parse(apr_pool_t *pool) {
 	const char certificateFile[512];
 	const char ecCertificateFile[512];
 	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
-	sprintf((char *)publicKeyFile, "%s/%s", dir, "/test/public.pem");
-	sprintf((char *)certificateFile, "%s/%s", dir, "/test/certificate.pem");
-	sprintf((char *)ecCertificateFile, "%s/%s", dir, "/test/eccert.pem");
+	snprintf((char *)publicKeyFile, 512, "%s/%s", dir, "/test/public.pem");
+	snprintf((char *)certificateFile, 512, "%s/%s", dir, "/test/certificate.pem");
+	snprintf((char *)ecCertificateFile, 512, "%s/%s", dir, "/test/eccert.pem");
 
 	input = BIO_new(BIO_s_file());
 	TST_ASSERT_ERR("test_public_key_parse_BIO_new_public_key", input != NULL, pool, err);
@@ -1041,11 +1041,11 @@ static char *test_proto_authorization_request(request_rec *r) {
 	oidc_proto_state_set_response_type(proto_state, oidc_cfg_provider_response_type_get(provider));
 	oidc_proto_state_set_timestamp_now(proto_state);
 
-	TST_ASSERT("oidc_proto_authorization_request (1)",
+	TST_ASSERT("oidc_proto_request_auth (1)",
 		   oidc_proto_request_auth(r, provider, NULL, redirect_uri, state, proto_state, NULL, NULL, NULL,
 					   NULL) == HTTP_MOVED_TEMPORARILY);
 
-	TST_ASSERT_STR("oidc_proto_authorization_request (2)", apr_table_get(r->headers_out, "Location"),
+	TST_ASSERT_STR("oidc_proto_request_auth (2)", apr_table_get(r->headers_out, "Location"),
 		       "https://idp.example.com/"
 		       "authorize?response_type=code&scope=openid&client_id=client_id&state=12345&redirect_uri=https%"
 		       "3A%2F%2Fwww.example.com%2Fprotected%2F&nonce=anonce&jan=piet&foo=bar");
@@ -1865,8 +1865,8 @@ static request_rec *test_setup(apr_pool_t *pool) {
 
 	oidc_dir_cfg_t *d_cfg = oidc_cfg_dir_config_create(request->pool, NULL);
 
-	request->server->module_config = apr_pcalloc(request->pool, sizeof(ap_conf_vector_t *) * kEls);
-	request->per_dir_config = apr_pcalloc(request->pool, sizeof(ap_conf_vector_t *) * kEls);
+	request->server->module_config = apr_pcalloc(request->pool, sizeof(void) * kEls);
+	request->per_dir_config = apr_pcalloc(request->pool, sizeof(void) * kEls);
 	ap_set_module_config(request->server->module_config, &auth_openidc_module, cfg);
 	ap_set_module_config(request->per_dir_config, &auth_openidc_module, d_cfg);
 

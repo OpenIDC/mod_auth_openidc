@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * All rights reserved.
  *
  * DISCLAIMER OF WARRANTIES:
@@ -363,7 +363,7 @@ int oidc_refresh_token_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *se
 	}
 
 	/* pass the tokens to the application, possibly updating the expiry */
-	if (oidc_session_pass_tokens(r, c, session, &needs_save) == FALSE) {
+	if (oidc_session_pass_tokens(r, c, session, TRUE, &needs_save) == FALSE) {
 		error_code = "session_corruption";
 		goto end;
 	}
@@ -377,10 +377,9 @@ end:
 
 	/* pass optional error message to the return URL */
 	if (error_code != NULL)
-		return_to =
-		    apr_psprintf(r->pool, "%s%serror_code=%s", return_to,
-				 strchr(return_to ? return_to : "", OIDC_CHAR_QUERY) ? OIDC_STR_AMP : OIDC_STR_QUERY,
-				 oidc_http_url_encode(r, error_code));
+		return_to = apr_psprintf(r->pool, "%s%serror_code=%s", return_to,
+					 strchr(return_to, OIDC_CHAR_QUERY) ? OIDC_STR_AMP : OIDC_STR_QUERY,
+					 oidc_http_url_encode(r, error_code));
 
 	/* add the redirect location header */
 	oidc_http_hdr_out_location_set(r, return_to);

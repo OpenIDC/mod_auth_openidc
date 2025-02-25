@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * All rights reserved.
  *
  * DISCLAIMER OF WARRANTIES:
@@ -110,6 +110,13 @@ typedef enum {
 	OIDC_TRACE_PARENT_PROPAGATE = 1,
 	OIDC_TRACE_PARENT_GENERATE = 2
 } oidc_trace_parent_t;
+
+typedef enum {
+	OIDC_SAMESITE_COOKIE_DISABLED = 0,
+	OIDC_SAMESITE_COOKIE_NONE = 1,
+	OIDC_SAMESITE_COOKIE_LAX = 2,
+	OIDC_SAMESITE_COOKIE_STRICT = 3
+} oidc_samesite_cookie_t;
 
 #define OIDC_ERROR_ENVVAR "OIDC_ERROR"
 #define OIDC_ERROR_DESC_ENVVAR "OIDC_ERROR_DESC"
@@ -214,7 +221,7 @@ OIDC_CFG_MEMBER_FUNCS_DECL(default_sso_url, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(default_slo_url, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(cookie_domain, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(cookie_http_only, int)
-OIDC_CFG_MEMBER_FUNCS_DECL(cookie_same_site, int)
+OIDC_CFG_MEMBER_FUNCS_DECL(cookie_same_site, oidc_samesite_cookie_t)
 OIDC_CFG_MEMBER_FUNCS_DECL(claim_delimiter, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(claim_prefix, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(state_timeout, int)

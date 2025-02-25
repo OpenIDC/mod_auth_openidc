@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * All rights reserved.
  *
  * DISCLAIMER OF WARRANTIES:
@@ -136,13 +136,15 @@ static int oidc_state_cookies_delete_oldest(request_rec *r, oidc_cfg_t *c, int n
 			prev = cur;
 			cur = cur->next;
 		}
-		oidc_warn(r, "deleting oldest state cookie: %s (time until expiry %" APR_TIME_T_FMT " seconds)",
-			  oldest->name, apr_time_sec(oldest->timestamp - apr_time_now()));
-		oidc_http_set_cookie(r, oldest->name, "", 0, OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r));
-		if (prev_oldest)
-			prev_oldest->next = oldest->next;
-		else
-			first = first ? first->next : NULL;
+		if (oldest) {
+			oidc_warn(r, "deleting oldest state cookie: %s (time until expiry %" APR_TIME_T_FMT " seconds)",
+				  oldest->name, apr_time_sec(oldest->timestamp - apr_time_now()));
+			oidc_http_set_cookie(r, oldest->name, "", 0, OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r));
+			if (prev_oldest)
+				prev_oldest->next = oldest->next;
+			else
+				first = first->next;
+		}
 		number_of_valid_state_cookies--;
 	}
 	return number_of_valid_state_cookies;
@@ -156,7 +158,7 @@ static int oidc_state_cookies_delete_oldest(request_rec *r, oidc_cfg_t *c, int n
 int oidc_state_cookies_clean_expired(request_rec *r, oidc_cfg_t *c, const char *currentCookieName, int delete_oldest) {
 	int number_of_valid_state_cookies = 0;
 	oidc_state_cookies_t *first = NULL, *last = NULL;
-	char *cookie, *tokenizerCtx = NULL;
+	char *cookie = NULL, *tokenizerCtx = NULL, *cookieName = NULL;
 	char *cookies = apr_pstrdup(r->pool, oidc_http_hdr_in_cookie_get(r));
 	if (cookies != NULL) {
 		cookie = apr_strtok(cookies, OIDC_STR_SEMI_COLON, &tokenizerCtx);
@@ -164,7 +166,7 @@ int oidc_state_cookies_clean_expired(request_rec *r, oidc_cfg_t *c, const char *
 			while (*cookie == OIDC_CHAR_SPACE)
 				cookie++;
 			if (_oidc_strstr(cookie, oidc_cfg_dir_state_cookie_prefix_get(r)) == cookie) {
-				char *cookieName = cookie;
+				cookieName = cookie;
 				while (cookie != NULL && *cookie != OIDC_CHAR_EQUAL)
 					cookie++;
 				if (*cookie == OIDC_CHAR_EQUAL) {
@@ -184,7 +186,7 @@ int oidc_state_cookies_clean_expired(request_rec *r, oidc_cfg_t *c, const char *
 								    oidc_proto_state_get_original_url(proto_state));
 								oidc_http_set_cookie(
 								    r, cookieName, "", 0,
-								    OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r));
+								    OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r));
 							} else {
 								if (first == NULL) {
 									first = apr_pcalloc(
@@ -207,7 +209,7 @@ int oidc_state_cookies_clean_expired(request_rec *r, oidc_cfg_t *c, const char *
 							    "state cookie could not be retrieved/decoded, deleting: %s",
 							    cookieName);
 							oidc_http_set_cookie(r, cookieName, "", 0,
-									     OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r));
+									     OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r));
 						}
 					}
 				}

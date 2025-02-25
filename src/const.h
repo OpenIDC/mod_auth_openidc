@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -91,6 +91,9 @@ static inline int _oidc_strncmp(const char *a, const char *b, size_t n) {
 static inline char *_oidc_strstr(const char *a, const char *b) {
 	return ((a && b) ? (char *)strstr(a, b) : NULL);
 }
+static inline char *_oidc_strncpy(char *destination, const char *source, size_t num) {
+	return ((destination && source) ? strncpy(destination, source, num) : NULL);
+}
 static inline apr_time_t _oidc_str_to_time(const char *s, const apr_time_t default_value) {
 	apr_time_t v = default_value;
 	if (s)
@@ -103,6 +106,10 @@ static inline int _oidc_str_to_int(const char *s, const int default_value) {
 		v = strtol(s, NULL, 10);
 	return v;
 }
+
+#ifdef WIN32
+#define snprintf _snprintf
+#endif
 
 #define HAVE_APACHE_24 MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 

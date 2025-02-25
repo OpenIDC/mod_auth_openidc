@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -67,22 +67,34 @@ char *oidc_http_url_encode(const request_rec *r, const char *str) {
 	 * see: https://curl.se/libcurl/c/threadsafe.html
 	 * so we can not not use a global variable here and optimize performance
 	 */
+	char *rv = "";
+	char *result = NULL;
 	CURL *curl = NULL;
+
 	if (str == NULL)
-		return "";
+		goto end;
+
 	curl = curl_easy_init();
 	if (curl == NULL) {
 		oidc_error(r, "curl_easy_init() error");
-		return "";
+		goto end;
 	}
-	char *result = curl_easy_escape(curl, str, 0);
+
+	result = curl_easy_escape(curl, str, 0);
 	if (result == NULL) {
 		oidc_error(r, "curl_easy_escape() error");
-		return "";
+		goto end;
 	}
-	char *rv = apr_pstrdup(r->pool, result);
-	curl_free(result);
-	curl_easy_cleanup(curl);
+
+	rv = apr_pstrdup(r->pool, result);
+
+end:
+
+	if (result)
+		curl_free(result);
+	if (curl)
+		curl_easy_cleanup(curl);
+
 	return rv;
 }
 
@@ -90,33 +102,47 @@ char *oidc_http_url_encode(const request_rec *r, const char *str) {
  * URL-decode a string
  */
 char *oidc_http_url_decode(const request_rec *r, const char *str) {
+	char *rv = "";
+	char *result = NULL;
 	CURL *curl = NULL;
+	int counter = 0;
+	char *replaced = NULL;
 
 	if (str == NULL)
-		return "";
+		goto end;
 
 	curl = curl_easy_init();
 	if (curl == NULL) {
 		oidc_error(r, "curl_easy_init() error");
-		return "";
+		goto end;
 	}
-	int counter = 0;
-	char *replaced = (char *)str;
-	while (str[counter] != '\0') {
-		if (str[counter] == '+') {
+
+	replaced = apr_pstrdup(r->pool, str);
+	while (replaced[counter] != '\0') {
+		if (replaced[counter] == '+') {
 			replaced[counter] = ' ';
 		}
 		counter++;
 	}
-	char *result = curl_easy_unescape(curl, replaced, 0, 0);
+
+	result = curl_easy_unescape(curl, replaced, 0, 0);
+
 	if (result == NULL) {
 		oidc_error(r, "curl_easy_unescape() error");
-		return "";
+		goto end;
 	}
-	char *rv = apr_pstrdup(r->pool, result);
-	curl_free(result);
-	curl_easy_cleanup(curl);
+
+	rv = apr_pstrdup(r->pool, result);
+
 	// oidc_debug(r, "input=\"%s\", output=\"%s\"", str, rv);
+
+end:
+
+	if (result)
+		curl_free(result);
+	if (curl)
+		curl_easy_cleanup(curl);
+
 	return rv;
 }
 
@@ -580,65 +606,65 @@ char *oidc_http_form_encoded_data(request_rec *r, const apr_table_t *params) {
 }
 
 /*
+ * call curl_easy_setopt with error checking and reporting
+ */
+#define OIDC_HTTP_CURL_SETOPT_PARMS(r, curl, code, option, ...)                                                        \
+	code = curl_easy_setopt(curl, option, __VA_ARGS__);                                                            \
+	if (code != CURLE_OK)                                                                                          \
+	oidc_error(r, "curl_easy_setopt(%s) failed with: %s", #option, curl_easy_strerror(code))
+
+#define OIDC_HTTP_CURL_SETOPT(...) OIDC_HTTP_CURL_SETOPT_PARMS(r, curl, code, __VA_ARGS__)
+
+/*
  * set libcurl SSL options
  */
 
-#define OIDC_CURLOPT_SSL_OPTIONS "CURLOPT_SSL_OPTIONS"
+#define OIDC_CURLOPT_SSL_OPTIONS_ENV_VAR_NAME "CURLOPT_SSL_OPTIONS"
 
-#define OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, option, key, val)                                            \
-	if (_oidc_strstr(env_var_value, option) != NULL) {                                                             \
-		oidc_debug(r, "curl_easy_setopt (%d) %s (%d)", key, option, val);                                      \
-		curl_easy_setopt(curl, key, val);                                                                      \
+#define OIDC_HTTP_CURL_SETOPT_SSL(option, value)                                                                       \
+	if (_oidc_strstr(env_var_value, #value) != NULL) {                                                             \
+		oidc_debug(r, "curl_easy_setopt(%s): %s (%d)", #option, #value, value);                                \
+		OIDC_HTTP_CURL_SETOPT(option, value);                                                                  \
 	}
 
 static void oidc_http_set_curl_ssl_options(request_rec *r, CURL *curl) {
+	// NB: the variable names r, curl, code and env_var_value are used in the OIDC_HTTP_CURL_SETOPT_SSL macro
 	const char *env_var_value = NULL;
+	CURLcode code = CURLE_OK;
 	if (r->subprocess_env != NULL)
-		env_var_value = apr_table_get(r->subprocess_env, OIDC_CURLOPT_SSL_OPTIONS);
+		env_var_value = apr_table_get(r->subprocess_env, OIDC_CURLOPT_SSL_OPTIONS_ENV_VAR_NAME);
 	if (env_var_value == NULL)
 		return;
-	oidc_debug(r, "SSL options environment variable %s=%s found", OIDC_CURLOPT_SSL_OPTIONS, env_var_value);
+	oidc_debug(r, "SSL options environment variable %s=%s found", OIDC_CURLOPT_SSL_OPTIONS_ENV_VAR_NAME,
+		   env_var_value);
 #if LIBCURL_VERSION_NUM >= 0x071900
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURLSSLOPT_ALLOW_BEAST", CURLOPT_SSL_OPTIONS,
-				  CURLSSLOPT_ALLOW_BEAST)
+	OIDC_HTTP_CURL_SETOPT_SSL(CURLOPT_SSL_OPTIONS, CURLSSLOPT_ALLOW_BEAST);
 #endif
 #if LIBCURL_VERSION_NUM >= 0x072c00
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURLSSLOPT_NO_REVOKE", CURLOPT_SSL_OPTIONS,
-				  CURLSSLOPT_NO_REVOKE)
+	OIDC_HTTP_CURL_SETOPT_SSL(CURLOPT_SSL_OPTIONS, CURLSSLOPT_NO_REVOKE)
 #endif
 #if LIBCURL_VERSION_NUM >= 0x074400
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURLSSLOPT_NO_PARTIALCHAIN", CURLOPT_SSL_OPTIONS,
-				  CURLSSLOPT_NO_PARTIALCHAIN)
+	OIDC_HTTP_CURL_SETOPT_SSL(CURLOPT_SSL_OPTIONS, CURLSSLOPT_NO_PARTIALCHAIN)
 #endif
 #if LIBCURL_VERSION_NUM >= 0x074600
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURLSSLOPT_REVOKE_BEST_EFFORT", CURLOPT_SSL_OPTIONS,
-				  CURLSSLOPT_REVOKE_BEST_EFFORT)
+	OIDC_HTTP_CURL_SETOPT_SSL(CURLOPT_SSL_OPTIONS, CURLSSLOPT_REVOKE_BEST_EFFORT)
 #endif
 #if LIBCURL_VERSION_NUM >= 0x074700
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURLSSLOPT_NATIVE_CA", CURLOPT_SSL_OPTIONS,
-				  CURLSSLOPT_NATIVE_CA)
+	OIDC_HTTP_CURL_SETOPT_SSL(CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA)
 #endif
 #if LIBCURL_VERSION_NUM >= 0x072200
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURL_SSLVERSION_TLSv1_0", CURLOPT_SSLVERSION,
-				  CURL_SSLVERSION_TLSv1_0)
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURL_SSLVERSION_TLSv1_1", CURLOPT_SSLVERSION,
-				  CURL_SSLVERSION_TLSv1_1)
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURL_SSLVERSION_TLSv1_2", CURLOPT_SSLVERSION,
-				  CURL_SSLVERSION_TLSv1_2)
+	OIDC_HTTP_CURL_SETOPT_SSL(CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_0)
+	OIDC_HTTP_CURL_SETOPT_SSL(CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_1)
+	OIDC_HTTP_CURL_SETOPT_SSL(CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2)
 #endif
 #if LIBCURL_VERSION_NUM >= 0x073400
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURL_SSLVERSION_TLSv1_3", CURLOPT_SSLVERSION,
-				  CURL_SSLVERSION_TLSv1_3)
+	OIDC_HTTP_CURL_SETOPT_SSL(CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_3)
 #endif
 #if LIBCURL_VERSION_NUM >= 0x073600
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURL_SSLVERSION_MAX_TLSv1_0", CURLOPT_SSLVERSION,
-				  CURL_SSLVERSION_MAX_TLSv1_0)
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURL_SSLVERSION_MAX_TLSv1_1", CURLOPT_SSLVERSION,
-				  CURL_SSLVERSION_MAX_TLSv1_1)
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURL_SSLVERSION_MAX_TLSv1_2", CURLOPT_SSLVERSION,
-				  CURL_SSLVERSION_MAX_TLSv1_2)
-	OIDC_HTTP_SET_CURL_OPTION(r, curl, env_var_value, "CURL_SSLVERSION_MAX_TLSv1_3", CURLOPT_SSLVERSION,
-				  CURL_SSLVERSION_MAX_TLSv1_3)
+	OIDC_HTTP_CURL_SETOPT_SSL(CURLOPT_SSLVERSION, CURL_SSLVERSION_MAX_TLSv1_0)
+	OIDC_HTTP_CURL_SETOPT_SSL(CURLOPT_SSLVERSION, CURL_SSLVERSION_MAX_TLSv1_1)
+	OIDC_HTTP_CURL_SETOPT_SSL(CURLOPT_SSLVERSION, CURL_SSLVERSION_MAX_TLSv1_2)
+	OIDC_HTTP_CURL_SETOPT_SSL(CURLOPT_SSLVERSION, CURL_SSLVERSION_MAX_TLSv1_3)
 #endif
 }
 
@@ -658,6 +684,15 @@ static const char *oidc_http_user_agent(request_rec *r) {
 	return s_useragent;
 }
 
+#define OIDC_CURL_INTERFACE_ENV_VAR "OIDC_CURL_INTERFACE"
+
+/*
+ * construct our local address/interface for outgoing requests
+ */
+static const char *oidc_http_interface(request_rec *r) {
+	return apr_table_get(r->subprocess_env, OIDC_CURL_INTERFACE_ENV_VAR);
+}
+
 /*
  * execute a HTTP (GET or POST) request
  */
@@ -669,10 +704,12 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 				    const apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
 				    const char *ssl_key_pwd) {
 
+	// NB: the variable names r, curl, and code are used in the OIDC_HTTP_CURL_SETOPT macro
+	CURL *curl = NULL;
+	CURLcode code = CURLE_OK;
 	char curl_err[CURL_ERROR_SIZE];
 	oidc_curl_resp_data_ctx_t d_buf = {r, NULL, 0};
 	oidc_curl_resp_hdr_ctx_t h_buf = {r, response_hdrs};
-	CURL *curl = NULL;
 	struct curl_slist *h_list = NULL;
 	int i = 0;
 	CURLcode res = CURLE_OK;
@@ -701,43 +738,46 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 	curl_err[0] = 0;
 
 	/* some of these are not really required */
-	curl_easy_setopt(curl, CURLOPT_HEADER, 0L);
-	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
-	curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
-	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curl_err);
-	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-	curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L);
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_HEADER, 0L);
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_NOPROGRESS, 1L);
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_NOSIGNAL, 1L);
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_ERRORBUFFER, curl_err);
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_FOLLOWLOCATION, 1L);
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_MAXREDIRS, 5L);
 
 	/* set the timeouts */
-	curl_easy_setopt(curl, CURLOPT_TIMEOUT, http_timeout->request_timeout);
-	curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, http_timeout->connect_timeout);
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_TIMEOUT, http_timeout->request_timeout);
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_CONNECTTIMEOUT, http_timeout->connect_timeout);
 
 	/* setup the buffer where the response data will be written to */
-	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, oidc_http_response_data);
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&d_buf);
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_WRITEFUNCTION, oidc_http_response_data);
+	/* coverity[bad_sizeof] */
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_WRITEDATA, &d_buf);
 
 	/* setup the buffer where the response headers will be written to */
-	curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, oidc_http_response_header);
-	curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *)&h_buf);
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_HEADERFUNCTION, oidc_http_response_header);
+	/* coverity[bad_sizeof] */
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_HEADERDATA, &h_buf);
 
 #ifndef LIBCURL_NO_CURLPROTO
 #if LIBCURL_VERSION_NUM >= 0x075500
-	curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
-	curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "http,https");
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_PROTOCOLS_STR, "http,https");
 #else
-	curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
-	curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
 #endif
 #endif
 
 	/* set the options for validating the SSL server certificate that the remote site presents */
-	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, (ssl_validate_server != FALSE ? 1L : 0L));
-	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, (ssl_validate_server != FALSE ? 2L : 0L));
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_SSL_VERIFYPEER, (ssl_validate_server != FALSE ? 1L : 0L));
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_SSL_VERIFYHOST, (ssl_validate_server != FALSE ? 2L : 0L));
 
 	oidc_http_set_curl_ssl_options(r, curl);
 
-	if (oidc_cfg_ca_bundle_path_get(c) != NULL)
-		curl_easy_setopt(curl, CURLOPT_CAINFO, oidc_cfg_ca_bundle_path_get(c));
+	if (oidc_cfg_ca_bundle_path_get(c) != NULL) {
+		OIDC_HTTP_CURL_SETOPT(CURLOPT_CAINFO, oidc_cfg_ca_bundle_path_get(c));
+	}
 
 #ifdef WIN32
 	else {
@@ -746,28 +786,44 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 		char *retval = (char *)malloc(sizeof(TCHAR) * (MAX_PATH + 1));
 		retval[0] = '\0';
 		buflen = SearchPath(NULL, "curl-ca-bundle.crt", NULL, MAX_PATH + 1, retval, &ptr);
-		if (buflen > 0)
-			curl_easy_setopt(curl, CURLOPT_CAINFO, retval);
-		else
+		if (buflen > 0) {
+			OIDC_HTTP_CURL_SETOPT(CURLOPT_CAINFO, retval);
+		} else {
 			oidc_warn(r, "no curl-ca-bundle.crt file found in path");
+		}
 		free(retval);
 	}
 #endif
 
 	/* identify this HTTP client */
-	const char *useragent = oidc_http_user_agent(r);
-	if ((useragent != NULL) && (_oidc_strcmp(useragent, "") != 0)) {
-		oidc_debug(r, "set HTTP request header User-Agent to: %s", useragent);
-		curl_easy_setopt(curl, CURLOPT_USERAGENT, useragent);
+	const char *s_useragent = oidc_http_user_agent(r);
+	if ((s_useragent != NULL) && (_oidc_strcmp(s_useragent, "") != 0)) {
+		oidc_debug(r, "set HTTP request header User-Agent to: %s", s_useragent);
+		OIDC_HTTP_CURL_SETOPT(CURLOPT_USERAGENT, s_useragent);
+	}
+
+	/* set the local interface if defined */
+	const char *s_interface = oidc_http_interface(r);
+	if ((s_interface != NULL) && (_oidc_strcmp(s_interface, "") != 0)) {
+#if LIBCURL_VERSION_NUM >= 0x073000
+		oidc_debug(r, "set local interface to: %s", s_interface);
+		OIDC_HTTP_CURL_SETOPT(CURLOPT_INTERFACE, s_interface);
+#else
+		oidc_warn(
+		    r, "local interface is configured to %s, but the cURL version in use does not support setting this",
+		    s_interface);
+#endif
 	}
 
 	/* set optional outgoing proxy for the local network */
 	if (outgoing_proxy->host_port) {
-		curl_easy_setopt(curl, CURLOPT_PROXY, outgoing_proxy->host_port);
-		if (outgoing_proxy->username_password)
-			curl_easy_setopt(curl, CURLOPT_PROXYUSERPWD, outgoing_proxy->username_password);
-		if (outgoing_proxy->auth_type != OIDC_CONFIG_POS_INT_UNSET)
-			curl_easy_setopt(curl, CURLOPT_PROXYAUTH, outgoing_proxy->auth_type);
+		OIDC_HTTP_CURL_SETOPT(CURLOPT_PROXY, outgoing_proxy->host_port);
+		if (outgoing_proxy->username_password) {
+			OIDC_HTTP_CURL_SETOPT(CURLOPT_PROXYUSERPWD, outgoing_proxy->username_password);
+		}
+		if (outgoing_proxy->auth_type != OIDC_CONFIG_POS_INT_UNSET) {
+			OIDC_HTTP_CURL_SETOPT(CURLOPT_PROXYAUTH, outgoing_proxy->auth_type);
+		}
 	}
 
 	/* see if we need to add token in the Bearer/DPoP Authorization header */
@@ -778,22 +834,25 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 
 	/* see if we need to perform HTTP basic authentication to the remote site */
 	if (basic_auth != NULL) {
-		curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
-		curl_easy_setopt(curl, CURLOPT_USERPWD, basic_auth);
+		OIDC_HTTP_CURL_SETOPT(CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
+		OIDC_HTTP_CURL_SETOPT(CURLOPT_USERPWD, basic_auth);
 	}
 
-	if (ssl_cert != NULL)
-		curl_easy_setopt(curl, CURLOPT_SSLCERT, ssl_cert);
-	if (ssl_key != NULL)
-		curl_easy_setopt(curl, CURLOPT_SSLKEY, ssl_key);
-	if (ssl_key_pwd != NULL)
-		curl_easy_setopt(curl, CURLOPT_KEYPASSWD, ssl_key_pwd);
+	if (ssl_cert != NULL) {
+		OIDC_HTTP_CURL_SETOPT(CURLOPT_SSLCERT, ssl_cert);
+	}
+	if (ssl_key != NULL) {
+		OIDC_HTTP_CURL_SETOPT(CURLOPT_SSLKEY, ssl_key);
+	}
+	if (ssl_key_pwd != NULL) {
+		OIDC_HTTP_CURL_SETOPT(CURLOPT_KEYPASSWD, ssl_key_pwd);
+	}
 
 	if (data != NULL) {
 		/* set POST data */
-		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
+		OIDC_HTTP_CURL_SETOPT(CURLOPT_POSTFIELDS, data);
 		/* set HTTP method to POST */
-		curl_easy_setopt(curl, CURLOPT_POST, 1);
+		OIDC_HTTP_CURL_SETOPT(CURLOPT_POST, 1);
 	}
 
 	if (content_type != NULL) {
@@ -815,8 +874,9 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 	}
 
 	/* see if we need to add any custom headers */
-	if (h_list != NULL)
-		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, h_list);
+	if (h_list != NULL) {
+		OIDC_HTTP_CURL_SETOPT(CURLOPT_HTTPHEADER, h_list);
+	}
 
 	if (pass_cookies != NULL) {
 		/* gather cookies that we need to pass on from the incoming request */
@@ -835,12 +895,12 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 		/* see if we need to pass any cookies */
 		if (cookie_string != NULL) {
 			oidc_debug(r, "passing browser cookies on backend call: %s", cookie_string);
-			curl_easy_setopt(curl, CURLOPT_COOKIE, cookie_string);
+			OIDC_HTTP_CURL_SETOPT(CURLOPT_COOKIE, cookie_string);
 		}
 	}
 
 	/* set the target URL */
-	curl_easy_setopt(curl, CURLOPT_URL, url);
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_URL, url);
 
 	/* call it and record the result */
 	for (i = 0; i <= http_timeout->retries; i++) {
@@ -850,16 +910,17 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 			break;
 		}
 		if (res == CURLE_OPERATION_TIMEDOUT) {
-			/* in case of a request/transfer timeout (which includes the connect timeout) we'll not retry */
+			/* in case of a request/transfer timeout (which includes the connect timeout) we'll not
+			 * retry */
 			oidc_error(r, "curl_easy_perform failed with a timeout for %s: [%s]; won't retry", url,
 				   curl_err[0] ? curl_err : "<n/a>");
-			OIDC_METRICS_COUNTER_INC_SPEC(r, c, OM_PROVIDER_CONNECT_ERROR,
-						      curl_err[0] ? curl_err : "timeout")
+			OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_CONNECT_ERROR,
+						       curl_err[0] ? curl_err : "timeout")
 			break;
 		}
 		oidc_error(r, "curl_easy_perform(%d/%d) failed for %s with: [%s]", i + 1, http_timeout->retries + 1,
 			   url, curl_err[0] ? curl_err : "<n/a>");
-		OIDC_METRICS_COUNTER_INC_SPEC(r, c, OM_PROVIDER_CONNECT_ERROR, curl_err[0] ? curl_err : "undefined")
+		OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_CONNECT_ERROR, curl_err[0] ? curl_err : "undefined")
 		/* in case of a connectivity/network glitch we'll back off before retrying */
 		if (i < http_timeout->retries)
 			apr_sleep(apr_time_from_msec(http_timeout->retry_interval));
@@ -870,7 +931,7 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 	curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
 	oidc_debug(r, "HTTP response code=%ld", http_code);
 
-	OIDC_METRICS_COUNTER_INC_SPEC(r, c, OM_PROVIDER_HTTP_RESPONSE_CODE, apr_psprintf(r->pool, "%ld", http_code));
+	OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_HTTP_RESPONSE_CODE, apr_psprintf(r->pool, "%ld", http_code));
 
 	*response = apr_pstrmemdup(r->pool, d_buf.memory, d_buf.size);
 	if (response_code)
@@ -1052,13 +1113,13 @@ void oidc_http_set_cookie(request_rec *r, const char *cookieName, const char *co
 	/* sanity check on overall cookie value size */
 	if (_oidc_strlen(headerString) > OIDC_HTTP_COOKIE_MAX_SIZE) {
 		oidc_warn(r,
-			  "the length of the cookie value (%d) is greater than %d(!) bytes, this may not work with all "
-			  "browsers/server combinations: consider switching to a server side caching!",
+			  "the length of the cookie value (%d) is greater than %d(!) bytes, this may not work "
+			  "with all browsers/server combinations: consider switching to a server side caching!",
 			  (int)_oidc_strlen(headerString), OIDC_HTTP_COOKIE_MAX_SIZE);
 	}
 
-	/* use r->err_headers_out so we always print our headers (even on 302 redirect) - headers_out only prints on 2xx
-	 * responses */
+	/* use r->err_headers_out so we always print our headers (even on 302 redirect) - headers_out only
+	 * prints on 2xx responses */
 	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_SET_COOKIE, headerString);
 }
 

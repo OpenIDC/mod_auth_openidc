@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -88,7 +88,13 @@ apr_byte_t oidc_cache_mutex_post_config(server_rec *s, oidc_cache_mutex_t *m, co
 	const char *dir;
 
 	/* construct the mutex filename */
-	apr_temp_dir_get(&dir, s->process->pool);
+	rv = apr_temp_dir_get(&dir, s->process->pool);
+	if (rv != APR_SUCCESS) {
+		oidc_serror(s, "apr_temp_dir_get failed: could not find a temp dir: %s",
+			    oidc_cache_status2str(s->process->pool, rv));
+		return FALSE;
+	}
+
 	m->mutex_filename =
 	    apr_psprintf(s->process->pool, "%s/mod_auth_openidc_%s_mutex.%ld.%pp", dir, type, (long int)getpid(), s);
 
@@ -214,7 +220,7 @@ apr_byte_t oidc_cache_mutex_destroy(server_rec *s, oidc_cache_mutex_t *m) {
 
 	oidc_slog(s, APLOG_TRACE1, "init: %pp (m=%pp,s=%pp, p=%d)", m, m->gmutex ? m->gmutex : 0, s, m->is_parent);
 
-	if ((m) && (m->is_parent == TRUE)) {
+	if (m && (m->is_parent == TRUE)) {
 		if ((m->is_global) && (m->gmutex)) {
 			rv = apr_global_mutex_destroy(m->gmutex);
 			m->gmutex = NULL;
@@ -289,7 +295,8 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, 
 	apr_byte_t rc = FALSE;
 	char *msg = NULL;
 	const char *s_key = NULL;
-	char *cache_value = NULL, *s_secret = NULL;
+	char *cache_value = NULL;
+	char *s_secret = NULL;
 
 	oidc_debug(r, "enter: %s (section=%s, decrypt=%d, type=%s)", key, section, encrypted, cfg->cache.impl->name);
 
