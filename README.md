@@ -1,12 +1,13 @@
 [![Build Status](https://github.com/OpenIDC/mod_auth_openidc/actions/workflows/build.yml/badge.svg)](https://github.com/OpenIDC/mod_auth_openidc/actions/workflows/build.yml)
 [<img width="184" height="96" align="right" src="http://openid.net/wordpress-content/uploads/2016/05/oid-l-certification-mark-l-cmyk-150dpi-90mm.jpg" alt="OpenID Certification">](https://openid.net/certification)
 [![CodeQL Analysis](https://github.com/OpenIDC/mod_auth_openidc/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/OpenIDC/mod_auth_openidc/actions/workflows/codeql-analysis.yml)
+[![Coverity Scan Build Status](https://scan.coverity.com/projects/31119/badge.svg)](https://scan.coverity.com/projects/openidc-mod_auth_openidc)
 
 mod_auth_openidc
 ================
 
 *mod_auth_openidc* is an OpenID Certified™ authentication and authorization module for the Apache 2.x
-HTTP server that implements the OpenID Connect Relying Party functionality.
+HTTP server that implements the OpenID Connect 1.x and FAPI 2.x Relying Party functionality.
 
 Build steps
 --------
@@ -145,7 +146,7 @@ For details on configuring multiple providers see the [Wiki](https://github.com/
 See the [Wiki](https://github.com/OpenIDC/mod_auth_openidc/wiki) for configuration docs for other OpenID Connect Providers:
 - [GLUU Server](https://github.com/OpenIDC/mod_auth_openidc/wiki/Gluu-Server)
 - [Keycloak](https://github.com/OpenIDC/mod_auth_openidc/wiki/Keycloak)
-- [Azure AD](https://github.com/OpenIDC/mod_auth_openidc/wiki/Azure-Active-Directory-Authentication)
+- [Microsoft Entra ID (Azure AD)](https://github.com/OpenIDC/mod_auth_openidc/wiki/Microsoft-Entra-ID--(Azure-AD))
 - [Sign in with Apple](https://github.com/OpenIDC/mod_auth_openidc/wiki/Sign-in-with-Apple)
 - [Curity Identity Server](https://github.com/OpenIDC/mod_auth_openidc/wiki/Curity-Identity-Server)
 - [LemonLDAP::NG](https://github.com/OpenIDC/mod_auth_openidc/wiki/LemonLDAP::NG)

@@ -36,6 +36,7 @@ libauth_openidc_la_SOURCES = \
 	src/proto/jwks.c \
 	src/proto/jwt.c \
 	src/proto/pkce.c \
+	src/proto/profile.c \
 	src/proto/proto.c \
 	src/proto/request.c \
 	src/proto/response.c \

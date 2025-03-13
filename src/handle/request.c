@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * All rights reserved.
  *
  * DISCLAIMER OF WARRANTIES:
@@ -98,8 +98,22 @@ static int oidc_request_check_cookie_domain(request_rec *r, oidc_cfg_t *c, oidc_
 	return OK;
 }
 
-#define OIDC_COOKIE_SAMESITE_LAX(c, r)                                                                                 \
-	oidc_cfg_cookie_same_site_get(c) ? OIDC_COOKIE_EXT_SAME_SITE_LAX : OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r)
+static const char *oidc_request_samesite_cookie(request_rec *r, struct oidc_cfg_t *c) {
+	const char *rv = NULL;
+	switch (oidc_cfg_cookie_same_site_get(c)) {
+	case OIDC_SAMESITE_COOKIE_STRICT:
+	case OIDC_SAMESITE_COOKIE_LAX:
+		rv = OIDC_HTTP_COOKIE_SAMESITE_LAX;
+		break;
+	case OIDC_SAMESITE_COOKIE_NONE:
+		rv = OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r);
+		break;
+	case OIDC_SAMESITE_COOKIE_DISABLED:
+	default:
+		break;
+	}
+	return rv;
+}
 
 /*
  * set the state that is maintained between an authorization request and an authorization response
@@ -135,7 +149,7 @@ static int oidc_request_authorization_set_cookie(request_rec *r, oidc_cfg_t *c, 
 	const char *cookieName = oidc_state_cookie_name(r, state);
 
 	/* set it as a cookie */
-	oidc_http_set_cookie(r, cookieName, cookieValue, -1, OIDC_COOKIE_SAMESITE_LAX(c, r));
+	oidc_http_set_cookie(r, cookieName, cookieValue, -1, oidc_request_samesite_cookie(r, c));
 
 	return OK;
 }
@@ -187,14 +201,14 @@ int oidc_request_authenticate_user(request_rec *r, oidc_cfg_t *c, oidc_provider_
 
 	if ((oidc_util_spaced_string_contains(r->pool, oidc_cfg_provider_response_type_get(provider),
 					      OIDC_PROTO_CODE) == TRUE) &&
-	    (oidc_cfg_provider_pkce_get(provider) != &oidc_pkce_none)) {
+	    (oidc_proto_profile_pkce_get(provider) != &oidc_pkce_none)) {
 
 		/* generate the code verifier value that correlates authorization requests and code exchange requests */
-		if (oidc_cfg_provider_pkce_get(provider)->state(r, &pkce_state) == FALSE)
+		if (oidc_proto_profile_pkce_get(provider)->state(r, &pkce_state) == FALSE)
 			return HTTP_INTERNAL_SERVER_ERROR;
 
 		/* generate the PKCE code challenge */
-		if (oidc_cfg_provider_pkce_get(provider)->challenge(r, pkce_state, &code_challenge) == FALSE)
+		if (oidc_proto_profile_pkce_get(provider)->challenge(r, pkce_state, &code_challenge) == FALSE)
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
 

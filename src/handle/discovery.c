@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * All rights reserved.
  *
  * DISCLAIMER OF WARRANTIES:
@@ -74,11 +74,28 @@ apr_byte_t oidc_is_discovery_response(request_rec *r, oidc_cfg_t *cfg) {
 	       oidc_util_request_has_parameter(r, OIDC_DISC_USER_PARAM);
 }
 
+static const char *oidc_discovery_csrf_cookie_samesite(request_rec *r, oidc_cfg_t *c) {
+	const char *rv = NULL;
+	switch (oidc_cfg_cookie_same_site_get(c)) {
+	case OIDC_SAMESITE_COOKIE_STRICT:
+		rv = OIDC_HTTP_COOKIE_SAMESITE_STRICT;
+		break;
+	case OIDC_SAMESITE_COOKIE_LAX:
+		rv = OIDC_HTTP_COOKIE_SAMESITE_LAX;
+		break;
+	case OIDC_SAMESITE_COOKIE_NONE:
+		rv = OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r);
+		break;
+	case OIDC_SAMESITE_COOKIE_DISABLED:
+		break;
+	default:
+		break;
+	}
+	return rv;
+}
+
 /* define the name of the cookie/parameter for CSRF protection */
 #define OIDC_CSRF_NAME "x_csrf"
-
-#define OIDC_COOKIE_SAMESITE_STRICT(c, r)                                                                              \
-	oidc_cfg_cookie_same_site_get(c) ? OIDC_COOKIE_EXT_SAME_SITE_STRICT : OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r)
 
 /*
  * present the user with an OP selection screen
@@ -122,7 +139,7 @@ int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg) {
 		oidc_debug(r, "redirecting to external discovery page: %s", url);
 
 		/* set CSRF cookie */
-		oidc_http_set_cookie(r, OIDC_CSRF_NAME, csrf, -1, OIDC_COOKIE_SAMESITE_STRICT(cfg, r));
+		oidc_http_set_cookie(r, OIDC_CSRF_NAME, csrf, -1, oidc_discovery_csrf_cookie_samesite(r, cfg));
 
 		/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
 		if (oidc_response_post_preserve_javascript(r, url, NULL, NULL) == TRUE)
@@ -200,7 +217,7 @@ int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg) {
 	s = apr_psprintf(r->pool, "%s<p><input type=\"submit\" value=\"Submit\"></p>\n", s);
 	s = apr_psprintf(r->pool, "%s</form>\n", s);
 
-	oidc_http_set_cookie(r, OIDC_CSRF_NAME, csrf, -1, OIDC_COOKIE_SAMESITE_STRICT(cfg, r));
+	oidc_http_set_cookie(r, OIDC_CSRF_NAME, csrf, -1, oidc_discovery_csrf_cookie_samesite(r, cfg));
 
 	char *javascript = NULL, *javascript_method = NULL;
 	char *html_head = "<style type=\"text/css\">body {text-align: center}</style>";
@@ -307,7 +324,7 @@ int oidc_discovery_response(request_rec *r, oidc_cfg_t *c) {
 	if (csrf_cookie) {
 
 		/* clean CSRF cookie */
-		oidc_http_set_cookie(r, OIDC_CSRF_NAME, "", 0, OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r));
+		oidc_http_set_cookie(r, OIDC_CSRF_NAME, "", 0, OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r));
 
 		/* compare CSRF cookie value with query parameter value */
 		if ((csrf_query == NULL) || _oidc_strcmp(csrf_query, csrf_cookie) != 0) {

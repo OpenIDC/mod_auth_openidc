@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * All rights reserved.
  *
  * DISCLAIMER OF WARRANTIES:
@@ -87,14 +87,14 @@ struct oidc_cfg_cache_t {
 	/* cache_type= memcache: list of memcache host/port servers to use */
 	char *memcache_servers;
 	/* cache_type= memcache: minimum number of connections to each memcache server per process*/
-	apr_uint32_t memcache_min;
+	int memcache_min;
 	/* cache_type= memcache: soft maximum number of connections to each memcache server per process */
-	apr_uint32_t memcache_smax;
+	int memcache_smax;
 	/* cache_type= memcache: hard maximum number of connections to each memcache server per process */
-	apr_uint32_t memcache_hmax;
+	int memcache_hmax;
 	/* cache_type= memcache: maximum time in microseconds a connection to a memcache server can be idle before being
 	 * closed */
-	apr_uint32_t memcache_ttl;
+	int memcache_ttl;
 #endif
 
 	/*
@@ -155,7 +155,7 @@ struct oidc_cfg_t {
 	int state_timeout;
 	int max_number_of_state_cookies;
 	int delete_oldest_state_cookies;
-	oidc_state_input_hdrs_t state_input_headers;
+	int state_input_headers;
 
 	int session_inactivity_timeout;
 	int provider_metadata_refresh_interval;
@@ -181,9 +181,9 @@ struct oidc_cfg_t {
 	apr_hash_t *redirect_urls_allowed;
 	char *ca_bundle_path;
 	char *logout_x_frame_options;
-	oidc_hdr_x_forwarded_t x_forwarded_headers;
-	oidc_on_error_action_t action_on_userinfo_error;
-	oidc_trace_parent_t trace_parent;
+	int x_forwarded_headers;
+	int action_on_userinfo_error;
+	int trace_parent;
 
 	apr_hash_t *metrics_hook_data;
 	char *metrics_path;

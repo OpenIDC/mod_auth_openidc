@@ -18,6 +18,7 @@
 AP_DECLARE(void)
 ap_hook_check_authn(ap_HOOK_check_user_id_t *pf, const char *const *aszPre, const char *const *aszSucc, int nOrder,
 		    int type) {
+	// comment explaining why the method is empty
 }
 
 AP_DECLARE(apr_status_t)
@@ -142,25 +143,30 @@ AP_DECLARE(int) ap_hook_auth_checker(request_rec *r) {
 
 AP_DECLARE(void)
 ap_hook_fixups(int (*handler)(request_rec *r), const char *const *aszPre, const char *const *aszSucc, int nOrder) {
+	// comment explaining why the method is empty
 }
 
 AP_DECLARE(void)
 ap_hook_insert_filter(void (*insert_filter)(request_rec *r), const char *const *aszPre, const char *const *aszSucc,
 		      int nOrder) {
+	// comment explaining why the method is empty
 }
 
 AP_DECLARE(void)
 ap_hook_post_config(int (*post_config)(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, server_rec *s),
 		    const char *const *aszPre, const char *const *aszSucc, int nOrder) {
+	// comment explaining why the method is empty
 }
 
 AP_DECLARE(void)
 ap_hook_child_init(void (*child_init)(apr_pool_t *p, server_rec *s), const char *const *aszPre,
 		   const char *const *aszSucc, int nOrder) {
+	// comment explaining why the method is empty
 }
 
 AP_DECLARE(void)
 ap_hook_handler(int (*handler)(request_rec *r), const char *const *aszPre, const char *const *aszSucc, int nOrder) {
+	// comment explaining why the method is empty
 }
 
 AP_DECLARE(int) ap_is_initial_req(request_rec *r) {
@@ -175,7 +181,8 @@ ap_expr_parse_cmd_mi(const cmd_parms *cmd, const char *expr, unsigned int flags,
 }
 
 AP_DECLARE(const char *) ap_expr_str_exec(request_rec *r, const ap_expr_info_t *expr, const char **err) {
-	err = NULL;
+	if (err)
+		*err = NULL;
 	return expr->filename;
 }
 
@@ -219,6 +226,7 @@ ap_log_rerror(const char *file, int line, int level, apr_status_t status, const 
 }
 
 AP_DECLARE(void) ap_note_auth_failure(request_rec *r) {
+	// comment explaining why the method is empty
 }
 
 AP_DECLARE(apr_status_t) ap_pass_brigade(ap_filter_t *filter, apr_bucket_brigade *bucket) {
@@ -236,6 +244,7 @@ const char *ap_run_http_scheme(const request_rec *r) {
 }
 
 AP_DECLARE(void) ap_set_content_type(request_rec *r, const char *ct) {
+	// comment explaining why the method is empty
 }
 
 AP_DECLARE_NONSTD(const char *) ap_set_flag_slot(cmd_parms *cmd, void *struct_ptr, int arg) {
@@ -243,7 +252,6 @@ AP_DECLARE_NONSTD(const char *) ap_set_flag_slot(cmd_parms *cmd, void *struct_pt
 }
 
 AP_DECLARE_NONSTD(const char *) ap_set_string_slot(cmd_parms *cmd, void *struct_ptr, const char *arg) {
-
 	return "";
 }
 

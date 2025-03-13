@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * All rights reserved.
  *
  * DISCLAIMER OF WARRANTIES:
@@ -327,6 +327,9 @@ apr_byte_t oidc_response_save_in_session(request_rec *r, oidc_cfg_t *c, oidc_ses
 		sid = id_token_jwt->payload.sub;
 	session->sid = oidc_response_make_sid_iss_unique(r, sid, oidc_cfg_provider_issuer_get(provider));
 
+	/* indicate that this is a newly created session */
+	oidc_session_set_session_new(r, session, 1);
+
 	/* store the session */
 	return oidc_session_save(r, session, TRUE);
 }
@@ -352,7 +355,7 @@ static apr_byte_t oidc_response_proto_state_restore(request_rec *r, oidc_cfg_t *
 	}
 
 	/* clear state cookie because we don't need it anymore */
-	oidc_http_set_cookie(r, cookieName, "", 0, OIDC_COOKIE_EXT_SAME_SITE_NONE(c, r));
+	oidc_http_set_cookie(r, cookieName, "", 0, OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r));
 
 	*proto_state = oidc_proto_state_from_cookie(r, c, cookieValue);
 	if (*proto_state == NULL)
@@ -716,7 +719,7 @@ int oidc_response_authorization_post(request_rec *r, oidc_cfg_t *c, oidc_session
 	}
 
 	/* get the parameters */
-	response_mode = (char *)apr_table_get(params, OIDC_PROTO_RESPONSE_MODE);
+	response_mode = apr_table_get(params, OIDC_PROTO_RESPONSE_MODE);
 
 	/* do the actual implicit work */
 	return oidc_response_process(r, c, session, params,

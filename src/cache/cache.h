@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -84,6 +84,7 @@ typedef struct oidc_cache_mutex_t {
 } oidc_cache_mutex_t;
 
 oidc_cache_mutex_t *oidc_cache_mutex_create(apr_pool_t *pool, apr_byte_t global);
+char *oidc_cache_status2str(apr_pool_t *p, apr_status_t statcode);
 apr_byte_t oidc_cache_mutex_post_config(server_rec *s, oidc_cache_mutex_t *m, const char *type);
 apr_status_t oidc_cache_mutex_child_init(apr_pool_t *p, server_rec *s, oidc_cache_mutex_t *m);
 apr_byte_t oidc_cache_mutex_lock(apr_pool_t *pool, server_rec *s, oidc_cache_mutex_t *m);

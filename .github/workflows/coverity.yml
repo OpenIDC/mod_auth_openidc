@@ -1,0 +1,65 @@
+name: Coverity
+
+on:
+  schedule:
+    - cron: '0 18 * * SUN'
+  workflow_dispatch:
+
+#on:
+#  push:
+#    branches: [ master, coverity ]
+#  pull_request:
+#    types: [opened, synchronize, reopened]
+
+jobs:
+  build:
+    name: Build and analyze
+    runs-on: ubuntu-latest
+    if: github.repository == 'OpenIDC/mod_auth_openidc'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y apache2-dev libcjose-dev libssl-dev check pkg-config
+          sudo apt-get install -y libjansson-dev libcurl4-openssl-dev libhiredis-dev libpcre2-dev
+      - name: Download Coverity Build Tool
+        env:
+          TOKEN: ${{ secrets.COVERITY_SCAN_TOKEN }}
+        run: |
+          wget -q https://scan.coverity.com/download/cxx/linux64 --post-data "token=$TOKEN&project=OpenIDC%2Fmod_auth_openidc" -O cov-analysis-linux64.tar.gz
+          mkdir cov-analysis-linux64
+          tar xzf cov-analysis-linux64.tar.gz --strip 1 -C cov-analysis-linux64
+      - name: Configure
+        run: |
+          ./autogen.sh
+          ./configure
+      - name: Make with cov-build
+        run: |
+          pwd
+          export PATH=`pwd`/cov-analysis-linux64/bin:$PATH
+          cov-build --dir cov-int make check
+      - name: Submit to Coverity Scan
+        env:
+          TOKEN: ${{ secrets.COVERITY_SCAN_TOKEN }}
+        run: |
+          tar czvf mod_auth_openidc.tgz cov-int
+          curl \
+            --form project=OpenIDC%2Fmod_auth_openidc \
+            --form token=$TOKEN \
+            --form email=hans.zandbelt@zmartzone.eu \
+            --form file=@mod_auth_openidc.tgz \
+            --form version=master \
+            --form description="`git rev-parse --abbrev-ref HEAD` `git rev-parse --short HEAD`" \
+            https://scan.coverity.com/builds?project=OpenIDC%2Fmod_auth_openidc
+#      - name: Coverity Scan
+#        uses: blackduck-inc/black-duck-security-scan@v2.0.0
+#        with:
+#          coverity_url: ${{ vars.COVERITY_URL }}
+#          coverity_project_name: ${{ vars.COVERITY_PROJECT_NAME }}
+#          coverity_user: ${{ vars.COVERITY_USER }}
+#          coverity_passphrase: ${{ secrets.COVERITY_PASSPHRASE }}
+#          coverity_build_command: make all
+#          coverity_clean_command: make clean

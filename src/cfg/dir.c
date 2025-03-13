@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * All rights reserved.
  *
  * DISCLAIMER OF WARRANTIES:
@@ -53,14 +53,14 @@ struct oidc_dir_cfg_t {
 	char *cookie_path;
 	char *cookie;
 	char *authn_header;
-	oidc_unauth_action_t unauth_action;
-	oidc_unautz_action_t unautz_action;
+	int unauth_action;
+	int unautz_action;
 	char *unauthz_arg;
 	apr_array_header_t *pass_cookies;
 	apr_array_header_t *strip_cookies;
-	oidc_appinfo_pass_in_t pass_info_in;
-	oidc_appinfo_encoding_t pass_info_encoding;
-	oidc_oauth_accept_token_in_t oauth_accept_token_in;
+	int pass_info_in;
+	int pass_info_encoding;
+	int oauth_accept_token_in;
 	apr_hash_t *oauth_accept_token_options;
 	int oauth_token_introspect_interval;
 	int preserve_post;
@@ -71,11 +71,11 @@ struct oidc_dir_cfg_t {
 	oidc_apr_expr_t *unauth_expression;
 	oidc_apr_expr_t *userinfo_claims_expr;
 	int refresh_access_token_before_expiry;
-	oidc_on_error_action_t action_on_error_refresh;
-	oidc_on_error_action_t action_on_userinfo_refresh;
+	int action_on_error_refresh;
+	int action_on_userinfo_refresh;
 	char *state_cookie_prefix;
 	apr_array_header_t *pass_userinfo_as;
-	oidc_pass_idtoken_as_t pass_idtoken_as;
+	int pass_idtoken_as;
 };
 
 #define OIDC_PASS_ID_TOKEN_AS_CLAIMS_STR "claims"
@@ -306,7 +306,7 @@ const char *oidc_cmd_dir_pass_claims_as_set(cmd_parms *cmd, void *m, const char 
 							 {OIDC_APPINFO_PASS_BOTH, OIDC_APPINFO_PASS_BOTH_STR}};
 
 	rv = oidc_cfg_parse_option(cmd->pool, pass_options, OIDC_CFG_OPTIONS_SIZE(pass_options), arg1,
-				   (int *)&dir_cfg->pass_info_in);
+				   &dir_cfg->pass_info_in);
 
 	static const oidc_cfg_option_t encoding_options[] = {
 	    {OIDC_APPINFO_ENCODING_NONE, OIDC_APPINFO_ENCODING_NONE_STR},
@@ -315,7 +315,7 @@ const char *oidc_cmd_dir_pass_claims_as_set(cmd_parms *cmd, void *m, const char 
 
 	if ((rv == NULL) && (arg2 != NULL))
 		rv = oidc_cfg_parse_option(cmd->pool, encoding_options, OIDC_CFG_OPTIONS_SIZE(encoding_options), arg2,
-					   (int *)&dir_cfg->pass_info_encoding);
+					   &dir_cfg->pass_info_encoding);
 
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
@@ -348,7 +348,7 @@ const char *oidc_cmd_dir_unauth_action_set(cmd_parms *cmd, void *m, const char *
 	oidc_dir_cfg_t *dir_cfg = (oidc_dir_cfg_t *)m;
 	const char *rv =
 	    oidc_cfg_parse_option(cmd->pool, unauth_action_options, OIDC_CFG_OPTIONS_SIZE(unauth_action_options), arg1,
-				  (int *)&dir_cfg->unauth_action);
+				  &dir_cfg->unauth_action);
 	if (rv == NULL)
 		rv = oidc_util_apr_expr_parse(cmd, arg2, &dir_cfg->unauth_expression, FALSE);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
@@ -368,8 +368,8 @@ const char *oidc_cmd_dir_unautz_action_set(cmd_parms *cmd, void *m, const char *
 						    {OIDC_UNAUTZ_RETURN401, OIDC_UNAUTZ_RETURN401_STR},
 						    {OIDC_UNAUTZ_AUTHENTICATE, OIDC_UNAUTZ_AUTHENTICATE_STR},
 						    {OIDC_UNAUTZ_RETURN302, OIDC_UNAUTZ_RETURN302_STR}};
-	const char *rv = oidc_cfg_parse_option(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg1,
-					       (int *)&dir_cfg->unautz_action);
+	const char *rv =
+	    oidc_cfg_parse_option(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg1, &dir_cfg->unautz_action);
 	if ((rv == NULL) && (arg2 != NULL)) {
 		dir_cfg->unauthz_arg = apr_pstrdup(cmd->pool, arg2);
 	} else if (dir_cfg->unautz_action == OIDC_UNAUTZ_RETURN302) {
@@ -422,7 +422,8 @@ const char *oidc_cmd_dir_refresh_access_token_before_expiry_set(cmd_parms *cmd, 
 		goto end;
 
 	if (arg2)
-		rv = oidc_cfg_parse_action_on_error_refresh_as(cmd->pool, arg2, &dir_cfg->action_on_error_refresh);
+		rv = oidc_cfg_parse_action_on_error_refresh_as(
+		    cmd->pool, arg2, (oidc_on_error_action_t *)&dir_cfg->action_on_error_refresh);
 
 end:
 
@@ -479,7 +480,7 @@ OIDC_CFG_DIR_MEMBER_FUNC_STR(authn_header, const char *, OIDC_DEFAULT_AUTHN_HEAD
 #define OIDC_DEFAULT_PASS_APPINFO_IN OIDC_APPINFO_PASS_BOTH
 OIDC_CFG_DIR_MEMBER_FUNC_INT_GET(pass_info_in, oidc_appinfo_pass_in_t, OIDC_DEFAULT_PASS_APPINFO_IN)
 
-/* default for passing app info in base64 encoded format */
+/* default for passing app info in a specific encoding */
 #define OIDC_DEFAULT_APPINFO_ENCODING OIDC_APPINFO_ENCODING_LATIN1
 OIDC_CFG_DIR_MEMBER_FUNC_INT_GET(pass_info_encoding, oidc_appinfo_encoding_t, OIDC_DEFAULT_APPINFO_ENCODING)
 

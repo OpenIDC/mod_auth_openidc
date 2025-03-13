@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * All rights reserved.
  *
  * DISCLAIMER OF WARRANTIES:
@@ -327,9 +327,9 @@ static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r, 
 	char *refresh_token = NULL;
 	char *code_verifier = NULL;
 
-	if (oidc_cfg_provider_pkce_get(provider) != &oidc_pkce_none)
-		oidc_cfg_provider_pkce_get(provider)->verifier(r, oidc_proto_state_get_pkce_state(proto_state),
-							       &code_verifier);
+	if (oidc_proto_profile_pkce_get(provider) != &oidc_pkce_none)
+		oidc_proto_profile_pkce_get(provider)->verifier(r, oidc_proto_state_get_pkce_state(proto_state),
+								&code_verifier);
 
 	const char *state = oidc_proto_state_get_state(proto_state);
 
@@ -380,7 +380,7 @@ apr_byte_t oidc_proto_response_code_idtoken(request_rec *r, oidc_cfg_t *c, oidc_
 
 	if (oidc_proto_validate_response_type_mode_issuer(
 		r, response_type, params, proto_state, response_mode, OIDC_PROTO_RESPONSE_MODE_FRAGMENT,
-		oidc_cfg_provider_issuer_get(provider), oidc_cfg_provider_response_require_iss_get(provider),
+		oidc_cfg_provider_issuer_get(provider), oidc_proto_profile_response_require_iss_get(provider),
 		oidc_cfg_provider_client_id_get(provider)) == FALSE)
 		return FALSE;
 
@@ -413,7 +413,7 @@ apr_byte_t oidc_proto_response_code_token(request_rec *r, oidc_cfg_t *c, oidc_pr
 
 	if (oidc_proto_validate_response_type_mode_issuer(
 		r, response_type, params, proto_state, response_mode, OIDC_PROTO_RESPONSE_MODE_FRAGMENT,
-		oidc_cfg_provider_issuer_get(provider), oidc_cfg_provider_response_require_iss_get(provider),
+		oidc_cfg_provider_issuer_get(provider), oidc_proto_profile_response_require_iss_get(provider),
 		oidc_cfg_provider_client_id_get(provider)) == FALSE)
 		return FALSE;
 
@@ -444,7 +444,7 @@ apr_byte_t oidc_proto_response_code(request_rec *r, oidc_cfg_t *c, oidc_proto_st
 
 	if (oidc_proto_validate_response_type_mode_issuer(
 		r, response_type, params, proto_state, response_mode, OIDC_PROTO_RESPONSE_MODE_QUERY,
-		oidc_cfg_provider_issuer_get(provider), oidc_cfg_provider_response_require_iss_get(provider),
+		oidc_cfg_provider_issuer_get(provider), oidc_proto_profile_response_require_iss_get(provider),
 		oidc_cfg_provider_client_id_get(provider)) == FALSE)
 		return FALSE;
 
@@ -488,7 +488,7 @@ static apr_byte_t oidc_proto_handle_implicit_flow(request_rec *r, oidc_cfg_t *c,
 
 	if (oidc_proto_validate_response_type_mode_issuer(
 		r, response_type, params, proto_state, response_mode, OIDC_PROTO_RESPONSE_MODE_FRAGMENT,
-		oidc_cfg_provider_issuer_get(provider), oidc_cfg_provider_response_require_iss_get(provider),
+		oidc_cfg_provider_issuer_get(provider), oidc_proto_profile_response_require_iss_get(provider),
 		oidc_cfg_provider_client_id_get(provider)) == FALSE)
 		return FALSE;
 

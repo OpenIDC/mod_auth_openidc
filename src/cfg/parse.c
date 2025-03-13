@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * All rights reserved.
  *
  * DISCLAIMER OF WARRANTIES:
@@ -106,9 +106,10 @@ char *oidc_cfg_parse_options_flatten(apr_pool_t *pool, const oidc_cfg_option_t o
 /*
  * parse an value provided as an option string into the corresponding integer/enum
  */
-char *oidc_cfg_parse_option(apr_pool_t *pool, const oidc_cfg_option_t options[], int n, const char *arg, int *v) {
+static char *oidc_cfg_parse_option_impl(apr_pool_t *pool, const oidc_cfg_option_t options[], int n, const char *arg,
+					int *v, int (*fstrcmp)(const char *, const char *)) {
 	int i = 0;
-	while ((i < n) && (_oidc_strcmp(arg, options[i].str) != 0))
+	while ((i < n) && (fstrcmp(arg, options[i].str) != 0))
 		i++;
 	if (i < n) {
 		*v = options[i].val;
@@ -116,6 +117,21 @@ char *oidc_cfg_parse_option(apr_pool_t *pool, const oidc_cfg_option_t options[],
 	}
 	return apr_psprintf(pool, "invalid value %s%s%s, must be one of %s", OIDC_LIST_OPTIONS_QUOTE, arg,
 			    OIDC_LIST_OPTIONS_QUOTE, oidc_cfg_parse_options_flatten(pool, options, n));
+}
+
+/*
+ * parse an value provided as an option string into the corresponding integer/enum case sensitive
+ */
+char *oidc_cfg_parse_option(apr_pool_t *pool, const oidc_cfg_option_t options[], int n, const char *arg, int *v) {
+	return oidc_cfg_parse_option_impl(pool, options, n, arg, v, _oidc_strcmp);
+}
+
+/*
+ * parse an value provided as an option string into the corresponding integer/enum case insensitive
+ */
+char *oidc_cfg_parse_option_ignore_case(apr_pool_t *pool, const oidc_cfg_option_t options[], int n, const char *arg,
+					int *v) {
+	return oidc_cfg_parse_option_impl(pool, options, n, arg, v, _oidc_strnatcasecmp);
 }
 
 /*

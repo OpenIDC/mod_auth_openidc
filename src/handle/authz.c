@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * All rights reserved.
  *
  * DISCLAIMER OF WARRANTIES:
@@ -196,10 +196,11 @@ static apr_byte_t oidc_authz_match_pcre_array(request_rec *r, const char *spec, 
 					      struct oidc_pcre *);
 
 // clang-format off
+#define OIDC_AUTHZ_PCRE_HANDLERS_NUMBER 2
+
 static oidc_authz_pcre_handler_t _oidc_authz_pcre_handlers[] = {
 	{ JSON_ARRAY, oidc_authz_match_pcre_array },
-	{ JSON_STRING, oidc_authz_match_pcre_string },
-	{ 0, NULL}
+	{ JSON_STRING, oidc_authz_match_pcre_string }
 };
 // clang-format on
 
@@ -237,7 +238,7 @@ static apr_byte_t oidc_authz_match_pcre(request_rec *r, const char *spec, json_t
 	apr_byte_t rc = FALSE;
 	struct oidc_pcre *preg = NULL;
 	char *s_err = NULL;
-	oidc_authz_pcre_handler_t *h = NULL;
+	int i = 0;
 
 	if ((spec == NULL) || (val == NULL) || (key == NULL))
 		return FALSE;
@@ -249,17 +250,17 @@ static apr_byte_t oidc_authz_match_pcre(request_rec *r, const char *spec, json_t
 	}
 
 	// loop over the JSON object PCRE handlers
-	for (h = _oidc_authz_pcre_handlers; h->handler; h++) {
-		if (h->type == json_typeof(val)) {
+	for (i = 0; i < OIDC_AUTHZ_PCRE_HANDLERS_NUMBER; i++) {
+		if (_oidc_authz_pcre_handlers[i].type == json_typeof(val)) {
 			// break out of the loop because we found a handler, and possibly a match
-			if (h->handler(r, spec, val, key, preg) == TRUE)
+			if (_oidc_authz_pcre_handlers[i].handler(r, spec, val, key, preg) == TRUE)
 				rc = TRUE;
 			break;
 		}
 	}
 
 	// see if we have found an object handler
-	if (h->handler == NULL)
+	if (i == OIDC_AUTHZ_PCRE_HANDLERS_NUMBER)
 		oidc_warn(r, "unhandled JSON object type [%d] for key \"%s\"", json_typeof(val), key);
 
 	oidc_pcre_free(preg);
@@ -282,25 +283,26 @@ static apr_byte_t oidc_authz_separator_dot(request_rec *r, const char *spec, jso
 }
 
 // clang-format off
+
+#define OIDC_AUTHZ_SEPARATOR_HANDLERS_NUMBER 3
+
 static oidc_authz_json_handler_t _oidc_authz_separator_handlers[] = {
 		// there's some overloading going on here, applying a char as an int index
 	{ OIDC_CHAR_COLON, oidc_authz_match_value },
 	{ OIDC_CHAR_TILDE, oidc_authz_match_pcre },
-	{ OIDC_CHAR_DOT, oidc_authz_separator_dot },
-	{ 0, NULL}
+	{ OIDC_CHAR_DOT, oidc_authz_separator_dot }
 };
 // clang-format on
 
 static apr_byte_t oidc_auth_handle_separator(request_rec *r, const char *key, json_t *val, const char *spec) {
-	oidc_authz_json_handler_t *h = NULL;
 	if ((spec == NULL) || (val == NULL) || (key == NULL))
 		return FALSE;
-	for (h = _oidc_authz_separator_handlers; h->handler; h++) {
+	for (int i = 0; i < OIDC_AUTHZ_SEPARATOR_HANDLERS_NUMBER; i++) {
 		// there's some overloading going on here, applying a char as an int index
-		if (h->type == (*spec)) {
+		if (_oidc_authz_separator_handlers[i].type == (*spec)) {
 			// skip the separator
 			spec++;
-			if (h->handler(r, spec, val, key) == TRUE)
+			if (_oidc_authz_separator_handlers[i].handler(r, spec, val, key) == TRUE)
 				return TRUE;
 		}
 	}
@@ -434,7 +436,7 @@ authz_status oidc_authz_24_worker(request_rec *r, json_t *claims, const char *re
 		/* see if we can match any of out input claims against this Require'd value */
 		if (match_claim_fn(r, w, claims) == TRUE) {
 
-			OIDC_METRICS_COUNTER_INC_SPEC(r, cfg, OM_AUTHZ_MATCH_REQUIRE_CLAIM, require_args);
+			OIDC_METRICS_COUNTER_INC_VALUE(r, cfg, OM_AUTHZ_MATCH_REQUIRE_CLAIM, require_args);
 
 			oidc_debug(r, "require claim/expr '%s' matched", w);
 			return AUTHZ_GRANTED;
@@ -446,7 +448,7 @@ authz_status oidc_authz_24_worker(request_rec *r, json_t *claims, const char *re
 		oidc_warn(r, "'require claim/expr' missing specification(s) in configuration, denying");
 	}
 
-	OIDC_METRICS_COUNTER_INC_SPEC(r, cfg, OM_AUTHZ_ERROR_REQUIRE_CLAIM, require_args);
+	OIDC_METRICS_COUNTER_INC_VALUE(r, cfg, OM_AUTHZ_ERROR_REQUIRE_CLAIM, require_args);
 
 	oidc_debug(r, "could not match require claim expression '%s'", require_args);
 	oidc_authz_error_add(r, require_args);

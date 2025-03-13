@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * All rights reserved.
  *
  * DISCLAIMER OF WARRANTIES:
@@ -200,7 +200,7 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r, oidc_
 		jwk_pub =
 		    oidc_util_key_list_first(oidc_cfg_public_keys_get(cfg), CJOSE_JWK_KTY_RSA, OIDC_JOSE_JWK_SIG_STR);
 		if (jwk_pub && jwk_pub->x5t)
-			// populate x5t; at least required for Azure AD
+			// populate x5t; at least required for Microsoft Entra ID / Azure AD
 			jwt->header.x5t = apr_pstrdup(r->pool, jwk_pub->x5t);
 	}
 

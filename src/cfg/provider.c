@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * All rights reserved.
  *
  * DISCLAIMER OF WARRANTIES:
@@ -96,6 +96,7 @@ struct oidc_provider_t {
 	oidc_userinfo_token_method_t userinfo_token_method;
 	char *request_object;
 	oidc_auth_request_method_t auth_request_method;
+	oidc_profile_t profile;
 	int response_require_iss;
 };
 
@@ -478,6 +479,11 @@ const char *oidc_cmd_provider_jwks_uri_refresh_interval_set(cmd_parms *cmd, void
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
+int oidc_cfg_jwks_uri_refresh_interval_get(const oidc_jwks_uri_t *jwks_uri) {
+	return jwks_uri->refresh_interval != OIDC_CONFIG_POS_INT_UNSET ? jwks_uri->refresh_interval
+								       : OIDC_DEFAULT_JWKS_REFRESH_INTERVAL;
+}
+
 int oidc_cfg_provider_jwks_uri_refresh_interval_get(oidc_provider_t *provider) {
 	return provider->jwks_uri.refresh_interval != OIDC_CONFIG_POS_INT_UNSET ? provider->jwks_uri.refresh_interval
 										: OIDC_DEFAULT_JWKS_REFRESH_INTERVAL;
@@ -492,7 +498,7 @@ const char *oidc_cfg_provider_jwks_uri_uri_get(oidc_provider_t *provider) {
 }
 
 const char *oidc_cfg_provider_jwks_uri_set(apr_pool_t *pool, oidc_provider_t *provider, const char *arg) {
-	const char *rv = oidc_cfg_parse_is_valid_url(pool, arg, "https");
+	const char *rv = oidc_cfg_parse_is_valid_http_url(pool, arg);
 	if (rv == NULL)
 		provider->jwks_uri.uri = apr_pstrdup(pool, arg);
 	return rv;
@@ -556,7 +562,7 @@ const char *oidc_cfg_provider_signed_jwks_uri_set(apr_pool_t *pool, oidc_provide
 	json_t *json = NULL;
 
 	if ((arg1 != NULL) && (_oidc_strcmp(arg1, "") != 0)) {
-		rv = oidc_cfg_parse_is_valid_url(pool, arg1, "https");
+		rv = oidc_cfg_parse_is_valid_http_url(pool, arg1);
 		if (rv != NULL)
 			goto end;
 		provider->jwks_uri.signed_uri = apr_pstrdup(pool, arg1);
@@ -627,7 +633,8 @@ const char *oidc_cmd_provider_userinfo_refresh_interval_set(cmd_parms *cmd, void
 	if (rv == NULL)
 		rv = oidc_cfg_provider_userinfo_refresh_interval_set(cmd->pool, cfg->provider, v);
 	if ((rv == NULL) && (arg2))
-		rv = oidc_cfg_parse_action_on_error_refresh_as(cmd->pool, arg2, &cfg->action_on_userinfo_error);
+		rv = oidc_cfg_parse_action_on_error_refresh_as(
+		    cmd->pool, arg2, (oidc_on_error_action_t *)&cfg->action_on_userinfo_error);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -656,12 +663,23 @@ const char *oidc_cmd_provider_revocation_endpoint_url_set(cmd_parms *cmd, void *
 		cfg->provider->revocation_endpoint_url = "";
 		return NULL;
 	}
-	return oidc_cfg_provider_revocation_endpoint_url_set(cmd->pool, cfg->provider, args);
+	return oidc_cfg_provider_revocation_endpoint_url_set(cmd->pool, cfg->provider, w);
 }
 
 const char *oidc_cfg_provider_revocation_endpoint_url_get(oidc_provider_t *provider) {
 	return provider->revocation_endpoint_url;
 }
+
+#define OIDC_PROFILE_OIDC10_STR "OIDC10"
+#define OIDC_PROFILE_FAPI20_STR "FAPI20"
+
+const char *oidc_cfg_provider_parse_profile(apr_pool_t *pool, const char *arg, oidc_profile_t *profile) {
+	static const oidc_cfg_option_t options[] = {{OIDC_PROFILE_OIDC10, OIDC_PROFILE_OIDC10_STR},
+						    {OIDC_PROFILE_FAPI20, OIDC_PROFILE_FAPI20_STR}};
+	return oidc_cfg_parse_option(pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg, (int *)profile);
+}
+#define OIDC_DEFAULT_PROFILE OIDC_PROFILE_OIDC10
+OIDC_PROVIDER_MEMBER_FUNCS_STR_INT(profile, oidc_cfg_provider_parse_profile, oidc_profile_t, OIDC_DEFAULT_PROFILE)
 
 /*
  * base
@@ -726,6 +744,7 @@ static void oidc_cfg_provider_init(oidc_provider_t *provider) {
 	provider->response_require_iss = OIDC_CONFIG_POS_INT_UNSET;
 
 	provider->id_token_aud_values = NULL;
+	provider->profile = OIDC_CONFIG_POS_INT_UNSET;
 }
 
 void oidc_cfg_provider_merge(apr_pool_t *pool, oidc_provider_t *dst, const oidc_provider_t *base,
@@ -840,6 +859,7 @@ void oidc_cfg_provider_merge(apr_pool_t *pool, oidc_provider_t *dst, const oidc_
 
 	dst->id_token_aud_values =
 	    add->id_token_aud_values != NULL ? add->id_token_aud_values : base->id_token_aud_values;
+	dst->profile = add->profile != OIDC_CONFIG_POS_INT_UNSET ? add->profile : base->profile;
 }
 
 oidc_provider_t *oidc_cfg_provider_create(apr_pool_t *pool) {

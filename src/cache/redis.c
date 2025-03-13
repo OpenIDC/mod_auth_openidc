@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -112,11 +112,9 @@ static apr_status_t oidc_cache_redis_connect(request_rec *r, oidc_cache_cfg_redi
  * free resources allocated for the per-process Redis connection context
  */
 apr_status_t oidc_cache_redis_disconnect(oidc_cache_cfg_redis_t *context) {
-	if (context != NULL) {
-		if (context->rctx != NULL) {
-			redisFree(context->rctx);
-			context->rctx = NULL;
-		}
+	if ((context != NULL) && (context->rctx != NULL)) {
+		redisFree(context->rctx);
+		context->rctx = NULL;
 	}
 	return APR_SUCCESS;
 }
@@ -367,10 +365,11 @@ static int oidc_cache_redis_env2int(request_rec *r, const char *env_var_name, co
 #define OIDC_REDIS_RETRY_INTERVAL_DEFAULT 300
 
 #define OIDC_REDIS_WARN_OR_ERROR(cond, r, ...)                                                                         \
-	if (cond)                                                                                                      \
+	if (cond) {                                                                                                    \
 		oidc_warn(r, ##__VA_ARGS__);                                                                           \
-	else                                                                                                           \
-		oidc_error(r, ##__VA_ARGS__);
+	} else {                                                                                                       \
+		oidc_error(r, ##__VA_ARGS__);                                                                          \
+	}
 
 /*
  * execute Redis command and deal with return value
@@ -379,14 +378,13 @@ static redisReply *oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t 
 
 	redisReply *reply = NULL;
 	char *errstr = NULL;
-	int i = 0;
 	va_list ap;
 	int retries = oidc_cache_redis_env2int(r, OIDC_REDIS_MAX_TRIES_ENV_VAR, OIDC_REDIS_MAX_TRIES_DEFAULT);
 	apr_time_t interval = apr_time_from_msec(
 	    oidc_cache_redis_env2int(r, OIDC_REDIS_RETRY_INTERVAL_ENV_VAR, OIDC_REDIS_RETRY_INTERVAL_DEFAULT));
 
 	/* try to execute a command at max n times while reconnecting */
-	for (i = 1; i <= retries; i++) {
+	for (int i = 1; i <= retries; i++) {
 
 		/* connect */
 		if (context->connect(r, context) != APR_SUCCESS) {
@@ -507,7 +505,7 @@ apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section, const char 
 	} else {
 
 		/* calculate the timeout from now */
-		timeout = apr_time_sec(expiry - apr_time_now());
+		timeout = (apr_uint32_t)apr_time_sec(expiry - apr_time_now());
 
 		/* store it */
 		reply = oidc_cache_redis_exec(r, context, "SETEX %s %d %s",
@@ -534,7 +532,9 @@ static int oidc_cache_redis_destroy_impl(server_rec *s) {
 		oidc_cache_mutex_lock(s->process->pool, s, context->mutex);
 		context->disconnect(context);
 		oidc_cache_mutex_unlock(s->process->pool, s, context->mutex);
-		oidc_cache_mutex_destroy(s, context->mutex);
+		if (oidc_cache_mutex_destroy(s, context->mutex) != TRUE) {
+			oidc_serror(s, "oidc_cache_mutex_destroy on refresh mutex failed");
+		}
 		cfg->cache.cfg = NULL;
 	}
 

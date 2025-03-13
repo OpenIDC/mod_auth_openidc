@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2017-2024 ZmartZone Holding BV
+ * Copyright (C) 2017-2025 ZmartZone Holding BV
  * Copyright (C) 2013-2017 Ping Identity Corporation
  * All rights reserved.
  *
@@ -65,10 +65,6 @@
 #include <openssl/rsa.h>
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
 #include <openssl/core_names.h>
-#endif
-
-#ifdef WIN32
-#define snprintf _snprintf
 #endif
 
 #include "util.h"
@@ -974,6 +970,7 @@ static apr_byte_t oidc_jose_brotli_uncompress(apr_pool_t *pool, const char *inpu
  */
 static apr_byte_t oidc_jose_zlib_compress(apr_pool_t *pool, const char *input, int input_len, char **output,
 					  int *output_len, oidc_jose_error_t *err) {
+	apr_byte_t rv = FALSE;
 	int status = Z_OK;
 	z_stream zlib;
 
@@ -990,24 +987,24 @@ static apr_byte_t oidc_jose_zlib_compress(apr_pool_t *pool, const char *input, i
 	status = deflateInit(&zlib, Z_BEST_COMPRESSION);
 	if (status != Z_OK) {
 		oidc_jose_error(err, "deflateInit() failed: %d", status);
-		return FALSE;
+		goto end;
 	}
 
 	status = deflate(&zlib, Z_FINISH);
 	if (status != Z_STREAM_END) {
 		oidc_jose_error(err, "deflate() failed: %d", status);
-		return FALSE;
-	}
-
-	status = deflateEnd(&zlib);
-	if (status != Z_OK) {
-		oidc_jose_error(err, "deflateEnd() failed: %d", status);
-		return FALSE;
+		goto end;
 	}
 
 	*output_len = (int)zlib.total_out;
 
-	return TRUE;
+	rv = TRUE;
+
+end:
+
+	deflateEnd(&zlib);
+
+	return rv;
 }
 
 #define OIDC_CJOSE_UNCOMPRESS_CHUNK 8192
@@ -1017,6 +1014,7 @@ static apr_byte_t oidc_jose_zlib_compress(apr_pool_t *pool, const char *input, i
  */
 static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input, int input_len, char **output,
 					    int *output_len, oidc_jose_error_t *err) {
+	apr_byte_t rv = FALSE;
 	int status = Z_OK;
 	size_t len = OIDC_CJOSE_UNCOMPRESS_CHUNK;
 	char *tmp = NULL, *buf = apr_pcalloc(pool, len);
@@ -1032,7 +1030,7 @@ static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input,
 	status = inflateInit(&zlib);
 	if (status != Z_OK) {
 		oidc_jose_error(err, "inflateInit() failed: %d", status);
-		return FALSE;
+		goto end;
 	}
 
 	while (status == Z_OK) {
@@ -1049,20 +1047,19 @@ static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input,
 
 	if (status != Z_STREAM_END) {
 		oidc_jose_error(err, "inflate() failed: %d", status);
-		inflateEnd(&zlib);
-		return FALSE;
-	}
-
-	status = inflateEnd(&zlib);
-	if (status != Z_OK) {
-		oidc_jose_error(err, "inflateEnd() failed: %d", status);
-		return FALSE;
+		goto end;
 	}
 
 	*output_len = (int)zlib.total_out;
 	*output = buf;
 
-	return TRUE;
+	rv = TRUE;
+
+end:
+
+	inflateEnd(&zlib);
+
+	return rv;
 }
 
 #endif
