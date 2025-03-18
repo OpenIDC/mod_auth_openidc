@@ -529,12 +529,12 @@ static apr_byte_t oidc_check_max_session_duration(request_rec *r, oidc_cfg_t *cf
  * it also handles the case that a cookie is unexpectedly shared across multiple hosts in
  * name-based virtual hosting even though the OP(s) would be the same
  */
-static apr_byte_t oidc_check_cookie_domain(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session) {
+apr_byte_t oidc_check_cookie_domain(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session) {
 	const char *c_cookie_domain = oidc_cfg_cookie_domain_get(cfg)
 					  ? oidc_cfg_cookie_domain_get(cfg)
 					  : oidc_util_current_url_host(r, oidc_cfg_x_forwarded_headers_get(cfg));
 	const char *s_cookie_domain = oidc_session_get_cookie_domain(r, session);
-	if ((s_cookie_domain == NULL) || (_oidc_strcmp(c_cookie_domain, s_cookie_domain) != 0)) {
+	if ((s_cookie_domain == NULL) || (_oidc_strnatcasecmp(c_cookie_domain, s_cookie_domain) != 0)) {
 		oidc_warn(r,
 			  "aborting: detected attempt to play cookie against a different domain/host than issued for! "
 			  "(issued=%s, current=%s)",

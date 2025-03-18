@@ -1073,6 +1073,8 @@ static char *test_logout_request(request_rec *r) {
 	    "https://idp.example.com/"
 	    "endsession?post_logout_redirect_uri=https%3A%2F%2Fwww.example.com%2Floggedout&client_id=myclient&foo=bar");
 
+	oidc_session_free(r, session);
+
 	return 0;
 }
 
@@ -1770,6 +1772,24 @@ static char *test_set_app_infos(request_rec *r) {
 	return 0;
 }
 
+static char *test_check_cookie_domain(request_rec *r) {
+	apr_byte_t rv = FALSE;
+	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_session_t *session = NULL;
+
+	oidc_session_load(r, &session);
+	oidc_session_set_cookie_domain(r, session, "ab001sb161djbn.xyz.com");
+	apr_table_set(r->headers_in, "Host", "ab001SB161djbn.xyz.com");
+
+	rv = oidc_check_cookie_domain(r, c, session);
+
+	TST_ASSERT_BYTE("oidc_check_cookie_domain", rv, TRUE);
+
+	oidc_session_free(r, session);
+
+	return 0;
+}
+
 static char *all_tests(apr_pool_t *pool, request_rec *r) {
 	char *message;
 	TST_RUN(test_private_key_parse, pool);
@@ -1815,6 +1835,7 @@ static char *all_tests(apr_pool_t *pool, request_rec *r) {
 #endif
 
 	TST_RUN(test_logout_request, r);
+	TST_RUN(test_check_cookie_domain, r);
 
 	return 0;
 }
