@@ -1,7 +1,9 @@
 03/18/2025
-- use case insensitive hostname/domain comparison in oidc_check_cookie_domain
-- remove the Location header from HTML based step up authentication redirects
+- core: use case insensitive hostname/domain comparison in oidc_check_cookie_domain
+- authz: remove the Location header from HTML based step up authentication redirects
   as it may conflict with its HTTP 200 status code and confuse middle boxes
+- metrics: avoid double-free on shutdown by not calling pthread_exit; fixes #1207; thanks @studersi
+- metrics: upon exit, do write cached metrics into shared memory before exiting
 - bump to 2.4.16.9dev
 
 02/17/2025

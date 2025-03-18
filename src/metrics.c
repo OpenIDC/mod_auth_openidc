@@ -725,6 +725,8 @@ static unsigned int oidc_metric_random_int(unsigned int mod) {
 	return v % mod;
 }
 
+#define OIDC_METRICS_POLL_INTERVAL 250
+
 /*
  * thread that periodically writes the local data into the shared memory
  */
@@ -734,14 +736,21 @@ static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void 
 	/* sleep for a short random time <1s so child processes write-lock on a different frequency */
 	apr_sleep(apr_time_from_msec(oidc_metric_random_int(1000)));
 
+	/* calculate the number of short sleep intervals */
+	int n = _oidc_metrics_interval(s) / apr_time_from_msec(OIDC_METRICS_POLL_INTERVAL);
+
 	/* see if we are asked to exit */
 	while (_oidc_metrics_thread_exit == FALSE) {
 
-		apr_sleep(_oidc_metrics_interval(s));
+		/* break up the sleep interval in short intervals so we can exit timely fashion without confusing Apache
+		 * at shutdown */
+		for (int i = 0; i < n; i++) {
+			apr_sleep(apr_time_from_msec(OIDC_METRICS_POLL_INTERVAL));
+			if (_oidc_metrics_thread_exit == TRUE)
+				break;
+		}
 
-		// NB: exit here because the parent thread may have cleaned up the shared memory segment
-		if (_oidc_metrics_thread_exit == TRUE)
-			break;
+		// NB: no exit here because we need to write our local metrics into the cache before exiting
 
 		/* lock the mutex that protects the locally cached metrics */
 		oidc_cache_mutex_lock(s->process->pool, s, _oidc_metrics_process_mutex);
@@ -757,7 +766,8 @@ static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void 
 		oidc_cache_mutex_unlock(s->process->pool, s, _oidc_metrics_process_mutex);
 	}
 
-	apr_thread_exit(thread, APR_SUCCESS);
+	/* NB: don't call apr_thread_exit here because it seems that Apache is cleaning up its own threads */
+	// apr_thread_exit(thread, APR_SUCCESS);
 
 	return NULL;
 }
