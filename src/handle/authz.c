@@ -528,6 +528,7 @@ static authz_status oidc_authz_24_unauthorized_user(request_rec *r) {
 
 	if (location != NULL) {
 		oidc_debug(r, "send HTML refresh with authorization redirect: %s", location);
+		oidc_http_hdr_out_location_set(r, NULL);
 		html_head = apr_psprintf(r->pool, "<meta http-equiv=\"refresh\" content=\"0; url=%s\">", location);
 		oidc_util_html_send(r, "Stepup Authentication", html_head, NULL, NULL, HTTP_UNAUTHORIZED);
 		r->header_only = 1;
