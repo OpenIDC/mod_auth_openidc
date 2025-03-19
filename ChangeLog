@@ -1,3 +1,6 @@
+03/19/2025
+- release 2.4.16.9
+
 03/18/2025
 - core: use case insensitive hostname/domain comparison in oidc_check_cookie_domain
 - authz: remove the Location header from HTML based step up authentication redirects
