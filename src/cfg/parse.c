@@ -213,8 +213,8 @@ static const char *oidc_cfg_parse_is_valid_url_scheme(apr_pool_t *pool, const ch
 	if (uri.scheme == NULL)
 		return apr_psprintf(pool, "'%s' cannot be parsed as a URL (no scheme set)", arg);
 
-	if ((scheme1 != NULL) && (_oidc_strcmp(uri.scheme, scheme1) != 0)) {
-		if ((scheme2 != NULL) && (_oidc_strcmp(uri.scheme, scheme2) != 0)) {
+	if ((scheme1 != NULL) && (_oidc_strnatcasecmp(uri.scheme, scheme1) != 0)) {
+		if ((scheme2 != NULL) && (_oidc_strnatcasecmp(uri.scheme, scheme2) != 0)) {
 			return apr_psprintf(pool, "'%s' cannot be parsed as a \"%s\" or \"%s\" URL (scheme == %s)!",
 					    arg, scheme1, scheme2, uri.scheme);
 		} else if (scheme2 == NULL) {

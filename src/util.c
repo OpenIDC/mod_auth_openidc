@@ -1989,15 +1989,15 @@ out:
  * check if the provided cookie domain value is valid
  */
 apr_byte_t oidc_util_cookie_domain_valid(const char *hostname, const char *cookie_domain) {
-	char *p = NULL;
+	const char *p = NULL;
 	const char *check_cookie = cookie_domain;
 	// Skip past the first char of a cookie_domain that starts
 	// with a ".", ASCII 46
 	if (check_cookie[0] == 46)
 		check_cookie++;
-	p = _oidc_strstr(hostname, check_cookie);
+	p = oidc_util_strcasestr(hostname, check_cookie);
 
-	if ((p == NULL) || (_oidc_strcmp(check_cookie, p) != 0)) {
+	if ((p == NULL) || (_oidc_strnatcasecmp(check_cookie, p) != 0)) {
 		return FALSE;
 	}
 	return TRUE;

@@ -1782,9 +1782,20 @@ static char *test_check_cookie_domain(request_rec *r) {
 	apr_table_set(r->headers_in, "Host", "ab001SB161djbn.xyz.com");
 
 	rv = oidc_check_cookie_domain(r, c, session);
-
 	TST_ASSERT_BYTE("oidc_check_cookie_domain", rv, TRUE);
 
+	rv = oidc_request_check_cookie_domain(r, c, "https://WWW.example.com/protected/index.html");
+	TST_ASSERT_BYTE("oidc_request_check_cookie_domain", rv, TRUE);
+
+	c->cookie_domain = ".XYZ.com";
+	rv = oidc_request_check_cookie_domain(r, c, "https://ab001sb161djbn.xyz.com/protected/index.html");
+	TST_ASSERT_BYTE("oidc_request_check_cookie_domain", rv, TRUE);
+
+	c->cookie_domain = "ab001SB161djbn.xyz.com";
+	rv = oidc_request_check_cookie_domain(r, c, "https://ab001sb161djbn.xyz.com/protected/index.html");
+	TST_ASSERT_BYTE("oidc_request_check_cookie_domain", rv, TRUE);
+
+	c->cookie_domain = NULL;
 	oidc_session_free(r, session);
 
 	return 0;

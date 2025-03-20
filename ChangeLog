@@ -1,8 +1,19 @@
+03/20/2025
+- core: compare hostnames and domains in a case insensitive way in:
+    oidc_request_check_cookie_domain
+    oidc_util_cookie_domain_valid
+    oidc_validate_redirect_url
+    oidc_cfg_parse_is_valid_url_scheme
+    oidc_discovery_target_link_uri_match
+- cookie: fix oidc_util_cookie_domain_valid so that it checks the incoming request against OIDCCookieDomain
+  rather than the OIDCRedirectURI and displays the correct error message if they don't match
+- bump to 2.4.16.10dev
+
 03/19/2025
 - release 2.4.16.9
 
 03/18/2025
-- core: use case insensitive hostname/domain comparison in oidc_check_cookie_domain
+- cookie: use case insensitive hostname/domain comparison in oidc_check_cookie_domain
 - authz: remove the Location header from HTML based step up authentication redirects
   as it may conflict with its HTTP 200 status code and confuse middle boxes
 - metrics: avoid double-free on shutdown by not calling pthread_exit; fixes #1207; thanks @studersi

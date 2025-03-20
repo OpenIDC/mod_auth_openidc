@@ -888,7 +888,8 @@ apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg_t *c, const char 
 			url_ipv6_aware = uri.hostname;
 		}
 
-		if ((_oidc_strstr(c_host, url_ipv6_aware) == NULL) || (_oidc_strstr(url_ipv6_aware, c_host) == NULL)) {
+		if ((oidc_util_strcasestr(c_host, url_ipv6_aware) == NULL) ||
+		    (oidc_util_strcasestr(url_ipv6_aware, c_host) == NULL)) {
 			*err_str = apr_pstrdup(r->pool, "Invalid Request");
 			*err_desc = apr_psprintf(
 			    r->pool, "URL value \"%s\" does not match the hostname of the current request \"%s\"",
@@ -898,19 +899,19 @@ apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg_t *c, const char 
 		}
 	}
 
-	if ((uri.hostname == NULL) && (_oidc_strstr(url, "/") != url)) {
+	if ((uri.hostname == NULL) && (oidc_util_strcasestr(url, "/") != url)) {
 		*err_str = apr_pstrdup(r->pool, "Malformed URL");
 		*err_desc = apr_psprintf(
 		    r->pool, "No hostname was parsed and it does not seem to be relative, i.e starting with '/': %s",
 		    url);
 		oidc_error(r, "%s: %s", *err_str, *err_desc);
 		return FALSE;
-	} else if ((uri.hostname == NULL) && (_oidc_strstr(url, "//") == url)) {
+	} else if ((uri.hostname == NULL) && (oidc_util_strcasestr(url, "//") == url)) {
 		*err_str = apr_pstrdup(r->pool, "Malformed URL");
 		*err_desc = apr_psprintf(r->pool, "No hostname was parsed and starting with '//': %s", url);
 		oidc_error(r, "%s: %s", *err_str, *err_desc);
 		return FALSE;
-	} else if ((uri.hostname == NULL) && (_oidc_strstr(url, "/\\") == url)) {
+	} else if ((uri.hostname == NULL) && (oidc_util_strcasestr(url, "/\\") == url)) {
 		*err_str = apr_pstrdup(r->pool, "Malformed URL");
 		*err_desc = apr_psprintf(r->pool, "No hostname was parsed and starting with '/\\': %s", url);
 		oidc_error(r, "%s: %s", *err_str, *err_desc);

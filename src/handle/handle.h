@@ -108,6 +108,7 @@ int oidc_request_uri(request_rec *r, oidc_cfg_t *c);
 int oidc_request_authenticate_user(request_rec *r, oidc_cfg_t *c, oidc_provider_t *provider, const char *original_url,
 				   const char *login_hint, const char *id_token_hint, const char *prompt,
 				   const char *auth_request_params, const char *path_scope);
+apr_byte_t oidc_request_check_cookie_domain(request_rec *r, oidc_cfg_t *c, const char *original_url);
 
 // response.c
 apr_byte_t oidc_response_post_preserve_javascript(request_rec *r, const char *location, char **javascript,

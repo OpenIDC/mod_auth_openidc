@@ -47,8 +47,7 @@
 #include "state.h"
 #include "util.h"
 
-static int oidc_request_check_cookie_domain(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,
-					    const char *original_url) {
+apr_byte_t oidc_request_check_cookie_domain(request_rec *r, oidc_cfg_t *c, const char *original_url) {
 	/*
 	 * printout errors if Cookie settings are not going to work
 	 */
@@ -58,18 +57,17 @@ static int oidc_request_check_cookie_domain(request_rec *r, oidc_cfg_t *c, oidc_
 	_oidc_memset(&r_uri, 0, sizeof(apr_uri_t));
 	apr_uri_parse(r->pool, original_url, &o_uri);
 	apr_uri_parse(r->pool, oidc_util_redirect_uri(r, c), &r_uri);
-	if ((_oidc_strcmp(o_uri.scheme, r_uri.scheme) != 0) && (_oidc_strcmp(r_uri.scheme, "https") == 0)) {
+	if ((_oidc_strnatcasecmp(o_uri.scheme, r_uri.scheme) != 0) && (_oidc_strcmp(r_uri.scheme, "https") == 0)) {
 		oidc_error(r,
 			   "the URL scheme (%s) of the configured " OIDCRedirectURI
 			   " does not match the URL scheme of the URL being accessed (%s): the \"state\" and "
 			   "\"session\" cookies will not be shared between the two!",
 			   r_uri.scheme, o_uri.scheme);
-		oidc_proto_state_destroy(proto_state);
-		return HTTP_INTERNAL_SERVER_ERROR;
+		return FALSE;
 	}
 
 	if (oidc_cfg_cookie_domain_get(c) == NULL) {
-		if (_oidc_strcmp(o_uri.hostname, r_uri.hostname) != 0) {
+		if (_oidc_strnatcasecmp(o_uri.hostname, r_uri.hostname) != 0) {
 			char *p = _oidc_strstr(o_uri.hostname, r_uri.hostname);
 			if ((p == NULL) || (_oidc_strcmp(r_uri.hostname, p) != 0)) {
 				oidc_error(r,
@@ -77,25 +75,23 @@ static int oidc_request_check_cookie_domain(request_rec *r, oidc_cfg_t *c, oidc_
 					   " does not match the URL hostname of the URL being accessed (%s): the "
 					   "\"state\" and \"session\" cookies will not be shared between the two!",
 					   r_uri.hostname, o_uri.hostname);
-				oidc_proto_state_destroy(proto_state);
 				OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_REQUEST_ERROR_URL);
-				return HTTP_INTERNAL_SERVER_ERROR;
+				return FALSE;
 			}
 		}
 	} else {
-		if (!oidc_util_cookie_domain_valid(r_uri.hostname, oidc_cfg_cookie_domain_get(c))) {
+		if (!oidc_util_cookie_domain_valid(o_uri.hostname, oidc_cfg_cookie_domain_get(c))) {
 			oidc_error(r,
 				   "the domain (%s) configured in " OIDCCookieDomain
 				   " does not match the URL hostname (%s) of the URL being accessed (%s): setting "
 				   "\"state\" and \"session\" cookies will not work!!",
 				   oidc_cfg_cookie_domain_get(c), o_uri.hostname, original_url);
-			oidc_proto_state_destroy(proto_state);
 			OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_REQUEST_ERROR_URL);
-			return HTTP_INTERNAL_SERVER_ERROR;
+			return FALSE;
 		}
 	}
 
-	return OK;
+	return TRUE;
 }
 
 static const char *oidc_request_samesite_cookie(request_rec *r, struct oidc_cfg_t *c) {
@@ -248,10 +244,9 @@ int oidc_request_authenticate_user(request_rec *r, oidc_cfg_t *c, oidc_provider_
 		return rc;
 	}
 
-	rc = oidc_request_check_cookie_domain(r, c, proto_state, original_url);
-	if (rc != OK) {
+	if (oidc_request_check_cookie_domain(r, c, original_url) == FALSE) {
 		oidc_proto_state_destroy(proto_state);
-		return rc;
+		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
 	/* send off to the OpenID Connect Provider */
