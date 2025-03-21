@@ -899,19 +899,19 @@ apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg_t *c, const char 
 		}
 	}
 
-	if ((uri.hostname == NULL) && (oidc_util_strcasestr(url, "/") != url)) {
+	if ((uri.hostname == NULL) && (_oidc_strstr(url, "/") != url)) {
 		*err_str = apr_pstrdup(r->pool, "Malformed URL");
 		*err_desc = apr_psprintf(
 		    r->pool, "No hostname was parsed and it does not seem to be relative, i.e starting with '/': %s",
 		    url);
 		oidc_error(r, "%s: %s", *err_str, *err_desc);
 		return FALSE;
-	} else if ((uri.hostname == NULL) && (oidc_util_strcasestr(url, "//") == url)) {
+	} else if ((uri.hostname == NULL) && (_oidc_strstr(url, "//") == url)) {
 		*err_str = apr_pstrdup(r->pool, "Malformed URL");
 		*err_desc = apr_psprintf(r->pool, "No hostname was parsed and starting with '//': %s", url);
 		oidc_error(r, "%s: %s", *err_str, *err_desc);
 		return FALSE;
-	} else if ((uri.hostname == NULL) && (oidc_util_strcasestr(url, "/\\") == url)) {
+	} else if ((uri.hostname == NULL) && (_oidc_strstr(url, "/\\") == url)) {
 		*err_str = apr_pstrdup(r->pool, "Malformed URL");
 		*err_desc = apr_psprintf(r->pool, "No hostname was parsed and starting with '/\\': %s", url);
 		oidc_error(r, "%s: %s", *err_str, *err_desc);
@@ -1429,7 +1429,7 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg_t *c) {
 		} else {
 			apr_uri_parse(s->process->pconf, oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(c)),
 				      &r_uri);
-			if ((r_uri.scheme == NULL) || (_oidc_strcmp(r_uri.scheme, "https") != 0)) {
+			if ((r_uri.scheme == NULL) || (_oidc_strnatcasecmp(r_uri.scheme, "https") != 0)) {
 				oidc_swarn(s,
 					   "the URL scheme (%s) of the configured " OIDCProviderMetadataURL
 					   " SHOULD be \"https\" for security reasons!",
@@ -1448,7 +1448,7 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg_t *c) {
 
 	apr_uri_parse(s->process->pconf, oidc_cfg_redirect_uri_get(c), &r_uri);
 	if (!redirect_uri_is_relative) {
-		if (_oidc_strcmp(r_uri.scheme, "https") != 0) {
+		if (_oidc_strnatcasecmp(r_uri.scheme, "https") != 0) {
 			oidc_swarn(s,
 				   "the URL scheme (%s) of the configured " OIDCRedirectURI
 				   " SHOULD be \"https\" for security reasons (moreover: some Providers may reject "
@@ -1494,7 +1494,7 @@ static int oidc_check_config_oauth(server_rec *s, oidc_cfg_t *c) {
 
 	if (oidc_cfg_oauth_metadata_url_get(c) != NULL) {
 		apr_uri_parse(s->process->pconf, oidc_cfg_oauth_metadata_url_get(c), &r_uri);
-		if ((r_uri.scheme == NULL) || (_oidc_strcmp(r_uri.scheme, "https") != 0)) {
+		if ((r_uri.scheme == NULL) || (_oidc_strnatcasecmp(r_uri.scheme, "https") != 0)) {
 			oidc_swarn(s,
 				   "the URL scheme (%s) of the configured " OIDCOAuthServerMetadataURL
 				   " SHOULD be \"https\" for security reasons!",

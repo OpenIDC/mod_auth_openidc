@@ -321,9 +321,9 @@ apr_byte_t oidc_metrics_is_valid_classname(apr_pool_t *pool, const char *name, c
 	*valid_names = apr_psprintf(pool, "%s%s%s", *valid_names ? *valid_names : "", *valid_names ? " | " : "",
 				    "claim.id_token.* | claim.userinfo.*");
 
-	return apr_table_get(names, name)
-		   ? TRUE
-		   : ((strstr(name, "claim.id_token.") != NULL) || (strstr(name, "claim.userinfo.") != NULL));
+	return apr_table_get(names, name) ? TRUE
+					  : ((_oidc_strstr(name, "claim.id_token.") != NULL) ||
+					     (_oidc_strstr(name, "claim.userinfo.") != NULL));
 }
 
 /*
@@ -643,7 +643,7 @@ static void oidc_metrics_store(server_rec *s) {
 			apr_hash_this(hi2, (const void **)&key, NULL, (void **)&counter_hash);
 
 			key = apr_pstrdup(s->process->pool, key);
-			p = strstr(key, ".");
+			p = _oidc_strstr(key, ".");
 			if (p == NULL) {
 				/* get or create the corresponding metric entry in the global metrics */
 				j_counter = json_object_get(j_counters, key);

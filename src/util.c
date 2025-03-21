@@ -662,7 +662,7 @@ static const char *oidc_util_current_url_scheme(const request_rec *r, oidc_hdr_x
 #endif
 	}
 	if ((scheme_str == NULL) ||
-	    ((_oidc_strcmp(scheme_str, "http") != 0) && (_oidc_strcmp(scheme_str, "https") != 0))) {
+	    ((_oidc_strnatcasecmp(scheme_str, "http") != 0) && (_oidc_strnatcasecmp(scheme_str, "https") != 0))) {
 		oidc_warn(r,
 			  "detected HTTP scheme \"%s\" is not \"http\" nor \"https\"; perhaps your reverse proxy "
 			  "passes a wrongly configured \"%s\" header: falling back to default \"https\"",
@@ -752,9 +752,9 @@ static const char *oidc_get_current_url_port(const request_rec *r, const char *s
 	 * determine the port locally and don't print it when it's the default for the protocol
 	 */
 	const apr_port_t port = r->connection->local_addr->port;
-	if ((_oidc_strcmp(scheme_str, "https") == 0) && port == 443)
+	if ((_oidc_strnatcasecmp(scheme_str, "https") == 0) && port == 443)
 		return NULL;
-	else if ((_oidc_strcmp(scheme_str, "http") == 0) && port == 80)
+	else if ((_oidc_strnatcasecmp(scheme_str, "http") == 0) && port == 80)
 		return NULL;
 
 	port_str = apr_psprintf(r->pool, "%u", port);

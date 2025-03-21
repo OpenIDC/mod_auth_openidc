@@ -57,7 +57,8 @@ apr_byte_t oidc_request_check_cookie_domain(request_rec *r, oidc_cfg_t *c, const
 	_oidc_memset(&r_uri, 0, sizeof(apr_uri_t));
 	apr_uri_parse(r->pool, original_url, &o_uri);
 	apr_uri_parse(r->pool, oidc_util_redirect_uri(r, c), &r_uri);
-	if ((_oidc_strnatcasecmp(o_uri.scheme, r_uri.scheme) != 0) && (_oidc_strcmp(r_uri.scheme, "https") == 0)) {
+	if ((_oidc_strnatcasecmp(o_uri.scheme, r_uri.scheme) != 0) &&
+	    (_oidc_strnatcasecmp(r_uri.scheme, "https") == 0)) {
 		oidc_error(r,
 			   "the URL scheme (%s) of the configured " OIDCRedirectURI
 			   " does not match the URL scheme of the URL being accessed (%s): the \"state\" and "
@@ -68,8 +69,8 @@ apr_byte_t oidc_request_check_cookie_domain(request_rec *r, oidc_cfg_t *c, const
 
 	if (oidc_cfg_cookie_domain_get(c) == NULL) {
 		if (_oidc_strnatcasecmp(o_uri.hostname, r_uri.hostname) != 0) {
-			char *p = _oidc_strstr(o_uri.hostname, r_uri.hostname);
-			if ((p == NULL) || (_oidc_strcmp(r_uri.hostname, p) != 0)) {
+			const char *p = oidc_util_strcasestr(o_uri.hostname, r_uri.hostname);
+			if ((p == NULL) || (_oidc_strnatcasecmp(r_uri.hostname, p) != 0)) {
 				oidc_error(r,
 					   "the URL hostname (%s) of the configured " OIDCRedirectURI
 					   " does not match the URL hostname of the URL being accessed (%s): the "
