@@ -36,8 +36,50 @@ listed [here](https://github.com/OpenIDC/mod_auth_openidc/wiki/Caching).
 For a complete overview of all configuration options, see the file [`auth_openidc.conf`](https://github.com/OpenIDC/mod_auth_openidc/blob/master/auth_openidc.conf). 
 This file can also serve as an include file for `httpd.conf`.
 
-Interoperability
-----------------
+How to Use It  
+-------------
+
+1. install and load `mod_auth_openidc.so` in your Apache server
+1. set `OIDCRedirectURI` to a "vanity" URL within a location that is protected by mod_auth_openidc
+1. configure a random password in `OIDCCryptoPassphrase` for session/state encryption purposes
+1. configure `OIDCProviderMetadataURL` so it points to the Discovery metadata of your OpenID Connect Provider served on the `.well-known/openid-configuration` endpoint
+1. register/generate a Client identifier and a secret with the OpenID Connect Provider and configure those in `OIDCClientID` and `OIDCClientSecret` respectively
+1. register the `OIDCRedirectURI` configured above as the Redirect or Callback URI for your client at the Provider
+1. configure your protected content/locations with `AuthType openid-connect`
+
+A minimal working configuration would look like:
+```apache
+LoadModule auth_openidc_module modules/mod_auth_openidc.so
+
+# OIDCRedirectURI is a vanity URL that must point to a path protected by this module but must NOT point to any content
+OIDCRedirectURI https://<hostname>/secure/redirect_uri
+OIDCCryptoPassphrase <password>
+
+OIDCProviderMetadataURL <issuer>/.well-known/openid-configuration
+OIDCClientID <client_id>
+OIDCClientSecret <client_secret>
+
+<Location /secure>
+   AuthType openid-connect
+   Require valid-user
+</Location>
+```
+For claims-based authorization with `Require claim:` directives see the [Wiki page on Authorization](https://github.com/OpenIDC/mod_auth_openidc/wiki/Authorization). For details on configuring multiple providers see the [Wiki](https://github.com/OpenIDC/mod_auth_openidc/wiki/Multiple-Providers).
+
+### Quickstart for specific Providers
+
+- [Keycloak](https://github.com/OpenIDC/mod_auth_openidc/wiki/Keycloak)
+- [Microsoft Entra ID (Azure AD)](https://github.com/OpenIDC/mod_auth_openidc/wiki/Microsoft-Entra-ID--(Azure-AD))
+- [Google Accounts](https://github.com/OpenIDC/mod_auth_openidc/wiki/Google-Accounts)
+- [Sign in with Apple](https://github.com/OpenIDC/mod_auth_openidc/wiki/Sign-in-with-Apple)
+- [GLUU Server](https://github.com/OpenIDC/mod_auth_openidc/wiki/Gluu-Server)
+- [Curity Identity Server](https://github.com/OpenIDC/mod_auth_openidc/wiki/Curity-Identity-Server)
+and [more](https://github.com/OpenIDC/mod_auth_openidc/wiki/Useful-Links)
+
+See the [Wiki](https://github.com/OpenIDC/mod_auth_openidc/wiki) for configuration docs for other OpenID Connect Providers.
+
+Interoperability and Supported Specifications
+---------------------------------------------
 
 *mod_auth_openidc* is [OpenID Certified™](https://openid.net/certification/#OPENID-RP-P) and supports the following specifications:
 - [OpenID Connect Core 1.0](http://openid.net/specs/openid-connect-core-1_0.html) *(Basic, Implicit, Hybrid and Refresh flows)*
@@ -65,85 +107,6 @@ For questions, issues and suggestions use the Github Discussions forum at:
 #### Commercial
 For commercial - subscription based - support and licensing please contact:  
   [sales@openidc.com](mailto:sales@openidc.com)  
-
-How to Use It  
--------------
-
-### OpenID Connect SSO with Google+ Sign-In
-
-Sample configuration for using Google as your OpenID Connect Provider running on
-`www.example.com` and `https://www.example.com/example/redirect_uri` registered
-as the *redirect_uri* for the client through the Google API Console. You will also
-have to enable the `Google+ API` under `APIs & auth` in the [Google API console](https://console.developers.google.com).
-
-```apache
-OIDCProviderMetadataURL https://accounts.google.com/.well-known/openid-configuration
-OIDCClientID <your-client-id-administered-through-the-google-api-console>
-OIDCClientSecret <your-client-secret-administered-through-the-google-api-console>
-
-# OIDCRedirectURI is a vanity URL that must point to a path protected by this module but must NOT point to any content
-OIDCRedirectURI https://www.example.com/example/redirect_uri
-OIDCCryptoPassphrase <password>
-
-<Location /example/>
-   AuthType openid-connect
-   Require valid-user
-</Location>
-```
-
-Note if you want to securely restrict logins to a specific Google Apps domain you would not only
-add the `hd=<your-domain>` setting to the `OIDCAuthRequestParams` primitive for skipping the Google Account
-Chooser screen, but you must also ask for the `email` scope using `OIDCScope` and use a `Require claim`
-authorization setting in the `Location` primitive similar to:
-
-```apache
-OIDCScope "openid email"
-Require claim hd:<your-domain>
-```
-
-The above is an authorization example of an exact match of a provided claim against a string value.
-For more authorization options see the [Wiki page on Authorization](https://github.com/OpenIDC/mod_auth_openidc/wiki/Authorization).
-
-### Quickstart with a generic OpenID Connect Provider
-
-1. install and load `mod_auth_openidc.so` in your Apache server
-1. configure your protected content/locations with `AuthType openid-connect`
-1. set `OIDCRedirectURI` to a "vanity" URL within a location that is protected by mod_auth_openidc
-1. register/generate a Client identifier and a secret with the OpenID Connect Provider and configure those in `OIDCClientID` and `OIDCClientSecret` respectively
-1. and register the `OIDCRedirectURI` as the Redirect or Callback URI with your client at the Provider
-1. configure `OIDCProviderMetadataURL` so it points to the Discovery metadata of your OpenID Connect Provider served on the `.well-known/openid-configuration` endpoint
-1. configure a random password in `OIDCCryptoPassphrase` for session/state encryption purposes
-
-```apache
-LoadModule auth_openidc_module modules/mod_auth_openidc.so
-
-OIDCProviderMetadataURL <issuer>/.well-known/openid-configuration
-OIDCClientID <client_id>
-OIDCClientSecret <client_secret>
-
-# OIDCRedirectURI is a vanity URL that must point to a path protected by this module but must NOT point to any content
-OIDCRedirectURI https://<hostname>/secure/redirect_uri
-OIDCCryptoPassphrase <password>
-
-<Location /secure>
-   AuthType openid-connect
-   Require valid-user
-</Location>
-```
-For details on configuring multiple providers see the [Wiki](https://github.com/OpenIDC/mod_auth_openidc/wiki/Multiple-Providers).
-
-### Quickstart for Other Providers
-
-See the [Wiki](https://github.com/OpenIDC/mod_auth_openidc/wiki) for configuration docs for other OpenID Connect Providers:
-- [GLUU Server](https://github.com/OpenIDC/mod_auth_openidc/wiki/Gluu-Server)
-- [Keycloak](https://github.com/OpenIDC/mod_auth_openidc/wiki/Keycloak)
-- [Microsoft Entra ID (Azure AD)](https://github.com/OpenIDC/mod_auth_openidc/wiki/Microsoft-Entra-ID--(Azure-AD))
-- [Sign in with Apple](https://github.com/OpenIDC/mod_auth_openidc/wiki/Sign-in-with-Apple)
-- [Curity Identity Server](https://github.com/OpenIDC/mod_auth_openidc/wiki/Curity-Identity-Server)
-- [LemonLDAP::NG](https://github.com/OpenIDC/mod_auth_openidc/wiki/LemonLDAP::NG)
-- [GitLab](https://github.com/OpenIDC/mod_auth_openidc/wiki/GitLab-OAuth2)
-- [Globus](https://github.com/OpenIDC/mod_auth_openidc/wiki/Globus)
-and [more](https://github.com/OpenIDC/mod_auth_openidc/wiki/Useful-Links)
 
 Disclaimer
 ----------
