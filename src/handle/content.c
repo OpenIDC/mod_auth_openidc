@@ -118,11 +118,18 @@ int oidc_content_handler(request_rec *r) {
 		/* discovery may result in a 200 HTML page or a redirect to an external URL */
 		rc = oidc_discovery_request(r, c);
 
-	} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_AUTHN) != NULL) {
+	} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_AUTHN_POST) != NULL) {
 
+		/* sending POST authentication request */
+		OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_AUTHN_POST);
+
+		rc = OK;
+
+	} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE) != NULL) {
+
+		/* sending POST preserve request */
 		OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_POST_PRESERVE);
 
-		/* sending POST preserve */
 		rc = OK;
 
 	} /* else: an authenticated request for which content is produced downstream */

@@ -1,3 +1,9 @@
+04/02/2025
+- fix protected content leakage when using OIDCProviderAuthRequestMethod POST, see:
+    https://github.com/OpenIDC/mod_auth_openidc/security/advisories/GHSA-59jp-rwph-878r
+- allow for regular Apache processing (e.g. setting response headers) when using OIDCProviderAuthRequestMethod POST
+- release 2.4.16.11
+
 03/21/2025
 - core: complete case-insensitive protocol/hostname/domain-name comparisons
 - release 2.4.16.10

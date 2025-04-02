@@ -157,7 +157,7 @@ static int oidc_proto_request_form_post_param_add(void *rec, const char *key, co
 /*
  * make the browser POST parameters through Javascript auto-submit
  */
-static int oidc_proto_request_html_post(request_rec *r, const char *url, apr_table_t *params) {
+static void oidc_proto_request_html_post(request_rec *r, const char *url, apr_table_t *params) {
 
 	oidc_debug(r, "enter");
 
@@ -174,7 +174,7 @@ static int oidc_proto_request_html_post(request_rec *r, const char *url, apr_tab
 				 "      </p>\n"
 				 "    </form>\n");
 
-	return oidc_util_html_send(r, "Submitting...", NULL, "document.forms[0].submit", html_body, OK);
+	oidc_util_html_send(r, "Submitting...", NULL, "document.forms[0].submit", html_body, OK);
 }
 
 #define OIDC_REQUEST_OJBECT_COPY_FROM_REQUEST "copy_from_request"
@@ -688,8 +688,12 @@ int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, co
 	if (oidc_proto_profile_auth_request_method_get(provider) == OIDC_AUTH_REQUEST_METHOD_POST) {
 
 		/* construct a HTML POST auto-submit page with the authorization request parameters */
-		rv =
-		    oidc_proto_request_html_post(r, oidc_cfg_provider_authorization_endpoint_url_get(provider), params);
+		oidc_proto_request_html_post(r, oidc_cfg_provider_authorization_endpoint_url_get(provider), params);
+
+		/* signal this to the content handler */
+		oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_AUTHN_POST, "");
+		r->user = "";
+		rv = OK;
 
 	} else if (oidc_proto_profile_auth_request_method_get(provider) == OIDC_AUTH_REQUEST_METHOD_PAR) {
 
@@ -701,7 +705,6 @@ int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, co
 		authorization_request =
 		    oidc_http_query_encoded_url(r, oidc_cfg_provider_authorization_endpoint_url_get(provider), params);
 
-		// TODO: should also enable this when using the POST binding for the auth request
 		/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
 		if (oidc_response_post_preserve_javascript(r, authorization_request, NULL, NULL) == FALSE) {
 
@@ -714,7 +717,7 @@ int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, co
 		} else {
 
 			/* signal this to the content handler */
-			oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_AUTHN, "");
+			oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE, "");
 			r->user = "";
 			rv = OK;
 		}

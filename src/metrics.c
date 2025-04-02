@@ -159,6 +159,7 @@ const oidc_metrics_counter_info_t _oidc_metrics_counters_info[] = {
   { OM_CLASS_CONTENT, "request.jwks",          "JWKs requests to the content handler" },
   { OM_CLASS_CONTENT, "request.discovery",     "discovery requests to the content handler" },
   { OM_CLASS_CONTENT, "request.post-preserve", "HTTP POST preservation requests to the content handler" },
+  { OM_CLASS_CONTENT, "request.authn-post",    "HTTP POST authentication requests to the content handler" },
   { OM_CLASS_CONTENT, "request.unknown",       "unknown requests to the content handler" },
 
   // KEEP THIS: end-of-counters
