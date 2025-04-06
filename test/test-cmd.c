@@ -134,7 +134,7 @@ int sign(int argc, char **argv, apr_pool_t *pool) {
 		return -1;
 	}
 
-	fprintf(stdout, "%s\n", cser);
+	fprintf(stdout, "%s", cser);
 
 	cjose_jws_release(jws);
 	cjose_jwk_release(jwk);
