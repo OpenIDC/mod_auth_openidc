@@ -475,7 +475,7 @@ const char *oidc_cfg_parse_key_record(apr_pool_t *pool, const char *tuple, char 
 }
 
 #define OIDC_ON_ERROR_502_STR "502_on_error"
-#define OIDC_ON_ERROR_REFRESH_STR "logout_on_error"
+#define OIDC_ON_ERROR_LOGOUT_STR "logout_on_error"
 #define OIDC_ON_ERROR_AUTH_STR "authenticate_on_error"
 
 /*
@@ -484,7 +484,7 @@ const char *oidc_cfg_parse_key_record(apr_pool_t *pool, const char *tuple, char 
 const char *oidc_cfg_parse_action_on_error_refresh_as(apr_pool_t *pool, const char *arg,
 						      oidc_on_error_action_t *action) {
 	static const oidc_cfg_option_t options[] = {{OIDC_ON_ERROR_502, OIDC_ON_ERROR_502_STR},
-						    {OIDC_ON_ERROR_LOGOUT, OIDC_ON_ERROR_REFRESH_STR},
+						    {OIDC_ON_ERROR_LOGOUT, OIDC_ON_ERROR_LOGOUT_STR},
 						    {OIDC_ON_ERROR_AUTH, OIDC_ON_ERROR_AUTH_STR}};
 	return oidc_cfg_parse_option(pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg, (int *)action);
 }
