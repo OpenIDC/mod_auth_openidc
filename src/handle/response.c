@@ -61,7 +61,7 @@ static int oidc_response_redirect_parent_window_to_logout(request_rec *r, oidc_c
 					 "    </script>\n",
 					 oidc_util_javascript_escape(r->pool, oidc_util_redirect_uri(r, c)));
 
-	return oidc_util_html_send(r, "Redirecting...", java_script, NULL, NULL, OK);
+	return oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_HTML, "Redirecting...", java_script, NULL, NULL);
 }
 
 /*
@@ -146,7 +146,7 @@ apr_byte_t oidc_response_post_preserve_javascript(request_rec *r, const char *lo
 	if (oidc_cfg_post_preserve_template_get(cfg) != NULL)
 		if (oidc_util_html_send_in_template(
 			r, oidc_cfg_post_preserve_template_get(cfg), &_oidc_response_post_preserve_template_contents,
-			json, OIDC_POST_PRESERVE_ESCAPE_NONE, location, OIDC_POST_PRESERVE_ESCAPE_JAVASCRIPT, OK) == OK)
+			json, OIDC_POST_PRESERVE_ESCAPE_NONE, location, OIDC_POST_PRESERVE_ESCAPE_JAVASCRIPT) == OK)
 			return TRUE;
 
 	const char *jmethod = "preserveOnLoad";
@@ -161,14 +161,11 @@ apr_byte_t oidc_response_post_preserve_javascript(request_rec *r, const char *lo
 	    jmethod, json,
 	    location ? apr_psprintf(r->pool, "window.location='%s';\n", oidc_util_javascript_escape(r->pool, location))
 		     : "");
-	if (location == NULL) {
-		if (javascript_method)
-			*javascript_method = apr_pstrdup(r->pool, jmethod);
-		if (javascript)
-			*javascript = apr_pstrdup(r->pool, jscript);
-	} else {
-		oidc_util_html_send(r, "Preserving...", jscript, jmethod, "<p>Preserving...</p>", OK);
-	}
+
+	if (javascript_method)
+		*javascript_method = apr_pstrdup(r->pool, jmethod);
+	if (javascript)
+		*javascript = apr_pstrdup(r->pool, jscript);
 
 	return TRUE;
 }
@@ -212,7 +209,7 @@ static int oidc_response_post_preserved_restore(request_rec *r, const char *orig
 	const char *body = "    <p>Restoring...</p>\n"
 			   "    <form method=\"post\"></form>\n";
 
-	return oidc_util_html_send(r, "Restoring...", script, method, body, OK);
+	return oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_HTML, "Restoring...", script, method, body);
 }
 
 char *oidc_response_make_sid_iss_unique(request_rec *r, const char *sid, const char *issuer) {
@@ -677,7 +674,7 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 			if (oidc_util_html_send_in_template(r, oidc_cfg_post_restore_template_get(c),
 							    &_oidc_response_post_restore_template_contents,
 							    original_url, OIDC_POST_PRESERVE_ESCAPE_JAVASCRIPT, "",
-							    OIDC_POST_PRESERVE_ESCAPE_NONE, OK) == OK)
+							    OIDC_POST_PRESERVE_ESCAPE_NONE) == OK)
 				return TRUE;
 		return oidc_response_post_preserved_restore(r, original_url);
 	}

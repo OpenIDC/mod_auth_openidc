@@ -1,7 +1,19 @@
+04/07/2025
+- allow for regular Apache processing (e.g. setting response/security headers)
+  by deferring HTML/HTTP output generation to the content handler (instead of user id check handler)
+  for the following use cases:
+  - OIDCProviderAuthRequestMethod POST
+  - OIDCPreservePost On (both internal and template-based)
+  - POST page for the implicit grant type
+  - Request URI handler
+  - internally generated POST logout page
+  - session management RP iframe
+  - session management logout HTML top-window redirect page
+- bump to 2.4.17dev
+
 04/02/2025
 - fix protected content leakage when using OIDCProviderAuthRequestMethod POST, see:
     https://github.com/OpenIDC/mod_auth_openidc/security/advisories/GHSA-59jp-rwph-878r
-- allow for regular Apache processing (e.g. setting response headers) when using OIDCProviderAuthRequestMethod POST
 - release 2.4.16.11
 
 03/21/2025

@@ -1033,7 +1033,7 @@ apr_byte_t oidc_util_decode_json_and_check_error(request_rec *r, const char *str
 }
 
 /*
- * sends content to the user agent
+ * sends data to the user agent
  */
 int oidc_util_http_send(request_rec *r, const char *data, size_t data_len, const char *content_type,
 			int success_rvalue) {
@@ -1068,6 +1068,41 @@ int oidc_util_http_send(request_rec *r, const char *data, size_t data_len, const
 }
 
 /*
+ * called from the authentication handler:
+ * prepares data to be sent to the user agent in the content handler
+ */
+int oidc_util_http_content_prep(request_rec *r, const char *data, size_t data_len, const char *content_type) {
+	/* store data, data_len and content-type in the request state, possibly deleting leftovers from a previous
+	 * request */
+	oidc_request_state_set(r, "data", NULL);
+	if (data)
+		oidc_request_state_set(r, "data", data);
+	oidc_request_state_set(r, "data_len", NULL);
+	if (data_len)
+		oidc_request_state_set(r, "data_len", apr_psprintf(r->pool, "%d", (int)data_len));
+	oidc_request_state_set(r, "content_type", NULL);
+	if (content_type)
+		oidc_request_state_set(r, "content_type", content_type);
+	/* signal that there's HTTP data to be sent in the content handler */
+	oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_HTTP, "");
+	/* make sure that we pass the authorization phase since we have to return data from the content handler */
+	r->user = "";
+	/* return OK to make sure that we continue in the content handler */
+	return OK;
+}
+
+/*
+ * called from the content handler:
+ * sends data that was prepared in oidc_util_http_content_prep to the user agent
+ */
+int oidc_util_http_content_send(request_rec *r) {
+	const char *data = oidc_request_state_get(r, "data");
+	int data_len = _oidc_str_to_int(oidc_request_state_get(r, "data_len"), 0);
+	const char *content_type = oidc_request_state_get(r, "content_type");
+	return oidc_util_http_send(r, data, data_len, content_type, OK);
+}
+
+/*
  * send HTML content to the user agent
  */
 int oidc_util_html_send(request_rec *r, const char *title, const char *html_head, const char *on_load,
@@ -1093,6 +1128,46 @@ int oidc_util_html_send(request_rec *r, const char *title, const char *html_head
 }
 
 /*
+ * called from the authentication handler:
+ * prepares HTML to be sent to the user agent in the content handler
+ */
+int oidc_util_html_content_prep(request_rec *r, const char *request_state_key, const char *title, const char *html_head,
+				const char *on_load, const char *html_body) {
+	/* store title, head, on_load function and body in the request state, possibly deleting leftovers from a
+	 * previous request */
+	oidc_request_state_set(r, "title", NULL);
+	if (title)
+		oidc_request_state_set(r, "title", title);
+	oidc_request_state_set(r, "head", NULL);
+	if (html_head)
+		oidc_request_state_set(r, "head", html_head);
+	oidc_request_state_set(r, "on_load", NULL);
+	if (on_load)
+		oidc_request_state_set(r, "on_load", on_load);
+	oidc_request_state_set(r, "body", NULL);
+	if (html_body)
+		oidc_request_state_set(r, "body", html_body);
+	/* signal that there's HTML data for a specific routine to be sent in the content handler */
+	oidc_request_state_set(r, request_state_key, "");
+	/* make sure that we pass the authorization phase since we have to return data from the content handler */
+	r->user = "";
+	/* return OK to make sure that we continue in the content handler */
+	return OK;
+}
+
+/*
+ * called from the content handler:
+ * sends HTML content that was prepared in oidc_util_html_content_prep to the user agent
+ */
+int oidc_util_html_content_send(request_rec *r) {
+	const char *title = oidc_request_state_get(r, "title");
+	const char *html_head = oidc_request_state_get(r, "head");
+	const char *on_load = oidc_request_state_get(r, "on_load");
+	const char *html_body = oidc_request_state_get(r, "body");
+	return oidc_util_html_send(r, title, html_head, on_load, html_body, OK);
+}
+
+/*
  * escape characters in an HTML/Javascript template
  */
 static char *oidc_util_template_escape(request_rec *r, const char *arg, int escape) {
@@ -1111,9 +1186,9 @@ static char *oidc_util_template_escape(request_rec *r, const char *arg, int esca
  * fill and send a HTML template
  */
 int oidc_util_html_send_in_template(request_rec *r, const char *filename, char **static_template_content,
-				    const char *arg1, int arg1_esc, const char *arg2, int arg2_esc, int status_code) {
+				    const char *arg1, int arg1_esc, const char *arg2, int arg2_esc) {
 	char *html = NULL;
-	int rc = status_code;
+	int rc = OK;
 	if (*static_template_content == NULL) {
 		// NB: templates go into the server process pool
 		if (oidc_util_file_read(r, filename, r->server->process->pool, static_template_content) == FALSE) {
@@ -1124,7 +1199,7 @@ int oidc_util_html_send_in_template(request_rec *r, const char *filename, char *
 	if (*static_template_content) {
 		html = apr_psprintf(r->pool, *static_template_content, oidc_util_template_escape(r, arg1, arg1_esc),
 				    oidc_util_template_escape(r, arg2, arg2_esc));
-		rc = oidc_util_http_send(r, html, _oidc_strlen(html), OIDC_HTTP_CONTENT_TYPE_TEXT_HTML, status_code);
+		rc = oidc_util_http_content_prep(r, html, _oidc_strlen(html), OIDC_HTTP_CONTENT_TYPE_TEXT_HTML);
 	}
 	return rc;
 }

@@ -69,7 +69,19 @@ int oidc_content_handler(request_rec *r) {
 		/* requests to the redirect URI are handled and finished here */
 		rc = OK;
 
-		if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO)) {
+		/* NB: check HTTP/HTML request before info (and others) so Logout HTML is processed if there's no
+		 * session (anymore) */
+		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTTP) != NULL) {
+
+			/* HTTP response has been generated and stored in the request state */
+			rc = oidc_util_http_content_send(r);
+
+		} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTML) != NULL) {
+
+			/* HTML body has been generated and stored in the request state */
+			rc = oidc_util_html_content_send(r);
+
+		} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO)) {
 
 			OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_INFO);
 
@@ -123,14 +135,26 @@ int oidc_content_handler(request_rec *r) {
 		/* sending POST authentication request */
 		OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_AUTHN_POST);
 
-		rc = OK;
+		/* HTML body has been generated and stored in the request state */
+		rc = oidc_util_html_content_send(r);
 
 	} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE) != NULL) {
 
 		/* sending POST preserve request */
 		OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_POST_PRESERVE);
 
-		rc = OK;
+		/* Javascript for HTML head has been generated and stored in the request state */
+		rc = oidc_util_html_content_send(r);
+
+	} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTTP) != NULL) {
+
+		/* HTTP response has been generated and stored in the request state */
+		rc = oidc_util_http_content_send(r);
+
+	} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTML) != NULL) {
+
+		/* HTML body has been generated and stored in the request state */
+		rc = oidc_util_html_content_send(r);
 
 	} /* else: an authenticated request for which content is produced downstream */
 

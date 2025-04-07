@@ -157,7 +157,7 @@ static int oidc_proto_request_form_post_param_add(void *rec, const char *key, co
 /*
  * make the browser POST parameters through Javascript auto-submit
  */
-static void oidc_proto_request_html_post(request_rec *r, const char *url, apr_table_t *params) {
+static const char *oidc_proto_request_html_post(request_rec *r, const char *url, apr_table_t *params) {
 
 	oidc_debug(r, "enter");
 
@@ -174,7 +174,7 @@ static void oidc_proto_request_html_post(request_rec *r, const char *url, apr_ta
 				 "      </p>\n"
 				 "    </form>\n");
 
-	oidc_util_html_send(r, "Submitting...", NULL, "document.forms[0].submit", html_body, OK);
+	return html_body;
 }
 
 #define OIDC_REQUEST_OJBECT_COPY_FROM_REQUEST "copy_from_request"
@@ -688,12 +688,12 @@ int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, co
 	if (oidc_proto_profile_auth_request_method_get(provider) == OIDC_AUTH_REQUEST_METHOD_POST) {
 
 		/* construct a HTML POST auto-submit page with the authorization request parameters */
-		oidc_proto_request_html_post(r, oidc_cfg_provider_authorization_endpoint_url_get(provider), params);
+		const char *html_body =
+		    oidc_proto_request_html_post(r, oidc_cfg_provider_authorization_endpoint_url_get(provider), params);
 
 		/* signal this to the content handler */
-		oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_AUTHN_POST, "");
-		r->user = "";
-		rv = OK;
+		rv = oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_AUTHN_POST, "Submitting...", NULL,
+						 "document.forms[0].submit", html_body);
 
 	} else if (oidc_proto_profile_auth_request_method_get(provider) == OIDC_AUTH_REQUEST_METHOD_PAR) {
 
@@ -705,8 +705,9 @@ int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, co
 		authorization_request =
 		    oidc_http_query_encoded_url(r, oidc_cfg_provider_authorization_endpoint_url_get(provider), params);
 
+		char *javascript = NULL;
 		/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
-		if (oidc_response_post_preserve_javascript(r, authorization_request, NULL, NULL) == FALSE) {
+		if (oidc_response_post_preserve_javascript(r, authorization_request, &javascript, NULL) == FALSE) {
 
 			/* add the redirect location header */
 			oidc_http_hdr_out_location_set(r, authorization_request);
@@ -717,9 +718,8 @@ int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, co
 		} else {
 
 			/* signal this to the content handler */
-			oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE, "");
-			r->user = "";
-			rv = OK;
+			rv = oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE, "Preserving...",
+							 javascript, "preserveOnLoad", "<p>Preserving...</p>");
 		}
 
 	} else {

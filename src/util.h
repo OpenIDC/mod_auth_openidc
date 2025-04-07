@@ -78,6 +78,9 @@ apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url);
 apr_byte_t oidc_util_decode_json_and_check_error(request_rec *r, const char *str, json_t **json);
 int oidc_util_html_send(request_rec *r, const char *title, const char *html_head, const char *on_load,
 			const char *html_body, int status_code);
+int oidc_util_html_content_prep(request_rec *r, const char *request_state_key, const char *title, const char *html_head,
+				const char *on_load, const char *html_body);
+int oidc_util_html_content_send(request_rec *r);
 apr_byte_t oidc_util_file_read(request_rec *r, const char *path, apr_pool_t *pool, char **result);
 apr_byte_t oidc_util_file_write(request_rec *r, const char *path, const char *data);
 apr_byte_t oidc_util_issuer_match(const char *a, const char *b);
@@ -114,7 +117,7 @@ const char *oidc_util_jq_filter(request_rec *r, const char *input, const char *f
 void oidc_util_set_trace_parent(request_rec *r, oidc_cfg_t *c, const char *span);
 void oidc_util_apr_hash_clear(apr_hash_t *ht);
 int oidc_util_html_send_in_template(request_rec *r, const char *filename, char **static_template_content,
-				    const char *arg1, int arg1_esc, const char *arg2, int arg2_esc, int status_code);
+				    const char *arg1, int arg1_esc, const char *arg2, int arg2_esc);
 char *oidc_util_apr_expr_parse(cmd_parms *cmd, const char *str, oidc_apr_expr_t **expr, apr_byte_t result_is_str);
 const char *oidc_util_apr_expr_exec(request_rec *r, const oidc_apr_expr_t *expr, apr_byte_t result_is_str);
 

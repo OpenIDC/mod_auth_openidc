@@ -250,13 +250,14 @@ int oidc_logout_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, 
 		const char *accept = oidc_http_hdr_in_accept_get(r);
 		if ((_oidc_strcmp(url, OIDC_IMG_STYLE_LOGOUT_PARAM_VALUE) == 0) ||
 		    ((accept) && _oidc_strstr(accept, OIDC_HTTP_CONTENT_TYPE_IMAGE_PNG))) {
-			return oidc_util_http_send(r, (const char *)&oidc_logout_transparent_pixel,
-						   sizeof(oidc_logout_transparent_pixel),
-						   OIDC_HTTP_CONTENT_TYPE_IMAGE_PNG, OK);
+			return oidc_util_http_content_prep(r, (const char *)&oidc_logout_transparent_pixel,
+							   sizeof(oidc_logout_transparent_pixel),
+							   OIDC_HTTP_CONTENT_TYPE_IMAGE_PNG);
 		}
 
 		/* standard HTTP based logout: should be called in an iframe from the OP */
-		return oidc_util_html_send(r, "Logged Out", NULL, NULL, "<p>Logged Out</p>", OK);
+		return oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_HTML, "Logged Out", NULL, NULL,
+						   "<p>Logged Out</p>");
 	}
 
 	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL, "no-cache, no-store");
@@ -264,7 +265,8 @@ int oidc_logout_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, 
 
 	/* see if we don't need to go somewhere special after killing the session locally */
 	if (url == NULL)
-		return oidc_util_html_send(r, "Logged Out", NULL, NULL, "<p>Logged Out</p>", OK);
+		return oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_HTML, "Logged Out", NULL, NULL,
+						   "<p>Logged Out</p>");
 
 	/* send the user to the specified where-to-go-after-logout URL */
 	oidc_http_hdr_out_location_set(r, url);

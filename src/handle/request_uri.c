@@ -68,5 +68,5 @@ int oidc_request_uri(request_rec *r, oidc_cfg_t *c) {
 
 	oidc_cache_set_request_uri(r, request_ref, NULL, 0);
 
-	return oidc_util_http_send(r, jwt, _oidc_strlen(jwt), OIDC_HTTP_CONTENT_TYPE_JWT, OK);
+	return oidc_util_http_content_prep(r, jwt, _oidc_strlen(jwt), OIDC_HTTP_CONTENT_TYPE_JWT);
 }
