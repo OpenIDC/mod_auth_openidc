@@ -794,7 +794,7 @@ int oidc_authz_22_checker(request_rec *r) {
 	}
 
 	/* dispatch to the <2.4 specific authz routine */
-	int rc = oidc_authz_22_worker(r, claims ? claims : id_token, reqs, reqs_arr->nelts);
+	int rc = oidc_authz_22_worker(r, claims, reqs, reqs_arr->nelts);
 
 	/* cleanup */
 	if (claims)
