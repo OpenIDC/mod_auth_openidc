@@ -398,6 +398,39 @@ static void oidc_authz_get_claims_idtoken_scope(request_rec *r, json_t **claims,
 	*scope = oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_SCOPE);
 }
 
+/*
+ * merge the claims from the userinfo endpoint, the claims from the id_token, and the scope returned
+ * from the userinfo endpoint into a single set of claims that can be used to authorize on
+ */
+static json_t *oidc_authz_merge_claims(request_rec *r) {
+	json_t *claims = NULL, *id_token = NULL;
+	const char *scope = NULL;
+
+	/* get the set of claims from the request state as they have been set in the authentication part earlier */
+	oidc_authz_get_claims_idtoken_scope(r, &claims, &id_token, &scope);
+
+	json_t *result = json_object();
+
+	/* if scope was returned from the token endpoint, include it in the set of authorization claims */
+	if (scope)
+		json_object_set_new(result, OIDC_CLAIM_SCOPE, json_string(scope));
+
+	/* merge userinfo claims into the authorization claims (take precedence over scope) */
+	if (claims)
+		oidc_util_json_merge(r, claims, result);
+
+	/* merge id_token claims (e.g. "iss") into the authorization claims (take precedence over userinfo claims and
+	 * scope) */
+	oidc_util_json_merge(r, id_token, result);
+
+	if (id_token)
+		json_decref(id_token);
+	if (claims)
+		json_decref(claims);
+
+	return result;
+}
+
 #if HAVE_APACHE_24
 
 /*
@@ -540,38 +573,6 @@ static authz_status oidc_authz_24_unauthorized_user(request_rec *r) {
 	return AUTHZ_DENIED;
 }
 
-/*
- * merge the claims from the userinfo endpoint, the claims from the id_token, and the scope returned
- * from the userinfo endpoint into a single set of claims that can be used to authorize on
- */
-static json_t *oidc_authz_merge_claims(request_rec *r) {
-	json_t *claims = NULL, *id_token = NULL;
-	const char *scope = NULL;
-
-	/* get the set of claims from the request state as they have been set in the authentication part earlier */
-	oidc_authz_get_claims_idtoken_scope(r, &claims, &id_token, &scope);
-
-	json_t *result = json_object();
-
-	/* if scope was returned from the token endpoint, include it in the set of authorization claims */
-	if (scope)
-		json_object_set_new(result, OIDC_CLAIM_SCOPE, json_string(scope));
-
-	/* merge userinfo claims into the authorization claims (take precedence over scope) */
-	if (claims)
-		oidc_util_json_merge(r, claims, result);
-
-	/* merge id_token claims (e.g. "iss") into the authorization claims (take precedence over userinfo claims and
-	 * scope) */
-	oidc_util_json_merge(r, id_token, result);
-
-	if (id_token)
-		json_decref(id_token);
-	if (claims)
-		json_decref(claims);
-
-	return result;
-}
 /*
  * generic Apache >=2.4 authorization hook for this module
  * handles both OpenID Connect or OAuth 2.0 in the same way, based on the claims stored in the session
