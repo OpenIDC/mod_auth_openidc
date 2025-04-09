@@ -580,6 +580,7 @@ static void oidc_copy_tokens_to_request_state(request_rec *r, oidc_session_t *se
 
 	const char *id_token = oidc_session_get_idtoken_claims(r, session);
 	const char *claims = oidc_session_get_userinfo_claims(r, session);
+	const char *scope = oidc_session_get_scope(r, session);
 
 	oidc_debug(r, "id_token=%s claims=%s", id_token, claims);
 
@@ -594,6 +595,9 @@ static void oidc_copy_tokens_to_request_state(request_rec *r, oidc_session_t *se
 		if (s_claims != NULL)
 			*s_claims = claims;
 	}
+
+	if (scope != NULL)
+		oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_SCOPE, scope);
 }
 
 /*
@@ -635,6 +639,13 @@ apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg_t *cfg, oidc_sessio
 		/* pass it to the app in a header or environment variable */
 		oidc_util_set_app_info(r, OIDC_APP_INFO_ACCESS_TOKEN_EXP, access_token_expires,
 				       OIDC_DEFAULT_HEADER_PREFIX, pass_in, encoding);
+	}
+
+	/* set the scope in the app headers/variables alongside of the access token, if enabled */
+	const char *scope = oidc_session_get_scope(r, session);
+	if ((oidc_cfg_dir_pass_access_token_get(r) != 0) && scope != NULL) {
+		/* pass it to the app in a header or environment variable */
+		oidc_util_set_app_info(r, OIDC_APP_INFO_SCOPE, scope, OIDC_DEFAULT_HEADER_PREFIX, pass_in, encoding);
 	}
 
 	if (extend_session) {

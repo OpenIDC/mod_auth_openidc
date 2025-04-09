@@ -493,6 +493,8 @@ apr_byte_t oidc_session_set(request_rec *r, oidc_session_t *z, const char *key, 
 #define OIDC_SESSION_KEY_USERINFO_REFRESH_INTERVAL "uir"
 /* key for storing whether this is a newly created session or not */
 #define OIDC_SESSION_KEY_SESSION_IS_NEW "sn"
+/* key for storing the scope in the session context */
+#define OIDC_SESSION_KEY_SCOPE "scp"
 
 /*
  * helper functions
@@ -813,4 +815,15 @@ void oidc_session_set_session_new(request_rec *r, oidc_session_t *z, const int i
 
 int oidc_session_get_session_new(request_rec *r, oidc_session_t *z) {
 	return oidc_session_get_int(r, z, OIDC_SESSION_KEY_SESSION_IS_NEW, 0);
+}
+
+/*
+ * scope
+ */
+void oidc_session_set_scope(request_rec *r, oidc_session_t *z, const char *scope) {
+	oidc_session_set(r, z, OIDC_SESSION_KEY_SCOPE, scope);
+}
+
+const char *oidc_session_get_scope(request_rec *r, oidc_session_t *z) {
+	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_SCOPE);
 }

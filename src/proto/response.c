@@ -292,7 +292,8 @@ static apr_byte_t oidc_proto_parse_idtoken_and_validate_code(request_rec *r, oid
  */
 static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider, const char *code,
 					  const char *code_verifier, char **id_token, char **access_token,
-					  char **token_type, int *expires_in, char **refresh_token, const char *state) {
+					  char **token_type, int *expires_in, char **refresh_token, char **scope,
+					  const char *state) {
 
 	oidc_debug(r, "enter");
 
@@ -310,7 +311,7 @@ static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg_t *cfg, oidc_
 		apr_table_setn(params, OIDC_PROTO_STATE, state);
 
 	return oidc_proto_token_endpoint_request(r, cfg, provider, params, id_token, access_token, token_type,
-						 expires_in, refresh_token);
+						 expires_in, refresh_token, scope);
 }
 
 /*
@@ -326,6 +327,7 @@ static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r, 
 	int expires_in = -1;
 	char *refresh_token = NULL;
 	char *code_verifier = NULL;
+	char *scope = NULL;
 
 	if (oidc_proto_profile_pkce_get(provider) != &oidc_pkce_none)
 		oidc_proto_profile_pkce_get(provider)->verifier(r, oidc_proto_state_get_pkce_state(proto_state),
@@ -334,7 +336,7 @@ static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r, 
 	const char *state = oidc_proto_state_get_state(proto_state);
 
 	if (oidc_proto_resolve_code(r, c, provider, apr_table_get(params, OIDC_PROTO_CODE), code_verifier, &id_token,
-				    &access_token, &token_type, &expires_in, &refresh_token, state) == FALSE) {
+				    &access_token, &token_type, &expires_in, &refresh_token, &scope, state) == FALSE) {
 		oidc_error(r, "failed to resolve the code");
 		OIDC_METRICS_COUNTER_INC(r, c, OM_PROVIDER_TOKEN_ERROR);
 		return FALSE;
@@ -362,6 +364,10 @@ static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r, 
 	/* refresh token should not have been set before */
 	if (refresh_token != NULL) {
 		apr_table_set(params, OIDC_PROTO_REFRESH_TOKEN, refresh_token);
+	}
+
+	if (scope != NULL) {
+		apr_table_set(params, OIDC_PROTO_SCOPE, scope);
 	}
 
 	return TRUE;
@@ -393,6 +399,7 @@ apr_byte_t oidc_proto_response_code_idtoken(request_rec *r, oidc_cfg_t *c, oidc_
 	apr_table_unset(params, OIDC_PROTO_TOKEN_TYPE);
 	apr_table_unset(params, OIDC_PROTO_EXPIRES_IN);
 	apr_table_unset(params, OIDC_PROTO_REFRESH_TOKEN);
+	apr_table_unset(params, OIDC_PROTO_SCOPE);
 
 	if (oidc_proto_resolve_code_and_validate_response(r, c, provider, response_type, params, proto_state) == FALSE)
 		return FALSE;
@@ -420,6 +427,7 @@ apr_byte_t oidc_proto_response_code_token(request_rec *r, oidc_cfg_t *c, oidc_pr
 	/* clear parameters that should only be set from the token endpoint */
 	apr_table_unset(params, OIDC_PROTO_ID_TOKEN);
 	apr_table_unset(params, OIDC_PROTO_REFRESH_TOKEN);
+	apr_table_unset(params, OIDC_PROTO_SCOPE);
 
 	if (oidc_proto_resolve_code_and_validate_response(r, c, provider, response_type, params, proto_state) == FALSE)
 		return FALSE;
@@ -454,6 +462,7 @@ apr_byte_t oidc_proto_response_code(request_rec *r, oidc_cfg_t *c, oidc_proto_st
 	apr_table_unset(params, OIDC_PROTO_EXPIRES_IN);
 	apr_table_unset(params, OIDC_PROTO_ID_TOKEN);
 	apr_table_unset(params, OIDC_PROTO_REFRESH_TOKEN);
+	apr_table_unset(params, OIDC_PROTO_SCOPE);
 
 	if (oidc_proto_resolve_code_and_validate_response(r, c, provider, response_type, params, proto_state) == FALSE)
 		return FALSE;
@@ -520,6 +529,7 @@ apr_byte_t oidc_proto_response_code_idtoken_token(request_rec *r, oidc_cfg_t *c,
 
 	/* clear parameters that should only be set from the token endpoint */
 	apr_table_unset(params, OIDC_PROTO_REFRESH_TOKEN);
+	apr_table_unset(params, OIDC_PROTO_SCOPE);
 
 	if (oidc_proto_resolve_code_and_validate_response(r, c, provider, response_type, params, proto_state) == FALSE)
 		return FALSE;

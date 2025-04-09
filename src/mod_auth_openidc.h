@@ -59,6 +59,7 @@
 #define OIDC_REQUEST_STATE_KEY_HTTP "hp"
 #define OIDC_REQUEST_STATE_KEY_HTML "hl"
 #define OIDC_REQUEST_STATE_KEY_IDTOKEN "i"
+#define OIDC_REQUEST_STATE_KEY_SCOPE "sc"
 #define OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE "p"
 #define OIDC_REQUEST_STATE_KEY_SAVE "s"
 #define OIDC_REQUEST_STATE_TRACE_ID "t"
@@ -124,8 +125,10 @@
 #define OIDC_CLAIM_HTM "htm"
 #define OIDC_CLAIM_HTU "htu"
 #define OIDC_CLAIM_ATH "ath"
+#define OIDC_CLAIM_SCOPE "scope"
 
 #define OIDC_APP_INFO_REFRESH_TOKEN "refresh_token"
+#define OIDC_APP_INFO_SCOPE "scope"
 #define OIDC_APP_INFO_ACCESS_TOKEN "access_token"
 #define OIDC_APP_INFO_ACCESS_TOKEN_TYPE "access_token_type"
 #define OIDC_APP_INFO_ACCESS_TOKEN_EXP "access_token_expires"

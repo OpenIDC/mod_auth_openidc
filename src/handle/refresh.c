@@ -202,6 +202,7 @@ apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg_t *c, oidc_session_
 	char *s_token_type = NULL;
 	char *s_access_token = NULL;
 	char *s_refresh_token = NULL;
+	char *s_scope = NULL;
 	oidc_jwt_t *id_token_jwt = NULL;
 	oidc_jose_error_t err;
 	const char *refresh_token = NULL;
@@ -227,7 +228,7 @@ apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg_t *c, oidc_session_
 
 	/* refresh the tokens by calling the token endpoint */
 	if (oidc_proto_token_refresh_request(r, c, provider, refresh_token, &s_id_token, &s_access_token, &s_token_type,
-					     &expires_in, &s_refresh_token) == FALSE) {
+					     &expires_in, &s_refresh_token, &s_scope) == FALSE) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_PROVIDER_REFRESH_ERROR);
 		oidc_error(r, "access_token could not be refreshed with refresh_token: %s", refresh_token);
 		goto end;
@@ -258,6 +259,10 @@ process:
 	/* if we have a new refresh token (rolling refresh), store it in the session and overwrite the old one */
 	if (s_refresh_token != NULL)
 		oidc_session_set_refresh_token(r, session, s_refresh_token);
+
+	/* see if a new scope was returned from the token endpoint */
+	if (s_scope != NULL)
+		oidc_session_set_scope(r, session, s_scope);
 
 	/* if we have a new id_token, store it in the session and update the session max lifetime if required */
 	if (s_id_token != NULL) {

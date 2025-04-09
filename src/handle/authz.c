@@ -384,7 +384,8 @@ static void oidc_authz_error_add(request_rec *r, const char *msg) {
 /*
  * get the claims and id_token from request state
  */
-static void oidc_authz_get_claims_and_idtoken(request_rec *r, json_t **claims, json_t **id_token) {
+static void oidc_authz_get_claims_idtoken_scope(request_rec *r, json_t **claims, json_t **id_token,
+						const char **scope) {
 
 	const char *s_claims = oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_CLAIMS);
 	if (s_claims != NULL)
@@ -393,6 +394,8 @@ static void oidc_authz_get_claims_and_idtoken(request_rec *r, json_t **claims, j
 	const char *s_id_token = oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_IDTOKEN);
 	if (s_id_token != NULL)
 		oidc_util_decode_json_object(r, s_id_token, id_token);
+
+	*scope = oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_SCOPE);
 }
 
 #if HAVE_APACHE_24
@@ -538,6 +541,38 @@ static authz_status oidc_authz_24_unauthorized_user(request_rec *r) {
 }
 
 /*
+ * merge the claims from the userinfo endpoint, the claims from the id_token, and the scope returned
+ * from the userinfo endpoint into a single set of claims that can be used to authorize on
+ */
+static json_t *oidc_authz_merge_claims(request_rec *r) {
+	json_t *claims = NULL, *id_token = NULL;
+	const char *scope = NULL;
+
+	/* get the set of claims from the request state as they have been set in the authentication part earlier */
+	oidc_authz_get_claims_idtoken_scope(r, &claims, &id_token, &scope);
+
+	json_t *result = json_object();
+
+	/* if scope was returned from the token endpoint, include it in the set of authorization claims */
+	if (scope)
+		json_object_set_new(result, OIDC_CLAIM_SCOPE, json_string(scope));
+
+	/* merge userinfo claims into the authorization claims (take precedence over scope) */
+	if (claims)
+		oidc_util_json_merge(r, claims, result);
+
+	/* merge id_token claims (e.g. "iss") into the authorization claims (take precedence over userinfo claims and
+	 * scope) */
+	oidc_util_json_merge(r, id_token, result);
+
+	if (id_token)
+		json_decref(id_token);
+	if (claims)
+		json_decref(claims);
+
+	return result;
+}
+/*
  * generic Apache >=2.4 authorization hook for this module
  * handles both OpenID Connect or OAuth 2.0 in the same way, based on the claims stored in the session
  */
@@ -557,22 +592,14 @@ authz_status oidc_authz_24_checker(request_rec *r, const char *require_args, con
 	}
 
 	/* get the set of claims from the request state (they've been set in the authentication part earlier */
-	json_t *claims = NULL, *id_token = NULL;
-	oidc_authz_get_claims_and_idtoken(r, &claims, &id_token);
-
-	/* merge id_token claims (e.g. "iss") in to claims json object */
-	if (claims)
-		oidc_util_json_merge(r, id_token, claims);
+	json_t *claims = oidc_authz_merge_claims(r);
 
 	/* dispatch to the >=2.4 specific authz routine */
-	authz_status rc =
-	    oidc_authz_24_worker(r, claims ? claims : id_token, require_args, parsed_require_args, match_claim_fn);
+	authz_status rc = oidc_authz_24_worker(r, claims, require_args, parsed_require_args, match_claim_fn);
 
 	/* cleanup */
 	if (claims)
 		json_decref(claims);
-	if (id_token)
-		json_decref(id_token);
 
 	if ((rc == AUTHZ_DENIED) && ap_auth_type(r))
 		rc = oidc_authz_24_unauthorized_user(r);
@@ -753,8 +780,7 @@ int oidc_authz_22_checker(request_rec *r) {
 	}
 
 	/* get the set of claims from the request state (they've been set in the authentication part earlier */
-	json_t *claims = NULL, *id_token = NULL;
-	oidc_authz_get_claims_and_idtoken(r, &claims, &id_token);
+	json_t *claims = oidc_authz_merge_claims(r);
 
 	/* get the Require statements */
 	const apr_array_header_t *const reqs_arr = ap_requires(r);
@@ -766,18 +792,12 @@ int oidc_authz_22_checker(request_rec *r) {
 		return DECLINED;
 	}
 
-	/* merge id_token claims (e.g. "iss") in to claims json object */
-	if (claims)
-		oidc_util_json_merge(r, id_token, claims);
-
 	/* dispatch to the <2.4 specific authz routine */
 	int rc = oidc_authz_22_worker(r, claims ? claims : id_token, reqs, reqs_arr->nelts);
 
 	/* cleanup */
 	if (claims)
 		json_decref(claims);
-	if (id_token)
-		json_decref(id_token);
 
 	if ((rc == HTTP_UNAUTHORIZED) && ap_auth_type(r))
 		rc = oidc_authz_22_unauthorized_user(r);

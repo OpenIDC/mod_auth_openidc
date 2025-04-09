@@ -254,10 +254,10 @@ void oidc_proto_state_set_timestamp_now(oidc_proto_state_t *proto_state);
 // token.c
 apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
 					     apr_table_t *params, char **id_token, char **access_token,
-					     char **token_type, int *expires_in, char **refresh_token);
+					     char **token_type, int *expires_in, char **refresh_token, char **scope);
 apr_byte_t oidc_proto_token_refresh_request(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
 					    const char *rtoken, char **id_token, char **access_token, char **token_type,
-					    int *expires_in, char **refresh_token);
+					    int *expires_in, char **refresh_token, char **scope);
 
 // userinfo.c
 apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,

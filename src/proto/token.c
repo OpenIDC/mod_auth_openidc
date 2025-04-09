@@ -97,7 +97,7 @@ static apr_byte_t oidc_proto_token_endpoint_call(request_rec *r, oidc_cfg_t *cfg
  */
 apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
 					     apr_table_t *params, char **id_token, char **access_token,
-					     char **token_type, int *expires_in, char **refresh_token) {
+					     char **token_type, int *expires_in, char **refresh_token, char **scope) {
 
 	apr_byte_t rv = FALSE;
 	char *basic_auth = NULL;
@@ -198,6 +198,9 @@ apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, oi
 	/* get the refresh_token from the parsed response */
 	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_REFRESH_TOKEN, refresh_token, NULL);
 
+	/* get the scope from the parsed response */
+	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_SCOPE, scope, NULL);
+
 	rv = TRUE;
 
 end:
@@ -213,7 +216,7 @@ end:
  */
 apr_byte_t oidc_proto_token_refresh_request(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
 					    const char *rtoken, char **id_token, char **access_token, char **token_type,
-					    int *expires_in, char **refresh_token) {
+					    int *expires_in, char **refresh_token, char **scope) {
 
 	oidc_debug(r, "enter");
 
@@ -224,5 +227,5 @@ apr_byte_t oidc_proto_token_refresh_request(request_rec *r, oidc_cfg_t *cfg, oid
 	apr_table_setn(params, OIDC_PROTO_SCOPE, oidc_cfg_provider_scope_get(provider));
 
 	return oidc_proto_token_endpoint_request(r, cfg, provider, params, id_token, access_token, token_type,
-						 expires_in, refresh_token);
+						 expires_in, refresh_token, scope);
 }

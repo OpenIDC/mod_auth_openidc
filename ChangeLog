@@ -1,3 +1,8 @@
+04/08/2025
+- proto: pass the scope parameter as returned from the token endpoint in the OIDC_scope
+  header/environment variable and make it available for `Require claim scope:` purposes
+  if not available as a claim returned in the id_token or userinfo endpoint
+
 04/07/2025
 - allow for regular Apache processing (e.g. setting response/security headers)
   by deferring HTML/HTTP output generation to the content handler (instead of user id check handler)
