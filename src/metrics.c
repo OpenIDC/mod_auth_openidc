@@ -256,7 +256,7 @@ static inline char *_json_int2str(apr_pool_t *pool, json_int_t n) {
  * check Jansson specific integer/long number overrun
  */
 static inline int _is_overflow(server_rec *s, json_int_t cur, json_int_t add) {
-	if ((add > OIDC_METRICS_INT_MAX - cur)) {
+	if (add > (OIDC_METRICS_INT_MAX - cur)) {
 		oidc_swarn(s,
 			   "reset metrics since the size (%s) of the integer value would be larger than the "
 			   "JSON/libjansson maximum "
@@ -412,8 +412,15 @@ static json_t *oidc_metrics_json_parse_s(server_rec *s, char *s_json) {
  */
 static inline void oidc_metrics_storage_reset(server_rec *s) {
 	char *s_json = NULL;
-	json_t *json = NULL, *j_server = NULL, *j_entries = NULL, *j_entry = NULL, *j_val = NULL;
-	void *i1 = NULL, *i2 = NULL, *i3 = NULL, *i4 = NULL;
+	json_t *json = NULL;
+	json_t *j_server = NULL;
+	json_t *j_entries = NULL;
+	json_t *j_entry = NULL;
+	json_t *j_val = NULL;
+	void *i1 = NULL;
+	void *i2 = NULL;
+	void *i3 = NULL;
+	void *i4 = NULL;
 	int i = 0;
 
 	/* get the global stringified JSON metrics */
@@ -611,12 +618,20 @@ static inline unsigned int _oidc_metrics_key2type(const char *key) {
  */
 static void oidc_metrics_store(server_rec *s) {
 	char *s_json = NULL;
-	json_t *json = NULL, *j_server = NULL, *j_timer = NULL, *j_counters = NULL, *j_counter = NULL,
-	       *j_timings = NULL, *j_names = NULL;
-	apr_hash_index_t *hi1 = NULL, *hi2 = NULL;
-	const char *name = NULL, *key = NULL;
+	json_t *json = NULL;
+	json_t *j_server = NULL;
+	json_t *j_timer = NULL;
+	json_t *j_counters = NULL;
+	json_t *j_counter = NULL;
+	json_t *j_timings = NULL;
+	json_t *j_names = NULL;
+	apr_hash_index_t *hi1 = NULL;
+	apr_hash_index_t *hi2 = NULL;
+	const char *name = NULL;
+	const char *key = NULL;
 	char *p = NULL;
-	apr_hash_t *server_hash = NULL, *counter_hash = NULL;
+	apr_hash_t *server_hash = NULL;
+	apr_hash_t *counter_hash = NULL;
 	oidc_metrics_timing_t *timing = NULL;
 
 	if ((apr_hash_count(_oidc_metrics.counters) == 0) && (apr_hash_count(_oidc_metrics.timings) == 0))
@@ -712,7 +727,7 @@ static void oidc_metrics_store(server_rec *s) {
 /*
  * obtain the metrics flush interval from the environment variables
  */
-static inline apr_interval_time_t _oidc_metrics_interval(server_rec *s) {
+static inline apr_interval_time_t _oidc_metrics_interval(void) {
 	return apr_time_from_msec(_oidc_metrics_get_env_int(OIDC_METRICS_CACHE_STORAGE_INTERVAL_ENV_VAR,
 							    OIDC_METRICS_CACHE_STORAGE_INTERVAL_DEFAULT));
 }
@@ -738,7 +753,7 @@ static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void 
 	apr_sleep(apr_time_from_msec(oidc_metric_random_int(1000)));
 
 	/* calculate the number of short sleep intervals */
-	int n = _oidc_metrics_interval(s) / apr_time_from_msec(OIDC_METRICS_POLL_INTERVAL);
+	int n = _oidc_metrics_interval() / apr_time_from_msec(OIDC_METRICS_POLL_INTERVAL);
 
 	/* see if we are asked to exit */
 	while (_oidc_metrics_thread_exit == FALSE) {
@@ -1081,12 +1096,22 @@ static json_t *oidc_metrics_json_parse_r(request_rec *r, char *s_json) {
  */
 static int oidc_metrics_handle_json(request_rec *r, char *s_json) {
 
-	json_t *json = NULL, *j_server = NULL, *j_timings, *j_counters, *j_timing = NULL, *j_counter = NULL;
-	json_t *o_json = NULL, *o_server = NULL, *o_counters = NULL, *o_counter = NULL, *o_timings = NULL,
-	       *o_timing = NULL;
+	json_t *json = NULL;
+	json_t *j_server = NULL;
+	json_t *j_timings = NULL;
+	json_t *j_counters = NULL;
+	json_t *j_timing = NULL;
+	json_t *j_counter = NULL;
+	json_t *o_json = NULL;
+	json_t *o_server = NULL;
+	json_t *o_counters = NULL;
+	json_t *o_counter = NULL;
+	json_t *o_timings = NULL;
+	json_t *o_timing = NULL;
 	const char *s_server = NULL;
 	unsigned int type = 0;
-	void *i1 = NULL, *i2 = NULL;
+	void *i1 = NULL;
+	void *i2 = NULL;
 
 	/* parse the metrics string to JSON */
 	json = oidc_metrics_json_parse_r(r, s_json);
@@ -1180,9 +1205,18 @@ static int oidc_metrics_handle_internal(request_rec *r, char *s_json) {
  */
 static int oidc_metrics_handle_status(request_rec *r, char *s_json) {
 	char *msg = "OK\n";
-	char *s_metric_param = NULL, *s_server_param = NULL, *s_name_param = NULL, *s_value_param = NULL;
-	json_t *json = NULL, *j_server = NULL, *j_counters = NULL, *j_counter = NULL, *j_values = NULL, *j_value = NULL;
-	const char *s_key = NULL, *s_name = NULL;
+	char *s_metric_param = NULL;
+	char *s_server_param = NULL;
+	char *s_name_param = NULL;
+	char *s_value_param = NULL;
+	json_t *json = NULL;
+	json_t *j_server = NULL;
+	json_t *j_counters = NULL;
+	json_t *j_counter = NULL;
+	json_t *j_values = NULL;
+	json_t *j_value = NULL;
+	const char *s_key = NULL;
+	const char *s_name = NULL;
 	unsigned int type = 0;
 	void *iter = NULL;
 
@@ -1290,10 +1324,16 @@ typedef struct oidc_metric_prometheus_callback_ctx_t {
  */
 static int oidc_metrics_prometheus_counters(oidc_metric_prometheus_callback_ctx_t *ctx, const char *key,
 					    json_t *value) {
-	const char *s_server = NULL, *s_key = NULL, *s_value = NULL, *s_start = NULL;
-	json_t *j_counter = NULL, *j_value = NULL;
+	const char *s_server = NULL;
+	const char *s_key = NULL;
+	const char *s_value = NULL;
+	const char *s_start = NULL;
+	json_t *j_counter = NULL;
+	json_t *j_value = NULL;
 	json_t *o_counter = value;
-	void *i1 = NULL, *i2 = NULL, *i3 = NULL;
+	void *i1 = NULL;
+	void *i2 = NULL;
+	void *i3 = NULL;
 	unsigned int type = _oidc_metrics_key2type(key);
 	const char *s_label =
 	    oidc_metric_prometheus_normalize_name(ctx->pool, _oidc_metrics_counter_type2s(ctx->pool, type));

@@ -90,7 +90,6 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 	apr_uint32_t smax = 0;
 	apr_uint32_t hmax = 0;
 	apr_uint32_t ttl = 0;
-	;
 
 	if (oidc_cfg_cache_memcache_servers_get(cfg) == NULL) {
 		oidc_serror(s, "cache type is set to \"memcache\", but no valid " OIDCMemCacheServers
