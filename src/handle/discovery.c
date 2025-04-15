@@ -367,7 +367,6 @@ int oidc_discovery_response(request_rec *r, oidc_cfg_t *c) {
 	if (oidc_cfg_metadata_dir_get(c) == NULL) {
 		if ((oidc_provider_static_config(r, c, &provider) == TRUE) && (issuer != NULL)) {
 			if (_oidc_strcmp(oidc_cfg_provider_issuer_get(provider), issuer) != 0) {
-				oidc_cfg_provider_destroy(provider);
 				return oidc_util_html_send_error(
 				    r, "Invalid Request",
 				    apr_psprintf(
@@ -377,7 +376,6 @@ int oidc_discovery_response(request_rec *r, oidc_cfg_t *c) {
 				    HTTP_INTERNAL_SERVER_ERROR);
 			}
 		}
-		oidc_cfg_provider_destroy(provider);
 		return oidc_request_authenticate_user(r, c, NULL, target_link_uri, login_hint, NULL, NULL,
 						      auth_request_params, path_scopes);
 	}
@@ -448,18 +446,13 @@ int oidc_discovery_response(request_rec *r, oidc_cfg_t *c) {
 					       oidc_cfg_provider_ssl_validate_server_get(provider), &j_jwks,
 					       &force_refresh);
 			json_decref(j_jwks);
-			oidc_cfg_provider_destroy(provider);
 			return OK;
 		} else {
 			/* now we've got a selected OP, send the user there to authenticate */
-			int rv = oidc_request_authenticate_user(r, c, provider, target_link_uri, login_hint, NULL, NULL,
-								auth_request_params, path_scopes);
-			oidc_cfg_provider_destroy(provider);
-			return rv;
+			return oidc_request_authenticate_user(r, c, provider, target_link_uri, login_hint, NULL, NULL,
+							      auth_request_params, path_scopes);
 		}
 	}
-
-	oidc_cfg_provider_destroy(provider);
 
 	/* something went wrong */
 	return oidc_util_html_send_error(r, "Invalid Request",

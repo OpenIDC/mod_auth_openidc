@@ -173,11 +173,9 @@ int oidc_session_management(request_rec *r, oidc_cfg_t *c, oidc_session_t *sessi
 	/* see if this is a request for the OP iframe */
 	if (_oidc_strcmp("iframe_op", cmd) == 0) {
 		if (oidc_cfg_provider_check_session_iframe_get(provider) != NULL) {
-			oidc_cfg_provider_destroy(provider);
 			return oidc_session_management_iframe_op(r, c, session,
 								 oidc_cfg_provider_check_session_iframe_get(provider));
 		}
-		oidc_cfg_provider_destroy(provider);
 		return HTTP_NOT_FOUND;
 	}
 
@@ -185,7 +183,6 @@ int oidc_session_management(request_rec *r, oidc_cfg_t *c, oidc_session_t *sessi
 	if (_oidc_strcmp("iframe_rp", cmd) == 0) {
 		if ((oidc_cfg_provider_client_id_get(provider) != NULL) &&
 		    (oidc_cfg_provider_check_session_iframe_get(provider) != NULL)) {
-			oidc_cfg_provider_destroy(provider);
 			return oidc_session_management_iframe_rp(r, c, session,
 								 oidc_cfg_provider_client_id_get(provider),
 								 oidc_cfg_provider_check_session_iframe_get(provider));
@@ -193,7 +190,6 @@ int oidc_session_management(request_rec *r, oidc_cfg_t *c, oidc_session_t *sessi
 		oidc_debug(r, "iframe_rp command issued but no client (%s) and/or no check_session_iframe (%s) set",
 			   oidc_cfg_provider_client_id_get(provider),
 			   oidc_cfg_provider_check_session_iframe_get(provider));
-		oidc_cfg_provider_destroy(provider);
 		return HTTP_NOT_FOUND;
 	}
 
@@ -206,7 +202,6 @@ int oidc_session_management(request_rec *r, oidc_cfg_t *c, oidc_session_t *sessi
 		 *       those for the redirect_uri itself; do we need to store those as part of the
 		 *       session now?
 		 */
-		oidc_cfg_provider_destroy(provider);
 		return oidc_request_authenticate_user(
 		    r, c, provider, apr_psprintf(r->pool, "%s?session=iframe_rp", oidc_util_redirect_uri(r, c)), NULL,
 		    id_token_hint, "none", oidc_cfg_dir_path_auth_request_params_get(r),
@@ -215,8 +210,6 @@ int oidc_session_management(request_rec *r, oidc_cfg_t *c, oidc_session_t *sessi
 
 	/* handle failure in fallthrough */
 	oidc_error(r, "unknown command: %s", cmd);
-
-	oidc_cfg_provider_destroy(provider);
 
 	return HTTP_INTERNAL_SERVER_ERROR;
 }

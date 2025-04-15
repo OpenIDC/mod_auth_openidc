@@ -106,19 +106,15 @@ int oidc_info_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, ap
 
 				/* get the current provider info */
 				oidc_provider_t *provider = NULL;
-				if (oidc_get_provider_from_session(r, c, session, &provider) == FALSE) {
-					oidc_cfg_provider_destroy(provider);
+				if (oidc_get_provider_from_session(r, c, session, &provider) == FALSE)
 					return HTTP_INTERNAL_SERVER_ERROR;
-				}
 
 				/* execute the actual refresh grant */
 				if (oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, NULL) == FALSE) {
 					oidc_warn(r, "access_token could not be refreshed");
-					oidc_cfg_provider_destroy(provider);
 					return HTTP_INTERNAL_SERVER_ERROR;
 				}
 				needs_save = TRUE;
-				oidc_cfg_provider_destroy(provider);
 			}
 		}
 	}

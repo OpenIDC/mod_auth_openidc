@@ -389,8 +389,6 @@ end:
 	/* add the redirect location header */
 	oidc_http_hdr_out_location_set(r, return_to);
 
-	oidc_cfg_provider_destroy(provider);
-
 	return HTTP_MOVED_TEMPORARILY;
 }
 
@@ -427,21 +425,16 @@ apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg_t *c
 	if (t_expires > apr_time_now())
 		return TRUE;
 
-	if (oidc_get_provider_from_session(r, cfg, session, &provider) == FALSE) {
-		oidc_cfg_provider_destroy(provider);
+	if (oidc_get_provider_from_session(r, cfg, session, &provider) == FALSE)
 		return FALSE;
-	}
 
 	if (oidc_refresh_token_grant(r, cfg, session, provider, NULL, NULL, NULL) == FALSE) {
 		oidc_warn(r, "access_token could not be refreshed");
-		oidc_cfg_provider_destroy(provider);
 		*needs_save = FALSE;
 		return FALSE;
 	}
 
 	*needs_save = TRUE;
-
-	oidc_cfg_provider_destroy(provider);
 
 	return TRUE;
 }

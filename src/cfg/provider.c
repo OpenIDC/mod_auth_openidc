@@ -862,9 +862,16 @@ void oidc_cfg_provider_merge(apr_pool_t *pool, oidc_provider_t *dst, const oidc_
 	dst->profile = add->profile != OIDC_CONFIG_POS_INT_UNSET ? add->profile : base->profile;
 }
 
+static apr_status_t oidc_provider_config_cleanup(void *data) {
+	oidc_provider_t *provider = (oidc_provider_t *)data;
+	oidc_cfg_provider_destroy(provider);
+	return APR_SUCCESS;
+}
+
 oidc_provider_t *oidc_cfg_provider_create(apr_pool_t *pool) {
 	oidc_provider_t *provider = apr_pcalloc(pool, sizeof(oidc_provider_t));
 	oidc_cfg_provider_init(provider);
+	apr_pool_cleanup_register(pool, provider, oidc_provider_config_cleanup, oidc_provider_config_cleanup);
 	return provider;
 }
 

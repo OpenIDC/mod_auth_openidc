@@ -119,7 +119,6 @@ static void oidc_logout_revoke_tokens(request_rec *r, oidc_cfg_t *c, oidc_sessio
 
 out:
 
-	oidc_cfg_provider_destroy(provider);
 	oidc_debug(r, "leave");
 }
 
@@ -234,7 +233,6 @@ int oidc_logout_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, 
 				}
 				if (provider) {
 					oidc_logout_cleanup_by_sid(r, sid, c, provider, revoke_tokens);
-					oidc_cfg_provider_destroy(provider);
 				} else {
 					oidc_info(r, "No provider for front channel logout found");
 				}
@@ -434,10 +432,6 @@ out:
 		oidc_jwt_destroy(jwt);
 		jwt = NULL;
 	}
-	if (provider != NULL) {
-		oidc_cfg_provider_destroy(provider);
-		provider = NULL;
-	}
 
 	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL, "no-cache, no-store");
 	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_PRAGMA, "no-cache");
@@ -523,8 +517,6 @@ int oidc_logout(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 		// url = apr_psprintf(r->pool, "%s&state=%s", logout_request, state);
 		url = s_logout_request;
 	}
-
-	oidc_cfg_provider_destroy(provider);
 
 	return oidc_logout_request(r, c, session, url, TRUE);
 }
