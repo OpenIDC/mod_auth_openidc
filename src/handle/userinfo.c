@@ -197,6 +197,7 @@ apr_byte_t oidc_userinfo_refresh_claims(request_rec *r, oidc_cfg_t *cfg, oidc_se
 		/* get the current provider info */
 		if (oidc_get_provider_from_session(r, cfg, session, &provider) == FALSE) {
 			*needs_save = TRUE;
+			oidc_cfg_provider_destroy(provider);
 			return FALSE;
 		}
 
@@ -237,6 +238,8 @@ apr_byte_t oidc_userinfo_refresh_claims(request_rec *r, oidc_cfg_t *cfg, oidc_se
 	}
 
 	oidc_debug(r, "return: %d", rc);
+
+	oidc_cfg_provider_destroy(provider);
 
 	return rc;
 }

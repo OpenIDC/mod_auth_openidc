@@ -565,6 +565,7 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 			oidc_http_hdr_out_location_set(r,
 						       oidc_util_absolute_url(r, c, oidc_cfg_default_sso_url_get(c)));
 			OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_STATE_MISMATCH);
+			oidc_cfg_provider_destroy(provider);
 			return HTTP_MOVED_TEMPORARILY;
 		}
 		oidc_error(r,
@@ -577,7 +578,7 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 		}
 
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_STATE_MISMATCH);
-
+		oidc_cfg_provider_destroy(provider);
 		return oidc_util_html_send_error(r, "Invalid Authorization Response",
 						 "Could not match the authorization response to an earlier request via "
 						 "the state parameter and corresponding state cookie",
@@ -587,6 +588,7 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 	/* see if the response is an error response */
 	if (apr_table_get(params, OIDC_PROTO_ERROR) != NULL) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_PROVIDER);
+		oidc_cfg_provider_destroy(provider);
 		return oidc_response_authorization_error(r, c, proto_state, apr_table_get(params, OIDC_PROTO_ERROR),
 							 apr_table_get(params, OIDC_PROTO_ERROR_DESCRIPTION));
 	}
@@ -594,11 +596,13 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 	/* handle the code, implicit or hybrid flow */
 	if (oidc_response_flows(r, c, proto_state, provider, params, response_mode, &jwt) == FALSE) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_PROTOCOL);
+		oidc_cfg_provider_destroy(provider);
 		return oidc_response_authorization_error(r, c, proto_state, "Error in handling response type.", NULL);
 	}
 
 	if (jwt == NULL) {
 		oidc_error(r, "no id_token was provided");
+		oidc_cfg_provider_destroy(provider);
 		return oidc_response_authorization_error(r, c, proto_state, "No id_token was provided.", NULL);
 	}
 
@@ -634,6 +638,7 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 			if (_oidc_strcmp(session->remote_user, r->user) != 0) {
 				oidc_warn(r, "user set from new id_token is different from current one");
 				oidc_jwt_destroy(jwt);
+				oidc_cfg_provider_destroy(provider);
 				return oidc_response_authorization_error(r, c, proto_state, "User changed!", NULL);
 			}
 		}
@@ -647,6 +652,7 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 			apr_table_get(params, OIDC_PROTO_STATE), original_url, userinfo_jwt) == FALSE) {
 			oidc_proto_state_destroy(proto_state);
 			oidc_jwt_destroy(jwt);
+			oidc_cfg_provider_destroy(provider);
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 
@@ -656,6 +662,7 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 		oidc_error(r, "remote user could not be set");
 		oidc_jwt_destroy(jwt);
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_REMOTE_USER);
+		oidc_cfg_provider_destroy(provider);
 		return oidc_response_authorization_error(
 		    r, c, proto_state, "Remote user could not be set: contact the website administrator", NULL);
 	}
@@ -663,6 +670,7 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 	/* cleanup */
 	oidc_proto_state_destroy(proto_state);
 	oidc_jwt_destroy(jwt);
+	oidc_cfg_provider_destroy(provider);
 
 	/* check that we've actually authenticated a user; functions as error handling for oidc_get_remote_user */
 	if (r->user == NULL) {

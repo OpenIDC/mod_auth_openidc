@@ -316,6 +316,7 @@ int oidc_refresh_token_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *se
 	char *error_str = NULL;
 	char *error_description = NULL;
 	apr_byte_t needs_save = TRUE;
+	oidc_provider_t *provider = NULL;
 
 	/* get the command passed to the session management handler */
 	oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_REFRESH, &return_to);
@@ -354,7 +355,6 @@ int oidc_refresh_token_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *se
 	}
 
 	/* get a handle to the provider configuration */
-	oidc_provider_t *provider = NULL;
 	if (oidc_get_provider_from_session(r, c, session, &provider) == FALSE) {
 		error_code = "session_corruption";
 		goto end;
@@ -388,6 +388,8 @@ end:
 
 	/* add the redirect location header */
 	oidc_http_hdr_out_location_set(r, return_to);
+
+	oidc_cfg_provider_destroy(provider);
 
 	return HTTP_MOVED_TEMPORARILY;
 }
@@ -425,16 +427,21 @@ apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg_t *c
 	if (t_expires > apr_time_now())
 		return TRUE;
 
-	if (oidc_get_provider_from_session(r, cfg, session, &provider) == FALSE)
+	if (oidc_get_provider_from_session(r, cfg, session, &provider) == FALSE) {
+		oidc_cfg_provider_destroy(provider);
 		return FALSE;
+	}
 
 	if (oidc_refresh_token_grant(r, cfg, session, provider, NULL, NULL, NULL) == FALSE) {
 		oidc_warn(r, "access_token could not be refreshed");
+		oidc_cfg_provider_destroy(provider);
 		*needs_save = FALSE;
 		return FALSE;
 	}
 
 	*needs_save = TRUE;
+
+	oidc_cfg_provider_destroy(provider);
 
 	return TRUE;
 }

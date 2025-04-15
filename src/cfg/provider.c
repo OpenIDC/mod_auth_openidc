@@ -875,6 +875,8 @@ oidc_provider_t *oidc_cfg_provider_copy(apr_pool_t *pool, const oidc_provider_t 
 }
 
 void oidc_cfg_provider_destroy(oidc_provider_t *provider) {
+	if (provider == NULL)
+		return;
 	oidc_jwk_list_destroy(provider->jwks_uri.jwk_list);
 	oidc_jwk_list_destroy(provider->verify_public_keys);
 	oidc_jwk_list_destroy(provider->client_keys);
