@@ -1,6 +1,9 @@
+04/17/2025
+- bump to 2.4.17rc1
+
 04/15/2025
 - fix memory leaks when using provider specific client keys in a multi-provider setup
-- bump to 2.4.17rc1
+- bump to 2.4.17rc0
 
 04/08/2025
 - proto: pass the scope parameter as returned from the token endpoint in the OIDC_scope
