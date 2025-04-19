@@ -1,3 +1,9 @@
+04/19/2025
+- metadata: fix parsing the OPs `token_endpoint_auth_methods_supported` and avoid the log error:
+    oidc_metadata_provider_parse: oidc_provider_token_endpoint_auth_set: invalid value
+  and falling back to client_secret_basic after that; thanks François Kooman
+- bump to 2.4.17rc2
+
 04/17/2025
 - bump to 2.4.17rc1
 

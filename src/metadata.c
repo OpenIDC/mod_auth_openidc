@@ -252,6 +252,7 @@ static const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, json_t 
 						       oidc_valid_function_t valid_function, char **value,
 						       apr_byte_t optional, const char *preference) {
 	int i = 0;
+	if (value) *value = NULL;
 	json_t *json_arr = json_object_get(json, key);
 	apr_byte_t found = FALSE;
 	if ((json_arr != NULL) && (json_is_array(json_arr))) {
