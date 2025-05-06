@@ -283,6 +283,16 @@ static inline apr_byte_t oidc_cache_get_key(request_rec *r, const char *s_key, c
 	return TRUE;
 }
 
+#define OIDC_CACHE_PREFIX_ENV_VAR "OIDC_CACHE_PREFIX"
+
+/*
+ * construct the cache section identifier with a optional prefix if set in an environment variable
+ */
+static const char *oidc_cache_section_get(request_rec *r, const char *section) {
+	const char *prefix = apr_table_get(r->subprocess_env, OIDC_CACHE_PREFIX_ENV_VAR);
+	return (prefix == NULL) ? section : apr_psprintf(r->pool, "%s%s", prefix, section);
+}
+
 /*
  * get a key/value string pair from the cache, possibly decrypting it
  */
@@ -295,8 +305,9 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, 
 	const char *s_key = NULL;
 	char *cache_value = NULL;
 	char *s_secret = NULL;
+	const char *s_section = oidc_cache_section_get(r, section);
 
-	oidc_debug(r, "enter: %s (section=%s, decrypt=%d, type=%s)", key, section, encrypted, cfg->cache.impl->name);
+	oidc_debug(r, "enter: %s (section=%s, decrypt=%d, type=%s)", key, s_section, encrypted, cfg->cache.impl->name);
 
 	s_secret = cfg->crypto_passphrase.secret1;
 	if (oidc_cache_get_key(r, key, s_secret, encrypted, &s_key) == FALSE)
@@ -305,7 +316,7 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, 
 	OIDC_METRICS_TIMING_START(r, cfg);
 
 	/* get the value from the cache */
-	if (cfg->cache.impl->get(r, section, s_key, &cache_value) == FALSE)
+	if (cfg->cache.impl->get(r, s_section, s_key, &cache_value) == FALSE)
 		goto end;
 
 	/* see if it is any good */
@@ -314,7 +325,7 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, 
 		s_secret = cfg->crypto_passphrase.secret2;
 		if (oidc_cache_get_key(r, key, s_secret, encrypted, &s_key) == FALSE)
 			goto end;
-		if (cfg->cache.impl->get(r, section, s_key, &cache_value) == FALSE)
+		if (cfg->cache.impl->get(r, s_section, s_key, &cache_value) == FALSE)
 			goto end;
 	}
 
@@ -363,8 +374,9 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key, 
 	apr_byte_t rc = FALSE;
 	char *msg = NULL;
 	const char *s_key = NULL;
+	const char *s_section = oidc_cache_section_get(r, section);
 
-	oidc_debug(r, "enter: %s (section=%s, len=%d, encrypt=%d, ttl(s)=%" APR_TIME_T_FMT ", type=%s)", key, section,
+	oidc_debug(r, "enter: %s (section=%s, len=%d, encrypt=%d, ttl(s)=%" APR_TIME_T_FMT ", type=%s)", key, s_section,
 		   value ? (int)_oidc_strlen(value) : 0, encrypted, apr_time_sec(expiry - apr_time_now()),
 		   cfg->cache.impl->name);
 
@@ -381,7 +393,7 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key, 
 	OIDC_METRICS_TIMING_START(r, cfg);
 
 	/* store the resulting value in the cache */
-	rc = cfg->cache.impl->set(r, section, s_key, value, expiry);
+	rc = cfg->cache.impl->set(r, s_section, s_key, value, expiry);
 
 	OIDC_METRICS_TIMING_ADD(r, cfg, OM_CACHE_WRITE);
 

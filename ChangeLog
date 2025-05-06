@@ -1,3 +1,7 @@
+05/06/2025
+- allow adding a prefix to the cache (section) key through environment variable OIDC_CACHE_PREFIX
+- bump to 2.4.17.1dev
+
 04/22/2025
 - release 2.4.17
 
