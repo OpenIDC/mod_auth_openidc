@@ -326,7 +326,7 @@ const char *oidc_original_request_method(request_rec *r, oidc_cfg_t *cfg, apr_by
 			return OIDC_METHOD_GET;
 
 		const char *content_type = oidc_http_hdr_in_content_type_get(r);
-		if ((r->method_number == M_POST) &&
+		if ((r->method_number == M_POST) && (content_type != NULL) &&
 		    (_oidc_strcmp(content_type, OIDC_HTTP_CONTENT_TYPE_FORM_ENCODED) == 0))
 			method = OIDC_METHOD_FORM_POST;
 	}
