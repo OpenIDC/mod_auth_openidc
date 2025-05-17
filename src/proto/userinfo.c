@@ -71,13 +71,13 @@ static apr_byte_t oidc_proto_userinfo_response_jwt_parse(request_rec *r, oidc_cf
 		   oidc_cfg_provider_userinfo_encrypted_response_alg_get(provider),
 		   oidc_cfg_provider_userinfo_encrypted_response_enc_get(provider));
 
-	if (oidc_util_create_symmetric_key(r, oidc_cfg_provider_client_secret_get(provider), oidc_alg2keysize(alg),
+	if (oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider), oidc_alg2keysize(alg),
 					   OIDC_JOSE_ALG_SHA256, TRUE, &jwk) == FALSE)
 		goto end;
 
 	if (oidc_cfg_provider_userinfo_encrypted_response_alg_get(provider) != NULL) {
 		if (oidc_jwe_decrypt(r->pool, *response,
-				     oidc_util_merge_symmetric_key(r->pool, oidc_cfg_private_keys_get(cfg), jwk),
+				     oidc_util_key_symmetric_merge(r->pool, oidc_cfg_private_keys_get(cfg), jwk),
 				     &payload, NULL, &err, TRUE) == FALSE) {
 			oidc_error(r, "oidc_jwe_decrypt failed: %s", oidc_jose_e2s(r->pool, err));
 			goto end;
@@ -93,7 +93,7 @@ static apr_byte_t oidc_proto_userinfo_response_jwt_parse(request_rec *r, oidc_cf
 	}
 
 	if (oidc_jwt_parse(r->pool, *response, &jwt,
-			   oidc_util_merge_symmetric_key(r->pool, oidc_cfg_private_keys_get(cfg), jwk), FALSE,
+			   oidc_util_key_symmetric_merge(r->pool, oidc_cfg_private_keys_get(cfg), jwk), FALSE,
 			   &err) == FALSE) {
 		oidc_error(r, "oidc_jwt_parse failed: %s", oidc_jose_e2s(r->pool, err));
 		goto end;
@@ -105,13 +105,13 @@ static apr_byte_t oidc_proto_userinfo_response_jwt_parse(request_rec *r, oidc_cf
 	oidc_jwk_destroy(jwk);
 	jwk = NULL;
 
-	if (oidc_util_create_symmetric_key(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, TRUE, &jwk) ==
+	if (oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, TRUE, &jwk) ==
 	    FALSE)
 		goto end;
 
 	if (oidc_proto_jwt_verify(r, cfg, jwt, oidc_cfg_provider_jwks_uri_get(provider),
 				  oidc_cfg_provider_ssl_validate_server_get(provider),
-				  oidc_util_merge_symmetric_key(r->pool, NULL, jwk),
+				  oidc_util_key_symmetric_merge(r->pool, NULL, jwk),
 				  oidc_cfg_provider_userinfo_signed_response_alg_get(provider)) == FALSE) {
 
 		oidc_error(r, "JWT signature could not be validated, aborting");
@@ -193,7 +193,7 @@ static apr_byte_t oidc_proto_userinfo_request_composite_claims(request_rec *r, o
 				oidc_jwt_t *jwt = NULL;
 				if (oidc_jwt_parse(
 					r->pool, s_json, &jwt,
-					oidc_util_merge_symmetric_key(r->pool, oidc_cfg_private_keys_get(cfg), jwk),
+					oidc_util_key_symmetric_merge(r->pool, oidc_cfg_private_keys_get(cfg), jwk),
 					FALSE, &err) == FALSE) {
 					oidc_error(r, "could not parse JWT from aggregated claim \"%s\": %s", key,
 						   oidc_jose_e2s(r->pool, err));

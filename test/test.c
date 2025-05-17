@@ -1176,11 +1176,11 @@ static char *test_proto_validate_jwt(request_rec *r) {
 
 	oidc_jwk_t *jwk = NULL;
 	TST_ASSERT_ERR("oidc_util_create_symmetric_key",
-		       oidc_util_create_symmetric_key(r, s_secret, 0, NULL, TRUE, &jwk) == TRUE, r->pool, err);
+		       oidc_util_key_symmetric_create(r, s_secret, 0, NULL, TRUE, &jwk) == TRUE, r->pool, err);
 	TST_ASSERT_ERR("oidc_util_create_symmetric_key (jwk)", jwk != NULL, r->pool, err);
 
 	TST_ASSERT_ERR("oidc_jwt_verify",
-		       oidc_jwt_verify(r->pool, jwt, oidc_util_merge_symmetric_key(r->pool, NULL, jwk), &err), r->pool,
+		       oidc_jwt_verify(r->pool, jwt, oidc_util_key_symmetric_merge(r->pool, NULL, jwk), &err), r->pool,
 		       err);
 
 	TST_ASSERT_ERR("oidc_proto_validate_jwt", oidc_proto_jwt_validate(r, jwt, s_issuer, TRUE, TRUE, 10), r->pool,

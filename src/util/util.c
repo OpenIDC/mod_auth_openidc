@@ -811,61 +811,6 @@ void oidc_util_table_add_query_encoded_params(apr_pool_t *pool, apr_table_t *tab
 }
 
 /*
- * create a symmetric key from a client_secret
- */
-apr_byte_t oidc_util_create_symmetric_key(request_rec *r, const char *client_secret, unsigned int r_key_len,
-					  const char *hash_algo, apr_byte_t set_kid, oidc_jwk_t **jwk) {
-	oidc_jose_error_t err = {{'\0'}, 0, {'\0'}, {'\0'}};
-	unsigned char *key = NULL;
-	unsigned int key_len;
-
-	if ((client_secret != NULL) && (_oidc_strlen(client_secret) > 0)) {
-
-		if (hash_algo == NULL) {
-			key = (unsigned char *)client_secret;
-			key_len = _oidc_strlen(client_secret);
-		} else {
-			/* hash the client_secret first, this is OpenID Connect specific */
-			oidc_jose_hash_bytes(r->pool, hash_algo, (const unsigned char *)client_secret,
-					     _oidc_strlen(client_secret), &key, &key_len, &err);
-		}
-
-		if ((key != NULL) && (key_len > 0)) {
-			if ((r_key_len != 0) && (key_len >= r_key_len))
-				key_len = r_key_len;
-			oidc_debug(r, "key_len=%d", key_len);
-			*jwk = oidc_jwk_create_symmetric_key(r->pool, NULL, key, key_len, set_kid, &err);
-		}
-
-		if (*jwk == NULL) {
-			oidc_error(r, "could not create JWK from the provided secret: %s", oidc_jose_e2s(r->pool, err));
-			return FALSE;
-		}
-	}
-
-	return TRUE;
-}
-
-/*
- * merge provided keys and client secret in to a single hashtable
- */
-apr_hash_t *oidc_util_merge_symmetric_key(apr_pool_t *pool, const apr_array_header_t *keys, oidc_jwk_t *jwk) {
-	apr_hash_t *result = apr_hash_make(pool);
-	const oidc_jwk_t *elem = NULL;
-	int i = 0;
-	if (keys != NULL) {
-		for (i = 0; i < keys->nelts; i++) {
-			elem = APR_ARRAY_IDX(keys, i, oidc_jwk_t *);
-			apr_hash_set(result, elem->kid, APR_HASH_KEY_STRING, elem);
-		}
-	}
-	if (jwk != NULL) {
-		apr_hash_set(result, jwk->kid, APR_HASH_KEY_STRING, jwk);
-	}
-	return result;
-}
-
-/*
  * openssl hash and base64 encode
  */
 apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char *openssl_hash_algo, const char *input,
@@ -887,37 +832,6 @@ apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char
 }
 
 /*
- * merge the provided array of keys (k2) into a hash table of keys (k1)
- */
-apr_hash_t *oidc_util_merge_key_sets(apr_pool_t *pool, apr_hash_t *k1, const apr_array_header_t *k2) {
-	apr_hash_t *rv = k1 ? apr_hash_copy(pool, k1) : apr_hash_make(pool);
-	const oidc_jwk_t *jwk = NULL;
-	int i = 0;
-	if (k2 != NULL) {
-		for (i = 0; i < k2->nelts; i++) {
-			jwk = APR_ARRAY_IDX(k2, i, oidc_jwk_t *);
-			apr_hash_set(rv, jwk->kid, APR_HASH_KEY_STRING, jwk);
-		}
-	}
-	return rv;
-}
-
-/*
- * merge two hash tables with key sets
- */
-apr_hash_t *oidc_util_merge_key_sets_hash(apr_pool_t *pool, apr_hash_t *k1, apr_hash_t *k2) {
-	if (k1 == NULL) {
-		if (k2 == NULL)
-			return apr_hash_make(pool);
-		return k2;
-	}
-	if (k2 == NULL)
-		return k1;
-	return apr_hash_overlay(pool, k1, k2);
-}
-
-
-/*
  * check if the provided cookie domain value is valid
  */
 apr_byte_t oidc_util_cookie_domain_valid(const char *hostname, const char *cookie_domain) {
@@ -934,26 +848,6 @@ apr_byte_t oidc_util_cookie_domain_valid(const char *hostname, const char *cooki
 	}
 	return TRUE;
 }
-
-/*
- * return the first JWK that matches a provided key type and use from an array of JWKs
- */
-oidc_jwk_t *oidc_util_key_list_first(const apr_array_header_t *key_list, int kty, const char *use) {
-	oidc_jwk_t *rv = NULL;
-	int i = 0;
-	oidc_jwk_t *jwk = NULL;
-	for (i = 0; (key_list) && (i < key_list->nelts); i++) {
-		jwk = APR_ARRAY_IDX(key_list, i, oidc_jwk_t *);
-		if ((kty != -1) && (jwk->kty != kty))
-			continue;
-		if (((use == NULL) || (jwk->use == NULL) || (_oidc_strncmp(jwk->use, use, _oidc_strlen(use)) == 0))) {
-			rv = jwk;
-			break;
-		}
-	}
-	return rv;
-}
-
 
 #define OIDC_TP_TRACE_ID_LEN 16
 #define OIDC_TP_PARENT_ID_LEN 8

@@ -561,13 +561,13 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 	oidc_jwk_t *jwk = NULL;
 
 	// TODO: replace this OIDC client secret with OIDCOAuthDecryptSharedKeys
-	if (oidc_util_create_symmetric_key(r, oidc_cfg_provider_client_secret_get(oidc_cfg_provider_get(c)), 0, NULL,
+	if (oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(oidc_cfg_provider_get(c)), 0, NULL,
 					   TRUE, &jwk) == FALSE)
 		return FALSE;
 
 	oidc_jwt_t *jwt = NULL;
 	if (oidc_jwt_parse(r->pool, access_token, &jwt,
-			   oidc_util_merge_symmetric_key(r->pool, oidc_cfg_private_keys_get(c), jwk), FALSE,
+			   oidc_util_key_symmetric_merge(r->pool, oidc_cfg_private_keys_get(c), jwk), FALSE,
 			   &err) == FALSE) {
 		oidc_error(r, "could not parse JWT from access_token: %s", oidc_jose_e2s(r->pool, err));
 		oidc_jwk_destroy(jwk);
@@ -597,7 +597,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 				    oidc_cfg_provider_userinfo_refresh_interval_get(oidc_cfg_provider_get(c)), NULL,
 				    NULL};
 	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri, oidc_cfg_oauth_ssl_validate_server_get(c),
-				  oidc_util_merge_key_sets(r->pool, oidc_cfg_oauth_verify_shared_keys_get(c),
+				  oidc_util_key_sets_merge(r->pool, oidc_cfg_oauth_verify_shared_keys_get(c),
 							   oidc_cfg_oauth_verify_public_keys_get(c)),
 				  NULL) == FALSE) {
 		oidc_error(r, "JWT access token signature could not be validated, aborting");

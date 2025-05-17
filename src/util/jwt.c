@@ -122,7 +122,7 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const oidc_crypto_passphrase_t *
 		goto end;
 	}
 
-	if (oidc_util_create_symmetric_key(r, passphrase->secret1, 0, OIDC_JOSE_ALG_SHA256, FALSE, &jwk) == FALSE)
+	if (oidc_util_key_symmetric_create(r, passphrase->secret1, 0, OIDC_JOSE_ALG_SHA256, FALSE, &jwk) == FALSE)
 		goto end;
 
 	if (oidc_util_jwt_internal_compress(r)) {
@@ -197,11 +197,11 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *
 	keys = apr_hash_make(r->pool);
 
 	if ((passphrase->secret2 != NULL) && (kid == NULL)) {
-		if (oidc_util_create_symmetric_key(r, passphrase->secret2, 0, OIDC_JOSE_ALG_SHA256, FALSE, &jwk) ==
+		if (oidc_util_key_symmetric_create(r, passphrase->secret2, 0, OIDC_JOSE_ALG_SHA256, FALSE, &jwk) ==
 		    FALSE)
 			goto end;
 	} else {
-		if (oidc_util_create_symmetric_key(r, passphrase->secret1, 0, OIDC_JOSE_ALG_SHA256, FALSE, &jwk) ==
+		if (oidc_util_key_symmetric_create(r, passphrase->secret1, 0, OIDC_JOSE_ALG_SHA256, FALSE, &jwk) ==
 		    FALSE)
 			goto end;
 	}

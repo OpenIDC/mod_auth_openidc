@@ -307,7 +307,7 @@ static int oidc_logout_backchannel(request_rec *r, oidc_cfg_t *cfg) {
 	// TODO: jwk symmetric key based on provider
 
 	if (oidc_jwt_parse(r->pool, logout_token, &jwt,
-			   oidc_util_merge_symmetric_key(r->pool, oidc_cfg_private_keys_get(cfg), NULL), FALSE,
+			   oidc_util_key_symmetric_merge(r->pool, oidc_cfg_private_keys_get(cfg), NULL), FALSE,
 			   &err) == FALSE) {
 		oidc_error(r, "oidc_jwt_parse failed: %s", oidc_jose_e2s(r->pool, err));
 		goto out;
@@ -334,14 +334,14 @@ static int oidc_logout_backchannel(request_rec *r, oidc_cfg_t *cfg) {
 	// TODO: destroy the JWK used for decryption
 
 	jwk = NULL;
-	if (oidc_util_create_symmetric_key(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, TRUE, &jwk) ==
+	if (oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, TRUE, &jwk) ==
 	    FALSE)
 		return FALSE;
 
 	if (oidc_proto_jwt_verify(
 		r, cfg, jwt, oidc_cfg_provider_jwks_uri_get(provider),
 		oidc_cfg_provider_ssl_validate_server_get(provider),
-		oidc_util_merge_symmetric_key(r->pool, oidc_cfg_provider_verify_public_keys_get(provider), jwk),
+		oidc_util_key_symmetric_merge(r->pool, oidc_cfg_provider_verify_public_keys_get(provider), jwk),
 		oidc_cfg_provider_id_token_signed_response_alg_get(provider)) == FALSE) {
 
 		oidc_error(r, "id_token signature could not be validated, aborting");

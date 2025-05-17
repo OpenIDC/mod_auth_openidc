@@ -342,7 +342,7 @@ int enckey(int argc, char **argv, apr_pool_t *pool) {
 	request_rec *r = request_setup(pool);
 
 	oidc_jwk_t *jwk = NULL;
-	if (oidc_util_create_symmetric_key(r, argv[2], argc > 4 ? _oidc_str_to_int(argv[4], 0) : 0,
+	if (oidc_util_key_symmetric_create(r, argv[2], argc > 4 ? _oidc_str_to_int(argv[4], 0) : 0,
 					   argc > 3 ? argv[3] : NULL, FALSE, &jwk) == FALSE) {
 		fprintf(stderr, "oidc_util_create_symmetric_key failed");
 		return -1;

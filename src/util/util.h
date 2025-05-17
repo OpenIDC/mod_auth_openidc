@@ -95,11 +95,19 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const oidc_crypto_passphrase_t *
 apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *passphrase,
 				const char *compact_encoded_jwt, char **s_payload);
 
+// key.c
+apr_byte_t oidc_util_key_symmetric_create(request_rec *r, const char *client_secret, unsigned int r_key_len,
+					  const char *hash_algo, apr_byte_t set_kid, oidc_jwk_t **jwk);
+apr_hash_t *oidc_util_key_sets_merge(apr_pool_t *pool, apr_hash_t *k1, const apr_array_header_t *k2);
+apr_hash_t *oidc_util_key_sets_hash_merge(apr_pool_t *pool, apr_hash_t *k1, apr_hash_t *k2);
+apr_hash_t *oidc_util_key_symmetric_merge(apr_pool_t *pool, const apr_array_header_t *keys, oidc_jwk_t *jwk);
+
 // random.c
 apr_byte_t oidc_util_random_bytes(unsigned char *buf, apr_size_t length);
 apr_byte_t oidc_util_random_bytes_gen(request_rec *r, unsigned char *buf, apr_size_t length);
 apr_byte_t oidc_util_random_hexstr_gen(request_rec *r, char **hex_str, int byte_len);
 apr_byte_t oidc_util_random_str_gen(request_rec *r, char **output, int len);
+oidc_jwk_t *oidc_util_key_list_first(const apr_array_header_t *key_list, int kty, const char *use);
 
 // url.c
 const char *oidc_util_url_cur_host(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers);
@@ -113,8 +121,6 @@ apr_byte_t oidc_util_url_parameter_get(request_rec *r, char *name, char **value)
 
 apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char *openssl_hash_algo, const char *input,
 						      char **output);
-apr_byte_t oidc_util_create_symmetric_key(request_rec *r, const char *client_secret, unsigned int r_key_len,
-					  const char *hash_algo, apr_byte_t set_kid, oidc_jwk_t **jwk);
 int oidc_util_strnenvcmp(const char *a, const char *b, int len);
 char *oidc_util_openssl_version(apr_pool_t *pool);
 apr_byte_t oidc_util_file_read(request_rec *r, const char *path, apr_pool_t *pool, char **result);
@@ -129,12 +135,8 @@ apr_byte_t oidc_util_spaced_string_equals(apr_pool_t *pool, const char *a, const
 apr_byte_t oidc_util_spaced_string_contains(apr_pool_t *pool, const char *str, const char *match);
 char *oidc_util_javascript_escape(apr_pool_t *pool, const char *input);
 void oidc_util_table_add_query_encoded_params(apr_pool_t *pool, apr_table_t *table, const char *params);
-apr_hash_t *oidc_util_merge_key_sets(apr_pool_t *pool, apr_hash_t *k1, const apr_array_header_t *k2);
-apr_hash_t *oidc_util_merge_key_sets_hash(apr_pool_t *pool, apr_hash_t *k1, apr_hash_t *k2);
 apr_byte_t oidc_util_cookie_domain_valid(const char *hostname, const char *cookie_domain);
-apr_hash_t *oidc_util_merge_symmetric_key(apr_pool_t *pool, const apr_array_header_t *keys, oidc_jwk_t *jwk);
 const char *oidc_util_strcasestr(const char *s1, const char *s2);
-oidc_jwk_t *oidc_util_key_list_first(const apr_array_header_t *key_list, int kty, const char *use);
 void oidc_util_set_trace_parent(request_rec *r, oidc_cfg_t *c, const char *span);
 void oidc_util_apr_hash_clear(apr_hash_t *ht);
 

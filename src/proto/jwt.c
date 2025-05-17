@@ -187,7 +187,7 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t *jw
 
 	/* do the actual JWS verification with the locally and remotely provided key material */
 	// TODO: now static keys "win" if the same `kid` was used in both local and remote key sets
-	rv = oidc_jwt_verify(r->pool, jwt, oidc_util_merge_key_sets_hash(r->pool, static_keys, dynamic_keys), &err);
+	rv = oidc_jwt_verify(r->pool, jwt, oidc_util_key_sets_hash_merge(r->pool, static_keys, dynamic_keys), &err);
 
 	/* if no kid was provided we may have used stale keys from the cache, so we'll refresh it */
 	if ((rv == FALSE) && (jwt->header.kid == NULL)) {
@@ -198,7 +198,7 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t *jw
 		/* destroy the list to avoid memory leaks when keys with the same kid are retrieved */
 		oidc_jwk_list_destroy_hash(dynamic_keys);
 		oidc_proto_jwks_uri_keys(r, cfg, jwt, jwks_uri, ssl_validate_server, dynamic_keys, &force_refresh);
-		rv = oidc_jwt_verify(r->pool, jwt, oidc_util_merge_key_sets_hash(r->pool, static_keys, dynamic_keys),
+		rv = oidc_jwt_verify(r->pool, jwt, oidc_util_key_sets_hash_merge(r->pool, static_keys, dynamic_keys),
 				     &err);
 	}
 

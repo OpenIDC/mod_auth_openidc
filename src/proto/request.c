@@ -399,7 +399,7 @@ static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provide
 			}
 			break;
 		case CJOSE_JWK_KTY_OCT:
-			oidc_util_create_symmetric_key(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, FALSE,
+			oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, FALSE,
 						       &sjwk);
 			jwk_needs_destroy = 1;
 			break;
@@ -452,7 +452,7 @@ static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provide
 			oidc_request_uri_encryption_jwk_by_type(r, cfg, provider, oidc_jwt_alg2kty(jwe), &ejwk);
 			break;
 		case CJOSE_JWK_KTY_OCT:
-			oidc_util_create_symmetric_key(r, oidc_cfg_provider_client_secret_get(provider),
+			oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider),
 						       oidc_alg2keysize(jwe->header.alg), OIDC_JOSE_ALG_SHA256, FALSE,
 						       &ejwk);
 			break;

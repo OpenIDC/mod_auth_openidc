@@ -49,6 +49,7 @@ libauth_openidc_la_SOURCES = \
 	src/util/jq.c \
 	src/util/json.c \
 	src/util/jwt.c \
+	src/util/key.c \
 	src/util/pcre_subst.c \
 	src/util/random.c \
 	src/util/url.c \
