@@ -51,6 +51,7 @@ libauth_openidc_la_SOURCES = \
 	src/util/jwt.c \
 	src/util/pcre_subst.c \
 	src/util/random.c \
+	src/util/url.c \
 	src/util/util.c \
 	src/metrics.c \
 	src/oauth.c \

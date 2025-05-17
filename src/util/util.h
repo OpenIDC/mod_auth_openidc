@@ -101,19 +101,22 @@ apr_byte_t oidc_util_random_bytes_gen(request_rec *r, unsigned char *buf, apr_si
 apr_byte_t oidc_util_random_hexstr_gen(request_rec *r, char **hex_str, int byte_len);
 apr_byte_t oidc_util_random_str_gen(request_rec *r, char **output, int len);
 
+// url.c
+const char *oidc_util_url_cur_host(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers);
+char *oidc_util_url_cur(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers);
+apr_byte_t oidc_util_url_cur_is_secure(request_rec *r, oidc_cfg_t *c);
+apr_byte_t oidc_util_url_cur_matches(request_rec *r, const char *url);
+const char *oidc_util_url_abs(request_rec *r, oidc_cfg_t *cfg, const char *url);
+const char *oidc_util_url_redirect_uri(request_rec *r, oidc_cfg_t *c);
+apr_byte_t oidc_util_url_has_parameter(request_rec *r, const char *param);
+apr_byte_t oidc_util_url_parameter_get(request_rec *r, char *name, char **value);
+
 apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char *openssl_hash_algo, const char *input,
 						      char **output);
 apr_byte_t oidc_util_create_symmetric_key(request_rec *r, const char *client_secret, unsigned int r_key_len,
 					  const char *hash_algo, apr_byte_t set_kid, oidc_jwk_t **jwk);
 int oidc_util_strnenvcmp(const char *a, const char *b, int len);
-const char *oidc_util_current_url_host(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers);
-apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url);
-char *oidc_util_current_url(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers);
-const char *oidc_util_absolute_url(request_rec *r, oidc_cfg_t *cfg, const char *url);
-const char *oidc_util_redirect_uri(request_rec *r, oidc_cfg_t *c);
-apr_byte_t oidc_util_request_is_secure(request_rec *r, oidc_cfg_t *c);
 char *oidc_util_openssl_version(apr_pool_t *pool);
-apr_byte_t oidc_util_request_matches_url(request_rec *r, const char *url);
 apr_byte_t oidc_util_file_read(request_rec *r, const char *path, apr_pool_t *pool, char **result);
 apr_byte_t oidc_util_file_write(request_rec *r, const char *path, const char *data);
 apr_byte_t oidc_util_issuer_match(const char *a, const char *b);

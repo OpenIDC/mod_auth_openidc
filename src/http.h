@@ -96,7 +96,7 @@
 
 #define OIDC_HTTP_COOKIE_SAMESITE_LAX "SameSite=Lax"
 #define OIDC_HTTP_COOKIE_SAMESITE_STRICT "SameSite=Strict"
-#define OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r) oidc_util_request_is_secure(r, c) ? "SameSite=None" : NULL
+#define OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r) oidc_util_url_cur_is_secure(r, c) ? "SameSite=None" : NULL
 
 typedef struct oidc_http_timeout_t {
 	int request_timeout; // in seconds
@@ -160,8 +160,8 @@ apr_byte_t oidc_http_post_json(request_rec *r, const char *url, json_t *data, co
 			       long *response_code, apr_hash_t *response_hdrs, oidc_http_timeout_t *http_timeout,
 			       const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,
 			       const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd);
-apr_byte_t oidc_util_request_has_parameter(request_rec *r, const char *param);
-apr_byte_t oidc_util_request_parameter_get(request_rec *r, char *name, char **value);
+apr_byte_t oidc_util_url_has_parameter(request_rec *r, const char *param);
+apr_byte_t oidc_util_url_parameter_get(request_rec *r, char *name, char **value);
 int oidc_util_http_send(request_rec *r, const char *data, size_t data_len, const char *content_type,
 			int success_rvalue);
 int oidc_util_http_content_prep(request_rec *r, const char *data, size_t data_len, const char *content_type);

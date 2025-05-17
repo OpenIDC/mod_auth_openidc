@@ -60,8 +60,8 @@ apr_byte_t oidc_proto_response_is_redirect(request_rec *r, oidc_cfg_t *cfg) {
 
 	/* prereq: this is a call to the configured redirect_uri; see if it is a GET with id_token or code
 	 * parameters */
-	return ((r->method_number == M_GET) && (oidc_util_request_has_parameter(r, OIDC_PROTO_ID_TOKEN) ||
-						oidc_util_request_has_parameter(r, OIDC_PROTO_CODE)));
+	return ((r->method_number == M_GET) && (oidc_util_url_has_parameter(r, OIDC_PROTO_ID_TOKEN) ||
+						oidc_util_url_has_parameter(r, OIDC_PROTO_CODE)));
 }
 
 /*
@@ -301,7 +301,7 @@ static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg_t *cfg, oidc_
 	apr_table_t *params = apr_table_make(r->pool, 5);
 	apr_table_setn(params, OIDC_PROTO_GRANT_TYPE, OIDC_PROTO_GRANT_TYPE_AUTHZ_CODE);
 	apr_table_setn(params, OIDC_PROTO_CODE, code);
-	apr_table_set(params, OIDC_PROTO_REDIRECT_URI, oidc_util_redirect_uri(r, cfg));
+	apr_table_set(params, OIDC_PROTO_REDIRECT_URI, oidc_util_url_redirect_uri(r, cfg));
 
 	if (code_verifier)
 		apr_table_setn(params, OIDC_PROTO_CODE_VERIFIER, code_verifier);

@@ -59,7 +59,7 @@ static int oidc_response_redirect_parent_window_to_logout(request_rec *r, oidc_c
 					 "    <script type=\"text/javascript\">\n"
 					 "      window.top.location.href = '%s?session=logout';\n"
 					 "    </script>\n",
-					 oidc_util_javascript_escape(r->pool, oidc_util_redirect_uri(r, c)));
+					 oidc_util_javascript_escape(r->pool, oidc_util_url_redirect_uri(r, c)));
 
 	return oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_HTML, "Redirecting...", java_script, NULL, NULL);
 }
@@ -313,7 +313,7 @@ apr_byte_t oidc_response_save_in_session(request_rec *r, oidc_cfg_t *c, oidc_ses
 	oidc_session_set_cookie_domain(r, session,
 				       oidc_cfg_cookie_domain_get(c)
 					   ? oidc_cfg_cookie_domain_get(c)
-					   : oidc_util_current_url_host(r, oidc_cfg_x_forwarded_headers_get(c)));
+					   : oidc_util_url_cur_host(r, oidc_cfg_x_forwarded_headers_get(c)));
 
 	char *sid = NULL;
 	oidc_debug(r, "provider->backchannel_logout_supported=%d",
@@ -563,7 +563,7 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 				  "there: %s",
 				  oidc_cfg_default_sso_url_get(c));
 			oidc_http_hdr_out_location_set(r,
-						       oidc_util_absolute_url(r, c, oidc_cfg_default_sso_url_get(c)));
+						       oidc_util_url_abs(r, c, oidc_cfg_default_sso_url_get(c)));
 			OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_STATE_MISMATCH);
 			return HTTP_MOVED_TEMPORARILY;
 		}

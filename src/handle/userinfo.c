@@ -276,7 +276,7 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg_t *cf
 		goto end;
 
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_AUD,
-			    json_string(oidc_util_current_url(r, oidc_cfg_x_forwarded_headers_get(cfg))));
+			    json_string(oidc_util_url_cur(r, oidc_cfg_x_forwarded_headers_get(cfg))));
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_ISS,
 			    json_string(oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(cfg))));
 

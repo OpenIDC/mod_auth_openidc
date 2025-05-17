@@ -56,7 +56,7 @@ apr_byte_t oidc_request_check_cookie_domain(request_rec *r, oidc_cfg_t *c, const
 	apr_uri_t r_uri;
 	_oidc_memset(&r_uri, 0, sizeof(apr_uri_t));
 	apr_uri_parse(r->pool, original_url, &o_uri);
-	apr_uri_parse(r->pool, oidc_util_redirect_uri(r, c), &r_uri);
+	apr_uri_parse(r->pool, oidc_util_url_redirect_uri(r, c), &r_uri);
 	if ((_oidc_strnatcasecmp(o_uri.scheme, r_uri.scheme) != 0) &&
 	    (_oidc_strnatcasecmp(r_uri.scheme, "https") == 0)) {
 		oidc_error(r,
@@ -252,7 +252,7 @@ int oidc_request_authenticate_user(request_rec *r, oidc_cfg_t *c, oidc_provider_
 
 	/* send off to the OpenID Connect Provider */
 	// TODO: maybe show intermediate/progress screen "redirecting to"
-	rc = oidc_proto_request_auth(r, provider, login_hint, oidc_util_redirect_uri(r, c), state, proto_state,
+	rc = oidc_proto_request_auth(r, provider, login_hint, oidc_util_url_redirect_uri(r, c), state, proto_state,
 				     id_token_hint, code_challenge, auth_request_params, path_scope);
 
 	OIDC_METRICS_TIMING_ADD(r, c, OM_AUTHN_REQUEST);

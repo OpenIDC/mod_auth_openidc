@@ -64,7 +64,7 @@ int oidc_content_handler(request_rec *r) {
 		return DECLINED;
 	}
 
-	if (oidc_util_request_matches_url(r, oidc_util_redirect_uri(r, c)) == TRUE) {
+	if (oidc_util_url_cur_matches(r, oidc_util_url_redirect_uri(r, c)) == TRUE) {
 
 		/* requests to the redirect URI are handled and finished here */
 		rc = OK;
@@ -81,7 +81,7 @@ int oidc_content_handler(request_rec *r) {
 			/* HTML body has been generated and stored in the request state */
 			rc = oidc_util_html_content_send(r);
 
-		} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO)) {
+		} else if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO)) {
 
 			OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_INFO);
 
@@ -104,14 +104,14 @@ int oidc_content_handler(request_rec *r) {
 			/* free resources allocated for the session */
 			oidc_session_free(r, session);
 
-		} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_DPOP)) {
+		} else if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_DPOP)) {
 
 			OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_DPOP);
 
 			/* handle request to create a DPoP proof */
 			rc = oidc_dpop_request(r, c);
 
-		} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
+		} else if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
 
 			OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_JWKS);
 

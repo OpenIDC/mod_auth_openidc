@@ -1220,10 +1220,10 @@ static int oidc_metrics_handle_status(request_rec *r, char *s_json) {
 	unsigned int type = 0;
 	void *iter = NULL;
 
-	oidc_util_request_parameter_get(r, OIDC_METRICS_SERVER_PARAM, &s_server_param);
-	oidc_util_request_parameter_get(r, OIDC_METRICS_COUNTER_PARAM, &s_metric_param);
-	oidc_util_request_parameter_get(r, OIDC_METRICS_NAME_PARAM, &s_name_param);
-	oidc_util_request_parameter_get(r, OIDC_METRICS_VALUE_PARAM, &s_value_param);
+	oidc_util_url_parameter_get(r, OIDC_METRICS_SERVER_PARAM, &s_server_param);
+	oidc_util_url_parameter_get(r, OIDC_METRICS_COUNTER_PARAM, &s_metric_param);
+	oidc_util_url_parameter_get(r, OIDC_METRICS_NAME_PARAM, &s_name_param);
+	oidc_util_url_parameter_get(r, OIDC_METRICS_VALUE_PARAM, &s_value_param);
 
 	if (s_server_param == NULL)
 		s_server_param = "localhost";
@@ -1523,7 +1523,7 @@ static int oidc_metric_reset(request_rec *r, int dvalue) {
 	char svalue[16];
 	int value = 0;
 
-	oidc_util_request_parameter_get(r, OIDC_METRICS_RESET_PARAM, &s_reset);
+	oidc_util_url_parameter_get(r, OIDC_METRICS_RESET_PARAM, &s_reset);
 
 	if (s_reset == NULL)
 		return dvalue;
@@ -1548,7 +1548,7 @@ const oidc_metrics_content_handler_t *oidc_metrics_find_handler(request_rec *r) 
 	int i = 0;
 
 	/* get the specified format */
-	oidc_util_request_parameter_get(r, OIDC_METRICS_FORMAT_PARAM, &s_format);
+	oidc_util_url_parameter_get(r, OIDC_METRICS_FORMAT_PARAM, &s_format);
 
 	if (s_format == NULL)
 		return &_oidc_metrics_handlers[0];

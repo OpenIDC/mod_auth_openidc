@@ -121,19 +121,19 @@ static int oidc_session_management_iframe_rp(request_rec *r, oidc_cfg_t *c, oidc
 	}
 
 	char *s_poll_interval = NULL;
-	oidc_util_request_parameter_get(r, "poll", &s_poll_interval);
+	oidc_util_url_parameter_get(r, "poll", &s_poll_interval);
 	int poll_interval = _oidc_str_to_int(s_poll_interval, 0);
 	if ((poll_interval <= 0) || (poll_interval > 3600 * 24))
 		poll_interval = 3000;
 
 	char *login_uri = NULL, *error_str = NULL, *error_description = NULL;
-	oidc_util_request_parameter_get(r, "login_uri", &login_uri);
+	oidc_util_url_parameter_get(r, "login_uri", &login_uri);
 	if ((login_uri != NULL) &&
 	    (oidc_validate_redirect_url(r, c, login_uri, FALSE, &error_str, &error_description) == FALSE)) {
 		return HTTP_BAD_REQUEST;
 	}
 
-	const char *redirect_uri = oidc_util_redirect_uri(r, c);
+	const char *redirect_uri = oidc_util_url_redirect_uri(r, c);
 
 	java_script = apr_psprintf(r->pool, java_script, origin, client_id, session_state ? session_state : "",
 				   login_uri ? login_uri : "", op_iframe_id, poll_interval, redirect_uri, redirect_uri);
@@ -150,7 +150,7 @@ int oidc_session_management(request_rec *r, oidc_cfg_t *c, oidc_session_t *sessi
 	oidc_provider_t *provider = NULL;
 
 	/* get the command passed to the session management handler */
-	oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_SESSION, &cmd);
+	oidc_util_url_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_SESSION, &cmd);
 	if (cmd == NULL) {
 		oidc_error(r, "session management handler called with no command");
 		return HTTP_INTERNAL_SERVER_ERROR;
@@ -161,7 +161,7 @@ int oidc_session_management(request_rec *r, oidc_cfg_t *c, oidc_session_t *sessi
 		oidc_debug(
 		    r,
 		    "[session=logout] calling oidc_handle_logout_request because of session mgmt local logout call.");
-		return oidc_logout_request(r, c, session, oidc_util_absolute_url(r, c, oidc_cfg_default_slo_url_get(c)),
+		return oidc_logout_request(r, c, session, oidc_util_url_abs(r, c, oidc_cfg_default_slo_url_get(c)),
 					   TRUE);
 	}
 
@@ -203,7 +203,7 @@ int oidc_session_management(request_rec *r, oidc_cfg_t *c, oidc_session_t *sessi
 		 *       session now?
 		 */
 		return oidc_request_authenticate_user(
-		    r, c, provider, apr_psprintf(r->pool, "%s?session=iframe_rp", oidc_util_redirect_uri(r, c)), NULL,
+		    r, c, provider, apr_psprintf(r->pool, "%s?session=iframe_rp", oidc_util_url_redirect_uri(r, c)), NULL,
 		    id_token_hint, "none", oidc_cfg_dir_path_auth_request_params_get(r),
 		    oidc_cfg_dir_path_scope_get(r));
 	}

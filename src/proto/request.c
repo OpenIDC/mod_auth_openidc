@@ -68,8 +68,8 @@ static void oidc_proto_request_auth_params_add(request_rec *r, apr_table_t *para
 			apr_table_add(params, key, val);
 			continue;
 		}
-		if (oidc_util_request_has_parameter(r, key) == TRUE) {
-			oidc_util_request_parameter_get(r, key, &val);
+		if (oidc_util_url_has_parameter(r, key) == TRUE) {
+			oidc_util_url_parameter_get(r, key, &val);
 			apr_table_add(params, key, val);
 		}
 	}

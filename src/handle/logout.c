@@ -218,9 +218,9 @@ int oidc_logout_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, 
 			char *sid, *iss;
 			oidc_provider_t *provider = NULL;
 
-			if (oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_SID, &sid) != FALSE) {
+			if (oidc_util_url_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_SID, &sid) != FALSE) {
 
-				if (oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_ISS, &iss) != FALSE) {
+				if (oidc_util_url_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_ISS, &iss) != FALSE) {
 					provider = oidc_get_provider_for_issuer(r, c, iss, FALSE);
 				} else {
 					/*
@@ -454,7 +454,7 @@ int oidc_logout(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 	char *id_token_hint = NULL;
 	char *s_logout_request = NULL;
 
-	oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_LOGOUT, &url);
+	oidc_util_url_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_LOGOUT, &url);
 
 	oidc_debug(r, "enter (url=%s)", url);
 
@@ -466,7 +466,7 @@ int oidc_logout(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 
 	if ((url == NULL) || (_oidc_strcmp(url, "") == 0)) {
 
-		url = apr_pstrdup(r->pool, oidc_util_absolute_url(r, c, oidc_cfg_default_slo_url_get(c)));
+		url = apr_pstrdup(r->pool, oidc_util_url_abs(r, c, oidc_cfg_default_slo_url_get(c)));
 
 	} else {
 

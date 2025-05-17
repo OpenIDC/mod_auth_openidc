@@ -87,7 +87,7 @@ int oidc_dpop_request(request_rec *r, oidc_cfg_t *c) {
 	}
 
 	/* retrieve the access token parameter */
-	oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_DPOP, &s_access_token);
+	oidc_util_url_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_DPOP, &s_access_token);
 	if (s_access_token == NULL) {
 		oidc_error(r, "\"access_token\" value to the \"%s\" parameter is missing",
 			   OIDC_REDIRECT_URI_REQUEST_DPOP);
@@ -95,17 +95,17 @@ int oidc_dpop_request(request_rec *r, oidc_cfg_t *c) {
 	}
 
 	/* retrieve the URL parameter */
-	oidc_util_request_parameter_get(r, OIDC_DPOP_PARAM_URL, &s_url);
+	oidc_util_url_parameter_get(r, OIDC_DPOP_PARAM_URL, &s_url);
 	if (s_url == NULL) {
 		oidc_error(r, "\"url\" parameter is missing");
 		goto end;
 	}
 
 	/* retrieve the optional nonce parameter */
-	oidc_util_request_parameter_get(r, OIDC_DPOP_PARAM_NONCE, &s_nonce);
+	oidc_util_url_parameter_get(r, OIDC_DPOP_PARAM_NONCE, &s_nonce);
 
 	/* parse the optional HTTP method parameter */
-	oidc_util_request_parameter_get(r, OIDC_DPOP_PARAM_METHOD, &s_method);
+	oidc_util_url_parameter_get(r, OIDC_DPOP_PARAM_METHOD, &s_method);
 	if (_oidc_strnatcasecmp(s_method, "post") == 0)
 		s_method = "POST";
 	else if ((_oidc_strnatcasecmp(s_method, "get") == 0) || (s_method == NULL))

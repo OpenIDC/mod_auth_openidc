@@ -319,8 +319,8 @@ int oidc_refresh_token_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *se
 	oidc_provider_t *provider = NULL;
 
 	/* get the command passed to the session management handler */
-	oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_REFRESH, &return_to);
-	oidc_util_request_parameter_get(r, OIDC_PROTO_ACCESS_TOKEN, &r_access_token);
+	oidc_util_url_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_REFRESH, &return_to);
+	oidc_util_url_parameter_get(r, OIDC_PROTO_ACCESS_TOKEN, &r_access_token);
 
 	/* check the input parameters */
 	if (return_to == NULL) {

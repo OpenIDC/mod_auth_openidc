@@ -498,7 +498,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg,
 	/* assemble the JSON registration request */
 	json_t *data = json_object();
 	json_object_set_new(data, OIDC_METADATA_CLIENT_NAME, json_string(oidc_cfg_provider_client_name_get(provider)));
-	json_object_set_new(data, OIDC_METADATA_REDIRECT_URIS, json_pack("[s]", oidc_util_redirect_uri(r, cfg)));
+	json_object_set_new(data, OIDC_METADATA_REDIRECT_URIS, json_pack("[s]", oidc_util_url_redirect_uri(r, cfg)));
 
 	json_t *response_types = json_array();
 	apr_array_header_t *flows = oidc_proto_supported_flows(r->pool);
@@ -525,7 +525,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg,
 				    json_string(oidc_cfg_provider_client_jwks_uri_get(provider)));
 	} else if (oidc_cfg_public_keys_get(cfg) != NULL) {
 		json_object_set_new(data, OIDC_METADATA_JWKS_URI,
-				    json_string(apr_psprintf(r->pool, "%s?%s=rsa", oidc_util_redirect_uri(r, cfg),
+				    json_string(apr_psprintf(r->pool, "%s?%s=rsa", oidc_util_url_redirect_uri(r, cfg),
 							     OIDC_REDIRECT_URI_REQUEST_JWKS)));
 	}
 
@@ -567,23 +567,23 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg,
 		}
 	}
 
-	json_object_set_new(data, OIDC_METADATA_INITIATE_LOGIN_URI, json_string(oidc_util_redirect_uri(r, cfg)));
+	json_object_set_new(data, OIDC_METADATA_INITIATE_LOGIN_URI, json_string(oidc_util_url_redirect_uri(r, cfg)));
 
 	json_object_set_new(
 	    data, OIDC_METADATA_FRONTCHANNEL_LOGOUT_URI,
-	    json_string(apr_psprintf(r->pool, "%s?%s=%s", oidc_util_redirect_uri(r, cfg),
+	    json_string(apr_psprintf(r->pool, "%s?%s=%s", oidc_util_url_redirect_uri(r, cfg),
 				     OIDC_REDIRECT_URI_REQUEST_LOGOUT, OIDC_GET_STYLE_LOGOUT_PARAM_VALUE)));
 
 	// TODO: may want to add backchannel_logout_session_required
 	json_object_set_new(
 	    data, OIDC_METADATA_BACKCHANNEL_LOGOUT_URI,
-	    json_string(apr_psprintf(r->pool, "%s?%s=%s", oidc_util_redirect_uri(r, cfg),
+	    json_string(apr_psprintf(r->pool, "%s?%s=%s", oidc_util_url_redirect_uri(r, cfg),
 				     OIDC_REDIRECT_URI_REQUEST_LOGOUT, OIDC_BACKCHANNEL_STYLE_LOGOUT_PARAM_VALUE)));
 
 	if (oidc_cfg_default_slo_url_get(cfg) != NULL) {
 		json_object_set_new(
 		    data, OIDC_METADATA_POST_LOGOUT_REDIRECT_URIS,
-		    json_pack("[s]", oidc_util_absolute_url(r, cfg, oidc_cfg_default_slo_url_get(cfg))));
+		    json_pack("[s]", oidc_util_url_abs(r, cfg, oidc_cfg_default_slo_url_get(cfg))));
 	}
 
 	/* add any custom JSON in to the registration request */

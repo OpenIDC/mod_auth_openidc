@@ -1098,7 +1098,7 @@ void oidc_http_set_cookie(request_rec *r, const char *cookieName, const char *co
 		headerString = apr_psprintf(r->pool, "%s; %s=%s", headerString, OIDC_HTTP_COOKIE_FLAG_DOMAIN,
 					    oidc_cfg_cookie_domain_get(c));
 
-	if (oidc_util_request_is_secure(r, c))
+	if (oidc_util_url_cur_is_secure(r, c))
 		headerString = apr_psprintf(r->pool, "%s; %s", headerString, OIDC_HTTP_COOKIE_FLAG_SECURE);
 
 	if (oidc_cfg_cookie_http_only_get(c) != FALSE)

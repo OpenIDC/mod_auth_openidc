@@ -52,7 +52,7 @@
 int oidc_request_uri(request_rec *r, oidc_cfg_t *c) {
 
 	char *request_ref = NULL;
-	oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_REQUEST_URI, &request_ref);
+	oidc_util_url_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_REQUEST_URI, &request_ref);
 	if (request_ref == NULL) {
 		oidc_error(r, "no \"%s\" parameter found", OIDC_REDIRECT_URI_REQUEST_REQUEST_URI);
 		return HTTP_BAD_REQUEST;

@@ -61,9 +61,9 @@ int oidc_info_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, ap
 	apr_byte_t b_extend_session = TRUE;
 	apr_time_t t_interval = -1;
 
-	oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_INFO, &s_format);
-	oidc_util_request_parameter_get(r, OIDC_INFO_PARAM_ACCESS_TOKEN_REFRESH_INTERVAL, &s_interval);
-	oidc_util_request_parameter_get(r, OIDC_INFO_PARAM_EXTEND_SESSION, &s_extend_session);
+	oidc_util_url_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_INFO, &s_format);
+	oidc_util_url_parameter_get(r, OIDC_INFO_PARAM_ACCESS_TOKEN_REFRESH_INTERVAL, &s_interval);
+	oidc_util_url_parameter_get(r, OIDC_INFO_PARAM_EXTEND_SESSION, &s_extend_session);
 	if ((s_extend_session) && (_oidc_strcmp(s_extend_session, "false") == 0))
 		b_extend_session = FALSE;
 
