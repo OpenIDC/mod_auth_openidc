@@ -49,7 +49,7 @@
 #include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 #include <apr_lib.h>
 
@@ -66,7 +66,7 @@ apr_byte_t oidc_oauth_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg
 		return FALSE;
 
 	/* decode and see if it is not an error response somehow */
-	if (oidc_util_decode_json_and_check_error(r, *response, j_metadata) == FALSE) {
+	if (oidc_util_json_decode_and_check_error(r, *response, j_metadata) == FALSE) {
 		oidc_error(r, "JSON parsing of retrieved Discovery document failed");
 		return FALSE;
 	}
@@ -112,7 +112,7 @@ static apr_byte_t oidc_oauth_provider_config(request_rec *r, oidc_cfg_t *c) {
 
 	} else {
 
-		oidc_util_decode_json_object(r, s_json, &j_provider);
+		oidc_util_json_decode_object(r, s_json, &j_provider);
 
 		/* check to see if it is valid metadata */
 		/*
@@ -360,7 +360,7 @@ static apr_byte_t oidc_oauth_cache_access_token(request_rec *r, oidc_cfg_t *c, a
 	json_t *cache_entry = json_object();
 	json_object_set(cache_entry, OIDC_OAUTH_CACHE_KEY_RESPONSE, json);
 	json_object_set_new(cache_entry, OIDC_OAUTH_CACHE_KEY_TIMESTAMP, json_integer(apr_time_sec(apr_time_now())));
-	char *cache_value = oidc_util_encode_json(r->pool, cache_entry, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	char *cache_value = oidc_util_json_encode(r->pool, cache_entry, JSON_PRESERVE_ORDER | JSON_COMPACT);
 
 	/* set it in the cache so subsequent request don't need to validate the access_token and get the claims anymore
 	 */
@@ -392,7 +392,7 @@ static apr_byte_t oidc_oauth_get_cached_access_token(request_rec *r, oidc_cfg_t 
 		return FALSE;
 
 	/* json decode the cache entry */
-	if (oidc_util_decode_json_object(r, s_cache_entry, &cache_entry) == FALSE) {
+	if (oidc_util_json_decode_object(r, s_cache_entry, &cache_entry) == FALSE) {
 		*json = NULL;
 		return FALSE;
 	}
@@ -447,7 +447,7 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg_t *c,
 		}
 
 		/* decode and see if it is not an error response somehow */
-		if (oidc_util_decode_json_and_check_error(r, s_json, &result) == FALSE)
+		if (oidc_util_json_decode_and_check_error(r, s_json, &result) == FALSE)
 			return FALSE;
 
 		json_t *active = json_object_get(result, OIDC_PROTO_ACTIVE);
@@ -535,7 +535,7 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg_t *c,
 	}
 
 	/* stringify the response */
-	*response = oidc_util_encode_json(r->pool, *token, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	*response = oidc_util_json_encode(r->pool, *token, JSON_PRESERVE_ORDER | JSON_COMPACT);
 
 	return TRUE;
 }

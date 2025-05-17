@@ -45,7 +45,7 @@
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "session.h"
-#include "util.h"
+#include "util/util.h"
 
 /* JSON object key for the value that holds the refresh token's refresh timestamp */
 #define OIDC_REFRESH_TIMESTAMP "ts"
@@ -92,7 +92,7 @@ static void oidc_refresh_token_cache_set(request_rec *r, oidc_cfg_t *c, const ch
 	json_object_set_new(json, OIDC_REFRESH_TIMESTAMP, json_integer(apr_time_sec(*ts)));
 
 	/* stringify the JSON object and store it in the cache */
-	s_json = oidc_util_encode_json(r->pool, json, JSON_COMPACT);
+	s_json = oidc_util_json_encode(r->pool, json, JSON_COMPACT);
 	oidc_debug(r, "caching refresh_token (%s) grant results for %d seconds: %s", refresh_token,
 		   OIDC_REFRESH_CACHE_TTL, s_json);
 
@@ -140,7 +140,7 @@ static apr_byte_t oidc_refresh_token_cache_get(request_rec *r, oidc_cfg_t *c, co
 	}
 
 	/* we should have valid cache results by now */
-	if (oidc_util_decode_json_object(r, s_json, &json) == FALSE)
+	if (oidc_util_json_decode_object(r, s_json, &json) == FALSE)
 		goto no_cache_found;
 
 	oidc_debug(r, "using cached refresh_token (%s) grant results: %s", refresh_token, s_json);

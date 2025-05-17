@@ -42,7 +42,7 @@
 
 // clang-format off
 
-#include "util.h"
+#include "util/util.h"
 #include "metrics.h"
 #include <limits.h>
 #include <apr_shm.h>
@@ -477,7 +477,7 @@ static inline void oidc_metrics_storage_reset(server_rec *s) {
 	}
 
 	/* serialize the metrics data, preserve order is required for Prometheus */
-	s_json = oidc_util_encode_json(s->process->pool, json, JSON_COMPACT | JSON_PRESERVE_ORDER);
+	s_json = oidc_util_json_encode(s->process->pool, json, JSON_COMPACT | JSON_PRESERVE_ORDER);
 
 	/* free the JSON data */
 	json_decref(json);
@@ -710,7 +710,7 @@ static void oidc_metrics_store(server_rec *s) {
 	}
 
 	/* serialize the metrics data, preserve order is required for Prometheus */
-	s_json = oidc_util_encode_json(s->process->pool, json, JSON_COMPACT | JSON_PRESERVE_ORDER);
+	s_json = oidc_util_json_encode(s->process->pool, json, JSON_COMPACT | JSON_PRESERVE_ORDER);
 
 	/* free the JSON data */
 	json_decref(json);
@@ -1175,7 +1175,7 @@ static int oidc_metrics_handle_json(request_rec *r, char *s_json) {
 		i1 = json_object_iter_next(json, i1);
 	}
 
-	s_json = oidc_util_encode_json(r->pool, o_json, JSON_COMPACT | JSON_PRESERVE_ORDER);
+	s_json = oidc_util_json_encode(r->pool, o_json, JSON_COMPACT | JSON_PRESERVE_ORDER);
 
 	json_decref(o_json);
 	json_decref(json);

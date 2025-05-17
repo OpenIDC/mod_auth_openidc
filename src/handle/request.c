@@ -45,7 +45,7 @@
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "state.h"
-#include "util.h"
+#include "util/util.h"
 
 apr_byte_t oidc_request_check_cookie_domain(request_rec *r, oidc_cfg_t *c, const char *original_url) {
 	/*

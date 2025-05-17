@@ -47,7 +47,7 @@
 #include "metadata.h"
 #include "metrics.h"
 #include "mod_auth_openidc.h"
-#include "util.h"
+#include "util/util.h"
 
 #include <openssl/opensslconf.h>
 #include <openssl/opensslv.h>
@@ -56,7 +56,7 @@
  * generate a random value (nonce) to correlate request/response through browser state
  */
 apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce, int len) {
-	return oidc_util_generate_random_string(r, nonce, len);
+	return oidc_util_random_str_gen(r, nonce, len);
 }
 
 /*

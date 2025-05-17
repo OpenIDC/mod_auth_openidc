@@ -52,7 +52,7 @@
 #include "cfg/cfg_int.h"
 #include "jose.h"
 #include "metrics.h"
-#include "util.h"
+#include "util/util.h"
 
 #ifdef AP_NEED_SET_MUTEX_PERMS
 #include "unixd.h"

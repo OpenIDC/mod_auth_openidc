@@ -45,9 +45,9 @@
 #include "http_protocol.h"
 #include "metrics.h"
 #include "mod_auth_openidc.h"
-#include "pcre_subst.h"
+#include "util/pcre_subst.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 static apr_byte_t oidc_authz_match_json_string(request_rec *r, const char *spec, json_t *val, const char *key) {
 	return (_oidc_strcmp(json_string_value(val), spec) == 0);
@@ -360,7 +360,7 @@ static apr_byte_t oidc_authz_match_claims_expr(request_rec *r, const char *const
 
 	oidc_debug(r, "enter: '%s'", attr_spec);
 
-	str = oidc_util_jq_filter(r, oidc_util_encode_json(r->pool, claims, JSON_PRESERVE_ORDER | JSON_COMPACT),
+	str = oidc_util_jq_filter(r, oidc_util_json_encode(r->pool, claims, JSON_PRESERVE_ORDER | JSON_COMPACT),
 				  attr_spec);
 	rv = (_oidc_strcmp(str, "true") == 0);
 
@@ -389,11 +389,11 @@ static void oidc_authz_get_claims_idtoken_scope(request_rec *r, json_t **claims,
 
 	const char *s_claims = oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_CLAIMS);
 	if (s_claims != NULL)
-		oidc_util_decode_json_object(r, s_claims, claims);
+		oidc_util_json_decode_object(r, s_claims, claims);
 
 	const char *s_id_token = oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_IDTOKEN);
 	if (s_id_token != NULL)
-		oidc_util_decode_json_object(r, s_id_token, id_token);
+		oidc_util_json_decode_object(r, s_id_token, id_token);
 
 	*scope = oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_SCOPE);
 }

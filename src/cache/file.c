@@ -45,7 +45,7 @@
 
 #include "cfg/cache.h"
 #include "cfg/cfg_int.h"
-#include "util.h"
+#include "util/util.h"
 
 /*
  * header structure that holds the metadata info for a cache file entry
@@ -367,7 +367,7 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section, const
 	char s_err[128];
 	char *rnd = NULL;
 
-	oidc_util_generate_random_string(r, &rnd, 12);
+	oidc_util_random_str_gen(r, &rnd, 12);
 
 	/* get the fully qualified path to the cache file based on the key name */
 	const char *target = oidc_cache_file_path(r, section, key);

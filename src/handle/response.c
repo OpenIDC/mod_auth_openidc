@@ -46,7 +46,7 @@
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "state.h"
-#include "util.h"
+#include "util/util.h"
 
 /*
  * redirect the browser to the session logout endpoint
@@ -500,7 +500,7 @@ static apr_byte_t oidc_response_set_request_user(request_rec *r, oidc_cfg_t *c, 
 	apr_byte_t rc = FALSE;
 	char *remote_user = NULL;
 	json_t *claims = NULL;
-	oidc_util_decode_json_object(r, s_claims, &claims);
+	oidc_util_json_decode_object(r, s_claims, &claims);
 	if (claims == NULL) {
 		rc = oidc_get_remote_user(r, claim_name, oidc_cfg_remote_user_claim_get(c)->reg_exp,
 					  oidc_cfg_remote_user_claim_get(c)->replace, jwt->payload.value.json,

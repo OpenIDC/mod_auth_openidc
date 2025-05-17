@@ -43,7 +43,7 @@
 #include "cfg/parse.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 /*
  * setup for an endpoint call without authentication
@@ -93,7 +93,7 @@ static apr_byte_t oidc_proto_jwt_create(request_rec *r, const char *client_id, c
 	oidc_jwt_t *jwt = *out;
 
 	char *jti = NULL;
-	oidc_util_generate_random_string(r, &jti, OIDC_PROTO_JWT_JTI_LEN);
+	oidc_util_random_str_gen(r, &jti, OIDC_PROTO_JWT_JTI_LEN);
 
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_ISS, json_string(client_id));
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_SUB, json_string(client_id));

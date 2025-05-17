@@ -44,7 +44,7 @@
 #include "handle/handle.h"
 #include "metrics.h"
 #include "mod_auth_openidc.h"
-#include "util.h"
+#include "util/util.h"
 
 static int oidc_session_management_iframe_op(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
 					     const char *check_session_iframe) {

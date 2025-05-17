@@ -67,7 +67,7 @@
 #include <openssl/core_names.h>
 #endif
 
-#include "util.h"
+#include "util/util.h"
 
 /*
  * assemble an error report
@@ -184,7 +184,7 @@ char *oidc_jose_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jose_error
 
 	if (_oidc_strcmp(jwt->header.alg, CJOSE_HDR_ALG_NONE) == 0) {
 
-		s_payload = oidc_util_encode_json(pool, jwt->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
+		s_payload = oidc_util_json_encode(pool, jwt->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
 		if (s_payload == NULL) {
 			oidc_jose_error(err, "oidc_util_encode_json failed");
 			return NULL;
@@ -348,7 +348,7 @@ oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, json_t *json, oidc_jose_error_t *er
 	json_t *v = NULL, *e = NULL;
 	int i = 0;
 
-	char *s_json = oidc_util_encode_json(pool, json, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	char *s_json = oidc_util_json_encode(pool, json, JSON_PRESERVE_ORDER | JSON_COMPACT);
 	if (s_json == NULL) {
 		oidc_jose_error(err, "could not serialize JWK");
 		goto end;
@@ -577,7 +577,7 @@ apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_js
 		json_object_set_new(json, OIDC_JOSE_JWK_X5T_STR, json_string(jwk->x5t));
 
 	// generate the string ...
-	*s_json = oidc_util_encode_json(pool, json, JSON_ENCODE_ANY | JSON_COMPACT | JSON_PRESERVE_ORDER);
+	*s_json = oidc_util_json_encode(pool, json, JSON_ENCODE_ANY | JSON_COMPACT | JSON_PRESERVE_ORDER);
 
 	rv = (*s_json != NULL);
 
@@ -1122,7 +1122,7 @@ apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json, oidc_jwt_t *
 
 	cjose_header_t *hdr = cjose_jws_get_protected(jwt->cjose_jws);
 	jwt->header.value.json = json_deep_copy((json_t *)hdr);
-	jwt->header.value.str = oidc_util_encode_json(pool, jwt->header.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	jwt->header.value.str = oidc_util_json_encode(pool, jwt->header.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
 
 	jwt->header.alg = apr_pstrdup(pool, cjose_header_get(hdr, CJOSE_HDR_ALG, &cjose_err));
 	jwt->header.enc = apr_pstrdup(pool, cjose_header_get(hdr, CJOSE_HDR_ENC, &cjose_err));
@@ -1202,7 +1202,7 @@ apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk, apr
 		cjose_jws_release(jwt->cjose_jws);
 
 	cjose_err cjose_err;
-	char *plaintext = oidc_util_encode_json(pool, jwt->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	char *plaintext = oidc_util_json_encode(pool, jwt->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
 
 	char *s_payload = NULL;
 	int payload_len = 0;

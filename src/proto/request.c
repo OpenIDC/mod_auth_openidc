@@ -45,7 +45,7 @@
 #include "metadata.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 /*
  * add extra configured authentication request parameters (global or per-path)
@@ -110,7 +110,7 @@ static int oidc_proto_request_auth_push(request_rec *r, struct oidc_provider_t *
 		goto out;
 
 	/* check for errors, the response itself will have been logged already */
-	if (oidc_util_decode_json_and_check_error(r, response, &j_result) == FALSE)
+	if (oidc_util_json_decode_and_check_error(r, response, &j_result) == FALSE)
 		goto out;
 
 	/* get the request_uri from the parsed response */
@@ -363,7 +363,7 @@ static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provide
 	/* debug logging */
 	oidc_debug(
 	    r, "request object: %s",
-	    oidc_util_encode_json(r->pool, request_object->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT));
+	    oidc_util_json_encode(r->pool, request_object->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT));
 
 	char *serialized_request_object = NULL;
 	oidc_jose_error_t err;
@@ -530,7 +530,7 @@ static char *oidc_proto_request_uri_create(request_rec *r, struct oidc_provider_
 	char *request_uri = NULL;
 	if (serialized_request_object != NULL) {
 		char *request_ref = NULL;
-		if (oidc_util_generate_random_string(r, &request_ref, OIDC_PROTO_REQUEST_URI_REF_LEN) == TRUE) {
+		if (oidc_util_random_str_gen(r, &request_ref, OIDC_PROTO_REQUEST_URI_REF_LEN) == TRUE) {
 			oidc_cache_set_request_uri(r, request_ref, serialized_request_object,
 						   apr_time_now() + apr_time_from_sec(ttl));
 			request_uri = apr_psprintf(r->pool, "%s?%s=%s", resolver_url, OIDC_PROTO_REQUEST_URI,
@@ -549,7 +549,7 @@ static void oidc_proto_request_uri_request_param_add(request_rec *r, struct oidc
 
 	/* parse the request object configuration from a string in to a JSON structure */
 	json_t *request_object_config = NULL;
-	if (oidc_util_decode_json_object(r, oidc_cfg_provider_request_object_get(provider), &request_object_config) ==
+	if (oidc_util_json_decode_object(r, oidc_cfg_provider_request_object_get(provider), &request_object_config) ==
 	    FALSE)
 		return;
 

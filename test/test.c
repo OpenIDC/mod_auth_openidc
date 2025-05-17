@@ -48,7 +48,7 @@
 
 #include "cfg/cfg_int.h"
 #include "cfg/dir.h"
-#include "util.h"
+#include "util/util.h"
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 
@@ -1557,11 +1557,11 @@ static char *test_authz_worker(request_rec *r) {
 static char *test_decode_json_object(request_rec *r) {
 	apr_byte_t rc = FALSE;
 	json_t *json = NULL;
-	rc = oidc_util_decode_json_object(r, "nojson", &json);
+	rc = oidc_util_json_decode_object(r, "nojson", &json);
 	TST_ASSERT("test invalid JSON", rc == FALSE);
-	rc = oidc_util_decode_json_object(r, "{ \"n\": \"\\u0000<?php echo 'Hello' ?>\"}", &json);
+	rc = oidc_util_json_decode_object(r, "{ \"n\": \"\\u0000<?php echo 'Hello' ?>\"}", &json);
 	TST_ASSERT("test JSON with NULL value", rc == FALSE);
-	rc = oidc_util_decode_json_object(
+	rc = oidc_util_json_decode_object(
 	    r,
 	    "tmjcbnuvyrtygbtbyizkfuabiddgixcvnvupjuwnvxznpspmjaqrlpgmggixxovrpwntkvsvxjtkjjggnevyfyemdrlxtnmzjstmjuyquy"
 	    "yjzzwsfrazgzbdojkcfaeiqawltqsiwwzzgpiikpqoxixhsqtnfbchrcgxbgiaynkscvbvfnpuddrpjbgdtxxlebrswrtukzxqyyfrmwrr"
@@ -1604,7 +1604,7 @@ static char *test_decode_json_object(request_rec *r) {
 	    "enkhkiuojxdwscvtacbwfixhrcaxlfeakidxgrmgitrmrzdzhwjyazzikrclajgksENDxxxx",
 	    &json);
 	TST_ASSERT("test invalid long JSON", rc == FALSE);
-	rc = oidc_util_decode_json_object(r, "{}", &json);
+	rc = oidc_util_json_decode_object(r, "{}", &json);
 	TST_ASSERT("test valid JSON", rc == TRUE);
 	json_decref(json);
 	return 0;
@@ -1617,7 +1617,7 @@ static char *test_remote_user(request_rec *r) {
 	json_t *json = NULL;
 
 	s = "{\"upn\":\"nneul@umsystem.edu\"}";
-	rc = oidc_util_decode_json_object(r, s, &json);
+	rc = oidc_util_json_decode_object(r, s, &json);
 	TST_ASSERT("test remote user (1) valid JSON", rc == TRUE);
 	rc = oidc_get_remote_user(r, "upn", "^(.*)@umsystem\\.edu", NULL, json, &remote_user);
 	TST_ASSERT_STR("remote_user (0) string", remote_user, "nneul");
@@ -1627,7 +1627,7 @@ static char *test_remote_user(request_rec *r) {
 	json_decref(json);
 
 	s = "{\"email\":\"nneul@umsystem.edu\"}";
-	rc = oidc_util_decode_json_object(r, s, &json);
+	rc = oidc_util_json_decode_object(r, s, &json);
 	TST_ASSERT("test remote user (2) valid JSON", rc == TRUE);
 	rc = oidc_get_remote_user(r, "email", "^(.*)@([^.]+)\\..+$", "$2\\$1", json, &remote_user);
 	TST_ASSERT("test remote user (2) function result", rc == TRUE);
@@ -1635,7 +1635,7 @@ static char *test_remote_user(request_rec *r) {
 	json_decref(json);
 
 	s = "{ \"name\": \"Dominik František Bučík\" }";
-	rc = oidc_util_decode_json_object(r, s, &json);
+	rc = oidc_util_json_decode_object(r, s, &json);
 	TST_ASSERT("test remote user (3) valid JSON", rc == TRUE);
 	rc = oidc_get_remote_user(r, "name", "^(.*)$", "$1@test.com", json, &remote_user);
 	TST_ASSERT("test remote user (3) function result", rc == TRUE);
@@ -1643,7 +1643,7 @@ static char *test_remote_user(request_rec *r) {
 	json_decref(json);
 
 	s = "{ \"preferred_username\": \"dbucik\" }";
-	rc = oidc_util_decode_json_object(r, s, &json);
+	rc = oidc_util_json_decode_object(r, s, &json);
 	TST_ASSERT("test remote user (4) valid JSON", rc == TRUE);
 	rc = oidc_get_remote_user(r, "preferred_username", "^(.*)$", "$1@test.com", json, &remote_user);
 	TST_ASSERT("test remote user (4) function result", rc == TRUE);
@@ -1742,7 +1742,7 @@ static char *test_set_app_infos(request_rec *r) {
 	apr_byte_t rc = FALSE;
 	json_t *claims = NULL;
 
-	rc = oidc_util_decode_json_object(r,
+	rc = oidc_util_json_decode_object(r,
 					  "{"
 					  "\"simple\":\"hans\","
 					  "\"name\": \"GÜnther\","

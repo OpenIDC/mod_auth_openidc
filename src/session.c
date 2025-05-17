@@ -44,7 +44,7 @@
 #include "cfg/dir.h"
 #include "metrics.h"
 #include "mod_auth_openidc.h"
-#include "util.h"
+#include "util/util.h"
 
 /* the name of the remote-user attribute in the session  */
 #define OIDC_SESSION_REMOTE_USER_KEY "r"
@@ -65,7 +65,7 @@ static apr_byte_t oidc_session_encode(request_rec *r, oidc_cfg_t *c, oidc_sessio
 				      apr_byte_t encrypt) {
 
 	if (encrypt == FALSE) {
-		*s_value = oidc_util_encode_json(r->pool, z->state, JSON_COMPACT);
+		*s_value = oidc_util_json_encode(r->pool, z->state, JSON_COMPACT);
 		return (*s_value != NULL);
 	} else if (oidc_cfg_crypto_passphrase_secret1_get(c) == NULL) {
 		oidc_error(r, "cannot encrypt session state because " OIDCCryptoPassphrase " is not set");
@@ -73,7 +73,7 @@ static apr_byte_t oidc_session_encode(request_rec *r, oidc_cfg_t *c, oidc_sessio
 	}
 
 	if (oidc_util_jwt_create(r, oidc_cfg_crypto_passphrase_get(c),
-				 oidc_util_encode_json(r->pool, z->state, JSON_COMPACT), s_value) == FALSE)
+				 oidc_util_json_encode(r->pool, z->state, JSON_COMPACT), s_value) == FALSE)
 		return FALSE;
 
 	return TRUE;
@@ -87,7 +87,7 @@ static apr_byte_t oidc_session_decode(request_rec *r, oidc_cfg_t *c, oidc_sessio
 	char *s_payload = NULL;
 
 	if (encrypt == FALSE) {
-		return oidc_util_decode_json_object(r, s_json, &z->state);
+		return oidc_util_json_decode_object(r, s_json, &z->state);
 	} else if (oidc_cfg_crypto_passphrase_secret1_get(c) == NULL) {
 		oidc_error(r, "cannot decrypt session state because " OIDCCryptoPassphrase " is not set");
 		return FALSE;
@@ -98,14 +98,14 @@ static apr_byte_t oidc_session_decode(request_rec *r, oidc_cfg_t *c, oidc_sessio
 		return FALSE;
 	}
 
-	return oidc_util_decode_json_object(r, s_payload, &z->state);
+	return oidc_util_json_decode_object(r, s_payload, &z->state);
 }
 
 /*
  * generate a unique identifier for a session
  */
 void oidc_session_id_new(request_rec *r, oidc_session_t *z) {
-	oidc_util_generate_random_hex_string(r, &z->uuid, 20);
+	oidc_util_random_hexstr_gen(r, &z->uuid, 20);
 }
 
 /*
@@ -506,7 +506,7 @@ static json_t *oidc_session_get_str2json(request_rec *r, oidc_session_t *z,
 	json_t *json = NULL;
 	const char *str = session_get_str_fn(r, z);
 	if (str != NULL)
-		oidc_util_decode_json_object(r, str, &json);
+		oidc_util_json_decode_object(r, str, &json);
 	return json;
 }
 
@@ -533,7 +533,7 @@ void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, const c
 	int warn_claim_size = OIDC_SESSION_WARN_CLAIM_SIZE;
 	const char *s = NULL;
 
-	if (oidc_util_decode_json_object(r, claims, &src) == FALSE) {
+	if (oidc_util_json_decode_object(r, claims, &src) == FALSE) {
 		oidc_session_set(r, z, session_key, NULL);
 		return;
 	}
@@ -567,7 +567,7 @@ void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, const c
 		}
 
 		if (is_allowed == TRUE) {
-			s = value ? oidc_util_encode_json(r->pool, value,
+			s = value ? oidc_util_json_encode(r->pool, value,
 							  JSON_PRESERVE_ORDER | JSON_COMPACT | JSON_ENCODE_ANY)
 				  : "";
 			if (_oidc_strlen(s) > warn_claim_size)
@@ -592,7 +592,7 @@ void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, const c
 		iter = json_object_iter_next(src, iter);
 	}
 
-	const char *filtered_claims = oidc_util_encode_json(r->pool, dst, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	const char *filtered_claims = oidc_util_json_encode(r->pool, dst, JSON_PRESERVE_ORDER | JSON_COMPACT);
 	filtered_claims = oidc_util_jq_filter(r, filtered_claims,
 					      oidc_util_apr_expr_exec(r, oidc_cfg_filter_claims_expr_get(c), TRUE));
 	json_decref(dst);

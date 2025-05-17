@@ -42,7 +42,7 @@
 
 #include "metrics.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 /*
  * indicate whether the incoming HTTP POST request is an OpenID Connect Authorization Response

@@ -35,7 +35,7 @@
 #include <ctype.h>
 #include <stdio.h>
 
-#include "pcre_subst.h"
+#include "util/pcre_subst.h"
 
 #ifdef HAVE_LIBPCRE2
 #define PCRE2_CODE_UNIT_WIDTH 8

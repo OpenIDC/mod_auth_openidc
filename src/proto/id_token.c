@@ -42,7 +42,7 @@
 
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 /*
  * if a nonce was passed in the authorization request (and stored in the browser state),

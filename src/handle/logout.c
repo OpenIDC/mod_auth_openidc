@@ -44,7 +44,7 @@
 #include "handle/handle.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 #define OIDC_DONT_REVOKE_TOKENS_BEFORE_LOGOUT_ENVVAR "OIDC_DONT_REVOKE_TOKENS_BEFORE_LOGOUT"
 

@@ -43,7 +43,7 @@
 #include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 /*
  * parse a JWT response from the userinfo endpoint: at this point the response is not a JSON object
@@ -307,14 +307,14 @@ apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, oidc_pro
 					      response_hdrs) == FALSE)
 		goto end;
 
-	if (oidc_util_decode_json_object_err(r, *response, &j_result, FALSE) == FALSE) {
+	if (oidc_util_json_decode_object_err(r, *response, &j_result, FALSE) == FALSE) {
 
 		// must be a JWT
 		if (oidc_proto_userinfo_response_jwt_parse(r, cfg, provider, response, &j_result, userinfo_jwt) ==
 		    FALSE)
 			goto end;
 
-	} else if (oidc_util_check_json_error(r, j_result) == TRUE) {
+	} else if (oidc_util_json_check_error(r, j_result) == TRUE) {
 
 		if (oidc_proto_dpop_use_nonce(r, cfg, j_result, response_hdrs,
 					      oidc_cfg_provider_userinfo_endpoint_url_get(provider), method,
@@ -328,7 +328,7 @@ apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, oidc_pro
 
 		json_decref(j_result);
 
-		if (oidc_util_decode_json_object_err(r, *response, &j_result, FALSE) == FALSE) {
+		if (oidc_util_json_decode_object_err(r, *response, &j_result, FALSE) == FALSE) {
 
 			// must be a JWT
 			if (oidc_proto_userinfo_response_jwt_parse(r, cfg, provider, response, &j_result,
@@ -336,12 +336,12 @@ apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, oidc_pro
 				goto end;
 		}
 
-		if (oidc_util_check_json_error(r, j_result) == TRUE)
+		if (oidc_util_json_check_error(r, j_result) == TRUE)
 			goto end;
 	}
 
 	if (oidc_proto_userinfo_request_composite_claims(r, cfg, j_result) == TRUE)
-		*response = oidc_util_encode_json(r->pool, j_result, JSON_PRESERVE_ORDER | JSON_COMPACT);
+		*response = oidc_util_json_encode(r->pool, j_result, JSON_PRESERVE_ORDER | JSON_COMPACT);
 
 	char *user_info_sub = NULL;
 	oidc_jose_get_string(r->pool, j_result, OIDC_CLAIM_SUB, FALSE, &user_info_sub, NULL);

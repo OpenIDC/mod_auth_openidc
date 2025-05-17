@@ -43,14 +43,21 @@ libauth_openidc_la_SOURCES = \
 	src/proto/state.c \
 	src/proto/token.c \
 	src/proto/userinfo.c \
+	src/util/base64.c \
+	src/util/expr.c \
+	src/util/html.c \
+	src/util/jq.c \
+	src/util/json.c \
+	src/util/jwt.c \
+	src/util/pcre_subst.c \
+	src/util/random.c \
+	src/util/util.c \
 	src/metrics.c \
 	src/oauth.c \
-	src/util.c \
 	src/http.c \
 	src/session.c \
 	src/metadata.c \
-	src/jose.c \
-	src/pcre_subst.c
+	src/jose.c
 
 AM_CFLAGS = -DNAMEVER="@NAMEVER@" -I${top_srcdir}/src @APACHE_CFLAGS@ @OPENSSL_CFLAGS@ @CURL_CFLAGS@ @JANSSON_CFLAGS@ @CJOSE_CFLAGS@ @PCRE_CFLAGS@
 AM_CPPFLAGS = @APACHE_CPPFLAGS@
@@ -98,15 +105,15 @@ noinst_HEADERS = \
 	src/handle/handle.h \
 	src/proto/proto.h \
 	src/cache/cache.h \
+	src/util/util.h \
+	src/util/pcre_subst.h \
 	src/oauth.h \
 	src/metadata.h \
 	src/session.h \
 	src/jose.h \
 	src/http.h \
-	src/util.h \
 	src/metrics.h \
-	src/const.h \
-	src/pcre_subst.h
+	src/const.h
 
 if HAVE_LIBHIREDIS
 noinst_HEADERS += \

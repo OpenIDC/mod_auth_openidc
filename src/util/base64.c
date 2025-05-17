@@ -40,71 +40,88 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#include "proto/proto.h"
 #include "util/util.h"
 
+#include <apr_base64.h>
 /*
- * PCKE "plain" proto state
+ * base64url encode a string
  */
-static apr_byte_t oidc_proto_pkce_state_plain(request_rec *r, char **state) {
-	return oidc_util_random_str_gen(r, state, OIDC_PROTO_CODE_VERIFIER_LENGTH);
-}
-
-/*
- * PCKE "plain" code_challenge
- */
-static apr_byte_t oidc_proto_pkce_challenge_plain(request_rec *r, const char *state, char **code_challenge) {
-	*code_challenge = apr_pstrdup(r->pool, state);
-	return TRUE;
-}
-
-/*
- * PCKE "plain" code_verifier
- */
-static apr_byte_t oidc_proto_pkce_verifier_plain(request_rec *r, const char *state, char **code_verifier) {
-	*code_verifier = apr_pstrdup(r->pool, state);
-	return TRUE;
-}
-
-/*
- * PCKE "s256" proto state
- */
-static apr_byte_t oidc_proto_pkce_state_s256(request_rec *r, char **state) {
-	return oidc_util_random_str_gen(r, state, OIDC_PROTO_CODE_VERIFIER_LENGTH);
-}
-
-/*
- * PCKE "s256" code_challenge
- */
-static apr_byte_t oidc_proto_pkce_challenge_s256(request_rec *r, const char *state, char **code_challenge) {
-	if (oidc_util_hash_string_and_base64url_encode(r, OIDC_JOSE_ALG_SHA256, state, code_challenge) == FALSE) {
-		oidc_error(r, "oidc_util_hash_string_and_base64url_encode returned an error for the code verifier");
-		return FALSE;
+int oidc_util_base64url_encode(request_rec *r, char **dst, const char *src, int src_len, int remove_padding) {
+	if ((src == NULL) || (src_len <= 0)) {
+		oidc_error(r, "not encoding anything; src=NULL and/or src_len<1");
+		return -1;
 	}
-	return TRUE;
+	unsigned int enc_len = apr_base64_encode_len(src_len);
+	char *enc = apr_palloc(r->pool, enc_len);
+	apr_base64_encode(enc, src, src_len);
+	unsigned int i = 0;
+	while (enc[i] != '\0') {
+		if (enc[i] == '+')
+			enc[i] = '-';
+		if (enc[i] == '/')
+			enc[i] = '_';
+		if (enc[i] == '=')
+			enc[i] = ',';
+		i++;
+	}
+	if (remove_padding) {
+		/* remove /0 and padding */
+		if (enc_len > 0)
+			enc_len--;
+		if ((enc_len > 0) && (enc[enc_len - 1] == ','))
+			enc_len--;
+		if ((enc_len > 0) && (enc[enc_len - 1] == ','))
+			enc_len--;
+		enc[enc_len] = '\0';
+	}
+	*dst = enc;
+	return enc_len;
 }
 
 /*
- * PCKE "s256" code_verifier
+ * parse a base64 encoded binary value from the provided string
  */
-static apr_byte_t oidc_proto_pkce_verifier_s256(request_rec *r, const char *state, char **code_verifier) {
-	*code_verifier = apr_pstrdup(r->pool, state);
-	return TRUE;
+char *oidc_util_base64_decode(apr_pool_t *pool, const char *input, char **output, int *output_len) {
+	int len = apr_base64_decode_len(input);
+	*output = apr_pcalloc(pool, len);
+	*output_len = apr_base64_decode(*output, input);
+	if (*output_len <= 0)
+		return apr_psprintf(pool, "base64-decoding of \"%s\" failed", input);
+	return NULL;
 }
 
 /*
- * PKCE plain
+ * base64url decode a string
  */
-oidc_proto_pkce_t oidc_pkce_plain = {OIDC_PKCE_METHOD_PLAIN, oidc_proto_pkce_state_plain,
-				     oidc_proto_pkce_verifier_plain, oidc_proto_pkce_challenge_plain};
+int oidc_util_base64url_decode(apr_pool_t *pool, char **dst, const char *src) {
+	if (src == NULL) {
+		return -1;
+	}
+	char *dec = apr_pstrdup(pool, src);
+	int i = 0;
+	while (dec[i] != '\0') {
+		if (dec[i] == '-')
+			dec[i] = '+';
+		if (dec[i] == '_')
+			dec[i] = '/';
+		if (dec[i] == ',')
+			dec[i] = '=';
+		i++;
+	}
+	switch (_oidc_strlen(dec) % 4) {
+	case 0:
+		break;
+	case 2:
+		dec = apr_pstrcat(pool, dec, "==", NULL);
+		break;
+	case 3:
+		dec = apr_pstrcat(pool, dec, "=", NULL);
+		break;
+	default:
+		return 0;
+	}
 
-/*
- * PKCE s256
- */
-oidc_proto_pkce_t oidc_pkce_s256 = {OIDC_PKCE_METHOD_S256, oidc_proto_pkce_state_s256, oidc_proto_pkce_verifier_s256,
-				    oidc_proto_pkce_challenge_s256};
-
-/*
- * PKCE none
- */
-oidc_proto_pkce_t oidc_pkce_none = {OIDC_PKCE_METHOD_NONE, NULL, NULL, NULL};
+	int dlen = -1;
+	oidc_util_base64_decode(pool, dec, dst, &dlen);
+	return dlen;
+}

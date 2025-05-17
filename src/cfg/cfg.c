@@ -50,7 +50,7 @@
 #include "metrics.h"
 #include "proto/proto.h"
 #include "session.h"
-#include "util.h"
+#include "util/util.h"
 
 const char *oidc_cfg_string_list_add(apr_pool_t *pool, apr_array_header_t **list, const char *arg) {
 	if (*list == NULL)

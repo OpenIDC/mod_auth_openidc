@@ -43,7 +43,7 @@
 #include "cfg/dir.h"
 #include "cfg/cfg_int.h"
 #include "cfg/parse.h"
-#include "util.h"
+#include "util/util.h"
 
 /*
  * directory related configuration

@@ -44,7 +44,7 @@
 #include "cfg/parse.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 /*
  * based on a resource perform OpenID Connect Provider Issuer Discovery to find out the issuer and obtain and store its
@@ -70,7 +70,7 @@ static apr_byte_t oidc_proto_webfinger_discovery(request_rec *r, oidc_cfg_t *cfg
 
 	/* decode and see if it is not an error response somehow */
 	json_t *j_response = NULL;
-	if (oidc_util_decode_json_and_check_error(r, response, &j_response) == FALSE)
+	if (oidc_util_json_decode_and_check_error(r, response, &j_response) == FALSE)
 		return FALSE;
 
 	/* get the links parameter */

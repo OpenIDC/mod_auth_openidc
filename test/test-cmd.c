@@ -48,7 +48,7 @@
 #include "cfg/provider.h"
 #include "jose.h"
 #include "session.h"
-#include "util.h"
+#include "util/util.h"
 #include <apr_base64.h>
 #include <openssl/pem.h>
 

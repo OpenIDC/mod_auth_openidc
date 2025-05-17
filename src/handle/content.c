@@ -43,7 +43,7 @@
 #include "handle/handle.h"
 #include "metrics.h"
 #include "mod_auth_openidc.h"
-#include "util.h"
+#include "util/util.h"
 
 /*
  * handle content generating requests

@@ -44,7 +44,7 @@
 #include "handle/handle.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 /*
  * store claims resolved from the userinfo endpoint in the session
@@ -280,12 +280,12 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg_t *cf
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_ISS,
 			    json_string(oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(cfg))));
 
-	oidc_util_decode_json_object(r, s_claims, &json);
+	oidc_util_json_decode_object(r, s_claims, &json);
 	if (json == NULL)
 		goto end;
 	if (oidc_util_json_merge(r, json, jwt->payload.value.json) == FALSE)
 		goto end;
-	s_claims = oidc_util_encode_json(r->pool, jwt->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	s_claims = oidc_util_json_encode(r->pool, jwt->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
 	if (oidc_jose_hash_and_base64url_encode(r->pool, OIDC_JOSE_ALG_SHA256, s_claims, _oidc_strlen(s_claims) + 1,
 						&key, &err) == FALSE) {
 		oidc_error(r, "oidc_jose_hash_and_base64url_encode failed: %s", oidc_jose_e2s(r->pool, err));
@@ -303,7 +303,7 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg_t *cf
 	}
 
 	if (json_object_get(jwt->payload.value.json, OIDC_CLAIM_JTI) == NULL) {
-		oidc_util_generate_random_string(r, &jti, OIDC_PROTO_JWT_JTI_LEN);
+		oidc_util_random_str_gen(r, &jti, OIDC_PROTO_JWT_JTI_LEN);
 		json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_JTI, json_string(jti));
 	}
 	if (json_object_get(jwt->payload.value.json, OIDC_CLAIM_IAT) == NULL) {

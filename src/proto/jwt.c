@@ -42,7 +42,7 @@
 
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 /*
  * validate "iat" claim in JWT
@@ -231,7 +231,7 @@ char *oidc_proto_jwt_header_peek(request_rec *r, const char *compact_encoded_jwt
 	}
 	if ((alg != NULL) || (enc != NULL)) {
 		json_t *json = NULL;
-		oidc_util_decode_json_object(r, result, &json);
+		oidc_util_json_decode_object(r, result, &json);
 		if (json) {
 			if (alg)
 				*alg = apr_pstrdup(r->pool, json_string_value(json_object_get(json, CJOSE_HDR_ALG)));

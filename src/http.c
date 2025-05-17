@@ -56,7 +56,7 @@
 #include "http.h"
 #include "metrics.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 /*
  * URL-encode a string
@@ -987,7 +987,7 @@ apr_byte_t oidc_http_post_json(request_rec *r, const char *url, json_t *json, co
 			       long *response_code, apr_hash_t *response_hdrs, oidc_http_timeout_t *http_timeout,
 			       const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,
 			       const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd) {
-	char *data = json != NULL ? oidc_util_encode_json(r->pool, json, JSON_PRESERVE_ORDER | JSON_COMPACT) : NULL;
+	char *data = json != NULL ? oidc_util_json_encode(r->pool, json, JSON_PRESERVE_ORDER | JSON_COMPACT) : NULL;
 	return oidc_http_request(r, url, data, OIDC_HTTP_CONTENT_TYPE_JSON, basic_auth, access_token, dpop,
 				 ssl_validate_server, response, response_code, response_hdrs, http_timeout,
 				 outgoing_proxy, pass_cookies, ssl_cert, ssl_key, ssl_key_pwd);

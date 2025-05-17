@@ -42,7 +42,7 @@
 
 #include "metadata.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 /*
  * get the key from the JWKs that corresponds with the key specified in the header

@@ -42,7 +42,7 @@
 
 #include "metrics.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 /*
  * check that the access_token type is supported
@@ -137,11 +137,11 @@ apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, oi
 		goto end;
 
 	/* decode the response into a JSON object */
-	if (oidc_util_decode_json_object_err(r, response, &j_result, TRUE) == FALSE)
+	if (oidc_util_json_decode_object_err(r, response, &j_result, TRUE) == FALSE)
 		goto end;
 
 	/* check for errors, the response itself will have been logged already */
-	if (oidc_util_check_json_error(r, j_result) == TRUE) {
+	if (oidc_util_json_check_error(r, j_result) == TRUE) {
 
 		dpop = NULL;
 		if (oidc_proto_dpop_use_nonce(r, cfg, j_result, response_hdrs,
@@ -155,7 +155,7 @@ apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, oi
 
 		json_decref(j_result);
 
-		if (oidc_util_decode_json_and_check_error(r, response, &j_result) == FALSE)
+		if (oidc_util_json_decode_and_check_error(r, response, &j_result) == FALSE)
 			goto end;
 	}
 

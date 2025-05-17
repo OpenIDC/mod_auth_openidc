@@ -51,7 +51,7 @@
 #include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 #define OIDC_METADATA_SUFFIX_PROVIDER "provider"
 #define OIDC_METADATA_SUFFIX_CLIENT "client"
@@ -214,7 +214,7 @@ static apr_byte_t oidc_metadata_file_read_json(request_rec *r, const char *path,
 		return FALSE;
 
 	/* decode the JSON contents of the buffer */
-	return oidc_util_decode_json_object(r, buf, result);
+	return oidc_util_json_decode_object(r, buf, result);
 }
 
 /*
@@ -557,7 +557,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg,
 
 	if (oidc_cfg_provider_request_object_get(provider) != NULL) {
 		json_t *request_object_config = NULL;
-		if (oidc_util_decode_json_object(r, oidc_cfg_provider_request_object_get(provider),
+		if (oidc_util_json_decode_object(r, oidc_cfg_provider_request_object_get(provider),
 						 &request_object_config) == TRUE) {
 			json_t *crypto = json_object_get(request_object_config, "crypto");
 			char *alg = "none";
@@ -589,7 +589,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg,
 	/* add any custom JSON in to the registration request */
 	if (oidc_cfg_provider_registration_endpoint_json_get(provider) != NULL) {
 		json_t *json = NULL;
-		if (oidc_util_decode_json_object(r, oidc_cfg_provider_registration_endpoint_json_get(provider),
+		if (oidc_util_json_decode_object(r, oidc_cfg_provider_registration_endpoint_json_get(provider),
 						 &json) == FALSE)
 			return FALSE;
 		oidc_util_json_merge(r, json, data);
@@ -608,7 +608,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg,
 	json_decref(data);
 
 	/* decode and see if it is not an error response somehow */
-	if (oidc_util_decode_json_and_check_error(r, *response, j_client) == FALSE) {
+	if (oidc_util_json_decode_and_check_error(r, *response, j_client) == FALSE) {
 		oidc_error(r, "JSON parsing of dynamic client registration response failed");
 		return FALSE;
 	}
@@ -675,7 +675,7 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r, oidc_cfg
 	}
 
 	/* decode and see if it is not an error response somehow */
-	if (oidc_util_decode_json_and_check_error(r, response, j_jwks) == FALSE) {
+	if (oidc_util_json_decode_and_check_error(r, response, j_jwks) == FALSE) {
 		oidc_error(r, "JSON parsing of JWKs published at the jwks_uri failed");
 		return FALSE;
 	}
@@ -712,7 +712,7 @@ apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg_t *cfg, const oidc_jw
 	/* see if the JWKs is cached */
 	if ((oidc_cache_get_jwks(r, oidc_metadata_jwks_cache_key(jwks_uri), &value) == TRUE) && (value != NULL)) {
 		/* decode and see if it is not a cached error response somehow */
-		if (oidc_util_decode_json_and_check_error(r, value, j_jwks) == FALSE) {
+		if (oidc_util_json_decode_and_check_error(r, value, j_jwks) == FALSE) {
 			oidc_warn(r, "JSON parsing of cached JWKs data failed");
 			value = NULL;
 		}
@@ -747,7 +747,7 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg, cons
 	OIDC_METRICS_TIMING_ADD(r, cfg, OM_PROVIDER_METADATA);
 
 	/* decode and see if it is not an error response somehow */
-	if (oidc_util_decode_json_and_check_error(r, *response, j_metadata) == FALSE) {
+	if (oidc_util_json_decode_and_check_error(r, *response, j_metadata) == FALSE) {
 		oidc_error(r, "JSON parsing of retrieved Discovery document failed");
 		return FALSE;
 	}

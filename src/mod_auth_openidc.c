@@ -57,7 +57,7 @@
 #include "metrics.h"
 #include "oauth.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 #define OPENSSL_THREAD_DEFINES
 #include <openssl/err.h>
@@ -204,7 +204,7 @@ void oidc_strip_cookies(request_rec *r) {
 static apr_byte_t oidc_provider_validate_metadata_str(request_rec *r, oidc_cfg_t *c, const char *s_json,
 						      json_t **j_provider, apr_byte_t decode_only) {
 
-	if (oidc_util_decode_json_object(r, s_json, j_provider) == FALSE)
+	if (oidc_util_json_decode_object(r, s_json, j_provider) == FALSE)
 		return FALSE;
 
 	if (decode_only == TRUE)
@@ -401,7 +401,7 @@ apr_byte_t oidc_set_app_claims(request_rec *r, oidc_cfg_t *cfg, const char *s_cl
 
 	/* decode the string-encoded attributes in to a JSON structure */
 	if (s_claims != NULL) {
-		if (oidc_util_decode_json_object(r, s_claims, &j_claims) == FALSE)
+		if (oidc_util_json_decode_object(r, s_claims, &j_claims) == FALSE)
 			return FALSE;
 	}
 
