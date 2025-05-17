@@ -40,9 +40,9 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#include "util/util.h"
 #include "http.h"
 #include "mod_auth_openidc.h"
+#include "util/util.h"
 
 /*
  * HTML escape a string
@@ -78,6 +78,95 @@ char *oidc_util_html_escape(apr_pool_t *pool, const char *s) {
 	}
 	r[j] = '\0';
 	return apr_pstrdup(pool, r);
+}
+
+/*
+ * JavaScript escape a string
+ */
+char *oidc_util_html_javascript_escape(apr_pool_t *pool, const char *s) {
+	const char *cp = NULL;
+	char *output = NULL;
+	int outputlen = 0;
+	int i = 0;
+
+	if (s == NULL) {
+		return NULL;
+	}
+
+	outputlen = 0;
+	for (cp = s; *cp; cp++) {
+		switch (*cp) {
+		case '\'':
+		case '"':
+		case '\\':
+		case '/':
+		case 0x0D:
+		case 0x0A:
+			outputlen += 2;
+			break;
+		case '<':
+		case '>':
+			outputlen += 4;
+			break;
+		default:
+			outputlen += 1;
+			break;
+		}
+	}
+
+	i = 0;
+	output = apr_pcalloc(pool, outputlen + 1);
+	for (cp = s; *cp; cp++) {
+		switch (*cp) {
+		case '\'':
+			if (i <= outputlen - 2)
+				(void)_oidc_strcpy(&output[i], "\\'");
+			i += 2;
+			break;
+		case '"':
+			if (i <= outputlen - 2)
+				(void)_oidc_strcpy(&output[i], "\\\"");
+			i += 2;
+			break;
+		case '\\':
+			if (i <= outputlen - 2)
+				(void)_oidc_strcpy(&output[i], "\\\\");
+			i += 2;
+			break;
+		case '/':
+			if (i <= outputlen - 2)
+				(void)_oidc_strcpy(&output[i], "\\/");
+			i += 2;
+			break;
+		case 0x0D:
+			if (i <= outputlen - 2)
+				(void)_oidc_strcpy(&output[i], "\\r");
+			i += 2;
+			break;
+		case 0x0A:
+			if (i <= outputlen - 2)
+				(void)_oidc_strcpy(&output[i], "\\n");
+			i += 2;
+			break;
+		case '<':
+			if (i <= outputlen - 4)
+				(void)_oidc_strcpy(&output[i], "\\x3c");
+			i += 4;
+			break;
+		case '>':
+			if (i <= outputlen - 4)
+				(void)_oidc_strcpy(&output[i], "\\x3e");
+			i += 4;
+			break;
+		default:
+			if (i <= outputlen - 1)
+				output[i] = *cp;
+			i += 1;
+			break;
+		}
+	}
+	output[i] = '\0';
+	return output;
 }
 
 /*
@@ -153,7 +242,7 @@ static char *oidc_util_template_escape(request_rec *r, const char *arg, int esca
 	if (escape == OIDC_POST_PRESERVE_ESCAPE_HTML) {
 		rv = oidc_util_html_escape(r->pool, arg ? arg : "");
 	} else if (escape == OIDC_POST_PRESERVE_ESCAPE_JAVASCRIPT) {
-		rv = oidc_util_javascript_escape(r->pool, arg ? arg : "");
+		rv = oidc_util_html_javascript_escape(r->pool, arg ? arg : "");
 	} else {
 		rv = apr_pstrdup(r->pool, arg);
 	}

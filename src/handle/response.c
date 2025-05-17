@@ -59,7 +59,7 @@ static int oidc_response_redirect_parent_window_to_logout(request_rec *r, oidc_c
 					 "    <script type=\"text/javascript\">\n"
 					 "      window.top.location.href = '%s?session=logout';\n"
 					 "    </script>\n",
-					 oidc_util_javascript_escape(r->pool, oidc_util_url_redirect_uri(r, c)));
+					 oidc_util_html_javascript_escape(r->pool, oidc_util_url_redirect_uri(r, c)));
 
 	return oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_HTML, "Redirecting...", java_script, NULL, NULL);
 }
@@ -159,8 +159,9 @@ apr_byte_t oidc_response_post_preserve_javascript(request_rec *r, const char *lo
 	    "      }\n"
 	    "    </script>\n",
 	    jmethod, json,
-	    location ? apr_psprintf(r->pool, "window.location='%s';\n", oidc_util_javascript_escape(r->pool, location))
-		     : "");
+	    location
+		? apr_psprintf(r->pool, "window.location='%s';\n", oidc_util_html_javascript_escape(r->pool, location))
+		: "");
 
 	if (javascript_method)
 		*javascript_method = apr_pstrdup(r->pool, jmethod);
@@ -204,7 +205,7 @@ static int oidc_response_post_preserved_restore(request_rec *r, const char *orig
 			 "        document.forms[0].submit();\n"
 			 "      }\n"
 			 "    </script>\n",
-			 method, oidc_util_javascript_escape(r->pool, original_url));
+			 method, oidc_util_html_javascript_escape(r->pool, original_url));
 
 	const char *body = "    <p>Restoring...</p>\n"
 			   "    <form method=\"post\"></form>\n";
@@ -562,8 +563,7 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 				  "invalid authorization response state; a default SSO URL is set, sending the user "
 				  "there: %s",
 				  oidc_cfg_default_sso_url_get(c));
-			oidc_http_hdr_out_location_set(r,
-						       oidc_util_url_abs(r, c, oidc_cfg_default_sso_url_get(c)));
+			oidc_http_hdr_out_location_set(r, oidc_util_url_abs(r, c, oidc_cfg_default_sso_url_get(c)));
 			OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_STATE_MISMATCH);
 			return HTTP_MOVED_TEMPORARILY;
 		}

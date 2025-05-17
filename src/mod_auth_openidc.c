@@ -407,8 +407,9 @@ apr_byte_t oidc_set_app_claims(request_rec *r, oidc_cfg_t *cfg, const char *s_cl
 
 	/* set the resolved claims a HTTP headers for the application */
 	if (j_claims != NULL) {
-		oidc_util_set_app_infos(r, j_claims, oidc_cfg_claim_prefix_get(cfg), oidc_cfg_claim_delimiter_get(cfg),
-					pass_in, oidc_cfg_dir_pass_info_encoding_get(r));
+		oidc_util_appinfo_set_all(r, j_claims, oidc_cfg_claim_prefix_get(cfg),
+					  oidc_cfg_claim_delimiter_get(cfg), pass_in,
+					  oidc_cfg_dir_pass_info_encoding_get(r));
 
 		/* release resources */
 		json_decref(j_claims);
@@ -613,39 +614,39 @@ apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg_t *cfg, oidc_sessio
 	const char *refresh_token = oidc_session_get_refresh_token(r, session);
 	if ((oidc_cfg_dir_pass_refresh_token_get(r) != 0) && (refresh_token != NULL)) {
 		/* pass it to the app in a header or environment variable */
-		oidc_util_set_app_info(r, OIDC_APP_INFO_REFRESH_TOKEN, refresh_token, OIDC_DEFAULT_HEADER_PREFIX,
-				       pass_in, encoding);
+		oidc_util_appinfo_set(r, OIDC_APP_INFO_REFRESH_TOKEN, refresh_token, OIDC_DEFAULT_HEADER_PREFIX,
+				      pass_in, encoding);
 	}
 
 	/* set the access_token in the app headers/variables */
 	const char *access_token = oidc_session_get_access_token(r, session);
 	if ((oidc_cfg_dir_pass_access_token_get(r) != 0) && access_token != NULL) {
 		/* pass it to the app in a header or environment variable */
-		oidc_util_set_app_info(r, OIDC_APP_INFO_ACCESS_TOKEN, access_token, OIDC_DEFAULT_HEADER_PREFIX, pass_in,
-				       encoding);
+		oidc_util_appinfo_set(r, OIDC_APP_INFO_ACCESS_TOKEN, access_token, OIDC_DEFAULT_HEADER_PREFIX, pass_in,
+				      encoding);
 	}
 
 	/* set the access_token type in the app headers/variables */
 	const char *access_token_type = oidc_session_get_access_token_type(r, session);
 	if ((oidc_cfg_dir_pass_access_token_get(r) != 0) && access_token_type != NULL) {
 		/* pass it to the app in a header or environment variable */
-		oidc_util_set_app_info(r, OIDC_APP_INFO_ACCESS_TOKEN_TYPE, access_token_type,
-				       OIDC_DEFAULT_HEADER_PREFIX, pass_in, encoding);
+		oidc_util_appinfo_set(r, OIDC_APP_INFO_ACCESS_TOKEN_TYPE, access_token_type, OIDC_DEFAULT_HEADER_PREFIX,
+				      pass_in, encoding);
 	}
 
 	/* set the expiry timestamp in the app headers/variables */
 	const char *access_token_expires = oidc_session_get_access_token_expires2str(r, session);
 	if ((oidc_cfg_dir_pass_access_token_get(r) != 0) && access_token_expires != NULL) {
 		/* pass it to the app in a header or environment variable */
-		oidc_util_set_app_info(r, OIDC_APP_INFO_ACCESS_TOKEN_EXP, access_token_expires,
-				       OIDC_DEFAULT_HEADER_PREFIX, pass_in, encoding);
+		oidc_util_appinfo_set(r, OIDC_APP_INFO_ACCESS_TOKEN_EXP, access_token_expires,
+				      OIDC_DEFAULT_HEADER_PREFIX, pass_in, encoding);
 	}
 
 	/* set the scope in the app headers/variables alongside of the access token, if enabled */
 	const char *scope = oidc_session_get_scope(r, session);
 	if ((oidc_cfg_dir_pass_access_token_get(r) != 0) && scope != NULL) {
 		/* pass it to the app in a header or environment variable */
-		oidc_util_set_app_info(r, OIDC_APP_INFO_SCOPE, scope, OIDC_DEFAULT_HEADER_PREFIX, pass_in, encoding);
+		oidc_util_appinfo_set(r, OIDC_APP_INFO_SCOPE, scope, OIDC_DEFAULT_HEADER_PREFIX, pass_in, encoding);
 	}
 
 	if (extend_session) {
@@ -740,9 +741,9 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg_t *cfg, oidc_se
 			oidc_debug(r, "dir_action_on_error_refresh: %d", oidc_cfg_dir_action_on_error_refresh_get(r));
 			OIDC_METRICS_COUNTER_INC(r, cfg, OM_SESSION_ERROR_REFRESH_ACCESS_TOKEN);
 			if (oidc_cfg_dir_action_on_error_refresh_get(r) == OIDC_ON_ERROR_LOGOUT) {
-				return oidc_logout_request(
-				    r, cfg, session, oidc_util_url_abs(r, cfg, oidc_cfg_default_slo_url_get(cfg)),
-				    FALSE);
+				return oidc_logout_request(r, cfg, session,
+							   oidc_util_url_abs(r, cfg, oidc_cfg_default_slo_url_get(cfg)),
+							   FALSE);
 			}
 			if (oidc_cfg_dir_action_on_error_refresh_get(r) == OIDC_ON_ERROR_AUTH) {
 				oidc_session_kill(r, session);
@@ -758,9 +759,9 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg_t *cfg, oidc_se
 			oidc_debug(r, "action_on_userinfo_error: %d", oidc_cfg_action_on_userinfo_error_get(cfg));
 			OIDC_METRICS_COUNTER_INC(r, cfg, OM_SESSION_ERROR_REFRESH_USERINFO);
 			if (oidc_cfg_action_on_userinfo_error_get(cfg) == OIDC_ON_ERROR_LOGOUT) {
-				return oidc_logout_request(
-				    r, cfg, session, oidc_util_url_abs(r, cfg, oidc_cfg_default_slo_url_get(cfg)),
-				    FALSE);
+				return oidc_logout_request(r, cfg, session,
+							   oidc_util_url_abs(r, cfg, oidc_cfg_default_slo_url_get(cfg)),
+							   FALSE);
 			}
 			if (oidc_cfg_action_on_userinfo_error_get(cfg) == OIDC_ON_ERROR_AUTH) {
 				oidc_session_kill(r, session);
@@ -785,8 +786,8 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg_t *cfg, oidc_se
 
 	if ((oidc_cfg_dir_pass_idtoken_as_get(r) & OIDC_PASS_IDTOKEN_AS_PAYLOAD)) {
 		/* pass the id_token JSON object to the app in a header or environment variable */
-		oidc_util_set_app_info(r, OIDC_APP_INFO_ID_TOKEN_PAYLOAD, s_id_token, OIDC_DEFAULT_HEADER_PREFIX,
-				       pass_in, encoding);
+		oidc_util_appinfo_set(r, OIDC_APP_INFO_ID_TOKEN_PAYLOAD, s_id_token, OIDC_DEFAULT_HEADER_PREFIX,
+				      pass_in, encoding);
 	}
 
 	if ((oidc_cfg_dir_pass_idtoken_as_get(r) & OIDC_PASS_IDTOKEN_AS_SERIALIZED)) {
@@ -794,8 +795,8 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg_t *cfg, oidc_se
 		s_id_token = oidc_session_get_idtoken(r, session);
 		if (s_id_token) {
 			/* pass the compact serialized JWT to the app in a header or environment variable */
-			oidc_util_set_app_info(r, OIDC_APP_INFO_ID_TOKEN, s_id_token, OIDC_DEFAULT_HEADER_PREFIX,
-					       pass_in, encoding);
+			oidc_util_appinfo_set(r, OIDC_APP_INFO_ID_TOKEN, s_id_token, OIDC_DEFAULT_HEADER_PREFIX,
+					      pass_in, encoding);
 		} else {
 			oidc_warn(r, "id_token was not found in the session so it cannot be passed on");
 		}

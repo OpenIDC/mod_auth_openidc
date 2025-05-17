@@ -145,4 +145,3 @@ oidc_jwk_t *oidc_util_key_list_first(const apr_array_header_t *key_list, int kty
 	}
 	return rv;
 }
-

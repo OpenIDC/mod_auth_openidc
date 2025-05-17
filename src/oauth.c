@@ -761,13 +761,13 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg_t *c, const char *access_to
 		oidc_http_hdr_in_set(r, authn_header, r->user);
 
 	/* set the resolved claims in the HTTP headers for the target application */
-	oidc_util_set_app_infos(r, token, oidc_cfg_claim_prefix_get(c), oidc_cfg_claim_delimiter_get(c), pass_in,
-				encoding);
+	oidc_util_appinfo_set_all(r, token, oidc_cfg_claim_prefix_get(c), oidc_cfg_claim_delimiter_get(c), pass_in,
+				  encoding);
 
 	/* set the access_token in the app headers */
 	if (access_token != NULL) {
-		oidc_util_set_app_info(r, OIDC_APP_INFO_ACCESS_TOKEN, access_token, OIDC_DEFAULT_HEADER_PREFIX, pass_in,
-				       encoding);
+		oidc_util_appinfo_set(r, OIDC_APP_INFO_ACCESS_TOKEN, access_token, OIDC_DEFAULT_HEADER_PREFIX, pass_in,
+				      encoding);
 	}
 
 	/* free JSON resources */

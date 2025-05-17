@@ -581,9 +581,8 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg,
 				     OIDC_REDIRECT_URI_REQUEST_LOGOUT, OIDC_BACKCHANNEL_STYLE_LOGOUT_PARAM_VALUE)));
 
 	if (oidc_cfg_default_slo_url_get(cfg) != NULL) {
-		json_object_set_new(
-		    data, OIDC_METADATA_POST_LOGOUT_REDIRECT_URIS,
-		    json_pack("[s]", oidc_util_url_abs(r, cfg, oidc_cfg_default_slo_url_get(cfg))));
+		json_object_set_new(data, OIDC_METADATA_POST_LOGOUT_REDIRECT_URIS,
+				    json_pack("[s]", oidc_util_url_abs(r, cfg, oidc_cfg_default_slo_url_get(cfg))));
 	}
 
 	/* add any custom JSON in to the registration request */

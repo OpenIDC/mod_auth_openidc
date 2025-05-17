@@ -40,8 +40,8 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#include "util/util.h"
 #include "proto/proto.h"
+#include "util/util.h"
 
 /*
  * printout a JSON string value

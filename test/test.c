@@ -1227,13 +1227,11 @@ static char *test_current_url(request_rec *r) {
 	TST_ASSERT_STR("test_current_url (5b)", url, "https://www.outer.com:654/test?foo=bar&param1=value1");
 	url = oidc_util_url_cur(r, OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT);
 	TST_ASSERT_STR("test_current_url (5c)", url, "https://www.outer.com:321/test?foo=bar&param1=value1");
-	url = oidc_util_url_cur(r,
-				    OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT | OIDC_HDR_X_FORWARDED_PROTO);
+	url = oidc_util_url_cur(r, OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT | OIDC_HDR_X_FORWARDED_PROTO);
 	TST_ASSERT_STR("test_current_url (5d)", url, "http://www.outer.com:321/test?foo=bar&param1=value1");
 
 	apr_table_set(r->headers_in, "X-Forwarded-Proto", "https , http");
-	url = oidc_util_url_cur(r,
-				    OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT | OIDC_HDR_X_FORWARDED_PROTO);
+	url = oidc_util_url_cur(r, OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT | OIDC_HDR_X_FORWARDED_PROTO);
 	TST_ASSERT_STR("test_current_url (6)", url, "https://www.outer.com:321/test?foo=bar&param1=value1");
 
 	apr_table_unset(r->headers_in, "X-Forwarded-Host");
@@ -1751,18 +1749,19 @@ static char *test_set_app_infos(request_rec *r) {
 					  &claims);
 	TST_ASSERT("valid JSON", rc == TRUE);
 
-	oidc_util_set_app_infos(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
+	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
 	TST_ASSERT_STR("header plain simple", apr_table_get(r->headers_in, "OIDC_CLAIM_simple"), "hans");
 	TST_ASSERT_STR("header plain name", apr_table_get(r->headers_in, "OIDC_CLAIM_name"), "G\u00DCnther");
 	TST_ASSERT_STR("header plain dagger", apr_table_get(r->headers_in, "OIDC_CLAIM_dagger"), "D\u2020gger");
 
-	oidc_util_set_app_infos(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS,
-				OIDC_APPINFO_ENCODING_BASE64URL);
+	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS,
+				  OIDC_APPINFO_ENCODING_BASE64URL);
 	TST_ASSERT_STR("header base64url simple", apr_table_get(r->headers_in, "OIDC_CLAIM_simple"), "aGFucw");
 	TST_ASSERT_STR("header base64url name", apr_table_get(r->headers_in, "OIDC_CLAIM_name"), "R8OcbnRoZXI");
 	TST_ASSERT_STR("header base64url dagger", apr_table_get(r->headers_in, "OIDC_CLAIM_dagger"), "ROKAoGdnZXI");
 
-	oidc_util_set_app_infos(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_LATIN1);
+	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS,
+				  OIDC_APPINFO_ENCODING_LATIN1);
 	TST_ASSERT_STR("header latin1 simple", apr_table_get(r->headers_in, "OIDC_CLAIM_simple"), "hans");
 	TST_ASSERT_STR("header latin1 name", apr_table_get(r->headers_in, "OIDC_CLAIM_name"), "G\xDCnther");
 	TST_ASSERT_STR("header latin1 dagger", apr_table_get(r->headers_in, "OIDC_CLAIM_dagger"), "D?gger");

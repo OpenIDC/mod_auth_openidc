@@ -380,8 +380,8 @@ void oidc_userinfo_pass_as(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *sess
 
 		case OIDC_PASS_USERINFO_AS_JSON_OBJECT:
 			/* pass the userinfo JSON object to the app in a header or environment variable */
-			oidc_util_set_app_info(r, p->name ? p->name : OIDC_APP_INFO_USERINFO_JSON, s_claims,
-					       p->name ? "" : OIDC_DEFAULT_HEADER_PREFIX, pass_in, encoding);
+			oidc_util_appinfo_set(r, p->name ? p->name : OIDC_APP_INFO_USERINFO_JSON, s_claims,
+					      p->name ? "" : OIDC_DEFAULT_HEADER_PREFIX, pass_in, encoding);
 			break;
 
 		case OIDC_PASS_USERINFO_AS_JWT:
@@ -391,9 +391,9 @@ void oidc_userinfo_pass_as(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *sess
 				if (s_userinfo_jwt != NULL) {
 					/* pass the compact serialized JWT to the app in a header or environment
 					 * variable */
-					oidc_util_set_app_info(
-					    r, p->name ? p->name : OIDC_APP_INFO_USERINFO_JWT, s_userinfo_jwt,
-					    p->name ? "" : OIDC_DEFAULT_HEADER_PREFIX, pass_in, encoding);
+					oidc_util_appinfo_set(r, p->name ? p->name : OIDC_APP_INFO_USERINFO_JWT,
+							      s_userinfo_jwt, p->name ? "" : OIDC_DEFAULT_HEADER_PREFIX,
+							      pass_in, encoding);
 				} else {
 					oidc_debug(
 					    r,
@@ -409,8 +409,8 @@ void oidc_userinfo_pass_as(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *sess
 		case OIDC_PASS_USERINFO_AS_SIGNED_JWT:
 
 			if (oidc_userinfo_create_signed_jwt(r, cfg, session, s_claims, &cser) == TRUE) {
-				oidc_util_set_app_info(r, p->name ? p->name : OIDC_APP_INFO_SIGNED_JWT, cser,
-						       p->name ? "" : OIDC_DEFAULT_HEADER_PREFIX, pass_in, encoding);
+				oidc_util_appinfo_set(r, p->name ? p->name : OIDC_APP_INFO_SIGNED_JWT, cser,
+						      p->name ? "" : OIDC_DEFAULT_HEADER_PREFIX, pass_in, encoding);
 			}
 			break;
 

@@ -40,8 +40,8 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#include "util/util.h"
 #include "util/pcre_subst.h"
+#include "util/util.h"
 
 /*
  * regexp substitute
@@ -169,4 +169,3 @@ const char *oidc_util_apr_expr_exec(request_rec *r, const oidc_apr_expr_t *expr,
 #endif
 	return expr_result;
 }
-

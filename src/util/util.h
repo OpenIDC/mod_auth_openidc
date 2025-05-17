@@ -47,6 +47,12 @@
 #include "cfg/dir.h"
 #include "jose.h"
 
+// appinfo.c
+void oidc_util_appinfo_set(request_rec *r, const char *s_key, const char *s_value, const char *claim_prefix,
+			   oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding);
+void oidc_util_appinfo_set_all(request_rec *r, json_t *j_attrs, const char *claim_prefix, const char *claim_delimiter,
+			       oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding);
+
 // base64.c
 char *oidc_util_base64_decode(apr_pool_t *pool, const char *input, char **output, int *output_len);
 int oidc_util_base64url_encode(request_rec *r, char **dst, const char *src, int src_len, int remove_padding);
@@ -60,6 +66,10 @@ apr_byte_t oidc_util_regexp_first_match(apr_pool_t *pool, const char *input, con
 char *oidc_util_apr_expr_parse(cmd_parms *cmd, const char *str, oidc_apr_expr_t **expr, apr_byte_t result_is_str);
 const char *oidc_util_apr_expr_exec(request_rec *r, const oidc_apr_expr_t *expr, apr_byte_t result_is_str);
 
+// file.c
+apr_byte_t oidc_util_file_read(request_rec *r, const char *path, apr_pool_t *pool, char **result);
+apr_byte_t oidc_util_file_write(request_rec *r, const char *path, const char *data);
+
 // html.c
 int oidc_util_html_send(request_rec *r, const char *title, const char *html_head, const char *on_load,
 			const char *html_body, int status_code);
@@ -68,6 +78,7 @@ int oidc_util_html_content_prep(request_rec *r, const char *request_state_key, c
 int oidc_util_html_content_send(request_rec *r);
 int oidc_util_html_send_error(request_rec *r, const char *error, const char *description, int status_code);
 char *oidc_util_html_escape(apr_pool_t *pool, const char *input);
+char *oidc_util_html_javascript_escape(apr_pool_t *pool, const char *input);
 int oidc_util_html_send_in_template(request_rec *r, const char *filename, char **static_template_content,
 				    const char *arg1, int arg1_esc, const char *arg2, int arg2_esc);
 
@@ -123,17 +134,10 @@ apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char
 						      char **output);
 int oidc_util_strnenvcmp(const char *a, const char *b, int len);
 char *oidc_util_openssl_version(apr_pool_t *pool);
-apr_byte_t oidc_util_file_read(request_rec *r, const char *path, apr_pool_t *pool, char **result);
-apr_byte_t oidc_util_file_write(request_rec *r, const char *path, const char *data);
 apr_byte_t oidc_util_issuer_match(const char *a, const char *b);
-void oidc_util_set_app_info(request_rec *r, const char *s_key, const char *s_value, const char *claim_prefix,
-			    oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding);
-void oidc_util_set_app_infos(request_rec *r, json_t *j_attrs, const char *claim_prefix, const char *claim_delimiter,
-			     oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding);
 apr_hash_t *oidc_util_spaced_string_to_hashtable(apr_pool_t *pool, const char *str);
 apr_byte_t oidc_util_spaced_string_equals(apr_pool_t *pool, const char *a, const char *b);
 apr_byte_t oidc_util_spaced_string_contains(apr_pool_t *pool, const char *str, const char *match);
-char *oidc_util_javascript_escape(apr_pool_t *pool, const char *input);
 void oidc_util_table_add_query_encoded_params(apr_pool_t *pool, apr_table_t *table, const char *params);
 apr_byte_t oidc_util_cookie_domain_valid(const char *hostname, const char *cookie_domain);
 const char *oidc_util_strcasestr(const char *s1, const char *s2);

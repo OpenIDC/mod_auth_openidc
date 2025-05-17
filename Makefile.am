@@ -43,8 +43,10 @@ libauth_openidc_la_SOURCES = \
 	src/proto/state.c \
 	src/proto/token.c \
 	src/proto/userinfo.c \
+	src/util/appinfo.c \
 	src/util/base64.c \
 	src/util/expr.c \
+	src/util/file.c \
 	src/util/html.c \
 	src/util/jq.c \
 	src/util/json.c \
