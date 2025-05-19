@@ -40,9 +40,10 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#include "http.h"
 #include "mod_auth_openidc.h"
 #include "util/util.h"
+
+#include "http.h"
 
 /*
  * HTML escape a string
