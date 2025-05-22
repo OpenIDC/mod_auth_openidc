@@ -1,5 +1,5 @@
-05/23/2025
-- metrics: avoid possible segfault after restart twice
+05/22/2025
+- metrics: avoid possible segfault after restart twice; thanks @atzm
 
 05/17/2025
 - code: refactor util.c into util/ directory
