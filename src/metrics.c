@@ -879,6 +879,7 @@ apr_status_t oidc_metrics_cleanup(server_rec *s) {
 	apr_thread_join(&rv, _oidc_metrics_thread);
 	if (rv != APR_SUCCESS)
 		oidc_serror(s, "apr_thread_join failed");
+	_oidc_metrics_thread_exit = FALSE;
 	_oidc_metrics_thread = NULL;
 
 	/* delete the shared memory segment if we are in the parent process */
