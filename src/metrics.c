@@ -328,18 +328,6 @@ apr_byte_t oidc_metrics_is_valid_classname(apr_pool_t *pool, const char *name, c
 }
 
 /*
- * collection thread
- */
-
-/*
- * retrieve the (JSON) serialized (global) metrics data from shared memory
- */
-static inline char *_oidc_metrics_storage_get(server_rec *s) {
-	char *p = (char *)apr_shm_baseaddr_get(_oidc_metrics_cache);
-	return ((p) && (*p != 0)) ? apr_pstrdup(s->process->pool, p) : NULL;
-}
-
-/*
  * retrieve environment variable integer with default setting
  */
 static inline int _oidc_metrics_get_env_int(const char *name, int dval) {
@@ -366,6 +354,14 @@ static inline apr_size_t _oidc_metrics_shm_size(server_rec *s) {
 		}
 	}
 	return _g_oidc_metrics_shm_size;
+}
+
+/*
+ * retrieve the (JSON) serialized (global) metrics data from shared memory
+ */
+static inline char *_oidc_metrics_storage_get(server_rec *s) {
+	char *p = (char *)apr_shm_baseaddr_get(_oidc_metrics_cache);
+	return ((p) && (*p != 0)) ? apr_pstrndup(s->process->pool, p, _oidc_metrics_shm_size(s)) : NULL;
 }
 
 /*
