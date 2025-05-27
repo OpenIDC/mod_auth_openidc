@@ -138,7 +138,7 @@ static int oidc_session_management_iframe_rp(request_rec *r, oidc_cfg_t *c, oidc
 	java_script = apr_psprintf(r->pool, java_script, origin, client_id, session_state ? session_state : "",
 				   login_uri ? login_uri : "", op_iframe_id, poll_interval, redirect_uri, redirect_uri);
 
-	return oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_HTML, NULL, java_script, "setTimer", NULL);
+	return oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_HTML, NULL, java_script, "setTimer()", NULL);
 }
 
 /*

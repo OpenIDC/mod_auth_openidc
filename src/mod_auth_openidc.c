@@ -977,7 +977,7 @@ static int oidc_javascript_implicit(request_rec *r, oidc_cfg_t *c) {
 	    "          document.forms[0].appendChild(input);\n"
 	    "        }\n"
 	    "        document.forms[0].action = window.location.href.substr(0, window.location.href.indexOf('#'));\n"
-	    "        document.forms[0].submit();\n"
+	    "        HTMLFormElement.prototype.submit.call(document.forms[0]);\n"
 	    "      }\n"
 	    "    </script>\n";
 
@@ -990,7 +990,7 @@ static int oidc_javascript_implicit(request_rec *r, oidc_cfg_t *c) {
 				"    </form>\n";
 
 	/* prepare HTML/Javascript page to be sent in the content handler */
-	return oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_HTML, "Submitting...", java_script, "postOnLoad",
+	return oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_HTML, "Submitting...", java_script, "postOnLoad()",
 					   html_body);
 }
 

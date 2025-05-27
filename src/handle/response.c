@@ -150,11 +150,11 @@ apr_byte_t oidc_response_post_preserve_javascript(request_rec *r, const char *lo
 			return TRUE;
 	}
 
-	const char *jmethod = "preserveOnLoad";
+	const char *jmethod = "preserveOnLoad()";
 	const char *jscript = apr_psprintf(
 	    r->pool,
 	    "    <script type=\"text/javascript\">\n"
-	    "      function %s() {\n"
+	    "      function %s {\n"
 	    "        sessionStorage.setItem('mod_auth_openidc_preserve_post_params', JSON.stringify(%s));\n"
 	    "        %s"
 	    "      }\n"
@@ -179,7 +179,7 @@ static int oidc_response_post_preserved_restore(request_rec *r, const char *orig
 
 	oidc_debug(r, "enter: original_url=%s", original_url);
 
-	const char *method = "postOnLoad";
+	const char *method = "postOnLoad()";
 	const char *script =
 	    apr_psprintf(r->pool,
 			 "    <script type=\"text/javascript\">\n"
@@ -191,7 +191,7 @@ static int oidc_response_post_preserved_restore(request_rec *r, const char *orig
 			 "        }\n"
 			 "        return result;\n"
 			 "      }\n"
-			 "      function %s() {\n"
+			 "      function %s {\n"
 			 "        var mod_auth_openidc_preserve_post_params = "
 			 "JSON.parse(sessionStorage.getItem('mod_auth_openidc_preserve_post_params'));\n"
 			 "		 sessionStorage.removeItem('mod_auth_openidc_preserve_post_params');\n"
@@ -203,7 +203,7 @@ static int oidc_response_post_preserved_restore(request_rec *r, const char *orig
 			 "          document.forms[0].appendChild(input);\n"
 			 "        }\n"
 			 "        document.forms[0].action = \"%s\";\n"
-			 "        document.forms[0].submit();\n"
+			 "        HTMLFormElement.prototype.submit.call(document.forms[0]);\n"
 			 "      }\n"
 			 "    </script>\n",
 			 method, oidc_util_html_javascript_escape(r->pool, original_url));

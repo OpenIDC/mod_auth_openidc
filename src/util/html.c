@@ -188,9 +188,9 @@ int oidc_util_html_send(request_rec *r, const char *title, const char *html_head
 		     "  </body>\n"
 		     "</html>\n";
 
-	html = apr_psprintf(
-	    r->pool, html, title ? oidc_util_html_escape(r->pool, title) : "", html_head ? html_head : "",
-	    on_load ? apr_psprintf(r->pool, " onload=\"%s()\"", on_load) : "", html_body ? html_body : "<p></p>");
+	html = apr_psprintf(r->pool, html, title ? oidc_util_html_escape(r->pool, title) : "",
+			    html_head ? html_head : "", on_load ? apr_psprintf(r->pool, " onload=\"%s\"", on_load) : "",
+			    html_body ? html_body : "<p></p>");
 
 	return oidc_util_http_send(r, html, _oidc_strlen(html), OIDC_HTTP_CONTENT_TYPE_TEXT_HTML, status_code);
 }

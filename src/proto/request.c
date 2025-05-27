@@ -693,7 +693,7 @@ int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, co
 
 		/* signal this to the content handler */
 		rv = oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_AUTHN_POST, "Submitting...", NULL,
-						 "document.forms[0].submit", html_body);
+						 "HTMLFormElement.prototype.submit.call(document.forms[0])", html_body);
 
 	} else if (oidc_proto_profile_auth_request_method_get(provider) == OIDC_AUTH_REQUEST_METHOD_PAR) {
 
@@ -722,7 +722,7 @@ int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, co
 			if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTTP) == NULL) {
 				/* signal this to the content handler */
 				rv = oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE,
-								 "Preserving...", javascript, "preserveOnLoad",
+								 "Preserving...", javascript, "preserveOnLoad()",
 								 "<p>Preserving...</p>");
 			}
 		}

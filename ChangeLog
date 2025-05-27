@@ -1,5 +1,16 @@
 05/27/2025
 - fix usage of OIDCPreservePostTemplates, regression in 2.4.17; see #1325; thanks @perry19987
+- javascript: use HTMLFormElement.prototype.submit.call(document.forms[0]) on all Javascript
+  auto-submit POST forms to prevent browser Javascript error: "form.submit is not a function"
+  affects:
+    - OpenID Connect Implicit response type (OIDCResponseType id_token *)
+    - Form Post response type (OIDCResponseMode form_post)
+    - send authentication request via POST binding (OIDCProviderAuthRequestMethod POST)
+    - preserving POST data (OIDCPreservePost On)
+  see:
+     https://trackjs.com/blog/when-form-submit-is-not-a-function/ 
+     https://stackoverflow.com/questions/833032/submit-is-not-a-function-error-in-javascript
+     https://www.geeksforgeeks.org/how-to-solve-submit-is-not-a-function-error-in-javascript/
 
 05/22/2025
 - metrics: avoid possible segfault after restart twice; thanks @atzm
