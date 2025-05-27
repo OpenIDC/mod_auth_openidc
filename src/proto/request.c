@@ -717,9 +717,14 @@ int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, co
 
 		} else {
 
-			/* signal this to the content handler */
-			rv = oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE, "Preserving...",
-							 javascript, "preserveOnLoad", "<p>Preserving...</p>");
+			// NB: if a template is in use, we should not override
+			// OIDC_REQUEST_STATE_KEY_HTTP with OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE
+			if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTTP) == NULL) {
+				/* signal this to the content handler */
+				rv = oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE,
+								 "Preserving...", javascript, "preserveOnLoad",
+								 "<p>Preserving...</p>");
+			}
 		}
 
 	} else {

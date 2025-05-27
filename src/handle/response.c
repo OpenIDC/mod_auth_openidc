@@ -143,11 +143,12 @@ apr_byte_t oidc_response_post_preserve_javascript(request_rec *r, const char *lo
 	}
 	json = apr_psprintf(r->pool, "{ %s }", json);
 
-	if (oidc_cfg_post_preserve_template_get(cfg) != NULL)
+	if (oidc_cfg_post_preserve_template_get(cfg) != NULL) {
 		if (oidc_util_html_send_in_template(
 			r, oidc_cfg_post_preserve_template_get(cfg), &_oidc_response_post_preserve_template_contents,
 			json, OIDC_POST_PRESERVE_ESCAPE_NONE, location, OIDC_POST_PRESERVE_ESCAPE_JAVASCRIPT) == OK)
 			return TRUE;
+	}
 
 	const char *jmethod = "preserveOnLoad";
 	const char *jscript = apr_psprintf(
@@ -677,11 +678,9 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 	/* check whether form post data was preserved; if so restore it */
 	if (_oidc_strcmp(original_method, OIDC_METHOD_FORM_POST) == 0) {
 		if (oidc_cfg_post_restore_template_get(c) != NULL)
-			if (oidc_util_html_send_in_template(r, oidc_cfg_post_restore_template_get(c),
-							    &_oidc_response_post_restore_template_contents,
-							    original_url, OIDC_POST_PRESERVE_ESCAPE_JAVASCRIPT, "",
-							    OIDC_POST_PRESERVE_ESCAPE_NONE) == OK)
-				return TRUE;
+			return oidc_util_html_send_in_template(
+			    r, oidc_cfg_post_restore_template_get(c), &_oidc_response_post_restore_template_contents,
+			    original_url, OIDC_POST_PRESERVE_ESCAPE_JAVASCRIPT, "", OIDC_POST_PRESERVE_ESCAPE_NONE);
 		return oidc_response_post_preserved_restore(r, original_url);
 	}
 
