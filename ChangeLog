@@ -2,6 +2,8 @@
 - fix usage of OIDCPreservePostTemplates, regression in 2.4.17; see #1325; thanks @perry19987
 - javascript: use HTMLFormElement.prototype.submit.call(document.forms[0]) on all Javascript
   auto-submit POST forms to prevent browser Javascript error: "form.submit is not a function"
+  which would occur when an element (i.e. the submit button) in a HTML form has a name or id 
+  with a value "submit" and OIDCPreservePost is set to On
   affects:
     - OpenID Connect Implicit response type (OIDCResponseType id_token *)
     - Form Post response type (OIDCResponseMode form_post)
