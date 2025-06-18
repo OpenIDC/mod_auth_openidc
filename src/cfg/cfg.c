@@ -195,7 +195,7 @@ const char *oidc_cmd_session_type_set(cmd_parms *cmd, void *ptr, const char *arg
 		} else if (_oidc_strcmp(p, OIDC_SESSION_TYPE_STORE_ID_TOKEN) == 0) {
 			// only for client-cookie
 			cfg->store_id_token = 1;
-		} else if (_oidc_strcmp(p, OIDC_SESSION_TYPE_SEPARATOR OIDC_SESSION_TYPE_PERSISTENT
+		} else if (_oidc_strcmp(p, OIDC_SESSION_TYPE_PERSISTENT
 					       OIDC_SESSION_TYPE_SEPARATOR OIDC_SESSION_TYPE_STORE_ID_TOKEN) == 0) {
 			// only for client-cookie
 			cfg->persistent_session_cookie = 1;
