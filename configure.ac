@@ -14,7 +14,7 @@ LT_INIT([dlopen])
 
 # Checks for apxs.
 AC_ARG_WITH([apxs],
-	[AS_HELP_STRING([--with-apxs=PATH/NAME],[path to the apxs binary for Apache [[apxs]]])],
+	[AS_HELP_STRING([--with-apxs=PATH/NAME],[path to the apxs binary for Apache [apxs]])],
 	[AC_SUBST(APXS, $with_apxs)],
 	[AC_PATH_PROGS(APXS, [apxs apxs2],,)])
 
@@ -119,7 +119,7 @@ AC_SUBST(PCRE_CFLAGS)
 AC_SUBST(PCRE_LIBS)
 
 AC_ARG_WITH(brotli,
-	AS_HELP_STRING([--with-brotli], [enable brotli compression support]),
+	AS_HELP_STRING([--with-brotli], [enable brotli compression support [default=no]]),
 	ac_brotli=$withval, ac_brotli=no)
 if test x$ac_brotli != xno; then
 	PKG_CHECK_MODULES(LIBBROTLIENC, [libbrotlienc >= 1.0.0], [with_libbrotlienc=yes], [with_libbrotlienc=no])
@@ -157,8 +157,7 @@ AC_SUBST(HIREDIS_LIBS)
 # JQ
 HAVE_LIBJQ=0
 
-AC_ARG_WITH([jq],
-	AS_HELP_STRING([--with-jq=PATH], [location of your libjq installation])])
+AC_ARG_WITH([jq], AS_HELP_STRING([--with-jq=PATH], [location of libjq development headers]),)
 
 if test -n "$with_jq"
 then
@@ -166,7 +165,11 @@ then
 		JQ_CFLAGS="-I$with_jq/include"
 	fi
 	if test "$JQ_LIBS" == ""; then
-		JQ_LIBS="-L$with_jq/lib -ljq"
+		if test "$with_jq" == "yes"; then
+			JQ_LIBS="-L/usr/lib -ljq"
+		else
+			JQ_LIBS="-L$with_jq/lib -ljq"
+		fi
 	fi
 
 	CPPFLAGS="$JQ_CFLAGS $CPPFLAGS"
