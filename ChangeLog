@@ -1,3 +1,6 @@
+06/23/2025
+- release 2.4.17.1
+
 06/18/2025
 - fix usage of OIDCSessionType client-cookie:persistent:store_id_token; see #1331; thanks @rgcv
 
