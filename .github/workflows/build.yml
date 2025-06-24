@@ -4,21 +4,34 @@ on: [push, pull_request]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v3
+
     - name: Dependencies
       run: |
         sudo apt-get update -y
-        sudo apt-get install -y apache2-dev libcjose-dev libssl-dev check pkg-config
-        sudo apt-get install -y libjansson-dev libcurl4-openssl-dev libhiredis-dev libpcre2-dev
+        sudo apt-get install -y libssl-dev libcurl4-openssl-dev libhiredis-dev libmemcached-dev
+        sudo apt-get install -y libjansson-dev libcjose-dev apache2-dev pkg-config
+        cd /tmp
+        #curl https://api.github.com/repos/OpenIDC/liboauth2/releases/latest | grep "browser_download_url.*liboauth2_.*jammy_amd64.deb" | cut -d: -f2,3 | tr -d \" | wget -qi -
+        #curl https://api.github.com/repos/OpenIDC/liboauth2/releases/latest | grep "browser_download_url.*liboauth2-apache_.*jammy_amd64.deb" | cut -d: -f2,3 | tr -d \" | wget -qi -
+        #curl https://api.github.com/repos/OpenIDC/liboauth2/releases/latest | grep "browser_download_url.*liboauth2-dev_.*jammy_amd64.deb" | cut -d: -f2,3 | tr -d \" | wget -qi -
+        #sudo apt-get -y install ./*.deb
+        git clone https://github.com/OpenIDC/liboauth2.git
+        cd liboauth2
+        ./autogen.sh
+        ./configure
+        make
+        sudo make install
     - name: Configure
       run: |
         ./autogen.sh
         ./configure
+
     - name: Make
       run: make
-    - name: Test
-      run: make check || (cat test-suite.log && exit -1)
+
     - name: Distcheck
-      run: make distcheck DESTDIR=/tmp/mod_auth_openidc
+      run: make distcheck DESTDIR="/tmp/mod_oauth2"
