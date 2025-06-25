@@ -446,12 +446,13 @@ OIDC_CFG_MEMBER_FUNC_TYPE_GET(x_forwarded_headers, oidc_hdr_x_forwarded_t, OIDC_
 
 static void oidc_check_x_forwarded_hdr(request_rec *r, const apr_byte_t x_forwarded_headers, const apr_byte_t hdr_type,
 				       const char *hdr_str, const char *(hdr_func)(const request_rec *r)) {
-	const char *env_var = apr_table_get(r->subprocess_env, OIDC_CHECK_X_FORWARDED_HDR_LOG_DISABLE);
+	apr_byte_t suppress = oidc_util_spaced_string_contains(
+	    r->pool, apr_table_get(r->subprocess_env, OIDC_CHECK_X_FORWARDED_HDR_LOG_DISABLE), hdr_str);
 	if (hdr_func(r)) {
-		if (!(x_forwarded_headers & hdr_type) && (_oidc_strstr(env_var, hdr_str) == NULL))
+		if (!(x_forwarded_headers & hdr_type) && !suppress)
 			oidc_warn(r, "header %s received but %s not configured for it", hdr_str, OIDCXForwardedHeaders);
 	} else {
-		if ((x_forwarded_headers & hdr_type) && (_oidc_strstr(env_var, hdr_str) == NULL))
+		if ((x_forwarded_headers & hdr_type) && !suppress)
 			oidc_warn(r, "%s configured for header %s but not found in request", OIDCXForwardedHeaders,
 				  hdr_str);
 	}

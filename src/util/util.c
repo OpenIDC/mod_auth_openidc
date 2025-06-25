@@ -380,6 +380,8 @@ apr_byte_t oidc_util_spaced_string_equals(apr_pool_t *pool, const char *a, const
  * see if a particular value is part of a space separated value
  */
 apr_byte_t oidc_util_spaced_string_contains(apr_pool_t *pool, const char *str, const char *match) {
+	if ((str == NULL) || (match == NULL))
+		return FALSE;
 	apr_hash_t *ht = oidc_util_spaced_string_to_hashtable(pool, str);
 	return (apr_hash_get(ht, match, APR_HASH_KEY_STRING) != NULL);
 }
