@@ -1,3 +1,8 @@
+06/25/2025
+- allow to suppress warnings about (individual) X-Forwarded headers; see #1333
+  through environment variable OIDC_CHECK_X_FORWARDED_HDR_LOG_DISABLE, e.g.:
+    SetEnvIfExpr true OIDC_CHECK_X_FORWARDED_HDR_LOG_DISABLE=X-Forwarded-Proto
+
 06/23/2025
 - release 2.4.17.1
 

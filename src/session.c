@@ -526,12 +526,16 @@ static const char *oidc_session_get_key2string(request_rec *r, oidc_session_t *z
 void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, const char *session_key, const char *claims) {
 	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
-	const char *name;
+	const char *name = NULL;
 	json_t *src = NULL, *dst = NULL, *value = NULL;
 	void *iter = NULL;
-	apr_byte_t is_allowed;
+	apr_byte_t is_allowed = TRUE;
 	int warn_claim_size = OIDC_SESSION_WARN_CLAIM_SIZE;
 	const char *s = NULL;
+
+	// avoid gcc 14 warning: '%s' directive argument is null [-Wformat-overflow=]
+	if (session_key == NULL)
+		session_key = "";
 
 	if (oidc_util_json_decode_object(r, claims, &src) == FALSE) {
 		oidc_session_set(r, z, session_key, NULL);

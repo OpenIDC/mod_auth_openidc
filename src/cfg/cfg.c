@@ -195,8 +195,8 @@ const char *oidc_cmd_session_type_set(cmd_parms *cmd, void *ptr, const char *arg
 		} else if (_oidc_strcmp(p, OIDC_SESSION_TYPE_STORE_ID_TOKEN) == 0) {
 			// only for client-cookie
 			cfg->store_id_token = 1;
-		} else if (_oidc_strcmp(p, OIDC_SESSION_TYPE_PERSISTENT
-					       OIDC_SESSION_TYPE_SEPARATOR OIDC_SESSION_TYPE_STORE_ID_TOKEN) == 0) {
+		} else if (_oidc_strcmp(p, OIDC_SESSION_TYPE_PERSISTENT OIDC_SESSION_TYPE_SEPARATOR
+					       OIDC_SESSION_TYPE_STORE_ID_TOKEN) == 0) {
 			// only for client-cookie
 			cfg->persistent_session_cookie = 1;
 			cfg->store_id_token = 1;
@@ -442,13 +442,16 @@ const char *oidc_cmd_x_forwarded_headers_set(cmd_parms *cmd, void *m, const char
 #define OIDC_DEFAULT_X_FORWARDED_HEADERS OIDC_HDR_NONE
 OIDC_CFG_MEMBER_FUNC_TYPE_GET(x_forwarded_headers, oidc_hdr_x_forwarded_t, OIDC_DEFAULT_X_FORWARDED_HEADERS)
 
+#define OIDC_CHECK_X_FORWARDED_HDR_LOG_DISABLE "OIDC_CHECK_X_FORWARDED_HDR_LOG_DISABLE"
+
 static void oidc_check_x_forwarded_hdr(request_rec *r, const apr_byte_t x_forwarded_headers, const apr_byte_t hdr_type,
 				       const char *hdr_str, const char *(hdr_func)(const request_rec *r)) {
+	const char *env_var = apr_table_get(r->subprocess_env, OIDC_CHECK_X_FORWARDED_HDR_LOG_DISABLE);
 	if (hdr_func(r)) {
-		if (!(x_forwarded_headers & hdr_type))
+		if (!(x_forwarded_headers & hdr_type) && (_oidc_strstr(env_var, hdr_str) == NULL))
 			oidc_warn(r, "header %s received but %s not configured for it", hdr_str, OIDCXForwardedHeaders);
 	} else {
-		if (x_forwarded_headers & hdr_type)
+		if ((x_forwarded_headers & hdr_type) && (_oidc_strstr(env_var, hdr_str) == NULL))
 			oidc_warn(r, "%s configured for header %s but not found in request", OIDCXForwardedHeaders,
 				  hdr_str);
 	}
