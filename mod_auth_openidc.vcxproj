@@ -240,6 +240,9 @@
 	<ClCompile Include="src\proto\pkce.c">
 		<ObjectFileName>$(IntDir)pkce_proto.obj</ObjectFileName>
     </ClCompile>
+	<ClCompile Include="src\proto\profile.c">
+		<ObjectFileName>$(IntDir)profile_proto.obj</ObjectFileName>
+    </ClCompile>
 	<ClCompile Include="src\proto\proto.c">
 		<ObjectFileName>$(IntDir)proto_proto.obj</ObjectFileName>
     </ClCompile>
