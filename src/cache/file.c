@@ -46,7 +46,7 @@
 #include "cfg/cache.h"
 #include "cfg/cfg_int.h"
 #include "util.h"
-#include "..\mod_auth_openidc.h"
+#include "../mod_auth_openidc.h"
 
 extern module AP_MODULE_DECLARE_DATA auth_openidc_module;
 
