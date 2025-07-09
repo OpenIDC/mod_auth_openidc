@@ -5,6 +5,7 @@
 /.libs
 /.deps/
 /.dirstamp
+/*.gcno
 /config.h
 /config.h.in
 /config.h.in~
