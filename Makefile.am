@@ -164,7 +164,7 @@ TESTS = test/test
 test_test_SOURCES = test/test.c test/stub.c
 test_test_CFLAGS = ${AM_CFLAGS} -fPIC
 
-#if HAVE_CHECK
+if HAVE_CHECK
 
 TESTS += test/check_auth_openidc
 
@@ -176,7 +176,7 @@ noinst_HEADERS += \
 	test/check_auth_openidc.h
 test_check_auth_openidc_LDADD = @CHECK_LIBS@
 
-#endif
+endif
 
 check_PROGRAMS = $(TESTS)
 
