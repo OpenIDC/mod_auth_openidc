@@ -1,10 +1,13 @@
 /test
 /test-cmd
+/test_jose
 /*.lo
 /*.o
 /*.slo
 /.libs/
 /.deps/
-/test.log
-/test.trs
+/*.log
+/*.trs
 /.dirstamp
+/*.gcno
+/*.gcda

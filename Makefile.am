@@ -166,15 +166,11 @@ test_test_CFLAGS = ${AM_CFLAGS} -fPIC
 
 if HAVE_CHECK
 
-TESTS += test/check_auth_openidc
+TESTS += test/test_jose
 
-test_check_auth_openidc_CFLAGS = ${AM_CFLAGS} @CHECK_CFLAGS@
-test_check_auth_openidc_SOURCES = \
-	test/check_auth_openidc.c \
-	test/stub.c
-noinst_HEADERS += \
-	test/check_auth_openidc.h
-test_check_auth_openidc_LDADD = @CHECK_LIBS@
+test_test_jose_CFLAGS = @CHECK_CFLAGS@ ${AM_CFLAGS}
+test_test_jose_LDADD = @CHECK_LIBS@ ${LDADD}
+test_test_jose_SOURCES = test/test_jose.c
 
 endif
 
