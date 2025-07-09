@@ -1,4 +1,8 @@
 07/15/2025
+- add check and code coverage skeleton
+- bump to 2.4.18dev
+
+07/15/2025
 - support the use of Elliptic Curve keys for private_key_jwt authentication at
   the token- and introspection endpoints and make the signing algorithm configurable
   for both RSA en EC keys; closes #1336; thanks @rjr162
