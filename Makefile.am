@@ -63,9 +63,9 @@ libauth_openidc_la_SOURCES = \
 	src/metadata.c \
 	src/jose.c
 
-AM_CFLAGS = -DNAMEVER="@NAMEVER@" -I${top_srcdir}/src @APACHE_CFLAGS@ @OPENSSL_CFLAGS@ @CURL_CFLAGS@ @JANSSON_CFLAGS@ @CJOSE_CFLAGS@ @PCRE_CFLAGS@
-AM_CPPFLAGS = @APACHE_CPPFLAGS@
-AM_LDFLAGS = @APACHE_LDFLAGS@
+AM_CFLAGS = $(CODE_COVERAGE_CFLAGS) -DNAMEVER="@NAMEVER@" -I${top_srcdir}/src @APACHE_CFLAGS@ @OPENSSL_CFLAGS@ @CURL_CFLAGS@ @JANSSON_CFLAGS@ @CJOSE_CFLAGS@ @PCRE_CFLAGS@
+AM_CPPFLAGS = $(CODE_COVERAGE_CPPFLAGS) @APACHE_CPPFLAGS@
+AM_LDFLAGS = --coverage @APACHE_LDFLAGS@
 LIBADD = @APACHE_LIBS@ @OPENSSL_LIBS@ @CURL_LIBS@ @JANSSON_LIBS@ @CJOSE_LIBS@ @PCRE_LIBS@
 
 if HAVE_LIBHIREDIS
@@ -151,9 +151,9 @@ uninstall-local:
 	rm -f $(DESTDIR)@APACHE_MODULEDIR@/mod_auth_openidc.so mod_auth_openidc.la
 
 clean-local:
-	rm -f mod_auth_openidc.la
+	rm -f mod_auth_openidc.la test/*.gcno
 
-LDADD = libauth_openidc.la ${LIBADD}
+LDADD = $(CODE_COVERAGE_LIBS) libauth_openidc.la ${LIBADD}
 
 noinst_PROGRAMS = test/test-cmd
 test_test_cmd_SOURCES = test/test-cmd.c test/stub.c
@@ -161,9 +161,27 @@ test_test_cmd_CFLAGS = ${AM_CFLAGS} -fPIC
 
 TESTS = test/test
 
-check_PROGRAMS = test/test
 test_test_SOURCES = test/test.c test/stub.c
 test_test_CFLAGS = ${AM_CFLAGS} -fPIC
 
+#if HAVE_CHECK
+
+TESTS += test/check_auth_openidc
+
+test_check_auth_openidc_CFLAGS = ${AM_CFLAGS} @CHECK_CFLAGS@
+test_check_auth_openidc_SOURCES = \
+	test/check_auth_openidc.c \
+	test/stub.c
+noinst_HEADERS += \
+	test/check_auth_openidc.h
+test_check_auth_openidc_LDADD = @CHECK_LIBS@
+
+#endif
+
+check_PROGRAMS = $(TESTS)
+
+CODE_COVERAGE_LCOV_SHOPTS = --ignore-errors inconsistent --ignore-errors unused
+@CODE_COVERAGE_RULES@
+
 clang-format:
-	clang-format -style=file -i $$(find . -name *.[ch] -maxdepth 3)
+	clang-format -style=file -i $$(find . -maxdepth 3 -name *.[ch])
