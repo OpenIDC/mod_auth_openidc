@@ -41,34 +41,26 @@
  *
  **************************************************************************/
 
-#include <check.h>
-#include <stdbool.h>
-#include <stdlib.h>
-
-#include <openssl/evp.h>
-
-#include "cfg/cfg.h"
 #include "jose.h"
-
-static apr_pool_t *pool = NULL;
+#include "test/helper.h"
 
 // supported
 
 START_TEST(test_jose_jws_supported_algorithms) {
 	apr_array_header_t *arr = NULL;
-	arr = oidc_jose_jws_supported_algorithms(pool);
+	arr = oidc_jose_jws_supported_algorithms(oidc_test_pool_get());
 	ck_assert_msg(arr != NULL, "list of supported signing algorithms is empty");
 }
 END_TEST
 
 START_TEST(test_jose_jws_algorithm_is_supported) {
 	apr_byte_t rv = FALSE;
-	rv = oidc_jose_jws_algorithm_is_supported(pool, "RS256");
+	rv = oidc_jose_jws_algorithm_is_supported(oidc_test_pool_get(), "RS256");
 	ck_assert_msg(rv == TRUE, "algorithm RS256 is not supported");
-	rv = oidc_jose_jws_algorithm_is_supported(pool, "NO256");
+	rv = oidc_jose_jws_algorithm_is_supported(oidc_test_pool_get(), "NO256");
 	ck_assert_msg(rv == FALSE, "algorithm NO256 should not be supported");
 #ifdef OIDC_JOSE_EC_SUPPORT
-	rv = oidc_jose_jws_algorithm_is_supported(pool, "ES256");
+	rv = oidc_jose_jws_algorithm_is_supported(oidc_test_pool_get(), "ES256");
 	ck_assert_msg(rv == TRUE, "algorithm ES256 is not supported");
 #endif
 }
@@ -76,53 +68,39 @@ END_TEST
 
 START_TEST(test_jose_jwe_supported_algorithms) {
 	apr_array_header_t *arr = NULL;
-	arr = oidc_jose_jwe_supported_algorithms(pool);
+	arr = oidc_jose_jwe_supported_algorithms(oidc_test_pool_get());
 	ck_assert_msg(arr != NULL, "list of supported encryption algorithms is empty");
 }
 END_TEST
 
 START_TEST(test_jose_jwe_algorithm_is_supported) {
 	apr_byte_t rv = FALSE;
-	rv = oidc_jose_jwe_algorithm_is_supported(pool, "A128KW");
+	rv = oidc_jose_jwe_algorithm_is_supported(oidc_test_pool_get(), "A128KW");
 	ck_assert_msg(rv == TRUE, "algorithm A128KW is not supported");
 }
 END_TEST
 
 START_TEST(test_jose_jwe_supported_encryptions) {
 	apr_array_header_t *arr = NULL;
-	arr = oidc_jose_jwe_supported_encryptions(pool);
+	arr = oidc_jose_jwe_supported_encryptions(oidc_test_pool_get());
 	ck_assert_msg(arr != NULL, "list of supported encryption ciphers is empty");
 }
 END_TEST
 
 START_TEST(test_jose_jwe_encryption_is_supported) {
 	apr_byte_t rv = FALSE;
-	rv = oidc_jose_jwe_encryption_is_supported(pool, "A128CBC-HS256");
+	rv = oidc_jose_jwe_encryption_is_supported(oidc_test_pool_get(), "A128CBC-HS256");
 	ck_assert_msg(rv == TRUE, "cipher A128CBC-HS256 is not supported");
 #if (OIDC_JOSE_GCM_SUPPORT)
-	rv = oidc_jose_jwe_encryption_is_supported(pool, "A256GCM");
+	rv = oidc_jose_jwe_encryption_is_supported(oidc_test_pool_get(), "A256GCM");
 	ck_assert_msg(rv == TRUE, "cipher A256GCM is not supported");
 #endif
 }
 END_TEST
 
-static void setup(void) {
-	apr_initialize();
-	oidc_pre_config_init();
-	apr_pool_create(&pool, NULL);
-}
-
-static void teardown(void) {
-	EVP_cleanup();
-	apr_pool_destroy(pool);
-	apr_terminate();
-}
-
 int main(void) {
-	int n_failed = 0;
-
 	TCase *sup = tcase_create("supported");
-	tcase_add_checked_fixture(sup, setup, teardown);
+	tcase_add_checked_fixture(sup, oidc_test_setup, oidc_test_teardown);
 
 	tcase_add_test(sup, test_jose_jws_supported_algorithms);
 	tcase_add_test(sup, test_jose_jws_algorithm_is_supported);
@@ -134,10 +112,5 @@ int main(void) {
 	Suite *s = suite_create("jose");
 	suite_add_tcase(s, sup);
 
-	SRunner *sr = srunner_create(s);
-	srunner_run_all(sr, CK_VERBOSE);
-	n_failed = srunner_ntests_failed(sr);
-	srunner_free(sr);
-
-	return (n_failed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
+	return oidc_test_suite_run(s);
 }
