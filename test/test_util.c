@@ -41,7 +41,7 @@
  *
  **************************************************************************/
 
-#include "test/helper.h"
+#include "helper.h"
 #include "util/util.h"
 
 // base64
