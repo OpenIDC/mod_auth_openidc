@@ -1,6 +1,5 @@
 /test
 /test-cmd
-/test_jose
 /*.lo
 /*.o
 /*.slo
@@ -11,3 +10,5 @@
 /.dirstamp
 /*.gcno
 /*.gcda
+/test_jose
+/test_util

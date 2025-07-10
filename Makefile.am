@@ -166,11 +166,17 @@ test_test_CFLAGS = ${AM_CFLAGS} -fPIC
 
 if HAVE_CHECK
 
-TESTS += test/test_jose
+noinst_HEADERS += test/helper.h
 
+TESTS += test/test_jose
 test_test_jose_CFLAGS = @CHECK_CFLAGS@ ${AM_CFLAGS}
 test_test_jose_LDADD = @CHECK_LIBS@ ${LDADD}
-test_test_jose_SOURCES = test/test_jose.c
+test_test_jose_SOURCES = test/test_jose.c test/helper.c test/stub.c
+
+TESTS += test/test_util
+test_test_util_CFLAGS = @CHECK_CFLAGS@ ${AM_CFLAGS}
+test_test_util_LDADD = @CHECK_LIBS@ ${LDADD}
+test_test_util_SOURCES = test/test_util.c test/helper.c test/stub.c
 
 endif
 
