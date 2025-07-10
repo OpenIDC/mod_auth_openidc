@@ -41,7 +41,7 @@
  *
  **************************************************************************/
 
-#include "test/helper.h"
+#include "helper.h"
 #include "cfg/cfg_int.h"
 #include "cfg/dir.h"
 #include <openssl/evp.h>

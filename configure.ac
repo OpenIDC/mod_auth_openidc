@@ -200,5 +200,9 @@ AC_SUBST(CHECK_CFLAGS)
 AC_SUBST(CHECK_LIBS)
 
 # Create Makefile from Makefile.in
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([
+	Makefile
+	src/Makefile
+	test/Makefile
+])
 AC_OUTPUT

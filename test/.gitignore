@@ -12,3 +12,5 @@
 /*.gcda
 /test_jose
 /test_util
+/Makefile
+/Makefile.in
