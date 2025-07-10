@@ -140,8 +140,8 @@ static char *test_private_key_parse(apr_pool_t *pool) {
 	const char ecPrivateKeyFile[512];
 
 	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
-	snprintf((char *)rsaPrivateKeyFile, 512, "%s/%s", dir, "/test/private.pem");
-	snprintf((char *)ecPrivateKeyFile, 512, "%s/%s", dir, "/test/ecpriv.key");
+	snprintf((char *)rsaPrivateKeyFile, 512, "%s/%s", dir, "/private.pem");
+	snprintf((char *)ecPrivateKeyFile, 512, "%s/%s", dir, "/ecpriv.key");
 
 	input = BIO_new(BIO_s_file());
 	TST_ASSERT_ERR("test_private_key_parse_BIO_new_RSA_private_key", input != NULL, pool, err);
@@ -204,9 +204,9 @@ static char *test_public_key_parse(apr_pool_t *pool) {
 	const char certificateFile[512];
 	const char ecCertificateFile[512];
 	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
-	snprintf((char *)publicKeyFile, 512, "%s/%s", dir, "/test/public.pem");
-	snprintf((char *)certificateFile, 512, "%s/%s", dir, "/test/certificate.pem");
-	snprintf((char *)ecCertificateFile, 512, "%s/%s", dir, "/test/eccert.pem");
+	snprintf((char *)publicKeyFile, 512, "%s/%s", dir, "/public.pem");
+	snprintf((char *)certificateFile, 512, "%s/%s", dir, "/certificate.pem");
+	snprintf((char *)ecCertificateFile, 512, "%s/%s", dir, "/eccert.pem");
 
 	input = BIO_new(BIO_s_file());
 	TST_ASSERT_ERR("test_public_key_parse_BIO_new_public_key", input != NULL, pool, err);
@@ -1716,7 +1716,7 @@ static char *test_open_redirect(request_rec *r) {
 
 	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
 	// https://github.com/payloadbox/open-redirect-payload-list
-	filename = apr_psprintf(r->pool, "%s/%s", dir, "/test/open-redirect-payload-list.txt");
+	filename = apr_psprintf(r->pool, "%s/%s", dir, "/open-redirect-payload-list.txt");
 
 	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 

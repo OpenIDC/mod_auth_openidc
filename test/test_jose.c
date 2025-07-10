@@ -41,8 +41,8 @@
  *
  **************************************************************************/
 
+#include "helper.h"
 #include "jose.h"
-#include "test/helper.h"
 
 // supported
 
