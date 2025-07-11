@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 07/11/2025
 - add check and code coverage skeleton
 - bump to 2.4.18dev
@@ -6,6 +7,11 @@
 - support use of Elliptic Curve prime256v1 keys for private_key_jwt (ES256) token endpoint
   and introspection endpoint authentication; closes #1336
 - bump to 2.4.17.2dev
+=======
+07/09/2025
+- add check and code coverage skeleton
+- bump to 2.4.18dev
+>>>>>>> branch 'check-code-coverage' of https://github.com/OpenIDC/mod_auth_openidc.git
 
 06/25/2025
 - allow to suppress warnings about (individual) X-Forwarded headers; see #1333
