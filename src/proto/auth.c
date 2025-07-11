@@ -191,14 +191,12 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r, oidc_
 		return FALSE;
 
 	if ((client_keys != NULL) && (client_keys->nelts > 0)) {
-		jwk = oidc_util_key_list_first(client_keys, CJOSE_JWK_KTY_RSA, OIDC_JOSE_JWK_SIG_STR);
+		jwk = oidc_util_key_list_first(client_keys, -1, OIDC_JOSE_JWK_SIG_STR);
 		if (jwk && jwk->x5t)
 			jwt->header.x5t = apr_pstrdup(r->pool, jwk->x5t);
 	} else if ((oidc_cfg_private_keys_get(cfg) != NULL) && (oidc_cfg_private_keys_get(cfg)->nelts > 0)) {
-		jwk =
-		    oidc_util_key_list_first(oidc_cfg_private_keys_get(cfg), CJOSE_JWK_KTY_RSA, OIDC_JOSE_JWK_SIG_STR);
-		jwk_pub =
-		    oidc_util_key_list_first(oidc_cfg_public_keys_get(cfg), CJOSE_JWK_KTY_RSA, OIDC_JOSE_JWK_SIG_STR);
+		jwk = oidc_util_key_list_first(oidc_cfg_private_keys_get(cfg), -1, OIDC_JOSE_JWK_SIG_STR);
+		jwk_pub = oidc_util_key_list_first(oidc_cfg_public_keys_get(cfg), -1, OIDC_JOSE_JWK_SIG_STR);
 		if (jwk_pub && jwk_pub->x5t)
 			// populate x5t; at least required for Microsoft Entra ID / Azure AD
 			jwt->header.x5t = apr_pstrdup(r->pool, jwk_pub->x5t);
@@ -212,7 +210,8 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r, oidc_
 	}
 
 	jwt->header.kid = apr_pstrdup(r->pool, jwk->kid);
-	jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_RS256);
+	jwt->header.alg =
+	    apr_pstrdup(r->pool, jwk->kty == CJOSE_JWK_KTY_EC ? CJOSE_HDR_ALG_ES256 : CJOSE_HDR_ALG_RS256);
 
 	oidc_proto_jwt_sign_and_add(r, params, jwt, jwk);
 

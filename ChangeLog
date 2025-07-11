@@ -1,3 +1,8 @@
+07/11/2025
+- support use of Elliptic Curve prime256v1 keys for private_key_jwt (ES256) token endpoint
+  and introspection endpoint authentication; closes #1336
+- bump to 2.4.17.2dev
+
 06/25/2025
 - allow to suppress warnings about (individual) X-Forwarded headers; see #1333
   through environment variable OIDC_CHECK_X_FORWARDED_HDR_LOG_DISABLE, e.g.:
