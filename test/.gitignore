@@ -10,8 +10,6 @@
 /.dirstamp
 /*.gcno
 /*.gcda
-/Makefile
-/Makefile.in
 /test_jose
 /test_util
 /Makefile
