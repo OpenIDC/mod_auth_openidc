@@ -131,10 +131,10 @@ int oidc_proto_profile_response_require_iss_get(oidc_provider_t *provider);
 
 // auth.c
 apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg_t *cfg, const char *token_endpoint_auth,
-					  const char *client_id, const char *client_secret,
-					  const apr_array_header_t *client_keys, const char *audience,
-					  apr_table_t *params, const char *bearer_access_token, char **basic_auth_str,
-					  char **bearer_auth_str);
+					  const char *token_endpoint_auth_alg, const char *client_id,
+					  const char *client_secret, const apr_array_header_t *client_keys,
+					  const char *audience, apr_table_t *params, const char *bearer_access_token,
+					  char **basic_auth_str, char **bearer_auth_str);
 
 // discovery.c
 apr_byte_t oidc_proto_discovery_account_based(request_rec *r, oidc_cfg_t *cfg, const char *acct, char **issuer);

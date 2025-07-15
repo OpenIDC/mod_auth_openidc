@@ -164,6 +164,7 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg_t *c
 
 	/* add the token endpoint authentication credentials */
 	if (oidc_proto_token_endpoint_auth(r, c, oidc_cfg_oauth_introspection_endpoint_auth_get(c),
+					   oidc_cfg_oauth_introspection_endpoint_auth_alg_get(c),
 					   oidc_cfg_oauth_client_id_get(c), oidc_cfg_oauth_client_secret_get(c), NULL,
 					   oidc_cfg_oauth_introspection_endpoint_url_get(c), params,
 					   bearer_access_token_auth, &basic_auth, &bearer_auth) == FALSE)

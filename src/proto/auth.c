@@ -172,15 +172,15 @@ static apr_byte_t oidc_proto_endpoint_access_token_bearer(request_rec *r, oidc_c
 	return rv;
 }
 
-#define OIDC_PROTO_JWT_ASSERTION_ASYMMETRIC_ALG CJOSE_HDR_ALG_RS256
-
 /*
  * create a JWT assertion signed with the configured private key and add it to the HTTP request as endpoint
  * authentication
  */
-static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r, oidc_cfg_t *cfg, const char *client_id,
+static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r, oidc_cfg_t *cfg,
+							   const char *token_endpoint_auth_alg, const char *client_id,
 							   const apr_array_header_t *client_keys, const char *audience,
 							   apr_table_t *params) {
+	apr_byte_t rv = FALSE;
 	oidc_jwt_t *jwt = NULL;
 	oidc_jwk_t *jwk = NULL;
 	const oidc_jwk_t *jwk_pub = NULL;
@@ -205,29 +205,52 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r, oidc_
 	if (jwk == NULL) {
 		oidc_error(r, "no private signing keys have been configured to use for private_key_jwt client "
 			      "authentication (" OIDCPrivateKeyFiles ")");
-		oidc_jwt_destroy(jwt);
-		return FALSE;
+		goto end;
 	}
 
 	jwt->header.kid = apr_pstrdup(r->pool, jwk->kid);
-	jwt->header.alg =
-	    apr_pstrdup(r->pool, jwk->kty == CJOSE_JWK_KTY_EC ? CJOSE_HDR_ALG_ES256 : CJOSE_HDR_ALG_RS256);
 
-	oidc_proto_jwt_sign_and_add(r, params, jwt, jwk);
+	if (token_endpoint_auth_alg != NULL) {
+		jwt->header.alg = apr_pstrdup(r->pool, token_endpoint_auth_alg);
+		// oidc_proto_jwt_sign_and_add will fail later if no corresponding key was configured
+	} else {
+		if (jwk->kty == CJOSE_JWK_KTY_RSA) {
+			jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_RS256);
+		} else if (jwk->kty == CJOSE_JWK_KTY_EC) {
+			if (cjose_jwk_EC_get_curve(jwk->cjose_jwk, NULL) == NID_X9_62_prime256v1)
+				jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_ES256);
+			if (cjose_jwk_EC_get_curve(jwk->cjose_jwk, NULL) == NID_secp384r1)
+				jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_ES384);
+			if (cjose_jwk_EC_get_curve(jwk->cjose_jwk, NULL) == NID_secp521r1)
+				jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_ES512);
+		} else {
+			oidc_error(
+			    r, "no valid signing key (RSA or Elliptic Curve) could be found in " OIDCPrivateKeyFiles);
+			goto end;
+		}
+	}
 
-	oidc_jwt_destroy(jwt);
+	oidc_debug(r, "signing private_key_jwt assertion with algorithm: %s", jwt->header.alg);
 
-	return TRUE;
+	// this fails if the wrong type of key  configured for an explicitly specified algorithm
+	rv = oidc_proto_jwt_sign_and_add(r, params, jwt, jwk);
+
+end:
+
+	if (jwt)
+		oidc_jwt_destroy(jwt);
+
+	return rv;
 }
 
 /*
  * add the configured token endpoint authentication method to the request (or return it in the *_auth_str parameters)
  */
 apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg_t *cfg, const char *token_endpoint_auth,
-					  const char *client_id, const char *client_secret,
-					  const apr_array_header_t *client_keys, const char *audience,
-					  apr_table_t *params, const char *bearer_access_token, char **basic_auth_str,
-					  char **bearer_auth_str) {
+					  const char *token_endpoint_auth_alg, const char *client_id,
+					  const char *client_secret, const apr_array_header_t *client_keys,
+					  const char *audience, apr_table_t *params, const char *bearer_access_token,
+					  char **basic_auth_str, char **bearer_auth_str) {
 
 	oidc_debug(r, "token_endpoint_auth=%s", token_endpoint_auth);
 
@@ -267,7 +290,8 @@ apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg_t *cfg, const
 		return oidc_proto_endpoint_auth_client_secret_jwt(r, client_id, client_secret, audience, params);
 
 	if (_oidc_strcmp(token_endpoint_auth, OIDC_PROTO_PRIVATE_KEY_JWT) == 0)
-		return oidc_proto_endpoint_auth_private_key_jwt(r, cfg, client_id, client_keys, audience, params);
+		return oidc_proto_endpoint_auth_private_key_jwt(r, cfg, token_endpoint_auth_alg, client_id, client_keys,
+								audience, params);
 
 	if (_oidc_strcmp(token_endpoint_auth, OIDC_PROTO_BEARER_ACCESS_TOKEN) == 0) {
 		return oidc_proto_endpoint_access_token_bearer(r, cfg, bearer_access_token, bearer_auth_str);

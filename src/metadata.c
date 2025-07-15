@@ -1379,6 +1379,7 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg_t *cfg, json_t *j_c
 	OIDC_METADATA_PROVIDER_SET(client_contact, value, rv)
 
 	/* get the token endpoint authentication method */
+	// TODO: token_endpoint_auth_alg inheritance from global setting does not work now
 	oidc_util_json_object_get_string(r->pool, j_conf, OIDC_METADATA_TOKEN_ENDPOINT_AUTH, &value,
 					 oidc_cfg_provider_token_endpoint_auth_get(oidc_cfg_provider_get(cfg)));
 	if (value != NULL) {

@@ -96,6 +96,7 @@ OIDC_CFG_OAUTH_MEMBER_FUNCS_DECL(metadata_url, const char *)
 OIDC_CFG_OAUTH_MEMBER_FUNCS_DECL(introspection_endpoint_url, const char *)
 OIDC_CFG_OAUTH_MEMBER_FUNCS_DECL(introspection_endpoint_params, const char *)
 OIDC_CFG_OAUTH_MEMBER_FUNCS_DECL(introspection_endpoint_auth, const char *)
+OIDC_CFG_OAUTH_MEMBER_FUNCS_DECL(introspection_endpoint_auth_alg, const char *)
 OIDC_CFG_OAUTH_MEMBER_FUNCS_DECL(introspection_endpoint_method, oidc_oauth_introspection_endpoint_method_t)
 OIDC_CFG_OAUTH_MEMBER_FUNCS_DECL(introspection_token_param_name, const char *)
 OIDC_CFG_OAUTH_MEMBER_FUNCS_DECL(introspection_endpoint_tls_client_cert, const char *)
@@ -124,6 +125,7 @@ OIDC_CFG_OAUTH_MEMBER_FUNC_GET_DECL(introspection_token_expiry_claim_required,
 OIDC_CFG_OAUTH_MEMBER_FUNC_SET_DECL(introspection_endpoint_url)
 OIDC_CFG_OAUTH_MEMBER_FUNC_SET_DECL(verify_jwks_uri)
 OIDC_CFG_OAUTH_MEMBER_FUNC_SET_DECL(introspection_endpoint_auth)
+OIDC_CFG_OAUTH_MEMBER_FUNC_GET_DECL(introspection_endpoint_auth_alg, const char *)
 
 typedef struct oidc_oauth_t oidc_oauth_t;
 

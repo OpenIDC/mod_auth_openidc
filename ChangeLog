@@ -1,6 +1,7 @@
-07/11/2025
-- support use of Elliptic Curve prime256v1 keys for private_key_jwt (ES256) token endpoint
-  and introspection endpoint authentication; closes #1336
+07/15/2025
+- support the use of Elliptic Curve keys for private_key_jwt authentication at
+  the token- and introspection endpoints and make the signing algorithm configurable
+  for both RSA en EC keys; closes #1336; thanks @rjr162
 - bump to 2.4.17.2dev
 
 06/25/2025

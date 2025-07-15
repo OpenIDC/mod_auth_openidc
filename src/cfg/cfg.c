@@ -229,19 +229,57 @@ static const char *oidc_valid_endpoint_auth_method_impl(apr_pool_t *pool, const 
 	return oidc_cfg_parse_is_valid_option(pool, arg, options);
 }
 
-const char *oidc_cfg_valid_endpoint_auth_method(apr_pool_t *pool, const char *arg) {
-	return oidc_valid_endpoint_auth_method_impl(pool, arg, TRUE);
+static const char *oidc_valid_private_key_jwt_alg(apr_pool_t *pool, const char *arg) {
+	static const char *options[] = {"RS256", "RS384", "RS512", "PS256", "PS384", "PS512",
+#if (OIDC_JOSE_EC_SUPPORT)
+					"ES256", "ES384", "ES512",
+#endif
+
+					NULL};
+	return oidc_cfg_parse_is_valid_option(pool, arg, options);
 }
 
-const char *oidc_cfg_valid_endpoint_auth_method_no_private_key(apr_pool_t *pool, const char *arg) {
+#define OIDC_ENDPOINT_AUTH_METHOD_SEPARATOR ":"
+
+static void oidc_cfg_endpoint_auth_parse(apr_pool_t *pool, const char *arg1, char **method, char **suffix) {
+	const char *arg = apr_pstrdup(pool, arg1);
+	char *sep = _oidc_strstr(arg, OIDC_ENDPOINT_AUTH_METHOD_SEPARATOR);
+	if (sep) {
+		*sep = '\0';
+		*suffix = apr_pstrdup(pool, ++sep);
+	}
+	*method = apr_pstrdup(pool, arg);
+}
+
+static const char *oidc_cfg_valid_endpoint_auth_method_with_private_key(apr_pool_t *pool, const char *arg1) {
+	const char *rv = NULL;
+	char *method = NULL;
+	char *alg = NULL;
+	oidc_cfg_endpoint_auth_parse(pool, arg1, &method, &alg);
+	if ((_oidc_strcmp(method, OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT) == 0) && (alg != NULL)) {
+		rv = oidc_valid_private_key_jwt_alg(pool, alg);
+		if (rv != NULL)
+			return rv;
+	}
+	return oidc_valid_endpoint_auth_method_impl(pool, method, TRUE);
+}
+
+static const char *oidc_cfg_valid_endpoint_auth_method_no_private_key(apr_pool_t *pool, const char *arg) {
 	return oidc_valid_endpoint_auth_method_impl(pool, arg, FALSE);
+}
+
+const char *oidc_cfg_endpoint_auth_set(apr_pool_t *pool, oidc_cfg_t *cfg, const char *arg1, char **auth, char **alg) {
+	const char *rv = oidc_cfg_get_valid_endpoint_auth_function(cfg)(pool, arg1);
+	if (rv == NULL)
+		oidc_cfg_endpoint_auth_parse(pool, arg1, auth, alg);
+	return rv;
 }
 
 /*
  * return the right token endpoint authentication method validation function, based on whether private keys are set
  */
 oidc_valid_function_t oidc_cfg_get_valid_endpoint_auth_function(oidc_cfg_t *cfg) {
-	return (cfg->private_keys != NULL) ? &oidc_cfg_valid_endpoint_auth_method
+	return (cfg->private_keys != NULL) ? &oidc_cfg_valid_endpoint_auth_method_with_private_key
 					   : &oidc_cfg_valid_endpoint_auth_method_no_private_key;
 }
 

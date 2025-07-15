@@ -98,7 +98,8 @@ static int oidc_proto_request_auth_push(request_rec *r, struct oidc_provider_t *
 
 	/* add the token endpoint authentication credentials to the pushed authorization request */
 	if (oidc_proto_token_endpoint_auth(
-		r, cfg, oidc_cfg_provider_token_endpoint_auth_get(provider), oidc_cfg_provider_client_id_get(provider),
+		r, cfg, oidc_cfg_provider_token_endpoint_auth_get(provider),
+		oidc_cfg_provider_token_endpoint_auth_alg_get(provider), oidc_cfg_provider_client_id_get(provider),
 		oidc_cfg_provider_client_secret_get(provider), oidc_cfg_provider_client_keys_get(provider),
 		oidc_proto_profile_token_endpoint_auth_aud(provider), params, NULL, &basic_auth, &bearer_auth) == FALSE)
 		goto out;

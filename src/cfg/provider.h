@@ -270,6 +270,7 @@ const char *OIDC_CFG_MEMBER_FUNC_NAME(token_endpoint_auth, cfg_provider, set)(ap
 									      const char *arg);
 OIDC_CMD_PROVIDER_MEMBER_FUNC_DECL(token_endpoint_auth)
 OIDC_CFG_PROVIDER_MEMBER_FUNC_GET_DECL(token_endpoint_auth, const char *)
+OIDC_CFG_PROVIDER_MEMBER_FUNC_GET_DECL(token_endpoint_auth_alg, const char *)
 
 oidc_provider_t *oidc_cfg_provider_create(apr_pool_t *pool);
 void oidc_cfg_provider_merge(apr_pool_t *pool, oidc_provider_t *dst, const oidc_provider_t *base,
