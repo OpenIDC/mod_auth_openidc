@@ -431,6 +431,23 @@ static json_t *oidc_authz_merge_claims(request_rec *r) {
 	return result;
 }
 
+/*
+ * check if this request should be passed to the content handler without applying authorization
+ */
+static apr_byte_t oidc_authz_skip_to_content_handler(request_rec *r) {
+	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
+		return TRUE;
+	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_AUTHN_POST) != NULL)
+		return TRUE;
+	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE) != NULL)
+		return TRUE;
+	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTTP) != NULL)
+		return TRUE;
+	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTML) != NULL)
+		return TRUE;
+	return FALSE;
+}
+
 #if HAVE_APACHE_24
 
 /*
@@ -571,23 +588,6 @@ static authz_status oidc_authz_24_unauthorized_user(request_rec *r) {
 	}
 
 	return AUTHZ_DENIED;
-}
-
-/*
- * check if this request should be passed to the content handler without applying authorization
- */
-static apr_byte_t oidc_authz_skip_to_content_handler(request_rec *r) {
-	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
-		return TRUE;
-	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_AUTHN_POST) != NULL)
-		return TRUE;
-	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE) != NULL)
-		return TRUE;
-	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTTP) != NULL)
-		return TRUE;
-	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTML) != NULL)
-		return TRUE;
-	return FALSE;
 }
 
 /*
