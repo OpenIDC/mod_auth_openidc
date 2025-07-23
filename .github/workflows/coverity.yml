@@ -1,15 +1,11 @@
 name: Coverity
 
-on:
-  schedule:
-    - cron: '0 18 * * SUN'
-  workflow_dispatch:
-
 #on:
-#  push:
-#    branches: [ master, coverity ]
-#  pull_request:
-#    types: [opened, synchronize, reopened]
+#  schedule:
+#    - cron: '0 18 * * SUN'
+#  workflow_dispatch:
+
+on: [push, pull_request]
 
 jobs:
   build:
@@ -24,7 +20,7 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y apache2-dev libcjose-dev libssl-dev check pkg-config
-          sudo apt-get install -y libjansson-dev libcurl4-openssl-dev libhiredis-dev libpcre2-dev
+          sudo apt-get install -y libjansson-dev libcurl4-openssl-dev libhiredis-dev libpcre2-dev libjq-dev check
       - name: Download Coverity Build Tool
         env:
           TOKEN: ${{ secrets.COVERITY_SCAN_TOKEN }}
@@ -35,7 +31,7 @@ jobs:
       - name: Configure
         run: |
           ./autogen.sh
-          ./configure
+          ./configure --with-jq
       - name: Make with cov-build
         run: |
           pwd
