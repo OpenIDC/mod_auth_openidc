@@ -2,7 +2,6 @@
 /.vscode/
 /.libs/
 /.settings/
-/m4/
 /.project
 /.cproject
 /.dockerignore
@@ -28,4 +27,3 @@
 /Makefile.in
 /missing
 /test-driver
-/test-suite.log
