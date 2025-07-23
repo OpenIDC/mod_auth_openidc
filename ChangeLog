@@ -1,3 +1,8 @@
+07/23/2025
+- fix regression in 2.4.17 for processing unauthenticated requests that generate HTML
+  content, e.g. `OIDCProviderAuthRequestMethod POST` and `OIDCPreservePost On`
+  when protected with `Require claim` statements rather than just `Require valid-user`.
+ 
 07/15/2025
 - support the use of Elliptic Curve keys for private_key_jwt authentication at
   the token- and introspection endpoints and make the signing algorithm configurable

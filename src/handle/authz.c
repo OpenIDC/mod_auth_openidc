@@ -574,6 +574,23 @@ static authz_status oidc_authz_24_unauthorized_user(request_rec *r) {
 }
 
 /*
+ * check if this request should be passed to the content handler without applying authorization
+ */
+static apr_byte_t oidc_authz_skip_to_content_handler(request_rec *r) {
+	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
+		return TRUE;
+	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_AUTHN_POST) != NULL)
+		return TRUE;
+	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE) != NULL)
+		return TRUE;
+	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTTP) != NULL)
+		return TRUE;
+	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTML) != NULL)
+		return TRUE;
+	return FALSE;
+}
+
+/*
  * generic Apache >=2.4 authorization hook for this module
  * handles both OpenID Connect or OAuth 2.0 in the same way, based on the claims stored in the session
  */
@@ -586,7 +603,7 @@ authz_status oidc_authz_24_checker(request_rec *r, const char *require_args, con
 	if ((r->user != NULL) && (_oidc_strlen(r->user) == 0)) {
 		if (oidc_cfg_dir_unauth_action_get(r) == OIDC_UNAUTH_PASS)
 			return AUTHZ_GRANTED;
-		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
+		if (oidc_authz_skip_to_content_handler(r) == TRUE)
 			return AUTHZ_GRANTED;
 		if (r->method_number == M_OPTIONS)
 			return AUTHZ_GRANTED;
@@ -774,7 +791,7 @@ int oidc_authz_22_checker(request_rec *r) {
 		r->user = NULL;
 		if (oidc_cfg_dir_unauth_action_get(r) == OIDC_UNAUTH_PASS)
 			return OK;
-		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
+		if (oidc_authz_skip_to_content_handler(r) == TRUE)
 			return OK;
 		if (r->method_number == M_OPTIONS)
 			return OK;
