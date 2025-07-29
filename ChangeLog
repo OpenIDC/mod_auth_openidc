@@ -10,6 +10,10 @@
 - bump to 2.4.18dev
 
 07/23/2025
+- add check and code coverage skeleton
+- bump to 2.4.18dev
+
+07/23/2025
 - fix regression in 2.4.17 for processing unauthenticated requests that generate HTML
   content, e.g. `OIDCProviderAuthRequestMethod POST` and `OIDCPreservePost On`
   when protected with `Require claim` statements rather than just `Require valid-user`.
