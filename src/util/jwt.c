@@ -65,7 +65,7 @@ static const char *oidc_util_jwt_hdr_dir_a256gcm(request_rec *r, char *input) {
 
 	p = _oidc_strstr(compact_encoded_jwt, "..");
 	if (p) {
-		_oidc_jwt_hdr_dir_a256gcm = apr_pstrndup(r->server->process->pconf, compact_encoded_jwt,
+		_oidc_jwt_hdr_dir_a256gcm = apr_pstrndup(r->server->process->pool, compact_encoded_jwt,
 							 _oidc_strlen(compact_encoded_jwt) - _oidc_strlen(p) + 2);
 		oidc_debug(r, "saved _oidc_jwt_hdr_dir_a256gcm header: %s", _oidc_jwt_hdr_dir_a256gcm);
 	}

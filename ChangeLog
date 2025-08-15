@@ -1,3 +1,8 @@
+08/15/2025
+- use the server process pool for static variable allocation rather than the pconf pool
+  to prevents possible segmentation faults after (graceful) restarting the same process
+- bump to 2.4.17.3dev
+
 07/28/2025
 - release 2.4.17.2
 

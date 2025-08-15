@@ -588,8 +588,8 @@ const apr_array_header_t *oidc_cfg_dir_pass_userinfo_as_get(request_rec *r) {
 	if (dir_cfg->pass_userinfo_as == NULL) {
 		if (pass_userinfo_as_default == NULL) {
 			pass_userinfo_as_default =
-			    apr_array_make(r->server->process->pconf, 3, sizeof(oidc_pass_user_info_as_t *));
-			oidc_cfg_dir_parse_pass_userinfo_as(r->server->process->pconf, OIDC_DEFAULT_PASS_USERINFO_AS,
+			    apr_array_make(r->server->process->pool, 3, sizeof(oidc_pass_user_info_as_t *));
+			oidc_cfg_dir_parse_pass_userinfo_as(r->server->process->pool, OIDC_DEFAULT_PASS_USERINFO_AS,
 							    &p);
 			APR_ARRAY_PUSH(pass_userinfo_as_default, oidc_pass_user_info_as_t *) = p;
 		}
