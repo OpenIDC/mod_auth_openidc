@@ -1,3 +1,7 @@
+08/18/2025
+- fix parsing the value set via OIDCMemCacheConnectionsTTL and interpret it in
+  seconds correctly now (instead of microseconds); see #1345; thanks @rpluem
+
 08/15/2025
 - use the server process pool for static variable allocation rather than the pconf pool
   to prevents possible segmentation faults after (graceful) restarting the same process
