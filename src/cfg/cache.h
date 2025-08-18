@@ -92,7 +92,7 @@ OIDC_CFG_MEMBER_FUNCS_DECL(cache_memcache_servers, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_memcache_min, int)
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_memcache_smax, int)
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_memcache_hmax, int)
-OIDC_CFG_MEMBER_FUNCS_DECL(cache_memcache_ttl, int)
+OIDC_CFG_MEMBER_FUNCS_DECL(cache_memcache_ttl, apr_interval_time_t)
 
 #endif // USE_MEMCACHE
 

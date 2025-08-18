@@ -52,6 +52,8 @@
 #include "cache/cache.h"
 
 #define OIDC_CONFIG_POS_INT_UNSET -1
+/* -1 might be used for unlimited timeout */
+#define OIDC_CONFIG_POS_TIMEOUT_UNSET (apr_interval_time_t)-2
 
 #define OIDCPublicKeyFiles "OIDCPublicKeyFiles"
 #define OIDCDefaultLoggedOutURL "OIDCDefaultLoggedOutURL"

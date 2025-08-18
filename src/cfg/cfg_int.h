@@ -94,7 +94,7 @@ struct oidc_cfg_cache_t {
 	int memcache_hmax;
 	/* cache_type= memcache: maximum time in microseconds a connection to a memcache server can be idle before being
 	 * closed */
-	int memcache_ttl;
+	apr_interval_time_t memcache_ttl;
 #endif
 
 	/*
