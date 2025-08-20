@@ -5,7 +5,10 @@
 /.libs
 /.deps/
 /.dirstamp
+/*.gcno
 /config.h
 /config.h.in
 /config.h.in~
 /stamp-h1
+/Makefile
+/Makefile.in

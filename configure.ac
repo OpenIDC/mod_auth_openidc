@@ -1,4 +1,4 @@
-AC_INIT([mod_auth_openidc],[2.4.17.3dev],[hans.zandbelt@openidc.com])
+AC_INIT([mod_auth_openidc],[2.4.18dev],[hans.zandbelt@openidc.com])
 
 AC_SUBST(NAMEVER, AC_PACKAGE_TARNAME()-AC_PACKAGE_VERSION())
 
@@ -11,6 +11,8 @@ AC_PROG_CC
 AM_PROG_CC_C_O
 AM_PROG_AR
 LT_INIT([dlopen])
+
+AX_CODE_COVERAGE
 
 # Checks for apxs.
 AC_ARG_WITH([apxs],
@@ -186,6 +188,21 @@ AM_CONDITIONAL(HAVE_LIBJQ, [test x"$HAVE_LIBJQ" = "x1"])
 AC_SUBST(JQ_CFLAGS)
 AC_SUBST(JQ_LIBS)
 
+# check
+PKG_CHECK_MODULES([CHECK],
+	[check >= 0.9.4],
+	[have_check="yes"],
+		[AC_MSG_WARN([Check not found; cannot run unit tests!]);
+	[have_check="no"]
+])
+AM_CONDITIONAL(HAVE_CHECK, [test x"$have_check" = "xyes"])
+AC_SUBST(CHECK_CFLAGS)
+AC_SUBST(CHECK_LIBS)
+
 # Create Makefile from Makefile.in
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([
+	Makefile
+	src/Makefile
+	test/Makefile
+])
 AC_OUTPUT

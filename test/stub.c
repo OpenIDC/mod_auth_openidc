@@ -311,7 +311,46 @@ AP_DECLARE(apr_status_t) ap_mpm_query(int query_code, int *result) {
 #if AP_MODULE_MAGIC_AT_LEAST(20080920, 2)
 AP_DECLARE(apr_status_t)
 ap_timeout_parameter_parse(const char *timeout_parameter, apr_interval_time_t *timeout, const char *default_time_unit) {
-	*timeout = 0;
+	char *endp;
+	const char *time_str;
+	apr_int64_t tout;
+
+	tout = apr_strtoi64(timeout_parameter, &endp, 10);
+	if (errno) {
+		return errno;
+	}
+	if (!endp || !*endp) {
+		time_str = default_time_unit;
+	} else {
+		time_str = endp;
+	}
+
+	switch (*time_str) {
+		/* Time is in seconds */
+	case 's':
+		*timeout = (apr_interval_time_t)apr_time_from_sec(tout);
+		break;
+	case 'h':
+		/* Time is in hours */
+		*timeout = (apr_interval_time_t)apr_time_from_sec(tout * 3600);
+		break;
+	case 'm':
+		switch (*(++time_str)) {
+		/* Time is in milliseconds */
+		case 's':
+			*timeout = (apr_interval_time_t)tout * 1000;
+			break;
+		/* Time is in minutes */
+		case 'i':
+			*timeout = (apr_interval_time_t)apr_time_from_sec(tout * 60);
+			break;
+		default:
+			return APR_EGENERAL;
+		}
+		break;
+	default:
+		return APR_EGENERAL;
+	}
 	return APR_SUCCESS;
 }
 #endif

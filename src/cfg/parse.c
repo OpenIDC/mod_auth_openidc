@@ -201,22 +201,26 @@ const char *oidc_cfg_parse_int_min_max(apr_pool_t *pool, const char *arg, int *i
  * apr_interval_time_t if it is in a valid min/max range
  */
 const char *oidc_cfg_parse_timeout_min_max(apr_pool_t *pool, const char *arg, apr_interval_time_t *timeout_value,
-				       apr_interval_time_t min_value, apr_interval_time_t max_value) {
-       apr_interval_time_t timeout;
+					   apr_interval_time_t min_value, apr_interval_time_t max_value) {
+	apr_interval_time_t timeout;
 
-       if (ap_timeout_parameter_parse(arg, &timeout, "s") != APR_SUCCESS) {
-               return apr_psprintf(pool, "not a valid timeout parameter: %s", arg);
-       }
-       if (timeout < min_value) {
-               return apr_psprintf(pool, "timeout value %" APR_TIME_T_FMT " is smaller than the minimum allowed value %" APR_TIME_T_FMT, timeout,
-                                   min_value);
-       }
-       if (timeout > max_value) {
-               return apr_psprintf(pool, "timeout value %" APR_TIME_T_FMT " is greater than the maximum allowed value %" APR_TIME_T_FMT, timeout,
-                                   max_value);
-       }
-       *timeout_value = (int)timeout;
-       return NULL;
+	if (ap_timeout_parameter_parse(arg, &timeout, "s") != APR_SUCCESS) {
+		return apr_psprintf(pool, "not a valid timeout parameter: %s", arg);
+	}
+	if (timeout < min_value) {
+		return apr_psprintf(pool,
+				    "timeout value %" APR_TIME_T_FMT
+				    " is smaller than the minimum allowed value %" APR_TIME_T_FMT,
+				    timeout, min_value);
+	}
+	if (timeout > max_value) {
+		return apr_psprintf(pool,
+				    "timeout value %" APR_TIME_T_FMT
+				    " is greater than the maximum allowed value %" APR_TIME_T_FMT,
+				    timeout, max_value);
+	}
+	*timeout_value = (int)timeout;
+	return NULL;
 }
 
 /*

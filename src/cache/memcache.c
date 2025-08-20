@@ -178,8 +178,8 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 		if (port == 0)
 			port = 11211;
 
-		oidc_sdebug(s, "creating server: %s:%d, min=%d, smax=%d, hmax=%d, ttl=%" APR_TIME_T_FMT, host_str, port, min, smax,
-			    hmax, ttl);
+		oidc_sdebug(s, "creating server: %s:%d, min=%d, smax=%d, hmax=%d, ttl=%" APR_TIME_T_FMT, host_str, port,
+			    min, smax, hmax, ttl);
 
 		/* create the memcache server struct */
 		rv = apr_memcache_server_create(p, host_str, port, min, smax, hmax, (apr_uint32_t)ttl, &st);

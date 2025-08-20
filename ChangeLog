@@ -1,3 +1,10 @@
+08/20/2025
+- revise test/check and code coverage functions
+- revise autoconf/automake, split over subdirs now
+- add tests for memcache TTL
+- fix check OIDC_CONFIG_POS_TIMEOUT_UNSET for memcache TTL getter; #1345
+- bump to 2.4.18dev
+
 08/18/2025
 - fix parsing the value set via OIDCMemCacheConnectionsTTL and interpret it in
   seconds correctly now (instead of microseconds); see #1345; thanks @rpluem
@@ -14,7 +21,7 @@
 - fix regression in 2.4.17 for processing unauthenticated requests that generate HTML
   content, e.g. `OIDCProviderAuthRequestMethod POST` and `OIDCPreservePost On`
   when protected with `Require claim` statements rather than just `Require valid-user`.
- 
+
 07/15/2025
 - support the use of Elliptic Curve keys for private_key_jwt authentication at
   the token- and introspection endpoints and make the signing algorithm configurable
