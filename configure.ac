@@ -165,7 +165,7 @@ if test -n "$with_jq"
 then
 	if test "$JQ_CFLAGS" == ""; then
 		if test "$with_jq" == "yes"; then
-			JQ_CFLAGS="/usr/include"
+			JQ_CFLAGS="-I/usr/include"
 		else
 			JQ_CFLAGS="-I$with_jq/include"
 		fi
