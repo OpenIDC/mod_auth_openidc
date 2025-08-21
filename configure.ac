@@ -164,7 +164,11 @@ AC_ARG_WITH([jq], AS_HELP_STRING([--with-jq=PATH], [location of libjq developmen
 if test -n "$with_jq"
 then
 	if test "$JQ_CFLAGS" == ""; then
-		JQ_CFLAGS="-I$with_jq/include"
+		if test "$with_jq" == "yes"; then
+			JQ_CFLAGS="/usr/include"
+		else
+			JQ_CFLAGS="-I$with_jq/include"
+		fi
 	fi
 	if test "$JQ_LIBS" == ""; then
 		if test "$with_jq" == "yes"; then
