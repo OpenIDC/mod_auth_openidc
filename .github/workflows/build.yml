@@ -20,7 +20,7 @@ jobs:
     - name: Make
       run: make
     - name: Test
-      run: make check || (cat test-suite.log && exit -1)
+      run: make check || (cat test/test-suite.log && exit -1)
     - name: Valgrind
       run: make valgrind
     - name: Distcheck
