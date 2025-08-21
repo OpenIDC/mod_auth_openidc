@@ -13,8 +13,5 @@ EXTRA_DIST = \
 clang-format:
 	clang-format -style=file -i $$(find . -maxdepth 3 -name *.[ch])
 
-check-code-coverage: check
-	${MAKE} -C test $@
-
-valgrind: check
+valgrind check-code-coverage: check
 	${MAKE} -C test $@
