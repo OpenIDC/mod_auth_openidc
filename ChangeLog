@@ -1,3 +1,6 @@
+08/21/2025
+- add Valgrind target to Makefile and to Github Build action
+
 08/20/2025
 - revise test/check and code coverage functions
 - revise autoconf/automake, split over subdirs now

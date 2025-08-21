@@ -72,6 +72,11 @@ EXTRA_DIST = \
 clean-local:
 	rm -f *.gcno
 
+${TESTS:%=%.valgrind}: ${TESTS}
+	CK_FORK=no valgrind --error-exitcode=1 --show-leak-kinds=definite --read-inline-info=yes --keep-debuginfo=yes ./$$(basename $@ .valgrind)
+
+valgrind: ${TESTS:%=%.valgrind}
+
 CODE_COVERAGE_LCOV_SHOPTS = --ignore-errors inconsistent --ignore-errors unused
 
 @CODE_COVERAGE_RULES@

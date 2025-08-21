@@ -15,3 +15,6 @@ clang-format:
 
 check-code-coverage: check
 	${MAKE} -C test $@
+
+valgrind: check
+	${MAKE} -C test $@
