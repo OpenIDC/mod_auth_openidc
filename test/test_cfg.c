@@ -108,12 +108,12 @@ START_TEST(test_cfg_cache_connections_ttl) {
 	rv = oidc_cmd_cache_memcache_ttl_set(cmd, ptr, arg);
 	ck_assert_msg(rv != NULL, "set to 4295 did not fail");
 
-	arg = "180s";
+	arg = "180";
 	rv = oidc_cmd_cache_memcache_ttl_set(cmd, ptr, arg);
 	ck_assert_msg(rv == NULL, "set to 180s failed");
 
 	ttl = oidc_cfg_cache_memcache_ttl_get(cfg);
-	ck_assert_msg(ttl == apr_time_from_sec(180), "get 180s failed: %d", (int)ttl);
+	ck_assert_msg(ttl == apr_time_from_sec(180), "get 180 failed: %d", (int)ttl);
 }
 END_TEST
 
