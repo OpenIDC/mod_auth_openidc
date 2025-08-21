@@ -202,7 +202,12 @@ const char *oidc_cfg_parse_int_min_max(apr_pool_t *pool, const char *arg, int *i
  */
 const char *oidc_cfg_parse_timeout_min_max(apr_pool_t *pool, const char *arg, apr_interval_time_t *timeout_value,
 					   apr_interval_time_t min_value, apr_interval_time_t max_value) {
+#if AP_MODULE_MAGIC_AT_LEAST(20080920, 2)
 	apr_interval_time_t timeout;
+#else
+	char *endptr;
+	apr_int64_t timeout;
+#endif
 
 #if AP_MODULE_MAGIC_AT_LEAST(20080920, 2)
 	if (ap_timeout_parameter_parse(arg, &timeout, "s") != APR_SUCCESS) {
