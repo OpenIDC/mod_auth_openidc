@@ -108,9 +108,13 @@ START_TEST(test_cfg_cache_connections_ttl) {
 	rv = oidc_cmd_cache_memcache_ttl_set(cmd, ptr, arg);
 	ck_assert_msg(rv != NULL, "set to 4295 did not fail");
 
+#if AP_MODULE_MAGIC_AT_LEAST(20080920, 2)
+	arg = "180s";
+#else
 	arg = "180";
+#endif
 	rv = oidc_cmd_cache_memcache_ttl_set(cmd, ptr, arg);
-	ck_assert_msg(rv == NULL, "set to 180s failed");
+	ck_assert_msg(rv == NULL, "set to %s failed", arg);
 
 	ttl = oidc_cfg_cache_memcache_ttl_get(cfg);
 	ck_assert_msg(ttl == apr_time_from_sec(180), "get 180 failed: %d", (int)ttl);
