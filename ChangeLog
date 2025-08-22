@@ -1,3 +1,7 @@
+08/22/2025
+- test: make test_cfg oidc_cmd_cache_memcache_ttl_set 180 work on Apache 2.2 
+- bump to 2.4.18.1dev
+
 08/21/2025
 - add Valgrind target to Makefile and to Github Build action
 - release 2.4.18
