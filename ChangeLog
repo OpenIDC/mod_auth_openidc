@@ -1,3 +1,7 @@
+08/27/2025
+- improve Redis (and Metrics) performance on process MPMs by using
+  apr_thread_mutex_t (instead of apr_proc_mutex_t) for locking; see #1340
+
 08/22/2025
 - test: make test_cfg oidc_cmd_cache_memcache_ttl_set 180 work on Apache 2.2 
 - bump to 2.4.18.1dev

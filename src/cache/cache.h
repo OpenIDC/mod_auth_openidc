@@ -48,6 +48,7 @@
 
 #include "const.h" // for the PACKAGE_* defines
 #include <apr_global_mutex.h>
+#include <apr_thread_mutex.h>
 #include <httpd.h>
 
 /*
@@ -77,7 +78,7 @@ typedef struct oidc_cache_t {
 
 typedef struct oidc_cache_mutex_t {
 	apr_global_mutex_t *gmutex;
-	apr_proc_mutex_t *pmutex;
+	apr_thread_mutex_t *tmutex;
 	char *mutex_filename;
 	apr_byte_t is_global;
 	apr_byte_t is_parent;

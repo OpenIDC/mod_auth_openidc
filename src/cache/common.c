@@ -62,7 +62,7 @@
 oidc_cache_mutex_t *oidc_cache_mutex_create(apr_pool_t *pool, apr_byte_t global) {
 	oidc_cache_mutex_t *ctx = apr_pcalloc(pool, sizeof(oidc_cache_mutex_t));
 	ctx->gmutex = NULL;
-	ctx->pmutex = NULL;
+	ctx->tmutex = NULL;
 	ctx->mutex_filename = NULL;
 	ctx->is_parent = TRUE;
 	ctx->is_global = global;
@@ -80,7 +80,7 @@ char *oidc_cache_status2str(apr_pool_t *p, apr_status_t statcode) {
 	return apr_pstrdup(p, buf);
 }
 
-apr_byte_t oidc_cache_mutex_post_config(server_rec *s, oidc_cache_mutex_t *m, const char *type) {
+static apr_byte_t oidc_cache_mutex_global_create(server_rec *s, oidc_cache_mutex_t *m, const char *type) {
 
 	apr_status_t rv = APR_SUCCESS;
 	const char *dir;
@@ -108,35 +108,46 @@ apr_byte_t oidc_cache_mutex_post_config(server_rec *s, oidc_cache_mutex_t *m, co
 	    ;
 
 	/* create the mutex lock */
-	if (m->is_global)
-		rv = apr_global_mutex_create(&m->gmutex, (const char *)m->mutex_filename, mech, s->process->pool);
-	else
-		rv = apr_proc_mutex_create(&m->pmutex, (const char *)m->mutex_filename, mech, s->process->pool);
+	rv = apr_global_mutex_create(&m->gmutex, (const char *)m->mutex_filename, mech, s->process->pool);
 
 	if (rv != APR_SUCCESS) {
-		oidc_serror(
-		    s, "apr_global_mutex_create/apr_proc_mutex_create failed to create mutex (%d) on file %s: %s (%d)",
-		    mech, m->mutex_filename, oidc_cache_status2str(s->process->pool, rv), rv);
+		oidc_serror(s, "apr_global_mutex_create failed to create mutex (%d) on file %s: %s (%d)", mech,
+			    m->mutex_filename, oidc_cache_status2str(s->process->pool, rv), rv);
 		return FALSE;
 	}
 
 	/* need this on Linux */
 #ifdef AP_NEED_SET_MUTEX_PERMS
-	if (m->is_global) {
 #if MODULE_MAGIC_NUMBER_MAJOR >= 20081201
-		rv = ap_unixd_set_global_mutex_perms(m->gmutex);
+	rv = ap_unixd_set_global_mutex_perms(m->gmutex);
 #else
-		rv = unixd_set_global_mutex_perms(m->gmutex);
+	rv = unixd_set_global_mutex_perms(m->gmutex);
 #endif
-		if (rv != APR_SUCCESS) {
-			oidc_serror(s, "unixd_set_global_mutex_perms failed; could not set permissions: %s (%d)",
-				    oidc_cache_status2str(s->process->pool, rv), rv);
-			return FALSE;
-		}
+	if (rv != APR_SUCCESS) {
+		oidc_serror(s, "unixd_set_global_mutex_perms failed; could not set permissions: %s (%d)",
+			    oidc_cache_status2str(s->process->pool, rv), rv);
+		return FALSE;
 	}
 #endif
 
 	oidc_slog(s, APLOG_TRACE1, "create: %pp (m=%pp,s=%pp, p=%d)", m, m->gmutex ? m->gmutex : 0, s, m->is_parent);
+
+	return TRUE;
+}
+
+apr_byte_t oidc_cache_mutex_post_config(server_rec *s, oidc_cache_mutex_t *m, const char *type) {
+
+	apr_status_t rv = APR_SUCCESS;
+
+	if (m->is_global)
+		return oidc_cache_mutex_global_create(s, m, type);
+
+	rv = apr_thread_mutex_create(&m->tmutex, APR_THREAD_MUTEX_DEFAULT, s->process->pool);
+	if (rv != APR_SUCCESS) {
+		oidc_serror(s, "apr_thread_mutex_create failed: %s (%d)", oidc_cache_status2str(s->process->pool, rv),
+			    rv);
+		return FALSE;
+	}
 
 	return TRUE;
 }
@@ -152,18 +163,16 @@ apr_status_t oidc_cache_mutex_child_init(apr_pool_t *p, server_rec *s, oidc_cach
 		return APR_SUCCESS;
 
 	/* initialize the lock for the child process */
-	apr_status_t rv;
+	apr_status_t rv = APR_SUCCESS;
 
-	if (m->is_global)
+	if (m->is_global) {
 		rv = apr_global_mutex_child_init(&m->gmutex, (const char *)m->mutex_filename, p);
-	else
-		rv = apr_proc_mutex_child_init(&m->pmutex, (const char *)m->mutex_filename, p);
-
-	if (rv != APR_SUCCESS) {
-		oidc_serror(
-		    s,
-		    "apr_global_mutex_child_init/apr_proc_mutex_child_init failed to reopen mutex on file %s: %s (%d)",
-		    m->mutex_filename, oidc_cache_status2str(p, rv), rv);
+		if (rv != APR_SUCCESS) {
+			oidc_serror(s,
+				    "apr_global_mutex_child_init failed to reopen mutex on "
+				    "file %s: %s (%d)",
+				    m->mutex_filename, oidc_cache_status2str(p, rv), rv);
+		}
 	}
 
 	m->is_parent = FALSE;
@@ -181,10 +190,10 @@ apr_byte_t oidc_cache_mutex_lock(apr_pool_t *pool, server_rec *s, oidc_cache_mut
 	if (m->is_global)
 		rv = apr_global_mutex_lock(m->gmutex);
 	else
-		rv = apr_proc_mutex_lock(m->pmutex);
+		rv = apr_thread_mutex_lock(m->tmutex);
 
 	if (rv != APR_SUCCESS)
-		oidc_serror(s, "apr_global_mutex_lock/apr_proc_mutex_lock failed: %s (%d)",
+		oidc_serror(s, "apr_global_mutex_lock/apr_thread_mutex_lock failed: %s (%d)",
 			    oidc_cache_status2str(pool, rv), rv);
 
 	return TRUE;
@@ -200,10 +209,10 @@ apr_byte_t oidc_cache_mutex_unlock(apr_pool_t *pool, server_rec *s, oidc_cache_m
 	if (m->is_global)
 		rv = apr_global_mutex_unlock(m->gmutex);
 	else
-		rv = apr_proc_mutex_unlock(m->pmutex);
+		rv = apr_thread_mutex_unlock(m->tmutex);
 
 	if (rv != APR_SUCCESS)
-		oidc_serror(s, "apr_global_mutex_unlock/apr_proc_mutex_unlock failed: %s (%d)",
+		oidc_serror(s, "apr_global_mutex_unlock/apr_thread_mutex_unlock failed: %s (%d)",
 			    oidc_cache_status2str(pool, rv), rv);
 
 	return TRUE;
@@ -222,11 +231,11 @@ apr_byte_t oidc_cache_mutex_destroy(server_rec *s, oidc_cache_mutex_t *m) {
 		if ((m->is_global) && (m->gmutex)) {
 			rv = apr_global_mutex_destroy(m->gmutex);
 			m->gmutex = NULL;
-		} else if (m->pmutex) {
-			rv = apr_proc_mutex_destroy(m->pmutex);
-			m->pmutex = NULL;
+		} else if (m->tmutex) {
+			rv = apr_thread_mutex_destroy(m->tmutex);
+			m->tmutex = NULL;
 		}
-		oidc_sdebug(s, "apr_global_mutex_destroy/apr_proc_mutex_destroy returned :%d", rv);
+		oidc_sdebug(s, "apr_global_mutex_destroy/apr_thread_mutex_destroy returned :%d", rv);
 	}
 
 	return (rv == APR_SUCCESS);
