@@ -1,6 +1,8 @@
 08/31/2025
 - pass JSON real claims without trailing zeros, use 8 digits precision instead of 6
 - test: complete util/appinfo.c coverage
+- oidc_util_base64_decode: check NULL inputs
+- test: complete util/base64.c coverage
 
 08/27/2025
 - improve Redis (and Metrics) performance on process MPMs by using

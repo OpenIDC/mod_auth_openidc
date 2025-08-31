@@ -82,11 +82,15 @@ int oidc_util_base64url_encode(request_rec *r, char **dst, const char *src, int 
  * parse a base64 encoded binary value from the provided string
  */
 char *oidc_util_base64_decode(apr_pool_t *pool, const char *input, char **output, int *output_len) {
-	int len = apr_base64_decode_len(input);
-	*output = apr_pcalloc(pool, len);
+	if ((input == NULL) || (output == NULL) || (output_len == 0))
+		return apr_psprintf(pool, "base64-decoding of failed: invalid parameters");
+
+	*output = apr_pcalloc(pool, apr_base64_decode_len(input));
 	*output_len = apr_base64_decode(*output, input);
+
 	if (*output_len <= 0)
 		return apr_psprintf(pool, "base64-decoding of \"%s\" failed", input);
+
 	return NULL;
 }
 

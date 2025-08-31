@@ -49,7 +49,13 @@
 START_TEST(test_util_base64url_encode) {
 	int len = -1;
 	char *dst = NULL;
-	const char *src = "test";
+	const char *src = NULL;
+
+	len = oidc_util_base64url_encode(oidc_test_request_get(), &dst, NULL, 0, 1);
+	ck_assert_ptr_null(dst);
+	ck_assert_int_eq(len, -1);
+
+	src = "test";
 	len = oidc_util_base64url_encode(oidc_test_request_get(), &dst, src, _oidc_strlen(src), 1);
 	ck_assert_msg(dst != NULL, "dst value is NULL");
 	ck_assert_int_eq(len, 6);
@@ -69,6 +75,16 @@ START_TEST(test_util_base64_decode) {
 	const char *input = "dGVzdA==";
 	char *output = NULL;
 	int len = -1;
+
+	rv = oidc_util_base64_decode(oidc_test_pool_get(), NULL, &output, &len);
+	ck_assert_ptr_nonnull(rv);
+	ck_assert_ptr_null(output);
+	ck_assert_int_eq(len, -1);
+
+	rv = oidc_util_base64_decode(oidc_test_pool_get(), "\\", &output, &len);
+	ck_assert_ptr_nonnull(rv);
+	ck_assert_int_eq(len, 0);
+
 	rv = oidc_util_base64_decode(oidc_test_pool_get(), input, &output, &len);
 	ck_assert_msg(rv == NULL, "return value is not NULL");
 	ck_assert_int_eq(len, 4);
@@ -78,12 +94,13 @@ END_TEST
 
 START_TEST(test_util_base64url_decode) {
 	int len = -1;
-	char *src = "dGVzdA==";
+	char *src = "c3ViamVjdHM_X2Q9MQ-Tl5u,";
 	char *dst = NULL;
 	len = oidc_util_base64url_decode(oidc_test_pool_get(), &dst, src);
 	ck_assert_msg(dst != NULL, "dst value is NULL");
-	ck_assert_int_eq(len, 4);
-	ck_assert_str_eq(dst, "test");
+	ck_assert_int_eq(len, 17);
+	// TODO: need binary compare
+	// ck_assert_str_eq(dst, "subjects?_d=1���");
 }
 END_TEST
 
