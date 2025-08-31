@@ -87,6 +87,72 @@ START_TEST(test_util_base64url_decode) {
 }
 END_TEST
 
+START_TEST(test_util_appinfo_set) {
+	apr_byte_t rc = FALSE;
+	json_t *claims = NULL;
+	request_rec *r = oidc_test_request_get();
+
+	rc = oidc_util_json_decode_object(r,
+					  "{"
+					  "\"simple\":\"hans\","
+					  "\"name\": \"GÜnther\","
+					  "\"dagger\": \"D†gÿger\","
+					  "\"anarr\" : [ false, \"hans\", \"piet\", true, {} ],"
+					  "\"names\" : [ \"hans\", \"piet\" ],"
+					  "\"abool\": true,"
+					  "\"anint\": 5,"
+					  "\"lint\": 111111111111111,"
+					  "\"areal\": 1.5,"
+					  "\"anobj\" : { \"hans\": \"piet\", \"abool\": false },"
+					  "\"anull\": null"
+					  "}",
+					  &claims);
+	ck_assert_int_eq(rc, TRUE);
+
+	oidc_util_appinfo_set_all(r, NULL, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
+
+	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
+	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_simple"), "hans");
+	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_name"), "G\u00DCnther");
+	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_dagger"), "D\u2020gÿger");
+	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_anarr"), "0,hans,piet,1");
+	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_names"), "hans,piet");
+	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_abool"), "1");
+	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_anint"), "5");
+	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_lint"), "111111111111111");
+	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_areal"), "1.5");
+	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_anobj"), "{\"hans\":\"piet\",\"abool\":false}");
+
+	ck_assert_ptr_null(apr_table_get(r->headers_in, "OIDC_CLAIM_anull"));
+	ck_assert_ptr_null(apr_table_get(r->subprocess_env, "OIDC_CLAIM_names"));
+
+	oidc_util_appinfo_set_all(r, claims, "MYPREFIX_", "#", OIDC_APPINFO_PASS_HEADERS | OIDC_APPINFO_PASS_ENVVARS,
+				  OIDC_APPINFO_ENCODING_NONE);
+	ck_assert_str_eq(apr_table_get(r->headers_in, "MYPREFIX_simple"), "hans");
+	ck_assert_str_eq(apr_table_get(r->headers_in, "MYPREFIX_name"), "G\u00DCnther");
+	ck_assert_str_eq(apr_table_get(r->headers_in, "MYPREFIX_dagger"), "D\u2020gÿger");
+	ck_assert_str_eq(apr_table_get(r->headers_in, "MYPREFIX_anarr"), "0#hans#piet#1");
+
+	ck_assert_ptr_null(apr_table_get(r->subprocess_env, "OIDC_CLAIM_names"));
+	ck_assert_str_eq(apr_table_get(r->subprocess_env, "MYPREFIX_anarr"), "0#hans#piet#1");
+
+	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS,
+				  OIDC_APPINFO_ENCODING_BASE64URL);
+	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_simple"), "aGFucw");
+	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_name"), "R8OcbnRoZXI");
+	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_dagger"), "ROKAoGfDv2dlcg");
+	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_anarr"), "MCxoYW5zLHBpZXQsMQ");
+
+	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS,
+				  OIDC_APPINFO_ENCODING_LATIN1);
+	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_simple"), "hans");
+	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_name"), "G\xDCnther");
+	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_dagger"), "D?g\xFFger");
+
+	json_decref(claims);
+}
+END_TEST
+
 int main(void) {
 	TCase *core = tcase_create("base64");
 	tcase_add_checked_fixture(core, oidc_test_setup, oidc_test_teardown);
@@ -95,7 +161,9 @@ int main(void) {
 	tcase_add_test(core, test_util_base64_decode);
 	tcase_add_test(core, test_util_base64url_decode);
 
-	Suite *s = suite_create("metadata");
+	tcase_add_test(core, test_util_appinfo_set);
+
+	Suite *s = suite_create("util");
 	suite_add_tcase(s, core);
 
 	return oidc_test_suite_run(s);

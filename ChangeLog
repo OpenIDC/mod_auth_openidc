@@ -1,3 +1,7 @@
+08/31/2025
+- pass JSON real claims without trailing zeros, use 8 digits precision instead of 6
+- test: complete util/appinfo.c coverage
+
 08/27/2025
 - improve Redis (and Metrics) performance on process MPMs by using
   apr_thread_mutex_t (instead of apr_proc_mutex_t) for locking; see #1340

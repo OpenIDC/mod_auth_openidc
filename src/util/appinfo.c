@@ -111,13 +111,15 @@ void oidc_util_appinfo_set(request_rec *r, const char *s_key, const char *s_valu
 	}
 }
 
+#define OIDC_JSON_MAX_INT_STR_LEN 64
+
 /*
  * set the user/claims information from the session in HTTP headers passed on to the application
  */
 void oidc_util_appinfo_set_all(request_rec *r, json_t *j_attrs, const char *claim_prefix, const char *claim_delimiter,
 			       oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding) {
 
-	char s_int[255];
+	char s_int[OIDC_JSON_MAX_INT_STR_LEN];
 	json_t *j_value = NULL;
 	const char *s_key = NULL;
 
@@ -150,18 +152,16 @@ void oidc_util_appinfo_set_all(request_rec *r, json_t *j_attrs, const char *clai
 
 		} else if (json_is_integer(j_value)) {
 
-			if (snprintf(s_int, 255, "%ld", (long)json_integer_value(j_value)) > 0) {
+			if (snprintf(s_int, OIDC_JSON_MAX_INT_STR_LEN, "%ld", (long)json_integer_value(j_value)) > 0) {
 				/* set long value in the application header whose name is based on the key and the
 				 * prefix */
 				oidc_util_appinfo_set(r, s_key, s_int, claim_prefix, pass_in, encoding);
-			} else {
-				oidc_warn(r, "could not convert JSON number to string (> 255 characters?), skipping");
 			}
 
 		} else if (json_is_real(j_value)) {
 
 			/* set float value in the application header whose name is based on the key and the prefix */
-			oidc_util_appinfo_set(r, s_key, apr_psprintf(r->pool, "%lf", json_real_value(j_value)),
+			oidc_util_appinfo_set(r, s_key, apr_psprintf(r->pool, "%.8g", json_real_value(j_value)),
 					      claim_prefix, pass_in, encoding);
 
 		} else if (json_is_object(j_value)) {
