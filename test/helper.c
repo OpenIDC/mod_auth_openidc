@@ -150,6 +150,7 @@ cmd_parms *oidc_test_cmd_get(const char *primitive) {
 	cmd_parms *cmd = apr_pcalloc(r->pool, sizeof(cmd_parms));
 	cmd->server = r->server;
 	cmd->pool = r->pool;
+	cmd->temp_pool = r->pool;
 	cmd->directive = apr_pcalloc(cmd->pool, sizeof(ap_directive_t));
 	cmd->directive->directive = primitive;
 	return cmd;

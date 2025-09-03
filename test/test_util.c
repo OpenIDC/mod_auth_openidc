@@ -170,6 +170,127 @@ START_TEST(test_util_appinfo_set) {
 }
 END_TEST
 
+START_TEST(test_util_expr_substitute) {
+	apr_byte_t rc = FALSE;
+	apr_pool_t *pool = oidc_test_pool_get();
+	const char *input = "match 292 numbers";
+	const char *regexp = "^.* ([0-9]+).*$";
+	const char *replace = "$1";
+	char *output = NULL;
+	char *error_str = NULL;
+
+	rc = oidc_util_regexp_substitute(pool, input, "$$$$$**@@", replace, &output, &error_str);
+	ck_assert_msg(rc == FALSE, "oidc_util_regexp_substitute returned TRUE");
+	ck_assert_ptr_nonnull(error_str);
+
+	error_str = NULL;
+	rc = oidc_util_regexp_substitute(
+	    pool,
+	    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	    regexp, replace, &output, &error_str);
+	ck_assert_msg(rc == FALSE, "oidc_util_regexp_substitute returned TRUE");
+	ck_assert_ptr_nonnull(error_str);
+
+	error_str = NULL;
+	rc = oidc_util_regexp_substitute(pool, "", "", "", &output, &error_str);
+	ck_assert_msg(rc == FALSE, "oidc_util_regexp_substitute returned TRUE");
+	ck_assert_ptr_nonnull(error_str);
+
+	error_str = NULL;
+	rc = oidc_util_regexp_substitute(pool, input, regexp, replace, &output, &error_str);
+	ck_assert_msg(rc == TRUE, "oidc_util_regexp_substitute returned FALSE");
+	ck_assert_ptr_null(error_str);
+	ck_assert_str_eq(output, "292");
+}
+END_TEST
+
+START_TEST(test_util_expr_first_match) {
+	apr_byte_t rc = FALSE;
+	apr_pool_t *pool = oidc_test_pool_get();
+	const char *input = "12345 hello";
+	const char *regexp = "^([0-9]+)\\s+([a-z]+)$";
+	;
+	char *output = NULL;
+	char *error_str = NULL;
+
+	rc = oidc_util_regexp_first_match(pool, input, "$$$$$**@@", &output, &error_str);
+	ck_assert_msg(rc == FALSE, "oidc_util_regexp_first_match returned TRUE");
+	ck_assert_ptr_nonnull(error_str);
+
+	error_str = NULL;
+	rc = oidc_util_regexp_first_match(pool, "abc", regexp, &output, &error_str);
+	ck_assert_msg(rc == FALSE, "oidc_util_regexp_first_match returned TRUE");
+	ck_assert_ptr_nonnull(error_str);
+
+	error_str = NULL;
+	rc = oidc_util_regexp_first_match(pool, "abc abc", regexp, &output, &error_str);
+	ck_assert_msg(rc == FALSE, "oidc_util_regexp_first_match returned TRUE");
+	ck_assert_ptr_nonnull(error_str);
+
+	error_str = NULL;
+	rc = oidc_util_regexp_first_match(pool, input, regexp, &output, &error_str);
+	ck_assert_msg(rc == TRUE, "oidc_util_regexp_first_match returned FALSE");
+	ck_assert_ptr_null(error_str);
+	ck_assert_str_eq(output, "12345");
+}
+END_TEST
+
+START_TEST(test_util_expr_parse) {
+	char *rv = NULL;
+	cmd_parms *cmd = oidc_test_cmd_get("");
+	oidc_apr_expr_t *expr = NULL;
+
+	// NB: stub only
+
+	expr = NULL;
+	rv = oidc_util_apr_expr_parse(cmd, NULL, &expr, FALSE);
+	ck_assert_ptr_null(rv);
+	ck_assert_ptr_null(expr);
+
+	//	expr = NULL;
+	//	rv = oidc_util_apr_expr_parse(cmd, "% ||| true)", &expr, FALSE);
+	//	ck_assert_ptr_nonnull(rv);
+	//	ck_assert_ptr_null(expr);
+
+	expr = NULL;
+	rv = oidc_util_apr_expr_parse(cmd, "", &expr, TRUE);
+	ck_assert_ptr_null(rv);
+	ck_assert_ptr_nonnull(expr);
+}
+END_TEST
+
+START_TEST(test_util_expr_exec) {
+	const char *result = NULL;
+	char *rv = NULL;
+	cmd_parms *cmd = oidc_test_cmd_get("");
+	request_rec *r = oidc_test_request_get();
+	oidc_apr_expr_t *expr = NULL;
+
+	// NB: stub only
+	expr = NULL;
+	rv = oidc_util_apr_expr_parse(cmd, "true", &expr, FALSE);
+	ck_assert_ptr_null(rv);
+	ck_assert_ptr_nonnull(expr);
+
+	// NB: stub only
+	result = oidc_util_apr_expr_exec(r, expr, TRUE);
+	ck_assert_ptr_nonnull(result);
+	ck_assert_str_eq(result, "stub.c");
+
+	// NB: stub only
+	result = oidc_util_apr_expr_exec(r, expr, FALSE);
+	ck_assert_ptr_null(result);
+
+	// NB: stub only
+	expr = NULL;
+	rv = oidc_util_apr_expr_parse(cmd, "#", &expr, FALSE);
+	ck_assert_ptr_nonnull(rv);
+	ck_assert_ptr_null(expr);
+}
+END_TEST
+
 int main(void) {
 	TCase *core = tcase_create("base64");
 	tcase_add_checked_fixture(core, oidc_test_setup, oidc_test_teardown);
@@ -179,6 +300,11 @@ int main(void) {
 	tcase_add_test(core, test_util_base64url_decode);
 
 	tcase_add_test(core, test_util_appinfo_set);
+
+	tcase_add_test(core, test_util_expr_substitute);
+	tcase_add_test(core, test_util_expr_first_match);
+	tcase_add_test(core, test_util_expr_parse);
+	tcase_add_test(core, test_util_expr_exec);
 
 	Suite *s = suite_create("util");
 	suite_add_tcase(s, core);

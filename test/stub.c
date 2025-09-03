@@ -177,7 +177,14 @@ AP_DECLARE(int) ap_is_initial_req(request_rec *r) {
 AP_DECLARE(ap_expr_info_t *)
 ap_expr_parse_cmd_mi(const cmd_parms *cmd, const char *expr, unsigned int flags, const char **err,
 		     ap_expr_lookup_fn_t *lookup_fn, int module_index) {
-	return NULL;
+	if (strcmp(expr, "#") == 0) {
+		*err = "error";
+		return NULL;
+	}
+	ap_expr_info_t *rv = apr_pcalloc(cmd->pool, sizeof(ap_expr_info_t));
+	rv->filename = "stub.c";
+	rv->root_node = NULL;
+	return rv;
 }
 
 AP_DECLARE(const char *) ap_expr_str_exec(request_rec *r, const ap_expr_info_t *expr, const char **err) {
@@ -357,6 +364,7 @@ ap_timeout_parameter_parse(const char *timeout_parameter, apr_interval_time_t *t
 
 #if HAVE_APACHE_24
 AP_DECLARE(int) ap_expr_exec(request_rec *r, const ap_expr_info_t *expr, const char **err) {
-	return 0;
+	*err = "error";
+	return 1;
 }
 #endif
