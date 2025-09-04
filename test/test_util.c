@@ -291,6 +291,39 @@ START_TEST(test_util_expr_exec) {
 }
 END_TEST
 
+START_TEST(test_util_file) {
+	request_rec *r = oidc_test_request_get();
+	const char *dir = NULL;
+	char *path = NULL;
+	apr_byte_t rc = FALSE;
+	char *text = NULL, *read = NULL;
+
+	apr_temp_dir_get(&dir, r->pool);
+	path = apr_psprintf(r->pool, "%s/test.tmp", dir);
+
+	oidc_util_random_str_gen(r, &text, 32);
+	// write directory instead of file
+	rc = oidc_util_file_write(r, dir, text);
+	ck_assert_msg(rc == FALSE, "oidc_util_file_write returned TRUE");
+
+	rc = oidc_util_file_write(r, path, text);
+	ck_assert_msg(rc == TRUE, "oidc_util_file_write returned FALSE");
+
+	// read no- existing file
+	rc = oidc_util_file_read(r, apr_psprintf(r->pool, "%s/bogus.tmp", dir), r->pool, &read);
+	ck_assert_msg(rc == FALSE, "oidc_util_file_read returned TRUE");
+
+	// read directory instead of file
+	rc = oidc_util_file_read(r, dir, r->pool, &read);
+	ck_assert_msg(rc == FALSE, "oidc_util_file_read returned TRUE");
+
+	rc = oidc_util_file_read(r, path, r->pool, &read);
+	ck_assert_msg(rc == TRUE, "oidc_util_file_read returned FALSE");
+	ck_assert_ptr_nonnull(read);
+	ck_assert_str_eq(read, text);
+}
+END_TEST
+
 int main(void) {
 	TCase *core = tcase_create("base64");
 	tcase_add_checked_fixture(core, oidc_test_setup, oidc_test_teardown);
@@ -305,6 +338,8 @@ int main(void) {
 	tcase_add_test(core, test_util_expr_first_match);
 	tcase_add_test(core, test_util_expr_parse);
 	tcase_add_test(core, test_util_expr_exec);
+
+	tcase_add_test(core, test_util_file);
 
 	Suite *s = suite_create("util");
 	suite_add_tcase(s, core);
