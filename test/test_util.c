@@ -42,6 +42,7 @@
  **************************************************************************/
 
 #include "helper.h"
+#include "mod_auth_openidc.h"
 #include "util/util.h"
 
 // base64
@@ -324,6 +325,70 @@ START_TEST(test_util_file) {
 }
 END_TEST
 
+START_TEST(test_util_html_escape) {
+	apr_pool_t *pool = oidc_test_pool_get();
+
+	ck_assert_str_eq(oidc_util_html_escape(pool, NULL), "");
+	ck_assert_str_eq(oidc_util_html_escape(pool, ""), "");
+	ck_assert_str_eq(oidc_util_html_escape(pool, "<script>alert('This is an XSS attack');</script>"),
+			 "&lt;script&gt;alert(&apos;This is an XSS attack&apos;);&lt;/script&gt;");
+
+	// TODO: which spec/function is actually followed here?
+	ck_assert_ptr_eq(oidc_util_html_javascript_escape(pool, NULL), NULL);
+	ck_assert_str_eq(oidc_util_html_javascript_escape(pool, "@*_+-./"), "@*_+-.\\/");
+}
+END_TEST
+
+START_TEST(test_util_html_content) {
+	int rv = -1;
+	request_rec *r = oidc_test_request_get();
+
+	r->user = NULL;
+	rv = oidc_util_html_content_prep(r, "test_util_html_content", "test title", "test head", "onload", "test body");
+	ck_assert_msg(rv == OK, "oidc_util_html_content_prep did not return OK: %d", rv);
+	ck_assert_str_eq(r->user, "");
+	ck_assert_str_eq(oidc_request_state_get(r, "title"), "test title");
+
+	r->user = NULL;
+	rv = oidc_util_html_content_send(r);
+	ck_assert_msg(rv == OK, "oidc_util_html_content_send did not return OK: %d", rv);
+	ck_assert_str_eq(r->user, "");
+
+	r->user = NULL;
+	rv = oidc_util_html_send(r, "test title", "test head", "onload", "test body", OK);
+	ck_assert_msg(rv == OK, "oidc_util_html_send did not return OK: %d", rv);
+	ck_assert_str_eq(r->user, "");
+
+	r->user = NULL;
+	rv = oidc_util_html_send(r, "test title", "test head", "onload", "test body", 201);
+	ck_assert_msg(rv == 201, "oidc_util_html_send did not return 201: %d", rv);
+	ck_assert_ptr_null(r->user);
+
+	rv = oidc_util_html_send_error(r, "my error", "my error description", 404);
+	ck_assert_msg(rv == 404, "oidc_util_html_send_error did not return 404: %d", rv);
+	ck_assert_str_eq(apr_table_get(r->subprocess_env, "OIDC_ERROR"), "my error");
+	ck_assert_str_eq(apr_table_get(r->subprocess_env, "OIDC_ERROR_DESC"), "my error description");
+}
+END_TEST
+
+START_TEST(test_util_html_template) {
+	int rv = -1;
+	char *template_contents = NULL;
+	request_rec *r = oidc_test_request_get();
+	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	char *fname = apr_psprintf(r->pool, "%s/%s", dir, "post_preserve.template");
+
+	rv = oidc_util_html_send_in_template(r, fname, &template_contents, "arg1", OIDC_POST_PRESERVE_ESCAPE_NONE,
+					     "arg2", OIDC_POST_PRESERVE_ESCAPE_NONE);
+	ck_assert_msg(rv == OK, "oidc_util_html_send_in_template did not return OK: %d", rv);
+	ck_assert_int_eq(_oidc_strlen(template_contents), 489);
+	ck_assert_int_eq(_oidc_strncmp(template_contents, "<!DOCTYPE HTML PUBLIC", 10), 0);
+	ck_assert_str_eq(oidc_request_state_get(r, "data_len"), "493");
+	ck_assert_ptr_nonnull(_oidc_strstr(oidc_request_state_get(r, "data"), "window.location='arg2"));
+	ck_assert_str_eq(oidc_request_state_get(r, "content_type"), "text/html");
+}
+END_TEST
+
 int main(void) {
 	TCase *core = tcase_create("base64");
 	tcase_add_checked_fixture(core, oidc_test_setup, oidc_test_teardown);
@@ -340,6 +405,10 @@ int main(void) {
 	tcase_add_test(core, test_util_expr_exec);
 
 	tcase_add_test(core, test_util_file);
+
+	tcase_add_test(core, test_util_html_escape);
+	tcase_add_test(core, test_util_html_content);
+	tcase_add_test(core, test_util_html_template);
 
 	Suite *s = suite_create("util");
 	suite_add_tcase(s, core);
