@@ -390,28 +390,41 @@ START_TEST(test_util_html_template) {
 END_TEST
 
 int main(void) {
-	TCase *core = tcase_create("base64");
-	tcase_add_checked_fixture(core, oidc_test_setup, oidc_test_teardown);
-
-	tcase_add_test(core, test_util_base64url_encode);
-	tcase_add_test(core, test_util_base64_decode);
-	tcase_add_test(core, test_util_base64url_decode);
-
-	tcase_add_test(core, test_util_appinfo_set);
-
-	tcase_add_test(core, test_util_expr_substitute);
-	tcase_add_test(core, test_util_expr_first_match);
-	tcase_add_test(core, test_util_expr_parse);
-	tcase_add_test(core, test_util_expr_exec);
-
-	tcase_add_test(core, test_util_file);
-
-	tcase_add_test(core, test_util_html_escape);
-	tcase_add_test(core, test_util_html_content);
-	tcase_add_test(core, test_util_html_template);
-
+	TCase *c = NULL;
 	Suite *s = suite_create("util");
-	suite_add_tcase(s, core);
+
+	c = tcase_create("base64");
+	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
+
+	tcase_add_test(c, test_util_base64url_encode);
+	tcase_add_test(c, test_util_base64_decode);
+	tcase_add_test(c, test_util_base64url_decode);
+	suite_add_tcase(s, c);
+
+	c = tcase_create("appinfo");
+	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(c, test_util_appinfo_set);
+	suite_add_tcase(s, c);
+
+	c = tcase_create("expr");
+	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(c, test_util_expr_substitute);
+	tcase_add_test(c, test_util_expr_first_match);
+	tcase_add_test(c, test_util_expr_parse);
+	tcase_add_test(c, test_util_expr_exec);
+	suite_add_tcase(s, c);
+
+	c = tcase_create("file");
+	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(c, test_util_file);
+	suite_add_tcase(s, c);
+
+	c = tcase_create("html");
+	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(c, test_util_html_escape);
+	tcase_add_test(c, test_util_html_content);
+	tcase_add_test(c, test_util_html_template);
+	suite_add_tcase(s, c);
 
 	return oidc_test_suite_run(s);
 }
