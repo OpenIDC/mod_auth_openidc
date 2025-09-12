@@ -1,5 +1,5 @@
-09/03/2025
-- test: complete util/expr.c coverage
+09/12/2025
+- test: add util/*.c coverage tests
 
 08/31/2025
 - pass JSON real claims without trailing zeros, use 8 digits precision instead of 6

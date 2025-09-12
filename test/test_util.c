@@ -389,6 +389,23 @@ START_TEST(test_util_html_template) {
 }
 END_TEST
 
+START_TEST(test_util_jq) {
+	request_rec *r = oidc_test_request_get();
+#ifdef USE_LIBJQ
+	ck_assert_str_eq(oidc_util_jq_filter(r, NULL, "."), "{}");
+	ck_assert_str_eq(oidc_util_jq_filter(r, "{ \"jan\": \"jan\", \"piet\": \"piet\" }", NULL),
+			 "{ \"jan\": \"jan\", \"piet\": \"piet\" }");
+	ck_assert_str_eq(oidc_util_jq_filter(r, "{ \"jan\": \"jan\", \"piet\": \"piet\" }", "bogus"),
+			 "{ \"jan\": \"jan\", \"piet\": \"piet\" }");
+	ck_assert_str_eq(oidc_util_jq_filter(r, "{ \"jan\": \"jan\", \"piet\": \"piet\" }", ".jan"), "\"jan\"");
+	ck_assert_str_eq(oidc_util_jq_filter(r, "{ \"jan\": \"jan\", \"piet\": \"piet\" }", ".jan"), "\"jan\"");
+#else
+	ck_assert_str_eq(oidc_util_jq_filter(r, "{ \"jan\": \"jan\", \"piet\": \"piet\" }", ".jan"),
+			 "{ \"jan\": \"jan\", \"piet\": \"piet\" }");
+#endif
+}
+END_TEST
+
 int main(void) {
 	TCase *c = NULL;
 	Suite *s = suite_create("util");
@@ -424,6 +441,11 @@ int main(void) {
 	tcase_add_test(c, test_util_html_escape);
 	tcase_add_test(c, test_util_html_content);
 	tcase_add_test(c, test_util_html_template);
+	suite_add_tcase(s, c);
+
+	c = tcase_create("jq");
+	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(c, test_util_jq);
 	suite_add_tcase(s, c);
 
 	return oidc_test_suite_run(s);
