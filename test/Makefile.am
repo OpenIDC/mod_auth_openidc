@@ -67,7 +67,9 @@ EXTRA_DIST = \
 	private.pem \
 	public.pem \
 	certificate.pem \
-	open-redirect-payload-list.txt
+	open-redirect-payload-list.txt \
+	post_preserve.template \
+	post_restore.template
 
 clean-local:
 	rm -f *.gcno
