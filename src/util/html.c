@@ -61,7 +61,7 @@ char *oidc_util_html_escape(apr_pool_t *pool, const char *s) {
 	unsigned int m = 0;
 	const char *ptr = chars;
 	unsigned int len = _oidc_strlen(ptr);
-	char *r = apr_pcalloc(pool, _oidc_strlen(s) * 6);
+	char *r = apr_pcalloc(pool, _oidc_strlen(s) * 6 + 1);
 	for (i = 0; i < _oidc_strlen(s); i++) {
 		for (n = 0; n < len; n++) {
 			if (s[i] == chars[n]) {
