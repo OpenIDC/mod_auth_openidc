@@ -46,16 +46,16 @@
 #include "cache/redis.h"
 #include "cfg/cfg_int.h"
 
-// TODO: proper Redis error reporting (server unreachable etc.)
-
 #define REDIS_CONNECT_TIMEOUT_DEFAULT 5
 #define REDIS_TIMEOUT_DEFAULT 5
 #define REDIS_KEEPALIVE_DEFAULT -1
 
+#define OIDC_REDIS_MUTEX_GLOBAL_ENV_VAR "OIDC_REDIS_MUTEX_GLOBAL"
+
 /* create the cache context */
 static oidc_cache_cfg_redis_t *oidc_cache_redis_cfg_create(apr_pool_t *pool) {
 	oidc_cache_cfg_redis_t *context = apr_pcalloc(pool, sizeof(oidc_cache_cfg_redis_t));
-	context->mutex = oidc_cache_mutex_create(pool, FALSE);
+	context->mutex = oidc_cache_mutex_create(pool, getenv(OIDC_REDIS_MUTEX_GLOBAL_ENV_VAR) ? TRUE : FALSE);
 	context->username = NULL;
 	context->passwd = NULL;
 	context->database = -1;

@@ -1,3 +1,8 @@
+09/13/2025
+- redis: apply global (server-wide) locking when system(!) environment variable
+  OIDC_REDIS_MUTEX_GLOBAL is set, for backwards compatibility, through:
+  PassEnv OIDC_REDIS_MUTEX_GLOBAL
+
 09/12/2025
 - test: add util/*.c coverage tests
 
