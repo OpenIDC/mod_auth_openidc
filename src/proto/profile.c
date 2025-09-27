@@ -54,6 +54,25 @@ const char *oidc_proto_profile_token_endpoint_auth_aud(oidc_provider_t *provider
 }
 
 /*
+ * returns the "aud" claim to insert into the JWT used for client
+ * authentication towards the revocation endpoint using private_key_jwt/client_secret_jwt
+ */
+const char *oidc_proto_profile_revocation_endpoint_auth_aud(oidc_provider_t *provider, const char *val) {
+	if (oidc_cfg_provider_profile_get(provider) == OIDC_PROFILE_FAPI20) {
+		return oidc_cfg_provider_issuer_get(provider);
+	}
+	const char *aud = oidc_cfg_provider_revocation_endpoint_url_get(provider);
+	if (val != NULL) {
+		if (_oidc_strcmp(val, "token") == 0) {
+			aud = oidc_cfg_provider_token_endpoint_url_get(provider);
+		} else {
+			aud = val;
+		}
+	}
+	return aud;
+}
+
+/*
  * returns the method to be used when sending the authorization request to the Provider
  */
 oidc_auth_request_method_t oidc_proto_profile_auth_request_method_get(oidc_provider_t *provider) {

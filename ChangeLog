@@ -1,3 +1,9 @@
+09/27/2025
+- logout: when revoking tokens at the revocation endpoint with client_secret_jwt or
+  private_key_jwt, use the revocatoin endpoint as "aud" value (instead of the token endpoint
+  that was used before), unless environment variable OIDC_TOKEN_REVOCATION_AUD is set to
+  "token" (or another literal aud value)
+
 09/13/2025
 - redis: apply global (server-wide) locking when system(!) environment variable
   OIDC_REDIS_MUTEX_GLOBAL is set, for backwards compatibility, through:
