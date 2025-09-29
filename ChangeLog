@@ -1,5 +1,6 @@
 09/29/2025
 - refresh: turn debug printouts in config errors into warnings; see #1349; thanks@CrazyWolf13
+- shm: use _oidc_strcpy instead of _oidc_strcpy to avoid segfaults on some platforms; see #1353
 
 09/27/2025
 - logout: when revoking tokens at the revocation endpoint with client_secret_jwt or
