@@ -405,7 +405,7 @@ apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg_t *c
 
 	t_expires = oidc_session_get_access_token_expires(r, session);
 	if (t_expires <= 0) {
-		oidc_debug(r, "no access token expires_in stored in the session (i.e. returned from in the "
+		oidc_warn(r, "no access token expires_in stored in the session (i.e. returned from in the "
 			      "authorization response), so cannot refresh the access token based on TTL requirement");
 		return FALSE;
 	}
@@ -413,7 +413,7 @@ apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg_t *c
 	// NB: this fails early: when no refresh token was returned, an error will be returned on
 	//     the first authenticated request, unrelated to the actual access token expiry timestamp
 	if (oidc_session_get_refresh_token(r, session) == NULL) {
-		oidc_debug(r, "no refresh token stored in the session, so cannot refresh the access token based on TTL "
+		oidc_warn(r, "no refresh token stored in the session, so cannot refresh the access token based on TTL "
 			      "requirement");
 		return FALSE;
 	}
