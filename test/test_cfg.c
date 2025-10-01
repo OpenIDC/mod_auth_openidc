@@ -72,6 +72,8 @@ START_TEST(test_cmd_provider_token_endpoint_auth_set) {
 }
 END_TEST
 
+#ifdef USE_MEMCACHE
+
 START_TEST(test_cfg_cache_connections_ttl) {
 	const char *rv = NULL;
 	void *ptr = NULL;
@@ -121,12 +123,16 @@ START_TEST(test_cfg_cache_connections_ttl) {
 }
 END_TEST
 
+#endif
+
 int main(void) {
 	TCase *core = tcase_create("core");
 	tcase_add_checked_fixture(core, oidc_test_setup, oidc_test_teardown);
 
 	tcase_add_test(core, test_cmd_provider_token_endpoint_auth_set);
+#ifdef USE_MEMCACHE
 	tcase_add_test(core, test_cfg_cache_connections_ttl);
+#endif
 
 	Suite *s = suite_create("cfg");
 	suite_add_tcase(s, core);
