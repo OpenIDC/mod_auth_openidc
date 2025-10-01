@@ -91,9 +91,6 @@ static inline int _oidc_strncmp(const char *a, const char *b, size_t n) {
 static inline char *_oidc_strstr(const char *a, const char *b) {
 	return ((a && b) ? (char *)strstr(a, b) : NULL);
 }
-static inline char *_oidc_strncpy(char *destination, const char *source, size_t num) {
-	return ((destination && source) ? strncpy(destination, source, num) : NULL);
-}
 static inline apr_time_t _oidc_str_to_time(const char *s, const apr_time_t default_value) {
 	apr_time_t v = default_value;
 	if (s)
