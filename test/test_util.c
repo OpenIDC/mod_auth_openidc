@@ -278,17 +278,29 @@ START_TEST(test_util_expr_exec) {
 	// NB: stub only
 	result = oidc_util_apr_expr_exec(r, expr, TRUE);
 	ck_assert_ptr_nonnull(result);
+#if HAVE_APACHE_24
 	ck_assert_str_eq(result, "stub.c");
-
+#else
+	ck_assert_str_eq(result, "true");
+#endif
 	// NB: stub only
 	result = oidc_util_apr_expr_exec(r, expr, FALSE);
+#if HAVE_APACHE_24
 	ck_assert_ptr_null(result);
+#else
+	ck_assert_str_eq(result, "true");
+#endif
 
 	// NB: stub only
 	expr = NULL;
 	rv = oidc_util_apr_expr_parse(cmd, "#", &expr, FALSE);
+#if HAVE_APACHE_24
 	ck_assert_ptr_nonnull(rv);
 	ck_assert_ptr_null(expr);
+#else
+	ck_assert_ptr_null(rv);
+	ck_assert_ptr_nonnull(expr);
+#endif
 }
 END_TEST
 
