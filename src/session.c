@@ -313,7 +313,7 @@ apr_byte_t oidc_session_extract(request_rec *r, oidc_session_t *z) {
 	if (apr_time_now() > z->expiry) {
 
 		oidc_warn(r, "session restored from cache has expired");
-		oidc_session_clear(r, z);
+		oidc_session_kill(r, z);
 
 		goto out;
 	}

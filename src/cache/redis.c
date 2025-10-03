@@ -506,10 +506,12 @@ apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section, const char 
 
 		/* calculate the timeout from now */
 		timeout = (apr_uint32_t)apr_time_sec(expiry - apr_time_now());
+		if (timeout < 0)
+			timeout = 0;
 
 		/* store it */
-		reply = oidc_cache_redis_exec(r, context, "SETEX %s %d %s",
-					      oidc_cache_redis_get_key(r->pool, section, key), timeout, value);
+		reply = oidc_cache_redis_exec(r, context, "SET %s %s EX %d",
+					      oidc_cache_redis_get_key(r->pool, section, key), value, timeout);
 	}
 
 	rv = (reply != NULL) && (reply->type != REDIS_REPLY_ERROR);
