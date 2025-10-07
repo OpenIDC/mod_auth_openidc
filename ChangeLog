@@ -1,6 +1,5 @@
 10/3/2025
 - redis: use SET..EX %d instead of deprecated SETEX
-- redis: add safety check for negative expiry values
 - bump to 2.4.18.2dev
 
 10/01/2025
