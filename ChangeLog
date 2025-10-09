@@ -1,5 +1,6 @@
 10/3/2025
 - redis: use SET..EX %d instead of deprecated SETEX
+- session: remove expired session from cache with `oidc_session_kill` instead of just clearing it
 - bump to 2.4.18.2dev
 
 10/01/2025
