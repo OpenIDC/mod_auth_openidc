@@ -83,12 +83,13 @@ Interoperability and Supported Specifications
 
 *mod_auth_openidc* is [OpenID Certified™](https://openid.net/certification/#OPENID-RP-P) and supports the following specifications:
 - [OpenID Connect Core 1.0](http://openid.net/specs/openid-connect-core-1_0.html) *(Basic, Implicit, Hybrid and Refresh flows)*
-- [OpenID Connect Discovery 1.0](http://openid.net/specs/openid-connect-discovery-1_0.html)
-- [OpenID Connect Dynamic Client Registration 1.0](http://openid.net/specs/openid-connect-registration-1_0.html)
 - [RFC 7636 - Proof Key for Code Exchange by OAuth Public Clients](https://datatracker.ietf.org/doc/html/rfc7636)
+- [FAPI 2.0 Security Profile](https://openid.net/specs/fapi-security-profile-2_0-final.html)
+- [FAPI 2.0 Message Signing](https://openid.net/specs/fapi-message-signing-2_0.html)
 - [RFC 9126 - OAuth 2.0 Pushed Authorization Requests](https://datatracker.ietf.org/doc/html/rfc9126)
 - [RFC 9449 - OAuth 2.0 Demonstrating Proof of Possession (DPoP)](https://tools.ietf.org/html/rfc9449)
-- [FAPI 2.0 Security Profile](https://openid.net/specs/fapi-2_0-security-profile-ID2.html)
+- [OpenID Connect Discovery 1.0](http://openid.net/specs/openid-connect-discovery-1_0.html)
+- [OpenID Connect Dynamic Client Registration 1.0](http://openid.net/specs/openid-connect-registration-1_0.html)
 - [OAuth 2.0 Form Post Response Mode 1.0](http://openid.net/specs/oauth-v2-form-post-response-mode-1_0.html)
 - [OAuth 2.0 Multiple Response Type Encoding Practices 1.0](http://openid.net/specs/oauth-v2-multiple-response-types-1_0.html)
 - [OpenID Connect Session Management 1.0](http://openid.net/specs/openid-connect-session-1_0.html) *see the [Wiki](https://github.com/OpenIDC/mod_auth_openidc/wiki/OpenID-Connect-Session-Management) for information on how to configure it)*
