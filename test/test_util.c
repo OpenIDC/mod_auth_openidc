@@ -487,6 +487,33 @@ START_TEST(test_util_json) {
 }
 END_TEST
 
+START_TEST(test_util_jwt) {
+	request_rec *r = oidc_test_request_get();
+	oidc_crypto_passphrase_t passphrase = {"secret1", NULL};
+	const char *str = "{ \"key\": \"value\" }";
+	char *cser = NULL;
+	char *payload = NULL;
+
+	//	const char *empty = "{}";
+	//	ck_assert_msg(oidc_util_jwt_create(r, &passphrase, empty, &cser) == TRUE, "result is not TRUE");
+	//	ck_assert_msg(oidc_util_jwt_verify(r, &passphrase, cser, &payload) == TRUE, "result is not TRUE");
+	//	ck_assert_str_eq(payload, empty);
+
+	ck_assert_msg(oidc_util_jwt_create(r, &passphrase, str, &cser) == TRUE, "result is not TRUE");
+	ck_assert_msg(oidc_util_jwt_verify(r, &passphrase, cser, &payload) == TRUE, "result is not TRUE");
+	ck_assert_str_eq(payload, str);
+
+	apr_table_set(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS", "true");
+	apr_table_set(r->subprocess_env, "OIDC_JWT_INTERNAL_STRIP_HDR", "true");
+	ck_assert_msg(oidc_util_jwt_create(r, &passphrase, str, &cser) == TRUE, "result is not TRUE");
+	ck_assert_msg(oidc_util_jwt_verify(r, &passphrase, cser, &payload) == TRUE, "result is not TRUE");
+	ck_assert_str_eq(payload, str);
+
+	passphrase.secret1 = NULL;
+	ck_assert_msg(oidc_util_jwt_create(r, &passphrase, str, &cser) == FALSE, "result is not FALSE");
+}
+END_TEST
+
 int main(void) {
 	TCase *c = NULL;
 	Suite *s = suite_create("util");
@@ -532,6 +559,11 @@ int main(void) {
 	c = tcase_create("json");
 	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(c, test_util_json);
+	suite_add_tcase(s, c);
+
+	c = tcase_create("jwt");
+	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(c, test_util_jwt);
 	suite_add_tcase(s, c);
 
 	return oidc_test_suite_run(s);
