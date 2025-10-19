@@ -418,6 +418,75 @@ START_TEST(test_util_jq) {
 }
 END_TEST
 
+START_TEST(test_util_json) {
+	request_rec *r = oidc_test_request_get();
+	apr_byte_t rv = FALSE;
+	json_t *json = NULL;
+	json_t *src = NULL;
+	json_t *dst = NULL;
+	json_error_t json_error;
+	apr_pool_t *pool = oidc_test_pool_get();
+	apr_array_header_t *arr = NULL;
+	int v = 0;
+
+	ck_assert_msg(oidc_util_json_decode_and_check_error(r, NULL, &json) == FALSE,
+		      "result for NULL is not FALSE: %d", rv);
+	json_decref(json);
+	ck_assert_msg(oidc_util_json_decode_and_check_error(r, "{}", &json) == TRUE, "result for {} is not FALSE: %d",
+		      rv);
+	json_decref(json);
+	ck_assert_msg(oidc_util_json_decode_and_check_error(r, "[ 1, 2 ]", &json) == FALSE,
+		      "result for array object is not TRUE: %d", rv);
+	json_decref(json);
+	ck_assert_msg(oidc_util_json_decode_and_check_error(r, "{\"error\":\"yes\"}", &json) == FALSE,
+		      "result for error object is not FALSE: %d", rv);
+	json_decref(json);
+
+	json = json_loads("[ \"hi\", 2 ]", 0, &json_error);
+	ck_assert_ptr_nonnull(json);
+	ck_assert_msg(oidc_util_json_array_has_value(r, json, "ho") == FALSE, "result for \"ho\" is not FALSE");
+	ck_assert_msg(oidc_util_json_array_has_value(r, json, "hi") == TRUE, "result for \"hi\" is not TRUE");
+	json_decref(json);
+
+	json = json_loads("{ \"myarr\": [ \"hi\", \"ho\" ] }", 0, &json_error);
+	ck_assert_ptr_nonnull(json);
+	ck_assert_msg(oidc_util_json_object_get_string_array(pool, json, "my", &arr, NULL) == TRUE,
+		      "result is not TRUE");
+	ck_assert_ptr_null(arr);
+	ck_assert_msg(oidc_util_json_object_get_string_array(pool, json, "myarr", &arr, NULL) == TRUE,
+		      "result is not TRUE");
+	ck_assert_ptr_nonnull(arr);
+	ck_assert_msg(arr->nelts == 2, "array size is not 2");
+	json_decref(json);
+
+	json = json_loads("{ \"myint\": 1, \"mybool\": true }", 0, &json_error);
+	ck_assert_ptr_nonnull(json);
+	ck_assert_msg(oidc_util_json_object_get_int(json, "my", &v, 0) == FALSE, "result is not FALSE");
+	ck_assert_int_eq(v, 0);
+	ck_assert_msg(oidc_util_json_object_get_int(json, "myint", &v, 0) == TRUE, "result is not TRUE");
+	ck_assert_int_eq(v, 1);
+	ck_assert_msg(oidc_util_json_object_get_bool(json, "my", &v, 0) == FALSE, "result is not FALSE");
+	ck_assert_int_eq(v, 0);
+	ck_assert_msg(oidc_util_json_object_get_bool(json, "mybool", &v, 0) == TRUE, "result is not TRUE");
+	ck_assert_int_eq(v, 1);
+	json_decref(json);
+
+	src = json_loads("{ \"myint1\": 1, \"mybool1\": false }", 0, &json_error);
+	ck_assert_ptr_nonnull(src);
+	dst = json_loads("{ \"myint2\": 2, \"mybool2\": true }", 0, &json_error);
+	ck_assert_ptr_nonnull(dst);
+	ck_assert_msg(oidc_util_json_merge(r, src, dst) == TRUE, "result is not TRUE");
+	ck_assert_ptr_nonnull(src);
+	ck_assert_ptr_nonnull(dst);
+	ck_assert_msg(oidc_util_json_object_get_bool(dst, "mybool2", &v, 0) == TRUE, "result is not TRUE");
+	ck_assert_int_eq(v, 1);
+	ck_assert_msg(oidc_util_json_object_get_bool(dst, "mybool1", &v, 1) == TRUE, "result is not TRUE");
+	ck_assert_int_eq(v, 0);
+	json_decref(src);
+	json_decref(dst);
+}
+END_TEST
+
 int main(void) {
 	TCase *c = NULL;
 	Suite *s = suite_create("util");
@@ -458,6 +527,11 @@ int main(void) {
 	c = tcase_create("jq");
 	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(c, test_util_jq);
+	suite_add_tcase(s, c);
+
+	c = tcase_create("json");
+	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(c, test_util_json);
 	suite_add_tcase(s, c);
 
 	return oidc_test_suite_run(s);

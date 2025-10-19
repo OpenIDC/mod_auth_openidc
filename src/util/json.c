@@ -136,7 +136,7 @@ apr_byte_t oidc_util_json_decode_and_check_error(request_rec *r, const char *str
 	if (oidc_util_json_decode_object(r, str, json) == FALSE)
 		return FALSE;
 
-	// see if it is not an error response somehow
+	// see if it is an error response
 	if (oidc_util_json_check_error(r, *json) == TRUE) {
 		json_decref(*json);
 		*json = NULL;
@@ -220,9 +220,10 @@ apr_byte_t oidc_util_json_object_get_int(const json_t *json, const char *name, i
 		v = json_object_get(json, name);
 		if ((v != NULL) && (json_is_integer(v))) {
 			*value = json_integer_value(v);
+			return TRUE;
 		}
 	}
-	return TRUE;
+	return FALSE;
 }
 
 /*
