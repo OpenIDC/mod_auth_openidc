@@ -622,10 +622,10 @@ const char *oidc_cfg_parse_public_key_files(apr_pool_t *pool, const char *arg, a
 	}
 
 	if (*keys == NULL)
-		*keys = apr_array_make(pool, 4, sizeof(oidc_jwk_t *));
+		*keys = apr_array_make(pool, 4, sizeof(const oidc_jwk_t *));
 	if (use)
 		jwk->use = apr_pstrdup(pool, use);
-	APR_ARRAY_PUSH(*keys, oidc_jwk_t *) = jwk;
+	APR_ARRAY_PUSH(*keys, const oidc_jwk_t *) = jwk;
 
 	return NULL;
 }

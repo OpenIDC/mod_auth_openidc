@@ -373,11 +373,11 @@ oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, json_t *json, oidc_jose_error_t *er
 	// set x5c array
 	v = json_object_get(json, OIDC_JOSE_JWK_X5C_STR);
 	if (v && json_is_array(v)) {
-		result->x5c = apr_array_make(pool, json_array_size(v), sizeof(char *));
+		result->x5c = apr_array_make(pool, json_array_size(v), sizeof(const char *));
 		for (i = 0; i < json_array_size(v); i++) {
 			e = json_array_get(v, i);
 			if (json_is_string(e))
-				APR_ARRAY_PUSH(result->x5c, char *) = apr_pstrdup(pool, json_string_value(e));
+				APR_ARRAY_PUSH(result->x5c, const char *) = apr_pstrdup(pool, json_string_value(e));
 		}
 	}
 
@@ -409,9 +409,9 @@ oidc_jwk_t *oidc_jwk_copy(apr_pool_t *pool, const oidc_jwk_t *src) {
 	dst->use = apr_pstrdup(pool, src->use);
 	dst->x5c = NULL;
 	if (src->x5c) {
-		dst->x5c = apr_array_make(pool, src->x5c->nelts, sizeof(char *));
+		dst->x5c = apr_array_make(pool, src->x5c->nelts, sizeof(const char *));
 		for (i = 0; i < src->x5c->nelts; i++)
-			APR_ARRAY_PUSH(dst->x5c, char *) = APR_ARRAY_IDX(src->x5c, i, char *);
+			APR_ARRAY_PUSH(dst->x5c, const char *) = APR_ARRAY_IDX(src->x5c, i, const char *);
 	}
 	dst->x5t = apr_pstrdup(pool, src->x5t);
 	dst->x5t_S256 = apr_pstrdup(pool, src->x5t_S256);
@@ -457,9 +457,9 @@ apr_array_header_t *oidc_jwk_list_copy(apr_pool_t *pool, apr_array_header_t *src
 	if (src == NULL)
 		return NULL;
 
-	dst = apr_array_make(pool, src->nelts, sizeof(oidc_jwk_t *));
+	dst = apr_array_make(pool, src->nelts, sizeof(const oidc_jwk_t *));
 	for (i = 0; i < src->nelts; i++)
-		APR_ARRAY_PUSH(dst, oidc_jwk_t *) = oidc_jwk_copy(pool, APR_ARRAY_IDX(src, i, oidc_jwk_t *));
+		APR_ARRAY_PUSH(dst, oidc_jwk_t *) = oidc_jwk_copy(pool, APR_ARRAY_IDX(src, i, const oidc_jwk_t *));
 
 	return dst;
 }
@@ -493,7 +493,7 @@ apr_byte_t oidc_jwks_parse_json(apr_pool_t *pool, json_t *json, apr_array_header
 		oidc_jose_error(err, "JWKS did not contain \"" OIDC_JOSE_JWKS_KEYS_STR "\" array");
 		return FALSE;
 	}
-	*jwk_list = apr_array_make(pool, json_array_size(keys), sizeof(oidc_jwk_t *));
+	*jwk_list = apr_array_make(pool, json_array_size(keys), sizeof(const oidc_jwk_t *));
 	for (int i = 0; i < json_array_size(keys); i++) {
 		json_t *elem = json_array_get(keys, i);
 		if (elem == NULL)
@@ -502,7 +502,7 @@ apr_byte_t oidc_jwks_parse_json(apr_pool_t *pool, json_t *json, apr_array_header
 		if (oidc_jwk_parse_json(pool, elem, &jwk, err) != TRUE) {
 			return FALSE;
 		}
-		APR_ARRAY_PUSH(*jwk_list, oidc_jwk_t *) = jwk;
+		APR_ARRAY_PUSH(*jwk_list, const oidc_jwk_t *) = jwk;
 	}
 	return TRUE;
 }
@@ -1347,35 +1347,42 @@ apr_byte_t oidc_jwt_verify(apr_pool_t *pool, oidc_jwt_t *jwt, apr_hash_t *keys, 
 apr_byte_t oidc_jose_hash_bytes(apr_pool_t *pool, const char *s_digest, const unsigned char *input,
 				unsigned int input_len, unsigned char **output, unsigned int *output_len,
 				oidc_jose_error_t *err) {
+	apr_byte_t rv = FALSE;
 	unsigned char md_value[EVP_MAX_MD_SIZE];
-
+	const EVP_MD *evp_digest = NULL;
 	EVP_MD_CTX *ctx = EVP_MD_CTX_new();
 	EVP_MD_CTX_init(ctx);
 
-	const EVP_MD *evp_digest = NULL;
 	if ((evp_digest = EVP_get_digestbyname(s_digest)) == NULL) {
 		oidc_jose_error(err, "no OpenSSL digest algorithm found for algorithm \"%s\"", s_digest);
-		return FALSE;
+		goto end;
 	}
 
 	if (!EVP_DigestInit_ex(ctx, evp_digest, NULL)) {
 		oidc_jose_error_openssl(err, "EVP_DigestInit_ex");
-		return FALSE;
-	}
-	if (!EVP_DigestUpdate(ctx, input, input_len)) {
-		oidc_jose_error_openssl(err, "EVP_DigestUpdate");
-		return FALSE;
-	}
-	if (!EVP_DigestFinal(ctx, md_value, output_len)) {
-		oidc_jose_error_openssl(err, "EVP_DigestFinal");
-		return FALSE;
+		goto end;
 	}
 
-	EVP_MD_CTX_free(ctx);
+	if (!EVP_DigestUpdate(ctx, input, input_len)) {
+		oidc_jose_error_openssl(err, "EVP_DigestUpdate");
+		goto end;
+	}
+
+	if (!EVP_DigestFinal(ctx, md_value, output_len)) {
+		oidc_jose_error_openssl(err, "EVP_DigestFinal");
+		goto end;
+	}
 
 	*output = apr_pmemdup(pool, md_value, *output_len);
 
-	return TRUE;
+	rv = TRUE;
+
+end:
+
+	if (ctx)
+		EVP_MD_CTX_free(ctx);
+
+	return rv;
 }
 
 /*
@@ -1682,12 +1689,12 @@ apr_byte_t oidc_jwk_pem_bio_to_jwk(apr_pool_t *pool, BIO *input, const char *kid
 
 			/* certificate is present, fill the jwkset with certificate entries */
 			/* populate first x5c certificate */
-			(*oidc_jwk)->x5c = apr_array_make(pool, 1, sizeof(char *));
+			(*oidc_jwk)->x5c = apr_array_make(pool, 1, sizeof(const char *));
 			if ((*oidc_jwk)->x5c == NULL) {
 				oidc_jose_error(err, "apr_array_make failed");
 				goto end;
 			}
-			APR_ARRAY_PUSH((*oidc_jwk)->x5c, char *) = x509_pem_encoded_certificate;
+			APR_ARRAY_PUSH((*oidc_jwk)->x5c, const char *) = x509_pem_encoded_certificate;
 
 			/* populate thumbprints entries */
 #if OPENSSL_VERSION_NUMBER < 0x000907000L
@@ -1716,7 +1723,7 @@ apr_byte_t oidc_jwk_pem_bio_to_jwk(apr_pool_t *pool, BIO *input, const char *kid
 							    x509_cert_length, &(*oidc_jwk)->x5t_S256, err);
 
 			while (oidc_jwk_x509_read(pool, input, &x509_pem_encoded_certificate, NULL, NULL, err) == TRUE)
-				APR_ARRAY_PUSH((*oidc_jwk)->x5c, char *) = x509_pem_encoded_certificate;
+				APR_ARRAY_PUSH((*oidc_jwk)->x5c, const char *) = x509_pem_encoded_certificate;
 		}
 	}
 

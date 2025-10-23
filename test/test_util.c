@@ -514,6 +514,99 @@ START_TEST(test_util_jwt) {
 }
 END_TEST
 
+START_TEST(test_util_key) {
+	request_rec *r = oidc_test_request_get();
+	apr_pool_t *pool = oidc_test_pool_get();
+	apr_hash_t *hash = NULL;
+	apr_hash_t *hash2 = NULL;
+	apr_hash_t *hash3 = NULL;
+	oidc_jwk_t *jwk = NULL;
+	oidc_jwk_t *jwk2 = NULL;
+	oidc_jwk_t *jwk3 = NULL;
+	apr_array_header_t *arr = NULL;
+	apr_array_header_t *arr2 = NULL;
+
+	// TODO: TRUE really?
+	ck_assert_msg(oidc_util_key_symmetric_create(r, NULL, 0, NULL, TRUE, &jwk) == TRUE, "result is not TRUE");
+	ck_assert_ptr_null(jwk);
+
+	ck_assert_msg(oidc_util_key_symmetric_create(r, "mysecret", 0, "SHA100", TRUE, &jwk) == FALSE,
+		      "result is not FALSE");
+	ck_assert_ptr_null(jwk);
+
+	ck_assert_msg(oidc_util_key_symmetric_create(r, "mysecret", 0, "SHA256", FALSE, &jwk) == TRUE,
+		      "result is not TRUE");
+	ck_assert_ptr_nonnull(jwk);
+	ck_assert_ptr_null(jwk->kid);
+	oidc_jwk_destroy(jwk);
+
+	ck_assert_msg(oidc_util_key_symmetric_create(r, "mylongerthansixteensecret", 16, NULL, FALSE, &jwk) == TRUE,
+		      "result is not TRUE");
+	ck_assert_ptr_nonnull(jwk);
+	ck_assert_ptr_null(jwk->kid);
+	oidc_jwk_destroy(jwk);
+
+	ck_assert_msg(oidc_util_key_symmetric_create(r, "mysecret", 0, "SHA256", TRUE, &jwk) == TRUE,
+		      "result is not TRUE");
+	ck_assert_ptr_nonnull(jwk);
+	ck_assert_str_eq(jwk->kid, "6x3Xmnf4H99f-Y4R2pdjCZFnF5EUHrms85pklY5NCSc");
+
+	hash = oidc_util_key_symmetric_merge(pool, NULL, NULL);
+	ck_assert_ptr_nonnull(hash);
+	ck_assert_int_eq(apr_hash_count(hash), 0);
+
+	arr = apr_array_make(pool, 2, sizeof(const oidc_jwk_t *));
+	ck_assert_msg(oidc_util_key_symmetric_create(r, "mysecret2", 0, NULL, TRUE, &jwk2) == TRUE,
+		      "result is not TRUE");
+	ck_assert_ptr_nonnull(jwk2);
+	ck_assert_str_eq(jwk2->kid, "dxRmRMF-k0GMCu8QRtFY7aO0GyONucZRyVUf1mTRUd4");
+	APR_ARRAY_PUSH(arr, const oidc_jwk_t *) = jwk2;
+
+	hash = oidc_util_key_symmetric_merge(pool, arr, NULL);
+	ck_assert_ptr_nonnull(hash);
+	ck_assert_int_eq(apr_hash_count(hash), 1);
+
+	hash = oidc_util_key_symmetric_merge(pool, arr, jwk);
+	ck_assert_int_eq(apr_hash_count(hash), 2);
+	ck_assert_ptr_eq(apr_hash_get(hash, "6x3Xmnf4H99f-Y4R2pdjCZFnF5EUHrms85pklY5NCSc", APR_HASH_KEY_STRING), jwk);
+	ck_assert_ptr_eq(apr_hash_get(hash, "dxRmRMF-k0GMCu8QRtFY7aO0GyONucZRyVUf1mTRUd4", APR_HASH_KEY_STRING), jwk2);
+
+	arr2 = apr_array_make(pool, 2, sizeof(const oidc_jwk_t *));
+	ck_assert_msg(oidc_util_key_symmetric_create(r, "mysecret3", 0, "SHA256", TRUE, &jwk3) == TRUE,
+		      "result is not TRUE");
+	ck_assert_ptr_nonnull(jwk3);
+	ck_assert_str_eq(jwk3->kid, "z4Fru6dQBC2pdKuIXuGmjyQpPVmZ-Y4ma54MlKMRU3o");
+	APR_ARRAY_PUSH(arr2, const oidc_jwk_t *) = jwk3;
+	hash2 = oidc_util_key_sets_merge(pool, hash, arr2);
+	ck_assert_ptr_nonnull(hash2);
+	ck_assert_int_eq(apr_hash_count(hash2), 3);
+	ck_assert_ptr_eq(apr_hash_get(hash2, "6x3Xmnf4H99f-Y4R2pdjCZFnF5EUHrms85pklY5NCSc", APR_HASH_KEY_STRING), jwk);
+	ck_assert_ptr_eq(apr_hash_get(hash2, "dxRmRMF-k0GMCu8QRtFY7aO0GyONucZRyVUf1mTRUd4", APR_HASH_KEY_STRING), jwk2);
+	ck_assert_ptr_eq(apr_hash_get(hash2, "z4Fru6dQBC2pdKuIXuGmjyQpPVmZ-Y4ma54MlKMRU3o", APR_HASH_KEY_STRING), jwk3);
+
+	hash3 = oidc_util_key_sets_hash_merge(pool, NULL, NULL);
+	ck_assert_ptr_nonnull(hash3);
+	ck_assert_int_eq(apr_hash_count(hash3), 0);
+
+	hash3 = NULL;
+	hash3 = oidc_util_key_sets_hash_merge(pool, hash, NULL);
+	ck_assert_ptr_nonnull(hash3);
+	ck_assert_ptr_eq(hash3, hash);
+	ck_assert_int_eq(apr_hash_count(hash3), 2);
+
+	hash3 = NULL;
+	hash3 = oidc_util_key_sets_hash_merge(pool, hash, hash2);
+	ck_assert_ptr_nonnull(hash3);
+	ck_assert_int_eq(apr_hash_count(hash3), 3);
+
+	ck_assert_ptr_eq(oidc_util_key_list_first(arr2, -1, NULL), jwk3);
+	ck_assert_ptr_eq(oidc_util_key_list_first(arr2, CJOSE_JWK_KTY_OCT, "sig"), jwk3);
+	ck_assert_ptr_null(oidc_util_key_list_first(arr2, CJOSE_JWK_KTY_RSA, "enc"));
+
+	oidc_jwk_list_destroy_hash(hash3);
+}
+END_TEST
+
 int main(void) {
 	TCase *c = NULL;
 	Suite *s = suite_create("util");
@@ -564,6 +657,11 @@ int main(void) {
 	c = tcase_create("jwt");
 	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(c, test_util_jwt);
+	suite_add_tcase(s, c);
+
+	c = tcase_create("key");
+	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(c, test_util_key);
 	suite_add_tcase(s, c);
 
 	return oidc_test_suite_run(s);

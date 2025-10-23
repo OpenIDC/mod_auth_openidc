@@ -75,7 +75,7 @@ clean-local:
 	rm -f *.gcno
 
 ${TESTS:%=%.valgrind}: ${TESTS}
-	CK_FORK=no valgrind --error-exitcode=1 --show-leak-kinds=definite --read-inline-info=yes --keep-debuginfo=yes ./$$(basename $@ .valgrind)
+	CK_FORK=no valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=definite --read-inline-info=yes --keep-debuginfo=yes ./$$(basename $@ .valgrind)
 
 valgrind: ${TESTS:%=%.valgrind}
 

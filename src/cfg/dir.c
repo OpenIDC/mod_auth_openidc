@@ -169,8 +169,8 @@ const char *oidc_cmd_dir_pass_userinfo_as_set(cmd_parms *cmd, void *m, const cha
 	if (rv != NULL)
 		return OIDC_CONFIG_DIR_RV(cmd, rv);
 	if (dir_cfg->pass_userinfo_as == NULL)
-		dir_cfg->pass_userinfo_as = apr_array_make(cmd->pool, 3, sizeof(oidc_pass_user_info_as_t *));
-	APR_ARRAY_PUSH(dir_cfg->pass_userinfo_as, oidc_pass_user_info_as_t *) = p;
+		dir_cfg->pass_userinfo_as = apr_array_make(cmd->pool, 3, sizeof(const oidc_pass_user_info_as_t *));
+	APR_ARRAY_PUSH(dir_cfg->pass_userinfo_as, const oidc_pass_user_info_as_t *) = p;
 	return NULL;
 }
 
@@ -588,10 +588,10 @@ const apr_array_header_t *oidc_cfg_dir_pass_userinfo_as_get(request_rec *r) {
 	if (dir_cfg->pass_userinfo_as == NULL) {
 		if (pass_userinfo_as_default == NULL) {
 			pass_userinfo_as_default =
-			    apr_array_make(r->server->process->pool, 3, sizeof(oidc_pass_user_info_as_t *));
+			    apr_array_make(r->server->process->pool, 3, sizeof(const oidc_pass_user_info_as_t *));
 			oidc_cfg_dir_parse_pass_userinfo_as(r->server->process->pool, OIDC_DEFAULT_PASS_USERINFO_AS,
 							    &p);
-			APR_ARRAY_PUSH(pass_userinfo_as_default, oidc_pass_user_info_as_t *) = p;
+			APR_ARRAY_PUSH(pass_userinfo_as_default, const oidc_pass_user_info_as_t *) = p;
 		}
 	}
 	return dir_cfg->pass_userinfo_as ? dir_cfg->pass_userinfo_as : pass_userinfo_as_default;

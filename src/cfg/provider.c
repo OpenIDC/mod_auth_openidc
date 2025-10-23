@@ -534,8 +534,8 @@ const char *oidc_cfg_provider_signed_jwks_uri_keys_set(apr_pool_t *pool, oidc_pr
 					  oidc_jose_e2s(pool, err));
 			goto end;
 		}
-		provider->jwks_uri.jwk_list = apr_array_make(pool, 1, sizeof(oidc_jwk_t *));
-		APR_ARRAY_PUSH(provider->jwks_uri.jwk_list, oidc_jwk_t *) = jwk;
+		provider->jwks_uri.jwk_list = apr_array_make(pool, 1, sizeof(const oidc_jwk_t *));
+		APR_ARRAY_PUSH(provider->jwks_uri.jwk_list, const oidc_jwk_t *) = jwk;
 		goto end;
 	}
 

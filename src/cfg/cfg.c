@@ -324,10 +324,10 @@ const char *oidc_cmd_private_keys_set(cmd_parms *cmd, void *ptr, const char *arg
 	}
 
 	if (cfg->private_keys == NULL)
-		cfg->private_keys = apr_array_make(cmd->pool, 4, sizeof(oidc_jwk_t *));
+		cfg->private_keys = apr_array_make(cmd->pool, 4, sizeof(const oidc_jwk_t *));
 	if (use)
 		jwk->use = apr_pstrdup(cmd->pool, use);
-	APR_ARRAY_PUSH(cfg->private_keys, oidc_jwk_t *) = jwk;
+	APR_ARRAY_PUSH(cfg->private_keys, const oidc_jwk_t *) = jwk;
 
 end:
 

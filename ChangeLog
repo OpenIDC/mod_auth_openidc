@@ -1,4 +1,9 @@
-10/3/2025
+10/23/2025
+- util/key.c: check for unsupported symmetric key hashing algorithms and avoid a memory leak in such cases
+- test: add util/key.c coverage tests
+- code: use const qualifier in apr_array_header_t operations
+
+10/03/2025
 - redis: use SET..EX %d instead of deprecated SETEX
 - session: remove expired session from cache with `oidc_session_kill` instead of just clearing it
 - bump to 2.4.18.2dev

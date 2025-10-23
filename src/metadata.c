@@ -1217,8 +1217,8 @@ static void oidc_metadata_get_jwks(request_rec *r, json_t *json, apr_array_heade
 		}
 
 		if (*jwk_list == NULL)
-			*jwk_list = apr_array_make(r->pool, 4, sizeof(oidc_jwk_t *));
-		APR_ARRAY_PUSH(*jwk_list, oidc_jwk_t *) = jwk;
+			*jwk_list = apr_array_make(r->pool, 4, sizeof(const oidc_jwk_t *));
+		APR_ARRAY_PUSH(*jwk_list, const oidc_jwk_t *) = jwk;
 	}
 }
 

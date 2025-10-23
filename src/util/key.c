@@ -58,8 +58,9 @@ apr_byte_t oidc_util_key_symmetric_create(request_rec *r, const char *client_sec
 			key_len = _oidc_strlen(client_secret);
 		} else {
 			/* hash the client_secret first, this is OpenID Connect specific */
-			oidc_jose_hash_bytes(r->pool, hash_algo, (const unsigned char *)client_secret,
-					     _oidc_strlen(client_secret), &key, &key_len, &err);
+			if (oidc_jose_hash_bytes(r->pool, hash_algo, (const unsigned char *)client_secret,
+						 _oidc_strlen(client_secret), &key, &key_len, &err) == FALSE)
+				return FALSE;
 		}
 
 		if ((key != NULL) && (key_len > 0)) {
@@ -79,7 +80,7 @@ apr_byte_t oidc_util_key_symmetric_create(request_rec *r, const char *client_sec
 }
 
 /*
- * merge provided keys and client secret in to a single hashtable
+ * merge an array of JWKs and a JWK into a single hashtable
  */
 apr_hash_t *oidc_util_key_symmetric_merge(apr_pool_t *pool, const apr_array_header_t *keys, oidc_jwk_t *jwk) {
 	apr_hash_t *result = apr_hash_make(pool);
@@ -87,8 +88,9 @@ apr_hash_t *oidc_util_key_symmetric_merge(apr_pool_t *pool, const apr_array_head
 	int i = 0;
 	if (keys != NULL) {
 		for (i = 0; i < keys->nelts; i++) {
-			elem = APR_ARRAY_IDX(keys, i, oidc_jwk_t *);
-			apr_hash_set(result, elem->kid, APR_HASH_KEY_STRING, elem);
+			elem = APR_ARRAY_IDX(keys, i, const oidc_jwk_t *);
+			if (elem->kid != NULL)
+				apr_hash_set(result, elem->kid, APR_HASH_KEY_STRING, elem);
 		}
 	}
 	if (jwk != NULL) {
@@ -106,8 +108,9 @@ apr_hash_t *oidc_util_key_sets_merge(apr_pool_t *pool, apr_hash_t *k1, const apr
 	int i = 0;
 	if (k2 != NULL) {
 		for (i = 0; i < k2->nelts; i++) {
-			jwk = APR_ARRAY_IDX(k2, i, oidc_jwk_t *);
-			apr_hash_set(rv, jwk->kid, APR_HASH_KEY_STRING, jwk);
+			jwk = APR_ARRAY_IDX(k2, i, const oidc_jwk_t *);
+			if (jwk->kid != NULL)
+				apr_hash_set(rv, jwk->kid, APR_HASH_KEY_STRING, jwk);
 		}
 	}
 	return rv;
