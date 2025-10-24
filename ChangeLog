@@ -1,3 +1,6 @@
+10/24/2025
+- code: refactor util/random.c
+
 10/23/2025
 - util/key.c: check for unsupported symmetric key hashing algorithms and avoid a memory leak in such cases
 - test: add util/key.c coverage tests

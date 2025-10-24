@@ -531,7 +531,7 @@ static char *oidc_proto_request_uri_create(request_rec *r, struct oidc_provider_
 	char *request_uri = NULL;
 	if (serialized_request_object != NULL) {
 		char *request_ref = NULL;
-		if (oidc_util_random_str_gen(r, &request_ref, OIDC_PROTO_REQUEST_URI_REF_LEN) == TRUE) {
+		if (oidc_util_rand_str(r, &request_ref, OIDC_PROTO_REQUEST_URI_REF_LEN, FALSE) == TRUE) {
 			oidc_cache_set_request_uri(r, request_ref, serialized_request_object,
 						   apr_time_now() + apr_time_from_sec(ttl));
 			request_uri = apr_psprintf(r->pool, "%s?%s=%s", resolver_url, OIDC_PROTO_REQUEST_URI,

@@ -406,6 +406,13 @@ void oidc_util_table_add_query_encoded_params(apr_pool_t *pool, apr_table_t *tab
 	}
 }
 
+char *oidc_util_hex_encode(request_rec *r, const unsigned char *bytes, unsigned int len) {
+	char *s = "";
+	for (int i = 0; i < len; i++)
+		s = apr_psprintf(r->pool, "%s%02x", s, bytes[i]);
+	return s;
+}
+
 /*
  * openssl hash and base64 encode
  */
@@ -421,7 +428,7 @@ apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char
 	}
 
 	if (oidc_util_base64url_encode(r, output, (const char *)hashed, hashed_len, TRUE) <= 0) {
-		oidc_error(r, "oidc_base64url_encode returned an error: %s", err.text);
+		oidc_error(r, "oidc_base64url_encode returned an error");
 		return FALSE;
 	}
 	return TRUE;

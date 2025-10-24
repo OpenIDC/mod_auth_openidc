@@ -56,7 +56,7 @@
  * generate a random value (nonce) to correlate request/response through browser state
  */
 apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce, int len) {
-	return oidc_util_random_str_gen(r, nonce, len);
+	return oidc_util_rand_str(r, nonce, len, FALSE);
 }
 
 /*

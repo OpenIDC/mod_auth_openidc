@@ -55,8 +55,8 @@
 /*
  * generate a number of random bytes, either using libapr or urandom (no per-request logging)
  */
-apr_byte_t oidc_util_random_bytes(unsigned char *buf, apr_size_t length) {
-	apr_byte_t rv = TRUE;
+static apr_byte_t _oidc_util_rand(unsigned char *buf, apr_size_t length) {
+	apr_byte_t rv = FALSE;
 
 #ifndef USE_URANDOM
 
@@ -72,7 +72,7 @@ apr_byte_t oidc_util_random_bytes(unsigned char *buf, apr_size_t length) {
 		if (fd == -1) {
 			fd = open(DEV_RANDOM, O_RDONLY);
 			if (fd == -1)
-				return errno;
+				return FALSE;
 		}
 
 		do {
@@ -82,7 +82,7 @@ apr_byte_t oidc_util_random_bytes(unsigned char *buf, apr_size_t length) {
 		if (rc < 0) {
 			int errnum = errno;
 			close(fd);
-			return errnum;
+			return FALSE;
 		} else if (rc == 0) {
 			close(fd);
 			fd = -1; /* force open() again */
@@ -104,50 +104,45 @@ apr_byte_t oidc_util_random_bytes(unsigned char *buf, apr_size_t length) {
 /*
  * generate a number of random bytes, either using libapr or urandom
  */
-apr_byte_t oidc_util_random_bytes_gen(request_rec *r, unsigned char *buf, apr_size_t length) {
+static apr_byte_t _oidc_util_rand_bytes(request_rec *r, unsigned char *buf, apr_size_t len) {
 	apr_byte_t rv = TRUE;
-	const char *gen = NULL;
 #ifndef USE_URANDOM
-	gen = "apr";
+	const char *gen = "apr";
 #else
-	gen = DEV_RANDOM;
+	const char *gen = DEV_RANDOM;
 #endif
-	oidc_debug(r, "oidc_util_random_bytes [%s] call for %" APR_SIZE_T_FMT " bytes", gen, length);
-	rv = oidc_util_random_bytes(buf, length);
-	oidc_debug(r, "oidc_util_random_bytes returned: %d", rv);
-
+	oidc_debug(r, "use [%s] for generating %" APR_SIZE_T_FMT " random bytes", gen, len);
+	rv = _oidc_util_rand(buf, len);
+	oidc_debug(r, "return: %d", rv);
 	return rv;
+}
+
+/*
+ * generate a random integer value in the specified modulo range
+ */
+unsigned int oidc_util_rand_int(unsigned int mod) {
+	unsigned int v;
+	_oidc_util_rand((unsigned char *)&v, sizeof(v));
+	return v % mod;
 }
 
 /*
  * generate a random string of (lowercase) hexadecimal characters, representing byte_len bytes
  */
-apr_byte_t oidc_util_random_hexstr_gen(request_rec *r, char **hex_str, int byte_len) {
+apr_byte_t oidc_util_rand_str(request_rec *r, char **str, int byte_len, apr_byte_t to_hex) {
 	unsigned char *bytes = apr_pcalloc(r->pool, byte_len);
-	int i = 0;
-	if (oidc_util_random_bytes_gen(r, bytes, byte_len) != TRUE) {
-		oidc_error(r, "oidc_util_generate_random_bytes returned an error");
+	if (_oidc_util_rand_bytes(r, bytes, byte_len) != TRUE) {
+		oidc_error(r, "_oidc_util_rand_bytes returned an error");
 		return FALSE;
 	}
-	*hex_str = "";
-	for (i = 0; i < byte_len; i++)
-		*hex_str = apr_psprintf(r->pool, "%s%02x", *hex_str, bytes[i]);
 
-	return TRUE;
-}
-
-/*
- * generate a random string value value of a specified byte length
- */
-apr_byte_t oidc_util_random_str_gen(request_rec *r, char **output, int len) {
-	unsigned char *bytes = apr_pcalloc(r->pool, len);
-	if (oidc_util_random_bytes_gen(r, bytes, len) != TRUE) {
-		oidc_error(r, "oidc_util_generate_random_bytes returned an error");
-		return FALSE;
-	}
-	if (oidc_util_base64url_encode(r, output, (const char *)bytes, len, TRUE) <= 0) {
-		oidc_error(r, "oidc_base64url_encode returned an error");
-		return FALSE;
+	if (to_hex) {
+		*str = oidc_util_hex_encode(r, bytes, byte_len);
+	} else {
+		if (oidc_util_base64url_encode(r, str, (const char *)bytes, byte_len, TRUE) <= 0) {
+			oidc_error(r, "oidc_base64url_encode returned an error");
+			return FALSE;
+		}
 	}
 	return TRUE;
 }

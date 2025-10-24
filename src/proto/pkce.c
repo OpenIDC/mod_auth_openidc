@@ -47,7 +47,7 @@
  * PCKE "plain" proto state
  */
 static apr_byte_t oidc_proto_pkce_state_plain(request_rec *r, char **state) {
-	return oidc_util_random_str_gen(r, state, OIDC_PROTO_CODE_VERIFIER_LENGTH);
+	return oidc_util_rand_str(r, state, OIDC_PROTO_CODE_VERIFIER_LENGTH, FALSE);
 }
 
 /*
@@ -70,7 +70,7 @@ static apr_byte_t oidc_proto_pkce_verifier_plain(request_rec *r, const char *sta
  * PCKE "s256" proto state
  */
 static apr_byte_t oidc_proto_pkce_state_s256(request_rec *r, char **state) {
-	return oidc_util_random_str_gen(r, state, OIDC_PROTO_CODE_VERIFIER_LENGTH);
+	return oidc_util_rand_str(r, state, OIDC_PROTO_CODE_VERIFIER_LENGTH, FALSE);
 }
 
 /*

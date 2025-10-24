@@ -96,7 +96,7 @@ apr_byte_t oidc_proto_dpop_create(request_rec *r, oidc_cfg_t *cfg, const char *u
 	s_jwk = cjose_jwk_to_json(jwk->cjose_jwk, 0, &cjose_err);
 	cjose_header_set_raw(jwt->header.value.json, OIDC_CLAIM_JWK, s_jwk, &cjose_err);
 
-	oidc_util_random_str_gen(r, &jti, OIDC_PROTO_JWT_JTI_LEN);
+	oidc_util_rand_str(r, &jti, OIDC_PROTO_JWT_JTI_LEN, FALSE);
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_JTI, json_string(jti));
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_HTM, json_string(method));
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_HTU, json_string(url));

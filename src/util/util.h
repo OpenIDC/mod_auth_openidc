@@ -112,13 +112,11 @@ apr_byte_t oidc_util_key_symmetric_create(request_rec *r, const char *client_sec
 apr_hash_t *oidc_util_key_sets_merge(apr_pool_t *pool, apr_hash_t *k1, const apr_array_header_t *k2);
 apr_hash_t *oidc_util_key_sets_hash_merge(apr_pool_t *pool, apr_hash_t *k1, apr_hash_t *k2);
 apr_hash_t *oidc_util_key_symmetric_merge(apr_pool_t *pool, const apr_array_header_t *keys, oidc_jwk_t *jwk);
+oidc_jwk_t *oidc_util_key_list_first(const apr_array_header_t *key_list, int kty, const char *use);
 
 // random.c
-apr_byte_t oidc_util_random_bytes(unsigned char *buf, apr_size_t length);
-apr_byte_t oidc_util_random_bytes_gen(request_rec *r, unsigned char *buf, apr_size_t length);
-apr_byte_t oidc_util_random_hexstr_gen(request_rec *r, char **hex_str, int byte_len);
-apr_byte_t oidc_util_random_str_gen(request_rec *r, char **output, int len);
-oidc_jwk_t *oidc_util_key_list_first(const apr_array_header_t *key_list, int kty, const char *use);
+unsigned int oidc_util_rand_int(unsigned int mod);
+apr_byte_t oidc_util_rand_str(request_rec *r, char **output, int byte_len, apr_byte_t to_hex);
 
 // url.c
 const char *oidc_util_url_cur_host(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers);
@@ -130,6 +128,8 @@ const char *oidc_util_url_redirect_uri(request_rec *r, oidc_cfg_t *c);
 apr_byte_t oidc_util_url_has_parameter(request_rec *r, const char *param);
 apr_byte_t oidc_util_url_parameter_get(request_rec *r, char *name, char **value);
 
+// util.c
+char *oidc_util_hex_encode(request_rec *r, const unsigned char *bytes, unsigned int len);
 apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char *openssl_hash_algo, const char *input,
 						      char **output);
 int oidc_util_strnenvcmp(const char *a, const char *b, int len);

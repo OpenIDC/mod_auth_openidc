@@ -728,15 +728,6 @@ static inline apr_interval_time_t _oidc_metrics_interval(void) {
 							    OIDC_METRICS_CACHE_STORAGE_INTERVAL_DEFAULT));
 }
 
-/*
- * generate a random integer value in the specified modulo range
- */
-static unsigned int oidc_metric_random_int(unsigned int mod) {
-	unsigned int v;
-	oidc_util_random_bytes((unsigned char *)&v, sizeof(v));
-	return v % mod;
-}
-
 #define OIDC_METRICS_POLL_INTERVAL 250
 
 /*
@@ -746,7 +737,7 @@ static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void 
 	server_rec *s = (server_rec *)data;
 
 	/* sleep for a short random time <1s so child processes write-lock on a different frequency */
-	apr_sleep(apr_time_from_msec(oidc_metric_random_int(1000)));
+	apr_sleep(apr_time_from_msec(oidc_util_rand_int(1000)));
 
 	/* calculate the number of short sleep intervals */
 	int n = _oidc_metrics_interval() / apr_time_from_msec(OIDC_METRICS_POLL_INTERVAL);
