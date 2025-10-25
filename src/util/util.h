@@ -116,7 +116,8 @@ oidc_jwk_t *oidc_util_key_list_first(const apr_array_header_t *key_list, int kty
 
 // random.c
 unsigned int oidc_util_rand_int(unsigned int mod);
-apr_byte_t oidc_util_rand_str(request_rec *r, char **output, int byte_len, apr_byte_t to_hex);
+apr_byte_t oidc_util_rand_str(request_rec *r, char **output, int len);
+char *oidc_util_rand_hex_str(request_rec *r, int len);
 
 // url.c
 const char *oidc_util_url_cur_host(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers);

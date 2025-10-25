@@ -92,13 +92,10 @@ static apr_byte_t oidc_proto_jwt_create(request_rec *r, const char *client_id, c
 	*out = oidc_jwt_new(r->pool, TRUE, TRUE);
 	oidc_jwt_t *jwt = *out;
 
-	char *jti = NULL;
-	oidc_util_rand_str(r, &jti, OIDC_PROTO_JWT_JTI_LEN, FALSE);
-
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_ISS, json_string(client_id));
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_SUB, json_string(client_id));
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_AUD, json_string(audience));
-	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_JTI, json_string(jti));
+	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_JTI, json_string(oidc_proto_jti_gen(r)));
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_EXP, json_integer(apr_time_sec(apr_time_now()) + 60));
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_IAT, json_integer(apr_time_sec(apr_time_now())));
 

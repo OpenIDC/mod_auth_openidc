@@ -116,9 +116,6 @@
 #define OIDC_PROTO_DPOP "DPoP"
 #define OIDC_PROTO_DPOP_USE_NONCE "use_dpop_nonce"
 
-/* nonce bytes length */
-#define OIDC_PROTO_NONCE_LENGTH 32
-
 typedef json_t oidc_proto_state_t;
 
 // profile.c
@@ -165,9 +162,6 @@ apr_byte_t oidc_proto_jwks_uri_keys(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t 
 				    int ssl_validate_server, apr_hash_t *keys, apr_byte_t *force_refresh);
 
 // jwt.c
-
-#define OIDC_PROTO_JWT_JTI_LEN 16
-
 apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri,
 				 int ssl_validate_server, apr_hash_t *symmetric_keys, const char *alg);
 apr_byte_t oidc_proto_jwt_validate(request_rec *r, oidc_jwt_t *jwt, const char *iss, apr_byte_t exp_is_mandatory,
@@ -193,7 +187,8 @@ const char *oidc_proto_state_get_pkce_state(oidc_proto_state_t *proto_state);
 void oidc_proto_state_set_pkce_state(oidc_proto_state_t *proto_state, const char *pkce_state);
 
 // proto.c
-apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce, int len);
+apr_byte_t oidc_proto_nonce_gen(request_rec *r, char **nonce);
+char *oidc_proto_jti_gen(request_rec *r);
 apr_array_header_t *oidc_proto_supported_flows(apr_pool_t *pool);
 apr_byte_t oidc_proto_flow_is_supported(apr_pool_t *pool, const char *flow);
 int oidc_proto_return_www_authenticate(request_rec *r, const char *error, const char *error_description);

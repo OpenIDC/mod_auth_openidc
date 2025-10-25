@@ -190,7 +190,7 @@ int oidc_request_authenticate_user(request_rec *r, oidc_cfg_t *c, oidc_provider_
 
 	/* generate the random nonce value that correlates requests and responses */
 	char *nonce = NULL;
-	if (oidc_proto_generate_nonce(r, &nonce, OIDC_PROTO_NONCE_LENGTH) == FALSE)
+	if (oidc_proto_nonce_gen(r, &nonce) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
 	char *pkce_state = NULL;

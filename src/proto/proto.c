@@ -52,11 +52,28 @@
 #include <openssl/opensslconf.h>
 #include <openssl/opensslv.h>
 
+/* nonce bytes length */
+#define OIDC_PROTO_NONCE_LENGTH 32
+
 /*
  * generate a random value (nonce) to correlate request/response through browser state
  */
-apr_byte_t oidc_proto_generate_nonce(request_rec *r, char **nonce, int len) {
-	return oidc_util_rand_str(r, nonce, len, FALSE);
+apr_byte_t oidc_proto_nonce_gen(request_rec *r, char **nonce) {
+	return oidc_util_rand_str(r, nonce, OIDC_PROTO_NONCE_LENGTH);
+}
+
+/* jti bytes length */
+#define OIDC_PROTO_JWT_JTI_LEN 16
+
+/*
+ * generate a random unique "jti" JWT identifier
+ */
+char *oidc_proto_jti_gen(request_rec *r) {
+	char *jti = NULL;
+	if (oidc_util_rand_str(r, &jti, OIDC_PROTO_JWT_JTI_LEN) == FALSE) {
+		oidc_error(r, "oidc_util_rand_str returned FALSE");
+	}
+	return jti;
 }
 
 /*

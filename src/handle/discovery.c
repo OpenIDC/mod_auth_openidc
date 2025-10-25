@@ -110,7 +110,7 @@ int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg) {
 
 	/* generate CSRF token */
 	char *csrf = NULL;
-	if (oidc_proto_generate_nonce(r, &csrf, 8) == FALSE)
+	if (oidc_util_rand_str(r, &csrf, 8) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
 	const char *path_scopes = oidc_cfg_dir_path_scope_get(r);

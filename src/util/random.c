@@ -127,22 +127,29 @@ unsigned int oidc_util_rand_int(unsigned int mod) {
 }
 
 /*
- * generate a random string of (lowercase) hexadecimal characters, representing byte_len bytes
+ * generate a random string of base64url encoded characters, representing len bytes
  */
-apr_byte_t oidc_util_rand_str(request_rec *r, char **str, int byte_len, apr_byte_t to_hex) {
-	unsigned char *bytes = apr_pcalloc(r->pool, byte_len);
-	if (_oidc_util_rand_bytes(r, bytes, byte_len) != TRUE) {
+apr_byte_t oidc_util_rand_str(request_rec *r, char **str, int len) {
+	unsigned char *bytes = apr_pcalloc(r->pool, len);
+	if (_oidc_util_rand_bytes(r, bytes, len) != TRUE) {
 		oidc_error(r, "_oidc_util_rand_bytes returned an error");
 		return FALSE;
 	}
-
-	if (to_hex) {
-		*str = oidc_util_hex_encode(r, bytes, byte_len);
-	} else {
-		if (oidc_util_base64url_encode(r, str, (const char *)bytes, byte_len, TRUE) <= 0) {
-			oidc_error(r, "oidc_base64url_encode returned an error");
-			return FALSE;
-		}
+	if (oidc_util_base64url_encode(r, str, (const char *)bytes, len, TRUE) <= 0) {
+		oidc_error(r, "oidc_base64url_encode returned an error");
+		return FALSE;
 	}
 	return TRUE;
+}
+
+/*
+ * generate a random string of (lowercase) hexadecimal characters, representing len bytes
+ */
+char *oidc_util_rand_hex_str(request_rec *r, int len) {
+	unsigned char *bytes = apr_pcalloc(r->pool, len);
+	if (_oidc_util_rand_bytes(r, bytes, len) != TRUE) {
+		oidc_error(r, "_oidc_util_rand_bytes returned an error");
+		return NULL;
+	}
+	return oidc_util_hex_encode(r, bytes, len);
 }

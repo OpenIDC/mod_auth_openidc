@@ -314,7 +314,7 @@ START_TEST(test_util_file) {
 	apr_temp_dir_get(&dir, r->pool);
 	path = apr_psprintf(r->pool, "%s/test.tmp", dir);
 
-	oidc_util_rand_str(r, &text, 32, FALSE);
+	oidc_util_rand_str(r, &text, 32);
 	// write directory instead of file
 	rc = oidc_util_file_write(r, dir, text);
 	ck_assert_msg(rc == FALSE, "oidc_util_file_write returned TRUE");

@@ -101,11 +101,13 @@ static apr_byte_t oidc_session_decode(request_rec *r, oidc_cfg_t *c, oidc_sessio
 	return oidc_util_json_decode_object(r, s_payload, &z->state);
 }
 
+#define OIDC_SESSION_ID_LEN 20
+
 /*
  * generate a unique identifier for a session
  */
 void oidc_session_id_new(request_rec *r, oidc_session_t *z) {
-	oidc_util_rand_str(r, &z->uuid, 20, TRUE);
+	z->uuid = oidc_util_rand_hex_str(r, OIDC_SESSION_ID_LEN);
 }
 
 /*

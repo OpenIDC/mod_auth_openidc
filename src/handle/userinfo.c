@@ -263,7 +263,6 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg_t *cf
 	oidc_jwk_t *jwk = NULL;
 	oidc_jose_error_t err;
 	apr_time_t access_token_expires = -1;
-	char *jti = NULL;
 	char *key = NULL;
 	json_t *json = NULL;
 	int ttl = 0;
@@ -303,8 +302,7 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg_t *cf
 	}
 
 	if (json_object_get(jwt->payload.value.json, OIDC_CLAIM_JTI) == NULL) {
-		oidc_util_rand_str(r, &jti, OIDC_PROTO_JWT_JTI_LEN, FALSE);
-		json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_JTI, json_string(jti));
+		json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_JTI, json_string(oidc_proto_jti_gen(r)));
 	}
 	if (json_object_get(jwt->payload.value.json, OIDC_CLAIM_IAT) == NULL) {
 		json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_IAT,
