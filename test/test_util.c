@@ -607,6 +607,30 @@ START_TEST(test_util_key) {
 }
 END_TEST
 
+START_TEST(test_util_random) {
+	request_rec *r = oidc_test_request_get();
+	unsigned int v;
+	char *s = NULL;
+
+	v = oidc_util_rand_int(10);
+	ck_assert_msg((v >= 0) && (v < 10), "value out of range");
+	v = oidc_util_rand_int(3);
+	ck_assert_msg((v >= 0) && (v < 3), "value out of range");
+
+	ck_assert_msg(oidc_util_rand_str(r, &s, 8) == TRUE, "oidc_util_rand_str returned FALSE");
+	ck_assert_int_eq(_oidc_strlen(s), 11);
+	ck_assert_msg(oidc_util_rand_str(r, &s, 12) == TRUE, "oidc_util_rand_str returned FALSE");
+	ck_assert_int_eq(_oidc_strlen(s), 16);
+
+	s = oidc_util_rand_hex_str(r, 8);
+	ck_assert_ptr_nonnull(s);
+	ck_assert_int_eq(_oidc_strlen(s), 16);
+	s = oidc_util_rand_hex_str(r, 16);
+	ck_assert_ptr_nonnull(s);
+	ck_assert_int_eq(_oidc_strlen(s), 32);
+}
+END_TEST
+
 int main(void) {
 	TCase *c = NULL;
 	Suite *s = suite_create("util");
@@ -662,6 +686,11 @@ int main(void) {
 	c = tcase_create("key");
 	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(c, test_util_key);
+	suite_add_tcase(s, c);
+
+	c = tcase_create("random");
+	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(c, test_util_random);
 	suite_add_tcase(s, c);
 
 	return oidc_test_suite_run(s);
