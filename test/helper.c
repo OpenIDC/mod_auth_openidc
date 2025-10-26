@@ -78,7 +78,7 @@ static request_rec *oidc_test_request_init(apr_pool_t *pool) {
 
 	apr_pool_userdata_set("https", "scheme", NULL, request->pool);
 	request->server->server_hostname = "www.example.com";
-	request->connection->local_addr->port = 443;
+	request->connection->local_addr->port = 4433;
 	request->unparsed_uri = "/bla?foo=bar&param1=value1";
 	request->args = "foo=bar&param1=value1";
 	apr_uri_parse(request->pool, "https://www.example.com/bla?foo=bar&param1=value1", &request->parsed_uri);

@@ -631,6 +631,128 @@ START_TEST(test_util_random) {
 }
 END_TEST
 
+START_TEST(test_util_url) {
+	request_rec *r = oidc_test_request_get();
+
+	r->uri = "/test";
+	r->unparsed_uri = apr_pstrcat(r->pool, r->uri, "?", r->args, NULL);
+
+	ck_assert_str_eq(oidc_util_url_cur_host(r, OIDC_HDR_NONE), "www.example.com");
+
+	ck_assert_str_eq(oidc_util_url_cur(r, OIDC_HDR_NONE), "https://www.example.com/test?foo=bar&param1=value1");
+	apr_table_set(r->headers_in, "X-Forwarded-Host", "www.outer.com");
+	ck_assert_str_eq(oidc_util_url_cur(r, OIDC_HDR_NONE), "https://www.example.com/test?foo=bar&param1=value1");
+	ck_assert_str_eq(oidc_util_url_cur(r, OIDC_HDR_X_FORWARDED_HOST),
+			 "https://www.outer.com/test?foo=bar&param1=value1");
+	apr_table_set(r->headers_in, "X-Forwarded-Host", "www.outer.com:654");
+	ck_assert_str_eq(oidc_util_url_cur(r, OIDC_HDR_X_FORWARDED_HOST),
+			 "https://www.outer.com:654/test?foo=bar&param1=value1");
+
+	apr_table_set(r->headers_in, "X-Forwarded-Port", "321");
+	ck_assert_str_eq(oidc_util_url_cur(r, OIDC_HDR_NONE), "https://www.example.com/test?foo=bar&param1=value1");
+	ck_assert_str_eq(oidc_util_url_cur(r, OIDC_HDR_X_FORWARDED_HOST),
+			 "https://www.outer.com:654/test?foo=bar&param1=value1");
+	ck_assert_str_eq(oidc_util_url_cur(r, OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT),
+			 "https://www.outer.com:321/test?foo=bar&param1=value1");
+
+	apr_table_set(r->headers_in, "X-Forwarded-Proto", "http");
+	ck_assert_str_eq(oidc_util_url_cur(r, OIDC_HDR_NONE), "https://www.example.com/test?foo=bar&param1=value1");
+	ck_assert_str_eq(oidc_util_url_cur(r, OIDC_HDR_X_FORWARDED_HOST),
+			 "https://www.outer.com:654/test?foo=bar&param1=value1");
+	ck_assert_str_eq(oidc_util_url_cur(r, OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT),
+			 "https://www.outer.com:321/test?foo=bar&param1=value1");
+	ck_assert_str_eq(
+	    oidc_util_url_cur(r, OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT | OIDC_HDR_X_FORWARDED_PROTO),
+	    "http://www.outer.com:321/test?foo=bar&param1=value1");
+
+	apr_table_set(r->headers_in, "X-Forwarded-Proto", "https , http");
+	ck_assert_str_eq(
+	    oidc_util_url_cur(r, OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT | OIDC_HDR_X_FORWARDED_PROTO),
+	    "https://www.outer.com:321/test?foo=bar&param1=value1");
+
+	apr_table_set(r->headers_in, "X-Forwarded-Proto", "hxxx");
+	ck_assert_str_eq(
+	    oidc_util_url_cur(r, OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT | OIDC_HDR_X_FORWARDED_PROTO),
+	    "https://www.outer.com:321/test?foo=bar&param1=value1");
+
+	apr_table_unset(r->headers_in, "X-Forwarded-Host");
+	apr_table_unset(r->headers_in, "X-Forwarded-Port");
+	ck_assert_str_eq(oidc_util_url_cur(r, OIDC_HDR_X_FORWARDED_PROTO),
+			 "https://www.example.com/test?foo=bar&param1=value1");
+
+	apr_table_set(r->headers_in, "X-Forwarded-Proto", "http ");
+	apr_table_set(r->headers_in, "Host", "remotehost");
+	ck_assert_str_eq(oidc_util_url_cur(r, OIDC_HDR_X_FORWARDED_PROTO),
+			 "http://remotehost/test?foo=bar&param1=value1");
+
+	apr_table_set(r->headers_in, "Host", "remotehost:8380");
+	r->uri = "http://remotehost:8380/private/";
+	ck_assert_str_eq(oidc_util_url_cur(r, OIDC_HDR_X_FORWARDED_PROTO),
+			 "http://remotehost:8380/private/?foo=bar&param1=value1");
+
+	apr_table_set(r->headers_in, "Host", "[fd04:41b1:1170:28:16b0:446b:9fb7:7118]:8380");
+	ck_assert_str_eq(oidc_util_url_cur(r, OIDC_HDR_X_FORWARDED_PROTO),
+			 "http://[fd04:41b1:1170:28:16b0:446b:9fb7:7118]:8380/private/?foo=bar&param1=value1");
+
+	apr_table_set(r->headers_in, "Host", "[fd04:41b1:1170:28:16b0:446b:9fb7:7118]");
+	ck_assert_str_eq(oidc_util_url_cur(r, OIDC_HDR_X_FORWARDED_PROTO),
+			 "http://[fd04:41b1:1170:28:16b0:446b:9fb7:7118]/private/?foo=bar&param1=value1");
+
+	apr_table_unset(r->headers_in, "X-Forwarded-Proto");
+	apr_table_unset(r->headers_in, "Host");
+
+	apr_table_set(r->headers_in, "Forwarded", "host=www.outer.com");
+	ck_assert_str_eq(oidc_util_url_cur(r, OIDC_HDR_FORWARDED),
+			 "https://www.outer.com/private/?foo=bar&param1=value1");
+
+	apr_table_set(r->headers_in, "Forwarded", "proto=http");
+	ck_assert_str_eq(oidc_util_url_cur(r, OIDC_HDR_FORWARDED),
+			 "http://www.example.com/private/?foo=bar&param1=value1");
+
+	apr_table_set(r->headers_in, "Forwarded", "host=www.outer.com:8443");
+	ck_assert_str_eq(oidc_util_url_cur(r, OIDC_HDR_FORWARDED),
+			 "https://www.outer.com:8443/private/?foo=bar&param1=value1");
+
+	apr_table_set(r->headers_in, "Forwarded", "proto=http; host=www.outer.com:8080");
+	ck_assert_str_eq(oidc_util_url_cur(r, OIDC_HDR_FORWARDED),
+			 "http://www.outer.com:8080/private/?foo=bar&param1=value1");
+
+	apr_table_set(r->headers_in, "Forwarded", "host=www.outer.com:8080; proto=http");
+	ck_assert_str_eq(oidc_util_url_cur(r, OIDC_HDR_FORWARDED),
+			 "http://www.outer.com:8080/private/?foo=bar&param1=value1");
+
+	apr_table_unset(r->headers_in, "Forwarded");
+	// it should not crash when Forwarded is not present
+	ck_assert_str_eq(oidc_util_url_cur(r, OIDC_HDR_FORWARDED),
+			 "https://www.example.com:4433/private/?foo=bar&param1=value1");
+	apr_table_set(r->headers_in, "Host", "www.example.com");
+
+	r->uri = "http://[2001:65333322223616";
+	// TODO: shouldn't we either add "/" or not concatenate?
+	ck_assert_str_eq(oidc_util_url_cur(r, OIDC_HDR_NONE), "https://www.example.comhttp://[2001:65333322223616");
+}
+END_TEST
+
+START_TEST(test_util_url_abs) {
+	request_rec *r = oidc_test_request_get();
+	ck_assert_ptr_null(oidc_util_url_abs(r, oidc_test_cfg_get(), NULL));
+	ck_assert_str_eq(oidc_util_url_abs(r, oidc_test_cfg_get(), "https://www.example.com"),
+			 "https://www.example.com");
+	ck_assert_str_eq(oidc_util_url_abs(r, oidc_test_cfg_get(), "/mytest"), "https://www.example.com/mytest");
+}
+END_TEST
+
+START_TEST(test_util_url_matches) {
+	request_rec *r = oidc_test_request_get();
+	ck_assert_msg(oidc_util_url_cur_matches(r, NULL) == FALSE, "match");
+	ck_assert_msg(oidc_util_url_cur_matches(r, "sss//www.example.com/bla") == FALSE, "match");
+	ck_assert_msg(oidc_util_url_cur_matches(r, "https://www.example.com/bla") == TRUE, "no match");
+	ck_assert_msg(oidc_util_url_cur_matches(r, "https://www.example.com/bla2") == FALSE, "match");
+	r->parsed_uri.path = NULL;
+	ck_assert_msg(oidc_util_url_cur_matches(r, "https://www.example.com/bla2") == FALSE, "match");
+}
+END_TEST
+
 int main(void) {
 	TCase *c = NULL;
 	Suite *s = suite_create("util");
@@ -691,6 +813,13 @@ int main(void) {
 	c = tcase_create("random");
 	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(c, test_util_random);
+	suite_add_tcase(s, c);
+
+	c = tcase_create("url");
+	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(c, test_util_url);
+	tcase_add_test(c, test_util_url_abs);
+	tcase_add_test(c, test_util_url_matches);
 	suite_add_tcase(s, c);
 
 	return oidc_test_suite_run(s);
