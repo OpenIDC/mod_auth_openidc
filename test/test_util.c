@@ -753,6 +753,93 @@ START_TEST(test_util_url_matches) {
 }
 END_TEST
 
+START_TEST(test_util_strenv_and_casestr) {
+	int d = 0;
+
+	d = oidc_util_strnenvcmp("a.b", "A_B", -1);
+	ck_assert_msg(d == 0, "oidc_util_strnenvcmp did not treat a.b == A_B");
+
+	d = oidc_util_strnenvcmp("abc", "abd", -1);
+	ck_assert_msg(d < 0, "oidc_util_strnenvcmp expected abc < abd");
+
+	const char *p = oidc_util_strcasestr("Hello World", "world");
+	ck_assert_ptr_nonnull(p);
+	ck_assert_ptr_null(oidc_util_strcasestr("abcdef", "xyz"));
+}
+END_TEST
+
+START_TEST(test_util_spaced_string_helpers) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	apr_hash_t *ht = NULL;
+
+	ht = oidc_util_spaced_string_to_hashtable(pool, "one two three");
+	ck_assert_ptr_nonnull(ht);
+	ck_assert_int_eq(apr_hash_count(ht), 3);
+
+	ck_assert_msg(oidc_util_spaced_string_contains(pool, "one two three", "two") == TRUE,
+		      "expected contains to return TRUE");
+	ck_assert_msg(oidc_util_spaced_string_contains(pool, NULL, "two") == FALSE,
+		      "expected contains with NULL str to return FALSE");
+
+	ck_assert_msg(oidc_util_spaced_string_equals(pool, "a b c", "c a b") == TRUE,
+		      "expected spaced_string_equals to treat different order as equal");
+	ck_assert_msg(oidc_util_spaced_string_equals(pool, "a b c", "a b") == FALSE,
+		      "expected spaced_string_equals to detect different counts");
+}
+END_TEST
+
+START_TEST(test_util_hex_and_hash) {
+	request_rec *r = oidc_test_request_get();
+	const unsigned char bytes[] = {0xAB, 0x01};
+	char *hex = NULL;
+	char *out = NULL;
+
+	hex = oidc_util_hex_encode(r, bytes, 2);
+	ck_assert_ptr_nonnull(hex);
+	ck_assert_str_eq(hex, "ab01");
+
+	ck_assert_msg(oidc_util_hash_string_and_base64url_encode(r, "SHA256", "test", &out) == TRUE,
+		      "oidc_util_hash_string_and_base64url_encode failed");
+	ck_assert_ptr_nonnull(out);
+}
+END_TEST
+
+START_TEST(test_util_cookie_domain_and_issuer) {
+	ck_assert_msg(oidc_util_cookie_domain_valid("www.example.com", ".example.com") == TRUE,
+		      "expected cookie domain .example.com to be valid for www.example.com");
+	ck_assert_msg(oidc_util_cookie_domain_valid("www.example.com", "example.org") == FALSE,
+		      "expected cookie domain example.org to be invalid for www.example.com");
+
+	ck_assert_msg(oidc_util_issuer_match("https://id.example.com", "https://id.example.com/") == TRUE,
+		      "expected issuer match to ignore trailing slash");
+	ck_assert_msg(oidc_util_issuer_match("https://id.example.com", "https://other.example.com") == FALSE,
+		      "expected different issuers not to match");
+}
+END_TEST
+
+START_TEST(test_util_table_and_hash_clear_and_openssl) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	apr_table_t *t = apr_table_make(pool, 4);
+	apr_hash_t *ht = apr_hash_make(pool);
+
+	oidc_util_table_add_query_encoded_params(pool, t, "a=1&b=two%20words&c=3");
+	ck_assert_str_eq(apr_table_get(t, "a"), "1");
+	// because ap_unesacpe_url doe snot decode anything in the stub.c
+	ck_assert_str_eq(apr_table_get(t, "b"), "two%20words");
+	ck_assert_str_eq(apr_table_get(t, "c"), "3");
+
+	apr_hash_set(ht, "k1", APR_HASH_KEY_STRING, "v1");
+	apr_hash_set(ht, "k2", APR_HASH_KEY_STRING, "v2");
+	ck_assert_int_eq(apr_hash_count(ht), 2);
+	oidc_util_apr_hash_clear(ht);
+	ck_assert_int_eq(apr_hash_count(ht), 0);
+
+	char *v = oidc_util_openssl_version(pool);
+	ck_assert_ptr_nonnull(v);
+	ck_assert_int_gt(_oidc_strlen(v), 0);
+}
+END_TEST
+
 int main(void) {
 	TCase *c = NULL;
 	Suite *s = suite_create("util");
@@ -820,6 +907,15 @@ int main(void) {
 	tcase_add_test(c, test_util_url);
 	tcase_add_test(c, test_util_url_abs);
 	tcase_add_test(c, test_util_url_matches);
+	suite_add_tcase(s, c);
+
+	c = tcase_create("util");
+	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(c, test_util_strenv_and_casestr);
+	tcase_add_test(c, test_util_spaced_string_helpers);
+	tcase_add_test(c, test_util_hex_and_hash);
+	tcase_add_test(c, test_util_cookie_domain_and_issuer);
+	tcase_add_test(c, test_util_table_and_hash_clear_and_openssl);
 	suite_add_tcase(s, c);
 
 	return oidc_test_suite_run(s);
