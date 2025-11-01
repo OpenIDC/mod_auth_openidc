@@ -840,6 +840,91 @@ START_TEST(test_util_table_and_hash_clear_and_openssl) {
 }
 END_TEST
 
+START_TEST(test_util_read_form_encoded_params) {
+	request_rec *r = oidc_test_request_get();
+	apr_table_t *t = apr_table_make(r->pool, 4);
+
+	char *form = "a=1&b=two%20words&c=3";
+	ck_assert_msg(oidc_util_read_form_encoded_params(r, t, form) == TRUE,
+		      "oidc_util_read_form_encoded_params returned FALSE");
+
+	ck_assert_str_eq(apr_table_get(t, "a"), "1");
+	ck_assert_str_eq(apr_table_get(t, "b"), "two words");
+	ck_assert_str_eq(apr_table_get(t, "c"), "3");
+}
+END_TEST
+
+START_TEST(test_util_read_post_params_wrong_content_type) {
+	request_rec *r = oidc_test_request_get();
+	apr_table_t *t = apr_table_make(r->pool, 2);
+
+	r->method_number = M_GET;
+	apr_table_set(r->headers_in, "Content-Type", "application/x-www-form-urlencoded");
+	ck_assert_msg(oidc_util_read_post_params(r, t, FALSE, NULL) == FALSE,
+		      "oidc_util_read_post_params should return FALSE for non-POST method");
+
+	r->method_number = M_POST;
+	apr_table_set(r->headers_in, "Content-Type", "application/json");
+	ck_assert_msg(oidc_util_read_post_params(r, t, FALSE, NULL) == FALSE,
+		      "oidc_util_read_post_params should return FALSE for wrong content-type");
+}
+END_TEST
+
+START_TEST(test_util_read_post_params_oversized) {
+	request_rec *r = oidc_test_request_get();
+	apr_table_t *t = apr_table_make(r->pool, 2);
+
+	r->method_number = M_POST;
+	apr_table_set(r->headers_in, "Content-Type", "application/x-www-form-urlencoded");
+
+	r->remaining = (apr_size_t)(1024 * 1024 + 1);
+
+	ck_assert_msg(oidc_util_read_post_params(r, t, FALSE, NULL) == FALSE,
+		      "oidc_util_read_post_params should return FALSE for oversized POST body");
+}
+END_TEST
+
+START_TEST(test_util_read_post_params) {
+	request_rec *r = oidc_test_request_get();
+	apr_table_t *t = apr_table_make(r->pool, 4);
+
+	r->method_number = M_POST;
+	apr_table_set(r->headers_in, "Content-Type", "application/x-www-form-urlencoded");
+	const char *form = "a=1&b=2";
+	r->remaining = (apr_size_t)_oidc_strlen(form);
+	r->args = apr_pstrdup(r->pool, form);
+
+	apr_byte_t rc = oidc_util_read_post_params(r, t, FALSE, NULL);
+	ck_assert_msg(rc == TRUE, "oidc_util_read_post_params returned FALSE when propagate==FALSE");
+
+	apr_table_t *userdata_post_params = NULL;
+	apr_pool_userdata_get((void **)&userdata_post_params, OIDC_USERDATA_POST_PARAMS_KEY, r->pool);
+	ck_assert_ptr_null(userdata_post_params);
+
+	rc = oidc_util_read_post_params(r, t, TRUE, NULL);
+	ck_assert_msg(rc == TRUE, "oidc_util_read_post_params returned FALSE when propagate==TRUE");
+}
+END_TEST
+
+START_TEST(test_util_set_trace_parent_flags) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	oidc_cmd_trace_parent_set(oidc_test_cmd_get(OIDCTraceParent), NULL, "generate");
+	oidc_cmd_metrics_hook_data_set(oidc_test_cmd_get(OIDCMetricsData), NULL, "authn");
+
+	oidc_request_state_set(r, OIDC_REQUEST_STATE_TRACE_ID, NULL);
+	oidc_util_set_trace_parent(r, c, NULL);
+
+	const char *tp = apr_table_get(r->headers_in, OIDC_HTTP_HDR_TRACE_PARENT);
+	ck_assert_ptr_nonnull(tp);
+	int len = _oidc_strlen(tp);
+	ck_assert_msg(len >= 2, "traceparent header too short");
+	ck_assert_msg(_oidc_strncmp(&tp[len - 2], "01", 2) == 0,
+		      "traceparent flags byte is not 01 when metrics hook is set");
+}
+END_TEST
+
 int main(void) {
 	TCase *c = NULL;
 	Suite *s = suite_create("util");
@@ -912,9 +997,14 @@ int main(void) {
 	c = tcase_create("util");
 	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(c, test_util_strenv_and_casestr);
+	tcase_add_test(c, test_util_read_form_encoded_params);
+	tcase_add_test(c, test_util_read_post_params_wrong_content_type);
+	tcase_add_test(c, test_util_read_post_params_oversized);
+	tcase_add_test(c, test_util_read_post_params);
 	tcase_add_test(c, test_util_spaced_string_helpers);
 	tcase_add_test(c, test_util_hex_and_hash);
 	tcase_add_test(c, test_util_cookie_domain_and_issuer);
+	tcase_add_test(c, test_util_set_trace_parent_flags);
 	tcase_add_test(c, test_util_table_and_hash_clear_and_openssl);
 	suite_add_tcase(s, c);
 

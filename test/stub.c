@@ -288,7 +288,7 @@ AP_DECLARE(int) ap_setup_client_block(request_rec *r, int read_policy) {
 }
 
 AP_DECLARE(int) ap_should_client_block(request_rec *r) {
-	return 0;
+	return 1;
 }
 
 AP_DECLARE(int) ap_unescape_url(char *url) {
