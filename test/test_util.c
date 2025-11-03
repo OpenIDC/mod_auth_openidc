@@ -613,9 +613,9 @@ START_TEST(test_util_random) {
 	char *s = NULL;
 
 	v = oidc_util_rand_int(10);
-	ck_assert_msg((v >= 0) && (v < 10), "value out of range");
+	ck_assert_msg((v < 10), "value out of range");
 	v = oidc_util_rand_int(3);
-	ck_assert_msg((v >= 0) && (v < 3), "value out of range");
+	ck_assert_msg((v < 3), "value out of range");
 
 	ck_assert_msg(oidc_util_rand_str(r, &s, 8) == TRUE, "oidc_util_rand_str returned FALSE");
 	ck_assert_int_eq(_oidc_strlen(s), 11);
