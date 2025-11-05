@@ -134,6 +134,8 @@ apr_byte_t oidc_jose_hash_and_base64url_encode(apr_pool_t *pool, const char *ope
 /* return a string claim value from a JSON object */
 apr_byte_t oidc_jose_get_string(apr_pool_t *pool, json_t *json, const char *claim_name, apr_byte_t is_mandatory,
 				char **result, oidc_jose_error_t *err);
+apr_byte_t oidc_jose_get_timestamp(apr_pool_t *pool, json_t *json, const char *claim_name, apr_byte_t is_mandatory,
+				   double *result, oidc_jose_error_t *err);
 
 apr_byte_t oidc_jose_compress(apr_pool_t *pool, const char *input, int input_len, char **output, int *output_len,
 			      oidc_jose_error_t *err);

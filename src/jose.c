@@ -775,8 +775,8 @@ apr_byte_t oidc_jose_get_string(apr_pool_t *pool, json_t *json, const char *clai
 /*
  * parse (optional) timestamp from payload
  */
-static apr_byte_t oidc_jose_get_timestamp(apr_pool_t *pool, json_t *json, const char *claim_name,
-					  apr_byte_t is_mandatory, double *result, oidc_jose_error_t *err) {
+apr_byte_t oidc_jose_get_timestamp(apr_pool_t *pool, json_t *json, const char *claim_name, apr_byte_t is_mandatory,
+				   double *result, oidc_jose_error_t *err) {
 	*result = OIDC_JWT_CLAIM_TIME_EMPTY;
 	json_t *v = json_object_get(json, claim_name);
 	if (v != NULL) {
