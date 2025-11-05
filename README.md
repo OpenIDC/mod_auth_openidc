@@ -106,7 +106,9 @@ For questions, issues and suggestions use the Github Discussions forum at:
   [https://github.com/OpenIDC/mod_auth_openidc/discussions](https://github.com/OpenIDC/mod_auth_openidc/discussions)
 
 #### Commercial
-For commercial - subscription based - support and licensing please contact:  
+Licensed builds with support for Redis/Valkey over TLS, Redis Sentinel/Cluster as well as binary packages for Microsoft Windows, EOL Red Hat, Ubuntu and Debian releases, Oracle HTTP Server and IBM HTTP Server are available under a commercial agreement.
+
+For inquiries about commercial - subscription based - support and licensing please contact:  
   [sales@openidc.com](mailto:sales@openidc.com)  
 
 Disclaimer
