@@ -189,6 +189,7 @@ START_TEST(test_jose_jwk_and_json_and_copy_lists) {
 	char *s_json = NULL;
 	ck_assert_msg(oidc_jwk_to_json(pool, pub, &s_json, &err) == TRUE, "oidc_jwk_to_json failed");
 	ck_assert_ptr_nonnull(s_json);
+	oidc_jwk_destroy(pub);
 	json_error_t je;
 	json_t *j = json_loads(s_json, 0, &je);
 	ck_assert_ptr_nonnull(j);
@@ -206,16 +207,21 @@ START_TEST(test_jose_jwk_and_json_and_copy_lists) {
 	oidc_jwk_t *sym_copy = oidc_jwk_copy(pool, sym);
 	ck_assert_ptr_nonnull(sym_copy);
 	ck_assert_ptr_nonnull(sym_copy->kid);
+	oidc_jwk_destroy(sym_copy);
 
 	apr_array_header_t *arr = apr_array_make(pool, 1, sizeof(const oidc_jwk_t *));
 	APR_ARRAY_PUSH(arr, const oidc_jwk_t *) = sym;
 	apr_array_header_t *arr_copy = oidc_jwk_list_copy(pool, arr);
 	ck_assert_msg(arr_copy != NULL && arr_copy->nelts == 1, "oidc_jwk_list_copy failed");
+	oidc_jwk_list_destroy(arr_copy);
 
 	apr_hash_t *h = apr_hash_make(pool);
 	apr_hash_set(h, sym->kid, APR_HASH_KEY_STRING, sym);
 	oidc_jwk_list_destroy_hash(h);
 	ck_assert_int_eq(apr_hash_count(h), 0);
+
+	oidc_jwk_list_destroy(arr);
+	ck_assert_int_eq(arr->nelts, 0);
 }
 END_TEST
 
@@ -252,11 +258,15 @@ START_TEST(test_jwt_sign_verify_and_encrypt_decrypt) {
 	apr_hash_set(keys, sym->kid, APR_HASH_KEY_STRING, sym);
 	ck_assert_msg(oidc_jwt_verify(pool, jwt, keys, &err) == TRUE, "oidc_jwt_verify failed");
 
+	oidc_jwk_destroy(sym);
+	oidc_jwt_destroy(jwt);
+
 	oidc_jwt_t *none_jwt = oidc_jwt_new(pool, 1, 1);
 	json_object_set_new(none_jwt->payload.value.json, "hello", json_string("world"));
 	none_jwt->header.alg = apr_pstrdup(pool, CJOSE_HDR_ALG_NONE);
 	char *s = oidc_jose_jwt_serialize(pool, none_jwt, &err);
 	ck_assert_ptr_nonnull(s);
+	oidc_jwt_destroy(none_jwt);
 
 	char *dot = strchr(s, '.');
 	ck_assert_ptr_nonnull(dot);
@@ -311,6 +321,8 @@ START_TEST(test_jwt_sign_verify_and_encrypt_decrypt) {
 	ck_assert_msg(oidc_jwt_encrypt(pool, jwe, pub, payload, (int)_oidc_strlen(payload), &serialized, &err) == TRUE,
 		      "oidc_jwt_encrypt failed");
 	ck_assert_ptr_nonnull(serialized);
+	oidc_jwk_destroy(pub);
+	oidc_jwt_destroy(jwe);
 
 	apr_hash_t *dec_keys = apr_hash_make(pool);
 	apr_hash_set(dec_keys, priv->kid, APR_HASH_KEY_STRING, priv);
@@ -320,6 +332,8 @@ START_TEST(test_jwt_sign_verify_and_encrypt_decrypt) {
 		      "oidc_jwe_decrypt failed");
 	ck_assert_msg(dec_plain_len == (int)_oidc_strlen(payload), "decrypted length mismatch");
 	ck_assert_msg(memcmp(dec_plain, payload, dec_plain_len) == 0, "decrypted plaintext mismatch");
+
+	oidc_jwk_list_destroy_hash(dec_keys);
 }
 END_TEST
 
@@ -358,6 +372,7 @@ START_TEST(test_jwk_json_parse_and_jwks) {
 
 	char *s_json = NULL;
 	ck_assert_msg(oidc_jwk_to_json(pool, pub, &s_json, &err) == TRUE, "oidc_jwk_to_json failed");
+	oidc_jwk_destroy(pub);
 	json_error_t je;
 	json_t *j = json_loads(s_json, 0, &je);
 	ck_assert_ptr_nonnull(j);
@@ -365,6 +380,7 @@ START_TEST(test_jwk_json_parse_and_jwks) {
 	oidc_jwk_t *parsed = oidc_jwk_parse(pool, j, &err);
 	ck_assert_ptr_nonnull(parsed);
 	ck_assert_ptr_nonnull(parsed->kid);
+	oidc_jwk_destroy(parsed);
 
 	ck_assert_msg(oidc_is_jwk(j) == TRUE, "oidc_is_jwk false for JWK json");
 
@@ -379,6 +395,7 @@ START_TEST(test_jwk_json_parse_and_jwks) {
 
 	json_decref(j);
 	json_decref(jwks);
+	oidc_jwk_list_destroy(jwk_list);
 }
 END_TEST
 
@@ -418,15 +435,20 @@ START_TEST(test_alg2keysize_and_hdr_get_and_jwt_parse) {
 	char *s = oidc_jose_jwt_serialize(pool, jwt, &err);
 	ck_assert_ptr_nonnull(s);
 
+	oidc_jwt_destroy(jwt);
+
 	apr_hash_t *keys = apr_hash_make(pool);
 	apr_hash_set(keys, sym->kid, APR_HASH_KEY_STRING, sym);
 	oidc_jwt_t *parsed = NULL;
 	ck_assert_msg(oidc_jwt_parse(pool, s, &parsed, keys, FALSE, &err) == TRUE, "oidc_jwt_parse failed");
 	ck_assert_ptr_nonnull(parsed);
 
+	oidc_jwk_destroy(sym);
+
 	const char *alg = oidc_jwt_hdr_get(parsed, "alg");
 	ck_assert_ptr_nonnull(alg);
 	ck_assert_msg(_oidc_strcmp(alg, CJOSE_HDR_ALG_HS256) == 0, "parsed alg mismatch");
+	oidc_jwt_destroy(parsed);
 }
 END_TEST
 
