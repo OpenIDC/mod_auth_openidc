@@ -310,7 +310,7 @@ const char *oidc_original_request_method(request_rec *r, oidc_cfg_t *cfg, apr_by
 	const char *method = OIDC_METHOD_GET;
 
 	char *m = NULL;
-	if ((handle_discovery_response == TRUE) && (oidc_util_url_cur_matches(r, oidc_util_url_redirect_uri(r, cfg))) &&
+	if ((handle_discovery_response == TRUE) && (oidc_util_url_matches_redirect_uri(r, cfg)) &&
 	    (oidc_is_discovery_response(r, cfg))) {
 		oidc_util_url_parameter_get(r, OIDC_DISC_RM_PARAM, &m);
 		if (m != NULL)
@@ -1249,7 +1249,7 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg_t *c) {
 	oidc_session_load(r, &session);
 
 	/* see if the initial request is to the redirect URI; this handles potential logout too */
-	if (oidc_util_url_cur_matches(r, oidc_util_url_redirect_uri(r, c))) {
+	if (oidc_util_url_matches_redirect_uri(r, c) == TRUE) {
 
 		/* handle request to the redirect_uri */
 		rc = oidc_handle_redirect_uri_request(r, c, session);
@@ -1330,7 +1330,7 @@ static int oidc_check_mixed_userid_oauth(request_rec *r, oidc_cfg_t *c) {
 
 int oidc_fixups(request_rec *r) {
 	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
-	if (oidc_enabled(r) == TRUE) {
+	if (oidc_enabled(r, c) == TRUE) {
 		OIDC_METRICS_TIMING_REQUEST_ADD(r, c, OM_MOD_AUTH_OPENIDC);
 		return OK;
 	}
@@ -1351,7 +1351,7 @@ int oidc_check_user_id(request_rec *r) {
 	oidc_debug(r, "incoming request: \"%s?%s\", ap_is_initial_req(r)=%d", r->parsed_uri.path, r->args,
 		   ap_is_initial_req(r));
 
-	if (oidc_enabled(r) == FALSE) {
+	if (oidc_enabled(r, c) == FALSE) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHTYPE_DECLINED);
 		return DECLINED;
 	}
@@ -1387,7 +1387,11 @@ int oidc_check_user_id(request_rec *r) {
 /*
  * check of mod_auth_openidc needs to handle this request
  */
-apr_byte_t oidc_enabled(request_rec *r) {
+apr_byte_t oidc_enabled(request_rec *r, oidc_cfg_t *c) {
+
+	//	if (oidc_util_url_matches_redirect_uri(r, c) == TRUE)
+	//		return TRUE;
+
 	if (ap_auth_type(r) == NULL)
 		return FALSE;
 
@@ -1821,7 +1825,9 @@ static const char oidcFilterName[] = "oidc_filter_in_filter";
  */
 static void oidc_filter_in_insert_filter(request_rec *r) {
 
-	if (oidc_enabled(r) == FALSE)
+	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+
+	if (oidc_enabled(r, c) == FALSE)
 		return;
 
 	if (ap_is_initial_req(r) == 0)

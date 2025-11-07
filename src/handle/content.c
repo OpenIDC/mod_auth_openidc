@@ -59,12 +59,12 @@ int oidc_content_handler(request_rec *r) {
 		if (_oidc_strcmp(r->parsed_uri.path, oidc_cfg_metrics_path_get(c)) == 0)
 			return oidc_metrics_handle_request(r);
 
-	if (oidc_enabled(r) == FALSE) {
+	if (oidc_enabled(r, c) == FALSE) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_DECLINED);
 		return DECLINED;
 	}
 
-	if (oidc_util_url_cur_matches(r, oidc_util_url_redirect_uri(r, c)) == TRUE) {
+	if (oidc_util_url_matches_redirect_uri(r, c) == TRUE) {
 
 		/* requests to the redirect URI are handled and finished here */
 		rc = OK;

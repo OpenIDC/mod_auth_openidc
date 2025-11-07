@@ -140,7 +140,7 @@
 
 int oidc_check_user_id(request_rec *r);
 int oidc_fixups(request_rec *r);
-apr_byte_t oidc_enabled(request_rec *r);
+apr_byte_t oidc_enabled(request_rec *r, oidc_cfg_t *c);
 void oidc_request_state_set(request_rec *r, const char *key, const char *value);
 const char *oidc_request_state_get(request_rec *r, const char *key);
 void oidc_scrub_headers(request_rec *r);

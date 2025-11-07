@@ -744,12 +744,17 @@ END_TEST
 
 START_TEST(test_util_url_matches) {
 	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
 	ck_assert_msg(oidc_util_url_cur_matches(r, NULL) == FALSE, "match");
 	ck_assert_msg(oidc_util_url_cur_matches(r, "sss//www.example.com/bla") == FALSE, "match");
 	ck_assert_msg(oidc_util_url_cur_matches(r, "https://www.example.com/bla") == TRUE, "no match");
 	ck_assert_msg(oidc_util_url_cur_matches(r, "https://www.example.com/bla2") == FALSE, "match");
 	r->parsed_uri.path = NULL;
 	ck_assert_msg(oidc_util_url_cur_matches(r, "https://www.example.com/bla2") == FALSE, "match");
+	ck_assert_msg(oidc_util_url_matches_redirect_uri(r, c) == FALSE, "match");
+	apr_uri_parse(r->pool, "https://www.example.com/protected/", &r->parsed_uri);
+	ck_assert_msg(oidc_util_url_matches_redirect_uri(r, c) == TRUE, "no match");
 }
 END_TEST
 
