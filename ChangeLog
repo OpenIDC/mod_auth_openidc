@@ -1,7 +1,9 @@
 11/07/2025
 - support individual SameSite cookie settings on the session cookie, state cookie and Discovery CSRF
   cookie by adding 2 more arguments to OIDCCookieSameSite
-
+- code: avoid compiler warnings on `curl_easy_setopt` in http.c
+  http.c:612:16: warning: call to '_curl_easy_setopt_err_long' declared with attribute warning: curl_easy_setopt expects a long argument [-Wattribute-warning]
+  
 11/05/2025
 - test: add jose.c coverage tests
 

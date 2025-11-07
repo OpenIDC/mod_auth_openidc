@@ -623,8 +623,8 @@ char *oidc_http_form_encoded_data(request_rec *r, const apr_table_t *params) {
 
 #define OIDC_HTTP_CURL_SETOPT_SSL(option, value)                                                                       \
 	if (_oidc_strstr(env_var_value, #value) != NULL) {                                                             \
-		oidc_debug(r, "curl_easy_setopt(%s): %s (%d)", #option, #value, value);                                \
-		OIDC_HTTP_CURL_SETOPT(option, value);                                                                  \
+		oidc_debug(r, "curl_easy_setopt(%s): %s (%ld)", #option, #value, (long)value);                         \
+		OIDC_HTTP_CURL_SETOPT(option, (long)value);                                                            \
 	}
 
 static void oidc_http_set_curl_ssl_options(request_rec *r, CURL *curl) {
