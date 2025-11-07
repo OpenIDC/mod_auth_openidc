@@ -573,7 +573,8 @@ OIDC_CFG_MEMBER_FUNCS_BOOL(cookie_http_only, OIDC_DEFAULT_COOKIE_HTTPONLY)
 /*
  * define which header we use for calculating the fingerprint of the state during authentication
  */
-const char *oidc_cmd_cookie_same_site_set(cmd_parms *cmd, void *m, const char *arg) {
+const char *oidc_cmd_cookie_same_site_session_set(cmd_parms *cmd, void *m, const char *arg1, const char *arg2,
+						  const char *arg3) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
 	// NB: On is made equal to Lax here and Off is equal to None (backwards compatibility)
 	static const oidc_cfg_option_t options[] = {{OIDC_SAMESITE_COOKIE_NONE, OIDC_SAMESITE_COOKIE_OFF_STR},
@@ -582,13 +583,34 @@ const char *oidc_cmd_cookie_same_site_set(cmd_parms *cmd, void *m, const char *a
 						    {OIDC_SAMESITE_COOKIE_NONE, OIDC_SAMESITE_COOKIE_NONE_STR},
 						    {OIDC_SAMESITE_COOKIE_LAX, OIDC_SAMESITE_COOKIE_LAX_STR},
 						    {OIDC_SAMESITE_COOKIE_STRICT, OIDC_SAMESITE_COOKIE_STRICT_STR}};
-	const char *rv = oidc_cfg_parse_option_ignore_case(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg,
-							   &cfg->cookie_same_site);
+	const char *rv = oidc_cfg_parse_option_ignore_case(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg1,
+							   &cfg->cookie_same_site_session);
+	if ((rv == NULL) && (arg2 != NULL)) {
+		static const oidc_cfg_option_t state_options[] = {
+		    {OIDC_SAMESITE_COOKIE_NONE, OIDC_SAMESITE_COOKIE_OFF_STR},
+		    {OIDC_SAMESITE_COOKIE_LAX, OIDC_SAMESITE_COOKIE_ON_STR},
+		    {OIDC_SAMESITE_COOKIE_DISABLED, OIDC_SAMESITE_COOKIE_DISABLED_STR},
+		    {OIDC_SAMESITE_COOKIE_NONE, OIDC_SAMESITE_COOKIE_NONE_STR},
+		    {OIDC_SAMESITE_COOKIE_LAX, OIDC_SAMESITE_COOKIE_LAX_STR}};
+		rv = oidc_cfg_parse_option_ignore_case(cmd->pool, state_options, OIDC_CFG_OPTIONS_SIZE(state_options),
+						       arg2, &cfg->cookie_same_site_state);
+	}
+	if ((rv == NULL) && (arg3 != NULL)) {
+		rv = oidc_cfg_parse_option_ignore_case(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg3,
+						       &cfg->cookie_same_site_discovery_csrf);
+	}
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
 #define OIDC_DEFAULT_COOKIE_SAME_SITE OIDC_SAMESITE_COOKIE_LAX
-OIDC_CFG_MEMBER_FUNC_TYPE_GET(cookie_same_site, oidc_samesite_cookie_t, OIDC_DEFAULT_COOKIE_SAME_SITE)
+OIDC_CFG_MEMBER_FUNC_TYPE_GET(cookie_same_site_session, oidc_samesite_cookie_t, OIDC_DEFAULT_COOKIE_SAME_SITE)
+
+#define OIDC_DEFAULT_COOKIE_SAME_SITE_STATE oidc_cfg_cookie_same_site_session_get(cfg)
+OIDC_CFG_MEMBER_FUNC_TYPE_GET(cookie_same_site_state, oidc_samesite_cookie_t, OIDC_DEFAULT_COOKIE_SAME_SITE_STATE)
+
+#define OIDC_DEFAULT_COOKIE_SAME_SITE_CSRF_DISCOVERY oidc_cfg_cookie_same_site_session_get(cfg)
+OIDC_CFG_MEMBER_FUNC_TYPE_GET(cookie_same_site_discovery_csrf, oidc_samesite_cookie_t,
+			      OIDC_DEFAULT_COOKIE_SAME_SITE_CSRF_DISCOVERY)
 
 #define OIDC_DEFAULT_SESSION_FALLBACK_TO_COOKIE 0
 OIDC_CFG_MEMBER_FUNCS_BOOL(session_cache_fallback_to_cookie, OIDC_DEFAULT_SESSION_FALLBACK_TO_COOKIE)
@@ -710,7 +732,10 @@ void *oidc_cfg_server_create(apr_pool_t *pool, server_rec *svr) {
 	c->remote_user_claim.reg_exp = NULL;
 	c->remote_user_claim.replace = NULL;
 	c->cookie_http_only = OIDC_CONFIG_POS_INT_UNSET;
-	c->cookie_same_site = OIDC_CONFIG_POS_INT_UNSET;
+
+	c->cookie_same_site_session = OIDC_CONFIG_POS_INT_UNSET;
+	c->cookie_same_site_state = OIDC_CONFIG_POS_INT_UNSET;
+	c->cookie_same_site_discovery_csrf = OIDC_CONFIG_POS_INT_UNSET;
 
 	c->outgoing_proxy.host_port = NULL;
 	c->outgoing_proxy.username_password = NULL;
@@ -834,8 +859,16 @@ void *oidc_cfg_server_merge(apr_pool_t *pool, void *BASE, void *ADD) {
 
 	c->cookie_http_only =
 	    add->cookie_http_only != OIDC_CONFIG_POS_INT_UNSET ? add->cookie_http_only : base->cookie_http_only;
-	c->cookie_same_site =
-	    add->cookie_same_site != OIDC_CONFIG_POS_INT_UNSET ? add->cookie_same_site : base->cookie_same_site;
+
+	c->cookie_same_site_session = add->cookie_same_site_session != OIDC_CONFIG_POS_INT_UNSET
+					  ? add->cookie_same_site_session
+					  : base->cookie_same_site_session;
+	c->cookie_same_site_state = add->cookie_same_site_state != OIDC_CONFIG_POS_INT_UNSET
+					? add->cookie_same_site_state
+					: base->cookie_same_site_state;
+	c->cookie_same_site_discovery_csrf = add->cookie_same_site_discovery_csrf != OIDC_CONFIG_POS_INT_UNSET
+						 ? add->cookie_same_site_discovery_csrf
+						 : base->cookie_same_site_discovery_csrf;
 
 	if (add->outgoing_proxy.host_port != NULL) {
 		c->outgoing_proxy.host_port = add->outgoing_proxy.host_port;

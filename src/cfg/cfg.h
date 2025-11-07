@@ -224,7 +224,6 @@ OIDC_CFG_MEMBER_FUNCS_DECL(default_sso_url, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(default_slo_url, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(cookie_domain, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(cookie_http_only, int)
-OIDC_CFG_MEMBER_FUNCS_DECL(cookie_same_site, oidc_samesite_cookie_t)
 OIDC_CFG_MEMBER_FUNCS_DECL(claim_delimiter, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(claim_prefix, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(state_timeout, int)
@@ -254,6 +253,9 @@ OIDC_CFG_MEMBER_FUNCS_DECL(crypto_passphrase, const oidc_crypto_passphrase_t *, 
 OIDC_CFG_MEMBER_FUNCS_DECL(max_number_of_state_cookies, int, const char *)
 
 // 3 args
+OIDC_CFG_MEMBER_FUNCS_DECL(cookie_same_site_session, oidc_samesite_cookie_t, const char *, const char *)
+OIDC_CFG_MEMBER_FUNC_GET_DECL(cookie_same_site_state, oidc_samesite_cookie_t)
+OIDC_CFG_MEMBER_FUNC_GET_DECL(cookie_same_site_discovery_csrf, oidc_samesite_cookie_t)
 OIDC_CFG_MEMBER_FUNCS_DECL(remote_user_claim, const oidc_remote_user_claim_t *, const char *, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(outgoing_proxy, const oidc_http_outgoing_proxy_t *, const char *, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(http_timeout_short, oidc_http_timeout_t *, const char *, const char *)

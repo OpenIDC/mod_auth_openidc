@@ -95,9 +95,9 @@ apr_byte_t oidc_request_check_cookie_domain(request_rec *r, oidc_cfg_t *c, const
 	return TRUE;
 }
 
-static const char *oidc_request_samesite_cookie(request_rec *r, struct oidc_cfg_t *c) {
+static const char *oidc_request_samesite_state_cookie(request_rec *r, struct oidc_cfg_t *c) {
 	const char *rv = NULL;
-	switch (oidc_cfg_cookie_same_site_get(c)) {
+	switch (oidc_cfg_cookie_same_site_state_get(c)) {
 	case OIDC_SAMESITE_COOKIE_STRICT:
 	case OIDC_SAMESITE_COOKIE_LAX:
 		rv = OIDC_HTTP_COOKIE_SAMESITE_LAX;
@@ -146,7 +146,7 @@ static int oidc_request_authorization_set_cookie(request_rec *r, oidc_cfg_t *c, 
 	const char *cookieName = oidc_state_cookie_name(r, state);
 
 	/* set it as a cookie */
-	oidc_http_set_cookie(r, cookieName, cookieValue, -1, oidc_request_samesite_cookie(r, c));
+	oidc_http_set_cookie(r, cookieName, cookieValue, -1, oidc_request_samesite_state_cookie(r, c));
 
 	return OK;
 }

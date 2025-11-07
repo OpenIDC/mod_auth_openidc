@@ -150,7 +150,10 @@ struct oidc_cfg_t {
 	int session_cookie_chunk_size;
 	char *cookie_domain;
 	int cookie_http_only;
-	int cookie_same_site;
+	/* samesite cookie settings */
+	int cookie_same_site_session;
+	int cookie_same_site_state;
+	int cookie_same_site_discovery_csrf;
 
 	int state_timeout;
 	int max_number_of_state_cookies;

@@ -193,9 +193,9 @@ static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 	return rc;
 }
 
-static const char *oidc_session_samesite_cookie(request_rec *r, struct oidc_cfg_t *c, int first_time) {
+static const char *oidc_session_cookie_samesite(request_rec *r, struct oidc_cfg_t *c, int first_time) {
 	const char *rv = NULL;
-	switch (oidc_cfg_cookie_same_site_get(c)) {
+	switch (oidc_cfg_cookie_same_site_session_get(c)) {
 	case OIDC_SAMESITE_COOKIE_STRICT:
 		rv = first_time ? OIDC_HTTP_COOKIE_SAMESITE_LAX : OIDC_HTTP_COOKIE_SAMESITE_STRICT;
 		break;
@@ -238,7 +238,7 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, apr
 			/* set the uuid in the cookie */
 			oidc_http_set_cookie(r, oidc_cfg_dir_cookie_get(r), z->uuid,
 					     oidc_cfg_persistent_session_cookie_get(c) ? z->expiry : -1,
-					     oidc_session_samesite_cookie(r, c, first_time));
+					     oidc_session_cookie_samesite(r, c, first_time));
 
 	} else {
 
@@ -278,7 +278,7 @@ static apr_byte_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z, ap
 	oidc_http_set_chunked_cookie(
 	    r, oidc_cfg_dir_cookie_get(r), cookieValue, oidc_cfg_persistent_session_cookie_get(c) ? z->expiry : -1,
 	    oidc_cfg_session_cookie_chunk_size_get(c),
-	    (z->state == NULL) ? OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r) : oidc_session_samesite_cookie(r, c, first_time));
+	    (z->state == NULL) ? OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r) : oidc_session_cookie_samesite(r, c, first_time));
 
 	return TRUE;
 }

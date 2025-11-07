@@ -103,9 +103,9 @@ const command_rec oidc_cfg_cmds[] = {
 		cookie_http_only,
 		"Defines whether or not the cookie httponly flag is set on cookies."),
 	OIDC_CFG_CMD(
-		AP_INIT_TAKE1,
+		AP_INIT_TAKE123,
 		OIDCCookieSameSite,
-		cookie_same_site,
+		cookie_same_site_session,
 		"Defines whether or not the cookie Same-Site flag is set on cookies."),
 	OIDC_CFG_CMD(
 		AP_INIT_TAKE123,

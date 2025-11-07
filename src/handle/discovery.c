@@ -76,7 +76,7 @@ apr_byte_t oidc_is_discovery_response(request_rec *r, oidc_cfg_t *cfg) {
 
 static const char *oidc_discovery_csrf_cookie_samesite(request_rec *r, oidc_cfg_t *c) {
 	const char *rv = NULL;
-	switch (oidc_cfg_cookie_same_site_get(c)) {
+	switch (oidc_cfg_cookie_same_site_discovery_csrf_get(c)) {
 	case OIDC_SAMESITE_COOKIE_STRICT:
 		rv = OIDC_HTTP_COOKIE_SAMESITE_STRICT;
 		break;
