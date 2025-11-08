@@ -587,8 +587,6 @@ const char *oidc_cmd_cookie_same_site_session_set(cmd_parms *cmd, void *m, const
 							   &cfg->cookie_same_site_session);
 	if ((rv == NULL) && (arg2 != NULL)) {
 		static const oidc_cfg_option_t state_options[] = {
-		    {OIDC_SAMESITE_COOKIE_NONE, OIDC_SAMESITE_COOKIE_OFF_STR},
-		    {OIDC_SAMESITE_COOKIE_LAX, OIDC_SAMESITE_COOKIE_ON_STR},
 		    {OIDC_SAMESITE_COOKIE_DISABLED, OIDC_SAMESITE_COOKIE_DISABLED_STR},
 		    {OIDC_SAMESITE_COOKIE_NONE, OIDC_SAMESITE_COOKIE_NONE_STR},
 		    {OIDC_SAMESITE_COOKIE_LAX, OIDC_SAMESITE_COOKIE_LAX_STR}};
@@ -596,8 +594,13 @@ const char *oidc_cmd_cookie_same_site_session_set(cmd_parms *cmd, void *m, const
 						       arg2, &cfg->cookie_same_site_state);
 	}
 	if ((rv == NULL) && (arg3 != NULL)) {
-		rv = oidc_cfg_parse_option_ignore_case(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg3,
-						       &cfg->cookie_same_site_discovery_csrf);
+		static const oidc_cfg_option_t csrf_options[] = {
+		    {OIDC_SAMESITE_COOKIE_DISABLED, OIDC_SAMESITE_COOKIE_DISABLED_STR},
+		    {OIDC_SAMESITE_COOKIE_NONE, OIDC_SAMESITE_COOKIE_NONE_STR},
+		    {OIDC_SAMESITE_COOKIE_LAX, OIDC_SAMESITE_COOKIE_LAX_STR},
+		    {OIDC_SAMESITE_COOKIE_STRICT, OIDC_SAMESITE_COOKIE_STRICT_STR}};
+		rv = oidc_cfg_parse_option_ignore_case(cmd->pool, csrf_options, OIDC_CFG_OPTIONS_SIZE(csrf_options),
+						       arg3, &cfg->cookie_same_site_discovery_csrf);
 	}
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }

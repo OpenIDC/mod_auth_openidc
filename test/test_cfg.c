@@ -150,7 +150,14 @@ START_TEST(test_cmd_cookie_same_site) {
 	ck_assert_int_eq(oidc_cfg_cookie_same_site_state_get(cfg), OIDC_SAMESITE_COOKIE_NONE);
 	ck_assert_int_eq(oidc_cfg_cookie_same_site_discovery_csrf_get(cfg), OIDC_SAMESITE_COOKIE_NONE);
 
+	ck_assert_ptr_null(oidc_cmd_cookie_same_site_session_set(cmd, NULL, "Disabled", NULL, NULL));
+	ck_assert_int_eq(oidc_cfg_cookie_same_site_session_get(cfg), OIDC_SAMESITE_COOKIE_DISABLED);
+	ck_assert_int_eq(oidc_cfg_cookie_same_site_state_get(cfg), OIDC_SAMESITE_COOKIE_DISABLED);
+	ck_assert_int_eq(oidc_cfg_cookie_same_site_discovery_csrf_get(cfg), OIDC_SAMESITE_COOKIE_DISABLED);
+
 	ck_assert_ptr_nonnull(oidc_cmd_cookie_same_site_session_set(cmd, NULL, "InvalidValue", NULL, NULL));
+	ck_assert_ptr_nonnull(oidc_cmd_cookie_same_site_session_set(cmd, NULL, "Strict", "On", NULL));
+	ck_assert_ptr_nonnull(oidc_cmd_cookie_same_site_session_set(cmd, NULL, "Strict", "Lax", "Off"));
 
 	ck_assert_ptr_null(oidc_cmd_cookie_same_site_session_set(cmd, NULL, "Strict", "None", NULL));
 	ck_assert_int_eq(oidc_cfg_cookie_same_site_session_get(cfg), OIDC_SAMESITE_COOKIE_STRICT);
