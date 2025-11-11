@@ -50,25 +50,14 @@ libtest_la_SOURCES = \
 	helper.c \
 	stub.c
 
-TESTS += test_jose
-test_jose_CFLAGS = @CHECK_CFLAGS@ ${AM_CFLAGS}
-test_jose_LDADD = @CHECK_LIBS@ ${LDADD} libtest.la
-test_jose_SOURCES = test_jose.c
+AM_CFLAGS += @CHECK_CFLAGS@
+LDADD += libtest.la @CHECK_LIBS@
 
-TESTS += test_util
-test_util_CFLAGS = @CHECK_CFLAGS@ ${AM_CFLAGS}
-test_util_LDADD = @CHECK_LIBS@ ${LDADD} libtest.la
-test_util_SOURCES = test_util.c
-
-TESTS += test_cfg
-test_cfg_CFLAGS = @CHECK_CFLAGS@ ${AM_CFLAGS}
-test_cfg_LDADD = @CHECK_LIBS@ ${LDADD} libtest.la
-test_cfg_SOURCES = test_cfg.c
-
-TESTS += test_http
-test_http_CFLAGS = @CHECK_CFLAGS@ ${AM_CFLAGS}
-test_http_LDADD = @CHECK_LIBS@ ${LDADD} libtest.la
-test_http_SOURCES = test_http.c
+TESTS += \
+	test_cfg \
+	test_util \
+	test_jose \
+	test_http
 
 endif
 

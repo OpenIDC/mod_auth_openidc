@@ -1,5 +1,6 @@
 11/11/2025
 - test: add test/test_http.c and migrate http accept tests there from test.c
+- test: test/Makefile.am refactor check programs
 
 11/07/2025
 - support individual SameSite cookie settings on the session cookie, state cookie and Discovery CSRF
