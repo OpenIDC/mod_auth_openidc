@@ -42,25 +42,33 @@ test_CFLAGS = ${AM_CFLAGS} -fPIC
 
 if HAVE_CHECK
 
+noinst_LTLIBRARIES = libtest.la
+
+libtest_la_CFLAGS = ${AM_CFLAGS} -fPIC
+
+libtest_la_SOURCES = \
+	helper.c \
+	stub.c
+
 TESTS += test_jose
 test_jose_CFLAGS = @CHECK_CFLAGS@ ${AM_CFLAGS}
-test_jose_LDADD = @CHECK_LIBS@ ${LDADD}
-test_jose_SOURCES = test_jose.c helper.c stub.c
+test_jose_LDADD = @CHECK_LIBS@ ${LDADD} libtest.la
+test_jose_SOURCES = test_jose.c
 
 TESTS += test_util
 test_util_CFLAGS = @CHECK_CFLAGS@ ${AM_CFLAGS}
-test_util_LDADD = @CHECK_LIBS@ ${LDADD}
-test_util_SOURCES = test_util.c helper.c stub.c
+test_util_LDADD = @CHECK_LIBS@ ${LDADD} libtest.la
+test_util_SOURCES = test_util.c
 
 TESTS += test_cfg
 test_cfg_CFLAGS = @CHECK_CFLAGS@ ${AM_CFLAGS}
-test_cfg_LDADD = @CHECK_LIBS@ ${LDADD}
-test_cfg_SOURCES = test_cfg.c helper.c stub.c
+test_cfg_LDADD = @CHECK_LIBS@ ${LDADD} libtest.la
+test_cfg_SOURCES = test_cfg.c
 
 TESTS += test_http
 test_http_CFLAGS = @CHECK_CFLAGS@ ${AM_CFLAGS}
-test_http_LDADD = @CHECK_LIBS@ ${LDADD}
-test_http_SOURCES = test_http.c helper.c stub.c
+test_http_LDADD = @CHECK_LIBS@ ${LDADD} libtest.la
+test_http_SOURCES = test_http.c
 
 endif
 
