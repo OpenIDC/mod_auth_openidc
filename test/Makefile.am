@@ -57,6 +57,11 @@ test_cfg_CFLAGS = @CHECK_CFLAGS@ ${AM_CFLAGS}
 test_cfg_LDADD = @CHECK_LIBS@ ${LDADD}
 test_cfg_SOURCES = test_cfg.c helper.c stub.c
 
+TESTS += test_http
+test_http_CFLAGS = @CHECK_CFLAGS@ ${AM_CFLAGS}
+test_http_LDADD = @CHECK_LIBS@ ${LDADD}
+test_http_SOURCES = test_http.c helper.c stub.c
+
 endif
 
 check_PROGRAMS = $(TESTS)
