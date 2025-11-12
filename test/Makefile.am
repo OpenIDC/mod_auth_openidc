@@ -57,7 +57,8 @@ TESTS += \
 	test_cfg \
 	test_util \
 	test_jose \
-	test_http
+	test_http \
+	test_cache
 
 endif
 

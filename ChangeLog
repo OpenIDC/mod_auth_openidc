@@ -1,3 +1,6 @@
+11/12/2025
+- test: add test/test_cache.c coverage tests
+
 11/11/2025
 - test: add test/test_http.c and migrate http accept tests there from test.c
 - test: test/Makefile.am refactor check programs
