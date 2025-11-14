@@ -58,7 +58,8 @@ TESTS += \
 	test_util \
 	test_jose \
 	test_http \
-	test_cache
+	test_cache \
+	test_proto
 
 endif
 

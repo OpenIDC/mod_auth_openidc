@@ -1,3 +1,6 @@
+11/14/2025
+- test: add test/test_proto.c and migrate proto tests from test.c
+
 11/12/2025
 - test: add test/test_cache.c coverage tests
 
