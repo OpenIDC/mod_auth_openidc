@@ -270,6 +270,166 @@ START_TEST(test_proto_validate_jwt) {
 }
 END_TEST
 
+START_TEST(test_proto_nonce_and_jti) {
+	request_rec *r = oidc_test_request_get();
+	char *nonce = NULL;
+	ck_assert_int_eq(oidc_proto_nonce_gen(r, &nonce), TRUE);
+	ck_assert_ptr_nonnull(nonce);
+
+	char *jti = oidc_proto_jti_gen(r);
+	ck_assert_ptr_nonnull(jti);
+	/* jti should be a non-empty string */
+	ck_assert_int_ne(_oidc_strlen(jti), 0);
+}
+END_TEST
+
+START_TEST(test_proto_supported_flows_and_check) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	apr_array_header_t *flows = oidc_proto_supported_flows(pool);
+	ck_assert_ptr_nonnull(flows);
+	ck_assert_int_eq(flows->nelts, 6);
+
+	/* known supported flows */
+	ck_assert_int_eq(oidc_proto_flow_is_supported(pool, "code"), TRUE);
+	ck_assert_int_eq(oidc_proto_flow_is_supported(pool, "id_token token"), TRUE);
+	ck_assert_int_eq(oidc_proto_flow_is_supported(pool, "unrecognized flow"), FALSE);
+}
+END_TEST
+
+START_TEST(test_proto_state_getters_setters_and_string) {
+	request_rec *r = oidc_test_request_get();
+	oidc_proto_state_t *ps = oidc_proto_state_new();
+	ck_assert_ptr_nonnull(ps);
+
+	oidc_proto_state_set_issuer(ps, "https://example.org");
+	oidc_proto_state_set_nonce(ps, "mynonce");
+	oidc_proto_state_set_original_url(ps, "https://example.org/orig");
+	oidc_proto_state_set_original_method(ps, "POST");
+	oidc_proto_state_set_response_mode(ps, "fragment");
+	oidc_proto_state_set_response_type(ps, "id_token token");
+	oidc_proto_state_set_state(ps, "12345");
+	oidc_proto_state_set_prompt(ps, "none");
+	oidc_proto_state_set_pkce_state(ps, "pkce123");
+	oidc_proto_state_set_timestamp_now(ps);
+
+	ck_assert_str_eq(oidc_proto_state_get_issuer(ps), "https://example.org");
+	ck_assert_str_eq(oidc_proto_state_get_nonce(ps), "mynonce");
+	ck_assert_str_eq(oidc_proto_state_get_original_url(ps), "https://example.org/orig");
+	ck_assert_str_eq(oidc_proto_state_get_original_method(ps), "POST");
+	ck_assert_str_eq(oidc_proto_state_get_response_mode(ps), "fragment");
+	ck_assert_str_eq(oidc_proto_state_get_response_type(ps), "id_token token");
+	ck_assert_str_eq(oidc_proto_state_get_state(ps), "12345");
+	ck_assert_str_eq(oidc_proto_state_get_prompt(ps), "none");
+	ck_assert_str_eq(oidc_proto_state_get_pkce_state(ps), "pkce123");
+	ck_assert(oidc_proto_state_get_timestamp(ps) > 0);
+
+	char *s = oidc_proto_state_to_string(r, ps);
+	ck_assert_ptr_nonnull(s);
+	/* basic sanity: string contains issuer and nonce */
+	ck_assert_ptr_nonnull(_oidc_strstr(s, "https://example.org"));
+	ck_assert_ptr_nonnull(_oidc_strstr(s, "mynonce"));
+
+	oidc_proto_state_destroy(ps);
+}
+END_TEST
+
+START_TEST(test_proto_state_cookie_roundtrip) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	oidc_proto_state_t *ps = oidc_proto_state_new();
+	oidc_proto_state_set_nonce(ps, "rndnonce");
+	oidc_proto_state_set_state(ps, "s1");
+	oidc_proto_state_set_issuer(ps, "https://idp.example.com");
+	oidc_proto_state_set_timestamp_now(ps);
+
+	char *cookie = oidc_proto_state_to_cookie(r, c, ps);
+	ck_assert_ptr_nonnull(cookie);
+
+	oidc_proto_state_t *parsed = oidc_proto_state_from_cookie(r, c, cookie);
+	ck_assert_ptr_nonnull(parsed);
+	ck_assert_str_eq(oidc_proto_state_get_nonce(parsed), "rndnonce");
+	ck_assert_str_eq(oidc_proto_state_get_state(parsed), "s1");
+	ck_assert_str_eq(oidc_proto_state_get_issuer(parsed), "https://idp.example.com");
+
+	oidc_proto_state_destroy(ps);
+	oidc_proto_state_destroy(parsed);
+}
+END_TEST
+
+START_TEST(test_proto_pkce_plain_and_s256) {
+	request_rec *r = oidc_test_request_get();
+	char *state_plain = NULL;
+	char *challenge_plain = NULL;
+	char *verifier_plain = NULL;
+
+	/* plain */
+	ck_assert_int_eq(oidc_pkce_plain.state(r, &state_plain), TRUE);
+	ck_assert_ptr_nonnull(state_plain);
+	ck_assert_int_eq(oidc_pkce_plain.challenge(r, state_plain, &challenge_plain), TRUE);
+	ck_assert_ptr_nonnull(challenge_plain);
+	ck_assert_str_eq(challenge_plain, state_plain);
+	ck_assert_int_eq(oidc_pkce_plain.verifier(r, state_plain, &verifier_plain), TRUE);
+	ck_assert_ptr_nonnull(verifier_plain);
+	ck_assert_str_eq(verifier_plain, state_plain);
+
+	/* s256 */
+	char *state_s256 = NULL;
+	char *challenge_s256 = NULL;
+	char *verifier_s256 = NULL;
+	ck_assert_int_eq(oidc_pkce_s256.state(r, &state_s256), TRUE);
+	ck_assert_ptr_nonnull(state_s256);
+	ck_assert_int_eq(oidc_pkce_s256.challenge(r, state_s256, &challenge_s256), TRUE);
+	ck_assert_ptr_nonnull(challenge_s256);
+	ck_assert_int_ne(_oidc_strlen(challenge_s256), 0);
+	/* s256 challenge should not equal raw state */
+	ck_assert_int_ne(_oidc_strcmp(challenge_s256, state_s256), 0);
+	ck_assert_int_eq(oidc_pkce_s256.verifier(r, state_s256, &verifier_s256), TRUE);
+	ck_assert_ptr_nonnull(verifier_s256);
+	ck_assert_str_eq(verifier_s256, state_s256);
+}
+END_TEST
+
+START_TEST(test_proto_profile_helpers) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(pool);
+
+	/* default profile: token_endpoint_auth_aud returns token endpoint */
+	oidc_cfg_provider_token_endpoint_url_set(pool, provider, "https://idp.example.com/token");
+	ck_assert_str_eq(oidc_proto_profile_token_endpoint_auth_aud(provider), "https://idp.example.com/token");
+
+	/* revocation: when val=="token" should return token endpoint */
+	oidc_cfg_provider_revocation_endpoint_url_set(pool, provider, "https://idp.example.com/rev");
+	ck_assert_str_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, "token"),
+			 "https://idp.example.com/token");
+
+	/* if profile is FAPI20 behavior changes */
+	/* set profile to FAPI20 */
+	oidc_cfg_provider_profile_int_set(provider, OIDC_PROFILE_FAPI20);
+	/* token endpoint aud should now be issuer */
+	oidc_cfg_provider_issuer_set(pool, provider, "https://idp.example.com");
+	ck_assert_str_eq(oidc_proto_profile_token_endpoint_auth_aud(provider), "https://idp.example.com");
+	/* pkce should be forced to S256 */
+	ck_assert_ptr_eq(oidc_proto_profile_pkce_get(provider), &oidc_pkce_s256);
+	/* DPoP should be required */
+	ck_assert_int_eq(oidc_proto_profile_dpop_mode_get(provider), OIDC_DPOP_MODE_REQUIRED);
+	/* response require iss should be true */
+	ck_assert_int_eq(oidc_proto_profile_response_require_iss_get(provider), 1);
+}
+END_TEST
+
+START_TEST(test_proto_return_www_authenticate_header) {
+	request_rec *r = oidc_test_request_get();
+	/* ensure no auth_name in stub (stub returns NULL) */
+	int rc = oidc_proto_return_www_authenticate(r, "invalid_token", "bad token");
+	ck_assert_int_eq(rc, HTTP_UNAUTHORIZED);
+	const char *hdr = apr_table_get(r->err_headers_out, "WWW-Authenticate");
+	ck_assert_ptr_nonnull(hdr);
+	ck_assert_ptr_nonnull(_oidc_strstr(hdr, "invalid_token"));
+	ck_assert_ptr_nonnull(_oidc_strstr(hdr, "bad token"));
+}
+END_TEST
+
 int main(void) {
 	TCase *core = tcase_create("core");
 	tcase_add_checked_fixture(core, oidc_test_setup, oidc_test_teardown);
@@ -280,6 +440,13 @@ int main(void) {
 	tcase_add_test(core, test_logout_request);
 	tcase_add_test(core, test_proto_validate_nonce);
 	tcase_add_test(core, test_proto_validate_jwt);
+	tcase_add_test(core, test_proto_nonce_and_jti);
+	tcase_add_test(core, test_proto_supported_flows_and_check);
+	tcase_add_test(core, test_proto_state_getters_setters_and_string);
+	tcase_add_test(core, test_proto_state_cookie_roundtrip);
+	tcase_add_test(core, test_proto_pkce_plain_and_s256);
+	tcase_add_test(core, test_proto_profile_helpers);
+	tcase_add_test(core, test_proto_return_www_authenticate_header);
 
 	Suite *s = suite_create("proto");
 	suite_add_tcase(s, core);
