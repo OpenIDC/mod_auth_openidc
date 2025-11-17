@@ -1,5 +1,7 @@
 11/17/2025
 - metadata: avoid double-free when validation of provider metadata fails
+- drop support for Apache 2.2
+- bump to 2.4.19dev
 
 11/14/2025
 - test: add test/test_proto.c and migrate proto tests from test.c

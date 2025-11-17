@@ -964,8 +964,6 @@ static char *test_jwt_decrypt_gcm(apr_pool_t *pool) {
 
 #endif
 
-#if HAVE_APACHE_24
-
 static char *test_authz_worker(request_rec *r) {
 	authz_status rc;
 	char *require_args = NULL;
@@ -1171,8 +1169,6 @@ static char *test_authz_worker(request_rec *r) {
 
 	return 0;
 }
-
-#endif
 
 static char *test_decode_json_object(request_rec *r) {
 	apr_byte_t rc = FALSE;
@@ -1416,9 +1412,7 @@ static char *all_tests(apr_pool_t *pool, request_rec *r) {
 	TST_RUN(test_is_auth_capable_request, r);
 	TST_RUN(test_open_redirect, r);
 
-#if HAVE_APACHE_24
 	TST_RUN(test_authz_worker, r);
-#endif
 
 	TST_RUN(test_check_cookie_domain, r);
 

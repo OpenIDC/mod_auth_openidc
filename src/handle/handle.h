@@ -60,7 +60,6 @@
 #endif
 typedef apr_byte_t (*oidc_authz_match_claim_fn_type)(request_rec *, const char *const, json_t *);
 apr_byte_t oidc_authz_match_claim(request_rec *r, const char *const attr_spec, json_t *claims);
-#if HAVE_APACHE_24
 #ifdef USE_LIBJQ
 authz_status oidc_authz_24_checker_claims_expr(request_rec *r, const char *require_args,
 					       const void *parsed_require_args);
@@ -68,9 +67,6 @@ authz_status oidc_authz_24_checker_claims_expr(request_rec *r, const char *requi
 authz_status oidc_authz_24_checker_claim(request_rec *r, const char *require_args, const void *parsed_require_args);
 authz_status oidc_authz_24_worker(request_rec *r, json_t *claims, const char *require_args,
 				  const void *parsed_require_args, oidc_authz_match_claim_fn_type match_claim_fn);
-#else
-int oidc_authz_22_checker(request_rec *r);
-#endif
 
 // content.c
 int oidc_content_handler(request_rec *r);

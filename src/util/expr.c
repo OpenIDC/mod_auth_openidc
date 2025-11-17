@@ -132,7 +132,6 @@ char *oidc_util_apr_expr_parse(cmd_parms *cmd, const char *str, oidc_apr_expr_t 
 		return NULL;
 	*expr = apr_pcalloc(cmd->pool, sizeof(oidc_apr_expr_t));
 	(*expr)->str = apr_pstrdup(cmd->pool, str);
-#if HAVE_APACHE_24
 	const char *expr_err = NULL;
 	unsigned int flags = AP_EXPR_FLAG_DONT_VARY & AP_EXPR_FLAG_RESTRICTED;
 	if (result_is_str)
@@ -142,7 +141,6 @@ char *oidc_util_apr_expr_parse(cmd_parms *cmd, const char *str, oidc_apr_expr_t 
 		rv = apr_pstrcat(cmd->temp_pool, "cannot parse expression: ", expr_err, NULL);
 		*expr = NULL;
 	}
-#endif
 	return rv;
 }
 
@@ -153,7 +151,6 @@ const char *oidc_util_apr_expr_exec(request_rec *r, const oidc_apr_expr_t *expr,
 	const char *expr_result = NULL;
 	if (expr == NULL)
 		return NULL;
-#if HAVE_APACHE_24
 	const char *expr_err = NULL;
 	if (result_is_str) {
 		expr_result = ap_expr_str_exec(r, expr->expr, &expr_err);
@@ -164,8 +161,5 @@ const char *oidc_util_apr_expr_exec(request_rec *r, const oidc_apr_expr_t *expr,
 		oidc_error(r, "executing expression \"%s\" failed: %s", expr->str, expr_err);
 		expr_result = NULL;
 	}
-#else
-	expr_result = expr->str;
-#endif
 	return expr_result;
 }

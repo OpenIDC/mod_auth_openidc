@@ -141,9 +141,7 @@ typedef enum {
 #define OIDC_HTML_ERROR_TEMPLATE_DEPRECATED "deprecated"
 
 typedef struct oidc_apr_expr_t {
-#if HAVE_APACHE_24
 	ap_expr_info_t *expr;
-#endif
 	char *str;
 } oidc_apr_expr_t;
 

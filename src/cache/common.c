@@ -118,11 +118,7 @@ static apr_byte_t oidc_cache_mutex_global_create(server_rec *s, oidc_cache_mutex
 
 	/* need this on Linux */
 #ifdef AP_NEED_SET_MUTEX_PERMS
-#if MODULE_MAGIC_NUMBER_MAJOR >= 20081201
 	rv = ap_unixd_set_global_mutex_perms(m->gmutex);
-#else
-	rv = unixd_set_global_mutex_perms(m->gmutex);
-#endif
 	if (rv != APR_SUCCESS) {
 		oidc_serror(s, "unixd_set_global_mutex_perms failed; could not set permissions: %s (%d)",
 			    oidc_cache_status2str(s->process->pool, rv), rv);

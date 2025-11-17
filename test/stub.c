@@ -11,8 +11,6 @@
 
 // clang-format on
 
-#define HAVE_APACHE_24 MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-
 #define ap_HOOK_check_user_id_t void
 
 AP_DECLARE(void)
@@ -190,7 +188,6 @@ AP_DECLARE(int) ap_is_initial_req(request_rec *r) {
 	return 0;
 }
 
-#if HAVE_APACHE_24
 AP_DECLARE(ap_expr_info_t *)
 ap_expr_parse_cmd_mi(const cmd_parms *cmd, const char *expr, unsigned int flags, const char **err,
 		     ap_expr_lookup_fn_t *lookup_fn, int module_index) {
@@ -217,10 +214,6 @@ AP_DECLARE(char *) ap_get_exec_line(apr_pool_t *p, const char *cmd, const char *
 AP_DECLARE(void)
 ap_log_error_(const char *file, int line, int module_index, int level, apr_status_t status, const server_rec *s,
 	      const char *fmt, ...) {
-#else
-AP_DECLARE(void)
-ap_log_error(const char *file, int line, int level, apr_status_t status, const server_rec *s, const char *fmt, ...) {
-#endif
 	if (level < APLOG_DEBUG) {
 		fprintf(stderr, "%s:%d [%d] [%d] ", file, line, level, status);
 		va_list ap;
@@ -231,14 +224,9 @@ ap_log_error(const char *file, int line, int level, apr_status_t status, const s
 	}
 }
 
-#if HAVE_APACHE_24
 AP_DECLARE(void)
 ap_log_rerror_(const char *file, int line, int module_index, int level, apr_status_t status, const request_rec *r,
 	       const char *fmt, ...) {
-#else
-AP_DECLARE(void)
-ap_log_rerror(const char *file, int line, int level, apr_status_t status, const request_rec *r, const char *fmt, ...) {
-#endif
 	if (level < APLOG_DEBUG) {
 		fprintf(stderr, "%s:%d [%d] [%d] ", file, line, level, status);
 		va_list ap;
@@ -379,9 +367,7 @@ ap_timeout_parameter_parse(const char *timeout_parameter, apr_interval_time_t *t
 }
 #endif
 
-#if HAVE_APACHE_24
 AP_DECLARE(int) ap_expr_exec(request_rec *r, const ap_expr_info_t *expr, const char **err) {
 	*err = "error";
 	return 1;
 }
-#endif
