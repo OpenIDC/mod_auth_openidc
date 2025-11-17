@@ -60,8 +60,6 @@ typedef struct {
 #define OIDC_SESSION_TYPE_CLIENT_COOKIE 1
 
 apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **z);
-apr_byte_t oidc_session_get(request_rec *r, oidc_session_t *z, const char *key, char **value);
-apr_byte_t oidc_session_set(request_rec *r, oidc_session_t *z, const char *key, const char *value);
 apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z, apr_byte_t first_time);
 apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z);
 apr_byte_t oidc_session_free(request_rec *r, oidc_session_t *z);
@@ -71,12 +69,10 @@ void oidc_session_id_new(request_rec *r, oidc_session_t *z);
 
 void oidc_session_set_userinfo_jwt(request_rec *r, oidc_session_t *z, const char *userinfo_jwt);
 const char *oidc_session_get_userinfo_jwt(request_rec *r, oidc_session_t *z);
-void oidc_session_set_userinfo_claims(request_rec *r, oidc_session_t *z, const char *claims);
-const char *oidc_session_get_userinfo_claims(request_rec *r, oidc_session_t *z);
-json_t *oidc_session_get_userinfo_claims_json(request_rec *r, oidc_session_t *z);
-void oidc_session_set_idtoken_claims(request_rec *r, oidc_session_t *z, const char *idtoken_claims);
-const char *oidc_session_get_idtoken_claims(request_rec *r, oidc_session_t *z);
-json_t *oidc_session_get_idtoken_claims_json(request_rec *r, oidc_session_t *z);
+void oidc_session_set_userinfo_claims(request_rec *r, oidc_session_t *z, json_t *userinfo_claims);
+json_t *oidc_session_get_userinfo_claims(request_rec *r, oidc_session_t *z);
+void oidc_session_set_idtoken_claims(request_rec *r, oidc_session_t *z, json_t *idtoken_claims);
+json_t *oidc_session_get_idtoken_claims(request_rec *r, oidc_session_t *z);
 void oidc_session_set_idtoken(request_rec *r, oidc_session_t *z, const char *s_id_token);
 const char *oidc_session_get_idtoken(request_rec *r, oidc_session_t *z);
 void oidc_session_set_access_token(request_rec *r, oidc_session_t *z, const char *access_token);

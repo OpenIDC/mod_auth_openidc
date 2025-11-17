@@ -1,5 +1,9 @@
 11/17/2025
 - metadata: avoid double-free when validation of provider metadata fails
+- perf: store id_token/userinfo claims as JSON objects and avoid parsing/serializing overhead
+  which results in up to 7% performance increase, depending on the number of claims stored
+- session/cookie: save 20-40 bytes on the session and client-cookie size
+  NB: the internal session format has changed and is backwards incompatible: existing sessions and cookies will be invalid
 - drop support for Apache 2.2
 - bump to 2.4.19dev
 
@@ -14,7 +18,7 @@
 - test: test/Makefile.am refactor check programs
 
 11/07/2025
-- support individual SameSite cookie settings on the session cookie, state cookie and Discovery CSRF
+- cookie: support individual SameSite cookie settings on the session cookie, state cookie and Discovery CSRF
   cookie by adding 2 more arguments to OIDCCookieSameSite
 - code: avoid compiler warnings on `curl_easy_setopt` in http.c
   http.c:612:16: warning: call to '_curl_easy_setopt_err_long' declared with attribute warning: curl_easy_setopt expects a long argument [-Wattribute-warning]

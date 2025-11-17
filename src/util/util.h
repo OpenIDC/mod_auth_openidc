@@ -83,7 +83,7 @@ int oidc_util_html_send_in_template(request_rec *r, const char *filename, char *
 				    const char *arg1, int arg1_esc, const char *arg2, int arg2_esc);
 
 // jq.c
-const char *oidc_util_jq_filter(request_rec *r, const char *input, const char *filter);
+const char *oidc_util_jq_filter(request_rec *r, json_t *json, const char *filter);
 
 // json.c
 char *oidc_util_json_encode(apr_pool_t *pool, json_t *json, size_t flags);

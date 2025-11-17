@@ -90,9 +90,10 @@ static int oidc_jq_filter_cache_ttl(request_rec *r) {
 /*
  * apply a JQ expression/filter to the provided JSON input
  */
-const char *oidc_util_jq_filter(request_rec *r, const char *input, const char *filter) {
-	const char *result = input;
+const char *oidc_util_jq_filter(request_rec *r, json_t *json, const char *filter) {
+	const char *result = NULL;
 #ifdef USE_LIBJQ
+	const char *input = oidc_util_json_encode(r->pool, json, JSON_PRESERVE_ORDER | JSON_COMPACT);
 	jq_state *jq = NULL;
 	struct jv_parser *parser = NULL;
 	int ttl = 0;
@@ -101,6 +102,7 @@ const char *oidc_util_jq_filter(request_rec *r, const char *input, const char *f
 
 	if (filter == NULL) {
 		oidc_debug(r, "filter is NULL, abort");
+		result = input;
 		goto end;
 	}
 
@@ -130,17 +132,20 @@ const char *oidc_util_jq_filter(request_rec *r, const char *input, const char *f
 	jq = jq_init();
 	if (jq == NULL) {
 		oidc_error(r, "jq_init returned NULL");
+		result = input;
 		goto end;
 	}
 
 	if (jq_compile(jq, filter) == 0) {
 		oidc_error(r, "jq_compile returned an error");
+		result = input;
 		goto end;
 	}
 
 	parser = jv_parser_new(0);
 	if (parser == NULL) {
 		oidc_error(r, "jv_parser_new returned NULL");
+		result = input;
 		goto end;
 	}
 
@@ -159,6 +164,8 @@ end:
 		jv_parser_free(parser);
 	if (jq)
 		jq_teardown(&jq);
+#else
+	result = oidc_util_json_encode(r->pool, json, JSON_PRESERVE_ORDER | JSON_COMPACT);
 #endif
 
 	return result;

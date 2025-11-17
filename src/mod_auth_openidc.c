@@ -341,18 +341,18 @@ const char *oidc_original_request_method(request_rec *r, oidc_cfg_t *cfg, apr_by
  * get the mod_auth_openidc related context from the (userdata in the) request
  * (used for passing state between various Apache request processing stages and hook callbacks)
  */
-static apr_table_t *oidc_request_state(request_rec *rr) {
+static apr_hash_t *oidc_request_state(request_rec *rr) {
 
 	/* our state is always stored in the main request */
 	request_rec *r = (rr->main != NULL) ? rr->main : rr;
 
-	/* our state is a table, get it */
-	apr_table_t *state = NULL;
+	/* our state is a hash table, get it */
+	apr_hash_t *state = NULL;
 	apr_pool_userdata_get((void **)&state, OIDC_USERDATA_KEY, r->pool);
 
-	/* if it does not exist, we'll create a new table */
+	/* if it does not exist, we'll create a new hash table */
 	if (state == NULL) {
-		state = apr_table_make(r->pool, 5);
+		state = apr_hash_make(r->pool);
 		apr_pool_userdata_set(state, OIDC_USERDATA_KEY, NULL, r->pool);
 	}
 
@@ -366,11 +366,11 @@ static apr_table_t *oidc_request_state(request_rec *rr) {
  */
 void oidc_request_state_set(request_rec *r, const char *key, const char *value) {
 
-	/* get a handle to the global state, which is a table */
-	apr_table_t *state = oidc_request_state(r);
+	/* get a handle to the global state, which is a hash table */
+	apr_hash_t *state = oidc_request_state(r);
 
-	/* put the name/value pair in that table */
-	apr_table_set(state, key, value);
+	/* put the name/value pair in that hash table */
+	apr_hash_set(state, key, APR_HASH_KEY_STRING, value);
 }
 
 /*
@@ -379,20 +379,50 @@ void oidc_request_state_set(request_rec *r, const char *key, const char *value) 
  */
 const char *oidc_request_state_get(request_rec *r, const char *key) {
 
-	/* get a handle to the global state, which is a table */
-	apr_table_t *state = oidc_request_state(r);
+	/* get a handle to the global state, which is a hash table */
+	apr_hash_t *state = oidc_request_state(r);
 
-	/* return the value from the table */
-	return apr_table_get(state, key);
+	/* return the value from the hash table */
+	return (const char *)apr_hash_get(state, key, APR_HASH_KEY_STRING);
+}
+
+/*
+ * get a name/json object pair from the mod_auth_openidc-specific request context
+ * (used for passing state between various Apache request processing stages and hook callbacks)
+ */
+json_t *oidc_request_state_json_get(request_rec *r, const char *key) {
+
+	/* get a handle to the global state, which is a hash table */
+	apr_hash_t *state = oidc_request_state(r);
+
+	/* return the value from the hash table */
+	return (json_t *)apr_hash_get(state, key, APR_HASH_KEY_STRING);
+}
+
+/*
+ * set a name/json object pair in the mod_auth_openidc-specific request context
+ * (used for passing state between various Apache request processing stages and hook callbacks)
+ */
+void oidc_request_state_json_set(request_rec *r, const char *key, json_t *value) {
+
+	/* get a handle to the global state, which is a hash table */
+	apr_hash_t *state = oidc_request_state(r);
+
+	/* make a copy of the json object because the session object in the caller will be cleared */
+	json_t *json = json_copy(value);
+
+	/* register a cleanup for the json object */
+	apr_pool_cleanup_register(r->pool, json, (apr_status_t (*)(void *))json_decref, apr_pool_cleanup_null);
+
+	/* put the name/value pair in that hash table */
+	apr_hash_set(state, key, APR_HASH_KEY_STRING, json);
 }
 
 /*
  * set the claims from a JSON object (c.q. id_token or user_info response) stored
  * in the session in to HTTP headers passed on to the application
  */
-apr_byte_t oidc_set_app_claims(request_rec *r, oidc_cfg_t *cfg, const char *s_claims) {
-
-	json_t *j_claims = NULL;
+apr_byte_t oidc_set_app_claims(request_rec *r, oidc_cfg_t *cfg, json_t *claims) {
 
 	oidc_appinfo_pass_in_t pass_in = oidc_cfg_dir_pass_info_in_get(r);
 
@@ -400,20 +430,10 @@ apr_byte_t oidc_set_app_claims(request_rec *r, oidc_cfg_t *cfg, const char *s_cl
 	if (pass_in == OIDC_APPINFO_PASS_NONE)
 		return TRUE;
 
-	/* decode the string-encoded attributes in to a JSON structure */
-	if (s_claims != NULL) {
-		if (oidc_util_json_decode_object(r, s_claims, &j_claims) == FALSE)
-			return FALSE;
-	}
-
 	/* set the resolved claims a HTTP headers for the application */
-	if (j_claims != NULL) {
-		oidc_util_appinfo_set_all(r, j_claims, oidc_cfg_claim_prefix_get(cfg),
-					  oidc_cfg_claim_delimiter_get(cfg), pass_in,
-					  oidc_cfg_dir_pass_info_encoding_get(r));
-
-		/* release resources */
-		json_decref(j_claims);
+	if (claims != NULL) {
+		oidc_util_appinfo_set_all(r, claims, oidc_cfg_claim_prefix_get(cfg), oidc_cfg_claim_delimiter_get(cfg),
+					  pass_in, oidc_cfg_dir_pass_info_encoding_get(r));
 	}
 
 	return TRUE;
@@ -575,28 +595,19 @@ apr_byte_t oidc_get_provider_from_session(request_rec *r, oidc_cfg_t *c, oidc_se
 }
 
 /*
- * copy the claims and id_token from the session to the request state and optionally return them
+ * copy the claims and id_token from the session to the request state
  */
-static void oidc_copy_tokens_to_request_state(request_rec *r, oidc_session_t *session, const char **s_id_token,
-					      const char **s_claims) {
+static void oidc_copy_tokens_to_request_state(request_rec *r, oidc_session_t *session) {
 
-	const char *id_token = oidc_session_get_idtoken_claims(r, session);
-	const char *claims = oidc_session_get_userinfo_claims(r, session);
+	json_t *id_token = oidc_session_get_idtoken_claims(r, session);
+	json_t *claims = oidc_session_get_userinfo_claims(r, session);
 	const char *scope = oidc_session_get_scope(r, session);
 
-	oidc_debug(r, "id_token=%s claims=%s", id_token, claims);
+	if (id_token != NULL)
+		oidc_request_state_json_set(r, OIDC_REQUEST_STATE_KEY_IDTOKEN, id_token);
 
-	if (id_token != NULL) {
-		oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_IDTOKEN, id_token);
-		if (s_id_token != NULL)
-			*s_id_token = id_token;
-	}
-
-	if (claims != NULL) {
-		oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_CLAIMS, claims);
-		if (s_claims != NULL)
-			*s_claims = claims;
-	}
+	if (claims != NULL)
+		oidc_request_state_json_set(r, OIDC_REQUEST_STATE_KEY_CLAIMS, claims);
 
 	if (scope != NULL)
 		oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_SCOPE, scope);
@@ -695,8 +706,6 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg_t *cfg, oidc_se
 
 	apr_byte_t rv = FALSE;
 	int rc = OK;
-	const char *s_claims = NULL;
-	const char *s_id_token = NULL;
 
 	oidc_debug(r, "enter");
 
@@ -777,37 +786,33 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg_t *cfg, oidc_se
 		oidc_http_hdr_in_set(r, authn_header, r->user);
 
 	/* copy id_token and claims from session to request state and obtain their values */
-	oidc_copy_tokens_to_request_state(r, session, &s_id_token, &s_claims);
+	oidc_copy_tokens_to_request_state(r, session);
 
 	if ((oidc_cfg_dir_pass_idtoken_as_get(r) & OIDC_PASS_IDTOKEN_AS_CLAIMS)) {
 		/* set the id_token in the app headers */
-		if (oidc_set_app_claims(r, cfg, s_id_token) == FALSE)
+		if (oidc_set_app_claims(r, cfg, oidc_session_get_idtoken_claims(r, session)) == FALSE)
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
 	if ((oidc_cfg_dir_pass_idtoken_as_get(r) & OIDC_PASS_IDTOKEN_AS_PAYLOAD)) {
 		/* pass the id_token JSON object to the app in a header or environment variable */
-		oidc_util_appinfo_set(r, OIDC_APP_INFO_ID_TOKEN_PAYLOAD, s_id_token, OIDC_DEFAULT_HEADER_PREFIX,
-				      pass_in, encoding);
+		oidc_util_appinfo_set(r, OIDC_APP_INFO_ID_TOKEN_PAYLOAD,
+				      oidc_util_json_encode(r->pool, oidc_session_get_idtoken_claims(r, session),
+							    JSON_PRESERVE_ORDER | JSON_COMPACT),
+				      OIDC_DEFAULT_HEADER_PREFIX, pass_in, encoding);
 	}
 
 	if ((oidc_cfg_dir_pass_idtoken_as_get(r) & OIDC_PASS_IDTOKEN_AS_SERIALIZED)) {
-		/* get the compact serialized JWT from the session */
-		s_id_token = oidc_session_get_idtoken(r, session);
-		if (s_id_token) {
-			/* pass the compact serialized JWT to the app in a header or environment variable */
-			oidc_util_appinfo_set(r, OIDC_APP_INFO_ID_TOKEN, s_id_token, OIDC_DEFAULT_HEADER_PREFIX,
-					      pass_in, encoding);
-		} else {
-			oidc_warn(r, "id_token was not found in the session so it cannot be passed on");
-		}
+		/* pass the compact serialized JWT to the app in a header or environment variable */
+		oidc_util_appinfo_set(r, OIDC_APP_INFO_ID_TOKEN, oidc_session_get_idtoken(r, session),
+				      OIDC_DEFAULT_HEADER_PREFIX, pass_in, encoding);
 	}
 
 	/* pass the at, rt and at expiry to the application, possibly update the session expiry */
 	if (oidc_session_pass_tokens(r, cfg, session, extend_session, needs_save) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
-	oidc_userinfo_pass_as(r, cfg, session, s_claims, pass_in, encoding);
+	oidc_userinfo_pass_as(r, cfg, session, pass_in, encoding);
 
 	/* return "user authenticated" status */
 	return OK;
@@ -1225,7 +1230,7 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg_t *c) {
 				oidc_session_t *session = NULL;
 				oidc_session_load(r, &session);
 
-				oidc_copy_tokens_to_request_state(r, session, NULL, NULL);
+				oidc_copy_tokens_to_request_state(r, session);
 
 				/* free resources allocated for the session */
 				oidc_session_free(r, session);

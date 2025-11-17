@@ -165,16 +165,16 @@ int oidc_info_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, ap
 
 	/* include the id_token claims in the session info */
 	if (apr_hash_get(oidc_cfg_info_hook_data_get(c), OIDC_HOOK_INFO_ID_TOKEN, APR_HASH_KEY_STRING)) {
-		json_t *id_token = oidc_session_get_idtoken_claims_json(r, session);
+		json_t *id_token = oidc_session_get_idtoken_claims(r, session);
 		if (id_token)
-			json_object_set_new(json, OIDC_HOOK_INFO_ID_TOKEN, id_token);
+			json_object_set(json, OIDC_HOOK_INFO_ID_TOKEN, id_token);
 	}
 
 	if (apr_hash_get(oidc_cfg_info_hook_data_get(c), OIDC_HOOK_INFO_USER_INFO, APR_HASH_KEY_STRING)) {
 		/* include the claims from the userinfo endpoint the session info */
-		json_t *claims = oidc_session_get_userinfo_claims_json(r, session);
+		json_t *claims = oidc_session_get_userinfo_claims(r, session);
 		if (claims)
-			json_object_set_new(json, OIDC_HOOK_INFO_USER_INFO, claims);
+			json_object_set(json, OIDC_HOOK_INFO_USER_INFO, claims);
 	}
 
 	/* include the maximum session lifetime in the session info */

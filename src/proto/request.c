@@ -229,10 +229,8 @@ static int oidc_request_uri_copy_from_request(void *rec, const char *name, const
 		if (result == NULL)
 			/* assume string */
 			result = json_string(value);
-		if (result) {
-			json_object_set_new(ctx->request_object->payload.value.json, name, json_deep_copy(result));
-			json_decref(result);
-		}
+		if (result)
+			json_object_set_new(ctx->request_object->payload.value.json, name, result);
 
 		if (oidc_proto_request_uri_param_needs_action(ctx->request_object_config, name,
 							      OIDC_REQUEST_OJBECT_COPY_AND_REMOVE_FROM_REQUEST)) {

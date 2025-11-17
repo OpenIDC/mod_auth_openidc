@@ -258,7 +258,7 @@ apr_byte_t oidc_proto_token_refresh_request(request_rec *r, oidc_cfg_t *cfg, oid
 // userinfo.c
 apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
 				       const char *id_token_sub, const char *access_token,
-				       const char *access_token_type, char **response, char **userinfo_jwt,
-				       long *response_code);
+				       const char *access_token_type, char **s_userinfo, char **userinfo_jwt,
+				       json_t **userinfo_claims, long *response_code);
 
 #endif /* _MOD_AUTH_OPENIDC_PROTO_H_ */

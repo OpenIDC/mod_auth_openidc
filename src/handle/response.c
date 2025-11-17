@@ -223,7 +223,8 @@ char *oidc_response_make_sid_iss_unique(request_rec *r, const char *sid, const c
  */
 apr_byte_t oidc_response_save_in_session(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
 					 oidc_provider_t *provider, const char *remoteUser, const char *id_token,
-					 oidc_jwt_t *id_token_jwt, const char *claims, const char *access_token,
+					 oidc_jwt_t *id_token_jwt, const char *s_userinfo_claims,
+					 json_t *userinfo_claims, const char *access_token,
 					 const char *access_token_type, const int expires_in, const char *refresh_token,
 					 const char *scope, const char *session_state, const char *state,
 					 const char *original_url, const char *userinfo_jwt) {
@@ -235,7 +236,7 @@ apr_byte_t oidc_response_save_in_session(request_rec *r, oidc_cfg_t *c, oidc_ses
 	session->expiry = apr_time_now() + apr_time_from_sec(oidc_cfg_session_inactivity_timeout_get(c));
 
 	/* store the claims payload in the id_token for later reference */
-	oidc_session_set_idtoken_claims(r, session, id_token_jwt->payload.value.str);
+	oidc_session_set_idtoken_claims(r, session, id_token_jwt->payload.value.json);
 
 	if (oidc_cfg_store_id_token_get(c)) {
 		/* store the compact serialized representation of the id_token for later reference  */
@@ -272,7 +273,7 @@ apr_byte_t oidc_response_save_in_session(request_rec *r, oidc_cfg_t *c, oidc_ses
 						   oidc_cfg_provider_userinfo_refresh_interval_get(provider));
 
 	/* store claims resolved from userinfo endpoint */
-	oidc_userinfo_store_claims(r, c, session, provider, claims, userinfo_jwt);
+	oidc_userinfo_store_claims(r, c, session, provider, userinfo_claims, userinfo_jwt);
 
 	/* see if we have an access_token */
 	if (access_token != NULL) {
@@ -485,7 +486,7 @@ static apr_byte_t oidc_response_flows(request_rec *r, oidc_cfg_t *c, oidc_proto_
  * set the unique user identifier that will be propagated in the Apache r->user and REMOTE_USER variables
  */
 static apr_byte_t oidc_response_set_request_user(request_rec *r, oidc_cfg_t *c, oidc_provider_t *provider,
-						 oidc_jwt_t *jwt, const char *s_claims) {
+						 oidc_jwt_t *jwt, json_t *userinfo_claims) {
 
 	const char *issuer = oidc_cfg_provider_issuer_get(provider);
 	char *claim_name = apr_pstrdup(r->pool, oidc_cfg_remote_user_claim_name_get(c));
@@ -501,13 +502,12 @@ static apr_byte_t oidc_response_set_request_user(request_rec *r, oidc_cfg_t *c, 
 	/* extract the username claim (default: "sub") from the id_token payload or user claims */
 	apr_byte_t rc = FALSE;
 	char *remote_user = NULL;
-	json_t *claims = NULL;
-	oidc_util_json_decode_object(r, s_claims, &claims);
-	if (claims == NULL) {
+	if (userinfo_claims == NULL) {
 		rc = oidc_get_remote_user(r, claim_name, oidc_cfg_remote_user_claim_get(c)->reg_exp,
 					  oidc_cfg_remote_user_claim_get(c)->replace, jwt->payload.value.json,
 					  &remote_user);
 	} else {
+		json_t *claims = json_copy(userinfo_claims);
 		oidc_util_json_merge(r, jwt->payload.value.json, claims);
 		rc = oidc_get_remote_user(r, claim_name, oidc_cfg_remote_user_claim_get(c)->reg_exp,
 					  oidc_cfg_remote_user_claim_get(c)->replace, claims, &remote_user);
@@ -550,7 +550,7 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 
 	oidc_provider_t *provider = NULL;
 	oidc_proto_state_t *proto_state = NULL;
-	oidc_jwt_t *jwt = NULL;
+	oidc_jwt_t *id_token = NULL;
 
 	/* see if this response came from a browser-back event */
 	if (oidc_response_browser_back(r, apr_table_get(params, OIDC_PROTO_STATE), session) == TRUE)
@@ -593,12 +593,12 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 	}
 
 	/* handle the code, implicit or hybrid flow */
-	if (oidc_response_flows(r, c, proto_state, provider, params, response_mode, &jwt) == FALSE) {
+	if (oidc_response_flows(r, c, proto_state, provider, params, response_mode, &id_token) == FALSE) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_PROTOCOL);
 		return oidc_response_authorization_error(r, c, proto_state, "Error in handling response type.", NULL);
 	}
 
-	if (jwt == NULL) {
+	if (id_token == NULL) {
 		oidc_error(r, "no id_token was provided");
 		return oidc_response_authorization_error(r, c, proto_state, "No id_token was provided.", NULL);
 	}
@@ -610,9 +610,10 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 	 * optionally resolve additional claims against the userinfo endpoint
 	 * parsed claims are not actually used here but need to be parsed anyway for error checking purposes
 	 */
-	const char *claims = oidc_userinfo_retrieve_claims(
+	json_t *userinfo_claims = NULL;
+	const char *s_userinfo_claims = oidc_userinfo_retrieve_claims(
 	    r, c, provider, apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN),
-	    apr_table_get(params, OIDC_PROTO_TOKEN_TYPE), NULL, jwt->payload.sub, &userinfo_jwt);
+	    apr_table_get(params, OIDC_PROTO_TOKEN_TYPE), NULL, id_token->payload.sub, &userinfo_claims, &userinfo_jwt);
 
 	/* restore the original protected URL that the user was trying to access */
 	const char *original_url = oidc_proto_state_get_original_url(proto_state);
@@ -624,7 +625,7 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 	const char *prompt = oidc_proto_state_get_prompt(proto_state);
 
 	/* set the user */
-	if (oidc_response_set_request_user(r, c, provider, jwt, claims) == TRUE) {
+	if (oidc_response_set_request_user(r, c, provider, id_token, userinfo_claims) == TRUE) {
 
 		/* session management: if the user in the new response is not equal to the old one, error out */
 		if ((prompt != NULL) && (_oidc_strcmp(prompt, OIDC_PROTO_PROMPT_NONE) == 0)) {
@@ -634,20 +635,23 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 			// if (_oidc_strcmp(sub, jwt->payload.sub) != 0) {
 			if (_oidc_strcmp(session->remote_user, r->user) != 0) {
 				oidc_warn(r, "user set from new id_token is different from current one");
-				oidc_jwt_destroy(jwt);
+				oidc_jwt_destroy(id_token);
+				json_decref(userinfo_claims);
 				return oidc_response_authorization_error(r, c, proto_state, "User changed!", NULL);
 			}
 		}
 
 		/* store resolved information in the session */
 		if (oidc_response_save_in_session(
-			r, c, session, provider, r->user, apr_table_get(params, OIDC_PROTO_ID_TOKEN), jwt, claims,
-			apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN), apr_table_get(params, OIDC_PROTO_TOKEN_TYPE),
-			expires_in, apr_table_get(params, OIDC_PROTO_REFRESH_TOKEN),
-			apr_table_get(params, OIDC_PROTO_SCOPE), apr_table_get(params, OIDC_PROTO_SESSION_STATE),
-			apr_table_get(params, OIDC_PROTO_STATE), original_url, userinfo_jwt) == FALSE) {
+			r, c, session, provider, r->user, apr_table_get(params, OIDC_PROTO_ID_TOKEN), id_token,
+			s_userinfo_claims, userinfo_claims, apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN),
+			apr_table_get(params, OIDC_PROTO_TOKEN_TYPE), expires_in,
+			apr_table_get(params, OIDC_PROTO_REFRESH_TOKEN), apr_table_get(params, OIDC_PROTO_SCOPE),
+			apr_table_get(params, OIDC_PROTO_SESSION_STATE), apr_table_get(params, OIDC_PROTO_STATE),
+			original_url, userinfo_jwt) == FALSE) {
 			oidc_proto_state_destroy(proto_state);
-			oidc_jwt_destroy(jwt);
+			oidc_jwt_destroy(id_token);
+			json_decref(userinfo_claims);
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 
@@ -655,7 +659,8 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 
 	} else {
 		oidc_error(r, "remote user could not be set");
-		oidc_jwt_destroy(jwt);
+		oidc_jwt_destroy(id_token);
+		json_decref(userinfo_claims);
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_REMOTE_USER);
 		return oidc_response_authorization_error(
 		    r, c, proto_state, "Remote user could not be set: contact the website administrator", NULL);
@@ -663,7 +668,8 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 
 	/* cleanup */
 	oidc_proto_state_destroy(proto_state);
-	oidc_jwt_destroy(jwt);
+	oidc_jwt_destroy(id_token);
+	json_decref(userinfo_claims);
 
 	/* check that we've actually authenticated a user; functions as error handling for oidc_get_remote_user */
 	if (r->user == NULL) {

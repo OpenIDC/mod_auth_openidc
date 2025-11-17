@@ -1121,7 +1121,7 @@ apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json, oidc_jwt_t *
 	}
 
 	cjose_header_t *hdr = cjose_jws_get_protected(jwt->cjose_jws);
-	jwt->header.value.json = json_deep_copy((json_t *)hdr);
+	jwt->header.value.json = json_copy((json_t *)hdr);
 	jwt->header.value.str = oidc_util_json_encode(pool, jwt->header.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
 
 	jwt->header.alg = apr_pstrdup(pool, cjose_header_get(hdr, CJOSE_HDR_ALG, &cjose_err));

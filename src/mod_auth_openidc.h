@@ -141,8 +141,12 @@
 int oidc_check_user_id(request_rec *r);
 int oidc_fixups(request_rec *r);
 apr_byte_t oidc_enabled(request_rec *r, oidc_cfg_t *c);
+
 void oidc_request_state_set(request_rec *r, const char *key, const char *value);
 const char *oidc_request_state_get(request_rec *r, const char *key);
+json_t *oidc_request_state_json_get(request_rec *r, const char *key);
+void oidc_request_state_json_set(request_rec *r, const char *key, json_t *value);
+
 void oidc_scrub_headers(request_rec *r);
 void oidc_strip_cookies(request_rec *r);
 apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name, const char *replace, const char *reg_exp,
@@ -161,6 +165,6 @@ int oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg_t *c, const char *
 apr_byte_t oidc_is_auth_capable_request(request_rec *r);
 apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg_t *c, const char *redirect_to_url,
 				      apr_byte_t restrict_to_host, char **err_str, char **err_desc);
-apr_byte_t oidc_set_app_claims(request_rec *r, oidc_cfg_t *cfg, const char *s_claims);
+apr_byte_t oidc_set_app_claims(request_rec *r, oidc_cfg_t *cfg, json_t *claims);
 
 #endif /* _MOD_AUTH_OPENIDC_H_ */

@@ -360,8 +360,7 @@ static apr_byte_t oidc_authz_match_claims_expr(request_rec *r, const char *const
 
 	oidc_debug(r, "enter: '%s'", attr_spec);
 
-	str = oidc_util_jq_filter(r, oidc_util_json_encode(r->pool, claims, JSON_PRESERVE_ORDER | JSON_COMPACT),
-				  attr_spec);
+	str = oidc_util_jq_filter(r, claims, attr_spec);
 	rv = (_oidc_strcmp(str, "true") == 0);
 
 	return rv;
@@ -386,15 +385,8 @@ static void oidc_authz_error_add(request_rec *r, const char *msg) {
  */
 static void oidc_authz_get_claims_idtoken_scope(request_rec *r, json_t **claims, json_t **id_token,
 						const char **scope) {
-
-	const char *s_claims = oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_CLAIMS);
-	if (s_claims != NULL)
-		oidc_util_json_decode_object(r, s_claims, claims);
-
-	const char *s_id_token = oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_IDTOKEN);
-	if (s_id_token != NULL)
-		oidc_util_json_decode_object(r, s_id_token, id_token);
-
+	*claims = oidc_request_state_json_get(r, OIDC_REQUEST_STATE_KEY_CLAIMS);
+	*id_token = oidc_request_state_json_get(r, OIDC_REQUEST_STATE_KEY_IDTOKEN);
 	*scope = oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_SCOPE);
 }
 
@@ -403,13 +395,12 @@ static void oidc_authz_get_claims_idtoken_scope(request_rec *r, json_t **claims,
  * from the userinfo endpoint into a single set of claims that can be used to authorize on
  */
 static json_t *oidc_authz_merge_claims(request_rec *r) {
+	json_t *result = json_object();
 	json_t *claims = NULL, *id_token = NULL;
 	const char *scope = NULL;
 
 	/* get the set of claims from the request state as they have been set in the authentication part earlier */
 	oidc_authz_get_claims_idtoken_scope(r, &claims, &id_token, &scope);
-
-	json_t *result = json_object();
 
 	/* if scope was returned from the token endpoint, include it in the set of authorization claims */
 	if (scope)
@@ -421,12 +412,8 @@ static json_t *oidc_authz_merge_claims(request_rec *r) {
 
 	/* merge id_token claims (e.g. "iss") into the authorization claims (take precedence over userinfo claims and
 	 * scope) */
-	oidc_util_json_merge(r, id_token, result);
-
 	if (id_token)
-		json_decref(id_token);
-	if (claims)
-		json_decref(claims);
+		oidc_util_json_merge(r, id_token, result);
 
 	return result;
 }

@@ -390,18 +390,18 @@ END_TEST
 
 START_TEST(test_util_jq) {
 	request_rec *r = oidc_test_request_get();
+	json_t *json = NULL;
+	oidc_util_json_decode_object(r, "{ \"jan\": \"jan\", \"piet\": \"piet\" }", &json);
 #ifdef USE_LIBJQ
 	ck_assert_str_eq(oidc_util_jq_filter(r, NULL, "."), "{}");
-	ck_assert_str_eq(oidc_util_jq_filter(r, "{ \"jan\": \"jan\", \"piet\": \"piet\" }", NULL),
-			 "{ \"jan\": \"jan\", \"piet\": \"piet\" }");
-	ck_assert_str_eq(oidc_util_jq_filter(r, "{ \"jan\": \"jan\", \"piet\": \"piet\" }", "bogus"),
-			 "{ \"jan\": \"jan\", \"piet\": \"piet\" }");
-	ck_assert_str_eq(oidc_util_jq_filter(r, "{ \"jan\": \"jan\", \"piet\": \"piet\" }", ".jan"), "\"jan\"");
-	ck_assert_str_eq(oidc_util_jq_filter(r, "{ \"jan\": \"jan\", \"piet\": \"piet\" }", ".jan"), "\"jan\"");
+	ck_assert_str_eq(oidc_util_jq_filter(r, json, NULL), "{\"jan\":\"jan\",\"piet\":\"piet\"}");
+	ck_assert_str_eq(oidc_util_jq_filter(r, json, ".bogus"), "null");
+	ck_assert_str_eq(oidc_util_jq_filter(r, json, "bogus"), "{\"jan\":\"jan\",\"piet\":\"piet\"}");
+	ck_assert_str_eq(oidc_util_jq_filter(r, json, ".jan"), "\"jan\"");
 #else
-	ck_assert_str_eq(oidc_util_jq_filter(r, "{ \"jan\": \"jan\", \"piet\": \"piet\" }", ".jan"),
-			 "{ \"jan\": \"jan\", \"piet\": \"piet\" }");
+	ck_assert_str_eq(oidc_util_jq_filter(r, json, ".jan"), "{\"jan\": \"jan\",\"piet\":\"piet\"}");
 #endif
+	json_decref(json);
 }
 END_TEST
 

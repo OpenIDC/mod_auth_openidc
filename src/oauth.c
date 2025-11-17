@@ -419,7 +419,7 @@ static apr_byte_t oidc_oauth_get_cached_access_token(request_rec *r, oidc_cfg_t 
 	oidc_debug(r, "returning cached introspection result that meets freshness requirements: %s", s_cache_entry);
 
 	/* we've got a cached introspection result that is still valid for this path's requirements */
-	*json = json_deep_copy(json_object_get(cache_entry, OIDC_OAUTH_CACHE_KEY_RESPONSE));
+	*json = json_copy(json_object_get(cache_entry, OIDC_OAUTH_CACHE_KEY_RESPONSE));
 
 	json_decref(cache_entry);
 	return TRUE;
@@ -523,7 +523,7 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg_t *c,
 		// oidc_oauth_spaced_string_to_array(r, result, OIDC_PROTO_SCOPE, tkn, "scopes");
 
 		/* return only the pimped access_token results */
-		*token = json_deep_copy(tkn);
+		*token = json_copy(tkn);
 
 		json_decref(result);
 
@@ -608,7 +608,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 
 	oidc_debug(r, "successfully verified JWT access token: %s", jwt->payload.value.str);
 
-	*token = json_deep_copy(jwt->payload.value.json);
+	*token = json_copy(jwt->payload.value.json);
 	*response = jwt->payload.value.str;
 
 	oidc_jwt_destroy(jwt);
