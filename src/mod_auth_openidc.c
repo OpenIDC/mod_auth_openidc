@@ -215,6 +215,7 @@ static apr_byte_t oidc_provider_validate_metadata_str(request_rec *r, oidc_cfg_t
 		oidc_warn(r, "cache corruption detected: invalid metadata from url: %s",
 			  oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(c)));
 		json_decref(*j_provider);
+		*j_provider = NULL;
 		return FALSE;
 	}
 
