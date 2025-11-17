@@ -82,28 +82,28 @@ static int oidc_response_authorization_error(request_rec *r, oidc_cfg_t *c, oidc
 
 /* handle the browser back on an authorization response */
 static apr_byte_t oidc_response_browser_back(request_rec *r, const char *r_state, oidc_session_t *session) {
-
-	/*  see if we have an existing session and browser-back was used */
 	const char *s_state = NULL, *o_url = NULL;
 
-	if (session->remote_user != NULL) {
+	/*  see if we have an existing session and browser-back was used */
+	if (session->remote_user == NULL)
+		/* no session was established yet */
+		return FALSE;
 
-		s_state = oidc_session_get_request_state(r, session);
-		o_url = oidc_session_get_original_url(r, session);
+	s_state = oidc_session_get_request_state(r, session);
+	if ((r_state == NULL) || (s_state == NULL) || (_oidc_strcmp(r_state, s_state) != 0))
+		/*  state does not match with the state that was used to create  the session earlier, no replay is going
+		 * on here */
+		return FALSE;
 
-		if ((r_state != NULL) && (s_state != NULL) && (_oidc_strcmp(r_state, s_state) == 0)) {
+	/* get the URL that was originally accessed by the user */
+	o_url = oidc_session_get_original_url(r, session);
+	/* log the browser back event detection */
+	oidc_warn(r, "browser back detected, redirecting to original URL: %s", o_url);
+	/* go back to the URL that he originally tried to access */
+	oidc_http_hdr_out_location_set(r, o_url);
 
-			/* log the browser back event detection */
-			oidc_warn(r, "browser back detected, redirecting to original URL: %s", o_url);
-
-			/* go back to the URL that he originally tried to access */
-			oidc_http_hdr_out_location_set(r, o_url);
-
-			return TRUE;
-		}
-	}
-
-	return FALSE;
+	/* signal that a browser back event was detected indeed and we handled this here */
+	return TRUE;
 }
 
 static char *_oidc_response_post_preserve_template_contents = NULL;
