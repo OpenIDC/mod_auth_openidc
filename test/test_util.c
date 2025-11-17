@@ -399,7 +399,7 @@ START_TEST(test_util_jq) {
 	ck_assert_str_eq(oidc_util_jq_filter(r, json, "bogus"), "{\"jan\":\"jan\",\"piet\":\"piet\"}");
 	ck_assert_str_eq(oidc_util_jq_filter(r, json, ".jan"), "\"jan\"");
 #else
-	ck_assert_str_eq(oidc_util_jq_filter(r, json, ".jan"), "{\"jan\": \"jan\",\"piet\":\"piet\"}");
+	ck_assert_str_eq(oidc_util_jq_filter(r, json, ".jan"), "{\"jan\":\"jan\",\"piet\":\"piet\"}");
 #endif
 	json_decref(json);
 }
