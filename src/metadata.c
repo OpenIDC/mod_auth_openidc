@@ -753,7 +753,6 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg, cons
 
 	/* check to see if it is valid metadata */
 	if (oidc_metadata_provider_is_valid(r, cfg, *j_metadata, issuer) == FALSE) {
-		json_decref(*j_metadata);
 		return FALSE;
 	}
 

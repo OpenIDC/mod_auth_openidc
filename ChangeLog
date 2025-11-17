@@ -1,3 +1,6 @@
+11/17/2025
+- metadata: avoid double-free when validation of provider metadata fails
+
 11/14/2025
 - test: add test/test_proto.c and migrate proto tests from test.c
 
