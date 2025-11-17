@@ -72,7 +72,6 @@ static int oidc_response_authorization_error(request_rec *r, oidc_cfg_t *c, oidc
 	const char *prompt = oidc_proto_state_get_prompt(proto_state);
 	if (prompt != NULL)
 		prompt = apr_pstrdup(r->pool, prompt);
-	oidc_proto_state_destroy(proto_state);
 	if ((prompt != NULL) && (_oidc_strcmp(prompt, OIDC_PROTO_PROMPT_NONE) == 0)) {
 		return oidc_response_redirect_parent_window_to_logout(r, c);
 	}
@@ -377,7 +376,6 @@ static apr_byte_t oidc_response_proto_state_restore(request_rec *r, oidc_cfg_t *
 		    r,
 		    "calculated state from cookie does not match state parameter passed back in URL: \"%s\" != \"%s\"",
 		    state, calc);
-		oidc_proto_state_destroy(*proto_state);
 		return FALSE;
 	}
 
@@ -396,7 +394,6 @@ static apr_byte_t oidc_response_proto_state_restore(request_rec *r, oidc_cfg_t *
 					 oidc_proto_state_get_original_url(*proto_state)),
 			    OK);
 		}
-		oidc_proto_state_destroy(*proto_state);
 		return FALSE;
 	}
 
@@ -433,13 +430,7 @@ static apr_byte_t oidc_response_match_state(request_rec *r, oidc_cfg_t *c, const
 
 	*provider = oidc_get_provider_for_issuer(r, c, oidc_proto_state_get_issuer(*proto_state), FALSE);
 
-	if (*provider == NULL) {
-		oidc_proto_state_destroy(*proto_state);
-		*proto_state = NULL;
-		return FALSE;
-	}
-
-	return TRUE;
+	return (*provider != NULL);
 }
 
 /*
@@ -545,16 +536,25 @@ static char *_oidc_response_post_restore_template_contents = NULL;
  */
 static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, apr_table_t *params,
 				 const char *response_mode) {
-
-	oidc_debug(r, "enter, response_mode=%s", response_mode);
-
+	int rc = -1;
 	oidc_provider_t *provider = NULL;
 	oidc_proto_state_t *proto_state = NULL;
 	oidc_jwt_t *id_token = NULL;
+	json_t *userinfo_claims = NULL;
+	int expires_in = 0;
+	char *userinfo_jwt = NULL;
+	const char *s_userinfo_claims = NULL;
+	const char *original_url = NULL;
+	const char *original_method = NULL;
+	const char *prompt = NULL;
+
+	oidc_debug(r, "enter, response_mode=%s", response_mode);
 
 	/* see if this response came from a browser-back event */
-	if (oidc_response_browser_back(r, apr_table_get(params, OIDC_PROTO_STATE), session) == TRUE)
-		return HTTP_MOVED_TEMPORARILY;
+	if (oidc_response_browser_back(r, apr_table_get(params, OIDC_PROTO_STATE), session) == TRUE) {
+		rc = HTTP_MOVED_TEMPORARILY;
+		goto end;
+	}
 
 	/* match the returned state parameter against the state stored in the browser */
 	if (oidc_response_match_state(r, c, apr_table_get(params, OIDC_PROTO_STATE), &provider, &proto_state) ==
@@ -566,7 +566,8 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 				  oidc_cfg_default_sso_url_get(c));
 			oidc_http_hdr_out_location_set(r, oidc_util_url_abs(r, c, oidc_cfg_default_sso_url_get(c)));
 			OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_STATE_MISMATCH);
-			return HTTP_MOVED_TEMPORARILY;
+			rc = HTTP_MOVED_TEMPORARILY;
+			goto end;
 		}
 		oidc_error(r,
 			   "invalid authorization response state and no default SSO URL is set, sending an error...");
@@ -574,107 +575,100 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 		// if error text was already produced (e.g. state timeout) then just return with a 400
 		if (apr_table_get(r->subprocess_env, OIDC_ERROR_ENVVAR) != NULL) {
 			OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_STATE_EXPIRED);
-			return HTTP_BAD_REQUEST;
+			rc = HTTP_BAD_REQUEST;
+			goto end;
 		}
 
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_STATE_MISMATCH);
 
-		return oidc_util_html_send_error(r, "Invalid Authorization Response",
-						 "Could not match the authorization response to an earlier request via "
-						 "the state parameter and corresponding state cookie",
-						 HTTP_BAD_REQUEST);
+		rc = oidc_util_html_send_error(r, "Invalid Authorization Response",
+					       "Could not match the authorization response to an earlier request via "
+					       "the state parameter and corresponding state cookie",
+					       HTTP_BAD_REQUEST);
+		goto end;
 	}
 
 	/* see if the response is an error response */
 	if (apr_table_get(params, OIDC_PROTO_ERROR) != NULL) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_PROVIDER);
-		return oidc_response_authorization_error(r, c, proto_state, apr_table_get(params, OIDC_PROTO_ERROR),
-							 apr_table_get(params, OIDC_PROTO_ERROR_DESCRIPTION));
+		rc = oidc_response_authorization_error(r, c, proto_state, apr_table_get(params, OIDC_PROTO_ERROR),
+						       apr_table_get(params, OIDC_PROTO_ERROR_DESCRIPTION));
+		goto end;
 	}
 
 	/* handle the code, implicit or hybrid flow */
 	if (oidc_response_flows(r, c, proto_state, provider, params, response_mode, &id_token) == FALSE) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_PROTOCOL);
-		return oidc_response_authorization_error(r, c, proto_state, "Error in handling response type.", NULL);
+		rc = oidc_response_authorization_error(r, c, proto_state, "Error in handling response type.", NULL);
+		goto end;
 	}
 
 	if (id_token == NULL) {
 		oidc_error(r, "no id_token was provided");
-		return oidc_response_authorization_error(r, c, proto_state, "No id_token was provided.", NULL);
+		rc = oidc_response_authorization_error(r, c, proto_state, "No id_token was provided.", NULL);
+		goto end;
 	}
 
-	int expires_in = _oidc_str_to_int(apr_table_get(params, OIDC_PROTO_EXPIRES_IN), -1);
-	char *userinfo_jwt = NULL;
+	expires_in = _oidc_str_to_int(apr_table_get(params, OIDC_PROTO_EXPIRES_IN), -1);
 
 	/*
 	 * optionally resolve additional claims against the userinfo endpoint
 	 * parsed claims are not actually used here but need to be parsed anyway for error checking purposes
 	 */
-	json_t *userinfo_claims = NULL;
-	const char *s_userinfo_claims = oidc_userinfo_retrieve_claims(
+	s_userinfo_claims = oidc_userinfo_retrieve_claims(
 	    r, c, provider, apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN),
 	    apr_table_get(params, OIDC_PROTO_TOKEN_TYPE), NULL, id_token->payload.sub, &userinfo_claims, &userinfo_jwt);
 
 	/* restore the original protected URL that the user was trying to access */
-	const char *original_url = oidc_proto_state_get_original_url(proto_state);
+	original_url = oidc_proto_state_get_original_url(proto_state);
 	if (original_url != NULL)
 		original_url = apr_pstrdup(r->pool, original_url);
-	const char *original_method = oidc_proto_state_get_original_method(proto_state);
+	original_method = oidc_proto_state_get_original_method(proto_state);
 	if (original_method != NULL)
 		original_method = apr_pstrdup(r->pool, original_method);
-	const char *prompt = oidc_proto_state_get_prompt(proto_state);
+	prompt = oidc_proto_state_get_prompt(proto_state);
 
 	/* set the user */
-	if (oidc_response_set_request_user(r, c, provider, id_token, userinfo_claims) == TRUE) {
-
-		/* session management: if the user in the new response is not equal to the old one, error out */
-		if ((prompt != NULL) && (_oidc_strcmp(prompt, OIDC_PROTO_PROMPT_NONE) == 0)) {
-			// TOOD: actually need to compare sub? (need to store it in the session separately then
-			// const char *sub = NULL;
-			// oidc_session_get(r, session, "sub", &sub);
-			// if (_oidc_strcmp(sub, jwt->payload.sub) != 0) {
-			if (_oidc_strcmp(session->remote_user, r->user) != 0) {
-				oidc_warn(r, "user set from new id_token is different from current one");
-				oidc_jwt_destroy(id_token);
-				json_decref(userinfo_claims);
-				return oidc_response_authorization_error(r, c, proto_state, "User changed!", NULL);
-			}
-		}
-
-		/* store resolved information in the session */
-		if (oidc_response_save_in_session(
-			r, c, session, provider, r->user, apr_table_get(params, OIDC_PROTO_ID_TOKEN), id_token,
-			s_userinfo_claims, userinfo_claims, apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN),
-			apr_table_get(params, OIDC_PROTO_TOKEN_TYPE), expires_in,
-			apr_table_get(params, OIDC_PROTO_REFRESH_TOKEN), apr_table_get(params, OIDC_PROTO_SCOPE),
-			apr_table_get(params, OIDC_PROTO_SESSION_STATE), apr_table_get(params, OIDC_PROTO_STATE),
-			original_url, userinfo_jwt) == FALSE) {
-			oidc_proto_state_destroy(proto_state);
-			oidc_jwt_destroy(id_token);
-			json_decref(userinfo_claims);
-			return HTTP_INTERNAL_SERVER_ERROR;
-		}
-
-		oidc_debug(r, "set remote_user to \"%s\" in new session \"%s\"", r->user, session->uuid);
-
-	} else {
+	if (oidc_response_set_request_user(r, c, provider, id_token, userinfo_claims) == FALSE) {
 		oidc_error(r, "remote user could not be set");
-		oidc_jwt_destroy(id_token);
-		json_decref(userinfo_claims);
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_REMOTE_USER);
-		return oidc_response_authorization_error(
+		rc = oidc_response_authorization_error(
 		    r, c, proto_state, "Remote user could not be set: contact the website administrator", NULL);
+		goto end;
 	}
 
-	/* cleanup */
-	oidc_proto_state_destroy(proto_state);
-	oidc_jwt_destroy(id_token);
-	json_decref(userinfo_claims);
+	oidc_debug(r, "set remote_user to \"%s\" in new session \"%s\"", r->user, session->uuid);
+
+	/* session management: if the user in the new response is not equal to the old one, error out */
+	if ((prompt != NULL) && (_oidc_strcmp(prompt, OIDC_PROTO_PROMPT_NONE) == 0)) {
+		// TOOD: actually need to compare sub? (need to store it in the session separately then
+		// const char *sub = NULL;
+		// oidc_session_get(r, session, "sub", &sub);
+		// if (_oidc_strcmp(sub, jwt->payload.sub) != 0) {
+		if (_oidc_strcmp(session->remote_user, r->user) != 0) {
+			oidc_warn(r, "user set from new id_token is different from current one");
+			rc = oidc_response_authorization_error(r, c, proto_state, "User changed!", NULL);
+			goto end;
+		}
+	}
+
+	/* store resolved information in the session */
+	if (oidc_response_save_in_session(
+		r, c, session, provider, r->user, apr_table_get(params, OIDC_PROTO_ID_TOKEN), id_token,
+		s_userinfo_claims, userinfo_claims, apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN),
+		apr_table_get(params, OIDC_PROTO_TOKEN_TYPE), expires_in,
+		apr_table_get(params, OIDC_PROTO_REFRESH_TOKEN), apr_table_get(params, OIDC_PROTO_SCOPE),
+		apr_table_get(params, OIDC_PROTO_SESSION_STATE), apr_table_get(params, OIDC_PROTO_STATE), original_url,
+		userinfo_jwt) == FALSE) {
+		rc = HTTP_INTERNAL_SERVER_ERROR;
+		goto end;
+	}
 
 	/* check that we've actually authenticated a user; functions as error handling for oidc_get_remote_user */
 	if (r->user == NULL) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_REMOTE_USER);
-		return HTTP_UNAUTHORIZED;
+		rc = HTTP_UNAUTHORIZED;
+		goto end;
 	}
 
 	/* log the successful response */
@@ -683,18 +677,32 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 
 	/* check whether form post data was preserved; if so restore it */
 	if (_oidc_strcmp(original_method, OIDC_METHOD_FORM_POST) == 0) {
-		if (oidc_cfg_post_restore_template_get(c) != NULL)
-			return oidc_util_html_send_in_template(
+		if (oidc_cfg_post_restore_template_get(c) != NULL) {
+			rc = oidc_util_html_send_in_template(
 			    r, oidc_cfg_post_restore_template_get(c), &_oidc_response_post_restore_template_contents,
 			    original_url, OIDC_POST_PRESERVE_ESCAPE_JAVASCRIPT, "", OIDC_POST_PRESERVE_ESCAPE_NONE);
-		return oidc_response_post_preserved_restore(r, original_url);
+		} else {
+			rc = oidc_response_post_preserved_restore(r, original_url);
+		}
+		goto end;
 	}
 
 	/* now we've authenticated the user so go back to the URL that he originally tried to access */
 	oidc_http_hdr_out_location_set(r, original_url);
 
 	/* do the actual redirect to the original URL */
-	return HTTP_MOVED_TEMPORARILY;
+	rc = HTTP_MOVED_TEMPORARILY;
+
+end:
+
+	if (proto_state)
+		oidc_proto_state_destroy(proto_state);
+	if (id_token)
+		oidc_jwt_destroy(id_token);
+	if (userinfo_claims)
+		json_decref(userinfo_claims);
+
+	return rc;
 }
 
 /*
