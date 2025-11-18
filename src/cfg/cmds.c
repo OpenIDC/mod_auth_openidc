@@ -781,7 +781,7 @@ const command_rec oidc_cfg_cmds[] = {
 		pass_refresh_token,
 		"Pass the refresh token in a header and/or environment variable (On or Off)"),
 	OIDC_CFG_CMD_DIR(
-		AP_INIT_TAKE123,
+		AP_INIT_ITERATE,
 		OIDCPassIDTokenAs,
 		pass_idtoken_as,
 		"Set the format in which the id_token is passed in (a) header(s); must be one or more of: claims | payload | serialized"),

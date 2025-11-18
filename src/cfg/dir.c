@@ -81,11 +81,12 @@ struct oidc_dir_cfg_t {
 #define OIDC_PASS_ID_TOKEN_AS_CLAIMS_STR "claims"
 #define OIDC_PASS_IDTOKEN_AS_PAYLOAD_STR "payload"
 #define OIDC_PASS_IDTOKEN_AS_SERIALIZED_STR "serialized"
+#define OIDC_PASS_IDTOKEN_OFF_STR "off"
 
 /*
  * define how to pass the id_token/claims in HTTP headers
  */
-const char *oidc_cmd_dir_pass_idtoken_as_set(cmd_parms *cmd, void *m, const char *v1, const char *v2, const char *v3) {
+const char *oidc_cmd_dir_pass_idtoken_as_set(cmd_parms *cmd, void *m, const char *arg) {
 	oidc_dir_cfg_t *dir_cfg = (oidc_dir_cfg_t *)m;
 
 	oidc_pass_idtoken_as_t type;
@@ -94,28 +95,18 @@ const char *oidc_cmd_dir_pass_idtoken_as_set(cmd_parms *cmd, void *m, const char
 	static const oidc_cfg_option_t options[] = {
 	    {OIDC_PASS_IDTOKEN_AS_CLAIMS, OIDC_PASS_ID_TOKEN_AS_CLAIMS_STR},
 	    {OIDC_PASS_IDTOKEN_AS_PAYLOAD, OIDC_PASS_IDTOKEN_AS_PAYLOAD_STR},
-	    {OIDC_PASS_IDTOKEN_AS_SERIALIZED, OIDC_PASS_IDTOKEN_AS_SERIALIZED_STR}};
+	    {OIDC_PASS_IDTOKEN_AS_SERIALIZED, OIDC_PASS_IDTOKEN_AS_SERIALIZED_STR},
+	    {OIDC_PASS_IDTOKEN_OFF, OIDC_PASS_IDTOKEN_OFF_STR}};
 
-	if (v1) {
-		rv = oidc_cfg_parse_option(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), v1, (int *)&type);
+	if (arg) {
+		rv = oidc_cfg_parse_option(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg, (int *)&type);
 		if (rv != NULL)
 			return OIDC_CONFIG_DIR_RV(cmd, rv);
 		// NB: assign the first to override the "unset" default
-		dir_cfg->pass_idtoken_as = type;
-	}
-
-	if (v2) {
-		rv = oidc_cfg_parse_option(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), v2, (int *)&type);
-		if (rv != NULL)
-			return OIDC_CONFIG_DIR_RV(cmd, rv);
-		dir_cfg->pass_idtoken_as |= type;
-	}
-
-	if (v3) {
-		rv = oidc_cfg_parse_option(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), v3, (int *)&type);
-		if (rv != NULL)
-			return OIDC_CONFIG_DIR_RV(cmd, rv);
-		dir_cfg->pass_idtoken_as |= type;
+		if (dir_cfg->pass_idtoken_as == OIDC_CONFIG_POS_INT_UNSET)
+			dir_cfg->pass_idtoken_as = type;
+		else
+			dir_cfg->pass_idtoken_as |= type;
 	}
 
 	return NULL;
