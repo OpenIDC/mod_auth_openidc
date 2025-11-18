@@ -111,9 +111,11 @@ static apr_byte_t _oidc_util_rand_bytes(request_rec *r, unsigned char *buf, apr_
 #else
 	const char *gen = DEV_RANDOM;
 #endif
-	oidc_debug(r, "use [%s] for generating %" APR_SIZE_T_FMT " random bytes", gen, len);
+	if (r)
+		oidc_debug(r, "use [%s] for generating %" APR_SIZE_T_FMT " random bytes", gen, len);
 	rv = _oidc_util_rand(buf, len);
-	oidc_debug(r, "return: %d", rv);
+	if (r)
+		oidc_debug(r, "return: %d", rv);
 	return rv;
 }
 
@@ -145,11 +147,12 @@ apr_byte_t oidc_util_rand_str(request_rec *r, char **str, int len) {
 /*
  * generate a random string of (lowercase) hexadecimal characters, representing len bytes
  */
-char *oidc_util_rand_hex_str(request_rec *r, int len) {
-	unsigned char *bytes = apr_pcalloc(r->pool, len);
+char *oidc_util_rand_hex_str(request_rec *r, apr_pool_t *pool, int len) {
+	unsigned char *bytes = apr_pcalloc(pool, len);
 	if (_oidc_util_rand_bytes(r, bytes, len) != TRUE) {
-		oidc_error(r, "_oidc_util_rand_bytes returned an error");
+		if (r)
+			oidc_error(r, "_oidc_util_rand_bytes returned an error");
 		return NULL;
 	}
-	return oidc_util_hex_encode(r, bytes, len);
+	return oidc_util_hex_encode(pool, bytes, len);
 }

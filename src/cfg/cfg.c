@@ -108,16 +108,16 @@ const char *oidc_cmd_crypto_passphrase_set(cmd_parms *cmd, void *struct_ptr, con
 	return rv;
 }
 
-const oidc_crypto_passphrase_t *oidc_cfg_crypto_passphrase_get(oidc_cfg_t *cfg, request_rec *r) {
-	// make sure secret1 is set
-	oidc_cfg_crypto_passphrase_secret1_get(cfg, r);
+const oidc_crypto_passphrase_t *oidc_cfg_crypto_passphrase_get(oidc_cfg_t *cfg) {
 	return &cfg->crypto_passphrase;
 }
 
-const char *oidc_cfg_crypto_passphrase_secret1_get(oidc_cfg_t *cfg, request_rec *r) {
-	if (cfg->crypto_passphrase.secret1 == NULL)
-		oidc_util_rand_str(r, (char **)&cfg->crypto_passphrase.secret1, 32);
+const char *oidc_cfg_crypto_passphrase_secret1_get(oidc_cfg_t *cfg) {
 	return cfg->crypto_passphrase.secret1;
+}
+
+void oidc_cfg_crypto_passphrase_secret1_set(oidc_cfg_t *cfg, const char *secret) {
+	cfg->crypto_passphrase.secret1 = secret;
 }
 
 const char *oidc_cfg_crypto_passphrase_secret2_get(oidc_cfg_t *cfg) {

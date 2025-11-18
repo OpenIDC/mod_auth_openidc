@@ -169,20 +169,20 @@ START_TEST(test_cache_encrypt_no_secret) {
 
 	/* get cfg and temporarily remove the secret to simulate missing passphrase */
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
-	const char *old_secret = oidc_cfg_crypto_passphrase_secret1_get(cfg, r);
+	const char *old_secret = oidc_cfg_crypto_passphrase_secret1_get(cfg);
 	cfg->crypto_passphrase.secret1 = NULL;
 	cfg->cache.encrypt = 1;
 
 	/* fail when value is too short and compression fails */
 	ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, "nokey", "v", expiry), FALSE);
 
-	/* do not fail when encryption is on but no secret is set (long enough value to compress) */
+	/* fail when encryption is on but no secret is set (long enough value to compress) */
 	ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, "nokey",
 					"vadadfsssssssssssssssssssssssssssssssssssssssssssssssssssssssss", expiry),
-			 TRUE);
+			 FALSE);
 
-	/* get should not fail because a secret should be generated */
-	ck_assert_int_eq(oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, "nokey", &value), TRUE);
+	/* fail because no secret is set */
+	ck_assert_int_eq(oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, "nokey", &value), FALSE);
 
 	/* restore secret */
 	cfg->crypto_passphrase.secret1 = (char *)old_secret;
@@ -204,7 +204,7 @@ START_TEST(test_cache_second_passphrase_retry) {
 
 	/* prepare cfg and secrets */
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
-	const char *old_s1 = oidc_cfg_crypto_passphrase_secret1_get(cfg, r);
+	const char *old_s1 = oidc_cfg_crypto_passphrase_secret1_get(cfg);
 	const char *old_s2 = oidc_cfg_crypto_passphrase_secret2_get(cfg);
 	int old_encrypt = cfg->cache.encrypt;
 
@@ -275,7 +275,7 @@ START_TEST(test_cache_secret1_empty_secret2_fallback) {
 
 	/* prepare cfg and secrets */
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
-	const char *old_s1 = oidc_cfg_crypto_passphrase_secret1_get(cfg, r);
+	const char *old_s1 = oidc_cfg_crypto_passphrase_secret1_get(cfg);
 	const char *old_s2 = oidc_cfg_crypto_passphrase_secret2_get(cfg);
 	int old_encrypt = cfg->cache.encrypt;
 
@@ -342,7 +342,7 @@ START_TEST(test_cache_compression_enabled_set_get) {
 	/* verify encryption+compression works by trying to create a JWT with the current cfg secret */
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
 	oidc_crypto_passphrase_t passphrase;
-	passphrase.secret1 = oidc_cfg_crypto_passphrase_secret1_get(cfg, r);
+	passphrase.secret1 = oidc_cfg_crypto_passphrase_secret1_get(cfg);
 	passphrase.secret2 = oidc_cfg_crypto_passphrase_secret2_get(cfg);
 	char *encoded = NULL;
 	apr_byte_t forced_no_compress = FALSE;
@@ -373,7 +373,7 @@ START_TEST(test_cache_compression_enabled_second_passphrase) {
 
 	/* prepare cfg and secrets */
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
-	const char *old_s1 = oidc_cfg_crypto_passphrase_secret1_get(cfg, r);
+	const char *old_s1 = oidc_cfg_crypto_passphrase_secret1_get(cfg);
 	const char *old_s2 = oidc_cfg_crypto_passphrase_secret2_get(cfg);
 	int old_encrypt = cfg->cache.encrypt;
 
@@ -384,7 +384,7 @@ START_TEST(test_cache_compression_enabled_second_passphrase) {
 
 	/* verify encryption+compression works for this cfg; fall back to no-compress if not */
 	oidc_crypto_passphrase_t passphrase;
-	passphrase.secret1 = oidc_cfg_crypto_passphrase_secret1_get(cfg, r);
+	passphrase.secret1 = oidc_cfg_crypto_passphrase_secret1_get(cfg);
 	passphrase.secret2 = oidc_cfg_crypto_passphrase_secret2_get(cfg);
 	char *encoded = NULL;
 	apr_byte_t forced_no_compress = FALSE;
@@ -433,7 +433,7 @@ START_TEST(test_cache_compression_enabled_empty_secret2_fallback) {
 
 	/* prepare cfg and secrets */
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
-	const char *old_s1 = oidc_cfg_crypto_passphrase_secret1_get(cfg, r);
+	const char *old_s1 = oidc_cfg_crypto_passphrase_secret1_get(cfg);
 	const char *old_s2 = oidc_cfg_crypto_passphrase_secret2_get(cfg);
 	int old_encrypt = cfg->cache.encrypt;
 
@@ -443,7 +443,7 @@ START_TEST(test_cache_compression_enabled_empty_secret2_fallback) {
 
 	/* verify encryption+compression works; fall back to no-compress if not */
 	oidc_crypto_passphrase_t passphrase2;
-	passphrase2.secret1 = oidc_cfg_crypto_passphrase_secret1_get(cfg, r);
+	passphrase2.secret1 = oidc_cfg_crypto_passphrase_secret1_get(cfg);
 	passphrase2.secret2 = oidc_cfg_crypto_passphrase_secret2_get(cfg);
 	char *encoded2 = NULL;
 	apr_byte_t forced_no_compress = FALSE;

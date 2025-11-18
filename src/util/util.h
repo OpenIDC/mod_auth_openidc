@@ -117,7 +117,7 @@ oidc_jwk_t *oidc_util_key_list_first(const apr_array_header_t *key_list, int kty
 // random.c
 unsigned int oidc_util_rand_int(unsigned int mod);
 apr_byte_t oidc_util_rand_str(request_rec *r, char **output, int len);
-char *oidc_util_rand_hex_str(request_rec *r, int len);
+char *oidc_util_rand_hex_str(request_rec *r, apr_pool_t *pool, int len);
 
 // url.c
 const char *oidc_util_url_cur_host(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers);
@@ -131,7 +131,7 @@ apr_byte_t oidc_util_url_has_parameter(request_rec *r, const char *param);
 apr_byte_t oidc_util_url_parameter_get(request_rec *r, char *name, char **value);
 
 // util.c
-char *oidc_util_hex_encode(request_rec *r, const unsigned char *bytes, unsigned int len);
+char *oidc_util_hex_encode(apr_pool_t *pool, const unsigned char *bytes, unsigned int len);
 apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char *openssl_hash_algo, const char *input,
 						      char **output);
 int oidc_util_strnenvcmp(const char *a, const char *b, int len);

@@ -71,12 +71,12 @@ static apr_byte_t oidc_session_encode(request_rec *r, oidc_cfg_t *c, oidc_sessio
 	if (encrypt == FALSE) {
 		*s_value = oidc_util_json_encode(r->pool, z->state, JSON_COMPACT);
 		return (*s_value != NULL);
-	} else if (oidc_cfg_crypto_passphrase_secret1_get(c, r) == NULL) {
+	} else if (oidc_cfg_crypto_passphrase_secret1_get(c) == NULL) {
 		oidc_error(r, "cannot encrypt session state because " OIDCCryptoPassphrase " is not set");
 		return FALSE;
 	}
 
-	if (oidc_util_jwt_create(r, oidc_cfg_crypto_passphrase_get(c, r),
+	if (oidc_util_jwt_create(r, oidc_cfg_crypto_passphrase_get(c),
 				 oidc_util_json_encode(r->pool, z->state, JSON_COMPACT), s_value) == FALSE)
 		return FALSE;
 
@@ -92,12 +92,12 @@ static apr_byte_t oidc_session_decode(request_rec *r, oidc_cfg_t *c, oidc_sessio
 
 	if (encrypt == FALSE) {
 		return oidc_util_json_decode_object(r, s_json, &z->state);
-	} else if (oidc_cfg_crypto_passphrase_secret1_get(c, r) == NULL) {
+	} else if (oidc_cfg_crypto_passphrase_secret1_get(c) == NULL) {
 		oidc_error(r, "cannot decrypt session state because " OIDCCryptoPassphrase " is not set");
 		return FALSE;
 	}
 
-	if (oidc_util_jwt_verify(r, oidc_cfg_crypto_passphrase_get(c, r), s_json, &s_payload) == FALSE) {
+	if (oidc_util_jwt_verify(r, oidc_cfg_crypto_passphrase_get(c), s_json, &s_payload) == FALSE) {
 		oidc_error(r, "could not verify secure JWT: cache value possibly corrupted");
 		return FALSE;
 	}
@@ -111,7 +111,7 @@ static apr_byte_t oidc_session_decode(request_rec *r, oidc_cfg_t *c, oidc_sessio
  * generate a unique identifier for a session
  */
 void oidc_session_id_new(request_rec *r, oidc_session_t *z) {
-	z->uuid = oidc_util_rand_hex_str(r, OIDC_SESSION_ID_LEN);
+	z->uuid = oidc_util_rand_hex_str(r, r->pool, OIDC_SESSION_ID_LEN);
 }
 
 /*

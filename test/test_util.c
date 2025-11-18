@@ -609,10 +609,10 @@ START_TEST(test_util_random) {
 	ck_assert_msg(oidc_util_rand_str(r, &s, 12) == TRUE, "oidc_util_rand_str returned FALSE");
 	ck_assert_int_eq(_oidc_strlen(s), 16);
 
-	s = oidc_util_rand_hex_str(r, 8);
+	s = oidc_util_rand_hex_str(r, r->pool, 8);
 	ck_assert_ptr_nonnull(s);
 	ck_assert_int_eq(_oidc_strlen(s), 16);
-	s = oidc_util_rand_hex_str(r, 16);
+	s = oidc_util_rand_hex_str(r, r->pool, 16);
 	ck_assert_ptr_nonnull(s);
 	ck_assert_int_eq(_oidc_strlen(s), 32);
 }
@@ -786,7 +786,7 @@ START_TEST(test_util_hex_and_hash) {
 	char *hex = NULL;
 	char *out = NULL;
 
-	hex = oidc_util_hex_encode(r, bytes, 2);
+	hex = oidc_util_hex_encode(r->pool, bytes, 2);
 	ck_assert_ptr_nonnull(hex);
 	ck_assert_str_eq(hex, "ab01");
 

@@ -195,6 +195,7 @@ void oidc_cfg_child_init(apr_pool_t *pool, oidc_cfg_t *cfg, server_rec *s);
 void oidc_cfg_cleanup_child(oidc_cfg_t *cfg, server_rec *s);
 const char *oidc_cfg_string_list_add(apr_pool_t *pool, apr_array_header_t **list, const char *arg);
 const char *oidc_cfg_endpoint_auth_set(apr_pool_t *pool, oidc_cfg_t *cfg, const char *arg, char **auth, char **alg);
+void oidc_cfg_crypto_passphrase_secret1_set(oidc_cfg_t *cfg, const char *secret);
 
 #define OIDC_CFG_MEMBER_FUNC_NAME(member, type, method) oidc_##type##_##member##_##method
 
@@ -209,9 +210,8 @@ const char *oidc_cfg_endpoint_auth_set(apr_pool_t *pool, oidc_cfg_t *cfg, const 
 
 OIDC_CFG_MEMBER_FUNCS_DECL(delete_oldest_state_cookies, int)
 OIDC_CFG_MEMBER_FUNCS_DECL(action_on_userinfo_error, oidc_on_error_action_t)
-OIDC_CMD_MEMBER_FUNC_DECL(crypto_passphrase_secret1, const char *);
-const char *oidc_cfg_crypto_passphrase_secret1_get(oidc_cfg_t *cfg, request_rec *r);
-OIDC_CFG_MEMBER_FUNC_GET_DECL(crypto_passphrase_secret2, const char *)
+OIDC_CFG_MEMBER_FUNCS_DECL(crypto_passphrase_secret1, const char *)
+OIDC_CFG_MEMBER_FUNCS_DECL(crypto_passphrase_secret2, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(refresh_mutex, oidc_cache_mutex_t *)
 OIDC_CFG_MEMBER_FUNCS_DECL(store_id_token, int)
 OIDC_CFG_MEMBER_FUNCS_DECL(post_preserve_template, const char *)
@@ -249,10 +249,8 @@ OIDC_CFG_MEMBER_FUNCS_DECL(dpop_api_enabled, int)
 
 // 2 args
 OIDC_CFG_MEMBER_FUNCS_DECL(post_preserve_templates, const char *, const char *)
+OIDC_CFG_MEMBER_FUNCS_DECL(crypto_passphrase, const oidc_crypto_passphrase_t *, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(max_number_of_state_cookies, int, const char *)
-
-const char *oidc_cmd_crypto_passphrase_set(cmd_parms *, void *, const char *, const char *);
-const oidc_crypto_passphrase_t *oidc_cfg_crypto_passphrase_get(oidc_cfg_t *cfg, request_rec *r);
 
 // 3 args
 OIDC_CFG_MEMBER_FUNCS_DECL(cookie_same_site_session, oidc_samesite_cookie_t, const char *, const char *)

@@ -314,7 +314,7 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, 
 
 	oidc_debug(r, "enter: %s (section=%s, decrypt=%d, type=%s)", key, s_section, encrypted, cfg->cache.impl->name);
 
-	s_secret = oidc_cfg_crypto_passphrase_secret1_get(cfg, r);
+	s_secret = oidc_cfg_crypto_passphrase_secret1_get(cfg);
 	if (oidc_cache_get_key(r, key, s_secret, encrypted, &s_key) == FALSE)
 		goto end;
 
@@ -385,12 +385,12 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key, 
 		   value ? (int)_oidc_strlen(value) : 0, encrypted, apr_time_sec(expiry - apr_time_now()),
 		   cfg->cache.impl->name);
 
-	if (oidc_cache_get_key(r, key, oidc_cfg_crypto_passphrase_secret1_get(cfg, r), encrypted, &s_key) == FALSE)
+	if (oidc_cache_get_key(r, key, oidc_cfg_crypto_passphrase_secret1_get(cfg), encrypted, &s_key) == FALSE)
 		goto end;
 
 	/* see if we need to encrypt */
 	if ((encrypted == 1) && (value != NULL)) {
-		if (oidc_cache_crypto_encrypt(r, value, oidc_cfg_crypto_passphrase_get(cfg, r), &encoded) == FALSE)
+		if (oidc_cache_crypto_encrypt(r, value, oidc_cfg_crypto_passphrase_get(cfg), &encoded) == FALSE)
 			goto end;
 		value = encoded;
 	}
