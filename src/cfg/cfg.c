@@ -102,18 +102,26 @@ const char *oidc_cmd_crypto_passphrase_set(cmd_parms *cmd, void *struct_ptr, con
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
 	const char *rv = NULL;
 	if (arg1)
-		rv = oidc_cfg_parse_passphrase(cmd->pool, arg1, &cfg->crypto_passphrase.secret1);
+		rv = oidc_cfg_parse_passphrase(cmd->pool, arg1, (char **)&cfg->crypto_passphrase.secret1);
 	if ((rv == NULL) && (arg2 != NULL))
-		rv = oidc_cfg_parse_passphrase(cmd->pool, arg2, &cfg->crypto_passphrase.secret2);
+		rv = oidc_cfg_parse_passphrase(cmd->pool, arg2, (char **)&cfg->crypto_passphrase.secret2);
 	return rv;
 }
 
-const oidc_crypto_passphrase_t *oidc_cfg_crypto_passphrase_get(oidc_cfg_t *cfg) {
+const oidc_crypto_passphrase_t *oidc_cfg_crypto_passphrase_get(oidc_cfg_t *cfg, request_rec *r) {
+	// make sure secret1 is set
+	oidc_cfg_crypto_passphrase_secret1_get(cfg, r);
 	return &cfg->crypto_passphrase;
 }
 
-const char *oidc_cfg_crypto_passphrase_secret1_get(oidc_cfg_t *cfg) {
+const char *oidc_cfg_crypto_passphrase_secret1_get(oidc_cfg_t *cfg, request_rec *r) {
+	if (cfg->crypto_passphrase.secret1 == NULL)
+		oidc_util_rand_str(r, (char **)&cfg->crypto_passphrase.secret1, 32);
 	return cfg->crypto_passphrase.secret1;
+}
+
+const char *oidc_cfg_crypto_passphrase_secret2_get(oidc_cfg_t *cfg) {
+	return cfg->crypto_passphrase.secret2;
 }
 
 const char *oidc_cmd_outgoing_proxy_set(cmd_parms *cmd, void *ptr, const char *arg1, const char *arg2,

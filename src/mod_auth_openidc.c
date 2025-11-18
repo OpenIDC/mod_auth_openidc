@@ -1450,9 +1450,6 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg_t *c) {
 		return oidc_check_config_error(s, OIDCRedirectURI);
 	redirect_uri_is_relative = (oidc_cfg_redirect_uri_get(c)[0] == OIDC_CHAR_FORWARD_SLASH);
 
-	if (oidc_cfg_crypto_passphrase_secret1_get(c) == NULL)
-		return oidc_check_config_error(s, OIDCCryptoPassphrase);
-
 	if (oidc_cfg_metadata_dir_get(c) == NULL) {
 		if (oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(c)) == NULL) {
 			if (oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(c)) == NULL)
@@ -1555,9 +1552,6 @@ static int oidc_check_config_oauth(server_rec *s, oidc_cfg_t *c) {
 			       "' or '" OIDCOAuthVerifyCertFiles "') must be set");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
-
-	if ((oidc_cfg_cache_encrypt_get(c) == 1) && (oidc_cfg_crypto_passphrase_secret1_get(c) == NULL))
-		return oidc_check_config_error(s, OIDCCryptoPassphrase);
 
 	return OK;
 }

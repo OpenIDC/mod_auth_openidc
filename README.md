@@ -41,7 +41,7 @@ How to Use It
 
 1. install and load `mod_auth_openidc.so` in your Apache server
 1. set `OIDCRedirectURI` to a "vanity" URL within a location that is protected by mod_auth_openidc
-1. configure a random password in `OIDCCryptoPassphrase` for session/state encryption purposes
+
 1. configure `OIDCProviderMetadataURL` so it points to the Discovery metadata of your OpenID Connect Provider served on the `.well-known/openid-configuration` endpoint
 1. register/generate a Client identifier and a secret with the OpenID Connect Provider and configure those in `OIDCClientID` and `OIDCClientSecret` respectively
 1. register the `OIDCRedirectURI` configured above as the Redirect or Callback URI for your client at the Provider
@@ -53,7 +53,6 @@ LoadModule auth_openidc_module modules/mod_auth_openidc.so
 
 # OIDCRedirectURI is a vanity URL that must point to a path protected by this module but must NOT point to any content
 OIDCRedirectURI https://<hostname>/secure/redirect_uri
-OIDCCryptoPassphrase <password>
 
 OIDCProviderMetadataURL <issuer>/.well-known/openid-configuration
 OIDCClientID <client_id>

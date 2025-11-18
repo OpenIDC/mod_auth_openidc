@@ -248,7 +248,7 @@ static inline apr_byte_t oidc_cache_crypto_encrypt(request_rec *r, const char *p
 /*
  * AES GCM decrypt using the crypto passphrase as symmetric key
  */
-static inline apr_byte_t oidc_cache_crypto_decrypt(request_rec *r, const char *cache_value, char *secret,
+static inline apr_byte_t oidc_cache_crypto_decrypt(request_rec *r, const char *cache_value, const char *secret,
 						   char **plaintext) {
 	oidc_crypto_passphrase_t passphrase;
 	passphrase.secret1 = secret;
@@ -309,12 +309,12 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, 
 	char *msg = NULL;
 	const char *s_key = NULL;
 	char *cache_value = NULL;
-	char *s_secret = NULL;
+	const char *s_secret = NULL;
 	const char *s_section = oidc_cache_section_get(r, section);
 
 	oidc_debug(r, "enter: %s (section=%s, decrypt=%d, type=%s)", key, s_section, encrypted, cfg->cache.impl->name);
 
-	s_secret = cfg->crypto_passphrase.secret1;
+	s_secret = oidc_cfg_crypto_passphrase_secret1_get(cfg, r);
 	if (oidc_cache_get_key(r, key, s_secret, encrypted, &s_key) == FALSE)
 		goto end;
 
@@ -325,9 +325,9 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, 
 		goto end;
 
 	/* see if it is any good */
-	if ((cache_value == NULL) && (encrypted == 1) && (cfg->crypto_passphrase.secret2 != NULL)) {
+	if ((cache_value == NULL) && (encrypted == 1) && (oidc_cfg_crypto_passphrase_secret2_get(cfg) != NULL)) {
 		oidc_debug(r, "2nd try with previous passphrase");
-		s_secret = cfg->crypto_passphrase.secret2;
+		s_secret = oidc_cfg_crypto_passphrase_secret2_get(cfg);
 		if (oidc_cache_get_key(r, key, s_secret, encrypted, &s_key) == FALSE)
 			goto end;
 		if (cfg->cache.impl->get(r, s_section, s_key, &cache_value) == FALSE)
@@ -385,12 +385,12 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key, 
 		   value ? (int)_oidc_strlen(value) : 0, encrypted, apr_time_sec(expiry - apr_time_now()),
 		   cfg->cache.impl->name);
 
-	if (oidc_cache_get_key(r, key, cfg->crypto_passphrase.secret1, encrypted, &s_key) == FALSE)
+	if (oidc_cache_get_key(r, key, oidc_cfg_crypto_passphrase_secret1_get(cfg, r), encrypted, &s_key) == FALSE)
 		goto end;
 
 	/* see if we need to encrypt */
 	if ((encrypted == 1) && (value != NULL)) {
-		if (oidc_cache_crypto_encrypt(r, value, &cfg->crypto_passphrase, &encoded) == FALSE)
+		if (oidc_cache_crypto_encrypt(r, value, oidc_cfg_crypto_passphrase_get(cfg, r), &encoded) == FALSE)
 			goto end;
 		value = encoded;
 	}
