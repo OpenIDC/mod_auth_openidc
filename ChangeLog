@@ -1,3 +1,6 @@
+11/19/2025
+- request: set the OIDC_ERROR variables when PAR is configured but not enabled by the Provider
+
 11/18/2025
 - id_token: add "off" option to OIDCPassIDTokenAs so no claims from the ID token will be passed on
 - passphrase: generate a crypto key when OIDCCryptoPassphrase is not set

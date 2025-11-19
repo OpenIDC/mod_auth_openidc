@@ -93,6 +93,10 @@ static int oidc_proto_request_auth_push(request_rec *r, struct oidc_provider_t *
 	if (endpoint_url == NULL) {
 		oidc_error(r, "the Provider's OAuth 2.0 Pushed Authorization Request endpoint URL is not set, PAR "
 			      "cannot be used");
+		rv = oidc_util_html_send_error(
+		    r, "Pushed Authorization Request Endpoint not set",
+		    "the Provider's OAuth 2.0 Pushed Authorization Request endpoint URL is not set, PAR cannot be used",
+		    HTTP_INTERNAL_SERVER_ERROR);
 		goto out;
 	}
 
