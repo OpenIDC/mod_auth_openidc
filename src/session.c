@@ -549,7 +549,6 @@ static void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, 
 	apr_byte_t is_allowed = TRUE;
 	int warn_claim_size = OIDC_SESSION_WARN_CLAIM_SIZE;
 	const char *str = NULL;
-	const char *filtered_claims = NULL;
 
 	// avoid gcc 14 warning: '%s' directive argument is null [-Wformat-overflow=]
 	if (session_key == NULL)
@@ -614,6 +613,7 @@ static void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, 
 	}
 
 #ifdef USE_LIBJQ
+	const char *filtered_claims = NULL;
 	const oidc_apr_expr_t *filter = oidc_cfg_filter_claims_expr_get(c);
 	if (filter != NULL) {
 		filtered_claims = oidc_util_jq_filter(r, dst, oidc_util_apr_expr_exec(r, filter, TRUE));
