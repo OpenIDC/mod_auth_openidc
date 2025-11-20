@@ -328,9 +328,6 @@ ap_timeout_parameter_parse(const char *timeout_parameter, apr_interval_time_t *t
 	apr_int64_t tout;
 
 	tout = apr_strtoi64(timeout_parameter, &endp, 10);
-	if (errno) {
-		return errno;
-	}
 	if (!endp || !*endp) {
 		time_str = default_time_unit;
 	} else {
