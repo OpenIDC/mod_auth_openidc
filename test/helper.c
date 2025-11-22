@@ -112,7 +112,7 @@ static request_rec *oidc_test_request_init(apr_pool_t *pool) {
 	cfg->cache.shm_size_max = 500;
 	cfg->cache.shm_entry_size_max = 16384 + 255 + 17;
 	cfg->cache.encrypt = 1;
-	if (cfg->cache.impl->post_config(request->server) != OK) {
+	if (cfg->cache.impl->post_config(pool, request->server) != OK) {
 		fprintf(stderr, "cfg->cache.impl->post_config failed!\n");
 		exit(-1);
 	}
@@ -129,7 +129,7 @@ void oidc_test_setup(void) {
 
 void oidc_test_teardown(void) {
 	EVP_cleanup();
-	oidc_test_cfg_get()->cache.impl->destroy(request->server);
+	oidc_test_cfg_get()->cache.impl->destroy(pool, request->server);
 	apr_pool_destroy(pool);
 	apr_terminate();
 }

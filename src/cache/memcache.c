@@ -69,19 +69,19 @@ static void *oidc_cache_memcache_cfg_create(apr_pool_t *pool) {
 /*
  * initialize the memcache struct to a number of memcache servers
  */
-static int oidc_cache_memcache_post_config(server_rec *s) {
+static int oidc_cache_memcache_post_config(apr_pool_t *pool, server_rec *s) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(s->module_config, &auth_openidc_module);
 
 	if (cfg->cache.cfg != NULL)
 		return APR_SUCCESS;
-	oidc_cache_cfg_memcache_t *context = oidc_cache_memcache_cfg_create(s->process->pool);
+	oidc_cache_cfg_memcache_t *context = oidc_cache_memcache_cfg_create(pool);
 	cfg->cache.cfg = context;
 
 	apr_status_t rv = APR_SUCCESS;
 	apr_uint16_t nservers = 0;
 	char *split;
 	char *tok;
-	apr_pool_t *p = s->process->pool;
+	apr_pool_t *p = pool;
 	APR_OPTIONAL_FN_TYPE(http2_get_num_workers) * get_h2_num_workers;
 	int max_threads = 0;
 	int minw = 0;

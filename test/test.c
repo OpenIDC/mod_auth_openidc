@@ -1478,7 +1478,7 @@ static request_rec *test_setup(apr_pool_t *pool) {
 	cfg->cache.shm_size_max = 500;
 	cfg->cache.shm_entry_size_max = 16384 + 255 + 17;
 	cfg->cache.encrypt = 1;
-	if (cfg->cache.impl->post_config(request->server) != OK) {
+	if (oidc_cfg_post_config(pool, cfg, request->server) != OK) {
 		printf("cfg->cache.impl->post_config failed!\n");
 		exit(-1);
 	}

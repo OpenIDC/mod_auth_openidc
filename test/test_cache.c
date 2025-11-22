@@ -55,7 +55,7 @@ START_TEST(test_cache_mutex_and_status2str) {
 	oidc_cache_mutex_t *m = oidc_cache_mutex_create(pool, FALSE);
 	ck_assert_ptr_nonnull(m);
 
-	ck_assert_int_eq(oidc_cache_mutex_post_config(r->server, m, "test"), TRUE);
+	ck_assert_int_eq(oidc_cache_mutex_post_config(pool, r->server, m, "test"), TRUE);
 	/* lock/unlock should succeed */
 	ck_assert_int_eq(oidc_cache_mutex_lock(pool, r->server, m), TRUE);
 	ck_assert_int_eq(oidc_cache_mutex_unlock(pool, r->server, m), TRUE);
@@ -143,7 +143,7 @@ START_TEST(test_cache_mutex_global_and_child_init) {
 	ck_assert_ptr_nonnull(m);
 
 	/* post_config should create the global mutex */
-	ck_assert_int_eq(oidc_cache_mutex_post_config(r->server, m, "gtest"), TRUE);
+	ck_assert_int_eq(oidc_cache_mutex_post_config(pool, r->server, m, "gtest"), TRUE);
 
 	/* lock/unlock should succeed for global mutex */
 	ck_assert_int_eq(oidc_cache_mutex_lock(pool, r->server, m), TRUE);

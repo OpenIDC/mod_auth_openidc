@@ -782,14 +782,14 @@ static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void 
 /*
  * NB: global, yet called for each vhost that has metrics enabled!
  */
-apr_byte_t oidc_metrics_post_config(server_rec *s) {
+apr_byte_t oidc_metrics_post_config(apr_pool_t *pool, server_rec *s) {
 
 	/* make sure it gets executed exactly once! */
 	if (_oidc_metrics_cache != NULL)
 		return TRUE;
 
 	/* create the shared memory segment that holds the stringified JSON formatted metrics data */
-	if (apr_shm_create(&_oidc_metrics_cache, _oidc_metrics_shm_size(s), NULL, s->process->pconf) != APR_SUCCESS)
+	if (apr_shm_create(&_oidc_metrics_cache, _oidc_metrics_shm_size(s), NULL, s->process->pool) != APR_SUCCESS)
 		return FALSE;
 	if (_oidc_metrics_cache == NULL)
 		return FALSE;
@@ -813,14 +813,14 @@ apr_byte_t oidc_metrics_post_config(server_rec *s) {
 	_oidc_metrics_global_mutex = oidc_cache_mutex_create(s->process->pool, TRUE);
 	if (_oidc_metrics_global_mutex == NULL)
 		return FALSE;
-	if (oidc_cache_mutex_post_config(s, _oidc_metrics_global_mutex, "metrics-global") == FALSE)
+	if (oidc_cache_mutex_post_config(s->process->pool, s, _oidc_metrics_global_mutex, "metrics-global") == FALSE)
 		return FALSE;
 
 	/* create and initialize the mutex that guards the shared memory */
 	_oidc_metrics_process_mutex = oidc_cache_mutex_create(s->process->pool, FALSE);
 	if (_oidc_metrics_process_mutex == NULL)
 		return FALSE;
-	if (oidc_cache_mutex_post_config(s, _oidc_metrics_process_mutex, "metrics-process") == FALSE)
+	if (oidc_cache_mutex_post_config(s->process->pool, s, _oidc_metrics_process_mutex, "metrics-process") == FALSE)
 		return FALSE;
 
 	return TRUE;

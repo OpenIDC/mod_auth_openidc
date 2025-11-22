@@ -48,7 +48,7 @@
 #include <httpd.h>
 
 apr_byte_t oidc_metrics_is_valid_classname(apr_pool_t *pool, const char *name, char **valid_names);
-apr_byte_t oidc_metrics_post_config(server_rec *s);
+apr_byte_t oidc_metrics_post_config(apr_pool_t *pool, server_rec *s);
 apr_status_t oidc_metrics_child_init(apr_pool_t *p, server_rec *s);
 apr_status_t oidc_metrics_cleanup(server_rec *s);
 int oidc_metrics_handle_request(request_rec *r);

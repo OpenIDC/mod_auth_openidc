@@ -59,12 +59,12 @@
 #define OIDC_CACHE_KEY_SIZE_MAX 512
 
 typedef void *(*oidc_cache_cfg_create)(apr_pool_t *pool);
-typedef int (*oidc_cache_post_config_function)(server_rec *s);
+typedef int (*oidc_cache_post_config_function)(apr_pool_t *pool, server_rec *s);
 typedef int (*oidc_cache_child_init_function)(apr_pool_t *p, server_rec *s);
 typedef apr_byte_t (*oidc_cache_get_function)(request_rec *r, const char *section, const char *key, char **value);
 typedef apr_byte_t (*oidc_cache_set_function)(request_rec *r, const char *section, const char *key, const char *value,
 					      apr_time_t expiry);
-typedef int (*oidc_cache_destroy_function)(server_rec *s);
+typedef int (*oidc_cache_destroy_function)(apr_pool_t *pool, server_rec *s);
 
 typedef struct oidc_cache_t {
 	const char *name;
@@ -86,7 +86,7 @@ typedef struct oidc_cache_mutex_t {
 
 oidc_cache_mutex_t *oidc_cache_mutex_create(apr_pool_t *pool, apr_byte_t global);
 char *oidc_cache_status2str(apr_pool_t *p, apr_status_t statcode);
-apr_byte_t oidc_cache_mutex_post_config(server_rec *s, oidc_cache_mutex_t *m, const char *type);
+apr_byte_t oidc_cache_mutex_post_config(apr_pool_t *pool, server_rec *s, oidc_cache_mutex_t *m, const char *type);
 apr_status_t oidc_cache_mutex_child_init(apr_pool_t *p, server_rec *s, oidc_cache_mutex_t *m);
 apr_byte_t oidc_cache_mutex_lock(apr_pool_t *pool, server_rec *s, oidc_cache_mutex_t *m);
 apr_byte_t oidc_cache_mutex_unlock(apr_pool_t *pool, server_rec *s, oidc_cache_mutex_t *m);

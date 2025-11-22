@@ -72,7 +72,7 @@ typedef struct oidc_cache_cfg_redis_t {
 	oidc_cache_redis_disconnect_function_t disconnect;
 } oidc_cache_cfg_redis_t;
 
-int oidc_cache_redis_post_config(server_rec *s, oidc_cfg_t *cfg, const char *name);
+int oidc_cache_redis_post_config(apr_pool_t *pool, server_rec *s, oidc_cfg_t *cfg, const char *name);
 int oidc_cache_redis_child_init(apr_pool_t *p, server_rec *s);
 redisReply *oidc_cache_redis_command(request_rec *r, oidc_cache_cfg_redis_t *context, char **errstr, const char *format,
 				     va_list ap);

@@ -326,7 +326,7 @@ static request_rec *request_setup(apr_pool_t *pool) {
 	cfg->cache.cfg = NULL;
 	cfg->cache.shm_size_max = 500;
 	cfg->cache.shm_entry_size_max = 16384 + 255 + 17;
-	if (cfg->cache.impl->post_config(request->server) != OK) {
+	if (cfg->cache.impl->post_config(pool, request->server) != OK) {
 		printf("cfg->cache->post_config failed!\n");
 		exit(-1);
 	}

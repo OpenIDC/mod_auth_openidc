@@ -85,18 +85,17 @@ static void *oidc_cache_shm_cfg_create(apr_pool_t *pool) {
 /*
  * initialized the shared memory block in the parent process
  */
-int oidc_cache_shm_post_config(server_rec *s) {
+static int oidc_cache_shm_post_config(apr_pool_t *pool, server_rec *s) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(s->module_config, &auth_openidc_module);
 
 	if (cfg->cache.cfg != NULL)
 		return OK;
-	oidc_cache_cfg_shm_t *context = oidc_cache_shm_cfg_create(s->process->pconf);
+	oidc_cache_cfg_shm_t *context = oidc_cache_shm_cfg_create(pool);
 	cfg->cache.cfg = context;
 
 	/* create the shared memory segment */
-	apr_status_t rv =
-	    apr_shm_create(&context->shm, (apr_size_t)cfg->cache.shm_entry_size_max * cfg->cache.shm_size_max, NULL,
-			   s->process->pconf);
+	apr_status_t rv = apr_shm_create(
+	    &context->shm, (apr_size_t)cfg->cache.shm_entry_size_max * cfg->cache.shm_size_max, NULL, s->process->pool);
 	if (rv != APR_SUCCESS) {
 		oidc_serror(s, "apr_shm_create failed to create shared memory segment");
 		return HTTP_INTERNAL_SERVER_ERROR;
@@ -109,7 +108,7 @@ int oidc_cache_shm_post_config(server_rec *s) {
 		t->access = 0;
 	}
 
-	if (oidc_cache_mutex_post_config(s, context->mutex, "shm") == FALSE)
+	if (oidc_cache_mutex_post_config(pool, s, context->mutex, "shm") == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
 	oidc_sdebug(
@@ -125,7 +124,7 @@ int oidc_cache_shm_post_config(server_rec *s) {
 /*
  * initialize the shared memory segment in a child process
  */
-int oidc_cache_shm_child_init(apr_pool_t *p, server_rec *s) {
+static int oidc_cache_shm_child_init(apr_pool_t *p, server_rec *s) {
 	oidc_cfg_t *cfg = ap_get_module_config(s->module_config, &auth_openidc_module);
 	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *)cfg->cache.cfg;
 
@@ -319,7 +318,7 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section, const 
 	return TRUE;
 }
 
-static int oidc_cache_shm_destroy(server_rec *s) {
+static int oidc_cache_shm_destroy(apr_pool_t *pool, server_rec *s) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(s->module_config, &auth_openidc_module);
 	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *)cfg->cache.cfg;
 	apr_status_t rv = APR_SUCCESS;
@@ -328,11 +327,11 @@ static int oidc_cache_shm_destroy(server_rec *s) {
 		  context ? context->is_parent : -1);
 
 	if (context && (context->is_parent == TRUE) && (context->shm) && (context->mutex)) {
-		oidc_cache_mutex_lock(s->process->pool, s, context->mutex);
+		oidc_cache_mutex_lock(pool, s, context->mutex);
 		rv = apr_shm_destroy(context->shm);
 		oidc_sdebug(s, "apr_shm_destroy returned: %d", rv);
 		context->shm = NULL;
-		oidc_cache_mutex_unlock(s->process->pool, s, context->mutex);
+		oidc_cache_mutex_unlock(pool, s, context->mutex);
 	}
 
 	if (context && (context->mutex)) {

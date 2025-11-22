@@ -416,6 +416,10 @@ void oidc_cfg_oauth_merge(apr_pool_t *pool, oidc_oauth_t *dst, const oidc_oauth_
 }
 
 void oidc_cfg_oauth_destroy(oidc_oauth_t *o) {
+	if (o == NULL)
+		return;
 	oidc_jwk_list_destroy(o->verify_public_keys);
+	o->verify_public_keys = NULL;
 	oidc_jwk_list_destroy_hash(o->verify_shared_keys);
+	o->verify_shared_keys = NULL;
 }

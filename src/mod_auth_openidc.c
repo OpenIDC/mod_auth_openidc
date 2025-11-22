@@ -1433,7 +1433,7 @@ static int oidc_check_config_error(server_rec *s, const char *config_str) {
 /*
  * check the config required for the OpenID Connect RP role
  */
-static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg_t *c) {
+static int oidc_check_config_openid_openidc(apr_pool_t *pool, server_rec *s, oidc_cfg_t *c) {
 
 	apr_uri_t r_uri;
 	apr_byte_t redirect_uri_is_relative;
@@ -1457,8 +1457,7 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg_t *c) {
 			if (oidc_cfg_provider_authorization_endpoint_url_get(oidc_cfg_provider_get(c)) == NULL)
 				return oidc_check_config_error(s, OIDCProviderAuthorizationEndpoint);
 		} else {
-			apr_uri_parse(s->process->pconf, oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(c)),
-				      &r_uri);
+			apr_uri_parse(pool, oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(c)), &r_uri);
 			if ((r_uri.scheme == NULL) || (_oidc_strnatcasecmp(r_uri.scheme, "https") != 0)) {
 				oidc_swarn(s,
 					   "the URL scheme (%s) of the configured " OIDCProviderMetadataURL
@@ -1476,7 +1475,7 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg_t *c) {
 		}
 	}
 
-	apr_uri_parse(s->process->pconf, oidc_cfg_redirect_uri_get(c), &r_uri);
+	apr_uri_parse(pool, oidc_cfg_redirect_uri_get(c), &r_uri);
 	if (!redirect_uri_is_relative) {
 		if (_oidc_strnatcasecmp(r_uri.scheme, "https") != 0) {
 			oidc_swarn(s,
@@ -1515,7 +1514,7 @@ static int oidc_check_config_openid_openidc(server_rec *s, oidc_cfg_t *c) {
 /*
  * check the config required for the OAuth 2.0 RS role
  */
-static int oidc_check_config_oauth(server_rec *s, oidc_cfg_t *c) {
+static int oidc_check_config_oauth(apr_pool_t *pool, server_rec *s, oidc_cfg_t *c) {
 
 	apr_uri_t r_uri;
 
@@ -1523,7 +1522,7 @@ static int oidc_check_config_oauth(server_rec *s, oidc_cfg_t *c) {
 		      "https://github.com/OpenIDC/mod_oauth2!");
 
 	if (oidc_cfg_oauth_metadata_url_get(c) != NULL) {
-		apr_uri_parse(s->process->pconf, oidc_cfg_oauth_metadata_url_get(c), &r_uri);
+		apr_uri_parse(pool, oidc_cfg_oauth_metadata_url_get(c), &r_uri);
 		if ((r_uri.scheme == NULL) || (_oidc_strnatcasecmp(r_uri.scheme, "https") != 0)) {
 			oidc_swarn(s,
 				   "the URL scheme (%s) of the configured " OIDCOAuthServerMetadataURL
@@ -1564,13 +1563,15 @@ static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s) {
 
 	oidc_sdebug(s, "enter");
 
-	if (oidc_cfg_crypto_passphrase_secret1_get(cfg) == NULL)
-		oidc_cfg_crypto_passphrase_secret1_set(cfg, oidc_util_rand_hex_str(NULL, s->process->pconf, 32));
+	if (oidc_cfg_crypto_passphrase_secret1_get(cfg) == NULL) {
+		oidc_serror(s, "'" OIDCCryptoPassphrase "' must be set");
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
 
 	if ((oidc_cfg_metadata_dir_get(cfg) != NULL) ||
 	    (oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(cfg)) != NULL) ||
 	    (oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(cfg)) != NULL)) {
-		if (oidc_check_config_openid_openidc(s, cfg) != OK)
+		if (oidc_check_config_openid_openidc(pool, s, cfg) != OK)
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -1579,7 +1580,7 @@ static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s) {
 	    (oidc_cfg_oauth_introspection_endpoint_url_get(cfg) != NULL) ||
 	    (oidc_cfg_oauth_verify_jwks_uri_get(cfg) != NULL) || (oidc_cfg_oauth_verify_public_keys_get(cfg) != NULL) ||
 	    (oidc_cfg_oauth_verify_shared_keys_get(cfg) != NULL)) {
-		if (oidc_check_config_oauth(s, cfg) != OK)
+		if (oidc_check_config_oauth(pool, s, cfg) != OK)
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -1591,12 +1592,13 @@ static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s) {
  */
 static int oidc_config_check_merged_vhost_configs(apr_pool_t *pool, server_rec *s) {
 	int status = OK;
-	while (s != NULL && status == OK) {
-		oidc_cfg_t *cfg = ap_get_module_config(s->module_config, &auth_openidc_module);
+	server_rec *sp = s;
+	while ((sp != NULL) && (status == OK)) {
+		oidc_cfg_t *cfg = ap_get_module_config(sp->module_config, &auth_openidc_module);
 		if (oidc_cfg_merged_get(cfg)) {
-			status = oidc_config_check_vhost_config(pool, s);
+			status = oidc_config_check_vhost_config(pool, sp);
 		}
-		s = s->next;
+		sp = sp->next;
 	}
 	return status;
 }
@@ -1605,12 +1607,13 @@ static int oidc_config_check_merged_vhost_configs(apr_pool_t *pool, server_rec *
  * check if any merged vhost configs exist
  */
 static int oidc_config_merged_vhost_configs_exist(server_rec *s) {
-	while (s != NULL) {
-		oidc_cfg_t *cfg = ap_get_module_config(s->module_config, &auth_openidc_module);
+	server_rec *sp = s;
+	while (sp != NULL) {
+		oidc_cfg_t *cfg = ap_get_module_config(sp->module_config, &auth_openidc_module);
 		if (oidc_cfg_merged_get(cfg)) {
 			return TRUE;
 		}
-		s = s->next;
+		sp = sp->next;
 	}
 	return FALSE;
 }
@@ -1756,7 +1759,7 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, se
 	server_rec *sp = s;
 	while (sp != NULL) {
 		oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(sp->module_config, &auth_openidc_module);
-		if (oidc_cfg_post_config(cfg, sp) != OK)
+		if (oidc_cfg_post_config(pool, cfg, sp) != OK)
 			return HTTP_INTERNAL_SERVER_ERROR;
 		sp = sp->next;
 	}
