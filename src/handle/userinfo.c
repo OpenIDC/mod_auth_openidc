@@ -267,7 +267,6 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg_t *cf
 	oidc_jose_error_t err;
 	apr_time_t access_token_expires = -1;
 	char *key = NULL;
-	json_t *json = NULL;
 	int ttl = 0;
 	int exp = 0;
 	apr_time_t expiry = 0;
@@ -337,9 +336,6 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg_t *cf
 	oidc_cache_set_signed_jwt(r, key, *cser, expiry);
 
 end:
-
-	if (json)
-		json_decref(json);
 
 	if (jwt)
 		oidc_jwt_destroy(jwt);
