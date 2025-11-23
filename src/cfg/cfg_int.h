@@ -115,6 +115,8 @@ struct oidc_cfg_cache_t {
 
 struct oidc_cfg_t {
 
+	server_rec *svr;
+
 	/* the redirect URI as configured with the OpenID Connect OP's that we talk to */
 	char *redirect_uri;
 	/* secret key(s) used for encryption */

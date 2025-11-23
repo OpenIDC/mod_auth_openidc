@@ -108,8 +108,32 @@ static apr_byte_t oidc_cache_mutex_global_create(apr_pool_t *pool, server_rec *s
 #endif
 	    ;
 
+	// TODO: need to allocate this on the server process pool to avoid crashes on
+	//       oidc_cache_mutex_unlock at shutdown time on graceful restarts,
+	//       and test/helper.c shutdown; is it because libapr cleaned it up before us?
+
+	// it is probably related to the remaining valgrind report on possibly lost memory:
+
+	/*
+	 * ==73== 24 bytes in 1 blocks are possibly lost in loss record 39 of 176
+	 * ==73==    at 0x4844818: malloc (vg_replace_malloc.c:446)
+	 * ==73==    by 0x4A91765: __tsearch (tsearch.c:337)
+	 * ==73==    by 0x4A91765: tsearch (tsearch.c:290)
+	 * ==73==    by 0x4A1C4E5: __sem_check_add_mapping (sem_routines.c:121)
+	 * ==73==    by 0x4A1C1A0: sem_open@@GLIBC_2.34 (sem_open.c:195)
+	 * ==73==    by 0x49622BF: ??? (in /usr/lib/x86_64-linux-gnu/libapr-1.so.0.7.5)
+	 * ==73==    by 0x49633D9: apr_proc_mutex_create (in /usr/lib/x86_64-linux-gnu/libapr-1.so.0.7.5)
+	 * ==73==    by 0x4961E8C: apr_global_mutex_create (in /usr/lib/x86_64-linux-gnu/libapr-1.so.0.7.5)
+	 * ==73==    by 0x5A27AD3: oidc_cache_mutex_global_create (common.c:116)
+	 * ==73==    by 0x5A27AD3: oidc_cache_mutex_post_config (common.c:144)
+	 * ==73==    by 0x5A2750D: oidc_cache_shm_post_config (shm.c:111)
+	 * ==73==    by 0x5A1D66E: oidc_cfg_post_config (cfg.c:1009)
+	 * ==73==    by 0x5A15F9C: oidc_post_config (mod_auth_openidc.c:1762)
+	 * ==73==    by 0x16B2C3: ap_run_post_config (in /usr/sbin/apache2)
+	 */
+
 	/* create the mutex lock */
-	rv = apr_global_mutex_create(&m->gmutex, (const char *)m->mutex_filename, mech, pool);
+	rv = apr_global_mutex_create(&m->gmutex, (const char *)m->mutex_filename, mech, s->process->pool);
 
 	if (rv != APR_SUCCESS) {
 		oidc_serror(s, "apr_global_mutex_create failed to create mutex (%d) on file %s: %s (%d)", mech,
@@ -137,8 +161,9 @@ apr_byte_t oidc_cache_mutex_post_config(apr_pool_t *pool, server_rec *s, oidc_ca
 	apr_status_t rv = APR_SUCCESS;
 
 	if (m->is_global)
-		return oidc_cache_mutex_global_create(s->process->pool, s, m, type);
+		return oidc_cache_mutex_global_create(pool, s, m, type);
 
+	// NB: see note above at apr_global_mutex_create
 	rv = apr_thread_mutex_create(&m->tmutex, APR_THREAD_MUTEX_DEFAULT, s->process->pool);
 	if (rv != APR_SUCCESS) {
 		oidc_serror(s, "apr_thread_mutex_create failed: %s (%d)", oidc_cache_status2str(pool, rv), rv);
@@ -162,7 +187,7 @@ apr_status_t oidc_cache_mutex_child_init(apr_pool_t *p, server_rec *s, oidc_cach
 	apr_status_t rv = APR_SUCCESS;
 
 	if (m->is_global) {
-		rv = apr_global_mutex_child_init(&m->gmutex, (const char *)m->mutex_filename, s->process->pool);
+		rv = apr_global_mutex_child_init(&m->gmutex, (const char *)m->mutex_filename, p);
 		if (rv != APR_SUCCESS) {
 			oidc_serror(s,
 				    "apr_global_mutex_child_init failed to reopen mutex on "

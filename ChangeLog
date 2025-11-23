@@ -1,6 +1,6 @@
-11/22/2025
-- init: refactor pconf pool memory allocation handling, part 1
-  should result in less memory allocation over graceful restarts
+11/23/2025
+- init: refactor pconf pool memory allocation handling
+  avoid increasing memory (pool) consumption over graceful restarts
 
 11/19/2025
 - request: set the OIDC_ERROR variables when PAR is configured but not enabled by the Provider

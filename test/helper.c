@@ -54,7 +54,8 @@ static request_rec *oidc_test_request_init(apr_pool_t *pool) {
 	const unsigned int kEls = kIdx + 1;
 	request_rec *request = (request_rec *)apr_pcalloc(pool, sizeof(request_rec));
 
-	request->pool = pool;
+	apr_pool_create(&request->pool, pool);
+
 	request->subprocess_env = apr_table_make(request->pool, 0);
 
 	request->headers_in = apr_table_make(request->pool, 0);
@@ -68,13 +69,13 @@ static request_rec *oidc_test_request_init(apr_pool_t *pool) {
 		      "mod_auth_openidc_session"
 		      "=0123456789abcdef; baz=zot");
 
-	request->server = apr_pcalloc(request->pool, sizeof(struct server_rec));
-	request->server->process = apr_pcalloc(request->pool, sizeof(struct process_rec));
-	request->server->process->pool = request->pool;
-	request->server->process->pconf = request->pool;
-	request->connection = apr_pcalloc(request->pool, sizeof(struct conn_rec));
-	request->connection->bucket_alloc = apr_bucket_alloc_create(request->pool);
-	request->connection->local_addr = apr_pcalloc(request->pool, sizeof(apr_sockaddr_t));
+	request->server = apr_pcalloc(pool, sizeof(struct server_rec));
+	request->server->process = apr_pcalloc(pool, sizeof(struct process_rec));
+	apr_pool_create(&request->server->process->pool, pool);
+	apr_pool_create(&request->server->process->pconf, pool);
+	request->connection = apr_pcalloc(pool, sizeof(struct conn_rec));
+	request->connection->bucket_alloc = apr_bucket_alloc_create(pool);
+	request->connection->local_addr = apr_pcalloc(pool, sizeof(apr_sockaddr_t));
 
 	apr_pool_userdata_set("https", "scheme", NULL, request->pool);
 	request->server->server_hostname = "www.example.com";
@@ -84,27 +85,28 @@ static request_rec *oidc_test_request_init(apr_pool_t *pool) {
 	apr_uri_parse(request->pool, "https://www.example.com/bla?foo=bar&param1=value1", &request->parsed_uri);
 
 	auth_openidc_module.module_index = kIdx;
-	oidc_cfg_t *cfg = oidc_cfg_server_create(request->pool, request->server);
+	oidc_cfg_t *cfg = oidc_cfg_server_create(request->server->process->pconf, request->server);
 
-	oidc_cfg_provider_issuer_set(pool, oidc_cfg_provider_get(cfg), "https://idp.example.com");
-	oidc_cfg_provider_authorization_endpoint_url_set(pool, oidc_cfg_provider_get(cfg),
+	oidc_cfg_provider_issuer_set(request->server->process->pconf, oidc_cfg_provider_get(cfg),
+				     "https://idp.example.com");
+	oidc_cfg_provider_authorization_endpoint_url_set(request->server->process->pconf, oidc_cfg_provider_get(cfg),
 							 "https://idp.example.com/authorize");
-	oidc_cfg_provider_client_id_set(pool, oidc_cfg_provider_get(cfg), "client_id");
+	oidc_cfg_provider_client_id_set(request->server->process->pconf, oidc_cfg_provider_get(cfg), "client_id");
 
 	cfg->redirect_uri = "https://www.example.com/protected/";
 
-	oidc_dir_cfg_t *d_cfg = oidc_cfg_dir_config_create(request->pool, NULL);
+	oidc_dir_cfg_t *d_cfg = oidc_cfg_dir_config_create(request->server->process->pconf, NULL);
 
 	// coverity[suspicious_sizeof]
-	request->server->module_config = apr_pcalloc(request->pool, sizeof(void *) * kEls);
+	request->server->module_config = apr_pcalloc(request->server->process->pconf, sizeof(void *) * kEls);
 	// coverity[suspicious_sizeof]
-	request->per_dir_config = apr_pcalloc(request->pool, sizeof(void *) * kEls);
+	request->per_dir_config = apr_pcalloc(request->server->process->pconf, sizeof(void *) * kEls);
 	ap_set_module_config(request->server->module_config, &auth_openidc_module, cfg);
 	ap_set_module_config(request->per_dir_config, &auth_openidc_module, d_cfg);
 
 	// TODO:
-	cfg->public_keys = apr_array_make(pool, 1, sizeof(const char *));
-	cfg->private_keys = apr_array_make(pool, 1, sizeof(const char *));
+	cfg->public_keys = apr_array_make(request->server->process->pconf, 1, sizeof(const char *));
+	cfg->private_keys = apr_array_make(request->server->process->pconf, 1, sizeof(const char *));
 
 	cfg->crypto_passphrase.secret1 = "12345678901234567890123456789012";
 	cfg->cache.impl = &oidc_cache_shm;
@@ -112,7 +114,7 @@ static request_rec *oidc_test_request_init(apr_pool_t *pool) {
 	cfg->cache.shm_size_max = 500;
 	cfg->cache.shm_entry_size_max = 16384 + 255 + 17;
 	cfg->cache.encrypt = 1;
-	if (cfg->cache.impl->post_config(pool, request->server) != OK) {
+	if (cfg->cache.impl->post_config(request->server->process->pconf, request->server) != OK) {
 		fprintf(stderr, "cfg->cache.impl->post_config failed!\n");
 		exit(-1);
 	}
@@ -129,8 +131,6 @@ void oidc_test_setup(void) {
 
 void oidc_test_teardown(void) {
 	EVP_cleanup();
-	oidc_test_cfg_get()->cache.impl->destroy(pool, request->server);
-	apr_pool_destroy(pool);
 	apr_terminate();
 }
 

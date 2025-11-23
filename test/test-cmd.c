@@ -293,8 +293,8 @@ static request_rec *request_setup(apr_pool_t *pool) {
 
 	request->server = apr_pcalloc(request->pool, sizeof(struct server_rec));
 	request->server->process = apr_pcalloc(request->pool, sizeof(struct process_rec));
-	request->server->process->pool = request->pool;
-	request->server->process->pconf = request->pool;
+	apr_pool_create(&request->server->process->pool, pool);
+	apr_pool_create(&request->server->process->pconf, pool);
 	request->connection = apr_pcalloc(request->pool, sizeof(struct conn_rec));
 	request->connection->local_addr = apr_pcalloc(request->pool, sizeof(apr_sockaddr_t));
 
@@ -306,19 +306,20 @@ static request_rec *request_setup(apr_pool_t *pool) {
 	apr_uri_parse(request->pool, "https://www.example.com/bla?foo=bar&param1=value1", &request->parsed_uri);
 
 	auth_openidc_module.module_index = kIdx;
-	oidc_cfg_t *cfg = oidc_cfg_server_create(request->pool, request->server);
+	oidc_cfg_t *cfg = oidc_cfg_server_create(request->server->process->pconf, request->server);
 
-	oidc_cfg_provider_issuer_set(pool, oidc_cfg_provider_get(cfg), "https://idp.example.com");
-	oidc_cfg_provider_authorization_endpoint_url_set(pool, oidc_cfg_provider_get(cfg),
+	oidc_cfg_provider_issuer_set(request->server->process->pconf, oidc_cfg_provider_get(cfg),
+				     "https://idp.example.com");
+	oidc_cfg_provider_authorization_endpoint_url_set(request->server->process->pconf, oidc_cfg_provider_get(cfg),
 							 "https://idp.example.com/authorize");
-	oidc_cfg_provider_scope_set(pool, oidc_cfg_provider_get(cfg), "openid");
-	oidc_cfg_provider_client_id_set(pool, oidc_cfg_provider_get(cfg), "client_id");
+	oidc_cfg_provider_scope_set(request->server->process->pconf, oidc_cfg_provider_get(cfg), "openid");
+	oidc_cfg_provider_client_id_set(request->server->process->pconf, oidc_cfg_provider_get(cfg), "client_id");
 	cfg->redirect_uri = "https://www.example.com/protected/";
 
-	oidc_dir_cfg_t *d_cfg = oidc_cfg_dir_config_create(request->pool, NULL);
+	oidc_dir_cfg_t *d_cfg = oidc_cfg_dir_config_create(request->server->process->pconf, NULL);
 
-	request->server->module_config = apr_pcalloc(request->pool, sizeof(void) * kEls);
-	request->per_dir_config = apr_pcalloc(request->pool, sizeof(void) * kEls);
+	request->server->module_config = apr_pcalloc(request->server->process->pconf, sizeof(void) * kEls);
+	request->per_dir_config = apr_pcalloc(request->server->process->pconf, sizeof(void) * kEls);
 	ap_set_module_config(request->server->module_config, &auth_openidc_module, cfg);
 	ap_set_module_config(request->per_dir_config, &auth_openidc_module, d_cfg);
 
@@ -326,7 +327,7 @@ static request_rec *request_setup(apr_pool_t *pool) {
 	cfg->cache.cfg = NULL;
 	cfg->cache.shm_size_max = 500;
 	cfg->cache.shm_entry_size_max = 16384 + 255 + 17;
-	if (cfg->cache.impl->post_config(pool, request->server) != OK) {
+	if (oidc_cfg_post_config(request->server->process->pconf, cfg, request->server) != OK) {
 		printf("cfg->cache->post_config failed!\n");
 		exit(-1);
 	}
@@ -494,8 +495,6 @@ int main(int argc, char **argv, char **env) {
 		return uuid(argc, argv, pool);
 
 	EVP_cleanup();
-
-	apr_pool_destroy(pool);
 	apr_terminate();
 
 	return usage(argc, argv, NULL);

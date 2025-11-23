@@ -684,11 +684,23 @@ OIDC_CFG_MEMBER_FUNCS_ABS_OR_REL_URI(redirect_uri)
 OIDC_CFG_MEMBER_FUNCS_ABS_OR_REL_URI(default_sso_url)
 OIDC_CFG_MEMBER_FUNCS_ABS_OR_REL_URI(default_slo_url)
 
+typedef struct oidc_cfg_cleanup_ctx_t {
+	oidc_cfg_t *cfg;
+	apr_pool_t *pool;
+	server_rec *svr;
+} oidc_cfg_cleanup_ctx_t;
+
 /*
  * destroy a server config record and its members
  */
 static apr_status_t oidc_cfg_server_destroy(void *data) {
-	oidc_cfg_t *cfg = (oidc_cfg_t *)data;
+	oidc_cfg_cleanup_ctx_t *ctx = (oidc_cfg_cleanup_ctx_t *)data;
+	oidc_cfg_t *cfg = ctx->cfg;
+	if (cfg->cache.impl && cfg->cache.impl->destroy) {
+		cfg->cache.impl->destroy(ctx->pool, ctx->svr);
+		cfg->cache.impl->destroy = NULL;
+		cfg->cache.impl = NULL;
+	}
 	oidc_cfg_provider_destroy(cfg->provider);
 	cfg->provider = NULL;
 	oidc_cfg_oauth_destroy(cfg->oauth);
@@ -700,10 +712,15 @@ static apr_status_t oidc_cfg_server_destroy(void *data) {
 	return APR_SUCCESS;
 }
 
-static oidc_cfg_t *oidc_cfg_server_alloc(apr_pool_t *pool) {
+static oidc_cfg_t *oidc_cfg_server_alloc(apr_pool_t *pool, server_rec *svr) {
 	oidc_cfg_t *c = apr_pcalloc(pool, sizeof(oidc_cfg_t));
+	oidc_cfg_cleanup_ctx_t *ctx = apr_pcalloc(pool, sizeof(oidc_cfg_cleanup_ctx_t));
+	ctx->cfg = c;
+	// pool used at descrution time
+	ctx->pool = pool;
+	ctx->svr = svr;
 	// need to register a cleanup handler to the config pool to handle graceful restarts without memory leaks
-	apr_pool_cleanup_register(pool, c, oidc_cfg_server_destroy, oidc_cfg_server_destroy);
+	apr_pool_cleanup_register(pool, ctx, oidc_cfg_server_destroy, oidc_cfg_server_destroy);
 	return c;
 }
 
@@ -711,7 +728,8 @@ static oidc_cfg_t *oidc_cfg_server_alloc(apr_pool_t *pool) {
  * create a new server config record with defaults
  */
 void *oidc_cfg_server_create(apr_pool_t *pool, server_rec *svr) {
-	oidc_cfg_t *c = oidc_cfg_server_alloc(pool);
+	oidc_cfg_t *c = oidc_cfg_server_alloc(pool, svr);
+	c->svr = svr;
 
 	c->merged = FALSE;
 
@@ -797,7 +815,7 @@ void *oidc_cfg_server_merge(apr_pool_t *pool, void *BASE, void *ADD) {
 	oidc_cfg_t *base = (oidc_cfg_t *)BASE;
 	oidc_cfg_t *add = (oidc_cfg_t *)ADD;
 
-	oidc_cfg_t *c = oidc_cfg_server_alloc(pool);
+	oidc_cfg_t *c = oidc_cfg_server_alloc(pool, add->svr);
 
 	c->provider = oidc_cfg_provider_create(pool);
 	c->oauth = oidc_cfg_oauth_create(pool);
@@ -994,7 +1012,7 @@ int oidc_cfg_post_config(apr_pool_t *pool, oidc_cfg_t *cfg, server_rec *s) {
 	if (_oidc_refresh_mutex == NULL) {
 		// NB: use the process pool here as the mutex is a process-wide singleton
 		_oidc_refresh_mutex = oidc_cache_mutex_create(s->process->pool, TRUE);
-		if (oidc_cache_mutex_post_config(pool, s, _oidc_refresh_mutex, "refresh") != TRUE)
+		if (oidc_cache_mutex_post_config(s->process->pool, s, _oidc_refresh_mutex, "refresh") != TRUE)
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
 	if (cfg->metrics_hook_data != NULL) {
@@ -1023,13 +1041,6 @@ void oidc_cfg_child_init(apr_pool_t *pool, oidc_cfg_t *cfg, server_rec *s) {
 }
 
 void oidc_cfg_cleanup_child(oidc_cfg_t *cfg, server_rec *s) {
-	// TODO: is the cache destroyed on graceful restarts now?
-	if (cfg->cache.impl->destroy != NULL) {
-		if (cfg->cache.impl->destroy(s->process->pool, s) != APR_SUCCESS) {
-			oidc_serror(s, "cache destroy function failed");
-		}
-		cfg->cache.impl->destroy = NULL;
-	}
 	if (_oidc_refresh_mutex != NULL) {
 		if (oidc_cache_mutex_destroy(s, _oidc_refresh_mutex) != TRUE) {
 			oidc_serror(s, "oidc_cache_mutex_destroy on refresh mutex failed");
