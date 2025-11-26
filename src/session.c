@@ -615,12 +615,15 @@ static void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, 
 #ifdef USE_LIBJQ
 	const char *filtered_claims = NULL;
 	const oidc_apr_expr_t *filter = oidc_cfg_filter_claims_expr_get(c);
+	const char *s_filter = oidc_util_apr_expr_exec(r, filter, TRUE);
 	if (filter != NULL) {
-		filtered_claims = oidc_util_jq_filter(r, dst, oidc_util_apr_expr_exec(r, filter, TRUE));
+		filtered_claims = oidc_util_jq_filter(r, dst, s_filter);
 		json_decref(dst);
 		dst = NULL;
-		if (oidc_util_json_decode_object(r, filtered_claims, &dst))
-			oidc_error(r, "jq filtering of claims for [%s] resulted in invalid JSON object", session_key);
+		if (oidc_util_json_decode_object(r, filtered_claims, &dst) == FALSE) {
+			oidc_error(r, "JQ filtering of claims for [%s] resulted in invalid JSON object, filter='%s'",
+				   session_key, s_filter);
+		}
 	}
 #endif
 

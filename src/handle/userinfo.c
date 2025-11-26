@@ -358,11 +358,12 @@ void oidc_userinfo_pass_as(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *sess
 
 #ifdef USE_LIBJQ
 	const char *s_claims = NULL;
-	const char *filter = oidc_cfg_dir_userinfo_claims_expr_get(r);
-	if (filter) {
-		s_claims = oidc_util_jq_filter(r, oidc_session_get_userinfo_claims(r, session), filter);
-		if (oidc_util_json_decode_object(r, s_claims, &filtered_claims) != TRUE) {
-			oidc_error(r, "decoding filtered userinfo claims JSON object failed");
+	const char *s_filter = oidc_cfg_dir_userinfo_claims_expr_get(r);
+	if (s_filter) {
+		s_claims = oidc_util_jq_filter(r, oidc_session_get_userinfo_claims(r, session), s_filter);
+		if (oidc_util_json_decode_object(r, s_claims, &filtered_claims) == FALSE) {
+			oidc_error(r, "JQ filtering of claims for [%s] resulted in invalid JSON object, filter='%s'",
+				   "userinfo", s_filter);
 			return;
 		}
 	}
