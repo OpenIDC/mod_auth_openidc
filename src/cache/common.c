@@ -80,6 +80,9 @@ char *oidc_cache_status2str(apr_pool_t *p, apr_status_t statcode) {
 	return apr_pstrdup(p, buf);
 }
 
+/*
+ * create a server-wide mutex
+ */
 static apr_byte_t oidc_cache_mutex_global_create(apr_pool_t *pool, server_rec *s, oidc_cache_mutex_t *m,
 						 const char *type) {
 
@@ -109,10 +112,25 @@ static apr_byte_t oidc_cache_mutex_global_create(apr_pool_t *pool, server_rec *s
 	    ;
 
 	// TODO: need to allocate this on the server process pool to avoid crashes on
-	//       oidc_cache_mutex_unlock at shutdown time on graceful restarts,
+	//       oidc_cache_mutex_unlock at shutdown time on graceful restarts
 	//       and test/helper.c shutdown; is it because libapr cleaned it up before us?
 
-	// it is probably related to the remaining valgrind report on possibly lost memory:
+	/*
+	 * ==54== Invalid read of size 4
+	 * ==54==    at 0x4A1C1D0: sem_post@@GLIBC_2.34 (sem_post.c:35)
+	 * ==54==    by 0x49626F7: ??? (in /usr/lib/x86_64-linux-gnu/libapr-1.so.0.7.5)
+	 * ==54==    by 0x4962065: apr_global_mutex_unlock (in /usr/lib/x86_64-linux-gnu/libapr-1.so.0.7.5)
+	 * ==54==    by 0x5A40F9B: oidc_cache_mutex_unlock (common.c:259)
+	 * ==54==    by 0x5A3FF51: oidc_cache_shm_destroy (shm.c:334)
+	 * ==54==    by 0x5A33F53: oidc_cfg_server_destroy (cfg.c:700)
+	 * ==54==    by 0x4964A4D: apr_pool_destroy (in /usr/lib/x86_64-linux-gnu/libapr-1.so.0.7.5)
+	 * ==54==    by 0x4964A2C: apr_pool_destroy (in /usr/lib/x86_64-linux-gnu/libapr-1.so.0.7.5)
+	 * ==54==    by 0x142767: ??? (in /usr/sbin/apache2)
+	 * ==54==    by 0x14223A: main (in /usr/sbin/apache2)
+	 * ==54==  Address 0x5abb008 is not stack'd, malloc'd or (recently) free'd
+	 */
+
+	// could it be related  to the remaining valgrind report on possibly lost memory: ?
 
 	/*
 	 * ==73== 24 bytes in 1 blocks are possibly lost in loss record 39 of 176
@@ -156,6 +174,9 @@ static apr_byte_t oidc_cache_mutex_global_create(apr_pool_t *pool, server_rec *s
 	return TRUE;
 }
 
+/*
+ * initialize a server- or process-wide mutex
+ */
 apr_byte_t oidc_cache_mutex_post_config(apr_pool_t *pool, server_rec *s, oidc_cache_mutex_t *m, const char *type) {
 
 	apr_status_t rv = APR_SUCCESS;
@@ -163,7 +184,7 @@ apr_byte_t oidc_cache_mutex_post_config(apr_pool_t *pool, server_rec *s, oidc_ca
 	if (m->is_global)
 		return oidc_cache_mutex_global_create(pool, s, m, type);
 
-	// NB: see note above at apr_global_mutex_create
+	// NB: see note above at apr_global_mutex_create on the use of s->process->pool
 	rv = apr_thread_mutex_create(&m->tmutex, APR_THREAD_MUTEX_DEFAULT, s->process->pool);
 	if (rv != APR_SUCCESS) {
 		oidc_serror(s, "apr_thread_mutex_create failed: %s (%d)", oidc_cache_status2str(pool, rv), rv);
