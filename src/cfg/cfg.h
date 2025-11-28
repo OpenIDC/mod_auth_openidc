@@ -188,11 +188,12 @@ int oidc_cfg_merged_get(oidc_cfg_t *cfg);
 
 void oidc_pre_config_init();
 
-void *oidc_cfg_server_create(apr_pool_t *pool, server_rec *svr);
+void *oidc_cfg_server_create(apr_pool_t *pool, server_rec *s);
 void *oidc_cfg_server_merge(apr_pool_t *pool, void *BASE, void *ADD);
+apr_byte_t oidc_cfg_server_destroy(apr_pool_t *pool, server_rec *s, oidc_cfg_t *cfg);
 int oidc_cfg_post_config(apr_pool_t *pool, oidc_cfg_t *cfg, server_rec *s);
 void oidc_cfg_child_init(apr_pool_t *pool, oidc_cfg_t *cfg, server_rec *s);
-void oidc_cfg_cleanup_child(oidc_cfg_t *cfg, server_rec *s);
+void oidc_cfg_process_cleanup(oidc_cfg_t *cfg, server_rec *s);
 const char *oidc_cfg_string_list_add(apr_pool_t *pool, apr_array_header_t **list, const char *arg);
 const char *oidc_cfg_endpoint_auth_set(apr_pool_t *pool, oidc_cfg_t *cfg, const char *arg, char **auth, char **alg);
 

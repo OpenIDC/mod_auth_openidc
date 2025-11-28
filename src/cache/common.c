@@ -178,20 +178,25 @@ static apr_byte_t oidc_cache_mutex_global_create(apr_pool_t *pool, server_rec *s
  * initialize a server- or process-wide mutex
  */
 apr_byte_t oidc_cache_mutex_post_config(apr_pool_t *pool, server_rec *s, oidc_cache_mutex_t *m, const char *type) {
-
+	apr_byte_t rc = TRUE;
 	apr_status_t rv = APR_SUCCESS;
 
-	if (m->is_global)
-		return oidc_cache_mutex_global_create(pool, s, m, type);
+	if (m->is_global) {
+		rc = oidc_cache_mutex_global_create(pool, s, m, type);
+		goto end;
+	}
 
 	// NB: see note above at apr_global_mutex_create on the use of s->process->pool
 	rv = apr_thread_mutex_create(&m->tmutex, APR_THREAD_MUTEX_DEFAULT, s->process->pool);
 	if (rv != APR_SUCCESS) {
 		oidc_serror(s, "apr_thread_mutex_create failed: %s (%d)", oidc_cache_status2str(pool, rv), rv);
-		return FALSE;
+		rc = FALSE;
+		goto end;
 	}
 
-	return TRUE;
+end:
+
+	return rc;
 }
 
 /*

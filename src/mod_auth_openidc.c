@@ -1648,25 +1648,16 @@ static void oidc_ssl_id_callback(CRYPTO_THREADID *id) {
 #endif /* defined(OPENSSL_THREADS) && APR_HAS_THREADS */
 
 /*
- * cleanup resources allocated in a child process
+ * cleanup resources allocated in a process
  */
-static apr_status_t oidc_cleanup_child(void *data) {
+static apr_status_t oidc_process_cleanup(void *data) {
+
 	server_rec *sp = (server_rec *)data;
 	while (sp != NULL) {
 		oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(sp->module_config, &auth_openidc_module);
-		oidc_cfg_cleanup_child(cfg, sp);
+		oidc_cfg_process_cleanup(cfg, sp);
 		sp = sp->next;
 	}
-
-	return APR_SUCCESS;
-}
-
-/*
- * cleanup resources allocated in a parent process
- */
-static apr_status_t oidc_cleanup_parent(void *data) {
-
-	oidc_cleanup_child(data);
 
 #if ((OPENSSL_VERSION_NUMBER < 0x10100000) && defined(OPENSSL_THREADS) && APR_HAS_THREADS)
 	if (CRYPTO_get_locking_callback() == oidc_ssl_locking_callback)
@@ -1754,7 +1745,7 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, se
 
 #endif /* (OPENSSL_VERSION_NUMBER < 0x10100000) && defined (OPENSSL_THREADS) && APR_HAS_THREADS */
 
-	apr_pool_cleanup_register(pool, s, oidc_cleanup_parent, apr_pool_cleanup_null);
+	apr_pool_cleanup_register(pool, s, oidc_process_cleanup, apr_pool_cleanup_null);
 
 	server_rec *sp = s;
 	while (sp != NULL) {
@@ -1822,11 +1813,6 @@ static void oidc_child_init(apr_pool_t *p, server_rec *s) {
 		oidc_cfg_child_init(p, cfg, sp);
 		sp = sp->next;
 	}
-	/*
-	 * NB: don't pass oidc_cleanup_child as the child cleanup routine parameter
-	 *     because that does not actually get called upon child cleanup...
-	 */
-	apr_pool_cleanup_register(p, s, oidc_cleanup_child, apr_pool_cleanup_null);
 }
 
 static const char oidcFilterName[] = "oidc_filter_in_filter";
