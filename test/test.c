@@ -52,6 +52,8 @@
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 
+#include "helper.h"
+
 static int test_nr_run = 0;
 static char TST_ERR_MSG[4096];
 static int TST_RC;
@@ -1419,95 +1421,20 @@ static char *all_tests(apr_pool_t *pool, request_rec *r) {
 	return 0;
 }
 
-static request_rec *test_setup(apr_pool_t *pool) {
-	const unsigned int kIdx = 0;
-	const unsigned int kEls = kIdx + 1;
-	request_rec *request = (request_rec *)apr_pcalloc(pool, sizeof(request_rec));
-
-	apr_pool_create(&request->pool, pool);
-	request->subprocess_env = apr_table_make(request->pool, 0);
-
-	request->headers_in = apr_table_make(request->pool, 0);
-	request->headers_out = apr_table_make(request->pool, 0);
-	request->err_headers_out = apr_table_make(request->pool, 0);
-
-	apr_table_set(request->headers_in, "Host", "www.example.com");
-	apr_table_set(request->headers_in, "OIDC_foo", "some-value");
-	apr_table_set(request->headers_in, "Cookie",
-		      "foo=bar; "
-		      "mod_auth_openidc_session"
-		      "=0123456789abcdef; baz=zot");
-
-	request->server = apr_pcalloc(request->pool, sizeof(struct server_rec));
-	request->server->process = apr_pcalloc(request->pool, sizeof(struct process_rec));
-	apr_pool_create(&request->server->process->pool, pool);
-	apr_pool_create(&request->server->process->pconf, pool);
-	request->connection = apr_pcalloc(request->pool, sizeof(struct conn_rec));
-	request->connection->bucket_alloc = apr_bucket_alloc_create(request->pool);
-	request->connection->local_addr = apr_pcalloc(request->pool, sizeof(apr_sockaddr_t));
-
-	apr_pool_userdata_set("https", "scheme", NULL, request->pool);
-	request->server->server_hostname = "www.example.com";
-	request->connection->local_addr->port = 443;
-	request->unparsed_uri = "/bla?foo=bar&param1=value1";
-	request->args = "foo=bar&param1=value1";
-	apr_uri_parse(request->pool, "https://www.example.com/bla?foo=bar&param1=value1", &request->parsed_uri);
-
-	auth_openidc_module.module_index = kIdx;
-	oidc_cfg_t *cfg = oidc_cfg_server_create(request->server->process->pconf, request->server);
-
-	oidc_cfg_provider_issuer_set(request->server->process->pconf, oidc_cfg_provider_get(cfg),
-				     "https://idp.example.com");
-	oidc_cfg_provider_authorization_endpoint_url_set(request->server->process->pconf, oidc_cfg_provider_get(cfg),
-							 "https://idp.example.com/authorize");
-	oidc_cfg_provider_client_id_set(request->server->process->pconf, oidc_cfg_provider_get(cfg), "client_id");
-
-	cfg->redirect_uri = "https://www.example.com/protected/";
-
-	oidc_dir_cfg_t *d_cfg = oidc_cfg_dir_config_create(request->server->process->pconf, NULL);
-
-	// coverity[suspicious_sizeof]
-	request->server->module_config = apr_pcalloc(request->server->process->pconf, sizeof(void *) * kEls);
-	// coverity[suspicious_sizeof]
-	request->per_dir_config = apr_pcalloc(request->server->process->pconf, sizeof(void *) * kEls);
-	ap_set_module_config(request->server->module_config, &auth_openidc_module, cfg);
-	ap_set_module_config(request->per_dir_config, &auth_openidc_module, d_cfg);
-
-	cfg->crypto_passphrase.secret1 = "12345678901234567890123456789012";
-	cfg->cache.impl = &oidc_cache_shm;
-	cfg->cache.cfg = NULL;
-	cfg->cache.shm_size_max = 500;
-	cfg->cache.shm_entry_size_max = 16384 + 255 + 17;
-	cfg->cache.encrypt = 1;
-	if (oidc_cfg_post_config(request->server->process->pconf, cfg, request->server) != OK) {
-		printf("cfg->cache.impl->post_config failed!\n");
-		exit(-1);
-	}
-
-	return request;
-}
-
 int main(int argc, char **argv, char **env) {
-	if (apr_app_initialize(&argc, (const char *const **)argv, (const char *const **)env) != APR_SUCCESS) {
-		printf("apr_app_initialize failed\n");
-		return -1;
-	}
 
-	oidc_pre_config_init();
+	oidc_test_setup();
 
-	apr_pool_t *pool = NULL;
-	apr_pool_create(&pool, NULL);
-	request_rec *r = test_setup(pool);
+	request_rec *r = oidc_test_request_get();
 
-	char *result = all_tests(pool, r);
+	char *result = all_tests(oidc_test_pool_get(), r);
 	if (result != 0) {
 		printf("Failed: %s\n", result);
 	} else {
 		printf("All %d tests passed!\n", test_nr_run);
 	}
 
-	EVP_cleanup();
-	apr_terminate();
+	oidc_test_teardown();
 
 	return result != 0;
 }

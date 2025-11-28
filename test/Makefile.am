@@ -29,19 +29,6 @@ endif
 
 noinst_HEADERS = helper.h
 
-LDADD = ${top_builddir}/src/libauth_openidc.la ${LIBADD}
-
-noinst_PROGRAMS = test-cmd
-test_cmd_SOURCES = test-cmd.c stub.c
-test_cmd_CFLAGS = ${AM_CFLAGS} -fPIC
-
-TESTS = test
-
-test_SOURCES = test.c stub.c
-test_CFLAGS = ${AM_CFLAGS} -fPIC
-
-if HAVE_CHECK
-
 noinst_LTLIBRARIES = libtest.la
 
 libtest_la_CFLAGS = ${AM_CFLAGS} -fPIC
@@ -50,8 +37,16 @@ libtest_la_SOURCES = \
 	helper.c \
 	stub.c
 
+LDADD = ${top_builddir}/src/libauth_openidc.la libtest.la ${LIBADD}
+
+noinst_PROGRAMS = test-cmd
+
+TESTS = test
+
+if HAVE_CHECK
+
 AM_CFLAGS += @CHECK_CFLAGS@
-LDADD += libtest.la @CHECK_LIBS@
+LDADD += @CHECK_LIBS@
 
 TESTS += \
 	test_cfg \

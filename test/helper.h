@@ -55,9 +55,9 @@
 void oidc_test_setup(void);
 void oidc_test_teardown(void);
 int oidc_test_suite_run(Suite *s);
-apr_pool_t *oidc_test_pool_get();
-request_rec *oidc_test_request_get();
-oidc_cfg_t *oidc_test_cfg_get();
+apr_pool_t *oidc_test_pool_get(void);
+request_rec *oidc_test_request_get(void);
+oidc_cfg_t *oidc_test_cfg_get(void);
 cmd_parms *oidc_test_cmd_get(const char *primitive);
 
 #ifndef _ck_assert_ptr_null
