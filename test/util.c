@@ -156,14 +156,3 @@ cmd_parms *oidc_test_cmd_get(const char *primitive) {
 	cmd->directive->directive = primitive;
 	return cmd;
 }
-
-int oidc_test_suite_run(Suite *s) {
-	int n_failed = 0;
-
-	SRunner *sr = srunner_create(s);
-	srunner_run_all(sr, CK_VERBOSE);
-	n_failed = srunner_ntests_failed(sr);
-	srunner_free(sr);
-
-	return (n_failed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
-}

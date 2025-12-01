@@ -45,7 +45,6 @@
 
 #include "const.h" // for the PACKAGE_* defines
 #include <apr_pools.h>
-#include <check.h>
 #include <httpd.h>
 #include <stdbool.h>
 #include <stdlib.h>
