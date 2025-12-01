@@ -40,8 +40,8 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#ifndef _MOD_AUTH_OPENIDC_TEST_COMMON_H_
-#define _MOD_AUTH_OPENIDC_TEST_COMMON_H_
+#ifndef _MOD_AUTH_OPENIDC_TEST_UTIL_H_
+#define _MOD_AUTH_OPENIDC_TEST_UTIL_H_
 
 #include "const.h" // for the PACKAGE_* defines
 #include <apr_pools.h>
@@ -54,32 +54,9 @@
 
 void oidc_test_setup(void);
 void oidc_test_teardown(void);
-int oidc_test_suite_run(Suite *s);
 apr_pool_t *oidc_test_pool_get(void);
 request_rec *oidc_test_request_get(void);
 oidc_cfg_t *oidc_test_cfg_get(void);
 cmd_parms *oidc_test_cmd_get(const char *primitive);
 
-#ifndef _ck_assert_ptr_null
-#define _ck_assert_ptr_null(X, OP)                                                                                     \
-	do {                                                                                                           \
-		const void *_ck_x = (X);                                                                               \
-		ck_assert_msg(_ck_x OP NULL, "Assertion '%s' failed: %s == %#lx", #X " " #OP " NULL", #X,              \
-			      (unsigned long)(uintptr_t)_ck_x);                                                        \
-	} while (0)
-#define ck_assert_ptr_null(X) _ck_assert_ptr_null(X, ==)
-#define ck_assert_ptr_nonnull(X) _ck_assert_ptr_null(X, !=)
-#endif
-
-#ifndef _ck_assert_ptr
-#define _ck_assert_ptr(X, OP, Y)                                                                                       \
-	do {                                                                                                           \
-		const void *_ck_x = (X);                                                                               \
-		const void *_ck_y = (Y);                                                                               \
-		ck_assert_msg(_ck_x OP _ck_y, "Assertion '%s' failed: %s == %#lx, %s == %#lx", #X " " #OP " " #Y, #X,  \
-			      (unsigned long)(uintptr_t)_ck_x, #Y, (unsigned long)(uintptr_t)_ck_y);                   \
-	} while (0)
-#define ck_assert_ptr_eq(X, Y) _ck_assert_ptr(X, ==, Y)
-#endif
-
-#endif // _MOD_AUTH_OPENIDC_TEST_COMMON_H_
+#endif // _MOD_AUTH_OPENIDC_TEST_UTIL_H_

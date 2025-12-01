@@ -44,10 +44,11 @@
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 
+#include "check_util.h"
 #include "handle/handle.h"
-#include "helper.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
+#include "util.h"
 #include "util/util.h"
 
 START_TEST(test_proto_validate_access_token) {

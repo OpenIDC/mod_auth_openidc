@@ -44,8 +44,9 @@
 #include "cfg/cache.h"
 #include "cfg/cfg_int.h"
 #include "cfg/provider.h"
-#include "helper.h"
+#include "check_util.h"
 #include "http.h"
+#include "util.h"
 #include <curl/curl.h>
 
 START_TEST(test_http_accept) {

@@ -52,7 +52,7 @@
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 
-#include "helper.h"
+#include "util.h"
 
 static int test_nr_run = 0;
 static char TST_ERR_MSG[4096];

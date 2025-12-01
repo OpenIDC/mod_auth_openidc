@@ -41,8 +41,9 @@
  *
  **************************************************************************/
 
-#include "helper.h"
+#include "check_util.h"
 #include "mod_auth_openidc.h"
+#include "util.h"
 #include "util/util.h"
 
 // base64

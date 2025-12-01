@@ -44,7 +44,8 @@
 #include "cfg/cache.h"
 #include "cfg/cfg_int.h"
 #include "cfg/provider.h"
-#include "helper.h"
+#include "check_util.h"
+#include "util.h"
 #include "util/util.h"
 
 START_TEST(test_cache_mutex_and_status2str) {
