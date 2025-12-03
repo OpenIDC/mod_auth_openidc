@@ -52,6 +52,8 @@
 #include "cache/cache.h"
 
 #define OIDC_CONFIG_POS_INT_UNSET -1
+/* -1 might be used for unlimited timeout */
+#define OIDC_CONFIG_POS_TIMEOUT_UNSET (apr_interval_time_t) - 2
 
 #define OIDCPublicKeyFiles "OIDCPublicKeyFiles"
 #define OIDCDefaultLoggedOutURL "OIDCDefaultLoggedOutURL"
@@ -139,15 +141,13 @@ typedef enum {
 #define OIDC_HTML_ERROR_TEMPLATE_DEPRECATED "deprecated"
 
 typedef struct oidc_apr_expr_t {
-#if HAVE_APACHE_24
 	ap_expr_info_t *expr;
-#endif
 	char *str;
 } oidc_apr_expr_t;
 
 typedef struct oidc_crypto_passphrase_t {
-	char *secret1;
-	char *secret2;
+	const char *secret1;
+	const char *secret2;
 } oidc_crypto_passphrase_t;
 
 typedef struct oidc_remote_user_claim_t {
@@ -188,12 +188,14 @@ int oidc_cfg_merged_get(oidc_cfg_t *cfg);
 
 void oidc_pre_config_init();
 
-void *oidc_cfg_server_create(apr_pool_t *pool, server_rec *svr);
+void *oidc_cfg_server_create(apr_pool_t *pool, server_rec *s);
 void *oidc_cfg_server_merge(apr_pool_t *pool, void *BASE, void *ADD);
-int oidc_cfg_post_config(oidc_cfg_t *cfg, server_rec *s);
+apr_byte_t oidc_cfg_server_destroy(apr_pool_t *pool, server_rec *s, oidc_cfg_t *cfg);
+int oidc_cfg_post_config(apr_pool_t *pool, oidc_cfg_t *cfg, server_rec *s);
 void oidc_cfg_child_init(apr_pool_t *pool, oidc_cfg_t *cfg, server_rec *s);
-void oidc_cfg_cleanup_child(oidc_cfg_t *cfg, server_rec *s);
+void oidc_cfg_process_cleanup(oidc_cfg_t *cfg, server_rec *s);
 const char *oidc_cfg_string_list_add(apr_pool_t *pool, apr_array_header_t **list, const char *arg);
+const char *oidc_cfg_endpoint_auth_set(apr_pool_t *pool, oidc_cfg_t *cfg, const char *arg, char **auth, char **alg);
 
 #define OIDC_CFG_MEMBER_FUNC_NAME(member, type, method) oidc_##type##_##member##_##method
 
@@ -209,6 +211,7 @@ const char *oidc_cfg_string_list_add(apr_pool_t *pool, apr_array_header_t **list
 OIDC_CFG_MEMBER_FUNCS_DECL(delete_oldest_state_cookies, int)
 OIDC_CFG_MEMBER_FUNCS_DECL(action_on_userinfo_error, oidc_on_error_action_t)
 OIDC_CFG_MEMBER_FUNCS_DECL(crypto_passphrase_secret1, const char *)
+OIDC_CFG_MEMBER_FUNCS_DECL(crypto_passphrase_secret2, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(refresh_mutex, oidc_cache_mutex_t *)
 OIDC_CFG_MEMBER_FUNCS_DECL(store_id_token, int)
 OIDC_CFG_MEMBER_FUNCS_DECL(post_preserve_template, const char *)
@@ -221,7 +224,6 @@ OIDC_CFG_MEMBER_FUNCS_DECL(default_sso_url, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(default_slo_url, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(cookie_domain, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(cookie_http_only, int)
-OIDC_CFG_MEMBER_FUNCS_DECL(cookie_same_site, oidc_samesite_cookie_t)
 OIDC_CFG_MEMBER_FUNCS_DECL(claim_delimiter, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(claim_prefix, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(state_timeout, int)
@@ -251,6 +253,9 @@ OIDC_CFG_MEMBER_FUNCS_DECL(crypto_passphrase, const oidc_crypto_passphrase_t *, 
 OIDC_CFG_MEMBER_FUNCS_DECL(max_number_of_state_cookies, int, const char *)
 
 // 3 args
+OIDC_CFG_MEMBER_FUNCS_DECL(cookie_same_site_session, oidc_samesite_cookie_t, const char *, const char *)
+OIDC_CFG_MEMBER_FUNC_GET_DECL(cookie_same_site_state, oidc_samesite_cookie_t)
+OIDC_CFG_MEMBER_FUNC_GET_DECL(cookie_same_site_discovery_csrf, oidc_samesite_cookie_t)
 OIDC_CFG_MEMBER_FUNCS_DECL(remote_user_claim, const oidc_remote_user_claim_t *, const char *, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(outgoing_proxy, const oidc_http_outgoing_proxy_t *, const char *, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(http_timeout_short, oidc_http_timeout_t *, const char *, const char *)

@@ -56,7 +56,7 @@
 #include "http.h"
 #include "metrics.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 /*
  * URL-encode a string
@@ -623,8 +623,8 @@ char *oidc_http_form_encoded_data(request_rec *r, const apr_table_t *params) {
 
 #define OIDC_HTTP_CURL_SETOPT_SSL(option, value)                                                                       \
 	if (_oidc_strstr(env_var_value, #value) != NULL) {                                                             \
-		oidc_debug(r, "curl_easy_setopt(%s): %s (%d)", #option, #value, value);                                \
-		OIDC_HTTP_CURL_SETOPT(option, value);                                                                  \
+		oidc_debug(r, "curl_easy_setopt(%s): %s (%ld)", #option, #value, (long)value);                         \
+		OIDC_HTTP_CURL_SETOPT(option, (long)value);                                                            \
 	}
 
 static void oidc_http_set_curl_ssl_options(request_rec *r, CURL *curl) {
@@ -987,7 +987,7 @@ apr_byte_t oidc_http_post_json(request_rec *r, const char *url, json_t *json, co
 			       long *response_code, apr_hash_t *response_hdrs, oidc_http_timeout_t *http_timeout,
 			       const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,
 			       const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd) {
-	char *data = json != NULL ? oidc_util_encode_json(r->pool, json, JSON_PRESERVE_ORDER | JSON_COMPACT) : NULL;
+	char *data = json != NULL ? oidc_util_json_encode(r->pool, json, JSON_PRESERVE_ORDER | JSON_COMPACT) : NULL;
 	return oidc_http_request(r, url, data, OIDC_HTTP_CONTENT_TYPE_JSON, basic_auth, access_token, dpop,
 				 ssl_validate_server, response, response_code, response_hdrs, http_timeout,
 				 outgoing_proxy, pass_cookies, ssl_cert, ssl_key, ssl_key_pwd);
@@ -1098,7 +1098,7 @@ void oidc_http_set_cookie(request_rec *r, const char *cookieName, const char *co
 		headerString = apr_psprintf(r->pool, "%s; %s=%s", headerString, OIDC_HTTP_COOKIE_FLAG_DOMAIN,
 					    oidc_cfg_cookie_domain_get(c));
 
-	if (oidc_util_request_is_secure(r, c))
+	if (oidc_util_url_cur_is_secure(r, c))
 		headerString = apr_psprintf(r->pool, "%s; %s", headerString, OIDC_HTTP_COOKIE_FLAG_SECURE);
 
 	if (oidc_cfg_cookie_http_only_get(c) != FALSE)

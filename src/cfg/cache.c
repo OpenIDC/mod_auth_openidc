@@ -80,9 +80,9 @@ const char *oidc_cmd_cache_type_set(cmd_parms *cmd, void *ptr, const char *arg) 
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
-#define OIDC_CFG_MEMBER_FUNC_CACHE_TYPE_GET(member, type, def_val)                                                     \
+#define OIDC_CFG_MEMBER_FUNC_CACHE_TYPE_GET(member, type, def_val, unset_val)                                          \
 	type oidc_cfg_cache_##member##_get(oidc_cfg_t *cfg) {                                                          \
-		if (cfg->cache.member == OIDC_CONFIG_POS_INT_UNSET)                                                    \
+		if (cfg->cache.member == unset_val)                                                                    \
 			return def_val;                                                                                \
 		return cfg->cache.member;                                                                              \
 	}
@@ -97,21 +97,29 @@ const char *oidc_cmd_cache_type_set(cmd_parms *cmd, void *ptr, const char *arg) 
 		return OIDC_CONFIG_DIR_RV(cmd, rv);                                                                    \
 	}
 
-#define OIDC_CFG_MEMBER_FUNCS_CACHE_INT_EXT(member, parse, def_val)                                                    \
+#define OIDC_CFG_MEMBER_FUNCS_CACHE_PARSE(member, type, parse, def_val, unset_val)                                     \
 	const char *oidc_cmd_cache_##member##_set(cmd_parms *cmd, void *ptr, const char *arg) {                        \
 		oidc_cfg_t *cfg =                                                                                      \
 		    (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);              \
-		int v = -1;                                                                                            \
+		type v = -1;                                                                                           \
 		const char *rv = parse;                                                                                \
 		if (rv == NULL)                                                                                        \
 			cfg->cache.member = v;                                                                         \
 		return OIDC_CONFIG_DIR_RV(cmd, rv);                                                                    \
 	}                                                                                                              \
                                                                                                                        \
-	OIDC_CFG_MEMBER_FUNC_CACHE_TYPE_GET(member, int, def_val)
+	OIDC_CFG_MEMBER_FUNC_CACHE_TYPE_GET(member, type, def_val, unset_val)
+
+#define OIDC_CFG_MEMBER_FUNCS_CACHE_INT_EXT(member, parse, def_val)                                                    \
+	OIDC_CFG_MEMBER_FUNCS_CACHE_PARSE(member, int, parse, def_val, OIDC_CONFIG_POS_INT_UNSET)
 
 #define OIDC_CFG_MEMBER_FUNCS_CACHE_INT(member, min, max, def_val)                                                     \
 	OIDC_CFG_MEMBER_FUNCS_CACHE_INT_EXT(member, oidc_cfg_parse_int_min_max(cmd->pool, arg, &v, min, max), def_val)
+
+#define OIDC_CFG_MEMBER_FUNCS_CACHE_TIMEOUT(member, min, max, def_val)                                                 \
+	OIDC_CFG_MEMBER_FUNCS_CACHE_PARSE(member, apr_interval_time_t,                                                 \
+					  oidc_cfg_parse_timeout_min_max(cmd->pool, arg, &v, min, max), def_val,       \
+					  OIDC_CONFIG_POS_TIMEOUT_UNSET)
 
 #define OIDC_CFG_MEMBER_FUNCS_CACHE_BOOL(member, def_val)                                                              \
 	OIDC_CFG_MEMBER_FUNCS_CACHE_INT_EXT(member, oidc_cfg_parse_boolean(cmd->pool, arg, &v), def_val)
@@ -159,7 +167,8 @@ const char *oidc_cmd_cache_shm_entry_size_max_set(cmd_parms *cmd, void *ptr, con
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
-OIDC_CFG_MEMBER_FUNC_CACHE_TYPE_GET(shm_entry_size_max, int, OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX)
+OIDC_CFG_MEMBER_FUNC_CACHE_TYPE_GET(shm_entry_size_max, int, OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX,
+				    OIDC_CONFIG_POS_INT_UNSET)
 
 static void oidc_cfg_cache_shm_create_server_config(oidc_cfg_t *c) {
 	c->cache.shm_size_max = OIDC_DEFAULT_CACHE_SHM_SIZE;
@@ -235,19 +244,26 @@ OIDC_CFG_MEMBER_FUNCS_CACHE_INT(memcache_smax, OIDC_CACHE_MEMCACHE_CONNECTIONS_S
 OIDC_CFG_MEMBER_FUNCS_CACHE_INT(memcache_hmax, OIDC_CACHE_MEMCACHE_CONNECTIONS_HMAX_MIN,
 				OIDC_CACHE_MEMCACHE_CONNECTIONS_HMAX_MAX, OIDC_DEFAULT_CACHE_MEMCACHE_CONNECTIONS_HMAX)
 
-#define OIDC_CACHE_MEMCACHE_CONNECTIONS_TTL_MIN 0
-#define OIDC_CACHE_MEMCACHE_CONNECTIONS_TTL_MAX 3600 * 24 * 7
-#define OIDC_DEFAULT_CACHE_MEMCACHE_CONNECTIONS_TTL 0
+#define OIDC_CACHE_MEMCACHE_CONNECTIONS_TTL_MIN (apr_interval_time_t)0
+/*
+ *  Due to a design error in the apr-util 1.x apr_memcache_server_create prototype
+ *  (it uses an apr_uint32_t instead of an apr_interval_time_t) we need to limit
+ *  the maximum value to 4292 seconds which is the maximum value in microseconds
+ *  that can be represented by an apr_uint32_t.
+ */
+#define OIDC_CACHE_MEMCACHE_CONNECTIONS_TTL_MAX apr_time_from_sec(4294)
+#define OIDC_DEFAULT_CACHE_MEMCACHE_CONNECTIONS_TTL apr_time_from_sec(60)
 
-OIDC_CFG_MEMBER_FUNCS_CACHE_INT(memcache_ttl, OIDC_CACHE_MEMCACHE_CONNECTIONS_TTL_MIN,
-				OIDC_CACHE_MEMCACHE_CONNECTIONS_TTL_MAX, OIDC_DEFAULT_CACHE_MEMCACHE_CONNECTIONS_TTL)
+OIDC_CFG_MEMBER_FUNCS_CACHE_TIMEOUT(memcache_ttl, OIDC_CACHE_MEMCACHE_CONNECTIONS_TTL_MIN,
+				    OIDC_CACHE_MEMCACHE_CONNECTIONS_TTL_MAX,
+				    OIDC_DEFAULT_CACHE_MEMCACHE_CONNECTIONS_TTL)
 
 static void oidc_cfg_cache_memcache_create_server_config(oidc_cfg_t *c) {
 	c->cache.memcache_servers = NULL;
 	c->cache.memcache_min = OIDC_CONFIG_POS_INT_UNSET;
 	c->cache.memcache_smax = OIDC_CONFIG_POS_INT_UNSET;
 	c->cache.memcache_hmax = OIDC_CONFIG_POS_INT_UNSET;
-	c->cache.memcache_ttl = OIDC_CONFIG_POS_INT_UNSET;
+	c->cache.memcache_ttl = OIDC_CONFIG_POS_TIMEOUT_UNSET;
 }
 
 static void oidc_cfg_cache_memcache_merge_server_config(oidc_cfg_t *c, oidc_cfg_t *base, oidc_cfg_t *add) {
@@ -259,8 +275,8 @@ static void oidc_cfg_cache_memcache_merge_server_config(oidc_cfg_t *c, oidc_cfg_
 										       : base->cache.memcache_smax;
 	c->cache.memcache_hmax = add->cache.memcache_hmax != OIDC_CONFIG_POS_INT_UNSET ? add->cache.memcache_hmax
 										       : base->cache.memcache_hmax;
-	c->cache.memcache_ttl =
-	    add->cache.memcache_ttl != OIDC_CONFIG_POS_INT_UNSET ? add->cache.memcache_ttl : base->cache.memcache_ttl;
+	c->cache.memcache_ttl = add->cache.memcache_ttl != OIDC_CONFIG_POS_TIMEOUT_UNSET ? add->cache.memcache_ttl
+											 : base->cache.memcache_ttl;
 }
 
 #endif
@@ -301,8 +317,8 @@ const char *oidc_cmd_cache_redis_connect_timeout_set(cmd_parms *cmd, void *struc
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
-OIDC_CFG_MEMBER_FUNC_CACHE_TYPE_GET(redis_connect_timeout, int, OIDC_CONFIG_POS_INT_UNSET)
-OIDC_CFG_MEMBER_FUNC_CACHE_TYPE_GET(redis_keepalive, int, OIDC_CONFIG_POS_INT_UNSET)
+OIDC_CFG_MEMBER_FUNC_CACHE_TYPE_GET(redis_connect_timeout, int, OIDC_CONFIG_POS_INT_UNSET, OIDC_CONFIG_POS_INT_UNSET)
+OIDC_CFG_MEMBER_FUNC_CACHE_TYPE_GET(redis_keepalive, int, OIDC_CONFIG_POS_INT_UNSET, OIDC_CONFIG_POS_INT_UNSET)
 
 #define OIDC_REDIS_TIMEOUT_MIN 1
 #define OIDC_REDIS_TIMEOUT_MAX 3600

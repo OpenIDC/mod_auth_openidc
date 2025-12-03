@@ -69,19 +69,19 @@ static void *oidc_cache_memcache_cfg_create(apr_pool_t *pool) {
 /*
  * initialize the memcache struct to a number of memcache servers
  */
-static int oidc_cache_memcache_post_config(server_rec *s) {
+static int oidc_cache_memcache_post_config(apr_pool_t *pool, server_rec *s) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(s->module_config, &auth_openidc_module);
 
 	if (cfg->cache.cfg != NULL)
 		return APR_SUCCESS;
-	oidc_cache_cfg_memcache_t *context = oidc_cache_memcache_cfg_create(s->process->pool);
+	oidc_cache_cfg_memcache_t *context = oidc_cache_memcache_cfg_create(pool);
 	cfg->cache.cfg = context;
 
 	apr_status_t rv = APR_SUCCESS;
 	apr_uint16_t nservers = 0;
 	char *split;
 	char *tok;
-	apr_pool_t *p = s->process->pool;
+	apr_pool_t *p = pool;
 	APR_OPTIONAL_FN_TYPE(http2_get_num_workers) * get_h2_num_workers;
 	int max_threads = 0;
 	int minw = 0;
@@ -89,8 +89,7 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 	apr_uint32_t min = 0;
 	apr_uint32_t smax = 0;
 	apr_uint32_t hmax = 0;
-	apr_uint32_t ttl = 0;
-	;
+	apr_interval_time_t ttl = 0;
 
 	if (oidc_cfg_cache_memcache_servers_get(cfg) == NULL) {
 		oidc_serror(s, "cache type is set to \"memcache\", but no valid " OIDCMemCacheServers
@@ -149,9 +148,6 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 			smax = 1;
 		}
 	}
-	if (ttl == 0) {
-		ttl = apr_time_from_sec(60);
-	}
 	if (smax > hmax) {
 		smax = hmax;
 	}
@@ -182,11 +178,11 @@ static int oidc_cache_memcache_post_config(server_rec *s) {
 		if (port == 0)
 			port = 11211;
 
-		oidc_sdebug(s, "creating server: %s:%d, min=%d, smax=%d, hmax=%d, ttl=%d", host_str, port, min, smax,
-			    hmax, ttl);
+		oidc_sdebug(s, "creating server: %s:%d, min=%d, smax=%d, hmax=%d, ttl=%" APR_TIME_T_FMT, host_str, port,
+			    min, smax, hmax, ttl);
 
 		/* create the memcache server struct */
-		rv = apr_memcache_server_create(p, host_str, port, min, smax, hmax, ttl, &st);
+		rv = apr_memcache_server_create(p, host_str, port, min, smax, hmax, (apr_uint32_t)ttl, &st);
 		if (rv != APR_SUCCESS) {
 			oidc_serror(s, "failed to create cache server: %s:%d", host_str, port);
 			return HTTP_INTERNAL_SERVER_ERROR;

@@ -23,7 +23,7 @@
 					document.forms[0].appendChild(input);
 				}
 				document.forms[0].action = "%s";
-				document.forms[0].submit();
+				HTMLFormElement.prototype.submit.call(document.forms[0]);
 			}
 		</script>			
 	</head>

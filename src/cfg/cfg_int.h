@@ -94,7 +94,7 @@ struct oidc_cfg_cache_t {
 	int memcache_hmax;
 	/* cache_type= memcache: maximum time in microseconds a connection to a memcache server can be idle before being
 	 * closed */
-	int memcache_ttl;
+	apr_interval_time_t memcache_ttl;
 #endif
 
 	/*
@@ -114,6 +114,8 @@ struct oidc_cfg_cache_t {
 };
 
 struct oidc_cfg_t {
+
+	server_rec *svr;
 
 	/* the redirect URI as configured with the OpenID Connect OP's that we talk to */
 	char *redirect_uri;
@@ -150,7 +152,10 @@ struct oidc_cfg_t {
 	int session_cookie_chunk_size;
 	char *cookie_domain;
 	int cookie_http_only;
-	int cookie_same_site;
+	/* samesite cookie settings */
+	int cookie_same_site_session;
+	int cookie_same_site_state;
+	int cookie_same_site_discovery_csrf;
 
 	int state_timeout;
 	int max_number_of_state_cookies;

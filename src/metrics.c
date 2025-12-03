@@ -42,7 +42,7 @@
 
 // clang-format off
 
-#include "util.h"
+#include "util/util.h"
 #include "metrics.h"
 #include <limits.h>
 #include <apr_shm.h>
@@ -159,6 +159,7 @@ const oidc_metrics_counter_info_t _oidc_metrics_counters_info[] = {
   { OM_CLASS_CONTENT, "request.jwks",          "JWKs requests to the content handler" },
   { OM_CLASS_CONTENT, "request.discovery",     "discovery requests to the content handler" },
   { OM_CLASS_CONTENT, "request.post-preserve", "HTTP POST preservation requests to the content handler" },
+  { OM_CLASS_CONTENT, "request.authn-post",    "HTTP POST authentication requests to the content handler" },
   { OM_CLASS_CONTENT, "request.unknown",       "unknown requests to the content handler" },
 
   // KEEP THIS: end-of-counters
@@ -255,7 +256,7 @@ static inline char *_json_int2str(apr_pool_t *pool, json_int_t n) {
  * check Jansson specific integer/long number overrun
  */
 static inline int _is_overflow(server_rec *s, json_int_t cur, json_int_t add) {
-	if ((add > OIDC_METRICS_INT_MAX - cur)) {
+	if (add > (OIDC_METRICS_INT_MAX - cur)) {
 		oidc_swarn(s,
 			   "reset metrics since the size (%s) of the integer value would be larger than the "
 			   "JSON/libjansson maximum "
@@ -321,21 +322,9 @@ apr_byte_t oidc_metrics_is_valid_classname(apr_pool_t *pool, const char *name, c
 	*valid_names = apr_psprintf(pool, "%s%s%s", *valid_names ? *valid_names : "", *valid_names ? " | " : "",
 				    "claim.id_token.* | claim.userinfo.*");
 
-	return apr_table_get(names, name)
-		   ? TRUE
-		   : ((strstr(name, "claim.id_token.") != NULL) || (strstr(name, "claim.userinfo.") != NULL));
-}
-
-/*
- * collection thread
- */
-
-/*
- * retrieve the (JSON) serialized (global) metrics data from shared memory
- */
-static inline char *_oidc_metrics_storage_get(server_rec *s) {
-	char *p = (char *)apr_shm_baseaddr_get(_oidc_metrics_cache);
-	return ((p) && (*p != 0)) ? apr_pstrdup(s->process->pool, p) : NULL;
+	return apr_table_get(names, name) ? TRUE
+					  : ((_oidc_strstr(name, "claim.id_token.") != NULL) ||
+					     (_oidc_strstr(name, "claim.userinfo.") != NULL));
 }
 
 /*
@@ -365,6 +354,14 @@ static inline apr_size_t _oidc_metrics_shm_size(server_rec *s) {
 		}
 	}
 	return _g_oidc_metrics_shm_size;
+}
+
+/*
+ * retrieve the (JSON) serialized (global) metrics data from shared memory
+ */
+static inline char *_oidc_metrics_storage_get(server_rec *s) {
+	char *p = (char *)apr_shm_baseaddr_get(_oidc_metrics_cache);
+	return ((p) && (*p != 0)) ? apr_pstrndup(s->process->pool, p, _oidc_metrics_shm_size(s)) : NULL;
 }
 
 /*
@@ -411,8 +408,15 @@ static json_t *oidc_metrics_json_parse_s(server_rec *s, char *s_json) {
  */
 static inline void oidc_metrics_storage_reset(server_rec *s) {
 	char *s_json = NULL;
-	json_t *json = NULL, *j_server = NULL, *j_entries = NULL, *j_entry = NULL, *j_val = NULL;
-	void *i1 = NULL, *i2 = NULL, *i3 = NULL, *i4 = NULL;
+	json_t *json = NULL;
+	json_t *j_server = NULL;
+	json_t *j_entries = NULL;
+	json_t *j_entry = NULL;
+	json_t *j_val = NULL;
+	void *i1 = NULL;
+	void *i2 = NULL;
+	void *i3 = NULL;
+	void *i4 = NULL;
 	int i = 0;
 
 	/* get the global stringified JSON metrics */
@@ -469,7 +473,7 @@ static inline void oidc_metrics_storage_reset(server_rec *s) {
 	}
 
 	/* serialize the metrics data, preserve order is required for Prometheus */
-	s_json = oidc_util_encode_json(s->process->pool, json, JSON_COMPACT | JSON_PRESERVE_ORDER);
+	s_json = oidc_util_json_encode(s->process->pool, json, JSON_COMPACT | JSON_PRESERVE_ORDER);
 
 	/* free the JSON data */
 	json_decref(json);
@@ -610,12 +614,20 @@ static inline unsigned int _oidc_metrics_key2type(const char *key) {
  */
 static void oidc_metrics_store(server_rec *s) {
 	char *s_json = NULL;
-	json_t *json = NULL, *j_server = NULL, *j_timer = NULL, *j_counters = NULL, *j_counter = NULL,
-	       *j_timings = NULL, *j_names = NULL;
-	apr_hash_index_t *hi1 = NULL, *hi2 = NULL;
-	const char *name = NULL, *key = NULL;
+	json_t *json = NULL;
+	json_t *j_server = NULL;
+	json_t *j_timer = NULL;
+	json_t *j_counters = NULL;
+	json_t *j_counter = NULL;
+	json_t *j_timings = NULL;
+	json_t *j_names = NULL;
+	apr_hash_index_t *hi1 = NULL;
+	apr_hash_index_t *hi2 = NULL;
+	const char *name = NULL;
+	const char *key = NULL;
 	char *p = NULL;
-	apr_hash_t *server_hash = NULL, *counter_hash = NULL;
+	apr_hash_t *server_hash = NULL;
+	apr_hash_t *counter_hash = NULL;
 	oidc_metrics_timing_t *timing = NULL;
 
 	if ((apr_hash_count(_oidc_metrics.counters) == 0) && (apr_hash_count(_oidc_metrics.timings) == 0))
@@ -643,7 +655,7 @@ static void oidc_metrics_store(server_rec *s) {
 			apr_hash_this(hi2, (const void **)&key, NULL, (void **)&counter_hash);
 
 			key = apr_pstrdup(s->process->pool, key);
-			p = strstr(key, ".");
+			p = _oidc_strstr(key, ".");
 			if (p == NULL) {
 				/* get or create the corresponding metric entry in the global metrics */
 				j_counter = json_object_get(j_counters, key);
@@ -694,7 +706,7 @@ static void oidc_metrics_store(server_rec *s) {
 	}
 
 	/* serialize the metrics data, preserve order is required for Prometheus */
-	s_json = oidc_util_encode_json(s->process->pool, json, JSON_COMPACT | JSON_PRESERVE_ORDER);
+	s_json = oidc_util_json_encode(s->process->pool, json, JSON_COMPACT | JSON_PRESERVE_ORDER);
 
 	/* free the JSON data */
 	json_decref(json);
@@ -711,19 +723,12 @@ static void oidc_metrics_store(server_rec *s) {
 /*
  * obtain the metrics flush interval from the environment variables
  */
-static inline apr_interval_time_t _oidc_metrics_interval(server_rec *s) {
+static inline apr_interval_time_t _oidc_metrics_interval(void) {
 	return apr_time_from_msec(_oidc_metrics_get_env_int(OIDC_METRICS_CACHE_STORAGE_INTERVAL_ENV_VAR,
 							    OIDC_METRICS_CACHE_STORAGE_INTERVAL_DEFAULT));
 }
 
-/*
- * generate a random integer value in the specified modulo range
- */
-static unsigned int oidc_metric_random_int(unsigned int mod) {
-	unsigned int v;
-	oidc_util_random_bytes((unsigned char *)&v, sizeof(v));
-	return v % mod;
-}
+#define OIDC_METRICS_POLL_INTERVAL 250
 
 /*
  * thread that periodically writes the local data into the shared memory
@@ -732,16 +737,23 @@ static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void 
 	server_rec *s = (server_rec *)data;
 
 	/* sleep for a short random time <1s so child processes write-lock on a different frequency */
-	apr_sleep(apr_time_from_msec(oidc_metric_random_int(1000)));
+	apr_sleep(apr_time_from_msec(oidc_util_rand_int(1000)));
+
+	/* calculate the number of short sleep intervals */
+	int n = _oidc_metrics_interval() / apr_time_from_msec(OIDC_METRICS_POLL_INTERVAL);
 
 	/* see if we are asked to exit */
 	while (_oidc_metrics_thread_exit == FALSE) {
 
-		apr_sleep(_oidc_metrics_interval(s));
+		/* break up the sleep interval in short intervals so we can exit timely fashion without confusing Apache
+		 * at shutdown */
+		for (int i = 0; i < n; i++) {
+			apr_sleep(apr_time_from_msec(OIDC_METRICS_POLL_INTERVAL));
+			if (_oidc_metrics_thread_exit == TRUE)
+				break;
+		}
 
-		// NB: exit here because the parent thread may have cleaned up the shared memory segment
-		if (_oidc_metrics_thread_exit == TRUE)
-			break;
+		// NB: no exit here because we need to write our local metrics into the cache before exiting
 
 		/* lock the mutex that protects the locally cached metrics */
 		oidc_cache_mutex_lock(s->process->pool, s, _oidc_metrics_process_mutex);
@@ -757,7 +769,8 @@ static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void 
 		oidc_cache_mutex_unlock(s->process->pool, s, _oidc_metrics_process_mutex);
 	}
 
-	apr_thread_exit(thread, APR_SUCCESS);
+	/* NB: don't call apr_thread_exit here because it seems that Apache is cleaning up its own threads */
+	// apr_thread_exit(thread, APR_SUCCESS);
 
 	return NULL;
 }
@@ -769,14 +782,14 @@ static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void 
 /*
  * NB: global, yet called for each vhost that has metrics enabled!
  */
-apr_byte_t oidc_metrics_post_config(server_rec *s) {
+apr_byte_t oidc_metrics_post_config(apr_pool_t *pool, server_rec *s) {
 
 	/* make sure it gets executed exactly once! */
 	if (_oidc_metrics_cache != NULL)
 		return TRUE;
 
 	/* create the shared memory segment that holds the stringified JSON formatted metrics data */
-	if (apr_shm_create(&_oidc_metrics_cache, _oidc_metrics_shm_size(s), NULL, s->process->pconf) != APR_SUCCESS)
+	if (apr_shm_create(&_oidc_metrics_cache, _oidc_metrics_shm_size(s), NULL, s->process->pool) != APR_SUCCESS)
 		return FALSE;
 	if (_oidc_metrics_cache == NULL)
 		return FALSE;
@@ -800,14 +813,14 @@ apr_byte_t oidc_metrics_post_config(server_rec *s) {
 	_oidc_metrics_global_mutex = oidc_cache_mutex_create(s->process->pool, TRUE);
 	if (_oidc_metrics_global_mutex == NULL)
 		return FALSE;
-	if (oidc_cache_mutex_post_config(s, _oidc_metrics_global_mutex, "metrics-global") == FALSE)
+	if (oidc_cache_mutex_post_config(s->process->pool, s, _oidc_metrics_global_mutex, "metrics-global") == FALSE)
 		return FALSE;
 
 	/* create and initialize the mutex that guards the shared memory */
 	_oidc_metrics_process_mutex = oidc_cache_mutex_create(s->process->pool, FALSE);
 	if (_oidc_metrics_process_mutex == NULL)
 		return FALSE;
-	if (oidc_cache_mutex_post_config(s, _oidc_metrics_process_mutex, "metrics-process") == FALSE)
+	if (oidc_cache_mutex_post_config(s->process->pool, s, _oidc_metrics_process_mutex, "metrics-process") == FALSE)
 		return FALSE;
 
 	return TRUE;
@@ -853,6 +866,7 @@ apr_status_t oidc_metrics_cleanup(server_rec *s) {
 	apr_thread_join(&rv, _oidc_metrics_thread);
 	if (rv != APR_SUCCESS)
 		oidc_serror(s, "apr_thread_join failed");
+	_oidc_metrics_thread_exit = FALSE;
 	_oidc_metrics_thread = NULL;
 
 	/* delete the shared memory segment if we are in the parent process */
@@ -1070,12 +1084,22 @@ static json_t *oidc_metrics_json_parse_r(request_rec *r, char *s_json) {
  */
 static int oidc_metrics_handle_json(request_rec *r, char *s_json) {
 
-	json_t *json = NULL, *j_server = NULL, *j_timings, *j_counters, *j_timing = NULL, *j_counter = NULL;
-	json_t *o_json = NULL, *o_server = NULL, *o_counters = NULL, *o_counter = NULL, *o_timings = NULL,
-	       *o_timing = NULL;
+	json_t *json = NULL;
+	json_t *j_server = NULL;
+	json_t *j_timings = NULL;
+	json_t *j_counters = NULL;
+	json_t *j_timing = NULL;
+	json_t *j_counter = NULL;
+	json_t *o_json = NULL;
+	json_t *o_server = NULL;
+	json_t *o_counters = NULL;
+	json_t *o_counter = NULL;
+	json_t *o_timings = NULL;
+	json_t *o_timing = NULL;
 	const char *s_server = NULL;
 	unsigned int type = 0;
-	void *i1 = NULL, *i2 = NULL;
+	void *i1 = NULL;
+	void *i2 = NULL;
 
 	/* parse the metrics string to JSON */
 	json = oidc_metrics_json_parse_r(r, s_json);
@@ -1139,7 +1163,7 @@ static int oidc_metrics_handle_json(request_rec *r, char *s_json) {
 		i1 = json_object_iter_next(json, i1);
 	}
 
-	s_json = oidc_util_encode_json(r->pool, o_json, JSON_COMPACT | JSON_PRESERVE_ORDER);
+	s_json = oidc_util_json_encode(r->pool, o_json, JSON_COMPACT | JSON_PRESERVE_ORDER);
 
 	json_decref(o_json);
 	json_decref(json);
@@ -1169,16 +1193,25 @@ static int oidc_metrics_handle_internal(request_rec *r, char *s_json) {
  */
 static int oidc_metrics_handle_status(request_rec *r, char *s_json) {
 	char *msg = "OK\n";
-	char *s_metric_param = NULL, *s_server_param = NULL, *s_name_param = NULL, *s_value_param = NULL;
-	json_t *json = NULL, *j_server = NULL, *j_counters = NULL, *j_counter = NULL, *j_values = NULL, *j_value = NULL;
-	const char *s_key = NULL, *s_name = NULL;
+	char *s_metric_param = NULL;
+	char *s_server_param = NULL;
+	char *s_name_param = NULL;
+	char *s_value_param = NULL;
+	json_t *json = NULL;
+	json_t *j_server = NULL;
+	json_t *j_counters = NULL;
+	json_t *j_counter = NULL;
+	json_t *j_values = NULL;
+	json_t *j_value = NULL;
+	const char *s_key = NULL;
+	const char *s_name = NULL;
 	unsigned int type = 0;
 	void *iter = NULL;
 
-	oidc_util_request_parameter_get(r, OIDC_METRICS_SERVER_PARAM, &s_server_param);
-	oidc_util_request_parameter_get(r, OIDC_METRICS_COUNTER_PARAM, &s_metric_param);
-	oidc_util_request_parameter_get(r, OIDC_METRICS_NAME_PARAM, &s_name_param);
-	oidc_util_request_parameter_get(r, OIDC_METRICS_VALUE_PARAM, &s_value_param);
+	oidc_util_url_parameter_get(r, OIDC_METRICS_SERVER_PARAM, &s_server_param);
+	oidc_util_url_parameter_get(r, OIDC_METRICS_COUNTER_PARAM, &s_metric_param);
+	oidc_util_url_parameter_get(r, OIDC_METRICS_NAME_PARAM, &s_name_param);
+	oidc_util_url_parameter_get(r, OIDC_METRICS_VALUE_PARAM, &s_value_param);
 
 	if (s_server_param == NULL)
 		s_server_param = "localhost";
@@ -1279,10 +1312,16 @@ typedef struct oidc_metric_prometheus_callback_ctx_t {
  */
 static int oidc_metrics_prometheus_counters(oidc_metric_prometheus_callback_ctx_t *ctx, const char *key,
 					    json_t *value) {
-	const char *s_server = NULL, *s_key = NULL, *s_value = NULL, *s_start = NULL;
-	json_t *j_counter = NULL, *j_value = NULL;
+	const char *s_server = NULL;
+	const char *s_key = NULL;
+	const char *s_value = NULL;
+	const char *s_start = NULL;
+	json_t *j_counter = NULL;
+	json_t *j_value = NULL;
 	json_t *o_counter = value;
-	void *i1 = NULL, *i2 = NULL, *i3 = NULL;
+	void *i1 = NULL;
+	void *i2 = NULL;
+	void *i3 = NULL;
 	unsigned int type = _oidc_metrics_key2type(key);
 	const char *s_label =
 	    oidc_metric_prometheus_normalize_name(ctx->pool, _oidc_metrics_counter_type2s(ctx->pool, type));
@@ -1472,7 +1511,7 @@ static int oidc_metric_reset(request_rec *r, int dvalue) {
 	char svalue[16];
 	int value = 0;
 
-	oidc_util_request_parameter_get(r, OIDC_METRICS_RESET_PARAM, &s_reset);
+	oidc_util_url_parameter_get(r, OIDC_METRICS_RESET_PARAM, &s_reset);
 
 	if (s_reset == NULL)
 		return dvalue;
@@ -1497,7 +1536,7 @@ const oidc_metrics_content_handler_t *oidc_metrics_find_handler(request_rec *r) 
 	int i = 0;
 
 	/* get the specified format */
-	oidc_util_request_parameter_get(r, OIDC_METRICS_FORMAT_PARAM, &s_format);
+	oidc_util_url_parameter_get(r, OIDC_METRICS_FORMAT_PARAM, &s_format);
 
 	if (s_format == NULL)
 		return &_oidc_metrics_handlers[0];

@@ -49,7 +49,7 @@
 #include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 #include <apr_lib.h>
 
@@ -66,7 +66,7 @@ apr_byte_t oidc_oauth_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg
 		return FALSE;
 
 	/* decode and see if it is not an error response somehow */
-	if (oidc_util_decode_json_and_check_error(r, *response, j_metadata) == FALSE) {
+	if (oidc_util_json_decode_and_check_error(r, *response, j_metadata) == FALSE) {
 		oidc_error(r, "JSON parsing of retrieved Discovery document failed");
 		return FALSE;
 	}
@@ -112,7 +112,7 @@ static apr_byte_t oidc_oauth_provider_config(request_rec *r, oidc_cfg_t *c) {
 
 	} else {
 
-		oidc_util_decode_json_object(r, s_json, &j_provider);
+		oidc_util_json_decode_object(r, s_json, &j_provider);
 
 		/* check to see if it is valid metadata */
 		/*
@@ -164,6 +164,7 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg_t *c
 
 	/* add the token endpoint authentication credentials */
 	if (oidc_proto_token_endpoint_auth(r, c, oidc_cfg_oauth_introspection_endpoint_auth_get(c),
+					   oidc_cfg_oauth_introspection_endpoint_auth_alg_get(c),
 					   oidc_cfg_oauth_client_id_get(c), oidc_cfg_oauth_client_secret_get(c), NULL,
 					   oidc_cfg_oauth_introspection_endpoint_url_get(c), params,
 					   bearer_access_token_auth, &basic_auth, &bearer_auth) == FALSE)
@@ -360,7 +361,7 @@ static apr_byte_t oidc_oauth_cache_access_token(request_rec *r, oidc_cfg_t *c, a
 	json_t *cache_entry = json_object();
 	json_object_set(cache_entry, OIDC_OAUTH_CACHE_KEY_RESPONSE, json);
 	json_object_set_new(cache_entry, OIDC_OAUTH_CACHE_KEY_TIMESTAMP, json_integer(apr_time_sec(apr_time_now())));
-	char *cache_value = oidc_util_encode_json(r->pool, cache_entry, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	char *cache_value = oidc_util_json_encode(r->pool, cache_entry, JSON_PRESERVE_ORDER | JSON_COMPACT);
 
 	/* set it in the cache so subsequent request don't need to validate the access_token and get the claims anymore
 	 */
@@ -392,7 +393,7 @@ static apr_byte_t oidc_oauth_get_cached_access_token(request_rec *r, oidc_cfg_t 
 		return FALSE;
 
 	/* json decode the cache entry */
-	if (oidc_util_decode_json_object(r, s_cache_entry, &cache_entry) == FALSE) {
+	if (oidc_util_json_decode_object(r, s_cache_entry, &cache_entry) == FALSE) {
 		*json = NULL;
 		return FALSE;
 	}
@@ -418,7 +419,7 @@ static apr_byte_t oidc_oauth_get_cached_access_token(request_rec *r, oidc_cfg_t 
 	oidc_debug(r, "returning cached introspection result that meets freshness requirements: %s", s_cache_entry);
 
 	/* we've got a cached introspection result that is still valid for this path's requirements */
-	*json = json_deep_copy(json_object_get(cache_entry, OIDC_OAUTH_CACHE_KEY_RESPONSE));
+	*json = json_copy(json_object_get(cache_entry, OIDC_OAUTH_CACHE_KEY_RESPONSE));
 
 	json_decref(cache_entry);
 	return TRUE;
@@ -447,7 +448,7 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg_t *c,
 		}
 
 		/* decode and see if it is not an error response somehow */
-		if (oidc_util_decode_json_and_check_error(r, s_json, &result) == FALSE)
+		if (oidc_util_json_decode_and_check_error(r, s_json, &result) == FALSE)
 			return FALSE;
 
 		json_t *active = json_object_get(result, OIDC_PROTO_ACTIVE);
@@ -522,7 +523,7 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg_t *c,
 		// oidc_oauth_spaced_string_to_array(r, result, OIDC_PROTO_SCOPE, tkn, "scopes");
 
 		/* return only the pimped access_token results */
-		*token = json_deep_copy(tkn);
+		*token = json_copy(tkn);
 
 		json_decref(result);
 
@@ -535,7 +536,7 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg_t *c,
 	}
 
 	/* stringify the response */
-	*response = oidc_util_encode_json(r->pool, *token, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	*response = oidc_util_json_encode(r->pool, *token, JSON_PRESERVE_ORDER | JSON_COMPACT);
 
 	return TRUE;
 }
@@ -561,13 +562,13 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 	oidc_jwk_t *jwk = NULL;
 
 	// TODO: replace this OIDC client secret with OIDCOAuthDecryptSharedKeys
-	if (oidc_util_create_symmetric_key(r, oidc_cfg_provider_client_secret_get(oidc_cfg_provider_get(c)), 0, NULL,
+	if (oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(oidc_cfg_provider_get(c)), 0, NULL,
 					   TRUE, &jwk) == FALSE)
 		return FALSE;
 
 	oidc_jwt_t *jwt = NULL;
 	if (oidc_jwt_parse(r->pool, access_token, &jwt,
-			   oidc_util_merge_symmetric_key(r->pool, oidc_cfg_private_keys_get(c), jwk), FALSE,
+			   oidc_util_key_symmetric_merge(r->pool, oidc_cfg_private_keys_get(c), jwk), FALSE,
 			   &err) == FALSE) {
 		oidc_error(r, "could not parse JWT from access_token: %s", oidc_jose_e2s(r->pool, err));
 		oidc_jwk_destroy(jwk);
@@ -597,7 +598,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 				    oidc_cfg_provider_userinfo_refresh_interval_get(oidc_cfg_provider_get(c)), NULL,
 				    NULL};
 	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri, oidc_cfg_oauth_ssl_validate_server_get(c),
-				  oidc_util_merge_key_sets(r->pool, oidc_cfg_oauth_verify_shared_keys_get(c),
+				  oidc_util_key_sets_merge(r->pool, oidc_cfg_oauth_verify_shared_keys_get(c),
 							   oidc_cfg_oauth_verify_public_keys_get(c)),
 				  NULL) == FALSE) {
 		oidc_error(r, "JWT access token signature could not be validated, aborting");
@@ -607,7 +608,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 
 	oidc_debug(r, "successfully verified JWT access token: %s", jwt->payload.value.str);
 
-	*token = json_deep_copy(jwt->payload.value.json);
+	*token = json_copy(jwt->payload.value.json);
 	*response = jwt->payload.value.str;
 
 	oidc_jwt_destroy(jwt);
@@ -668,10 +669,10 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg_t *c, const char *access_to
 		}
 
 		/* check if this is a request to the "special" handler (Redirect URI) */
-	} else if (oidc_util_request_matches_url(r, oidc_util_redirect_uri(r, c))) {
+	} else if (oidc_util_url_matches_redirect_uri(r, c) == TRUE) {
 
 		/* check if this is a request for the public (encryption) keys */
-		if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
+		if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
 
 			OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_JWKS);
 
@@ -685,7 +686,7 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg_t *c, const char *access_to
 			return OK;
 
 			/* check if this is a request to remove the access token from the cache */
-		} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE)) {
+		} else if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE)) {
 
 			/* handle request to invalidate access token cache */
 			return oidc_revoke_at_cache_remove(r, c);
@@ -761,13 +762,13 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg_t *c, const char *access_to
 		oidc_http_hdr_in_set(r, authn_header, r->user);
 
 	/* set the resolved claims in the HTTP headers for the target application */
-	oidc_util_set_app_infos(r, token, oidc_cfg_claim_prefix_get(c), oidc_cfg_claim_delimiter_get(c), pass_in,
-				encoding);
+	oidc_util_appinfo_set_all(r, token, oidc_cfg_claim_prefix_get(c), oidc_cfg_claim_delimiter_get(c), pass_in,
+				  encoding);
 
 	/* set the access_token in the app headers */
 	if (access_token != NULL) {
-		oidc_util_set_app_info(r, OIDC_APP_INFO_ACCESS_TOKEN, access_token, OIDC_DEFAULT_HEADER_PREFIX, pass_in,
-				       encoding);
+		oidc_util_appinfo_set(r, OIDC_APP_INFO_ACCESS_TOKEN, access_token, OIDC_DEFAULT_HEADER_PREFIX, pass_in,
+				      encoding);
 	}
 
 	/* free JSON resources */

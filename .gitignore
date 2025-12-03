@@ -1,3 +1,15 @@
+/autom4te.cache/
+/.vscode/
+/.libs/
+/.settings/
+/.project
+/.cproject
+/.dockerignore
+/aclocal.m4
+/ar-lib
+/compile
+/config.guess
+/config.guess~
 /config.log
 /config.status
 /configure
@@ -21,3 +33,4 @@
 /config.sub~
 /configure~
 /install-sh~
+/test-driver

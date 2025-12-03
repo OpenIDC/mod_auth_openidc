@@ -66,15 +66,15 @@ typedef struct {
 #define OIDC_CACHE_FILE_PREFIX "mod-auth-openidc-"
 
 /* post config routine */
-int oidc_cache_file_post_config(server_rec *s) {
+int oidc_cache_file_post_config(apr_pool_t *pool, server_rec *s) {
 	apr_status_t rv = APR_SUCCESS;
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(s->module_config, &auth_openidc_module);
 	if (cfg->cache.file_dir == NULL) {
 		/* by default we'll use the OS specified /tmp dir for cache files */
-		rv = apr_temp_dir_get((const char **)&cfg->cache.file_dir, s->process->pool);
+		rv = apr_temp_dir_get((const char **)&cfg->cache.file_dir, pool);
 		if (rv != APR_SUCCESS) {
 			oidc_serror(s, "apr_temp_dir_get failed: could not find a temp dir: %s",
-				    oidc_cache_status2str(s->process->pool, rv));
+				    oidc_cache_status2str(pool, rv));
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 	}
@@ -370,7 +370,8 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section, const
 	char s_err[128];
 	char *rnd = NULL;
 
-	oidc_util_generate_random_string(r, &rnd, 12);
+	if (oidc_util_rand_str(r, &rnd, 12) == FALSE)
+		return FALSE;
 
 	/* get the fully qualified path to the cache file based on the key name */
 	const char *target = oidc_cache_file_path(r, section, key);

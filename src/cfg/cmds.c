@@ -103,9 +103,9 @@ const command_rec oidc_cfg_cmds[] = {
 		cookie_http_only,
 		"Defines whether or not the cookie httponly flag is set on cookies."),
 	OIDC_CFG_CMD(
-		AP_INIT_TAKE1,
+		AP_INIT_TAKE123,
 		OIDCCookieSameSite,
-		cookie_same_site,
+		cookie_same_site_session,
 		"Defines whether or not the cookie Same-Site flag is set on cookies."),
 	OIDC_CFG_CMD(
 		AP_INIT_TAKE123,
@@ -781,7 +781,7 @@ const command_rec oidc_cfg_cmds[] = {
 		pass_refresh_token,
 		"Pass the refresh token in a header and/or environment variable (On or Off)"),
 	OIDC_CFG_CMD_DIR(
-		AP_INIT_TAKE123,
+		AP_INIT_ITERATE,
 		OIDCPassIDTokenAs,
 		pass_idtoken_as,
 		"Set the format in which the id_token is passed in (a) header(s); must be one or more of: claims | payload | serialized"),

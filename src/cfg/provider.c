@@ -51,6 +51,7 @@ struct oidc_provider_t {
 	char *authorization_endpoint_url;
 	char *token_endpoint_url;
 	char *token_endpoint_auth;
+	char *token_endpoint_auth_alg;
 	char *token_endpoint_params;
 	char *userinfo_endpoint_url;
 	char *revocation_endpoint_url;
@@ -533,8 +534,8 @@ const char *oidc_cfg_provider_signed_jwks_uri_keys_set(apr_pool_t *pool, oidc_pr
 					  oidc_jose_e2s(pool, err));
 			goto end;
 		}
-		provider->jwks_uri.jwk_list = apr_array_make(pool, 1, sizeof(oidc_jwk_t *));
-		APR_ARRAY_PUSH(provider->jwks_uri.jwk_list, oidc_jwk_t *) = jwk;
+		provider->jwks_uri.jwk_list = apr_array_make(pool, 1, sizeof(const oidc_jwk_t *));
+		APR_ARRAY_PUSH(provider->jwks_uri.jwk_list, const oidc_jwk_t *) = jwk;
 		goto end;
 	}
 
@@ -595,10 +596,8 @@ const char *oidc_cmd_provider_signed_jwks_uri_set(cmd_parms *cmd, void *ptr, con
 
 const char *oidc_cfg_provider_token_endpoint_auth_set(apr_pool_t *pool, oidc_cfg_t *cfg, oidc_provider_t *provider,
 						      const char *arg) {
-	const char *rv = oidc_cfg_get_valid_endpoint_auth_function(cfg)(pool, arg);
-	if (rv == NULL)
-		provider->token_endpoint_auth = apr_pstrdup(pool, arg);
-	return rv;
+	return oidc_cfg_endpoint_auth_set(pool, cfg, arg, &provider->token_endpoint_auth,
+					  &provider->token_endpoint_auth_alg);
 }
 
 const char *oidc_cmd_provider_token_endpoint_auth_set(cmd_parms *cmd, void *ptr, const char *arg) {
@@ -609,6 +608,10 @@ const char *oidc_cmd_provider_token_endpoint_auth_set(cmd_parms *cmd, void *ptr,
 
 const char *oidc_cfg_provider_token_endpoint_auth_get(oidc_provider_t *provider) {
 	return provider->token_endpoint_auth;
+}
+
+const char *oidc_cfg_provider_token_endpoint_auth_alg_get(oidc_provider_t *provider) {
+	return provider->token_endpoint_auth_alg;
 }
 
 #define OIDC_USERINFO_REFRESH_INTERVAL_MIN 0
@@ -691,6 +694,7 @@ static void oidc_cfg_provider_init(oidc_provider_t *provider) {
 	provider->authorization_endpoint_url = NULL;
 	provider->token_endpoint_url = NULL;
 	provider->token_endpoint_auth = NULL;
+	provider->token_endpoint_auth_alg = NULL;
 	provider->token_endpoint_params = NULL;
 	provider->userinfo_endpoint_url = NULL;
 	provider->revocation_endpoint_url = NULL;
@@ -756,6 +760,8 @@ void oidc_cfg_provider_merge(apr_pool_t *pool, oidc_provider_t *dst, const oidc_
 	dst->token_endpoint_url = add->token_endpoint_url != NULL ? add->token_endpoint_url : base->token_endpoint_url;
 	dst->token_endpoint_auth =
 	    add->token_endpoint_auth != NULL ? add->token_endpoint_auth : base->token_endpoint_auth;
+	dst->token_endpoint_auth_alg =
+	    add->token_endpoint_auth_alg != NULL ? add->token_endpoint_auth_alg : base->token_endpoint_auth_alg;
 	dst->token_endpoint_params =
 	    add->token_endpoint_params != NULL ? add->token_endpoint_params : base->token_endpoint_params;
 	dst->userinfo_endpoint_url =
@@ -875,7 +881,12 @@ oidc_provider_t *oidc_cfg_provider_copy(apr_pool_t *pool, const oidc_provider_t 
 }
 
 void oidc_cfg_provider_destroy(oidc_provider_t *provider) {
+	if (provider == NULL)
+		return;
 	oidc_jwk_list_destroy(provider->jwks_uri.jwk_list);
+	provider->jwks_uri.jwk_list = NULL;
 	oidc_jwk_list_destroy(provider->verify_public_keys);
+	provider->verify_public_keys = NULL;
 	oidc_jwk_list_destroy(provider->client_keys);
+	provider->client_keys = NULL;
 }

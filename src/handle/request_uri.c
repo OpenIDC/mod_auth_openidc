@@ -44,7 +44,7 @@
 #include "metadata.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 /*
  * handle request object by reference request
@@ -52,7 +52,7 @@
 int oidc_request_uri(request_rec *r, oidc_cfg_t *c) {
 
 	char *request_ref = NULL;
-	oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_REQUEST_URI, &request_ref);
+	oidc_util_url_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_REQUEST_URI, &request_ref);
 	if (request_ref == NULL) {
 		oidc_error(r, "no \"%s\" parameter found", OIDC_REDIRECT_URI_REQUEST_REQUEST_URI);
 		return HTTP_BAD_REQUEST;
@@ -68,5 +68,5 @@ int oidc_request_uri(request_rec *r, oidc_cfg_t *c) {
 
 	oidc_cache_set_request_uri(r, request_ref, NULL, 0);
 
-	return oidc_util_http_send(r, jwt, _oidc_strlen(jwt), OIDC_HTTP_CONTENT_TYPE_JWT, OK);
+	return oidc_util_http_content_prep(r, jwt, _oidc_strlen(jwt), OIDC_HTTP_CONTENT_TYPE_JWT);
 }

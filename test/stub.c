@@ -11,8 +11,6 @@
 
 // clang-format on
 
-#define HAVE_APACHE_24 MODULE_MAGIC_NUMBER_MAJOR >= 20100714
-
 #define ap_HOOK_check_user_id_t void
 
 AP_DECLARE(void)
@@ -129,8 +127,25 @@ AP_DECLARE(char *) ap_getword_nulls(apr_pool_t *p, const char **line, char stop)
 	return "";
 }
 
-AP_DECLARE(char *) ap_getword_white(apr_pool_t *p, const char **line) {
-	return 0;
+AP_DECLARE(char *) ap_getword_white(apr_pool_t *atrans, const char **line) {
+	const char *pos = *line;
+	int len;
+	char *res;
+
+	while (!apr_isspace(*pos) && *pos) {
+		++pos;
+	}
+
+	len = pos - *line;
+	res = apr_pstrmemdup(atrans, *line, len);
+
+	while (apr_isspace(*pos)) {
+		++pos;
+	}
+
+	*line = pos;
+
+	return res;
 }
 
 AP_DECLARE(int) ap_hook_check_user_id(request_rec *r) {
@@ -173,11 +188,17 @@ AP_DECLARE(int) ap_is_initial_req(request_rec *r) {
 	return 0;
 }
 
-#if HAVE_APACHE_24
 AP_DECLARE(ap_expr_info_t *)
 ap_expr_parse_cmd_mi(const cmd_parms *cmd, const char *expr, unsigned int flags, const char **err,
 		     ap_expr_lookup_fn_t *lookup_fn, int module_index) {
-	return NULL;
+	if (strcmp(expr, "#") == 0) {
+		*err = "error";
+		return NULL;
+	}
+	ap_expr_info_t *rv = apr_pcalloc(cmd->pool, sizeof(ap_expr_info_t));
+	rv->filename = "stub.c";
+	rv->root_node = NULL;
+	return rv;
 }
 
 AP_DECLARE(const char *) ap_expr_str_exec(request_rec *r, const ap_expr_info_t *expr, const char **err) {
@@ -193,10 +214,6 @@ AP_DECLARE(char *) ap_get_exec_line(apr_pool_t *p, const char *cmd, const char *
 AP_DECLARE(void)
 ap_log_error_(const char *file, int line, int module_index, int level, apr_status_t status, const server_rec *s,
 	      const char *fmt, ...) {
-#else
-AP_DECLARE(void)
-ap_log_error(const char *file, int line, int level, apr_status_t status, const server_rec *s, const char *fmt, ...) {
-#endif
 	if (level < APLOG_DEBUG) {
 		fprintf(stderr, "%s:%d [%d] [%d] ", file, line, level, status);
 		va_list ap;
@@ -207,14 +224,9 @@ ap_log_error(const char *file, int line, int level, apr_status_t status, const s
 	}
 }
 
-#if HAVE_APACHE_24
 AP_DECLARE(void)
 ap_log_rerror_(const char *file, int line, int module_index, int level, apr_status_t status, const request_rec *r,
 	       const char *fmt, ...) {
-#else
-AP_DECLARE(void)
-ap_log_rerror(const char *file, int line, int level, apr_status_t status, const request_rec *r, const char *fmt, ...) {
-#endif
 	if (level < APLOG_DEBUG) {
 		fprintf(stderr, "%s:%d [%d] [%d] ", file, line, level, status);
 		va_list ap;
@@ -264,7 +276,7 @@ AP_DECLARE(int) ap_setup_client_block(request_rec *r, int read_policy) {
 }
 
 AP_DECLARE(int) ap_should_client_block(request_rec *r) {
-	return 0;
+	return 1;
 }
 
 AP_DECLARE(int) ap_unescape_url(char *url) {
@@ -311,13 +323,48 @@ AP_DECLARE(apr_status_t) ap_mpm_query(int query_code, int *result) {
 #if AP_MODULE_MAGIC_AT_LEAST(20080920, 2)
 AP_DECLARE(apr_status_t)
 ap_timeout_parameter_parse(const char *timeout_parameter, apr_interval_time_t *timeout, const char *default_time_unit) {
-	*timeout = 0;
+	char *endp;
+	const char *time_str;
+	apr_int64_t tout;
+
+	tout = apr_strtoi64(timeout_parameter, &endp, 10);
+	if (!endp || !*endp) {
+		time_str = default_time_unit;
+	} else {
+		time_str = endp;
+	}
+
+	switch (*time_str) {
+		/* Time is in seconds */
+	case 's':
+		*timeout = (apr_interval_time_t)apr_time_from_sec(tout);
+		break;
+	case 'h':
+		/* Time is in hours */
+		*timeout = (apr_interval_time_t)apr_time_from_sec(tout * 3600);
+		break;
+	case 'm':
+		switch (*(++time_str)) {
+		/* Time is in milliseconds */
+		case 's':
+			*timeout = (apr_interval_time_t)tout * 1000;
+			break;
+		/* Time is in minutes */
+		case 'i':
+			*timeout = (apr_interval_time_t)apr_time_from_sec(tout * 60);
+			break;
+		default:
+			return APR_EGENERAL;
+		}
+		break;
+	default:
+		return APR_EGENERAL;
+	}
 	return APR_SUCCESS;
 }
 #endif
 
-#if HAVE_APACHE_24
 AP_DECLARE(int) ap_expr_exec(request_rec *r, const ap_expr_info_t *expr, const char **err) {
-	return 0;
+	*err = "error";
+	return 1;
 }
-#endif

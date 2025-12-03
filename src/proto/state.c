@@ -41,7 +41,7 @@
  */
 
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 #define OIDC_PROTO_STATE_ISSUER "i"
 #define OIDC_PROTO_STATE_ORIGINAL_URL "ou"
@@ -87,7 +87,7 @@ void oidc_proto_state_destroy(oidc_proto_state_t *proto_state) {
  * serialize a state object to a string (for logging/debugging purposes)
  */
 char *oidc_proto_state_to_string(request_rec *r, oidc_proto_state_t *proto_state) {
-	return oidc_util_encode_json(r->pool, proto_state, JSON_COMPACT);
+	return oidc_util_json_encode(r->pool, proto_state, JSON_COMPACT);
 }
 
 /*
@@ -232,30 +232,13 @@ void oidc_proto_state_set_timestamp_now(oidc_proto_state_t *proto_state) {
 }
 
 /*
- * sanity check on the configuration of OIDCCryptoPassphrase
- */
-static apr_byte_t oidc_proto_check_crypto_passphrase(request_rec *r, oidc_cfg_t *c, const char *action) {
-	if (oidc_cfg_crypto_passphrase_secret1_get(c) == NULL) {
-		oidc_error(r,
-			   "cannot %s state cookie because " OIDCCryptoPassphrase
-			   " is not set; please check your OIDC Provider configuration as well or avoid using AuthType "
-			   "openid-connect",
-			   action);
-		return FALSE;
-	}
-	return TRUE;
-}
-
-/*
  * parse a state object from the provided cookie value
  */
 oidc_proto_state_t *oidc_proto_state_from_cookie(request_rec *r, oidc_cfg_t *c, const char *cookieValue) {
 	char *s_payload = NULL;
 	json_t *result = NULL;
-	if (oidc_proto_check_crypto_passphrase(r, c, "parse") == FALSE)
-		return NULL;
 	oidc_util_jwt_verify(r, oidc_cfg_crypto_passphrase_get(c), cookieValue, &s_payload);
-	oidc_util_decode_json_object(r, s_payload, &result);
+	oidc_util_json_decode_object(r, s_payload, &result);
 	return result;
 }
 
@@ -264,9 +247,7 @@ oidc_proto_state_t *oidc_proto_state_from_cookie(request_rec *r, oidc_cfg_t *c, 
  */
 char *oidc_proto_state_to_cookie(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state) {
 	char *cookieValue = NULL;
-	if (oidc_proto_check_crypto_passphrase(r, c, "create") == FALSE)
-		return NULL;
 	oidc_util_jwt_create(r, oidc_cfg_crypto_passphrase_get(c),
-			     oidc_util_encode_json(r->pool, proto_state, JSON_COMPACT), &cookieValue);
+			     oidc_util_json_encode(r->pool, proto_state, JSON_COMPACT), &cookieValue);
 	return cookieValue;
 }

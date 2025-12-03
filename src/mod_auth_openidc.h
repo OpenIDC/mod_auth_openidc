@@ -53,10 +53,14 @@
 #define OIDC_AUTH_TYPE_OPENID_BOTH "auth-openidc"
 
 /* keys for storing info in the request state */
-#define OIDC_REQUEST_STATE_KEY_IDTOKEN "i"
+#define OIDC_REQUEST_STATE_KEY_AUTHN_POST "a"
 #define OIDC_REQUEST_STATE_KEY_CLAIMS "c"
 #define OIDC_REQUEST_STATE_KEY_DISCOVERY "d"
-#define OIDC_REQUEST_STATE_KEY_AUTHN "a"
+#define OIDC_REQUEST_STATE_KEY_HTTP "hp"
+#define OIDC_REQUEST_STATE_KEY_HTML "hl"
+#define OIDC_REQUEST_STATE_KEY_IDTOKEN "i"
+#define OIDC_REQUEST_STATE_KEY_SCOPE "sc"
+#define OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE "p"
 #define OIDC_REQUEST_STATE_KEY_SAVE "s"
 #define OIDC_REQUEST_STATE_TRACE_ID "t"
 
@@ -121,8 +125,10 @@
 #define OIDC_CLAIM_HTM "htm"
 #define OIDC_CLAIM_HTU "htu"
 #define OIDC_CLAIM_ATH "ath"
+#define OIDC_CLAIM_SCOPE "scope"
 
 #define OIDC_APP_INFO_REFRESH_TOKEN "refresh_token"
+#define OIDC_APP_INFO_SCOPE "scope"
 #define OIDC_APP_INFO_ACCESS_TOKEN "access_token"
 #define OIDC_APP_INFO_ACCESS_TOKEN_TYPE "access_token_type"
 #define OIDC_APP_INFO_ACCESS_TOKEN_EXP "access_token_expires"
@@ -134,15 +140,20 @@
 
 int oidc_check_user_id(request_rec *r);
 int oidc_fixups(request_rec *r);
-apr_byte_t oidc_enabled(request_rec *r);
+apr_byte_t oidc_enabled(request_rec *r, oidc_cfg_t *c);
+
 void oidc_request_state_set(request_rec *r, const char *key, const char *value);
 const char *oidc_request_state_get(request_rec *r, const char *key);
+json_t *oidc_request_state_json_get(request_rec *r, const char *key);
+void oidc_request_state_json_set(request_rec *r, const char *key, json_t *value);
+
 void oidc_scrub_headers(request_rec *r);
 void oidc_strip_cookies(request_rec *r);
 apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name, const char *replace, const char *reg_exp,
 				json_t *json, char **request_user);
 apr_byte_t oidc_get_provider_from_session(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
 					  oidc_provider_t **provider);
+apr_byte_t oidc_check_cookie_domain(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session);
 apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session, apr_byte_t extend_session,
 				    apr_byte_t *needs_save);
 void oidc_log_session_expires(request_rec *r, const char *msg, apr_time_t session_expires);
@@ -154,6 +165,6 @@ int oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg_t *c, const char *
 apr_byte_t oidc_is_auth_capable_request(request_rec *r);
 apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg_t *c, const char *redirect_to_url,
 				      apr_byte_t restrict_to_host, char **err_str, char **err_desc);
-apr_byte_t oidc_set_app_claims(request_rec *r, oidc_cfg_t *cfg, const char *s_claims);
+apr_byte_t oidc_set_app_claims(request_rec *r, oidc_cfg_t *cfg, json_t *claims);
 
 #endif /* _MOD_AUTH_OPENIDC_H_ */

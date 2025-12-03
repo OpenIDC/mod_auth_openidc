@@ -60,7 +60,6 @@
 #endif
 typedef apr_byte_t (*oidc_authz_match_claim_fn_type)(request_rec *, const char *const, json_t *);
 apr_byte_t oidc_authz_match_claim(request_rec *r, const char *const attr_spec, json_t *claims);
-#if HAVE_APACHE_24
 #ifdef USE_LIBJQ
 authz_status oidc_authz_24_checker_claims_expr(request_rec *r, const char *require_args,
 					       const void *parsed_require_args);
@@ -68,9 +67,6 @@ authz_status oidc_authz_24_checker_claims_expr(request_rec *r, const char *requi
 authz_status oidc_authz_24_checker_claim(request_rec *r, const char *require_args, const void *parsed_require_args);
 authz_status oidc_authz_24_worker(request_rec *r, json_t *claims, const char *require_args,
 				  const void *parsed_require_args, oidc_authz_match_claim_fn_type match_claim_fn);
-#else
-int oidc_authz_22_checker(request_rec *r);
-#endif
 
 // content.c
 int oidc_content_handler(request_rec *r);
@@ -108,6 +104,7 @@ int oidc_request_uri(request_rec *r, oidc_cfg_t *c);
 int oidc_request_authenticate_user(request_rec *r, oidc_cfg_t *c, oidc_provider_t *provider, const char *original_url,
 				   const char *login_hint, const char *id_token_hint, const char *prompt,
 				   const char *auth_request_params, const char *path_scope);
+apr_byte_t oidc_request_check_cookie_domain(request_rec *r, oidc_cfg_t *c, const char *original_url);
 
 // response.c
 apr_byte_t oidc_response_post_preserve_javascript(request_rec *r, const char *location, char **javascript,
@@ -117,10 +114,11 @@ int oidc_response_authorization_redirect(request_rec *r, oidc_cfg_t *c, oidc_ses
 int oidc_response_authorization_post(request_rec *r, oidc_cfg_t *c, oidc_session_t *session);
 apr_byte_t oidc_response_save_in_session(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
 					 oidc_provider_t *provider, const char *remoteUser, const char *id_token,
-					 oidc_jwt_t *id_token_jwt, const char *claims, const char *access_token,
+					 oidc_jwt_t *id_token_jwt, const char *s_userinfo_claims,
+					 json_t *userinfo_claims, const char *access_token,
 					 const char *access_token_type, const int expires_in, const char *refresh_token,
-					 const char *session_state, const char *state, const char *original_url,
-					 const char *userinfo_jwt);
+					 const char *scope, const char *session_state, const char *state,
+					 const char *original_url, const char *userinfo_jwt);
 
 // revoke.c
 int oidc_revoke_session(request_rec *r, oidc_cfg_t *c);
@@ -131,13 +129,14 @@ int oidc_session_management(request_rec *r, oidc_cfg_t *c, oidc_session_t *sessi
 
 // userinfo.c
 void oidc_userinfo_store_claims(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, oidc_provider_t *provider,
-				const char *claims, const char *userinfo_jwt);
+				json_t *userinfo_claims, const char *userinfo_jwt);
 const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg_t *c, oidc_provider_t *provider,
 					  const char *access_token, const char *access_token_type,
-					  oidc_session_t *session, char *id_token_sub, char **userinfo_jwt);
+					  oidc_session_t *session, char *id_token_sub, json_t **userinfo_claims,
+					  char **userinfo_jwt);
 apr_byte_t oidc_userinfo_refresh_claims(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session,
 					apr_byte_t *needs_save);
-void oidc_userinfo_pass_as(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session, const char *s_claims,
-			   oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding);
+void oidc_userinfo_pass_as(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session, oidc_appinfo_pass_in_t pass_in,
+			   oidc_appinfo_encoding_t encoding);
 
 #endif // _MOD_AUTH_OPENIDC_HANDLE_H_

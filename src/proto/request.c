@@ -45,7 +45,7 @@
 #include "metadata.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 /*
  * add extra configured authentication request parameters (global or per-path)
@@ -68,8 +68,8 @@ static void oidc_proto_request_auth_params_add(request_rec *r, apr_table_t *para
 			apr_table_add(params, key, val);
 			continue;
 		}
-		if (oidc_util_request_has_parameter(r, key) == TRUE) {
-			oidc_util_request_parameter_get(r, key, &val);
+		if (oidc_util_url_has_parameter(r, key) == TRUE) {
+			oidc_util_url_parameter_get(r, key, &val);
 			apr_table_add(params, key, val);
 		}
 	}
@@ -93,12 +93,17 @@ static int oidc_proto_request_auth_push(request_rec *r, struct oidc_provider_t *
 	if (endpoint_url == NULL) {
 		oidc_error(r, "the Provider's OAuth 2.0 Pushed Authorization Request endpoint URL is not set, PAR "
 			      "cannot be used");
+		rv = oidc_util_html_send_error(
+		    r, "Pushed Authorization Request Endpoint not set",
+		    "the Provider's OAuth 2.0 Pushed Authorization Request endpoint URL is not set, PAR cannot be used",
+		    HTTP_INTERNAL_SERVER_ERROR);
 		goto out;
 	}
 
 	/* add the token endpoint authentication credentials to the pushed authorization request */
 	if (oidc_proto_token_endpoint_auth(
-		r, cfg, oidc_cfg_provider_token_endpoint_auth_get(provider), oidc_cfg_provider_client_id_get(provider),
+		r, cfg, oidc_cfg_provider_token_endpoint_auth_get(provider),
+		oidc_cfg_provider_token_endpoint_auth_alg_get(provider), oidc_cfg_provider_client_id_get(provider),
 		oidc_cfg_provider_client_secret_get(provider), oidc_cfg_provider_client_keys_get(provider),
 		oidc_proto_profile_token_endpoint_auth_aud(provider), params, NULL, &basic_auth, &bearer_auth) == FALSE)
 		goto out;
@@ -110,7 +115,7 @@ static int oidc_proto_request_auth_push(request_rec *r, struct oidc_provider_t *
 		goto out;
 
 	/* check for errors, the response itself will have been logged already */
-	if (oidc_util_decode_json_and_check_error(r, response, &j_result) == FALSE)
+	if (oidc_util_json_decode_and_check_error(r, response, &j_result) == FALSE)
 		goto out;
 
 	/* get the request_uri from the parsed response */
@@ -157,7 +162,7 @@ static int oidc_proto_request_form_post_param_add(void *rec, const char *key, co
 /*
  * make the browser POST parameters through Javascript auto-submit
  */
-static int oidc_proto_request_html_post(request_rec *r, const char *url, apr_table_t *params) {
+static const char *oidc_proto_request_html_post(request_rec *r, const char *url, apr_table_t *params) {
 
 	oidc_debug(r, "enter");
 
@@ -174,7 +179,7 @@ static int oidc_proto_request_html_post(request_rec *r, const char *url, apr_tab
 				 "      </p>\n"
 				 "    </form>\n");
 
-	return oidc_util_html_send(r, "Submitting...", NULL, "document.forms[0].submit", html_body, OK);
+	return html_body;
 }
 
 #define OIDC_REQUEST_OJBECT_COPY_FROM_REQUEST "copy_from_request"
@@ -228,10 +233,8 @@ static int oidc_request_uri_copy_from_request(void *rec, const char *name, const
 		if (result == NULL)
 			/* assume string */
 			result = json_string(value);
-		if (result) {
-			json_object_set_new(ctx->request_object->payload.value.json, name, json_deep_copy(result));
-			json_decref(result);
-		}
+		if (result)
+			json_object_set_new(ctx->request_object->payload.value.json, name, result);
 
 		if (oidc_proto_request_uri_param_needs_action(ctx->request_object_config, name,
 							      OIDC_REQUEST_OJBECT_COPY_AND_REMOVE_FROM_REQUEST)) {
@@ -363,7 +366,7 @@ static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provide
 	/* debug logging */
 	oidc_debug(
 	    r, "request object: %s",
-	    oidc_util_encode_json(r->pool, request_object->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT));
+	    oidc_util_json_encode(r->pool, request_object->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT));
 
 	char *serialized_request_object = NULL;
 	oidc_jose_error_t err;
@@ -399,7 +402,7 @@ static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provide
 			}
 			break;
 		case CJOSE_JWK_KTY_OCT:
-			oidc_util_create_symmetric_key(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, FALSE,
+			oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, FALSE,
 						       &sjwk);
 			jwk_needs_destroy = 1;
 			break;
@@ -452,7 +455,7 @@ static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provide
 			oidc_request_uri_encryption_jwk_by_type(r, cfg, provider, oidc_jwt_alg2kty(jwe), &ejwk);
 			break;
 		case CJOSE_JWK_KTY_OCT:
-			oidc_util_create_symmetric_key(r, oidc_cfg_provider_client_secret_get(provider),
+			oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider),
 						       oidc_alg2keysize(jwe->header.alg), OIDC_JOSE_ALG_SHA256, FALSE,
 						       &ejwk);
 			break;
@@ -530,7 +533,7 @@ static char *oidc_proto_request_uri_create(request_rec *r, struct oidc_provider_
 	char *request_uri = NULL;
 	if (serialized_request_object != NULL) {
 		char *request_ref = NULL;
-		if (oidc_util_generate_random_string(r, &request_ref, OIDC_PROTO_REQUEST_URI_REF_LEN) == TRUE) {
+		if (oidc_util_rand_str(r, &request_ref, OIDC_PROTO_REQUEST_URI_REF_LEN) == TRUE) {
 			oidc_cache_set_request_uri(r, request_ref, serialized_request_object,
 						   apr_time_now() + apr_time_from_sec(ttl));
 			request_uri = apr_psprintf(r->pool, "%s?%s=%s", resolver_url, OIDC_PROTO_REQUEST_URI,
@@ -549,7 +552,7 @@ static void oidc_proto_request_uri_request_param_add(request_rec *r, struct oidc
 
 	/* parse the request object configuration from a string in to a JSON structure */
 	json_t *request_object_config = NULL;
-	if (oidc_util_decode_json_object(r, oidc_cfg_provider_request_object_get(provider), &request_object_config) ==
+	if (oidc_util_json_decode_object(r, oidc_cfg_provider_request_object_get(provider), &request_object_config) ==
 	    FALSE)
 		return;
 
@@ -688,8 +691,12 @@ int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, co
 	if (oidc_proto_profile_auth_request_method_get(provider) == OIDC_AUTH_REQUEST_METHOD_POST) {
 
 		/* construct a HTML POST auto-submit page with the authorization request parameters */
-		rv =
+		const char *html_body =
 		    oidc_proto_request_html_post(r, oidc_cfg_provider_authorization_endpoint_url_get(provider), params);
+
+		/* signal this to the content handler */
+		rv = oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_AUTHN_POST, "Submitting...", NULL,
+						 "HTMLFormElement.prototype.submit.call(document.forms[0])", html_body);
 
 	} else if (oidc_proto_profile_auth_request_method_get(provider) == OIDC_AUTH_REQUEST_METHOD_PAR) {
 
@@ -701,9 +708,9 @@ int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, co
 		authorization_request =
 		    oidc_http_query_encoded_url(r, oidc_cfg_provider_authorization_endpoint_url_get(provider), params);
 
-		// TODO: should also enable this when using the POST binding for the auth request
+		char *javascript = NULL;
 		/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
-		if (oidc_response_post_preserve_javascript(r, authorization_request, NULL, NULL) == FALSE) {
+		if (oidc_response_post_preserve_javascript(r, authorization_request, &javascript, NULL) == FALSE) {
 
 			/* add the redirect location header */
 			oidc_http_hdr_out_location_set(r, authorization_request);
@@ -713,10 +720,14 @@ int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, co
 
 		} else {
 
-			/* signal this to the content handler */
-			oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_AUTHN, "");
-			r->user = "";
-			rv = OK;
+			// NB: if a template is in use, we should not override
+			// OIDC_REQUEST_STATE_KEY_HTTP with OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE
+			if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTTP) == NULL) {
+				/* signal this to the content handler */
+				rv = oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE,
+								 "Preserving...", javascript, "preserveOnLoad()",
+								 "<p>Preserving...</p>");
+			}
 		}
 
 	} else {

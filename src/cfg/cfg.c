@@ -50,7 +50,7 @@
 #include "metrics.h"
 #include "proto/proto.h"
 #include "session.h"
-#include "util.h"
+#include "util/util.h"
 
 const char *oidc_cfg_string_list_add(apr_pool_t *pool, apr_array_header_t **list, const char *arg) {
 	if (*list == NULL)
@@ -102,9 +102,9 @@ const char *oidc_cmd_crypto_passphrase_set(cmd_parms *cmd, void *struct_ptr, con
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
 	const char *rv = NULL;
 	if (arg1)
-		rv = oidc_cfg_parse_passphrase(cmd->pool, arg1, &cfg->crypto_passphrase.secret1);
+		rv = oidc_cfg_parse_passphrase(cmd->pool, arg1, (char **)&cfg->crypto_passphrase.secret1);
 	if ((rv == NULL) && (arg2 != NULL))
-		rv = oidc_cfg_parse_passphrase(cmd->pool, arg2, &cfg->crypto_passphrase.secret2);
+		rv = oidc_cfg_parse_passphrase(cmd->pool, arg2, (char **)&cfg->crypto_passphrase.secret2);
 	return rv;
 }
 
@@ -114,6 +114,14 @@ const oidc_crypto_passphrase_t *oidc_cfg_crypto_passphrase_get(oidc_cfg_t *cfg) 
 
 const char *oidc_cfg_crypto_passphrase_secret1_get(oidc_cfg_t *cfg) {
 	return cfg->crypto_passphrase.secret1;
+}
+
+void oidc_cfg_crypto_passphrase_secret1_set(oidc_cfg_t *cfg, const char *secret) {
+	cfg->crypto_passphrase.secret1 = secret;
+}
+
+const char *oidc_cfg_crypto_passphrase_secret2_get(oidc_cfg_t *cfg) {
+	return cfg->crypto_passphrase.secret2;
 }
 
 const char *oidc_cmd_outgoing_proxy_set(cmd_parms *cmd, void *ptr, const char *arg1, const char *arg2,
@@ -195,8 +203,8 @@ const char *oidc_cmd_session_type_set(cmd_parms *cmd, void *ptr, const char *arg
 		} else if (_oidc_strcmp(p, OIDC_SESSION_TYPE_STORE_ID_TOKEN) == 0) {
 			// only for client-cookie
 			cfg->store_id_token = 1;
-		} else if (_oidc_strcmp(p, OIDC_SESSION_TYPE_SEPARATOR OIDC_SESSION_TYPE_PERSISTENT
-					       OIDC_SESSION_TYPE_SEPARATOR OIDC_SESSION_TYPE_STORE_ID_TOKEN) == 0) {
+		} else if (_oidc_strcmp(p, OIDC_SESSION_TYPE_PERSISTENT OIDC_SESSION_TYPE_SEPARATOR
+					       OIDC_SESSION_TYPE_STORE_ID_TOKEN) == 0) {
 			// only for client-cookie
 			cfg->persistent_session_cookie = 1;
 			cfg->store_id_token = 1;
@@ -229,19 +237,57 @@ static const char *oidc_valid_endpoint_auth_method_impl(apr_pool_t *pool, const 
 	return oidc_cfg_parse_is_valid_option(pool, arg, options);
 }
 
-const char *oidc_cfg_valid_endpoint_auth_method(apr_pool_t *pool, const char *arg) {
-	return oidc_valid_endpoint_auth_method_impl(pool, arg, TRUE);
+static const char *oidc_valid_private_key_jwt_alg(apr_pool_t *pool, const char *arg) {
+	static const char *options[] = {"RS256", "RS384", "RS512", "PS256", "PS384", "PS512",
+#if (OIDC_JOSE_EC_SUPPORT)
+					"ES256", "ES384", "ES512",
+#endif
+
+					NULL};
+	return oidc_cfg_parse_is_valid_option(pool, arg, options);
 }
 
-const char *oidc_cfg_valid_endpoint_auth_method_no_private_key(apr_pool_t *pool, const char *arg) {
+#define OIDC_ENDPOINT_AUTH_METHOD_SEPARATOR ":"
+
+static void oidc_cfg_endpoint_auth_parse(apr_pool_t *pool, const char *arg1, char **method, char **suffix) {
+	const char *arg = apr_pstrdup(pool, arg1);
+	char *sep = _oidc_strstr(arg, OIDC_ENDPOINT_AUTH_METHOD_SEPARATOR);
+	if (sep) {
+		*sep = '\0';
+		*suffix = apr_pstrdup(pool, ++sep);
+	}
+	*method = apr_pstrdup(pool, arg);
+}
+
+static const char *oidc_cfg_valid_endpoint_auth_method_with_private_key(apr_pool_t *pool, const char *arg1) {
+	const char *rv = NULL;
+	char *method = NULL;
+	char *alg = NULL;
+	oidc_cfg_endpoint_auth_parse(pool, arg1, &method, &alg);
+	if ((_oidc_strcmp(method, OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT) == 0) && (alg != NULL)) {
+		rv = oidc_valid_private_key_jwt_alg(pool, alg);
+		if (rv != NULL)
+			return rv;
+	}
+	return oidc_valid_endpoint_auth_method_impl(pool, method, TRUE);
+}
+
+static const char *oidc_cfg_valid_endpoint_auth_method_no_private_key(apr_pool_t *pool, const char *arg) {
 	return oidc_valid_endpoint_auth_method_impl(pool, arg, FALSE);
+}
+
+const char *oidc_cfg_endpoint_auth_set(apr_pool_t *pool, oidc_cfg_t *cfg, const char *arg1, char **auth, char **alg) {
+	const char *rv = oidc_cfg_get_valid_endpoint_auth_function(cfg)(pool, arg1);
+	if (rv == NULL)
+		oidc_cfg_endpoint_auth_parse(pool, arg1, auth, alg);
+	return rv;
 }
 
 /*
  * return the right token endpoint authentication method validation function, based on whether private keys are set
  */
 oidc_valid_function_t oidc_cfg_get_valid_endpoint_auth_function(oidc_cfg_t *cfg) {
-	return (cfg->private_keys != NULL) ? &oidc_cfg_valid_endpoint_auth_method
+	return (cfg->private_keys != NULL) ? &oidc_cfg_valid_endpoint_auth_method_with_private_key
 					   : &oidc_cfg_valid_endpoint_auth_method_no_private_key;
 }
 
@@ -286,10 +332,10 @@ const char *oidc_cmd_private_keys_set(cmd_parms *cmd, void *ptr, const char *arg
 	}
 
 	if (cfg->private_keys == NULL)
-		cfg->private_keys = apr_array_make(cmd->pool, 4, sizeof(oidc_jwk_t *));
+		cfg->private_keys = apr_array_make(cmd->pool, 4, sizeof(const oidc_jwk_t *));
 	if (use)
 		jwk->use = apr_pstrdup(cmd->pool, use);
-	APR_ARRAY_PUSH(cfg->private_keys, oidc_jwk_t *) = jwk;
+	APR_ARRAY_PUSH(cfg->private_keys, const oidc_jwk_t *) = jwk;
 
 end:
 
@@ -442,13 +488,17 @@ const char *oidc_cmd_x_forwarded_headers_set(cmd_parms *cmd, void *m, const char
 #define OIDC_DEFAULT_X_FORWARDED_HEADERS OIDC_HDR_NONE
 OIDC_CFG_MEMBER_FUNC_TYPE_GET(x_forwarded_headers, oidc_hdr_x_forwarded_t, OIDC_DEFAULT_X_FORWARDED_HEADERS)
 
+#define OIDC_CHECK_X_FORWARDED_HDR_LOG_DISABLE "OIDC_CHECK_X_FORWARDED_HDR_LOG_DISABLE"
+
 static void oidc_check_x_forwarded_hdr(request_rec *r, const apr_byte_t x_forwarded_headers, const apr_byte_t hdr_type,
 				       const char *hdr_str, const char *(hdr_func)(const request_rec *r)) {
+	apr_byte_t suppress = oidc_util_spaced_string_contains(
+	    r->pool, apr_table_get(r->subprocess_env, OIDC_CHECK_X_FORWARDED_HDR_LOG_DISABLE), hdr_str);
 	if (hdr_func(r)) {
-		if (!(x_forwarded_headers & hdr_type))
+		if (!(x_forwarded_headers & hdr_type) && !suppress)
 			oidc_warn(r, "header %s received but %s not configured for it", hdr_str, OIDCXForwardedHeaders);
 	} else {
-		if (x_forwarded_headers & hdr_type)
+		if ((x_forwarded_headers & hdr_type) && !suppress)
 			oidc_warn(r, "%s configured for header %s but not found in request", OIDCXForwardedHeaders,
 				  hdr_str);
 	}
@@ -531,7 +581,8 @@ OIDC_CFG_MEMBER_FUNCS_BOOL(cookie_http_only, OIDC_DEFAULT_COOKIE_HTTPONLY)
 /*
  * define which header we use for calculating the fingerprint of the state during authentication
  */
-const char *oidc_cmd_cookie_same_site_set(cmd_parms *cmd, void *m, const char *arg) {
+const char *oidc_cmd_cookie_same_site_session_set(cmd_parms *cmd, void *m, const char *arg1, const char *arg2,
+						  const char *arg3) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
 	// NB: On is made equal to Lax here and Off is equal to None (backwards compatibility)
 	static const oidc_cfg_option_t options[] = {{OIDC_SAMESITE_COOKIE_NONE, OIDC_SAMESITE_COOKIE_OFF_STR},
@@ -540,13 +591,37 @@ const char *oidc_cmd_cookie_same_site_set(cmd_parms *cmd, void *m, const char *a
 						    {OIDC_SAMESITE_COOKIE_NONE, OIDC_SAMESITE_COOKIE_NONE_STR},
 						    {OIDC_SAMESITE_COOKIE_LAX, OIDC_SAMESITE_COOKIE_LAX_STR},
 						    {OIDC_SAMESITE_COOKIE_STRICT, OIDC_SAMESITE_COOKIE_STRICT_STR}};
-	const char *rv = oidc_cfg_parse_option_ignore_case(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg,
-							   &cfg->cookie_same_site);
+	const char *rv = oidc_cfg_parse_option_ignore_case(cmd->pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg1,
+							   &cfg->cookie_same_site_session);
+	if ((rv == NULL) && (arg2 != NULL)) {
+		static const oidc_cfg_option_t state_options[] = {
+		    {OIDC_SAMESITE_COOKIE_DISABLED, OIDC_SAMESITE_COOKIE_DISABLED_STR},
+		    {OIDC_SAMESITE_COOKIE_NONE, OIDC_SAMESITE_COOKIE_NONE_STR},
+		    {OIDC_SAMESITE_COOKIE_LAX, OIDC_SAMESITE_COOKIE_LAX_STR}};
+		rv = oidc_cfg_parse_option_ignore_case(cmd->pool, state_options, OIDC_CFG_OPTIONS_SIZE(state_options),
+						       arg2, &cfg->cookie_same_site_state);
+	}
+	if ((rv == NULL) && (arg3 != NULL)) {
+		static const oidc_cfg_option_t csrf_options[] = {
+		    {OIDC_SAMESITE_COOKIE_DISABLED, OIDC_SAMESITE_COOKIE_DISABLED_STR},
+		    {OIDC_SAMESITE_COOKIE_NONE, OIDC_SAMESITE_COOKIE_NONE_STR},
+		    {OIDC_SAMESITE_COOKIE_LAX, OIDC_SAMESITE_COOKIE_LAX_STR},
+		    {OIDC_SAMESITE_COOKIE_STRICT, OIDC_SAMESITE_COOKIE_STRICT_STR}};
+		rv = oidc_cfg_parse_option_ignore_case(cmd->pool, csrf_options, OIDC_CFG_OPTIONS_SIZE(csrf_options),
+						       arg3, &cfg->cookie_same_site_discovery_csrf);
+	}
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
 #define OIDC_DEFAULT_COOKIE_SAME_SITE OIDC_SAMESITE_COOKIE_LAX
-OIDC_CFG_MEMBER_FUNC_TYPE_GET(cookie_same_site, oidc_samesite_cookie_t, OIDC_DEFAULT_COOKIE_SAME_SITE)
+OIDC_CFG_MEMBER_FUNC_TYPE_GET(cookie_same_site_session, oidc_samesite_cookie_t, OIDC_DEFAULT_COOKIE_SAME_SITE)
+
+#define OIDC_DEFAULT_COOKIE_SAME_SITE_STATE oidc_cfg_cookie_same_site_session_get(cfg)
+OIDC_CFG_MEMBER_FUNC_TYPE_GET(cookie_same_site_state, oidc_samesite_cookie_t, OIDC_DEFAULT_COOKIE_SAME_SITE_STATE)
+
+#define OIDC_DEFAULT_COOKIE_SAME_SITE_CSRF_DISCOVERY oidc_cfg_cookie_same_site_session_get(cfg)
+OIDC_CFG_MEMBER_FUNC_TYPE_GET(cookie_same_site_discovery_csrf, oidc_samesite_cookie_t,
+			      OIDC_DEFAULT_COOKIE_SAME_SITE_CSRF_DISCOVERY)
 
 #define OIDC_DEFAULT_SESSION_FALLBACK_TO_COOKIE 0
 OIDC_CFG_MEMBER_FUNCS_BOOL(session_cache_fallback_to_cookie, OIDC_DEFAULT_SESSION_FALLBACK_TO_COOKIE)
@@ -609,24 +684,55 @@ OIDC_CFG_MEMBER_FUNCS_ABS_OR_REL_URI(redirect_uri)
 OIDC_CFG_MEMBER_FUNCS_ABS_OR_REL_URI(default_sso_url)
 OIDC_CFG_MEMBER_FUNCS_ABS_OR_REL_URI(default_slo_url)
 
+typedef struct oidc_cfg_cleanup_ctx_t {
+	oidc_cfg_t *cfg;
+	apr_pool_t *pool;
+	server_rec *svr;
+} oidc_cfg_cleanup_ctx_t;
+
 /*
  * destroy a server config record and its members
  */
-static apr_status_t oidc_cfg_server_destroy(void *data) {
-	oidc_cfg_t *cfg = (oidc_cfg_t *)data;
+apr_byte_t oidc_cfg_server_destroy(apr_pool_t *pool, server_rec *s, oidc_cfg_t *cfg) {
+	if ((cfg->cache.impl) && (cfg->cache.impl->destroy))
+		cfg->cache.impl->destroy(pool, s);
+	cfg->cache.impl = NULL;
 	oidc_cfg_provider_destroy(cfg->provider);
+	cfg->provider = NULL;
 	oidc_cfg_oauth_destroy(cfg->oauth);
+	cfg->oauth = NULL;
 	oidc_jwk_list_destroy(cfg->public_keys);
+	cfg->public_keys = NULL;
 	oidc_jwk_list_destroy(cfg->private_keys);
-	return APR_SUCCESS;
+	cfg->private_keys = NULL;
+	return TRUE;
+}
+
+static apr_status_t oidc_cfg_server_cleanup(void *data) {
+	oidc_cfg_cleanup_ctx_t *ctx = (oidc_cfg_cleanup_ctx_t *)data;
+	oidc_cfg_t *cfg = ctx->cfg;
+	return oidc_cfg_server_destroy(ctx->pool, ctx->svr, cfg) ? APR_SUCCESS : APR_EGENERAL;
+}
+
+static oidc_cfg_t *oidc_cfg_server_alloc(apr_pool_t *pool, server_rec *s) {
+	oidc_cfg_t *c = apr_pcalloc(pool, sizeof(oidc_cfg_t));
+	oidc_cfg_cleanup_ctx_t *ctx = apr_pcalloc(pool, sizeof(oidc_cfg_cleanup_ctx_t));
+	ctx->cfg = c;
+	// pconf  pool used at destruction time
+	ctx->pool = pool;
+	ctx->svr = s;
+	// need to register a cleanup handler to the config pool to handle graceful restarts without memory increasing
+	// memory consumption
+	apr_pool_cleanup_register(pool, ctx, oidc_cfg_server_cleanup, apr_pool_cleanup_null);
+	return c;
 }
 
 /*
  * create a new server config record with defaults
  */
 void *oidc_cfg_server_create(apr_pool_t *pool, server_rec *svr) {
-	oidc_cfg_t *c = apr_pcalloc(pool, sizeof(oidc_cfg_t));
-	apr_pool_cleanup_register(pool, c, oidc_cfg_server_destroy, oidc_cfg_server_destroy);
+	oidc_cfg_t *c = oidc_cfg_server_alloc(pool, svr);
+	c->svr = svr;
 
 	c->merged = FALSE;
 
@@ -668,13 +774,16 @@ void *oidc_cfg_server_create(apr_pool_t *pool, server_rec *svr) {
 	c->remote_user_claim.reg_exp = NULL;
 	c->remote_user_claim.replace = NULL;
 	c->cookie_http_only = OIDC_CONFIG_POS_INT_UNSET;
-	c->cookie_same_site = OIDC_CONFIG_POS_INT_UNSET;
+
+	c->cookie_same_site_session = OIDC_CONFIG_POS_INT_UNSET;
+	c->cookie_same_site_state = OIDC_CONFIG_POS_INT_UNSET;
+	c->cookie_same_site_discovery_csrf = OIDC_CONFIG_POS_INT_UNSET;
 
 	c->outgoing_proxy.host_port = NULL;
 	c->outgoing_proxy.username_password = NULL;
 	c->outgoing_proxy.auth_type = OIDC_CONFIG_POS_INT_UNSET;
 
-	c->crypto_passphrase.secret1 = NULL;
+	c->crypto_passphrase.secret1 = oidc_util_rand_hex_str(NULL, pool, 32);
 	c->crypto_passphrase.secret2 = NULL;
 
 	c->post_preserve_template = NULL;
@@ -709,8 +818,8 @@ void *oidc_cfg_server_merge(apr_pool_t *pool, void *BASE, void *ADD) {
 	oidc_cfg_t *base = (oidc_cfg_t *)BASE;
 	oidc_cfg_t *add = (oidc_cfg_t *)ADD;
 
-	oidc_cfg_t *c = apr_pcalloc(pool, sizeof(oidc_cfg_t));
-	apr_pool_cleanup_register(pool, c, oidc_cfg_server_destroy, oidc_cfg_server_destroy);
+	oidc_cfg_t *c = oidc_cfg_server_alloc(pool, add->svr);
+
 	c->provider = oidc_cfg_provider_create(pool);
 	c->oauth = oidc_cfg_oauth_create(pool);
 
@@ -792,8 +901,16 @@ void *oidc_cfg_server_merge(apr_pool_t *pool, void *BASE, void *ADD) {
 
 	c->cookie_http_only =
 	    add->cookie_http_only != OIDC_CONFIG_POS_INT_UNSET ? add->cookie_http_only : base->cookie_http_only;
-	c->cookie_same_site =
-	    add->cookie_same_site != OIDC_CONFIG_POS_INT_UNSET ? add->cookie_same_site : base->cookie_same_site;
+
+	c->cookie_same_site_session = add->cookie_same_site_session != OIDC_CONFIG_POS_INT_UNSET
+					  ? add->cookie_same_site_session
+					  : base->cookie_same_site_session;
+	c->cookie_same_site_state = add->cookie_same_site_state != OIDC_CONFIG_POS_INT_UNSET
+					? add->cookie_same_site_state
+					: base->cookie_same_site_state;
+	c->cookie_same_site_discovery_csrf = add->cookie_same_site_discovery_csrf != OIDC_CONFIG_POS_INT_UNSET
+						 ? add->cookie_same_site_discovery_csrf
+						 : base->cookie_same_site_discovery_csrf;
 
 	if (add->outgoing_proxy.host_port != NULL) {
 		c->outgoing_proxy.host_port = add->outgoing_proxy.host_port;
@@ -888,20 +1005,21 @@ oidc_cache_mutex_t *oidc_cfg_refresh_mutex_get(oidc_cfg_t *cfg) {
 	return _oidc_refresh_mutex;
 }
 
-int oidc_cfg_post_config(oidc_cfg_t *cfg, server_rec *s) {
+int oidc_cfg_post_config(apr_pool_t *pool, oidc_cfg_t *cfg, server_rec *s) {
 	if (cfg->cache.impl == NULL)
 		cfg->cache.impl = &oidc_cache_shm;
 	if (cfg->cache.impl->post_config != NULL) {
-		if (cfg->cache.impl->post_config(s) != OK)
+		if (cfg->cache.impl->post_config(pool, s) != OK)
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
 	if (_oidc_refresh_mutex == NULL) {
+		// NB: use the process pool here as the mutex is a process-wide singleton
 		_oidc_refresh_mutex = oidc_cache_mutex_create(s->process->pool, TRUE);
-		if (oidc_cache_mutex_post_config(s, _oidc_refresh_mutex, "refresh") != TRUE)
+		if (oidc_cache_mutex_post_config(s->process->pool, s, _oidc_refresh_mutex, "refresh") != TRUE)
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
 	if (cfg->metrics_hook_data != NULL) {
-		if (oidc_metrics_post_config(s) != TRUE)
+		if (oidc_metrics_post_config(pool, s) != TRUE)
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
 	return OK;
@@ -925,12 +1043,7 @@ void oidc_cfg_child_init(apr_pool_t *pool, oidc_cfg_t *cfg, server_rec *s) {
 	}
 }
 
-void oidc_cfg_cleanup_child(oidc_cfg_t *cfg, server_rec *s) {
-	if (cfg->cache.impl->destroy != NULL) {
-		if (cfg->cache.impl->destroy(s) != APR_SUCCESS) {
-			oidc_serror(s, "cache destroy function failed");
-		}
-	}
+void oidc_cfg_process_cleanup(oidc_cfg_t *cfg, server_rec *s) {
 	if (_oidc_refresh_mutex != NULL) {
 		if (oidc_cache_mutex_destroy(s, _oidc_refresh_mutex) != TRUE) {
 			oidc_serror(s, "oidc_cache_mutex_destroy on refresh mutex failed");
@@ -942,5 +1055,6 @@ void oidc_cfg_cleanup_child(oidc_cfg_t *cfg, server_rec *s) {
 		if (oidc_metrics_cleanup(s) != APR_SUCCESS) {
 			oidc_serror(s, "oidc_metrics_cleanup failed");
 		}
+		cfg->metrics_hook_data = NULL;
 	}
 }

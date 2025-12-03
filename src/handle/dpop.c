@@ -43,7 +43,7 @@
 #include "handle/handle.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 #include <ap_mmn.h>
 
@@ -87,7 +87,7 @@ int oidc_dpop_request(request_rec *r, oidc_cfg_t *c) {
 	}
 
 	/* retrieve the access token parameter */
-	oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_DPOP, &s_access_token);
+	oidc_util_url_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_DPOP, &s_access_token);
 	if (s_access_token == NULL) {
 		oidc_error(r, "\"access_token\" value to the \"%s\" parameter is missing",
 			   OIDC_REDIRECT_URI_REQUEST_DPOP);
@@ -95,17 +95,17 @@ int oidc_dpop_request(request_rec *r, oidc_cfg_t *c) {
 	}
 
 	/* retrieve the URL parameter */
-	oidc_util_request_parameter_get(r, OIDC_DPOP_PARAM_URL, &s_url);
+	oidc_util_url_parameter_get(r, OIDC_DPOP_PARAM_URL, &s_url);
 	if (s_url == NULL) {
 		oidc_error(r, "\"url\" parameter is missing");
 		goto end;
 	}
 
 	/* retrieve the optional nonce parameter */
-	oidc_util_request_parameter_get(r, OIDC_DPOP_PARAM_NONCE, &s_nonce);
+	oidc_util_url_parameter_get(r, OIDC_DPOP_PARAM_NONCE, &s_nonce);
 
 	/* parse the optional HTTP method parameter */
-	oidc_util_request_parameter_get(r, OIDC_DPOP_PARAM_METHOD, &s_method);
+	oidc_util_url_parameter_get(r, OIDC_DPOP_PARAM_METHOD, &s_method);
 	if (_oidc_strnatcasecmp(s_method, "post") == 0)
 		s_method = "POST";
 	else if ((_oidc_strnatcasecmp(s_method, "get") == 0) || (s_method == NULL))
@@ -122,7 +122,7 @@ int oidc_dpop_request(request_rec *r, oidc_cfg_t *c) {
 	/* assemble and serialize the JSON response object */
 	json = json_object();
 	json_object_set_new(json, OIDC_HTTP_HDR_DPOP, json_string(s_dpop));
-	s_response = oidc_util_encode_json(r->pool, json, JSON_COMPACT | JSON_PRESERVE_ORDER);
+	s_response = oidc_util_json_encode(r->pool, json, JSON_COMPACT | JSON_PRESERVE_ORDER);
 
 	/* return the serialized JSON response */
 	rc = oidc_util_http_send(r, s_response, _oidc_strlen(s_response), OIDC_HTTP_CONTENT_TYPE_JSON, OK);

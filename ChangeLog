@@ -1,3 +1,231 @@
+12/01/2025
+- release 2.4.19
+
+11/23/2025
+- init: refactor pconf pool memory allocation handling
+  avoid increasing memory (pool) consumption over graceful restarts
+
+11/19/2025
+- request: set the OIDC_ERROR variables when PAR is configured but not enabled by the Provider
+
+11/18/2025
+- id_token: add "off" option to OIDCPassIDTokenAs so no claims from the ID token will be passed on
+- passphrase: generate a crypto key when OIDCCryptoPassphrase is not set
+
+11/17/2025
+- metadata: avoid double-free when validation of provider metadata fails
+- perf: store id_token/userinfo claims as JSON objects and avoid parsing/serializing overhead
+  which results in up to 7% performance increase, depending on the number of claims stored
+- session/cookie: save 20-40 bytes on the session and client-cookie size
+  NB: the internal session format has changed and is backwards incompatible: existing sessions and cookies will be invalid
+- response: avoid proto state memory leaks upon errors in response processing
+- drop support for Apache 2.2
+- bump to 2.4.19dev
+
+11/14/2025
+- test: add test/test_proto.c and migrate proto tests from test.c
+
+11/12/2025
+- test: add test/test_cache.c coverage tests
+
+11/11/2025
+- test: add test/test_http.c and migrate http accept tests there from test.c
+- test: test/Makefile.am refactor check programs
+
+11/07/2025
+- cookie: support individual SameSite cookie settings on the session cookie, state cookie and Discovery CSRF
+  cookie by adding 2 more arguments to OIDCCookieSameSite
+- code: avoid compiler warnings on `curl_easy_setopt` in http.c
+  http.c:612:16: warning: call to '_curl_easy_setopt_err_long' declared with attribute warning: curl_easy_setopt expects a long argument [-Wattribute-warning]
+  
+11/05/2025
+- test: add jose.c coverage tests
+
+10/24/2025
+- code: refactor util/random.c
+
+10/23/2025
+- util/key.c: check for unsupported symmetric key hashing algorithms and avoid a memory leak in such cases
+- test: add util/key.c coverage tests
+- code: use const qualifier in apr_array_header_t operations
+
+10/03/2025
+- redis: use SET..EX %d instead of deprecated SETEX
+- session: remove expired session from cache with `oidc_session_kill` instead of just clearing it
+- bump to 2.4.18.2dev
+
+10/01/2025
+- release 2.4.18.1
+
+09/29/2025
+- refresh: turn debug printouts in config errors into warnings; see #1349; thanks@CrazyWolf13
+- shm: use _oidc_strcpy instead of _oidc_strncpy to avoid segfaults on some platforms; see #1353
+  regression since 2.4.16.7, found on Amazon Linux 2023
+
+09/27/2025
+- logout: when revoking tokens at the revocation endpoint with client_secret_jwt or
+  private_key_jwt, use the revocation endpoint as "aud" value (instead of the token endpoint
+  that was used before), unless environment variable OIDC_TOKEN_REVOCATION_AUD is set to
+  "token" (or another literal aud value)
+
+09/13/2025
+- redis: apply global (server-wide) locking when system(!) environment variable
+  OIDC_REDIS_MUTEX_GLOBAL is set, for backwards compatibility, through:
+  PassEnv OIDC_REDIS_MUTEX_GLOBAL
+
+09/12/2025
+- test: add util/*.c coverage tests
+
+08/31/2025
+- pass JSON real claims without trailing zeros, use 8 digits precision instead of 6
+- test: complete util/appinfo.c coverage
+- oidc_util_base64_decode: check NULL inputs
+- test: complete util/base64.c coverage
+
+08/27/2025
+- improve Redis (and Metrics) performance on process MPMs by using
+  apr_thread_mutex_t (instead of apr_proc_mutex_t) for locking; see #1340
+
+08/22/2025
+- test: make test_cfg oidc_cmd_cache_memcache_ttl_set 180 work on Apache 2.2 
+- bump to 2.4.18.1dev
+
+08/21/2025
+- add Valgrind target to Makefile and to Github Build action
+- release 2.4.18
+
+08/20/2025
+- revise test/check and code coverage functions
+- revise autoconf/automake, split over subdirs now
+- add tests for memcache TTL
+- fix check OIDC_CONFIG_POS_TIMEOUT_UNSET for memcache TTL getter; #1345
+- bump to 2.4.18dev
+
+08/18/2025
+- fix parsing the value set via OIDCMemCacheConnectionsTTL and interpret it in
+  seconds correctly now (instead of microseconds); see #1345; thanks @rpluem
+
+08/15/2025
+- use the server process pool for static variable allocation rather than the pconf pool
+  to prevents possible segmentation faults after (graceful) restarting the same process
+- bump to 2.4.17.3dev
+
+07/28/2025
+- release 2.4.17.2
+
+07/23/2025
+- fix regression in 2.4.17 for processing unauthenticated requests that generate HTML
+  content, e.g. `OIDCProviderAuthRequestMethod POST` and `OIDCPreservePost On`
+  when protected with `Require claim` statements rather than just `Require valid-user`.
+
+07/15/2025
+- support the use of Elliptic Curve keys for private_key_jwt authentication at
+  the token- and introspection endpoints and make the signing algorithm configurable
+  for both RSA en EC keys; closes #1336; thanks @rjr162
+- bump to 2.4.17.2dev
+
+06/25/2025
+- allow to suppress warnings about (individual) X-Forwarded headers; see #1333
+  through environment variable OIDC_CHECK_X_FORWARDED_HDR_LOG_DISABLE, e.g.:
+    SetEnvIfExpr true OIDC_CHECK_X_FORWARDED_HDR_LOG_DISABLE=X-Forwarded-Proto
+
+06/23/2025
+- release 2.4.17.1
+
+06/18/2025
+- fix usage of OIDCSessionType client-cookie:persistent:store_id_token; see #1331; thanks @rgcv
+
+05/27/2025
+- fix usage of OIDCPreservePostTemplates, regression in 2.4.17; see #1325; thanks @perry19987
+- javascript: use HTMLFormElement.prototype.submit.call(document.forms[0]) on all Javascript
+  auto-submit POST forms to prevent browser Javascript error: "form.submit is not a function"
+  which would occur when an element (i.e. the submit button) in a HTML form has a name or id 
+  with a value "submit" and OIDCPreservePost is set to On
+  affects:
+    - OpenID Connect Implicit response type (OIDCResponseType id_token *)
+    - Form Post response type (OIDCResponseMode form_post)
+    - send authentication request via POST binding (OIDCProviderAuthRequestMethod POST)
+    - preserving POST data (OIDCPreservePost On)
+  see:
+     https://trackjs.com/blog/when-form-submit-is-not-a-function/ 
+     https://stackoverflow.com/questions/833032/submit-is-not-a-function-error-in-javascript
+     https://www.geeksforgeeks.org/how-to-solve-submit-is-not-a-function-error-in-javascript/
+
+05/22/2025
+- metrics: avoid possible segfault after restart twice; thanks @atzm
+
+05/17/2025
+- code: refactor util.c into util/ directory
+
+05/06/2025
+- allow adding a prefix to the cache (section) key through environment variable OIDC_CACHE_PREFIX
+- bump to 2.4.17.1dev
+
+04/22/2025
+- release 2.4.17
+
+04/19/2025
+- metadata: fix parsing the OPs `token_endpoint_auth_methods_supported` and avoid the log error:
+    oidc_metadata_provider_parse: oidc_provider_token_endpoint_auth_set: invalid value
+  and falling back to client_secret_basic after that; thanks François Kooman
+- bump to 2.4.17rc2
+
+04/17/2025
+- bump to 2.4.17rc1
+
+04/15/2025
+- fix memory leaks when using provider specific client keys in a multi-provider setup
+- bump to 2.4.17rc0
+
+04/08/2025
+- proto: pass the scope parameter as returned from the token endpoint in the OIDC_scope
+  header/environment variable and make it available for `Require claim scope:` purposes
+  if not available as a claim returned in the id_token or userinfo endpoint
+
+04/07/2025
+- allow for regular Apache processing (e.g. setting response/security headers)
+  by deferring HTML/HTTP output generation to the content handler (instead of user id check handler)
+  for the following use cases:
+  - OIDCProviderAuthRequestMethod POST
+  - OIDCPreservePost On (both internal and template-based)
+  - POST page for the implicit grant type
+  - Request URI handler
+  - internally generated POST logout page
+  - session management RP iframe
+  - session management logout HTML top-window redirect page
+- bump to 2.4.17dev
+
+04/02/2025
+- fix protected content leakage when using OIDCProviderAuthRequestMethod POST, see:
+    https://github.com/OpenIDC/mod_auth_openidc/security/advisories/GHSA-59jp-rwph-878r
+- release 2.4.16.11
+
+03/21/2025
+- core: complete case-insensitive protocol/hostname/domain-name comparisons
+- release 2.4.16.10
+
+03/20/2025
+- core: compare hostnames and domains in a case insensitive way in:
+    oidc_request_check_cookie_domain
+    oidc_util_cookie_domain_valid
+    oidc_validate_redirect_url
+    oidc_cfg_parse_is_valid_url_scheme
+    oidc_discovery_target_link_uri_match
+- cookie: fix oidc_util_cookie_domain_valid so that it checks the incoming request against OIDCCookieDomain
+  rather than the OIDCRedirectURI and displays the correct error message if they don't match
+- bump to 2.4.16.10dev
+
+03/19/2025
+- release 2.4.16.9
+
+03/18/2025
+- cookie: use case insensitive hostname/domain comparison in oidc_check_cookie_domain
+- authz: remove the Location header from HTML based step up authentication redirects
+  as it may conflict with its HTTP 200 status code and confuse middle boxes
+- metrics: avoid double-free on shutdown by not calling pthread_exit; fixes #1207; thanks @studersi
+- metrics: upon exit, do write cached metrics into shared memory before exiting
+- bump to 2.4.16.9dev
+
 02/17/2025
 - release 2.4.16.8
 

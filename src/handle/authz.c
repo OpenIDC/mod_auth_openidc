@@ -45,9 +45,9 @@
 #include "http_protocol.h"
 #include "metrics.h"
 #include "mod_auth_openidc.h"
-#include "pcre_subst.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/pcre_subst.h"
+#include "util/util.h"
 
 static apr_byte_t oidc_authz_match_json_string(request_rec *r, const char *spec, json_t *val, const char *key) {
 	return (_oidc_strcmp(json_string_value(val), spec) == 0);
@@ -360,8 +360,7 @@ static apr_byte_t oidc_authz_match_claims_expr(request_rec *r, const char *const
 
 	oidc_debug(r, "enter: '%s'", attr_spec);
 
-	str = oidc_util_jq_filter(r, oidc_util_encode_json(r->pool, claims, JSON_PRESERVE_ORDER | JSON_COMPACT),
-				  attr_spec);
+	str = oidc_util_jq_filter(r, claims, attr_spec);
 	rv = (_oidc_strcmp(str, "true") == 0);
 
 	return rv;
@@ -384,18 +383,57 @@ static void oidc_authz_error_add(request_rec *r, const char *msg) {
 /*
  * get the claims and id_token from request state
  */
-static void oidc_authz_get_claims_and_idtoken(request_rec *r, json_t **claims, json_t **id_token) {
-
-	const char *s_claims = oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_CLAIMS);
-	if (s_claims != NULL)
-		oidc_util_decode_json_object(r, s_claims, claims);
-
-	const char *s_id_token = oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_IDTOKEN);
-	if (s_id_token != NULL)
-		oidc_util_decode_json_object(r, s_id_token, id_token);
+static void oidc_authz_get_claims_idtoken_scope(request_rec *r, json_t **claims, json_t **id_token,
+						const char **scope) {
+	*claims = oidc_request_state_json_get(r, OIDC_REQUEST_STATE_KEY_CLAIMS);
+	*id_token = oidc_request_state_json_get(r, OIDC_REQUEST_STATE_KEY_IDTOKEN);
+	*scope = oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_SCOPE);
 }
 
-#if HAVE_APACHE_24
+/*
+ * merge the claims from the userinfo endpoint, the claims from the id_token, and the scope returned
+ * from the userinfo endpoint into a single set of claims that can be used to authorize on
+ */
+static json_t *oidc_authz_merge_claims(request_rec *r) {
+	json_t *result = json_object();
+	json_t *claims = NULL, *id_token = NULL;
+	const char *scope = NULL;
+
+	/* get the set of claims from the request state as they have been set in the authentication part earlier */
+	oidc_authz_get_claims_idtoken_scope(r, &claims, &id_token, &scope);
+
+	/* if scope was returned from the token endpoint, include it in the set of authorization claims */
+	if (scope)
+		json_object_set_new(result, OIDC_CLAIM_SCOPE, json_string(scope));
+
+	/* merge userinfo claims into the authorization claims (take precedence over scope) */
+	if (claims)
+		oidc_util_json_merge(r, claims, result);
+
+	/* merge id_token claims (e.g. "iss") into the authorization claims (take precedence over userinfo claims and
+	 * scope) */
+	if (id_token)
+		oidc_util_json_merge(r, id_token, result);
+
+	return result;
+}
+
+/*
+ * check if this request should be passed to the content handler without applying authorization
+ */
+static apr_byte_t oidc_authz_skip_to_content_handler(request_rec *r) {
+	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
+		return TRUE;
+	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_AUTHN_POST) != NULL)
+		return TRUE;
+	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE) != NULL)
+		return TRUE;
+	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTTP) != NULL)
+		return TRUE;
+	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTML) != NULL)
+		return TRUE;
+	return FALSE;
+}
 
 /*
  * Apache >=2.4 authorization routine: match the claims from the authenticated user against the Require primitive
@@ -517,7 +555,7 @@ static authz_status oidc_authz_24_unauthorized_user(request_rec *r) {
 		break;
 	}
 
-	oidc_request_authenticate_user(r, c, NULL, oidc_util_current_url(r, oidc_cfg_x_forwarded_headers_get(c)), NULL,
+	oidc_request_authenticate_user(r, c, NULL, oidc_util_url_cur(r, oidc_cfg_x_forwarded_headers_get(c)), NULL,
 				       NULL, NULL, oidc_cfg_dir_path_auth_request_params_get(r),
 				       oidc_cfg_dir_path_scope_get(r));
 
@@ -528,6 +566,7 @@ static authz_status oidc_authz_24_unauthorized_user(request_rec *r) {
 
 	if (location != NULL) {
 		oidc_debug(r, "send HTML refresh with authorization redirect: %s", location);
+		oidc_http_hdr_out_location_set(r, NULL);
 		html_head = apr_psprintf(r->pool, "<meta http-equiv=\"refresh\" content=\"0; url=%s\">", location);
 		oidc_util_html_send(r, "Stepup Authentication", html_head, NULL, NULL, HTTP_UNAUTHORIZED);
 		r->header_only = 1;
@@ -549,29 +588,21 @@ authz_status oidc_authz_24_checker(request_rec *r, const char *require_args, con
 	if ((r->user != NULL) && (_oidc_strlen(r->user) == 0)) {
 		if (oidc_cfg_dir_unauth_action_get(r) == OIDC_UNAUTH_PASS)
 			return AUTHZ_GRANTED;
-		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
+		if (oidc_authz_skip_to_content_handler(r) == TRUE)
 			return AUTHZ_GRANTED;
 		if (r->method_number == M_OPTIONS)
 			return AUTHZ_GRANTED;
 	}
 
 	/* get the set of claims from the request state (they've been set in the authentication part earlier */
-	json_t *claims = NULL, *id_token = NULL;
-	oidc_authz_get_claims_and_idtoken(r, &claims, &id_token);
-
-	/* merge id_token claims (e.g. "iss") in to claims json object */
-	if (claims)
-		oidc_util_json_merge(r, id_token, claims);
+	json_t *claims = oidc_authz_merge_claims(r);
 
 	/* dispatch to the >=2.4 specific authz routine */
-	authz_status rc =
-	    oidc_authz_24_worker(r, claims ? claims : id_token, require_args, parsed_require_args, match_claim_fn);
+	authz_status rc = oidc_authz_24_worker(r, claims, require_args, parsed_require_args, match_claim_fn);
 
 	/* cleanup */
 	if (claims)
 		json_decref(claims);
-	if (id_token)
-		json_decref(id_token);
 
 	if ((rc == AUTHZ_DENIED) && ap_auth_type(r))
 		rc = oidc_authz_24_unauthorized_user(r);
@@ -588,200 +619,4 @@ authz_status oidc_authz_24_checker_claims_expr(request_rec *r, const char *requi
 					       const void *parsed_require_args) {
 	return oidc_authz_24_checker(r, require_args, parsed_require_args, oidc_authz_match_claims_expr);
 }
-#endif
-
-#else
-
-/*
- * Apache <2.4 authorization routine: match the claims from the authenticated user against the Require primitive
- */
-static int oidc_authz_22_worker(request_rec *r, json_t *claims, const require_line *const reqs, int nelts) {
-	const int m = r->method_number;
-	const char *token;
-	const char *requirement;
-	int i;
-	int have_oauthattr = 0;
-	int count_oauth_claims = 0;
-	oidc_authz_match_claim_fn_type match_claim_fn = NULL;
-
-	/* go through applicable Require directives */
-	for (i = 0; i < nelts; ++i) {
-
-		/* ignore this Require if it's in a <Limit> section that exclude this method */
-		if (!(reqs[i].method_mask & (AP_METHOD_BIT << m))) {
-			continue;
-		}
-
-		/* ignore if it's not a "Require claim ..." */
-		requirement = reqs[i].requirement;
-
-		token = ap_getword_white(r->pool, &requirement);
-
-		/* see if we've got anything meant for us */
-		if (_oidc_strnatcasecmp(token, OIDC_REQUIRE_CLAIM_NAME) == 0) {
-			match_claim_fn = oidc_authz_match_claim;
-#ifdef USE_LIBJQ
-		} else if (_oidc_strnatcasecmp(token, OIDC_REQUIRE_CLAIMS_EXPR_NAME) == 0) {
-			match_claim_fn = oidc_authz_match_claims_expr;
-#endif
-		} else {
-			continue;
-		}
-
-		/* ok, we have a "Require claim/claims_expr" to satisfy */
-		have_oauthattr = 1;
-
-		/*
-		 * If we have an applicable claim, but no claims were sent in the request, then we can
-		 * just stop looking here, because it's not satisfiable. The code after this loop will
-		 * give the appropriate response.
-		 */
-		if (!claims) {
-			break;
-		}
-
-		/*
-		 * iterate over the claim specification strings in this require directive searching
-		 * for a specification that matches one of the claims/expressions.
-		 */
-		while (*requirement) {
-			token = ap_getword_conf(r->pool, &requirement);
-			count_oauth_claims++;
-
-			oidc_debug(r, "evaluating claim/expr specification: %s", token);
-
-			if (match_claim_fn(r, token, claims) == TRUE) {
-
-				/* if *any* claim matches, then authorization has succeeded and all of the others are
-				 * ignored */
-				oidc_debug(r, "require claim/expr '%s' matched", token);
-				return OK;
-			}
-		}
-
-		oidc_authz_error_add(r, requirement);
-	}
-
-	/* if there weren't any "Require claim" directives, we're irrelevant */
-	if (!have_oauthattr) {
-		oidc_debug(r, "no claim/expr statements found, not performing authz");
-		return DECLINED;
-	}
-	/* if there was a "Require claim", but no actual claims, that's cause to warn the admin of an iffy configuration
-	 */
-	if (count_oauth_claims == 0) {
-		oidc_warn(r, "'require claim/expr' missing specification(s) in configuration, declining");
-		return DECLINED;
-	}
-
-	/* log the event, also in Apache speak */
-	oidc_debug(r, "authorization denied for require claims (0/%d): '%s'", nelts,
-		   nelts > 0 ? reqs[0].requirement : "(none)");
-
-	ap_note_auth_failure(r);
-
-	return HTTP_UNAUTHORIZED;
-}
-
-/*
- * find out which action we need to take when encountering an unauthorized request
- */
-static int oidc_authz_22_unauthorized_user(request_rec *r) {
-
-	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
-
-	if (_oidc_strnatcasecmp((const char *)ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
-		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ERROR_OAUTH20);
-		oidc_proto_return_www_authenticate(r, "insufficient_scope",
-						   "Different scope(s) or other claims required");
-		return HTTP_UNAUTHORIZED;
-	}
-
-	/* see if we've configured OIDCUnAutzAction for this path */
-	switch (oidc_cfg_dir_unautz_action_get(r)) {
-	case OIDC_UNAUTZ_RETURN403:
-		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_403);
-		if (oidc_cfg_dir_unauthz_arg_get(r))
-			oidc_util_html_send(r, "Authorization Error", NULL, NULL, oidc_cfg_dir_unauthz_arg_get(r),
-					    HTTP_FORBIDDEN);
-		return HTTP_FORBIDDEN;
-	case OIDC_UNAUTZ_RETURN401:
-		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_401);
-		if (oidc_cfg_dir_unauthz_arg_get(r))
-			oidc_util_html_send(r, "Authorization Error", NULL, NULL, oidc_cfg_dir_unauthz_arg_get(r),
-					    HTTP_UNAUTHORIZED);
-		return HTTP_UNAUTHORIZED;
-	case OIDC_UNAUTZ_RETURN302:
-		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_302);
-		oidc_http_hdr_out_location_set(r, oidc_cfg_dir_unauthz_arg_get(r));
-		return HTTP_MOVED_TEMPORARILY;
-	case OIDC_UNAUTZ_AUTHENTICATE:
-		/*
-		 * exception handling: if this looks like a XMLHttpRequest call we
-		 * won't redirect the user and thus avoid creating a state cookie
-		 * for a non-browser (= Javascript) call that will never return from the OP
-		 */
-		if (oidc_is_auth_capable_request(r) == FALSE) {
-			OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_401);
-			return HTTP_UNAUTHORIZED;
-		}
-
-		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_AUTH);
-	}
-
-	return oidc_request_authenticate_user(r, c, NULL, oidc_util_current_url(r, oidc_cfg_x_forwarded_headers_get(c)),
-					      NULL, NULL, NULL, oidc_cfg_dir_path_auth_request_params_get(r),
-					      oidc_cfg_dir_path_scope_get(r));
-}
-
-/*
- * generic Apache <2.4 authorization hook for this module
- * handles both OpenID Connect and OAuth 2.0 in the same way, based on the claims stored in the request context
- */
-int oidc_authz_22_checker(request_rec *r) {
-
-	/* check for anonymous access and PASS mode */
-	if ((r->user != NULL) && (_oidc_strlen(r->user) == 0)) {
-		r->user = NULL;
-		if (oidc_cfg_dir_unauth_action_get(r) == OIDC_UNAUTH_PASS)
-			return OK;
-		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL)
-			return OK;
-		if (r->method_number == M_OPTIONS)
-			return OK;
-	}
-
-	/* get the set of claims from the request state (they've been set in the authentication part earlier */
-	json_t *claims = NULL, *id_token = NULL;
-	oidc_authz_get_claims_and_idtoken(r, &claims, &id_token);
-
-	/* get the Require statements */
-	const apr_array_header_t *const reqs_arr = ap_requires(r);
-
-	/* see if we have any */
-	const require_line *const reqs = reqs_arr ? (require_line *)reqs_arr->elts : NULL;
-	if (!reqs_arr) {
-		oidc_debug(r, "no require statements found, so declining to perform authorization.");
-		return DECLINED;
-	}
-
-	/* merge id_token claims (e.g. "iss") in to claims json object */
-	if (claims)
-		oidc_util_json_merge(r, id_token, claims);
-
-	/* dispatch to the <2.4 specific authz routine */
-	int rc = oidc_authz_22_worker(r, claims ? claims : id_token, reqs, reqs_arr->nelts);
-
-	/* cleanup */
-	if (claims)
-		json_decref(claims);
-	if (id_token)
-		json_decref(id_token);
-
-	if ((rc == HTTP_UNAUTHORIZED) && ap_auth_type(r))
-		rc = oidc_authz_22_unauthorized_user(r);
-
-	return rc;
-}
-
 #endif

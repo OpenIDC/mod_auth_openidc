@@ -41,13 +41,16 @@
  */
 
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
+static apr_byte_t oidc_proto_pkce_code_verifier_gen(request_rec *r, char **code_verifier) {
+	return oidc_util_rand_str(r, code_verifier, OIDC_PROTO_CODE_VERIFIER_LENGTH);
+}
 /*
  * PCKE "plain" proto state
  */
 static apr_byte_t oidc_proto_pkce_state_plain(request_rec *r, char **state) {
-	return oidc_util_generate_random_string(r, state, OIDC_PROTO_CODE_VERIFIER_LENGTH);
+	return oidc_proto_pkce_code_verifier_gen(r, state);
 }
 
 /*
@@ -70,7 +73,7 @@ static apr_byte_t oidc_proto_pkce_verifier_plain(request_rec *r, const char *sta
  * PCKE "s256" proto state
  */
 static apr_byte_t oidc_proto_pkce_state_s256(request_rec *r, char **state) {
-	return oidc_util_generate_random_string(r, state, OIDC_PROTO_CODE_VERIFIER_LENGTH);
+	return oidc_proto_pkce_code_verifier_gen(r, state);
 }
 
 /*

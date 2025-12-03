@@ -51,7 +51,7 @@
 #include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 #define OIDC_METADATA_SUFFIX_PROVIDER "provider"
 #define OIDC_METADATA_SUFFIX_CLIENT "client"
@@ -214,7 +214,7 @@ static apr_byte_t oidc_metadata_file_read_json(request_rec *r, const char *path,
 		return FALSE;
 
 	/* decode the JSON contents of the buffer */
-	return oidc_util_decode_json_object(r, buf, result);
+	return oidc_util_json_decode_object(r, buf, result);
 }
 
 /*
@@ -252,6 +252,8 @@ static const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, json_t 
 						       oidc_valid_function_t valid_function, char **value,
 						       apr_byte_t optional, const char *preference) {
 	int i = 0;
+	if (value)
+		*value = NULL;
 	json_t *json_arr = json_object_get(json, key);
 	apr_byte_t found = FALSE;
 	if ((json_arr != NULL) && (json_is_array(json_arr))) {
@@ -496,7 +498,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg,
 	/* assemble the JSON registration request */
 	json_t *data = json_object();
 	json_object_set_new(data, OIDC_METADATA_CLIENT_NAME, json_string(oidc_cfg_provider_client_name_get(provider)));
-	json_object_set_new(data, OIDC_METADATA_REDIRECT_URIS, json_pack("[s]", oidc_util_redirect_uri(r, cfg)));
+	json_object_set_new(data, OIDC_METADATA_REDIRECT_URIS, json_pack("[s]", oidc_util_url_redirect_uri(r, cfg)));
 
 	json_t *response_types = json_array();
 	apr_array_header_t *flows = oidc_proto_supported_flows(r->pool);
@@ -523,7 +525,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg,
 				    json_string(oidc_cfg_provider_client_jwks_uri_get(provider)));
 	} else if (oidc_cfg_public_keys_get(cfg) != NULL) {
 		json_object_set_new(data, OIDC_METADATA_JWKS_URI,
-				    json_string(apr_psprintf(r->pool, "%s?%s=rsa", oidc_util_redirect_uri(r, cfg),
+				    json_string(apr_psprintf(r->pool, "%s?%s=rsa", oidc_util_url_redirect_uri(r, cfg),
 							     OIDC_REDIRECT_URI_REQUEST_JWKS)));
 	}
 
@@ -555,7 +557,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg,
 
 	if (oidc_cfg_provider_request_object_get(provider) != NULL) {
 		json_t *request_object_config = NULL;
-		if (oidc_util_decode_json_object(r, oidc_cfg_provider_request_object_get(provider),
+		if (oidc_util_json_decode_object(r, oidc_cfg_provider_request_object_get(provider),
 						 &request_object_config) == TRUE) {
 			json_t *crypto = json_object_get(request_object_config, "crypto");
 			char *alg = "none";
@@ -565,29 +567,28 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg,
 		}
 	}
 
-	json_object_set_new(data, OIDC_METADATA_INITIATE_LOGIN_URI, json_string(oidc_util_redirect_uri(r, cfg)));
+	json_object_set_new(data, OIDC_METADATA_INITIATE_LOGIN_URI, json_string(oidc_util_url_redirect_uri(r, cfg)));
 
 	json_object_set_new(
 	    data, OIDC_METADATA_FRONTCHANNEL_LOGOUT_URI,
-	    json_string(apr_psprintf(r->pool, "%s?%s=%s", oidc_util_redirect_uri(r, cfg),
+	    json_string(apr_psprintf(r->pool, "%s?%s=%s", oidc_util_url_redirect_uri(r, cfg),
 				     OIDC_REDIRECT_URI_REQUEST_LOGOUT, OIDC_GET_STYLE_LOGOUT_PARAM_VALUE)));
 
 	// TODO: may want to add backchannel_logout_session_required
 	json_object_set_new(
 	    data, OIDC_METADATA_BACKCHANNEL_LOGOUT_URI,
-	    json_string(apr_psprintf(r->pool, "%s?%s=%s", oidc_util_redirect_uri(r, cfg),
+	    json_string(apr_psprintf(r->pool, "%s?%s=%s", oidc_util_url_redirect_uri(r, cfg),
 				     OIDC_REDIRECT_URI_REQUEST_LOGOUT, OIDC_BACKCHANNEL_STYLE_LOGOUT_PARAM_VALUE)));
 
 	if (oidc_cfg_default_slo_url_get(cfg) != NULL) {
-		json_object_set_new(
-		    data, OIDC_METADATA_POST_LOGOUT_REDIRECT_URIS,
-		    json_pack("[s]", oidc_util_absolute_url(r, cfg, oidc_cfg_default_slo_url_get(cfg))));
+		json_object_set_new(data, OIDC_METADATA_POST_LOGOUT_REDIRECT_URIS,
+				    json_pack("[s]", oidc_util_url_abs(r, cfg, oidc_cfg_default_slo_url_get(cfg))));
 	}
 
 	/* add any custom JSON in to the registration request */
 	if (oidc_cfg_provider_registration_endpoint_json_get(provider) != NULL) {
 		json_t *json = NULL;
-		if (oidc_util_decode_json_object(r, oidc_cfg_provider_registration_endpoint_json_get(provider),
+		if (oidc_util_json_decode_object(r, oidc_cfg_provider_registration_endpoint_json_get(provider),
 						 &json) == FALSE)
 			return FALSE;
 		oidc_util_json_merge(r, json, data);
@@ -606,7 +607,7 @@ static apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg,
 	json_decref(data);
 
 	/* decode and see if it is not an error response somehow */
-	if (oidc_util_decode_json_and_check_error(r, *response, j_client) == FALSE) {
+	if (oidc_util_json_decode_and_check_error(r, *response, j_client) == FALSE) {
 		oidc_error(r, "JSON parsing of dynamic client registration response failed");
 		return FALSE;
 	}
@@ -673,7 +674,7 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r, oidc_cfg
 	}
 
 	/* decode and see if it is not an error response somehow */
-	if (oidc_util_decode_json_and_check_error(r, response, j_jwks) == FALSE) {
+	if (oidc_util_json_decode_and_check_error(r, response, j_jwks) == FALSE) {
 		oidc_error(r, "JSON parsing of JWKs published at the jwks_uri failed");
 		return FALSE;
 	}
@@ -710,7 +711,7 @@ apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg_t *cfg, const oidc_jw
 	/* see if the JWKs is cached */
 	if ((oidc_cache_get_jwks(r, oidc_metadata_jwks_cache_key(jwks_uri), &value) == TRUE) && (value != NULL)) {
 		/* decode and see if it is not a cached error response somehow */
-		if (oidc_util_decode_json_and_check_error(r, value, j_jwks) == FALSE) {
+		if (oidc_util_json_decode_and_check_error(r, value, j_jwks) == FALSE) {
 			oidc_warn(r, "JSON parsing of cached JWKs data failed");
 			value = NULL;
 		}
@@ -745,7 +746,7 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg, cons
 	OIDC_METRICS_TIMING_ADD(r, cfg, OM_PROVIDER_METADATA);
 
 	/* decode and see if it is not an error response somehow */
-	if (oidc_util_decode_json_and_check_error(r, *response, j_metadata) == FALSE) {
+	if (oidc_util_json_decode_and_check_error(r, *response, j_metadata) == FALSE) {
 		oidc_error(r, "JSON parsing of retrieved Discovery document failed");
 		return FALSE;
 	}
@@ -753,6 +754,7 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg, cons
 	/* check to see if it is valid metadata */
 	if (oidc_metadata_provider_is_valid(r, cfg, *j_metadata, issuer) == FALSE) {
 		json_decref(*j_metadata);
+		*j_metadata = NULL;
 		return FALSE;
 	}
 
@@ -1216,8 +1218,8 @@ static void oidc_metadata_get_jwks(request_rec *r, json_t *json, apr_array_heade
 		}
 
 		if (*jwk_list == NULL)
-			*jwk_list = apr_array_make(r->pool, 4, sizeof(oidc_jwk_t *));
-		APR_ARRAY_PUSH(*jwk_list, oidc_jwk_t *) = jwk;
+			*jwk_list = apr_array_make(r->pool, 4, sizeof(const oidc_jwk_t *));
+		APR_ARRAY_PUSH(*jwk_list, const oidc_jwk_t *) = jwk;
 	}
 }
 
@@ -1378,6 +1380,7 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg_t *cfg, json_t *j_c
 	OIDC_METADATA_PROVIDER_SET(client_contact, value, rv)
 
 	/* get the token endpoint authentication method */
+	// TODO: token_endpoint_auth_alg inheritance from global setting does not work now
 	oidc_util_json_object_get_string(r->pool, j_conf, OIDC_METADATA_TOKEN_ENDPOINT_AUTH, &value,
 					 oidc_cfg_provider_token_endpoint_auth_get(oidc_cfg_provider_get(cfg)));
 	if (value != NULL) {

@@ -3,3 +3,4 @@
 /.dirstamp
 /*.lo
 /*.o
+/*.gcno

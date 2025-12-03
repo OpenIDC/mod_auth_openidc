@@ -43,7 +43,7 @@
 #include "state.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 #include <apr_sha1.h>
 
 #define OIDC_STATE_SHA1_LEN 20

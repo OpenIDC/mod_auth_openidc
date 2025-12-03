@@ -49,6 +49,7 @@
 #include "jose.h"
 #include "session.h"
 #include "util.h"
+#include "util/util.h"
 #include <apr_base64.h>
 #include <openssl/pem.h>
 
@@ -134,7 +135,7 @@ int sign(int argc, char **argv, apr_pool_t *pool) {
 		return -1;
 	}
 
-	fprintf(stdout, "%s\n", cser);
+	fprintf(stdout, "%s", cser);
 
 	cjose_jws_release(jws);
 	cjose_jwk_release(jwk);
@@ -273,76 +274,15 @@ int key2jwk(int argc, char **argv, apr_pool_t *pool) {
 	return 0;
 }
 
-static request_rec *request_setup(apr_pool_t *pool) {
-	const unsigned int kIdx = 0;
-	const unsigned int kEls = kIdx + 1;
-	request_rec *request = (request_rec *)apr_pcalloc(pool, sizeof(request_rec));
-
-	request->pool = pool;
-
-	request->headers_in = apr_table_make(request->pool, 0);
-	request->headers_out = apr_table_make(request->pool, 0);
-	request->err_headers_out = apr_table_make(request->pool, 0);
-
-	apr_table_set(request->headers_in, "Host", "www.example.com");
-	apr_table_set(request->headers_in, "OIDC_foo", "some-value");
-	apr_table_set(request->headers_in, "Cookie",
-		      "foo=bar; "
-		      "mod_auth_openidc_session"
-		      "=0123456789abcdef; baz=zot");
-
-	request->server = apr_pcalloc(request->pool, sizeof(struct server_rec));
-	request->server->process = apr_pcalloc(request->pool, sizeof(struct process_rec));
-	request->server->process->pool = request->pool;
-	request->server->process->pconf = request->pool;
-	request->connection = apr_pcalloc(request->pool, sizeof(struct conn_rec));
-	request->connection->local_addr = apr_pcalloc(request->pool, sizeof(apr_sockaddr_t));
-
-	apr_pool_userdata_set("https", "scheme", NULL, request->pool);
-	request->server->server_hostname = "www.example.com";
-	request->connection->local_addr->port = 443;
-	request->unparsed_uri = "/bla?foo=bar&param1=value1";
-	request->args = "foo=bar&param1=value1";
-	apr_uri_parse(request->pool, "https://www.example.com/bla?foo=bar&param1=value1", &request->parsed_uri);
-
-	auth_openidc_module.module_index = kIdx;
-	oidc_cfg_t *cfg = oidc_cfg_server_create(request->pool, request->server);
-
-	oidc_cfg_provider_issuer_set(pool, oidc_cfg_provider_get(cfg), "https://idp.example.com");
-	oidc_cfg_provider_authorization_endpoint_url_set(pool, oidc_cfg_provider_get(cfg),
-							 "https://idp.example.com/authorize");
-	oidc_cfg_provider_scope_set(pool, oidc_cfg_provider_get(cfg), "openid");
-	oidc_cfg_provider_client_id_set(pool, oidc_cfg_provider_get(cfg), "client_id");
-	cfg->redirect_uri = "https://www.example.com/protected/";
-
-	oidc_dir_cfg_t *d_cfg = oidc_cfg_dir_config_create(request->pool, NULL);
-
-	request->server->module_config = apr_pcalloc(request->pool, sizeof(void) * kEls);
-	request->per_dir_config = apr_pcalloc(request->pool, sizeof(void) * kEls);
-	ap_set_module_config(request->server->module_config, &auth_openidc_module, cfg);
-	ap_set_module_config(request->per_dir_config, &auth_openidc_module, d_cfg);
-
-	cfg->cache.impl = &oidc_cache_shm;
-	cfg->cache.cfg = NULL;
-	cfg->cache.shm_size_max = 500;
-	cfg->cache.shm_entry_size_max = 16384 + 255 + 17;
-	if (cfg->cache.impl->post_config(request->server) != OK) {
-		printf("cfg->cache->post_config failed!\n");
-		exit(-1);
-	}
-
-	return request;
-}
-
 int enckey(int argc, char **argv, apr_pool_t *pool) {
 
 	if (argc <= 2)
 		return usage(argc, argv, "enckey <secret> [hash] [key-length]");
 
-	request_rec *r = request_setup(pool);
+	request_rec *r = oidc_test_request_get();
 
 	oidc_jwk_t *jwk = NULL;
-	if (oidc_util_create_symmetric_key(r, argv[2], argc > 4 ? _oidc_str_to_int(argv[4], 0) : 0,
+	if (oidc_util_key_symmetric_create(r, argv[2], argc > 4 ? _oidc_str_to_int(argv[4], 0) : 0,
 					   argc > 3 ? argv[3] : NULL, FALSE, &jwk) == FALSE) {
 		fprintf(stderr, "oidc_util_create_symmetric_key failed");
 		return -1;
@@ -374,7 +314,7 @@ int hash_base64url(int argc, char **argv, apr_pool_t *pool) {
 	int base64url_decode_first = argc > 4 ? (_oidc_strcmp(argv[4], "yes") == 0) : 0;
 	char *output = NULL;
 
-	request_rec *r = request_setup(pool);
+	request_rec *r = oidc_test_request_get();
 
 	if (base64url_decode_first) {
 
@@ -434,7 +374,7 @@ int uuid(int argc, char **argv, apr_pool_t *pool) {
 			n = 25000000;
 	}
 
-	request_rec *r = request_setup(pool);
+	request_rec *r = oidc_test_request_get();
 
 	apr_hash_t *entries = apr_hash_make(pool);
 	while (i < n) {
@@ -456,47 +396,43 @@ int uuid(int argc, char **argv, apr_pool_t *pool) {
 }
 int main(int argc, char **argv, char **env) {
 
+	int rc = 0;
+
 	if (argc <= 1)
 		return usage(argc, argv, NULL);
 
-	if (apr_app_initialize(&argc, (const char *const **)argv, (const char *const **)env) != APR_SUCCESS) {
-		printf("apr_app_initialize failed\n");
-		return -1;
-	}
+	oidc_test_setup();
 
-	oidc_pre_config_init();
-
-	apr_pool_t *pool = NULL;
-	apr_pool_create(&pool, NULL);
+	apr_pool_t *pool = oidc_test_pool_get();
 
 	if (_oidc_strcmp(argv[1], "sign") == 0)
-		return sign(argc, argv, pool);
+		rc = sign(argc, argv, pool);
 
-	if (_oidc_strcmp(argv[1], "verify") == 0)
-		return verify(argc, argv, pool);
+	else if (_oidc_strcmp(argv[1], "verify") == 0)
+		rc = verify(argc, argv, pool);
 
-	if (_oidc_strcmp(argv[1], "decrypt") == 0)
-		return decrypt(argc, argv, pool);
+	else if (_oidc_strcmp(argv[1], "decrypt") == 0)
+		rc = decrypt(argc, argv, pool);
 
-	if (_oidc_strcmp(argv[1], "key2jwk") == 0)
-		return key2jwk(argc, argv, pool);
+	else if (_oidc_strcmp(argv[1], "key2jwk") == 0)
+		rc = key2jwk(argc, argv, pool);
 
-	if (_oidc_strcmp(argv[1], "enckey") == 0)
-		return enckey(argc, argv, pool);
+	else if (_oidc_strcmp(argv[1], "enckey") == 0)
+		rc = enckey(argc, argv, pool);
 
-	if (_oidc_strcmp(argv[1], "hash_base64url") == 0)
-		return hash_base64url(argc, argv, pool);
+	else if (_oidc_strcmp(argv[1], "hash_base64url") == 0)
+		rc = hash_base64url(argc, argv, pool);
 
-	if (_oidc_strcmp(argv[1], "timestamp") == 0)
-		return timestamp(argc, argv, pool);
+	else if (_oidc_strcmp(argv[1], "timestamp") == 0)
+		rc = timestamp(argc, argv, pool);
 
-	if (_oidc_strcmp(argv[1], "uuid") == 0)
-		return uuid(argc, argv, pool);
+	else if (_oidc_strcmp(argv[1], "uuid") == 0)
+		rc = uuid(argc, argv, pool);
 
-	EVP_cleanup();
+	else
+		rc = usage(argc, argv, NULL);
 
-	apr_pool_destroy(pool);
-	apr_terminate();
+	oidc_test_teardown();
 
-	return usage(argc, argv, NULL);
+	return rc;
 }

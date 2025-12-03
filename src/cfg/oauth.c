@@ -63,6 +63,7 @@ struct oidc_oauth_t {
 	char *introspection_token_param_name;
 	char *introspection_endpoint_params;
 	char *introspection_endpoint_auth;
+	char *introspection_endpoint_auth_alg;
 	char *introspection_client_auth_bearer_token;
 	char *introspection_endpoint_tls_client_key;
 	char *introspection_endpoint_tls_client_key_pwd;
@@ -190,8 +191,24 @@ OIDC_OAUTH_MEMBER_FUNCS_STR_VALID(verify_jwks_uri, oidc_cfg_parse_is_valid_http_
 #define OIDC_DEFAULT_OAUTH_TOKEN_PARAM_NAME "token"
 OIDC_OAUTH_MEMBER_FUNCS_STR_VALID(introspection_token_param_name, NULL, OIDC_DEFAULT_OAUTH_TOKEN_PARAM_NAME)
 
-OIDC_OAUTH_MEMBER_FUNCS_STR_VALID(introspection_endpoint_auth,
-				  oidc_cfg_get_valid_endpoint_auth_function(cfg)(pool, arg), NULL)
+const char *oidc_cfg_oauth_introspection_endpoint_auth_set(apr_pool_t *pool, oidc_cfg_t *cfg, const char *arg) {
+	return oidc_cfg_endpoint_auth_set(pool, cfg, arg, &cfg->oauth->introspection_endpoint_auth,
+					  &cfg->oauth->introspection_endpoint_auth_alg);
+}
+
+const char *oidc_cmd_oauth_introspection_endpoint_auth_set(cmd_parms *cmd, void *ptr, const char *arg) {
+	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
+	const char *rv = oidc_cfg_oauth_introspection_endpoint_auth_set(cmd->pool, cfg, arg);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
+const char *oidc_cfg_oauth_introspection_endpoint_auth_get(oidc_cfg_t *cfg) {
+	return cfg->oauth->introspection_endpoint_auth;
+}
+
+const char *oidc_cfg_oauth_introspection_endpoint_auth_alg_get(oidc_cfg_t *cfg) {
+	return cfg->oauth->introspection_endpoint_auth_alg;
+}
 
 oidc_remote_user_claim_t *oidc_cfg_oauth_remote_user_claim_get(oidc_cfg_t *cfg) {
 	return &cfg->oauth->remote_user_claim;
@@ -323,6 +340,7 @@ oidc_oauth_t *oidc_cfg_oauth_create(apr_pool_t *pool) {
 	o->introspection_endpoint_method = OIDC_CONFIG_POS_INT_UNSET;
 	o->introspection_endpoint_params = NULL;
 	o->introspection_endpoint_auth = NULL;
+	o->introspection_endpoint_auth_alg = NULL;
 	o->introspection_client_auth_bearer_token = NULL;
 	o->introspection_token_param_name = NULL;
 	o->introspection_token_expiry_claim_name = NULL;
@@ -361,6 +379,9 @@ void oidc_cfg_oauth_merge(apr_pool_t *pool, oidc_oauth_t *dst, const oidc_oauth_
 						 : base->introspection_endpoint_params;
 	dst->introspection_endpoint_auth = add->introspection_endpoint_auth != NULL ? add->introspection_endpoint_auth
 										    : base->introspection_endpoint_auth;
+	dst->introspection_endpoint_auth_alg = add->introspection_endpoint_auth_alg != NULL
+						   ? add->introspection_endpoint_auth_alg
+						   : base->introspection_endpoint_auth_alg;
 	dst->introspection_client_auth_bearer_token = add->introspection_client_auth_bearer_token != NULL
 							  ? add->introspection_client_auth_bearer_token
 							  : base->introspection_client_auth_bearer_token;
@@ -395,6 +416,10 @@ void oidc_cfg_oauth_merge(apr_pool_t *pool, oidc_oauth_t *dst, const oidc_oauth_
 }
 
 void oidc_cfg_oauth_destroy(oidc_oauth_t *o) {
+	if (o == NULL)
+		return;
 	oidc_jwk_list_destroy(o->verify_public_keys);
+	o->verify_public_keys = NULL;
 	oidc_jwk_list_destroy_hash(o->verify_shared_keys);
+	o->verify_shared_keys = NULL;
 }

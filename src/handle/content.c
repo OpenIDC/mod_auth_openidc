@@ -43,7 +43,7 @@
 #include "handle/handle.h"
 #include "metrics.h"
 #include "mod_auth_openidc.h"
-#include "util.h"
+#include "util/util.h"
 
 /*
  * handle content generating requests
@@ -59,17 +59,29 @@ int oidc_content_handler(request_rec *r) {
 		if (_oidc_strcmp(r->parsed_uri.path, oidc_cfg_metrics_path_get(c)) == 0)
 			return oidc_metrics_handle_request(r);
 
-	if (oidc_enabled(r) == FALSE) {
+	if (oidc_enabled(r, c) == FALSE) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_DECLINED);
 		return DECLINED;
 	}
 
-	if (oidc_util_request_matches_url(r, oidc_util_redirect_uri(r, c)) == TRUE) {
+	if (oidc_util_url_matches_redirect_uri(r, c) == TRUE) {
 
 		/* requests to the redirect URI are handled and finished here */
 		rc = OK;
 
-		if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO)) {
+		/* NB: check HTTP/HTML request before info (and others) so Logout HTML is processed if there's no
+		 * session (anymore) */
+		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTTP) != NULL) {
+
+			/* HTTP response has been generated and stored in the request state */
+			rc = oidc_util_http_content_send(r);
+
+		} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTML) != NULL) {
+
+			/* HTML body has been generated and stored in the request state */
+			rc = oidc_util_html_content_send(r);
+
+		} else if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO)) {
 
 			OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_INFO);
 
@@ -92,14 +104,14 @@ int oidc_content_handler(request_rec *r) {
 			/* free resources allocated for the session */
 			oidc_session_free(r, session);
 
-		} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_DPOP)) {
+		} else if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_DPOP)) {
 
 			OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_DPOP);
 
 			/* handle request to create a DPoP proof */
 			rc = oidc_dpop_request(r, c);
 
-		} else if (oidc_util_request_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
+		} else if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
 
 			OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_JWKS);
 
@@ -118,12 +130,31 @@ int oidc_content_handler(request_rec *r) {
 		/* discovery may result in a 200 HTML page or a redirect to an external URL */
 		rc = oidc_discovery_request(r, c);
 
-	} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_AUTHN) != NULL) {
+	} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_AUTHN_POST) != NULL) {
 
+		/* sending POST authentication request */
+		OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_AUTHN_POST);
+
+		/* HTML body has been generated and stored in the request state */
+		rc = oidc_util_html_content_send(r);
+
+	} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE) != NULL) {
+
+		/* sending POST preserve request */
 		OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_POST_PRESERVE);
 
-		/* sending POST preserve */
-		rc = OK;
+		/* Javascript for HTML head has been generated and stored in the request state */
+		rc = oidc_util_html_content_send(r);
+
+	} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTTP) != NULL) {
+
+		/* HTTP response has been generated and stored in the request state */
+		rc = oidc_util_http_content_send(r);
+
+	} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTML) != NULL) {
+
+		/* HTML body has been generated and stored in the request state */
+		rc = oidc_util_html_content_send(r);
 
 	} /* else: an authenticated request for which content is produced downstream */
 

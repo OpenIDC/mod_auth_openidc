@@ -43,7 +43,7 @@
 #include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 /*
  * parse a JWT response from the userinfo endpoint: at this point the response is not a JSON object
@@ -71,13 +71,13 @@ static apr_byte_t oidc_proto_userinfo_response_jwt_parse(request_rec *r, oidc_cf
 		   oidc_cfg_provider_userinfo_encrypted_response_alg_get(provider),
 		   oidc_cfg_provider_userinfo_encrypted_response_enc_get(provider));
 
-	if (oidc_util_create_symmetric_key(r, oidc_cfg_provider_client_secret_get(provider), oidc_alg2keysize(alg),
+	if (oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider), oidc_alg2keysize(alg),
 					   OIDC_JOSE_ALG_SHA256, TRUE, &jwk) == FALSE)
 		goto end;
 
 	if (oidc_cfg_provider_userinfo_encrypted_response_alg_get(provider) != NULL) {
 		if (oidc_jwe_decrypt(r->pool, *response,
-				     oidc_util_merge_symmetric_key(r->pool, oidc_cfg_private_keys_get(cfg), jwk),
+				     oidc_util_key_symmetric_merge(r->pool, oidc_cfg_private_keys_get(cfg), jwk),
 				     &payload, NULL, &err, TRUE) == FALSE) {
 			oidc_error(r, "oidc_jwe_decrypt failed: %s", oidc_jose_e2s(r->pool, err));
 			goto end;
@@ -93,7 +93,7 @@ static apr_byte_t oidc_proto_userinfo_response_jwt_parse(request_rec *r, oidc_cf
 	}
 
 	if (oidc_jwt_parse(r->pool, *response, &jwt,
-			   oidc_util_merge_symmetric_key(r->pool, oidc_cfg_private_keys_get(cfg), jwk), FALSE,
+			   oidc_util_key_symmetric_merge(r->pool, oidc_cfg_private_keys_get(cfg), jwk), FALSE,
 			   &err) == FALSE) {
 		oidc_error(r, "oidc_jwt_parse failed: %s", oidc_jose_e2s(r->pool, err));
 		goto end;
@@ -105,13 +105,13 @@ static apr_byte_t oidc_proto_userinfo_response_jwt_parse(request_rec *r, oidc_cf
 	oidc_jwk_destroy(jwk);
 	jwk = NULL;
 
-	if (oidc_util_create_symmetric_key(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, TRUE, &jwk) ==
+	if (oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, TRUE, &jwk) ==
 	    FALSE)
 		goto end;
 
 	if (oidc_proto_jwt_verify(r, cfg, jwt, oidc_cfg_provider_jwks_uri_get(provider),
 				  oidc_cfg_provider_ssl_validate_server_get(provider),
-				  oidc_util_merge_symmetric_key(r->pool, NULL, jwk),
+				  oidc_util_key_symmetric_merge(r->pool, NULL, jwk),
 				  oidc_cfg_provider_userinfo_signed_response_alg_get(provider)) == FALSE) {
 
 		oidc_error(r, "JWT signature could not be validated, aborting");
@@ -120,7 +120,7 @@ static apr_byte_t oidc_proto_userinfo_response_jwt_parse(request_rec *r, oidc_cf
 	oidc_debug(r, "successfully verified signed JWT returned from userinfo endpoint: %s", jwt->payload.value.str);
 
 	*userinfo_jwt = apr_pstrdup(r->pool, *response);
-	*claims = json_deep_copy(jwt->payload.value.json);
+	*claims = json_copy(jwt->payload.value.json);
 	*response = apr_pstrdup(r->pool, jwt->payload.value.str);
 
 	rv = TRUE;
@@ -193,7 +193,7 @@ static apr_byte_t oidc_proto_userinfo_request_composite_claims(request_rec *r, o
 				oidc_jwt_t *jwt = NULL;
 				if (oidc_jwt_parse(
 					r->pool, s_json, &jwt,
-					oidc_util_merge_symmetric_key(r->pool, oidc_cfg_private_keys_get(cfg), jwk),
+					oidc_util_key_symmetric_merge(r->pool, oidc_cfg_private_keys_get(cfg), jwk),
 					FALSE, &err) == FALSE) {
 					oidc_error(r, "could not parse JWT from aggregated claim \"%s\": %s", key,
 						   oidc_jose_e2s(r->pool, err));
@@ -281,12 +281,11 @@ static apr_byte_t oidc_proto_userinfo_endpoint_call(request_rec *r, oidc_cfg_t *
  */
 apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
 				       const char *id_token_sub, const char *access_token,
-				       const char *access_token_type, char **response, char **userinfo_jwt,
-				       long *response_code) {
+				       const char *access_token_type, char **s_userinfo, char **userinfo_jwt,
+				       json_t **userinfo_claims, long *response_code) {
 	apr_byte_t rv = FALSE;
 	char *dpop = NULL;
 	apr_hash_t *response_hdrs = NULL;
-	json_t *j_result = NULL;
 	const char *method =
 	    oidc_cfg_provider_userinfo_token_method_get(provider) == OIDC_USER_INFO_TOKEN_METHOD_POST ? "POST" : "GET";
 
@@ -303,48 +302,49 @@ apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, oidc_pro
 			goto end;
 	}
 
-	if (oidc_proto_userinfo_endpoint_call(r, cfg, provider, access_token, dpop, response, response_code,
+	if (oidc_proto_userinfo_endpoint_call(r, cfg, provider, access_token, dpop, s_userinfo, response_code,
 					      response_hdrs) == FALSE)
 		goto end;
 
-	if (oidc_util_decode_json_object_err(r, *response, &j_result, FALSE) == FALSE) {
+	if (oidc_util_json_decode_object_err(r, *s_userinfo, userinfo_claims, FALSE) == FALSE) {
 
 		// must be a JWT
-		if (oidc_proto_userinfo_response_jwt_parse(r, cfg, provider, response, &j_result, userinfo_jwt) ==
-		    FALSE)
+		if (oidc_proto_userinfo_response_jwt_parse(r, cfg, provider, s_userinfo, userinfo_claims,
+							   userinfo_jwt) == FALSE)
 			goto end;
 
-	} else if (oidc_util_check_json_error(r, j_result) == TRUE) {
+	} else if (oidc_util_json_check_error(r, *userinfo_claims) == TRUE) {
 
-		if (oidc_proto_dpop_use_nonce(r, cfg, j_result, response_hdrs,
+		if (oidc_proto_dpop_use_nonce(r, cfg, *userinfo_claims, response_hdrs,
 					      oidc_cfg_provider_userinfo_endpoint_url_get(provider), method,
 					      access_token, &dpop) == FALSE)
 			// a regular error response
 			goto end;
 
-		if (oidc_proto_userinfo_endpoint_call(r, cfg, provider, access_token, dpop, response, response_code,
+		json_decref(*userinfo_claims);
+		*userinfo_claims = NULL;
+
+		if (oidc_proto_userinfo_endpoint_call(r, cfg, provider, access_token, dpop, s_userinfo, response_code,
 						      response_hdrs) == FALSE)
 			goto end;
 
-		json_decref(j_result);
-
-		if (oidc_util_decode_json_object_err(r, *response, &j_result, FALSE) == FALSE) {
+		if (oidc_util_json_decode_object_err(r, *s_userinfo, userinfo_claims, FALSE) == FALSE) {
 
 			// must be a JWT
-			if (oidc_proto_userinfo_response_jwt_parse(r, cfg, provider, response, &j_result,
+			if (oidc_proto_userinfo_response_jwt_parse(r, cfg, provider, s_userinfo, userinfo_claims,
 								   userinfo_jwt) == FALSE)
 				goto end;
 		}
 
-		if (oidc_util_check_json_error(r, j_result) == TRUE)
+		if (oidc_util_json_check_error(r, *userinfo_claims) == TRUE)
 			goto end;
 	}
 
-	if (oidc_proto_userinfo_request_composite_claims(r, cfg, j_result) == TRUE)
-		*response = oidc_util_encode_json(r->pool, j_result, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	if (oidc_proto_userinfo_request_composite_claims(r, cfg, *userinfo_claims) == TRUE)
+		*s_userinfo = oidc_util_json_encode(r->pool, *userinfo_claims, JSON_PRESERVE_ORDER | JSON_COMPACT);
 
 	char *user_info_sub = NULL;
-	oidc_jose_get_string(r->pool, j_result, OIDC_CLAIM_SUB, FALSE, &user_info_sub, NULL);
+	oidc_jose_get_string(r->pool, *userinfo_claims, OIDC_CLAIM_SUB, FALSE, &user_info_sub, NULL);
 
 	oidc_debug(r, "id_token_sub=%s, user_info_sub=%s", id_token_sub, user_info_sub);
 
@@ -370,8 +370,10 @@ apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, oidc_pro
 
 end:
 
-	if (j_result)
-		json_decref(j_result);
+	if ((rv == FALSE) && (*userinfo_claims != NULL)) {
+		json_decref(*userinfo_claims);
+		*userinfo_claims = NULL;
+	}
 
 	return rv;
 }

@@ -42,7 +42,7 @@
 
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 /*
  * if a nonce was passed in the authorization request (and stored in the browser state),
@@ -391,14 +391,14 @@ apr_byte_t oidc_proto_idtoken_parse(request_rec *r, oidc_cfg_t *cfg, oidc_provid
 	char buf[APR_RFC822_DATE_LEN + 1];
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
-	if (oidc_util_create_symmetric_key(r, oidc_cfg_provider_client_secret_get(provider), oidc_alg2keysize(alg),
+	if (oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider), oidc_alg2keysize(alg),
 					   OIDC_JOSE_ALG_SHA256, TRUE, &jwk) == FALSE)
 		return FALSE;
 
-	decryption_keys = oidc_util_merge_symmetric_key(r->pool, oidc_cfg_private_keys_get(cfg), jwk);
+	decryption_keys = oidc_util_key_symmetric_merge(r->pool, oidc_cfg_private_keys_get(cfg), jwk);
 	if (oidc_cfg_provider_client_keys_get(provider))
 		decryption_keys =
-		    oidc_util_merge_key_sets(r->pool, decryption_keys, oidc_cfg_provider_client_keys_get(provider));
+		    oidc_util_key_sets_merge(r->pool, decryption_keys, oidc_cfg_provider_client_keys_get(provider));
 
 	if (oidc_jwt_parse(r->pool, id_token, jwt, decryption_keys, FALSE, &err) == FALSE) {
 		oidc_error(r, "oidc_jwt_parse failed: %s", oidc_jose_e2s(r->pool, err));
@@ -415,7 +415,7 @@ apr_byte_t oidc_proto_idtoken_parse(request_rec *r, oidc_cfg_t *cfg, oidc_provid
 	if (is_code_flow == FALSE || _oidc_strcmp((*jwt)->header.alg, "none") != 0) {
 
 		jwk = NULL;
-		if (oidc_util_create_symmetric_key(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, TRUE,
+		if (oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, TRUE,
 						   &jwk) == FALSE) {
 			oidc_jwt_destroy(*jwt);
 			*jwt = NULL;
@@ -425,7 +425,7 @@ apr_byte_t oidc_proto_idtoken_parse(request_rec *r, oidc_cfg_t *cfg, oidc_provid
 		if (oidc_proto_jwt_verify(
 			r, cfg, *jwt, oidc_cfg_provider_jwks_uri_get(provider),
 			oidc_cfg_provider_ssl_validate_server_get(provider),
-			oidc_util_merge_symmetric_key(r->pool, oidc_cfg_provider_verify_public_keys_get(provider), jwk),
+			oidc_util_key_symmetric_merge(r->pool, oidc_cfg_provider_verify_public_keys_get(provider), jwk),
 			oidc_cfg_provider_id_token_signed_response_alg_get(provider)) == FALSE) {
 
 			oidc_error(r, "id_token signature could not be validated, aborting");

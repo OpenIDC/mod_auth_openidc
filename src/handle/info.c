@@ -42,7 +42,7 @@
 
 #include "handle/handle.h"
 #include "mod_auth_openidc.h"
-#include "util.h"
+#include "util/util.h"
 
 #define OIDC_INFO_PARAM_ACCESS_TOKEN_REFRESH_INTERVAL "access_token_refresh_interval"
 
@@ -61,9 +61,9 @@ int oidc_info_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, ap
 	apr_byte_t b_extend_session = TRUE;
 	apr_time_t t_interval = -1;
 
-	oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_INFO, &s_format);
-	oidc_util_request_parameter_get(r, OIDC_INFO_PARAM_ACCESS_TOKEN_REFRESH_INTERVAL, &s_interval);
-	oidc_util_request_parameter_get(r, OIDC_INFO_PARAM_EXTEND_SESSION, &s_extend_session);
+	oidc_util_url_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_INFO, &s_format);
+	oidc_util_url_parameter_get(r, OIDC_INFO_PARAM_ACCESS_TOKEN_REFRESH_INTERVAL, &s_interval);
+	oidc_util_url_parameter_get(r, OIDC_INFO_PARAM_EXTEND_SESSION, &s_extend_session);
 	if ((s_extend_session) && (_oidc_strcmp(s_extend_session, "false") == 0))
 		b_extend_session = FALSE;
 
@@ -165,16 +165,16 @@ int oidc_info_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, ap
 
 	/* include the id_token claims in the session info */
 	if (apr_hash_get(oidc_cfg_info_hook_data_get(c), OIDC_HOOK_INFO_ID_TOKEN, APR_HASH_KEY_STRING)) {
-		json_t *id_token = oidc_session_get_idtoken_claims_json(r, session);
+		json_t *id_token = oidc_session_get_idtoken_claims(r, session);
 		if (id_token)
-			json_object_set_new(json, OIDC_HOOK_INFO_ID_TOKEN, id_token);
+			json_object_set(json, OIDC_HOOK_INFO_ID_TOKEN, id_token);
 	}
 
 	if (apr_hash_get(oidc_cfg_info_hook_data_get(c), OIDC_HOOK_INFO_USER_INFO, APR_HASH_KEY_STRING)) {
 		/* include the claims from the userinfo endpoint the session info */
-		json_t *claims = oidc_session_get_userinfo_claims_json(r, session);
+		json_t *claims = oidc_session_get_userinfo_claims(r, session);
 		if (claims)
-			json_object_set_new(json, OIDC_HOOK_INFO_USER_INFO, claims);
+			json_object_set(json, OIDC_HOOK_INFO_USER_INFO, claims);
 	}
 
 	/* include the maximum session lifetime in the session info */
@@ -222,12 +222,12 @@ int oidc_info_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, ap
 
 	if (_oidc_strcmp(OIDC_HOOK_INFO_FORMAT_JSON, s_format) == 0) {
 		/* JSON-encode the result */
-		r_value = oidc_util_encode_json(r->pool, json, JSON_PRESERVE_ORDER);
+		r_value = oidc_util_json_encode(r->pool, json, JSON_PRESERVE_ORDER);
 		/* return the stringified JSON result */
 		rc = oidc_util_http_send(r, r_value, _oidc_strlen(r_value), OIDC_HTTP_CONTENT_TYPE_JSON, OK);
 	} else if (_oidc_strcmp(OIDC_HOOK_INFO_FORMAT_HTML, s_format) == 0) {
 		/* JSON-encode the result */
-		r_value = oidc_util_encode_json(r->pool, json, JSON_PRESERVE_ORDER | JSON_INDENT(2));
+		r_value = oidc_util_json_encode(r->pool, json, JSON_PRESERVE_ORDER | JSON_INDENT(2));
 		rc = oidc_util_html_send(r, "Session Info", NULL, NULL, apr_psprintf(r->pool, "<pre>%s</pre>", r_value),
 					 OK);
 	}

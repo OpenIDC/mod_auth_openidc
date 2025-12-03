@@ -48,9 +48,11 @@
 
 #include "cfg/cfg_int.h"
 #include "cfg/dir.h"
-#include "util.h"
+#include "util/util.h"
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
+
+#include "util.h"
 
 static int test_nr_run = 0;
 static char TST_ERR_MSG[4096];
@@ -140,8 +142,8 @@ static char *test_private_key_parse(apr_pool_t *pool) {
 	const char ecPrivateKeyFile[512];
 
 	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
-	snprintf((char *)rsaPrivateKeyFile, 512, "%s/%s", dir, "/test/private.pem");
-	snprintf((char *)ecPrivateKeyFile, 512, "%s/%s", dir, "/test/ecpriv.key");
+	snprintf((char *)rsaPrivateKeyFile, 512, "%s/%s", dir, "/private.pem");
+	snprintf((char *)ecPrivateKeyFile, 512, "%s/%s", dir, "/ecpriv.key");
 
 	input = BIO_new(BIO_s_file());
 	TST_ASSERT_ERR("test_private_key_parse_BIO_new_RSA_private_key", input != NULL, pool, err);
@@ -204,9 +206,9 @@ static char *test_public_key_parse(apr_pool_t *pool) {
 	const char certificateFile[512];
 	const char ecCertificateFile[512];
 	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
-	snprintf((char *)publicKeyFile, 512, "%s/%s", dir, "/test/public.pem");
-	snprintf((char *)certificateFile, 512, "%s/%s", dir, "/test/certificate.pem");
-	snprintf((char *)ecCertificateFile, 512, "%s/%s", dir, "/test/eccert.pem");
+	snprintf((char *)publicKeyFile, 512, "%s/%s", dir, "/public.pem");
+	snprintf((char *)certificateFile, 512, "%s/%s", dir, "/certificate.pem");
+	snprintf((char *)ecCertificateFile, 512, "%s/%s", dir, "/eccert.pem");
 
 	input = BIO_new(BIO_s_file());
 	TST_ASSERT_ERR("test_public_key_parse_BIO_new_public_key", input != NULL, pool, err);
@@ -964,386 +966,6 @@ static char *test_jwt_decrypt_gcm(apr_pool_t *pool) {
 
 #endif
 
-static char *test_proto_validate_access_token(request_rec *r) {
-
-	// from http://openid.net/specs/openid-connect-core-1_0.html#id_token-tokenExample
-	// A.3  Example using response_type=id_token token
-	const char *s = "eyJraWQiOiIxZTlnZGs3IiwiYWxnIjoiUlMyNTYifQ.ewogIml"
-			"zcyI6ICJodHRwOi8vc2VydmVyLmV4YW1wbGUuY29tIiwKICJzdWIiOiAiMjQ"
-			"4Mjg5NzYxMDAxIiwKICJhdWQiOiAiczZCaGRSa3F0MyIsCiAibm9uY2UiOiA"
-			"ibi0wUzZfV3pBMk1qIiwKICJleHAiOiAxMzExMjgxOTcwLAogImlhdCI6IDE"
-			"zMTEyODA5NzAsCiAiYXRfaGFzaCI6ICI3N1FtVVB0alBmeld0RjJBbnBLOVJ"
-			"RIgp9.F9gRev0Dt2tKcrBkHy72cmRqnLdzw9FLCCSebV7mWs7o_sv2O5s6zM"
-			"ky2kmhHTVx9HmdvNnx9GaZ8XMYRFeYk8L5NZ7aYlA5W56nsG1iWOou_-gji0"
-			"ibWIuuf4Owaho3YSoi7EvsTuLFz6tq-dLyz0dKABMDsiCmJ5wqkPUDTE3QTX"
-			"jzbUmOzUDli-gCh5QPuZAq0cNW3pf_2n4zpvTYtbmj12cVcxGIMZby7TMWES"
-			"RjQ9_o3jvhVNcCGcE0KAQXejhA1ocJhNEvQNqMFGlBb6_0RxxKjDZ-Oa329e"
-			"GDidOvvp0h5hoES4a8IuGKS7NOcpp-aFwp0qVMDLI-Xnm-Pg";
-
-	oidc_jose_error_t err;
-	oidc_jwt_t *jwt = NULL;
-	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(r->pool, s, &jwt, NULL, FALSE, &err), r->pool, err);
-
-	const char *access_token = "jHkWEdUXMU1BwAsC4vtUsZwnNvTIxEl0z9K3vx5KF0Y";
-	TST_ASSERT("oidc_proto_validate_access_token",
-		   oidc_proto_idtoken_validate_access_token(r, NULL, jwt, "id_token token", access_token));
-
-	oidc_jwt_destroy(jwt);
-
-	return 0;
-}
-
-static char *test_proto_validate_code(request_rec *r) {
-
-	// from http://openid.net/specs/openid-connect-core-1_0.html#code-id_tokenExample
-	// A.4 Example using response_type=code id_token
-	const char *s = "eyJraWQiOiIxZTlnZGs3IiwiYWxnIjoiUlMyNTYifQ.ewogIml"
-			"zcyI6ICJodHRwOi8vc2VydmVyLmV4YW1wbGUuY29tIiwKICJzdWIiOiAiMjQ"
-			"4Mjg5NzYxMDAxIiwKICJhdWQiOiAiczZCaGRSa3F0MyIsCiAibm9uY2UiOiA"
-			"ibi0wUzZfV3pBMk1qIiwKICJleHAiOiAxMzExMjgxOTcwLAogImlhdCI6IDE"
-			"zMTEyODA5NzAsCiAiY19oYXNoIjogIkxEa3RLZG9RYWszUGswY25YeENsdEE"
-			"iCn0.XW6uhdrkBgcGx6zVIrCiROpWURs-4goO1sKA4m9jhJIImiGg5muPUcN"
-			"egx6sSv43c5DSn37sxCRrDZZm4ZPBKKgtYASMcE20SDgvYJdJS0cyuFw7Ijp"
-			"_7WnIjcrl6B5cmoM6ylCvsLMwkoQAxVublMwH10oAxjzD6NEFsu9nipkszWh"
-			"sPePf_rM4eMpkmCbTzume-fzZIi5VjdWGGEmzTg32h3jiex-r5WTHbj-u5HL"
-			"7u_KP3rmbdYNzlzd1xWRYTUs4E8nOTgzAUwvwXkIQhOh5TPcSMBYy6X3E7-_"
-			"gr9Ue6n4ND7hTFhtjYs3cjNKIA08qm5cpVYFMFMG6PkhzLQ";
-
-	oidc_jose_error_t err;
-	oidc_jwt_t *jwt = NULL;
-	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(r->pool, s, &jwt, NULL, FALSE, &err), r->pool, err);
-
-	const char *code = "Qcb0Orv1zh30vL1MPRsbm-diHiMwcLyZvn1arpZv-Jxf_11jnpEX3Tgfvk";
-	TST_ASSERT("oidc_proto_validate_code", oidc_proto_idtoken_validate_code(r, NULL, jwt, "code id_token", code));
-
-	oidc_jwt_destroy(jwt);
-
-	return 0;
-}
-
-static char *test_proto_authorization_request(request_rec *r) {
-
-	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
-
-	oidc_cfg_provider_issuer_set(r->pool, provider, "https://idp.example.com");
-	oidc_cfg_provider_authorization_endpoint_url_set(r->pool, provider, "https://idp.example.com/authorize");
-	oidc_cfg_provider_client_id_set(r->pool, provider, "client_id");
-	oidc_cfg_provider_auth_request_params_set(r->pool, provider, "jan=piet&foo=#");
-
-	const char *redirect_uri = "https://www.example.com/protected/";
-	const char *state = "12345";
-
-	oidc_proto_state_t *proto_state = oidc_proto_state_new();
-	oidc_proto_state_set_nonce(proto_state, "anonce");
-	oidc_proto_state_set_original_url(proto_state, "https://localhost/protected/index.php");
-	oidc_proto_state_set_original_method(proto_state, OIDC_METHOD_GET);
-	oidc_proto_state_set_issuer(proto_state, oidc_cfg_provider_issuer_get(provider));
-	oidc_proto_state_set_response_type(proto_state, oidc_cfg_provider_response_type_get(provider));
-	oidc_proto_state_set_timestamp_now(proto_state);
-
-	TST_ASSERT("oidc_proto_request_auth (1)",
-		   oidc_proto_request_auth(r, provider, NULL, redirect_uri, state, proto_state, NULL, NULL, NULL,
-					   NULL) == HTTP_MOVED_TEMPORARILY);
-
-	TST_ASSERT_STR("oidc_proto_request_auth (2)", apr_table_get(r->headers_out, "Location"),
-		       "https://idp.example.com/"
-		       "authorize?response_type=code&scope=openid&client_id=client_id&state=12345&redirect_uri=https%"
-		       "3A%2F%2Fwww.example.com%2Fprotected%2F&nonce=anonce&jan=piet&foo=bar");
-
-	return 0;
-}
-
-static char *test_logout_request(request_rec *r) {
-
-	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
-	oidc_session_t *session = NULL;
-
-	oidc_session_load(r, &session);
-	oidc_session_set_issuer(r, session, oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(c)));
-
-	oidc_cfg_provider_end_session_endpoint_set(r->pool, oidc_cfg_provider_get(c),
-						   "https://idp.example.com/endsession");
-	oidc_cfg_provider_logout_request_params_set(r->pool, oidc_cfg_provider_get(c), "client_id=myclient&foo=bar");
-
-	r->args = "logout=https%3A%2F%2Fwww.example.com%2Floggedout";
-
-	TST_ASSERT("oidc_handle_logout (1)", oidc_logout(r, c, session) == HTTP_MOVED_TEMPORARILY);
-	TST_ASSERT_STR(
-	    "oidc_handle_logout (2)", apr_table_get(r->headers_out, "Location"),
-	    "https://idp.example.com/"
-	    "endsession?post_logout_redirect_uri=https%3A%2F%2Fwww.example.com%2Floggedout&client_id=myclient&foo=bar");
-
-	return 0;
-}
-
-static char *test_proto_validate_nonce(request_rec *r) {
-
-	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
-	const char *nonce = "avSk7S69G4kEE8Km4bPiOjrfChHt6nO4Z397Lp_bQnc,";
-
-	/*
-	 * {
-	 *   "typ": "JWT",
-	 *   "alg": "RS256",
-	 *   "x5t": "Z1NCjojeiHAib-Gm8vFE6ya6lPM"
-	 * }
-	 * {
-	 *   "nonce": "avSk7S69G4kEE8Km4bPiOjrfChHt6nO4Z397Lp_bQnc,",
-	 *   "iat": 1411580876,
-	 *   "at_hash": "yTqsoONZbuWbN6TbgevuDQ",
-	 *   "sub": "6343a29c-5399-44a7-9b35-4990f4377c96",
-	 *   "amr": "password",
-	 *   "auth_time": 1411577267,
-	 *   "idp": "idsrv",
-	 *   "name": "ksonaty",
-	 *   "iss": "https://agsync.com",
-	 *   "aud": "agsync_implicit",
-	 *   "exp": 1411584475,
-	 *   "nbf": 1411580875
-	 * }
-	 */
-	char *s_jwt = apr_pstrdup(
-	    r->pool,
-	    "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IloxTkNqb2plaUhBaWItR204dkZFNnlhNmxQTSJ9."
-	    "eyJub25jZSI6ImF2U2s3UzY5RzRrRUU4S200YlBpT2pyZkNoSHQ2bk80WjM5N0xwX2JRbmMsIiwiaWF0IjoxNDExNTgwODc2LCJhdF9oYX"
-	    "NoIjoieVRxc29PTlpidVdiTjZUYmdldnVEUSIsInN1YiI6IjYzNDNhMjljLTUzOTktNDRhNy05YjM1LTQ5OTBmNDM3N2M5NiIsImFtciI6"
-	    "InBhc3N3b3JkIiwiYXV0aF90aW1lIjoxNDExNTc3MjY3LCJpZHAiOiJpZHNydiIsIm5hbWUiOiJrc29uYXR5IiwiaXNzIjoiaHR0cHM6Ly"
-	    "9hZ3N5bmMuY29tIiwiYXVkIjoiYWdzeW5jX2ltcGxpY2l0IiwiZXhwIjoxNDExNTg0NDc1LCJuYmYiOjE0MTE1ODA4NzV9.lEG-"
-	    "DgHHa0JuOEuOTBvCqyexjRVcKXBnJJm289o2HyTgclpH80DsOMED9RlXCFfuDY7nw9i2cxUmIMAV42AdTxkMPomK3chytcajvpAZJirlk6"
-	    "53bo9GTDXJSKZr5fwyEu--qahsoT5t9qvoWyFdYkvmMHFw1-"
-	    "mAHDGgVe23voc9jPuFFIhRRqIn4e8ikzN4VQeEV1UXJD02kYYFn2TRWURgiFyVeTr2r0MTn-auCEsFS_AfR1Bl_"
-	    "kmpMfqwrsicf5MTBvfPJeuSMt3t3d3LOGBkg36_z21X-ZRN7wy1KTjagr7iQ_y5csIpmtqs_QM55TTB9dW1HIosJPhiuMEJEA");
-	oidc_jwt_t *jwt = NULL;
-	oidc_jose_error_t err;
-	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(r->pool, s_jwt, &jwt, NULL, FALSE, &err), r->pool, err);
-
-	TST_ASSERT("oidc_proto_idtoken_validate_nonce (1)",
-		   oidc_proto_idtoken_validate_nonce(r, c, oidc_cfg_provider_get(c), nonce, jwt));
-	TST_ASSERT("oidc_proto_idtoken_validate_nonce (2)",
-		   oidc_proto_idtoken_validate_nonce(r, c, oidc_cfg_provider_get(c), nonce, jwt) == FALSE);
-
-	oidc_jwt_destroy(jwt);
-
-	return 0;
-}
-
-static char *test_proto_validate_jwt(request_rec *r) {
-
-	oidc_jwt_t *jwt = NULL;
-	oidc_jose_error_t err;
-
-	const char *s_secret = "secret";
-	const char *s_issuer = "https://localhost";
-	apr_time_t now = apr_time_sec(apr_time_now());
-
-	const char *s_jwt_header = "{"
-				   "\"alg\": \"HS256\""
-				   "}";
-
-	const char *s_jwt_payload = "{"
-				    "\"nonce\": \"543210,\","
-				    "\"iat\": %" APR_TIME_T_FMT ","
-				    "\"sub\": \"alice\","
-				    "\"iss\": \"%s\","
-				    "\"aud\": \"bob\","
-				    "\"exp\": %" APR_TIME_T_FMT "}";
-	s_jwt_payload = apr_psprintf(r->pool, s_jwt_payload, now, s_issuer, now + 600);
-
-	char *s_jwt_header_encoded = NULL;
-	oidc_util_base64url_encode(r, &s_jwt_header_encoded, s_jwt_header, _oidc_strlen(s_jwt_header), 1);
-
-	char *s_jwt_payload_encoded = NULL;
-	oidc_util_base64url_encode(r, &s_jwt_payload_encoded, s_jwt_payload, _oidc_strlen(s_jwt_payload), 1);
-
-	char *s_jwt_message = apr_psprintf(r->pool, "%s.%s", s_jwt_header_encoded, s_jwt_payload_encoded);
-
-	unsigned int md_len = 0;
-	unsigned char md[EVP_MAX_MD_SIZE];
-	const EVP_MD *digest = EVP_get_digestbyname("sha256");
-
-	TST_ASSERT("HMAC", HMAC(digest, (const unsigned char *)s_secret, _oidc_strlen(s_secret),
-				(const unsigned char *)s_jwt_message, _oidc_strlen(s_jwt_message), md, &md_len) != 0);
-
-	char *s_jwt_signature_encoded = NULL;
-	oidc_util_base64url_encode(r, &s_jwt_signature_encoded, (const char *)md, md_len, 1);
-
-	char *s_jwt =
-	    apr_psprintf(r->pool, "%s.%s.%s", s_jwt_header_encoded, s_jwt_payload_encoded, s_jwt_signature_encoded);
-
-	TST_ASSERT_ERR("oidc_jwt_parse", oidc_jwt_parse(r->pool, s_jwt, &jwt, NULL, FALSE, &err), r->pool, err);
-
-	oidc_jwk_t *jwk = NULL;
-	TST_ASSERT_ERR("oidc_util_create_symmetric_key",
-		       oidc_util_create_symmetric_key(r, s_secret, 0, NULL, TRUE, &jwk) == TRUE, r->pool, err);
-	TST_ASSERT_ERR("oidc_util_create_symmetric_key (jwk)", jwk != NULL, r->pool, err);
-
-	TST_ASSERT_ERR("oidc_jwt_verify",
-		       oidc_jwt_verify(r->pool, jwt, oidc_util_merge_symmetric_key(r->pool, NULL, jwk), &err), r->pool,
-		       err);
-
-	TST_ASSERT_ERR("oidc_proto_validate_jwt", oidc_proto_jwt_validate(r, jwt, s_issuer, TRUE, TRUE, 10), r->pool,
-		       err);
-
-	oidc_jwk_destroy(jwk);
-	oidc_jwt_destroy(jwt);
-
-	return 0;
-}
-
-static char *test_current_url(request_rec *r) {
-
-	char *url = NULL;
-
-	r->uri = "/test";
-	r->unparsed_uri = apr_pstrcat(r->pool, r->uri, "?", r->args, NULL);
-
-	url = oidc_util_current_url(r, 0);
-	TST_ASSERT_STR("test_current_url (1)", url, "https://www.example.com/test?foo=bar&param1=value1");
-
-	apr_table_set(r->headers_in, "X-Forwarded-Host", "www.outer.com");
-	url = oidc_util_current_url(r, 0);
-	TST_ASSERT_STR("test_current_url (2a)", url, "https://www.example.com/test?foo=bar&param1=value1");
-	url = oidc_util_current_url(r, OIDC_HDR_X_FORWARDED_HOST);
-	TST_ASSERT_STR("test_current_url (2b)", url, "https://www.outer.com/test?foo=bar&param1=value1");
-
-	apr_table_set(r->headers_in, "X-Forwarded-Host", "www.outer.com:654");
-	url = oidc_util_current_url(r, OIDC_HDR_X_FORWARDED_HOST);
-	TST_ASSERT_STR("test_current_url (3)", url, "https://www.outer.com:654/test?foo=bar&param1=value1");
-
-	apr_table_set(r->headers_in, "X-Forwarded-Port", "321");
-	url = oidc_util_current_url(r, 0);
-	TST_ASSERT_STR("test_current_url (4a)", url, "https://www.example.com/test?foo=bar&param1=value1");
-	url = oidc_util_current_url(r, OIDC_HDR_X_FORWARDED_HOST);
-	TST_ASSERT_STR("test_current_url (4b)", url, "https://www.outer.com:654/test?foo=bar&param1=value1");
-	url = oidc_util_current_url(r, OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT);
-	TST_ASSERT_STR("test_current_url (4)", url, "https://www.outer.com:321/test?foo=bar&param1=value1");
-
-	apr_table_set(r->headers_in, "X-Forwarded-Proto", "http");
-	url = oidc_util_current_url(r, 0);
-	TST_ASSERT_STR("test_current_url (5a)", url, "https://www.example.com/test?foo=bar&param1=value1");
-	url = oidc_util_current_url(r, OIDC_HDR_X_FORWARDED_HOST);
-	TST_ASSERT_STR("test_current_url (5b)", url, "https://www.outer.com:654/test?foo=bar&param1=value1");
-	url = oidc_util_current_url(r, OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT);
-	TST_ASSERT_STR("test_current_url (5c)", url, "https://www.outer.com:321/test?foo=bar&param1=value1");
-	url = oidc_util_current_url(r,
-				    OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT | OIDC_HDR_X_FORWARDED_PROTO);
-	TST_ASSERT_STR("test_current_url (5d)", url, "http://www.outer.com:321/test?foo=bar&param1=value1");
-
-	apr_table_set(r->headers_in, "X-Forwarded-Proto", "https , http");
-	url = oidc_util_current_url(r,
-				    OIDC_HDR_X_FORWARDED_HOST | OIDC_HDR_X_FORWARDED_PORT | OIDC_HDR_X_FORWARDED_PROTO);
-	TST_ASSERT_STR("test_current_url (6)", url, "https://www.outer.com:321/test?foo=bar&param1=value1");
-
-	apr_table_unset(r->headers_in, "X-Forwarded-Host");
-	apr_table_unset(r->headers_in, "X-Forwarded-Port");
-	url = oidc_util_current_url(r, OIDC_HDR_X_FORWARDED_PROTO);
-	TST_ASSERT_STR("test_current_url (7)", url, "https://www.example.com/test?foo=bar&param1=value1");
-
-	apr_table_set(r->headers_in, "X-Forwarded-Proto", "http ");
-	apr_table_set(r->headers_in, "Host", "remotehost:8380");
-	r->uri = "http://remotehost:8380/private/";
-	url = oidc_util_current_url(r, OIDC_HDR_X_FORWARDED_PROTO);
-	TST_ASSERT_STR("test_current_url (8)", url, "http://remotehost:8380/private/?foo=bar&param1=value1");
-
-	apr_table_set(r->headers_in, "Host", "[fd04:41b1:1170:28:16b0:446b:9fb7:7118]:8380");
-	url = oidc_util_current_url(r, OIDC_HDR_X_FORWARDED_PROTO);
-	TST_ASSERT_STR("test_current_url (9)", url,
-		       "http://[fd04:41b1:1170:28:16b0:446b:9fb7:7118]:8380/private/?foo=bar&param1=value1");
-
-	apr_table_set(r->headers_in, "Host", "[fd04:41b1:1170:28:16b0:446b:9fb7:7118]");
-	url = oidc_util_current_url(r, OIDC_HDR_X_FORWARDED_PROTO);
-	TST_ASSERT_STR("test_current_url (10)", url,
-		       "http://[fd04:41b1:1170:28:16b0:446b:9fb7:7118]/private/?foo=bar&param1=value1");
-
-	apr_table_unset(r->headers_in, "X-Forwarded-Proto");
-	apr_table_unset(r->headers_in, "Host");
-
-	apr_table_set(r->headers_in, "Forwarded", "host=www.outer.com");
-	url = oidc_util_current_url(r, OIDC_HDR_FORWARDED);
-	TST_ASSERT_STR("test_current_url (11)", url, "https://www.outer.com/private/?foo=bar&param1=value1");
-
-	apr_table_set(r->headers_in, "Forwarded", "proto=http");
-	url = oidc_util_current_url(r, OIDC_HDR_FORWARDED);
-	TST_ASSERT_STR("test_current_url (12)", url, "http://www.example.com/private/?foo=bar&param1=value1");
-
-	apr_table_set(r->headers_in, "Forwarded", "host=www.outer.com:8443");
-	url = oidc_util_current_url(r, OIDC_HDR_FORWARDED);
-	TST_ASSERT_STR("test_current_url (13)", url, "https://www.outer.com:8443/private/?foo=bar&param1=value1");
-
-	apr_table_set(r->headers_in, "Forwarded", "proto=http; host=www.outer.com:8080");
-	url = oidc_util_current_url(r, OIDC_HDR_FORWARDED);
-	TST_ASSERT_STR("test_current_url (14)", url, "http://www.outer.com:8080/private/?foo=bar&param1=value1");
-
-	apr_table_set(r->headers_in, "Forwarded", "host=www.outer.com:8080; proto=http");
-	url = oidc_util_current_url(r, OIDC_HDR_FORWARDED);
-	TST_ASSERT_STR("test_current_url (15)", url, "http://www.outer.com:8080/private/?foo=bar&param1=value1");
-
-	apr_table_unset(r->headers_in, "Forwarded");
-
-	// it should not crash when Forwarded is not present
-	url = oidc_util_current_url(r, OIDC_HDR_FORWARDED);
-	TST_ASSERT_STR("test_current_url (16)", url, "https://www.example.com/private/?foo=bar&param1=value1");
-
-	apr_table_set(r->headers_in, "Host", "www.example.com");
-
-	return 0;
-}
-
-static char *test_accept(request_rec *r) {
-
-	// ie 9/10/11
-	apr_table_set(r->headers_in, "Accept", "text/html, application/xhtml+xml, */*");
-	TST_ASSERT("Accept: text/html (ie 9/10/11)", oidc_http_hdr_in_accept_contains(r, "text/html") != 0);
-	TST_ASSERT("Accept: application/json (ie 9/10/11)",
-		   oidc_http_hdr_in_accept_contains(r, "application/json") == 0);
-
-	// firefox
-	apr_table_set(r->headers_in, "Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-	TST_ASSERT("Accept: text/html (firefox)", oidc_http_hdr_in_accept_contains(r, "text/html") != 0);
-	TST_ASSERT("Accept: application/json (firefox)", oidc_http_hdr_in_accept_contains(r, "application/json") == 0);
-
-	// chrome/safari
-	apr_table_set(r->headers_in, "Accept",
-		      "application/xml,application/xhtml+xml,text/html;q=0.9, text/plain;q=0.8,image/png,*/*;q=0.5");
-	TST_ASSERT("Accept: text/html (chrome/safari)", oidc_http_hdr_in_accept_contains(r, "text/html") != 0);
-	TST_ASSERT("Accept: application/json (chrome/safari)",
-		   oidc_http_hdr_in_accept_contains(r, "application/json") == 0);
-
-	// safari 5
-	apr_table_set(r->headers_in, "Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-	TST_ASSERT("Accept: text/html (safari 5)", oidc_http_hdr_in_accept_contains(r, "text/html") != 0);
-	TST_ASSERT("Accept: application/json (safari 5)", oidc_http_hdr_in_accept_contains(r, "application/json") == 0);
-
-	// ie 8
-	apr_table_set(r->headers_in, "Accept",
-		      "image/jpeg, application/x-ms-application, image/gif, application/xaml+xml, image/pjpeg, "
-		      "application/x-ms-xbap, application/x-shockwave-flash, application/msword, */*");
-	TST_ASSERT("Accept: text/html (ie 8)", oidc_http_hdr_in_accept_contains(r, "text/html") == 0);
-	TST_ASSERT("Accept: */* (ie 8)", oidc_http_hdr_in_accept_contains(r, "*/*") != 0);
-	TST_ASSERT("Accept: application/json (ie 8)", oidc_http_hdr_in_accept_contains(r, "application/json") == 0);
-
-	// edge
-	apr_table_set(r->headers_in, "Accept", "text/html, application/xhtml+xml, image/jxr, */*");
-	TST_ASSERT("Accept: text/html (edge)", oidc_http_hdr_in_accept_contains(r, "text/html") != 0);
-	TST_ASSERT("Accept: application/json (edge)", oidc_http_hdr_in_accept_contains(r, "application/json") == 0);
-
-	// opera
-	apr_table_set(r->headers_in, "Accept",
-		      "text/html, application/xml;q=0.9, application/xhtml+xml, image/png, image/webp, image/jpeg, "
-		      "image/gif, image/x-xbitmap, */*;q=0.1");
-	TST_ASSERT("Accept: text/html (opera)", oidc_http_hdr_in_accept_contains(r, "text/html") != 0);
-	TST_ASSERT("Accept: application/json (opera)", oidc_http_hdr_in_accept_contains(r, "application/json") == 0);
-
-	// xmlhttprequest
-	apr_table_set(r->headers_in, "Accept", "application/json");
-	TST_ASSERT("Accept: text/html (opera)", oidc_http_hdr_in_accept_contains(r, "text/html") == 0);
-	TST_ASSERT("Accept: application/json (opera)", oidc_http_hdr_in_accept_contains(r, "application/json") != 0);
-
-	return 0;
-}
-
-#if HAVE_APACHE_24
-
 static char *test_authz_worker(request_rec *r) {
 	authz_status rc;
 	char *require_args = NULL;
@@ -1550,16 +1172,14 @@ static char *test_authz_worker(request_rec *r) {
 	return 0;
 }
 
-#endif
-
 static char *test_decode_json_object(request_rec *r) {
 	apr_byte_t rc = FALSE;
 	json_t *json = NULL;
-	rc = oidc_util_decode_json_object(r, "nojson", &json);
+	rc = oidc_util_json_decode_object(r, "nojson", &json);
 	TST_ASSERT("test invalid JSON", rc == FALSE);
-	rc = oidc_util_decode_json_object(r, "{ \"n\": \"\\u0000<?php echo 'Hello' ?>\"}", &json);
+	rc = oidc_util_json_decode_object(r, "{ \"n\": \"\\u0000<?php echo 'Hello' ?>\"}", &json);
 	TST_ASSERT("test JSON with NULL value", rc == FALSE);
-	rc = oidc_util_decode_json_object(
+	rc = oidc_util_json_decode_object(
 	    r,
 	    "tmjcbnuvyrtygbtbyizkfuabiddgixcvnvupjuwnvxznpspmjaqrlpgmggixxovrpwntkvsvxjtkjjggnevyfyemdrlxtnmzjstmjuyquy"
 	    "yjzzwsfrazgzbdojkcfaeiqawltqsiwwzzgpiikpqoxixhsqtnfbchrcgxbgiaynkscvbvfnpuddrpjbgdtxxlebrswrtukzxqyyfrmwrr"
@@ -1602,7 +1222,7 @@ static char *test_decode_json_object(request_rec *r) {
 	    "enkhkiuojxdwscvtacbwfixhrcaxlfeakidxgrmgitrmrzdzhwjyazzikrclajgksENDxxxx",
 	    &json);
 	TST_ASSERT("test invalid long JSON", rc == FALSE);
-	rc = oidc_util_decode_json_object(r, "{}", &json);
+	rc = oidc_util_json_decode_object(r, "{}", &json);
 	TST_ASSERT("test valid JSON", rc == TRUE);
 	json_decref(json);
 	return 0;
@@ -1615,7 +1235,7 @@ static char *test_remote_user(request_rec *r) {
 	json_t *json = NULL;
 
 	s = "{\"upn\":\"nneul@umsystem.edu\"}";
-	rc = oidc_util_decode_json_object(r, s, &json);
+	rc = oidc_util_json_decode_object(r, s, &json);
 	TST_ASSERT("test remote user (1) valid JSON", rc == TRUE);
 	rc = oidc_get_remote_user(r, "upn", "^(.*)@umsystem\\.edu", NULL, json, &remote_user);
 	TST_ASSERT_STR("remote_user (0) string", remote_user, "nneul");
@@ -1625,7 +1245,7 @@ static char *test_remote_user(request_rec *r) {
 	json_decref(json);
 
 	s = "{\"email\":\"nneul@umsystem.edu\"}";
-	rc = oidc_util_decode_json_object(r, s, &json);
+	rc = oidc_util_json_decode_object(r, s, &json);
 	TST_ASSERT("test remote user (2) valid JSON", rc == TRUE);
 	rc = oidc_get_remote_user(r, "email", "^(.*)@([^.]+)\\..+$", "$2\\$1", json, &remote_user);
 	TST_ASSERT("test remote user (2) function result", rc == TRUE);
@@ -1633,7 +1253,7 @@ static char *test_remote_user(request_rec *r) {
 	json_decref(json);
 
 	s = "{ \"name\": \"Dominik František Bučík\" }";
-	rc = oidc_util_decode_json_object(r, s, &json);
+	rc = oidc_util_json_decode_object(r, s, &json);
 	TST_ASSERT("test remote user (3) valid JSON", rc == TRUE);
 	rc = oidc_get_remote_user(r, "name", "^(.*)$", "$1@test.com", json, &remote_user);
 	TST_ASSERT("test remote user (3) function result", rc == TRUE);
@@ -1641,7 +1261,7 @@ static char *test_remote_user(request_rec *r) {
 	json_decref(json);
 
 	s = "{ \"preferred_username\": \"dbucik\" }";
-	rc = oidc_util_decode_json_object(r, s, &json);
+	rc = oidc_util_json_decode_object(r, s, &json);
 	TST_ASSERT("test remote user (4) valid JSON", rc == TRUE);
 	rc = oidc_get_remote_user(r, "preferred_username", "^(.*)$", "$1@test.com", json, &remote_user);
 	TST_ASSERT("test remote user (4) function result", rc == TRUE);
@@ -1716,7 +1336,7 @@ static char *test_open_redirect(request_rec *r) {
 
 	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
 	// https://github.com/payloadbox/open-redirect-payload-list
-	filename = apr_psprintf(r->pool, "%s/%s", dir, "/test/open-redirect-payload-list.txt");
+	filename = apr_psprintf(r->pool, "%s/%s", dir, "/open-redirect-payload-list.txt");
 
 	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
@@ -1736,36 +1356,31 @@ static char *test_open_redirect(request_rec *r) {
 	return 0;
 }
 
-static char *test_set_app_infos(request_rec *r) {
-	apr_byte_t rc = FALSE;
-	json_t *claims = NULL;
+static char *test_check_cookie_domain(request_rec *r) {
+	apr_byte_t rv = FALSE;
+	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_session_t *session = NULL;
 
-	rc = oidc_util_decode_json_object(r,
-					  "{"
-					  "\"simple\":\"hans\","
-					  "\"name\": \"GÜnther\","
-					  "\"dagger\": \"D†gger\""
-					  "}",
-					  &claims);
-	TST_ASSERT("valid JSON", rc == TRUE);
+	oidc_session_load(r, &session);
+	oidc_session_set_cookie_domain(r, session, "ab001sb161djbn.xyz.com");
+	apr_table_set(r->headers_in, "Host", "ab001SB161djbn.xyz.com");
 
-	oidc_util_set_app_infos(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
-	TST_ASSERT_STR("header plain simple", apr_table_get(r->headers_in, "OIDC_CLAIM_simple"), "hans");
-	TST_ASSERT_STR("header plain name", apr_table_get(r->headers_in, "OIDC_CLAIM_name"), "G\u00DCnther");
-	TST_ASSERT_STR("header plain dagger", apr_table_get(r->headers_in, "OIDC_CLAIM_dagger"), "D\u2020gger");
+	rv = oidc_check_cookie_domain(r, c, session);
+	TST_ASSERT_BYTE("oidc_check_cookie_domain", rv, TRUE);
 
-	oidc_util_set_app_infos(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS,
-				OIDC_APPINFO_ENCODING_BASE64URL);
-	TST_ASSERT_STR("header base64url simple", apr_table_get(r->headers_in, "OIDC_CLAIM_simple"), "aGFucw");
-	TST_ASSERT_STR("header base64url name", apr_table_get(r->headers_in, "OIDC_CLAIM_name"), "R8OcbnRoZXI");
-	TST_ASSERT_STR("header base64url dagger", apr_table_get(r->headers_in, "OIDC_CLAIM_dagger"), "ROKAoGdnZXI");
+	rv = oidc_request_check_cookie_domain(r, c, "https://WWW.example.com/protected/index.html");
+	TST_ASSERT_BYTE("oidc_request_check_cookie_domain", rv, TRUE);
 
-	oidc_util_set_app_infos(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_LATIN1);
-	TST_ASSERT_STR("header latin1 simple", apr_table_get(r->headers_in, "OIDC_CLAIM_simple"), "hans");
-	TST_ASSERT_STR("header latin1 name", apr_table_get(r->headers_in, "OIDC_CLAIM_name"), "G\xDCnther");
-	TST_ASSERT_STR("header latin1 dagger", apr_table_get(r->headers_in, "OIDC_CLAIM_dagger"), "D?gger");
+	c->cookie_domain = ".XYZ.com";
+	rv = oidc_request_check_cookie_domain(r, c, "https://ab001sb161djbn.xyz.com/protected/index.html");
+	TST_ASSERT_BYTE("oidc_request_check_cookie_domain", rv, TRUE);
 
-	json_decref(claims);
+	c->cookie_domain = "ab001SB161djbn.xyz.com";
+	rv = oidc_request_check_cookie_domain(r, c, "https://ab001sb161djbn.xyz.com/protected/index.html");
+	TST_ASSERT_BYTE("oidc_request_check_cookie_domain", rv, TRUE);
+
+	c->cookie_domain = NULL;
+	oidc_session_free(r, session);
 
 	return 0;
 }
@@ -1793,119 +1408,33 @@ static char *all_tests(apr_pool_t *pool, request_rec *r) {
 	TST_RUN(test_jwt_verify_rsa, pool);
 	TST_RUN(test_jwt_sign_verify, pool);
 
-	TST_RUN(test_proto_validate_access_token, r);
-	TST_RUN(test_proto_validate_code, r);
-
-	TST_RUN(test_proto_authorization_request, r);
-	TST_RUN(test_proto_validate_nonce, r);
-	TST_RUN(test_proto_validate_jwt, r);
-
-	TST_RUN(test_current_url, r);
-	TST_RUN(test_accept, r);
-
 	TST_RUN(test_decode_json_object, r);
 
 	TST_RUN(test_remote_user, r);
 	TST_RUN(test_is_auth_capable_request, r);
 	TST_RUN(test_open_redirect, r);
-	TST_RUN(test_set_app_infos, r);
 
-#if HAVE_APACHE_24
 	TST_RUN(test_authz_worker, r);
-#endif
 
-	TST_RUN(test_logout_request, r);
+	TST_RUN(test_check_cookie_domain, r);
 
 	return 0;
 }
 
-static request_rec *test_setup(apr_pool_t *pool) {
-	const unsigned int kIdx = 0;
-	const unsigned int kEls = kIdx + 1;
-	request_rec *request = (request_rec *)apr_pcalloc(pool, sizeof(request_rec));
-
-	request->pool = pool;
-	request->subprocess_env = apr_table_make(request->pool, 0);
-
-	request->headers_in = apr_table_make(request->pool, 0);
-	request->headers_out = apr_table_make(request->pool, 0);
-	request->err_headers_out = apr_table_make(request->pool, 0);
-
-	apr_table_set(request->headers_in, "Host", "www.example.com");
-	apr_table_set(request->headers_in, "OIDC_foo", "some-value");
-	apr_table_set(request->headers_in, "Cookie",
-		      "foo=bar; "
-		      "mod_auth_openidc_session"
-		      "=0123456789abcdef; baz=zot");
-
-	request->server = apr_pcalloc(request->pool, sizeof(struct server_rec));
-	request->server->process = apr_pcalloc(request->pool, sizeof(struct process_rec));
-	request->server->process->pool = request->pool;
-	request->server->process->pconf = request->pool;
-	request->connection = apr_pcalloc(request->pool, sizeof(struct conn_rec));
-	request->connection->bucket_alloc = apr_bucket_alloc_create(request->pool);
-	request->connection->local_addr = apr_pcalloc(request->pool, sizeof(apr_sockaddr_t));
-
-	apr_pool_userdata_set("https", "scheme", NULL, request->pool);
-	request->server->server_hostname = "www.example.com";
-	request->connection->local_addr->port = 443;
-	request->unparsed_uri = "/bla?foo=bar&param1=value1";
-	request->args = "foo=bar&param1=value1";
-	apr_uri_parse(request->pool, "https://www.example.com/bla?foo=bar&param1=value1", &request->parsed_uri);
-
-	auth_openidc_module.module_index = kIdx;
-	oidc_cfg_t *cfg = oidc_cfg_server_create(request->pool, request->server);
-
-	oidc_cfg_provider_issuer_set(pool, oidc_cfg_provider_get(cfg), "https://idp.example.com");
-	oidc_cfg_provider_authorization_endpoint_url_set(pool, oidc_cfg_provider_get(cfg),
-							 "https://idp.example.com/authorize");
-	oidc_cfg_provider_client_id_set(pool, oidc_cfg_provider_get(cfg), "client_id");
-
-	cfg->redirect_uri = "https://www.example.com/protected/";
-
-	oidc_dir_cfg_t *d_cfg = oidc_cfg_dir_config_create(request->pool, NULL);
-
-	request->server->module_config = apr_pcalloc(request->pool, sizeof(void) * kEls);
-	request->per_dir_config = apr_pcalloc(request->pool, sizeof(void) * kEls);
-	ap_set_module_config(request->server->module_config, &auth_openidc_module, cfg);
-	ap_set_module_config(request->per_dir_config, &auth_openidc_module, d_cfg);
-
-	cfg->crypto_passphrase.secret1 = "12345678901234567890123456789012";
-	cfg->cache.impl = &oidc_cache_shm;
-	cfg->cache.cfg = NULL;
-	cfg->cache.shm_size_max = 500;
-	cfg->cache.shm_entry_size_max = 16384 + 255 + 17;
-	cfg->cache.encrypt = 1;
-	if (cfg->cache.impl->post_config(request->server) != OK) {
-		printf("cfg->cache.impl->post_config failed!\n");
-		exit(-1);
-	}
-
-	return request;
-}
-
 int main(int argc, char **argv, char **env) {
-	if (apr_app_initialize(&argc, (const char *const **)argv, (const char *const **)env) != APR_SUCCESS) {
-		printf("apr_app_initialize failed\n");
-		return -1;
-	}
 
-	oidc_pre_config_init();
+	oidc_test_setup();
 
-	apr_pool_t *pool = NULL;
-	apr_pool_create(&pool, NULL);
-	request_rec *r = test_setup(pool);
+	request_rec *r = oidc_test_request_get();
 
-	char *result = all_tests(pool, r);
+	char *result = all_tests(oidc_test_pool_get(), r);
 	if (result != 0) {
 		printf("Failed: %s\n", result);
 	} else {
 		printf("All %d tests passed!\n", test_nr_run);
 	}
 
-	EVP_cleanup();
-	apr_pool_destroy(pool);
-	apr_terminate();
+	oidc_test_teardown();
 
 	return result != 0;
 }

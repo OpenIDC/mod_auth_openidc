@@ -70,10 +70,12 @@
 #define _oidc_memset(b, c, __len) memset_s(b, __len, c, __len)
 #define _oidc_memcpy(__dst, __src, __n) memcpy_s(__dst, __src, __n)
 #define _oidc_strcpy(__dst, __src) strcpy_s(__dst, __src)
+#define _oidc_strncpy(__dst, __src, __n) strncpy_s(__dst, __src, __n)
 #else
 #define _oidc_memset(b, c, __len) memset(b, c, __len)
 #define _oidc_memcpy(__dst, __src, __n) memcpy(__dst, __src, __n)
 #define _oidc_strcpy(__dst, __src) strcpy(__dst, __src)
+#define _oidc_strncpy(__dst, __src, __n) strncpy(__dst, __src, __n)
 #endif
 
 static inline size_t _oidc_strlen(const char *s) {
@@ -91,9 +93,6 @@ static inline int _oidc_strncmp(const char *a, const char *b, size_t n) {
 static inline char *_oidc_strstr(const char *a, const char *b) {
 	return ((a && b) ? (char *)strstr(a, b) : NULL);
 }
-static inline char *_oidc_strncpy(char *destination, const char *source, size_t num) {
-	return ((destination && source) ? strncpy(destination, source, num) : NULL);
-}
 static inline apr_time_t _oidc_str_to_time(const char *s, const apr_time_t default_value) {
 	apr_time_t v = default_value;
 	if (s)
@@ -110,8 +109,6 @@ static inline int _oidc_str_to_int(const char *s, const int default_value) {
 #ifdef WIN32
 #define snprintf _snprintf
 #endif
-
-#define HAVE_APACHE_24 MODULE_MAGIC_NUMBER_MAJOR >= 20100714
 
 #ifndef OIDC_DEBUG
 #define OIDC_DEBUG APLOG_DEBUG

@@ -44,7 +44,7 @@
 #include "cfg/dir.h"
 #include "const.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 #include <apr_base64.h>
 #include <apr_file_io.h>
 #include <apr_strings.h>
@@ -197,6 +197,47 @@ const char *oidc_cfg_parse_int_min_max(apr_pool_t *pool, const char *arg, int *i
 }
 
 /*
+ * parse a timeout string via ap_timeout_parameter_parse into an
+ * apr_interval_time_t if it is in a valid min/max range
+ */
+const char *oidc_cfg_parse_timeout_min_max(apr_pool_t *pool, const char *arg, apr_interval_time_t *timeout_value,
+					   apr_interval_time_t min_value, apr_interval_time_t max_value) {
+#if AP_MODULE_MAGIC_AT_LEAST(20080920, 2)
+	apr_interval_time_t timeout;
+#else
+	char *endptr;
+	apr_int64_t timeout;
+#endif
+
+#if AP_MODULE_MAGIC_AT_LEAST(20080920, 2)
+	if (ap_timeout_parameter_parse(arg, &timeout, "s") != APR_SUCCESS) {
+		return apr_psprintf(pool, "not a valid timeout parameter: %s", arg);
+	}
+#else
+	timeout = apr_strtoi64(arg, &endptr, 10);
+	if (errno != 0 || *endptr != '\0') {
+		return apr_psprintf(pool, "not a valid timeout parameter: %s", arg);
+	}
+	timeout = apr_time_from_sec(timeout);
+#endif
+
+	if (timeout < min_value) {
+		return apr_psprintf(pool,
+				    "timeout value %" APR_TIME_T_FMT
+				    " is smaller than the minimum allowed value %" APR_TIME_T_FMT,
+				    timeout, min_value);
+	}
+	if (timeout > max_value) {
+		return apr_psprintf(pool,
+				    "timeout value %" APR_TIME_T_FMT
+				    " is greater than the maximum allowed value %" APR_TIME_T_FMT,
+				    timeout, max_value);
+	}
+	*timeout_value = (int)timeout;
+	return NULL;
+}
+
+/*
  * check if a string is a valid URL starting with either scheme1 or scheme2 (if not NULL)
  */
 static const char *oidc_cfg_parse_is_valid_url_scheme(apr_pool_t *pool, const char *arg, const char *scheme1,
@@ -213,8 +254,8 @@ static const char *oidc_cfg_parse_is_valid_url_scheme(apr_pool_t *pool, const ch
 	if (uri.scheme == NULL)
 		return apr_psprintf(pool, "'%s' cannot be parsed as a URL (no scheme set)", arg);
 
-	if ((scheme1 != NULL) && (_oidc_strcmp(uri.scheme, scheme1) != 0)) {
-		if ((scheme2 != NULL) && (_oidc_strcmp(uri.scheme, scheme2) != 0)) {
+	if ((scheme1 != NULL) && (_oidc_strnatcasecmp(uri.scheme, scheme1) != 0)) {
+		if ((scheme2 != NULL) && (_oidc_strnatcasecmp(uri.scheme, scheme2) != 0)) {
 			return apr_psprintf(pool, "'%s' cannot be parsed as a \"%s\" or \"%s\" URL (scheme == %s)!",
 					    arg, scheme1, scheme2, uri.scheme);
 		} else if (scheme2 == NULL) {
@@ -475,7 +516,7 @@ const char *oidc_cfg_parse_key_record(apr_pool_t *pool, const char *tuple, char 
 }
 
 #define OIDC_ON_ERROR_502_STR "502_on_error"
-#define OIDC_ON_ERROR_REFRESH_STR "logout_on_error"
+#define OIDC_ON_ERROR_LOGOUT_STR "logout_on_error"
 #define OIDC_ON_ERROR_AUTH_STR "authenticate_on_error"
 
 /*
@@ -484,48 +525,10 @@ const char *oidc_cfg_parse_key_record(apr_pool_t *pool, const char *tuple, char 
 const char *oidc_cfg_parse_action_on_error_refresh_as(apr_pool_t *pool, const char *arg,
 						      oidc_on_error_action_t *action) {
 	static const oidc_cfg_option_t options[] = {{OIDC_ON_ERROR_502, OIDC_ON_ERROR_502_STR},
-						    {OIDC_ON_ERROR_LOGOUT, OIDC_ON_ERROR_REFRESH_STR},
+						    {OIDC_ON_ERROR_LOGOUT, OIDC_ON_ERROR_LOGOUT_STR},
 						    {OIDC_ON_ERROR_AUTH, OIDC_ON_ERROR_AUTH_STR}};
 	return oidc_cfg_parse_option(pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg, (int *)action);
 }
-
-#if !(HAVE_APACHE_24)
-static char *ap_get_exec_line(apr_pool_t *p, const char *cmd, const char *const *argv) {
-	char buf[MAX_STRING_LEN];
-	apr_procattr_t *procattr;
-	apr_proc_t *proc;
-	apr_file_t *fp;
-	apr_size_t nbytes = 1;
-	char c;
-	int k;
-
-	if (apr_procattr_create(&procattr, p) != APR_SUCCESS)
-		return NULL;
-	if (apr_procattr_io_set(procattr, APR_FULL_BLOCK, APR_FULL_BLOCK, APR_FULL_BLOCK) != APR_SUCCESS)
-		return NULL;
-	if (apr_procattr_dir_set(procattr, ap_make_dirstr_parent(p, cmd)) != APR_SUCCESS)
-		return NULL;
-	if (apr_procattr_cmdtype_set(procattr, APR_PROGRAM) != APR_SUCCESS)
-		return NULL;
-	proc = apr_pcalloc(p, sizeof(apr_proc_t));
-	if (apr_proc_create(proc, cmd, argv, NULL, procattr, p) != APR_SUCCESS)
-		return NULL;
-	fp = proc->out;
-
-	if (fp == NULL)
-		return NULL;
-	/* XXX: we are reading 1 byte at a time here */
-	for (k = 0; apr_file_read(fp, &c, &nbytes) == APR_SUCCESS && nbytes == 1 && (k < MAX_STRING_LEN - 1);) {
-		if (c == '\n' || c == '\r')
-			break;
-		buf[k++] = c;
-	}
-	buf[k] = '\0';
-	apr_file_close(fp);
-
-	return apr_pstrndup(p, buf, k);
-}
-#endif
 
 /*
  * set a string value in the server config with exec support
@@ -581,10 +584,10 @@ const char *oidc_cfg_parse_public_key_files(apr_pool_t *pool, const char *arg, a
 	}
 
 	if (*keys == NULL)
-		*keys = apr_array_make(pool, 4, sizeof(oidc_jwk_t *));
+		*keys = apr_array_make(pool, 4, sizeof(const oidc_jwk_t *));
 	if (use)
 		jwk->use = apr_pstrdup(pool, use);
-	APR_ARRAY_PUSH(*keys, oidc_jwk_t *) = jwk;
+	APR_ARRAY_PUSH(*keys, const oidc_jwk_t *) = jwk;
 
 	return NULL;
 }

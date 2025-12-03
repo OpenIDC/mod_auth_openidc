@@ -44,9 +44,11 @@
 #include "handle/handle.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
-#include "util.h"
+#include "util/util.h"
 
 #define OIDC_DONT_REVOKE_TOKENS_BEFORE_LOGOUT_ENVVAR "OIDC_DONT_REVOKE_TOKENS_BEFORE_LOGOUT"
+
+#define OIDC_TOKEN_REVOCATION_AUD_ENV_VAR "OIDC_TOKEN_REVOCATION_AUD"
 
 /*
  * revoke refresh token and access token stored in the session if the
@@ -82,9 +84,12 @@ static void oidc_logout_revoke_tokens(request_rec *r, oidc_cfg_t *c, oidc_sessio
 
 	// add the token endpoint authentication credentials to the revocation endpoint call...
 	if (oidc_proto_token_endpoint_auth(
-		r, c, oidc_cfg_provider_token_endpoint_auth_get(provider), oidc_cfg_provider_client_id_get(provider),
+		r, c, oidc_cfg_provider_token_endpoint_auth_get(provider),
+		oidc_cfg_provider_token_endpoint_auth_alg_get(provider), oidc_cfg_provider_client_id_get(provider),
 		oidc_cfg_provider_client_secret_get(provider), oidc_cfg_provider_client_keys_get(provider),
-		oidc_proto_profile_token_endpoint_auth_aud(provider), params, NULL, &basic_auth, &bearer_auth) == FALSE)
+		oidc_proto_profile_revocation_endpoint_auth_aud(
+		    provider, apr_table_get(r->subprocess_env, OIDC_TOKEN_REVOCATION_AUD_ENV_VAR)),
+		params, NULL, &basic_auth, &bearer_auth) == FALSE)
 		goto out;
 
 	token = oidc_session_get_refresh_token(r, session);
@@ -218,9 +223,9 @@ int oidc_logout_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, 
 			char *sid, *iss;
 			oidc_provider_t *provider = NULL;
 
-			if (oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_SID, &sid) != FALSE) {
+			if (oidc_util_url_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_SID, &sid) != FALSE) {
 
-				if (oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_ISS, &iss) != FALSE) {
+				if (oidc_util_url_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_ISS, &iss) != FALSE) {
 					provider = oidc_get_provider_for_issuer(r, c, iss, FALSE);
 				} else {
 					/*
@@ -250,13 +255,14 @@ int oidc_logout_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, 
 		const char *accept = oidc_http_hdr_in_accept_get(r);
 		if ((_oidc_strcmp(url, OIDC_IMG_STYLE_LOGOUT_PARAM_VALUE) == 0) ||
 		    ((accept) && _oidc_strstr(accept, OIDC_HTTP_CONTENT_TYPE_IMAGE_PNG))) {
-			return oidc_util_http_send(r, (const char *)&oidc_logout_transparent_pixel,
-						   sizeof(oidc_logout_transparent_pixel),
-						   OIDC_HTTP_CONTENT_TYPE_IMAGE_PNG, OK);
+			return oidc_util_http_content_prep(r, (const char *)&oidc_logout_transparent_pixel,
+							   sizeof(oidc_logout_transparent_pixel),
+							   OIDC_HTTP_CONTENT_TYPE_IMAGE_PNG);
 		}
 
 		/* standard HTTP based logout: should be called in an iframe from the OP */
-		return oidc_util_html_send(r, "Logged Out", NULL, NULL, "<p>Logged Out</p>", OK);
+		return oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_HTML, "Logged Out", NULL, NULL,
+						   "<p>Logged Out</p>");
 	}
 
 	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL, "no-cache, no-store");
@@ -264,7 +270,8 @@ int oidc_logout_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, 
 
 	/* see if we don't need to go somewhere special after killing the session locally */
 	if (url == NULL)
-		return oidc_util_html_send(r, "Logged Out", NULL, NULL, "<p>Logged Out</p>", OK);
+		return oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_HTML, "Logged Out", NULL, NULL,
+						   "<p>Logged Out</p>");
 
 	/* send the user to the specified where-to-go-after-logout URL */
 	oidc_http_hdr_out_location_set(r, url);
@@ -305,7 +312,7 @@ static int oidc_logout_backchannel(request_rec *r, oidc_cfg_t *cfg) {
 	// TODO: jwk symmetric key based on provider
 
 	if (oidc_jwt_parse(r->pool, logout_token, &jwt,
-			   oidc_util_merge_symmetric_key(r->pool, oidc_cfg_private_keys_get(cfg), NULL), FALSE,
+			   oidc_util_key_symmetric_merge(r->pool, oidc_cfg_private_keys_get(cfg), NULL), FALSE,
 			   &err) == FALSE) {
 		oidc_error(r, "oidc_jwt_parse failed: %s", oidc_jose_e2s(r->pool, err));
 		goto out;
@@ -332,14 +339,14 @@ static int oidc_logout_backchannel(request_rec *r, oidc_cfg_t *cfg) {
 	// TODO: destroy the JWK used for decryption
 
 	jwk = NULL;
-	if (oidc_util_create_symmetric_key(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, TRUE, &jwk) ==
+	if (oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, TRUE, &jwk) ==
 	    FALSE)
 		return FALSE;
 
 	if (oidc_proto_jwt_verify(
 		r, cfg, jwt, oidc_cfg_provider_jwks_uri_get(provider),
 		oidc_cfg_provider_ssl_validate_server_get(provider),
-		oidc_util_merge_symmetric_key(r->pool, oidc_cfg_provider_verify_public_keys_get(provider), jwk),
+		oidc_util_key_symmetric_merge(r->pool, oidc_cfg_provider_verify_public_keys_get(provider), jwk),
 		oidc_cfg_provider_id_token_signed_response_alg_get(provider)) == FALSE) {
 
 		oidc_error(r, "id_token signature could not be validated, aborting");
@@ -452,7 +459,7 @@ int oidc_logout(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 	char *id_token_hint = NULL;
 	char *s_logout_request = NULL;
 
-	oidc_util_request_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_LOGOUT, &url);
+	oidc_util_url_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_LOGOUT, &url);
 
 	oidc_debug(r, "enter (url=%s)", url);
 
@@ -464,7 +471,7 @@ int oidc_logout(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 
 	if ((url == NULL) || (_oidc_strcmp(url, "") == 0)) {
 
-		url = apr_pstrdup(r->pool, oidc_util_absolute_url(r, c, oidc_cfg_default_slo_url_get(c)));
+		url = apr_pstrdup(r->pool, oidc_util_url_abs(r, c, oidc_cfg_default_slo_url_get(c)));
 
 	} else {
 
