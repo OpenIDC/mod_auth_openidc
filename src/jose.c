@@ -1658,7 +1658,7 @@ end:
  * by "input" to a JSON Web Key object
  */
 apr_byte_t oidc_jwk_pem_bio_to_jwk(apr_pool_t *pool, BIO *input, const char *kid, oidc_jwk_t **oidc_jwk,
-				   int is_private_key, oidc_jose_error_t *err) {
+				   apr_byte_t is_private_key, oidc_jose_error_t *err) {
 	cjose_err cjose_err;
 	X509 *x509 = NULL;
 	EVP_PKEY *pkey = NULL;
@@ -1672,7 +1672,7 @@ apr_byte_t oidc_jwk_pem_bio_to_jwk(apr_pool_t *pool, BIO *input, const char *kid
 
 	*oidc_jwk = oidc_jwk_new(pool);
 
-	if (is_private_key) {
+	if (is_private_key == TRUE) {
 		/* get the private key struct from the BIO */
 		if ((pkey = PEM_read_bio_PrivateKey(input, NULL, NULL, NULL)) == NULL) {
 			oidc_jose_error_openssl(err, "PEM_read_bio_PrivateKey");
@@ -1775,8 +1775,8 @@ end:
 /*
  * parse a PEM-formatted public or private key from the specified file
  */
-static apr_byte_t oidc_jwk_parse_pem_key(apr_pool_t *pool, int is_private_key, const char *kid, const char *filename,
-					 oidc_jwk_t **jwk, oidc_jose_error_t *err) {
+static apr_byte_t oidc_jwk_parse_pem_key(apr_pool_t *pool, apr_byte_t is_private_key, const char *kid,
+					 const char *filename, oidc_jwk_t **jwk, oidc_jose_error_t *err) {
 	BIO *input = NULL;
 	apr_byte_t rv = FALSE;
 
@@ -1840,26 +1840,20 @@ static apr_byte_t _oidc_jwk_parse_x5c(apr_pool_t *pool, json_t *json, cjose_jwk_
 	const char *s_x5c = json_string_value(v);
 
 	/* PEM-format it */
-	const int len = 75;
+	const int chunk = 75;
 	int i = 0;
 	char *s = apr_psprintf(pool, "%s\n", OIDC_JOSE_CERT_BEGIN);
-	while (i < _oidc_strlen(s_x5c)) {
-		s = apr_psprintf(pool, "%s%s\n", s, apr_pstrmemdup(pool, s_x5c + i, len));
-		i += len;
+	const int n = _oidc_strlen(s_x5c);
+	while (i < n) {
+		s = apr_psprintf(pool, "%s%s\n", s, apr_pstrmemdup(pool, s_x5c + i, (i + chunk) > n ? (n - i) : chunk));
+		i += chunk;
 	}
 	s = apr_psprintf(pool, "%s%s\n", s, OIDC_JOSE_CERT_END);
 
-	BIO *input = NULL;
-
 	/* put it in BIO memory */
-	if ((input = BIO_new(BIO_s_mem())) == NULL) {
-		oidc_jose_error_openssl(err, "memory allocation BIO_new/BIO_s_mem");
-		return FALSE;
-	}
-
-	if (BIO_puts(input, s) <= 0) {
-		BIO_free(input);
-		oidc_jose_error_openssl(err, "BIO_puts");
+	BIO *input = BIO_new_mem_buf(s, _oidc_strlen(s));
+	if (input == NULL) {
+		oidc_jose_error_openssl(err, "BIO_new_mem_buf");
 		return FALSE;
 	}
 

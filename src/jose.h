@@ -276,7 +276,7 @@ int oidc_jwt_alg2kty(oidc_jwt_t *jwt);
 /* return the key size for an algorithm */
 unsigned int oidc_alg2keysize(const char *alg);
 
-apr_byte_t oidc_jwk_pem_bio_to_jwk(apr_pool_t *pool, BIO *input, const char *kid, oidc_jwk_t **jwk, int is_private_key,
-				   oidc_jose_error_t *err);
+apr_byte_t oidc_jwk_pem_bio_to_jwk(apr_pool_t *pool, BIO *input, const char *kid, oidc_jwk_t **jwk,
+				   apr_byte_t is_private_key, oidc_jose_error_t *err);
 
 #endif /* _MOD_AUTH_OPENIDC_JOSE_H_ */

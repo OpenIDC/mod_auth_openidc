@@ -1,3 +1,7 @@
+12/08/2025
+- jwk: fix parsi8ng RSA JWKs with only an "x5c" parameter (i.e. no "n" and "e")
+- bump to 2.4.19.1dev
+
 12/01/2025
 - release 2.4.19
 
