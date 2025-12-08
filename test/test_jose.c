@@ -529,7 +529,7 @@ START_TEST(test_jwk_private_key_parse) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	oidc_jose_error_t err = {{'\0'}, 0, {'\0'}, {'\0'}};
 	oidc_jwk_t *jwk = NULL;
-	BIO *input = NULL, *inputCert = NULL;
+	BIO *input = NULL;
 	char *json = NULL;
 	apr_byte_t isPrivateKey = TRUE;
 
@@ -560,9 +560,9 @@ START_TEST(test_jwk_private_key_parse) {
 	    "rHuVwJVlTNk6MvFUIj4ayXdX13Qy4kTBRiQM7pumPaypEE4CrAfTWP0AYnEwz_FGluOpMZNzoAQ\"}");
 	oidc_jwk_destroy(jwk);
 
-	inputCert = BIO_new(BIO_s_file());
-	ck_assert_ptr_nonnull(inputCert);
-	ck_assert_int_eq(BIO_read_filename(inputCert, ecPrivateKeyFile), 1);
+	input = BIO_new(BIO_s_file());
+	ck_assert_ptr_nonnull(input);
+	ck_assert_int_eq(BIO_read_filename(input, ecPrivateKeyFile), 1);
 	ck_assert_int_eq(oidc_jwk_pem_bio_to_jwk(pool, input, NULL, &jwk, isPrivateKey, &err), TRUE);
 	BIO_free(input);
 
