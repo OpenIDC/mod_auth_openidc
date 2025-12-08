@@ -130,67 +130,6 @@ static char *_jwk_parse(apr_pool_t *pool, const char *s, oidc_jwk_t **jwk, oidc_
 	return 0;
 }
 
-static char *test_private_key_parse(apr_pool_t *pool) {
-	oidc_jose_error_t err = {{'\0'}, 0, {'\0'}, {'\0'}};
-	BIO *input = NULL;
-	oidc_jwk_t *jwk = NULL;
-	apr_byte_t isPrivateKey = TRUE;
-	int result;
-	char *json = NULL;
-
-	const char rsaPrivateKeyFile[512];
-	const char ecPrivateKeyFile[512];
-
-	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
-	snprintf((char *)rsaPrivateKeyFile, 512, "%s/%s", dir, "/private.pem");
-	snprintf((char *)ecPrivateKeyFile, 512, "%s/%s", dir, "/ecpriv.key");
-
-	input = BIO_new(BIO_s_file());
-	TST_ASSERT_ERR("test_private_key_parse_BIO_new_RSA_private_key", input != NULL, pool, err);
-
-	TST_ASSERT_ERR("test_private_key_parse_BIOread_filename_RSA_private_key",
-		       result = BIO_read_filename(input, rsaPrivateKeyFile), pool, err);
-
-	TST_ASSERT_ERR("oidc_jwk_pem_bio_to_jwk", oidc_jwk_pem_bio_to_jwk(pool, input, NULL, &jwk, isPrivateKey, &err),
-		       pool, err);
-	BIO_free(input);
-
-	TST_ASSERT_ERR("oidc_jwk_to_json with RSA private key", oidc_jwk_to_json(pool, jwk, &json, &err), pool, err);
-	TST_ASSERT_STR(
-	    "oidc_jwk_to_json with RSA private key output test", json,
-	    "{\"kty\":\"RSA\",\"kid\":\"IbLjLR7-C1q0-ypkueZxGIJwBQNaLg46DZMpnPW1kps\",\"e\":\"AQAB\",\"n\":"
-	    "\"iGeTXbfV5bMppx7o7qMLCuVIKqbBa_qOzBiNNpe0K8rjg7-1z9GCuSlqbZtM0_5BQ6bGonnSPD--"
-	    "PowhFdivS4WNA33O0Kl1tQ0wdH3TOnwueIO9ahfW4q0BGFvMObneK-tjwiNMj1l-cZt8pvuS-3LtTWIzC-"
-	    "hTZM4caUmy5olm5PVdmru6C6V5rxkbYBPITFSzl5mpuo_C6RV_MYRwAh60ghs2OEvIWDrJkZnYaF7sjHC9j-"
-	    "4kfcM5oY7Zhg8KuHyloudYNzlqjVAPd0MbkLkh1pa8fmHsnN6cgfXYtFK7Z8WjYDUAhTH1JjZCVSFN55A-51dgD4cQNzieLEEkJw\","
-	    "\"d\":\"Xc9d-kZERQVC0Dzh1b0sCwJE75Bf1fMr4hHAjJsovjV641ElqRdd4Borp9X2sJVcLTq1wWgmvmjYXgvhdTTg2f-"
-	    "vS4dqhPcGjM3VVUhzzPU6wIdZ7W0XzC1PY4E-ozTBJ1Nr-EhujuftnhRhVjYOkAAqU94FXVsaf2mBAKg-"
-	    "8WzrWx2MeWjfLcE79DmSL9Iw2areKVRGlKddIIPnHb-Mw9HB7ZCyVTC1v5sqhQPy6qPo8XHdQju_EYRlIOMksU8kcb20R_ezib_"
-	    "rHuVwJVlTNk6MvFUIj4ayXdX13Qy4kTBRiQM7pumPaypEE4CrAfTWP0AYnEwz_FGluOpMZNzoAQ\"}");
-	oidc_jwk_destroy(jwk);
-
-	input = BIO_new(BIO_s_file());
-	TST_ASSERT_ERR("test_private_key_parse_BIO_new_EC_private_key", input != NULL, pool, err);
-
-	TST_ASSERT_ERR("test_private_key_parse_BIOread_filename_EC_private_key",
-		       result = BIO_read_filename(input, ecPrivateKeyFile), pool, err);
-
-	TST_ASSERT_ERR("oidc_jwk_pem_bio_to_jwk", oidc_jwk_pem_bio_to_jwk(pool, input, NULL, &jwk, isPrivateKey, &err),
-		       pool, err);
-	BIO_free(input);
-
-	TST_ASSERT_ERR("oidc_jwk_to_json with EC private key", oidc_jwk_to_json(pool, jwk, &json, &err), pool, err);
-	TST_ASSERT_STR(
-	    "oidc_jwk_to_json with EC private key output test", json,
-	    "{\"kty\":\"EC\",\"kid\":\"-THDTumMGazABrYTb8xJoYOK2OPiWmho3D-nPC1dSYg\",\"crv\":\"P-521\",\"x\":"
-	    "\"AR6Eh9VhdLEA-rm5WR0_T0LjKysJuBkSoXaR8GjphHvoOTrljcACRsVlTES9FMkbxbNEs4JdxPgPJl9G-e9WEJTe\",\"y\":"
-	    "\"AammgflZaJuSdycK_ccUXkSXjNQd8NsqJuv9LFpk5Ys1OAiirWm6uktXG8ALNSxSffcurBq8zqZyZ141dV6qSzKQ\",\"d\":"
-	    "\"AKFwyWAZ2FiTTEofXXOC6I2GBPQeEyCnsVzo075hCOcebYgLpzSj8xWfkTqxsUq8FF5cxlKS3jym3qgsuV0Eb0wd\"}");
-	oidc_jwk_destroy(jwk);
-
-	return 0;
-}
-
 static char *test_jwt_parse(apr_pool_t *pool) {
 
 	// from http://tools.ietf.org/html/draft-ietf-oauth-json-web-token-20
@@ -1284,7 +1223,6 @@ static char *test_check_cookie_domain(request_rec *r) {
 
 static char *all_tests(apr_pool_t *pool, request_rec *r) {
 	char *message;
-	TST_RUN(test_private_key_parse, pool);
 
 	TST_RUN(test_jwt_parse, pool);
 	TST_RUN(test_plaintext_jwt_parse, pool);

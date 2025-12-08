@@ -440,8 +440,8 @@ END_TEST
 START_TEST(test_jwk_public_key_parse) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	oidc_jose_error_t err = {{'\0'}, 0, {'\0'}, {'\0'}};
-	oidc_jwk_t *jwk, *jwkCert = NULL;
-	BIO *input, *inputCert = NULL;
+	oidc_jwk_t *jwk = NULL, *jwkCert = NULL;
+	BIO *input = NULL, *inputCert = NULL;
 	char *json = NULL;
 	apr_byte_t isPrivateKey = FALSE;
 
@@ -525,6 +525,57 @@ START_TEST(test_jwk_public_key_parse) {
 }
 END_TEST
 
+START_TEST(test_jwk_private_key_parse) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err = {{'\0'}, 0, {'\0'}, {'\0'}};
+	oidc_jwk_t *jwk = NULL;
+	BIO *input = NULL, *inputCert = NULL;
+	char *json = NULL;
+	apr_byte_t isPrivateKey = TRUE;
+
+	const char rsaPrivateKeyFile[512];
+	const char ecPrivateKeyFile[512];
+
+	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	snprintf((char *)rsaPrivateKeyFile, 512, "%s/%s", dir, "/private.pem");
+	snprintf((char *)ecPrivateKeyFile, 512, "%s/%s", dir, "/ecpriv.key");
+
+	input = BIO_new(BIO_s_file());
+	ck_assert_ptr_nonnull(input);
+	ck_assert_int_eq(BIO_read_filename(input, rsaPrivateKeyFile), 1);
+	ck_assert_int_eq(oidc_jwk_pem_bio_to_jwk(pool, input, NULL, &jwk, isPrivateKey, &err), TRUE);
+	BIO_free(input);
+
+	ck_assert_int_eq(oidc_jwk_to_json(pool, jwk, &json, &err), TRUE);
+	ck_assert_str_eq(
+	    json,
+	    "{\"kty\":\"RSA\",\"kid\":\"IbLjLR7-C1q0-ypkueZxGIJwBQNaLg46DZMpnPW1kps\",\"e\":\"AQAB\",\"n\":"
+	    "\"iGeTXbfV5bMppx7o7qMLCuVIKqbBa_qOzBiNNpe0K8rjg7-1z9GCuSlqbZtM0_5BQ6bGonnSPD--"
+	    "PowhFdivS4WNA33O0Kl1tQ0wdH3TOnwueIO9ahfW4q0BGFvMObneK-tjwiNMj1l-cZt8pvuS-3LtTWIzC-"
+	    "hTZM4caUmy5olm5PVdmru6C6V5rxkbYBPITFSzl5mpuo_C6RV_MYRwAh60ghs2OEvIWDrJkZnYaF7sjHC9j-"
+	    "4kfcM5oY7Zhg8KuHyloudYNzlqjVAPd0MbkLkh1pa8fmHsnN6cgfXYtFK7Z8WjYDUAhTH1JjZCVSFN55A-51dgD4cQNzieLEEkJw\","
+	    "\"d\":\"Xc9d-kZERQVC0Dzh1b0sCwJE75Bf1fMr4hHAjJsovjV641ElqRdd4Borp9X2sJVcLTq1wWgmvmjYXgvhdTTg2f-"
+	    "vS4dqhPcGjM3VVUhzzPU6wIdZ7W0XzC1PY4E-ozTBJ1Nr-EhujuftnhRhVjYOkAAqU94FXVsaf2mBAKg-"
+	    "8WzrWx2MeWjfLcE79DmSL9Iw2areKVRGlKddIIPnHb-Mw9HB7ZCyVTC1v5sqhQPy6qPo8XHdQju_EYRlIOMksU8kcb20R_ezib_"
+	    "rHuVwJVlTNk6MvFUIj4ayXdX13Qy4kTBRiQM7pumPaypEE4CrAfTWP0AYnEwz_FGluOpMZNzoAQ\"}");
+	oidc_jwk_destroy(jwk);
+
+	inputCert = BIO_new(BIO_s_file());
+	ck_assert_ptr_nonnull(inputCert);
+	ck_assert_int_eq(BIO_read_filename(inputCert, ecPrivateKeyFile), 1);
+	ck_assert_int_eq(oidc_jwk_pem_bio_to_jwk(pool, input, NULL, &jwk, isPrivateKey, &err), TRUE);
+	BIO_free(input);
+
+	ck_assert_int_eq(oidc_jwk_to_json(pool, jwk, &json, &err), TRUE);
+	ck_assert_str_eq(
+	    json, "{\"kty\":\"EC\",\"kid\":\"-THDTumMGazABrYTb8xJoYOK2OPiWmho3D-nPC1dSYg\",\"crv\":\"P-521\",\"x\":"
+		  "\"AR6Eh9VhdLEA-rm5WR0_T0LjKysJuBkSoXaR8GjphHvoOTrljcACRsVlTES9FMkbxbNEs4JdxPgPJl9G-e9WEJTe\",\"y\":"
+		  "\"AammgflZaJuSdycK_ccUXkSXjNQd8NsqJuv9LFpk5Ys1OAiirWm6uktXG8ALNSxSffcurBq8zqZyZ141dV6qSzKQ\",\"d\":"
+		  "\"AKFwyWAZ2FiTTEofXXOC6I2GBPQeEyCnsVzo075hCOcebYgLpzSj8xWfkTqxsUq8FF5cxlKS3jym3qgsuV0Eb0wd\"}");
+	oidc_jwk_destroy(jwk);
+}
+END_TEST
+
 START_TEST(test_jwk_list_destroy) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	apr_array_header_t *arr = apr_array_make(pool, 2, sizeof(const oidc_jwk_t *));
@@ -603,6 +654,7 @@ int main(void) {
 	tcase_add_test(core, test_alg2keysize_and_hdr_get_and_jwt_parse);
 	tcase_add_test(core, test_jwk_json_x5c_parse);
 	tcase_add_test(core, test_jwk_public_key_parse);
+	tcase_add_test(core, test_jwk_private_key_parse);
 
 	Suite *s = suite_create("jose");
 	suite_add_tcase(s, sup);
