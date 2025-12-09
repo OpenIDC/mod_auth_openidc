@@ -10,6 +10,7 @@ git submodule foreach --recursive git clean -xfd
 REM Force all changed track files to be default values.
 git submodule foreach --recursive git reset --hard
 REM Update to the Latest and greatest in the submodule
+git submodule sync --recursive
 git submodule update --recursive --remote
 
 @ECHO Copy over changes to cjose so they compile on windows

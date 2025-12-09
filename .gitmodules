@@ -3,4 +3,4 @@
 	url = https://github.com/microsoft/vcpkg.git
 [submodule "cjose"]
 	path = cjose
-	url = git@github.com:OpenIDC/cjose.git
+	url = https://github.com/OpenIDC/cjose.git

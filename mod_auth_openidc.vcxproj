@@ -78,13 +78,13 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(IncludePath);$(ProjectDir)target\httpd-latest\Apache24\include;$(ProjectDir)cjose\include;$(ProjectDir)vcpkg\installed\x86-windows\include;$(ProjectDir)\src</IncludePath>
+    <IncludePath>$(IncludePath);$(ProjectDir)target\httpd-latest\Apache24\include;$(ProjectDir)cjose\include;$(ProjectDir)vcpkg\installed\x86-windows\include;$(ProjectDir)\src;$(ProjectDir)\src\util</IncludePath>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(ProjectDir)\target\httpd-latest\Apache24\include;$(ProjectDir)cjose\include;$(ProjectDir)\vcpkg\installed\x64-windows\include;$(ProjectDir)\src;$(IncludePath)</IncludePath>
+    <IncludePath>$(ProjectDir)\target\httpd-latest\Apache24\include;$(ProjectDir)cjose\include;$(ProjectDir)\vcpkg\installed\x64-windows\include;$(ProjectDir)\src;$(ProjectDir)\src\util;$(IncludePath)</IncludePath>
     <LibraryPath>$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -159,13 +159,15 @@
     <ClInclude Include="src\jose.h" />
     <ClInclude Include="src\metrics.h" />
     <ClInclude Include="src\mod_auth_openidc.h" />
-    <ClInclude Include="src\pcre_subst.h" />
+    <ClInclude Include="src\util\pcre_subst.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\cache\common.c" />
-    <ClCompile Include="src\cache\file.c" />
+    <ClCompile Include="src\cache\file.c">
+      <ObjectFileName>$(IntDir)cache_file.obj</ObjectFileName>
+    </ClCompile>
     <ClCompile Include="src\cache\memcache.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
@@ -218,7 +220,7 @@
 	<ClCompile Include="src\cfg\provider.c">
 		<ObjectFileName>$(IntDir)provider_cfg.obj</ObjectFileName>
     </ClCompile>
-    <ClCompile Include="src\pcre_subst.c" />
+    <ClCompile Include="src\util\pcre_subst.c" />
     <ClCompile Include="src\proto\auth.c">
 		<ObjectFileName>$(IntDir)auth_proto.obj</ObjectFileName>
     </ClCompile>
@@ -267,7 +269,20 @@
 	<ClCompile Include="src\state.c">
 		<ObjectFileName>$(IntDir)state.obj</ObjectFileName>
     </ClCompile>
-    <ClCompile Include="src\util.c" />
+    <ClCompile Include="src\util\appinfo.c" />
+    <ClCompile Include="src\util\base64.c" />
+    <ClCompile Include="src\util\expr.c" />
+    <ClCompile Include="src\util\file.c">
+      <ObjectFileName>$(IntDir)util_file.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="src\util\html.c" />
+    <ClCompile Include="src\util\jq.c" />
+    <ClCompile Include="src\util\json.c" />
+    <ClCompile Include="src\util\jwt.c" />
+    <ClCompile Include="src\util\key.c" />
+    <ClCompile Include="src\util\random.c" />
+    <ClCompile Include="src\util\url.c" />
+    <ClCompile Include="src\util\util.c" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
