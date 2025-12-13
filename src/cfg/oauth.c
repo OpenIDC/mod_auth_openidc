@@ -299,8 +299,7 @@ const char *oidc_cmd_oauth_verify_shared_keys_set(cmd_parms *cmd, void *struct_p
 	char *use = NULL;
 
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
-	int offset = (int)(long)cmd->info;
-	apr_hash_t **shared_keys = (apr_hash_t **)((char *)cfg + offset);
+	apr_hash_t **shared_keys = &cfg->oauth->verify_shared_keys;
 
 	char *kid = NULL, *secret = NULL;
 	int key_len = 0;
