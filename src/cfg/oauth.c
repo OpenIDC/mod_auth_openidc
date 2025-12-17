@@ -299,7 +299,6 @@ const char *oidc_cmd_oauth_verify_shared_keys_set(cmd_parms *cmd, void *struct_p
 	char *use = NULL;
 
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
-	apr_hash_t **shared_keys = &cfg->oauth->verify_shared_keys;
 
 	char *kid = NULL, *secret = NULL;
 	int key_len = 0;
@@ -313,11 +312,11 @@ const char *oidc_cmd_oauth_verify_shared_keys_set(cmd_parms *cmd, void *struct_p
 				    secret, oidc_jose_e2s(cmd->pool, err));
 	}
 
-	if (*shared_keys == NULL)
-		*shared_keys = apr_hash_make(cmd->pool);
+	if (cfg->oauth->verify_shared_keys == NULL)
+		cfg->oauth->verify_shared_keys = apr_hash_make(cmd->pool);
 	if (use)
 		jwk->use = apr_pstrdup(cmd->pool, use);
-	apr_hash_set(*shared_keys, jwk->kid, APR_HASH_KEY_STRING, jwk);
+	apr_hash_set(cfg->oauth->verify_shared_keys, jwk->kid, APR_HASH_KEY_STRING, jwk);
 
 	return NULL;
 }

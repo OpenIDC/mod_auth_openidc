@@ -45,6 +45,7 @@
 #include "cfg/cfg_int.h"
 #include "cfg/provider.h"
 #include "check_util.h"
+#include "jose.h"
 #include "util.h"
 
 // provider
@@ -177,6 +178,40 @@ START_TEST(test_cmd_cookie_same_site) {
 }
 END_TEST
 
+START_TEST(test_cmd_oauth_verify_shared_keys) {
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCOAuthVerifySharedKeys);
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	apr_hash_t *keys = NULL;
+	oidc_jwk_t *jwk = NULL;
+	apr_hash_index_t *hi = NULL;
+
+	keys = oidc_cfg_oauth_verify_shared_keys_get(cfg);
+	ck_assert_ptr_null(keys);
+
+	ck_assert_ptr_null(oidc_cmd_oauth_verify_shared_keys_set(cmd, NULL, "mysecret"));
+	keys = oidc_cfg_oauth_verify_shared_keys_get(cfg);
+	ck_assert_ptr_nonnull(keys);
+	ck_assert_int_eq(apr_hash_count(keys), 1);
+	hi = apr_hash_first(cmd->pool, keys);
+	apr_hash_this(hi, NULL, NULL, (void **)&jwk);
+	ck_assert_ptr_nonnull(jwk);
+	ck_assert_int_eq(jwk->kty, CJOSE_JWK_KTY_OCT);
+	ck_assert_ptr_null(jwk->use);
+
+	ck_assert_ptr_null(oidc_cmd_oauth_verify_shared_keys_set(cmd, NULL, "enc:mykid#mysecret2"));
+	keys = oidc_cfg_oauth_verify_shared_keys_get(cfg);
+	ck_assert_ptr_nonnull(keys);
+	ck_assert_int_eq(apr_hash_count(keys), 2);
+	jwk = apr_hash_get(keys, "mykid", APR_HASH_KEY_STRING);
+	ck_assert_ptr_nonnull(jwk);
+	ck_assert_int_eq(jwk->kty, CJOSE_JWK_KTY_OCT);
+	ck_assert_str_eq(jwk->use, "enc");
+	ck_assert_str_eq(jwk->kid, "mykid");
+
+	oidc_jwk_list_destroy_hash(keys);
+}
+END_TEST
+
 int main(void) {
 	TCase *core = tcase_create("core");
 	tcase_add_checked_fixture(core, oidc_test_setup, oidc_test_teardown);
@@ -186,6 +221,7 @@ int main(void) {
 	tcase_add_test(core, test_cfg_cache_connections_ttl);
 #endif
 	tcase_add_test(core, test_cmd_cookie_same_site);
+	tcase_add_test(core, test_cmd_oauth_verify_shared_keys);
 
 	Suite *s = suite_create("cfg");
 	suite_add_tcase(s, core);
