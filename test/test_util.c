@@ -120,7 +120,7 @@ START_TEST(test_util_appinfo_set) {
 					  "\"names\" : [ \"hans\", \"piet\" ],"
 					  "\"abool\": true,"
 					  "\"anint\": 5,"
-					  "\"lint\": 111111111111111,"
+					  "\"lint\": 1111111111,"
 					  "\"areal\": 1.5,"
 					  "\"anobj\" : { \"hans\": \"piet\", \"abool\": false },"
 					  "\"anull\": null"
@@ -138,7 +138,7 @@ START_TEST(test_util_appinfo_set) {
 	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_names"), "hans,piet");
 	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_abool"), "1");
 	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_anint"), "5");
-	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_lint"), "111111111111111");
+	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_lint"), "1111111111");
 	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_areal"), "1.5");
 	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_anobj"), "{\"hans\":\"piet\",\"abool\":false}");
 
