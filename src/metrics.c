@@ -18,7 +18,7 @@
  */
 
 /***************************************************************************
- * Copyright (C) 2023-2025 ZmartZone Holding BV
+ * Copyright (C) 2023-2026 ZmartZone Holding BV
  * All rights reserved.
  *
  * DISCLAIMER OF WARRANTIES:
