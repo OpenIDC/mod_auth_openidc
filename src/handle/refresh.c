@@ -69,6 +69,9 @@
 /* needs to be larger than a few characters for cache compression to work... */
 #define OIDC_REFRESH_LOCK_VALUE "needstobelargerthanafewcharacters"
 
+/* needs to be larger than a few characters for cache compression to work... */
+#define OIDC_REFRESH_FAILED_LOCK_VALUE "alsoneedstobelargerthanafewcharactersbutdifferent"
+
 /*
  * cache refresh token grant results for a while to avoid (almost) parallel requests
  */
@@ -103,16 +106,23 @@ static void oidc_refresh_token_cache_set(request_rec *r, oidc_cfg_t *c, const ch
 	json_decref(json);
 }
 
+typedef enum {
+	OIDC_REFRESH_CACHE_SUCCESS,
+	OIDC_REFRESH_CACHE_ERROR,
+	OIDC_REFRESH_CACHE_ABORT
+} oidc_refresh_token_cache_result_t;
 /*
  * obtain recent refresh token grant results from the cache
  */
-static apr_byte_t oidc_refresh_token_cache_get(request_rec *r, oidc_cfg_t *c, const char *refresh_token,
-					       char **s_access_token, char **s_token_type, int *expires_in,
-					       char **s_id_token, char **s_refresh_token, apr_time_t *ts) {
+static oidc_refresh_token_cache_result_t oidc_refresh_token_cache_get(request_rec *r, oidc_cfg_t *c,
+								      const char *refresh_token, char **s_access_token,
+								      char **s_token_type, int *expires_in,
+								      char **s_id_token, char **s_refresh_token,
+								      apr_time_t *ts) {
 
 	char *s_json = NULL;
 	json_t *json = NULL, *v = NULL;
-	apr_byte_t rv = FALSE;
+	oidc_refresh_token_cache_result_t rv = OIDC_REFRESH_CACHE_ERROR;
 
 	oidc_cache_mutex_lock(r->pool, r->server, oidc_cfg_refresh_mutex_get(c));
 
@@ -130,9 +140,20 @@ static apr_byte_t oidc_refresh_token_cache_get(request_rec *r, oidc_cfg_t *c, co
 		oidc_cache_get_refresh_token(r, refresh_token, &s_json);
 	}
 
+	if (s_json == NULL)
+		goto no_cache_found;
+
+	/* check if we have run into an error */
+	if (_oidc_strcmp(s_json, OIDC_REFRESH_FAILED_LOCK_VALUE) == 0) {
+		oidc_debug(r, "refresh token %s failed to refresh before, do not try to refresh it again but fail",
+			   refresh_token);
+		rv = OIDC_REFRESH_CACHE_ABORT;
+		goto end;
+	}
+
 	/* check if we have run into a timeout */
-	if ((s_json == NULL) || (_oidc_strcmp(s_json, OIDC_REFRESH_LOCK_VALUE) == 0)) {
-		oidc_warn(r, "timeout waiting for refresh grant cache results");
+	if (_oidc_strcmp(s_json, OIDC_REFRESH_LOCK_VALUE) == 0) {
+		oidc_warn(r, "timeout waiting for refresh token %s cache to unlock", refresh_token);
 		// TODO: now we are going to refresh ourselves with a refresh token that has already been
 		// tried before; that is not great in rolling refresh token setups but I guess we have no
 		// other choice anyhow...
@@ -162,7 +183,7 @@ static apr_byte_t oidc_refresh_token_cache_get(request_rec *r, oidc_cfg_t *c, co
 	/* cleanup */
 	json_decref(json);
 
-	rv = TRUE;
+	rv = OIDC_REFRESH_CACHE_SUCCESS;
 
 	goto end;
 
@@ -207,6 +228,7 @@ apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg_t *c, oidc_session_
 	oidc_jose_error_t err;
 	const char *refresh_token = NULL;
 	apr_time_t ts = 0;
+	oidc_refresh_token_cache_result_t rv = OIDC_REFRESH_CACHE_ERROR;
 
 	oidc_debug(r, "enter");
 
@@ -218,9 +240,13 @@ apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg_t *c, oidc_session_
 	}
 
 	/* see if it was refreshed very recently and we can re-use the results from the cache */
-	if (oidc_refresh_token_cache_get(r, c, refresh_token, &s_access_token, &s_token_type, &expires_in, &s_id_token,
-					 &s_refresh_token, &ts) == TRUE)
+	rv = oidc_refresh_token_cache_get(r, c, refresh_token, &s_access_token, &s_token_type, &expires_in, &s_id_token,
+					  &s_refresh_token, &ts);
+	if (rv == OIDC_REFRESH_CACHE_SUCCESS)
 		goto process;
+	if (rv == OIDC_REFRESH_CACHE_ABORT)
+		/* a prior refresh of the access token failed and we won't try the same again */
+		goto end;
 
 	oidc_debug(r, "refreshing refresh_token: %s", refresh_token);
 
@@ -231,6 +257,10 @@ apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg_t *c, oidc_session_
 					     &expires_in, &s_refresh_token, &s_scope) == FALSE) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_PROVIDER_REFRESH_ERROR);
 		oidc_error(r, "access_token could not be refreshed with refresh_token: %s", refresh_token);
+		/* release the refresh lock and indicate this refresh token should not be refreshed anymore for at least
+		 * 30 seconds */
+		oidc_cache_set_refresh_token(r, refresh_token, OIDC_REFRESH_FAILED_LOCK_VALUE,
+					     apr_time_now() + apr_time_from_sec(OIDC_REFRESH_CACHE_TTL));
 		goto end;
 	}
 
