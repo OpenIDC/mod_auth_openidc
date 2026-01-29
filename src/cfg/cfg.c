@@ -783,7 +783,7 @@ void *oidc_cfg_server_create(apr_pool_t *pool, server_rec *svr) {
 	c->outgoing_proxy.username_password = NULL;
 	c->outgoing_proxy.auth_type = OIDC_CONFIG_POS_INT_UNSET;
 
-	c->crypto_passphrase.secret1 = oidc_util_rand_hex_str(NULL, pool, 32);
+	c->crypto_passphrase.secret1 = NULL;
 	c->crypto_passphrase.secret2 = NULL;
 
 	c->post_preserve_template = NULL;

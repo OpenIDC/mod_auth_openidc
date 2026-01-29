@@ -1,3 +1,7 @@
+01/29/2026
+- fix merging top-level configured OIDCCryptoPassphrase into vhosts that have not explicitly configured it
+  regression introduced in 2.4.19
+
 01/28/2026
 - refresh: fix releasing the best effort distributed refresh lock immediately after refreshing
   the access token fails to avoid parallel requests queuing up and blocking threads; also

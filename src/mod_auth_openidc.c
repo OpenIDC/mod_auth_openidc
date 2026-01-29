@@ -412,7 +412,7 @@ void oidc_request_state_json_set(request_rec *r, const char *key, json_t *value)
 	json_t *json = json_copy(value);
 
 	/* register a cleanup for the json object */
-	apr_pool_cleanup_register(r->pool, json, (apr_status_t (*)(void *))json_decref, apr_pool_cleanup_null);
+	apr_pool_cleanup_register(r->pool, json, (apr_status_t(*)(void *))json_decref, apr_pool_cleanup_null);
 
 	/* put the name/value pair in that hash table */
 	apr_hash_set(state, key, APR_HASH_KEY_STRING, json);
@@ -1563,10 +1563,8 @@ static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s) {
 
 	oidc_sdebug(s, "enter");
 
-	if (oidc_cfg_crypto_passphrase_secret1_get(cfg) == NULL) {
-		oidc_serror(s, "'" OIDCCryptoPassphrase "' must be set");
-		return HTTP_INTERNAL_SERVER_ERROR;
-	}
+	if (oidc_cfg_crypto_passphrase_secret1_get(cfg) == NULL)
+		oidc_cfg_crypto_passphrase_secret1_set(cfg, oidc_util_rand_hex_str(NULL, s->process->pool, 32));
 
 	if ((oidc_cfg_metadata_dir_get(cfg) != NULL) ||
 	    (oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(cfg)) != NULL) ||
