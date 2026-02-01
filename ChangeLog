@@ -1,3 +1,6 @@
+02/01/2026
+- release 2.4.19.1
+
 01/29/2026
 - fix merging top-level configured OIDCCryptoPassphrase into vhosts that have not explicitly configured it
   regression introduced in 2.4.19
