@@ -713,24 +713,24 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg_t *c, const char *access_to
 	oidc_util_set_trace_parent(r, c, access_token);
 
 	/* validate the obtained access token against the OAuth AS validation endpoint */
-	json_t *token = NULL;
+	json_t *claims = NULL;
 	char *s_token = NULL;
 
 	/* check if an introspection endpoint is set */
 	if (oidc_cfg_oauth_introspection_endpoint_url_get(c) != NULL) {
 		/* we'll validate the token remotely */
-		if (oidc_oauth_resolve_access_token(r, c, access_token, &token, &s_token) == FALSE)
+		if (oidc_oauth_resolve_access_token(r, c, access_token, &claims, &s_token) == FALSE)
 			return oidc_proto_return_www_authenticate(r, OIDC_PROTO_ERR_INVALID_TOKEN,
 								  "Reference token could not be introspected");
 	} else {
 		/* no introspection endpoint is set, assume the token is a JWT and validate it locally */
-		if (oidc_oauth_validate_jwt_access_token(r, c, access_token, &token, &s_token) == FALSE)
+		if (oidc_oauth_validate_jwt_access_token(r, c, access_token, &claims, &s_token) == FALSE)
 			return oidc_proto_return_www_authenticate(r, OIDC_PROTO_ERR_INVALID_TOKEN,
 								  "JWT token could not be validated");
 	}
 
 	/* check that we've got something back */
-	if (token == NULL) {
+	if (claims == NULL) {
 		oidc_error(r, "could not resolve claims (token == NULL)");
 		return oidc_proto_return_www_authenticate(r, OIDC_PROTO_ERR_INVALID_TOKEN,
 							  "No claims could be parsed from the token");
@@ -738,11 +738,11 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg_t *c, const char *access_to
 
 	/* store the parsed token (cq. the claims from the response) in the request state so it can be accessed by the
 	 * authz routines */
-	oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_CLAIMS, (const char *)s_token);
+	oidc_request_state_json_set(r, OIDC_REQUEST_STATE_KEY_CLAIMS, claims);
 
 	/* set the request user */
-	if (oidc_oauth_set_request_user(r, c, token) == FALSE) {
-		json_decref(token);
+	if (oidc_oauth_set_request_user(r, c, claims) == FALSE) {
+		json_decref(claims);
 		oidc_error(r, "remote user could not be set, aborting with HTTP_UNAUTHORIZED");
 		return oidc_proto_return_www_authenticate(r, OIDC_PROTO_ERR_INVALID_TOKEN, "Could not set remote user");
 	}
@@ -762,7 +762,7 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg_t *c, const char *access_to
 		oidc_http_hdr_in_set(r, authn_header, r->user);
 
 	/* set the resolved claims in the HTTP headers for the target application */
-	oidc_util_appinfo_set_all(r, token, oidc_cfg_claim_prefix_get(c), oidc_cfg_claim_delimiter_get(c), pass_in,
+	oidc_util_appinfo_set_all(r, claims, oidc_cfg_claim_prefix_get(c), oidc_cfg_claim_delimiter_get(c), pass_in,
 				  encoding);
 
 	/* set the access_token in the app headers */
@@ -772,7 +772,7 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg_t *c, const char *access_to
 	}
 
 	/* free JSON resources */
-	json_decref(token);
+	json_decref(claims);
 
 	/* strip any cookies that we need to */
 	oidc_strip_cookies(r);
