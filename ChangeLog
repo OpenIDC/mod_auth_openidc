@@ -1,3 +1,7 @@
+03/06/2026
+- cast curl timeouts in options to long to avoid compiler warnings
+- bump to 2.4.19.3dev
+
 02/23/2026
 - fix claims based authorization in OAuth 2.0 RS mode (AuthType oauth20 and AuthType auth-openidc)
   regression introduced in 2.4.19

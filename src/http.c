@@ -746,8 +746,8 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 	OIDC_HTTP_CURL_SETOPT(CURLOPT_MAXREDIRS, 5L);
 
 	/* set the timeouts */
-	OIDC_HTTP_CURL_SETOPT(CURLOPT_TIMEOUT, (CURLoption)http_timeout->request_timeout);
-	OIDC_HTTP_CURL_SETOPT(CURLOPT_CONNECTTIMEOUT, (CURLoption)http_timeout->connect_timeout);
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_TIMEOUT, (long)http_timeout->request_timeout);
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_CONNECTTIMEOUT, (long)http_timeout->connect_timeout);
 
 	/* setup the buffer where the response data will be written to */
 	OIDC_HTTP_CURL_SETOPT(CURLOPT_WRITEFUNCTION, oidc_http_response_data);
@@ -852,7 +852,7 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 		/* set POST data */
 		OIDC_HTTP_CURL_SETOPT(CURLOPT_POSTFIELDS, data);
 		/* set HTTP method to POST */
-		OIDC_HTTP_CURL_SETOPT(CURLOPT_POST, 1);
+		OIDC_HTTP_CURL_SETOPT(CURLOPT_POST, 1L);
 	}
 
 	if (content_type != NULL) {

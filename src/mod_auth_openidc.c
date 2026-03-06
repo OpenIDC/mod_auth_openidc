@@ -412,7 +412,7 @@ void oidc_request_state_json_set(request_rec *r, const char *key, json_t *value)
 	json_t *json = json_copy(value);
 
 	/* register a cleanup for the json object */
-	apr_pool_cleanup_register(r->pool, json, (apr_status_t(*)(void *))json_decref, apr_pool_cleanup_null);
+	apr_pool_cleanup_register(r->pool, json, (apr_status_t (*)(void *))json_decref, apr_pool_cleanup_null);
 
 	/* put the name/value pair in that hash table */
 	apr_hash_set(state, key, APR_HASH_KEY_STRING, json);
