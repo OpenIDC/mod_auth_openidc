@@ -1,5 +1,8 @@
+04/18/2026
+- build: conditionally add --coverage to AM_LDFLAGS in Makefile.am
+
 03/06/2026
-- cast curl timeouts in options to long to avoid compiler warnings
+- code: cast curl timeouts in options to long to avoid compiler warnings
 - bump to 2.4.19.3dev
 
 02/23/2026
