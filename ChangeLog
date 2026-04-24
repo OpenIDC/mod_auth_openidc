@@ -1,3 +1,7 @@
+04/24/2026
+- oidc: add scope=openid to authorization request when passing a Request Object
+by Reference (request_uri) as defined by the OIDC spec. See #1385; thanks @gueuselambix, @hjmikkon
+
 04/18/2026
 - build: conditionally add --coverage to AM_LDFLAGS in Makefile.am
 
