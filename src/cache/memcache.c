@@ -67,6 +67,53 @@ static void *oidc_cache_memcache_cfg_create(apr_pool_t *pool) {
 }
 
 /*
+ * parse a single "host[:port]" entry and register it with the memcache context
+ */
+static int oidc_cache_memcache_add_server(server_rec *s, apr_pool_t *p, oidc_cache_cfg_memcache_t *context,
+					  char *split, apr_uint32_t min, apr_uint32_t smax, apr_uint32_t hmax,
+					  apr_interval_time_t ttl) {
+	apr_memcache_server_t *st;
+	char *host_str;
+	char *scope_id;
+	apr_port_t port;
+	apr_status_t rv;
+
+	/* parse out host and port */
+	rv = apr_parse_addr_port(&host_str, &scope_id, &port, split, p);
+	if (rv != APR_SUCCESS) {
+		oidc_serror(s, "failed to parse cache server: '%s'", split);
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	if (host_str == NULL) {
+		oidc_serror(s, "failed to parse cache server, no hostname specified: '%s'", split);
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	if (port == 0)
+		port = 11211;
+
+	oidc_sdebug(s, "creating server: %s:%d, min=%d, smax=%d, hmax=%d, ttl=%" APR_TIME_T_FMT, host_str, port, min,
+		    smax, hmax, ttl);
+
+	/* create the memcache server struct */
+	rv = apr_memcache_server_create(p, host_str, port, min, smax, hmax, (apr_uint32_t)ttl, &st);
+	if (rv != APR_SUCCESS) {
+		oidc_serror(s, "failed to create cache server: %s:%d", host_str, port);
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	/* add the memcache server struct to the list */
+	rv = apr_memcache_add_server(context->cache_memcache, st);
+	if (rv != APR_SUCCESS) {
+		oidc_serror(s, "failed to add cache server: %s:%d", host_str, port);
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	return OK;
+}
+
+/*
  * initialize the memcache struct to a number of memcache servers
  */
 static int oidc_cache_memcache_post_config(apr_pool_t *pool, server_rec *s) {
@@ -158,44 +205,9 @@ static int oidc_cache_memcache_post_config(apr_pool_t *pool, server_rec *s) {
 	cache_config = apr_pstrdup(p, oidc_cfg_cache_memcache_servers_get(cfg));
 	split = apr_strtok(cache_config, OIDC_STR_SPACE, &tok);
 	while (split) {
-		apr_memcache_server_t *st;
-		char *host_str;
-		char *scope_id;
-		apr_port_t port;
-
-		/* parse out host and port */
-		rv = apr_parse_addr_port(&host_str, &scope_id, &port, split, p);
-		if (rv != APR_SUCCESS) {
-			oidc_serror(s, "failed to parse cache server: '%s'", split);
-			return HTTP_INTERNAL_SERVER_ERROR;
-		}
-
-		if (host_str == NULL) {
-			oidc_serror(s, "failed to parse cache server, no hostname specified: '%s'", split);
-			return HTTP_INTERNAL_SERVER_ERROR;
-		}
-
-		if (port == 0)
-			port = 11211;
-
-		oidc_sdebug(s, "creating server: %s:%d, min=%d, smax=%d, hmax=%d, ttl=%" APR_TIME_T_FMT, host_str, port,
-			    min, smax, hmax, ttl);
-
-		/* create the memcache server struct */
-		rv = apr_memcache_server_create(p, host_str, port, min, smax, hmax, (apr_uint32_t)ttl, &st);
-		if (rv != APR_SUCCESS) {
-			oidc_serror(s, "failed to create cache server: %s:%d", host_str, port);
-			return HTTP_INTERNAL_SERVER_ERROR;
-		}
-
-		/* add the memcache server struct to the list */
-		rv = apr_memcache_add_server(context->cache_memcache, st);
-		if (rv != APR_SUCCESS) {
-			oidc_serror(s, "failed to add cache server: %s:%d", host_str, port);
-			return HTTP_INTERNAL_SERVER_ERROR;
-		}
-
-		/* go to the next entry */
+		int rc = oidc_cache_memcache_add_server(s, p, context, split, min, smax, hmax, ttl);
+		if (rc != OK)
+			return rc;
 		split = apr_strtok(NULL, OIDC_STR_SPACE, &tok);
 	}
 
