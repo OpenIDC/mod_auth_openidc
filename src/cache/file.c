@@ -235,15 +235,106 @@ error_close:
 #define OIDC_CACHE_FILE_LAST_CLEANED "last-cleaned"
 
 /*
+ * decide whether a cache cleaning cycle should run and bump the "last cleaned"
+ * timestamp; creates the metadata file if it does not yet exist
+ * returns TRUE if cleaning should proceed; *rc holds the status to return when FALSE
+ */
+static apr_byte_t oidc_cache_file_clean_due(request_rec *r, oidc_cfg_t *cfg, const char *metadata_path,
+					    apr_status_t *rc) {
+	apr_file_t *fd = NULL;
+	apr_finfo_t fi;
+	char s_err[128];
+
+	*rc = APR_SUCCESS;
+
+	/* no metadata file yet: create it and proceed with a first cleaning cycle */
+	if (apr_stat(&fi, metadata_path, APR_FINFO_MTIME, r->pool) != APR_SUCCESS) {
+		if ((*rc = apr_file_open(&fd, metadata_path, (APR_FOPEN_WRITE | APR_FOPEN_CREATE), APR_OS_DEFAULT,
+					 r->pool)) != APR_SUCCESS) {
+			oidc_error(r, "error creating cache timestamp file '%s' (%s)", metadata_path,
+				   apr_strerror(*rc, s_err, sizeof(s_err)));
+			return FALSE;
+		}
+		if ((*rc = apr_file_close(fd)) != APR_SUCCESS) {
+			oidc_error(r, "error closing cache timestamp file '%s' (%s)", metadata_path,
+				   apr_strerror(*rc, s_err, sizeof(s_err)));
+		}
+		*rc = APR_SUCCESS;
+		return TRUE;
+	}
+
+	/* really only clean once per so much time, check that we have not recently run */
+	if (apr_time_now() < fi.mtime + apr_time_from_sec(oidc_cfg_cache_file_clean_interval_get(cfg))) {
+		oidc_debug(r,
+			   "last cleanup call was less than %d seconds ago (next one as early as in %" APR_TIME_T_FMT
+			   " secs)",
+			   oidc_cfg_cache_file_clean_interval_get(cfg),
+			   apr_time_sec(fi.mtime + apr_time_from_sec(oidc_cfg_cache_file_clean_interval_get(cfg)) -
+					apr_time_now()));
+		return FALSE;
+	}
+
+	/* time to clean, reset the mtime of the metadata file to reflect this cleaning cycle */
+	apr_file_mtime_set(metadata_path, apr_time_now(), r->pool);
+
+	oidc_debug(r, "start cleaning cycle");
+
+	return TRUE;
+}
+
+/*
+ * process a single cache directory entry: remove the file if it expired or its header is corrupt
+ */
+static void oidc_cache_file_clean_entry(request_rec *r, oidc_cfg_t *cfg, const char *metadata_filename,
+					const apr_finfo_t *fi) {
+	apr_file_t *fd = NULL;
+	apr_status_t rc;
+	oidc_cache_file_info_t info;
+	char s_err[128];
+
+	/* skip non-cache entries, cq. the ".", ".." and the metadata file */
+	if ((fi->name[0] == OIDC_CHAR_DOT) || (_oidc_strstr(fi->name, OIDC_CACHE_FILE_PREFIX) != fi->name) ||
+	    (_oidc_strcmp(fi->name, metadata_filename) == 0))
+		return;
+
+	/* get the fully qualified path to the cache file and open it */
+	const char *path = apr_psprintf(r->pool, "%s/%s", cfg->cache.file_dir, fi->name);
+	if ((rc = apr_file_open(&fd, path, APR_FOPEN_READ, APR_OS_DEFAULT, r->pool)) != APR_SUCCESS) {
+		oidc_error(r, "unable to open cache entry \"%s\" (%s)", path, apr_strerror(rc, s_err, sizeof(s_err)));
+		return;
+	}
+
+	/* read the header with cache metadata info */
+	apr_file_lock(fd, APR_FLOCK_EXCLUSIVE);
+	rc = oidc_cache_file_read(r, path, fd, &info, sizeof(oidc_cache_file_info_t));
+	apr_file_unlock(fd);
+	apr_file_close(fd);
+
+	if (rc != APR_SUCCESS) {
+		oidc_error(r, "cache entry (%s) corrupted (%s), removing file \"%s\"", fi->name,
+			   apr_strerror(rc, s_err, sizeof(s_err)), path);
+	} else if (apr_time_now() < info.expire) {
+		/* entry is still valid, keep it */
+		return;
+	} else {
+		oidc_debug(r, "cache entry (%s) expired, removing file \"%s\")", fi->name, path);
+	}
+
+	/* delete the cache file */
+	if ((rc = apr_file_remove(path, r->pool)) != APR_SUCCESS) {
+		/* hrm, this will most probably happen again on the next run... */
+		oidc_error(r, "could not delete cache file \"%s\" (%s)", path, apr_strerror(rc, s_err, sizeof(s_err)));
+	}
+}
+
+/*
  * delete all expired entries from the cache directory
  */
 static apr_status_t oidc_cache_file_clean(request_rec *r) {
 	apr_status_t rc = APR_SUCCESS;
 	apr_dir_t *dir = NULL;
-	apr_file_t *fd = NULL;
 	apr_status_t i;
 	apr_finfo_t fi;
-	oidc_cache_file_info_t info;
 	char s_err[128];
 
 	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
@@ -251,43 +342,9 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 	/* get the path to the metadata file that holds "last cleaned" metadata info */
 	const char *metadata_path = oidc_cache_file_path(r, "cache-file", OIDC_CACHE_FILE_LAST_CLEANED);
 
-	/* open the metadata file if it exists */
-	if (apr_stat(&fi, metadata_path, APR_FINFO_MTIME, r->pool) == APR_SUCCESS) {
-
-		/* really only clean once per so much time, check that we haven not recently run */
-		if (apr_time_now() < fi.mtime + apr_time_from_sec(oidc_cfg_cache_file_clean_interval_get(cfg))) {
-			oidc_debug(
-			    r,
-			    "last cleanup call was less than %d seconds ago (next one as early as in %" APR_TIME_T_FMT
-			    " secs)",
-			    oidc_cfg_cache_file_clean_interval_get(cfg),
-			    apr_time_sec(fi.mtime + apr_time_from_sec(oidc_cfg_cache_file_clean_interval_get(cfg)) -
-					 apr_time_now()));
-			return APR_SUCCESS;
-		}
-
-		/* time to clean, reset the modification time of the metadata file to reflect the timestamp of this
-		 * cleaning cycle */
-		apr_file_mtime_set(metadata_path, apr_time_now(), r->pool);
-
-		oidc_debug(r, "start cleaning cycle");
-
-	} else {
-
-		/* no metadata file exists yet, create one (and open it) */
-		if ((rc = apr_file_open(&fd, metadata_path, (APR_FOPEN_WRITE | APR_FOPEN_CREATE), APR_OS_DEFAULT,
-					r->pool)) != APR_SUCCESS) {
-			oidc_error(r, "error creating cache timestamp file '%s' (%s)", metadata_path,
-				   apr_strerror(rc, s_err, sizeof(s_err)));
-			return rc;
-		}
-
-		/* and cleanup... */
-		if ((rc = apr_file_close(fd)) != APR_SUCCESS) {
-			oidc_error(r, "error closing cache timestamp file '%s' (%s)", metadata_path,
-				   apr_strerror(rc, s_err, sizeof(s_err)));
-		}
-	}
+	/* decide whether we should run a cleaning cycle (and bump the timestamp if so) */
+	if (oidc_cache_file_clean_due(r, cfg, metadata_path, &rc) == FALSE)
+		return rc;
 
 	/* time to clean, open the cache directory */
 	if ((rc = apr_dir_open(&dir, cfg->cache.file_dir, r->pool)) != APR_SUCCESS) {
@@ -296,60 +353,13 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 		return rc;
 	}
 
+	const char *metadata_filename = oidc_cache_file_name(r, "cache-file", OIDC_CACHE_FILE_LAST_CLEANED);
+
 	/* loop trough the cache file entries */
 	do {
-
-		/* read the next entry from the directory */
 		i = apr_dir_read(&fi, APR_FINFO_NAME, dir);
-
-		if (i == APR_SUCCESS) {
-
-			/* skip non-cache entries, cq. the ".", ".." and the metadata file */
-			if ((fi.name[0] == OIDC_CHAR_DOT) ||
-			    (_oidc_strstr(fi.name, OIDC_CACHE_FILE_PREFIX) != fi.name) ||
-			    (_oidc_strcmp(fi.name,
-					  oidc_cache_file_name(r, "cache-file", OIDC_CACHE_FILE_LAST_CLEANED)) == 0))
-				continue;
-
-			/* get the fully qualified path to the cache file and open it */
-			const char *path = apr_psprintf(r->pool, "%s/%s", cfg->cache.file_dir, fi.name);
-			if ((rc = apr_file_open(&fd, path, APR_FOPEN_READ, APR_OS_DEFAULT, r->pool)) != APR_SUCCESS) {
-				oidc_error(r, "unable to open cache entry \"%s\" (%s)", path,
-					   apr_strerror(rc, s_err, sizeof(s_err)));
-				continue;
-			}
-
-			/* read the header with cache metadata info */
-			apr_file_lock(fd, APR_FLOCK_EXCLUSIVE);
-			rc = oidc_cache_file_read(r, path, fd, &info, sizeof(oidc_cache_file_info_t));
-			apr_file_unlock(fd);
-			apr_file_close(fd);
-
-			if (rc == APR_SUCCESS) {
-
-				/* check if this entry expired, if not just continue to the next entry */
-				if (apr_time_now() < info.expire)
-					continue;
-
-				/* the cache entry expired, we're going to remove it so log that event */
-				oidc_debug(r, "cache entry (%s) expired, removing file \"%s\")", fi.name, path);
-
-			} else {
-
-				/* file open returned an error, log that */
-				oidc_error(r, "cache entry (%s) corrupted (%s), removing file \"%s\"", fi.name,
-					   apr_strerror(rc, s_err, sizeof(s_err)), path);
-			}
-
-			/* delete the cache file */
-			if ((rc = apr_file_remove(path, r->pool)) != APR_SUCCESS) {
-
-				/* hrm, this will most probably happen again on the next run... */
-				oidc_error(r, "could not delete cache file \"%s\" (%s)", path,
-					   apr_strerror(rc, s_err, sizeof(s_err)));
-			}
-		}
-
+		if (i == APR_SUCCESS)
+			oidc_cache_file_clean_entry(r, cfg, metadata_filename, &fi);
 	} while (i == APR_SUCCESS);
 
 	apr_dir_close(dir);
