@@ -812,6 +812,64 @@ void *oidc_cfg_server_create(apr_pool_t *pool, server_rec *svr) {
 }
 
 /*
+ * pick the "add" pointer if non-NULL, otherwise fall back to "base"
+ */
+static void *_oidc_cfg_merge_ptr(void *add, void *base) {
+	return add != NULL ? add : base;
+}
+
+/*
+ * pick the "add" int if it was explicitly configured, otherwise fall back to "base"
+ */
+static int _oidc_cfg_merge_pos_int(int add, int base) {
+	return add != OIDC_CONFIG_POS_INT_UNSET ? add : base;
+}
+
+/*
+ * merge an http_timeout struct: "add" wins as a whole if it has been configured
+ */
+static void _oidc_cfg_merge_http_timeout(oidc_http_timeout_t *c, const oidc_http_timeout_t *add,
+					 const oidc_http_timeout_t *base) {
+	const oidc_http_timeout_t *src = add->request_timeout != OIDC_CONFIG_POS_INT_UNSET ? add : base;
+	c->request_timeout = src->request_timeout;
+	c->connect_timeout = src->connect_timeout;
+	c->retries = src->retries;
+	c->retry_interval = src->retry_interval;
+}
+
+/*
+ * merge the remote_user_claim struct: "add" wins as a whole if it has been configured
+ */
+static void _oidc_cfg_merge_remote_user_claim(oidc_remote_user_claim_t *c, const oidc_remote_user_claim_t *add,
+					      const oidc_remote_user_claim_t *base) {
+	const oidc_remote_user_claim_t *src = add->claim_name != NULL ? add : base;
+	c->claim_name = src->claim_name;
+	c->reg_exp = src->reg_exp;
+	c->replace = src->replace;
+}
+
+/*
+ * merge the outgoing_proxy struct: "add" wins as a whole if it has been configured
+ */
+static void _oidc_cfg_merge_outgoing_proxy(oidc_http_outgoing_proxy_t *c, const oidc_http_outgoing_proxy_t *add,
+					   const oidc_http_outgoing_proxy_t *base) {
+	const oidc_http_outgoing_proxy_t *src = add->host_port != NULL ? add : base;
+	c->host_port = src->host_port;
+	c->username_password = src->username_password;
+	c->auth_type = src->auth_type;
+}
+
+/*
+ * merge the crypto_passphrase struct: "add" wins as a whole if it has been configured
+ */
+static void _oidc_cfg_merge_crypto_passphrase(oidc_crypto_passphrase_t *c, const oidc_crypto_passphrase_t *add,
+					      const oidc_crypto_passphrase_t *base) {
+	const oidc_crypto_passphrase_t *src = add->secret1 != NULL ? add : base;
+	c->secret1 = src->secret1;
+	c->secret2 = src->secret2;
+}
+
+/*
  * merge a new server config with a base one
  */
 void *oidc_cfg_server_merge(apr_pool_t *pool, void *BASE, void *ADD) {
@@ -829,146 +887,79 @@ void *oidc_cfg_server_merge(apr_pool_t *pool, void *BASE, void *ADD) {
 	oidc_cfg_oauth_merge(pool, c->oauth, base->oauth, add->oauth);
 	oidc_cfg_cache_merge_server_config(c, base, add);
 
-	c->redirect_uri = add->redirect_uri != NULL ? add->redirect_uri : base->redirect_uri;
-	c->default_sso_url = add->default_sso_url != NULL ? add->default_sso_url : base->default_sso_url;
-	c->default_slo_url = add->default_slo_url != NULL ? add->default_slo_url : base->default_slo_url;
-	c->public_keys = oidc_jwk_list_copy(pool, add->public_keys != NULL ? add->public_keys : base->public_keys);
-	c->private_keys = oidc_jwk_list_copy(pool, add->private_keys != NULL ? add->private_keys : base->private_keys);
+	c->redirect_uri = _oidc_cfg_merge_ptr(add->redirect_uri, base->redirect_uri);
+	c->default_sso_url = _oidc_cfg_merge_ptr(add->default_sso_url, base->default_sso_url);
+	c->default_slo_url = _oidc_cfg_merge_ptr(add->default_slo_url, base->default_slo_url);
+	c->public_keys = oidc_jwk_list_copy(pool, _oidc_cfg_merge_ptr(add->public_keys, base->public_keys));
+	c->private_keys = oidc_jwk_list_copy(pool, _oidc_cfg_merge_ptr(add->private_keys, base->private_keys));
 
-	if (add->http_timeout_long.request_timeout != OIDC_CONFIG_POS_INT_UNSET) {
-		c->http_timeout_long.request_timeout = add->http_timeout_long.request_timeout;
-		c->http_timeout_long.connect_timeout = add->http_timeout_long.connect_timeout;
-		c->http_timeout_long.retries = add->http_timeout_long.retries;
-		c->http_timeout_long.retry_interval = add->http_timeout_long.retry_interval;
-	} else {
-		c->http_timeout_long.request_timeout = base->http_timeout_long.request_timeout;
-		c->http_timeout_long.connect_timeout = base->http_timeout_long.connect_timeout;
-		c->http_timeout_long.retries = base->http_timeout_long.retries;
-		c->http_timeout_long.retry_interval = base->http_timeout_long.retry_interval;
-	}
+	_oidc_cfg_merge_http_timeout(&c->http_timeout_long, &add->http_timeout_long, &base->http_timeout_long);
+	_oidc_cfg_merge_http_timeout(&c->http_timeout_short, &add->http_timeout_short, &base->http_timeout_short);
 
-	if (add->http_timeout_short.request_timeout != OIDC_CONFIG_POS_INT_UNSET) {
-		c->http_timeout_short.request_timeout = add->http_timeout_short.request_timeout;
-		c->http_timeout_short.connect_timeout = add->http_timeout_short.connect_timeout;
-		c->http_timeout_short.retries = add->http_timeout_short.retries;
-		c->http_timeout_short.retry_interval = add->http_timeout_short.retry_interval;
-	} else {
-		c->http_timeout_short.request_timeout = base->http_timeout_short.request_timeout;
-		c->http_timeout_short.connect_timeout = base->http_timeout_short.connect_timeout;
-		c->http_timeout_short.retries = base->http_timeout_short.retries;
-		c->http_timeout_short.retry_interval = base->http_timeout_short.retry_interval;
-	}
+	c->state_timeout = _oidc_cfg_merge_pos_int(add->state_timeout, base->state_timeout);
+	c->max_number_of_state_cookies =
+	    _oidc_cfg_merge_pos_int(add->max_number_of_state_cookies, base->max_number_of_state_cookies);
+	c->delete_oldest_state_cookies =
+	    _oidc_cfg_merge_pos_int(add->delete_oldest_state_cookies, base->delete_oldest_state_cookies);
+	c->session_inactivity_timeout =
+	    _oidc_cfg_merge_pos_int(add->session_inactivity_timeout, base->session_inactivity_timeout);
 
-	c->state_timeout = add->state_timeout != OIDC_CONFIG_POS_INT_UNSET ? add->state_timeout : base->state_timeout;
-	c->max_number_of_state_cookies = add->max_number_of_state_cookies != OIDC_CONFIG_POS_INT_UNSET
-					     ? add->max_number_of_state_cookies
-					     : base->max_number_of_state_cookies;
-	c->delete_oldest_state_cookies = add->delete_oldest_state_cookies != OIDC_CONFIG_POS_INT_UNSET
-					     ? add->delete_oldest_state_cookies
-					     : base->delete_oldest_state_cookies;
-	c->session_inactivity_timeout = add->session_inactivity_timeout != OIDC_CONFIG_POS_INT_UNSET
-					    ? add->session_inactivity_timeout
-					    : base->session_inactivity_timeout;
+	c->metadata_dir = _oidc_cfg_merge_ptr(add->metadata_dir, base->metadata_dir);
 
-	c->metadata_dir = add->metadata_dir != NULL ? add->metadata_dir : base->metadata_dir;
+	c->session_type = _oidc_cfg_merge_pos_int(add->session_type, base->session_type);
+	c->session_cache_fallback_to_cookie =
+	    _oidc_cfg_merge_pos_int(add->session_cache_fallback_to_cookie, base->session_cache_fallback_to_cookie);
+	c->persistent_session_cookie =
+	    _oidc_cfg_merge_pos_int(add->persistent_session_cookie, base->persistent_session_cookie);
+	c->store_id_token = _oidc_cfg_merge_pos_int(add->store_id_token, base->store_id_token);
+	c->session_cookie_chunk_size =
+	    _oidc_cfg_merge_pos_int(add->session_cookie_chunk_size, base->session_cookie_chunk_size);
 
-	c->session_type = add->session_type != OIDC_CONFIG_POS_INT_UNSET ? add->session_type : base->session_type;
-	c->session_cache_fallback_to_cookie = add->session_cache_fallback_to_cookie != OIDC_CONFIG_POS_INT_UNSET
-						  ? add->session_cache_fallback_to_cookie
-						  : base->session_cache_fallback_to_cookie;
-	c->persistent_session_cookie = add->persistent_session_cookie != OIDC_CONFIG_POS_INT_UNSET
-					   ? add->persistent_session_cookie
-					   : base->persistent_session_cookie;
-	c->store_id_token =
-	    add->store_id_token != OIDC_CONFIG_POS_INT_UNSET ? add->store_id_token : base->store_id_token;
-	c->session_cookie_chunk_size = add->session_cookie_chunk_size != OIDC_CONFIG_POS_INT_UNSET
-					   ? add->session_cookie_chunk_size
-					   : base->session_cookie_chunk_size;
+	c->cookie_domain = _oidc_cfg_merge_ptr(add->cookie_domain, base->cookie_domain);
+	c->claim_delimiter = _oidc_cfg_merge_ptr(add->claim_delimiter, base->claim_delimiter);
+	c->claim_prefix = _oidc_cfg_merge_ptr(add->claim_prefix, base->claim_prefix);
 
-	c->cookie_domain = add->cookie_domain != NULL ? add->cookie_domain : base->cookie_domain;
-	c->claim_delimiter = add->claim_delimiter != NULL ? add->claim_delimiter : base->claim_delimiter;
-	c->claim_prefix = add->claim_prefix != NULL ? add->claim_prefix : base->claim_prefix;
+	_oidc_cfg_merge_remote_user_claim(&c->remote_user_claim, &add->remote_user_claim, &base->remote_user_claim);
 
-	if (add->remote_user_claim.claim_name != NULL) {
-		c->remote_user_claim.claim_name = add->remote_user_claim.claim_name;
-		c->remote_user_claim.reg_exp = add->remote_user_claim.reg_exp;
-		c->remote_user_claim.replace = add->remote_user_claim.replace;
-	} else {
-		c->remote_user_claim.claim_name = base->remote_user_claim.claim_name;
-		c->remote_user_claim.reg_exp = base->remote_user_claim.reg_exp;
-		c->remote_user_claim.replace = base->remote_user_claim.replace;
-	}
+	c->cookie_http_only = _oidc_cfg_merge_pos_int(add->cookie_http_only, base->cookie_http_only);
 
-	c->cookie_http_only =
-	    add->cookie_http_only != OIDC_CONFIG_POS_INT_UNSET ? add->cookie_http_only : base->cookie_http_only;
+	c->cookie_same_site_session =
+	    _oidc_cfg_merge_pos_int(add->cookie_same_site_session, base->cookie_same_site_session);
+	c->cookie_same_site_state = _oidc_cfg_merge_pos_int(add->cookie_same_site_state, base->cookie_same_site_state);
+	c->cookie_same_site_discovery_csrf =
+	    _oidc_cfg_merge_pos_int(add->cookie_same_site_discovery_csrf, base->cookie_same_site_discovery_csrf);
 
-	c->cookie_same_site_session = add->cookie_same_site_session != OIDC_CONFIG_POS_INT_UNSET
-					  ? add->cookie_same_site_session
-					  : base->cookie_same_site_session;
-	c->cookie_same_site_state = add->cookie_same_site_state != OIDC_CONFIG_POS_INT_UNSET
-					? add->cookie_same_site_state
-					: base->cookie_same_site_state;
-	c->cookie_same_site_discovery_csrf = add->cookie_same_site_discovery_csrf != OIDC_CONFIG_POS_INT_UNSET
-						 ? add->cookie_same_site_discovery_csrf
-						 : base->cookie_same_site_discovery_csrf;
+	_oidc_cfg_merge_outgoing_proxy(&c->outgoing_proxy, &add->outgoing_proxy, &base->outgoing_proxy);
+	_oidc_cfg_merge_crypto_passphrase(&c->crypto_passphrase, &add->crypto_passphrase, &base->crypto_passphrase);
 
-	if (add->outgoing_proxy.host_port != NULL) {
-		c->outgoing_proxy.host_port = add->outgoing_proxy.host_port;
-		c->outgoing_proxy.username_password = add->outgoing_proxy.username_password;
-		c->outgoing_proxy.auth_type = add->outgoing_proxy.auth_type;
-	} else {
-		c->outgoing_proxy.host_port = base->outgoing_proxy.host_port;
-		c->outgoing_proxy.username_password = base->outgoing_proxy.username_password;
-		c->outgoing_proxy.auth_type = base->outgoing_proxy.auth_type;
-	}
+	c->post_preserve_template = _oidc_cfg_merge_ptr(add->post_preserve_template, base->post_preserve_template);
+	c->post_restore_template = _oidc_cfg_merge_ptr(add->post_restore_template, base->post_restore_template);
 
-	if (add->crypto_passphrase.secret1 != NULL) {
-		c->crypto_passphrase.secret1 = add->crypto_passphrase.secret1;
-		c->crypto_passphrase.secret2 = add->crypto_passphrase.secret2;
-	} else {
-		c->crypto_passphrase.secret1 = base->crypto_passphrase.secret1;
-		c->crypto_passphrase.secret2 = base->crypto_passphrase.secret2;
-	}
+	c->provider_metadata_refresh_interval =
+	    _oidc_cfg_merge_pos_int(add->provider_metadata_refresh_interval, base->provider_metadata_refresh_interval);
 
-	c->post_preserve_template =
-	    add->post_preserve_template != NULL ? add->post_preserve_template : base->post_preserve_template;
-	c->post_restore_template =
-	    add->post_restore_template != NULL ? add->post_restore_template : base->post_restore_template;
+	c->info_hook_data = _oidc_cfg_merge_ptr(add->info_hook_data, base->info_hook_data);
+	c->metrics_hook_data = _oidc_cfg_merge_ptr(add->metrics_hook_data, base->metrics_hook_data);
+	c->metrics_path = _oidc_cfg_merge_ptr(add->metrics_path, base->metrics_path);
+	c->trace_parent = _oidc_cfg_merge_pos_int(add->trace_parent, base->trace_parent);
+	c->dpop_api_enabled = _oidc_cfg_merge_pos_int(add->dpop_api_enabled, base->dpop_api_enabled);
 
-	c->provider_metadata_refresh_interval = add->provider_metadata_refresh_interval != OIDC_CONFIG_POS_INT_UNSET
-						    ? add->provider_metadata_refresh_interval
-						    : base->provider_metadata_refresh_interval;
+	c->black_listed_claims = _oidc_cfg_merge_ptr(add->black_listed_claims, base->black_listed_claims);
+	c->white_listed_claims = _oidc_cfg_merge_ptr(add->white_listed_claims, base->white_listed_claims);
+	c->filter_claims_expr = _oidc_cfg_merge_ptr(add->filter_claims_expr, base->filter_claims_expr);
 
-	c->info_hook_data = add->info_hook_data != NULL ? add->info_hook_data : base->info_hook_data;
-	c->metrics_hook_data = add->metrics_hook_data != NULL ? add->metrics_hook_data : base->metrics_hook_data;
-	c->metrics_path = add->metrics_path != NULL ? add->metrics_path : base->metrics_path;
-	c->trace_parent = add->trace_parent != OIDC_CONFIG_POS_INT_UNSET ? add->trace_parent : base->trace_parent;
-	c->dpop_api_enabled =
-	    add->dpop_api_enabled != OIDC_CONFIG_POS_INT_UNSET ? add->dpop_api_enabled : base->dpop_api_enabled;
+	c->state_input_headers = _oidc_cfg_merge_pos_int(add->state_input_headers, base->state_input_headers);
 
-	c->black_listed_claims =
-	    add->black_listed_claims != NULL ? add->black_listed_claims : base->black_listed_claims;
-	c->white_listed_claims =
-	    add->white_listed_claims != NULL ? add->white_listed_claims : base->white_listed_claims;
-	c->filter_claims_expr = add->filter_claims_expr != NULL ? add->filter_claims_expr : base->filter_claims_expr;
+	c->redirect_urls_allowed = _oidc_cfg_merge_ptr(add->redirect_urls_allowed, base->redirect_urls_allowed);
 
-	c->state_input_headers = add->state_input_headers != OIDC_CONFIG_POS_INT_UNSET ? add->state_input_headers
-										       : base->state_input_headers;
+	c->ca_bundle_path = _oidc_cfg_merge_ptr(add->ca_bundle_path, base->ca_bundle_path);
 
-	c->redirect_urls_allowed =
-	    add->redirect_urls_allowed != NULL ? add->redirect_urls_allowed : base->redirect_urls_allowed;
+	c->logout_x_frame_options = _oidc_cfg_merge_ptr(add->logout_x_frame_options, base->logout_x_frame_options);
 
-	c->ca_bundle_path = add->ca_bundle_path != NULL ? add->ca_bundle_path : base->ca_bundle_path;
+	c->x_forwarded_headers = _oidc_cfg_merge_pos_int(add->x_forwarded_headers, base->x_forwarded_headers);
 
-	c->logout_x_frame_options =
-	    add->logout_x_frame_options != NULL ? add->logout_x_frame_options : base->logout_x_frame_options;
-
-	c->x_forwarded_headers = add->x_forwarded_headers != OIDC_CONFIG_POS_INT_UNSET ? add->x_forwarded_headers
-										       : base->x_forwarded_headers;
-
-	c->action_on_userinfo_error = add->action_on_userinfo_error != OIDC_CONFIG_POS_INT_UNSET
-					  ? add->action_on_userinfo_error
-					  : base->action_on_userinfo_error;
+	c->action_on_userinfo_error =
+	    _oidc_cfg_merge_pos_int(add->action_on_userinfo_error, base->action_on_userinfo_error);
 
 	return c;
 }
