@@ -210,6 +210,47 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section, const 
 }
 
 /*
+ * scan the shared memory block to locate a slot matching section_key, the first free or
+ * expired slot, and the least-recently-used slot as a fallback
+ */
+static void oidc_cache_shm_find_slot(oidc_cfg_t *cfg, oidc_cache_shm_entry_t *base, const char *section_key,
+				     apr_time_t current_time, oidc_cache_shm_entry_t **match,
+				     oidc_cache_shm_entry_t **free_slot, oidc_cache_shm_entry_t **lru) {
+	oidc_cache_shm_entry_t *t = base;
+
+	*match = NULL;
+	*free_slot = NULL;
+	*lru = base;
+
+	for (int i = 0; i < cfg->cache.shm_size_max; i++, OIDC_CACHE_SHM_ADD_OFFSET(t, cfg->cache.shm_entry_size_max)) {
+
+		/* see if this slot is free */
+		if (t->section_key[0] == '\0') {
+			if (*free_slot == NULL)
+				*free_slot = t;
+			continue;
+		}
+
+		/* see if a value already exists for this key */
+		if (_oidc_strcmp(t->section_key, section_key) == 0) {
+			*match = t;
+			return;
+		}
+
+		/* see if this slot has expired (treat as free) */
+		if (t->expires <= current_time) {
+			if (*free_slot == NULL)
+				*free_slot = t;
+			continue;
+		}
+
+		/* track the least-recently-used slot for the fallback case */
+		if (t->access < (*lru)->access)
+			*lru = t;
+	}
+}
+
+/*
  * store a value in the shared memory cache
  */
 static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section, const char *key, const char *value,
@@ -219,7 +260,7 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section, const 
 	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *)cfg->cache.cfg;
 
 	oidc_cache_shm_entry_t *match = NULL;
-	oidc_cache_shm_entry_t *free = NULL;
+	oidc_cache_shm_entry_t *free_slot = NULL;
 	oidc_cache_shm_entry_t *lru = NULL;
 	oidc_cache_shm_entry_t *t = NULL;
 	apr_time_t current_time = 0;
@@ -244,46 +285,15 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section, const 
 	if (oidc_cache_mutex_lock(r->pool, r->server, context->mutex) == FALSE)
 		return FALSE;
 
-	/* get a pointer to the shared memory block */
-	t = apr_shm_baseaddr_get(context->shm);
-
 	/* get the current time */
 	current_time = apr_time_now();
 
 	/* loop over the block, looking for the key */
-	match = NULL;
-	free = NULL;
-	lru = t;
-	for (int i = 0; i < cfg->cache.shm_size_max; i++, OIDC_CACHE_SHM_ADD_OFFSET(t, cfg->cache.shm_entry_size_max)) {
-
-		/* see if this slot is free */
-		if (t->section_key[0] == '\0') {
-			if (free == NULL)
-				free = t;
-			continue;
-		}
-
-		/* see if a value already exists for this key */
-		if (_oidc_strcmp(t->section_key, section_key) == 0) {
-			match = t;
-			break;
-		}
-
-		/* see if this slot has expired */
-		if (t->expires <= current_time) {
-			if (free == NULL)
-				free = t;
-			continue;
-		}
-
-		/* see if this slot was less recently used than the current pointer */
-		if (t->access < lru->access) {
-			lru = t;
-		}
-	}
+	oidc_cache_shm_find_slot(cfg, apr_shm_baseaddr_get(context->shm), section_key, current_time, &match, &free_slot,
+				 &lru);
 
 	/* if we have no free slots, issue a warning about the LRU entry */
-	if (match == NULL && free == NULL) {
+	if (match == NULL && free_slot == NULL) {
 		age = (current_time - lru->access) / 1000000;
 		if (age < 3600) {
 			oidc_warn(r,
@@ -295,7 +305,7 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section, const 
 	}
 
 	/* pick the best slot: choose one with a matching key over a free slot, over a least-recently-used one */
-	t = match ? match : (free ? free : lru);
+	t = match ? match : (free_slot ? free_slot : lru);
 
 	/* see if we need to clear or set the value */
 	if (value != NULL) {
