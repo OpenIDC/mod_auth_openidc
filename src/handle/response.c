@@ -531,6 +531,60 @@ static apr_byte_t oidc_response_set_request_user(request_rec *r, oidc_cfg_t *c, 
 static char *_oidc_response_post_restore_template_contents = NULL;
 
 /*
+ * handle the case where the state parameter from the authorization response could not be matched
+ */
+static int oidc_response_handle_state_mismatch(request_rec *r, oidc_cfg_t *c) {
+	if (oidc_cfg_default_sso_url_get(c) != NULL) {
+		oidc_warn(r,
+			  "invalid authorization response state; a default SSO URL is set, sending the user there: %s",
+			  oidc_cfg_default_sso_url_get(c));
+		oidc_http_hdr_out_location_set(r, oidc_util_url_abs(r, c, oidc_cfg_default_sso_url_get(c)));
+		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_STATE_MISMATCH);
+		return HTTP_MOVED_TEMPORARILY;
+	}
+
+	oidc_error(r, "invalid authorization response state and no default SSO URL is set, sending an error...");
+
+	// if error text was already produced (e.g. state timeout) then just return with a 400
+	if (apr_table_get(r->subprocess_env, OIDC_ERROR_ENVVAR) != NULL) {
+		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_STATE_EXPIRED);
+		return HTTP_BAD_REQUEST;
+	}
+
+	OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_STATE_MISMATCH);
+
+	return oidc_util_html_send_error(r, "Invalid Authorization Response",
+					 "Could not match the authorization response to an earlier request via "
+					 "the state parameter and corresponding state cookie",
+					 HTTP_BAD_REQUEST);
+}
+
+/*
+ * finalize a successful authorization response: restore preserved form-post data or redirect to the original URL
+ */
+static int oidc_response_finish_success(request_rec *r, oidc_cfg_t *c, const char *original_url,
+					const char *original_method) {
+	/* log the successful response */
+	oidc_debug(r, "session created and stored, returning to original URL: %s, original method: %s", original_url,
+		   original_method);
+
+	/* check whether form post data was preserved; if so restore it */
+	if (_oidc_strcmp(original_method, OIDC_METHOD_FORM_POST) == 0) {
+		if (oidc_cfg_post_restore_template_get(c) != NULL)
+			return oidc_util_html_send_in_template(
+			    r, oidc_cfg_post_restore_template_get(c), &_oidc_response_post_restore_template_contents,
+			    original_url, OIDC_POST_PRESERVE_ESCAPE_JAVASCRIPT, "", OIDC_POST_PRESERVE_ESCAPE_NONE);
+		return oidc_response_post_preserved_restore(r, original_url);
+	}
+
+	/* now we've authenticated the user so go back to the URL that he originally tried to access */
+	oidc_http_hdr_out_location_set(r, original_url);
+
+	/* do the actual redirect to the original URL */
+	return HTTP_MOVED_TEMPORARILY;
+}
+
+/*
  * complete the handling of an authorization response by obtaining, parsing and verifying the
  * id_token and storing the authenticated user state in the session
  */
@@ -559,32 +613,7 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 	/* match the returned state parameter against the state stored in the browser */
 	if (oidc_response_match_state(r, c, apr_table_get(params, OIDC_PROTO_STATE), &provider, &proto_state) ==
 	    FALSE) {
-		if (oidc_cfg_default_sso_url_get(c) != NULL) {
-			oidc_warn(r,
-				  "invalid authorization response state; a default SSO URL is set, sending the user "
-				  "there: %s",
-				  oidc_cfg_default_sso_url_get(c));
-			oidc_http_hdr_out_location_set(r, oidc_util_url_abs(r, c, oidc_cfg_default_sso_url_get(c)));
-			OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_STATE_MISMATCH);
-			rc = HTTP_MOVED_TEMPORARILY;
-			goto end;
-		}
-		oidc_error(r,
-			   "invalid authorization response state and no default SSO URL is set, sending an error...");
-
-		// if error text was already produced (e.g. state timeout) then just return with a 400
-		if (apr_table_get(r->subprocess_env, OIDC_ERROR_ENVVAR) != NULL) {
-			OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_STATE_EXPIRED);
-			rc = HTTP_BAD_REQUEST;
-			goto end;
-		}
-
-		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_STATE_MISMATCH);
-
-		rc = oidc_util_html_send_error(r, "Invalid Authorization Response",
-					       "Could not match the authorization response to an earlier request via "
-					       "the state parameter and corresponding state cookie",
-					       HTTP_BAD_REQUEST);
+		rc = oidc_response_handle_state_mismatch(r, c);
 		goto end;
 	}
 
@@ -639,17 +668,16 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 
 	oidc_debug(r, "set remote_user to \"%s\" in new session \"%s\"", r->user, session->uuid);
 
+	// TOOD: actually need to compare sub? (need to store it in the session separately then
+	// const char *sub = NULL;
+	// oidc_session_get(r, session, "sub", &sub);
+	// if (_oidc_strcmp(sub, jwt->payload.sub) != 0) {
 	/* session management: if the user in the new response is not equal to the old one, error out */
-	if ((prompt != NULL) && (_oidc_strcmp(prompt, OIDC_PROTO_PROMPT_NONE) == 0)) {
-		// TOOD: actually need to compare sub? (need to store it in the session separately then
-		// const char *sub = NULL;
-		// oidc_session_get(r, session, "sub", &sub);
-		// if (_oidc_strcmp(sub, jwt->payload.sub) != 0) {
-		if (_oidc_strcmp(session->remote_user, r->user) != 0) {
-			oidc_warn(r, "user set from new id_token is different from current one");
-			rc = oidc_response_authorization_error(r, c, proto_state, "User changed!", NULL);
-			goto end;
-		}
+	if ((prompt != NULL) && (_oidc_strcmp(prompt, OIDC_PROTO_PROMPT_NONE) == 0) &&
+	    (_oidc_strcmp(session->remote_user, r->user) != 0)) {
+		oidc_warn(r, "user set from new id_token is different from current one");
+		rc = oidc_response_authorization_error(r, c, proto_state, "User changed!", NULL);
+		goto end;
 	}
 
 	/* store resolved information in the session */
@@ -671,27 +699,7 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 		goto end;
 	}
 
-	/* log the successful response */
-	oidc_debug(r, "session created and stored, returning to original URL: %s, original method: %s", original_url,
-		   original_method);
-
-	/* check whether form post data was preserved; if so restore it */
-	if (_oidc_strcmp(original_method, OIDC_METHOD_FORM_POST) == 0) {
-		if (oidc_cfg_post_restore_template_get(c) != NULL) {
-			rc = oidc_util_html_send_in_template(
-			    r, oidc_cfg_post_restore_template_get(c), &_oidc_response_post_restore_template_contents,
-			    original_url, OIDC_POST_PRESERVE_ESCAPE_JAVASCRIPT, "", OIDC_POST_PRESERVE_ESCAPE_NONE);
-		} else {
-			rc = oidc_response_post_preserved_restore(r, original_url);
-		}
-		goto end;
-	}
-
-	/* now we've authenticated the user so go back to the URL that he originally tried to access */
-	oidc_http_hdr_out_location_set(r, original_url);
-
-	/* do the actual redirect to the original URL */
-	rc = HTTP_MOVED_TEMPORARILY;
+	rc = oidc_response_finish_success(r, c, original_url, original_method);
 
 end:
 
