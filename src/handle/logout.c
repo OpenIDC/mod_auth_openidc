@@ -461,81 +461,102 @@ out:
 #define OIDC_REFRESH_TOKENS_BEFORE_LOGOUT_ENVVAR "OIDC_REFRESH_TOKENS_BEFORE_LOGOUT"
 
 /*
+ * append a query string suffix to url, picking '?' or '&' based on whether
+ * url already contains a query string
+ */
+static char *oidc_logout_url_append(request_rec *r, const char *url, const char *suffix) {
+	const char *sep = (strchr(url, OIDC_CHAR_QUERY) != NULL) ? OIDC_STR_AMP : OIDC_STR_QUERY;
+	return apr_pstrcat(r->pool, url, sep, suffix, NULL);
+}
+
+/*
+ * apply the default and validate the post-logout redirect URL; on failure
+ * sets *rv to the HTTP status the caller should return
+ */
+static apr_byte_t oidc_logout_validate_url(request_rec *r, oidc_cfg_t *c, char **url, int *rv) {
+
+	char *error_str = NULL;
+	char *error_description = NULL;
+
+	if ((*url == NULL) || (_oidc_strcmp(*url, "") == 0)) {
+		*url = apr_pstrdup(r->pool, oidc_util_url_abs(r, c, oidc_cfg_default_slo_url_get(c)));
+		return TRUE;
+	}
+
+	/* do input validation on the logout parameter value */
+	if (oidc_validate_redirect_url(r, c, *url, TRUE, &error_str, &error_description) == FALSE) {
+		*rv = oidc_util_html_send_error(r, error_str, error_description, HTTP_BAD_REQUEST);
+		return FALSE;
+	}
+	return TRUE;
+}
+
+/*
+ * build the OP end_session_endpoint URL, populating id_token_hint
+ * (optionally refreshed), post_logout_redirect_uri and any configured
+ * extra logout request parameters
+ */
+static char *oidc_logout_build_op_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
+					  oidc_provider_t *provider, const char *post_logout_url) {
+
+	char *id_token_hint = NULL;
+	char *s_logout_request = NULL;
+
+	if (apr_table_get(r->subprocess_env, OIDC_REFRESH_TOKENS_BEFORE_LOGOUT_ENVVAR) != NULL) {
+		if (oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, &id_token_hint) == FALSE)
+			oidc_warn(r, "id_token_hint could not be refreshed before logout");
+	} else {
+		id_token_hint = apr_pstrdup(r->pool, oidc_session_get_idtoken(r, session));
+	}
+
+	s_logout_request = apr_pstrdup(r->pool, oidc_cfg_provider_end_session_endpoint_get(provider));
+	if (id_token_hint != NULL)
+		s_logout_request = oidc_logout_url_append(
+		    r, s_logout_request,
+		    apr_psprintf(r->pool, OIDC_PROTO_ID_TOKEN_HINT "=%s", oidc_http_url_encode(r, id_token_hint)));
+
+	if (post_logout_url != NULL)
+		s_logout_request = oidc_logout_url_append(
+		    r, s_logout_request,
+		    apr_psprintf(r->pool, "post_logout_redirect_uri=%s", oidc_http_url_encode(r, post_logout_url)));
+
+	if (oidc_cfg_provider_logout_request_params_get(provider) != NULL)
+		s_logout_request = oidc_logout_url_append(r, s_logout_request,
+							  oidc_cfg_provider_logout_request_params_get(provider));
+
+	// char *state = NULL;
+	// oidc_proto_generate_nonce(r, &state, 8);
+	// s_logout_request = apr_psprintf(r->pool, "%s&state=%s", s_logout_request, state);
+	return s_logout_request;
+}
+
+/*
  * perform (single) logout
  */
 int oidc_logout(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 
-	oidc_provider_t *provider = NULL;
 	/* pickup the command or URL where the user wants to go after logout */
 	char *url = NULL;
-	char *error_str = NULL;
-	char *error_description = NULL;
-	char *id_token_hint = NULL;
-	char *s_logout_request = NULL;
+	oidc_provider_t *provider = NULL;
+	int rv = OK;
 
 	oidc_util_url_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_LOGOUT, &url);
 
 	oidc_debug(r, "enter (url=%s)", url);
 
-	if (oidc_logout_is_front_channel(url)) {
+	if (oidc_logout_is_front_channel(url))
 		return oidc_logout_request(r, c, session, url, TRUE);
-	} else if (oidc_logout_is_back_channel(url)) {
+	if (oidc_logout_is_back_channel(url))
 		return oidc_logout_backchannel(r, c);
-	}
 
-	if ((url == NULL) || (_oidc_strcmp(url, "") == 0)) {
-
-		url = apr_pstrdup(r->pool, oidc_util_url_abs(r, c, oidc_cfg_default_slo_url_get(c)));
-
-	} else {
-
-		/* do input validation on the logout parameter value */
-		if (oidc_validate_redirect_url(r, c, url, TRUE, &error_str, &error_description) == FALSE) {
-			return oidc_util_html_send_error(r, error_str, error_description, HTTP_BAD_REQUEST);
-		}
-	}
+	if (oidc_logout_validate_url(r, c, &url, &rv) == FALSE)
+		return rv;
 
 	if (oidc_get_provider_from_session(r, c, session, &provider) == FALSE)
 		oidc_warn(r, "oidc_get_provider_from_session failed");
 
-	if ((provider != NULL) && (oidc_cfg_provider_end_session_endpoint_get(provider) != NULL)) {
-
-		if (apr_table_get(r->subprocess_env, OIDC_REFRESH_TOKENS_BEFORE_LOGOUT_ENVVAR) != NULL) {
-			if (oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, &id_token_hint) == FALSE)
-				oidc_warn(r, "id_token_hint could not be refreshed before logout");
-		} else {
-			id_token_hint = apr_pstrdup(r->pool, oidc_session_get_idtoken(r, session));
-		}
-
-		s_logout_request = apr_pstrdup(r->pool, oidc_cfg_provider_end_session_endpoint_get(provider));
-		if (id_token_hint != NULL) {
-			s_logout_request = apr_psprintf(
-			    r->pool, "%s%s" OIDC_PROTO_ID_TOKEN_HINT "=%s", s_logout_request,
-			    strchr(s_logout_request ? s_logout_request : "", OIDC_CHAR_QUERY) != NULL ? OIDC_STR_AMP
-												      : OIDC_STR_QUERY,
-			    oidc_http_url_encode(r, id_token_hint));
-		}
-
-		if (url != NULL) {
-			s_logout_request = apr_psprintf(
-			    r->pool, "%s%spost_logout_redirect_uri=%s", s_logout_request,
-			    strchr(s_logout_request ? s_logout_request : "", OIDC_CHAR_QUERY) != NULL ? OIDC_STR_AMP
-												      : OIDC_STR_QUERY,
-			    oidc_http_url_encode(r, url));
-		}
-
-		if (oidc_cfg_provider_logout_request_params_get(provider) != NULL) {
-			s_logout_request = apr_psprintf(
-			    r->pool, "%s%s%s", s_logout_request,
-			    strchr(s_logout_request ? s_logout_request : "", OIDC_CHAR_QUERY) != NULL ? OIDC_STR_AMP
-												      : OIDC_STR_QUERY,
-			    oidc_cfg_provider_logout_request_params_get(provider));
-		}
-		// char *state = NULL;
-		// oidc_proto_generate_nonce(r, &state, 8);
-		// url = apr_psprintf(r->pool, "%s&state=%s", logout_request, state);
-		url = s_logout_request;
-	}
+	if ((provider != NULL) && (oidc_cfg_provider_end_session_endpoint_get(provider) != NULL))
+		url = oidc_logout_build_op_request(r, c, session, provider, url);
 
 	return oidc_logout_request(r, c, session, url, TRUE);
 }
