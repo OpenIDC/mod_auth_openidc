@@ -838,14 +838,65 @@ static apr_byte_t oidc_jose_parse_payload(apr_pool_t *pool, const char *s_payloa
 }
 
 /*
+ * decrypt a JWE using the key whose kid matches the JWE protected header
+ */
+static uint8_t *oidc_jwe_decrypt_by_kid(apr_pool_t *pool, cjose_jwe_t *jwe, apr_hash_t *keys, const char *kid,
+					size_t *content_len, oidc_jose_error_t *err) {
+	cjose_err cjose_err;
+	oidc_jwk_t *jwk = apr_hash_get(keys, kid, APR_HASH_KEY_STRING);
+
+	if (jwk == NULL) {
+		oidc_jose_error(err, "could not find key with kid: %s", kid);
+		return NULL;
+	}
+
+	if ((jwk->use != NULL) && (_oidc_strcmp(jwk->use, OIDC_JOSE_JWK_ENC_STR) != 0)) {
+		oidc_jose_error(err, "cannot use non-encryption (\"use=enc\") key with kid: %s", kid);
+		return NULL;
+	}
+
+	uint8_t *decrypted = cjose_jwe_decrypt(jwe, jwk->cjose_jwk, content_len, &cjose_err);
+	if (decrypted == NULL)
+		oidc_jose_error(err, "encrypted JWT could not be decrypted with kid %s: %s", kid,
+				oidc_cjose_e2s(pool, cjose_err));
+	return decrypted;
+}
+
+/*
+ * decrypt a JWE by trying every configured key whose kty/use is compatible
+ * with the JWE's algorithm
+ */
+static uint8_t *oidc_jwe_decrypt_any(apr_pool_t *pool, cjose_jwe_t *jwe, apr_hash_t *keys, const char *alg,
+				     size_t *content_len, oidc_jose_error_t *err) {
+	cjose_err cjose_err;
+	uint8_t *decrypted = NULL;
+	oidc_jwk_t *jwk = NULL;
+
+	for (apr_hash_index_t *hi = apr_hash_first(pool, keys); hi; hi = apr_hash_next(hi)) {
+		apr_hash_this(hi, NULL, NULL, (void **)&jwk);
+
+		if (jwk->kty != oidc_alg2kty(alg))
+			continue;
+		if ((jwk->use) && (_oidc_strcmp(jwk->use, OIDC_JOSE_JWK_ENC_STR) != 0))
+			continue;
+
+		decrypted = cjose_jwe_decrypt(jwe, jwk->cjose_jwk, content_len, &cjose_err);
+		if (decrypted != NULL)
+			return decrypted;
+	}
+
+	oidc_jose_error(err,
+			"encrypted JWT could not be decrypted with any of the %d keys: error for last "
+			"tried key is: %s",
+			apr_hash_count(keys), oidc_cjose_e2s(pool, cjose_err));
+	return NULL;
+}
+
+/*
  * decrypt a JWT and return the plaintext
  */
 static uint8_t *oidc_jwe_decrypt_impl(apr_pool_t *pool, cjose_jwe_t *jwe, apr_hash_t *keys, size_t *content_len,
 				      oidc_jose_error_t *err) {
-
-	uint8_t *decrypted = NULL;
-	oidc_jwk_t *jwk = NULL;
-	apr_hash_index_t *hi;
 
 	cjose_err cjose_err;
 	cjose_header_t *hdr = cjose_jwe_get_protected(jwe);
@@ -857,46 +908,10 @@ static uint8_t *oidc_jwe_decrypt_impl(apr_pool_t *pool, cjose_jwe_t *jwe, apr_ha
 		return NULL;
 	}
 
-	if (kid != NULL) {
+	if (kid != NULL)
+		return oidc_jwe_decrypt_by_kid(pool, jwe, keys, kid, content_len, err);
 
-		jwk = apr_hash_get(keys, kid, APR_HASH_KEY_STRING);
-		if (jwk != NULL) {
-			if ((jwk->use == NULL) || (_oidc_strcmp(jwk->use, OIDC_JOSE_JWK_ENC_STR) == 0)) {
-				decrypted = cjose_jwe_decrypt(jwe, jwk->cjose_jwk, content_len, &cjose_err);
-				if (decrypted == NULL)
-					oidc_jose_error(err, "encrypted JWT could not be decrypted with kid %s: %s",
-							kid, oidc_cjose_e2s(pool, cjose_err));
-			} else {
-				oidc_jose_error(err, "cannot use non-encryption (\"use=enc\") key with kid: %s", kid);
-			}
-		} else {
-			oidc_jose_error(err, "could not find key with kid: %s", kid);
-		}
-
-	} else {
-
-		for (hi = apr_hash_first(pool, keys); hi; hi = apr_hash_next(hi)) {
-			apr_hash_this(hi, NULL, NULL, (void **)&jwk);
-
-			if (jwk->kty != oidc_alg2kty(alg))
-				continue;
-
-			if ((jwk->use) && (_oidc_strcmp(jwk->use, OIDC_JOSE_JWK_ENC_STR) != 0))
-				continue;
-
-			decrypted = cjose_jwe_decrypt(jwe, jwk->cjose_jwk, content_len, &cjose_err);
-			if (decrypted != NULL)
-				break;
-		}
-
-		if (decrypted == NULL)
-			oidc_jose_error(err,
-					"encrypted JWT could not be decrypted with any of the %d keys: error for last "
-					"tried key is: %s",
-					apr_hash_count(keys), oidc_cjose_e2s(pool, cjose_err));
-	}
-
-	return decrypted;
+	return oidc_jwe_decrypt_any(pool, jwe, keys, alg, content_len, err);
 }
 
 /*
@@ -1287,58 +1302,62 @@ apr_byte_t oidc_jose_version_deprecated(apr_pool_t *pool) {
 /*
  * verify the signature of a JWT
  */
-apr_byte_t oidc_jwt_verify(apr_pool_t *pool, oidc_jwt_t *jwt, apr_hash_t *keys, oidc_jose_error_t *err) {
+/*
+ * verify a JWS against a single JWK, reporting failure into err and clearing
+ * jwt->cjose_jws when the linked cjose version is known to leave it in an
+ * unusable state after a failed verify
+ */
+static apr_byte_t oidc_jwt_verify_with_key(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk,
+					   oidc_jose_error_t *err) {
+	cjose_err cjose_err;
+	apr_byte_t rc = cjose_jws_verify(jwt->cjose_jws, jwk->cjose_jwk, &cjose_err);
+	if (rc == FALSE) {
+		oidc_jose_error(err, "cjose_jws_verify failed: %s", oidc_cjose_e2s(pool, cjose_err));
+		if (oidc_jose_version_deprecated(pool))
+			jwt->cjose_jws = NULL;
+	}
+	return rc;
+}
+
+/*
+ * verify a JWS by iterating over all configured keys with a matching kty
+ */
+static apr_byte_t oidc_jwt_verify_any(apr_pool_t *pool, oidc_jwt_t *jwt, apr_hash_t *keys, oidc_jose_error_t *err) {
+	oidc_jwk_t *jwk = NULL;
 	apr_byte_t rc = FALSE;
 
-	oidc_jwk_t *jwk = NULL;
-	apr_hash_index_t *hi;
-	cjose_err cjose_err;
-
-	if (jwt->header.kid != NULL) {
-
-		jwk = apr_hash_get(keys, jwt->header.kid, APR_HASH_KEY_STRING);
-		if (jwk != NULL) {
-			rc = cjose_jws_verify(jwt->cjose_jws, jwk->cjose_jwk, &cjose_err);
-			if (rc == FALSE) {
-				oidc_jose_error(err, "cjose_jws_verify failed: %s", oidc_cjose_e2s(pool, cjose_err));
-				if (oidc_jose_version_deprecated(pool))
-					jwt->cjose_jws = NULL;
-			}
-		} else {
-			oidc_jose_error(err, "could not find key with kid: %s", jwt->header.kid);
-			rc = FALSE;
-		}
-
-	} else {
-
-		for (hi = apr_hash_first(pool, keys); hi; hi = apr_hash_next(hi)) {
-			apr_hash_this(hi, NULL, NULL, (void **)&jwk);
-			if (jwk->kty == oidc_jwt_alg2kty(jwt)) {
-				rc = cjose_jws_verify(jwt->cjose_jws, jwk->cjose_jwk, &cjose_err);
-				if (rc == FALSE) {
-					oidc_jose_error(err, "cjose_jws_verify failed: %s",
-							oidc_cjose_e2s(pool, cjose_err));
-					if (oidc_jose_version_deprecated(pool))
-						jwt->cjose_jws = NULL;
-				}
-			}
-			if ((rc == TRUE) || (jwt->cjose_jws == NULL))
-				break;
-		}
-
-		if (rc == FALSE)
-			oidc_jose_error(
-			    err, "could not verify signature against any of the (%d) provided keys%s",
-			    apr_hash_count(keys),
-			    apr_hash_count(keys) > 0
-				? ""
-				: apr_psprintf(
-				      pool,
-				      "; you have probably provided no or incorrect keys/key-types for algorithm: %s",
-				      jwt->header.alg));
+	for (apr_hash_index_t *hi = apr_hash_first(pool, keys); hi; hi = apr_hash_next(hi)) {
+		apr_hash_this(hi, NULL, NULL, (void **)&jwk);
+		if (jwk->kty == oidc_jwt_alg2kty(jwt))
+			rc = oidc_jwt_verify_with_key(pool, jwt, jwk, err);
+		if ((rc == TRUE) || (jwt->cjose_jws == NULL))
+			break;
 	}
 
+	if (rc == FALSE)
+		oidc_jose_error(
+		    err, "could not verify signature against any of the (%d) provided keys%s", apr_hash_count(keys),
+		    apr_hash_count(keys) > 0
+			? ""
+			: apr_psprintf(pool,
+				       "; you have probably provided no or incorrect keys/key-types for algorithm: %s",
+				       jwt->header.alg));
+
 	return rc;
+}
+
+apr_byte_t oidc_jwt_verify(apr_pool_t *pool, oidc_jwt_t *jwt, apr_hash_t *keys, oidc_jose_error_t *err) {
+
+	if (jwt->header.kid == NULL)
+		return oidc_jwt_verify_any(pool, jwt, keys, err);
+
+	oidc_jwk_t *jwk = apr_hash_get(keys, jwt->header.kid, APR_HASH_KEY_STRING);
+	if (jwk == NULL) {
+		oidc_jose_error(err, "could not find key with kid: %s", jwt->header.kid);
+		return FALSE;
+	}
+
+	return oidc_jwt_verify_with_key(pool, jwt, jwk, err);
 }
 
 /*
@@ -1657,103 +1676,139 @@ end:
  * convert the PEM public key - possibly in a X.509 certificate - in the BIO pointed to
  * by "input" to a JSON Web Key object
  */
+/*
+ * populate x5c (first cert plus any trailing chain entries) and the x5t/x5t#S256
+ * thumbprints on jwk from a parsed X.509 certificate
+ */
+static apr_byte_t oidc_jwk_populate_cert_info(apr_pool_t *pool, BIO *input, oidc_jwk_t *jwk, X509 *x509,
+					      const char *first_pem, oidc_jose_error_t *err) {
+	unsigned char *x509_bytes = NULL;
+	int x509_cert_length = 0;
+	char *next_pem = NULL;
+	apr_byte_t rv = FALSE;
+
+	jwk->x5c = apr_array_make(pool, 1, sizeof(const char *));
+	if (jwk->x5c == NULL) {
+		oidc_jose_error(err, "apr_array_make failed");
+		return FALSE;
+	}
+	APR_ARRAY_PUSH(jwk->x5c, const char *) = first_pem;
+
+#if OPENSSL_VERSION_NUMBER < 0x000907000L
+	// openssl below 0.9.7 does not allocate memory for you :o
+	x509_cert_length = i2d_X509(x509, NULL);
+	if (x509_cert_length <= 0) {
+		oidc_jose_error_openssl(err, "i2d_X509");
+		goto end;
+	}
+	x509_bytes = (unsigned char *)OPENSSL_malloc(pool, x509_cert_length + 1);
+	const unsigned char *p = x509_bytes;
+	x509_cert_length = i2d_X509(x509, &p);
+#else
+	x509_cert_length = i2d_X509(x509, &x509_bytes);
+#endif
+	if (x509_cert_length < 0) {
+		oidc_jose_error_openssl(err, "i2d_X509");
+		goto end;
+	}
+
+	oidc_jose_hash_and_base64url_encode(pool, OIDC_JOSE_ALG_SHA1, (const char *)x509_bytes, x509_cert_length,
+					    &jwk->x5t, err);
+	oidc_jose_hash_and_base64url_encode(pool, OIDC_JOSE_ALG_SHA256, (const char *)x509_bytes, x509_cert_length,
+					    &jwk->x5t_S256, err);
+
+	while (oidc_jwk_x509_read(pool, input, &next_pem, NULL, NULL, err) == TRUE)
+		APR_ARRAY_PUSH(jwk->x5c, const char *) = next_pem;
+
+	rv = TRUE;
+
+end:
+	if (x509_bytes)
+		OPENSSL_free(x509_bytes);
+	return rv;
+}
+
+/*
+ * read a public key from the BIO, falling back to an X.509 certificate chain
+ * when the BIO does not contain a bare PEM public key; on success, the
+ * extracted EVP_PKEY is returned in *pkey (out_x509 carries the cert that must
+ * be X509_free'd by the caller, when non-NULL)
+ */
+static apr_byte_t oidc_jwk_pem_bio_read_public(apr_pool_t *pool, BIO *input, oidc_jwk_t *jwk, EVP_PKEY **pkey,
+					       X509 **out_x509, oidc_jose_error_t *err) {
+
+	*pkey = PEM_read_bio_PUBKEY(input, NULL, NULL, NULL);
+	if (*pkey != NULL)
+		return TRUE;
+
+	/* not a public key - reset the buffer and try as a certificate */
+	BIO_reset(input);
+
+	char *first_pem = NULL;
+	if (oidc_jwk_x509_read(pool, input, &first_pem, pkey, out_x509, err) == FALSE)
+		return FALSE;
+
+	return oidc_jwk_populate_cert_info(pool, input, jwk, *out_x509, first_pem, err);
+}
+
+/*
+ * return the OpenSSL key-type base id for the supplied EVP_PKEY, abstracting
+ * over the different OpenSSL API versions
+ */
+static int oidc_jwk_pkey_base_id(EVP_PKEY *pkey) {
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+	return EVP_PKEY_get_base_id(pkey);
+#elif (OPENSSL_VERSION_NUMBER > 0x10100000)
+	return EVP_PKEY_base_id(pkey);
+#else
+	return EVP_PKEY_type(pkey->type);
+#endif
+}
+
+/*
+ * dispatch a parsed EVP_PKEY into the matching JWK builder, producing the
+ * fingerprint bytes that drive kid generation
+ */
+static apr_byte_t oidc_jwk_pkey_to_jwk(apr_pool_t *pool, EVP_PKEY *pkey, oidc_jwk_t **jwk, char **fp, int *fp_len,
+				       oidc_jose_error_t *err) {
+	switch (oidc_jwk_pkey_base_id(pkey)) {
+	case EVP_PKEY_RSA:
+		return _oidc_jwk_rsa_key_to_jwk(pool, pkey, jwk, fp, fp_len, err);
+#if (OIDC_JOSE_EC_SUPPORT)
+	case EVP_PKEY_EC:
+		return _oidc_jwk_ec_key_to_jwk(pool, pkey, jwk, fp, fp_len, err);
+#endif
+	default:
+		oidc_jose_error(err, "unhandled key type: %d", oidc_jwk_pkey_base_id(pkey));
+		return FALSE;
+	}
+}
+
 apr_byte_t oidc_jwk_pem_bio_to_jwk(apr_pool_t *pool, BIO *input, const char *kid, oidc_jwk_t **oidc_jwk,
 				   apr_byte_t is_private_key, oidc_jose_error_t *err) {
 	cjose_err cjose_err;
 	X509 *x509 = NULL;
 	EVP_PKEY *pkey = NULL;
-	int pkey_type = 0;
 	apr_byte_t rv = FALSE;
-	char *x509_pem_encoded_certificate = NULL;
-	unsigned char *x509_bytes = NULL;
-	int x509_cert_length = 0;
 	char *fp = NULL;
 	int fp_len = 0;
 
 	*oidc_jwk = oidc_jwk_new(pool);
 
 	if (is_private_key == TRUE) {
-		/* get the private key struct from the BIO */
 		if ((pkey = PEM_read_bio_PrivateKey(input, NULL, NULL, NULL)) == NULL) {
 			oidc_jose_error_openssl(err, "PEM_read_bio_PrivateKey");
 			goto end;
 		}
-	} else {
-		/* read public key */
-		if ((pkey = PEM_read_bio_PUBKEY(input, NULL, NULL, NULL)) == NULL) {
-			/* not a public key - reset the buffer */
-			BIO_reset(input);
-
-			if (oidc_jwk_x509_read(pool, input, &x509_pem_encoded_certificate, &pkey, &x509, err) == FALSE)
-				goto end;
-
-			/* certificate is present, fill the jwkset with certificate entries */
-			/* populate first x5c certificate */
-			(*oidc_jwk)->x5c = apr_array_make(pool, 1, sizeof(const char *));
-			if ((*oidc_jwk)->x5c == NULL) {
-				oidc_jose_error(err, "apr_array_make failed");
-				goto end;
-			}
-			APR_ARRAY_PUSH((*oidc_jwk)->x5c, const char *) = x509_pem_encoded_certificate;
-
-			/* populate thumbprints entries */
-#if OPENSSL_VERSION_NUMBER < 0x000907000L
-			// openssl below 0.9.7 does not allocate memory for you :o
-			x509_cert_length = i2d_X509(x509, NULL);
-			if (x509_cert_length <= 0) {
-				oidc_jose_error_openssl(err, "i2d_X509");
-				goto end;
-			}
-			x509_bytes = (unsigned char *)OPENSSL_malloc(pool, x509_cert_length + 1);
-			const unsigned char *p = x509_bytes;
-			x509_cert_length = i2d_X509(x509, &p);
-#else
-			x509_cert_length = i2d_X509(x509, &x509_bytes);
-#endif
-			if (x509_cert_length < 0) {
-				oidc_jose_error_openssl(err, "i2d_X509");
-				goto end;
-			}
-
-			/* populate x5t */
-			oidc_jose_hash_and_base64url_encode(pool, OIDC_JOSE_ALG_SHA1, (const char *)x509_bytes,
-							    x509_cert_length, &(*oidc_jwk)->x5t, err);
-			/* populate x5t_S256 */
-			oidc_jose_hash_and_base64url_encode(pool, OIDC_JOSE_ALG_SHA256, (const char *)x509_bytes,
-							    x509_cert_length, &(*oidc_jwk)->x5t_S256, err);
-
-			while (oidc_jwk_x509_read(pool, input, &x509_pem_encoded_certificate, NULL, NULL, err) == TRUE)
-				APR_ARRAY_PUSH((*oidc_jwk)->x5c, const char *) = x509_pem_encoded_certificate;
-		}
-	}
-
-#if OPENSSL_VERSION_NUMBER >= 0x30000000L
-	pkey_type = EVP_PKEY_get_base_id(pkey);
-#elif (OPENSSL_VERSION_NUMBER > 0x10100000)
-	pkey_type = EVP_PKEY_base_id(pkey);
-#else
-	pkey_type = EVP_PKEY_type(pkey->type);
-#endif
-
-	switch (pkey_type) {
-	case EVP_PKEY_RSA:
-		if (_oidc_jwk_rsa_key_to_jwk(pool, pkey, oidc_jwk, &fp, &fp_len, err) == FALSE)
-			goto end;
-		break;
-#if (OIDC_JOSE_EC_SUPPORT)
-	case EVP_PKEY_EC:
-		if (_oidc_jwk_ec_key_to_jwk(pool, pkey, oidc_jwk, &fp, &fp_len, err) == FALSE)
-			goto end;
-		break;
-#endif
-	default:
-		oidc_jose_error(err, "unhandled key type: %d", pkey_type);
-		break;
-	}
-
-	if (oidc_jwk_set_or_generate_kid(pool, (*oidc_jwk)->cjose_jwk, kid, fp, fp_len, err) == FALSE) {
+	} else if (oidc_jwk_pem_bio_read_public(pool, input, *oidc_jwk, &pkey, &x509, err) == FALSE) {
 		goto end;
 	}
+
+	if (oidc_jwk_pkey_to_jwk(pool, pkey, oidc_jwk, &fp, &fp_len, err) == FALSE)
+		goto end;
+
+	if (oidc_jwk_set_or_generate_kid(pool, (*oidc_jwk)->cjose_jwk, kid, fp, fp_len, err) == FALSE)
+		goto end;
 
 	(*oidc_jwk)->kid = apr_pstrdup(pool, cjose_jwk_get_kid((*oidc_jwk)->cjose_jwk, &cjose_err));
 	(*oidc_jwk)->kty = cjose_jwk_get_kty((*oidc_jwk)->cjose_jwk, &cjose_err);
@@ -1762,8 +1817,6 @@ apr_byte_t oidc_jwk_pem_bio_to_jwk(apr_pool_t *pool, BIO *input, const char *kid
 
 end:
 
-	if (x509_bytes)
-		OPENSSL_free(x509_bytes);
 	if (pkey)
 		EVP_PKEY_free(pkey);
 	if (x509)
