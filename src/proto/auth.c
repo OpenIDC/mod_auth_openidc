@@ -170,6 +170,50 @@ static apr_byte_t oidc_proto_endpoint_access_token_bearer(request_rec *r, oidc_c
 }
 
 /*
+ * pick the private signing key (and its accompanying x5t when available) used to sign a private_key_jwt
+ * assertion: client-specific keys take precedence over the module-wide configured private keys
+ */
+static oidc_jwk_t *oidc_proto_endpoint_auth_pick_signing_key(oidc_cfg_t *cfg, const apr_array_header_t *client_keys,
+							     const char **x5t) {
+	const oidc_jwk_t *jwk_pub = NULL;
+	oidc_jwk_t *jwk = NULL;
+
+	*x5t = NULL;
+	if ((client_keys != NULL) && (client_keys->nelts > 0)) {
+		jwk = oidc_util_key_list_first(client_keys, -1, OIDC_JOSE_JWK_SIG_STR);
+		if (jwk && jwk->x5t)
+			*x5t = jwk->x5t;
+		return jwk;
+	}
+	if ((oidc_cfg_private_keys_get(cfg) != NULL) && (oidc_cfg_private_keys_get(cfg)->nelts > 0)) {
+		jwk = oidc_util_key_list_first(oidc_cfg_private_keys_get(cfg), -1, OIDC_JOSE_JWK_SIG_STR);
+		jwk_pub = oidc_util_key_list_first(oidc_cfg_public_keys_get(cfg), -1, OIDC_JOSE_JWK_SIG_STR);
+		if (jwk_pub && jwk_pub->x5t)
+			// populate x5t; at least required for Microsoft Entra ID / Azure AD
+			*x5t = jwk_pub->x5t;
+	}
+	return jwk;
+}
+
+/*
+ * derive the default JWS algorithm to sign a private_key_jwt assertion with from the key (RSA -> RS256;
+ * EC -> ES256/384/512 per curve); returns NULL when the key type/curve is unsupported
+ */
+static const char *oidc_proto_endpoint_auth_default_alg(const oidc_jwk_t *jwk) {
+	if (jwk->kty == CJOSE_JWK_KTY_RSA)
+		return CJOSE_HDR_ALG_RS256;
+	if (jwk->kty == CJOSE_JWK_KTY_EC) {
+		if (cjose_jwk_EC_get_curve(jwk->cjose_jwk, NULL) == NID_X9_62_prime256v1)
+			return CJOSE_HDR_ALG_ES256;
+		if (cjose_jwk_EC_get_curve(jwk->cjose_jwk, NULL) == NID_secp384r1)
+			return CJOSE_HDR_ALG_ES384;
+		if (cjose_jwk_EC_get_curve(jwk->cjose_jwk, NULL) == NID_secp521r1)
+			return CJOSE_HDR_ALG_ES512;
+	}
+	return NULL;
+}
+
+/*
  * create a JWT assertion signed with the configured private key and add it to the HTTP request as endpoint
  * authentication
  */
@@ -180,52 +224,37 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r, oidc_
 	apr_byte_t rv = FALSE;
 	oidc_jwt_t *jwt = NULL;
 	oidc_jwk_t *jwk = NULL;
-	const oidc_jwk_t *jwk_pub = NULL;
+	const char *x5t = NULL;
+	const char *alg = NULL;
 
 	oidc_debug(r, "enter");
 
 	if (oidc_proto_jwt_create(r, client_id, audience, &jwt) == FALSE)
 		return FALSE;
 
-	if ((client_keys != NULL) && (client_keys->nelts > 0)) {
-		jwk = oidc_util_key_list_first(client_keys, -1, OIDC_JOSE_JWK_SIG_STR);
-		if (jwk && jwk->x5t)
-			jwt->header.x5t = apr_pstrdup(r->pool, jwk->x5t);
-	} else if ((oidc_cfg_private_keys_get(cfg) != NULL) && (oidc_cfg_private_keys_get(cfg)->nelts > 0)) {
-		jwk = oidc_util_key_list_first(oidc_cfg_private_keys_get(cfg), -1, OIDC_JOSE_JWK_SIG_STR);
-		jwk_pub = oidc_util_key_list_first(oidc_cfg_public_keys_get(cfg), -1, OIDC_JOSE_JWK_SIG_STR);
-		if (jwk_pub && jwk_pub->x5t)
-			// populate x5t; at least required for Microsoft Entra ID / Azure AD
-			jwt->header.x5t = apr_pstrdup(r->pool, jwk_pub->x5t);
-	}
-
+	jwk = oidc_proto_endpoint_auth_pick_signing_key(cfg, client_keys, &x5t);
 	if (jwk == NULL) {
 		oidc_error(r, "no private signing keys have been configured to use for private_key_jwt client "
 			      "authentication (" OIDCPrivateKeyFiles ")");
 		goto end;
 	}
 
+	if (x5t != NULL)
+		jwt->header.x5t = apr_pstrdup(r->pool, x5t);
 	jwt->header.kid = apr_pstrdup(r->pool, jwk->kid);
 
 	if (token_endpoint_auth_alg != NULL) {
-		jwt->header.alg = apr_pstrdup(r->pool, token_endpoint_auth_alg);
 		// oidc_proto_jwt_sign_and_add will fail later if no corresponding key was configured
+		alg = token_endpoint_auth_alg;
 	} else {
-		if (jwk->kty == CJOSE_JWK_KTY_RSA) {
-			jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_RS256);
-		} else if (jwk->kty == CJOSE_JWK_KTY_EC) {
-			if (cjose_jwk_EC_get_curve(jwk->cjose_jwk, NULL) == NID_X9_62_prime256v1)
-				jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_ES256);
-			if (cjose_jwk_EC_get_curve(jwk->cjose_jwk, NULL) == NID_secp384r1)
-				jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_ES384);
-			if (cjose_jwk_EC_get_curve(jwk->cjose_jwk, NULL) == NID_secp521r1)
-				jwt->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_ES512);
-		} else {
+		alg = oidc_proto_endpoint_auth_default_alg(jwk);
+		if (alg == NULL) {
 			oidc_error(
 			    r, "no valid signing key (RSA or Elliptic Curve) could be found in " OIDCPrivateKeyFiles);
 			goto end;
 		}
 	}
+	jwt->header.alg = apr_pstrdup(r->pool, alg);
 
 	oidc_debug(r, "signing private_key_jwt assertion with algorithm: %s", jwt->header.alg);
 
