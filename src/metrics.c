@@ -1198,6 +1198,41 @@ static int oidc_metrics_handle_internal(request_rec *r, char *s_json) {
 #define OIDC_METRICS_VALUE_PARAM "value"
 
 /*
+ * find the counter entry in j_counters whose type matches "class.metric" (s_metric_param)
+ */
+static json_t *oidc_metrics_status_find_counter(request_rec *r, json_t *j_counters, const char *s_metric_param) {
+	void *iter = json_object_iter(j_counters);
+	while (iter) {
+		unsigned int type = _oidc_metrics_key2type(json_object_iter_key(iter));
+		if (_oidc_strcmp(_oidc_metrics_counter_type2s(r->pool, type), s_metric_param) == 0)
+			return json_object_iter_value(iter);
+		iter = json_object_iter_next(j_counters, iter);
+	}
+	return NULL;
+}
+
+/*
+ * extract the requested integer value out of a counter entry:
+ *   - integer entry: the counter itself
+ *   - object entry with value-only selector: j_counter[value]
+ *   - object entry with name+value selectors: j_counter[name][value]
+ */
+static json_t *oidc_metrics_status_select_value(json_t *j_counter, const char *s_name_param,
+						const char *s_value_param) {
+	json_t *j_values = NULL;
+	if (json_is_integer(j_counter))
+		return j_counter;
+	if (s_value_param == NULL)
+		return NULL;
+	if (s_name_param == NULL)
+		return json_object_get(j_counter, s_value_param);
+	j_values = json_object_get(j_counter, s_name_param);
+	if (j_values == NULL)
+		return NULL;
+	return json_object_get(j_values, s_value_param);
+}
+
+/*
  * return status updates
  */
 static int oidc_metrics_handle_status(request_rec *r, char *s_json) {
@@ -1210,12 +1245,7 @@ static int oidc_metrics_handle_status(request_rec *r, char *s_json) {
 	json_t *j_server = NULL;
 	json_t *j_counters = NULL;
 	json_t *j_counter = NULL;
-	json_t *j_values = NULL;
 	json_t *j_value = NULL;
-	const char *s_key = NULL;
-	const char *s_name = NULL;
-	unsigned int type = 0;
-	void *iter = NULL;
 
 	oidc_util_url_parameter_get(r, OIDC_METRICS_SERVER_PARAM, &s_server_param);
 	oidc_util_url_parameter_get(r, OIDC_METRICS_COUNTER_PARAM, &s_metric_param);
@@ -1240,31 +1270,13 @@ static int oidc_metrics_handle_status(request_rec *r, char *s_json) {
 	if (j_counters == NULL)
 		goto end;
 
-	iter = json_object_iter(j_counters);
-	while (iter) {
-		s_key = json_object_iter_key(iter);
-		j_counter = json_object_iter_value(iter);
-		type = _oidc_metrics_key2type(s_key);
-		s_name = _oidc_metrics_counter_type2s(r->pool, type);
-		if (_oidc_strcmp(s_name, s_metric_param) == 0) {
-			if (json_is_integer(j_counter)) {
-				j_value = j_counter;
-			} else if (s_value_param != NULL) {
-				if (s_name_param != NULL) {
-					j_values = json_object_get(j_counter, s_name_param);
-					if (j_values != NULL)
-						j_value = json_object_get(j_values, s_value_param);
-				} else {
-					j_value = json_object_get(j_counter, s_value_param);
-				}
-			}
-			if (j_value)
-				msg = apr_psprintf(r->pool, "OK: %s\n",
-						   _json_int2str(r->pool, json_integer_value(j_value)));
-			break;
-		}
-		iter = json_object_iter_next(j_counters, iter);
-	}
+	j_counter = oidc_metrics_status_find_counter(r, j_counters, s_metric_param);
+	if (j_counter == NULL)
+		goto end;
+
+	j_value = oidc_metrics_status_select_value(j_counter, s_name_param, s_value_param);
+	if (j_value)
+		msg = apr_psprintf(r->pool, "OK: %s\n", _json_int2str(r->pool, json_integer_value(j_value)));
 
 end:
 
