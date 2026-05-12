@@ -298,126 +298,130 @@ int oidc_logout_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, 
  */
 #define OIDC_EVENTS_BLOGOUT_KEY "http://schemas.openid.net/event/backchannel-logout"
 
-static int oidc_logout_backchannel(request_rec *r, oidc_cfg_t *cfg) {
-
-	oidc_debug(r, "enter");
-
-	const char *logout_token = NULL;
-	oidc_jwt_t *jwt = NULL;
-	oidc_jose_error_t err;
-	oidc_jwk_t *jwk = NULL;
-	oidc_provider_t *provider = NULL;
-	char *sid = NULL;
-	int rc = HTTP_BAD_REQUEST;
-
+static int oidc_logout_backchannel_read_token(request_rec *r, const char **logout_token) {
 	apr_table_t *params = apr_table_make(r->pool, 8);
 	if (oidc_util_read_post_params(r, params, FALSE, NULL) == FALSE) {
 		oidc_error(r, "could not read POST-ed parameters to the logout endpoint");
-		goto out;
+		return HTTP_BAD_REQUEST;
 	}
-
-	logout_token = apr_table_get(params, OIDC_PROTO_LOGOUT_TOKEN);
-	if (logout_token == NULL) {
+	*logout_token = apr_table_get(params, OIDC_PROTO_LOGOUT_TOKEN);
+	if (*logout_token == NULL) {
 		oidc_error(r, "backchannel lggout endpoint was called but could not find a parameter named \"%s\"",
 			   OIDC_PROTO_LOGOUT_TOKEN);
-		goto out;
+		return HTTP_BAD_REQUEST;
 	}
+	return OK;
+}
+
+static int oidc_logout_backchannel_parse_jwt(request_rec *r, oidc_cfg_t *cfg, const char *logout_token,
+					     oidc_jwt_t **jwt) {
+	oidc_jose_error_t err;
 
 	// TODO: jwk symmetric key based on provider
-
-	if (oidc_jwt_parse(r->pool, logout_token, &jwt,
+	if (oidc_jwt_parse(r->pool, logout_token, jwt,
 			   oidc_util_key_symmetric_merge(r->pool, oidc_cfg_private_keys_get(cfg), NULL), FALSE,
 			   &err) == FALSE) {
 		oidc_error(r, "oidc_jwt_parse failed: %s", oidc_jose_e2s(r->pool, err));
-		goto out;
+		return HTTP_BAD_REQUEST;
 	}
-
-	if ((jwt->header.alg == NULL) || (_oidc_strcmp(jwt->header.alg, "none") == 0)) {
+	if (((*jwt)->header.alg == NULL) || (_oidc_strcmp((*jwt)->header.alg, "none") == 0)) {
 		oidc_error(r, "logout token is not signed");
-		goto out;
+		return HTTP_BAD_REQUEST;
 	}
+	return OK;
+}
 
-	provider = oidc_get_provider_for_issuer(r, cfg, jwt->payload.iss, FALSE);
-	if (provider == NULL) {
+static int oidc_logout_backchannel_get_provider(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t *jwt,
+						oidc_provider_t **provider) {
+	*provider = oidc_get_provider_for_issuer(r, cfg, jwt->payload.iss, FALSE);
+	if (*provider == NULL) {
 		oidc_error(r, "no provider found for issuer: %s", jwt->payload.iss);
-		goto out;
+		return HTTP_BAD_REQUEST;
 	}
-
-	if ((oidc_cfg_provider_id_token_signed_response_alg_get(provider) != NULL) &&
-	    (_oidc_strcmp(oidc_cfg_provider_id_token_signed_response_alg_get(provider), jwt->header.alg) != 0)) {
+	if ((oidc_cfg_provider_id_token_signed_response_alg_get(*provider) != NULL) &&
+	    (_oidc_strcmp(oidc_cfg_provider_id_token_signed_response_alg_get(*provider), jwt->header.alg) != 0)) {
 		oidc_error(r, "logout token is signed using wrong algorithm: %s != %s", jwt->header.alg,
-			   oidc_cfg_provider_id_token_signed_response_alg_get(provider));
-		goto out;
+			   oidc_cfg_provider_id_token_signed_response_alg_get(*provider));
+		return HTTP_BAD_REQUEST;
 	}
+	return OK;
+}
 
-	// TODO: destroy the JWK used for decryption
-
-	jwk = NULL;
-	if (oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, TRUE, &jwk) ==
-	    FALSE)
-		return FALSE;
-
+static int oidc_logout_backchannel_verify_jwt(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t *jwt,
+					      oidc_provider_t *provider, oidc_jwk_t *jwk) {
 	if (oidc_proto_jwt_verify(
 		r, cfg, jwt, oidc_cfg_provider_jwks_uri_get(provider),
 		oidc_cfg_provider_ssl_validate_server_get(provider),
 		oidc_util_key_symmetric_merge(r->pool, oidc_cfg_provider_verify_public_keys_get(provider), jwk),
 		oidc_cfg_provider_id_token_signed_response_alg_get(provider)) == FALSE) {
-
 		oidc_error(r, "id_token signature could not be validated, aborting");
-		goto out;
+		return HTTP_BAD_REQUEST;
 	}
-
 	if (oidc_proto_jwt_validate(
 		r, jwt, oidc_cfg_provider_validate_issuer_get(provider) ? oidc_cfg_provider_issuer_get(provider) : NULL,
 		FALSE, FALSE, oidc_cfg_provider_idtoken_iat_slack_get(provider)) == FALSE)
-		goto out;
-
+		return HTTP_BAD_REQUEST;
 	/* verify the "aud" and "azp" values */
 	if (oidc_proto_idtoken_validate_aud_and_azp(r, cfg, provider, &jwt->payload) == FALSE)
-		goto out;
+		return HTTP_BAD_REQUEST;
+	return OK;
+}
 
-	json_t *events = json_object_get(jwt->payload.value.json, OIDC_CLAIM_EVENTS);
-	if (events == NULL) {
-		oidc_error(r, "\"%s\" claim could not be found in logout token", OIDC_CLAIM_EVENTS);
-		goto out;
-	}
-
-	json_t *blogout = json_object_get(events, OIDC_EVENTS_BLOGOUT_KEY);
-	if (!json_is_object(blogout)) {
-		oidc_error(r, "\"%s\" object could not be found in \"%s\" claim", OIDC_EVENTS_BLOGOUT_KEY,
-			   OIDC_CLAIM_EVENTS);
-		goto out;
-	}
-
-	char *nonce = NULL;
-	oidc_util_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_NONCE, &nonce, NULL);
-	if (nonce != NULL) {
-		oidc_error(r, "rejecting logout request/token since it contains a \"%s\" claim", OIDC_CLAIM_NONCE);
-		goto out;
-	}
-
+static int oidc_logout_backchannel_check_jti_replay(request_rec *r, oidc_provider_t *provider, oidc_jwt_t *jwt) {
 	char *jti = NULL;
+	char *replay = NULL;
+	apr_time_t jti_cache_duration;
+
 	oidc_util_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_JTI, &jti, NULL);
 	if (jti != NULL) {
-		char *replay = NULL;
 		oidc_cache_get_jti(r, jti, &replay);
 		if (replay != NULL) {
 			oidc_error(r,
 				   "the \"%s\" value (%s) passed in logout token was found in the cache already; "
 				   "possible replay attack!?",
 				   OIDC_CLAIM_JTI, jti);
-			goto out;
+			return HTTP_BAD_REQUEST;
 		}
 	}
 
 	/* jti cache duration is the configured replay prevention window for token issuance plus 10 seconds for safety
 	 */
-	apr_time_t jti_cache_duration = apr_time_from_sec(oidc_cfg_provider_idtoken_iat_slack_get(provider) * 2 + 10);
-
+	jti_cache_duration = apr_time_from_sec(oidc_cfg_provider_idtoken_iat_slack_get(provider) * 2 + 10);
 	/* store it in the cache for the calculated duration */
 	oidc_cache_set_jti(r, jti, jti, apr_time_now() + jti_cache_duration);
+	return OK;
+}
 
-	oidc_util_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_EVENTS, &sid, NULL);
+static int oidc_logout_backchannel_validate_claims(request_rec *r, oidc_provider_t *provider, oidc_jwt_t *jwt,
+						   char **sid) {
+	char *nonce = NULL;
+	json_t *events = NULL;
+	json_t *blogout = NULL;
+	int rc = OK;
+
+	events = json_object_get(jwt->payload.value.json, OIDC_CLAIM_EVENTS);
+	if (events == NULL) {
+		oidc_error(r, "\"%s\" claim could not be found in logout token", OIDC_CLAIM_EVENTS);
+		return HTTP_BAD_REQUEST;
+	}
+	blogout = json_object_get(events, OIDC_EVENTS_BLOGOUT_KEY);
+	if (!json_is_object(blogout)) {
+		oidc_error(r, "\"%s\" object could not be found in \"%s\" claim", OIDC_EVENTS_BLOGOUT_KEY,
+			   OIDC_CLAIM_EVENTS);
+		return HTTP_BAD_REQUEST;
+	}
+
+	oidc_util_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_NONCE, &nonce, NULL);
+	if (nonce != NULL) {
+		oidc_error(r, "rejecting logout request/token since it contains a \"%s\" claim", OIDC_CLAIM_NONCE);
+		return HTTP_BAD_REQUEST;
+	}
+
+	rc = oidc_logout_backchannel_check_jti_replay(r, provider, jwt);
+	if (rc != OK)
+		return rc;
+
+	oidc_util_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_EVENTS, sid, NULL);
 
 	// TODO: by-spec we should cater for the fact that "sid" has been provided
 	//       in the id_token returned in the authentication request, but "sub"
@@ -427,14 +431,50 @@ static int oidc_logout_backchannel(request_rec *r, oidc_cfg_t *cfg) {
 	//       this for logout
 	//       (and probably call us multiple times or the same sub if needed)
 
-	oidc_util_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_SID, &sid, NULL);
-	if (sid == NULL)
-		sid = jwt->payload.sub;
-
-	if (sid == NULL) {
+	oidc_util_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_SID, sid, NULL);
+	if (*sid == NULL)
+		*sid = jwt->payload.sub;
+	if (*sid == NULL) {
 		oidc_error(r, "no \"sub\" and no \"sid\" claim found in logout token");
-		goto out;
+		return HTTP_BAD_REQUEST;
 	}
+	return OK;
+}
+
+static int oidc_logout_backchannel(request_rec *r, oidc_cfg_t *cfg) {
+	int rc = HTTP_BAD_REQUEST;
+	const char *logout_token = NULL;
+	oidc_jwt_t *jwt = NULL;
+	oidc_jwk_t *jwk = NULL;
+	oidc_provider_t *provider = NULL;
+	char *sid = NULL;
+
+	oidc_debug(r, "enter");
+
+	rc = oidc_logout_backchannel_read_token(r, &logout_token);
+	if (rc != OK)
+		goto out;
+
+	rc = oidc_logout_backchannel_parse_jwt(r, cfg, logout_token, &jwt);
+	if (rc != OK)
+		goto out;
+
+	rc = oidc_logout_backchannel_get_provider(r, cfg, jwt, &provider);
+	if (rc != OK)
+		goto out;
+
+	// TODO: destroy the JWK used for decryption
+	if (oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, TRUE, &jwk) ==
+	    FALSE)
+		return FALSE;
+
+	rc = oidc_logout_backchannel_verify_jwt(r, cfg, jwt, provider, jwk);
+	if (rc != OK)
+		goto out;
+
+	rc = oidc_logout_backchannel_validate_claims(r, provider, jwt, &sid);
+	if (rc != OK)
+		goto out;
 
 	// a backchannel logout comes from the provider, so no need to revoke the tokens
 	oidc_logout_cleanup_by_sid(r, sid, cfg, provider, FALSE);
@@ -443,14 +483,10 @@ static int oidc_logout_backchannel(request_rec *r, oidc_cfg_t *cfg) {
 
 out:
 
-	if (jwk != NULL) {
+	if (jwk != NULL)
 		oidc_jwk_destroy(jwk);
-		jwk = NULL;
-	}
-	if (jwt != NULL) {
+	if (jwt != NULL)
 		oidc_jwt_destroy(jwt);
-		jwt = NULL;
-	}
 
 	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL, "no-cache, no-store");
 	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_PRAGMA, "no-cache");
