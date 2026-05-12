@@ -115,10 +115,31 @@ static oidc_authz_json_handler_t _oidc_authz_json_handlers[] = {
 };
 // clang-format on
 
+static apr_byte_t oidc_authz_match_json_array_elem(request_rec *r, const char *spec, json_t *e, const char *key) {
+	oidc_authz_json_handler_t *h = NULL;
+
+	// loop over the JSON object type handlers
+	for (h = _oidc_authz_json_handlers; h->handler; h++) {
+		if (h->type != json_typeof(e))
+			continue;
+		// avoid recursing into a nested array; matching need to be done with the "." syntax
+		// we want h->handler to end up as NULL to printout a warning at the end
+		if (json_typeof(e) == JSON_ARRAY)
+			continue;
+		// break out of the loop because we found a handler, and possibly a match
+		if (h->handler(r, spec, e, key) == TRUE)
+			return TRUE;
+		break;
+	}
+	if (h->handler == NULL)
+		oidc_warn(r, "unhandled in-array JSON object type [%d] for key \"%s\"", json_typeof(e), key);
+	// else: just no match
+	return FALSE;
+}
+
 static apr_byte_t oidc_authz_match_json_array(request_rec *r, const char *spec, json_t *val, const char *key) {
 	int i = 0;
 	json_t *e = NULL;
-	oidc_authz_json_handler_t *h = NULL;
 
 	if ((spec == NULL) || (val == NULL) || (key == NULL))
 		return FALSE;
@@ -126,23 +147,8 @@ static apr_byte_t oidc_authz_match_json_array(request_rec *r, const char *spec, 
 	// loop over the elements in the array, trying to find a match
 	for (i = 0; i < json_array_size(val); i++) {
 		e = json_array_get(val, i);
-
-		// loop over the JSON object type handlers
-		for (h = _oidc_authz_json_handlers; h->handler; h++) {
-			if (h->type == json_typeof(e)) {
-				// avoid recursing into a nested array; matching need to be done with the "." syntax
-				if (json_typeof(e) == JSON_ARRAY)
-					// we want h->handler to end up as NULL to printout a warning at the end
-					continue;
-				// break out of the loop because we found a handler, and possibly a match
-				if (h->handler(r, spec, e, key) == TRUE)
-					return TRUE;
-				break;
-			}
-		}
-		if (h->handler == NULL)
-			oidc_warn(r, "unhandled in-array JSON object type [%d] for key \"%s\"", json_typeof(e), key);
-		// else: just no match, continue with the next array element
+		if (oidc_authz_match_json_array_elem(r, spec, e, key) == TRUE)
+			return TRUE;
 	}
 	return FALSE;
 }
