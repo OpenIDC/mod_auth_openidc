@@ -404,20 +404,57 @@ static json_t *oidc_metrics_json_parse_s(server_rec *s, char *s_json) {
 }
 
 /*
+ * recursively reset all integer leaf values within a JSON object tree to 0
+ */
+static void oidc_metrics_reset_integer_tree(json_t *json) {
+	void *iter = json_object_iter(json);
+	while (iter) {
+		json_t *value = json_object_iter_value(iter);
+		if (json_is_integer(value))
+			json_integer_set(value, 0);
+		else if (json_is_object(value))
+			oidc_metrics_reset_integer_tree(value);
+		iter = json_object_iter_next(json, iter);
+	}
+}
+
+/*
+ * reset a single timings entry (buckets, sum, count) to 0
+ */
+static void oidc_metrics_reset_timer(json_t *j_entry) {
+	int i = 0;
+	for (i = 0; i < OIDC_METRICS_BUCKET_NUM; i++)
+		json_object_set_new(j_entry, _oidc_metric_buckets[i].name, json_integer(0));
+	json_object_set_new(j_entry, OIDC_METRICS_SUM, json_integer(0));
+	json_object_set_new(j_entry, OIDC_METRICS_COUNT, json_integer(0));
+}
+
+/*
+ * reset all counter and timer entries for a single server in the JSON data
+ */
+static void oidc_metrics_reset_server(json_t *j_server) {
+	json_t *j_entries = NULL;
+	void *iter = NULL;
+
+	j_entries = json_object_get(j_server, OIDC_METRICS_COUNTERS);
+	if (j_entries)
+		oidc_metrics_reset_integer_tree(j_entries);
+
+	j_entries = json_object_get(j_server, OIDC_METRICS_TIMINGS);
+	iter = json_object_iter(j_entries);
+	while (iter) {
+		oidc_metrics_reset_timer(json_object_iter_value(iter));
+		iter = json_object_iter_next(j_entries, iter);
+	}
+}
+
+/*
  * reset the serialized (global) metrics data in shared memory
  */
 static inline void oidc_metrics_storage_reset(server_rec *s) {
 	char *s_json = NULL;
 	json_t *json = NULL;
-	json_t *j_server = NULL;
-	json_t *j_entries = NULL;
-	json_t *j_entry = NULL;
-	json_t *j_val = NULL;
-	void *i1 = NULL;
-	void *i2 = NULL;
-	void *i3 = NULL;
-	void *i4 = NULL;
-	int i = 0;
+	void *iter = NULL;
 
 	/* get the global stringified JSON metrics */
 	s_json = _oidc_metrics_storage_get(s);
@@ -427,49 +464,10 @@ static inline void oidc_metrics_storage_reset(server_rec *s) {
 	if (json == NULL)
 		json = json_object();
 
-	i1 = json_object_iter(json);
-	while (i1) {
-		j_server = json_object_iter_value(i1);
-
-		// counters
-		j_entries = json_object_get(j_server, OIDC_METRICS_COUNTERS);
-		i2 = json_object_iter(j_entries);
-		while (i2) {
-			j_entry = json_object_iter_value(i2);
-			if (json_is_integer(j_entry)) {
-				json_integer_set(j_entry, 0);
-			} else {
-				i3 = json_object_iter(j_entry);
-				while (i3) {
-					j_val = json_object_iter_value(i3);
-					if (json_is_integer(j_val)) {
-						json_integer_set(j_val, 0);
-					} else {
-						i4 = json_object_iter(j_val);
-						while (i4) {
-							json_integer_set(json_object_iter_value(i4), 0);
-							i4 = json_object_iter_next(j_val, i4);
-						}
-					}
-					i3 = json_object_iter_next(j_entry, i3);
-				}
-			}
-			i2 = json_object_iter_next(j_entries, i2);
-		}
-
-		// timers
-		j_entries = json_object_get(j_server, OIDC_METRICS_TIMINGS);
-		i2 = json_object_iter(j_entries);
-		while (i2) {
-			j_entry = json_object_iter_value(i2);
-			for (i = 0; i < OIDC_METRICS_BUCKET_NUM; i++)
-				json_object_set_new(j_entry, _oidc_metric_buckets[i].name, json_integer(0));
-			json_object_set_new(j_entry, OIDC_METRICS_SUM, json_integer(0));
-			json_object_set_new(j_entry, OIDC_METRICS_COUNT, json_integer(0));
-			i2 = json_object_iter_next(j_entries, i2);
-		}
-
-		i1 = json_object_iter_next(json, i1);
+	iter = json_object_iter(json);
+	while (iter) {
+		oidc_metrics_reset_server(json_object_iter_value(iter));
+		iter = json_object_iter_next(json, iter);
 	}
 
 	/* serialize the metrics data, preserve order is required for Prometheus */
