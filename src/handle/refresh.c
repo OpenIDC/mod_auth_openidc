@@ -212,65 +212,117 @@ end:
 }
 
 /*
- * execute refresh token grant to refresh the existing access token
+ * obtain a fresh set of tokens, either by re-using a recent cache entry or
+ * by calling the OP token endpoint with the supplied refresh_token; on a
+ * remote refresh failure the refresh_token is locked out of future refresh
+ * attempts for OIDC_REFRESH_CACHE_TTL seconds
  */
-apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, oidc_provider_t *provider,
-				    char **new_access_token, char **new_access_token_type, char **new_id_token) {
-
-	apr_byte_t rc = FALSE;
-	char *s_id_token = NULL;
-	int expires_in = -1;
-	char *s_token_type = NULL;
-	char *s_access_token = NULL;
-	char *s_refresh_token = NULL;
-	char *s_scope = NULL;
-	oidc_jwt_t *id_token_jwt = NULL;
-	oidc_jose_error_t err;
-	const char *refresh_token = NULL;
-	apr_time_t ts = 0;
-	oidc_refresh_token_cache_result_t rv = OIDC_REFRESH_CACHE_ERROR;
-
-	oidc_debug(r, "enter");
-
-	/* get the refresh token that was stored in the session */
-	refresh_token = oidc_session_get_refresh_token(r, session);
-	if (refresh_token == NULL) {
-		oidc_warn(r, "refresh token routine called but no refresh_token found in the session");
-		goto end;
-	}
+static apr_byte_t oidc_refresh_token_grant_obtain_tokens(request_rec *r, oidc_cfg_t *c, oidc_provider_t *provider,
+							 const char *refresh_token, char **s_id_token,
+							 char **s_access_token, char **s_token_type, int *expires_in,
+							 char **s_refresh_token, char **s_scope, apr_time_t *ts) {
 
 	/* see if it was refreshed very recently and we can re-use the results from the cache */
-	rv = oidc_refresh_token_cache_get(r, c, refresh_token, &s_access_token, &s_token_type, &expires_in, &s_id_token,
-					  &s_refresh_token, &ts);
+	oidc_refresh_token_cache_result_t rv = oidc_refresh_token_cache_get(
+	    r, c, refresh_token, s_access_token, s_token_type, expires_in, s_id_token, s_refresh_token, ts);
 	if (rv == OIDC_REFRESH_CACHE_SUCCESS)
-		goto process;
+		return TRUE;
 	if (rv == OIDC_REFRESH_CACHE_ABORT)
 		/* a prior refresh of the access token failed and we won't try the same again */
-		goto end;
+		return FALSE;
 
 	oidc_debug(r, "refreshing refresh_token: %s", refresh_token);
 
 	OIDC_METRICS_TIMING_START(r, c);
 
 	/* refresh the tokens by calling the token endpoint */
-	if (oidc_proto_token_refresh_request(r, c, provider, refresh_token, &s_id_token, &s_access_token, &s_token_type,
-					     &expires_in, &s_refresh_token, &s_scope) == FALSE) {
+	if (oidc_proto_token_refresh_request(r, c, provider, refresh_token, s_id_token, s_access_token, s_token_type,
+					     expires_in, s_refresh_token, s_scope) == FALSE) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_PROVIDER_REFRESH_ERROR);
 		oidc_error(r, "access_token could not be refreshed with refresh_token: %s", refresh_token);
 		/* release the refresh lock and indicate this refresh token should not be refreshed anymore for at least
 		 * 30 seconds */
 		oidc_cache_set_refresh_token(r, refresh_token, OIDC_REFRESH_FAILED_LOCK_VALUE,
 					     apr_time_now() + apr_time_from_sec(OIDC_REFRESH_CACHE_TTL));
-		goto end;
+		return FALSE;
 	}
 
 	OIDC_METRICS_TIMING_ADD(r, c, OM_PROVIDER_REFRESH);
 
 	/* cache the results for other callers */
-	oidc_refresh_token_cache_set(r, c, refresh_token, s_access_token, s_token_type, expires_in, s_id_token,
-				     s_refresh_token, &ts);
+	oidc_refresh_token_cache_set(r, c, refresh_token, *s_access_token, *s_token_type, *expires_in, *s_id_token,
+				     *s_refresh_token, ts);
 
-process:
+	return TRUE;
+}
+
+/*
+ * apply a refreshed id_token to the session: optionally persist the
+ * serialized form, parse it, store its claims, update the session expiry
+ * when no fixed max-duration is configured and return it to the caller
+ */
+static void oidc_refresh_token_grant_apply_id_token(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
+						    oidc_provider_t *provider, char *s_id_token,
+						    char **new_id_token) {
+
+	oidc_jwt_t *id_token_jwt = NULL;
+	oidc_jose_error_t err;
+
+	/* only store the serialized representation when configured so */
+	if (oidc_cfg_store_id_token_get(c))
+		oidc_session_set_idtoken(r, session, s_id_token);
+
+	if (oidc_jwt_parse(r->pool, s_id_token, &id_token_jwt, NULL, FALSE, &err) == FALSE) {
+		oidc_warn(r, "parsing of id_token failed");
+	} else {
+		/* store the claims payload in the id_token for later reference */
+		oidc_session_set_idtoken_claims(r, session, id_token_jwt->payload.value.json);
+
+		if (oidc_cfg_provider_session_max_duration_get(provider) == 0) {
+			/* update the session expiry to match the expiry of the id_token */
+			apr_time_t session_expires = apr_time_from_sec(id_token_jwt->payload.exp);
+			oidc_session_set_session_expires(r, session, session_expires);
+
+			/* log message about the updated max session duration */
+			oidc_log_session_expires(r, "session max lifetime", session_expires);
+		}
+
+		/* see if we need to return it as a parameter */
+		if (new_id_token != NULL)
+			*new_id_token = s_id_token;
+	}
+
+	if (id_token_jwt != NULL)
+		oidc_jwt_destroy(id_token_jwt);
+}
+
+/*
+ * execute refresh token grant to refresh the existing access token
+ */
+apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, oidc_provider_t *provider,
+				    char **new_access_token, char **new_access_token_type, char **new_id_token) {
+
+	char *s_id_token = NULL;
+	char *s_token_type = NULL;
+	char *s_access_token = NULL;
+	char *s_refresh_token = NULL;
+	char *s_scope = NULL;
+	int expires_in = -1;
+	apr_time_t ts = 0;
+
+	oidc_debug(r, "enter");
+
+	/* get the refresh token that was stored in the session */
+	const char *refresh_token = oidc_session_get_refresh_token(r, session);
+	if (refresh_token == NULL) {
+		oidc_warn(r, "refresh token routine called but no refresh_token found in the session");
+		return FALSE;
+	}
+
+	if (oidc_refresh_token_grant_obtain_tokens(r, c, provider, refresh_token, &s_id_token, &s_access_token,
+						   &s_token_type, &expires_in, &s_refresh_token, &s_scope,
+						   &ts) == FALSE)
+		return FALSE;
 
 	/* store the new access_token in the session and discard the old one */
 	oidc_session_set_access_token(r, session, s_access_token);
@@ -295,44 +347,12 @@ process:
 		oidc_session_set_scope(r, session, s_scope);
 
 	/* if we have a new id_token, store it in the session and update the session max lifetime if required */
-	if (s_id_token != NULL) {
-
-		/* only store the serialized representation when configured so */
-		if (oidc_cfg_store_id_token_get(c))
-			oidc_session_set_idtoken(r, session, s_id_token);
-
-		if (oidc_jwt_parse(r->pool, s_id_token, &id_token_jwt, NULL, FALSE, &err) == TRUE) {
-			/* store the claims payload in the id_token for later reference */
-			oidc_session_set_idtoken_claims(r, session, id_token_jwt->payload.value.json);
-
-			if (oidc_cfg_provider_session_max_duration_get(provider) == 0) {
-				/* update the session expiry to match the expiry of the id_token */
-				apr_time_t session_expires = apr_time_from_sec(id_token_jwt->payload.exp);
-				oidc_session_set_session_expires(r, session, session_expires);
-
-				/* log message about the updated max session duration */
-				oidc_log_session_expires(r, "session max lifetime", session_expires);
-			}
-
-			/* see if we need to return it as a parameter */
-			if (new_id_token != NULL)
-				*new_id_token = s_id_token;
-
-		} else {
-			oidc_warn(r, "parsing of id_token failed");
-		}
-
-		if (id_token_jwt != NULL)
-			oidc_jwt_destroy(id_token_jwt);
-	}
+	if (s_id_token != NULL)
+		oidc_refresh_token_grant_apply_id_token(r, c, session, provider, s_id_token, new_id_token);
 
 	oidc_debug(r, "replaced refresh_token: %s with %s", refresh_token, s_refresh_token);
 
-	rc = TRUE;
-
-end:
-
-	return rc;
+	return TRUE;
 }
 
 /*
