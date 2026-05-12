@@ -608,25 +608,93 @@ static inline unsigned int _oidc_metrics_key2type(const char *key) {
 }
 
 /*
+ * update an existing counter under parent[key] or create a new one from counter_hash
+ */
+static void oidc_metrics_counter_set_or_update(server_rec *s, json_t *parent, const char *key,
+					       apr_hash_t *counter_hash) {
+	json_t *j_counter = json_object_get(parent, key);
+	if (j_counter != NULL)
+		oidc_metrics_counter_update(s, j_counter, counter_hash);
+	else
+		json_object_set_new(parent, key, oidc_metrics_counter_new(s, counter_hash));
+}
+
+/*
+ * merge a single local counter entry into the global counters object;
+ * keys of the form "class.name" are nested as j_counters[class][name]
+ */
+static void oidc_metrics_store_counter_entry(server_rec *s, json_t *j_counters, const char *key,
+					     apr_hash_t *counter_hash) {
+	char *class_name = apr_pstrdup(s->process->pool, key);
+	char *name = _oidc_strstr(class_name, ".");
+	json_t *j_names = NULL;
+
+	if (name == NULL) {
+		oidc_metrics_counter_set_or_update(s, j_counters, class_name, counter_hash);
+		return;
+	}
+
+	*name++ = '\0';
+	j_names = json_object_get(j_counters, class_name);
+	if (j_names == NULL) {
+		j_names = json_object();
+		json_object_set_new(j_names, name, oidc_metrics_counter_new(s, counter_hash));
+		json_object_set_new(j_counters, class_name, j_names);
+		return;
+	}
+
+	oidc_metrics_counter_set_or_update(s, j_names, name, counter_hash);
+}
+
+/*
+ * merge all locally collected counters into the global JSON
+ */
+static void oidc_metrics_store_counters(server_rec *s, json_t *json) {
+	apr_hash_index_t *hi1 = NULL, *hi2 = NULL;
+	const char *name = NULL, *key = NULL;
+	apr_hash_t *server_hash = NULL, *counter_hash = NULL;
+	json_t *j_counters = NULL;
+
+	for (hi1 = apr_hash_first(s->process->pool, _oidc_metrics.counters); hi1; hi1 = apr_hash_next(hi1)) {
+		apr_hash_this(hi1, (const void **)&name, NULL, (void **)&server_hash);
+		j_counters = json_object_get(oidc_metrics_server_get(json, name), OIDC_METRICS_COUNTERS);
+		for (hi2 = apr_hash_first(s->process->pool, server_hash); hi2; hi2 = apr_hash_next(hi2)) {
+			apr_hash_this(hi2, (const void **)&key, NULL, (void **)&counter_hash);
+			oidc_metrics_store_counter_entry(s, j_counters, key, counter_hash);
+		}
+	}
+}
+
+/*
+ * merge all locally collected timings into the global JSON
+ */
+static void oidc_metrics_store_timings(server_rec *s, json_t *json) {
+	apr_hash_index_t *hi1 = NULL, *hi2 = NULL;
+	const char *name = NULL, *key = NULL;
+	apr_hash_t *server_hash = NULL;
+	oidc_metrics_timing_t *timing = NULL;
+	json_t *j_timings = NULL, *j_timer = NULL;
+
+	for (hi1 = apr_hash_first(s->process->pool, _oidc_metrics.timings); hi1; hi1 = apr_hash_next(hi1)) {
+		apr_hash_this(hi1, (const void **)&name, NULL, (void **)&server_hash);
+		j_timings = json_object_get(oidc_metrics_server_get(json, name), OIDC_METRICS_TIMINGS);
+		for (hi2 = apr_hash_first(s->process->pool, server_hash); hi2; hi2 = apr_hash_next(hi2)) {
+			apr_hash_this(hi2, (const void **)&key, NULL, (void **)&timing);
+			j_timer = json_object_get(j_timings, key);
+			if (j_timer != NULL)
+				oidc_metrics_timings_update(s, j_timer, timing);
+			else
+				json_object_set_new(j_timings, key, oidc_metrics_timings_new(s, timing));
+		}
+	}
+}
+
+/*
  * flush the locally gathered metrics data into the global data kept in shared memory
  */
 static void oidc_metrics_store(server_rec *s) {
 	char *s_json = NULL;
 	json_t *json = NULL;
-	json_t *j_server = NULL;
-	json_t *j_timer = NULL;
-	json_t *j_counters = NULL;
-	json_t *j_counter = NULL;
-	json_t *j_timings = NULL;
-	json_t *j_names = NULL;
-	apr_hash_index_t *hi1 = NULL;
-	apr_hash_index_t *hi2 = NULL;
-	const char *name = NULL;
-	const char *key = NULL;
-	char *p = NULL;
-	apr_hash_t *server_hash = NULL;
-	apr_hash_t *counter_hash = NULL;
-	oidc_metrics_timing_t *timing = NULL;
 
 	if ((apr_hash_count(_oidc_metrics.counters) == 0) && (apr_hash_count(_oidc_metrics.timings) == 0))
 		return;
@@ -642,66 +710,8 @@ static void oidc_metrics_store(server_rec *s) {
 	if (json == NULL)
 		json = json_object();
 
-	for (hi1 = apr_hash_first(s->process->pool, _oidc_metrics.counters); hi1; hi1 = apr_hash_next(hi1)) {
-		apr_hash_this(hi1, (const void **)&name, NULL, (void **)&server_hash);
-
-		j_server = oidc_metrics_server_get(json, name);
-		j_counters = json_object_get(j_server, OIDC_METRICS_COUNTERS);
-
-		/* loop over the individual metrics */
-		for (hi2 = apr_hash_first(s->process->pool, server_hash); hi2; hi2 = apr_hash_next(hi2)) {
-			apr_hash_this(hi2, (const void **)&key, NULL, (void **)&counter_hash);
-
-			key = apr_pstrdup(s->process->pool, key);
-			p = _oidc_strstr(key, ".");
-			if (p == NULL) {
-				/* get or create the corresponding metric entry in the global metrics */
-				j_counter = json_object_get(j_counters, key);
-				if (j_counter != NULL)
-					oidc_metrics_counter_update(s, j_counter, counter_hash);
-				else
-					json_object_set_new(j_counters, key, oidc_metrics_counter_new(s, counter_hash));
-			} else {
-				*p = '\0';
-				p++;
-				// p now points to the name, key points to the class
-				j_names = json_object_get(j_counters, key);
-				if (j_names == NULL) {
-					j_names = json_object();
-					json_object_set_new(j_names, p, oidc_metrics_counter_new(s, counter_hash));
-					json_object_set_new(j_counters, key, j_names);
-				} else {
-					j_counter = json_object_get(j_names, p);
-					if (j_counter != NULL) {
-						oidc_metrics_counter_update(s, j_counter, counter_hash);
-					} else {
-						json_object_set_new(j_names, p,
-								    oidc_metrics_counter_new(s, counter_hash));
-					}
-				}
-			}
-		}
-	}
-
-	/* loop over the locally cached metrics from this process */
-	for (hi1 = apr_hash_first(s->process->pool, _oidc_metrics.timings); hi1; hi1 = apr_hash_next(hi1)) {
-		apr_hash_this(hi1, (const void **)&name, NULL, (void **)&server_hash);
-
-		j_server = oidc_metrics_server_get(json, name);
-		j_timings = json_object_get(j_server, OIDC_METRICS_TIMINGS);
-
-		/* loop over the individual metrics */
-		for (hi2 = apr_hash_first(s->process->pool, server_hash); hi2; hi2 = apr_hash_next(hi2)) {
-			apr_hash_this(hi2, (const void **)&key, NULL, (void **)&timing);
-
-			/* get or create the corresponding metric entry in the global metrics */
-			j_timer = json_object_get(j_timings, key);
-			if (j_timer != NULL)
-				oidc_metrics_timings_update(s, j_timer, timing);
-			else
-				json_object_set_new(j_timings, key, oidc_metrics_timings_new(s, timing));
-		}
-	}
+	oidc_metrics_store_counters(s, json);
+	oidc_metrics_store_timings(s, json);
 
 	/* serialize the metrics data, preserve order is required for Prometheus */
 	s_json = oidc_util_json_encode(s->process->pool, json, JSON_COMPACT | JSON_PRESERVE_ORDER);
