@@ -694,6 +694,148 @@ static const char *oidc_http_interface(request_rec *r) {
 }
 
 /*
+ * configure the CA bundle for SSL server certificate verification, falling
+ * back to the system curl-ca-bundle.crt on Windows when no explicit bundle
+ * was configured
+ */
+static void oidc_http_request_setup_ca_bundle(request_rec *r, CURL *curl, oidc_cfg_t *c) {
+	// NB: the variable names r, curl, and code are used in the OIDC_HTTP_CURL_SETOPT macro
+	CURLcode code = CURLE_OK;
+
+	if (oidc_cfg_ca_bundle_path_get(c) != NULL) {
+		OIDC_HTTP_CURL_SETOPT(CURLOPT_CAINFO, oidc_cfg_ca_bundle_path_get(c));
+		return;
+	}
+
+#ifdef WIN32
+	DWORD buflen;
+	char *ptr = NULL;
+	char *retval = (char *)malloc(sizeof(TCHAR) * (MAX_PATH + 1));
+	retval[0] = '\0';
+	buflen = SearchPath(NULL, "curl-ca-bundle.crt", NULL, MAX_PATH + 1, retval, &ptr);
+	if (buflen > 0) {
+		OIDC_HTTP_CURL_SETOPT(CURLOPT_CAINFO, retval);
+	} else {
+		oidc_warn(r, "no curl-ca-bundle.crt file found in path");
+	}
+	free(retval);
+#endif
+}
+
+/*
+ * configure the curl handle to use the optional outgoing proxy, including
+ * its credentials and authentication type when supplied
+ */
+static void oidc_http_request_setup_proxy(request_rec *r, CURL *curl,
+					  const oidc_http_outgoing_proxy_t *outgoing_proxy) {
+	// NB: the variable names r, curl, and code are used in the OIDC_HTTP_CURL_SETOPT macro
+	CURLcode code = CURLE_OK;
+
+	if (outgoing_proxy->host_port == NULL)
+		return;
+
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_PROXY, outgoing_proxy->host_port);
+	if (outgoing_proxy->username_password) {
+		OIDC_HTTP_CURL_SETOPT(CURLOPT_PROXYUSERPWD, outgoing_proxy->username_password);
+	}
+	if (outgoing_proxy->auth_type != OIDC_CONFIG_POS_INT_UNSET) {
+		OIDC_HTTP_CURL_SETOPT(CURLOPT_PROXYAUTH, outgoing_proxy->auth_type);
+	}
+}
+
+/*
+ * build the list of custom request headers (authorization, content-type,
+ * traceparent, DPoP) to pass on to curl
+ */
+static struct curl_slist *oidc_http_request_build_header_list(request_rec *r, oidc_cfg_t *c, const char *content_type,
+							      const char *access_token, const char *dpop) {
+	struct curl_slist *h_list = NULL;
+
+	/* see if we need to add token in the Bearer/DPoP Authorization header */
+	if (access_token != NULL)
+		h_list = curl_slist_append(h_list, apr_psprintf(r->pool, "%s: %s %s", OIDC_HTTP_HDR_AUTHORIZATION,
+								dpop ? "DPoP" : "Bearer", access_token));
+
+	if (content_type != NULL)
+		h_list = curl_slist_append(h_list,
+					   apr_psprintf(r->pool, "%s: %s", OIDC_HTTP_HDR_CONTENT_TYPE, content_type));
+
+	const char *traceparent = oidc_http_hdr_in_traceparent_get(r);
+	if (traceparent && oidc_cfg_trace_parent_get(c) != OIDC_TRACE_PARENT_OFF) {
+		oidc_debug(r, "propagating traceparent header: %s", traceparent);
+		h_list =
+		    curl_slist_append(h_list, apr_psprintf(r->pool, "%s: %s", OIDC_HTTP_HDR_TRACE_PARENT, traceparent));
+	}
+
+	if (dpop != NULL) {
+		oidc_debug(r, "appending DPoP header (len=%d)", (int)_oidc_strlen(dpop));
+		h_list = curl_slist_append(h_list, apr_psprintf(r->pool, "%s: %s", OIDC_HTTP_HDR_DPOP, dpop));
+	}
+
+	return h_list;
+}
+
+/*
+ * pass cookies from the incoming request through to the curl handle by
+ * concatenating the configured cookies into a single Cookie header value
+ */
+static void oidc_http_request_pass_cookies(request_rec *r, CURL *curl, const apr_array_header_t *pass_cookies) {
+	// NB: the variable names r, curl, and code are used in the OIDC_HTTP_CURL_SETOPT macro
+	CURLcode code = CURLE_OK;
+	char *cookie_string = NULL;
+
+	if (pass_cookies == NULL)
+		return;
+
+	for (int i = 0; i < pass_cookies->nelts; i++) {
+		const char *cookie_name = APR_ARRAY_IDX(pass_cookies, i, const char *);
+		char *cookie_value = oidc_http_get_cookie(r, cookie_name);
+		if (cookie_value == NULL)
+			continue;
+		cookie_string = (cookie_string == NULL)
+				    ? apr_psprintf(r->pool, "%s=%s", cookie_name, cookie_value)
+				    : apr_psprintf(r->pool, "%s; %s=%s", cookie_string, cookie_name, cookie_value);
+	}
+
+	if (cookie_string == NULL)
+		return;
+
+	oidc_debug(r, "passing browser cookies on backend call: %s", cookie_string);
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_COOKIE, cookie_string);
+}
+
+/*
+ * execute the curl request honoring the configured retry policy; retries
+ * are skipped on a request/transfer timeout and short-circuited on success
+ */
+static apr_byte_t oidc_http_request_perform_with_retries(request_rec *r, oidc_cfg_t *c, CURL *curl, const char *url,
+							 const char *curl_err, oidc_http_timeout_t *http_timeout) {
+	CURLcode res = CURLE_OK;
+
+	for (int i = 0; i <= http_timeout->retries; i++) {
+		res = curl_easy_perform(curl);
+		if (res == CURLE_OK)
+			return TRUE;
+		if (res == CURLE_OPERATION_TIMEDOUT) {
+			/* in case of a request/transfer timeout (which includes the connect timeout) we'll not retry */
+			oidc_error(r, "curl_easy_perform failed with a timeout for %s: [%s]; won't retry", url,
+				   curl_err[0] ? curl_err : "<n/a>");
+			OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_CONNECT_ERROR,
+						       curl_err[0] ? curl_err : "timeout")
+			return FALSE;
+		}
+		oidc_error(r, "curl_easy_perform(%d/%d) failed for %s with: [%s]", i + 1, http_timeout->retries + 1,
+			   url, curl_err[0] ? curl_err : "<n/a>");
+		OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_CONNECT_ERROR, curl_err[0] ? curl_err : "undefined")
+		/* in case of a connectivity/network glitch we'll back off before retrying */
+		if (i < http_timeout->retries)
+			apr_sleep(apr_time_from_msec(http_timeout->retry_interval));
+	}
+
+	return FALSE;
+}
+
+/*
  * execute a HTTP (GET or POST) request
  */
 static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char *data, const char *content_type,
@@ -711,8 +853,6 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 	oidc_curl_resp_data_ctx_t d_buf = {r, NULL, 0};
 	oidc_curl_resp_hdr_ctx_t h_buf = {r, response_hdrs};
 	struct curl_slist *h_list = NULL;
-	int i = 0;
-	CURLcode res = CURLE_OK;
 	long http_code = 0;
 	apr_byte_t rv = FALSE;
 	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
@@ -775,25 +915,7 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 
 	oidc_http_set_curl_ssl_options(r, curl);
 
-	if (oidc_cfg_ca_bundle_path_get(c) != NULL) {
-		OIDC_HTTP_CURL_SETOPT(CURLOPT_CAINFO, oidc_cfg_ca_bundle_path_get(c));
-	}
-
-#ifdef WIN32
-	else {
-		DWORD buflen;
-		char *ptr = NULL;
-		char *retval = (char *)malloc(sizeof(TCHAR) * (MAX_PATH + 1));
-		retval[0] = '\0';
-		buflen = SearchPath(NULL, "curl-ca-bundle.crt", NULL, MAX_PATH + 1, retval, &ptr);
-		if (buflen > 0) {
-			OIDC_HTTP_CURL_SETOPT(CURLOPT_CAINFO, retval);
-		} else {
-			oidc_warn(r, "no curl-ca-bundle.crt file found in path");
-		}
-		free(retval);
-	}
-#endif
+	oidc_http_request_setup_ca_bundle(r, curl, c);
 
 	/* identify this HTTP client */
 	const char *s_useragent = oidc_http_user_agent(r);
@@ -815,22 +937,7 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 #endif
 	}
 
-	/* set optional outgoing proxy for the local network */
-	if (outgoing_proxy->host_port) {
-		OIDC_HTTP_CURL_SETOPT(CURLOPT_PROXY, outgoing_proxy->host_port);
-		if (outgoing_proxy->username_password) {
-			OIDC_HTTP_CURL_SETOPT(CURLOPT_PROXYUSERPWD, outgoing_proxy->username_password);
-		}
-		if (outgoing_proxy->auth_type != OIDC_CONFIG_POS_INT_UNSET) {
-			OIDC_HTTP_CURL_SETOPT(CURLOPT_PROXYAUTH, outgoing_proxy->auth_type);
-		}
-	}
-
-	/* see if we need to add token in the Bearer/DPoP Authorization header */
-	if (access_token != NULL) {
-		h_list = curl_slist_append(h_list, apr_psprintf(r->pool, "%s: %s %s", OIDC_HTTP_HDR_AUTHORIZATION,
-								dpop ? "DPoP" : "Bearer", access_token));
-	}
+	oidc_http_request_setup_proxy(r, curl, outgoing_proxy);
 
 	/* see if we need to perform HTTP basic authentication to the remote site */
 	if (basic_auth != NULL) {
@@ -849,82 +956,23 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 	}
 
 	if (data != NULL) {
-		/* set POST data */
+		/* set POST data and switch HTTP method to POST */
 		OIDC_HTTP_CURL_SETOPT(CURLOPT_POSTFIELDS, data);
-		/* set HTTP method to POST */
 		OIDC_HTTP_CURL_SETOPT(CURLOPT_POST, 1L);
 	}
 
-	if (content_type != NULL) {
-		/* set content type */
-		h_list = curl_slist_append(h_list,
-					   apr_psprintf(r->pool, "%s: %s", OIDC_HTTP_HDR_CONTENT_TYPE, content_type));
-	}
-
-	const char *traceparent = oidc_http_hdr_in_traceparent_get(r);
-	if (traceparent && oidc_cfg_trace_parent_get(c) != OIDC_TRACE_PARENT_OFF) {
-		oidc_debug(r, "propagating traceparent header: %s", traceparent);
-		h_list =
-		    curl_slist_append(h_list, apr_psprintf(r->pool, "%s: %s", OIDC_HTTP_HDR_TRACE_PARENT, traceparent));
-	}
-
-	if (dpop != NULL) {
-		oidc_debug(r, "appending DPoP header (len=%d)", (int)_oidc_strlen(dpop));
-		h_list = curl_slist_append(h_list, apr_psprintf(r->pool, "%s: %s", OIDC_HTTP_HDR_DPOP, dpop));
-	}
-
-	/* see if we need to add any custom headers */
+	h_list = oidc_http_request_build_header_list(r, c, content_type, access_token, dpop);
 	if (h_list != NULL) {
 		OIDC_HTTP_CURL_SETOPT(CURLOPT_HTTPHEADER, h_list);
 	}
 
-	if (pass_cookies != NULL) {
-		/* gather cookies that we need to pass on from the incoming request */
-		char *cookie_string = NULL;
-		for (i = 0; i < pass_cookies->nelts; i++) {
-			const char *cookie_name = APR_ARRAY_IDX(pass_cookies, i, const char *);
-			char *cookie_value = oidc_http_get_cookie(r, cookie_name);
-			if (cookie_value != NULL) {
-				cookie_string =
-				    (cookie_string == NULL)
-					? apr_psprintf(r->pool, "%s=%s", cookie_name, cookie_value)
-					: apr_psprintf(r->pool, "%s; %s=%s", cookie_string, cookie_name, cookie_value);
-			}
-		}
-
-		/* see if we need to pass any cookies */
-		if (cookie_string != NULL) {
-			oidc_debug(r, "passing browser cookies on backend call: %s", cookie_string);
-			OIDC_HTTP_CURL_SETOPT(CURLOPT_COOKIE, cookie_string);
-		}
-	}
+	oidc_http_request_pass_cookies(r, curl, pass_cookies);
 
 	/* set the target URL */
 	OIDC_HTTP_CURL_SETOPT(CURLOPT_URL, url);
 
 	/* call it and record the result */
-	for (i = 0; i <= http_timeout->retries; i++) {
-		res = curl_easy_perform(curl);
-		if (res == CURLE_OK) {
-			rv = TRUE;
-			break;
-		}
-		if (res == CURLE_OPERATION_TIMEDOUT) {
-			/* in case of a request/transfer timeout (which includes the connect timeout) we'll not
-			 * retry */
-			oidc_error(r, "curl_easy_perform failed with a timeout for %s: [%s]; won't retry", url,
-				   curl_err[0] ? curl_err : "<n/a>");
-			OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_CONNECT_ERROR,
-						       curl_err[0] ? curl_err : "timeout")
-			break;
-		}
-		oidc_error(r, "curl_easy_perform(%d/%d) failed for %s with: [%s]", i + 1, http_timeout->retries + 1,
-			   url, curl_err[0] ? curl_err : "<n/a>");
-		OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_CONNECT_ERROR, curl_err[0] ? curl_err : "undefined")
-		/* in case of a connectivity/network glitch we'll back off before retrying */
-		if (i < http_timeout->retries)
-			apr_sleep(apr_time_from_msec(http_timeout->retry_interval));
-	}
+	rv = oidc_http_request_perform_with_retries(r, c, curl, url, curl_err, http_timeout);
 	if (rv == FALSE)
 		goto end;
 
