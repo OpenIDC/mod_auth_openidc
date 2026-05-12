@@ -246,41 +246,59 @@ static apr_byte_t oidc_metadata_is_valid_uri(request_rec *r, const char *type, c
 }
 
 /*
+ * try a single array entry against the validator and the preference;
+ * returns TRUE when the entry matches the preference and the caller should stop iterating
+ */
+static apr_byte_t oidc_metadata_array_string_apply(apr_pool_t *pool, json_t *elem,
+						   oidc_valid_function_t valid_function, char **value,
+						   const char *preference, apr_byte_t *found) {
+	if (!json_is_string(elem))
+		return FALSE;
+	if (valid_function(pool, json_string_value(elem)) != NULL)
+		return FALSE;
+
+	*found = TRUE;
+
+	if (value == NULL)
+		return FALSE;
+
+	if ((preference != NULL) && (_oidc_strcmp(json_string_value(elem), preference) == 0)) {
+		*value = apr_pstrdup(pool, json_string_value(elem));
+		return TRUE;
+	}
+
+	if (*value == NULL)
+		*value = apr_pstrdup(pool, json_string_value(elem));
+
+	return FALSE;
+}
+
+/*
  * check if there's a valid entry in a string of arrays, with a preference
  */
 static const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, json_t *json, const char *key,
 						       oidc_valid_function_t valid_function, char **value,
 						       apr_byte_t optional, const char *preference) {
-	int i = 0;
 	if (value)
 		*value = NULL;
+
 	json_t *json_arr = json_object_get(json, key);
-	apr_byte_t found = FALSE;
-	if ((json_arr != NULL) && (json_is_array(json_arr))) {
-		for (i = 0; i < json_array_size(json_arr); i++) {
-			json_t *elem = json_array_get(json_arr, i);
-			if (!json_is_string(elem))
-				continue;
-			if (valid_function(pool, json_string_value(elem)) == NULL) {
-				found = TRUE;
-				if (value != NULL) {
-					if ((preference != NULL) &&
-					    (_oidc_strcmp(json_string_value(elem), preference) == 0)) {
-						*value = apr_pstrdup(pool, json_string_value(elem));
-						break;
-					}
-					if (*value == NULL) {
-						*value = apr_pstrdup(pool, json_string_value(elem));
-					}
-				}
-			}
-		}
-		if (found == FALSE) {
-			return apr_psprintf(pool, "could not find a valid array string element for entry \"%s\"", key);
-		}
-	} else if (optional == FALSE) {
-		return apr_psprintf(pool, "JSON object did not contain a \"%s\" array", key);
+	if ((json_arr == NULL) || !json_is_array(json_arr)) {
+		if (optional == FALSE)
+			return apr_psprintf(pool, "JSON object did not contain a \"%s\" array", key);
+		return NULL;
 	}
+
+	apr_byte_t found = FALSE;
+	for (int i = 0; i < json_array_size(json_arr); i++) {
+		if (oidc_metadata_array_string_apply(pool, json_array_get(json_arr, i), valid_function, value,
+						     preference, &found))
+			break;
+	}
+
+	if (found == FALSE)
+		return apr_psprintf(pool, "could not find a valid array string element for entry \"%s\"", key);
+
 	return NULL;
 }
 
