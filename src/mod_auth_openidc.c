@@ -152,50 +152,54 @@ void oidc_scrub_headers(request_rec *r) {
 }
 
 /*
+ * return the configured cookie name that matches the leading "<name>=" portion of "cookie", or NULL when none matches
+ */
+static const char *oidc_strip_cookies_match(const char *cookie, const apr_array_header_t *strip) {
+	int i;
+	for (i = 0; i < strip->nelts; i++) {
+		const char *name = APR_ARRAY_IDX(strip, i, const char *);
+		size_t name_len = _oidc_strlen(name);
+		if ((_oidc_strncmp(cookie, name, name_len) == 0) && (cookie[name_len] == OIDC_CHAR_EQUAL))
+			return name;
+	}
+	return NULL;
+}
+
+/*
  * strip the session cookie from the headers sent to the application/backend
  */
 void oidc_strip_cookies(request_rec *r) {
 
-	char *cookie, *ctx, *result = NULL;
-	const char *name = NULL;
-	int i;
-
 	const apr_array_header_t *strip = oidc_cfg_dir_strip_cookies_get(r);
-
 	char *cookies = apr_pstrdup(r->pool, oidc_http_hdr_in_cookie_get(r));
 
-	if ((cookies != NULL) && (strip != NULL)) {
+	if ((cookies == NULL) || (strip == NULL))
+		return;
 
-		oidc_debug(r, "looking for the following cookies to strip from cookie header: %s",
-			   apr_array_pstrcat(r->pool, strip, OIDC_CHAR_COMMA));
+	oidc_debug(r, "looking for the following cookies to strip from cookie header: %s",
+		   apr_array_pstrcat(r->pool, strip, OIDC_CHAR_COMMA));
 
-		cookie = apr_strtok(cookies, OIDC_STR_SEMI_COLON, &ctx);
+	char *ctx = NULL;
+	char *result = NULL;
+	char *cookie = apr_strtok(cookies, OIDC_STR_SEMI_COLON, &ctx);
+	while (cookie != NULL) {
+		const char *matched = NULL;
 
-		do {
-			while (cookie != NULL && *cookie == OIDC_CHAR_SPACE)
-				cookie++;
-			if (cookie == NULL)
-				break;
+		while (*cookie == OIDC_CHAR_SPACE)
+			cookie++;
 
-			for (i = 0; i < strip->nelts; i++) {
-				name = APR_ARRAY_IDX(strip, i, const char *);
-				if ((_oidc_strncmp(cookie, name, _oidc_strlen(name)) == 0) &&
-				    (cookie[_oidc_strlen(name)] == OIDC_CHAR_EQUAL)) {
-					oidc_debug(r, "stripping: %s", name);
-					break;
-				}
-			}
+		matched = oidc_strip_cookies_match(cookie, strip);
+		if (matched != NULL) {
+			oidc_debug(r, "stripping: %s", matched);
+		} else {
+			result = result ? apr_psprintf(r->pool, "%s%s %s", result, OIDC_STR_SEMI_COLON, cookie)
+					: cookie;
+		}
 
-			if (i == strip->nelts) {
-				result = result ? apr_psprintf(r->pool, "%s%s %s", result, OIDC_STR_SEMI_COLON, cookie)
-						: cookie;
-			}
-
-			cookie = apr_strtok(NULL, OIDC_STR_SEMI_COLON, &ctx);
-		} while (cookie != NULL);
-
-		oidc_http_hdr_in_cookie_set(r, result);
+		cookie = apr_strtok(NULL, OIDC_STR_SEMI_COLON, &ctx);
 	}
+
+	oidc_http_hdr_in_cookie_set(r, result);
 }
 
 /*
@@ -870,89 +874,82 @@ apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name, const ch
 #define OIDC_MAX_URL_LENGTH 8192 * 2
 
 /*
- * avoid cross site request forgery on the redirect_to_url
+ * fill the err_str/err_desc out-params, log the error and return FALSE
  */
-apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg_t *c, const char *redirect_to_url,
-				      apr_byte_t restrict_to_host, char **err_str, char **err_desc) {
-	apr_uri_t uri;
+static apr_byte_t oidc_validate_redirect_url_fail(request_rec *r, char **err_str, char **err_desc, const char *str,
+						  const char *desc) {
+	*err_str = apr_pstrdup(r->pool, str);
+	*err_desc = apr_pstrdup(r->pool, desc);
+	oidc_error(r, "%s: %s", *err_str, *err_desc);
+	return FALSE;
+}
+
+/*
+ * verify the URL matches one of the OIDCRedirectURLsAllowed regexes
+ */
+static apr_byte_t oidc_validate_redirect_url_allowed(request_rec *r, apr_hash_t *allowed, const char *url,
+						     char **err_str, char **err_desc) {
+	apr_hash_index_t *hi;
 	const char *c_host = NULL;
-	apr_hash_index_t *hi = NULL;
-	size_t i = 0;
-	char *url = apr_pstrndup(r->pool, redirect_to_url, OIDC_MAX_URL_LENGTH);
-	char *url_ipv6_aware = NULL;
-
-	// replace potentially harmful backslashes with forward slashes
-	for (i = 0; i < _oidc_strlen(url); i++)
-		if (url[i] == '\\')
-			url[i] = '/';
-
-	if (apr_uri_parse(r->pool, url, &uri) != APR_SUCCESS) {
-		*err_str = apr_pstrdup(r->pool, "Malformed URL");
-		*err_desc = apr_psprintf(r->pool, "not a valid URL value: %s", url);
-		oidc_error(r, "%s: %s", *err_str, *err_desc);
-		return FALSE;
+	for (hi = apr_hash_first(NULL, allowed); hi; hi = apr_hash_next(hi)) {
+		apr_hash_this(hi, (const void **)&c_host, NULL, NULL);
+		if (oidc_util_regexp_first_match(r->pool, url, c_host, NULL, err_str) == TRUE)
+			return TRUE;
 	}
+	return oidc_validate_redirect_url_fail(
+	    r, err_str, err_desc, "URL not allowed",
+	    apr_psprintf(r->pool, "value does not match the list of allowed redirect URLs: %s", url));
+}
 
-	if (oidc_cfg_redirect_urls_allowed_get(c) != NULL) {
-		for (hi = apr_hash_first(NULL, oidc_cfg_redirect_urls_allowed_get(c)); hi; hi = apr_hash_next(hi)) {
-			apr_hash_this(hi, (const void **)&c_host, NULL, NULL);
-			if (oidc_util_regexp_first_match(r->pool, url, c_host, NULL, err_str) == TRUE)
-				break;
-		}
-		if (hi == NULL) {
-			*err_str = apr_pstrdup(r->pool, "URL not allowed");
-			*err_desc =
-			    apr_psprintf(r->pool, "value does not match the list of allowed redirect URLs: %s", url);
-			oidc_error(r, "%s: %s", *err_str, *err_desc);
-			return FALSE;
-		}
-	} else if ((uri.hostname != NULL) && (restrict_to_host == TRUE)) {
-		c_host = oidc_util_url_cur_host(r, oidc_cfg_x_forwarded_headers_get(c));
+/*
+ * verify the URL hostname matches the hostname of the current request
+ */
+static apr_byte_t oidc_validate_redirect_url_host(request_rec *r, oidc_cfg_t *c, apr_uri_t *uri, char **err_str,
+						  char **err_desc) {
+	const char *c_host = oidc_util_url_cur_host(r, oidc_cfg_x_forwarded_headers_get(c));
+	/* IPv6 literals need to be wrapped in brackets to compare with the current hostname */
+	const char *url_ipv6_aware =
+	    strchr(uri->hostname, ':') ? apr_pstrcat(r->pool, "[", uri->hostname, "]", NULL) : uri->hostname;
+	if ((oidc_util_strcasestr(c_host, url_ipv6_aware) != NULL) &&
+	    (oidc_util_strcasestr(url_ipv6_aware, c_host) != NULL))
+		return TRUE;
+	return oidc_validate_redirect_url_fail(
+	    r, err_str, err_desc, "Invalid Request",
+	    apr_psprintf(r->pool, "URL value \"%s\" does not match the hostname of the current request \"%s\"",
+			 apr_uri_unparse(r->pool, uri, 0), c_host));
+}
 
-		if (strchr(uri.hostname, ':')) { /* v6 literal */
-			url_ipv6_aware = apr_pstrcat(r->pool, "[", uri.hostname, "]", NULL);
-		} else {
-			url_ipv6_aware = uri.hostname;
-		}
+/*
+ * for hostname-less URLs, require the URL to be a safe relative path
+ */
+static apr_byte_t oidc_validate_redirect_url_relative(request_rec *r, const char *url, char **err_str,
+						      char **err_desc) {
+	if (_oidc_strstr(url, "/") != url)
+		return oidc_validate_redirect_url_fail(
+		    r, err_str, err_desc, "Malformed URL",
+		    apr_psprintf(r->pool,
+				 "No hostname was parsed and it does not seem to be relative, i.e starting with '/': %s",
+				 url));
+	if (_oidc_strstr(url, "//") == url)
+		return oidc_validate_redirect_url_fail(
+		    r, err_str, err_desc, "Malformed URL",
+		    apr_psprintf(r->pool, "No hostname was parsed and starting with '//': %s", url));
+	if (_oidc_strstr(url, "/\\") == url)
+		return oidc_validate_redirect_url_fail(
+		    r, err_str, err_desc, "Malformed URL",
+		    apr_psprintf(r->pool, "No hostname was parsed and starting with '/\\': %s", url));
+	return TRUE;
+}
 
-		if ((oidc_util_strcasestr(c_host, url_ipv6_aware) == NULL) ||
-		    (oidc_util_strcasestr(url_ipv6_aware, c_host) == NULL)) {
-			*err_str = apr_pstrdup(r->pool, "Invalid Request");
-			*err_desc = apr_psprintf(
-			    r->pool, "URL value \"%s\" does not match the hostname of the current request \"%s\"",
-			    apr_uri_unparse(r->pool, &uri, 0), c_host);
-			oidc_error(r, "%s: %s", *err_str, *err_desc);
-			return FALSE;
-		}
-	}
+/*
+ * reject the URL when it contains characters used for HTTP header splitting or other smuggling tricks
+ */
+static apr_byte_t oidc_validate_redirect_url_chars(request_rec *r, const char *url, char **err_str, char **err_desc) {
+	if ((_oidc_strstr(url, "\n") != NULL) || (_oidc_strstr(url, "\r") != NULL))
+		return oidc_validate_redirect_url_fail(
+		    r, err_str, err_desc, "Invalid URL",
+		    apr_psprintf(r->pool, "URL value \"%s\" contains illegal \"\n\" or \"\r\" character(s)", url));
 
-	if ((uri.hostname == NULL) && (_oidc_strstr(url, "/") != url)) {
-		*err_str = apr_pstrdup(r->pool, "Malformed URL");
-		*err_desc = apr_psprintf(
-		    r->pool, "No hostname was parsed and it does not seem to be relative, i.e starting with '/': %s",
-		    url);
-		oidc_error(r, "%s: %s", *err_str, *err_desc);
-		return FALSE;
-	} else if ((uri.hostname == NULL) && (_oidc_strstr(url, "//") == url)) {
-		*err_str = apr_pstrdup(r->pool, "Malformed URL");
-		*err_desc = apr_psprintf(r->pool, "No hostname was parsed and starting with '//': %s", url);
-		oidc_error(r, "%s: %s", *err_str, *err_desc);
-		return FALSE;
-	} else if ((uri.hostname == NULL) && (_oidc_strstr(url, "/\\") == url)) {
-		*err_str = apr_pstrdup(r->pool, "Malformed URL");
-		*err_desc = apr_psprintf(r->pool, "No hostname was parsed and starting with '/\\': %s", url);
-		oidc_error(r, "%s: %s", *err_str, *err_desc);
-		return FALSE;
-	}
-
-	/* validate the URL to prevent HTTP header splitting */
-	if (((_oidc_strstr(url, "\n") != NULL) || _oidc_strstr(url, "\r") != NULL)) {
-		*err_str = apr_pstrdup(r->pool, "Invalid URL");
-		*err_desc =
-		    apr_psprintf(r->pool, "URL value \"%s\" contains illegal \"\n\" or \"\r\" character(s)", url);
-		oidc_error(r, "%s: %s", *err_str, *err_desc);
-		return FALSE;
-	}
 	if ((_oidc_strstr(url, "/%09") != NULL) || (oidc_util_strcasestr(url, "/%2f") != NULL) ||
 	    (_oidc_strstr(url, "/\t") != NULL) || (_oidc_strstr(url, "/%68") != NULL) ||
 	    (oidc_util_strcasestr(url, "/http:") != NULL) || (oidc_util_strcasestr(url, "/https:") != NULL) ||
@@ -960,14 +957,46 @@ apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg_t *c, const char 
 	    (_oidc_strstr(url, "/〵") != NULL) || (_oidc_strstr(url, "/ゝ") != NULL) ||
 	    (_oidc_strstr(url, "/ー") != NULL) || (_oidc_strstr(url, "/ｰ") != NULL) ||
 	    (_oidc_strstr(url, "/<") != NULL) || (oidc_util_strcasestr(url, "%01javascript:") != NULL) ||
-	    (_oidc_strstr(url, "/%5c") != NULL) || (_oidc_strstr(url, "/\\") != NULL)) {
-		*err_str = apr_pstrdup(r->pool, "Invalid URL");
-		*err_desc = apr_psprintf(r->pool, "URL value \"%s\" contains illegal character(s)", url);
-		oidc_error(r, "%s: %s", *err_str, *err_desc);
-		return FALSE;
-	}
+	    (_oidc_strstr(url, "/%5c") != NULL) || (_oidc_strstr(url, "/\\") != NULL))
+		return oidc_validate_redirect_url_fail(
+		    r, err_str, err_desc, "Invalid URL",
+		    apr_psprintf(r->pool, "URL value \"%s\" contains illegal character(s)", url));
 
 	return TRUE;
+}
+
+/*
+ * avoid cross site request forgery on the redirect_to_url
+ */
+apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg_t *c, const char *redirect_to_url,
+				      apr_byte_t restrict_to_host, char **err_str, char **err_desc) {
+	apr_uri_t uri;
+	size_t i = 0;
+	char *url = apr_pstrndup(r->pool, redirect_to_url, OIDC_MAX_URL_LENGTH);
+
+	// replace potentially harmful backslashes with forward slashes
+	for (i = 0; i < _oidc_strlen(url); i++)
+		if (url[i] == '\\')
+			url[i] = '/';
+
+	if (apr_uri_parse(r->pool, url, &uri) != APR_SUCCESS)
+		return oidc_validate_redirect_url_fail(r, err_str, err_desc, "Malformed URL",
+						       apr_psprintf(r->pool, "not a valid URL value: %s", url));
+
+	if (oidc_cfg_redirect_urls_allowed_get(c) != NULL) {
+		if (oidc_validate_redirect_url_allowed(r, oidc_cfg_redirect_urls_allowed_get(c), url, err_str,
+						       err_desc) == FALSE)
+			return FALSE;
+	} else if ((uri.hostname != NULL) && (restrict_to_host == TRUE)) {
+		if (oidc_validate_redirect_url_host(r, c, &uri, err_str, err_desc) == FALSE)
+			return FALSE;
+	}
+
+	if ((uri.hostname == NULL) && (oidc_validate_redirect_url_relative(r, url, err_str, err_desc) == FALSE))
+		return FALSE;
+
+	/* validate the URL to prevent HTTP header splitting */
+	return oidc_validate_redirect_url_chars(r, url, err_str, err_desc);
 }
 
 /*
@@ -1202,6 +1231,66 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session
 }
 
 /*
+ * on a sub-request, try to recycle the authenticated user from the main/prev request;
+ * returns TRUE if the user could be recycled and the caller should return OK
+ */
+static apr_byte_t oidc_check_userid_openidc_subreq(request_rec *r) {
+	if (r->main != NULL)
+		r->user = r->main->user;
+	else if (r->prev != NULL)
+		r->user = r->prev->user;
+
+	if (r->user == NULL)
+		return FALSE;
+
+	/* this is a sub-request and we have a session (headers will have been scrubbed and set already) */
+	oidc_debug(r, "recycling user '%s' from initial request for sub-request", r->user);
+
+	/* apparently request state can get lost in sub-requests, so see if id_token/claims need to be restored */
+	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_IDTOKEN) == NULL) {
+		oidc_session_t *session = NULL;
+		oidc_session_load(r, &session);
+		oidc_copy_tokens_to_request_state(r, session);
+		oidc_session_free(r, session);
+	}
+
+	oidc_strip_cookies(r);
+	return TRUE;
+}
+
+/*
+ * handle a request to the redirect URI: dispatch, optionally retain the session and free, then return rc
+ */
+static int oidc_check_userid_openidc_redirect_uri(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
+	int rc = oidc_handle_redirect_uri_request(r, c, session);
+
+	/* see if the session needs to be retained for the content handler phase */
+	oidc_session_t *retain = NULL;
+	apr_pool_userdata_get((void **)&retain, OIDC_USERDATA_SESSION, r->pool);
+	if (retain == NULL)
+		oidc_session_free(r, session);
+
+	return rc;
+}
+
+/*
+ * handle an existing authenticated session: validate, persist if updated, free and strip cookies
+ */
+static int oidc_check_userid_openidc_existing_session(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
+	apr_byte_t needs_save = FALSE;
+	int rc = oidc_handle_existing_session(r, c, session, TRUE, &needs_save);
+	if ((rc == OK) && needs_save && (oidc_session_save(r, session, FALSE) == FALSE)) {
+		oidc_warn(r, "error saving session");
+		rc = HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	oidc_session_free(r, session);
+	oidc_strip_cookies(r);
+
+	return rc;
+}
+
+/*
  * main routine: handle OpenID Connect authentication
  */
 static int oidc_check_userid_openidc(request_rec *r, oidc_cfg_t *c) {
@@ -1214,109 +1303,32 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg_t *c) {
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	/* check if this is a sub-request or an initial request */
-	if (!ap_is_initial_req(r)) {
-
-		/* not an initial request, try to recycle what we've already established in the main request */
-		if (r->main != NULL)
-			r->user = r->main->user;
-		else if (r->prev != NULL)
-			r->user = r->prev->user;
-
-		if (r->user != NULL) {
-
-			/* this is a sub-request and we have a session (headers will have been scrubbed and set already)
-			 */
-			oidc_debug(r, "recycling user '%s' from initial request for sub-request", r->user);
-
-			/*
-			 * apparently request state can get lost in sub-requests, so let's see
-			 * if we need to restore id_token and/or claims from the session cache
-			 */
-			const char *s_id_token = oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_IDTOKEN);
-			if (s_id_token == NULL) {
-
-				oidc_session_t *session = NULL;
-				oidc_session_load(r, &session);
-
-				oidc_copy_tokens_to_request_state(r, session);
-
-				/* free resources allocated for the session */
-				oidc_session_free(r, session);
-			}
-
-			/* strip any cookies that we need to */
-			oidc_strip_cookies(r);
-
-			return OK;
-		}
-		/*
-		 * else: not initial request, but we could not find a session, so:
-		 * try to load a new session as if this were the initial request
-		 */
-	}
-
-	int rc = OK;
-	apr_byte_t needs_save = FALSE;
+	/* on a sub-request, try to recycle the user from the main/prev request; fall through if it cannot */
+	if (!ap_is_initial_req(r) && (oidc_check_userid_openidc_subreq(r) == TRUE))
+		return OK;
 
 	/* load the session from the request state; this will be a new "empty" session if no state exists */
-	oidc_session_t *session = NULL, *retain = NULL;
+	oidc_session_t *session = NULL;
 	oidc_session_load(r, &session);
 
 	/* see if the initial request is to the redirect URI; this handles potential logout too */
-	if (oidc_util_url_matches_redirect_uri(r, c) == TRUE) {
+	if (oidc_util_url_matches_redirect_uri(r, c) == TRUE)
+		return oidc_check_userid_openidc_redirect_uri(r, c, session);
 
-		/* handle request to the redirect_uri */
-		rc = oidc_handle_redirect_uri_request(r, c, session);
-
-		/* see if the session needs to be retained for the content handler phase */
-		apr_pool_userdata_get((void **)&retain, OIDC_USERDATA_SESSION, r->pool);
-
-		/* free resources allocated for the session */
-		if (retain == NULL)
-			oidc_session_free(r, session);
-
-		return rc;
-
-		/* initial request to non-redirect URI, check if we have an existing session */
-	} else if (session->remote_user != NULL) {
-
-		/* this is initial request and we already have a session */
-		rc = oidc_handle_existing_session(r, c, session, TRUE, &needs_save);
-		if (rc == OK) {
-
-			/* check if something was updated in the session and we need to save it again */
-			if (needs_save) {
-				if (oidc_session_save(r, session, FALSE) == FALSE) {
-					oidc_warn(r, "error saving session");
-					rc = HTTP_INTERNAL_SERVER_ERROR;
-				}
-			}
-		}
-
-		/* free resources allocated for the session */
-		oidc_session_free(r, session);
-
-		/* strip any cookies that we need to */
-		oidc_strip_cookies(r);
-
+	/* initial request to non-redirect URI with an existing session */
+	if (session->remote_user != NULL) {
+		int rc = oidc_check_userid_openidc_existing_session(r, c, session);
 		if (rc == OK) {
 			OIDC_METRICS_TIMING_ADD(r, c, OM_SESSION_VALID);
 		} else {
 			OIDC_METRICS_COUNTER_INC(r, c, OM_SESSION_ERROR_GENERAL);
 		}
-
 		return rc;
 	}
 
-	/* free resources allocated for the session */
 	oidc_session_free(r, session);
 
-	/*
-	 * else: we have no session and it is not an authorization or
-	 *       discovery response: just hit the default flow for unauthenticated users
-	 */
-
+	/* no session and not an authorization or discovery response: default flow for unauthenticated users */
 	return oidc_handle_unauthenticated_user(r, c);
 }
 
@@ -1431,12 +1443,70 @@ static int oidc_check_config_error(server_rec *s, const char *config_str) {
 }
 
 /*
+ * validate the provider source configuration: OIDCMetadataDir vs OIDCProviderMetadataURL vs static provider settings
+ */
+static int oidc_check_config_openid_openidc_provider(apr_pool_t *pool, server_rec *s, oidc_cfg_t *c) {
+	if (oidc_cfg_metadata_dir_get(c) != NULL) {
+		if (oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(c)) != NULL) {
+			oidc_serror(s,
+				    "only one of '" OIDCProviderMetadataURL "' or '" OIDCMetadataDir "' should be set");
+			return HTTP_INTERNAL_SERVER_ERROR;
+		}
+		return OK;
+	}
+
+	if (oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(c)) == NULL) {
+		if (oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(c)) == NULL)
+			return oidc_check_config_error(s, OIDCProviderIssuer);
+		if (oidc_cfg_provider_authorization_endpoint_url_get(oidc_cfg_provider_get(c)) == NULL)
+			return oidc_check_config_error(s, OIDCProviderAuthorizationEndpoint);
+	} else {
+		apr_uri_t r_uri;
+		apr_uri_parse(pool, oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(c)), &r_uri);
+		if ((r_uri.scheme == NULL) || (_oidc_strnatcasecmp(r_uri.scheme, "https") != 0)) {
+			oidc_swarn(s,
+				   "the URL scheme (%s) of the configured " OIDCProviderMetadataURL
+				   " SHOULD be \"https\" for security reasons!",
+				   r_uri.scheme);
+		}
+	}
+
+	if (oidc_cfg_provider_client_id_get(oidc_cfg_provider_get(c)) == NULL)
+		return oidc_check_config_error(s, OIDCClientID);
+
+	return OK;
+}
+
+/*
+ * validate OIDCCookieDomain against the redirect_uri's hostname
+ */
+static int oidc_check_config_openid_openidc_cookie_domain(server_rec *s, oidc_cfg_t *c, const apr_uri_t *r_uri,
+							  apr_byte_t redirect_uri_is_relative) {
+	if (oidc_cfg_cookie_domain_get(c) == NULL)
+		return OK;
+
+	if (redirect_uri_is_relative) {
+		oidc_swarn(s,
+			   "if the configured " OIDCRedirectURI " is relative, " OIDCCookieDomain " SHOULD be empty");
+		return OK;
+	}
+
+	if (!oidc_util_cookie_domain_valid(r_uri->hostname, oidc_cfg_cookie_domain_get(c))) {
+		oidc_serror(s,
+			    "the domain (%s) configured in " OIDCCookieDomain
+			    " does not match the URL hostname (%s) of the configured " OIDCRedirectURI
+			    " (%s): setting \"state\" and \"session\" cookies will not work!",
+			    oidc_cfg_cookie_domain_get(c), r_uri->hostname, oidc_cfg_redirect_uri_get(c));
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	return OK;
+}
+
+/*
  * check the config required for the OpenID Connect RP role
  */
 static int oidc_check_config_openid_openidc(apr_pool_t *pool, server_rec *s, oidc_cfg_t *c) {
-
-	apr_uri_t r_uri;
-	apr_byte_t redirect_uri_is_relative;
 
 	if ((oidc_cfg_metadata_dir_get(c) == NULL) &&
 	    (oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(c)) == NULL) &&
@@ -1448,64 +1518,32 @@ static int oidc_check_config_openid_openidc(apr_pool_t *pool, server_rec *s, oid
 
 	if (oidc_cfg_redirect_uri_get(c) == NULL)
 		return oidc_check_config_error(s, OIDCRedirectURI);
-	redirect_uri_is_relative = (oidc_cfg_redirect_uri_get(c)[0] == OIDC_CHAR_FORWARD_SLASH);
 
-	if (oidc_cfg_metadata_dir_get(c) == NULL) {
-		if (oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(c)) == NULL) {
-			if (oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(c)) == NULL)
-				return oidc_check_config_error(s, OIDCProviderIssuer);
-			if (oidc_cfg_provider_authorization_endpoint_url_get(oidc_cfg_provider_get(c)) == NULL)
-				return oidc_check_config_error(s, OIDCProviderAuthorizationEndpoint);
-		} else {
-			apr_uri_parse(pool, oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(c)), &r_uri);
-			if ((r_uri.scheme == NULL) || (_oidc_strnatcasecmp(r_uri.scheme, "https") != 0)) {
-				oidc_swarn(s,
-					   "the URL scheme (%s) of the configured " OIDCProviderMetadataURL
-					   " SHOULD be \"https\" for security reasons!",
-					   r_uri.scheme);
-			}
-		}
-		if (oidc_cfg_provider_client_id_get(oidc_cfg_provider_get(c)) == NULL)
-			return oidc_check_config_error(s, OIDCClientID);
-	} else {
-		if (oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(c)) != NULL) {
-			oidc_serror(s,
-				    "only one of '" OIDCProviderMetadataURL "' or '" OIDCMetadataDir "' should be set");
-			return HTTP_INTERNAL_SERVER_ERROR;
-		}
-	}
+	int rc = oidc_check_config_openid_openidc_provider(pool, s, c);
+	if (rc != OK)
+		return rc;
 
+	apr_byte_t redirect_uri_is_relative = (oidc_cfg_redirect_uri_get(c)[0] == OIDC_CHAR_FORWARD_SLASH);
+	apr_uri_t r_uri;
 	apr_uri_parse(pool, oidc_cfg_redirect_uri_get(c), &r_uri);
-	if (!redirect_uri_is_relative) {
-		if (_oidc_strnatcasecmp(r_uri.scheme, "https") != 0) {
-			oidc_swarn(s,
-				   "the URL scheme (%s) of the configured " OIDCRedirectURI
-				   " SHOULD be \"https\" for security reasons (moreover: some Providers may reject "
-				   "non-HTTPS URLs)",
-				   r_uri.scheme);
-		}
+
+	if (!redirect_uri_is_relative && (_oidc_strnatcasecmp(r_uri.scheme, "https") != 0)) {
+		oidc_swarn(s,
+			   "the URL scheme (%s) of the configured " OIDCRedirectURI
+			   " SHOULD be \"https\" for security reasons (moreover: some Providers may reject "
+			   "non-HTTPS URLs)",
+			   r_uri.scheme);
 	}
 
-	if (oidc_cfg_cookie_domain_get(c) != NULL) {
-		if (redirect_uri_is_relative) {
-			oidc_swarn(s, "if the configured " OIDCRedirectURI " is relative, " OIDCCookieDomain
-				      " SHOULD be empty");
-		} else if (!oidc_util_cookie_domain_valid(r_uri.hostname, oidc_cfg_cookie_domain_get(c))) {
-			oidc_serror(s,
-				    "the domain (%s) configured in " OIDCCookieDomain
-				    " does not match the URL hostname (%s) of the configured " OIDCRedirectURI
-				    " (%s): setting \"state\" and \"session\" cookies will not work!",
-				    oidc_cfg_cookie_domain_get(c), r_uri.hostname, oidc_cfg_redirect_uri_get(c));
-			return HTTP_INTERNAL_SERVER_ERROR;
-		}
-	}
+	rc = oidc_check_config_openid_openidc_cookie_domain(s, c, &r_uri, redirect_uri_is_relative);
+	if (rc != OK)
+		return rc;
 
-	if (oidc_proto_profile_dpop_mode_get(oidc_cfg_provider_get(c)) != OIDC_DPOP_MODE_OFF) {
-		if (oidc_util_key_list_first(oidc_cfg_private_keys_get(c), -1, OIDC_JOSE_JWK_SIG_STR) == NULL) {
-			oidc_serror(s, "'" OIDCDPoPMode "' is configured but the required signing keys have not been "
-				       "provided in '" OIDCPrivateKeyFiles "'/'" OIDCPublicKeyFiles "'");
-			return HTTP_INTERNAL_SERVER_ERROR;
-		}
+	if ((oidc_proto_profile_dpop_mode_get(oidc_cfg_provider_get(c)) != OIDC_DPOP_MODE_OFF) &&
+	    (oidc_util_key_list_first(oidc_cfg_private_keys_get(c), -1, OIDC_JOSE_JWK_SIG_STR) == NULL)) {
+		oidc_serror(s, "'" OIDCDPoPMode "' is configured but the required signing keys have not been "
+			       "provided in '" OIDCPrivateKeyFiles "'/'" OIDCPublicKeyFiles "'");
+		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
 	return OK;
