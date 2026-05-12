@@ -185,18 +185,85 @@ static apr_byte_t oidc_logout_is_back_channel(const char *logout_param_value) {
 }
 
 /*
+ * resolve the provider for a front-channel logout based on the sid/iss
+ * parameters from the request as specified in "OpenID Connect Front-Channel
+ * Logout 1.0 - draft 05" at https://openid.net/specs/openid-connect-frontchannel-1_0.html;
+ * *sid is set when the OP supplied a sid parameter, regardless of whether a
+ * provider could be resolved
+ */
+static oidc_provider_t *oidc_logout_request_front_channel_provider(request_rec *r, oidc_cfg_t *c, char **sid) {
+
+	char *iss = NULL;
+	oidc_provider_t *provider = NULL;
+
+	if (oidc_util_url_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_SID, sid) == FALSE)
+		return NULL;
+
+	if (oidc_util_url_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_ISS, &iss) != FALSE)
+		return oidc_get_provider_for_issuer(r, c, iss, FALSE);
+
+	/*
+	 * Microsoft Entra ID / Azure AD seems to be such a non spec compliant provider.
+	 * In this case try our luck with the static config if possible.
+	 */
+	oidc_debug(r, "OP did not provide an iss as parameter");
+	if (oidc_provider_static_config(r, c, &provider) == FALSE)
+		return NULL;
+	return provider;
+}
+
+/*
+ * handle the front-channel branch of a local logout: try to clear the
+ * session based on sid/iss (when no session was provided), emit the
+ * recommended cache-control headers and return the iframe body or
+ * transparent pixel response
+ */
+static int oidc_logout_request_front_channel(request_rec *r, oidc_cfg_t *c, const char *url, apr_byte_t revoke_tokens,
+					     apr_byte_t no_session_provided) {
+
+	if (no_session_provided) {
+		char *sid = NULL;
+		oidc_provider_t *provider = oidc_logout_request_front_channel_provider(r, c, &sid);
+		if (provider != NULL)
+			oidc_logout_cleanup_by_sid(r, sid, c, provider, revoke_tokens);
+		else if (sid != NULL)
+			oidc_info(r, "No provider for front channel logout found");
+	}
+
+	/* set recommended cache control headers */
+	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL, "no-cache, no-store");
+	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_PRAGMA, "no-cache");
+	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_P3P, "CAO PSA OUR");
+	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_EXPIRES, "0");
+	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_X_FRAME_OPTIONS, oidc_cfg_logout_x_frame_options_get(c));
+
+	/* see if this is PF-PA style logout in which case we return a transparent pixel */
+	const char *accept = oidc_http_hdr_in_accept_get(r);
+	if ((_oidc_strcmp(url, OIDC_IMG_STYLE_LOGOUT_PARAM_VALUE) == 0) ||
+	    ((accept) && _oidc_strstr(accept, OIDC_HTTP_CONTENT_TYPE_IMAGE_PNG))) {
+		return oidc_util_http_content_prep(r, (const char *)&oidc_logout_transparent_pixel,
+						   sizeof(oidc_logout_transparent_pixel),
+						   OIDC_HTTP_CONTENT_TYPE_IMAGE_PNG);
+	}
+
+	/* standard HTTP based logout: should be called in an iframe from the OP */
+	return oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_HTML, "Logged Out", NULL, NULL,
+					   "<p>Logged Out</p>");
+}
+
+/*
  * handle a local logout
  */
 int oidc_logout_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, const char *url,
 			apr_byte_t revoke_tokens) {
 
-	int no_session_provided = 1;
+	apr_byte_t no_session_provided = TRUE;
 
 	oidc_debug(r, "enter (url=%s)", url);
 
 	/* if there's no remote_user then there's no (stored) session to kill */
 	if (session->remote_user != NULL) {
-		no_session_provided = 0;
+		no_session_provided = FALSE;
 		if (revoke_tokens)
 			oidc_logout_revoke_tokens(r, c, session);
 	}
@@ -209,61 +276,8 @@ int oidc_logout_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, 
 	oidc_session_kill(r, session);
 
 	/* see if this is the OP calling us */
-	if (oidc_logout_is_front_channel(url)) {
-
-		/*
-		 * If no session was provided look for the sid and iss parameters in
-		 * the request as specified in
-		 * "OpenID Connect Front-Channel Logout 1.0 - draft 05" at
-		 * https://openid.net/specs/openid-connect-frontchannel-1_0.html
-		 * and try to clear the session based on sid / iss like in the
-		 * backchannel logout case.
-		 */
-		if (no_session_provided) {
-			char *sid, *iss;
-			oidc_provider_t *provider = NULL;
-
-			if (oidc_util_url_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_SID, &sid) != FALSE) {
-
-				if (oidc_util_url_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_ISS, &iss) != FALSE) {
-					provider = oidc_get_provider_for_issuer(r, c, iss, FALSE);
-				} else {
-					/*
-					 * Microsoft Entra ID / Azure AD seems to such a non spec compliant provider.
-					 * In this case try our luck with the static config if possible.
-					 */
-					oidc_debug(r, "OP did not provide an iss as parameter");
-					if (oidc_provider_static_config(r, c, &provider) == FALSE)
-						provider = NULL;
-				}
-				if (provider) {
-					oidc_logout_cleanup_by_sid(r, sid, c, provider, revoke_tokens);
-				} else {
-					oidc_info(r, "No provider for front channel logout found");
-				}
-			}
-		}
-
-		/* set recommended cache control headers */
-		oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL, "no-cache, no-store");
-		oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_PRAGMA, "no-cache");
-		oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_P3P, "CAO PSA OUR");
-		oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_EXPIRES, "0");
-		oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_X_FRAME_OPTIONS, oidc_cfg_logout_x_frame_options_get(c));
-
-		/* see if this is PF-PA style logout in which case we return a transparent pixel */
-		const char *accept = oidc_http_hdr_in_accept_get(r);
-		if ((_oidc_strcmp(url, OIDC_IMG_STYLE_LOGOUT_PARAM_VALUE) == 0) ||
-		    ((accept) && _oidc_strstr(accept, OIDC_HTTP_CONTENT_TYPE_IMAGE_PNG))) {
-			return oidc_util_http_content_prep(r, (const char *)&oidc_logout_transparent_pixel,
-							   sizeof(oidc_logout_transparent_pixel),
-							   OIDC_HTTP_CONTENT_TYPE_IMAGE_PNG);
-		}
-
-		/* standard HTTP based logout: should be called in an iframe from the OP */
-		return oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_HTML, "Logged Out", NULL, NULL,
-						   "<p>Logged Out</p>");
-	}
+	if (oidc_logout_is_front_channel(url))
+		return oidc_logout_request_front_channel(r, c, url, revoke_tokens, no_session_provided);
 
 	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL, "no-cache, no-store");
 	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_PRAGMA, "no-cache");
