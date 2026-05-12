@@ -1000,11 +1000,36 @@ void oidc_metrics_counter_inc(request_rec *r, oidc_metrics_counter_type_t type, 
 }
 
 /*
+ * zero out a timings entry (count, sum and all buckets)
+ */
+static inline void _oidc_metrics_timing_clear(oidc_metrics_timing_t *timing) {
+	int i = 0;
+	timing->count = 0;
+	timing->sum = 0;
+	for (i = 0; i < OIDC_METRICS_BUCKET_NUM; i++)
+		timing->buckets[i] = 0;
+}
+
+/*
+ * increment every bucket whose threshold covers elapsed (buckets are ordered;
+ * threshold == 0 marks the open-ended last bucket)
+ */
+static inline void _oidc_metrics_timing_buckets_inc(oidc_metrics_timing_t *timing, apr_time_t elapsed) {
+	int i = 0;
+	for (i = 0; i < OIDC_METRICS_BUCKET_NUM; i++) {
+		if ((elapsed < _oidc_metric_buckets[i].threshold) || (_oidc_metric_buckets[i].threshold == 0)) {
+			for (; i < OIDC_METRICS_BUCKET_NUM; i++)
+				timing->buckets[i]++;
+			break;
+		}
+	}
+}
+
+/*
  * add a metrics timing sample to the locally cached data
  */
 void oidc_metrics_timing_add(request_rec *r, oidc_metrics_timing_type_t type, apr_time_t elapsed) {
 	oidc_metrics_timing_t *timing = NULL;
-	int i = 0;
 
 	/* TODO: how can this happen? */
 	if (elapsed < 0) {
@@ -1020,37 +1045,13 @@ void oidc_metrics_timing_add(request_rec *r, oidc_metrics_timing_type_t type, ap
 	/* obtain or create the entry for the specified key */
 	timing = _oidc_metrics_timing_get(r, type);
 
-	/* performance */
-	if (timing->count <= 0) {
-		// new timing was created just now or reset earlier
-		for (i = 0; i < OIDC_METRICS_BUCKET_NUM; i++) {
-			if ((elapsed < _oidc_metric_buckets[i].threshold) || (_oidc_metric_buckets[i].threshold == 0)) {
-				// fill out the remaining buckets and break, as they are ordered
-				for (; i < OIDC_METRICS_BUCKET_NUM; i++)
-					timing->buckets[i] = 1;
-				break;
-			}
-		}
-		timing->sum = elapsed;
-		timing->count = 1;
-	} else {
-		if (_is_overflow(r->server, timing->sum, elapsed)) {
-			timing->count = 0;
-			timing->sum = 0;
-			for (i = 0; i < OIDC_METRICS_BUCKET_NUM; i++)
-				timing->buckets[i] = 0;
-		}
-		for (i = 0; i < OIDC_METRICS_BUCKET_NUM; i++) {
-			if ((elapsed < _oidc_metric_buckets[i].threshold) || (_oidc_metric_buckets[i].threshold == 0)) {
-				// fill out the remaining buckets and break, as they are ordered
-				for (; i < OIDC_METRICS_BUCKET_NUM; i++)
-					timing->buckets[i]++;
-				break;
-			}
-		}
-		timing->sum += elapsed;
-		timing->count++;
-	}
+	/* reset on overflow; a freshly-created entry already has count/sum/buckets at zero */
+	if ((timing->count > 0) && _is_overflow(r->server, timing->sum, elapsed))
+		_oidc_metrics_timing_clear(timing);
+
+	_oidc_metrics_timing_buckets_inc(timing, elapsed);
+	timing->sum += elapsed;
+	timing->count++;
 
 	/* unlock the local metrics cache hashtable */
 	oidc_cache_mutex_unlock(r->pool, r->server, _oidc_metrics_process_mutex);
