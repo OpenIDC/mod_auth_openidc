@@ -45,14 +45,85 @@
 #include "util/util.h"
 
 /*
- * get the key from the JWKs that corresponds with the key specified in the header
+ * when no kid/x5t was specified, include the JWK in the result if it is usable for signing;
+ * takes ownership of jwk (either inserts it into result or destroys it)
  */
-static apr_byte_t oidc_proto_jwks_key_get(request_rec *r, oidc_jwt_t *jwt, json_t *j_jwks, apr_hash_t *result) {
+static void oidc_proto_jwks_key_include_any(request_rec *r, oidc_jwk_t *jwk, json_t *elem, apr_hash_t *result) {
+	const char *use = json_string_value(json_object_get(elem, OIDC_JOSE_JWK_USE_STR));
+	if ((use != NULL) && (_oidc_strcmp(use, OIDC_JOSE_JWK_SIG_STR) != 0)) {
+		oidc_debug(r, "skipping key because of non-matching \"%s\": \"%s\"", OIDC_JOSE_JWK_USE_STR, use);
+		oidc_jwk_destroy(jwk);
+		return;
+	}
 
-	apr_byte_t rc = TRUE;
+	char *jwk_json = NULL;
+	oidc_jose_error_t err;
+	oidc_jwk_to_json(r->pool, jwk, &jwk_json, &err);
+	oidc_debug(r, "no kid/x5t to match, include matching key type: %s", jwk_json);
+	if (jwk->kid != NULL)
+		apr_hash_set(result, jwk->kid, APR_HASH_KEY_STRING, jwk);
+	else
+		// can do this because we never remove anything from the list
+		apr_hash_set(result, apr_psprintf(r->pool, "%d", apr_hash_count(result)), APR_HASH_KEY_STRING, jwk);
+}
+
+/*
+ * try a single JWKS entry against the JWT header;
+ * returns TRUE when a specific kid/x5t match was found so the caller can stop iterating
+ */
+static apr_byte_t oidc_proto_jwks_key_apply(request_rec *r, oidc_jwt_t *jwt, json_t *elem, const char *x5t,
+					    apr_hash_t *result) {
 	oidc_jwk_t *jwk = NULL;
 	oidc_jose_error_t err;
 	char *jwk_json = NULL;
+	char *s_x5t = NULL;
+
+	if (oidc_jwk_parse_json(r->pool, elem, &jwk, &err) == FALSE) {
+		oidc_warn(r, "oidc_jwk_parse_json failed: %s", oidc_jose_e2s(r->pool, err));
+		return FALSE;
+	}
+
+	/* skip keys whose type does not match the JWT algorithm */
+	if (oidc_jwt_alg2kty(jwt) != jwk->kty) {
+		oidc_debug(r,
+			   "skipping non matching kty=%d for kid=%s because it doesn't match requested kty=%d, kid=%s",
+			   jwk->kty, jwk->kid, oidc_jwt_alg2kty(jwt), jwt->header.kid);
+		oidc_jwk_destroy(jwk);
+		return FALSE;
+	}
+
+	/* no specific kid/x5t requested: include any sig-usable key with a matching type */
+	if ((jwt->header.kid == NULL) && (x5t == NULL)) {
+		oidc_proto_jwks_key_include_any(r, jwk, elem, result);
+		return FALSE;
+	}
+
+	/* compare the requested kid against the current element */
+	if ((jwt->header.kid != NULL) && (jwk->kid != NULL) && (_oidc_strcmp(jwt->header.kid, jwk->kid) == 0)) {
+		oidc_jwk_to_json(r->pool, jwk, &jwk_json, &err);
+		oidc_debug(r, "found matching kid: \"%s\" for jwk: %s", jwt->header.kid, jwk_json);
+		apr_hash_set(result, jwt->header.kid, APR_HASH_KEY_STRING, jwk);
+		return TRUE;
+	}
+
+	/* compare the requested thumbprint against the current element */
+	oidc_util_json_object_get_string(r->pool, elem, OIDC_JOSE_JWK_X5T_STR, &s_x5t, NULL);
+	if ((s_x5t != NULL) && (x5t != NULL) && (_oidc_strcmp(x5t, s_x5t) == 0)) {
+		oidc_jwk_to_json(r->pool, jwk, &jwk_json, &err);
+		oidc_debug(r, "found matching %s: \"%s\" for jwk: %s", OIDC_JOSE_JWK_X5T_STR, x5t, jwk_json);
+		apr_hash_set(result, x5t, APR_HASH_KEY_STRING, jwk);
+		return TRUE;
+	}
+
+	/* the right key type but no matching kid/x5t */
+	oidc_jwk_destroy(jwk);
+	return FALSE;
+}
+
+/*
+ * get the key from the JWKs that corresponds with the key specified in the header
+ */
+static apr_byte_t oidc_proto_jwks_key_get(request_rec *r, oidc_jwt_t *jwt, json_t *j_jwks, apr_hash_t *result) {
 
 	/* get the (optional) thumbprint for comparison */
 	const char *x5t = oidc_jwt_hdr_get(jwt, OIDC_JOSE_JWK_X5T_STR);
@@ -67,70 +138,11 @@ static apr_byte_t oidc_proto_jwks_key_get(request_rec *r, oidc_jwt_t *jwt, json_
 
 	int i;
 	for (i = 0; i < json_array_size(keys); i++) {
-
-		/* get the next element in the array */
-		json_t *elem = json_array_get(keys, i);
-
-		if (oidc_jwk_parse_json(r->pool, elem, &jwk, &err) == FALSE) {
-			oidc_warn(r, "oidc_jwk_parse_json failed: %s", oidc_jose_e2s(r->pool, err));
-			continue;
-		}
-
-		/* get the key type and see if it is the type that we are looking for */
-		if (oidc_jwt_alg2kty(jwt) != jwk->kty) {
-			oidc_debug(
-			    r,
-			    "skipping non matching kty=%d for kid=%s because it doesn't match requested kty=%d, kid=%s",
-			    jwk->kty, jwk->kid, oidc_jwt_alg2kty(jwt), jwt->header.kid);
-			oidc_jwk_destroy(jwk);
-			continue;
-		}
-
-		/* see if we were looking for a specific kid, if not we'll include any key that matches the type */
-		if ((jwt->header.kid == NULL) && (x5t == NULL)) {
-			const char *use = json_string_value(json_object_get(elem, OIDC_JOSE_JWK_USE_STR));
-			if ((use != NULL) && (_oidc_strcmp(use, OIDC_JOSE_JWK_SIG_STR) != 0)) {
-				oidc_debug(r, "skipping key because of non-matching \"%s\": \"%s\"",
-					   OIDC_JOSE_JWK_USE_STR, use);
-				oidc_jwk_destroy(jwk);
-			} else {
-				oidc_jwk_to_json(r->pool, jwk, &jwk_json, &err);
-				oidc_debug(r, "no kid/x5t to match, include matching key type: %s", jwk_json);
-				if (jwk->kid != NULL)
-					apr_hash_set(result, jwk->kid, APR_HASH_KEY_STRING, jwk);
-				else
-					// can do this because we never remove anything from the list
-					apr_hash_set(result, apr_psprintf(r->pool, "%d", apr_hash_count(result)),
-						     APR_HASH_KEY_STRING, jwk);
-			}
-			continue;
-		}
-
-		/* we are looking for a specific kid, get the kid from the current element */
-		/* compare the requested kid against the current element */
-		if ((jwt->header.kid != NULL) && (jwk->kid != NULL) && (_oidc_strcmp(jwt->header.kid, jwk->kid) == 0)) {
-			oidc_jwk_to_json(r->pool, jwk, &jwk_json, &err);
-			oidc_debug(r, "found matching kid: \"%s\" for jwk: %s", jwt->header.kid, jwk_json);
-			apr_hash_set(result, jwt->header.kid, APR_HASH_KEY_STRING, jwk);
+		if (oidc_proto_jwks_key_apply(r, jwt, json_array_get(keys, i), x5t, result) == TRUE)
 			break;
-		}
-
-		/* we are looking for a specific x5t, get the x5t from the current element */
-		char *s_x5t = NULL;
-		oidc_util_json_object_get_string(r->pool, elem, OIDC_JOSE_JWK_X5T_STR, &s_x5t, NULL);
-		/* compare the requested thumbprint against the current element */
-		if ((s_x5t != NULL) && (x5t != NULL) && (_oidc_strcmp(x5t, s_x5t) == 0)) {
-			oidc_jwk_to_json(r->pool, jwk, &jwk_json, &err);
-			oidc_debug(r, "found matching %s: \"%s\" for jwk: %s", OIDC_JOSE_JWK_X5T_STR, x5t, jwk_json);
-			apr_hash_set(result, x5t, APR_HASH_KEY_STRING, jwk);
-			break;
-		}
-
-		/* the right key type but no matching kid/x5t */
-		oidc_jwk_destroy(jwk);
 	}
 
-	return rc;
+	return TRUE;
 }
 
 /*
