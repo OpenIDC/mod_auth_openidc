@@ -344,86 +344,115 @@ end:
 }
 
 /*
+ * set an appinfo value, falling back to default_name (with the default
+ * header prefix) when no explicit name was configured
+ */
+static void oidc_userinfo_appinfo_set(request_rec *r, const char *name, const char *default_name, const char *value,
+				      oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding) {
+	oidc_util_appinfo_set(r, name ? name : default_name, value, name ? "" : OIDC_DEFAULT_HEADER_PREFIX, pass_in,
+			      encoding);
+}
+
+/*
+ * pass the userinfo JWT stored in the session to the app, rejecting the
+ * client-cookie session type which does not support storing such JWTs
+ */
+static void oidc_userinfo_pass_as_jwt(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session, const char *name,
+				      oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding) {
+
+	if (oidc_cfg_session_type_get(cfg) == OIDC_SESSION_TYPE_CLIENT_COOKIE) {
+		oidc_error(r, "session type \"client-cookie\" does not allow storing/passing a "
+			      "userinfo JWT; use \"" OIDCSessionType " server-cache\" for that");
+		return;
+	}
+
+	const char *s_userinfo_jwt = oidc_session_get_userinfo_jwt(r, session);
+	if (s_userinfo_jwt == NULL) {
+		oidc_debug(r,
+			   "configured to pass userinfo in a JWT, but no such JWT was found in the session "
+			   "(probably no such JWT was returned from the userinfo endpoint)");
+		return;
+	}
+
+	oidc_userinfo_appinfo_set(r, name, OIDC_APP_INFO_USERINFO_JWT, s_userinfo_jwt, pass_in, encoding);
+}
+
+/*
+ * dispatch a single configured "pass userinfo as" entry to the matching
+ * encoding-specific handler
+ */
+static void oidc_userinfo_pass_entry(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session, json_t *claims,
+				     oidc_pass_user_info_as_t *p, oidc_appinfo_pass_in_t pass_in,
+				     oidc_appinfo_encoding_t encoding) {
+
+	char *cser = NULL;
+
+	switch (p->type) {
+	case OIDC_PASS_USERINFO_AS_CLAIMS:
+		/* set the userinfo claims in the app headers */
+		oidc_set_app_claims(r, cfg, claims);
+		break;
+	case OIDC_PASS_USERINFO_AS_JSON_OBJECT:
+		/* pass the userinfo JSON object to the app in a header or environment variable */
+		oidc_userinfo_appinfo_set(r, p->name, OIDC_APP_INFO_USERINFO_JSON,
+					  oidc_util_json_encode(r->pool, claims, JSON_PRESERVE_ORDER | JSON_COMPACT),
+					  pass_in, encoding);
+		break;
+	case OIDC_PASS_USERINFO_AS_JWT:
+		oidc_userinfo_pass_as_jwt(r, cfg, session, p->name, pass_in, encoding);
+		break;
+	case OIDC_PASS_USERINFO_AS_SIGNED_JWT:
+		if (oidc_userinfo_create_signed_jwt(r, cfg, session, claims, &cser) == TRUE)
+			oidc_userinfo_appinfo_set(r, p->name, OIDC_APP_INFO_SIGNED_JWT, cser, pass_in, encoding);
+		break;
+	default:
+		break;
+	}
+}
+
+/*
+ * resolve the claims to pass to the app, optionally applying a JQ filter
+ * to the userinfo claims stored in the session; *filtered receives the
+ * newly allocated json_t that the caller must release, or NULL when no
+ * filter was applied
+ */
+static json_t *oidc_userinfo_resolve_claims(request_rec *r, oidc_session_t *session, json_t **filtered) {
+
+	*filtered = NULL;
+
+#ifdef USE_LIBJQ
+	const char *s_filter = oidc_cfg_dir_userinfo_claims_expr_get(r);
+	if (s_filter != NULL) {
+		const char *s_claims = oidc_util_jq_filter(r, oidc_session_get_userinfo_claims(r, session), s_filter);
+		if (oidc_util_json_decode_object(r, s_claims, filtered) == FALSE) {
+			oidc_error(r, "JQ filtering of claims for [%s] resulted in invalid JSON object, filter='%s'",
+				   "userinfo", s_filter);
+			return NULL;
+		}
+		return *filtered;
+	}
+#endif
+
+	return oidc_session_get_userinfo_claims(r, session);
+}
+
+/*
  * pass the userinfo claims to headers and/or environment variables, encoded as configured
  */
 void oidc_userinfo_pass_as(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session, oidc_appinfo_pass_in_t pass_in,
 			   oidc_appinfo_encoding_t encoding) {
-	const apr_array_header_t *pass_userinfo_as = NULL;
-	oidc_pass_user_info_as_t *p = NULL;
-	int i = 0;
-	char *cser = NULL;
-	json_t *claims = NULL, *filtered_claims = NULL;
 
-	pass_userinfo_as = oidc_cfg_dir_pass_userinfo_as_get(r);
+	const apr_array_header_t *pass_userinfo_as = oidc_cfg_dir_pass_userinfo_as_get(r);
+	json_t *filtered_claims = NULL;
+	json_t *claims = oidc_userinfo_resolve_claims(r, session, &filtered_claims);
 
-#ifdef USE_LIBJQ
-	const char *s_claims = NULL;
-	const char *s_filter = oidc_cfg_dir_userinfo_claims_expr_get(r);
-	if (s_filter) {
-		s_claims = oidc_util_jq_filter(r, oidc_session_get_userinfo_claims(r, session), s_filter);
-		if (oidc_util_json_decode_object(r, s_claims, &filtered_claims) == FALSE) {
-			oidc_error(r, "JQ filtering of claims for [%s] resulted in invalid JSON object, filter='%s'",
-				   "userinfo", s_filter);
-			return;
-		}
-	}
-#endif
+	if (claims == NULL)
+		return;
 
-	claims = filtered_claims ? filtered_claims : oidc_session_get_userinfo_claims(r, session);
-
-	for (i = 0; (pass_userinfo_as != NULL) && (i < pass_userinfo_as->nelts); i++) {
-
-		p = APR_ARRAY_IDX(pass_userinfo_as, i, oidc_pass_user_info_as_t *);
-
-		switch (p->type) {
-
-		case OIDC_PASS_USERINFO_AS_CLAIMS:
-			/* set the userinfo claims in the app headers */
-			oidc_set_app_claims(r, cfg, claims);
-			break;
-
-		case OIDC_PASS_USERINFO_AS_JSON_OBJECT:
-			/* pass the userinfo JSON object to the app in a header or environment variable */
-			oidc_util_appinfo_set(
-			    r, p->name ? p->name : OIDC_APP_INFO_USERINFO_JSON,
-			    oidc_util_json_encode(r->pool, claims, JSON_PRESERVE_ORDER | JSON_COMPACT),
-			    p->name ? "" : OIDC_DEFAULT_HEADER_PREFIX, pass_in, encoding);
-			break;
-
-		case OIDC_PASS_USERINFO_AS_JWT:
-			if (oidc_cfg_session_type_get(cfg) != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
-				/* get the compact serialized JWT from the session */
-				const char *s_userinfo_jwt = oidc_session_get_userinfo_jwt(r, session);
-				if (s_userinfo_jwt != NULL) {
-					/* pass the compact serialized JWT to the app in a header or environment
-					 * variable */
-					oidc_util_appinfo_set(r, p->name ? p->name : OIDC_APP_INFO_USERINFO_JWT,
-							      s_userinfo_jwt, p->name ? "" : OIDC_DEFAULT_HEADER_PREFIX,
-							      pass_in, encoding);
-				} else {
-					oidc_debug(
-					    r,
-					    "configured to pass userinfo in a JWT, but no such JWT was found in the "
-					    "session (probably no such JWT was returned from the userinfo endpoint)");
-				}
-			} else {
-				oidc_error(r, "session type \"client-cookie\" does not allow storing/passing a "
-					      "userinfo JWT; use \"" OIDCSessionType " server-cache\" for that");
-			}
-			break;
-
-		case OIDC_PASS_USERINFO_AS_SIGNED_JWT:
-
-			if (oidc_userinfo_create_signed_jwt(r, cfg, session, claims, &cser) == TRUE) {
-				oidc_util_appinfo_set(r, p->name ? p->name : OIDC_APP_INFO_SIGNED_JWT, cser,
-						      p->name ? "" : OIDC_DEFAULT_HEADER_PREFIX, pass_in, encoding);
-			}
-			break;
-
-		default:
-			break;
-		}
-	}
+	for (int i = 0; (pass_userinfo_as != NULL) && (i < pass_userinfo_as->nelts); i++)
+		oidc_userinfo_pass_entry(r, cfg, session, claims,
+					 APR_ARRAY_IDX(pass_userinfo_as, i, oidc_pass_user_info_as_t *), pass_in,
+					 encoding);
 
 	if (filtered_claims)
 		json_decref(filtered_claims);
