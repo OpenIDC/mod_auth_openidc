@@ -99,135 +99,138 @@ apr_byte_t oidc_proto_idtoken_validate_nonce(request_rec *r, oidc_cfg_t *cfg, oi
 #define OIDC_PROTO_IDTOKEN_AUD_CLIENT_ID_SPECIAL_VALUE "@"
 
 /*
- * validate the "aud" and "azp" claims in the id_token payload
+ * validate that the "azp" claim, when present, matches the configured client_id
  */
-apr_byte_t oidc_proto_idtoken_validate_aud_and_azp(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
-						   oidc_jwt_payload_t *id_token_payload) {
-
-	char *azp = NULL;
-	const char *s_aud = NULL;
-	const apr_array_header_t *arr = NULL;
-	int i = 0;
-
-	oidc_jose_get_string(r->pool, id_token_payload->value.json, OIDC_CLAIM_AZP, FALSE, &azp, NULL);
-
+static apr_byte_t oidc_proto_idtoken_validate_azp(request_rec *r, oidc_provider_t *provider, const char *azp) {
 	/*
 	 * the "azp" claim is only needed when the id_token has a single audience value and that audience
 	 * is different than the authorized party; it MAY be included even when the authorized party is
 	 * the same as the sole audience.
 	 */
-	if ((azp != NULL) && (_oidc_strcmp(azp, oidc_cfg_provider_client_id_get(provider)) != 0)) {
+	if ((azp == NULL) || (_oidc_strcmp(azp, oidc_cfg_provider_client_id_get(provider)) == 0))
+		return TRUE;
+	oidc_error(r,
+		   "the \"%s\" claim (%s) is present in the id_token, but is not equal to the configured "
+		   "client_id (%s)",
+		   OIDC_CLAIM_AZP, azp, oidc_cfg_provider_client_id_get(provider));
+	return FALSE;
+}
+
+/*
+ * resolve the special "@" audience value to the configured client_id (passthrough otherwise)
+ */
+static const char *oidc_proto_idtoken_aud_resolve(oidc_provider_t *provider, const char *s_aud) {
+	if (_oidc_strcmp(s_aud, OIDC_PROTO_IDTOKEN_AUD_CLIENT_ID_SPECIAL_VALUE) == 0)
+		return oidc_cfg_provider_client_id_get(provider);
+	return s_aud;
+}
+
+/*
+ * validate a single-valued "aud" claim against either the client_id or the configured aud-values list
+ */
+static apr_byte_t oidc_proto_idtoken_validate_aud_string(request_rec *r, oidc_provider_t *provider,
+							 const apr_array_header_t *arr, const char *aud_value) {
+	int i = 0;
+
+	if (arr == NULL) {
+		/* a single-valued audience must be equal to our client_id */
+		if (_oidc_strcmp(aud_value, oidc_cfg_provider_client_id_get(provider)) == 0)
+			return TRUE;
 		oidc_error(r,
-			   "the \"%s\" claim (%s) is present in the id_token, but is not equal to the configured "
-			   "client_id (%s)",
-			   OIDC_CLAIM_AZP, azp, oidc_cfg_provider_client_id_get(provider));
+			   "the configured client_id (%s) did not match the \"%s\" claim value (%s) in the id_token",
+			   oidc_cfg_provider_client_id_get(provider), OIDC_CLAIM_AUD, aud_value);
 		return FALSE;
 	}
 
-	/* get the "aud" value from the JSON payload */
-	json_t *aud = json_object_get(id_token_payload->value.json, OIDC_CLAIM_AUD);
-	if (aud != NULL) {
+	for (i = 0; i < arr->nelts; i++) {
+		const char *s_aud = oidc_proto_idtoken_aud_resolve(provider, APR_ARRAY_IDX(arr, i, const char *));
+		if (_oidc_strcmp(aud_value, s_aud) == 0)
+			return TRUE;
+	}
 
-		arr = oidc_proto_profile_id_token_aud_values_get(r->pool, provider);
+	oidc_error(r, "none of our configured audience values could be found in \"%s\" claim", OIDC_CLAIM_AUD);
+	return FALSE;
+}
 
-		/* check if it is a single-value */
-		if (json_is_string(aud)) {
+/*
+ * validate a multi-valued "aud" claim against either the client_id or the configured aud-values list
+ */
+static apr_byte_t oidc_proto_idtoken_validate_aud_array(request_rec *r, oidc_provider_t *provider,
+							const apr_array_header_t *arr, json_t *aud, const char *azp) {
+	int i = 0;
+	const char *s_aud = NULL;
 
-			if (arr == NULL) {
+	if (arr == NULL) {
+		if ((json_array_size(aud) > 1) && (azp == NULL))
+			oidc_warn(r,
+				  "the \"%s\" claim value in the id_token is an array with more than 1 element, but "
+				  "\"%s\" claim is not present (a SHOULD in the spec...)",
+				  OIDC_CLAIM_AUD, OIDC_CLAIM_AZP);
 
-				/* a single-valued audience must be equal to our client_id */
-				if (_oidc_strcmp(json_string_value(aud), oidc_cfg_provider_client_id_get(provider)) !=
-				    0) {
-					oidc_error(r,
-						   "the configured client_id (%s) did not match the \"%s\" claim value "
-						   "(%s) in "
-						   "the id_token",
-						   oidc_cfg_provider_client_id_get(provider), OIDC_CLAIM_AUD,
-						   json_string_value(aud));
-					return FALSE;
-				}
-
-			} else {
-
-				for (i = 0; i < arr->nelts; i++) {
-					s_aud = APR_ARRAY_IDX(arr, i, const char *);
-					if (_oidc_strcmp(s_aud, OIDC_PROTO_IDTOKEN_AUD_CLIENT_ID_SPECIAL_VALUE) == 0)
-						s_aud = oidc_cfg_provider_client_id_get(provider);
-					if (_oidc_strcmp(json_string_value(aud), s_aud) == 0)
-						break;
-				}
-
-				if (i == arr->nelts) {
-					oidc_error(
-					    r, "none of our configured audience values could be found in \"%s\" claim",
-					    OIDC_CLAIM_AUD);
-					return FALSE;
-				}
-			}
-
-			/* check if this is a multi-valued audience */
-		} else if (json_is_array(aud)) {
-
-			if (arr == NULL) {
-
-				if ((json_array_size(aud) > 1) && (azp == NULL)) {
-					oidc_warn(r,
-						  "the \"%s\" claim value in the id_token is an array with more than 1 "
-						  "element, but \"%s\" claim is not present (a SHOULD in the spec...)",
-						  OIDC_CLAIM_AUD, OIDC_CLAIM_AZP);
-				}
-
-				if (oidc_util_json_array_has_value(r, aud, oidc_cfg_provider_client_id_get(provider)) ==
-				    FALSE) {
-					oidc_error(
-					    r,
-					    "our configured client_id (%s) could not be found in the array of values "
-					    "for \"%s\" claim",
-					    oidc_cfg_provider_client_id_get(provider), OIDC_CLAIM_AUD);
-					return FALSE;
-				}
-
-			} else {
-
-				/* handle explicit and exhaustive configuration of acceptable audience values */
-
-				for (i = 0; i < arr->nelts; i++) {
-					s_aud = APR_ARRAY_IDX(arr, i, const char *);
-					if (_oidc_strcmp(s_aud, OIDC_PROTO_IDTOKEN_AUD_CLIENT_ID_SPECIAL_VALUE) == 0)
-						s_aud = oidc_cfg_provider_client_id_get(provider);
-					if (oidc_util_json_array_has_value(r, aud, s_aud) == FALSE) {
-						oidc_error(r,
-							   "our configured audience value (%s) could not be found in "
-							   "the array of values "
-							   "for \"%s\" claim",
-							   APR_ARRAY_IDX(arr, i, const char *), OIDC_CLAIM_AUD);
-						return FALSE;
-					}
-				}
-
-				if (json_array_size(aud) > arr->nelts) {
-					oidc_error(
-					    r,
-					    "our configured audience values are all present in the array of values "
-					    "for \"%s\" claim, but there are other unknown/untrusted values included "
-					    "as well",
-					    OIDC_CLAIM_AUD);
-					return FALSE;
-				}
-			}
-
-		} else {
-			oidc_error(r, "id_token JSON payload \"%s\" claim is not a string nor an array",
-				   OIDC_CLAIM_AUD);
+		if (oidc_util_json_array_has_value(r, aud, oidc_cfg_provider_client_id_get(provider)) == FALSE) {
+			oidc_error(r,
+				   "our configured client_id (%s) could not be found in the array of values for \"%s\" "
+				   "claim",
+				   oidc_cfg_provider_client_id_get(provider), OIDC_CLAIM_AUD);
 			return FALSE;
 		}
+		return TRUE;
+	}
 
-	} else {
-		oidc_error(r, "id_token JSON payload did not contain an \"%s\" claim", OIDC_CLAIM_AUD);
+	/* handle explicit and exhaustive configuration of acceptable audience values */
+	for (i = 0; i < arr->nelts; i++) {
+		s_aud = oidc_proto_idtoken_aud_resolve(provider, APR_ARRAY_IDX(arr, i, const char *));
+		if (oidc_util_json_array_has_value(r, aud, s_aud) == FALSE) {
+			oidc_error(r,
+				   "our configured audience value (%s) could not be found in the array of values for "
+				   "\"%s\" claim",
+				   APR_ARRAY_IDX(arr, i, const char *), OIDC_CLAIM_AUD);
+			return FALSE;
+		}
+	}
+
+	if (json_array_size(aud) > arr->nelts) {
+		oidc_error(r,
+			   "our configured audience values are all present in the array of values for \"%s\" claim, "
+			   "but there are other unknown/untrusted values included as well",
+			   OIDC_CLAIM_AUD);
 		return FALSE;
 	}
 
 	return TRUE;
+}
+
+/*
+ * validate the "aud" and "azp" claims in the id_token payload
+ */
+apr_byte_t oidc_proto_idtoken_validate_aud_and_azp(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
+						   oidc_jwt_payload_t *id_token_payload) {
+	char *azp = NULL;
+	json_t *aud = NULL;
+	const apr_array_header_t *arr = NULL;
+
+	oidc_jose_get_string(r->pool, id_token_payload->value.json, OIDC_CLAIM_AZP, FALSE, &azp, NULL);
+
+	if (oidc_proto_idtoken_validate_azp(r, provider, azp) == FALSE)
+		return FALSE;
+
+	/* get the "aud" value from the JSON payload */
+	aud = json_object_get(id_token_payload->value.json, OIDC_CLAIM_AUD);
+	if (aud == NULL) {
+		oidc_error(r, "id_token JSON payload did not contain an \"%s\" claim", OIDC_CLAIM_AUD);
+		return FALSE;
+	}
+
+	arr = oidc_proto_profile_id_token_aud_values_get(r->pool, provider);
+
+	if (json_is_string(aud))
+		return oidc_proto_idtoken_validate_aud_string(r, provider, arr, json_string_value(aud));
+
+	if (json_is_array(aud))
+		return oidc_proto_idtoken_validate_aud_array(r, provider, arr, aud, azp);
+
+	oidc_error(r, "id_token JSON payload \"%s\" claim is not a string nor an array", OIDC_CLAIM_AUD);
+	return FALSE;
 }
 
 /*
