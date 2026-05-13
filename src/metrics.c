@@ -1535,7 +1535,6 @@ const oidc_metrics_content_handler_t _oidc_metrics_handlers[] = {
  */
 static int oidc_metric_reset(request_rec *r, int dvalue) {
 	char *s_reset = NULL;
-	char svalue[16];
 	int value = 0;
 
 	oidc_util_url_parameter_get(r, OIDC_METRICS_RESET_PARAM, &s_reset);
@@ -1543,10 +1542,9 @@ static int oidc_metric_reset(request_rec *r, int dvalue) {
 	if (s_reset == NULL)
 		return dvalue;
 
-	sscanf(s_reset, "%s", svalue);
-	if (_oidc_strnatcasecmp(svalue, "true") == 0)
+	if (_oidc_strnatcasecmp(s_reset, "true") == 0)
 		value = 1;
-	else if (_oidc_strnatcasecmp(svalue, "false") == 0)
+	else if (_oidc_strnatcasecmp(s_reset, "false") == 0)
 		value = 0;
 
 	return value;
