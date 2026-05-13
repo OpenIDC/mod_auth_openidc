@@ -151,6 +151,80 @@ static int oidc_state_cookies_delete_oldest(request_rec *r, oidc_cfg_t *c, int n
 }
 
 /*
+ * append a state cookie record to the tail of the linked list of still-valid cookies
+ */
+static void oidc_state_cookies_list_append(request_rec *r, oidc_state_cookies_t **first, oidc_state_cookies_t **last,
+					   char *name, apr_time_t ts) {
+	if (*first == NULL) {
+		*first = apr_pcalloc(r->pool, sizeof(oidc_state_cookies_t));
+		*last = *first;
+	} else {
+		(*last)->next = apr_pcalloc(r->pool, sizeof(oidc_state_cookies_t));
+		*last = (*last)->next;
+	}
+	(*last)->name = name;
+	(*last)->timestamp = ts;
+	(*last)->next = NULL;
+}
+
+/*
+ * process a single state cookie: skip if it's the current one, delete if expired or undecodable,
+ * otherwise append it to the list of valid cookies; returns 1 if the cookie was kept
+ */
+static int oidc_state_cookies_process_one(request_rec *r, oidc_cfg_t *c, char *cookieName, const char *value,
+					  const char *currentCookieName, oidc_state_cookies_t **first,
+					  oidc_state_cookies_t **last) {
+	/* never touch the cookie associated with the request currently being processed */
+	if ((currentCookieName != NULL) && (_oidc_strcmp(cookieName, currentCookieName) == 0))
+		return 0;
+
+	oidc_proto_state_t *proto_state = oidc_proto_state_from_cookie(r, c, value);
+	if (proto_state == NULL) {
+		oidc_warn(r, "state cookie could not be retrieved/decoded, deleting: %s", cookieName);
+		oidc_http_set_cookie(r, cookieName, "", 0, OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r));
+		return 0;
+	}
+
+	int kept = 0;
+	json_int_t ts = oidc_proto_state_get_timestamp(proto_state);
+	if (apr_time_now() > ts + apr_time_from_sec(oidc_cfg_state_timeout_get(c))) {
+		oidc_warn(r, "state (%s) has expired (original_url=%s)", cookieName,
+			  oidc_proto_state_get_original_url(proto_state));
+		oidc_http_set_cookie(r, cookieName, "", 0, OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r));
+	} else {
+		oidc_state_cookies_list_append(r, first, last, cookieName, ts);
+		kept = 1;
+	}
+
+	oidc_proto_state_destroy(proto_state);
+	return kept;
+}
+
+/*
+ * parse a single "<name>=<value>" cookie token and dispatch processing if it is a state cookie;
+ * returns 1 if the token was kept as a valid state cookie
+ */
+static int oidc_state_cookies_parse_token(request_rec *r, oidc_cfg_t *c, char *cookie, const char *currentCookieName,
+					  oidc_state_cookies_t **first, oidc_state_cookies_t **last) {
+	while (*cookie == OIDC_CHAR_SPACE)
+		cookie++;
+
+	if (_oidc_strstr(cookie, oidc_cfg_dir_state_cookie_prefix_get(r)) != cookie)
+		return 0;
+
+	char *cookieName = cookie;
+	while (cookie != NULL && *cookie != OIDC_CHAR_EQUAL)
+		cookie++;
+	if (*cookie != OIDC_CHAR_EQUAL)
+		return 0;
+
+	*cookie = '\0';
+	cookie++;
+
+	return oidc_state_cookies_process_one(r, c, cookieName, cookie, currentCookieName, first, last);
+}
+
+/*
  * clean state cookies that have expired i.e. for outstanding requests that will never return
  * successfully and return the number of remaining valid cookies/outstanding-requests while
  * doing so
@@ -158,65 +232,20 @@ static int oidc_state_cookies_delete_oldest(request_rec *r, oidc_cfg_t *c, int n
 int oidc_state_cookies_clean_expired(request_rec *r, oidc_cfg_t *c, const char *currentCookieName, int delete_oldest) {
 	int number_of_valid_state_cookies = 0;
 	oidc_state_cookies_t *first = NULL, *last = NULL;
-	char *cookie = NULL, *tokenizerCtx = NULL, *cookieName = NULL;
+	char *tokenizerCtx = NULL;
 	char *cookies = apr_pstrdup(r->pool, oidc_http_hdr_in_cookie_get(r));
-	if (cookies != NULL) {
-		cookie = apr_strtok(cookies, OIDC_STR_SEMI_COLON, &tokenizerCtx);
-		while (cookie != NULL) {
-			while (*cookie == OIDC_CHAR_SPACE)
-				cookie++;
-			if (_oidc_strstr(cookie, oidc_cfg_dir_state_cookie_prefix_get(r)) == cookie) {
-				cookieName = cookie;
-				while (cookie != NULL && *cookie != OIDC_CHAR_EQUAL)
-					cookie++;
-				if (*cookie == OIDC_CHAR_EQUAL) {
-					*cookie = '\0';
-					cookie++;
-					if ((currentCookieName == NULL) ||
-					    (_oidc_strcmp(cookieName, currentCookieName) != 0)) {
-						oidc_proto_state_t *proto_state =
-						    oidc_proto_state_from_cookie(r, c, cookie);
-						if (proto_state != NULL) {
-							json_int_t ts = oidc_proto_state_get_timestamp(proto_state);
-							if (apr_time_now() >
-							    ts + apr_time_from_sec(oidc_cfg_state_timeout_get(c))) {
-								oidc_warn(
-								    r, "state (%s) has expired (original_url=%s)",
-								    cookieName,
-								    oidc_proto_state_get_original_url(proto_state));
-								oidc_http_set_cookie(
-								    r, cookieName, "", 0,
-								    OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r));
-							} else {
-								if (first == NULL) {
-									first = apr_pcalloc(
-									    r->pool, sizeof(oidc_state_cookies_t));
-									last = first;
-								} else {
-									last->next = apr_pcalloc(
-									    r->pool, sizeof(oidc_state_cookies_t));
-									last = last->next;
-								}
-								last->name = cookieName;
-								last->timestamp = ts;
-								last->next = NULL;
-								number_of_valid_state_cookies++;
-							}
-							oidc_proto_state_destroy(proto_state);
-						} else {
-							oidc_warn(
-							    r,
-							    "state cookie could not be retrieved/decoded, deleting: %s",
-							    cookieName);
-							oidc_http_set_cookie(r, cookieName, "", 0,
-									     OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r));
-						}
-					}
-				}
-			}
-			cookie = apr_strtok(NULL, OIDC_STR_SEMI_COLON, &tokenizerCtx);
-		}
+
+	if (cookies == NULL)
+		goto out;
+
+	char *cookie = apr_strtok(cookies, OIDC_STR_SEMI_COLON, &tokenizerCtx);
+	while (cookie != NULL) {
+		number_of_valid_state_cookies +=
+		    oidc_state_cookies_parse_token(r, c, cookie, currentCookieName, &first, &last);
+		cookie = apr_strtok(NULL, OIDC_STR_SEMI_COLON, &tokenizerCtx);
 	}
+
+out:
 
 	if (delete_oldest > 0)
 		number_of_valid_state_cookies = oidc_state_cookies_delete_oldest(
