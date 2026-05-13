@@ -325,22 +325,11 @@ static apr_byte_t oidc_request_uri_encryption_jwk_by_type(request_rec *r, oidc_c
 }
 
 /*
- * generate a request object
+ * populate iss/aud/iat/nbf/exp on the request object and merge "static" config values into it
  */
-static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provider_t *provider,
-					     json_t *request_object_config, apr_table_t *params, int ttl) {
-
-	oidc_jwk_t *sjwk = NULL;
-	int jwk_needs_destroy = 0;
-
-	oidc_debug(r, "enter");
-
-	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
-
-	/* create the request object value */
-	oidc_jwt_t *request_object = oidc_jwt_new(r->pool, TRUE, TRUE);
-
-	/* set basic values: iss, aud, iat and exp */
+static void oidc_request_uri_request_object_claims_set(request_rec *r, struct oidc_provider_t *provider,
+						       json_t *request_object_config, oidc_jwt_t *request_object,
+						       int ttl) {
 	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_ISS,
 			    json_string(oidc_cfg_provider_client_id_get(provider)));
 	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_AUD,
@@ -352,92 +341,183 @@ static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provide
 	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_EXP,
 			    json_integer(apr_time_sec(apr_time_now()) + ttl));
 
-	/* add static values to the request object as configured in the .conf file; may override iss/aud */
+	/* may override iss/aud */
 	oidc_util_json_merge(r, json_object_get(request_object_config, "static"), request_object->payload.value.json);
+}
 
-	/* copy parameters from the authorization request as configured in the .conf file */
+/*
+ * copy parameters from the authorization request to the request object and remove the marked ones from the query
+ */
+static void oidc_request_uri_request_object_params_copy(request_rec *r, json_t *request_object_config,
+							oidc_jwt_t *request_object, apr_table_t *params) {
 	apr_table_t *delete_from_query_params = apr_table_make(r->pool, 0);
 	oidc_request_uri_copy_req_ctx_t data = {r, request_object_config, request_object, delete_from_query_params};
 	apr_table_do(oidc_request_uri_copy_from_request, &data, params, NULL);
 
-	/* delete parameters from the query parameters of the authorization request as configured in the .conf file */
 	data.params2 = params;
 	apr_table_do(oidc_request_uri_delete_from_request, &data, delete_from_query_params, NULL);
+}
+
+/*
+ * resolve the JWK to sign the request object with, based on the configured signing algorithm
+ */
+static oidc_jwk_t *oidc_request_uri_request_object_signing_jwk_get(request_rec *r, oidc_cfg_t *cfg,
+								   struct oidc_provider_t *provider,
+								   oidc_jwt_t *request_object, int *jwk_needs_destroy) {
+	oidc_jwk_t *sjwk = NULL;
+	int kty = oidc_jwt_alg2kty(request_object);
+
+	*jwk_needs_destroy = 0;
+
+	switch (kty) {
+	case CJOSE_JWK_KTY_RSA:
+	case CJOSE_JWK_KTY_EC:
+		if ((oidc_cfg_provider_client_keys_get(provider) == NULL) &&
+		    (oidc_cfg_private_keys_get(cfg) == NULL)) {
+			oidc_error(r, "no global or per-provider private keys have been configured to use for "
+				      "request object signing");
+			return NULL;
+		}
+		sjwk = oidc_cfg_provider_client_keys_get(provider)
+			   ? oidc_util_key_list_first(oidc_cfg_provider_client_keys_get(provider), kty,
+						      OIDC_JOSE_JWK_SIG_STR)
+			   : oidc_util_key_list_first(oidc_cfg_private_keys_get(cfg), kty, OIDC_JOSE_JWK_SIG_STR);
+		if (sjwk && sjwk->kid)
+			request_object->header.kid = apr_pstrdup(r->pool, sjwk->kid);
+		else
+			oidc_error(r, "could not find a usable signing key");
+		return sjwk;
+	case CJOSE_JWK_KTY_OCT:
+		oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, FALSE, &sjwk);
+		*jwk_needs_destroy = 1;
+		return sjwk;
+	default:
+		oidc_error(r, "unsupported signing algorithm, no key type for algorithm: %s",
+			   request_object->header.alg);
+		return NULL;
+	}
+}
+
+/*
+ * sign the request object in place
+ */
+static apr_byte_t oidc_request_uri_request_object_sign(request_rec *r, oidc_cfg_t *cfg,
+						       struct oidc_provider_t *provider, oidc_jwt_t *request_object) {
+	oidc_jose_error_t err;
+	int jwk_needs_destroy = 0;
+
+	oidc_jwk_t *sjwk =
+	    oidc_request_uri_request_object_signing_jwk_get(r, cfg, provider, request_object, &jwk_needs_destroy);
+	if (sjwk == NULL)
+		return FALSE;
+
+	apr_byte_t rv = oidc_jwt_sign(r->pool, request_object, sjwk, FALSE, &err);
+	if (rv == FALSE)
+		oidc_error(r, "signing Request Object failed: %s", oidc_jose_e2s(r->pool, err));
+
+	if (jwk_needs_destroy)
+		oidc_jwk_destroy(sjwk);
+
+	return rv;
+}
+
+/*
+ * resolve the JWK to encrypt the request object with, based on the configured encryption algorithm
+ *
+ * NB: signing_alg is only used to preserve the original (technically incorrect, but stable) error message that
+ * references the signing algorithm rather than the encryption algorithm
+ */
+static oidc_jwk_t *oidc_request_uri_request_object_encryption_jwk_get(request_rec *r, oidc_cfg_t *cfg,
+								      struct oidc_provider_t *provider, oidc_jwt_t *jwe,
+								      const char *signing_alg) {
+	oidc_jwk_t *ejwk = NULL;
+
+	switch (oidc_jwt_alg2kty(jwe)) {
+	case CJOSE_JWK_KTY_RSA:
+	case CJOSE_JWK_KTY_EC:
+		oidc_request_uri_encryption_jwk_by_type(r, cfg, provider, oidc_jwt_alg2kty(jwe), &ejwk);
+		break;
+	case CJOSE_JWK_KTY_OCT:
+		oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider),
+					       oidc_alg2keysize(jwe->header.alg), OIDC_JOSE_ALG_SHA256, FALSE, &ejwk);
+		break;
+	default:
+		oidc_error(r, "unsupported encryption algorithm, no key type for algorithm: %s", signing_alg);
+		break;
+	}
+
+	return ejwk;
+}
+
+/*
+ * encrypt the (already serialized) signed request object into a JWE and return the compact serialization
+ */
+static char *oidc_request_uri_request_object_encrypt(request_rec *r, oidc_cfg_t *cfg, struct oidc_provider_t *provider,
+						     oidc_jwt_t *jwe, const char *cser, const char *signing_alg) {
+	oidc_jose_error_t err;
+	char *serialized = NULL;
+
+	oidc_jwk_t *ejwk = oidc_request_uri_request_object_encryption_jwk_get(r, cfg, provider, jwe, signing_alg);
+	if (ejwk == NULL)
+		return NULL;
+
+	if (jwe->header.enc == NULL)
+		jwe->header.enc = apr_pstrdup(r->pool, CJOSE_HDR_ENC_A128CBC_HS256);
+
+	if (ejwk->kid != NULL)
+		jwe->header.kid = ejwk->kid;
+
+	if (oidc_jwt_encrypt(r->pool, jwe, ejwk, cser, _oidc_strlen(cser) + 1, &serialized, &err) == FALSE) {
+		oidc_error(r, "encrypting JWT failed: %s", oidc_jose_e2s(r->pool, err));
+		serialized = NULL;
+	}
+
+	oidc_jwk_destroy(ejwk);
+
+	return serialized;
+}
+
+/*
+ * generate a request object
+ */
+static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provider_t *provider,
+					     json_t *request_object_config, apr_table_t *params, int ttl) {
+
+	oidc_jose_error_t err;
+	char *serialized_request_object = NULL;
+	oidc_jwt_t *jwe = NULL;
+
+	oidc_debug(r, "enter");
+
+	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+
+	/* create the request object value */
+	oidc_jwt_t *request_object = oidc_jwt_new(r->pool, TRUE, TRUE);
+
+	/* set basic values: iss, aud, iat, nbf, exp and merge static config */
+	oidc_request_uri_request_object_claims_set(r, provider, request_object_config, request_object, ttl);
+
+	/* copy/delete parameters from the authorization request as configured in the .conf file */
+	oidc_request_uri_request_object_params_copy(r, request_object_config, request_object, params);
 
 	/* debug logging */
 	oidc_debug(
 	    r, "request object: %s",
 	    oidc_util_json_encode(r->pool, request_object->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT));
 
-	char *serialized_request_object = NULL;
-	oidc_jose_error_t err;
-	int kty = -1;
-
 	/* get the crypto settings from the configuration */
 	json_t *crypto = json_object_get(request_object_config, "crypto");
 	oidc_util_json_object_get_string(r->pool, crypto, "sign_alg", &request_object->header.alg, "none");
 
 	/* see if we need to sign the request object */
-	if (_oidc_strcmp(request_object->header.alg, "none") != 0) {
+	if ((_oidc_strcmp(request_object->header.alg, "none") != 0) &&
+	    (oidc_request_uri_request_object_sign(r, cfg, provider, request_object) == FALSE))
+		goto out;
 
-		sjwk = NULL;
-		jwk_needs_destroy = 0;
-		kty = oidc_jwt_alg2kty(request_object);
-		switch (kty) {
-		case CJOSE_JWK_KTY_RSA:
-		case CJOSE_JWK_KTY_EC:
-			if ((oidc_cfg_provider_client_keys_get(provider) != NULL) ||
-			    (oidc_cfg_private_keys_get(cfg) != NULL)) {
-				sjwk = oidc_cfg_provider_client_keys_get(provider)
-					   ? oidc_util_key_list_first(oidc_cfg_provider_client_keys_get(provider), kty,
-								      OIDC_JOSE_JWK_SIG_STR)
-					   : oidc_util_key_list_first(oidc_cfg_private_keys_get(cfg), kty,
-								      OIDC_JOSE_JWK_SIG_STR);
-				if (sjwk && sjwk->kid)
-					request_object->header.kid = apr_pstrdup(r->pool, sjwk->kid);
-				else
-					oidc_error(r, "could not find a usable signing key");
-			} else {
-				oidc_error(r, "no global or per-provider private keys have been configured to use for "
-					      "request object signing");
-			}
-			break;
-		case CJOSE_JWK_KTY_OCT:
-			oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, FALSE,
-						       &sjwk);
-			jwk_needs_destroy = 1;
-			break;
-		default:
-			oidc_error(r, "unsupported signing algorithm, no key type for algorithm: %s",
-				   request_object->header.alg);
-			break;
-		}
-
-		if (sjwk == NULL) {
-			oidc_jwt_destroy(request_object);
-			json_decref(request_object_config);
-			return NULL;
-		}
-
-		if (oidc_jwt_sign(r->pool, request_object, sjwk, FALSE, &err) == FALSE) {
-			oidc_error(r, "signing Request Object failed: %s", oidc_jose_e2s(r->pool, err));
-			if (jwk_needs_destroy)
-				oidc_jwk_destroy(sjwk);
-			oidc_jwt_destroy(request_object);
-			json_decref(request_object_config);
-			return NULL;
-		}
-
-		if (jwk_needs_destroy)
-			oidc_jwk_destroy(sjwk);
-	}
-
-	oidc_jwt_t *jwe = oidc_jwt_new(r->pool, TRUE, FALSE);
+	jwe = oidc_jwt_new(r->pool, TRUE, FALSE);
 	if (jwe == NULL) {
 		oidc_error(r, "creating JWE failed");
-		oidc_jwt_destroy(request_object);
-		json_decref(request_object_config);
-		return NULL;
+		goto out;
 	}
 
 	oidc_util_json_object_get_string(r->pool, crypto, "crypt_alg", &jwe->header.alg, NULL);
@@ -446,64 +526,24 @@ static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provide
 	char *cser = oidc_jose_jwt_serialize(r->pool, request_object, &err);
 
 	/* see if we need to encrypt the request object */
-	if (jwe->header.alg != NULL) {
-
-		oidc_jwk_t *ejwk = NULL;
-
-		switch (oidc_jwt_alg2kty(jwe)) {
-		case CJOSE_JWK_KTY_RSA:
-		case CJOSE_JWK_KTY_EC:
-			oidc_request_uri_encryption_jwk_by_type(r, cfg, provider, oidc_jwt_alg2kty(jwe), &ejwk);
-			break;
-		case CJOSE_JWK_KTY_OCT:
-			oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider),
-						       oidc_alg2keysize(jwe->header.alg), OIDC_JOSE_ALG_SHA256, FALSE,
-						       &ejwk);
-			break;
-		default:
-			oidc_error(r, "unsupported encryption algorithm, no key type for algorithm: %s",
-				   request_object->header.alg);
-			break;
-		}
-
-		if (ejwk == NULL) {
-			oidc_jwt_destroy(jwe);
-			oidc_jwt_destroy(request_object);
-			json_decref(request_object_config);
-			return NULL;
-		}
-
-		if (jwe->header.enc == NULL)
-			jwe->header.enc = apr_pstrdup(r->pool, CJOSE_HDR_ENC_A128CBC_HS256);
-
-		if (ejwk->kid != NULL)
-			jwe->header.kid = ejwk->kid;
-
-		if (oidc_jwt_encrypt(r->pool, jwe, ejwk, cser, _oidc_strlen(cser) + 1, &serialized_request_object,
-				     &err) == FALSE) {
-			oidc_error(r, "encrypting JWT failed: %s", oidc_jose_e2s(r->pool, err));
-			oidc_jwk_destroy(ejwk);
-			oidc_jwt_destroy(jwe);
-			oidc_jwt_destroy(request_object);
-			json_decref(request_object_config);
-			return NULL;
-		}
-
-		oidc_jwk_destroy(ejwk);
-
-	} else {
-
+	if (jwe->header.alg != NULL)
+		serialized_request_object =
+		    oidc_request_uri_request_object_encrypt(r, cfg, provider, jwe, cser, request_object->header.alg);
+	else
 		/* should be sign only or "none" */
 		serialized_request_object = cser;
-	}
+
+out:
 
 	oidc_jwt_destroy(request_object);
 	oidc_jwt_destroy(jwe);
 	json_decref(request_object_config);
 
-	oidc_debug(r, "serialized request object JWT header = \"%s\"",
-		   oidc_proto_jwt_header_peek(r, serialized_request_object, NULL, NULL, NULL));
-	oidc_debug(r, "serialized request object = \"%s\"", serialized_request_object);
+	if (serialized_request_object != NULL) {
+		oidc_debug(r, "serialized request object JWT header = \"%s\"",
+			   oidc_proto_jwt_header_peek(r, serialized_request_object, NULL, NULL, NULL));
+		oidc_debug(r, "serialized request object = \"%s\"", serialized_request_object);
+	}
 
 	return serialized_request_object;
 }
@@ -594,51 +634,42 @@ static void oidc_proto_request_uri_request_param_add(request_rec *r, struct oidc
 }
 
 /*
- * send an OpenID Connect authorization request to the specified provider
+ * concatenate per-path scopes with per-provider scopes, warn if "openid" is missing, and add the result to params
  */
-int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, const char *login_hint,
-			    const char *redirect_uri, const char *state, oidc_proto_state_t *proto_state,
-			    const char *id_token_hint, const char *code_challenge, const char *auth_request_params,
-			    const char *path_scope) {
-
-	/* log some stuff */
-	oidc_debug(r,
-		   "enter, issuer=%s, redirect_uri=%s, state=%s, proto_state=%s, code_challenge=%s, "
-		   "auth_request_params=%s, path_scope=%s",
-		   oidc_cfg_provider_issuer_get(provider), redirect_uri, state,
-		   oidc_proto_state_to_string(r, proto_state), code_challenge, auth_request_params, path_scope);
-
-	int rv = OK;
-	char *authorization_request = NULL;
-
-	/* assemble parameters to call the token endpoint for validation */
-	apr_table_t *params = apr_table_make(r->pool, 4);
-
-	/* add the response type */
-	apr_table_setn(params, OIDC_PROTO_RESPONSE_TYPE, oidc_proto_state_get_response_type(proto_state));
-
-	/* concat the per-path scopes with the per-provider scopes */
+static void oidc_proto_request_auth_scope_set(request_rec *r, struct oidc_provider_t *provider, const char *path_scope,
+					      apr_table_t *params) {
 	const char *scope = oidc_cfg_provider_scope_get(provider);
 	if (path_scope != NULL)
 		scope = ((scope != NULL) && (_oidc_strcmp(scope, "") != 0))
 			    ? apr_pstrcat(r->pool, scope, OIDC_STR_SPACE, path_scope, NULL)
 			    : path_scope;
 
-	if (scope != NULL) {
-		if (!oidc_util_spaced_string_contains(r->pool, scope, OIDC_PROTO_SCOPE_OPENID)) {
-			oidc_warn(r,
-				  "the configuration for the \"%s\" parameter does not include the \"%s\" scope, your "
-				  "provider may not return an \"id_token\": %s",
-				  OIDC_PROTO_SCOPE, OIDC_PROTO_SCOPE_OPENID, scope);
-		}
-		apr_table_setn(params, OIDC_PROTO_SCOPE, scope);
-	}
+	if (scope == NULL)
+		return;
 
-	if (oidc_cfg_provider_client_id_get(provider) == NULL) {
-		oidc_error(r, "no Client ID set for the provider: perhaps you are accessing an endpoint protected with "
-			      "\"AuthType openid-connect\" instead of \"AuthType oauth20\"?)");
-		return HTTP_INTERNAL_SERVER_ERROR;
-	}
+	if (!oidc_util_spaced_string_contains(r->pool, scope, OIDC_PROTO_SCOPE_OPENID))
+		oidc_warn(r,
+			  "the configuration for the \"%s\" parameter does not include the \"%s\" scope, your "
+			  "provider may not return an \"id_token\": %s",
+			  OIDC_PROTO_SCOPE, OIDC_PROTO_SCOPE_OPENID, scope);
+
+	apr_table_setn(params, OIDC_PROTO_SCOPE, scope);
+}
+
+/*
+ * assemble all parameters that go into the authentication request
+ */
+static void oidc_proto_request_auth_params_set(request_rec *r, struct oidc_provider_t *provider,
+					       const char *login_hint, const char *redirect_uri, const char *state,
+					       oidc_proto_state_t *proto_state, const char *id_token_hint,
+					       const char *code_challenge, const char *auth_request_params,
+					       const char *path_scope, apr_table_t *params) {
+
+	/* add the response type */
+	apr_table_setn(params, OIDC_PROTO_RESPONSE_TYPE, oidc_proto_state_get_response_type(proto_state));
+
+	/* concat the per-path scopes with the per-provider scopes */
+	oidc_proto_request_auth_scope_set(r, provider, path_scope, params);
 
 	/* add the client ID */
 	apr_table_setn(params, OIDC_PROTO_CLIENT_ID, oidc_cfg_provider_client_id_get(provider));
@@ -687,51 +718,89 @@ int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, co
 	/* add request parameter (request or request_uri) if set */
 	if (oidc_cfg_provider_request_object_get(provider) != NULL)
 		oidc_proto_request_uri_request_param_add(r, provider, redirect_uri, params);
+}
 
-	/* send the full authentication request via POST or GET */
-	if (oidc_proto_profile_auth_request_method_get(provider) == OIDC_AUTH_REQUEST_METHOD_POST) {
+/*
+ * send the authentication request via an HTML form auto-POST page
+ */
+static int oidc_proto_request_auth_send_post(request_rec *r, struct oidc_provider_t *provider, apr_table_t *params) {
+	/* construct a HTML POST auto-submit page with the authorization request parameters */
+	const char *html_body =
+	    oidc_proto_request_html_post(r, oidc_cfg_provider_authorization_endpoint_url_get(provider), params);
 
-		/* construct a HTML POST auto-submit page with the authorization request parameters */
-		const char *html_body =
-		    oidc_proto_request_html_post(r, oidc_cfg_provider_authorization_endpoint_url_get(provider), params);
+	/* signal this to the content handler */
+	return oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_AUTHN_POST, "Submitting...", NULL,
+					   "HTMLFormElement.prototype.submit.call(document.forms[0])", html_body);
+}
 
-		/* signal this to the content handler */
-		rv = oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_AUTHN_POST, "Submitting...", NULL,
-						 "HTMLFormElement.prototype.submit.call(document.forms[0])", html_body);
+/*
+ * send the authentication request via an HTTP redirect (or a Javascript-based preserve page)
+ */
+static int oidc_proto_request_auth_send_get(request_rec *r, struct oidc_provider_t *provider, apr_table_t *params) {
 
-	} else if (oidc_proto_profile_auth_request_method_get(provider) == OIDC_AUTH_REQUEST_METHOD_PAR) {
+	/* construct the full authorization request URL */
+	char *authorization_request =
+	    oidc_http_query_encoded_url(r, oidc_cfg_provider_authorization_endpoint_url_get(provider), params);
 
+	char *javascript = NULL;
+
+	/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
+	if (oidc_response_post_preserve_javascript(r, authorization_request, &javascript, NULL) == FALSE) {
+		/* add the redirect location header */
+		oidc_http_hdr_out_location_set(r, authorization_request);
+		/* and tell Apache to return an HTTP Redirect (302) message */
+		return HTTP_MOVED_TEMPORARILY;
+	}
+
+	// NB: if a template is in use, we should not override
+	// OIDC_REQUEST_STATE_KEY_HTTP with OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE
+	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTTP) != NULL)
+		return OK;
+
+	/* signal this to the content handler */
+	return oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE, "Preserving...", javascript,
+					   "preserveOnLoad()", "<p>Preserving...</p>");
+}
+
+/*
+ * send an OpenID Connect authorization request to the specified provider
+ */
+int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, const char *login_hint,
+			    const char *redirect_uri, const char *state, oidc_proto_state_t *proto_state,
+			    const char *id_token_hint, const char *code_challenge, const char *auth_request_params,
+			    const char *path_scope) {
+	int rv;
+
+	/* log some stuff */
+	oidc_debug(r,
+		   "enter, issuer=%s, redirect_uri=%s, state=%s, proto_state=%s, code_challenge=%s, "
+		   "auth_request_params=%s, path_scope=%s",
+		   oidc_cfg_provider_issuer_get(provider), redirect_uri, state,
+		   oidc_proto_state_to_string(r, proto_state), code_challenge, auth_request_params, path_scope);
+
+	if (oidc_cfg_provider_client_id_get(provider) == NULL) {
+		oidc_error(r, "no Client ID set for the provider: perhaps you are accessing an endpoint protected with "
+			      "\"AuthType openid-connect\" instead of \"AuthType oauth20\"?)");
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	/* assemble parameters to call the authorization endpoint */
+	apr_table_t *params = apr_table_make(r->pool, 4);
+	oidc_proto_request_auth_params_set(r, provider, login_hint, redirect_uri, state, proto_state, id_token_hint,
+					   code_challenge, auth_request_params, path_scope, params);
+
+	/* send the full authentication request via POST, PAR or GET */
+	switch (oidc_proto_profile_auth_request_method_get(provider)) {
+	case OIDC_AUTH_REQUEST_METHOD_POST:
+		rv = oidc_proto_request_auth_send_post(r, provider, params);
+		break;
+	case OIDC_AUTH_REQUEST_METHOD_PAR:
 		rv = oidc_proto_request_auth_push(r, provider, params);
-
-	} else if (oidc_proto_profile_auth_request_method_get(provider) == OIDC_AUTH_REQUEST_METHOD_GET) {
-
-		/* construct the full authorization request URL */
-		authorization_request =
-		    oidc_http_query_encoded_url(r, oidc_cfg_provider_authorization_endpoint_url_get(provider), params);
-
-		char *javascript = NULL;
-		/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
-		if (oidc_response_post_preserve_javascript(r, authorization_request, &javascript, NULL) == FALSE) {
-
-			/* add the redirect location header */
-			oidc_http_hdr_out_location_set(r, authorization_request);
-
-			/* and tell Apache to return an HTTP Redirect (302) message */
-			rv = HTTP_MOVED_TEMPORARILY;
-
-		} else {
-
-			// NB: if a template is in use, we should not override
-			// OIDC_REQUEST_STATE_KEY_HTTP with OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE
-			if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTTP) == NULL) {
-				/* signal this to the content handler */
-				rv = oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE,
-								 "Preserving...", javascript, "preserveOnLoad()",
-								 "<p>Preserving...</p>");
-			}
-		}
-
-	} else {
+		break;
+	case OIDC_AUTH_REQUEST_METHOD_GET:
+		rv = oidc_proto_request_auth_send_get(r, provider, params);
+		break;
+	default:
 		oidc_error(r, "oidc_cfg_provider_auth_request_method_get(provider) set to an unknown value: %d",
 			   oidc_proto_profile_auth_request_method_get(provider));
 		return HTTP_INTERNAL_SERVER_ERROR;
