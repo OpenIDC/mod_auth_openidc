@@ -159,7 +159,7 @@ int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg) {
 						 HTTP_UNAUTHORIZED);
 
 	/* assemble a where-are-you-from IDP discovery HTML page */
-	const char *s = "			<h3>Select your OpenID Connect Identity Provider</h3>\n";
+	const char *s = "\t\t\t<h3>Select your OpenID Connect Identity Provider</h3>\n";
 
 	/* list all configured providers in there */
 	int i;
