@@ -419,6 +419,310 @@ START_TEST(test_proto_profile_helpers) {
 }
 END_TEST
 
+START_TEST(test_proto_profile_auth_request_method) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(pool);
+
+	/* default profile: the configured method is returned */
+	ck_assert_int_eq(oidc_proto_profile_auth_request_method_get(provider), OIDC_AUTH_REQUEST_METHOD_GET);
+
+	/* FAPI20 forces PAR regardless of configuration */
+	oidc_cfg_provider_profile_int_set(provider, OIDC_PROFILE_FAPI20);
+	ck_assert_int_eq(oidc_proto_profile_auth_request_method_get(provider), OIDC_AUTH_REQUEST_METHOD_PAR);
+}
+END_TEST
+
+START_TEST(test_proto_profile_id_token_aud_values) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(pool);
+
+	/* default profile, no explicit configuration: returns NULL */
+	ck_assert_ptr_null(oidc_proto_profile_id_token_aud_values_get(pool, provider));
+
+	/* FAPI20 with no explicit list: returns a list seeded with the client_id */
+	oidc_cfg_provider_client_id_set(pool, provider, "my-client");
+	oidc_cfg_provider_profile_int_set(provider, OIDC_PROFILE_FAPI20);
+	const apr_array_header_t *arr = oidc_proto_profile_id_token_aud_values_get(pool, provider);
+	ck_assert_ptr_nonnull(arr);
+	ck_assert_int_eq(arr->nelts, 1);
+	ck_assert_str_eq(APR_ARRAY_IDX(arr, 0, const char *), "my-client");
+
+	/* an explicitly configured list takes precedence */
+	oidc_cfg_provider_id_token_aud_values_set(pool, provider, "extra-aud");
+	arr = oidc_proto_profile_id_token_aud_values_get(pool, provider);
+	ck_assert_ptr_nonnull(arr);
+	ck_assert_int_eq(arr->nelts, 1);
+	ck_assert_str_eq(APR_ARRAY_IDX(arr, 0, const char *), "extra-aud");
+}
+END_TEST
+
+START_TEST(test_proto_profile_revocation_aud_variants) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(pool);
+
+	oidc_cfg_provider_token_endpoint_url_set(pool, provider, "https://idp.example.com/token");
+	oidc_cfg_provider_revocation_endpoint_url_set(pool, provider, "https://idp.example.com/rev");
+
+	/* default: revocation endpoint */
+	ck_assert_str_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, NULL),
+			 "https://idp.example.com/rev");
+
+	/* explicit URL takes precedence */
+	ck_assert_str_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, "https://override.example.com"),
+			 "https://override.example.com");
+
+	/* "token" sentinel resolves to the token endpoint */
+	ck_assert_str_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, "token"),
+			 "https://idp.example.com/token");
+
+	/* FAPI20: issuer wins regardless of val */
+	oidc_cfg_provider_issuer_set(pool, provider, "https://idp.example.com");
+	oidc_cfg_provider_profile_int_set(provider, OIDC_PROFILE_FAPI20);
+	ck_assert_str_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, NULL), "https://idp.example.com");
+	ck_assert_str_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, "token"), "https://idp.example.com");
+}
+END_TEST
+
+START_TEST(test_proto_pkce_none) {
+	ck_assert_str_eq(oidc_pkce_none.method, OIDC_PKCE_METHOD_NONE);
+	/* by definition there are no callbacks for the "none" method */
+	ck_assert_ptr_null(oidc_pkce_none.state);
+	ck_assert_ptr_null(oidc_pkce_none.verifier);
+	ck_assert_ptr_null(oidc_pkce_none.challenge);
+}
+END_TEST
+
+START_TEST(test_proto_token_endpoint_auth_no_client_id) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	apr_table_t *params = apr_table_make(r->pool, 1);
+	char *basic = NULL;
+	char *bearer = NULL;
+
+	/* no client_id => no auth needed, return TRUE without touching params/strings */
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_CLIENT_SECRET_BASIC, NULL, NULL, "secret", NULL,
+							NULL, params, NULL, &basic, &bearer),
+			 TRUE);
+	ck_assert_ptr_null(basic);
+	ck_assert_ptr_null(bearer);
+	ck_assert_int_eq(apr_table_elts(params)->nelts, 0);
+}
+END_TEST
+
+START_TEST(test_proto_token_endpoint_auth_basic_and_post) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	apr_table_t *params = NULL;
+	char *basic = NULL;
+	char *bearer = NULL;
+
+	/* client_secret_basic: returns "user:pass" in basic_auth_str */
+	params = apr_table_make(r->pool, 1);
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_CLIENT_SECRET_BASIC, NULL, "myclient", "mysecret",
+							NULL, NULL, params, NULL, &basic, &bearer),
+			 TRUE);
+	ck_assert_ptr_nonnull(basic);
+	ck_assert_str_eq(basic, "myclient:mysecret");
+	ck_assert_ptr_null(bearer);
+
+	/* client_secret_basic without a secret: must fail */
+	basic = NULL;
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_CLIENT_SECRET_BASIC, NULL, "myclient", NULL, NULL,
+							NULL, params, NULL, &basic, &bearer),
+			 TRUE); /* falls through to "public client" path: no secret + not private_key_jwt */
+	ck_assert_ptr_null(basic);
+	/* the "public client" path sets client_id on the params */
+	ck_assert_str_eq(apr_table_get(params, OIDC_PROTO_CLIENT_ID), "myclient");
+
+	/* client_secret_post: sets client_id and client_secret on the params */
+	params = apr_table_make(r->pool, 2);
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_CLIENT_SECRET_POST, NULL, "myclient", "mysecret",
+							NULL, NULL, params, NULL, &basic, &bearer),
+			 TRUE);
+	ck_assert_str_eq(apr_table_get(params, OIDC_PROTO_CLIENT_ID), "myclient");
+	ck_assert_str_eq(apr_table_get(params, OIDC_PROTO_CLIENT_SECRET), "mysecret");
+
+	/* none: only client_id is set */
+	params = apr_table_make(r->pool, 1);
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_ENDPOINT_AUTH_NONE, NULL, "myclient", "ignored",
+							NULL, NULL, params, NULL, &basic, &bearer),
+			 TRUE);
+	ck_assert_str_eq(apr_table_get(params, OIDC_PROTO_CLIENT_ID), "myclient");
+	ck_assert_ptr_null(apr_table_get(params, OIDC_PROTO_CLIENT_SECRET));
+}
+END_TEST
+
+START_TEST(test_proto_token_endpoint_auth_bearer) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	apr_table_t *params = apr_table_make(r->pool, 1);
+	char *basic = NULL;
+	char *bearer = NULL;
+
+	/* bearer_access_token without a token: must fail */
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_BEARER_ACCESS_TOKEN, NULL, "myclient", "secret",
+							NULL, NULL, params, NULL, &basic, &bearer),
+			 FALSE);
+	ck_assert_ptr_null(bearer);
+
+	/* bearer_access_token with a token: must succeed */
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_BEARER_ACCESS_TOKEN, NULL, "myclient", "secret",
+							NULL, NULL, params, "the-token", &basic, &bearer),
+			 TRUE);
+	ck_assert_ptr_nonnull(bearer);
+	ck_assert_str_eq(bearer, "the-token");
+}
+END_TEST
+
+START_TEST(test_proto_token_endpoint_auth_unknown_method) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	apr_table_t *params = apr_table_make(r->pool, 1);
+	char *basic = NULL;
+	char *bearer = NULL;
+
+	/* unknown method must hit the fall-through error path and return FALSE */
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, "totally_bogus_method", NULL, "myclient", "secret", NULL,
+							NULL, params, NULL, &basic, &bearer),
+			 FALSE);
+}
+END_TEST
+
+START_TEST(test_proto_jwt_validate_edge_cases) {
+	request_rec *r = oidc_test_request_get();
+	apr_pool_t *pool = r->pool;
+	apr_time_t now = apr_time_sec(apr_time_now());
+	oidc_jwt_t *jwt = NULL;
+
+	/* missing iss with required iss must fail */
+	jwt = oidc_jwt_new(pool, TRUE, TRUE);
+	jwt->payload.iss = NULL;
+	jwt->payload.iat = now;
+	jwt->payload.exp = now + 60;
+	ck_assert_int_eq(oidc_proto_jwt_validate(r, jwt, "https://expected.example.com", TRUE, TRUE, 10), FALSE);
+	oidc_jwt_destroy(jwt);
+
+	/* iss mismatch must fail */
+	jwt = oidc_jwt_new(pool, TRUE, TRUE);
+	jwt->payload.iss = apr_pstrdup(pool, "https://other.example.com");
+	jwt->payload.iat = now;
+	jwt->payload.exp = now + 60;
+	ck_assert_int_eq(oidc_proto_jwt_validate(r, jwt, "https://expected.example.com", TRUE, TRUE, 10), FALSE);
+	oidc_jwt_destroy(jwt);
+
+	/* iss==NULL on input means no issuer check; a valid window passes */
+	jwt = oidc_jwt_new(pool, TRUE, TRUE);
+	jwt->payload.iss = apr_pstrdup(pool, "https://any.example.com");
+	jwt->payload.iat = now;
+	jwt->payload.exp = now + 60;
+	ck_assert_int_eq(oidc_proto_jwt_validate(r, jwt, NULL, TRUE, TRUE, 10), TRUE);
+	oidc_jwt_destroy(jwt);
+
+	/* expired JWT must fail */
+	jwt = oidc_jwt_new(pool, TRUE, TRUE);
+	jwt->payload.iss = apr_pstrdup(pool, "https://idp.example.com");
+	jwt->payload.iat = now - 7200;
+	jwt->payload.exp = now - 3600;
+	ck_assert_int_eq(oidc_proto_jwt_validate(r, jwt, "https://idp.example.com", TRUE, TRUE, 10), FALSE);
+	oidc_jwt_destroy(jwt);
+
+	/* missing exp with exp mandatory must fail */
+	jwt = oidc_jwt_new(pool, TRUE, TRUE);
+	jwt->payload.iss = apr_pstrdup(pool, "https://idp.example.com");
+	jwt->payload.iat = now;
+	jwt->payload.exp = OIDC_JWT_CLAIM_TIME_EMPTY;
+	ck_assert_int_eq(oidc_proto_jwt_validate(r, jwt, "https://idp.example.com", TRUE, TRUE, 10), FALSE);
+	/* same JWT, but with exp not mandatory: passes */
+	ck_assert_int_eq(oidc_proto_jwt_validate(r, jwt, "https://idp.example.com", FALSE, TRUE, 10), TRUE);
+	oidc_jwt_destroy(jwt);
+
+	/* iat in the far future must fail */
+	jwt = oidc_jwt_new(pool, TRUE, TRUE);
+	jwt->payload.iss = apr_pstrdup(pool, "https://idp.example.com");
+	jwt->payload.iat = now + 3600;
+	jwt->payload.exp = now + 7200;
+	ck_assert_int_eq(oidc_proto_jwt_validate(r, jwt, "https://idp.example.com", TRUE, TRUE, 10), FALSE);
+	oidc_jwt_destroy(jwt);
+
+	/* missing iat with iat mandatory must fail */
+	jwt = oidc_jwt_new(pool, TRUE, TRUE);
+	jwt->payload.iss = apr_pstrdup(pool, "https://idp.example.com");
+	jwt->payload.iat = OIDC_JWT_CLAIM_TIME_EMPTY;
+	jwt->payload.exp = now + 60;
+	ck_assert_int_eq(oidc_proto_jwt_validate(r, jwt, "https://idp.example.com", TRUE, TRUE, 10), FALSE);
+	/* iat not mandatory: passes */
+	ck_assert_int_eq(oidc_proto_jwt_validate(r, jwt, "https://idp.example.com", TRUE, FALSE, 10), TRUE);
+	oidc_jwt_destroy(jwt);
+
+	/* negative slack disables the iat window check */
+	jwt = oidc_jwt_new(pool, TRUE, TRUE);
+	jwt->payload.iss = apr_pstrdup(pool, "https://idp.example.com");
+	jwt->payload.iat = now - 1000000;
+	jwt->payload.exp = now + 60;
+	ck_assert_int_eq(oidc_proto_jwt_validate(r, jwt, "https://idp.example.com", TRUE, TRUE, -1), TRUE);
+	oidc_jwt_destroy(jwt);
+}
+END_TEST
+
+START_TEST(test_proto_state_timestamp_and_bad_cookie) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_proto_state_t *ps = NULL;
+
+	/* timestamp unset => returns -1 */
+	ps = oidc_proto_state_new();
+	ck_assert_ptr_nonnull(ps);
+	ck_assert_msg(oidc_proto_state_get_timestamp(ps) == -1, "timestamp must be -1 when not set");
+	oidc_proto_state_destroy(ps);
+
+	/* NULL cookie value must not crash and must return NULL */
+	ck_assert_ptr_null(oidc_proto_state_from_cookie(r, c, NULL));
+
+	/* garbage cookie value must return NULL */
+	ck_assert_ptr_null(oidc_proto_state_from_cookie(r, c, "not-a-jwt-cookie-value"));
+}
+END_TEST
+
+START_TEST(test_proto_nonce_uniqueness) {
+	request_rec *r = oidc_test_request_get();
+	char *n1 = NULL, *n2 = NULL;
+
+	ck_assert_int_eq(oidc_proto_nonce_gen(r, &n1), TRUE);
+	ck_assert_int_eq(oidc_proto_nonce_gen(r, &n2), TRUE);
+	ck_assert_ptr_nonnull(n1);
+	ck_assert_ptr_nonnull(n2);
+	/* two consecutive nonces should differ (probabilistic but for 32 bytes of randomness essentially certain) */
+	ck_assert_int_ne(_oidc_strcmp(n1, n2), 0);
+}
+END_TEST
+
+START_TEST(test_proto_flow_unsupported) {
+	apr_pool_t *pool = oidc_test_pool_get();
+
+	/* empty string must not match */
+	ck_assert_int_eq(oidc_proto_flow_is_supported(pool, ""), FALSE);
+	/* unknown flow */
+	ck_assert_int_eq(oidc_proto_flow_is_supported(pool, "implicit"), FALSE);
+	/* partial token by itself is not a supported flow on its own */
+	ck_assert_int_eq(oidc_proto_flow_is_supported(pool, "token"), FALSE);
+	/* spaced_string_equals ignores order, so "token id_token" should match "id_token token" */
+	ck_assert_int_eq(oidc_proto_flow_is_supported(pool, "token id_token"), TRUE);
+}
+END_TEST
+
+START_TEST(test_proto_dpop_create_without_private_keys) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	char *dpop = NULL;
+
+	/* the test fixture configures an empty private_keys array, so DPoP proof creation must fail */
+	ck_assert_int_eq(oidc_proto_dpop_create(r, c, "https://idp.example.com/token", "POST", "some-access-token", NULL,
+						&dpop),
+			 FALSE);
+	ck_assert_ptr_null(dpop);
+}
+END_TEST
+
 START_TEST(test_proto_jwt_header_peek) {
 	request_rec *r = oidc_test_request_get();
 	char *alg = NULL;
@@ -512,6 +816,19 @@ int main(void) {
 	tcase_add_test(core, test_proto_state_cookie_roundtrip);
 	tcase_add_test(core, test_proto_pkce_plain_and_s256);
 	tcase_add_test(core, test_proto_profile_helpers);
+	tcase_add_test(core, test_proto_profile_auth_request_method);
+	tcase_add_test(core, test_proto_profile_id_token_aud_values);
+	tcase_add_test(core, test_proto_profile_revocation_aud_variants);
+	tcase_add_test(core, test_proto_pkce_none);
+	tcase_add_test(core, test_proto_token_endpoint_auth_no_client_id);
+	tcase_add_test(core, test_proto_token_endpoint_auth_basic_and_post);
+	tcase_add_test(core, test_proto_token_endpoint_auth_bearer);
+	tcase_add_test(core, test_proto_token_endpoint_auth_unknown_method);
+	tcase_add_test(core, test_proto_jwt_validate_edge_cases);
+	tcase_add_test(core, test_proto_state_timestamp_and_bad_cookie);
+	tcase_add_test(core, test_proto_nonce_uniqueness);
+	tcase_add_test(core, test_proto_flow_unsupported);
+	tcase_add_test(core, test_proto_dpop_create_without_private_keys);
 	tcase_add_test(core, test_proto_jwt_header_peek);
 	tcase_add_test(core, test_proto_response_is_post_and_redirect);
 	tcase_add_test(core, test_proto_return_www_authenticate_header);
