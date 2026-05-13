@@ -166,7 +166,6 @@ int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg) {
 	for (i = 0; i < arr->nelts; i++) {
 
 		const char *issuer = APR_ARRAY_IDX(arr, i, const char *);
-		// TODO: html escape (especially & character)
 
 		char *href = apr_psprintf(
 		    r->pool, "%s?%s=%s&amp;%s=%s&amp;%s=%s&amp;%s=%s", oidc_util_url_redirect_uri(r, cfg),
@@ -189,24 +188,25 @@ int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg) {
 		// if (p != NULL) *p = '\0';
 		/* point back to the redirect_uri, where the selection is handled, with an IDP selection and return_to
 		 * URL */
-		s = apr_psprintf(r->pool, "%s<p><a href=\"%s\">%s</a></p>\n", s, href, display);
+		s = apr_psprintf(r->pool, "%s<p><a href=\"%s\">%s</a></p>\n", s, href,
+				 oidc_util_html_escape(r->pool, display));
 	}
 
 	/* add an option to enter an account or issuer name for dynamic OP discovery */
 	s = apr_psprintf(r->pool, "%s<form method=\"get\" action=\"%s\">\n", s, oidc_util_url_redirect_uri(r, cfg));
 	s = apr_psprintf(r->pool, "%s<p><input type=\"hidden\" name=\"%s\" value=\"%s\"><p>\n", s, OIDC_DISC_RT_PARAM,
-			 current_url);
+			 oidc_util_html_escape(r->pool, current_url));
 	s = apr_psprintf(r->pool, "%s<p><input type=\"hidden\" name=\"%s\" value=\"%s\"><p>\n", s, OIDC_DISC_RM_PARAM,
-			 method);
+			 oidc_util_html_escape(r->pool, method));
 	s = apr_psprintf(r->pool, "%s<p><input type=\"hidden\" name=\"%s\" value=\"%s\"><p>\n", s, OIDC_CSRF_NAME,
-			 csrf);
+			 oidc_util_html_escape(r->pool, csrf));
 
 	if (path_scopes != NULL)
 		s = apr_psprintf(r->pool, "%s<p><input type=\"hidden\" name=\"%s\" value=\"%s\"><p>\n", s,
-				 OIDC_DISC_SC_PARAM, path_scopes);
+				 OIDC_DISC_SC_PARAM, oidc_util_html_escape(r->pool, path_scopes));
 	if (path_auth_request_params != NULL)
 		s = apr_psprintf(r->pool, "%s<p><input type=\"hidden\" name=\"%s\" value=\"%s\"><p>\n", s,
-				 OIDC_DISC_AR_PARAM, path_auth_request_params);
+				 OIDC_DISC_AR_PARAM, oidc_util_html_escape(r->pool, path_auth_request_params));
 
 	s = apr_psprintf(r->pool,
 			 "%s<p>Or enter your account name (eg. &quot;mike@seed.gluu.org&quot;, or an IDP identifier "
