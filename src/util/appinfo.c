@@ -114,14 +114,79 @@ void oidc_util_appinfo_set(request_rec *r, const char *s_key, const char *s_valu
 #define OIDC_JSON_MAX_INT_STR_LEN 64
 
 /*
+ * concatenate the (string/boolean) elements of a JSON array into a single delimiter-separated string;
+ * non-string/non-boolean elements are skipped with a debug message
+ */
+// TODO: escape the delimiter in the values (maybe reuse/extract url-formatted code from oidc_session_identity_encode)
+static const char *oidc_util_appinfo_array_concat(request_rec *r, json_t *j_array, const char *claim_delimiter,
+						  const char *s_key) {
+
+	oidc_debug(r, "parsing attribute array for key \"%s\" (#nr-of-elems: %lu)", s_key,
+		   (unsigned long)json_array_size(j_array));
+
+	char *s_concat = apr_pstrdup(r->pool, "");
+	for (size_t i = 0; i < json_array_size(j_array); i++) {
+		json_t *elem = json_array_get(j_array, i);
+		const char *s_elem = NULL;
+
+		if (json_is_string(elem))
+			s_elem = json_string_value(elem);
+		else if (json_is_boolean(elem))
+			s_elem = json_is_true(elem) ? "1" : "0";
+		else {
+			oidc_debug(r,
+				   "unhandled in-array JSON object type [%d] for key \"%s\" when parsing claims "
+				   "array elements",
+				   elem->type, s_key);
+			continue;
+		}
+
+		if (_oidc_strcmp(s_concat, "") != 0)
+			s_concat = apr_psprintf(r->pool, "%s%s%s", s_concat, claim_delimiter, s_elem);
+		else
+			s_concat = apr_pstrdup(r->pool, s_elem);
+	}
+
+	return s_concat;
+}
+
+/*
+ * render a single JSON claim value to its application-header textual form and pass it to oidc_util_appinfo_set
+ */
+static void oidc_util_appinfo_set_one(request_rec *r, const char *s_key, json_t *j_value, const char *claim_prefix,
+				      const char *claim_delimiter, oidc_appinfo_pass_in_t pass_in,
+				      oidc_appinfo_encoding_t encoding) {
+
+	char s_int[OIDC_JSON_MAX_INT_STR_LEN];
+
+	if (json_is_string(j_value)) {
+		oidc_util_appinfo_set(r, s_key, json_string_value(j_value), claim_prefix, pass_in, encoding);
+	} else if (json_is_boolean(j_value)) {
+		oidc_util_appinfo_set(r, s_key, json_is_true(j_value) ? "1" : "0", claim_prefix, pass_in, encoding);
+	} else if (json_is_integer(j_value)) {
+		if (snprintf(s_int, OIDC_JSON_MAX_INT_STR_LEN, "%ld", (long)json_integer_value(j_value)) > 0)
+			oidc_util_appinfo_set(r, s_key, s_int, claim_prefix, pass_in, encoding);
+	} else if (json_is_real(j_value)) {
+		oidc_util_appinfo_set(r, s_key, apr_psprintf(r->pool, "%.8g", json_real_value(j_value)), claim_prefix,
+				      pass_in, encoding);
+	} else if (json_is_object(j_value)) {
+		oidc_util_appinfo_set(r, s_key,
+				      oidc_util_json_encode(r->pool, j_value, JSON_PRESERVE_ORDER | JSON_COMPACT),
+				      claim_prefix, pass_in, encoding);
+	} else if (json_is_array(j_value)) {
+		oidc_util_appinfo_set(r, s_key, oidc_util_appinfo_array_concat(r, j_value, claim_delimiter, s_key),
+				      claim_prefix, pass_in, encoding);
+	} else {
+		oidc_debug(r, "unhandled JSON object type [%d] for key \"%s\" when parsing claims", j_value->type,
+			   s_key);
+	}
+}
+
+/*
  * set the user/claims information from the session in HTTP headers passed on to the application
  */
 void oidc_util_appinfo_set_all(request_rec *r, json_t *j_attrs, const char *claim_prefix, const char *claim_delimiter,
 			       oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding) {
-
-	char s_int[OIDC_JSON_MAX_INT_STR_LEN];
-	json_t *j_value = NULL;
-	const char *s_key = NULL;
 
 	/* if not attributes are set, nothing needs to be done */
 	if (j_attrs == NULL) {
@@ -130,107 +195,10 @@ void oidc_util_appinfo_set_all(request_rec *r, json_t *j_attrs, const char *clai
 	}
 
 	/* loop over the claims in the JSON structure */
-	void *iter = json_object_iter((json_t *)j_attrs);
+	void *iter = json_object_iter(j_attrs);
 	while (iter) {
-
-		/* get the next key/value entry */
-		s_key = json_object_iter_key(iter);
-		j_value = json_object_iter_value(iter);
-
-		/* check if it is a single value string */
-		if (json_is_string(j_value)) {
-
-			/* set the single string in the application header whose name is based on the key and the prefix
-			 */
-			oidc_util_appinfo_set(r, s_key, json_string_value(j_value), claim_prefix, pass_in, encoding);
-
-		} else if (json_is_boolean(j_value)) {
-
-			/* set boolean value in the application header whose name is based on the key and the prefix */
-			oidc_util_appinfo_set(r, s_key, (json_is_true(j_value) ? "1" : "0"), claim_prefix, pass_in,
-					      encoding);
-
-		} else if (json_is_integer(j_value)) {
-
-			if (snprintf(s_int, OIDC_JSON_MAX_INT_STR_LEN, "%ld", (long)json_integer_value(j_value)) > 0) {
-				/* set long value in the application header whose name is based on the key and the
-				 * prefix */
-				oidc_util_appinfo_set(r, s_key, s_int, claim_prefix, pass_in, encoding);
-			}
-
-		} else if (json_is_real(j_value)) {
-
-			/* set float value in the application header whose name is based on the key and the prefix */
-			oidc_util_appinfo_set(r, s_key, apr_psprintf(r->pool, "%.8g", json_real_value(j_value)),
-					      claim_prefix, pass_in, encoding);
-
-		} else if (json_is_object(j_value)) {
-
-			/* set json value in the application header whose name is based on the key and the prefix */
-			oidc_util_appinfo_set(
-			    r, s_key, oidc_util_json_encode(r->pool, j_value, JSON_PRESERVE_ORDER | JSON_COMPACT),
-			    claim_prefix, pass_in, encoding);
-
-			/* check if it is a multi-value string */
-		} else if (json_is_array(j_value)) {
-
-			/* some logging about what we're going to do */
-			oidc_debug(r, "parsing attribute array for key \"%s\" (#nr-of-elems: %lu)", s_key,
-				   (unsigned long)json_array_size(j_value));
-
-			/* string to hold the concatenated array string values */
-			char *s_concat = apr_pstrdup(r->pool, "");
-			size_t i = 0;
-
-			/* loop over the array */
-			for (i = 0; i < json_array_size(j_value); i++) {
-
-				/* get the current element */
-				json_t *elem = json_array_get(j_value, i);
-
-				/* check if it is a string */
-				if (json_is_string(elem)) {
-
-					/* concatenate the string to the s_concat value using the configured separator
-					 * char */
-					// TODO: escape the delimiter in the values (maybe reuse/extract url-formatted
-					// code from oidc_session_identity_encode)
-					if (_oidc_strcmp(s_concat, "") != 0) {
-						s_concat = apr_psprintf(r->pool, "%s%s%s", s_concat, claim_delimiter,
-									json_string_value(elem));
-					} else {
-						s_concat = apr_psprintf(r->pool, "%s", json_string_value(elem));
-					}
-
-				} else if (json_is_boolean(elem)) {
-
-					if (_oidc_strcmp(s_concat, "") != 0) {
-						s_concat = apr_psprintf(r->pool, "%s%s%s", s_concat, claim_delimiter,
-									json_is_true(elem) ? "1" : "0");
-					} else {
-						s_concat = apr_psprintf(r->pool, "%s", json_is_true(elem) ? "1" : "0");
-					}
-
-				} else {
-
-					/* don't know how to handle a non-string array element */
-					oidc_debug(r,
-						   "unhandled in-array JSON object type [%d] for key \"%s\" when "
-						   "parsing claims array elements",
-						   elem->type, s_key);
-				}
-			}
-
-			/* set the concatenated string */
-			oidc_util_appinfo_set(r, s_key, s_concat, claim_prefix, pass_in, encoding);
-
-		} else {
-
-			/* no string and no array, so unclear how to handle this */
-			oidc_debug(r, "unhandled JSON object type [%d] for key \"%s\" when parsing claims",
-				   j_value->type, s_key);
-		}
-
+		oidc_util_appinfo_set_one(r, json_object_iter_key(iter), json_object_iter_value(iter), claim_prefix,
+					  claim_delimiter, pass_in, encoding);
 		iter = json_object_iter_next(j_attrs, iter);
 	}
 }
