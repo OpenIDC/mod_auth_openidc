@@ -1880,14 +1880,39 @@ typedef struct oidc_filter_in_context {
 } oidc_filter_in_context;
 
 /*
+ * append a bucket with the captured POST parameters as form-encoded data to the brigade and
+ * update the Content-Length request header accordingly; no-op if there are no captured parameters
+ */
+static void oidc_filter_in_filter_append_post_params(ap_filter_t *f, apr_bucket_brigade *brigade,
+						     oidc_filter_in_context *ctx) {
+
+	apr_table_t *userdata_post_params = NULL;
+	apr_pool_userdata_get((void **)&userdata_post_params, OIDC_USERDATA_POST_PARAMS_KEY, f->r->pool);
+	if (userdata_post_params == NULL)
+		return;
+
+	char *buf = apr_psprintf(f->r->pool, "%s%s", ctx->nbytes > 0 ? "&" : "",
+				 oidc_http_form_encoded_data(f->r, userdata_post_params));
+	apr_bucket *b_out = apr_bucket_heap_create(buf, _oidc_strlen(buf), 0, f->r->connection->bucket_alloc);
+
+	APR_BRIGADE_INSERT_TAIL(brigade, b_out);
+
+	ctx->nbytes += _oidc_strlen(buf);
+
+	if (oidc_http_hdr_in_content_length_get(f->r) != NULL)
+		oidc_http_hdr_in_set(f->r, OIDC_HTTP_HDR_CONTENT_LENGTH,
+				     apr_psprintf(f->r->pool, "%ld", (long)ctx->nbytes));
+
+	apr_pool_userdata_set(NULL, OIDC_USERDATA_POST_PARAMS_KEY, NULL, f->r->pool);
+}
+
+/*
  * execute filter for inserting POST data
  */
 static apr_status_t oidc_filter_in_filter(ap_filter_t *f, apr_bucket_brigade *brigade, ap_input_mode_t mode,
 					  apr_read_type_e block, apr_off_t nbytes) {
 	oidc_filter_in_context *ctx = NULL;
-	apr_bucket *b_in = NULL, *b_out = NULL;
-	char *buf = NULL;
-	apr_table_t *userdata_post_params = NULL;
+	apr_bucket *b_in = NULL;
 	apr_status_t rc = APR_SUCCESS;
 
 	if (!(ctx = f->ctx)) {
@@ -1906,37 +1931,14 @@ static apr_status_t oidc_filter_in_filter(ap_filter_t *f, apr_bucket_brigade *br
 	while (!APR_BRIGADE_EMPTY(ctx->pbbTmp)) {
 
 		b_in = APR_BRIGADE_FIRST(ctx->pbbTmp);
+		APR_BUCKET_REMOVE(b_in);
 
 		if (APR_BUCKET_IS_EOS(b_in)) {
-
-			APR_BUCKET_REMOVE(b_in);
-
-			apr_pool_userdata_get((void **)&userdata_post_params, OIDC_USERDATA_POST_PARAMS_KEY,
-					      f->r->pool);
-
-			if (userdata_post_params != NULL) {
-				buf = apr_psprintf(f->r->pool, "%s%s", ctx->nbytes > 0 ? "&" : "",
-						   oidc_http_form_encoded_data(f->r, userdata_post_params));
-				b_out =
-				    apr_bucket_heap_create(buf, _oidc_strlen(buf), 0, f->r->connection->bucket_alloc);
-
-				APR_BRIGADE_INSERT_TAIL(brigade, b_out);
-
-				ctx->nbytes += _oidc_strlen(buf);
-
-				if (oidc_http_hdr_in_content_length_get(f->r) != NULL)
-					oidc_http_hdr_in_set(f->r, OIDC_HTTP_HDR_CONTENT_LENGTH,
-							     apr_psprintf(f->r->pool, "%ld", (long)ctx->nbytes));
-
-				apr_pool_userdata_set(NULL, OIDC_USERDATA_POST_PARAMS_KEY, NULL, f->r->pool);
-			}
-
+			oidc_filter_in_filter_append_post_params(f, brigade, ctx);
 			APR_BRIGADE_INSERT_TAIL(brigade, b_in);
-
 			break;
 		}
 
-		APR_BUCKET_REMOVE(b_in);
 		APR_BRIGADE_INSERT_TAIL(brigade, b_in);
 		ctx->nbytes += b_in->length;
 	}
