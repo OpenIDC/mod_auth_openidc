@@ -46,39 +46,59 @@
 #include "http.h"
 
 /*
+ * return the HTML escape sequence for a character, or NULL if the character passes through unchanged
+ */
+static const char *oidc_util_html_escape_char(char c) {
+	switch (c) {
+	case '&':
+		return "&amp;";
+	case '\'':
+		return "&apos;";
+	case '"':
+		return "&quot;";
+	case '>':
+		return "&gt;";
+	case '<':
+		return "&lt;";
+	default:
+		return NULL;
+	}
+}
+
+/*
  * HTML escape a string
  */
 char *oidc_util_html_escape(apr_pool_t *pool, const char *s) {
-	// TODO: this has performance/memory issues for large chunks of HTML
-	const char chars[6] = {'&', '\'', '\"', '>', '<', '\0'};
-	const char *const replace[] = {
-	    "&amp;", "&apos;", "&quot;", "&gt;", "&lt;",
-	};
-	unsigned int i = 0;
-	unsigned int j = 0;
-	unsigned int k = 0;
-	unsigned int n = 0;
-	unsigned int m = 0;
-	const char *ptr = chars;
-	unsigned int len = _oidc_strlen(ptr);
-	char *r = apr_pcalloc(pool, _oidc_strlen(s) * 6 + 1);
-	for (i = 0; i < _oidc_strlen(s); i++) {
-		for (n = 0; n < len; n++) {
-			if (s[i] == chars[n]) {
-				m = (unsigned int)_oidc_strlen(replace[n]);
-				for (k = 0; k < m; k++)
-					r[j + k] = replace[n][k];
-				j += m;
-				break;
-			}
-		}
-		if (n == len) {
-			r[j] = s[i];
-			j++;
-		}
+	const char *cp = NULL;
+	int outputlen = 0;
+	int i = 0;
+
+	if (s == NULL)
+		s = "";
+
+	/* first pass: compute the length of the escaped output */
+	for (cp = s; *cp; cp++) {
+		const char *esc = oidc_util_html_escape_char(*cp);
+		outputlen += esc ? (int)_oidc_strlen(esc) : 1;
 	}
-	r[j] = '\0';
-	return apr_pstrdup(pool, r);
+
+	/* second pass: write the escaped output, preserving the bounds-checked write idiom */
+	char *output = apr_pcalloc(pool, outputlen + 1);
+	for (cp = s; *cp; cp++) {
+		const char *esc = oidc_util_html_escape_char(*cp);
+		if (esc == NULL) {
+			if (i <= outputlen - 1)
+				output[i] = *cp;
+			i += 1;
+			continue;
+		}
+		int n = (int)_oidc_strlen(esc);
+		if (i <= outputlen - n)
+			(void)_oidc_strcpy(&output[i], esc);
+		i += n;
+	}
+	output[i] = '\0';
+	return output;
 }
 
 /*
