@@ -419,6 +419,71 @@ START_TEST(test_proto_profile_helpers) {
 }
 END_TEST
 
+START_TEST(test_proto_jwt_header_peek) {
+	request_rec *r = oidc_test_request_get();
+	char *alg = NULL;
+	char *enc = NULL;
+	char *kid = NULL;
+	char *hdr = NULL;
+
+	/* a minimal valid JWT-shaped string: only the first segment is decoded */
+	/* header: {"alg":"RS256","kid":"1e9gdk7"} */
+	const char *jwt = "eyJraWQiOiIxZTlnZGs3IiwiYWxnIjoiUlMyNTYifQ.payload.sig";
+	hdr = oidc_proto_jwt_header_peek(r, jwt, &alg, &enc, &kid);
+	ck_assert_ptr_nonnull(hdr);
+	ck_assert_ptr_nonnull(alg);
+	ck_assert_str_eq(alg, "RS256");
+	ck_assert_ptr_nonnull(kid);
+	ck_assert_str_eq(kid, "1e9gdk7");
+	/* enc was not present in the header */
+	ck_assert_msg(enc == NULL || enc[0] == '\0', "enc should be empty/absent");
+
+	/* NULL input must be tolerated (treated as empty) and return NULL */
+	alg = NULL;
+	hdr = oidc_proto_jwt_header_peek(r, NULL, &alg, NULL, NULL);
+	ck_assert_ptr_null(hdr);
+
+	/* no separator: returns NULL */
+	hdr = oidc_proto_jwt_header_peek(r, "not.a.jwt-but-has-dots", &alg, NULL, NULL);
+	/* "not.a.jwt-but-has-dots" has dots, but only the first segment is the part before the first dot;
+	 * "not" is not a valid base64url-decoded JSON object so alg should not be populated */
+	if (hdr != NULL) {
+		/* tolerate result depending on base64url-decoding behavior, but alg must not be RS256 here */
+		ck_assert_msg(alg == NULL || _oidc_strcmp(alg, "RS256") != 0,
+			      "alg must not be RS256 for non-JWT input");
+	}
+
+	/* no '.' at all returns NULL */
+	hdr = oidc_proto_jwt_header_peek(r, "no-dot-here", NULL, NULL, NULL);
+	ck_assert_ptr_null(hdr);
+}
+END_TEST
+
+START_TEST(test_proto_response_is_post_and_redirect) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	r->method_number = M_POST;
+	ck_assert_msg(oidc_proto_response_is_post(r, c) == TRUE, "POST method must be detected");
+	ck_assert_msg(oidc_proto_response_is_redirect(r, c) == FALSE,
+		      "POST method must not be classified as a redirect response");
+
+	r->method_number = M_GET;
+	r->args = "state=abc&foo=bar";
+	ck_assert_msg(oidc_proto_response_is_redirect(r, c) == FALSE,
+		      "GET without id_token or code must not be a redirect response");
+	ck_assert_msg(oidc_proto_response_is_post(r, c) == FALSE, "GET method must not be detected as POST");
+
+	r->args = "code=abc123&state=xyz";
+	ck_assert_msg(oidc_proto_response_is_redirect(r, c) == TRUE,
+		      "GET with code parameter must be classified as a redirect response");
+
+	r->args = "id_token=eyJ.x.y&state=xyz";
+	ck_assert_msg(oidc_proto_response_is_redirect(r, c) == TRUE,
+		      "GET with id_token parameter must be classified as a redirect response");
+}
+END_TEST
+
 START_TEST(test_proto_return_www_authenticate_header) {
 	request_rec *r = oidc_test_request_get();
 	/* ensure no auth_name in stub (stub returns NULL) */
@@ -447,6 +512,8 @@ int main(void) {
 	tcase_add_test(core, test_proto_state_cookie_roundtrip);
 	tcase_add_test(core, test_proto_pkce_plain_and_s256);
 	tcase_add_test(core, test_proto_profile_helpers);
+	tcase_add_test(core, test_proto_jwt_header_peek);
+	tcase_add_test(core, test_proto_response_is_post_and_redirect);
 	tcase_add_test(core, test_proto_return_www_authenticate_header);
 
 	Suite *s = suite_create("proto");

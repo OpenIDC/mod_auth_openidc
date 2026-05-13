@@ -899,6 +899,166 @@ START_TEST(test_util_read_post_params) {
 }
 END_TEST
 
+START_TEST(test_util_url_parameter_helpers) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	char *value = NULL;
+
+	r->args = NULL;
+	ck_assert_msg(oidc_util_url_has_parameter(r, "foo") == FALSE,
+		      "oidc_util_url_has_parameter must return FALSE when r->args is NULL");
+	ck_assert_msg(oidc_util_url_parameter_get(r, "foo", &value) == FALSE,
+		      "oidc_util_url_parameter_get must return FALSE when r->args is NULL");
+	ck_assert_ptr_null(value);
+
+	r->args = "foo=bar&param1=value1";
+	ck_assert_msg(oidc_util_url_has_parameter(r, "foo") == TRUE, "param at start should match");
+	ck_assert_msg(oidc_util_url_has_parameter(r, "param1") == TRUE, "param after & should match");
+	ck_assert_msg(oidc_util_url_has_parameter(r, "bogus") == FALSE, "unknown param must not match");
+	/* must not match a substring of an existing key */
+	ck_assert_msg(oidc_util_url_has_parameter(r, "param") == FALSE, "prefix-of-existing-key must not match");
+
+	value = NULL;
+	ck_assert_msg(oidc_util_url_parameter_get(r, "foo", &value) == TRUE, "foo lookup must succeed");
+	ck_assert_ptr_nonnull(value);
+	ck_assert_str_eq(value, "bar");
+
+	value = NULL;
+	ck_assert_msg(oidc_util_url_parameter_get(r, "param1", &value) == TRUE, "param1 lookup must succeed");
+	ck_assert_ptr_nonnull(value);
+	ck_assert_str_eq(value, "value1");
+
+	value = NULL;
+	ck_assert_msg(oidc_util_url_parameter_get(r, "missing", &value) == FALSE, "missing lookup must fail");
+	ck_assert_ptr_null(value);
+
+	r->args = "";
+	ck_assert_msg(oidc_util_url_parameter_get(r, "foo", &value) == FALSE,
+		      "empty args should make url_parameter_get return FALSE");
+
+	/* request scheme is "https" by default in oidc_test_request_init */
+	ck_assert_msg(oidc_util_url_cur_is_secure(r, c) == TRUE, "default scheme should be secure (https)");
+
+	ck_assert_str_eq(oidc_util_url_redirect_uri(r, c), "https://www.example.com/protected/");
+}
+END_TEST
+
+START_TEST(test_util_json_string_and_encode) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	request_rec *r = oidc_test_request_get();
+	json_t *json = NULL;
+	char *value = NULL;
+	char *encoded = NULL;
+
+	/* encode NULL must return NULL */
+	ck_assert_ptr_null(oidc_util_json_encode(pool, NULL, 0));
+
+	/* with no JSON, default is returned */
+	oidc_util_json_object_get_string(pool, NULL, "any", &value, "fallback");
+	ck_assert_ptr_nonnull(value);
+	ck_assert_str_eq(value, "fallback");
+
+	/* NULL default must produce NULL output */
+	value = (char *)0xdeadbeef;
+	oidc_util_json_object_get_string(pool, NULL, "any", &value, NULL);
+	ck_assert_ptr_null(value);
+
+	ck_assert_msg(oidc_util_json_decode_object(r, "{\"name\":\"hans\",\"age\":42}", &json) == TRUE,
+		      "decode of valid object failed");
+	ck_assert_ptr_nonnull(json);
+
+	/* existing string key */
+	value = NULL;
+	oidc_util_json_object_get_string(pool, json, "name", &value, "default");
+	ck_assert_str_eq(value, "hans");
+
+	/* missing key falls back to default */
+	value = NULL;
+	oidc_util_json_object_get_string(pool, json, "missing", &value, "default");
+	ck_assert_str_eq(value, "default");
+
+	/* non-string key (integer) falls back to default */
+	value = NULL;
+	oidc_util_json_object_get_string(pool, json, "age", &value, "default");
+	ck_assert_str_eq(value, "default");
+
+	/* round-trip encode */
+	encoded = oidc_util_json_encode(pool, json, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	ck_assert_ptr_nonnull(encoded);
+	ck_assert_str_eq(encoded, "{\"name\":\"hans\",\"age\":42}");
+	json_decref(json);
+
+	/* NULL input string returns FALSE and does not crash */
+	json = NULL;
+	ck_assert_msg(oidc_util_json_decode_object_err(r, NULL, &json, FALSE) == FALSE, "decode NULL must fail");
+	ck_assert_ptr_null(json);
+
+	/* malformed JSON must fail, but with log_err==FALSE no error is logged */
+	json = NULL;
+	ck_assert_msg(oidc_util_json_decode_object_err(r, "{not json", &json, FALSE) == FALSE,
+		      "decode of invalid JSON must fail");
+	ck_assert_ptr_null(json);
+}
+END_TEST
+
+START_TEST(test_util_strenv_length_and_casestr_edge) {
+	int d = 0;
+
+	/* with len, only the first N chars are compared */
+	d = oidc_util_strnenvcmp("a.bXXX", "A_b", 3);
+	ck_assert_int_eq(d, 0);
+
+	d = oidc_util_strnenvcmp("abcZZ", "abdYY", 3);
+	ck_assert_int_lt(d, 0);
+
+	/* len == 0 always equal */
+	d = oidc_util_strnenvcmp("totally different", "values here", 0);
+	ck_assert_int_eq(d, 0);
+
+	/* different lengths with len < 0 => longer string is greater */
+	d = oidc_util_strnenvcmp("abc", "abcd", -1);
+	ck_assert_int_lt(d, 0);
+	d = oidc_util_strnenvcmp("abcd", "abc", -1);
+	ck_assert_int_gt(d, 0);
+
+	/* strcasestr: NULL needle / NULL haystack must return NULL */
+	ck_assert_ptr_null(oidc_util_strcasestr(NULL, "x"));
+	ck_assert_ptr_null(oidc_util_strcasestr("hello", NULL));
+
+	/* empty needle returns the haystack pointer */
+	const char *hay = "Hello World";
+	ck_assert_ptr_eq(oidc_util_strcasestr(hay, ""), hay);
+
+	/* match at start (case-insensitive) */
+	ck_assert_ptr_nonnull(oidc_util_strcasestr("AbCdEf", "abc"));
+}
+END_TEST
+
+START_TEST(test_util_cookie_domain_dot_prefix) {
+	/* the leading dot must be tolerated */
+	ck_assert_msg(oidc_util_cookie_domain_valid("WWW.Example.Com", ".example.com") == TRUE,
+		      "cookie domain with leading dot must be valid (case-insensitive)");
+	/* host that doesn't end with the domain must be rejected */
+	ck_assert_msg(oidc_util_cookie_domain_valid("evil-example.com.attacker", "example.com") == FALSE,
+		      "cookie domain must match the trailing portion of the hostname");
+	/* trailing-slash issuer match in both directions */
+	ck_assert_msg(oidc_util_cookie_domain_valid("www.example.com", "www.example.com") == TRUE,
+		      "exact host must match itself");
+}
+END_TEST
+
+START_TEST(test_util_issuer_match_trailing_slash) {
+	/* trailing slash in either argument must be ignored */
+	ck_assert_msg(oidc_util_issuer_match("https://id.example.com/", "https://id.example.com") == TRUE,
+		      "trailing slash on a must be ignored");
+	ck_assert_msg(oidc_util_issuer_match("https://id.example.com", "https://id.example.com/") == TRUE,
+		      "trailing slash on b must be ignored");
+	/* more than a trailing slash difference must not match */
+	ck_assert_msg(oidc_util_issuer_match("https://id.example.com/foo", "https://id.example.com/bar") == FALSE,
+		      "different paths must not match");
+}
+END_TEST
+
 START_TEST(test_util_set_trace_parent_flags) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -990,6 +1150,7 @@ int main(void) {
 	c = tcase_create("util");
 	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(c, test_util_strenv_and_casestr);
+	tcase_add_test(c, test_util_strenv_length_and_casestr_edge);
 	tcase_add_test(c, test_util_read_form_encoded_params);
 	tcase_add_test(c, test_util_read_post_params_wrong_content_type);
 	tcase_add_test(c, test_util_read_post_params_oversized);
@@ -997,8 +1158,20 @@ int main(void) {
 	tcase_add_test(c, test_util_spaced_string_helpers);
 	tcase_add_test(c, test_util_hex_and_hash);
 	tcase_add_test(c, test_util_cookie_domain_and_issuer);
+	tcase_add_test(c, test_util_cookie_domain_dot_prefix);
+	tcase_add_test(c, test_util_issuer_match_trailing_slash);
 	tcase_add_test(c, test_util_set_trace_parent_flags);
 	tcase_add_test(c, test_util_table_and_hash_clear_and_openssl);
+	suite_add_tcase(s, c);
+
+	c = tcase_create("url-params");
+	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(c, test_util_url_parameter_helpers);
+	suite_add_tcase(s, c);
+
+	c = tcase_create("json-string");
+	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(c, test_util_json_string_and_encode);
 	suite_add_tcase(s, c);
 
 	return oidc_test_suite_run(s);
