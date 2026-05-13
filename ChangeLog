@@ -1,5 +1,6 @@
 05/13/2026
-- code: refactor functions to reduce cognitive complexity
+- code: re-factor functions to reduce cognitive complexity
+- security: fix 3 low-risk (insider-admin-based) security vulnerabilities
 
 04/24/2026
 - proto: add scope=openid to the authorization request when passing a Request Object
