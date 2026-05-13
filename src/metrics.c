@@ -1329,20 +1329,48 @@ typedef struct oidc_metric_prometheus_callback_ctx_t {
 } oidc_metric_prometheus_callback_ctx_t;
 
 /*
+ * append per-(name, value) label-pair lines for a single key under a server's counter
+ */
+static char *oidc_metrics_prometheus_counter_named(apr_pool_t *pool, char *s_text, const char *s_start,
+						   const char *s_key, json_t *j_value) {
+	void *iter = json_object_iter(j_value);
+	while (iter) {
+		const char *s_value = json_object_iter_key(iter);
+		s_text = apr_psprintf(pool, "%s%s,%s=\"%s\",%s=\"%s\"} %s\n", s_text, s_start,
+				      OIDC_METRICS_PROMETHEUS_NAME, s_key, OIDC_METRICS_PROMETHEUS_VALUE, s_value,
+				      _json_int2str(pool, json_integer_value(json_object_iter_value(iter))));
+		iter = json_object_iter_next(j_value, iter);
+	}
+	return s_text;
+}
+
+/*
+ * append per-key lines for one server's counter dict; integer entries are value-labeled, sub-dict
+ * entries are delegated to oidc_metrics_prometheus_counter_named for name+value labeling
+ */
+static char *oidc_metrics_prometheus_counter_keyed(apr_pool_t *pool, char *s_text, const char *s_start,
+						   json_t *j_counter) {
+	void *iter = json_object_iter(j_counter);
+	while (iter) {
+		const char *s_key = json_object_iter_key(iter);
+		json_t *j_value = json_object_iter_value(iter);
+		if (json_is_integer(j_value))
+			s_text =
+			    apr_psprintf(pool, "%s%s,%s=\"%s\"} %s\n", s_text, s_start, OIDC_METRICS_PROMETHEUS_VALUE,
+					 s_key, _json_int2str(pool, json_integer_value(j_value)));
+		else
+			s_text = oidc_metrics_prometheus_counter_named(pool, s_text, s_start, s_key, j_value);
+		iter = json_object_iter_next(j_counter, iter);
+	}
+	return s_text;
+}
+
+/*
  * loop function for converting counter metrics to Prometheus output
  */
 static int oidc_metrics_prometheus_counters(oidc_metric_prometheus_callback_ctx_t *ctx, const char *key,
 					    json_t *value) {
-	const char *s_server = NULL;
-	const char *s_key = NULL;
-	const char *s_value = NULL;
-	const char *s_start = NULL;
-	json_t *j_counter = NULL;
-	json_t *j_value = NULL;
 	json_t *o_counter = value;
-	void *i1 = NULL;
-	void *i2 = NULL;
-	void *i3 = NULL;
 	unsigned int type = _oidc_metrics_key2type(key);
 	const char *s_label =
 	    oidc_metric_prometheus_normalize_name(ctx->pool, _oidc_metrics_counter_type2s(ctx->pool, type));
@@ -1350,40 +1378,18 @@ static int oidc_metrics_prometheus_counters(oidc_metric_prometheus_callback_ctx_
 	    apr_psprintf(ctx->pool, "# HELP %s The number of %s.\n", s_label, _oidc_metrics_counters_info[type].desc);
 	s_text = apr_psprintf(ctx->pool, "%s# TYPE %s counter\n", s_text, s_label);
 
-	i1 = json_object_iter(o_counter);
-	while (i1) {
-		s_server = json_object_iter_key(i1);
-		j_counter = json_object_iter_value(i1);
-		s_start = apr_psprintf(ctx->pool, "%s{%s=\"%s\"", s_label, OIDC_METRICS_PROMETHEUS_SERVER, s_server);
-		if (json_is_integer(j_counter)) {
+	void *iter = json_object_iter(o_counter);
+	while (iter) {
+		const char *s_server = json_object_iter_key(iter);
+		json_t *j_counter = json_object_iter_value(iter);
+		const char *s_start =
+		    apr_psprintf(ctx->pool, "%s{%s=\"%s\"", s_label, OIDC_METRICS_PROMETHEUS_SERVER, s_server);
+		if (json_is_integer(j_counter))
 			s_text = apr_psprintf(ctx->pool, "%s%s} %s\n", s_text, s_start,
 					      _json_int2str(ctx->pool, json_integer_value(j_counter)));
-		} else {
-			i2 = json_object_iter(j_counter);
-			while (i2) {
-				s_key = json_object_iter_key(i2);
-				j_value = json_object_iter_value(i2);
-				if (json_is_integer(j_value)) {
-					s_text = apr_psprintf(ctx->pool, "%s%s,%s=\"%s\"} %s\n", s_text, s_start,
-							      OIDC_METRICS_PROMETHEUS_VALUE, s_key,
-							      _json_int2str(ctx->pool, json_integer_value(j_value)));
-				} else {
-					i3 = json_object_iter(j_value);
-					while (i3) {
-						s_value = json_object_iter_key(i3);
-						s_text = apr_psprintf(
-						    ctx->pool, "%s%s,%s=\"%s\",%s=\"%s\"} %s\n", s_text, s_start,
-						    OIDC_METRICS_PROMETHEUS_NAME, s_key, OIDC_METRICS_PROMETHEUS_VALUE,
-						    s_value,
-						    _json_int2str(ctx->pool,
-								  json_integer_value(json_object_iter_value(i3))));
-						i3 = json_object_iter_next(j_value, i3);
-					}
-				}
-				i2 = json_object_iter_next(j_counter, i2);
-			}
-		}
-		i1 = json_object_iter_next(o_counter, i1);
+		else
+			s_text = oidc_metrics_prometheus_counter_keyed(ctx->pool, s_text, s_start, j_counter);
+		iter = json_object_iter_next(o_counter, iter);
 	}
 	ctx->s_result = apr_pstrcat(ctx->pool, ctx->s_result, s_text, "\n", NULL);
 	json_decref(o_counter);
