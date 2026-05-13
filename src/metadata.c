@@ -1568,6 +1568,56 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg_t *cfg, json_t *j_c
 /*
  * parse the JSON client metadata in to a oidc_provider_t struct
  */
+/*
+ * override the provider token endpoint auth method when the client metadata specifies one
+ */
+static void oidc_metadata_client_parse_token_endpoint_auth(request_rec *r, oidc_cfg_t *cfg, json_t *j_client,
+							   oidc_provider_t *provider) {
+
+	char *value = NULL;
+	oidc_util_json_object_get_string(r->pool, j_client, OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHOD, &value, NULL);
+	if (value == NULL)
+		return;
+
+	const char *rv = oidc_cfg_provider_token_endpoint_auth_set(r->pool, cfg, provider, value);
+	if (rv != NULL)
+		oidc_error(r, "oidc_provider_token_endpoint_auth_set: %s", value);
+}
+
+/*
+ * determine the provider response_type when not already set by .conf: default from the global config,
+ * then fall back to the first entry of the client metadata "response_types" array if the configured
+ * one is not advertised as supported
+ */
+static void oidc_metadata_client_parse_response_type(request_rec *r, oidc_cfg_t *cfg, json_t *j_client,
+						     oidc_provider_t *provider) {
+
+	const char *rv = NULL;
+	char *value = NULL;
+
+	if (oidc_cfg_provider_response_type_get(provider) != NULL)
+		return;
+
+	oidc_cfg_provider_response_type_set(r->pool, provider,
+					    oidc_cfg_provider_response_type_get(oidc_cfg_provider_get(cfg)));
+
+	// "response_types" is an array in the client metadata as by spec
+	json_t *j_response_types = json_object_get(j_client, OIDC_METADATA_RESPONSE_TYPES);
+	if ((j_response_types == NULL) || (!json_is_array(j_response_types)))
+		return;
+
+	// if there's an array we'll prefer the configured response_type if supported
+	if (oidc_util_json_array_has_value(r, j_response_types, oidc_cfg_provider_response_type_get(provider)) == TRUE)
+		return;
+
+	// if the configured response_type is not supported, we'll fallback to the first one that is listed
+	json_t *j_response_type = json_array_get(j_response_types, 0);
+	if (json_is_string(j_response_type)) {
+		value = apr_pstrdup(r->pool, json_string_value(j_response_type));
+		OIDC_METADATA_PROVIDER_SET(response_type, value, rv)
+	}
+}
+
 apr_byte_t oidc_metadata_client_parse(request_rec *r, oidc_cfg_t *cfg, json_t *j_client, oidc_provider_t *provider) {
 
 	const char *rv = NULL;
@@ -1582,36 +1632,10 @@ apr_byte_t oidc_metadata_client_parse(request_rec *r, oidc_cfg_t *cfg, json_t *j
 	OIDC_METADATA_PROVIDER_SET(client_secret, value, rv)
 
 	/* see if the token endpoint auth method defined in the client metadata overrides the provider one */
-	oidc_util_json_object_get_string(r->pool, j_client, OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHOD, &value, NULL);
-	if (value != NULL) {
-		rv = oidc_cfg_provider_token_endpoint_auth_set(r->pool, cfg, provider, value);
-		if (rv != NULL)
-			oidc_error(r, "oidc_provider_token_endpoint_auth_set: %s", value);
-	}
+	oidc_metadata_client_parse_token_endpoint_auth(r, cfg, j_client, provider);
 
 	/* determine the response type if not set by .conf */
-
-	if (oidc_cfg_provider_response_type_get(provider) == NULL) {
-
-		oidc_cfg_provider_response_type_set(r->pool, provider,
-						    oidc_cfg_provider_response_type_get(oidc_cfg_provider_get(cfg)));
-
-		// "response_types" is an array in the client metadata as by spec
-		json_t *j_response_types = json_object_get(j_client, OIDC_METADATA_RESPONSE_TYPES);
-		if ((j_response_types != NULL) && (json_is_array(j_response_types))) {
-			// if there's an array we'll prefer the configured response_type if supported
-			if (oidc_util_json_array_has_value(r, j_response_types,
-							   oidc_cfg_provider_response_type_get(provider)) == FALSE) {
-				// if the configured response_type is not supported, we'll fallback to the first one
-				// that is listed
-				json_t *j_response_type = json_array_get(j_response_types, 0);
-				if (json_is_string(j_response_type)) {
-					value = apr_pstrdup(r->pool, json_string_value(j_response_type));
-					OIDC_METADATA_PROVIDER_SET(response_type, value, rv)
-				}
-			}
-		}
-	}
+	oidc_metadata_client_parse_response_type(r, cfg, j_client, provider);
 
 	oidc_util_json_object_get_string(
 	    r->pool, j_client, OIDC_METADATA_ID_TOKEN_SIGNED_RESPONSE_ALG, &value,
