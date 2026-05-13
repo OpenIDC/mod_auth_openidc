@@ -101,10 +101,17 @@ OIDC_CFG_MEMBER_FUNCS_HTTP_TIMEOUT(http_timeout_short, OIDC_DEFAULT_HTTP_REQUEST
 const char *oidc_cmd_crypto_passphrase_set(cmd_parms *cmd, void *struct_ptr, const char *arg1, const char *arg2) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
 	const char *rv = NULL;
-	if (arg1)
-		rv = oidc_cfg_parse_passphrase(cmd->pool, arg1, (char **)&cfg->crypto_passphrase.secret1);
-	if ((rv == NULL) && (arg2 != NULL))
-		rv = oidc_cfg_parse_passphrase(cmd->pool, arg2, (char **)&cfg->crypto_passphrase.secret2);
+	char *v = NULL;
+	if (arg1) {
+		rv = oidc_cfg_parse_passphrase(cmd->pool, arg1, &v);
+		if (rv == NULL)
+			cfg->crypto_passphrase.secret1 = v;
+	}
+	if ((rv == NULL) && (arg2 != NULL)) {
+		rv = oidc_cfg_parse_passphrase(cmd->pool, arg2, &v);
+		if (rv == NULL)
+			cfg->crypto_passphrase.secret2 = v;
+	}
 	return rv;
 }
 
