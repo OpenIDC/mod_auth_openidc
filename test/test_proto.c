@@ -500,8 +500,8 @@ START_TEST(test_proto_token_endpoint_auth_no_client_id) {
 	char *bearer = NULL;
 
 	/* no client_id => no auth needed, return TRUE without touching params/strings */
-	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_CLIENT_SECRET_BASIC, NULL, NULL, "secret", NULL,
-							NULL, params, NULL, &basic, &bearer),
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_CLIENT_SECRET_BASIC, NULL, NULL, "secret",
+							NULL, NULL, params, NULL, &basic, &bearer),
 			 TRUE);
 	ck_assert_ptr_null(basic);
 	ck_assert_ptr_null(bearer);
@@ -518,8 +518,8 @@ START_TEST(test_proto_token_endpoint_auth_basic_and_post) {
 
 	/* client_secret_basic: returns "user:pass" in basic_auth_str */
 	params = apr_table_make(r->pool, 1);
-	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_CLIENT_SECRET_BASIC, NULL, "myclient", "mysecret",
-							NULL, NULL, params, NULL, &basic, &bearer),
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_CLIENT_SECRET_BASIC, NULL, "myclient",
+							"mysecret", NULL, NULL, params, NULL, &basic, &bearer),
 			 TRUE);
 	ck_assert_ptr_nonnull(basic);
 	ck_assert_str_eq(basic, "myclient:mysecret");
@@ -527,8 +527,8 @@ START_TEST(test_proto_token_endpoint_auth_basic_and_post) {
 
 	/* client_secret_basic without a secret: must fail */
 	basic = NULL;
-	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_CLIENT_SECRET_BASIC, NULL, "myclient", NULL, NULL,
-							NULL, params, NULL, &basic, &bearer),
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_CLIENT_SECRET_BASIC, NULL, "myclient", NULL,
+							NULL, NULL, params, NULL, &basic, &bearer),
 			 TRUE); /* falls through to "public client" path: no secret + not private_key_jwt */
 	ck_assert_ptr_null(basic);
 	/* the "public client" path sets client_id on the params */
@@ -536,16 +536,16 @@ START_TEST(test_proto_token_endpoint_auth_basic_and_post) {
 
 	/* client_secret_post: sets client_id and client_secret on the params */
 	params = apr_table_make(r->pool, 2);
-	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_CLIENT_SECRET_POST, NULL, "myclient", "mysecret",
-							NULL, NULL, params, NULL, &basic, &bearer),
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_CLIENT_SECRET_POST, NULL, "myclient",
+							"mysecret", NULL, NULL, params, NULL, &basic, &bearer),
 			 TRUE);
 	ck_assert_str_eq(apr_table_get(params, OIDC_PROTO_CLIENT_ID), "myclient");
 	ck_assert_str_eq(apr_table_get(params, OIDC_PROTO_CLIENT_SECRET), "mysecret");
 
 	/* none: only client_id is set */
 	params = apr_table_make(r->pool, 1);
-	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_ENDPOINT_AUTH_NONE, NULL, "myclient", "ignored",
-							NULL, NULL, params, NULL, &basic, &bearer),
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_ENDPOINT_AUTH_NONE, NULL, "myclient",
+							"ignored", NULL, NULL, params, NULL, &basic, &bearer),
 			 TRUE);
 	ck_assert_str_eq(apr_table_get(params, OIDC_PROTO_CLIENT_ID), "myclient");
 	ck_assert_ptr_null(apr_table_get(params, OIDC_PROTO_CLIENT_SECRET));
@@ -560,14 +560,14 @@ START_TEST(test_proto_token_endpoint_auth_bearer) {
 	char *bearer = NULL;
 
 	/* bearer_access_token without a token: must fail */
-	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_BEARER_ACCESS_TOKEN, NULL, "myclient", "secret",
-							NULL, NULL, params, NULL, &basic, &bearer),
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_BEARER_ACCESS_TOKEN, NULL, "myclient",
+							"secret", NULL, NULL, params, NULL, &basic, &bearer),
 			 FALSE);
 	ck_assert_ptr_null(bearer);
 
 	/* bearer_access_token with a token: must succeed */
-	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_BEARER_ACCESS_TOKEN, NULL, "myclient", "secret",
-							NULL, NULL, params, "the-token", &basic, &bearer),
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_BEARER_ACCESS_TOKEN, NULL, "myclient",
+							"secret", NULL, NULL, params, "the-token", &basic, &bearer),
 			 TRUE);
 	ck_assert_ptr_nonnull(bearer);
 	ck_assert_str_eq(bearer, "the-token");
@@ -716,9 +716,9 @@ START_TEST(test_proto_dpop_create_without_private_keys) {
 	char *dpop = NULL;
 
 	/* the test fixture configures an empty private_keys array, so DPoP proof creation must fail */
-	ck_assert_int_eq(oidc_proto_dpop_create(r, c, "https://idp.example.com/token", "POST", "some-access-token", NULL,
-						&dpop),
-			 FALSE);
+	ck_assert_int_eq(
+	    oidc_proto_dpop_create(r, c, "https://idp.example.com/token", "POST", "some-access-token", NULL, &dpop),
+	    FALSE);
 	ck_assert_ptr_null(dpop);
 }
 END_TEST
