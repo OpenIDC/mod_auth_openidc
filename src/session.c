@@ -536,32 +536,103 @@ static const char *oidc_session_get_key2string(request_rec *r, oidc_session_t *z
 #define OIDC_SESSION_WARN_CLAIM_SIZE_VAR "OIDC_SESSION_WARN_CLAIM_SIZE"
 
 /*
+ * read the warning threshold for the (encoded) size of a single session claim from the environment
+ */
+static int oidc_session_warn_claim_size_get(request_rec *r) {
+	const char *str = NULL;
+
+	if (r->subprocess_env == NULL)
+		return OIDC_SESSION_WARN_CLAIM_SIZE;
+
+	str = apr_table_get(r->subprocess_env, OIDC_SESSION_WARN_CLAIM_SIZE_VAR);
+	if (str == NULL)
+		return OIDC_SESSION_WARN_CLAIM_SIZE;
+
+	int warn_claim_size = _oidc_str_to_int(str, OIDC_SESSION_WARN_CLAIM_SIZE);
+	oidc_debug(r, "warn_claim_size set to %d in environment variable %s", warn_claim_size,
+		   OIDC_SESSION_WARN_CLAIM_SIZE_VAR);
+	return warn_claim_size;
+}
+
+/*
+ * check whether a single claim passes the configured black/white list filters
+ */
+static apr_byte_t oidc_session_claim_is_allowed(request_rec *r, oidc_cfg_t *c, const char *session_key,
+						const char *name) {
+	if ((oidc_cfg_black_listed_claims_get(c) != NULL) &&
+	    (apr_hash_get(oidc_cfg_black_listed_claims_get(c), name, APR_HASH_KEY_STRING) != NULL)) {
+		oidc_debug(r, "removing blacklisted claim [%s]: '%s'", session_key, name);
+		return FALSE;
+	}
+
+	if ((oidc_cfg_white_listed_claims_get(c) != NULL) &&
+	    (apr_hash_get(oidc_cfg_white_listed_claims_get(c), name, APR_HASH_KEY_STRING) == NULL)) {
+		oidc_debug(r, "removing non-whitelisted claim [%s]: '%s'", session_key, name);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/*
+ * record a single allowed claim into the destination object, increment metrics and warn on oversized values
+ */
+static void oidc_session_filtered_claim_record(request_rec *r, oidc_cfg_t *c, const char *session_key, const char *name,
+					       json_t *value, json_t *dst, int warn_claim_size) {
+	const char *str =
+	    value ? oidc_util_json_encode(r->pool, value, JSON_PRESERVE_ORDER | JSON_COMPACT | JSON_ENCODE_ANY) : "";
+
+	if (_oidc_strlen(str) > warn_claim_size)
+		oidc_warn(r,
+			  "(encoded) value size of [%s] claim \"%s\" is larger than %d; consider "
+			  "blacklisting it in OIDCBlackListedClaims "
+			  "or increase the warning limit with environment variable %s",
+			  session_key, name, warn_claim_size, OIDC_SESSION_WARN_CLAIM_SIZE_VAR);
+
+	json_object_set(dst, name, value);
+
+	const char *metric_value = json_is_string(value) ? json_string_value(value) : str;
+	if (_oidc_strcmp(session_key, OIDC_SESSION_KEY_USERINFO_CLAIMS) == 0) {
+		OIDC_METRICS_COUNTER_INC_NAME_VALUE(r, c, OM_CLAIM_USER_INFO, name, metric_value);
+	} else {
+		OIDC_METRICS_COUNTER_INC_NAME_VALUE(r, c, OM_CLAIM_ID_TOKEN, name, metric_value);
+	}
+}
+
+#ifdef USE_LIBJQ
+/*
+ * apply the configured JQ filter to the collected claims; replaces *dst with the filtered object on success
+ */
+static void oidc_session_jq_filter_apply(request_rec *r, oidc_cfg_t *c, const char *session_key, json_t **dst) {
+	const oidc_apr_expr_t *filter = oidc_cfg_filter_claims_expr_get(c);
+	const char *s_filter = oidc_util_apr_expr_exec(r, filter, TRUE);
+
+	if (filter == NULL)
+		return;
+
+	const char *filtered_claims = oidc_util_jq_filter(r, *dst, s_filter);
+	json_decref(*dst);
+	*dst = NULL;
+	if (oidc_util_json_decode_object(r, filtered_claims, dst) == FALSE)
+		oidc_error(r, "JQ filtering of claims for [%s] resulted in invalid JSON object, filter='%s'",
+			   session_key, s_filter);
+}
+#endif
+
+/*
  * apply whitelisting/blacklisting and a JQ filter  to the provided (serialized JSON) claims
  * session_key may refer to id_token claims or userinfo claims
  */
 static void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, const char *session_key,
 					     json_t *claims) {
 	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
-
-	const char *name = NULL;
-	json_t *dst = NULL, *value = NULL;
+	json_t *dst = NULL;
 	void *iter = NULL;
-	apr_byte_t is_allowed = TRUE;
-	int warn_claim_size = OIDC_SESSION_WARN_CLAIM_SIZE;
-	const char *str = NULL;
+	int warn_claim_size = oidc_session_warn_claim_size_get(r);
 
 	// avoid gcc 14 warning: '%s' directive argument is null [-Wformat-overflow=]
 	if (session_key == NULL)
 		session_key = "";
-
-	if (r->subprocess_env != NULL) {
-		str = apr_table_get(r->subprocess_env, OIDC_SESSION_WARN_CLAIM_SIZE_VAR);
-		if (str) {
-			warn_claim_size = _oidc_str_to_int(str, OIDC_SESSION_WARN_CLAIM_SIZE);
-			oidc_debug(r, "warn_claim_size set to %d in environment variable %s", warn_claim_size,
-				   OIDC_SESSION_WARN_CLAIM_SIZE_VAR);
-		}
-	}
 
 	if (claims != NULL) {
 		dst = json_object();
@@ -570,61 +641,17 @@ static void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, 
 
 	// NB: need this loop for all claims for the metrics
 	while (iter) {
-		is_allowed = TRUE;
-		name = json_object_iter_key(iter);
-		value = json_object_iter_value(iter);
+		const char *name = json_object_iter_key(iter);
+		json_t *value = json_object_iter_value(iter);
 
-		if ((oidc_cfg_black_listed_claims_get(c) != NULL) &&
-		    (apr_hash_get(oidc_cfg_black_listed_claims_get(c), name, APR_HASH_KEY_STRING) != NULL)) {
-			oidc_debug(r, "removing blacklisted claim [%s]: '%s'", session_key, name);
-			is_allowed = FALSE;
-		}
-
-		if ((is_allowed == TRUE) && (oidc_cfg_white_listed_claims_get(c) != NULL) &&
-		    (apr_hash_get(oidc_cfg_white_listed_claims_get(c), name, APR_HASH_KEY_STRING) == NULL)) {
-			oidc_debug(r, "removing non-whitelisted claim [%s]: '%s'", session_key, name);
-			is_allowed = FALSE;
-		}
-
-		if (is_allowed == TRUE) {
-			str = value ? oidc_util_json_encode(r->pool, value,
-							    JSON_PRESERVE_ORDER | JSON_COMPACT | JSON_ENCODE_ANY)
-				    : "";
-			if (_oidc_strlen(str) > warn_claim_size)
-				oidc_warn(r,
-					  "(encoded) value size of [%s] claim \"%s\" is larger than %d; consider "
-					  "blacklisting it in OIDCBlackListedClaims "
-					  "or increase the warning limit with environment variable %s",
-					  session_key, name, warn_claim_size, OIDC_SESSION_WARN_CLAIM_SIZE_VAR);
-			json_object_set(dst, name, value);
-
-			if (_oidc_strcmp(session_key, OIDC_SESSION_KEY_USERINFO_CLAIMS) == 0) {
-				OIDC_METRICS_COUNTER_INC_NAME_VALUE(r, c, OM_CLAIM_USER_INFO, name,
-								    json_is_string(value) ? json_string_value(value)
-											  : str);
-			} else {
-				OIDC_METRICS_COUNTER_INC_NAME_VALUE(r, c, OM_CLAIM_ID_TOKEN, name,
-								    json_is_string(value) ? json_string_value(value)
-											  : str);
-			}
-		}
+		if (oidc_session_claim_is_allowed(r, c, session_key, name) == TRUE)
+			oidc_session_filtered_claim_record(r, c, session_key, name, value, dst, warn_claim_size);
 
 		iter = json_object_iter_next(claims, iter);
 	}
 
 #ifdef USE_LIBJQ
-	const char *filtered_claims = NULL;
-	const oidc_apr_expr_t *filter = oidc_cfg_filter_claims_expr_get(c);
-	const char *s_filter = oidc_util_apr_expr_exec(r, filter, TRUE);
-	if (filter != NULL) {
-		filtered_claims = oidc_util_jq_filter(r, dst, s_filter);
-		json_decref(dst);
-		dst = NULL;
-		if (oidc_util_json_decode_object(r, filtered_claims, &dst) == FALSE) {
-			oidc_error(r, "JQ filtering of claims for [%s] resulted in invalid JSON object, filter='%s'",
-				   session_key, s_filter);
-		}
-	}
+	oidc_session_jq_filter_apply(r, c, session_key, &dst);
 #endif
 
 	oidc_session_json_set(r, z, session_key, dst);
