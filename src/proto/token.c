@@ -93,6 +93,94 @@ static apr_byte_t oidc_proto_token_endpoint_call(request_rec *r, oidc_cfg_t *cfg
 }
 
 /*
+ * set up the DPoP request header and response header tracking for the initial token endpoint call
+ */
+static apr_byte_t oidc_proto_token_endpoint_dpop_prepare(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
+							 apr_hash_t **response_hdrs, char **dpop) {
+
+	if (oidc_proto_profile_dpop_mode_get(provider) == OIDC_DPOP_MODE_OFF)
+		return TRUE;
+
+	*response_hdrs = apr_hash_make(r->pool);
+	apr_hash_set(*response_hdrs, OIDC_HTTP_HDR_AUTHORIZATION, APR_HASH_KEY_STRING, "");
+	apr_hash_set(*response_hdrs, OIDC_HTTP_HDR_DPOP_NONCE, APR_HASH_KEY_STRING, "");
+	apr_hash_set(*response_hdrs, OIDC_HTTP_HDR_CONTENT_TYPE, APR_HASH_KEY_STRING, "");
+
+	if ((oidc_proto_dpop_create(r, cfg, oidc_cfg_provider_token_endpoint_url_get(provider), "POST", NULL, NULL,
+				    dpop) == FALSE) &&
+	    (oidc_proto_profile_dpop_mode_get(provider) == OIDC_DPOP_MODE_REQUIRED))
+		return FALSE;
+
+	return TRUE;
+}
+
+/*
+ * retry the token endpoint call with a new DPoP header that carries the server-provided nonce;
+ * on success, replaces *j_result with the freshly decoded response
+ */
+static apr_byte_t oidc_proto_token_endpoint_dpop_retry(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
+						       apr_table_t *params, const char *basic_auth,
+						       const char *bearer_auth, apr_hash_t *response_hdrs,
+						       char **response, json_t **j_result) {
+
+	char *dpop = NULL;
+
+	if (oidc_proto_dpop_use_nonce(r, cfg, *j_result, response_hdrs,
+				      oidc_cfg_provider_token_endpoint_url_get(provider), "POST", NULL, &dpop) == FALSE)
+		return FALSE;
+
+	if (oidc_proto_token_endpoint_call(r, cfg, provider, params, basic_auth, bearer_auth, dpop, response,
+					   response_hdrs) == FALSE)
+		return FALSE;
+
+	json_decref(*j_result);
+	*j_result = NULL;
+
+	return oidc_util_json_decode_and_check_error(r, *response, j_result);
+}
+
+/*
+ * parse a successful token endpoint response and validate the returned token type against the DPoP mode
+ */
+static apr_byte_t oidc_proto_token_endpoint_response_parse(request_rec *r, oidc_provider_t *provider, json_t *j_result,
+							   char **id_token, char **access_token, char **token_type,
+							   int *expires_in, char **refresh_token, char **scope) {
+
+	json_t *j_expires_in = NULL;
+
+	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_ID_TOKEN, id_token, NULL);
+	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_ACCESS_TOKEN, access_token, NULL);
+	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_TOKEN_TYPE, token_type, NULL);
+
+	/* check if DPoP is required */
+	if ((oidc_proto_profile_dpop_mode_get(provider) == OIDC_DPOP_MODE_REQUIRED) &&
+	    (_oidc_strnatcasecmp(*token_type, OIDC_PROTO_DPOP) != 0)) {
+		oidc_error(r, "access token type is \"%s\" but \"%s\" is required", *token_type, OIDC_PROTO_DPOP);
+		return FALSE;
+	}
+
+	/* check the new token type */
+	if ((*token_type != NULL) && (oidc_proto_validate_token_type(r, provider, *token_type) == FALSE)) {
+		oidc_warn(r, "access token type \"%s\" did not validate, dropping it", *token_type);
+		*access_token = NULL;
+		*token_type = NULL;
+	}
+
+	/* get the access token expires_in value; cater for string values (old Microsoft Entra ID / Azure AD) */
+	*expires_in = -1;
+	j_expires_in = json_object_get(j_result, OIDC_PROTO_EXPIRES_IN);
+	if (json_is_string(j_expires_in))
+		*expires_in = _oidc_str_to_int(json_string_value(j_expires_in), -1);
+	else if (json_is_integer(j_expires_in))
+		*expires_in = json_integer_value(j_expires_in);
+
+	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_REFRESH_TOKEN, refresh_token, NULL);
+	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_SCOPE, scope, NULL);
+
+	return TRUE;
+}
+
+/*
  * send a code/refresh request to the token endpoint and return the parsed contents
  */
 apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
@@ -105,7 +193,7 @@ apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, oi
 	char *response = NULL;
 	char *dpop = NULL;
 	apr_hash_t *response_hdrs = NULL;
-	json_t *j_result = NULL, *j_expires_in = NULL;
+	json_t *j_result = NULL;
 
 	/* add the token endpoint authentication credentials */
 	if (oidc_proto_token_endpoint_auth(
@@ -119,18 +207,9 @@ apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, oi
 	oidc_util_table_add_query_encoded_params(r->pool, params,
 						 oidc_cfg_provider_token_endpoint_params_get(provider));
 
-	if (oidc_proto_profile_dpop_mode_get(provider) != OIDC_DPOP_MODE_OFF) {
-
-		response_hdrs = apr_hash_make(r->pool);
-		apr_hash_set(response_hdrs, OIDC_HTTP_HDR_AUTHORIZATION, APR_HASH_KEY_STRING, "");
-		apr_hash_set(response_hdrs, OIDC_HTTP_HDR_DPOP_NONCE, APR_HASH_KEY_STRING, "");
-		apr_hash_set(response_hdrs, OIDC_HTTP_HDR_CONTENT_TYPE, APR_HASH_KEY_STRING, "");
-
-		if ((oidc_proto_dpop_create(r, cfg, oidc_cfg_provider_token_endpoint_url_get(provider), "POST", NULL,
-					    NULL, &dpop) == FALSE) &&
-		    (oidc_proto_profile_dpop_mode_get(provider) == OIDC_DPOP_MODE_REQUIRED))
-			goto end;
-	}
+	/* set up the DPoP header for the initial request if DPoP is enabled */
+	if (oidc_proto_token_endpoint_dpop_prepare(r, cfg, provider, &response_hdrs, &dpop) == FALSE)
+		goto end;
 
 	/* send the request to the token endpoint */
 	if (oidc_proto_token_endpoint_call(r, cfg, provider, params, basic_auth, bearer_auth, dpop, &response,
@@ -141,66 +220,15 @@ apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, oi
 	if (oidc_util_json_decode_object_err(r, response, &j_result, TRUE) == FALSE)
 		goto end;
 
-	/* check for errors, the response itself will have been logged already */
-	if (oidc_util_json_check_error(r, j_result) == TRUE) {
-
-		dpop = NULL;
-		if (oidc_proto_dpop_use_nonce(r, cfg, j_result, response_hdrs,
-					      oidc_cfg_provider_token_endpoint_url_get(provider), "POST", NULL,
-					      &dpop) == FALSE)
-			goto end;
-
-		if (oidc_proto_token_endpoint_call(r, cfg, provider, params, basic_auth, bearer_auth, dpop, &response,
-						   response_hdrs) == FALSE)
-			goto end;
-
-		json_decref(j_result);
-
-		if (oidc_util_json_decode_and_check_error(r, response, &j_result) == FALSE)
-			goto end;
-	}
-
-	/* get the id_token from the parsed response */
-	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_ID_TOKEN, id_token, NULL);
-
-	/* get the access_token from the parsed response */
-	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_ACCESS_TOKEN, access_token, NULL);
-
-	/* get the token type from the parsed response */
-	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_TOKEN_TYPE, token_type, NULL);
-
-	/* check if DPoP is required */
-	if ((oidc_proto_profile_dpop_mode_get(provider) == OIDC_DPOP_MODE_REQUIRED) &&
-	    (_oidc_strnatcasecmp(*token_type, OIDC_PROTO_DPOP) != 0)) {
-		oidc_error(r, "access token type is \"%s\" but \"%s\" is required", *token_type, OIDC_PROTO_DPOP);
+	/* on a DPoP nonce error retry the call with a fresh nonce-bound DPoP header */
+	if ((oidc_util_json_check_error(r, j_result) == TRUE) &&
+	    (oidc_proto_token_endpoint_dpop_retry(r, cfg, provider, params, basic_auth, bearer_auth, response_hdrs,
+						  &response, &j_result) == FALSE))
 		goto end;
-	}
 
-	/* check the new token type */
-	if (*token_type != NULL) {
-		if (oidc_proto_validate_token_type(r, provider, *token_type) == FALSE) {
-			oidc_warn(r, "access token type \"%s\" did not validate, dropping it", *token_type);
-			*access_token = NULL;
-			*token_type = NULL;
-		}
-	}
-
-	/* get the access token expires_in value */
-	*expires_in = -1;
-	j_expires_in = json_object_get(j_result, OIDC_PROTO_EXPIRES_IN);
-	if (j_expires_in != NULL) {
-		/* cater for string values (old Microsoft Entra ID / Azure AD) */
-		if (json_is_string(j_expires_in))
-			*expires_in = _oidc_str_to_int(json_string_value(j_expires_in), -1);
-		else if (json_is_integer(j_expires_in))
-			*expires_in = json_integer_value(j_expires_in);
-	}
-
-	/* get the refresh_token from the parsed response */
-	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_REFRESH_TOKEN, refresh_token, NULL);
-
-	/* get the scope from the parsed response */
-	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_SCOPE, scope, NULL);
+	if (oidc_proto_token_endpoint_response_parse(r, provider, j_result, id_token, access_token, token_type,
+						     expires_in, refresh_token, scope) == FALSE)
+		goto end;
 
 	rv = TRUE;
 
