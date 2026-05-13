@@ -193,7 +193,7 @@ static int oidc_response_post_preserved_restore(request_rec *r, const char *orig
 			 "      function %s {\n"
 			 "        var mod_auth_openidc_preserve_post_params = "
 			 "JSON.parse(sessionStorage.getItem('mod_auth_openidc_preserve_post_params'));\n"
-			 "		 sessionStorage.removeItem('mod_auth_openidc_preserve_post_params');\n"
+			 "\t\t sessionStorage.removeItem('mod_auth_openidc_preserve_post_params');\n"
 			 "        for (var key in mod_auth_openidc_preserve_post_params) {\n"
 			 "          var input = document.createElement(\"input\");\n"
 			 "          input.type = \"hidden\";\n"
