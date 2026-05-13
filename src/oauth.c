@@ -774,10 +774,10 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg_t *c, const char *access_to
 
 	/* validate the obtained access token against the OAuth AS validation endpoint */
 	if (oidc_oauth_validate_token(r, c, access_token, &claims, &s_token) == FALSE)
-		return oidc_proto_return_www_authenticate(
-		    r, OIDC_PROTO_ERR_INVALID_TOKEN,
-		    oidc_cfg_oauth_introspection_endpoint_url_get(c) != NULL ? "Reference token could not be introspected"
-									     : "JWT token could not be validated");
+		return oidc_proto_return_www_authenticate(r, OIDC_PROTO_ERR_INVALID_TOKEN,
+							  oidc_cfg_oauth_introspection_endpoint_url_get(c) != NULL
+							      ? "Reference token could not be introspected"
+							      : "JWT token could not be validated");
 
 	/* check that we've got something back */
 	if (claims == NULL) {

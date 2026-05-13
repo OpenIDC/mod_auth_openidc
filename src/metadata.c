@@ -249,9 +249,8 @@ static apr_byte_t oidc_metadata_is_valid_uri(request_rec *r, const char *type, c
  * try a single array entry against the validator and the preference;
  * returns TRUE when the entry matches the preference and the caller should stop iterating
  */
-static apr_byte_t oidc_metadata_array_string_apply(apr_pool_t *pool, json_t *elem,
-						   oidc_valid_function_t valid_function, char **value,
-						   const char *preference, apr_byte_t *found) {
+static apr_byte_t oidc_metadata_array_string_apply(apr_pool_t *pool, json_t *elem, oidc_valid_function_t valid_function,
+						   char **value, const char *preference, apr_byte_t *found) {
 	if (!json_is_string(elem))
 		return FALSE;
 	if (valid_function(pool, json_string_value(elem)) != NULL)
@@ -1262,8 +1261,7 @@ static void oidc_metadata_conf_parse_profile(request_rec *r, oidc_cfg_t *cfg, js
 /*
  * apply the client JWKS settings: jwks_uri, inline keys and signed-jwks-uri verification keys
  */
-static void oidc_metadata_conf_parse_keys(request_rec *r, oidc_cfg_t *cfg, json_t *j_conf,
-					  oidc_provider_t *provider) {
+static void oidc_metadata_conf_parse_keys(request_rec *r, oidc_cfg_t *cfg, json_t *j_conf, oidc_provider_t *provider) {
 	const char *rv = NULL;
 	char *value = NULL;
 	apr_array_header_t *keys = NULL;

@@ -1307,8 +1307,7 @@ apr_byte_t oidc_jose_version_deprecated(apr_pool_t *pool) {
  * jwt->cjose_jws when the linked cjose version is known to leave it in an
  * unusable state after a failed verify
  */
-static apr_byte_t oidc_jwt_verify_with_key(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk,
-					   oidc_jose_error_t *err) {
+static apr_byte_t oidc_jwt_verify_with_key(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk, oidc_jose_error_t *err) {
 	cjose_err cjose_err;
 	apr_byte_t rc = cjose_jws_verify(jwt->cjose_jws, jwk->cjose_jwk, &cjose_err);
 	if (rc == FALSE) {

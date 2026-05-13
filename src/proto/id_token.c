@@ -136,8 +136,7 @@ static apr_byte_t oidc_proto_idtoken_validate_aud_string(request_rec *r, oidc_pr
 		/* a single-valued audience must be equal to our client_id */
 		if (_oidc_strcmp(aud_value, oidc_cfg_provider_client_id_get(provider)) == 0)
 			return TRUE;
-		oidc_error(r,
-			   "the configured client_id (%s) did not match the \"%s\" claim value (%s) in the id_token",
+		oidc_error(r, "the configured client_id (%s) did not match the \"%s\" claim value (%s) in the id_token",
 			   oidc_cfg_provider_client_id_get(provider), OIDC_CLAIM_AUD, aud_value);
 		return FALSE;
 	}

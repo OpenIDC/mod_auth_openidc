@@ -69,8 +69,8 @@ static void *oidc_cache_memcache_cfg_create(apr_pool_t *pool) {
 /*
  * parse a single "host[:port]" entry and register it with the memcache context
  */
-static int oidc_cache_memcache_add_server(server_rec *s, apr_pool_t *p, oidc_cache_cfg_memcache_t *context,
-					  char *split, apr_uint32_t min, apr_uint32_t smax, apr_uint32_t hmax,
+static int oidc_cache_memcache_add_server(server_rec *s, apr_pool_t *p, oidc_cache_cfg_memcache_t *context, char *split,
+					  apr_uint32_t min, apr_uint32_t smax, apr_uint32_t hmax,
 					  apr_interval_time_t ttl) {
 	apr_memcache_server_t *st;
 	char *host_str;

@@ -52,8 +52,8 @@
 /*
  * see if we can and need to refresh the access token
  */
-static int oidc_info_refresh_access_token(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, const char *s_interval,
-					  apr_byte_t *needs_save) {
+static int oidc_info_refresh_access_token(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
+					  const char *s_interval, apr_byte_t *needs_save) {
 	apr_time_t t_interval = -1;
 	apr_time_t last_refresh = 0;
 	oidc_provider_t *provider = NULL;

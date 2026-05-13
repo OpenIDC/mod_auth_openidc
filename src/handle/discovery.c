@@ -460,10 +460,11 @@ static int oidc_discovery_response_authenticate(request_rec *r, oidc_cfg_t *c, c
 	/* try and get metadata from the metadata directories for the selected OP */
 	oidc_provider_t *provider = NULL;
 	if ((oidc_metadata_get(r, c, issuer, &provider, allow_dyn_reg) == FALSE) || (provider == NULL))
-		return oidc_util_html_send_error(r, "Invalid Request",
-						 "Could not find valid provider metadata for the selected OpenID Connect "
-						 "provider; contact the administrator",
-						 HTTP_NOT_FOUND);
+		return oidc_util_html_send_error(
+		    r, "Invalid Request",
+		    "Could not find valid provider metadata for the selected OpenID Connect "
+		    "provider; contact the administrator",
+		    HTTP_NOT_FOUND);
 
 	if (oidc_util_url_has_parameter(r, "test-jwks-uri")) {
 		json_t *j_jwks = NULL;

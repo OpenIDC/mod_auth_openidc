@@ -368,9 +368,8 @@ static void oidc_userinfo_pass_as_jwt(request_rec *r, oidc_cfg_t *cfg, oidc_sess
 
 	const char *s_userinfo_jwt = oidc_session_get_userinfo_jwt(r, session);
 	if (s_userinfo_jwt == NULL) {
-		oidc_debug(r,
-			   "configured to pass userinfo in a JWT, but no such JWT was found in the session "
-			   "(probably no such JWT was returned from the userinfo endpoint)");
+		oidc_debug(r, "configured to pass userinfo in a JWT, but no such JWT was found in the session "
+			      "(probably no such JWT was returned from the userinfo endpoint)");
 		return;
 	}
 

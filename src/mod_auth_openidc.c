@@ -192,8 +192,8 @@ void oidc_strip_cookies(request_rec *r) {
 		if (matched != NULL) {
 			oidc_debug(r, "stripping: %s", matched);
 		} else {
-			result = result ? apr_psprintf(r->pool, "%s%s %s", result, OIDC_STR_SEMI_COLON, cookie)
-					: cookie;
+			result =
+			    result ? apr_psprintf(r->pool, "%s%s %s", result, OIDC_STR_SEMI_COLON, cookie) : cookie;
 		}
 
 		cookie = apr_strtok(NULL, OIDC_STR_SEMI_COLON, &ctx);
@@ -927,9 +927,9 @@ static apr_byte_t oidc_validate_redirect_url_relative(request_rec *r, const char
 	if (_oidc_strstr(url, "/") != url)
 		return oidc_validate_redirect_url_fail(
 		    r, err_str, err_desc, "Malformed URL",
-		    apr_psprintf(r->pool,
-				 "No hostname was parsed and it does not seem to be relative, i.e starting with '/': %s",
-				 url));
+		    apr_psprintf(
+			r->pool,
+			"No hostname was parsed and it does not seem to be relative, i.e starting with '/': %s", url));
 	if (_oidc_strstr(url, "//") == url)
 		return oidc_validate_redirect_url_fail(
 		    r, err_str, err_desc, "Malformed URL",

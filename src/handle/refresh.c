@@ -262,8 +262,7 @@ static apr_byte_t oidc_refresh_token_grant_obtain_tokens(request_rec *r, oidc_cf
  * when no fixed max-duration is configured and return it to the caller
  */
 static void oidc_refresh_token_grant_apply_id_token(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
-						    oidc_provider_t *provider, char *s_id_token,
-						    char **new_id_token) {
+						    oidc_provider_t *provider, char *s_id_token, char **new_id_token) {
 
 	oidc_jwt_t *id_token_jwt = NULL;
 	oidc_jose_error_t err;

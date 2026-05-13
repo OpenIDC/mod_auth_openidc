@@ -557,8 +557,8 @@ static char *oidc_logout_build_op_request(request_rec *r, oidc_cfg_t *c, oidc_se
 		    apr_psprintf(r->pool, "post_logout_redirect_uri=%s", oidc_http_url_encode(r, post_logout_url)));
 
 	if (oidc_cfg_provider_logout_request_params_get(provider) != NULL)
-		s_logout_request = oidc_logout_url_append(r, s_logout_request,
-							  oidc_cfg_provider_logout_request_params_get(provider));
+		s_logout_request =
+		    oidc_logout_url_append(r, s_logout_request, oidc_cfg_provider_logout_request_params_get(provider));
 
 	// char *state = NULL;
 	// oidc_proto_generate_nonce(r, &state, 8);

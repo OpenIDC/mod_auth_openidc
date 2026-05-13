@@ -372,8 +372,7 @@ static oidc_jwk_t *oidc_request_uri_request_object_signing_jwk_get(request_rec *
 	switch (kty) {
 	case CJOSE_JWK_KTY_RSA:
 	case CJOSE_JWK_KTY_EC:
-		if ((oidc_cfg_provider_client_keys_get(provider) == NULL) &&
-		    (oidc_cfg_private_keys_get(cfg) == NULL)) {
+		if ((oidc_cfg_provider_client_keys_get(provider) == NULL) && (oidc_cfg_private_keys_get(cfg) == NULL)) {
 			oidc_error(r, "no global or per-provider private keys have been configured to use for "
 				      "request object signing");
 			return NULL;
@@ -659,8 +658,8 @@ static void oidc_proto_request_auth_scope_set(request_rec *r, struct oidc_provid
 /*
  * assemble all parameters that go into the authentication request
  */
-static void oidc_proto_request_auth_params_set(request_rec *r, struct oidc_provider_t *provider,
-					       const char *login_hint, const char *redirect_uri, const char *state,
+static void oidc_proto_request_auth_params_set(request_rec *r, struct oidc_provider_t *provider, const char *login_hint,
+					       const char *redirect_uri, const char *state,
 					       oidc_proto_state_t *proto_state, const char *id_token_hint,
 					       const char *code_challenge, const char *auth_request_params,
 					       const char *path_scope, apr_table_t *params) {
