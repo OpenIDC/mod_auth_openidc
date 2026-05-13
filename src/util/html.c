@@ -82,89 +82,62 @@ char *oidc_util_html_escape(apr_pool_t *pool, const char *s) {
 }
 
 /*
+ * return the JavaScript escape sequence for a character, or NULL if the character passes through unchanged
+ */
+static const char *oidc_util_html_javascript_escape_char(char c) {
+	switch (c) {
+	case '\'':
+		return "\\'";
+	case '"':
+		return "\\\"";
+	case '\\':
+		return "\\\\";
+	case '/':
+		return "\\/";
+	case 0x0D:
+		return "\\r";
+	case 0x0A:
+		return "\\n";
+	case '<':
+		return "\\x3c";
+	case '>':
+		return "\\x3e";
+	default:
+		return NULL;
+	}
+}
+
+/*
  * JavaScript escape a string
  */
 char *oidc_util_html_javascript_escape(apr_pool_t *pool, const char *s) {
 	const char *cp = NULL;
-	char *output = NULL;
 	int outputlen = 0;
 	int i = 0;
 
-	if (s == NULL) {
+	if (s == NULL)
 		return NULL;
+
+	/* first pass: compute the length of the escaped output */
+	for (cp = s; *cp; cp++) {
+		const char *esc = oidc_util_html_javascript_escape_char(*cp);
+		outputlen += esc ? (int)_oidc_strlen(esc) : 1;
 	}
 
-	outputlen = 0;
+	/* second pass: write the escaped output, preserving the bounds-checked write idiom */
+	char *output = apr_pcalloc(pool, outputlen + 1);
 	for (cp = s; *cp; cp++) {
-		switch (*cp) {
-		case '\'':
-		case '"':
-		case '\\':
-		case '/':
-		case 0x0D:
-		case 0x0A:
-			outputlen += 2;
-			break;
-		case '<':
-		case '>':
-			outputlen += 4;
-			break;
-		default:
-			outputlen += 1;
-			break;
-		}
-	}
-
-	i = 0;
-	output = apr_pcalloc(pool, outputlen + 1);
-	for (cp = s; *cp; cp++) {
-		switch (*cp) {
-		case '\'':
-			if (i <= outputlen - 2)
-				(void)_oidc_strcpy(&output[i], "\\'");
-			i += 2;
-			break;
-		case '"':
-			if (i <= outputlen - 2)
-				(void)_oidc_strcpy(&output[i], "\\\"");
-			i += 2;
-			break;
-		case '\\':
-			if (i <= outputlen - 2)
-				(void)_oidc_strcpy(&output[i], "\\\\");
-			i += 2;
-			break;
-		case '/':
-			if (i <= outputlen - 2)
-				(void)_oidc_strcpy(&output[i], "\\/");
-			i += 2;
-			break;
-		case 0x0D:
-			if (i <= outputlen - 2)
-				(void)_oidc_strcpy(&output[i], "\\r");
-			i += 2;
-			break;
-		case 0x0A:
-			if (i <= outputlen - 2)
-				(void)_oidc_strcpy(&output[i], "\\n");
-			i += 2;
-			break;
-		case '<':
-			if (i <= outputlen - 4)
-				(void)_oidc_strcpy(&output[i], "\\x3c");
-			i += 4;
-			break;
-		case '>':
-			if (i <= outputlen - 4)
-				(void)_oidc_strcpy(&output[i], "\\x3e");
-			i += 4;
-			break;
-		default:
+		const char *esc = oidc_util_html_javascript_escape_char(*cp);
+		if (esc == NULL) {
 			if (i <= outputlen - 1)
 				output[i] = *cp;
 			i += 1;
-			break;
+			continue;
 		}
+		int n = (int)_oidc_strlen(esc);
+		if (i <= outputlen - n)
+			(void)_oidc_strcpy(&output[i], esc);
+		i += n;
 	}
 	output[i] = '\0';
 	return output;
