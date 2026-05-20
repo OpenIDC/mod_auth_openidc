@@ -573,7 +573,7 @@ static int oidc_response_finish_success(request_rec *r, oidc_cfg_t *c, const cha
 		if (oidc_cfg_post_restore_template_get(c) != NULL)
 			return oidc_util_html_send_in_template(
 			    r, oidc_cfg_post_restore_template_get(c), &_oidc_response_post_restore_template_contents,
-			    original_url, OIDC_POST_PRESERVE_ESCAPE_JAVASCRIPT, "", OIDC_POST_PRESERVE_ESCAPE_NONE);
+			    original_url, OIDC_POST_PRESERVE_ESCAPE_JAVASCRIPT, NULL, OIDC_POST_PRESERVE_ESCAPE_NONE);
 		return oidc_response_post_preserved_restore(r, original_url);
 	}
 

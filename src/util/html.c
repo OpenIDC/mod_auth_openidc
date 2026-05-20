@@ -290,7 +290,7 @@ int oidc_util_html_send_in_template(request_rec *r, const char *filename, char *
 		}
 	}
 	if (*static_template_content) {
-		if (oidc_util_template_format_valid(*static_template_content, 2) == FALSE) {
+		if (oidc_util_template_format_valid(*static_template_content, (arg2 == NULL) ? 1 : 2) == FALSE) {
 			oidc_error(r,
 				   "template %s contains format specifiers other than two \"%%s\" placeholders; "
 				   "refusing to render",
@@ -298,7 +298,7 @@ int oidc_util_html_send_in_template(request_rec *r, const char *filename, char *
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 		html = apr_psprintf(r->pool, *static_template_content, oidc_util_template_escape(r, arg1, arg1_esc),
-				    oidc_util_template_escape(r, arg2, arg2_esc));
+				    (arg2 != NULL) ? oidc_util_template_escape(r, arg2, arg2_esc) : "");
 		rc = oidc_util_http_content_prep(r, html, _oidc_strlen(html), OIDC_HTTP_CONTENT_TYPE_TEXT_HTML);
 	}
 	return rc;
