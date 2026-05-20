@@ -181,8 +181,18 @@ int oidc_util_html_send(request_rec *r, const char *title, const char *html_head
 		     "  </body>\n"
 		     "</html>\n";
 
+	/*
+	 * on_load is rendered as the value of an HTML onload="..." attribute. The
+	 * caller is expected to pass trusted JavaScript (a function call literal),
+	 * but HTML-escape it as defense-in-depth: HTML entities in attribute
+	 * values are decoded by the browser before the JS is executed, so
+	 * legitimate values keep working while a stray quote can't break out of
+	 * the attribute into the surrounding markup.
+	 */
 	html = apr_psprintf(r->pool, html, title ? oidc_util_html_escape(r->pool, title) : "",
-			    html_head ? html_head : "", on_load ? apr_psprintf(r->pool, " onload=\"%s\"", on_load) : "",
+			    html_head ? html_head : "",
+			    on_load ? apr_psprintf(r->pool, " onload=\"%s\"", oidc_util_html_escape(r->pool, on_load))
+				    : "",
 			    html_body ? html_body : "<p></p>");
 
 	return oidc_util_http_send(r, html, _oidc_strlen(html), OIDC_HTTP_CONTENT_TYPE_TEXT_HTML, status_code);
