@@ -142,6 +142,7 @@ apr_byte_t oidc_util_spaced_string_equals(apr_pool_t *pool, const char *a, const
 apr_byte_t oidc_util_spaced_string_contains(apr_pool_t *pool, const char *str, const char *match);
 void oidc_util_table_add_query_encoded_params(apr_pool_t *pool, apr_table_t *table, const char *params);
 apr_byte_t oidc_util_cookie_domain_valid(const char *hostname, const char *cookie_domain);
+apr_byte_t oidc_util_hostname_endswith(const char *hostname, const char *suffix);
 const char *oidc_util_strcasestr(const char *s1, const char *s2);
 void oidc_util_set_trace_parent(request_rec *r, oidc_cfg_t *c, const char *span);
 void oidc_util_apr_hash_clear(apr_hash_t *ht);

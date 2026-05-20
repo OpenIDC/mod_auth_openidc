@@ -1,3 +1,9 @@
+05/20/2026
+- security: harden hostname suffix matching used for target_link_uri and cookie
+  domain checks; the previous strcasestr-based pattern accepted hosts that
+  share a suffix without a dot boundary (e.g. evil-example.com matching
+  example.com); replace with a proper subdomain check
+
 05/13/2026
 - code: re-factor functions to reduce cognitive complexity
 - security: fix 3 low-risk (insider-admin-based) security vulnerabilities

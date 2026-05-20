@@ -68,17 +68,14 @@ apr_byte_t oidc_request_check_cookie_domain(request_rec *r, oidc_cfg_t *c, const
 	}
 
 	if (oidc_cfg_cookie_domain_get(c) == NULL) {
-		if (_oidc_strnatcasecmp(o_uri.hostname, r_uri.hostname) != 0) {
-			const char *p = oidc_util_strcasestr(o_uri.hostname, r_uri.hostname);
-			if ((p == NULL) || (_oidc_strnatcasecmp(r_uri.hostname, p) != 0)) {
-				oidc_error(r,
-					   "the URL hostname (%s) of the configured " OIDCRedirectURI
-					   " does not match the URL hostname of the URL being accessed (%s): the "
-					   "\"state\" and \"session\" cookies will not be shared between the two!",
-					   r_uri.hostname, o_uri.hostname);
-				OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_REQUEST_ERROR_URL);
-				return FALSE;
-			}
+		if (oidc_util_hostname_endswith(o_uri.hostname, r_uri.hostname) == FALSE) {
+			oidc_error(r,
+				   "the URL hostname (%s) of the configured " OIDCRedirectURI
+				   " does not match the URL hostname of the URL being accessed (%s): the "
+				   "\"state\" and \"session\" cookies will not be shared between the two!",
+				   r_uri.hostname, o_uri.hostname);
+			OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_REQUEST_ERROR_URL);
+			return FALSE;
 		}
 	} else {
 		if (!oidc_util_cookie_domain_valid(o_uri.hostname, oidc_cfg_cookie_domain_get(c))) {

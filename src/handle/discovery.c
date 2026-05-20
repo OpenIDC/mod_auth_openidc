@@ -245,23 +245,19 @@ static int oidc_discovery_target_link_uri_match(request_rec *r, oidc_cfg_t *cfg,
 	apr_uri_parse(r->pool, oidc_util_url_redirect_uri(r, cfg), &r_uri);
 
 	if (oidc_cfg_cookie_domain_get(cfg) == NULL) {
-		/* cookie_domain set: see if the target_link_uri matches the redirect_uri host (because the session
-		 * cookie will be set host-wide) */
-		if (_oidc_strnatcasecmp(o_uri.hostname, r_uri.hostname) != 0) {
-			const char *p = oidc_util_strcasestr(o_uri.hostname, r_uri.hostname);
-			if ((p == NULL) || (_oidc_strnatcasecmp(r_uri.hostname, p) != 0)) {
-				oidc_error(r,
-					   "the URL hostname (%s) of the configured " OIDCRedirectURI
-					   " does not match the URL hostname of the \"target_link_uri\" (%s): aborting "
-					   "to prevent an open redirect.",
-					   r_uri.hostname, o_uri.hostname);
-				return FALSE;
-			}
+		/* no cookie_domain set: target_link_uri host must be equal to, or a subdomain of, the redirect_uri host
+		 * (because that's where the session cookie will be set) */
+		if (oidc_util_hostname_endswith(o_uri.hostname, r_uri.hostname) == FALSE) {
+			oidc_error(r,
+				   "the URL hostname (%s) of the configured " OIDCRedirectURI
+				   " does not match the URL hostname of the \"target_link_uri\" (%s): aborting "
+				   "to prevent an open redirect.",
+				   r_uri.hostname, o_uri.hostname);
+			return FALSE;
 		}
 	} else {
 		/* cookie_domain set: see if the target_link_uri is within the cookie_domain */
-		const char *p = oidc_util_strcasestr(o_uri.hostname, oidc_cfg_cookie_domain_get(cfg));
-		if ((p == NULL) || (_oidc_strnatcasecmp(oidc_cfg_cookie_domain_get(cfg), p) != 0)) {
+		if (oidc_util_cookie_domain_valid(o_uri.hostname, oidc_cfg_cookie_domain_get(cfg)) == FALSE) {
 			oidc_error(r,
 				   "the domain (%s) configured in " OIDCCookieDomain
 				   " does not match the URL hostname (%s) of the \"target_link_uri\" (%s): aborting to "

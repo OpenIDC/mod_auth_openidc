@@ -435,21 +435,37 @@ apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char
 }
 
 /*
+ * return TRUE when "hostname" is equal to "suffix" or is a proper subdomain of it,
+ * i.e. the part of "hostname" that precedes "suffix" ends with a dot; comparison
+ * is case-insensitive
+ */
+apr_byte_t oidc_util_hostname_endswith(const char *hostname, const char *suffix) {
+	size_t hlen, slen;
+	const char *tail = NULL;
+	if ((hostname == NULL) || (suffix == NULL))
+		return FALSE;
+	hlen = _oidc_strlen(hostname);
+	slen = _oidc_strlen(suffix);
+	if ((slen == 0) || (hlen < slen))
+		return FALSE;
+	tail = hostname + (hlen - slen);
+	if (_oidc_strnatcasecmp(tail, suffix) != 0)
+		return FALSE;
+	return ((tail == hostname) || (*(tail - 1) == '.')) ? TRUE : FALSE;
+}
+
+/*
  * check if the provided cookie domain value is valid
  */
 apr_byte_t oidc_util_cookie_domain_valid(const char *hostname, const char *cookie_domain) {
-	const char *p = NULL;
 	const char *check_cookie = cookie_domain;
+	if (check_cookie == NULL)
+		return FALSE;
 	// Skip past the first char of a cookie_domain that starts
 	// with a ".", ASCII 46
 	if (check_cookie[0] == 46)
 		check_cookie++;
-	p = oidc_util_strcasestr(hostname, check_cookie);
-
-	if ((p == NULL) || (_oidc_strnatcasecmp(check_cookie, p) != 0)) {
-		return FALSE;
-	}
-	return TRUE;
+	return oidc_util_hostname_endswith(hostname, check_cookie);
 }
 
 #define OIDC_TP_TRACE_ID_LEN 16
