@@ -81,6 +81,18 @@
 static inline size_t _oidc_strlen(const char *s) {
 	return (s ? strlen(s) : 0);
 }
+/*
+ * NULL-safe string comparison helpers.
+ *
+ * IMPORTANT: when either argument is NULL these intentionally return a
+ * non-zero value (-1) -- even when both are NULL. This is a defensive
+ * choice for the security-critical callers that use patterns like
+ *   if (_oidc_strcmp(calculated_state, received_state) != 0) { reject; }
+ * If two NULLs compared as "equal" (0), a missing state/nonce/CSRF token
+ * pair could silently slip past the check. Do not "fix" this to return 0
+ * for two NULL inputs without auditing every caller; the "<rejected when
+ * either side is missing>" semantics are load-bearing.
+ */
 static inline int _oidc_strcmp(const char *a, const char *b) {
 	return ((a && b) ? apr_strnatcmp(a, b) : -1);
 }
