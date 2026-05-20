@@ -261,7 +261,8 @@ static apr_byte_t oidc_proto_validate_hash(request_rec *r, const char *alg, cons
 	oidc_debug(r, "hash_len=%u, decoded_len=%d, calc_len=%u", hash_len, decoded_len, calc_len);
 
 	/* compare the calculated hash against the provided hash */
-	if (((unsigned int)decoded_len != hash_len) || (calc_len < hash_len) || (memcmp(decoded, calc, hash_len) != 0)) {
+	if (((unsigned int)decoded_len != hash_len) || (calc_len < hash_len) ||
+	    (memcmp(decoded, calc, hash_len) != 0)) {
 		oidc_error(r, "provided \"%s\" hash value (%s) does not match the calculated value", type, hash);
 		return FALSE;
 	}

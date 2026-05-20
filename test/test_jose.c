@@ -172,7 +172,7 @@ START_TEST(test_jose_jwk_and_json_and_copy_lists) {
 	oidc_jose_error_t err;
 	const char *src_file = __FILE__;
 	char *dir = NULL;
-	char *slash = strrchr(src_file, '/');
+	const char *slash = strrchr(src_file, '/');
 	if (slash)
 		dir = apr_pstrndup(pool, src_file, (int)(slash - src_file));
 	else
@@ -291,7 +291,7 @@ START_TEST(test_jwt_sign_verify_and_encrypt_decrypt) {
 
 	const char *src_file = __FILE__;
 	char *dir = NULL;
-	char *slash = strrchr(src_file, '/');
+	const char *slash = strrchr(src_file, '/');
 	if (slash)
 		dir = apr_pstrndup(pool, src_file, (int)(slash - src_file));
 	else
@@ -357,7 +357,7 @@ START_TEST(test_jwk_json_parse_and_jwks) {
 	oidc_jose_error_t err;
 	const char *src_file = __FILE__;
 	char *dir = NULL;
-	char *slash = strrchr(src_file, '/');
+	const char *slash = strrchr(src_file, '/');
 	if (slash)
 		dir = apr_pstrndup(pool, src_file, (int)(slash - src_file));
 	else

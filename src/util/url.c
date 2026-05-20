@@ -182,11 +182,11 @@ const char *oidc_util_url_cur_host(request_rec *r, oidc_hdr_x_forwarded_t x_forw
 		host_str = apr_pstrdup(r->pool, host_str);
 
 		if (host_str[0] == '[') {
-			p = strchr(host_str, ']');
+			p = strchr((char *)host_str, ']');
 			if (p)
 				p = strchr(p, OIDC_CHAR_COLON);
 		} else {
-			p = strchr(host_str, OIDC_CHAR_COLON);
+			p = strchr((char *)host_str, OIDC_CHAR_COLON);
 		}
 
 		if (p != NULL)
