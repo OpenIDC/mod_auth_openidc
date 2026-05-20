@@ -79,11 +79,13 @@ int oidc_util_base64url_encode(request_rec *r, char **dst, const char *src, int 
 }
 
 /*
- * parse a base64 encoded binary value from the provided string
+ * parse a base64 encoded binary value from the provided string;
+ * returns NULL on success and writes the decoded bytes and length into
+ * *output / *output_len, or returns an error string on failure
  */
 char *oidc_util_base64_decode(apr_pool_t *pool, const char *input, char **output, int *output_len) {
-	if ((input == NULL) || (output == NULL) || (output_len == 0))
-		return apr_psprintf(pool, "base64-decoding of failed: invalid parameters");
+	if ((input == NULL) || (output == NULL) || (output_len == NULL))
+		return apr_psprintf(pool, "base64-decoding failed: invalid parameters");
 
 	*output = apr_pcalloc(pool, apr_base64_decode_len(input));
 	*output_len = apr_base64_decode(*output, input);
@@ -95,7 +97,11 @@ char *oidc_util_base64_decode(apr_pool_t *pool, const char *input, char **output
 }
 
 /*
- * base64url decode a string
+ * base64url decode a string; returns the decoded length on success, or a
+ * non-positive value on failure (-1 for invalid input, 0 for a malformed
+ * padding length). Callers MUST store the result in a signed integer type:
+ * an unsigned int will turn the "<= 0" guard into "== 0" and silently let a
+ * -1 error slip through (see commit dfa89ffb for a prior such bug).
  */
 int oidc_util_base64url_decode(apr_pool_t *pool, char **dst, const char *src) {
 	if (src == NULL) {
