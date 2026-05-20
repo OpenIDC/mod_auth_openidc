@@ -1022,6 +1022,8 @@ end:
 }
 
 #define OIDC_CJOSE_UNCOMPRESS_CHUNK 8192
+/* absolute cap on the inflated output to prevent decompression bombs */
+#define OIDC_CJOSE_UNCOMPRESS_MAX (10 * 1024 * 1024)
 
 /*
  * inflate using zlib
@@ -1049,6 +1051,11 @@ static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input,
 
 	while (status == Z_OK) {
 		if (zlib.total_out >= OIDC_CJOSE_UNCOMPRESS_CHUNK) {
+			if (len + OIDC_CJOSE_UNCOMPRESS_CHUNK > OIDC_CJOSE_UNCOMPRESS_MAX) {
+				oidc_jose_error(err, "inflate() output would exceed %d bytes",
+						OIDC_CJOSE_UNCOMPRESS_MAX);
+				goto end;
+			}
 			tmp = apr_pcalloc(pool, len + OIDC_CJOSE_UNCOMPRESS_CHUNK);
 			_oidc_memcpy(tmp, buf, len);
 			len += OIDC_CJOSE_UNCOMPRESS_CHUNK;

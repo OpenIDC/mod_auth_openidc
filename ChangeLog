@@ -1,4 +1,7 @@
 05/20/2026
+- security: cap zlib-inflated JWE payload size at 10MB in
+  oidc_jose_zlib_uncompress to prevent decompression-bomb style memory
+  exhaustion via crafted compressed JWTs
 - security: restrict the session_management iframe's login_uri parameter to
   the current request host (restrict_to_host=TRUE); previously, when
   OIDCRedirectURLsAllowed was unset the URL host was not checked at all,
