@@ -422,12 +422,18 @@ static char *oidc_cfg_parse_base64url(apr_pool_t *pool, const char *input, char 
  * parse a hexadecimal encoded binary value from the provided string
  */
 static char *oidc_cfg_parse_hex(apr_pool_t *pool, const char *input, char **output, int *output_len) {
-	*output_len = _oidc_strlen(input) / 2;
+	size_t input_len = _oidc_strlen(input);
+	if ((input_len % 2) != 0)
+		return apr_psprintf(pool, "hex-decoding failed: input length (%" APR_SIZE_T_FMT ") is not even",
+				    input_len);
+	*output_len = input_len / 2;
 	const char *pos = input;
 	unsigned char *val = apr_pcalloc(pool, *output_len);
 	size_t count = 0;
-	for (count = 0; (count < (*output_len) / sizeof(unsigned char)) && (pos != NULL); count++) {
-		sscanf(pos, "%2hhx", &val[count]);
+	for (count = 0; count < (*output_len) / sizeof(unsigned char); count++) {
+		if (sscanf(pos, "%2hhx", &val[count]) != 1)
+			return apr_psprintf(pool, "hex-decoding failed at offset %" APR_SIZE_T_FMT ": non-hex input",
+					    count * 2);
 		pos += 2;
 	}
 	*output = (char *)val;
