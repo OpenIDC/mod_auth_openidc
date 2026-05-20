@@ -186,7 +186,8 @@ static int oidc_info_send_response(request_rec *r, json_t *json, const char *s_f
 	}
 
 	r_value = oidc_util_json_encode(r->pool, json, JSON_PRESERVE_ORDER | JSON_INDENT(2));
-	return oidc_util_html_send(r, "Session Info", NULL, NULL, apr_psprintf(r->pool, "<pre>%s</pre>", r_value), OK);
+	return oidc_util_html_send(r, "Session Info", NULL, NULL,
+				   apr_psprintf(r->pool, "<pre>%s</pre>", oidc_util_html_escape(r->pool, r_value)), OK);
 }
 
 /*
