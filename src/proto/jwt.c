@@ -161,6 +161,12 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t *jw
 				   jwt->header.alg, alg);
 			return FALSE;
 		}
+	} else if ((jwt->header.alg == NULL) || (_oidc_strcmp(jwt->header.alg, "none") == 0)) {
+		/* without an admin-configured algorithm to pin against, refuse the
+		 * unsigned "none" alg outright; cjose would also fail to find a
+		 * matching key, but reject early so the failure is unambiguous */
+		oidc_error(r, "no expected signing algorithm configured and JWT alg is \"none\" or unset: refusing");
+		return FALSE;
 	}
 
 	dynamic_keys = apr_hash_make(r->pool);
