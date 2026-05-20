@@ -533,7 +533,7 @@ static authz_status oidc_authz_24_unauthorized_user(request_rec *r) {
 	case OIDC_UNAUTZ_RETURN302:
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_302);
 		html_head = apr_psprintf(r->pool, "<meta http-equiv=\"refresh\" content=\"0; url=%s\">",
-					 oidc_cfg_dir_unauthz_arg_get(r));
+					 oidc_util_html_escape(r->pool, oidc_cfg_dir_unauthz_arg_get(r)));
 		oidc_util_html_send(r, "Authorization Error Redirect", html_head, NULL, NULL, HTTP_UNAUTHORIZED);
 		r->header_only = 1;
 		return AUTHZ_DENIED;
