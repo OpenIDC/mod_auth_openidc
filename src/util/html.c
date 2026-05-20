@@ -70,8 +70,8 @@ static const char *oidc_util_html_escape_char(char c) {
  */
 char *oidc_util_html_escape(apr_pool_t *pool, const char *s) {
 	const char *cp = NULL;
-	int outputlen = 0;
-	int i = 0;
+	size_t outputlen = 0;
+	size_t i = 0;
 
 	if (s == NULL)
 		s = "";
@@ -79,7 +79,7 @@ char *oidc_util_html_escape(apr_pool_t *pool, const char *s) {
 	/* first pass: compute the length of the escaped output */
 	for (cp = s; *cp; cp++) {
 		const char *esc = oidc_util_html_escape_char(*cp);
-		outputlen += esc ? (int)_oidc_strlen(esc) : 1;
+		outputlen += esc ? _oidc_strlen(esc) : 1;
 	}
 
 	/* second pass: write the escaped output, preserving the bounds-checked write idiom */
@@ -87,13 +87,13 @@ char *oidc_util_html_escape(apr_pool_t *pool, const char *s) {
 	for (cp = s; *cp; cp++) {
 		const char *esc = oidc_util_html_escape_char(*cp);
 		if (esc == NULL) {
-			if (i <= outputlen - 1)
+			if (i + 1 <= outputlen)
 				output[i] = *cp;
 			i += 1;
 			continue;
 		}
-		int n = (int)_oidc_strlen(esc);
-		if (i <= outputlen - n)
+		size_t n = _oidc_strlen(esc);
+		if (i + n <= outputlen)
 			(void)_oidc_strcpy(&output[i], esc);
 		i += n;
 	}
@@ -132,8 +132,8 @@ static const char *oidc_util_html_javascript_escape_char(char c) {
  */
 char *oidc_util_html_javascript_escape(apr_pool_t *pool, const char *s) {
 	const char *cp = NULL;
-	int outputlen = 0;
-	int i = 0;
+	size_t outputlen = 0;
+	size_t i = 0;
 
 	if (s == NULL)
 		return NULL;
@@ -141,7 +141,7 @@ char *oidc_util_html_javascript_escape(apr_pool_t *pool, const char *s) {
 	/* first pass: compute the length of the escaped output */
 	for (cp = s; *cp; cp++) {
 		const char *esc = oidc_util_html_javascript_escape_char(*cp);
-		outputlen += esc ? (int)_oidc_strlen(esc) : 1;
+		outputlen += esc ? _oidc_strlen(esc) : 1;
 	}
 
 	/* second pass: write the escaped output, preserving the bounds-checked write idiom */
@@ -149,13 +149,13 @@ char *oidc_util_html_javascript_escape(apr_pool_t *pool, const char *s) {
 	for (cp = s; *cp; cp++) {
 		const char *esc = oidc_util_html_javascript_escape_char(*cp);
 		if (esc == NULL) {
-			if (i <= outputlen - 1)
+			if (i + 1 <= outputlen)
 				output[i] = *cp;
 			i += 1;
 			continue;
 		}
-		int n = (int)_oidc_strlen(esc);
-		if (i <= outputlen - n)
+		size_t n = _oidc_strlen(esc);
+		if (i + n <= outputlen)
 			(void)_oidc_strcpy(&output[i], esc);
 		i += n;
 	}
