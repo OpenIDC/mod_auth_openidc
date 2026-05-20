@@ -123,8 +123,9 @@ static apr_byte_t _oidc_util_rand_bytes(request_rec *r, unsigned char *buf, apr_
  * generate a random integer value in the specified modulo range
  */
 unsigned int oidc_util_rand_int(unsigned int mod) {
-	unsigned int v;
-	_oidc_util_rand((unsigned char *)&v, sizeof(v));
+	unsigned int v = 0;
+	if (_oidc_util_rand((unsigned char *)&v, sizeof(v)) != TRUE)
+		return 0;
 	return v % mod;
 }
 
