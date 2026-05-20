@@ -1,4 +1,8 @@
 05/20/2026
+- security: restrict the session_management iframe's login_uri parameter to
+  the current request host (restrict_to_host=TRUE); previously, when
+  OIDCRedirectURLsAllowed was unset the URL host was not checked at all,
+  allowing an open redirect via window.top.location.replace
 - security: harden hostname suffix matching used for target_link_uri and cookie
   domain checks; the previous strcasestr-based pattern accepted hosts that
   share a suffix without a dot boundary (e.g. evil-example.com matching
