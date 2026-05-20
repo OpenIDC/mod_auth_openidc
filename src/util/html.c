@@ -244,6 +244,29 @@ static char *oidc_util_template_escape(request_rec *r, const char *arg, int esca
 }
 
 /*
+ * verify that a template contains only safe printf-style specifiers (%s and
+ * %%) and exactly the expected number of %s placeholders; reject anything
+ * else to avoid passing surprising specifiers (%n, %x, ...) to apr_psprintf
+ */
+static apr_byte_t oidc_util_template_format_valid(const char *tpl, int expected_s_count) {
+	int s_count = 0;
+	const char *p;
+	for (p = tpl; *p; p++) {
+		if (*p != '%')
+			continue;
+		p++;
+		if (*p == '%')
+			continue;
+		if (*p == 's') {
+			s_count++;
+			continue;
+		}
+		return FALSE;
+	}
+	return (s_count == expected_s_count) ? TRUE : FALSE;
+}
+
+/*
  * fill and send a HTML template
  */
 int oidc_util_html_send_in_template(request_rec *r, const char *filename, char **static_template_content,
@@ -258,6 +281,13 @@ int oidc_util_html_send_in_template(request_rec *r, const char *filename, char *
 		}
 	}
 	if (*static_template_content) {
+		if (oidc_util_template_format_valid(*static_template_content, 2) == FALSE) {
+			oidc_error(r,
+				   "template %s contains format specifiers other than two \"%%s\" placeholders; "
+				   "refusing to render",
+				   filename);
+			return HTTP_INTERNAL_SERVER_ERROR;
+		}
 		html = apr_psprintf(r->pool, *static_template_content, oidc_util_template_escape(r, arg1, arg1_esc),
 				    oidc_util_template_escape(r, arg2, arg2_esc));
 		rc = oidc_util_http_content_prep(r, html, _oidc_strlen(html), OIDC_HTTP_CONTENT_TYPE_TEXT_HTML);
