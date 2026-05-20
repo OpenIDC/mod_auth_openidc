@@ -910,8 +910,7 @@ static apr_byte_t oidc_validate_redirect_url_host(request_rec *r, oidc_cfg_t *c,
 	/* IPv6 literals need to be wrapped in brackets to compare with the current hostname */
 	const char *url_ipv6_aware =
 	    strchr(uri->hostname, ':') ? apr_pstrcat(r->pool, "[", uri->hostname, "]", NULL) : uri->hostname;
-	if ((oidc_util_strcasestr(c_host, url_ipv6_aware) != NULL) &&
-	    (oidc_util_strcasestr(url_ipv6_aware, c_host) != NULL))
+	if (_oidc_strnatcasecmp(c_host, url_ipv6_aware) == 0)
 		return TRUE;
 	return oidc_validate_redirect_url_fail(
 	    r, err_str, err_desc, "Invalid Request",
