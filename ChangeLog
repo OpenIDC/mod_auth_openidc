@@ -10,6 +10,49 @@
   domain checks; the previous strcasestr-based pattern accepted hosts that
   share a suffix without a dot boundary (e.g. evil-example.com matching
   example.com); replace with a proper subdomain check
+- security: HTML-escape the JSON session info embedded in the <pre> block of
+  the OIDCInfoHook HTML response; JSON does not escape '<'/'>' so a claim
+  containing </pre><script>...</script> rendered as live HTML
+- security: JavaScript-escape origin, client_id, session_state and
+  redirect_uri when embedding them in the RP session-management iframe;
+  previously only login_uri was escaped, so an OP-supplied session_state
+  containing a single quote could break out of the JS string literal
+- security: reject JWT alg "none" (and a missing alg header) in
+  oidc_proto_jwt_verify when no expected signing algorithm has been
+  configured; cjose already failed key lookup for "none" but reject earlier
+  to remove ambiguity and reduce alg-confusion surface
+- code: HTML-escape the meta-refresh URL in the OIDCUnAuthzAction "302"
+  branch of oidc_authz_24_unauthorized_user (companion to the same fix in
+  the OIDC_UNAUTZ_AUTHENTICATE branch)
+- code: guard against a NULL/empty path in oidc_session_management_iframe_rp;
+  apr_uri_parse's return code is now checked and the strstr-based origin
+  computation no longer dereferences a NULL result on OP metadata with no
+  path
+- code: validate format specifiers (only %% and exactly two %s) in
+  oidc_util_html_send_in_template before passing the template through
+  apr_psprintf so a stray %n in an admin-supplied template can't crash or
+  corrupt memory
+- code: detect RNG failure in oidc_util_rand_int; previously the return
+  code of _oidc_util_rand was ignored and stack-derived bits could be
+  returned on failure
+- code: use OpenSSL CRYPTO_memcmp for at_hash/c_hash verification in
+  oidc_proto_validate_hash to remove the timing side-channel on the
+  failure path
+- code: detect sscanf failures and reject odd-length input in
+  oidc_cfg_parse_hex so a typo in a hex-encoded OIDCCryptoPassphrase
+  doesn't silently weaken the derived key
+- code: reject URLs longer than OIDC_MAX_URL_LENGTH in
+  oidc_validate_redirect_url instead of silently truncating before the
+  chars/host checks
+- code: HTML-escape the on_load argument in oidc_util_html_send so a stray
+  quote can't break out of the onload="..." attribute into surrounding
+  markup
+- code: clean up oidc_util_base64_decode (pointer-vs-int NULL check,
+  error message typo) and document the signed-int return contract of
+  oidc_util_base64url_decode
+- code: document the NULL-NULL "not equal" semantics of _oidc_strcmp and
+  _oidc_strnatcasecmp as load-bearing security behavior so a future
+  cleanup doesn't relax it without auditing every caller
 - code: fix strchr/strrchr compiler warnings
 
 05/13/2026
