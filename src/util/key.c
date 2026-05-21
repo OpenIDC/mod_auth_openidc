@@ -66,7 +66,6 @@ apr_byte_t oidc_util_key_symmetric_create(request_rec *r, const char *client_sec
 		if ((key != NULL) && (key_len > 0)) {
 			if ((r_key_len != 0) && (key_len >= r_key_len))
 				key_len = r_key_len;
-			oidc_debug(r, "key_len=%d", key_len);
 			*jwk = oidc_jwk_create_symmetric_key(r->pool, NULL, key, key_len, set_kid, &err);
 		}
 

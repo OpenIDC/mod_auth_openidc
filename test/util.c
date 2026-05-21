@@ -44,6 +44,7 @@
 #include "util.h"
 #include "cfg/cfg_int.h"
 #include "cfg/dir.h"
+#include "util/util.h"
 #include <openssl/evp.h>
 
 static apr_pool_t *pool = NULL;
@@ -116,6 +117,16 @@ static request_rec *oidc_test_request_init(apr_pool_t *pool) {
 	cfg->cache.encrypt = 1;
 	if (cfg->cache.impl->post_config(request->server->process->pconf, request->server) != OK) {
 		fprintf(stderr, "cfg->cache.impl->post_config failed!\n");
+		exit(-1);
+	}
+
+	if (oidc_cfg_dir_post_config(request->server) != OK) {
+		fprintf(stderr, "oidc_util_jwt_post_config failed!\n");
+		exit(-1);
+	}
+
+	if (oidc_util_jwt_post_config(request->server) != OK) {
+		fprintf(stderr, "oidc_util_jwt_post_config failed!\n");
 		exit(-1);
 	}
 

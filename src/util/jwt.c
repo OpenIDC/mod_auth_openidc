@@ -44,31 +44,16 @@
 #include "util/util.h"
 
 /*
- * return the serialized header part of a A256GCM encrypted JWT (input)
+ * cached serialized header part of an A256GCM "dir" encrypted JWT;
+ * populated once via oidc_util_jwt_post_config() from the (single-threaded) post-config phase,
+ * read-only after that
+ */
+static const char *_oidc_jwt_hdr_dir_a256gcm = NULL;
+
+/*
+ * return the cached serialized header part of an A256GCM "dir" encrypted JWT
  */
 static const char *oidc_util_jwt_hdr_dir_a256gcm(request_rec *r, char *input) {
-	char *compact_encoded_jwt = NULL;
-	char *p = NULL;
-	static const char *_oidc_jwt_hdr_dir_a256gcm = NULL;
-	static oidc_crypto_passphrase_t passphrase;
-
-	if (_oidc_jwt_hdr_dir_a256gcm != NULL)
-		return _oidc_jwt_hdr_dir_a256gcm;
-
-	if (input == NULL) {
-		passphrase.secret1 = "needs_non_empty_string";
-		passphrase.secret2 = NULL;
-		oidc_util_jwt_create(r, &passphrase, "some_string", &compact_encoded_jwt);
-	} else {
-		compact_encoded_jwt = input;
-	}
-
-	p = _oidc_strstr(compact_encoded_jwt, "..");
-	if (p) {
-		_oidc_jwt_hdr_dir_a256gcm = apr_pstrndup(r->server->process->pool, compact_encoded_jwt,
-							 _oidc_strlen(compact_encoded_jwt) - _oidc_strlen(p) + 2);
-		oidc_debug(r, "saved _oidc_jwt_hdr_dir_a256gcm header: %s", _oidc_jwt_hdr_dir_a256gcm);
-	}
 	return _oidc_jwt_hdr_dir_a256gcm;
 }
 
@@ -236,4 +221,37 @@ end:
 		oidc_jwk_destroy(jwk);
 
 	return rv;
+}
+
+/*
+ * compute and cache the serialized A256GCM "dir" header prefix once during the (single-threaded)
+ * post-config phase; lazy initialization from the request path is not safe under threaded MPMs because
+ * the static and the process pool it allocates from are shared across worker threads without locking
+ */
+int oidc_util_jwt_post_config(server_rec *s) {
+	request_rec r;
+	char *compact_encoded_jwt = NULL;
+	char *sep = NULL;
+	oidc_crypto_passphrase_t passphrase;
+
+	if (_oidc_jwt_hdr_dir_a256gcm != NULL)
+		return OK;
+
+	_oidc_memset(&r, 0, sizeof(request_rec));
+	r.pool = s->process->pool;
+	r.server = s;
+	r.subprocess_env = apr_table_make(r.pool, 0);
+
+	passphrase.secret1 = "needs_non_empty_string";
+	passphrase.secret2 = NULL;
+
+	if (oidc_util_jwt_create(&r, &passphrase, "some_string", &compact_encoded_jwt) != TRUE)
+		return HTTP_INTERNAL_SERVER_ERROR;
+
+	sep = _oidc_strstr(compact_encoded_jwt, "..");
+	if (sep != NULL)
+		_oidc_jwt_hdr_dir_a256gcm = apr_pstrndup(s->process->pool, compact_encoded_jwt,
+							 _oidc_strlen(compact_encoded_jwt) - _oidc_strlen(sep) + 2);
+
+	return (_oidc_jwt_hdr_dir_a256gcm != NULL) ? OK : HTTP_INTERNAL_SERVER_ERROR;
 }

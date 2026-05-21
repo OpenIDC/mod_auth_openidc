@@ -573,18 +573,24 @@ const char *oidc_cfg_dir_path_auth_request_params_get(request_rec *r) {
 
 static apr_array_header_t *pass_userinfo_as_default = NULL;
 
+/*
+ * initialize the default pass-userinfo-as array once, from the (single-threaded) post-config phase;
+ * lazy initialization from the request path is not safe under threaded MPMs because the static and
+ * the process pool it allocates from are shared across worker threads without locking.
+ */
+int oidc_cfg_dir_post_config(server_rec *s) {
+	oidc_pass_user_info_as_t *p = NULL;
+	if (pass_userinfo_as_default != NULL)
+		return OK;
+	pass_userinfo_as_default = apr_array_make(s->process->pool, 3, sizeof(const oidc_pass_user_info_as_t *));
+	if (oidc_cfg_dir_parse_pass_userinfo_as(s->process->pool, OIDC_DEFAULT_PASS_USERINFO_AS, &p) != NULL)
+		return HTTP_INTERNAL_SERVER_ERROR;
+	APR_ARRAY_PUSH(pass_userinfo_as_default, const oidc_pass_user_info_as_t *) = p;
+	return OK;
+}
+
 const apr_array_header_t *oidc_cfg_dir_pass_userinfo_as_get(request_rec *r) {
 	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
-	oidc_pass_user_info_as_t *p = NULL;
-	if (dir_cfg->pass_userinfo_as == NULL) {
-		if (pass_userinfo_as_default == NULL) {
-			pass_userinfo_as_default =
-			    apr_array_make(r->server->process->pool, 3, sizeof(const oidc_pass_user_info_as_t *));
-			oidc_cfg_dir_parse_pass_userinfo_as(r->server->process->pool, OIDC_DEFAULT_PASS_USERINFO_AS,
-							    &p);
-			APR_ARRAY_PUSH(pass_userinfo_as_default, const oidc_pass_user_info_as_t *) = p;
-		}
-	}
 	return dir_cfg->pass_userinfo_as ? dir_cfg->pass_userinfo_as : pass_userinfo_as_default;
 }
 

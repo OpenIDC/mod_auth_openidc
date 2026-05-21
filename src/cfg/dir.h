@@ -176,5 +176,6 @@ typedef struct oidc_dir_cfg_t oidc_dir_cfg_t;
 
 void *oidc_cfg_dir_config_create(apr_pool_t *, char *);
 void *oidc_cfg_dir_config_merge(apr_pool_t *, void *, void *);
+int oidc_cfg_dir_post_config(server_rec *s);
 
 #endif // _MOD_AUTH_OPENIDC_CFG_DIR_H_

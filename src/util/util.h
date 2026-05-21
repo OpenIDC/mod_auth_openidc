@@ -105,6 +105,7 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const oidc_crypto_passphrase_t *
 				char **compact_encoded_jwt);
 apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *passphrase,
 				const char *compact_encoded_jwt, char **s_payload);
+int oidc_util_jwt_post_config(server_rec *s);
 
 // key.c
 apr_byte_t oidc_util_key_symmetric_create(request_rec *r, const char *client_secret, unsigned int r_key_len,

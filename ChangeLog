@@ -1,3 +1,9 @@
+05/21/2026
+- config: fix intermittent coredumps on per-request initialization under heavy load
+  initialize the default pass_userinfo_as array and the cached A256GCM
+  "dir" JWT header prefix once during post-config rather than lazily from the
+  request path
+  
 05/20/2026
 - security: cap zlib-inflated JWE payload size at 10MB in
   oidc_jose_zlib_uncompress to prevent decompression-bomb style memory
