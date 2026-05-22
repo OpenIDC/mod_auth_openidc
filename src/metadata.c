@@ -147,7 +147,7 @@ static const char *oidc_metadata_issuer_to_filename(request_rec *r, const char *
 
 	/* strip trailing '/' */
 	int n = _oidc_strlen(p);
-	if (p[n - 1] == OIDC_CHAR_FORWARD_SLASH)
+	if ((n > 0) && (p[n - 1] == OIDC_CHAR_FORWARD_SLASH))
 		p[n - 1] = '\0';
 
 	return oidc_http_url_encode(r, p);

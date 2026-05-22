@@ -280,7 +280,7 @@ static int oidc_discovery_target_link_uri_match(request_rec *r, oidc_cfg_t *cfg,
 			return FALSE;
 		} else if (_oidc_strlen(o_uri.path) > _oidc_strlen(cookie_path)) {
 			int n = _oidc_strlen(cookie_path);
-			if (cookie_path[n - 1] == OIDC_CHAR_FORWARD_SLASH)
+			if ((n > 0) && (cookie_path[n - 1] == OIDC_CHAR_FORWARD_SLASH))
 				n--;
 			if (o_uri.path[n] != OIDC_CHAR_FORWARD_SLASH) {
 				oidc_error(r,
@@ -442,7 +442,7 @@ static int oidc_discovery_response_authenticate(request_rec *r, oidc_cfg_t *c, c
 
 	/* strip trailing '/' */
 	int n = _oidc_strlen(issuer);
-	if (issuer[n - 1] == OIDC_CHAR_FORWARD_SLASH)
+	if ((n > 0) && (issuer[n - 1] == OIDC_CHAR_FORWARD_SLASH))
 		issuer[n - 1] = '\0';
 
 	if (oidc_util_url_has_parameter(r, "test-config")) {

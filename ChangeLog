@@ -1,3 +1,11 @@
+05/22/2026
+- security: guard the trailing-slash strip against an empty string to avoid an
+  out-of-bounds read (and conditional 1-byte out-of-bounds write of a NUL);
+  oidc_discovery_response_authenticate indexed issuer[-1] when an
+  unauthenticated request supplied an empty "iss" parameter; the same
+  [strlen-1] pattern is hardened in oidc_metadata_issuer_to_filename,
+  oidc_discovery_target_link_uri_match and oidc_response_set_request_user
+
 05/21/2026
 - config: fix intermittent coredumps on per-request initialization under heavy load
   initialize the default pass_userinfo_as array and the cached A256GCM

@@ -482,7 +482,7 @@ static apr_byte_t oidc_response_set_request_user(request_rec *r, oidc_cfg_t *c, 
 	const char *issuer = oidc_cfg_provider_issuer_get(provider);
 	char *claim_name = apr_pstrdup(r->pool, oidc_cfg_remote_user_claim_name_get(c));
 	int n = _oidc_strlen(claim_name);
-	apr_byte_t post_fix_with_issuer = (claim_name[n - 1] == OIDC_CHAR_AT);
+	apr_byte_t post_fix_with_issuer = (n > 0) && (claim_name[n - 1] == OIDC_CHAR_AT);
 	if (post_fix_with_issuer == TRUE) {
 		claim_name[n - 1] = '\0';
 		issuer = (_oidc_strstr(issuer, "https://") == NULL)
