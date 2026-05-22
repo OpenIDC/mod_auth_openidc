@@ -1059,6 +1059,27 @@ START_TEST(test_util_issuer_match_trailing_slash) {
 }
 END_TEST
 
+START_TEST(test_util_issuer_match_empty_and_null) {
+	/* two empty strings are strictly equal and must match */
+	ck_assert_msg(oidc_util_issuer_match("", "") == TRUE, "two empty issuers must match");
+
+	/*
+	 * an empty issuer differing only by a trailing slash must NOT match: the
+	 * trailing-slash relaxation reduces the compare length to 0, which is
+	 * rejected. This also exercises the empty-string edge of the [strlen-1]
+	 * trailing-slash handling.
+	 */
+	ck_assert_msg(oidc_util_issuer_match("", "/") == FALSE, "empty vs \"/\" must not match");
+	ck_assert_msg(oidc_util_issuer_match("/", "") == FALSE, "\"/\" vs empty must not match");
+
+	/* a NULL issuer must never match anything, not even another NULL */
+	ck_assert_msg(oidc_util_issuer_match(NULL, NULL) == FALSE, "two NULL issuers must not match");
+	ck_assert_msg(oidc_util_issuer_match(NULL, "") == FALSE, "NULL vs empty must not match");
+	ck_assert_msg(oidc_util_issuer_match("https://id.example.com", NULL) == FALSE,
+		      "a real issuer must not match NULL");
+}
+END_TEST
+
 START_TEST(test_util_set_trace_parent_flags) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -1160,6 +1181,7 @@ int main(void) {
 	tcase_add_test(c, test_util_cookie_domain_and_issuer);
 	tcase_add_test(c, test_util_cookie_domain_dot_prefix);
 	tcase_add_test(c, test_util_issuer_match_trailing_slash);
+	tcase_add_test(c, test_util_issuer_match_empty_and_null);
 	tcase_add_test(c, test_util_set_trace_parent_flags);
 	tcase_add_test(c, test_util_table_and_hash_clear_and_openssl);
 	suite_add_tcase(s, c);
