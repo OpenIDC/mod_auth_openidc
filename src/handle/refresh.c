@@ -133,8 +133,7 @@ static oidc_refresh_token_cache_result_t oidc_refresh_token_cache_get(request_re
 
 	/* wait for the "other" caller to populate the refresh token response cache results */
 	while ((s_json != NULL) && (_oidc_strcmp(s_json, OIDC_REFRESH_LOCK_VALUE) == 0)) {
-		oidc_warn(r, "existing refresh in progress for %s, back off for 0.5s before re-trying the cache",
-			  refresh_token);
+		oidc_warn(r, "existing refresh in progress, back off for 0.5s before re-trying the cache");
 		apr_sleep(apr_time_from_msec(500));
 		s_json = NULL;
 		oidc_cache_get_refresh_token(r, refresh_token, &s_json);
@@ -153,7 +152,7 @@ static oidc_refresh_token_cache_result_t oidc_refresh_token_cache_get(request_re
 
 	/* check if we have run into a timeout */
 	if (_oidc_strcmp(s_json, OIDC_REFRESH_LOCK_VALUE) == 0) {
-		oidc_warn(r, "timeout waiting for refresh token %s cache to unlock", refresh_token);
+		oidc_warn(r, "timeout waiting for refresh token cache to unlock");
 		// TODO: now we are going to refresh ourselves with a refresh token that has already been
 		// tried before; that is not great in rolling refresh token setups but I guess we have no
 		// other choice anyhow...
@@ -239,7 +238,7 @@ static apr_byte_t oidc_refresh_token_grant_obtain_tokens(request_rec *r, oidc_cf
 	if (oidc_proto_token_refresh_request(r, c, provider, refresh_token, s_id_token, s_access_token, s_token_type,
 					     expires_in, s_refresh_token, s_scope) == FALSE) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_PROVIDER_REFRESH_ERROR);
-		oidc_error(r, "access_token could not be refreshed with refresh_token: %s", refresh_token);
+		oidc_error(r, "access_token could not be refreshed");
 		/* release the refresh lock and indicate this refresh token should not be refreshed anymore for at least
 		 * 30 seconds */
 		oidc_cache_set_refresh_token(r, refresh_token, OIDC_REFRESH_FAILED_LOCK_VALUE,
