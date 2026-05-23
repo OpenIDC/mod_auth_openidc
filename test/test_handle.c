@@ -1395,6 +1395,55 @@ START_TEST(test_handle_legacy_check_cookie_domain) {
 END_TEST
 
 /*
+ * Tests for handle/jwks.c and handle/content.c
+ */
+
+START_TEST(test_handle_jwks_request_empty_keys) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* the fixture has an empty public_keys array => return "{ keys: [] }" with OK */
+	int rc = oidc_jwks_request(r, c);
+	ck_assert_int_eq(rc, OK);
+}
+END_TEST
+
+START_TEST(test_handle_content_handler_jwks) {
+	request_rec *r = oidc_test_request_get();
+
+	/* match the configured OIDCRedirectURI path */
+	r->parsed_uri.path = apr_pstrdup(r->pool, "/protected/");
+	r->args = "jwks";
+	int rc = oidc_content_handler(r);
+	ck_assert_int_eq(rc, OK);
+}
+END_TEST
+
+START_TEST(test_handle_content_handler_unknown_redirect_uri_request) {
+	request_rec *r = oidc_test_request_get();
+
+	/* matches redirect URI but the request carries none of the recognized parameters */
+	r->parsed_uri.path = apr_pstrdup(r->pool, "/protected/");
+	r->args = "";
+	int rc = oidc_content_handler(r);
+	/* the unknown-redirect-URI-request branch leaves rc at OK */
+	ck_assert_int_eq(rc, OK);
+}
+END_TEST
+
+START_TEST(test_handle_content_handler_non_redirect_no_state) {
+	request_rec *r = oidc_test_request_get();
+
+	/* path does NOT match the configured OIDCRedirectURI and no request state hints are set
+	 * => the dispatcher silently falls through with rc=DECLINED */
+	r->parsed_uri.path = apr_pstrdup(r->pool, "/somewhere/else");
+	r->args = "";
+	int rc = oidc_content_handler(r);
+	ck_assert_int_eq(rc, DECLINED);
+}
+END_TEST
+
+/*
  * Tests for handle/logout.c — drive oidc_logout and oidc_logout_request
  * through the local-logout, front-channel and backchannel branches that
  * the existing test_logout_request doesn't reach.
@@ -1600,6 +1649,13 @@ int main(void) {
 	tcase_add_test(logout, test_handle_logout_request_frontchannel_img);
 	tcase_add_test(logout, test_handle_logout_backchannel_no_token);
 
+	TCase *content = tcase_create("content");
+	tcase_add_checked_fixture(content, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(content, test_handle_jwks_request_empty_keys);
+	tcase_add_test(content, test_handle_content_handler_jwks);
+	tcase_add_test(content, test_handle_content_handler_unknown_redirect_uri_request);
+	tcase_add_test(content, test_handle_content_handler_non_redirect_no_state);
+
 	Suite *s = suite_create("handle");
 	suite_add_tcase(s, userinfo);
 	suite_add_tcase(s, refresh);
@@ -1609,6 +1665,7 @@ int main(void) {
 	suite_add_tcase(s, dpop);
 	suite_add_tcase(s, legacy);
 	suite_add_tcase(s, logout);
+	suite_add_tcase(s, content);
 
 	return oidc_test_suite_run(s);
 }
