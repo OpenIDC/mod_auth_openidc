@@ -1,3 +1,7 @@
+05/23/2026
+- depend on liboauth2 >= 2.2.1 with updated so.1 link
+- release 4.2.0
+
 08/22/2024
 - change LICENSE to Apache 2.0
 - depend on liboauth2 >= 2.0.0
