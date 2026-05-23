@@ -68,7 +68,8 @@ TESTS = \
 	test_proto \
 	test_handle \
 	test_oauth \
-	test_metadata
+	test_metadata \
+	test_metrics
 
 endif
 
@@ -88,7 +89,7 @@ clean-local:
 	rm -f *.gcno
 
 ${TESTS:%=%.valgrind}: ${TESTS}
-	CK_FORK=no valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=definite --read-inline-info=yes --keep-debuginfo=yes ./$$(basename $@ .valgrind)
+	CK_FORK=no valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=definite --errors-for-leak-kinds=definite --read-inline-info=yes --keep-debuginfo=yes ./$$(basename $@ .valgrind)
 
 valgrind: ${TESTS:%=%.valgrind}
 
