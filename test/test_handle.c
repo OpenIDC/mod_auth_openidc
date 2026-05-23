@@ -510,6 +510,89 @@ START_TEST(test_handle_response_authorization_redirect_error_param) {
 }
 END_TEST
 
+/* build an HS256-signed id_token signed with the symmetric key derived from the provider's
+ * client_secret, with the standard claims that oidc_proto_validate_idtoken requires */
+static char *e2e_sign_idtoken_hs256(request_rec *r, const char *issuer, const char *client_id, const char *sub,
+				    const char *nonce, const char *secret) {
+	apr_pool_t *pool = r->pool;
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	ck_assert_int_eq(oidc_util_key_symmetric_create(r, secret, 0, NULL, TRUE, &jwk), TRUE);
+	ck_assert_ptr_nonnull(jwk);
+
+	oidc_jwt_t *jwt = oidc_jwt_new(pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(pool, "HS256");
+	json_object_set_new(jwt->payload.value.json, "iss", json_string(issuer));
+	json_object_set_new(jwt->payload.value.json, "aud", json_string(client_id));
+	json_object_set_new(jwt->payload.value.json, "sub", json_string(sub));
+	json_object_set_new(jwt->payload.value.json, "nonce", json_string(nonce));
+	apr_time_t now = apr_time_sec(apr_time_now());
+	json_object_set_new(jwt->payload.value.json, "iat", json_integer(now));
+	json_object_set_new(jwt->payload.value.json, "exp", json_integer(now + 600));
+	/* keep payload.iss / .sub / .iat / .exp in sync with the JSON for the validator */
+	jwt->payload.iss = apr_pstrdup(pool, issuer);
+	jwt->payload.sub = apr_pstrdup(pool, sub);
+	jwt->payload.iat = now;
+	jwt->payload.exp = now + 600;
+
+	ck_assert_int_eq(oidc_jwt_sign(pool, jwt, jwk, FALSE, &err), TRUE);
+	char *cser = oidc_jose_jwt_serialize(pool, jwt, &err);
+	ck_assert_ptr_nonnull(cser);
+	oidc_jwk_destroy(jwk);
+	oidc_jwt_destroy(jwt);
+	return cser;
+}
+
+START_TEST(test_handle_response_authorization_redirect_idtoken_happy_path) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* configure the provider with a client_secret so the HS256 id_token verification succeeds */
+	const char *secret = "shared-secret-for-hs256-verification";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	/* build a proto_state with response_type=id_token and response_mode=query so the response
+	 * mode reported by the redirect handler ("query") lines up with what's in the cookie */
+	oidc_proto_state_t *ps = oidc_proto_state_new();
+	oidc_proto_state_set_nonce(ps, "nonce-1");
+	oidc_proto_state_set_state(ps, "s1");
+	oidc_proto_state_set_issuer(ps, "https://idp.example.com");
+	oidc_proto_state_set_original_url(ps, "https://www.example.com/protected/index.html");
+	oidc_proto_state_set_original_method(ps, OIDC_METHOD_GET);
+	oidc_proto_state_set_response_type(ps, OIDC_PROTO_RESPONSE_TYPE_IDTOKEN);
+	oidc_proto_state_set_response_mode(ps, OIDC_PROTO_RESPONSE_MODE_QUERY);
+	oidc_proto_state_set_timestamp_now(ps);
+
+	char *fingerprint = oidc_state_browser_fingerprint(r, c, "nonce-1");
+	char *cookie = oidc_proto_state_to_cookie(r, c, ps);
+	const char *cookie_name = oidc_state_cookie_name(r, fingerprint);
+	apr_table_set(r->headers_in, "Cookie",
+		      apr_psprintf(r->pool, "foo=bar; %s=%s; baz=zot", cookie_name, cookie));
+	oidc_proto_state_destroy(ps);
+
+	char *id_token = e2e_sign_idtoken_hs256(r, "https://idp.example.com", "client_id", "alice", "nonce-1", secret);
+	r->args = apr_psprintf(r->pool, "state=%s&id_token=%s", oidc_http_url_encode(r, fingerprint),
+			       oidc_http_url_encode(r, id_token));
+
+	int rc = oidc_response_authorization_redirect(r, c, session);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_str_eq(loc, "https://www.example.com/protected/index.html");
+	ck_assert_ptr_nonnull(r->user);
+	/* default OIDCRemoteUserClaim is "sub@" which post-fixes the username with the issuer */
+	ck_assert_str_eq(r->user, "alice@idp.example.com");
+	/* the session must now reflect the new authentication */
+	ck_assert_str_eq(session->remote_user, "alice@idp.example.com");
+	ck_assert_str_eq(oidc_session_get_issuer(r, session), "https://idp.example.com");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
 START_TEST(test_handle_response_authorization_redirect_unknown_response_type) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -1269,6 +1352,7 @@ int main(void) {
 	tcase_add_test(response, test_handle_response_authorization_post_only_response_mode_fragment);
 	tcase_add_test(response, test_handle_response_authorization_redirect_error_param);
 	tcase_add_test(response, test_handle_response_authorization_redirect_unknown_response_type);
+	tcase_add_test(response, test_handle_response_authorization_redirect_idtoken_happy_path);
 
 	TCase *discovery = tcase_create("discovery");
 	tcase_add_checked_fixture(discovery, oidc_test_setup, oidc_test_teardown);
