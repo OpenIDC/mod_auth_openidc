@@ -543,6 +543,73 @@ static char *e2e_sign_idtoken_hs256(request_rec *r, const char *issuer, const ch
 	return cser;
 }
 
+START_TEST(test_handle_response_authorization_redirect_code_flow_happy_path) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "code-flow-shared-secret-long-enough";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+	/* the token endpoint is on our loopback server */
+	oidc_test_http_response_t resp = {0};
+	resp.status_code = 200;
+	resp.content_type = "application/json";
+	/* build the id_token the token endpoint will return; signed HS256 with the same secret */
+	char *id_token = e2e_sign_idtoken_hs256(r, "https://idp.example.com", "client_id", "alice", "nonce-code", secret);
+	resp.body = apr_psprintf(r->pool,
+				 "{\"access_token\":\"AT-1\",\"token_type\":\"Bearer\",\"expires_in\":3600,"
+				 "\"refresh_token\":\"RT-1\",\"id_token\":\"%s\"}",
+				 id_token);
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	/* proto_state mirrors what oidc_proto_request_auth would have stored: response_type=code,
+	 * response_mode=query (matching the default for the redirect handler) and a pkce_state
+	 * so the s256 verifier (the default PKCE method) can derive a verifier */
+	oidc_proto_state_t *ps = oidc_proto_state_new();
+	oidc_proto_state_set_nonce(ps, "nonce-code");
+	oidc_proto_state_set_state(ps, "s-code");
+	oidc_proto_state_set_issuer(ps, "https://idp.example.com");
+	oidc_proto_state_set_original_url(ps, "https://www.example.com/protected/index.html");
+	oidc_proto_state_set_original_method(ps, OIDC_METHOD_GET);
+	oidc_proto_state_set_response_type(ps, OIDC_PROTO_RESPONSE_TYPE_CODE);
+	oidc_proto_state_set_response_mode(ps, OIDC_PROTO_RESPONSE_MODE_QUERY);
+	oidc_proto_state_set_pkce_state(ps, "pkce-state-1234567890abcdef1234567890abcdef1234567890ab");
+	oidc_proto_state_set_timestamp_now(ps);
+
+	char *fingerprint = oidc_state_browser_fingerprint(r, c, "nonce-code");
+	char *cookie = oidc_proto_state_to_cookie(r, c, ps);
+	const char *cookie_name = oidc_state_cookie_name(r, fingerprint);
+	apr_table_set(r->headers_in, "Cookie",
+		      apr_psprintf(r->pool, "foo=bar; %s=%s; baz=zot", cookie_name, cookie));
+	oidc_proto_state_destroy(ps);
+
+	r->args = apr_psprintf(r->pool, "state=%s&code=the-auth-code", oidc_http_url_encode(r, fingerprint));
+
+	int rc = oidc_response_authorization_redirect(r, c, session);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_str_eq(loc, "https://www.example.com/protected/index.html");
+	/* the token endpoint exchange + id_token validation should have populated the session */
+	ck_assert_str_eq(session->remote_user, "alice@idp.example.com");
+	ck_assert_str_eq(oidc_session_get_access_token(r, session), "AT-1");
+	ck_assert_str_eq(oidc_session_get_refresh_token(r, session), "RT-1");
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_str_eq(cap->method, "POST");
+	ck_assert_msg(_oidc_strstr(cap->body, "code=the-auth-code") != NULL,
+		      "token endpoint must be hit with the authorization code");
+
+	oidc_test_http_server_stop(srv);
+	oidc_session_free(r, session);
+}
+END_TEST
+
 START_TEST(test_handle_response_authorization_redirect_idtoken_happy_path) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -1489,6 +1556,7 @@ int main(void) {
 	tcase_add_test(response, test_handle_response_authorization_redirect_error_param);
 	tcase_add_test(response, test_handle_response_authorization_redirect_unknown_response_type);
 	tcase_add_test(response, test_handle_response_authorization_redirect_idtoken_happy_path);
+	tcase_add_test(response, test_handle_response_authorization_redirect_code_flow_happy_path);
 
 	TCase *discovery = tcase_create("discovery");
 	tcase_add_checked_fixture(discovery, oidc_test_setup, oidc_test_teardown);
