@@ -34,6 +34,9 @@
 #include "util.h"
 #include "util/util.h"
 
+#include <apr_file_io.h>
+#include <apr_strings.h>
+
 /*
  * Minimum-viable OpenID Connect provider metadata JSON, used by the
  * is_valid / parse / retrieve tests below.
@@ -289,6 +292,111 @@ START_TEST(test_metadata_oauth_provider_parse) {
 }
 END_TEST
 
+/*
+ * Disk-backed metadata-directory tests — set OIDCMetadataDir to a
+ * fresh /tmp directory, drop in a .provider + .client file pair, and
+ * exercise oidc_metadata_list / oidc_metadata_get / oidc_metadata_provider_get.
+ */
+
+/* create a fresh, empty temp dir and configure OIDCMetadataDir to point at it */
+static const char *e2e_make_metadata_dir(request_rec *r) {
+	char *tmpl = apr_psprintf(r->pool, "/tmp/oidc-test-metadata.XXXXXX");
+	ck_assert_msg(mkdtemp(tmpl) != NULL, "could not create temp metadata dir at %s", tmpl);
+	cmd_parms *cmd = oidc_test_cmd_get("OIDCMetadataDir");
+	ck_assert_ptr_null(oidc_cmd_metadata_dir_set(cmd, NULL, tmpl));
+	return tmpl;
+}
+
+static void e2e_write_file(request_rec *r, const char *path, const char *body) {
+	apr_file_t *f = NULL;
+	apr_status_t rv = apr_file_open(&f, path, APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE,
+					APR_FPROT_UREAD | APR_FPROT_UWRITE, r->pool);
+	ck_assert_msg(rv == APR_SUCCESS, "could not create file at %s", path);
+	apr_size_t len = (apr_size_t)_oidc_strlen(body);
+	rv = apr_file_write(f, body, &len);
+	ck_assert_int_eq(rv, APR_SUCCESS);
+	apr_file_close(f);
+}
+
+START_TEST(test_metadata_disk_list_empty_dir) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	(void)e2e_make_metadata_dir(r);
+
+	apr_array_header_t *list = NULL;
+	ck_assert_int_eq(oidc_metadata_list(r, c, &list), TRUE);
+	ck_assert_ptr_nonnull(list);
+	ck_assert_int_eq(list->nelts, 0);
+}
+END_TEST
+
+START_TEST(test_metadata_disk_get_provider_only) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+
+	/* a .provider file alone is enough for oidc_metadata_provider_get */
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), VALID_METADATA_JSON);
+
+	json_t *j = NULL;
+	ck_assert_int_eq(oidc_metadata_provider_get(r, c, "https://idp.example.com", &j, FALSE), TRUE);
+	ck_assert_ptr_nonnull(j);
+	json_decref(j);
+}
+END_TEST
+
+START_TEST(test_metadata_disk_list_skips_provider_without_client) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+
+	/* drop only the provider file; oidc_metadata_get fails because the
+	 * companion .client file is missing and dynamic registration is not allowed,
+	 * so oidc_metadata_list silently skips this issuer */
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), VALID_METADATA_JSON);
+
+	apr_array_header_t *list = NULL;
+	ck_assert_int_eq(oidc_metadata_list(r, c, &list), TRUE);
+	ck_assert_ptr_nonnull(list);
+	ck_assert_int_eq(list->nelts, 0);
+}
+END_TEST
+
+START_TEST(test_metadata_disk_get_full) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), VALID_METADATA_JSON);
+	/* minimal valid client metadata */
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.client", dir),
+		       "{\"client_id\":\"rp-test\",\"client_secret\":\"sekret\"}");
+
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_metadata_get(r, c, "https://idp.example.com", &provider, FALSE), TRUE);
+	ck_assert_ptr_nonnull(provider);
+	ck_assert_str_eq(oidc_cfg_provider_issuer_get(provider), "https://idp.example.com");
+	ck_assert_str_eq(oidc_cfg_provider_client_id_get(provider), "rp-test");
+
+	/* the same directory now produces a single-issuer list */
+	apr_array_header_t *list = NULL;
+	ck_assert_int_eq(oidc_metadata_list(r, c, &list), TRUE);
+	ck_assert_int_eq(list->nelts, 1);
+	ck_assert_str_eq(APR_ARRAY_IDX(list, 0, const char *), "https://idp.example.com");
+}
+END_TEST
+
+START_TEST(test_metadata_disk_provider_get_missing_no_discovery) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	(void)e2e_make_metadata_dir(r);
+
+	/* no provider file on disk and allow_discovery=FALSE => oidc_metadata_provider_get fails */
+	json_t *j = NULL;
+	ck_assert_int_eq(oidc_metadata_provider_get(r, c, "https://missing.example.com", &j, FALSE), FALSE);
+}
+END_TEST
+
 int main(void) {
 	TCase *validate = tcase_create("validate");
 	tcase_add_checked_fixture(validate, oidc_test_setup, oidc_test_teardown);
@@ -312,10 +420,19 @@ int main(void) {
 	tcase_add_test(retrieve, test_metadata_jwks_get_forced_refresh);
 	tcase_add_test(retrieve, test_metadata_jwks_get_http_failure);
 
+	TCase *disk = tcase_create("disk");
+	tcase_add_checked_fixture(disk, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(disk, test_metadata_disk_list_empty_dir);
+	tcase_add_test(disk, test_metadata_disk_get_provider_only);
+	tcase_add_test(disk, test_metadata_disk_list_skips_provider_without_client);
+	tcase_add_test(disk, test_metadata_disk_get_full);
+	tcase_add_test(disk, test_metadata_disk_provider_get_missing_no_discovery);
+
 	Suite *s = suite_create("metadata");
 	suite_add_tcase(s, validate);
 	suite_add_tcase(s, parse);
 	suite_add_tcase(s, retrieve);
+	suite_add_tcase(s, disk);
 
 	return oidc_test_suite_run(s);
 }
