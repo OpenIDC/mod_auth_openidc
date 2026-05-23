@@ -1580,6 +1580,72 @@ START_TEST(test_handle_check_user_id_unauthenticated_not_auth_capable) {
 }
 END_TEST
 
+START_TEST(test_handle_check_user_id_existing_session) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* build and persist a session under a known uuid, then inject the matching
+	 * session cookie into r->headers_in so the second oidc_session_load (inside
+	 * oidc_check_user_id) finds it in the shm cache and resumes it */
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	const char *uuid = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+	session->uuid = apr_pstrdup(r->pool, uuid);
+	session->remote_user = apr_pstrdup(r->pool, "alice@idp.example.com");
+	session->expiry = apr_time_now() + apr_time_from_sec(3600);
+	oidc_session_set_issuer(r, session, oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(c)));
+	oidc_session_set_session_expires(r, session, apr_time_now() + apr_time_from_sec(3600));
+	oidc_session_set_cookie_domain(r, session, "www.example.com");
+	ck_assert_int_eq(oidc_session_save(r, session, TRUE), TRUE);
+
+	/* inject the matching cookie into the next-call's input headers */
+	apr_table_set(r->headers_in, "Cookie",
+		      apr_psprintf(r->pool, "%s=%s", oidc_cfg_dir_cookie_get(r), uuid));
+
+	int rc = oidc_check_user_id(r);
+	ck_assert_int_eq(rc, OK);
+	ck_assert_ptr_nonnull(r->user);
+	ck_assert_str_eq(r->user, "alice@idp.example.com");
+
+	/* free the OUR session (the second one loaded inside oidc_check_user_id is
+	 * freed by oidc_check_userid_openidc_existing_session) */
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_check_user_id_existing_session_expired) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* same setup but session_expires is already in the past => the
+	 * oidc_check_max_session_duration helper short-circuits to a re-authentication
+	 * (302 to OP) when the request is auth-capable */
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	const char *uuid = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+	session->uuid = apr_pstrdup(r->pool, uuid);
+	session->remote_user = apr_pstrdup(r->pool, "alice@idp.example.com");
+	session->expiry = apr_time_now() + apr_time_from_sec(3600);
+	oidc_session_set_issuer(r, session, oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(c)));
+	oidc_session_set_session_expires(r, session, apr_time_now() - apr_time_from_sec(60));
+	oidc_session_set_cookie_domain(r, session, "www.example.com");
+	ck_assert_int_eq(oidc_session_save(r, session, TRUE), TRUE);
+
+	apr_table_set(r->headers_in, "Cookie",
+		      apr_psprintf(r->pool, "%s=%s", oidc_cfg_dir_cookie_get(r), uuid));
+	apr_table_set(r->headers_in, "Accept", "*/*");
+
+	int rc = oidc_check_user_id(r);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_msg(_oidc_strstr(loc, "https://idp.example.com/authorize") != NULL,
+		      "expired session must trigger re-authentication, got: %s", loc);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
 START_TEST(test_handle_check_user_id_unauth_action_pass) {
 	request_rec *r = oidc_test_request_get();
 
@@ -2075,6 +2141,8 @@ int main(void) {
 	tcase_add_checked_fixture(checkuid, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(checkuid, test_handle_check_user_id_unauthenticated_redirects_to_op);
 	tcase_add_test(checkuid, test_handle_check_user_id_unauthenticated_not_auth_capable);
+	tcase_add_test(checkuid, test_handle_check_user_id_existing_session);
+	tcase_add_test(checkuid, test_handle_check_user_id_existing_session_expired);
 	tcase_add_test(checkuid, test_handle_check_user_id_unauth_action_pass);
 	tcase_add_test(checkuid, test_handle_check_user_id_unauth_action_return_401);
 	tcase_add_test(checkuid, test_handle_check_user_id_unauth_action_return_410);
