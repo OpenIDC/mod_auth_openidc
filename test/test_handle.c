@@ -930,6 +930,57 @@ START_TEST(test_handle_userinfo_refresh_with_interval) {
 }
 END_TEST
 
+START_TEST(test_handle_userinfo_pass_as_jwt) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* seed the session with both claims and the JWT representation of those claims */
+	json_t *claims = json_pack("{s:s}", "sub", "alice");
+	oidc_session_set_userinfo_claims(r, session, claims);
+	oidc_session_set_userinfo_jwt(r, session, "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGljZSJ9.sig-bytes");
+
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPassUserInfoAs);
+	ck_assert_ptr_null(oidc_cmd_dir_pass_userinfo_as_set(cmd, dir_cfg, apr_pstrdup(r->pool, "jwt")));
+
+	oidc_userinfo_pass_as(r, c, session, OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
+
+	const char *hdr = apr_table_get(r->headers_in, OIDC_DEFAULT_HEADER_PREFIX OIDC_APP_INFO_USERINFO_JWT);
+	ck_assert_ptr_nonnull(hdr);
+	ck_assert_str_eq(hdr, "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGljZSJ9.sig-bytes");
+
+	json_decref(claims);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_userinfo_pass_as_signed_jwt_without_private_keys) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	json_t *claims = json_pack("{s:s}", "sub", "alice");
+	oidc_session_set_userinfo_claims(r, session, claims);
+
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPassUserInfoAs);
+	ck_assert_ptr_null(oidc_cmd_dir_pass_userinfo_as_set(cmd, dir_cfg, apr_pstrdup(r->pool, "signed_jwt")));
+
+	/* the test fixture has an empty private_keys array, so signed-JWT creation
+	 * silently fails and no header is set (the function is a void, this is its
+	 * graceful-degradation path) */
+	oidc_userinfo_pass_as(r, c, session, OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
+
+	ck_assert_ptr_null(apr_table_get(r->headers_in, OIDC_DEFAULT_HEADER_PREFIX OIDC_APP_INFO_SIGNED_JWT));
+
+	json_decref(claims);
+	oidc_session_free(r, session);
+}
+END_TEST
+
 START_TEST(test_handle_userinfo_pass_as_json) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -1406,6 +1457,8 @@ int main(void) {
 	tcase_add_test(userinfo, test_handle_userinfo_refresh_no_interval);
 	tcase_add_test(userinfo, test_handle_userinfo_refresh_with_interval);
 	tcase_add_test(userinfo, test_handle_userinfo_pass_as_no_claims);
+	tcase_add_test(userinfo, test_handle_userinfo_pass_as_jwt);
+	tcase_add_test(userinfo, test_handle_userinfo_pass_as_signed_jwt_without_private_keys);
 	tcase_add_test(userinfo, test_handle_userinfo_pass_as_json);
 
 	TCase *refresh = tcase_create("refresh");
