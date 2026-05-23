@@ -1208,6 +1208,72 @@ static oidc_proto_state_t *e2e_make_proto_state(request_rec *r) {
 	return ps;
 }
 
+START_TEST(test_proto_private_keys_load_from_pem) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+
+	/* load test/private.pem via the OIDCPrivateKeyFiles cmd setter and verify the
+	 * key lands in cfg->private_keys */
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	const char *arg = apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir);
+	const char *rv = oidc_cmd_private_keys_set(cmd, NULL, apr_pstrdup(r->pool, arg));
+	ck_assert_msg(rv == NULL, "could not load private key from %s/private.pem: %s", dir, rv);
+	const apr_array_header_t *keys = oidc_cfg_private_keys_get(cfg);
+	ck_assert_ptr_nonnull(keys);
+	ck_assert_int_eq(keys->nelts, 1);
+	oidc_jwk_t *jwk = APR_ARRAY_IDX(keys, 0, oidc_jwk_t *);
+	ck_assert_ptr_nonnull(jwk);
+	ck_assert_str_eq(jwk->kid, "rsa-1");
+}
+END_TEST
+
+START_TEST(test_proto_request_auth_with_request_object_none) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	/* OIDCRequestObject with sign_alg=none — the request_object becomes an
+	 * unsigned (alg=none) JWT and is appended as the "request" parameter on
+	 * the authorization request URL */
+	oidc_cfg_provider_request_object_set(r->pool, provider, "{\"crypto\":{\"sign_alg\":\"none\"}}");
+
+	oidc_proto_state_t *ps = e2e_make_proto_state(r);
+	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-ro-1", ps, NULL,
+					 NULL, NULL, NULL);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	/* OIDCRequestObject defaults to publishing the request via the redirect_uri
+	 * (request_uri=...) rather than embedding the JWT directly (request=...) */
+	ck_assert_msg(_oidc_strstr(loc, "request_uri=") != NULL,
+		      "request_uri= parameter must appear in the authorization URL: %s", loc);
+}
+END_TEST
+
+START_TEST(test_proto_request_auth_with_request_object_rs256) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	/* load a private key first so the RS256-signed request object can be created */
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	const char *arg = apr_psprintf(r->pool, "rsa-sig#%s/private.pem", dir);
+	ck_assert_ptr_null(oidc_cmd_private_keys_set(cmd, NULL, apr_pstrdup(r->pool, arg)));
+
+	oidc_cfg_provider_request_object_set(r->pool, provider, "{\"crypto\":{\"sign_alg\":\"RS256\"}}");
+
+	oidc_proto_state_t *ps = e2e_make_proto_state(r);
+	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-ro-2", ps, NULL,
+					 NULL, NULL, NULL);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_msg(_oidc_strstr(loc, "request_uri=") != NULL, "request_uri= parameter must appear in the URL");
+}
+END_TEST
+
 START_TEST(test_proto_request_auth_post_html) {
 	request_rec *r = oidc_test_request_get();
 	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
@@ -1442,6 +1508,9 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_userinfo_request_sub_mismatch);
 	tcase_add_test(e2e, test_proto_userinfo_request_error);
 	tcase_add_test(e2e, test_proto_request_auth_par_redirect);
+	tcase_add_test(e2e, test_proto_private_keys_load_from_pem);
+	tcase_add_test(e2e, test_proto_request_auth_with_request_object_none);
+	tcase_add_test(e2e, test_proto_request_auth_with_request_object_rs256);
 	tcase_add_test(e2e, test_proto_request_auth_post_html);
 	tcase_add_test(e2e, test_proto_request_auth_no_client_id);
 	tcase_add_test(e2e, test_proto_request_auth_unknown_method);

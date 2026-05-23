@@ -300,7 +300,11 @@ AP_DECLARE(const char *) ap_get_server_name(request_rec *r) {
 }
 
 AP_DECLARE(char *) ap_server_root_relative(apr_pool_t *p, const char *file) {
-	return "";
+	/* Apache's real implementation prepends ServerRoot to relative paths; in tests
+	 * we treat the path as already-absolute (or relative-to-cwd) and return it verbatim */
+	if (file == NULL)
+		return NULL;
+	return apr_pstrdup(p, file);
 }
 
 AP_DECLARE(ap_filter_t *) ap_add_input_filter(const char *name, void *ctx, request_rec *r, conn_rec *c) {
