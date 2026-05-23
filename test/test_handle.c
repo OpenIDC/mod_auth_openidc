@@ -1597,6 +1597,66 @@ END_TEST
  * the existing test_logout_request doesn't reach.
  */
 
+START_TEST(test_handle_logout_op_request_with_id_token_hint) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* configure end_session_endpoint + seed the session with an id_token + issuer so
+	 * oidc_logout_build_op_request injects id_token_hint into the OP request URL */
+	oidc_session_set_issuer(r, session, oidc_cfg_provider_issuer_get(provider));
+	oidc_session_set_idtoken(r, session, "stored-id-token-jwt-here");
+	oidc_cfg_provider_end_session_endpoint_set(r->pool, provider, "https://idp.example.com/endsession");
+
+	r->args = "logout=https%3A%2F%2Fwww.example.com%2Floggedout";
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	/* the resulting URL must contain the end_session_endpoint, the post_logout_redirect_uri
+	 * and an id_token_hint that round-trips through oidc_http_url_encode */
+	ck_assert_msg(_oidc_strstr(loc, "https://idp.example.com/endsession?") != NULL,
+		      "must redirect to the end_session_endpoint");
+	ck_assert_msg(_oidc_strstr(loc, "id_token_hint=stored-id-token-jwt-here") != NULL,
+		      "must propagate the id_token_hint from the session");
+	ck_assert_msg(_oidc_strstr(loc, "post_logout_redirect_uri=https%3A%2F%2Fwww.example.com%2Floggedout") != NULL,
+		      "must url-encode and append the post_logout_redirect_uri");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_logout_op_request_no_session_no_extra_params) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* end_session_endpoint configured, session has no idtoken (empty session) and no
+	 * logout_request_params on the provider => the redirect URL has only the
+	 * post_logout_redirect_uri appended */
+	oidc_session_set_issuer(r, session, oidc_cfg_provider_issuer_get(provider));
+	oidc_cfg_provider_end_session_endpoint_set(r->pool, provider, "https://idp.example.com/endsession?fixed=1");
+
+	r->args = "logout=https%3A%2F%2Fwww.example.com%2Floggedout";
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	/* end_session_endpoint already contains '?' so the next param must be appended with '&' */
+	ck_assert_msg(_oidc_strstr(loc, "https://idp.example.com/endsession?fixed=1&"
+					"post_logout_redirect_uri=https%3A%2F%2Fwww.example.com%2Floggedout") != NULL,
+		      "Location must preserve existing query and use '&' as the separator: got %s", loc);
+	/* no id_token_hint and no logout_request_params should land here */
+	ck_assert_msg(_oidc_strstr(loc, "id_token_hint=") == NULL, "no id_token_hint expected");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
 START_TEST(test_handle_logout_local_no_return_url) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -1924,6 +1984,8 @@ int main(void) {
 	tcase_add_test(logout, test_handle_logout_backchannel_happy_path);
 	tcase_add_test(logout, test_handle_logout_backchannel_missing_events_claim);
 	tcase_add_test(logout, test_handle_logout_backchannel_nonce_claim_rejected);
+	tcase_add_test(logout, test_handle_logout_op_request_with_id_token_hint);
+	tcase_add_test(logout, test_handle_logout_op_request_no_session_no_extra_params);
 
 	TCase *content = tcase_create("content");
 	tcase_add_checked_fixture(content, oidc_test_setup, oidc_test_teardown);
