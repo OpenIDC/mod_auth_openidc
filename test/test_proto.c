@@ -800,6 +800,156 @@ START_TEST(test_proto_return_www_authenticate_header) {
 }
 END_TEST
 
+/*
+ * Helper for building a synthetic id_token payload with a given JSON body.
+ * Returns a stack-init oidc_jwt_payload_t whose .value.json points to `claims`.
+ * Caller owns `claims` (typically `json_decref` after the test).
+ */
+static oidc_jwt_payload_t make_payload(json_t *claims) {
+	oidc_jwt_payload_t p = {0};
+	p.value.json = claims;
+	return p;
+}
+
+START_TEST(test_proto_idtoken_validate_aud_string_match) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	json_t *claims = json_pack("{s:s}", "aud", "client_id");
+	oidc_jwt_payload_t p = make_payload(claims);
+	ck_assert_int_eq(oidc_proto_idtoken_validate_aud_and_azp(r, c, oidc_cfg_provider_get(c), &p), TRUE);
+	json_decref(claims);
+}
+END_TEST
+
+START_TEST(test_proto_idtoken_validate_aud_string_mismatch) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	json_t *claims = json_pack("{s:s}", "aud", "different_client");
+	oidc_jwt_payload_t p = make_payload(claims);
+	ck_assert_int_eq(oidc_proto_idtoken_validate_aud_and_azp(r, c, oidc_cfg_provider_get(c), &p), FALSE);
+	json_decref(claims);
+}
+END_TEST
+
+START_TEST(test_proto_idtoken_validate_aud_array_with_client_id) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	/* azp is present here so the multi-aud SHOULD warning doesn't fire as a hard error */
+	json_t *claims = json_pack("{s:[s,s],s:s}", "aud", "other-rp", "client_id", "azp", "client_id");
+	oidc_jwt_payload_t p = make_payload(claims);
+	ck_assert_int_eq(oidc_proto_idtoken_validate_aud_and_azp(r, c, oidc_cfg_provider_get(c), &p), TRUE);
+	json_decref(claims);
+}
+END_TEST
+
+START_TEST(test_proto_idtoken_validate_aud_array_without_client_id) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	json_t *claims = json_pack("{s:[s,s]}", "aud", "other-rp", "yet-another");
+	oidc_jwt_payload_t p = make_payload(claims);
+	ck_assert_int_eq(oidc_proto_idtoken_validate_aud_and_azp(r, c, oidc_cfg_provider_get(c), &p), FALSE);
+	json_decref(claims);
+}
+END_TEST
+
+START_TEST(test_proto_idtoken_validate_aud_missing) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	json_t *claims = json_pack("{s:s}", "sub", "alice");
+	oidc_jwt_payload_t p = make_payload(claims);
+	ck_assert_int_eq(oidc_proto_idtoken_validate_aud_and_azp(r, c, oidc_cfg_provider_get(c), &p), FALSE);
+	json_decref(claims);
+}
+END_TEST
+
+START_TEST(test_proto_idtoken_validate_aud_wrong_type) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	json_t *claims = json_pack("{s:i}", "aud", 42);
+	oidc_jwt_payload_t p = make_payload(claims);
+	ck_assert_int_eq(oidc_proto_idtoken_validate_aud_and_azp(r, c, oidc_cfg_provider_get(c), &p), FALSE);
+	json_decref(claims);
+}
+END_TEST
+
+START_TEST(test_proto_idtoken_validate_azp_mismatch) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	/* aud is valid (matches client_id), but azp claims a different party */
+	json_t *claims = json_pack("{s:s,s:s}", "aud", "client_id", "azp", "evil-rp");
+	oidc_jwt_payload_t p = make_payload(claims);
+	ck_assert_int_eq(oidc_proto_idtoken_validate_aud_and_azp(r, c, oidc_cfg_provider_get(c), &p), FALSE);
+	json_decref(claims);
+}
+END_TEST
+
+START_TEST(test_proto_dpop_use_nonce_no_error_claim) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	json_t *result = json_pack("{s:s}", "active", "true");
+	char *dpop = NULL;
+	ck_assert_int_eq(oidc_proto_dpop_use_nonce(r, c, result, NULL, "https://idp.example.com/token", "POST",
+						   "access-token", &dpop),
+			 FALSE);
+	ck_assert_ptr_null(dpop);
+	json_decref(result);
+}
+END_TEST
+
+START_TEST(test_proto_dpop_use_nonce_wrong_error_value) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	json_t *result = json_pack("{s:s}", "error", "invalid_request");
+	char *dpop = NULL;
+	ck_assert_int_eq(oidc_proto_dpop_use_nonce(r, c, result, NULL, "https://idp.example.com/token", "POST",
+						   "access-token", &dpop),
+			 FALSE);
+	ck_assert_ptr_null(dpop);
+	json_decref(result);
+}
+END_TEST
+
+START_TEST(test_proto_dpop_use_nonce_missing_header) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	json_t *result = json_pack("{s:s}", "error", "use_dpop_nonce");
+	apr_hash_t *hdrs = apr_hash_make(r->pool); /* no DPoP-Nonce entry */
+	char *dpop = NULL;
+	ck_assert_int_eq(oidc_proto_dpop_use_nonce(r, c, result, hdrs, "https://idp.example.com/token", "POST",
+						   "access-token", &dpop),
+			 FALSE);
+	ck_assert_ptr_null(dpop);
+	json_decref(result);
+}
+END_TEST
+
+START_TEST(test_proto_discovery_account_no_at_sign) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	char *issuer = NULL;
+	/* missing '@' is rejected before any HTTP call */
+	ck_assert_int_eq(oidc_proto_discovery_account_based(r, c, "not-an-account", &issuer), FALSE);
+	ck_assert_ptr_null(issuer);
+}
+END_TEST
+
+START_TEST(test_proto_supported_flows_exhaustive) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	/* every documented flow round-trips through flow_is_supported */
+	ck_assert_int_eq(oidc_proto_flow_is_supported(pool, OIDC_PROTO_RESPONSE_TYPE_CODE), TRUE);
+	ck_assert_int_eq(oidc_proto_flow_is_supported(pool, OIDC_PROTO_RESPONSE_TYPE_IDTOKEN), TRUE);
+	ck_assert_int_eq(oidc_proto_flow_is_supported(pool, OIDC_PROTO_RESPONSE_TYPE_IDTOKEN_TOKEN), TRUE);
+	ck_assert_int_eq(oidc_proto_flow_is_supported(pool, OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN), TRUE);
+	ck_assert_int_eq(oidc_proto_flow_is_supported(pool, OIDC_PROTO_RESPONSE_TYPE_CODE_TOKEN), TRUE);
+	ck_assert_int_eq(oidc_proto_flow_is_supported(pool, OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN_TOKEN), TRUE);
+	/* token-only (implicit-only) is not in the supported set */
+	ck_assert_int_eq(oidc_proto_flow_is_supported(pool, OIDC_PROTO_RESPONSE_TYPE_TOKEN), FALSE);
+	/* spacing/order independence: spaced_string_equals normalizes whitespace order */
+	ck_assert_int_eq(oidc_proto_flow_is_supported(pool, "token id_token"), TRUE);
+	ck_assert_int_eq(oidc_proto_flow_is_supported(pool, ""), FALSE);
+}
+END_TEST
+
 int main(void) {
 	TCase *core = tcase_create("core");
 	tcase_add_checked_fixture(core, oidc_test_setup, oidc_test_teardown);
@@ -832,6 +982,18 @@ int main(void) {
 	tcase_add_test(core, test_proto_jwt_header_peek);
 	tcase_add_test(core, test_proto_response_is_post_and_redirect);
 	tcase_add_test(core, test_proto_return_www_authenticate_header);
+	tcase_add_test(core, test_proto_idtoken_validate_aud_string_match);
+	tcase_add_test(core, test_proto_idtoken_validate_aud_string_mismatch);
+	tcase_add_test(core, test_proto_idtoken_validate_aud_array_with_client_id);
+	tcase_add_test(core, test_proto_idtoken_validate_aud_array_without_client_id);
+	tcase_add_test(core, test_proto_idtoken_validate_aud_missing);
+	tcase_add_test(core, test_proto_idtoken_validate_aud_wrong_type);
+	tcase_add_test(core, test_proto_idtoken_validate_azp_mismatch);
+	tcase_add_test(core, test_proto_dpop_use_nonce_no_error_claim);
+	tcase_add_test(core, test_proto_dpop_use_nonce_wrong_error_value);
+	tcase_add_test(core, test_proto_dpop_use_nonce_missing_header);
+	tcase_add_test(core, test_proto_discovery_account_no_at_sign);
+	tcase_add_test(core, test_proto_supported_flows_exhaustive);
 
 	Suite *s = suite_create("proto");
 	suite_add_tcase(s, core);
