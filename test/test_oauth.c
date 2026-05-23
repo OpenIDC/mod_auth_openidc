@@ -25,6 +25,7 @@
  *
  **************************************************************************/
 
+#include "cfg/dir.h"
 #include "cfg/oauth.h"
 #include "check_util.h"
 #include "http_server.h"
@@ -194,6 +195,89 @@ START_TEST(test_oauth_check_userid_introspection_error_response) {
 }
 END_TEST
 
+START_TEST(test_oauth_check_userid_introspection_cached) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	apr_table_unset(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION);
+
+	/* the AS response includes an "exp" claim so the result is eligible for caching */
+	int exp_ts = (int)apr_time_sec(apr_time_now()) + 3600;
+	const char *body =
+	    apr_psprintf(r->pool, "{\"active\":true,\"sub\":\"alice\",\"exp\":%d,\"scope\":\"openid\"}", exp_ts);
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = body};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	e2e_set_introspection_endpoint(c, oidc_test_http_server_url(srv, r->pool));
+
+	/* prime the cache via a real introspection */
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-CACHE"), OK);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+
+	/* clear r->user, then call again with the same token; the cache hit must satisfy us
+	 * without going back to the (now-gone) introspection endpoint */
+	r->user = NULL;
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-CACHE"), OK);
+	ck_assert_ptr_nonnull(r->user);
+	ck_assert_str_eq(r->user, "alice");
+}
+END_TEST
+
+/*
+ * Tests for the non-header bearer-token sources. The default
+ * OIDCOAuthAcceptTokenAs is "header"; we flip it to query / cookie via
+ * the cmd setter for these tests.
+ */
+
+START_TEST(test_oauth_bearer_from_query) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get("OIDCOAuthAcceptTokenAs");
+	ck_assert_ptr_null(oidc_cmd_dir_accept_oauth_token_in_set(cmd, dir_cfg, "query"));
+
+	r->args = "access_token=AT-FROM-QUERY";
+
+	const char *token = NULL;
+	ck_assert_int_eq(oidc_oauth_get_bearer_token(r, &token), TRUE);
+	ck_assert_str_eq(token, "AT-FROM-QUERY");
+}
+END_TEST
+
+START_TEST(test_oauth_bearer_from_cookie) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get("OIDCOAuthAcceptTokenAs");
+	/* the default cookie name is "PA.global" */
+	ck_assert_ptr_null(oidc_cmd_dir_accept_oauth_token_in_set(cmd, dir_cfg, "cookie"));
+
+	apr_table_set(r->headers_in, "Cookie", "other=foo; PA.global=AT-FROM-COOKIE; bla=baz");
+
+	const char *token = NULL;
+	ck_assert_int_eq(oidc_oauth_get_bearer_token(r, &token), TRUE);
+	ck_assert_str_eq(token, "AT-FROM-COOKIE");
+}
+END_TEST
+
+/*
+ * Tests for the local-JWT access-token validation path (no introspection
+ * endpoint configured), which is reached via oidc_oauth_validate_token.
+ */
+
+START_TEST(test_oauth_check_userid_jwt_no_keys_configured) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	apr_table_unset(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION);
+	/* no introspection endpoint and no client_secret => oidc_util_key_symmetric_create
+	 * cannot derive a verification key => the JWT validation path fails => 401 */
+	int rc = oidc_oauth_check_userid(r, c, "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGljZSJ9.x");
+	ck_assert_int_eq(rc, HTTP_UNAUTHORIZED);
+	const char *hdr = apr_table_get(r->err_headers_out, "WWW-Authenticate");
+	ck_assert_ptr_nonnull(hdr);
+	ck_assert_msg(_oidc_strstr(hdr, "JWT token could not be validated") != NULL,
+		      "the error description should reference JWT validation");
+}
+END_TEST
+
 int main(void) {
 	TCase *bearer = tcase_create("bearer");
 	tcase_add_checked_fixture(bearer, oidc_test_setup, oidc_test_teardown);
@@ -201,6 +285,8 @@ int main(void) {
 	tcase_add_test(bearer, test_oauth_bearer_from_header_with_leading_spaces);
 	tcase_add_test(bearer, test_oauth_bearer_not_present);
 	tcase_add_test(bearer, test_oauth_bearer_wrong_scheme);
+	tcase_add_test(bearer, test_oauth_bearer_from_query);
+	tcase_add_test(bearer, test_oauth_bearer_from_cookie);
 
 	TCase *introspect = tcase_create("introspect");
 	tcase_add_checked_fixture(introspect, oidc_test_setup, oidc_test_teardown);
@@ -210,10 +296,16 @@ int main(void) {
 	tcase_add_test(introspect, test_oauth_check_userid_introspection_active);
 	tcase_add_test(introspect, test_oauth_check_userid_introspection_inactive);
 	tcase_add_test(introspect, test_oauth_check_userid_introspection_error_response);
+	tcase_add_test(introspect, test_oauth_check_userid_introspection_cached);
+
+	TCase *jwt = tcase_create("jwt");
+	tcase_add_checked_fixture(jwt, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(jwt, test_oauth_check_userid_jwt_no_keys_configured);
 
 	Suite *s = suite_create("oauth");
 	suite_add_tcase(s, bearer);
 	suite_add_tcase(s, introspect);
+	suite_add_tcase(s, jwt);
 
 	return oidc_test_suite_run(s);
 }
