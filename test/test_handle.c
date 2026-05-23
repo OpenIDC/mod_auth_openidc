@@ -25,6 +25,8 @@
  *
  **************************************************************************/
 
+#include "cfg/cfg_int.h"
+#include "cfg/dir.h"
 #include "check_util.h"
 #include "handle/handle.h"
 #include "http_server.h"
@@ -411,6 +413,200 @@ START_TEST(test_handle_response_authorization_redirect_state_mismatch) {
 }
 END_TEST
 
+/*
+ * Tests for handle/discovery.c — cover the is_discovery_response classifier
+ * and the request-side branches that don't require a configured metadata
+ * directory or upstream OP.
+ */
+
+START_TEST(test_handle_is_discovery_response) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* the default args have neither iss nor disc_user => FALSE */
+	ck_assert_int_eq(oidc_is_discovery_response(r, c), FALSE);
+
+	/* iss parameter present => TRUE */
+	r->args = "iss=https%3A%2F%2Fidp.example.com";
+	ck_assert_int_eq(oidc_is_discovery_response(r, c), TRUE);
+
+	/* disc_user parameter present => TRUE */
+	r->args = "disc_user=alice%40example.com";
+	ck_assert_int_eq(oidc_is_discovery_response(r, c), TRUE);
+}
+END_TEST
+
+START_TEST(test_handle_discovery_request_external_url) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* configure an external discovery handler via the dir cmd */
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCDiscoverURL);
+	ck_assert_ptr_null(oidc_cmd_dir_discover_url_set(cmd, dir_cfg, "https://disco.example.com/select"));
+
+	int rc = oidc_discovery_request(r, c);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_msg(_oidc_strstr(loc, "https://disco.example.com/select?") != NULL,
+		      "should redirect to the configured discovery handler");
+	/* the target_link_uri/return-to and the callback (redirect_uri) must be present */
+	ck_assert_msg(_oidc_strstr(loc, "target_link_uri=") != NULL, "redirect carries target_link_uri");
+	ck_assert_msg(_oidc_strstr(loc, "oidc_callback=") != NULL, "redirect carries the callback URI");
+}
+END_TEST
+
+START_TEST(test_handle_discovery_response_no_target_link_uri_no_sso_url) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* iss is set so it looks like a discovery response, but there's no target_link_uri
+	 * and no OIDCDefaultURL configured => INTERNAL_SERVER_ERROR */
+	r->args = "iss=https%3A%2F%2Fidp.example.com";
+	int rc = oidc_discovery_response(r, c);
+	ck_assert_int_eq(rc, HTTP_INTERNAL_SERVER_ERROR);
+}
+END_TEST
+
+/*
+ * Tests for handle/info.c — drive oidc_info_request through the early
+ * validation branches and a happy-path JSON response.
+ */
+
+START_TEST(test_handle_info_unknown_format) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	r->args = "info=xml";
+	int rc = oidc_info_request(r, c, session, FALSE);
+	ck_assert_int_eq(rc, HTTP_UNSUPPORTED_MEDIA_TYPE);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_info_no_remote_user) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	r->args = "info=json";
+	/* session->remote_user is NULL by default */
+	int rc = oidc_info_request(r, c, session, FALSE);
+	ck_assert_int_eq(rc, HTTP_UNAUTHORIZED);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_info_no_hook_data_configured) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	session->remote_user = apr_pstrdup(r->pool, "alice");
+
+	r->args = "info=json";
+	/* no OIDCInfoHook directive applied => NOT_FOUND */
+	int rc = oidc_info_request(r, c, session, FALSE);
+	ck_assert_int_eq(rc, HTTP_NOT_FOUND);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_info_json_happy_path) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	session->remote_user = apr_pstrdup(r->pool, "alice");
+	oidc_session_set_access_token(r, session, "AT-123");
+	oidc_session_set_access_token_type(r, session, "Bearer");
+
+	/* enable two of the info hook fields via the cmd setter */
+	cmd_parms *cmd_iat = oidc_test_cmd_get(OIDCInfoHook);
+	ck_assert_ptr_null(oidc_cmd_info_hook_data_set(cmd_iat, NULL, OIDC_HOOK_INFO_TIMESTAMP));
+	cmd_parms *cmd_user = oidc_test_cmd_get(OIDCInfoHook);
+	ck_assert_ptr_null(oidc_cmd_info_hook_data_set(cmd_user, NULL, OIDC_HOOK_INFO_SESSION_REMOTE_USER));
+
+	r->args = "info=json&extend_session=false";
+	int rc = oidc_info_request(r, c, session, FALSE);
+	ck_assert_int_eq(rc, OK);
+	ck_assert_ptr_nonnull(r->user);
+	ck_assert_str_eq(r->user, "alice");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/*
+ * Tests for handle/dpop.c — cover the disabled path, the missing-parameter
+ * paths and the case where DPoP creation fails because no private keys are
+ * configured.
+ */
+
+START_TEST(test_handle_dpop_disabled_by_default) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* OIDCDPoPMode defaults to off => the DPoP API is disabled => rc stays at HTTP_BAD_REQUEST */
+	int rc = oidc_dpop_request(r, c);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+}
+END_TEST
+
+/*
+ * Helper that flips the (otherwise-undirective) DPoP API switch and sets
+ * OIDC_DPOP_API_INSECURE so the loopback request_rec doesn't trip the
+ * "remote_ip != local_ip" guard (both are NULL in the test fixture, and
+ * _oidc_strnatcasecmp(NULL, NULL) deliberately returns -1).
+ */
+static void e2e_dpop_enable(request_rec *r, oidc_cfg_t *c) {
+	c->dpop_api_enabled = 1;
+	apr_table_set(r->subprocess_env, "OIDC_DPOP_API_INSECURE", "1");
+}
+
+START_TEST(test_handle_dpop_missing_access_token) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	e2e_dpop_enable(r, c);
+	r->args = "";
+
+	int rc = oidc_dpop_request(r, c);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+}
+END_TEST
+
+START_TEST(test_handle_dpop_missing_url_parameter) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	e2e_dpop_enable(r, c);
+	/* access_token is supplied but the url is not */
+	r->args = "dpop=AT-xyz";
+
+	int rc = oidc_dpop_request(r, c);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+}
+END_TEST
+
+START_TEST(test_handle_dpop_create_fails_without_private_keys) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	e2e_dpop_enable(r, c);
+	/* both required params are present, but the test fixture has an empty private_keys array
+	 * so oidc_proto_dpop_create cannot sign the proof and returns FALSE */
+	r->args = "dpop=AT-xyz&url=https%3A%2F%2Frs.example.com%2Fapi";
+
+	int rc = oidc_dpop_request(r, c);
+	ck_assert_int_eq(rc, HTTP_INTERNAL_SERVER_ERROR);
+}
+END_TEST
+
 int main(void) {
 	TCase *userinfo = tcase_create("userinfo");
 	tcase_add_checked_fixture(userinfo, oidc_test_setup, oidc_test_teardown);
@@ -441,10 +637,33 @@ int main(void) {
 	tcase_add_test(response, test_handle_response_save_in_session_with_userinfo);
 	tcase_add_test(response, test_handle_response_authorization_redirect_state_mismatch);
 
+	TCase *discovery = tcase_create("discovery");
+	tcase_add_checked_fixture(discovery, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(discovery, test_handle_is_discovery_response);
+	tcase_add_test(discovery, test_handle_discovery_request_external_url);
+	tcase_add_test(discovery, test_handle_discovery_response_no_target_link_uri_no_sso_url);
+
+	TCase *info = tcase_create("info");
+	tcase_add_checked_fixture(info, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(info, test_handle_info_unknown_format);
+	tcase_add_test(info, test_handle_info_no_remote_user);
+	tcase_add_test(info, test_handle_info_no_hook_data_configured);
+	tcase_add_test(info, test_handle_info_json_happy_path);
+
+	TCase *dpop = tcase_create("dpop");
+	tcase_add_checked_fixture(dpop, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(dpop, test_handle_dpop_disabled_by_default);
+	tcase_add_test(dpop, test_handle_dpop_missing_access_token);
+	tcase_add_test(dpop, test_handle_dpop_missing_url_parameter);
+	tcase_add_test(dpop, test_handle_dpop_create_fails_without_private_keys);
+
 	Suite *s = suite_create("handle");
 	suite_add_tcase(s, userinfo);
 	suite_add_tcase(s, refresh);
 	suite_add_tcase(s, response);
+	suite_add_tcase(s, discovery);
+	suite_add_tcase(s, info);
+	suite_add_tcase(s, dpop);
 
 	return oidc_test_suite_run(s);
 }
