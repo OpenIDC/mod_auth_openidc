@@ -41,10 +41,12 @@
  *
  **************************************************************************/
 
+#include "cache/cache.h"
 #include "cfg/cache.h"
 #include "cfg/cfg_int.h"
 #include "cfg/provider.h"
 #include "check_util.h"
+#include "mod_auth_openidc.h"
 #include "util.h"
 #include "util/util.h"
 
@@ -481,6 +483,130 @@ START_TEST(test_cache_compression_enabled_empty_secret2_fallback) {
 }
 END_TEST
 
+/*
+ * Tests for cache/file.c — swap the cache backend from shm to file
+ * (post_config-style) and run set/get/expiry/overwrite scenarios
+ * against a fresh /tmp/oidc-test-cache.XXXXXX directory.
+ *
+ * The shared mutex (oidc_cfg_refresh_mutex_get / oidc_cache_mutex_*)
+ * is intentionally NOT touched — the file backend reuses the same
+ * mutex infrastructure the shm backend already initialized.
+ */
+
+static oidc_cache_t *e2e_switch_to_file_backend(request_rec *r) {
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_cache_t *prev = (oidc_cache_t *)cfg->cache.impl;
+	cfg->cache.impl = &oidc_cache_file;
+
+	char *tmpl = apr_pstrdup(r->pool, "/tmp/oidc-test-cache.XXXXXX");
+	ck_assert_msg(mkdtemp(tmpl) != NULL, "could not create temp cache dir at %s", tmpl);
+	cfg->cache.file_dir = tmpl;
+
+	/* disable JWT compression: the cache wrapper's encryption path goes through
+	 * oidc_util_jwt_create which calls zlib's deflate; that step can fail
+	 * intermittently in this minimal test environment and isn't what we're testing */
+	apr_table_set(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS", "true");
+
+	ck_assert_int_eq(oidc_cache_file.post_config(r->server->process->pconf, r->server), OK);
+	return prev;
+}
+
+static void e2e_restore_cache_backend(oidc_cache_t *prev) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	cfg->cache.impl = prev;
+	apr_table_unset(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS");
+}
+
+START_TEST(test_cache_file_set_get_basic) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cache_t *prev = e2e_switch_to_file_backend(r);
+
+	apr_time_t expiry = apr_time_now() + apr_time_from_sec(60);
+	ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, "file-k1", "file-v1", expiry), TRUE);
+
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, "file-k1", &value), TRUE);
+	ck_assert_ptr_nonnull(value);
+	ck_assert_str_eq(value, "file-v1");
+
+	e2e_restore_cache_backend(prev);
+}
+END_TEST
+
+START_TEST(test_cache_file_miss) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cache_t *prev = e2e_switch_to_file_backend(r);
+
+	char *value = NULL;
+	/* a key that was never set must return TRUE with *value == NULL */
+	ck_assert_int_eq(oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, "no-such-key", &value), TRUE);
+	ck_assert_ptr_null(value);
+
+	e2e_restore_cache_backend(prev);
+}
+END_TEST
+
+START_TEST(test_cache_file_expired_entry_is_miss) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cache_t *prev = e2e_switch_to_file_backend(r);
+
+	/* set with an expiry already in the past => get must report a miss */
+	apr_time_t past = apr_time_now() - apr_time_from_sec(60);
+	ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, "file-expired", "stale-value", past), TRUE);
+
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, "file-expired", &value), TRUE);
+	ck_assert_ptr_null(value);
+
+	e2e_restore_cache_backend(prev);
+}
+END_TEST
+
+START_TEST(test_cache_file_overwrite_and_delete) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cache_t *prev = e2e_switch_to_file_backend(r);
+
+	apr_time_t expiry = apr_time_now() + apr_time_from_sec(60);
+	ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, "file-k2", "first-value", expiry), TRUE);
+	ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, "file-k2", "second-value", expiry), TRUE);
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, "file-k2", &value), TRUE);
+	ck_assert_str_eq(value, "second-value");
+
+	/* setting NULL deletes the cache entry */
+	ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, "file-k2", NULL, 0), TRUE);
+	value = NULL;
+	ck_assert_int_eq(oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, "file-k2", &value), TRUE);
+	ck_assert_ptr_null(value);
+
+	e2e_restore_cache_backend(prev);
+}
+END_TEST
+
+START_TEST(test_cache_file_default_tmp_dir) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_cache_t *prev = (oidc_cache_t *)cfg->cache.impl;
+	cfg->cache.impl = &oidc_cache_file;
+	/* leave cache.file_dir NULL — post_config must pick a system tmp dir via apr_temp_dir_get */
+	cfg->cache.file_dir = NULL;
+	apr_table_set(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS", "true");
+
+	ck_assert_int_eq(oidc_cache_file.post_config(r->server->process->pconf, r->server), OK);
+	ck_assert_ptr_nonnull(cfg->cache.file_dir);
+
+	apr_time_t expiry = apr_time_now() + apr_time_from_sec(60);
+	ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, "file-default-dir", "ok", expiry), TRUE);
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, "file-default-dir", &value), TRUE);
+	ck_assert_str_eq(value, "ok");
+
+	cfg->cache.impl = prev;
+	apr_table_unset(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS");
+}
+END_TEST
+
 int main(void) {
 	TCase *core = tcase_create("core");
 	tcase_add_checked_fixture(core, oidc_test_setup, oidc_test_teardown);
@@ -500,8 +626,17 @@ int main(void) {
 	tcase_add_test(core, test_cache_compression_enabled_second_passphrase);
 	tcase_add_test(core, test_cache_compression_enabled_empty_secret2_fallback);
 
+	TCase *file = tcase_create("file");
+	tcase_add_checked_fixture(file, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(file, test_cache_file_set_get_basic);
+	tcase_add_test(file, test_cache_file_miss);
+	tcase_add_test(file, test_cache_file_expired_entry_is_miss);
+	tcase_add_test(file, test_cache_file_overwrite_and_delete);
+	tcase_add_test(file, test_cache_file_default_tmp_dir);
+
 	Suite *s = suite_create("cache");
 	suite_add_tcase(s, core);
+	suite_add_tcase(s, file);
 
 	return oidc_test_suite_run(s);
 }
