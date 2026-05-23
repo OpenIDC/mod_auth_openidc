@@ -1691,6 +1691,131 @@ START_TEST(test_handle_logout_request_frontchannel_img) {
 }
 END_TEST
 
+/* build a backchannel-logout JWT with the spec-required events claim, HS256-signed
+ * with the given symmetric secret (default: NULL events claim is omitted, default:
+ * NULL nonce claim is omitted) */
+static char *e2e_sign_backchannel_logout_jwt(request_rec *r, const char *iss, const char *aud, const char *sub,
+					     const char *jti, apr_byte_t with_events, apr_byte_t with_nonce,
+					     const char *secret) {
+	apr_pool_t *pool = r->pool;
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	ck_assert_int_eq(oidc_util_key_symmetric_create(r, secret, 0, NULL, TRUE, &jwk), TRUE);
+	ck_assert_ptr_nonnull(jwk);
+
+	oidc_jwt_t *jwt = oidc_jwt_new(pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(pool, "HS256");
+	json_object_set_new(jwt->payload.value.json, "iss", json_string(iss));
+	json_object_set_new(jwt->payload.value.json, "aud", json_string(aud));
+	json_object_set_new(jwt->payload.value.json, "sub", json_string(sub));
+	json_object_set_new(jwt->payload.value.json, "jti", json_string(jti));
+	apr_time_t now = apr_time_sec(apr_time_now());
+	json_object_set_new(jwt->payload.value.json, "iat", json_integer(now));
+	if (with_events) {
+		json_t *events = json_object();
+		json_object_set_new(events, "http://schemas.openid.net/event/backchannel-logout", json_object());
+		json_object_set_new(jwt->payload.value.json, "events", events);
+	}
+	if (with_nonce)
+		json_object_set_new(jwt->payload.value.json, "nonce", json_string("n1"));
+	jwt->payload.iss = apr_pstrdup(pool, iss);
+	jwt->payload.sub = apr_pstrdup(pool, sub);
+	jwt->payload.iat = now;
+
+	ck_assert_int_eq(oidc_jwt_sign(pool, jwt, jwk, FALSE, &err), TRUE);
+	char *cser = oidc_jose_jwt_serialize(pool, jwt, &err);
+	ck_assert_ptr_nonnull(cser);
+	oidc_jwk_destroy(jwk);
+	oidc_jwt_destroy(jwt);
+	return cser;
+}
+
+/* prepare a POST body the way oidc_util_read_post_params expects it */
+static void e2e_post_body(request_rec *r, const char *body) {
+	r->method_number = M_POST;
+	apr_table_set(r->headers_in, "Content-Type", "application/x-www-form-urlencoded");
+	r->args = apr_pstrdup(r->pool, body);
+	r->remaining = (apr_size_t)_oidc_strlen(body);
+}
+
+START_TEST(test_handle_logout_backchannel_happy_path) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "backchannel-logout-shared-secret-XYZ";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	char *logout_jwt = e2e_sign_backchannel_logout_jwt(r, "https://idp.example.com", "client_id", "alice",
+							    "jti-1", TRUE, FALSE, secret);
+	char *body = apr_psprintf(r->pool, "logout_token=%s", oidc_http_url_encode(r, logout_jwt));
+	e2e_post_body(r, body);
+	apr_table_set(r->subprocess_env, "OIDC_REDIRECT_URI_REQUEST", "backchannel");
+	r->args = apr_pstrcat(r->pool, "logout=backchannel&", body, NULL);
+	r->remaining = (apr_size_t)_oidc_strlen(r->args);
+
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, OK);
+	/* the recommended caching headers should have been emitted */
+	const char *cc = apr_table_get(r->err_headers_out, "Cache-Control");
+	ck_assert_ptr_nonnull(cc);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_logout_backchannel_missing_events_claim) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "backchannel-logout-shared-secret-XYZ";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	/* JWT signs and verifies, but no events claim => spec violation => BAD_REQUEST */
+	char *logout_jwt = e2e_sign_backchannel_logout_jwt(r, "https://idp.example.com", "client_id", "alice",
+							    "jti-2", FALSE, FALSE, secret);
+	char *body = apr_psprintf(r->pool, "logout_token=%s", oidc_http_url_encode(r, logout_jwt));
+	e2e_post_body(r, body);
+	r->args = apr_pstrcat(r->pool, "logout=backchannel&", body, NULL);
+	r->remaining = (apr_size_t)_oidc_strlen(r->args);
+
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_logout_backchannel_nonce_claim_rejected) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "backchannel-logout-shared-secret-XYZ";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	/* a logout token containing a "nonce" claim is rejected per OIDC backchannel spec */
+	char *logout_jwt = e2e_sign_backchannel_logout_jwt(r, "https://idp.example.com", "client_id", "alice",
+							    "jti-3", TRUE, TRUE, secret);
+	char *body = apr_psprintf(r->pool, "logout_token=%s", oidc_http_url_encode(r, logout_jwt));
+	e2e_post_body(r, body);
+	r->args = apr_pstrcat(r->pool, "logout=backchannel&", body, NULL);
+	r->remaining = (apr_size_t)_oidc_strlen(r->args);
+
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
 START_TEST(test_handle_logout_backchannel_no_token) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -1796,6 +1921,9 @@ int main(void) {
 	tcase_add_test(logout, test_handle_logout_request_frontchannel_get);
 	tcase_add_test(logout, test_handle_logout_request_frontchannel_img);
 	tcase_add_test(logout, test_handle_logout_backchannel_no_token);
+	tcase_add_test(logout, test_handle_logout_backchannel_happy_path);
+	tcase_add_test(logout, test_handle_logout_backchannel_missing_events_claim);
+	tcase_add_test(logout, test_handle_logout_backchannel_nonce_claim_rejected);
 
 	TCase *content = tcase_create("content");
 	tcase_add_checked_fixture(content, oidc_test_setup, oidc_test_teardown);

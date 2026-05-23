@@ -38,7 +38,15 @@ AP_DECLARE(const char *) ap_auth_name(request_rec *r) {
 }
 
 AP_DECLARE(long) ap_get_client_block(request_rec *r, char *buffer, apr_size_t bufsiz) {
-	return 0;
+	/* tests stash the POST body in r->args (and r->remaining tracks bytes left); copy
+	 * from there into the caller's buffer so oidc_util_read can drive the form parser */
+	if (r->args == NULL || r->remaining == 0)
+		return 0;
+	apr_size_t off = strlen(r->args) - r->remaining;
+	apr_size_t n = (bufsiz < r->remaining) ? bufsiz : r->remaining;
+	memcpy(buffer, r->args + off, n);
+	r->remaining -= n;
+	return (long)n;
 }
 
 AP_DECLARE(char *) ap_getword(apr_pool_t *atrans, const char **line, char stop) {
