@@ -32,7 +32,8 @@ endif
 
 noinst_HEADERS = \
 	util.h \
-	check_util.h
+	check_util.h \
+	http_server.h
 
 LDADD = ${top_builddir}/src/libauth_openidc.la ${LIBADD}
 
@@ -59,6 +60,7 @@ libtest_la_CFLAGS = ${AM_CFLAGS} -fPIC
 libtest_la_SOURCES = \
 	util.c \
 	check_util.c \
+	http_server.c \
 	stub.c
 
 AM_CFLAGS += @CHECK_CFLAGS@

@@ -47,6 +47,7 @@
 #include "check_util.h"
 #include "http.h"
 #include "http_int.h"
+#include "http_server.h"
 #include "util.h"
 #include <curl/curl.h>
 
@@ -471,6 +472,237 @@ START_TEST(test_interface_env_var_passthrough) {
 }
 END_TEST
 
+/*
+ * End-to-end tests driving oidc_http_get/post_form/post_json against a
+ * loopback HTTP server fixture. These cover the curl handoff that the
+ * unit tests above cannot reach: request line assembly, header passing,
+ * body encoding, response decoding, response_code/headers capture,
+ * and retry-on-connect-refused.
+ */
+
+static oidc_http_timeout_t e2e_timeout(void) {
+	oidc_http_timeout_t t = {
+	    .request_timeout = 10,
+	    .connect_timeout = 5,
+	    .retries = 1,
+	    .retry_interval = 10,
+	};
+	return t;
+}
+
+static oidc_http_outgoing_proxy_t e2e_no_proxy(void) {
+	oidc_http_outgoing_proxy_t p = {NULL, NULL, OIDC_CONFIG_POS_INT_UNSET};
+	return p;
+}
+
+START_TEST(test_e2e_get_happy_path) {
+	request_rec *r = oidc_test_request_get();
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = "{\"ok\":true}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	const char *url = oidc_test_http_server_url(srv, r->pool);
+	char *response = NULL;
+	long status = 0;
+	oidc_http_timeout_t to = e2e_timeout();
+	oidc_http_outgoing_proxy_t pr = e2e_no_proxy();
+	apr_byte_t ok = oidc_http_get(r, url, NULL, NULL, NULL, NULL, FALSE, &response, &status, NULL, &to, &pr, NULL,
+				      NULL, NULL, NULL);
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_msg(ok == TRUE, "curl GET succeeds");
+	ck_assert_msg(status == 200, "status decoded from response");
+	ck_assert_ptr_nonnull(response);
+	ck_assert_msg(_oidc_strcmp(response, "{\"ok\":true}") == 0, "response body returned verbatim");
+	ck_assert_ptr_nonnull(cap);
+	ck_assert_msg(_oidc_strcmp(cap->method, "GET") == 0, "server saw GET");
+	ck_assert_msg(_oidc_strcmp(cap->path, "/") == 0, "server saw root path");
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+START_TEST(test_e2e_post_form) {
+	request_rec *r = oidc_test_request_get();
+	oidc_test_http_response_t resp = {.status_code = 200, .body = ""};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	const char *url = oidc_test_http_server_url(srv, r->pool);
+	apr_table_t *params = apr_table_make(r->pool, 3);
+	apr_table_set(params, "grant_type", "authorization_code");
+	apr_table_set(params, "code", "abc 123");
+
+	char *response = NULL;
+	long status = 0;
+	oidc_http_timeout_t to = e2e_timeout();
+	oidc_http_outgoing_proxy_t pr = e2e_no_proxy();
+	apr_byte_t ok = oidc_http_post_form(r, url, params, NULL, NULL, NULL, FALSE, &response, &status, NULL, &to, &pr,
+					    NULL, NULL, NULL, NULL);
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_msg(ok == TRUE, "POST form succeeds");
+	ck_assert_ptr_nonnull(cap);
+	ck_assert_msg(_oidc_strcmp(cap->method, "POST") == 0, "server saw POST");
+	const char *ct = apr_table_get(cap->headers, "Content-Type");
+	ck_assert_ptr_nonnull(ct);
+	ck_assert_msg(_oidc_strcmp(ct, OIDC_HTTP_CONTENT_TYPE_FORM_ENCODED) == 0, "form content-type sent");
+	ck_assert_ptr_nonnull(cap->body);
+	ck_assert_msg(_oidc_strstr(cap->body, "grant_type=authorization_code") != NULL,
+		      "grant_type param present in body");
+	ck_assert_msg(_oidc_strstr(cap->body, "code=abc%20123") != NULL, "code param url-encoded");
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+START_TEST(test_e2e_post_json) {
+	request_rec *r = oidc_test_request_get();
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = "{\"echo\":1}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	const char *url = oidc_test_http_server_url(srv, r->pool);
+	json_t *j = json_pack("{s:s,s:i}", "key", "value", "n", 42);
+	char *response = NULL;
+	long status = 0;
+	oidc_http_timeout_t to = e2e_timeout();
+	oidc_http_outgoing_proxy_t pr = e2e_no_proxy();
+	apr_byte_t ok = oidc_http_post_json(r, url, j, NULL, NULL, NULL, FALSE, &response, &status, NULL, &to, &pr,
+					    NULL, NULL, NULL, NULL);
+	json_decref(j);
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_msg(ok == TRUE, "POST json succeeds");
+	const char *ct = apr_table_get(cap->headers, "Content-Type");
+	ck_assert_ptr_nonnull(ct);
+	ck_assert_msg(_oidc_strcmp(ct, OIDC_HTTP_CONTENT_TYPE_JSON) == 0, "json content-type sent");
+	ck_assert_ptr_nonnull(cap->body);
+	ck_assert_msg(_oidc_strstr(cap->body, "\"key\"") != NULL && _oidc_strstr(cap->body, "\"value\"") != NULL,
+		      "json body contains key/value");
+	ck_assert_msg(_oidc_strstr(cap->body, "42") != NULL, "json body contains integer field");
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+START_TEST(test_e2e_bearer_authorization) {
+	request_rec *r = oidc_test_request_get();
+	oidc_test_http_response_t resp = {.status_code = 200, .body = ""};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	const char *url = oidc_test_http_server_url(srv, r->pool);
+	char *response = NULL;
+	long status = 0;
+	oidc_http_timeout_t to = e2e_timeout();
+	oidc_http_outgoing_proxy_t pr = e2e_no_proxy();
+	apr_byte_t ok = oidc_http_get(r, url, NULL, NULL, "TOK-BEARER", NULL, FALSE, &response, &status, NULL, &to, &pr,
+				      NULL, NULL, NULL, NULL);
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_msg(ok == TRUE, "bearer GET succeeds");
+	const char *auth = apr_table_get(cap->headers, OIDC_HTTP_HDR_AUTHORIZATION);
+	ck_assert_ptr_nonnull(auth);
+	ck_assert_msg(_oidc_strcmp(auth, "Bearer TOK-BEARER") == 0, "Bearer scheme sent");
+	ck_assert_ptr_null(apr_table_get(cap->headers, OIDC_HTTP_HDR_DPOP));
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+START_TEST(test_e2e_dpop_authorization) {
+	request_rec *r = oidc_test_request_get();
+	oidc_test_http_response_t resp = {.status_code = 200, .body = ""};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	const char *url = oidc_test_http_server_url(srv, r->pool);
+	char *response = NULL;
+	long status = 0;
+	oidc_http_timeout_t to = e2e_timeout();
+	oidc_http_outgoing_proxy_t pr = e2e_no_proxy();
+	apr_byte_t ok = oidc_http_get(r, url, NULL, NULL, "TOK-DPOP", "PROOF.JWT.HERE", FALSE, &response, &status, NULL,
+				      &to, &pr, NULL, NULL, NULL, NULL);
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_msg(ok == TRUE, "dpop GET succeeds");
+	const char *auth = apr_table_get(cap->headers, OIDC_HTTP_HDR_AUTHORIZATION);
+	ck_assert_ptr_nonnull(auth);
+	ck_assert_msg(_oidc_strcmp(auth, "DPoP TOK-DPOP") == 0, "DPoP scheme replaces Bearer");
+	const char *dpop = apr_table_get(cap->headers, OIDC_HTTP_HDR_DPOP);
+	ck_assert_ptr_nonnull(dpop);
+	ck_assert_msg(_oidc_strcmp(dpop, "PROOF.JWT.HERE") == 0, "DPoP header carries proof");
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+START_TEST(test_e2e_response_hdrs_and_status) {
+	request_rec *r = oidc_test_request_get();
+	apr_table_t *extra = apr_table_make(r->pool, 2);
+	apr_table_set(extra, OIDC_HTTP_HDR_DPOP_NONCE, "nonce-123");
+	oidc_test_http_response_t resp = {.status_code = 401,
+					  .content_type = "application/json",
+					  .body = "{\"error\":\"use_dpop_nonce\"}",
+					  .extra_headers = extra};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	const char *url = oidc_test_http_server_url(srv, r->pool);
+	apr_hash_t *hdrs = apr_hash_make(r->pool);
+	apr_hash_set(hdrs, OIDC_HTTP_HDR_DPOP_NONCE, APR_HASH_KEY_STRING, "");
+	apr_hash_set(hdrs, OIDC_HTTP_HDR_CONTENT_TYPE, APR_HASH_KEY_STRING, "");
+
+	char *response = NULL;
+	long status = 0;
+	oidc_http_timeout_t to = e2e_timeout();
+	oidc_http_outgoing_proxy_t pr = e2e_no_proxy();
+	apr_byte_t ok = oidc_http_get(r, url, NULL, NULL, NULL, NULL, FALSE, &response, &status, hdrs, &to, &pr, NULL,
+				      NULL, NULL, NULL);
+
+	(void)oidc_test_http_server_wait(srv);
+	/* the call itself succeeds at the transport layer even for 401 */
+	ck_assert_msg(ok == TRUE, "non-2xx still returns TRUE; the status is exposed via response_code");
+	ck_assert_msg(status == 401, "401 code captured");
+	const char *nonce = apr_hash_get(hdrs, OIDC_HTTP_HDR_DPOP_NONCE, APR_HASH_KEY_STRING);
+	ck_assert_ptr_nonnull(nonce);
+	ck_assert_msg(_oidc_strcmp(nonce, "nonce-123") == 0, "DPoP-Nonce captured from response");
+	const char *ct = apr_hash_get(hdrs, OIDC_HTTP_HDR_CONTENT_TYPE, APR_HASH_KEY_STRING);
+	ck_assert_ptr_nonnull(ct);
+	ck_assert_msg(_oidc_strstr(ct, "application/json") != NULL, "Content-Type captured");
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+START_TEST(test_e2e_retry_on_connect_refused) {
+	request_rec *r = oidc_test_request_get();
+
+	/* free port with nothing listening -> connect() returns ECONNREFUSED */
+	int port = oidc_test_http_free_port(r->pool);
+	ck_assert_msg(port > 0, "free port acquired");
+
+	const char *url = apr_psprintf(r->pool, "http://127.0.0.1:%d", port);
+	char *response = NULL;
+	long status = 0;
+	oidc_http_timeout_t to = {.request_timeout = 2, .connect_timeout = 2, .retries = 2, .retry_interval = 5};
+	oidc_http_outgoing_proxy_t pr = e2e_no_proxy();
+
+	apr_time_t before = apr_time_now();
+	apr_byte_t ok = oidc_http_get(r, url, NULL, NULL, NULL, NULL, FALSE, &response, &status, NULL, &to, &pr, NULL,
+				      NULL, NULL, NULL);
+	apr_time_t after = apr_time_now();
+
+	ck_assert_msg(ok == FALSE, "connect-refused after retries returns FALSE");
+	/* with retries=2, retry_interval=5ms, we expect at least two retry_interval sleeps */
+	apr_time_t elapsed_ms = (after - before) / 1000;
+	ck_assert_msg(elapsed_ms >= 5, "at least one retry back-off elapsed (got %ldms)", (long)elapsed_ms);
+}
+END_TEST
+
 int main(void) {
 	TCase *accept = tcase_create("accept");
 	tcase_add_checked_fixture(accept, oidc_test_setup, oidc_test_teardown);
@@ -499,9 +731,22 @@ int main(void) {
 	tcase_add_test(curl_helpers, test_user_agent_defaults_and_override);
 	tcase_add_test(curl_helpers, test_interface_env_var_passthrough);
 
+	TCase *e2e = tcase_create("e2e_curl");
+	tcase_add_checked_fixture(e2e, oidc_test_setup, oidc_test_teardown);
+	/* default tcase timeout is too tight for the retry test's back-off + connect timeouts */
+	tcase_set_timeout(e2e, 30);
+	tcase_add_test(e2e, test_e2e_get_happy_path);
+	tcase_add_test(e2e, test_e2e_post_form);
+	tcase_add_test(e2e, test_e2e_post_json);
+	tcase_add_test(e2e, test_e2e_bearer_authorization);
+	tcase_add_test(e2e, test_e2e_dpop_authorization);
+	tcase_add_test(e2e, test_e2e_response_hdrs_and_status);
+	tcase_add_test(e2e, test_e2e_retry_on_connect_refused);
+
 	Suite *s = suite_create("http");
 	suite_add_tcase(s, accept);
 	suite_add_tcase(s, curl_helpers);
+	suite_add_tcase(s, e2e);
 
 	return oidc_test_suite_run(s);
 }
