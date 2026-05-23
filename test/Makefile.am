@@ -39,18 +39,11 @@ LDADD = ${top_builddir}/src/libauth_openidc.la ${LIBADD}
 
 noinst_PROGRAMS = test-cmd
 
-TESTS = test
-
-test_SOURCES = \
-	test.c \
-	util.c \
-	stub.c
-
 test_cmd_SOURCES = \
 	test-cmd.c \
 	util.c \
 	stub.c
-	
+
 if HAVE_CHECK
 
 noinst_LTLIBRARIES = libtest.la
@@ -66,7 +59,7 @@ libtest_la_SOURCES = \
 AM_CFLAGS += @CHECK_CFLAGS@
 LDADD += libtest.la @CHECK_LIBS@
 
-TESTS += \
+TESTS = \
 	test_cfg \
 	test_util \
 	test_jose \

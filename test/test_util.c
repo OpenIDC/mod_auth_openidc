@@ -943,6 +943,28 @@ START_TEST(test_util_url_parameter_helpers) {
 }
 END_TEST
 
+/*
+ * Tests migrated from the legacy test/test.c suite — covers the
+ * non-NULL/non-oversized branches of oidc_util_json_decode_object that
+ * test_util_json above doesn't reach.
+ */
+START_TEST(test_util_legacy_json_decode_object) {
+	request_rec *r = oidc_test_request_get();
+	json_t *json = NULL;
+
+	/* embedded NUL via a   escape must be rejected */
+	ck_assert_int_eq(oidc_util_json_decode_object(r, "{ \"n\": \"\\u0000<?php echo 'Hello' ?>\"}", &json), FALSE);
+
+	/* an oversized JSON blob (>4 KiB of garbage) must be rejected by the size guard */
+	apr_pool_t *pool = oidc_test_pool_get();
+	apr_size_t big_len = 8192;
+	char *big = apr_palloc(pool, big_len + 1);
+	memset(big, 'a', big_len);
+	big[big_len] = '\0';
+	ck_assert_int_eq(oidc_util_json_decode_object(r, big, &json), FALSE);
+}
+END_TEST
+
 START_TEST(test_util_json_string_and_encode) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	request_rec *r = oidc_test_request_get();
@@ -1144,6 +1166,7 @@ int main(void) {
 	c = tcase_create("json");
 	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(c, test_util_json);
+	tcase_add_test(c, test_util_legacy_json_decode_object);
 	suite_add_tcase(s, c);
 
 	c = tcase_create("jwt");

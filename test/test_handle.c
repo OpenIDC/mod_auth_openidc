@@ -785,6 +785,217 @@ START_TEST(test_handle_refresh_request_happy_path) {
 }
 END_TEST
 
+/*
+ * Tests migrated from the legacy test/test.c TST_ASSERT-based suite covering
+ * the Require-claim authz worker, remote-user claim mapping, the
+ * is-auth-capable heuristics, open-redirect prevention and cookie-domain checks.
+ */
+
+/* helper that re-applies the same Require-claim pattern used throughout the legacy tests */
+static authz_status _legacy_authz(request_rec *r, json_t *json, const char *require_args) {
+	ap_expr_info_t *parsed = (ap_expr_info_t *)apr_pcalloc(r->pool, sizeof(ap_expr_info_t));
+	parsed->filename = require_args;
+	return oidc_authz_24_worker(r, json, require_args, parsed, oidc_authz_match_claim);
+}
+
+START_TEST(test_handle_legacy_authz_worker) {
+	request_rec *r = oidc_test_request_get();
+	r->user = "dummy";
+
+	const char *claims = "{"
+			     "\"sub\":\"stef\","
+			     "\"areal\":1.1,"
+			     "\"anull\":null,"
+			     "\"anint\":99,"
+			     "\"anegativeint\":-99,"
+			     "\"aminusoneint\":-1,"
+			     "\"nested\":{\"level1\":{\"level2\":\"hans\"},"
+			     "\"nestedarray\":[\"b\",\"c\",true,\"false\",[\"d\",\"e\"]],"
+			     "\"somebool\":false},"
+			     "\"somearray\":[\"one\",\"two\",\"three\"],"
+			     "\"somebool\":false,"
+			     "\"realm_access\":{\"roles\":[\"someRole1\",\"someRole2\"]},"
+			     "\"resource_access\":{\"someClient\":{\"roles\":[\"someRole3\",\"someRole4\"]}},"
+			     "\"https://test.com/pay\":\"alot\","
+			     "\"https://company.com/productAccess\":[\"snake2\",\"snake2ref\",\"fxt\"]"
+			     "}";
+	json_error_t err;
+	json_t *json = json_loads(claims, 0, &err);
+	ck_assert_msg(json != NULL, "JSON parsed [%s]", err.text);
+
+	/* simple sub claim — denied / granted */
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim sub:hans"), AUTHZ_DENIED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim sub:stef"), AUTHZ_GRANTED);
+
+	/* nested-dotted-path claims */
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim nested.level1.level2:hans"), AUTHZ_GRANTED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim nested.nestedarray:a"), AUTHZ_DENIED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim nested.nestedarray:c"), AUTHZ_GRANTED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim nested.level1:a"), AUTHZ_DENIED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim somebool:a"), AUTHZ_DENIED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim somebool.level1:a"), AUTHZ_DENIED);
+
+	/* Keycloak-style role checks */
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim realm_access.roles:someRole1"), AUTHZ_GRANTED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim resource_access.someClient.roles:someRole4"),
+			 AUTHZ_GRANTED);
+
+	/* namespaced (URI-shaped) keys */
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim https://test.com/pay:alot"), AUTHZ_GRANTED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim https://company.com/productAccess:snake2"),
+			 AUTHZ_GRANTED);
+
+	/* PCRE expressions */
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim nested.level1.level2~.an."), AUTHZ_GRANTED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim nested.level1.level2~zan."), AUTHZ_DENIED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim nested.nestedarray~."), AUTHZ_GRANTED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim nested.nestedarray~.b"), AUTHZ_DENIED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim email~...$"), AUTHZ_DENIED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim sub~...$"), AUTHZ_GRANTED);
+
+	/* numeric / null comparisons */
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim areal:1.1"), AUTHZ_GRANTED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim anull:null"), AUTHZ_GRANTED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim areal:null"), AUTHZ_DENIED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim anint:99"), AUTHZ_GRANTED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim anint:100"), AUTHZ_DENIED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim anegativeint:-99"), AUTHZ_GRANTED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim anegativeint:$99"), AUTHZ_DENIED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim aminusoneint:-1"), AUTHZ_GRANTED);
+
+	json_decref(json);
+}
+END_TEST
+
+START_TEST(test_handle_legacy_remote_user) {
+	request_rec *r = oidc_test_request_get();
+	char *remote_user = NULL;
+	json_t *json = NULL;
+
+	/* simple username extracted by regex first-match (no replace) */
+	ck_assert_int_eq(oidc_util_json_decode_object(r, "{\"upn\":\"nneul@umsystem.edu\"}", &json), TRUE);
+	oidc_get_remote_user(r, "upn", "^(.*)@umsystem\\.edu", NULL, json, &remote_user);
+	ck_assert_str_eq(remote_user, "nneul");
+	ck_assert_int_eq(oidc_get_remote_user(r, "upn", "^(.*)@umsystem\\.edu", "$1", json, &remote_user), TRUE);
+	ck_assert_str_eq(remote_user, "nneul");
+	json_decref(json);
+
+	/* regex with replace expression that swaps captured groups */
+	json = NULL;
+	ck_assert_int_eq(oidc_util_json_decode_object(r, "{\"email\":\"nneul@umsystem.edu\"}", &json), TRUE);
+	ck_assert_int_eq(oidc_get_remote_user(r, "email", "^(.*)@([^.]+)\\..+$", "$2\\$1", json, &remote_user), TRUE);
+	ck_assert_str_eq(remote_user, "umsystem\\nneul");
+	json_decref(json);
+
+	/* UTF-8 username — must round-trip through the replace expression intact */
+	json = NULL;
+	ck_assert_int_eq(oidc_util_json_decode_object(r, "{ \"name\": \"Dominik František Bučík\" }", &json), TRUE);
+	ck_assert_int_eq(oidc_get_remote_user(r, "name", "^(.*)$", "$1@test.com", json, &remote_user), TRUE);
+	ck_assert_str_eq(remote_user, "Dominik František Bučík@test.com");
+	json_decref(json);
+
+	json = NULL;
+	ck_assert_int_eq(oidc_util_json_decode_object(r, "{ \"preferred_username\": \"dbucik\" }", &json), TRUE);
+	ck_assert_int_eq(oidc_get_remote_user(r, "preferred_username", "^(.*)$", "$1@test.com", json, &remote_user),
+			 TRUE);
+	ck_assert_str_eq(remote_user, "dbucik@test.com");
+	json_decref(json);
+}
+END_TEST
+
+START_TEST(test_handle_legacy_is_auth_capable_request) {
+	request_rec *r = oidc_test_request_get();
+
+	apr_table_set(r->headers_in, "Accept", "*/*");
+	ck_assert_int_eq(oidc_is_auth_capable_request(r), TRUE);
+
+	apr_table_set(r->headers_in, "X-Requested-With", "XMLHttpRequest");
+	ck_assert_int_eq(oidc_is_auth_capable_request(r), FALSE);
+	apr_table_unset(r->headers_in, "X-Requested-With");
+
+	apr_table_set(r->headers_in, "Sec-Fetch-Mode", "navigate");
+	ck_assert_int_eq(oidc_is_auth_capable_request(r), TRUE);
+	apr_table_unset(r->headers_in, "Sec-Fetch-Mode");
+
+	apr_table_set(r->headers_in, "Sec-Fetch-Mode", "cors");
+	ck_assert_int_eq(oidc_is_auth_capable_request(r), FALSE);
+	apr_table_unset(r->headers_in, "Sec-Fetch-Mode");
+
+	apr_table_set(r->headers_in, "Sec-Fetch-Dest", "iframe");
+	ck_assert_int_eq(oidc_is_auth_capable_request(r), FALSE);
+	apr_table_unset(r->headers_in, "Sec-Fetch-Dest");
+
+	apr_table_set(r->headers_in, "Sec-Fetch-Dest", "image");
+	ck_assert_int_eq(oidc_is_auth_capable_request(r), FALSE);
+	apr_table_unset(r->headers_in, "Sec-Fetch-Dest");
+
+	apr_table_set(r->headers_in, "Sec-Fetch-Dest", "document");
+	ck_assert_int_eq(oidc_is_auth_capable_request(r), TRUE);
+	apr_table_unset(r->headers_in, "Sec-Fetch-Dest");
+
+	apr_table_set(r->headers_in, "Accept", "application/json");
+	ck_assert_int_eq(oidc_is_auth_capable_request(r), FALSE);
+	apr_table_unset(r->headers_in, "Accept");
+}
+END_TEST
+
+START_TEST(test_handle_legacy_open_redirect) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	char *err_str = NULL, *err_desc = NULL;
+
+	/* a same-host URL is allowed; a different-host URL is not */
+	ck_assert_int_eq(oidc_validate_redirect_url(r, c, "https://www.example.com/somewhere", TRUE, &err_str, &err_desc),
+			 TRUE);
+	ck_assert_int_eq(oidc_validate_redirect_url(r, c, "https://evil.example.com/somewhere", TRUE, &err_str, &err_desc),
+			 FALSE);
+
+	/* now walk the open-redirect payload list — every entry must be REJECTED */
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *filename = apr_psprintf(r->pool, "%s/%s", dir, "open-redirect-payload-list.txt");
+	apr_file_t *f = NULL;
+	apr_status_t rv = apr_file_open(&f, filename, APR_READ, APR_OS_DEFAULT, r->pool);
+	ck_assert_msg(rv == APR_SUCCESS, "could not open open-redirect-payload-list.txt at %s", filename);
+
+	char line_buf[8096];
+	while (apr_file_gets(line_buf, sizeof(line_buf), f) == APR_SUCCESS) {
+		size_t line_s = _oidc_strlen(line_buf);
+		if (line_s > 0 && line_buf[line_s - 1] == '\n')
+			line_buf[line_s - 1] = '\0';
+		err_str = NULL;
+		err_desc = NULL;
+		ck_assert_msg(oidc_validate_redirect_url(r, c, line_buf, TRUE, &err_str, &err_desc) == FALSE,
+			      "open-redirect payload was accepted: %s", line_buf);
+	}
+	apr_file_close(f);
+}
+END_TEST
+
+START_TEST(test_handle_legacy_check_cookie_domain) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_session_t *session = NULL;
+
+	oidc_session_load(r, &session);
+	oidc_session_set_cookie_domain(r, session, "ab001sb161djbn.xyz.com");
+	apr_table_set(r->headers_in, "Host", "ab001SB161djbn.xyz.com");
+
+	ck_assert_int_eq(oidc_check_cookie_domain(r, c, session), TRUE);
+	ck_assert_int_eq(oidc_request_check_cookie_domain(r, c, "https://WWW.example.com/protected/index.html"), TRUE);
+
+	c->cookie_domain = ".XYZ.com";
+	ck_assert_int_eq(
+	    oidc_request_check_cookie_domain(r, c, "https://ab001sb161djbn.xyz.com/protected/index.html"), TRUE);
+
+	c->cookie_domain = "ab001SB161djbn.xyz.com";
+	ck_assert_int_eq(
+	    oidc_request_check_cookie_domain(r, c, "https://ab001sb161djbn.xyz.com/protected/index.html"), TRUE);
+
+	c->cookie_domain = NULL;
+	oidc_session_free(r, session);
+}
+END_TEST
+
 int main(void) {
 	TCase *userinfo = tcase_create("userinfo");
 	tcase_add_checked_fixture(userinfo, oidc_test_setup, oidc_test_teardown);
@@ -842,6 +1053,14 @@ int main(void) {
 	tcase_add_test(dpop, test_handle_dpop_missing_url_parameter);
 	tcase_add_test(dpop, test_handle_dpop_create_fails_without_private_keys);
 
+	TCase *legacy = tcase_create("legacy");
+	tcase_add_checked_fixture(legacy, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(legacy, test_handle_legacy_authz_worker);
+	tcase_add_test(legacy, test_handle_legacy_remote_user);
+	tcase_add_test(legacy, test_handle_legacy_is_auth_capable_request);
+	tcase_add_test(legacy, test_handle_legacy_open_redirect);
+	tcase_add_test(legacy, test_handle_legacy_check_cookie_domain);
+
 	Suite *s = suite_create("handle");
 	suite_add_tcase(s, userinfo);
 	suite_add_tcase(s, refresh);
@@ -849,6 +1068,7 @@ int main(void) {
 	suite_add_tcase(s, discovery);
 	suite_add_tcase(s, info);
 	suite_add_tcase(s, dpop);
+	suite_add_tcase(s, legacy);
 
 	return oidc_test_suite_run(s);
 }
