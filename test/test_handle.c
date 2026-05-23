@@ -1395,6 +1395,154 @@ START_TEST(test_handle_legacy_check_cookie_domain) {
 END_TEST
 
 /*
+ * Tests for handle/revoke.c — oidc_revoke_session and oidc_revoke_at_cache_remove.
+ */
+
+START_TEST(test_handle_revoke_session_no_id) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* no ?revoke_session= => BAD_REQUEST */
+	r->args = "";
+	int rc = oidc_revoke_session(r, c);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+}
+END_TEST
+
+START_TEST(test_handle_revoke_session_server_cache) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* test fixture uses server-cache session type; cache_set with NULL value returns TRUE => OK */
+	r->args = "revoke_session=session-uuid-1";
+	int rc = oidc_revoke_session(r, c);
+	ck_assert_int_eq(rc, OK);
+	ck_assert_str_eq(r->user, "");
+}
+END_TEST
+
+START_TEST(test_handle_revoke_at_cache_remove_not_cached) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	r->args = "remove_at_cache=AT-not-in-cache";
+	int rc = oidc_revoke_at_cache_remove(r, c);
+	ck_assert_int_eq(rc, HTTP_NOT_FOUND);
+}
+END_TEST
+
+START_TEST(test_handle_revoke_at_cache_remove_cached) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* prime the AT cache then remove */
+	oidc_cache_set_access_token(r, "AT-cached", "{\"sub\":\"alice\"}", apr_time_now() + apr_time_from_sec(3600));
+	r->args = "remove_at_cache=AT-cached";
+	int rc = oidc_revoke_at_cache_remove(r, c);
+	ck_assert_int_eq(rc, OK);
+}
+END_TEST
+
+/*
+ * Tests for handle/session_management.c — oidc_session_management entry point.
+ */
+
+START_TEST(test_handle_session_management_no_cmd) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	r->args = "";
+	int rc = oidc_session_management(r, c, session);
+	ck_assert_int_eq(rc, HTTP_INTERNAL_SERVER_ERROR);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_session_management_unknown_cmd) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	r->args = "session=something_unrecognized";
+	int rc = oidc_session_management(r, c, session);
+	ck_assert_int_eq(rc, HTTP_INTERNAL_SERVER_ERROR);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_session_management_logout) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* session=logout maps to oidc_logout_request with the OIDCDefaultSLOURL as the URL */
+	r->args = "session=logout";
+	int rc = oidc_session_management(r, c, session);
+	/* no OIDCDefaultSLOURL configured => the logout helper renders the "Logged Out" HTML page */
+	ck_assert_int_eq(rc, OK);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_session_management_iframe_op_unconfigured) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* check_session_iframe not configured on the static provider => NOT_FOUND */
+	r->args = "session=iframe_op";
+	int rc = oidc_session_management(r, c, session);
+	ck_assert_int_eq(rc, HTTP_NOT_FOUND);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_session_management_iframe_op_configured) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	oidc_cfg_provider_check_session_iframe_set(r->pool, provider, "https://idp.example.com/check-session");
+
+	r->args = "session=iframe_op";
+	int rc = oidc_session_management(r, c, session);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	ck_assert_str_eq(apr_table_get(r->headers_out, "Location"), "https://idp.example.com/check-session");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_session_management_iframe_rp_configured) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	oidc_cfg_provider_check_session_iframe_set(r->pool, provider, "https://idp.example.com/check-session");
+	/* client_id is already "client_id" by default => iframe_rp generates the JS body */
+
+	r->args = "session=iframe_rp";
+	int rc = oidc_session_management(r, c, session);
+	ck_assert_int_eq(rc, OK);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/*
  * Tests for handle/jwks.c and handle/content.c
  */
 
@@ -1656,6 +1804,22 @@ int main(void) {
 	tcase_add_test(content, test_handle_content_handler_unknown_redirect_uri_request);
 	tcase_add_test(content, test_handle_content_handler_non_redirect_no_state);
 
+	TCase *revoke = tcase_create("revoke");
+	tcase_add_checked_fixture(revoke, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(revoke, test_handle_revoke_session_no_id);
+	tcase_add_test(revoke, test_handle_revoke_session_server_cache);
+	tcase_add_test(revoke, test_handle_revoke_at_cache_remove_not_cached);
+	tcase_add_test(revoke, test_handle_revoke_at_cache_remove_cached);
+
+	TCase *session_mgmt = tcase_create("session_mgmt");
+	tcase_add_checked_fixture(session_mgmt, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(session_mgmt, test_handle_session_management_no_cmd);
+	tcase_add_test(session_mgmt, test_handle_session_management_unknown_cmd);
+	tcase_add_test(session_mgmt, test_handle_session_management_logout);
+	tcase_add_test(session_mgmt, test_handle_session_management_iframe_op_unconfigured);
+	tcase_add_test(session_mgmt, test_handle_session_management_iframe_op_configured);
+	tcase_add_test(session_mgmt, test_handle_session_management_iframe_rp_configured);
+
 	Suite *s = suite_create("handle");
 	suite_add_tcase(s, userinfo);
 	suite_add_tcase(s, refresh);
@@ -1666,6 +1830,8 @@ int main(void) {
 	suite_add_tcase(s, legacy);
 	suite_add_tcase(s, logout);
 	suite_add_tcase(s, content);
+	suite_add_tcase(s, revoke);
+	suite_add_tcase(s, session_mgmt);
 
 	return oidc_test_suite_run(s);
 }
