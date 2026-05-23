@@ -1110,6 +1110,124 @@ START_TEST(test_handle_legacy_check_cookie_domain) {
 }
 END_TEST
 
+/*
+ * Tests for handle/logout.c — drive oidc_logout and oidc_logout_request
+ * through the local-logout, front-channel and backchannel branches that
+ * the existing test_logout_request doesn't reach.
+ */
+
+START_TEST(test_handle_logout_local_no_return_url) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* no ?logout= and no end_session_endpoint configured => local-logout HTML response */
+	r->args = "";
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, OK);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_logout_local_with_return_url) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* return URL pointing to our hostname is accepted by the open-redirect guard */
+	r->args = "logout=https%3A%2F%2Fwww.example.com%2Flogged-out";
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	ck_assert_str_eq(apr_table_get(r->headers_out, "Location"), "https://www.example.com/logged-out");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_logout_invalid_return_url) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* a return URL on a different host is rejected as a potential open redirect */
+	r->args = "logout=https%3A%2F%2Fevil.example.com%2Foops";
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_ne(rc, HTTP_MOVED_TEMPORARILY);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_logout_request_no_url_no_session) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* direct entry: no session, no URL => "Logged Out" HTML page */
+	int rc = oidc_logout_request(r, c, session, NULL, FALSE);
+	ck_assert_int_eq(rc, OK);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_logout_request_frontchannel_get) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* front-channel "get" style: spec-compliant iframe logout; OP supplies sid+iss */
+	r->args = "logout=get&sid=session-id&iss=https%3A%2F%2Fidp.example.com";
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, OK);
+	/* the recommended caching headers must be emitted */
+	const char *cc = apr_table_get(r->err_headers_out, "Cache-Control");
+	ck_assert_ptr_nonnull(cc);
+	ck_assert_msg(_oidc_strstr(cc, "no-cache") != NULL, "front-channel logout must set no-cache");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_logout_request_frontchannel_img) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* "img" style returns a transparent pixel rather than an HTML body */
+	r->args = "logout=img";
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, OK);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_logout_backchannel_no_token) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* POST to the backchannel endpoint without a logout_token => BAD_REQUEST */
+	r->args = "logout=backchannel";
+	r->method_number = M_POST;
+	apr_table_set(r->headers_in, "Content-Type", "application/x-www-form-urlencoded");
+	r->remaining = 0;
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
 int main(void) {
 	TCase *userinfo = tcase_create("userinfo");
 	tcase_add_checked_fixture(userinfo, oidc_test_setup, oidc_test_teardown);
@@ -1180,6 +1298,16 @@ int main(void) {
 	tcase_add_test(legacy, test_handle_legacy_open_redirect);
 	tcase_add_test(legacy, test_handle_legacy_check_cookie_domain);
 
+	TCase *logout = tcase_create("logout");
+	tcase_add_checked_fixture(logout, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(logout, test_handle_logout_local_no_return_url);
+	tcase_add_test(logout, test_handle_logout_local_with_return_url);
+	tcase_add_test(logout, test_handle_logout_invalid_return_url);
+	tcase_add_test(logout, test_handle_logout_request_no_url_no_session);
+	tcase_add_test(logout, test_handle_logout_request_frontchannel_get);
+	tcase_add_test(logout, test_handle_logout_request_frontchannel_img);
+	tcase_add_test(logout, test_handle_logout_backchannel_no_token);
+
 	Suite *s = suite_create("handle");
 	suite_add_tcase(s, userinfo);
 	suite_add_tcase(s, refresh);
@@ -1188,6 +1316,7 @@ int main(void) {
 	suite_add_tcase(s, info);
 	suite_add_tcase(s, dpop);
 	suite_add_tcase(s, legacy);
+	suite_add_tcase(s, logout);
 
 	return oidc_test_suite_run(s);
 }
