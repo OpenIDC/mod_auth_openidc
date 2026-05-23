@@ -202,16 +202,16 @@ static void oidc_http_hdr_table_set(const request_rec *r, apr_table_t *table, co
 		char *s_value = apr_pstrdup(r->pool, value);
 
 		/*
-		 * sanitize the header value by replacing line feeds with spaces
+		 * sanitize the header value by replacing CR/LF with spaces
 		 * just like the Apache header input algorithms do for incoming headers
 		 *
-		 * this makes it impossible to have line feeds in values but that is
+		 * this makes it impossible to have CR or LF in values but that is
 		 * compliant with RFC 7230 (and impossible for regular headers due to Apache's
 		 * parsing of headers anyway) and fixes a security vulnerability on
 		 * overwriting/setting outgoing headers when used in proxy mode
 		 */
 		char *p = NULL;
-		while ((p = strchr(s_value, '\n')))
+		while ((p = strpbrk(s_value, "\r\n")))
 			*p = OIDC_CHAR_SPACE;
 
 		oidc_debug(r, "%s: %s", name, s_value);
