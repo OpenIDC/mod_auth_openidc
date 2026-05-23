@@ -183,6 +183,93 @@ START_TEST(test_metrics_handle_request_with_samples) {
 }
 END_TEST
 
+/*
+ * "flushed" tcase — the background flush thread copies the locally-buffered
+ * counters/timings into shared memory every OIDC_METRICS_CACHE_STORAGE_INTERVAL
+ * milliseconds. The tests below force the interval down via the env var,
+ * push a sample, and sleep long enough to guarantee one flush, then drive
+ * each formatter against the now-populated shm so we cover the real-data
+ * branches that the "lifecycle" tcase deliberately doesn't reach.
+ */
+
+static void e2e_force_metrics_flush(request_rec *r, oidc_cfg_t *c) {
+	OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_REQUEST_ERROR_URL);
+	OIDC_METRICS_TIMING_START(r, c);
+	apr_sleep(apr_time_from_msec(1));
+	OIDC_METRICS_TIMING_ADD(r, c, OM_PROVIDER_TOKEN);
+	/* the thread first sleeps up to 1s of randomized jitter, then one poll
+	 * interval — 1500ms is the safe upper bound for both with our short interval */
+	apr_sleep(apr_time_from_msec(1500));
+}
+
+static void e2e_metrics_setup_flushed(request_rec *r) {
+	/* shrink the flush interval before post_config because the thread reads the env once */
+	setenv("OIDC_METRICS_CACHE_STORAGE_INTERVAL", "250", 1);
+	metrics_subsystem_setup(r);
+}
+
+static void e2e_metrics_teardown_flushed(request_rec *r) {
+	metrics_subsystem_teardown(r);
+	unsetenv("OIDC_METRICS_CACHE_STORAGE_INTERVAL");
+}
+
+START_TEST(test_metrics_handle_request_flushed_prometheus) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	e2e_metrics_setup_flushed(r);
+	e2e_force_metrics_flush(r, c);
+
+	r->args = "format=prometheus";
+	int rc = oidc_metrics_handle_request(r);
+	ck_assert_int_eq(rc, OK);
+
+	e2e_metrics_teardown_flushed(r);
+}
+END_TEST
+
+START_TEST(test_metrics_handle_request_flushed_json) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	e2e_metrics_setup_flushed(r);
+	e2e_force_metrics_flush(r, c);
+
+	r->args = "format=json";
+	int rc = oidc_metrics_handle_request(r);
+	ck_assert_int_eq(rc, OK);
+
+	e2e_metrics_teardown_flushed(r);
+}
+END_TEST
+
+START_TEST(test_metrics_handle_request_flushed_internal) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	e2e_metrics_setup_flushed(r);
+	e2e_force_metrics_flush(r, c);
+
+	/* now that the shm has real JSON, the "internal" handler returns it as-is */
+	r->args = "format=internal";
+	int rc = oidc_metrics_handle_request(r);
+	ck_assert_int_eq(rc, OK);
+
+	e2e_metrics_teardown_flushed(r);
+}
+END_TEST
+
+START_TEST(test_metrics_handle_request_flushed_status) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	e2e_metrics_setup_flushed(r);
+	e2e_force_metrics_flush(r, c);
+
+	r->args = "format=status";
+	int rc = oidc_metrics_handle_request(r);
+	ck_assert_int_eq(rc, OK);
+
+	e2e_metrics_teardown_flushed(r);
+}
+END_TEST
+
 int main(void) {
 	TCase *classname = tcase_create("classname");
 	tcase_add_checked_fixture(classname, oidc_test_setup, oidc_test_teardown);
@@ -200,9 +287,18 @@ int main(void) {
 	tcase_add_test(lifecycle, test_metrics_handle_request_format_unknown);
 	tcase_add_test(lifecycle, test_metrics_handle_request_with_samples);
 
+	TCase *flushed = tcase_create("flushed");
+	tcase_add_checked_fixture(flushed, oidc_test_setup, oidc_test_teardown);
+	tcase_set_timeout(flushed, 60);
+	tcase_add_test(flushed, test_metrics_handle_request_flushed_prometheus);
+	tcase_add_test(flushed, test_metrics_handle_request_flushed_json);
+	tcase_add_test(flushed, test_metrics_handle_request_flushed_internal);
+	tcase_add_test(flushed, test_metrics_handle_request_flushed_status);
+
 	Suite *s = suite_create("metrics");
 	suite_add_tcase(s, classname);
 	suite_add_tcase(s, lifecycle);
+	suite_add_tcase(s, flushed);
 
 	return oidc_test_suite_run(s);
 }
