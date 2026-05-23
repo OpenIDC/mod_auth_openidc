@@ -54,6 +54,7 @@
 #include "cfg/dir.h"
 #include "const.h"
 #include "http.h"
+#include "http_int.h"
 #include "metrics.h"
 #include "proto/proto.h"
 #include "util/util.h"
@@ -441,20 +442,10 @@ char *oidc_http_hdr_normalize_name(const request_rec *r, const char *str) {
 	return ns;
 }
 
-/* buffer to hold HTTP call responses */
-typedef struct oidc_curl_resp_data_ctx_t {
-	request_rec *r;
-	char *memory;
-	size_t size;
-} oidc_curl_resp_data_ctx_t;
-
-/* maximum acceptable size of HTTP responses: 10 Mb */
-#define OIDC_CURL_RESPONSE_DATA_SIZE_MAX 1024 * 1024 * 10
-
 /*
  * callback for CURL to write bytes that come back from an HTTP call
  */
-static size_t oidc_http_response_data(void *contents, size_t size, size_t nmemb, void *userp) {
+size_t oidc_http_response_data(void *contents, size_t size, size_t nmemb, void *userp) {
 	size_t realsize = size * nmemb;
 	oidc_curl_resp_data_ctx_t *mem = (oidc_curl_resp_data_ctx_t *)userp;
 
@@ -485,16 +476,10 @@ static size_t oidc_http_response_data(void *contents, size_t size, size_t nmemb,
 	return realsize;
 }
 
-/* buffer to hold HTTP response headers */
-typedef struct oidc_curl_resp_hdr_ctx_t {
-	request_rec *r;
-	apr_hash_t *hdrs;
-} oidc_curl_resp_hdr_ctx_t;
-
 /*
  * callback for CURL to write response headers that come back from an HTTP call
  */
-static size_t oidc_http_response_header(char *buffer, size_t size, size_t nitems, void *userdata) {
+size_t oidc_http_response_header(char *buffer, size_t size, size_t nitems, void *userdata) {
 	/* received header is nitems * size long in 'buffer' NOT ZERO TERMINATED */
 	oidc_curl_resp_hdr_ctx_t *ctx = (oidc_curl_resp_hdr_ctx_t *)userdata;
 	char *hdr = NULL, *value = NULL, *h_name = NULL;
@@ -619,8 +604,6 @@ char *oidc_http_form_encoded_data(request_rec *r, const apr_table_t *params) {
  * set libcurl SSL options
  */
 
-#define OIDC_CURLOPT_SSL_OPTIONS_ENV_VAR_NAME "CURLOPT_SSL_OPTIONS"
-
 #define OIDC_HTTP_CURL_SETOPT_SSL(option, value)                                                                       \
 	if (_oidc_strstr(env_var_value, #value) != NULL) {                                                             \
 		oidc_debug(r, "curl_easy_setopt(%s): %s (%ld)", #option, #value, (long)value);                         \
@@ -668,12 +651,10 @@ static void oidc_http_set_curl_ssl_options(request_rec *r, CURL *curl) {
 #endif
 }
 
-#define OIDC_USER_AGENT_ENV_VAR "OIDC_USER_AGENT"
-
 /*
  * construct our User-Agent header for outgoing requests
  */
-static const char *oidc_http_user_agent(request_rec *r) {
+const char *oidc_http_user_agent(request_rec *r) {
 	const char *s_useragent = apr_table_get(r->subprocess_env, OIDC_USER_AGENT_ENV_VAR);
 	if (s_useragent == NULL) {
 		s_useragent = apr_psprintf(r->pool, "[%s:%u:%lu] %s", r->server->server_hostname,
@@ -684,12 +665,10 @@ static const char *oidc_http_user_agent(request_rec *r) {
 	return s_useragent;
 }
 
-#define OIDC_CURL_INTERFACE_ENV_VAR "OIDC_CURL_INTERFACE"
-
 /*
  * construct our local address/interface for outgoing requests
  */
-static const char *oidc_http_interface(request_rec *r) {
+const char *oidc_http_interface(request_rec *r) {
 	return apr_table_get(r->subprocess_env, OIDC_CURL_INTERFACE_ENV_VAR);
 }
 
@@ -747,8 +726,8 @@ static void oidc_http_request_setup_proxy(request_rec *r, CURL *curl,
  * build the list of custom request headers (authorization, content-type,
  * traceparent, DPoP) to pass on to curl
  */
-static struct curl_slist *oidc_http_request_build_header_list(request_rec *r, oidc_cfg_t *c, const char *content_type,
-							      const char *access_token, const char *dpop) {
+struct curl_slist *oidc_http_request_build_header_list(request_rec *r, oidc_cfg_t *c, const char *content_type,
+						       const char *access_token, const char *dpop) {
 	struct curl_slist *h_list = NULL;
 
 	/* see if we need to add token in the Bearer/DPoP Authorization header */

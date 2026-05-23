@@ -123,6 +123,7 @@ noinst_HEADERS = \
 	session.h \
 	jose.h \
 	http.h \
+	http_int.h \
 	metrics.h \
 	const.h
 

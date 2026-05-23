@@ -46,6 +46,7 @@
 #include "cfg/provider.h"
 #include "check_util.h"
 #include "http.h"
+#include "http_int.h"
 #include "util.h"
 #include <curl/curl.h>
 
@@ -302,6 +303,174 @@ START_TEST(test_init_and_cleanup_noop) {
 }
 END_TEST
 
+/*
+ * Unit tests for the curl-adjacent static helpers exposed via http_int.h.
+ * These exercise the callbacks and builders directly so we cover the curl
+ * code paths without standing up a real HTTP transfer.
+ */
+
+START_TEST(test_response_data_accumulates) {
+	request_rec *r = oidc_test_request_get();
+	oidc_curl_resp_data_ctx_t ctx = {r, NULL, 0};
+
+	const char *part1 = "hello ";
+	const char *part2 = "world";
+
+	size_t n1 = oidc_http_response_data((void *)part1, 1, _oidc_strlen(part1), &ctx);
+	ck_assert_msg(n1 == _oidc_strlen(part1), "first chunk consumed entirely");
+	ck_assert_msg(ctx.size == _oidc_strlen(part1), "size grows by first chunk");
+
+	size_t n2 = oidc_http_response_data((void *)part2, 1, _oidc_strlen(part2), &ctx);
+	ck_assert_msg(n2 == _oidc_strlen(part2), "second chunk consumed entirely");
+	ck_assert_msg(ctx.size == _oidc_strlen(part1) + _oidc_strlen(part2), "size accumulates");
+
+	ck_assert_ptr_nonnull(ctx.memory);
+	ck_assert_msg(_oidc_strcmp(ctx.memory, "hello world") == 0, "memory concatenated and NUL-terminated");
+}
+END_TEST
+
+START_TEST(test_response_data_rejects_oversize) {
+	request_rec *r = oidc_test_request_get();
+	oidc_curl_resp_data_ctx_t ctx = {r, NULL, 0};
+
+	/* claim a chunk bigger than the cap without actually allocating it; the callback
+	 * must reject based on the advertised size before reading from contents */
+	char tiny = 'x';
+	size_t huge = (size_t)OIDC_CURL_RESPONSE_DATA_SIZE_MAX + 1;
+	size_t rv = oidc_http_response_data(&tiny, 1, huge, &ctx);
+	ck_assert_msg(rv == 0, "oversize response rejected (returns 0)");
+	ck_assert_msg(ctx.size == 0, "context size unchanged on rejection");
+}
+END_TEST
+
+START_TEST(test_response_header_captures_requested_only) {
+	request_rec *r = oidc_test_request_get();
+	apr_hash_t *hdrs = apr_hash_make(r->pool);
+	/* callers seed the hash with empty-string sentinels for each header they
+	 * want to capture; the callback fills in the actual value on match */
+	apr_hash_set(hdrs, OIDC_HTTP_HDR_DPOP_NONCE, APR_HASH_KEY_STRING, "");
+	oidc_curl_resp_hdr_ctx_t ctx = {r, hdrs};
+
+	const char *wire1 = "DPoP-Nonce: abc123\r\n";
+	const char *wire2 = "Content-Type: application/json\r\n";
+
+	size_t n1 = oidc_http_response_header((char *)wire1, 1, _oidc_strlen(wire1), &ctx);
+	ck_assert_msg(n1 == _oidc_strlen(wire1), "callback consumes full header line");
+
+	size_t n2 = oidc_http_response_header((char *)wire2, 1, _oidc_strlen(wire2), &ctx);
+	ck_assert_msg(n2 == _oidc_strlen(wire2), "non-matching header still fully consumed");
+
+	const char *got = apr_hash_get(hdrs, OIDC_HTTP_HDR_DPOP_NONCE, APR_HASH_KEY_STRING);
+	ck_assert_ptr_nonnull(got);
+	ck_assert_msg(_oidc_strcmp(got, "abc123") == 0, "trimmed value stored for requested header");
+
+	/* unrequested header should not have produced an entry under any new key */
+	ck_assert_ptr_null(apr_hash_get(hdrs, OIDC_HTTP_HDR_CONTENT_TYPE, APR_HASH_KEY_STRING));
+}
+END_TEST
+
+START_TEST(test_response_header_no_wanted_headers) {
+	request_rec *r = oidc_test_request_get();
+	oidc_curl_resp_hdr_ctx_t ctx_null = {r, NULL};
+	oidc_curl_resp_hdr_ctx_t ctx_empty = {r, apr_hash_make(r->pool)};
+
+	const char *wire = "Server: nginx\r\n";
+	/* both NULL and empty hash short-circuit but still report bytes consumed */
+	ck_assert_msg(oidc_http_response_header((char *)wire, 1, _oidc_strlen(wire), &ctx_null) == _oidc_strlen(wire),
+		      "NULL hash short-circuit consumes bytes");
+	ck_assert_msg(oidc_http_response_header((char *)wire, 1, _oidc_strlen(wire), &ctx_empty) == _oidc_strlen(wire),
+		      "empty hash short-circuit consumes bytes");
+}
+END_TEST
+
+/* count entries in a curl_slist */
+static int slist_count(struct curl_slist *l) {
+	int n = 0;
+	for (; l != NULL; l = l->next)
+		n++;
+	return n;
+}
+
+/* return 1 if any entry in the slist contains needle as a substring */
+static int slist_contains(struct curl_slist *l, const char *needle) {
+	for (; l != NULL; l = l->next)
+		if (l->data && _oidc_strstr(l->data, needle) != NULL)
+			return 1;
+	return 0;
+}
+
+START_TEST(test_build_header_list_bearer_and_content_type) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	struct curl_slist *l = oidc_http_request_build_header_list(r, c, OIDC_HTTP_CONTENT_TYPE_JSON, "tok-abc", NULL);
+	ck_assert_ptr_nonnull(l);
+	ck_assert_msg(slist_count(l) == 2, "Authorization + Content-Type entries present");
+	ck_assert_msg(slist_contains(l, "Authorization: Bearer tok-abc"), "Bearer scheme used when no DPoP");
+	ck_assert_msg(slist_contains(l, "Content-Type: " OIDC_HTTP_CONTENT_TYPE_JSON), "Content-Type passed through");
+	curl_slist_free_all(l);
+}
+END_TEST
+
+START_TEST(test_build_header_list_dpop_switches_scheme_and_adds_header) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	struct curl_slist *l = oidc_http_request_build_header_list(r, c, NULL, "tok-xyz", "PROOF.JWT.HERE");
+	ck_assert_ptr_nonnull(l);
+	ck_assert_msg(slist_contains(l, "Authorization: DPoP tok-xyz"),
+		      "DPoP scheme replaces Bearer when proof present");
+	ck_assert_msg(slist_contains(l, "DPoP: PROOF.JWT.HERE"), "separate DPoP header is appended");
+	ck_assert_msg(!slist_contains(l, "Content-Type:"), "no Content-Type when caller passed NULL");
+	curl_slist_free_all(l);
+}
+END_TEST
+
+START_TEST(test_build_header_list_no_inputs) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	struct curl_slist *l = oidc_http_request_build_header_list(r, c, NULL, NULL, NULL);
+	/* with no incoming traceparent and no inputs, slist should be empty */
+	apr_table_unset(r->headers_in, OIDC_HTTP_HDR_TRACE_PARENT);
+	ck_assert_msg(l == NULL || slist_count(l) == 0, "no entries when no inputs");
+	if (l)
+		curl_slist_free_all(l);
+}
+END_TEST
+
+START_TEST(test_user_agent_defaults_and_override) {
+	request_rec *r = oidc_test_request_get();
+
+	apr_table_unset(r->subprocess_env, OIDC_USER_AGENT_ENV_VAR);
+	const char *ua = oidc_http_user_agent(r);
+	ck_assert_ptr_nonnull(ua);
+	ck_assert_msg(_oidc_strstr(ua, "libcurl-") != NULL, "default UA mentions libcurl version");
+
+	apr_table_set(r->subprocess_env, OIDC_USER_AGENT_ENV_VAR, "custom-agent/9.9");
+	const char *ua2 = oidc_http_user_agent(r);
+	ck_assert_ptr_nonnull(ua2);
+	ck_assert_msg(_oidc_strcmp(ua2, "custom-agent/9.9") == 0, "env-var override returned verbatim");
+
+	apr_table_unset(r->subprocess_env, OIDC_USER_AGENT_ENV_VAR);
+}
+END_TEST
+
+START_TEST(test_interface_env_var_passthrough) {
+	request_rec *r = oidc_test_request_get();
+
+	apr_table_unset(r->subprocess_env, OIDC_CURL_INTERFACE_ENV_VAR);
+	ck_assert_ptr_null(oidc_http_interface(r));
+
+	apr_table_set(r->subprocess_env, OIDC_CURL_INTERFACE_ENV_VAR, "eth0");
+	const char *iface = oidc_http_interface(r);
+	ck_assert_ptr_nonnull(iface);
+	ck_assert_msg(_oidc_strcmp(iface, "eth0") == 0, "interface returned from env var");
+
+	apr_table_unset(r->subprocess_env, OIDC_CURL_INTERFACE_ENV_VAR);
+}
+END_TEST
+
 int main(void) {
 	TCase *accept = tcase_create("accept");
 	tcase_add_checked_fixture(accept, oidc_test_setup, oidc_test_teardown);
@@ -318,8 +487,21 @@ int main(void) {
 	tcase_add_test(accept, test_other_header_getters);
 	tcase_add_test(accept, test_init_and_cleanup_noop);
 
+	TCase *curl_helpers = tcase_create("curl_helpers");
+	tcase_add_checked_fixture(curl_helpers, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(curl_helpers, test_response_data_accumulates);
+	tcase_add_test(curl_helpers, test_response_data_rejects_oversize);
+	tcase_add_test(curl_helpers, test_response_header_captures_requested_only);
+	tcase_add_test(curl_helpers, test_response_header_no_wanted_headers);
+	tcase_add_test(curl_helpers, test_build_header_list_bearer_and_content_type);
+	tcase_add_test(curl_helpers, test_build_header_list_dpop_switches_scheme_and_adds_header);
+	tcase_add_test(curl_helpers, test_build_header_list_no_inputs);
+	tcase_add_test(curl_helpers, test_user_agent_defaults_and_override);
+	tcase_add_test(curl_helpers, test_interface_env_var_passthrough);
+
 	Suite *s = suite_create("http");
 	suite_add_tcase(s, accept);
+	suite_add_tcase(s, curl_helpers);
 
 	return oidc_test_suite_run(s);
 }
