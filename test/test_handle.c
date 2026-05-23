@@ -33,6 +33,7 @@
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "session.h"
+#include "state.h"
 #include "util.h"
 #include "util/util.h"
 
@@ -406,6 +407,119 @@ START_TEST(test_handle_response_authorization_redirect_state_mismatch) {
 
 	/* no state parameter at all => state-mismatch handler, with no default SSO URL => BAD_REQUEST */
 	r->args = "";
+	int rc = oidc_response_authorization_redirect(r, c, session);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_response_authorization_redirect_state_mismatch_with_sso_url) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* OIDCDefaultURL acts as a fallback for state-mismatch failures => 302 redirect */
+	cmd_parms *cmd = oidc_test_cmd_get("OIDCDefaultURL");
+	ck_assert_ptr_null(oidc_cmd_default_sso_url_set(cmd, NULL, "https://www.example.com/fallback"));
+
+	r->args = "";
+	int rc = oidc_response_authorization_redirect(r, c, session);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_msg(_oidc_strstr(loc, "https://www.example.com/fallback") != NULL, "redirect to OIDCDefaultURL");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_response_authorization_post_non_post_method) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* M_GET is the test fixture default => oidc_util_read_post_params returns FALSE
+	 * => oidc_response_authorization_post short-circuits to HTTP_INTERNAL_SERVER_ERROR */
+	r->method_number = M_GET;
+	int rc = oidc_response_authorization_post(r, c, session);
+	ck_assert_int_eq(rc, HTTP_INTERNAL_SERVER_ERROR);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_response_authorization_post_only_response_mode_fragment) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* POST body with only response_mode=fragment is treated as "no real data" =>
+	 * the handler returns HTTP_INTERNAL_SERVER_ERROR via the "Invalid Request" path */
+	r->method_number = M_POST;
+	apr_table_set(r->headers_in, "Content-Type", "application/x-www-form-urlencoded");
+	const char *form = "response_mode=fragment";
+	r->args = apr_pstrdup(r->pool, form);
+	r->remaining = (apr_size_t)_oidc_strlen(form);
+
+	int rc = oidc_response_authorization_post(r, c, session);
+	ck_assert_int_eq(rc, HTTP_INTERNAL_SERVER_ERROR);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* build a state cookie that oidc_response_proto_state_restore will accept, returning
+ * the matching state fingerprint that the test must pass via the state query param */
+static char *e2e_build_state_cookie(request_rec *r, oidc_cfg_t *c, const char *response_type) {
+	oidc_proto_state_t *ps = oidc_proto_state_new();
+	oidc_proto_state_set_nonce(ps, "rndnonce");
+	oidc_proto_state_set_state(ps, "s1");
+	oidc_proto_state_set_issuer(ps, "https://idp.example.com");
+	oidc_proto_state_set_original_url(ps, "https://www.example.com/protected/index.html");
+	oidc_proto_state_set_original_method(ps, OIDC_METHOD_GET);
+	oidc_proto_state_set_response_type(ps, response_type);
+	oidc_proto_state_set_timestamp_now(ps);
+
+	char *fingerprint = oidc_state_browser_fingerprint(r, c, "rndnonce");
+	char *cookie = oidc_proto_state_to_cookie(r, c, ps);
+	const char *cookie_name = oidc_state_cookie_name(r, fingerprint);
+	apr_table_set(r->headers_in, "Cookie",
+		      apr_psprintf(r->pool, "foo=bar; %s=%s; baz=zot", cookie_name, cookie));
+	oidc_proto_state_destroy(ps);
+	return fingerprint;
+}
+
+START_TEST(test_handle_response_authorization_redirect_error_param) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	char *state = e2e_build_state_cookie(r, c, OIDC_PROTO_RESPONSE_TYPE_CODE);
+	/* state restoration succeeds; an "error" param is present so the handler maps to authorization_error */
+	r->args = apr_psprintf(r->pool, "state=%s&error=invalid_request&error_description=Bad+request",
+			       oidc_http_url_encode(r, state));
+	int rc = oidc_response_authorization_redirect(r, c, session);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_response_authorization_redirect_unknown_response_type) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* state validates, but the response_type stored in the cookie is unsupported
+	 * => oidc_response_flows fails => authorization_error => HTTP_BAD_REQUEST */
+	char *state = e2e_build_state_cookie(r, c, "totally_bogus_flow");
+	r->args = apr_psprintf(r->pool, "state=%s", oidc_http_url_encode(r, state));
 	int rc = oidc_response_authorization_redirect(r, c, session);
 	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
 
@@ -1032,6 +1146,11 @@ int main(void) {
 	tcase_add_test(response, test_handle_response_save_in_session_minimal);
 	tcase_add_test(response, test_handle_response_save_in_session_with_userinfo);
 	tcase_add_test(response, test_handle_response_authorization_redirect_state_mismatch);
+	tcase_add_test(response, test_handle_response_authorization_redirect_state_mismatch_with_sso_url);
+	tcase_add_test(response, test_handle_response_authorization_post_non_post_method);
+	tcase_add_test(response, test_handle_response_authorization_post_only_response_mode_fragment);
+	tcase_add_test(response, test_handle_response_authorization_redirect_error_param);
+	tcase_add_test(response, test_handle_response_authorization_redirect_unknown_response_type);
 
 	TCase *discovery = tcase_create("discovery");
 	tcase_add_checked_fixture(discovery, oidc_test_setup, oidc_test_teardown);
