@@ -1543,6 +1543,83 @@ START_TEST(test_handle_session_management_iframe_rp_configured) {
 END_TEST
 
 /*
+ * Tests for mod_auth_openidc.c oidc_check_user_id — the main Apache
+ * authentication hook.
+ *
+ * ap_auth_type() in the test stub always returns "openid-connect", so
+ * oidc_enabled is TRUE and the dispatcher routes to the OIDC branch.
+ */
+
+START_TEST(test_handle_check_user_id_unauthenticated_redirects_to_op) {
+	request_rec *r = oidc_test_request_get();
+
+	/* oidc_handle_unauthenticated_user rejects non-auth-capable requests up-front
+	 * with 401; setting Accept to a wildcard takes the request through the
+	 * authentication dispatch => 302 to the authorization_endpoint */
+	apr_table_set(r->headers_in, "Accept", "*/*");
+
+	int rc = oidc_check_user_id(r);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_msg(_oidc_strstr(loc, "https://idp.example.com/authorize") != NULL,
+		      "redirect must target the configured authorization_endpoint, got: %s", loc);
+	ck_assert_msg(_oidc_strstr(loc, "client_id=client_id") != NULL,
+		      "authn request must carry the configured client_id");
+	ck_assert_msg(_oidc_strstr(loc, "response_type=code") != NULL, "authn request defaults to code flow");
+}
+END_TEST
+
+START_TEST(test_handle_check_user_id_unauthenticated_not_auth_capable) {
+	request_rec *r = oidc_test_request_get();
+
+	/* without a wildcard Accept and without OIDCUnAuthExpr the request is not
+	 * considered auth-capable (likely an XHR-style call) => 401 instead of 302 */
+	int rc = oidc_check_user_id(r);
+	ck_assert_int_eq(rc, HTTP_UNAUTHORIZED);
+}
+END_TEST
+
+START_TEST(test_handle_check_user_id_unauth_action_pass) {
+	request_rec *r = oidc_test_request_get();
+
+	/* OIDCUnAuthAction "pass" => no session + no redirect, just set r->user="" and OK */
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get("OIDCUnAuthAction");
+	ck_assert_ptr_null(oidc_cmd_dir_unauth_action_set(cmd, dir_cfg, "pass", NULL));
+
+	int rc = oidc_check_user_id(r);
+	ck_assert_int_eq(rc, OK);
+	ck_assert_ptr_nonnull(r->user);
+	ck_assert_str_eq(r->user, "");
+}
+END_TEST
+
+START_TEST(test_handle_check_user_id_unauth_action_return_401) {
+	request_rec *r = oidc_test_request_get();
+
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get("OIDCUnAuthAction");
+	ck_assert_ptr_null(oidc_cmd_dir_unauth_action_set(cmd, dir_cfg, "401", NULL));
+
+	int rc = oidc_check_user_id(r);
+	ck_assert_int_eq(rc, HTTP_UNAUTHORIZED);
+}
+END_TEST
+
+START_TEST(test_handle_check_user_id_unauth_action_return_410) {
+	request_rec *r = oidc_test_request_get();
+
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get("OIDCUnAuthAction");
+	ck_assert_ptr_null(oidc_cmd_dir_unauth_action_set(cmd, dir_cfg, "410", NULL));
+
+	int rc = oidc_check_user_id(r);
+	ck_assert_int_eq(rc, HTTP_GONE);
+}
+END_TEST
+
+/*
  * Tests for handle/jwks.c and handle/content.c
  */
 
@@ -1994,6 +2071,14 @@ int main(void) {
 	tcase_add_test(content, test_handle_content_handler_unknown_redirect_uri_request);
 	tcase_add_test(content, test_handle_content_handler_non_redirect_no_state);
 
+	TCase *checkuid = tcase_create("check_user_id");
+	tcase_add_checked_fixture(checkuid, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(checkuid, test_handle_check_user_id_unauthenticated_redirects_to_op);
+	tcase_add_test(checkuid, test_handle_check_user_id_unauthenticated_not_auth_capable);
+	tcase_add_test(checkuid, test_handle_check_user_id_unauth_action_pass);
+	tcase_add_test(checkuid, test_handle_check_user_id_unauth_action_return_401);
+	tcase_add_test(checkuid, test_handle_check_user_id_unauth_action_return_410);
+
 	TCase *revoke = tcase_create("revoke");
 	tcase_add_checked_fixture(revoke, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(revoke, test_handle_revoke_session_no_id);
@@ -2020,6 +2105,7 @@ int main(void) {
 	suite_add_tcase(s, legacy);
 	suite_add_tcase(s, logout);
 	suite_add_tcase(s, content);
+	suite_add_tcase(s, checkuid);
 	suite_add_tcase(s, revoke);
 	suite_add_tcase(s, session_mgmt);
 
