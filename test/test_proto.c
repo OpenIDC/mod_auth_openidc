@@ -46,6 +46,7 @@
 
 #include "check_util.h"
 #include "handle/handle.h"
+#include "http_server.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "util.h"
@@ -933,6 +934,245 @@ START_TEST(test_proto_discovery_account_no_at_sign) {
 }
 END_TEST
 
+/*
+ * End-to-end tests that drive token.c / userinfo.c / request.c against the
+ * loopback HTTP server fixture from test/http_server.c. They exercise the
+ * curl handoff plus the JSON-response parsing path in each module.
+ */
+
+START_TEST(test_proto_token_endpoint_request_success) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	oidc_test_http_response_t resp = {
+	    .status_code = 200,
+	    .content_type = "application/json",
+	    .body = "{\"access_token\":\"AT-1\",\"token_type\":\"Bearer\",\"expires_in\":3600,"
+		    "\"refresh_token\":\"RT-1\",\"scope\":\"openid profile\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	apr_table_t *params = apr_table_make(r->pool, 4);
+	apr_table_setn(params, OIDC_PROTO_GRANT_TYPE, OIDC_PROTO_GRANT_TYPE_AUTHZ_CODE);
+	apr_table_setn(params, OIDC_PROTO_CODE, "the-code");
+	apr_table_setn(params, OIDC_PROTO_REDIRECT_URI, "https://rp.example.com/cb");
+
+	char *id_token = NULL, *access_token = NULL, *token_type = NULL, *refresh_token = NULL, *scope = NULL;
+	int expires_in = -1;
+	ck_assert_int_eq(oidc_proto_token_endpoint_request(r, c, provider, params, &id_token, &access_token,
+							   &token_type, &expires_in, &refresh_token, &scope),
+			 TRUE);
+	ck_assert_str_eq(access_token, "AT-1");
+	ck_assert_str_eq(token_type, "Bearer");
+	ck_assert_int_eq(expires_in, 3600);
+	ck_assert_str_eq(refresh_token, "RT-1");
+	ck_assert_str_eq(scope, "openid profile");
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_str_eq(cap->method, "POST");
+	ck_assert_msg(_oidc_strstr(cap->body, "grant_type=authorization_code") != NULL, "grant_type sent in form body");
+	ck_assert_msg(_oidc_strstr(cap->body, "code=the-code") != NULL, "code sent in form body");
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+START_TEST(test_proto_token_endpoint_request_error) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	oidc_test_http_response_t resp = {.status_code = 400,
+					  .content_type = "application/json",
+					  .body =
+					      "{\"error\":\"invalid_grant\",\"error_description\":\"code expired\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	apr_table_t *params = apr_table_make(r->pool, 1);
+	apr_table_setn(params, OIDC_PROTO_GRANT_TYPE, OIDC_PROTO_GRANT_TYPE_AUTHZ_CODE);
+
+	char *id_token = NULL, *access_token = NULL, *token_type = NULL, *refresh_token = NULL, *scope = NULL;
+	int expires_in = -1;
+	ck_assert_int_eq(oidc_proto_token_endpoint_request(r, c, provider, params, &id_token, &access_token,
+							   &token_type, &expires_in, &refresh_token, &scope),
+			 FALSE);
+	ck_assert_ptr_null(access_token);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+START_TEST(test_proto_token_refresh_request_success) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	oidc_test_http_response_t resp = {
+	    .status_code = 200,
+	    .content_type = "application/json",
+	    .body = "{\"access_token\":\"AT-NEW\",\"token_type\":\"Bearer\",\"refresh_token\":\"RT-NEW\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+	oidc_cfg_provider_scope_set(r->pool, provider, "openid");
+
+	char *id_token = NULL, *access_token = NULL, *token_type = NULL, *refresh_token = NULL, *scope = NULL;
+	int expires_in = -1;
+	ck_assert_int_eq(oidc_proto_token_refresh_request(r, c, provider, "OLD-RT", &id_token, &access_token,
+							  &token_type, &expires_in, &refresh_token, &scope),
+			 TRUE);
+	ck_assert_str_eq(access_token, "AT-NEW");
+	ck_assert_str_eq(refresh_token, "RT-NEW");
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_msg(_oidc_strstr(cap->body, "grant_type=refresh_token") != NULL,
+		      "refresh grant_type sent in form body");
+	ck_assert_msg(_oidc_strstr(cap->body, "refresh_token=OLD-RT") != NULL, "old refresh_token sent in form body");
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+START_TEST(test_proto_userinfo_request_success) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/json",
+					  .body = "{\"sub\":\"alice\",\"name\":\"Alice Example\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 TRUE);
+	ck_assert_ptr_nonnull(userinfo_claims);
+	ck_assert_int_eq(response_code, 200);
+	const char *name = json_string_value(json_object_get(userinfo_claims, "name"));
+	ck_assert_ptr_nonnull(name);
+	ck_assert_str_eq(name, "Alice Example");
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_str_eq(cap->method, "GET");
+	const char *auth = apr_table_get(cap->headers, OIDC_HTTP_HDR_AUTHORIZATION);
+	ck_assert_ptr_nonnull(auth);
+	ck_assert_str_eq(auth, "Bearer AT");
+
+	json_decref(userinfo_claims);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+START_TEST(test_proto_userinfo_request_sub_mismatch) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = "{\"sub\":\"bob\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	/* id_token_sub is "alice" but userinfo returns "bob" — mismatch must fail */
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 FALSE);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+START_TEST(test_proto_userinfo_request_error) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	oidc_test_http_response_t resp = {.status_code = 401,
+					  .content_type = "application/json",
+					  .body = "{\"error\":\"invalid_token\",\"error_description\":\"expired\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 FALSE);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+START_TEST(test_proto_request_auth_par_redirect) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/json",
+					  .body = "{\"request_uri\":\"urn:ietf:params:oauth:request_uri:abc123\","
+						  "\"expires_in\":60}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	oidc_cfg_provider_issuer_set(r->pool, provider, "https://idp.example.com");
+	oidc_cfg_provider_authorization_endpoint_url_set(r->pool, provider, "https://idp.example.com/authorize");
+	oidc_cfg_provider_pushed_authorization_request_endpoint_url_set(r->pool, provider,
+									oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+	oidc_cfg_provider_auth_request_method_int_set(provider, OIDC_AUTH_REQUEST_METHOD_PAR);
+
+	oidc_proto_state_t *ps = oidc_proto_state_new();
+	oidc_proto_state_set_nonce(ps, "n1");
+	oidc_proto_state_set_original_url(ps, "https://rp.example.com/protected/");
+	oidc_proto_state_set_original_method(ps, OIDC_METHOD_GET);
+	oidc_proto_state_set_issuer(ps, "https://idp.example.com");
+	oidc_proto_state_set_response_type(ps, OIDC_PROTO_RESPONSE_TYPE_CODE);
+	oidc_proto_state_set_timestamp_now(ps);
+
+	int rc = oidc_proto_request_auth(r, provider, NULL, "https://rp.example.com/cb", "state-1", ps, NULL, NULL,
+					 NULL, NULL);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_msg(_oidc_strstr(loc, "https://idp.example.com/authorize") != NULL,
+		      "redirect targets the authorization endpoint");
+	ck_assert_msg(_oidc_strstr(loc, "request_uri=urn%3Aietf%3Aparams%3Aoauth%3Arequest_uri%3Aabc123") != NULL,
+		      "redirect includes the PAR-issued request_uri");
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_str_eq(cap->method, "POST");
+	ck_assert_msg(_oidc_strstr(cap->body, "response_type=code") != NULL,
+		      "PAR POST body carries response_type=code");
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
 START_TEST(test_proto_supported_flows_exhaustive) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	/* every documented flow round-trips through flow_is_supported */
@@ -995,8 +1235,20 @@ int main(void) {
 	tcase_add_test(core, test_proto_discovery_account_no_at_sign);
 	tcase_add_test(core, test_proto_supported_flows_exhaustive);
 
+	TCase *e2e = tcase_create("e2e_proto");
+	tcase_add_checked_fixture(e2e, oidc_test_setup, oidc_test_teardown);
+	tcase_set_timeout(e2e, 30);
+	tcase_add_test(e2e, test_proto_token_endpoint_request_success);
+	tcase_add_test(e2e, test_proto_token_endpoint_request_error);
+	tcase_add_test(e2e, test_proto_token_refresh_request_success);
+	tcase_add_test(e2e, test_proto_userinfo_request_success);
+	tcase_add_test(e2e, test_proto_userinfo_request_sub_mismatch);
+	tcase_add_test(e2e, test_proto_userinfo_request_error);
+	tcase_add_test(e2e, test_proto_request_auth_par_redirect);
+
 	Suite *s = suite_create("proto");
 	suite_add_tcase(s, core);
+	suite_add_tcase(s, e2e);
 
 	return oidc_test_suite_run(s);
 }

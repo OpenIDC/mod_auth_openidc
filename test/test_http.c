@@ -678,6 +678,91 @@ START_TEST(test_e2e_response_hdrs_and_status) {
 }
 END_TEST
 
+START_TEST(test_e2e_basic_auth) {
+	request_rec *r = oidc_test_request_get();
+	oidc_test_http_response_t resp = {.status_code = 200, .body = ""};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	const char *url = oidc_test_http_server_url(srv, r->pool);
+	char *response = NULL;
+	long status = 0;
+	oidc_http_timeout_t to = e2e_timeout();
+	oidc_http_outgoing_proxy_t pr = e2e_no_proxy();
+	apr_byte_t ok = oidc_http_get(r, url, NULL, "alice:s3cret", NULL, NULL, FALSE, &response, &status, NULL, &to,
+				      &pr, NULL, NULL, NULL, NULL);
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_msg(ok == TRUE, "basic-auth GET succeeds");
+	const char *auth = apr_table_get(cap->headers, OIDC_HTTP_HDR_AUTHORIZATION);
+	ck_assert_ptr_nonnull(auth);
+	/* base64("alice:s3cret") = YWxpY2U6czNjcmV0 */
+	ck_assert_msg(_oidc_strstr(auth, "Basic ") != NULL, "Basic scheme");
+	ck_assert_msg(_oidc_strstr(auth, "YWxpY2U6czNjcmV0") != NULL, "credentials base64-encoded");
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+START_TEST(test_e2e_pass_cookies) {
+	request_rec *r = oidc_test_request_get();
+	oidc_test_http_response_t resp = {.status_code = 200, .body = ""};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	/* seed the incoming request with two cookies; only one is in pass_cookies */
+	apr_table_set(r->headers_in, "Cookie", "keep=yes; drop=no");
+	apr_array_header_t *pass = apr_array_make(r->pool, 1, sizeof(const char *));
+	APR_ARRAY_PUSH(pass, const char *) = "keep";
+
+	const char *url = oidc_test_http_server_url(srv, r->pool);
+	char *response = NULL;
+	long status = 0;
+	oidc_http_timeout_t to = e2e_timeout();
+	oidc_http_outgoing_proxy_t pr = e2e_no_proxy();
+	apr_byte_t ok = oidc_http_get(r, url, NULL, NULL, NULL, NULL, FALSE, &response, &status, NULL, &to, &pr, pass,
+				      NULL, NULL, NULL);
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_msg(ok == TRUE, "GET with pass_cookies succeeds");
+	const char *cookie = apr_table_get(cap->headers, "Cookie");
+	ck_assert_ptr_nonnull(cookie);
+	ck_assert_msg(_oidc_strstr(cookie, "keep=yes") != NULL, "selected cookie forwarded");
+	ck_assert_msg(_oidc_strstr(cookie, "drop=no") == NULL, "unselected cookie filtered out");
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+START_TEST(test_e2e_get_with_query_params) {
+	request_rec *r = oidc_test_request_get();
+	oidc_test_http_response_t resp = {.status_code = 200, .body = ""};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	apr_table_t *params = apr_table_make(r->pool, 2);
+	apr_table_set(params, "resource", "acct:bob@example.com");
+	apr_table_set(params, "rel", "http://openid.net/specs/connect/1.0/issuer");
+
+	const char *url = oidc_test_http_server_url(srv, r->pool);
+	char *response = NULL;
+	long status = 0;
+	oidc_http_timeout_t to = e2e_timeout();
+	oidc_http_outgoing_proxy_t pr = e2e_no_proxy();
+	apr_byte_t ok = oidc_http_get(r, url, params, NULL, NULL, NULL, FALSE, &response, &status, NULL, &to, &pr, NULL,
+				      NULL, NULL, NULL);
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_msg(ok == TRUE, "GET with params succeeds");
+	ck_assert_ptr_nonnull(cap->path);
+	ck_assert_msg(_oidc_strstr(cap->path, "resource=acct%3Abob%40example.com") != NULL,
+		      "first query parameter url-encoded");
+	ck_assert_msg(_oidc_strstr(cap->path, "rel=") != NULL, "second query parameter present");
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
 START_TEST(test_e2e_retry_on_connect_refused) {
 	request_rec *r = oidc_test_request_get();
 
@@ -741,6 +826,9 @@ int main(void) {
 	tcase_add_test(e2e, test_e2e_bearer_authorization);
 	tcase_add_test(e2e, test_e2e_dpop_authorization);
 	tcase_add_test(e2e, test_e2e_response_hdrs_and_status);
+	tcase_add_test(e2e, test_e2e_basic_auth);
+	tcase_add_test(e2e, test_e2e_pass_cookies);
+	tcase_add_test(e2e, test_e2e_get_with_query_params);
 	tcase_add_test(e2e, test_e2e_retry_on_connect_refused);
 
 	Suite *s = suite_create("http");
