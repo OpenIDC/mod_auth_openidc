@@ -607,6 +607,184 @@ START_TEST(test_handle_dpop_create_fails_without_private_keys) {
 }
 END_TEST
 
+/*
+ * Additional tests for handle/userinfo.c — exercise the
+ * oidc_userinfo_refresh_claims happy path (interval > 0, session ready,
+ * loopback userinfo endpoint) and the oidc_userinfo_pass_as dispatcher
+ * for the "json" pass-as variant.
+ */
+
+START_TEST(test_handle_userinfo_refresh_with_interval) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/json",
+					  .body = "{\"sub\":\"alice\",\"email\":\"alice@example.com\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	/* arm the session so the refresh logic decides to call the userinfo endpoint */
+	oidc_session_set_issuer(r, session, "https://idp.example.com");
+	oidc_session_set_access_token(r, session, "AT-1");
+	oidc_session_set_access_token_type(r, session, "Bearer");
+	oidc_session_set_userinfo_refresh_interval(r, session, 60);
+	/* last_refresh defaults to 0 => long enough ago to trigger a refresh */
+
+	apr_byte_t needs_save = FALSE;
+	ck_assert_int_eq(oidc_userinfo_refresh_claims(r, c, session, &needs_save), TRUE);
+	ck_assert_int_eq(needs_save, TRUE);
+
+	json_t *stored = oidc_session_get_userinfo_claims(r, session);
+	ck_assert_ptr_nonnull(stored);
+	ck_assert_str_eq(json_string_value(json_object_get(stored, "email")), "alice@example.com");
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_userinfo_pass_as_json) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* seed the session with userinfo claims and configure the dir to pass them as a JSON header */
+	json_t *claims = json_pack("{s:s,s:s}", "sub", "alice", "groups", "admins");
+	oidc_session_set_userinfo_claims(r, session, claims);
+
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPassUserInfoAs);
+	ck_assert_ptr_null(oidc_cmd_dir_pass_userinfo_as_set(cmd, dir_cfg, "json"));
+
+	/* must not crash and must populate the OIDC_userinfo_json header on r->headers_in */
+	oidc_userinfo_pass_as(r, c, session, OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
+
+	const char *hdr = apr_table_get(r->headers_in, OIDC_DEFAULT_HEADER_PREFIX OIDC_APP_INFO_USERINFO_JSON);
+	ck_assert_ptr_nonnull(hdr);
+	ck_assert_msg(_oidc_strstr(hdr, "\"sub\":\"alice\"") != NULL, "JSON-encoded userinfo should be passed as a header");
+
+	json_decref(claims);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/*
+ * Additional tests for handle/refresh.c — exercise the
+ * oidc_refresh_token_request HTTP handler through its error and
+ * happy-path branches.
+ */
+
+START_TEST(test_handle_refresh_request_no_return_to) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	r->args = "";
+	/* no ?refresh=... in args => HTTP_INTERNAL_SERVER_ERROR */
+	ck_assert_int_eq(oidc_refresh_token_request(r, c, session), HTTP_INTERNAL_SERVER_ERROR);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_refresh_request_no_access_token_param) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* valid return_to URL but no ?access_token= => 302 redirect with error_code=no_access_token */
+	r->args = "refresh=https%3A%2F%2Fwww.example.com%2Fprotected%2F";
+	ck_assert_int_eq(oidc_refresh_token_request(r, c, session), HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_msg(_oidc_strstr(loc, "error_code=no_access_token") != NULL, "missing access_token error reported");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_refresh_request_session_has_no_access_token) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	r->args = "refresh=https%3A%2F%2Fwww.example.com%2Fprotected%2F&access_token=AT-CLIENT";
+	ck_assert_int_eq(oidc_refresh_token_request(r, c, session), HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_msg(_oidc_strstr(loc, "error_code=no_access_token_exists") != NULL, "missing session AT reported");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_refresh_request_access_token_mismatch) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	oidc_session_set_access_token(r, session, "AT-SERVER");
+
+	r->args = "refresh=https%3A%2F%2Fwww.example.com%2Fprotected%2F&access_token=AT-OTHER";
+	ck_assert_int_eq(oidc_refresh_token_request(r, c, session), HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_msg(_oidc_strstr(loc, "error_code=no_access_token_match") != NULL, "XSRF mismatch reported");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_refresh_request_happy_path) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/json",
+					  .body = "{\"access_token\":\"AT-NEW\",\"token_type\":\"Bearer\","
+						  "\"expires_in\":3600,\"refresh_token\":\"RT-NEW\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+	oidc_cfg_provider_scope_set(r->pool, provider, "openid");
+
+	/* session must carry an issuer (for provider lookup) and a matching access token */
+	oidc_session_set_issuer(r, session, "https://idp.example.com");
+	oidc_session_set_access_token(r, session, "AT-MATCHING");
+	oidc_session_set_refresh_token(r, session, "RT-OLD");
+
+	r->args = "refresh=https%3A%2F%2Fwww.example.com%2Fprotected%2F&access_token=AT-MATCHING";
+	ck_assert_int_eq(oidc_refresh_token_request(r, c, session), HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	/* on success the Location header is the return_to URL with no error_code appended */
+	ck_assert_msg(_oidc_strstr(loc, "error_code=") == NULL, "no error code on the happy path");
+	ck_assert_msg(_oidc_strstr(loc, "https://www.example.com/protected/") != NULL, "redirected to return_to");
+	/* and the session reflects the refreshed tokens */
+	ck_assert_str_eq(oidc_session_get_access_token(r, session), "AT-NEW");
+	ck_assert_str_eq(oidc_session_get_refresh_token(r, session), "RT-NEW");
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_session_free(r, session);
+}
+END_TEST
+
 int main(void) {
 	TCase *userinfo = tcase_create("userinfo");
 	tcase_add_checked_fixture(userinfo, oidc_test_setup, oidc_test_teardown);
@@ -617,7 +795,9 @@ int main(void) {
 	tcase_add_test(userinfo, test_handle_userinfo_retrieve_failure_no_session);
 	tcase_add_test(userinfo, test_handle_userinfo_store_and_clear_claims);
 	tcase_add_test(userinfo, test_handle_userinfo_refresh_no_interval);
+	tcase_add_test(userinfo, test_handle_userinfo_refresh_with_interval);
 	tcase_add_test(userinfo, test_handle_userinfo_pass_as_no_claims);
+	tcase_add_test(userinfo, test_handle_userinfo_pass_as_json);
 
 	TCase *refresh = tcase_create("refresh");
 	tcase_add_checked_fixture(refresh, oidc_test_setup, oidc_test_teardown);
@@ -628,6 +808,11 @@ int main(void) {
 	tcase_add_test(refresh, test_handle_refresh_before_expiry_ttl_negative);
 	tcase_add_test(refresh, test_handle_refresh_before_expiry_no_expiry_stored);
 	tcase_add_test(refresh, test_handle_refresh_before_expiry_no_refresh_token);
+	tcase_add_test(refresh, test_handle_refresh_request_no_return_to);
+	tcase_add_test(refresh, test_handle_refresh_request_no_access_token_param);
+	tcase_add_test(refresh, test_handle_refresh_request_session_has_no_access_token);
+	tcase_add_test(refresh, test_handle_refresh_request_access_token_mismatch);
+	tcase_add_test(refresh, test_handle_refresh_request_happy_path);
 
 	TCase *response = tcase_create("response");
 	tcase_add_checked_fixture(response, oidc_test_setup, oidc_test_teardown);
