@@ -1189,6 +1189,75 @@ static oidc_jwt_t *e2e_make_jwt_for_kid(apr_pool_t *pool, const char *alg, const
 	return jwt;
 }
 
+/*
+ * Tests for proto/request.c branches not covered by the existing
+ * test_proto_authorization_request (GET) or test_proto_request_auth_par_redirect (PAR):
+ * the POST method, missing-client-id and unknown-method failure paths.
+ */
+
+static oidc_proto_state_t *e2e_make_proto_state(request_rec *r) {
+	(void)r;
+	oidc_proto_state_t *ps = oidc_proto_state_new();
+	oidc_proto_state_set_nonce(ps, "n-1");
+	oidc_proto_state_set_state(ps, "s-1");
+	oidc_proto_state_set_issuer(ps, "https://idp.example.com");
+	oidc_proto_state_set_original_url(ps, "https://www.example.com/protected/");
+	oidc_proto_state_set_original_method(ps, OIDC_METHOD_GET);
+	oidc_proto_state_set_response_type(ps, OIDC_PROTO_RESPONSE_TYPE_CODE);
+	oidc_proto_state_set_timestamp_now(ps);
+	return ps;
+}
+
+START_TEST(test_proto_request_auth_post_html) {
+	request_rec *r = oidc_test_request_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+
+	oidc_cfg_provider_issuer_set(r->pool, provider, "https://idp.example.com");
+	oidc_cfg_provider_authorization_endpoint_url_set(r->pool, provider, "https://idp.example.com/authorize");
+	oidc_cfg_provider_client_id_set(r->pool, provider, "client_id");
+	oidc_cfg_provider_auth_request_method_int_set(provider, OIDC_AUTH_REQUEST_METHOD_POST);
+
+	oidc_proto_state_t *ps = e2e_make_proto_state(r);
+	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-1", ps, NULL,
+					 NULL, NULL, NULL);
+	/* POST returns OK with an auto-submitting form rather than a 302 redirect */
+	ck_assert_int_eq(rc, OK);
+	ck_assert_ptr_null(apr_table_get(r->headers_out, "Location"));
+}
+END_TEST
+
+START_TEST(test_proto_request_auth_no_client_id) {
+	request_rec *r = oidc_test_request_get();
+	/* fresh provider without client_id => function returns INTERNAL_SERVER_ERROR early */
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+	oidc_cfg_provider_issuer_set(r->pool, provider, "https://idp.example.com");
+	oidc_cfg_provider_authorization_endpoint_url_set(r->pool, provider, "https://idp.example.com/authorize");
+
+	oidc_proto_state_t *ps = e2e_make_proto_state(r);
+	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-1", ps, NULL,
+					 NULL, NULL, NULL);
+	ck_assert_int_eq(rc, HTTP_INTERNAL_SERVER_ERROR);
+	oidc_proto_state_destroy(ps);
+}
+END_TEST
+
+START_TEST(test_proto_request_auth_unknown_method) {
+	request_rec *r = oidc_test_request_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+	oidc_cfg_provider_issuer_set(r->pool, provider, "https://idp.example.com");
+	oidc_cfg_provider_authorization_endpoint_url_set(r->pool, provider, "https://idp.example.com/authorize");
+	oidc_cfg_provider_client_id_set(r->pool, provider, "client_id");
+	/* an out-of-enum value triggers the default branch in the dispatch switch */
+	oidc_cfg_provider_auth_request_method_int_set(provider, 999);
+
+	oidc_proto_state_t *ps = e2e_make_proto_state(r);
+	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-1", ps, NULL,
+					 NULL, NULL, NULL);
+	ck_assert_int_eq(rc, HTTP_INTERNAL_SERVER_ERROR);
+	oidc_proto_state_destroy(ps);
+}
+END_TEST
+
 START_TEST(test_proto_jwks_uri_keys_kid_match) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -1373,6 +1442,9 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_userinfo_request_sub_mismatch);
 	tcase_add_test(e2e, test_proto_userinfo_request_error);
 	tcase_add_test(e2e, test_proto_request_auth_par_redirect);
+	tcase_add_test(e2e, test_proto_request_auth_post_html);
+	tcase_add_test(e2e, test_proto_request_auth_no_client_id);
+	tcase_add_test(e2e, test_proto_request_auth_unknown_method);
 	tcase_add_test(e2e, test_proto_jwks_uri_keys_kid_match);
 	tcase_add_test(e2e, test_proto_jwks_uri_keys_no_kid_include_matching_kty);
 	tcase_add_test(e2e, test_proto_jwks_uri_keys_no_match_after_refresh);
