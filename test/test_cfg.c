@@ -388,6 +388,204 @@ START_TEST(test_cmd_provider_pkce) {
 }
 END_TEST
 
+START_TEST(test_cmd_provider_url_setters) {
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_provider_t *p = oidc_cfg_provider_get(cfg);
+	const char *url = "https://idp.example.com/path";
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCProviderTokenEndpoint);
+	ck_assert_ptr_null(oidc_cmd_provider_token_endpoint_url_set(cmd, NULL, url));
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_url_get(p), url);
+
+	cmd = oidc_test_cmd_get(OIDCProviderUserInfoEndpoint);
+	ck_assert_ptr_null(oidc_cmd_provider_userinfo_endpoint_url_set(cmd, NULL, url));
+	ck_assert_str_eq(oidc_cfg_provider_userinfo_endpoint_url_get(p), url);
+
+	cmd = oidc_test_cmd_get(OIDCProviderRegistrationEndpointJson);
+	ck_assert_ptr_null(oidc_cmd_provider_registration_endpoint_url_set(cmd, NULL, url));
+	ck_assert_str_eq(oidc_cfg_provider_registration_endpoint_url_get(p), url);
+
+	cmd = oidc_test_cmd_get(OIDCProviderEndSessionEndpoint);
+	ck_assert_ptr_null(oidc_cmd_provider_end_session_endpoint_set(cmd, NULL, url));
+	ck_assert_str_eq(oidc_cfg_provider_end_session_endpoint_get(p), url);
+
+	cmd = oidc_test_cmd_get(OIDCProviderCheckSessionIFrame);
+	ck_assert_ptr_null(oidc_cmd_provider_check_session_iframe_set(cmd, NULL, url));
+	ck_assert_str_eq(oidc_cfg_provider_check_session_iframe_get(p), url);
+
+	cmd = oidc_test_cmd_get(OIDCClientJwksUri);
+	ck_assert_ptr_null(oidc_cmd_provider_client_jwks_uri_set(cmd, NULL, url));
+	ck_assert_str_eq(oidc_cfg_provider_client_jwks_uri_get(p), url);
+
+	cmd = oidc_test_cmd_get(OIDCProviderMetadataURL);
+	ck_assert_ptr_null(oidc_cmd_provider_metadata_url_set(cmd, NULL, url));
+	ck_assert_str_eq(oidc_cfg_provider_metadata_url_get(p), url);
+
+	/* every URL setter rejects a value that does not parse as an http(s) URL */
+	cmd = oidc_test_cmd_get(OIDCProviderTokenEndpoint);
+	ck_assert_ptr_nonnull(oidc_cmd_provider_token_endpoint_url_set(cmd, NULL, "not-a-url"));
+}
+END_TEST
+
+START_TEST(test_cmd_provider_string_setters) {
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_provider_t *p = oidc_cfg_provider_get(cfg);
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCAuthRequestParams);
+	ck_assert_ptr_null(oidc_cmd_provider_auth_request_params_set(cmd, NULL, "prompt=login&max_age=60"));
+	ck_assert_str_eq(oidc_cfg_provider_auth_request_params_get(p), "prompt=login&max_age=60");
+
+	cmd = oidc_test_cmd_get(OIDCProviderTokenEndpointParams);
+	ck_assert_ptr_null(oidc_cmd_provider_token_endpoint_params_set(cmd, NULL, "extra=foo"));
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_params_get(p), "extra=foo");
+
+	cmd = oidc_test_cmd_get(OIDCClientName);
+	ck_assert_ptr_null(oidc_cmd_provider_client_name_set(cmd, NULL, "my-rp"));
+	ck_assert_str_eq(oidc_cfg_provider_client_name_get(p), "my-rp");
+
+	cmd = oidc_test_cmd_get(OIDCClientContact);
+	ck_assert_ptr_null(oidc_cmd_provider_client_contact_set(cmd, NULL, "admin@example.com"));
+	ck_assert_str_eq(oidc_cfg_provider_client_contact_get(p), "admin@example.com");
+
+	cmd = oidc_test_cmd_get(OIDCRequestObject);
+	ck_assert_ptr_null(oidc_cmd_provider_request_object_set(cmd, NULL, "{\"crypto\":{\"sign_alg\":\"none\"}}"));
+	ck_assert_str_eq(oidc_cfg_provider_request_object_get(p), "{\"crypto\":{\"sign_alg\":\"none\"}}");
+}
+END_TEST
+
+START_TEST(test_cmd_provider_signed_response_alg) {
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_provider_t *p = oidc_cfg_provider_get(cfg);
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCIDTokenSignedResponseAlg);
+	ck_assert_ptr_null(oidc_cmd_provider_id_token_signed_response_alg_set(cmd, NULL, "RS256"));
+	ck_assert_str_eq(oidc_cfg_provider_id_token_signed_response_alg_get(p), "RS256");
+	ck_assert_ptr_null(oidc_cmd_provider_id_token_signed_response_alg_set(cmd, NULL, "HS256"));
+	ck_assert_str_eq(oidc_cfg_provider_id_token_signed_response_alg_get(p), "HS256");
+	ck_assert_ptr_nonnull(oidc_cmd_provider_id_token_signed_response_alg_set(cmd, NULL, "TOTALLY_BOGUS_ALG"));
+
+	cmd = oidc_test_cmd_get(OIDCUserInfoSignedResponseAlg);
+	ck_assert_ptr_null(oidc_cmd_provider_userinfo_signed_response_alg_set(cmd, NULL, "ES256"));
+	ck_assert_str_eq(oidc_cfg_provider_userinfo_signed_response_alg_get(p), "ES256");
+	ck_assert_ptr_nonnull(oidc_cmd_provider_userinfo_signed_response_alg_set(cmd, NULL, "junk"));
+}
+END_TEST
+
+START_TEST(test_cmd_provider_encrypted_response_alg_enc) {
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_provider_t *p = oidc_cfg_provider_get(cfg);
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCIDTokenEncryptedResponseAlg);
+	ck_assert_ptr_null(oidc_cmd_provider_id_token_encrypted_response_alg_set(cmd, NULL, "RSA-OAEP"));
+	ck_assert_str_eq(oidc_cfg_provider_id_token_encrypted_response_alg_get(p), "RSA-OAEP");
+	ck_assert_ptr_nonnull(oidc_cmd_provider_id_token_encrypted_response_alg_set(cmd, NULL, "TOTALLY_BOGUS_ALG"));
+
+	cmd = oidc_test_cmd_get(OIDCIDTokenEncryptedResponseEnc);
+	ck_assert_ptr_null(oidc_cmd_provider_id_token_encrypted_response_enc_set(cmd, NULL, "A256GCM"));
+	ck_assert_str_eq(oidc_cfg_provider_id_token_encrypted_response_enc_get(p), "A256GCM");
+	ck_assert_ptr_nonnull(oidc_cmd_provider_id_token_encrypted_response_enc_set(cmd, NULL, "TOTALLY_BOGUS_ENC"));
+
+	cmd = oidc_test_cmd_get(OIDCUserInfoEncryptedResponseAlg);
+	ck_assert_ptr_null(oidc_cmd_provider_userinfo_encrypted_response_alg_set(cmd, NULL, "A256KW"));
+	ck_assert_str_eq(oidc_cfg_provider_userinfo_encrypted_response_alg_get(p), "A256KW");
+
+	cmd = oidc_test_cmd_get(OIDCUserInfoEncryptedResponseEnc);
+	ck_assert_ptr_null(oidc_cmd_provider_userinfo_encrypted_response_enc_set(cmd, NULL, "A128CBC-HS256"));
+	ck_assert_str_eq(oidc_cfg_provider_userinfo_encrypted_response_enc_get(p), "A128CBC-HS256");
+}
+END_TEST
+
+START_TEST(test_cmd_provider_bool_setters) {
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_provider_t *p = oidc_cfg_provider_get(cfg);
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCSSLValidateServer);
+	ck_assert_ptr_null(oidc_cmd_provider_ssl_validate_server_set(cmd, NULL, "Off"));
+	ck_assert_int_eq(oidc_cfg_provider_ssl_validate_server_get(p), 0);
+	ck_assert_ptr_null(oidc_cmd_provider_ssl_validate_server_set(cmd, NULL, "On"));
+	ck_assert_int_eq(oidc_cfg_provider_ssl_validate_server_get(p), 1);
+	ck_assert_ptr_nonnull(oidc_cmd_provider_ssl_validate_server_set(cmd, NULL, "MaybeLater"));
+
+	cmd = oidc_test_cmd_get(OIDCValidateIssuer);
+	ck_assert_ptr_null(oidc_cmd_provider_validate_issuer_set(cmd, NULL, "Off"));
+	ck_assert_int_eq(oidc_cfg_provider_validate_issuer_get(p), 0);
+}
+END_TEST
+
+START_TEST(test_cmd_provider_int_setters) {
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_provider_t *p = oidc_cfg_provider_get(cfg);
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCJWKSRefreshInterval);
+	ck_assert_ptr_null(oidc_cmd_provider_jwks_uri_refresh_interval_set(cmd, NULL, "600"));
+	const oidc_jwks_uri_t *jwks = oidc_cfg_provider_jwks_uri_get(p);
+	ck_assert_int_eq(oidc_cfg_jwks_uri_refresh_interval_get(jwks), 600);
+	/* below the minimum/non-numeric rejected */
+	ck_assert_ptr_nonnull(oidc_cmd_provider_jwks_uri_refresh_interval_set(cmd, NULL, "0"));
+	ck_assert_ptr_nonnull(oidc_cmd_provider_jwks_uri_refresh_interval_set(cmd, NULL, "bogus"));
+
+	cmd = oidc_test_cmd_get(OIDCUserInfoRefreshInterval);
+	ck_assert_ptr_null(oidc_cmd_provider_userinfo_refresh_interval_set(cmd, NULL, "60", NULL));
+	ck_assert_int_eq(oidc_cfg_provider_userinfo_refresh_interval_get(p), 60);
+}
+END_TEST
+
+START_TEST(test_cmd_provider_userinfo_token_method) {
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_provider_t *p = oidc_cfg_provider_get(cfg);
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCUserInfoTokenMethod);
+	ck_assert_ptr_null(oidc_cmd_provider_userinfo_token_method_set(cmd, NULL, "authz_header"));
+	ck_assert_int_eq(oidc_cfg_provider_userinfo_token_method_get(p), OIDC_USER_INFO_TOKEN_METHOD_HEADER);
+	ck_assert_ptr_null(oidc_cmd_provider_userinfo_token_method_set(cmd, NULL, "post_param"));
+	ck_assert_int_eq(oidc_cfg_provider_userinfo_token_method_get(p), OIDC_USER_INFO_TOKEN_METHOD_POST);
+	ck_assert_ptr_nonnull(oidc_cmd_provider_userinfo_token_method_set(cmd, NULL, "carrier_pigeon"));
+}
+END_TEST
+
+START_TEST(test_cmd_provider_auth_request_method) {
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_provider_t *p = oidc_cfg_provider_get(cfg);
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCProviderAuthRequestMethod);
+	ck_assert_ptr_null(oidc_cmd_provider_auth_request_method_set(cmd, NULL, "GET"));
+	ck_assert_int_eq(oidc_cfg_provider_auth_request_method_get(p), OIDC_AUTH_REQUEST_METHOD_GET);
+	ck_assert_ptr_null(oidc_cmd_provider_auth_request_method_set(cmd, NULL, "POST"));
+	ck_assert_int_eq(oidc_cfg_provider_auth_request_method_get(p), OIDC_AUTH_REQUEST_METHOD_POST);
+	ck_assert_ptr_null(oidc_cmd_provider_auth_request_method_set(cmd, NULL, "PAR"));
+	ck_assert_int_eq(oidc_cfg_provider_auth_request_method_get(p), OIDC_AUTH_REQUEST_METHOD_PAR);
+	ck_assert_ptr_nonnull(oidc_cmd_provider_auth_request_method_set(cmd, NULL, "DELETE"));
+}
+END_TEST
+
+START_TEST(test_cmd_provider_profile) {
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_provider_t *p = oidc_cfg_provider_get(cfg);
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCProfile);
+	ck_assert_ptr_null(oidc_cmd_provider_profile_set(cmd, NULL, "OIDC10"));
+	ck_assert_int_eq(oidc_cfg_provider_profile_get(p), OIDC_PROFILE_OIDC10);
+	ck_assert_ptr_null(oidc_cmd_provider_profile_set(cmd, NULL, "FAPI20"));
+	ck_assert_int_eq(oidc_cfg_provider_profile_get(p), OIDC_PROFILE_FAPI20);
+	ck_assert_ptr_nonnull(oidc_cmd_provider_profile_set(cmd, NULL, "GDPR"));
+}
+END_TEST
+
+START_TEST(test_cmd_provider_response_mode) {
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_provider_t *p = oidc_cfg_provider_get(cfg);
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCResponseMode);
+	ck_assert_ptr_null(oidc_cmd_provider_response_mode_set(cmd, NULL, "query"));
+	ck_assert_str_eq(oidc_cfg_provider_response_mode_get(p), "query");
+	ck_assert_ptr_null(oidc_cmd_provider_response_mode_set(cmd, NULL, "fragment"));
+	ck_assert_str_eq(oidc_cfg_provider_response_mode_get(p), "fragment");
+	ck_assert_ptr_null(oidc_cmd_provider_response_mode_set(cmd, NULL, "form_post"));
+	ck_assert_str_eq(oidc_cfg_provider_response_mode_get(p), "form_post");
+	ck_assert_ptr_nonnull(oidc_cmd_provider_response_mode_set(cmd, NULL, "yelling"));
+}
+END_TEST
+
 START_TEST(test_cmd_provider_idtoken_iat_slack) {
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCIDTokenIatSlack);
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
@@ -506,6 +704,16 @@ int main(void) {
 	tcase_add_test(provider, test_cmd_provider_dpop_mode);
 	tcase_add_test(provider, test_cmd_provider_pkce);
 	tcase_add_test(provider, test_cmd_provider_idtoken_iat_slack);
+	tcase_add_test(provider, test_cmd_provider_url_setters);
+	tcase_add_test(provider, test_cmd_provider_string_setters);
+	tcase_add_test(provider, test_cmd_provider_signed_response_alg);
+	tcase_add_test(provider, test_cmd_provider_encrypted_response_alg_enc);
+	tcase_add_test(provider, test_cmd_provider_bool_setters);
+	tcase_add_test(provider, test_cmd_provider_int_setters);
+	tcase_add_test(provider, test_cmd_provider_userinfo_token_method);
+	tcase_add_test(provider, test_cmd_provider_auth_request_method);
+	tcase_add_test(provider, test_cmd_provider_profile);
+	tcase_add_test(provider, test_cmd_provider_response_mode);
 
 	TCase *cache = tcase_create("cache");
 	tcase_add_checked_fixture(cache, oidc_test_setup, oidc_test_teardown);
