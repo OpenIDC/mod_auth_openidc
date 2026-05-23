@@ -386,6 +386,80 @@ START_TEST(test_metadata_disk_get_full) {
 }
 END_TEST
 
+START_TEST(test_metadata_disk_get_with_empty_conf_file) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), VALID_METADATA_JSON);
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.client", dir),
+		       "{\"client_id\":\"rp-test\",\"client_secret\":\"sekret\"}");
+	/* an empty JSON conf object has no fields to validate => still accepted */
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.conf", dir), "{}");
+
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_metadata_get(r, c, "https://idp.example.com", &provider, FALSE), TRUE);
+	ck_assert_str_eq(oidc_cfg_provider_issuer_get(provider), "https://idp.example.com");
+}
+END_TEST
+
+START_TEST(test_metadata_disk_get_with_invalid_conf_alg) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), VALID_METADATA_JSON);
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.client", dir),
+		       "{\"client_id\":\"rp-test\",\"client_secret\":\"sekret\"}");
+	/* conf contains an unsupported id_token signing algorithm => conf_is_valid rejects it */
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.conf", dir),
+		       "{\"id_token_signed_response_alg\":\"TOTALLY_BOGUS_ALG\"}");
+
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_metadata_get(r, c, "https://idp.example.com", &provider, FALSE), FALSE);
+}
+END_TEST
+
+START_TEST(test_metadata_disk_dyn_registration_success) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+
+	/* start a loopback server that will respond to the dynamic-registration POST */
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/json",
+					  .body = "{\"client_id\":\"dyn-rp\",\"client_secret\":\"dyn-secret\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	/* provider metadata advertises a registration_endpoint pointing at the loopback server */
+	const char *provider_json =
+	    apr_psprintf(r->pool,
+			 "{\"issuer\":\"https://idp.example.com\","
+			 "\"authorization_endpoint\":\"https://idp.example.com/authorize\","
+			 "\"token_endpoint\":\"https://idp.example.com/token\","
+			 "\"jwks_uri\":\"https://idp.example.com/jwks\","
+			 "\"registration_endpoint\":\"%s\","
+			 "\"response_types_supported\":[\"code\",\"id_token\"],"
+			 "\"token_endpoint_auth_methods_supported\":[\"client_secret_basic\"]}",
+			 oidc_test_http_server_url(srv, r->pool));
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), provider_json);
+	/* no .client on disk yet => fall through to dynamic registration */
+
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_metadata_get(r, c, "https://idp.example.com", &provider, TRUE), TRUE);
+	ck_assert_str_eq(oidc_cfg_provider_client_id_get(provider), "dyn-rp");
+	ck_assert_str_eq(oidc_cfg_provider_client_secret_get(provider), "dyn-secret");
+
+	/* the dynamic-registration POST should have been issued */
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_str_eq(cap->method, "POST");
+	ck_assert_msg(_oidc_strstr(cap->body, "redirect_uris") != NULL, "registration POST body carries redirect_uris");
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
 START_TEST(test_metadata_disk_provider_get_missing_no_discovery) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -426,6 +500,9 @@ int main(void) {
 	tcase_add_test(disk, test_metadata_disk_get_provider_only);
 	tcase_add_test(disk, test_metadata_disk_list_skips_provider_without_client);
 	tcase_add_test(disk, test_metadata_disk_get_full);
+	tcase_add_test(disk, test_metadata_disk_get_with_empty_conf_file);
+	tcase_add_test(disk, test_metadata_disk_get_with_invalid_conf_alg);
+	tcase_add_test(disk, test_metadata_disk_dyn_registration_success);
 	tcase_add_test(disk, test_metadata_disk_provider_get_missing_no_discovery);
 
 	Suite *s = suite_create("metadata");
