@@ -41,6 +41,7 @@
  *
  **************************************************************************/
 
+#include "cache/cache.h"
 #include "cfg/cache.h"
 #include "cfg/cfg_int.h"
 #include "cfg/dir.h"
@@ -399,6 +400,87 @@ START_TEST(test_cmd_provider_idtoken_iat_slack) {
 }
 END_TEST
 
+/*
+ * Tests for the cfg/cache.c directive setters: OIDCCacheType,
+ * OIDCCacheShmEntrySizeMax, OIDCCacheDir, OIDCSessionType.
+ */
+
+START_TEST(test_cmd_cache_type) {
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCCacheType);
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+
+	ck_assert_ptr_null(oidc_cmd_cache_type_set(cmd, NULL, "shm"));
+	ck_assert_ptr_eq(cfg->cache.impl, &oidc_cache_shm);
+	ck_assert_ptr_null(oidc_cmd_cache_type_set(cmd, NULL, "file"));
+	ck_assert_ptr_eq(cfg->cache.impl, &oidc_cache_file);
+#ifdef USE_MEMCACHE
+	ck_assert_ptr_null(oidc_cmd_cache_type_set(cmd, NULL, "memcache"));
+	ck_assert_ptr_eq(cfg->cache.impl, &oidc_cache_memcache);
+#endif
+#ifdef USE_LIBHIREDIS
+	ck_assert_ptr_null(oidc_cmd_cache_type_set(cmd, NULL, "redis"));
+	ck_assert_ptr_eq(cfg->cache.impl, &oidc_cache_redis);
+#endif
+	/* unknown backend rejected */
+	ck_assert_ptr_nonnull(oidc_cmd_cache_type_set(cmd, NULL, "totally_bogus_cache"));
+
+	/* restore the shm backend the test fixture expects so the subsequent teardown
+	 * (oidc_cfg_process_cleanup -> cache->destroy) operates on a known-good impl */
+	ck_assert_ptr_null(oidc_cmd_cache_type_set(cmd, NULL, "shm"));
+}
+END_TEST
+
+START_TEST(test_cmd_cache_shm_entry_size_max) {
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCCacheShmEntrySizeMax);
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+
+	/* in-range, multiple of 8 (the minimum is 8 KiB + a small overhead) */
+	ck_assert_ptr_null(oidc_cmd_cache_shm_entry_size_max_set(cmd, NULL, "16384"));
+	ck_assert_int_eq(cfg->cache.shm_entry_size_max, 16384);
+
+	/* in-range but not a multiple of 8 */
+	ck_assert_ptr_nonnull(oidc_cmd_cache_shm_entry_size_max_set(cmd, NULL, "16383"));
+
+	/* below the minimum / above the maximum / non-numeric */
+	ck_assert_ptr_nonnull(oidc_cmd_cache_shm_entry_size_max_set(cmd, NULL, "16"));
+	ck_assert_ptr_nonnull(oidc_cmd_cache_shm_entry_size_max_set(cmd, NULL, "99999999"));
+	ck_assert_ptr_nonnull(oidc_cmd_cache_shm_entry_size_max_set(cmd, NULL, "bogus"));
+}
+END_TEST
+
+START_TEST(test_cmd_cache_dir) {
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCCacheDir);
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+
+	/* /tmp exists and is a directory => accepted */
+	ck_assert_ptr_null(oidc_cmd_cache_file_dir_set(cmd, NULL, "/tmp"));
+	ck_assert_str_eq(cfg->cache.file_dir, "/tmp");
+
+	/* a path that does not exist is rejected */
+	ck_assert_ptr_nonnull(
+	    oidc_cmd_cache_file_dir_set(cmd, NULL, "/nonexistent/path/that/should/not/be/there"));
+}
+END_TEST
+
+START_TEST(test_cmd_session_type) {
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCSessionType);
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+
+	ck_assert_ptr_null(oidc_cmd_session_type_set(cmd, NULL, "client-cookie"));
+	ck_assert_int_eq(oidc_cfg_session_type_get(cfg), OIDC_SESSION_TYPE_CLIENT_COOKIE);
+
+	ck_assert_ptr_null(oidc_cmd_session_type_set(cmd, NULL, "server-cache"));
+	ck_assert_int_eq(oidc_cfg_session_type_get(cfg), OIDC_SESSION_TYPE_SERVER_CACHE);
+
+	/* the "persistent" suffix toggles the persistent-session-cookie flag */
+	ck_assert_ptr_null(oidc_cmd_session_type_set(cmd, NULL, "server-cache:persistent"));
+	ck_assert_int_eq(oidc_cfg_session_type_get(cfg), OIDC_SESSION_TYPE_SERVER_CACHE);
+
+	/* unknown variant rejected */
+	ck_assert_ptr_nonnull(oidc_cmd_session_type_set(cmd, NULL, "soup"));
+}
+END_TEST
+
 int main(void) {
 	TCase *core = tcase_create("core");
 	tcase_add_checked_fixture(core, oidc_test_setup, oidc_test_teardown);
@@ -425,10 +507,18 @@ int main(void) {
 	tcase_add_test(provider, test_cmd_provider_pkce);
 	tcase_add_test(provider, test_cmd_provider_idtoken_iat_slack);
 
+	TCase *cache = tcase_create("cache");
+	tcase_add_checked_fixture(cache, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(cache, test_cmd_cache_type);
+	tcase_add_test(cache, test_cmd_cache_shm_entry_size_max);
+	tcase_add_test(cache, test_cmd_cache_dir);
+	tcase_add_test(cache, test_cmd_session_type);
+
 	Suite *s = suite_create("cfg");
 	suite_add_tcase(s, core);
 	suite_add_tcase(s, dir);
 	suite_add_tcase(s, provider);
+	suite_add_tcase(s, cache);
 
 	return oidc_test_suite_run(s);
 }
