@@ -1173,6 +1173,134 @@ START_TEST(test_proto_request_auth_par_redirect) {
 }
 END_TEST
 
+/*
+ * Tests for proto/jwks.c — drive oidc_proto_jwks_uri_keys against the
+ * loopback HTTP server, exercising the kid-match, no-kid-include-any
+ * and HTTP-failure branches.
+ */
+
+/* build a JWT shell with header.alg + header.kid set so oidc_proto_jwks_uri_keys
+ * has enough metadata to pick a key from the JWKS response */
+static oidc_jwt_t *e2e_make_jwt_for_kid(apr_pool_t *pool, const char *alg, const char *kid) {
+	oidc_jwt_t *jwt = oidc_jwt_new(pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(pool, alg);
+	if (kid != NULL)
+		jwt->header.kid = apr_pstrdup(pool, kid);
+	return jwt;
+}
+
+START_TEST(test_proto_jwks_uri_keys_kid_match) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *jwks =
+	    "{\"keys\":[{\"kty\":\"oct\",\"kid\":\"k1\",\"use\":\"sig\",\"k\":\"AAECAwQFBgcICQoLDA0ODw\"}]}";
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = jwks};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	oidc_jwks_uri_t uri = {0};
+	uri.uri = oidc_test_http_server_url(srv, r->pool);
+	uri.refresh_interval = 60;
+
+	oidc_jwt_t *jwt = e2e_make_jwt_for_kid(r->pool, "HS256", "k1");
+	apr_hash_t *keys = apr_hash_make(r->pool);
+	apr_byte_t force_refresh = TRUE;
+	ck_assert_int_eq(oidc_proto_jwks_uri_keys(r, c, jwt, &uri, 0, keys, &force_refresh), TRUE);
+	ck_assert_int_eq(apr_hash_count(keys), 1);
+	ck_assert_ptr_nonnull(apr_hash_get(keys, "k1", APR_HASH_KEY_STRING));
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_jwt_destroy(jwt);
+	oidc_jwk_list_destroy_hash(keys);
+}
+END_TEST
+
+START_TEST(test_proto_jwks_uri_keys_no_kid_include_matching_kty) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* one sig-usable oct key plus one enc-usable oct key that must be skipped */
+	const char *jwks =
+	    "{\"keys\":["
+	    "{\"kty\":\"oct\",\"kid\":\"sigkey\",\"use\":\"sig\",\"k\":\"AAECAwQFBgcICQoLDA0ODw\"},"
+	    "{\"kty\":\"oct\",\"kid\":\"enckey\",\"use\":\"enc\",\"k\":\"EBEPDg0MCwoJCAcGBQQDAgEA\"}"
+	    "]}";
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = jwks};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	oidc_jwks_uri_t uri = {0};
+	uri.uri = oidc_test_http_server_url(srv, r->pool);
+	uri.refresh_interval = 60;
+
+	/* no kid in the JWT => "any sig-usable matching kty" branch */
+	oidc_jwt_t *jwt = e2e_make_jwt_for_kid(r->pool, "HS256", NULL);
+	apr_hash_t *keys = apr_hash_make(r->pool);
+	apr_byte_t force_refresh = TRUE;
+	ck_assert_int_eq(oidc_proto_jwks_uri_keys(r, c, jwt, &uri, 0, keys, &force_refresh), TRUE);
+	/* only the sig-usable key is included */
+	ck_assert_int_eq(apr_hash_count(keys), 1);
+	ck_assert_ptr_nonnull(apr_hash_get(keys, "sigkey", APR_HASH_KEY_STRING));
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_jwt_destroy(jwt);
+	oidc_jwk_list_destroy_hash(keys);
+}
+END_TEST
+
+START_TEST(test_proto_jwks_uri_keys_no_match_after_refresh) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* the JWKS has key kid=k1, but the JWT asks for kid=k2 — no match found.
+	 * The function refreshes once and then returns TRUE with an empty result. */
+	const char *jwks = "{\"keys\":[{\"kty\":\"oct\",\"kid\":\"k1\",\"k\":\"AAECAwQFBgcICQoLDA0ODw\"}]}";
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = jwks};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	oidc_jwks_uri_t uri = {0};
+	uri.uri = oidc_test_http_server_url(srv, r->pool);
+	uri.refresh_interval = 60;
+
+	oidc_jwt_t *jwt = e2e_make_jwt_for_kid(r->pool, "HS256", "k2");
+	apr_hash_t *keys = apr_hash_make(r->pool);
+	apr_byte_t force_refresh = TRUE;
+	ck_assert_int_eq(oidc_proto_jwks_uri_keys(r, c, jwt, &uri, 0, keys, &force_refresh), TRUE);
+	ck_assert_int_eq(apr_hash_count(keys), 0);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_jwt_destroy(jwt);
+}
+END_TEST
+
+START_TEST(test_proto_jwks_uri_keys_http_failure) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	int port = oidc_test_http_free_port(r->pool);
+	ck_assert_int_ne(port, 0);
+	oidc_jwks_uri_t uri = {0};
+	uri.uri = apr_psprintf(r->pool, "http://127.0.0.1:%d/jwks", port);
+	uri.refresh_interval = 60;
+
+	oidc_jwt_t *jwt = e2e_make_jwt_for_kid(r->pool, "HS256", "k1");
+	apr_hash_t *keys = apr_hash_make(r->pool);
+	apr_byte_t force_refresh = TRUE;
+	/* nothing listening => oidc_metadata_jwks_get returns no JSON => FALSE */
+	ck_assert_int_eq(oidc_proto_jwks_uri_keys(r, c, jwt, &uri, 0, keys, &force_refresh), FALSE);
+
+	oidc_jwt_destroy(jwt);
+}
+END_TEST
+
 START_TEST(test_proto_supported_flows_exhaustive) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	/* every documented flow round-trips through flow_is_supported */
@@ -1245,6 +1373,10 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_userinfo_request_sub_mismatch);
 	tcase_add_test(e2e, test_proto_userinfo_request_error);
 	tcase_add_test(e2e, test_proto_request_auth_par_redirect);
+	tcase_add_test(e2e, test_proto_jwks_uri_keys_kid_match);
+	tcase_add_test(e2e, test_proto_jwks_uri_keys_no_kid_include_matching_kty);
+	tcase_add_test(e2e, test_proto_jwks_uri_keys_no_match_after_refresh);
+	tcase_add_test(e2e, test_proto_jwks_uri_keys_http_failure);
 
 	Suite *s = suite_create("proto");
 	suite_add_tcase(s, core);
