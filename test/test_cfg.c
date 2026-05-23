@@ -43,9 +43,12 @@
 
 #include "cfg/cache.h"
 #include "cfg/cfg_int.h"
+#include "cfg/dir.h"
 #include "cfg/provider.h"
 #include "check_util.h"
 #include "jose.h"
+#include "mod_auth_openidc.h"
+#include "proto/proto.h"
 #include "util.h"
 
 // provider
@@ -212,6 +215,190 @@ START_TEST(test_cmd_oauth_verify_shared_keys) {
 }
 END_TEST
 
+/*
+ * Tests for the cfg/dir.c directive setters. These follow the existing
+ * test_cmd_* pattern: drive each oidc_cmd_dir_*_set through its valid /
+ * invalid input matrix and assert the dir_cfg getter reflects the change.
+ */
+
+START_TEST(test_cmd_dir_pass_userinfo_as) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPassUserInfoAs);
+
+	/* every documented variant must parse — the cmd handler writes into its arg buffer
+	 * (to split the "type:name" form), so the arg must be pool-allocated (mutable) */
+	ck_assert_ptr_null(oidc_cmd_dir_pass_userinfo_as_set(cmd, dir_cfg, apr_pstrdup(r->pool, "claims")));
+	ck_assert_ptr_null(oidc_cmd_dir_pass_userinfo_as_set(cmd, dir_cfg, apr_pstrdup(r->pool, "json")));
+	ck_assert_ptr_null(oidc_cmd_dir_pass_userinfo_as_set(cmd, dir_cfg, apr_pstrdup(r->pool, "jwt")));
+	ck_assert_ptr_null(oidc_cmd_dir_pass_userinfo_as_set(cmd, dir_cfg, apr_pstrdup(r->pool, "signed_jwt")));
+	/* "type:name" form is accepted, the colon-suffix sets a custom header name */
+	ck_assert_ptr_null(oidc_cmd_dir_pass_userinfo_as_set(cmd, dir_cfg, apr_pstrdup(r->pool, "json:CUSTOM-HDR")));
+	const apr_array_header_t *arr = oidc_cfg_dir_pass_userinfo_as_get(r);
+	ck_assert_ptr_nonnull(arr);
+	ck_assert_int_gt(arr->nelts, 0);
+
+	/* unknown variant rejected */
+	ck_assert_ptr_nonnull(oidc_cmd_dir_pass_userinfo_as_set(cmd, dir_cfg, apr_pstrdup(r->pool, "totally_bogus")));
+}
+END_TEST
+
+START_TEST(test_cmd_dir_pass_claims_as) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPassClaimsAs);
+
+	/* one-arg form sets pass_in and leaves encoding at default */
+	ck_assert_ptr_null(oidc_cmd_dir_pass_claims_as_set(cmd, dir_cfg, "headers", NULL));
+	ck_assert_int_eq(oidc_cfg_dir_pass_info_in_get(r), OIDC_APPINFO_PASS_HEADERS);
+
+	ck_assert_ptr_null(oidc_cmd_dir_pass_claims_as_set(cmd, dir_cfg, "environment", NULL));
+	ck_assert_int_eq(oidc_cfg_dir_pass_info_in_get(r), OIDC_APPINFO_PASS_ENVVARS);
+
+	ck_assert_ptr_null(oidc_cmd_dir_pass_claims_as_set(cmd, dir_cfg, "both", NULL));
+	/* OIDC_APPINFO_PASS_BOTH is a dir.c-internal alias for HEADERS|ENVVARS */
+	ck_assert_int_eq(oidc_cfg_dir_pass_info_in_get(r), OIDC_APPINFO_PASS_HEADERS | OIDC_APPINFO_PASS_ENVVARS);
+
+	ck_assert_ptr_null(oidc_cmd_dir_pass_claims_as_set(cmd, dir_cfg, "none", NULL));
+	ck_assert_int_eq(oidc_cfg_dir_pass_info_in_get(r), OIDC_APPINFO_PASS_NONE);
+
+	/* two-arg form sets the encoding too */
+	ck_assert_ptr_null(oidc_cmd_dir_pass_claims_as_set(cmd, dir_cfg, "headers", "base64url"));
+	ck_assert_int_eq(oidc_cfg_dir_pass_info_encoding_get(r), OIDC_APPINFO_ENCODING_BASE64URL);
+
+	ck_assert_ptr_null(oidc_cmd_dir_pass_claims_as_set(cmd, dir_cfg, "headers", "latin1"));
+	ck_assert_int_eq(oidc_cfg_dir_pass_info_encoding_get(r), OIDC_APPINFO_ENCODING_LATIN1);
+
+	/* both args reject unknowns */
+	ck_assert_ptr_nonnull(oidc_cmd_dir_pass_claims_as_set(cmd, dir_cfg, "BOGUS", NULL));
+	ck_assert_ptr_nonnull(oidc_cmd_dir_pass_claims_as_set(cmd, dir_cfg, "headers", "BOGUS-ENC"));
+}
+END_TEST
+
+START_TEST(test_cmd_dir_accept_oauth_token_in) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get("OIDCOAuthAcceptTokenAs");
+
+	/* every documented source must parse */
+	ck_assert_ptr_null(oidc_cmd_dir_accept_oauth_token_in_set(cmd, dir_cfg, "header"));
+	ck_assert_ptr_null(oidc_cmd_dir_accept_oauth_token_in_set(cmd, dir_cfg, "post"));
+	ck_assert_ptr_null(oidc_cmd_dir_accept_oauth_token_in_set(cmd, dir_cfg, "query"));
+	ck_assert_ptr_null(oidc_cmd_dir_accept_oauth_token_in_set(cmd, dir_cfg, "basic"));
+	/* cookie with the default name */
+	ck_assert_ptr_null(oidc_cmd_dir_accept_oauth_token_in_set(cmd, dir_cfg, "cookie"));
+	ck_assert_str_eq(oidc_cfg_dir_accept_token_in_option_get(r, OIDC_OAUTH_ACCEPT_TOKEN_IN_OPTION_COOKIE_NAME),
+			 "PA.global");
+	/* cookie with a custom name */
+	ck_assert_ptr_null(oidc_cmd_dir_accept_oauth_token_in_set(cmd, dir_cfg, "cookie:my-at-cookie"));
+	ck_assert_str_eq(oidc_cfg_dir_accept_token_in_option_get(r, OIDC_OAUTH_ACCEPT_TOKEN_IN_OPTION_COOKIE_NAME),
+			 "my-at-cookie");
+
+	/* unknown source rejected */
+	ck_assert_ptr_nonnull(oidc_cmd_dir_accept_oauth_token_in_set(cmd, dir_cfg, "smoke_signal"));
+}
+END_TEST
+
+/*
+ * Tests for the cfg/provider.c directive setters. Provider cmd setters look
+ * up cfg via the server's module config, so passing NULL for the dir-cfg
+ * parameter (the usual cmd-table convention) is fine.
+ */
+
+START_TEST(test_cmd_provider_response_type) {
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCResponseType);
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_provider_t *p = oidc_cfg_provider_get(cfg);
+
+	ck_assert_ptr_null(oidc_cmd_provider_response_type_set(cmd, NULL, "code"));
+	ck_assert_str_eq(oidc_cfg_provider_response_type_get(p), "code");
+	ck_assert_ptr_null(oidc_cmd_provider_response_type_set(cmd, NULL, "id_token"));
+	ck_assert_str_eq(oidc_cfg_provider_response_type_get(p), "id_token");
+	ck_assert_ptr_null(oidc_cmd_provider_response_type_set(cmd, NULL, "code id_token"));
+	/* unsupported flow */
+	ck_assert_ptr_nonnull(oidc_cmd_provider_response_type_set(cmd, NULL, "totally_bogus_flow"));
+}
+END_TEST
+
+START_TEST(test_cmd_provider_session_max_duration) {
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCSessionMaxDuration);
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_provider_t *p = oidc_cfg_provider_get(cfg);
+
+	/* 0 is the special "no max" sentinel */
+	ck_assert_ptr_null(oidc_cmd_provider_session_max_duration_set(cmd, NULL, "0"));
+	ck_assert_int_eq(oidc_cfg_provider_session_max_duration_get(p), 0);
+
+	ck_assert_ptr_null(oidc_cmd_provider_session_max_duration_set(cmd, NULL, "3600"));
+	ck_assert_int_eq(oidc_cfg_provider_session_max_duration_get(p), 3600);
+
+	/* below the minimum (15) is rejected */
+	ck_assert_ptr_nonnull(oidc_cmd_provider_session_max_duration_set(cmd, NULL, "5"));
+	/* above the maximum (1 year) is rejected */
+	ck_assert_ptr_nonnull(oidc_cmd_provider_session_max_duration_set(cmd, NULL, "999999999"));
+	/* non-numeric input is rejected */
+	ck_assert_ptr_nonnull(oidc_cmd_provider_session_max_duration_set(cmd, NULL, "soon"));
+}
+END_TEST
+
+START_TEST(test_cmd_provider_scope) {
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCScope);
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_provider_t *p = oidc_cfg_provider_get(cfg);
+
+	ck_assert_ptr_null(oidc_cmd_provider_scope_set(cmd, NULL, "openid"));
+	ck_assert_str_eq(oidc_cfg_provider_scope_get(p), "openid");
+	ck_assert_ptr_null(oidc_cmd_provider_scope_set(cmd, NULL, "openid profile email"));
+	ck_assert_str_eq(oidc_cfg_provider_scope_get(p), "openid profile email");
+}
+END_TEST
+
+START_TEST(test_cmd_provider_dpop_mode) {
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCDPoPMode);
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_provider_t *p = oidc_cfg_provider_get(cfg);
+
+	ck_assert_ptr_null(oidc_cmd_provider_dpop_mode_set(cmd, NULL, "off", NULL));
+	ck_assert_int_eq(oidc_cfg_provider_dpop_mode_get(p), OIDC_DPOP_MODE_OFF);
+	ck_assert_ptr_null(oidc_cmd_provider_dpop_mode_set(cmd, NULL, "optional", NULL));
+	ck_assert_int_eq(oidc_cfg_provider_dpop_mode_get(p), OIDC_DPOP_MODE_OPTIONAL);
+	ck_assert_ptr_null(oidc_cmd_provider_dpop_mode_set(cmd, NULL, "required", NULL));
+	ck_assert_int_eq(oidc_cfg_provider_dpop_mode_get(p), OIDC_DPOP_MODE_REQUIRED);
+	/* unknown mode */
+	ck_assert_ptr_nonnull(oidc_cmd_provider_dpop_mode_set(cmd, NULL, "maybe_later", NULL));
+}
+END_TEST
+
+START_TEST(test_cmd_provider_pkce) {
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPKCEMethod);
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_provider_t *p = oidc_cfg_provider_get(cfg);
+
+	ck_assert_ptr_null(oidc_cmd_provider_pkce_set(cmd, NULL, OIDC_PKCE_METHOD_PLAIN));
+	ck_assert_ptr_eq(oidc_cfg_provider_pkce_get(p), &oidc_pkce_plain);
+
+	ck_assert_ptr_null(oidc_cmd_provider_pkce_set(cmd, NULL, OIDC_PKCE_METHOD_S256));
+	ck_assert_ptr_eq(oidc_cfg_provider_pkce_get(p), &oidc_pkce_s256);
+
+	ck_assert_ptr_null(oidc_cmd_provider_pkce_set(cmd, NULL, OIDC_PKCE_METHOD_NONE));
+	ck_assert_ptr_eq(oidc_cfg_provider_pkce_get(p), &oidc_pkce_none);
+
+	ck_assert_ptr_nonnull(oidc_cmd_provider_pkce_set(cmd, NULL, "totally_bogus"));
+}
+END_TEST
+
+START_TEST(test_cmd_provider_idtoken_iat_slack) {
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCIDTokenIatSlack);
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_provider_t *p = oidc_cfg_provider_get(cfg);
+
+	ck_assert_ptr_null(oidc_cmd_provider_idtoken_iat_slack_set(cmd, NULL, "60"));
+	ck_assert_int_eq(oidc_cfg_provider_idtoken_iat_slack_get(p), 60);
+	/* non-numeric input rejected */
+	ck_assert_ptr_nonnull(oidc_cmd_provider_idtoken_iat_slack_set(cmd, NULL, "moments"));
+}
+END_TEST
+
 int main(void) {
 	TCase *core = tcase_create("core");
 	tcase_add_checked_fixture(core, oidc_test_setup, oidc_test_teardown);
@@ -223,8 +410,25 @@ int main(void) {
 	tcase_add_test(core, test_cmd_cookie_same_site);
 	tcase_add_test(core, test_cmd_oauth_verify_shared_keys);
 
+	TCase *dir = tcase_create("dir");
+	tcase_add_checked_fixture(dir, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(dir, test_cmd_dir_pass_userinfo_as);
+	tcase_add_test(dir, test_cmd_dir_pass_claims_as);
+	tcase_add_test(dir, test_cmd_dir_accept_oauth_token_in);
+
+	TCase *provider = tcase_create("provider");
+	tcase_add_checked_fixture(provider, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(provider, test_cmd_provider_response_type);
+	tcase_add_test(provider, test_cmd_provider_session_max_duration);
+	tcase_add_test(provider, test_cmd_provider_scope);
+	tcase_add_test(provider, test_cmd_provider_dpop_mode);
+	tcase_add_test(provider, test_cmd_provider_pkce);
+	tcase_add_test(provider, test_cmd_provider_idtoken_iat_slack);
+
 	Suite *s = suite_create("cfg");
 	suite_add_tcase(s, core);
+	suite_add_tcase(s, dir);
+	suite_add_tcase(s, provider);
 
 	return oidc_test_suite_run(s);
 }
