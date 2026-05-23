@@ -115,8 +115,9 @@ static request_rec *oidc_test_request_init(apr_pool_t *pool) {
 	cfg->cache.shm_size_max = 500;
 	cfg->cache.shm_entry_size_max = 16384 + 255 + 17;
 	cfg->cache.encrypt = 1;
-	if (cfg->cache.impl->post_config(request->server->process->pconf, request->server) != OK) {
-		fprintf(stderr, "cfg->cache.impl->post_config failed!\n");
+	/* full post-config so the cache backend AND the shared refresh-grant mutex get set up */
+	if (oidc_cfg_post_config(request->server->process->pconf, cfg, request->server) != OK) {
+		fprintf(stderr, "oidc_cfg_post_config failed!\n");
 		exit(-1);
 	}
 
@@ -141,8 +142,15 @@ void oidc_test_setup(void) {
 }
 
 void oidc_test_teardown(void) {
+	/* release the process-wide refresh mutex before apr_terminate frees its pool */
+	if (request != NULL) {
+		oidc_cfg_t *cfg = oidc_test_cfg_get();
+		oidc_cfg_process_cleanup(cfg, request->server);
+	}
 	EVP_cleanup();
 	apr_terminate();
+	request = NULL;
+	pool = NULL;
 }
 
 apr_pool_t *oidc_test_pool_get() {

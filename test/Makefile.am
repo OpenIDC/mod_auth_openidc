@@ -72,7 +72,10 @@ TESTS += \
 	test_jose \
 	test_http \
 	test_cache \
-	test_proto
+	test_proto \
+	test_handle \
+	test_oauth \
+	test_metadata
 
 endif
 
