@@ -270,6 +270,72 @@ START_TEST(test_metrics_handle_request_flushed_status) {
 }
 END_TEST
 
+START_TEST(test_metrics_handle_request_flushed_status_counter_selector) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	e2e_metrics_setup_flushed(r);
+	e2e_force_metrics_flush(r, c);
+
+	/* select the AUTHN_REQUEST_ERROR_URL counter we incremented in the flush helper:
+	 * format=status&server_name=<host>&counter=authn.request.error.url => "OK: 1\n"
+	 * (oidc_metrics_status_find_counter + oidc_metrics_status_select_value) */
+	r->args = "format=status&server_name=www.example.com&counter=authn.request.error.url";
+	int rc = oidc_metrics_handle_request(r);
+	ck_assert_int_eq(rc, OK);
+
+	e2e_metrics_teardown_flushed(r);
+}
+END_TEST
+
+START_TEST(test_metrics_handle_request_flushed_status_counter_with_value) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	e2e_metrics_setup_flushed(r);
+	/* push a value-indexed counter (provider.http.response.code) with value "200" then flush */
+	OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_HTTP_RESPONSE_CODE, "200");
+	apr_sleep(apr_time_from_msec(1500));
+
+	/* counter=provider.http.response.code&value=200 selects the per-value sub-counter
+	 * via oidc_metrics_status_select_value's object/value branch */
+	r->args = "format=status&server_name=www.example.com&counter=provider.http.response.code&value=200";
+	int rc = oidc_metrics_handle_request(r);
+	ck_assert_int_eq(rc, OK);
+
+	e2e_metrics_teardown_flushed(r);
+}
+END_TEST
+
+START_TEST(test_metrics_handle_request_flushed_status_unknown_counter) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	e2e_metrics_setup_flushed(r);
+	e2e_force_metrics_flush(r, c);
+
+	/* a counter name that does not exist in the shm JSON: the find returns NULL,
+	 * the handler returns the bare "OK\n" message (still rc=OK) */
+	r->args = "format=status&server_name=www.example.com&counter=totally.bogus.counter";
+	int rc = oidc_metrics_handle_request(r);
+	ck_assert_int_eq(rc, OK);
+
+	e2e_metrics_teardown_flushed(r);
+}
+END_TEST
+
+START_TEST(test_metrics_handle_request_flushed_status_unknown_server) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	e2e_metrics_setup_flushed(r);
+	e2e_force_metrics_flush(r, c);
+
+	/* server_name not present in the JSON: short-circuits via j_server==NULL */
+	r->args = "format=status&server_name=other.host.example&counter=authn.request.error.url";
+	int rc = oidc_metrics_handle_request(r);
+	ck_assert_int_eq(rc, OK);
+
+	e2e_metrics_teardown_flushed(r);
+}
+END_TEST
+
 int main(void) {
 	TCase *classname = tcase_create("classname");
 	tcase_add_checked_fixture(classname, oidc_test_setup, oidc_test_teardown);
@@ -294,6 +360,10 @@ int main(void) {
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_json);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_internal);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status);
+	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_counter_selector);
+	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_counter_with_value);
+	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_unknown_counter);
+	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_unknown_server);
 
 	Suite *s = suite_create("metrics");
 	suite_add_tcase(s, classname);
