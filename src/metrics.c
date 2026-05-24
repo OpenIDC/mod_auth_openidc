@@ -45,6 +45,7 @@
 #include "util/util.h"
 #include "metrics.h"
 #include <limits.h>
+#include <unistd.h>
 #include <apr_shm.h>
 #include <apr_lib.h>
 
@@ -183,6 +184,8 @@ static apr_byte_t _oidc_metrics_thread_exit = FALSE;
 static oidc_cache_mutex_t *_oidc_metrics_global_mutex = NULL;
 // pointer to the thread that periodically writes the locally gathered metrics to shared memory
 static apr_thread_t *_oidc_metrics_thread = NULL;
+// pid that owns _oidc_metrics_thread; used to tell a post-fork stale handle from a same-process double-init
+static pid_t _oidc_metrics_thread_pid = 0;
 // local in-memory cached metrics
 static oidc_metrics_t _oidc_metrics = {NULL, NULL};
 // mutex to protect the local metrics hash table
@@ -812,6 +815,7 @@ apr_byte_t oidc_metrics_post_config(apr_pool_t *pool, server_rec *s) {
 	/* create the thread that will periodically flush the local metrics data to shared memory */
 	if (apr_thread_create(&_oidc_metrics_thread, NULL, oidc_metrics_thread_run, s, s->process->pool) != APR_SUCCESS)
 		return FALSE;
+	_oidc_metrics_thread_pid = getpid();
 
 	/* create the hashtable that holds local metrics data */
 	_oidc_metrics.counters = apr_hash_make(s->process->pool);
@@ -838,6 +842,7 @@ apr_byte_t oidc_metrics_post_config(apr_pool_t *pool, server_rec *s) {
  * NB: global, yet called for each vhost that has metrics enabled!
  */
 apr_status_t oidc_metrics_child_init(apr_pool_t *p, server_rec *s) {
+	apr_status_t rv = APR_SUCCESS;
 
 	/* make sure this executes only once per child */
 	if (_oidc_metrics_is_parent == FALSE)
@@ -849,9 +854,20 @@ apr_status_t oidc_metrics_child_init(apr_pool_t *p, server_rec *s) {
 	if (oidc_cache_mutex_child_init(p, s, _oidc_metrics_process_mutex) != APR_SUCCESS)
 		return APR_EGENERAL;
 
+	/* if a flush thread already exists in this process (e.g. unit tests calling post_config and
+	 * child_init without forking) shut it down before overwriting the handle; after a real fork the
+	 * pid differs and the parent's thread didn't carry over, so the stale handle is just discarded */
+	if (_oidc_metrics_thread != NULL && _oidc_metrics_thread_pid == getpid()) {
+		_oidc_metrics_thread_exit = TRUE;
+		apr_thread_join(&rv, _oidc_metrics_thread);
+		_oidc_metrics_thread_exit = FALSE;
+	}
+	_oidc_metrics_thread = NULL;
+
 	/* the metrics flush thread is not inherited from the parent, so re-create it in the child */
 	if (apr_thread_create(&_oidc_metrics_thread, NULL, oidc_metrics_thread_run, s, s->process->pool) != APR_SUCCESS)
 		return APR_EGENERAL;
+	_oidc_metrics_thread_pid = getpid();
 
 	/* flag this is a child */
 	_oidc_metrics_is_parent = FALSE;
@@ -876,6 +892,7 @@ apr_status_t oidc_metrics_cleanup(server_rec *s) {
 		oidc_serror(s, "apr_thread_join failed");
 	_oidc_metrics_thread_exit = FALSE;
 	_oidc_metrics_thread = NULL;
+	_oidc_metrics_thread_pid = 0;
 
 	/* delete the shared memory segment if we are in the parent process */
 	if (_oidc_metrics_is_parent == TRUE)
