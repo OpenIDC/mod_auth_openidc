@@ -21,3 +21,9 @@
 /test_http
 /test_cache
 /test_proto
+/test_handle
+/test_metadata
+/test_metrics
+/test_oauth
+/mod_auth_openidc-*-coverage.info
+/mod_auth_openidc-*-coverage/
