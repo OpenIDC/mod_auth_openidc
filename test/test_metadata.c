@@ -157,9 +157,8 @@ START_TEST(test_metadata_retrieve_success) {
 	/* the call uses the provider's ssl_validate_server flag */
 	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
 
-	oidc_test_http_response_t resp = {.status_code = 200,
-					  .content_type = "application/json",
-					  .body = VALID_METADATA_JSON};
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = VALID_METADATA_JSON};
 	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
 	ck_assert_ptr_nonnull(srv);
 
@@ -232,8 +231,7 @@ START_TEST(test_metadata_jwks_get_forced_refresh) {
 	oidc_cfg_t *c = oidc_test_cfg_get();
 
 	const char *jwks_body = "{\"keys\":[{\"kty\":\"oct\",\"kid\":\"k1\",\"k\":\"AAECAwQFBgcICQoLDA0ODw\"}]}";
-	oidc_test_http_response_t resp = {
-	    .status_code = 200, .content_type = "application/json", .body = jwks_body};
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = jwks_body};
 	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
 	ck_assert_ptr_nonnull(srv);
 
@@ -433,16 +431,15 @@ START_TEST(test_metadata_disk_dyn_registration_success) {
 	ck_assert_ptr_nonnull(srv);
 
 	/* provider metadata advertises a registration_endpoint pointing at the loopback server */
-	const char *provider_json =
-	    apr_psprintf(r->pool,
-			 "{\"issuer\":\"https://idp.example.com\","
-			 "\"authorization_endpoint\":\"https://idp.example.com/authorize\","
-			 "\"token_endpoint\":\"https://idp.example.com/token\","
-			 "\"jwks_uri\":\"https://idp.example.com/jwks\","
-			 "\"registration_endpoint\":\"%s\","
-			 "\"response_types_supported\":[\"code\",\"id_token\"],"
-			 "\"token_endpoint_auth_methods_supported\":[\"client_secret_basic\"]}",
-			 oidc_test_http_server_url(srv, r->pool));
+	const char *provider_json = apr_psprintf(r->pool,
+						 "{\"issuer\":\"https://idp.example.com\","
+						 "\"authorization_endpoint\":\"https://idp.example.com/authorize\","
+						 "\"token_endpoint\":\"https://idp.example.com/token\","
+						 "\"jwks_uri\":\"https://idp.example.com/jwks\","
+						 "\"registration_endpoint\":\"%s\","
+						 "\"response_types_supported\":[\"code\",\"id_token\"],"
+						 "\"token_endpoint_auth_methods_supported\":[\"client_secret_basic\"]}",
+						 oidc_test_http_server_url(srv, r->pool));
 	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), provider_json);
 	/* no .client on disk yet => fall through to dynamic registration */
 

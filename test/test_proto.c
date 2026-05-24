@@ -1239,8 +1239,8 @@ START_TEST(test_proto_request_auth_with_request_object_none) {
 	oidc_cfg_provider_request_object_set(r->pool, provider, "{\"crypto\":{\"sign_alg\":\"none\"}}");
 
 	oidc_proto_state_t *ps = e2e_make_proto_state(r);
-	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-ro-1", ps, NULL,
-					 NULL, NULL, NULL);
+	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-ro-1", ps,
+					 NULL, NULL, NULL, NULL);
 	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
 	const char *loc = apr_table_get(r->headers_out, "Location");
 	ck_assert_ptr_nonnull(loc);
@@ -1265,8 +1265,8 @@ START_TEST(test_proto_request_auth_with_request_object_rs256) {
 	oidc_cfg_provider_request_object_set(r->pool, provider, "{\"crypto\":{\"sign_alg\":\"RS256\"}}");
 
 	oidc_proto_state_t *ps = e2e_make_proto_state(r);
-	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-ro-2", ps, NULL,
-					 NULL, NULL, NULL);
+	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-ro-2", ps,
+					 NULL, NULL, NULL, NULL);
 	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
 	const char *loc = apr_table_get(r->headers_out, "Location");
 	ck_assert_ptr_nonnull(loc);
@@ -1330,8 +1330,7 @@ START_TEST(test_proto_jwks_uri_keys_kid_match) {
 
 	const char *jwks =
 	    "{\"keys\":[{\"kty\":\"oct\",\"kid\":\"k1\",\"use\":\"sig\",\"k\":\"AAECAwQFBgcICQoLDA0ODw\"}]}";
-	oidc_test_http_response_t resp = {
-	    .status_code = 200, .content_type = "application/json", .body = jwks};
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = jwks};
 	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
 	ck_assert_ptr_nonnull(srv);
 
@@ -1358,13 +1357,11 @@ START_TEST(test_proto_jwks_uri_keys_no_kid_include_matching_kty) {
 	oidc_cfg_t *c = oidc_test_cfg_get();
 
 	/* one sig-usable oct key plus one enc-usable oct key that must be skipped */
-	const char *jwks =
-	    "{\"keys\":["
-	    "{\"kty\":\"oct\",\"kid\":\"sigkey\",\"use\":\"sig\",\"k\":\"AAECAwQFBgcICQoLDA0ODw\"},"
-	    "{\"kty\":\"oct\",\"kid\":\"enckey\",\"use\":\"enc\",\"k\":\"EBEPDg0MCwoJCAcGBQQDAgEA\"}"
-	    "]}";
-	oidc_test_http_response_t resp = {
-	    .status_code = 200, .content_type = "application/json", .body = jwks};
+	const char *jwks = "{\"keys\":["
+			   "{\"kty\":\"oct\",\"kid\":\"sigkey\",\"use\":\"sig\",\"k\":\"AAECAwQFBgcICQoLDA0ODw\"},"
+			   "{\"kty\":\"oct\",\"kid\":\"enckey\",\"use\":\"enc\",\"k\":\"EBEPDg0MCwoJCAcGBQQDAgEA\"}"
+			   "]}";
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = jwks};
 	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
 	ck_assert_ptr_nonnull(srv);
 
@@ -1395,8 +1392,7 @@ START_TEST(test_proto_jwks_uri_keys_no_match_after_refresh) {
 	/* the JWKS has key kid=k1, but the JWT asks for kid=k2 — no match found.
 	 * The function refreshes once and then returns TRUE with an empty result. */
 	const char *jwks = "{\"keys\":[{\"kty\":\"oct\",\"kid\":\"k1\",\"k\":\"AAECAwQFBgcICQoLDA0ODw\"}]}";
-	oidc_test_http_response_t resp = {
-	    .status_code = 200, .content_type = "application/json", .body = jwks};
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = jwks};
 	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
 	ck_assert_ptr_nonnull(srv);
 

@@ -52,8 +52,8 @@ START_TEST(test_handle_userinfo_retrieve_no_endpoint) {
 
 	json_t *claims = NULL;
 	char *userinfo_jwt = NULL;
-	const char *result = oidc_userinfo_retrieve_claims(r, c, provider, "AT", "Bearer", NULL, apr_pstrdup(r->pool, "alice"),
-							   &claims, &userinfo_jwt);
+	const char *result = oidc_userinfo_retrieve_claims(r, c, provider, "AT", "Bearer", NULL,
+							   apr_pstrdup(r->pool, "alice"), &claims, &userinfo_jwt);
 	ck_assert_ptr_null(result);
 	ck_assert_ptr_null(claims);
 }
@@ -107,9 +107,8 @@ START_TEST(test_handle_userinfo_retrieve_failure_no_session) {
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	oidc_provider_t *provider = oidc_cfg_provider_get(c);
 
-	oidc_test_http_response_t resp = {.status_code = 401,
-					  .content_type = "application/json",
-					  .body = "{\"error\":\"invalid_token\"}"};
+	oidc_test_http_response_t resp = {
+	    .status_code = 401, .content_type = "application/json", .body = "{\"error\":\"invalid_token\"}"};
 	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
 	ck_assert_ptr_nonnull(srv);
 	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
@@ -242,9 +241,8 @@ START_TEST(test_handle_refresh_grant_failure) {
 	oidc_session_load(r, &session);
 	oidc_session_set_refresh_token(r, session, "BAD-RT");
 
-	oidc_test_http_response_t resp = {.status_code = 400,
-					  .content_type = "application/json",
-					  .body = "{\"error\":\"invalid_grant\"}"};
+	oidc_test_http_response_t resp = {
+	    .status_code = 400, .content_type = "application/json", .body = "{\"error\":\"invalid_grant\"}"};
 	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
 	ck_assert_ptr_nonnull(srv);
 	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
@@ -379,10 +377,9 @@ START_TEST(test_handle_response_save_in_session_with_userinfo) {
 
 	json_t *userinfo = json_pack("{s:s,s:s}", "sub", "alice", "email", "alice@example.com");
 
-	apr_byte_t rc = oidc_response_save_in_session(r, c, session, provider, "alice", "id-token", jwt,
-						      "{\"sub\":\"alice\"}", userinfo, "AT", "Bearer", 600, NULL,
-						      "openid", NULL, "state-2",
-						      "https://www.example.com/protected/", "userinfo-jwt-here");
+	apr_byte_t rc = oidc_response_save_in_session(
+	    r, c, session, provider, "alice", "id-token", jwt, "{\"sub\":\"alice\"}", userinfo, "AT", "Bearer", 600,
+	    NULL, "openid", NULL, "state-2", "https://www.example.com/protected/", "userinfo-jwt-here");
 	ck_assert_int_eq(rc, TRUE);
 
 	json_t *stored = oidc_session_get_userinfo_claims(r, session);
@@ -487,8 +484,7 @@ static char *e2e_build_state_cookie(request_rec *r, oidc_cfg_t *c, const char *r
 	char *fingerprint = oidc_state_browser_fingerprint(r, c, "rndnonce");
 	char *cookie = oidc_proto_state_to_cookie(r, c, ps);
 	const char *cookie_name = oidc_state_cookie_name(r, fingerprint);
-	apr_table_set(r->headers_in, "Cookie",
-		      apr_psprintf(r->pool, "foo=bar; %s=%s; baz=zot", cookie_name, cookie));
+	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "foo=bar; %s=%s; baz=zot", cookie_name, cookie));
 	oidc_proto_state_destroy(ps);
 	return fingerprint;
 }
@@ -557,7 +553,8 @@ START_TEST(test_handle_response_authorization_redirect_code_flow_happy_path) {
 	resp.status_code = 200;
 	resp.content_type = "application/json";
 	/* build the id_token the token endpoint will return; signed HS256 with the same secret */
-	char *id_token = e2e_sign_idtoken_hs256(r, "https://idp.example.com", "client_id", "alice", "nonce-code", secret);
+	char *id_token =
+	    e2e_sign_idtoken_hs256(r, "https://idp.example.com", "client_id", "alice", "nonce-code", secret);
 	resp.body = apr_psprintf(r->pool,
 				 "{\"access_token\":\"AT-1\",\"token_type\":\"Bearer\",\"expires_in\":3600,"
 				 "\"refresh_token\":\"RT-1\",\"id_token\":\"%s\"}",
@@ -584,8 +581,7 @@ START_TEST(test_handle_response_authorization_redirect_code_flow_happy_path) {
 	char *fingerprint = oidc_state_browser_fingerprint(r, c, "nonce-code");
 	char *cookie = oidc_proto_state_to_cookie(r, c, ps);
 	const char *cookie_name = oidc_state_cookie_name(r, fingerprint);
-	apr_table_set(r->headers_in, "Cookie",
-		      apr_psprintf(r->pool, "foo=bar; %s=%s; baz=zot", cookie_name, cookie));
+	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "foo=bar; %s=%s; baz=zot", cookie_name, cookie));
 	oidc_proto_state_destroy(ps);
 
 	r->args = apr_psprintf(r->pool, "state=%s&code=the-auth-code", oidc_http_url_encode(r, fingerprint));
@@ -636,8 +632,7 @@ START_TEST(test_handle_response_authorization_redirect_idtoken_happy_path) {
 	char *fingerprint = oidc_state_browser_fingerprint(r, c, "nonce-1");
 	char *cookie = oidc_proto_state_to_cookie(r, c, ps);
 	const char *cookie_name = oidc_state_cookie_name(r, fingerprint);
-	apr_table_set(r->headers_in, "Cookie",
-		      apr_psprintf(r->pool, "foo=bar; %s=%s; baz=zot", cookie_name, cookie));
+	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "foo=bar; %s=%s; baz=zot", cookie_name, cookie));
 	oidc_proto_state_destroy(ps);
 
 	char *id_token = e2e_sign_idtoken_hs256(r, "https://idp.example.com", "client_id", "alice", "nonce-1", secret);
@@ -1067,7 +1062,8 @@ START_TEST(test_handle_userinfo_pass_as_json) {
 
 	const char *hdr = apr_table_get(r->headers_in, OIDC_DEFAULT_HEADER_PREFIX OIDC_APP_INFO_USERINFO_JSON);
 	ck_assert_ptr_nonnull(hdr);
-	ck_assert_msg(_oidc_strstr(hdr, "\"sub\":\"alice\"") != NULL, "JSON-encoded userinfo should be passed as a header");
+	ck_assert_msg(_oidc_strstr(hdr, "\"sub\":\"alice\"") != NULL,
+		      "JSON-encoded userinfo should be passed as a header");
 
 	json_decref(claims);
 	oidc_session_free(r, session);
@@ -1343,10 +1339,10 @@ START_TEST(test_handle_legacy_open_redirect) {
 	char *err_str = NULL, *err_desc = NULL;
 
 	/* a same-host URL is allowed; a different-host URL is not */
-	ck_assert_int_eq(oidc_validate_redirect_url(r, c, "https://www.example.com/somewhere", TRUE, &err_str, &err_desc),
-			 TRUE);
-	ck_assert_int_eq(oidc_validate_redirect_url(r, c, "https://evil.example.com/somewhere", TRUE, &err_str, &err_desc),
-			 FALSE);
+	ck_assert_int_eq(
+	    oidc_validate_redirect_url(r, c, "https://www.example.com/somewhere", TRUE, &err_str, &err_desc), TRUE);
+	ck_assert_int_eq(
+	    oidc_validate_redirect_url(r, c, "https://evil.example.com/somewhere", TRUE, &err_str, &err_desc), FALSE);
 
 	/* now walk the open-redirect payload list — every entry must be REJECTED */
 	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
@@ -1382,12 +1378,12 @@ START_TEST(test_handle_legacy_check_cookie_domain) {
 	ck_assert_int_eq(oidc_request_check_cookie_domain(r, c, "https://WWW.example.com/protected/index.html"), TRUE);
 
 	c->cookie_domain = ".XYZ.com";
-	ck_assert_int_eq(
-	    oidc_request_check_cookie_domain(r, c, "https://ab001sb161djbn.xyz.com/protected/index.html"), TRUE);
+	ck_assert_int_eq(oidc_request_check_cookie_domain(r, c, "https://ab001sb161djbn.xyz.com/protected/index.html"),
+			 TRUE);
 
 	c->cookie_domain = "ab001SB161djbn.xyz.com";
-	ck_assert_int_eq(
-	    oidc_request_check_cookie_domain(r, c, "https://ab001sb161djbn.xyz.com/protected/index.html"), TRUE);
+	ck_assert_int_eq(oidc_request_check_cookie_domain(r, c, "https://ab001sb161djbn.xyz.com/protected/index.html"),
+			 TRUE);
 
 	c->cookie_domain = NULL;
 	oidc_session_free(r, session);
@@ -1599,8 +1595,7 @@ START_TEST(test_handle_check_user_id_existing_session) {
 	ck_assert_int_eq(oidc_session_save(r, session, TRUE), TRUE);
 
 	/* inject the matching cookie into the next-call's input headers */
-	apr_table_set(r->headers_in, "Cookie",
-		      apr_psprintf(r->pool, "%s=%s", oidc_cfg_dir_cookie_get(r), uuid));
+	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "%s=%s", oidc_cfg_dir_cookie_get(r), uuid));
 
 	int rc = oidc_check_user_id(r);
 	ck_assert_int_eq(rc, OK);
@@ -1631,8 +1626,7 @@ START_TEST(test_handle_check_user_id_existing_session_expired) {
 	oidc_session_set_cookie_domain(r, session, "www.example.com");
 	ck_assert_int_eq(oidc_session_save(r, session, TRUE), TRUE);
 
-	apr_table_set(r->headers_in, "Cookie",
-		      apr_psprintf(r->pool, "%s=%s", oidc_cfg_dir_cookie_get(r), uuid));
+	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "%s=%s", oidc_cfg_dir_cookie_get(r), uuid));
 	apr_table_set(r->headers_in, "Accept", "*/*");
 
 	int rc = oidc_check_user_id(r);
@@ -1951,8 +1945,8 @@ START_TEST(test_handle_logout_backchannel_happy_path) {
 	const char *secret = "backchannel-logout-shared-secret-XYZ";
 	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
 
-	char *logout_jwt = e2e_sign_backchannel_logout_jwt(r, "https://idp.example.com", "client_id", "alice",
-							    "jti-1", TRUE, FALSE, secret);
+	char *logout_jwt = e2e_sign_backchannel_logout_jwt(r, "https://idp.example.com", "client_id", "alice", "jti-1",
+							   TRUE, FALSE, secret);
 	char *body = apr_psprintf(r->pool, "logout_token=%s", oidc_http_url_encode(r, logout_jwt));
 	e2e_post_body(r, body);
 	apr_table_set(r->subprocess_env, "OIDC_REDIRECT_URI_REQUEST", "backchannel");
@@ -1980,8 +1974,8 @@ START_TEST(test_handle_logout_backchannel_missing_events_claim) {
 	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
 
 	/* JWT signs and verifies, but no events claim => spec violation => BAD_REQUEST */
-	char *logout_jwt = e2e_sign_backchannel_logout_jwt(r, "https://idp.example.com", "client_id", "alice",
-							    "jti-2", FALSE, FALSE, secret);
+	char *logout_jwt = e2e_sign_backchannel_logout_jwt(r, "https://idp.example.com", "client_id", "alice", "jti-2",
+							   FALSE, FALSE, secret);
 	char *body = apr_psprintf(r->pool, "logout_token=%s", oidc_http_url_encode(r, logout_jwt));
 	e2e_post_body(r, body);
 	r->args = apr_pstrcat(r->pool, "logout=backchannel&", body, NULL);
@@ -2005,8 +1999,8 @@ START_TEST(test_handle_logout_backchannel_nonce_claim_rejected) {
 	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
 
 	/* a logout token containing a "nonce" claim is rejected per OIDC backchannel spec */
-	char *logout_jwt = e2e_sign_backchannel_logout_jwt(r, "https://idp.example.com", "client_id", "alice",
-							    "jti-3", TRUE, TRUE, secret);
+	char *logout_jwt = e2e_sign_backchannel_logout_jwt(r, "https://idp.example.com", "client_id", "alice", "jti-3",
+							   TRUE, TRUE, secret);
 	char *body = apr_psprintf(r->pool, "logout_token=%s", oidc_http_url_encode(r, logout_jwt));
 	e2e_post_body(r, body);
 	r->args = apr_pstrcat(r->pool, "logout=backchannel&", body, NULL);

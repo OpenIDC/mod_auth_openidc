@@ -655,8 +655,7 @@ START_TEST(test_cmd_cache_dir) {
 	ck_assert_str_eq(cfg->cache.file_dir, "/tmp");
 
 	/* a path that does not exist is rejected */
-	ck_assert_ptr_nonnull(
-	    oidc_cmd_cache_file_dir_set(cmd, NULL, "/nonexistent/path/that/should/not/be/there"));
+	ck_assert_ptr_nonnull(oidc_cmd_cache_file_dir_set(cmd, NULL, "/nonexistent/path/that/should/not/be/there"));
 }
 END_TEST
 

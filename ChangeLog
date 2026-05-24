@@ -1,3 +1,18 @@
+05/23/2026
+- test: large expansion of unit-test coverage
+- security: do not log refresh tokens at warn/error levels; the verbose
+  paths previously embedded the bearer-equivalent secret in messages
+  routed to the Apache error log where it could persist in operator
+  workflows and aggregation pipelines
+- security: also strip CR when sanitizing outgoing header values; the
+  previous LF-only filter still permitted CR-based header injection in
+  environments that treat lone CRs as line terminators
+- test: migrate the hand-rolled legacy test.c suite to per-module
+  Check-based binaries and add a loopback HTTP server fixture so the
+  http.c and proto/ tests can exercise the full libcurl path
+  end-to-end; expose previously-static http.c helpers via a new
+  http_int.h purely for unit-test access
+
 05/22/2026
 - security: guard the trailing-slash strip against an empty string to avoid an
   out-of-bounds read (and conditional 1-byte out-of-bounds write of a NUL);

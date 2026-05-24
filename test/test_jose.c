@@ -668,9 +668,10 @@ START_TEST(test_jose_legacy_jwt_parse_hs256) {
 
 	apr_hash_t *keys = apr_hash_make(pool);
 	oidc_jwk_t *jwk = NULL;
-	_jose_test_jwk_parse(
-	    pool, "{\"kty\":\"oct\",\"k\":\"AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow\"}",
-	    &jwk, &err);
+	_jose_test_jwk_parse(pool,
+			     "{\"kty\":\"oct\",\"k\":\"AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-"
+			     "1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow\"}",
+			     &jwk, &err);
 	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
 	ck_assert_msg(oidc_jwt_verify(pool, jwt, keys, &err) == TRUE, "oidc_jwt_verify: %s", oidc_jose_e2s(pool, err));
 	oidc_jwt_destroy(jwt);
@@ -695,10 +696,10 @@ START_TEST(test_jose_legacy_plaintext_jwt_parse) {
 	oidc_jwt_t *jwt = NULL;
 
 	/* from draft-ietf-oauth-json-web-token-20 §6.1 */
-	char *s = apr_pstrdup(pool,
-			      "eyJhbGciOiJub25lIn0"
-			      ".eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ"
-			      ".");
+	char *s = apr_pstrdup(
+	    pool, "eyJhbGciOiJub25lIn0"
+		  ".eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ"
+		  ".");
 
 	ck_assert_msg(oidc_jwt_parse(pool, s, &jwt, NULL, FALSE, &err) == TRUE, "oidc_jwt_parse: %s",
 		      oidc_jose_e2s(pool, err));
@@ -714,9 +715,10 @@ START_TEST(test_jose_legacy_jwt_get_string_claims) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	oidc_jose_error_t err;
 	oidc_jwt_t *jwt = NULL;
-	const char *s = "eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9"
-			".eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ"
-			".dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+	const char *s =
+	    "eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9"
+	    ".eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ"
+	    ".dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
 	ck_assert_msg(oidc_jwt_parse(pool, s, &jwt, NULL, FALSE, &err) == TRUE, "oidc_jwt_parse: %s",
 		      oidc_jose_e2s(pool, err));
 
@@ -755,11 +757,12 @@ START_TEST(test_jose_legacy_jwk_parse_collection) {
 	oidc_jwk_destroy(jwk);
 
 	/* §A.3 example symmetric key #2 */
-	_jose_test_jwk_parse(pool,
-			     "{\"kty\":\"oct\","
-			     "\"k\":\"AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow\","
-			     "\"kid\":\"HMAC key used in JWS A.1 example\"}",
-			     &jwk, &err);
+	_jose_test_jwk_parse(
+	    pool,
+	    "{\"kty\":\"oct\","
+	    "\"k\":\"AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow\","
+	    "\"kid\":\"HMAC key used in JWS A.1 example\"}",
+	    &jwk, &err);
 	oidc_jwk_destroy(jwk);
 
 	/* draft-ietf-jose-cookbook-08 §3.1 — EC public key (P-521) */
@@ -914,10 +917,9 @@ START_TEST(test_jose_legacy_jwt_decrypt_rsa_oaep_gcm) {
 	size_t content_len = 0;
 	uint8_t *decrypted = cjose_jwe_decrypt(jwe, jwk->cjose_jwk, &content_len, &cjose_err);
 	ck_assert_ptr_nonnull(decrypted);
-	ck_assert_int_eq(
-	    _oidc_strncmp((const char *)decrypted, "The true sign of intelligence is not knowledge but imagination.",
-			  content_len),
-	    0);
+	ck_assert_int_eq(_oidc_strncmp((const char *)decrypted,
+				       "The true sign of intelligence is not knowledge but imagination.", content_len),
+			 0);
 
 	cjose_get_dealloc()(decrypted);
 	cjose_jwe_release(jwe);
@@ -953,24 +955,24 @@ START_TEST(test_jose_legacy_jwt_verify_ec) {
 	oidc_jwt_destroy(jwt);
 
 	/* tampered signature byte (capitalised final g) must not verify */
-	s_jwt = apr_pstrdup(pool,
-			    "eyJhbGciOiJFUzI1NiIsImtpZCI6ImY2cXRqIn0."
-			    "eyJzdWIiOiJqb2UiLCJhdWQiOiJhY19vaWNfY2xpZW50IiwianRpIjoib0RXaXZXUEpCNDd6a2pPbTJjeWdEdiIs"
-			    "ImlzcyI6Imh0dHBzOlwvXC9sb2NhbGhvc3Q6OTAzMSIsImlhdCI6MTQ2Nzk5NzIwNywiZXhwIjoxNDY3OTk3NTA3"
-			    "LCJub25jZSI6IldMeG12NVN0WXlVazlKbFdJOFNhWFRMUGtHWjBWczhhU1Rkal9WUTZyYW8ifQ."
-			    "2kqX56QNow37gOlnfLn0SIzwie4mLLIUx_p9OSQa0hiUXKQWQLmMYBjIp5qGh2-R-KPHwNEBxqXwuPgXG4Y7EG");
+	s_jwt =
+	    apr_pstrdup(pool, "eyJhbGciOiJFUzI1NiIsImtpZCI6ImY2cXRqIn0."
+			      "eyJzdWIiOiJqb2UiLCJhdWQiOiJhY19vaWNfY2xpZW50IiwianRpIjoib0RXaXZXUEpCNDd6a2pPbTJjeWdEdiIs"
+			      "ImlzcyI6Imh0dHBzOlwvXC9sb2NhbGhvc3Q6OTAzMSIsImlhdCI6MTQ2Nzk5NzIwNywiZXhwIjoxNDY3OTk3NTA3"
+			      "LCJub25jZSI6IldMeG12NVN0WXlVazlKbFdJOFNhWFRMUGtHWjBWczhhU1Rkal9WUTZyYW8ifQ."
+			      "2kqX56QNow37gOlnfLn0SIzwie4mLLIUx_p9OSQa0hiUXKQWQLmMYBjIp5qGh2-R-KPHwNEBxqXwuPgXG4Y7EG");
 	jwt = NULL;
 	ck_assert_int_eq(oidc_jwt_parse(pool, s_jwt, &jwt, NULL, FALSE, &err), TRUE);
 	ck_assert_int_eq(oidc_jwt_verify(pool, jwt, keys, &err), FALSE);
 	oidc_jwt_destroy(jwt);
 
 	/* tampered payload byte must not verify */
-	s_jwt = apr_pstrdup(pool,
-			    "eyJhbGciOiJFUzI1NiIsImtpZCI6ImY2cXRqIn0."
-			    "eyJzdWIiOiJqb2UiLCJHdWQiOiJhY19vaWNfY2xpZW50IiwianRpIjoib0RXaXZXUEpCNDd6a2pPbTJjeWdEdiIs"
-			    "ImlzcyI6Imh0dHBzOlwvXC9sb2NhbGhvc3Q6OTAzMSIsImlhdCI6MTQ2Nzk5NzIwNywiZXhwIjoxNDY3OTk3NTA3"
-			    "LCJub25jZSI6IldMeG12NVN0WXlVazlKbFdJOFNhWFRMUGtHWjBWczhhU1Rkal9WUTZyYW8ifQ."
-			    "2kqX56QNow37gOlnfLn0SIzwie4mLLIUx_p9OSQa0hiUXKQWQLmMYBjIp5qGh2-R-KPHwNEBxqXwuPgXG4Y7Eg");
+	s_jwt =
+	    apr_pstrdup(pool, "eyJhbGciOiJFUzI1NiIsImtpZCI6ImY2cXRqIn0."
+			      "eyJzdWIiOiJqb2UiLCJHdWQiOiJhY19vaWNfY2xpZW50IiwianRpIjoib0RXaXZXUEpCNDd6a2pPbTJjeWdEdiIs"
+			      "ImlzcyI6Imh0dHBzOlwvXC9sb2NhbGhvc3Q6OTAzMSIsImlhdCI6MTQ2Nzk5NzIwNywiZXhwIjoxNDY3OTk3NTA3"
+			      "LCJub25jZSI6IldMeG12NVN0WXlVazlKbFdJOFNhWFRMUGtHWjBWczhhU1Rkal9WUTZyYW8ifQ."
+			      "2kqX56QNow37gOlnfLn0SIzwie4mLLIUx_p9OSQa0hiUXKQWQLmMYBjIp5qGh2-R-KPHwNEBxqXwuPgXG4Y7Eg");
 	jwt = NULL;
 	ck_assert_int_eq(oidc_jwt_parse(pool, s_jwt, &jwt, NULL, FALSE, &err), TRUE);
 	ck_assert_int_eq(oidc_jwt_verify(pool, jwt, keys, &err), FALSE);
@@ -999,11 +1001,12 @@ START_TEST(test_jose_legacy_jwt_verify_rsa) {
 	    "kmpMfqwrsicf5MTBvfPJeuSMt3t3d3LOGBkg36_z21X-ZRN7wy1KTjagr7iQ_y5csIpmtqs_QM55TTB9dW1HIosJPhiuMEJEA";
 	ck_assert_int_eq(oidc_jwt_parse(pool, s_good, &jwt, NULL, FALSE, &err), TRUE);
 
-	const char *s_key = "{\"kty\":\"RSA\",\"e\":\"AQAB\","
-			    "\"n\":\"3lDyn_ZvG32Pw5kYbRuVxHsPfe9Xt8s9vOXnt8z7_T-hZZvealNhCxz9VEwTJ7TsZ9CLi5c30FjoEJYFkKdd"
-			    "LAdxKo0oOXWc_AWrQvPwht9a-o6dX2fL_9CmXW1hGHXMH0qiLMrFqMSzZeh-GUY6F1woE_eKsAo6LOhP8X77FlEQT2Eu"
-			    "71wu8KC4B3sH_9QTco50KNw14-bRY5j2V2TZelvsXJnvrN4lXtEVYWFkREKeXzMH8DhDyZzh0NcHa7dFBa7rDusyfIHj"
-			    "uP6uAju_Ao6hhdOGjlKePMVtfusWBAI7MWDChLTqiCTvlZnCpkpTTh5m-i7TbE1TwmdbLceq1w\"}";
+	const char *s_key =
+	    "{\"kty\":\"RSA\",\"e\":\"AQAB\","
+	    "\"n\":\"3lDyn_ZvG32Pw5kYbRuVxHsPfe9Xt8s9vOXnt8z7_T-hZZvealNhCxz9VEwTJ7TsZ9CLi5c30FjoEJYFkKdd"
+	    "LAdxKo0oOXWc_AWrQvPwht9a-o6dX2fL_9CmXW1hGHXMH0qiLMrFqMSzZeh-GUY6F1woE_eKsAo6LOhP8X77FlEQT2Eu"
+	    "71wu8KC4B3sH_9QTco50KNw14-bRY5j2V2TZelvsXJnvrN4lXtEVYWFkREKeXzMH8DhDyZzh0NcHa7dFBa7rDusyfIHj"
+	    "uP6uAju_Ao6hhdOGjlKePMVtfusWBAI7MWDChLTqiCTvlZnCpkpTTh5m-i7TbE1TwmdbLceq1w\"}";
 	apr_hash_t *keys = apr_hash_make(pool);
 	oidc_jwk_t *jwk = NULL;
 	_jose_test_jwk_parse(pool, s_key, &jwk, &err);
@@ -1089,7 +1092,8 @@ START_TEST(test_jose_legacy_jwt_sign_verify_rsa_and_hmac) {
 
 	/* HMAC roundtrip with the same payload */
 	const char *secret = "my_secret4321";
-	jwk = oidc_jwk_create_symmetric_key(pool, NULL, (const unsigned char *)secret, _oidc_strlen(secret), FALSE, &err);
+	jwk =
+	    oidc_jwk_create_symmetric_key(pool, NULL, (const unsigned char *)secret, _oidc_strlen(secret), FALSE, &err);
 	ck_assert_ptr_nonnull(jwk);
 	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
 	jwt->header.alg = apr_pstrdup(pool, "HS256");
