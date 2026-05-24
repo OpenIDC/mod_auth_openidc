@@ -925,12 +925,16 @@ apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json, apr_hash_t
 		size_t content_len = 0;
 		uint8_t *decrypted = oidc_jwe_decrypt_impl(pool, jwe, keys, &content_len, err);
 		if (decrypted != NULL) {
-			*plaintext = apr_pcalloc(pool, content_len + 1);
-			_oidc_memcpy(*plaintext, decrypted, content_len);
-			(*plaintext)[content_len] = '\0';
+			if (content_len + 1 > content_len) {
+				*plaintext = apr_pcalloc(pool, content_len + 1);
+				_oidc_memcpy(*plaintext, decrypted, content_len);
+				(*plaintext)[content_len] = '\0';
+				if (plaintext_len)
+					*plaintext_len = content_len;
+			} else {
+				oidc_jose_error(err, "decrypted content length overflow");
+			}
 			cjose_get_dealloc()(decrypted);
-			if (plaintext_len)
-				*plaintext_len = content_len;
 		}
 		cjose_jwe_release(jwe);
 	} else if (import_must_succeed == FALSE) {
