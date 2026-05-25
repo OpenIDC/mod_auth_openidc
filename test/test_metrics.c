@@ -197,14 +197,14 @@ static void e2e_force_metrics_flush(request_rec *r, oidc_cfg_t *c) {
 	OIDC_METRICS_TIMING_START(r, c);
 	apr_sleep(apr_time_from_msec(1));
 	OIDC_METRICS_TIMING_ADD(r, c, OM_PROVIDER_TOKEN);
-	/* the thread first sleeps up to 1s of randomized jitter, then one poll
-	 * interval — 1500ms is the safe upper bound for both with our short interval */
-	apr_sleep(apr_time_from_msec(1500));
+	/* the thread first sleeps up to 100ms of randomized jitter, then one flush tick of
+	 * OIDC_METRICS_CACHE_STORAGE_INTERVAL (=100ms here); 300ms covers both with slack for CI */
+	apr_sleep(apr_time_from_msec(300));
 }
 
 static void e2e_metrics_setup_flushed(request_rec *r) {
 	/* shrink the flush interval before post_config because the thread reads the env once */
-	setenv("OIDC_METRICS_CACHE_STORAGE_INTERVAL", "250", 1);
+	setenv("OIDC_METRICS_CACHE_STORAGE_INTERVAL", "100", 1);
 	metrics_subsystem_setup(r);
 }
 
@@ -293,7 +293,7 @@ START_TEST(test_metrics_handle_request_flushed_status_counter_with_value) {
 	e2e_metrics_setup_flushed(r);
 	/* push a value-indexed counter (provider.http.response.code) with value "200" then flush */
 	OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_HTTP_RESPONSE_CODE, "200");
-	apr_sleep(apr_time_from_msec(1500));
+	apr_sleep(apr_time_from_msec(300));
 
 	/* counter=provider.http.response.code&value=200 selects the per-value sub-counter
 	 * via oidc_metrics_status_select_value's object/value branch */

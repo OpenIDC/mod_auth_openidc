@@ -747,11 +747,17 @@ static inline apr_interval_time_t _oidc_metrics_interval(void) {
 static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void *data) {
 	server_rec *s = (server_rec *)data;
 
-	/* sleep for a short random time <1s so child processes write-lock on a different frequency */
-	apr_sleep(apr_time_from_msec(oidc_util_rand_int(1000)));
+	/* sleep for a short random time <0.1s so child processes write-lock on a different frequency */
+	apr_sleep(apr_time_from_msec(oidc_util_rand_int(100)));
 
-	/* calculate the number of short sleep intervals */
-	int n = _oidc_metrics_interval() / apr_time_from_msec(OIDC_METRICS_POLL_INTERVAL);
+	/* split the flush interval into POLL_INTERVAL-sized ticks so shutdown is observed quickly; if the
+	 * configured interval is shorter than POLL_INTERVAL, use it as the tick directly so we still flush
+	 * on schedule rather than busy-looping with n=0 */
+	apr_interval_time_t interval = _oidc_metrics_interval();
+	apr_interval_time_t tick = apr_time_from_msec(OIDC_METRICS_POLL_INTERVAL);
+	if (tick > interval)
+		tick = interval;
+	int n = interval / tick;
 
 	/* see if we are asked to exit */
 	while (_oidc_metrics_thread_exit == FALSE) {
@@ -759,7 +765,7 @@ static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void 
 		/* break up the sleep interval in short intervals so we can exit timely fashion without confusing Apache
 		 * at shutdown */
 		for (int i = 0; i < n; i++) {
-			apr_sleep(apr_time_from_msec(OIDC_METRICS_POLL_INTERVAL));
+			apr_sleep(tick);
 			if (_oidc_metrics_thread_exit == TRUE)
 				break;
 		}
