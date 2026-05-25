@@ -975,7 +975,7 @@ apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg_t *c, const char 
 		return oidc_validate_redirect_url_fail(
 		    r, err_str, err_desc, "URL too long",
 		    apr_psprintf(r->pool, "URL value exceeds the maximum length of %d bytes", OIDC_MAX_URL_LENGTH));
-	char *url = apr_pstrndup(r->pool, redirect_to_url, OIDC_MAX_URL_LENGTH);
+	char *url = apr_pstrdup(r->pool, redirect_to_url);
 
 	// replace potentially harmful backslashes with forward slashes
 	for (i = 0; i < _oidc_strlen(url); i++)
