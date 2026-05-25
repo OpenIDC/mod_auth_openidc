@@ -124,8 +124,16 @@ static apr_byte_t _oidc_util_rand_bytes(request_rec *r, unsigned char *buf, apr_
  */
 unsigned int oidc_util_rand_int(unsigned int mod) {
 	unsigned int v = 0;
-	if (_oidc_util_rand((unsigned char *)&v, sizeof(v)) != TRUE)
+	unsigned int reject;
+
+	if (mod == 0)
 		return 0;
+	/* reject the short tail [0, 2^N mod `mod`) so v % mod is uniformly distributed */
+	reject = (0u - mod) % mod;
+	do {
+		if (_oidc_util_rand((unsigned char *)&v, sizeof(v)) != TRUE)
+			return 0;
+	} while (v < reject);
 	return v % mod;
 }
 

@@ -1,3 +1,9 @@
+05/25/2026
+- util: harden oidc_util_rand_int with a mod==0 guard (avoids division
+  by zero) and rejection sampling so v % mod is unbiased; the only
+  caller passes 100 (metrics jitter) so the prior bias was negligible,
+  but the hazard is now closed for any future caller
+
 05/23/2026
 - test: large expansion of unit-test coverage
 - security: do not log refresh tokens at warn/error levels; the verbose
