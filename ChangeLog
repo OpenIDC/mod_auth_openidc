@@ -1,40 +1,5 @@
 05/25/2026
-- metrics: clamp a misconfigured flush interval to the default; an env
-  var set to "0", empty, or any value strtol cannot parse left the
-  worker computing 0/0 in the per-tick split and SIGFPE'd the child
-  after the busy-loop fix in d34cbe2d landed; the same clamp covers
-  the negative-value case
-- metrics: switch _oidc_metrics_thread_exit to a volatile apr_uint32_t
-  accessed via apr_atomic_read32/set32; a plain apr_byte_t carries no
-  cross-thread visibility guarantees, so LTO was free to hoist the
-  polling load out of the loop and strand the post-join cleanup that
-  b66b54a0 added
-- jwt: stop fabricating a stack-zeroed request_rec in
-  oidc_util_jwt_post_config; any failure inside oidc_util_jwt_create
-  logs via oidc_error → ap_log_rerror which dereferences uninitialized
-  r->connection / r->uri and crashes Apache at startup instead of
-  returning HTTP_INTERNAL_SERVER_ERROR; mirror the encryption inline
-  against s->process->pool and route errors through oidc_serror(s, ...)
-- logout: return HTTP_BAD_REQUEST (instead of "return FALSE" which
-  silently evaluates to OK / HTTP 200) when symmetric-key creation
-  fails on a backchannel logout request; previously a request that
-  could not be verified was reported to the OP as a success and
-  skipped the cleanup_by_sid call
-- logout: drop a dead read of the "events" claim as a string from the
-  backchannel-logout claim validator; the result was unconditionally
-  overwritten by the OIDC_CLAIM_SID read on the next line
-- validate_redirect_url: reject NULL up front rather than falling
-  through to apr_uri_parse(r->pool, NULL, &uri), and drop the now
-  redundant OIDC_MAX_URL_LENGTH cap on the working copy (the length
-  check above already guarantees the bound)
-- strip_cookies: skip an all-whitespace token rather than appending it
-  as an empty "; " segment to the result; a header like
-  "foo=1; ; bar=2" previously survived the strip pass with the empty
-  middle still present
-- util: harden oidc_util_rand_int with a mod==0 guard (avoids division
-  by zero) and rejection sampling so v % mod is unbiased; the only
-  caller passes 100 (metrics jitter) so the prior bias was negligible,
-  but the hazard is now closed for any future caller
+- code: hardening in various places
 
 05/23/2026
 - test: large expansion of unit-test coverage
