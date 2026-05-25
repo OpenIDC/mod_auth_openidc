@@ -46,6 +46,7 @@
 #include "metrics.h"
 #include <limits.h>
 #include <unistd.h>
+#include <apr_atomic.h>
 #include <apr_shm.h>
 #include <apr_lib.h>
 
@@ -178,8 +179,10 @@ typedef struct oidc_metrics_t {
 static apr_shm_t *_oidc_metrics_cache = NULL;
 // flag to record if we are a parent process or a child process
 static apr_byte_t _oidc_metrics_is_parent = FALSE;
-// flag to signal the metrics write thread to exit
-static apr_byte_t _oidc_metrics_thread_exit = FALSE;
+/* flag to signal the metrics write thread to exit; accessed from the flush thread and from the
+ * cleanup/child-init paths, so use apr_atomic_* to enforce visibility across threads (without this,
+ * LTO is free to hoist the load out of the polling loop and shutdown stalls) */
+static volatile apr_uint32_t _oidc_metrics_thread_exit = 0;
 // mutex to protect the shared memory storage
 static oidc_cache_mutex_t *_oidc_metrics_global_mutex = NULL;
 // pointer to the thread that periodically writes the locally gathered metrics to shared memory
@@ -763,13 +766,13 @@ static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void 
 	int n = interval / tick;
 
 	/* see if we are asked to exit */
-	while (_oidc_metrics_thread_exit == FALSE) {
+	while (apr_atomic_read32(&_oidc_metrics_thread_exit) == 0) {
 
 		/* break up the sleep interval in short intervals so we can exit timely fashion without confusing Apache
 		 * at shutdown */
 		for (int i = 0; i < n; i++) {
 			apr_sleep(tick);
-			if (_oidc_metrics_thread_exit == TRUE)
+			if (apr_atomic_read32(&_oidc_metrics_thread_exit) != 0)
 				break;
 		}
 
@@ -867,9 +870,9 @@ apr_status_t oidc_metrics_child_init(apr_pool_t *p, server_rec *s) {
 	 * child_init without forking) shut it down before overwriting the handle; after a real fork the
 	 * pid differs and the parent's thread didn't carry over, so the stale handle is just discarded */
 	if (_oidc_metrics_thread != NULL && _oidc_metrics_thread_pid == getpid()) {
-		_oidc_metrics_thread_exit = TRUE;
+		apr_atomic_set32(&_oidc_metrics_thread_exit, 1);
 		apr_thread_join(&rv, _oidc_metrics_thread);
-		_oidc_metrics_thread_exit = FALSE;
+		apr_atomic_set32(&_oidc_metrics_thread_exit, 0);
 	}
 	_oidc_metrics_thread = NULL;
 
@@ -891,15 +894,16 @@ apr_status_t oidc_metrics_cleanup(server_rec *s) {
 	apr_status_t rv = APR_SUCCESS;
 
 	/* make sure it gets executed exactly once! */
-	if ((_oidc_metrics_cache == NULL) || (_oidc_metrics_thread_exit == TRUE) || (_oidc_metrics_thread == NULL))
+	if ((_oidc_metrics_cache == NULL) || (apr_atomic_read32(&_oidc_metrics_thread_exit) != 0) ||
+	    (_oidc_metrics_thread == NULL))
 		return APR_SUCCESS;
 
 	/* signal the collector thread to exit */
-	_oidc_metrics_thread_exit = TRUE;
+	apr_atomic_set32(&_oidc_metrics_thread_exit, 1);
 	apr_thread_join(&rv, _oidc_metrics_thread);
 	if (rv != APR_SUCCESS)
 		oidc_serror(s, "apr_thread_join failed");
-	_oidc_metrics_thread_exit = FALSE;
+	apr_atomic_set32(&_oidc_metrics_thread_exit, 0);
 	_oidc_metrics_thread = NULL;
 	_oidc_metrics_thread_pid = 0;
 
