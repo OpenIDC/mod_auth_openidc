@@ -128,6 +128,10 @@ static int oidc_proto_request_auth_push(request_rec *r, struct oidc_provider_t *
 	apr_table_clear(params);
 	apr_table_setn(params, OIDC_PROTO_CLIENT_ID, oidc_cfg_provider_client_id_get(provider));
 	apr_table_setn(params, OIDC_PROTO_REQUEST_URI, request_uri);
+	/* OpenID Connect Core 1.0 incorporating errata set 2 requires scope=openid on the front-channel
+	 * authorization request; this overrides RFC 9126 §4 which would otherwise restrict the redirect
+	 * to client_id and request_uri only */
+	apr_table_setn(params, OIDC_PROTO_SCOPE, OIDC_PROTO_SCOPE_OPENID);
 	authorization_request =
 	    oidc_http_query_encoded_url(r, oidc_cfg_provider_authorization_endpoint_url_get(provider), params);
 	oidc_http_hdr_out_location_set(r, authorization_request);
