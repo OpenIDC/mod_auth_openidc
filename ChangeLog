@@ -5,6 +5,10 @@
   branch, so a Bearer userinfo call against an OP that returned a JSON
   body of {"error":"use_dpop_nonce"} would dereference NULL inside
   apr_hash_get and crash the worker
+- request: stop hardcoding scope=openid on the post-PAR authorization
+  redirect; per RFC 9126 §4 the front-channel request after a PAR call
+  should carry only client_id and request_uri, and the configured
+  OIDCScope is already conveyed in the PAR POST body
 
 05/23/2026
 - test: large expansion of unit-test coverage
