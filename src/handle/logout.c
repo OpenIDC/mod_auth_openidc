@@ -421,8 +421,6 @@ static int oidc_logout_backchannel_validate_claims(request_rec *r, oidc_provider
 	if (rc != OK)
 		return rc;
 
-	oidc_util_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_EVENTS, sid, NULL);
-
 	// TODO: by-spec we should cater for the fact that "sid" has been provided
 	//       in the id_token returned in the authentication request, but "sub"
 	//       is used in the logout token but that requires a 2nd entry in the
