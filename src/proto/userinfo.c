@@ -385,7 +385,8 @@ apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, oidc_pro
 		goto end;
 
 	/* for plain JSON responses, check for an error and possibly retry with a fresh DPoP nonce */
-	if ((*userinfo_jwt == NULL) && (oidc_util_json_check_error(r, *userinfo_claims) == TRUE)) {
+	if ((*userinfo_jwt == NULL) && (response_hdrs != NULL) &&
+	    (oidc_util_json_check_error(r, *userinfo_claims) == TRUE)) {
 
 		if (oidc_proto_dpop_use_nonce(r, cfg, *userinfo_claims, response_hdrs,
 					      oidc_cfg_provider_userinfo_endpoint_url_get(provider), method,
