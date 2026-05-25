@@ -188,12 +188,16 @@ void oidc_strip_cookies(request_rec *r) {
 		while (*cookie == OIDC_CHAR_SPACE)
 			cookie++;
 
-		matched = oidc_strip_cookies_match(cookie, strip);
-		if (matched != NULL) {
-			oidc_debug(r, "stripping: %s", matched);
-		} else {
-			result =
-			    result ? apr_psprintf(r->pool, "%s%s %s", result, OIDC_STR_SEMI_COLON, cookie) : cookie;
+		/* an all-whitespace token would otherwise survive as an empty cookie segment in the result */
+		if (*cookie != '\0') {
+			matched = oidc_strip_cookies_match(cookie, strip);
+			if (matched != NULL) {
+				oidc_debug(r, "stripping: %s", matched);
+			} else {
+				result = result ? apr_psprintf(r->pool, "%s%s %s", result, OIDC_STR_SEMI_COLON,
+							       cookie)
+						: cookie;
+			}
 		}
 
 		cookie = apr_strtok(NULL, OIDC_STR_SEMI_COLON, &ctx);
