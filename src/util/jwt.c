@@ -227,31 +227,66 @@ end:
  * compute and cache the serialized A256GCM "dir" header prefix once during the (single-threaded)
  * post-config phase; lazy initialization from the request path is not safe under threaded MPMs because
  * the static and the process pool it allocates from are shared across worker threads without locking
+ *
+ * NB: we mirror oidc_util_jwt_create() inline here rather than calling it, because that function logs via
+ * oidc_error(r, ...) → ap_log_rerror which would dereference uninitialized request_rec fields (e.g.
+ * r->connection, r->uri) on the error path and crash Apache at startup; using server-context logging
+ * (oidc_serror) keeps post-config failures recoverable
  */
 int oidc_util_jwt_post_config(server_rec *s) {
-	request_rec r;
+	int rv = HTTP_INTERNAL_SERVER_ERROR;
+	apr_pool_t *pool = s->process->pool;
+	oidc_jose_error_t err = {{'\0'}, 0, {'\0'}, {'\0'}};
+	unsigned char *key = NULL;
+	unsigned int key_len = 0;
+	oidc_jwk_t *jwk = NULL;
+	oidc_jwt_t *jwe = NULL;
 	char *compact_encoded_jwt = NULL;
 	char *sep = NULL;
-	oidc_crypto_passphrase_t passphrase;
+	static const char *secret = "needs_non_empty_string";
 
 	if (_oidc_jwt_hdr_dir_a256gcm != NULL)
 		return OK;
 
-	_oidc_memset(&r, 0, sizeof(request_rec));
-	r.pool = s->process->pool;
-	r.server = s;
-	r.subprocess_env = apr_table_make(r.pool, 0);
+	if (oidc_jose_hash_bytes(pool, OIDC_JOSE_ALG_SHA256, (const unsigned char *)secret, _oidc_strlen(secret), &key,
+				 &key_len, &err) == FALSE) {
+		oidc_serror(s, "oidc_jose_hash_bytes failed: %s", oidc_jose_e2s(pool, err));
+		goto end;
+	}
 
-	passphrase.secret1 = "needs_non_empty_string";
-	passphrase.secret2 = NULL;
+	jwk = oidc_jwk_create_symmetric_key(pool, NULL, key, key_len, FALSE, &err);
+	if (jwk == NULL) {
+		oidc_serror(s, "oidc_jwk_create_symmetric_key failed: %s", oidc_jose_e2s(pool, err));
+		goto end;
+	}
 
-	if (oidc_util_jwt_create(&r, &passphrase, "some_string", &compact_encoded_jwt) != TRUE)
-		return HTTP_INTERNAL_SERVER_ERROR;
+	jwe = oidc_jwt_new(pool, TRUE, FALSE);
+	if (jwe == NULL) {
+		oidc_serror(s, "oidc_jwt_new failed");
+		goto end;
+	}
+	jwe->header.alg = apr_pstrdup(pool, CJOSE_HDR_ALG_DIR);
+	jwe->header.enc = apr_pstrdup(pool, CJOSE_HDR_ENC_A256GCM);
+
+	if (oidc_jwt_encrypt(pool, jwe, jwk, "x", 1, &compact_encoded_jwt, &err) == FALSE) {
+		oidc_serror(s, "oidc_jwt_encrypt failed: %s", oidc_jose_e2s(pool, err));
+		goto end;
+	}
 
 	sep = _oidc_strstr(compact_encoded_jwt, "..");
-	if (sep != NULL)
-		_oidc_jwt_hdr_dir_a256gcm = apr_pstrndup(s->process->pool, compact_encoded_jwt,
-							 _oidc_strlen(compact_encoded_jwt) - _oidc_strlen(sep) + 2);
+	if (sep == NULL) {
+		oidc_serror(s, "no \"..\" separator found in compact JWE");
+		goto end;
+	}
+	_oidc_jwt_hdr_dir_a256gcm =
+	    apr_pstrndup(pool, compact_encoded_jwt, _oidc_strlen(compact_encoded_jwt) - _oidc_strlen(sep) + 2);
 
-	return (_oidc_jwt_hdr_dir_a256gcm != NULL) ? OK : HTTP_INTERNAL_SERVER_ERROR;
+	rv = (_oidc_jwt_hdr_dir_a256gcm != NULL) ? OK : HTTP_INTERNAL_SERVER_ERROR;
+
+end:
+	if (jwe != NULL)
+		oidc_jwt_destroy(jwe);
+	if (jwk != NULL)
+		oidc_jwk_destroy(jwk);
+	return rv;
 }
