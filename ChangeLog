@@ -1,5 +1,19 @@
 05/25/2026
 - code: hardening in various places
+- strip_cookies: skip cookies that are only whitespace after the
+  leading-space strip; a header like "foo=1; ; bar=2" otherwise had the
+  empty middle token re-emitted verbatim, leaving a malformed segment
+  in the forwarded Cookie header
+- metrics: switch _oidc_metrics_thread_exit to a volatile apr_uint32_t
+  accessed via apr_atomic_read32/set32; the flush worker reads it from
+  a different thread than the cleanup / child-init writers, so a plain
+  apr_byte_t allowed LTO to hoist the load out of the polling loop and
+  strand the post-join cleanup that b66b54a0 added
+- util: guard oidc_util_rand_int with a mod==0 short-circuit (avoids
+  division by zero) and rejection-sample before reducing modulo so
+  v % mod is uniformly distributed; the only caller passes 100
+  (metrics jitter) so the prior bias was negligible, but the hazard
+  is closed for any future caller
 - userinfo: skip the DPoP-nonce retry path for non-DPoP token types;
   oidc_proto_userinfo_request only allocates response_hdrs on the DPoP
   branch, so a Bearer userinfo call against an OP that returned a JSON
