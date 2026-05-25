@@ -754,6 +754,9 @@ static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void 
 	 * configured interval is shorter than POLL_INTERVAL, use it as the tick directly so we still flush
 	 * on schedule rather than busy-looping with n=0 */
 	apr_interval_time_t interval = _oidc_metrics_interval();
+	/* a misconfigured env var parses to 0 (or negative) — fall back to the default to avoid 0/0 below */
+	if (interval <= 0)
+		interval = apr_time_from_msec(OIDC_METRICS_CACHE_STORAGE_INTERVAL_DEFAULT);
 	apr_interval_time_t tick = apr_time_from_msec(OIDC_METRICS_POLL_INTERVAL);
 	if (tick > interval)
 		tick = interval;
