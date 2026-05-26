@@ -30,15 +30,19 @@ jobs:
           build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} make clean check-code-coverage
       - name: Generate gcov reports
         # AX_CODE_COVERAGE leaves .gcda/.gcno under <dir>/.libs/ but does not produce
-        # .gcov text files; sonar.cfamily.gcov.reportsPath requires those, so emit
-        # them next to each source (gcov resolves the source path relative to cwd).
+        # .gcov text files; sonar.cfamily.gcov.reportsPath requires those. Run gcov
+        # from the repo root so SF: paths inside the reports are relative to the
+        # project base and match sonar.sources=src, then collect the .gcov files
+        # into gcov-reports/ for the scanner.
         run: |
+          mkdir -p gcov-reports
           find src -path '*/.libs/*.gcda' | while read -r gcda; do
             obj_dir=$(dirname "$gcda")
             src_dir=$(dirname "$obj_dir")
             base=$(basename "$gcda" .gcda)
-            (cd "$src_dir" && gcov -pb -o .libs "$base")
+            gcov -pb -o "$obj_dir" "$src_dir/$base.c"
           done
+          mv ./*.gcov gcov-reports/
       - name: Run sonar-scanner
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -47,4 +51,4 @@ jobs:
         with:
           args: >
             --define sonar.cfamily.compile-commands=${{ env.BUILD_WRAPPER_OUT_DIR }}/compile_commands.json
-            --define sonar.cfamily.gcov.reportsPath=src
+            --define sonar.cfamily.gcov.reportsPath=gcov-reports
