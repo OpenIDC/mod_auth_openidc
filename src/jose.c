@@ -871,6 +871,7 @@ static uint8_t *oidc_jwe_decrypt_any(apr_pool_t *pool, cjose_jwe_t *jwe, apr_has
 	cjose_err cjose_err;
 	uint8_t *decrypted = NULL;
 	oidc_jwk_t *jwk = NULL;
+	int n_tried = 0;
 
 	for (apr_hash_index_t *hi = apr_hash_first(pool, keys); hi; hi = apr_hash_next(hi)) {
 		apr_hash_this(hi, NULL, NULL, (void **)&jwk);
@@ -880,15 +881,23 @@ static uint8_t *oidc_jwe_decrypt_any(apr_pool_t *pool, cjose_jwe_t *jwe, apr_has
 		if ((jwk->use) && (_oidc_strcmp(jwk->use, OIDC_JOSE_JWK_ENC_STR) != 0))
 			continue;
 
+		n_tried++;
 		decrypted = cjose_jwe_decrypt(jwe, jwk->cjose_jwk, content_len, &cjose_err);
 		if (decrypted != NULL)
 			return decrypted;
 	}
 
-	oidc_jose_error(err,
-			"encrypted JWT could not be decrypted with any of the %d keys: error for last "
-			"tried key is: %s",
-			apr_hash_count(keys), oidc_cjose_e2s(pool, cjose_err));
+	if (n_tried == 0)
+		oidc_jose_error(err,
+				"encrypted JWT could not be decrypted: none of the %d configured keys is compatible "
+				"with alg \"%s\"",
+				apr_hash_count(keys), alg);
+	else
+		oidc_jose_error(
+		    err,
+		    "encrypted JWT could not be decrypted with any of the %d compatible keys: error for last "
+		    "tried key is: %s",
+		    n_tried, oidc_cjose_e2s(pool, cjose_err));
 	return NULL;
 }
 
