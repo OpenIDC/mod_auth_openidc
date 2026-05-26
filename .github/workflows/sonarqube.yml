@@ -39,7 +39,7 @@ jobs:
             obj_dir=$(dirname "$gcda")
             src_dir=$(dirname "$obj_dir")
             base=$(basename "$gcda" .gcda)
-            cd $src_dir && gcov ".libs/$base.c" && cd -
+            gcov -p -o $obj_dir $base.c
           done
       - name: Run sonar-scanner
         env:
