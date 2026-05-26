@@ -1127,6 +1127,179 @@ START_TEST(test_proto_userinfo_request_error) {
 }
 END_TEST
 
+START_TEST(test_proto_userinfo_request_post_method) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/json",
+					  .body = "{\"sub\":\"alice\",\"name\":\"Alice Example\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+	/* switch token presentation to the POST body branch */
+	oidc_cfg_provider_userinfo_token_method_int_set(provider, OIDC_USER_INFO_TOKEN_METHOD_POST);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 TRUE);
+	ck_assert_int_eq(response_code, 200);
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_str_eq(cap->method, "POST");
+	ck_assert_ptr_nonnull(cap->body);
+	ck_assert_msg(_oidc_strstr(cap->body, OIDC_PROTO_ACCESS_TOKEN "=AT") != NULL,
+		      "POST body must carry access_token=AT");
+
+	json_decref(userinfo_claims);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+START_TEST(test_proto_userinfo_request_missing_sub_required) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	/* response carries no "sub" claim and OIDC_NO_USERINFO_SUB is not set in the env =>
+	 * oidc_proto_userinfo_request_validate_sub rejects with FALSE */
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = "{\"name\":\"Alice\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 FALSE);
+	/* claims are freed by the validator on failure */
+	ck_assert_ptr_null(userinfo_claims);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+START_TEST(test_proto_userinfo_request_missing_sub_skipped_via_env) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = "{\"name\":\"Alice\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+	/* setting OIDC_NO_USERINFO_SUB in the subprocess env opts out of the mandatory-sub
+	 * check; pass NULL as id_token_sub so the equality branch is also skipped */
+	apr_table_set(r->subprocess_env, "OIDC_NO_USERINFO_SUB", "1");
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, NULL, "AT", "Bearer", &s_userinfo, &userinfo_jwt,
+						     &userinfo_claims, &response_code),
+			 TRUE);
+	ck_assert_ptr_nonnull(userinfo_claims);
+
+	json_decref(userinfo_claims);
+	apr_table_unset(r->subprocess_env, "OIDC_NO_USERINFO_SUB");
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+START_TEST(test_proto_userinfo_request_composite_embedded_jwt) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	/* a composite-claims response with an inline alg=none JWT for the "address" source;
+	 * the JWT below decodes to {"address":{"street_address":"123 Main St","country":"US"}}.
+	 * The dispatcher walks _claim_names → _claim_sources → JWT and merges the payload
+	 * back into claims under the "address" key, then strips both meta-keys. */
+	const char *address_jwt = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0."
+				  "eyJhZGRyZXNzIjp7InN0cmVldF9hZGRyZXNzIjoiMTIzIE1haW4gU3QiLCJjb3VudHJ5IjoiVVMifX0.";
+	const char *body = apr_psprintf(r->pool,
+					"{\"sub\":\"alice\",\"_claim_names\":{\"address\":\"src1\"},"
+					"\"_claim_sources\":{\"src1\":{\"JWT\":\"%s\"}}}",
+					address_jwt);
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = body};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 TRUE);
+	ck_assert_ptr_nonnull(userinfo_claims);
+	/* the composite resolver lifts "address" out of the inline JWT into the claims root */
+	json_t *address = json_object_get(userinfo_claims, "address");
+	ck_assert_ptr_nonnull(address);
+	ck_assert_int_eq(json_is_object(address), 1);
+	const char *street = json_string_value(json_object_get(address, "street_address"));
+	ck_assert_ptr_nonnull(street);
+	ck_assert_str_eq(street, "123 Main St");
+	const char *country = json_string_value(json_object_get(address, "country"));
+	ck_assert_ptr_nonnull(country);
+	ck_assert_str_eq(country, "US");
+	/* the meta-keys are stripped after resolution */
+	ck_assert_ptr_null(json_object_get(userinfo_claims, "_claim_names"));
+	ck_assert_ptr_null(json_object_get(userinfo_claims, "_claim_sources"));
+	/* the re-serialized s_userinfo reflects the rewritten payload */
+	ck_assert_ptr_nonnull(s_userinfo);
+	ck_assert_msg(_oidc_strstr(s_userinfo, "_claim_names") == NULL,
+		      "s_userinfo must be re-encoded without _claim_names");
+
+	json_decref(userinfo_claims);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+START_TEST(test_proto_userinfo_request_composite_names_without_sources) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	/* _claim_names present but _claim_sources missing => the composite resolver
+	 * short-circuits to FALSE without rewriting the claims; meta keys stay in place */
+	const char *body = "{\"sub\":\"alice\",\"_claim_names\":{\"address\":\"src1\"}}";
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = body};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 TRUE);
+	ck_assert_ptr_nonnull(userinfo_claims);
+	ck_assert_ptr_nonnull(json_object_get(userinfo_claims, "_claim_names"));
+
+	json_decref(userinfo_claims);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
 START_TEST(test_proto_request_auth_par_redirect) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -1503,6 +1676,11 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_userinfo_request_success);
 	tcase_add_test(e2e, test_proto_userinfo_request_sub_mismatch);
 	tcase_add_test(e2e, test_proto_userinfo_request_error);
+	tcase_add_test(e2e, test_proto_userinfo_request_post_method);
+	tcase_add_test(e2e, test_proto_userinfo_request_missing_sub_required);
+	tcase_add_test(e2e, test_proto_userinfo_request_missing_sub_skipped_via_env);
+	tcase_add_test(e2e, test_proto_userinfo_request_composite_embedded_jwt);
+	tcase_add_test(e2e, test_proto_userinfo_request_composite_names_without_sources);
 	tcase_add_test(e2e, test_proto_request_auth_par_redirect);
 	tcase_add_test(e2e, test_proto_private_keys_load_from_pem);
 	tcase_add_test(e2e, test_proto_request_auth_with_request_object_none);
