@@ -2037,6 +2037,59 @@ START_TEST(test_handle_logout_backchannel_no_token) {
 END_TEST
 
 /*
+ * Tests for handle/request_uri.c — the request-object-by-reference
+ * endpoint that the OP fetches when the RP advertises a request_uri
+ * during the authorization request.
+ */
+
+START_TEST(test_handle_request_uri_missing_param) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* call without a request_uri= parameter => BAD_REQUEST */
+	r->args = "";
+	int rc = oidc_request_uri(r, c);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+}
+END_TEST
+
+START_TEST(test_handle_request_uri_not_cached) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* parameter present but the referenced ID is not in the request-uri cache => NOT_FOUND */
+	r->args = "request_uri=missing-ref";
+	int rc = oidc_request_uri(r, c);
+	ck_assert_int_eq(rc, HTTP_NOT_FOUND);
+}
+END_TEST
+
+START_TEST(test_handle_request_uri_happy_path) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* prime the request-uri cache with a JWT-shaped payload then serve it back */
+	const char *ref = "abc123";
+	const char *jwt = "eyJhbGciOiJub25lIn0.eyJpc3MiOiJjbGllbnQifQ.";
+	oidc_cache_set_request_uri(r, ref, jwt, apr_time_now() + apr_time_from_sec(60));
+
+	r->args = apr_psprintf(r->pool, "request_uri=%s", ref);
+	int rc = oidc_request_uri(r, c);
+	ck_assert_int_eq(rc, OK);
+	/* oidc_util_http_content_prep stamps r->user="" and stores the body + content-type
+	 * in the request state for the content handler to flush */
+	ck_assert_ptr_nonnull(r->user);
+	ck_assert_str_eq(r->user, "");
+	ck_assert_str_eq(oidc_request_state_get(r, "data"), jwt);
+	ck_assert_str_eq(oidc_request_state_get(r, "content_type"), OIDC_HTTP_CONTENT_TYPE_JWT);
+	/* the cache entry is consumed in a single shot — a follow-up call must 404 */
+	char *check = NULL;
+	oidc_cache_get_request_uri(r, ref, &check);
+	ck_assert_ptr_null(check);
+}
+END_TEST
+
+/*
  * Tests for the oidc_handle_redirect_uri_request dispatcher in
  * mod_auth_openidc.c — focus on the routing decisions (which branch is
  * selected for a given request shape) rather than re-testing the
@@ -2296,6 +2349,12 @@ int main(void) {
 	tcase_add_test(session_mgmt, test_handle_session_management_iframe_op_configured);
 	tcase_add_test(session_mgmt, test_handle_session_management_iframe_rp_configured);
 
+	TCase *request_uri = tcase_create("request_uri");
+	tcase_add_checked_fixture(request_uri, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(request_uri, test_handle_request_uri_missing_param);
+	tcase_add_test(request_uri, test_handle_request_uri_not_cached);
+	tcase_add_test(request_uri, test_handle_request_uri_happy_path);
+
 	TCase *dispatch = tcase_create("dispatch");
 	tcase_add_checked_fixture(dispatch, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(dispatch, test_handle_dispatch_jwks);
@@ -2318,6 +2377,7 @@ int main(void) {
 	suite_add_tcase(s, checkuid);
 	suite_add_tcase(s, revoke);
 	suite_add_tcase(s, session_mgmt);
+	suite_add_tcase(s, request_uri);
 	suite_add_tcase(s, dispatch);
 
 	return oidc_test_suite_run(s);
