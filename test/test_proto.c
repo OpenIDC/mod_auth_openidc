@@ -1045,6 +1045,44 @@ START_TEST(test_proto_discovery_account_no_at_sign) {
 }
 END_TEST
 
+START_TEST(test_proto_discovery_account_unreachable_endpoint) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	/* drive the account → webfinger path against a known-closed loopback port:
+	 * exercises the "@" split, resource/domain assembly and the HTTP-failure
+	 * return path in oidc_proto_webfinger_discovery without a live server. */
+	int port = oidc_test_http_free_port(r->pool);
+	ck_assert_int_ne(port, 0);
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *issuer = NULL;
+	const char *acct = apr_psprintf(r->pool, "alice@127.0.0.1:%d", port);
+	ck_assert_int_eq(oidc_proto_discovery_account_based(r, c, acct, &issuer), FALSE);
+	ck_assert_ptr_null(issuer);
+}
+END_TEST
+
+START_TEST(test_proto_discovery_url_unreachable_endpoint) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	/* same idea against a URL input — exercises apr_uri_parse, the host+port
+	 * stitching in oidc_proto_discovery_url_based and the HTTP-failure return
+	 * in the shared webfinger helper. */
+	int port = oidc_test_http_free_port(r->pool);
+	ck_assert_int_ne(port, 0);
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *issuer = NULL;
+	const char *url = apr_psprintf(r->pool, "https://127.0.0.1:%d/alice", port);
+	ck_assert_int_eq(oidc_proto_discovery_url_based(r, c, url, &issuer), FALSE);
+	ck_assert_ptr_null(issuer);
+}
+END_TEST
+
 /*
  * End-to-end tests that drive token.c / userinfo.c / request.c against the
  * loopback HTTP server fixture from test/http_server.c. They exercise the
@@ -1780,6 +1818,8 @@ int main(void) {
 	tcase_add_test(core, test_proto_dpop_use_nonce_wrong_error_value);
 	tcase_add_test(core, test_proto_dpop_use_nonce_missing_header);
 	tcase_add_test(core, test_proto_discovery_account_no_at_sign);
+	tcase_add_test(core, test_proto_discovery_account_unreachable_endpoint);
+	tcase_add_test(core, test_proto_discovery_url_unreachable_endpoint);
 	tcase_add_test(core, test_proto_supported_flows_exhaustive);
 
 	TCase *e2e = tcase_create("e2e_proto");
