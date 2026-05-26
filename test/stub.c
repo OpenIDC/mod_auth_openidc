@@ -132,7 +132,16 @@ AP_DECLARE(char *) ap_getword_conf(apr_pool_t *p, const char **line) {
 }
 
 AP_DECLARE(char *) ap_getword_nulls(apr_pool_t *p, const char **line, char stop) {
-	return "";
+	/* match Apache semantics: return the word before `stop`, advance *line past
+	 * the separator (or to '\0' if `stop` is not present). The previous stub
+	 * silently returned "" and left *line untouched, which masked any callers
+	 * that relied on the advance — e.g. oidc_oauth_token_from_basic. */
+	const char *pos = *line;
+	while (*pos && (*pos != stop))
+		++pos;
+	char *res = apr_pstrmemdup(p, *line, pos - *line);
+	*line = (*pos == stop) ? pos + 1 : pos;
+	return res;
 }
 
 AP_DECLARE(char *) ap_getword_white(apr_pool_t *atrans, const char **line) {
@@ -193,7 +202,12 @@ ap_hook_handler(int (*handler)(request_rec *r), const char *const *aszPre, const
 }
 
 AP_DECLARE(int) ap_is_initial_req(request_rec *r) {
-	return 0;
+	/* match Apache semantics: a request is "initial" when it is neither a
+	 * sub-request (r->main NULL) nor an internal-redirect carryover
+	 * (r->prev NULL). The previous stub hard-returned 0 which forced every
+	 * caller through the sub-request branch and hid initial-request paths
+	 * from coverage (e.g. oidc_oauth_check_userid_redirect_uri). */
+	return (r->main == NULL) && (r->prev == NULL);
 }
 
 AP_DECLARE(ap_expr_info_t *)

@@ -34,6 +34,12 @@
 #include "util.h"
 #include "util/util.h"
 
+/* oauth.c exports this as non-static but has no header declaration; the
+ * metadata-retrieve tests below drive the helper directly to cover the
+ * HTTP + JSON-decode branches */
+extern apr_byte_t oidc_oauth_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg, const char *issuer,
+							const char *url, json_t **j_metadata, char **response);
+
 /*
  * Tests for oidc_oauth_get_bearer_token — exercise the Authorization-header
  * extraction path (default OIDCOAuthAcceptTokenAs setting is "header") and the
@@ -263,6 +269,124 @@ END_TEST
  * endpoint configured), which is reached via oidc_oauth_validate_token.
  */
 
+START_TEST(test_oauth_bearer_from_basic_header) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+
+	/* enable basic-scheme token acceptance and provide "Authorization: Basic <b64(user:AT-XYZ)>";
+	 * oidc_oauth_token_from_basic must strip the "user:" prefix and return just the token */
+	cmd_parms *cmd = oidc_test_cmd_get("OIDCOAuthAcceptTokenAs");
+	ck_assert_ptr_null(oidc_cmd_dir_accept_oauth_token_in_set(cmd, dir_cfg, "basic"));
+	apr_table_set(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION, "Basic dXNlcjpBVC1YWVo=");
+
+	const char *token = NULL;
+	ck_assert_int_eq(oidc_oauth_get_bearer_token(r, &token), TRUE);
+	ck_assert_ptr_nonnull(token);
+	ck_assert_str_eq(token, "AT-XYZ");
+}
+END_TEST
+
+START_TEST(test_oauth_bearer_from_basic_header_no_colon) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+
+	cmd_parms *cmd = oidc_test_cmd_get("OIDCOAuthAcceptTokenAs");
+	ck_assert_ptr_null(oidc_cmd_dir_accept_oauth_token_in_set(cmd, dir_cfg, "basic"));
+	/* b64("noseparator") — no colon in the decoded payload => token_from_basic returns NULL */
+	apr_table_set(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION, "Basic bm9zZXBhcmF0b3I=");
+
+	const char *token = NULL;
+	ck_assert_int_eq(oidc_oauth_get_bearer_token(r, &token), FALSE);
+	ck_assert_ptr_null(token);
+}
+END_TEST
+
+START_TEST(test_oauth_check_userid_redirect_uri_jwks) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	apr_table_unset(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION);
+
+	/* point the request path at the configured OIDCRedirectURI and ask for ?jwks=:
+	 * oidc_oauth_check_userid_redirect_uri must stamp r->user="" and return OK
+	 * so the content handler can serve the JWKS document. */
+	r->parsed_uri.path = apr_pstrdup(r->pool, "/protected/");
+	r->args = "jwks=1";
+	r->user = NULL;
+
+	int rc = oidc_oauth_check_userid(r, c, NULL);
+	ck_assert_int_eq(rc, OK);
+	ck_assert_ptr_nonnull(r->user);
+	ck_assert_str_eq(r->user, "");
+}
+END_TEST
+
+START_TEST(test_oauth_check_userid_redirect_uri_remove_at_cache) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	apr_table_unset(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION);
+
+	/* same path but with ?remove_at_cache= — the dispatcher hands off to
+	 * oidc_revoke_at_cache_remove which 404s on a cache miss. */
+	r->parsed_uri.path = apr_pstrdup(r->pool, "/protected/");
+	r->args = "remove_at_cache=AT-not-cached";
+
+	int rc = oidc_oauth_check_userid(r, c, NULL);
+	ck_assert_int_eq(rc, HTTP_NOT_FOUND);
+}
+END_TEST
+
+START_TEST(test_oauth_metadata_provider_retrieve_success) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *body = "{\"issuer\":\"https://idp.example.com\","
+			   "\"introspection_endpoint\":\"https://idp.example.com/introspect\"}";
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = body};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	cmd_parms *cmd_ssl = oidc_test_cmd_get(OIDCOAuthSSLValidateServer);
+	ck_assert_ptr_null(oidc_cmd_oauth_ssl_validate_server_set(cmd_ssl, NULL, "Off"));
+
+	json_t *metadata = NULL;
+	char *response = NULL;
+	ck_assert_int_eq(oidc_oauth_metadata_provider_retrieve(r, c, "https://idp.example.com",
+							       oidc_test_http_server_url(srv, r->pool), &metadata,
+							       &response),
+			 TRUE);
+	ck_assert_ptr_nonnull(metadata);
+	ck_assert_str_eq(json_string_value(json_object_get(metadata, "issuer")), "https://idp.example.com");
+
+	json_decref(metadata);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+START_TEST(test_oauth_metadata_provider_retrieve_invalid_json) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* server replies with non-JSON content => decode-and-check-error fails => FALSE */
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = "this is not json"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	cmd_parms *cmd_ssl = oidc_test_cmd_get(OIDCOAuthSSLValidateServer);
+	ck_assert_ptr_null(oidc_cmd_oauth_ssl_validate_server_set(cmd_ssl, NULL, "Off"));
+
+	json_t *metadata = NULL;
+	char *response = NULL;
+	ck_assert_int_eq(oidc_oauth_metadata_provider_retrieve(r, c, "https://idp.example.com",
+							       oidc_test_http_server_url(srv, r->pool), &metadata,
+							       &response),
+			 FALSE);
+	ck_assert_ptr_null(metadata);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
 START_TEST(test_oauth_check_userid_jwt_no_keys_configured) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -287,6 +411,8 @@ int main(void) {
 	tcase_add_test(bearer, test_oauth_bearer_wrong_scheme);
 	tcase_add_test(bearer, test_oauth_bearer_from_query);
 	tcase_add_test(bearer, test_oauth_bearer_from_cookie);
+	tcase_add_test(bearer, test_oauth_bearer_from_basic_header);
+	tcase_add_test(bearer, test_oauth_bearer_from_basic_header_no_colon);
 
 	TCase *introspect = tcase_create("introspect");
 	tcase_add_checked_fixture(introspect, oidc_test_setup, oidc_test_teardown);
@@ -297,15 +423,24 @@ int main(void) {
 	tcase_add_test(introspect, test_oauth_check_userid_introspection_inactive);
 	tcase_add_test(introspect, test_oauth_check_userid_introspection_error_response);
 	tcase_add_test(introspect, test_oauth_check_userid_introspection_cached);
+	tcase_add_test(introspect, test_oauth_check_userid_redirect_uri_jwks);
+	tcase_add_test(introspect, test_oauth_check_userid_redirect_uri_remove_at_cache);
 
 	TCase *jwt = tcase_create("jwt");
 	tcase_add_checked_fixture(jwt, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_no_keys_configured);
 
+	TCase *metadata = tcase_create("metadata");
+	tcase_add_checked_fixture(metadata, oidc_test_setup, oidc_test_teardown);
+	tcase_set_timeout(metadata, 30);
+	tcase_add_test(metadata, test_oauth_metadata_provider_retrieve_success);
+	tcase_add_test(metadata, test_oauth_metadata_provider_retrieve_invalid_json);
+
 	Suite *s = suite_create("oauth");
 	suite_add_tcase(s, bearer);
 	suite_add_tcase(s, introspect);
 	suite_add_tcase(s, jwt);
+	suite_add_tcase(s, metadata);
 
 	return oidc_test_suite_run(s);
 }
