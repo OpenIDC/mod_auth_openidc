@@ -37,6 +37,11 @@
 #include "util.h"
 #include "util/util.h"
 
+/* the top-level dispatch entry for OIDCRedirectURI requests lives in
+ * mod_auth_openidc.c and has no public header — declare it here so the
+ * dispatch tests below can exercise the routing decisions directly */
+extern int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session);
+
 /*
  * Tests for handle/userinfo.c — drive oidc_userinfo_retrieve_claims /
  * oidc_userinfo_refresh_claims / oidc_userinfo_store_claims against the
@@ -2031,6 +2036,140 @@ START_TEST(test_handle_logout_backchannel_no_token) {
 }
 END_TEST
 
+/*
+ * Tests for the oidc_handle_redirect_uri_request dispatcher in
+ * mod_auth_openidc.c — focus on the routing decisions (which branch is
+ * selected for a given request shape) rather than re-testing the
+ * sub-handlers, which the other suites above cover.
+ */
+
+START_TEST(test_handle_dispatch_jwks) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* ?jwks must short-circuit to OK and stamp r->user="" so the
+	 * authn hook lets the content handler serve the JWKS document;
+	 * oidc_util_url_has_parameter matches on "name=" so the value is irrelevant */
+	r->args = "jwks=1";
+	r->method_number = M_GET;
+	r->user = NULL;
+	int rc = oidc_handle_redirect_uri_request(r, c, session);
+	ck_assert_int_eq(rc, OK);
+	ck_assert_ptr_nonnull(r->user);
+	ck_assert_str_eq(r->user, "");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_dispatch_dpop) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* ?dpop must short-circuit to OK and stamp r->user="" so the
+	 * authn hook lets the content handler serve the DPoP proof */
+	r->args = "dpop=1";
+	r->method_number = M_GET;
+	r->user = NULL;
+	int rc = oidc_handle_redirect_uri_request(r, c, session);
+	ck_assert_int_eq(rc, OK);
+	ck_assert_ptr_nonnull(r->user);
+	ck_assert_str_eq(r->user, "");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_dispatch_info_no_session_returns_unauthorized) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* ?info on an empty session (remote_user == NULL) must return 401
+	 * without touching any of the info-handler internals */
+	ck_assert_ptr_null(session->remote_user);
+	r->args = "info=json";
+	r->method_number = M_GET;
+	int rc = oidc_handle_redirect_uri_request(r, c, session);
+	ck_assert_int_eq(rc, HTTP_UNAUTHORIZED);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_dispatch_unknown_args_returns_500) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* a GET to the redirect URI carrying args that match none of the
+	 * recognised parameters falls through to the invalid-request handler
+	 * which returns HTTP_INTERNAL_SERVER_ERROR via oidc_util_html_send_error */
+	r->args = "unrecognized=1";
+	r->method_number = M_GET;
+	int rc = oidc_handle_redirect_uri_request(r, c, session);
+	ck_assert_int_eq(rc, HTTP_INTERNAL_SERVER_ERROR);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_dispatch_empty_args_routes_to_implicit_flow) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* a "bare" GET to the redirect URI (no args) is the implicit-flow
+	 * fragment-mode bootstrap: the dispatcher must hand off to
+	 * oidc_javascript_implicit which preps an HTML page and returns OK */
+	r->args = NULL;
+	r->method_number = M_GET;
+	r->user = NULL;
+	int rc = oidc_handle_redirect_uri_request(r, c, session);
+	ck_assert_int_eq(rc, OK);
+	/* oidc_util_html_content_prep stores the body under the "body" request
+	 * state key and stamps r->user="" so the content handler runs */
+	ck_assert_ptr_nonnull(r->user);
+	ck_assert_str_eq(r->user, "");
+	const char *html = oidc_request_state_get(r, "body");
+	ck_assert_ptr_nonnull(html);
+	ck_assert_msg(_oidc_strstr(html, "form") != NULL,
+		      "implicit-flow body must contain the fragment-collecting form");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_dispatch_logout_takes_precedence_over_post_authn) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* a POST with a ?logout= query parameter must be routed to oidc_logout
+	 * (back-channel logout), not to the POST authorization-response handler:
+	 * the dispatcher checks for the logout parameter BEFORE oidc_proto_response_is_post.
+	 * Without a logout_token in the form body, oidc_logout returns BAD_REQUEST —
+	 * if routing went to the POST authn branch instead we'd see a different code
+	 * (typically a state-mismatch failure). */
+	r->args = "logout=backchannel";
+	r->method_number = M_POST;
+	apr_table_set(r->headers_in, "Content-Type", "application/x-www-form-urlencoded");
+	r->remaining = 0;
+	int rc = oidc_handle_redirect_uri_request(r, c, session);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
 int main(void) {
 	TCase *userinfo = tcase_create("userinfo");
 	tcase_add_checked_fixture(userinfo, oidc_test_setup, oidc_test_teardown);
@@ -2157,6 +2296,15 @@ int main(void) {
 	tcase_add_test(session_mgmt, test_handle_session_management_iframe_op_configured);
 	tcase_add_test(session_mgmt, test_handle_session_management_iframe_rp_configured);
 
+	TCase *dispatch = tcase_create("dispatch");
+	tcase_add_checked_fixture(dispatch, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(dispatch, test_handle_dispatch_jwks);
+	tcase_add_test(dispatch, test_handle_dispatch_dpop);
+	tcase_add_test(dispatch, test_handle_dispatch_info_no_session_returns_unauthorized);
+	tcase_add_test(dispatch, test_handle_dispatch_unknown_args_returns_500);
+	tcase_add_test(dispatch, test_handle_dispatch_empty_args_routes_to_implicit_flow);
+	tcase_add_test(dispatch, test_handle_dispatch_logout_takes_precedence_over_post_authn);
+
 	Suite *s = suite_create("handle");
 	suite_add_tcase(s, userinfo);
 	suite_add_tcase(s, refresh);
@@ -2170,6 +2318,7 @@ int main(void) {
 	suite_add_tcase(s, checkuid);
 	suite_add_tcase(s, revoke);
 	suite_add_tcase(s, session_mgmt);
+	suite_add_tcase(s, dispatch);
 
 	return oidc_test_suite_run(s);
 }

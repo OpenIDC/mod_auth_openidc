@@ -1,4 +1,13 @@
 05/26/2026
+- test: add a dispatch tcase to test_handle that drives
+  oidc_handle_redirect_uri_request directly through six routing
+  decisions (?jwks and ?dpop short-circuit to OK with r->user="",
+  ?info on a session without a remote_user yields 401, unknown args
+  fall through to the invalid-request 500, an empty args string
+  routes to oidc_javascript_implicit, and a POST with ?logout=
+  takes precedence over the POST authorization-response branch).
+  The function is declared extern in the test file because it
+  has no public header
 - code: split src/metadata.c into per-domain files under src/metadata/
   (provider, conf, client, jwks, oauth, util) with shared constants and
   helper macros in metadata/internal.h; the conf_parse_* helpers are
