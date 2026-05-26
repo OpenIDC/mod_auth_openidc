@@ -1,3 +1,13 @@
+05/26/2026
+- code: split src/metadata.c into per-domain files under src/metadata/
+  (provider, conf, client, jwks, oauth, util) with shared constants and
+  helper macros in metadata/internal.h; the conf_parse_* helpers are
+  rewritten on top of new OIDC_METADATA_CONF_STR/INT/BOOL macros so each
+  parsed field becomes a single line. Public API in metadata.h is
+  unchanged. Adds unit-test coverage for oidc_metadata_conf_parse_* and
+  the oidc_metadata_client_register POST payload to lock in behavior
+  across the move
+
 05/25/2026
 - code: hardening in various places
 - strip_cookies: skip cookies that are only whitespace after the
