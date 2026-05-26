@@ -457,6 +457,275 @@ START_TEST(test_metadata_disk_dyn_registration_success) {
 }
 END_TEST
 
+/*
+ * Tests for oidc_metadata_conf_parse — exercise the static conf_parse_* helpers
+ * by driving them through the public wrapper.
+ */
+
+START_TEST(test_metadata_conf_parse_string_fields) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+
+	/* the tls_client_cert/key setters access(2)-check the path, so point them at real fixtures */
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *cert_path = apr_psprintf(r->pool, "%s/certificate.pem", dir);
+	const char *key_path = apr_psprintf(r->pool, "%s/ecpriv.key", dir);
+
+	const char *conf_json = apr_psprintf(r->pool,
+					     "{"
+					     "\"profile\":\"OIDC10\","
+					     "\"client_jwks_uri\":\"https://rp.example.com/jwks\","
+					     "\"id_token_signed_response_alg\":\"RS256\","
+					     "\"id_token_encrypted_response_alg\":\"RSA-OAEP\","
+					     "\"id_token_encrypted_response_enc\":\"A256GCM\","
+					     "\"userinfo_signed_response_alg\":\"RS256\","
+					     "\"userinfo_encrypted_response_alg\":\"RSA-OAEP\","
+					     "\"userinfo_encrypted_response_enc\":\"A128CBC-HS256\","
+					     "\"scope\":\"openid profile email\","
+					     "\"auth_request_params\":\"prompt=consent\","
+					     "\"logout_request_params\":\"foo=bar\","
+					     "\"token_endpoint_params\":\"baz=qux\","
+					     "\"response_mode\":\"form_post\","
+					     "\"pkce_method\":\"S256\","
+					     "\"response_type\":\"code\","
+					     "\"client_name\":\"Test RP\","
+					     "\"client_contact\":\"ops@example.com\","
+					     "\"registration_token\":\"reg.tok.en\","
+					     "\"registration_endpoint_json\":\"{\\\"custom\\\":\\\"x\\\"}\","
+					     "\"token_endpoint_auth\":\"client_secret_post\","
+					     "\"token_endpoint_tls_client_cert\":\"%s\","
+					     "\"token_endpoint_tls_client_key\":\"%s\","
+					     "\"token_endpoint_tls_client_key_pwd\":\"sekret\""
+					     "}",
+					     cert_path, key_path);
+
+	json_t *j = NULL;
+	ck_assert_int_eq(oidc_util_json_decode_object(r, conf_json, &j), TRUE);
+	ck_assert_int_eq(oidc_metadata_conf_parse(r, c, j, provider), TRUE);
+
+	/* keys */
+	ck_assert_str_eq(oidc_cfg_provider_client_jwks_uri_get(provider), "https://rp.example.com/jwks");
+	/* id_token */
+	ck_assert_str_eq(oidc_cfg_provider_id_token_signed_response_alg_get(provider), "RS256");
+	ck_assert_str_eq(oidc_cfg_provider_id_token_encrypted_response_alg_get(provider), "RSA-OAEP");
+	ck_assert_str_eq(oidc_cfg_provider_id_token_encrypted_response_enc_get(provider), "A256GCM");
+	/* userinfo */
+	ck_assert_str_eq(oidc_cfg_provider_userinfo_signed_response_alg_get(provider), "RS256");
+	ck_assert_str_eq(oidc_cfg_provider_userinfo_encrypted_response_alg_get(provider), "RSA-OAEP");
+	ck_assert_str_eq(oidc_cfg_provider_userinfo_encrypted_response_enc_get(provider), "A128CBC-HS256");
+	/* request params */
+	ck_assert_str_eq(oidc_cfg_provider_scope_get(provider), "openid profile email");
+	ck_assert_str_eq(oidc_cfg_provider_auth_request_params_get(provider), "prompt=consent");
+	ck_assert_str_eq(oidc_cfg_provider_logout_request_params_get(provider), "foo=bar");
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_params_get(provider), "baz=qux");
+	/* response */
+	ck_assert_str_eq(oidc_cfg_provider_response_mode_get(provider), "form_post");
+	ck_assert_str_eq(oidc_cfg_provider_response_type_get(provider), "code");
+	/* client */
+	ck_assert_str_eq(oidc_cfg_provider_client_name_get(provider), "Test RP");
+	ck_assert_str_eq(oidc_cfg_provider_client_contact_get(provider), "ops@example.com");
+	ck_assert_str_eq(oidc_cfg_provider_registration_token_get(provider), "reg.tok.en");
+	ck_assert_str_eq(oidc_cfg_provider_registration_endpoint_json_get(provider), "{\"custom\":\"x\"}");
+	/* tls client */
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider), cert_path);
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_tls_client_key_get(provider), key_path);
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider), "sekret");
+
+	json_decref(j);
+}
+END_TEST
+
+START_TEST(test_metadata_conf_parse_int_fields) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+
+	/* mix of JSON booleans and integers — both must be honoured */
+	const char *conf_json = "{"
+				"\"ssl_validate_server\":false,"
+				"\"validate_issuer\":false,"
+				"\"jwks_refresh_interval\":7200,"
+				"\"idtoken_iat_slack\":42,"
+				"\"session_max_duration\":3600,"
+				"\"userinfo_refresh_interval\":300,"
+				"\"response_require_iss\":true"
+				"}";
+
+	json_t *j = NULL;
+	ck_assert_int_eq(oidc_util_json_decode_object(r, conf_json, &j), TRUE);
+	ck_assert_int_eq(oidc_metadata_conf_parse(r, c, j, provider), TRUE);
+
+	ck_assert_int_eq(oidc_cfg_provider_ssl_validate_server_get(provider), FALSE);
+	ck_assert_int_eq(oidc_cfg_provider_validate_issuer_get(provider), FALSE);
+	ck_assert_int_eq(oidc_cfg_provider_jwks_uri_refresh_interval_get(provider), 7200);
+	ck_assert_int_eq(oidc_cfg_provider_idtoken_iat_slack_get(provider), 42);
+	ck_assert_int_eq(oidc_cfg_provider_session_max_duration_get(provider), 3600);
+	ck_assert_int_eq(oidc_cfg_provider_userinfo_refresh_interval_get(provider), 300);
+	ck_assert_int_eq(oidc_cfg_provider_response_require_iss_get(provider), TRUE);
+
+	json_decref(j);
+}
+END_TEST
+
+START_TEST(test_metadata_conf_parse_id_token_aud_values) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+
+	json_t *j = json_pack("{s:[s,s]}", "id_token_aud_values", "aud-one", "aud-two");
+	ck_assert_int_eq(oidc_metadata_conf_parse(r, c, j, provider), TRUE);
+
+	const apr_array_header_t *auds = oidc_cfg_provider_id_token_aud_values_get(provider);
+	ck_assert_ptr_nonnull(auds);
+	ck_assert_int_eq(auds->nelts, 2);
+	ck_assert_str_eq(APR_ARRAY_IDX(auds, 0, const char *), "aud-one");
+	ck_assert_str_eq(APR_ARRAY_IDX(auds, 1, const char *), "aud-two");
+
+	json_decref(j);
+}
+END_TEST
+
+START_TEST(test_metadata_conf_parse_dpop_and_auth_request_method) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+
+	json_t *j = json_pack("{s:s,s:s}", "dpop_mode", "required", "auth_request_method", "POST");
+	ck_assert_int_eq(oidc_metadata_conf_parse(r, c, j, provider), TRUE);
+
+	ck_assert_int_eq(oidc_cfg_provider_dpop_mode_get(provider), OIDC_DPOP_MODE_REQUIRED);
+	ck_assert_int_eq(oidc_cfg_provider_auth_request_method_get(provider), OIDC_AUTH_REQUEST_METHOD_POST);
+
+	json_decref(j);
+}
+END_TEST
+
+START_TEST(test_metadata_conf_parse_userinfo_token_method) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+
+	json_t *j = json_pack("{s:s}", "userinfo_token_method", "post_param");
+	ck_assert_int_eq(oidc_metadata_conf_parse(r, c, j, provider), TRUE);
+
+	ck_assert_int_eq(oidc_cfg_provider_userinfo_token_method_get(provider), OIDC_USER_INFO_TOKEN_METHOD_POST);
+
+	json_decref(j);
+}
+END_TEST
+
+/*
+ * Tests for the oidc_metadata_client_register POST payload — drive the static
+ * helper through the full disk-backed dynamic-registration flow and inspect
+ * the captured POST body.
+ */
+
+START_TEST(test_metadata_disk_dyn_registration_payload_fields) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/json",
+					  .body = "{\"client_id\":\"dyn-rp\",\"client_secret\":\"dyn-secret\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	const char *provider_json = apr_psprintf(r->pool,
+						 "{\"issuer\":\"https://idp.example.com\","
+						 "\"authorization_endpoint\":\"https://idp.example.com/authorize\","
+						 "\"token_endpoint\":\"https://idp.example.com/token\","
+						 "\"jwks_uri\":\"https://idp.example.com/jwks\","
+						 "\"registration_endpoint\":\"%s\","
+						 "\"response_types_supported\":[\"code\",\"id_token\"],"
+						 "\"token_endpoint_auth_methods_supported\":[\"client_secret_basic\"]}",
+						 oidc_test_http_server_url(srv, r->pool));
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), provider_json);
+	/* the .conf supplies the provider-level fields that client_register reads */
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.conf", dir),
+		       "{\"client_name\":\"Test RP\","
+		       "\"client_contact\":\"ops@example.com\","
+		       "\"token_endpoint_auth\":\"client_secret_post\","
+		       "\"id_token_signed_response_alg\":\"RS256\","
+		       "\"request_object\":\"{\\\"crypto\\\":{\\\"sign_alg\\\":\\\"RS256\\\"}}\"}");
+
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_metadata_get(r, c, "https://idp.example.com", &provider, TRUE), TRUE);
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_str_eq(cap->method, "POST");
+
+	/* registration POST body must carry every field the server-side spec needs */
+	ck_assert_msg(_oidc_strstr(cap->body, "\"client_name\"") != NULL, "missing client_name in: %s", cap->body);
+	ck_assert_msg(_oidc_strstr(cap->body, "\"Test RP\"") != NULL, "missing client_name value in: %s", cap->body);
+	ck_assert_msg(_oidc_strstr(cap->body, "\"redirect_uris\"") != NULL, "missing redirect_uris");
+	ck_assert_msg(_oidc_strstr(cap->body, "https://www.example.com/protected/") != NULL,
+		      "missing redirect_uri value");
+	ck_assert_msg(_oidc_strstr(cap->body, "\"response_types\"") != NULL, "missing response_types");
+	ck_assert_msg(_oidc_strstr(cap->body, "\"grant_types\"") != NULL, "missing grant_types");
+	ck_assert_msg(_oidc_strstr(cap->body, "\"authorization_code\"") != NULL, "missing authorization_code grant");
+	ck_assert_msg(_oidc_strstr(cap->body, "\"refresh_token\"") != NULL, "missing refresh_token grant");
+	ck_assert_msg(_oidc_strstr(cap->body, "\"contacts\"") != NULL, "missing contacts");
+	ck_assert_msg(_oidc_strstr(cap->body, "\"ops@example.com\"") != NULL, "missing contact value");
+	ck_assert_msg(_oidc_strstr(cap->body, "\"token_endpoint_auth_method\"") != NULL,
+		      "missing token_endpoint_auth_method");
+	ck_assert_msg(_oidc_strstr(cap->body, "\"client_secret_post\"") != NULL,
+		      "missing token_endpoint_auth_method value");
+	ck_assert_msg(_oidc_strstr(cap->body, "\"id_token_signed_response_alg\"") != NULL,
+		      "missing id_token_signed_response_alg");
+	ck_assert_msg(_oidc_strstr(cap->body, "\"initiate_login_uri\"") != NULL, "missing initiate_login_uri");
+	ck_assert_msg(_oidc_strstr(cap->body, "\"frontchannel_logout_uri\"") != NULL,
+		      "missing frontchannel_logout_uri");
+	ck_assert_msg(_oidc_strstr(cap->body, "\"backchannel_logout_uri\"") != NULL, "missing backchannel_logout_uri");
+	ck_assert_msg(_oidc_strstr(cap->body, "\"request_object_signing_alg\"") != NULL,
+		      "missing request_object_signing_alg");
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+START_TEST(test_metadata_disk_dyn_registration_custom_json_merge) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/json",
+					  .body = "{\"client_id\":\"dyn-rp\",\"client_secret\":\"dyn-secret\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	const char *provider_json = apr_psprintf(r->pool,
+						 "{\"issuer\":\"https://idp.example.com\","
+						 "\"authorization_endpoint\":\"https://idp.example.com/authorize\","
+						 "\"token_endpoint\":\"https://idp.example.com/token\","
+						 "\"jwks_uri\":\"https://idp.example.com/jwks\","
+						 "\"registration_endpoint\":\"%s\","
+						 "\"response_types_supported\":[\"code\",\"id_token\"],"
+						 "\"token_endpoint_auth_methods_supported\":[\"client_secret_basic\"]}",
+						 oidc_test_http_server_url(srv, r->pool));
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), provider_json);
+	/* the registration_endpoint_json contents are merged into the POST body */
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.conf", dir),
+		       "{\"registration_endpoint_json\":"
+		       "\"{\\\"software_id\\\":\\\"my-software\\\",\\\"software_version\\\":\\\"1.2.3\\\"}\"}");
+
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_metadata_get(r, c, "https://idp.example.com", &provider, TRUE), TRUE);
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_msg(_oidc_strstr(cap->body, "\"software_id\"") != NULL, "missing software_id in: %s", cap->body);
+	ck_assert_msg(_oidc_strstr(cap->body, "\"my-software\"") != NULL, "missing software_id value");
+	ck_assert_msg(_oidc_strstr(cap->body, "\"software_version\"") != NULL, "missing software_version");
+	ck_assert_msg(_oidc_strstr(cap->body, "\"1.2.3\"") != NULL, "missing software_version value");
+	/* and the built-in fields must still be present alongside the merged ones */
+	ck_assert_msg(_oidc_strstr(cap->body, "\"redirect_uris\"") != NULL, "missing redirect_uris after merge");
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
 START_TEST(test_metadata_disk_provider_get_missing_no_discovery) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -491,6 +760,14 @@ int main(void) {
 	tcase_add_test(retrieve, test_metadata_jwks_get_forced_refresh);
 	tcase_add_test(retrieve, test_metadata_jwks_get_http_failure);
 
+	TCase *conf = tcase_create("conf");
+	tcase_add_checked_fixture(conf, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(conf, test_metadata_conf_parse_string_fields);
+	tcase_add_test(conf, test_metadata_conf_parse_int_fields);
+	tcase_add_test(conf, test_metadata_conf_parse_id_token_aud_values);
+	tcase_add_test(conf, test_metadata_conf_parse_dpop_and_auth_request_method);
+	tcase_add_test(conf, test_metadata_conf_parse_userinfo_token_method);
+
 	TCase *disk = tcase_create("disk");
 	tcase_add_checked_fixture(disk, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(disk, test_metadata_disk_list_empty_dir);
@@ -500,12 +777,15 @@ int main(void) {
 	tcase_add_test(disk, test_metadata_disk_get_with_empty_conf_file);
 	tcase_add_test(disk, test_metadata_disk_get_with_invalid_conf_alg);
 	tcase_add_test(disk, test_metadata_disk_dyn_registration_success);
+	tcase_add_test(disk, test_metadata_disk_dyn_registration_payload_fields);
+	tcase_add_test(disk, test_metadata_disk_dyn_registration_custom_json_merge);
 	tcase_add_test(disk, test_metadata_disk_provider_get_missing_no_discovery);
 
 	Suite *s = suite_create("metadata");
 	suite_add_tcase(s, validate);
 	suite_add_tcase(s, parse);
 	suite_add_tcase(s, retrieve);
+	suite_add_tcase(s, conf);
 	suite_add_tcase(s, disk);
 
 	return oidc_test_suite_run(s);
