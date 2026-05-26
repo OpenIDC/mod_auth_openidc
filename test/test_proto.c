@@ -589,6 +589,117 @@ START_TEST(test_proto_token_endpoint_auth_unknown_method) {
 }
 END_TEST
 
+START_TEST(test_proto_token_endpoint_auth_client_secret_jwt) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	apr_table_t *params = apr_table_make(r->pool, 2);
+	char *basic = NULL;
+	char *bearer = NULL;
+
+	/* client_secret_jwt: HMAC-SHA256 over a JWT signed with the client_secret;
+	 * the result is added to params as client_assertion + client_assertion_type */
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_CLIENT_SECRET_JWT, NULL, "myclient",
+							"mysecretmysecretmysecretmysecret", NULL,
+							"https://idp.example.com/token", params, NULL, &basic, &bearer),
+			 TRUE);
+	const char *assertion_type = apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION_TYPE);
+	ck_assert_ptr_nonnull(assertion_type);
+	ck_assert_str_eq(assertion_type, OIDC_PROTO_CLIENT_ASSERTION_TYPE_JWT_BEARER);
+	const char *assertion = apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION);
+	ck_assert_ptr_nonnull(assertion);
+	/* compact JWS format: <hdr>.<payload>.<sig> */
+	const char *dot1 = _oidc_strstr(assertion, ".");
+	ck_assert_ptr_nonnull(dot1);
+	const char *dot2 = _oidc_strstr(dot1 + 1, ".");
+	ck_assert_ptr_nonnull(dot2);
+	ck_assert_msg(_oidc_strstr(dot2 + 1, ".") == NULL, "compact JWS must have exactly two dots");
+}
+END_TEST
+
+START_TEST(test_proto_token_endpoint_auth_private_key_jwt_no_keys) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	apr_table_t *params = apr_table_make(r->pool, 1);
+	char *basic = NULL;
+	char *bearer = NULL;
+
+	/* private_key_jwt without any configured private keys must fail; passing
+	 * client_secret=NULL also exercises the "no secret + private_key_jwt"
+	 * branch that bypasses the public-client short-circuit */
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_PRIVATE_KEY_JWT, NULL, "myclient", NULL, NULL,
+							"https://idp.example.com/token", params, NULL, &basic, &bearer),
+			 FALSE);
+	ck_assert_ptr_null(apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION));
+}
+END_TEST
+
+START_TEST(test_proto_token_endpoint_auth_private_key_jwt_with_rsa_key) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+
+	/* load test/private.pem so cfg->private_keys has an RSA key with kid "rsa-1" */
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	const char *err = oidc_cmd_private_keys_set(
+	    cmd, NULL, apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir)));
+	ck_assert_msg(err == NULL, "could not load private key: %s", err);
+
+	apr_table_t *params = apr_table_make(r->pool, 2);
+	char *basic = NULL;
+	char *bearer = NULL;
+
+	/* private_key_jwt with no explicit algorithm: default for RSA is RS256;
+	 * the JWT must land in the params as client_assertion + assertion_type */
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, cfg, OIDC_PROTO_PRIVATE_KEY_JWT, NULL, "myclient", NULL,
+							NULL, "https://idp.example.com/token", params, NULL, &basic,
+							&bearer),
+			 TRUE);
+	const char *assertion = apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION);
+	ck_assert_ptr_nonnull(assertion);
+	ck_assert_str_eq(apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION_TYPE),
+			 OIDC_PROTO_CLIENT_ASSERTION_TYPE_JWT_BEARER);
+
+	/* decode the header (everything before the first '.') and confirm alg=RS256 + kid=rsa-1 */
+	const char *dot = _oidc_strstr(assertion, ".");
+	ck_assert_ptr_nonnull(dot);
+	char *enc_hdr = apr_pstrmemdup(r->pool, assertion, dot - assertion);
+	char *dec_hdr = NULL;
+	ck_assert_int_gt(oidc_util_base64url_decode(r->pool, &dec_hdr, enc_hdr), 0);
+	ck_assert_ptr_nonnull(_oidc_strstr(dec_hdr, "\"alg\":\"RS256\""));
+	ck_assert_ptr_nonnull(_oidc_strstr(dec_hdr, "\"kid\":\"rsa-1\""));
+}
+END_TEST
+
+START_TEST(test_proto_token_endpoint_auth_private_key_jwt_explicit_alg) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+
+	/* load private.pem as above */
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	const char *err = oidc_cmd_private_keys_set(
+	    cmd, NULL, apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir)));
+	ck_assert_msg(err == NULL, "could not load private key: %s", err);
+
+	apr_table_t *params = apr_table_make(r->pool, 2);
+	char *basic = NULL;
+	char *bearer = NULL;
+
+	/* explicit token_endpoint_auth_alg=RS384 must override the key-derived default */
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, cfg, OIDC_PROTO_PRIVATE_KEY_JWT, "RS384", "myclient", NULL,
+							NULL, "https://idp.example.com/token", params, NULL, &basic,
+							&bearer),
+			 TRUE);
+	const char *assertion = apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION);
+	ck_assert_ptr_nonnull(assertion);
+	const char *dot = _oidc_strstr(assertion, ".");
+	char *enc_hdr = apr_pstrmemdup(r->pool, assertion, dot - assertion);
+	char *dec_hdr = NULL;
+	ck_assert_int_gt(oidc_util_base64url_decode(r->pool, &dec_hdr, enc_hdr), 0);
+	ck_assert_ptr_nonnull(_oidc_strstr(dec_hdr, "\"alg\":\"RS384\""));
+}
+END_TEST
+
 START_TEST(test_proto_jwt_validate_edge_cases) {
 	request_rec *r = oidc_test_request_get();
 	apr_pool_t *pool = r->pool;
@@ -1646,6 +1757,10 @@ int main(void) {
 	tcase_add_test(core, test_proto_token_endpoint_auth_basic_and_post);
 	tcase_add_test(core, test_proto_token_endpoint_auth_bearer);
 	tcase_add_test(core, test_proto_token_endpoint_auth_unknown_method);
+	tcase_add_test(core, test_proto_token_endpoint_auth_client_secret_jwt);
+	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_no_keys);
+	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_with_rsa_key);
+	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_explicit_alg);
 	tcase_add_test(core, test_proto_jwt_validate_edge_cases);
 	tcase_add_test(core, test_proto_state_timestamp_and_bad_cookie);
 	tcase_add_test(core, test_proto_nonce_uniqueness);
