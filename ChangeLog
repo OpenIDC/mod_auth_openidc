@@ -1,4 +1,32 @@
 05/26/2026
+- test: close five coverage gaps identified from the `make
+  check-code-coverage` report; together they add 20 new unit tests
+  and one stub-fixture fix without touching production code:
+    - proto/userinfo.c: POST token-presentation, mandatory-sub
+      rejection and OIDC_NO_USERINFO_SUB skip, plus aggregated-claim
+      resolution via an inline alg=none JWT and the no-_claim_sources
+      short-circuit (5 tests in e2e_proto).
+    - proto/auth.c: client_secret_jwt assertion + private_key_jwt
+      with no keys, with the test/private.pem RSA key, and with an
+      explicit RS384 override; assertions decode the JWS header to
+      check alg/kid (4 tests in core).
+    - handle/request_uri.c: brand-new request_uri tcase covers all
+      three branches — missing parameter (400), cache miss (404),
+      and the cache-hit happy path that primes the content handler
+      and consumes the entry (3 tests).
+    - proto/discovery.c: account-based and URL-based webfinger entry
+      points driven against a known-closed loopback port via
+      oidc_test_http_free_port — covers the @-split / apr_uri_parse
+      stitching and the HTTP-failure return in the shared helper
+      (2 tests in core). TLS-mocked JSON-parsing branches are still
+      out of reach with the plaintext fixture.
+    - oauth.c: Basic-scheme bearer extraction (success + no-colon),
+      the OAuth-side redirect-URI dispatch (?jwks → OK, ?remove_at_cache
+      → 404), and oidc_oauth_metadata_provider_retrieve against the
+      loopback HTTP fixture for success and invalid-JSON-response
+      (6 tests). Required two fixture fixes in test/stub.c:
+      ap_getword_nulls was a no-op and ap_is_initial_req hard-coded
+      to 0 — both now match Apache semantics.
 - test: add a dispatch tcase to test_handle that drives
   oidc_handle_redirect_uri_request directly through six routing
   decisions (?jwks and ?dpop short-circuit to OK with r->user="",
