@@ -25,8 +25,8 @@ jobs:
       - name: Run build-wrapper
         run: |
           ./autogen.sh
-          ./configure --with-jq
-          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} make clean all
+          ./configure --with-jq --enable-code-coverage
+          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} make clean check-code-coverage
       - name: Run sonar-scanner
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -35,3 +35,4 @@ jobs:
         with:
           args: >
             --define sonar.cfamily.compile-commands=${{ env.BUILD_WRAPPER_OUT_DIR }}/compile_commands.json
+			--define sonar.cfamily.gcov.reportsPath=src
