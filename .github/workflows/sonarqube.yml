@@ -34,7 +34,7 @@ jobs:
         # from the repo root so SF: paths inside the reports are relative to the
         # project base and match sonar.sources=src,
         run: |
-		  cd src
+          cd src
           find . -path '*/.libs/*.gcda' | while read -r gcda; do
             obj_dir=$(dirname "$gcda")
             src_dir=$(dirname "$obj_dir")
