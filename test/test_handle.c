@@ -1396,6 +1396,315 @@ START_TEST(test_handle_legacy_check_cookie_domain) {
 END_TEST
 
 /*
+ * Additional tests for mod_auth_openidc.c top-level helpers — exercise the
+ * header/cookie scrubbing branches, the no-metadata static-provider path,
+ * the various OIDCPassClaimsAs / OIDCPassIDTokenAs / OIDCUnAuthAction
+ * dispatches, plus a handful of validate_redirect_url corner cases that
+ * the open-redirect payload list does not reach.
+ */
+
+START_TEST(test_handle_mod_scrub_headers_default_prefix) {
+	request_rec *r = oidc_test_request_get();
+
+	/* default OIDCClaimPrefix is OIDC_, so the OIDC_-prefixed header set by
+	 * the fixture must be removed while other headers survive */
+	apr_table_set(r->headers_in, "OIDC_foo", "evil");
+	apr_table_set(r->headers_in, "X-Original", "kept");
+
+	oidc_scrub_headers(r);
+
+	ck_assert_ptr_null(apr_table_get(r->headers_in, "OIDC_foo"));
+	ck_assert_str_eq(apr_table_get(r->headers_in, "X-Original"), "kept");
+}
+END_TEST
+
+START_TEST(test_handle_mod_scrub_headers_empty_prefix_with_whitelist) {
+	request_rec *r = oidc_test_request_get();
+
+	/* with an empty OIDCClaimPrefix the whitelist set is overlaid on top of
+	 * the default OIDC_-prefix scrub: this exercises the apr_hash_overlay
+	 * branch in oidc_scrub_headers */
+	cmd_parms *cmd_prefix = oidc_test_cmd_get(OIDCClaimPrefix);
+	ck_assert_ptr_null(oidc_cmd_claim_prefix_set(cmd_prefix, NULL, ""));
+	cmd_parms *cmd_wl = oidc_test_cmd_get(OIDCWhiteListedClaims);
+	ck_assert_ptr_null(oidc_cmd_white_listed_claims_set(cmd_wl, NULL, "X-Custom-Scrub"));
+
+	apr_table_set(r->headers_in, "X-Custom-Scrub", "should-be-scrubbed");
+	apr_table_set(r->headers_in, "X-Other", "should-survive");
+
+	oidc_scrub_headers(r);
+
+	ck_assert_ptr_null(apr_table_get(r->headers_in, "X-Custom-Scrub"));
+	ck_assert_str_eq(apr_table_get(r->headers_in, "X-Other"), "should-survive");
+}
+END_TEST
+
+START_TEST(test_handle_mod_scrub_headers_custom_prefix) {
+	request_rec *r = oidc_test_request_get();
+
+	/* a prefix that does not start with OIDC_ triggers the second scrub pass
+	 * that removes the custom-prefix headers on top of the OIDC_ ones */
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCClaimPrefix);
+	ck_assert_ptr_null(oidc_cmd_claim_prefix_set(cmd, NULL, "MY_"));
+
+	apr_table_set(r->headers_in, "MY_email", "scrubbed");
+	apr_table_set(r->headers_in, "OIDC_foo", "scrubbed");
+	apr_table_set(r->headers_in, "X-Other", "kept");
+
+	oidc_scrub_headers(r);
+
+	ck_assert_ptr_null(apr_table_get(r->headers_in, "MY_email"));
+	ck_assert_ptr_null(apr_table_get(r->headers_in, "OIDC_foo"));
+	ck_assert_str_eq(apr_table_get(r->headers_in, "X-Other"), "kept");
+}
+END_TEST
+
+START_TEST(test_handle_mod_strip_cookies_configured) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCStripCookies);
+	ck_assert_ptr_null(oidc_cmd_dir_strip_cookies_set(cmd, dir_cfg, "session-id"));
+	ck_assert_ptr_null(oidc_cmd_dir_strip_cookies_set(cmd, dir_cfg, "tracker"));
+
+	/* leading whitespace and an all-whitespace token both exercise the
+	 * cookie-trim and empty-segment-skip code paths */
+	apr_table_set(r->headers_in, "Cookie", "session-id=abc; keep=this; ; tracker=xyz; mod_auth_openidc_session=ok");
+
+	oidc_strip_cookies(r);
+
+	const char *cookies = apr_table_get(r->headers_in, "Cookie");
+	ck_assert_ptr_nonnull(cookies);
+	ck_assert_msg(_oidc_strstr(cookies, "session-id") == NULL, "session-id must be stripped, got: %s", cookies);
+	ck_assert_msg(_oidc_strstr(cookies, "tracker=") == NULL, "tracker must be stripped, got: %s", cookies);
+	ck_assert_msg(_oidc_strstr(cookies, "keep=this") != NULL, "unmatched cookies must survive, got: %s", cookies);
+	ck_assert_msg(_oidc_strstr(cookies, "mod_auth_openidc_session=ok") != NULL,
+		      "unrelated cookies must survive, got: %s", cookies);
+}
+END_TEST
+
+START_TEST(test_handle_mod_provider_static_config_no_metadata_url) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* default fixture has no metadata_dir and no provider_metadata_url => the
+	 * early-return branch hands back the configured provider as-is */
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_provider_static_config(r, c, &provider), TRUE);
+	ck_assert_ptr_nonnull(provider);
+	ck_assert_ptr_eq(provider, oidc_cfg_provider_get(c));
+}
+END_TEST
+
+START_TEST(test_handle_mod_set_app_claims_pass_none) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPassClaimsAs);
+	ck_assert_ptr_null(oidc_cmd_dir_pass_claims_as_set(cmd, dir_cfg, "none", NULL));
+
+	/* PASS_NONE short-circuits => returns TRUE without populating env vars */
+	json_t *claims = json_pack("{s:s}", "sub", "alice");
+	ck_assert_int_eq(oidc_set_app_claims(r, c, claims), TRUE);
+	ck_assert_ptr_null(apr_table_get(r->subprocess_env, "OIDC_CLAIM_sub"));
+	json_decref(claims);
+}
+END_TEST
+
+START_TEST(test_handle_mod_set_app_claims_pass_both) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* default OIDCPassClaimsAs is "both" => the claim ends up as an env var */
+	json_t *claims = json_pack("{s:s}", "sub", "alice");
+	ck_assert_int_eq(oidc_set_app_claims(r, c, claims), TRUE);
+	ck_assert_str_eq(apr_table_get(r->subprocess_env, "OIDC_CLAIM_sub"), "alice");
+	json_decref(claims);
+}
+END_TEST
+
+START_TEST(test_handle_mod_log_session_expires) {
+	request_rec *r = oidc_test_request_get();
+
+	/* exercises the rfc822-date + debug-log path; no observable side effect
+	 * other than not crashing on a far-future expiry */
+	oidc_log_session_expires(r, "test", apr_time_now() + apr_time_from_sec(900));
+}
+END_TEST
+
+START_TEST(test_handle_mod_check_cookie_domain_mismatch) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* session cookie issued for another host must be rejected */
+	oidc_session_set_cookie_domain(r, session, "other-host.example.com");
+	ck_assert_int_eq(oidc_check_cookie_domain(r, c, session), FALSE);
+
+	/* and a NULL session cookie domain must also fail (the OR-clause guard) */
+	oidc_session_set_cookie_domain(r, session, NULL);
+	ck_assert_int_eq(oidc_check_cookie_domain(r, c, session), FALSE);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_mod_get_provider_from_session_no_issuer) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* an empty session has no issuer => returns FALSE */
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_get_provider_from_session(r, c, session, &provider), FALSE);
+	ck_assert_ptr_null(provider);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_mod_get_provider_from_session_with_issuer) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	oidc_session_set_issuer(r, session, oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(c)));
+
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_get_provider_from_session(r, c, session, &provider), TRUE);
+	ck_assert_ptr_nonnull(provider);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_mod_get_remote_user_missing_claim) {
+	request_rec *r = oidc_test_request_get();
+	json_t *json = json_pack("{s:s}", "sub", "alice");
+	char *remote_user = NULL;
+
+	/* requested claim missing => FALSE, remote_user left untouched */
+	ck_assert_int_eq(oidc_get_remote_user(r, "preferred_username", NULL, NULL, json, &remote_user), FALSE);
+	ck_assert_ptr_null(remote_user);
+
+	/* claim present but not a string => FALSE as well */
+	json_object_set_new(json, "preferred_username", json_integer(42));
+	ck_assert_int_eq(oidc_get_remote_user(r, "preferred_username", NULL, NULL, json, &remote_user), FALSE);
+	json_decref(json);
+}
+END_TEST
+
+START_TEST(test_handle_mod_validate_redirect_url_backslash_relative) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	char *err_str = NULL, *err_desc = NULL;
+
+	/* a hostname-less URL whose only path is the empty string can't be
+	 * relative-validated: the "starts with /" check fails and we get
+	 * "Malformed URL" */
+	ck_assert_int_eq(oidc_validate_redirect_url(r, c, "evil", TRUE, &err_str, &err_desc), FALSE);
+	ck_assert_ptr_nonnull(err_str);
+	ck_assert_str_eq(err_str, "Malformed URL");
+}
+END_TEST
+
+START_TEST(test_handle_mod_validate_redirect_url_allowed) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCRedirectURLsAllowed);
+	ck_assert_ptr_null(oidc_cmd_redirect_urls_allowed_set(cmd, NULL, "^https://[a-z]+\\.example\\.com/"));
+
+	char *err_str = NULL, *err_desc = NULL;
+	/* matching the configured regex bypasses the same-host check */
+	ck_assert_int_eq(
+	    oidc_validate_redirect_url(r, c, "https://other.example.com/return", TRUE, &err_str, &err_desc), TRUE);
+
+	/* a URL that does not match the regex is rejected with "URL not allowed" */
+	err_str = NULL;
+	err_desc = NULL;
+	ck_assert_int_eq(oidc_validate_redirect_url(r, c, "https://evil.test/return", TRUE, &err_str, &err_desc),
+			 FALSE);
+	ck_assert_ptr_nonnull(err_str);
+	ck_assert_str_eq(err_str, "URL not allowed");
+}
+END_TEST
+
+START_TEST(test_handle_mod_session_pass_tokens_full) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPassRefreshToken);
+	ck_assert_ptr_null(oidc_cmd_dir_pass_refresh_token_set(cmd, dir_cfg, "On"));
+
+	/* populate every field oidc_session_pass_tokens propagates and mark the
+	 * session as new so the samesite-update branch flips needs_save */
+	oidc_session_set_access_token(r, session, "AT-1");
+	oidc_session_set_access_token_type(r, session, "Bearer");
+	oidc_session_set_access_token_expires(r, session, 3600);
+	oidc_session_set_refresh_token(r, session, "RT-1");
+	oidc_session_set_scope(r, session, "openid profile");
+	oidc_session_set_session_new(r, session, 1);
+
+	/* keep the inactivity timer far from expiry so it does not also trigger */
+	session->expiry = apr_time_now() + apr_time_from_sec(3600 * 24);
+
+	apr_byte_t needs_save = FALSE;
+	ck_assert_int_eq(oidc_session_pass_tokens(r, c, session, TRUE, &needs_save), TRUE);
+	ck_assert_int_eq(needs_save, TRUE);
+
+	/* the new-session bit must have been cleared as a side effect */
+	ck_assert_int_eq(oidc_session_get_session_new(r, session), 0);
+
+	/* values must have been propagated to subprocess_env */
+	ck_assert_str_eq(apr_table_get(r->subprocess_env, "OIDC_access_token"), "AT-1");
+	ck_assert_str_eq(apr_table_get(r->subprocess_env, "OIDC_access_token_type"), "Bearer");
+	ck_assert_str_eq(apr_table_get(r->subprocess_env, "OIDC_scope"), "openid profile");
+	ck_assert_str_eq(apr_table_get(r->subprocess_env, "OIDC_refresh_token"), "RT-1");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_mod_original_request_method_post_form) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+
+	/* with OIDCPreservePost off the function always returns GET regardless of
+	 * the request's actual method */
+	r->method_number = M_POST;
+	apr_table_set(r->headers_in, "Content-Type", "application/x-www-form-urlencoded");
+	ck_assert_str_eq(oidc_original_request_method(r, c, FALSE), OIDC_METHOD_GET);
+
+	/* with OIDCPreservePost on, POST+form-encoded => FORM_POST */
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPreservePost);
+	ck_assert_ptr_null(oidc_cmd_dir_preserve_post_set(cmd, dir_cfg, "On"));
+	ck_assert_str_eq(oidc_original_request_method(r, c, FALSE), OIDC_METHOD_FORM_POST);
+
+	/* same setting but the request is a GET => still GET */
+	r->method_number = M_GET;
+	ck_assert_str_eq(oidc_original_request_method(r, c, FALSE), OIDC_METHOD_GET);
+}
+END_TEST
+
+START_TEST(test_handle_mod_check_user_id_unauth_action_407) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCUnAuthAction);
+	ck_assert_ptr_null(oidc_cmd_dir_unauth_action_set(cmd, dir_cfg, "407", NULL));
+
+	int rc = oidc_check_user_id(r);
+	ck_assert_int_eq(rc, HTTP_PROXY_AUTHENTICATION_REQUIRED);
+}
+END_TEST
+
+/*
  * Tests for handle/revoke.c — oidc_revoke_session and oidc_revoke_at_cache_remove.
  */
 
@@ -2439,10 +2748,11 @@ START_TEST(test_handle_info_json_full_hook_data) {
 	oidc_session_set_idtoken(r, session, "id-token-jwt");
 	oidc_session_set_refresh_token(r, session, "RT-XYZ");
 
-	const char *fields[] = {
-	    OIDC_HOOK_INFO_TIMESTAMP,	    OIDC_HOOK_INFO_ACCES_TOKEN,	  OIDC_HOOK_INFO_ACCES_TOKEN_EXP,
-	    OIDC_HOOK_INFO_ID_TOKEN_HINT,   OIDC_HOOK_INFO_SESSION,	  OIDC_HOOK_INFO_SESSION_EXP,
-	    OIDC_HOOK_INFO_SESSION_TIMEOUT, OIDC_HOOK_INFO_SESSION_REMOTE_USER, OIDC_HOOK_INFO_REFRESH_TOKEN};
+	const char *fields[] = {OIDC_HOOK_INFO_TIMESTAMP,	OIDC_HOOK_INFO_ACCES_TOKEN,
+				OIDC_HOOK_INFO_ACCES_TOKEN_EXP, OIDC_HOOK_INFO_ID_TOKEN_HINT,
+				OIDC_HOOK_INFO_SESSION,		OIDC_HOOK_INFO_SESSION_EXP,
+				OIDC_HOOK_INFO_SESSION_TIMEOUT, OIDC_HOOK_INFO_SESSION_REMOTE_USER,
+				OIDC_HOOK_INFO_REFRESH_TOKEN};
 	for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); i++) {
 		cmd_parms *cmd = oidc_test_cmd_get(OIDCInfoHook);
 		ck_assert_ptr_null(oidc_cmd_info_hook_data_set(cmd, NULL, fields[i]));
@@ -2469,8 +2779,7 @@ START_TEST(test_handle_logout_revoke_tokens) {
 	oidc_session_t *session = NULL;
 	oidc_session_load(r, &session);
 
-	oidc_test_http_response_t resp = {
-	    .status_code = 200, .content_type = "application/json", .body = "{}"};
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = "{}"};
 	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
 	ck_assert_ptr_nonnull(srv);
 	oidc_cfg_provider_revocation_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
@@ -2550,8 +2859,8 @@ START_TEST(test_handle_refresh_grant_cache_hit) {
 	 * with nothing listening so any actual HTTP request would fail */
 	int free_port = oidc_test_http_free_port(r->pool);
 	ck_assert_int_ne(free_port, 0);
-	oidc_cfg_provider_token_endpoint_url_set(
-	    r->pool, provider, apr_psprintf(r->pool, "http://127.0.0.1:%d/token", free_port));
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider,
+						 apr_psprintf(r->pool, "http://127.0.0.1:%d/token", free_port));
 
 	char *new_at = NULL, *new_att = NULL;
 	ck_assert_int_eq(oidc_refresh_token_grant(r, c, session, provider, &new_at, &new_att, NULL), TRUE);
@@ -2731,6 +3040,26 @@ int main(void) {
 	tcase_add_test(legacy, test_handle_legacy_open_redirect);
 	tcase_add_test(legacy, test_handle_legacy_check_cookie_domain);
 
+	TCase *mod_main = tcase_create("mod_main");
+	tcase_add_checked_fixture(mod_main, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(mod_main, test_handle_mod_scrub_headers_default_prefix);
+	tcase_add_test(mod_main, test_handle_mod_scrub_headers_empty_prefix_with_whitelist);
+	tcase_add_test(mod_main, test_handle_mod_scrub_headers_custom_prefix);
+	tcase_add_test(mod_main, test_handle_mod_strip_cookies_configured);
+	tcase_add_test(mod_main, test_handle_mod_provider_static_config_no_metadata_url);
+	tcase_add_test(mod_main, test_handle_mod_set_app_claims_pass_none);
+	tcase_add_test(mod_main, test_handle_mod_set_app_claims_pass_both);
+	tcase_add_test(mod_main, test_handle_mod_log_session_expires);
+	tcase_add_test(mod_main, test_handle_mod_check_cookie_domain_mismatch);
+	tcase_add_test(mod_main, test_handle_mod_get_provider_from_session_no_issuer);
+	tcase_add_test(mod_main, test_handle_mod_get_provider_from_session_with_issuer);
+	tcase_add_test(mod_main, test_handle_mod_get_remote_user_missing_claim);
+	tcase_add_test(mod_main, test_handle_mod_validate_redirect_url_backslash_relative);
+	tcase_add_test(mod_main, test_handle_mod_validate_redirect_url_allowed);
+	tcase_add_test(mod_main, test_handle_mod_session_pass_tokens_full);
+	tcase_add_test(mod_main, test_handle_mod_original_request_method_post_form);
+	tcase_add_test(mod_main, test_handle_mod_check_user_id_unauth_action_407);
+
 	TCase *logout = tcase_create("logout");
 	tcase_add_checked_fixture(logout, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(logout, test_handle_logout_local_no_return_url);
@@ -2823,6 +3152,7 @@ int main(void) {
 	suite_add_tcase(s, info);
 	suite_add_tcase(s, dpop);
 	suite_add_tcase(s, legacy);
+	suite_add_tcase(s, mod_main);
 	suite_add_tcase(s, logout);
 	suite_add_tcase(s, content);
 	suite_add_tcase(s, authz_24);
