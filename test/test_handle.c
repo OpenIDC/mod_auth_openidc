@@ -2223,6 +2223,432 @@ START_TEST(test_handle_dispatch_logout_takes_precedence_over_post_authn) {
 }
 END_TEST
 
+/*
+ * Tests for handle/authz.c — drive oidc_authz_24_checker_claim through the
+ * anonymous shortcuts, the OAuth20 vs OpenID-Connect denial branches and
+ * the OIDCUnAutzAction policy paths so oidc_authz_24_unauthorized_user,
+ * oidc_authz_merge_claims, oidc_authz_get_claims_idtoken_scope and
+ * oidc_authz_skip_to_content_handler all get exercised.
+ */
+
+START_TEST(test_handle_authz_24_claim_granted_from_idtoken) {
+	request_rec *r = oidc_test_request_get();
+	r->user = apr_pstrdup(r->pool, "alice");
+	/* seed an id_token in the request state so merge_claims has something to evaluate */
+	json_t *id_token = json_pack("{s:s}", "sub", "alice");
+	oidc_request_state_json_set(r, OIDC_REQUEST_STATE_KEY_IDTOKEN, id_token);
+	json_decref(id_token);
+
+	authz_status rc = oidc_authz_24_checker_claim(r, "claim sub:alice", NULL);
+	ck_assert_int_eq(rc, AUTHZ_GRANTED);
+}
+END_TEST
+
+START_TEST(test_handle_authz_24_anonymous_unauth_pass) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCUnAuthAction);
+	ck_assert_ptr_null(oidc_cmd_dir_unauth_action_set(cmd, dir_cfg, "pass", NULL));
+
+	r->user = apr_pstrdup(r->pool, "");
+	authz_status rc = oidc_authz_24_checker_claim(r, "claim sub:nobody", NULL);
+	ck_assert_int_eq(rc, AUTHZ_GRANTED);
+}
+END_TEST
+
+START_TEST(test_handle_authz_24_anonymous_skip_via_discovery_state) {
+	request_rec *r = oidc_test_request_get();
+	r->user = apr_pstrdup(r->pool, "");
+	/* discovery state set => skip_to_content_handler short-circuits to GRANTED */
+	oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_DISCOVERY, "1");
+
+	authz_status rc = oidc_authz_24_checker_claim(r, "claim sub:nobody", NULL);
+	ck_assert_int_eq(rc, AUTHZ_GRANTED);
+}
+END_TEST
+
+START_TEST(test_handle_authz_24_anonymous_options_method) {
+	request_rec *r = oidc_test_request_get();
+	r->user = apr_pstrdup(r->pool, "");
+	r->method_number = M_OPTIONS;
+
+	authz_status rc = oidc_authz_24_checker_claim(r, "claim sub:nobody", NULL);
+	ck_assert_int_eq(rc, AUTHZ_GRANTED);
+}
+END_TEST
+
+START_TEST(test_handle_authz_24_oauth20_denied) {
+	request_rec *r = oidc_test_request_get();
+	r->user = apr_pstrdup(r->pool, "alice");
+	/* setting r->ap_auth_type doesn't influence ap_auth_type(r) in the fixture
+	 * (that reads from core_dir_config), so we just verify the worker denies
+	 * when the claim doesn't match the id_token */
+	r->ap_auth_type = apr_pstrdup(r->pool, OIDC_AUTH_TYPE_OPENID_OAUTH20);
+
+	authz_status rc = oidc_authz_24_checker_claim(r, "claim sub:bob", NULL);
+	ck_assert_int_eq(rc, AUTHZ_DENIED);
+}
+END_TEST
+
+START_TEST(test_handle_authz_24_oidc_unautz_return_401) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	r->user = apr_pstrdup(r->pool, "alice");
+	r->ap_auth_type = apr_pstrdup(r->pool, OIDC_AUTH_TYPE_OPENID_CONNECT);
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCUnAutzAction);
+	ck_assert_ptr_null(oidc_cmd_dir_unautz_action_set(cmd, dir_cfg, "401", "Denied"));
+
+	authz_status rc = oidc_authz_24_checker_claim(r, "claim sub:bob", NULL);
+	ck_assert_int_eq(rc, AUTHZ_DENIED);
+}
+END_TEST
+
+START_TEST(test_handle_authz_24_oidc_unautz_return_302) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	r->user = apr_pstrdup(r->pool, "alice");
+	r->ap_auth_type = apr_pstrdup(r->pool, OIDC_AUTH_TYPE_OPENID_CONNECT);
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCUnAutzAction);
+	ck_assert_ptr_null(oidc_cmd_dir_unautz_action_set(cmd, dir_cfg, "302", "https://www.example.com/denied"));
+
+	authz_status rc = oidc_authz_24_checker_claim(r, "claim sub:bob", NULL);
+	ck_assert_int_eq(rc, AUTHZ_DENIED);
+}
+END_TEST
+
+/*
+ * Additional tests for handle/content.c — exercise the request-state
+ * branches in oidc_content_handler that the existing tests don't reach.
+ */
+
+START_TEST(test_handle_content_handler_redirect_uri_http_state) {
+	request_rec *r = oidc_test_request_get();
+	r->parsed_uri.path = apr_pstrdup(r->pool, "/protected/");
+	r->args = "";
+	oidc_util_http_content_prep(r, "hi", 2, "text/plain");
+	int rc = oidc_content_handler(r);
+	ck_assert_int_eq(rc, OK);
+}
+END_TEST
+
+START_TEST(test_handle_content_handler_redirect_uri_html_state) {
+	request_rec *r = oidc_test_request_get();
+	r->parsed_uri.path = apr_pstrdup(r->pool, "/protected/");
+	r->args = "";
+	oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_HTML, "T", NULL, NULL, "<p>x</p>");
+	int rc = oidc_content_handler(r);
+	ck_assert_int_eq(rc, OK);
+}
+END_TEST
+
+START_TEST(test_handle_content_handler_redirect_uri_info_no_session) {
+	request_rec *r = oidc_test_request_get();
+	r->parsed_uri.path = apr_pstrdup(r->pool, "/protected/");
+	r->args = "info=json";
+	/* dispatches to oidc_info_request which short-circuits to 401 (no remote_user) */
+	int rc = oidc_content_handler(r);
+	ck_assert_int_eq(rc, HTTP_UNAUTHORIZED);
+}
+END_TEST
+
+START_TEST(test_handle_content_handler_redirect_uri_dpop_disabled) {
+	request_rec *r = oidc_test_request_get();
+	r->parsed_uri.path = apr_pstrdup(r->pool, "/protected/");
+	r->args = "dpop=1";
+	int rc = oidc_content_handler(r);
+	/* DPoP is disabled in the fixture => oidc_dpop_request returns BAD_REQUEST */
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+}
+END_TEST
+
+START_TEST(test_handle_content_handler_discovery_state) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	r->parsed_uri.path = apr_pstrdup(r->pool, "/somewhere/else");
+	r->args = "";
+	/* configure an external discovery handler so oidc_discovery_request takes the
+	 * 302-to-external-page path rather than dereferencing a NULL metadata dir */
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCDiscoverURL);
+	ck_assert_ptr_null(oidc_cmd_dir_discover_url_set(cmd, dir_cfg, "https://disco.example.com/select"));
+	oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_DISCOVERY, "1");
+	int rc = oidc_content_handler(r);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+}
+END_TEST
+
+START_TEST(test_handle_content_handler_authn_post_state) {
+	request_rec *r = oidc_test_request_get();
+	r->parsed_uri.path = apr_pstrdup(r->pool, "/somewhere/else");
+	r->args = "";
+	oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_AUTHN_POST, "Auth", NULL, NULL, "<form>x</form>");
+	int rc = oidc_content_handler(r);
+	ck_assert_int_eq(rc, OK);
+}
+END_TEST
+
+START_TEST(test_handle_content_handler_authn_preserve_state) {
+	request_rec *r = oidc_test_request_get();
+	r->parsed_uri.path = apr_pstrdup(r->pool, "/somewhere/else");
+	r->args = "";
+	oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE, "Pres", NULL, NULL, "<p>x</p>");
+	int rc = oidc_content_handler(r);
+	ck_assert_int_eq(rc, OK);
+}
+END_TEST
+
+START_TEST(test_handle_content_handler_http_state_non_redirect) {
+	request_rec *r = oidc_test_request_get();
+	r->parsed_uri.path = apr_pstrdup(r->pool, "/somewhere/else");
+	r->args = "";
+	oidc_util_http_content_prep(r, "x", 1, "text/plain");
+	int rc = oidc_content_handler(r);
+	ck_assert_int_eq(rc, OK);
+}
+END_TEST
+
+START_TEST(test_handle_content_handler_html_state_non_redirect) {
+	request_rec *r = oidc_test_request_get();
+	r->parsed_uri.path = apr_pstrdup(r->pool, "/somewhere/else");
+	r->args = "";
+	oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_HTML, "T", NULL, NULL, "<p>x</p>");
+	int rc = oidc_content_handler(r);
+	ck_assert_int_eq(rc, OK);
+}
+END_TEST
+
+/*
+ * Additional test for handle/info.c — configure every hook field that the
+ * test fixture can populate from session state so oidc_info_build_json
+ * exercises the access_token, id_token_hint, refresh_token, session-info
+ * and session-expiry branches plus the oidc_info_add_access_token /
+ * oidc_info_add_session helpers.
+ */
+
+START_TEST(test_handle_info_json_full_hook_data) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	session->remote_user = apr_pstrdup(r->pool, "alice");
+	oidc_session_set_access_token(r, session, "AT-XYZ");
+	oidc_session_set_access_token_type(r, session, "Bearer");
+	oidc_session_set_access_token_expires(r, session, 3600);
+	oidc_session_set_idtoken(r, session, "id-token-jwt");
+	oidc_session_set_refresh_token(r, session, "RT-XYZ");
+
+	const char *fields[] = {
+	    OIDC_HOOK_INFO_TIMESTAMP,	    OIDC_HOOK_INFO_ACCES_TOKEN,	  OIDC_HOOK_INFO_ACCES_TOKEN_EXP,
+	    OIDC_HOOK_INFO_ID_TOKEN_HINT,   OIDC_HOOK_INFO_SESSION,	  OIDC_HOOK_INFO_SESSION_EXP,
+	    OIDC_HOOK_INFO_SESSION_TIMEOUT, OIDC_HOOK_INFO_SESSION_REMOTE_USER, OIDC_HOOK_INFO_REFRESH_TOKEN};
+	for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); i++) {
+		cmd_parms *cmd = oidc_test_cmd_get(OIDCInfoHook);
+		ck_assert_ptr_null(oidc_cmd_info_hook_data_set(cmd, NULL, fields[i]));
+	}
+
+	r->args = "info=json&extend_session=false";
+	int rc = oidc_info_request(r, c, session, FALSE);
+	ck_assert_int_eq(rc, OK);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/*
+ * Additional tests for handle/logout.c — drive oidc_logout_revoke_tokens
+ * by configuring a revocation endpoint pointing to the loopback HTTP
+ * server and verifying the POST body that lands on the server.
+ */
+
+START_TEST(test_handle_logout_revoke_tokens) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = "{}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_revocation_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	/* session must have a remote_user (so the revoke branch runs) and an issuer
+	 * matching the static provider so oidc_get_provider_from_session resolves it */
+	session->remote_user = apr_pstrdup(r->pool, "alice");
+	oidc_session_set_issuer(r, session, oidc_cfg_provider_issuer_get(provider));
+	oidc_session_set_refresh_token(r, session, "RT-revoke");
+
+	int rc = oidc_logout_request(r, c, session, NULL, TRUE);
+	ck_assert_int_eq(rc, OK);
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_ptr_nonnull(cap);
+	ck_assert_str_eq(cap->method, "POST");
+	ck_assert_msg(_oidc_strstr(cap->body, "token=RT-revoke") != NULL,
+		      "revocation POST must include the refresh token: got %s", cap->body);
+	ck_assert_msg(_oidc_strstr(cap->body, "token_type_hint=refresh_token") != NULL,
+		      "revocation POST must hint refresh_token as the token type");
+
+	oidc_test_http_server_stop(srv);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_logout_revoke_tokens_no_endpoint) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* no revocation_endpoint URL => oidc_logout_revoke_tokens early-returns silently */
+	session->remote_user = apr_pstrdup(r->pool, "alice");
+	oidc_session_set_issuer(r, session, oidc_cfg_provider_issuer_get(provider));
+	oidc_session_set_refresh_token(r, session, "RT-x");
+
+	int rc = oidc_logout_request(r, c, session, NULL, TRUE);
+	ck_assert_int_eq(rc, OK);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/*
+ * Additional tests for handle/refresh.c — the cache-hit fast path and the
+ * id_token-in-response path that oidc_refresh_token_grant_apply_id_token
+ * handles.
+ */
+
+START_TEST(test_handle_refresh_grant_cache_hit) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	oidc_session_set_refresh_token(r, session, "RT-CACHED");
+
+	/* first call hits the token endpoint and populates the refresh-token cache */
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/json",
+					  .body = "{\"access_token\":\"AT-FRESH\",\"token_type\":\"Bearer\","
+						  "\"expires_in\":3600,\"refresh_token\":\"RT-CACHED\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+	oidc_cfg_provider_scope_set(r->pool, provider, "openid");
+
+	ck_assert_int_eq(oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, NULL), TRUE);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+
+	/* second call must come from the cache; point the token endpoint at a port
+	 * with nothing listening so any actual HTTP request would fail */
+	int free_port = oidc_test_http_free_port(r->pool);
+	ck_assert_int_ne(free_port, 0);
+	oidc_cfg_provider_token_endpoint_url_set(
+	    r->pool, provider, apr_psprintf(r->pool, "http://127.0.0.1:%d/token", free_port));
+
+	char *new_at = NULL, *new_att = NULL;
+	ck_assert_int_eq(oidc_refresh_token_grant(r, c, session, provider, &new_at, &new_att, NULL), TRUE);
+	ck_assert_str_eq(new_at, "AT-FRESH");
+	ck_assert_str_eq(new_att, "Bearer");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_refresh_grant_with_id_token) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	oidc_session_set_refresh_token(r, session, "OLD-RT");
+
+	/* the token endpoint also returns an id_token => triggers
+	 * oidc_refresh_token_grant_apply_id_token (parse, claims store, expiry update) */
+	const char *secret = "refresh-flow-shared-secret-long-enough";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+	char *id_token =
+	    e2e_sign_idtoken_hs256(r, "https://idp.example.com", "client_id", "alice", "n-refresh", secret);
+
+	oidc_test_http_response_t resp = {0};
+	resp.status_code = 200;
+	resp.content_type = "application/json";
+	resp.body = apr_psprintf(r->pool,
+				 "{\"access_token\":\"AT-NEW\",\"token_type\":\"Bearer\","
+				 "\"expires_in\":3600,\"refresh_token\":\"NEW-RT\",\"id_token\":\"%s\"}",
+				 id_token);
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+	oidc_cfg_provider_scope_set(r->pool, provider, "openid");
+
+	char *new_id = NULL;
+	ck_assert_int_eq(oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, &new_id), TRUE);
+	ck_assert_ptr_nonnull(new_id);
+	ck_assert_str_eq(new_id, id_token);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/*
+ * Additional test for handle/discovery.c — the metadata-dir + test-config
+ * branch of oidc_discovery_response_authenticate which is otherwise
+ * unreached.
+ */
+
+START_TEST(test_handle_discovery_response_test_config_short_circuit) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	char *tmpl = apr_pstrdup(r->pool, "/tmp/oidc-test-disco.XXXXXX");
+	ck_assert_msg(mkdtemp(tmpl) != NULL, "could not create temp metadata dir at %s", tmpl);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCMetadataDir);
+	ck_assert_ptr_null(oidc_cmd_metadata_dir_set(cmd, NULL, tmpl));
+
+	const char *provider_json = "{\"issuer\":\"https://idp.example.com\","
+				    "\"authorization_endpoint\":\"https://idp.example.com/authorize\","
+				    "\"token_endpoint\":\"https://idp.example.com/token\","
+				    "\"jwks_uri\":\"https://idp.example.com/jwks\","
+				    "\"response_types_supported\":[\"code\"],"
+				    "\"token_endpoint_auth_methods_supported\":[\"client_secret_basic\"]}";
+	apr_file_t *f = NULL;
+	ck_assert_int_eq(apr_file_open(&f, apr_psprintf(r->pool, "%s/idp.example.com.provider", tmpl),
+				       APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE,
+				       APR_FPROT_UREAD | APR_FPROT_UWRITE, r->pool),
+			 APR_SUCCESS);
+	apr_size_t len = (apr_size_t)_oidc_strlen(provider_json);
+	apr_file_write(f, provider_json, &len);
+	apr_file_close(f);
+	const char *client_json = "{\"client_id\":\"rp-test\",\"client_secret\":\"sekret\"}";
+	ck_assert_int_eq(apr_file_open(&f, apr_psprintf(r->pool, "%s/idp.example.com.client", tmpl),
+				       APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE,
+				       APR_FPROT_UREAD | APR_FPROT_UWRITE, r->pool),
+			 APR_SUCCESS);
+	len = (apr_size_t)_oidc_strlen(client_json);
+	apr_file_write(f, client_json, &len);
+	apr_file_close(f);
+
+	/* iss + target_link_uri on our host + test-config => the authenticate branch
+	 * resolves the issuer from the metadata dir and short-circuits to OK */
+	r->args = "iss=https%3A%2F%2Fidp.example.com"
+		  "&target_link_uri=https%3A%2F%2Fwww.example.com%2Fprotected%2F"
+		  "&test-config=1";
+	int rc = oidc_discovery_response(r, c);
+	ck_assert_int_eq(rc, OK);
+}
+END_TEST
+
 int main(void) {
 	TCase *userinfo = tcase_create("userinfo");
 	tcase_add_checked_fixture(userinfo, oidc_test_setup, oidc_test_teardown);
@@ -2253,6 +2679,8 @@ int main(void) {
 	tcase_add_test(refresh, test_handle_refresh_request_session_has_no_access_token);
 	tcase_add_test(refresh, test_handle_refresh_request_access_token_mismatch);
 	tcase_add_test(refresh, test_handle_refresh_request_happy_path);
+	tcase_add_test(refresh, test_handle_refresh_grant_cache_hit);
+	tcase_add_test(refresh, test_handle_refresh_grant_with_id_token);
 
 	TCase *response = tcase_create("response");
 	tcase_add_checked_fixture(response, oidc_test_setup, oidc_test_teardown);
@@ -2278,6 +2706,7 @@ int main(void) {
 	tcase_add_test(discovery, test_handle_discovery_response_static_provider_iss_mismatch);
 	tcase_add_test(discovery, test_handle_discovery_response_target_link_uri_open_redirect);
 	tcase_add_test(discovery, test_handle_discovery_request_with_metadata_dir);
+	tcase_add_test(discovery, test_handle_discovery_response_test_config_short_circuit);
 
 	TCase *info = tcase_create("info");
 	tcase_add_checked_fixture(info, oidc_test_setup, oidc_test_teardown);
@@ -2285,6 +2714,7 @@ int main(void) {
 	tcase_add_test(info, test_handle_info_no_remote_user);
 	tcase_add_test(info, test_handle_info_no_hook_data_configured);
 	tcase_add_test(info, test_handle_info_json_happy_path);
+	tcase_add_test(info, test_handle_info_json_full_hook_data);
 
 	TCase *dpop = tcase_create("dpop");
 	tcase_add_checked_fixture(dpop, oidc_test_setup, oidc_test_teardown);
@@ -2315,6 +2745,8 @@ int main(void) {
 	tcase_add_test(logout, test_handle_logout_backchannel_nonce_claim_rejected);
 	tcase_add_test(logout, test_handle_logout_op_request_with_id_token_hint);
 	tcase_add_test(logout, test_handle_logout_op_request_no_session_no_extra_params);
+	tcase_add_test(logout, test_handle_logout_revoke_tokens);
+	tcase_add_test(logout, test_handle_logout_revoke_tokens_no_endpoint);
 
 	TCase *content = tcase_create("content");
 	tcase_add_checked_fixture(content, oidc_test_setup, oidc_test_teardown);
@@ -2322,6 +2754,25 @@ int main(void) {
 	tcase_add_test(content, test_handle_content_handler_jwks);
 	tcase_add_test(content, test_handle_content_handler_unknown_redirect_uri_request);
 	tcase_add_test(content, test_handle_content_handler_non_redirect_no_state);
+	tcase_add_test(content, test_handle_content_handler_redirect_uri_http_state);
+	tcase_add_test(content, test_handle_content_handler_redirect_uri_html_state);
+	tcase_add_test(content, test_handle_content_handler_redirect_uri_info_no_session);
+	tcase_add_test(content, test_handle_content_handler_redirect_uri_dpop_disabled);
+	tcase_add_test(content, test_handle_content_handler_discovery_state);
+	tcase_add_test(content, test_handle_content_handler_authn_post_state);
+	tcase_add_test(content, test_handle_content_handler_authn_preserve_state);
+	tcase_add_test(content, test_handle_content_handler_http_state_non_redirect);
+	tcase_add_test(content, test_handle_content_handler_html_state_non_redirect);
+
+	TCase *authz_24 = tcase_create("authz_24");
+	tcase_add_checked_fixture(authz_24, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(authz_24, test_handle_authz_24_claim_granted_from_idtoken);
+	tcase_add_test(authz_24, test_handle_authz_24_anonymous_unauth_pass);
+	tcase_add_test(authz_24, test_handle_authz_24_anonymous_skip_via_discovery_state);
+	tcase_add_test(authz_24, test_handle_authz_24_anonymous_options_method);
+	tcase_add_test(authz_24, test_handle_authz_24_oauth20_denied);
+	tcase_add_test(authz_24, test_handle_authz_24_oidc_unautz_return_401);
+	tcase_add_test(authz_24, test_handle_authz_24_oidc_unautz_return_302);
 
 	TCase *checkuid = tcase_create("check_user_id");
 	tcase_add_checked_fixture(checkuid, oidc_test_setup, oidc_test_teardown);
@@ -2374,6 +2825,7 @@ int main(void) {
 	suite_add_tcase(s, legacy);
 	suite_add_tcase(s, logout);
 	suite_add_tcase(s, content);
+	suite_add_tcase(s, authz_24);
 	suite_add_tcase(s, checkuid);
 	suite_add_tcase(s, revoke);
 	suite_add_tcase(s, session_mgmt);
