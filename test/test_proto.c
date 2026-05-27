@@ -1771,6 +1771,281 @@ START_TEST(test_proto_supported_flows_exhaustive) {
 }
 END_TEST
 
+/*
+ * Additional response.c / dpop.c tests — exercise the early-failure branches
+ * in each response-type handler (where the static validate_response_type_mode_issuer
+ * rejects mismatched params) and the happy-path of oidc_proto_dpop_create when
+ * a private signing key is available.
+ */
+
+START_TEST(test_proto_response_code_idtoken_missing_code) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_proto_state_t *ps = oidc_proto_state_new();
+	oidc_jwt_t *jwt = NULL;
+	apr_table_t *params = apr_table_make(r->pool, 0);
+
+	/* "code id_token" handler requires both code and id_token in params; empty
+	 * params trigger validate_response_type's "missing code" branch => FALSE */
+	ck_assert_int_eq(
+	    oidc_proto_response_code_idtoken(r, c, ps, provider, params, OIDC_PROTO_RESPONSE_MODE_FRAGMENT, &jwt),
+	    FALSE);
+	oidc_proto_state_destroy(ps);
+}
+END_TEST
+
+START_TEST(test_proto_response_code_token_missing_code) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_proto_state_t *ps = oidc_proto_state_new();
+	oidc_jwt_t *jwt = NULL;
+	apr_table_t *params = apr_table_make(r->pool, 0);
+
+	ck_assert_int_eq(
+	    oidc_proto_response_code_token(r, c, ps, provider, params, OIDC_PROTO_RESPONSE_MODE_FRAGMENT, &jwt), FALSE);
+	oidc_proto_state_destroy(ps);
+}
+END_TEST
+
+START_TEST(test_proto_response_code_idtoken_token_missing_params) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_proto_state_t *ps = oidc_proto_state_new();
+	oidc_jwt_t *jwt = NULL;
+	apr_table_t *params = apr_table_make(r->pool, 0);
+
+	ck_assert_int_eq(
+	    oidc_proto_response_code_idtoken_token(r, c, ps, provider, params, OIDC_PROTO_RESPONSE_MODE_FRAGMENT, &jwt),
+	    FALSE);
+	oidc_proto_state_destroy(ps);
+}
+END_TEST
+
+START_TEST(test_proto_response_idtoken_token_missing_params) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_proto_state_t *ps = oidc_proto_state_new();
+	oidc_jwt_t *jwt = NULL;
+	apr_table_t *params = apr_table_make(r->pool, 0);
+
+	ck_assert_int_eq(
+	    oidc_proto_response_idtoken_token(r, c, ps, provider, params, OIDC_PROTO_RESPONSE_MODE_FRAGMENT, &jwt),
+	    FALSE);
+	oidc_proto_state_destroy(ps);
+}
+END_TEST
+
+START_TEST(test_proto_response_code_iss_mismatch) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_proto_state_t *ps = oidc_proto_state_new();
+	oidc_jwt_t *jwt = NULL;
+
+	/* iss in the params does not match the configured provider issuer =>
+	 * validate_issuer_client_id rejects it before any other check */
+	apr_table_t *params = apr_table_make(r->pool, 2);
+	apr_table_set(params, OIDC_PROTO_CODE, "the-code");
+	apr_table_set(params, OIDC_PROTO_ISS, "https://wrong.example.com");
+
+	ck_assert_int_eq(oidc_proto_response_code(r, c, ps, provider, params, OIDC_PROTO_RESPONSE_MODE_QUERY, &jwt),
+			 FALSE);
+	oidc_proto_state_destroy(ps);
+}
+END_TEST
+
+START_TEST(test_proto_response_code_client_id_mismatch) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_proto_state_t *ps = oidc_proto_state_new();
+	oidc_jwt_t *jwt = NULL;
+
+	apr_table_t *params = apr_table_make(r->pool, 2);
+	apr_table_set(params, OIDC_PROTO_CODE, "the-code");
+	apr_table_set(params, OIDC_PROTO_CLIENT_ID, "wrong-client");
+
+	ck_assert_int_eq(oidc_proto_response_code(r, c, ps, provider, params, OIDC_PROTO_RESPONSE_MODE_QUERY, &jwt),
+			 FALSE);
+	oidc_proto_state_destroy(ps);
+}
+END_TEST
+
+START_TEST(test_proto_response_code_response_mode_mismatch) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_proto_state_t *ps = oidc_proto_state_new();
+	oidc_jwt_t *jwt = NULL;
+
+	/* request explicitly asks for response_mode=query but the OP responds
+	 * via fragment => validate_response_mode rejects */
+	oidc_proto_state_set_response_mode(ps, OIDC_PROTO_RESPONSE_MODE_QUERY);
+	apr_table_t *params = apr_table_make(r->pool, 1);
+	apr_table_set(params, OIDC_PROTO_CODE, "the-code");
+
+	ck_assert_int_eq(oidc_proto_response_code(r, c, ps, provider, params, OIDC_PROTO_RESPONSE_MODE_FRAGMENT, &jwt),
+			 FALSE);
+	oidc_proto_state_destroy(ps);
+}
+END_TEST
+
+START_TEST(test_proto_response_code_unexpected_id_token) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_proto_state_t *ps = oidc_proto_state_new();
+	oidc_jwt_t *jwt = NULL;
+
+	/* "code" response_type must NOT carry an id_token in params — covers the
+	 * "response contains an unexpected id_token" branch */
+	apr_table_t *params = apr_table_make(r->pool, 2);
+	apr_table_set(params, OIDC_PROTO_CODE, "the-code");
+	apr_table_set(params, OIDC_PROTO_ID_TOKEN, "unexpected");
+
+	ck_assert_int_eq(oidc_proto_response_code(r, c, ps, provider, params, OIDC_PROTO_RESPONSE_MODE_QUERY, &jwt),
+			 FALSE);
+	oidc_proto_state_destroy(ps);
+}
+END_TEST
+
+START_TEST(test_proto_dpop_create_with_rsa_private_key) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* load test/private.pem so cfg->private_keys has an RSA signing key */
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	const char *err = oidc_cmd_private_keys_set(
+	    cmd, NULL, apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir)));
+	ck_assert_msg(err == NULL, "could not load private key: %s", err);
+
+	/* DPoP proof with access_token + nonce => exercises both optional branches
+	 * (ath claim and nonce claim) on top of the happy-path JWT sign+serialize */
+	char *dpop = NULL;
+	ck_assert_int_eq(oidc_proto_dpop_create(r, c, "https://idp.example.com/token", "POST", "the-access-token",
+						"the-dpop-nonce", &dpop),
+			 TRUE);
+	ck_assert_ptr_nonnull(dpop);
+
+	/* the serialized JWT has 3 dot-separated segments */
+	const char *first = _oidc_strstr(dpop, ".");
+	ck_assert_ptr_nonnull(first);
+	const char *second = _oidc_strstr(first + 1, ".");
+	ck_assert_ptr_nonnull(second);
+
+	/* base64url-decode the header and confirm typ=dpop+jwt */
+	char *enc_hdr = apr_pstrmemdup(r->pool, dpop, first - dpop);
+	char *dec_hdr = NULL;
+	ck_assert_int_gt(oidc_util_base64url_decode(r->pool, &dec_hdr, enc_hdr), 0);
+	ck_assert_ptr_nonnull(_oidc_strstr(dec_hdr, "\"typ\":\"dpop+jwt\""));
+}
+END_TEST
+
+/* build an HS256-signed JWT payload using the symmetric key derived from `secret`;
+ * shared helper for the JWT-userinfo-response test */
+static char *e2e_sign_jwt_hs256_payload(request_rec *r, const char *secret, json_t *payload) {
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	ck_assert_int_eq(oidc_util_key_symmetric_create(r, secret, 0, NULL, TRUE, &jwk), TRUE);
+	oidc_jwt_t *jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(r->pool, "HS256");
+	json_object_update(jwt->payload.value.json, payload);
+	ck_assert_int_eq(oidc_jwt_sign(r->pool, jwt, jwk, FALSE, &err), TRUE);
+	char *cser = oidc_jose_jwt_serialize(r->pool, jwt, &err);
+	oidc_jwk_destroy(jwk);
+	oidc_jwt_destroy(jwt);
+	return cser;
+}
+
+START_TEST(test_proto_userinfo_request_signed_jwt_response) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	/* configure HS256 signed userinfo responses; client_secret doubles as the HMAC key */
+	const char *secret = "userinfo-signed-response-secret-long";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+	ck_assert_ptr_null(oidc_cfg_provider_userinfo_signed_response_alg_set(r->pool, provider, "HS256"));
+
+	json_t *payload = json_pack("{s:s,s:s}", "sub", "alice", "name", "Alice JWT");
+	char *jwt_str = e2e_sign_jwt_hs256_payload(r, secret, payload);
+	json_decref(payload);
+
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/jwt", .body = jwt_str};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	/* the JWT-decoding path in oidc_proto_userinfo_response_jwt_parse must extract claims */
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 TRUE);
+	ck_assert_ptr_nonnull(userinfo_claims);
+	ck_assert_ptr_nonnull(userinfo_jwt);
+	ck_assert_str_eq(userinfo_jwt, jwt_str);
+	const char *name = json_string_value(json_object_get(userinfo_claims, "name"));
+	ck_assert_ptr_nonnull(name);
+	ck_assert_str_eq(name, "Alice JWT");
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	json_decref(userinfo_claims);
+}
+END_TEST
+
+START_TEST(test_proto_request_auth_with_copy_and_remove_from_request) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	/* same shape as the request_object_rs256 test but with copy_and_remove_from_request
+	 * including "state" — this exercises oidc_request_uri_delete_from_request */
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	ck_assert_ptr_null(oidc_cmd_private_keys_set(
+	    cmd, NULL, apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-sig#%s/private.pem", dir))));
+
+	oidc_cfg_provider_request_object_set(
+	    r->pool, provider, "{\"crypto\":{\"sign_alg\":\"RS256\"},\"copy_and_remove_from_request\":[\"state\"]}");
+
+	oidc_proto_state_t *ps = e2e_make_proto_state(r);
+	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-to-strip", ps,
+					 NULL, NULL, NULL, NULL);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_msg(_oidc_strstr(loc, "request_uri=") != NULL, "request_uri= parameter must appear in the URL");
+	/* state was marked copy_and_remove => it must have been stripped from the redirect */
+	ck_assert_msg(_oidc_strstr(loc, "state=") == NULL, "state= must have been removed from the URL, got: %s", loc);
+}
+END_TEST
+
+START_TEST(test_proto_dpop_create_no_access_token_no_nonce) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	ck_assert_ptr_null(oidc_cmd_private_keys_set(
+	    cmd, NULL, apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir))));
+
+	/* no access_token, no nonce => skips both optional claims */
+	char *dpop = NULL;
+	ck_assert_int_eq(oidc_proto_dpop_create(r, c, "https://idp.example.com/token", "POST", NULL, NULL, &dpop),
+			 TRUE);
+	ck_assert_ptr_nonnull(dpop);
+}
+END_TEST
+
 int main(void) {
 	TCase *core = tcase_create("core");
 	tcase_add_checked_fixture(core, oidc_test_setup, oidc_test_teardown);
@@ -1821,6 +2096,16 @@ int main(void) {
 	tcase_add_test(core, test_proto_discovery_account_unreachable_endpoint);
 	tcase_add_test(core, test_proto_discovery_url_unreachable_endpoint);
 	tcase_add_test(core, test_proto_supported_flows_exhaustive);
+	tcase_add_test(core, test_proto_response_code_idtoken_missing_code);
+	tcase_add_test(core, test_proto_response_code_token_missing_code);
+	tcase_add_test(core, test_proto_response_code_idtoken_token_missing_params);
+	tcase_add_test(core, test_proto_response_idtoken_token_missing_params);
+	tcase_add_test(core, test_proto_response_code_iss_mismatch);
+	tcase_add_test(core, test_proto_response_code_client_id_mismatch);
+	tcase_add_test(core, test_proto_response_code_response_mode_mismatch);
+	tcase_add_test(core, test_proto_response_code_unexpected_id_token);
+	tcase_add_test(core, test_proto_dpop_create_with_rsa_private_key);
+	tcase_add_test(core, test_proto_dpop_create_no_access_token_no_nonce);
 
 	TCase *e2e = tcase_create("e2e_proto");
 	tcase_add_checked_fixture(e2e, oidc_test_setup, oidc_test_teardown);
@@ -1840,6 +2125,8 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_private_keys_load_from_pem);
 	tcase_add_test(e2e, test_proto_request_auth_with_request_object_none);
 	tcase_add_test(e2e, test_proto_request_auth_with_request_object_rs256);
+	tcase_add_test(e2e, test_proto_request_auth_with_copy_and_remove_from_request);
+	tcase_add_test(e2e, test_proto_userinfo_request_signed_jwt_response);
 	tcase_add_test(e2e, test_proto_request_auth_post_html);
 	tcase_add_test(e2e, test_proto_request_auth_no_client_id);
 	tcase_add_test(e2e, test_proto_request_auth_unknown_method);
