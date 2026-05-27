@@ -1222,8 +1222,7 @@ START_TEST(test_cmd_dir_refresh_access_token_before_expiry) {
 	ck_assert_int_eq(oidc_cfg_dir_refresh_access_token_before_expiry_get(r), 60);
 
 	/* the 2nd arg sets the on-error action */
-	ck_assert_ptr_null(
-	    oidc_cmd_dir_refresh_access_token_before_expiry_set(cmd, dir_cfg, "120", "logout_on_error"));
+	ck_assert_ptr_null(oidc_cmd_dir_refresh_access_token_before_expiry_set(cmd, dir_cfg, "120", "logout_on_error"));
 	ck_assert_int_eq(oidc_cfg_dir_action_on_error_refresh_get(r), OIDC_ON_ERROR_LOGOUT);
 
 	/* below the min (0) or unknown 2nd arg are rejected */
@@ -1628,8 +1627,8 @@ START_TEST(test_cmd_provider_endpoint_urls) {
 	ck_assert_ptr_nonnull(oidc_cmd_provider_authorization_endpoint_url_set(cmd, NULL, "not-a-url"));
 
 	cmd = oidc_test_cmd_get(OIDCProviderPushedAuthorizationRequestEndpoint);
-	ck_assert_ptr_null(oidc_cmd_provider_pushed_authorization_request_endpoint_url_set(
-	    cmd, NULL, "https://idp.example.com/par"));
+	ck_assert_ptr_null(
+	    oidc_cmd_provider_pushed_authorization_request_endpoint_url_set(cmd, NULL, "https://idp.example.com/par"));
 	ck_assert_str_eq(oidc_cfg_provider_pushed_authorization_request_endpoint_url_get(p),
 			 "https://idp.example.com/par");
 
@@ -1673,13 +1672,13 @@ START_TEST(test_cmd_provider_jwks_uri_and_signed_jwks_uri) {
 	cmd_parms *cmd = NULL;
 
 	cmd = oidc_test_cmd_get(OIDCProviderSignedJwksUri);
-	ck_assert_ptr_null(oidc_cmd_provider_signed_jwks_uri_set(cmd, NULL, "https://idp.example.com/signed-jwks",
-								 "{\"keys\":[]}"));
+	ck_assert_ptr_null(
+	    oidc_cmd_provider_signed_jwks_uri_set(cmd, NULL, "https://idp.example.com/signed-jwks", "{\"keys\":[]}"));
 	ck_assert_str_eq(oidc_cfg_provider_signed_jwks_uri_get(p), "https://idp.example.com/signed-jwks");
 
 	/* json that doesn't parse */
-	ck_assert_ptr_nonnull(oidc_cmd_provider_signed_jwks_uri_set(cmd, NULL, "https://idp.example.com/signed-jwks",
-								    "{not-json"));
+	ck_assert_ptr_nonnull(
+	    oidc_cmd_provider_signed_jwks_uri_set(cmd, NULL, "https://idp.example.com/signed-jwks", "{not-json"));
 	/* URL that doesn't validate */
 	ck_assert_ptr_nonnull(oidc_cmd_provider_signed_jwks_uri_set(cmd, NULL, "not-a-url", NULL));
 }
@@ -1691,8 +1690,7 @@ START_TEST(test_cmd_provider_registration_endpoint_json_and_token) {
 	cmd_parms *cmd = NULL;
 
 	cmd = oidc_test_cmd_get(OIDCProviderRegistrationEndpointJson);
-	ck_assert_ptr_null(
-	    oidc_cmd_provider_registration_endpoint_json_set(cmd, NULL, "{\"client_name\":\"my-rp\"}"));
+	ck_assert_ptr_null(oidc_cmd_provider_registration_endpoint_json_set(cmd, NULL, "{\"client_name\":\"my-rp\"}"));
 	ck_assert_str_eq(oidc_cfg_provider_registration_endpoint_json_get(p), "{\"client_name\":\"my-rp\"}");
 }
 END_TEST

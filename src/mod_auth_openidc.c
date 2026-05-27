@@ -194,8 +194,7 @@ void oidc_strip_cookies(request_rec *r) {
 			if (matched != NULL) {
 				oidc_debug(r, "stripping: %s", matched);
 			} else {
-				result = result ? apr_psprintf(r->pool, "%s%s %s", result, OIDC_STR_SEMI_COLON,
-							       cookie)
+				result = result ? apr_psprintf(r->pool, "%s%s %s", result, OIDC_STR_SEMI_COLON, cookie)
 						: cookie;
 			}
 		}
