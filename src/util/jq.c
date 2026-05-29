@@ -52,7 +52,7 @@ static const char *oidc_util_jq_exec(request_rec *r, jq_state *jq, struct jv_par
 	const char *rv = NULL;
 	jv value, elem, str, msg;
 
-	while (jv_is_valid((value = jv_parser_next(parser)))) {
+	while (jv_is_valid(value = jv_parser_next(parser))) {
 		jq_start(jq, value, 0);
 		while (jv_is_valid(elem = jq_next(jq))) {
 			str = jv_dump_string(elem, 0);

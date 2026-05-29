@@ -305,7 +305,7 @@ static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg_t *cfg, oidc_
 		apr_table_setn(params, OIDC_PROTO_CODE_VERIFIER, code_verifier);
 
 	/* add state to mitigate IDP mixup attacks, only useful in a multi-provider setup */
-	if ((oidc_cfg_metadata_dir_get(cfg) != NULL) && (state))
+	if ((oidc_cfg_metadata_dir_get(cfg) != NULL) && state)
 		apr_table_setn(params, OIDC_PROTO_STATE, state);
 
 	return oidc_proto_token_endpoint_request(r, cfg, provider, params, id_token, access_token, token_type,

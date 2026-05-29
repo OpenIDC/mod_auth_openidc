@@ -311,7 +311,7 @@ const char *oidc_cmd_cache_redis_connect_timeout_set(cmd_parms *cmd, void *struc
 	if (arg1)
 		rv = oidc_cfg_parse_int_min_max(cmd->pool, arg1, &cfg->cache.redis_connect_timeout,
 						OIDC_REDIS_CONNECT_TIMEOUT_MIN, OIDC_REDIS_CONNECT_TIMEOUT_MAX);
-	if ((rv == NULL) && (arg2))
+	if ((rv == NULL) && arg2)
 		rv = oidc_cfg_parse_int_min_max(cmd->pool, arg2, &cfg->cache.redis_keepalive,
 						OIDC_REDIS_KEEPALIVE_TIMEOUT_MIN, OIDC_REDIS_KEEPALIVE_TIMEOUT_MAX);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);

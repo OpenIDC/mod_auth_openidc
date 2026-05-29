@@ -239,7 +239,7 @@ static int oidc_logout_request_front_channel(request_rec *r, oidc_cfg_t *c, cons
 	/* see if this is PF-PA style logout in which case we return a transparent pixel */
 	const char *accept = oidc_http_hdr_in_accept_get(r);
 	if ((_oidc_strcmp(url, OIDC_IMG_STYLE_LOGOUT_PARAM_VALUE) == 0) ||
-	    ((accept) && _oidc_strstr(accept, OIDC_HTTP_CONTENT_TYPE_IMAGE_PNG))) {
+	    (accept && _oidc_strstr(accept, OIDC_HTTP_CONTENT_TYPE_IMAGE_PNG))) {
 		return oidc_util_http_content_prep(r, (const char *)&oidc_logout_transparent_pixel,
 						   sizeof(oidc_logout_transparent_pixel),
 						   OIDC_HTTP_CONTENT_TYPE_IMAGE_PNG);

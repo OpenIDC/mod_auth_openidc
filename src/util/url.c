@@ -232,7 +232,7 @@ char *oidc_util_url_cur(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_heade
 	path = r->uri;
 
 	/* check if we're dealing with a forward proxying secenario i.e. a non-relative URL */
-	if ((path) && (path[0] != '/')) {
+	if (path && (path[0] != '/')) {
 		_oidc_memset(&uri, 0, sizeof(apr_uri_t));
 		if (apr_uri_parse(r->pool, r->uri, &uri) == APR_SUCCESS)
 			path = apr_pstrcat(r->pool, uri.path, (r->args != NULL && *r->args != '\0' ? "?" : ""), r->args,

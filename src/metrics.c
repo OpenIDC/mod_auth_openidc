@@ -367,7 +367,7 @@ static inline apr_size_t _oidc_metrics_shm_size(server_rec *s) {
  */
 static inline char *_oidc_metrics_storage_get(server_rec *s) {
 	char *p = (char *)apr_shm_baseaddr_get(_oidc_metrics_cache);
-	return ((p) && (*p != 0)) ? apr_pstrndup(s->process->pool, p, _oidc_metrics_shm_size(s)) : NULL;
+	return p && (*p != 0) ? apr_pstrndup(s->process->pool, p, _oidc_metrics_shm_size(s)) : NULL;
 }
 
 /*

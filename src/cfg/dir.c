@@ -641,7 +641,7 @@ void *oidc_cfg_dir_config_create(apr_pool_t *pool, char *path) {
 	c->state_cookie_prefix = NULL;
 	c->pass_userinfo_as = NULL;
 	c->pass_idtoken_as = OIDC_CONFIG_POS_INT_UNSET;
-	return (c);
+	return c;
 }
 
 /*
@@ -717,5 +717,5 @@ void *oidc_cfg_dir_config_merge(apr_pool_t *pool, void *BASE, void *ADD) {
 
 	c->state_cookie_prefix = _oidc_cfg_dir_merge_ptr(add->state_cookie_prefix, base->state_cookie_prefix);
 
-	return (c);
+	return c;
 }

@@ -146,7 +146,7 @@ void oidc_scrub_headers(request_rec *r) {
 	 * then see if the claim headers need to be removed on top of that
 	 * (i.e. the prefix does not start with the default OIDC_)
 	 */
-	if ((_oidc_strstr(prefix, OIDC_DEFAULT_HEADER_PREFIX) != prefix)) {
+	if (_oidc_strstr(prefix, OIDC_DEFAULT_HEADER_PREFIX) != prefix) {
 		oidc_scrub_request_headers(r, prefix, NULL);
 	}
 }
@@ -703,15 +703,15 @@ apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg_t *cfg, oidc_sessio
 static void oidc_idtoken_pass_as(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session,
 				 oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding) {
 
-	if ((oidc_cfg_dir_pass_idtoken_as_get(r) & OIDC_PASS_IDTOKEN_OFF))
+	if (oidc_cfg_dir_pass_idtoken_as_get(r) & OIDC_PASS_IDTOKEN_OFF)
 		return;
 
-	if ((oidc_cfg_dir_pass_idtoken_as_get(r) & OIDC_PASS_IDTOKEN_AS_CLAIMS)) {
+	if (oidc_cfg_dir_pass_idtoken_as_get(r) & OIDC_PASS_IDTOKEN_AS_CLAIMS) {
 		/* set the id_token in the app headers */
 		oidc_set_app_claims(r, cfg, oidc_session_get_idtoken_claims(r, session));
 	}
 
-	if ((oidc_cfg_dir_pass_idtoken_as_get(r) & OIDC_PASS_IDTOKEN_AS_PAYLOAD)) {
+	if (oidc_cfg_dir_pass_idtoken_as_get(r) & OIDC_PASS_IDTOKEN_AS_PAYLOAD) {
 		/* pass the id_token JSON object to the app in a header or environment variable */
 		oidc_util_appinfo_set(r, OIDC_APP_INFO_ID_TOKEN_PAYLOAD,
 				      oidc_util_json_encode(r->pool, oidc_session_get_idtoken_claims(r, session),
@@ -719,7 +719,7 @@ static void oidc_idtoken_pass_as(request_rec *r, oidc_cfg_t *cfg, oidc_session_t
 				      OIDC_DEFAULT_HEADER_PREFIX, pass_in, encoding);
 	}
 
-	if ((oidc_cfg_dir_pass_idtoken_as_get(r) & OIDC_PASS_IDTOKEN_AS_SERIALIZED)) {
+	if (oidc_cfg_dir_pass_idtoken_as_get(r) & OIDC_PASS_IDTOKEN_AS_SERIALIZED) {
 		/* pass the compact serialized JWT to the app in a header or environment variable */
 		oidc_util_appinfo_set(r, OIDC_APP_INFO_ID_TOKEN, oidc_session_get_idtoken(r, session),
 				      OIDC_DEFAULT_HEADER_PREFIX, pass_in, encoding);

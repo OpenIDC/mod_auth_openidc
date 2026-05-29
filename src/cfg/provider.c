@@ -325,7 +325,7 @@ const char *oidc_cfg_provider_dpop_mode_set(apr_pool_t *pool, oidc_provider_t *p
 const char *oidc_cmd_provider_dpop_mode_set(cmd_parms *cmd, void *ptr, const char *arg1, const char *arg2) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
 	const char *rv = oidc_cfg_provider_dpop_mode_set(cmd->pool, cfg->provider, arg1);
-	if ((rv == NULL) && (arg2))
+	if ((rv == NULL) && arg2)
 		rv = oidc_cfg_parse_boolean(cmd->pool, arg2, &cfg->dpop_api_enabled);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
@@ -635,7 +635,7 @@ const char *oidc_cmd_provider_userinfo_refresh_interval_set(cmd_parms *cmd, void
 	const char *rv = oidc_cfg_parse_int(cmd->pool, arg1, &v);
 	if (rv == NULL)
 		rv = oidc_cfg_provider_userinfo_refresh_interval_set(cmd->pool, cfg->provider, v);
-	if ((rv == NULL) && (arg2))
+	if ((rv == NULL) && arg2)
 		rv = oidc_cfg_parse_action_on_error_refresh_as(
 		    cmd->pool, arg2, (oidc_on_error_action_t *)&cfg->action_on_userinfo_error);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);

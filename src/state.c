@@ -129,7 +129,7 @@ static int oidc_state_cookies_delete_oldest(request_rec *r, oidc_cfg_t *c, int n
 		cur = first ? first->next : NULL;
 		// find the oldest state cookie in the list (stored in "oldest")
 		while (cur) {
-			if ((cur->timestamp < oldest->timestamp)) {
+			if (cur->timestamp < oldest->timestamp) {
 				oldest = cur;
 				prev_oldest = prev;
 			}
