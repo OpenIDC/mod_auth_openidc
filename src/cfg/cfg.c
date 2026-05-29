@@ -152,10 +152,9 @@ const oidc_http_outgoing_proxy_t *oidc_cfg_outgoing_proxy_get(oidc_cfg_t *cfg) {
 }
 
 static const char *oidc_cfg_valid_cookie_domain(apr_pool_t *pool, const char *arg) {
-	size_t sz, limit;
+	size_t limit = _oidc_strlen(arg);
 	char d;
-	limit = _oidc_strlen(arg);
-	for (sz = 0; sz < limit; sz++) {
+	for (size_t sz = 0; sz < limit; sz++) {
 		d = arg[sz];
 		if ((d < '0' || d > '9') && (d < 'a' || d > 'z') && (d < 'A' || d > 'Z') && d != '.' && d != '-') {
 			return (apr_psprintf(pool, "invalid character '%c' in cookie domain value: %s", d, arg));

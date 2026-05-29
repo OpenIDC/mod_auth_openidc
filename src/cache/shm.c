@@ -164,7 +164,6 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section, const 
 	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *)cfg->cache.cfg;
 
-	int i;
 	const char *section_key = oidc_cache_shm_get_key(r, section, key);
 	if (section_key == NULL)
 		return FALSE;
@@ -179,7 +178,7 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section, const 
 	oidc_cache_shm_entry_t *t = apr_shm_baseaddr_get(context->shm);
 
 	/* loop over the block, looking for the key */
-	for (i = 0; i < cfg->cache.shm_size_max; i++, OIDC_CACHE_SHM_ADD_OFFSET(t, cfg->cache.shm_entry_size_max)) {
+	for (int i = 0; i < cfg->cache.shm_size_max; i++, OIDC_CACHE_SHM_ADD_OFFSET(t, cfg->cache.shm_entry_size_max)) {
 		const char *tablekey = t->section_key;
 
 		if ((tablekey != NULL) && (_oidc_strcmp(tablekey, section_key) == 0)) {

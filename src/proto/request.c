@@ -277,7 +277,6 @@ static apr_byte_t oidc_request_uri_encryption_jwk_by_type(request_rec *r, oidc_c
 	apr_byte_t force_refresh = TRUE;
 	oidc_jwk_t *key = NULL;
 	char *jwk_json = NULL;
-	int i = 0;
 
 	/* TODO: forcefully refresh now; we may want to relax that */
 	oidc_metadata_jwks_get(r, cfg, oidc_cfg_provider_jwks_uri_get(provider),
@@ -295,7 +294,7 @@ static apr_byte_t oidc_request_uri_encryption_jwk_by_type(request_rec *r, oidc_c
 	}
 
 	/* walk the set of published keys to find the first that has a matching type */
-	for (i = 0; i < json_array_size(keys); i++) {
+	for (int i = 0; i < json_array_size(keys); i++) {
 
 		json_t *elem = json_array_get(keys, i);
 

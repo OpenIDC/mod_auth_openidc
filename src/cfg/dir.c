@@ -183,8 +183,8 @@ static const oidc_cfg_option_t oidc_oauth_accept_token_in_options[] = {
  */
 const char *oidc_cfg_dir_accept_oauth_token_in2str(apr_pool_t *pool, oidc_oauth_accept_token_in_t v) {
 	static oidc_cfg_option_t enabled[OIDC_CFG_OPTIONS_SIZE(oidc_oauth_accept_token_in_options)];
-	int i = 0, j = 0;
-	for (j = 0; j < OIDC_CFG_OPTIONS_SIZE(oidc_oauth_accept_token_in_options); j++) {
+	int i = 0;
+	for (int j = 0; j < OIDC_CFG_OPTIONS_SIZE(oidc_oauth_accept_token_in_options); j++) {
 		if (v & oidc_oauth_accept_token_in_options[j].val) {
 			enabled[i] = oidc_oauth_accept_token_in_options[j];
 			i++;
@@ -324,8 +324,7 @@ static const oidc_cfg_option_t unauth_action_options[] = {{OIDC_UNAUTH_AUTHENTIC
 							  {OIDC_UNAUTH_RETURN407, OIDC_UNAUTH_RETURN407_STR}};
 
 static const char *oidc_cfg_dir_unauth_action2str(oidc_unauth_action_t action) {
-	int i = 0;
-	for (i = 0; i < OIDC_CFG_OPTIONS_SIZE(unauth_action_options); i++) {
+	for (int i = 0; i < OIDC_CFG_OPTIONS_SIZE(unauth_action_options); i++) {
 		if (action == unauth_action_options[i].val)
 			return unauth_action_options[i].str;
 	}

@@ -432,8 +432,7 @@ char *oidc_http_hdr_normalize_name(const request_rec *r, const char *str) {
 	const char *separators = "()<>@,;:\\\"/[]?={} \t";
 
 	char *ns = apr_pstrdup(r->pool, str);
-	size_t i;
-	for (i = 0; i < _oidc_strlen(ns); i++) {
+	for (size_t i = 0; i < _oidc_strlen(ns); i++) {
 		if (ns[i] < 32 || ns[i] == 127)
 			ns[i] = '-';
 		else if (strchr(separators, ns[i]) != NULL)
@@ -483,7 +482,6 @@ size_t oidc_http_response_header(char *buffer, size_t size, size_t nitems, void 
 	/* received header is nitems * size long in 'buffer' NOT ZERO TERMINATED */
 	oidc_curl_resp_hdr_ctx_t *ctx = (oidc_curl_resp_hdr_ctx_t *)userdata;
 	char *hdr = NULL, *value = NULL, *h_name = NULL;
-	apr_hash_index_t *hi = NULL;
 	apr_ssize_t h_len = 0;
 	int i = 0;
 
@@ -517,7 +515,7 @@ size_t oidc_http_response_header(char *buffer, size_t size, size_t nitems, void 
 	// TODO: would be faster to use all lowercase keys
 
 	/* check if the caller is interested in the value of the current response header */
-	for (hi = apr_hash_first(NULL, ctx->hdrs); hi; hi = apr_hash_next(hi)) {
+	for (apr_hash_index_t *hi = apr_hash_first(NULL, ctx->hdrs); hi; hi = apr_hash_next(hi)) {
 		apr_hash_this(hi, (const void **)&h_name, &h_len, NULL);
 		if (_oidc_strnatcasecmp(hdr, h_name) == 0) {
 			oidc_debug(ctx->r, "returning response header: %s: %s", h_name, value);
@@ -1226,7 +1224,7 @@ static char *oidc_http_get_chunk_cookie_name(request_rec *r, const char *cookieN
  */
 char *oidc_http_get_chunked_cookie(request_rec *r, const char *cookieName, int chunkSize) {
 	char *cookieValue = NULL, *chunkValue = NULL;
-	int chunkCount = 0, i = 0;
+	int chunkCount = 0;
 	if (chunkSize == 0)
 		return oidc_http_get_cookie(r, cookieName);
 	chunkCount = oidc_http_get_chunked_count(r, cookieName);
@@ -1236,7 +1234,7 @@ char *oidc_http_get_chunked_cookie(request_rec *r, const char *cookieName, int c
 		oidc_warn(r, "chunk count out of bounds: %d", chunkCount);
 		return NULL;
 	}
-	for (i = 0; i < chunkCount; i++) {
+	for (int i = 0; i < chunkCount; i++) {
 		chunkValue = oidc_http_get_cookie(r, oidc_http_get_chunk_cookie_name(r, cookieName, i));
 		if (chunkValue == NULL) {
 			oidc_warn(r, "could not find chunk %d; aborting", i);
@@ -1252,10 +1250,9 @@ char *oidc_http_get_chunked_cookie(request_rec *r, const char *cookieName, int c
  */
 static void oidc_http_clear_chunked_cookie(request_rec *r, const char *cookieName, apr_time_t expires,
 					   const char *ext) {
-	int i = 0;
 	int chunkCount = oidc_http_get_chunked_count(r, cookieName);
 	if (chunkCount > 0) {
-		for (i = 0; i < chunkCount; i++)
+		for (int i = 0; i < chunkCount; i++)
 			oidc_http_set_cookie(r, oidc_http_get_chunk_cookie_name(r, cookieName, i), "", expires, ext);
 		oidc_http_set_cookie(r, oidc_http_get_chunk_count_name(r, cookieName), "", expires, ext);
 	}
@@ -1266,7 +1263,6 @@ static void oidc_http_clear_chunked_cookie(request_rec *r, const char *cookieNam
  */
 void oidc_http_set_chunked_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires,
 				  int chunkSize, const char *ext) {
-	int i = 0;
 	int cookieLength = _oidc_strlen(cookieValue);
 	char *chunkValue = NULL;
 
@@ -1287,7 +1283,7 @@ void oidc_http_set_chunked_cookie(request_rec *r, const char *cookieName, const 
 	/* set a chunked cookie */
 	int chunkCountValue = cookieLength / chunkSize + 1;
 	const char *ptr = cookieValue;
-	for (i = 0; i < chunkCountValue; i++) {
+	for (int i = 0; i < chunkCountValue; i++) {
 		chunkValue = apr_pstrndup(r->pool, ptr, chunkSize);
 		ptr += chunkSize;
 		oidc_http_set_cookie(r, oidc_http_get_chunk_cookie_name(r, cookieName, i), chunkValue, expires, ext);

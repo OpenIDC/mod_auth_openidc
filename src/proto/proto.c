@@ -95,8 +95,7 @@ apr_array_header_t *oidc_proto_supported_flows(apr_pool_t *pool) {
  */
 apr_byte_t oidc_proto_flow_is_supported(apr_pool_t *pool, const char *flow) {
 	apr_array_header_t *flows = oidc_proto_supported_flows(pool);
-	int i;
-	for (i = 0; i < flows->nelts; i++) {
+	for (int i = 0; i < flows->nelts; i++) {
 		if (oidc_util_spaced_string_equals(pool, flow, APR_ARRAY_IDX(flows, i, const char *)))
 			return TRUE;
 	}

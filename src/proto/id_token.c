@@ -132,7 +132,6 @@ static const char *oidc_proto_idtoken_aud_resolve(oidc_provider_t *provider, con
  */
 static apr_byte_t oidc_proto_idtoken_validate_aud_string(request_rec *r, oidc_provider_t *provider,
 							 const apr_array_header_t *arr, const char *aud_value) {
-	int i = 0;
 
 	if (arr == NULL) {
 		/* a single-valued audience must be equal to our client_id */
@@ -143,7 +142,7 @@ static apr_byte_t oidc_proto_idtoken_validate_aud_string(request_rec *r, oidc_pr
 		return FALSE;
 	}
 
-	for (i = 0; i < arr->nelts; i++) {
+	for (int i = 0; i < arr->nelts; i++) {
 		const char *s_aud = oidc_proto_idtoken_aud_resolve(provider, APR_ARRAY_IDX(arr, i, const char *));
 		if (_oidc_strcmp(aud_value, s_aud) == 0)
 			return TRUE;
@@ -158,7 +157,6 @@ static apr_byte_t oidc_proto_idtoken_validate_aud_string(request_rec *r, oidc_pr
  */
 static apr_byte_t oidc_proto_idtoken_validate_aud_array(request_rec *r, oidc_provider_t *provider,
 							const apr_array_header_t *arr, json_t *aud, const char *azp) {
-	int i = 0;
 	const char *s_aud = NULL;
 
 	if (arr == NULL) {
@@ -179,7 +177,7 @@ static apr_byte_t oidc_proto_idtoken_validate_aud_array(request_rec *r, oidc_pro
 	}
 
 	/* handle explicit and exhaustive configuration of acceptable audience values */
-	for (i = 0; i < arr->nelts; i++) {
+	for (int i = 0; i < arr->nelts; i++) {
 		s_aud = oidc_proto_idtoken_aud_resolve(provider, APR_ARRAY_IDX(arr, i, const char *));
 		if (oidc_util_json_array_has_value(r, aud, s_aud) == FALSE) {
 			oidc_error(r,
@@ -296,8 +294,7 @@ static apr_byte_t oidc_proto_validate_hash_value(request_rec *r, oidc_provider_t
 	if (hash == NULL) {
 
 		/* no hash..., now see if the flow required it */
-		int i;
-		for (i = 0; i < required_for_flows->nelts; i++) {
+		for (int i = 0; i < required_for_flows->nelts; i++) {
 			if (oidc_util_spaced_string_equals(r->pool, response_type,
 							   APR_ARRAY_IDX(required_for_flows, i, const char *))) {
 				oidc_warn(r, "flow is \"%s\", but no %s found in id_token", response_type, key);

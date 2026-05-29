@@ -103,8 +103,7 @@ apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg, oidc_p
 
 	json_t *response_types = json_array();
 	apr_array_header_t *flows = oidc_proto_supported_flows(r->pool);
-	int i = 0;
-	for (i = 0; i < flows->nelts; i++)
+	for (int i = 0; i < flows->nelts; i++)
 		json_array_append_new(response_types, json_string(APR_ARRAY_IDX(flows, i, const char *)));
 	json_object_set_new(data, OIDC_METADATA_RESPONSE_TYPES, response_types);
 

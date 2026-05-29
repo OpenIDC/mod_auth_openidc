@@ -229,7 +229,6 @@ void oidc_metadata_parse_url(request_rec *r, const char *type, const char *issue
  */
 void oidc_metadata_get_jwks(request_rec *r, json_t *json, apr_array_header_t **jwk_list) {
 	json_t *keys = NULL;
-	int i = 0;
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
 	json_t *elem = NULL;
@@ -244,7 +243,7 @@ void oidc_metadata_get_jwks(request_rec *r, json_t *json, apr_array_header_t **j
 		return;
 	}
 
-	for (i = 0; i < json_array_size(keys); i++) {
+	for (int i = 0; i < json_array_size(keys); i++) {
 
 		elem = json_array_get(keys, i);
 

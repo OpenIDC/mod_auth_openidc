@@ -162,8 +162,7 @@ int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg) {
 	const char *s = "\t\t\t<h3>Select your OpenID Connect Identity Provider</h3>\n";
 
 	/* list all configured providers in there */
-	int i;
-	for (i = 0; i < arr->nelts; i++) {
+	for (int i = 0; i < arr->nelts; i++) {
 
 		const char *issuer = APR_ARRAY_IDX(arr, i, const char *);
 

@@ -280,7 +280,6 @@ apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table, apr_by
 	char *data = NULL;
 	const apr_array_header_t *arr = NULL;
 	const apr_table_entry_t *elts = NULL;
-	int i = 0;
 	const char *content_type = NULL;
 
 	content_type = oidc_http_hdr_in_content_type_get(r);
@@ -302,7 +301,7 @@ apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table, apr_by
 
 	arr = apr_table_elts(table);
 	elts = (const apr_table_entry_t *)arr->elts;
-	for (i = 0; i < arr->nelts; i++)
+	for (int i = 0; i < arr->nelts; i++)
 		if (_oidc_strcmp(elts[i].key, strip_param_name) != 0)
 			oidc_util_userdata_set_post_param(r, elts[i].key, elts[i].val);
 
@@ -367,8 +366,7 @@ apr_byte_t oidc_util_spaced_string_equals(apr_pool_t *pool, const char *a, const
 		return FALSE;
 
 	/* then loop over all entries */
-	apr_hash_index_t *hi;
-	for (hi = apr_hash_first(NULL, ht_a); hi; hi = apr_hash_next(hi)) {
+	for (apr_hash_index_t *hi = apr_hash_first(NULL, ht_a); hi; hi = apr_hash_next(hi)) {
 		apr_hash_this(hi, &k, NULL, &v);
 		if (apr_hash_get(ht_b, k, APR_HASH_KEY_STRING) == NULL)
 			return FALSE;
@@ -539,10 +537,9 @@ void oidc_util_set_trace_parent(request_rec *r, oidc_cfg_t *c, const char *span)
  * clear the contents of a hash table (used for older versions of libapr missing this)
  */
 void oidc_util_apr_hash_clear(apr_hash_t *ht) {
-	apr_hash_index_t *hi = NULL;
 	const void *key = NULL;
 	apr_ssize_t klen = 0;
-	for (hi = apr_hash_first(NULL, ht); hi; hi = apr_hash_next(hi)) {
+	for (apr_hash_index_t *hi = apr_hash_first(NULL, ht); hi; hi = apr_hash_next(hi)) {
 		apr_hash_this(hi, &key, &klen, NULL);
 		apr_hash_set(ht, key, klen, NULL);
 	}

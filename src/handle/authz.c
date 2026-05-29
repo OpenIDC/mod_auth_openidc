@@ -138,14 +138,13 @@ static apr_byte_t oidc_authz_match_json_array_elem(request_rec *r, const char *s
 }
 
 static apr_byte_t oidc_authz_match_json_array(request_rec *r, const char *spec, json_t *val, const char *key) {
-	int i = 0;
 	json_t *e = NULL;
 
 	if ((spec == NULL) || (val == NULL) || (key == NULL))
 		return FALSE;
 
 	// loop over the elements in the array, trying to find a match
-	for (i = 0; i < json_array_size(val); i++) {
+	for (int i = 0; i < json_array_size(val); i++) {
 		e = json_array_get(val, i);
 		if (oidc_authz_match_json_array_elem(r, spec, e, key) == TRUE)
 			return TRUE;
@@ -154,14 +153,12 @@ static apr_byte_t oidc_authz_match_json_array(request_rec *r, const char *spec, 
 }
 
 static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec, json_t *val, const char *key) {
-	oidc_authz_json_handler_t *h = NULL;
-
 	if ((spec == NULL) || (val == NULL) || (key == NULL))
 		return FALSE;
 
 	oidc_debug(r, "matching: spec=%s, key=%s", spec, key);
 
-	for (h = _oidc_authz_json_handlers; h->handler; h++) {
+	for (oidc_authz_json_handler_t *h = _oidc_authz_json_handlers; h->handler; h++) {
 		if (h->type == json_typeof(val))
 			return h->handler(r, spec, val, key);
 	}
@@ -213,14 +210,13 @@ static oidc_authz_pcre_handler_t _oidc_authz_pcre_handlers[] = {
 static apr_byte_t oidc_authz_match_pcre_array(request_rec *r, const char *spec, json_t *val, const char *key,
 					      struct oidc_pcre *preg) {
 
-	int i = 0;
 	json_t *e = NULL;
 
 	if ((spec == NULL) || (val == NULL) || (key == NULL) || (preg == NULL))
 		return FALSE;
 
 	// loop over the elements in the array, trying to find a match
-	for (i = 0; i < json_array_size(val); i++) {
+	for (int i = 0; i < json_array_size(val); i++) {
 		e = json_array_get(val, i);
 
 		if (json_typeof(e) == JSON_STRING) {

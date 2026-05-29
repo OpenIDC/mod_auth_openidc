@@ -50,14 +50,13 @@ int oidc_jwks_request(request_rec *r, oidc_cfg_t *c) {
 	//	char *jwks_type = NULL;
 	//	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS, &jwks_type);
 	char *jwks = apr_pstrdup(r->pool, "{ \"keys\" : [");
-	int i = 0;
 	apr_byte_t first = TRUE;
 	const oidc_jwk_t *jwk = NULL;
 	oidc_jose_error_t err;
 	char *s_json = NULL;
 
 	/* loop over the RSA/EC public keys */
-	for (i = 0; oidc_cfg_public_keys_get(c) && i < oidc_cfg_public_keys_get(c)->nelts; i++) {
+	for (int i = 0; oidc_cfg_public_keys_get(c) && i < oidc_cfg_public_keys_get(c)->nelts; i++) {
 		jwk = APR_ARRAY_IDX(oidc_cfg_public_keys_get(c), i, oidc_jwk_t *);
 
 		if (oidc_jwk_to_json(r->pool, jwk, &s_json, &err) == TRUE) {

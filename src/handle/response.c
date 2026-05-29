@@ -134,9 +134,8 @@ apr_byte_t oidc_response_post_preserve_javascript(request_rec *r, const char *lo
 
 	const apr_array_header_t *arr = apr_table_elts(params);
 	const apr_table_entry_t *elts = (const apr_table_entry_t *)arr->elts;
-	int i;
 	char *json = "";
-	for (i = 0; i < arr->nelts; i++) {
+	for (int i = 0; i < arr->nelts; i++) {
 		json = apr_psprintf(r->pool, "%s'%s': '%s'%s", json, oidc_http_url_encode(r, elts[i].key),
 				    oidc_http_url_encode(r, elts[i].val), i < arr->nelts - 1 ? "," : "");
 	}

@@ -346,7 +346,6 @@ oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, json_t *json, oidc_jose_error_t *er
 	oidc_jose_error_t x5c_err;
 	char *use = NULL;
 	json_t *v = NULL, *e = NULL;
-	int i = 0;
 
 	char *s_json = oidc_util_json_encode(pool, json, JSON_PRESERVE_ORDER | JSON_COMPACT);
 	if (s_json == NULL) {
@@ -374,7 +373,7 @@ oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, json_t *json, oidc_jose_error_t *er
 	v = json_object_get(json, OIDC_JOSE_JWK_X5C_STR);
 	if (v && json_is_array(v)) {
 		result->x5c = apr_array_make(pool, json_array_size(v), sizeof(const char *));
-		for (i = 0; i < json_array_size(v); i++) {
+		for (int i = 0; i < json_array_size(v); i++) {
 			e = json_array_get(v, i);
 			if (json_is_string(e))
 				APR_ARRAY_PUSH(result->x5c, const char *) = apr_pstrdup(pool, json_string_value(e));
@@ -400,7 +399,6 @@ end:
  * copy a JWK by converting oidc_jwk_t to JSON and parsing it back
  */
 oidc_jwk_t *oidc_jwk_copy(apr_pool_t *pool, const oidc_jwk_t *src) {
-	int i = 0;
 	cjose_err err;
 	oidc_jwk_t *dst = oidc_jwk_new(pool);
 	dst->cjose_jwk = cjose_jwk_retain(src->cjose_jwk, &err);
@@ -410,7 +408,7 @@ oidc_jwk_t *oidc_jwk_copy(apr_pool_t *pool, const oidc_jwk_t *src) {
 	dst->x5c = NULL;
 	if (src->x5c) {
 		dst->x5c = apr_array_make(pool, src->x5c->nelts, sizeof(const char *));
-		for (i = 0; i < src->x5c->nelts; i++)
+		for (int i = 0; i < src->x5c->nelts; i++)
 			APR_ARRAY_PUSH(dst->x5c, const char *) = APR_ARRAY_IDX(src->x5c, i, const char *);
 	}
 	dst->x5t = apr_pstrdup(pool, src->x5t);
@@ -432,12 +430,11 @@ void oidc_jwk_destroy(oidc_jwk_t *jwk) {
  * destroy a list of JWKs structs
  */
 void oidc_jwk_list_destroy_hash(apr_hash_t *keys) {
-	apr_hash_index_t *hi = NULL;
 	const void *key = NULL;
 	apr_ssize_t klen = 0;
 	if (keys == NULL)
 		return;
-	for (hi = apr_hash_first(NULL, keys); hi; hi = apr_hash_next(hi)) {
+	for (apr_hash_index_t *hi = apr_hash_first(NULL, keys); hi; hi = apr_hash_next(hi)) {
 		oidc_jwk_t *jwk = NULL;
 		apr_hash_this(hi, &key, &klen, (void **)&jwk);
 		oidc_jwk_destroy(jwk);
@@ -450,13 +447,12 @@ void oidc_jwk_list_destroy_hash(apr_hash_t *keys) {
  */
 apr_array_header_t *oidc_jwk_list_copy(apr_pool_t *pool, apr_array_header_t *src) {
 	apr_array_header_t *dst = NULL;
-	int i = 0;
 
 	if (src == NULL)
 		return NULL;
 
 	dst = apr_array_make(pool, src->nelts, sizeof(const oidc_jwk_t *));
-	for (i = 0; i < src->nelts; i++)
+	for (int i = 0; i < src->nelts; i++)
 		APR_ARRAY_PUSH(dst, oidc_jwk_t *) = oidc_jwk_copy(pool, APR_ARRAY_IDX(src, i, const oidc_jwk_t *));
 
 	return dst;
@@ -536,7 +532,6 @@ apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_js
 	cjose_err err;
 	json_t *json = NULL, *temp = NULL;
 	json_error_t json_error;
-	int i = 0;
 
 	// input sanity checks
 	if ((jwk == NULL) || (s_json == NULL))
@@ -561,7 +556,7 @@ apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_js
 	// set x5c
 	if ((jwk->x5c != NULL) && (jwk->x5c->nelts > 0)) {
 		temp = json_array();
-		for (i = 0; i < jwk->x5c->nelts; i++)
+		for (int i = 0; i < jwk->x5c->nelts; i++)
 			json_array_append_new(temp, json_string(APR_ARRAY_IDX(jwk->x5c, i, const char *)));
 		json_object_set_new(json, OIDC_JOSE_JWK_X5C_STR, temp);
 	}

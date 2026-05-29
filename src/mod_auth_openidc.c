@@ -85,8 +85,7 @@ static void oidc_scrub_request_headers(request_rec *r, const char *claim_prefix,
 
 	/* loop over the incoming HTTP headers */
 	const apr_table_entry_t *const e = (const apr_table_entry_t *)h->elts;
-	int i;
-	for (i = 0; i < h->nelts; i++) {
+	for (int i = 0; i < h->nelts; i++) {
 		const char *const k = e[i].key;
 
 		/* is this header's name equivalent to a header that needs scrubbing? */
@@ -155,8 +154,7 @@ void oidc_scrub_headers(request_rec *r) {
  * return the configured cookie name that matches the leading "<name>=" portion of "cookie", or NULL when none matches
  */
 static const char *oidc_strip_cookies_match(const char *cookie, const apr_array_header_t *strip) {
-	int i;
-	for (i = 0; i < strip->nelts; i++) {
+	for (int i = 0; i < strip->nelts; i++) {
 		const char *name = APR_ARRAY_IDX(strip, i, const char *);
 		size_t name_len = _oidc_strlen(name);
 		if ((_oidc_strncmp(cookie, name, name_len) == 0) && (cookie[name_len] == OIDC_CHAR_EQUAL))
@@ -887,9 +885,8 @@ static apr_byte_t oidc_validate_redirect_url_fail(request_rec *r, char **err_str
  */
 static apr_byte_t oidc_validate_redirect_url_allowed(request_rec *r, apr_hash_t *allowed, const char *url,
 						     char **err_str, char **err_desc) {
-	apr_hash_index_t *hi;
 	const char *c_host = NULL;
-	for (hi = apr_hash_first(NULL, allowed); hi; hi = apr_hash_next(hi)) {
+	for (apr_hash_index_t *hi = apr_hash_first(NULL, allowed); hi; hi = apr_hash_next(hi)) {
 		apr_hash_this(hi, (const void **)&c_host, NULL, NULL);
 		if (oidc_util_regexp_first_match(r->pool, url, c_host, NULL, err_str) == TRUE)
 			return TRUE;
@@ -968,7 +965,6 @@ static apr_byte_t oidc_validate_redirect_url_chars(request_rec *r, const char *u
 apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg_t *c, const char *redirect_to_url,
 				      apr_byte_t restrict_to_host, char **err_str, char **err_desc) {
 	apr_uri_t uri;
-	size_t i = 0;
 	if (redirect_to_url == NULL)
 		return oidc_validate_redirect_url_fail(r, err_str, err_desc, "Invalid URL", "URL value is NULL");
 	if (_oidc_strlen(redirect_to_url) > OIDC_MAX_URL_LENGTH)
@@ -978,7 +974,7 @@ apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg_t *c, const char 
 	char *url = apr_pstrdup(r->pool, redirect_to_url);
 
 	// replace potentially harmful backslashes with forward slashes
-	for (i = 0; i < _oidc_strlen(url); i++)
+	for (size_t i = 0; i < _oidc_strlen(url); i++)
 		if (url[i] == '\\')
 			url[i] = '/';
 

@@ -429,8 +429,7 @@ static char *oidc_cfg_parse_hex(apr_pool_t *pool, const char *input, char **outp
 	*output_len = input_len / 2;
 	const char *pos = input;
 	unsigned char *val = apr_pcalloc(pool, *output_len);
-	size_t count = 0;
-	for (count = 0; count < (*output_len) / sizeof(unsigned char); count++) {
+	for (size_t count = 0; count < (*output_len) / sizeof(unsigned char); count++) {
 		if (sscanf(pos, "%2hhx", &val[count]) != 1)
 			return apr_psprintf(pool, "hex-decoding failed at offset %" APR_SIZE_T_FMT ": non-hex input",
 					    count * 2);

@@ -86,9 +86,8 @@ apr_byte_t oidc_util_key_symmetric_create(request_rec *r, const char *client_sec
 apr_hash_t *oidc_util_key_symmetric_merge(apr_pool_t *pool, const apr_array_header_t *keys, oidc_jwk_t *jwk) {
 	apr_hash_t *result = apr_hash_make(pool);
 	const oidc_jwk_t *elem = NULL;
-	int i = 0;
 	if (keys != NULL) {
-		for (i = 0; i < keys->nelts; i++) {
+		for (int i = 0; i < keys->nelts; i++) {
 			elem = APR_ARRAY_IDX(keys, i, const oidc_jwk_t *);
 			if (elem->kid != NULL)
 				apr_hash_set(result, elem->kid, APR_HASH_KEY_STRING, elem);
@@ -106,9 +105,8 @@ apr_hash_t *oidc_util_key_symmetric_merge(apr_pool_t *pool, const apr_array_head
 apr_hash_t *oidc_util_key_sets_merge(apr_pool_t *pool, apr_hash_t *k1, const apr_array_header_t *k2) {
 	apr_hash_t *rv = k1 ? apr_hash_copy(pool, k1) : apr_hash_make(pool);
 	const oidc_jwk_t *jwk = NULL;
-	int i = 0;
 	if (k2 != NULL) {
-		for (i = 0; i < k2->nelts; i++) {
+		for (int i = 0; i < k2->nelts; i++) {
 			jwk = APR_ARRAY_IDX(k2, i, const oidc_jwk_t *);
 			if (jwk->kid != NULL)
 				apr_hash_set(rv, jwk->kid, APR_HASH_KEY_STRING, jwk);
@@ -136,9 +134,8 @@ apr_hash_t *oidc_util_key_sets_hash_merge(apr_pool_t *pool, apr_hash_t *k1, apr_
  */
 oidc_jwk_t *oidc_util_key_list_first(const apr_array_header_t *key_list, int kty, const char *use) {
 	oidc_jwk_t *rv = NULL;
-	int i = 0;
 	oidc_jwk_t *jwk = NULL;
-	for (i = 0; key_list && (i < key_list->nelts); i++) {
+	for (int i = 0; key_list && (i < key_list->nelts); i++) {
 		jwk = APR_ARRAY_IDX(key_list, i, oidc_jwk_t *);
 		if ((kty != -1) && (jwk->kty != kty))
 			continue;
