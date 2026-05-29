@@ -230,7 +230,9 @@ static void oidc_proto_userinfo_composite_apply_names(request_rec *r, json_t *na
  * if the userinfo response contains composite claims then resolve those
  */
 static apr_byte_t oidc_proto_userinfo_request_composite_claims(request_rec *r, oidc_cfg_t *cfg, json_t *claims) {
-	json_t *sources, *names, *decoded;
+	json_t *sources;
+	json_t *names;
+	json_t *decoded;
 
 	oidc_debug(r, "enter");
 

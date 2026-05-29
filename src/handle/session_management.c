@@ -130,7 +130,9 @@ static int oidc_session_management_iframe_rp(request_rec *r, oidc_cfg_t *c, oidc
 	if ((poll_interval <= 0) || (poll_interval > 3600 * 24))
 		poll_interval = 3000;
 
-	char *login_uri = NULL, *error_str = NULL, *error_description = NULL;
+	char *login_uri = NULL;
+	char *error_str = NULL;
+	char *error_description = NULL;
 	oidc_util_url_parameter_get(r, "login_uri", &login_uri);
 	if ((login_uri != NULL) &&
 	    (oidc_validate_redirect_url(r, c, login_uri, TRUE, &error_str, &error_description) == FALSE)) {

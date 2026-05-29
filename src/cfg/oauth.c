@@ -300,7 +300,8 @@ const char *oidc_cmd_oauth_verify_shared_keys_set(cmd_parms *cmd, void *struct_p
 
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
 
-	char *kid = NULL, *secret = NULL;
+	char *kid = NULL;
+	char *secret = NULL;
 	int key_len = 0;
 	const char *rv = oidc_cfg_parse_key_record(cmd->pool, arg, &kid, &secret, &key_len, &use, TRUE);
 	if (rv != NULL)

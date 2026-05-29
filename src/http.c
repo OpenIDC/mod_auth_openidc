@@ -173,7 +173,8 @@ static const char *oidc_http_hdr_in_get_left_most_only(const request_rec *r, con
  */
 static apr_byte_t oidc_http_hdr_in_contains(const request_rec *r, const char *name, const char *separator,
 					    const char postfix_separator, const char *needle) {
-	char *ctx = NULL, *elem = NULL;
+	char *ctx = NULL;
+	char *elem = NULL;
 	const char *value = oidc_http_hdr_in_get(r, name);
 	apr_byte_t rc = FALSE;
 	if (value) {
@@ -481,7 +482,9 @@ size_t oidc_http_response_data(void *contents, size_t size, size_t nmemb, void *
 size_t oidc_http_response_header(char *buffer, size_t size, size_t nitems, void *userdata) {
 	/* received header is nitems * size long in 'buffer' NOT ZERO TERMINATED */
 	oidc_curl_resp_hdr_ctx_t *ctx = (oidc_curl_resp_hdr_ctx_t *)userdata;
-	char *hdr = NULL, *value = NULL, *h_name = NULL;
+	char *hdr = NULL;
+	char *value = NULL;
+	char *h_name = NULL;
 	apr_ssize_t h_len = 0;
 	int i = 0;
 
@@ -1223,7 +1226,8 @@ static char *oidc_http_get_chunk_cookie_name(request_rec *r, const char *cookieN
  * get a cookie value that is split over a number of chunked cookies
  */
 char *oidc_http_get_chunked_cookie(request_rec *r, const char *cookieName, int chunkSize) {
-	char *cookieValue = NULL, *chunkValue = NULL;
+	char *cookieValue = NULL;
+	char *chunkValue = NULL;
 	int chunkCount = 0;
 	if (chunkSize == 0)
 		return oidc_http_get_cookie(r, cookieName);

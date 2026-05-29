@@ -321,7 +321,9 @@ const char *oidc_cmd_private_keys_set(cmd_parms *cmd, void *ptr, const char *arg
 	oidc_jose_error_t err;
 	char *use = NULL;
 
-	char *kid = NULL, *name = NULL, *fname = NULL;
+	char *kid = NULL;
+	char *name = NULL;
+	char *fname = NULL;
 	int fname_len;
 	const char *rv = oidc_cfg_parse_key_record(cmd->pool, arg, &kid, &name, &fname_len, &use, FALSE);
 	if (rv != NULL)

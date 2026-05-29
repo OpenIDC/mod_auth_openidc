@@ -316,7 +316,9 @@ static apr_byte_t oidc_auth_handle_separator(request_rec *r, const char *key, js
  */
 apr_byte_t oidc_authz_match_claim(request_rec *r, const char *const attr_spec, json_t *claims) {
 
-	const char *key = NULL, *attr_c = NULL, *spec_c = NULL;
+	const char *key = NULL;
+	const char *attr_c = NULL;
+	const char *spec_c = NULL;
 	json_t *val = NULL;
 
 	// if we don't have any claims, they can never match any Require claim primitive
@@ -398,7 +400,8 @@ static void oidc_authz_get_claims_idtoken_scope(request_rec *r, json_t **claims,
  */
 static json_t *oidc_authz_merge_claims(request_rec *r) {
 	json_t *result = json_object();
-	json_t *claims = NULL, *id_token = NULL;
+	json_t *claims = NULL;
+	json_t *id_token = NULL;
 	const char *scope = NULL;
 
 	/* get the set of claims from the request state as they have been set in the authentication part earlier */
@@ -445,7 +448,9 @@ authz_status oidc_authz_24_worker(request_rec *r, json_t *claims, const char *re
 
 	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	int count_oauth_claims = 0;
-	const char *t, *w, *err = NULL;
+	const char *t;
+	const char *w;
+	const char *err = NULL;
 	const ap_expr_info_t *expr = parsed_require_args;
 
 	/* needed for anonymous authentication */

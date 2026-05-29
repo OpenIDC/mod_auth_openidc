@@ -81,7 +81,8 @@ static int oidc_response_authorization_error(request_rec *r, oidc_cfg_t *c, oidc
 
 /* handle the browser back on an authorization response */
 static apr_byte_t oidc_response_browser_back(request_rec *r, const char *r_state, oidc_session_t *session) {
-	const char *s_state = NULL, *o_url = NULL;
+	const char *s_state = NULL;
+	const char *o_url = NULL;
 
 	/*  see if we have an existing session and browser-back was used */
 	if (session->remote_user == NULL)

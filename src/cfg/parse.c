@@ -476,7 +476,10 @@ static const char *oidc_cfg_parse_key_value(apr_pool_t *pool, const char *enc, c
 const char *oidc_cfg_parse_key_record(apr_pool_t *pool, const char *tuple, char **kid, char **key, int *key_len,
 				      char **use, apr_byte_t triplet) {
 	const char *rv = NULL;
-	char *s = NULL, *p = NULL, *q = NULL, *enc = NULL;
+	char *s = NULL;
+	char *p = NULL;
+	char *q = NULL;
+	char *enc = NULL;
 
 	if ((tuple == NULL) || (_oidc_strcmp(tuple, "") == 0))
 		return "tuple value not set";
@@ -573,7 +576,9 @@ const char *oidc_cfg_parse_public_key_files(apr_pool_t *pool, const char *arg, a
 	oidc_jose_error_t err;
 	char *use = NULL;
 
-	char *kid = NULL, *name = NULL, *fname = NULL;
+	char *kid = NULL;
+	char *name = NULL;
+	char *fname = NULL;
 	int fname_len;
 	const char *rv = oidc_cfg_parse_key_record(pool, arg, &kid, &name, &fname_len, &use, FALSE);
 	if (rv != NULL)
@@ -615,7 +620,8 @@ const char *oidc_parse_remote_user_claim(apr_pool_t *pool, const char *v1, const
  */
 const char *oidc_cfg_parse_http_timeout(apr_pool_t *pool, const char *arg1, const char *arg2, const char *arg3,
 					oidc_http_timeout_t *http_timeout) {
-	char *s = NULL, *p = NULL;
+	char *s = NULL;
+	char *p = NULL;
 	if (arg1)
 		http_timeout->request_timeout = _oidc_str_to_int(arg1, http_timeout->request_timeout);
 	if (arg2)

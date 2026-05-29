@@ -202,7 +202,8 @@ const char *oidc_cfg_dir_accept_oauth_token_in2str(apr_pool_t *pool, oidc_oauth_
 const char *oidc_cmd_dir_accept_oauth_token_in_set(cmd_parms *cmd, void *m, const char *arg) {
 	oidc_dir_cfg_t *dir_cfg = (oidc_dir_cfg_t *)m;
 	int v = 0;
-	const char *rv = NULL, *s = NULL;
+	const char *rv = NULL;
+	const char *s = NULL;
 	char *p = NULL;
 
 	s = apr_pstrdup(cmd->pool, arg);

@@ -91,8 +91,10 @@ static void _oidc_jose_error_set(oidc_jose_error_t *error, const char *source, c
 static int oidc_jose_util_get_b64encoded_certificate_data(apr_pool_t *p, X509 *x509_cert,
 							  char **b64_encoded_certificate, oidc_jose_error_t *err) {
 	int rc = 0;
-	char *name = NULL, *header = NULL;
-	long len = 0, b64_len = 0;
+	char *name = NULL;
+	char *header = NULL;
+	long len = 0;
+	long b64_len = 0;
 	BIO *bio = NULL;
 	unsigned char *data = NULL;
 
@@ -179,7 +181,9 @@ const char *oidc_jwt_hdr_get(oidc_jwt_t *jwt, const char *key) {
  */
 char *oidc_jose_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jose_error_t *err) {
 	cjose_err cjose_err;
-	char *result = NULL, *s_payload = NULL, *out = NULL;
+	char *result = NULL;
+	char *s_payload = NULL;
+	char *out = NULL;
 	size_t out_len;
 
 	if (_oidc_strcmp(jwt->header.alg, CJOSE_HDR_ALG_NONE) == 0) {
@@ -345,7 +349,8 @@ oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, json_t *json, oidc_jose_error_t *er
 	cjose_err cjose_err;
 	oidc_jose_error_t x5c_err;
 	char *use = NULL;
-	json_t *v = NULL, *e = NULL;
+	json_t *v = NULL;
+	json_t *e = NULL;
 
 	char *s_json = oidc_util_json_encode(pool, json, JSON_PRESERVE_ORDER | JSON_COMPACT);
 	if (s_json == NULL) {
@@ -530,7 +535,8 @@ apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_js
 	apr_byte_t rv = FALSE;
 	char *s_cjose = NULL;
 	cjose_err err;
-	json_t *json = NULL, *temp = NULL;
+	json_t *json = NULL;
+	json_t *temp = NULL;
 	json_error_t json_error;
 
 	// input sanity checks
@@ -1034,7 +1040,8 @@ static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input,
 	apr_byte_t rv = FALSE;
 	int status = Z_OK;
 	size_t len = OIDC_CJOSE_UNCOMPRESS_CHUNK;
-	char *tmp = NULL, *buf = apr_pcalloc(pool, len);
+	char *tmp = NULL;
+	char *buf = apr_pcalloc(pool, len);
 	z_stream zlib;
 
 	zlib.zalloc = Z_NULL;
@@ -1511,7 +1518,9 @@ static apr_byte_t _oidc_jwk_rsa_key_to_jwk(apr_pool_t *pool, EVP_PKEY *pkey, oid
 					   int *fp_len, oidc_jose_error_t *err) {
 	apr_byte_t rv = FALSE;
 	cjose_err cjose_err;
-	BIGNUM *rsa_n = NULL, *rsa_e = NULL, *rsa_d = NULL;
+	BIGNUM *rsa_n = NULL;
+	BIGNUM *rsa_e = NULL;
+	BIGNUM *rsa_d = NULL;
 	cjose_jwk_rsa_keyspec key_spec;
 
 	_oidc_memset(&key_spec, 0, sizeof(cjose_jwk_rsa_keyspec));
@@ -1594,7 +1603,9 @@ static apr_byte_t _oidc_jwk_ec_key_to_jwk(apr_pool_t *pool, EVP_PKEY *pkey, oidc
 	cjose_err cjose_err;
 	cjose_jwk_ec_keyspec ec_keyspec;
 	int crv = 0;
-	BIGNUM *ec_x = NULL, *ec_y = NULL, *ec_d = NULL;
+	BIGNUM *ec_x = NULL;
+	BIGNUM *ec_y = NULL;
+	BIGNUM *ec_d = NULL;
 
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
 	char curve_name[64];

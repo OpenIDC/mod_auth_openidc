@@ -218,7 +218,8 @@ int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg) {
 
 	oidc_http_set_cookie(r, OIDC_CSRF_NAME, csrf, -1, oidc_discovery_csrf_cookie_samesite(r, cfg));
 
-	char *javascript = NULL, *javascript_method = NULL;
+	char *javascript = NULL;
+	char *javascript_method = NULL;
 	char *html_head = "<style type=\"text/css\">body {text-align: center}</style>";
 	if (oidc_response_post_preserve_javascript(r, NULL, &javascript, &javascript_method) == TRUE)
 		html_head = apr_psprintf(r->pool, "%s%s", html_head, javascript);
@@ -480,8 +481,12 @@ static int oidc_discovery_response_authenticate(request_rec *r, oidc_cfg_t *c, c
  */
 int oidc_discovery_response(request_rec *r, oidc_cfg_t *c) {
 
-	char *issuer = NULL, *target_link_uri = NULL, *login_hint = NULL, *auth_request_params = NULL, *user = NULL,
-	     *path_scopes = NULL;
+	char *issuer = NULL;
+	char *target_link_uri = NULL;
+	char *login_hint = NULL;
+	char *auth_request_params = NULL;
+	char *user = NULL;
+	char *path_scopes = NULL;
 	int rv = OK;
 
 	oidc_util_url_parameter_get(r, OIDC_DISC_OP_PARAM, &issuer);

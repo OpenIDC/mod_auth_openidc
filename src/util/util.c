@@ -440,7 +440,8 @@ apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char
  * is case-insensitive
  */
 apr_byte_t oidc_util_hostname_endswith(const char *hostname, const char *suffix) {
-	size_t hlen, slen;
+	size_t hlen;
+	size_t slen;
 	const char *tail = NULL;
 	if ((hostname == NULL) || (suffix == NULL))
 		return FALSE;
@@ -483,7 +484,8 @@ void oidc_util_set_trace_parent(request_rec *r, oidc_cfg_t *c, const char *span)
 	unsigned char trace_id[OIDC_TP_TRACE_ID_LEN];
 	unsigned char parent_id[OIDC_TP_PARENT_ID_LEN];
 	unsigned char trace_flags = 0;
-	char *s_parent_id = "", *s_trace_id = "";
+	char *s_parent_id = "";
+	char *s_trace_id = "";
 	const char *v = NULL;
 	int i = 0;
 	char *hostname = "localhost";

@@ -120,7 +120,10 @@ typedef struct oidc_state_cookies_t {
  */
 static int oidc_state_cookies_delete_oldest(request_rec *r, oidc_cfg_t *c, int number_of_valid_state_cookies,
 					    int max_number_of_state_cookies, oidc_state_cookies_t *first) {
-	oidc_state_cookies_t *cur = NULL, *prev = NULL, *prev_oldest = NULL, *oldest = NULL;
+	oidc_state_cookies_t *cur = NULL;
+	oidc_state_cookies_t *prev = NULL;
+	oidc_state_cookies_t *prev_oldest = NULL;
+	oidc_state_cookies_t *oldest = NULL;
 	// loop over the list of state cookies, deleting the oldest one until we reach an acceptable number
 	while (number_of_valid_state_cookies >= max_number_of_state_cookies) {
 		oldest = first;
@@ -231,7 +234,8 @@ static int oidc_state_cookies_parse_token(request_rec *r, oidc_cfg_t *c, char *c
  */
 int oidc_state_cookies_clean_expired(request_rec *r, oidc_cfg_t *c, const char *currentCookieName, int delete_oldest) {
 	int number_of_valid_state_cookies = 0;
-	oidc_state_cookies_t *first = NULL, *last = NULL;
+	oidc_state_cookies_t *first = NULL;
+	oidc_state_cookies_t *last = NULL;
 	char *tokenizerCtx = NULL;
 	char *cookies = apr_pstrdup(r->pool, oidc_http_hdr_in_cookie_get(r));
 

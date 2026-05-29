@@ -38,7 +38,8 @@
  */
 apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, json_t *j_provider) {
 
-	char *issuer = NULL, *value = NULL;
+	char *issuer = NULL;
+	char *value = NULL;
 	const char *rv = NULL;
 
 	/* get the "issuer" from the provider metadata */

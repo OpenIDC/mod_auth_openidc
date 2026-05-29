@@ -80,7 +80,9 @@ static void oidc_proto_request_auth_params_add(request_rec *r, apr_table_t *para
  */
 static int oidc_proto_request_auth_push(request_rec *r, struct oidc_provider_t *provider, apr_table_t *params) {
 	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
-	char *response = NULL, *basic_auth = NULL, *bearer_auth = NULL;
+	char *response = NULL;
+	char *basic_auth = NULL;
+	char *bearer_auth = NULL;
 	char *request_uri = NULL;
 	int expires_in = 0;
 	char *authorization_request = NULL;

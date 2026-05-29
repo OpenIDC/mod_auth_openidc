@@ -196,7 +196,8 @@ apr_byte_t oidc_util_json_object_get_string(apr_pool_t *pool, json_t *json, cons
  */
 apr_byte_t oidc_util_json_object_get_string_array(apr_pool_t *pool, json_t *json, const char *name,
 						  apr_array_header_t **value, const apr_array_header_t *default_value) {
-	json_t *v = NULL, *arr = NULL;
+	json_t *v = NULL;
+	json_t *arr = NULL;
 	*value = (default_value != NULL) ? apr_array_copy(pool, default_value) : NULL;
 	if (json != NULL) {
 		arr = json_object_get(json, name);

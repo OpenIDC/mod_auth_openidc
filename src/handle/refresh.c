@@ -123,7 +123,8 @@ static oidc_refresh_token_cache_result_t oidc_refresh_token_cache_get(request_re
 								      apr_time_t *ts) {
 
 	char *s_json = NULL;
-	json_t *json = NULL, *v = NULL;
+	json_t *json = NULL;
+	json_t *v = NULL;
 	oidc_refresh_token_cache_result_t rv = OIDC_REFRESH_CACHE_ERROR;
 
 	oidc_cache_mutex_lock(r->pool, r->server, oidc_cfg_refresh_mutex_get(c));

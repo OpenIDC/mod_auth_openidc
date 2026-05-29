@@ -50,7 +50,10 @@
  */
 static const char *oidc_util_jq_exec(request_rec *r, jq_state *jq, struct jv_parser *parser) {
 	const char *rv = NULL;
-	jv value, elem, str, msg;
+	jv value;
+	jv elem;
+	jv str;
+	jv msg;
 
 	value = jv_parser_next(parser);
 	while (jv_is_valid(value)) {
