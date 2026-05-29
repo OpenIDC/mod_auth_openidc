@@ -42,6 +42,18 @@
  * dispatch tests below can exercise the routing decisions directly */
 extern int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session);
 
+/* minimum-viable OpenID Connect provider metadata used by the static-config tests below */
+#define OIDC_TEST_PROVIDER_METADATA_JSON                                                                               \
+	"{"                                                                                                            \
+	"\"issuer\":\"https://idp.example.com\","                                                                      \
+	"\"authorization_endpoint\":\"https://idp.example.com/authorize\","                                            \
+	"\"token_endpoint\":\"https://idp.example.com/token\","                                                        \
+	"\"userinfo_endpoint\":\"https://idp.example.com/userinfo\","                                                  \
+	"\"jwks_uri\":\"https://idp.example.com/jwks\","                                                               \
+	"\"response_types_supported\":[\"code\",\"id_token\",\"id_token token\"],"                                     \
+	"\"token_endpoint_auth_methods_supported\":[\"client_secret_basic\",\"client_secret_post\"]"                   \
+	"}"
+
 /*
  * Tests for handle/userinfo.c — drive oidc_userinfo_retrieve_claims /
  * oidc_userinfo_refresh_claims / oidc_userinfo_store_claims against the
@@ -1493,6 +1505,70 @@ START_TEST(test_handle_mod_provider_static_config_no_metadata_url) {
 	ck_assert_int_eq(oidc_provider_static_config(r, c, &provider), TRUE);
 	ck_assert_ptr_nonnull(provider);
 	ck_assert_ptr_eq(provider, oidc_cfg_provider_get(c));
+}
+END_TEST
+
+START_TEST(test_handle_mod_provider_static_config_metadata_url_cached) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *cfg_provider = oidc_cfg_provider_get(c);
+
+	/* configure a metadata URL (no metadata dir) and pre-seed the provider cache,
+	 * so static config takes the cache-hit branch (validate-decode, no HTTP fetch) */
+	const char *metadata_url = "https://idp.example.com/.well-known/openid-configuration";
+	oidc_cfg_provider_metadata_url_set(r->pool, cfg_provider, metadata_url);
+	oidc_cache_set_provider(r, metadata_url, OIDC_TEST_PROVIDER_METADATA_JSON,
+				apr_time_now() + apr_time_from_sec(300));
+
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_provider_static_config(r, c, &provider), TRUE);
+	ck_assert_ptr_nonnull(provider);
+	/* a metadata-derived provider is a fresh copy, not the configured struct */
+	ck_assert_ptr_ne(provider, cfg_provider);
+}
+END_TEST
+
+START_TEST(test_handle_mod_provider_static_config_metadata_url_fetch) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *cfg_provider = oidc_cfg_provider_get(c);
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, cfg_provider, 0);
+
+	/* serve the metadata from the loopback server and point the provider at it;
+	 * with an empty cache this drives the HTTP retrieve + validate + cache-set path */
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = OIDC_TEST_PROVIDER_METADATA_JSON};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_metadata_url_set(r->pool, cfg_provider, oidc_test_http_server_url(srv, r->pool));
+
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_provider_static_config(r, c, &provider), TRUE);
+	ck_assert_ptr_nonnull(provider);
+	ck_assert_ptr_ne(provider, cfg_provider);
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_str_eq(cap->method, "GET");
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+START_TEST(test_handle_mod_provider_static_config_metadata_url_fetch_fails) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *cfg_provider = oidc_cfg_provider_get(c);
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, cfg_provider, 0);
+
+	/* point the provider at a port with nothing listening: the metadata fetch
+	 * fails (cache miss + connection refused) and static config returns FALSE */
+	int port = oidc_test_http_free_port(r->pool);
+	ck_assert_int_ne(port, 0);
+	oidc_cfg_provider_metadata_url_set(r->pool, cfg_provider,
+					   apr_psprintf(r->pool, "http://127.0.0.1:%d/metadata", port));
+
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_provider_static_config(r, c, &provider), FALSE);
 }
 END_TEST
 
@@ -3328,6 +3404,9 @@ int main(void) {
 	tcase_add_test(mod_main, test_handle_mod_scrub_headers_custom_prefix);
 	tcase_add_test(mod_main, test_handle_mod_strip_cookies_configured);
 	tcase_add_test(mod_main, test_handle_mod_provider_static_config_no_metadata_url);
+	tcase_add_test(mod_main, test_handle_mod_provider_static_config_metadata_url_cached);
+	tcase_add_test(mod_main, test_handle_mod_provider_static_config_metadata_url_fetch);
+	tcase_add_test(mod_main, test_handle_mod_provider_static_config_metadata_url_fetch_fails);
 	tcase_add_test(mod_main, test_handle_mod_set_app_claims_pass_none);
 	tcase_add_test(mod_main, test_handle_mod_set_app_claims_pass_both);
 	tcase_add_test(mod_main, test_handle_mod_log_session_expires);
