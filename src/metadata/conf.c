@@ -40,7 +40,7 @@
 /*
  * check is a specified JOSE feature is supported
  */
-static apr_byte_t oidc_metadata_conf_jose_is_supported(request_rec *r, json_t *j_conf, const char *issuer,
+static apr_byte_t oidc_metadata_conf_jose_is_supported(request_rec *r, const json_t *j_conf, const char *issuer,
 						       const char *key, oidc_valid_function_t valid_function) {
 	char *s_value = NULL;
 	oidc_util_json_object_get_string(r->pool, j_conf, key, &s_value, NULL);
@@ -110,7 +110,7 @@ apr_byte_t oidc_metadata_conf_get(request_rec *r, const char *issuer, json_t **j
 /*
  * apply the conf profile; must run first so it can override potentially non-conformant / insecure settings
  */
-static void oidc_metadata_conf_parse_profile(request_rec *r, oidc_cfg_t *cfg, json_t *j_conf,
+static void oidc_metadata_conf_parse_profile(request_rec *r, oidc_cfg_t *cfg, const json_t *j_conf,
 					     oidc_provider_t *provider) {
 	const char *rv = NULL;
 	char *value = NULL;
@@ -128,7 +128,8 @@ static void oidc_metadata_conf_parse_profile(request_rec *r, oidc_cfg_t *cfg, js
 /*
  * apply the client JWKS settings: jwks_uri, inline keys and signed-jwks-uri verification keys
  */
-static void oidc_metadata_conf_parse_keys(request_rec *r, oidc_cfg_t *cfg, json_t *j_conf, oidc_provider_t *provider) {
+static void oidc_metadata_conf_parse_keys(request_rec *r, oidc_cfg_t *cfg, const json_t *j_conf,
+					  oidc_provider_t *provider) {
 	const char *rv = NULL;
 	apr_array_header_t *keys = NULL;
 
@@ -151,7 +152,7 @@ static void oidc_metadata_conf_parse_keys(request_rec *r, oidc_cfg_t *cfg, json_
 /*
  * apply the id_token signing & encryption settings and the audience override
  */
-static void oidc_metadata_conf_parse_id_token(request_rec *r, oidc_cfg_t *cfg, json_t *j_conf,
+static void oidc_metadata_conf_parse_id_token(request_rec *r, oidc_cfg_t *cfg, const json_t *j_conf,
 					      oidc_provider_t *provider) {
 	const char *rv = NULL;
 	apr_array_header_t *auds = NULL;
@@ -173,7 +174,7 @@ static void oidc_metadata_conf_parse_id_token(request_rec *r, oidc_cfg_t *cfg, j
 /*
  * apply the userinfo signing & encryption settings, refresh interval and token presentation method
  */
-static void oidc_metadata_conf_parse_userinfo(request_rec *r, oidc_cfg_t *cfg, json_t *j_conf,
+static void oidc_metadata_conf_parse_userinfo(request_rec *r, oidc_cfg_t *cfg, const json_t *j_conf,
 					      oidc_provider_t *provider) {
 	const char *rv = NULL;
 	char *value = NULL;
@@ -209,7 +210,7 @@ static void oidc_metadata_conf_parse_session(request_rec *r, oidc_cfg_t *cfg, js
 /*
  * apply the scope, the various request-parameter overrides and the request_object setting
  */
-static void oidc_metadata_conf_parse_request_params(request_rec *r, oidc_cfg_t *cfg, json_t *j_conf,
+static void oidc_metadata_conf_parse_request_params(request_rec *r, oidc_cfg_t *cfg, const json_t *j_conf,
 						    oidc_provider_t *provider) {
 	// TODO: use the provider "scopes_supported" to mix-and-match with what we've configured for the client
 	// TODO: check that "openid" is always included in the configured scopes, right?
@@ -246,7 +247,7 @@ static void oidc_metadata_conf_parse_response(request_rec *r, oidc_cfg_t *cfg, j
 /*
  * apply the client name/contact and dynamic registration metadata overrides
  */
-static void oidc_metadata_conf_parse_client(request_rec *r, oidc_cfg_t *cfg, json_t *j_conf,
+static void oidc_metadata_conf_parse_client(request_rec *r, oidc_cfg_t *cfg, const json_t *j_conf,
 					    oidc_provider_t *provider) {
 	OIDC_METADATA_CONF_STR(j_conf, OIDC_METADATA_CLIENT_NAME, client_name);
 	OIDC_METADATA_CONF_STR(j_conf, OIDC_METADATA_CLIENT_CONTACT, client_contact);
@@ -257,7 +258,7 @@ static void oidc_metadata_conf_parse_client(request_rec *r, oidc_cfg_t *cfg, jso
 /*
  * apply the token endpoint authentication method
  */
-static void oidc_metadata_conf_parse_endpoint_auth(request_rec *r, oidc_cfg_t *cfg, json_t *j_conf,
+static void oidc_metadata_conf_parse_endpoint_auth(request_rec *r, oidc_cfg_t *cfg, const json_t *j_conf,
 						   oidc_provider_t *provider) {
 	const char *rv = NULL;
 	char *value = NULL;
@@ -275,7 +276,7 @@ static void oidc_metadata_conf_parse_endpoint_auth(request_rec *r, oidc_cfg_t *c
 /*
  * apply the TLS client certificate auth settings for the token endpoint
  */
-static void oidc_metadata_conf_parse_tls_client(request_rec *r, oidc_cfg_t *cfg, json_t *j_conf,
+static void oidc_metadata_conf_parse_tls_client(request_rec *r, oidc_cfg_t *cfg, const json_t *j_conf,
 						oidc_provider_t *provider) {
 	OIDC_METADATA_CONF_STR(j_conf, OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_CERT, token_endpoint_tls_client_cert);
 	OIDC_METADATA_CONF_STR(j_conf, OIDC_METADATA_TOKEN_ENDPOINT_TLS_CLIENT_KEY, token_endpoint_tls_client_key);
@@ -286,7 +287,7 @@ static void oidc_metadata_conf_parse_tls_client(request_rec *r, oidc_cfg_t *cfg,
 /*
  * apply the DPoP mode
  */
-static void oidc_metadata_conf_parse_dpop_mode(request_rec *r, json_t *j_conf, oidc_provider_t *provider) {
+static void oidc_metadata_conf_parse_dpop_mode(request_rec *r, const json_t *j_conf, oidc_provider_t *provider) {
 	const char *rv = NULL;
 	char *value = NULL;
 
@@ -303,7 +304,8 @@ static void oidc_metadata_conf_parse_dpop_mode(request_rec *r, json_t *j_conf, o
 /*
  * apply the HTTP method used to deliver the authentication request
  */
-static void oidc_metadata_conf_parse_auth_request_method(request_rec *r, json_t *j_conf, oidc_provider_t *provider) {
+static void oidc_metadata_conf_parse_auth_request_method(request_rec *r, const json_t *j_conf,
+							 oidc_provider_t *provider) {
 	const char *rv = NULL;
 	char *value = NULL;
 

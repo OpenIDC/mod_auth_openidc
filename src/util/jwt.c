@@ -74,7 +74,7 @@ static apr_byte_t oidc_util_env_var_override(const request_rec *r, const char *e
 /*
  * check if we need to compress (internal) encrypted JWTs or not
  */
-static apr_byte_t oidc_util_jwt_internal_compress(request_rec *r) {
+static apr_byte_t oidc_util_jwt_internal_compress(const request_rec *r) {
 	// avoid compressing JWTs that need to be compatible with external producers/consumers
 	return oidc_util_env_var_override(r, OIDC_JWT_INTERNAL_NO_COMPRESS_ENV_VAR, FALSE);
 }
@@ -84,7 +84,7 @@ static apr_byte_t oidc_util_jwt_internal_compress(request_rec *r) {
 /*
  * check if we need to strip the header from (internal) encrypted JWTs or not
  */
-static apr_byte_t oidc_util_jwt_internal_strip_header(request_rec *r) {
+static apr_byte_t oidc_util_jwt_internal_strip_header(const request_rec *r) {
 	// avoid stripping JWT headers that need to be compatible with external producers/consumers
 	return oidc_util_env_var_override(r, OIDC_JWT_INTERNAL_STRIP_HDR_ENV_VAR, TRUE);
 }

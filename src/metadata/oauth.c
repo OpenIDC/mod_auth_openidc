@@ -36,7 +36,7 @@
 /*
  * parse the JSON OAuth 2.0 provider metadata in to the cfg->oauth struct
  */
-apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, json_t *j_provider) {
+apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, const json_t *j_provider) {
 
 	char *issuer = NULL;
 	char *value = NULL;

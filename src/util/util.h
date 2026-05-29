@@ -83,13 +83,13 @@ int oidc_util_html_send_in_template(request_rec *r, const char *filename, char *
 				    const char *arg1, int arg1_esc, const char *arg2, int arg2_esc);
 
 // jq.c
-const char *oidc_util_jq_filter(request_rec *r, json_t *json, const char *filter);
+const char *oidc_util_jq_filter(request_rec *r, const json_t *json, const char *filter);
 
 // json.c
 char *oidc_util_json_encode(apr_pool_t *pool, const json_t *json, size_t flags);
 apr_byte_t oidc_util_json_decode_object_err(request_rec *r, const char *str, json_t **json, apr_byte_t log_err);
 apr_byte_t oidc_util_json_decode_object(request_rec *r, const char *str, json_t **json);
-apr_byte_t oidc_util_json_check_error(request_rec *r, json_t *json);
+apr_byte_t oidc_util_json_check_error(request_rec *r, const json_t *json);
 apr_byte_t oidc_util_json_decode_and_check_error(request_rec *r, const char *str, json_t **json);
 apr_byte_t oidc_util_json_object_get_string(apr_pool_t *pool, const json_t *json, const char *name, char **value,
 					    const char *default_value);

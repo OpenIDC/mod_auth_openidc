@@ -49,7 +49,7 @@
  * printout a JSON string value
  */
 static apr_byte_t oidc_util_json_string_print(request_rec *r, const json_t *result, const char *key, const char *log) {
-	json_t *value = json_object_get(result, key);
+	const json_t *value = json_object_get(result, key);
 	if (value != NULL && !json_is_null(value)) {
 		oidc_error(r, "%s: response contained an \"%s\" entry with value: \"%s\"", log, key,
 			   oidc_util_json_encode(r->pool, value, JSON_PRESERVE_ORDER | JSON_COMPACT | JSON_ENCODE_ANY));
@@ -61,7 +61,7 @@ static apr_byte_t oidc_util_json_string_print(request_rec *r, const json_t *resu
 /*
  * check a JSON object for "error" results and printout
  */
-apr_byte_t oidc_util_json_check_error(request_rec *r, json_t *json) {
+apr_byte_t oidc_util_json_check_error(request_rec *r, const json_t *json) {
 	if (oidc_util_json_string_print(r, json, OIDC_PROTO_ERROR, "oidc_util_check_json_error") == TRUE) {
 		oidc_util_json_string_print(r, json, OIDC_PROTO_ERROR_DESCRIPTION, "oidc_util_check_json_error");
 		return TRUE;
@@ -197,7 +197,7 @@ apr_byte_t oidc_util_json_object_get_string(apr_pool_t *pool, const json_t *json
 apr_byte_t oidc_util_json_object_get_string_array(apr_pool_t *pool, const json_t *json, const char *name,
 						  apr_array_header_t **value, const apr_array_header_t *default_value) {
 	const json_t *v = NULL;
-	json_t *arr = NULL;
+	const json_t *arr = NULL;
 	*value = (default_value != NULL) ? apr_array_copy(pool, default_value) : NULL;
 	if (json != NULL) {
 		arr = json_object_get(json, name);

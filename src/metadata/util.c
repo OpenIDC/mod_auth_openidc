@@ -110,7 +110,7 @@ apr_byte_t oidc_metadata_file_read_json(request_rec *r, const char *path, json_t
 /*
  * check if the specified entry in metadata is a valid URI
  */
-apr_byte_t oidc_metadata_is_valid_uri(request_rec *r, const char *type, const char *issuer, json_t *json,
+apr_byte_t oidc_metadata_is_valid_uri(request_rec *r, const char *type, const char *issuer, const json_t *json,
 				      const char *key, char **value, apr_byte_t is_mandatory) {
 
 	char *s_value = NULL;
@@ -195,7 +195,7 @@ const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, const json_t *
 /*
  * parse boolean value from JSON configuration
  */
-void oidc_metadata_parse_boolean(request_rec *r, json_t *json, const char *key, int *value, int default_value) {
+void oidc_metadata_parse_boolean(request_rec *r, const json_t *json, const char *key, int *value, int default_value) {
 	int int_value = 0;
 	char *s_value = NULL;
 	if (oidc_util_json_object_get_bool(json, key, &int_value, default_value) == FALSE) {

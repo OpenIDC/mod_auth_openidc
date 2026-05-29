@@ -41,7 +41,8 @@
 /*
  * check to see if JSON provider metadata is valid
  */
-apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, oidc_cfg_t *cfg, json_t *j_provider, const char *issuer) {
+apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, const oidc_cfg_t *cfg, json_t *j_provider,
+					   const char *issuer) {
 
 	/* get the "issuer" from the provider metadata and double-check that it matches what we looked for */
 	char *s_issuer = NULL;

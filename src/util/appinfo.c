@@ -153,9 +153,9 @@ static const char *oidc_util_appinfo_array_concat(request_rec *r, const json_t *
 /*
  * render a single JSON claim value to its application-header textual form and pass it to oidc_util_appinfo_set
  */
-static void oidc_util_appinfo_set_one(request_rec *r, const char *s_key, json_t *j_value, const char *claim_prefix,
-				      const char *claim_delimiter, oidc_appinfo_pass_in_t pass_in,
-				      oidc_appinfo_encoding_t encoding) {
+static void oidc_util_appinfo_set_one(request_rec *r, const char *s_key, const json_t *j_value,
+				      const char *claim_prefix, const char *claim_delimiter,
+				      oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding) {
 
 	char s_int[OIDC_JSON_MAX_INT_STR_LEN];
 

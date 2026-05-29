@@ -41,7 +41,7 @@
 /*
  * check to see if dynamically registered JSON client metadata is valid and has not expired
  */
-static apr_byte_t oidc_metadata_client_is_valid(request_rec *r, json_t *j_client, const char *issuer) {
+static apr_byte_t oidc_metadata_client_is_valid(request_rec *r, const json_t *j_client, const char *issuer) {
 
 	char *str;
 
@@ -159,7 +159,7 @@ apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg, oidc_p
 		json_t *request_object_config = NULL;
 		if (oidc_util_json_decode_object(r, oidc_cfg_provider_request_object_get(provider),
 						 &request_object_config) == TRUE) {
-			json_t *crypto = json_object_get(request_object_config, "crypto");
+			const json_t *crypto = json_object_get(request_object_config, "crypto");
 			char *alg = "none";
 			oidc_util_json_object_get_string(r->pool, crypto, "sign_alg", &alg, "none");
 			json_object_set_new(data, "request_object_signing_alg", json_string(alg));
@@ -259,7 +259,7 @@ apr_byte_t oidc_metadata_client_get(request_rec *r, oidc_cfg_t *cfg, const char 
 /*
  * override the provider token endpoint auth method when the client metadata specifies one
  */
-static void oidc_metadata_client_parse_token_endpoint_auth(request_rec *r, oidc_cfg_t *cfg, json_t *j_client,
+static void oidc_metadata_client_parse_token_endpoint_auth(request_rec *r, oidc_cfg_t *cfg, const json_t *j_client,
 							   oidc_provider_t *provider) {
 
 	char *value = NULL;
@@ -290,7 +290,7 @@ static void oidc_metadata_client_parse_response_type(request_rec *r, oidc_cfg_t 
 					    oidc_cfg_provider_response_type_get(oidc_cfg_provider_get(cfg)));
 
 	// "response_types" is an array in the client metadata as by spec
-	json_t *j_response_types = json_object_get(j_client, OIDC_METADATA_RESPONSE_TYPES);
+	const json_t *j_response_types = json_object_get(j_client, OIDC_METADATA_RESPONSE_TYPES);
 	if ((j_response_types == NULL) || (!json_is_array(j_response_types)))
 		return;
 
