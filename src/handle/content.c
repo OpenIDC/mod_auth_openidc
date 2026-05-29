@@ -55,9 +55,9 @@ int oidc_content_handler(request_rec *r) {
 	apr_byte_t needs_save = FALSE;
 	oidc_session_t *session = NULL;
 
-	if ((r->parsed_uri.path != NULL) && (oidc_cfg_metrics_path_get(c) != NULL))
-		if (_oidc_strcmp(r->parsed_uri.path, oidc_cfg_metrics_path_get(c)) == 0)
-			return oidc_metrics_handle_request(r);
+	if ((r->parsed_uri.path != NULL) && (oidc_cfg_metrics_path_get(c) != NULL) &&
+	    (_oidc_strcmp(r->parsed_uri.path, oidc_cfg_metrics_path_get(c)) == 0))
+		return oidc_metrics_handle_request(r);
 
 	if (oidc_enabled(r, c) == FALSE) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_DECLINED);

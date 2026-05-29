@@ -227,12 +227,10 @@ apr_byte_t oidc_metadata_client_get(request_rec *r, oidc_cfg_t *cfg, const char 
 	const char *client_path = oidc_metadata_client_file_path(r, issuer);
 
 	/* see if we have valid metadata already, if so, return it */
-	if (oidc_metadata_file_read_json(r, client_path, j_client) == TRUE) {
-
-		/* if the client metadata is (still) valid, return it */
-		if (oidc_metadata_client_is_valid(r, *j_client, issuer) == TRUE)
-			return TRUE;
-	}
+	/* if we have valid client metadata already, return it */
+	if ((oidc_metadata_file_read_json(r, client_path, j_client) == TRUE) &&
+	    (oidc_metadata_client_is_valid(r, *j_client, issuer) == TRUE))
+		return TRUE;
 
 	/* at this point we have no valid client metadata, see if there's a registration endpoint for this provider */
 	if (oidc_cfg_provider_registration_endpoint_url_get(provider) == NULL) {

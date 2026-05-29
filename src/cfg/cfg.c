@@ -1006,39 +1006,26 @@ oidc_cache_mutex_t *oidc_cfg_refresh_mutex_get(oidc_cfg_t *cfg) {
 int oidc_cfg_post_config(apr_pool_t *pool, oidc_cfg_t *cfg, server_rec *s) {
 	if (cfg->cache.impl == NULL)
 		cfg->cache.impl = &oidc_cache_shm;
-	if (cfg->cache.impl->post_config != NULL) {
-		if (cfg->cache.impl->post_config(pool, s) != OK)
-			return HTTP_INTERNAL_SERVER_ERROR;
-	}
+	if ((cfg->cache.impl->post_config != NULL) && (cfg->cache.impl->post_config(pool, s) != OK))
+		return HTTP_INTERNAL_SERVER_ERROR;
 	if (_oidc_refresh_mutex == NULL) {
 		// NB: use the process pool here as the mutex is a process-wide singleton
 		_oidc_refresh_mutex = oidc_cache_mutex_create(s->process->pool, TRUE);
 		if (oidc_cache_mutex_post_config(s->process->pool, s, _oidc_refresh_mutex, "refresh") != TRUE)
 			return HTTP_INTERNAL_SERVER_ERROR;
 	}
-	if (cfg->metrics_hook_data != NULL) {
-		if (oidc_metrics_post_config(pool, s) != TRUE)
-			return HTTP_INTERNAL_SERVER_ERROR;
-	}
+	if ((cfg->metrics_hook_data != NULL) && (oidc_metrics_post_config(pool, s) != TRUE))
+		return HTTP_INTERNAL_SERVER_ERROR;
 	return OK;
 }
 
 void oidc_cfg_child_init(apr_pool_t *pool, oidc_cfg_t *cfg, server_rec *s) {
-	if (cfg->cache.impl->child_init != NULL) {
-		if (cfg->cache.impl->child_init(pool, s) != APR_SUCCESS) {
-			oidc_serror(s, "cfg->cache->child_init failed");
-		}
-	}
-	if (_oidc_refresh_mutex != NULL) {
-		if (oidc_cache_mutex_child_init(pool, s, _oidc_refresh_mutex) != APR_SUCCESS) {
-			oidc_serror(s, "oidc_cache_mutex_child_init on refresh mutex failed");
-		}
-	}
-	if (cfg->metrics_hook_data != NULL) {
-		if (oidc_metrics_child_init(pool, s) != APR_SUCCESS) {
-			oidc_serror(s, "oidc_metrics_cache_child_init failed");
-		}
-	}
+	if ((cfg->cache.impl->child_init != NULL) && (cfg->cache.impl->child_init(pool, s) != APR_SUCCESS))
+		oidc_serror(s, "cfg->cache->child_init failed");
+	if ((_oidc_refresh_mutex != NULL) && (oidc_cache_mutex_child_init(pool, s, _oidc_refresh_mutex) != APR_SUCCESS))
+		oidc_serror(s, "oidc_cache_mutex_child_init on refresh mutex failed");
+	if ((cfg->metrics_hook_data != NULL) && (oidc_metrics_child_init(pool, s) != APR_SUCCESS))
+		oidc_serror(s, "oidc_metrics_cache_child_init failed");
 }
 
 void oidc_cfg_process_cleanup(oidc_cfg_t *cfg, server_rec *s) {

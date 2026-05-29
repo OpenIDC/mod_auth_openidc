@@ -53,14 +53,12 @@ apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, oidc_cfg_t *cfg, json
 	}
 
 	/* check that the issuer matches */
-	if (issuer != NULL) {
-		if (oidc_util_issuer_match(issuer, s_issuer) == FALSE) {
-			oidc_error(r,
-				   "requested issuer (%s) does not match the \"" OIDC_METADATA_ISSUER
-				   "\" value in the provider metadata file: %s",
-				   issuer, s_issuer);
-			return FALSE;
-		}
+	if ((issuer != NULL) && (oidc_util_issuer_match(issuer, s_issuer) == FALSE)) {
+		oidc_error(r,
+			   "requested issuer (%s) does not match the \"" OIDC_METADATA_ISSUER
+			   "\" value in the provider metadata file: %s",
+			   issuer, s_issuer);
+		return FALSE;
 	}
 
 	/* verify that the provider supports the a flow that we implement */
@@ -198,13 +196,9 @@ apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg_t *cfg, const cha
 	}
 
 	/* see if we have valid metadata already, if so, return it */
-	if (oidc_metadata_file_read_json(r, provider_path, &j_cache) == TRUE) {
-
-		/* return the validation result */
-		if (use_cache == TRUE) {
-			*j_provider = j_cache;
-			return oidc_metadata_provider_is_valid(r, cfg, *j_provider, issuer);
-		}
+	if ((oidc_metadata_file_read_json(r, provider_path, &j_cache) == TRUE) && (use_cache == TRUE)) {
+		*j_provider = j_cache;
+		return oidc_metadata_provider_is_valid(r, cfg, *j_provider, issuer);
 	}
 
 	if ((have_cache == FALSE) && (!allow_discovery)) {

@@ -88,12 +88,10 @@ const apr_array_header_t *oidc_proto_profile_id_token_aud_values_get(apr_pool_t 
 	const apr_array_header_t *values = oidc_cfg_provider_id_token_aud_values_get(provider);
 	// TODO: so we actually do allow overriding the acceptable "aud" values but we sort of assume the client_id
 	//       is in there in that case; perhaps check that - in the config check? - for FAPI20
-	if (values == NULL) {
-		if (oidc_cfg_provider_profile_get(provider) == OIDC_PROFILE_FAPI20) {
-			apr_array_header_t *list = NULL;
-			oidc_cfg_string_list_add(pool, &list, oidc_cfg_provider_client_id_get(provider));
-			return list;
-		}
+	if ((values == NULL) && (oidc_cfg_provider_profile_get(provider) == OIDC_PROFILE_FAPI20)) {
+		apr_array_header_t *list = NULL;
+		oidc_cfg_string_list_add(pool, &list, oidc_cfg_provider_client_id_get(provider));
+		return list;
 	}
 	return values;
 }

@@ -174,10 +174,9 @@ int oidc_session_management(request_rec *r, oidc_cfg_t *c, oidc_session_t *sessi
 					   TRUE);
 	}
 
-	if (oidc_get_provider_from_session(r, c, session, &provider) == FALSE) {
-		if ((oidc_provider_static_config(r, c, &provider) == FALSE) || (provider == NULL))
-			return HTTP_NOT_FOUND;
-	}
+	if ((oidc_get_provider_from_session(r, c, session, &provider) == FALSE) &&
+	    ((oidc_provider_static_config(r, c, &provider) == FALSE) || (provider == NULL)))
+		return HTTP_NOT_FOUND;
 
 	/* see if this is a request for the OP iframe */
 	if (_oidc_strcmp("iframe_op", cmd) == 0) {

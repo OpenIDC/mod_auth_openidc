@@ -183,11 +183,10 @@ char *oidc_pcre_subst(apr_pool_t *pool, const struct oidc_pcre *pcre, const char
 	PCRE2_SPTR subject = (PCRE2_SPTR)str;
 	PCRE2_SIZE length = (PCRE2_SIZE)len;
 	PCRE2_SPTR replacement = (PCRE2_SPTR)rep;
-	if (pcre2_substitute(pcre->preg, subject, length, 0, PCRE2_SUBSTITUTE_GLOBAL, 0, 0, replacement,
-			     PCRE2_ZERO_TERMINATED, output, &outlen) > 0) {
-		if (outlen > 0)
-			rv = apr_pstrndup(pool, (const char *)output, outlen);
-	}
+	if ((pcre2_substitute(pcre->preg, subject, length, 0, PCRE2_SUBSTITUTE_GLOBAL, 0, 0, replacement,
+			      PCRE2_ZERO_TERMINATED, output, &outlen) > 0) &&
+	    (outlen > 0))
+		rv = apr_pstrndup(pool, (const char *)output, outlen);
 	free(output);
 #else
 	char *substituted = NULL;

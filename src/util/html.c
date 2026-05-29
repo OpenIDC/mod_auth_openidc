@@ -283,12 +283,11 @@ int oidc_util_html_send_in_template(request_rec *r, const char *filename, char *
 				    const char *arg1, int arg1_esc, const char *arg2, int arg2_esc) {
 	char *html = NULL;
 	int rc = OK;
-	if (*static_template_content == NULL) {
-		// NB: templates go into the server process pool
-		if (oidc_util_file_read(r, filename, r->server->process->pool, static_template_content) == FALSE) {
-			oidc_error(r, "could not read template: %s", filename);
-			*static_template_content = NULL;
-		}
+	// NB: templates go into the server process pool
+	if ((*static_template_content == NULL) &&
+	    (oidc_util_file_read(r, filename, r->server->process->pool, static_template_content) == FALSE)) {
+		oidc_error(r, "could not read template: %s", filename);
+		*static_template_content = NULL;
 	}
 	if (*static_template_content) {
 		if (oidc_util_template_format_valid(*static_template_content, (arg2 == NULL) ? 1 : 2) == FALSE) {

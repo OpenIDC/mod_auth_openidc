@@ -295,17 +295,12 @@ oidc_provider_t *oidc_get_provider_for_issuer(request_rec *r, oidc_cfg_t *c, con
 	if (oidc_provider_static_config(r, c, &provider) == FALSE)
 		return NULL;
 
-	/* unless a metadata directory was configured, so we'll try and get the provider settings from there */
-	if (oidc_cfg_metadata_dir_get(c) != NULL) {
-
-		/* try and get metadata from the metadata directory for the OP that sent this response */
-		if ((oidc_metadata_get(r, c, issuer, &provider, allow_discovery) == FALSE) || (provider == NULL)) {
-
-			/* don't know nothing about this OP/issuer */
-			oidc_error(r, "no provider metadata found for issuer \"%s\"", issuer);
-
-			return NULL;
-		}
+	/* if a metadata directory was configured, try and get the provider settings from there */
+	if ((oidc_cfg_metadata_dir_get(c) != NULL) &&
+	    ((oidc_metadata_get(r, c, issuer, &provider, allow_discovery) == FALSE) || (provider == NULL))) {
+		/* don't know nothing about this OP/issuer */
+		oidc_error(r, "no provider metadata found for issuer \"%s\"", issuer);
+		return NULL;
 	}
 
 	return provider;
@@ -995,9 +990,9 @@ apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg_t *c, const char 
 		if (oidc_validate_redirect_url_allowed(r, oidc_cfg_redirect_urls_allowed_get(c), url, err_str,
 						       err_desc) == FALSE)
 			return FALSE;
-	} else if ((uri.hostname != NULL) && (restrict_to_host == TRUE)) {
-		if (oidc_validate_redirect_url_host(r, c, &uri, err_str, err_desc) == FALSE)
-			return FALSE;
+	} else if ((uri.hostname != NULL) && (restrict_to_host == TRUE) &&
+		   (oidc_validate_redirect_url_host(r, c, &uri, err_str, err_desc) == FALSE)) {
+		return FALSE;
 	}
 
 	if ((uri.hostname == NULL) && (oidc_validate_redirect_url_relative(r, url, err_str, err_desc) == FALSE))
@@ -1612,21 +1607,20 @@ static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s) {
 	if (oidc_cfg_crypto_passphrase_secret1_get(cfg) == NULL)
 		oidc_cfg_crypto_passphrase_secret1_set(cfg, oidc_util_rand_hex_str(NULL, s->process->pool, 32));
 
-	if ((oidc_cfg_metadata_dir_get(cfg) != NULL) ||
-	    (oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(cfg)) != NULL) ||
-	    (oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(cfg)) != NULL)) {
-		if (oidc_check_config_openid_openidc(pool, s, cfg) != OK)
-			return HTTP_INTERNAL_SERVER_ERROR;
-	}
+	if (((oidc_cfg_metadata_dir_get(cfg) != NULL) ||
+	     (oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(cfg)) != NULL) ||
+	     (oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(cfg)) != NULL)) &&
+	    (oidc_check_config_openid_openidc(pool, s, cfg) != OK))
+		return HTTP_INTERNAL_SERVER_ERROR;
 
-	if ((oidc_cfg_oauth_metadata_url_get(cfg) != NULL) || (oidc_cfg_oauth_client_id_get(cfg) != NULL) ||
-	    (oidc_cfg_oauth_client_secret_get(cfg) != NULL) ||
-	    (oidc_cfg_oauth_introspection_endpoint_url_get(cfg) != NULL) ||
-	    (oidc_cfg_oauth_verify_jwks_uri_get(cfg) != NULL) || (oidc_cfg_oauth_verify_public_keys_get(cfg) != NULL) ||
-	    (oidc_cfg_oauth_verify_shared_keys_get(cfg) != NULL)) {
-		if (oidc_check_config_oauth(pool, s, cfg) != OK)
-			return HTTP_INTERNAL_SERVER_ERROR;
-	}
+	if (((oidc_cfg_oauth_metadata_url_get(cfg) != NULL) || (oidc_cfg_oauth_client_id_get(cfg) != NULL) ||
+	     (oidc_cfg_oauth_client_secret_get(cfg) != NULL) ||
+	     (oidc_cfg_oauth_introspection_endpoint_url_get(cfg) != NULL) ||
+	     (oidc_cfg_oauth_verify_jwks_uri_get(cfg) != NULL) ||
+	     (oidc_cfg_oauth_verify_public_keys_get(cfg) != NULL) ||
+	     (oidc_cfg_oauth_verify_shared_keys_get(cfg) != NULL)) &&
+	    (oidc_check_config_oauth(pool, s, cfg) != OK))
+		return HTTP_INTERNAL_SERVER_ERROR;
 
 	return OK;
 }

@@ -422,11 +422,9 @@ oidc_jwk_t *oidc_jwk_copy(apr_pool_t *pool, const oidc_jwk_t *src) {
  * destroy resources allocated for a JWK struct
  */
 void oidc_jwk_destroy(oidc_jwk_t *jwk) {
-	if (jwk) {
-		if (jwk->cjose_jwk) {
-			cjose_jwk_release(jwk->cjose_jwk);
-			jwk->cjose_jwk = NULL;
-		}
+	if (jwk && jwk->cjose_jwk) {
+		cjose_jwk_release(jwk->cjose_jwk);
+		jwk->cjose_jwk = NULL;
 	}
 }
 
@@ -654,11 +652,10 @@ oidc_jwk_t *oidc_jwk_create_symmetric_key(apr_pool_t *pool, const char *skid, co
 		return NULL;
 	}
 
-	if (set_kid == TRUE) {
-		if (oidc_jwk_set_or_generate_kid(pool, cjose_jwk, skid, (const char *)key, key_len, err) == FALSE) {
-			cjose_jwk_release(cjose_jwk);
-			return NULL;
-		}
+	if ((set_kid == TRUE) &&
+	    (oidc_jwk_set_or_generate_kid(pool, cjose_jwk, skid, (const char *)key, key_len, err) == FALSE)) {
+		cjose_jwk_release(cjose_jwk);
+		return NULL;
 	}
 
 	oidc_jwk_t *jwk = oidc_jwk_new(pool);
@@ -1488,12 +1485,10 @@ static apr_byte_t oidc_jwk_x509_read(apr_pool_t *pool, BIO *input, char **encode
 		goto end;
 	}
 
-	if (pkey) {
-		/* get the public key struct from the X.509 struct */
-		if ((*pkey = X509_get_pubkey(x509)) == NULL) {
-			oidc_jose_error_openssl(err, "X509_get_pubkey");
-			goto end;
-		}
+	/* get the public key struct from the X.509 struct */
+	if (pkey && ((*pkey = X509_get_pubkey(x509)) == NULL)) {
+		oidc_jose_error_openssl(err, "X509_get_pubkey");
+		goto end;
 	}
 
 	/* populate x5c certificate */

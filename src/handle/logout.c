@@ -155,11 +155,10 @@ static apr_byte_t oidc_logout_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg
 	}
 
 	// revoke tokens if we can get a handle on those
-	if (oidc_cfg_session_type_get(cfg) != OIDC_SESSION_TYPE_CLIENT_COOKIE) {
-		if ((oidc_session_load_cache_by_uuid(r, cfg, uuid, &session) != FALSE) && (revoke_tokens == TRUE))
-			if (oidc_session_extract(r, &session) != FALSE)
-				oidc_logout_revoke_tokens(r, cfg, &session);
-	}
+	if ((oidc_cfg_session_type_get(cfg) != OIDC_SESSION_TYPE_CLIENT_COOKIE) &&
+	    (oidc_session_load_cache_by_uuid(r, cfg, uuid, &session) != FALSE) && (revoke_tokens == TRUE) &&
+	    (oidc_session_extract(r, &session) != FALSE))
+		oidc_logout_revoke_tokens(r, cfg, &session);
 
 	// clear the session cache
 	oidc_cache_set_sid(r, sid, NULL, 0);

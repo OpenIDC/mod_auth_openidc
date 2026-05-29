@@ -142,12 +142,11 @@ apr_byte_t oidc_response_post_preserve_javascript(request_rec *r, const char *lo
 	}
 	json = apr_psprintf(r->pool, "{ %s }", json);
 
-	if (oidc_cfg_post_preserve_template_get(cfg) != NULL) {
-		if (oidc_util_html_send_in_template(
-			r, oidc_cfg_post_preserve_template_get(cfg), &_oidc_response_post_preserve_template_contents,
-			json, OIDC_POST_PRESERVE_ESCAPE_NONE, location, OIDC_POST_PRESERVE_ESCAPE_JAVASCRIPT) == OK)
-			return TRUE;
-	}
+	if ((oidc_cfg_post_preserve_template_get(cfg) != NULL) &&
+	    (oidc_util_html_send_in_template(
+		 r, oidc_cfg_post_preserve_template_get(cfg), &_oidc_response_post_preserve_template_contents, json,
+		 OIDC_POST_PRESERVE_ESCAPE_NONE, location, OIDC_POST_PRESERVE_ESCAPE_JAVASCRIPT) == OK))
+		return TRUE;
 
 	const char *jmethod = "preserveOnLoad()";
 	const char *jscript = apr_psprintf(

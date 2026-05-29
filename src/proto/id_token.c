@@ -358,12 +358,9 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r, oidc_provider_t *p
 	oidc_debug(r, "enter, jwt.header=\"%s\", jwt.payload=\"%s\", nonce=\"%s\"", jwt->header.value.str,
 		   jwt->payload.value.str, nonce);
 
-	/* if a nonce is not passed, we're doing a ("code") flow where the nonce is optional */
-	if (nonce != NULL) {
-		/* if present, verify the nonce */
-		if (oidc_proto_idtoken_validate_nonce(r, cfg, provider, nonce, jwt) == FALSE)
-			return FALSE;
-	}
+	/* if a nonce is passed, verify it; otherwise we're doing a ("code") flow where the nonce is optional */
+	if ((nonce != NULL) && (oidc_proto_idtoken_validate_nonce(r, cfg, provider, nonce, jwt) == FALSE))
+		return FALSE;
 
 	/* validate the ID Token JWT, requiring iss match, and valid exp + iat */
 	if (oidc_proto_jwt_validate(

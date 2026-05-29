@@ -215,14 +215,12 @@ static apr_byte_t oidc_proto_validate_issuer_client_id(request_rec *r, const cha
 		return FALSE;
 	}
 
-	if (response_client_id != NULL) {
-		if (_oidc_strcmp(configured_client_id, response_client_id) != 0) {
-			oidc_error(r,
-				   "configured client_id (%s) does not match the client_id provided in the response by "
-				   "the OP (%s)",
-				   configured_client_id, response_client_id);
-			return FALSE;
-		}
+	if ((response_client_id != NULL) && (_oidc_strcmp(configured_client_id, response_client_id) != 0)) {
+		oidc_error(r,
+			   "configured client_id (%s) does not match the client_id provided in the response by "
+			   "the OP (%s)",
+			   configured_client_id, response_client_id);
+		return FALSE;
 	}
 
 	oidc_debug(r, "iss and/or client_id matched OK: %s, %s, %s, %s", response_issuer, configured_issuer,
