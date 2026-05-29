@@ -48,19 +48,21 @@
 apr_byte_t oidc_util_key_symmetric_create(request_rec *r, const char *client_secret, unsigned int r_key_len,
 					  const char *hash_algo, apr_byte_t set_kid, oidc_jwk_t **jwk) {
 	oidc_jose_error_t err = {{'\0'}, 0, {'\0'}, {'\0'}};
-	unsigned char *key = NULL;
+	const unsigned char *key = NULL;
 	unsigned int key_len;
 
 	if ((client_secret != NULL) && (_oidc_strlen(client_secret) > 0)) {
 
 		if (hash_algo == NULL) {
-			key = (unsigned char *)client_secret;
+			key = (const unsigned char *)client_secret;
 			key_len = _oidc_strlen(client_secret);
 		} else {
 			/* hash the client_secret first, this is OpenID Connect specific */
+			unsigned char *hashed = NULL;
 			if (oidc_jose_hash_bytes(r->pool, hash_algo, (const unsigned char *)client_secret,
-						 _oidc_strlen(client_secret), &key, &key_len, &err) == FALSE)
+						 _oidc_strlen(client_secret), &hashed, &key_len, &err) == FALSE)
 				return FALSE;
+			key = hashed;
 		}
 
 		if ((key != NULL) && (key_len > 0)) {

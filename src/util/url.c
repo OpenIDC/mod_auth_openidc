@@ -179,18 +179,19 @@ const char *oidc_util_url_cur_host(request_rec *r, oidc_hdr_x_forwarded_t x_forw
 	if (host_str == NULL)
 		host_str = oidc_http_hdr_in_host_get(r);
 	if (host_str) {
-		host_str = apr_pstrdup(r->pool, host_str);
+		char *dup = apr_pstrdup(r->pool, host_str);
 
-		if (host_str[0] == '[') {
-			p = strchr((char *)host_str, ']');
+		if (dup[0] == '[') {
+			p = strchr(dup, ']');
 			if (p)
 				p = strchr(p, OIDC_CHAR_COLON);
 		} else {
-			p = strchr((char *)host_str, OIDC_CHAR_COLON);
+			p = strchr(dup, OIDC_CHAR_COLON);
 		}
 
 		if (p != NULL)
 			*p = '\0';
+		host_str = dup;
 	} else {
 		/* no Host header, HTTP 1.0 */
 		host_str = ap_get_server_name(r);
