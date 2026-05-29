@@ -48,7 +48,7 @@
 /*
  * printout a JSON string value
  */
-static apr_byte_t oidc_util_json_string_print(request_rec *r, json_t *result, const char *key, const char *log) {
+static apr_byte_t oidc_util_json_string_print(request_rec *r, const json_t *result, const char *key, const char *log) {
 	json_t *value = json_object_get(result, key);
 	if (value != NULL && !json_is_null(value)) {
 		oidc_error(r, "%s: response contained an \"%s\" entry with value: \"%s\"", log, key,
@@ -121,7 +121,7 @@ apr_byte_t oidc_util_json_decode_object(request_rec *r, const char *str, json_t 
 /*
  * encode a JSON object
  */
-char *oidc_util_json_encode(apr_pool_t *pool, json_t *json, size_t flags) {
+char *oidc_util_json_encode(apr_pool_t *pool, const json_t *json, size_t flags) {
 	if (json == NULL)
 		return NULL;
 	char *s = json_dumps(json, flags);
@@ -151,7 +151,7 @@ apr_byte_t oidc_util_json_decode_and_check_error(request_rec *r, const char *str
 /*
  * see if a certain string value is part of a JSON array with string elements
  */
-apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack, const char *needle) {
+apr_byte_t oidc_util_json_array_has_value(request_rec *r, const json_t *haystack, const char *needle) {
 
 	if ((haystack == NULL) || (!json_is_array(haystack)))
 		return FALSE;
@@ -179,7 +179,7 @@ apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack, cons
 /*
  * get (optional) string from a JSON object
  */
-apr_byte_t oidc_util_json_object_get_string(apr_pool_t *pool, json_t *json, const char *name, char **value,
+apr_byte_t oidc_util_json_object_get_string(apr_pool_t *pool, const json_t *json, const char *name, char **value,
 					    const char *default_value) {
 	*value = default_value ? apr_pstrdup(pool, default_value) : NULL;
 	if (json != NULL) {
@@ -194,7 +194,7 @@ apr_byte_t oidc_util_json_object_get_string(apr_pool_t *pool, json_t *json, cons
 /*
  * get (optional) string array from a JSON object
  */
-apr_byte_t oidc_util_json_object_get_string_array(apr_pool_t *pool, json_t *json, const char *name,
+apr_byte_t oidc_util_json_object_get_string_array(apr_pool_t *pool, const json_t *json, const char *name,
 						  apr_array_header_t **value, const apr_array_header_t *default_value) {
 	const json_t *v = NULL;
 	json_t *arr = NULL;

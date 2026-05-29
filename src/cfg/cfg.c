@@ -292,7 +292,7 @@ const char *oidc_cfg_endpoint_auth_set(apr_pool_t *pool, oidc_cfg_t *cfg, const 
 /*
  * return the right token endpoint authentication method validation function, based on whether private keys are set
  */
-oidc_valid_function_t oidc_cfg_get_valid_endpoint_auth_function(oidc_cfg_t *cfg) {
+oidc_valid_function_t oidc_cfg_get_valid_endpoint_auth_function(const oidc_cfg_t *cfg) {
 	return (cfg->private_keys != NULL) ? &oidc_cfg_valid_endpoint_auth_method_with_private_key
 					   : &oidc_cfg_valid_endpoint_auth_method_no_private_key;
 }
@@ -364,7 +364,7 @@ const oidc_remote_user_claim_t *oidc_cfg_remote_user_claim_get(oidc_cfg_t *cfg) 
 
 #define OIDC_DEFAULT_CLAIM_REMOTE_USER "sub@"
 
-const char *oidc_cfg_remote_user_claim_name_get(oidc_cfg_t *cfg) {
+const char *oidc_cfg_remote_user_claim_name_get(const oidc_cfg_t *cfg) {
 	return cfg->remote_user_claim.claim_name != NULL ? cfg->remote_user_claim.claim_name
 							 : OIDC_DEFAULT_CLAIM_REMOTE_USER;
 }
@@ -994,7 +994,7 @@ oidc_provider_t *oidc_cfg_provider_get(oidc_cfg_t *cfg) {
 	return cfg->provider;
 }
 
-int oidc_cfg_merged_get(oidc_cfg_t *cfg) {
+int oidc_cfg_merged_get(const oidc_cfg_t *cfg) {
 	return cfg->merged;
 }
 
@@ -1020,7 +1020,7 @@ int oidc_cfg_post_config(apr_pool_t *pool, oidc_cfg_t *cfg, server_rec *s) {
 	return OK;
 }
 
-void oidc_cfg_child_init(apr_pool_t *pool, oidc_cfg_t *cfg, server_rec *s) {
+void oidc_cfg_child_init(apr_pool_t *pool, const oidc_cfg_t *cfg, server_rec *s) {
 	if ((cfg->cache.impl->child_init != NULL) && (cfg->cache.impl->child_init(pool, s) != APR_SUCCESS))
 		oidc_serror(s, "cfg->cache->child_init failed");
 	if ((_oidc_refresh_mutex != NULL) && (oidc_cache_mutex_child_init(pool, s, _oidc_refresh_mutex) != APR_SUCCESS))

@@ -83,7 +83,7 @@ apr_byte_t oidc_util_key_symmetric_create(request_rec *r, const char *client_sec
 /*
  * merge an array of JWKs and a JWK into a single hashtable
  */
-apr_hash_t *oidc_util_key_symmetric_merge(apr_pool_t *pool, const apr_array_header_t *keys, oidc_jwk_t *jwk) {
+apr_hash_t *oidc_util_key_symmetric_merge(apr_pool_t *pool, const apr_array_header_t *keys, const oidc_jwk_t *jwk) {
 	apr_hash_t *result = apr_hash_make(pool);
 	const oidc_jwk_t *elem = NULL;
 	if (keys != NULL) {

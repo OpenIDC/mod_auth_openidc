@@ -139,8 +139,9 @@ apr_byte_t oidc_metadata_is_valid_uri(request_rec *r, const char *type, const ch
  * try a single array entry against the validator and the preference;
  * returns TRUE when the entry matches the preference and the caller should stop iterating
  */
-static apr_byte_t oidc_metadata_array_string_apply(apr_pool_t *pool, json_t *elem, oidc_valid_function_t valid_function,
-						   char **value, const char *preference, apr_byte_t *found) {
+static apr_byte_t oidc_metadata_array_string_apply(apr_pool_t *pool, const json_t *elem,
+						   oidc_valid_function_t valid_function, char **value,
+						   const char *preference, apr_byte_t *found) {
 	if (!json_is_string(elem))
 		return FALSE;
 	if (valid_function(pool, json_string_value(elem)) != NULL)
@@ -165,7 +166,7 @@ static apr_byte_t oidc_metadata_array_string_apply(apr_pool_t *pool, json_t *ele
 /*
  * check if there's a valid entry in a string of arrays, with a preference
  */
-const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, json_t *json, const char *key,
+const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, const json_t *json, const char *key,
 						oidc_valid_function_t valid_function, char **value, apr_byte_t optional,
 						const char *preference) {
 	if (value)
@@ -227,7 +228,7 @@ void oidc_metadata_parse_url(request_rec *r, const char *type, const char *issue
 /*
  * parse a set of JWKs from a JSON metadata object
  */
-void oidc_metadata_get_jwks(request_rec *r, json_t *json, apr_array_header_t **jwk_list) {
+void oidc_metadata_get_jwks(request_rec *r, const json_t *json, apr_array_header_t **jwk_list) {
 	const json_t *keys = NULL;
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;

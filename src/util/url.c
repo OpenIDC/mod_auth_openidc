@@ -266,7 +266,7 @@ const char *oidc_util_url_abs(request_rec *r, oidc_cfg_t *cfg, const char *url) 
 /*
  * check if the request is on a secure HTTPs (TLS) connection
  */
-apr_byte_t oidc_util_url_cur_is_secure(request_rec *r, oidc_cfg_t *c) {
+apr_byte_t oidc_util_url_cur_is_secure(const request_rec *r, oidc_cfg_t *c) {
 	return (_oidc_strnatcasecmp("https", _oidc_util_url_cur_scheme(r, oidc_cfg_x_forwarded_headers_get(c))) == 0);
 }
 

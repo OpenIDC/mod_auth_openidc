@@ -62,7 +62,8 @@ static const char *oidc_util_jwt_hdr_dir_a256gcm(request_rec *r, char *input) {
 /*
  * helper function to override a variable value with an optionally provided environment variable
  */
-static apr_byte_t oidc_util_env_var_override(request_rec *r, const char *env_var_name, apr_byte_t return_when_set) {
+static apr_byte_t oidc_util_env_var_override(const request_rec *r, const char *env_var_name,
+					     apr_byte_t return_when_set) {
 	const char *s = NULL;
 	if (r->subprocess_env == NULL)
 		return !return_when_set;

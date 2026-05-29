@@ -118,7 +118,7 @@ void oidc_util_appinfo_set(request_rec *r, const char *s_key, const char *s_valu
  * non-string/non-boolean elements are skipped with a debug message
  */
 // TODO: escape the delimiter in the values (maybe reuse/extract url-formatted code from oidc_session_identity_encode)
-static const char *oidc_util_appinfo_array_concat(request_rec *r, json_t *j_array, const char *claim_delimiter,
+static const char *oidc_util_appinfo_array_concat(request_rec *r, const json_t *j_array, const char *claim_delimiter,
 						  const char *s_key) {
 
 	oidc_debug(r, "parsing attribute array for key \"%s\" (#nr-of-elems: %lu)", s_key,

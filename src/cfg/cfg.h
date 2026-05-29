@@ -181,10 +181,10 @@ typedef struct oidc_provider_t oidc_provider_t;
 typedef struct oidc_cfg_t oidc_cfg_t;
 
 void oidc_cfg_x_forwarded_headers_check(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers);
-const char *oidc_cfg_remote_user_claim_name_get(oidc_cfg_t *cfg);
+const char *oidc_cfg_remote_user_claim_name_get(const oidc_cfg_t *cfg);
 
 oidc_provider_t *oidc_cfg_provider_get(oidc_cfg_t *);
-int oidc_cfg_merged_get(oidc_cfg_t *cfg);
+int oidc_cfg_merged_get(const oidc_cfg_t *cfg);
 
 void oidc_pre_config_init();
 
@@ -192,7 +192,7 @@ void *oidc_cfg_server_create(apr_pool_t *pool, server_rec *s);
 void *oidc_cfg_server_merge(apr_pool_t *pool, void *BASE, void *ADD);
 apr_byte_t oidc_cfg_server_destroy(apr_pool_t *pool, server_rec *s, oidc_cfg_t *cfg);
 int oidc_cfg_post_config(apr_pool_t *pool, oidc_cfg_t *cfg, server_rec *s);
-void oidc_cfg_child_init(apr_pool_t *pool, oidc_cfg_t *cfg, server_rec *s);
+void oidc_cfg_child_init(apr_pool_t *pool, const oidc_cfg_t *cfg, server_rec *s);
 void oidc_cfg_process_cleanup(oidc_cfg_t *cfg, server_rec *s);
 const char *oidc_cfg_string_list_add(apr_pool_t *pool, apr_array_header_t **list, const char *arg);
 const char *oidc_cfg_endpoint_auth_set(apr_pool_t *pool, oidc_cfg_t *cfg, const char *arg, char **auth, char **alg);

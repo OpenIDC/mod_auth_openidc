@@ -175,7 +175,7 @@ static void oidc_cfg_cache_shm_create_server_config(oidc_cfg_t *c) {
 	c->cache.shm_entry_size_max = OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX;
 }
 
-static void oidc_cfg_cache_shm_merge_server_config(oidc_cfg_t *c, oidc_cfg_t *base, oidc_cfg_t *add) {
+static void oidc_cfg_cache_shm_merge_server_config(oidc_cfg_t *c, const oidc_cfg_t *base, const oidc_cfg_t *add) {
 	c->cache.shm_size_max =
 	    add->cache.shm_size_max != OIDC_DEFAULT_CACHE_SHM_SIZE ? add->cache.shm_size_max : base->cache.shm_size_max;
 	c->cache.shm_entry_size_max = add->cache.shm_entry_size_max != OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX

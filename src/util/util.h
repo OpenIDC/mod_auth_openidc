@@ -86,19 +86,19 @@ int oidc_util_html_send_in_template(request_rec *r, const char *filename, char *
 const char *oidc_util_jq_filter(request_rec *r, json_t *json, const char *filter);
 
 // json.c
-char *oidc_util_json_encode(apr_pool_t *pool, json_t *json, size_t flags);
+char *oidc_util_json_encode(apr_pool_t *pool, const json_t *json, size_t flags);
 apr_byte_t oidc_util_json_decode_object_err(request_rec *r, const char *str, json_t **json, apr_byte_t log_err);
 apr_byte_t oidc_util_json_decode_object(request_rec *r, const char *str, json_t **json);
 apr_byte_t oidc_util_json_check_error(request_rec *r, json_t *json);
 apr_byte_t oidc_util_json_decode_and_check_error(request_rec *r, const char *str, json_t **json);
-apr_byte_t oidc_util_json_object_get_string(apr_pool_t *pool, json_t *json, const char *name, char **value,
+apr_byte_t oidc_util_json_object_get_string(apr_pool_t *pool, const json_t *json, const char *name, char **value,
 					    const char *default_value);
-apr_byte_t oidc_util_json_object_get_string_array(apr_pool_t *pool, json_t *json, const char *name,
+apr_byte_t oidc_util_json_object_get_string_array(apr_pool_t *pool, const json_t *json, const char *name,
 						  apr_array_header_t **value, const apr_array_header_t *default_value);
 apr_byte_t oidc_util_json_object_get_int(const json_t *json, const char *name, int *value, const int default_value);
 apr_byte_t oidc_util_json_object_get_bool(const json_t *json, const char *name, int *value, const int default_value);
 apr_byte_t oidc_util_json_merge(request_rec *r, json_t *src, json_t *dst);
-apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack, const char *needle);
+apr_byte_t oidc_util_json_array_has_value(request_rec *r, const json_t *haystack, const char *needle);
 
 // jwt.c
 apr_byte_t oidc_util_jwt_create(request_rec *r, const oidc_crypto_passphrase_t *passphrase, const char *s_payload,
@@ -112,7 +112,7 @@ apr_byte_t oidc_util_key_symmetric_create(request_rec *r, const char *client_sec
 					  const char *hash_algo, apr_byte_t set_kid, oidc_jwk_t **jwk);
 apr_hash_t *oidc_util_key_sets_merge(apr_pool_t *pool, apr_hash_t *k1, const apr_array_header_t *k2);
 apr_hash_t *oidc_util_key_sets_hash_merge(apr_pool_t *pool, apr_hash_t *k1, apr_hash_t *k2);
-apr_hash_t *oidc_util_key_symmetric_merge(apr_pool_t *pool, const apr_array_header_t *keys, oidc_jwk_t *jwk);
+apr_hash_t *oidc_util_key_symmetric_merge(apr_pool_t *pool, const apr_array_header_t *keys, const oidc_jwk_t *jwk);
 oidc_jwk_t *oidc_util_key_list_first(const apr_array_header_t *key_list, int kty, const char *use);
 
 // random.c
@@ -123,7 +123,7 @@ char *oidc_util_rand_hex_str(request_rec *r, apr_pool_t *pool, int len);
 // url.c
 const char *oidc_util_url_cur_host(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers);
 char *oidc_util_url_cur(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers);
-apr_byte_t oidc_util_url_cur_is_secure(request_rec *r, oidc_cfg_t *c);
+apr_byte_t oidc_util_url_cur_is_secure(const request_rec *r, oidc_cfg_t *c);
 apr_byte_t oidc_util_url_cur_matches(request_rec *r, const char *url);
 const char *oidc_util_url_abs(request_rec *r, oidc_cfg_t *cfg, const char *url);
 const char *oidc_util_url_redirect_uri(request_rec *r, oidc_cfg_t *c);

@@ -277,7 +277,7 @@ static void oidc_metadata_client_parse_token_endpoint_auth(request_rec *r, oidc_
  * then fall back to the first entry of the client metadata "response_types" array if the configured
  * one is not advertised as supported
  */
-static void oidc_metadata_client_parse_response_type(request_rec *r, oidc_cfg_t *cfg, json_t *j_client,
+static void oidc_metadata_client_parse_response_type(request_rec *r, oidc_cfg_t *cfg, const json_t *j_client,
 						     oidc_provider_t *provider) {
 
 	const char *rv = NULL;

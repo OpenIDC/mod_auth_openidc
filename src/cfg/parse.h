@@ -83,7 +83,7 @@ const char *oidc_cfg_parse_public_key_files(apr_pool_t *pool, const char *arg, a
 
 typedef const char *(*oidc_valid_function_t)(apr_pool_t *, const char *);
 
-oidc_valid_function_t oidc_cfg_get_valid_endpoint_auth_function(oidc_cfg_t *cfg);
+oidc_valid_function_t oidc_cfg_get_valid_endpoint_auth_function(const oidc_cfg_t *cfg);
 const char *oidc_parse_remote_user_claim(apr_pool_t *pool, const char *v1, const char *v2, const char *v3,
 					 oidc_remote_user_claim_t *remote_user_claim);
 const char *oidc_cfg_parse_http_timeout(apr_pool_t *pool, const char *arg1, const char *arg2, const char *arg3,

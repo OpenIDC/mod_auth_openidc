@@ -239,7 +239,7 @@ static apr_byte_t oidc_util_read(request_rec *r, char **rbuf) {
 /*
  * read form-encoded parameters from a string in to a table
  */
-apr_byte_t oidc_util_read_form_encoded_params(request_rec *r, apr_table_t *table, char *data) {
+apr_byte_t oidc_util_read_form_encoded_params(request_rec *r, apr_table_t *table, const char *data) {
 	const char *key = NULL;
 	const char *val = NULL;
 	const char *p = data;

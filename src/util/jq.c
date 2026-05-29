@@ -87,7 +87,7 @@ static const char *oidc_util_jq_exec(request_rec *r, jq_state *jq, struct jv_par
 /*
  * return the JQ expression result cache expiry
  */
-static int oidc_jq_filter_cache_ttl(request_rec *r) {
+static int oidc_jq_filter_cache_ttl(const request_rec *r) {
 	const char *s_ttl = apr_table_get(r->subprocess_env, OIDC_JQ_FILTER_CACHE_TTL_ENVVAR);
 	return _oidc_str_to_int(s_ttl, OIDC_JQ_FILTER_EXPIRE_DEFAULT);
 }
