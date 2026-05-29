@@ -47,6 +47,60 @@
 #include "util/util.h"
 
 /*
+ * parse a webfinger response body and extract the issuer href.
+ *
+ * Non-static so unit tests can exercise the JSON validation paths directly without
+ * needing a live HTTPS webfinger endpoint; not part of the public proto.h API.
+ */
+apr_byte_t oidc_proto_webfinger_response_get_issuer(request_rec *r, const char *response, char **issuer) {
+
+	/* decode and see if it is not an error response somehow */
+	json_t *j_response = NULL;
+	if (oidc_util_json_decode_and_check_error(r, response, &j_response) == FALSE)
+		return FALSE;
+
+	apr_byte_t rv = FALSE;
+
+	/* get the links parameter */
+	json_t *j_links = json_object_get(j_response, "links");
+	if ((j_links == NULL) || (!json_is_array(j_links))) {
+		oidc_error(r, "response JSON object did not contain a \"links\" array");
+		goto end;
+	}
+
+	/* get the one-and-only object in the "links" array */
+	json_t *j_object = json_array_get(j_links, 0);
+	if ((j_object == NULL) || (!json_is_object(j_object))) {
+		oidc_error(
+		    r,
+		    "response JSON object did not contain a JSON object as the first element in the \"links\" array");
+		goto end;
+	}
+
+	/* get the href from that object, which is the issuer value */
+	json_t *j_href = json_object_get(j_object, "href");
+	if ((j_href == NULL) || (!json_is_string(j_href))) {
+		oidc_error(
+		    r, "response JSON object did not contain a \"href\" element in the first \"links\" array object");
+		goto end;
+	}
+
+	/* check that the link is on secure HTTPs */
+	if (oidc_cfg_parse_is_valid_url(r->pool, json_string_value(j_href), "https") != NULL) {
+		oidc_error(r, "response JSON object contains an \"href\" value that is not a valid \"https\" URL: %s",
+			   json_string_value(j_href));
+		goto end;
+	}
+
+	*issuer = apr_pstrdup(r->pool, json_string_value(j_href));
+	rv = TRUE;
+
+end:
+	json_decref(j_response);
+	return rv;
+}
+
+/*
  * based on a resource perform OpenID Connect Provider Issuer Discovery to find out the issuer and obtain and store its
  * metadata
  */
@@ -68,52 +122,11 @@ static apr_byte_t oidc_proto_webfinger_discovery(request_rec *r, oidc_cfg_t *cfg
 		return FALSE;
 	}
 
-	/* decode and see if it is not an error response somehow */
-	json_t *j_response = NULL;
-	if (oidc_util_json_decode_and_check_error(r, response, &j_response) == FALSE)
+	if (oidc_proto_webfinger_response_get_issuer(r, response, issuer) == FALSE)
 		return FALSE;
-
-	/* get the links parameter */
-	json_t *j_links = json_object_get(j_response, "links");
-	if ((j_links == NULL) || (!json_is_array(j_links))) {
-		oidc_error(r, "response JSON object did not contain a \"links\" array");
-		json_decref(j_response);
-		return FALSE;
-	}
-
-	/* get the one-and-only object in the "links" array */
-	json_t *j_object = json_array_get(j_links, 0);
-	if ((j_object == NULL) || (!json_is_object(j_object))) {
-		oidc_error(
-		    r,
-		    "response JSON object did not contain a JSON object as the first element in the \"links\" array");
-		json_decref(j_response);
-		return FALSE;
-	}
-
-	/* get the href from that object, which is the issuer value */
-	json_t *j_href = json_object_get(j_object, "href");
-	if ((j_href == NULL) || (!json_is_string(j_href))) {
-		oidc_error(
-		    r, "response JSON object did not contain a \"href\" element in the first \"links\" array object");
-		json_decref(j_response);
-		return FALSE;
-	}
-
-	/* check that the link is on secure HTTPs */
-	if (oidc_cfg_parse_is_valid_url(r->pool, json_string_value(j_href), "https") != NULL) {
-		oidc_error(r, "response JSON object contains an \"href\" value that is not a valid \"https\" URL: %s",
-			   json_string_value(j_href));
-		json_decref(j_response);
-		return FALSE;
-	}
-
-	*issuer = apr_pstrdup(r->pool, json_string_value(j_href));
 
 	oidc_debug(r, "returning issuer \"%s\" for resource \"%s\" after doing successful webfinger-based discovery",
 		   *issuer, resource);
-
-	json_decref(j_response);
 
 	return TRUE;
 }

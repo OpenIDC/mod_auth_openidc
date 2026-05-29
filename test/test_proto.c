@@ -1064,6 +1064,67 @@ START_TEST(test_proto_discovery_account_unreachable_endpoint) {
 }
 END_TEST
 
+/* internal helper exposed by src/proto/discovery.c for unit-testing the webfinger response parser */
+extern apr_byte_t oidc_proto_webfinger_response_get_issuer(request_rec *r, const char *response, char **issuer);
+
+START_TEST(test_proto_webfinger_response_get_issuer_happy) {
+	request_rec *r = oidc_test_request_get();
+	const char *resp = "{\"links\":[{\"href\":\"https://idp.example.com\"}]}";
+	char *issuer = NULL;
+	ck_assert_int_eq(oidc_proto_webfinger_response_get_issuer(r, resp, &issuer), TRUE);
+	ck_assert_str_eq(issuer, "https://idp.example.com");
+}
+END_TEST
+
+START_TEST(test_proto_webfinger_response_get_issuer_invalid_json) {
+	request_rec *r = oidc_test_request_get();
+	char *issuer = NULL;
+	ck_assert_int_eq(oidc_proto_webfinger_response_get_issuer(r, "not json", &issuer), FALSE);
+	ck_assert_ptr_null(issuer);
+}
+END_TEST
+
+START_TEST(test_proto_webfinger_response_get_issuer_missing_links) {
+	request_rec *r = oidc_test_request_get();
+	char *issuer = NULL;
+	ck_assert_int_eq(oidc_proto_webfinger_response_get_issuer(r, "{\"foo\":1}", &issuer), FALSE);
+	ck_assert_ptr_null(issuer);
+}
+END_TEST
+
+START_TEST(test_proto_webfinger_response_get_issuer_links_not_array) {
+	request_rec *r = oidc_test_request_get();
+	char *issuer = NULL;
+	ck_assert_int_eq(oidc_proto_webfinger_response_get_issuer(r, "{\"links\":\"oops\"}", &issuer), FALSE);
+	ck_assert_ptr_null(issuer);
+}
+END_TEST
+
+START_TEST(test_proto_webfinger_response_get_issuer_first_link_not_object) {
+	request_rec *r = oidc_test_request_get();
+	char *issuer = NULL;
+	ck_assert_int_eq(oidc_proto_webfinger_response_get_issuer(r, "{\"links\":[\"oops\"]}", &issuer), FALSE);
+	ck_assert_ptr_null(issuer);
+}
+END_TEST
+
+START_TEST(test_proto_webfinger_response_get_issuer_missing_href) {
+	request_rec *r = oidc_test_request_get();
+	char *issuer = NULL;
+	ck_assert_int_eq(oidc_proto_webfinger_response_get_issuer(r, "{\"links\":[{\"rel\":\"x\"}]}", &issuer), FALSE);
+	ck_assert_ptr_null(issuer);
+}
+END_TEST
+
+START_TEST(test_proto_webfinger_response_get_issuer_href_not_https) {
+	request_rec *r = oidc_test_request_get();
+	const char *resp = "{\"links\":[{\"href\":\"http://idp.example.com\"}]}";
+	char *issuer = NULL;
+	ck_assert_int_eq(oidc_proto_webfinger_response_get_issuer(r, resp, &issuer), FALSE);
+	ck_assert_ptr_null(issuer);
+}
+END_TEST
+
 START_TEST(test_proto_discovery_url_unreachable_endpoint) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -2095,6 +2156,13 @@ int main(void) {
 	tcase_add_test(core, test_proto_discovery_account_no_at_sign);
 	tcase_add_test(core, test_proto_discovery_account_unreachable_endpoint);
 	tcase_add_test(core, test_proto_discovery_url_unreachable_endpoint);
+	tcase_add_test(core, test_proto_webfinger_response_get_issuer_happy);
+	tcase_add_test(core, test_proto_webfinger_response_get_issuer_invalid_json);
+	tcase_add_test(core, test_proto_webfinger_response_get_issuer_missing_links);
+	tcase_add_test(core, test_proto_webfinger_response_get_issuer_links_not_array);
+	tcase_add_test(core, test_proto_webfinger_response_get_issuer_first_link_not_object);
+	tcase_add_test(core, test_proto_webfinger_response_get_issuer_missing_href);
+	tcase_add_test(core, test_proto_webfinger_response_get_issuer_href_not_https);
 	tcase_add_test(core, test_proto_supported_flows_exhaustive);
 	tcase_add_test(core, test_proto_response_code_idtoken_missing_code);
 	tcase_add_test(core, test_proto_response_code_token_missing_code);
