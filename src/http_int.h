@@ -80,7 +80,7 @@ typedef struct oidc_curl_resp_hdr_ctx_t {
 size_t oidc_http_response_data(void *contents, size_t size, size_t nmemb, void *userp);
 
 /* libcurl CURLOPT_HEADERFUNCTION callback: capture requested headers into ctx->hdrs */
-size_t oidc_http_response_header(char *buffer, size_t size, size_t nitems, void *userdata);
+size_t oidc_http_response_header(const char *buffer, size_t size, size_t nitems, void *userdata);
 
 /* build the curl_slist of outgoing request headers (Authorization, Content-Type, traceparent, DPoP) */
 struct curl_slist *oidc_http_request_build_header_list(request_rec *r, oidc_cfg_t *c, const char *content_type,
@@ -90,6 +90,6 @@ struct curl_slist *oidc_http_request_build_header_list(request_rec *r, oidc_cfg_
 const char *oidc_http_user_agent(request_rec *r);
 
 /* return the configured local interface (CURLOPT_INTERFACE) or NULL if unset */
-const char *oidc_http_interface(request_rec *r);
+const char *oidc_http_interface(const request_rec *r);
 
 #endif /* _MOD_AUTH_OPENIDC_HTTP_INT_H_ */

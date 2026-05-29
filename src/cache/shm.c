@@ -212,7 +212,7 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section, const 
  * scan the shared memory block to locate a slot matching section_key, the first free or
  * expired slot, and the least-recently-used slot as a fallback
  */
-static void oidc_cache_shm_find_slot(oidc_cfg_t *cfg, oidc_cache_shm_entry_t *base, const char *section_key,
+static void oidc_cache_shm_find_slot(const oidc_cfg_t *cfg, oidc_cache_shm_entry_t *base, const char *section_key,
 				     apr_time_t current_time, oidc_cache_shm_entry_t **match,
 				     oidc_cache_shm_entry_t **free_slot, oidc_cache_shm_entry_t **lru) {
 	oidc_cache_shm_entry_t *t = base;

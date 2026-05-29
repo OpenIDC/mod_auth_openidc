@@ -479,7 +479,7 @@ size_t oidc_http_response_data(void *contents, size_t size, size_t nmemb, void *
 /*
  * callback for CURL to write response headers that come back from an HTTP call
  */
-size_t oidc_http_response_header(char *buffer, size_t size, size_t nitems, void *userdata) {
+size_t oidc_http_response_header(const char *buffer, size_t size, size_t nitems, void *userdata) {
 	/* received header is nitems * size long in 'buffer' NOT ZERO TERMINATED */
 	oidc_curl_resp_hdr_ctx_t *ctx = (oidc_curl_resp_hdr_ctx_t *)userdata;
 	char *hdr = NULL;
@@ -669,7 +669,7 @@ const char *oidc_http_user_agent(request_rec *r) {
 /*
  * construct our local address/interface for outgoing requests
  */
-const char *oidc_http_interface(request_rec *r) {
+const char *oidc_http_interface(const request_rec *r) {
 	return apr_table_get(r->subprocess_env, OIDC_CURL_INTERFACE_ENV_VAR);
 }
 
@@ -789,7 +789,8 @@ static void oidc_http_request_pass_cookies(request_rec *r, CURL *curl, const apr
  * are skipped on a request/transfer timeout and short-circuited on success
  */
 static apr_byte_t oidc_http_request_perform_with_retries(request_rec *r, oidc_cfg_t *c, CURL *curl, const char *url,
-							 const char *curl_err, oidc_http_timeout_t *http_timeout) {
+							 const char *curl_err,
+							 const oidc_http_timeout_t *http_timeout) {
 	CURLcode res = CURLE_OK;
 
 	for (int i = 0; i <= http_timeout->retries; i++) {

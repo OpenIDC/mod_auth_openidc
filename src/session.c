@@ -158,7 +158,7 @@ static apr_byte_t oidc_session_json_set(request_rec *r, oidc_session_t *z, const
 /*
  * get a json object from the session based on the name from a name/value pair
  */
-static json_t *oidc_session_json_get(request_rec *r, oidc_session_t *z, const char *key) {
+static json_t *oidc_session_json_get(request_rec *r, const oidc_session_t *z, const char *key) {
 	return json_object_get(z->state, key);
 }
 
@@ -332,7 +332,7 @@ static apr_byte_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z, ap
 /*
  * retrieve an integer from the session state
  */
-static inline int oidc_session_get_int(request_rec *r, oidc_session_t *z, const char *key, int def_val) {
+static inline int oidc_session_get_int(request_rec *r, const oidc_session_t *z, const char *key, int def_val) {
 	int v;
 	oidc_util_json_object_get_int(z->state, key, &v, def_val);
 	return v;
@@ -341,7 +341,7 @@ static inline int oidc_session_get_int(request_rec *r, oidc_session_t *z, const 
 /*
  * retrieve a timestamp from the session state
  */
-static inline apr_time_t oidc_session_get_key2timestamp(request_rec *r, oidc_session_t *z, const char *key) {
+static inline apr_time_t oidc_session_get_key2timestamp(request_rec *r, const oidc_session_t *z, const char *key) {
 	int value = -1;
 	oidc_util_json_object_get_int(z->state, key, &value, -1);
 	return (value > -1) ? apr_time_from_sec(value) : -1;

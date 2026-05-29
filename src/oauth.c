@@ -310,7 +310,8 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 /*
  * parse (custom/configurable) token expiry claim in introspection result
  */
-static apr_byte_t oidc_oauth_parse_and_cache_token_expiry(request_rec *r, oidc_cfg_t *c, json_t *introspection_response,
+static apr_byte_t oidc_oauth_parse_and_cache_token_expiry(request_rec *r, oidc_cfg_t *c,
+							  const json_t *introspection_response,
 							  const char *expiry_claim_name, int expiry_format_absolute,
 							  int expiry_claim_is_mandatory, apr_time_t *cache_until) {
 
@@ -447,7 +448,7 @@ static apr_byte_t oidc_oauth_get_cached_access_token(request_rec *r, oidc_cfg_t 
 /*
  * check the value of the "active" claim in an introspection response
  */
-static apr_byte_t oidc_oauth_introspection_active_is_valid(request_rec *r, json_t *active) {
+static apr_byte_t oidc_oauth_introspection_active_is_valid(request_rec *r, const json_t *active) {
 	if (json_is_boolean(active)) {
 		if (json_is_true(active))
 			return TRUE;

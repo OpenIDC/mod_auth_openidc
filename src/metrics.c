@@ -392,7 +392,7 @@ static inline void _oidc_metrics_storage_set(server_rec *s, const char *value) {
 /*
  * parse a string into a JSON object
  */
-static json_t *oidc_metrics_json_load(char *s_json, json_error_t *json_error) {
+static json_t *oidc_metrics_json_load(const char *s_json, json_error_t *json_error) {
 	if (s_json == NULL)
 		s_json = "{}";
 	return json_loads(s_json, 0, json_error);
@@ -437,7 +437,7 @@ static void oidc_metrics_reset_timer(json_t *j_entry) {
 /*
  * reset all counter and timer entries for a single server in the JSON data
  */
-static void oidc_metrics_reset_server(json_t *j_server) {
+static void oidc_metrics_reset_server(const json_t *j_server) {
 	json_t *j_entries = NULL;
 	void *iter = NULL;
 

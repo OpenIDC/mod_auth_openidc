@@ -452,7 +452,7 @@ void oidc_log_session_expires(request_rec *r, const char *msg, apr_time_t sessio
 /*
  * see if this is a request that is capable of completing an authentication round trip to the Provider
  */
-apr_byte_t oidc_is_auth_capable_request(request_rec *r) {
+apr_byte_t oidc_is_auth_capable_request(const request_rec *r) {
 
 	if ((oidc_http_hdr_in_x_requested_with_get(r) != NULL) &&
 	    (_oidc_strnatcasecmp(oidc_http_hdr_in_x_requested_with_get(r), OIDC_HTTP_HDR_VAL_XML_HTTP_REQUEST) == 0))
@@ -831,7 +831,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg_t *cfg, oidc_se
  * get the r->user for this request based on the configuration for OIDC/OAuth
  */
 apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name, const char *reg_exp, const char *replace,
-				json_t *json, char **request_user) {
+				const json_t *json, char **request_user) {
 
 	/* get the claim value from the JSON object */
 	const json_t *username = json_object_get(json, claim_name);

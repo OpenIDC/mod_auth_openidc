@@ -132,10 +132,10 @@ apr_byte_t oidc_jose_hash_and_base64url_encode(apr_pool_t *pool, const char *ope
 					       int input_len, char **output, oidc_jose_error_t *err);
 
 /* return a string claim value from a JSON object */
-apr_byte_t oidc_jose_get_string(apr_pool_t *pool, json_t *json, const char *claim_name, apr_byte_t is_mandatory,
+apr_byte_t oidc_jose_get_string(apr_pool_t *pool, const json_t *json, const char *claim_name, apr_byte_t is_mandatory,
 				char **result, oidc_jose_error_t *err);
-apr_byte_t oidc_jose_get_timestamp(apr_pool_t *pool, json_t *json, const char *claim_name, apr_byte_t is_mandatory,
-				   double *result, oidc_jose_error_t *err);
+apr_byte_t oidc_jose_get_timestamp(apr_pool_t *pool, const json_t *json, const char *claim_name,
+				   apr_byte_t is_mandatory, double *result, oidc_jose_error_t *err);
 
 apr_byte_t oidc_jose_compress(apr_pool_t *pool, const char *input, int input_len, char **output, int *output_len,
 			      oidc_jose_error_t *err);
@@ -181,11 +181,12 @@ oidc_jwk_t *oidc_jwk_copy(apr_pool_t *pool, const oidc_jwk_t *jwk);
 /* parse a JSON object (JWK) in to a JWK struct */
 apr_byte_t oidc_jwk_parse_json(apr_pool_t *pool, json_t *json, oidc_jwk_t **jwk, oidc_jose_error_t *err);
 /* parse a JSON object (JWKS) to a list of JWK structs */
-apr_byte_t oidc_jwks_parse_json(apr_pool_t *pool, json_t *json, apr_array_header_t **jwk_list, oidc_jose_error_t *err);
+apr_byte_t oidc_jwks_parse_json(apr_pool_t *pool, const json_t *json, apr_array_header_t **jwk_list,
+				oidc_jose_error_t *err);
 /* test if JSON object looks like JWK */
-apr_byte_t oidc_is_jwk(json_t *json);
+apr_byte_t oidc_is_jwk(const json_t *json);
 /* test if JSON object looks like JWKS */
-apr_byte_t oidc_is_jwks(json_t *json);
+apr_byte_t oidc_is_jwks(const json_t *json);
 /* convert a JWK struct to a JSON string */
 apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_json, oidc_jose_error_t *err);
 /* destroy resources allocated for a JWK struct */
@@ -254,15 +255,15 @@ typedef struct oidc_jwt_t {
 apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *s_json, oidc_jwt_t **j_jwt, apr_hash_t *keys,
 			  apr_byte_t compress, oidc_jose_error_t *err);
 /* sign a JWT with a JWK */
-apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk, apr_byte_t compress,
+apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, const oidc_jwk_t *jwk, apr_byte_t compress,
 			 oidc_jose_error_t *err);
 /* verify a JWT a key in a list of JWKs */
 apr_byte_t oidc_jwt_verify(apr_pool_t *pool, oidc_jwt_t *jwt, apr_hash_t *keys, oidc_jose_error_t *err);
 /* perform compact serialization on a JWT and return the resulting string */
 char *oidc_jose_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jose_error_t *err);
 /* encrypt JWT */
-apr_byte_t oidc_jwt_encrypt(apr_pool_t *pool, oidc_jwt_t *jwe, oidc_jwk_t *jwk, const char *payload, int payload_len,
-			    char **serialized, oidc_jose_error_t *err);
+apr_byte_t oidc_jwt_encrypt(apr_pool_t *pool, oidc_jwt_t *jwe, const oidc_jwk_t *jwk, const char *payload,
+			    int payload_len, char **serialized, oidc_jose_error_t *err);
 
 /* create a new JWT */
 oidc_jwt_t *oidc_jwt_new(apr_pool_t *pool, int create_header, int create_payload);
@@ -272,7 +273,7 @@ void oidc_jwt_destroy(oidc_jwt_t *);
 /* get a header value from a JWT */
 const char *oidc_jwt_hdr_get(oidc_jwt_t *jwt, const char *key);
 /* return the key type of a JWT */
-int oidc_jwt_alg2kty(oidc_jwt_t *jwt);
+int oidc_jwt_alg2kty(const oidc_jwt_t *jwt);
 /* return the key size for an algorithm */
 unsigned int oidc_alg2keysize(const char *alg);
 

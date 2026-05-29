@@ -88,7 +88,7 @@ static void _oidc_jose_error_set(oidc_jose_error_t *error, const char *source, c
 /*
  * extract a b64 encoded certificate representation as a single string
  */
-static int oidc_jose_util_get_b64encoded_certificate_data(apr_pool_t *p, X509 *x509_cert,
+static int oidc_jose_util_get_b64encoded_certificate_data(apr_pool_t *p, const X509 *x509_cert,
 							  char **b64_encoded_certificate, oidc_jose_error_t *err) {
 	int rc = 0;
 	char *name = NULL;
@@ -247,7 +247,7 @@ static int oidc_alg2kty(const char *alg) {
 /*
  * return the key type of a JWT
  */
-int oidc_jwt_alg2kty(oidc_jwt_t *jwt) {
+int oidc_jwt_alg2kty(const oidc_jwt_t *jwt) {
 	return oidc_alg2kty(jwt->header.alg);
 }
 
@@ -287,7 +287,7 @@ static oidc_jwk_t *oidc_jwk_new(apr_pool_t *pool) {
 	return jwk;
 }
 
-static apr_byte_t _oidc_jwk_parse_x5c(apr_pool_t *pool, json_t *json, cjose_jwk_t **jwk, oidc_jose_error_t *err);
+static apr_byte_t _oidc_jwk_parse_x5c(apr_pool_t *pool, const json_t *json, cjose_jwk_t **jwk, oidc_jose_error_t *err);
 
 #define OIDC_JOSE_HDR_KTY "kty"
 #define OIDC_JOSE_HDR_KTY_RSA "RSA"
@@ -486,7 +486,8 @@ apr_byte_t oidc_jwk_parse_json(apr_pool_t *pool, json_t *json, oidc_jwk_t **jwk,
 /*
  * parse a set of JWKs into a list (array) of JWK structs
  */
-apr_byte_t oidc_jwks_parse_json(apr_pool_t *pool, json_t *json, apr_array_header_t **jwk_list, oidc_jose_error_t *err) {
+apr_byte_t oidc_jwks_parse_json(apr_pool_t *pool, const json_t *json, apr_array_header_t **jwk_list,
+				oidc_jose_error_t *err) {
 	const json_t *keys = json_object_get(json, OIDC_JOSE_JWKS_KEYS_STR);
 	if ((keys == NULL) || (!json_is_array(keys))) {
 		oidc_jose_error(err, "JWKS did not contain \"" OIDC_JOSE_JWKS_KEYS_STR "\" array");
@@ -509,7 +510,7 @@ apr_byte_t oidc_jwks_parse_json(apr_pool_t *pool, json_t *json, apr_array_header
 /*
  * check if a JSON object is a JWK
  */
-apr_byte_t oidc_is_jwk(json_t *json) {
+apr_byte_t oidc_is_jwk(const json_t *json) {
 	const json_t *kty = json_object_get(json, OIDC_JOSE_JWK_KTY_STR);
 	if ((kty == NULL) || (!json_is_string(kty))) {
 		return FALSE;
@@ -520,7 +521,7 @@ apr_byte_t oidc_is_jwk(json_t *json) {
 /*
  * check if a JSON object is a set JWKs
  */
-apr_byte_t oidc_is_jwks(json_t *json) {
+apr_byte_t oidc_is_jwks(const json_t *json) {
 	const json_t *keys = json_object_get(json, OIDC_JOSE_JWKS_KEYS_STR);
 	if ((keys == NULL) || (!json_is_array(keys))) {
 		return FALSE;
@@ -752,7 +753,7 @@ apr_byte_t oidc_jose_jwe_encryption_is_supported(apr_pool_t *pool, const char *e
 /*
  * get (optional) string from JWT
  */
-apr_byte_t oidc_jose_get_string(apr_pool_t *pool, json_t *json, const char *claim_name, apr_byte_t is_mandatory,
+apr_byte_t oidc_jose_get_string(apr_pool_t *pool, const json_t *json, const char *claim_name, apr_byte_t is_mandatory,
 				char **result, oidc_jose_error_t *err) {
 	const json_t *v = json_object_get(json, claim_name);
 	if (v != NULL) {
@@ -773,8 +774,8 @@ apr_byte_t oidc_jose_get_string(apr_pool_t *pool, json_t *json, const char *clai
 /*
  * parse (optional) timestamp from payload
  */
-apr_byte_t oidc_jose_get_timestamp(apr_pool_t *pool, json_t *json, const char *claim_name, apr_byte_t is_mandatory,
-				   double *result, oidc_jose_error_t *err) {
+apr_byte_t oidc_jose_get_timestamp(apr_pool_t *pool, const json_t *json, const char *claim_name,
+				   apr_byte_t is_mandatory, double *result, oidc_jose_error_t *err) {
 	*result = OIDC_JWT_CLAIM_TIME_EMPTY;
 	const json_t *v = json_object_get(json, claim_name);
 	if (v != NULL) {
@@ -1214,7 +1215,7 @@ void oidc_jwt_destroy(oidc_jwt_t *jwt) {
 /*
  * sign a JWT
  */
-apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk, apr_byte_t compress,
+apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, const oidc_jwk_t *jwk, apr_byte_t compress,
 			 oidc_jose_error_t *err) {
 
 	cjose_header_t *hdr = (cjose_header_t *)jwt->header.value.json;
@@ -1270,8 +1271,8 @@ void EVP_MD_CTX_free(EVP_MD_CTX *ctx) {
 /*
  * encrypt a JWT
  */
-apr_byte_t oidc_jwt_encrypt(apr_pool_t *pool, oidc_jwt_t *jwe, oidc_jwk_t *jwk, const char *payload, int payload_len,
-			    char **serialized, oidc_jose_error_t *err) {
+apr_byte_t oidc_jwt_encrypt(apr_pool_t *pool, oidc_jwt_t *jwe, const oidc_jwk_t *jwk, const char *payload,
+			    int payload_len, char **serialized, oidc_jose_error_t *err) {
 
 	cjose_header_t *hdr = (cjose_header_t *)jwe->header.value.json;
 
@@ -1322,7 +1323,8 @@ apr_byte_t oidc_jose_version_deprecated(apr_pool_t *pool) {
  * jwt->cjose_jws when the linked cjose version is known to leave it in an
  * unusable state after a failed verify
  */
-static apr_byte_t oidc_jwt_verify_with_key(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jwk_t *jwk, oidc_jose_error_t *err) {
+static apr_byte_t oidc_jwt_verify_with_key(apr_pool_t *pool, oidc_jwt_t *jwt, const oidc_jwk_t *jwk,
+					   oidc_jose_error_t *err) {
 	cjose_err cjose_err;
 	apr_byte_t rc = cjose_jws_verify(jwt->cjose_jws, jwk->cjose_jwk, &cjose_err);
 	if (rc == FALSE) {
@@ -1514,7 +1516,7 @@ end:
 /*
  * extract a JWK struct and a fingerprint from an OpenSSL RSA key
  */
-static apr_byte_t _oidc_jwk_rsa_key_to_jwk(apr_pool_t *pool, EVP_PKEY *pkey, oidc_jwk_t **oidc_jwk, char **fp,
+static apr_byte_t _oidc_jwk_rsa_key_to_jwk(apr_pool_t *pool, const EVP_PKEY *pkey, oidc_jwk_t **oidc_jwk, char **fp,
 					   int *fp_len, oidc_jose_error_t *err) {
 	apr_byte_t rv = FALSE;
 	cjose_err cjose_err;
@@ -1597,7 +1599,7 @@ end:
 /*
  * extract a JWK struct and a fingerprint from an OpenSSL Elliptic Curve key
  */
-static apr_byte_t _oidc_jwk_ec_key_to_jwk(apr_pool_t *pool, EVP_PKEY *pkey, oidc_jwk_t **oidc_jwk, char **fp,
+static apr_byte_t _oidc_jwk_ec_key_to_jwk(apr_pool_t *pool, const EVP_PKEY *pkey, oidc_jwk_t **oidc_jwk, char **fp,
 					  int *fp_len, oidc_jose_error_t *err) {
 	apr_byte_t rv = FALSE;
 	cjose_err cjose_err;
@@ -1699,7 +1701,7 @@ end:
  * populate x5c (first cert plus any trailing chain entries) and the x5t/x5t#S256
  * thumbprints on jwk from a parsed X.509 certificate
  */
-static apr_byte_t oidc_jwk_populate_cert_info(apr_pool_t *pool, BIO *input, oidc_jwk_t *jwk, X509 *x509,
+static apr_byte_t oidc_jwk_populate_cert_info(apr_pool_t *pool, BIO *input, oidc_jwk_t *jwk, const X509 *x509,
 					      const char *first_pem, oidc_jose_error_t *err) {
 	unsigned char *x509_bytes = NULL;
 	int x509_cert_length = 0;
@@ -1774,7 +1776,7 @@ static apr_byte_t oidc_jwk_pem_bio_read_public(apr_pool_t *pool, BIO *input, oid
  * return the OpenSSL key-type base id for the supplied EVP_PKEY, abstracting
  * over the different OpenSSL API versions
  */
-static int oidc_jwk_pkey_base_id(EVP_PKEY *pkey) {
+static int oidc_jwk_pkey_base_id(const EVP_PKEY *pkey) {
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
 	return EVP_PKEY_get_base_id(pkey);
 #elif (OPENSSL_VERSION_NUMBER > 0x10100000)
@@ -1881,7 +1883,7 @@ end:
 /*
  * parse a PEM-formatted key from a JSON object in to a cjose JWK object
  */
-static apr_byte_t _oidc_jwk_parse_x5c(apr_pool_t *pool, json_t *json, cjose_jwk_t **jwk, oidc_jose_error_t *err) {
+static apr_byte_t _oidc_jwk_parse_x5c(apr_pool_t *pool, const json_t *json, cjose_jwk_t **jwk, oidc_jose_error_t *err) {
 
 	apr_byte_t rv = FALSE;
 	const char *kid = NULL;
