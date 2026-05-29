@@ -1485,10 +1485,13 @@ static apr_byte_t oidc_jwk_x509_read(apr_pool_t *pool, BIO *input, char **encode
 		goto end;
 	}
 
-	/* get the public key struct from the X.509 struct */
-	if (pkey && ((*pkey = X509_get_pubkey(x509)) == NULL)) {
-		oidc_jose_error_openssl(err, "X509_get_pubkey");
-		goto end;
+	if (pkey) {
+		/* get the public key struct from the X.509 struct */
+		*pkey = X509_get_pubkey(x509);
+		if (*pkey == NULL) {
+			oidc_jose_error_openssl(err, "X509_get_pubkey");
+			goto end;
+		}
 	}
 
 	/* populate x5c certificate */
