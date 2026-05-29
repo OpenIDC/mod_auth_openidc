@@ -125,8 +125,12 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r, oidc_cfg
 	}
 
 	/* check to see if it is a set of valid JWKs */
-	if (oidc_metadata_jwks_is_valid(r, url, *j_jwks) == FALSE)
+	if (oidc_metadata_jwks_is_valid(r, url, *j_jwks) == FALSE) {
+		/* the decoded object is ours now; release it before bailing */
+		json_decref(*j_jwks);
+		*j_jwks = NULL;
 		return FALSE;
+	}
 
 	/* store the JWKs in the cache */
 	oidc_cache_set_jwks(r, oidc_metadata_jwks_cache_key(jwks_uri), response,
