@@ -305,7 +305,9 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section, const 
 	}
 
 	/* pick the best slot: choose one with a matching key over a free slot, over a least-recently-used one */
-	t = match ? match : (free_slot ? free_slot : lru);
+	t = match;
+	if (t == NULL)
+		t = free_slot ? free_slot : lru;
 
 	/* see if we need to clear or set the value */
 	if (value != NULL) {

@@ -52,15 +52,19 @@ static const char *oidc_util_jq_exec(request_rec *r, jq_state *jq, struct jv_par
 	const char *rv = NULL;
 	jv value, elem, str, msg;
 
-	while (jv_is_valid(value = jv_parser_next(parser))) {
+	value = jv_parser_next(parser);
+	while (jv_is_valid(value)) {
 		jq_start(jq, value, 0);
-		while (jv_is_valid(elem = jq_next(jq))) {
+		elem = jq_next(jq);
+		while (jv_is_valid(elem)) {
 			str = jv_dump_string(elem, 0);
 			rv = apr_pstrdup(r->pool, jv_string_value(str));
 			oidc_debug(r, "jv_dump_string: %s", rv);
 			jv_free(str);
+			elem = jq_next(jq);
 		}
 		jv_free(elem);
+		value = jv_parser_next(parser);
 	}
 
 	if (jv_invalid_has_msg(jv_copy(value))) {

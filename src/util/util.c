@@ -322,9 +322,11 @@ apr_byte_t oidc_util_issuer_match(const char *a, const char *b) {
 		/* no strict match, but we are going to accept if the difference is only a trailing slash */
 		int n1 = _oidc_strlen(a);
 		int n2 = _oidc_strlen(b);
-		int n = ((n1 == n2 + 1) && (a[n1 - 1] == OIDC_CHAR_FORWARD_SLASH))
-			    ? n2
-			    : (((n2 == n1 + 1) && (b[n2 - 1] == OIDC_CHAR_FORWARD_SLASH)) ? n1 : 0);
+		int n = 0;
+		if ((n1 == n2 + 1) && (a[n1 - 1] == OIDC_CHAR_FORWARD_SLASH))
+			n = n2;
+		else if ((n2 == n1 + 1) && (b[n2 - 1] == OIDC_CHAR_FORWARD_SLASH))
+			n = n1;
 		if ((n == 0) || (_oidc_strncmp(a, b, n) != 0))
 			return FALSE;
 	}
