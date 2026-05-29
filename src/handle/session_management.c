@@ -46,8 +46,7 @@
 #include "mod_auth_openidc.h"
 #include "util/util.h"
 
-static int oidc_session_management_iframe_op(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
-					     const char *check_session_iframe) {
+static int oidc_session_management_iframe_op(request_rec *r, const char *check_session_iframe) {
 	oidc_debug(r, "enter");
 	oidc_http_hdr_out_location_set(r, check_session_iframe);
 	return HTTP_MOVED_TEMPORARILY;
@@ -182,7 +181,7 @@ int oidc_session_management(request_rec *r, oidc_cfg_t *c, oidc_session_t *sessi
 	/* see if this is a request for the OP iframe */
 	if (_oidc_strcmp("iframe_op", cmd) == 0) {
 		if (oidc_cfg_provider_check_session_iframe_get(provider) != NULL) {
-			return oidc_session_management_iframe_op(r, c, session,
+			return oidc_session_management_iframe_op(r,
 								 oidc_cfg_provider_check_session_iframe_get(provider));
 		}
 		return HTTP_NOT_FOUND;

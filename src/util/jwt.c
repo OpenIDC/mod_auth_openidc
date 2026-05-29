@@ -53,7 +53,7 @@ static const char *_oidc_jwt_hdr_dir_a256gcm = NULL;
 /*
  * return the cached serialized header part of an A256GCM "dir" encrypted JWT
  */
-static const char *oidc_util_jwt_hdr_dir_a256gcm(request_rec *r, char *input) {
+static const char *oidc_util_jwt_hdr_dir_a256gcm(void) {
 	return _oidc_jwt_hdr_dir_a256gcm;
 }
 
@@ -138,7 +138,7 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const oidc_crypto_passphrase_t *
 	}
 
 	if ((*compact_encoded_jwt != NULL) && (oidc_util_jwt_internal_strip_header(r)))
-		*compact_encoded_jwt += _oidc_strlen(oidc_util_jwt_hdr_dir_a256gcm(r, *compact_encoded_jwt));
+		*compact_encoded_jwt += _oidc_strlen(oidc_util_jwt_hdr_dir_a256gcm());
 
 	rv = TRUE;
 
@@ -171,8 +171,7 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *
 	char *kid = NULL;
 
 	if (oidc_util_jwt_internal_strip_header(r))
-		compact_encoded_jwt =
-		    apr_pstrcat(r->pool, oidc_util_jwt_hdr_dir_a256gcm(r, NULL), compact_encoded_jwt, NULL);
+		compact_encoded_jwt = apr_pstrcat(r->pool, oidc_util_jwt_hdr_dir_a256gcm(), compact_encoded_jwt, NULL);
 
 	oidc_proto_jwt_header_peek(r, compact_encoded_jwt, &alg, &enc, &kid);
 	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_DIR) != 0) || (_oidc_strcmp(enc, CJOSE_HDR_ENC_A256GCM) != 0)) {

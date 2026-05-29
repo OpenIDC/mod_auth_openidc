@@ -77,9 +77,9 @@
 /*
  * cache refresh token grant results for a while to avoid (almost) parallel requests
  */
-static void oidc_refresh_token_cache_set(request_rec *r, oidc_cfg_t *c, const char *refresh_token,
-					 const char *s_access_token, const char *s_token_type, int expires_in,
-					 const char *s_id_token, const char *s_refresh_token, apr_time_t *ts) {
+static void oidc_refresh_token_cache_set(request_rec *r, const char *refresh_token, const char *s_access_token,
+					 const char *s_token_type, int expires_in, const char *s_id_token,
+					 const char *s_refresh_token, apr_time_t *ts) {
 	char *s_json = NULL;
 
 	/* create the JSON representation of the refresh grant results + timestamp */
@@ -255,7 +255,7 @@ static apr_byte_t oidc_refresh_token_grant_obtain_tokens(request_rec *r, oidc_cf
 	OIDC_METRICS_TIMING_ADD(r, c, OM_PROVIDER_REFRESH);
 
 	/* cache the results for other callers */
-	oidc_refresh_token_cache_set(r, c, refresh_token, *s_access_token, *s_token_type, *expires_in, *s_id_token,
+	oidc_refresh_token_cache_set(r, refresh_token, *s_access_token, *s_token_type, *expires_in, *s_id_token,
 				     *s_refresh_token, ts);
 
 	return TRUE;
