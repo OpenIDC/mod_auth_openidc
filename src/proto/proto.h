@@ -141,7 +141,7 @@ apr_byte_t oidc_proto_discovery_url_based(request_rec *r, oidc_cfg_t *cfg, const
 // dpop.c
 apr_byte_t oidc_proto_dpop_create(request_rec *r, oidc_cfg_t *cfg, const char *url, const char *method,
 				  const char *access_token, const char *nonce, char **dpop);
-apr_byte_t oidc_proto_dpop_use_nonce(request_rec *r, oidc_cfg_t *cfg, json_t *j_result, apr_hash_t *response_hdrs,
+apr_byte_t oidc_proto_dpop_use_nonce(request_rec *r, oidc_cfg_t *cfg, const json_t *j_result, apr_hash_t *response_hdrs,
 				     const char *url, const char *method, const char *access_token, char **dpop);
 
 // id_token.c
@@ -200,7 +200,7 @@ int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, co
 			    const char *path_scope);
 
 // response.c
-apr_byte_t oidc_proto_response_is_post(request_rec *r, oidc_cfg_t *cfg);
+apr_byte_t oidc_proto_response_is_post(const request_rec *r, oidc_cfg_t *cfg);
 apr_byte_t oidc_proto_response_is_redirect(request_rec *r, oidc_cfg_t *cfg);
 apr_byte_t oidc_proto_response_code_idtoken_token(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,
 						  oidc_provider_t *provider, apr_table_t *params,
@@ -229,7 +229,7 @@ char *oidc_proto_state_to_cookie(request_rec *r, oidc_cfg_t *c, oidc_proto_state
 char *oidc_proto_state_to_string(request_rec *r, oidc_proto_state_t *proto_state);
 const char *oidc_proto_state_get_issuer(oidc_proto_state_t *proto_state);
 const char *oidc_proto_state_get_nonce(oidc_proto_state_t *proto_state);
-apr_time_t oidc_proto_state_get_timestamp(oidc_proto_state_t *proto_state);
+apr_time_t oidc_proto_state_get_timestamp(const oidc_proto_state_t *proto_state);
 const char *oidc_proto_state_get_state(oidc_proto_state_t *proto_state);
 const char *oidc_proto_state_get_original_url(oidc_proto_state_t *proto_state);
 const char *oidc_proto_state_get_prompt(oidc_proto_state_t *proto_state);

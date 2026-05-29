@@ -69,8 +69,9 @@ static apr_byte_t oidc_proto_validate_token_type(request_rec *r, oidc_provider_t
  * send the request to the token endpoint
  */
 static apr_byte_t oidc_proto_token_endpoint_call(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
-						 apr_table_t *params, const char *basic_auth, const char *bearer_auth,
-						 const char *dpop, char **response, apr_hash_t *response_hdrs) {
+						 const apr_table_t *params, const char *basic_auth,
+						 const char *bearer_auth, const char *dpop, char **response,
+						 apr_hash_t *response_hdrs) {
 
 	OIDC_METRICS_TIMING_START(r, cfg);
 

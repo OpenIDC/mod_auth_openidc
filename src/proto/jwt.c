@@ -47,7 +47,7 @@
 /*
  * validate "iat" claim in JWT
  */
-static apr_byte_t oidc_proto_validate_iat(request_rec *r, oidc_jwt_t *jwt, apr_byte_t is_mandatory, int slack) {
+static apr_byte_t oidc_proto_validate_iat(request_rec *r, const oidc_jwt_t *jwt, apr_byte_t is_mandatory, int slack) {
 
 	/* get the current time */
 	apr_time_t now = apr_time_sec(apr_time_now());
@@ -85,7 +85,7 @@ static apr_byte_t oidc_proto_validate_iat(request_rec *r, oidc_jwt_t *jwt, apr_b
 /*
  * validate "exp" claim in JWT
  */
-static apr_byte_t oidc_proto_validate_exp(request_rec *r, oidc_jwt_t *jwt, apr_byte_t is_mandatory) {
+static apr_byte_t oidc_proto_validate_exp(request_rec *r, const oidc_jwt_t *jwt, apr_byte_t is_mandatory) {
 
 	/* get the current time */
 	apr_time_t now = apr_time_sec(apr_time_now());

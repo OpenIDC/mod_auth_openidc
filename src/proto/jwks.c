@@ -48,7 +48,7 @@
  * when no kid/x5t was specified, include the JWK in the result if it is usable for signing;
  * takes ownership of jwk (either inserts it into result or destroys it)
  */
-static void oidc_proto_jwks_key_include_any(request_rec *r, oidc_jwk_t *jwk, json_t *elem, apr_hash_t *result) {
+static void oidc_proto_jwks_key_include_any(request_rec *r, oidc_jwk_t *jwk, const json_t *elem, apr_hash_t *result) {
 	const char *use = json_string_value(json_object_get(elem, OIDC_JOSE_JWK_USE_STR));
 	if ((use != NULL) && (_oidc_strcmp(use, OIDC_JOSE_JWK_SIG_STR) != 0)) {
 		oidc_debug(r, "skipping key because of non-matching \"%s\": \"%s\"", OIDC_JOSE_JWK_USE_STR, use);
@@ -123,7 +123,7 @@ static apr_byte_t oidc_proto_jwks_key_apply(request_rec *r, oidc_jwt_t *jwt, jso
 /*
  * get the key from the JWKs that corresponds with the key specified in the header
  */
-static apr_byte_t oidc_proto_jwks_key_get(request_rec *r, oidc_jwt_t *jwt, json_t *j_jwks, apr_hash_t *result) {
+static apr_byte_t oidc_proto_jwks_key_get(request_rec *r, oidc_jwt_t *jwt, const json_t *j_jwks, apr_hash_t *result) {
 
 	/* get the (optional) thumbprint for comparison */
 	const char *x5t = oidc_jwt_hdr_get(jwt, OIDC_JOSE_JWK_X5T_STR);

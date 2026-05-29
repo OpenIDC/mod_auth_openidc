@@ -46,7 +46,7 @@
 
 #define OIDC_PROTO_DPOP_JWT_TYP "dpop+jwt"
 
-apr_byte_t oidc_proto_dpop_use_nonce(request_rec *r, oidc_cfg_t *cfg, json_t *j_result, apr_hash_t *response_hdrs,
+apr_byte_t oidc_proto_dpop_use_nonce(request_rec *r, oidc_cfg_t *cfg, const json_t *j_result, apr_hash_t *response_hdrs,
 				     const char *url, const char *method, const char *access_token, char **dpop) {
 	apr_byte_t rv = FALSE;
 	const char *dpop_nonce = NULL;

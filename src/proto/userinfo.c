@@ -145,7 +145,7 @@ end:
  * obtain the JWT payload string for a single aggregated/distributed claim source entry,
  * either directly from the "JWT" member or by fetching it from the configured endpoint
  */
-static const char *oidc_proto_userinfo_composite_source_payload(request_rec *r, oidc_cfg_t *cfg, json_t *value) {
+static const char *oidc_proto_userinfo_composite_source_payload(request_rec *r, oidc_cfg_t *cfg, const json_t *value) {
 	const json_t *jwt = json_object_get(value, OIDC_COMPOSITE_CLAIM_JWT);
 	if ((jwt != NULL) && (json_is_string(jwt)))
 		return apr_pstrdup(r->pool, json_string_value(jwt));
@@ -207,7 +207,8 @@ static void oidc_proto_userinfo_composite_decode_sources(request_rec *r, oidc_cf
 /*
  * resolve each composite-claim name against the decoded sources and copy the value into claims
  */
-static void oidc_proto_userinfo_composite_apply_names(request_rec *r, json_t *names, json_t *decoded, json_t *claims) {
+static void oidc_proto_userinfo_composite_apply_names(request_rec *r, json_t *names, const json_t *decoded,
+						      json_t *claims) {
 	void *iter = json_object_iter(names);
 	while (iter) {
 		const char *key = json_object_iter_key(iter);

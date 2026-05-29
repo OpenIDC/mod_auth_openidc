@@ -47,7 +47,7 @@
 /*
  * indicate whether the incoming HTTP POST request is an OpenID Connect Authorization Response
  */
-apr_byte_t oidc_proto_response_is_post(request_rec *r, oidc_cfg_t *cfg) {
+apr_byte_t oidc_proto_response_is_post(const request_rec *r, oidc_cfg_t *cfg) {
 
 	/* prereq: this is a call to the configured redirect_uri; see if it is a POST */
 	return (r->method_number == M_POST);
@@ -67,8 +67,8 @@ apr_byte_t oidc_proto_response_is_redirect(request_rec *r, oidc_cfg_t *cfg) {
 /*
  * check the required parameters for the various flows after resolving the authorization code
  */
-static apr_byte_t oidc_proto_validate_code_response(request_rec *r, const char *response_type, char *id_token,
-						    char *access_token, char *token_type) {
+static apr_byte_t oidc_proto_validate_code_response(request_rec *r, const char *response_type, const char *id_token,
+						    const char *access_token, const char *token_type) {
 
 	oidc_debug(r, "enter");
 
@@ -233,7 +233,8 @@ static apr_byte_t oidc_proto_validate_issuer_client_id(request_rec *r, const cha
  * helper function to validate both the response type and the response mode in a single function call
  */
 static apr_byte_t oidc_proto_validate_response_type_mode_issuer(request_rec *r, const char *requested_response_type,
-								apr_table_t *params, oidc_proto_state_t *proto_state,
+								const apr_table_t *params,
+								oidc_proto_state_t *proto_state,
 								const char *response_mode,
 								const char *default_response_mode, const char *issuer,
 								int require_issuer, const char *c_client_id) {
@@ -261,7 +262,7 @@ static apr_byte_t oidc_proto_validate_response_type_mode_issuer(request_rec *r, 
  */
 static apr_byte_t oidc_proto_parse_idtoken_and_validate_code(request_rec *r, oidc_cfg_t *c,
 							     oidc_proto_state_t *proto_state, oidc_provider_t *provider,
-							     const char *response_type, apr_table_t *params,
+							     const char *response_type, const apr_table_t *params,
 							     oidc_jwt_t **jwt, apr_byte_t must_validate_code) {
 
 	const char *code = apr_table_get(params, OIDC_PROTO_CODE);

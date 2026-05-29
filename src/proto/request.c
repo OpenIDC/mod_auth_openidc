@@ -168,7 +168,7 @@ static int oidc_proto_request_form_post_param_add(void *rec, const char *key, co
 /*
  * make the browser POST parameters through Javascript auto-submit
  */
-static const char *oidc_proto_request_html_post(request_rec *r, const char *url, apr_table_t *params) {
+static const char *oidc_proto_request_html_post(request_rec *r, const char *url, const apr_table_t *params) {
 
 	oidc_debug(r, "enter");
 
@@ -198,8 +198,8 @@ static const char *oidc_proto_request_html_post(request_rec *r, const char *url,
  * copied and/or deleted to/from the protected request object based on the settings specified
  * in the "copy_from_request"/"copy_and_remove_from_request" JSON array in the request object
  */
-static apr_byte_t oidc_proto_request_uri_param_needs_action(json_t *request_object_config, const char *parameter_name,
-							    const char *action) {
+static apr_byte_t oidc_proto_request_uri_param_needs_action(const json_t *request_object_config,
+							    const char *parameter_name, const char *action) {
 	const json_t *copy_from_request = json_object_get(request_object_config, action);
 	size_t index = 0;
 	while (index < json_array_size(copy_from_request)) {
@@ -332,7 +332,7 @@ static apr_byte_t oidc_request_uri_encryption_jwk_by_type(request_rec *r, oidc_c
  * populate iss/aud/iat/nbf/exp on the request object and merge "static" config values into it
  */
 static void oidc_request_uri_request_object_claims_set(request_rec *r, struct oidc_provider_t *provider,
-						       json_t *request_object_config, oidc_jwt_t *request_object,
+						       const json_t *request_object_config, oidc_jwt_t *request_object,
 						       int ttl) {
 	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_ISS,
 			    json_string(oidc_cfg_provider_client_id_get(provider)));
@@ -739,7 +739,8 @@ static int oidc_proto_request_auth_send_post(request_rec *r, struct oidc_provide
 /*
  * send the authentication request via an HTTP redirect (or a Javascript-based preserve page)
  */
-static int oidc_proto_request_auth_send_get(request_rec *r, struct oidc_provider_t *provider, apr_table_t *params) {
+static int oidc_proto_request_auth_send_get(request_rec *r, struct oidc_provider_t *provider,
+					    const apr_table_t *params) {
 
 	/* construct the full authorization request URL */
 	const char *authorization_request =

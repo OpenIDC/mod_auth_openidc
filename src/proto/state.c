@@ -57,7 +57,7 @@
 /*
  * retrieve a string from the state object
  */
-static const char *oidc_proto_state_get_string_value(oidc_proto_state_t *proto_state, const char *name) {
+static const char *oidc_proto_state_get_string_value(const oidc_proto_state_t *proto_state, const char *name) {
 	const json_t *v = json_object_get(proto_state, name);
 	return v ? json_string_value(v) : NULL;
 }
@@ -107,7 +107,7 @@ const char *oidc_proto_state_get_nonce(oidc_proto_state_t *proto_state) {
 /*
  * retrieve the timestamp value from the state object
  */
-apr_time_t oidc_proto_state_get_timestamp(oidc_proto_state_t *proto_state) {
+apr_time_t oidc_proto_state_get_timestamp(const oidc_proto_state_t *proto_state) {
 	const json_t *v = json_object_get(proto_state, OIDC_PROTO_STATE_TIMESTAMP);
 	return v ? apr_time_from_sec(json_integer_value(v)) : -1;
 }

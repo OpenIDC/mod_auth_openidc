@@ -250,7 +250,7 @@ end:
 /*
  * obtain the signed JWT cache TTL from the environment variables
  */
-static int oidc_userinfo_signed_jwt_cache_ttl(request_rec *r) {
+static int oidc_userinfo_signed_jwt_cache_ttl(const request_rec *r) {
 	const char *s_ttl = apr_table_get(r->subprocess_env, OIDC_USERINFO_SIGNED_JWT_CACHE_TTL_ENVVAR);
 	return _oidc_str_to_int(s_ttl, OIDC_USERINFO_SIGNED_JWT_CACHE_TTL_DEFAULT);
 }
@@ -381,7 +381,7 @@ static void oidc_userinfo_pass_as_jwt(request_rec *r, oidc_cfg_t *cfg, oidc_sess
  * encoding-specific handler
  */
 static void oidc_userinfo_pass_entry(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session, json_t *claims,
-				     oidc_pass_user_info_as_t *p, oidc_appinfo_pass_in_t pass_in,
+				     const oidc_pass_user_info_as_t *p, oidc_appinfo_pass_in_t pass_in,
 				     oidc_appinfo_encoding_t encoding) {
 
 	char *cser = NULL;
