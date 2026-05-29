@@ -169,17 +169,18 @@ char *oidc_util_html_javascript_escape(apr_pool_t *pool, const char *s) {
 int oidc_util_html_send(request_rec *r, const char *title, const char *html_head, const char *on_load,
 			const char *html_body, int status_code) {
 
-	char *html = "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\" \"http://www.w3.org/TR/html4/strict.dtd\">\n"
-		     "<html>\n"
-		     "  <head>\n"
-		     "    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n"
-		     "    <title>%s</title>\n"
-		     "    %s\n"
-		     "  </head>\n"
-		     "  <body%s>\n"
-		     "%s\n"
-		     "  </body>\n"
-		     "</html>\n";
+	static const char html_tmpl[] =
+	    "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\" \"http://www.w3.org/TR/html4/strict.dtd\">\n"
+	    "<html>\n"
+	    "  <head>\n"
+	    "    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n"
+	    "    <title>%s</title>\n"
+	    "    %s\n"
+	    "  </head>\n"
+	    "  <body%s>\n"
+	    "%s\n"
+	    "  </body>\n"
+	    "</html>\n";
 
 	/*
 	 * on_load is rendered as the value of an HTML onload="..." attribute. The
@@ -189,8 +190,8 @@ int oidc_util_html_send(request_rec *r, const char *title, const char *html_head
 	 * legitimate values keep working while a stray quote can't break out of
 	 * the attribute into the surrounding markup.
 	 */
-	html = apr_psprintf(
-	    r->pool, html, title ? oidc_util_html_escape(r->pool, title) : "", html_head ? html_head : "",
+	char *html = apr_psprintf(
+	    r->pool, html_tmpl, title ? oidc_util_html_escape(r->pool, title) : "", html_head ? html_head : "",
 	    on_load ? apr_psprintf(r->pool, " onload=\"%s\"", oidc_util_html_escape(r->pool, on_load)) : "",
 	    html_body ? html_body : "<p></p>");
 

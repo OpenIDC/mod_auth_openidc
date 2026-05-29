@@ -58,7 +58,7 @@ static int oidc_session_management_iframe_rp(request_rec *r, oidc_cfg_t *c, oidc
 
 	oidc_debug(r, "enter");
 
-	const char *java_script =
+	static const char java_script_tmpl[] =
 	    "    <script type=\"text/javascript\">\n"
 	    "      var targetOrigin  = '%s';\n"
 	    "      var clientId  = '%s';\n"
@@ -139,12 +139,13 @@ static int oidc_session_management_iframe_rp(request_rec *r, oidc_cfg_t *c, oidc
 
 	const char *redirect_uri = oidc_util_url_redirect_uri(r, c);
 
-	java_script = apr_psprintf(r->pool, java_script, oidc_util_html_javascript_escape(r->pool, origin),
-				   oidc_util_html_javascript_escape(r->pool, client_id),
-				   session_state ? oidc_util_html_javascript_escape(r->pool, session_state) : "",
-				   login_uri ? oidc_util_html_javascript_escape(r->pool, login_uri) : "", op_iframe_id,
-				   poll_interval, oidc_util_html_javascript_escape(r->pool, redirect_uri),
-				   oidc_util_html_javascript_escape(r->pool, redirect_uri));
+	const char *java_script =
+	    apr_psprintf(r->pool, java_script_tmpl, oidc_util_html_javascript_escape(r->pool, origin),
+			 oidc_util_html_javascript_escape(r->pool, client_id),
+			 session_state ? oidc_util_html_javascript_escape(r->pool, session_state) : "",
+			 login_uri ? oidc_util_html_javascript_escape(r->pool, login_uri) : "", op_iframe_id,
+			 poll_interval, oidc_util_html_javascript_escape(r->pool, redirect_uri),
+			 oidc_util_html_javascript_escape(r->pool, redirect_uri));
 
 	return oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_HTML, NULL, java_script, "setTimer()", NULL);
 }
