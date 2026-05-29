@@ -1632,6 +1632,78 @@ START_TEST(test_handle_mod_validate_redirect_url_allowed) {
 }
 END_TEST
 
+START_TEST(test_handle_mod_get_remote_user_regexp) {
+	request_rec *r = oidc_test_request_get();
+	json_t *json = json_pack("{s:s}", "email", "Alice@Example.COM");
+	char *remote_user = NULL;
+
+	/* substitution path (reg_exp + replace): rewrite the claim value */
+	ck_assert_int_eq(oidc_get_remote_user(r, "email", "^(.*)@.*$", "$1", json, &remote_user), TRUE);
+	ck_assert_ptr_nonnull(remote_user);
+
+	/* first-match path (reg_exp, replace == NULL): extract the first capture group */
+	remote_user = NULL;
+	ck_assert_int_eq(oidc_get_remote_user(r, "email", "([A-Za-z]+)", NULL, json, &remote_user), TRUE);
+	ck_assert_ptr_nonnull(remote_user);
+
+	/* an invalid regex on the substitution path fails and clears the out-param */
+	remote_user = NULL;
+	ck_assert_int_eq(oidc_get_remote_user(r, "email", "(", "$1", json, &remote_user), FALSE);
+	ck_assert_ptr_null(remote_user);
+
+	/* an invalid regex on the first-match path fails and clears the out-param */
+	remote_user = NULL;
+	ck_assert_int_eq(oidc_get_remote_user(r, "email", "(", NULL, json, &remote_user), FALSE);
+	ck_assert_ptr_null(remote_user);
+
+	json_decref(json);
+}
+END_TEST
+
+START_TEST(test_handle_mod_validate_redirect_url_edge_cases) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	char *err_str = NULL, *err_desc = NULL;
+
+	/* a NULL URL is rejected up front */
+	ck_assert_int_eq(oidc_validate_redirect_url(r, c, NULL, TRUE, &err_str, &err_desc), FALSE);
+	ck_assert_ptr_nonnull(err_str);
+	ck_assert_str_eq(err_str, "Invalid URL");
+
+	/* a URL exceeding the maximum length is rejected before parsing */
+	char *too_long = apr_pcalloc(r->pool, 20001);
+	for (int i = 0; i < 20000; i++)
+		too_long[i] = 'a';
+	too_long[0] = '/';
+	err_str = NULL;
+	err_desc = NULL;
+	ck_assert_int_eq(oidc_validate_redirect_url(r, c, too_long, TRUE, &err_str, &err_desc), FALSE);
+	ck_assert_ptr_nonnull(err_str);
+	ck_assert_str_eq(err_str, "URL too long");
+
+	/* a relative URL carrying a CR/LF header-splitting character is rejected */
+	err_str = NULL;
+	err_desc = NULL;
+	ck_assert_int_eq(oidc_validate_redirect_url(r, c, "/path\ninjected", TRUE, &err_str, &err_desc), FALSE);
+	ck_assert_ptr_nonnull(err_str);
+}
+END_TEST
+
+START_TEST(test_handle_mod_check_cookie_domain_configured) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCCookieDomain);
+	ck_assert_ptr_null(oidc_cmd_cookie_domain_set(cmd, NULL, "example.com"));
+
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	/* a session cookie issued for the explicitly configured domain is accepted */
+	oidc_session_set_cookie_domain(r, session, "example.com");
+	ck_assert_int_eq(oidc_check_cookie_domain(r, c, session), TRUE);
+	oidc_session_free(r, session);
+}
+END_TEST
+
 START_TEST(test_handle_mod_session_pass_tokens_full) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -3265,6 +3337,9 @@ int main(void) {
 	tcase_add_test(mod_main, test_handle_mod_get_remote_user_missing_claim);
 	tcase_add_test(mod_main, test_handle_mod_validate_redirect_url_backslash_relative);
 	tcase_add_test(mod_main, test_handle_mod_validate_redirect_url_allowed);
+	tcase_add_test(mod_main, test_handle_mod_get_remote_user_regexp);
+	tcase_add_test(mod_main, test_handle_mod_validate_redirect_url_edge_cases);
+	tcase_add_test(mod_main, test_handle_mod_check_cookie_domain_configured);
 	tcase_add_test(mod_main, test_handle_mod_session_pass_tokens_full);
 	tcase_add_test(mod_main, test_handle_mod_original_request_method_post_form);
 	tcase_add_test(mod_main, test_handle_mod_check_user_id_unauth_action_407);
