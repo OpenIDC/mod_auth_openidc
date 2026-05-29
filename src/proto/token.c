@@ -40,6 +40,8 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+#include <limits.h>
+
 #include "metrics.h"
 #include "proto/proto.h"
 #include "util/util.h"
@@ -169,10 +171,14 @@ static apr_byte_t oidc_proto_token_endpoint_response_parse(request_rec *r, oidc_
 	/* get the access token expires_in value; cater for string values (old Microsoft Entra ID / Azure AD) */
 	*expires_in = -1;
 	j_expires_in = json_object_get(j_result, OIDC_PROTO_EXPIRES_IN);
-	if (json_is_string(j_expires_in))
+	if (json_is_string(j_expires_in)) {
 		*expires_in = _oidc_str_to_int(json_string_value(j_expires_in), -1);
-	else if (json_is_integer(j_expires_in))
-		*expires_in = json_integer_value(j_expires_in);
+	} else if (json_is_integer(j_expires_in)) {
+		/* clamp into int range so a maliciously huge OP value can't silently truncate to a small/negative TTL
+		 */
+		json_int_t v = json_integer_value(j_expires_in);
+		*expires_in = (v > INT_MAX) ? INT_MAX : ((v < INT_MIN) ? INT_MIN : (int)v);
+	}
 
 	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_REFRESH_TOKEN, refresh_token, NULL);
 	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_SCOPE, scope, NULL);

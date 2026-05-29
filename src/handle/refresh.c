@@ -40,6 +40,8 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+#include <limits.h>
+
 #include "handle/handle.h"
 #include "metrics.h"
 #include "mod_auth_openidc.h"
@@ -170,8 +172,11 @@ static oidc_refresh_token_cache_result_t oidc_refresh_token_cache_get(request_re
 		*s_access_token = apr_pstrdup(r->pool, json_string_value(v));
 	if ((v = json_object_get(json, OIDC_PROTO_TOKEN_TYPE)))
 		*s_token_type = apr_pstrdup(r->pool, json_string_value(v));
-	if ((v = json_object_get(json, OIDC_PROTO_EXPIRES_IN)))
-		*expires_in = json_integer_value(v);
+	if ((v = json_object_get(json, OIDC_PROTO_EXPIRES_IN))) {
+		/* clamp into int range to match the writer-side guard in oidc_proto_token_response_parse */
+		json_int_t n = json_integer_value(v);
+		*expires_in = (n > INT_MAX) ? INT_MAX : ((n < INT_MIN) ? INT_MIN : (int)n);
+	}
 	if ((v = json_object_get(json, OIDC_PROTO_ID_TOKEN)))
 		*s_id_token = apr_pstrdup(r->pool, json_string_value(v));
 	if ((v = json_object_get(json, OIDC_PROTO_REFRESH_TOKEN)))

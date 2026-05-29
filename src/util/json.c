@@ -40,6 +40,8 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+#include <limits.h>
+
 #include "proto/proto.h"
 #include "util/util.h"
 
@@ -219,7 +221,9 @@ apr_byte_t oidc_util_json_object_get_int(const json_t *json, const char *name, i
 	if (json != NULL) {
 		v = json_object_get(json, name);
 		if ((v != NULL) && (json_is_integer(v))) {
-			*value = json_integer_value(v);
+			/* json_int_t is at least int64; clamp into int range to avoid silent truncation */
+			json_int_t n = json_integer_value(v);
+			*value = (n > INT_MAX) ? INT_MAX : ((n < INT_MIN) ? INT_MIN : (int)n);
 			return TRUE;
 		}
 	}
