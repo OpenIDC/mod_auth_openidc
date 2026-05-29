@@ -271,6 +271,90 @@ START_TEST(test_metadata_jwks_get_http_failure) {
 END_TEST
 
 /*
+ * after a successful refresh the JWKs is cached; a follow-up call with refresh=FALSE
+ * must serve the cached copy and skip the HTTP round-trip
+ */
+START_TEST(test_metadata_jwks_get_cache_hit) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *jwks_body = "{\"keys\":[{\"kty\":\"oct\",\"kid\":\"k1\",\"k\":\"AAECAwQFBgcICQoLDA0ODw\"}]}";
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = jwks_body};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	oidc_jwks_uri_t jwks_uri = {0};
+	jwks_uri.uri = oidc_test_http_server_url(srv, r->pool);
+	jwks_uri.refresh_interval = 60;
+
+	/* first call: forced refresh populates the cache */
+	json_t *j1 = NULL;
+	apr_byte_t refresh = TRUE;
+	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j1, &refresh), TRUE);
+	ck_assert_ptr_nonnull(j1);
+	json_decref(j1);
+
+	/* stop the server so a second HTTP request would fail; cache should still serve */
+	oidc_test_http_server_stop(srv);
+
+	json_t *j2 = NULL;
+	refresh = FALSE;
+	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j2, &refresh), TRUE);
+	ck_assert_ptr_nonnull(j2);
+	ck_assert_ptr_nonnull(json_object_get(j2, "keys"));
+	json_decref(j2);
+}
+END_TEST
+
+/*
+ * a JWKs document that does not contain a "keys" array must be rejected; refresh=FALSE
+ * keeps the cache-miss path linear (single HTTP attempt) since our one-shot test server
+ * only services one request
+ */
+START_TEST(test_metadata_jwks_get_missing_keys) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = "{\"not_keys\":[]}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	oidc_jwks_uri_t jwks_uri = {0};
+	jwks_uri.uri = oidc_test_http_server_url(srv, r->pool);
+	jwks_uri.refresh_interval = 60;
+
+	json_t *j = NULL;
+	apr_byte_t refresh = FALSE;
+	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j, &refresh), FALSE);
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* non-JSON response body must be rejected (same single-HTTP-attempt setup as above) */
+START_TEST(test_metadata_jwks_get_invalid_json) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = "this is not json"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	oidc_jwks_uri_t jwks_uri = {0};
+	jwks_uri.uri = oidc_test_http_server_url(srv, r->pool);
+	jwks_uri.refresh_interval = 60;
+
+	json_t *j = NULL;
+	apr_byte_t refresh = FALSE;
+	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j, &refresh), FALSE);
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/*
  * Tests for oidc_oauth_metadata_provider_parse — populates cfg->oauth from
  * an AS metadata document.
  */
@@ -759,6 +843,9 @@ int main(void) {
 	tcase_add_test(retrieve, test_metadata_retrieve_invalid_metadata);
 	tcase_add_test(retrieve, test_metadata_jwks_get_forced_refresh);
 	tcase_add_test(retrieve, test_metadata_jwks_get_http_failure);
+	tcase_add_test(retrieve, test_metadata_jwks_get_cache_hit);
+	tcase_add_test(retrieve, test_metadata_jwks_get_missing_keys);
+	tcase_add_test(retrieve, test_metadata_jwks_get_invalid_json);
 
 	TCase *conf = tcase_create("conf");
 	tcase_add_checked_fixture(conf, oidc_test_setup, oidc_test_teardown);
