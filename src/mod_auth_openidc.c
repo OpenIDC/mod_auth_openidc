@@ -409,7 +409,7 @@ void oidc_request_state_json_set(request_rec *r, const char *key, json_t *value)
 	apr_hash_t *state = oidc_request_state(r);
 
 	/* make a copy of the json object because the session object in the caller will be cleared */
-	json_t *json = json_copy(value);
+	const json_t *json = json_copy(value);
 
 	/* register a cleanup for the json object */
 	apr_pool_cleanup_register(r->pool, json, (apr_status_t (*)(void *))json_decref, apr_pool_cleanup_null);
@@ -834,7 +834,7 @@ apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name, const ch
 				json_t *json, char **request_user) {
 
 	/* get the claim value from the JSON object */
-	json_t *username = json_object_get(json, claim_name);
+	const json_t *username = json_object_get(json, claim_name);
 	if ((username == NULL) || (!json_is_string(username))) {
 		oidc_warn(r, "JSON object did not contain a \"%s\" string", claim_name);
 		return FALSE;
@@ -1820,7 +1820,7 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, se
  */
 static const char *oidc_parse_config(cmd_parms *cmd, const char *require_line, const void **parsed_require_line) {
 	const char *expr_err = NULL;
-	ap_expr_info_t *expr;
+	const ap_expr_info_t *expr;
 
 	expr = ap_expr_parse_cmd(cmd, require_line, AP_EXPR_FLAG_STRING_RESULT, &expr_err, NULL);
 
@@ -1895,8 +1895,8 @@ static void oidc_filter_in_filter_append_post_params(ap_filter_t *f, apr_bucket_
 	if (userdata_post_params == NULL)
 		return;
 
-	char *buf = apr_psprintf(f->r->pool, "%s%s", ctx->nbytes > 0 ? "&" : "",
-				 oidc_http_form_encoded_data(f->r, userdata_post_params));
+	const char *buf = apr_psprintf(f->r->pool, "%s%s", ctx->nbytes > 0 ? "&" : "",
+				       oidc_http_form_encoded_data(f->r, userdata_post_params));
 	apr_bucket *b_out = apr_bucket_heap_create(buf, _oidc_strlen(buf), 0, f->r->connection->bucket_alloc);
 
 	APR_BRIGADE_INSERT_TAIL(brigade, b_out);

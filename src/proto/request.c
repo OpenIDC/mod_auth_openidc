@@ -85,7 +85,7 @@ static int oidc_proto_request_auth_push(request_rec *r, struct oidc_provider_t *
 	char *bearer_auth = NULL;
 	char *request_uri = NULL;
 	int expires_in = 0;
-	char *authorization_request = NULL;
+	const char *authorization_request = NULL;
 	json_t *j_result = NULL;
 	int rv = HTTP_INTERNAL_SERVER_ERROR;
 	const char *endpoint_url = oidc_cfg_provider_pushed_authorization_request_endpoint_url_get(provider);
@@ -200,10 +200,10 @@ static const char *oidc_proto_request_html_post(request_rec *r, const char *url,
  */
 static apr_byte_t oidc_proto_request_uri_param_needs_action(json_t *request_object_config, const char *parameter_name,
 							    const char *action) {
-	json_t *copy_from_request = json_object_get(request_object_config, action);
+	const json_t *copy_from_request = json_object_get(request_object_config, action);
 	size_t index = 0;
 	while (index < json_array_size(copy_from_request)) {
-		json_t *value = json_array_get(copy_from_request, index);
+		const json_t *value = json_array_get(copy_from_request, index);
 		if ((json_is_string(value)) && (_oidc_strcmp(json_string_value(value), parameter_name) == 0)) {
 			return TRUE;
 		}
@@ -289,7 +289,7 @@ static apr_byte_t oidc_request_uri_encryption_jwk_by_type(request_rec *r, oidc_c
 		return FALSE;
 	}
 
-	json_t *keys = json_object_get(j_jwks, OIDC_JOSE_JWKS_KEYS_STR);
+	const json_t *keys = json_object_get(j_jwks, OIDC_JOSE_JWKS_KEYS_STR);
 	if ((keys == NULL) || !(json_is_array(keys))) {
 		oidc_error(r, "\"%s\" array element is not a JSON array", OIDC_JOSE_JWKS_KEYS_STR);
 		return FALSE;
@@ -569,7 +569,7 @@ static char *oidc_proto_request_uri_create(request_rec *r, struct oidc_provider_
 	else
 		resolver_url = apr_pstrdup(r->pool, redirect_uri);
 
-	char *serialized_request_object =
+	const char *serialized_request_object =
 	    oidc_request_uri_request_object(r, provider, request_object_config, params, ttl);
 
 	/* generate a temporary reference, store the request object in the cache and generate a Request URI that
@@ -601,10 +601,10 @@ static void oidc_proto_request_uri_request_param_add(request_rec *r, struct oidc
 		return;
 
 	/* request_uri is used as default parameter for sending Request Object */
-	char *parameter = OIDC_PROTO_REQUEST_URI;
+	const char *parameter = OIDC_PROTO_REQUEST_URI;
 
 	/* get request_object_type parameter from config */
-	json_t *request_object_type = json_object_get(request_object_config, "request_object_type");
+	const json_t *request_object_type = json_object_get(request_object_config, "request_object_type");
 	if (request_object_type != NULL) {
 		const char *request_object_type_str = json_string_value(request_object_type);
 		if (request_object_type_str == NULL) {
@@ -622,7 +622,7 @@ static void oidc_proto_request_uri_request_param_add(request_rec *r, struct oidc
 	}
 
 	/* create request value */
-	char *value = NULL;
+	const char *value = NULL;
 	int ttl = OIDC_REQUEST_OBJECT_TTL_DEFAULT;
 	oidc_util_json_object_get_int(request_object_config, "ttl", &ttl, OIDC_REQUEST_OBJECT_TTL_DEFAULT);
 	if (_oidc_strcmp(parameter, OIDC_PROTO_REQUEST_URI) == 0) {
@@ -742,7 +742,7 @@ static int oidc_proto_request_auth_send_post(request_rec *r, struct oidc_provide
 static int oidc_proto_request_auth_send_get(request_rec *r, struct oidc_provider_t *provider, apr_table_t *params) {
 
 	/* construct the full authorization request URL */
-	char *authorization_request =
+	const char *authorization_request =
 	    oidc_http_query_encoded_url(r, oidc_cfg_provider_authorization_endpoint_url_get(provider), params);
 
 	char *javascript = NULL;

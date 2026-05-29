@@ -317,7 +317,7 @@ static apr_byte_t oidc_oauth_parse_and_cache_token_expiry(request_rec *r, oidc_c
 	oidc_debug(r, "expiry_claim_name=%s, expiry_format_absolute=%d, expiry_claim_is_mandatory=%d",
 		   expiry_claim_name, expiry_format_absolute, expiry_claim_is_mandatory);
 
-	json_t *expiry = json_object_get(introspection_response, expiry_claim_name);
+	const json_t *expiry = json_object_get(introspection_response, expiry_claim_name);
 
 	if (expiry == NULL) {
 		if (expiry_claim_is_mandatory) {
@@ -380,7 +380,7 @@ static apr_byte_t oidc_oauth_cache_access_token(request_rec *r, oidc_cfg_t *c, a
 	json_t *cache_entry = json_object();
 	json_object_set(cache_entry, OIDC_OAUTH_CACHE_KEY_RESPONSE, json);
 	json_object_set_new(cache_entry, OIDC_OAUTH_CACHE_KEY_TIMESTAMP, json_integer(apr_time_sec(apr_time_now())));
-	char *cache_value = oidc_util_json_encode(r->pool, cache_entry, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	const char *cache_value = oidc_util_json_encode(r->pool, cache_entry, JSON_PRESERVE_ORDER | JSON_COMPACT);
 
 	/* set it in the cache so subsequent request don't need to validate the access_token and get the claims anymore
 	 */
@@ -418,7 +418,7 @@ static apr_byte_t oidc_oauth_get_cached_access_token(request_rec *r, oidc_cfg_t 
 	}
 
 	/* compare the timestamp against the freshness requirement */
-	json_t *v = json_object_get(cache_entry, OIDC_OAUTH_CACHE_KEY_TIMESTAMP);
+	const json_t *v = json_object_get(cache_entry, OIDC_OAUTH_CACHE_KEY_TIMESTAMP);
 	apr_time_t now = apr_time_sec(apr_time_now());
 	if ((token_introspection_interval > 0) && (now > json_integer_value(v) + token_introspection_interval)) {
 

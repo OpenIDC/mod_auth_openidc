@@ -216,7 +216,7 @@ static const char *_oidc_util_url_base_cur(request_rec *r, oidc_hdr_x_forwarded_
 	port_str = _oidc_util_url_cur_port(r, scheme_str, x_forwarded_headers);
 	port_str = port_str ? apr_psprintf(r->pool, ":%s", port_str) : "";
 
-	char *url = apr_pstrcat(r->pool, scheme_str, "://", host_str, port_str, NULL);
+	const char *url = apr_pstrcat(r->pool, scheme_str, "://", host_str, port_str, NULL);
 
 	return url;
 }
@@ -314,7 +314,7 @@ apr_byte_t oidc_util_url_has_parameter(request_rec *r, const char *param) {
  */
 apr_byte_t oidc_util_url_parameter_get(request_rec *r, char *name, char **value) {
 	char *tokenizer_ctx = NULL;
-	char *p = NULL;
+	const char *p = NULL;
 	char *args = NULL;
 	const char *k_param = apr_psprintf(r->pool, "%s=", name);
 	const size_t k_param_sz = _oidc_strlen(k_param);

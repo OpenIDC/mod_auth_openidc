@@ -190,7 +190,7 @@ int oidc_util_html_send(request_rec *r, const char *title, const char *html_head
 	 * legitimate values keep working while a stray quote can't break out of
 	 * the attribute into the surrounding markup.
 	 */
-	char *html = apr_psprintf(
+	const char *html = apr_psprintf(
 	    r->pool, html_tmpl, title ? oidc_util_html_escape(r->pool, title) : "", html_head ? html_head : "",
 	    on_load ? apr_psprintf(r->pool, " onload=\"%s\"", oidc_util_html_escape(r->pool, on_load)) : "",
 	    html_body ? html_body : "<p></p>");
@@ -280,7 +280,7 @@ static apr_byte_t oidc_util_template_format_valid(const char *tpl, int expected_
  */
 int oidc_util_html_send_in_template(request_rec *r, const char *filename, char **static_template_content,
 				    const char *arg1, int arg1_esc, const char *arg2, int arg2_esc) {
-	char *html = NULL;
+	const char *html = NULL;
 	int rc = OK;
 	// NB: templates go into the server process pool
 	if ((*static_template_content == NULL) &&

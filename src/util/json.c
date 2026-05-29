@@ -158,7 +158,7 @@ apr_byte_t oidc_util_json_array_has_value(request_rec *r, json_t *haystack, cons
 
 	int i;
 	for (i = 0; i < json_array_size(haystack); i++) {
-		json_t *elem = json_array_get(haystack, i);
+		const json_t *elem = json_array_get(haystack, i);
 		if (!json_is_string(elem)) {
 			oidc_error(r, "unhandled in-array JSON non-string object type [%d]", elem->type);
 			continue;
@@ -183,7 +183,7 @@ apr_byte_t oidc_util_json_object_get_string(apr_pool_t *pool, json_t *json, cons
 					    const char *default_value) {
 	*value = default_value ? apr_pstrdup(pool, default_value) : NULL;
 	if (json != NULL) {
-		json_t *v = json_object_get(json, name);
+		const json_t *v = json_object_get(json, name);
 		if ((v != NULL) && (json_is_string(v))) {
 			*value = apr_pstrdup(pool, json_string_value(v));
 		}
@@ -196,7 +196,7 @@ apr_byte_t oidc_util_json_object_get_string(apr_pool_t *pool, json_t *json, cons
  */
 apr_byte_t oidc_util_json_object_get_string_array(apr_pool_t *pool, json_t *json, const char *name,
 						  apr_array_header_t **value, const apr_array_header_t *default_value) {
-	json_t *v = NULL;
+	const json_t *v = NULL;
 	json_t *arr = NULL;
 	*value = (default_value != NULL) ? apr_array_copy(pool, default_value) : NULL;
 	if (json != NULL) {

@@ -55,11 +55,12 @@ static int oidc_response_redirect_parent_window_to_logout(request_rec *r, oidc_c
 
 	oidc_debug(r, "enter");
 
-	char *java_script = apr_psprintf(r->pool,
-					 "    <script type=\"text/javascript\">\n"
-					 "      window.top.location.href = '%s?session=logout';\n"
-					 "    </script>\n",
-					 oidc_util_html_javascript_escape(r->pool, oidc_util_url_redirect_uri(r, c)));
+	const char *java_script =
+	    apr_psprintf(r->pool,
+			 "    <script type=\"text/javascript\">\n"
+			 "      window.top.location.href = '%s?session=logout';\n"
+			 "    </script>\n",
+			 oidc_util_html_javascript_escape(r->pool, oidc_util_url_redirect_uri(r, c)));
 
 	return oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_HTML, "Redirecting...", java_script, NULL, NULL);
 }
@@ -352,7 +353,7 @@ static apr_byte_t oidc_response_proto_state_restore(request_rec *r, oidc_cfg_t *
 	oidc_state_cookies_clean_expired(r, c, cookieName, FALSE);
 
 	/* get the state cookie value first */
-	char *cookieValue = oidc_http_get_cookie(r, cookieName);
+	const char *cookieValue = oidc_http_get_cookie(r, cookieName);
 	if (cookieValue == NULL) {
 		oidc_error(r, "no \"%s\" state cookie found: check domain and samesite cookie settings", cookieName);
 		return FALSE;

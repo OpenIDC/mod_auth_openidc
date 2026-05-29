@@ -661,7 +661,7 @@ const char *oidc_cfg_provider_revocation_endpoint_url_set(apr_pool_t *pool, oidc
 
 const char *oidc_cmd_provider_revocation_endpoint_url_set(cmd_parms *cmd, void *ptr, const char *args) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
-	char *w = ap_getword_conf(cmd->pool, &args);
+	const char *w = ap_getword_conf(cmd->pool, &args);
 	if (*w == '\0' || *args != 0) {
 		cfg->provider->revocation_endpoint_url = "";
 		return NULL;

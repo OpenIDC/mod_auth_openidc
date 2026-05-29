@@ -337,7 +337,7 @@ apr_byte_t oidc_util_issuer_match(const char *a, const char *b) {
  * parse a space separated string in to a hash table
  */
 apr_hash_t *oidc_util_spaced_string_to_hashtable(apr_pool_t *pool, const char *str) {
-	char *val;
+	const char *val;
 	const char *data = apr_pstrdup(pool, str);
 	apr_hash_t *result = apr_hash_make(pool);
 	while (data && (*data)) {
@@ -488,7 +488,7 @@ void oidc_util_set_trace_parent(request_rec *r, oidc_cfg_t *c, const char *span)
 	char *s_trace_id = "";
 	const char *v = NULL;
 	int i = 0;
-	char *hostname = "localhost";
+	const char *hostname = "localhost";
 	const uint64_t P1 = 7;
 	const uint64_t P2 = 31;
 	uint64_t hash = P1;

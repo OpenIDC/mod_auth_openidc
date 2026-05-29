@@ -105,7 +105,7 @@ int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg) {
 	oidc_debug(r, "enter");
 
 	/* obtain the URL we're currently accessing, to be stored in the state/session */
-	char *current_url = oidc_util_url_cur(r, oidc_cfg_x_forwarded_headers_get(cfg));
+	const char *current_url = oidc_util_url_cur(r, oidc_cfg_x_forwarded_headers_get(cfg));
 	const char *method = oidc_original_request_method(r, cfg, FALSE);
 
 	/* generate CSRF token */
@@ -178,9 +178,9 @@ int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg) {
 			href = apr_psprintf(r->pool, "%s&amp;%s=%s", href, OIDC_DISC_AR_PARAM,
 					    oidc_http_url_encode(r, path_auth_request_params));
 
-		char *display = (_oidc_strstr(issuer, "https://") == NULL)
-				    ? apr_pstrdup(r->pool, issuer)
-				    : apr_pstrdup(r->pool, issuer + _oidc_strlen("https://"));
+		const char *display = (_oidc_strstr(issuer, "https://") == NULL)
+					  ? apr_pstrdup(r->pool, issuer)
+					  : apr_pstrdup(r->pool, issuer + _oidc_strlen("https://"));
 
 		/* strip port number */
 		// char *p = _oidc_strstr(display, ":");
@@ -270,7 +270,7 @@ static int oidc_discovery_target_link_uri_match(request_rec *r, oidc_cfg_t *cfg,
 	/* see if the cookie_path setting matches the target_link_uri path */
 	const char *cookie_path = oidc_cfg_dir_cookie_path_get(r);
 	if (cookie_path != NULL) {
-		char *p = (o_uri.path != NULL) ? _oidc_strstr(o_uri.path, cookie_path) : NULL;
+		const char *p = (o_uri.path != NULL) ? _oidc_strstr(o_uri.path, cookie_path) : NULL;
 		if (p != o_uri.path) {
 			oidc_error(r,
 				   "the path (%s) configured in " OIDCCookiePath
@@ -303,7 +303,7 @@ static int oidc_discovery_target_link_uri_match(request_rec *r, oidc_cfg_t *cfg,
  */
 static apr_byte_t oidc_discovery_response_csrf_check(request_rec *r, oidc_cfg_t *c) {
 
-	char *csrf_cookie = oidc_http_get_cookie(r, OIDC_CSRF_NAME);
+	const char *csrf_cookie = oidc_http_get_cookie(r, OIDC_CSRF_NAME);
 	char *csrf_query = NULL;
 
 	/* no CSRF cookie means this is 3rd party initiated SSO */

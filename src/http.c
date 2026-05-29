@@ -987,7 +987,7 @@ apr_byte_t oidc_http_get(request_rec *r, const char *url, const apr_table_t *par
 			 long *response_code, apr_hash_t *response_hdrs, oidc_http_timeout_t *http_timeout,
 			 const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,
 			 const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd) {
-	char *query_url = oidc_http_query_encoded_url(r, url, params);
+	const char *query_url = oidc_http_query_encoded_url(r, url, params);
 	return oidc_http_request(r, query_url, NULL, NULL, basic_auth, access_token, dpop, ssl_validate_server,
 				 response, response_code, response_hdrs, http_timeout, outgoing_proxy, pass_cookies,
 				 ssl_cert, ssl_key, ssl_key_pwd);
@@ -1001,7 +1001,7 @@ apr_byte_t oidc_http_post_form(request_rec *r, const char *url, const apr_table_
 			       long *response_code, apr_hash_t *response_hdrs, oidc_http_timeout_t *http_timeout,
 			       const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,
 			       const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd) {
-	char *data = oidc_http_form_encoded_data(r, params);
+	const char *data = oidc_http_form_encoded_data(r, params);
 	return oidc_http_request(r, url, data, OIDC_HTTP_CONTENT_TYPE_FORM_ENCODED, basic_auth, access_token, dpop,
 				 ssl_validate_server, response, response_code, response_hdrs, http_timeout,
 				 outgoing_proxy, pass_cookies, ssl_cert, ssl_key, ssl_key_pwd);
@@ -1015,7 +1015,8 @@ apr_byte_t oidc_http_post_json(request_rec *r, const char *url, json_t *json, co
 			       long *response_code, apr_hash_t *response_hdrs, oidc_http_timeout_t *http_timeout,
 			       const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,
 			       const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd) {
-	char *data = json != NULL ? oidc_util_json_encode(r->pool, json, JSON_PRESERVE_ORDER | JSON_COMPACT) : NULL;
+	const char *data =
+	    json != NULL ? oidc_util_json_encode(r->pool, json, JSON_PRESERVE_ORDER | JSON_COMPACT) : NULL;
 	return oidc_http_request(r, url, data, OIDC_HTTP_CONTENT_TYPE_JSON, basic_auth, access_token, dpop,
 				 ssl_validate_server, response, response_code, response_hdrs, http_timeout,
 				 outgoing_proxy, pass_cookies, ssl_cert, ssl_key, ssl_key_pwd);
@@ -1026,7 +1027,7 @@ apr_byte_t oidc_http_post_json(request_rec *r, const char *url, json_t *json, co
  */
 static char *oidc_http_get_path(request_rec *r) {
 	size_t i;
-	char *p;
+	const char *p;
 	p = r->parsed_uri.path;
 	if ((p == NULL) || (p[0] == '\0'))
 		return apr_pstrdup(r->pool, OIDC_STR_FORWARD_SLASH);
@@ -1155,7 +1156,7 @@ void oidc_http_set_cookie(request_rec *r, const char *cookieName, const char *co
  * get a cookie from the HTTP request
  */
 char *oidc_http_get_cookie(request_rec *r, const char *cookieName) {
-	char *cookie = NULL;
+	const char *cookie = NULL;
 	char *tokenizerCtx = NULL;
 	char *rv = NULL;
 
@@ -1210,7 +1211,7 @@ static char *oidc_http_get_chunk_count_name(request_rec *r, const char *cookieNa
  */
 static int oidc_http_get_chunked_count(request_rec *r, const char *cookieName) {
 	int chunkCount = 0;
-	char *chunkCountValue = oidc_http_get_cookie(r, oidc_http_get_chunk_count_name(r, cookieName));
+	const char *chunkCountValue = oidc_http_get_cookie(r, oidc_http_get_chunk_count_name(r, cookieName));
 	chunkCount = _oidc_str_to_int(chunkCountValue, 0);
 	return chunkCount;
 }
@@ -1268,7 +1269,7 @@ static void oidc_http_clear_chunked_cookie(request_rec *r, const char *cookieNam
 void oidc_http_set_chunked_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires,
 				  int chunkSize, const char *ext) {
 	int cookieLength = _oidc_strlen(cookieValue);
-	char *chunkValue = NULL;
+	const char *chunkValue = NULL;
 
 	/* see if we need to chunk at all */
 	if ((chunkSize == 0) || ((cookieLength > 0) && (cookieLength < chunkSize))) {

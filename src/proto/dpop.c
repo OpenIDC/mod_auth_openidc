@@ -49,9 +49,9 @@
 apr_byte_t oidc_proto_dpop_use_nonce(request_rec *r, oidc_cfg_t *cfg, json_t *j_result, apr_hash_t *response_hdrs,
 				     const char *url, const char *method, const char *access_token, char **dpop) {
 	apr_byte_t rv = FALSE;
-	char *dpop_nonce = NULL;
+	const char *dpop_nonce = NULL;
 
-	json_t *j_error = json_object_get(j_result, OIDC_PROTO_ERROR);
+	const json_t *j_error = json_object_get(j_result, OIDC_PROTO_ERROR);
 	if ((j_error == NULL) || (!json_is_string(j_error)) ||
 	    (_oidc_strcmp(json_string_value(j_error), OIDC_PROTO_DPOP_USE_NONCE) != 0))
 		goto end;

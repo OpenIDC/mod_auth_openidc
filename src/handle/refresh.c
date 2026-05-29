@@ -366,7 +366,7 @@ int oidc_refresh_token_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *se
 
 	char *return_to = NULL;
 	char *r_access_token = NULL;
-	char *error_code = NULL;
+	const char *error_code = NULL;
 	char *error_str = NULL;
 	char *error_description = NULL;
 	apr_byte_t needs_save = TRUE;

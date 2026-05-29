@@ -250,7 +250,7 @@ OIDC_OAUTH_MEMBER_FUNCS_INT(introspection_endpoint_method, oidc_parse_introspect
 const char *oidc_cmd_oauth_introspection_client_auth_bearer_token_set(cmd_parms *cmd, void *struct_ptr,
 								      const char *args) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
-	char *w = ap_getword_conf(cmd->pool, &args);
+	const char *w = ap_getword_conf(cmd->pool, &args);
 	cfg->oauth->introspection_client_auth_bearer_token = (*w == '\0' || *args != 0) ? "" : w;
 	return NULL;
 }

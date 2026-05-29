@@ -543,7 +543,7 @@ const char *oidc_cfg_parse_action_on_error_refresh_as(apr_pool_t *pool, const ch
  */
 const char *oidc_cfg_parse_passphrase(apr_pool_t *pool, const char *arg, char **passphrase) {
 	char **argv = NULL;
-	char *result = NULL;
+	const char *result = NULL;
 	int arglen = _oidc_strlen(arg);
 	/* Based on code from mod_session_crypto. */
 	if (arglen > 5 && _oidc_strncmp(arg, "exec:", 5) == 0) {
@@ -620,7 +620,7 @@ const char *oidc_parse_remote_user_claim(apr_pool_t *pool, const char *v1, const
  */
 const char *oidc_cfg_parse_http_timeout(apr_pool_t *pool, const char *arg1, const char *arg2, const char *arg3,
 					oidc_http_timeout_t *http_timeout) {
-	char *s = NULL;
+	const char *s = NULL;
 	char *p = NULL;
 	if (arg1)
 		http_timeout->request_timeout = _oidc_str_to_int(arg1, http_timeout->request_timeout);

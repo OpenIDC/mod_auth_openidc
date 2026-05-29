@@ -242,7 +242,7 @@ int oidc_util_jwt_post_config(server_rec *s) {
 	oidc_jwk_t *jwk = NULL;
 	oidc_jwt_t *jwe = NULL;
 	char *compact_encoded_jwt = NULL;
-	char *sep = NULL;
+	const char *sep = NULL;
 	static const char *secret = "needs_non_empty_string";
 
 	if (_oidc_jwt_hdr_dir_a256gcm != NULL)

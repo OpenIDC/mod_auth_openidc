@@ -171,7 +171,7 @@ const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, json_t *json, 
 	if (value)
 		*value = NULL;
 
-	json_t *json_arr = json_object_get(json, key);
+	const json_t *json_arr = json_object_get(json, key);
 	if ((json_arr == NULL) || !json_is_array(json_arr)) {
 		if (optional == FALSE)
 			return apr_psprintf(pool, "JSON object did not contain a \"%s\" array", key);
@@ -228,7 +228,7 @@ void oidc_metadata_parse_url(request_rec *r, const char *type, const char *issue
  * parse a set of JWKs from a JSON metadata object
  */
 void oidc_metadata_get_jwks(request_rec *r, json_t *json, apr_array_header_t **jwk_list) {
-	json_t *keys = NULL;
+	const json_t *keys = NULL;
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
 	json_t *elem = NULL;

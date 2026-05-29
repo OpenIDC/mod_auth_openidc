@@ -188,7 +188,7 @@ const char *oidc_cmd_session_type_set(cmd_parms *cmd, void *ptr, const char *arg
 	if (rv != NULL)
 		return OIDC_CONFIG_DIR_RV(cmd, rv);
 
-	char *s = apr_pstrdup(cmd->pool, arg);
+	const char *s = apr_pstrdup(cmd->pool, arg);
 	char *p = _oidc_strstr(s, OIDC_SESSION_TYPE_SEPARATOR);
 
 	if (p) {

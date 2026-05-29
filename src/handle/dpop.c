@@ -58,7 +58,7 @@ int oidc_dpop_request(request_rec *r, oidc_cfg_t *c) {
 	char *s_nonce = NULL;
 	char *s_method = NULL;
 	char *s_dpop = NULL;
-	char *s_response = NULL;
+	const char *s_response = NULL;
 	json_t *json = NULL;
 	char *remote_ip = NULL;
 

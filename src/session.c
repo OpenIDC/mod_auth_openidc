@@ -305,7 +305,7 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, apr
  * load the session from a self-contained client-side cookie
  */
 static apr_byte_t oidc_session_load_cookie(request_rec *r, oidc_cfg_t *c, oidc_session_t *z) {
-	char *cookieValue =
+	const char *cookieValue =
 	    oidc_http_get_chunked_cookie(r, oidc_cfg_dir_cookie_get(r), oidc_cfg_session_cookie_chunk_size_get(c));
 	if ((cookieValue != NULL) && (oidc_session_decode(r, c, z, cookieValue, TRUE) == FALSE))
 		return FALSE;
@@ -352,7 +352,7 @@ static inline apr_time_t oidc_session_get_key2timestamp(request_rec *r, oidc_ses
  */
 apr_byte_t oidc_session_extract(request_rec *r, oidc_session_t *z) {
 	apr_byte_t rc = FALSE;
-	json_t *json = NULL;
+	const json_t *json = NULL;
 
 	if (z->state == NULL)
 		goto out;

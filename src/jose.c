@@ -314,7 +314,7 @@ static cjose_jwk_t *_oidc_jwk_parse_x5c_spec(apr_pool_t *pool, json_t *json, oid
 		goto end;
 	}
 
-	json_t *v = json_object_get(json, OIDC_JOSE_HDR_X5C);
+	const json_t *v = json_object_get(json, OIDC_JOSE_HDR_X5C);
 	if (v == NULL) {
 		oidc_jose_error(err, "no \"" OIDC_JOSE_HDR_X5C "\" key found in JWK JSON value");
 		goto end;
@@ -349,10 +349,10 @@ oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, json_t *json, oidc_jose_error_t *er
 	cjose_err cjose_err;
 	oidc_jose_error_t x5c_err;
 	char *use = NULL;
-	json_t *v = NULL;
+	const json_t *v = NULL;
 	json_t *e = NULL;
 
-	char *s_json = oidc_util_json_encode(pool, json, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	const char *s_json = oidc_util_json_encode(pool, json, JSON_PRESERVE_ORDER | JSON_COMPACT);
 	if (s_json == NULL) {
 		oidc_jose_error(err, "could not serialize JWK");
 		goto end;
@@ -754,7 +754,7 @@ apr_byte_t oidc_jose_jwe_encryption_is_supported(apr_pool_t *pool, const char *e
  */
 apr_byte_t oidc_jose_get_string(apr_pool_t *pool, json_t *json, const char *claim_name, apr_byte_t is_mandatory,
 				char **result, oidc_jose_error_t *err) {
-	json_t *v = json_object_get(json, claim_name);
+	const json_t *v = json_object_get(json, claim_name);
 	if (v != NULL) {
 		if (json_is_string(v)) {
 			*result = apr_pstrdup(pool, json_string_value(v));
@@ -776,7 +776,7 @@ apr_byte_t oidc_jose_get_string(apr_pool_t *pool, json_t *json, const char *clai
 apr_byte_t oidc_jose_get_timestamp(apr_pool_t *pool, json_t *json, const char *claim_name, apr_byte_t is_mandatory,
 				   double *result, oidc_jose_error_t *err) {
 	*result = OIDC_JWT_CLAIM_TIME_EMPTY;
-	json_t *v = json_object_get(json, claim_name);
+	const json_t *v = json_object_get(json, claim_name);
 	if (v != NULL) {
 		if (json_is_number(v)) {
 			*result = json_number_value(v);
@@ -841,7 +841,7 @@ static apr_byte_t oidc_jose_parse_payload(apr_pool_t *pool, const char *s_payloa
 static uint8_t *oidc_jwe_decrypt_by_kid(apr_pool_t *pool, cjose_jwe_t *jwe, apr_hash_t *keys, const char *kid,
 					size_t *content_len, oidc_jose_error_t *err) {
 	cjose_err cjose_err;
-	oidc_jwk_t *jwk = apr_hash_get(keys, kid, APR_HASH_KEY_STRING);
+	const oidc_jwk_t *jwk = apr_hash_get(keys, kid, APR_HASH_KEY_STRING);
 
 	if (jwk == NULL) {
 		oidc_jose_error(err, "could not find key with kid: %s", kid);
@@ -1310,7 +1310,7 @@ apr_byte_t oidc_jwt_encrypt(apr_pool_t *pool, oidc_jwt_t *jwe, oidc_jwk_t *jwk, 
  * cjose_jws_verify that resources after a verification failure
  */
 apr_byte_t oidc_jose_version_deprecated(apr_pool_t *pool) {
-	char *version = apr_pstrdup(pool, cjose_version());
+	const char *version = apr_pstrdup(pool, cjose_version());
 	return (_oidc_strstr(version, OIDC_JOSE_CJOSE_VERSION_DEPRECATED) == version);
 }
 
@@ -1443,7 +1443,7 @@ static char *oidc_jose_alg_to_openssl_digest(const char *alg) {
 apr_byte_t oidc_jose_hash_string(apr_pool_t *pool, const char *alg, const char *msg, char **hash,
 				 unsigned int *hash_len, oidc_jose_error_t *err) {
 
-	char *s_digest = oidc_jose_alg_to_openssl_digest(alg);
+	const char *s_digest = oidc_jose_alg_to_openssl_digest(alg);
 	if (s_digest == NULL) {
 		oidc_jose_error(err, "no OpenSSL digest algorithm name found for algorithm \"%s\"", alg);
 		return FALSE;
@@ -1888,7 +1888,7 @@ static apr_byte_t _oidc_jwk_parse_x5c(apr_pool_t *pool, json_t *json, cjose_jwk_
 	oidc_jwk_t *oidc_jwk = NULL;
 
 	/* get the "x5c" array element from the JSON object */
-	json_t *v = json_object_get(json, OIDC_JOSE_HDR_X5C);
+	const json_t *v = json_object_get(json, OIDC_JOSE_HDR_X5C);
 	if (v == NULL) {
 		oidc_jose_error(err, "JSON key \"%s\" could not be found", OIDC_JOSE_HDR_X5C);
 		return FALSE;

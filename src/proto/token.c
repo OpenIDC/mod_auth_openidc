@@ -148,7 +148,7 @@ static apr_byte_t oidc_proto_token_endpoint_response_parse(request_rec *r, oidc_
 							   char **id_token, char **access_token, char **token_type,
 							   int *expires_in, char **refresh_token, char **scope) {
 
-	json_t *j_expires_in = NULL;
+	const json_t *j_expires_in = NULL;
 
 	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_ID_TOKEN, id_token, NULL);
 	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_ACCESS_TOKEN, access_token, NULL);

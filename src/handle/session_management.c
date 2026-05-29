@@ -103,7 +103,7 @@ static int oidc_session_management_iframe_rp(request_rec *r, oidc_cfg_t *c, oidc
 	    "    </script>\n";
 
 	/* determine the origin for the check_session_iframe endpoint */
-	char *origin = apr_pstrdup(r->pool, check_session_iframe);
+	const char *origin = apr_pstrdup(r->pool, check_session_iframe);
 	apr_uri_t uri;
 	if (apr_uri_parse(r->pool, check_session_iframe, &uri) != APR_SUCCESS) {
 		oidc_error(r, "could not parse the check_session_iframe URL: %s", check_session_iframe);

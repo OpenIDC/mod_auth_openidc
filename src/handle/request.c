@@ -120,7 +120,7 @@ static int oidc_request_authorization_set_cookie(request_rec *r, oidc_cfg_t *c, 
 	 * random value, original URL, original method, issuer, response_type, response_mod, prompt and timestamp
 	 * encoded as JSON, encrypting the resulting JSON value
 	 */
-	char *cookieValue = oidc_proto_state_to_cookie(r, c, proto_state);
+	const char *cookieValue = oidc_proto_state_to_cookie(r, c, proto_state);
 	if (cookieValue == NULL)
 		return HTTP_INTERNAL_SERVER_ERROR;
 

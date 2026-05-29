@@ -146,7 +146,7 @@ end:
  * either directly from the "JWT" member or by fetching it from the configured endpoint
  */
 static const char *oidc_proto_userinfo_composite_source_payload(request_rec *r, oidc_cfg_t *cfg, json_t *value) {
-	json_t *jwt = json_object_get(value, OIDC_COMPOSITE_CLAIM_JWT);
+	const json_t *jwt = json_object_get(value, OIDC_COMPOSITE_CLAIM_JWT);
 	if ((jwt != NULL) && (json_is_string(jwt)))
 		return apr_pstrdup(r->pool, json_string_value(jwt));
 
@@ -216,7 +216,7 @@ static void oidc_proto_userinfo_composite_apply_names(request_rec *r, json_t *na
 			oidc_warn(r, "no string value found for claim \"%s\"", key);
 		} else {
 			oidc_debug(r, "processing: %s: %s", key, s_value);
-			json_t *values = json_object_get(decoded, s_value);
+			const json_t *values = json_object_get(decoded, s_value);
 			if (values == NULL)
 				oidc_warn(r, "no values for source \"%s\" found", s_value);
 			else

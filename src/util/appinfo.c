@@ -126,7 +126,7 @@ static const char *oidc_util_appinfo_array_concat(request_rec *r, json_t *j_arra
 
 	char *s_concat = apr_pstrdup(r->pool, "");
 	for (size_t i = 0; i < json_array_size(j_array); i++) {
-		json_t *elem = json_array_get(j_array, i);
+		const json_t *elem = json_array_get(j_array, i);
 		const char *s_elem = NULL;
 
 		if (json_is_string(elem))

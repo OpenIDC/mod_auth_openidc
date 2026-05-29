@@ -366,7 +366,7 @@ static inline apr_size_t _oidc_metrics_shm_size(server_rec *s) {
  * retrieve the (JSON) serialized (global) metrics data from shared memory
  */
 static inline char *_oidc_metrics_storage_get(server_rec *s) {
-	char *p = (char *)apr_shm_baseaddr_get(_oidc_metrics_cache);
+	const char *p = (char *)apr_shm_baseaddr_get(_oidc_metrics_cache);
 	return p && (*p != 0) ? apr_pstrndup(s->process->pool, p, _oidc_metrics_shm_size(s)) : NULL;
 }
 
@@ -936,7 +936,7 @@ apr_status_t oidc_metrics_cleanup(server_rec *s) {
  */
 static inline apr_hash_t *_oidc_metrics_server_hash(request_rec *r, apr_hash_t *table) {
 	apr_hash_t *server_hash = NULL;
-	char *name = "_default_";
+	const char *name = "_default_";
 
 	/* obtain the server name */
 	if (r->server->server_hostname)
@@ -1124,10 +1124,10 @@ static json_t *oidc_metrics_json_parse_r(request_rec *r, char *s_json) {
 static int oidc_metrics_handle_json(request_rec *r, char *s_json) {
 
 	json_t *json = NULL;
-	json_t *j_server = NULL;
+	const json_t *j_server = NULL;
 	json_t *j_timings = NULL;
 	json_t *j_counters = NULL;
-	json_t *j_timing = NULL;
+	const json_t *j_timing = NULL;
 	json_t *j_counter = NULL;
 	json_t *o_json = NULL;
 	json_t *o_server = NULL;
@@ -1249,7 +1249,7 @@ static json_t *oidc_metrics_status_find_counter(request_rec *r, json_t *j_counte
  */
 static json_t *oidc_metrics_status_select_value(json_t *j_counter, const char *s_name_param,
 						const char *s_value_param) {
-	json_t *j_values = NULL;
+	const json_t *j_values = NULL;
 	if (json_is_integer(j_counter))
 		return j_counter;
 	if (s_value_param == NULL)
@@ -1266,16 +1266,16 @@ static json_t *oidc_metrics_status_select_value(json_t *j_counter, const char *s
  * return status updates
  */
 static int oidc_metrics_handle_status(request_rec *r, char *s_json) {
-	char *msg = "OK\n";
+	const char *msg = "OK\n";
 	char *s_metric_param = NULL;
 	char *s_server_param = NULL;
 	char *s_name_param = NULL;
 	char *s_value_param = NULL;
 	json_t *json = NULL;
-	json_t *j_server = NULL;
+	const json_t *j_server = NULL;
 	json_t *j_counters = NULL;
 	json_t *j_counter = NULL;
-	json_t *j_value = NULL;
+	const json_t *j_value = NULL;
 
 	oidc_util_url_parameter_get(r, OIDC_METRICS_SERVER_PARAM, &s_server_param);
 	oidc_util_url_parameter_get(r, OIDC_METRICS_COUNTER_PARAM, &s_metric_param);

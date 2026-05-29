@@ -394,8 +394,8 @@ static int oidc_logout_backchannel_check_jti_replay(request_rec *r, oidc_provide
 static int oidc_logout_backchannel_validate_claims(request_rec *r, oidc_provider_t *provider, oidc_jwt_t *jwt,
 						   char **sid) {
 	char *nonce = NULL;
-	json_t *events = NULL;
-	json_t *blogout = NULL;
+	const json_t *events = NULL;
+	const json_t *blogout = NULL;
 	int rc = OK;
 
 	events = json_object_get(jwt->payload.value.json, OIDC_CLAIM_EVENTS);

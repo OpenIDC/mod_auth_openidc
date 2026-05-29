@@ -63,7 +63,7 @@ static apr_byte_t oidc_metadata_client_is_valid(request_rec *r, json_t *j_client
 	}
 
 	/* the expiry timestamp from the JSON object */
-	json_t *expires_at = json_object_get(j_client, OIDC_METADATA_CLIENT_SECRET_EXPIRES_AT);
+	const json_t *expires_at = json_object_get(j_client, OIDC_METADATA_CLIENT_SECRET_EXPIRES_AT);
 	if ((expires_at == NULL) || (!json_is_integer(expires_at))) {
 		oidc_debug(
 		    r, "client (%s) metadata did not contain a \"" OIDC_METADATA_CLIENT_SECRET_EXPIRES_AT "\" setting",
@@ -281,7 +281,7 @@ static void oidc_metadata_client_parse_response_type(request_rec *r, oidc_cfg_t 
 						     oidc_provider_t *provider) {
 
 	const char *rv = NULL;
-	char *value = NULL;
+	const char *value = NULL;
 
 	if (oidc_cfg_provider_response_type_get(provider) != NULL)
 		return;
@@ -299,7 +299,7 @@ static void oidc_metadata_client_parse_response_type(request_rec *r, oidc_cfg_t 
 		return;
 
 	// if the configured response_type is not supported, we'll fallback to the first one that is listed
-	json_t *j_response_type = json_array_get(j_response_types, 0);
+	const json_t *j_response_type = json_array_get(j_response_types, 0);
 	if (json_is_string(j_response_type)) {
 		value = apr_pstrdup(r->pool, json_string_value(j_response_type));
 		OIDC_METADATA_PROVIDER_SET(response_type, value, rv)

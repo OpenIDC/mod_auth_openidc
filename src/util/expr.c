@@ -54,7 +54,7 @@
 apr_byte_t oidc_util_regexp_substitute(apr_pool_t *pool, const char *input, const char *regexp, const char *replace,
 				       char **output, char **error_str) {
 
-	char *substituted = NULL;
+	const char *substituted = NULL;
 	apr_byte_t rc = FALSE;
 
 	struct oidc_pcre *preg = oidc_pcre_compile(pool, regexp, error_str);

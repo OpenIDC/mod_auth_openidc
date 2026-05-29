@@ -62,14 +62,14 @@ apr_byte_t oidc_proto_webfinger_response_get_issuer(request_rec *r, const char *
 	apr_byte_t rv = FALSE;
 
 	/* get the links parameter */
-	json_t *j_links = json_object_get(j_response, "links");
+	const json_t *j_links = json_object_get(j_response, "links");
 	if ((j_links == NULL) || (!json_is_array(j_links))) {
 		oidc_error(r, "response JSON object did not contain a \"links\" array");
 		goto end;
 	}
 
 	/* get the one-and-only object in the "links" array */
-	json_t *j_object = json_array_get(j_links, 0);
+	const json_t *j_object = json_array_get(j_links, 0);
 	if ((j_object == NULL) || (!json_is_object(j_object))) {
 		oidc_error(
 		    r,
@@ -78,7 +78,7 @@ apr_byte_t oidc_proto_webfinger_response_get_issuer(request_rec *r, const char *
 	}
 
 	/* get the href from that object, which is the issuer value */
-	json_t *j_href = json_object_get(j_object, "href");
+	const json_t *j_href = json_object_get(j_object, "href");
 	if ((j_href == NULL) || (!json_is_string(j_href))) {
 		oidc_error(
 		    r, "response JSON object did not contain a \"href\" element in the first \"links\" array object");

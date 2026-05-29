@@ -509,7 +509,7 @@ const char *oidc_cmd_dir_token_introspection_interval_set(cmd_parms *cmd, void *
 }
 
 int oidc_cfg_dir_token_introspection_interval_get(request_rec *r) {
-	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	const oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
 	// we use -2 here as an exception because -1 is a valid value
 	if (dir_cfg->oauth_token_introspect_interval <= -2)
 		return OIDC_DEFAULT_TOKEN_INTROSPECTION_INTERVAL;
@@ -550,7 +550,7 @@ end:
 }
 
 apr_byte_t oidc_cfg_dir_unauth_expr_is_set(request_rec *r) {
-	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	const oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
 	return (dir_cfg->unauth_expression != NULL) ? TRUE : FALSE;
 }
 
@@ -559,12 +559,12 @@ apr_byte_t oidc_cfg_dir_unauth_expr_is_set(request_rec *r) {
 OIDC_CFG_DIR_MEMBER_FUNC_INT_GET(unautz_action, oidc_unautz_action_t, OIDC_DEFAULT_UNAUTZ_ACTION)
 
 const char *oidc_cfg_dir_unauthz_arg_get(request_rec *r) {
-	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	const oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
 	return dir_cfg->unauthz_arg;
 }
 
 const char *oidc_cfg_dir_path_auth_request_params_get(request_rec *r) {
-	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	const oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
 	return oidc_util_apr_expr_exec(r, dir_cfg->path_auth_request_expr, TRUE);
 }
 
@@ -590,7 +590,7 @@ int oidc_cfg_dir_post_config(server_rec *s) {
 }
 
 const apr_array_header_t *oidc_cfg_dir_pass_userinfo_as_get(request_rec *r) {
-	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	const oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
 	return dir_cfg->pass_userinfo_as ? dir_cfg->pass_userinfo_as : pass_userinfo_as_default;
 }
 
@@ -600,13 +600,13 @@ OIDC_CFG_DIR_MEMBER_FUNC_INT_GET(pass_idtoken_as, oidc_pass_idtoken_as_t, OIDC_D
 
 #ifdef USE_LIBJQ
 const char *oidc_cfg_dir_userinfo_claims_expr_get(request_rec *r) {
-	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	const oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
 	return oidc_util_apr_expr_exec(r, dir_cfg->userinfo_claims_expr, TRUE);
 }
 #endif
 
 const char *oidc_cfg_dir_path_scope_get(request_rec *r) {
-	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	const oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
 	return oidc_util_apr_expr_exec(r, dir_cfg->path_scope_expr, TRUE);
 }
 

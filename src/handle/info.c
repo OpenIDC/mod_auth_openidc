@@ -178,7 +178,7 @@ static void oidc_info_build_json(request_rec *r, oidc_cfg_t *c, oidc_session_t *
  * send the session info to the caller in the requested format (JSON or HTML)
  */
 static int oidc_info_send_response(request_rec *r, json_t *json, const char *s_format) {
-	char *r_value = NULL;
+	const char *r_value = NULL;
 
 	if (_oidc_strcmp(OIDC_HOOK_INFO_FORMAT_JSON, s_format) == 0) {
 		r_value = oidc_util_json_encode(r->pool, json, JSON_PRESERVE_ORDER);

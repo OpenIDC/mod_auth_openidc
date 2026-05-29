@@ -116,7 +116,7 @@ static oidc_authz_json_handler_t _oidc_authz_json_handlers[] = {
 // clang-format on
 
 static apr_byte_t oidc_authz_match_json_array_elem(request_rec *r, const char *spec, json_t *e, const char *key) {
-	oidc_authz_json_handler_t *h = NULL;
+	const oidc_authz_json_handler_t *h = NULL;
 
 	// loop over the JSON object type handlers
 	for (h = _oidc_authz_json_handlers; h->handler; h++) {
@@ -158,7 +158,7 @@ static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec, json_
 
 	oidc_debug(r, "matching: spec=%s, key=%s", spec, key);
 
-	for (oidc_authz_json_handler_t *h = _oidc_authz_json_handlers; h->handler; h++) {
+	for (const oidc_authz_json_handler_t *h = _oidc_authz_json_handlers; h->handler; h++) {
 		if (h->type == json_typeof(val))
 			return h->handler(r, spec, val, key);
 	}
@@ -510,7 +510,7 @@ authz_status oidc_authz_24_worker(request_rec *r, json_t *claims, const char *re
  */
 static authz_status oidc_authz_24_unauthorized_user(request_rec *r) {
 
-	char *html_head = NULL;
+	const char *html_head = NULL;
 
 	oidc_debug(r, "enter");
 
