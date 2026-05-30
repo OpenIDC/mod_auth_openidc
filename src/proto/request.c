@@ -431,8 +431,8 @@ static apr_byte_t oidc_request_uri_request_object_sign(request_rec *r, oidc_cfg_
  * references the signing algorithm rather than the encryption algorithm
  */
 static oidc_jwk_t *oidc_request_uri_request_object_encryption_jwk_get(request_rec *r, oidc_cfg_t *cfg,
-								      struct oidc_provider_t *provider, oidc_jwt_t *jwe,
-								      const char *signing_alg) {
+								      struct oidc_provider_t *provider,
+								      const oidc_jwt_t *jwe, const char *signing_alg) {
 	oidc_jwk_t *ejwk = NULL;
 
 	switch (oidc_jwt_alg2kty(jwe)) {
@@ -509,7 +509,7 @@ static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provide
 	    oidc_util_json_encode(r->pool, request_object->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT));
 
 	/* get the crypto settings from the configuration */
-	json_t *crypto = json_object_get(request_object_config, "crypto");
+	const json_t *crypto = json_object_get(request_object_config, "crypto");
 	oidc_util_json_object_get_string(r->pool, crypto, "sign_alg", &request_object->header.alg, "none");
 
 	/* see if we need to sign the request object */
@@ -726,7 +726,8 @@ static void oidc_proto_request_auth_params_set(request_rec *r, struct oidc_provi
 /*
  * send the authentication request via an HTML form auto-POST page
  */
-static int oidc_proto_request_auth_send_post(request_rec *r, struct oidc_provider_t *provider, apr_table_t *params) {
+static int oidc_proto_request_auth_send_post(request_rec *r, struct oidc_provider_t *provider,
+					     const apr_table_t *params) {
 	/* construct a HTML POST auto-submit page with the authorization request parameters */
 	const char *html_body =
 	    oidc_proto_request_html_post(r, oidc_cfg_provider_authorization_endpoint_url_get(provider), params);

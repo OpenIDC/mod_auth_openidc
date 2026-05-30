@@ -52,7 +52,7 @@
  */
 // non-static for test.c
 apr_byte_t oidc_proto_idtoken_validate_nonce(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
-					     const char *nonce, oidc_jwt_t *jwt) {
+					     const char *nonce, const oidc_jwt_t *jwt) {
 
 	oidc_jose_error_t err;
 
@@ -156,7 +156,8 @@ static apr_byte_t oidc_proto_idtoken_validate_aud_string(request_rec *r, oidc_pr
  * validate a multi-valued "aud" claim against either the client_id or the configured aud-values list
  */
 static apr_byte_t oidc_proto_idtoken_validate_aud_array(request_rec *r, oidc_provider_t *provider,
-							const apr_array_header_t *arr, json_t *aud, const char *azp) {
+							const apr_array_header_t *arr, const json_t *aud,
+							const char *azp) {
 	const char *s_aud = NULL;
 
 	if (arr == NULL) {
@@ -203,7 +204,7 @@ static apr_byte_t oidc_proto_idtoken_validate_aud_array(request_rec *r, oidc_pro
  * validate the "aud" and "azp" claims in the id_token payload
  */
 apr_byte_t oidc_proto_idtoken_validate_aud_and_azp(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
-						   oidc_jwt_payload_t *id_token_payload) {
+						   const oidc_jwt_payload_t *id_token_payload) {
 	char *azp = NULL;
 	json_t *aud = NULL;
 	const apr_array_header_t *arr = NULL;
@@ -278,7 +279,7 @@ static apr_byte_t oidc_proto_validate_hash(request_rec *r, const char *alg, cons
 /*
  * check a hash value in the id_token against the corresponding hash calculated over a provided value
  */
-static apr_byte_t oidc_proto_validate_hash_value(request_rec *r, oidc_provider_t *provider, oidc_jwt_t *jwt,
+static apr_byte_t oidc_proto_validate_hash_value(request_rec *r, oidc_provider_t *provider, const oidc_jwt_t *jwt,
 						 const char *response_type, const char *value, const char *key,
 						 apr_array_header_t *required_for_flows) {
 

@@ -194,7 +194,7 @@ static void oidc_proto_userinfo_composite_decode_sources(request_rec *r, oidc_cf
 	void *iter = json_object_iter(sources);
 	while (iter) {
 		const char *key = json_object_iter_key(iter);
-		json_t *value = json_object_iter_value(iter);
+		const json_t *value = json_object_iter_value(iter);
 		if ((value != NULL) && (json_is_object(value))) {
 			const char *s_json = oidc_proto_userinfo_composite_source_payload(r, cfg, value);
 			if ((s_json != NULL) && (_oidc_strcmp(s_json, "") != 0))
@@ -337,7 +337,7 @@ static apr_byte_t oidc_proto_userinfo_response_resolve(request_rec *r, oidc_cfg_
  * validate that the userinfo response contains a "sub" claim and that it matches the id_token "sub"
  */
 static apr_byte_t oidc_proto_userinfo_request_validate_sub(request_rec *r, const char *id_token_sub,
-							   json_t *userinfo_claims) {
+							   const json_t *userinfo_claims) {
 	char *user_info_sub = NULL;
 	oidc_jose_get_string(r->pool, userinfo_claims, OIDC_CLAIM_SUB, FALSE, &user_info_sub, NULL);
 

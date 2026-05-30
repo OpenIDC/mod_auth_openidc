@@ -492,7 +492,8 @@ apr_byte_t oidc_proto_response_code(request_rec *r, oidc_cfg_t *c, oidc_proto_st
  */
 static apr_byte_t oidc_proto_handle_implicit_flow(request_rec *r, oidc_cfg_t *c, const char *response_type,
 						  oidc_proto_state_t *proto_state, oidc_provider_t *provider,
-						  apr_table_t *params, const char *response_mode, oidc_jwt_t **jwt) {
+						  const apr_table_t *params, const char *response_mode,
+						  oidc_jwt_t **jwt) {
 
 	if (oidc_proto_validate_response_type_mode_issuer(
 		r, response_type, params, proto_state, response_mode, OIDC_PROTO_RESPONSE_MODE_FRAGMENT,

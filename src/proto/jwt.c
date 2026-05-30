@@ -287,7 +287,7 @@ end:
 	return rv;
 }
 
-apr_byte_t oidc_proto_jwt_sign_and_serialize(request_rec *r, oidc_jwk_t *jwk, oidc_jwt_t *jwt, char **cser) {
+apr_byte_t oidc_proto_jwt_sign_and_serialize(request_rec *r, const oidc_jwk_t *jwk, oidc_jwt_t *jwt, char **cser) {
 	apr_byte_t rv = FALSE;
 	oidc_jose_error_t err;
 

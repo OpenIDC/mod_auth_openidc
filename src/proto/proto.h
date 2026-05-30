@@ -148,14 +148,14 @@ apr_byte_t oidc_proto_dpop_use_nonce(request_rec *r, oidc_cfg_t *cfg, const json
 apr_byte_t oidc_proto_idtoken_parse(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider, const char *id_token,
 				    const char *nonce, oidc_jwt_t **jwt, apr_byte_t is_code_flow);
 apr_byte_t oidc_proto_idtoken_validate_aud_and_azp(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
-						   oidc_jwt_payload_t *id_token_payload);
+						   const oidc_jwt_payload_t *id_token_payload);
 // non-static for test.c
 apr_byte_t oidc_proto_idtoken_validate_access_token(request_rec *r, oidc_provider_t *provider, oidc_jwt_t *jwt,
 						    const char *response_type, const char *access_token);
 apr_byte_t oidc_proto_idtoken_validate_code(request_rec *r, oidc_provider_t *provider, oidc_jwt_t *jwt,
 					    const char *response_type, const char *code);
 apr_byte_t oidc_proto_idtoken_validate_nonce(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
-					     const char *nonce, oidc_jwt_t *jwt);
+					     const char *nonce, const oidc_jwt_t *jwt);
 
 // jwks.c
 apr_byte_t oidc_proto_jwks_uri_keys(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri,
@@ -169,7 +169,7 @@ apr_byte_t oidc_proto_jwt_validate(request_rec *r, oidc_jwt_t *jwt, const char *
 char *oidc_proto_jwt_header_peek(request_rec *r, const char *jwt, char **alg, char **enc, char **kid);
 apr_byte_t oidc_proto_jwt_create_from_first_pkey(request_rec *r, oidc_cfg_t *cfg, oidc_jwk_t **jwk, oidc_jwt_t **jwt,
 						 apr_byte_t use_psa_for_rsa);
-apr_byte_t oidc_proto_jwt_sign_and_serialize(request_rec *r, oidc_jwk_t *jwk, oidc_jwt_t *jwt, char **cser);
+apr_byte_t oidc_proto_jwt_sign_and_serialize(request_rec *r, const oidc_jwk_t *jwk, oidc_jwt_t *jwt, char **cser);
 
 // pkce.c
 #define OIDC_PKCE_METHOD_PLAIN "plain"
@@ -183,7 +183,7 @@ extern oidc_proto_pkce_t oidc_pkce_plain;
 extern oidc_proto_pkce_t oidc_pkce_s256;
 extern oidc_proto_pkce_t oidc_pkce_none;
 
-const char *oidc_proto_state_get_pkce_state(oidc_proto_state_t *proto_state);
+const char *oidc_proto_state_get_pkce_state(const oidc_proto_state_t *proto_state);
 void oidc_proto_state_set_pkce_state(oidc_proto_state_t *proto_state, const char *pkce_state);
 
 // proto.c
@@ -225,18 +225,18 @@ apr_byte_t oidc_proto_response_idtoken(request_rec *r, oidc_cfg_t *c, oidc_proto
 oidc_proto_state_t *oidc_proto_state_new();
 void oidc_proto_state_destroy(oidc_proto_state_t *proto_state);
 oidc_proto_state_t *oidc_proto_state_from_cookie(request_rec *r, oidc_cfg_t *c, const char *cookieValue);
-char *oidc_proto_state_to_cookie(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state);
-char *oidc_proto_state_to_string(request_rec *r, oidc_proto_state_t *proto_state);
-const char *oidc_proto_state_get_issuer(oidc_proto_state_t *proto_state);
-const char *oidc_proto_state_get_nonce(oidc_proto_state_t *proto_state);
+char *oidc_proto_state_to_cookie(request_rec *r, oidc_cfg_t *c, const oidc_proto_state_t *proto_state);
+char *oidc_proto_state_to_string(request_rec *r, const oidc_proto_state_t *proto_state);
+const char *oidc_proto_state_get_issuer(const oidc_proto_state_t *proto_state);
+const char *oidc_proto_state_get_nonce(const oidc_proto_state_t *proto_state);
 apr_time_t oidc_proto_state_get_timestamp(const oidc_proto_state_t *proto_state);
-const char *oidc_proto_state_get_state(oidc_proto_state_t *proto_state);
-const char *oidc_proto_state_get_original_url(oidc_proto_state_t *proto_state);
-const char *oidc_proto_state_get_prompt(oidc_proto_state_t *proto_state);
-const char *oidc_proto_state_get_response_type(oidc_proto_state_t *proto_state);
-const char *oidc_proto_state_get_response_mode(oidc_proto_state_t *proto_state);
-const char *oidc_proto_state_get_original_url(oidc_proto_state_t *proto_state);
-const char *oidc_proto_state_get_original_method(oidc_proto_state_t *proto_state);
+const char *oidc_proto_state_get_state(const oidc_proto_state_t *proto_state);
+const char *oidc_proto_state_get_original_url(const oidc_proto_state_t *proto_state);
+const char *oidc_proto_state_get_prompt(const oidc_proto_state_t *proto_state);
+const char *oidc_proto_state_get_response_type(const oidc_proto_state_t *proto_state);
+const char *oidc_proto_state_get_response_mode(const oidc_proto_state_t *proto_state);
+const char *oidc_proto_state_get_original_url(const oidc_proto_state_t *proto_state);
+const char *oidc_proto_state_get_original_method(const oidc_proto_state_t *proto_state);
 void oidc_proto_state_set_state(oidc_proto_state_t *proto_state, const char *state);
 void oidc_proto_state_set_issuer(oidc_proto_state_t *proto_state, const char *issuer);
 void oidc_proto_state_set_original_url(oidc_proto_state_t *proto_state, const char *original_url);
