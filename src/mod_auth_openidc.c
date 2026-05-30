@@ -1628,7 +1628,7 @@ static int oidc_config_check_merged_vhost_configs(apr_pool_t *pool, server_rec *
 	int status = OK;
 	server_rec *sp = s;
 	while ((sp != NULL) && (status == OK)) {
-		oidc_cfg_t *cfg = ap_get_module_config(sp->module_config, &auth_openidc_module);
+		const oidc_cfg_t *cfg = ap_get_module_config(sp->module_config, &auth_openidc_module);
 		if (oidc_cfg_merged_get(cfg)) {
 			status = oidc_config_check_vhost_config(pool, sp);
 		}
@@ -1643,7 +1643,7 @@ static int oidc_config_check_merged_vhost_configs(apr_pool_t *pool, server_rec *
 static int oidc_config_merged_vhost_configs_exist(server_rec *s) {
 	server_rec *sp = s;
 	while (sp != NULL) {
-		oidc_cfg_t *cfg = ap_get_module_config(sp->module_config, &auth_openidc_module);
+		const oidc_cfg_t *cfg = ap_get_module_config(sp->module_config, &auth_openidc_module);
 		if (oidc_cfg_merged_get(cfg)) {
 			return TRUE;
 		}
@@ -1849,7 +1849,7 @@ static const authz_provider oidc_authz_claims_expr_provider = {
 static void oidc_child_init(apr_pool_t *p, server_rec *s) {
 	server_rec *sp = s;
 	while (sp != NULL) {
-		oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(sp->module_config, &auth_openidc_module);
+		const oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(sp->module_config, &auth_openidc_module);
 		oidc_cfg_child_init(p, cfg, sp);
 		sp = sp->next;
 	}

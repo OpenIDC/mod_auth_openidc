@@ -282,7 +282,8 @@ static const char *oidc_cfg_valid_endpoint_auth_method_no_private_key(apr_pool_t
 	return oidc_valid_endpoint_auth_method_impl(pool, arg, FALSE);
 }
 
-const char *oidc_cfg_endpoint_auth_set(apr_pool_t *pool, oidc_cfg_t *cfg, const char *arg1, char **auth, char **alg) {
+const char *oidc_cfg_endpoint_auth_set(apr_pool_t *pool, const oidc_cfg_t *cfg, const char *arg1, char **auth,
+				       char **alg) {
 	const char *rv = oidc_cfg_get_valid_endpoint_auth_function(cfg)(pool, arg1);
 	if (rv == NULL)
 		oidc_cfg_endpoint_auth_parse(pool, arg1, auth, alg);

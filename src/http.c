@@ -174,7 +174,7 @@ static const char *oidc_http_hdr_in_get_left_most_only(const request_rec *r, con
 static apr_byte_t oidc_http_hdr_in_contains(const request_rec *r, const char *name, const char *separator,
 					    const char postfix_separator, const char *needle) {
 	char *ctx = NULL;
-	char *elem = NULL;
+	const char *elem = NULL;
 	const char *value = oidc_http_hdr_in_get(r, name);
 	apr_byte_t rc = FALSE;
 	if (value) {
@@ -822,7 +822,7 @@ static apr_byte_t oidc_http_request_perform_with_retries(request_rec *r, oidc_cf
 static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char *data, const char *content_type,
 				    const char *basic_auth, const char *access_token, const char *dpop,
 				    int ssl_validate_server, char **response, long *response_code,
-				    apr_hash_t *response_hdrs, oidc_http_timeout_t *http_timeout,
+				    apr_hash_t *response_hdrs, const oidc_http_timeout_t *http_timeout,
 				    const oidc_http_outgoing_proxy_t *outgoing_proxy,
 				    const apr_array_header_t *pass_cookies, const char *ssl_cert, const char *ssl_key,
 				    const char *ssl_key_pwd) {
@@ -1011,7 +1011,7 @@ apr_byte_t oidc_http_post_form(request_rec *r, const char *url, const apr_table_
 /*
  * execute HTTP POST request with JSON-encoded data
  */
-apr_byte_t oidc_http_post_json(request_rec *r, const char *url, json_t *json, const char *basic_auth,
+apr_byte_t oidc_http_post_json(request_rec *r, const char *url, const json_t *json, const char *basic_auth,
 			       const char *access_token, const char *dpop, int ssl_validate_server, char **response,
 			       long *response_code, apr_hash_t *response_hdrs, oidc_http_timeout_t *http_timeout,
 			       const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,

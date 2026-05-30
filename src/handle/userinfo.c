@@ -93,7 +93,7 @@ const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg_t *c, oidc_pr
 	char *result = NULL;
 	char *refreshed_access_token = NULL;
 	char *refreshed_access_token_type = NULL;
-	json_t *id_token_claims = NULL;
+	const json_t *id_token_claims = NULL;
 	long response_code = 0;
 
 	oidc_debug(r, "enter");

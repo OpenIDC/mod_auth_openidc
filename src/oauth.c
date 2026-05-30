@@ -474,7 +474,7 @@ static apr_byte_t oidc_oauth_introspection_active_is_valid(request_rec *r, const
  */
 static apr_byte_t oidc_oauth_introspection_validate_and_cache(request_rec *r, oidc_cfg_t *c, const char *access_token,
 							      json_t *result) {
-	json_t *active = json_object_get(result, OIDC_PROTO_ACTIVE);
+	const json_t *active = json_object_get(result, OIDC_PROTO_ACTIVE);
 	apr_time_t cache_until = apr_time_now() + apr_time_from_sec(60);
 
 	if (active != NULL) {
@@ -648,7 +648,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 /*
  * set the unique user identifier that will be propagated in the Apache r->user and REMOTE_USER variables
  */
-static apr_byte_t oidc_oauth_set_request_user(request_rec *r, oidc_cfg_t *c, json_t *token) {
+static apr_byte_t oidc_oauth_set_request_user(request_rec *r, oidc_cfg_t *c, const json_t *token) {
 	char *remote_user = NULL;
 
 	if (oidc_get_remote_user(r, oidc_cfg_oauth_remote_user_claim_name_get(c),

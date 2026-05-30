@@ -479,7 +479,7 @@ const char *oidc_cfg_parse_key_record(apr_pool_t *pool, const char *tuple, char 
 	char *s = NULL;
 	char *p = NULL;
 	char *q = NULL;
-	char *enc = NULL;
+	const char *enc = NULL;
 
 	if ((tuple == NULL) || (_oidc_strcmp(tuple, "") == 0))
 		return "tuple value not set";

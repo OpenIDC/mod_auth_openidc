@@ -74,7 +74,7 @@ apr_byte_t oidc_is_discovery_response(request_rec *r, oidc_cfg_t *cfg) {
 	       oidc_util_url_has_parameter(r, OIDC_DISC_USER_PARAM);
 }
 
-static const char *oidc_discovery_csrf_cookie_samesite(request_rec *r, oidc_cfg_t *c) {
+static const char *oidc_discovery_csrf_cookie_samesite(const request_rec *r, oidc_cfg_t *c) {
 	const char *rv = NULL;
 	switch (oidc_cfg_cookie_same_site_discovery_csrf_get(c)) {
 	case OIDC_SAMESITE_COOKIE_STRICT:

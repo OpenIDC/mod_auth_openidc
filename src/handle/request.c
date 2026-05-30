@@ -92,7 +92,7 @@ apr_byte_t oidc_request_check_cookie_domain(request_rec *r, oidc_cfg_t *c, const
 	return TRUE;
 }
 
-static const char *oidc_request_samesite_state_cookie(request_rec *r, struct oidc_cfg_t *c) {
+static const char *oidc_request_samesite_state_cookie(const request_rec *r, struct oidc_cfg_t *c) {
 	const char *rv = NULL;
 	switch (oidc_cfg_cookie_same_site_state_get(c)) {
 	case OIDC_SAMESITE_COOKIE_STRICT:

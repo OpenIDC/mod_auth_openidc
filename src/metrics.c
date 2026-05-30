@@ -401,7 +401,7 @@ static json_t *oidc_metrics_json_load(const char *s_json, json_error_t *json_err
 /*
  * parse a string into a JSON object in a server_rec context
  */
-static json_t *oidc_metrics_json_parse_s(server_rec *s, char *s_json) {
+static json_t *oidc_metrics_json_parse_s(server_rec *s, const char *s_json) {
 	json_error_t json_error;
 	json_t *json = oidc_metrics_json_load(s_json, &json_error);
 	if (json == NULL)
@@ -679,7 +679,7 @@ static void oidc_metrics_store_timings(server_rec *s, json_t *json) {
 	apr_hash_t *server_hash = NULL;
 	oidc_metrics_timing_t *timing = NULL;
 	json_t *j_timings = NULL;
-	json_t *j_timer = NULL;
+	const json_t *j_timer = NULL;
 
 	for (apr_hash_index_t *hi1 = apr_hash_first(s->process->pool, _oidc_metrics.timings); hi1;
 	     hi1 = apr_hash_next(hi1)) {
@@ -1110,7 +1110,7 @@ static inline char *_oidc_metrics_timing_type2s(apr_pool_t *pool, unsigned int t
 /*
  * parse a string into a JSON object in the request_rec context
  */
-static json_t *oidc_metrics_json_parse_r(request_rec *r, char *s_json) {
+static json_t *oidc_metrics_json_parse_r(request_rec *r, const char *s_json) {
 	json_error_t json_error;
 	json_t *json = oidc_metrics_json_load(s_json, &json_error);
 	if (json == NULL)
@@ -1433,7 +1433,7 @@ static int oidc_metrics_prometheus_timings(oidc_metric_prometheus_callback_ctx_t
 	const char *s_key = NULL;
 	const char *s_bucket = NULL;
 	json_t *j_timing = NULL;
-	json_t *j_member = NULL;
+	const json_t *j_member = NULL;
 	json_t *o_timer = value;
 	unsigned int type = _oidc_metrics_key2type(key);
 	const char *s_label =
@@ -1496,7 +1496,7 @@ static void oidc_metrics_prometheus_convert(apr_hash_t *hash, const char *server
  */
 static int oidc_metrics_handle_prometheus(request_rec *r, char *s_json) {
 	json_t *json = NULL;
-	json_t *j_server = NULL;
+	const json_t *j_server = NULL;
 	const char *s_server = NULL;
 	apr_hash_t *t_counters = apr_hash_make(r->pool);
 	apr_hash_t *t_timings = apr_hash_make(r->pool);

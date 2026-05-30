@@ -182,7 +182,7 @@ const char *oidc_jwt_hdr_get(oidc_jwt_t *jwt, const char *key) {
 char *oidc_jose_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jose_error_t *err) {
 	cjose_err cjose_err;
 	char *result = NULL;
-	char *s_payload = NULL;
+	const char *s_payload = NULL;
 	char *out = NULL;
 	size_t out_len;
 
@@ -297,7 +297,7 @@ static apr_byte_t _oidc_jwk_parse_x5c(apr_pool_t *pool, const json_t *json, cjos
 /*
  * parse a JSON object with an "x5c" JWK representation into a cjose JWK object
  */
-static cjose_jwk_t *_oidc_jwk_parse_x5c_spec(apr_pool_t *pool, json_t *json, oidc_jose_error_t *err) {
+static cjose_jwk_t *_oidc_jwk_parse_x5c_spec(apr_pool_t *pool, const json_t *json, oidc_jose_error_t *err) {
 
 	cjose_jwk_t *cjose_jwk = NULL;
 
@@ -350,7 +350,7 @@ oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, json_t *json, oidc_jose_error_t *er
 	oidc_jose_error_t x5c_err;
 	char *use = NULL;
 	const json_t *v = NULL;
-	json_t *e = NULL;
+	const json_t *e = NULL;
 
 	const char *s_json = oidc_util_json_encode(pool, json, JSON_PRESERVE_ORDER | JSON_COMPACT);
 	if (s_json == NULL) {
@@ -1367,7 +1367,7 @@ apr_byte_t oidc_jwt_verify(apr_pool_t *pool, oidc_jwt_t *jwt, apr_hash_t *keys, 
 	if (jwt->header.kid == NULL)
 		return oidc_jwt_verify_any(pool, jwt, keys, err);
 
-	oidc_jwk_t *jwk = apr_hash_get(keys, jwt->header.kid, APR_HASH_KEY_STRING);
+	const oidc_jwk_t *jwk = apr_hash_get(keys, jwt->header.kid, APR_HASH_KEY_STRING);
 	if (jwk == NULL) {
 		oidc_jose_error(err, "could not find key with kid: %s", jwt->header.kid);
 		return FALSE;
@@ -1790,7 +1790,7 @@ static int oidc_jwk_pkey_base_id(const EVP_PKEY *pkey) {
  * dispatch a parsed EVP_PKEY into the matching JWK builder, producing the
  * fingerprint bytes that drive kid generation
  */
-static apr_byte_t oidc_jwk_pkey_to_jwk(apr_pool_t *pool, EVP_PKEY *pkey, oidc_jwk_t **jwk, char **fp, int *fp_len,
+static apr_byte_t oidc_jwk_pkey_to_jwk(apr_pool_t *pool, const EVP_PKEY *pkey, oidc_jwk_t **jwk, char **fp, int *fp_len,
 				       oidc_jose_error_t *err) {
 	switch (oidc_jwk_pkey_base_id(pkey)) {
 	case EVP_PKEY_RSA:
