@@ -49,6 +49,12 @@
 #include "mod_auth_openidc.h"
 #include "util.h"
 #include "util/util.h"
+#include <stdlib.h>
+#include <string.h>
+
+#ifdef USE_LIBHIREDIS
+#include "cache/redis.h"
+#endif
 
 START_TEST(test_cache_mutex_and_status2str) {
 	request_rec *r = oidc_test_request_get();
@@ -607,6 +613,431 @@ START_TEST(test_cache_file_default_tmp_dir) {
 }
 END_TEST
 
+#ifdef USE_LIBHIREDIS
+
+/*
+ * Tests for cache/redis.c — the Redis backend exposes its connect/command/disconnect
+ * operations as function pointers on oidc_cache_cfg_redis_t. We install mock
+ * implementations that fabricate redisReply objects, so the get/set/exec/retry logic
+ * can be exercised fully offline, without a live Redis server.
+ *
+ * NB: replies are allocated with calloc()/strdup() because the backend frees them with
+ * hiredis' freeReplyObject(), whose default allocator is plain free().
+ */
+
+typedef struct redis_mock_state_t {
+	int connect_calls;
+	int command_calls;
+	int disconnect_calls;
+	int connect_fail_times; /* connect returns APR_EGENERAL this many times, then APR_SUCCESS */
+	int error_first_n;	/* command returns an ERROR reply for the first n calls */
+	int return_null;	/* command returns a NULL reply */
+	int reply_type;		/* type of the success reply (REDIS_REPLY_*) */
+	const char *reply_str;	/* string payload of the success reply (may be NULL) */
+	int force_len;		/* if >= 0, override reply->len to simulate a length mismatch */
+	char *last_format;	/* the format string passed to the most recent command */
+} redis_mock_state_t;
+
+static redis_mock_state_t redis_mock;
+
+static void redis_mock_reset(void) {
+	memset(&redis_mock, 0, sizeof(redis_mock));
+	redis_mock.reply_type = REDIS_REPLY_STRING;
+	redis_mock.force_len = -1;
+}
+
+static redisReply *redis_mock_make_reply(int type, const char *str, int force_len) {
+	redisReply *reply = calloc(1, sizeof(redisReply));
+	reply->type = type;
+	if (str != NULL) {
+		reply->str = strdup(str);
+		reply->len = (force_len >= 0) ? (size_t)force_len : strlen(str);
+	} else {
+		reply->len = (force_len >= 0) ? (size_t)force_len : 0;
+	}
+	return reply;
+}
+
+static apr_status_t redis_mock_connect(request_rec *r, oidc_cache_cfg_redis_t *context) {
+	(void)r;
+	(void)context;
+	redis_mock.connect_calls++;
+	if (redis_mock.connect_fail_times > 0) {
+		redis_mock.connect_fail_times--;
+		return APR_EGENERAL;
+	}
+	return APR_SUCCESS;
+}
+
+static redisReply *redis_mock_command(request_rec *r, oidc_cache_cfg_redis_t *context, char **errstr,
+				      const char *format, va_list ap) {
+	(void)context;
+	(void)ap;
+	redis_mock.command_calls++;
+	redis_mock.last_format = apr_pstrdup(r->pool, format);
+	*errstr = apr_pstrdup(r->pool, "mock");
+	if (redis_mock.error_first_n > 0) {
+		redis_mock.error_first_n--;
+		return redis_mock_make_reply(REDIS_REPLY_ERROR, "mock error", -1);
+	}
+	if (redis_mock.return_null)
+		return NULL;
+	return redis_mock_make_reply(redis_mock.reply_type, redis_mock.reply_str, redis_mock.force_len);
+}
+
+static apr_status_t redis_mock_disconnect(oidc_cache_cfg_redis_t *context) {
+	redis_mock.disconnect_calls++;
+	context->rctx = NULL;
+	return APR_SUCCESS;
+}
+
+static oidc_cache_t *redis_mock_prev_impl;
+static void *redis_mock_prev_cfg;
+
+/* swap in the redis backend with a fresh, mutex-initialized context and mock operations */
+static oidc_cache_cfg_redis_t *redis_mock_install(request_rec *r) {
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	redis_mock_prev_impl = (oidc_cache_t *)cfg->cache.impl;
+	redis_mock_prev_cfg = cfg->cache.cfg;
+
+	/* a non-NULL server makes oidc_cache_redis_post_config validation pass */
+	cfg->cache.redis_server = "localhost:6379";
+	cfg->cache.cfg = NULL;
+
+	ck_assert_int_eq(oidc_cache_redis_post_config(r->server->process->pconf, r->server, cfg, "redis"), OK);
+
+	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *)cfg->cache.cfg;
+	ck_assert_ptr_nonnull(context);
+	/* the host:port parse and operation pointers are wired up by the static post_config_impl;
+	 * here we supply them (and mocks) directly */
+	context->host_str = "localhost";
+	context->port = 6379;
+	context->connect = redis_mock_connect;
+	context->command = redis_mock_command;
+	context->disconnect = redis_mock_disconnect;
+
+	cfg->cache.impl = &oidc_cache_redis;
+
+	/* keep the reconnect retry loop fast and deterministic */
+	apr_table_set(r->subprocess_env, "OIDC_REDIS_MAX_TRIES", "2");
+	apr_table_set(r->subprocess_env, "OIDC_REDIS_RETRY_INTERVAL", "1");
+
+	redis_mock_reset();
+
+	return context;
+}
+
+static void redis_mock_restore(request_rec *r) {
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	/* exercise the destroy path: locks, mock disconnect, mutex destroy */
+	if ((cfg->cache.impl != NULL) && (cfg->cache.impl->destroy != NULL))
+		cfg->cache.impl->destroy(r->server->process->pconf, r->server);
+	cfg->cache.impl = redis_mock_prev_impl;
+	cfg->cache.cfg = redis_mock_prev_cfg;
+	apr_table_unset(r->subprocess_env, "OIDC_REDIS_MAX_TRIES");
+	apr_table_unset(r->subprocess_env, "OIDC_REDIS_RETRY_INTERVAL");
+}
+
+START_TEST(test_cache_redis_post_config_no_server) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_cache_t *prev_impl = (oidc_cache_t *)cfg->cache.impl;
+	void *prev_cfg = cfg->cache.cfg;
+	char *prev_server = cfg->cache.redis_server;
+
+	/* no OIDCRedisCacheServer configured => post_config must fail */
+	cfg->cache.redis_server = NULL;
+	cfg->cache.cfg = NULL;
+	ck_assert_int_eq(oidc_cache_redis_post_config(r->server->process->pconf, r->server, cfg, "redis"),
+			 HTTP_INTERNAL_SERVER_ERROR);
+
+	cfg->cache.impl = prev_impl;
+	cfg->cache.cfg = prev_cfg;
+	cfg->cache.redis_server = prev_server;
+}
+END_TEST
+
+START_TEST(test_cache_redis_post_config_success) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_cache_t *prev_impl = (oidc_cache_t *)cfg->cache.impl;
+	void *prev_cfg = cfg->cache.cfg;
+	char *prev_server = cfg->cache.redis_server;
+
+	cfg->cache.redis_server = "localhost:6379";
+	cfg->cache.cfg = NULL;
+	ck_assert_int_eq(oidc_cache_redis_post_config(r->server->process->pconf, r->server, cfg, "redis"), OK);
+
+	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *)cfg->cache.cfg;
+	ck_assert_ptr_nonnull(context);
+	ck_assert_ptr_nonnull(context->mutex);
+	/* defaults installed by the cfg-create step (no directives set) */
+	ck_assert_int_eq(context->database, -1);
+	ck_assert_int_eq(context->keepalive, -1);
+
+	/* the public post_config does not wire up the operation pointers, so destroy the
+	 * mutex directly rather than via the backend destroy (which would call disconnect) */
+	oidc_cache_mutex_destroy(r->server, context->mutex);
+	cfg->cache.impl = prev_impl;
+	cfg->cache.cfg = prev_cfg;
+	cfg->cache.redis_server = prev_server;
+}
+END_TEST
+
+START_TEST(test_cache_redis_get_hit) {
+	request_rec *r = oidc_test_request_get();
+	redis_mock_install(r);
+	redis_mock.reply_type = REDIS_REPLY_STRING;
+	redis_mock.reply_str = "v1";
+
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_redis_get(r, OIDC_CACHE_SECTION_SESSION, "k1", &value), TRUE);
+	ck_assert_ptr_nonnull(value);
+	ck_assert_str_eq(value, "v1");
+	ck_assert_int_eq(redis_mock.command_calls, 1);
+	ck_assert_int_eq(strncmp(redis_mock.last_format, "GET ", 4), 0);
+
+	redis_mock_restore(r);
+}
+END_TEST
+
+START_TEST(test_cache_redis_get_miss) {
+	request_rec *r = oidc_test_request_get();
+	redis_mock_install(r);
+	redis_mock.reply_type = REDIS_REPLY_NIL;
+
+	char *value = NULL;
+	/* a NIL reply is a normal cache miss: TRUE with *value left NULL */
+	ck_assert_int_eq(oidc_cache_redis_get(r, OIDC_CACHE_SECTION_SESSION, "k1", &value), TRUE);
+	ck_assert_ptr_null(value);
+
+	redis_mock_restore(r);
+}
+END_TEST
+
+START_TEST(test_cache_redis_get_len_mismatch) {
+	request_rec *r = oidc_test_request_get();
+	redis_mock_install(r);
+	redis_mock.reply_type = REDIS_REPLY_STRING;
+	redis_mock.reply_str = "abc";
+	redis_mock.force_len = 2; /* len != strlen("abc") */
+
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_redis_get(r, OIDC_CACHE_SECTION_SESSION, "k1", &value), FALSE);
+	ck_assert_ptr_null(value);
+
+	redis_mock_restore(r);
+}
+END_TEST
+
+START_TEST(test_cache_redis_get_wrong_type) {
+	request_rec *r = oidc_test_request_get();
+	redis_mock_install(r);
+	redis_mock.reply_type = REDIS_REPLY_INTEGER; /* not a string and not NIL */
+
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_redis_get(r, OIDC_CACHE_SECTION_SESSION, "k1", &value), FALSE);
+	ck_assert_ptr_null(value);
+
+	redis_mock_restore(r);
+}
+END_TEST
+
+START_TEST(test_cache_redis_get_connect_failure) {
+	request_rec *r = oidc_test_request_get();
+	redis_mock_install(r);
+	redis_mock.connect_fail_times = 5; /* exceeds OIDC_REDIS_MAX_TRIES */
+
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_redis_get(r, OIDC_CACHE_SECTION_SESSION, "k1", &value), FALSE);
+	/* connect attempted on every retry; command never reached */
+	ck_assert_int_eq(redis_mock.connect_calls, 2);
+	ck_assert_int_eq(redis_mock.command_calls, 0);
+
+	redis_mock_restore(r);
+}
+END_TEST
+
+START_TEST(test_cache_redis_get_error_then_recover) {
+	request_rec *r = oidc_test_request_get();
+	redis_mock_install(r);
+	redis_mock.error_first_n = 1; /* first command errors, forcing a reconnect+retry */
+	redis_mock.reply_type = REDIS_REPLY_STRING;
+	redis_mock.reply_str = "ok";
+
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_redis_get(r, OIDC_CACHE_SECTION_SESSION, "k1", &value), TRUE);
+	ck_assert_str_eq(value, "ok");
+	ck_assert_int_eq(redis_mock.command_calls, 2);
+	ck_assert_int_ge(redis_mock.disconnect_calls, 1);
+
+	redis_mock_restore(r);
+}
+END_TEST
+
+START_TEST(test_cache_redis_get_null_reply) {
+	request_rec *r = oidc_test_request_get();
+	redis_mock_install(r);
+	redis_mock.return_null = 1; /* command keeps returning NULL */
+
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_redis_get(r, OIDC_CACHE_SECTION_SESSION, "k1", &value), FALSE);
+	ck_assert_int_eq(redis_mock.command_calls, 2);
+
+	redis_mock_restore(r);
+}
+END_TEST
+
+START_TEST(test_cache_redis_set_value) {
+	request_rec *r = oidc_test_request_get();
+	redis_mock_install(r);
+	redis_mock.reply_type = REDIS_REPLY_STATUS;
+	redis_mock.reply_str = "OK";
+
+	apr_time_t expiry = apr_time_now() + apr_time_from_sec(60);
+	ck_assert_int_eq(oidc_cache_redis_set(r, OIDC_CACHE_SECTION_SESSION, "k1", "v1", expiry), TRUE);
+	ck_assert_int_eq(strncmp(redis_mock.last_format, "SET ", 4), 0);
+	ck_assert_ptr_nonnull(strstr(redis_mock.last_format, "EX"));
+
+	redis_mock_restore(r);
+}
+END_TEST
+
+START_TEST(test_cache_redis_set_delete) {
+	request_rec *r = oidc_test_request_get();
+	redis_mock_install(r);
+	redis_mock.reply_type = REDIS_REPLY_INTEGER; /* DEL returns the number of keys removed */
+
+	/* a NULL value triggers a DEL */
+	ck_assert_int_eq(oidc_cache_redis_set(r, OIDC_CACHE_SECTION_SESSION, "k1", NULL, 0), TRUE);
+	ck_assert_int_eq(strncmp(redis_mock.last_format, "DEL ", 4), 0);
+
+	redis_mock_restore(r);
+}
+END_TEST
+
+START_TEST(test_cache_redis_set_error) {
+	request_rec *r = oidc_test_request_get();
+	redis_mock_install(r);
+	redis_mock.error_first_n = 5; /* every attempt errors */
+
+	apr_time_t expiry = apr_time_now() + apr_time_from_sec(60);
+	ck_assert_int_eq(oidc_cache_redis_set(r, OIDC_CACHE_SECTION_SESSION, "k1", "v1", expiry), FALSE);
+
+	redis_mock_restore(r);
+}
+END_TEST
+
+START_TEST(test_cache_redis_helpers_short_circuit) {
+	request_rec *r = oidc_test_request_get();
+
+	/* keepalive == 0: returns TRUE without touching the (NULL) context */
+	ck_assert_int_eq(oidc_cache_redis_set_keepalive(r, NULL, 0), TRUE);
+	/* no password: AUTH skipped, returns TRUE */
+	ck_assert_int_eq(oidc_cache_redis_set_auth(r, NULL, NULL, NULL), TRUE);
+	/* database == -1: SELECT skipped, returns TRUE */
+	ck_assert_int_eq(oidc_cache_redis_set_database(r, NULL, -1), TRUE);
+	/* disconnect is a safe no-op on a NULL context */
+	ck_assert_int_eq((int)oidc_cache_redis_disconnect(NULL), (int)APR_SUCCESS);
+}
+END_TEST
+
+#endif /* USE_LIBHIREDIS */
+
+#ifdef USE_MEMCACHE
+
+/*
+ * Tests for cache/memcache.c — the memcache backend's post_config only parses the
+ * server list and allocates apr_memcache structures; it does not open a connection,
+ * so the parsing and pool-sizing logic can be exercised offline without a live
+ * memcached. (get/set need a live server and are left to optional integration tests.)
+ */
+
+static oidc_cache_t *memcache_prev_impl;
+static void *memcache_prev_cfg;
+static char *memcache_prev_servers;
+
+static void memcache_save(oidc_cfg_t *cfg) {
+	memcache_prev_impl = (oidc_cache_t *)cfg->cache.impl;
+	memcache_prev_cfg = cfg->cache.cfg;
+	memcache_prev_servers = cfg->cache.memcache_servers;
+	/* force post_config to run rather than short-circuit on an existing context */
+	cfg->cache.cfg = NULL;
+}
+
+static void memcache_restore(oidc_cfg_t *cfg) {
+	cfg->cache.impl = memcache_prev_impl;
+	cfg->cache.cfg = memcache_prev_cfg;
+	cfg->cache.memcache_servers = memcache_prev_servers;
+}
+
+START_TEST(test_cache_memcache_post_config_no_servers) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	memcache_save(cfg);
+
+	/* no OIDCMemCacheServers configured => post_config must fail */
+	cfg->cache.memcache_servers = NULL;
+	ck_assert_int_eq(oidc_cache_memcache.post_config(r->server->process->pconf, r->server),
+			 HTTP_INTERNAL_SERVER_ERROR);
+
+	memcache_restore(cfg);
+}
+END_TEST
+
+START_TEST(test_cache_memcache_post_config_single_server) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	memcache_save(cfg);
+
+	cfg->cache.memcache_servers = "127.0.0.1:11211";
+	ck_assert_int_eq(oidc_cache_memcache.post_config(r->server->process->pconf, r->server), OK);
+	ck_assert_ptr_nonnull(cfg->cache.cfg);
+
+	memcache_restore(cfg);
+}
+END_TEST
+
+START_TEST(test_cache_memcache_post_config_multi_server) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	memcache_save(cfg);
+
+	/* two servers exercise the server-counting and add-server loops */
+	cfg->cache.memcache_servers = "127.0.0.1:11211 127.0.0.1:11212";
+	ck_assert_int_eq(oidc_cache_memcache.post_config(r->server->process->pconf, r->server), OK);
+	ck_assert_ptr_nonnull(cfg->cache.cfg);
+
+	memcache_restore(cfg);
+}
+END_TEST
+
+START_TEST(test_cache_memcache_post_config_pool_clamp) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	memcache_save(cfg);
+
+	int prev_min = cfg->cache.memcache_min;
+	int prev_smax = cfg->cache.memcache_smax;
+	int prev_hmax = cfg->cache.memcache_hmax;
+
+	/* smax > hmax and min > smax exercise both connection-pool clamp branches */
+	cfg->cache.memcache_servers = "127.0.0.1:11211";
+	cfg->cache.memcache_hmax = 5;
+	cfg->cache.memcache_smax = 10;
+	cfg->cache.memcache_min = 8;
+	ck_assert_int_eq(oidc_cache_memcache.post_config(r->server->process->pconf, r->server), OK);
+	ck_assert_ptr_nonnull(cfg->cache.cfg);
+
+	cfg->cache.memcache_min = prev_min;
+	cfg->cache.memcache_smax = prev_smax;
+	cfg->cache.memcache_hmax = prev_hmax;
+	memcache_restore(cfg);
+}
+END_TEST
+
+#endif /* USE_MEMCACHE */
+
 int main(void) {
 	TCase *core = tcase_create("core");
 	tcase_add_checked_fixture(core, oidc_test_setup, oidc_test_teardown);
@@ -637,6 +1068,35 @@ int main(void) {
 	Suite *s = suite_create("cache");
 	suite_add_tcase(s, core);
 	suite_add_tcase(s, file);
+
+#ifdef USE_LIBHIREDIS
+	TCase *redis = tcase_create("redis");
+	tcase_add_checked_fixture(redis, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(redis, test_cache_redis_post_config_no_server);
+	tcase_add_test(redis, test_cache_redis_post_config_success);
+	tcase_add_test(redis, test_cache_redis_get_hit);
+	tcase_add_test(redis, test_cache_redis_get_miss);
+	tcase_add_test(redis, test_cache_redis_get_len_mismatch);
+	tcase_add_test(redis, test_cache_redis_get_wrong_type);
+	tcase_add_test(redis, test_cache_redis_get_connect_failure);
+	tcase_add_test(redis, test_cache_redis_get_error_then_recover);
+	tcase_add_test(redis, test_cache_redis_get_null_reply);
+	tcase_add_test(redis, test_cache_redis_set_value);
+	tcase_add_test(redis, test_cache_redis_set_delete);
+	tcase_add_test(redis, test_cache_redis_set_error);
+	tcase_add_test(redis, test_cache_redis_helpers_short_circuit);
+	suite_add_tcase(s, redis);
+#endif
+
+#ifdef USE_MEMCACHE
+	TCase *memcache = tcase_create("memcache");
+	tcase_add_checked_fixture(memcache, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(memcache, test_cache_memcache_post_config_no_servers);
+	tcase_add_test(memcache, test_cache_memcache_post_config_single_server);
+	tcase_add_test(memcache, test_cache_memcache_post_config_multi_server);
+	tcase_add_test(memcache, test_cache_memcache_post_config_pool_clamp);
+	suite_add_tcase(s, memcache);
+#endif
 
 	return oidc_test_suite_run(s);
 }
