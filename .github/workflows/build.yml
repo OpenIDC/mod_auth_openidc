@@ -6,7 +6,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: Dependencies
       run: |
         sudo apt-get update -y
@@ -42,7 +42,7 @@ jobs:
         ports:
           - 11211:11211
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: Dependencies
       run: |
         sudo apt-get update -y
@@ -70,7 +70,7 @@ jobs:
   distcheck:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: Dependencies
       run: |
         sudo apt-get update -y
@@ -106,7 +106,7 @@ jobs:
         ports:
           - 11211:11211
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: Dependencies
       run: |
         sudo apt-get update -y
@@ -144,7 +144,7 @@ jobs:
         } >> "$GITHUB_STEP_SUMMARY"
     - name: Upload report
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: coverage-report
         path: |
@@ -155,7 +155,7 @@ jobs:
   fuzz:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: Dependencies
       run: |
         sudo apt-get update -y
@@ -191,7 +191,7 @@ jobs:
         done
     - name: Upload crashes
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: fuzz-crashes
         path: |
@@ -203,7 +203,7 @@ jobs:
   sanitizers:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: Dependencies
       run: |
         sudo apt-get update -y
@@ -264,7 +264,7 @@ jobs:
       OIDC_TEST_REDIS_SERVER: localhost:6379
       OIDC_TEST_MEMCACHE_SERVER: localhost:11211
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: Dependencies
       run: |
         sudo apt-get update -y
