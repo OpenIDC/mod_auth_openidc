@@ -60,6 +60,24 @@ jobs:
 
   coverage:
     runs-on: ubuntu-latest
+    # check-code-coverage defaults OIDC_TEST_REDIS_SERVER/OIDC_TEST_MEMCACHE_SERVER
+    # to localhost (see test/Makefile.am), so the live test_cache tcases run here
+    # too -- give them the servers, which also folds the real cache/redis.c +
+    # cache/memcache.c paths into the coverage report
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+      memcached:
+        image: memcached:1.6-alpine
+        ports:
+          - 11211:11211
     steps:
     - uses: actions/checkout@v4
     - name: Dependencies
@@ -72,6 +90,15 @@ jobs:
       run: |
         ./autogen.sh
         ./configure --with-jq --enable-code-coverage
+    - name: Wait for service containers
+      run: |
+        for i in $(seq 1 30); do
+          (exec 3<>/dev/tcp/localhost/6379) 2>/dev/null \
+            && (exec 3<>/dev/tcp/localhost/11211) 2>/dev/null \
+            && { echo "redis + memcached reachable"; exit 0; }
+          echo "waiting for service containers ($i)..."; sleep 1
+        done
+        echo "service containers did not become reachable"; exit 1
     - name: Coverage
       run: |
         make check-code-coverage \
