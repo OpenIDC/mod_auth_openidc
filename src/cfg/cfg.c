@@ -115,11 +115,11 @@ const char *oidc_cmd_crypto_passphrase_set(cmd_parms *cmd, void *struct_ptr, con
 	return rv;
 }
 
-const oidc_crypto_passphrase_t *oidc_cfg_crypto_passphrase_get(oidc_cfg_t *cfg) {
+const oidc_crypto_passphrase_t *oidc_cfg_crypto_passphrase_get(const oidc_cfg_t *cfg) {
 	return &cfg->crypto_passphrase;
 }
 
-const char *oidc_cfg_crypto_passphrase_secret1_get(oidc_cfg_t *cfg) {
+const char *oidc_cfg_crypto_passphrase_secret1_get(const oidc_cfg_t *cfg) {
 	return cfg->crypto_passphrase.secret1;
 }
 
@@ -127,7 +127,7 @@ void oidc_cfg_crypto_passphrase_secret1_set(oidc_cfg_t *cfg, const char *secret)
 	cfg->crypto_passphrase.secret1 = secret;
 }
 
-const char *oidc_cfg_crypto_passphrase_secret2_get(oidc_cfg_t *cfg) {
+const char *oidc_cfg_crypto_passphrase_secret2_get(const oidc_cfg_t *cfg) {
 	return cfg->crypto_passphrase.secret2;
 }
 
@@ -147,7 +147,7 @@ const char *oidc_cmd_outgoing_proxy_set(cmd_parms *cmd, void *ptr, const char *a
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
-const oidc_http_outgoing_proxy_t *oidc_cfg_outgoing_proxy_get(oidc_cfg_t *cfg) {
+const oidc_http_outgoing_proxy_t *oidc_cfg_outgoing_proxy_get(const oidc_cfg_t *cfg) {
 	return &cfg->outgoing_proxy;
 }
 
@@ -359,7 +359,7 @@ const char *oidc_cmd_remote_user_claim_set(cmd_parms *cmd, void *ptr, const char
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
-const oidc_remote_user_claim_t *oidc_cfg_remote_user_claim_get(oidc_cfg_t *cfg) {
+const oidc_remote_user_claim_t *oidc_cfg_remote_user_claim_get(const oidc_cfg_t *cfg) {
 	return &cfg->remote_user_claim;
 }
 
@@ -452,7 +452,7 @@ const char *oidc_cmd_claim_prefix_set(cmd_parms *cmd, void *struct_ptr, const ch
 
 #define OIDC_DEFAULT_CLAIM_PREFIX "OIDC_CLAIM_"
 
-const char *oidc_cfg_claim_prefix_get(oidc_cfg_t *cfg) {
+const char *oidc_cfg_claim_prefix_get(const oidc_cfg_t *cfg) {
 	return (cfg->claim_prefix != NULL) ? cfg->claim_prefix : OIDC_DEFAULT_CLAIM_PREFIX;
 }
 
@@ -1001,7 +1001,7 @@ int oidc_cfg_merged_get(const oidc_cfg_t *cfg) {
 
 static oidc_cache_mutex_t *_oidc_refresh_mutex = NULL;
 
-oidc_cache_mutex_t *oidc_cfg_refresh_mutex_get(oidc_cfg_t *cfg) {
+oidc_cache_mutex_t *oidc_cfg_refresh_mutex_get(const oidc_cfg_t *cfg) {
 	return _oidc_refresh_mutex;
 }
 

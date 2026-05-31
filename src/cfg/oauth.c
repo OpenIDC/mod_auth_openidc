@@ -79,7 +79,7 @@ struct oidc_oauth_t {
 
 // helper
 #define OIDC_OAUTH_MEMBER_FUNC_GET(member, type)                                                                       \
-	type oidc_cfg_oauth_##member##_get(oidc_cfg_t *cfg) {                                                          \
+	type oidc_cfg_oauth_##member##_get(const oidc_cfg_t *cfg) {                                                    \
 		return cfg->oauth->member;                                                                             \
 	}
 
@@ -105,7 +105,7 @@ struct oidc_oauth_t {
 		return OIDC_CONFIG_DIR_RV(cmd, rv);                                                                    \
 	}                                                                                                              \
                                                                                                                        \
-	type oidc_cfg_oauth_##member##_get(oidc_cfg_t *cfg) {                                                          \
+	type oidc_cfg_oauth_##member##_get(const oidc_cfg_t *cfg) {                                                    \
 		if (cfg->oauth->member == OIDC_CONFIG_POS_INT_UNSET)                                                   \
 			return def_val;                                                                                \
 		return cfg->oauth->member;                                                                             \
@@ -127,7 +127,7 @@ struct oidc_oauth_t {
 	OIDC_OAUTH_MEMBER_FUNCS_TYPE(member, const char *, oidc_cfg_parse_is_valid_http_url(cmd->pool, arg))
 
 #define OIDC_OAUTH_MEMBER_FUNC_STR_GET_DEF(member, def_val)                                                            \
-	const char *oidc_cfg_oauth_##member##_get(oidc_cfg_t *cfg) {                                                   \
+	const char *oidc_cfg_oauth_##member##_get(const oidc_cfg_t *cfg) {                                             \
 		return cfg->oauth->member ? cfg->oauth->member : def_val;                                              \
 	}
 
@@ -202,21 +202,21 @@ const char *oidc_cmd_oauth_introspection_endpoint_auth_set(cmd_parms *cmd, void 
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
-const char *oidc_cfg_oauth_introspection_endpoint_auth_get(oidc_cfg_t *cfg) {
+const char *oidc_cfg_oauth_introspection_endpoint_auth_get(const oidc_cfg_t *cfg) {
 	return cfg->oauth->introspection_endpoint_auth;
 }
 
-const char *oidc_cfg_oauth_introspection_endpoint_auth_alg_get(oidc_cfg_t *cfg) {
+const char *oidc_cfg_oauth_introspection_endpoint_auth_alg_get(const oidc_cfg_t *cfg) {
 	return cfg->oauth->introspection_endpoint_auth_alg;
 }
 
-oidc_remote_user_claim_t *oidc_cfg_oauth_remote_user_claim_get(oidc_cfg_t *cfg) {
+oidc_remote_user_claim_t *oidc_cfg_oauth_remote_user_claim_get(const oidc_cfg_t *cfg) {
 	return &cfg->oauth->remote_user_claim;
 }
 
 #define OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER "sub"
 
-const char *oidc_cfg_oauth_remote_user_claim_name_get(oidc_cfg_t *cfg) {
+const char *oidc_cfg_oauth_remote_user_claim_name_get(const oidc_cfg_t *cfg) {
 	return cfg->oauth->remote_user_claim.claim_name != NULL ? cfg->oauth->remote_user_claim.claim_name
 								: OIDC_DEFAULT_OAUTH_CLAIM_REMOTE_USER;
 }

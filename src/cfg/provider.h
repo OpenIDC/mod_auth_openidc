@@ -160,7 +160,7 @@ typedef enum {
 									 ##__VA_ARGS__);
 
 #define OIDC_CFG_PROVIDER_MEMBER_FUNC_GET_DECL(member, type)                                                           \
-	type OIDC_CFG_MEMBER_FUNC_NAME(member, cfg_provider, get)(oidc_provider_t *);
+	type OIDC_CFG_MEMBER_FUNC_NAME(member, cfg_provider, get)(const oidc_provider_t *);
 
 #define OIDC_CFG_PROVIDER_MEMBER_FUNCS_DECL(member, itype, rtype, ...)                                                 \
 	OIDC_CMD_PROVIDER_MEMBER_FUNC_DECL(member, ##__VA_ARGS__)                                                      \
@@ -265,7 +265,7 @@ OIDC_CFG_PROVIDER_MEMBER_FUNC_SET_DECL(signed_jwks_uri_keys, json_t *, apr_array
 OIDC_CFG_PROVIDER_MEMBER_FUNC_GET_DECL(signed_jwks_uri_keys, apr_array_header_t *)
 
 // specials for token_endpoint_auth
-const char *OIDC_CFG_MEMBER_FUNC_NAME(token_endpoint_auth, cfg_provider, set)(apr_pool_t *pool, oidc_cfg_t *cfg,
+const char *OIDC_CFG_MEMBER_FUNC_NAME(token_endpoint_auth, cfg_provider, set)(apr_pool_t *pool, const oidc_cfg_t *cfg,
 									      oidc_provider_t *provider,
 									      const char *arg);
 OIDC_CMD_PROVIDER_MEMBER_FUNC_DECL(token_endpoint_auth)

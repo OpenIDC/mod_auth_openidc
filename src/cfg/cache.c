@@ -81,7 +81,7 @@ const char *oidc_cmd_cache_type_set(cmd_parms *cmd, void *ptr, const char *arg) 
 }
 
 #define OIDC_CFG_MEMBER_FUNC_CACHE_TYPE_GET(member, type, def_val, unset_val)                                          \
-	type oidc_cfg_cache_##member##_get(oidc_cfg_t *cfg) {                                                          \
+	type oidc_cfg_cache_##member##_get(const oidc_cfg_t *cfg) {                                                    \
 		if (cfg->cache.member == unset_val)                                                                    \
 			return def_val;                                                                                \
 		return cfg->cache.member;                                                                              \
@@ -129,7 +129,7 @@ OIDC_CFG_MEMBER_FUNCS_CACHE_BOOL(encrypt, cfg->cache.impl->encrypt_by_default)
 #define OIDC_CFG_MEMBER_FUNCS_CACHE_STR_DEF(member, valid, def_val)                                                    \
 	OIDC_CFG_MEMBER_FUNC_CACHE_SET(member, valid)                                                                  \
                                                                                                                        \
-	const char *oidc_cfg_cache_##member##_get(oidc_cfg_t *cfg) {                                                   \
+	const char *oidc_cfg_cache_##member##_get(const oidc_cfg_t *cfg) {                                             \
 		return (cfg->cache.member != NULL) ? cfg->cache.member : def_val;                                      \
 	}
 

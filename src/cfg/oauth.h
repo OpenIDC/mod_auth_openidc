@@ -79,7 +79,7 @@ typedef enum {
 } oidc_oauth_introspection_endpoint_method_t;
 
 #define OIDC_CFG_OAUTH_MEMBER_FUNC_GET_DECL(member, type)                                                              \
-	type OIDC_CFG_MEMBER_FUNC_NAME(member, cfg_oauth, get)(oidc_cfg_t * cfg);
+	type OIDC_CFG_MEMBER_FUNC_NAME(member, cfg_oauth, get)(const oidc_cfg_t *cfg);
 
 #define OIDC_CMD_OAUTH_MEMBER_FUNC_DECL(member, ...)                                                                   \
 	const char *OIDC_CFG_MEMBER_FUNC_NAME(member, cmd_oauth, set)(cmd_parms *, void *, ##__VA_ARGS__);

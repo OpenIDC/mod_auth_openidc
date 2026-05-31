@@ -110,7 +110,7 @@ struct oidc_provider_t {
 		return OIDC_CONFIG_DIR_RV(cmd, rv);                                                                    \
 	}                                                                                                              \
                                                                                                                        \
-	type oidc_cfg_provider_##member##_get(oidc_provider_t *provider) {                                             \
+	type oidc_cfg_provider_##member##_get(const oidc_provider_t *provider) {                                       \
 		return provider->member != NULL ? provider->member : def_val;                                          \
 	}
 
@@ -132,7 +132,7 @@ struct oidc_provider_t {
 	OIDC_PROVIDER_MEMBER_FUNCS_TYPE_DEF(member, const char *, NULL)
 
 #define OIDC_PROVIDER_MEMBER_GET_INT_DEF(member, type, def_val)                                                        \
-	type oidc_cfg_provider_##member##_get(oidc_provider_t *provider) {                                             \
+	type oidc_cfg_provider_##member##_get(const oidc_provider_t *provider) {                                       \
 		return provider->member != OIDC_CONFIG_POS_INT_UNSET ? provider->member : def_val;                     \
 	}
 
@@ -485,16 +485,16 @@ int oidc_cfg_jwks_uri_refresh_interval_get(const oidc_jwks_uri_t *jwks_uri) {
 								       : OIDC_DEFAULT_JWKS_REFRESH_INTERVAL;
 }
 
-int oidc_cfg_provider_jwks_uri_refresh_interval_get(oidc_provider_t *provider) {
+int oidc_cfg_provider_jwks_uri_refresh_interval_get(const oidc_provider_t *provider) {
 	return provider->jwks_uri.refresh_interval != OIDC_CONFIG_POS_INT_UNSET ? provider->jwks_uri.refresh_interval
 										: OIDC_DEFAULT_JWKS_REFRESH_INTERVAL;
 }
 
-const oidc_jwks_uri_t *oidc_cfg_provider_jwks_uri_get(oidc_provider_t *provider) {
+const oidc_jwks_uri_t *oidc_cfg_provider_jwks_uri_get(const oidc_provider_t *provider) {
 	return &provider->jwks_uri;
 }
 
-const char *oidc_cfg_provider_jwks_uri_uri_get(oidc_provider_t *provider) {
+const char *oidc_cfg_provider_jwks_uri_uri_get(const oidc_provider_t *provider) {
 	return provider->jwks_uri.uri;
 }
 
@@ -511,11 +511,11 @@ const char *oidc_cmd_provider_jwks_uri_set(cmd_parms *cmd, void *ptr, const char
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
-const char *oidc_cfg_provider_signed_jwks_uri_get(oidc_provider_t *provider) {
+const char *oidc_cfg_provider_signed_jwks_uri_get(const oidc_provider_t *provider) {
 	return provider->jwks_uri.signed_uri;
 }
 
-apr_array_header_t *oidc_cfg_provider_signed_jwks_uri_keys_get(oidc_provider_t *provider) {
+apr_array_header_t *oidc_cfg_provider_signed_jwks_uri_keys_get(const oidc_provider_t *provider) {
 	return provider->jwks_uri.jwk_list;
 }
 
@@ -594,8 +594,8 @@ const char *oidc_cmd_provider_signed_jwks_uri_set(cmd_parms *cmd, void *ptr, con
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
-const char *oidc_cfg_provider_token_endpoint_auth_set(apr_pool_t *pool, oidc_cfg_t *cfg, oidc_provider_t *provider,
-						      const char *arg) {
+const char *oidc_cfg_provider_token_endpoint_auth_set(apr_pool_t *pool, const oidc_cfg_t *cfg,
+						      oidc_provider_t *provider, const char *arg) {
 	return oidc_cfg_endpoint_auth_set(pool, cfg, arg, &provider->token_endpoint_auth,
 					  &provider->token_endpoint_auth_alg);
 }
@@ -606,11 +606,11 @@ const char *oidc_cmd_provider_token_endpoint_auth_set(cmd_parms *cmd, void *ptr,
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
-const char *oidc_cfg_provider_token_endpoint_auth_get(oidc_provider_t *provider) {
+const char *oidc_cfg_provider_token_endpoint_auth_get(const oidc_provider_t *provider) {
 	return provider->token_endpoint_auth;
 }
 
-const char *oidc_cfg_provider_token_endpoint_auth_alg_get(oidc_provider_t *provider) {
+const char *oidc_cfg_provider_token_endpoint_auth_alg_get(const oidc_provider_t *provider) {
 	return provider->token_endpoint_auth_alg;
 }
 
@@ -641,7 +641,7 @@ const char *oidc_cmd_provider_userinfo_refresh_interval_set(cmd_parms *cmd, void
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
-int oidc_cfg_provider_userinfo_refresh_interval_get(oidc_provider_t *provider) {
+int oidc_cfg_provider_userinfo_refresh_interval_get(const oidc_provider_t *provider) {
 	return provider->userinfo_refresh_interval != OIDC_CONFIG_POS_INT_UNSET
 		   ? provider->userinfo_refresh_interval
 		   : OIDC_DEFAULT_USERINFO_REFRESH_INTERVAL;
@@ -669,7 +669,7 @@ const char *oidc_cmd_provider_revocation_endpoint_url_set(cmd_parms *cmd, void *
 	return oidc_cfg_provider_revocation_endpoint_url_set(cmd->pool, cfg->provider, w);
 }
 
-const char *oidc_cfg_provider_revocation_endpoint_url_get(oidc_provider_t *provider) {
+const char *oidc_cfg_provider_revocation_endpoint_url_get(const oidc_provider_t *provider) {
 	return provider->revocation_endpoint_url;
 }
 

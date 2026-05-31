@@ -206,7 +206,7 @@ struct oidc_cfg_t {
 		   : NULL
 
 #define OIDC_CFG_MEMBER_FUNC_GET(member, type)                                                                         \
-	type oidc_cfg_##member##_get(oidc_cfg_t *cfg) {                                                                \
+	type oidc_cfg_##member##_get(const oidc_cfg_t *cfg) {                                                          \
 		return cfg->member;                                                                                    \
 	}
 
@@ -226,7 +226,7 @@ struct oidc_cfg_t {
 	OIDC_CFG_MEMBER_FUNC_GET(member, type)
 
 #define OIDC_CFG_MEMBER_FUNC_TYPE_GET(member, type, def_val)                                                           \
-	type oidc_cfg_##member##_get(oidc_cfg_t *cfg) {                                                                \
+	type oidc_cfg_##member##_get(const oidc_cfg_t *cfg) {                                                          \
 		if (cfg->member == OIDC_CONFIG_POS_INT_UNSET)                                                          \
 			return def_val;                                                                                \
 		return cfg->member;                                                                                    \
@@ -254,7 +254,7 @@ struct oidc_cfg_t {
 #define OIDC_CFG_MEMBER_FUNCS_STR_DEF(member, valid, def_val)                                                          \
 	OIDC_CFG_MEMBER_FUNC_SET(member, valid)                                                                        \
                                                                                                                        \
-	const char *oidc_cfg_##member##_get(oidc_cfg_t *cfg) {                                                         \
+	const char *oidc_cfg_##member##_get(const oidc_cfg_t *cfg) {                                                   \
 		return (cfg->member != NULL) ? cfg->member : def_val;                                                  \
 	}
 

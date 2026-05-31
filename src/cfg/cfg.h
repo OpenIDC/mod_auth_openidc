@@ -201,7 +201,8 @@ void oidc_cfg_crypto_passphrase_secret1_set(oidc_cfg_t *cfg, const char *secret)
 
 #define OIDC_CFG_MEMBER_FUNC_NAME(member, type, method) oidc_##type##_##member##_##method
 
-#define OIDC_CFG_MEMBER_FUNC_GET_DECL(member, type) type OIDC_CFG_MEMBER_FUNC_NAME(member, cfg, get)(oidc_cfg_t * cfg);
+#define OIDC_CFG_MEMBER_FUNC_GET_DECL(member, type)                                                                    \
+	type OIDC_CFG_MEMBER_FUNC_NAME(member, cfg, get)(const oidc_cfg_t *cfg);
 
 #define OIDC_CMD_MEMBER_FUNC_DECL(member, ...)                                                                         \
 	const char *OIDC_CFG_MEMBER_FUNC_NAME(member, cmd, set)(cmd_parms *, void *, ##__VA_ARGS__);
@@ -260,8 +261,11 @@ OIDC_CFG_MEMBER_FUNC_GET_DECL(cookie_same_site_state, oidc_samesite_cookie_t)
 OIDC_CFG_MEMBER_FUNC_GET_DECL(cookie_same_site_discovery_csrf, oidc_samesite_cookie_t)
 OIDC_CFG_MEMBER_FUNCS_DECL(remote_user_claim, const oidc_remote_user_claim_t *, const char *, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(outgoing_proxy, const oidc_http_outgoing_proxy_t *, const char *, const char *)
-OIDC_CFG_MEMBER_FUNCS_DECL(http_timeout_short, oidc_http_timeout_t *, const char *, const char *)
-OIDC_CFG_MEMBER_FUNCS_DECL(http_timeout_long, oidc_http_timeout_t *, const char *, const char *)
+/* NB: the http_timeout getters lazily initialize the timeout struct in-config, so cfg cannot be const here */
+const char *oidc_cmd_http_timeout_short_set(cmd_parms *, void *, const char *, const char *, const char *);
+oidc_http_timeout_t *oidc_cfg_http_timeout_short_get(oidc_cfg_t *cfg);
+const char *oidc_cmd_http_timeout_long_set(cmd_parms *, void *, const char *, const char *, const char *);
+oidc_http_timeout_t *oidc_cfg_http_timeout_long_get(oidc_cfg_t *cfg);
 
 // ifdefs
 #ifdef USE_LIBJQ
