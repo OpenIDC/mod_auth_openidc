@@ -689,6 +689,223 @@ START_TEST(test_handle_response_authorization_redirect_unknown_response_type) {
 }
 END_TEST
 
+/* defined further down alongside the logout tests; used here for the form-post entrypoint tests */
+static void e2e_post_body(request_rec *r, const char *body);
+
+START_TEST(test_handle_response_authorization_error_prompt_none) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* build a state whose proto_state carries prompt=none */
+	oidc_proto_state_t *ps = oidc_proto_state_new();
+	oidc_proto_state_set_nonce(ps, "rndnonce");
+	oidc_proto_state_set_state(ps, "s1");
+	oidc_proto_state_set_issuer(ps, "https://idp.example.com");
+	oidc_proto_state_set_original_url(ps, "https://www.example.com/protected/index.html");
+	oidc_proto_state_set_original_method(ps, OIDC_METHOD_GET);
+	oidc_proto_state_set_response_type(ps, OIDC_PROTO_RESPONSE_TYPE_CODE);
+	oidc_proto_state_set_response_mode(ps, OIDC_PROTO_RESPONSE_MODE_QUERY);
+	oidc_proto_state_set_prompt(ps, OIDC_PROTO_PROMPT_NONE);
+	oidc_proto_state_set_timestamp_now(ps);
+	char *fingerprint = oidc_state_browser_fingerprint(r, c, "rndnonce");
+	char *cookie = oidc_proto_state_to_cookie(r, c, ps);
+	const char *cookie_name = oidc_state_cookie_name(r, fingerprint);
+	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "%s=%s", cookie_name, cookie));
+	oidc_proto_state_destroy(ps);
+
+	/* an error response under prompt=none must redirect the parent window to logout rather than
+	 * render an error page */
+	r->args = apr_psprintf(r->pool, "state=%s&error=login_required&error_description=x",
+			       oidc_http_url_encode(r, fingerprint));
+	int rc = oidc_response_authorization_redirect(r, c, session);
+	ck_assert_int_eq(rc, OK);
+	const char *head = oidc_request_state_get(r, "head");
+	ck_assert_ptr_nonnull(head);
+	ck_assert_msg(_oidc_strstr(head, "session=logout") != NULL,
+		      "prompt=none error must redirect the parent window to logout");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_response_browser_back) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* an established session whose stored request-state equals the state in the URL is a browser-back
+	 * event: redirect to the original URL without re-processing the authorization response */
+	session->remote_user = apr_pstrdup(r->pool, "alice");
+	oidc_session_set_request_state(r, session, "bb-state");
+	oidc_session_set_original_url(r, session, "https://www.example.com/protected/page");
+
+	r->args = "state=bb-state&code=whatever";
+	int rc = oidc_response_authorization_redirect(r, c, session);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_str_eq(loc, "https://www.example.com/protected/page");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_response_post_preserve_javascript) {
+	request_rec *r = oidc_test_request_get();
+
+	/* enable POST preservation for this location and present a form POST with parameters */
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPreservePost);
+	ck_assert_ptr_null(oidc_cmd_dir_preserve_post_set(cmd, dir_cfg, "On"));
+	e2e_post_body(r, "name=alice&grp=admins");
+
+	char *js = NULL;
+	char *jm = NULL;
+	apr_byte_t rv = oidc_response_post_preserve_javascript(r, "https://www.example.com/protected/", &js, &jm);
+	ck_assert_int_eq(rv, TRUE);
+	ck_assert_ptr_nonnull(js);
+	ck_assert_ptr_nonnull(jm);
+	ck_assert_str_eq(jm, "preserveOnLoad()");
+	ck_assert_msg(_oidc_strstr(js, "mod_auth_openidc_preserve_post_params") != NULL,
+		      "generated javascript must reference the preserve-post session storage");
+	ck_assert_msg(_oidc_strstr(js, "name") != NULL, "the POSTed parameters must be embedded in the javascript");
+}
+END_TEST
+
+START_TEST(test_handle_response_save_in_session_session_mgmt) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* session management on (check_session_iframe set) + a session_state provided + an explicit cookie domain */
+	oidc_cfg_provider_check_session_iframe_set(r->pool, provider, "https://idp.example.com/check_session");
+	ck_assert_ptr_null(oidc_cmd_cookie_domain_set(oidc_test_cmd_get(OIDCCookieDomain), NULL, "www.example.com"));
+
+	oidc_jwt_t *jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->payload.sub = apr_pstrdup(r->pool, "alice");
+	jwt->payload.exp = apr_time_sec(apr_time_now()) + 3600;
+
+	apr_byte_t rc = oidc_response_save_in_session(r, c, session, provider, "alice", "id-token", jwt, NULL, NULL,
+						      NULL, NULL, 0, NULL, NULL, "the-session-state", "state-3",
+						      "https://www.example.com/protected/", NULL);
+	ck_assert_int_eq(rc, TRUE);
+	ck_assert_str_eq(oidc_session_get_session_state(r, session), "the-session-state");
+	ck_assert_str_eq(oidc_session_get_cookie_domain(r, session), "www.example.com");
+
+	oidc_jwt_destroy(jwt);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_response_save_in_session_no_session_state) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* check_session_iframe set but no session_state in the response => the "no session_state provided"
+	 * branch; session_max_duration==0 => the hard expiry is derived from the id_token exp claim */
+	oidc_cfg_provider_check_session_iframe_set(r->pool, provider, "https://idp.example.com/check_session");
+	oidc_cfg_provider_session_max_duration_set(r->pool, provider, 0);
+
+	oidc_jwt_t *jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->payload.sub = apr_pstrdup(r->pool, "alice");
+	jwt->payload.exp = apr_time_sec(apr_time_now()) + 3600;
+
+	apr_byte_t rc =
+	    oidc_response_save_in_session(r, c, session, provider, "alice", "id-token", jwt, NULL, NULL, NULL, NULL, 0,
+					  NULL, NULL, NULL, "state-4", "https://www.example.com/protected/", NULL);
+	ck_assert_int_eq(rc, TRUE);
+	ck_assert_str_eq(session->remote_user, "alice");
+
+	oidc_jwt_destroy(jwt);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_response_state_restore_no_cookie) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* a (non-empty) state with no matching state cookie => proto-state restore fails in
+	 * oidc_response_proto_state_restore; with a pre-existing error in the environment and no default
+	 * SSO URL the mismatch handler short-circuits to 400 */
+	apr_table_set(r->subprocess_env, OIDC_ERROR_ENVVAR, "earlier error");
+	r->args = "state=no-such-cookie";
+	int rc = oidc_response_authorization_redirect(r, c, session);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_response_finish_form_post_restore) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "shared-secret-for-hs256-verification";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	/* same as the id_token happy path but with original_method=form_post: instead of a 302 the handler
+	 * must return an HTML page that restores and re-POSTs the preserved form data */
+	oidc_proto_state_t *ps = oidc_proto_state_new();
+	oidc_proto_state_set_nonce(ps, "nonce-fp");
+	oidc_proto_state_set_state(ps, "s-fp");
+	oidc_proto_state_set_issuer(ps, "https://idp.example.com");
+	oidc_proto_state_set_original_url(ps, "https://www.example.com/protected/form-target");
+	oidc_proto_state_set_original_method(ps, OIDC_METHOD_FORM_POST);
+	oidc_proto_state_set_response_type(ps, OIDC_PROTO_RESPONSE_TYPE_IDTOKEN);
+	oidc_proto_state_set_response_mode(ps, OIDC_PROTO_RESPONSE_MODE_QUERY);
+	oidc_proto_state_set_timestamp_now(ps);
+
+	char *fingerprint = oidc_state_browser_fingerprint(r, c, "nonce-fp");
+	char *cookie = oidc_proto_state_to_cookie(r, c, ps);
+	const char *cookie_name = oidc_state_cookie_name(r, fingerprint);
+	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "%s=%s", cookie_name, cookie));
+	oidc_proto_state_destroy(ps);
+
+	char *id_token = e2e_sign_idtoken_hs256(r, "https://idp.example.com", "client_id", "alice", "nonce-fp", secret);
+	r->args = apr_psprintf(r->pool, "state=%s&id_token=%s", oidc_http_url_encode(r, fingerprint),
+			       oidc_http_url_encode(r, id_token));
+
+	int rc = oidc_response_authorization_redirect(r, c, session);
+	ck_assert_int_eq(rc, OK);
+	const char *head = oidc_request_state_get(r, "head");
+	ck_assert_ptr_nonnull(head);
+	ck_assert_msg(_oidc_strstr(head, "mod_auth_openidc_preserve_post_params") != NULL,
+		      "form_post finish must emit the POST-restore javascript");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_response_authorization_post_state_mismatch) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* a real form POST with parameters reaches oidc_response_process through the POST entrypoint; the
+	 * state has no matching cookie so it ends in a state-mismatch 400 */
+	e2e_post_body(r, "state=no-cookie&code=abc");
+	int rc = oidc_response_authorization_post(r, c, session);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
 /*
  * Tests for handle/discovery.c — cover the is_discovery_response classifier
  * and the request-side branches that don't require a configured metadata
@@ -2456,6 +2673,23 @@ START_TEST(test_handle_jwks_request_empty_keys) {
 }
 END_TEST
 
+START_TEST(test_handle_jwks_request_with_public_key) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* publish one RSA public key (test/public.pem) at the JWKs endpoint so the serialization loop runs */
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *err =
+	    oidc_cmd_public_keys_set(oidc_test_cmd_get(OIDCPublicKeyFiles), NULL,
+				     apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-1#%s/public.pem", dir)));
+	ck_assert_msg(err == NULL, "could not load public key: %s", err);
+	ck_assert_int_gt(oidc_cfg_public_keys_get(c)->nelts, 0);
+
+	int rc = oidc_jwks_request(r, c);
+	ck_assert_int_eq(rc, OK);
+}
+END_TEST
+
 START_TEST(test_handle_content_handler_jwks) {
 	request_rec *r = oidc_test_request_get();
 
@@ -3456,6 +3690,14 @@ int main(void) {
 	tcase_add_test(response, test_handle_response_authorization_redirect_unknown_response_type);
 	tcase_add_test(response, test_handle_response_authorization_redirect_idtoken_happy_path);
 	tcase_add_test(response, test_handle_response_authorization_redirect_code_flow_happy_path);
+	tcase_add_test(response, test_handle_response_authorization_error_prompt_none);
+	tcase_add_test(response, test_handle_response_browser_back);
+	tcase_add_test(response, test_handle_response_post_preserve_javascript);
+	tcase_add_test(response, test_handle_response_save_in_session_session_mgmt);
+	tcase_add_test(response, test_handle_response_save_in_session_no_session_state);
+	tcase_add_test(response, test_handle_response_state_restore_no_cookie);
+	tcase_add_test(response, test_handle_response_finish_form_post_restore);
+	tcase_add_test(response, test_handle_response_authorization_post_state_mismatch);
 
 	TCase *discovery = tcase_create("discovery");
 	tcase_add_checked_fixture(discovery, oidc_test_setup, oidc_test_teardown);
@@ -3550,6 +3792,7 @@ int main(void) {
 	TCase *content = tcase_create("content");
 	tcase_add_checked_fixture(content, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(content, test_handle_jwks_request_empty_keys);
+	tcase_add_test(content, test_handle_jwks_request_with_public_key);
 	tcase_add_test(content, test_handle_content_handler_jwks);
 	tcase_add_test(content, test_handle_content_handler_unknown_redirect_uri_request);
 	tcase_add_test(content, test_handle_content_handler_non_redirect_no_state);
