@@ -12,7 +12,6 @@ jobs:
         sudo apt-get update -y
         sudo apt-get install -y apache2-dev libcjose-dev libssl-dev check pkg-config
         sudo apt-get install -y libjansson-dev libcurl4-openssl-dev libhiredis-dev libpcre2-dev libjq-dev check
-        sudo apt-get install -y valgrind
     - name: Configure
       run: |
         ./autogen.sh
@@ -21,8 +20,41 @@ jobs:
       run: make
     - name: Test
       run: make check || (cat test/test-suite.log && exit -1)
+
+  valgrind:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Dependencies
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y apache2-dev libcjose-dev libssl-dev check pkg-config
+        sudo apt-get install -y libjansson-dev libcurl4-openssl-dev libhiredis-dev libpcre2-dev libjq-dev check
+        sudo apt-get install -y valgrind
+    - name: Configure
+      run: |
+        ./autogen.sh
+        ./configure --with-jq
+    - name: Make
+      run: make
     - name: Valgrind
       run: make valgrind
+
+  distcheck:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Dependencies
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y apache2-dev libcjose-dev libssl-dev check pkg-config
+        sudo apt-get install -y libjansson-dev libcurl4-openssl-dev libhiredis-dev libpcre2-dev libjq-dev check
+    - name: Configure
+      run: |
+        ./autogen.sh
+        ./configure --with-jq
+    - name: Make
+      run: make
     - name: Distcheck
       run: make distcheck DESTDIR=/tmp/mod_auth_openidc
 
