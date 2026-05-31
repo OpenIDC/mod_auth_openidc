@@ -69,6 +69,7 @@ oidc_unit_tests = \
 	test_cache \
 	test_proto \
 	test_handle \
+	test_state \
 	test_oauth \
 	test_metadata \
 	test_metrics
