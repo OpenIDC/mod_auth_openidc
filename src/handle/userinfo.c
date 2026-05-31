@@ -282,8 +282,8 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg_t *cf
 		goto end;
 	const char *s_claims =
 	    oidc_util_json_encode(r->pool, jwt->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
-	if (oidc_jose_hash_and_base64url_encode(r->pool, OIDC_JOSE_ALG_SHA256, s_claims, _oidc_strlen(s_claims) + 1,
-						&key, &err) == FALSE) {
+	if (oidc_jose_hash_and_base64url_encode(r->pool, OIDC_JOSE_ALG_SHA256, s_claims,
+						(int)_oidc_strlen(s_claims) + 1, &key, &err) == FALSE) {
 		oidc_error(r, "oidc_jose_hash_and_base64url_encode failed: %s", oidc_jose_e2s(r->pool, err));
 		goto end;
 	}

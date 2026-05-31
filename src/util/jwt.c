@@ -112,13 +112,14 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const oidc_crypto_passphrase_t *
 		goto end;
 
 	if (oidc_util_jwt_internal_compress(r)) {
-		if (oidc_jose_compress(r->pool, s_payload, _oidc_strlen(s_payload), &cser, &cser_len, &err) == FALSE) {
+		if (oidc_jose_compress(r->pool, s_payload, (int)_oidc_strlen(s_payload), &cser, &cser_len, &err) ==
+		    FALSE) {
 			oidc_error(r, "oidc_jose_compress failed: %s", oidc_jose_e2s(r->pool, err));
 			goto end;
 		}
 	} else {
 		cser = apr_pstrdup(r->pool, s_payload);
-		cser_len = _oidc_strlen(s_payload);
+		cser_len = (int)_oidc_strlen(s_payload);
 	}
 
 	jwe = oidc_jwt_new(r->pool, TRUE, FALSE);
@@ -248,8 +249,8 @@ int oidc_util_jwt_post_config(server_rec *s) {
 	if (_oidc_jwt_hdr_dir_a256gcm != NULL)
 		return OK;
 
-	if (oidc_jose_hash_bytes(pool, OIDC_JOSE_ALG_SHA256, (const unsigned char *)secret, _oidc_strlen(secret), &key,
-				 &key_len, &err) == FALSE) {
+	if (oidc_jose_hash_bytes(pool, OIDC_JOSE_ALG_SHA256, (const unsigned char *)secret,
+				 (unsigned int)_oidc_strlen(secret), &key, &key_len, &err) == FALSE) {
 		oidc_serror(s, "oidc_jose_hash_bytes failed: %s", oidc_jose_e2s(pool, err));
 		goto end;
 	}

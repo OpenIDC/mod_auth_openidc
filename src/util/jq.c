@@ -156,7 +156,7 @@ const char *oidc_util_jq_filter(request_rec *r, const json_t *json, const char *
 		goto end;
 	}
 
-	jv_parser_set_buf(parser, input, _oidc_strlen(input), 0);
+	jv_parser_set_buf(parser, input, (int)_oidc_strlen(input), 0);
 
 	result = oidc_util_jq_exec(r, jq, parser);
 

@@ -77,7 +77,7 @@ char *oidc_state_browser_fingerprint(request_rec *r, const oidc_cfg_t *c, const 
 		value = oidc_http_hdr_in_x_forwarded_for_get(r);
 		/* if we have a value for this header, concat it to the hash input */
 		if (value != NULL)
-			apr_sha1_update(&sha1, value, _oidc_strlen(value));
+			apr_sha1_update(&sha1, value, (unsigned int)_oidc_strlen(value));
 	}
 
 	if (oidc_cfg_state_input_headers_get(c) & OIDC_STATE_INPUT_HEADERS_USER_AGENT) {
@@ -85,7 +85,7 @@ char *oidc_state_browser_fingerprint(request_rec *r, const oidc_cfg_t *c, const 
 		value = oidc_http_hdr_in_user_agent_get(r);
 		/* if we have a value for this header, concat it to the hash input */
 		if (value != NULL)
-			apr_sha1_update(&sha1, value, _oidc_strlen(value));
+			apr_sha1_update(&sha1, value, (unsigned int)_oidc_strlen(value));
 	}
 
 	/* get the remote client IP address or host name */
@@ -97,7 +97,7 @@ char *oidc_state_browser_fingerprint(request_rec *r, const oidc_cfg_t *c, const 
 	 */
 
 	/* concat the nonce parameter to the hash input */
-	apr_sha1_update(&sha1, nonce, _oidc_strlen(nonce));
+	apr_sha1_update(&sha1, nonce, (unsigned int)_oidc_strlen(nonce));
 
 	/* finalize the hash input and calculate the resulting hash output */
 	apr_sha1_final(hash, &sha1);

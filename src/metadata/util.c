@@ -56,7 +56,7 @@ const char *oidc_metadata_issuer_to_filename(request_rec *r, const char *issuer)
 	}
 
 	/* strip trailing '/' */
-	int n = _oidc_strlen(p);
+	int n = (int)_oidc_strlen(p);
 	if ((n > 0) && (p[n - 1] == OIDC_CHAR_FORWARD_SLASH))
 		p[n - 1] = '\0';
 
@@ -67,7 +67,7 @@ const char *oidc_metadata_issuer_to_filename(request_rec *r, const char *issuer)
  * get the issuer from a metadata filename (cq. urldecode it)
  */
 const char *oidc_metadata_filename_to_issuer(request_rec *r, const char *filename) {
-	const char *result = apr_pstrdup(r->pool, filename);
+	char *result = apr_pstrdup(r->pool, filename);
 	char *p = strrchr(result, OIDC_CHAR_DOT);
 	*p = '\0';
 	p = oidc_http_url_decode(r, result);

@@ -102,7 +102,7 @@ apr_byte_t oidc_proto_dpop_create(request_rec *r, const oidc_cfg_t *cfg, const c
 
 	if (access_token != NULL) {
 		if (oidc_jose_hash_and_base64url_encode(r->pool, OIDC_JOSE_ALG_SHA256, access_token,
-							_oidc_strlen(access_token), &ath, &err) == FALSE) {
+							(int)_oidc_strlen(access_token), &ath, &err) == FALSE) {
 			oidc_error(r, "oidc_jose_hash_and_base64url_encode failed: %s", oidc_jose_e2s(r->pool, err));
 			goto end;
 		}

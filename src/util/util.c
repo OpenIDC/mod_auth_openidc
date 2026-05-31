@@ -319,8 +319,8 @@ apr_byte_t oidc_util_issuer_match(const char *a, const char *b) {
 	if (_oidc_strcmp(a, b) != 0) {
 
 		/* no strict match, but we are going to accept if the difference is only a trailing slash */
-		int n1 = _oidc_strlen(a);
-		int n2 = _oidc_strlen(b);
+		int n1 = (int)_oidc_strlen(a);
+		int n2 = (int)_oidc_strlen(b);
 		int n = 0;
 		if ((n1 == n2 + 1) && (a[n1 - 1] == OIDC_CHAR_FORWARD_SLASH))
 			n = n2;
@@ -421,8 +421,8 @@ apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char
 	oidc_jose_error_t err;
 	unsigned char *hashed = NULL;
 	unsigned int hashed_len = 0;
-	if (oidc_jose_hash_bytes(r->pool, openssl_hash_algo, (const unsigned char *)input, _oidc_strlen(input), &hashed,
-				 &hashed_len, &err) == FALSE) {
+	if (oidc_jose_hash_bytes(r->pool, openssl_hash_algo, (const unsigned char *)input,
+				 (unsigned int)_oidc_strlen(input), &hashed, &hashed_len, &err) == FALSE) {
 		oidc_error(r, "oidc_jose_hash_bytes returned an error: %s", err.text);
 		return FALSE;
 	}

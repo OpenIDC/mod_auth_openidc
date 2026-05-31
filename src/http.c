@@ -510,7 +510,7 @@ size_t oidc_http_response_header(const char *buffer, size_t size, size_t nitems,
 		while (*value == ' ')
 			value++;
 		/* remove trailing /r/n */
-		i = _oidc_strlen(value) - 1;
+		i = (int)_oidc_strlen(value) - 1;
 		while ((value[i] == '\r') || (value[i] == '\n'))
 			value[i--] = '\0';
 	}
@@ -1269,7 +1269,7 @@ static void oidc_http_clear_chunked_cookie(request_rec *r, const char *cookieNam
  */
 void oidc_http_set_chunked_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires,
 				  int chunkSize, const char *ext) {
-	int cookieLength = _oidc_strlen(cookieValue);
+	int cookieLength = (int)_oidc_strlen(cookieValue);
 	const char *chunkValue = NULL;
 
 	/* see if we need to chunk at all */

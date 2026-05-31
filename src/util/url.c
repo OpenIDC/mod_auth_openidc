@@ -179,7 +179,7 @@ const char *oidc_util_url_cur_host(request_rec *r, oidc_hdr_x_forwarded_t x_forw
 	if (host_str == NULL)
 		host_str = oidc_http_hdr_in_host_get(r);
 	if (host_str) {
-		const char *dup = apr_pstrdup(r->pool, host_str);
+		char *dup = apr_pstrdup(r->pool, host_str);
 
 		if (dup[0] == '[') {
 			p = strchr(dup, ']');

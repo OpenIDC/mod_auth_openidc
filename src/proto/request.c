@@ -471,7 +471,7 @@ static char *oidc_request_uri_request_object_encrypt(request_rec *r, oidc_cfg_t 
 	if (ejwk->kid != NULL)
 		jwe->header.kid = ejwk->kid;
 
-	if (oidc_jwt_encrypt(r->pool, jwe, ejwk, cser, _oidc_strlen(cser) + 1, &serialized, &err) == FALSE) {
+	if (oidc_jwt_encrypt(r->pool, jwe, ejwk, cser, (int)_oidc_strlen(cser) + 1, &serialized, &err) == FALSE) {
 		oidc_error(r, "encrypting JWT failed: %s", oidc_jose_e2s(r->pool, err));
 		serialized = NULL;
 	}

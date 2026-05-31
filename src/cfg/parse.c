@@ -426,7 +426,7 @@ static char *oidc_cfg_parse_hex(apr_pool_t *pool, const char *input, char **outp
 	if ((input_len % 2) != 0)
 		return apr_psprintf(pool, "hex-decoding failed: input length (%" APR_SIZE_T_FMT ") is not even",
 				    input_len);
-	*output_len = input_len / 2;
+	*output_len = (int)(input_len / 2);
 	const char *pos = input;
 	unsigned char *val = apr_pcalloc(pool, *output_len);
 	for (size_t count = 0; count < (*output_len) / sizeof(unsigned char); count++) {
@@ -459,7 +459,7 @@ static const char *oidc_cfg_parse_key_value(apr_pool_t *pool, const char *enc, c
 		return oidc_cfg_parse_hex(pool, input, key, key_len);
 	if (_oidc_strcmp(enc, OIDC_KEY_ENCODING_PLAIN) == 0) {
 		*key = apr_pstrdup(pool, input);
-		*key_len = _oidc_strlen(*key);
+		*key_len = (int)_oidc_strlen(*key);
 		return NULL;
 	}
 	// NB: when we get here we'll return an error displaying the valid options
@@ -512,12 +512,12 @@ const char *oidc_cfg_parse_key_record(apr_pool_t *pool, const char *tuple, char 
 			*p = '\0';
 			*kid = s;
 			*key = p + 1;
-			*key_len = _oidc_strlen(*key);
+			*key_len = (int)_oidc_strlen(*key);
 		}
 	} else {
 		*kid = NULL;
 		*key = s;
-		*key_len = _oidc_strlen(*key);
+		*key_len = (int)_oidc_strlen(*key);
 	}
 
 	return rv;
@@ -544,7 +544,7 @@ const char *oidc_cfg_parse_action_on_error_refresh_as(apr_pool_t *pool, const ch
 const char *oidc_cfg_parse_passphrase(apr_pool_t *pool, const char *arg, char **passphrase) {
 	char **argv = NULL;
 	const char *result = NULL;
-	int arglen = _oidc_strlen(arg);
+	int arglen = (int)_oidc_strlen(arg);
 	/* Based on code from mod_session_crypto. */
 	if (arglen > 5 && _oidc_strncmp(arg, "exec:", 5) == 0) {
 		if (apr_tokenize_to_argv(arg + 5, &argv, pool) != APR_SUCCESS) {

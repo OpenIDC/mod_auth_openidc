@@ -202,7 +202,7 @@ apr_byte_t oidc_util_json_object_get_string_array(apr_pool_t *pool, const json_t
 	if (json != NULL) {
 		arr = json_object_get(json, name);
 		if ((arr != NULL) && (json_is_array(arr))) {
-			*value = apr_array_make(pool, json_array_size(arr), sizeof(const char *));
+			*value = apr_array_make(pool, (int)json_array_size(arr), sizeof(const char *));
 			for (size_t i = 0; i < json_array_size(arr); i++) {
 				v = json_array_get(arr, i);
 				APR_ARRAY_PUSH(*value, const char *) = apr_pstrdup(pool, json_string_value(v));

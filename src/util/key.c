@@ -55,12 +55,13 @@ apr_byte_t oidc_util_key_symmetric_create(request_rec *r, const char *client_sec
 
 		if (hash_algo == NULL) {
 			key = (const unsigned char *)client_secret;
-			key_len = _oidc_strlen(client_secret);
+			key_len = (unsigned int)_oidc_strlen(client_secret);
 		} else {
 			/* hash the client_secret first, this is OpenID Connect specific */
 			unsigned char *hashed = NULL;
 			if (oidc_jose_hash_bytes(r->pool, hash_algo, (const unsigned char *)client_secret,
-						 _oidc_strlen(client_secret), &hashed, &key_len, &err) == FALSE)
+						 (unsigned int)_oidc_strlen(client_secret), &hashed, &key_len,
+						 &err) == FALSE)
 				return FALSE;
 			key = hashed;
 		}

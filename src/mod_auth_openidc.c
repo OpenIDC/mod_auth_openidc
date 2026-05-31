@@ -75,7 +75,7 @@
  */
 static void oidc_scrub_request_headers(request_rec *r, const char *claim_prefix, apr_hash_t *scrub) {
 
-	const int prefix_len = claim_prefix ? _oidc_strlen(claim_prefix) : 0;
+	const int prefix_len = claim_prefix ? (int)_oidc_strlen(claim_prefix) : 0;
 
 	/* get an array representation of the incoming HTTP headers */
 	const apr_array_header_t *const h = apr_table_elts(r->headers_in);

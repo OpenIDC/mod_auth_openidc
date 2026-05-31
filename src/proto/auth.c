@@ -135,7 +135,7 @@ static apr_byte_t oidc_proto_endpoint_auth_client_secret_jwt(request_rec *r, con
 		return FALSE;
 
 	oidc_jwk_t *jwk = oidc_jwk_create_symmetric_key(r->pool, NULL, (const unsigned char *)client_secret,
-							_oidc_strlen(client_secret), FALSE, &err);
+							(unsigned int)_oidc_strlen(client_secret), FALSE, &err);
 	if (jwk == NULL) {
 		oidc_error(r, "parsing of client secret into JWK failed: %s", oidc_jose_e2s(r->pool, err));
 		oidc_jwt_destroy(jwt);

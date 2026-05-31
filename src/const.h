@@ -114,7 +114,7 @@ static inline apr_time_t _oidc_str_to_time(const char *s, const apr_time_t defau
 static inline int _oidc_str_to_int(const char *s, const int default_value) {
 	int v = default_value;
 	if (s)
-		v = strtol(s, NULL, 10);
+		v = (int)strtol(s, NULL, 10);
 	return v;
 }
 

@@ -499,8 +499,9 @@ OIDC_CFG_MEMBER_FUNC_TYPE_GET(x_forwarded_headers, oidc_hdr_x_forwarded_t, OIDC_
 
 #define OIDC_CHECK_X_FORWARDED_HDR_LOG_DISABLE "OIDC_CHECK_X_FORWARDED_HDR_LOG_DISABLE"
 
-static void oidc_check_x_forwarded_hdr(request_rec *r, const apr_byte_t x_forwarded_headers, const apr_byte_t hdr_type,
-				       const char *hdr_str, const char *(hdr_func)(const request_rec *r)) {
+static void oidc_check_x_forwarded_hdr(request_rec *r, const oidc_hdr_x_forwarded_t x_forwarded_headers,
+				       const oidc_hdr_x_forwarded_t hdr_type, const char *hdr_str,
+				       const char *(hdr_func)(const request_rec *r)) {
 	apr_byte_t suppress = oidc_util_spaced_string_contains(
 	    r->pool, apr_table_get(r->subprocess_env, OIDC_CHECK_X_FORWARDED_HDR_LOG_DISABLE), hdr_str);
 	if (hdr_func(r)) {

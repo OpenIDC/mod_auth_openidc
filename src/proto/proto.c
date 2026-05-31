@@ -106,7 +106,7 @@ apr_byte_t oidc_proto_flow_is_supported(apr_pool_t *pool, const char *flow) {
  * set the WWW-Authenticate response header according to https://tools.ietf.org/html/rfc6750#section-3
  */
 int oidc_proto_return_www_authenticate(request_rec *r, const char *error, const char *error_description) {
-	apr_byte_t accept_token_in = oidc_cfg_dir_oauth_accept_token_in_get(r);
+	apr_byte_t accept_token_in = (apr_byte_t)oidc_cfg_dir_oauth_accept_token_in_get(r);
 	char *hdr;
 	if (accept_token_in == OIDC_OAUTH_ACCEPT_TOKEN_IN_BASIC) {
 		hdr = apr_psprintf(r->pool, "%s", OIDC_PROTO_BASIC);

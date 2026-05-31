@@ -434,7 +434,7 @@ static void oidc_session_set_int(request_rec *r, oidc_session_t *z, const char *
  */
 static void oidc_session_set_timestamp(request_rec *r, oidc_session_t *z, const char *key, const apr_time_t timestamp) {
 	if (timestamp > -1)
-		oidc_session_set_int(r, z, key, apr_time_sec(timestamp));
+		oidc_session_set_int(r, z, key, (int)apr_time_sec(timestamp));
 }
 
 /*

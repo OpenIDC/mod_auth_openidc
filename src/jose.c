@@ -121,7 +121,7 @@ static int oidc_jose_util_get_b64encoded_certificate_data(apr_pool_t *p, const X
 		goto end;
 	};
 
-	rc = EVP_EncodeBlock((unsigned char *)*b64_encoded_certificate, data, len);
+	rc = EVP_EncodeBlock((unsigned char *)*b64_encoded_certificate, data, (int)len);
 
 end:
 	if (bio) {
@@ -377,7 +377,7 @@ oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, const json_t *json, oidc_jose_error
 	// set x5c array
 	v = json_object_get(json, OIDC_JOSE_JWK_X5C_STR);
 	if (v && json_is_array(v)) {
-		result->x5c = apr_array_make(pool, json_array_size(v), sizeof(const char *));
+		result->x5c = apr_array_make(pool, (int)json_array_size(v), sizeof(const char *));
 		for (int i = 0; i < json_array_size(v); i++) {
 			e = json_array_get(v, i);
 			if (json_is_string(e))
@@ -493,7 +493,7 @@ apr_byte_t oidc_jwks_parse_json(apr_pool_t *pool, const json_t *json, apr_array_
 		oidc_jose_error(err, "JWKS did not contain \"" OIDC_JOSE_JWKS_KEYS_STR "\" array");
 		return FALSE;
 	}
-	*jwk_list = apr_array_make(pool, json_array_size(keys), sizeof(const oidc_jwk_t *));
+	*jwk_list = apr_array_make(pool, (int)json_array_size(keys), sizeof(const oidc_jwk_t *));
 	for (int i = 0; i < json_array_size(keys); i++) {
 		const json_t *elem = json_array_get(keys, i);
 		if (elem == NULL)
@@ -938,13 +938,13 @@ apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json, apr_hash_t
 			(*plaintext)[content_len] = '\0';
 			cjose_get_dealloc()(decrypted);
 			if (plaintext_len)
-				*plaintext_len = content_len;
+				*plaintext_len = (int)content_len;
 		}
 		cjose_jwe_release(jwe);
 	} else if (import_must_succeed == FALSE) {
 		*plaintext = apr_pstrdup(pool, input_json);
 		if (plaintext_len)
-			*plaintext_len = _oidc_strlen(input_json);
+			*plaintext_len = (int)_oidc_strlen(input_json);
 	} else {
 		oidc_jose_error(err, "cjose_jwe_import failed: %s", oidc_cjose_e2s(pool, cjose_err));
 	}
@@ -1071,7 +1071,7 @@ static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input,
 			buf = tmp;
 		}
 		zlib.next_out = (Bytef *)(buf + zlib.total_out);
-		zlib.avail_out = (uInt)len - zlib.total_out;
+		zlib.avail_out = (uInt)(len - zlib.total_out);
 		status = inflate(&zlib, Z_SYNC_FLUSH);
 	}
 
@@ -1171,7 +1171,7 @@ apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json, oidc_jwt_t *
 	if (compress == TRUE) {
 		char *payload = NULL;
 		int payload_len = 0;
-		if (oidc_jose_uncompress(pool, (char *)plaintext, plaintext_len, &payload, &payload_len, err) ==
+		if (oidc_jose_uncompress(pool, (char *)plaintext, (int)plaintext_len, &payload, &payload_len, err) ==
 		    FALSE) {
 			oidc_jwt_destroy(jwt);
 			*j_jwt = NULL;
@@ -1238,13 +1238,13 @@ apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, const oidc_jwk_t *jw
 	char *s_payload = NULL;
 	int payload_len = 0;
 	if (compress == TRUE) {
-		if (oidc_jose_compress(pool, (char *)plaintext, _oidc_strlen(plaintext), &s_payload, &payload_len,
+		if (oidc_jose_compress(pool, (char *)plaintext, (int)_oidc_strlen(plaintext), &s_payload, &payload_len,
 				       err) == FALSE) {
 			return FALSE;
 		}
 	} else {
 		s_payload = plaintext;
-		payload_len = _oidc_strlen(plaintext);
+		payload_len = (int)_oidc_strlen(plaintext);
 		jwt->payload.value.str = plaintext;
 	}
 
@@ -1451,7 +1451,7 @@ apr_byte_t oidc_jose_hash_string(apr_pool_t *pool, const char *alg, const char *
 		return FALSE;
 	}
 
-	return oidc_jose_hash_bytes(pool, s_digest, (const unsigned char *)msg, _oidc_strlen(msg),
+	return oidc_jose_hash_bytes(pool, s_digest, (const unsigned char *)msg, (unsigned int)_oidc_strlen(msg),
 				    (unsigned char **)hash, hash_len, err);
 }
 
@@ -1573,7 +1573,7 @@ static apr_byte_t _oidc_jwk_rsa_key_to_jwk(apr_pool_t *pool, const EVP_PKEY *pke
 		goto end;
 	}
 
-	*fp_len = key_spec.nlen + key_spec.elen;
+	*fp_len = (int)(key_spec.nlen + key_spec.elen);
 	*fp = apr_pcalloc(pool, *fp_len);
 	_oidc_memcpy(*fp, key_spec.n, key_spec.nlen);
 	_oidc_memcpy(*fp + key_spec.nlen, key_spec.e, key_spec.elen);
@@ -1670,7 +1670,7 @@ static apr_byte_t _oidc_jwk_ec_key_to_jwk(apr_pool_t *pool, const EVP_PKEY *pkey
 	}
 
 	apr_uint32_t b = htonl(crv);
-	*fp_len = sizeof(b) + ec_keyspec.xlen + ec_keyspec.ylen;
+	*fp_len = (int)(sizeof(b) + ec_keyspec.xlen + ec_keyspec.ylen);
 	*fp = apr_pcalloc(pool, *fp_len);
 	_oidc_memcpy(*fp, &b, sizeof(b));
 	_oidc_memcpy(*fp + sizeof(b), ec_keyspec.x, ec_keyspec.xlen);
@@ -1917,7 +1917,7 @@ static apr_byte_t _oidc_jwk_parse_x5c(apr_pool_t *pool, const json_t *json, cjos
 	const int chunk = 75;
 	int i = 0;
 	char *s = apr_psprintf(pool, "%s\n", OIDC_JOSE_CERT_BEGIN);
-	const int n = _oidc_strlen(s_x5c);
+	const int n = (int)_oidc_strlen(s_x5c);
 	while (i < n) {
 		s = apr_psprintf(pool, "%s%s\n", s, apr_pstrmemdup(pool, s_x5c + i, (i + chunk) > n ? (n - i) : chunk));
 		i += chunk;
@@ -1925,7 +1925,7 @@ static apr_byte_t _oidc_jwk_parse_x5c(apr_pool_t *pool, const json_t *json, cjos
 	s = apr_psprintf(pool, "%s%s\n", s, OIDC_JOSE_CERT_END);
 
 	/* put it in BIO memory */
-	BIO *input = BIO_new_mem_buf(s, _oidc_strlen(s));
+	BIO *input = BIO_new_mem_buf(s, (int)_oidc_strlen(s));
 	if (input == NULL) {
 		oidc_jose_error_openssl(err, "BIO_new_mem_buf");
 		return FALSE;

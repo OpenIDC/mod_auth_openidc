@@ -376,7 +376,7 @@ static inline char *_oidc_metrics_storage_get(server_rec *s) {
 static inline void _oidc_metrics_storage_set(server_rec *s, const char *value) {
 	char *p = apr_shm_baseaddr_get(_oidc_metrics_cache);
 	if (value) {
-		int n = _oidc_strlen(value) + 1;
+		int n = (int)_oidc_strlen(value) + 1;
 		if (n > _oidc_metrics_shm_size(s))
 			oidc_serror(s,
 				    "json value too large: set or increase system environment variable %s to a value "
@@ -765,7 +765,7 @@ static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void 
 	apr_interval_time_t tick = apr_time_from_msec(OIDC_METRICS_POLL_INTERVAL);
 	if (tick > interval)
 		tick = interval;
-	int n = interval / tick;
+	int n = (int)(interval / tick);
 
 	/* see if we are asked to exit */
 	while (apr_atomic_read32(&_oidc_metrics_thread_exit) == 0) {
