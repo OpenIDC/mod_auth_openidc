@@ -1060,6 +1060,98 @@ START_TEST(test_handle_userinfo_pass_as_signed_jwt_without_private_keys) {
 }
 END_TEST
 
+START_TEST(test_handle_userinfo_pass_as_signed_jwt_with_private_keys) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* load test/private.pem so cfg->private_keys holds an RSA signing key with kid "rsa-1" */
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *key_cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	const char *key_err = oidc_cmd_private_keys_set(
+	    key_cmd, NULL, apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir)));
+	ck_assert_msg(key_err == NULL, "could not load private key: %s", key_err);
+
+	json_t *claims = json_pack("{s:s}", "sub", "alice");
+	oidc_session_set_userinfo_claims(r, session, claims);
+
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPassUserInfoAs);
+	ck_assert_ptr_null(oidc_cmd_dir_pass_userinfo_as_set(cmd, dir_cfg, apr_pstrdup(r->pool, "signed_jwt")));
+
+	/* with a private signing key configured, the claims are signed and passed as a compact JWT */
+	oidc_userinfo_pass_as(r, c, session, OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
+
+	const char *hdr = apr_table_get(r->headers_in, OIDC_DEFAULT_HEADER_PREFIX OIDC_APP_INFO_SIGNED_JWT);
+	ck_assert_ptr_nonnull(hdr);
+
+	/* a compact JWS has exactly two '.' separators (header.payload.signature) */
+	const char *dot1 = _oidc_strstr(hdr, ".");
+	ck_assert_ptr_nonnull(dot1);
+	const char *dot2 = _oidc_strstr(dot1 + 1, ".");
+	ck_assert_ptr_nonnull(dot2);
+
+	/* decode the protected header and confirm it was signed with the configured RSA key */
+	char *dec_hdr = NULL;
+	ck_assert_int_gt(oidc_util_base64url_decode(r->pool, &dec_hdr, apr_pstrmemdup(r->pool, hdr, dot1 - hdr)), 0);
+	ck_assert_ptr_nonnull(_oidc_strstr(dec_hdr, "\"alg\":\"RS256\""));
+	ck_assert_ptr_nonnull(_oidc_strstr(dec_hdr, "\"kid\":\"rsa-1\""));
+
+	/* decode the payload and confirm the userinfo claim plus the synthesized iss/exp claims */
+	char *dec_pl = NULL;
+	ck_assert_int_gt(
+	    oidc_util_base64url_decode(r->pool, &dec_pl, apr_pstrmemdup(r->pool, dot1 + 1, dot2 - (dot1 + 1))), 0);
+	ck_assert_ptr_nonnull(_oidc_strstr(dec_pl, "\"sub\":\"alice\""));
+	ck_assert_ptr_nonnull(_oidc_strstr(dec_pl, "\"iss\":\"https://idp.example.com\""));
+	ck_assert_ptr_nonnull(_oidc_strstr(dec_pl, "\"exp\""));
+
+	json_decref(claims);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_userinfo_pass_as_signed_jwt_cached) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *key_cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	const char *key_err = oidc_cmd_private_keys_set(
+	    key_cmd, NULL, apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir)));
+	ck_assert_msg(key_err == NULL, "could not load private key: %s", key_err);
+
+	json_t *claims = json_pack("{s:s}", "sub", "alice");
+	oidc_session_set_userinfo_claims(r, session, claims);
+
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPassUserInfoAs);
+	ck_assert_ptr_null(oidc_cmd_dir_pass_userinfo_as_set(cmd, dir_cfg, apr_pstrdup(r->pool, "signed_jwt")));
+
+	/* a non-negative cache TTL makes the signed JWT eligible for caching; "0" derives the
+	 * cache expiry from the JWT "exp" claim */
+	apr_table_set(r->subprocess_env, "OIDC_USERINFO_SIGNED_JWT_CACHE_TTL", "0");
+
+	/* first pass: cache miss => sign + serialize + store in the cache */
+	oidc_userinfo_pass_as(r, c, session, OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
+	const char *first = apr_table_get(r->headers_in, OIDC_DEFAULT_HEADER_PREFIX OIDC_APP_INFO_SIGNED_JWT);
+	ck_assert_ptr_nonnull(first);
+	first = apr_pstrdup(r->pool, first);
+
+	/* second pass with identical claims: cache hit => the exact same serialized JWT is returned */
+	apr_table_unset(r->headers_in, OIDC_DEFAULT_HEADER_PREFIX OIDC_APP_INFO_SIGNED_JWT);
+	oidc_userinfo_pass_as(r, c, session, OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
+	const char *second = apr_table_get(r->headers_in, OIDC_DEFAULT_HEADER_PREFIX OIDC_APP_INFO_SIGNED_JWT);
+	ck_assert_ptr_nonnull(second);
+	ck_assert_str_eq(first, second);
+
+	json_decref(claims);
+	oidc_session_free(r, session);
+}
+END_TEST
+
 START_TEST(test_handle_userinfo_pass_as_json) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -3329,6 +3421,8 @@ int main(void) {
 	tcase_add_test(userinfo, test_handle_userinfo_pass_as_no_claims);
 	tcase_add_test(userinfo, test_handle_userinfo_pass_as_jwt);
 	tcase_add_test(userinfo, test_handle_userinfo_pass_as_signed_jwt_without_private_keys);
+	tcase_add_test(userinfo, test_handle_userinfo_pass_as_signed_jwt_with_private_keys);
+	tcase_add_test(userinfo, test_handle_userinfo_pass_as_signed_jwt_cached);
 	tcase_add_test(userinfo, test_handle_userinfo_pass_as_json);
 
 	TCase *refresh = tcase_create("refresh");
