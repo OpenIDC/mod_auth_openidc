@@ -809,7 +809,7 @@ static apr_byte_t oidc_jose_parse_payload(apr_pool_t *pool, const char *s_payloa
 
 	/* check that we've actually got a JSON value back */
 	if (payload->value.json == NULL) {
-		oidc_jose_error(err, "JSON parsing (json_loads) failed: %s (%s)", json_error.text, s_payload);
+		oidc_jose_error(err, "JSON parsing (json_loads) failed: %s (%s)", json_error.text, payload->value.str);
 		return FALSE;
 	}
 
