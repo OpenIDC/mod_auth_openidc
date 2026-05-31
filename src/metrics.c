@@ -45,7 +45,6 @@
 #include "util/util.h"
 #include "metrics.h"
 #include <limits.h>
-#include <unistd.h>
 #include <apr_atomic.h>
 #include <apr_shm.h>
 #include <apr_lib.h>
