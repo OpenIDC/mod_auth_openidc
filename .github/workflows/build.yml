@@ -65,3 +65,51 @@ jobs:
           test/coverage-report
           test/coverage.info
         if-no-files-found: warn
+
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Dependencies
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y apache2-dev libcjose-dev libssl-dev check pkg-config
+        sudo apt-get install -y libjansson-dev libcurl4-openssl-dev libhiredis-dev libpcre2-dev libjq-dev check
+        sudo apt-get install -y clang
+    - name: Configure
+      run: |
+        ./autogen.sh
+        ./configure --with-jq
+    - name: Make
+      run: make
+    - name: Build fuzz targets (clang + ASan/UBSan)
+      run: test/fuzz/build.sh
+    - name: Replay seed corpora under sanitizers
+      run: |
+        cd test/fuzz
+        for t in base64 url jwt json; do
+          echo "== replay fuzz_$t =="
+          ./build/fuzz_$t corpus/$t/*
+        done
+        # the curated open-redirect payloads, one libFuzzer input per file
+        tmp=$(mktemp -d); i=0
+        while IFS= read -r line; do printf '%s' "$line" > "$tmp/p$i"; i=$((i + 1)); done \
+          < ../open-redirect-payload-list.txt
+        ./build/fuzz_url "$tmp"/*
+    - name: Short fuzzing run
+      run: |
+        cd test/fuzz
+        for t in base64 url jwt json; do
+          echo "== fuzz_$t =="
+          ./build/fuzz_$t -max_total_time=30 -print_final_stats=1 corpus/$t
+        done
+    - name: Upload crashes
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: fuzz-crashes
+        path: |
+          test/fuzz/crash-*
+          test/fuzz/oom-*
+          test/fuzz/timeout-*
+        if-no-files-found: ignore

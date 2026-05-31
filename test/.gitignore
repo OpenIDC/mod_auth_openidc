@@ -27,3 +27,23 @@
 /test_oauth
 /mod_auth_openidc-*-coverage.info
 /mod_auth_openidc-*-coverage/
+
+# fuzz targets: ignore built binaries and the fuzz/ build artifacts, but keep
+# the sources, corpus, scripts and README under fuzz/
+/fuzz_base64
+/fuzz_url
+/fuzz_jwt
+/fuzz_json
+/fuzz/*.o
+/fuzz/.deps/
+/fuzz/.dirstamp
+/fuzz/*.log
+/fuzz/*.trs
+/fuzz/build/
+/fuzz/crash-*
+/fuzz/oom-*
+/fuzz/timeout-*
+/fuzz/leak-*
+# inputs libFuzzer discovers and writes into the corpus dirs during a run are
+# named by their SHA1; keep the curated (human-named) seeds, ignore the rest
+/fuzz/corpus/*/[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*
