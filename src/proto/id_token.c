@@ -130,7 +130,7 @@ static const char *oidc_proto_idtoken_aud_resolve(const oidc_provider_t *provide
 /*
  * validate a single-valued "aud" claim against either the client_id or the configured aud-values list
  */
-static apr_byte_t oidc_proto_idtoken_validate_aud_string(request_rec *r, oidc_provider_t *provider,
+static apr_byte_t oidc_proto_idtoken_validate_aud_string(request_rec *r, const oidc_provider_t *provider,
 							 const apr_array_header_t *arr, const char *aud_value) {
 
 	if (arr == NULL) {
@@ -155,7 +155,7 @@ static apr_byte_t oidc_proto_idtoken_validate_aud_string(request_rec *r, oidc_pr
 /*
  * validate a multi-valued "aud" claim against either the client_id or the configured aud-values list
  */
-static apr_byte_t oidc_proto_idtoken_validate_aud_array(request_rec *r, oidc_provider_t *provider,
+static apr_byte_t oidc_proto_idtoken_validate_aud_array(request_rec *r, const oidc_provider_t *provider,
 							const apr_array_header_t *arr, const json_t *aud,
 							const char *azp) {
 	const char *s_aud = NULL;

@@ -76,7 +76,7 @@ end:
 /*
  * generate a DPoP proof for the specified URL/method/access_token
  */
-apr_byte_t oidc_proto_dpop_create(request_rec *r, oidc_cfg_t *cfg, const char *url, const char *method,
+apr_byte_t oidc_proto_dpop_create(request_rec *r, const oidc_cfg_t *cfg, const char *url, const char *method,
 				  const char *access_token, const char *nonce, char **dpop) {
 	apr_byte_t rv = FALSE;
 	oidc_jwt_t *jwt = NULL;

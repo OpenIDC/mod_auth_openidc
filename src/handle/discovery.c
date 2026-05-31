@@ -74,7 +74,7 @@ apr_byte_t oidc_is_discovery_response(request_rec *r, oidc_cfg_t *cfg) {
 	       oidc_util_url_has_parameter(r, OIDC_DISC_USER_PARAM);
 }
 
-static const char *oidc_discovery_csrf_cookie_samesite(const request_rec *r, oidc_cfg_t *c) {
+static const char *oidc_discovery_csrf_cookie_samesite(const request_rec *r, const oidc_cfg_t *c) {
 	const char *rv = NULL;
 	switch (oidc_cfg_cookie_same_site_discovery_csrf_get(c)) {
 	case OIDC_SAMESITE_COOKIE_STRICT:
@@ -301,7 +301,7 @@ static int oidc_discovery_target_link_uri_match(request_rec *r, oidc_cfg_t *cfg,
  * client registration allowed), FALSE for 3rd-party initiated SSO or when
  * the CSRF check fails
  */
-static apr_byte_t oidc_discovery_response_csrf_check(request_rec *r, oidc_cfg_t *c) {
+static apr_byte_t oidc_discovery_response_csrf_check(request_rec *r, const oidc_cfg_t *c) {
 
 	const char *csrf_cookie = oidc_http_get_cookie(r, OIDC_CSRF_NAME);
 	char *csrf_query = NULL;

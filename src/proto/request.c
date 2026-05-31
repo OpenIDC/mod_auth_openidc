@@ -78,7 +78,7 @@ static void oidc_proto_request_auth_params_add(request_rec *r, apr_table_t *para
 /*
  * send a Pushed Authorization Request (PAR) to the Provider
  */
-static int oidc_proto_request_auth_push(request_rec *r, struct oidc_provider_t *provider, apr_table_t *params) {
+static int oidc_proto_request_auth_push(request_rec *r, const struct oidc_provider_t *provider, apr_table_t *params) {
 	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	char *response = NULL;
 	char *basic_auth = NULL;
@@ -298,7 +298,7 @@ static apr_byte_t oidc_request_uri_encryption_jwk_by_type(request_rec *r, oidc_c
 	/* walk the set of published keys to find the first that has a matching type */
 	for (int i = 0; i < json_array_size(keys); i++) {
 
-		json_t *elem = json_array_get(keys, i);
+		const json_t *elem = json_array_get(keys, i);
 
 		const char *use = json_string_value(json_object_get(elem, OIDC_JOSE_JWK_USE_STR));
 		if ((use != NULL) && (_oidc_strcmp(use, OIDC_JOSE_JWK_ENC_STR) != 0)) {
@@ -404,8 +404,9 @@ static oidc_jwk_t *oidc_request_uri_request_object_signing_jwk_get(request_rec *
 /*
  * sign the request object in place
  */
-static apr_byte_t oidc_request_uri_request_object_sign(request_rec *r, oidc_cfg_t *cfg,
-						       struct oidc_provider_t *provider, oidc_jwt_t *request_object) {
+static apr_byte_t oidc_request_uri_request_object_sign(request_rec *r, const oidc_cfg_t *cfg,
+						       const struct oidc_provider_t *provider,
+						       oidc_jwt_t *request_object) {
 	oidc_jose_error_t err;
 	int jwk_needs_destroy = 0;
 
@@ -431,7 +432,7 @@ static apr_byte_t oidc_request_uri_request_object_sign(request_rec *r, oidc_cfg_
  * references the signing algorithm rather than the encryption algorithm
  */
 static oidc_jwk_t *oidc_request_uri_request_object_encryption_jwk_get(request_rec *r, oidc_cfg_t *cfg,
-								      struct oidc_provider_t *provider,
+								      const struct oidc_provider_t *provider,
 								      const oidc_jwt_t *jwe, const char *signing_alg) {
 	oidc_jwk_t *ejwk = NULL;
 

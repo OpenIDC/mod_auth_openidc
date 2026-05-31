@@ -64,7 +64,7 @@ apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z, apr_byte_t first
 apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z);
 apr_byte_t oidc_session_free(request_rec *r, oidc_session_t *z);
 apr_byte_t oidc_session_extract(request_rec *r, oidc_session_t *z);
-apr_byte_t oidc_session_load_cache_by_uuid(request_rec *r, oidc_cfg_t *c, const char *uuid, oidc_session_t *z);
+apr_byte_t oidc_session_load_cache_by_uuid(request_rec *r, const oidc_cfg_t *c, const char *uuid, oidc_session_t *z);
 void oidc_session_id_new(request_rec *r, oidc_session_t *z);
 
 void oidc_session_set_userinfo_jwt(request_rec *r, oidc_session_t *z, const char *userinfo_jwt);

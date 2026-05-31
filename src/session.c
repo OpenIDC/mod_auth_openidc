@@ -172,7 +172,7 @@ static apr_byte_t oidc_session_set(request_rec *r, oidc_session_t *z, const char
 /*
  * load the session from the session cache, indexed by its uuid session id
  */
-apr_byte_t oidc_session_load_cache_by_uuid(request_rec *r, oidc_cfg_t *c, const char *uuid, oidc_session_t *z) {
+apr_byte_t oidc_session_load_cache_by_uuid(request_rec *r, const oidc_cfg_t *c, const char *uuid, oidc_session_t *z) {
 	char *stored_uuid = NULL;
 	char *s_json = NULL;
 	apr_byte_t rc = FALSE;
@@ -239,7 +239,7 @@ static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 	return rc;
 }
 
-static const char *oidc_session_cookie_samesite(const request_rec *r, struct oidc_cfg_t *c, int first_time) {
+static const char *oidc_session_cookie_samesite(const request_rec *r, const struct oidc_cfg_t *c, int first_time) {
 	const char *rv = NULL;
 	switch (oidc_cfg_cookie_same_site_session_get(c)) {
 	case OIDC_SAMESITE_COOKIE_STRICT:
@@ -304,7 +304,7 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, apr
 /*
  * load the session from a self-contained client-side cookie
  */
-static apr_byte_t oidc_session_load_cookie(request_rec *r, oidc_cfg_t *c, oidc_session_t *z) {
+static apr_byte_t oidc_session_load_cookie(request_rec *r, const oidc_cfg_t *c, oidc_session_t *z) {
 	const char *cookieValue =
 	    oidc_http_get_chunked_cookie(r, oidc_cfg_dir_cookie_get(r), oidc_cfg_session_cookie_chunk_size_get(c));
 	if ((cookieValue != NULL) && (oidc_session_decode(r, c, z, cookieValue, TRUE) == FALSE))
@@ -625,7 +625,7 @@ static void oidc_session_jq_filter_apply(request_rec *r, const oidc_cfg_t *c, co
  */
 static void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, const char *session_key,
 					     json_t *claims) {
-	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	const oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	json_t *dst = NULL;
 	void *iter = NULL;
 	int warn_claim_size = oidc_session_warn_claim_size_get(r);

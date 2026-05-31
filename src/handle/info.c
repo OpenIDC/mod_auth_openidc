@@ -88,7 +88,7 @@ static int oidc_info_refresh_access_token(request_rec *r, oidc_cfg_t *c, oidc_se
 /*
  * include the access token and its type in the session info
  */
-static void oidc_info_add_access_token(request_rec *r, oidc_session_t *session, json_t *json) {
+static void oidc_info_add_access_token(request_rec *r, const oidc_session_t *session, json_t *json) {
 	const char *access_token = oidc_session_get_access_token(r, session);
 	if (access_token != NULL)
 		json_object_set_new(json, OIDC_HOOK_INFO_ACCES_TOKEN, json_string(access_token));

@@ -99,8 +99,9 @@ static apr_byte_t oidc_proto_token_endpoint_call(request_rec *r, oidc_cfg_t *cfg
 /*
  * set up the DPoP request header and response header tracking for the initial token endpoint call
  */
-static apr_byte_t oidc_proto_token_endpoint_dpop_prepare(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
-							 apr_hash_t **response_hdrs, char **dpop) {
+static apr_byte_t oidc_proto_token_endpoint_dpop_prepare(request_rec *r, oidc_cfg_t *cfg,
+							 const oidc_provider_t *provider, apr_hash_t **response_hdrs,
+							 char **dpop) {
 
 	if (oidc_proto_profile_dpop_mode_get(provider) == OIDC_DPOP_MODE_OFF)
 		return TRUE;
@@ -122,7 +123,7 @@ static apr_byte_t oidc_proto_token_endpoint_dpop_prepare(request_rec *r, oidc_cf
  * retry the token endpoint call with a new DPoP header that carries the server-provided nonce;
  * on success, replaces *j_result with the freshly decoded response
  */
-static apr_byte_t oidc_proto_token_endpoint_dpop_retry(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
+static apr_byte_t oidc_proto_token_endpoint_dpop_retry(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
 						       const apr_table_t *params, const char *basic_auth,
 						       const char *bearer_auth, apr_hash_t *response_hdrs,
 						       char **response, json_t **j_result) {
@@ -146,7 +147,7 @@ static apr_byte_t oidc_proto_token_endpoint_dpop_retry(request_rec *r, oidc_cfg_
 /*
  * parse a successful token endpoint response and validate the returned token type against the DPoP mode
  */
-static apr_byte_t oidc_proto_token_endpoint_response_parse(request_rec *r, oidc_provider_t *provider,
+static apr_byte_t oidc_proto_token_endpoint_response_parse(request_rec *r, const oidc_provider_t *provider,
 							   const json_t *j_result, char **id_token, char **access_token,
 							   char **token_type, int *expires_in, char **refresh_token,
 							   char **scope) {

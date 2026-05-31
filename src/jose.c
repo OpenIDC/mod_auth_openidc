@@ -495,7 +495,7 @@ apr_byte_t oidc_jwks_parse_json(apr_pool_t *pool, const json_t *json, apr_array_
 	}
 	*jwk_list = apr_array_make(pool, json_array_size(keys), sizeof(const oidc_jwk_t *));
 	for (int i = 0; i < json_array_size(keys); i++) {
-		json_t *elem = json_array_get(keys, i);
+		const json_t *elem = json_array_get(keys, i);
 		if (elem == NULL)
 			continue;
 		oidc_jwk_t *jwk;

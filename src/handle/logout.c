@@ -222,7 +222,7 @@ static int oidc_logout_request_front_channel(request_rec *r, oidc_cfg_t *c, cons
 
 	if (no_session_provided) {
 		char *sid = NULL;
-		oidc_provider_t *provider = oidc_logout_request_front_channel_provider(r, c, &sid);
+		const oidc_provider_t *provider = oidc_logout_request_front_channel_provider(r, c, &sid);
 		if (provider != NULL)
 			oidc_logout_cleanup_by_sid(r, sid, c, provider, revoke_tokens);
 		else if (sid != NULL)
@@ -392,7 +392,7 @@ static int oidc_logout_backchannel_check_jti_replay(request_rec *r, const oidc_p
 	return OK;
 }
 
-static int oidc_logout_backchannel_validate_claims(request_rec *r, oidc_provider_t *provider, oidc_jwt_t *jwt,
+static int oidc_logout_backchannel_validate_claims(request_rec *r, const oidc_provider_t *provider, oidc_jwt_t *jwt,
 						   char **sid) {
 	char *nonce = NULL;
 	const json_t *events = NULL;

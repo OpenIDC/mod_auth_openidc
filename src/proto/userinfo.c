@@ -319,7 +319,7 @@ static apr_byte_t oidc_proto_userinfo_request_dpop_init(request_rec *r, oidc_cfg
 /*
  * call the userinfo endpoint and decode the response as either a JSON object or a JWT
  */
-static apr_byte_t oidc_proto_userinfo_response_resolve(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
+static apr_byte_t oidc_proto_userinfo_response_resolve(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
 						       const char *access_token, const char *dpop,
 						       apr_hash_t *response_hdrs, char **s_userinfo,
 						       long *response_code, json_t **userinfo_claims,

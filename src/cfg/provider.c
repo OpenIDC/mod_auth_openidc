@@ -519,7 +519,7 @@ apr_array_header_t *oidc_cfg_provider_signed_jwks_uri_keys_get(const oidc_provid
 	return provider->jwks_uri.jwk_list;
 }
 
-const char *oidc_cfg_provider_signed_jwks_uri_keys_set(apr_pool_t *pool, oidc_provider_t *provider, json_t *json,
+const char *oidc_cfg_provider_signed_jwks_uri_keys_set(apr_pool_t *pool, oidc_provider_t *provider, const json_t *json,
 						       apr_array_header_t *def_val) {
 	const char *rv = NULL;
 	oidc_jose_error_t err;

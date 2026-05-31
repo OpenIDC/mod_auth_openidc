@@ -219,8 +219,8 @@ apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg, const 
  * see if we have client metadata and check its validity
  * if not, use OpenID Connect Client Registration to get it, check it and store it
  */
-apr_byte_t oidc_metadata_client_get(request_rec *r, oidc_cfg_t *cfg, const char *issuer, oidc_provider_t *provider,
-				    json_t **j_client) {
+apr_byte_t oidc_metadata_client_get(request_rec *r, oidc_cfg_t *cfg, const char *issuer,
+				    const oidc_provider_t *provider, json_t **j_client) {
 
 	/* get the full file path to the client metadata for this issuer */
 	const char *client_path = oidc_metadata_client_file_path(r, issuer);

@@ -836,7 +836,7 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 	struct curl_slist *h_list = NULL;
 	long http_code = 0;
 	apr_byte_t rv = FALSE;
-	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	const oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
 	/* do some logging about the inputs */
 	oidc_debug(r,
@@ -1097,7 +1097,7 @@ static const char *oidc_http_set_cookie_append_value(request_rec *r) {
 void oidc_http_set_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires,
 			  const char *ext) {
 
-	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	const oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	char *headerString = NULL;
 	char *expiresString = NULL;
 	const char *appendString = NULL;

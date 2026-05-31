@@ -139,7 +139,7 @@ apr_byte_t oidc_proto_discovery_account_based(request_rec *r, oidc_cfg_t *cfg, c
 apr_byte_t oidc_proto_discovery_url_based(request_rec *r, oidc_cfg_t *cfg, const char *url, char **issuer);
 
 // dpop.c
-apr_byte_t oidc_proto_dpop_create(request_rec *r, oidc_cfg_t *cfg, const char *url, const char *method,
+apr_byte_t oidc_proto_dpop_create(request_rec *r, const oidc_cfg_t *cfg, const char *url, const char *method,
 				  const char *access_token, const char *nonce, char **dpop);
 apr_byte_t oidc_proto_dpop_use_nonce(request_rec *r, oidc_cfg_t *cfg, const json_t *j_result, apr_hash_t *response_hdrs,
 				     const char *url, const char *method, const char *access_token, char **dpop);
@@ -205,13 +205,13 @@ apr_byte_t oidc_proto_response_is_redirect(request_rec *r, oidc_cfg_t *cfg);
 apr_byte_t oidc_proto_response_code_idtoken_token(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,
 						  oidc_provider_t *provider, apr_table_t *params,
 						  const char *response_mode, oidc_jwt_t **jwt);
-apr_byte_t oidc_proto_response_code_idtoken(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,
+apr_byte_t oidc_proto_response_code_idtoken(request_rec *r, oidc_cfg_t *c, const oidc_proto_state_t *proto_state,
 					    oidc_provider_t *provider, apr_table_t *params, const char *response_mode,
 					    oidc_jwt_t **jwt);
-apr_byte_t oidc_proto_response_code_token(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,
+apr_byte_t oidc_proto_response_code_token(request_rec *r, oidc_cfg_t *c, const oidc_proto_state_t *proto_state,
 					  oidc_provider_t *provider, apr_table_t *params, const char *response_mode,
 					  oidc_jwt_t **jwt);
-apr_byte_t oidc_proto_response_code(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,
+apr_byte_t oidc_proto_response_code(request_rec *r, oidc_cfg_t *c, const oidc_proto_state_t *proto_state,
 				    oidc_provider_t *provider, apr_table_t *params, const char *response_mode,
 				    oidc_jwt_t **jwt);
 apr_byte_t oidc_proto_response_idtoken_token(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,

@@ -551,7 +551,7 @@ static apr_byte_t oidc_check_max_session_duration(request_rec *r, oidc_cfg_t *cf
  * it also handles the case that a cookie is unexpectedly shared across multiple hosts in
  * name-based virtual hosting even though the OP(s) would be the same
  */
-apr_byte_t oidc_check_cookie_domain(request_rec *r, const oidc_cfg_t *cfg, oidc_session_t *session) {
+apr_byte_t oidc_check_cookie_domain(request_rec *r, const oidc_cfg_t *cfg, const oidc_session_t *session) {
 	const char *c_cookie_domain = oidc_cfg_cookie_domain_get(cfg)
 					  ? oidc_cfg_cookie_domain_get(cfg)
 					  : oidc_util_url_cur_host(r, oidc_cfg_x_forwarded_headers_get(cfg));
@@ -570,7 +570,7 @@ apr_byte_t oidc_check_cookie_domain(request_rec *r, const oidc_cfg_t *cfg, oidc_
 /*
  * get a handle to the provider configuration via the "issuer" stored in the session
  */
-apr_byte_t oidc_get_provider_from_session(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
+apr_byte_t oidc_get_provider_from_session(request_rec *r, oidc_cfg_t *c, const oidc_session_t *session,
 					  oidc_provider_t **provider) {
 
 	oidc_debug(r, "enter");
@@ -597,7 +597,7 @@ apr_byte_t oidc_get_provider_from_session(request_rec *r, oidc_cfg_t *c, oidc_se
 /*
  * copy the claims and id_token from the session to the request state
  */
-static void oidc_copy_tokens_to_request_state(request_rec *r, oidc_session_t *session) {
+static void oidc_copy_tokens_to_request_state(request_rec *r, const oidc_session_t *session) {
 
 	json_t *id_token = oidc_session_get_idtoken_claims(r, session);
 	json_t *claims = oidc_session_get_userinfo_claims(r, session);
@@ -698,7 +698,7 @@ apr_byte_t oidc_session_pass_tokens(request_rec *r, const oidc_cfg_t *cfg, oidc_
 	return TRUE;
 }
 
-static void oidc_idtoken_pass_as(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session,
+static void oidc_idtoken_pass_as(request_rec *r, const oidc_cfg_t *cfg, const oidc_session_t *session,
 				 oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding) {
 
 	if (oidc_cfg_dir_pass_idtoken_as_get(r) & OIDC_PASS_IDTOKEN_OFF)
@@ -962,7 +962,7 @@ static apr_byte_t oidc_validate_redirect_url_chars(request_rec *r, const char *u
 /*
  * avoid cross site request forgery on the redirect_to_url
  */
-apr_byte_t oidc_validate_redirect_url(request_rec *r, oidc_cfg_t *c, const char *redirect_to_url,
+apr_byte_t oidc_validate_redirect_url(request_rec *r, const oidc_cfg_t *c, const char *redirect_to_url,
 				      apr_byte_t restrict_to_host, char **err_str, char **err_desc) {
 	apr_uri_t uri;
 	if (redirect_to_url == NULL)

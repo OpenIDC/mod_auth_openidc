@@ -126,7 +126,7 @@ char *oidc_util_url_cur(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_heade
 apr_byte_t oidc_util_url_cur_is_secure(const request_rec *r, const oidc_cfg_t *c);
 apr_byte_t oidc_util_url_cur_matches(request_rec *r, const char *url);
 const char *oidc_util_url_abs(request_rec *r, const oidc_cfg_t *cfg, const char *url);
-const char *oidc_util_url_redirect_uri(request_rec *r, oidc_cfg_t *c);
+const char *oidc_util_url_redirect_uri(request_rec *r, const oidc_cfg_t *c);
 apr_byte_t oidc_util_url_matches_redirect_uri(request_rec *r, oidc_cfg_t *cfg);
 apr_byte_t oidc_util_url_has_parameter(request_rec *r, const char *param);
 apr_byte_t oidc_util_url_parameter_get(request_rec *r, char *name, char **value);

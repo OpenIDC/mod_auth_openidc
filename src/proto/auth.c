@@ -218,7 +218,7 @@ static const char *oidc_proto_endpoint_auth_default_alg(const oidc_jwk_t *jwk) {
  * create a JWT assertion signed with the configured private key and add it to the HTTP request as endpoint
  * authentication
  */
-static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r, oidc_cfg_t *cfg,
+static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r, const oidc_cfg_t *cfg,
 							   const char *token_endpoint_auth_alg, const char *client_id,
 							   const apr_array_header_t *client_keys, const char *audience,
 							   apr_table_t *params) {

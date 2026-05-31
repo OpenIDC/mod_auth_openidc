@@ -118,7 +118,7 @@ typedef struct oidc_state_cookies_t {
 /*
  * delete superfluous state cookies i.e. exceeding the maximum, starting with the oldest ones
  */
-static int oidc_state_cookies_delete_oldest(request_rec *r, oidc_cfg_t *c, int number_of_valid_state_cookies,
+static int oidc_state_cookies_delete_oldest(request_rec *r, const oidc_cfg_t *c, int number_of_valid_state_cookies,
 					    int max_number_of_state_cookies, oidc_state_cookies_t *first) {
 	oidc_state_cookies_t *cur = NULL;
 	oidc_state_cookies_t *prev = NULL;
@@ -174,7 +174,7 @@ static void oidc_state_cookies_list_append(request_rec *r, oidc_state_cookies_t 
  * process a single state cookie: skip if it's the current one, delete if expired or undecodable,
  * otherwise append it to the list of valid cookies; returns 1 if the cookie was kept
  */
-static int oidc_state_cookies_process_one(request_rec *r, oidc_cfg_t *c, char *cookieName, const char *value,
+static int oidc_state_cookies_process_one(request_rec *r, const oidc_cfg_t *c, char *cookieName, const char *value,
 					  const char *currentCookieName, oidc_state_cookies_t **first,
 					  oidc_state_cookies_t **last) {
 	/* never touch the cookie associated with the request currently being processed */

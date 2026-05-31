@@ -81,7 +81,7 @@ static int oidc_response_authorization_error(request_rec *r, oidc_cfg_t *c, cons
 }
 
 /* handle the browser back on an authorization response */
-static apr_byte_t oidc_response_browser_back(request_rec *r, const char *r_state, oidc_session_t *session) {
+static apr_byte_t oidc_response_browser_back(request_rec *r, const char *r_state, const oidc_session_t *session) {
 	const char *s_state = NULL;
 	const char *o_url = NULL;
 
@@ -220,8 +220,8 @@ char *oidc_response_make_sid_iss_unique(request_rec *r, const char *sid, const c
 /*
  * store resolved information in the session
  */
-apr_byte_t oidc_response_save_in_session(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
-					 oidc_provider_t *provider, const char *remoteUser, const char *id_token,
+apr_byte_t oidc_response_save_in_session(request_rec *r, const oidc_cfg_t *c, oidc_session_t *session,
+					 const oidc_provider_t *provider, const char *remoteUser, const char *id_token,
 					 oidc_jwt_t *id_token_jwt, const char *s_userinfo_claims,
 					 json_t *userinfo_claims, const char *access_token,
 					 const char *access_token_type, const int expires_in, const char *refresh_token,
@@ -533,7 +533,7 @@ static char *_oidc_response_post_restore_template_contents = NULL;
 /*
  * handle the case where the state parameter from the authorization response could not be matched
  */
-static int oidc_response_handle_state_mismatch(request_rec *r, oidc_cfg_t *c) {
+static int oidc_response_handle_state_mismatch(request_rec *r, const oidc_cfg_t *c) {
 	if (oidc_cfg_default_sso_url_get(c) != NULL) {
 		oidc_warn(r,
 			  "invalid authorization response state; a default SSO URL is set, sending the user there: %s",

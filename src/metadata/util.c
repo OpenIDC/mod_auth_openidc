@@ -84,17 +84,17 @@ static const char *oidc_metadata_file_path(request_rec *r, const oidc_cfg_t *cfg
 }
 
 const char *oidc_metadata_provider_file_path(request_rec *r, const char *issuer) {
-	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	const oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	return oidc_metadata_file_path(r, cfg, issuer, OIDC_METADATA_SUFFIX_PROVIDER);
 }
 
 const char *oidc_metadata_client_file_path(request_rec *r, const char *issuer) {
-	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	const oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	return oidc_metadata_file_path(r, cfg, issuer, OIDC_METADATA_SUFFIX_CLIENT);
 }
 
 const char *oidc_metadata_conf_path(request_rec *r, const char *issuer) {
-	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	const oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	return oidc_metadata_file_path(r, cfg, issuer, OIDC_METADATA_SUFFIX_CONF);
 }
 
@@ -233,7 +233,7 @@ void oidc_metadata_get_jwks(request_rec *r, const json_t *json, apr_array_header
 	const json_t *keys = NULL;
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
-	json_t *elem = NULL;
+	const json_t *elem = NULL;
 
 	keys = json_object_get(json, OIDC_JOSE_JWKS_KEYS_STR);
 	if (keys == NULL)

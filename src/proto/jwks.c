@@ -71,7 +71,7 @@ static void oidc_proto_jwks_key_include_any(request_rec *r, oidc_jwk_t *jwk, con
  * try a single JWKS entry against the JWT header;
  * returns TRUE when a specific kid/x5t match was found so the caller can stop iterating
  */
-static apr_byte_t oidc_proto_jwks_key_apply(request_rec *r, oidc_jwt_t *jwt, json_t *elem, const char *x5t,
+static apr_byte_t oidc_proto_jwks_key_apply(request_rec *r, oidc_jwt_t *jwt, const json_t *elem, const char *x5t,
 					    apr_hash_t *result) {
 	oidc_jwk_t *jwk = NULL;
 	oidc_jose_error_t err;

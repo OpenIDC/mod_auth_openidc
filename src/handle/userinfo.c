@@ -357,8 +357,9 @@ static void oidc_userinfo_appinfo_set(request_rec *r, const char *name, const ch
  * pass the userinfo JWT stored in the session to the app, rejecting the
  * client-cookie session type which does not support storing such JWTs
  */
-static void oidc_userinfo_pass_as_jwt(request_rec *r, const oidc_cfg_t *cfg, oidc_session_t *session, const char *name,
-				      oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding) {
+static void oidc_userinfo_pass_as_jwt(request_rec *r, const oidc_cfg_t *cfg, const oidc_session_t *session,
+				      const char *name, oidc_appinfo_pass_in_t pass_in,
+				      oidc_appinfo_encoding_t encoding) {
 
 	if (oidc_cfg_session_type_get(cfg) == OIDC_SESSION_TYPE_CLIENT_COOKIE) {
 		oidc_error(r, "session type \"client-cookie\" does not allow storing/passing a "
