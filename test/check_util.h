@@ -89,6 +89,16 @@
 /* assert that table entry KEY is absent */
 #define ck_assert_table_unset(tbl, key) ck_assert_ptr_null(apr_table_get((tbl), (key)))
 
+/*
+ * assert that oidc_jwt_parse() of S succeeds, reporting the jose error string
+ * on failure (the bare ck_assert_int_eq(oidc_jwt_parse(...), TRUE) only says
+ * "!= TRUE", not why). COMPRESS is FALSE, matching every call site. The
+ * including TU must pull in jose.h (oidc_jwt_parse / oidc_jose_e2s).
+ */
+#define ck_assert_jwt_parses(pool, s, jwt, keys, err)                                                                  \
+	ck_assert_msg(oidc_jwt_parse((pool), (s), &(jwt), (keys), FALSE, &(err)) == TRUE, "oidc_jwt_parse failed: %s", \
+		      oidc_jose_e2s((pool), (err)))
+
 int oidc_test_suite_run(Suite *s);
 
 #endif // _MOD_AUTH_OPENIDC_TEST_CHECK_UTIL_H_

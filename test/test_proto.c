@@ -71,7 +71,7 @@ START_TEST(test_proto_validate_access_token) {
 
 	oidc_jose_error_t err;
 	oidc_jwt_t *jwt = NULL;
-	ck_assert_int_eq(oidc_jwt_parse(r->pool, s, &jwt, NULL, FALSE, &err), TRUE);
+	ck_assert_jwt_parses(r->pool, s, jwt, NULL, err);
 
 	const char *access_token = "jHkWEdUXMU1BwAsC4vtUsZwnNvTIxEl0z9K3vx5KF0Y";
 	ck_assert_int_eq(oidc_proto_idtoken_validate_access_token(r, NULL, jwt, "id_token token", access_token), TRUE);
@@ -99,7 +99,7 @@ START_TEST(test_proto_validate_code) {
 
 	oidc_jose_error_t err;
 	oidc_jwt_t *jwt = NULL;
-	ck_assert_int_eq(oidc_jwt_parse(r->pool, s, &jwt, NULL, FALSE, &err), TRUE);
+	ck_assert_jwt_parses(r->pool, s, jwt, NULL, err);
 
 	const char *code = "Qcb0Orv1zh30vL1MPRsbm-diHiMwcLyZvn1arpZv-Jxf_11jnpEX3Tgfvk";
 	ck_assert_int_eq(oidc_proto_idtoken_validate_code(r, NULL, jwt, "code id_token", code), TRUE);
@@ -206,7 +206,7 @@ START_TEST(test_proto_validate_nonce) {
 	    "kmpMfqwrsicf5MTBvfPJeuSMt3t3d3LOGBkg36_z21X-ZRN7wy1KTjagr7iQ_y5csIpmtqs_QM55TTB9dW1HIosJPhiuMEJEA");
 	oidc_jwt_t *jwt = NULL;
 	oidc_jose_error_t err;
-	ck_assert_int_eq(oidc_jwt_parse(r->pool, s_jwt, &jwt, NULL, FALSE, &err), TRUE);
+	ck_assert_jwt_parses(r->pool, s_jwt, jwt, NULL, err);
 
 	ck_assert_int_eq(oidc_proto_idtoken_validate_nonce(r, c, oidc_cfg_provider_get(c), nonce, jwt), TRUE);
 	ck_assert_int_eq(oidc_proto_idtoken_validate_nonce(r, c, oidc_cfg_provider_get(c), nonce, jwt), FALSE);
@@ -258,7 +258,7 @@ START_TEST(test_proto_validate_jwt) {
 	char *s_jwt =
 	    apr_psprintf(r->pool, "%s.%s.%s", s_jwt_header_encoded, s_jwt_payload_encoded, s_jwt_signature_encoded);
 
-	ck_assert_int_eq(oidc_jwt_parse(r->pool, s_jwt, &jwt, NULL, FALSE, &err), TRUE);
+	ck_assert_jwt_parses(r->pool, s_jwt, jwt, NULL, err);
 
 	oidc_jwk_t *jwk = NULL;
 	ck_assert_int_eq(oidc_util_key_symmetric_create(r, s_secret, 0, NULL, TRUE, &jwk), TRUE);
