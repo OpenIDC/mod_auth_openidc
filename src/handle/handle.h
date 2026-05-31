@@ -91,8 +91,9 @@ int oidc_logout_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, 
 			apr_byte_t revoke_tokens);
 
 // refresh.c
-apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, oidc_provider_t *provider,
-				    char **new_access_token, char **new_access_token_type, char **new_id_token);
+apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
+				    const oidc_provider_t *provider, char **new_access_token,
+				    char **new_access_token_type, char **new_id_token);
 int oidc_refresh_token_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session);
 apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session,
 						   int ttl_minimum, apr_byte_t *needs_save);

@@ -309,8 +309,9 @@ static void oidc_refresh_token_grant_apply_id_token(request_rec *r, const oidc_c
 /*
  * execute refresh token grant to refresh the existing access token
  */
-apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, oidc_provider_t *provider,
-				    char **new_access_token, char **new_access_token_type, char **new_id_token) {
+apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
+				    const oidc_provider_t *provider, char **new_access_token,
+				    char **new_access_token_type, char **new_id_token) {
 
 	char *s_id_token = NULL;
 	char *s_token_type = NULL;

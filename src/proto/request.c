@@ -593,7 +593,7 @@ static char *oidc_proto_request_uri_create(request_rec *r, const struct oidc_pro
 /*
  * Generic function to generate request/request_object parameter with value
  */
-static void oidc_proto_request_uri_request_param_add(request_rec *r, struct oidc_provider_t *provider,
+static void oidc_proto_request_uri_request_param_add(request_rec *r, const struct oidc_provider_t *provider,
 						     const char *redirect_uri, apr_table_t *params) {
 
 	/* parse the request object configuration from a string in to a JSON structure */
