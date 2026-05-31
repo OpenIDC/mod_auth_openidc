@@ -144,6 +144,9 @@ static request_rec *oidc_test_request_init(apr_pool_t *pool) {
 void oidc_test_setup(void) {
 	apr_initialize();
 	oidc_pre_config_init();
+	/* reset the stubbed AuthType so a test that changed it does not leak into
+	 * the next one under CK_FORK=no */
+	oidc_test_set_auth_type(NULL);
 	apr_pool_create(&pool, NULL);
 	request = oidc_test_request_init(pool);
 }

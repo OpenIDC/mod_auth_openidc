@@ -29,8 +29,17 @@ AP_DECLARE(apr_status_t) ap_unixd_set_global_mutex_perms(apr_global_mutex_t *gmu
 	return 0;
 }
 
+/* the AuthType reported to the module; default openid-connect, overridable per
+ * test via oidc_test_set_auth_type() so the OAuth / mixed dispatch paths can be
+ * exercised */
+static const char *stub_auth_type = "openid-connect";
+
+void oidc_test_set_auth_type(const char *auth_type) {
+	stub_auth_type = (auth_type != NULL) ? auth_type : "openid-connect";
+}
+
 AP_DECLARE(const char *) ap_auth_type(request_rec *r) {
-	return "openid-connect";
+	return stub_auth_type;
 }
 
 AP_DECLARE(const char *) ap_auth_name(request_rec *r) {

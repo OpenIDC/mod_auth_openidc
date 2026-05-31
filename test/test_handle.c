@@ -2450,6 +2450,57 @@ START_TEST(test_handle_check_user_id_unauth_action_return_410) {
 }
 END_TEST
 
+START_TEST(test_handle_check_user_id_oauth_mixed_options) {
+	request_rec *r = oidc_test_request_get();
+
+	/* AuthType auth-openidc + an OPTIONS request with no bearer token:
+	 * oidc_check_mixed_userid_oauth short-circuits to OK with an empty user */
+	oidc_test_set_auth_type(OIDC_AUTH_TYPE_OPENID_BOTH);
+	r->method_number = M_OPTIONS;
+
+	int rc = oidc_check_user_id(r);
+	ck_assert_int_eq(rc, OK);
+	ck_assert_str_eq(r->user, "");
+}
+END_TEST
+
+START_TEST(test_handle_check_user_id_oauth_mixed_browser_fallback) {
+	request_rec *r = oidc_test_request_get();
+
+	/* AuthType auth-openidc, no bearer token and not OPTIONS: the mixed handler
+	 * falls back to the OIDC browser flow => 302 to the OP for an auth-capable
+	 * request */
+	oidc_test_set_auth_type(OIDC_AUTH_TYPE_OPENID_BOTH);
+	apr_table_set(r->headers_in, "Accept", "*/*");
+
+	int rc = oidc_check_user_id(r);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+}
+END_TEST
+
+START_TEST(test_handle_check_user_id_oauth_mixed_bearer) {
+	request_rec *r = oidc_test_request_get();
+
+	/* a bearer token routes the mixed handler to the OAuth resource-server path
+	 * (oidc_oauth_check_userid); with no token validation configured it is
+	 * rejected => 401 */
+	oidc_test_set_auth_type(OIDC_AUTH_TYPE_OPENID_BOTH);
+	apr_table_set(r->headers_in, "Authorization", "Bearer some-access-token");
+
+	int rc = oidc_check_user_id(r);
+	ck_assert_int_eq(rc, HTTP_UNAUTHORIZED);
+}
+END_TEST
+
+START_TEST(test_handle_fixups_enabled) {
+	request_rec *r = oidc_test_request_get();
+
+	/* with the module enabled (AuthType openid-connect) the fixups hook runs the
+	 * metrics timing and returns OK */
+	ck_assert_int_eq(oidc_fixups(r), OK);
+}
+END_TEST
+
 /*
  * Tests for handle/jwks.c and handle/content.c
  */
@@ -3603,6 +3654,10 @@ int main(void) {
 	tcase_add_test(checkuid, test_handle_check_user_id_unauth_action_pass);
 	tcase_add_test(checkuid, test_handle_check_user_id_unauth_action_return_401);
 	tcase_add_test(checkuid, test_handle_check_user_id_unauth_action_return_410);
+	tcase_add_test(checkuid, test_handle_check_user_id_oauth_mixed_options);
+	tcase_add_test(checkuid, test_handle_check_user_id_oauth_mixed_browser_fallback);
+	tcase_add_test(checkuid, test_handle_check_user_id_oauth_mixed_bearer);
+	tcase_add_test(checkuid, test_handle_fixups_enabled);
 
 	TCase *revoke = tcase_create("revoke");
 	tcase_add_checked_fixture(revoke, oidc_test_setup, oidc_test_teardown);
