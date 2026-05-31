@@ -70,6 +70,7 @@ oidc_unit_tests = \
 	test_proto \
 	test_handle \
 	test_state \
+	test_session \
 	test_oauth \
 	test_metadata \
 	test_metrics
