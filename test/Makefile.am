@@ -59,7 +59,7 @@ libtest_la_SOURCES = \
 AM_CFLAGS += @CHECK_CFLAGS@
 LDADD += libtest.la @CHECK_LIBS@
 
-TESTS = \
+check_PROGRAMS = \
 	test_cfg \
 	test_util \
 	test_jose \
@@ -71,9 +71,18 @@ TESTS = \
 	test_metadata \
 	test_metrics
 
+# the compiled libcheck binaries, plus a source-level guard that fails the
+# build if a START_TEST body is never wired into a suite with tcase_add_test
+# (such a test compiles but silently never runs); see check_registration.sh
+TESTS = $(check_PROGRAMS) check_registration.sh
+
 endif
 
-check_PROGRAMS = $(TESTS)
+# TEST_EXTENSIONS is read at automake time and so must be unconditional; the
+# .sh handler drives check_registration.sh, the only non-program in TESTS.
+TEST_EXTENSIONS = .sh
+SH_LOG_COMPILER = $(SHELL)
+dist_check_SCRIPTS = check_registration.sh
 
 EXTRA_DIST = \
 	ecpriv.key \
@@ -88,10 +97,10 @@ EXTRA_DIST = \
 clean-local:
 	rm -f *.gcno
 
-${TESTS:%=%.valgrind}: ${TESTS}
+${check_PROGRAMS:%=%.valgrind}: ${check_PROGRAMS}
 	CK_FORK=no valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=definite --errors-for-leak-kinds=definite --read-inline-info=yes --keep-debuginfo=yes ./$$(basename $@ .valgrind)
 
-valgrind: ${TESTS:%=%.valgrind}
+valgrind: ${check_PROGRAMS:%=%.valgrind}
 
 CODE_COVERAGE_LCOV_SHOPTS = --ignore-errors inconsistent --ignore-errors unused
 
