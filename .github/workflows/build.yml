@@ -178,3 +178,65 @@ jobs:
         ASAN_OPTIONS: detect_leaks=0:abort_on_error=1:strict_string_checks=1:detect_stack_use_after_return=1
         UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
       run: make check || (cat test/test-suite.log && exit 1)
+
+  cache-backends:
+    # Two things the other jobs miss: (1) a gcc-vs-clang build matrix, and
+    # (2) the redis/memcache backends run against *live* servers rather than
+    # the in-process mocks the unit tests use by default. The redis and
+    # memcache dev headers arrive via libhiredis-dev and apache2-dev ->
+    # libaprutil1-dev (apr_memcache.h), so HAVE_LIBHIREDIS and HAVE_MEMCACHE
+    # are both on; the test_cache "redis-live"/"memcache-live" tcases register
+    # only when OIDC_TEST_*_SERVER is set, so they stay off in the other jobs.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+      memcached:
+        image: memcached:1.6-alpine
+        ports:
+          - 11211:11211
+    env:
+      OIDC_TEST_REDIS_SERVER: localhost:6379
+      OIDC_TEST_MEMCACHE_SERVER: localhost:11211
+    steps:
+    - uses: actions/checkout@v4
+    - name: Dependencies
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y apache2-dev libcjose-dev libssl-dev check pkg-config
+        sudo apt-get install -y libjansson-dev libcurl4-openssl-dev libhiredis-dev libpcre2-dev libjq-dev check
+        sudo apt-get install -y clang
+    - name: Configure
+      run: |
+        ./autogen.sh
+        ./configure --with-jq CC=${{ matrix.cc }}
+        # the apxs-derived CFLAGS carry gcc-only LTO flags (-flto=auto /
+        # -ffat-lto-objects); strip them on the clang leg so an older runner
+        # clang cannot choke on them (LTO is not needed for a test build)
+        if [ "${{ matrix.cc }}" = "clang" ]; then
+          sed -i 's/-flto=auto//g; s/-ffat-lto-objects//g' src/Makefile test/Makefile
+        fi
+    - name: Make
+      run: make
+    - name: Wait for service containers
+      run: |
+        for i in $(seq 1 30); do
+          (exec 3<>/dev/tcp/localhost/6379) 2>/dev/null \
+            && (exec 3<>/dev/tcp/localhost/11211) 2>/dev/null \
+            && { echo "redis + memcached reachable"; exit 0; }
+          echo "waiting for service containers ($i)..."; sleep 1
+        done
+        echo "service containers did not become reachable"; exit 1
+    - name: Test (live redis + memcached)
+      run: make check || (cat test/test-suite.log && exit 1)

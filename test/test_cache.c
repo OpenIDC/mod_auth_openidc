@@ -947,6 +947,69 @@ START_TEST(test_cache_redis_helpers_short_circuit) {
 END_TEST
 
 /*
+ * Live integration test against a real Redis server.
+ *
+ * Unlike the mock tests above (which fabricate redisReply objects so the
+ * get/set/retry logic runs offline), this drives the real connect/command/
+ * disconnect ops that oidc_cache_redis.post_config wires up, against the
+ * server named by OIDC_TEST_REDIS_SERVER. The suite only registers this
+ * tcase when that variable is set (see main), so an ordinary "make check"
+ * without a server is unaffected; CI points it at a redis service container.
+ *
+ * We exercise the raw backend ops (oidc_cache_redis_get/set) rather than the
+ * oidc_cache_set/get wrapper: the wrapper's encrypt/compress layer is already
+ * covered by the core tcase, and going raw isolates the actual wire round-trip.
+ */
+START_TEST(test_cache_redis_live_roundtrip) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_cache_t *prev_impl = (oidc_cache_t *)cfg->cache.impl;
+	void *prev_cfg = cfg->cache.cfg;
+	char *prev_server = cfg->cache.redis_server;
+
+	/* wire the real backend ops against the live server (host:port parsed here) */
+	cfg->cache.cfg = NULL;
+	cfg->cache.redis_server = apr_pstrdup(r->pool, getenv("OIDC_TEST_REDIS_SERVER"));
+	cfg->cache.impl = &oidc_cache_redis;
+	ck_assert_int_eq(oidc_cache_redis.post_config(r->server->process->pconf, r->server), OK);
+
+	/* a key unique to this run so repeated CI runs against a persistent server don't collide */
+	char *key = apr_psprintf(r->pool, "live-%" APR_TIME_T_FMT, apr_time_now());
+	apr_time_t expiry = apr_time_now() + apr_time_from_sec(60);
+	char *value = NULL;
+
+	/* a key that was never set is a normal miss: TRUE with *value left NULL */
+	ck_assert_int_eq(oidc_cache_redis_get(r, OIDC_CACHE_SECTION_SESSION, key, &value), TRUE);
+	ck_assert_ptr_null(value);
+
+	/* set then get returns the stored value */
+	ck_assert_int_eq(oidc_cache_redis_set(r, OIDC_CACHE_SECTION_SESSION, key, "live-v1", expiry), TRUE);
+	value = NULL;
+	ck_assert_int_eq(oidc_cache_redis_get(r, OIDC_CACHE_SECTION_SESSION, key, &value), TRUE);
+	ck_assert_ptr_nonnull(value);
+	ck_assert_str_eq(value, "live-v1");
+
+	/* overwrite replaces the value */
+	ck_assert_int_eq(oidc_cache_redis_set(r, OIDC_CACHE_SECTION_SESSION, key, "live-v2", expiry), TRUE);
+	value = NULL;
+	ck_assert_int_eq(oidc_cache_redis_get(r, OIDC_CACHE_SECTION_SESSION, key, &value), TRUE);
+	ck_assert_str_eq(value, "live-v2");
+
+	/* a NULL value deletes the entry; the next get is a miss */
+	ck_assert_int_eq(oidc_cache_redis_set(r, OIDC_CACHE_SECTION_SESSION, key, NULL, 0), TRUE);
+	value = NULL;
+	ck_assert_int_eq(oidc_cache_redis_get(r, OIDC_CACHE_SECTION_SESSION, key, &value), TRUE);
+	ck_assert_ptr_null(value);
+
+	/* tear down the live connection + mutex, then restore the fixture's backend */
+	oidc_cache_redis.destroy(r->server->process->pconf, r->server);
+	cfg->cache.impl = prev_impl;
+	cfg->cache.cfg = prev_cfg;
+	cfg->cache.redis_server = prev_server;
+}
+END_TEST
+
+/*
  * reset the redis mock as part of the per-test fixture. Under CK_FORK=no
  * (make valgrind) all tests share one process, so a test that does not call
  * redis_mock_install() would otherwise inherit the previous test's mock state;
@@ -1318,6 +1381,51 @@ START_TEST(test_cache_memcache_set_delete) {
 }
 END_TEST
 
+/*
+ * Live integration test against a real memcached server.
+ *
+ * The mock tests above swap in fabricated data-path ops; this drives the real
+ * apr_memcache-backed ops that oidc_cache_memcache.post_config wires up (and
+ * which eagerly connect the pool), against the server named by
+ * OIDC_TEST_MEMCACHE_SERVER. Registered only when that variable is set (see
+ * main); CI points it at a memcached service container.
+ */
+START_TEST(test_cache_memcache_live_roundtrip) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	memcache_save(cfg); /* saves impl/cfg/servers/pool sizes and nulls cfg->cache.cfg */
+
+	cfg->cache.memcache_servers = apr_pstrdup(r->pool, getenv("OIDC_TEST_MEMCACHE_SERVER"));
+	cfg->cache.impl = &oidc_cache_memcache;
+	ck_assert_int_eq(oidc_cache_memcache.post_config(r->server->process->pconf, r->server), OK);
+
+	/* a key unique to this run so repeated CI runs against a persistent server don't collide */
+	char *key = apr_psprintf(r->pool, "live-%" APR_TIME_T_FMT, apr_time_now());
+	apr_time_t expiry = apr_time_now() + apr_time_from_sec(60);
+	char *value = NULL;
+
+	/* set then get returns the stored value */
+	ck_assert_int_eq(oidc_cache_memcache_set(r, OIDC_CACHE_SECTION_SESSION, key, "live-v1", expiry), TRUE);
+	ck_assert_int_eq(oidc_cache_memcache_get(r, OIDC_CACHE_SECTION_SESSION, key, &value), TRUE);
+	ck_assert_ptr_nonnull(value);
+	ck_assert_str_eq(value, "live-v1");
+
+	/* overwrite replaces the value */
+	ck_assert_int_eq(oidc_cache_memcache_set(r, OIDC_CACHE_SECTION_SESSION, key, "live-v2", expiry), TRUE);
+	value = NULL;
+	ck_assert_int_eq(oidc_cache_memcache_get(r, OIDC_CACHE_SECTION_SESSION, key, &value), TRUE);
+	ck_assert_str_eq(value, "live-v2");
+
+	/* a NULL value deletes the entry; the next get is a miss (server still alive => TRUE/NULL) */
+	ck_assert_int_eq(oidc_cache_memcache_set(r, OIDC_CACHE_SECTION_SESSION, key, NULL, 0), TRUE);
+	value = NULL;
+	ck_assert_int_eq(oidc_cache_memcache_get(r, OIDC_CACHE_SECTION_SESSION, key, &value), TRUE);
+	ck_assert_ptr_null(value);
+
+	memcache_restore(cfg);
+}
+END_TEST
+
 /* reset the memcache mock per test; see redis_test_setup for the rationale */
 static void memcache_test_setup(void) {
 	oidc_test_setup();
@@ -1374,6 +1482,14 @@ int main(void) {
 	tcase_add_test(redis, test_cache_redis_set_error);
 	tcase_add_test(redis, test_cache_redis_helpers_short_circuit);
 	suite_add_tcase(s, redis);
+
+	/* live round-trip against a real redis, only when a server is configured */
+	if (getenv("OIDC_TEST_REDIS_SERVER") != NULL) {
+		TCase *redis_live = tcase_create("redis-live");
+		tcase_add_checked_fixture(redis_live, oidc_test_setup, oidc_test_teardown);
+		tcase_add_test(redis_live, test_cache_redis_live_roundtrip);
+		suite_add_tcase(s, redis_live);
+	}
 #endif
 
 #ifdef USE_MEMCACHE
@@ -1392,6 +1508,14 @@ int main(void) {
 	tcase_add_test(memcache, test_cache_memcache_set_error);
 	tcase_add_test(memcache, test_cache_memcache_set_delete);
 	suite_add_tcase(s, memcache);
+
+	/* live round-trip against a real memcached, only when a server is configured */
+	if (getenv("OIDC_TEST_MEMCACHE_SERVER") != NULL) {
+		TCase *memcache_live = tcase_create("memcache-live");
+		tcase_add_checked_fixture(memcache_live, memcache_test_setup, oidc_test_teardown);
+		tcase_add_test(memcache_live, test_cache_memcache_live_roundtrip);
+		suite_add_tcase(s, memcache_live);
+	}
 #endif
 
 	return oidc_test_suite_run(s);

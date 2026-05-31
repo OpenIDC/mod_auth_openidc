@@ -11,6 +11,25 @@ jobs:
     runs-on: ubuntu-latest
     env:
       BUILD_WRAPPER_OUT_DIR: build_wrapper_output_directory # Directory where build-wrapper output will be placed
+      # point the test_cache "redis-live"/"memcache-live" tcases at the service
+      # containers below so the real backend code paths are covered (the mocks
+      # bypass cache/redis.c + cache/memcache.c connect/command/getp/set ops)
+      OIDC_TEST_REDIS_SERVER: localhost:6379
+      OIDC_TEST_MEMCACHE_SERVER: localhost:11211
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+      memcached:
+        image: memcached:1.6-alpine
+        ports:
+          - 11211:11211
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,6 +42,15 @@ jobs:
           sudo apt-get install -y lcov
       - name: Install Build Wrapper
         uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v8.1.0
+      - name: Wait for service containers
+        run: |
+          for i in $(seq 1 30); do
+            (exec 3<>/dev/tcp/localhost/6379) 2>/dev/null \
+              && (exec 3<>/dev/tcp/localhost/11211) 2>/dev/null \
+              && { echo "redis + memcached reachable"; exit 0; }
+            echo "waiting for service containers ($i)..."; sleep 1
+          done
+          echo "service containers did not become reachable"; exit 1
       - name: Run build-wrapper
         run: |
           ./autogen.sh
