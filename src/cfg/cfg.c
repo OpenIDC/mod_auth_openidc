@@ -52,6 +52,11 @@
 #include "session.h"
 #include "util/util.h"
 
+#if OPENSSL_API_COMPAT < 0x10100000L
+#include <openssl/err.h>
+#include <openssl/ssl.h>
+#endif
+
 const char *oidc_cfg_string_list_add(apr_pool_t *pool, apr_array_header_t **list, const char *arg) {
 	if (*list == NULL)
 		*list = apr_array_make(pool, 1, sizeof(const char *));
@@ -973,11 +978,6 @@ void *oidc_cfg_server_merge(apr_pool_t *pool, void *BASE, void *ADD) {
 
 	return c;
 }
-
-#if OPENSSL_API_COMPAT < 0x10100000L
-#include <openssl/err.h>
-#include <openssl/ssl.h>
-#endif
 
 /*
  * initialize before the post config handler runs
