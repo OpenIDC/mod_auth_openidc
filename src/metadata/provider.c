@@ -255,7 +255,7 @@ apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg_t *cfg, const cha
 /*
  * parse the JSON provider metadata in to a oidc_provider_t struct but do not override values already set
  */
-apr_byte_t oidc_metadata_provider_parse(request_rec *r, oidc_cfg_t *cfg, json_t *j_provider,
+apr_byte_t oidc_metadata_provider_parse(request_rec *r, const oidc_cfg_t *cfg, const json_t *j_provider,
 					oidc_provider_t *provider) {
 
 	const char *rv = NULL;

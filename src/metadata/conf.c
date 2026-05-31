@@ -323,7 +323,7 @@ static void oidc_metadata_conf_parse_auth_request_method(request_rec *r, const j
 /*
  * parse the JSON conf metadata in to a oidc_provider_t struct
  */
-apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg_t *cfg, json_t *j_conf, oidc_provider_t *provider) {
+apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg_t *cfg, const json_t *j_conf, oidc_provider_t *provider) {
 	oidc_metadata_conf_parse_profile(r, cfg, j_conf, provider);
 	oidc_metadata_conf_parse_keys(r, cfg, j_conf, provider);
 	oidc_metadata_conf_parse_id_token(r, cfg, j_conf, provider);

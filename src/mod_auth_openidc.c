@@ -118,7 +118,7 @@ static void oidc_scrub_request_headers(request_rec *r, const char *claim_prefix,
  * scrub all mod_auth_openidc related headers
  */
 void oidc_scrub_headers(request_rec *r) {
-	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	const oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
 	const char *prefix = oidc_cfg_claim_prefix_get(cfg);
 	apr_hash_t *hdrs = apr_hash_make(r->pool);
@@ -422,7 +422,7 @@ void oidc_request_state_json_set(request_rec *r, const char *key, json_t *value)
  * set the claims from a JSON object (c.q. id_token or user_info response) stored
  * in the session in to HTTP headers passed on to the application
  */
-apr_byte_t oidc_set_app_claims(request_rec *r, oidc_cfg_t *cfg, json_t *claims) {
+apr_byte_t oidc_set_app_claims(request_rec *r, const oidc_cfg_t *cfg, json_t *claims) {
 
 	oidc_appinfo_pass_in_t pass_in = oidc_cfg_dir_pass_info_in_get(r);
 
@@ -551,7 +551,7 @@ static apr_byte_t oidc_check_max_session_duration(request_rec *r, oidc_cfg_t *cf
  * it also handles the case that a cookie is unexpectedly shared across multiple hosts in
  * name-based virtual hosting even though the OP(s) would be the same
  */
-apr_byte_t oidc_check_cookie_domain(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session) {
+apr_byte_t oidc_check_cookie_domain(request_rec *r, const oidc_cfg_t *cfg, oidc_session_t *session) {
 	const char *c_cookie_domain = oidc_cfg_cookie_domain_get(cfg)
 					  ? oidc_cfg_cookie_domain_get(cfg)
 					  : oidc_util_url_cur_host(r, oidc_cfg_x_forwarded_headers_get(cfg));
@@ -616,8 +616,8 @@ static void oidc_copy_tokens_to_request_state(request_rec *r, oidc_session_t *se
 /*
  * pass refresh_token, access_token and access_token_expires as headers/environment variables to the application
  */
-apr_byte_t oidc_session_pass_tokens(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session, apr_byte_t extend_session,
-				    apr_byte_t *needs_save) {
+apr_byte_t oidc_session_pass_tokens(request_rec *r, const oidc_cfg_t *cfg, oidc_session_t *session,
+				    apr_byte_t extend_session, apr_byte_t *needs_save) {
 
 	oidc_appinfo_pass_in_t pass_in = oidc_cfg_dir_pass_info_in_get(r);
 	oidc_appinfo_encoding_t encoding = oidc_cfg_dir_pass_info_encoding_get(r);
@@ -899,7 +899,7 @@ static apr_byte_t oidc_validate_redirect_url_allowed(request_rec *r, apr_hash_t 
 /*
  * verify the URL hostname matches the hostname of the current request
  */
-static apr_byte_t oidc_validate_redirect_url_host(request_rec *r, oidc_cfg_t *c, apr_uri_t *uri, char **err_str,
+static apr_byte_t oidc_validate_redirect_url_host(request_rec *r, const oidc_cfg_t *c, apr_uri_t *uri, char **err_str,
 						  char **err_desc) {
 	const char *c_host = oidc_util_url_cur_host(r, oidc_cfg_x_forwarded_headers_get(c));
 	/* IPv6 literals need to be wrapped in brackets to compare with the current hostname */
@@ -1479,7 +1479,7 @@ static int oidc_check_config_openid_openidc_provider(apr_pool_t *pool, server_re
 /*
  * validate OIDCCookieDomain against the redirect_uri's hostname
  */
-static int oidc_check_config_openid_openidc_cookie_domain(server_rec *s, oidc_cfg_t *c, const apr_uri_t *r_uri,
+static int oidc_check_config_openid_openidc_cookie_domain(server_rec *s, const oidc_cfg_t *c, const apr_uri_t *r_uri,
 							  apr_byte_t redirect_uri_is_relative) {
 	if (oidc_cfg_cookie_domain_get(c) == NULL)
 		return OK;
@@ -1551,7 +1551,7 @@ static int oidc_check_config_openid_openidc(apr_pool_t *pool, server_rec *s, oid
 /*
  * check the config required for the OAuth 2.0 RS role
  */
-static int oidc_check_config_oauth(apr_pool_t *pool, server_rec *s, oidc_cfg_t *c) {
+static int oidc_check_config_oauth(apr_pool_t *pool, server_rec *s, const oidc_cfg_t *c) {
 
 	apr_uri_t r_uri;
 

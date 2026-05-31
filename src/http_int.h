@@ -83,7 +83,7 @@ size_t oidc_http_response_data(void *contents, size_t size, size_t nmemb, void *
 size_t oidc_http_response_header(const char *buffer, size_t size, size_t nitems, void *userdata);
 
 /* build the curl_slist of outgoing request headers (Authorization, Content-Type, traceparent, DPoP) */
-struct curl_slist *oidc_http_request_build_header_list(request_rec *r, oidc_cfg_t *c, const char *content_type,
+struct curl_slist *oidc_http_request_build_header_list(request_rec *r, const oidc_cfg_t *c, const char *content_type,
 						       const char *access_token, const char *dpop);
 
 /* construct (and cache via subprocess_env override) the outgoing User-Agent string */

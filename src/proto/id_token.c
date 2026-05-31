@@ -51,7 +51,7 @@
  * check that it matches the nonce value in the id_token payload
  */
 // non-static for test.c
-apr_byte_t oidc_proto_idtoken_validate_nonce(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
+apr_byte_t oidc_proto_idtoken_validate_nonce(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
 					     const char *nonce, const oidc_jwt_t *jwt) {
 
 	oidc_jose_error_t err;
@@ -103,7 +103,7 @@ apr_byte_t oidc_proto_idtoken_validate_nonce(request_rec *r, oidc_cfg_t *cfg, oi
 /*
  * validate that the "azp" claim, when present, matches the configured client_id
  */
-static apr_byte_t oidc_proto_idtoken_validate_azp(request_rec *r, oidc_provider_t *provider, const char *azp) {
+static apr_byte_t oidc_proto_idtoken_validate_azp(request_rec *r, const oidc_provider_t *provider, const char *azp) {
 	/*
 	 * the "azp" claim is only needed when the id_token has a single audience value and that audience
 	 * is different than the authorized party; it MAY be included even when the authorized party is
@@ -121,7 +121,7 @@ static apr_byte_t oidc_proto_idtoken_validate_azp(request_rec *r, oidc_provider_
 /*
  * resolve the special "@" audience value to the configured client_id (passthrough otherwise)
  */
-static const char *oidc_proto_idtoken_aud_resolve(oidc_provider_t *provider, const char *s_aud) {
+static const char *oidc_proto_idtoken_aud_resolve(const oidc_provider_t *provider, const char *s_aud) {
 	if (_oidc_strcmp(s_aud, OIDC_PROTO_IDTOKEN_AUD_CLIENT_ID_SPECIAL_VALUE) == 0)
 		return oidc_cfg_provider_client_id_get(provider);
 	return s_aud;
@@ -206,7 +206,7 @@ static apr_byte_t oidc_proto_idtoken_validate_aud_array(request_rec *r, oidc_pro
 apr_byte_t oidc_proto_idtoken_validate_aud_and_azp(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
 						   const oidc_jwt_payload_t *id_token_payload) {
 	char *azp = NULL;
-	json_t *aud = NULL;
+	const json_t *aud = NULL;
 	const apr_array_header_t *arr = NULL;
 
 	oidc_jose_get_string(r->pool, id_token_payload->value.json, OIDC_CLAIM_AZP, FALSE, &azp, NULL);

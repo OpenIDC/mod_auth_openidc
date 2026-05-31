@@ -123,9 +123,9 @@ char *oidc_util_rand_hex_str(request_rec *r, apr_pool_t *pool, int len);
 // url.c
 const char *oidc_util_url_cur_host(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers);
 char *oidc_util_url_cur(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers);
-apr_byte_t oidc_util_url_cur_is_secure(const request_rec *r, oidc_cfg_t *c);
+apr_byte_t oidc_util_url_cur_is_secure(const request_rec *r, const oidc_cfg_t *c);
 apr_byte_t oidc_util_url_cur_matches(request_rec *r, const char *url);
-const char *oidc_util_url_abs(request_rec *r, oidc_cfg_t *cfg, const char *url);
+const char *oidc_util_url_abs(request_rec *r, const oidc_cfg_t *cfg, const char *url);
 const char *oidc_util_url_redirect_uri(request_rec *r, oidc_cfg_t *c);
 apr_byte_t oidc_util_url_matches_redirect_uri(request_rec *r, oidc_cfg_t *cfg);
 apr_byte_t oidc_util_url_has_parameter(request_rec *r, const char *param);
@@ -145,7 +145,7 @@ void oidc_util_table_add_query_encoded_params(apr_pool_t *pool, apr_table_t *tab
 apr_byte_t oidc_util_cookie_domain_valid(const char *hostname, const char *cookie_domain);
 apr_byte_t oidc_util_hostname_endswith(const char *hostname, const char *suffix);
 const char *oidc_util_strcasestr(const char *s1, const char *s2);
-void oidc_util_set_trace_parent(request_rec *r, oidc_cfg_t *c, const char *span);
+void oidc_util_set_trace_parent(request_rec *r, const oidc_cfg_t *c, const char *span);
 void oidc_util_apr_hash_clear(apr_hash_t *ht);
 
 #endif /* _MOD_AUTH_OPENIDC_UTIL_H_ */

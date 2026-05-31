@@ -196,7 +196,7 @@ const char *oidc_metadata_conf_path(request_rec *r, const char *issuer);
 apr_byte_t oidc_metadata_conf_get(request_rec *r, const char *issuer, json_t **j_conf);
 apr_byte_t oidc_metadata_client_get(request_rec *r, oidc_cfg_t *cfg, const char *issuer, oidc_provider_t *provider,
 				    json_t **j_client);
-apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider, json_t **j_client,
-					 char **response);
+apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
+					 json_t **j_client, char **response);
 
 #endif /* _MOD_AUTH_OPENIDC_METADATA_INTERNAL_H_ */

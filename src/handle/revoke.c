@@ -43,7 +43,7 @@
 #include "handle/handle.h"
 #include "mod_auth_openidc.h"
 
-int oidc_revoke_session(request_rec *r, oidc_cfg_t *c) {
+int oidc_revoke_session(request_rec *r, const oidc_cfg_t *c) {
 	apr_byte_t rc = FALSE;
 	char *session_id = NULL;
 

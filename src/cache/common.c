@@ -354,7 +354,7 @@ static const char *oidc_cache_section_get(request_rec *r, const char *section) {
  */
 apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, char **value) {
 
-	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	const oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	int encrypted = oidc_cfg_cache_encrypt_get(cfg);
 	apr_byte_t rc = FALSE;
 	char *msg = NULL;
@@ -424,7 +424,7 @@ end:
  */
 apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key, const char *value, apr_time_t expiry) {
 
-	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	const oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	int encrypted = oidc_cfg_cache_encrypt_get(cfg);
 	char *encoded = NULL;
 	apr_byte_t rc = FALSE;

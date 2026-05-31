@@ -271,7 +271,7 @@ static int oidc_request_uri_delete_from_request(void *rec, const char *name, con
  * obtain the public key for a provider to encrypt the request object with
  */
 static apr_byte_t oidc_request_uri_encryption_jwk_by_type(request_rec *r, oidc_cfg_t *cfg,
-							  struct oidc_provider_t *provider, int key_type,
+							  const struct oidc_provider_t *provider, int key_type,
 							  oidc_jwk_t **jwk) {
 
 	oidc_jose_error_t err;
@@ -331,7 +331,7 @@ static apr_byte_t oidc_request_uri_encryption_jwk_by_type(request_rec *r, oidc_c
 /*
  * populate iss/aud/iat/nbf/exp on the request object and merge "static" config values into it
  */
-static void oidc_request_uri_request_object_claims_set(request_rec *r, struct oidc_provider_t *provider,
+static void oidc_request_uri_request_object_claims_set(request_rec *r, const struct oidc_provider_t *provider,
 						       const json_t *request_object_config, oidc_jwt_t *request_object,
 						       int ttl) {
 	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_ISS,
@@ -365,8 +365,8 @@ static void oidc_request_uri_request_object_params_copy(request_rec *r, json_t *
 /*
  * resolve the JWK to sign the request object with, based on the configured signing algorithm
  */
-static oidc_jwk_t *oidc_request_uri_request_object_signing_jwk_get(request_rec *r, oidc_cfg_t *cfg,
-								   struct oidc_provider_t *provider,
+static oidc_jwk_t *oidc_request_uri_request_object_signing_jwk_get(request_rec *r, const oidc_cfg_t *cfg,
+								   const struct oidc_provider_t *provider,
 								   oidc_jwt_t *request_object, int *jwk_needs_destroy) {
 	oidc_jwk_t *sjwk = NULL;
 	int kty = oidc_jwt_alg2kty(request_object);
@@ -639,8 +639,8 @@ static void oidc_proto_request_uri_request_param_add(request_rec *r, struct oidc
 /*
  * concatenate per-path scopes with per-provider scopes, warn if "openid" is missing, and add the result to params
  */
-static void oidc_proto_request_auth_scope_set(request_rec *r, struct oidc_provider_t *provider, const char *path_scope,
-					      apr_table_t *params) {
+static void oidc_proto_request_auth_scope_set(request_rec *r, const struct oidc_provider_t *provider,
+					      const char *path_scope, apr_table_t *params) {
 	const char *scope = oidc_cfg_provider_scope_get(provider);
 	if (path_scope != NULL)
 		scope = ((scope != NULL) && (_oidc_strcmp(scope, "") != 0))
@@ -726,7 +726,7 @@ static void oidc_proto_request_auth_params_set(request_rec *r, struct oidc_provi
 /*
  * send the authentication request via an HTML form auto-POST page
  */
-static int oidc_proto_request_auth_send_post(request_rec *r, struct oidc_provider_t *provider,
+static int oidc_proto_request_auth_send_post(request_rec *r, const struct oidc_provider_t *provider,
 					     const apr_table_t *params) {
 	/* construct a HTML POST auto-submit page with the authorization request parameters */
 	const char *html_body =
@@ -740,7 +740,7 @@ static int oidc_proto_request_auth_send_post(request_rec *r, struct oidc_provide
 /*
  * send the authentication request via an HTTP redirect (or a Javascript-based preserve page)
  */
-static int oidc_proto_request_auth_send_get(request_rec *r, struct oidc_provider_t *provider,
+static int oidc_proto_request_auth_send_get(request_rec *r, const struct oidc_provider_t *provider,
 					    const apr_table_t *params) {
 
 	/* construct the full authorization request URL */

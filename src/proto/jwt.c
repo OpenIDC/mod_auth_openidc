@@ -252,8 +252,8 @@ char *oidc_proto_jwt_header_peek(request_rec *r, const char *compact_encoded_jwt
 	return result;
 }
 
-apr_byte_t oidc_proto_jwt_create_from_first_pkey(request_rec *r, oidc_cfg_t *cfg, oidc_jwk_t **jwk, oidc_jwt_t **jwt,
-						 apr_byte_t use_psa_for_rsa) {
+apr_byte_t oidc_proto_jwt_create_from_first_pkey(request_rec *r, const oidc_cfg_t *cfg, oidc_jwk_t **jwk,
+						 oidc_jwt_t **jwt, apr_byte_t use_psa_for_rsa) {
 	apr_byte_t rv = FALSE;
 
 	oidc_debug(r, "enter");

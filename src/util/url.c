@@ -179,7 +179,7 @@ const char *oidc_util_url_cur_host(request_rec *r, oidc_hdr_x_forwarded_t x_forw
 	if (host_str == NULL)
 		host_str = oidc_http_hdr_in_host_get(r);
 	if (host_str) {
-		char *dup = apr_pstrdup(r->pool, host_str);
+		const char *dup = apr_pstrdup(r->pool, host_str);
 
 		if (dup[0] == '[') {
 			p = strchr(dup, ']');
@@ -254,7 +254,7 @@ char *oidc_util_url_cur(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_heade
 /*
  * infer a full absolute URL from the (optional) relative one
  */
-const char *oidc_util_url_abs(request_rec *r, oidc_cfg_t *cfg, const char *url) {
+const char *oidc_util_url_abs(request_rec *r, const oidc_cfg_t *cfg, const char *url) {
 	if ((url != NULL) && (url[0] == OIDC_CHAR_FORWARD_SLASH)) {
 		url =
 		    apr_pstrcat(r->pool, _oidc_util_url_base_cur(r, oidc_cfg_x_forwarded_headers_get(cfg)), url, NULL);
@@ -266,7 +266,7 @@ const char *oidc_util_url_abs(request_rec *r, oidc_cfg_t *cfg, const char *url) 
 /*
  * check if the request is on a secure HTTPs (TLS) connection
  */
-apr_byte_t oidc_util_url_cur_is_secure(const request_rec *r, oidc_cfg_t *c) {
+apr_byte_t oidc_util_url_cur_is_secure(const request_rec *r, const oidc_cfg_t *c) {
 	return (_oidc_strnatcasecmp("https", _oidc_util_url_cur_scheme(r, oidc_cfg_x_forwarded_headers_get(c))) == 0);
 }
 

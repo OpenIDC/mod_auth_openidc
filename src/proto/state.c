@@ -234,7 +234,7 @@ void oidc_proto_state_set_timestamp_now(oidc_proto_state_t *proto_state) {
 /*
  * parse a state object from the provided cookie value
  */
-oidc_proto_state_t *oidc_proto_state_from_cookie(request_rec *r, oidc_cfg_t *c, const char *cookieValue) {
+oidc_proto_state_t *oidc_proto_state_from_cookie(request_rec *r, const oidc_cfg_t *c, const char *cookieValue) {
 	char *s_payload = NULL;
 	json_t *result = NULL;
 	oidc_util_jwt_verify(r, oidc_cfg_crypto_passphrase_get(c), cookieValue, &s_payload);
@@ -245,7 +245,7 @@ oidc_proto_state_t *oidc_proto_state_from_cookie(request_rec *r, oidc_cfg_t *c, 
 /*
  * serialize a state object to a signed JWT cookie value
  */
-char *oidc_proto_state_to_cookie(request_rec *r, oidc_cfg_t *c, const oidc_proto_state_t *proto_state) {
+char *oidc_proto_state_to_cookie(request_rec *r, const oidc_cfg_t *c, const oidc_proto_state_t *proto_state) {
 	char *cookieValue = NULL;
 	oidc_util_jwt_create(r, oidc_cfg_crypto_passphrase_get(c),
 			     oidc_util_json_encode(r->pool, proto_state, JSON_COMPACT), &cookieValue);

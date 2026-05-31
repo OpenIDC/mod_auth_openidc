@@ -46,7 +46,7 @@
  * returns the "aud" claim to insert into the JWT used for client
  * authentication towards the token endpoint using private_key_jwt/client_secret_jwt
  */
-const char *oidc_proto_profile_token_endpoint_auth_aud(oidc_provider_t *provider) {
+const char *oidc_proto_profile_token_endpoint_auth_aud(const oidc_provider_t *provider) {
 	if (oidc_cfg_provider_profile_get(provider) == OIDC_PROFILE_FAPI20) {
 		return oidc_cfg_provider_issuer_get(provider);
 	}
@@ -57,7 +57,7 @@ const char *oidc_proto_profile_token_endpoint_auth_aud(oidc_provider_t *provider
  * returns the "aud" claim to insert into the JWT used for client
  * authentication towards the revocation endpoint using private_key_jwt/client_secret_jwt
  */
-const char *oidc_proto_profile_revocation_endpoint_auth_aud(oidc_provider_t *provider, const char *val) {
+const char *oidc_proto_profile_revocation_endpoint_auth_aud(const oidc_provider_t *provider, const char *val) {
 	if (oidc_cfg_provider_profile_get(provider) == OIDC_PROFILE_FAPI20) {
 		return oidc_cfg_provider_issuer_get(provider);
 	}
@@ -75,7 +75,7 @@ const char *oidc_proto_profile_revocation_endpoint_auth_aud(oidc_provider_t *pro
 /*
  * returns the method to be used when sending the authorization request to the Provider
  */
-oidc_auth_request_method_t oidc_proto_profile_auth_request_method_get(oidc_provider_t *provider) {
+oidc_auth_request_method_t oidc_proto_profile_auth_request_method_get(const oidc_provider_t *provider) {
 	if (oidc_cfg_provider_profile_get(provider) == OIDC_PROFILE_FAPI20)
 		return OIDC_AUTH_REQUEST_METHOD_PAR;
 	return oidc_cfg_provider_auth_request_method_get(provider);
@@ -84,7 +84,8 @@ oidc_auth_request_method_t oidc_proto_profile_auth_request_method_get(oidc_provi
 /*
  * returns the acceptable "aud" values in the ID token
  */
-const apr_array_header_t *oidc_proto_profile_id_token_aud_values_get(apr_pool_t *pool, oidc_provider_t *provider) {
+const apr_array_header_t *oidc_proto_profile_id_token_aud_values_get(apr_pool_t *pool,
+								     const oidc_provider_t *provider) {
 	const apr_array_header_t *values = oidc_cfg_provider_id_token_aud_values_get(provider);
 	// TODO: so we actually do allow overriding the acceptable "aud" values but we sort of assume the client_id
 	//       is in there in that case; perhaps check that - in the config check? - for FAPI20
@@ -99,7 +100,7 @@ const apr_array_header_t *oidc_proto_profile_id_token_aud_values_get(apr_pool_t 
 /*
  * returns the PKCE mode
  */
-const oidc_proto_pkce_t *oidc_proto_profile_pkce_get(oidc_provider_t *provider) {
+const oidc_proto_pkce_t *oidc_proto_profile_pkce_get(const oidc_provider_t *provider) {
 	if (oidc_cfg_provider_profile_get(provider) == OIDC_PROFILE_FAPI20)
 		return &oidc_pkce_s256;
 	return oidc_cfg_provider_pkce_get(provider);
@@ -108,7 +109,7 @@ const oidc_proto_pkce_t *oidc_proto_profile_pkce_get(oidc_provider_t *provider) 
 /*
  * returns the DPoP mode
  */
-oidc_dpop_mode_t oidc_proto_profile_dpop_mode_get(oidc_provider_t *provider) {
+oidc_dpop_mode_t oidc_proto_profile_dpop_mode_get(const oidc_provider_t *provider) {
 	if (oidc_cfg_provider_profile_get(provider) == OIDC_PROFILE_FAPI20)
 		return OIDC_DPOP_MODE_REQUIRED;
 	return oidc_cfg_provider_dpop_mode_get(provider);
@@ -118,7 +119,7 @@ oidc_dpop_mode_t oidc_proto_profile_dpop_mode_get(oidc_provider_t *provider) {
  * returns whether the Provider is required to pass back an "iss" parameter
  * together with the authorization response sent to the Redirect URI
  */
-int oidc_proto_profile_response_require_iss_get(oidc_provider_t *provider) {
+int oidc_proto_profile_response_require_iss_get(const oidc_provider_t *provider) {
 	if (oidc_cfg_provider_profile_get(provider) == OIDC_PROFILE_FAPI20)
 		return 1;
 	return oidc_cfg_provider_response_require_iss_get(provider);

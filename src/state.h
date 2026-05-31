@@ -46,7 +46,7 @@
 #include "cfg/cfg.h"
 
 char *oidc_state_cookie_name(request_rec *r, const char *state);
-char *oidc_state_browser_fingerprint(request_rec *r, oidc_cfg_t *c, const char *nonce);
+char *oidc_state_browser_fingerprint(request_rec *r, const oidc_cfg_t *c, const char *nonce);
 int oidc_state_cookies_clean_expired(request_rec *r, oidc_cfg_t *c, const char *currentCookieName, int delete_oldest);
 
 #endif /* _MOD_AUTH_OPENIDC_STATE_H_ */

@@ -210,7 +210,7 @@ static oidc_authz_pcre_handler_t _oidc_authz_pcre_handlers[] = {
 static apr_byte_t oidc_authz_match_pcre_array(request_rec *r, const char *spec, const json_t *val, const char *key,
 					      struct oidc_pcre *preg) {
 
-	json_t *e = NULL;
+	const json_t *e = NULL;
 
 	if ((spec == NULL) || (val == NULL) || (key == NULL) || (preg == NULL))
 		return FALSE;
@@ -446,7 +446,7 @@ static apr_byte_t oidc_authz_skip_to_content_handler(request_rec *r) {
 authz_status oidc_authz_24_worker(request_rec *r, json_t *claims, const char *require_args,
 				  const void *parsed_require_args, oidc_authz_match_claim_fn_type match_claim_fn) {
 
-	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	const oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	int count_oauth_claims = 0;
 	const char *t;
 	const char *w;

@@ -93,8 +93,8 @@ static apr_byte_t oidc_metadata_client_is_valid(request_rec *r, const json_t *j_
 /*
  * register the client with the OP using Dynamic Client Registration
  */
-apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider, json_t **j_client,
-					 char **response) {
+apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
+					 json_t **j_client, char **response) {
 
 	/* assemble the JSON registration request */
 	json_t *data = json_object();
@@ -259,8 +259,8 @@ apr_byte_t oidc_metadata_client_get(request_rec *r, oidc_cfg_t *cfg, const char 
 /*
  * override the provider token endpoint auth method when the client metadata specifies one
  */
-static void oidc_metadata_client_parse_token_endpoint_auth(request_rec *r, oidc_cfg_t *cfg, const json_t *j_client,
-							   oidc_provider_t *provider) {
+static void oidc_metadata_client_parse_token_endpoint_auth(request_rec *r, const oidc_cfg_t *cfg,
+							   const json_t *j_client, oidc_provider_t *provider) {
 
 	char *value = NULL;
 	oidc_util_json_object_get_string(r->pool, j_client, OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHOD, &value, NULL);

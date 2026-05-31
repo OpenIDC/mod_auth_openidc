@@ -127,8 +127,8 @@ out:
 	oidc_debug(r, "leave");
 }
 
-static apr_byte_t oidc_logout_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg_t *cfg, oidc_provider_t *provider,
-					     apr_byte_t revoke_tokens) {
+static apr_byte_t oidc_logout_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg_t *cfg,
+					     const oidc_provider_t *provider, apr_byte_t revoke_tokens) {
 
 	char *uuid = NULL;
 	oidc_session_t session;
@@ -312,7 +312,7 @@ static int oidc_logout_backchannel_read_token(request_rec *r, const char **logou
 	return OK;
 }
 
-static int oidc_logout_backchannel_parse_jwt(request_rec *r, oidc_cfg_t *cfg, const char *logout_token,
+static int oidc_logout_backchannel_parse_jwt(request_rec *r, const oidc_cfg_t *cfg, const char *logout_token,
 					     oidc_jwt_t **jwt) {
 	oidc_jose_error_t err;
 
@@ -366,7 +366,8 @@ static int oidc_logout_backchannel_verify_jwt(request_rec *r, oidc_cfg_t *cfg, o
 	return OK;
 }
 
-static int oidc_logout_backchannel_check_jti_replay(request_rec *r, oidc_provider_t *provider, const oidc_jwt_t *jwt) {
+static int oidc_logout_backchannel_check_jti_replay(request_rec *r, const oidc_provider_t *provider,
+						    const oidc_jwt_t *jwt) {
 	char *jti = NULL;
 	char *replay = NULL;
 	apr_time_t jti_cache_duration;

@@ -648,7 +648,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 /*
  * set the unique user identifier that will be propagated in the Apache r->user and REMOTE_USER variables
  */
-static apr_byte_t oidc_oauth_set_request_user(request_rec *r, oidc_cfg_t *c, const json_t *token) {
+static apr_byte_t oidc_oauth_set_request_user(request_rec *r, const oidc_cfg_t *c, const json_t *token) {
 	char *remote_user = NULL;
 
 	if (oidc_get_remote_user(r, oidc_cfg_oauth_remote_user_claim_name_get(c),
@@ -724,7 +724,7 @@ static apr_byte_t oidc_oauth_validate_token(request_rec *r, oidc_cfg_t *c, const
 /*
  * propagate claims and access_token into the application HTTP headers
  */
-static void oidc_oauth_pass_info_to_app(request_rec *r, oidc_cfg_t *c, json_t *claims, const char *access_token) {
+static void oidc_oauth_pass_info_to_app(request_rec *r, const oidc_cfg_t *c, json_t *claims, const char *access_token) {
 	const char *authn_header = oidc_cfg_dir_authn_header_get(r);
 	oidc_appinfo_pass_in_t pass_in = oidc_cfg_dir_pass_info_in_get(r);
 	oidc_appinfo_encoding_t encoding = oidc_cfg_dir_pass_info_encoding_get(r);

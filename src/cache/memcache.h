@@ -91,7 +91,7 @@ typedef struct oidc_cache_cfg_memcache_t {
 } oidc_cache_cfg_memcache_t;
 
 int oidc_cache_memcache_post_config(apr_pool_t *pool, server_rec *s, oidc_cfg_t *cfg);
-int oidc_cache_memcache_add_servers(apr_pool_t *pool, server_rec *s, oidc_cfg_t *cfg,
+int oidc_cache_memcache_add_servers(apr_pool_t *pool, server_rec *s, const oidc_cfg_t *cfg,
 				    oidc_cache_cfg_memcache_t *context);
 apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *section, const char *key, char **value);
 apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *section, const char *key, const char *value,

@@ -58,7 +58,7 @@ char *oidc_state_cookie_name(request_rec *r, const char *state) {
 /*
  * calculates a hash value based on request fingerprint plus a provided nonce string.
  */
-char *oidc_state_browser_fingerprint(request_rec *r, oidc_cfg_t *c, const char *nonce) {
+char *oidc_state_browser_fingerprint(request_rec *r, const oidc_cfg_t *c, const char *nonce) {
 
 	unsigned char hash[OIDC_STATE_SHA1_LEN];
 	/* helper to hold to header values */

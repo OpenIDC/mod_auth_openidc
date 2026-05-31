@@ -479,7 +479,7 @@ trace-id         = 32HEXDIGLC  ; 16 bytes array identifier. All zeroes forbidden
 parent-id        = 16HEXDIGLC  ; 8 bytes array identifier. All zeroes forbidden
 trace-flags      = 2HEXDIGLC   ; 8 bit flags. Currently, only one bit is used.
  */
-void oidc_util_set_trace_parent(request_rec *r, oidc_cfg_t *c, const char *span) {
+void oidc_util_set_trace_parent(request_rec *r, const oidc_cfg_t *c, const char *span) {
 	// apr_table_get(r->subprocess_env, "UNIQUE_ID");
 	unsigned char trace_id[OIDC_TP_TRACE_ID_LEN];
 	unsigned char parent_id[OIDC_TP_PARENT_ID_LEN];

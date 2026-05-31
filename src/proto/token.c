@@ -49,7 +49,8 @@
 /*
  * check that the access_token type is supported
  */
-static apr_byte_t oidc_proto_validate_token_type(request_rec *r, oidc_provider_t *provider, const char *token_type) {
+static apr_byte_t oidc_proto_validate_token_type(request_rec *r, const oidc_provider_t *provider,
+						 const char *token_type) {
 	/*  we only support bearer/Bearer and DPoP/dpop */
 	if ((token_type != NULL) && (_oidc_strnatcasecmp(token_type, OIDC_PROTO_BEARER) != 0) &&
 	    (_oidc_strnatcasecmp(token_type, OIDC_PROTO_DPOP) != 0) &&
@@ -68,7 +69,7 @@ static apr_byte_t oidc_proto_validate_token_type(request_rec *r, oidc_provider_t
 /*
  * send the request to the token endpoint
  */
-static apr_byte_t oidc_proto_token_endpoint_call(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
+static apr_byte_t oidc_proto_token_endpoint_call(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
 						 const apr_table_t *params, const char *basic_auth,
 						 const char *bearer_auth, const char *dpop, char **response,
 						 apr_hash_t *response_hdrs) {

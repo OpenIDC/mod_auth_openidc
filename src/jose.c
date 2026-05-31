@@ -478,7 +478,7 @@ void oidc_jwk_list_destroy(apr_array_header_t *keys_list) {
 /*
  * parse a JSON object in to a JWK struct
  */
-apr_byte_t oidc_jwk_parse_json(apr_pool_t *pool, json_t *json, oidc_jwk_t **jwk, oidc_jose_error_t *err) {
+apr_byte_t oidc_jwk_parse_json(apr_pool_t *pool, const json_t *json, oidc_jwk_t **jwk, oidc_jose_error_t *err) {
 	*jwk = oidc_jwk_parse(pool, json, err);
 	return (*jwk != NULL);
 }

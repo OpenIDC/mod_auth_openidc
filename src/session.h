@@ -68,26 +68,26 @@ apr_byte_t oidc_session_load_cache_by_uuid(request_rec *r, oidc_cfg_t *c, const 
 void oidc_session_id_new(request_rec *r, oidc_session_t *z);
 
 void oidc_session_set_userinfo_jwt(request_rec *r, oidc_session_t *z, const char *userinfo_jwt);
-const char *oidc_session_get_userinfo_jwt(request_rec *r, oidc_session_t *z);
+const char *oidc_session_get_userinfo_jwt(request_rec *r, const oidc_session_t *z);
 void oidc_session_set_userinfo_claims(request_rec *r, oidc_session_t *z, json_t *userinfo_claims);
 json_t *oidc_session_get_userinfo_claims(request_rec *r, const oidc_session_t *z);
 void oidc_session_set_idtoken_claims(request_rec *r, oidc_session_t *z, json_t *idtoken_claims);
 json_t *oidc_session_get_idtoken_claims(request_rec *r, const oidc_session_t *z);
 void oidc_session_set_idtoken(request_rec *r, oidc_session_t *z, const char *s_id_token);
-const char *oidc_session_get_idtoken(request_rec *r, oidc_session_t *z);
+const char *oidc_session_get_idtoken(request_rec *r, const oidc_session_t *z);
 void oidc_session_set_access_token(request_rec *r, oidc_session_t *z, const char *access_token);
-const char *oidc_session_get_access_token(request_rec *r, oidc_session_t *z);
+const char *oidc_session_get_access_token(request_rec *r, const oidc_session_t *z);
 void oidc_session_set_access_token_type(request_rec *r, oidc_session_t *z, const char *token_type);
-const char *oidc_session_get_access_token_type(request_rec *r, oidc_session_t *z);
+const char *oidc_session_get_access_token_type(request_rec *r, const oidc_session_t *z);
 void oidc_session_set_access_token_expires(request_rec *r, oidc_session_t *z, const int expires_in);
 apr_time_t oidc_session_get_access_token_expires(request_rec *r, const oidc_session_t *z);
 const char *oidc_session_get_access_token_expires2str(request_rec *r, const oidc_session_t *z);
 void oidc_session_set_refresh_token(request_rec *r, oidc_session_t *z, const char *refresh_token);
-const char *oidc_session_get_refresh_token(request_rec *r, oidc_session_t *z);
+const char *oidc_session_get_refresh_token(request_rec *r, const oidc_session_t *z);
 void oidc_session_set_session_expires(request_rec *r, oidc_session_t *z, const apr_time_t expires);
 apr_time_t oidc_session_get_session_expires(request_rec *r, const oidc_session_t *z);
 void oidc_session_set_cookie_domain(request_rec *r, oidc_session_t *z, const char *cookie_domain);
-const char *oidc_session_get_cookie_domain(request_rec *r, oidc_session_t *z);
+const char *oidc_session_get_cookie_domain(request_rec *r, const oidc_session_t *z);
 void oidc_session_reset_userinfo_last_refresh(request_rec *r, oidc_session_t *z);
 void oidc_session_set_userinfo_refresh_interval(request_rec *r, oidc_session_t *z, const int interval);
 int oidc_session_get_userinfo_refresh_interval(request_rec *r, const oidc_session_t *z);
@@ -95,17 +95,17 @@ apr_time_t oidc_session_get_userinfo_last_refresh(request_rec *r, const oidc_ses
 void oidc_session_set_access_token_last_refresh(request_rec *r, oidc_session_t *z, apr_time_t ts);
 apr_time_t oidc_session_get_access_token_last_refresh(request_rec *r, const oidc_session_t *z);
 void oidc_session_set_request_state(request_rec *r, oidc_session_t *z, const char *request_state);
-const char *oidc_session_get_request_state(request_rec *r, oidc_session_t *z);
+const char *oidc_session_get_request_state(request_rec *r, const oidc_session_t *z);
 void oidc_session_set_original_url(request_rec *r, oidc_session_t *z, const char *original_url);
-const char *oidc_session_get_original_url(request_rec *r, oidc_session_t *z);
+const char *oidc_session_get_original_url(request_rec *r, const oidc_session_t *z);
 void oidc_session_set_session_state(request_rec *r, oidc_session_t *z, const char *session_state);
-const char *oidc_session_get_session_state(request_rec *r, oidc_session_t *z);
+const char *oidc_session_get_session_state(request_rec *r, const oidc_session_t *z);
 void oidc_session_set_issuer(request_rec *r, oidc_session_t *z, const char *issuer);
-const char *oidc_session_get_issuer(request_rec *r, oidc_session_t *z);
+const char *oidc_session_get_issuer(request_rec *r, const oidc_session_t *z);
 void oidc_session_set_client_id(request_rec *r, oidc_session_t *z, const char *client_id);
 void oidc_session_set_session_new(request_rec *r, oidc_session_t *z, const int is_new);
 int oidc_session_get_session_new(request_rec *r, const oidc_session_t *z);
-const char *oidc_session_get_scope(request_rec *r, oidc_session_t *z);
+const char *oidc_session_get_scope(request_rec *r, const oidc_session_t *z);
 void oidc_session_set_scope(request_rec *r, oidc_session_t *z, const char *scope);
 
 #endif /* _MOD_AUTH_OPENIDC_SESSION_H_ */

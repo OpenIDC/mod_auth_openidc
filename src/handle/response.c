@@ -476,7 +476,7 @@ static apr_byte_t oidc_response_flows(request_rec *r, oidc_cfg_t *c, oidc_proto_
 /*
  * set the unique user identifier that will be propagated in the Apache r->user and REMOTE_USER variables
  */
-static apr_byte_t oidc_response_set_request_user(request_rec *r, oidc_cfg_t *c, oidc_provider_t *provider,
+static apr_byte_t oidc_response_set_request_user(request_rec *r, const oidc_cfg_t *c, const oidc_provider_t *provider,
 						 oidc_jwt_t *jwt, json_t *userinfo_claims) {
 
 	const char *issuer = oidc_cfg_provider_issuer_get(provider);
@@ -562,7 +562,7 @@ static int oidc_response_handle_state_mismatch(request_rec *r, oidc_cfg_t *c) {
 /*
  * finalize a successful authorization response: restore preserved form-post data or redirect to the original URL
  */
-static int oidc_response_finish_success(request_rec *r, oidc_cfg_t *c, const char *original_url,
+static int oidc_response_finish_success(request_rec *r, const oidc_cfg_t *c, const char *original_url,
 					const char *original_method) {
 	/* log the successful response */
 	oidc_debug(r, "session created and stored, returning to original URL: %s, original method: %s", original_url,

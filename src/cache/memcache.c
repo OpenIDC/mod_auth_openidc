@@ -123,7 +123,7 @@ int oidc_cache_memcache_post_config(apr_pool_t *pool, server_rec *s, oidc_cfg_t 
 
 	apr_status_t rv = APR_SUCCESS;
 	apr_uint16_t nservers = 0;
-	char *split;
+	const char *split;
 	char *tok;
 	APR_OPTIONAL_FN_TYPE(http2_get_num_workers) * get_h2_num_workers;
 	int max_threads = 0;
@@ -210,7 +210,7 @@ int oidc_cache_memcache_post_config(apr_pool_t *pool, server_rec *s, oidc_cfg_t 
 /*
  * register all configured memcache servers with the context through the (injectable) add_server op
  */
-int oidc_cache_memcache_add_servers(apr_pool_t *pool, server_rec *s, oidc_cfg_t *cfg,
+int oidc_cache_memcache_add_servers(apr_pool_t *pool, server_rec *s, const oidc_cfg_t *cfg,
 				    oidc_cache_cfg_memcache_t *context) {
 	char *tok;
 	char *cache_config = apr_pstrdup(pool, oidc_cfg_cache_memcache_servers_get(cfg));

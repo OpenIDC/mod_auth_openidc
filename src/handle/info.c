@@ -110,7 +110,7 @@ static void oidc_info_add_session(oidc_session_t *session, json_t *json) {
 /*
  * build the JSON object that is returned to the caller based on the configured info hook data
  */
-static void oidc_info_build_json(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, json_t *json) {
+static void oidc_info_build_json(request_rec *r, const oidc_cfg_t *c, oidc_session_t *session, json_t *json) {
 	apr_hash_t *data = oidc_cfg_info_hook_data_get(c);
 
 	/* add a timestamp of creation in there for the caller */

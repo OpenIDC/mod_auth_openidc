@@ -457,7 +457,7 @@ static void oidc_metrics_reset_server(const json_t *j_server) {
  * reset the serialized (global) metrics data in shared memory
  */
 static inline void oidc_metrics_storage_reset(server_rec *s) {
-	char *s_json = NULL;
+	const char *s_json = NULL;
 	json_t *json = NULL;
 	void *iter = NULL;
 
@@ -627,7 +627,7 @@ static void oidc_metrics_counter_set_or_update(server_rec *s, json_t *parent, co
  */
 static void oidc_metrics_store_counter_entry(server_rec *s, json_t *j_counters, const char *key,
 					     apr_hash_t *counter_hash) {
-	char *class_name = apr_pstrdup(s->process->pool, key);
+	const char *class_name = apr_pstrdup(s->process->pool, key);
 	char *name = _oidc_strstr(class_name, ".");
 	json_t *j_names = NULL;
 
@@ -701,7 +701,7 @@ static void oidc_metrics_store_timings(server_rec *s, json_t *json) {
  * flush the locally gathered metrics data into the global data kept in shared memory
  */
 static void oidc_metrics_store(server_rec *s) {
-	char *s_json = NULL;
+	const char *s_json = NULL;
 	json_t *json = NULL;
 
 	if ((apr_hash_count(_oidc_metrics.counters) == 0) && (apr_hash_count(_oidc_metrics.timings) == 0))
@@ -1615,7 +1615,7 @@ const oidc_metrics_content_handler_t *oidc_metrics_find_handler(request_rec *r) 
  * return the metrics to the caller and flush the storage
  */
 int oidc_metrics_handle_request(request_rec *r) {
-	char *s_json = NULL;
+	const char *s_json = NULL;
 	const oidc_metrics_content_handler_t *handler = NULL;
 
 	/* get the content handler for the format */

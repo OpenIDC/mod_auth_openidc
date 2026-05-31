@@ -234,7 +234,7 @@ static apr_byte_t oidc_proto_validate_issuer_client_id(request_rec *r, const cha
  */
 static apr_byte_t oidc_proto_validate_response_type_mode_issuer(request_rec *r, const char *requested_response_type,
 								const apr_table_t *params,
-								oidc_proto_state_t *proto_state,
+								const oidc_proto_state_t *proto_state,
 								const char *response_mode,
 								const char *default_response_mode, const char *issuer,
 								int require_issuer, const char *c_client_id) {

@@ -482,7 +482,7 @@ size_t oidc_http_response_data(void *contents, size_t size, size_t nmemb, void *
 size_t oidc_http_response_header(const char *buffer, size_t size, size_t nitems, void *userdata) {
 	/* received header is nitems * size long in 'buffer' NOT ZERO TERMINATED */
 	oidc_curl_resp_hdr_ctx_t *ctx = (oidc_curl_resp_hdr_ctx_t *)userdata;
-	char *hdr = NULL;
+	const char *hdr = NULL;
 	char *value = NULL;
 	char *h_name = NULL;
 	apr_ssize_t h_len = 0;
@@ -678,7 +678,7 @@ const char *oidc_http_interface(const request_rec *r) {
  * back to the system curl-ca-bundle.crt on Windows when no explicit bundle
  * was configured
  */
-static void oidc_http_request_setup_ca_bundle(request_rec *r, CURL *curl, oidc_cfg_t *c) {
+static void oidc_http_request_setup_ca_bundle(request_rec *r, CURL *curl, const oidc_cfg_t *c) {
 	// NB: the variable names r, curl, and code are used in the OIDC_HTTP_CURL_SETOPT macro
 	CURLcode code = CURLE_OK;
 
@@ -727,7 +727,7 @@ static void oidc_http_request_setup_proxy(request_rec *r, CURL *curl,
  * build the list of custom request headers (authorization, content-type,
  * traceparent, DPoP) to pass on to curl
  */
-struct curl_slist *oidc_http_request_build_header_list(request_rec *r, oidc_cfg_t *c, const char *content_type,
+struct curl_slist *oidc_http_request_build_header_list(request_rec *r, const oidc_cfg_t *c, const char *content_type,
 						       const char *access_token, const char *dpop) {
 	struct curl_slist *h_list = NULL;
 
@@ -788,8 +788,8 @@ static void oidc_http_request_pass_cookies(request_rec *r, CURL *curl, const apr
  * execute the curl request honoring the configured retry policy; retries
  * are skipped on a request/transfer timeout and short-circuited on success
  */
-static apr_byte_t oidc_http_request_perform_with_retries(request_rec *r, oidc_cfg_t *c, CURL *curl, const char *url,
-							 const char *curl_err,
+static apr_byte_t oidc_http_request_perform_with_retries(request_rec *r, const oidc_cfg_t *c, CURL *curl,
+							 const char *url, const char *curl_err,
 							 const oidc_http_timeout_t *http_timeout) {
 	CURLcode res = CURLE_OK;
 

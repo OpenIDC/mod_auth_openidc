@@ -67,7 +67,7 @@ const char *oidc_metadata_issuer_to_filename(request_rec *r, const char *issuer)
  * get the issuer from a metadata filename (cq. urldecode it)
  */
 const char *oidc_metadata_filename_to_issuer(request_rec *r, const char *filename) {
-	char *result = apr_pstrdup(r->pool, filename);
+	const char *result = apr_pstrdup(r->pool, filename);
 	char *p = strrchr(result, OIDC_CHAR_DOT);
 	*p = '\0';
 	p = oidc_http_url_decode(r, result);
@@ -77,7 +77,8 @@ const char *oidc_metadata_filename_to_issuer(request_rec *r, const char *filenam
 /*
  * get the full path to the metadata file for a specified issuer and directory
  */
-static const char *oidc_metadata_file_path(request_rec *r, oidc_cfg_t *cfg, const char *issuer, const char *type) {
+static const char *oidc_metadata_file_path(request_rec *r, const oidc_cfg_t *cfg, const char *issuer,
+					   const char *type) {
 	return apr_psprintf(r->pool, "%s/%s.%s", oidc_cfg_metadata_dir_get(cfg),
 			    oidc_metadata_issuer_to_filename(r, issuer), type);
 }

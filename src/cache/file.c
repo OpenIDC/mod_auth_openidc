@@ -239,7 +239,7 @@ error_close:
  * timestamp; creates the metadata file if it does not yet exist
  * returns TRUE if cleaning should proceed; *rc holds the status to return when FALSE
  */
-static apr_byte_t oidc_cache_file_clean_due(request_rec *r, oidc_cfg_t *cfg, const char *metadata_path,
+static apr_byte_t oidc_cache_file_clean_due(request_rec *r, const oidc_cfg_t *cfg, const char *metadata_path,
 					    apr_status_t *rc) {
 	apr_file_t *fd = NULL;
 	apr_finfo_t fi;

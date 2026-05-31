@@ -116,7 +116,7 @@ typedef enum {
 /*
  * obtain recent refresh token grant results from the cache
  */
-static oidc_refresh_token_cache_result_t oidc_refresh_token_cache_get(request_rec *r, oidc_cfg_t *c,
+static oidc_refresh_token_cache_result_t oidc_refresh_token_cache_get(request_rec *r, const oidc_cfg_t *c,
 								      const char *refresh_token, char **s_access_token,
 								      char **s_token_type, int *expires_in,
 								      char **s_id_token, char **s_refresh_token,
@@ -266,8 +266,9 @@ static apr_byte_t oidc_refresh_token_grant_obtain_tokens(request_rec *r, oidc_cf
  * serialized form, parse it, store its claims, update the session expiry
  * when no fixed max-duration is configured and return it to the caller
  */
-static void oidc_refresh_token_grant_apply_id_token(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
-						    oidc_provider_t *provider, char *s_id_token, char **new_id_token) {
+static void oidc_refresh_token_grant_apply_id_token(request_rec *r, const oidc_cfg_t *c, oidc_session_t *session,
+						    const oidc_provider_t *provider, char *s_id_token,
+						    char **new_id_token) {
 
 	oidc_jwt_t *id_token_jwt = NULL;
 	oidc_jose_error_t err;

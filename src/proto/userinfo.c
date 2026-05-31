@@ -49,8 +49,9 @@
  * parse a JWT response from the userinfo endpoint: at this point the response is not a JSON object
  * if the response is an encrypted and/or signed JWT, decrypt/verify it before validating it
  */
-static apr_byte_t oidc_proto_userinfo_response_jwt_parse(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
-							 char **response, json_t **claims, char **userinfo_jwt) {
+static apr_byte_t oidc_proto_userinfo_response_jwt_parse(request_rec *r, oidc_cfg_t *cfg,
+							 const oidc_provider_t *provider, char **response,
+							 json_t **claims, char **userinfo_jwt) {
 	apr_byte_t rv = FALSE;
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
@@ -166,7 +167,7 @@ static const char *oidc_proto_userinfo_composite_source_payload(request_rec *r, 
 /*
  * parse a single aggregated/distributed claim JWT and merge its payload into decoded[key]
  */
-static void oidc_proto_userinfo_composite_decode_source(request_rec *r, oidc_cfg_t *cfg, const char *key,
+static void oidc_proto_userinfo_composite_decode_source(request_rec *r, const oidc_cfg_t *cfg, const char *key,
 							const char *s_json, json_t *decoded) {
 	oidc_jose_error_t err;
 	oidc_jwt_t *jwt = NULL;
@@ -262,7 +263,7 @@ static apr_byte_t oidc_proto_userinfo_request_composite_claims(request_rec *r, o
 /*
  * send the request to the userinfo endpoint
  */
-static apr_byte_t oidc_proto_userinfo_endpoint_call(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
+static apr_byte_t oidc_proto_userinfo_endpoint_call(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
 						    const char *access_token, const char *dpop, char **response,
 						    long *response_code, apr_hash_t *response_hdrs) {
 
@@ -303,8 +304,9 @@ static apr_byte_t oidc_proto_userinfo_endpoint_call(request_rec *r, oidc_cfg_t *
  * allocate the response headers hash used to capture DPoP-related response metadata and
  * create the initial DPoP proof for the userinfo request
  */
-static apr_byte_t oidc_proto_userinfo_request_dpop_init(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
-							const char *method, const char *access_token, char **dpop,
+static apr_byte_t oidc_proto_userinfo_request_dpop_init(request_rec *r, oidc_cfg_t *cfg,
+							const oidc_provider_t *provider, const char *method,
+							const char *access_token, char **dpop,
 							apr_hash_t **response_hdrs) {
 	*response_hdrs = apr_hash_make(r->pool);
 	apr_hash_set(*response_hdrs, OIDC_HTTP_HDR_AUTHORIZATION, APR_HASH_KEY_STRING, "");
