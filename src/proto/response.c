@@ -177,7 +177,7 @@ static apr_byte_t oidc_proto_validate_response_type(request_rec *r, const char *
 /*
  * validate the response mode used by the OP against the requested response mode
  */
-static apr_byte_t oidc_proto_validate_response_mode(request_rec *r, oidc_proto_state_t *proto_state,
+static apr_byte_t oidc_proto_validate_response_mode(request_rec *r, const oidc_proto_state_t *proto_state,
 						    const char *response_mode, const char *default_response_mode) {
 
 	const char *requested_response_mode = oidc_proto_state_get_response_mode(proto_state);
@@ -261,9 +261,10 @@ static apr_byte_t oidc_proto_validate_response_type_mode_issuer(request_rec *r, 
  * parse and id_token and check the c_hash if the code is provided
  */
 static apr_byte_t oidc_proto_parse_idtoken_and_validate_code(request_rec *r, oidc_cfg_t *c,
-							     oidc_proto_state_t *proto_state, oidc_provider_t *provider,
-							     const char *response_type, const apr_table_t *params,
-							     oidc_jwt_t **jwt, apr_byte_t must_validate_code) {
+							     const oidc_proto_state_t *proto_state,
+							     oidc_provider_t *provider, const char *response_type,
+							     const apr_table_t *params, oidc_jwt_t **jwt,
+							     apr_byte_t must_validate_code) {
 
 	const char *code = apr_table_get(params, OIDC_PROTO_CODE);
 	const char *id_token = apr_table_get(params, OIDC_PROTO_ID_TOKEN);
@@ -318,7 +319,8 @@ static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg_t *cfg, oidc_
  */
 static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r, oidc_cfg_t *c,
 								oidc_provider_t *provider, const char *response_type,
-								apr_table_t *params, oidc_proto_state_t *proto_state) {
+								apr_table_t *params,
+								const oidc_proto_state_t *proto_state) {
 
 	char *id_token = NULL;
 	char *access_token = NULL;

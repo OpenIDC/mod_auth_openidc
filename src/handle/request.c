@@ -114,7 +114,7 @@ static const char *oidc_request_samesite_state_cookie(const request_rec *r, stru
  * in a cookie in the browser that is cryptographically bound to that state
  */
 static int oidc_request_authorization_set_cookie(request_rec *r, oidc_cfg_t *c, const char *state,
-						 oidc_proto_state_t *proto_state) {
+						 const oidc_proto_state_t *proto_state) {
 	/*
 	 * create a cookie consisting of 8 elements:
 	 * random value, original URL, original method, issuer, response_type, response_mod, prompt and timestamp

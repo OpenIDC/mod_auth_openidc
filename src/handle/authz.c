@@ -168,7 +168,7 @@ static apr_byte_t oidc_authz_match_value(request_rec *r, const char *spec, json_
 	return FALSE;
 }
 
-typedef apr_byte_t(oidc_match_pcre_function_t)(request_rec *r, const char *, json_t *, const char *,
+typedef apr_byte_t(oidc_match_pcre_function_t)(request_rec *r, const char *, const json_t *, const char *,
 					       struct oidc_pcre *);
 
 typedef struct oidc_authz_pcre_handler_t {
@@ -176,7 +176,7 @@ typedef struct oidc_authz_pcre_handler_t {
 	oidc_match_pcre_function_t *handler;
 } oidc_authz_pcre_handler_t;
 
-static apr_byte_t oidc_authz_match_pcre_string(request_rec *r, const char *spec, json_t *val, const char *key,
+static apr_byte_t oidc_authz_match_pcre_string(request_rec *r, const char *spec, const json_t *val, const char *key,
 					       struct oidc_pcre *preg) {
 	char *s_err = NULL;
 	const char *s = json_string_value(val);
@@ -195,7 +195,7 @@ static apr_byte_t oidc_authz_match_pcre_string(request_rec *r, const char *spec,
 	return TRUE;
 }
 
-static apr_byte_t oidc_authz_match_pcre_array(request_rec *r, const char *spec, json_t *val, const char *key,
+static apr_byte_t oidc_authz_match_pcre_array(request_rec *r, const char *spec, const json_t *val, const char *key,
 					      struct oidc_pcre *);
 
 // clang-format off
@@ -207,7 +207,7 @@ static oidc_authz_pcre_handler_t _oidc_authz_pcre_handlers[] = {
 };
 // clang-format on
 
-static apr_byte_t oidc_authz_match_pcre_array(request_rec *r, const char *spec, json_t *val, const char *key,
+static apr_byte_t oidc_authz_match_pcre_array(request_rec *r, const char *spec, const json_t *val, const char *key,
 					      struct oidc_pcre *preg) {
 
 	json_t *e = NULL;

@@ -985,7 +985,7 @@ end:
  */
 apr_byte_t oidc_http_get(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth,
 			 const char *access_token, const char *dpop, int ssl_validate_server, char **response,
-			 long *response_code, apr_hash_t *response_hdrs, oidc_http_timeout_t *http_timeout,
+			 long *response_code, apr_hash_t *response_hdrs, const oidc_http_timeout_t *http_timeout,
 			 const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,
 			 const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd) {
 	const char *query_url = oidc_http_query_encoded_url(r, url, params);
@@ -999,7 +999,7 @@ apr_byte_t oidc_http_get(request_rec *r, const char *url, const apr_table_t *par
  */
 apr_byte_t oidc_http_post_form(request_rec *r, const char *url, const apr_table_t *params, const char *basic_auth,
 			       const char *access_token, const char *dpop, int ssl_validate_server, char **response,
-			       long *response_code, apr_hash_t *response_hdrs, oidc_http_timeout_t *http_timeout,
+			       long *response_code, apr_hash_t *response_hdrs, const oidc_http_timeout_t *http_timeout,
 			       const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,
 			       const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd) {
 	const char *data = oidc_http_form_encoded_data(r, params);
@@ -1013,7 +1013,7 @@ apr_byte_t oidc_http_post_form(request_rec *r, const char *url, const apr_table_
  */
 apr_byte_t oidc_http_post_json(request_rec *r, const char *url, const json_t *json, const char *basic_auth,
 			       const char *access_token, const char *dpop, int ssl_validate_server, char **response,
-			       long *response_code, apr_hash_t *response_hdrs, oidc_http_timeout_t *http_timeout,
+			       long *response_code, apr_hash_t *response_hdrs, const oidc_http_timeout_t *http_timeout,
 			       const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,
 			       const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd) {
 	const char *data =

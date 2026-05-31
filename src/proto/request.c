@@ -664,7 +664,7 @@ static void oidc_proto_request_auth_scope_set(request_rec *r, struct oidc_provid
  */
 static void oidc_proto_request_auth_params_set(request_rec *r, struct oidc_provider_t *provider, const char *login_hint,
 					       const char *redirect_uri, const char *state,
-					       oidc_proto_state_t *proto_state, const char *id_token_hint,
+					       const oidc_proto_state_t *proto_state, const char *id_token_hint,
 					       const char *code_challenge, const char *auth_request_params,
 					       const char *path_scope, apr_table_t *params) {
 

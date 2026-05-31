@@ -1121,7 +1121,7 @@ static json_t *oidc_metrics_json_parse_r(request_rec *r, const char *s_json) {
 /*
  * JSON with extended descriptions/names
  */
-static int oidc_metrics_handle_json(request_rec *r, char *s_json) {
+static int oidc_metrics_handle_json(request_rec *r, const char *s_json) {
 
 	json_t *json = NULL;
 	const json_t *j_server = NULL;
@@ -1216,7 +1216,7 @@ end:
 /*
  * dump the internal shared memory segment
  */
-static int oidc_metrics_handle_internal(request_rec *r, char *s_json) {
+static int oidc_metrics_handle_internal(request_rec *r, const char *s_json) {
 	if (s_json == NULL)
 		return HTTP_NOT_FOUND;
 	return oidc_util_http_send(r, s_json, _oidc_strlen(s_json), OIDC_HTTP_CONTENT_TYPE_JSON, OK);
@@ -1265,7 +1265,7 @@ static json_t *oidc_metrics_status_select_value(json_t *j_counter, const char *s
 /*
  * return status updates
  */
-static int oidc_metrics_handle_status(request_rec *r, char *s_json) {
+static int oidc_metrics_handle_status(request_rec *r, const char *s_json) {
 	const char *msg = "OK\n";
 	char *s_metric_param = NULL;
 	char *s_server_param = NULL;
@@ -1494,7 +1494,7 @@ static void oidc_metrics_prometheus_convert(apr_hash_t *hash, const char *server
 /*
  * generate output in Prometheus formatting
  */
-static int oidc_metrics_handle_prometheus(request_rec *r, char *s_json) {
+static int oidc_metrics_handle_prometheus(request_rec *r, const char *s_json) {
 	json_t *json = NULL;
 	const json_t *j_server = NULL;
 	const char *s_server = NULL;
@@ -1541,7 +1541,7 @@ static int oidc_metrics_handle_prometheus(request_rec *r, char *s_json) {
  * definitions for handler callbacks
  */
 
-typedef int (*oidc_metrics_handler_function_t)(request_rec *, char *);
+typedef int (*oidc_metrics_handler_function_t)(request_rec *, const char *);
 
 // holder for output function callback context
 typedef struct oidc_metrics_handler_t {
