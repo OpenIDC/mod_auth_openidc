@@ -25,3 +25,43 @@ jobs:
       run: make valgrind
     - name: Distcheck
       run: make distcheck DESTDIR=/tmp/mod_auth_openidc
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Dependencies
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y apache2-dev libcjose-dev libssl-dev check pkg-config
+        sudo apt-get install -y libjansson-dev libcurl4-openssl-dev libhiredis-dev libpcre2-dev libjq-dev check
+        sudo apt-get install -y lcov
+    - name: Configure
+      run: |
+        ./autogen.sh
+        ./configure --with-jq --enable-code-coverage
+    - name: Coverage
+      run: |
+        make check-code-coverage \
+          CODE_COVERAGE_OUTPUT_FILE=coverage.info \
+          CODE_COVERAGE_OUTPUT_DIRECTORY=coverage-report \
+          2>&1 | tee coverage.log || { cat test/test-suite.log; exit 1; }
+    - name: Summary
+      if: always()
+      run: |
+        {
+          echo '## Code coverage'
+          echo '```'
+          sed -n '/Overall coverage rate/,/functions/p' coverage.log | grep . \
+            || tail -n 20 coverage.log
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+    - name: Upload report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: |
+          test/coverage-report
+          test/coverage.info
+        if-no-files-found: warn
