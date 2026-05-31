@@ -64,7 +64,7 @@ struct oidc_oauth_t {
 	char *introspection_endpoint_params;
 	char *introspection_endpoint_auth;
 	char *introspection_endpoint_auth_alg;
-	char *introspection_client_auth_bearer_token;
+	const char *introspection_client_auth_bearer_token;
 	char *introspection_endpoint_tls_client_key;
 	char *introspection_endpoint_tls_client_key_pwd;
 	char *introspection_endpoint_tls_client_cert;
