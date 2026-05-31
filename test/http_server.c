@@ -41,9 +41,10 @@ struct oidc_test_http_server_t {
 	apr_socket_t *listen_sock;
 	apr_port_t port;
 	apr_thread_t *thread;
-	const oidc_test_http_response_t *response;
-	oidc_test_http_captured_t captured;
-	int captured_ok;
+	const oidc_test_http_response_t *responses; /* scripted, served in order */
+	int n_responses;
+	oidc_test_http_captured_t *captured; /* one slot per scripted response */
+	int captured_count;		     /* number of requests actually handled */
 	int stopped;
 };
 
@@ -69,10 +70,9 @@ static apr_ssize_t srv_read_headers(apr_socket_t *sock, char *buf, apr_size_t ca
 	return -1;
 }
 
-static void srv_parse_request(oidc_test_http_server_t *s, char *headers, apr_size_t headers_len,
+static void srv_parse_request(apr_pool_t *p, oidc_test_http_captured_t *cap, char *headers, apr_size_t headers_len,
 			      const char *trailing_body, apr_size_t trailing_body_len, apr_socket_t *sock) {
-	apr_pool_t *p = s->pool;
-	s->captured.headers = apr_table_make(p, 16);
+	cap->headers = apr_table_make(p, 16);
 
 	/* request line: METHOD<sp>PATH<sp>HTTP/1.x\r\n */
 	char *eol = strstr(headers, "\r\n");
@@ -87,8 +87,8 @@ static void srv_parse_request(oidc_test_http_server_t *s, char *headers, apr_siz
 	if (sp2 == NULL)
 		return;
 	*sp2 = '\0';
-	s->captured.method = apr_pstrdup(p, headers);
-	s->captured.path = apr_pstrdup(p, sp1 + 1);
+	cap->method = apr_pstrdup(p, headers);
+	cap->path = apr_pstrdup(p, sp1 + 1);
 
 	/* header lines until empty line */
 	char *line = eol + 2;
@@ -107,7 +107,7 @@ static void srv_parse_request(oidc_test_http_server_t *s, char *headers, apr_siz
 			char *value = colon + 1;
 			while (*value == ' ' || *value == '\t')
 				value++;
-			apr_table_set(s->captured.headers, name, value);
+			apr_table_set(cap->headers, name, value);
 			if (strcasecmp(name, "Content-Length") == 0)
 				content_length = (apr_size_t)apr_atoi64(value);
 		}
@@ -131,8 +131,8 @@ static void srv_parse_request(oidc_test_http_server_t *s, char *headers, apr_siz
 			got += want;
 		}
 		body[got] = '\0';
-		s->captured.body = body;
-		s->captured.body_len = got;
+		cap->body = body;
+		cap->body_len = got;
 	}
 }
 
@@ -175,8 +175,7 @@ static int srv_append_hdr(void *rec, const char *key, const char *value) {
 	return 1;
 }
 
-static void srv_send_response(oidc_test_http_server_t *s, apr_socket_t *sock) {
-	const oidc_test_http_response_t *r = s->response;
+static void srv_send_response(oidc_test_http_server_t *s, const oidc_test_http_response_t *r, apr_socket_t *sock) {
 	apr_size_t body_len = r->body ? strlen(r->body) : 0;
 	srv_hdr_acc_t acc = {s->pool, NULL};
 	if (r->extra_headers != NULL)
@@ -210,48 +209,59 @@ static void srv_send_response(oidc_test_http_server_t *s, apr_socket_t *sock) {
 
 static void *APR_THREAD_FUNC srv_run(apr_thread_t *t, void *data) {
 	oidc_test_http_server_t *s = (oidc_test_http_server_t *)data;
-	apr_socket_t *conn = NULL;
 
-	apr_status_t rv = apr_socket_accept(&conn, s->listen_sock, s->pool);
-	if (rv != APR_SUCCESS) {
-		/* accept timeout (no client) is a legitimate shutdown path for tests that
-		 * never connect to the server, so we exit quietly */
-		apr_thread_exit(t, APR_SUCCESS);
-		return NULL;
-	}
+	/* serve one connection per scripted response, in order; each oidc_http_*
+	 * call opens a fresh connection (the responses say "Connection: close") */
+	for (int i = 0; i < s->n_responses; i++) {
+		apr_socket_t *conn = NULL;
+		apr_status_t rv = apr_socket_accept(&conn, s->listen_sock, s->pool);
+		if (rv != APR_SUCCESS)
+			/* accept fails when the listen socket is torn down by stop(); a
+			 * well-formed test drives exactly n_responses requests so this is
+			 * only reached at shutdown */
+			break;
 
-	/* short timeouts so a misbehaving test doesn't hang the suite */
-	apr_socket_timeout_set(conn, apr_time_from_sec(5));
+		/* short timeouts so a misbehaving test doesn't hang the suite */
+		apr_socket_timeout_set(conn, apr_time_from_sec(5));
 
-	char *buf = apr_palloc(s->pool, OIDC_TEST_SRV_READ_BUF);
-	apr_size_t received_total = 0;
-	apr_ssize_t hdr_end = srv_read_headers(conn, buf, OIDC_TEST_SRV_READ_BUF, &received_total);
-	if (hdr_end < 0) {
+		char *buf = apr_palloc(s->pool, OIDC_TEST_SRV_READ_BUF);
+		apr_size_t received_total = 0;
+		apr_ssize_t hdr_end = srv_read_headers(conn, buf, OIDC_TEST_SRV_READ_BUF, &received_total);
+		if (hdr_end < 0) {
+			apr_socket_close(conn);
+			break;
+		}
+		/* NUL-terminate inside the header block (replacing the final '\n' of the
+		 * "\r\n\r\n" terminator). This bounds the header-parser's strstr calls
+		 * without touching the first byte of any inline body bytes at buf[hdr_end]. */
+		buf[hdr_end - 1] = '\0';
+		apr_size_t trailing_len = received_total - (apr_size_t)hdr_end;
+		const char *trailing = (trailing_len > 0) ? (buf + hdr_end) : NULL;
+
+		oidc_test_http_captured_t *cap = &s->captured[i];
+		srv_parse_request(s->pool, cap, buf, (apr_size_t)hdr_end, trailing, trailing_len, conn);
+		if ((cap->method != NULL) && (cap->path != NULL))
+			s->captured_count = i + 1;
+
+		srv_send_response(s, &s->responses[i], conn);
+
 		apr_socket_close(conn);
-		apr_thread_exit(t, APR_EGENERAL);
-		return NULL;
 	}
-	/* NUL-terminate inside the header block (replacing the final '\n' of the
-	 * "\r\n\r\n" terminator). This bounds the header-parser's strstr calls
-	 * without touching the first byte of any inline body bytes at buf[hdr_end]. */
-	buf[hdr_end - 1] = '\0';
-	apr_size_t trailing_len = received_total - (apr_size_t)hdr_end;
-	const char *trailing = (trailing_len > 0) ? (buf + hdr_end) : NULL;
 
-	srv_parse_request(s, buf, (apr_size_t)hdr_end, trailing, trailing_len, conn);
-	s->captured_ok = (s->captured.method != NULL && s->captured.path != NULL);
-
-	srv_send_response(s, conn);
-
-	apr_socket_close(conn);
 	apr_thread_exit(t, APR_SUCCESS);
 	return NULL;
 }
 
-oidc_test_http_server_t *oidc_test_http_server_start(apr_pool_t *pool, const oidc_test_http_response_t *response) {
+oidc_test_http_server_t *oidc_test_http_server_start_seq(apr_pool_t *pool, const oidc_test_http_response_t *responses,
+							 int n_responses) {
+	if ((responses == NULL) || (n_responses < 1))
+		return NULL;
+
 	oidc_test_http_server_t *s = apr_pcalloc(pool, sizeof(*s));
 	s->pool = pool;
-	s->response = response;
+	s->responses = responses;
+	s->n_responses = n_responses;
+	s->captured = apr_pcalloc(pool, sizeof(oidc_test_http_captured_t) * n_responses);
 
 	apr_sockaddr_t *sa = NULL;
 	if (apr_sockaddr_info_get(&sa, "127.0.0.1", APR_INET, 0, 0, pool) != APR_SUCCESS)
@@ -275,6 +285,10 @@ oidc_test_http_server_t *oidc_test_http_server_start(apr_pool_t *pool, const oid
 	return s;
 }
 
+oidc_test_http_server_t *oidc_test_http_server_start(apr_pool_t *pool, const oidc_test_http_response_t *response) {
+	return oidc_test_http_server_start_seq(pool, response, 1);
+}
+
 int oidc_test_http_server_port(const oidc_test_http_server_t *s) {
 	return s ? (int)s->port : 0;
 }
@@ -286,14 +300,27 @@ const char *oidc_test_http_server_url(const oidc_test_http_server_t *s, apr_pool
 }
 
 const oidc_test_http_captured_t *oidc_test_http_server_wait(oidc_test_http_server_t *s) {
+	return oidc_test_http_server_captured(s, 0);
+}
+
+int oidc_test_http_server_request_count(oidc_test_http_server_t *s) {
 	if (s == NULL || s->thread == NULL)
-		return NULL;
+		return 0;
 	if (!s->stopped) {
 		apr_status_t status = APR_SUCCESS;
 		apr_thread_join(&status, s->thread);
 		s->stopped = 1;
 	}
-	return s->captured_ok ? &s->captured : NULL;
+	return s->captured_count;
+}
+
+const oidc_test_http_captured_t *oidc_test_http_server_captured(oidc_test_http_server_t *s, int index) {
+	if (s == NULL)
+		return NULL;
+	int count = oidc_test_http_server_request_count(s);
+	if ((index < 0) || (index >= count))
+		return NULL;
+	return &s->captured[index];
 }
 
 void oidc_test_http_server_stop(oidc_test_http_server_t *s) {

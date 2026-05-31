@@ -25,11 +25,13 @@
  */
 
 /*
- * Single-connection plaintext HTTP/1.0 loopback fixture used by the
- * Check-based unit tests to drive `oidc_http_get/post_form/post_json`
- * end-to-end without depending on a network service. The server binds
- * to 127.0.0.1 on a kernel-assigned free port, accepts one connection,
- * reads the request, replies with a pre-configured response, and exits.
+ * Plaintext HTTP/1.0 loopback fixture used by the Check-based unit tests to
+ * drive `oidc_http_get/post_form/post_json` end-to-end without depending on a
+ * network service. The server binds to 127.0.0.1 on a kernel-assigned free
+ * port and serves one connection per scripted response, in order, capturing
+ * each request; with a single response it accepts one connection and exits.
+ * Serving a sequence (oidc_test_http_server_start_seq) enables multi-request
+ * flows such as a 401-then-retry or refresh-then-userinfo exchange.
  *
  * Typical usage in a test:
  *
@@ -75,6 +77,17 @@ typedef struct oidc_test_http_server_t oidc_test_http_server_t;
  */
 oidc_test_http_server_t *oidc_test_http_server_start(apr_pool_t *pool, const oidc_test_http_response_t *response);
 
+/*
+ * Start a loopback HTTP server that serves `n_responses` connections, replying
+ * with responses[i] to the i-th request and capturing each one. Use this to
+ * test flows that issue more than one outbound request. The test must drive
+ * exactly `n_responses` requests: accept() blocks, so a test that issues fewer
+ * will stall at teardown until the libcheck per-test timeout fires. Returns
+ * NULL on bad arguments or bind/listen failure.
+ */
+oidc_test_http_server_t *oidc_test_http_server_start_seq(apr_pool_t *pool, const oidc_test_http_response_t *responses,
+							 int n_responses);
+
 /* The kernel-assigned port the server bound to. */
 int oidc_test_http_server_port(const oidc_test_http_server_t *s);
 
@@ -87,6 +100,16 @@ const char *oidc_test_http_server_url(const oidc_test_http_server_t *s, apr_pool
  * call multiple times; subsequent calls return the same pointer.
  */
 const oidc_test_http_captured_t *oidc_test_http_server_wait(oidc_test_http_server_t *s);
+
+/*
+ * Join the server thread (if needed) and return the request captured for the
+ * `index`-th scripted response, or NULL if that request was never made. wait()
+ * is equivalent to captured(s, 0).
+ */
+const oidc_test_http_captured_t *oidc_test_http_server_captured(oidc_test_http_server_t *s, int index);
+
+/* Join the server thread (if needed) and return the number of requests handled. */
+int oidc_test_http_server_request_count(oidc_test_http_server_t *s);
 
 /* Join the server thread (calls wait internally) and release resources. */
 void oidc_test_http_server_stop(oidc_test_http_server_t *s);

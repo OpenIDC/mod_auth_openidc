@@ -788,6 +788,52 @@ START_TEST(test_e2e_retry_on_connect_refused) {
 }
 END_TEST
 
+START_TEST(test_e2e_scripted_sequence) {
+	request_rec *r = oidc_test_request_get();
+
+	/* two responses served in order from a single server (a 401 then a 200,
+	 * like an error-then-retry exchange) — exercises the multi-response mock
+	 * server and the per-request capture */
+	oidc_test_http_response_t responses[2] = {
+	    {.status_code = 401, .content_type = "application/json", .body = "{\"error\":\"invalid_token\"}"},
+	    {.status_code = 200, .content_type = "application/json", .body = "{\"ok\":true}"},
+	};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start_seq(r->pool, responses, 2);
+	ck_assert_ptr_nonnull(srv);
+	const char *url = oidc_test_http_server_url(srv, r->pool);
+	oidc_http_timeout_t to = e2e_timeout();
+	oidc_http_outgoing_proxy_t pr = e2e_no_proxy();
+
+	/* first call hits responses[0] => 401 */
+	char *body1 = NULL;
+	long status1 = 0;
+	oidc_http_get(r, url, NULL, NULL, NULL, NULL, FALSE, &body1, &status1, NULL, &to, &pr, NULL, NULL, NULL, NULL);
+	ck_assert_int_eq(status1, 401);
+
+	/* second call hits responses[1] => 200 with its own body */
+	char *body2 = NULL;
+	long status2 = 0;
+	apr_byte_t ok2 = oidc_http_get(r, url, NULL, NULL, NULL, NULL, FALSE, &body2, &status2, NULL, &to, &pr, NULL,
+				       NULL, NULL, NULL);
+	ck_assert_int_eq(ok2, TRUE);
+	ck_assert_int_eq(status2, 200);
+	ck_assert_str_eq(body2, "{\"ok\":true}");
+
+	/* both requests were handled and captured in order */
+	ck_assert_int_eq(oidc_test_http_server_request_count(srv), 2);
+	const oidc_test_http_captured_t *c0 = oidc_test_http_server_captured(srv, 0);
+	const oidc_test_http_captured_t *c1 = oidc_test_http_server_captured(srv, 1);
+	ck_assert_ptr_nonnull(c0);
+	ck_assert_ptr_nonnull(c1);
+	ck_assert_str_eq(c0->method, "GET");
+	ck_assert_str_eq(c1->method, "GET");
+	/* a third index was never requested */
+	ck_assert_ptr_null(oidc_test_http_server_captured(srv, 2));
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
 int main(void) {
 	TCase *accept = tcase_create("accept");
 	tcase_add_checked_fixture(accept, oidc_test_setup, oidc_test_teardown);
@@ -830,6 +876,7 @@ int main(void) {
 	tcase_add_test(e2e, test_e2e_pass_cookies);
 	tcase_add_test(e2e, test_e2e_get_with_query_params);
 	tcase_add_test(e2e, test_e2e_retry_on_connect_refused);
+	tcase_add_test(e2e, test_e2e_scripted_sequence);
 
 	Suite *s = suite_create("http");
 	suite_add_tcase(s, accept);
