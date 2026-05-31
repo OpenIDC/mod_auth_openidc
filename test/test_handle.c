@@ -1309,11 +1309,13 @@ START_TEST(test_handle_userinfo_pass_as_signed_jwt_with_private_keys) {
 	const char *dot2 = _oidc_strstr(dot1 + 1, ".");
 	ck_assert_ptr_nonnull(dot2);
 
-	/* decode the protected header and confirm it was signed with the configured RSA key */
-	char *dec_hdr = NULL;
-	ck_assert_int_gt(oidc_util_base64url_decode(r->pool, &dec_hdr, apr_pstrmemdup(r->pool, hdr, dot1 - hdr)), 0);
-	ck_assert_ptr_nonnull(_oidc_strstr(dec_hdr, "\"alg\":\"RS256\""));
-	ck_assert_ptr_nonnull(_oidc_strstr(dec_hdr, "\"kid\":\"rsa-1\""));
+	/* confirm it was signed with the configured RSA key; parse the header via
+	 * oidc_proto_jwt_header_peek rather than substring-matching the serialized JSON,
+	 * whose whitespace (e.g. the space after the colon) differs across cjose versions */
+	char *alg = NULL, *kid = NULL;
+	ck_assert_ptr_nonnull(oidc_proto_jwt_header_peek(r, hdr, &alg, NULL, &kid));
+	ck_assert_str_eq(alg, "RS256");
+	ck_assert_str_eq(kid, "rsa-1");
 
 	/* decode the payload and confirm the userinfo claim plus the synthesized iss/exp claims */
 	char *dec_pl = NULL;

@@ -659,14 +659,12 @@ START_TEST(test_proto_token_endpoint_auth_private_key_jwt_with_rsa_key) {
 	ck_assert_ptr_nonnull(assertion);
 	ck_assert_table_str(params, OIDC_PROTO_CLIENT_ASSERTION_TYPE, OIDC_PROTO_CLIENT_ASSERTION_TYPE_JWT_BEARER);
 
-	/* decode the header (everything before the first '.') and confirm alg=RS256 + kid=rsa-1 */
-	const char *dot = _oidc_strstr(assertion, ".");
-	ck_assert_ptr_nonnull(dot);
-	char *enc_hdr = apr_pstrmemdup(r->pool, assertion, dot - assertion);
-	char *dec_hdr = NULL;
-	ck_assert_int_gt(oidc_util_base64url_decode(r->pool, &dec_hdr, enc_hdr), 0);
-	ck_assert_ptr_nonnull(_oidc_strstr(dec_hdr, "\"alg\":\"RS256\""));
-	ck_assert_ptr_nonnull(_oidc_strstr(dec_hdr, "\"kid\":\"rsa-1\""));
+	/* confirm alg=RS256 + kid=rsa-1 by parsing the header (oidc_proto_jwt_header_peek)
+	 * rather than substring-matching the serialized JSON, whose whitespace varies by cjose version */
+	char *alg = NULL, *kid = NULL;
+	ck_assert_ptr_nonnull(oidc_proto_jwt_header_peek(r, assertion, &alg, NULL, &kid));
+	ck_assert_str_eq(alg, "RS256");
+	ck_assert_str_eq(kid, "rsa-1");
 }
 END_TEST
 
@@ -692,11 +690,9 @@ START_TEST(test_proto_token_endpoint_auth_private_key_jwt_explicit_alg) {
 			 TRUE);
 	const char *assertion = apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION);
 	ck_assert_ptr_nonnull(assertion);
-	const char *dot = _oidc_strstr(assertion, ".");
-	char *enc_hdr = apr_pstrmemdup(r->pool, assertion, dot - assertion);
-	char *dec_hdr = NULL;
-	ck_assert_int_gt(oidc_util_base64url_decode(r->pool, &dec_hdr, enc_hdr), 0);
-	ck_assert_ptr_nonnull(_oidc_strstr(dec_hdr, "\"alg\":\"RS384\""));
+	char *alg = NULL;
+	ck_assert_ptr_nonnull(oidc_proto_jwt_header_peek(r, assertion, &alg, NULL, NULL));
+	ck_assert_str_eq(alg, "RS384");
 }
 END_TEST
 
