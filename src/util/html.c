@@ -260,14 +260,20 @@ static char *oidc_util_template_escape(request_rec *r, const char *arg, int esca
  */
 static apr_byte_t oidc_util_template_format_valid(const char *tpl, int expected_s_count) {
 	int s_count = 0;
-	for (const char *p = tpl; *p; p++) {
-		if (*p != '%')
+	const char *p = tpl;
+	while (*p) {
+		if (*p != '%') {
+			p++;
 			continue;
+		}
 		p++;
-		if (*p == '%')
+		if (*p == '%') {
+			p++;
 			continue;
+		}
 		if (*p == 's') {
 			s_count++;
+			p++;
 			continue;
 		}
 		return FALSE;

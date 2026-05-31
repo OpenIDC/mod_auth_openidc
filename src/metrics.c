@@ -1046,8 +1046,8 @@ static inline void _oidc_metrics_timing_clear(oidc_metrics_timing_t *timing) {
 static inline void _oidc_metrics_timing_buckets_inc(oidc_metrics_timing_t *timing, apr_time_t elapsed) {
 	for (int i = 0; i < OIDC_METRICS_BUCKET_NUM; i++) {
 		if ((elapsed < _oidc_metric_buckets[i].threshold) || (_oidc_metric_buckets[i].threshold == 0)) {
-			for (; i < OIDC_METRICS_BUCKET_NUM; i++)
-				timing->buckets[i]++;
+			for (int j = i; j < OIDC_METRICS_BUCKET_NUM; j++)
+				timing->buckets[j]++;
 			break;
 		}
 	}
