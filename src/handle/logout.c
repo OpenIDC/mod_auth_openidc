@@ -560,9 +560,6 @@ static char *oidc_logout_build_op_request(request_rec *r, oidc_cfg_t *c, oidc_se
 		s_logout_request =
 		    oidc_logout_url_append(r, s_logout_request, oidc_cfg_provider_logout_request_params_get(provider));
 
-	// char *state = NULL;
-	// oidc_proto_generate_nonce(r, &state, 8);
-	// s_logout_request = apr_psprintf(r->pool, "%s&state=%s", s_logout_request, state);
 	return s_logout_request;
 }
 

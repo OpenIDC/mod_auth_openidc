@@ -138,9 +138,6 @@ int oidc_util_http_send(request_rec *r, const char *data, size_t data_len, const
 			   rc);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
-	/*
-	 *r->status = success_rvalue;
-	 */
 
 	if ((success_rvalue == OK) && (r->user == NULL)) {
 		/*
@@ -480,7 +477,6 @@ parent-id        = 16HEXDIGLC  ; 8 bytes array identifier. All zeroes forbidden
 trace-flags      = 2HEXDIGLC   ; 8 bit flags. Currently, only one bit is used.
  */
 void oidc_util_set_trace_parent(request_rec *r, const oidc_cfg_t *c, const char *span) {
-	// apr_table_get(r->subprocess_env, "UNIQUE_ID");
 	unsigned char trace_id[OIDC_TP_TRACE_ID_LEN];
 	unsigned char parent_id[OIDC_TP_PARENT_ID_LEN];
 	unsigned char trace_flags = 0;

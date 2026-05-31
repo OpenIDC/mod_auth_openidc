@@ -73,10 +73,6 @@ apr_byte_t oidc_oauth_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg
 
 	/* check to see if it is valid metadata */
 	// TODO:
-	/*
-	 if (oidc_oauth_metadata_provider_is_valid(r, cfg, *j_metadata, issuer) == FALSE)
-	 return FALSE;
-	 */
 
 	/* all OK */
 	return TRUE;
@@ -115,14 +111,6 @@ static apr_byte_t oidc_oauth_provider_config(request_rec *r, oidc_cfg_t *c) {
 		oidc_util_json_decode_object(r, s_json, &j_provider);
 
 		/* check to see if it is valid metadata */
-		/*
-		 if (oidc_oauth_metadata_provider_is_valid(r, c, j_provider, NULL) == FALSE) {
-		 oidc_error(r,
-		 "cache corruption detected: invalid metadata from url: %s",
-		 c->provider.metadata_url);
-		 return FALSE;
-		 }
-		 */
 	}
 
 	if (oidc_oauth_metadata_provider_parse(r, c, j_provider) == FALSE) {

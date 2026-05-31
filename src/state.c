@@ -89,12 +89,6 @@ char *oidc_state_browser_fingerprint(request_rec *r, const oidc_cfg_t *c, const 
 	}
 
 	/* get the remote client IP address or host name */
-	/*
-	 int remotehost_is_ip;
-	 value = ap_get_remote_host(r->connection, r->per_dir_config,
-	 REMOTE_NOLOOKUP, &remotehost_is_ip);
-	 apr_sha1_update(&sha1, value, _oidc_strlen(value));
-	 */
 
 	/* concat the nonce parameter to the hash input */
 	apr_sha1_update(&sha1, nonce, (unsigned int)_oidc_strlen(nonce));

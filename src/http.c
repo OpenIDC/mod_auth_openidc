@@ -135,8 +135,6 @@ char *oidc_http_url_decode(const request_rec *r, const char *str) {
 
 	rv = apr_pstrdup(r->pool, result);
 
-	// oidc_debug(r, "input=\"%s\", output=\"%s\"", str, rv);
-
 end:
 
 	if (result)

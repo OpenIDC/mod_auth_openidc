@@ -183,8 +183,6 @@ int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg) {
 					  : apr_pstrdup(r->pool, issuer + _oidc_strlen("https://"));
 
 		/* strip port number */
-		// char *p = _oidc_strstr(display, ":");
-		// if (p != NULL) *p = '\0';
 		/* point back to the redirect_uri, where the selection is handled, with an IDP selection and return_to
 		 * URL */
 		s = apr_psprintf(r->pool, "%s<p><a href=\"%s\">%s</a></p>\n", s, href,

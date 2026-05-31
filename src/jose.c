@@ -154,7 +154,6 @@ oidc_jwt_t *oidc_jwt_new(apr_pool_t *pool, int create_header, int create_payload
 	oidc_jwt_t *jwt = apr_pcalloc(pool, sizeof(oidc_jwt_t));
 	if (create_header) {
 		jwt->header.value.json = json_object();
-		// oidc_jwt_hdr_set(jwt, "typ", "JWT");
 	}
 	if (create_payload) {
 		jwt->payload.value.json = json_object();
@@ -627,7 +626,6 @@ static apr_byte_t oidc_jwk_set_or_generate_kid(apr_pool_t *pool, cjose_jwk_t *cj
 		/* calculate a unique key identifier (kid) by fingerprinting the key params */
 		if (oidc_jose_hash_and_base64url_encode(pool, OIDC_JOSE_ALG_SHA256, key_params, key_params_len,
 							&jwk_kid, err) == FALSE) {
-			// oidc_jose_error(err, "oidc_jose_hash_and_base64urlencode failed");
 			return FALSE;
 		}
 	}

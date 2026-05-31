@@ -47,8 +47,6 @@
  */
 int oidc_jwks_request(request_rec *r, const oidc_cfg_t *c) {
 	/* pickup requested JWKs type */
-	//	char *jwks_type = NULL;
-	//	oidc_util_get_request_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS, &jwks_type);
 	char *jwks = apr_pstrdup(r->pool, "{ \"keys\" : [");
 	apr_byte_t first = TRUE;
 	const oidc_jwk_t *jwk = NULL;

@@ -1206,12 +1206,6 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session
 
 		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_ERROR_PROVIDER);
 
-		//		char *error = NULL, *descr = NULL;
-		//		oidc_util_get_request_parameter(r, "error", &error);
-		//		oidc_util_get_request_parameter(r, "error_description", &descr);
-		//
-		//		/* send user facing error to browser */
-		//		return oidc_util_html_send_error(r, error, descr, OK);
 		rc = oidc_response_authorization_redirect(r, c, session);
 
 		return rc;
@@ -1414,9 +1408,6 @@ int oidc_check_user_id(request_rec *r) {
  * check of mod_auth_openidc needs to handle this request
  */
 apr_byte_t oidc_enabled(request_rec *r, oidc_cfg_t *c) {
-
-	//	if (oidc_util_url_matches_redirect_uri(r, c) == TRUE)
-	//		return TRUE;
 
 	if (ap_auth_type(r) == NULL)
 		return FALSE;

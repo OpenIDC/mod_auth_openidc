@@ -168,11 +168,6 @@ apr_byte_t oidc_util_json_array_has_value(request_rec *r, const json_t *haystack
 		}
 	}
 
-	/*	oidc_debug(r,
-	 *			"returning (%d=%d)", i,
-	 *			haystack->value.array->nelts);
-	 */
-
 	return (i == json_array_size(haystack)) ? FALSE : TRUE;
 }
 

@@ -212,7 +212,6 @@ typedef struct oidc_metrics_bucket_t {
 // clang-format off
 
 static oidc_metrics_bucket_t _oidc_metric_buckets[] = {
-	//{ "le005", "bucket{le=\"0.05\"}", 50 },
 	{ "le01", "le=\"0.1\"", 100 },
 	{ "le05", "le=\"0.5\"", 500 },
 	{ "le1", "le=\"1\"", apr_time_from_msec(1) },
@@ -795,7 +794,6 @@ static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void 
 	}
 
 	/* NB: don't call apr_thread_exit here because it seems that Apache is cleaning up its own threads */
-	// apr_thread_exit(thread, APR_SUCCESS);
 
 	return NULL;
 }
@@ -1631,7 +1629,6 @@ int oidc_metrics_handle_request(request_rec *r) {
 
 	/* now that the metrics have been consumed, clear the shared memory segment */
 	if (oidc_metric_reset(r, handler->reset))
-		// oidc_metrics_storage_set(r->server, NULL);
 		oidc_metrics_storage_reset(r->server);
 
 	/* unlock the global shared memory */

@@ -120,7 +120,6 @@ static int oidc_session_management_iframe_rp(request_rec *r, const oidc_cfg_t *c
 	if (session_state == NULL) {
 		oidc_warn(
 		    r, "no session_state found in the session; the OP does probably not support session management!?");
-		// return OK;
 	}
 
 	char *s_poll_interval = NULL;
