@@ -11,11 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       BUILD_WRAPPER_OUT_DIR: build_wrapper_output_directory # Directory where build-wrapper output will be placed
-      # point the test_cache "redis-live"/"memcache-live" tcases at the service
-      # containers below so the real backend code paths are covered (the mocks
-      # bypass cache/redis.c + cache/memcache.c connect/command/getp/set ops)
-      OIDC_TEST_REDIS_SERVER: localhost:6379
-      OIDC_TEST_MEMCACHE_SERVER: localhost:11211
+    # the check-code-coverage target in test/Makefile.am defaults
+    # OIDC_TEST_REDIS_SERVER/OIDC_TEST_MEMCACHE_SERVER to localhost, so the live
+    # test_cache tcases run against the service containers below without a
+    # job-level env override
     services:
       redis:
         image: redis:7

@@ -130,4 +130,12 @@ valgrind: ${oidc_unit_tests:%=%.valgrind}
 
 CODE_COVERAGE_LCOV_SHOPTS = --ignore-errors inconsistent --ignore-errors unused
 
+# the live redis/memcache integration tcases (test_cache.c) register only when
+# these are set, so the default "make check" leaves them off. The coverage run
+# turns them on so the real cache/redis.c + cache/memcache.c ops -- which the
+# mock-based tests bypass -- get exercised. Defaults assume servers on the loopback
+# (e.g. the CI service containers); override via the environment to point elsewhere.
+check-code-coverage: export OIDC_TEST_REDIS_SERVER ?= localhost:6379
+check-code-coverage: export OIDC_TEST_MEMCACHE_SERVER ?= localhost:11211
+
 @CODE_COVERAGE_RULES@
