@@ -200,8 +200,7 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *
 
 	if (oidc_util_jwt_internal_compress(r)) {
 
-		if (oidc_jose_uncompress(r->pool, (char *)plaintext, plaintext_len, &payload, &payload_len, &err) ==
-		    FALSE) {
+		if (oidc_jose_uncompress(r->pool, plaintext, plaintext_len, &payload, &payload_len, &err) == FALSE) {
 			oidc_error(r, "oidc_jose_uncompress failed: %s", oidc_jose_e2s(r->pool, err));
 			goto end;
 		}

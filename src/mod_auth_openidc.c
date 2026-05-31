@@ -1421,13 +1421,13 @@ apr_byte_t oidc_enabled(request_rec *r, oidc_cfg_t *c) {
 	if (ap_auth_type(r) == NULL)
 		return FALSE;
 
-	if (_oidc_strnatcasecmp((const char *)ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_CONNECT) == 0)
+	if (_oidc_strnatcasecmp(ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_CONNECT) == 0)
 		return TRUE;
 
-	if (_oidc_strnatcasecmp((const char *)ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0)
+	if (_oidc_strnatcasecmp(ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0)
 		return TRUE;
 
-	if (_oidc_strnatcasecmp((const char *)ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_BOTH) == 0)
+	if (_oidc_strnatcasecmp(ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_BOTH) == 0)
 		return TRUE;
 
 	return FALSE;

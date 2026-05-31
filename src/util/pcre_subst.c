@@ -205,8 +205,7 @@ struct oidc_pcre *oidc_pcre_compile(apr_pool_t *pool, const char *regexp, char *
 #ifdef HAVE_LIBPCRE2
 	int errorcode;
 	PCRE2_SIZE erroroffset;
-	pcre->preg =
-	    pcre2_compile((PCRE2_SPTR)regexp, (PCRE2_SIZE)_oidc_strlen(regexp), 0, &errorcode, &erroroffset, NULL);
+	pcre->preg = pcre2_compile((PCRE2_SPTR)regexp, _oidc_strlen(regexp), 0, &errorcode, &erroroffset, NULL);
 #else
 	const char *errorptr = NULL;
 	int erroffset;

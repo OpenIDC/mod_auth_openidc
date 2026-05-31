@@ -1238,8 +1238,8 @@ apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, const oidc_jwk_t *jw
 	char *s_payload = NULL;
 	int payload_len = 0;
 	if (compress == TRUE) {
-		if (oidc_jose_compress(pool, (char *)plaintext, (int)_oidc_strlen(plaintext), &s_payload, &payload_len,
-				       err) == FALSE) {
+		if (oidc_jose_compress(pool, plaintext, (int)_oidc_strlen(plaintext), &s_payload, &payload_len, err) ==
+		    FALSE) {
 			return FALSE;
 		}
 	} else {

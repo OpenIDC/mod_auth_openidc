@@ -133,7 +133,7 @@ static void oidc_session_clear(request_rec *r, oidc_session_t *z) {
 static apr_byte_t oidc_session_get(request_rec *r, const oidc_session_t *z, const char *key, char **value) {
 
 	/* just return the value for the key */
-	oidc_util_json_object_get_string(r->pool, z->state, key, (char **)value, NULL);
+	oidc_util_json_object_get_string(r->pool, z->state, key, value, NULL);
 
 	return TRUE;
 }
