@@ -800,12 +800,12 @@ static apr_byte_t oidc_http_request_perform_with_retries(request_rec *r, const o
 			oidc_error(r, "curl_easy_perform failed with a timeout for %s: [%s]; won't retry", url,
 				   curl_err[0] ? curl_err : "<n/a>");
 			OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_CONNECT_ERROR,
-						       curl_err[0] ? curl_err : "timeout")
+						       curl_err[0] ? curl_err : "timeout");
 			return FALSE;
 		}
 		oidc_error(r, "curl_easy_perform(%d/%d) failed for %s with: [%s]", i + 1, http_timeout->retries + 1,
 			   url, curl_err[0] ? curl_err : "<n/a>");
-		OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_CONNECT_ERROR, curl_err[0] ? curl_err : "undefined")
+		OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_CONNECT_ERROR, curl_err[0] ? curl_err : "undefined");
 		/* in case of a connectivity/network glitch we'll back off before retrying */
 		if (i < http_timeout->retries)
 			apr_sleep(apr_time_from_msec(http_timeout->retry_interval));

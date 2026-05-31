@@ -208,12 +208,15 @@ static inline const char *_oidc_metrics_type_name2s(apr_pool_t *pool, unsigned i
 }
 
 #define OIDC_METRICS_COUNTER_INC_NAME_VALUE(r, cfg, type, name, value)                                                 \
-	if (oidc_cfg_metrics_hook_data_get(cfg) != NULL) {                                                             \
-		if (apr_hash_get(oidc_cfg_metrics_hook_data_get(cfg), _oidc_metrics_type_name2s(r->pool, type, name),  \
-				 APR_HASH_KEY_STRING) != NULL) {                                                       \
-			oidc_metrics_counter_inc(r, type, name, value);                                                \
+	do {                                                                                                           \
+		if (oidc_cfg_metrics_hook_data_get(cfg) != NULL) {                                                     \
+			if (apr_hash_get(oidc_cfg_metrics_hook_data_get(cfg),                                          \
+					 _oidc_metrics_type_name2s(r->pool, type, name),                               \
+					 APR_HASH_KEY_STRING) != NULL) {                                               \
+				oidc_metrics_counter_inc(r, type, name, value);                                        \
+			}                                                                                              \
 		}                                                                                                      \
-	}
+	} while (0)
 
 #define OIDC_METRICS_COUNTER_INC_VALUE(r, cfg, type, value)                                                            \
 	OIDC_METRICS_COUNTER_INC_NAME_VALUE(r, cfg, type, NULL, value)

@@ -119,7 +119,7 @@ static int oidc_jose_util_get_b64encoded_certificate_data(apr_pool_t *p, const X
 	if (!*b64_encoded_certificate) {
 		oidc_jose_error_openssl(err, "apr_pcalloc");
 		goto end;
-	};
+	}
 
 	rc = EVP_EncodeBlock((unsigned char *)*b64_encoded_certificate, data, (int)len);
 
