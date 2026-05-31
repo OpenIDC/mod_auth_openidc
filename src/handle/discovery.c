@@ -231,7 +231,7 @@ int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg) {
 /*
  * check if the target_link_uri matches to configuration settings to prevent an open redirect
  */
-static int oidc_discovery_target_link_uri_match(request_rec *r, oidc_cfg_t *cfg, const char *target_link_uri) {
+static int oidc_discovery_target_link_uri_match(request_rec *r, const oidc_cfg_t *cfg, const char *target_link_uri) {
 
 	apr_uri_t o_uri;
 	apr_uri_parse(r->pool, target_link_uri, &o_uri);

@@ -209,7 +209,7 @@ apr_byte_t oidc_session_load_cache_by_uuid(request_rec *r, const oidc_cfg_t *c, 
  * load the session from the cache using the cookie as the index
  */
 static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
-	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	const oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
 	apr_byte_t rc = FALSE;
 
@@ -263,7 +263,7 @@ static const char *oidc_session_cookie_samesite(const request_rec *r, const stru
  * save the session to the cache using a cookie for the index
  */
 static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, apr_byte_t first_time) {
-	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	const oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
 	apr_byte_t rc = TRUE;
 
@@ -316,7 +316,7 @@ static apr_byte_t oidc_session_load_cookie(request_rec *r, const oidc_cfg_t *c, 
  * store the session in a self-contained client-side-only cookie storage
  */
 static apr_byte_t oidc_session_save_cookie(request_rec *r, const oidc_session_t *z, apr_byte_t first_time) {
-	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	const oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	char *cookieValue = "";
 	if ((z->state != NULL) && (oidc_session_encode(r, c, z, &cookieValue, TRUE) == FALSE))
 		return FALSE;
@@ -392,7 +392,7 @@ out:
  * load a session from the cache/cookie
  */
 apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
-	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	const oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
 	apr_byte_t rc = FALSE;
 

@@ -304,7 +304,7 @@ static apr_byte_t oidc_proto_userinfo_endpoint_call(request_rec *r, oidc_cfg_t *
  * allocate the response headers hash used to capture DPoP-related response metadata and
  * create the initial DPoP proof for the userinfo request
  */
-static apr_byte_t oidc_proto_userinfo_request_dpop_init(request_rec *r, oidc_cfg_t *cfg,
+static apr_byte_t oidc_proto_userinfo_request_dpop_init(request_rec *r, const oidc_cfg_t *cfg,
 							const oidc_provider_t *provider, const char *method,
 							const char *access_token, char **dpop,
 							apr_hash_t **response_hdrs) {
@@ -367,7 +367,7 @@ static apr_byte_t oidc_proto_userinfo_request_validate_sub(request_rec *r, const
 /*
  * get claims from the OP UserInfo endpoint using the provided access_token
  */
-apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
+apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
 				       const char *id_token_sub, const char *access_token,
 				       const char *access_token_type, char **s_userinfo, char **userinfo_jwt,
 				       json_t **userinfo_claims, long *response_code) {

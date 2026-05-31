@@ -51,7 +51,7 @@
 /*
  * redirect the browser to the session logout endpoint
  */
-static int oidc_response_redirect_parent_window_to_logout(request_rec *r, oidc_cfg_t *c) {
+static int oidc_response_redirect_parent_window_to_logout(request_rec *r, const oidc_cfg_t *c) {
 
 	oidc_debug(r, "enter");
 

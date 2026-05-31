@@ -203,7 +203,7 @@ static apr_byte_t oidc_proto_idtoken_validate_aud_array(request_rec *r, const oi
 /*
  * validate the "aud" and "azp" claims in the id_token payload
  */
-apr_byte_t oidc_proto_idtoken_validate_aud_and_azp(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
+apr_byte_t oidc_proto_idtoken_validate_aud_and_azp(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
 						   const oidc_jwt_payload_t *id_token_payload) {
 	char *azp = NULL;
 	const json_t *aud = NULL;

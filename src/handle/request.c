@@ -47,7 +47,7 @@
 #include "state.h"
 #include "util/util.h"
 
-apr_byte_t oidc_request_check_cookie_domain(request_rec *r, oidc_cfg_t *c, const char *original_url) {
+apr_byte_t oidc_request_check_cookie_domain(request_rec *r, const oidc_cfg_t *c, const char *original_url) {
 	/*
 	 * printout errors if Cookie settings are not going to work
 	 */

@@ -54,7 +54,7 @@
  * revoke refresh token and access token stored in the session if the
  * OP has an RFC 7009 compliant token revocation endpoint
  */
-static void oidc_logout_revoke_tokens(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
+static void oidc_logout_revoke_tokens(request_rec *r, oidc_cfg_t *c, const oidc_session_t *session) {
 
 	char *response = NULL;
 	char *basic_auth = NULL;
@@ -509,7 +509,7 @@ static char *oidc_logout_url_append(request_rec *r, const char *url, const char 
  * apply the default and validate the post-logout redirect URL; on failure
  * sets *rv to the HTTP status the caller should return
  */
-static apr_byte_t oidc_logout_validate_url(request_rec *r, oidc_cfg_t *c, char **url, int *rv) {
+static apr_byte_t oidc_logout_validate_url(request_rec *r, const oidc_cfg_t *c, char **url, int *rv) {
 
 	char *error_str = NULL;
 	char *error_description = NULL;

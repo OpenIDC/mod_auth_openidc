@@ -456,8 +456,9 @@ static oidc_jwk_t *oidc_request_uri_request_object_encryption_jwk_get(request_re
 /*
  * encrypt the (already serialized) signed request object into a JWE and return the compact serialization
  */
-static char *oidc_request_uri_request_object_encrypt(request_rec *r, oidc_cfg_t *cfg, struct oidc_provider_t *provider,
-						     oidc_jwt_t *jwe, const char *cser, const char *signing_alg) {
+static char *oidc_request_uri_request_object_encrypt(request_rec *r, oidc_cfg_t *cfg,
+						     const struct oidc_provider_t *provider, oidc_jwt_t *jwe,
+						     const char *cser, const char *signing_alg) {
 	oidc_jose_error_t err;
 	char *serialized = NULL;
 

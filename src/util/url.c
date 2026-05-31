@@ -294,7 +294,7 @@ apr_byte_t oidc_util_url_cur_matches(request_rec *r, const char *url) {
 /*
  * see if the currently accessed path matches the Redirect URI
  */
-apr_byte_t oidc_util_url_matches_redirect_uri(request_rec *r, oidc_cfg_t *cfg) {
+apr_byte_t oidc_util_url_matches_redirect_uri(request_rec *r, const oidc_cfg_t *cfg) {
 	return oidc_util_url_cur_matches(r, oidc_util_url_redirect_uri(r, cfg));
 }
 

@@ -381,7 +381,7 @@ static void oidc_userinfo_pass_as_jwt(request_rec *r, const oidc_cfg_t *cfg, con
  * dispatch a single configured "pass userinfo as" entry to the matching
  * encoding-specific handler
  */
-static void oidc_userinfo_pass_entry(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session, json_t *claims,
+static void oidc_userinfo_pass_entry(request_rec *r, oidc_cfg_t *cfg, const oidc_session_t *session, json_t *claims,
 				     const oidc_pass_user_info_as_t *p, oidc_appinfo_pass_in_t pass_in,
 				     oidc_appinfo_encoding_t encoding) {
 

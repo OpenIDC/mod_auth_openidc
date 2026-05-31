@@ -141,13 +141,14 @@ apr_byte_t oidc_proto_discovery_url_based(request_rec *r, oidc_cfg_t *cfg, const
 // dpop.c
 apr_byte_t oidc_proto_dpop_create(request_rec *r, const oidc_cfg_t *cfg, const char *url, const char *method,
 				  const char *access_token, const char *nonce, char **dpop);
-apr_byte_t oidc_proto_dpop_use_nonce(request_rec *r, oidc_cfg_t *cfg, const json_t *j_result, apr_hash_t *response_hdrs,
-				     const char *url, const char *method, const char *access_token, char **dpop);
+apr_byte_t oidc_proto_dpop_use_nonce(request_rec *r, const oidc_cfg_t *cfg, const json_t *j_result,
+				     apr_hash_t *response_hdrs, const char *url, const char *method,
+				     const char *access_token, char **dpop);
 
 // id_token.c
 apr_byte_t oidc_proto_idtoken_parse(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider, const char *id_token,
 				    const char *nonce, oidc_jwt_t **jwt, apr_byte_t is_code_flow);
-apr_byte_t oidc_proto_idtoken_validate_aud_and_azp(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
+apr_byte_t oidc_proto_idtoken_validate_aud_and_azp(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
 						   const oidc_jwt_payload_t *id_token_payload);
 // non-static for test.c
 apr_byte_t oidc_proto_idtoken_validate_access_token(request_rec *r, oidc_provider_t *provider, const oidc_jwt_t *jwt,
@@ -202,7 +203,7 @@ int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, co
 // response.c
 apr_byte_t oidc_proto_response_is_post(const request_rec *r, oidc_cfg_t *cfg);
 apr_byte_t oidc_proto_response_is_redirect(request_rec *r, oidc_cfg_t *cfg);
-apr_byte_t oidc_proto_response_code_idtoken_token(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,
+apr_byte_t oidc_proto_response_code_idtoken_token(request_rec *r, oidc_cfg_t *c, const oidc_proto_state_t *proto_state,
 						  oidc_provider_t *provider, apr_table_t *params,
 						  const char *response_mode, oidc_jwt_t **jwt);
 apr_byte_t oidc_proto_response_code_idtoken(request_rec *r, oidc_cfg_t *c, const oidc_proto_state_t *proto_state,
@@ -214,10 +215,10 @@ apr_byte_t oidc_proto_response_code_token(request_rec *r, oidc_cfg_t *c, const o
 apr_byte_t oidc_proto_response_code(request_rec *r, oidc_cfg_t *c, const oidc_proto_state_t *proto_state,
 				    oidc_provider_t *provider, apr_table_t *params, const char *response_mode,
 				    oidc_jwt_t **jwt);
-apr_byte_t oidc_proto_response_idtoken_token(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,
+apr_byte_t oidc_proto_response_idtoken_token(request_rec *r, oidc_cfg_t *c, const oidc_proto_state_t *proto_state,
 					     oidc_provider_t *provider, apr_table_t *params, const char *response_mode,
 					     oidc_jwt_t **jwt);
-apr_byte_t oidc_proto_response_idtoken(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,
+apr_byte_t oidc_proto_response_idtoken(request_rec *r, oidc_cfg_t *c, const oidc_proto_state_t *proto_state,
 				       oidc_provider_t *provider, apr_table_t *params, const char *response_mode,
 				       oidc_jwt_t **jwt);
 
@@ -248,7 +249,7 @@ void oidc_proto_state_set_prompt(oidc_proto_state_t *proto_state, const char *pr
 void oidc_proto_state_set_timestamp_now(oidc_proto_state_t *proto_state);
 
 // token.c
-apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
+apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
 					     apr_table_t *params, char **id_token, char **access_token,
 					     char **token_type, int *expires_in, char **refresh_token, char **scope);
 apr_byte_t oidc_proto_token_refresh_request(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
@@ -256,7 +257,7 @@ apr_byte_t oidc_proto_token_refresh_request(request_rec *r, oidc_cfg_t *cfg, oid
 					    int *expires_in, char **refresh_token, char **scope);
 
 // userinfo.c
-apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
+apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
 				       const char *id_token_sub, const char *access_token,
 				       const char *access_token_type, char **s_userinfo, char **userinfo_jwt,
 				       json_t **userinfo_claims, long *response_code);

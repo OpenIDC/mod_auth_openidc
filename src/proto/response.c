@@ -513,7 +513,7 @@ static apr_byte_t oidc_proto_handle_implicit_flow(request_rec *r, oidc_cfg_t *c,
 /*
  * handle the "code id_token token" response type
  */
-apr_byte_t oidc_proto_response_code_idtoken_token(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,
+apr_byte_t oidc_proto_response_code_idtoken_token(request_rec *r, oidc_cfg_t *c, const oidc_proto_state_t *proto_state,
 						  oidc_provider_t *provider, apr_table_t *params,
 						  const char *response_mode, oidc_jwt_t **jwt) {
 
@@ -542,7 +542,7 @@ apr_byte_t oidc_proto_response_code_idtoken_token(request_rec *r, oidc_cfg_t *c,
 /*
  * handle the "id_token token" response type
  */
-apr_byte_t oidc_proto_response_idtoken_token(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,
+apr_byte_t oidc_proto_response_idtoken_token(request_rec *r, oidc_cfg_t *c, const oidc_proto_state_t *proto_state,
 					     oidc_provider_t *provider, apr_table_t *params, const char *response_mode,
 					     oidc_jwt_t **jwt) {
 
@@ -567,7 +567,7 @@ apr_byte_t oidc_proto_response_idtoken_token(request_rec *r, oidc_cfg_t *c, oidc
 /*
  * handle the "id_token" response type
  */
-apr_byte_t oidc_proto_response_idtoken(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,
+apr_byte_t oidc_proto_response_idtoken(request_rec *r, oidc_cfg_t *c, const oidc_proto_state_t *proto_state,
 				       oidc_provider_t *provider, apr_table_t *params, const char *response_mode,
 				       oidc_jwt_t **jwt) {
 

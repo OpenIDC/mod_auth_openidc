@@ -51,7 +51,7 @@
 #define OIDC_DPOP_PARAM_NONCE "nonce"
 #define OIDC_DPOP_PARAM_METHOD "method"
 
-int oidc_dpop_request(request_rec *r, oidc_cfg_t *c) {
+int oidc_dpop_request(request_rec *r, const oidc_cfg_t *c) {
 	int rc = HTTP_BAD_REQUEST;
 	char *s_url = NULL;
 	char *s_access_token = NULL;

@@ -207,8 +207,9 @@ static int oidc_state_cookies_process_one(request_rec *r, const oidc_cfg_t *c, c
  * parse a single "<name>=<value>" cookie token and dispatch processing if it is a state cookie;
  * returns 1 if the token was kept as a valid state cookie
  */
-static int oidc_state_cookies_parse_token(request_rec *r, oidc_cfg_t *c, char *cookie, const char *currentCookieName,
-					  oidc_state_cookies_t **first, oidc_state_cookies_t **last) {
+static int oidc_state_cookies_parse_token(request_rec *r, const oidc_cfg_t *c, char *cookie,
+					  const char *currentCookieName, oidc_state_cookies_t **first,
+					  oidc_state_cookies_t **last) {
 	while (*cookie == OIDC_CHAR_SPACE)
 		cookie++;
 

@@ -52,7 +52,7 @@ static int oidc_session_management_iframe_op(request_rec *r, const char *check_s
 	return HTTP_MOVED_TEMPORARILY;
 }
 
-static int oidc_session_management_iframe_rp(request_rec *r, oidc_cfg_t *c, const oidc_session_t *session,
+static int oidc_session_management_iframe_rp(request_rec *r, const oidc_cfg_t *c, const oidc_session_t *session,
 					     const char *client_id, const char *check_session_iframe) {
 
 	oidc_debug(r, "enter");

@@ -99,7 +99,7 @@ static apr_byte_t oidc_proto_token_endpoint_call(request_rec *r, oidc_cfg_t *cfg
 /*
  * set up the DPoP request header and response header tracking for the initial token endpoint call
  */
-static apr_byte_t oidc_proto_token_endpoint_dpop_prepare(request_rec *r, oidc_cfg_t *cfg,
+static apr_byte_t oidc_proto_token_endpoint_dpop_prepare(request_rec *r, const oidc_cfg_t *cfg,
 							 const oidc_provider_t *provider, apr_hash_t **response_hdrs,
 							 char **dpop) {
 
@@ -193,7 +193,7 @@ static apr_byte_t oidc_proto_token_endpoint_response_parse(request_rec *r, const
 /*
  * send a code/refresh request to the token endpoint and return the parsed contents
  */
-apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
+apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
 					     apr_table_t *params, char **id_token, char **access_token,
 					     char **token_type, int *expires_in, char **refresh_token, char **scope) {
 
