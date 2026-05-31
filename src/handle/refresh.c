@@ -176,7 +176,12 @@ static oidc_refresh_token_cache_result_t oidc_refresh_token_cache_get(request_re
 	if ((v = json_object_get(json, OIDC_PROTO_EXPIRES_IN))) {
 		/* clamp into int range to match the writer-side guard in oidc_proto_token_response_parse */
 		json_int_t n = json_integer_value(v);
-		*expires_in = (n > INT_MAX) ? INT_MAX : ((n < INT_MIN) ? INT_MIN : (int)n);
+		if (n > INT_MAX)
+			*expires_in = INT_MAX;
+		else if (n < INT_MIN)
+			*expires_in = INT_MIN;
+		else
+			*expires_in = (int)n;
 	}
 	if ((v = json_object_get(json, OIDC_PROTO_ID_TOKEN)))
 		*s_id_token = apr_pstrdup(r->pool, json_string_value(v));

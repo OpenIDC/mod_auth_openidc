@@ -178,7 +178,12 @@ static apr_byte_t oidc_proto_token_endpoint_response_parse(request_rec *r, const
 		/* clamp into int range so a maliciously huge OP value can't silently truncate to a small/negative TTL
 		 */
 		json_int_t v = json_integer_value(j_expires_in);
-		*expires_in = (v > INT_MAX) ? INT_MAX : ((v < INT_MIN) ? INT_MIN : (int)v);
+		if (v > INT_MAX)
+			*expires_in = INT_MAX;
+		else if (v < INT_MIN)
+			*expires_in = INT_MIN;
+		else
+			*expires_in = (int)v;
 	}
 
 	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_REFRESH_TOKEN, refresh_token, NULL);

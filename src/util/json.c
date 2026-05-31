@@ -218,7 +218,12 @@ apr_byte_t oidc_util_json_object_get_int(const json_t *json, const char *name, i
 		if ((v != NULL) && (json_is_integer(v))) {
 			/* json_int_t is at least int64; clamp into int range to avoid silent truncation */
 			json_int_t n = json_integer_value(v);
-			*value = (n > INT_MAX) ? INT_MAX : ((n < INT_MIN) ? INT_MIN : (int)n);
+			if (n > INT_MAX)
+				*value = INT_MAX;
+			else if (n < INT_MIN)
+				*value = INT_MIN;
+			else
+				*value = (int)n;
 			return TRUE;
 		}
 	}
