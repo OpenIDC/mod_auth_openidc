@@ -144,7 +144,7 @@ jobs:
         } >> "$GITHUB_STEP_SUMMARY"
     - name: Upload report
       if: always()
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       with:
         name: coverage-report
         path: |
@@ -191,7 +191,7 @@ jobs:
         done
     - name: Upload crashes
       if: failure()
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       with:
         name: fuzz-crashes
         path: |
