@@ -47,6 +47,13 @@
 #include "util/util.h"
 #include <openssl/evp.h>
 
+/*
+ * Per-test fixture state. oidc_test_setup() recreates both every test and
+ * oidc_test_teardown() frees and NULLs them, so they do not carry over between
+ * tests even under CK_FORK=no (make valgrind), where the whole suite runs in
+ * one process. Tests that keep their own module-level statics (e.g. the cache
+ * mocks in test_cache.c) must reset them in their fixture for the same reason.
+ */
 static apr_pool_t *pool = NULL;
 static request_rec *request = NULL;
 

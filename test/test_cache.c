@@ -946,6 +946,18 @@ START_TEST(test_cache_redis_helpers_short_circuit) {
 }
 END_TEST
 
+/*
+ * reset the redis mock as part of the per-test fixture. Under CK_FORK=no
+ * (make valgrind) all tests share one process, so a test that does not call
+ * redis_mock_install() would otherwise inherit the previous test's mock state;
+ * under the default fork-per-test mode every test already starts from the
+ * parent's pristine statics.
+ */
+static void redis_test_setup(void) {
+	oidc_test_setup();
+	redis_mock_reset();
+}
+
 #endif /* USE_LIBHIREDIS */
 
 #ifdef USE_MEMCACHE
@@ -1306,6 +1318,12 @@ START_TEST(test_cache_memcache_set_delete) {
 }
 END_TEST
 
+/* reset the memcache mock per test; see redis_test_setup for the rationale */
+static void memcache_test_setup(void) {
+	oidc_test_setup();
+	memcache_mock_reset();
+}
+
 #endif /* USE_MEMCACHE */
 
 int main(void) {
@@ -1341,7 +1359,7 @@ int main(void) {
 
 #ifdef USE_LIBHIREDIS
 	TCase *redis = tcase_create("redis");
-	tcase_add_checked_fixture(redis, oidc_test_setup, oidc_test_teardown);
+	tcase_add_checked_fixture(redis, redis_test_setup, oidc_test_teardown);
 	tcase_add_test(redis, test_cache_redis_post_config_no_server);
 	tcase_add_test(redis, test_cache_redis_post_config_success);
 	tcase_add_test(redis, test_cache_redis_get_hit);
@@ -1360,7 +1378,7 @@ int main(void) {
 
 #ifdef USE_MEMCACHE
 	TCase *memcache = tcase_create("memcache");
-	tcase_add_checked_fixture(memcache, oidc_test_setup, oidc_test_teardown);
+	tcase_add_checked_fixture(memcache, memcache_test_setup, oidc_test_teardown);
 	tcase_add_test(memcache, test_cache_memcache_post_config_no_servers);
 	tcase_add_test(memcache, test_cache_memcache_post_config_single_server);
 	tcase_add_test(memcache, test_cache_memcache_post_config_multi_server);
