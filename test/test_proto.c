@@ -133,10 +133,11 @@ START_TEST(test_proto_authorization_request) {
 	    oidc_proto_request_auth(r, provider, NULL, redirect_uri, state, proto_state, NULL, NULL, NULL, NULL),
 	    HTTP_MOVED_TEMPORARILY);
 
-	ck_assert_str_eq(apr_table_get(r->headers_out, "Location"),
-			 "https://idp.example.com/"
-			 "authorize?response_type=code&scope=openid&client_id=client_id&state=12345&redirect_uri=https%"
-			 "3A%2F%2Fwww.example.com%2Fprotected%2F&nonce=anonce&jan=piet&foo=bar");
+	ck_assert_table_str(
+	    r->headers_out, "Location",
+	    "https://idp.example.com/"
+	    "authorize?response_type=code&scope=openid&client_id=client_id&state=12345&redirect_uri=https%"
+	    "3A%2F%2Fwww.example.com%2Fprotected%2F&nonce=anonce&jan=piet&foo=bar");
 }
 END_TEST
 
@@ -533,23 +534,23 @@ START_TEST(test_proto_token_endpoint_auth_basic_and_post) {
 			 TRUE); /* falls through to "public client" path: no secret + not private_key_jwt */
 	ck_assert_ptr_null(basic);
 	/* the "public client" path sets client_id on the params */
-	ck_assert_str_eq(apr_table_get(params, OIDC_PROTO_CLIENT_ID), "myclient");
+	ck_assert_table_str(params, OIDC_PROTO_CLIENT_ID, "myclient");
 
 	/* client_secret_post: sets client_id and client_secret on the params */
 	params = apr_table_make(r->pool, 2);
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_CLIENT_SECRET_POST, NULL, "myclient",
 							"mysecret", NULL, NULL, params, NULL, &basic, &bearer),
 			 TRUE);
-	ck_assert_str_eq(apr_table_get(params, OIDC_PROTO_CLIENT_ID), "myclient");
-	ck_assert_str_eq(apr_table_get(params, OIDC_PROTO_CLIENT_SECRET), "mysecret");
+	ck_assert_table_str(params, OIDC_PROTO_CLIENT_ID, "myclient");
+	ck_assert_table_str(params, OIDC_PROTO_CLIENT_SECRET, "mysecret");
 
 	/* none: only client_id is set */
 	params = apr_table_make(r->pool, 1);
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_ENDPOINT_AUTH_NONE, NULL, "myclient",
 							"ignored", NULL, NULL, params, NULL, &basic, &bearer),
 			 TRUE);
-	ck_assert_str_eq(apr_table_get(params, OIDC_PROTO_CLIENT_ID), "myclient");
-	ck_assert_ptr_null(apr_table_get(params, OIDC_PROTO_CLIENT_SECRET));
+	ck_assert_table_str(params, OIDC_PROTO_CLIENT_ID, "myclient");
+	ck_assert_table_unset(params, OIDC_PROTO_CLIENT_SECRET);
 }
 END_TEST
 
@@ -629,7 +630,7 @@ START_TEST(test_proto_token_endpoint_auth_private_key_jwt_no_keys) {
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_PRIVATE_KEY_JWT, NULL, "myclient", NULL, NULL,
 							"https://idp.example.com/token", params, NULL, &basic, &bearer),
 			 FALSE);
-	ck_assert_ptr_null(apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION));
+	ck_assert_table_unset(params, OIDC_PROTO_CLIENT_ASSERTION);
 }
 END_TEST
 
@@ -656,8 +657,7 @@ START_TEST(test_proto_token_endpoint_auth_private_key_jwt_with_rsa_key) {
 			 TRUE);
 	const char *assertion = apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION);
 	ck_assert_ptr_nonnull(assertion);
-	ck_assert_str_eq(apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION_TYPE),
-			 OIDC_PROTO_CLIENT_ASSERTION_TYPE_JWT_BEARER);
+	ck_assert_table_str(params, OIDC_PROTO_CLIENT_ASSERTION_TYPE, OIDC_PROTO_CLIENT_ASSERTION_TYPE_JWT_BEARER);
 
 	/* decode the header (everything before the first '.') and confirm alg=RS256 + kid=rsa-1 */
 	const char *dot = _oidc_strstr(assertion, ".");
@@ -1671,7 +1671,7 @@ START_TEST(test_proto_request_auth_post_html) {
 					 NULL, NULL, NULL);
 	/* POST returns OK with an auto-submitting form rather than a 302 redirect */
 	ck_assert_int_eq(rc, OK);
-	ck_assert_ptr_null(apr_table_get(r->headers_out, "Location"));
+	ck_assert_table_unset(r->headers_out, "Location");
 }
 END_TEST
 

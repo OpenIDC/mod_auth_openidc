@@ -131,42 +131,42 @@ START_TEST(test_util_appinfo_set) {
 	oidc_util_appinfo_set_all(r, NULL, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
 
 	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
-	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_simple"), "hans");
-	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_name"), "G\u00DCnther");
-	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_dagger"), "D\u2020gÿger");
-	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_anarr"), "0,hans,piet,1");
-	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_names"), "hans,piet");
-	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_abool"), "1");
-	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_anint"), "5");
-	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_lint"), "1111111111");
-	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_areal"), "1.5");
-	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_anobj"), "{\"hans\":\"piet\",\"abool\":false}");
+	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_simple", "hans");
+	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_name", "G\u00DCnther");
+	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_dagger", "D\u2020gÿger");
+	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_anarr", "0,hans,piet,1");
+	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_names", "hans,piet");
+	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_abool", "1");
+	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_anint", "5");
+	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_lint", "1111111111");
+	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_areal", "1.5");
+	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_anobj", "{\"hans\":\"piet\",\"abool\":false}");
 
-	ck_assert_ptr_null(apr_table_get(r->headers_in, "OIDC_CLAIM_anull"));
-	ck_assert_ptr_null(apr_table_get(r->subprocess_env, "OIDC_CLAIM_names"));
+	ck_assert_table_unset(r->headers_in, "OIDC_CLAIM_anull");
+	ck_assert_table_unset(r->subprocess_env, "OIDC_CLAIM_names");
 
 	oidc_util_appinfo_set_all(r, claims, "MYPREFIX_", "#", OIDC_APPINFO_PASS_HEADERS | OIDC_APPINFO_PASS_ENVVARS,
 				  OIDC_APPINFO_ENCODING_NONE);
-	ck_assert_str_eq(apr_table_get(r->headers_in, "MYPREFIX_simple"), "hans");
-	ck_assert_str_eq(apr_table_get(r->headers_in, "MYPREFIX_name"), "G\u00DCnther");
-	ck_assert_str_eq(apr_table_get(r->headers_in, "MYPREFIX_dagger"), "D\u2020gÿger");
-	ck_assert_str_eq(apr_table_get(r->headers_in, "MYPREFIX_anarr"), "0#hans#piet#1");
+	ck_assert_table_str(r->headers_in, "MYPREFIX_simple", "hans");
+	ck_assert_table_str(r->headers_in, "MYPREFIX_name", "G\u00DCnther");
+	ck_assert_table_str(r->headers_in, "MYPREFIX_dagger", "D\u2020gÿger");
+	ck_assert_table_str(r->headers_in, "MYPREFIX_anarr", "0#hans#piet#1");
 
-	ck_assert_ptr_null(apr_table_get(r->subprocess_env, "OIDC_CLAIM_names"));
-	ck_assert_str_eq(apr_table_get(r->subprocess_env, "MYPREFIX_anarr"), "0#hans#piet#1");
+	ck_assert_table_unset(r->subprocess_env, "OIDC_CLAIM_names");
+	ck_assert_table_str(r->subprocess_env, "MYPREFIX_anarr", "0#hans#piet#1");
 
 	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS,
 				  OIDC_APPINFO_ENCODING_BASE64URL);
-	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_simple"), "aGFucw");
-	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_name"), "R8OcbnRoZXI");
-	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_dagger"), "ROKAoGfDv2dlcg");
-	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_anarr"), "MCxoYW5zLHBpZXQsMQ");
+	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_simple", "aGFucw");
+	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_name", "R8OcbnRoZXI");
+	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_dagger", "ROKAoGfDv2dlcg");
+	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_anarr", "MCxoYW5zLHBpZXQsMQ");
 
 	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS,
 				  OIDC_APPINFO_ENCODING_LATIN1);
-	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_simple"), "hans");
-	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_name"), "G\xDCnther");
-	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_dagger"), "D?g\xFFger");
+	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_simple", "hans");
+	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_name", "G\xDCnther");
+	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_dagger", "D?g\xFFger");
 
 	json_decref(claims);
 }
@@ -366,8 +366,8 @@ START_TEST(test_util_html_content) {
 
 	rv = oidc_util_html_send_error(r, "my error", "my error description", 404);
 	ck_assert_msg(rv == 404, "oidc_util_html_send_error did not return 404: %d", rv);
-	ck_assert_str_eq(apr_table_get(r->subprocess_env, "OIDC_ERROR"), "my error");
-	ck_assert_str_eq(apr_table_get(r->subprocess_env, "OIDC_ERROR_DESC"), "my error description");
+	ck_assert_table_str(r->subprocess_env, "OIDC_ERROR", "my error");
+	ck_assert_table_str(r->subprocess_env, "OIDC_ERROR_DESC", "my error description");
 }
 END_TEST
 
@@ -816,10 +816,10 @@ START_TEST(test_util_table_and_hash_clear_and_openssl) {
 	apr_hash_t *ht = apr_hash_make(pool);
 
 	oidc_util_table_add_query_encoded_params(pool, t, "a=1&b=two%20words&c=3");
-	ck_assert_str_eq(apr_table_get(t, "a"), "1");
+	ck_assert_table_str(t, "a", "1");
 	// because ap_unesacpe_url doe snot decode anything in the stub.c
-	ck_assert_str_eq(apr_table_get(t, "b"), "two%20words");
-	ck_assert_str_eq(apr_table_get(t, "c"), "3");
+	ck_assert_table_str(t, "b", "two%20words");
+	ck_assert_table_str(t, "c", "3");
 
 	apr_hash_set(ht, "k1", APR_HASH_KEY_STRING, "v1");
 	apr_hash_set(ht, "k2", APR_HASH_KEY_STRING, "v2");
@@ -841,9 +841,9 @@ START_TEST(test_util_read_form_encoded_params) {
 	ck_assert_msg(oidc_util_read_form_encoded_params(r, t, form) == TRUE,
 		      "oidc_util_read_form_encoded_params returned FALSE");
 
-	ck_assert_str_eq(apr_table_get(t, "a"), "1");
-	ck_assert_str_eq(apr_table_get(t, "b"), "two words");
-	ck_assert_str_eq(apr_table_get(t, "c"), "3");
+	ck_assert_table_str(t, "a", "1");
+	ck_assert_table_str(t, "b", "two words");
+	ck_assert_table_str(t, "c", "3");
 }
 END_TEST
 

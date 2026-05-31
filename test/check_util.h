@@ -43,6 +43,7 @@
 #ifndef _MOD_AUTH_OPENIDC_TEST_CHECK_UTIL_H_
 #define _MOD_AUTH_OPENIDC_TEST_CHECK_UTIL_H_
 
+#include <apr_tables.h>
 #include <check.h>
 
 #ifndef _ck_assert_ptr_null
@@ -66,6 +67,27 @@
 	} while (0)
 #define ck_assert_ptr_eq(X, Y) _ck_assert_ptr(X, ==, Y)
 #endif
+
+/*
+ * domain-specific assertions for the libcheck tests
+ *
+ * The module passes claims and metadata to the request as apr_table entries
+ * (headers, subprocess_env, ...), so the tests check those constantly. These
+ * wrap the apr_table_get + ck_assert pattern and, unlike a bare
+ * ck_assert_str_eq(apr_table_get(...), ...), fail cleanly with the key name
+ * instead of dereferencing NULL when the entry is absent.
+ */
+
+/* assert that table entry KEY is present and equals EXPECTED */
+#define ck_assert_table_str(tbl, key, expected)                                                                        \
+	do {                                                                                                           \
+		const char *_ck_tv = apr_table_get((tbl), (key));                                                      \
+		ck_assert_msg(_ck_tv != NULL, "table entry '%s' is missing", (key));                                   \
+		ck_assert_str_eq(_ck_tv, (expected));                                                                  \
+	} while (0)
+
+/* assert that table entry KEY is absent */
+#define ck_assert_table_unset(tbl, key) ck_assert_ptr_null(apr_table_get((tbl), (key)))
 
 int oidc_test_suite_run(Suite *s);
 

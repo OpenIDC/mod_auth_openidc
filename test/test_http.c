@@ -607,7 +607,7 @@ START_TEST(test_e2e_bearer_authorization) {
 	const char *auth = apr_table_get(cap->headers, OIDC_HTTP_HDR_AUTHORIZATION);
 	ck_assert_ptr_nonnull(auth);
 	ck_assert_msg(_oidc_strcmp(auth, "Bearer TOK-BEARER") == 0, "Bearer scheme sent");
-	ck_assert_ptr_null(apr_table_get(cap->headers, OIDC_HTTP_HDR_DPOP));
+	ck_assert_table_unset(cap->headers, OIDC_HTTP_HDR_DPOP);
 
 	oidc_test_http_server_stop(srv);
 }

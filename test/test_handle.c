@@ -1270,7 +1270,7 @@ START_TEST(test_handle_userinfo_pass_as_signed_jwt_without_private_keys) {
 	 * graceful-degradation path) */
 	oidc_userinfo_pass_as(r, c, session, OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
 
-	ck_assert_ptr_null(apr_table_get(r->headers_in, OIDC_DEFAULT_HEADER_PREFIX OIDC_APP_INFO_SIGNED_JWT));
+	ck_assert_table_unset(r->headers_in, OIDC_DEFAULT_HEADER_PREFIX OIDC_APP_INFO_SIGNED_JWT);
 
 	json_decref(claims);
 	oidc_session_free(r, session);
@@ -1734,8 +1734,8 @@ START_TEST(test_handle_mod_scrub_headers_default_prefix) {
 
 	oidc_scrub_headers(r);
 
-	ck_assert_ptr_null(apr_table_get(r->headers_in, "OIDC_foo"));
-	ck_assert_str_eq(apr_table_get(r->headers_in, "X-Original"), "kept");
+	ck_assert_table_unset(r->headers_in, "OIDC_foo");
+	ck_assert_table_str(r->headers_in, "X-Original", "kept");
 }
 END_TEST
 
@@ -1755,8 +1755,8 @@ START_TEST(test_handle_mod_scrub_headers_empty_prefix_with_whitelist) {
 
 	oidc_scrub_headers(r);
 
-	ck_assert_ptr_null(apr_table_get(r->headers_in, "X-Custom-Scrub"));
-	ck_assert_str_eq(apr_table_get(r->headers_in, "X-Other"), "should-survive");
+	ck_assert_table_unset(r->headers_in, "X-Custom-Scrub");
+	ck_assert_table_str(r->headers_in, "X-Other", "should-survive");
 }
 END_TEST
 
@@ -1774,9 +1774,9 @@ START_TEST(test_handle_mod_scrub_headers_custom_prefix) {
 
 	oidc_scrub_headers(r);
 
-	ck_assert_ptr_null(apr_table_get(r->headers_in, "MY_email"));
-	ck_assert_ptr_null(apr_table_get(r->headers_in, "OIDC_foo"));
-	ck_assert_str_eq(apr_table_get(r->headers_in, "X-Other"), "kept");
+	ck_assert_table_unset(r->headers_in, "MY_email");
+	ck_assert_table_unset(r->headers_in, "OIDC_foo");
+	ck_assert_table_str(r->headers_in, "X-Other", "kept");
 }
 END_TEST
 
@@ -1892,7 +1892,7 @@ START_TEST(test_handle_mod_set_app_claims_pass_none) {
 	/* PASS_NONE short-circuits => returns TRUE without populating env vars */
 	json_t *claims = json_pack("{s:s}", "sub", "alice");
 	ck_assert_int_eq(oidc_set_app_claims(r, c, claims), TRUE);
-	ck_assert_ptr_null(apr_table_get(r->subprocess_env, "OIDC_CLAIM_sub"));
+	ck_assert_table_unset(r->subprocess_env, "OIDC_CLAIM_sub");
 	json_decref(claims);
 }
 END_TEST
@@ -1904,7 +1904,7 @@ START_TEST(test_handle_mod_set_app_claims_pass_both) {
 	/* default OIDCPassClaimsAs is "both" => the claim ends up as an env var */
 	json_t *claims = json_pack("{s:s}", "sub", "alice");
 	ck_assert_int_eq(oidc_set_app_claims(r, c, claims), TRUE);
-	ck_assert_str_eq(apr_table_get(r->subprocess_env, "OIDC_CLAIM_sub"), "alice");
+	ck_assert_table_str(r->subprocess_env, "OIDC_CLAIM_sub", "alice");
 	json_decref(claims);
 }
 END_TEST
@@ -2119,10 +2119,10 @@ START_TEST(test_handle_mod_session_pass_tokens_full) {
 	ck_assert_int_eq(oidc_session_get_session_new(r, session), 0);
 
 	/* values must have been propagated to subprocess_env */
-	ck_assert_str_eq(apr_table_get(r->subprocess_env, "OIDC_access_token"), "AT-1");
-	ck_assert_str_eq(apr_table_get(r->subprocess_env, "OIDC_access_token_type"), "Bearer");
-	ck_assert_str_eq(apr_table_get(r->subprocess_env, "OIDC_scope"), "openid profile");
-	ck_assert_str_eq(apr_table_get(r->subprocess_env, "OIDC_refresh_token"), "RT-1");
+	ck_assert_table_str(r->subprocess_env, "OIDC_access_token", "AT-1");
+	ck_assert_table_str(r->subprocess_env, "OIDC_access_token_type", "Bearer");
+	ck_assert_table_str(r->subprocess_env, "OIDC_scope", "openid profile");
+	ck_assert_table_str(r->subprocess_env, "OIDC_refresh_token", "RT-1");
 
 	oidc_session_free(r, session);
 }
@@ -2494,7 +2494,7 @@ START_TEST(test_handle_session_management_iframe_op_configured) {
 	r->args = "session=iframe_op";
 	int rc = oidc_session_management(r, c, session);
 	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
-	ck_assert_str_eq(apr_table_get(r->headers_out, "Location"), "https://idp.example.com/check-session");
+	ck_assert_table_str(r->headers_out, "Location", "https://idp.example.com/check-session");
 
 	oidc_session_free(r, session);
 }
@@ -2816,7 +2816,7 @@ START_TEST(test_handle_logout_local_with_return_url) {
 	r->args = "logout=https%3A%2F%2Fwww.example.com%2Flogged-out";
 	int rc = oidc_logout(r, c, session);
 	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
-	ck_assert_str_eq(apr_table_get(r->headers_out, "Location"), "https://www.example.com/logged-out");
+	ck_assert_table_str(r->headers_out, "Location", "https://www.example.com/logged-out");
 
 	oidc_session_free(r, session);
 }
