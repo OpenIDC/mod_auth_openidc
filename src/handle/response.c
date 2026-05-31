@@ -342,7 +342,7 @@ apr_byte_t oidc_response_save_in_session(request_rec *r, const oidc_cfg_t *c, oi
 /*
  * restore the state that was maintained between authorization request and response in an encrypted cookie
  */
-static apr_byte_t oidc_response_proto_state_restore(request_rec *r, oidc_cfg_t *c, const char *state,
+static apr_byte_t oidc_response_proto_state_restore(request_rec *r, const oidc_cfg_t *c, const char *state,
 						    oidc_proto_state_t **proto_state) {
 
 	oidc_debug(r, "enter");

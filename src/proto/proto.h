@@ -146,8 +146,8 @@ apr_byte_t oidc_proto_dpop_use_nonce(request_rec *r, const oidc_cfg_t *cfg, cons
 				     const char *access_token, char **dpop);
 
 // id_token.c
-apr_byte_t oidc_proto_idtoken_parse(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider, const char *id_token,
-				    const char *nonce, oidc_jwt_t **jwt, apr_byte_t is_code_flow);
+apr_byte_t oidc_proto_idtoken_parse(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
+				    const char *id_token, const char *nonce, oidc_jwt_t **jwt, apr_byte_t is_code_flow);
 apr_byte_t oidc_proto_idtoken_validate_aud_and_azp(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
 						   const oidc_jwt_payload_t *id_token_payload);
 // non-static for test.c

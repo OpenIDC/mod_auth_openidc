@@ -318,8 +318,8 @@ static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg_t *cfg, const
  * resolve the code against the token endpoint and validate the response that is returned by the OP
  */
 static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r, oidc_cfg_t *c,
-								oidc_provider_t *provider, const char *response_type,
-								apr_table_t *params,
+								const oidc_provider_t *provider,
+								const char *response_type, apr_table_t *params,
 								const oidc_proto_state_t *proto_state) {
 
 	char *id_token = NULL;

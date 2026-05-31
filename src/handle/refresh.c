@@ -227,7 +227,7 @@ end:
  * remote refresh failure the refresh_token is locked out of future refresh
  * attempts for OIDC_REFRESH_CACHE_TTL seconds
  */
-static apr_byte_t oidc_refresh_token_grant_obtain_tokens(request_rec *r, oidc_cfg_t *c, oidc_provider_t *provider,
+static apr_byte_t oidc_refresh_token_grant_obtain_tokens(request_rec *r, oidc_cfg_t *c, const oidc_provider_t *provider,
 							 const char *refresh_token, char **s_id_token,
 							 char **s_access_token, char **s_token_type, int *expires_in,
 							 char **s_refresh_token, char **s_scope, apr_time_t *ts) {

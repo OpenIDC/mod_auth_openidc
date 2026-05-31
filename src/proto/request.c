@@ -558,7 +558,7 @@ out:
 /*
  * generate a request object and pass it by reference in the authorization request
  */
-static char *oidc_proto_request_uri_create(request_rec *r, struct oidc_provider_t *provider,
+static char *oidc_proto_request_uri_create(request_rec *r, const struct oidc_provider_t *provider,
 					   json_t *request_object_config, const char *redirect_uri, apr_table_t *params,
 					   int ttl) {
 

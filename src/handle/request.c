@@ -113,7 +113,7 @@ static const char *oidc_request_samesite_state_cookie(const request_rec *r, cons
  * set the state that is maintained between an authorization request and an authorization response
  * in a cookie in the browser that is cryptographically bound to that state
  */
-static int oidc_request_authorization_set_cookie(request_rec *r, oidc_cfg_t *c, const char *state,
+static int oidc_request_authorization_set_cookie(request_rec *r, const oidc_cfg_t *c, const char *state,
 						 const oidc_proto_state_t *proto_state) {
 	/*
 	 * create a cookie consisting of 8 elements:

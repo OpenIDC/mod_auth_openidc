@@ -383,8 +383,9 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r, const oidc_provide
 /*
  * check whether the provided string is a valid id_token and return its parsed contents
  */
-apr_byte_t oidc_proto_idtoken_parse(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider, const char *id_token,
-				    const char *nonce, oidc_jwt_t **jwt, apr_byte_t is_code_flow) {
+apr_byte_t oidc_proto_idtoken_parse(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
+				    const char *id_token, const char *nonce, oidc_jwt_t **jwt,
+				    apr_byte_t is_code_flow) {
 
 	char *alg = NULL;
 	oidc_debug(r, "enter: id_token header=%s", oidc_proto_jwt_header_peek(r, id_token, &alg, NULL, NULL));
