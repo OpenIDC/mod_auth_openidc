@@ -56,6 +56,10 @@
 #include "cache/redis.h"
 #endif
 
+#ifdef USE_MEMCACHE
+#include "cache/memcache.h"
+#endif
+
 START_TEST(test_cache_mutex_and_status2str) {
 	request_rec *r = oidc_test_request_get();
 	apr_pool_t *pool = oidc_test_pool_get();
@@ -947,28 +951,154 @@ END_TEST
 #ifdef USE_MEMCACHE
 
 /*
- * Tests for cache/memcache.c — the memcache backend's post_config only parses the
- * server list and allocates apr_memcache structures; it does not open a connection,
- * so the parsing and pool-sizing logic can be exercised offline without a live
- * memcached. (get/set need a live server and are left to optional integration tests.)
+ * Tests for cache/memcache.c.
+ *
+ * The real per-server setup (apr_memcache_server_create) eagerly connects when the connection-pool
+ * minimum is > 0, so to exercise the server-counting and pool-sizing logic offline (without a live
+ * memcached) we install a mock add_server operation on the context. The mock records the pool sizes
+ * it is handed and returns success without touching the network, mirroring the redis mock above.
  */
+
+typedef struct memcache_mock_state_t {
+	int add_calls;	       /* number of times the per-server op was invoked */
+	apr_uint32_t last_min; /* pool sizes seen by the most recent invocation */
+	apr_uint32_t last_smax;
+	apr_uint32_t last_hmax;
+	apr_interval_time_t last_ttl;
+	int fail; /* if non-zero, the add_server op returns HTTP_INTERNAL_SERVER_ERROR */
+
+	/* data-path mock */
+	int get_calls;
+	int set_calls;
+	int delete_calls;
+	int status_calls;
+	apr_status_t getp_rv;	/* return code for the getp op */
+	const char *getp_value; /* value handed back on a getp hit (may be NULL) */
+	int getp_len;		/* override the returned length; < 0 means strlen(getp_value) */
+	apr_byte_t status_rv;	/* return code for the status op */
+	apr_status_t set_rv;	/* return code for the set op */
+	apr_status_t delete_rv; /* return code for the delete op */
+	const char *last_key;	/* key seen by the most recent data-path op */
+	const char *last_value; /* value seen by the most recent set op */
+} memcache_mock_state_t;
+
+static memcache_mock_state_t memcache_mock;
+
+static void memcache_mock_reset(void) {
+	memset(&memcache_mock, 0, sizeof(memcache_mock));
+	memcache_mock.getp_len = -1;
+}
+
+/* mock per-server op: records the pool sizes, never connects */
+static int memcache_mock_add_server(server_rec *s, apr_pool_t *p, struct oidc_cache_cfg_memcache_t *context,
+				    char *split, apr_uint32_t min, apr_uint32_t smax, apr_uint32_t hmax,
+				    apr_interval_time_t ttl) {
+	(void)s;
+	(void)p;
+	(void)context;
+	(void)split;
+	memcache_mock.add_calls++;
+	memcache_mock.last_min = min;
+	memcache_mock.last_smax = smax;
+	memcache_mock.last_hmax = hmax;
+	memcache_mock.last_ttl = ttl;
+	return memcache_mock.fail ? HTTP_INTERNAL_SERVER_ERROR : OK;
+}
+
+/* mock data-path ops: fabricate results without a live memcached */
+static apr_status_t memcache_mock_getp(struct oidc_cache_cfg_memcache_t *context, apr_pool_t *p, const char *key,
+				       char **baton, apr_size_t *len) {
+	(void)context;
+	memcache_mock.get_calls++;
+	memcache_mock.last_key = key;
+	if (memcache_mock.getp_rv == APR_SUCCESS) {
+		*baton = memcache_mock.getp_value ? apr_pstrdup(p, memcache_mock.getp_value) : NULL;
+		*len = (memcache_mock.getp_len >= 0)
+			   ? (apr_size_t)memcache_mock.getp_len
+			   : (memcache_mock.getp_value ? strlen(memcache_mock.getp_value) : 0);
+	}
+	return memcache_mock.getp_rv;
+}
+
+static apr_status_t memcache_mock_set(struct oidc_cache_cfg_memcache_t *context, const char *key, char *baton,
+				      apr_size_t len, apr_uint32_t timeout) {
+	(void)context;
+	(void)len;
+	(void)timeout;
+	memcache_mock.set_calls++;
+	memcache_mock.last_key = key;
+	memcache_mock.last_value = baton;
+	return memcache_mock.set_rv;
+}
+
+static apr_status_t memcache_mock_delete(struct oidc_cache_cfg_memcache_t *context, const char *key) {
+	(void)context;
+	memcache_mock.delete_calls++;
+	memcache_mock.last_key = key;
+	return memcache_mock.delete_rv;
+}
+
+static apr_byte_t memcache_mock_status(const struct oidc_cache_cfg_memcache_t *context) {
+	(void)context;
+	memcache_mock.status_calls++;
+	return memcache_mock.status_rv;
+}
 
 static oidc_cache_t *memcache_prev_impl;
 static void *memcache_prev_cfg;
 static char *memcache_prev_servers;
+static int memcache_prev_min;
+static int memcache_prev_smax;
+static int memcache_prev_hmax;
 
 static void memcache_save(oidc_cfg_t *cfg) {
 	memcache_prev_impl = (oidc_cache_t *)cfg->cache.impl;
 	memcache_prev_cfg = cfg->cache.cfg;
 	memcache_prev_servers = cfg->cache.memcache_servers;
+	memcache_prev_min = cfg->cache.memcache_min;
+	memcache_prev_smax = cfg->cache.memcache_smax;
+	memcache_prev_hmax = cfg->cache.memcache_hmax;
 	/* force post_config to run rather than short-circuit on an existing context */
 	cfg->cache.cfg = NULL;
+	memcache_mock_reset();
 }
 
 static void memcache_restore(oidc_cfg_t *cfg) {
 	cfg->cache.impl = memcache_prev_impl;
 	cfg->cache.cfg = memcache_prev_cfg;
 	cfg->cache.memcache_servers = memcache_prev_servers;
+	cfg->cache.memcache_min = memcache_prev_min;
+	cfg->cache.memcache_smax = memcache_prev_smax;
+	cfg->cache.memcache_hmax = memcache_prev_hmax;
+}
+
+/*
+ * run the offline post_config path: validate + size the pool (no connection), then run the
+ * add-server loop with the mock op swapped in so no real server is created
+ */
+static oidc_cache_cfg_memcache_t *memcache_mock_run(request_rec *r, oidc_cfg_t *cfg) {
+	ck_assert_int_eq(oidc_cache_memcache_post_config(r->server->process->pconf, r->server, cfg), OK);
+	oidc_cache_cfg_memcache_t *context = (oidc_cache_cfg_memcache_t *)cfg->cache.cfg;
+	ck_assert_ptr_nonnull(context);
+	context->add_server = memcache_mock_add_server;
+	ck_assert_int_eq(oidc_cache_memcache_add_servers(r->server->process->pconf, r->server, cfg, context), OK);
+	return context;
+}
+
+/*
+ * build a context (no connection) and swap in the data-path mock ops so get/set can be exercised
+ * offline against fabricated apr_memcache results
+ */
+static oidc_cache_cfg_memcache_t *memcache_mock_install(request_rec *r, oidc_cfg_t *cfg) {
+	cfg->cache.memcache_servers = "127.0.0.1:11211";
+	ck_assert_int_eq(oidc_cache_memcache_post_config(r->server->process->pconf, r->server, cfg), OK);
+	oidc_cache_cfg_memcache_t *context = (oidc_cache_cfg_memcache_t *)cfg->cache.cfg;
+	ck_assert_ptr_nonnull(context);
+	context->getp = memcache_mock_getp;
+	context->set = memcache_mock_set;
+	context->del = memcache_mock_delete;
+	context->status = memcache_mock_status;
+	return context;
 }
 
 START_TEST(test_cache_memcache_post_config_no_servers) {
@@ -978,7 +1108,7 @@ START_TEST(test_cache_memcache_post_config_no_servers) {
 
 	/* no OIDCMemCacheServers configured => post_config must fail */
 	cfg->cache.memcache_servers = NULL;
-	ck_assert_int_eq(oidc_cache_memcache.post_config(r->server->process->pconf, r->server),
+	ck_assert_int_eq(oidc_cache_memcache_post_config(r->server->process->pconf, r->server, cfg),
 			 HTTP_INTERNAL_SERVER_ERROR);
 
 	memcache_restore(cfg);
@@ -991,8 +1121,8 @@ START_TEST(test_cache_memcache_post_config_single_server) {
 	memcache_save(cfg);
 
 	cfg->cache.memcache_servers = "127.0.0.1:11211";
-	ck_assert_int_eq(oidc_cache_memcache.post_config(r->server->process->pconf, r->server), OK);
-	ck_assert_ptr_nonnull(cfg->cache.cfg);
+	memcache_mock_run(r, cfg);
+	ck_assert_int_eq(memcache_mock.add_calls, 1);
 
 	memcache_restore(cfg);
 }
@@ -1005,8 +1135,8 @@ START_TEST(test_cache_memcache_post_config_multi_server) {
 
 	/* two servers exercise the server-counting and add-server loops */
 	cfg->cache.memcache_servers = "127.0.0.1:11211 127.0.0.1:11212";
-	ck_assert_int_eq(oidc_cache_memcache.post_config(r->server->process->pconf, r->server), OK);
-	ck_assert_ptr_nonnull(cfg->cache.cfg);
+	memcache_mock_run(r, cfg);
+	ck_assert_int_eq(memcache_mock.add_calls, 2);
 
 	memcache_restore(cfg);
 }
@@ -1017,21 +1147,161 @@ START_TEST(test_cache_memcache_post_config_pool_clamp) {
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
 	memcache_save(cfg);
 
-	int prev_min = cfg->cache.memcache_min;
-	int prev_smax = cfg->cache.memcache_smax;
-	int prev_hmax = cfg->cache.memcache_hmax;
-
 	/* smax > hmax and min > smax exercise both connection-pool clamp branches */
 	cfg->cache.memcache_servers = "127.0.0.1:11211";
 	cfg->cache.memcache_hmax = 5;
 	cfg->cache.memcache_smax = 10;
 	cfg->cache.memcache_min = 8;
-	ck_assert_int_eq(oidc_cache_memcache.post_config(r->server->process->pconf, r->server), OK);
-	ck_assert_ptr_nonnull(cfg->cache.cfg);
+	oidc_cache_cfg_memcache_t *context = memcache_mock_run(r, cfg);
 
-	cfg->cache.memcache_min = prev_min;
-	cfg->cache.memcache_smax = prev_smax;
-	cfg->cache.memcache_hmax = prev_hmax;
+	/* both branches clamp down to hmax, so min == smax == hmax == 5 */
+	ck_assert_int_eq(context->hmax, 5);
+	ck_assert_int_eq(context->smax, 5);
+	ck_assert_int_eq(context->min, 5);
+	ck_assert_int_eq(memcache_mock.add_calls, 1);
+	ck_assert_int_eq(memcache_mock.last_hmax, 5);
+	ck_assert_int_eq(memcache_mock.last_smax, 5);
+	ck_assert_int_eq(memcache_mock.last_min, 5);
+
+	memcache_restore(cfg);
+}
+END_TEST
+
+START_TEST(test_cache_memcache_get_hit) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	memcache_save(cfg);
+	memcache_mock_install(r, cfg);
+
+	memcache_mock.getp_rv = APR_SUCCESS;
+	memcache_mock.getp_value = "v1";
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_memcache_get(r, OIDC_CACHE_SECTION_SESSION, "k1", &value), TRUE);
+	ck_assert_ptr_nonnull(value);
+	ck_assert_str_eq(value, "v1");
+	ck_assert_int_eq(memcache_mock.get_calls, 1);
+	/* the section/key are combined into the lookup key */
+	ck_assert_str_eq(memcache_mock.last_key, OIDC_CACHE_SECTION_SESSION ":k1");
+
+	memcache_restore(cfg);
+}
+END_TEST
+
+START_TEST(test_cache_memcache_get_miss_alive) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	memcache_save(cfg);
+	memcache_mock_install(r, cfg);
+
+	/* a genuine miss: not found, but at least one server is alive => OK with NULL value */
+	memcache_mock.getp_rv = APR_NOTFOUND;
+	memcache_mock.status_rv = TRUE;
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_memcache_get(r, OIDC_CACHE_SECTION_SESSION, "k", &value), TRUE);
+	ck_assert_ptr_null(value);
+	ck_assert_int_eq(memcache_mock.status_calls, 1);
+
+	memcache_restore(cfg);
+}
+END_TEST
+
+START_TEST(test_cache_memcache_get_miss_all_dead) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	memcache_save(cfg);
+	memcache_mock_install(r, cfg);
+
+	/* not found and all servers dead => treated as an error (FALSE) */
+	memcache_mock.getp_rv = APR_NOTFOUND;
+	memcache_mock.status_rv = FALSE;
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_memcache_get(r, OIDC_CACHE_SECTION_SESSION, "k", &value), FALSE);
+	ck_assert_int_eq(memcache_mock.status_calls, 1);
+
+	memcache_restore(cfg);
+}
+END_TEST
+
+START_TEST(test_cache_memcache_get_error) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	memcache_save(cfg);
+	memcache_mock_install(r, cfg);
+
+	/* a hard error from the server => FALSE */
+	memcache_mock.getp_rv = APR_EGENERAL;
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_memcache_get(r, OIDC_CACHE_SECTION_SESSION, "k", &value), FALSE);
+
+	memcache_restore(cfg);
+}
+END_TEST
+
+START_TEST(test_cache_memcache_get_len_mismatch) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	memcache_save(cfg);
+	memcache_mock_install(r, cfg);
+
+	/* a returned length that disagrees with the string length => FALSE */
+	memcache_mock.getp_rv = APR_SUCCESS;
+	memcache_mock.getp_value = "hello";
+	memcache_mock.getp_len = 3;
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_memcache_get(r, OIDC_CACHE_SECTION_SESSION, "k", &value), FALSE);
+
+	memcache_restore(cfg);
+}
+END_TEST
+
+START_TEST(test_cache_memcache_set_value) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	memcache_save(cfg);
+	memcache_mock_install(r, cfg);
+
+	memcache_mock.set_rv = APR_SUCCESS;
+	ck_assert_int_eq(oidc_cache_memcache_set(r, OIDC_CACHE_SECTION_SESSION, "k", "v", apr_time_now()), TRUE);
+	ck_assert_int_eq(memcache_mock.set_calls, 1);
+	ck_assert_str_eq(memcache_mock.last_value, "v");
+	ck_assert_str_eq(memcache_mock.last_key, OIDC_CACHE_SECTION_SESSION ":k");
+
+	memcache_restore(cfg);
+}
+END_TEST
+
+START_TEST(test_cache_memcache_set_error) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	memcache_save(cfg);
+	memcache_mock_install(r, cfg);
+
+	memcache_mock.set_rv = APR_EGENERAL;
+	ck_assert_int_eq(oidc_cache_memcache_set(r, OIDC_CACHE_SECTION_SESSION, "k", "v", apr_time_now()), FALSE);
+
+	memcache_restore(cfg);
+}
+END_TEST
+
+START_TEST(test_cache_memcache_set_delete) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	memcache_save(cfg);
+	memcache_mock_install(r, cfg);
+
+	/* a NULL value clears the entry; APR_NOTFOUND on delete is treated as success */
+	memcache_mock.delete_rv = APR_NOTFOUND;
+	ck_assert_int_eq(oidc_cache_memcache_set(r, OIDC_CACHE_SECTION_SESSION, "k", NULL, 0), TRUE);
+	ck_assert_int_eq(memcache_mock.delete_calls, 1);
+
+	/* a successful delete is also success */
+	memcache_mock.delete_rv = APR_SUCCESS;
+	ck_assert_int_eq(oidc_cache_memcache_set(r, OIDC_CACHE_SECTION_SESSION, "k", NULL, 0), TRUE);
+
+	/* a hard error on delete => FALSE */
+	memcache_mock.delete_rv = APR_EGENERAL;
+	ck_assert_int_eq(oidc_cache_memcache_set(r, OIDC_CACHE_SECTION_SESSION, "k", NULL, 0), FALSE);
+
 	memcache_restore(cfg);
 }
 END_TEST
@@ -1095,6 +1365,14 @@ int main(void) {
 	tcase_add_test(memcache, test_cache_memcache_post_config_single_server);
 	tcase_add_test(memcache, test_cache_memcache_post_config_multi_server);
 	tcase_add_test(memcache, test_cache_memcache_post_config_pool_clamp);
+	tcase_add_test(memcache, test_cache_memcache_get_hit);
+	tcase_add_test(memcache, test_cache_memcache_get_miss_alive);
+	tcase_add_test(memcache, test_cache_memcache_get_miss_all_dead);
+	tcase_add_test(memcache, test_cache_memcache_get_error);
+	tcase_add_test(memcache, test_cache_memcache_get_len_mismatch);
+	tcase_add_test(memcache, test_cache_memcache_set_value);
+	tcase_add_test(memcache, test_cache_memcache_set_error);
+	tcase_add_test(memcache, test_cache_memcache_set_delete);
 	suite_add_tcase(s, memcache);
 #endif
 

@@ -139,6 +139,11 @@ noinst_HEADERS += \
 	cache/redis.h
 endif
 
+if HAVE_MEMCACHE
+noinst_HEADERS += \
+	cache/memcache.h
+endif
+
 noinst_DATA = mod_auth_openidc.la
 
 mod_auth_openidc.la: libauth_openidc.la
