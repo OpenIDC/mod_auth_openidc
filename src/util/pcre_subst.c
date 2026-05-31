@@ -285,14 +285,10 @@ int oidc_pcre_exec(apr_pool_t *pool, struct oidc_pcre *pcre, const char *input, 
 #ifdef HAVE_LIBPCRE2
 	pcre->match_data = pcre2_match_data_create_from_pattern(pcre->preg, NULL);
 	if ((rc = pcre2_match(pcre->preg, (PCRE2_SPTR)input, (PCRE2_SIZE)len, 0, 0, pcre->match_data, NULL)) < 0) {
-		switch (rc) {
-		case PCRE2_ERROR_NOMATCH:
+		if (rc == PCRE2_ERROR_NOMATCH)
 			*error_str = apr_pstrdup(pool, "string did not match the pattern");
-			break;
-		default:
+		else
 			*error_str = apr_psprintf(pool, "unknown error: %d", rc);
-			break;
-		}
 	}
 #else
 	if ((rc = pcre_exec(pcre->preg, NULL, input, len, 0, 0, pcre->subStr, OIDC_UTIL_REGEXP_MATCH_SIZE)) < 0) {
