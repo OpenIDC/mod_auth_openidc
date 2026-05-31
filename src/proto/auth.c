@@ -105,7 +105,8 @@ static apr_byte_t oidc_proto_jwt_create(request_rec *r, const char *client_id, c
 /*
  * helper function to add a JWT assertion to the HTTP request as endpoint authentication
  */
-static apr_byte_t oidc_proto_jwt_sign_and_add(request_rec *r, apr_table_t *params, oidc_jwt_t *jwt, oidc_jwk_t *jwk) {
+static apr_byte_t oidc_proto_jwt_sign_and_add(request_rec *r, apr_table_t *params, oidc_jwt_t *jwt,
+					      const oidc_jwk_t *jwk) {
 	char *cser = NULL;
 
 	if (oidc_proto_jwt_sign_and_serialize(r, jwk, jwt, &cser) == FALSE)

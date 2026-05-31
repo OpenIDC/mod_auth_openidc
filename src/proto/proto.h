@@ -150,9 +150,9 @@ apr_byte_t oidc_proto_idtoken_parse(request_rec *r, oidc_cfg_t *cfg, oidc_provid
 apr_byte_t oidc_proto_idtoken_validate_aud_and_azp(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
 						   const oidc_jwt_payload_t *id_token_payload);
 // non-static for test.c
-apr_byte_t oidc_proto_idtoken_validate_access_token(request_rec *r, oidc_provider_t *provider, oidc_jwt_t *jwt,
+apr_byte_t oidc_proto_idtoken_validate_access_token(request_rec *r, oidc_provider_t *provider, const oidc_jwt_t *jwt,
 						    const char *response_type, const char *access_token);
-apr_byte_t oidc_proto_idtoken_validate_code(request_rec *r, oidc_provider_t *provider, oidc_jwt_t *jwt,
+apr_byte_t oidc_proto_idtoken_validate_code(request_rec *r, oidc_provider_t *provider, const oidc_jwt_t *jwt,
 					    const char *response_type, const char *code);
 apr_byte_t oidc_proto_idtoken_validate_nonce(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
 					     const char *nonce, const oidc_jwt_t *jwt);

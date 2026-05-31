@@ -216,7 +216,7 @@ void oidc_metadata_parse_boolean(request_rec *r, const json_t *json, const char 
 /*
  * parse URL value from JSON configuration
  */
-void oidc_metadata_parse_url(request_rec *r, const char *type, const char *issuer, json_t *json, const char *key,
+void oidc_metadata_parse_url(request_rec *r, const char *type, const char *issuer, const json_t *json, const char *key,
 			     char **value, const char *default_value) {
 	*value = NULL;
 	if ((oidc_metadata_is_valid_uri(r, type, issuer, json, key, value, FALSE) == FALSE) ||

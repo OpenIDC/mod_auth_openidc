@@ -315,7 +315,7 @@ static apr_byte_t oidc_session_load_cookie(request_rec *r, oidc_cfg_t *c, oidc_s
 /*
  * store the session in a self-contained client-side-only cookie storage
  */
-static apr_byte_t oidc_session_save_cookie(request_rec *r, oidc_session_t *z, apr_byte_t first_time) {
+static apr_byte_t oidc_session_save_cookie(request_rec *r, const oidc_session_t *z, apr_byte_t first_time) {
 	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	char *cookieValue = "";
 	if ((z->state != NULL) && (oidc_session_encode(r, c, z, &cookieValue, TRUE) == FALSE))
@@ -526,7 +526,7 @@ apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z) {
 /*
  * helper functions
  */
-static const char *oidc_session_get_key2string(request_rec *r, oidc_session_t *z, const char *key) {
+static const char *oidc_session_get_key2string(request_rec *r, const oidc_session_t *z, const char *key) {
 	char *s_value = NULL;
 	oidc_session_get(r, z, key, &s_value);
 	return s_value;
@@ -737,7 +737,7 @@ apr_time_t oidc_session_get_access_token_expires(request_rec *r, const oidc_sess
 	return oidc_session_get_key2timestamp(r, z, OIDC_SESSION_KEY_ACCESSTOKEN_EXPIRES);
 }
 
-const char *oidc_session_get_access_token_expires2str(request_rec *r, oidc_session_t *z) {
+const char *oidc_session_get_access_token_expires2str(request_rec *r, const oidc_session_t *z) {
 	apr_time_t expires = oidc_session_get_access_token_expires(r, z);
 	return (expires > -1) ? apr_psprintf(r->pool, "%" APR_TIME_T_FMT, apr_time_sec(expires)) : NULL;
 }

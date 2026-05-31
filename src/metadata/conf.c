@@ -60,7 +60,7 @@ static apr_byte_t oidc_metadata_conf_jose_is_supported(request_rec *r, const jso
 /*
  * check to see if JSON configuration data is valid
  */
-static apr_byte_t oidc_metadata_conf_is_valid(request_rec *r, json_t *j_conf, const char *issuer) {
+static apr_byte_t oidc_metadata_conf_is_valid(request_rec *r, const json_t *j_conf, const char *issuer) {
 
 	if (oidc_metadata_conf_jose_is_supported(r, j_conf, issuer, OIDC_METADATA_ID_TOKEN_SIGNED_RESPONSE_ALG,
 						 oidc_cfg_parse_is_valid_signed_response_alg) == FALSE)
@@ -198,7 +198,7 @@ static void oidc_metadata_conf_parse_userinfo(request_rec *r, oidc_cfg_t *cfg, c
 /*
  * apply SSL/issuer validation flags and session-related interval overrides
  */
-static void oidc_metadata_conf_parse_session(request_rec *r, oidc_cfg_t *cfg, json_t *j_conf,
+static void oidc_metadata_conf_parse_session(request_rec *r, oidc_cfg_t *cfg, const json_t *j_conf,
 					     oidc_provider_t *provider) {
 	OIDC_METADATA_CONF_BOOL(j_conf, OIDC_METADATA_SSL_VALIDATE_SERVER, ssl_validate_server);
 	OIDC_METADATA_CONF_BOOL(j_conf, OIDC_METADATA_VALIDATE_ISSUER, validate_issuer);
@@ -224,7 +224,7 @@ static void oidc_metadata_conf_parse_request_params(request_rec *r, oidc_cfg_t *
 /*
  * apply the response/PKCE settings
  */
-static void oidc_metadata_conf_parse_response(request_rec *r, oidc_cfg_t *cfg, json_t *j_conf,
+static void oidc_metadata_conf_parse_response(request_rec *r, oidc_cfg_t *cfg, const json_t *j_conf,
 					      oidc_provider_t *provider) {
 	const char *rv = NULL;
 	char *value = NULL;

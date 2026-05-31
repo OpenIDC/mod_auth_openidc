@@ -258,7 +258,7 @@ static int oidc_userinfo_signed_jwt_cache_ttl(const request_rec *r) {
 /*
  * create a signed JWT with s_claims payload and return the serialized form in cser
  */
-static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session,
+static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg_t *cfg, const oidc_session_t *session,
 						  json_t *claims, char **cser) {
 	apr_byte_t rv = FALSE;
 	oidc_jwt_t *jwt = NULL;
@@ -415,7 +415,7 @@ static void oidc_userinfo_pass_entry(request_rec *r, oidc_cfg_t *cfg, oidc_sessi
  * newly allocated json_t that the caller must release, or NULL when no
  * filter was applied
  */
-static json_t *oidc_userinfo_resolve_claims(request_rec *r, oidc_session_t *session, json_t **filtered) {
+static json_t *oidc_userinfo_resolve_claims(request_rec *r, const oidc_session_t *session, json_t **filtered) {
 
 	*filtered = NULL;
 

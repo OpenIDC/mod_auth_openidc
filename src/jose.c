@@ -343,7 +343,7 @@ static oidc_jwk_t *oidc_jwk_from_cjose(apr_pool_t *pool, cjose_jwk_t *cjose_jwk,
 /*
  * parse a JSON string to a JWK struct
  */
-oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, json_t *json, oidc_jose_error_t *err) {
+oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, const json_t *json, oidc_jose_error_t *err) {
 	oidc_jwk_t *result = NULL;
 	cjose_jwk_t *cjose_jwk = NULL;
 	cjose_err cjose_err;

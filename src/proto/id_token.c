@@ -316,7 +316,7 @@ static apr_byte_t oidc_proto_validate_hash_value(request_rec *r, oidc_provider_t
 /*
  * check the at_hash value in the id_token against the access_token
  */
-apr_byte_t oidc_proto_idtoken_validate_access_token(request_rec *r, oidc_provider_t *provider, oidc_jwt_t *jwt,
+apr_byte_t oidc_proto_idtoken_validate_access_token(request_rec *r, oidc_provider_t *provider, const oidc_jwt_t *jwt,
 						    const char *response_type, const char *access_token) {
 	apr_array_header_t *required_for_flows = apr_array_make(r->pool, 2, sizeof(const char *));
 	APR_ARRAY_PUSH(required_for_flows, const char *) = OIDC_PROTO_RESPONSE_TYPE_IDTOKEN_TOKEN;
@@ -332,7 +332,7 @@ apr_byte_t oidc_proto_idtoken_validate_access_token(request_rec *r, oidc_provide
 /*
  * check the c_hash value in the id_token against the code
  */
-apr_byte_t oidc_proto_idtoken_validate_code(request_rec *r, oidc_provider_t *provider, oidc_jwt_t *jwt,
+apr_byte_t oidc_proto_idtoken_validate_code(request_rec *r, oidc_provider_t *provider, const oidc_jwt_t *jwt,
 					    const char *response_type, const char *code) {
 	apr_array_header_t *required_for_flows = apr_array_make(r->pool, 2, sizeof(const char *));
 	APR_ARRAY_PUSH(required_for_flows, const char *) = OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN;

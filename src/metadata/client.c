@@ -309,7 +309,8 @@ static void oidc_metadata_client_parse_response_type(request_rec *r, oidc_cfg_t 
 /*
  * parse the JSON client metadata in to a oidc_provider_t struct
  */
-apr_byte_t oidc_metadata_client_parse(request_rec *r, oidc_cfg_t *cfg, json_t *j_client, oidc_provider_t *provider) {
+apr_byte_t oidc_metadata_client_parse(request_rec *r, oidc_cfg_t *cfg, const json_t *j_client,
+				      oidc_provider_t *provider) {
 
 	const char *rv = NULL;
 	char *value = NULL;
