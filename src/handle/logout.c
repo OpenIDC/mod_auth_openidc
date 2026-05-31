@@ -347,7 +347,7 @@ static int oidc_logout_backchannel_get_provider(request_rec *r, oidc_cfg_t *cfg,
 }
 
 static int oidc_logout_backchannel_verify_jwt(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t *jwt,
-					      oidc_provider_t *provider, const oidc_jwk_t *jwk) {
+					      const oidc_provider_t *provider, const oidc_jwk_t *jwk) {
 	if (oidc_proto_jwt_verify(
 		r, cfg, jwt, oidc_cfg_provider_jwks_uri_get(provider),
 		oidc_cfg_provider_ssl_validate_server_get(provider),

@@ -227,7 +227,8 @@ static int oidc_state_cookies_parse_token(request_rec *r, const oidc_cfg_t *c, c
  * successfully and return the number of remaining valid cookies/outstanding-requests while
  * doing so
  */
-int oidc_state_cookies_clean_expired(request_rec *r, oidc_cfg_t *c, const char *currentCookieName, int delete_oldest) {
+int oidc_state_cookies_clean_expired(request_rec *r, const oidc_cfg_t *c, const char *currentCookieName,
+				     int delete_oldest) {
 	int number_of_valid_state_cookies = 0;
 	oidc_state_cookies_t *first = NULL;
 	oidc_state_cookies_t *last = NULL;

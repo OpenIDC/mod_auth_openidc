@@ -136,7 +136,7 @@ const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg_t *c, oidc_pr
 					  char **userinfo_jwt);
 apr_byte_t oidc_userinfo_refresh_claims(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session,
 					apr_byte_t *needs_save);
-void oidc_userinfo_pass_as(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session, oidc_appinfo_pass_in_t pass_in,
-			   oidc_appinfo_encoding_t encoding);
+void oidc_userinfo_pass_as(request_rec *r, oidc_cfg_t *cfg, const oidc_session_t *session,
+			   oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding);
 
 #endif // _MOD_AUTH_OPENIDC_HANDLE_H_

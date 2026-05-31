@@ -439,8 +439,8 @@ static json_t *oidc_userinfo_resolve_claims(request_rec *r, const oidc_session_t
 /*
  * pass the userinfo claims to headers and/or environment variables, encoded as configured
  */
-void oidc_userinfo_pass_as(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session, oidc_appinfo_pass_in_t pass_in,
-			   oidc_appinfo_encoding_t encoding) {
+void oidc_userinfo_pass_as(request_rec *r, oidc_cfg_t *cfg, const oidc_session_t *session,
+			   oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding) {
 
 	const apr_array_header_t *pass_userinfo_as = oidc_cfg_dir_pass_userinfo_as_get(r);
 	json_t *filtered_claims = NULL;

@@ -348,7 +348,7 @@ apr_byte_t oidc_proto_idtoken_validate_code(request_rec *r, oidc_provider_t *pro
 /*
  * check whether the provided JWT is a valid id_token for the specified "provider"
  */
-static apr_byte_t oidc_proto_validate_idtoken(request_rec *r, oidc_provider_t *provider, oidc_jwt_t *jwt,
+static apr_byte_t oidc_proto_validate_idtoken(request_rec *r, const oidc_provider_t *provider, oidc_jwt_t *jwt,
 					      const char *nonce) {
 
 	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);

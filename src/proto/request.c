@@ -485,7 +485,7 @@ static char *oidc_request_uri_request_object_encrypt(request_rec *r, oidc_cfg_t 
 /*
  * generate a request object
  */
-static char *oidc_request_uri_request_object(request_rec *r, struct oidc_provider_t *provider,
+static char *oidc_request_uri_request_object(request_rec *r, const struct oidc_provider_t *provider,
 					     json_t *request_object_config, apr_table_t *params, int ttl) {
 
 	oidc_jose_error_t err;

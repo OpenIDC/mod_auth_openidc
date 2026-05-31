@@ -290,10 +290,10 @@ static apr_byte_t oidc_proto_parse_idtoken_and_validate_code(request_rec *r, oid
 /*
  * resolves the code received from the OP in to an id_token, access_token and refresh_token
  */
-static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider, const char *code,
-					  const char *code_verifier, char **id_token, char **access_token,
-					  char **token_type, int *expires_in, char **refresh_token, char **scope,
-					  const char *state) {
+static apr_byte_t oidc_proto_resolve_code(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
+					  const char *code, const char *code_verifier, char **id_token,
+					  char **access_token, char **token_type, int *expires_in, char **refresh_token,
+					  char **scope, const char *state) {
 
 	oidc_debug(r, "enter");
 

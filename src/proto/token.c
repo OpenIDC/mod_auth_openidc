@@ -255,7 +255,7 @@ end:
 /*
  * refreshes the access_token/id_token /refresh_token received from the OP using the refresh_token
  */
-apr_byte_t oidc_proto_token_refresh_request(request_rec *r, oidc_cfg_t *cfg, oidc_provider_t *provider,
+apr_byte_t oidc_proto_token_refresh_request(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
 					    const char *rtoken, char **id_token, char **access_token, char **token_type,
 					    int *expires_in, char **refresh_token, char **scope) {
 

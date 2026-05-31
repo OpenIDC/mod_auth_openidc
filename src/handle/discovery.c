@@ -325,7 +325,7 @@ static apr_byte_t oidc_discovery_response_csrf_check(request_rec *r, const oidc_
  * apply the default and validate the target_link_uri; on failure sets
  * *rv to the HTTP status the caller should return
  */
-static apr_byte_t oidc_discovery_response_target_link_uri_validate(request_rec *r, oidc_cfg_t *c,
+static apr_byte_t oidc_discovery_response_target_link_uri_validate(request_rec *r, const oidc_cfg_t *c,
 								   char **target_link_uri, int *rv) {
 
 	char *error_str = NULL;

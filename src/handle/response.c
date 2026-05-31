@@ -68,7 +68,7 @@ static int oidc_response_redirect_parent_window_to_logout(request_rec *r, const 
 /*
  * handle an error returned by the OP
  */
-static int oidc_response_authorization_error(request_rec *r, oidc_cfg_t *c, const oidc_proto_state_t *proto_state,
+static int oidc_response_authorization_error(request_rec *r, const oidc_cfg_t *c, const oidc_proto_state_t *proto_state,
 					     const char *error, const char *error_description) {
 	const char *prompt = oidc_proto_state_get_prompt(proto_state);
 	if (prompt != NULL)
@@ -436,7 +436,7 @@ static apr_byte_t oidc_response_match_state(request_rec *r, oidc_cfg_t *c, const
 /*
  * handle the different flows (hybrid, implicit, Authorization Code)
  */
-static apr_byte_t oidc_response_flows(request_rec *r, oidc_cfg_t *c, oidc_proto_state_t *proto_state,
+static apr_byte_t oidc_response_flows(request_rec *r, oidc_cfg_t *c, const oidc_proto_state_t *proto_state,
 				      oidc_provider_t *provider, apr_table_t *params, const char *response_mode,
 				      oidc_jwt_t **jwt) {
 
