@@ -1,3 +1,78 @@
+06/01/2026
+- ci: bump the GitHub Actions to Node 24 runtimes — actions/checkout
+  and actions/upload-artifact to v5, then upload-artifact to v7 and
+  codeql-action to v4 (v5/v4 still run on Node 20)
+- jose: cast away const at the OpenSSL call sites whose signatures
+  vary by version, so the build stays warning-clean across OpenSSL
+  1.x/3.x and LibreSSL
+- metrics: include unistd.h again, now guarded under #ifndef WIN32
+- code: const-qualify the remaining read-only provider parameters in
+  logout/userinfo/proto and oidc_proto_request_auth, finishing the
+  S995 cascade
+- test: portability fixes for old libcheck — parse the JWT and DPoP
+  proof headers instead of substring-matching cjose's version-specific
+  output, compare the userinfo last-refresh as a 64-bit apr_time_t
+  (old libcheck truncates int asserts), shim ck_assert_ptr_ne, and
+  redirect the registration-check error/failure messages to stderr
+- release 2.4.19.3
+
+05/31/2026
+- ci: split valgrind and distcheck into their own jobs; add a
+  gcc/clang build matrix; run the suite under ASan and UBSan
+  (excluding benign UB classes); surface code coverage on every build;
+  and give the coverage and valgrind jobs live redis+memcache service
+  containers so the real cache backends are exercised
+- jose: fix an out-of-bounds read when logging a malformed JWT payload
+- test: add a fuzz harness for the untrusted-input parsers; fail
+  make check on unregistered START_TEST bodies; generalize the mock
+  HTTP server to serve N scripted responses; add the ck_assert_jwt_parses
+  and table-assert helpers and convert the call sites; and reset the
+  cache mocks in the fixture so state does not leak under CK_FORK=no
+- test: split session.c and state.c into dedicated test_session.c /
+  test_state.c; cover the OAuth mixed-mode dispatch and fixups hook,
+  the handle/jwks.c and handle/response.c branches, the signed-JWT
+  userinfo pass-as path with RSA keys, and the redis (mock) + memcache
+  backends in test_cache.c (memcache run offline via injectable mocks)
+- code: continue the SonarCloud cleanup — finish const-qualifying the
+  read-only pointer parameters and the cfg/oauth/provider getter macros
+  (S995/S5350), drop an unused request_rec param (S1172), replace a
+  small switch with if statements (S1301), move #include directives to
+  the top of file (S954), un-nest ternaries (S3358), make narrowing
+  integer conversions explicit (S5276), and remove empty statements,
+  commented-out code and redundant casts (S1116/S125/S1905)
+
+05/30/2026
+- code: const-qualify more cascade-exposed read-only pointers in
+  handle/jose/http/metrics/oauth/cfg and proto/session (S995/S5350)
+
+05/29/2026
+- code: fix a memory leak in oidc_metadata_jwks_retrieve_and_cache
+- code: clamp json_int_t→int conversions on OP-supplied values to
+  avoid silent overflow, and split an assignment out of an && to clear
+  an S912 BLOCKER
+- code: large SonarCloud sweep — const-qualify read-only pointer
+  parameters across jose/http/metrics/session/oauth/proto/handle/util/
+  metadata/cfg and make local pointers point-to-const (S995/S5350),
+  remove genuinely-unused function parameters (S1172), one variable per
+  declaration (S1659), declare loop variables in minimal scope (S5955),
+  collapse 26 nested-if findings (S1066), remove 19 redundant
+  parenthesis groups (S1110), drop three const-drop casts (S859), hoist
+  html/js format strings to static const arrays, and clear assorted
+  small findings (S1121/S3358/S3457)
+- test: cover the webfinger response parser (proto/discovery.c), the
+  metadata jwks_get cache-hit and validation-failure branches, and the
+  oidc_provider_static_config / redirect-URL / remote-user /
+  cookie-domain branches in mod_auth_openidc.c
+
+05/27/2026
+- test: extend coverage across the tree — proto response handlers,
+  dpop, request-object removal and userinfo JWT; state.c fingerprint
+  and state-cookie cleanup; mod_auth_openidc.c top-level helpers;
+  the handle/authz, content, info, logout, refresh and discovery
+  branches; and the cfg/parse, cfg/cfg, cfg/oauth, cfg/provider,
+  cfg/dir and cfg/cache setters
+- code: run clang-format and add *.gcov to the ignore lists
+
 05/26/2026
 - test: close five coverage gaps identified from the `make
   check-code-coverage` report; together they add 20 new unit tests
@@ -44,6 +119,11 @@
   unchanged. Adds unit-test coverage for oidc_metadata_conf_parse_* and
   the oidc_metadata_client_register POST payload to lock in behavior
   across the move
+- ci: enable SonarQube analysis with code coverage for real, add a
+  gcov reporting step (reports collected under gcov-reports/) and bump
+  to sonar-scanner 8.1.0
+- jose: avoid reading an uninitialized cjose_err when no compatible
+  JWE decryption key is tried
 
 05/25/2026
 - code: hardening in various places
