@@ -195,7 +195,7 @@ apr_byte_t oidc_proto_flow_is_supported(apr_pool_t *pool, const char *flow);
 int oidc_proto_return_www_authenticate(request_rec *r, const char *error, const char *error_description);
 
 // request.c
-int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, const char *login_hint,
+int oidc_proto_request_auth(request_rec *r, const struct oidc_provider_t *provider, const char *login_hint,
 			    const char *redirect_uri, const char *state, oidc_proto_state_t *proto_state,
 			    const char *id_token_hint, const char *code_challenge, const char *auth_request_params,
 			    const char *path_scope);

@@ -772,7 +772,7 @@ static int oidc_proto_request_auth_send_get(request_rec *r, const struct oidc_pr
 /*
  * send an OpenID Connect authorization request to the specified provider
  */
-int oidc_proto_request_auth(request_rec *r, struct oidc_provider_t *provider, const char *login_hint,
+int oidc_proto_request_auth(request_rec *r, const struct oidc_provider_t *provider, const char *login_hint,
 			    const char *redirect_uri, const char *state, oidc_proto_state_t *proto_state,
 			    const char *id_token_hint, const char *code_challenge, const char *auth_request_params,
 			    const char *path_scope) {
