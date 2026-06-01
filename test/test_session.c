@@ -145,9 +145,11 @@ START_TEST(test_session_last_refresh_timestamps) {
 	oidc_session_set_access_token_last_refresh(r, z, ts);
 	ck_assert_int_eq((int)apr_time_sec(oidc_session_get_access_token_last_refresh(r, z)), (int)apr_time_sec(ts));
 
-	/* reset_userinfo_last_refresh stamps "now" */
+	/* reset_userinfo_last_refresh stamps "now"; assert via ck_assert() so the 64-bit apr_time_t
+	 * is compared natively. old libcheck (RHEL/Rocky 7, check < 0.10.0) truncates ck_assert_int_*
+	 * operands to 32-bit int, which mangles the microsecond timestamp into a (often negative) value */
 	oidc_session_reset_userinfo_last_refresh(r, z);
-	ck_assert_int_gt(oidc_session_get_userinfo_last_refresh(r, z), 0);
+	ck_assert(oidc_session_get_userinfo_last_refresh(r, z) > 0);
 
 	oidc_session_free(r, z);
 }
