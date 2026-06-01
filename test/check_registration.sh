@@ -59,20 +59,20 @@ for f in "$dir"/test_*.c; do
 		echo "$missing" | while IFS= read -r name; do
 			[ -n "$name" ] || continue
 			echo "ERROR: $base: START_TEST($name) is never registered" \
-				"with tcase_add_test() -- it will not run"
+				"with tcase_add_test() -- it will not run" >&2
 		done
 	fi
 done
 
 if [ "$checked" -eq 0 ]; then
-	echo "ERROR: no test_*.c sources found under '$dir' -- cannot verify registration"
+	echo "ERROR: no test_*.c sources found under '$dir' -- cannot verify registration" >&2
 	exit 1
 fi
 
 if [ "$status" -eq 0 ]; then
 	echo "PASS: registration check -- every START_TEST in $checked file(s) is wired into a suite"
 else
-	echo "FAIL: register the test(s) above with a tcase_add_test(...) call in the suite builder"
+	echo "FAIL: register the test(s) above with a tcase_add_test(...) call in the suite builder" >&2
 fi
 
 exit "$status"
