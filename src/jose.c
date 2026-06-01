@@ -103,7 +103,7 @@ static int oidc_jose_util_get_b64encoded_certificate_data(apr_pool_t *p, const X
 		goto end;
 	}
 
-	if (!PEM_write_bio_X509(bio, x509_cert)) {
+	if (!PEM_write_bio_X509(bio, (X509 *)x509_cert)) {
 		oidc_jose_error_openssl(err, "PEM_write_bio_X509");
 		goto end;
 	}
@@ -1531,7 +1531,7 @@ static apr_byte_t _oidc_jwk_rsa_key_to_jwk(apr_pool_t *pool, const EVP_PKEY *pke
 	EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_RSA_D, &rsa_d);
 #else
 	/* get the RSA key from the public key struct */
-	RSA *rsa = (RSA *)EVP_PKEY_get1_RSA(pkey);
+	RSA *rsa = (RSA *)EVP_PKEY_get1_RSA((EVP_PKEY *)pkey);
 	if (rsa == NULL) {
 		oidc_jose_error_openssl(err, "EVP_PKEY_get1_RSA");
 		goto end;
@@ -1621,7 +1621,7 @@ static apr_byte_t _oidc_jwk_ec_key_to_jwk(apr_pool_t *pool, const EVP_PKEY *pkey
 	}
 	crv = OBJ_sn2nid(curve_name);
 #else
-	EC_KEY *eckey = (EC_KEY *)EVP_PKEY_get1_EC_KEY(pkey);
+	EC_KEY *eckey = (EC_KEY *)EVP_PKEY_get1_EC_KEY((EVP_PKEY *)pkey);
 	if (eckey == NULL) {
 		oidc_jose_error_openssl(err, "EVP_PKEY_get1_EC_KEY");
 		goto end;
@@ -1715,16 +1715,16 @@ static apr_byte_t oidc_jwk_populate_cert_info(apr_pool_t *pool, BIO *input, oidc
 
 #if OPENSSL_VERSION_NUMBER < 0x000907000L
 	// openssl below 0.9.7 does not allocate memory for you :o
-	x509_cert_length = i2d_X509(x509, NULL);
+	x509_cert_length = i2d_X509((X509 *)x509, NULL);
 	if (x509_cert_length <= 0) {
 		oidc_jose_error_openssl(err, "i2d_X509");
 		goto end;
 	}
 	x509_bytes = (unsigned char *)OPENSSL_malloc(pool, x509_cert_length + 1);
 	const unsigned char *p = x509_bytes;
-	x509_cert_length = i2d_X509(x509, &p);
+	x509_cert_length = i2d_X509((X509 *)x509, &p);
 #else
-	x509_cert_length = i2d_X509(x509, &x509_bytes);
+	x509_cert_length = i2d_X509((X509 *)x509, &x509_bytes);
 #endif
 	if (x509_cert_length < 0) {
 		oidc_jose_error_openssl(err, "i2d_X509");
