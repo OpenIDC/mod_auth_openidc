@@ -16,7 +16,7 @@
 
 #include "fuzz.h"
 #include "mod_auth_openidc.h" /* oidc_validate_redirect_url */
-#include "util.h"             /* test fixture */
+#include "util.h"	      /* test fixture */
 
 #include <apr_pools.h>
 #include <apr_strings.h>

@@ -42,6 +42,10 @@
 
 // clang-format off
 
+#ifndef WIN32
+#include <unistd.h>
+#endif
+
 #include "util/util.h"
 #include "metrics.h"
 #include <limits.h>
