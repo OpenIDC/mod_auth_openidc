@@ -533,7 +533,7 @@ static apr_byte_t oidc_logout_validate_url(request_rec *r, const oidc_cfg_t *c, 
  * extra logout request parameters
  */
 static char *oidc_logout_build_op_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
-					  oidc_provider_t *provider, const char *post_logout_url) {
+					  const oidc_provider_t *provider, const char *post_logout_url) {
 
 	char *id_token_hint = NULL;
 	char *s_logout_request = NULL;

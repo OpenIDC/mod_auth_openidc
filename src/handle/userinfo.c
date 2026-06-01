@@ -85,7 +85,7 @@ void oidc_userinfo_store_claims(request_rec *r, const oidc_cfg_t *c, oidc_sessio
 /*
  * retrieve claims from the userinfo endpoint and return the stringified response
  */
-const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg_t *c, oidc_provider_t *provider,
+const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg_t *c, const oidc_provider_t *provider,
 					  const char *access_token, const char *access_token_type,
 					  oidc_session_t *session, char *id_token_sub, json_t **userinfo_claims,
 					  char **userinfo_jwt) {

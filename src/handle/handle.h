@@ -131,7 +131,7 @@ int oidc_session_management(request_rec *r, oidc_cfg_t *c, oidc_session_t *sessi
 // userinfo.c
 void oidc_userinfo_store_claims(request_rec *r, const oidc_cfg_t *c, oidc_session_t *session,
 				const oidc_provider_t *provider, json_t *userinfo_claims, const char *userinfo_jwt);
-const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg_t *c, oidc_provider_t *provider,
+const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg_t *c, const oidc_provider_t *provider,
 					  const char *access_token, const char *access_token_type,
 					  oidc_session_t *session, char *id_token_sub, json_t **userinfo_claims,
 					  char **userinfo_jwt);
