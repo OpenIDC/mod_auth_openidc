@@ -1995,11 +1995,16 @@ START_TEST(test_proto_dpop_create_with_rsa_private_key) {
 	const char *second = _oidc_strstr(first + 1, ".");
 	ck_assert_ptr_nonnull(second);
 
-	/* base64url-decode the header and confirm typ=dpop+jwt */
+	/* decode the header and confirm typ=dpop+jwt; parse it as JSON rather than
+	 * substring-matching, since cjose's header serialization (e.g. the whitespace
+	 * after the colon) differs across cjose versions */
 	char *enc_hdr = apr_pstrmemdup(r->pool, dpop, first - dpop);
 	char *dec_hdr = NULL;
 	ck_assert_int_gt(oidc_util_base64url_decode(r->pool, &dec_hdr, enc_hdr), 0);
-	ck_assert_ptr_nonnull(_oidc_strstr(dec_hdr, "\"typ\":\"dpop+jwt\""));
+	json_t *hdr_json = NULL;
+	ck_assert_int_eq(oidc_util_json_decode_object(r, dec_hdr, &hdr_json), TRUE);
+	ck_assert_str_eq(json_string_value(json_object_get(hdr_json, "typ")), "dpop+jwt");
+	json_decref(hdr_json);
 }
 END_TEST
 
