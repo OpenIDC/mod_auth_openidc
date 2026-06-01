@@ -1,6 +1,6 @@
 [![Build Status](https://github.com/OpenIDC/mod_auth_openidc/actions/workflows/build.yml/badge.svg)](https://github.com/OpenIDC/mod_auth_openidc/actions/workflows/build.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=OpenIDC_mod_auth_openidc&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=OpenIDC_mod_auth_openidc)
 [<img width="184" height="96" align="right" src="http://openid.net/wordpress-content/uploads/2016/05/oid-l-certification-mark-l-cmyk-150dpi-90mm.jpg" alt="OpenID Certification">](https://openid.net/certification)
-[![CodeQL Analysis](https://github.com/OpenIDC/mod_auth_openidc/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/OpenIDC/mod_auth_openidc/actions/workflows/codeql-analysis.yml)
 
 
 mod_auth_openidc
