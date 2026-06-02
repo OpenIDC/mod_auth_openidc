@@ -220,7 +220,7 @@ START_TEST(test_proto_validate_jwt) {
 	oidc_jwt_t *jwt = NULL;
 	oidc_jose_error_t err;
 
-	const char *s_secret = "secret";
+	const char *s_secret = "mysecret";
 	const char *s_issuer = "https://localhost";
 	apr_time_t now = apr_time_sec(apr_time_now());
 

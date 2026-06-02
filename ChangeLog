@@ -1,3 +1,7 @@
+06/02/2026
+- test: use long symmetric key to work against cjose >= 0.6.2.6
+- bump to 2.4.19.4dev
+
 06/01/2026
 - ci: bump the GitHub Actions to Node 24 runtimes — actions/checkout
   and actions/upload-artifact to v5, then upload-artifact to v7 and
