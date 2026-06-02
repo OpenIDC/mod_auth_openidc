@@ -592,11 +592,11 @@ START_TEST(test_jwk_list_destroy) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	apr_array_header_t *arr = apr_array_make(pool, 2, sizeof(const oidc_jwk_t *));
 	oidc_jose_error_t err;
-	unsigned char key[16] = {0};
+	unsigned char key[32] = {0};
 	for (int i = 0; i < 2; i++) {
 		char kid[8];
 		snprintf(kid, sizeof(kid), "k%02d", i);
-		oidc_jwk_t *sym = oidc_jwk_create_symmetric_key(pool, kid, key, 16, TRUE, &err);
+		oidc_jwk_t *sym = oidc_jwk_create_symmetric_key(pool, kid, key, 32, TRUE, &err);
 		APR_ARRAY_PUSH(arr, const oidc_jwk_t *) = sym;
 	}
 	oidc_jwk_list_destroy(arr);
@@ -1088,7 +1088,7 @@ START_TEST(test_jose_legacy_jwt_sign_verify_rsa_and_hmac) {
 	oidc_jwk_destroy(jwk);
 
 	/* HMAC roundtrip with the same payload */
-	const char *secret = "my_secret4321";
+	const char *secret = "mysecretwithmorethan32characters";
 	jwk =
 	    oidc_jwk_create_symmetric_key(pool, NULL, (const unsigned char *)secret, _oidc_strlen(secret), FALSE, &err);
 	ck_assert_ptr_nonnull(jwk);
