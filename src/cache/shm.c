@@ -269,11 +269,12 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section, const 
 	if (section_key == NULL)
 		return FALSE;
 
-	/* check that the passed in value is valid */
+	/* check that the passed in value is valid; reject at ">=" rather than ">" so the NUL terminator
+	 * written by the _oidc_strcpy below always fits within the entry, independent of struct padding */
 	if ((value != NULL) &&
-	    (_oidc_strlen(value) > (cfg->cache.shm_entry_size_max - sizeof(oidc_cache_shm_entry_t)))) {
+	    (_oidc_strlen(value) >= (cfg->cache.shm_entry_size_max - sizeof(oidc_cache_shm_entry_t)))) {
 		oidc_error(r,
-			   "could not store value since value size is too large (%lu > %lu); consider "
+			   "could not store value since value size is too large (%lu >= %lu); consider "
 			   "increasing " OIDCCacheShmEntrySizeMax "",
 			   (unsigned long)_oidc_strlen(value),
 			   (unsigned long)(cfg->cache.shm_entry_size_max - sizeof(oidc_cache_shm_entry_t)));

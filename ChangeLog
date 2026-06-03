@@ -1,4 +1,6 @@
 06/03/2026
+- cache: reject shm cache values at ">=" the available entry size so the
+  NUL terminator always fits, removing reliance on struct alignment padding
 - cache: NUL-terminate the shm cache entry key explicitly after strncpy to
   avoid an in-struct over-read when a key hits the maximum length
 - jose: enforce that the kid-selected key type matches the JWT/JWE algorithm
