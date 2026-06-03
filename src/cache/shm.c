@@ -313,6 +313,9 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section, const 
 
 		/* fill out the entry with the provided data */
 		_oidc_strncpy(t->section_key, section_key, OIDC_CACHE_SHM_KEY_MAX - 1);
+		/* strncpy does not NUL-terminate when the source is exactly OIDC_CACHE_SHM_KEY_MAX - 1
+		 * characters long, so terminate explicitly to avoid an over-read on subsequent compares */
+		t->section_key[OIDC_CACHE_SHM_KEY_MAX - 1] = '\0';
 		_oidc_strcpy(t->value, value);
 		t->expires = expiry;
 		t->access = current_time;

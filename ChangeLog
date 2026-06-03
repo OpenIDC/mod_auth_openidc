@@ -1,4 +1,6 @@
 06/03/2026
+- cache: NUL-terminate the shm cache entry key explicitly after strncpy to
+  avoid an in-struct over-read when a key hits the maximum length
 - jose: enforce that the kid-selected key type matches the JWT/JWE algorithm
   on the kid lookup path too, not just the no-kid path (defense in depth
   against key/algorithm confusion; cjose already rejected the mismatch)
