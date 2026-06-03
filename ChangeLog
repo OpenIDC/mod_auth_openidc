@@ -1,4 +1,7 @@
 06/03/2026
+- cache: always hash the memcache key so it satisfies memcached's key
+  constraints (length, no whitespace/control chars) regardless of the key
+  contents or whether OIDCCacheEncrypt is enabled
 - cache: reject shm cache values at ">=" the available entry size so the
   NUL terminator always fits, removing reliance on struct alignment padding
 - cache: NUL-terminate the shm cache entry key explicitly after strncpy to

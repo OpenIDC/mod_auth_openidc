@@ -1255,8 +1255,12 @@ START_TEST(test_cache_memcache_get_hit) {
 	ck_assert_ptr_nonnull(value);
 	ck_assert_str_eq(value, "v1");
 	ck_assert_int_eq(memcache_mock.get_calls, 1);
-	/* the section/key are combined into the lookup key */
-	ck_assert_str_eq(memcache_mock.last_key, OIDC_CACHE_SECTION_SESSION ":k1");
+	/* the section/key are combined and hashed into the lookup key */
+	char *expected_key = NULL;
+	ck_assert_int_eq(
+	    oidc_util_hash_string_and_base64url_encode(r, "sha256", OIDC_CACHE_SECTION_SESSION ":k1", &expected_key),
+	    TRUE);
+	ck_assert_str_eq(memcache_mock.last_key, expected_key);
 
 	memcache_restore(cfg);
 }
@@ -1339,7 +1343,12 @@ START_TEST(test_cache_memcache_set_value) {
 	ck_assert_int_eq(oidc_cache_memcache_set(r, OIDC_CACHE_SECTION_SESSION, "k", "v", apr_time_now()), TRUE);
 	ck_assert_int_eq(memcache_mock.set_calls, 1);
 	ck_assert_str_eq(memcache_mock.last_value, "v");
-	ck_assert_str_eq(memcache_mock.last_key, OIDC_CACHE_SECTION_SESSION ":k");
+	/* the section/key are combined and hashed into the lookup key */
+	char *expected_key = NULL;
+	ck_assert_int_eq(
+	    oidc_util_hash_string_and_base64url_encode(r, "sha256", OIDC_CACHE_SECTION_SESSION ":k", &expected_key),
+	    TRUE);
+	ck_assert_str_eq(memcache_mock.last_key, expected_key);
 
 	memcache_restore(cfg);
 }

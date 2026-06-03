@@ -45,6 +45,8 @@
 
 #include "cache/memcache.h"
 #include "cfg/cfg_int.h"
+#include "jose.h"
+#include "util/util.h"
 #include <ap_mpm.h>
 #include <apr_optional.h>
 
@@ -273,8 +275,17 @@ static void oidc_cache_memcache_log_status_error(request_rec *r, const char *s, 
 /*
  * assemble single key name based on section/key input
  */
-static char *oidc_cache_memcache_get_key(apr_pool_t *pool, const char *section, const char *key) {
-	return apr_psprintf(pool, "%s:%s", section, key);
+static char *oidc_cache_memcache_get_key(request_rec *r, const char *section, const char *key) {
+	char *hashed = NULL;
+	const char *section_key = apr_psprintf(r->pool, "%s:%s", section, key);
+	/* hash the key so it always satisfies memcached's key constraints (<= 250 bytes, no whitespace or
+	 * control characters), independent of the (possibly attacker-supplied) key contents and of whether
+	 * OIDCCacheEncrypt is enabled */
+	if (oidc_util_hash_string_and_base64url_encode(r, OIDC_JOSE_ALG_SHA256, section_key, &hashed) == FALSE) {
+		oidc_error(r, "oidc_util_hash_string_and_base64url_encode returned an error");
+		return NULL;
+	}
+	return hashed;
 }
 
 /*
@@ -315,9 +326,12 @@ apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *section, const ch
 
 	apr_size_t len = 0;
 
+	const char *s_key = oidc_cache_memcache_get_key(r, section, key);
+	if (s_key == NULL)
+		return FALSE;
+
 	/* get it */
-	apr_status_t rv =
-	    context->getp(context, r->pool, oidc_cache_memcache_get_key(r->pool, section, key), value, &len);
+	apr_status_t rv = context->getp(context, r->pool, s_key, value, &len);
 
 	if (rv == APR_NOTFOUND) {
 
@@ -331,8 +345,7 @@ apr_byte_t oidc_cache_memcache_get(request_rec *r, const char *section, const ch
 			return FALSE;
 		}
 
-		oidc_debug(r, "apr_memcache_getp: key %s not found in cache",
-			   oidc_cache_memcache_get_key(r->pool, section, key));
+		oidc_debug(r, "apr_memcache_getp: key %s not found in cache", s_key);
 
 		return TRUE;
 
@@ -366,14 +379,17 @@ apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *section, const ch
 
 	apr_status_t rv = APR_SUCCESS;
 
+	const char *s_key = oidc_cache_memcache_get_key(r, section, key);
+	if (s_key == NULL)
+		return FALSE;
+
 	/* see if we should be clearing this entry */
 	if (value == NULL) {
 
-		rv = context->del(context, oidc_cache_memcache_get_key(r->pool, section, key));
+		rv = context->del(context, s_key);
 
 		if (rv == APR_NOTFOUND) {
-			oidc_debug(r, "apr_memcache_delete: key %s not found in cache",
-				   oidc_cache_memcache_get_key(r->pool, section, key));
+			oidc_debug(r, "apr_memcache_delete: key %s not found in cache", s_key);
 			rv = APR_SUCCESS;
 		} else if (rv != APR_SUCCESS) {
 			oidc_cache_memcache_log_status_error(r, "apr_memcache_delete", rv);
@@ -385,8 +401,7 @@ apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *section, const ch
 		apr_uint32_t timeout = (apr_uint32_t)apr_time_sec(expiry);
 
 		/* store it */
-		rv = context->set(context, oidc_cache_memcache_get_key(r->pool, section, key), (char *)value,
-				  _oidc_strlen(value), timeout);
+		rv = context->set(context, s_key, (char *)value, _oidc_strlen(value), timeout);
 
 		if (rv != APR_SUCCESS) {
 			oidc_cache_memcache_log_status_error(r, "apr_memcache_set", rv);
