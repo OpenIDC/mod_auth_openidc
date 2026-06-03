@@ -166,7 +166,7 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_TAKE1,
 		OIDCSessionType,
 		session_type,
-		"OpenID Connect session storage type (Apache 2.0/2.2 only). Must be one of \"server-cache\" or \"client-cookie\" with an optional suffix \":persistent\"."),
+		"OpenID Connect session storage type."),
 	OIDC_CFG_CMD(
 		AP_INIT_TAKE1,
 		OIDCSessionCacheFallbackToCookie,
@@ -224,7 +224,7 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_TAKE1,
 		OIDCStateInputHeaders,
 		state_input_headers,
-		"Specify header name which is used as the input for calculating the fingerprint of the state during authentication; must be one of \"none\", \"user-agent\", \"x-forwarded-for\" or \"both\" (default)."),
+		"Specify header name which is used as the input for calculating the fingerprint of the state during authentication."),
 	OIDC_CFG_CMD(
 		AP_INIT_ITERATE,
 		OIDCRedirectURLsAllowed,
@@ -271,7 +271,7 @@ const command_rec oidc_cfg_cmds[] = {
 		oidc_cmd_cache_type_set,
 		NULL,
 		RSRC_CONF,
-		"cache backend must be one of ['shm'|" _OIDC_CMDS_CACHE_TYPE_MEMCACHE _OIDC_CMDS_CACHE_TYPE_REDIS "'file']."),
+		"The cache backend."),
 	OIDC_CFG_CMD(
 		AP_INIT_TAKE1,
 		OIDCCacheEncrypt,
@@ -443,17 +443,17 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_TAKE1,
 		OIDCResponseType,
 		response_type,
-		"The response type (or OpenID Connect Flow) used; must be one of \"code\", \"id_token\", \"id_token token\", \"code id_token\", \"code token\" or \"code id_token token\" (serves as default value for discovered OPs too)"),
+		"The response type (or OpenID Connect Flow) used (serves as default value for discovered OPs too)."),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_TAKE1,
 		OIDCResponseMode,
 		response_mode,
-		"The response mode used; must be one of \"fragment\", \"query\" or \"form_post\" (serves as default value for discovered OPs too)"),
+		"The response mode used (serves as default value for discovered OPs too)."),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_TAKE1,
 		OIDCClientJwksUri,
 		client_jwks_uri,
-		"Define the Client JWKS URL (e.g.: https://localhost/protected/?jwks=rsa)"),
+		"Define the Client JWKS URL (e.g.: https://localhost/protected/?jwks=rsa)."),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_TAKE1,
 		OIDCIDTokenSignedResponseAlg,
@@ -463,12 +463,12 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_TAKE1,
 		OIDCIDTokenEncryptedResponseAlg,
 		id_token_encrypted_response_alg,
-		"The algorithm that the OP should use to encrypt the Content Encryption Key that is used to encrypt the id_token (used only in dynamic client registration); must be one of [RSA1_5|A128KW|A256KW|RSA-OAEP]"),
+		"The algorithm that the OP should use to encrypt the Content Encryption Key that is used to encrypt the id_token (used only in dynamic client registration)."),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_TAKE1,
 		OIDCIDTokenEncryptedResponseEnc,
 		id_token_encrypted_response_enc,
-		"The algorithm that the OP should use to encrypt to the id_token with the Content Encryption Key (used only in dynamic client registration); must be one of [A128CBC-HS256|A256CBC-HS512|A256GCM]"),
+		"The algorithm that the OP should use to encrypt to the id_token with the Content Encryption Key (used only in dynamic client registration)."),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_ITERATE,
 		OIDCIDTokenAudValues,
@@ -478,22 +478,22 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_TAKE1,
 		OIDCUserInfoSignedResponseAlg,
 		userinfo_signed_response_alg,
-		"The algorithm that the OP should use to sign the UserInfo response (used only in dynamic client registration); must be one of [RS256|RS384|RS512|PS256|PS384|PS512|HS256|HS384|HS512]"),
+		"The algorithm that the OP should use to sign the UserInfo response (used only in dynamic client registration)."),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_TAKE1,
 		OIDCUserInfoEncryptedResponseAlg,
 		userinfo_encrypted_response_alg,
-		"The algorithm that the OP should use to encrypt the Content Encryption Key that is used to encrypt the UserInfo response (used only in dynamic client registration); must be one of [RSA1_5|A128KW|A256KW|RSA-OAEP]"),
+		"The algorithm that the OP should use to encrypt the Content Encryption Key that is used to encrypt the UserInfo response (used only in dynamic client registration)."),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_TAKE1,
 		OIDCUserInfoEncryptedResponseEnc,
 		userinfo_encrypted_response_enc,
-		"The algorithm that the OP should use to encrypt to encrypt the UserInfo response with the Content Encryption Key (used only in dynamic client registration); must be one of [A128CBC-HS256|A256CBC-HS512|A256GCM]"),
+		"The algorithm that the OP should use to encrypt to encrypt the UserInfo response with the Content Encryption Key (used only in dynamic client registration)"),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_TAKE1,
 		OIDCUserInfoTokenMethod,
 		userinfo_token_method,
-		"The method that is used to present the access token to the userinfo endpoint; must be one of [authz_header|post_param]"),
+		"The method that is used to present the access token to the userinfo endpoint."),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_TAKE1,
 		OIDCSSLValidateServer,
@@ -548,12 +548,12 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_TAKE1,
 		OIDCPKCEMethod,
 		pkce,
-		"The RFC 7636 PCKE mode used; must be one of \"plain\" or \"S256\""),
+		"The RFC 7636 PCKE mode used."),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_TAKE12,
 		OIDCDPoPMode,
 		dpop_mode,
-		"The RFC 9449 DPoP mode used; must be one of \"off\", \"optional\" or \"required\""),
+		"The RFC 9449 DPoP mode used."),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_TAKE1,
 		OIDCClientID,
@@ -744,22 +744,22 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_TAKE12,
 		OIDCUnAuthAction,
 		unauth_action,
-		"Set the action taken when an unauthenticated request occurs: must be one of auth | pass | 401 | 407 |410."),
+		"Set the action taken when an unauthenticated request occurs."),
 	OIDC_CFG_CMD_DIR(
 		AP_INIT_TAKE12,
 		OIDCUnAutzAction,
 		unautz_action,
-		"Set the action taken when an unauthorized request occurs: must be one of: 401 [<text>] | 403 [<text>] | 302 [<url>] | auth."),
+		"Set the action taken when an unauthorized request occurs."),
 	OIDC_CFG_CMD_DIR(
 		AP_INIT_TAKE12,
 		OIDCPassClaimsAs,
 		pass_claims_as,
-		"Specify how claims are passed to the application(s); must be one of: none | headers | environment | both."),
+		"Specify how claims are passed to the application(s)."),
 	OIDC_CFG_CMD_DIR(
 		AP_INIT_ITERATE,
 		OIDCOAuthAcceptTokenAs,
 		accept_oauth_token_in,
-		"The method in which an OAuth token can be presented; must be one or more of: header | post | query | cookie."),
+		"The method in which an OAuth token can be presented."),
 	OIDC_CFG_CMD_DIR(
 		AP_INIT_TAKE1,
 		OIDCOAuthTokenIntrospectionInterval,
@@ -774,27 +774,27 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_TAKE1,
 		OIDCPassAccessToken,
 		pass_access_token,
-		"Pass the access token in a header and/or environment variable (On or Off)"),
+		"Pass the access token in a header and/or environment variable."),
 	OIDC_CFG_CMD_DIR(
 		AP_INIT_TAKE1,
 		OIDCPassRefreshToken,
 		pass_refresh_token,
-		"Pass the refresh token in a header and/or environment variable (On or Off)"),
+		"Pass the refresh token in a header and/or environment variable."),
 	OIDC_CFG_CMD_DIR(
 		AP_INIT_ITERATE,
 		OIDCPassIDTokenAs,
 		pass_idtoken_as,
-		"Set the format in which the id_token is passed in (a) header(s); must be one or more of: claims | payload | serialized"),
+		"Set the format in which the id_token is passed in (a) header(s)."),
 	OIDC_CFG_CMD_DIR(
 		AP_INIT_TAKE12,
 		OIDCRefreshAccessTokenBeforeExpiry,
 		refresh_access_token_before_expiry,
-		"Ensure the access token is valid for at least <secs> seconds by refreshing it if required; must be: <secs> [logout_on_error | authenticate_on_error]."),
+		"Ensure the access token is valid for at least <secs> seconds by refreshing it if required."),
 	OIDC_CFG_CMD_DIR(
 		AP_INIT_ITERATE,
 		OIDCPassUserInfoAs,
 		pass_userinfo_as,
-		"The format in which the userinfo is passed in (a) header(s); must be one or more of: claims | json | jwt | signed_jwt"),
+		"The format in which the userinfo is passed in (a) header(s)."),
 #ifdef USE_LIBJQ
 	OIDC_CFG_CMD_DIR(
 		AP_INIT_TAKE1,

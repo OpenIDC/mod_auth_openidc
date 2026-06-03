@@ -1,3 +1,9 @@
+06/03/2026
+- doc: correct the sample auth_openidc.conf wrt. JWE/JWS algorithms
+- config: remove the JWE/JWS algorithms from the config primitive help texts
+  as not to get out of sync: at startup the error message will contain what is
+  supported anyhow
+
 06/02/2026
 - test: use long symmetric key to work against cjose >= 0.6.2.6
 - bump to 2.4.19.4dev
