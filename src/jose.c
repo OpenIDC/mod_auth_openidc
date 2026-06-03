@@ -838,12 +838,20 @@ static apr_byte_t oidc_jose_parse_payload(apr_pool_t *pool, const char *s_payloa
  * decrypt a JWE using the key whose kid matches the JWE protected header
  */
 static uint8_t *oidc_jwe_decrypt_by_kid(apr_pool_t *pool, cjose_jwe_t *jwe, apr_hash_t *keys, const char *kid,
-					size_t *content_len, oidc_jose_error_t *err) {
+					const char *alg, size_t *content_len, oidc_jose_error_t *err) {
 	cjose_err cjose_err;
 	const oidc_jwk_t *jwk = apr_hash_get(keys, kid, APR_HASH_KEY_STRING);
 
 	if (jwk == NULL) {
 		oidc_jose_error(err, "could not find key with kid: %s", kid);
+		return NULL;
+	}
+
+	/* make sure the key type is compatible with the algorithm, just as the no-kid path does, rather than
+	 * relying solely on cjose to reject a mismatch (defense in depth against key/algorithm confusion) */
+	if (jwk->kty != oidc_alg2kty(alg)) {
+		oidc_jose_error(err, "key type of key with kid \"%s\" does not match the JWE \"alg\" header \"%s\"",
+				kid, alg);
 		return NULL;
 	}
 
@@ -915,7 +923,7 @@ static uint8_t *oidc_jwe_decrypt_impl(apr_pool_t *pool, cjose_jwe_t *jwe, apr_ha
 	}
 
 	if (kid != NULL)
-		return oidc_jwe_decrypt_by_kid(pool, jwe, keys, kid, content_len, err);
+		return oidc_jwe_decrypt_by_kid(pool, jwe, keys, kid, alg, content_len, err);
 
 	return oidc_jwe_decrypt_any(pool, jwe, keys, alg, content_len, err);
 }
@@ -1368,6 +1376,14 @@ apr_byte_t oidc_jwt_verify(apr_pool_t *pool, oidc_jwt_t *jwt, apr_hash_t *keys, 
 	const oidc_jwk_t *jwk = apr_hash_get(keys, jwt->header.kid, APR_HASH_KEY_STRING);
 	if (jwk == NULL) {
 		oidc_jose_error(err, "could not find key with kid: %s", jwt->header.kid);
+		return FALSE;
+	}
+
+	/* make sure the key type is compatible with the algorithm, just as the no-kid path does, rather than
+	 * relying solely on cjose to reject a mismatch (defense in depth against key/algorithm confusion) */
+	if (jwk->kty != oidc_jwt_alg2kty(jwt)) {
+		oidc_jose_error(err, "key type of key with kid \"%s\" does not match the JWT \"alg\" header \"%s\"",
+				jwt->header.kid, jwt->header.alg);
 		return FALSE;
 	}
 

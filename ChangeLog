@@ -1,4 +1,7 @@
 06/03/2026
+- jose: enforce that the kid-selected key type matches the JWT/JWE algorithm
+  on the kid lookup path too, not just the no-kid path (defense in depth
+  against key/algorithm confusion; cjose already rejected the mismatch)
 - doc: correct the sample auth_openidc.conf wrt. JWE/JWS algorithms
 - config: remove the JWE/JWS algorithms from the config primitive help texts
   as not to get out of sync: at startup the error message will contain what is
