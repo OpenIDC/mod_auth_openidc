@@ -1,4 +1,7 @@
 06/03/2026
+- proto: do not skip id_token signature validation for the "code" flow with
+  algorithm "none" when an id_token signing algorithm has been pinned via
+  OIDCIDTokenSignedResponseAlg; honor the pin and reject the unsigned token
 - oauth: warn when an introspection response omits the RFC 7662 "active"
   member, since token validity then relies solely on the expiry claim
 - cache: always hash the memcache key so it satisfies memcached's key
