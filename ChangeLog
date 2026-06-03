@@ -1,4 +1,6 @@
 06/03/2026
+- oauth: warn when an introspection response omits the RFC 7662 "active"
+  member, since token validity then relies solely on the expiry claim
 - cache: always hash the memcache key so it satisfies memcached's key
   constraints (length, no whitespace/control chars) regardless of the key
   contents or whether OIDCCacheEncrypt is enabled

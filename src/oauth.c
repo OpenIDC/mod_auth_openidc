@@ -472,6 +472,12 @@ static apr_byte_t oidc_oauth_introspection_validate_and_cache(request_rec *r, oi
 		    FALSE)
 			return FALSE;
 	} else {
+		/* the "active" member is REQUIRED by RFC 7662; warn when it is absent since validity is then
+		 * derived solely from the (possibly optional) configured expiry claim */
+		oidc_warn(r,
+			  "introspection response did not contain the RFC 7662 \"%s\" member; token validity is "
+			  "determined solely from the \"%s\" expiry claim",
+			  OIDC_PROTO_ACTIVE, oidc_cfg_oauth_introspection_token_expiry_claim_name_get(c));
 		if (oidc_oauth_parse_and_cache_token_expiry(
 			r, c, result, oidc_cfg_oauth_introspection_token_expiry_claim_name_get(c),
 			oidc_cfg_oauth_introspection_token_expiry_claim_format_get(c) ==
