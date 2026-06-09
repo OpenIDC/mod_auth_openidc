@@ -1,3 +1,8 @@
+06/09/2026
+- state: fix an out-of-bounds read (and one-byte out-of-bounds write) in the
+  state-cookie parser; a state-prefixed Cookie token without a "=" scanned
+  past the end of the token buffer; stop the scan at the string terminator
+
 06/03/2026
 - proto: do not skip id_token signature validation for the "code" flow with
   algorithm "none" when an id_token signing algorithm has been pinned via

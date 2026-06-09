@@ -190,6 +190,18 @@ START_TEST(test_state_cookies_clean_undecodable) {
 }
 END_TEST
 
+START_TEST(test_state_cookies_clean_no_value) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* a state-prefixed cookie token without a '=' must be rejected and must not scan past the end of
+	 * the token buffer looking for a '=' (out-of-bounds read + NUL write) */
+	apr_table_set(r->headers_in, "Cookie", "mod_auth_openidc_state_novalue");
+
+	ck_assert_int_eq(oidc_state_cookies_clean_expired(r, c, NULL, 0), 0);
+}
+END_TEST
+
 START_TEST(test_state_cookies_clean_valid_kept) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -269,6 +281,7 @@ int main(void) {
 	tcase_add_test(state, test_state_cookies_clean_no_cookie_header);
 	tcase_add_test(state, test_state_cookies_clean_skip_current_and_non_state);
 	tcase_add_test(state, test_state_cookies_clean_undecodable);
+	tcase_add_test(state, test_state_cookies_clean_no_value);
 	tcase_add_test(state, test_state_cookies_clean_valid_kept);
 	tcase_add_test(state, test_state_cookies_clean_expired_deleted);
 	tcase_add_test(state, test_state_cookies_clean_delete_oldest);

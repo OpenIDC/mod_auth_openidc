@@ -211,7 +211,10 @@ static int oidc_state_cookies_parse_token(request_rec *r, const oidc_cfg_t *c, c
 		return 0;
 
 	char *cookieName = cookie;
-	while (cookie != NULL && *cookie != OIDC_CHAR_EQUAL)
+	/* stop at the string terminator as well as at '='; the previous "cookie != NULL" condition could
+	 * never be false (cookie is only incremented) so a state-prefixed token without a '=' would scan
+	 * past the end of the buffer (out-of-bounds read, and a subsequent out-of-bounds NUL write) */
+	while ((*cookie != '\0') && (*cookie != OIDC_CHAR_EQUAL))
 		cookie++;
 	if (*cookie != OIDC_CHAR_EQUAL)
 		return 0;
