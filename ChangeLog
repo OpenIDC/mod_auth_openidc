@@ -1,4 +1,8 @@
 06/09/2026
+- cache: return failure from the cache mutex lock/unlock helpers when the
+  underlying APR mutex operation fails; they previously always returned TRUE,
+  so the callers' lock-failure guards never triggered and the code could
+  access the shared cache without holding the lock
 - state: fix an out-of-bounds read (and one-byte out-of-bounds write) in the
   state-cookie parser; a state-prefixed Cookie token without a "=" scanned
   past the end of the token buffer; stop the scan at the string terminator

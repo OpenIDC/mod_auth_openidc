@@ -239,9 +239,12 @@ apr_byte_t oidc_cache_mutex_lock(apr_pool_t *pool, server_rec *s, oidc_cache_mut
 	else
 		rv = apr_thread_mutex_lock(m->tmutex);
 
-	if (rv != APR_SUCCESS)
+	if (rv != APR_SUCCESS) {
 		oidc_serror(s, "apr_global_mutex_lock/apr_thread_mutex_lock failed: %s (%d)",
 			    oidc_cache_status2str(pool, rv), rv);
+		/* return failure so callers that guard on it abort instead of proceeding without the lock */
+		return FALSE;
+	}
 
 	return TRUE;
 }
@@ -258,9 +261,11 @@ apr_byte_t oidc_cache_mutex_unlock(apr_pool_t *pool, server_rec *s, oidc_cache_m
 	else
 		rv = apr_thread_mutex_unlock(m->tmutex);
 
-	if (rv != APR_SUCCESS)
+	if (rv != APR_SUCCESS) {
 		oidc_serror(s, "apr_global_mutex_unlock/apr_thread_mutex_unlock failed: %s (%d)",
 			    oidc_cache_status2str(pool, rv), rv);
+		return FALSE;
+	}
 
 	return TRUE;
 }
