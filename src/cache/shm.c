@@ -188,7 +188,10 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section, const 
 
 				/* update access timestamp */
 				t->access = apr_time_now();
-				*value = t->value;
+				/* copy the value out while still holding the lock; returning the raw
+				 * pointer into shared memory would let a concurrent set() tear the value
+				 * after the lock below is released and the caller reads/decrypts it */
+				*value = apr_pstrdup(r->pool, t->value);
 
 			} else {
 
