@@ -133,9 +133,12 @@ char *oidc_util_apr_expr_parse(cmd_parms *cmd, const char *str, oidc_apr_expr_t 
 	*expr = apr_pcalloc(cmd->pool, sizeof(oidc_apr_expr_t));
 	(*expr)->str = apr_pstrdup(cmd->pool, str);
 	const char *expr_err = NULL;
-	unsigned int flags = AP_EXPR_FLAG_DONT_VARY & AP_EXPR_FLAG_RESTRICTED;
+	/* combine the flags with bitwise-OR; "&" left flags at 0, dropping AP_EXPR_FLAG_RESTRICTED (and
+	 * AP_EXPR_FLAG_DONT_VARY) so the expression was parsed unrestricted even though these directives
+	 * are valid in .htaccess (OR_AUTHCFG) */
+	unsigned int flags = AP_EXPR_FLAG_DONT_VARY | AP_EXPR_FLAG_RESTRICTED;
 	if (result_is_str)
-		flags += AP_EXPR_FLAG_STRING_RESULT;
+		flags |= AP_EXPR_FLAG_STRING_RESULT;
 	(*expr)->expr = ap_expr_parse_cmd(cmd, str, flags, &expr_err, NULL);
 	if (expr_err != NULL) {
 		rv = apr_pstrcat(cmd->temp_pool, "cannot parse expression: ", expr_err, NULL);

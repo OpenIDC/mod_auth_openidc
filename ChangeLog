@@ -1,4 +1,9 @@
 06/09/2026
+- util: parse Apache expressions with AP_EXPR_FLAG_RESTRICTED; the flags were
+  combined with bitwise-AND instead of OR, which left them at zero and dropped
+  the RESTRICTED flag, so expressions in directives that are valid in .htaccess
+  (OIDCUnAuthAction, OIDCUserInfoClaimsExpr, OIDCPathScope,
+  OIDCPathAuthRequestParams) were parsed unrestricted
 - cache: return failure from the cache mutex lock/unlock helpers when the
   underlying APR mutex operation fails; they previously always returned TRUE,
   so the callers' lock-failure guards never triggered and the code could
