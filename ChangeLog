@@ -1,4 +1,7 @@
 06/09/2026
+- info: set "Cache-Control: no-cache, no-store" (and "Pragma: no-cache") on the
+  OIDCInfoHook response so the access/refresh/id token and session claims it
+  may contain are not stored by the browser or an intermediary cache
 - util: parse Apache expressions with AP_EXPR_FLAG_RESTRICTED; the flags were
   combined with bitwise-AND instead of OR, which left them at zero and dropped
   the RESTRICTED flag, so expressions in directives that are valid in .htaccess

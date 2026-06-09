@@ -180,6 +180,11 @@ static void oidc_info_build_json(request_rec *r, const oidc_cfg_t *c, oidc_sessi
 static int oidc_info_send_response(request_rec *r, const json_t *json, const char *s_format) {
 	const char *r_value = NULL;
 
+	/* the response may carry the access/refresh/id token and session claims; prevent it from being
+	 * stored by the browser or any intermediary cache */
+	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL, "no-cache, no-store");
+	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_PRAGMA, "no-cache");
+
 	if (_oidc_strcmp(OIDC_HOOK_INFO_FORMAT_JSON, s_format) == 0) {
 		r_value = oidc_util_json_encode(r->pool, json, JSON_PRESERVE_ORDER);
 		return oidc_util_http_send(r, r_value, _oidc_strlen(r_value), OIDC_HTTP_CONTENT_TYPE_JSON, OK);
