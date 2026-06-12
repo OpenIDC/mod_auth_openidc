@@ -2091,6 +2091,71 @@ START_TEST(test_proto_request_auth_with_copy_and_remove_from_request) {
 }
 END_TEST
 
+/* run an authorization request with an embedded (request=) unsigned (alg=none) request object
+ * that copies the custom "client_ref=1234" parameter and the spec-defined "state=98765"
+ * parameter via copy_from_request, then extract the request object from the authorization URL
+ * and return its decoded JSON payload */
+static json_t *e2e_request_object_copy_params_payload(request_rec *r) {
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	oidc_cfg_provider_request_object_set(r->pool, provider,
+					     "{\"crypto\":{\"sign_alg\":\"none\"},\"request_object_type\":\"request\","
+					     "\"copy_from_request\":[\"client_ref\",\"state\"]}");
+
+	oidc_proto_state_t *ps = e2e_make_proto_state(r);
+	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "98765", ps, NULL,
+					 NULL, "client_ref=1234", NULL);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+
+	/* pull the embedded request object out of the request= parameter */
+	const char *jwt = _oidc_strstr(loc, "&request=");
+	ck_assert_msg(jwt != NULL, "request= parameter must appear in the authorization URL: %s", loc);
+	jwt += _oidc_strlen("&request=");
+	const char *amp = _oidc_strstr(jwt, "&");
+	if (amp != NULL)
+		jwt = apr_pstrmemdup(r->pool, jwt, amp - jwt);
+
+	/* decode the payload section of the (unsigned) compact JWT */
+	const char *dot1 = _oidc_strstr(jwt, ".");
+	ck_assert_ptr_nonnull(dot1);
+	const char *dot2 = _oidc_strstr(dot1 + 1, ".");
+	ck_assert_ptr_nonnull(dot2);
+	char *s_payload = NULL;
+	ck_assert_int_gt(
+	    oidc_util_base64url_decode(r->pool, &s_payload, apr_pstrmemdup(r->pool, dot1 + 1, dot2 - (dot1 + 1))), 0);
+
+	json_t *payload = json_loads(s_payload, 0, NULL);
+	ck_assert_ptr_nonnull(payload);
+	return payload;
+}
+
+START_TEST(test_proto_request_auth_request_object_copy_param_types) {
+	request_rec *r = oidc_test_request_get();
+
+	json_t *payload = e2e_request_object_copy_params_payload(r);
+
+	/* a custom parameter value that parses as JSON is interpreted as its JSON type */
+	json_t *v = json_object_get(payload, "client_ref");
+	ck_assert_ptr_nonnull(v);
+	ck_assert_msg(json_is_integer(v), "copied request parameter must be a JSON integer, got JSON type %d",
+		      json_typeof(v));
+	ck_assert_int_eq((int)json_integer_value(v), 1234);
+
+	/* parameters defined as strings in the OpenID Connect specification (such as "state")
+	 * must be copied verbatim as JSON strings, never as another JSON type */
+	v = json_object_get(payload, "state");
+	ck_assert_ptr_nonnull(v);
+	ck_assert_msg(json_is_string(v), "copied state parameter must be a JSON string, got JSON type %d",
+		      json_typeof(v));
+	ck_assert_str_eq(json_string_value(v), "98765");
+
+	json_decref(payload);
+}
+END_TEST
+
 START_TEST(test_proto_dpop_create_no_access_token_no_nonce) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -2195,6 +2260,7 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_request_auth_with_request_object_none);
 	tcase_add_test(e2e, test_proto_request_auth_with_request_object_rs256);
 	tcase_add_test(e2e, test_proto_request_auth_with_copy_and_remove_from_request);
+	tcase_add_test(e2e, test_proto_request_auth_request_object_copy_param_types);
 	tcase_add_test(e2e, test_proto_userinfo_request_signed_jwt_response);
 	tcase_add_test(e2e, test_proto_request_auth_post_html);
 	tcase_add_test(e2e, test_proto_request_auth_no_client_id);

@@ -212,6 +212,40 @@ static apr_byte_t oidc_proto_request_uri_param_needs_action(const json_t *reques
 	return FALSE;
 }
 
+/*
+ * indicates whether the named authorization request parameter is defined as a string in the
+ * OpenID Connect/OAuth 2.0 specifications and thus must never be subjected to JSON type
+ * interpretation
+ */
+static apr_byte_t oidc_request_uri_param_is_spec_string(const char *name) {
+	static const char *spec_string_params[] = {OIDC_PROTO_SCOPE,
+						   OIDC_PROTO_RESPONSE_TYPE,
+						   OIDC_PROTO_CLIENT_ID,
+						   OIDC_PROTO_REDIRECT_URI,
+						   OIDC_PROTO_STATE,
+						   OIDC_PROTO_RESPONSE_MODE,
+						   OIDC_PROTO_NONCE,
+						   OIDC_PROTO_DISPLAY,
+						   OIDC_PROTO_PROMPT,
+						   OIDC_PROTO_UI_LOCALES,
+						   OIDC_PROTO_ID_TOKEN_HINT,
+						   OIDC_PROTO_LOGIN_HINT,
+						   OIDC_PROTO_ACR_VALUES,
+						   OIDC_PROTO_CLAIMS_LOCALES,
+						   OIDC_PROTO_CODE_CHALLENGE,
+						   OIDC_PROTO_CODE_CHALLENGE_METHOD,
+						   OIDC_PROTO_REQUEST_URI,
+						   OIDC_PROTO_REQUEST_OBJECT,
+						   NULL};
+	int i = 0;
+	while (spec_string_params[i] != NULL) {
+		if (_oidc_strcmp(name, spec_string_params[i]) == 0)
+			return TRUE;
+		i++;
+	}
+	return FALSE;
+}
+
 /* context structure for copying request parameters */
 typedef struct oidc_request_uri_copy_req_ctx_t {
 	request_rec *r;
@@ -235,12 +269,17 @@ static int oidc_request_uri_copy_from_request(void *rec, const char *name, const
 						      OIDC_REQUEST_OJBECT_COPY_AND_REMOVE_FROM_REQUEST)) {
 		json_t *result = NULL;
 		json_error_t json_error;
-		result = json_loads(value, JSON_DECODE_ANY, &json_error);
+		/* parameters that the specifications define as strings must not be subject to JSON
+		 * type interpretation (e.g. a numeric "state" value becoming a json_int) */
+		if (oidc_request_uri_param_is_spec_string(name) == FALSE)
+			result = json_loads(value, JSON_DECODE_ANY, &json_error);
 		if (result == NULL)
 			/* assume string */
 			result = json_string(value);
 		if (result)
 			json_object_set_new(ctx->request_object->payload.value.json, name, result);
+		else
+			oidc_warn(ctx->r, "json_string failed for name: %s, value: %s", name, value);
 
 		if (oidc_proto_request_uri_param_needs_action(ctx->request_object_config, name,
 							      OIDC_REQUEST_OJBECT_COPY_AND_REMOVE_FROM_REQUEST)) {

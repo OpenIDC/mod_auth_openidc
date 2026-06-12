@@ -1,3 +1,12 @@
+06/12/2026
+- proto: when copying authorization request parameters into a request object
+  (copy_from_request / copy_and_remove_from_request), no longer interpret the
+  values of parameters that the OpenID Connect/OAuth 2.0 specifications define
+  as strings (e.g. client_id, scope, nonce, state) as JSON, so a numeric value
+  of such a parameter can no longer change type into a JSON integer; values of
+  other parameters (e.g. claims, max_age) are still decoded as JSON with a
+  fallback to string
+
 06/09/2026
 - cache: copy the shm cache value out while holding the global lock instead of
   returning a pointer into the shared memory segment, so a concurrent set() in
