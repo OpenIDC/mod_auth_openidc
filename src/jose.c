@@ -70,6 +70,15 @@
 #include "util/util.h"
 
 /*
+ * the backend-independent OIDC_JOSE_JWK_KTY_* values carried in oidc_jwk_t.kty are kept identical to the
+ * cjose enum so that no translation is needed at the boundary; assert that invariant at compile time so a
+ * future cjose renumbering fails the build loudly instead of silently breaking key selection
+ */
+_Static_assert(OIDC_JOSE_JWK_KTY_RSA == CJOSE_JWK_KTY_RSA, "OIDC_JOSE_JWK_KTY_RSA must match cjose");
+_Static_assert(OIDC_JOSE_JWK_KTY_EC == CJOSE_JWK_KTY_EC, "OIDC_JOSE_JWK_KTY_EC must match cjose");
+_Static_assert(OIDC_JOSE_JWK_KTY_OCT == CJOSE_JWK_KTY_OCT, "OIDC_JOSE_JWK_KTY_OCT must match cjose");
+
+/*
  * assemble an error report
  */
 static void _oidc_jose_error_set(oidc_jose_error_t *error, const char *source, const int line, const char *function,
@@ -168,6 +177,20 @@ const char *oidc_jwt_hdr_get(oidc_jwt_t *jwt, const char *key) {
 	cjose_err cjose_err;
 	cjose_header_t *hdr = cjose_jws_get_protected(jwt->cjose_jws);
 	return hdr ? cjose_header_get(hdr, key, &cjose_err) : NULL;
+}
+
+/*
+ * set a JWT header member to a raw (pre-serialized) JSON value
+ */
+apr_byte_t oidc_jwt_hdr_set_json(oidc_jwt_t *jwt, const char *key, const char *raw_json, oidc_jose_error_t *err) {
+	json_error_t json_error;
+	json_t *value = json_loads(raw_json, 0, &json_error);
+	if (value == NULL) {
+		oidc_jose_error(err, "json_loads failed: %s", json_error.text);
+		return FALSE;
+	}
+	json_object_set_new(jwt->header.value.json, key, value);
+	return TRUE;
 }
 
 /*
@@ -588,6 +611,48 @@ end:
 		cjose_get_dealloc()(s_cjose);
 
 	return rv;
+}
+
+/*
+ * convert the public part of a JWK struct to a (pool-allocated) JSON string; unlike oidc_jwk_to_json this
+ * excludes private key material, which is required when publishing a key (e.g. the DPoP confirmation header)
+ */
+apr_byte_t oidc_jwk_to_public_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_json, oidc_jose_error_t *err) {
+	cjose_err cjose_err;
+	char *s_cjose = NULL;
+
+	if ((jwk == NULL) || (s_json == NULL))
+		return FALSE;
+
+	s_cjose = cjose_jwk_to_json(jwk->cjose_jwk, FALSE /* public only */, &cjose_err);
+	if (s_cjose == NULL) {
+		oidc_jose_error(err, "cjose_jwk_to_json failed: %s", oidc_cjose_e2s(pool, cjose_err));
+		return FALSE;
+	}
+	*s_json = apr_pstrdup(pool, s_cjose);
+	cjose_get_dealloc()(s_cjose);
+
+	return TRUE;
+}
+
+/*
+ * derive the default JWS signing algorithm for a key (RSA -> RS256; EC -> ES256/384/512 per curve);
+ * returns NULL when the key type/curve is unsupported
+ */
+const char *oidc_jwk_default_jws_alg(const oidc_jwk_t *jwk) {
+	if (jwk == NULL)
+		return NULL;
+	if (jwk->kty == OIDC_JOSE_JWK_KTY_RSA)
+		return OIDC_JOSE_HDR_ALG_RS256;
+	if (jwk->kty == OIDC_JOSE_JWK_KTY_EC) {
+		if (cjose_jwk_EC_get_curve(jwk->cjose_jwk, NULL) == NID_X9_62_prime256v1)
+			return OIDC_JOSE_HDR_ALG_ES256;
+		if (cjose_jwk_EC_get_curve(jwk->cjose_jwk, NULL) == NID_secp384r1)
+			return OIDC_JOSE_HDR_ALG_ES384;
+		if (cjose_jwk_EC_get_curve(jwk->cjose_jwk, NULL) == NID_secp521r1)
+			return OIDC_JOSE_HDR_ALG_ES512;
+	}
+	return NULL;
 }
 
 /*
@@ -1311,6 +1376,13 @@ apr_byte_t oidc_jwt_encrypt(apr_pool_t *pool, oidc_jwt_t *jwe, const oidc_jwk_t 
 }
 
 #define OIDC_JOSE_CJOSE_VERSION_DEPRECATED "0.4."
+
+/*
+ * return the version string of the underlying JOSE backend library
+ */
+const char *oidc_jose_version(void) {
+	return cjose_version();
+}
 
 /*
  * check for a version of cjose < 0.5.0 that has a version of

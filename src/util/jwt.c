@@ -128,8 +128,8 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const oidc_crypto_passphrase_t *
 		goto end;
 	}
 
-	jwe->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_DIR);
-	jwe->header.enc = apr_pstrdup(r->pool, CJOSE_HDR_ENC_A256GCM);
+	jwe->header.alg = apr_pstrdup(r->pool, OIDC_JOSE_HDR_ALG_DIR);
+	jwe->header.enc = apr_pstrdup(r->pool, OIDC_JOSE_HDR_ENC_A256GCM);
 	if (passphrase->secret2 != NULL)
 		jwe->header.kid = apr_pstrdup(r->pool, "1");
 
@@ -175,7 +175,7 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *
 		compact_encoded_jwt = apr_pstrcat(r->pool, oidc_util_jwt_hdr_dir_a256gcm(), compact_encoded_jwt, NULL);
 
 	oidc_proto_jwt_header_peek(r, compact_encoded_jwt, &alg, &enc, &kid);
-	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_DIR) != 0) || (_oidc_strcmp(enc, CJOSE_HDR_ENC_A256GCM) != 0)) {
+	if ((_oidc_strcmp(alg, OIDC_JOSE_HDR_ALG_DIR) != 0) || (_oidc_strcmp(enc, OIDC_JOSE_HDR_ENC_A256GCM) != 0)) {
 		oidc_error(r, "corrupted JWE header, alg=\"%s\" enc=\"%s\"", alg, enc);
 		goto end;
 	}
@@ -265,8 +265,8 @@ int oidc_util_jwt_post_config(server_rec *s) {
 		oidc_serror(s, "oidc_jwt_new failed");
 		goto end;
 	}
-	jwe->header.alg = apr_pstrdup(pool, CJOSE_HDR_ALG_DIR);
-	jwe->header.enc = apr_pstrdup(pool, CJOSE_HDR_ENC_A256GCM);
+	jwe->header.alg = apr_pstrdup(pool, OIDC_JOSE_HDR_ALG_DIR);
+	jwe->header.enc = apr_pstrdup(pool, OIDC_JOSE_HDR_ENC_A256GCM);
 
 	if (oidc_jwt_encrypt(pool, jwe, jwk, "x", 1, &compact_encoded_jwt, &err) == FALSE) {
 		oidc_serror(s, "oidc_jwt_encrypt failed: %s", oidc_jose_e2s(pool, err));

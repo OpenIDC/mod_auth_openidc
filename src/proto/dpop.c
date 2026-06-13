@@ -83,7 +83,6 @@ apr_byte_t oidc_proto_dpop_create(request_rec *r, const oidc_cfg_t *cfg, const c
 	oidc_jwt_t *jwt = NULL;
 	oidc_jwk_t *jwk = NULL;
 	oidc_jose_error_t err;
-	cjose_err cjose_err;
 	char *s_jwk = NULL;
 	char *ath = NULL;
 
@@ -93,8 +92,14 @@ apr_byte_t oidc_proto_dpop_create(request_rec *r, const oidc_cfg_t *cfg, const c
 		goto end;
 
 	json_object_set_new(jwt->header.value.json, OIDC_CLAIM_TYP, json_string(OIDC_PROTO_DPOP_JWT_TYP));
-	s_jwk = cjose_jwk_to_json(jwk->cjose_jwk, 0, &cjose_err);
-	cjose_header_set_raw(jwt->header.value.json, OIDC_CLAIM_JWK, s_jwk, &cjose_err);
+	if (oidc_jwk_to_public_json(r->pool, jwk, &s_jwk, &err) == FALSE) {
+		oidc_error(r, "oidc_jwk_to_public_json failed: %s", oidc_jose_e2s(r->pool, err));
+		goto end;
+	}
+	if (oidc_jwt_hdr_set_json(jwt, OIDC_CLAIM_JWK, s_jwk, &err) == FALSE) {
+		oidc_error(r, "oidc_jwt_hdr_set_json failed: %s", oidc_jose_e2s(r->pool, err));
+		goto end;
+	}
 
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_JTI, json_string(oidc_proto_jti_gen(r)));
 	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_HTM, json_string(method));
@@ -119,9 +124,6 @@ apr_byte_t oidc_proto_dpop_create(request_rec *r, const oidc_cfg_t *cfg, const c
 	rv = TRUE;
 
 end:
-
-	if (s_jwk)
-		cjose_get_dealloc()(s_jwk);
 
 	if (jwt)
 		oidc_jwt_destroy(jwt);

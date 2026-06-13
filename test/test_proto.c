@@ -831,6 +831,44 @@ START_TEST(test_proto_dpop_create_without_private_keys) {
 }
 END_TEST
 
+START_TEST(test_proto_dpop_create_embeds_public_key_only) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	char *dpop = NULL;
+
+	/* load test/private.pem so DPoP proof creation has an RSA key to sign with */
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	const char *kerr = oidc_cmd_private_keys_set(
+	    cmd, NULL, apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir)));
+	ck_assert_msg(kerr == NULL, "could not load private key: %s", kerr);
+
+	ck_assert_int_eq(
+	    oidc_proto_dpop_create(r, c, "https://idp.example.com/token", "POST", "some-access-token", NULL, &dpop),
+	    TRUE);
+	ck_assert_ptr_nonnull(dpop);
+
+	/* decode and JSON-parse the protected header (first compact segment) instead of substring-matching the
+	 * serialized JSON, whose whitespace varies by cjose version */
+	const char *p = _oidc_strstr(dpop, ".");
+	ck_assert_ptr_nonnull((void *)p);
+	char *header_b64 = apr_pstrmemdup(r->pool, dpop, _oidc_strlen(dpop) - _oidc_strlen(p));
+	char *header_json = NULL;
+	ck_assert_int_gt(oidc_util_base64url_decode(r->pool, &header_json, header_b64), 0);
+	json_t *header = NULL;
+	ck_assert_int_eq(oidc_util_json_decode_object(r, header_json, &header), TRUE);
+
+	/* the DPoP confirmation header must embed the PUBLIC key only: public params present, private absent */
+	json_t *jwk = json_object_get(header, OIDC_CLAIM_JWK);
+	ck_assert_ptr_nonnull(jwk);
+	ck_assert_ptr_nonnull(json_object_get(jwk, "n")); /* RSA public modulus */
+	ck_assert_ptr_nonnull(json_object_get(jwk, "e")); /* RSA public exponent */
+	ck_assert_ptr_null(json_object_get(jwk, "d"));	  /* RSA private exponent must NOT be present */
+	ck_assert_ptr_null(json_object_get(jwk, "p"));
+	ck_assert_ptr_null(json_object_get(jwk, "q"));
+}
+END_TEST
+
 START_TEST(test_proto_jwt_header_peek) {
 	request_rec *r = oidc_test_request_get();
 	char *alg = NULL;
@@ -2206,6 +2244,7 @@ int main(void) {
 	tcase_add_test(core, test_proto_nonce_uniqueness);
 	tcase_add_test(core, test_proto_flow_unsupported);
 	tcase_add_test(core, test_proto_dpop_create_without_private_keys);
+	tcase_add_test(core, test_proto_dpop_create_embeds_public_key_only);
 	tcase_add_test(core, test_proto_jwt_header_peek);
 	tcase_add_test(core, test_proto_response_is_post_and_redirect);
 	tcase_add_test(core, test_proto_return_www_authenticate_header);

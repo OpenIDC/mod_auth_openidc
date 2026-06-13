@@ -89,6 +89,28 @@
 /* the OIDC jwks fields from RFC 5741 */
 #define OIDC_JOSE_JWKS_KEYS_STR "keys" // Array of JWKs
 
+/*
+ * JOSE header parameter names, algorithm/encryption values and key types, kept independent of the backend
+ * JOSE library so that nothing outside jose.c/key.c needs to reference cjose; the key-type values are kept
+ * identical to the cjose enum (asserted at compile time in jose.c) so no boundary translation is needed
+ */
+#define OIDC_JOSE_HDR_ALG "alg"
+#define OIDC_JOSE_HDR_ENC "enc"
+#define OIDC_JOSE_HDR_KID "kid"
+#define OIDC_JOSE_HDR_ALG_DIR "dir"
+#define OIDC_JOSE_HDR_ALG_RS256 "RS256"
+#define OIDC_JOSE_HDR_ALG_PS256 "PS256"
+#define OIDC_JOSE_HDR_ALG_HS256 "HS256"
+#define OIDC_JOSE_HDR_ALG_ES256 "ES256"
+#define OIDC_JOSE_HDR_ALG_ES384 "ES384"
+#define OIDC_JOSE_HDR_ALG_ES512 "ES512"
+#define OIDC_JOSE_HDR_ENC_A256GCM "A256GCM"
+#define OIDC_JOSE_HDR_ENC_A128CBC_HS256 "A128CBC-HS256"
+
+#define OIDC_JOSE_JWK_KTY_RSA 1
+#define OIDC_JOSE_JWK_KTY_EC 2
+#define OIDC_JOSE_JWK_KTY_OCT 3
+
 /* struct for returning errors to the caller */
 typedef struct {
 	char source[OIDC_JOSE_ERROR_SOURCE_LENGTH];
@@ -120,6 +142,9 @@ apr_array_header_t *oidc_jose_jwe_supported_algorithms(apr_pool_t *pool);
 apr_byte_t oidc_jose_jwe_algorithm_is_supported(apr_pool_t *pool, const char *alg);
 apr_array_header_t *oidc_jose_jwe_supported_encryptions(apr_pool_t *pool);
 apr_byte_t oidc_jose_jwe_encryption_is_supported(apr_pool_t *pool, const char *enc);
+
+/* return the version string of the underlying JOSE backend library */
+const char *oidc_jose_version(void);
 
 /* hash helpers */
 apr_byte_t oidc_jose_hash_string(apr_pool_t *pool, const char *alg, const char *msg, char **hash,
@@ -189,6 +214,11 @@ apr_byte_t oidc_is_jwk(const json_t *json);
 apr_byte_t oidc_is_jwks(const json_t *json);
 /* convert a JWK struct to a JSON string */
 apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_json, oidc_jose_error_t *err);
+/* convert the PUBLIC part of a JWK struct to a JSON string (excludes private key material) */
+apr_byte_t oidc_jwk_to_public_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_json, oidc_jose_error_t *err);
+/* derive the default JWS signing algorithm for a key (RS256 for RSA; ES256/384/512 per EC curve); NULL if unsupported
+ */
+const char *oidc_jwk_default_jws_alg(const oidc_jwk_t *jwk);
 /* destroy resources allocated for a JWK struct */
 void oidc_jwk_destroy(oidc_jwk_t *jwk);
 /* destroy a list of JWKs structs */
@@ -272,6 +302,8 @@ void oidc_jwt_destroy(oidc_jwt_t *);
 
 /* get a header value from a JWT */
 const char *oidc_jwt_hdr_get(oidc_jwt_t *jwt, const char *key);
+/* set a JWT header member to a raw (pre-serialized) JSON value */
+apr_byte_t oidc_jwt_hdr_set_json(oidc_jwt_t *jwt, const char *key, const char *raw_json, oidc_jose_error_t *err);
 /* return the key type of a JWT */
 int oidc_jwt_alg2kty(const oidc_jwt_t *jwt);
 /* return the key size for an algorithm */

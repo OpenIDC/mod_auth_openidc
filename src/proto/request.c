@@ -413,8 +413,8 @@ static oidc_jwk_t *oidc_request_uri_request_object_signing_jwk_get(request_rec *
 	*jwk_needs_destroy = 0;
 
 	switch (kty) {
-	case CJOSE_JWK_KTY_RSA:
-	case CJOSE_JWK_KTY_EC:
+	case OIDC_JOSE_JWK_KTY_RSA:
+	case OIDC_JOSE_JWK_KTY_EC:
 		if ((oidc_cfg_provider_client_keys_get(provider) == NULL) && (oidc_cfg_private_keys_get(cfg) == NULL)) {
 			oidc_error(r, "no global or per-provider private keys have been configured to use for "
 				      "request object signing");
@@ -429,7 +429,7 @@ static oidc_jwk_t *oidc_request_uri_request_object_signing_jwk_get(request_rec *
 		else
 			oidc_error(r, "could not find a usable signing key");
 		return sjwk;
-	case CJOSE_JWK_KTY_OCT:
+	case OIDC_JOSE_JWK_KTY_OCT:
 		oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, FALSE, &sjwk);
 		*jwk_needs_destroy = 1;
 		return sjwk;
@@ -476,11 +476,11 @@ static oidc_jwk_t *oidc_request_uri_request_object_encryption_jwk_get(request_re
 	oidc_jwk_t *ejwk = NULL;
 
 	switch (oidc_jwt_alg2kty(jwe)) {
-	case CJOSE_JWK_KTY_RSA:
-	case CJOSE_JWK_KTY_EC:
+	case OIDC_JOSE_JWK_KTY_RSA:
+	case OIDC_JOSE_JWK_KTY_EC:
 		oidc_request_uri_encryption_jwk_by_type(r, cfg, provider, oidc_jwt_alg2kty(jwe), &ejwk);
 		break;
-	case CJOSE_JWK_KTY_OCT:
+	case OIDC_JOSE_JWK_KTY_OCT:
 		oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider),
 					       oidc_alg2keysize(jwe->header.alg), OIDC_JOSE_ALG_SHA256, FALSE, &ejwk);
 		break;
@@ -506,7 +506,7 @@ static char *oidc_request_uri_request_object_encrypt(request_rec *r, oidc_cfg_t 
 		return NULL;
 
 	if (jwe->header.enc == NULL)
-		jwe->header.enc = apr_pstrdup(r->pool, CJOSE_HDR_ENC_A128CBC_HS256);
+		jwe->header.enc = apr_pstrdup(r->pool, OIDC_JOSE_HDR_ENC_A128CBC_HS256);
 
 	if (ejwk->kid != NULL)
 		jwe->header.kid = ejwk->kid;

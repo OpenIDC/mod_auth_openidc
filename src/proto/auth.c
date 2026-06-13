@@ -118,7 +118,7 @@ static apr_byte_t oidc_proto_jwt_sign_and_add(request_rec *r, apr_table_t *param
 	return TRUE;
 }
 
-#define OIDC_PROTO_JWT_ASSERTION_SYMMETRIC_ALG CJOSE_HDR_ALG_HS256
+#define OIDC_PROTO_JWT_ASSERTION_SYMMETRIC_ALG OIDC_JOSE_HDR_ALG_HS256
 
 /*
  * create a JWT assertion signed with the client secret and add it to the HTTP request as endpoint authentication
@@ -197,24 +197,6 @@ static oidc_jwk_t *oidc_proto_endpoint_auth_pick_signing_key(const oidc_cfg_t *c
 }
 
 /*
- * derive the default JWS algorithm to sign a private_key_jwt assertion with from the key (RSA -> RS256;
- * EC -> ES256/384/512 per curve); returns NULL when the key type/curve is unsupported
- */
-static const char *oidc_proto_endpoint_auth_default_alg(const oidc_jwk_t *jwk) {
-	if (jwk->kty == CJOSE_JWK_KTY_RSA)
-		return CJOSE_HDR_ALG_RS256;
-	if (jwk->kty == CJOSE_JWK_KTY_EC) {
-		if (cjose_jwk_EC_get_curve(jwk->cjose_jwk, NULL) == NID_X9_62_prime256v1)
-			return CJOSE_HDR_ALG_ES256;
-		if (cjose_jwk_EC_get_curve(jwk->cjose_jwk, NULL) == NID_secp384r1)
-			return CJOSE_HDR_ALG_ES384;
-		if (cjose_jwk_EC_get_curve(jwk->cjose_jwk, NULL) == NID_secp521r1)
-			return CJOSE_HDR_ALG_ES512;
-	}
-	return NULL;
-}
-
-/*
  * create a JWT assertion signed with the configured private key and add it to the HTTP request as endpoint
  * authentication
  */
@@ -248,7 +230,7 @@ static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r, const
 		// oidc_proto_jwt_sign_and_add will fail later if no corresponding key was configured
 		alg = token_endpoint_auth_alg;
 	} else {
-		alg = oidc_proto_endpoint_auth_default_alg(jwk);
+		alg = oidc_jwk_default_jws_alg(jwk);
 		if (alg == NULL) {
 			oidc_error(
 			    r, "no valid signing key (RSA or Elliptic Curve) could be found in " OIDCPrivateKeyFiles);

@@ -1743,8 +1743,9 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, se
 
 	ap_log_error(APLOG_MARK, APLOG_INFO, 0, s,
 		     "%s - init - cjose %s, %s, EC=%s, GCM=%s, Memcache=%s, Redis=%s, JQ=%s", NAMEVERSION,
-		     cjose_version(), oidc_util_openssl_version(s->process->pool), OIDC_JOSE_EC_SUPPORT ? "yes" : "no",
-		     OIDC_JOSE_GCM_SUPPORT ? "yes" : "no", _OIDC_USE_MEMCACHE, _OIDC_USE_REDIS, _OIDC_USE_JQ);
+		     oidc_jose_version(), oidc_util_openssl_version(s->process->pool),
+		     OIDC_JOSE_EC_SUPPORT ? "yes" : "no", OIDC_JOSE_GCM_SUPPORT ? "yes" : "no", _OIDC_USE_MEMCACHE,
+		     _OIDC_USE_REDIS, _OIDC_USE_JQ);
 
 	oidc_http_init();
 

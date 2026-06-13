@@ -177,7 +177,7 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t *jw
 			      "performed against statically configured keys");
 		/* the JWKs URI was provided, but let's see if it makes sense to pull down keys, i.e. if it is an
 		 * asymmetric signature */
-	} else if (oidc_jwt_alg2kty(jwt) == CJOSE_JWK_KTY_OCT) {
+	} else if (oidc_jwt_alg2kty(jwt) == OIDC_JOSE_JWK_KTY_OCT) {
 		oidc_debug(r,
 			   "\"%s\" is set, but the JWT has a symmetric signature so we won't pull/use keys from there",
 			   (jwks_uri->signed_uri != NULL) ? "signed_jwks_uri" : "jwks_uri");
@@ -241,11 +241,14 @@ char *oidc_proto_jwt_header_peek(request_rec *r, const char *compact_encoded_jwt
 		oidc_util_json_decode_object(r, result, &json);
 		if (json) {
 			if (alg)
-				*alg = apr_pstrdup(r->pool, json_string_value(json_object_get(json, CJOSE_HDR_ALG)));
+				*alg =
+				    apr_pstrdup(r->pool, json_string_value(json_object_get(json, OIDC_JOSE_HDR_ALG)));
 			if (enc)
-				*enc = apr_pstrdup(r->pool, json_string_value(json_object_get(json, CJOSE_HDR_ENC)));
+				*enc =
+				    apr_pstrdup(r->pool, json_string_value(json_object_get(json, OIDC_JOSE_HDR_ENC)));
 			if (kid)
-				*kid = apr_pstrdup(r->pool, json_string_value(json_object_get(json, CJOSE_HDR_KID)));
+				*kid =
+				    apr_pstrdup(r->pool, json_string_value(json_object_get(json, OIDC_JOSE_HDR_KID)));
 		}
 		json_decref(json);
 	}
@@ -270,10 +273,11 @@ apr_byte_t oidc_proto_jwt_create_from_first_pkey(request_rec *r, const oidc_cfg_
 
 	(*jwt)->header.kid = apr_pstrdup(r->pool, (*jwk)->kid);
 
-	if ((*jwk)->kty == CJOSE_JWK_KTY_RSA)
-		(*jwt)->header.alg = apr_pstrdup(r->pool, use_psa_for_rsa ? CJOSE_HDR_ALG_PS256 : CJOSE_HDR_ALG_RS256);
-	else if ((*jwk)->kty == CJOSE_JWK_KTY_EC)
-		(*jwt)->header.alg = apr_pstrdup(r->pool, CJOSE_HDR_ALG_ES256);
+	if ((*jwk)->kty == OIDC_JOSE_JWK_KTY_RSA)
+		(*jwt)->header.alg =
+		    apr_pstrdup(r->pool, use_psa_for_rsa ? OIDC_JOSE_HDR_ALG_PS256 : OIDC_JOSE_HDR_ALG_RS256);
+	else if ((*jwk)->kty == OIDC_JOSE_JWK_KTY_EC)
+		(*jwt)->header.alg = apr_pstrdup(r->pool, OIDC_JOSE_HDR_ALG_ES256);
 	else {
 		oidc_error(r, "no usable RSA/EC signing keys has been configured (in " OIDCPrivateKeyFiles ")");
 		goto end;
