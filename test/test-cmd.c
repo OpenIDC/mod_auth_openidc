@@ -50,7 +50,9 @@
 #include "session.h"
 #include "util.h"
 #include "util/util.h"
+
 #include <apr_base64.h>
+#include <cjose/cjose.h> /* this CLI utility uses the cjose API directly (no longer pulled in via jose.h) */
 #include <openssl/pem.h>
 
 int usage(int argc, char **argv, const char *msg) {

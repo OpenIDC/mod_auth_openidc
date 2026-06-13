@@ -1,11 +1,11 @@
 06/13/2026
-- jose: confine all direct use of the cjose library to the JOSE abstraction
-  layer (jose.c, jose.h, util/key.c); the DPoP, request object, JWT,
-  session/state and startup code now reference backend-independent OIDC_JOSE_*
-  header/algorithm/key-type constants and new accessor functions
-  (oidc_jose_version, oidc_jwk_to_public_json, oidc_jwk_default_jws_alg,
-  oidc_jwt_hdr_set_json) instead of cjose symbols; no functional change, a
-  preparatory step towards decoupling the underlying JOSE backend
+- jose: stop exposing the cjose JOSE library through the public jose.h header,
+  as a preparatory step towards decoupling the underlying JOSE backend; code
+  outside jose.c now uses backend-independent OIDC_JOSE_* constants and accessor
+  functions (oidc_jose_version, oidc_jwk_to_public_json, oidc_jwk_default_jws_alg,
+  oidc_jwt_hdr_set_json) instead of cjose symbols, and jose.h no longer includes
+  <cjose/cjose.h> (the cjose key and signature objects are now opaque forward
+  declarations); no functional change
 
 06/12/2026
 - proto: when copying authorization request parameters into a request object

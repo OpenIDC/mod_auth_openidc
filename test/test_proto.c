@@ -866,6 +866,8 @@ START_TEST(test_proto_dpop_create_embeds_public_key_only) {
 	ck_assert_ptr_null(json_object_get(jwk, "d"));	  /* RSA private exponent must NOT be present */
 	ck_assert_ptr_null(json_object_get(jwk, "p"));
 	ck_assert_ptr_null(json_object_get(jwk, "q"));
+
+	json_decref(header);
 }
 END_TEST
 

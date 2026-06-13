@@ -588,8 +588,8 @@ START_TEST(test_util_key) {
 	ck_assert_int_eq(apr_hash_count(hash3), 3);
 
 	ck_assert_ptr_eq(oidc_util_key_list_first(arr2, -1, NULL), jwk3);
-	ck_assert_ptr_eq(oidc_util_key_list_first(arr2, CJOSE_JWK_KTY_OCT, "sig"), jwk3);
-	ck_assert_ptr_null(oidc_util_key_list_first(arr2, CJOSE_JWK_KTY_RSA, "enc"));
+	ck_assert_ptr_eq(oidc_util_key_list_first(arr2, OIDC_JOSE_JWK_KTY_OCT, "sig"), jwk3);
+	ck_assert_ptr_null(oidc_util_key_list_first(arr2, OIDC_JOSE_JWK_KTY_RSA, "enc"));
 
 	oidc_jwk_list_destroy_hash(hash3);
 }

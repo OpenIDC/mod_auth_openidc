@@ -48,6 +48,8 @@
 
 #include <http_protocol.h>
 
+#include <openssl/opensslv.h> /* OPENSSL_VERSION_STR / OPENSSL_VERSION_TEXT in oidc_util_openssl_version() */
+
 /*
  * convert a character to an ENVIRONMENT-variable-safe variant
  */

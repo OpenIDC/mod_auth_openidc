@@ -201,7 +201,7 @@ START_TEST(test_cmd_oauth_verify_shared_keys) {
 	hi = apr_hash_first(cmd->pool, keys);
 	apr_hash_this(hi, NULL, NULL, (void **)&jwk);
 	ck_assert_ptr_nonnull(jwk);
-	ck_assert_int_eq(jwk->kty, CJOSE_JWK_KTY_OCT);
+	ck_assert_int_eq(jwk->kty, OIDC_JOSE_JWK_KTY_OCT);
 	ck_assert_ptr_null(jwk->use);
 
 	ck_assert_ptr_null(oidc_cmd_oauth_verify_shared_keys_set(cmd, NULL, "enc:mykid#mysecret2"));
@@ -210,7 +210,7 @@ START_TEST(test_cmd_oauth_verify_shared_keys) {
 	ck_assert_int_eq(apr_hash_count(keys), 2);
 	jwk = apr_hash_get(keys, "mykid", APR_HASH_KEY_STRING);
 	ck_assert_ptr_nonnull(jwk);
-	ck_assert_int_eq(jwk->kty, CJOSE_JWK_KTY_OCT);
+	ck_assert_int_eq(jwk->kty, OIDC_JOSE_JWK_KTY_OCT);
 	ck_assert_str_eq(jwk->use, "enc");
 	ck_assert_str_eq(jwk->kid, "mykid");
 

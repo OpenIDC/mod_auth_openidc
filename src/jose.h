@@ -53,8 +53,17 @@
 #include <apr_strings.h>
 #include <apr_tables.h>
 
-#include <cjose/cjose.h>
 #include <jansson.h>
+
+/*
+ * opaque forward declarations of the backend JOSE library's key and signature types, so this public header
+ * does not need to include <cjose/cjose.h>; jose.c includes the real header to operate on them
+ */
+typedef struct _cjose_jwk_int cjose_jwk_t;
+typedef struct _cjose_jws_int cjose_jws_t;
+
+/* opaque forward declaration of the OpenSSL BIO type used in the oidc_jwk_pem_bio_to_jwk() prototype below */
+typedef struct bio_st BIO;
 
 #ifndef APR_ARRAY_IDX
 #define APR_ARRAY_IDX(ary, i, type) (((type *)(ary)->elts)[i])
@@ -127,9 +136,6 @@ typedef struct {
 	_oidc_jose_error_set(err, __FILE__, __LINE__, __FUNCTION__, "%s() failed: %s", msg,                            \
 			     ERR_error_string(ERR_get_error(), NULL), ##__VA_ARGS__)
 #define oidc_jose_e2s(pool, err) apr_psprintf(pool, "[%s:%d: %s]: %s", err.source, err.line, err.function, err.text)
-#define oidc_cjose_e2s(pool, cjose_err)                                                                                \
-	apr_psprintf(pool, "%s [file: %s, function: %s, line: %ld]", cjose_err.message, cjose_err.file,                \
-		     cjose_err.function, cjose_err.line)
 
 /*
  * helper functions

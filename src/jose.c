@@ -56,6 +56,8 @@
 
 #include "jose.h"
 
+#include <cjose/cjose.h>
+
 #include <openssl/bn.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -68,6 +70,14 @@
 #endif
 
 #include "util/util.h"
+
+/*
+ * render a cjose error into a string; defined here rather than in jose.h so the public header stays free of
+ * the cjose error type
+ */
+#define oidc_cjose_e2s(pool, cjose_err)                                                                                \
+	apr_psprintf(pool, "%s [file: %s, function: %s, line: %ld]", cjose_err.message, cjose_err.file,                \
+		     cjose_err.function, cjose_err.line)
 
 /*
  * the backend-independent OIDC_JOSE_JWK_KTY_* values carried in oidc_jwk_t.kty are kept identical to the

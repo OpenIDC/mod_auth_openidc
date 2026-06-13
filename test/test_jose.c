@@ -44,7 +44,9 @@
 #include "check_util.h"
 #include "jose.h"
 #include "util.h"
+
 #include "util/util.h"
+#include <cjose/cjose.h> /* this JOSE-layer test exercises the cjose API directly (no longer pulled in via jose.h) */
 
 /* shared helper: parse a JWK from a JSON string into the supplied outparam */
 static void _jose_test_jwk_parse(apr_pool_t *pool, const char *s, oidc_jwk_t **jwk, oidc_jose_error_t *err) {
@@ -289,7 +291,7 @@ START_TEST(test_jwt_sign_verify_and_encrypt_decrypt) {
 	size_t decoded_len = 0;
 	cjose_err cjose_err_local;
 	if (cjose_base64url_decode(hdr_b64, _oidc_strlen(hdr_b64), &decoded, &decoded_len, &cjose_err_local) == FALSE) {
-		ck_abort_msg("cjose_base64url_decode failed: %s", oidc_cjose_e2s(pool, cjose_err_local));
+		ck_abort_msg("cjose_base64url_decode failed: %s", cjose_err_local.message);
 	}
 	char *hdr_json = apr_pstrmemdup(pool, (const char *)decoded, decoded_len);
 	cjose_get_dealloc()(decoded);
