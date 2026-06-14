@@ -11,7 +11,7 @@ parser, reusing the libcheck test fixture (`test/util.c`) for a ready
 | `fuzz_base64` | `oidc_util_base64url_decode`       | base64url decoding (cookies, state, JWT segments) |
 | `fuzz_url`    | `oidc_validate_redirect_url`       | the open-redirect guard (return-to / logout URLs) |
 | `fuzz_jwt`    | `oidc_jwt_parse`                   | compact JWT/JWS/JWE structural parse              |
-| `fuzz_json`   | `oidc_util_json_decode_object`     | JSON decode (token / userinfo / metadata)         |
+| `fuzz_json`   | `oidc_json_decode_object`          | JSON decode (token / userinfo / metadata)         |
 
 ## Two build modes
 
