@@ -47,16 +47,17 @@
 
 #include "util/util.h"
 #include <cjose/cjose.h> /* this JOSE-layer test exercises the cjose API directly (no longer pulled in via jose.h) */
+#include <jansson.h> /* this test builds JSON fixtures with the backend API directly (no longer pulled in via jose.h) */
 
 /* shared helper: parse a JWK from a JSON string into the supplied outparam */
 static void _jose_test_jwk_parse(apr_pool_t *pool, const char *s, oidc_jwk_t **jwk, oidc_jose_error_t *err) {
 	json_error_t json_err;
-	json_t *json = json_loads(s, 0, &json_err);
+	oidc_json_t *json = json_loads(s, 0, &json_err);
 	ck_assert_msg(json != NULL, "JSON parse failed: %s", json_err.text);
 	*jwk = oidc_jwk_parse(pool, json, err);
 	oidc_jose_error_t err_val = *err;
 	ck_assert_msg(*jwk != NULL, "oidc_jwk_parse failed: %s", oidc_jose_e2s(pool, err_val));
-	json_decref(json);
+	oidc_json_decref(json);
 }
 
 // supported
@@ -134,10 +135,10 @@ END_TEST
 
 START_TEST(test_jose_get_string_and_timestamps) {
 	apr_pool_t *pool = oidc_test_pool_get();
-	json_t *j = json_object();
-	json_object_set_new(j, "k1", json_string("v1"));
-	json_object_set_new(j, "num", json_integer(123));
-	json_object_set_new(j, "t1", json_real(4.5));
+	oidc_json_t *j = oidc_json_object();
+	oidc_json_object_set_new(j, "k1", oidc_json_string("v1"));
+	oidc_json_object_set_new(j, "num", oidc_json_integer(123));
+	oidc_json_object_set_new(j, "t1", json_real(4.5));
 	char *s = NULL;
 	oidc_jose_error_t err;
 
@@ -158,7 +159,7 @@ START_TEST(test_jose_get_string_and_timestamps) {
 	ck_assert_msg(oidc_jose_get_timestamp(pool, j, "tsmissing", TRUE, &ts2, &err) == FALSE,
 		      "get timestamp should have failed for missing mandatory key");
 
-	json_decref(j);
+	oidc_json_decref(j);
 }
 END_TEST
 
@@ -206,11 +207,11 @@ START_TEST(test_jose_jwk_and_json_and_copy_lists) {
 	ck_assert_ptr_nonnull(s_json);
 	oidc_jwk_destroy(pub);
 	json_error_t je;
-	json_t *j = json_loads(s_json, 0, &je);
+	oidc_json_t *j = json_loads(s_json, 0, &je);
 	ck_assert_ptr_nonnull(j);
-	json_t *kty = json_object_get(j, "kty");
+	oidc_json_t *kty = oidc_json_object_get(j, "kty");
 	ck_assert_ptr_nonnull(kty);
-	json_decref(j);
+	oidc_json_decref(j);
 
 	unsigned char key[32];
 	for (int i = 0; i < 32; i++)
@@ -263,7 +264,7 @@ START_TEST(test_jwt_sign_verify_and_encrypt_decrypt) {
 	ck_assert_ptr_nonnull(sym);
 
 	oidc_jwt_t *jwt = oidc_jwt_new(pool, 1, 1);
-	json_object_set_new(jwt->payload.value.json, "iss", json_string("unit-test"));
+	oidc_json_object_set_new(jwt->payload.value.json, "iss", oidc_json_string("unit-test"));
 	jwt->header.alg = apr_pstrdup(pool, CJOSE_HDR_ALG_HS256);
 
 	ck_assert_msg(oidc_jwt_sign(pool, jwt, sym, FALSE, &err) == TRUE, "oidc_jwt_sign failed");
@@ -277,7 +278,7 @@ START_TEST(test_jwt_sign_verify_and_encrypt_decrypt) {
 	oidc_jwt_destroy(jwt);
 
 	oidc_jwt_t *none_jwt = oidc_jwt_new(pool, 1, 1);
-	json_object_set_new(none_jwt->payload.value.json, "hello", json_string("world"));
+	oidc_json_object_set_new(none_jwt->payload.value.json, "hello", oidc_json_string("world"));
 	none_jwt->header.alg = apr_pstrdup(pool, CJOSE_HDR_ALG_NONE);
 	char *s = oidc_jose_jwt_serialize(pool, none_jwt, &err);
 	ck_assert_ptr_nonnull(s);
@@ -296,12 +297,13 @@ START_TEST(test_jwt_sign_verify_and_encrypt_decrypt) {
 	char *hdr_json = apr_pstrmemdup(pool, (const char *)decoded, decoded_len);
 	cjose_get_dealloc()(decoded);
 	json_error_t jerr;
-	json_t *hdr_obj = json_loads(hdr_json, 0, &jerr);
+	oidc_json_t *hdr_obj = json_loads(hdr_json, 0, &jerr);
 	ck_assert_ptr_nonnull(hdr_obj);
-	json_t *alg = json_object_get(hdr_obj, "alg");
+	oidc_json_t *alg = oidc_json_object_get(hdr_obj, "alg");
 	ck_assert_ptr_nonnull(alg);
-	ck_assert_msg(json_is_string(alg) && _oidc_strcmp(json_string_value(alg), "none") == 0, "alg is not 'none'");
-	json_decref(hdr_obj);
+	ck_assert_msg(oidc_json_is_string(alg) && _oidc_strcmp(oidc_json_string_value(alg), "none") == 0,
+		      "alg is not 'none'");
+	oidc_json_decref(hdr_obj);
 
 	const char *src_file = __FILE__;
 	char *dir = NULL;
@@ -389,7 +391,7 @@ START_TEST(test_jwk_json_parse_and_jwks) {
 	ck_assert_msg(oidc_jwk_to_json(pool, pub, &s_json, &err) == TRUE, "oidc_jwk_to_json failed");
 	oidc_jwk_destroy(pub);
 	json_error_t je;
-	json_t *j = json_loads(s_json, 0, &je);
+	oidc_json_t *j = json_loads(s_json, 0, &je);
 	ck_assert_ptr_nonnull(j);
 
 	oidc_jwk_t *parsed = oidc_jwk_parse(pool, j, &err);
@@ -399,17 +401,17 @@ START_TEST(test_jwk_json_parse_and_jwks) {
 
 	ck_assert_msg(oidc_is_jwk(j) == TRUE, "oidc_is_jwk false for JWK json");
 
-	json_t *jwks = json_object();
-	json_t *arr = json_array();
-	json_array_append_new(arr, json_deep_copy(j));
-	json_object_set_new(jwks, "keys", arr);
+	oidc_json_t *jwks = oidc_json_object();
+	oidc_json_t *arr = oidc_json_array();
+	oidc_json_array_append_new(arr, oidc_json_deep_copy(j));
+	oidc_json_object_set_new(jwks, "keys", arr);
 	apr_array_header_t *jwk_list = NULL;
 	ck_assert_msg(oidc_jwks_parse_json(pool, jwks, &jwk_list, &err) == TRUE, "oidc_jwks_parse_json failed");
 	ck_assert_msg(jwk_list != NULL && jwk_list->nelts == 1, "jwks parse returned wrong number of keys");
 	ck_assert_msg(oidc_is_jwks(jwks) == TRUE, "oidc_is_jwks false for jwks json");
 
-	json_decref(j);
-	json_decref(jwks);
+	oidc_json_decref(j);
+	oidc_json_decref(jwks);
 	oidc_jwk_list_destroy(jwk_list);
 }
 END_TEST
@@ -437,7 +439,7 @@ START_TEST(test_jwk_json_x5c_parse) {
 	    "RuP2SmmaIzmnw9JiSlYhzo4tpzd5rFXhjRbg4zW9C+2qok+2+qDM1iJ684gPHMIY8aLWrdgQTxkumGmTqgawR+"
 	    "N5MDtdPTEQ0XfIBc2cJEUyMTY5MPvACWpkA6SdS4xSvdXK3IVfOWA==\"]}";
 
-	json_t *j = json_loads(s_json, 0, &json_err);
+	oidc_json_t *j = json_loads(s_json, 0, &json_err);
 	ck_assert_ptr_nonnull(j);
 	ck_assert_int_eq(oidc_is_jwk(j), TRUE);
 
@@ -446,7 +448,7 @@ START_TEST(test_jwk_json_x5c_parse) {
 	ck_assert_ptr_nonnull(jwk->kid);
 	ck_assert_int_eq(jwk->x5c->nelts, 1);
 
-	json_decref(j);
+	oidc_json_decref(j);
 	oidc_jwk_destroy(jwk);
 }
 END_TEST
@@ -620,7 +622,7 @@ START_TEST(test_alg2keysize_and_hdr_get_and_jwt_parse) {
 	ck_assert_ptr_nonnull(sym);
 
 	oidc_jwt_t *jwt = oidc_jwt_new(pool, 1, 1);
-	json_object_set_new(jwt->payload.value.json, "sub", json_string("subject"));
+	oidc_json_object_set_new(jwt->payload.value.json, "sub", oidc_json_string("subject"));
 	jwt->header.alg = apr_pstrdup(pool, CJOSE_HDR_ALG_HS256);
 	ck_assert_msg(oidc_jwt_sign(pool, jwt, sym, FALSE, &err) == TRUE, "oidc_jwt_sign failed");
 	char *s = oidc_jose_jwt_serialize(pool, jwt, &err);
@@ -1071,11 +1073,11 @@ START_TEST(test_jose_legacy_jwt_sign_verify_rsa_and_hmac) {
 	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
 
 	oidc_jwt_t *jwt = oidc_jwt_new(pool, TRUE, TRUE);
-	json_object_set_new(jwt->payload.value.json, "iss", json_string("https://example.org"));
-	json_object_set_new(jwt->payload.value.json, "sub", json_string("https://example.org"));
-	json_object_set_new(jwt->payload.value.json, "aud", json_string("sample_client"));
-	json_object_set_new(jwt->payload.value.json, "exp", json_integer(apr_time_sec(apr_time_now()) + 60));
-	json_object_set_new(jwt->payload.value.json, "iat", json_integer(apr_time_sec(apr_time_now())));
+	oidc_json_object_set_new(jwt->payload.value.json, "iss", oidc_json_string("https://example.org"));
+	oidc_json_object_set_new(jwt->payload.value.json, "sub", oidc_json_string("https://example.org"));
+	oidc_json_object_set_new(jwt->payload.value.json, "aud", oidc_json_string("sample_client"));
+	oidc_json_object_set_new(jwt->payload.value.json, "exp", oidc_json_integer(apr_time_sec(apr_time_now()) + 60));
+	oidc_json_object_set_new(jwt->payload.value.json, "iat", oidc_json_integer(apr_time_sec(apr_time_now())));
 	jwt->header.alg = apr_pstrdup(pool, CJOSE_HDR_ALG_RS256);
 
 	ck_assert_int_eq(oidc_jwt_sign(pool, jwt, jwk, FALSE, &err), TRUE);

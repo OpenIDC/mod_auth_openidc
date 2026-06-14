@@ -207,9 +207,9 @@ void oidc_strip_cookies(request_rec *r) {
  * check if s_json is valid provider metadata
  */
 static apr_byte_t oidc_provider_validate_metadata_str(request_rec *r, oidc_cfg_t *c, const char *s_json,
-						      json_t **j_provider, apr_byte_t decode_only) {
+						      oidc_json_t **j_provider, apr_byte_t decode_only) {
 
-	if (oidc_util_json_decode_object(r, s_json, j_provider) == FALSE)
+	if (oidc_json_decode_object(r, s_json, j_provider) == FALSE)
 		return FALSE;
 
 	if (decode_only == TRUE)
@@ -219,7 +219,7 @@ static apr_byte_t oidc_provider_validate_metadata_str(request_rec *r, oidc_cfg_t
 	if (oidc_metadata_provider_is_valid(r, c, *j_provider, NULL) == FALSE) {
 		oidc_warn(r, "cache corruption detected: invalid metadata from url: %s",
 			  oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(c)));
-		json_decref(*j_provider);
+		oidc_json_decref(*j_provider);
 		*j_provider = NULL;
 		return FALSE;
 	}
@@ -232,7 +232,7 @@ static apr_byte_t oidc_provider_validate_metadata_str(request_rec *r, oidc_cfg_t
  */
 apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg_t *c, oidc_provider_t **provider) {
 
-	json_t *j_provider = NULL;
+	oidc_json_t *j_provider = NULL;
 	char *s_json = NULL;
 
 	/* see if we should configure a static provider based on external (cached) metadata */
@@ -256,7 +256,7 @@ apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg_t *c, oidc_provi
 				   oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(c)));
 			return FALSE;
 		}
-		json_decref(j_provider);
+		oidc_json_decref(j_provider);
 
 		if (oidc_provider_validate_metadata_str(r, c, s_json, &j_provider, FALSE) == FALSE)
 			return FALSE;
@@ -273,11 +273,11 @@ apr_byte_t oidc_provider_static_config(request_rec *r, oidc_cfg_t *c, oidc_provi
 	if (oidc_metadata_provider_parse(r, c, j_provider, *provider) == FALSE) {
 		oidc_error(r, "could not parse metadata from url: %s",
 			   oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(c)));
-		json_decref(j_provider);
+		oidc_json_decref(j_provider);
 		return FALSE;
 	}
 
-	json_decref(j_provider);
+	oidc_json_decref(j_provider);
 
 	return TRUE;
 }
@@ -390,29 +390,29 @@ const char *oidc_request_state_get(request_rec *r, const char *key) {
  * get a name/json object pair from the mod_auth_openidc-specific request context
  * (used for passing state between various Apache request processing stages and hook callbacks)
  */
-json_t *oidc_request_state_json_get(request_rec *r, const char *key) {
+oidc_json_t *oidc_request_state_json_get(request_rec *r, const char *key) {
 
 	/* get a handle to the global state, which is a hash table */
 	apr_hash_t *state = oidc_request_state(r);
 
 	/* return the value from the hash table */
-	return (json_t *)apr_hash_get(state, key, APR_HASH_KEY_STRING);
+	return (oidc_json_t *)apr_hash_get(state, key, APR_HASH_KEY_STRING);
 }
 
 /*
  * set a name/json object pair in the mod_auth_openidc-specific request context
  * (used for passing state between various Apache request processing stages and hook callbacks)
  */
-void oidc_request_state_json_set(request_rec *r, const char *key, json_t *value) {
+void oidc_request_state_json_set(request_rec *r, const char *key, oidc_json_t *value) {
 
 	/* get a handle to the global state, which is a hash table */
 	apr_hash_t *state = oidc_request_state(r);
 
 	/* make a copy of the json object because the session object in the caller will be cleared */
-	const json_t *json = json_copy(value);
+	const oidc_json_t *json = oidc_json_copy(value);
 
 	/* register a cleanup for the json object */
-	apr_pool_cleanup_register(r->pool, json, (apr_status_t (*)(void *))json_decref, apr_pool_cleanup_null);
+	apr_pool_cleanup_register(r->pool, json, (apr_status_t (*)(void *))oidc_json_decref, apr_pool_cleanup_null);
 
 	/* put the name/value pair in that hash table */
 	apr_hash_set(state, key, APR_HASH_KEY_STRING, json);
@@ -422,7 +422,7 @@ void oidc_request_state_json_set(request_rec *r, const char *key, json_t *value)
  * set the claims from a JSON object (c.q. id_token or user_info response) stored
  * in the session in to HTTP headers passed on to the application
  */
-apr_byte_t oidc_set_app_claims(request_rec *r, const oidc_cfg_t *cfg, json_t *claims) {
+apr_byte_t oidc_set_app_claims(request_rec *r, const oidc_cfg_t *cfg, oidc_json_t *claims) {
 
 	oidc_appinfo_pass_in_t pass_in = oidc_cfg_dir_pass_info_in_get(r);
 
@@ -599,8 +599,8 @@ apr_byte_t oidc_get_provider_from_session(request_rec *r, oidc_cfg_t *c, const o
  */
 static void oidc_copy_tokens_to_request_state(request_rec *r, const oidc_session_t *session) {
 
-	json_t *id_token = oidc_session_get_idtoken_claims(r, session);
-	json_t *claims = oidc_session_get_userinfo_claims(r, session);
+	oidc_json_t *id_token = oidc_session_get_idtoken_claims(r, session);
+	oidc_json_t *claims = oidc_session_get_userinfo_claims(r, session);
 	const char *scope = oidc_session_get_scope(r, session);
 
 	if (id_token != NULL)
@@ -712,8 +712,8 @@ static void oidc_idtoken_pass_as(request_rec *r, const oidc_cfg_t *cfg, const oi
 	if (oidc_cfg_dir_pass_idtoken_as_get(r) & OIDC_PASS_IDTOKEN_AS_PAYLOAD) {
 		/* pass the id_token JSON object to the app in a header or environment variable */
 		oidc_util_appinfo_set(r, OIDC_APP_INFO_ID_TOKEN_PAYLOAD,
-				      oidc_util_json_encode(r->pool, oidc_session_get_idtoken_claims(r, session),
-							    JSON_PRESERVE_ORDER | JSON_COMPACT),
+				      oidc_json_encode(r->pool, oidc_session_get_idtoken_claims(r, session),
+						       OIDC_JSON_PRESERVE_ORDER | OIDC_JSON_COMPACT),
 				      OIDC_DEFAULT_HEADER_PREFIX, pass_in, encoding);
 	}
 
@@ -831,16 +831,16 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg_t *cfg, oidc_se
  * get the r->user for this request based on the configuration for OIDC/OAuth
  */
 apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name, const char *reg_exp, const char *replace,
-				const json_t *json, char **request_user) {
+				const oidc_json_t *json, char **request_user) {
 
 	/* get the claim value from the JSON object */
-	const json_t *username = json_object_get(json, claim_name);
-	if ((username == NULL) || (!json_is_string(username))) {
+	const oidc_json_t *username = oidc_json_object_get(json, claim_name);
+	if ((username == NULL) || (!oidc_json_is_string(username))) {
 		oidc_warn(r, "JSON object did not contain a \"%s\" string", claim_name);
 		return FALSE;
 	}
 
-	*request_user = apr_pstrdup(r->pool, json_string_value(username));
+	*request_user = apr_pstrdup(r->pool, oidc_json_string_value(username));
 
 	if (reg_exp != NULL) {
 

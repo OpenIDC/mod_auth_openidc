@@ -120,7 +120,7 @@
 #define OIDC_PROTO_DPOP "DPoP"
 #define OIDC_PROTO_DPOP_USE_NONCE "use_dpop_nonce"
 
-typedef json_t oidc_proto_state_t;
+typedef oidc_json_t oidc_proto_state_t;
 
 // profile.c
 oidc_auth_request_method_t oidc_proto_profile_auth_request_method_get(const oidc_provider_t *provider);
@@ -145,7 +145,7 @@ apr_byte_t oidc_proto_discovery_url_based(request_rec *r, oidc_cfg_t *cfg, const
 // dpop.c
 apr_byte_t oidc_proto_dpop_create(request_rec *r, const oidc_cfg_t *cfg, const char *url, const char *method,
 				  const char *access_token, const char *nonce, char **dpop);
-apr_byte_t oidc_proto_dpop_use_nonce(request_rec *r, const oidc_cfg_t *cfg, const json_t *j_result,
+apr_byte_t oidc_proto_dpop_use_nonce(request_rec *r, const oidc_cfg_t *cfg, const oidc_json_t *j_result,
 				     apr_hash_t *response_hdrs, const char *url, const char *method,
 				     const char *access_token, char **dpop);
 
@@ -264,6 +264,6 @@ apr_byte_t oidc_proto_token_refresh_request(request_rec *r, oidc_cfg_t *cfg, con
 apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
 				       const char *id_token_sub, const char *access_token,
 				       const char *access_token_type, char **s_userinfo, char **userinfo_jwt,
-				       json_t **userinfo_claims, long *response_code);
+				       oidc_json_t **userinfo_claims, long *response_code);
 
 #endif /* _MOD_AUTH_OPENIDC_PROTO_H_ */

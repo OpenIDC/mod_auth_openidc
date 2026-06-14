@@ -36,6 +36,7 @@
 #include "state.h"
 #include "util.h"
 #include "util/util.h"
+#include <jansson.h> /* this test builds JSON fixtures with the backend API directly (no longer pulled in via jose.h) */
 
 /* the top-level dispatch entry for OIDCRedirectURI requests lives in
  * mod_auth_openidc.c and has no public header — declare it here so the
@@ -67,7 +68,7 @@ START_TEST(test_handle_userinfo_retrieve_no_endpoint) {
 	/* fresh provider with no userinfo_endpoint set */
 	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
 
-	json_t *claims = NULL;
+	oidc_json_t *claims = NULL;
 	char *userinfo_jwt = NULL;
 	const char *result = oidc_userinfo_retrieve_claims(r, c, provider, "AT", "Bearer", NULL,
 							   apr_pstrdup(r->pool, "alice"), &claims, &userinfo_jwt);
@@ -83,7 +84,7 @@ START_TEST(test_handle_userinfo_retrieve_no_access_token) {
 
 	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, "https://idp.example.com/userinfo");
 
-	json_t *claims = NULL;
+	oidc_json_t *claims = NULL;
 	char *userinfo_jwt = NULL;
 	/* NULL access_token short-circuits to NULL */
 	const char *result = oidc_userinfo_retrieve_claims(r, c, provider, NULL, "Bearer", NULL,
@@ -105,17 +106,17 @@ START_TEST(test_handle_userinfo_retrieve_success_no_session) {
 	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
 	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
 
-	json_t *claims = NULL;
+	oidc_json_t *claims = NULL;
 	char *userinfo_jwt = NULL;
 	const char *result = oidc_userinfo_retrieve_claims(r, c, provider, "AT", "Bearer", NULL,
 							   apr_pstrdup(r->pool, "alice"), &claims, &userinfo_jwt);
 	ck_assert_ptr_nonnull(result);
 	ck_assert_ptr_nonnull(claims);
-	ck_assert_str_eq(json_string_value(json_object_get(claims, "name")), "Alice Example");
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(claims, "name")), "Alice Example");
 
 	(void)oidc_test_http_server_wait(srv);
 	oidc_test_http_server_stop(srv);
-	json_decref(claims);
+	oidc_json_decref(claims);
 }
 END_TEST
 
@@ -131,7 +132,7 @@ START_TEST(test_handle_userinfo_retrieve_failure_no_session) {
 	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
 	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
 
-	json_t *claims = NULL;
+	oidc_json_t *claims = NULL;
 	char *userinfo_jwt = NULL;
 	/* userinfo call fails and no session is provided => no refresh path => NULL */
 	const char *result = oidc_userinfo_retrieve_claims(r, c, provider, "AT", "Bearer", NULL,
@@ -150,12 +151,12 @@ START_TEST(test_handle_userinfo_store_and_clear_claims) {
 	oidc_session_t *session = NULL;
 	oidc_session_load(r, &session);
 
-	json_t *claims = json_pack("{s:s,s:s}", "sub", "alice", "name", "Alice");
+	oidc_json_t *claims = json_pack("{s:s,s:s}", "sub", "alice", "name", "Alice");
 	oidc_userinfo_store_claims(r, c, session, provider, claims, "the-jwt");
 
-	json_t *stored = oidc_session_get_userinfo_claims(r, session);
+	oidc_json_t *stored = oidc_session_get_userinfo_claims(r, session);
 	ck_assert_ptr_nonnull(stored);
-	ck_assert_str_eq(json_string_value(json_object_get(stored, "sub")), "alice");
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(stored, "sub")), "alice");
 	ck_assert_str_eq(oidc_session_get_userinfo_jwt(r, session), "the-jwt");
 
 	/* passing NULL clears both */
@@ -163,7 +164,7 @@ START_TEST(test_handle_userinfo_store_and_clear_claims) {
 	ck_assert_ptr_null(oidc_session_get_userinfo_claims(r, session));
 	ck_assert_ptr_null(oidc_session_get_userinfo_jwt(r, session));
 
-	json_decref(claims);
+	oidc_json_decref(claims);
 	oidc_session_free(r, session);
 }
 END_TEST
@@ -390,24 +391,24 @@ START_TEST(test_handle_response_save_in_session_with_userinfo) {
 	jwt->payload.sub = apr_pstrdup(r->pool, "alice");
 	jwt->payload.exp = apr_time_sec(apr_time_now()) + 3600;
 	/* embed a sid claim into the id_token payload */
-	json_object_set_new(jwt->payload.value.json, "sid", json_string("session-id-xyz"));
+	oidc_json_object_set_new(jwt->payload.value.json, "sid", oidc_json_string("session-id-xyz"));
 
-	json_t *userinfo = json_pack("{s:s,s:s}", "sub", "alice", "email", "alice@example.com");
+	oidc_json_t *userinfo = json_pack("{s:s,s:s}", "sub", "alice", "email", "alice@example.com");
 
 	apr_byte_t rc = oidc_response_save_in_session(
 	    r, c, session, provider, "alice", "id-token", jwt, "{\"sub\":\"alice\"}", userinfo, "AT", "Bearer", 600,
 	    NULL, "openid", NULL, "state-2", "https://www.example.com/protected/", "userinfo-jwt-here");
 	ck_assert_int_eq(rc, TRUE);
 
-	json_t *stored = oidc_session_get_userinfo_claims(r, session);
+	oidc_json_t *stored = oidc_session_get_userinfo_claims(r, session);
 	ck_assert_ptr_nonnull(stored);
-	ck_assert_str_eq(json_string_value(json_object_get(stored, "email")), "alice@example.com");
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(stored, "email")), "alice@example.com");
 
 	ck_assert_str_eq(oidc_session_get_userinfo_jwt(r, session), "userinfo-jwt-here");
 	/* sid should be derived from the SID claim */
 	ck_assert_msg(_oidc_strstr(session->sid, "session-id-xyz@") != NULL, "sid should embed the claim");
 
-	json_decref(userinfo);
+	oidc_json_decref(userinfo);
 	oidc_jwt_destroy(jwt);
 	oidc_session_free(r, session);
 }
@@ -535,13 +536,13 @@ static char *e2e_sign_idtoken_hs256(request_rec *r, const char *issuer, const ch
 
 	oidc_jwt_t *jwt = oidc_jwt_new(pool, TRUE, TRUE);
 	jwt->header.alg = apr_pstrdup(pool, "HS256");
-	json_object_set_new(jwt->payload.value.json, "iss", json_string(issuer));
-	json_object_set_new(jwt->payload.value.json, "aud", json_string(client_id));
-	json_object_set_new(jwt->payload.value.json, "sub", json_string(sub));
-	json_object_set_new(jwt->payload.value.json, "nonce", json_string(nonce));
+	oidc_json_object_set_new(jwt->payload.value.json, "iss", oidc_json_string(issuer));
+	oidc_json_object_set_new(jwt->payload.value.json, "aud", oidc_json_string(client_id));
+	oidc_json_object_set_new(jwt->payload.value.json, "sub", oidc_json_string(sub));
+	oidc_json_object_set_new(jwt->payload.value.json, "nonce", oidc_json_string(nonce));
 	apr_time_t now = apr_time_sec(apr_time_now());
-	json_object_set_new(jwt->payload.value.json, "iat", json_integer(now));
-	json_object_set_new(jwt->payload.value.json, "exp", json_integer(now + 600));
+	oidc_json_object_set_new(jwt->payload.value.json, "iat", oidc_json_integer(now));
+	oidc_json_object_set_new(jwt->payload.value.json, "exp", oidc_json_integer(now + 600));
 	/* keep payload.iss / .sub / .iat / .exp in sync with the JSON for the validator */
 	jwt->payload.iss = apr_pstrdup(pool, issuer);
 	jwt->payload.sub = apr_pstrdup(pool, sub);
@@ -1216,9 +1217,9 @@ START_TEST(test_handle_userinfo_refresh_with_interval) {
 	ck_assert_int_eq(oidc_userinfo_refresh_claims(r, c, session, &needs_save), TRUE);
 	ck_assert_int_eq(needs_save, TRUE);
 
-	json_t *stored = oidc_session_get_userinfo_claims(r, session);
+	oidc_json_t *stored = oidc_session_get_userinfo_claims(r, session);
 	ck_assert_ptr_nonnull(stored);
-	ck_assert_str_eq(json_string_value(json_object_get(stored, "email")), "alice@example.com");
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(stored, "email")), "alice@example.com");
 
 	(void)oidc_test_http_server_wait(srv);
 	oidc_test_http_server_stop(srv);
@@ -1233,7 +1234,7 @@ START_TEST(test_handle_userinfo_pass_as_jwt) {
 	oidc_session_load(r, &session);
 
 	/* seed the session with both claims and the JWT representation of those claims */
-	json_t *claims = json_pack("{s:s}", "sub", "alice");
+	oidc_json_t *claims = json_pack("{s:s}", "sub", "alice");
 	oidc_session_set_userinfo_claims(r, session, claims);
 	oidc_session_set_userinfo_jwt(r, session, "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGljZSJ9.sig-bytes");
 
@@ -1247,7 +1248,7 @@ START_TEST(test_handle_userinfo_pass_as_jwt) {
 	ck_assert_ptr_nonnull(hdr);
 	ck_assert_str_eq(hdr, "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGljZSJ9.sig-bytes");
 
-	json_decref(claims);
+	oidc_json_decref(claims);
 	oidc_session_free(r, session);
 }
 END_TEST
@@ -1258,7 +1259,7 @@ START_TEST(test_handle_userinfo_pass_as_signed_jwt_without_private_keys) {
 	oidc_session_t *session = NULL;
 	oidc_session_load(r, &session);
 
-	json_t *claims = json_pack("{s:s}", "sub", "alice");
+	oidc_json_t *claims = json_pack("{s:s}", "sub", "alice");
 	oidc_session_set_userinfo_claims(r, session, claims);
 
 	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
@@ -1272,7 +1273,7 @@ START_TEST(test_handle_userinfo_pass_as_signed_jwt_without_private_keys) {
 
 	ck_assert_table_unset(r->headers_in, OIDC_DEFAULT_HEADER_PREFIX OIDC_APP_INFO_SIGNED_JWT);
 
-	json_decref(claims);
+	oidc_json_decref(claims);
 	oidc_session_free(r, session);
 }
 END_TEST
@@ -1290,7 +1291,7 @@ START_TEST(test_handle_userinfo_pass_as_signed_jwt_with_private_keys) {
 	    key_cmd, NULL, apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir)));
 	ck_assert_msg(key_err == NULL, "could not load private key: %s", key_err);
 
-	json_t *claims = json_pack("{s:s}", "sub", "alice");
+	oidc_json_t *claims = json_pack("{s:s}", "sub", "alice");
 	oidc_session_set_userinfo_claims(r, session, claims);
 
 	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
@@ -1325,7 +1326,7 @@ START_TEST(test_handle_userinfo_pass_as_signed_jwt_with_private_keys) {
 	ck_assert_ptr_nonnull(_oidc_strstr(dec_pl, "\"iss\":\"https://idp.example.com\""));
 	ck_assert_ptr_nonnull(_oidc_strstr(dec_pl, "\"exp\""));
 
-	json_decref(claims);
+	oidc_json_decref(claims);
 	oidc_session_free(r, session);
 }
 END_TEST
@@ -1342,7 +1343,7 @@ START_TEST(test_handle_userinfo_pass_as_signed_jwt_cached) {
 	    key_cmd, NULL, apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir)));
 	ck_assert_msg(key_err == NULL, "could not load private key: %s", key_err);
 
-	json_t *claims = json_pack("{s:s}", "sub", "alice");
+	oidc_json_t *claims = json_pack("{s:s}", "sub", "alice");
 	oidc_session_set_userinfo_claims(r, session, claims);
 
 	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
@@ -1366,7 +1367,7 @@ START_TEST(test_handle_userinfo_pass_as_signed_jwt_cached) {
 	ck_assert_ptr_nonnull(second);
 	ck_assert_str_eq(first, second);
 
-	json_decref(claims);
+	oidc_json_decref(claims);
 	oidc_session_free(r, session);
 }
 END_TEST
@@ -1378,7 +1379,7 @@ START_TEST(test_handle_userinfo_pass_as_json) {
 	oidc_session_load(r, &session);
 
 	/* seed the session with userinfo claims and configure the dir to pass them as a JSON header */
-	json_t *claims = json_pack("{s:s,s:s}", "sub", "alice", "groups", "admins");
+	oidc_json_t *claims = json_pack("{s:s,s:s}", "sub", "alice", "groups", "admins");
 	oidc_session_set_userinfo_claims(r, session, claims);
 
 	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
@@ -1393,7 +1394,7 @@ START_TEST(test_handle_userinfo_pass_as_json) {
 	ck_assert_msg(_oidc_strstr(hdr, "\"sub\":\"alice\"") != NULL,
 		      "JSON-encoded userinfo should be passed as a header");
 
-	json_decref(claims);
+	oidc_json_decref(claims);
 	oidc_session_free(r, session);
 }
 END_TEST
@@ -1514,7 +1515,7 @@ END_TEST
  */
 
 /* helper that re-applies the same Require-claim pattern used throughout the legacy tests */
-static authz_status _legacy_authz(request_rec *r, json_t *json, const char *require_args) {
+static authz_status _legacy_authz(request_rec *r, oidc_json_t *json, const char *require_args) {
 	ap_expr_info_t *parsed = (ap_expr_info_t *)apr_pcalloc(r->pool, sizeof(ap_expr_info_t));
 	parsed->filename = require_args;
 	return oidc_authz_24_worker(r, json, require_args, parsed, oidc_authz_match_claim);
@@ -1542,7 +1543,7 @@ START_TEST(test_handle_legacy_authz_worker) {
 			     "\"https://company.com/productAccess\":[\"snake2\",\"snake2ref\",\"fxt\"]"
 			     "}";
 	json_error_t err;
-	json_t *json = json_loads(claims, 0, &err);
+	oidc_json_t *json = json_loads(claims, 0, &err);
 	ck_assert_msg(json != NULL, "JSON parsed [%s]", err.text);
 
 	/* simple sub claim — denied / granted */
@@ -1585,43 +1586,43 @@ START_TEST(test_handle_legacy_authz_worker) {
 	ck_assert_int_eq(_legacy_authz(r, json, "Require claim anegativeint:$99"), AUTHZ_DENIED);
 	ck_assert_int_eq(_legacy_authz(r, json, "Require claim aminusoneint:-1"), AUTHZ_GRANTED);
 
-	json_decref(json);
+	oidc_json_decref(json);
 }
 END_TEST
 
 START_TEST(test_handle_legacy_remote_user) {
 	request_rec *r = oidc_test_request_get();
 	char *remote_user = NULL;
-	json_t *json = NULL;
+	oidc_json_t *json = NULL;
 
 	/* simple username extracted by regex first-match (no replace) */
-	ck_assert_int_eq(oidc_util_json_decode_object(r, "{\"upn\":\"nneul@umsystem.edu\"}", &json), TRUE);
+	ck_assert_int_eq(oidc_json_decode_object(r, "{\"upn\":\"nneul@umsystem.edu\"}", &json), TRUE);
 	oidc_get_remote_user(r, "upn", "^(.*)@umsystem\\.edu", NULL, json, &remote_user);
 	ck_assert_str_eq(remote_user, "nneul");
 	ck_assert_int_eq(oidc_get_remote_user(r, "upn", "^(.*)@umsystem\\.edu", "$1", json, &remote_user), TRUE);
 	ck_assert_str_eq(remote_user, "nneul");
-	json_decref(json);
+	oidc_json_decref(json);
 
 	/* regex with replace expression that swaps captured groups */
 	json = NULL;
-	ck_assert_int_eq(oidc_util_json_decode_object(r, "{\"email\":\"nneul@umsystem.edu\"}", &json), TRUE);
+	ck_assert_int_eq(oidc_json_decode_object(r, "{\"email\":\"nneul@umsystem.edu\"}", &json), TRUE);
 	ck_assert_int_eq(oidc_get_remote_user(r, "email", "^(.*)@([^.]+)\\..+$", "$2\\$1", json, &remote_user), TRUE);
 	ck_assert_str_eq(remote_user, "umsystem\\nneul");
-	json_decref(json);
+	oidc_json_decref(json);
 
 	/* UTF-8 username — must round-trip through the replace expression intact */
 	json = NULL;
-	ck_assert_int_eq(oidc_util_json_decode_object(r, "{ \"name\": \"Dominik František Bučík\" }", &json), TRUE);
+	ck_assert_int_eq(oidc_json_decode_object(r, "{ \"name\": \"Dominik František Bučík\" }", &json), TRUE);
 	ck_assert_int_eq(oidc_get_remote_user(r, "name", "^(.*)$", "$1@test.com", json, &remote_user), TRUE);
 	ck_assert_str_eq(remote_user, "Dominik František Bučík@test.com");
-	json_decref(json);
+	oidc_json_decref(json);
 
 	json = NULL;
-	ck_assert_int_eq(oidc_util_json_decode_object(r, "{ \"preferred_username\": \"dbucik\" }", &json), TRUE);
+	ck_assert_int_eq(oidc_json_decode_object(r, "{ \"preferred_username\": \"dbucik\" }", &json), TRUE);
 	ck_assert_int_eq(oidc_get_remote_user(r, "preferred_username", "^(.*)$", "$1@test.com", json, &remote_user),
 			 TRUE);
 	ck_assert_str_eq(remote_user, "dbucik@test.com");
-	json_decref(json);
+	oidc_json_decref(json);
 }
 END_TEST
 
@@ -1892,10 +1893,10 @@ START_TEST(test_handle_mod_set_app_claims_pass_none) {
 	ck_assert_ptr_null(oidc_cmd_dir_pass_claims_as_set(cmd, dir_cfg, "none", NULL));
 
 	/* PASS_NONE short-circuits => returns TRUE without populating env vars */
-	json_t *claims = json_pack("{s:s}", "sub", "alice");
+	oidc_json_t *claims = json_pack("{s:s}", "sub", "alice");
 	ck_assert_int_eq(oidc_set_app_claims(r, c, claims), TRUE);
 	ck_assert_table_unset(r->subprocess_env, "OIDC_CLAIM_sub");
-	json_decref(claims);
+	oidc_json_decref(claims);
 }
 END_TEST
 
@@ -1904,10 +1905,10 @@ START_TEST(test_handle_mod_set_app_claims_pass_both) {
 	oidc_cfg_t *c = oidc_test_cfg_get();
 
 	/* default OIDCPassClaimsAs is "both" => the claim ends up as an env var */
-	json_t *claims = json_pack("{s:s}", "sub", "alice");
+	oidc_json_t *claims = json_pack("{s:s}", "sub", "alice");
 	ck_assert_int_eq(oidc_set_app_claims(r, c, claims), TRUE);
 	ck_assert_table_str(r->subprocess_env, "OIDC_CLAIM_sub", "alice");
-	json_decref(claims);
+	oidc_json_decref(claims);
 }
 END_TEST
 
@@ -1970,7 +1971,7 @@ END_TEST
 
 START_TEST(test_handle_mod_get_remote_user_missing_claim) {
 	request_rec *r = oidc_test_request_get();
-	json_t *json = json_pack("{s:s}", "sub", "alice");
+	oidc_json_t *json = json_pack("{s:s}", "sub", "alice");
 	char *remote_user = NULL;
 
 	/* requested claim missing => FALSE, remote_user left untouched */
@@ -1978,9 +1979,9 @@ START_TEST(test_handle_mod_get_remote_user_missing_claim) {
 	ck_assert_ptr_null(remote_user);
 
 	/* claim present but not a string => FALSE as well */
-	json_object_set_new(json, "preferred_username", json_integer(42));
+	oidc_json_object_set_new(json, "preferred_username", oidc_json_integer(42));
 	ck_assert_int_eq(oidc_get_remote_user(r, "preferred_username", NULL, NULL, json, &remote_user), FALSE);
-	json_decref(json);
+	oidc_json_decref(json);
 }
 END_TEST
 
@@ -2021,7 +2022,7 @@ END_TEST
 
 START_TEST(test_handle_mod_get_remote_user_regexp) {
 	request_rec *r = oidc_test_request_get();
-	json_t *json = json_pack("{s:s}", "email", "Alice@Example.COM");
+	oidc_json_t *json = json_pack("{s:s}", "email", "Alice@Example.COM");
 	char *remote_user = NULL;
 
 	/* substitution path (reg_exp + replace): rewrite the claim value */
@@ -2043,7 +2044,7 @@ START_TEST(test_handle_mod_get_remote_user_regexp) {
 	ck_assert_int_eq(oidc_get_remote_user(r, "email", "(", NULL, json, &remote_user), FALSE);
 	ck_assert_ptr_null(remote_user);
 
-	json_decref(json);
+	oidc_json_decref(json);
 }
 END_TEST
 
@@ -2743,19 +2744,20 @@ static char *e2e_sign_backchannel_logout_jwt(request_rec *r, const char *iss, co
 
 	oidc_jwt_t *jwt = oidc_jwt_new(pool, TRUE, TRUE);
 	jwt->header.alg = apr_pstrdup(pool, "HS256");
-	json_object_set_new(jwt->payload.value.json, "iss", json_string(iss));
-	json_object_set_new(jwt->payload.value.json, "aud", json_string(aud));
-	json_object_set_new(jwt->payload.value.json, "sub", json_string(sub));
-	json_object_set_new(jwt->payload.value.json, "jti", json_string(jti));
+	oidc_json_object_set_new(jwt->payload.value.json, "iss", oidc_json_string(iss));
+	oidc_json_object_set_new(jwt->payload.value.json, "aud", oidc_json_string(aud));
+	oidc_json_object_set_new(jwt->payload.value.json, "sub", oidc_json_string(sub));
+	oidc_json_object_set_new(jwt->payload.value.json, "jti", oidc_json_string(jti));
 	apr_time_t now = apr_time_sec(apr_time_now());
-	json_object_set_new(jwt->payload.value.json, "iat", json_integer(now));
+	oidc_json_object_set_new(jwt->payload.value.json, "iat", oidc_json_integer(now));
 	if (with_events) {
-		json_t *events = json_object();
-		json_object_set_new(events, "http://schemas.openid.net/event/backchannel-logout", json_object());
-		json_object_set_new(jwt->payload.value.json, "events", events);
+		oidc_json_t *events = oidc_json_object();
+		oidc_json_object_set_new(events, "http://schemas.openid.net/event/backchannel-logout",
+					 oidc_json_object());
+		oidc_json_object_set_new(jwt->payload.value.json, "events", events);
 	}
 	if (with_nonce)
-		json_object_set_new(jwt->payload.value.json, "nonce", json_string("n1"));
+		oidc_json_object_set_new(jwt->payload.value.json, "nonce", oidc_json_string("n1"));
 	jwt->payload.iss = apr_pstrdup(pool, iss);
 	jwt->payload.sub = apr_pstrdup(pool, sub);
 	jwt->payload.iat = now;
@@ -3071,9 +3073,9 @@ START_TEST(test_handle_authz_24_claim_granted_from_idtoken) {
 	request_rec *r = oidc_test_request_get();
 	r->user = apr_pstrdup(r->pool, "alice");
 	/* seed an id_token in the request state so merge_claims has something to evaluate */
-	json_t *id_token = json_pack("{s:s}", "sub", "alice");
+	oidc_json_t *id_token = json_pack("{s:s}", "sub", "alice");
 	oidc_request_state_json_set(r, OIDC_REQUEST_STATE_KEY_IDTOKEN, id_token);
-	json_decref(id_token);
+	oidc_json_decref(id_token);
 
 	authz_status rc = oidc_authz_24_checker_claim(r, "claim sub:alice", NULL);
 	ck_assert_int_eq(rc, AUTHZ_GRANTED);

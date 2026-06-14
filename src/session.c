@@ -69,7 +69,7 @@ static apr_byte_t oidc_session_encode(request_rec *r, const oidc_cfg_t *c, const
 				      apr_byte_t encrypt) {
 
 	if (encrypt == FALSE) {
-		*s_value = oidc_util_json_encode(r->pool, z->state, JSON_COMPACT);
+		*s_value = oidc_json_encode(r->pool, z->state, OIDC_JSON_COMPACT);
 		return (*s_value != NULL);
 	} else if (oidc_cfg_crypto_passphrase_secret1_get(c) == NULL) {
 		oidc_error(r, "cannot encrypt session state because " OIDCCryptoPassphrase " is not set");
@@ -77,7 +77,7 @@ static apr_byte_t oidc_session_encode(request_rec *r, const oidc_cfg_t *c, const
 	}
 
 	if (oidc_util_jwt_create(r, oidc_cfg_crypto_passphrase_get(c),
-				 oidc_util_json_encode(r->pool, z->state, JSON_COMPACT), s_value) == FALSE)
+				 oidc_json_encode(r->pool, z->state, OIDC_JSON_COMPACT), s_value) == FALSE)
 		return FALSE;
 
 	return TRUE;
@@ -91,7 +91,7 @@ static apr_byte_t oidc_session_decode(request_rec *r, const oidc_cfg_t *c, oidc_
 	char *s_payload = NULL;
 
 	if (encrypt == FALSE) {
-		return oidc_util_json_decode_object(r, s_json, &z->state);
+		return oidc_json_decode_object(r, s_json, &z->state);
 	} else if (oidc_cfg_crypto_passphrase_secret1_get(c) == NULL) {
 		oidc_error(r, "cannot decrypt session state because " OIDCCryptoPassphrase " is not set");
 		return FALSE;
@@ -102,7 +102,7 @@ static apr_byte_t oidc_session_decode(request_rec *r, const oidc_cfg_t *c, oidc_
 		return FALSE;
 	}
 
-	return oidc_util_json_decode_object(r, s_payload, &z->state);
+	return oidc_json_decode_object(r, s_payload, &z->state);
 }
 
 #define OIDC_SESSION_ID_LEN 20
@@ -122,7 +122,7 @@ static void oidc_session_clear(request_rec *r, oidc_session_t *z) {
 	// NB: don't clear sid or uuid
 	z->expiry = 0;
 	if (z->state) {
-		json_decref(z->state);
+		oidc_json_decref(z->state);
 		z->state = NULL;
 	}
 }
@@ -133,7 +133,7 @@ static void oidc_session_clear(request_rec *r, oidc_session_t *z) {
 static apr_byte_t oidc_session_get(request_rec *r, const oidc_session_t *z, const char *key, char **value) {
 
 	/* just return the value for the key */
-	oidc_util_json_object_get_string(r->pool, z->state, key, value, NULL);
+	oidc_json_object_get_string(r->pool, z->state, key, value, NULL);
 
 	return TRUE;
 }
@@ -141,15 +141,15 @@ static apr_byte_t oidc_session_get(request_rec *r, const oidc_session_t *z, cons
 /*
  * set a name/value key pair in the session
  */
-static apr_byte_t oidc_session_json_set(request_rec *r, oidc_session_t *z, const char *key, json_t *value) {
+static apr_byte_t oidc_session_json_set(request_rec *r, oidc_session_t *z, const char *key, oidc_json_t *value) {
 
 	/* only set it if non-NULL, otherwise delete the entry */
 	if (value) {
 		if (z->state == NULL)
-			z->state = json_object();
-		json_object_set_new(z->state, key, value);
+			z->state = oidc_json_object();
+		oidc_json_object_set_new(z->state, key, value);
 	} else if (z->state != NULL) {
-		json_object_del(z->state, key);
+		oidc_json_object_del(z->state, key);
 	}
 
 	return TRUE;
@@ -158,15 +158,15 @@ static apr_byte_t oidc_session_json_set(request_rec *r, oidc_session_t *z, const
 /*
  * get a json object from the session based on the name from a name/value pair
  */
-static json_t *oidc_session_json_get(request_rec *r, const oidc_session_t *z, const char *key) {
-	return json_object_get(z->state, key);
+static oidc_json_t *oidc_session_json_get(request_rec *r, const oidc_session_t *z, const char *key) {
+	return oidc_json_object_get(z->state, key);
 }
 
 /*
  * set a name/string key pair in the session
  */
 static apr_byte_t oidc_session_set(request_rec *r, oidc_session_t *z, const char *key, const char *value) {
-	return oidc_session_json_set(r, z, key, value ? json_string(value) : NULL);
+	return oidc_session_json_set(r, z, key, value ? oidc_json_string(value) : NULL);
 }
 
 /*
@@ -334,7 +334,7 @@ static apr_byte_t oidc_session_save_cookie(request_rec *r, const oidc_session_t 
  */
 static inline int oidc_session_get_int(request_rec *r, const oidc_session_t *z, const char *key, int def_val) {
 	int v;
-	oidc_util_json_object_get_int(z->state, key, &v, def_val);
+	oidc_json_object_get_int(z->state, key, &v, def_val);
 	return v;
 }
 
@@ -343,7 +343,7 @@ static inline int oidc_session_get_int(request_rec *r, const oidc_session_t *z, 
  */
 static inline apr_time_t oidc_session_get_key2timestamp(request_rec *r, const oidc_session_t *z, const char *key) {
 	int value = -1;
-	oidc_util_json_object_get_int(z->state, key, &value, -1);
+	oidc_json_object_get_int(z->state, key, &value, -1);
 	return (value > -1) ? apr_time_from_sec(value) : -1;
 }
 
@@ -352,14 +352,14 @@ static inline apr_time_t oidc_session_get_key2timestamp(request_rec *r, const oi
  */
 apr_byte_t oidc_session_extract(request_rec *r, oidc_session_t *z) {
 	apr_byte_t rc = FALSE;
-	const json_t *json = NULL;
+	const oidc_json_t *json = NULL;
 
 	if (z->state == NULL)
 		goto out;
 
 	/* sanity check also taking into account OIDC_DONT_STORE_ID_TOKEN_CLAIMS_IN_SESSION=true */
 	json = oidc_session_json_get(r, z, OIDC_SESSION_KEY_IDTOKEN_CLAIMS);
-	if ((json != NULL) && (!json_is_object(json))) {
+	if ((json != NULL) && (!oidc_json_is_object(json))) {
 
 		oidc_error(r, "session is corrupted/incompatible: id_token claims is not a JSON object");
 		oidc_session_kill(r, z);
@@ -425,8 +425,8 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
  */
 static void oidc_session_set_int(request_rec *r, oidc_session_t *z, const char *key, int v) {
 	if (z->state == NULL)
-		z->state = json_object();
-	json_object_set_new(z->state, key, json_integer(v));
+		z->state = oidc_json_object();
+	oidc_json_object_set_new(z->state, key, oidc_json_integer(v));
 }
 
 /*
@@ -478,7 +478,7 @@ apr_byte_t oidc_session_free(request_rec *r, oidc_session_t *z) {
 apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z) {
 	r->user = NULL;
 	if (z->state) {
-		json_decref(z->state);
+		oidc_json_decref(z->state);
 		z->state = NULL;
 	}
 	oidc_session_save(r, z, FALSE);
@@ -578,9 +578,11 @@ static apr_byte_t oidc_session_claim_is_allowed(request_rec *r, const oidc_cfg_t
  * record a single allowed claim into the destination object, increment metrics and warn on oversized values
  */
 static void oidc_session_filtered_claim_record(request_rec *r, const oidc_cfg_t *c, const char *session_key,
-					       const char *name, json_t *value, json_t *dst, int warn_claim_size) {
-	const char *str =
-	    value ? oidc_util_json_encode(r->pool, value, JSON_PRESERVE_ORDER | JSON_COMPACT | JSON_ENCODE_ANY) : "";
+					       const char *name, oidc_json_t *value, oidc_json_t *dst,
+					       int warn_claim_size) {
+	const char *str = value ? oidc_json_encode(r->pool, value,
+						   OIDC_JSON_PRESERVE_ORDER | OIDC_JSON_COMPACT | OIDC_JSON_ENCODE_ANY)
+				: "";
 
 	if (_oidc_strlen(str) > warn_claim_size)
 		oidc_warn(r,
@@ -589,9 +591,9 @@ static void oidc_session_filtered_claim_record(request_rec *r, const oidc_cfg_t 
 			  "or increase the warning limit with environment variable %s",
 			  session_key, name, warn_claim_size, OIDC_SESSION_WARN_CLAIM_SIZE_VAR);
 
-	json_object_set(dst, name, value);
+	oidc_json_object_set(dst, name, value);
 
-	const char *metric_value = json_is_string(value) ? json_string_value(value) : str;
+	const char *metric_value = oidc_json_is_string(value) ? oidc_json_string_value(value) : str;
 	if (_oidc_strcmp(session_key, OIDC_SESSION_KEY_USERINFO_CLAIMS) == 0) {
 		OIDC_METRICS_COUNTER_INC_NAME_VALUE(r, c, OM_CLAIM_USER_INFO, name, metric_value);
 	} else {
@@ -603,7 +605,8 @@ static void oidc_session_filtered_claim_record(request_rec *r, const oidc_cfg_t 
 /*
  * apply the configured JQ filter to the collected claims; replaces *dst with the filtered object on success
  */
-static void oidc_session_jq_filter_apply(request_rec *r, const oidc_cfg_t *c, const char *session_key, json_t **dst) {
+static void oidc_session_jq_filter_apply(request_rec *r, const oidc_cfg_t *c, const char *session_key,
+					 oidc_json_t **dst) {
 	const oidc_apr_expr_t *filter = oidc_cfg_filter_claims_expr_get(c);
 	const char *s_filter = oidc_util_apr_expr_exec(r, filter, TRUE);
 
@@ -611,9 +614,9 @@ static void oidc_session_jq_filter_apply(request_rec *r, const oidc_cfg_t *c, co
 		return;
 
 	const char *filtered_claims = oidc_util_jq_filter(r, *dst, s_filter);
-	json_decref(*dst);
+	oidc_json_decref(*dst);
 	*dst = NULL;
-	if (oidc_util_json_decode_object(r, filtered_claims, dst) == FALSE)
+	if (oidc_json_decode_object(r, filtered_claims, dst) == FALSE)
 		oidc_error(r, "JQ filtering of claims for [%s] resulted in invalid JSON object, filter='%s'",
 			   session_key, s_filter);
 }
@@ -624,9 +627,9 @@ static void oidc_session_jq_filter_apply(request_rec *r, const oidc_cfg_t *c, co
  * session_key may refer to id_token claims or userinfo claims
  */
 static void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, const char *session_key,
-					     json_t *claims) {
+					     oidc_json_t *claims) {
 	const oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
-	json_t *dst = NULL;
+	oidc_json_t *dst = NULL;
 	void *iter = NULL;
 	int warn_claim_size = oidc_session_warn_claim_size_get(r);
 
@@ -635,19 +638,19 @@ static void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, 
 		session_key = "";
 
 	if (claims != NULL) {
-		dst = json_object();
-		iter = json_object_iter(claims);
+		dst = oidc_json_object();
+		iter = oidc_json_object_iter(claims);
 	}
 
 	// NB: need this loop for all claims for the metrics
 	while (iter) {
-		const char *name = json_object_iter_key(iter);
-		json_t *value = json_object_iter_value(iter);
+		const char *name = oidc_json_object_iter_key(iter);
+		oidc_json_t *value = oidc_json_object_iter_value(iter);
 
 		if (oidc_session_claim_is_allowed(r, c, session_key, name) == TRUE)
 			oidc_session_filtered_claim_record(r, c, session_key, name, value, dst, warn_claim_size);
 
-		iter = json_object_iter_next(claims, iter);
+		iter = oidc_json_object_iter_next(claims, iter);
 	}
 
 #ifdef USE_LIBJQ
@@ -660,11 +663,11 @@ static void oidc_session_set_filtered_claims(request_rec *r, oidc_session_t *z, 
 /*
  * userinfo claims
  */
-void oidc_session_set_userinfo_claims(request_rec *r, oidc_session_t *z, json_t *claims_json) {
+void oidc_session_set_userinfo_claims(request_rec *r, oidc_session_t *z, oidc_json_t *claims_json) {
 	oidc_session_set_filtered_claims(r, z, OIDC_SESSION_KEY_USERINFO_CLAIMS, claims_json);
 }
 
-json_t *oidc_session_get_userinfo_claims(request_rec *r, const oidc_session_t *z) {
+oidc_json_t *oidc_session_get_userinfo_claims(request_rec *r, const oidc_session_t *z) {
 	return oidc_session_json_get(r, z, OIDC_SESSION_KEY_USERINFO_CLAIMS);
 }
 
@@ -679,12 +682,12 @@ const char *oidc_session_get_userinfo_jwt(request_rec *r, const oidc_session_t *
 /*
  * id_token claims
  */
-void oidc_session_set_idtoken_claims(request_rec *r, oidc_session_t *z, json_t *idtoken_claims) {
+void oidc_session_set_idtoken_claims(request_rec *r, oidc_session_t *z, oidc_json_t *idtoken_claims) {
 	if (apr_table_get(r->subprocess_env, "OIDC_DONT_STORE_ID_TOKEN_CLAIMS_IN_SESSION") == NULL)
 		oidc_session_set_filtered_claims(r, z, OIDC_SESSION_KEY_IDTOKEN_CLAIMS, idtoken_claims);
 }
 
-json_t *oidc_session_get_idtoken_claims(request_rec *r, const oidc_session_t *z) {
+oidc_json_t *oidc_session_get_idtoken_claims(request_rec *r, const oidc_session_t *z) {
 	return oidc_session_json_get(r, z, OIDC_SESSION_KEY_IDTOKEN_CLAIMS);
 }
 
@@ -855,11 +858,11 @@ const char *oidc_session_get_issuer(request_rec *r, const oidc_session_t *z) {
  */
 void oidc_session_set_session_new(request_rec *r, oidc_session_t *z, const int is_new) {
 	if (z->state == NULL)
-		z->state = json_object();
+		z->state = oidc_json_object();
 	if (is_new)
-		json_object_set_new(z->state, OIDC_SESSION_KEY_SESSION_IS_NEW, json_integer(1));
+		oidc_json_object_set_new(z->state, OIDC_SESSION_KEY_SESSION_IS_NEW, oidc_json_integer(1));
 	else
-		json_object_del(z->state, OIDC_SESSION_KEY_SESSION_IS_NEW);
+		oidc_json_object_del(z->state, OIDC_SESSION_KEY_SESSION_IS_NEW);
 }
 
 int oidc_session_get_session_new(request_rec *r, const oidc_session_t *z) {

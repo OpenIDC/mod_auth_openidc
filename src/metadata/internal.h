@@ -34,7 +34,7 @@
 #include "jose.h"
 #include "metadata.h"
 
-#include <jansson.h>
+#include "json.h"
 
 /* metadata file suffixes */
 #define OIDC_METADATA_SUFFIX_PROVIDER "provider"
@@ -138,8 +138,8 @@
 #define OIDC_METADATA_CONF_STR(j_conf, key, member)                                                                    \
 	do {                                                                                                           \
 		char *_v_ = NULL;                                                                                      \
-		oidc_util_json_object_get_string(r->pool, j_conf, key, &_v_,                                           \
-						 oidc_cfg_provider_##member##_get(oidc_cfg_provider_get(cfg)));        \
+		oidc_json_object_get_string(r->pool, j_conf, key, &_v_,                                                \
+					    oidc_cfg_provider_##member##_get(oidc_cfg_provider_get(cfg)));             \
 		if (_v_ != NULL) {                                                                                     \
 			const char *_rv_ = oidc_cfg_provider_##member##_set(r->pool, provider, _v_);                   \
 			if (_rv_ != NULL)                                                                              \
@@ -150,8 +150,8 @@
 #define OIDC_METADATA_CONF_INT(j_conf, key, member)                                                                    \
 	do {                                                                                                           \
 		int _v_ = OIDC_CONFIG_POS_INT_UNSET;                                                                   \
-		oidc_util_json_object_get_int(j_conf, key, &_v_,                                                       \
-					      oidc_cfg_provider_##member##_get(oidc_cfg_provider_get(cfg)));           \
+		oidc_json_object_get_int(j_conf, key, &_v_,                                                            \
+					 oidc_cfg_provider_##member##_get(oidc_cfg_provider_get(cfg)));                \
 		if (_v_ != OIDC_CONFIG_POS_INT_UNSET) {                                                                \
 			const char *_rv_ = oidc_cfg_provider_##member##_set(r->pool, provider, _v_);                   \
 			if (_rv_ != NULL)                                                                              \
@@ -172,16 +172,17 @@
 /*
  * shared internal helpers (see src/metadata/util.c)
  */
-apr_byte_t oidc_metadata_is_valid_uri(request_rec *r, const char *type, const char *issuer, const json_t *json,
+apr_byte_t oidc_metadata_is_valid_uri(request_rec *r, const char *type, const char *issuer, const oidc_json_t *json,
 				      const char *key, char **value, apr_byte_t is_mandatory);
-const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, const json_t *json, const char *key,
+const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, const oidc_json_t *json, const char *key,
 						oidc_valid_function_t valid_function, char **value, apr_byte_t optional,
 						const char *preference);
-void oidc_metadata_parse_boolean(request_rec *r, const json_t *json, const char *key, int *value, int default_value);
-void oidc_metadata_parse_url(request_rec *r, const char *type, const char *issuer, const json_t *json, const char *key,
-			     char **value, const char *default_value);
-void oidc_metadata_get_jwks(request_rec *r, const json_t *json, apr_array_header_t **jwk_list);
-apr_byte_t oidc_metadata_file_read_json(request_rec *r, const char *path, json_t **result);
+void oidc_metadata_parse_boolean(request_rec *r, const oidc_json_t *json, const char *key, int *value,
+				 int default_value);
+void oidc_metadata_parse_url(request_rec *r, const char *type, const char *issuer, const oidc_json_t *json,
+			     const char *key, char **value, const char *default_value);
+void oidc_metadata_get_jwks(request_rec *r, const oidc_json_t *json, apr_array_header_t **jwk_list);
+apr_byte_t oidc_metadata_file_read_json(request_rec *r, const char *path, oidc_json_t **result);
 
 /* path/filename helpers */
 const char *oidc_metadata_issuer_to_filename(request_rec *r, const char *issuer);
@@ -193,10 +194,10 @@ const char *oidc_metadata_conf_path(request_rec *r, const char *issuer);
 /*
  * cross-domain entry points used only by the metadata.c orchestrator
  */
-apr_byte_t oidc_metadata_conf_get(request_rec *r, const char *issuer, json_t **j_conf);
+apr_byte_t oidc_metadata_conf_get(request_rec *r, const char *issuer, oidc_json_t **j_conf);
 apr_byte_t oidc_metadata_client_get(request_rec *r, oidc_cfg_t *cfg, const char *issuer,
-				    const oidc_provider_t *provider, json_t **j_client);
+				    const oidc_provider_t *provider, oidc_json_t **j_client);
 apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
-					 json_t **j_client, char **response);
+					 oidc_json_t **j_client, char **response);
 
 #endif /* _MOD_AUTH_OPENIDC_METADATA_INTERNAL_H_ */

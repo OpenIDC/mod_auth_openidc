@@ -519,8 +519,8 @@ apr_array_header_t *oidc_cfg_provider_signed_jwks_uri_keys_get(const oidc_provid
 	return provider->jwks_uri.jwk_list;
 }
 
-const char *oidc_cfg_provider_signed_jwks_uri_keys_set(apr_pool_t *pool, oidc_provider_t *provider, const json_t *json,
-						       apr_array_header_t *def_val) {
+const char *oidc_cfg_provider_signed_jwks_uri_keys_set(apr_pool_t *pool, oidc_provider_t *provider,
+						       const oidc_json_t *json, apr_array_header_t *def_val) {
 	const char *rv = NULL;
 	oidc_jose_error_t err;
 
@@ -559,8 +559,8 @@ end:
 const char *oidc_cfg_provider_signed_jwks_uri_set(apr_pool_t *pool, oidc_provider_t *provider, const char *arg1,
 						  const char *arg2) {
 	const char *rv = NULL;
-	json_error_t json_error;
-	json_t *json = NULL;
+	char *s_err = NULL;
+	oidc_json_t *json = NULL;
 
 	if ((arg1 != NULL) && (_oidc_strcmp(arg1, "") != 0)) {
 		rv = oidc_cfg_parse_is_valid_http_url(pool, arg1);
@@ -572,9 +572,8 @@ const char *oidc_cfg_provider_signed_jwks_uri_set(apr_pool_t *pool, oidc_provide
 	if ((arg2 == NULL) || (_oidc_strcmp(arg2, "") == 0))
 		goto end;
 
-	json = json_loads(arg2, 0, &json_error);
-	if (json == NULL) {
-		rv = apr_psprintf(pool, "json_loads failed for the 2nd argument: %s", json_error.text);
+	if (oidc_json_parse(pool, arg2, 0, &json, &s_err) == FALSE) {
+		rv = apr_psprintf(pool, "parsing the 2nd argument as JSON failed: %s", s_err);
 		goto end;
 	}
 
@@ -583,7 +582,7 @@ const char *oidc_cfg_provider_signed_jwks_uri_set(apr_pool_t *pool, oidc_provide
 end:
 
 	if (json)
-		json_decref(json);
+		oidc_json_decref(json);
 
 	return rv;
 }

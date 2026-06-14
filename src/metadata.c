@@ -46,9 +46,9 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg_t *cfg, const char *issuer
 	apr_byte_t rc = FALSE;
 
 	/* pointers to the parsed JSON metadata */
-	json_t *j_provider = NULL;
-	json_t *j_client = NULL;
-	json_t *j_conf = NULL;
+	oidc_json_t *j_provider = NULL;
+	oidc_json_t *j_client = NULL;
+	oidc_json_t *j_conf = NULL;
 
 	/* allocate space for a parsed-and-merged metadata struct */
 	*provider = oidc_cfg_provider_create(r->pool);
@@ -78,11 +78,11 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg_t *cfg, const char *issuer
 end:
 
 	if (j_provider)
-		json_decref(j_provider);
+		oidc_json_decref(j_provider);
 	if (j_conf)
-		json_decref(j_conf);
+		oidc_json_decref(j_conf);
 	if (j_client)
-		json_decref(j_client);
+		oidc_json_decref(j_client);
 
 	return rc;
 }

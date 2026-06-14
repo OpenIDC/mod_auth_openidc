@@ -86,7 +86,7 @@ static int oidc_proto_request_auth_push(request_rec *r, const struct oidc_provid
 	char *request_uri = NULL;
 	int expires_in = 0;
 	const char *authorization_request = NULL;
-	json_t *j_result = NULL;
+	oidc_json_t *j_result = NULL;
 	int rv = HTTP_INTERNAL_SERVER_ERROR;
 	const char *endpoint_url = oidc_cfg_provider_pushed_authorization_request_endpoint_url_get(provider);
 
@@ -117,14 +117,14 @@ static int oidc_proto_request_auth_push(request_rec *r, const struct oidc_provid
 		goto out;
 
 	/* check for errors, the response itself will have been logged already */
-	if (oidc_util_json_decode_and_check_error(r, response, &j_result) == FALSE)
+	if (oidc_json_decode_and_check_error(r, response, &j_result) == FALSE)
 		goto out;
 
 	/* get the request_uri from the parsed response */
-	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_REQUEST_URI, &request_uri, NULL);
+	oidc_json_object_get_string(r->pool, j_result, OIDC_PROTO_REQUEST_URI, &request_uri, NULL);
 
 	/* get the expires_in value from the parsed response */
-	oidc_util_json_object_get_int(j_result, OIDC_PROTO_EXPIRES_IN, &expires_in, 60);
+	oidc_json_object_get_int(j_result, OIDC_PROTO_EXPIRES_IN, &expires_in, 60);
 
 	/* assemble the resulting authentication request and redirect */
 	apr_table_clear(params);
@@ -142,7 +142,7 @@ static int oidc_proto_request_auth_push(request_rec *r, const struct oidc_provid
 out:
 
 	if (j_result)
-		json_decref(j_result);
+		oidc_json_decref(j_result);
 
 	return rv;
 }
@@ -198,13 +198,14 @@ static const char *oidc_proto_request_html_post(request_rec *r, const char *url,
  * copied and/or deleted to/from the protected request object based on the settings specified
  * in the "copy_from_request"/"copy_and_remove_from_request" JSON array in the request object
  */
-static apr_byte_t oidc_proto_request_uri_param_needs_action(const json_t *request_object_config,
+static apr_byte_t oidc_proto_request_uri_param_needs_action(const oidc_json_t *request_object_config,
 							    const char *parameter_name, const char *action) {
-	const json_t *copy_from_request = json_object_get(request_object_config, action);
+	const oidc_json_t *copy_from_request = oidc_json_object_get(request_object_config, action);
 	size_t index = 0;
-	while (index < json_array_size(copy_from_request)) {
-		const json_t *value = json_array_get(copy_from_request, index);
-		if ((json_is_string(value)) && (_oidc_strcmp(json_string_value(value), parameter_name) == 0)) {
+	while (index < oidc_json_array_size(copy_from_request)) {
+		const oidc_json_t *value = oidc_json_array_get(copy_from_request, index);
+		if ((oidc_json_is_string(value)) &&
+		    (_oidc_strcmp(oidc_json_string_value(value), parameter_name) == 0)) {
 			return TRUE;
 		}
 		index++;
@@ -249,7 +250,7 @@ static apr_byte_t oidc_request_uri_param_is_spec_string(const char *name) {
 /* context structure for copying request parameters */
 typedef struct oidc_request_uri_copy_req_ctx_t {
 	request_rec *r;
-	json_t *request_object_config;
+	oidc_json_t *request_object_config;
 	oidc_jwt_t *request_object;
 	apr_table_t *params2;
 } oidc_request_uri_copy_req_ctx_t;
@@ -267,19 +268,18 @@ static int oidc_request_uri_copy_from_request(void *rec, const char *name, const
 						      OIDC_REQUEST_OJBECT_COPY_FROM_REQUEST) ||
 	    oidc_proto_request_uri_param_needs_action(ctx->request_object_config, name,
 						      OIDC_REQUEST_OJBECT_COPY_AND_REMOVE_FROM_REQUEST)) {
-		json_t *result = NULL;
-		json_error_t json_error;
+		oidc_json_t *result = NULL;
 		/* parameters that the specifications define as strings must not be subject to JSON
 		 * type interpretation (e.g. a numeric "state" value becoming a json_int) */
 		if (oidc_request_uri_param_is_spec_string(name) == FALSE)
-			result = json_loads(value, JSON_DECODE_ANY, &json_error);
+			oidc_json_parse(ctx->r->pool, value, OIDC_JSON_DECODE_ANY, &result, NULL);
 		if (result == NULL)
 			/* assume string */
-			result = json_string(value);
+			result = oidc_json_string(value);
 		if (result)
-			json_object_set_new(ctx->request_object->payload.value.json, name, result);
+			oidc_json_object_set_new(ctx->request_object->payload.value.json, name, result);
 		else
-			oidc_warn(ctx->r, "json_string failed for name: %s, value: %s", name, value);
+			oidc_warn(ctx->r, "oidc_json_string failed for name: %s, value: %s", name, value);
 
 		if (oidc_proto_request_uri_param_needs_action(ctx->request_object_config, name,
 							      OIDC_REQUEST_OJBECT_COPY_AND_REMOVE_FROM_REQUEST)) {
@@ -314,7 +314,7 @@ static apr_byte_t oidc_request_uri_encryption_jwk_by_type(request_rec *r, oidc_c
 							  oidc_jwk_t **jwk) {
 
 	oidc_jose_error_t err;
-	json_t *j_jwks = NULL;
+	oidc_json_t *j_jwks = NULL;
 	apr_byte_t force_refresh = TRUE;
 	oidc_jwk_t *key = NULL;
 	char *jwk_json = NULL;
@@ -328,18 +328,18 @@ static apr_byte_t oidc_request_uri_encryption_jwk_by_type(request_rec *r, oidc_c
 		return FALSE;
 	}
 
-	const json_t *keys = json_object_get(j_jwks, OIDC_JOSE_JWKS_KEYS_STR);
-	if ((keys == NULL) || !(json_is_array(keys))) {
+	const oidc_json_t *keys = oidc_json_object_get(j_jwks, OIDC_JOSE_JWKS_KEYS_STR);
+	if ((keys == NULL) || !(oidc_json_is_array(keys))) {
 		oidc_error(r, "\"%s\" array element is not a JSON array", OIDC_JOSE_JWKS_KEYS_STR);
 		return FALSE;
 	}
 
 	/* walk the set of published keys to find the first that has a matching type */
-	for (int i = 0; i < json_array_size(keys); i++) {
+	for (int i = 0; i < oidc_json_array_size(keys); i++) {
 
-		const json_t *elem = json_array_get(keys, i);
+		const oidc_json_t *elem = oidc_json_array_get(keys, i);
 
-		const char *use = json_string_value(json_object_get(elem, OIDC_JOSE_JWK_USE_STR));
+		const char *use = oidc_json_string_value(oidc_json_object_get(elem, OIDC_JOSE_JWK_USE_STR));
 		if ((use != NULL) && (_oidc_strcmp(use, OIDC_JOSE_JWK_ENC_STR) != 0)) {
 			oidc_debug(r, "skipping key because of non-matching \"%s\": \"%s\"", OIDC_JOSE_JWK_USE_STR,
 				   use);
@@ -361,8 +361,8 @@ static apr_byte_t oidc_request_uri_encryption_jwk_by_type(request_rec *r, oidc_c
 		oidc_jwk_destroy(key);
 	}
 
-	/* no need anymore for the parsed json_t contents, release the it */
-	json_decref(j_jwks);
+	/* no need anymore for the parsed oidc_json_t contents, release the it */
+	oidc_json_decref(j_jwks);
 
 	return (*jwk != NULL);
 }
@@ -371,27 +371,27 @@ static apr_byte_t oidc_request_uri_encryption_jwk_by_type(request_rec *r, oidc_c
  * populate iss/aud/iat/nbf/exp on the request object and merge "static" config values into it
  */
 static void oidc_request_uri_request_object_claims_set(request_rec *r, const struct oidc_provider_t *provider,
-						       const json_t *request_object_config, oidc_jwt_t *request_object,
-						       int ttl) {
-	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_ISS,
-			    json_string(oidc_cfg_provider_client_id_get(provider)));
-	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_AUD,
-			    json_string(oidc_cfg_provider_issuer_get(provider)));
-	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_IAT,
-			    json_integer(apr_time_sec(apr_time_now())));
-	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_NBF,
-			    json_integer(apr_time_sec(apr_time_now())));
-	json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_EXP,
-			    json_integer(apr_time_sec(apr_time_now()) + ttl));
+						       const oidc_json_t *request_object_config,
+						       oidc_jwt_t *request_object, int ttl) {
+	oidc_json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_ISS,
+				 oidc_json_string(oidc_cfg_provider_client_id_get(provider)));
+	oidc_json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_AUD,
+				 oidc_json_string(oidc_cfg_provider_issuer_get(provider)));
+	oidc_json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_IAT,
+				 oidc_json_integer(apr_time_sec(apr_time_now())));
+	oidc_json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_NBF,
+				 oidc_json_integer(apr_time_sec(apr_time_now())));
+	oidc_json_object_set_new(request_object->payload.value.json, OIDC_CLAIM_EXP,
+				 oidc_json_integer(apr_time_sec(apr_time_now()) + ttl));
 
 	/* may override iss/aud */
-	oidc_util_json_merge(r, json_object_get(request_object_config, "static"), request_object->payload.value.json);
+	oidc_json_merge(r, oidc_json_object_get(request_object_config, "static"), request_object->payload.value.json);
 }
 
 /*
  * copy parameters from the authorization request to the request object and remove the marked ones from the query
  */
-static void oidc_request_uri_request_object_params_copy(request_rec *r, json_t *request_object_config,
+static void oidc_request_uri_request_object_params_copy(request_rec *r, oidc_json_t *request_object_config,
 							oidc_jwt_t *request_object, apr_table_t *params) {
 	apr_table_t *delete_from_query_params = apr_table_make(r->pool, 0);
 	oidc_request_uri_copy_req_ctx_t data = {r, request_object_config, request_object, delete_from_query_params};
@@ -525,7 +525,7 @@ static char *oidc_request_uri_request_object_encrypt(request_rec *r, oidc_cfg_t 
  * generate a request object
  */
 static char *oidc_request_uri_request_object(request_rec *r, const struct oidc_provider_t *provider,
-					     json_t *request_object_config, apr_table_t *params, int ttl) {
+					     oidc_json_t *request_object_config, apr_table_t *params, int ttl) {
 
 	oidc_jose_error_t err;
 	char *serialized_request_object = NULL;
@@ -545,13 +545,13 @@ static char *oidc_request_uri_request_object(request_rec *r, const struct oidc_p
 	oidc_request_uri_request_object_params_copy(r, request_object_config, request_object, params);
 
 	/* debug logging */
-	oidc_debug(
-	    r, "request object: %s",
-	    oidc_util_json_encode(r->pool, request_object->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT));
+	oidc_debug(r, "request object: %s",
+		   oidc_json_encode(r->pool, request_object->payload.value.json,
+				    OIDC_JSON_PRESERVE_ORDER | OIDC_JSON_COMPACT));
 
 	/* get the crypto settings from the configuration */
-	const json_t *crypto = json_object_get(request_object_config, "crypto");
-	oidc_util_json_object_get_string(r->pool, crypto, "sign_alg", &request_object->header.alg, "none");
+	const oidc_json_t *crypto = oidc_json_object_get(request_object_config, "crypto");
+	oidc_json_object_get_string(r->pool, crypto, "sign_alg", &request_object->header.alg, "none");
 
 	/* see if we need to sign the request object */
 	if ((_oidc_strcmp(request_object->header.alg, "none") != 0) &&
@@ -564,8 +564,8 @@ static char *oidc_request_uri_request_object(request_rec *r, const struct oidc_p
 		goto out;
 	}
 
-	oidc_util_json_object_get_string(r->pool, crypto, "crypt_alg", &jwe->header.alg, NULL);
-	oidc_util_json_object_get_string(r->pool, crypto, "crypt_enc", &jwe->header.enc, NULL);
+	oidc_json_object_get_string(r->pool, crypto, "crypt_alg", &jwe->header.alg, NULL);
+	oidc_json_object_get_string(r->pool, crypto, "crypt_enc", &jwe->header.enc, NULL);
 
 	char *cser = oidc_jose_jwt_serialize(r->pool, request_object, &err);
 
@@ -581,7 +581,7 @@ out:
 
 	oidc_jwt_destroy(request_object);
 	oidc_jwt_destroy(jwe);
-	json_decref(request_object_config);
+	oidc_json_decref(request_object_config);
 
 	if (serialized_request_object != NULL) {
 		oidc_debug(r, "serialized request object JWT header = \"%s\"",
@@ -598,15 +598,16 @@ out:
  * generate a request object and pass it by reference in the authorization request
  */
 static char *oidc_proto_request_uri_create(request_rec *r, const struct oidc_provider_t *provider,
-					   json_t *request_object_config, const char *redirect_uri, apr_table_t *params,
-					   int ttl) {
+					   oidc_json_t *request_object_config, const char *redirect_uri,
+					   apr_table_t *params, int ttl) {
 
 	oidc_debug(r, "enter");
 
 	/* see if we need to override the resolver URL, mostly for test purposes */
 	char *resolver_url = NULL;
-	if (json_object_get(request_object_config, "url") != NULL)
-		resolver_url = apr_pstrdup(r->pool, json_string_value(json_object_get(request_object_config, "url")));
+	if (oidc_json_object_get(request_object_config, "url") != NULL)
+		resolver_url =
+		    apr_pstrdup(r->pool, oidc_json_string_value(oidc_json_object_get(request_object_config, "url")));
 	else
 		resolver_url = apr_pstrdup(r->pool, redirect_uri);
 
@@ -636,18 +637,17 @@ static void oidc_proto_request_uri_request_param_add(request_rec *r, const struc
 						     const char *redirect_uri, apr_table_t *params) {
 
 	/* parse the request object configuration from a string in to a JSON structure */
-	json_t *request_object_config = NULL;
-	if (oidc_util_json_decode_object(r, oidc_cfg_provider_request_object_get(provider), &request_object_config) ==
-	    FALSE)
+	oidc_json_t *request_object_config = NULL;
+	if (oidc_json_decode_object(r, oidc_cfg_provider_request_object_get(provider), &request_object_config) == FALSE)
 		return;
 
 	/* request_uri is used as default parameter for sending Request Object */
 	const char *parameter = OIDC_PROTO_REQUEST_URI;
 
 	/* get request_object_type parameter from config */
-	const json_t *request_object_type = json_object_get(request_object_config, "request_object_type");
+	const oidc_json_t *request_object_type = oidc_json_object_get(request_object_config, "request_object_type");
 	if (request_object_type != NULL) {
-		const char *request_object_type_str = json_string_value(request_object_type);
+		const char *request_object_type_str = oidc_json_string_value(request_object_type);
 		if (request_object_type_str == NULL) {
 			oidc_error(r, "Value of request_object_type in request_object config is not a string");
 			return;
@@ -665,7 +665,7 @@ static void oidc_proto_request_uri_request_param_add(request_rec *r, const struc
 	/* create request value */
 	const char *value = NULL;
 	int ttl = OIDC_REQUEST_OBJECT_TTL_DEFAULT;
-	oidc_util_json_object_get_int(request_object_config, "ttl", &ttl, OIDC_REQUEST_OBJECT_TTL_DEFAULT);
+	oidc_json_object_get_int(request_object_config, "ttl", &ttl, OIDC_REQUEST_OBJECT_TTL_DEFAULT);
 	if (_oidc_strcmp(parameter, OIDC_PROTO_REQUEST_URI) == 0) {
 		/* parameter is "request_uri" */
 		value = oidc_proto_request_uri_create(r, provider, request_object_config, redirect_uri, params, ttl);

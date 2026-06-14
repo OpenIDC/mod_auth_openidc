@@ -47,10 +47,10 @@
 #include <apr_time.h>
 
 typedef struct {
-	char *uuid;	   /* unique id */
-	char *remote_user; /* user who owns this particular session */
-	json_t *state;	   /* the state for this session, encoded in a JSON object */
-	apr_time_t expiry; /* if > 0, the time of expiry of this session */
+	char *uuid;	    /* unique id */
+	char *remote_user;  /* user who owns this particular session */
+	oidc_json_t *state; /* the state for this session, encoded in a JSON object */
+	apr_time_t expiry;  /* if > 0, the time of expiry of this session */
 	char *sid;
 } oidc_session_t;
 
@@ -69,10 +69,10 @@ void oidc_session_id_new(request_rec *r, oidc_session_t *z);
 
 void oidc_session_set_userinfo_jwt(request_rec *r, oidc_session_t *z, const char *userinfo_jwt);
 const char *oidc_session_get_userinfo_jwt(request_rec *r, const oidc_session_t *z);
-void oidc_session_set_userinfo_claims(request_rec *r, oidc_session_t *z, json_t *userinfo_claims);
-json_t *oidc_session_get_userinfo_claims(request_rec *r, const oidc_session_t *z);
-void oidc_session_set_idtoken_claims(request_rec *r, oidc_session_t *z, json_t *idtoken_claims);
-json_t *oidc_session_get_idtoken_claims(request_rec *r, const oidc_session_t *z);
+void oidc_session_set_userinfo_claims(request_rec *r, oidc_session_t *z, oidc_json_t *userinfo_claims);
+oidc_json_t *oidc_session_get_userinfo_claims(request_rec *r, const oidc_session_t *z);
+void oidc_session_set_idtoken_claims(request_rec *r, oidc_session_t *z, oidc_json_t *idtoken_claims);
+oidc_json_t *oidc_session_get_idtoken_claims(request_rec *r, const oidc_session_t *z);
 void oidc_session_set_idtoken(request_rec *r, oidc_session_t *z, const char *s_id_token);
 const char *oidc_session_get_idtoken(request_rec *r, const oidc_session_t *z);
 void oidc_session_set_access_token(request_rec *r, oidc_session_t *z, const char *access_token);

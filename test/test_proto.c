@@ -51,6 +51,7 @@
 #include "proto/proto.h"
 #include "util.h"
 #include "util/util.h"
+#include <jansson.h> /* this test builds JSON fixtures with the backend API directly (no longer pulled in via jose.h) */
 
 START_TEST(test_proto_validate_access_token) {
 	request_rec *r = oidc_test_request_get();
@@ -855,19 +856,19 @@ START_TEST(test_proto_dpop_create_embeds_public_key_only) {
 	char *header_b64 = apr_pstrmemdup(r->pool, dpop, _oidc_strlen(dpop) - _oidc_strlen(p));
 	char *header_json = NULL;
 	ck_assert_int_gt(oidc_util_base64url_decode(r->pool, &header_json, header_b64), 0);
-	json_t *header = NULL;
-	ck_assert_int_eq(oidc_util_json_decode_object(r, header_json, &header), TRUE);
+	oidc_json_t *header = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(r, header_json, &header), TRUE);
 
 	/* the DPoP confirmation header must embed the PUBLIC key only: public params present, private absent */
-	json_t *jwk = json_object_get(header, OIDC_CLAIM_JWK);
+	oidc_json_t *jwk = oidc_json_object_get(header, OIDC_CLAIM_JWK);
 	ck_assert_ptr_nonnull(jwk);
-	ck_assert_ptr_nonnull(json_object_get(jwk, "n")); /* RSA public modulus */
-	ck_assert_ptr_nonnull(json_object_get(jwk, "e")); /* RSA public exponent */
-	ck_assert_ptr_null(json_object_get(jwk, "d"));	  /* RSA private exponent must NOT be present */
-	ck_assert_ptr_null(json_object_get(jwk, "p"));
-	ck_assert_ptr_null(json_object_get(jwk, "q"));
+	ck_assert_ptr_nonnull(oidc_json_object_get(jwk, "n")); /* RSA public modulus */
+	ck_assert_ptr_nonnull(oidc_json_object_get(jwk, "e")); /* RSA public exponent */
+	ck_assert_ptr_null(oidc_json_object_get(jwk, "d"));    /* RSA private exponent must NOT be present */
+	ck_assert_ptr_null(oidc_json_object_get(jwk, "p"));
+	ck_assert_ptr_null(oidc_json_object_get(jwk, "q"));
 
-	json_decref(header);
+	oidc_json_decref(header);
 }
 END_TEST
 
@@ -951,9 +952,9 @@ END_TEST
 /*
  * Helper for building a synthetic id_token payload with a given JSON body.
  * Returns a stack-init oidc_jwt_payload_t whose .value.json points to `claims`.
- * Caller owns `claims` (typically `json_decref` after the test).
+ * Caller owns `claims` (typically `oidc_json_decref` after the test).
  */
-static oidc_jwt_payload_t make_payload(json_t *claims) {
+static oidc_jwt_payload_t make_payload(oidc_json_t *claims) {
 	oidc_jwt_payload_t p = {0};
 	p.value.json = claims;
 	return p;
@@ -962,20 +963,20 @@ static oidc_jwt_payload_t make_payload(json_t *claims) {
 START_TEST(test_proto_idtoken_validate_aud_string_match) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
-	json_t *claims = json_pack("{s:s}", "aud", "client_id");
+	oidc_json_t *claims = json_pack("{s:s}", "aud", "client_id");
 	oidc_jwt_payload_t p = make_payload(claims);
 	ck_assert_int_eq(oidc_proto_idtoken_validate_aud_and_azp(r, c, oidc_cfg_provider_get(c), &p), TRUE);
-	json_decref(claims);
+	oidc_json_decref(claims);
 }
 END_TEST
 
 START_TEST(test_proto_idtoken_validate_aud_string_mismatch) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
-	json_t *claims = json_pack("{s:s}", "aud", "different_client");
+	oidc_json_t *claims = json_pack("{s:s}", "aud", "different_client");
 	oidc_jwt_payload_t p = make_payload(claims);
 	ck_assert_int_eq(oidc_proto_idtoken_validate_aud_and_azp(r, c, oidc_cfg_provider_get(c), &p), FALSE);
-	json_decref(claims);
+	oidc_json_decref(claims);
 }
 END_TEST
 
@@ -983,40 +984,40 @@ START_TEST(test_proto_idtoken_validate_aud_array_with_client_id) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	/* azp is present here so the multi-aud SHOULD warning doesn't fire as a hard error */
-	json_t *claims = json_pack("{s:[s,s],s:s}", "aud", "other-rp", "client_id", "azp", "client_id");
+	oidc_json_t *claims = json_pack("{s:[s,s],s:s}", "aud", "other-rp", "client_id", "azp", "client_id");
 	oidc_jwt_payload_t p = make_payload(claims);
 	ck_assert_int_eq(oidc_proto_idtoken_validate_aud_and_azp(r, c, oidc_cfg_provider_get(c), &p), TRUE);
-	json_decref(claims);
+	oidc_json_decref(claims);
 }
 END_TEST
 
 START_TEST(test_proto_idtoken_validate_aud_array_without_client_id) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
-	json_t *claims = json_pack("{s:[s,s]}", "aud", "other-rp", "yet-another");
+	oidc_json_t *claims = json_pack("{s:[s,s]}", "aud", "other-rp", "yet-another");
 	oidc_jwt_payload_t p = make_payload(claims);
 	ck_assert_int_eq(oidc_proto_idtoken_validate_aud_and_azp(r, c, oidc_cfg_provider_get(c), &p), FALSE);
-	json_decref(claims);
+	oidc_json_decref(claims);
 }
 END_TEST
 
 START_TEST(test_proto_idtoken_validate_aud_missing) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
-	json_t *claims = json_pack("{s:s}", "sub", "alice");
+	oidc_json_t *claims = json_pack("{s:s}", "sub", "alice");
 	oidc_jwt_payload_t p = make_payload(claims);
 	ck_assert_int_eq(oidc_proto_idtoken_validate_aud_and_azp(r, c, oidc_cfg_provider_get(c), &p), FALSE);
-	json_decref(claims);
+	oidc_json_decref(claims);
 }
 END_TEST
 
 START_TEST(test_proto_idtoken_validate_aud_wrong_type) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
-	json_t *claims = json_pack("{s:i}", "aud", 42);
+	oidc_json_t *claims = json_pack("{s:i}", "aud", 42);
 	oidc_jwt_payload_t p = make_payload(claims);
 	ck_assert_int_eq(oidc_proto_idtoken_validate_aud_and_azp(r, c, oidc_cfg_provider_get(c), &p), FALSE);
-	json_decref(claims);
+	oidc_json_decref(claims);
 }
 END_TEST
 
@@ -1024,50 +1025,50 @@ START_TEST(test_proto_idtoken_validate_azp_mismatch) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	/* aud is valid (matches client_id), but azp claims a different party */
-	json_t *claims = json_pack("{s:s,s:s}", "aud", "client_id", "azp", "evil-rp");
+	oidc_json_t *claims = json_pack("{s:s,s:s}", "aud", "client_id", "azp", "evil-rp");
 	oidc_jwt_payload_t p = make_payload(claims);
 	ck_assert_int_eq(oidc_proto_idtoken_validate_aud_and_azp(r, c, oidc_cfg_provider_get(c), &p), FALSE);
-	json_decref(claims);
+	oidc_json_decref(claims);
 }
 END_TEST
 
 START_TEST(test_proto_dpop_use_nonce_no_error_claim) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
-	json_t *result = json_pack("{s:s}", "active", "true");
+	oidc_json_t *result = json_pack("{s:s}", "active", "true");
 	char *dpop = NULL;
 	ck_assert_int_eq(oidc_proto_dpop_use_nonce(r, c, result, NULL, "https://idp.example.com/token", "POST",
 						   "access-token", &dpop),
 			 FALSE);
 	ck_assert_ptr_null(dpop);
-	json_decref(result);
+	oidc_json_decref(result);
 }
 END_TEST
 
 START_TEST(test_proto_dpop_use_nonce_wrong_error_value) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
-	json_t *result = json_pack("{s:s}", "error", "invalid_request");
+	oidc_json_t *result = json_pack("{s:s}", "error", "invalid_request");
 	char *dpop = NULL;
 	ck_assert_int_eq(oidc_proto_dpop_use_nonce(r, c, result, NULL, "https://idp.example.com/token", "POST",
 						   "access-token", &dpop),
 			 FALSE);
 	ck_assert_ptr_null(dpop);
-	json_decref(result);
+	oidc_json_decref(result);
 }
 END_TEST
 
 START_TEST(test_proto_dpop_use_nonce_missing_header) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
-	json_t *result = json_pack("{s:s}", "error", "use_dpop_nonce");
+	oidc_json_t *result = json_pack("{s:s}", "error", "use_dpop_nonce");
 	apr_hash_t *hdrs = apr_hash_make(r->pool); /* no DPoP-Nonce entry */
 	char *dpop = NULL;
 	ck_assert_int_eq(oidc_proto_dpop_use_nonce(r, c, result, hdrs, "https://idp.example.com/token", "POST",
 						   "access-token", &dpop),
 			 FALSE);
 	ck_assert_ptr_null(dpop);
-	json_decref(result);
+	oidc_json_decref(result);
 }
 END_TEST
 
@@ -1301,14 +1302,14 @@ START_TEST(test_proto_userinfo_request_success) {
 	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
 
 	char *s_userinfo = NULL, *userinfo_jwt = NULL;
-	json_t *userinfo_claims = NULL;
+	oidc_json_t *userinfo_claims = NULL;
 	long response_code = 0;
 	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
 						     &userinfo_jwt, &userinfo_claims, &response_code),
 			 TRUE);
 	ck_assert_ptr_nonnull(userinfo_claims);
 	ck_assert_int_eq(response_code, 200);
-	const char *name = json_string_value(json_object_get(userinfo_claims, "name"));
+	const char *name = oidc_json_string_value(oidc_json_object_get(userinfo_claims, "name"));
 	ck_assert_ptr_nonnull(name);
 	ck_assert_str_eq(name, "Alice Example");
 
@@ -1318,7 +1319,7 @@ START_TEST(test_proto_userinfo_request_success) {
 	ck_assert_ptr_nonnull(auth);
 	ck_assert_str_eq(auth, "Bearer AT");
 
-	json_decref(userinfo_claims);
+	oidc_json_decref(userinfo_claims);
 	oidc_test_http_server_stop(srv);
 }
 END_TEST
@@ -1336,7 +1337,7 @@ START_TEST(test_proto_userinfo_request_sub_mismatch) {
 	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
 
 	char *s_userinfo = NULL, *userinfo_jwt = NULL;
-	json_t *userinfo_claims = NULL;
+	oidc_json_t *userinfo_claims = NULL;
 	long response_code = 0;
 	/* id_token_sub is "alice" but userinfo returns "bob" — mismatch must fail */
 	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
@@ -1362,7 +1363,7 @@ START_TEST(test_proto_userinfo_request_error) {
 	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
 
 	char *s_userinfo = NULL, *userinfo_jwt = NULL;
-	json_t *userinfo_claims = NULL;
+	oidc_json_t *userinfo_claims = NULL;
 	long response_code = 0;
 	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
 						     &userinfo_jwt, &userinfo_claims, &response_code),
@@ -1389,7 +1390,7 @@ START_TEST(test_proto_userinfo_request_post_method) {
 	oidc_cfg_provider_userinfo_token_method_int_set(provider, OIDC_USER_INFO_TOKEN_METHOD_POST);
 
 	char *s_userinfo = NULL, *userinfo_jwt = NULL;
-	json_t *userinfo_claims = NULL;
+	oidc_json_t *userinfo_claims = NULL;
 	long response_code = 0;
 	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
 						     &userinfo_jwt, &userinfo_claims, &response_code),
@@ -1402,7 +1403,7 @@ START_TEST(test_proto_userinfo_request_post_method) {
 	ck_assert_msg(_oidc_strstr(cap->body, OIDC_PROTO_ACCESS_TOKEN "=AT") != NULL,
 		      "POST body must carry access_token=AT");
 
-	json_decref(userinfo_claims);
+	oidc_json_decref(userinfo_claims);
 	oidc_test_http_server_stop(srv);
 }
 END_TEST
@@ -1422,7 +1423,7 @@ START_TEST(test_proto_userinfo_request_missing_sub_required) {
 	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
 
 	char *s_userinfo = NULL, *userinfo_jwt = NULL;
-	json_t *userinfo_claims = NULL;
+	oidc_json_t *userinfo_claims = NULL;
 	long response_code = 0;
 	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
 						     &userinfo_jwt, &userinfo_claims, &response_code),
@@ -1451,14 +1452,14 @@ START_TEST(test_proto_userinfo_request_missing_sub_skipped_via_env) {
 	apr_table_set(r->subprocess_env, "OIDC_NO_USERINFO_SUB", "1");
 
 	char *s_userinfo = NULL, *userinfo_jwt = NULL;
-	json_t *userinfo_claims = NULL;
+	oidc_json_t *userinfo_claims = NULL;
 	long response_code = 0;
 	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, NULL, "AT", "Bearer", &s_userinfo, &userinfo_jwt,
 						     &userinfo_claims, &response_code),
 			 TRUE);
 	ck_assert_ptr_nonnull(userinfo_claims);
 
-	json_decref(userinfo_claims);
+	oidc_json_decref(userinfo_claims);
 	apr_table_unset(r->subprocess_env, "OIDC_NO_USERINFO_SUB");
 	(void)oidc_test_http_server_wait(srv);
 	oidc_test_http_server_stop(srv);
@@ -1487,31 +1488,31 @@ START_TEST(test_proto_userinfo_request_composite_embedded_jwt) {
 	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
 
 	char *s_userinfo = NULL, *userinfo_jwt = NULL;
-	json_t *userinfo_claims = NULL;
+	oidc_json_t *userinfo_claims = NULL;
 	long response_code = 0;
 	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
 						     &userinfo_jwt, &userinfo_claims, &response_code),
 			 TRUE);
 	ck_assert_ptr_nonnull(userinfo_claims);
 	/* the composite resolver lifts "address" out of the inline JWT into the claims root */
-	json_t *address = json_object_get(userinfo_claims, "address");
+	oidc_json_t *address = oidc_json_object_get(userinfo_claims, "address");
 	ck_assert_ptr_nonnull(address);
-	ck_assert_int_eq(json_is_object(address), 1);
-	const char *street = json_string_value(json_object_get(address, "street_address"));
+	ck_assert_int_eq(oidc_json_is_object(address), 1);
+	const char *street = oidc_json_string_value(oidc_json_object_get(address, "street_address"));
 	ck_assert_ptr_nonnull(street);
 	ck_assert_str_eq(street, "123 Main St");
-	const char *country = json_string_value(json_object_get(address, "country"));
+	const char *country = oidc_json_string_value(oidc_json_object_get(address, "country"));
 	ck_assert_ptr_nonnull(country);
 	ck_assert_str_eq(country, "US");
 	/* the meta-keys are stripped after resolution */
-	ck_assert_ptr_null(json_object_get(userinfo_claims, "_claim_names"));
-	ck_assert_ptr_null(json_object_get(userinfo_claims, "_claim_sources"));
+	ck_assert_ptr_null(oidc_json_object_get(userinfo_claims, "_claim_names"));
+	ck_assert_ptr_null(oidc_json_object_get(userinfo_claims, "_claim_sources"));
 	/* the re-serialized s_userinfo reflects the rewritten payload */
 	ck_assert_ptr_nonnull(s_userinfo);
 	ck_assert_msg(_oidc_strstr(s_userinfo, "_claim_names") == NULL,
 		      "s_userinfo must be re-encoded without _claim_names");
 
-	json_decref(userinfo_claims);
+	oidc_json_decref(userinfo_claims);
 	(void)oidc_test_http_server_wait(srv);
 	oidc_test_http_server_stop(srv);
 }
@@ -1532,15 +1533,15 @@ START_TEST(test_proto_userinfo_request_composite_names_without_sources) {
 	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
 
 	char *s_userinfo = NULL, *userinfo_jwt = NULL;
-	json_t *userinfo_claims = NULL;
+	oidc_json_t *userinfo_claims = NULL;
 	long response_code = 0;
 	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
 						     &userinfo_jwt, &userinfo_claims, &response_code),
 			 TRUE);
 	ck_assert_ptr_nonnull(userinfo_claims);
-	ck_assert_ptr_nonnull(json_object_get(userinfo_claims, "_claim_names"));
+	ck_assert_ptr_nonnull(oidc_json_object_get(userinfo_claims, "_claim_names"));
 
-	json_decref(userinfo_claims);
+	oidc_json_decref(userinfo_claims);
 	(void)oidc_test_http_server_wait(srv);
 	oidc_test_http_server_stop(srv);
 }
@@ -2041,16 +2042,16 @@ START_TEST(test_proto_dpop_create_with_rsa_private_key) {
 	char *enc_hdr = apr_pstrmemdup(r->pool, dpop, first - dpop);
 	char *dec_hdr = NULL;
 	ck_assert_int_gt(oidc_util_base64url_decode(r->pool, &dec_hdr, enc_hdr), 0);
-	json_t *hdr_json = NULL;
-	ck_assert_int_eq(oidc_util_json_decode_object(r, dec_hdr, &hdr_json), TRUE);
-	ck_assert_str_eq(json_string_value(json_object_get(hdr_json, "typ")), "dpop+jwt");
-	json_decref(hdr_json);
+	oidc_json_t *hdr_json = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(r, dec_hdr, &hdr_json), TRUE);
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(hdr_json, "typ")), "dpop+jwt");
+	oidc_json_decref(hdr_json);
 }
 END_TEST
 
 /* build an HS256-signed JWT payload using the symmetric key derived from `secret`;
  * shared helper for the JWT-userinfo-response test */
-static char *e2e_sign_jwt_hs256_payload(request_rec *r, const char *secret, json_t *payload) {
+static char *e2e_sign_jwt_hs256_payload(request_rec *r, const char *secret, oidc_json_t *payload) {
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
 	ck_assert_int_eq(oidc_util_key_symmetric_create(r, secret, 0, NULL, TRUE, &jwk), TRUE);
@@ -2074,9 +2075,9 @@ START_TEST(test_proto_userinfo_request_signed_jwt_response) {
 	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
 	ck_assert_ptr_null(oidc_cfg_provider_userinfo_signed_response_alg_set(r->pool, provider, "HS256"));
 
-	json_t *payload = json_pack("{s:s,s:s}", "sub", "alice", "name", "Alice JWT");
+	oidc_json_t *payload = json_pack("{s:s,s:s}", "sub", "alice", "name", "Alice JWT");
 	char *jwt_str = e2e_sign_jwt_hs256_payload(r, secret, payload);
-	json_decref(payload);
+	oidc_json_decref(payload);
 
 	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/jwt", .body = jwt_str};
 	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
@@ -2085,7 +2086,7 @@ START_TEST(test_proto_userinfo_request_signed_jwt_response) {
 	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
 
 	char *s_userinfo = NULL, *userinfo_jwt = NULL;
-	json_t *userinfo_claims = NULL;
+	oidc_json_t *userinfo_claims = NULL;
 	long response_code = 0;
 	/* the JWT-decoding path in oidc_proto_userinfo_response_jwt_parse must extract claims */
 	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
@@ -2094,13 +2095,13 @@ START_TEST(test_proto_userinfo_request_signed_jwt_response) {
 	ck_assert_ptr_nonnull(userinfo_claims);
 	ck_assert_ptr_nonnull(userinfo_jwt);
 	ck_assert_str_eq(userinfo_jwt, jwt_str);
-	const char *name = json_string_value(json_object_get(userinfo_claims, "name"));
+	const char *name = oidc_json_string_value(oidc_json_object_get(userinfo_claims, "name"));
 	ck_assert_ptr_nonnull(name);
 	ck_assert_str_eq(name, "Alice JWT");
 
 	(void)oidc_test_http_server_wait(srv);
 	oidc_test_http_server_stop(srv);
-	json_decref(userinfo_claims);
+	oidc_json_decref(userinfo_claims);
 }
 END_TEST
 
@@ -2135,7 +2136,7 @@ END_TEST
  * that copies the custom "client_ref=1234" parameter and the spec-defined "state=98765"
  * parameter via copy_from_request, then extract the request object from the authorization URL
  * and return its decoded JSON payload */
-static json_t *e2e_request_object_copy_params_payload(request_rec *r) {
+static oidc_json_t *e2e_request_object_copy_params_payload(request_rec *r) {
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	oidc_provider_t *provider = oidc_cfg_provider_get(c);
 
@@ -2167,7 +2168,7 @@ static json_t *e2e_request_object_copy_params_payload(request_rec *r) {
 	ck_assert_int_gt(
 	    oidc_util_base64url_decode(r->pool, &s_payload, apr_pstrmemdup(r->pool, dot1 + 1, dot2 - (dot1 + 1))), 0);
 
-	json_t *payload = json_loads(s_payload, 0, NULL);
+	oidc_json_t *payload = json_loads(s_payload, 0, NULL);
 	ck_assert_ptr_nonnull(payload);
 	return payload;
 }
@@ -2175,24 +2176,24 @@ static json_t *e2e_request_object_copy_params_payload(request_rec *r) {
 START_TEST(test_proto_request_auth_request_object_copy_param_types) {
 	request_rec *r = oidc_test_request_get();
 
-	json_t *payload = e2e_request_object_copy_params_payload(r);
+	oidc_json_t *payload = e2e_request_object_copy_params_payload(r);
 
 	/* a custom parameter value that parses as JSON is interpreted as its JSON type */
-	json_t *v = json_object_get(payload, "client_ref");
+	oidc_json_t *v = oidc_json_object_get(payload, "client_ref");
 	ck_assert_ptr_nonnull(v);
-	ck_assert_msg(json_is_integer(v), "copied request parameter must be a JSON integer, got JSON type %d",
-		      json_typeof(v));
-	ck_assert_int_eq((int)json_integer_value(v), 1234);
+	ck_assert_msg(oidc_json_is_integer(v), "copied request parameter must be a JSON integer, got JSON type %d",
+		      oidc_json_typeof(v));
+	ck_assert_int_eq((int)oidc_json_integer_value(v), 1234);
 
 	/* parameters defined as strings in the OpenID Connect specification (such as "state")
 	 * must be copied verbatim as JSON strings, never as another JSON type */
-	v = json_object_get(payload, "state");
+	v = oidc_json_object_get(payload, "state");
 	ck_assert_ptr_nonnull(v);
-	ck_assert_msg(json_is_string(v), "copied state parameter must be a JSON string, got JSON type %d",
-		      json_typeof(v));
-	ck_assert_str_eq(json_string_value(v), "98765");
+	ck_assert_msg(oidc_json_is_string(v), "copied state parameter must be a JSON string, got JSON type %d",
+		      oidc_json_typeof(v));
+	ck_assert_str_eq(oidc_json_string_value(v), "98765");
 
-	json_decref(payload);
+	oidc_json_decref(payload);
 }
 END_TEST
 

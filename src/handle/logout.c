@@ -372,7 +372,7 @@ static int oidc_logout_backchannel_check_jti_replay(request_rec *r, const oidc_p
 	char *replay = NULL;
 	apr_time_t jti_cache_duration;
 
-	oidc_util_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_JTI, &jti, NULL);
+	oidc_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_JTI, &jti, NULL);
 	if (jti != NULL) {
 		oidc_cache_get_jti(r, jti, &replay);
 		if (replay != NULL) {
@@ -395,23 +395,23 @@ static int oidc_logout_backchannel_check_jti_replay(request_rec *r, const oidc_p
 static int oidc_logout_backchannel_validate_claims(request_rec *r, const oidc_provider_t *provider, oidc_jwt_t *jwt,
 						   char **sid) {
 	char *nonce = NULL;
-	const json_t *events = NULL;
-	const json_t *blogout = NULL;
+	const oidc_json_t *events = NULL;
+	const oidc_json_t *blogout = NULL;
 	int rc = OK;
 
-	events = json_object_get(jwt->payload.value.json, OIDC_CLAIM_EVENTS);
+	events = oidc_json_object_get(jwt->payload.value.json, OIDC_CLAIM_EVENTS);
 	if (events == NULL) {
 		oidc_error(r, "\"%s\" claim could not be found in logout token", OIDC_CLAIM_EVENTS);
 		return HTTP_BAD_REQUEST;
 	}
-	blogout = json_object_get(events, OIDC_EVENTS_BLOGOUT_KEY);
-	if (!json_is_object(blogout)) {
+	blogout = oidc_json_object_get(events, OIDC_EVENTS_BLOGOUT_KEY);
+	if (!oidc_json_is_object(blogout)) {
 		oidc_error(r, "\"%s\" object could not be found in \"%s\" claim", OIDC_EVENTS_BLOGOUT_KEY,
 			   OIDC_CLAIM_EVENTS);
 		return HTTP_BAD_REQUEST;
 	}
 
-	oidc_util_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_NONCE, &nonce, NULL);
+	oidc_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_NONCE, &nonce, NULL);
 	if (nonce != NULL) {
 		oidc_error(r, "rejecting logout request/token since it contains a \"%s\" claim", OIDC_CLAIM_NONCE);
 		return HTTP_BAD_REQUEST;
@@ -429,7 +429,7 @@ static int oidc_logout_backchannel_validate_claims(request_rec *r, const oidc_pr
 	//       this for logout
 	//       (and probably call us multiple times or the same sub if needed)
 
-	oidc_util_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_SID, sid, NULL);
+	oidc_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_SID, sid, NULL);
 	if (*sid == NULL)
 		*sid = jwt->payload.sub;
 	if (*sid == NULL) {

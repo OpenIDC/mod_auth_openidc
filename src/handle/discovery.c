@@ -444,10 +444,10 @@ static int oidc_discovery_response_authenticate(request_rec *r, oidc_cfg_t *c, c
 		issuer[n - 1] = '\0';
 
 	if (oidc_util_url_has_parameter(r, "test-config")) {
-		json_t *j_provider = NULL;
+		oidc_json_t *j_provider = NULL;
 		oidc_metadata_provider_get(r, c, issuer, &j_provider, allow_dyn_reg);
 		if (j_provider)
-			json_decref(j_provider);
+			oidc_json_decref(j_provider);
 		return OK;
 	}
 
@@ -461,11 +461,11 @@ static int oidc_discovery_response_authenticate(request_rec *r, oidc_cfg_t *c, c
 		    HTTP_NOT_FOUND);
 
 	if (oidc_util_url_has_parameter(r, "test-jwks-uri")) {
-		json_t *j_jwks = NULL;
+		oidc_json_t *j_jwks = NULL;
 		apr_byte_t force_refresh = TRUE;
 		oidc_metadata_jwks_get(r, c, oidc_cfg_provider_jwks_uri_get(provider),
 				       oidc_cfg_provider_ssl_validate_server_get(provider), &j_jwks, &force_refresh);
-		json_decref(j_jwks);
+		oidc_json_decref(j_jwks);
 		return OK;
 	}
 

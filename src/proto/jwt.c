@@ -237,20 +237,20 @@ char *oidc_proto_jwt_header_peek(request_rec *r, const char *compact_encoded_jwt
 		return NULL;
 	}
 	if ((alg != NULL) || (enc != NULL)) {
-		json_t *json = NULL;
-		oidc_util_json_decode_object(r, result, &json);
+		oidc_json_t *json = NULL;
+		oidc_json_decode_object(r, result, &json);
 		if (json) {
 			if (alg)
-				*alg =
-				    apr_pstrdup(r->pool, json_string_value(json_object_get(json, OIDC_JOSE_HDR_ALG)));
+				*alg = apr_pstrdup(
+				    r->pool, oidc_json_string_value(oidc_json_object_get(json, OIDC_JOSE_HDR_ALG)));
 			if (enc)
-				*enc =
-				    apr_pstrdup(r->pool, json_string_value(json_object_get(json, OIDC_JOSE_HDR_ENC)));
+				*enc = apr_pstrdup(
+				    r->pool, oidc_json_string_value(oidc_json_object_get(json, OIDC_JOSE_HDR_ENC)));
 			if (kid)
-				*kid =
-				    apr_pstrdup(r->pool, json_string_value(json_object_get(json, OIDC_JOSE_HDR_KID)));
+				*kid = apr_pstrdup(
+				    r->pool, oidc_json_string_value(oidc_json_object_get(json, OIDC_JOSE_HDR_KID)));
 		}
-		json_decref(json);
+		oidc_json_decref(json);
 	}
 	return result;
 }

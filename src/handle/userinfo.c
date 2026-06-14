@@ -50,7 +50,8 @@
  * store claims resolved from the userinfo endpoint in the session
  */
 void oidc_userinfo_store_claims(request_rec *r, const oidc_cfg_t *c, oidc_session_t *session,
-				const oidc_provider_t *provider, json_t *userinfo_claims, const char *userinfo_jwt) {
+				const oidc_provider_t *provider, oidc_json_t *userinfo_claims,
+				const char *userinfo_jwt) {
 
 	oidc_debug(r, "enter");
 
@@ -87,13 +88,13 @@ void oidc_userinfo_store_claims(request_rec *r, const oidc_cfg_t *c, oidc_sessio
  */
 const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg_t *c, const oidc_provider_t *provider,
 					  const char *access_token, const char *access_token_type,
-					  oidc_session_t *session, char *id_token_sub, json_t **userinfo_claims,
+					  oidc_session_t *session, char *id_token_sub, oidc_json_t **userinfo_claims,
 					  char **userinfo_jwt) {
 
 	char *result = NULL;
 	char *refreshed_access_token = NULL;
 	char *refreshed_access_token_type = NULL;
-	const json_t *id_token_claims = NULL;
+	const oidc_json_t *id_token_claims = NULL;
 	long response_code = 0;
 
 	oidc_debug(r, "enter");
@@ -183,7 +184,7 @@ apr_byte_t oidc_userinfo_refresh_claims(request_rec *r, oidc_cfg_t *cfg, oidc_se
 	oidc_provider_t *provider = NULL;
 	const char *claims = NULL;
 	char *userinfo_jwt = NULL;
-	json_t *userinfo_claims = NULL;
+	oidc_json_t *userinfo_claims = NULL;
 	apr_time_t last_refresh = 0;
 
 	/* see if we can do anything here, i.e. a refresh interval is configured */
@@ -226,7 +227,7 @@ apr_byte_t oidc_userinfo_refresh_claims(request_rec *r, oidc_cfg_t *cfg, oidc_se
 	/* store claims resolved from userinfo endpoint */
 	oidc_userinfo_store_claims(r, cfg, session, provider, userinfo_claims, userinfo_jwt);
 
-	json_decref(userinfo_claims);
+	oidc_json_decref(userinfo_claims);
 
 	if (claims == NULL) {
 		*needs_save = FALSE;
@@ -259,7 +260,7 @@ static int oidc_userinfo_signed_jwt_cache_ttl(const request_rec *r) {
  * create a signed JWT with s_claims payload and return the serialized form in cser
  */
 static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg_t *cfg, const oidc_session_t *session,
-						  json_t *claims, char **cser) {
+						  oidc_json_t *claims, char **cser) {
 	apr_byte_t rv = FALSE;
 	oidc_jwt_t *jwt = NULL;
 	oidc_jwk_t *jwk = NULL;
@@ -273,15 +274,15 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg_t *cf
 	if (oidc_proto_jwt_create_from_first_pkey(r, cfg, &jwk, &jwt, FALSE) == FALSE)
 		goto end;
 
-	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_AUD,
-			    json_string(oidc_util_url_cur(r, oidc_cfg_x_forwarded_headers_get(cfg))));
-	json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_ISS,
-			    json_string(oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(cfg))));
+	oidc_json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_AUD,
+				 oidc_json_string(oidc_util_url_cur(r, oidc_cfg_x_forwarded_headers_get(cfg))));
+	oidc_json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_ISS,
+				 oidc_json_string(oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(cfg))));
 
-	if (oidc_util_json_merge(r, claims, jwt->payload.value.json) == FALSE)
+	if (oidc_json_merge(r, claims, jwt->payload.value.json) == FALSE)
 		goto end;
 	const char *s_claims =
-	    oidc_util_json_encode(r->pool, jwt->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	    oidc_json_encode(r->pool, jwt->payload.value.json, OIDC_JSON_PRESERVE_ORDER | OIDC_JSON_COMPACT);
 	if (oidc_jose_hash_and_base64url_encode(r->pool, OIDC_JOSE_ALG_SHA256, s_claims,
 						(int)_oidc_strlen(s_claims) + 1, &key, &err) == FALSE) {
 		oidc_error(r, "oidc_jose_hash_and_base64url_encode failed: %s", oidc_jose_e2s(r->pool, err));
@@ -298,19 +299,21 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg_t *cf
 		goto end;
 	}
 
-	if (json_object_get(jwt->payload.value.json, OIDC_CLAIM_JTI) == NULL) {
-		json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_JTI, json_string(oidc_proto_jti_gen(r)));
+	if (oidc_json_object_get(jwt->payload.value.json, OIDC_CLAIM_JTI) == NULL) {
+		oidc_json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_JTI,
+					 oidc_json_string(oidc_proto_jti_gen(r)));
 	}
-	if (json_object_get(jwt->payload.value.json, OIDC_CLAIM_IAT) == NULL) {
-		json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_IAT,
-				    json_integer(apr_time_sec(apr_time_now())));
+	if (oidc_json_object_get(jwt->payload.value.json, OIDC_CLAIM_IAT) == NULL) {
+		oidc_json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_IAT,
+					 oidc_json_integer(apr_time_sec(apr_time_now())));
 	}
-	if (json_object_get(jwt->payload.value.json, OIDC_CLAIM_EXP) == NULL) {
+	if (oidc_json_object_get(jwt->payload.value.json, OIDC_CLAIM_EXP) == NULL) {
 		access_token_expires = oidc_session_get_access_token_expires(r, session);
-		json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_EXP,
-				    json_integer(access_token_expires > 0 ? apr_time_sec(access_token_expires)
-									  : apr_time_sec(apr_time_now()) +
-										OIDC_USERINFO_SIGNED_JWT_EXP_DEFAULT));
+		oidc_json_object_set_new(
+		    jwt->payload.value.json, OIDC_CLAIM_EXP,
+		    oidc_json_integer(access_token_expires > 0
+					  ? apr_time_sec(access_token_expires)
+					  : apr_time_sec(apr_time_now()) + OIDC_USERINFO_SIGNED_JWT_EXP_DEFAULT));
 	}
 
 	if (oidc_proto_jwt_sign_and_serialize(r, jwk, jwt, cser) == FALSE)
@@ -323,7 +326,7 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg_t *cf
 
 	if (ttl == 0) {
 		// need to get the cache ttl from the exp claim
-		oidc_util_json_object_get_int(jwt->payload.value.json, OIDC_CLAIM_EXP, &exp, 0);
+		oidc_json_object_get_int(jwt->payload.value.json, OIDC_CLAIM_EXP, &exp, 0);
 		// actually the exp claim always exists by now
 		expiry = (exp > 0) ? apr_time_from_sec(exp)
 				   : apr_time_now() + apr_time_from_sec(OIDC_USERINFO_SIGNED_JWT_EXP_DEFAULT);
@@ -381,9 +384,9 @@ static void oidc_userinfo_pass_as_jwt(request_rec *r, const oidc_cfg_t *cfg, con
  * dispatch a single configured "pass userinfo as" entry to the matching
  * encoding-specific handler
  */
-static void oidc_userinfo_pass_entry(request_rec *r, oidc_cfg_t *cfg, const oidc_session_t *session, json_t *claims,
-				     const oidc_pass_user_info_as_t *p, oidc_appinfo_pass_in_t pass_in,
-				     oidc_appinfo_encoding_t encoding) {
+static void oidc_userinfo_pass_entry(request_rec *r, oidc_cfg_t *cfg, const oidc_session_t *session,
+				     oidc_json_t *claims, const oidc_pass_user_info_as_t *p,
+				     oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding) {
 
 	char *cser = NULL;
 
@@ -394,9 +397,9 @@ static void oidc_userinfo_pass_entry(request_rec *r, oidc_cfg_t *cfg, const oidc
 		break;
 	case OIDC_PASS_USERINFO_AS_JSON_OBJECT:
 		/* pass the userinfo JSON object to the app in a header or environment variable */
-		oidc_userinfo_appinfo_set(r, p->name, OIDC_APP_INFO_USERINFO_JSON,
-					  oidc_util_json_encode(r->pool, claims, JSON_PRESERVE_ORDER | JSON_COMPACT),
-					  pass_in, encoding);
+		oidc_userinfo_appinfo_set(
+		    r, p->name, OIDC_APP_INFO_USERINFO_JSON,
+		    oidc_json_encode(r->pool, claims, OIDC_JSON_PRESERVE_ORDER | OIDC_JSON_COMPACT), pass_in, encoding);
 		break;
 	case OIDC_PASS_USERINFO_AS_JWT:
 		oidc_userinfo_pass_as_jwt(r, cfg, session, p->name, pass_in, encoding);
@@ -413,10 +416,11 @@ static void oidc_userinfo_pass_entry(request_rec *r, oidc_cfg_t *cfg, const oidc
 /*
  * resolve the claims to pass to the app, optionally applying a JQ filter
  * to the userinfo claims stored in the session; *filtered receives the
- * newly allocated json_t that the caller must release, or NULL when no
+ * newly allocated oidc_json_t that the caller must release, or NULL when no
  * filter was applied
  */
-static json_t *oidc_userinfo_resolve_claims(request_rec *r, const oidc_session_t *session, json_t **filtered) {
+static oidc_json_t *oidc_userinfo_resolve_claims(request_rec *r, const oidc_session_t *session,
+						 oidc_json_t **filtered) {
 
 	*filtered = NULL;
 
@@ -424,7 +428,7 @@ static json_t *oidc_userinfo_resolve_claims(request_rec *r, const oidc_session_t
 	const char *s_filter = oidc_cfg_dir_userinfo_claims_expr_get(r);
 	if (s_filter != NULL) {
 		const char *s_claims = oidc_util_jq_filter(r, oidc_session_get_userinfo_claims(r, session), s_filter);
-		if (oidc_util_json_decode_object(r, s_claims, filtered) == FALSE) {
+		if (oidc_json_decode_object(r, s_claims, filtered) == FALSE) {
 			oidc_error(r, "JQ filtering of claims for [%s] resulted in invalid JSON object, filter='%s'",
 				   "userinfo", s_filter);
 			return NULL;
@@ -443,8 +447,8 @@ void oidc_userinfo_pass_as(request_rec *r, oidc_cfg_t *cfg, const oidc_session_t
 			   oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding) {
 
 	const apr_array_header_t *pass_userinfo_as = oidc_cfg_dir_pass_userinfo_as_get(r);
-	json_t *filtered_claims = NULL;
-	json_t *claims = oidc_userinfo_resolve_claims(r, session, &filtered_claims);
+	oidc_json_t *filtered_claims = NULL;
+	oidc_json_t *claims = oidc_userinfo_resolve_claims(r, session, &filtered_claims);
 
 	if (claims == NULL)
 		return;
@@ -455,5 +459,5 @@ void oidc_userinfo_pass_as(request_rec *r, oidc_cfg_t *cfg, const oidc_session_t
 					 encoding);
 
 	if (filtered_claims)
-		json_decref(filtered_claims);
+		oidc_json_decref(filtered_claims);
 }

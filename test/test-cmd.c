@@ -53,6 +53,7 @@
 
 #include <apr_base64.h>
 #include <cjose/cjose.h> /* this CLI utility uses the cjose API directly (no longer pulled in via jose.h) */
+#include <jansson.h> /* this test builds JSON fixtures with the backend API directly (no longer pulled in via jose.h) */
 #include <openssl/pem.h>
 
 int usage(int argc, char **argv, const char *msg) {
@@ -167,7 +168,7 @@ int verify(int argc, char **argv, apr_pool_t *pool) {
 	}
 
 	json_error_t json_error;
-	json_t *json = json_loads(s_jwk, 0, &json_error);
+	oidc_json_t *json = json_loads(s_jwk, 0, &json_error);
 
 	oidc_jose_error_t oidc_err;
 	oidc_jwk_t *jwk = oidc_jwk_parse(pool, json, &oidc_err);
@@ -195,7 +196,7 @@ int verify(int argc, char **argv, apr_pool_t *pool) {
 
 	cjose_jws_release(jws);
 	oidc_jwk_destroy(jwk);
-	json_decref(json);
+	oidc_json_decref(json);
 
 	return 0;
 }
@@ -215,7 +216,7 @@ int decrypt(int argc, char **argv, apr_pool_t *pool) {
 	apr_hash_t *keys = apr_hash_make(pool);
 
 	json_error_t json_error;
-	json_t *json = json_loads(s_jwk, 0, &json_error);
+	oidc_json_t *json = json_loads(s_jwk, 0, &json_error);
 
 	oidc_jose_error_t oidc_err;
 	oidc_jwk_t *jwk = oidc_jwk_parse(pool, json, &oidc_err);
@@ -236,7 +237,7 @@ int decrypt(int argc, char **argv, apr_pool_t *pool) {
 
 	fprintf(stdout, "%s", plaintext);
 	oidc_jwk_destroy(jwk);
-	json_decref(json);
+	oidc_json_decref(json);
 
 	return 0;
 }

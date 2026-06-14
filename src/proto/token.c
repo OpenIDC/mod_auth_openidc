@@ -123,7 +123,7 @@ static apr_byte_t oidc_proto_token_endpoint_dpop_prepare(request_rec *r, const o
 static apr_byte_t oidc_proto_token_endpoint_dpop_retry(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
 						       const apr_table_t *params, const char *basic_auth,
 						       const char *bearer_auth, apr_hash_t *response_hdrs,
-						       char **response, json_t **j_result) {
+						       char **response, oidc_json_t **j_result) {
 
 	char *dpop = NULL;
 
@@ -135,25 +135,25 @@ static apr_byte_t oidc_proto_token_endpoint_dpop_retry(request_rec *r, oidc_cfg_
 					   response_hdrs) == FALSE)
 		return FALSE;
 
-	json_decref(*j_result);
+	oidc_json_decref(*j_result);
 	*j_result = NULL;
 
-	return oidc_util_json_decode_and_check_error(r, *response, j_result);
+	return oidc_json_decode_and_check_error(r, *response, j_result);
 }
 
 /*
  * parse a successful token endpoint response and validate the returned token type against the DPoP mode
  */
 static apr_byte_t oidc_proto_token_endpoint_response_parse(request_rec *r, const oidc_provider_t *provider,
-							   const json_t *j_result, char **id_token, char **access_token,
-							   char **token_type, int *expires_in, char **refresh_token,
-							   char **scope) {
+							   const oidc_json_t *j_result, char **id_token,
+							   char **access_token, char **token_type, int *expires_in,
+							   char **refresh_token, char **scope) {
 
-	const json_t *j_expires_in = NULL;
+	const oidc_json_t *j_expires_in = NULL;
 
-	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_ID_TOKEN, id_token, NULL);
-	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_ACCESS_TOKEN, access_token, NULL);
-	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_TOKEN_TYPE, token_type, NULL);
+	oidc_json_object_get_string(r->pool, j_result, OIDC_PROTO_ID_TOKEN, id_token, NULL);
+	oidc_json_object_get_string(r->pool, j_result, OIDC_PROTO_ACCESS_TOKEN, access_token, NULL);
+	oidc_json_object_get_string(r->pool, j_result, OIDC_PROTO_TOKEN_TYPE, token_type, NULL);
 
 	/* check if DPoP is required */
 	if ((oidc_proto_profile_dpop_mode_get(provider) == OIDC_DPOP_MODE_REQUIRED) &&
@@ -171,13 +171,13 @@ static apr_byte_t oidc_proto_token_endpoint_response_parse(request_rec *r, const
 
 	/* get the access token expires_in value; cater for string values (old Microsoft Entra ID / Azure AD) */
 	*expires_in = -1;
-	j_expires_in = json_object_get(j_result, OIDC_PROTO_EXPIRES_IN);
-	if (json_is_string(j_expires_in)) {
-		*expires_in = _oidc_str_to_int(json_string_value(j_expires_in), -1);
-	} else if (json_is_integer(j_expires_in)) {
+	j_expires_in = oidc_json_object_get(j_result, OIDC_PROTO_EXPIRES_IN);
+	if (oidc_json_is_string(j_expires_in)) {
+		*expires_in = _oidc_str_to_int(oidc_json_string_value(j_expires_in), -1);
+	} else if (oidc_json_is_integer(j_expires_in)) {
 		/* clamp into int range so a maliciously huge OP value can't silently truncate to a small/negative TTL
 		 */
-		json_int_t v = json_integer_value(j_expires_in);
+		oidc_json_int_t v = oidc_json_integer_value(j_expires_in);
 		if (v > INT_MAX)
 			*expires_in = INT_MAX;
 		else if (v < INT_MIN)
@@ -186,8 +186,8 @@ static apr_byte_t oidc_proto_token_endpoint_response_parse(request_rec *r, const
 			*expires_in = (int)v;
 	}
 
-	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_REFRESH_TOKEN, refresh_token, NULL);
-	oidc_util_json_object_get_string(r->pool, j_result, OIDC_PROTO_SCOPE, scope, NULL);
+	oidc_json_object_get_string(r->pool, j_result, OIDC_PROTO_REFRESH_TOKEN, refresh_token, NULL);
+	oidc_json_object_get_string(r->pool, j_result, OIDC_PROTO_SCOPE, scope, NULL);
 
 	return TRUE;
 }
@@ -205,7 +205,7 @@ apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, co
 	char *response = NULL;
 	char *dpop = NULL;
 	apr_hash_t *response_hdrs = NULL;
-	json_t *j_result = NULL;
+	oidc_json_t *j_result = NULL;
 
 	/* add the token endpoint authentication credentials */
 	if (oidc_proto_token_endpoint_auth(
@@ -229,11 +229,11 @@ apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, co
 		goto end;
 
 	/* decode the response into a JSON object */
-	if (oidc_util_json_decode_object_err(r, response, &j_result, TRUE) == FALSE)
+	if (oidc_json_decode_object_err(r, response, &j_result, TRUE) == FALSE)
 		goto end;
 
 	/* on a DPoP nonce error retry the call with a fresh nonce-bound DPoP header */
-	if ((oidc_util_json_check_error(r, j_result) == TRUE) &&
+	if ((oidc_json_check_error(r, j_result) == TRUE) &&
 	    (oidc_proto_token_endpoint_dpop_retry(r, cfg, provider, params, basic_auth, bearer_auth, response_hdrs,
 						  &response, &j_result) == FALSE))
 		goto end;
@@ -247,7 +247,7 @@ apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, co
 end:
 
 	if (j_result)
-		json_decref(j_result);
+		oidc_json_decref(j_result);
 
 	return rv;
 }

@@ -55,22 +55,22 @@
 apr_byte_t oidc_proto_webfinger_response_get_issuer(request_rec *r, const char *response, char **issuer) {
 
 	/* decode and see if it is not an error response somehow */
-	json_t *j_response = NULL;
-	if (oidc_util_json_decode_and_check_error(r, response, &j_response) == FALSE)
+	oidc_json_t *j_response = NULL;
+	if (oidc_json_decode_and_check_error(r, response, &j_response) == FALSE)
 		return FALSE;
 
 	apr_byte_t rv = FALSE;
 
 	/* get the links parameter */
-	const json_t *j_links = json_object_get(j_response, "links");
-	if ((j_links == NULL) || (!json_is_array(j_links))) {
+	const oidc_json_t *j_links = oidc_json_object_get(j_response, "links");
+	if ((j_links == NULL) || (!oidc_json_is_array(j_links))) {
 		oidc_error(r, "response JSON object did not contain a \"links\" array");
 		goto end;
 	}
 
 	/* get the one-and-only object in the "links" array */
-	const json_t *j_object = json_array_get(j_links, 0);
-	if ((j_object == NULL) || (!json_is_object(j_object))) {
+	const oidc_json_t *j_object = oidc_json_array_get(j_links, 0);
+	if ((j_object == NULL) || (!oidc_json_is_object(j_object))) {
 		oidc_error(
 		    r,
 		    "response JSON object did not contain a JSON object as the first element in the \"links\" array");
@@ -78,25 +78,25 @@ apr_byte_t oidc_proto_webfinger_response_get_issuer(request_rec *r, const char *
 	}
 
 	/* get the href from that object, which is the issuer value */
-	const json_t *j_href = json_object_get(j_object, "href");
-	if ((j_href == NULL) || (!json_is_string(j_href))) {
+	const oidc_json_t *j_href = oidc_json_object_get(j_object, "href");
+	if ((j_href == NULL) || (!oidc_json_is_string(j_href))) {
 		oidc_error(
 		    r, "response JSON object did not contain a \"href\" element in the first \"links\" array object");
 		goto end;
 	}
 
 	/* check that the link is on secure HTTPs */
-	if (oidc_cfg_parse_is_valid_url(r->pool, json_string_value(j_href), "https") != NULL) {
+	if (oidc_cfg_parse_is_valid_url(r->pool, oidc_json_string_value(j_href), "https") != NULL) {
 		oidc_error(r, "response JSON object contains an \"href\" value that is not a valid \"https\" URL: %s",
-			   json_string_value(j_href));
+			   oidc_json_string_value(j_href));
 		goto end;
 	}
 
-	*issuer = apr_pstrdup(r->pool, json_string_value(j_href));
+	*issuer = apr_pstrdup(r->pool, oidc_json_string_value(j_href));
 	rv = TRUE;
 
 end:
-	json_decref(j_response);
+	oidc_json_decref(j_response);
 	return rv;
 }
 

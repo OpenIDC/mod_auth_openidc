@@ -183,7 +183,7 @@ static int oidc_state_cookies_process_one(request_rec *r, const oidc_cfg_t *c, c
 	}
 
 	int kept = 0;
-	json_int_t ts = oidc_proto_state_get_timestamp(proto_state);
+	oidc_json_int_t ts = oidc_proto_state_get_timestamp(proto_state);
 	if (apr_time_now() > ts + apr_time_from_sec(oidc_cfg_state_timeout_get(c))) {
 		oidc_warn(r, "state (%s) has expired (original_url=%s)", cookieName,
 			  oidc_proto_state_get_original_url(proto_state));

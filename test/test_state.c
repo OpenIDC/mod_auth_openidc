@@ -67,7 +67,7 @@ static char *state_cookie_value(request_rec *r, oidc_cfg_t *c, int ts_offset) {
 	oidc_proto_state_set_response_type(ps, OIDC_PROTO_RESPONSE_TYPE_CODE);
 	oidc_proto_state_set_timestamp_now(ps);
 	/* override the timestamp the setter just wrote */
-	json_object_set_new(ps, "t", json_integer(apr_time_sec(apr_time_now()) + ts_offset));
+	oidc_json_object_set_new(ps, "t", oidc_json_integer(apr_time_sec(apr_time_now()) + ts_offset));
 	char *cv = oidc_proto_state_to_cookie(r, c, ps);
 	oidc_proto_state_destroy(ps);
 	return cv;

@@ -1,3 +1,11 @@
+06/14/2026
+- json: introduce a JSON backend abstraction layer; move util/json.c to json.c
+  and rename oidc_util_json_* to oidc_json_*, with an opaque oidc_json_t type
+  and backend-independent OIDC_JSON_* constants, so that code outside json.c no
+  longer references libjansson directly (jose.c remains the cjose seam, which
+  uses the same backend value type); a preparatory step towards decoupling the
+  underlying JSON backend; no functional change
+
 06/13/2026
 - jose: stop exposing the cjose JOSE library through the public jose.h header,
   as a preparatory step towards decoupling the underlying JOSE backend; code

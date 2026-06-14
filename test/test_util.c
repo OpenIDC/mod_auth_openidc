@@ -43,6 +43,7 @@
 
 #include "check_util.h"
 #include "mod_auth_openidc.h"
+#include <jansson.h> /* this test builds JSON fixtures with the backend API directly (no longer pulled in via jose.h) */
 #include "util.h"
 #include "util/util.h"
 
@@ -108,10 +109,10 @@ END_TEST
 
 START_TEST(test_util_appinfo_set) {
 	apr_byte_t rc = FALSE;
-	json_t *claims = NULL;
+	oidc_json_t *claims = NULL;
 	request_rec *r = oidc_test_request_get();
 
-	rc = oidc_util_json_decode_object(r,
+	rc = oidc_json_decode_object(r,
 					  "{"
 					  "\"simple\":\"hans\","
 					  "\"name\": \"GÜnther\","
@@ -168,7 +169,7 @@ START_TEST(test_util_appinfo_set) {
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_name", "G\xDCnther");
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_dagger", "D?g\xFFger");
 
-	json_decref(claims);
+	oidc_json_decref(claims);
 }
 END_TEST
 
@@ -391,8 +392,8 @@ END_TEST
 
 START_TEST(test_util_jq) {
 	request_rec *r = oidc_test_request_get();
-	json_t *json = NULL;
-	oidc_util_json_decode_object(r, "{ \"jan\": \"jan\", \"piet\": \"piet\" }", &json);
+	oidc_json_t *json = NULL;
+	oidc_json_decode_object(r, "{ \"jan\": \"jan\", \"piet\": \"piet\" }", &json);
 #ifdef USE_LIBJQ
 	ck_assert_str_eq(oidc_util_jq_filter(r, NULL, "."), "{}");
 	ck_assert_str_eq(oidc_util_jq_filter(r, json, NULL), "{\"jan\":\"jan\",\"piet\":\"piet\"}");
@@ -402,76 +403,76 @@ START_TEST(test_util_jq) {
 #else
 	ck_assert_str_eq(oidc_util_jq_filter(r, json, ".jan"), "{\"jan\":\"jan\",\"piet\":\"piet\"}");
 #endif
-	json_decref(json);
+	oidc_json_decref(json);
 }
 END_TEST
 
 START_TEST(test_util_json) {
 	request_rec *r = oidc_test_request_get();
 	apr_byte_t rv = FALSE;
-	json_t *json = NULL;
-	json_t *src = NULL;
-	json_t *dst = NULL;
+	oidc_json_t *json = NULL;
+	oidc_json_t *src = NULL;
+	oidc_json_t *dst = NULL;
 	json_error_t json_error;
 	apr_pool_t *pool = oidc_test_pool_get();
 	apr_array_header_t *arr = NULL;
 	int v = 0;
 
-	ck_assert_msg(oidc_util_json_decode_and_check_error(r, NULL, &json) == FALSE,
+	ck_assert_msg(oidc_json_decode_and_check_error(r, NULL, &json) == FALSE,
 		      "result for NULL is not FALSE: %d", rv);
-	json_decref(json);
-	ck_assert_msg(oidc_util_json_decode_and_check_error(r, "{}", &json) == TRUE, "result for {} is not FALSE: %d",
+	oidc_json_decref(json);
+	ck_assert_msg(oidc_json_decode_and_check_error(r, "{}", &json) == TRUE, "result for {} is not FALSE: %d",
 		      rv);
-	json_decref(json);
-	ck_assert_msg(oidc_util_json_decode_and_check_error(r, "[ 1, 2 ]", &json) == FALSE,
+	oidc_json_decref(json);
+	ck_assert_msg(oidc_json_decode_and_check_error(r, "[ 1, 2 ]", &json) == FALSE,
 		      "result for array object is not TRUE: %d", rv);
-	json_decref(json);
-	ck_assert_msg(oidc_util_json_decode_and_check_error(r, "{\"error\":\"yes\"}", &json) == FALSE,
+	oidc_json_decref(json);
+	ck_assert_msg(oidc_json_decode_and_check_error(r, "{\"error\":\"yes\"}", &json) == FALSE,
 		      "result for error object is not FALSE: %d", rv);
-	json_decref(json);
+	oidc_json_decref(json);
 
 	json = json_loads("[ \"hi\", 2 ]", 0, &json_error);
 	ck_assert_ptr_nonnull(json);
-	ck_assert_msg(oidc_util_json_array_has_value(r, json, "ho") == FALSE, "result for \"ho\" is not FALSE");
-	ck_assert_msg(oidc_util_json_array_has_value(r, json, "hi") == TRUE, "result for \"hi\" is not TRUE");
-	json_decref(json);
+	ck_assert_msg(oidc_json_array_has_value(r, json, "ho") == FALSE, "result for \"ho\" is not FALSE");
+	ck_assert_msg(oidc_json_array_has_value(r, json, "hi") == TRUE, "result for \"hi\" is not TRUE");
+	oidc_json_decref(json);
 
 	json = json_loads("{ \"myarr\": [ \"hi\", \"ho\" ] }", 0, &json_error);
 	ck_assert_ptr_nonnull(json);
-	ck_assert_msg(oidc_util_json_object_get_string_array(pool, json, "my", &arr, NULL) == TRUE,
+	ck_assert_msg(oidc_json_object_get_string_array(pool, json, "my", &arr, NULL) == TRUE,
 		      "result is not TRUE");
 	ck_assert_ptr_null(arr);
-	ck_assert_msg(oidc_util_json_object_get_string_array(pool, json, "myarr", &arr, NULL) == TRUE,
+	ck_assert_msg(oidc_json_object_get_string_array(pool, json, "myarr", &arr, NULL) == TRUE,
 		      "result is not TRUE");
 	ck_assert_ptr_nonnull(arr);
 	ck_assert_msg(arr->nelts == 2, "array size is not 2");
-	json_decref(json);
+	oidc_json_decref(json);
 
 	json = json_loads("{ \"myint\": 1, \"mybool\": true }", 0, &json_error);
 	ck_assert_ptr_nonnull(json);
-	ck_assert_msg(oidc_util_json_object_get_int(json, "my", &v, 0) == FALSE, "result is not FALSE");
+	ck_assert_msg(oidc_json_object_get_int(json, "my", &v, 0) == FALSE, "result is not FALSE");
 	ck_assert_int_eq(v, 0);
-	ck_assert_msg(oidc_util_json_object_get_int(json, "myint", &v, 0) == TRUE, "result is not TRUE");
+	ck_assert_msg(oidc_json_object_get_int(json, "myint", &v, 0) == TRUE, "result is not TRUE");
 	ck_assert_int_eq(v, 1);
-	ck_assert_msg(oidc_util_json_object_get_bool(json, "my", &v, 0) == FALSE, "result is not FALSE");
+	ck_assert_msg(oidc_json_object_get_bool(json, "my", &v, 0) == FALSE, "result is not FALSE");
 	ck_assert_int_eq(v, 0);
-	ck_assert_msg(oidc_util_json_object_get_bool(json, "mybool", &v, 0) == TRUE, "result is not TRUE");
+	ck_assert_msg(oidc_json_object_get_bool(json, "mybool", &v, 0) == TRUE, "result is not TRUE");
 	ck_assert_int_eq(v, 1);
-	json_decref(json);
+	oidc_json_decref(json);
 
 	src = json_loads("{ \"myint1\": 1, \"mybool1\": false }", 0, &json_error);
 	ck_assert_ptr_nonnull(src);
 	dst = json_loads("{ \"myint2\": 2, \"mybool2\": true }", 0, &json_error);
 	ck_assert_ptr_nonnull(dst);
-	ck_assert_msg(oidc_util_json_merge(r, src, dst) == TRUE, "result is not TRUE");
+	ck_assert_msg(oidc_json_merge(r, src, dst) == TRUE, "result is not TRUE");
 	ck_assert_ptr_nonnull(src);
 	ck_assert_ptr_nonnull(dst);
-	ck_assert_msg(oidc_util_json_object_get_bool(dst, "mybool2", &v, 0) == TRUE, "result is not TRUE");
+	ck_assert_msg(oidc_json_object_get_bool(dst, "mybool2", &v, 0) == TRUE, "result is not TRUE");
 	ck_assert_int_eq(v, 1);
-	ck_assert_msg(oidc_util_json_object_get_bool(dst, "mybool1", &v, 1) == TRUE, "result is not TRUE");
+	ck_assert_msg(oidc_json_object_get_bool(dst, "mybool1", &v, 1) == TRUE, "result is not TRUE");
 	ck_assert_int_eq(v, 0);
-	json_decref(src);
-	json_decref(dst);
+	oidc_json_decref(src);
+	oidc_json_decref(dst);
 }
 END_TEST
 
@@ -945,15 +946,15 @@ END_TEST
 
 /*
  * Tests migrated from the legacy test/test.c suite — covers the
- * non-NULL/non-oversized branches of oidc_util_json_decode_object that
+ * non-NULL/non-oversized branches of oidc_json_decode_object that
  * test_util_json above doesn't reach.
  */
 START_TEST(test_util_legacy_json_decode_object) {
 	request_rec *r = oidc_test_request_get();
-	json_t *json = NULL;
+	oidc_json_t *json = NULL;
 
 	/* embedded NUL via a   escape must be rejected */
-	ck_assert_int_eq(oidc_util_json_decode_object(r, "{ \"n\": \"\\u0000<?php echo 'Hello' ?>\"}", &json), FALSE);
+	ck_assert_int_eq(oidc_json_decode_object(r, "{ \"n\": \"\\u0000<?php echo 'Hello' ?>\"}", &json), FALSE);
 
 	/* an oversized JSON blob (>4 KiB of garbage) must be rejected by the size guard */
 	apr_pool_t *pool = oidc_test_pool_get();
@@ -961,63 +962,63 @@ START_TEST(test_util_legacy_json_decode_object) {
 	char *big = apr_palloc(pool, big_len + 1);
 	memset(big, 'a', big_len);
 	big[big_len] = '\0';
-	ck_assert_int_eq(oidc_util_json_decode_object(r, big, &json), FALSE);
+	ck_assert_int_eq(oidc_json_decode_object(r, big, &json), FALSE);
 }
 END_TEST
 
 START_TEST(test_util_json_string_and_encode) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	request_rec *r = oidc_test_request_get();
-	json_t *json = NULL;
+	oidc_json_t *json = NULL;
 	char *value = NULL;
 	char *encoded = NULL;
 
 	/* encode NULL must return NULL */
-	ck_assert_ptr_null(oidc_util_json_encode(pool, NULL, 0));
+	ck_assert_ptr_null(oidc_json_encode(pool, NULL, 0));
 
 	/* with no JSON, default is returned */
-	oidc_util_json_object_get_string(pool, NULL, "any", &value, "fallback");
+	oidc_json_object_get_string(pool, NULL, "any", &value, "fallback");
 	ck_assert_ptr_nonnull(value);
 	ck_assert_str_eq(value, "fallback");
 
 	/* NULL default must produce NULL output */
 	value = (char *)0xdeadbeef;
-	oidc_util_json_object_get_string(pool, NULL, "any", &value, NULL);
+	oidc_json_object_get_string(pool, NULL, "any", &value, NULL);
 	ck_assert_ptr_null(value);
 
-	ck_assert_msg(oidc_util_json_decode_object(r, "{\"name\":\"hans\",\"age\":42}", &json) == TRUE,
+	ck_assert_msg(oidc_json_decode_object(r, "{\"name\":\"hans\",\"age\":42}", &json) == TRUE,
 		      "decode of valid object failed");
 	ck_assert_ptr_nonnull(json);
 
 	/* existing string key */
 	value = NULL;
-	oidc_util_json_object_get_string(pool, json, "name", &value, "default");
+	oidc_json_object_get_string(pool, json, "name", &value, "default");
 	ck_assert_str_eq(value, "hans");
 
 	/* missing key falls back to default */
 	value = NULL;
-	oidc_util_json_object_get_string(pool, json, "missing", &value, "default");
+	oidc_json_object_get_string(pool, json, "missing", &value, "default");
 	ck_assert_str_eq(value, "default");
 
 	/* non-string key (integer) falls back to default */
 	value = NULL;
-	oidc_util_json_object_get_string(pool, json, "age", &value, "default");
+	oidc_json_object_get_string(pool, json, "age", &value, "default");
 	ck_assert_str_eq(value, "default");
 
 	/* round-trip encode */
-	encoded = oidc_util_json_encode(pool, json, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	encoded = oidc_json_encode(pool, json, OIDC_JSON_PRESERVE_ORDER | OIDC_JSON_COMPACT);
 	ck_assert_ptr_nonnull(encoded);
 	ck_assert_str_eq(encoded, "{\"name\":\"hans\",\"age\":42}");
-	json_decref(json);
+	oidc_json_decref(json);
 
 	/* NULL input string returns FALSE and does not crash */
 	json = NULL;
-	ck_assert_msg(oidc_util_json_decode_object_err(r, NULL, &json, FALSE) == FALSE, "decode NULL must fail");
+	ck_assert_msg(oidc_json_decode_object_err(r, NULL, &json, FALSE) == FALSE, "decode NULL must fail");
 	ck_assert_ptr_null(json);
 
 	/* malformed JSON must fail, but with log_err==FALSE no error is logged */
 	json = NULL;
-	ck_assert_msg(oidc_util_json_decode_object_err(r, "{not json", &json, FALSE) == FALSE,
+	ck_assert_msg(oidc_json_decode_object_err(r, "{not json", &json, FALSE) == FALSE,
 		      "decode of invalid JSON must fail");
 	ck_assert_ptr_null(json);
 }

@@ -52,7 +52,7 @@
 #include <http_log.h>
 #include <http_request.h>
 // clang-format on
-#include <jansson.h>
+#include "json.h"
 
 #define OIDC_HTTP_CONTENT_TYPE_JSON "application/json"
 #define OIDC_HTTP_CONTENT_TYPE_JWT "application/jwt"
@@ -155,7 +155,7 @@ apr_byte_t oidc_http_post_form(request_rec *r, const char *url, const apr_table_
 			       long *response_code, apr_hash_t *response_hdrs, const oidc_http_timeout_t *http_timeout,
 			       const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,
 			       const char *ssl_cert, const char *ssl_key, const char *ssl_key_pwd);
-apr_byte_t oidc_http_post_json(request_rec *r, const char *url, const json_t *data, const char *basic_auth,
+apr_byte_t oidc_http_post_json(request_rec *r, const char *url, const oidc_json_t *data, const char *basic_auth,
 			       const char *access_token, const char *dpop, int ssl_validate_server, char **response,
 			       long *response_code, apr_hash_t *response_hdrs, const oidc_http_timeout_t *http_timeout,
 			       const oidc_http_outgoing_proxy_t *outgoing_proxy, const apr_array_header_t *pass_cookies,

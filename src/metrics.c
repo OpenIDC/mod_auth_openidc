@@ -246,24 +246,20 @@ static oidc_metrics_bucket_t _oidc_metric_buckets[] = {
 #define OIDC_METRICS_COUNTERS "counters"
 
 /*
- * convert a Jansson number to a string: JSON_INTEGER_FORMAT does not work with apr_psprintf !?
+ * convert a Jansson number to a string: OIDC_JSON_INT_FORMAT does not work with apr_psprintf !?
  */
-static inline char *_json_int2str(apr_pool_t *pool, json_int_t n) {
+static inline char *_json_int2str(apr_pool_t *pool, oidc_json_int_t n) {
 	char s[255];
-	snprintf(s, 255, "%" JSON_INTEGER_FORMAT, n);
+	snprintf(s, 255, "%" OIDC_JSON_INT_FORMAT, n);
 	return apr_pstrdup(pool, s);
 }
 
-#if JSON_INTEGER_IS_LONG_LONG
-#define OIDC_METRICS_INT_MAX LLONG_MAX
-#else
-#define OIDC_METRICS_INT_MAX LONG_MAX
-#endif
+#define OIDC_METRICS_INT_MAX OIDC_JSON_INT_MAX
 
 /*
  * check Jansson specific integer/long number overrun
  */
-static inline int _is_overflow(server_rec *s, json_int_t cur, json_int_t add) {
+static inline int _is_overflow(server_rec *s, oidc_json_int_t cur, oidc_json_int_t add) {
 	if (add > (OIDC_METRICS_INT_MAX - cur)) {
 		oidc_swarn(s,
 			   "reset metrics since the size (%s) of the integer value would be larger than the "
@@ -277,14 +273,14 @@ static inline int _is_overflow(server_rec *s, json_int_t cur, json_int_t add) {
 
 // single counter container
 typedef struct oidc_metrics_counter_t {
-	json_int_t count;
+	oidc_json_int_t count;
 } oidc_metrics_counter_t;
 
 // single timing stats container
 typedef struct oidc_metrics_timing_t {
-	json_int_t buckets[OIDC_METRICS_BUCKET_NUM];
+	oidc_json_int_t buckets[OIDC_METRICS_BUCKET_NUM];
 	apr_time_t sum;
-	json_int_t count;
+	oidc_json_int_t count;
 } oidc_metrics_timing_t;
 
 // context holder for parsing valid classnames
@@ -394,64 +390,66 @@ static inline void _oidc_metrics_storage_set(server_rec *s, const char *value) {
 /*
  * parse a string into a JSON object
  */
-static json_t *oidc_metrics_json_load(const char *s_json, json_error_t *json_error) {
+static oidc_json_t *oidc_metrics_json_load(apr_pool_t *pool, const char *s_json, char **s_err) {
+	oidc_json_t *json = NULL;
 	if (s_json == NULL)
 		s_json = "{}";
-	return json_loads(s_json, 0, json_error);
+	oidc_json_parse(pool, s_json, 0, &json, s_err);
+	return json;
 }
 
 /*
  * parse a string into a JSON object in a server_rec context
  */
-static json_t *oidc_metrics_json_parse_s(server_rec *s, const char *s_json) {
-	json_error_t json_error;
-	json_t *json = oidc_metrics_json_load(s_json, &json_error);
+static oidc_json_t *oidc_metrics_json_parse_s(server_rec *s, const char *s_json) {
+	char *s_err = NULL;
+	oidc_json_t *json = oidc_metrics_json_load(s->process->pool, s_json, &s_err);
 	if (json == NULL)
-		oidc_serror(s, "JSON parsing failed: %s", json_error.text);
+		oidc_serror(s, "JSON parsing failed: %s", s_err);
 	return json;
 }
 
 /*
  * recursively reset all integer leaf values within a JSON object tree to 0
  */
-static void oidc_metrics_reset_integer_tree(json_t *json) {
-	void *iter = json_object_iter(json);
+static void oidc_metrics_reset_integer_tree(oidc_json_t *json) {
+	void *iter = oidc_json_object_iter(json);
 	while (iter) {
-		json_t *value = json_object_iter_value(iter);
-		if (json_is_integer(value))
-			json_integer_set(value, 0);
-		else if (json_is_object(value))
+		oidc_json_t *value = oidc_json_object_iter_value(iter);
+		if (oidc_json_is_integer(value))
+			oidc_json_integer_set(value, 0);
+		else if (oidc_json_is_object(value))
 			oidc_metrics_reset_integer_tree(value);
-		iter = json_object_iter_next(json, iter);
+		iter = oidc_json_object_iter_next(json, iter);
 	}
 }
 
 /*
  * reset a single timings entry (buckets, sum, count) to 0
  */
-static void oidc_metrics_reset_timer(json_t *j_entry) {
+static void oidc_metrics_reset_timer(oidc_json_t *j_entry) {
 	for (int i = 0; i < OIDC_METRICS_BUCKET_NUM; i++)
-		json_object_set_new(j_entry, _oidc_metric_buckets[i].name, json_integer(0));
-	json_object_set_new(j_entry, OIDC_METRICS_SUM, json_integer(0));
-	json_object_set_new(j_entry, OIDC_METRICS_COUNT, json_integer(0));
+		oidc_json_object_set_new(j_entry, _oidc_metric_buckets[i].name, oidc_json_integer(0));
+	oidc_json_object_set_new(j_entry, OIDC_METRICS_SUM, oidc_json_integer(0));
+	oidc_json_object_set_new(j_entry, OIDC_METRICS_COUNT, oidc_json_integer(0));
 }
 
 /*
  * reset all counter and timer entries for a single server in the JSON data
  */
-static void oidc_metrics_reset_server(const json_t *j_server) {
-	json_t *j_entries = NULL;
+static void oidc_metrics_reset_server(const oidc_json_t *j_server) {
+	oidc_json_t *j_entries = NULL;
 	void *iter = NULL;
 
-	j_entries = json_object_get(j_server, OIDC_METRICS_COUNTERS);
+	j_entries = oidc_json_object_get(j_server, OIDC_METRICS_COUNTERS);
 	if (j_entries)
 		oidc_metrics_reset_integer_tree(j_entries);
 
-	j_entries = json_object_get(j_server, OIDC_METRICS_TIMINGS);
-	iter = json_object_iter(j_entries);
+	j_entries = oidc_json_object_get(j_server, OIDC_METRICS_TIMINGS);
+	iter = oidc_json_object_iter(j_entries);
 	while (iter) {
-		oidc_metrics_reset_timer(json_object_iter_value(iter));
-		iter = json_object_iter_next(j_entries, iter);
+		oidc_metrics_reset_timer(oidc_json_object_iter_value(iter));
+		iter = oidc_json_object_iter_next(j_entries, iter);
 	}
 }
 
@@ -460,7 +458,7 @@ static void oidc_metrics_reset_server(const json_t *j_server) {
  */
 static inline void oidc_metrics_storage_reset(server_rec *s) {
 	const char *s_json = NULL;
-	json_t *json = NULL;
+	oidc_json_t *json = NULL;
 	void *iter = NULL;
 
 	/* get the global stringified JSON metrics */
@@ -469,19 +467,19 @@ static inline void oidc_metrics_storage_reset(server_rec *s) {
 	/* parse the metrics string to JSON */
 	json = oidc_metrics_json_parse_s(s, s_json);
 	if (json == NULL)
-		json = json_object();
+		json = oidc_json_object();
 
-	iter = json_object_iter(json);
+	iter = oidc_json_object_iter(json);
 	while (iter) {
-		oidc_metrics_reset_server(json_object_iter_value(iter));
-		iter = json_object_iter_next(json, iter);
+		oidc_metrics_reset_server(oidc_json_object_iter_value(iter));
+		iter = oidc_json_object_iter_next(json, iter);
 	}
 
 	/* serialize the metrics data, preserve order is required for Prometheus */
-	s_json = oidc_util_json_encode(s->process->pool, json, JSON_COMPACT | JSON_PRESERVE_ORDER);
+	s_json = oidc_json_encode(s->process->pool, json, OIDC_JSON_COMPACT | OIDC_JSON_PRESERVE_ORDER);
 
 	/* free the JSON data */
-	json_decref(json);
+	oidc_json_decref(json);
 
 	/* store the serialized metrics data in shared memory */
 	_oidc_metrics_storage_set(s, s_json);
@@ -490,40 +488,40 @@ static inline void oidc_metrics_storage_reset(server_rec *s) {
 /*
  * create a new timings entry in the collected JSON data
  */
-static json_t *oidc_metrics_timings_new(server_rec *s, const oidc_metrics_timing_t *timing) {
-	json_t *entry = json_object();
+static oidc_json_t *oidc_metrics_timings_new(server_rec *s, const oidc_metrics_timing_t *timing) {
+	oidc_json_t *entry = oidc_json_object();
 	for (int i = 0; i < OIDC_METRICS_BUCKET_NUM; i++)
-		json_object_set_new(entry, _oidc_metric_buckets[i].name, json_integer(timing->buckets[i]));
-	json_object_set_new(entry, OIDC_METRICS_SUM, json_integer(apr_time_as_msec(timing->sum)));
-	json_object_set_new(entry, OIDC_METRICS_COUNT, json_integer(timing->count));
+		oidc_json_object_set_new(entry, _oidc_metric_buckets[i].name, oidc_json_integer(timing->buckets[i]));
+	oidc_json_object_set_new(entry, OIDC_METRICS_SUM, oidc_json_integer(apr_time_as_msec(timing->sum)));
+	oidc_json_object_set_new(entry, OIDC_METRICS_COUNT, oidc_json_integer(timing->count));
 	return entry;
 }
 
 /*
  * update an entry in the collected JSON data
  */
-static void oidc_metrics_timings_update(server_rec *s, const json_t *entry, const oidc_metrics_timing_t *timing) {
-	json_t *j_member = NULL;
-	json_int_t n = 0;
-	json_int_t v = 0;
+static void oidc_metrics_timings_update(server_rec *s, const oidc_json_t *entry, const oidc_metrics_timing_t *timing) {
+	oidc_json_t *j_member = NULL;
+	oidc_json_int_t n = 0;
+	oidc_json_int_t v = 0;
 
 	for (int i = 0; i < OIDC_METRICS_BUCKET_NUM; i++) {
-		j_member = json_object_get(entry, _oidc_metric_buckets[i].name);
-		json_integer_set(j_member, json_integer_value(j_member) + timing->buckets[i]);
+		j_member = oidc_json_object_get(entry, _oidc_metric_buckets[i].name);
+		oidc_json_integer_set(j_member, oidc_json_integer_value(j_member) + timing->buckets[i]);
 	}
 
-	j_member = json_object_get(entry, OIDC_METRICS_SUM);
-	n = json_integer_value(j_member);
+	j_member = oidc_json_object_get(entry, OIDC_METRICS_SUM);
+	n = oidc_json_integer_value(j_member);
 
 	v = apr_time_as_msec(timing->sum);
 	if (_is_overflow(s, n, v))
 		n = 0;
 
-	json_integer_set(j_member, n + v);
+	oidc_json_integer_set(j_member, n + v);
 
-	j_member = json_object_get(entry, OIDC_METRICS_COUNT);
-	n = json_integer_value(j_member);
-	json_integer_set(j_member, n + timing->count);
+	j_member = oidc_json_object_get(entry, OIDC_METRICS_COUNT);
+	n = oidc_json_integer_value(j_member);
+	oidc_json_integer_set(j_member, n + timing->count);
 }
 
 #define OIDC_METRICS_VALUE_DEFAULT "_"
@@ -538,18 +536,18 @@ static inline const char *_metrics_value2key(const char *value) {
 /*
  * create a new counter entry in the collected JSON data
  */
-static json_t *oidc_metrics_counter_new(server_rec *s, apr_hash_t *htable) {
+static oidc_json_t *oidc_metrics_counter_new(server_rec *s, apr_hash_t *htable) {
 	oidc_metrics_counter_t *counter = NULL;
 	char *value = NULL;
-	json_t *j_values = NULL;
+	oidc_json_t *j_values = NULL;
 	for (apr_hash_index_t *hi = apr_hash_first(s->process->pool, htable); hi; hi = apr_hash_next(hi)) {
 		apr_hash_this(hi, (const void **)&value, NULL, (void **)&counter);
 		if (_oidc_strcmp(value, OIDC_METRICS_VALUE_DEFAULT) == 0) {
-			j_values = json_integer(counter->count);
+			j_values = oidc_json_integer(counter->count);
 		} else {
 			if (j_values == NULL)
-				j_values = json_object();
-			json_object_set_new(j_values, value, json_integer(counter->count));
+				j_values = oidc_json_object();
+			oidc_json_object_set_new(j_values, value, oidc_json_integer(counter->count));
 		}
 	}
 	return j_values;
@@ -558,39 +556,39 @@ static json_t *oidc_metrics_counter_new(server_rec *s, apr_hash_t *htable) {
 /*
  * update a counter entry in the collected JSON data
  */
-static void oidc_metrics_counter_update(server_rec *s, json_t *j_counter, apr_hash_t *htable) {
-	json_int_t v = 0;
+static void oidc_metrics_counter_update(server_rec *s, oidc_json_t *j_counter, apr_hash_t *htable) {
+	oidc_json_int_t v = 0;
 	oidc_metrics_counter_t *counter = NULL;
 	char *value = NULL;
-	json_t *j_value = NULL;
+	oidc_json_t *j_value = NULL;
 	for (apr_hash_index_t *hi = apr_hash_first(s->process->pool, htable); hi; hi = apr_hash_next(hi)) {
 		apr_hash_this(hi, (const void **)&value, NULL, (void **)&counter);
 		if (_oidc_strcmp(value, OIDC_METRICS_VALUE_DEFAULT) == 0) {
 			j_value = j_counter;
 		} else {
-			j_value = json_object_get(j_counter, value);
+			j_value = oidc_json_object_get(j_counter, value);
 			if (j_value == NULL) {
-				json_object_set_new(j_counter, value, json_integer(counter->count));
+				oidc_json_object_set_new(j_counter, value, oidc_json_integer(counter->count));
 				continue;
 			}
 		}
-		v = json_integer_value(j_value);
+		v = oidc_json_integer_value(j_value);
 		if (_is_overflow(s, v, counter->count))
 			v = 0;
-		json_integer_set(j_value, v + counter->count);
+		oidc_json_integer_set(j_value, v + counter->count);
 	}
 }
 
 /*
  * get or create the vhost entry in the global metrics
  */
-static json_t *oidc_metrics_server_get(json_t *json, const char *name) {
-	json_t *j_server = json_object_get(json, name);
+static oidc_json_t *oidc_metrics_server_get(oidc_json_t *json, const char *name) {
+	oidc_json_t *j_server = oidc_json_object_get(json, name);
 	if (j_server == NULL) {
-		j_server = json_object();
-		json_object_set_new(j_server, OIDC_METRICS_COUNTERS, json_object());
-		json_object_set_new(j_server, OIDC_METRICS_TIMINGS, json_object());
-		json_object_set_new(json, name, j_server);
+		j_server = oidc_json_object();
+		oidc_json_object_set_new(j_server, OIDC_METRICS_COUNTERS, oidc_json_object());
+		oidc_json_object_set_new(j_server, OIDC_METRICS_TIMINGS, oidc_json_object());
+		oidc_json_object_set_new(json, name, j_server);
 	}
 	return j_server;
 }
@@ -614,24 +612,24 @@ static inline unsigned int _oidc_metrics_key2type(const char *key) {
 /*
  * update an existing counter under parent[key] or create a new one from counter_hash
  */
-static void oidc_metrics_counter_set_or_update(server_rec *s, json_t *parent, const char *key,
+static void oidc_metrics_counter_set_or_update(server_rec *s, oidc_json_t *parent, const char *key,
 					       apr_hash_t *counter_hash) {
-	json_t *j_counter = json_object_get(parent, key);
+	oidc_json_t *j_counter = oidc_json_object_get(parent, key);
 	if (j_counter != NULL)
 		oidc_metrics_counter_update(s, j_counter, counter_hash);
 	else
-		json_object_set_new(parent, key, oidc_metrics_counter_new(s, counter_hash));
+		oidc_json_object_set_new(parent, key, oidc_metrics_counter_new(s, counter_hash));
 }
 
 /*
  * merge a single local counter entry into the global counters object;
  * keys of the form "class.name" are nested as j_counters[class][name]
  */
-static void oidc_metrics_store_counter_entry(server_rec *s, json_t *j_counters, const char *key,
+static void oidc_metrics_store_counter_entry(server_rec *s, oidc_json_t *j_counters, const char *key,
 					     apr_hash_t *counter_hash) {
 	const char *class_name = apr_pstrdup(s->process->pool, key);
 	char *name = _oidc_strstr(class_name, ".");
-	json_t *j_names = NULL;
+	oidc_json_t *j_names = NULL;
 
 	if (name == NULL) {
 		oidc_metrics_counter_set_or_update(s, j_counters, class_name, counter_hash);
@@ -639,11 +637,11 @@ static void oidc_metrics_store_counter_entry(server_rec *s, json_t *j_counters, 
 	}
 
 	*name++ = '\0';
-	j_names = json_object_get(j_counters, class_name);
+	j_names = oidc_json_object_get(j_counters, class_name);
 	if (j_names == NULL) {
-		j_names = json_object();
-		json_object_set_new(j_names, name, oidc_metrics_counter_new(s, counter_hash));
-		json_object_set_new(j_counters, class_name, j_names);
+		j_names = oidc_json_object();
+		oidc_json_object_set_new(j_names, name, oidc_metrics_counter_new(s, counter_hash));
+		oidc_json_object_set_new(j_counters, class_name, j_names);
 		return;
 	}
 
@@ -653,17 +651,17 @@ static void oidc_metrics_store_counter_entry(server_rec *s, json_t *j_counters, 
 /*
  * merge all locally collected counters into the global JSON
  */
-static void oidc_metrics_store_counters(server_rec *s, json_t *json) {
+static void oidc_metrics_store_counters(server_rec *s, oidc_json_t *json) {
 	const char *name = NULL;
 	const char *key = NULL;
 	apr_hash_t *server_hash = NULL;
 	apr_hash_t *counter_hash = NULL;
-	json_t *j_counters = NULL;
+	oidc_json_t *j_counters = NULL;
 
 	for (apr_hash_index_t *hi1 = apr_hash_first(s->process->pool, _oidc_metrics.counters); hi1;
 	     hi1 = apr_hash_next(hi1)) {
 		apr_hash_this(hi1, (const void **)&name, NULL, (void **)&server_hash);
-		j_counters = json_object_get(oidc_metrics_server_get(json, name), OIDC_METRICS_COUNTERS);
+		j_counters = oidc_json_object_get(oidc_metrics_server_get(json, name), OIDC_METRICS_COUNTERS);
 		for (apr_hash_index_t *hi2 = apr_hash_first(s->process->pool, server_hash); hi2;
 		     hi2 = apr_hash_next(hi2)) {
 			apr_hash_this(hi2, (const void **)&key, NULL, (void **)&counter_hash);
@@ -675,26 +673,26 @@ static void oidc_metrics_store_counters(server_rec *s, json_t *json) {
 /*
  * merge all locally collected timings into the global JSON
  */
-static void oidc_metrics_store_timings(server_rec *s, json_t *json) {
+static void oidc_metrics_store_timings(server_rec *s, oidc_json_t *json) {
 	const char *name = NULL;
 	const char *key = NULL;
 	apr_hash_t *server_hash = NULL;
 	oidc_metrics_timing_t *timing = NULL;
-	json_t *j_timings = NULL;
-	const json_t *j_timer = NULL;
+	oidc_json_t *j_timings = NULL;
+	const oidc_json_t *j_timer = NULL;
 
 	for (apr_hash_index_t *hi1 = apr_hash_first(s->process->pool, _oidc_metrics.timings); hi1;
 	     hi1 = apr_hash_next(hi1)) {
 		apr_hash_this(hi1, (const void **)&name, NULL, (void **)&server_hash);
-		j_timings = json_object_get(oidc_metrics_server_get(json, name), OIDC_METRICS_TIMINGS);
+		j_timings = oidc_json_object_get(oidc_metrics_server_get(json, name), OIDC_METRICS_TIMINGS);
 		for (apr_hash_index_t *hi2 = apr_hash_first(s->process->pool, server_hash); hi2;
 		     hi2 = apr_hash_next(hi2)) {
 			apr_hash_this(hi2, (const void **)&key, NULL, (void **)&timing);
-			j_timer = json_object_get(j_timings, key);
+			j_timer = oidc_json_object_get(j_timings, key);
 			if (j_timer != NULL)
 				oidc_metrics_timings_update(s, j_timer, timing);
 			else
-				json_object_set_new(j_timings, key, oidc_metrics_timings_new(s, timing));
+				oidc_json_object_set_new(j_timings, key, oidc_metrics_timings_new(s, timing));
 		}
 	}
 }
@@ -704,7 +702,7 @@ static void oidc_metrics_store_timings(server_rec *s, json_t *json) {
  */
 static void oidc_metrics_store(server_rec *s) {
 	const char *s_json = NULL;
-	json_t *json = NULL;
+	oidc_json_t *json = NULL;
 
 	if ((apr_hash_count(_oidc_metrics.counters) == 0) && (apr_hash_count(_oidc_metrics.timings) == 0))
 		return;
@@ -718,16 +716,16 @@ static void oidc_metrics_store(server_rec *s) {
 	/* parse the metrics string to JSON */
 	json = oidc_metrics_json_parse_s(s, s_json);
 	if (json == NULL)
-		json = json_object();
+		json = oidc_json_object();
 
 	oidc_metrics_store_counters(s, json);
 	oidc_metrics_store_timings(s, json);
 
 	/* serialize the metrics data, preserve order is required for Prometheus */
-	s_json = oidc_util_json_encode(s->process->pool, json, JSON_COMPACT | JSON_PRESERVE_ORDER);
+	s_json = oidc_json_encode(s->process->pool, json, OIDC_JSON_COMPACT | OIDC_JSON_PRESERVE_ORDER);
 
 	/* free the JSON data */
-	json_decref(json);
+	oidc_json_decref(json);
 
 	/* store the serialized metrics data in shared memory */
 	_oidc_metrics_storage_set(s, s_json);
@@ -1111,11 +1109,11 @@ static inline char *_oidc_metrics_timing_type2s(apr_pool_t *pool, unsigned int t
 /*
  * parse a string into a JSON object in the request_rec context
  */
-static json_t *oidc_metrics_json_parse_r(request_rec *r, const char *s_json) {
-	json_error_t json_error;
-	json_t *json = oidc_metrics_json_load(s_json, &json_error);
+static oidc_json_t *oidc_metrics_json_parse_r(request_rec *r, const char *s_json) {
+	char *s_err = NULL;
+	oidc_json_t *json = oidc_metrics_json_load(r->pool, s_json, &s_err);
 	if (json == NULL)
-		oidc_error(r, "JSON parsing failed: %s", json_error.text);
+		oidc_error(r, "JSON parsing failed: %s", s_err);
 	return json;
 }
 
@@ -1124,18 +1122,18 @@ static json_t *oidc_metrics_json_parse_r(request_rec *r, const char *s_json) {
  */
 static int oidc_metrics_handle_json(request_rec *r, const char *s_json) {
 
-	json_t *json = NULL;
-	const json_t *j_server = NULL;
-	json_t *j_timings = NULL;
-	json_t *j_counters = NULL;
-	const json_t *j_timing = NULL;
-	json_t *j_counter = NULL;
-	json_t *o_json = NULL;
-	json_t *o_server = NULL;
-	json_t *o_counters = NULL;
-	json_t *o_counter = NULL;
-	json_t *o_timings = NULL;
-	json_t *o_timing = NULL;
+	oidc_json_t *json = NULL;
+	const oidc_json_t *j_server = NULL;
+	oidc_json_t *j_timings = NULL;
+	oidc_json_t *j_counters = NULL;
+	const oidc_json_t *j_timing = NULL;
+	oidc_json_t *j_counter = NULL;
+	oidc_json_t *o_json = NULL;
+	oidc_json_t *o_server = NULL;
+	oidc_json_t *o_counters = NULL;
+	oidc_json_t *o_counter = NULL;
+	oidc_json_t *o_timings = NULL;
+	oidc_json_t *o_timing = NULL;
 	const char *s_server = NULL;
 	unsigned int type = 0;
 	void *i1 = NULL;
@@ -1146,67 +1144,67 @@ static int oidc_metrics_handle_json(request_rec *r, const char *s_json) {
 	if (json == NULL)
 		goto end;
 
-	o_json = json_object();
+	o_json = oidc_json_object();
 
-	i1 = json_object_iter(json);
+	i1 = oidc_json_object_iter(json);
 	while (i1) {
-		s_server = json_object_iter_key(i1);
-		j_server = json_object_iter_value(i1);
+		s_server = oidc_json_object_iter_key(i1);
+		j_server = oidc_json_object_iter_value(i1);
 
-		o_server = json_object();
-		json_object_set_new(o_json, s_server, o_server);
+		o_server = oidc_json_object();
+		oidc_json_object_set_new(o_json, s_server, o_server);
 
-		j_counters = json_object_get(j_server, OIDC_METRICS_COUNTERS);
-		o_counters = json_object();
-		json_object_set_new(o_server, OIDC_METRICS_COUNTERS, o_counters);
+		j_counters = oidc_json_object_get(j_server, OIDC_METRICS_COUNTERS);
+		o_counters = oidc_json_object();
+		oidc_json_object_set_new(o_server, OIDC_METRICS_COUNTERS, o_counters);
 
-		i2 = json_object_iter(j_counters);
+		i2 = oidc_json_object_iter(j_counters);
 		while (i2) {
-			type = _oidc_metrics_key2type(json_object_iter_key(i2));
-			j_counter = json_object_iter_value(i2);
-			o_counter = json_object();
-			if (json_is_integer(j_counter))
-				json_object_set(o_counter, "count", j_counter);
+			type = _oidc_metrics_key2type(oidc_json_object_iter_key(i2));
+			j_counter = oidc_json_object_iter_value(i2);
+			o_counter = oidc_json_object();
+			if (oidc_json_is_integer(j_counter))
+				oidc_json_object_set(o_counter, "count", j_counter);
 			else
-				json_object_set_new(o_counter, "values", json_deep_copy(j_counter));
-			json_object_set_new(o_counter, OIDC_METRICS_JSON_CLASS_NAME,
-					    json_string(_oidc_metrics_counters_info[type].class_name));
-			json_object_set_new(o_counter, OIDC_METRICS_JSON_METRIC_NAME,
-					    json_string(_oidc_metrics_counters_info[type].metric_name));
-			json_object_set_new(o_counter, OIDC_METRICS_JSON_DESC,
-					    json_string(_oidc_metrics_counters_info[type].desc));
-			json_object_set_new(o_counters, _oidc_metrics_counter_type2s(r->pool, type), o_counter);
-			i2 = json_object_iter_next(j_counters, i2);
+				oidc_json_object_set_new(o_counter, "values", oidc_json_deep_copy(j_counter));
+			oidc_json_object_set_new(o_counter, OIDC_METRICS_JSON_CLASS_NAME,
+						 oidc_json_string(_oidc_metrics_counters_info[type].class_name));
+			oidc_json_object_set_new(o_counter, OIDC_METRICS_JSON_METRIC_NAME,
+						 oidc_json_string(_oidc_metrics_counters_info[type].metric_name));
+			oidc_json_object_set_new(o_counter, OIDC_METRICS_JSON_DESC,
+						 oidc_json_string(_oidc_metrics_counters_info[type].desc));
+			oidc_json_object_set_new(o_counters, _oidc_metrics_counter_type2s(r->pool, type), o_counter);
+			i2 = oidc_json_object_iter_next(j_counters, i2);
 		}
 
-		j_timings = json_object_get(j_server, OIDC_METRICS_TIMINGS);
-		o_timings = json_object();
-		json_object_set_new(o_server, OIDC_METRICS_TIMINGS, o_timings);
+		j_timings = oidc_json_object_get(j_server, OIDC_METRICS_TIMINGS);
+		o_timings = oidc_json_object();
+		oidc_json_object_set_new(o_server, OIDC_METRICS_TIMINGS, o_timings);
 
-		i2 = json_object_iter(j_timings);
+		i2 = oidc_json_object_iter(j_timings);
 		while (i2) {
-			type = _oidc_metrics_key2type(json_object_iter_key(i2));
-			j_timing = json_object_iter_value(i2);
+			type = _oidc_metrics_key2type(oidc_json_object_iter_key(i2));
+			j_timing = oidc_json_object_iter_value(i2);
 
-			o_timing = json_deep_copy(j_timing);
-			json_object_set_new(o_timing, OIDC_METRICS_JSON_CLASS_NAME,
-					    json_string(_oidc_metrics_timings_info[type].class_name));
-			json_object_set_new(o_timing, OIDC_METRICS_JSON_METRIC_NAME,
-					    json_string(_oidc_metrics_timings_info[type].metric_name));
-			json_object_set_new(o_timing, OIDC_METRICS_JSON_DESC,
-					    json_string(_oidc_metrics_timings_info[type].desc));
+			o_timing = oidc_json_deep_copy(j_timing);
+			oidc_json_object_set_new(o_timing, OIDC_METRICS_JSON_CLASS_NAME,
+						 oidc_json_string(_oidc_metrics_timings_info[type].class_name));
+			oidc_json_object_set_new(o_timing, OIDC_METRICS_JSON_METRIC_NAME,
+						 oidc_json_string(_oidc_metrics_timings_info[type].metric_name));
+			oidc_json_object_set_new(o_timing, OIDC_METRICS_JSON_DESC,
+						 oidc_json_string(_oidc_metrics_timings_info[type].desc));
 
-			json_object_set_new(o_timings, _oidc_metrics_timing_type2s(r->pool, type), o_timing);
+			oidc_json_object_set_new(o_timings, _oidc_metrics_timing_type2s(r->pool, type), o_timing);
 
-			i2 = json_object_iter_next(j_timings, i2);
+			i2 = oidc_json_object_iter_next(j_timings, i2);
 		}
-		i1 = json_object_iter_next(json, i1);
+		i1 = oidc_json_object_iter_next(json, i1);
 	}
 
-	s_json = oidc_util_json_encode(r->pool, o_json, JSON_COMPACT | JSON_PRESERVE_ORDER);
+	s_json = oidc_json_encode(r->pool, o_json, OIDC_JSON_COMPACT | OIDC_JSON_PRESERVE_ORDER);
 
-	json_decref(o_json);
-	json_decref(json);
+	oidc_json_decref(o_json);
+	oidc_json_decref(json);
 
 end:
 
@@ -1231,13 +1229,14 @@ static int oidc_metrics_handle_internal(request_rec *r, const char *s_json) {
 /*
  * find the counter entry in j_counters whose type matches "class.metric" (s_metric_param)
  */
-static json_t *oidc_metrics_status_find_counter(request_rec *r, json_t *j_counters, const char *s_metric_param) {
-	void *iter = json_object_iter(j_counters);
+static oidc_json_t *oidc_metrics_status_find_counter(request_rec *r, oidc_json_t *j_counters,
+						     const char *s_metric_param) {
+	void *iter = oidc_json_object_iter(j_counters);
 	while (iter) {
-		unsigned int type = _oidc_metrics_key2type(json_object_iter_key(iter));
+		unsigned int type = _oidc_metrics_key2type(oidc_json_object_iter_key(iter));
 		if (_oidc_strcmp(_oidc_metrics_counter_type2s(r->pool, type), s_metric_param) == 0)
-			return json_object_iter_value(iter);
-		iter = json_object_iter_next(j_counters, iter);
+			return oidc_json_object_iter_value(iter);
+		iter = oidc_json_object_iter_next(j_counters, iter);
 	}
 	return NULL;
 }
@@ -1248,19 +1247,19 @@ static json_t *oidc_metrics_status_find_counter(request_rec *r, json_t *j_counte
  *   - object entry with value-only selector: j_counter[value]
  *   - object entry with name+value selectors: j_counter[name][value]
  */
-static json_t *oidc_metrics_status_select_value(json_t *j_counter, const char *s_name_param,
-						const char *s_value_param) {
-	const json_t *j_values = NULL;
-	if (json_is_integer(j_counter))
+static oidc_json_t *oidc_metrics_status_select_value(oidc_json_t *j_counter, const char *s_name_param,
+						     const char *s_value_param) {
+	const oidc_json_t *j_values = NULL;
+	if (oidc_json_is_integer(j_counter))
 		return j_counter;
 	if (s_value_param == NULL)
 		return NULL;
 	if (s_name_param == NULL)
-		return json_object_get(j_counter, s_value_param);
-	j_values = json_object_get(j_counter, s_name_param);
+		return oidc_json_object_get(j_counter, s_value_param);
+	j_values = oidc_json_object_get(j_counter, s_name_param);
 	if (j_values == NULL)
 		return NULL;
-	return json_object_get(j_values, s_value_param);
+	return oidc_json_object_get(j_values, s_value_param);
 }
 
 /*
@@ -1272,11 +1271,11 @@ static int oidc_metrics_handle_status(request_rec *r, const char *s_json) {
 	char *s_server_param = NULL;
 	char *s_name_param = NULL;
 	char *s_value_param = NULL;
-	json_t *json = NULL;
-	const json_t *j_server = NULL;
-	json_t *j_counters = NULL;
-	json_t *j_counter = NULL;
-	const json_t *j_value = NULL;
+	oidc_json_t *json = NULL;
+	const oidc_json_t *j_server = NULL;
+	oidc_json_t *j_counters = NULL;
+	oidc_json_t *j_counter = NULL;
+	const oidc_json_t *j_value = NULL;
 
 	oidc_util_url_parameter_get(r, OIDC_METRICS_SERVER_PARAM, &s_server_param);
 	oidc_util_url_parameter_get(r, OIDC_METRICS_COUNTER_PARAM, &s_metric_param);
@@ -1293,11 +1292,11 @@ static int oidc_metrics_handle_status(request_rec *r, const char *s_json) {
 	if (json == NULL)
 		goto end;
 
-	j_server = json_object_get(json, s_server_param);
+	j_server = oidc_json_object_get(json, s_server_param);
 	if (j_server == NULL)
 		goto end;
 
-	j_counters = json_object_get(j_server, OIDC_METRICS_COUNTERS);
+	j_counters = oidc_json_object_get(j_server, OIDC_METRICS_COUNTERS);
 	if (j_counters == NULL)
 		goto end;
 
@@ -1307,12 +1306,12 @@ static int oidc_metrics_handle_status(request_rec *r, const char *s_json) {
 
 	j_value = oidc_metrics_status_select_value(j_counter, s_name_param, s_value_param);
 	if (j_value)
-		msg = apr_psprintf(r->pool, "OK: %s\n", _json_int2str(r->pool, json_integer_value(j_value)));
+		msg = apr_psprintf(r->pool, "OK: %s\n", _json_int2str(r->pool, oidc_json_integer_value(j_value)));
 
 end:
 
 	if (json)
-		json_decref(json);
+		oidc_json_decref(json);
 
 	return oidc_util_http_send(r, msg, _oidc_strlen(msg), "text/plain", OK);
 }
@@ -1361,14 +1360,14 @@ typedef struct oidc_metric_prometheus_callback_ctx_t {
  * append per-(name, value) label-pair lines for a single key under a server's counter
  */
 static char *oidc_metrics_prometheus_counter_named(apr_pool_t *pool, char *s_text, const char *s_start,
-						   const char *s_key, json_t *j_value) {
-	void *iter = json_object_iter(j_value);
+						   const char *s_key, oidc_json_t *j_value) {
+	void *iter = oidc_json_object_iter(j_value);
 	while (iter) {
-		const char *s_value = json_object_iter_key(iter);
+		const char *s_value = oidc_json_object_iter_key(iter);
 		s_text = apr_psprintf(pool, "%s%s,%s=\"%s\",%s=\"%s\"} %s\n", s_text, s_start,
 				      OIDC_METRICS_PROMETHEUS_NAME, s_key, OIDC_METRICS_PROMETHEUS_VALUE, s_value,
-				      _json_int2str(pool, json_integer_value(json_object_iter_value(iter))));
-		iter = json_object_iter_next(j_value, iter);
+				      _json_int2str(pool, oidc_json_integer_value(oidc_json_object_iter_value(iter))));
+		iter = oidc_json_object_iter_next(j_value, iter);
 	}
 	return s_text;
 }
@@ -1378,18 +1377,18 @@ static char *oidc_metrics_prometheus_counter_named(apr_pool_t *pool, char *s_tex
  * entries are delegated to oidc_metrics_prometheus_counter_named for name+value labeling
  */
 static char *oidc_metrics_prometheus_counter_keyed(apr_pool_t *pool, char *s_text, const char *s_start,
-						   json_t *j_counter) {
-	void *iter = json_object_iter(j_counter);
+						   oidc_json_t *j_counter) {
+	void *iter = oidc_json_object_iter(j_counter);
 	while (iter) {
-		const char *s_key = json_object_iter_key(iter);
-		json_t *j_value = json_object_iter_value(iter);
-		if (json_is_integer(j_value))
+		const char *s_key = oidc_json_object_iter_key(iter);
+		oidc_json_t *j_value = oidc_json_object_iter_value(iter);
+		if (oidc_json_is_integer(j_value))
 			s_text =
 			    apr_psprintf(pool, "%s%s,%s=\"%s\"} %s\n", s_text, s_start, OIDC_METRICS_PROMETHEUS_VALUE,
-					 s_key, _json_int2str(pool, json_integer_value(j_value)));
+					 s_key, _json_int2str(pool, oidc_json_integer_value(j_value)));
 		else
 			s_text = oidc_metrics_prometheus_counter_named(pool, s_text, s_start, s_key, j_value);
-		iter = json_object_iter_next(j_counter, iter);
+		iter = oidc_json_object_iter_next(j_counter, iter);
 	}
 	return s_text;
 }
@@ -1398,8 +1397,8 @@ static char *oidc_metrics_prometheus_counter_keyed(apr_pool_t *pool, char *s_tex
  * loop function for converting counter metrics to Prometheus output
  */
 static int oidc_metrics_prometheus_counters(oidc_metric_prometheus_callback_ctx_t *ctx, const char *key,
-					    json_t *value) {
-	json_t *o_counter = value;
+					    oidc_json_t *value) {
+	oidc_json_t *o_counter = value;
 	unsigned int type = _oidc_metrics_key2type(key);
 	const char *s_label =
 	    oidc_metric_prometheus_normalize_name(ctx->pool, _oidc_metrics_counter_type2s(ctx->pool, type));
@@ -1407,21 +1406,21 @@ static int oidc_metrics_prometheus_counters(oidc_metric_prometheus_callback_ctx_
 	    apr_psprintf(ctx->pool, "# HELP %s The number of %s.\n", s_label, _oidc_metrics_counters_info[type].desc);
 	s_text = apr_psprintf(ctx->pool, "%s# TYPE %s counter\n", s_text, s_label);
 
-	void *iter = json_object_iter(o_counter);
+	void *iter = oidc_json_object_iter(o_counter);
 	while (iter) {
-		const char *s_server = json_object_iter_key(iter);
-		json_t *j_counter = json_object_iter_value(iter);
+		const char *s_server = oidc_json_object_iter_key(iter);
+		oidc_json_t *j_counter = oidc_json_object_iter_value(iter);
 		const char *s_start =
 		    apr_psprintf(ctx->pool, "%s{%s=\"%s\"", s_label, OIDC_METRICS_PROMETHEUS_SERVER, s_server);
-		if (json_is_integer(j_counter))
+		if (oidc_json_is_integer(j_counter))
 			s_text = apr_psprintf(ctx->pool, "%s%s} %s\n", s_text, s_start,
-					      _json_int2str(ctx->pool, json_integer_value(j_counter)));
+					      _json_int2str(ctx->pool, oidc_json_integer_value(j_counter)));
 		else
 			s_text = oidc_metrics_prometheus_counter_keyed(ctx->pool, s_text, s_start, j_counter);
-		iter = json_object_iter_next(o_counter, iter);
+		iter = oidc_json_object_iter_next(o_counter, iter);
 	}
 	ctx->s_result = apr_pstrcat(ctx->pool, ctx->s_result, s_text, "\n", NULL);
-	json_decref(o_counter);
+	oidc_json_decref(o_counter);
 	return 1;
 }
 
@@ -1429,13 +1428,14 @@ static int oidc_metrics_prometheus_counters(oidc_metric_prometheus_callback_ctx_
  * loop function for converting timing metrics to Prometheus output
  */
 
-static int oidc_metrics_prometheus_timings(oidc_metric_prometheus_callback_ctx_t *ctx, const char *key, json_t *value) {
+static int oidc_metrics_prometheus_timings(oidc_metric_prometheus_callback_ctx_t *ctx, const char *key,
+					   oidc_json_t *value) {
 	const char *s_server = NULL;
 	const char *s_key = NULL;
 	const char *s_bucket = NULL;
-	json_t *j_timing = NULL;
-	const json_t *j_member = NULL;
-	json_t *o_timer = value;
+	oidc_json_t *j_timing = NULL;
+	const oidc_json_t *j_member = NULL;
+	oidc_json_t *o_timer = value;
 	unsigned int type = _oidc_metrics_key2type(key);
 	const char *s_label =
 	    oidc_metric_prometheus_normalize_name(ctx->pool, _oidc_metrics_timing_type2s(ctx->pool, type));
@@ -1443,14 +1443,14 @@ static int oidc_metrics_prometheus_timings(oidc_metric_prometheus_callback_ctx_t
 	    apr_psprintf(ctx->pool, "# HELP %s A histogram of %s.\n", s_label, _oidc_metrics_timings_info[type].desc);
 	s_text = apr_psprintf(ctx->pool, "%s# TYPE %s histogram\n", s_text, s_label);
 
-	void *iter1 = json_object_iter(o_timer);
+	void *iter1 = oidc_json_object_iter(o_timer);
 	while (iter1) {
-		s_server = json_object_iter_key(iter1);
-		j_timing = json_object_iter_value(iter1);
-		void *iter3 = json_object_iter(j_timing);
+		s_server = oidc_json_object_iter_key(iter1);
+		j_timing = oidc_json_object_iter_value(iter1);
+		void *iter3 = oidc_json_object_iter(j_timing);
 		while (iter3) {
-			s_key = json_object_iter_key(iter3);
-			j_member = json_object_iter_value(iter3);
+			s_key = oidc_json_object_iter_key(iter3);
+			j_member = oidc_json_object_iter_value(iter3);
 			s_bucket = oidc_metrics_prometheus_bucket_label(s_key);
 			if (s_bucket)
 				s_text = apr_psprintf(ctx->pool, "%s%s_%s{%s,", s_text, s_label,
@@ -1459,36 +1459,36 @@ static int oidc_metrics_prometheus_timings(oidc_metric_prometheus_callback_ctx_t
 				s_text = apr_psprintf(ctx->pool, "%s%s_%s{", s_text, s_label, s_key);
 
 			s_text = apr_psprintf(ctx->pool, "%s%s=\"%s\"} %s\n", s_text, OIDC_METRICS_PROMETHEUS_SERVER,
-					      s_server, _json_int2str(ctx->pool, json_integer_value(j_member)));
-			iter3 = json_object_iter_next(j_timing, iter3);
+					      s_server, _json_int2str(ctx->pool, oidc_json_integer_value(j_member)));
+			iter3 = oidc_json_object_iter_next(j_timing, iter3);
 		}
-		iter1 = json_object_iter_next(o_timer, iter1);
+		iter1 = oidc_json_object_iter_next(o_timer, iter1);
 	}
 	ctx->s_result = apr_pstrcat(ctx->pool, ctx->s_result, s_text, "\n", NULL);
-	json_decref(o_timer);
+	oidc_json_decref(o_timer);
 	return 1;
 }
 
 /*
  * take a list of metrics from a server indexed list and add it to a type indexed list
  */
-static void oidc_metrics_prometheus_convert(apr_hash_t *hash, const char *server, json_t *list) {
+static void oidc_metrics_prometheus_convert(apr_hash_t *hash, const char *server, oidc_json_t *list) {
 	const char *type = NULL;
-	json_t *src = NULL;
-	json_t *dst = NULL;
-	void *iter = json_object_iter(list);
+	oidc_json_t *src = NULL;
+	oidc_json_t *dst = NULL;
+	void *iter = oidc_json_object_iter(list);
 	while (iter) {
-		type = json_object_iter_key(iter);
-		src = json_object_iter_value(iter);
-		dst = (json_t *)apr_hash_get(hash, type, APR_HASH_KEY_STRING);
+		type = oidc_json_object_iter_key(iter);
+		src = oidc_json_object_iter_value(iter);
+		dst = (oidc_json_t *)apr_hash_get(hash, type, APR_HASH_KEY_STRING);
 		if (dst) {
-			json_object_set(dst, server, src);
+			oidc_json_object_set(dst, server, src);
 		} else {
-			dst = json_object();
-			json_object_set(dst, server, src);
+			dst = oidc_json_object();
+			oidc_json_object_set(dst, server, src);
 			apr_hash_set(hash, type, APR_HASH_KEY_STRING, dst);
 		}
-		iter = json_object_iter_next(list, iter);
+		iter = oidc_json_object_iter_next(list, iter);
 	}
 }
 
@@ -1496,8 +1496,8 @@ static void oidc_metrics_prometheus_convert(apr_hash_t *hash, const char *server
  * generate output in Prometheus formatting
  */
 static int oidc_metrics_handle_prometheus(request_rec *r, const char *s_json) {
-	json_t *json = NULL;
-	const json_t *j_server = NULL;
+	oidc_json_t *json = NULL;
+	const oidc_json_t *j_server = NULL;
 	const char *s_server = NULL;
 	apr_hash_t *t_counters = apr_hash_make(r->pool);
 	apr_hash_t *t_timings = apr_hash_make(r->pool);
@@ -1513,13 +1513,15 @@ static int oidc_metrics_handle_prometheus(request_rec *r, const char *s_json) {
 	if (json == NULL)
 		return OK;
 
-	iter = json_object_iter(json);
+	iter = oidc_json_object_iter(json);
 	while (iter) {
-		s_server = json_object_iter_key(iter);
-		j_server = json_object_iter_value(iter);
-		oidc_metrics_prometheus_convert(t_counters, s_server, json_object_get(j_server, OIDC_METRICS_COUNTERS));
-		oidc_metrics_prometheus_convert(t_timings, s_server, json_object_get(j_server, OIDC_METRICS_TIMINGS));
-		iter = json_object_iter_next(json, iter);
+		s_server = oidc_json_object_iter_key(iter);
+		j_server = oidc_json_object_iter_value(iter);
+		oidc_metrics_prometheus_convert(t_counters, s_server,
+						oidc_json_object_get(j_server, OIDC_METRICS_COUNTERS));
+		oidc_metrics_prometheus_convert(t_timings, s_server,
+						oidc_json_object_get(j_server, OIDC_METRICS_TIMINGS));
+		iter = oidc_json_object_iter_next(json, iter);
 	}
 
 	for (hi = apr_hash_first(r->pool, t_counters); hi; hi = apr_hash_next(hi)) {
@@ -1532,7 +1534,7 @@ static int oidc_metrics_handle_prometheus(request_rec *r, const char *s_json) {
 		oidc_metrics_prometheus_timings(&ctx, name, value);
 	}
 
-	json_decref(json);
+	oidc_json_decref(json);
 
 	return oidc_util_http_send(r, ctx.s_result, _oidc_strlen(ctx.s_result), OIDC_METRICS_PROMETHEUS_CONTENT_TYPE,
 				   OK);

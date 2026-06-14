@@ -36,6 +36,7 @@
 
 #include <apr_file_io.h>
 #include <apr_strings.h>
+#include <jansson.h> /* this test builds JSON fixtures with the backend API directly (no longer pulled in via jose.h) */
 
 /*
  * Minimum-viable OpenID Connect provider metadata JSON, used by the
@@ -59,10 +60,10 @@
 START_TEST(test_metadata_is_valid_happy) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
-	json_t *j = NULL;
-	ck_assert_int_eq(oidc_util_json_decode_object(r, VALID_METADATA_JSON, &j), TRUE);
+	oidc_json_t *j = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(r, VALID_METADATA_JSON, &j), TRUE);
 	ck_assert_int_eq(oidc_metadata_provider_is_valid(r, c, j, "https://idp.example.com"), TRUE);
-	json_decref(j);
+	oidc_json_decref(j);
 }
 END_TEST
 
@@ -70,20 +71,20 @@ START_TEST(test_metadata_is_valid_missing_issuer) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	/* the "issuer" claim is required */
-	json_t *j = json_pack("{s:s}", "authorization_endpoint", "https://idp.example.com/authorize");
+	oidc_json_t *j = json_pack("{s:s}", "authorization_endpoint", "https://idp.example.com/authorize");
 	ck_assert_int_eq(oidc_metadata_provider_is_valid(r, c, j, "https://idp.example.com"), FALSE);
-	json_decref(j);
+	oidc_json_decref(j);
 }
 END_TEST
 
 START_TEST(test_metadata_is_valid_issuer_mismatch) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
-	json_t *j = NULL;
-	ck_assert_int_eq(oidc_util_json_decode_object(r, VALID_METADATA_JSON, &j), TRUE);
+	oidc_json_t *j = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(r, VALID_METADATA_JSON, &j), TRUE);
 	/* asking for a different issuer than the one in the document => FALSE */
 	ck_assert_int_eq(oidc_metadata_provider_is_valid(r, c, j, "https://other.example.com"), FALSE);
-	json_decref(j);
+	oidc_json_decref(j);
 }
 END_TEST
 
@@ -91,9 +92,9 @@ START_TEST(test_metadata_is_valid_missing_authz_endpoint) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	/* authorization_endpoint is required */
-	json_t *j = json_pack("{s:s}", "issuer", "https://idp.example.com");
+	oidc_json_t *j = json_pack("{s:s}", "issuer", "https://idp.example.com");
 	ck_assert_int_eq(oidc_metadata_provider_is_valid(r, c, j, "https://idp.example.com"), FALSE);
-	json_decref(j);
+	oidc_json_decref(j);
 }
 END_TEST
 
@@ -107,8 +108,8 @@ START_TEST(test_metadata_parse_populates_empty_provider) {
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
 
-	json_t *j = NULL;
-	ck_assert_int_eq(oidc_util_json_decode_object(r, VALID_METADATA_JSON, &j), TRUE);
+	oidc_json_t *j = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(r, VALID_METADATA_JSON, &j), TRUE);
 	ck_assert_int_eq(oidc_metadata_provider_parse(r, c, j, provider), TRUE);
 
 	ck_assert_str_eq(oidc_cfg_provider_issuer_get(provider), "https://idp.example.com");
@@ -118,7 +119,7 @@ START_TEST(test_metadata_parse_populates_empty_provider) {
 	ck_assert_str_eq(oidc_cfg_provider_userinfo_endpoint_url_get(provider), "https://idp.example.com/userinfo");
 	ck_assert_str_eq(oidc_cfg_provider_jwks_uri_uri_get(provider), "https://idp.example.com/jwks");
 
-	json_decref(j);
+	oidc_json_decref(j);
 }
 END_TEST
 
@@ -131,8 +132,8 @@ START_TEST(test_metadata_parse_preserves_existing_values) {
 	oidc_cfg_provider_issuer_set(r->pool, provider, "https://configured.example.com");
 	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, "https://configured.example.com/token");
 
-	json_t *j = NULL;
-	ck_assert_int_eq(oidc_util_json_decode_object(r, VALID_METADATA_JSON, &j), TRUE);
+	oidc_json_t *j = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(r, VALID_METADATA_JSON, &j), TRUE);
 	ck_assert_int_eq(oidc_metadata_provider_parse(r, c, j, provider), TRUE);
 
 	ck_assert_str_eq(oidc_cfg_provider_issuer_get(provider), "https://configured.example.com");
@@ -141,7 +142,7 @@ START_TEST(test_metadata_parse_preserves_existing_values) {
 	ck_assert_str_eq(oidc_cfg_provider_authorization_endpoint_url_get(provider),
 			 "https://idp.example.com/authorize");
 
-	json_decref(j);
+	oidc_json_decref(j);
 }
 END_TEST
 
@@ -162,7 +163,7 @@ START_TEST(test_metadata_retrieve_success) {
 	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
 	ck_assert_ptr_nonnull(srv);
 
-	json_t *j = NULL;
+	oidc_json_t *j = NULL;
 	char *response = NULL;
 	apr_byte_t ok = oidc_metadata_provider_retrieve(r, c, "https://idp.example.com",
 							oidc_test_http_server_url(srv, r->pool), &j, &response);
@@ -174,7 +175,7 @@ START_TEST(test_metadata_retrieve_success) {
 	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
 	ck_assert_str_eq(cap->method, "GET");
 
-	json_decref(j);
+	oidc_json_decref(j);
 	oidc_test_http_server_stop(srv);
 }
 END_TEST
@@ -189,7 +190,7 @@ START_TEST(test_metadata_retrieve_http_failure) {
 	ck_assert_int_ne(port, 0);
 	const char *url = apr_psprintf(r->pool, "http://127.0.0.1:%d/.well-known", port);
 
-	json_t *j = NULL;
+	oidc_json_t *j = NULL;
 	char *response = NULL;
 	/* nothing listening => HTTP fetch fails => FALSE */
 	ck_assert_int_eq(oidc_metadata_provider_retrieve(r, c, "https://idp.example.com", url, &j, &response), FALSE);
@@ -209,7 +210,7 @@ START_TEST(test_metadata_retrieve_invalid_metadata) {
 	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
 	ck_assert_ptr_nonnull(srv);
 
-	json_t *j = NULL;
+	oidc_json_t *j = NULL;
 	char *response = NULL;
 	ck_assert_int_eq(oidc_metadata_provider_retrieve(r, c, "https://idp.example.com",
 							 oidc_test_http_server_url(srv, r->pool), &j, &response),
@@ -239,16 +240,16 @@ START_TEST(test_metadata_jwks_get_forced_refresh) {
 	jwks_uri.uri = oidc_test_http_server_url(srv, r->pool);
 	jwks_uri.refresh_interval = 60;
 
-	json_t *j = NULL;
+	oidc_json_t *j = NULL;
 	apr_byte_t refresh = TRUE;
 	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j, &refresh), TRUE);
 	ck_assert_ptr_nonnull(j);
-	ck_assert_ptr_nonnull(json_object_get(j, "keys"));
+	ck_assert_ptr_nonnull(oidc_json_object_get(j, "keys"));
 
 	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
 	ck_assert_str_eq(cap->method, "GET");
 
-	json_decref(j);
+	oidc_json_decref(j);
 	oidc_test_http_server_stop(srv);
 }
 END_TEST
@@ -263,7 +264,7 @@ START_TEST(test_metadata_jwks_get_http_failure) {
 	jwks_uri.uri = apr_psprintf(r->pool, "http://127.0.0.1:%d/jwks", port);
 	jwks_uri.refresh_interval = 60;
 
-	json_t *j = NULL;
+	oidc_json_t *j = NULL;
 	apr_byte_t refresh = TRUE;
 	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j, &refresh), FALSE);
 	ck_assert_ptr_null(j);
@@ -288,21 +289,21 @@ START_TEST(test_metadata_jwks_get_cache_hit) {
 	jwks_uri.refresh_interval = 60;
 
 	/* first call: forced refresh populates the cache */
-	json_t *j1 = NULL;
+	oidc_json_t *j1 = NULL;
 	apr_byte_t refresh = TRUE;
 	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j1, &refresh), TRUE);
 	ck_assert_ptr_nonnull(j1);
-	json_decref(j1);
+	oidc_json_decref(j1);
 
 	/* stop the server so a second HTTP request would fail; cache should still serve */
 	oidc_test_http_server_stop(srv);
 
-	json_t *j2 = NULL;
+	oidc_json_t *j2 = NULL;
 	refresh = FALSE;
 	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j2, &refresh), TRUE);
 	ck_assert_ptr_nonnull(j2);
-	ck_assert_ptr_nonnull(json_object_get(j2, "keys"));
-	json_decref(j2);
+	ck_assert_ptr_nonnull(oidc_json_object_get(j2, "keys"));
+	oidc_json_decref(j2);
 }
 END_TEST
 
@@ -324,7 +325,7 @@ START_TEST(test_metadata_jwks_get_missing_keys) {
 	jwks_uri.uri = oidc_test_http_server_url(srv, r->pool);
 	jwks_uri.refresh_interval = 60;
 
-	json_t *j = NULL;
+	oidc_json_t *j = NULL;
 	apr_byte_t refresh = FALSE;
 	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j, &refresh), FALSE);
 
@@ -346,7 +347,7 @@ START_TEST(test_metadata_jwks_get_invalid_json) {
 	jwks_uri.uri = oidc_test_http_server_url(srv, r->pool);
 	jwks_uri.refresh_interval = 60;
 
-	json_t *j = NULL;
+	oidc_json_t *j = NULL;
 	apr_byte_t refresh = FALSE;
 	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j, &refresh), FALSE);
 
@@ -363,14 +364,14 @@ START_TEST(test_metadata_oauth_provider_parse) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
 
-	json_t *j = json_pack("{s:s,s:s,s:s}", "issuer", "https://as.example.com", "introspection_endpoint",
-			      "https://as.example.com/introspect", "jwks_uri", "https://as.example.com/jwks");
+	oidc_json_t *j = json_pack("{s:s,s:s,s:s}", "issuer", "https://as.example.com", "introspection_endpoint",
+				   "https://as.example.com/introspect", "jwks_uri", "https://as.example.com/jwks");
 	ck_assert_int_eq(oidc_oauth_metadata_provider_parse(r, c, j), TRUE);
 
 	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_url_get(c), "https://as.example.com/introspect");
 	ck_assert_str_eq(oidc_cfg_oauth_verify_jwks_uri_get(c), "https://as.example.com/jwks");
 
-	json_decref(j);
+	oidc_json_decref(j);
 }
 END_TEST
 
@@ -420,10 +421,10 @@ START_TEST(test_metadata_disk_get_provider_only) {
 	/* a .provider file alone is enough for oidc_metadata_provider_get */
 	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), VALID_METADATA_JSON);
 
-	json_t *j = NULL;
+	oidc_json_t *j = NULL;
 	ck_assert_int_eq(oidc_metadata_provider_get(r, c, "https://idp.example.com", &j, FALSE), TRUE);
 	ck_assert_ptr_nonnull(j);
-	json_decref(j);
+	oidc_json_decref(j);
 }
 END_TEST
 
@@ -584,8 +585,8 @@ START_TEST(test_metadata_conf_parse_string_fields) {
 					     "}",
 					     cert_path, key_path);
 
-	json_t *j = NULL;
-	ck_assert_int_eq(oidc_util_json_decode_object(r, conf_json, &j), TRUE);
+	oidc_json_t *j = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(r, conf_json, &j), TRUE);
 	ck_assert_int_eq(oidc_metadata_conf_parse(r, c, j, provider), TRUE);
 
 	/* keys */
@@ -616,7 +617,7 @@ START_TEST(test_metadata_conf_parse_string_fields) {
 	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_tls_client_key_get(provider), key_path);
 	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider), "sekret");
 
-	json_decref(j);
+	oidc_json_decref(j);
 }
 END_TEST
 
@@ -636,8 +637,8 @@ START_TEST(test_metadata_conf_parse_int_fields) {
 				"\"response_require_iss\":true"
 				"}";
 
-	json_t *j = NULL;
-	ck_assert_int_eq(oidc_util_json_decode_object(r, conf_json, &j), TRUE);
+	oidc_json_t *j = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(r, conf_json, &j), TRUE);
 	ck_assert_int_eq(oidc_metadata_conf_parse(r, c, j, provider), TRUE);
 
 	ck_assert_int_eq(oidc_cfg_provider_ssl_validate_server_get(provider), FALSE);
@@ -648,7 +649,7 @@ START_TEST(test_metadata_conf_parse_int_fields) {
 	ck_assert_int_eq(oidc_cfg_provider_userinfo_refresh_interval_get(provider), 300);
 	ck_assert_int_eq(oidc_cfg_provider_response_require_iss_get(provider), TRUE);
 
-	json_decref(j);
+	oidc_json_decref(j);
 }
 END_TEST
 
@@ -657,7 +658,7 @@ START_TEST(test_metadata_conf_parse_id_token_aud_values) {
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
 
-	json_t *j = json_pack("{s:[s,s]}", "id_token_aud_values", "aud-one", "aud-two");
+	oidc_json_t *j = json_pack("{s:[s,s]}", "id_token_aud_values", "aud-one", "aud-two");
 	ck_assert_int_eq(oidc_metadata_conf_parse(r, c, j, provider), TRUE);
 
 	const apr_array_header_t *auds = oidc_cfg_provider_id_token_aud_values_get(provider);
@@ -666,7 +667,7 @@ START_TEST(test_metadata_conf_parse_id_token_aud_values) {
 	ck_assert_str_eq(APR_ARRAY_IDX(auds, 0, const char *), "aud-one");
 	ck_assert_str_eq(APR_ARRAY_IDX(auds, 1, const char *), "aud-two");
 
-	json_decref(j);
+	oidc_json_decref(j);
 }
 END_TEST
 
@@ -675,13 +676,13 @@ START_TEST(test_metadata_conf_parse_dpop_and_auth_request_method) {
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
 
-	json_t *j = json_pack("{s:s,s:s}", "dpop_mode", "required", "auth_request_method", "POST");
+	oidc_json_t *j = json_pack("{s:s,s:s}", "dpop_mode", "required", "auth_request_method", "POST");
 	ck_assert_int_eq(oidc_metadata_conf_parse(r, c, j, provider), TRUE);
 
 	ck_assert_int_eq(oidc_cfg_provider_dpop_mode_get(provider), OIDC_DPOP_MODE_REQUIRED);
 	ck_assert_int_eq(oidc_cfg_provider_auth_request_method_get(provider), OIDC_AUTH_REQUEST_METHOD_POST);
 
-	json_decref(j);
+	oidc_json_decref(j);
 }
 END_TEST
 
@@ -690,12 +691,12 @@ START_TEST(test_metadata_conf_parse_userinfo_token_method) {
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
 
-	json_t *j = json_pack("{s:s}", "userinfo_token_method", "post_param");
+	oidc_json_t *j = json_pack("{s:s}", "userinfo_token_method", "post_param");
 	ck_assert_int_eq(oidc_metadata_conf_parse(r, c, j, provider), TRUE);
 
 	ck_assert_int_eq(oidc_cfg_provider_userinfo_token_method_get(provider), OIDC_USER_INFO_TOKEN_METHOD_POST);
 
-	json_decref(j);
+	oidc_json_decref(j);
 }
 END_TEST
 
@@ -816,7 +817,7 @@ START_TEST(test_metadata_disk_provider_get_missing_no_discovery) {
 	(void)e2e_make_metadata_dir(r);
 
 	/* no provider file on disk and allow_discovery=FALSE => oidc_metadata_provider_get fails */
-	json_t *j = NULL;
+	oidc_json_t *j = NULL;
 	ck_assert_int_eq(oidc_metadata_provider_get(r, c, "https://missing.example.com", &j, FALSE), FALSE);
 }
 END_TEST

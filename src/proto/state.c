@@ -58,36 +58,36 @@
  * retrieve a string from the state object
  */
 static const char *oidc_proto_state_get_string_value(const oidc_proto_state_t *proto_state, const char *name) {
-	const json_t *v = json_object_get(proto_state, name);
-	return v ? json_string_value(v) : NULL;
+	const oidc_json_t *v = oidc_json_object_get(proto_state, name);
+	return v ? oidc_json_string_value(v) : NULL;
 }
 
 /*
  * set a string value in the state object
  */
 static void oidc_proto_state_set_string_value(oidc_proto_state_t *proto_state, const char *name, const char *value) {
-	json_object_set_new(proto_state, name, json_string(value));
+	oidc_json_object_set_new(proto_state, name, oidc_json_string(value));
 }
 
 /*
  * create a new state object
  */
 oidc_proto_state_t *oidc_proto_state_new() {
-	return json_object();
+	return oidc_json_object();
 }
 
 /*
  * free up resources allocated for a state object
  */
 void oidc_proto_state_destroy(oidc_proto_state_t *proto_state) {
-	json_decref(proto_state);
+	oidc_json_decref(proto_state);
 }
 
 /*
  * serialize a state object to a string (for logging/debugging purposes)
  */
 char *oidc_proto_state_to_string(request_rec *r, const oidc_proto_state_t *proto_state) {
-	return oidc_util_json_encode(r->pool, proto_state, JSON_COMPACT);
+	return oidc_json_encode(r->pool, proto_state, OIDC_JSON_COMPACT);
 }
 
 /*
@@ -108,8 +108,8 @@ const char *oidc_proto_state_get_nonce(const oidc_proto_state_t *proto_state) {
  * retrieve the timestamp value from the state object
  */
 apr_time_t oidc_proto_state_get_timestamp(const oidc_proto_state_t *proto_state) {
-	const json_t *v = json_object_get(proto_state, OIDC_PROTO_STATE_TIMESTAMP);
-	return v ? apr_time_from_sec(json_integer_value(v)) : -1;
+	const oidc_json_t *v = oidc_json_object_get(proto_state, OIDC_PROTO_STATE_TIMESTAMP);
+	return v ? apr_time_from_sec(oidc_json_integer_value(v)) : -1;
 }
 
 /*
@@ -228,7 +228,8 @@ void oidc_proto_state_set_pkce_state(oidc_proto_state_t *proto_state, const char
  * set the current time as timestamp value in the state object
  */
 void oidc_proto_state_set_timestamp_now(oidc_proto_state_t *proto_state) {
-	json_object_set_new(proto_state, OIDC_PROTO_STATE_TIMESTAMP, json_integer(apr_time_sec(apr_time_now())));
+	oidc_json_object_set_new(proto_state, OIDC_PROTO_STATE_TIMESTAMP,
+				 oidc_json_integer(apr_time_sec(apr_time_now())));
 }
 
 /*
@@ -236,9 +237,9 @@ void oidc_proto_state_set_timestamp_now(oidc_proto_state_t *proto_state) {
  */
 oidc_proto_state_t *oidc_proto_state_from_cookie(request_rec *r, const oidc_cfg_t *c, const char *cookieValue) {
 	char *s_payload = NULL;
-	json_t *result = NULL;
+	oidc_json_t *result = NULL;
 	oidc_util_jwt_verify(r, oidc_cfg_crypto_passphrase_get(c), cookieValue, &s_payload);
-	oidc_util_json_decode_object(r, s_payload, &result);
+	oidc_json_decode_object(r, s_payload, &result);
 	return result;
 }
 
@@ -248,6 +249,6 @@ oidc_proto_state_t *oidc_proto_state_from_cookie(request_rec *r, const oidc_cfg_
 char *oidc_proto_state_to_cookie(request_rec *r, const oidc_cfg_t *c, const oidc_proto_state_t *proto_state) {
 	char *cookieValue = NULL;
 	oidc_util_jwt_create(r, oidc_cfg_crypto_passphrase_get(c),
-			     oidc_util_json_encode(r->pool, proto_state, JSON_COMPACT), &cookieValue);
+			     oidc_json_encode(r->pool, proto_state, OIDC_JSON_COMPACT), &cookieValue);
 	return cookieValue;
 }

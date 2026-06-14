@@ -46,22 +46,23 @@
 #include "cfg/cfg.h"
 #include "cfg/provider.h"
 
-apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg_t *cfg, const char *issuer, json_t **j_provider,
+apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg_t *cfg, const char *issuer, oidc_json_t **j_provider,
 				      apr_byte_t allow_discovery);
 apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg, const char *issuer, const char *url,
-					   json_t **j_metadata, char **response);
-apr_byte_t oidc_metadata_provider_parse(request_rec *r, const oidc_cfg_t *cfg, const json_t *j_provider,
+					   oidc_json_t **j_metadata, char **response);
+apr_byte_t oidc_metadata_provider_parse(request_rec *r, const oidc_cfg_t *cfg, const oidc_json_t *j_provider,
 					oidc_provider_t *provider);
-apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, const oidc_cfg_t *cfg, const json_t *j_provider,
+apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, const oidc_cfg_t *cfg, const oidc_json_t *j_provider,
 					   const char *issuer);
-apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg_t *cfg, const json_t *j_conf, oidc_provider_t *provider);
-apr_byte_t oidc_metadata_client_parse(request_rec *r, oidc_cfg_t *cfg, const json_t *j_client,
+apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg_t *cfg, const oidc_json_t *j_conf,
+				    oidc_provider_t *provider);
+apr_byte_t oidc_metadata_client_parse(request_rec *r, oidc_cfg_t *cfg, const oidc_json_t *j_client,
 				      oidc_provider_t *provider);
 apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg_t *cfg, apr_array_header_t **arr);
 apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg_t *cfg, const char *selected, oidc_provider_t **provider,
 			     apr_byte_t allow_discovery);
 apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg_t *cfg, const oidc_jwks_uri_t *jwks_uri,
-				  int ssl_validate_server, json_t **j_jwks, apr_byte_t *refresh);
-apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, const json_t *j_provider);
+				  int ssl_validate_server, oidc_json_t **j_jwks, apr_byte_t *refresh);
+apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, const oidc_json_t *j_provider);
 
 #endif /* _MOD_AUTH_OPENIDC_METADATA_H_ */

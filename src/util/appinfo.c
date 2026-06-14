@@ -118,26 +118,26 @@ void oidc_util_appinfo_set(request_rec *r, const char *s_key, const char *s_valu
  * non-string/non-boolean elements are skipped with a debug message
  */
 // TODO: escape the delimiter in the values (maybe reuse/extract url-formatted code from oidc_session_identity_encode)
-static const char *oidc_util_appinfo_array_concat(request_rec *r, const json_t *j_array, const char *claim_delimiter,
-						  const char *s_key) {
+static const char *oidc_util_appinfo_array_concat(request_rec *r, const oidc_json_t *j_array,
+						  const char *claim_delimiter, const char *s_key) {
 
 	oidc_debug(r, "parsing attribute array for key \"%s\" (#nr-of-elems: %lu)", s_key,
-		   (unsigned long)json_array_size(j_array));
+		   (unsigned long)oidc_json_array_size(j_array));
 
 	char *s_concat = apr_pstrdup(r->pool, "");
-	for (size_t i = 0; i < json_array_size(j_array); i++) {
-		const json_t *elem = json_array_get(j_array, i);
+	for (size_t i = 0; i < oidc_json_array_size(j_array); i++) {
+		const oidc_json_t *elem = oidc_json_array_get(j_array, i);
 		const char *s_elem = NULL;
 
-		if (json_is_string(elem))
-			s_elem = json_string_value(elem);
-		else if (json_is_boolean(elem))
-			s_elem = json_is_true(elem) ? "1" : "0";
+		if (oidc_json_is_string(elem))
+			s_elem = oidc_json_string_value(elem);
+		else if (oidc_json_is_boolean(elem))
+			s_elem = oidc_json_is_true(elem) ? "1" : "0";
 		else {
 			oidc_debug(r,
 				   "unhandled in-array JSON object type [%d] for key \"%s\" when parsing claims "
 				   "array elements",
-				   elem->type, s_key);
+				   oidc_json_typeof(elem), s_key);
 			continue;
 		}
 
@@ -153,40 +153,42 @@ static const char *oidc_util_appinfo_array_concat(request_rec *r, const json_t *
 /*
  * render a single JSON claim value to its application-header textual form and pass it to oidc_util_appinfo_set
  */
-static void oidc_util_appinfo_set_one(request_rec *r, const char *s_key, const json_t *j_value,
+static void oidc_util_appinfo_set_one(request_rec *r, const char *s_key, const oidc_json_t *j_value,
 				      const char *claim_prefix, const char *claim_delimiter,
 				      oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding) {
 
 	char s_int[OIDC_JSON_MAX_INT_STR_LEN];
 
-	if (json_is_string(j_value)) {
-		oidc_util_appinfo_set(r, s_key, json_string_value(j_value), claim_prefix, pass_in, encoding);
-	} else if (json_is_boolean(j_value)) {
-		oidc_util_appinfo_set(r, s_key, json_is_true(j_value) ? "1" : "0", claim_prefix, pass_in, encoding);
-	} else if (json_is_integer(j_value)) {
-		if (snprintf(s_int, OIDC_JSON_MAX_INT_STR_LEN, "%ld", (long)json_integer_value(j_value)) > 0)
+	if (oidc_json_is_string(j_value)) {
+		oidc_util_appinfo_set(r, s_key, oidc_json_string_value(j_value), claim_prefix, pass_in, encoding);
+	} else if (oidc_json_is_boolean(j_value)) {
+		oidc_util_appinfo_set(r, s_key, oidc_json_is_true(j_value) ? "1" : "0", claim_prefix, pass_in,
+				      encoding);
+	} else if (oidc_json_is_integer(j_value)) {
+		if (snprintf(s_int, OIDC_JSON_MAX_INT_STR_LEN, "%ld", (long)oidc_json_integer_value(j_value)) > 0)
 			oidc_util_appinfo_set(r, s_key, s_int, claim_prefix, pass_in, encoding);
-	} else if (json_is_real(j_value)) {
-		oidc_util_appinfo_set(r, s_key, apr_psprintf(r->pool, "%.8g", json_real_value(j_value)), claim_prefix,
-				      pass_in, encoding);
-	} else if (json_is_object(j_value)) {
-		oidc_util_appinfo_set(r, s_key,
-				      oidc_util_json_encode(r->pool, j_value, JSON_PRESERVE_ORDER | JSON_COMPACT),
+	} else if (oidc_json_is_real(j_value)) {
+		oidc_util_appinfo_set(r, s_key, apr_psprintf(r->pool, "%.8g", oidc_json_real_value(j_value)),
 				      claim_prefix, pass_in, encoding);
-	} else if (json_is_array(j_value)) {
+	} else if (oidc_json_is_object(j_value)) {
+		oidc_util_appinfo_set(r, s_key,
+				      oidc_json_encode(r->pool, j_value, OIDC_JSON_PRESERVE_ORDER | OIDC_JSON_COMPACT),
+				      claim_prefix, pass_in, encoding);
+	} else if (oidc_json_is_array(j_value)) {
 		oidc_util_appinfo_set(r, s_key, oidc_util_appinfo_array_concat(r, j_value, claim_delimiter, s_key),
 				      claim_prefix, pass_in, encoding);
 	} else {
-		oidc_debug(r, "unhandled JSON object type [%d] for key \"%s\" when parsing claims", j_value->type,
-			   s_key);
+		oidc_debug(r, "unhandled JSON object type [%d] for key \"%s\" when parsing claims",
+			   oidc_json_typeof(j_value), s_key);
 	}
 }
 
 /*
  * set the user/claims information from the session in HTTP headers passed on to the application
  */
-void oidc_util_appinfo_set_all(request_rec *r, json_t *j_attrs, const char *claim_prefix, const char *claim_delimiter,
-			       oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding) {
+void oidc_util_appinfo_set_all(request_rec *r, oidc_json_t *j_attrs, const char *claim_prefix,
+			       const char *claim_delimiter, oidc_appinfo_pass_in_t pass_in,
+			       oidc_appinfo_encoding_t encoding) {
 
 	/* if not attributes are set, nothing needs to be done */
 	if (j_attrs == NULL) {
@@ -195,10 +197,10 @@ void oidc_util_appinfo_set_all(request_rec *r, json_t *j_attrs, const char *clai
 	}
 
 	/* loop over the claims in the JSON structure */
-	void *iter = json_object_iter(j_attrs);
+	void *iter = oidc_json_object_iter(j_attrs);
 	while (iter) {
-		oidc_util_appinfo_set_one(r, json_object_iter_key(iter), json_object_iter_value(iter), claim_prefix,
-					  claim_delimiter, pass_in, encoding);
-		iter = json_object_iter_next(j_attrs, iter);
+		oidc_util_appinfo_set_one(r, oidc_json_object_iter_key(iter), oidc_json_object_iter_value(iter),
+					  claim_prefix, claim_delimiter, pass_in, encoding);
+		iter = oidc_json_object_iter_next(j_attrs, iter);
 	}
 }

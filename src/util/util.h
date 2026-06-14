@@ -46,12 +46,14 @@
 #include "cfg/cfg.h"
 #include "cfg/dir.h"
 #include "jose.h"
+#include "json.h"
 
 // appinfo.c
 void oidc_util_appinfo_set(request_rec *r, const char *s_key, const char *s_value, const char *claim_prefix,
 			   oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding);
-void oidc_util_appinfo_set_all(request_rec *r, json_t *j_attrs, const char *claim_prefix, const char *claim_delimiter,
-			       oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding);
+void oidc_util_appinfo_set_all(request_rec *r, oidc_json_t *j_attrs, const char *claim_prefix,
+			       const char *claim_delimiter, oidc_appinfo_pass_in_t pass_in,
+			       oidc_appinfo_encoding_t encoding);
 
 // base64.c
 char *oidc_util_base64_decode(apr_pool_t *pool, const char *input, char **output, int *output_len);
@@ -83,22 +85,7 @@ int oidc_util_html_send_in_template(request_rec *r, const char *filename, char *
 				    const char *arg1, int arg1_esc, const char *arg2, int arg2_esc);
 
 // jq.c
-const char *oidc_util_jq_filter(request_rec *r, const json_t *json, const char *filter);
-
-// json.c
-char *oidc_util_json_encode(apr_pool_t *pool, const json_t *json, size_t flags);
-apr_byte_t oidc_util_json_decode_object_err(request_rec *r, const char *str, json_t **json, apr_byte_t log_err);
-apr_byte_t oidc_util_json_decode_object(request_rec *r, const char *str, json_t **json);
-apr_byte_t oidc_util_json_check_error(request_rec *r, const json_t *json);
-apr_byte_t oidc_util_json_decode_and_check_error(request_rec *r, const char *str, json_t **json);
-apr_byte_t oidc_util_json_object_get_string(apr_pool_t *pool, const json_t *json, const char *name, char **value,
-					    const char *default_value);
-apr_byte_t oidc_util_json_object_get_string_array(apr_pool_t *pool, const json_t *json, const char *name,
-						  apr_array_header_t **value, const apr_array_header_t *default_value);
-apr_byte_t oidc_util_json_object_get_int(const json_t *json, const char *name, int *value, const int default_value);
-apr_byte_t oidc_util_json_object_get_bool(const json_t *json, const char *name, int *value, const int default_value);
-apr_byte_t oidc_util_json_merge(request_rec *r, json_t *src, json_t *dst);
-apr_byte_t oidc_util_json_array_has_value(request_rec *r, const json_t *haystack, const char *needle);
+const char *oidc_util_jq_filter(request_rec *r, const oidc_json_t *json, const char *filter);
 
 // jwt.c
 apr_byte_t oidc_util_jwt_create(request_rec *r, const oidc_crypto_passphrase_t *passphrase, const char *s_payload,

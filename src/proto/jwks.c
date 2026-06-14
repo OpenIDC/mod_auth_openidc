@@ -48,8 +48,9 @@
  * when no kid/x5t was specified, include the JWK in the result if it is usable for signing;
  * takes ownership of jwk (either inserts it into result or destroys it)
  */
-static void oidc_proto_jwks_key_include_any(request_rec *r, oidc_jwk_t *jwk, const json_t *elem, apr_hash_t *result) {
-	const char *use = json_string_value(json_object_get(elem, OIDC_JOSE_JWK_USE_STR));
+static void oidc_proto_jwks_key_include_any(request_rec *r, oidc_jwk_t *jwk, const oidc_json_t *elem,
+					    apr_hash_t *result) {
+	const char *use = oidc_json_string_value(oidc_json_object_get(elem, OIDC_JOSE_JWK_USE_STR));
 	if ((use != NULL) && (_oidc_strcmp(use, OIDC_JOSE_JWK_SIG_STR) != 0)) {
 		oidc_debug(r, "skipping key because of non-matching \"%s\": \"%s\"", OIDC_JOSE_JWK_USE_STR, use);
 		oidc_jwk_destroy(jwk);
@@ -71,7 +72,7 @@ static void oidc_proto_jwks_key_include_any(request_rec *r, oidc_jwk_t *jwk, con
  * try a single JWKS entry against the JWT header;
  * returns TRUE when a specific kid/x5t match was found so the caller can stop iterating
  */
-static apr_byte_t oidc_proto_jwks_key_apply(request_rec *r, oidc_jwt_t *jwt, const json_t *elem, const char *x5t,
+static apr_byte_t oidc_proto_jwks_key_apply(request_rec *r, oidc_jwt_t *jwt, const oidc_json_t *elem, const char *x5t,
 					    apr_hash_t *result) {
 	oidc_jwk_t *jwk = NULL;
 	oidc_jose_error_t err;
@@ -107,7 +108,7 @@ static apr_byte_t oidc_proto_jwks_key_apply(request_rec *r, oidc_jwt_t *jwt, con
 	}
 
 	/* compare the requested thumbprint against the current element */
-	oidc_util_json_object_get_string(r->pool, elem, OIDC_JOSE_JWK_X5T_STR, &s_x5t, NULL);
+	oidc_json_object_get_string(r->pool, elem, OIDC_JOSE_JWK_X5T_STR, &s_x5t, NULL);
 	if ((s_x5t != NULL) && (x5t != NULL) && (_oidc_strcmp(x5t, s_x5t) == 0)) {
 		oidc_jwk_to_json(r->pool, jwk, &jwk_json, &err);
 		oidc_debug(r, "found matching %s: \"%s\" for jwk: %s", OIDC_JOSE_JWK_X5T_STR, x5t, jwk_json);
@@ -123,21 +124,22 @@ static apr_byte_t oidc_proto_jwks_key_apply(request_rec *r, oidc_jwt_t *jwt, con
 /*
  * get the key from the JWKs that corresponds with the key specified in the header
  */
-static apr_byte_t oidc_proto_jwks_key_get(request_rec *r, oidc_jwt_t *jwt, const json_t *j_jwks, apr_hash_t *result) {
+static apr_byte_t oidc_proto_jwks_key_get(request_rec *r, oidc_jwt_t *jwt, const oidc_json_t *j_jwks,
+					  apr_hash_t *result) {
 
 	/* get the (optional) thumbprint for comparison */
 	const char *x5t = oidc_jwt_hdr_get(jwt, OIDC_JOSE_JWK_X5T_STR);
 	oidc_debug(r, "search for kid \"%s\" or thumbprint x5t \"%s\"", jwt->header.kid, x5t);
 
 	/* get the "keys" JSON array from the JWKs object */
-	const json_t *keys = json_object_get(j_jwks, OIDC_JOSE_JWKS_KEYS_STR);
-	if ((keys == NULL) || !(json_is_array(keys))) {
+	const oidc_json_t *keys = oidc_json_object_get(j_jwks, OIDC_JOSE_JWKS_KEYS_STR);
+	if ((keys == NULL) || !(oidc_json_is_array(keys))) {
 		oidc_error(r, "\"%s\" array element is not a JSON array", OIDC_JOSE_JWKS_KEYS_STR);
 		return FALSE;
 	}
 
-	for (int i = 0; i < json_array_size(keys); i++) {
-		if (oidc_proto_jwks_key_apply(r, jwt, json_array_get(keys, i), x5t, result) == TRUE)
+	for (int i = 0; i < oidc_json_array_size(keys); i++) {
+		if (oidc_proto_jwks_key_apply(r, jwt, oidc_json_array_get(keys, i), x5t, result) == TRUE)
 			break;
 	}
 
@@ -151,7 +153,7 @@ static apr_byte_t oidc_proto_jwks_key_get(request_rec *r, oidc_jwt_t *jwt, const
 apr_byte_t oidc_proto_jwks_uri_keys(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri,
 				    int ssl_validate_server, apr_hash_t *keys, apr_byte_t *force_refresh) {
 
-	json_t *j_jwks = NULL;
+	oidc_json_t *j_jwks = NULL;
 
 	/* get the set of JSON Web Keys for this provider (possibly by downloading them from the specified
 	 * provider->jwk_uri) */
@@ -171,8 +173,8 @@ apr_byte_t oidc_proto_jwks_uri_keys(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t 
 	 */
 	oidc_proto_jwks_key_get(r, jwt, j_jwks, keys);
 
-	/* no need anymore for the parsed json_t contents, release the it */
-	json_decref(j_jwks);
+	/* no need anymore for the parsed oidc_json_t contents, release the it */
+	oidc_json_decref(j_jwks);
 
 	/* if we've got no keys and we did not do a fresh download, then the cache may be stale */
 	if ((apr_hash_count(keys) < 1) && (*force_refresh == FALSE)) {

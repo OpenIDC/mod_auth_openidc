@@ -46,9 +46,9 @@
 #include "cfg/dir.h"
 #include "const.h" // for the PACKAGE_* defines
 #include "jose.h"
+#include "json.h"
 #include "session.h"
 #include <http_request.h>
-#include <jansson.h>
 #include <mod_auth.h>
 
 // authz.c
@@ -58,14 +58,14 @@
 /* the name of the keyword that follows the Require primitive to indicate claims-expression-based authorization */
 #define OIDC_REQUIRE_CLAIMS_EXPR_NAME "claims_expr"
 #endif
-typedef apr_byte_t (*oidc_authz_match_claim_fn_type)(request_rec *, const char *const, json_t *);
-apr_byte_t oidc_authz_match_claim(request_rec *r, const char *const attr_spec, json_t *claims);
+typedef apr_byte_t (*oidc_authz_match_claim_fn_type)(request_rec *, const char *const, oidc_json_t *);
+apr_byte_t oidc_authz_match_claim(request_rec *r, const char *const attr_spec, oidc_json_t *claims);
 #ifdef USE_LIBJQ
 authz_status oidc_authz_24_checker_claims_expr(request_rec *r, const char *require_args,
 					       const void *parsed_require_args);
 #endif
 authz_status oidc_authz_24_checker_claim(request_rec *r, const char *require_args, const void *parsed_require_args);
-authz_status oidc_authz_24_worker(request_rec *r, json_t *claims, const char *require_args,
+authz_status oidc_authz_24_worker(request_rec *r, oidc_json_t *claims, const char *require_args,
 				  const void *parsed_require_args, oidc_authz_match_claim_fn_type match_claim_fn);
 
 // content.c
@@ -116,7 +116,7 @@ int oidc_response_authorization_post(request_rec *r, oidc_cfg_t *c, oidc_session
 apr_byte_t oidc_response_save_in_session(request_rec *r, const oidc_cfg_t *c, oidc_session_t *session,
 					 const oidc_provider_t *provider, const char *remoteUser, const char *id_token,
 					 oidc_jwt_t *id_token_jwt, const char *s_userinfo_claims,
-					 json_t *userinfo_claims, const char *access_token,
+					 oidc_json_t *userinfo_claims, const char *access_token,
 					 const char *access_token_type, const int expires_in, const char *refresh_token,
 					 const char *scope, const char *session_state, const char *state,
 					 const char *original_url, const char *userinfo_jwt);
@@ -130,10 +130,11 @@ int oidc_session_management(request_rec *r, oidc_cfg_t *c, oidc_session_t *sessi
 
 // userinfo.c
 void oidc_userinfo_store_claims(request_rec *r, const oidc_cfg_t *c, oidc_session_t *session,
-				const oidc_provider_t *provider, json_t *userinfo_claims, const char *userinfo_jwt);
+				const oidc_provider_t *provider, oidc_json_t *userinfo_claims,
+				const char *userinfo_jwt);
 const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg_t *c, const oidc_provider_t *provider,
 					  const char *access_token, const char *access_token_type,
-					  oidc_session_t *session, char *id_token_sub, json_t **userinfo_claims,
+					  oidc_session_t *session, char *id_token_sub, oidc_json_t **userinfo_claims,
 					  char **userinfo_jwt);
 apr_byte_t oidc_userinfo_refresh_claims(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session,
 					apr_byte_t *needs_save);

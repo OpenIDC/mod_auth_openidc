@@ -156,18 +156,18 @@ static apr_byte_t oidc_proto_idtoken_validate_aud_string(request_rec *r, const o
  * validate a multi-valued "aud" claim against either the client_id or the configured aud-values list
  */
 static apr_byte_t oidc_proto_idtoken_validate_aud_array(request_rec *r, const oidc_provider_t *provider,
-							const apr_array_header_t *arr, const json_t *aud,
+							const apr_array_header_t *arr, const oidc_json_t *aud,
 							const char *azp) {
 	const char *s_aud = NULL;
 
 	if (arr == NULL) {
-		if ((json_array_size(aud) > 1) && (azp == NULL))
+		if ((oidc_json_array_size(aud) > 1) && (azp == NULL))
 			oidc_warn(r,
 				  "the \"%s\" claim value in the id_token is an array with more than 1 element, but "
 				  "\"%s\" claim is not present (a SHOULD in the spec...)",
 				  OIDC_CLAIM_AUD, OIDC_CLAIM_AZP);
 
-		if (oidc_util_json_array_has_value(r, aud, oidc_cfg_provider_client_id_get(provider)) == FALSE) {
+		if (oidc_json_array_has_value(r, aud, oidc_cfg_provider_client_id_get(provider)) == FALSE) {
 			oidc_error(r,
 				   "our configured client_id (%s) could not be found in the array of values for \"%s\" "
 				   "claim",
@@ -180,7 +180,7 @@ static apr_byte_t oidc_proto_idtoken_validate_aud_array(request_rec *r, const oi
 	/* handle explicit and exhaustive configuration of acceptable audience values */
 	for (int i = 0; i < arr->nelts; i++) {
 		s_aud = oidc_proto_idtoken_aud_resolve(provider, APR_ARRAY_IDX(arr, i, const char *));
-		if (oidc_util_json_array_has_value(r, aud, s_aud) == FALSE) {
+		if (oidc_json_array_has_value(r, aud, s_aud) == FALSE) {
 			oidc_error(r,
 				   "our configured audience value (%s) could not be found in the array of values for "
 				   "\"%s\" claim",
@@ -189,7 +189,7 @@ static apr_byte_t oidc_proto_idtoken_validate_aud_array(request_rec *r, const oi
 		}
 	}
 
-	if (json_array_size(aud) > arr->nelts) {
+	if (oidc_json_array_size(aud) > arr->nelts) {
 		oidc_error(r,
 			   "our configured audience values are all present in the array of values for \"%s\" claim, "
 			   "but there are other unknown/untrusted values included as well",
@@ -206,7 +206,7 @@ static apr_byte_t oidc_proto_idtoken_validate_aud_array(request_rec *r, const oi
 apr_byte_t oidc_proto_idtoken_validate_aud_and_azp(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
 						   const oidc_jwt_payload_t *id_token_payload) {
 	char *azp = NULL;
-	const json_t *aud = NULL;
+	const oidc_json_t *aud = NULL;
 	const apr_array_header_t *arr = NULL;
 
 	oidc_jose_get_string(r->pool, id_token_payload->value.json, OIDC_CLAIM_AZP, FALSE, &azp, NULL);
@@ -215,7 +215,7 @@ apr_byte_t oidc_proto_idtoken_validate_aud_and_azp(request_rec *r, oidc_cfg_t *c
 		return FALSE;
 
 	/* get the "aud" value from the JSON payload */
-	aud = json_object_get(id_token_payload->value.json, OIDC_CLAIM_AUD);
+	aud = oidc_json_object_get(id_token_payload->value.json, OIDC_CLAIM_AUD);
 	if (aud == NULL) {
 		oidc_error(r, "id_token JSON payload did not contain an \"%s\" claim", OIDC_CLAIM_AUD);
 		return FALSE;
@@ -223,10 +223,10 @@ apr_byte_t oidc_proto_idtoken_validate_aud_and_azp(request_rec *r, oidc_cfg_t *c
 
 	arr = oidc_proto_profile_id_token_aud_values_get(r->pool, provider);
 
-	if (json_is_string(aud))
-		return oidc_proto_idtoken_validate_aud_string(r, provider, arr, json_string_value(aud));
+	if (oidc_json_is_string(aud))
+		return oidc_proto_idtoken_validate_aud_string(r, provider, arr, oidc_json_string_value(aud));
 
-	if (json_is_array(aud))
+	if (oidc_json_is_array(aud))
 		return oidc_proto_idtoken_validate_aud_array(r, provider, arr, aud, azp);
 
 	oidc_error(r, "id_token JSON payload \"%s\" claim is not a string nor an array", OIDC_CLAIM_AUD);

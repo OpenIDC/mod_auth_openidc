@@ -36,14 +36,14 @@
 /*
  * parse the JSON OAuth 2.0 provider metadata in to the cfg->oauth struct
  */
-apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, const json_t *j_provider) {
+apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, const oidc_json_t *j_provider) {
 
 	char *issuer = NULL;
 	char *value = NULL;
 	const char *rv = NULL;
 
 	/* get the "issuer" from the provider metadata */
-	oidc_util_json_object_get_string(r->pool, j_provider, OIDC_METADATA_ISSUER, &issuer, NULL);
+	oidc_json_object_get_string(r->pool, j_provider, OIDC_METADATA_ISSUER, &issuer, NULL);
 
 	// TOOD: should check for "if c->oauth.introspection_endpoint_url == NULL and
 	//       allocate the string from the process/config pool
@@ -52,7 +52,7 @@ apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, con
 	// https://groups.google.com/forum/#!topic/mod_auth_openidc/o1K_1Yh-TQA
 
 	/* get a handle to the introspection endpoint */
-	oidc_util_json_object_get_string(r->pool, j_provider, OIDC_METADATA_INTROSPECTION_ENDPOINT, &value, NULL);
+	oidc_json_object_get_string(r->pool, j_provider, OIDC_METADATA_INTROSPECTION_ENDPOINT, &value, NULL);
 	if (value != NULL) {
 		rv = oidc_cfg_oauth_introspection_endpoint_url_set(r->pool, c, value);
 		if (rv != NULL)
@@ -60,7 +60,7 @@ apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, con
 	}
 
 	/* get a handle to the jwks_uri endpoint */
-	oidc_util_json_object_get_string(r->pool, j_provider, OIDC_METADATA_JWKS_URI, &value, NULL);
+	oidc_json_object_get_string(r->pool, j_provider, OIDC_METADATA_JWKS_URI, &value, NULL);
 	if (value != NULL) {
 		rv = oidc_cfg_oauth_verify_jwks_uri_set(r->pool, c, value);
 		if (rv != NULL)

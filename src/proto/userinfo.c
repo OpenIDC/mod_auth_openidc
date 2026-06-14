@@ -51,7 +51,7 @@
  */
 static apr_byte_t oidc_proto_userinfo_response_jwt_parse(request_rec *r, oidc_cfg_t *cfg,
 							 const oidc_provider_t *provider, char **response,
-							 json_t **claims, char **userinfo_jwt) {
+							 oidc_json_t **claims, char **userinfo_jwt) {
 	apr_byte_t rv = FALSE;
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
@@ -121,7 +121,7 @@ static apr_byte_t oidc_proto_userinfo_response_jwt_parse(request_rec *r, oidc_cf
 	oidc_debug(r, "successfully verified signed JWT returned from userinfo endpoint: %s", jwt->payload.value.str);
 
 	*userinfo_jwt = apr_pstrdup(r->pool, *response);
-	*claims = json_copy(jwt->payload.value.json);
+	*claims = oidc_json_copy(jwt->payload.value.json);
 	*response = apr_pstrdup(r->pool, jwt->payload.value.str);
 
 	rv = TRUE;
@@ -146,13 +146,15 @@ end:
  * obtain the JWT payload string for a single aggregated/distributed claim source entry,
  * either directly from the "JWT" member or by fetching it from the configured endpoint
  */
-static const char *oidc_proto_userinfo_composite_source_payload(request_rec *r, oidc_cfg_t *cfg, const json_t *value) {
-	const json_t *jwt = json_object_get(value, OIDC_COMPOSITE_CLAIM_JWT);
-	if ((jwt != NULL) && (json_is_string(jwt)))
-		return apr_pstrdup(r->pool, json_string_value(jwt));
+static const char *oidc_proto_userinfo_composite_source_payload(request_rec *r, oidc_cfg_t *cfg,
+								const oidc_json_t *value) {
+	const oidc_json_t *jwt = oidc_json_object_get(value, OIDC_COMPOSITE_CLAIM_JWT);
+	if ((jwt != NULL) && (oidc_json_is_string(jwt)))
+		return apr_pstrdup(r->pool, oidc_json_string_value(jwt));
 
-	const char *access_token = json_string_value(json_object_get(value, OIDC_COMPOSITE_CLAIM_ACCESS_TOKEN));
-	const char *endpoint = json_string_value(json_object_get(value, OIDC_COMPOSITE_CLAIM_ENDPOINT));
+	const char *access_token =
+	    oidc_json_string_value(oidc_json_object_get(value, OIDC_COMPOSITE_CLAIM_ACCESS_TOKEN));
+	const char *endpoint = oidc_json_string_value(oidc_json_object_get(value, OIDC_COMPOSITE_CLAIM_ENDPOINT));
 	if ((access_token == NULL) || (endpoint == NULL))
 		return NULL;
 
@@ -168,7 +170,7 @@ static const char *oidc_proto_userinfo_composite_source_payload(request_rec *r, 
  * parse a single aggregated/distributed claim JWT and merge its payload into decoded[key]
  */
 static void oidc_proto_userinfo_composite_decode_source(request_rec *r, const oidc_cfg_t *cfg, const char *key,
-							const char *s_json, json_t *decoded) {
+							const char *s_json, oidc_json_t *decoded) {
 	oidc_jose_error_t err;
 	oidc_jwt_t *jwt = NULL;
 
@@ -177,12 +179,12 @@ static void oidc_proto_userinfo_composite_decode_source(request_rec *r, const oi
 			   &err) == FALSE) {
 		oidc_error(r, "could not parse JWT from aggregated claim \"%s\": %s", key, oidc_jose_e2s(r->pool, err));
 	} else {
-		json_t *v = json_object_get(decoded, key);
+		oidc_json_t *v = oidc_json_object_get(decoded, key);
 		if (v == NULL) {
-			v = json_object();
-			json_object_set_new(decoded, key, v);
+			v = oidc_json_object();
+			oidc_json_object_set_new(decoded, key, v);
 		}
-		oidc_util_json_merge(r, jwt->payload.value.json, v);
+		oidc_json_merge(r, jwt->payload.value.json, v);
 	}
 	oidc_jwt_destroy(jwt);
 }
@@ -190,72 +192,72 @@ static void oidc_proto_userinfo_composite_decode_source(request_rec *r, const oi
 /*
  * walk all composite-claim sources, decoding each into the decoded object
  */
-static void oidc_proto_userinfo_composite_decode_sources(request_rec *r, oidc_cfg_t *cfg, json_t *sources,
-							 json_t *decoded) {
-	void *iter = json_object_iter(sources);
+static void oidc_proto_userinfo_composite_decode_sources(request_rec *r, oidc_cfg_t *cfg, oidc_json_t *sources,
+							 oidc_json_t *decoded) {
+	void *iter = oidc_json_object_iter(sources);
 	while (iter) {
-		const char *key = json_object_iter_key(iter);
-		const json_t *value = json_object_iter_value(iter);
-		if ((value != NULL) && (json_is_object(value))) {
+		const char *key = oidc_json_object_iter_key(iter);
+		const oidc_json_t *value = oidc_json_object_iter_value(iter);
+		if ((value != NULL) && (oidc_json_is_object(value))) {
 			const char *s_json = oidc_proto_userinfo_composite_source_payload(r, cfg, value);
 			if ((s_json != NULL) && (_oidc_strcmp(s_json, "") != 0))
 				oidc_proto_userinfo_composite_decode_source(r, cfg, key, s_json, decoded);
 		}
-		iter = json_object_iter_next(sources, iter);
+		iter = oidc_json_object_iter_next(sources, iter);
 	}
 }
 
 /*
  * resolve each composite-claim name against the decoded sources and copy the value into claims
  */
-static void oidc_proto_userinfo_composite_apply_names(request_rec *r, json_t *names, const json_t *decoded,
-						      json_t *claims) {
-	void *iter = json_object_iter(names);
+static void oidc_proto_userinfo_composite_apply_names(request_rec *r, oidc_json_t *names, const oidc_json_t *decoded,
+						      oidc_json_t *claims) {
+	void *iter = oidc_json_object_iter(names);
 	while (iter) {
-		const char *key = json_object_iter_key(iter);
-		const char *s_value = json_string_value(json_object_iter_value(iter));
+		const char *key = oidc_json_object_iter_key(iter);
+		const char *s_value = oidc_json_string_value(oidc_json_object_iter_value(iter));
 		if (s_value == NULL) {
 			oidc_warn(r, "no string value found for claim \"%s\"", key);
 		} else {
 			oidc_debug(r, "processing: %s: %s", key, s_value);
-			const json_t *values = json_object_get(decoded, s_value);
+			const oidc_json_t *values = oidc_json_object_get(decoded, s_value);
 			if (values == NULL)
 				oidc_warn(r, "no values for source \"%s\" found", s_value);
 			else
-				json_object_set(claims, key, json_object_get(values, key));
+				oidc_json_object_set(claims, key, oidc_json_object_get(values, key));
 		}
-		iter = json_object_iter_next(names, iter);
+		iter = oidc_json_object_iter_next(names, iter);
 	}
 }
 
 /*
  * if the userinfo response contains composite claims then resolve those
  */
-static apr_byte_t oidc_proto_userinfo_request_composite_claims(request_rec *r, oidc_cfg_t *cfg, json_t *claims) {
-	json_t *sources;
-	json_t *names;
-	json_t *decoded;
+static apr_byte_t oidc_proto_userinfo_request_composite_claims(request_rec *r, oidc_cfg_t *cfg, oidc_json_t *claims) {
+	oidc_json_t *sources;
+	oidc_json_t *names;
+	oidc_json_t *decoded;
 
 	oidc_debug(r, "enter");
 
-	names = json_object_get(claims, OIDC_COMPOSITE_CLAIM_NAMES);
-	if ((names == NULL) || (!json_is_object(names)))
+	names = oidc_json_object_get(claims, OIDC_COMPOSITE_CLAIM_NAMES);
+	if ((names == NULL) || (!oidc_json_is_object(names)))
 		return FALSE;
 
-	sources = json_object_get(claims, OIDC_COMPOSITE_CLAIM_SOURCES);
-	if ((sources == NULL) || (!json_is_object(sources))) {
+	sources = oidc_json_object_get(claims, OIDC_COMPOSITE_CLAIM_SOURCES);
+	if ((sources == NULL) || (!oidc_json_is_object(sources))) {
 		oidc_debug(r, "%s found, but no %s found", OIDC_COMPOSITE_CLAIM_NAMES, OIDC_COMPOSITE_CLAIM_SOURCES);
 		return FALSE;
 	}
 
-	decoded = json_object();
+	decoded = oidc_json_object();
 
 	oidc_proto_userinfo_composite_decode_sources(r, cfg, sources, decoded);
 	oidc_proto_userinfo_composite_apply_names(r, names, decoded, claims);
 
-	json_object_del(claims, OIDC_COMPOSITE_CLAIM_NAMES);
-	json_object_del(claims, OIDC_COMPOSITE_CLAIM_SOURCES);
-	json_decref(decoded);
+	oidc_json_object_del(claims, OIDC_COMPOSITE_CLAIM_NAMES);
+	oidc_json_object_del(claims, OIDC_COMPOSITE_CLAIM_SOURCES);
+	oidc_json_decref(decoded);
 
 	return TRUE;
 }
@@ -322,13 +324,13 @@ static apr_byte_t oidc_proto_userinfo_request_dpop_init(request_rec *r, const oi
 static apr_byte_t oidc_proto_userinfo_response_resolve(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
 						       const char *access_token, const char *dpop,
 						       apr_hash_t *response_hdrs, char **s_userinfo,
-						       long *response_code, json_t **userinfo_claims,
+						       long *response_code, oidc_json_t **userinfo_claims,
 						       char **userinfo_jwt) {
 	if (oidc_proto_userinfo_endpoint_call(r, cfg, provider, access_token, dpop, s_userinfo, response_code,
 					      response_hdrs) == FALSE)
 		return FALSE;
 
-	if (oidc_util_json_decode_object_err(r, *s_userinfo, userinfo_claims, FALSE) == TRUE)
+	if (oidc_json_decode_object_err(r, *s_userinfo, userinfo_claims, FALSE) == TRUE)
 		return TRUE;
 
 	// must be a JWT
@@ -339,7 +341,7 @@ static apr_byte_t oidc_proto_userinfo_response_resolve(request_rec *r, oidc_cfg_
  * validate that the userinfo response contains a "sub" claim and that it matches the id_token "sub"
  */
 static apr_byte_t oidc_proto_userinfo_request_validate_sub(request_rec *r, const char *id_token_sub,
-							   const json_t *userinfo_claims) {
+							   const oidc_json_t *userinfo_claims) {
 	char *user_info_sub = NULL;
 	oidc_jose_get_string(r->pool, userinfo_claims, OIDC_CLAIM_SUB, FALSE, &user_info_sub, NULL);
 
@@ -370,7 +372,7 @@ static apr_byte_t oidc_proto_userinfo_request_validate_sub(request_rec *r, const
 apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
 				       const char *id_token_sub, const char *access_token,
 				       const char *access_token_type, char **s_userinfo, char **userinfo_jwt,
-				       json_t **userinfo_claims, long *response_code) {
+				       oidc_json_t **userinfo_claims, long *response_code) {
 	apr_byte_t rv = FALSE;
 	char *dpop = NULL;
 	apr_hash_t *response_hdrs = NULL;
@@ -391,7 +393,7 @@ apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, const oi
 
 	/* for plain JSON responses, check for an error and possibly retry with a fresh DPoP nonce */
 	if ((*userinfo_jwt == NULL) && (response_hdrs != NULL) &&
-	    (oidc_util_json_check_error(r, *userinfo_claims) == TRUE)) {
+	    (oidc_json_check_error(r, *userinfo_claims) == TRUE)) {
 
 		if (oidc_proto_dpop_use_nonce(r, cfg, *userinfo_claims, response_hdrs,
 					      oidc_cfg_provider_userinfo_endpoint_url_get(provider), method,
@@ -399,7 +401,7 @@ apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, const oi
 			// a regular error response
 			goto end;
 
-		json_decref(*userinfo_claims);
+		oidc_json_decref(*userinfo_claims);
 		*userinfo_claims = NULL;
 
 		if (oidc_proto_userinfo_response_resolve(r, cfg, provider, access_token, dpop, response_hdrs,
@@ -407,12 +409,12 @@ apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, const oi
 							 userinfo_jwt) == FALSE)
 			goto end;
 
-		if (oidc_util_json_check_error(r, *userinfo_claims) == TRUE)
+		if (oidc_json_check_error(r, *userinfo_claims) == TRUE)
 			goto end;
 	}
 
 	if (oidc_proto_userinfo_request_composite_claims(r, cfg, *userinfo_claims) == TRUE)
-		*s_userinfo = oidc_util_json_encode(r->pool, *userinfo_claims, JSON_PRESERVE_ORDER | JSON_COMPACT);
+		*s_userinfo = oidc_json_encode(r->pool, *userinfo_claims, OIDC_JSON_PRESERVE_ORDER | OIDC_JSON_COMPACT);
 
 	if (oidc_proto_userinfo_request_validate_sub(r, id_token_sub, *userinfo_claims) == FALSE)
 		goto end;
@@ -422,7 +424,7 @@ apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, const oi
 end:
 
 	if ((rv == FALSE) && (*userinfo_claims != NULL)) {
-		json_decref(*userinfo_claims);
+		oidc_json_decref(*userinfo_claims);
 		*userinfo_claims = NULL;
 	}
 

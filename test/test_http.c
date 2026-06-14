@@ -50,6 +50,7 @@
 #include "http_server.h"
 #include "util.h"
 #include <curl/curl.h>
+#include <jansson.h> /* this test builds JSON fixtures with the backend API directly (no longer pulled in via jose.h) */
 
 START_TEST(test_http_accept) {
 	request_rec *r = oidc_test_request_get();
@@ -565,14 +566,14 @@ START_TEST(test_e2e_post_json) {
 	ck_assert_ptr_nonnull(srv);
 
 	const char *url = oidc_test_http_server_url(srv, r->pool);
-	json_t *j = json_pack("{s:s,s:i}", "key", "value", "n", 42);
+	oidc_json_t *j = json_pack("{s:s,s:i}", "key", "value", "n", 42);
 	char *response = NULL;
 	long status = 0;
 	oidc_http_timeout_t to = e2e_timeout();
 	oidc_http_outgoing_proxy_t pr = e2e_no_proxy();
 	apr_byte_t ok = oidc_http_post_json(r, url, j, NULL, NULL, NULL, FALSE, &response, &status, NULL, &to, &pr,
 					    NULL, NULL, NULL, NULL);
-	json_decref(j);
+	oidc_json_decref(j);
 
 	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
 	ck_assert_msg(ok == TRUE, "POST json succeeds");

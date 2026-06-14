@@ -56,6 +56,13 @@
 
 #include "jose.h"
 
+/*
+ * jose.c is the cjose seam: cjose's public API is defined in terms of the JSON backend's value
+ * type (jansson's json_t, identical to oidc_json_t), so this is the one translation unit besides
+ * json.c that includes the backend header directly and uses the raw json_* API
+ */
+#include <jansson.h>
+
 #include <cjose/cjose.h>
 
 #include <openssl/bn.h>
@@ -220,7 +227,8 @@ char *oidc_jose_jwt_serialize(apr_pool_t *pool, oidc_jwt_t *jwt, oidc_jose_error
 
 	if (_oidc_strcmp(jwt->header.alg, CJOSE_HDR_ALG_NONE) == 0) {
 
-		s_payload = oidc_util_json_encode(pool, jwt->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
+		s_payload =
+		    oidc_json_encode(pool, jwt->payload.value.json, OIDC_JSON_PRESERVE_ORDER | OIDC_JSON_COMPACT);
 		if (s_payload == NULL) {
 			oidc_jose_error(err, "oidc_util_encode_json failed");
 			return NULL;
@@ -384,7 +392,7 @@ oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, const json_t *json, oidc_jose_error
 	const json_t *v = NULL;
 	const json_t *e = NULL;
 
-	const char *s_json = oidc_util_json_encode(pool, json, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	const char *s_json = oidc_json_encode(pool, json, OIDC_JSON_PRESERVE_ORDER | OIDC_JSON_COMPACT);
 	if (s_json == NULL) {
 		oidc_jose_error(err, "could not serialize JWK");
 		goto end;
@@ -609,7 +617,7 @@ apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_js
 		json_object_set_new(json, OIDC_JOSE_JWK_X5T_STR, json_string(jwk->x5t));
 
 	// generate the string ...
-	*s_json = oidc_util_json_encode(pool, json, JSON_ENCODE_ANY | JSON_COMPACT | JSON_PRESERVE_ORDER);
+	*s_json = oidc_json_encode(pool, json, OIDC_JSON_ENCODE_ANY | OIDC_JSON_COMPACT | OIDC_JSON_PRESERVE_ORDER);
 
 	rv = (*s_json != NULL);
 
@@ -1234,7 +1242,8 @@ apr_byte_t oidc_jwt_parse(apr_pool_t *pool, const char *input_json, oidc_jwt_t *
 
 	cjose_header_t *hdr = cjose_jws_get_protected(jwt->cjose_jws);
 	jwt->header.value.json = json_copy((json_t *)hdr);
-	jwt->header.value.str = oidc_util_json_encode(pool, jwt->header.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	jwt->header.value.str =
+	    oidc_json_encode(pool, jwt->header.value.json, OIDC_JSON_PRESERVE_ORDER | OIDC_JSON_COMPACT);
 
 	jwt->header.alg = apr_pstrdup(pool, cjose_header_get(hdr, CJOSE_HDR_ALG, &cjose_err));
 	jwt->header.enc = apr_pstrdup(pool, cjose_header_get(hdr, CJOSE_HDR_ENC, &cjose_err));
@@ -1314,7 +1323,7 @@ apr_byte_t oidc_jwt_sign(apr_pool_t *pool, oidc_jwt_t *jwt, const oidc_jwk_t *jw
 		cjose_jws_release(jwt->cjose_jws);
 
 	cjose_err cjose_err;
-	char *plaintext = oidc_util_json_encode(pool, jwt->payload.value.json, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	char *plaintext = oidc_json_encode(pool, jwt->payload.value.json, OIDC_JSON_PRESERVE_ORDER | OIDC_JSON_COMPACT);
 
 	char *s_payload = NULL;
 	int payload_len = 0;

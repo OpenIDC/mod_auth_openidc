@@ -59,7 +59,7 @@ int oidc_dpop_request(request_rec *r, const oidc_cfg_t *c) {
 	char *s_method = NULL;
 	char *s_dpop = NULL;
 	const char *s_response = NULL;
-	json_t *json = NULL;
+	oidc_json_t *json = NULL;
 	char *remote_ip = NULL;
 
 #if AP_MODULE_MAGIC_AT_LEAST(20111130, 0)
@@ -120,9 +120,9 @@ int oidc_dpop_request(request_rec *r, const oidc_cfg_t *c) {
 	}
 
 	/* assemble and serialize the JSON response object */
-	json = json_object();
-	json_object_set_new(json, OIDC_HTTP_HDR_DPOP, json_string(s_dpop));
-	s_response = oidc_util_json_encode(r->pool, json, JSON_COMPACT | JSON_PRESERVE_ORDER);
+	json = oidc_json_object();
+	oidc_json_object_set_new(json, OIDC_HTTP_HDR_DPOP, oidc_json_string(s_dpop));
+	s_response = oidc_json_encode(r->pool, json, OIDC_JSON_COMPACT | OIDC_JSON_PRESERVE_ORDER);
 
 	/* return the serialized JSON response */
 	rc = oidc_util_http_send(r, s_response, _oidc_strlen(s_response), OIDC_HTTP_CONTENT_TYPE_JSON, OK);
@@ -130,7 +130,7 @@ int oidc_dpop_request(request_rec *r, const oidc_cfg_t *c) {
 end:
 
 	if (json)
-		json_decref(json);
+		oidc_json_decref(json);
 
 	return rc;
 }

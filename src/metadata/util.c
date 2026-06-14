@@ -101,21 +101,21 @@ const char *oidc_metadata_conf_path(request_rec *r, const char *issuer) {
 /*
  * read a JSON metadata file from disk
  */
-apr_byte_t oidc_metadata_file_read_json(request_rec *r, const char *path, json_t **result) {
+apr_byte_t oidc_metadata_file_read_json(request_rec *r, const char *path, oidc_json_t **result) {
 	char *buf = NULL;
 	if (oidc_util_file_read(r, path, r->pool, &buf) == FALSE)
 		return FALSE;
-	return oidc_util_json_decode_object(r, buf, result);
+	return oidc_json_decode_object(r, buf, result);
 }
 
 /*
  * check if the specified entry in metadata is a valid URI
  */
-apr_byte_t oidc_metadata_is_valid_uri(request_rec *r, const char *type, const char *issuer, const json_t *json,
+apr_byte_t oidc_metadata_is_valid_uri(request_rec *r, const char *type, const char *issuer, const oidc_json_t *json,
 				      const char *key, char **value, apr_byte_t is_mandatory) {
 
 	char *s_value = NULL;
-	oidc_util_json_object_get_string(r->pool, json, key, &s_value, NULL);
+	oidc_json_object_get_string(r->pool, json, key, &s_value, NULL);
 
 	if (s_value == NULL) {
 		if (is_mandatory) {
@@ -140,12 +140,12 @@ apr_byte_t oidc_metadata_is_valid_uri(request_rec *r, const char *type, const ch
  * try a single array entry against the validator and the preference;
  * returns TRUE when the entry matches the preference and the caller should stop iterating
  */
-static apr_byte_t oidc_metadata_array_string_apply(apr_pool_t *pool, const json_t *elem,
+static apr_byte_t oidc_metadata_array_string_apply(apr_pool_t *pool, const oidc_json_t *elem,
 						   oidc_valid_function_t valid_function, char **value,
 						   const char *preference, apr_byte_t *found) {
-	if (!json_is_string(elem))
+	if (!oidc_json_is_string(elem))
 		return FALSE;
-	if (valid_function(pool, json_string_value(elem)) != NULL)
+	if (valid_function(pool, oidc_json_string_value(elem)) != NULL)
 		return FALSE;
 
 	*found = TRUE;
@@ -153,13 +153,13 @@ static apr_byte_t oidc_metadata_array_string_apply(apr_pool_t *pool, const json_
 	if (value == NULL)
 		return FALSE;
 
-	if ((preference != NULL) && (_oidc_strcmp(json_string_value(elem), preference) == 0)) {
-		*value = apr_pstrdup(pool, json_string_value(elem));
+	if ((preference != NULL) && (_oidc_strcmp(oidc_json_string_value(elem), preference) == 0)) {
+		*value = apr_pstrdup(pool, oidc_json_string_value(elem));
 		return TRUE;
 	}
 
 	if (*value == NULL)
-		*value = apr_pstrdup(pool, json_string_value(elem));
+		*value = apr_pstrdup(pool, oidc_json_string_value(elem));
 
 	return FALSE;
 }
@@ -167,22 +167,22 @@ static apr_byte_t oidc_metadata_array_string_apply(apr_pool_t *pool, const json_
 /*
  * check if there's a valid entry in a string of arrays, with a preference
  */
-const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, const json_t *json, const char *key,
+const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, const oidc_json_t *json, const char *key,
 						oidc_valid_function_t valid_function, char **value, apr_byte_t optional,
 						const char *preference) {
 	if (value)
 		*value = NULL;
 
-	const json_t *json_arr = json_object_get(json, key);
-	if ((json_arr == NULL) || !json_is_array(json_arr)) {
+	const oidc_json_t *json_arr = oidc_json_object_get(json, key);
+	if ((json_arr == NULL) || !oidc_json_is_array(json_arr)) {
 		if (optional == FALSE)
 			return apr_psprintf(pool, "JSON object did not contain a \"%s\" array", key);
 		return NULL;
 	}
 
 	apr_byte_t found = FALSE;
-	for (int i = 0; i < json_array_size(json_arr); i++) {
-		if (oidc_metadata_array_string_apply(pool, json_array_get(json_arr, i), valid_function, value,
+	for (int i = 0; i < oidc_json_array_size(json_arr); i++) {
+		if (oidc_metadata_array_string_apply(pool, oidc_json_array_get(json_arr, i), valid_function, value,
 						     preference, &found))
 			break;
 	}
@@ -196,11 +196,12 @@ const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, const json_t *
 /*
  * parse boolean value from JSON configuration
  */
-void oidc_metadata_parse_boolean(request_rec *r, const json_t *json, const char *key, int *value, int default_value) {
+void oidc_metadata_parse_boolean(request_rec *r, const oidc_json_t *json, const char *key, int *value,
+				 int default_value) {
 	int int_value = 0;
 	char *s_value = NULL;
-	if (oidc_util_json_object_get_bool(json, key, &int_value, default_value) == FALSE) {
-		oidc_util_json_object_get_string(r->pool, json, key, &s_value, NULL);
+	if (oidc_json_object_get_bool(json, key, &int_value, default_value) == FALSE) {
+		oidc_json_object_get_string(r->pool, json, key, &s_value, NULL);
 		if (s_value != NULL) {
 			const char *rv = oidc_cfg_parse_boolean(r->pool, s_value, &int_value);
 			if (rv != NULL) {
@@ -208,7 +209,7 @@ void oidc_metadata_parse_boolean(request_rec *r, const json_t *json, const char 
 				int_value = default_value;
 			}
 		} else {
-			oidc_util_json_object_get_int(json, key, &int_value, default_value);
+			oidc_json_object_get_int(json, key, &int_value, default_value);
 		}
 	}
 	*value = (int_value != 0) ? TRUE : FALSE;
@@ -217,8 +218,8 @@ void oidc_metadata_parse_boolean(request_rec *r, const json_t *json, const char 
 /*
  * parse URL value from JSON configuration
  */
-void oidc_metadata_parse_url(request_rec *r, const char *type, const char *issuer, const json_t *json, const char *key,
-			     char **value, const char *default_value) {
+void oidc_metadata_parse_url(request_rec *r, const char *type, const char *issuer, const oidc_json_t *json,
+			     const char *key, char **value, const char *default_value) {
 	*value = NULL;
 	if ((oidc_metadata_is_valid_uri(r, type, issuer, json, key, value, FALSE) == FALSE) ||
 	    ((*value == NULL) && (default_value != NULL))) {
@@ -229,25 +230,25 @@ void oidc_metadata_parse_url(request_rec *r, const char *type, const char *issue
 /*
  * parse a set of JWKs from a JSON metadata object
  */
-void oidc_metadata_get_jwks(request_rec *r, const json_t *json, apr_array_header_t **jwk_list) {
-	const json_t *keys = NULL;
+void oidc_metadata_get_jwks(request_rec *r, const oidc_json_t *json, apr_array_header_t **jwk_list) {
+	const oidc_json_t *keys = NULL;
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
-	const json_t *elem = NULL;
+	const oidc_json_t *elem = NULL;
 
-	keys = json_object_get(json, OIDC_JOSE_JWKS_KEYS_STR);
+	keys = oidc_json_object_get(json, OIDC_JOSE_JWKS_KEYS_STR);
 	if (keys == NULL)
 		return;
 
-	if (!json_is_array(keys)) {
+	if (!oidc_json_is_array(keys)) {
 		oidc_error(r, "trying to parse a list of JWKs but the value for key \"%s\" is not a JSON array",
 			   OIDC_JOSE_JWKS_KEYS_STR);
 		return;
 	}
 
-	for (int i = 0; i < json_array_size(keys); i++) {
+	for (int i = 0; i < oidc_json_array_size(keys); i++) {
 
-		elem = json_array_get(keys, i);
+		elem = oidc_json_array_get(keys, i);
 
 		if (oidc_jwk_parse_json(r->pool, elem, &jwk, &err) == FALSE) {
 			oidc_warn(r, "oidc_jwk_parse_json failed: %s", oidc_jose_e2s(r->pool, err));

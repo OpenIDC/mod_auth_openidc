@@ -53,7 +53,7 @@
 #include <apr_strings.h>
 #include <apr_tables.h>
 
-#include <jansson.h>
+#include "json.h"
 
 /*
  * opaque forward declarations of the backend JOSE library's key and signature types, so this public header
@@ -163,9 +163,9 @@ apr_byte_t oidc_jose_hash_and_base64url_encode(apr_pool_t *pool, const char *ope
 					       int input_len, char **output, oidc_jose_error_t *err);
 
 /* return a string claim value from a JSON object */
-apr_byte_t oidc_jose_get_string(apr_pool_t *pool, const json_t *json, const char *claim_name, apr_byte_t is_mandatory,
-				char **result, oidc_jose_error_t *err);
-apr_byte_t oidc_jose_get_timestamp(apr_pool_t *pool, const json_t *json, const char *claim_name,
+apr_byte_t oidc_jose_get_string(apr_pool_t *pool, const oidc_json_t *json, const char *claim_name,
+				apr_byte_t is_mandatory, char **result, oidc_jose_error_t *err);
+apr_byte_t oidc_jose_get_timestamp(apr_pool_t *pool, const oidc_json_t *json, const char *claim_name,
 				   apr_byte_t is_mandatory, double *result, oidc_jose_error_t *err);
 
 apr_byte_t oidc_jose_compress(apr_pool_t *pool, const char *input, int input_len, char **output, int *output_len,
@@ -176,7 +176,7 @@ apr_byte_t oidc_jose_uncompress(apr_pool_t *pool, const char *input, int input_l
 /* a parsed JWK/JWT JSON object */
 typedef struct oidc_jose_json_t {
 	/* parsed JSON struct representation */
-	json_t *json;
+	oidc_json_t *json;
 	/* string representation */
 	char *str;
 } oidc_jose_json_t;
@@ -207,17 +207,17 @@ typedef struct oidc_jwk_t {
 apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json, apr_hash_t *keys, char **plaintext,
 			    int *plaintext_len, oidc_jose_error_t *err, apr_byte_t import_must_succeed);
 /* parse a JSON string (JWK) to a JWK struct */
-oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, const json_t *json, oidc_jose_error_t *err);
+oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, const oidc_json_t *json, oidc_jose_error_t *err);
 oidc_jwk_t *oidc_jwk_copy(apr_pool_t *pool, const oidc_jwk_t *jwk);
 /* parse a JSON object (JWK) in to a JWK struct */
-apr_byte_t oidc_jwk_parse_json(apr_pool_t *pool, const json_t *json, oidc_jwk_t **jwk, oidc_jose_error_t *err);
+apr_byte_t oidc_jwk_parse_json(apr_pool_t *pool, const oidc_json_t *json, oidc_jwk_t **jwk, oidc_jose_error_t *err);
 /* parse a JSON object (JWKS) to a list of JWK structs */
-apr_byte_t oidc_jwks_parse_json(apr_pool_t *pool, const json_t *json, apr_array_header_t **jwk_list,
+apr_byte_t oidc_jwks_parse_json(apr_pool_t *pool, const oidc_json_t *json, apr_array_header_t **jwk_list,
 				oidc_jose_error_t *err);
 /* test if JSON object looks like JWK */
-apr_byte_t oidc_is_jwk(const json_t *json);
+apr_byte_t oidc_is_jwk(const oidc_json_t *json);
 /* test if JSON object looks like JWKS */
-apr_byte_t oidc_is_jwks(const json_t *json);
+apr_byte_t oidc_is_jwks(const oidc_json_t *json);
 /* convert a JWK struct to a JSON string */
 apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_json, oidc_jose_error_t *err);
 /* convert the PUBLIC part of a JWK struct to a JSON string (excludes private key material) */

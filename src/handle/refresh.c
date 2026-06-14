@@ -83,21 +83,21 @@ static void oidc_refresh_token_cache_set(request_rec *r, const char *refresh_tok
 	char *s_json = NULL;
 
 	/* create the JSON representation of the refresh grant results + timestamp */
-	json_t *json = json_object();
+	oidc_json_t *json = oidc_json_object();
 	if (s_access_token)
-		json_object_set_new(json, OIDC_PROTO_ACCESS_TOKEN, json_string(s_access_token));
+		oidc_json_object_set_new(json, OIDC_PROTO_ACCESS_TOKEN, oidc_json_string(s_access_token));
 	if (s_token_type)
-		json_object_set_new(json, OIDC_PROTO_TOKEN_TYPE, json_string(s_token_type));
-	json_object_set_new(json, OIDC_PROTO_EXPIRES_IN, json_integer(expires_in));
+		oidc_json_object_set_new(json, OIDC_PROTO_TOKEN_TYPE, oidc_json_string(s_token_type));
+	oidc_json_object_set_new(json, OIDC_PROTO_EXPIRES_IN, oidc_json_integer(expires_in));
 	if (s_id_token)
-		json_object_set_new(json, OIDC_PROTO_ID_TOKEN, json_string(s_id_token));
+		oidc_json_object_set_new(json, OIDC_PROTO_ID_TOKEN, oidc_json_string(s_id_token));
 	if (s_refresh_token)
-		json_object_set_new(json, OIDC_PROTO_REFRESH_TOKEN, json_string(s_refresh_token));
+		oidc_json_object_set_new(json, OIDC_PROTO_REFRESH_TOKEN, oidc_json_string(s_refresh_token));
 	*ts = apr_time_now();
-	json_object_set_new(json, OIDC_REFRESH_TIMESTAMP, json_integer(apr_time_sec(*ts)));
+	oidc_json_object_set_new(json, OIDC_REFRESH_TIMESTAMP, oidc_json_integer(apr_time_sec(*ts)));
 
 	/* stringify the JSON object and store it in the cache */
-	s_json = oidc_util_json_encode(r->pool, json, JSON_COMPACT);
+	s_json = oidc_json_encode(r->pool, json, OIDC_JSON_COMPACT);
 	oidc_debug(r, "caching refresh_token (%s) grant results for %d seconds: %s", refresh_token,
 		   OIDC_REFRESH_CACHE_TTL, s_json);
 
@@ -105,7 +105,7 @@ static void oidc_refresh_token_cache_set(request_rec *r, const char *refresh_tok
 				     apr_time_now() + apr_time_from_sec(OIDC_REFRESH_CACHE_TTL));
 
 	/* cleanup */
-	json_decref(json);
+	oidc_json_decref(json);
 }
 
 typedef enum {
@@ -123,8 +123,8 @@ static oidc_refresh_token_cache_result_t oidc_refresh_token_cache_get(request_re
 								      apr_time_t *ts) {
 
 	char *s_json = NULL;
-	json_t *json = NULL;
-	const json_t *v = NULL;
+	oidc_json_t *json = NULL;
+	const oidc_json_t *v = NULL;
 	oidc_refresh_token_cache_result_t rv = OIDC_REFRESH_CACHE_ERROR;
 
 	oidc_cache_mutex_lock(r->pool, r->server, oidc_cfg_refresh_mutex_get(c));
@@ -163,19 +163,19 @@ static oidc_refresh_token_cache_result_t oidc_refresh_token_cache_get(request_re
 	}
 
 	/* we should have valid cache results by now */
-	if (oidc_util_json_decode_object(r, s_json, &json) == FALSE)
+	if (oidc_json_decode_object(r, s_json, &json) == FALSE)
 		goto no_cache_found;
 
 	oidc_debug(r, "using cached refresh_token (%s) grant results: %s", refresh_token, s_json);
 
 	/* parse the results from the cache into the output parameters */
-	if ((v = json_object_get(json, OIDC_PROTO_ACCESS_TOKEN)))
-		*s_access_token = apr_pstrdup(r->pool, json_string_value(v));
-	if ((v = json_object_get(json, OIDC_PROTO_TOKEN_TYPE)))
-		*s_token_type = apr_pstrdup(r->pool, json_string_value(v));
-	if ((v = json_object_get(json, OIDC_PROTO_EXPIRES_IN))) {
+	if ((v = oidc_json_object_get(json, OIDC_PROTO_ACCESS_TOKEN)))
+		*s_access_token = apr_pstrdup(r->pool, oidc_json_string_value(v));
+	if ((v = oidc_json_object_get(json, OIDC_PROTO_TOKEN_TYPE)))
+		*s_token_type = apr_pstrdup(r->pool, oidc_json_string_value(v));
+	if ((v = oidc_json_object_get(json, OIDC_PROTO_EXPIRES_IN))) {
 		/* clamp into int range to match the writer-side guard in oidc_proto_token_response_parse */
-		json_int_t n = json_integer_value(v);
+		oidc_json_int_t n = oidc_json_integer_value(v);
 		if (n > INT_MAX)
 			*expires_in = INT_MAX;
 		else if (n < INT_MIN)
@@ -183,15 +183,15 @@ static oidc_refresh_token_cache_result_t oidc_refresh_token_cache_get(request_re
 		else
 			*expires_in = (int)n;
 	}
-	if ((v = json_object_get(json, OIDC_PROTO_ID_TOKEN)))
-		*s_id_token = apr_pstrdup(r->pool, json_string_value(v));
-	if ((v = json_object_get(json, OIDC_PROTO_REFRESH_TOKEN)))
-		*s_refresh_token = apr_pstrdup(r->pool, json_string_value(v));
-	if ((v = json_object_get(json, OIDC_REFRESH_TIMESTAMP)))
-		*ts = apr_time_from_sec(json_integer_value(v));
+	if ((v = oidc_json_object_get(json, OIDC_PROTO_ID_TOKEN)))
+		*s_id_token = apr_pstrdup(r->pool, oidc_json_string_value(v));
+	if ((v = oidc_json_object_get(json, OIDC_PROTO_REFRESH_TOKEN)))
+		*s_refresh_token = apr_pstrdup(r->pool, oidc_json_string_value(v));
+	if ((v = oidc_json_object_get(json, OIDC_REFRESH_TIMESTAMP)))
+		*ts = apr_time_from_sec(oidc_json_integer_value(v));
 
 	/* cleanup */
-	json_decref(json);
+	oidc_json_decref(json);
 
 	rv = OIDC_REFRESH_CACHE_SUCCESS;
 

@@ -88,34 +88,35 @@ static int oidc_info_refresh_access_token(request_rec *r, oidc_cfg_t *c, oidc_se
 /*
  * include the access token and its type in the session info
  */
-static void oidc_info_add_access_token(request_rec *r, const oidc_session_t *session, json_t *json) {
+static void oidc_info_add_access_token(request_rec *r, const oidc_session_t *session, oidc_json_t *json) {
 	const char *access_token = oidc_session_get_access_token(r, session);
 	if (access_token != NULL)
-		json_object_set_new(json, OIDC_HOOK_INFO_ACCES_TOKEN, json_string(access_token));
+		oidc_json_object_set_new(json, OIDC_HOOK_INFO_ACCES_TOKEN, oidc_json_string(access_token));
 	const char *access_token_type = oidc_session_get_access_token_type(r, session);
 	if (access_token_type != NULL)
-		json_object_set_new(json, OIDC_HOOK_INFO_ACCES_TOKEN_TYPE, json_string(access_token_type));
+		oidc_json_object_set_new(json, OIDC_HOOK_INFO_ACCES_TOKEN_TYPE, oidc_json_string(access_token_type));
 }
 
 /*
  * include the session state and uuid in the session info
  */
-static void oidc_info_add_session(oidc_session_t *session, json_t *json) {
-	json_t *j_session = json_object();
-	json_object_set(j_session, OIDC_HOOK_INFO_SESSION_STATE, session->state);
-	json_object_set_new(j_session, OIDC_HOOK_INFO_SESSION_UUID, json_string(session->uuid));
-	json_object_set_new(json, OIDC_HOOK_INFO_SESSION, j_session);
+static void oidc_info_add_session(oidc_session_t *session, oidc_json_t *json) {
+	oidc_json_t *j_session = oidc_json_object();
+	oidc_json_object_set(j_session, OIDC_HOOK_INFO_SESSION_STATE, session->state);
+	oidc_json_object_set_new(j_session, OIDC_HOOK_INFO_SESSION_UUID, oidc_json_string(session->uuid));
+	oidc_json_object_set_new(json, OIDC_HOOK_INFO_SESSION, j_session);
 }
 
 /*
  * build the JSON object that is returned to the caller based on the configured info hook data
  */
-static void oidc_info_build_json(request_rec *r, const oidc_cfg_t *c, oidc_session_t *session, json_t *json) {
+static void oidc_info_build_json(request_rec *r, const oidc_cfg_t *c, oidc_session_t *session, oidc_json_t *json) {
 	apr_hash_t *data = oidc_cfg_info_hook_data_get(c);
 
 	/* add a timestamp of creation in there for the caller */
 	if (apr_hash_get(data, OIDC_HOOK_INFO_TIMESTAMP, APR_HASH_KEY_STRING))
-		json_object_set_new(json, OIDC_HOOK_INFO_TIMESTAMP, json_integer(apr_time_sec(apr_time_now())));
+		oidc_json_object_set_new(json, OIDC_HOOK_INFO_TIMESTAMP,
+					 oidc_json_integer(apr_time_sec(apr_time_now())));
 
 	/* include the access token in the session info */
 	if (apr_hash_get(data, OIDC_HOOK_INFO_ACCES_TOKEN, APR_HASH_KEY_STRING))
@@ -125,43 +126,47 @@ static void oidc_info_build_json(request_rec *r, const oidc_cfg_t *c, oidc_sessi
 	if (apr_hash_get(data, OIDC_HOOK_INFO_ACCES_TOKEN_EXP, APR_HASH_KEY_STRING)) {
 		const char *access_token_expires = oidc_session_get_access_token_expires2str(r, session);
 		if (access_token_expires != NULL)
-			json_object_set_new(json, OIDC_HOOK_INFO_ACCES_TOKEN_EXP, json_string(access_token_expires));
+			oidc_json_object_set_new(json, OIDC_HOOK_INFO_ACCES_TOKEN_EXP,
+						 oidc_json_string(access_token_expires));
 	}
 
 	/* include the serialized id_token (id_token_hint) in the session info */
 	if (apr_hash_get(data, OIDC_HOOK_INFO_ID_TOKEN_HINT, APR_HASH_KEY_STRING)) {
 		const char *s_id_token = oidc_session_get_idtoken(r, session);
 		if (s_id_token != NULL)
-			json_object_set_new(json, OIDC_HOOK_INFO_ID_TOKEN_HINT, json_string(s_id_token));
+			oidc_json_object_set_new(json, OIDC_HOOK_INFO_ID_TOKEN_HINT, oidc_json_string(s_id_token));
 	}
 
 	/* include the id_token claims in the session info */
 	if (apr_hash_get(data, OIDC_HOOK_INFO_ID_TOKEN, APR_HASH_KEY_STRING)) {
-		json_t *id_token = oidc_session_get_idtoken_claims(r, session);
+		oidc_json_t *id_token = oidc_session_get_idtoken_claims(r, session);
 		if (id_token)
-			json_object_set(json, OIDC_HOOK_INFO_ID_TOKEN, id_token);
+			oidc_json_object_set(json, OIDC_HOOK_INFO_ID_TOKEN, id_token);
 	}
 
 	/* include the claims from the userinfo endpoint in the session info */
 	if (apr_hash_get(data, OIDC_HOOK_INFO_USER_INFO, APR_HASH_KEY_STRING)) {
-		json_t *claims = oidc_session_get_userinfo_claims(r, session);
+		oidc_json_t *claims = oidc_session_get_userinfo_claims(r, session);
 		if (claims)
-			json_object_set(json, OIDC_HOOK_INFO_USER_INFO, claims);
+			oidc_json_object_set(json, OIDC_HOOK_INFO_USER_INFO, claims);
 	}
 
 	/* include the maximum session lifetime in the session info */
 	if (apr_hash_get(data, OIDC_HOOK_INFO_SESSION_EXP, APR_HASH_KEY_STRING)) {
 		apr_time_t session_expires = oidc_session_get_session_expires(r, session);
-		json_object_set_new(json, OIDC_HOOK_INFO_SESSION_EXP, json_integer(apr_time_sec(session_expires)));
+		oidc_json_object_set_new(json, OIDC_HOOK_INFO_SESSION_EXP,
+					 oidc_json_integer(apr_time_sec(session_expires)));
 	}
 
 	/* include the inactivity timeout in the session info */
 	if (apr_hash_get(data, OIDC_HOOK_INFO_SESSION_TIMEOUT, APR_HASH_KEY_STRING))
-		json_object_set_new(json, OIDC_HOOK_INFO_SESSION_TIMEOUT, json_integer(apr_time_sec(session->expiry)));
+		oidc_json_object_set_new(json, OIDC_HOOK_INFO_SESSION_TIMEOUT,
+					 oidc_json_integer(apr_time_sec(session->expiry)));
 
 	/* include the remote_user in the session info */
 	if (apr_hash_get(data, OIDC_HOOK_INFO_SESSION_REMOTE_USER, APR_HASH_KEY_STRING))
-		json_object_set_new(json, OIDC_HOOK_INFO_SESSION_REMOTE_USER, json_string(session->remote_user));
+		oidc_json_object_set_new(json, OIDC_HOOK_INFO_SESSION_REMOTE_USER,
+					 oidc_json_string(session->remote_user));
 
 	if (apr_hash_get(data, OIDC_HOOK_INFO_SESSION, APR_HASH_KEY_STRING))
 		oidc_info_add_session(session, json);
@@ -170,14 +175,14 @@ static void oidc_info_build_json(request_rec *r, const oidc_cfg_t *c, oidc_sessi
 	if (apr_hash_get(data, OIDC_HOOK_INFO_REFRESH_TOKEN, APR_HASH_KEY_STRING)) {
 		const char *refresh_token = oidc_session_get_refresh_token(r, session);
 		if (refresh_token != NULL)
-			json_object_set_new(json, OIDC_HOOK_INFO_REFRESH_TOKEN, json_string(refresh_token));
+			oidc_json_object_set_new(json, OIDC_HOOK_INFO_REFRESH_TOKEN, oidc_json_string(refresh_token));
 	}
 }
 
 /*
  * send the session info to the caller in the requested format (JSON or HTML)
  */
-static int oidc_info_send_response(request_rec *r, const json_t *json, const char *s_format) {
+static int oidc_info_send_response(request_rec *r, const oidc_json_t *json, const char *s_format) {
 	const char *r_value = NULL;
 
 	/* the response may carry the access/refresh/id token and session claims; prevent it from being
@@ -186,11 +191,11 @@ static int oidc_info_send_response(request_rec *r, const json_t *json, const cha
 	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_PRAGMA, "no-cache");
 
 	if (_oidc_strcmp(OIDC_HOOK_INFO_FORMAT_JSON, s_format) == 0) {
-		r_value = oidc_util_json_encode(r->pool, json, JSON_PRESERVE_ORDER);
+		r_value = oidc_json_encode(r->pool, json, OIDC_JSON_PRESERVE_ORDER);
 		return oidc_util_http_send(r, r_value, _oidc_strlen(r_value), OIDC_HTTP_CONTENT_TYPE_JSON, OK);
 	}
 
-	r_value = oidc_util_json_encode(r->pool, json, JSON_PRESERVE_ORDER | JSON_INDENT(2));
+	r_value = oidc_json_encode(r->pool, json, OIDC_JSON_PRESERVE_ORDER | OIDC_JSON_INDENT(2));
 	return oidc_util_html_send(r, "Session Info", NULL, NULL,
 				   apr_psprintf(r->pool, "<pre>%s</pre>", oidc_util_html_escape(r->pool, r_value)), OK);
 }
@@ -204,7 +209,7 @@ int oidc_info_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, ap
 	char *s_interval = NULL;
 	char *s_extend_session = NULL;
 	apr_byte_t b_extend_session = TRUE;
-	json_t *json = NULL;
+	oidc_json_t *json = NULL;
 
 	oidc_util_url_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_INFO, &s_format);
 	oidc_util_url_parameter_get(r, OIDC_INFO_PARAM_ACCESS_TOKEN_REFRESH_INTERVAL, &s_interval);
@@ -238,7 +243,7 @@ int oidc_info_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, ap
 		return rc;
 
 	/* create the JSON object */
-	json = json_object();
+	json = oidc_json_object();
 
 	/*
 	 * refresh the claims from the userinfo endpoint
@@ -268,7 +273,7 @@ int oidc_info_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, ap
 end:
 
 	/* free the allocated resources */
-	json_decref(json);
+	oidc_json_decref(json);
 
 	return rc;
 }

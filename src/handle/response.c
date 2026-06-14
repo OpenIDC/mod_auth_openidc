@@ -223,7 +223,7 @@ char *oidc_response_make_sid_iss_unique(request_rec *r, const char *sid, const c
 apr_byte_t oidc_response_save_in_session(request_rec *r, const oidc_cfg_t *c, oidc_session_t *session,
 					 const oidc_provider_t *provider, const char *remoteUser, const char *id_token,
 					 oidc_jwt_t *id_token_jwt, const char *s_userinfo_claims,
-					 json_t *userinfo_claims, const char *access_token,
+					 oidc_json_t *userinfo_claims, const char *access_token,
 					 const char *access_token_type, const int expires_in, const char *refresh_token,
 					 const char *scope, const char *session_state, const char *state,
 					 const char *original_url, const char *userinfo_jwt) {
@@ -477,7 +477,7 @@ static apr_byte_t oidc_response_flows(request_rec *r, oidc_cfg_t *c, const oidc_
  * set the unique user identifier that will be propagated in the Apache r->user and REMOTE_USER variables
  */
 static apr_byte_t oidc_response_set_request_user(request_rec *r, const oidc_cfg_t *c, const oidc_provider_t *provider,
-						 oidc_jwt_t *jwt, json_t *userinfo_claims) {
+						 oidc_jwt_t *jwt, oidc_json_t *userinfo_claims) {
 
 	const char *issuer = oidc_cfg_provider_issuer_get(provider);
 	char *claim_name = apr_pstrdup(r->pool, oidc_cfg_remote_user_claim_name_get(c));
@@ -498,11 +498,11 @@ static apr_byte_t oidc_response_set_request_user(request_rec *r, const oidc_cfg_
 					  oidc_cfg_remote_user_claim_get(c)->replace, jwt->payload.value.json,
 					  &remote_user);
 	} else {
-		json_t *claims = json_copy(userinfo_claims);
-		oidc_util_json_merge(r, jwt->payload.value.json, claims);
+		oidc_json_t *claims = oidc_json_copy(userinfo_claims);
+		oidc_json_merge(r, jwt->payload.value.json, claims);
 		rc = oidc_get_remote_user(r, claim_name, oidc_cfg_remote_user_claim_get(c)->reg_exp,
 					  oidc_cfg_remote_user_claim_get(c)->replace, claims, &remote_user);
-		json_decref(claims);
+		oidc_json_decref(claims);
 	}
 
 	if ((rc == FALSE) || (remote_user == NULL)) {
@@ -594,7 +594,7 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 	oidc_provider_t *provider = NULL;
 	oidc_proto_state_t *proto_state = NULL;
 	oidc_jwt_t *id_token = NULL;
-	json_t *userinfo_claims = NULL;
+	oidc_json_t *userinfo_claims = NULL;
 	int expires_in = 0;
 	char *userinfo_jwt = NULL;
 	const char *s_userinfo_claims = NULL;
@@ -708,7 +708,7 @@ end:
 	if (id_token)
 		oidc_jwt_destroy(id_token);
 	if (userinfo_claims)
-		json_decref(userinfo_claims);
+		oidc_json_decref(userinfo_claims);
 
 	return rc;
 }

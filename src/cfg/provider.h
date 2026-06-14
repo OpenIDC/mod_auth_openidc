@@ -261,7 +261,7 @@ OIDC_CFG_PROVIDER_MEMBER_FUNC_GET_DECL(jwks_uri_uri, const char *)
 OIDC_CMD_PROVIDER_MEMBER_FUNC_DECL(signed_jwks_uri, const char *)
 OIDC_CFG_PROVIDER_MEMBER_FUNC_SET_DECL(signed_jwks_uri, const char *, const char *)
 OIDC_CFG_PROVIDER_MEMBER_FUNC_GET_DECL(signed_jwks_uri, const char *)
-OIDC_CFG_PROVIDER_MEMBER_FUNC_SET_DECL(signed_jwks_uri_keys, const json_t *, apr_array_header_t *)
+OIDC_CFG_PROVIDER_MEMBER_FUNC_SET_DECL(signed_jwks_uri_keys, const oidc_json_t *, apr_array_header_t *)
 OIDC_CFG_PROVIDER_MEMBER_FUNC_GET_DECL(signed_jwks_uri_keys, apr_array_header_t *)
 
 // specials for token_endpoint_auth

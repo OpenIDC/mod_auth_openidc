@@ -48,10 +48,10 @@ static const char *oidc_metadata_jwks_cache_key(const oidc_jwks_uri_t *jwks_uri)
 /*
  * checks if a parsed JWKs file is a valid one, cq. contains "keys"
  */
-static apr_byte_t oidc_metadata_jwks_is_valid(request_rec *r, const char *url, const json_t *j_jwks) {
+static apr_byte_t oidc_metadata_jwks_is_valid(request_rec *r, const char *url, const oidc_json_t *j_jwks) {
 
-	const json_t *keys = json_object_get(j_jwks, OIDC_METADATA_KEYS);
-	if ((keys == NULL) || (!json_is_array(keys))) {
+	const oidc_json_t *keys = oidc_json_object_get(j_jwks, OIDC_METADATA_KEYS);
+	if ((keys == NULL) || (!oidc_json_is_array(keys))) {
 		oidc_error(
 		    r, "JWKs JSON metadata obtained from URL \"%s\" did not contain a \"" OIDC_METADATA_KEYS "\" array",
 		    url);
@@ -65,7 +65,7 @@ static apr_byte_t oidc_metadata_jwks_is_valid(request_rec *r, const char *url, c
  */
 static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r, oidc_cfg_t *cfg,
 							const oidc_jwks_uri_t *jwks_uri, int ssl_validate_server,
-							json_t **j_jwks) {
+							oidc_json_t **j_jwks) {
 
 	char *response = NULL;
 	const char *url = (jwks_uri->signed_uri != NULL) ? jwks_uri->signed_uri : jwks_uri->uri;
@@ -119,7 +119,7 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r, oidc_cfg
 	}
 
 	/* decode and see if it is not an error response somehow */
-	if (oidc_util_json_decode_and_check_error(r, response, j_jwks) == FALSE) {
+	if (oidc_json_decode_and_check_error(r, response, j_jwks) == FALSE) {
 		oidc_error(r, "JSON parsing of JWKs published at the jwks_uri failed");
 		return FALSE;
 	}
@@ -127,7 +127,7 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r, oidc_cfg
 	/* check to see if it is a set of valid JWKs */
 	if (oidc_metadata_jwks_is_valid(r, url, *j_jwks) == FALSE) {
 		/* the decoded object is ours now; release it before bailing */
-		json_decref(*j_jwks);
+		oidc_json_decref(*j_jwks);
 		*j_jwks = NULL;
 		return FALSE;
 	}
@@ -143,7 +143,7 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r, oidc_cfg
  * return JWKs for the specified issuer
  */
 apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg_t *cfg, const oidc_jwks_uri_t *jwks_uri,
-				  int ssl_validate_server, json_t **j_jwks, apr_byte_t *refresh) {
+				  int ssl_validate_server, oidc_json_t **j_jwks, apr_byte_t *refresh) {
 	char *value = NULL;
 	const char *url = jwks_uri->signed_uri ? jwks_uri->signed_uri : jwks_uri->uri;
 
@@ -159,7 +159,7 @@ apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg_t *cfg, const oidc_jw
 
 	/* see if the JWKs is cached and decodes cleanly (a cached error response is treated as a miss) */
 	if ((oidc_cache_get_jwks(r, oidc_metadata_jwks_cache_key(jwks_uri), &value) == TRUE) && (value != NULL) &&
-	    (oidc_util_json_decode_and_check_error(r, value, j_jwks) == FALSE)) {
+	    (oidc_json_decode_and_check_error(r, value, j_jwks) == FALSE)) {
 		oidc_warn(r, "JSON parsing of cached JWKs data failed");
 		value = NULL;
 	}

@@ -97,10 +97,10 @@ static int oidc_jq_filter_cache_ttl(const request_rec *r) {
 /*
  * apply a JQ expression/filter to the provided JSON input
  */
-const char *oidc_util_jq_filter(request_rec *r, const json_t *json, const char *filter) {
+const char *oidc_util_jq_filter(request_rec *r, const oidc_json_t *json, const char *filter) {
 	const char *result = NULL;
 #ifdef USE_LIBJQ
-	const char *input = oidc_util_json_encode(r->pool, json, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	const char *input = oidc_json_encode(r->pool, json, OIDC_JSON_PRESERVE_ORDER | OIDC_JSON_COMPACT);
 	jq_state *jq = NULL;
 	struct jv_parser *parser = NULL;
 	int ttl = 0;
@@ -172,7 +172,7 @@ end:
 	if (jq)
 		jq_teardown(&jq);
 #else
-	result = oidc_util_json_encode(r->pool, json, JSON_PRESERVE_ORDER | JSON_COMPACT);
+	result = oidc_json_encode(r->pool, json, OIDC_JSON_PRESERVE_ORDER | OIDC_JSON_COMPACT);
 #endif
 
 	return result;

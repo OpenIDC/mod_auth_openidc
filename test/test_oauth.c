@@ -38,7 +38,7 @@
  * metadata-retrieve tests below drive the helper directly to cover the
  * HTTP + JSON-decode branches */
 extern apr_byte_t oidc_oauth_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg, const char *issuer,
-							const char *url, json_t **j_metadata, char **response);
+							const char *url, oidc_json_t **j_metadata, char **response);
 
 /*
  * Tests for oidc_oauth_get_bearer_token — exercise the Authorization-header
@@ -347,16 +347,16 @@ START_TEST(test_oauth_metadata_provider_retrieve_success) {
 	cmd_parms *cmd_ssl = oidc_test_cmd_get(OIDCOAuthSSLValidateServer);
 	ck_assert_ptr_null(oidc_cmd_oauth_ssl_validate_server_set(cmd_ssl, NULL, "Off"));
 
-	json_t *metadata = NULL;
+	oidc_json_t *metadata = NULL;
 	char *response = NULL;
 	ck_assert_int_eq(oidc_oauth_metadata_provider_retrieve(r, c, "https://idp.example.com",
 							       oidc_test_http_server_url(srv, r->pool), &metadata,
 							       &response),
 			 TRUE);
 	ck_assert_ptr_nonnull(metadata);
-	ck_assert_str_eq(json_string_value(json_object_get(metadata, "issuer")), "https://idp.example.com");
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(metadata, "issuer")), "https://idp.example.com");
 
-	json_decref(metadata);
+	oidc_json_decref(metadata);
 	(void)oidc_test_http_server_wait(srv);
 	oidc_test_http_server_stop(srv);
 }
@@ -374,7 +374,7 @@ START_TEST(test_oauth_metadata_provider_retrieve_invalid_json) {
 	cmd_parms *cmd_ssl = oidc_test_cmd_get(OIDCOAuthSSLValidateServer);
 	ck_assert_ptr_null(oidc_cmd_oauth_ssl_validate_server_set(cmd_ssl, NULL, "Off"));
 
-	json_t *metadata = NULL;
+	oidc_json_t *metadata = NULL;
 	char *response = NULL;
 	ck_assert_int_eq(oidc_oauth_metadata_provider_retrieve(r, c, "https://idp.example.com",
 							       oidc_test_http_server_url(srv, r->pool), &metadata,

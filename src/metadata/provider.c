@@ -41,12 +41,12 @@
 /*
  * check to see if JSON provider metadata is valid
  */
-apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, const oidc_cfg_t *cfg, const json_t *j_provider,
+apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, const oidc_cfg_t *cfg, const oidc_json_t *j_provider,
 					   const char *issuer) {
 
 	/* get the "issuer" from the provider metadata and double-check that it matches what we looked for */
 	char *s_issuer = NULL;
-	oidc_util_json_object_get_string(r->pool, j_provider, OIDC_METADATA_ISSUER, &s_issuer, NULL);
+	oidc_json_object_get_string(r->pool, j_provider, OIDC_METADATA_ISSUER, &s_issuer, NULL);
 	if (s_issuer == NULL) {
 		oidc_error(r, "provider (%s) JSON metadata did not contain an \"" OIDC_METADATA_ISSUER "\" string",
 			   issuer);
@@ -65,7 +65,7 @@ apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, const oidc_cfg_t *cfg
 	/* verify that the provider supports the a flow that we implement */
 	if (oidc_metadata_valid_string_in_array(r->pool, j_provider, OIDC_METADATA_RESPONSE_TYPES_SUPPORTED,
 						oidc_cfg_parse_is_valid_response_type, NULL, FALSE, NULL) != NULL) {
-		if (json_object_get(j_provider, OIDC_METADATA_RESPONSE_TYPES_SUPPORTED) != NULL) {
+		if (oidc_json_object_get(j_provider, OIDC_METADATA_RESPONSE_TYPES_SUPPORTED) != NULL) {
 			oidc_error(r,
 				   "could not find a supported response type in provider metadata (%s) for entry "
 				   "\"" OIDC_METADATA_RESPONSE_TYPES_SUPPORTED "\"",
@@ -132,7 +132,7 @@ apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, const oidc_cfg_t *cfg
  * use OpenID Connect Discovery to get metadata for the specified issuer
  */
 apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg, const char *issuer, const char *url,
-					   json_t **j_metadata, char **response) {
+					   oidc_json_t **j_metadata, char **response) {
 
 	OIDC_METRICS_TIMING_START(r, cfg);
 
@@ -148,14 +148,14 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg, cons
 	OIDC_METRICS_TIMING_ADD(r, cfg, OM_PROVIDER_METADATA);
 
 	/* decode and see if it is not an error response somehow */
-	if (oidc_util_json_decode_and_check_error(r, *response, j_metadata) == FALSE) {
+	if (oidc_json_decode_and_check_error(r, *response, j_metadata) == FALSE) {
 		oidc_error(r, "JSON parsing of retrieved Discovery document failed");
 		return FALSE;
 	}
 
 	/* check to see if it is valid metadata */
 	if (oidc_metadata_provider_is_valid(r, cfg, *j_metadata, issuer) == FALSE) {
-		json_decref(*j_metadata);
+		oidc_json_decref(*j_metadata);
 		*j_metadata = NULL;
 		return FALSE;
 	}
@@ -168,7 +168,7 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg, cons
  * see if we have provider metadata and check its validity
  * if not, use OpenID Connect Discovery to get it, check it and store it
  */
-apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg_t *cfg, const char *issuer, json_t **j_provider,
+apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg_t *cfg, const char *issuer, oidc_json_t **j_provider,
 				      apr_byte_t allow_discovery) {
 
 	/* holds the response data/string/JSON from the OP */
@@ -180,7 +180,7 @@ apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg_t *cfg, const cha
 	/* check the last-modified timestamp */
 	apr_byte_t use_cache = TRUE;
 	apr_finfo_t fi;
-	json_t *j_cache = NULL;
+	oidc_json_t *j_cache = NULL;
 	apr_byte_t have_cache = FALSE;
 
 	/* see if we are refreshing metadata and we need a refresh */
@@ -255,7 +255,7 @@ apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg_t *cfg, const cha
 /*
  * parse the JSON provider metadata in to a oidc_provider_t struct but do not override values already set
  */
-apr_byte_t oidc_metadata_provider_parse(request_rec *r, const oidc_cfg_t *cfg, const json_t *j_provider,
+apr_byte_t oidc_metadata_provider_parse(request_rec *r, const oidc_cfg_t *cfg, const oidc_json_t *j_provider,
 					oidc_provider_t *provider) {
 
 	const char *rv = NULL;
@@ -264,7 +264,7 @@ apr_byte_t oidc_metadata_provider_parse(request_rec *r, const oidc_cfg_t *cfg, c
 
 	if (oidc_cfg_provider_issuer_get(provider) == NULL) {
 		/* get the "issuer" from the provider metadata */
-		oidc_util_json_object_get_string(r->pool, j_provider, OIDC_METADATA_ISSUER, &value, NULL);
+		oidc_json_object_get_string(r->pool, j_provider, OIDC_METADATA_ISSUER, &value, NULL);
 		OIDC_METADATA_PROVIDER_SET(issuer, value, rv);
 	}
 
