@@ -93,19 +93,20 @@ fuzz_json_SOURCES = fuzz/fuzz_json.c fuzz/standalone.c
 
 check_PROGRAMS = $(oidc_unit_tests) $(oidc_fuzz_targets)
 
-# the libcheck binaries plus two source/corpus guards: check_registration.sh
-# (every START_TEST body is wired into a suite) and fuzz/run-fuzzers.sh (the
+# the libcheck binaries plus three source guards: check_registration.sh (every
+# START_TEST body is wired into a suite), check_directives.sh (every
+# oidc_dir_cfg_t member is initialized and merged) and fuzz/run-fuzzers.sh (the
 # fuzz targets survive their seed corpora). The fuzz binaries themselves are
 # driven by that script, not run directly.
-TESTS = $(oidc_unit_tests) check_registration.sh fuzz/run-fuzzers.sh
+TESTS = $(oidc_unit_tests) check_registration.sh check_directives.sh fuzz/run-fuzzers.sh
 
 endif
 
 # TEST_EXTENSIONS is read at automake time and so must be unconditional; the
-# .sh handler drives check_registration.sh, the only non-program in TESTS.
+# .sh handler drives the script-based tests, the non-programs in TESTS.
 TEST_EXTENSIONS = .sh
 SH_LOG_COMPILER = $(SHELL)
-dist_check_SCRIPTS = check_registration.sh fuzz/run-fuzzers.sh
+dist_check_SCRIPTS = check_registration.sh check_directives.sh fuzz/run-fuzzers.sh
 
 EXTRA_DIST = \
 	ecpriv.key \
