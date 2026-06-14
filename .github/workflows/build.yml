@@ -294,3 +294,32 @@ jobs:
         echo "service containers did not become reachable"; exit 1
     - name: Test (live redis + memcached)
       run: make check || (cat test/test-suite.log && exit 1)
+
+  static-analysis:
+    # clang is stricter than the gcc build on type correctness: implicit integer
+    # narrowing and incompatible function-pointer casts. These tend to hide in
+    # the macro-generated config getters/setters, where the gcc build (which only
+    # errors on implicit-function-declaration) stays silent. Build with clang and
+    # promote the two high-signal type-check categories to errors so a regression
+    # fails the build; the noisier -Wconversion/-Wsign-compare family is left out
+    # deliberately (pervasive style warnings the project does not enforce).
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v5
+    - name: Dependencies
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y apache2-dev libcjose-dev libssl-dev check pkg-config
+        sudo apt-get install -y libjansson-dev libcurl4-openssl-dev libhiredis-dev libpcre2-dev libjq-dev check
+        sudo apt-get install -y clang
+    - name: Configure
+      run: |
+        ./autogen.sh
+        ./configure --with-jq CC=clang \
+          CFLAGS="-g -O2 -Werror=implicit-int-conversion -Werror=cast-function-type-mismatch"
+        # the apxs-derived CFLAGS carry gcc-only LTO flags (-flto=auto /
+        # -ffat-lto-objects); strip them on the clang leg so an older runner
+        # clang cannot choke on them (LTO is irrelevant for an analysis build)
+        sed -i 's/-flto=auto//g; s/-ffat-lto-objects//g' src/Makefile test/Makefile
+    - name: Make (clang, type checks promoted to errors)
+      run: make
