@@ -400,6 +400,14 @@ oidc_json_t *oidc_request_state_json_get(request_rec *r, const char *key) {
 }
 
 /*
+ * APR pool cleanup callback that releases a request-state JSON object
+ */
+static apr_status_t oidc_request_state_json_cleanup(void *json) {
+	oidc_json_decref((oidc_json_t *)json);
+	return APR_SUCCESS;
+}
+
+/*
  * set a name/json object pair in the mod_auth_openidc-specific request context
  * (used for passing state between various Apache request processing stages and hook callbacks)
  */
@@ -412,7 +420,7 @@ void oidc_request_state_json_set(request_rec *r, const char *key, oidc_json_t *v
 	const oidc_json_t *json = oidc_json_copy(value);
 
 	/* register a cleanup for the json object */
-	apr_pool_cleanup_register(r->pool, json, (apr_status_t (*)(void *))oidc_json_decref, apr_pool_cleanup_null);
+	apr_pool_cleanup_register(r->pool, json, oidc_request_state_json_cleanup, apr_pool_cleanup_null);
 
 	/* put the name/value pair in that hash table */
 	apr_hash_set(state, key, APR_HASH_KEY_STRING, json);

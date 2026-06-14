@@ -250,8 +250,8 @@ const char *oidc_cmd_dir_pass_cookies_set(cmd_parms *cmd, void *m, const char *a
 	type oidc_cfg_dir_##member##_get(request_rec *r) {                                                             \
 		oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);               \
 		if (dir_cfg->member == unset_val)                                                                      \
-			return def_val;                                                                                \
-		return dir_cfg->member;                                                                                \
+			return (type)def_val;                                                                          \
+		return (type)dir_cfg->member;                                                                          \
 	}
 
 #define OIDC_CFG_DIR_MEMBER_FUNC_INT_GET(member, type, def_val)                                                        \
