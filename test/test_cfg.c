@@ -1339,6 +1339,62 @@ START_TEST(test_cfg_dir_config_merge) {
 END_TEST
 
 /*
+ * Regression coverage for the dir-config merge resolution rules that
+ * test_cfg_dir_config_merge does not exercise: the _merge_pos_int helper (incl.
+ * an explicit "off"/0 overriding a truthy base) and the _merge_introspect_interval
+ * special case (the -2 "unset" sentinel must fall back to base, not reset to the
+ * getter default). These are the empty/sentinel paths that have historically
+ * regressed in config merging.
+ */
+START_TEST(test_cfg_dir_config_merge_inherit) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	request_rec *r = oidc_test_request_get();
+	void *prev = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	oidc_dir_cfg_t *base, *add, *merged;
+	cmd_parms *cmd;
+
+	/* pos_int: base configured, add left unset -> merged inherits base */
+	base = oidc_cfg_dir_config_create(pool, NULL);
+	add = oidc_cfg_dir_config_create(pool, NULL);
+	cmd = oidc_test_cmd_get(OIDCPreservePost);
+	ck_assert_ptr_null(oidc_cmd_dir_preserve_post_set(cmd, base, "On"));
+	merged = oidc_cfg_dir_config_merge(pool, base, add);
+	ap_set_module_config(r->per_dir_config, &auth_openidc_module, merged);
+	ck_assert_int_eq(oidc_cfg_dir_preserve_post_get(r), 1);
+
+	/* pos_int: an explicit "Off" (0) on add must override a truthy base,
+	 * i.e. 0 is a configured value, not "unset" */
+	base = oidc_cfg_dir_config_create(pool, NULL);
+	add = oidc_cfg_dir_config_create(pool, NULL);
+	ck_assert_ptr_null(oidc_cmd_dir_preserve_post_set(cmd, base, "On"));
+	ck_assert_ptr_null(oidc_cmd_dir_preserve_post_set(cmd, add, "Off"));
+	merged = oidc_cfg_dir_config_merge(pool, base, add);
+	ap_set_module_config(r->per_dir_config, &auth_openidc_module, merged);
+	ck_assert_int_eq(oidc_cfg_dir_preserve_post_get(r), 0);
+
+	/* pos_int: neither side configured -> getter resolves to its default */
+	base = oidc_cfg_dir_config_create(pool, NULL);
+	add = oidc_cfg_dir_config_create(pool, NULL);
+	merged = oidc_cfg_dir_config_merge(pool, base, add);
+	ap_set_module_config(r->per_dir_config, &auth_openidc_module, merged);
+	ck_assert_int_eq(oidc_cfg_dir_preserve_post_get(r), 0);
+
+	/* introspect interval: add at the -2 default must inherit base's value,
+	 * not collapse to the getter's 0 default */
+	base = oidc_cfg_dir_config_create(pool, NULL);
+	add = oidc_cfg_dir_config_create(pool, NULL);
+	cmd = oidc_test_cmd_get(OIDCOAuthTokenIntrospectionInterval);
+	ck_assert_ptr_null(oidc_cmd_dir_token_introspection_interval_set(cmd, base, "30"));
+	merged = oidc_cfg_dir_config_merge(pool, base, add);
+	ap_set_module_config(r->per_dir_config, &auth_openidc_module, merged);
+	ck_assert_int_eq(oidc_cfg_dir_token_introspection_interval_get(r), 30);
+
+	/* restore the original dir cfg so teardown doesn't see something unexpected */
+	ap_set_module_config(r->per_dir_config, &auth_openidc_module, prev);
+}
+END_TEST
+
+/*
  * Tests for cfg/cache.c uncovered functions.
  */
 
@@ -1790,6 +1846,7 @@ int main(void) {
 	tcase_add_test(dir, test_cmd_dir_pass_idtoken_as);
 	tcase_add_test(dir, test_cfg_dir_accept_oauth_token_in2str);
 	tcase_add_test(dir, test_cfg_dir_config_merge);
+	tcase_add_test(dir, test_cfg_dir_config_merge_inherit);
 
 	TCase *provider = tcase_create("provider");
 	tcase_add_checked_fixture(provider, oidc_test_setup, oidc_test_teardown);
