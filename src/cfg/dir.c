@@ -72,7 +72,6 @@ struct oidc_dir_cfg_t {
 	oidc_apr_expr_t *userinfo_claims_expr;
 	int refresh_access_token_before_expiry;
 	int action_on_error_refresh;
-	int action_on_userinfo_refresh;
 	char *state_cookie_prefix;
 	apr_array_header_t *pass_userinfo_as;
 	int pass_idtoken_as;
