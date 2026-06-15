@@ -3406,7 +3406,14 @@ START_TEST(test_handle_refresh_grant_with_id_token) {
 	oidc_provider_t *provider = oidc_cfg_provider_get(c);
 	oidc_session_t *session = NULL;
 	oidc_session_load(r, &session);
-	oidc_session_set_refresh_token(r, session, "OLD-RT");
+	oidc_session_set_refresh_token(r, session, "RT-IDTOKEN");
+
+	/* the refresh-token grant consults a shared cache first; with a persistent
+	 * cache backend a prior test's entry under the same key could short-circuit
+	 * the token-endpoint call and skip applying the id_token. Use a dedicated key
+	 * and evict any stale grant result so this test always refreshes against the
+	 * OP, independent of the configured cache backend. */
+	oidc_cache_set_refresh_token(r, "RT-IDTOKEN", NULL, 0);
 
 	/* the token endpoint also returns an id_token => triggers
 	 * oidc_refresh_token_grant_apply_id_token (parse, claims store, expiry update) */
