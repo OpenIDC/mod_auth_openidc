@@ -59,13 +59,18 @@ trap 'rm -f "$tmp_members" "$tmp_create" "$tmp_merge"' EXIT
 awk '/^struct oidc_dir_cfg_t \{/{f=1;next} f&&/^\};/{f=0} f' "$src" |
 	grep -aoE '[A-Za-z_][A-Za-z0-9_]*;' | tr -d ';' | sort -u >"$tmp_members"
 
-# members assigned (c->member) inside each function, up to its 'return c;'
+# members assigned (c->member) inside each function, up to its 'return c;'.
+# Match the function-opening line with a literal index() lookup, not a dynamic
+# regex: passing a regex through awk -v is not portable -- gawk strips the '\('
+# escape (warning, then a fatal "Unmatched (" because the bare paren is then an
+# invalid ERE) while mawk keeps it. index() is a plain substring search, so the
+# '(' is literal and no escaping is needed.
 extract_assigns() {
-	awk -v sig="$1" '$0 ~ sig {f=1} f&&/return c;/{f=0} f' "$src" |
+	awk -v sig="$1" 'index($0, sig){f=1} f&&/return c;/{f=0} f' "$src" |
 		grep -aoE 'c->[A-Za-z_][A-Za-z0-9_]*' | sed 's/c->//' | sort -u
 }
-extract_assigns 'oidc_cfg_dir_config_create\(apr_pool_t' >"$tmp_create"
-extract_assigns 'oidc_cfg_dir_config_merge\(apr_pool_t' >"$tmp_merge"
+extract_assigns 'oidc_cfg_dir_config_create(apr_pool_t' >"$tmp_create"
+extract_assigns 'oidc_cfg_dir_config_merge(apr_pool_t' >"$tmp_merge"
 
 count=$(wc -l <"$tmp_members" | tr -d ' ')
 if [ "$count" -eq 0 ]; then
