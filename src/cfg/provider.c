@@ -101,6 +101,13 @@ struct oidc_provider_t {
 	int response_require_iss;
 };
 
+/*
+ * Body generators for the per-provider (oidc_provider_t) accessors declared in
+ * cfg/provider.h: for member `foo` they emit oidc_cmd_provider_foo_set(),
+ * oidc_cfg_provider_foo_set() and oidc_cfg_provider_foo_get().
+ * OIDC_PROVIDER_MEMBER_FUNCS_TYPE_DEF is the common base the typed variants
+ * build on. Indexed by .ctags.d/mod_auth_openidc.ctags.
+ */
 #define OIDC_PROVIDER_MEMBER_FUNCS_TYPE_DEF(member, type, def_val)                                                     \
                                                                                                                        \
 	const char *oidc_cmd_provider_##member##_set(cmd_parms *cmd, void *ptr, const char *arg) {                     \

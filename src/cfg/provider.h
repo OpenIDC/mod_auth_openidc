@@ -98,97 +98,82 @@ typedef enum {
 	OIDC_PROFILE_FAPI20 = 2,
 } oidc_profile_t;
 
-// NB: need the primitive strings and the declarations of the custom
-//     set routines here because the commands are included in config.c.
-//     via include "cmds.inc"
+// NB: the OIDC* directive name strings live in cfg/directives.h; the custom
+//     set-routine declarations below are needed here because the commands are
+//     included in config.c via include "cmds.inc"
 
-#define OIDCProviderMetadataURL "OIDCProviderMetadataURL"
-#define OIDCProviderIssuer "OIDCProviderIssuer"
-#define OIDCProviderAuthorizationEndpoint "OIDCProviderAuthorizationEndpoint"
-#define OIDCProviderTokenEndpoint "OIDCProviderTokenEndpoint"
-#define OIDCProviderTokenEndpointAuth "OIDCProviderTokenEndpointAuth"
-#define OIDCProviderTokenEndpointParams "OIDCProviderTokenEndpointParams"
-#define OIDCProviderRegistrationEndpointJson "OIDCProviderRegistrationEndpointJson"
-#define OIDCProviderUserInfoEndpoint "OIDCProviderUserInfoEndpoint"
-#define OIDCProviderRevocationEndpoint "OIDCProviderRevocationEndpoint"
-#define OIDCProviderPushedAuthorizationRequestEndpoint "OIDCProviderPushedAuthorizationRequestEndpoint"
-#define OIDCProviderCheckSessionIFrame "OIDCProviderCheckSessionIFrame"
-#define OIDCProviderEndSessionEndpoint "OIDCProviderEndSessionEndpoint"
-#define OIDCProviderBackChannelLogoutSupported "OIDCProviderBackChannelLogoutSupported"
-#define OIDCProviderJwksUri "OIDCProviderJwksUri"
-#define OIDCProviderSignedJwksUri "OIDCProviderSignedJwksUri"
-#define OIDCProviderVerifyCertFiles "OIDCProviderVerifyCertFiles"
-#define OIDCResponseType "OIDCResponseType"
-#define OIDCProviderAuthRequestMethod "OIDCProviderAuthRequestMethod"
-#define OIDCProfile "OIDCProfile"
-#define OIDCPKCEMethod "OIDCPKCEMethod"
-#define OIDCDPoPMode "OIDCDPoPMode"
-#define OIDCResponseMode "OIDCResponseMode"
-#define OIDCClientJwksUri "OIDCClientJwksUri"
-#define OIDCIDTokenSignedResponseAlg "OIDCIDTokenSignedResponseAlg"
-#define OIDCIDTokenEncryptedResponseAlg "OIDCIDTokenEncryptedResponseAlg"
-#define OIDCIDTokenEncryptedResponseEnc "OIDCIDTokenEncryptedResponseEnc"
-#define OIDCIDTokenAudValues "OIDCIDTokenAudValues"
-#define OIDCUserInfoSignedResponseAlg "OIDCUserInfoSignedResponseAlg"
-#define OIDCUserInfoEncryptedResponseAlg "OIDCUserInfoEncryptedResponseAlg"
-#define OIDCUserInfoEncryptedResponseEnc "OIDCUserInfoEncryptedResponseEnc"
-#define OIDCUserInfoTokenMethod "OIDCUserInfoTokenMethod"
-#define OIDCSSLValidateServer "OIDCSSLValidateServer"
-#define OIDCValidateIssuer "OIDCValidateIssuer"
-#define OIDCClientName "OIDCClientName"
-#define OIDCClientContact "OIDCClientContact"
-#define OIDCScope "OIDCScope"
-#define OIDCJWKSRefreshInterval "OIDCJWKSRefreshInterval"
-#define OIDCIDTokenIatSlack "OIDCIDTokenIatSlack"
-#define OIDCSessionMaxDuration "OIDCSessionMaxDuration"
-#define OIDCAuthRequestParams "OIDCAuthRequestParams"
-#define OIDCLogoutRequestParams "OIDCLogoutRequestParams"
-#define OIDCClientID "OIDCClientID"
-#define OIDCClientSecret "OIDCClientSecret"
-#define OIDCClientTokenEndpointCert "OIDCClientTokenEndpointCert"
-#define OIDCClientTokenEndpointKey "OIDCClientTokenEndpointKey"
-#define OIDCClientTokenEndpointKeyPassword "OIDCClientTokenEndpointKeyPassword"
-#define OIDCUserInfoRefreshInterval "OIDCUserInfoRefreshInterval"
-#define OIDCRequestObject "OIDCRequestObject"
+/*
+ * Generators for the per-provider (oidc_provider_t) directive accessors.
+ *
+ * Three atoms each declare exactly one prototype; the aggregates below combine
+ * them. For member `foo` the atoms declare:
+ *
+ *   const char *oidc_cmd_provider_foo_set(cmd_parms *, void *, const char *, ...); // directive handler (cmds.c)
+ *   const char *oidc_cfg_provider_foo_set(apr_pool_t *, oidc_provider_t *, ...);   // setter (metadata/*.c)
+ *   <type>      oidc_cfg_provider_foo_get(const oidc_provider_t *);                // getter (used everywhere)
+ *
+ * The matching bodies are generated in cfg/provider.c. Because the names are
+ * token-pasted they are not findable by grepping for the literal symbol;
+ * .ctags.d/mod_auth_openidc.ctags ships a ctags recipe that indexes them.
+ *
+ * Layering is kept to two: every aggregate (STR/TYPE/INT/KEYS/INT_INT/STR_LIST)
+ * expands directly to these atoms, never to another aggregate.
+ */
 
+/* the atoms: one prototype each */
+
+/* const char *oidc_cmd_provider_<member>_set(cmd_parms *, void *, const char *, ...) */
 #define OIDC_CMD_PROVIDER_MEMBER_FUNC_DECL(member, ...)                                                                \
-	const char *OIDC_CFG_MEMBER_FUNC_NAME(member, cmd_provider, set)(cmd_parms *, void *, const char *,            \
-									 ##__VA_ARGS__);
+	const char *oidc_cmd_provider_##member##_set(cmd_parms *, void *, const char *, ##__VA_ARGS__);
 
-#define OIDC_CFG_PROVIDER_MEMBER_FUNC_SET_DECL(member, type, ...)                                                      \
-	const char *OIDC_CFG_MEMBER_FUNC_NAME(member, cfg_provider, set)(apr_pool_t *, oidc_provider_t *, type,        \
-									 ##__VA_ARGS__);
+/* const char *oidc_cfg_provider_<member>_set(apr_pool_t *, oidc_provider_t *, <itype>, ...) */
+#define OIDC_CFG_PROVIDER_MEMBER_FUNC_SET_DECL(member, itype, ...)                                                     \
+	const char *oidc_cfg_provider_##member##_set(apr_pool_t *, oidc_provider_t *, itype, ##__VA_ARGS__);
 
-#define OIDC_CFG_PROVIDER_MEMBER_FUNC_GET_DECL(member, type)                                                           \
-	type OIDC_CFG_MEMBER_FUNC_NAME(member, cfg_provider, get)(const oidc_provider_t *);
+/* <rtype> oidc_cfg_provider_<member>_get(const oidc_provider_t *) */
+#define OIDC_CFG_PROVIDER_MEMBER_FUNC_GET_DECL(member, rtype)                                                          \
+	rtype oidc_cfg_provider_##member##_get(const oidc_provider_t *);
 
-#define OIDC_CFG_PROVIDER_MEMBER_FUNCS_DECL(member, itype, rtype, ...)                                                 \
+/* the aggregates: directive handler + setter + getter, plus optional helpers */
+
+/* string setter + string getter */
+#define OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_DECL(member, ...)                                                           \
 	OIDC_CMD_PROVIDER_MEMBER_FUNC_DECL(member, ##__VA_ARGS__)                                                      \
-	OIDC_CFG_PROVIDER_MEMBER_FUNC_SET_DECL(member, itype)                                                          \
+	OIDC_CFG_PROVIDER_MEMBER_FUNC_SET_DECL(member, const char *)                                                   \
+	OIDC_CFG_PROVIDER_MEMBER_FUNC_GET_DECL(member, const char *)
+
+/* string setter + getter of arbitrary <rtype> */
+#define OIDC_CFG_PROVIDER_MEMBER_FUNCS_TYPE_DECL(member, rtype, ...)                                                   \
+	OIDC_CMD_PROVIDER_MEMBER_FUNC_DECL(member, ##__VA_ARGS__)                                                      \
+	OIDC_CFG_PROVIDER_MEMBER_FUNC_SET_DECL(member, const char *)                                                   \
 	OIDC_CFG_PROVIDER_MEMBER_FUNC_GET_DECL(member, rtype)
 
+/* int setter + int getter */
 #define OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_DECL(member, ...)                                                           \
-	OIDC_CFG_PROVIDER_MEMBER_FUNCS_DECL(member, int, int, ##__VA_ARGS__)
+	OIDC_CMD_PROVIDER_MEMBER_FUNC_DECL(member, ##__VA_ARGS__)                                                      \
+	OIDC_CFG_PROVIDER_MEMBER_FUNC_SET_DECL(member, int)                                                            \
+	OIDC_CFG_PROVIDER_MEMBER_FUNC_GET_DECL(member, int)
 
-#define OIDC_CFG_PROVIDER_MEMBER_FUNCS_TYPE_DECL(member, type, ...)                                                    \
-	OIDC_CFG_PROVIDER_MEMBER_FUNCS_DECL(member, const char *, type, ##__VA_ARGS__)
-
-#define OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_DECL(member, ...)                                                           \
-	OIDC_CFG_PROVIDER_MEMBER_FUNCS_TYPE_DECL(member, const char *, ##__VA_ARGS__)
-
+/* string setter + JWK-array getter + a set-from-keys helper */
 #define OIDC_CFG_PROVIDER_MEMBER_FUNCS_KEYS_DECL(member)                                                               \
-	OIDC_CFG_PROVIDER_MEMBER_FUNCS_TYPE_DECL(member, const apr_array_header_t *)                                   \
-	const char *OIDC_CFG_MEMBER_FUNC_NAME(member, cfg_provider, set_keys)(apr_pool_t *, oidc_provider_t *,         \
-									      apr_array_header_t *);
+	OIDC_CMD_PROVIDER_MEMBER_FUNC_DECL(member)                                                                     \
+	OIDC_CFG_PROVIDER_MEMBER_FUNC_SET_DECL(member, const char *)                                                   \
+	OIDC_CFG_PROVIDER_MEMBER_FUNC_GET_DECL(member, const apr_array_header_t *)                                     \
+	const char *oidc_cfg_provider_##member##_set_keys(apr_pool_t *, oidc_provider_t *, apr_array_header_t *);
 
-#define OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_INT_DECL(member, type)                                                      \
-	OIDC_CFG_PROVIDER_MEMBER_FUNCS_TYPE_DECL(member, type)                                                         \
-	void OIDC_CFG_MEMBER_FUNC_NAME(member, cfg_provider, int_set)(oidc_provider_t * provider, type arg);
+/* string setter + getter of <rtype> + an int_set helper that bypasses parsing */
+#define OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_INT_DECL(member, rtype)                                                     \
+	OIDC_CMD_PROVIDER_MEMBER_FUNC_DECL(member)                                                                     \
+	OIDC_CFG_PROVIDER_MEMBER_FUNC_SET_DECL(member, const char *)                                                   \
+	OIDC_CFG_PROVIDER_MEMBER_FUNC_GET_DECL(member, rtype)                                                          \
+	void oidc_cfg_provider_##member##_int_set(oidc_provider_t *provider, rtype arg);
 
+/* string setter + array getter + a set-from-string-list helper */
 #define OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_LIST_DECL(member)                                                           \
-	OIDC_CFG_PROVIDER_MEMBER_FUNCS_TYPE_DECL(member, const apr_array_header_t *)                                   \
-	const char *OIDC_CFG_MEMBER_FUNC_NAME(member, cfg_provider, set_str_list)(apr_pool_t *, oidc_provider_t *,     \
-										  apr_array_header_t *);
+	OIDC_CMD_PROVIDER_MEMBER_FUNC_DECL(member)                                                                     \
+	OIDC_CFG_PROVIDER_MEMBER_FUNC_SET_DECL(member, const char *)                                                   \
+	OIDC_CFG_PROVIDER_MEMBER_FUNC_GET_DECL(member, const apr_array_header_t *)                                     \
+	const char *oidc_cfg_provider_##member##_set_str_list(apr_pool_t *, oidc_provider_t *, apr_array_header_t *);
 
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_DECL(metadata_url)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_DECL(issuer)
@@ -243,7 +228,7 @@ OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_DECL(response_require_iss)
 // ints with 2 args
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_DECL(userinfo_refresh_interval, const char *)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_TYPE_DECL(dpop_mode, oidc_dpop_mode_t, const char *)
-void OIDC_CFG_MEMBER_FUNC_NAME(dpop_mode, cfg_provider, int_set)(oidc_provider_t *provider, oidc_dpop_mode_t arg);
+void oidc_cfg_provider_dpop_mode_int_set(oidc_provider_t *provider, oidc_dpop_mode_t arg);
 
 // for metadata.c
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_INT_DECL(userinfo_token_method, oidc_userinfo_token_method_t)
@@ -265,9 +250,8 @@ OIDC_CFG_PROVIDER_MEMBER_FUNC_SET_DECL(signed_jwks_uri_keys, const oidc_json_t *
 OIDC_CFG_PROVIDER_MEMBER_FUNC_GET_DECL(signed_jwks_uri_keys, apr_array_header_t *)
 
 // specials for token_endpoint_auth
-const char *OIDC_CFG_MEMBER_FUNC_NAME(token_endpoint_auth, cfg_provider, set)(apr_pool_t *pool, const oidc_cfg_t *cfg,
-									      oidc_provider_t *provider,
-									      const char *arg);
+const char *oidc_cfg_provider_token_endpoint_auth_set(apr_pool_t *pool, const oidc_cfg_t *cfg,
+						      oidc_provider_t *provider, const char *arg);
 OIDC_CMD_PROVIDER_MEMBER_FUNC_DECL(token_endpoint_auth)
 OIDC_CFG_PROVIDER_MEMBER_FUNC_GET_DECL(token_endpoint_auth, const char *)
 OIDC_CFG_PROVIDER_MEMBER_FUNC_GET_DECL(token_endpoint_auth_alg, const char *)

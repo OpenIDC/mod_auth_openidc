@@ -112,6 +112,7 @@ endif
 noinst_HEADERS = \
 	cfg/cfg.h \
 	cfg/cfg_int.h \
+	cfg/directives.h \
 	cfg/cache.h \
 	cfg/provider.h \
 	cfg/oauth.h \

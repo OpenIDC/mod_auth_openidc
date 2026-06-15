@@ -45,24 +45,6 @@
 
 #include "cfg/cfg.h"
 
-#define OIDCOAuthServerMetadataURL "OIDCOAuthServerMetadataURL"
-#define OIDCOAuthClientID "OIDCOAuthClientID"
-#define OIDCOAuthClientSecret "OIDCOAuthClientSecret"
-#define OIDCOAuthIntrospectionClientAuthBearerToken "OIDCOAuthIntrospectionClientAuthBearerToken"
-#define OIDCOAuthIntrospectionEndpoint "OIDCOAuthIntrospectionEndpoint"
-#define OIDCOAuthIntrospectionEndpointMethod "OIDCOAuthIntrospectionEndpointMethod"
-#define OIDCOAuthIntrospectionEndpointParams "OIDCOAuthIntrospectionEndpointParams"
-#define OIDCOAuthIntrospectionEndpointAuth "OIDCOAuthIntrospectionEndpointAuth"
-#define OIDCOAuthIntrospectionEndpointCert "OIDCOAuthIntrospectionEndpointCert"
-#define OIDCOAuthIntrospectionEndpointKey "OIDCOAuthIntrospectionEndpointKey"
-#define OIDCOAuthIntrospectionEndpointKeyPassword "OIDCOAuthIntrospectionEndpointKeyPassword"
-#define OIDCOAuthIntrospectionTokenParamName "OIDCOAuthIntrospectionTokenParamName"
-#define OIDCOAuthTokenExpiryClaim "OIDCOAuthTokenExpiryClaim"
-#define OIDCOAuthSSLValidateServer "OIDCOAuthSSLValidateServer"
-#define OIDCOAuthVerifyCertFiles "OIDCOAuthVerifyCertFiles"
-#define OIDCOAuthVerifySharedKeys "OIDCOAuthVerifySharedKeys"
-#define OIDCOAuthVerifyJwksUri "OIDCOAuthVerifyJwksUri"
-
 typedef enum {
 	OIDC_TOKEN_EXPIRY_CLAIM_FORMAT_RELATIVE = 1,
 	OIDC_TOKEN_EXPIRY_CLAIM_FORMAT_ABSOLUTE = 2
@@ -78,18 +60,29 @@ typedef enum {
 	OIDC_INTROSPECTION_METHOD_POST = 2
 } oidc_oauth_introspection_endpoint_method_t;
 
-#define OIDC_CFG_OAUTH_MEMBER_FUNC_GET_DECL(member, type)                                                              \
-	type OIDC_CFG_MEMBER_FUNC_NAME(member, cfg_oauth, get)(const oidc_cfg_t *cfg);
+/*
+ * Generators for the OAuth resource-server (oidc_oauth_t) directive accessors.
+ * For member `foo` they declare oidc_cmd_oauth_foo_set() (directive handler),
+ * oidc_cfg_oauth_foo_set() (setter, used from metadata/oauth.c) and
+ * oidc_cfg_oauth_foo_get() (getter). Bodies live in cfg/oauth.c. At most two
+ * macro layers: an aggregate expands directly to the single-prototype atoms.
+ */
 
+/* <type> oidc_cfg_oauth_<member>_get(const oidc_cfg_t *) */
+#define OIDC_CFG_OAUTH_MEMBER_FUNC_GET_DECL(member, type) type oidc_cfg_oauth_##member##_get(const oidc_cfg_t *cfg);
+
+/* const char *oidc_cmd_oauth_<member>_set(cmd_parms *, void *, ...) */
 #define OIDC_CMD_OAUTH_MEMBER_FUNC_DECL(member, ...)                                                                   \
-	const char *OIDC_CFG_MEMBER_FUNC_NAME(member, cmd_oauth, set)(cmd_parms *, void *, ##__VA_ARGS__);
+	const char *oidc_cmd_oauth_##member##_set(cmd_parms *, void *, ##__VA_ARGS__);
 
+/* directive handler + typed getter */
 #define OIDC_CFG_OAUTH_MEMBER_FUNCS_DECL(member, type, ...)                                                            \
 	OIDC_CMD_OAUTH_MEMBER_FUNC_DECL(member, const char *, ##__VA_ARGS__);                                          \
 	OIDC_CFG_OAUTH_MEMBER_FUNC_GET_DECL(member, type)
 
+/* const char *oidc_cfg_oauth_<member>_set(apr_pool_t *, oidc_cfg_t *, const char *) */
 #define OIDC_CFG_OAUTH_MEMBER_FUNC_SET_DECL(member)                                                                    \
-	const char *OIDC_CFG_MEMBER_FUNC_NAME(member, cfg_oauth, set)(apr_pool_t *, oidc_cfg_t *, const char *);
+	const char *oidc_cfg_oauth_##member##_set(apr_pool_t *, oidc_cfg_t *, const char *);
 
 OIDC_CFG_OAUTH_MEMBER_FUNCS_DECL(ssl_validate_server, int)
 OIDC_CFG_OAUTH_MEMBER_FUNCS_DECL(metadata_url, const char *)

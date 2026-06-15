@@ -1,3 +1,9 @@
+06/15/2026
+- cfg: collect the OIDC* directive-name macros in a single cfg/directives.h and
+  flatten the config-accessor generator macros (drop the function-name token
+  paster, document the generated symbols, ship a ctags recipe to index them);
+  no functional change
+
 06/14/2026
 - json: introduce a JSON backend abstraction layer; move util/json.c to json.c
   and rename oidc_util_json_* to oidc_json_*, with an opaque oidc_json_t type

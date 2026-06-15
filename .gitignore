@@ -41,3 +41,7 @@ coverage-report/
 # clangd / clang-tidy tooling (e.g. `bear -- make` generates the compile DB)
 compile_commands.json
 .cache/
+
+# ctags index (e.g. `ctags -R src/`, reads .ctags.d/mod_auth_openidc.ctags)
+/tags
+/TAGS

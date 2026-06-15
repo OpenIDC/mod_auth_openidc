@@ -45,28 +45,6 @@
 
 #include "cfg/cfg.h"
 
-#define OIDCPathScope "OIDCPathScope"
-#define OIDCPathAuthRequestParams "OIDCPathAuthRequestParams"
-#define OIDCDiscoverURL "OIDCDiscoverURL"
-#define OIDCPassCookies "OIDCPassCookies"
-#define OIDCStripCookies "OIDCStripCookies"
-#define OIDCAuthNHeader "OIDCAuthNHeader"
-#define OIDCCookie "OIDCCookie"
-#define OIDCUnAuthAction "OIDCUnAuthAction"
-#define OIDCUnAutzAction "OIDCUnAutzAction"
-#define OIDCPassClaimsAs "OIDCPassClaimsAs"
-#define OIDCOAuthAcceptTokenAs "OIDCOAuthAcceptTokenAs"
-#define OIDCOAuthTokenIntrospectionInterval "OIDCOAuthTokenIntrospectionInterval"
-#define OIDCPreservePost "OIDCPreservePost"
-#define OIDCPassAccessToken "OIDCPassAccessToken"
-#define OIDCPassRefreshToken "OIDCPassRefreshToken"
-#define OIDCRefreshAccessTokenBeforeExpiry "OIDCRefreshAccessTokenBeforeExpiry"
-#define OIDCStateCookiePrefix "OIDCStateCookiePrefix"
-#define OIDCPassIDTokenAs "OIDCPassIDTokenAs"
-#define OIDCPassUserInfoAs "OIDCPassUserInfoAs"
-#define OIDCUserInfoClaimsExpr "OIDCUserInfoClaimsExpr"
-#define OIDCCookiePath "OIDCCookiePath"
-
 typedef enum {
 	/* pass id_token as individual claims in headers (default) */
 	OIDC_PASS_IDTOKEN_AS_CLAIMS = 1,
@@ -121,11 +99,20 @@ typedef enum {
 	OIDC_UNAUTZ_RETURN302 = 4
 } oidc_unautz_action_t;
 
-#define OIDC_CMD_DIR_MEMBER_FUNC_DECL(member, ...)                                                                     \
-	const char *OIDC_CFG_MEMBER_FUNC_NAME(member, cmd_dir, set)(cmd_parms *, void *, const char *, ##__VA_ARGS__);
+/*
+ * Generators for the per-directory (oidc_dir_cfg_t) directive accessors. For
+ * member `foo` they declare oidc_cmd_dir_foo_set() (directive handler) and
+ * oidc_cfg_dir_foo_get() (getter; takes the request_rec because per-dir config
+ * is merged per request). Bodies live in cfg/dir.c. At most two macro layers:
+ * the FUNCS aggregate expands directly to the single-prototype atoms.
+ */
 
-#define OIDC_CFG_DIR_MEMBER_FUNC_GET_DECL(member, type)                                                                \
-	type OIDC_CFG_MEMBER_FUNC_NAME(member, cfg_dir, get)(request_rec * r);
+/* const char *oidc_cmd_dir_<member>_set(cmd_parms *, void *, const char *, ...) */
+#define OIDC_CMD_DIR_MEMBER_FUNC_DECL(member, ...)                                                                     \
+	const char *oidc_cmd_dir_##member##_set(cmd_parms *, void *, const char *, ##__VA_ARGS__);
+
+/* <type> oidc_cfg_dir_<member>_get(request_rec *) */
+#define OIDC_CFG_DIR_MEMBER_FUNC_GET_DECL(member, type) type oidc_cfg_dir_##member##_get(request_rec *r);
 
 #define OIDC_CFG_DIR_MEMBER_FUNCS(member, type, ...)                                                                   \
 	OIDC_CMD_DIR_MEMBER_FUNC_DECL(member, ##__VA_ARGS__)                                                           \
@@ -166,11 +153,10 @@ OIDC_CFG_DIR_MEMBER_FUNC_GET_DECL(pass_info_encoding, oidc_appinfo_encoding_t)
 OIDC_CFG_DIR_MEMBER_FUNC_GET_DECL(oauth_accept_token_in, oidc_oauth_accept_token_in_t)
 OIDC_CFG_DIR_MEMBER_FUNC_GET_DECL(unauthz_arg, const char *)
 
-// specials
-const char *OIDC_CFG_MEMBER_FUNC_NAME(accept_token_in_option, cfg_dir, get)(request_rec *r, const char *key);
-apr_byte_t OIDC_CFG_MEMBER_FUNC_NAME(unauth_expr, cfg_dir, is_set)(request_rec *r);
-const char *OIDC_CFG_MEMBER_FUNC_NAME(accept_oauth_token, cfg_dir, in2str)(apr_pool_t *pool,
-									   oidc_oauth_accept_token_in_t v);
+// specials (names written out in full)
+const char *oidc_cfg_dir_accept_token_in_option_get(request_rec *r, const char *key);
+apr_byte_t oidc_cfg_dir_unauth_expr_is_set(request_rec *r);
+const char *oidc_cfg_dir_accept_oauth_token_in2str(apr_pool_t *pool, oidc_oauth_accept_token_in_t v);
 
 typedef struct oidc_dir_cfg_t oidc_dir_cfg_t;
 

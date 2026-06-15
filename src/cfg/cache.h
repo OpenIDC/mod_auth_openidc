@@ -48,11 +48,9 @@
 void oidc_cfg_cache_create_server_config(oidc_cfg_t *c);
 void oidc_cfg_cache_merge_server_config(oidc_cfg_t *c, oidc_cfg_t *base, oidc_cfg_t *add);
 
-// NB: need the primitive strings and the custom set routines
-//     here because the commands are included in config.
-
-#define OIDCCacheType "OIDCCacheType"
-#define OIDCCacheEncrypt "OIDCCacheEncrypt"
+// NB: the OIDC* directive name strings live in cfg/directives.h; the custom
+//     set-routine declarations are needed here because the commands are
+//     included in config.
 
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_type, int)
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_encrypt, int)
@@ -60,18 +58,12 @@ OIDC_CFG_MEMBER_FUNCS_DECL(cache_encrypt, int)
 /*
  * shm
  */
-#define OIDCCacheShmMax "OIDCCacheShmMax"
-#define OIDCCacheShmEntrySizeMax "OIDCCacheShmEntrySizeMax"
-
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_shm_size_max, int)
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_shm_entry_size_max, int)
 
 /*
  * file
  */
-
-#define OIDCCacheDir "OIDCCacheDir"
-#define OIDCCacheFileCleanInterval "OIDCCacheFileCleanInterval"
 
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_file_clean_interval, int)
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_file_dir, const char *)
@@ -81,12 +73,6 @@ OIDC_CFG_MEMBER_FUNCS_DECL(cache_file_dir, const char *)
  */
 
 #ifdef USE_MEMCACHE
-
-#define OIDCMemCacheServers "OIDCMemCacheServers"
-#define OIDCMemCacheConnectionsMin "OIDCMemCacheConnectionsMin"
-#define OIDCMemCacheConnectionsSMax "OIDCMemCacheConnectionsSMax"
-#define OIDCMemCacheConnectionsHMax "OIDCMemCacheConnectionsHMax"
-#define OIDCMemCacheConnectionsTTL "OIDCMemCacheConnectionsTTL"
 
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_memcache_servers, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_memcache_min, int)
@@ -101,13 +87,6 @@ OIDC_CFG_MEMBER_FUNCS_DECL(cache_memcache_ttl, apr_interval_time_t)
  */
 
 #ifdef USE_LIBHIREDIS
-
-#define OIDCRedisCacheServer "OIDCRedisCacheServer"
-#define OIDCRedisCacheUsername "OIDCRedisCacheUsername"
-#define OIDCRedisCachePassword "OIDCRedisCachePassword"
-#define OIDCRedisCacheDatabase "OIDCRedisCacheDatabase"
-#define OIDCRedisCacheConnectTimeout "OIDCRedisCacheConnectTimeout"
-#define OIDCRedisCacheTimeout "OIDCRedisCacheTimeout"
 
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_redis_server, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_redis_username, const char *)

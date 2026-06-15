@@ -1,0 +1,35 @@
+# Universal Ctags recipe for mod_auth_openidc's generated config accessors.
+#
+# The per-server / per-provider / per-OAuth / per-directory directive getters
+# and setters in src/cfg/ are produced by token-pasting macros (see
+# cfg/cfg.h, cfg/provider.h, cfg/oauth.h, cfg/dir.h and their cfg/*.c bodies).
+# Their names are assembled from the struct member name, so a plain grep or an
+# editor "jump to definition" cannot find e.g. oidc_cfg_provider_issuer_get.
+#
+# These rules synthesize tags for those names from each generator's CALL site,
+# so `ctags -R` (Universal Ctags) makes them navigable. It is a best-effort
+# index: a few generator variants may over- or under-tag; the compiler remains
+# the source of truth. Requires Universal Ctags (not Exuberant). Usage:
+#
+#     ctags -R src/        # reads .ctags.d/*.ctags automatically
+#
+# The leading `^` anchors at column 0, matching the generator CALL sites (which
+# start the line) and never the `#define` lines (which start with "#define ").
+
+# base, per-server: OIDC_CFG_MEMBER_* / OIDC_CMD_MEMBER_* -> oidc_cfg_<m>_get, oidc_cmd_<m>_set
+--regex-C=/^OIDC_(CFG|CMD)_MEMBER_FUNC[A-Z_]*\(([a-zA-Z0-9_]+)/oidc_cfg_\2_get/f/
+--regex-C=/^OIDC_(CFG|CMD)_MEMBER_FUNC[A-Z_]*\(([a-zA-Z0-9_]+)/oidc_cmd_\2_set/f/
+
+# provider: OIDC_CFG_PROVIDER_MEMBER_* (decl) / OIDC_PROVIDER_MEMBER_* (impl)
+--regex-C=/^OIDC_(CFG_)?PROVIDER_MEMBER[A-Z_]*\(([a-zA-Z0-9_]+)/oidc_cfg_provider_\2_get/f/
+--regex-C=/^OIDC_(CFG_)?PROVIDER_MEMBER[A-Z_]*\(([a-zA-Z0-9_]+)/oidc_cfg_provider_\2_set/f/
+--regex-C=/^OIDC_(CFG_)?PROVIDER_MEMBER[A-Z_]*\(([a-zA-Z0-9_]+)/oidc_cmd_provider_\2_set/f/
+
+# OAuth resource server: OIDC_CFG_OAUTH_MEMBER_* (decl) / OIDC_OAUTH_MEMBER_* (impl)
+--regex-C=/^OIDC_(CFG_)?OAUTH_MEMBER[A-Z_]*\(([a-zA-Z0-9_]+)/oidc_cfg_oauth_\2_get/f/
+--regex-C=/^OIDC_(CFG_)?OAUTH_MEMBER[A-Z_]*\(([a-zA-Z0-9_]+)/oidc_cfg_oauth_\2_set/f/
+--regex-C=/^OIDC_(CFG_)?OAUTH_MEMBER[A-Z_]*\(([a-zA-Z0-9_]+)/oidc_cmd_oauth_\2_set/f/
+
+# per-directory: OIDC_CFG_DIR_MEMBER_* -> oidc_cfg_dir_<m>_get, oidc_cmd_dir_<m>_set
+--regex-C=/^OIDC_CFG_DIR_MEMBER[A-Z_]*\(([a-zA-Z0-9_]+)/oidc_cfg_dir_\1_get/f/
+--regex-C=/^OIDC_CFG_DIR_MEMBER[A-Z_]*\(([a-zA-Z0-9_]+)/oidc_cmd_dir_\1_set/f/

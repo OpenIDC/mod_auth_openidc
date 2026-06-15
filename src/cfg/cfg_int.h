@@ -205,6 +205,13 @@ struct oidc_cfg_t {
 	rv != NULL ? apr_psprintf(cmd->pool, "Invalid value for directive '%s': %s", cmd->directive->directive, rv)    \
 		   : NULL
 
+/*
+ * Body generators for the per-server (oidc_cfg_t) accessors declared in
+ * cfg/cfg.h. For member `foo` these emit the getter oidc_cfg_foo_get() and the
+ * directive handler oidc_cmd_foo_set(), matching the prototypes declared there;
+ * the OIDC_CFG_MEMBER_FUNCS_* aggregates in cfg/cfg.c build on them. The names
+ * are token-pasted: see .ctags.d/mod_auth_openidc.ctags to index them.
+ */
 #define OIDC_CFG_MEMBER_FUNC_GET(member, type)                                                                         \
 	type oidc_cfg_##member##_get(const oidc_cfg_t *cfg) {                                                          \
 		return cfg->member;                                                                                    \
