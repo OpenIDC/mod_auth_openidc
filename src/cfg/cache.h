@@ -49,8 +49,8 @@ void oidc_cfg_cache_create_server_config(oidc_cfg_t *c);
 void oidc_cfg_cache_merge_server_config(oidc_cfg_t *c, oidc_cfg_t *base, oidc_cfg_t *add);
 
 // NB: the OIDC* directive name strings live in cfg/directives.h; the custom
-//     set-routine declarations are needed here because the commands are
-//     included in config.
+//     set-routine declarations are needed here because cfg/cmds.c references
+//     them when building the oidc_cfg_cmds[] command table
 
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_type, int)
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_encrypt, int)

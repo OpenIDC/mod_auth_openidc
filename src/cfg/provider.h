@@ -99,8 +99,8 @@ typedef enum {
 } oidc_profile_t;
 
 // NB: the OIDC* directive name strings live in cfg/directives.h; the custom
-//     set-routine declarations below are needed here because the commands are
-//     included in config.c via include "cmds.inc"
+//     set-routine declarations below are needed here because cfg/cmds.c
+//     references them when building the oidc_cfg_cmds[] command table
 
 /*
  * Generators for the per-provider (oidc_provider_t) directive accessors.
