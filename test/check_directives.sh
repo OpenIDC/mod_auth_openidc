@@ -55,8 +55,36 @@ tmp_create=$(mktemp)
 tmp_merge=$(mktemp)
 trap 'rm -f "$tmp_members" "$tmp_create" "$tmp_merge"' EXIT
 
-# struct members: identifiers terminated by ';' inside the struct block
-awk '/^struct oidc_dir_cfg_t \{/{f=1;next} f&&/^\};/{f=0} f' "$src" |
+# struct members: identifiers terminated by ';' inside the struct block.
+# Strip C comments (// and /* */, including multi-line spans) and skip
+# preprocessor lines before extracting, so a stray 'word;' inside a comment or
+# macro is not mistaken for a member. Without this, a trailing annotation like
+# 'int foo; /* rename to bar; */' or a block-comment continuation line would
+# inject a phantom member and fail the build with a confusing error. Plain
+# index()/substr() only -- no dynamic regex -- so it stays gawk/mawk portable.
+awk '
+	/^struct oidc_dir_cfg_t \{/ { inside = 1; next }
+	inside && /^\};/ { inside = 0 }
+	!inside { next }
+	{
+		line = $0
+		if (incomment) {		# inside an open /* ... that began earlier
+			p = index(line, "*/")
+			if (p == 0) next	# whole line is still commented out
+			line = substr(line, p + 2)
+			incomment = 0
+		}
+		while ((p = index(line, "/*")) > 0) {	# strip /* ... */ spans
+			tail = substr(line, p + 2)
+			q = index(tail, "*/")
+			if (q == 0) { line = substr(line, 1, p - 1); incomment = 1; break }
+			line = substr(line, 1, p - 1) substr(tail, q + 2)
+		}
+		p = index(line, "//")			# strip // to end of line
+		if (p > 0) line = substr(line, 1, p - 1)
+		if (line ~ /^[ \t]*#/) next		# skip preprocessor directives
+		print line
+	}' "$src" |
 	grep -aoE '[A-Za-z_][A-Za-z0-9_]*;' | tr -d ';' | sort -u >"$tmp_members"
 
 # members assigned (c->member) inside each function, up to its 'return c;'.
