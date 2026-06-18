@@ -35,10 +35,15 @@ set -eu
 # correct under VPATH/distcheck where the test dir and src dir are siblings in
 # the unpacked source tree), then fall back to build-relative paths.
 dir="${srcdir:-}"
-[ -n "$dir" ] || dir=$(dirname "$0")
+if [ -z "$dir" ]; then
+	case "$0" in
+		*/*) dir=$(dirname -- "$0") ;;
+		*) dir=$(pwd) ;;
+	esac
+fi
 
 src=""
-for cand in "$dir/../src/cfg/dir.c" "../src/cfg/dir.c" "$(dirname "$0")/../src/cfg/dir.c"; do
+for cand in "$dir/../src/cfg/dir.c" "../src/cfg/dir.c"; do
 	if [ -f "$cand" ]; then
 		src="$cand"
 		break
@@ -85,7 +90,17 @@ awk '
 		if (line ~ /^[ \t]*#/) next		# skip preprocessor directives
 		print line
 	}' "$src" |
-	grep -aoE '[A-Za-z_][A-Za-z0-9_]*;' | tr -d ';' | sort -u >"$tmp_members"
+	awk '
+		{
+			line = $0
+			gsub(/^[ \t]+|[ \t]+$/, "", line)
+			if (line == "") next
+			if (line !~ /;[ \t]*$/) next
+			sub(/[ \t]*;[ \t]*$/, "", line)
+			sub(/\[[^][]*\][ \t]*$/, "", line)
+			if (match(line, /[A-Za-z_][A-Za-z0-9_]*[ \t]*$/))
+				print substr(line, RSTART, RLENGTH)
+		}' | tr -d ' \t' | sort -u >"$tmp_members"
 
 # members assigned (c->member) inside each function, up to its 'return c;'.
 # Match the function-opening line with a literal index() lookup, not a dynamic
@@ -100,7 +115,7 @@ extract_assigns() {
 extract_assigns 'oidc_cfg_dir_config_create(apr_pool_t' >"$tmp_create"
 extract_assigns 'oidc_cfg_dir_config_merge(apr_pool_t' >"$tmp_merge"
 
-count=$(wc -l <"$tmp_members" | tr -d ' ')
+count=$(wc -l <"$tmp_members" | awk '{print $1}')
 if [ "$count" -eq 0 ]; then
 	echo "ERROR: no oidc_dir_cfg_t members found in $src -- parser out of date?" >&2
 	exit 1
