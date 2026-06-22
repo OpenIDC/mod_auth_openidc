@@ -214,6 +214,34 @@ struct oidc_provider_t {
 #define OIDC_PROVIDER_MEMBER_FUNCS_URL(member)                                                                         \
 	OIDC_PROVIDER_MEMBER_FUNCS_PARSE_STR(member, oidc_cfg_parse_is_valid_http_url, NULL)
 
+/*
+ * Like OIDC_PROVIDER_MEMBER_FUNCS_URL, but the directive accepts an empty value (raw-args) to explicitly disable the
+ * associated endpoint. The empty string is stored (and preserved as non-NULL), so a value advertised in the metadata
+ * obtained from OIDCProviderMetadataURL does not override it; callers must treat the empty string as "disabled".
+ */
+#define OIDC_PROVIDER_MEMBER_FUNCS_URL_EMPTY(member)                                                                   \
+	const char *oidc_cfg_provider_##member##_set(apr_pool_t *pool, oidc_provider_t *provider, const char *arg) {   \
+		const char *rv = oidc_cfg_parse_is_valid_http_url(pool, arg);                                          \
+		if (rv == NULL)                                                                                        \
+			provider->member = apr_pstrdup(pool, arg);                                                     \
+		return rv;                                                                                             \
+	}                                                                                                              \
+                                                                                                                       \
+	const char *oidc_cmd_provider_##member##_set(cmd_parms *cmd, void *ptr, const char *args) {                    \
+		oidc_cfg_t *cfg =                                                                                      \
+		    (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);              \
+		const char *w = ap_getword_conf(cmd->pool, &args);                                                     \
+		if (*w == '\0' || *args != 0) {                                                                        \
+			cfg->provider->member = "";                                                                    \
+			return NULL;                                                                                   \
+		}                                                                                                      \
+		return oidc_cfg_provider_##member##_set(cmd->pool, cfg->provider, w);                                  \
+	}                                                                                                              \
+                                                                                                                       \
+	const char *oidc_cfg_provider_##member##_get(const oidc_provider_t *provider) {                                \
+		return provider->member;                                                                               \
+	}
+
 #define OIDC_PROVIDER_MEMBER_FUNCS_FLAG(member, def_val)                                                               \
 	OIDC_PROVIDER_MEMBER_FUNCS_INT(member, oidc_cfg_parse_boolean, 0, 1, def_val)
 
@@ -342,7 +370,6 @@ OIDC_PROVIDER_MEMBER_FUNCS_URL(authorization_endpoint_url)
 OIDC_PROVIDER_MEMBER_FUNCS_STR(auth_request_params, NULL)
 OIDC_PROVIDER_MEMBER_FUNCS_URL(token_endpoint_url)
 OIDC_PROVIDER_MEMBER_FUNCS_STR(token_endpoint_params, NULL)
-OIDC_PROVIDER_MEMBER_FUNCS_URL(userinfo_endpoint_url)
 OIDC_PROVIDER_MEMBER_FUNCS_URL(registration_endpoint_url)
 OIDC_PROVIDER_MEMBER_FUNCS_URL(pushed_authorization_request_endpoint_url)
 OIDC_PROVIDER_MEMBER_FUNCS_URL(check_session_iframe)
@@ -654,30 +681,14 @@ int oidc_cfg_provider_userinfo_refresh_interval_get(const oidc_provider_t *provi
 }
 
 /*
- * revocation endpoint url, must allow empty string in base config
+ * endpoint URLs that accept an empty value to explicitly disable the endpoint (see
+ * OIDC_PROVIDER_MEMBER_FUNCS_URL_EMPTY); callers gate on both NULL and the empty string:
+ * - userinfo_endpoint_url: e.g. with Microsoft Entra ID, where the access token cannot be used against the
+ *   UserInfo Endpoint and all required claims are already present in the id_token
+ * - revocation_endpoint_url: must allow empty string in base config
  */
-
-const char *oidc_cfg_provider_revocation_endpoint_url_set(apr_pool_t *pool, oidc_provider_t *provider,
-							  const char *arg) {
-	const char *rv = oidc_cfg_parse_is_valid_http_url(pool, arg);
-	if (rv == NULL)
-		provider->revocation_endpoint_url = apr_pstrdup(pool, arg);
-	return rv;
-}
-
-const char *oidc_cmd_provider_revocation_endpoint_url_set(cmd_parms *cmd, void *ptr, const char *args) {
-	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
-	const char *w = ap_getword_conf(cmd->pool, &args);
-	if (*w == '\0' || *args != 0) {
-		cfg->provider->revocation_endpoint_url = "";
-		return NULL;
-	}
-	return oidc_cfg_provider_revocation_endpoint_url_set(cmd->pool, cfg->provider, w);
-}
-
-const char *oidc_cfg_provider_revocation_endpoint_url_get(const oidc_provider_t *provider) {
-	return provider->revocation_endpoint_url;
-}
+OIDC_PROVIDER_MEMBER_FUNCS_URL_EMPTY(userinfo_endpoint_url)
+OIDC_PROVIDER_MEMBER_FUNCS_URL_EMPTY(revocation_endpoint_url)
 
 #define OIDC_PROFILE_OIDC10_STR "OIDC10"
 #define OIDC_PROFILE_FAPI20_STR "FAPI20"

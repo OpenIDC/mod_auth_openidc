@@ -99,9 +99,11 @@ const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg_t *c, const o
 
 	oidc_debug(r, "enter");
 
-	/* see if a userinfo endpoint is set, otherwise there's nothing to do for us */
-	if (oidc_cfg_provider_userinfo_endpoint_url_get(provider) == NULL) {
-		oidc_debug(r, "not retrieving userinfo claims because userinfo_endpoint is not set");
+	/* see if a userinfo endpoint is set (and not explicitly disabled with an empty value), otherwise there's
+	 * nothing to do for us */
+	if ((oidc_cfg_provider_userinfo_endpoint_url_get(provider) == NULL) ||
+	    (_oidc_strcmp(oidc_cfg_provider_userinfo_endpoint_url_get(provider), "") == 0)) {
+		oidc_debug(r, "not retrieving userinfo claims because userinfo_endpoint is not set or disabled");
 		goto end;
 	}
 
@@ -202,8 +204,9 @@ apr_byte_t oidc_userinfo_refresh_claims(request_rec *r, oidc_cfg_t *cfg, oidc_se
 		goto end;
 	}
 
-	/* nothing to do without a userinfo endpoint */
-	if (oidc_cfg_provider_userinfo_endpoint_url_get(provider) == NULL)
+	/* nothing to do without a userinfo endpoint (or when it is explicitly disabled with an empty value) */
+	if ((oidc_cfg_provider_userinfo_endpoint_url_get(provider) == NULL) ||
+	    (_oidc_strcmp(oidc_cfg_provider_userinfo_endpoint_url_get(provider), "") == 0))
 		goto end;
 
 	/* get the last refresh timestamp from the session info */

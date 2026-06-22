@@ -395,10 +395,10 @@ const command_rec oidc_cfg_cmds[] = {
 		registration_endpoint_json,
 		"Define a JSON object with parameters that will be merged into the client registration request to the OpenID OP Registration Endpoint (e.g.: { \"request_uris\" : [ \"https://example.com/uri\"] })."),
 	OIDC_CFG_CMD_PROVIDER(
-		AP_INIT_TAKE1,
+		AP_INIT_RAW_ARGS,
 		OIDCProviderUserInfoEndpoint,
 		userinfo_endpoint_url,
-		"Define the OpenID OP UserInfo Endpoint URL (e.g.: https://localhost:9031/idp/userinfo.openid)"),
+		"Define the OpenID OP UserInfo Endpoint URL (e.g.: https://localhost:9031/idp/userinfo.openid); leave empty to explicitly disable calling the UserInfo Endpoint, even when one is advertised in the discovered provider metadata."),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_RAW_ARGS,
 		OIDCProviderRevocationEndpoint,

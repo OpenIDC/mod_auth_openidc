@@ -54,7 +54,8 @@ static apr_byte_t oidc_proto_validate_token_type(request_rec *r, const oidc_prov
 	/*  we only support bearer/Bearer and DPoP/dpop */
 	if ((token_type != NULL) && (_oidc_strnatcasecmp(token_type, OIDC_PROTO_BEARER) != 0) &&
 	    (_oidc_strnatcasecmp(token_type, OIDC_PROTO_DPOP) != 0) &&
-	    (oidc_cfg_provider_userinfo_endpoint_url_get(provider) != NULL)) {
+	    (oidc_cfg_provider_userinfo_endpoint_url_get(provider) != NULL) &&
+	    (_oidc_strcmp(oidc_cfg_provider_userinfo_endpoint_url_get(provider), "") != 0)) {
 		oidc_error(r,
 			   "token_type is \"%s\" and UserInfo endpoint (%s) for issuer \"%s\" is set: can only deal "
 			   "with \"%s\" or \"%s\" authentication against a UserInfo endpoint!",

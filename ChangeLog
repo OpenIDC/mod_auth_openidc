@@ -1,3 +1,10 @@
+06/22/2026
+- cfg: allow OIDCProviderUserInfoEndpoint to be set to an empty value to explicitly
+  disable calling the UserInfo Endpoint, even when one is advertised in the metadata
+  obtained from OIDCProviderMetadataURL; useful when the access token cannot be used
+  against the UserInfo Endpoint (e.g. with Microsoft Entra ID) and the required claims
+  are already present in the id_token; see #1390; thanks @drpuur
+
 06/15/2026
 - cfg: collect the OIDC* directive-name macros in a single cfg/directives.h and
   flatten the config-accessor generator macros (drop the function-name token

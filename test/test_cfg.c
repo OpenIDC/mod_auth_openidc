@@ -402,6 +402,9 @@ START_TEST(test_cmd_provider_url_setters) {
 	cmd = oidc_test_cmd_get(OIDCProviderUserInfoEndpoint);
 	ck_assert_ptr_null(oidc_cmd_provider_userinfo_endpoint_url_set(cmd, NULL, url));
 	ck_assert_str_eq(oidc_cfg_provider_userinfo_endpoint_url_get(p), url);
+	/* an empty value explicitly disables calling the userinfo endpoint (mirrors the revocation endpoint) */
+	ck_assert_ptr_null(oidc_cmd_provider_userinfo_endpoint_url_set(cmd, NULL, ""));
+	ck_assert_str_eq(oidc_cfg_provider_userinfo_endpoint_url_get(p), "");
 
 	cmd = oidc_test_cmd_get(OIDCProviderRegistrationEndpointJson);
 	ck_assert_ptr_null(oidc_cmd_provider_registration_endpoint_url_set(cmd, NULL, url));
