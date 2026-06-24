@@ -109,7 +109,7 @@ typedef enum {
  * them. For member `foo` the atoms declare:
  *
  *   const char *oidc_cmd_provider_foo_set(cmd_parms *, void *, const char *, ...); // directive handler (cmds.c)
- *   const char *oidc_cfg_provider_foo_set(apr_pool_t *, oidc_provider_t *, ...);   // setter (metadata/*.c)
+ *   const char *oidc_cfg_provider_foo_set(apr_pool_t *, oidc_provider_t *, ...);   // setter (metadata *.c)
  *   <type>      oidc_cfg_provider_foo_get(const oidc_provider_t *);                // getter (used everywhere)
  *
  * The matching bodies are generated in cfg/provider.c. Because the names are
