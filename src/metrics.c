@@ -59,7 +59,7 @@
 
 #define OM_CLASS_AUTH_TYPE     "authtype"       // Request counter, overall and per AuthType: openid-connect, oauth20 and auth-openidc.
 #define OM_CLASS_AUTHN         "authn"          // Authentication request creation and response processing.
-#define OM_CLASS_AUTHZ         "authz"          // Authorization errors per OIDCUnAuthzAction (per Require statement, not overall).
+#define OM_CLASS_AUTHZ         "authz"          // Authorization errors per OIDCUnAutzAction (per Require statement, not overall).
 #define OM_CLASS_REQUIRE_CLAIM "require.claim"  // Match/failure count of Require claim directives (per Require statement, not overall).
 #define OM_CLASS_CLAIM         "claim"          // Claims per value
 #define OM_CLASS_PROVIDER      "provider"       // Requests to the provider [token, userinfo, metadata] endpoints.
