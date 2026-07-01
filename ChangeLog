@@ -1,3 +1,6 @@
+07/01/2026
+- release 2.4.9.4
+
 06/22/2026
 - cfg: allow OIDCProviderUserInfoEndpoint to be set to an empty value to explicitly
   disable calling the UserInfo Endpoint, even when one is advertised in the metadata
