@@ -868,6 +868,130 @@ START_TEST(test_cmd_session_inactivity_timeout) {
 }
 END_TEST
 
+/* drive oidc_cfg_parse_key_record through every key-value encoding
+ * (b64/b64url/hex/plain) including the malformed-input error branches */
+START_TEST(test_cfg_parse_key_record_encodings) {
+	request_rec *r = oidc_test_request_get();
+	char *kid = NULL;
+	char *key = NULL;
+	int key_len = 0;
+	char *use = NULL;
+
+	/* base64: 16 bytes */
+	ck_assert_ptr_null(
+	    oidc_cfg_parse_key_record(r->pool, "b64#k1#AAECAwQFBgcICQoLDA0ODw==", &kid, &key, &key_len, &use, TRUE));
+	ck_assert_str_eq(kid, "k1");
+	ck_assert_int_eq(key_len, 16);
+
+	/* base64url: 16 bytes, no padding */
+	ck_assert_ptr_null(
+	    oidc_cfg_parse_key_record(r->pool, "b64url#k2#AAECAwQFBgcICQoLDA0ODw", &kid, &key, &key_len, &use, TRUE));
+	ck_assert_str_eq(kid, "k2");
+	ck_assert_int_eq(key_len, 16);
+
+	/* hex: 16 bytes */
+	ck_assert_ptr_null(oidc_cfg_parse_key_record(r->pool, "hex#k3#000102030405060708090a0b0c0d0e0f", &kid, &key,
+						     &key_len, &use, TRUE));
+	ck_assert_int_eq(key_len, 16);
+	ck_assert_int_eq((unsigned char)key[15], 0x0f);
+
+	/* plain */
+	ck_assert_ptr_null(oidc_cfg_parse_key_record(r->pool, "plain#k4#mysecret", &kid, &key, &key_len, &use, TRUE));
+	ck_assert_int_eq(key_len, 8);
+
+	/* use prefix */
+	ck_assert_ptr_null(
+	    oidc_cfg_parse_key_record(r->pool, "sig:plain#k5#mysecret", &kid, &key, &key_len, &use, TRUE));
+	ck_assert_ptr_nonnull(use);
+	ck_assert_str_eq(use, "sig");
+
+	/* error branches: invalid base64url, odd-length hex, non-hex input, unknown encoding */
+	ck_assert_ptr_nonnull(oidc_cfg_parse_key_record(r->pool, "b64url#k#!!!!", &kid, &key, &key_len, &use, TRUE));
+	ck_assert_ptr_nonnull(oidc_cfg_parse_key_record(r->pool, "hex#k#abc", &kid, &key, &key_len, &use, TRUE));
+	ck_assert_ptr_nonnull(oidc_cfg_parse_key_record(r->pool, "hex#k#zzzz", &kid, &key, &key_len, &use, TRUE));
+	ck_assert_ptr_nonnull(oidc_cfg_parse_key_record(r->pool, "bogus#k#value", &kid, &key, &key_len, &use, TRUE));
+}
+END_TEST
+
+/* OIDCClientTokenEndpointCert/Key/KeyPassword: TLS client credentials for the
+ * provider token endpoint; cert and key must reference readable files */
+START_TEST(test_cmd_provider_token_endpoint_tls) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(cfg);
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *cert = apr_psprintf(r->pool, "%s/certificate.pem", dir);
+	const char *key = apr_psprintf(r->pool, "%s/private.pem", dir);
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCClientTokenEndpointCert);
+	ck_assert_ptr_null(oidc_cmd_provider_token_endpoint_tls_client_cert_set(cmd, NULL, cert));
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider), cert);
+	/* a non-existent file is rejected */
+	ck_assert_ptr_nonnull(oidc_cmd_provider_token_endpoint_tls_client_cert_set(cmd, NULL, "/nonexistent.crt"));
+
+	cmd = oidc_test_cmd_get(OIDCClientTokenEndpointKey);
+	ck_assert_ptr_null(oidc_cmd_provider_token_endpoint_tls_client_key_set(cmd, NULL, key));
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_tls_client_key_get(provider), key);
+
+	cmd = oidc_test_cmd_get(OIDCClientTokenEndpointKeyPassword);
+	ck_assert_ptr_null(oidc_cmd_provider_token_endpoint_tls_client_key_pwd_set(cmd, NULL, "keypass"));
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider), "keypass");
+}
+END_TEST
+
+/* OIDCOAuthIntrospectionEndpointCert/Key/KeyPassword: TLS client credentials
+ * for the AS introspection endpoint */
+START_TEST(test_cmd_oauth_introspection_endpoint_tls) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *cert = apr_psprintf(r->pool, "%s/certificate.pem", dir);
+	const char *key = apr_psprintf(r->pool, "%s/private.pem", dir);
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCOAuthIntrospectionEndpointCert);
+	ck_assert_ptr_null(oidc_cmd_oauth_introspection_endpoint_tls_client_cert_set(cmd, NULL, cert));
+	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_tls_client_cert_get(cfg), cert);
+
+	cmd = oidc_test_cmd_get(OIDCOAuthIntrospectionEndpointKey);
+	ck_assert_ptr_null(oidc_cmd_oauth_introspection_endpoint_tls_client_key_set(cmd, NULL, key));
+	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_tls_client_key_get(cfg), key);
+
+	cmd = oidc_test_cmd_get(OIDCOAuthIntrospectionEndpointKeyPassword);
+	ck_assert_ptr_null(oidc_cmd_oauth_introspection_endpoint_tls_client_key_pwd_set(cmd, NULL, "rspass"));
+	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_tls_client_key_pwd_get(cfg), "rspass");
+}
+END_TEST
+
+/* the macro-generated provider setters that are populated from client
+ * metadata / .conf files rather than via a registered directive */
+START_TEST(test_cmd_provider_metadata_only_setters) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(cfg);
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+
+	/* client_keys: parsed from public key files like OIDCPublicKeyFiles */
+	cmd_parms *cmd = oidc_test_cmd_get("OIDCProviderClientKeys");
+	ck_assert_ptr_null(
+	    oidc_cmd_provider_client_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-1#%s/public.pem", dir)));
+	const apr_array_header_t *keys = oidc_cfg_provider_client_keys_get(provider);
+	ck_assert_ptr_nonnull(keys);
+	ck_assert_int_gt(keys->nelts, 0);
+
+	/* set_keys: direct array assignment */
+	ck_assert_ptr_null(oidc_cfg_provider_client_keys_set_keys(r->pool, provider, (apr_array_header_t *)keys));
+	ck_assert_ptr_eq(oidc_cfg_provider_client_keys_get(provider), keys);
+
+	cmd = oidc_test_cmd_get("OIDCProviderResponseRequireIss");
+	ck_assert_ptr_null(oidc_cmd_provider_response_require_iss_set(cmd, NULL, "On"));
+	ck_assert_int_eq(oidc_cfg_provider_response_require_iss_get(provider), 1);
+
+	cmd = oidc_test_cmd_get("OIDCProviderRegistrationToken");
+	ck_assert_ptr_null(oidc_cmd_provider_registration_token_set(cmd, NULL, "reg-token-1"));
+	ck_assert_str_eq(oidc_cfg_provider_registration_token_get(provider), "reg-token-1");
+}
+END_TEST
+
 START_TEST(test_cmd_public_keys) {
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPublicKeyFiles);
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
@@ -1888,6 +2012,8 @@ int main(void) {
 	tcase_add_test(provider, test_cmd_provider_idtoken_iat_slack);
 	tcase_add_test(provider, test_cmd_provider_url_setters);
 	tcase_add_test(provider, test_cmd_provider_string_setters);
+	tcase_add_test(provider, test_cmd_provider_token_endpoint_tls);
+	tcase_add_test(provider, test_cmd_provider_metadata_only_setters);
 	tcase_add_test(provider, test_cmd_provider_signed_response_alg);
 	tcase_add_test(provider, test_cmd_provider_encrypted_response_alg_enc);
 	tcase_add_test(provider, test_cmd_provider_bool_setters);
@@ -1929,11 +2055,13 @@ int main(void) {
 	tcase_add_test(parse, test_cfg_parse_public_key_files);
 	tcase_add_test(parse, test_cfg_parse_remote_user_claim);
 	tcase_add_test(parse, test_cfg_parse_http_timeout);
+	tcase_add_test(parse, test_cfg_parse_key_record_encodings);
 
 	TCase *oauth = tcase_create("oauth");
 	tcase_add_checked_fixture(oauth, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(oauth, test_cmd_oauth_url_and_client);
 	tcase_add_test(oauth, test_cmd_oauth_introspection_settings);
+	tcase_add_test(oauth, test_cmd_oauth_introspection_endpoint_tls);
 	tcase_add_test(oauth, test_cmd_oauth_token_expiry_claim);
 	tcase_add_test(oauth, test_cmd_oauth_remote_user_claim);
 	tcase_add_test(oauth, test_cmd_oauth_verify_public_keys);
