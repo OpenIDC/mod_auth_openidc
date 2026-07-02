@@ -1113,6 +1113,39 @@ START_TEST(test_jose_legacy_jwt_sign_verify_rsa_and_hmac) {
 }
 END_TEST
 
+/* the JOSE backend version string is reported in the module's startup log line */
+START_TEST(test_jose_version) {
+	const char *version = oidc_jose_version();
+	ck_assert_ptr_nonnull(version);
+	ck_assert_int_gt((int)_oidc_strlen(version), 0);
+}
+END_TEST
+
+/* the json.c facade wrappers that exist for backend-API completeness but have
+ * no product call sites (yet): keep them working */
+START_TEST(test_jose_json_facade_scalars) {
+	oidc_json_t *j_true = oidc_json_boolean(1);
+	ck_assert_int_eq(oidc_json_is_boolean(j_true), 1);
+	ck_assert_int_eq(oidc_json_is_true(j_true), 1);
+	oidc_json_decref(j_true);
+
+	oidc_json_t *j_false = oidc_json_boolean(0);
+	ck_assert_int_eq(oidc_json_is_boolean(j_false), 1);
+	ck_assert_int_eq(oidc_json_is_true(j_false), 0);
+	oidc_json_decref(j_false);
+
+	oidc_json_t *j_int = oidc_json_integer(42);
+	ck_assert_int_eq(oidc_json_is_number(j_int), 1);
+	ck_assert(oidc_json_number_value(j_int) == 42.0);
+	oidc_json_decref(j_int);
+
+	oidc_json_t *j_real = json_real(1.5);
+	ck_assert_int_eq(oidc_json_is_number(j_real), 1);
+	ck_assert(oidc_json_number_value(j_real) == 1.5);
+	oidc_json_decref(j_real);
+}
+END_TEST
+
 int main(void) {
 	TCase *sup = tcase_create("supported");
 	tcase_add_checked_fixture(sup, oidc_test_setup, oidc_test_teardown);
@@ -1139,6 +1172,8 @@ int main(void) {
 	tcase_add_test(core, test_jwk_json_x5c_parse);
 	tcase_add_test(core, test_jwk_public_key_parse);
 	tcase_add_test(core, test_jwk_private_key_parse);
+	tcase_add_test(core, test_jose_version);
+	tcase_add_test(core, test_jose_json_facade_scalars);
 
 	TCase *legacy = tcase_create("legacy");
 	tcase_add_checked_fixture(legacy, oidc_test_setup, oidc_test_teardown);

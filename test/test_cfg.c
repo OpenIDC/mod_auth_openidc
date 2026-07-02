@@ -663,6 +663,7 @@ START_TEST(test_cmd_cache_shm_entry_size_max) {
 	/* in-range, multiple of 8 (the minimum is 8 KiB + a small overhead) */
 	ck_assert_ptr_null(oidc_cmd_cache_shm_entry_size_max_set(cmd, NULL, "16384"));
 	ck_assert_int_eq(cfg->cache.shm_entry_size_max, 16384);
+	ck_assert_int_eq(oidc_cfg_cache_shm_entry_size_max_get(cfg), 16384);
 
 	/* in-range but not a multiple of 8 */
 	ck_assert_ptr_nonnull(oidc_cmd_cache_shm_entry_size_max_set(cmd, NULL, "16383"));
