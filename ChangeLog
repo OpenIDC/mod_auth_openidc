@@ -1,4 +1,9 @@
 07/02/2026
+- proto: no longer send an empty "request_uri" (or "request") parameter on the
+  authorization request when creating the request object fails
+- proto: fix the misleading "will be dropped" warning about an access token
+  returned from the token endpoint in hybrid flows: it overrides the value
+  obtained from the authorization response
 - test: improve unit test coverage: signed_jwks_uri verification, request object
   (JAR) encryption, id_token aud values, OAuth RS metadata-URL/local-JWT/POST/
   sub-request paths, jq claims-expression authorization, key-record encodings and

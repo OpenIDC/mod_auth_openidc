@@ -1567,9 +1567,9 @@ START_TEST(test_proto_response_code_idtoken_happy) {
 }
 END_TEST
 
-/* "code token": the access token comes from the authorization response and
- * the id_token from the token endpoint; the access token the token endpoint
- * also returns is dropped with a warning */
+/* "code token": the access token from the authorization response and the
+ * id_token from the token endpoint; an access token the token endpoint also
+ * returns overrides the fragment one (with a warning) */
 START_TEST(test_proto_response_code_token_happy) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -1579,7 +1579,7 @@ START_TEST(test_proto_response_code_token_happy) {
 	oidc_proto_state_t *ps = e2e_make_hybrid_proto_state(r, c, "code token", "nonce-hybrid-ct", secret);
 
 	const char *body =
-	    apr_psprintf(r->pool, "{\"id_token\":\"%s\",\"access_token\":\"AT-DROPPED\",\"token_type\":\"Bearer\"}",
+	    apr_psprintf(r->pool, "{\"id_token\":\"%s\",\"access_token\":\"AT-BACKCHANNEL\",\"token_type\":\"Bearer\"}",
 			 e2e_sign_hybrid_idtoken(r, secret, "nonce-hybrid-ct", NULL, NULL));
 	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = body};
 	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
@@ -1596,11 +1596,9 @@ START_TEST(test_proto_response_code_token_happy) {
 	oidc_jwt_t *jwt = NULL;
 	ck_assert_int_eq(oidc_proto_response_code_token(r, c, ps, provider, params, "fragment", &jwt), TRUE);
 	ck_assert_ptr_nonnull(jwt);
-	/* NB: despite the "will be dropped" warning logged by the code-response
-	 * validation, the access token from the token endpoint actually
-	 * overrides the fragment one (see the override in
-	 * oidc_proto_resolve_code_and_validate_response) */
-	ck_assert_str_eq(apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN), "AT-DROPPED");
+	/* the access token from the token endpoint overrides the fragment one
+	 * (see oidc_proto_resolve_code_and_validate_response) */
+	ck_assert_str_eq(apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN), "AT-BACKCHANNEL");
 
 	(void)oidc_test_http_server_wait(srv);
 	oidc_test_http_server_stop(srv);
@@ -2320,7 +2318,7 @@ START_TEST(test_proto_request_auth_with_request_object_encrypted_rsa) {
 END_TEST
 
 /* an unsupported crypt_alg maps to no key type: request object creation fails
- * and the request_uri parameter on the authorization request stays empty */
+ * and the authorization request is sent without a request_uri parameter */
 START_TEST(test_proto_request_auth_with_request_object_encrypt_bad_alg) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -2335,11 +2333,8 @@ START_TEST(test_proto_request_auth_with_request_object_encrypt_bad_alg) {
 	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
 	const char *loc = apr_table_get(r->headers_out, "Location");
 	ck_assert_ptr_nonnull(loc);
-	const char *p = _oidc_strstr(loc, "request_uri=");
-	ck_assert_ptr_nonnull((void *)p);
-	p += _oidc_strlen("request_uri=");
-	ck_assert_msg((*p == '\0') || (*p == '&'),
-		      "request_uri= must stay empty when request object encryption fails: %s", loc);
+	ck_assert_msg(_oidc_strstr(loc, "request_uri=") == NULL,
+		      "request_uri= must NOT appear when request object encryption fails: %s", loc);
 }
 END_TEST
 
