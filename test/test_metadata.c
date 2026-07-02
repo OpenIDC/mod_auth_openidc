@@ -604,6 +604,73 @@ START_TEST(test_metadata_disk_get_full) {
 }
 END_TEST
 
+/* with OIDCDefaultLoggedOutURL set, the dynamic-registration request carries
+ * a post_logout_redirect_uris array with the absolute logged-out URL */
+START_TEST(test_metadata_disk_dyn_registration_post_logout_redirect_uris) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCDefaultLoggedOutURL);
+	ck_assert_ptr_null(oidc_cmd_default_slo_url_set(cmd, NULL, "/logged-out.html"));
+
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/json",
+					  .body = "{\"client_id\":\"dyn-rp\",\"client_secret\":\"dyn-secret\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	const char *provider_json = apr_psprintf(r->pool,
+						 "{\"issuer\":\"https://idp.example.com\","
+						 "\"authorization_endpoint\":\"https://idp.example.com/authorize\","
+						 "\"token_endpoint\":\"https://idp.example.com/token\","
+						 "\"jwks_uri\":\"https://idp.example.com/jwks\","
+						 "\"registration_endpoint\":\"%s\","
+						 "\"response_types_supported\":[\"code\"],"
+						 "\"token_endpoint_auth_methods_supported\":[\"client_secret_"
+						 "basic\"]}",
+						 oidc_test_http_server_url(srv, r->pool));
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), provider_json);
+
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_metadata_get(r, c, "https://idp.example.com", &provider, TRUE), TRUE);
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_str_eq(cap->method, "POST");
+	ck_assert_msg(_oidc_strstr(cap->body, "\"post_logout_redirect_uris\"") != NULL,
+		      "missing post_logout_redirect_uris in: %s", cap->body);
+	ck_assert_msg(_oidc_strstr(cap->body, "https://www.example.com/logged-out.html") != NULL,
+		      "missing absolute logged-out URL in: %s", cap->body);
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* NB: pins CURRENT behavior — the "response_types" fallback logic in
+ * oidc_metadata_client_parse_response_type is unreachable because
+ * oidc_cfg_provider_response_type_get never returns NULL (it substitutes the
+ * "code" default), so its early-return always fires and the response_type
+ * stays at the configured/global default even when the client metadata does
+ * not advertise it. If that check is ever fixed to inspect the raw member,
+ * this test should start asserting the "id_token" fallback instead. */
+START_TEST(test_metadata_client_parse_response_type_not_advertised) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+
+	oidc_json_t *j = NULL;
+	/* the global default response_type ("code") is not in the client's list */
+	ck_assert_int_eq(oidc_json_decode_object(r,
+						 "{\"client_id\":\"rp-test\",\"client_secret\":\"sekret\","
+						 "\"response_types\":[\"id_token\",\"id_token token\"]}",
+						 &j),
+			 TRUE);
+	ck_assert_int_eq(oidc_metadata_client_parse(r, c, j, provider), TRUE);
+	ck_assert_str_eq(oidc_cfg_provider_response_type_get(provider), "code");
+	oidc_json_decref(j);
+}
+END_TEST
+
 /* a client secret with an expires_at in the past invalidates the client
  * metadata; without a registration endpoint re-registration then fails */
 START_TEST(test_metadata_disk_client_secret_expired) {
@@ -1079,6 +1146,8 @@ int main(void) {
 	tcase_add_test(disk, test_metadata_disk_get_provider_only);
 	tcase_add_test(disk, test_metadata_disk_list_skips_provider_without_client);
 	tcase_add_test(disk, test_metadata_disk_get_full);
+	tcase_add_test(disk, test_metadata_disk_dyn_registration_post_logout_redirect_uris);
+	tcase_add_test(disk, test_metadata_client_parse_response_type_not_advertised);
 	tcase_add_test(disk, test_metadata_disk_client_secret_expired);
 	tcase_add_test(disk, test_metadata_disk_client_secret_never_expires);
 	tcase_add_test(disk, test_metadata_disk_provider_get_live_discovery);

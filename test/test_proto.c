@@ -1462,6 +1462,276 @@ START_TEST(test_proto_response_code_missing_access_token) {
 }
 END_TEST
 
+/*
+ * Hybrid/implicit fragment-flow handlers. The id_token must carry a valid
+ * nonce plus, depending on the flow, valid c_hash (over the code) and at_hash
+ * (over the access token) claims.
+ */
+
+/* the left-most half of the SHA-256 hash of a value, base64url-encoded, as
+ * used by the c_hash/at_hash id_token claims for an HS256-signed id_token */
+static const char *e2e_half_hash_b64url(request_rec *r, const char *value) {
+	oidc_jose_error_t err;
+	char *calc = NULL;
+	unsigned int calc_len = 0;
+	char *out = NULL;
+	ck_assert_int_eq(oidc_jose_hash_string(r->pool, "HS256", value, &calc, &calc_len, &err), TRUE);
+	ck_assert_int_gt(oidc_util_base64url_encode(r, &out, calc, oidc_jose_hash_length("HS256") / 2, TRUE), 0);
+	return out;
+}
+
+/* build an HS256-signed id_token for the hybrid flows: standard claims plus
+ * nonce and optional c_hash/at_hash values */
+static char *e2e_sign_hybrid_idtoken(request_rec *r, const char *secret, const char *nonce, const char *code,
+				     const char *access_token) {
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	ck_assert_int_eq(oidc_util_key_symmetric_create(r, secret, 0, NULL, TRUE, &jwk), TRUE);
+
+	oidc_jwt_t *jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(r->pool, "HS256");
+	apr_time_t now = apr_time_sec(apr_time_now());
+	oidc_json_object_set_new(jwt->payload.value.json, "iss", oidc_json_string("https://idp.example.com"));
+	oidc_json_object_set_new(jwt->payload.value.json, "aud", oidc_json_string("client_id"));
+	oidc_json_object_set_new(jwt->payload.value.json, "sub", oidc_json_string("alice"));
+	oidc_json_object_set_new(jwt->payload.value.json, "nonce", oidc_json_string(nonce));
+	oidc_json_object_set_new(jwt->payload.value.json, "iat", oidc_json_integer(now));
+	oidc_json_object_set_new(jwt->payload.value.json, "exp", oidc_json_integer(now + 600));
+	if (code != NULL)
+		oidc_json_object_set_new(jwt->payload.value.json, "c_hash",
+					 oidc_json_string(e2e_half_hash_b64url(r, code)));
+	if (access_token != NULL)
+		oidc_json_object_set_new(jwt->payload.value.json, "at_hash",
+					 oidc_json_string(e2e_half_hash_b64url(r, access_token)));
+	jwt->payload.iss = apr_pstrdup(r->pool, "https://idp.example.com");
+	jwt->payload.sub = apr_pstrdup(r->pool, "alice");
+	jwt->payload.iat = now;
+	jwt->payload.exp = now + 600;
+
+	ck_assert_int_eq(oidc_jwt_sign(r->pool, jwt, jwk, FALSE, &err), TRUE);
+	char *cser = oidc_jose_jwt_serialize(r->pool, jwt, &err);
+	ck_assert_ptr_nonnull(cser);
+	oidc_jwk_destroy(jwk);
+	oidc_jwt_destroy(jwt);
+	return cser;
+}
+
+/* common setup for the hybrid tests: client secret, PKCE off, unique nonce */
+static oidc_proto_state_t *e2e_make_hybrid_proto_state(request_rec *r, oidc_cfg_t *c, const char *response_type,
+						       const char *nonce, const char *secret) {
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+	ck_assert_ptr_null(oidc_cfg_provider_pkce_set(r->pool, provider, "none"));
+	oidc_proto_state_t *ps = e2e_make_proto_state(r);
+	oidc_proto_state_set_response_type(ps, response_type);
+	oidc_proto_state_set_nonce(ps, nonce);
+	return ps;
+}
+
+/* "code id_token": the id_token comes from the authorization response (with a
+ * valid c_hash) and the access token from the token endpoint */
+START_TEST(test_proto_response_code_idtoken_happy) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *secret = "hybrid-flow-shared-secret-code-idtoken";
+
+	oidc_proto_state_t *ps = e2e_make_hybrid_proto_state(r, c, "code id_token", "nonce-hybrid-ci", secret);
+
+	/* the token endpoint returns the access token; the id_token it also
+	 * returns is dropped with a warning since the flow carries its own */
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/json",
+					  .body = "{\"access_token\":\"AT-HYBRID-1\",\"token_type\":\"Bearer\","
+						  "\"id_token\":\"dropped\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	apr_table_t *params = apr_table_make(r->pool, 4);
+	apr_table_setn(params, OIDC_PROTO_CODE, "the-hybrid-code");
+	apr_table_setn(params, OIDC_PROTO_ID_TOKEN,
+		       e2e_sign_hybrid_idtoken(r, secret, "nonce-hybrid-ci", "the-hybrid-code", NULL));
+	apr_table_setn(params, OIDC_PROTO_STATE, "s-1");
+
+	oidc_jwt_t *jwt = NULL;
+	ck_assert_int_eq(oidc_proto_response_code_idtoken(r, c, ps, provider, params, "fragment", &jwt), TRUE);
+	ck_assert_ptr_nonnull(jwt);
+	ck_assert_str_eq(apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN), "AT-HYBRID-1");
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_jwt_destroy(jwt);
+	oidc_proto_state_destroy(ps);
+}
+END_TEST
+
+/* "code token": the access token comes from the authorization response and
+ * the id_token from the token endpoint; the access token the token endpoint
+ * also returns is dropped with a warning */
+START_TEST(test_proto_response_code_token_happy) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *secret = "hybrid-flow-shared-secret-code-token1";
+
+	oidc_proto_state_t *ps = e2e_make_hybrid_proto_state(r, c, "code token", "nonce-hybrid-ct", secret);
+
+	const char *body =
+	    apr_psprintf(r->pool, "{\"id_token\":\"%s\",\"access_token\":\"AT-DROPPED\",\"token_type\":\"Bearer\"}",
+			 e2e_sign_hybrid_idtoken(r, secret, "nonce-hybrid-ct", NULL, NULL));
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = body};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	apr_table_t *params = apr_table_make(r->pool, 4);
+	apr_table_setn(params, OIDC_PROTO_CODE, "the-ct-code");
+	apr_table_setn(params, OIDC_PROTO_ACCESS_TOKEN, "AT-FRAGMENT");
+	apr_table_setn(params, OIDC_PROTO_TOKEN_TYPE, "Bearer");
+	apr_table_setn(params, OIDC_PROTO_STATE, "s-1");
+
+	oidc_jwt_t *jwt = NULL;
+	ck_assert_int_eq(oidc_proto_response_code_token(r, c, ps, provider, params, "fragment", &jwt), TRUE);
+	ck_assert_ptr_nonnull(jwt);
+	/* NB: despite the "will be dropped" warning logged by the code-response
+	 * validation, the access token from the token endpoint actually
+	 * overrides the fragment one (see the override in
+	 * oidc_proto_resolve_code_and_validate_response) */
+	ck_assert_str_eq(apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN), "AT-DROPPED");
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_jwt_destroy(jwt);
+	oidc_proto_state_destroy(ps);
+}
+END_TEST
+
+/* "code token" where the token endpoint fails to return the (required)
+ * id_token: the code response validation rejects it */
+START_TEST(test_proto_response_code_token_missing_id_token) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *secret = "hybrid-flow-shared-secret-code-token2";
+
+	oidc_proto_state_t *ps = e2e_make_hybrid_proto_state(r, c, "code token", "nonce-hybrid-ct2", secret);
+
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = "{\"scope\":\"openid\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	apr_table_t *params = apr_table_make(r->pool, 4);
+	apr_table_setn(params, OIDC_PROTO_CODE, "the-ct2-code");
+	apr_table_setn(params, OIDC_PROTO_ACCESS_TOKEN, "AT-FRAGMENT2");
+	apr_table_setn(params, OIDC_PROTO_TOKEN_TYPE, "Bearer");
+	apr_table_setn(params, OIDC_PROTO_STATE, "s-1");
+
+	oidc_jwt_t *jwt = NULL;
+	ck_assert_int_eq(oidc_proto_response_code_token(r, c, ps, provider, params, "fragment", &jwt), FALSE);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_proto_state_destroy(ps);
+}
+END_TEST
+
+/* "code id_token token": id_token and access token from the authorization
+ * response (validated via c_hash and at_hash), code resolved at the token
+ * endpoint */
+START_TEST(test_proto_response_code_idtoken_token_happy) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *secret = "hybrid-flow-shared-secret-code-it-tok";
+
+	oidc_proto_state_t *ps = e2e_make_hybrid_proto_state(r, c, "code id_token token", "nonce-hybrid-cit", secret);
+
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = "{}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	apr_table_t *params = apr_table_make(r->pool, 4);
+	apr_table_setn(params, OIDC_PROTO_CODE, "the-cit-code");
+	apr_table_setn(params, OIDC_PROTO_ACCESS_TOKEN, "AT-CIT");
+	apr_table_setn(params, OIDC_PROTO_TOKEN_TYPE, "Bearer");
+	apr_table_setn(params, OIDC_PROTO_ID_TOKEN,
+		       e2e_sign_hybrid_idtoken(r, secret, "nonce-hybrid-cit", "the-cit-code", "AT-CIT"));
+	apr_table_setn(params, OIDC_PROTO_STATE, "s-1");
+
+	oidc_jwt_t *jwt = NULL;
+	ck_assert_int_eq(oidc_proto_response_code_idtoken_token(r, c, ps, provider, params, "fragment", &jwt), TRUE);
+	ck_assert_ptr_nonnull(jwt);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_jwt_destroy(jwt);
+	oidc_proto_state_destroy(ps);
+}
+END_TEST
+
+/* "id_token token": pure implicit flow, no code and no token endpoint call;
+ * the access token is validated against the at_hash claim */
+START_TEST(test_proto_response_idtoken_token_happy) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *secret = "hybrid-flow-shared-secret-idtok-token";
+
+	oidc_proto_state_t *ps = e2e_make_hybrid_proto_state(r, c, "id_token token", "nonce-hybrid-it", secret);
+
+	apr_table_t *params = apr_table_make(r->pool, 4);
+	apr_table_setn(params, OIDC_PROTO_ACCESS_TOKEN, "AT-IMPLICIT");
+	apr_table_setn(params, OIDC_PROTO_TOKEN_TYPE, "Bearer");
+	apr_table_setn(params, OIDC_PROTO_ID_TOKEN,
+		       e2e_sign_hybrid_idtoken(r, secret, "nonce-hybrid-it", NULL, "AT-IMPLICIT"));
+	apr_table_setn(params, OIDC_PROTO_STATE, "s-1");
+
+	oidc_jwt_t *jwt = NULL;
+	ck_assert_int_eq(oidc_proto_response_idtoken_token(r, c, ps, provider, params, "fragment", &jwt), TRUE);
+	ck_assert_ptr_nonnull(jwt);
+
+	oidc_jwt_destroy(jwt);
+	oidc_proto_state_destroy(ps);
+}
+END_TEST
+
+/* response-type mismatches between what was requested and what came back:
+ * a missing access_token for a token-carrying flow and an unexpected
+ * access_token for a plain code flow are both rejected up front */
+START_TEST(test_proto_response_type_mismatch) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *secret = "hybrid-flow-shared-secret-mismatch01";
+	oidc_jwt_t *jwt = NULL;
+
+	/* "code token" requested but no access_token in the response */
+	oidc_proto_state_t *ps = e2e_make_hybrid_proto_state(r, c, "code token", "nonce-hybrid-mm1", secret);
+	apr_table_t *params = apr_table_make(r->pool, 4);
+	apr_table_setn(params, OIDC_PROTO_CODE, "the-mm-code");
+	apr_table_setn(params, OIDC_PROTO_STATE, "s-1");
+	ck_assert_int_eq(oidc_proto_response_code_token(r, c, ps, provider, params, "fragment", &jwt), FALSE);
+	oidc_proto_state_destroy(ps);
+
+	/* "code" requested but the response carries an access_token */
+	ps = e2e_make_hybrid_proto_state(r, c, "code", "nonce-hybrid-mm2", secret);
+	params = apr_table_make(r->pool, 4);
+	apr_table_setn(params, OIDC_PROTO_CODE, "the-mm2-code");
+	apr_table_setn(params, OIDC_PROTO_ACCESS_TOKEN, "AT-UNEXPECTED");
+	apr_table_setn(params, OIDC_PROTO_STATE, "s-1");
+	ck_assert_int_eq(oidc_proto_response_code(r, c, ps, provider, params, "query", &jwt), FALSE);
+	oidc_proto_state_destroy(ps);
+}
+END_TEST
+
 /* aggregated (embedded JWT) and distributed (access_token + endpoint) composite
  * claims are resolved into the userinfo claims and the bookkeeping members
  * (_claim_names/_claim_sources) are removed */
@@ -2676,6 +2946,12 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_token_endpoint_request_unsupported_token_type);
 	tcase_add_test(e2e, test_proto_token_endpoint_request_dpop_required_but_bearer);
 	tcase_add_test(e2e, test_proto_response_code_missing_access_token);
+	tcase_add_test(e2e, test_proto_response_code_idtoken_happy);
+	tcase_add_test(e2e, test_proto_response_code_token_happy);
+	tcase_add_test(e2e, test_proto_response_code_token_missing_id_token);
+	tcase_add_test(e2e, test_proto_response_code_idtoken_token_happy);
+	tcase_add_test(e2e, test_proto_response_idtoken_token_happy);
+	tcase_add_test(e2e, test_proto_response_type_mismatch);
 	tcase_add_test(e2e, test_proto_userinfo_request_composite_claims);
 	tcase_add_test(e2e, test_proto_userinfo_request_dpop);
 	tcase_add_test(e2e, test_proto_userinfo_request_success);
