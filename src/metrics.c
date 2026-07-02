@@ -488,7 +488,7 @@ static inline void oidc_metrics_storage_reset(server_rec *s) {
 /*
  * create a new timings entry in the collected JSON data
  */
-static oidc_json_t *oidc_metrics_timings_new(server_rec *s, const oidc_metrics_timing_t *timing) {
+static oidc_json_t *oidc_metrics_timings_new(const oidc_metrics_timing_t *timing) {
 	oidc_json_t *entry = oidc_json_object();
 	for (int i = 0; i < OIDC_METRICS_BUCKET_NUM; i++)
 		oidc_json_object_set_new(entry, _oidc_metric_buckets[i].name, oidc_json_integer(timing->buckets[i]));
@@ -692,7 +692,7 @@ static void oidc_metrics_store_timings(server_rec *s, oidc_json_t *json) {
 			if (j_timer != NULL)
 				oidc_metrics_timings_update(s, j_timer, timing);
 			else
-				oidc_json_object_set_new(j_timings, key, oidc_metrics_timings_new(s, timing));
+				oidc_json_object_set_new(j_timings, key, oidc_metrics_timings_new(timing));
 		}
 	}
 }

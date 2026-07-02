@@ -411,7 +411,7 @@ static apr_status_t oidc_request_state_json_cleanup(void *json) {
  * set a name/json object pair in the mod_auth_openidc-specific request context
  * (used for passing state between various Apache request processing stages and hook callbacks)
  */
-void oidc_request_state_json_set(request_rec *r, const char *key, oidc_json_t *value) {
+void oidc_request_state_json_set(request_rec *r, const char *key, const oidc_json_t *value) {
 
 	/* get a handle to the global state, which is a hash table */
 	apr_hash_t *state = oidc_request_state(r);
@@ -1920,7 +1920,8 @@ static apr_status_t oidc_filter_in_filter(ap_filter_t *f, apr_bucket_brigade *br
 	apr_status_t rc = APR_SUCCESS;
 
 	if (!(ctx = f->ctx)) {
-		f->ctx = ctx = apr_palloc(f->r->pool, sizeof *ctx);
+		ctx = apr_palloc(f->r->pool, sizeof *ctx);
+		f->ctx = ctx;
 		ctx->pbbTmp = apr_brigade_create(f->r->pool, f->r->connection->bucket_alloc);
 		ctx->nbytes = 0;
 	}

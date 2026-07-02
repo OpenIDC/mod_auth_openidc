@@ -477,7 +477,7 @@ static apr_byte_t oidc_response_flows(request_rec *r, oidc_cfg_t *c, const oidc_
  * set the unique user identifier that will be propagated in the Apache r->user and REMOTE_USER variables
  */
 static apr_byte_t oidc_response_set_request_user(request_rec *r, const oidc_cfg_t *c, const oidc_provider_t *provider,
-						 oidc_jwt_t *jwt, oidc_json_t *userinfo_claims) {
+						 oidc_jwt_t *jwt, const oidc_json_t *userinfo_claims) {
 
 	const char *issuer = oidc_cfg_provider_issuer_get(provider);
 	char *claim_name = apr_pstrdup(r->pool, oidc_cfg_remote_user_claim_name_get(c));

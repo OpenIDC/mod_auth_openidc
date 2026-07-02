@@ -94,7 +94,8 @@ awk '
 # invalid ERE) while mawk keeps it. index() is a plain substring search, so the
 # '(' is literal and no escaping is needed.
 extract_assigns() {
-	awk -v sig="$1" 'index($0, sig){f=1} f&&/return c;/{f=0} f' "$src" |
+	sig=$1
+	awk -v sig="$sig" 'index($0, sig){f=1} f&&/return c;/{f=0} f' "$src" |
 		grep -aoE 'c->[A-Za-z_][A-Za-z0-9_]*' | sed 's/c->//' | sort -u
 }
 extract_assigns 'oidc_cfg_dir_config_create(apr_pool_t' >"$tmp_create"
@@ -108,13 +109,15 @@ fi
 
 status=0
 report() {
-	# $1 = label, $2 = file of members missing from that site
+	# label = which oidc_cfg_dir_config_*() site, file = members missing from that site
+	label=$1
+	file=$2
 	while IFS= read -r m; do
 		[ -n "$m" ] || continue
 		status=1
-		echo "ERROR: oidc_dir_cfg_t.$m is not handled in oidc_cfg_dir_config_$1()" \
+		echo "ERROR: oidc_dir_cfg_t.$m is not handled in oidc_cfg_dir_config_$label()" \
 			"-- a merged config will get the zero default, not the configured/inherited value" >&2
-	done <"$2"
+	done <"$file"
 }
 
 comm -23 "$tmp_members" "$tmp_create" >"$tmp_create.miss" || true

@@ -145,7 +145,7 @@ apr_byte_t oidc_enabled(request_rec *r, oidc_cfg_t *c);
 void oidc_request_state_set(request_rec *r, const char *key, const char *value);
 const char *oidc_request_state_get(request_rec *r, const char *key);
 oidc_json_t *oidc_request_state_json_get(request_rec *r, const char *key);
-void oidc_request_state_json_set(request_rec *r, const char *key, oidc_json_t *value);
+void oidc_request_state_json_set(request_rec *r, const char *key, const oidc_json_t *value);
 
 void oidc_scrub_headers(request_rec *r);
 void oidc_strip_cookies(request_rec *r);
