@@ -108,14 +108,14 @@ static apr_byte_t oidc_proto_validate_code_response(request_rec *r, const char *
 		if (access_token != NULL) {
 			oidc_warn(r,
 				  "requested flow is \"%s\" but there is an \"%s\" parameter in the code response that "
-				  "will be dropped",
+				  "will override the value obtained from the authorization response",
 				  response_type, OIDC_PROTO_ACCESS_TOKEN);
 		}
 
 		if (token_type != NULL) {
 			oidc_warn(r,
 				  "requested flow is \"%s\" but there is a \"%s\" parameter in the code response that "
-				  "will be dropped",
+				  "will override the value obtained from the authorization response",
 				  response_type, OIDC_PROTO_TOKEN_TYPE);
 		}
 	}
