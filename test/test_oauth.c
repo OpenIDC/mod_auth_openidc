@@ -335,6 +335,181 @@ START_TEST(test_oauth_check_userid_redirect_uri_remove_at_cache) {
 }
 END_TEST
 
+/* prepare a POST body the way oidc_util_read_post_params expects it */
+static void e2e_post_body(request_rec *r, const char *body) {
+	r->method_number = M_POST;
+	apr_table_set(r->headers_in, "Content-Type", "application/x-www-form-urlencoded");
+	r->args = apr_pstrdup(r->pool, body);
+	r->remaining = (apr_size_t)_oidc_strlen(body);
+}
+
+START_TEST(test_oauth_bearer_from_post) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+
+	cmd_parms *cmd = oidc_test_cmd_get("OIDCOAuthAcceptTokenAs");
+	ck_assert_ptr_null(oidc_cmd_dir_accept_oauth_token_in_set(cmd, dir_cfg, "post"));
+	apr_table_unset(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION);
+	e2e_post_body(r, "access_token=AT-FROM-POST&other=val");
+
+	const char *token = NULL;
+	ck_assert_int_eq(oidc_oauth_get_bearer_token(r, &token), TRUE);
+	ck_assert_ptr_nonnull(token);
+	ck_assert_str_eq(token, "AT-FROM-POST");
+}
+END_TEST
+
+/* build an HS256-signed JWT access token with the raw shared secret as key */
+static char *e2e_sign_jwt_access_token_hs256(request_rec *r, const char *secret, int exp_offset_secs) {
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	ck_assert_int_eq(oidc_util_key_symmetric_create(r, secret, 0, NULL, FALSE, &jwk), TRUE);
+	oidc_jwt_t *jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(r->pool, "HS256");
+	apr_time_t now = apr_time_sec(apr_time_now());
+	oidc_json_object_set_new(jwt->payload.value.json, "sub", oidc_json_string("alice"));
+	oidc_json_object_set_new(jwt->payload.value.json, "iat", oidc_json_integer(now));
+	oidc_json_object_set_new(jwt->payload.value.json, "exp", oidc_json_integer(now + exp_offset_secs));
+	jwt->payload.sub = apr_pstrdup(r->pool, "alice");
+	jwt->payload.iat = now;
+	jwt->payload.exp = now + exp_offset_secs;
+	ck_assert_int_eq(oidc_jwt_sign(r->pool, jwt, jwk, FALSE, &err), TRUE);
+	char *cser = oidc_jose_jwt_serialize(r->pool, jwt, &err);
+	ck_assert_ptr_nonnull(cser);
+	oidc_jwk_destroy(jwk);
+	oidc_jwt_destroy(jwt);
+	return cser;
+}
+
+/* configure the shared verification secret and the client_secret the JWT
+ * validation path derives its decryption key candidate from */
+static const char *e2e_setup_jwt_validation(request_rec *r, oidc_cfg_t *c) {
+	const char *secret = "0123456789abcdef0123456789abcdef";
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCOAuthVerifySharedKeys);
+	ck_assert_ptr_null(oidc_cmd_oauth_verify_shared_keys_set(cmd, NULL, secret));
+	oidc_cfg_provider_client_secret_set(r->pool, oidc_cfg_provider_get(c), secret);
+	apr_table_unset(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION);
+	return secret;
+}
+
+/* local JWT access-token validation succeeds against OIDCOAuthVerifySharedKeys
+ * and sets REMOTE_USER from the default "sub" claim */
+START_TEST(test_oauth_check_userid_jwt_valid_hs256) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *secret = e2e_setup_jwt_validation(r, c);
+	char *access_token = e2e_sign_jwt_access_token_hs256(r, secret, 300);
+
+	int rc = oidc_oauth_check_userid(r, c, access_token);
+	ck_assert_int_eq(rc, OK);
+	ck_assert_ptr_nonnull(r->user);
+	ck_assert_str_eq(r->user, "alice");
+}
+END_TEST
+
+/* an expired JWT access token must be rejected by the local validation path */
+START_TEST(test_oauth_check_userid_jwt_expired) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *secret = e2e_setup_jwt_validation(r, c);
+	char *access_token = e2e_sign_jwt_access_token_hs256(r, secret, -3600);
+
+	int rc = oidc_oauth_check_userid(r, c, access_token);
+	ck_assert_int_eq(rc, HTTP_UNAUTHORIZED);
+}
+END_TEST
+
+/* a JWT access token signed with a different key must fail signature validation */
+START_TEST(test_oauth_check_userid_jwt_bad_signature) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	(void)e2e_setup_jwt_validation(r, c);
+	char *access_token = e2e_sign_jwt_access_token_hs256(r, "fedcba9876543210fedcba9876543210", 300);
+
+	int rc = oidc_oauth_check_userid(r, c, access_token);
+	ck_assert_int_eq(rc, HTTP_UNAUTHORIZED);
+}
+END_TEST
+
+/* OIDCOAuthServerMetadataURL: the AS configuration is retrieved from the
+ * metadata document (first call, populating the cache) and re-read from the
+ * cache on the next request */
+START_TEST(test_oauth_check_userid_metadata_url) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	apr_table_unset(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION);
+
+	/* introspection endpoint server: serve two identical "active" responses */
+	oidc_test_http_response_t intro_resp[2] = {
+	    {.status_code = 200,
+	     .content_type = "application/json",
+	     .body = "{\"active\":true,\"sub\":\"alice\",\"scope\":\"openid\",\"client_id\":\"rp-1\"}"},
+	    {.status_code = 200,
+	     .content_type = "application/json",
+	     .body = "{\"active\":true,\"sub\":\"alice\",\"scope\":\"openid\",\"client_id\":\"rp-1\"}"}};
+	oidc_test_http_server_t *intro_srv = oidc_test_http_server_start_seq(r->pool, intro_resp, 2);
+	ck_assert_ptr_nonnull(intro_srv);
+
+	/* metadata server: points the introspection_endpoint at the server above */
+	const char *metadata_body =
+	    apr_psprintf(r->pool, "{\"issuer\":\"https://idp.example.com\",\"introspection_endpoint\":\"%s\"}",
+			 oidc_test_http_server_url(intro_srv, r->pool));
+	oidc_test_http_response_t md_resp = {
+	    .status_code = 200, .content_type = "application/json", .body = metadata_body};
+	oidc_test_http_server_t *md_srv = oidc_test_http_server_start(r->pool, &md_resp);
+	ck_assert_ptr_nonnull(md_srv);
+
+	cmd_parms *cmd_md = oidc_test_cmd_get(OIDCOAuthServerMetadataURL);
+	ck_assert_ptr_null(oidc_cmd_oauth_metadata_url_set(cmd_md, NULL, oidc_test_http_server_url(md_srv, r->pool)));
+	cmd_parms *cmd_ssl = oidc_test_cmd_get(OIDCOAuthSSLValidateServer);
+	ck_assert_ptr_null(oidc_cmd_oauth_ssl_validate_server_set(cmd_ssl, NULL, "Off"));
+
+	/* first call: retrieves the metadata over HTTP, caches it and introspects */
+	int rc = oidc_oauth_check_userid(r, c, "AT-MD-1");
+	ck_assert_int_eq(rc, OK);
+	ck_assert_str_eq(r->user, "alice");
+
+	/* the metadata document must have been fetched exactly once */
+	(void)oidc_test_http_server_wait(md_srv);
+	oidc_test_http_server_stop(md_srv);
+
+	/* second call: the metadata comes from the cache (the metadata server is
+	 * down now), a fresh token forces a second introspection round-trip */
+	r->user = NULL;
+	rc = oidc_oauth_check_userid(r, c, "AT-MD-2");
+	ck_assert_int_eq(rc, OK);
+	ck_assert_str_eq(r->user, "alice");
+
+	oidc_test_http_server_stop(intro_srv);
+}
+END_TEST
+
+/* sub-requests and internal redirects recycle the user from the initial request */
+START_TEST(test_oauth_check_userid_subrequest) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	r->user = apr_pstrdup(r->pool, "alice");
+
+	request_rec *sub = apr_pmemdup(r->pool, r, sizeof(request_rec));
+	sub->main = r;
+	sub->user = NULL;
+	ck_assert_int_eq(oidc_oauth_check_userid(sub, c, NULL), OK);
+	ck_assert_ptr_nonnull(sub->user);
+	ck_assert_str_eq(sub->user, "alice");
+
+	request_rec *redir = apr_pmemdup(r->pool, r, sizeof(request_rec));
+	redir->prev = r;
+	redir->main = NULL;
+	redir->user = NULL;
+	ck_assert_int_eq(oidc_oauth_check_userid(redir, c, NULL), OK);
+	ck_assert_ptr_nonnull(redir->user);
+	ck_assert_str_eq(redir->user, "alice");
+}
+END_TEST
+
 START_TEST(test_oauth_metadata_provider_retrieve_success) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -413,6 +588,7 @@ int main(void) {
 	tcase_add_test(bearer, test_oauth_bearer_from_cookie);
 	tcase_add_test(bearer, test_oauth_bearer_from_basic_header);
 	tcase_add_test(bearer, test_oauth_bearer_from_basic_header_no_colon);
+	tcase_add_test(bearer, test_oauth_bearer_from_post);
 
 	TCase *introspect = tcase_create("introspect");
 	tcase_add_checked_fixture(introspect, oidc_test_setup, oidc_test_teardown);
@@ -425,16 +601,21 @@ int main(void) {
 	tcase_add_test(introspect, test_oauth_check_userid_introspection_cached);
 	tcase_add_test(introspect, test_oauth_check_userid_redirect_uri_jwks);
 	tcase_add_test(introspect, test_oauth_check_userid_redirect_uri_remove_at_cache);
+	tcase_add_test(introspect, test_oauth_check_userid_subrequest);
 
 	TCase *jwt = tcase_create("jwt");
 	tcase_add_checked_fixture(jwt, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_no_keys_configured);
+	tcase_add_test(jwt, test_oauth_check_userid_jwt_valid_hs256);
+	tcase_add_test(jwt, test_oauth_check_userid_jwt_expired);
+	tcase_add_test(jwt, test_oauth_check_userid_jwt_bad_signature);
 
 	TCase *metadata = tcase_create("metadata");
 	tcase_add_checked_fixture(metadata, oidc_test_setup, oidc_test_teardown);
 	tcase_set_timeout(metadata, 30);
 	tcase_add_test(metadata, test_oauth_metadata_provider_retrieve_success);
 	tcase_add_test(metadata, test_oauth_metadata_provider_retrieve_invalid_json);
+	tcase_add_test(metadata, test_oauth_check_userid_metadata_url);
 
 	Suite *s = suite_create("oauth");
 	suite_add_tcase(s, bearer);
