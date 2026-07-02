@@ -604,6 +604,85 @@ START_TEST(test_metadata_disk_get_full) {
 }
 END_TEST
 
+/* a client secret with an expires_at in the past invalidates the client
+ * metadata; without a registration endpoint re-registration then fails */
+START_TEST(test_metadata_disk_client_secret_expired) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), VALID_METADATA_JSON);
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.client", dir),
+		       "{\"client_id\":\"rp-test\",\"client_secret\":\"sekret\","
+		       "\"client_secret_expires_at\":100}");
+
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_metadata_get(r, c, "https://idp.example.com", &provider, FALSE), FALSE);
+}
+END_TEST
+
+/* client_secret_expires_at=0 means the secret never expires */
+START_TEST(test_metadata_disk_client_secret_never_expires) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), VALID_METADATA_JSON);
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.client", dir),
+		       "{\"client_id\":\"rp-test\",\"client_secret\":\"sekret\","
+		       "\"client_secret_expires_at\":0}");
+
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_metadata_get(r, c, "https://idp.example.com", &provider, FALSE), TRUE);
+	ck_assert_str_eq(oidc_cfg_provider_client_id_get(provider), "rp-test");
+}
+END_TEST
+
+/* live OpenID Connect Discovery: no cached/disk metadata, so the provider
+ * document is fetched from <issuer>/.well-known/openid-configuration and
+ * written to the metadata directory */
+START_TEST(test_metadata_disk_provider_get_live_discovery) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	(void)e2e_make_metadata_dir(r);
+
+	/* the metadata body must reference the server's own URL as the issuer,
+	 * which is only known after binding; the server keeps a pointer to the
+	 * response struct, so the body can be filled in before the first request */
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = "{}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	const char *issuer = oidc_test_http_server_url(srv, r->pool);
+	resp.body = apr_psprintf(r->pool,
+				 "{\"issuer\":\"%s\","
+				 "\"authorization_endpoint\":\"%s/authorize\","
+				 "\"token_endpoint\":\"%s/token\","
+				 "\"jwks_uri\":\"%s/jwks\","
+				 "\"response_types_supported\":[\"code\"],"
+				 "\"token_endpoint_auth_methods_supported\":[\"client_secret_basic\"]}",
+				 issuer, issuer, issuer, issuer);
+
+	oidc_json_t *j = NULL;
+	ck_assert_int_eq(oidc_metadata_provider_get(r, c, issuer, &j, TRUE), TRUE);
+	ck_assert_ptr_nonnull(j);
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(j, "issuer")), issuer);
+	oidc_json_decref(j);
+
+	/* the discovery request must have hit the well-known path */
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_msg(_oidc_strstr(cap->path, "/.well-known/openid-configuration") != NULL,
+		      "discovery must fetch the well-known path: %s", cap->path);
+	oidc_test_http_server_stop(srv);
+
+	/* the retrieved metadata was written to the metadata dir: a second call
+	 * with discovery disabled and the server down is served from disk */
+	j = NULL;
+	ck_assert_int_eq(oidc_metadata_provider_get(r, c, issuer, &j, FALSE), TRUE);
+	ck_assert_ptr_nonnull(j);
+	oidc_json_decref(j);
+}
+END_TEST
+
 START_TEST(test_metadata_disk_get_with_empty_conf_file) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -1000,6 +1079,9 @@ int main(void) {
 	tcase_add_test(disk, test_metadata_disk_get_provider_only);
 	tcase_add_test(disk, test_metadata_disk_list_skips_provider_without_client);
 	tcase_add_test(disk, test_metadata_disk_get_full);
+	tcase_add_test(disk, test_metadata_disk_client_secret_expired);
+	tcase_add_test(disk, test_metadata_disk_client_secret_never_expires);
+	tcase_add_test(disk, test_metadata_disk_provider_get_live_discovery);
 	tcase_add_test(disk, test_metadata_disk_get_with_empty_conf_file);
 	tcase_add_test(disk, test_metadata_disk_get_with_invalid_conf_alg);
 	tcase_add_test(disk, test_metadata_disk_dyn_registration_success);

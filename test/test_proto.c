@@ -1359,6 +1359,216 @@ START_TEST(test_proto_token_refresh_request_success) {
 }
 END_TEST
 
+/* an unsupported token_type combined with a configured userinfo endpoint makes
+ * the token-endpoint response parser drop the access token (not a hard error) */
+START_TEST(test_proto_token_endpoint_request_unsupported_token_type) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/json",
+					  .body = "{\"access_token\":\"AT-MAC\",\"token_type\":\"mac\","
+						  "\"id_token\":\"dummy\",\"expires_in\":3600}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, "https://idp.example.com/userinfo");
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	apr_table_t *params = apr_table_make(r->pool, 4);
+	apr_table_setn(params, OIDC_PROTO_GRANT_TYPE, OIDC_PROTO_GRANT_TYPE_AUTHZ_CODE);
+	apr_table_setn(params, OIDC_PROTO_CODE, "the-code");
+
+	char *id_token = NULL, *access_token = NULL, *token_type = NULL, *refresh_token = NULL, *scope = NULL;
+	int expires_in = -1;
+	ck_assert_int_eq(oidc_proto_token_endpoint_request(r, c, provider, params, &id_token, &access_token,
+							   &token_type, &expires_in, &refresh_token, &scope),
+			 TRUE);
+	ck_assert_ptr_null(access_token);
+	ck_assert_ptr_null(token_type);
+	ck_assert_ptr_nonnull(id_token);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* OIDCDPoPMode required: a Bearer token-endpoint response must be rejected */
+START_TEST(test_proto_token_endpoint_request_dpop_required_but_bearer) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/json",
+					  .body = "{\"access_token\":\"AT-1\",\"token_type\":\"Bearer\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+	ck_assert_ptr_null(oidc_cfg_provider_dpop_mode_set(r->pool, provider, "required"));
+	/* a private key so the DPoP proof for the token request can be created
+	 * and the request actually reaches the (Bearer-answering) endpoint */
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	ck_assert_ptr_null(
+	    oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-dpop-tk#%s/private.pem", dir)));
+
+	apr_table_t *params = apr_table_make(r->pool, 4);
+	apr_table_setn(params, OIDC_PROTO_GRANT_TYPE, OIDC_PROTO_GRANT_TYPE_AUTHZ_CODE);
+	apr_table_setn(params, OIDC_PROTO_CODE, "the-code");
+
+	char *id_token = NULL, *access_token = NULL, *token_type = NULL, *refresh_token = NULL, *scope = NULL;
+	int expires_in = -1;
+	ck_assert_int_eq(oidc_proto_token_endpoint_request(r, c, provider, params, &id_token, &access_token,
+							   &token_type, &expires_in, &refresh_token, &scope),
+			 FALSE);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* defined further below with the request-object e2e tests */
+static oidc_proto_state_t *e2e_make_proto_state(request_rec *r);
+
+/* plain code flow where the token endpoint fails to return an access token:
+ * the code-response validation must reject the response */
+START_TEST(test_proto_response_code_missing_access_token) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = "{\"id_token\":\"dummy\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+	ck_assert_ptr_null(oidc_cfg_provider_pkce_set(r->pool, provider, "none"));
+
+	oidc_proto_state_t *ps = e2e_make_proto_state(r);
+	apr_table_t *params = apr_table_make(r->pool, 4);
+	apr_table_setn(params, OIDC_PROTO_CODE, "the-code");
+	apr_table_setn(params, OIDC_PROTO_STATE, "s-1");
+
+	oidc_jwt_t *jwt = NULL;
+	ck_assert_int_eq(oidc_proto_response_code(r, c, ps, provider, params, "query", &jwt), FALSE);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_proto_state_destroy(ps);
+}
+END_TEST
+
+/* aggregated (embedded JWT) and distributed (access_token + endpoint) composite
+ * claims are resolved into the userinfo claims and the bookkeeping members
+ * (_claim_names/_claim_sources) are removed */
+START_TEST(test_proto_userinfo_request_composite_claims) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+
+	/* build the aggregated/distributed claim JWTs; oidc_jwt_parse only parses
+	 * (no signature verification) so any HS256 signing key will do */
+	ck_assert_int_eq(oidc_util_key_symmetric_create(r, "0123456789abcdef0123456789abcdef", 0, NULL, FALSE, &jwk),
+			 TRUE);
+	oidc_jwt_t *jwt1 = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt1->header.alg = apr_pstrdup(r->pool, "HS256");
+	oidc_json_object_set_new(jwt1->payload.value.json, "credit_score", oidc_json_integer(700));
+	ck_assert_int_eq(oidc_jwt_sign(r->pool, jwt1, jwk, FALSE, &err), TRUE);
+	char *src1_jwt = oidc_jose_jwt_serialize(r->pool, jwt1, &err);
+	oidc_jwt_t *jwt2 = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt2->header.alg = apr_pstrdup(r->pool, "HS256");
+	oidc_json_object_set_new(jwt2->payload.value.json, "shoe_size", oidc_json_integer(42));
+	ck_assert_int_eq(oidc_jwt_sign(r->pool, jwt2, jwk, FALSE, &err), TRUE);
+	char *src2_jwt = oidc_jose_jwt_serialize(r->pool, jwt2, &err);
+	oidc_jwk_destroy(jwk);
+	oidc_jwt_destroy(jwt1);
+	oidc_jwt_destroy(jwt2);
+
+	/* distributed-claim endpoint: serves the second JWT on demand */
+	oidc_test_http_response_t dist_resp = {.status_code = 200, .content_type = "application/jwt", .body = src2_jwt};
+	oidc_test_http_server_t *dist_srv = oidc_test_http_server_start(r->pool, &dist_resp);
+	ck_assert_ptr_nonnull(dist_srv);
+
+	/* userinfo response with one aggregated and one distributed source */
+	const char *userinfo_body = apr_psprintf(r->pool,
+						 "{\"sub\":\"alice\","
+						 "\"_claim_names\":{\"credit_score\":\"src1\",\"shoe_size\":\"src2\"},"
+						 "\"_claim_sources\":{\"src1\":{\"JWT\":\"%s\"},"
+						 "\"src2\":{\"access_token\":\"AT-DIST\",\"endpoint\":\"%s\"}}}",
+						 src1_jwt, oidc_test_http_server_url(dist_srv, r->pool));
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = userinfo_body};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	oidc_json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 TRUE);
+	ck_assert_ptr_nonnull(userinfo_claims);
+	/* both composite claims resolved, bookkeeping members removed */
+	ck_assert_int_eq((int)oidc_json_integer_value(oidc_json_object_get(userinfo_claims, "credit_score")), 700);
+	ck_assert_int_eq((int)oidc_json_integer_value(oidc_json_object_get(userinfo_claims, "shoe_size")), 42);
+	ck_assert_ptr_null(oidc_json_object_get(userinfo_claims, "_claim_names"));
+	ck_assert_ptr_null(oidc_json_object_get(userinfo_claims, "_claim_sources"));
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	(void)oidc_test_http_server_wait(dist_srv);
+	oidc_test_http_server_stop(dist_srv);
+	oidc_json_decref(userinfo_claims);
+}
+END_TEST
+
+/* a DPoP-bound access token makes the userinfo request carry a DPoP proof */
+START_TEST(test_proto_userinfo_request_dpop) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	/* DPoP proof creation needs an asymmetric signing key */
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	ck_assert_ptr_null(oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-dpop#%s/private.pem", dir)));
+
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = "{\"sub\":\"alice\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	oidc_json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT-DPOP", "DPoP", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 TRUE);
+	ck_assert_ptr_nonnull(userinfo_claims);
+
+	/* the request must carry both the DPoP authorization scheme and a proof header */
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	const char *auth = apr_table_get(cap->headers, OIDC_HTTP_HDR_AUTHORIZATION);
+	ck_assert_ptr_nonnull(auth);
+	ck_assert_msg(_oidc_strstr(auth, "DPoP AT-DPOP") == auth, "authorization header must use the DPoP scheme: %s",
+		      auth);
+	ck_assert_ptr_nonnull(apr_table_get(cap->headers, OIDC_HTTP_HDR_DPOP));
+
+	oidc_test_http_server_stop(srv);
+	oidc_json_decref(userinfo_claims);
+}
+END_TEST
+
 START_TEST(test_proto_userinfo_request_success) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -2463,6 +2673,11 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_token_endpoint_request_success);
 	tcase_add_test(e2e, test_proto_token_endpoint_request_error);
 	tcase_add_test(e2e, test_proto_token_refresh_request_success);
+	tcase_add_test(e2e, test_proto_token_endpoint_request_unsupported_token_type);
+	tcase_add_test(e2e, test_proto_token_endpoint_request_dpop_required_but_bearer);
+	tcase_add_test(e2e, test_proto_response_code_missing_access_token);
+	tcase_add_test(e2e, test_proto_userinfo_request_composite_claims);
+	tcase_add_test(e2e, test_proto_userinfo_request_dpop);
 	tcase_add_test(e2e, test_proto_userinfo_request_success);
 	tcase_add_test(e2e, test_proto_userinfo_request_sub_mismatch);
 	tcase_add_test(e2e, test_proto_userinfo_request_error);

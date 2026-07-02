@@ -993,6 +993,45 @@ START_TEST(test_handle_discovery_response_target_link_uri_open_redirect) {
 }
 END_TEST
 
+/* point OIDCMetadataDir at a fresh empty temp dir so oidc_discovery_response
+ * takes the resolve-issuer (non-static) code path */
+static void e2e_discovery_set_empty_metadata_dir(request_rec *r) {
+	char *tmpl = apr_pstrdup(r->pool, "/tmp/oidc-test-disco.XXXXXX");
+	ck_assert_msg(mkdtemp(tmpl) != NULL, "could not create temp metadata dir at %s", tmpl);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCMetadataDir);
+	ck_assert_ptr_null(oidc_cmd_metadata_dir_set(cmd, NULL, tmpl));
+}
+
+/* a user identifier entered on the discovery page that cannot be resolved via
+ * URL-based (webfinger) discovery produces a 404 error page; the https://
+ * normalization prefix is applied first */
+START_TEST(test_handle_discovery_response_user_discovery_fails) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	e2e_discovery_set_empty_metadata_dir(r);
+
+	/* 127.0.0.1:1 => https://127.0.0.1:1 => connection refused */
+	r->args = "disc_user=127.0.0.1%3A1"
+		  "&target_link_uri=https%3A%2F%2Fwww.example.com%2Fprotected%2F";
+	int rc = oidc_discovery_response(r, c);
+	ck_assert_int_eq(rc, HTTP_NOT_FOUND);
+}
+END_TEST
+
+/* an account-shaped issuer value (containing "@") triggers account-based
+ * (webfinger) discovery; an unresolvable domain produces a 404 error page */
+START_TEST(test_handle_discovery_response_account_discovery_fails) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	e2e_discovery_set_empty_metadata_dir(r);
+
+	r->args = "iss=jane%40127.0.0.1%3A1"
+		  "&target_link_uri=https%3A%2F%2Fwww.example.com%2Fprotected%2F";
+	int rc = oidc_discovery_response(r, c);
+	ck_assert_int_eq(rc, HTTP_NOT_FOUND);
+}
+END_TEST
+
 START_TEST(test_handle_discovery_request_with_metadata_dir) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -3593,6 +3632,8 @@ int main(void) {
 	tcase_add_test(discovery, test_handle_discovery_response_static_provider_redirects);
 	tcase_add_test(discovery, test_handle_discovery_response_static_provider_iss_mismatch);
 	tcase_add_test(discovery, test_handle_discovery_response_target_link_uri_open_redirect);
+	tcase_add_test(discovery, test_handle_discovery_response_user_discovery_fails);
+	tcase_add_test(discovery, test_handle_discovery_response_account_discovery_fails);
 	tcase_add_test(discovery, test_handle_discovery_request_with_metadata_dir);
 	tcase_add_test(discovery, test_handle_discovery_response_test_config_short_circuit);
 
