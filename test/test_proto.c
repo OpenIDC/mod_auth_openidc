@@ -1694,6 +1694,104 @@ START_TEST(test_proto_request_auth_with_request_object_rs256) {
 }
 END_TEST
 
+/* the request object is encrypted (sign_alg=none) with a symmetric key derived
+ * from the client_secret: covers the OCT branch of the encryption-JWK resolver
+ * and the JWE creation itself */
+START_TEST(test_proto_request_auth_with_request_object_encrypted_symmetric) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	oidc_cfg_provider_client_secret_set(r->pool, provider, "jar-encryption-shared-secret");
+	oidc_cfg_provider_request_object_set(r->pool, provider,
+					     "{\"crypto\":{\"sign_alg\":\"none\",\"crypt_alg\":\"A128KW\"}}");
+
+	oidc_proto_state_t *ps = e2e_make_proto_state(r);
+	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-ro-enc-1", ps,
+					 NULL, NULL, NULL, NULL);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_msg(_oidc_strstr(loc, "request_uri=") != NULL,
+		      "request_uri= parameter must appear in the authorization URL: %s", loc);
+}
+END_TEST
+
+/* the request object is encrypted with an RSA key published in the provider's
+ * JWKs document: covers oidc_request_uri_encryption_jwk_by_type incl. the
+ * use=sig skip, the kty-mismatch skip and the kid-copy into the JWE header */
+START_TEST(test_proto_request_auth_with_request_object_encrypted_rsa) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_jose_error_t err;
+
+	/* derive the public encryption JWK from the test RSA private key */
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	ck_assert_ptr_null(oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-enc#%s/private.pem", dir)));
+	oidc_jwk_t *priv = APR_ARRAY_IDX(oidc_cfg_private_keys_get(c), 0, oidc_jwk_t *);
+	char *s_pub = NULL;
+	ck_assert_int_eq(oidc_jwk_to_public_json(r->pool, priv, &s_pub, &err), TRUE);
+	oidc_json_t *j_pub = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(r, s_pub, &j_pub), TRUE);
+	oidc_json_object_set_new(j_pub, "use", oidc_json_string("enc"));
+	oidc_json_object_set_new(j_pub, "kid", oidc_json_string("enc-1"));
+
+	/* serve a JWKs doc with a use=sig decoy and a kty-mismatch (oct) decoy in
+	 * front of the usable RSA encryption key */
+	const char *jwks_body = apr_psprintf(r->pool,
+					     "{\"keys\":[{\"kty\":\"RSA\",\"use\":\"sig\",\"kid\":\"sig-1\"},"
+					     "{\"kty\":\"oct\",\"k\":\"AAECAwQFBgcICQoLDA0ODw\"},%s]}",
+					     oidc_json_encode(r->pool, j_pub, OIDC_JSON_COMPACT));
+	oidc_json_decref(j_pub);
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = jwks_body};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	ck_assert_ptr_null(oidc_cfg_provider_jwks_uri_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool)));
+
+	oidc_cfg_provider_request_object_set(r->pool, provider,
+					     "{\"crypto\":{\"sign_alg\":\"none\",\"crypt_alg\":\"RSA-OAEP\","
+					     "\"crypt_enc\":\"A128CBC-HS256\"}}");
+
+	oidc_proto_state_t *ps = e2e_make_proto_state(r);
+	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-ro-enc-2", ps,
+					 NULL, NULL, NULL, NULL);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_msg(_oidc_strstr(loc, "request_uri=") != NULL,
+		      "request_uri= parameter must appear in the authorization URL: %s", loc);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* an unsupported crypt_alg maps to no key type: request object creation fails
+ * and the request_uri parameter on the authorization request stays empty */
+START_TEST(test_proto_request_auth_with_request_object_encrypt_bad_alg) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	oidc_cfg_provider_request_object_set(r->pool, provider,
+					     "{\"crypto\":{\"sign_alg\":\"none\",\"crypt_alg\":\"BOGUS\"}}");
+
+	oidc_proto_state_t *ps = e2e_make_proto_state(r);
+	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-ro-enc-3", ps,
+					 NULL, NULL, NULL, NULL);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	const char *p = _oidc_strstr(loc, "request_uri=");
+	ck_assert_ptr_nonnull((void *)p);
+	p += _oidc_strlen("request_uri=");
+	ck_assert_msg((*p == '\0') || (*p == '&'),
+		      "request_uri= must stay empty when request object encryption fails: %s", loc);
+}
+END_TEST
+
 START_TEST(test_proto_request_auth_post_html) {
 	request_rec *r = oidc_test_request_get();
 	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
@@ -2301,6 +2399,9 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_private_keys_load_from_pem);
 	tcase_add_test(e2e, test_proto_request_auth_with_request_object_none);
 	tcase_add_test(e2e, test_proto_request_auth_with_request_object_rs256);
+	tcase_add_test(e2e, test_proto_request_auth_with_request_object_encrypted_symmetric);
+	tcase_add_test(e2e, test_proto_request_auth_with_request_object_encrypted_rsa);
+	tcase_add_test(e2e, test_proto_request_auth_with_request_object_encrypt_bad_alg);
 	tcase_add_test(e2e, test_proto_request_auth_with_copy_and_remove_from_request);
 	tcase_add_test(e2e, test_proto_request_auth_request_object_copy_param_types);
 	tcase_add_test(e2e, test_proto_userinfo_request_signed_jwt_response);
