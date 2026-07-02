@@ -305,6 +305,83 @@ START_TEST(test_metrics_handle_request_flushed_status_counter_with_value) {
 }
 END_TEST
 
+/* poll the JSON formatter (non-destructively: reset=false) until the
+ * asynchronously-flushed data contains the needle (instrumented/valgrind runs
+ * can outlast a single fixed sleep) */
+static const char *metrics_json_wait_for(request_rec *r, const char *needle, int max_ms) {
+	const char *body = NULL;
+	int waited = 0;
+	while (waited <= max_ms) {
+		r->args = "format=json&reset=false";
+		ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
+		body = oidc_request_state_get(r, "sent_body");
+		if ((body != NULL) && (_oidc_strstr(body, needle) != NULL))
+			return body;
+		apr_sleep(apr_time_from_msec(100));
+		waited += 100;
+	}
+	return body;
+}
+
+/* two flush rounds for the same metrics: the second round merges into the
+ * existing shm entries via oidc_metrics_counter_update / timings_update, and
+ * the prometheus formatter renders the plain, value-keyed and name+value
+ * counter shapes */
+START_TEST(test_metrics_flushed_twice_updates_entries) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	e2e_metrics_setup_flushed(r);
+
+	/* the fixture only enables the session+provider classes; the plain
+	 * counter below lives in the authn class and the name+value one is a
+	 * per-claim metric that must be enabled by its full name */
+	cmd_parms *cmd = oidc_test_cmd_get("OIDCMetricsData");
+	ck_assert_ptr_null(oidc_cmd_metrics_hook_data_set(cmd, NULL, "authn"));
+	cmd = oidc_test_cmd_get("OIDCMetricsData");
+	ck_assert_ptr_null(oidc_cmd_metrics_hook_data_set(cmd, NULL, "claim.id_token.email"));
+
+	/* round 1: create the global entries */
+	{
+		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_REQUEST_ERROR_URL);
+		OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_HTTP_RESPONSE_CODE, "200");
+		OIDC_METRICS_COUNTER_INC_NAME_VALUE(r, c, OM_CLAIM_ID_TOKEN, "email", "alice@example.com");
+		OIDC_METRICS_TIMING_START(r, c);
+		apr_sleep(apr_time_from_msec(1));
+		OIDC_METRICS_TIMING_ADD(r, c, OM_PROVIDER_TOKEN);
+	}
+	ck_assert_ptr_nonnull(_oidc_strstr(metrics_json_wait_for(r, "\"200\"", 5000), "\"200\""));
+
+	/* round 2: the same metrics again plus a new keyed value; this merges
+	 * into the existing entries (oidc_metrics_timings_update and
+	 * oidc_metrics_counter_update incl. its new-key branch) */
+	{
+		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_REQUEST_ERROR_URL);
+		OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_HTTP_RESPONSE_CODE, "200");
+		OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_HTTP_RESPONSE_CODE, "404");
+		OIDC_METRICS_TIMING_START(r, c);
+		apr_sleep(apr_time_from_msec(1));
+		OIDC_METRICS_TIMING_ADD(r, c, OM_PROVIDER_TOKEN);
+	}
+	const char *body = metrics_json_wait_for(r, "\"404\"", 5000);
+	ck_assert_ptr_nonnull(body);
+	ck_assert_ptr_nonnull(_oidc_strstr(body, "\"404\""));
+
+	/* the prometheus formatter must render the counter lines incl. the
+	 * plain, value-labeled and name+value-labeled shapes; the twice-flushed
+	 * "200" counter must show the merged value of 2 */
+	r->args = "format=prometheus&reset=false";
+	ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
+	body = oidc_request_state_get(r, "sent_body");
+	ck_assert_ptr_nonnull(body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_authn_request_error_url") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "value=\"200\"} 2") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "value=\"404\"} 1") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "name=\"email\"") != NULL, "BODY=[%s]", body);
+
+	e2e_metrics_teardown_flushed(r);
+}
+END_TEST
+
 START_TEST(test_metrics_handle_request_flushed_status_unknown_counter) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -362,6 +439,7 @@ int main(void) {
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_counter_selector);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_counter_with_value);
+	tcase_add_test(flushed, test_metrics_flushed_twice_updates_entries);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_unknown_counter);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_unknown_server);
 

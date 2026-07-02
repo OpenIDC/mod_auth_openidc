@@ -84,6 +84,10 @@ static request_rec *oidc_test_request_init(apr_pool_t *pool) {
 	request->connection = apr_pcalloc(pool, sizeof(struct conn_rec));
 	request->connection->bucket_alloc = apr_bucket_alloc_create(pool);
 	request->connection->local_addr = apr_pcalloc(pool, sizeof(apr_sockaddr_t));
+	/* minimal output filter carrying the request so the ap_pass_brigade stub
+	 * can capture sent response bodies into the "sent_body" request state */
+	request->output_filters = apr_pcalloc(pool, sizeof(ap_filter_t));
+	request->output_filters->r = request;
 
 	apr_pool_userdata_set("https", "scheme", NULL, request->pool);
 	request->server->server_hostname = "www.example.com";

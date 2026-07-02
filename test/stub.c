@@ -272,7 +272,17 @@ AP_DECLARE(void) ap_note_auth_failure(request_rec *r) {
 	// comment explaining why the method is empty
 }
 
+/* capture the response body passed down the output filter chain in the request
+ * state under "sent_body" so tests can assert on generated content; the test
+ * fixture wires request->output_filters->r for this (see test/util.c) */
+extern void oidc_request_state_set(request_rec *r, const char *key, const char *value);
+
 AP_DECLARE(apr_status_t) ap_pass_brigade(ap_filter_t *filter, apr_bucket_brigade *bucket) {
+	char *buf = NULL;
+	apr_size_t len = 0;
+	if ((filter != NULL) && (filter->r != NULL) &&
+	    (apr_brigade_pflatten(bucket, &buf, &len, filter->r->pool) == APR_SUCCESS) && (len > 0))
+		oidc_request_state_set(filter->r, "sent_body", apr_pstrmemdup(filter->r->pool, buf, len));
 	return APR_SUCCESS;
 }
 
