@@ -3082,6 +3082,39 @@ START_TEST(test_handle_authz_24_claim_granted_from_idtoken) {
 }
 END_TEST
 
+#ifdef USE_LIBJQ
+
+/* Require claims_expr: the jq expression evaluates to true against the
+ * claims merged from the request state */
+START_TEST(test_handle_authz_24_claims_expr_granted) {
+	request_rec *r = oidc_test_request_get();
+	r->user = apr_pstrdup(r->pool, "alice");
+	oidc_json_t *id_token = json_pack("{s:s,s:[s,s]}", "sub", "alice", "groups", "users", "admins");
+	oidc_request_state_json_set(r, OIDC_REQUEST_STATE_KEY_IDTOKEN, id_token);
+	oidc_json_decref(id_token);
+
+	/* NB: the Require line is split on unquoted whitespace by ap_getword_conf,
+	 * so a real-world jq expression argument is either quoted or space-free */
+	authz_status rc = oidc_authz_24_checker_claims_expr(r, ".groups|index(\"admins\")!=null", NULL);
+	ck_assert_int_eq(rc, AUTHZ_GRANTED);
+}
+END_TEST
+
+/* Require claims_expr: a jq expression that does not evaluate to true denies */
+START_TEST(test_handle_authz_24_claims_expr_denied) {
+	request_rec *r = oidc_test_request_get();
+	r->user = apr_pstrdup(r->pool, "alice");
+	oidc_json_t *id_token = json_pack("{s:s}", "sub", "alice");
+	oidc_request_state_json_set(r, OIDC_REQUEST_STATE_KEY_IDTOKEN, id_token);
+	oidc_json_decref(id_token);
+
+	authz_status rc = oidc_authz_24_checker_claims_expr(r, ".sub==\"bob\"", NULL);
+	ck_assert_int_eq(rc, AUTHZ_DENIED);
+}
+END_TEST
+
+#endif /* USE_LIBJQ */
+
 START_TEST(test_handle_authz_24_anonymous_unauth_pass) {
 	request_rec *r = oidc_test_request_get();
 	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
@@ -3649,6 +3682,10 @@ int main(void) {
 	TCase *authz_24 = tcase_create("authz_24");
 	tcase_add_checked_fixture(authz_24, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(authz_24, test_handle_authz_24_claim_granted_from_idtoken);
+#ifdef USE_LIBJQ
+	tcase_add_test(authz_24, test_handle_authz_24_claims_expr_granted);
+	tcase_add_test(authz_24, test_handle_authz_24_claims_expr_denied);
+#endif
 	tcase_add_test(authz_24, test_handle_authz_24_anonymous_unauth_pass);
 	tcase_add_test(authz_24, test_handle_authz_24_anonymous_skip_via_discovery_state);
 	tcase_add_test(authz_24, test_handle_authz_24_anonymous_options_method);

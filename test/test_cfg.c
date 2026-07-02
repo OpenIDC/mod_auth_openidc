@@ -224,6 +224,29 @@ END_TEST
  * invalid input matrix and assert the dir_cfg getter reflects the change.
  */
 
+#ifdef USE_LIBJQ
+
+/* OIDCFilterClaimsExpr / OIDCUserInfoClaimsExpr parse their argument as an
+ * Apache expression holding a jq filter */
+START_TEST(test_cmd_filter_claims_expr) {
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCFilterClaimsExpr);
+	ck_assert_ptr_null(oidc_cmd_filter_claims_expr_set(cmd, NULL, ".my_claims"));
+	ck_assert_ptr_nonnull(oidc_cfg_filter_claims_expr_get(cfg));
+}
+END_TEST
+
+START_TEST(test_cmd_dir_userinfo_claims_expr) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCUserInfoClaimsExpr);
+	ck_assert_ptr_null(oidc_cmd_dir_userinfo_claims_expr_set(cmd, dir_cfg, ".claims_for_app"));
+	ck_assert_ptr_nonnull(oidc_cfg_dir_userinfo_claims_expr_get(r));
+}
+END_TEST
+
+#endif /* USE_LIBJQ */
+
 START_TEST(test_cmd_dir_pass_userinfo_as) {
 	request_rec *r = oidc_test_request_get();
 	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
@@ -1835,6 +1858,10 @@ int main(void) {
 
 	TCase *dir = tcase_create("dir");
 	tcase_add_checked_fixture(dir, oidc_test_setup, oidc_test_teardown);
+#ifdef USE_LIBJQ
+	tcase_add_test(dir, test_cmd_filter_claims_expr);
+	tcase_add_test(dir, test_cmd_dir_userinfo_claims_expr);
+#endif
 	tcase_add_test(dir, test_cmd_dir_pass_userinfo_as);
 	tcase_add_test(dir, test_cmd_dir_pass_claims_as);
 	tcase_add_test(dir, test_cmd_dir_accept_oauth_token_in);
