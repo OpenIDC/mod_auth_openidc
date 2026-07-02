@@ -669,12 +669,19 @@ static void oidc_proto_request_uri_request_param_add(request_rec *r, const struc
 	if (_oidc_strcmp(parameter, OIDC_PROTO_REQUEST_URI) == 0) {
 		/* parameter is "request_uri" */
 		value = oidc_proto_request_uri_create(r, provider, request_object_config, redirect_uri, params, ttl);
-		apr_table_set(params, OIDC_PROTO_REQUEST_URI, value);
 	} else {
 		/* parameter is "request" */
 		value = oidc_request_uri_request_object(r, provider, request_object_config, params, ttl);
-		apr_table_set(params, OIDC_PROTO_REQUEST_OBJECT, value);
 	}
+
+	/* don't add an empty parameter when creating the request object failed */
+	if (value == NULL) {
+		oidc_warn(r, "creating the \"%s\" parameter value failed; the authorization request is sent without it",
+			  parameter);
+		return;
+	}
+
+	apr_table_set(params, parameter, value);
 }
 
 /*
