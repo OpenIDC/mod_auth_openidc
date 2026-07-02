@@ -1,3 +1,11 @@
+07/02/2026
+- test: improve unit test coverage: signed_jwks_uri verification, request object
+  (JAR) encryption, id_token aud values, OAuth RS metadata-URL/local-JWT/POST/
+  sub-request paths, jq claims-expression authorization, key-record encodings and
+  TLS client-cert setters, metrics shm-merge and Prometheus counter shapes,
+  composite and DPoP-bound userinfo requests, webfinger discovery failure paths
+  and client-secret expiry; no functional change
+
 07/01/2026
 - release 2.4.9.4
 
