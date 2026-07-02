@@ -1021,6 +1021,77 @@ START_TEST(test_proto_idtoken_validate_aud_wrong_type) {
 }
 END_TEST
 
+/* configure an explicit OIDCProviderIDTokenAudValues list on the provider; the
+ * special "@" value must resolve to the configured client_id */
+static void set_provider_aud_values(request_rec *r, oidc_provider_t *provider, const char *v1, const char *v2) {
+	apr_array_header_t *list = NULL;
+	ck_assert_ptr_null(oidc_cfg_string_list_add(r->pool, &list, v1));
+	if (v2 != NULL)
+		ck_assert_ptr_null(oidc_cfg_string_list_add(r->pool, &list, v2));
+	ck_assert_ptr_null(oidc_cfg_provider_id_token_aud_values_set_str_list(r->pool, provider, list));
+}
+
+START_TEST(test_proto_idtoken_validate_aud_values_string_special_at) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	set_provider_aud_values(r, oidc_cfg_provider_get(c), "@", "https://api.example.com");
+	/* a single-valued aud matching the client_id via the "@" special value */
+	oidc_json_t *claims = json_pack("{s:s}", "aud", "client_id");
+	oidc_jwt_payload_t p = make_payload(claims);
+	ck_assert_int_eq(oidc_proto_idtoken_validate_aud_and_azp(r, c, oidc_cfg_provider_get(c), &p), TRUE);
+	oidc_json_decref(claims);
+}
+END_TEST
+
+START_TEST(test_proto_idtoken_validate_aud_values_string_no_match) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	set_provider_aud_values(r, oidc_cfg_provider_get(c), "@", "https://api.example.com");
+	oidc_json_t *claims = json_pack("{s:s}", "aud", "https://untrusted.example.com");
+	oidc_jwt_payload_t p = make_payload(claims);
+	ck_assert_int_eq(oidc_proto_idtoken_validate_aud_and_azp(r, c, oidc_cfg_provider_get(c), &p), FALSE);
+	oidc_json_decref(claims);
+}
+END_TEST
+
+START_TEST(test_proto_idtoken_validate_aud_values_array_exhaustive_match) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	set_provider_aud_values(r, oidc_cfg_provider_get(c), "@", "https://api.example.com");
+	/* every configured value present in the aud array and no extra values */
+	oidc_json_t *claims =
+	    json_pack("{s:[s,s],s:s}", "aud", "client_id", "https://api.example.com", "azp", "client_id");
+	oidc_jwt_payload_t p = make_payload(claims);
+	ck_assert_int_eq(oidc_proto_idtoken_validate_aud_and_azp(r, c, oidc_cfg_provider_get(c), &p), TRUE);
+	oidc_json_decref(claims);
+}
+END_TEST
+
+START_TEST(test_proto_idtoken_validate_aud_values_array_missing_configured) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	set_provider_aud_values(r, oidc_cfg_provider_get(c), "@", "https://api.example.com");
+	/* the configured https://api.example.com value is not present in the aud array */
+	oidc_json_t *claims = json_pack("{s:[s],s:s}", "aud", "client_id", "azp", "client_id");
+	oidc_jwt_payload_t p = make_payload(claims);
+	ck_assert_int_eq(oidc_proto_idtoken_validate_aud_and_azp(r, c, oidc_cfg_provider_get(c), &p), FALSE);
+	oidc_json_decref(claims);
+}
+END_TEST
+
+START_TEST(test_proto_idtoken_validate_aud_values_array_untrusted_extra) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	set_provider_aud_values(r, oidc_cfg_provider_get(c), "@", NULL);
+	/* all configured values are present but the aud array carries an unknown extra value */
+	oidc_json_t *claims =
+	    json_pack("{s:[s,s],s:s}", "aud", "client_id", "https://evil.example.com", "azp", "client_id");
+	oidc_jwt_payload_t p = make_payload(claims);
+	ck_assert_int_eq(oidc_proto_idtoken_validate_aud_and_azp(r, c, oidc_cfg_provider_get(c), &p), FALSE);
+	oidc_json_decref(claims);
+}
+END_TEST
+
 START_TEST(test_proto_idtoken_validate_azp_mismatch) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -2355,6 +2426,11 @@ int main(void) {
 	tcase_add_test(core, test_proto_idtoken_validate_aud_array_without_client_id);
 	tcase_add_test(core, test_proto_idtoken_validate_aud_missing);
 	tcase_add_test(core, test_proto_idtoken_validate_aud_wrong_type);
+	tcase_add_test(core, test_proto_idtoken_validate_aud_values_string_special_at);
+	tcase_add_test(core, test_proto_idtoken_validate_aud_values_string_no_match);
+	tcase_add_test(core, test_proto_idtoken_validate_aud_values_array_exhaustive_match);
+	tcase_add_test(core, test_proto_idtoken_validate_aud_values_array_missing_configured);
+	tcase_add_test(core, test_proto_idtoken_validate_aud_values_array_untrusted_extra);
 	tcase_add_test(core, test_proto_idtoken_validate_azp_mismatch);
 	tcase_add_test(core, test_proto_dpop_use_nonce_no_error_claim);
 	tcase_add_test(core, test_proto_dpop_use_nonce_wrong_error_value);
