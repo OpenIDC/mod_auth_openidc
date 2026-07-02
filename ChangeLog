@@ -12,7 +12,7 @@
   and client-secret expiry; no functional change
 
 07/01/2026
-- release 2.4.9.4
+- release 2.4.19.4
 
 06/22/2026
 - cfg: allow OIDCProviderUserInfoEndpoint to be set to an empty value to explicitly
