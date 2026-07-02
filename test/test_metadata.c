@@ -356,6 +356,141 @@ START_TEST(test_metadata_jwks_get_invalid_json) {
 END_TEST
 
 /*
+ * Tests for the signed_jwks_uri branch of oidc_metadata_jwks_get — the JWKs
+ * document is served as the payload of a signed JWT that must verify against
+ * the keys pinned in jwks_uri->jwk_list.
+ */
+
+/* build an HS256-signed JWT whose payload is a JWKs document */
+static char *signed_jwks_make_jwt(request_rec *r, const char *secret) {
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	ck_assert_int_eq(oidc_util_key_symmetric_create(r, secret, 0, NULL, FALSE, &jwk), TRUE);
+
+	oidc_jwt_t *jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(r->pool, "HS256");
+	oidc_json_object_set_new(
+	    jwt->payload.value.json, "keys",
+	    json_loads("[{\"kty\":\"oct\",\"kid\":\"k1\",\"k\":\"AAECAwQFBgcICQoLDA0ODw\"}]", 0, NULL));
+
+	ck_assert_int_eq(oidc_jwt_sign(r->pool, jwt, jwk, FALSE, &err), TRUE);
+	char *cser = oidc_jose_jwt_serialize(r->pool, jwt, &err);
+	ck_assert_ptr_nonnull(cser);
+	oidc_jwk_destroy(jwk);
+	oidc_jwt_destroy(jwt);
+	return cser;
+}
+
+/* build the pinned verifier key list: one key carrying a kid and one without,
+ * covering both kid-registration branches of the signed_jwks loop */
+static apr_array_header_t *signed_jwks_make_verifier_list(request_rec *r, const char *secret) {
+	oidc_jwk_t *jwk_kid = NULL;
+	oidc_jwk_t *jwk_no_kid = NULL;
+	ck_assert_int_eq(oidc_util_key_symmetric_create(r, secret, 0, NULL, TRUE, &jwk_kid), TRUE);
+	ck_assert_ptr_nonnull(jwk_kid->kid);
+	ck_assert_int_eq(oidc_util_key_symmetric_create(r, secret, 0, NULL, FALSE, &jwk_no_kid), TRUE);
+	ck_assert_ptr_null(jwk_no_kid->kid);
+	apr_array_header_t *jwk_list = apr_array_make(r->pool, 2, sizeof(oidc_jwk_t *));
+	APR_ARRAY_PUSH(jwk_list, oidc_jwk_t *) = jwk_kid;
+	APR_ARRAY_PUSH(jwk_list, oidc_jwk_t *) = jwk_no_kid;
+	return jwk_list;
+}
+
+static void signed_jwks_destroy_verifier_list(apr_array_header_t *jwk_list) {
+	for (int i = 0; i < jwk_list->nelts; i++)
+		oidc_jwk_destroy(APR_ARRAY_IDX(jwk_list, i, oidc_jwk_t *));
+}
+
+START_TEST(test_metadata_jwks_get_signed_happy) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *secret = "signed-jwks-shared-secret-long-enough";
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/jwt", .body = signed_jwks_make_jwt(r, secret)};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	oidc_jwks_uri_t jwks_uri = {0};
+	jwks_uri.signed_uri = oidc_test_http_server_url(srv, r->pool);
+	jwks_uri.refresh_interval = 60;
+	jwks_uri.jwk_list = signed_jwks_make_verifier_list(r, secret);
+
+	oidc_json_t *j = NULL;
+	apr_byte_t refresh = TRUE;
+	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j, &refresh), TRUE);
+	ck_assert_ptr_nonnull(j);
+	ck_assert_ptr_nonnull(oidc_json_object_get(j, "keys"));
+	oidc_json_decref(j);
+
+	/* the unwrapped payload must have been cached under the signed_uri key;
+	 * stop the server so a cache miss would surface as an HTTP failure */
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+
+	oidc_json_t *j2 = NULL;
+	refresh = FALSE;
+	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j2, &refresh), TRUE);
+	ck_assert_ptr_nonnull(j2);
+	ck_assert_ptr_nonnull(oidc_json_object_get(j2, "keys"));
+	oidc_json_decref(j2);
+
+	signed_jwks_destroy_verifier_list(jwks_uri.jwk_list);
+}
+END_TEST
+
+/* a signed JWKs response signed with the wrong key must be rejected */
+START_TEST(test_metadata_jwks_get_signed_bad_signature) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/jwt",
+					  .body = signed_jwks_make_jwt(r, "attacker-controlled-other-secret")};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	oidc_jwks_uri_t jwks_uri = {0};
+	jwks_uri.signed_uri = oidc_test_http_server_url(srv, r->pool);
+	jwks_uri.refresh_interval = 60;
+	jwks_uri.jwk_list = signed_jwks_make_verifier_list(r, "signed-jwks-shared-secret-long-enough");
+
+	oidc_json_t *j = NULL;
+	apr_byte_t refresh = FALSE;
+	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j, &refresh), FALSE);
+	ck_assert_ptr_null(j);
+
+	oidc_test_http_server_stop(srv);
+	signed_jwks_destroy_verifier_list(jwks_uri.jwk_list);
+}
+END_TEST
+
+/* a response that is not a JWT at all must be rejected when signed_jwks_uri is used */
+START_TEST(test_metadata_jwks_get_signed_not_a_jwt) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = "{\"keys\":[]}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	oidc_jwks_uri_t jwks_uri = {0};
+	jwks_uri.signed_uri = oidc_test_http_server_url(srv, r->pool);
+	jwks_uri.refresh_interval = 60;
+	jwks_uri.jwk_list = signed_jwks_make_verifier_list(r, "signed-jwks-shared-secret-long-enough");
+
+	oidc_json_t *j = NULL;
+	apr_byte_t refresh = FALSE;
+	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j, &refresh), FALSE);
+	ck_assert_ptr_null(j);
+
+	oidc_test_http_server_stop(srv);
+	signed_jwks_destroy_verifier_list(jwks_uri.jwk_list);
+}
+END_TEST
+
+/*
  * Tests for oidc_oauth_metadata_provider_parse — populates cfg->oauth from
  * an AS metadata document.
  */
@@ -847,6 +982,9 @@ int main(void) {
 	tcase_add_test(retrieve, test_metadata_jwks_get_cache_hit);
 	tcase_add_test(retrieve, test_metadata_jwks_get_missing_keys);
 	tcase_add_test(retrieve, test_metadata_jwks_get_invalid_json);
+	tcase_add_test(retrieve, test_metadata_jwks_get_signed_happy);
+	tcase_add_test(retrieve, test_metadata_jwks_get_signed_bad_signature);
+	tcase_add_test(retrieve, test_metadata_jwks_get_signed_not_a_jwt);
 
 	TCase *conf = tcase_create("conf");
 	tcase_add_checked_fixture(conf, oidc_test_setup, oidc_test_teardown);
