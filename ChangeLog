@@ -1,3 +1,6 @@
+07/03/2026
+- bump to 2.4.20dev
+
 07/02/2026
 - proto: no longer send an empty "request_uri" (or "request") parameter on the
   authorization request when creating the request object fails
