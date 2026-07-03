@@ -1,4 +1,9 @@
 07/03/2026
+- state: use SHA-256 instead of SHA-1 to compute the browser-fingerprint hash
+  bound into the "state" value (X-Forwarded-For/User-Agent headers plus the
+  per-request nonce); in-flight authentication redirects started just before
+  an upgrade will fail state validation on return and require the user to
+  restart the login, same as any other state-timeout
 - util/cache: create metadata files (which can hold a dynamically registered
   client_secret) and file-cache entries with owner-only (0600) permissions
   instead of relying on the process umask via APR_OS_DEFAULT
