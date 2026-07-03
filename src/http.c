@@ -657,9 +657,9 @@ char *oidc_http_form_encoded_data(request_rec *r, const apr_table_t *params) {
 
 		oidc_http_encode_t log_data = {r, NULL};
 		apr_table_do(oidc_http_add_form_encoded_param_for_log, &log_data, params, NULL);
-		oidc_debug(r, "data=%s", log_data.encoded_params);
+		oidc_debug(r, "data=%s", log_data.encoded_params ? log_data.encoded_params : "(null)");
 	} else {
-		oidc_debug(r, "data=%s", data);
+		oidc_debug(r, "data=(null)");
 	}
 	return data;
 }

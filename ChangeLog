@@ -1,4 +1,8 @@
 07/03/2026
+- http: fix a -Wformat-overflow warning in oidc_http_form_encoded_data(): the
+  "no params" branch logged a provably-NULL "data" variable via "%s"; log the
+  literal "(null)" there instead, matching the "(null)" convention used
+  elsewhere in this file
 - mod_auth_openidc: fix oidc_config_check_merged_vhost_configs() to also derive the
   base server's own PBKDF2 key material when it has an explicitly-configured
   OIDCCryptoPassphrase: the base server's config is never flagged "merged" (it is
