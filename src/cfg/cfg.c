@@ -173,6 +173,62 @@ apr_byte_t oidc_cfg_crypto_passphrase_derive_keys(oidc_cfg_t *cfg) {
 	return oidc_crypto_passphrase_derive_keys(&cfg->crypto_passphrase);
 }
 
+/*
+ * memoized variant of oidc_crypto_passphrase_derive_keys(), keyed on the secret text: a server
+ * with hundreds of <VirtualHost>s that all inherit/set the same OIDCCryptoPassphrase would
+ * otherwise pay for the ~210,000-iteration PBKDF2 once per vhost instead of once per distinct
+ * secret. kdf_cache is an apr_hash_t (string -> OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN-byte
+ * buffer) that the caller creates once (e.g. apr_hash_make(pool)) and passes into every
+ * server_rec it checks in a single post_config pass; pool must outlive kdf_cache (a config
+ * pool such as pconf is the right choice) since it is used to allocate the cached entries.
+ * Passing kdf_cache == NULL falls back to always deriving, identical to the uncached function.
+ */
+apr_byte_t oidc_crypto_passphrase_derive_keys_cached(apr_pool_t *pool, apr_hash_t *kdf_cache,
+						     oidc_crypto_passphrase_t *cp) {
+	const unsigned char *cached = NULL;
+
+	if (kdf_cache == NULL)
+		return oidc_crypto_passphrase_derive_keys(cp);
+
+	if ((cp->secret1 != NULL) && (_oidc_strlen(cp->secret1) > 0) && (cp->derived_key1_set == FALSE)) {
+		cached = apr_hash_get(kdf_cache, cp->secret1, APR_HASH_KEY_STRING);
+		if (cached != NULL) {
+			_oidc_memcpy(cp->derived_key1, cached, OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN);
+		} else {
+			if (oidc_util_key_derive_passphrase_key(cp->secret1, cp->derived_key1,
+								OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN) == FALSE)
+				return FALSE;
+			apr_hash_set(kdf_cache, apr_pstrdup(pool, cp->secret1), APR_HASH_KEY_STRING,
+				     apr_pmemdup(pool, cp->derived_key1, OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN));
+		}
+		cp->derived_key1_set = TRUE;
+	}
+
+	if ((cp->secret2 != NULL) && (_oidc_strlen(cp->secret2) > 0) && (cp->derived_key2_set == FALSE)) {
+		cached = apr_hash_get(kdf_cache, cp->secret2, APR_HASH_KEY_STRING);
+		if (cached != NULL) {
+			_oidc_memcpy(cp->derived_key2, cached, OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN);
+		} else {
+			if (oidc_util_key_derive_passphrase_key(cp->secret2, cp->derived_key2,
+								OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN) == FALSE)
+				return FALSE;
+			apr_hash_set(kdf_cache, apr_pstrdup(pool, cp->secret2), APR_HASH_KEY_STRING,
+				     apr_pmemdup(pool, cp->derived_key2, OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN));
+		}
+		cp->derived_key2_set = TRUE;
+	}
+
+	return TRUE;
+}
+
+/*
+ * thin wrapper around oidc_crypto_passphrase_derive_keys_cached() for the passphrase embedded
+ * in a server config; see that function for details
+ */
+apr_byte_t oidc_cfg_crypto_passphrase_derive_keys_cached(apr_pool_t *pool, apr_hash_t *kdf_cache, oidc_cfg_t *cfg) {
+	return oidc_crypto_passphrase_derive_keys_cached(pool, kdf_cache, &cfg->crypto_passphrase);
+}
+
 const char *oidc_cmd_outgoing_proxy_set(cmd_parms *cmd, void *ptr, const char *arg1, const char *arg2,
 					const char *arg3) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);

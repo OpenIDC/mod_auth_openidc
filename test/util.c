@@ -57,6 +57,63 @@
 static apr_pool_t *pool = NULL;
 static request_rec *request = NULL;
 
+/*
+ * memoize the real PBKDF2-HMAC-SHA256 derivation (210,000 iterations, see
+ * oidc_util_key_derive_passphrase_key) by raw secret text, for the lifetime of the test
+ * process. oidc_test_setup() re-derives on every one of the ~570 tests in the suite, and
+ * test_cache.c's passphrase-rotation tests re-derive several times per test, but the whole
+ * suite only ever uses a handful of distinct secret strings -- so caching collapses ~600 KDF
+ * calls down to a handful without weakening what any test actually checks (the KDF itself is
+ * only under test in test_util.c's test_util_jwt, which calls oidc_crypto_passphrase_derive_keys()
+ * directly and bypasses this cache). This matters most under `make valgrind` (CK_FORK=no),
+ * where the entire suite runs in one process and memcheck instrumentation makes each 210,000-
+ * iteration call ~100x slower (~20ms natively vs. ~2s under valgrind).
+ */
+#define OIDC_TEST_KDF_CACHE_MAX 32
+static struct {
+	char secret[128];
+	unsigned char key[OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN];
+} oidc_test_kdf_cache[OIDC_TEST_KDF_CACHE_MAX];
+static int oidc_test_kdf_cache_n = 0;
+
+static apr_byte_t oidc_test_key_derive_cached(const char *secret, unsigned char *out) {
+	int i;
+	for (i = 0; i < oidc_test_kdf_cache_n; i++) {
+		if (_oidc_strcmp(oidc_test_kdf_cache[i].secret, secret) == 0) {
+			_oidc_memcpy(out, oidc_test_kdf_cache[i].key, OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN);
+			return TRUE;
+		}
+	}
+	if (oidc_util_key_derive_passphrase_key(secret, out, OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN) == FALSE)
+		return FALSE;
+	if ((oidc_test_kdf_cache_n < OIDC_TEST_KDF_CACHE_MAX) &&
+	    (_oidc_strlen(secret) < sizeof(oidc_test_kdf_cache[0].secret))) {
+		_oidc_strcpy(oidc_test_kdf_cache[oidc_test_kdf_cache_n].secret, secret);
+		_oidc_memcpy(oidc_test_kdf_cache[oidc_test_kdf_cache_n].key, out, OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN);
+		oidc_test_kdf_cache_n++;
+	}
+	return TRUE;
+}
+
+/*
+ * test-only drop-in for oidc_cfg_crypto_passphrase_derive_keys()/oidc_crypto_passphrase_derive_keys()
+ * that routes the actual KDF work through the cache above; same semantics (skips a slot whose
+ * *_set flag is already TRUE, treats an empty secret as "not configured").
+ */
+static apr_byte_t oidc_test_crypto_passphrase_derive_keys_cached(oidc_crypto_passphrase_t *cp) {
+	if ((cp->secret1 != NULL) && (_oidc_strlen(cp->secret1) > 0) && (cp->derived_key1_set == FALSE)) {
+		if (oidc_test_key_derive_cached(cp->secret1, cp->derived_key1) == FALSE)
+			return FALSE;
+		cp->derived_key1_set = TRUE;
+	}
+	if ((cp->secret2 != NULL) && (_oidc_strlen(cp->secret2) > 0) && (cp->derived_key2_set == FALSE)) {
+		if (oidc_test_key_derive_cached(cp->secret2, cp->derived_key2) == FALSE)
+			return FALSE;
+		cp->derived_key2_set = TRUE;
+	}
+	return TRUE;
+}
+
 static request_rec *oidc_test_request_init(apr_pool_t *pool) {
 	const unsigned int kIdx = 0;
 	const unsigned int kEls = kIdx + 1;
@@ -121,7 +178,7 @@ static request_rec *oidc_test_request_init(apr_pool_t *pool) {
 	cfg->private_keys = apr_array_make(request->server->process->pconf, 1, sizeof(const char *));
 
 	cfg->crypto_passphrase.secret1 = "12345678901234567890123456789012";
-	if (oidc_cfg_crypto_passphrase_derive_keys(cfg) == FALSE) {
+	if (oidc_test_crypto_passphrase_derive_keys_cached(&cfg->crypto_passphrase) == FALSE) {
 		fprintf(stderr, "oidc_cfg_crypto_passphrase_derive_keys failed!\n");
 		exit(-1);
 	}
@@ -204,7 +261,7 @@ cmd_parms *oidc_test_cmd_get(const char *primitive) {
 void oidc_test_crypto_passphrase_rederive(oidc_cfg_t *cfg) {
 	cfg->crypto_passphrase.derived_key1_set = FALSE;
 	cfg->crypto_passphrase.derived_key2_set = FALSE;
-	if (oidc_cfg_crypto_passphrase_derive_keys(cfg) == FALSE) {
+	if (oidc_test_crypto_passphrase_derive_keys_cached(&cfg->crypto_passphrase) == FALSE) {
 		fprintf(stderr, "oidc_cfg_crypto_passphrase_derive_keys failed!\n");
 		exit(-1);
 	}

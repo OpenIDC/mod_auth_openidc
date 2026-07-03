@@ -174,6 +174,9 @@ const char *oidc_cfg_endpoint_auth_set(apr_pool_t *pool, const oidc_cfg_t *cfg, 
 void oidc_cfg_crypto_passphrase_secret1_set(oidc_cfg_t *cfg, const char *secret);
 apr_byte_t oidc_crypto_passphrase_derive_keys(oidc_crypto_passphrase_t *cp);
 apr_byte_t oidc_cfg_crypto_passphrase_derive_keys(oidc_cfg_t *cfg);
+apr_byte_t oidc_crypto_passphrase_derive_keys_cached(apr_pool_t *pool, apr_hash_t *kdf_cache,
+						     oidc_crypto_passphrase_t *cp);
+apr_byte_t oidc_cfg_crypto_passphrase_derive_keys_cached(apr_pool_t *pool, apr_hash_t *kdf_cache, oidc_cfg_t *cfg);
 
 /*
  * Generators for the per-server (oidc_cfg_t) directive accessors.

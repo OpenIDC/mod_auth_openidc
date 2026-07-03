@@ -1604,16 +1604,23 @@ static int oidc_check_config_oauth(apr_pool_t *pool, server_rec *s, const oidc_c
  * FALSE, an unset passphrase is left alone: the base server may deliberately be left without
  * its own crypto passphrase when vhosts each set/override their own OIDCCryptoPassphrase, and
  * must keep starting up that way rather than silently gaining a freshly-manufactured one.
+ *
+ * kdf_cache memoizes the (expensive, ~210,000-iteration PBKDF2) derivation by secret text across
+ * every server_rec checked in this post_config pass -- see oidc_crypto_passphrase_derive_keys_cached().
+ * A deployment with hundreds of <VirtualHost>s that all inherit/set the same OIDCCryptoPassphrase
+ * would otherwise re-run the KDF once per vhost instead of once per distinct secret, which can
+ * turn into a multi-second startup/graceful-restart delay.
  */
-static int oidc_config_ensure_crypto_passphrase(server_rec *s, oidc_cfg_t *cfg, apr_byte_t auto_generate) {
+static int oidc_config_ensure_crypto_passphrase(server_rec *s, oidc_cfg_t *cfg, apr_byte_t auto_generate,
+						apr_hash_t *kdf_cache) {
 	if (oidc_cfg_crypto_passphrase_secret1_get(cfg) == NULL) {
 		if (!auto_generate)
 			return OK;
 		oidc_cfg_crypto_passphrase_secret1_set(cfg, oidc_util_rand_hex_str(NULL, s->process->pool, 32));
 	}
 
-	if (oidc_cfg_crypto_passphrase_derive_keys(cfg) == FALSE) {
-		oidc_serror(s, "oidc_cfg_crypto_passphrase_derive_keys failed");
+	if (oidc_cfg_crypto_passphrase_derive_keys_cached(s->process->pool, kdf_cache, cfg) == FALSE) {
+		oidc_serror(s, "oidc_cfg_crypto_passphrase_derive_keys_cached failed");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -1623,12 +1630,12 @@ static int oidc_config_ensure_crypto_passphrase(server_rec *s, oidc_cfg_t *cfg, 
 /*
  * check the config of a vhost
  */
-static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s) {
+static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s, apr_hash_t *kdf_cache) {
 	oidc_cfg_t *cfg = ap_get_module_config(s->module_config, &auth_openidc_module);
 
 	oidc_sdebug(s, "enter");
 
-	if (oidc_config_ensure_crypto_passphrase(s, cfg, TRUE) != OK)
+	if (oidc_config_ensure_crypto_passphrase(s, cfg, TRUE, kdf_cache) != OK)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
 	if (((oidc_cfg_metadata_dir_get(cfg) != NULL) ||
@@ -1655,11 +1662,15 @@ static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s) {
 static int oidc_config_check_merged_vhost_configs(apr_pool_t *pool, server_rec *s) {
 	int status = OK;
 	server_rec *sp = s;
+	/* shared across every server_rec below, so hundreds of vhosts inheriting/setting the same
+	 * OIDCCryptoPassphrase only pay for the PBKDF2 derivation once per distinct secret -- see
+	 * oidc_config_ensure_crypto_passphrase() */
+	apr_hash_t *kdf_cache = apr_hash_make(pool);
 	while ((sp != NULL) && (status == OK)) {
 		oidc_cfg_t *cfg = ap_get_module_config(sp->module_config, &auth_openidc_module);
 		if (oidc_cfg_merged_get(cfg)) {
 			/* a merged vhost config is checked in full, exactly as before */
-			status = oidc_config_check_vhost_config(pool, sp);
+			status = oidc_config_check_vhost_config(pool, sp, kdf_cache);
 		} else {
 			/* the base server "s" itself is never flagged as merged (its config comes
 			 * straight from create_server_config, not merge_server_config). Derive keys for
@@ -1667,7 +1678,7 @@ static int oidc_config_check_merged_vhost_configs(apr_pool_t *pool, server_rec *
 			 * auto-generate one): both leaving the base without a passphrase (vhosts set/
 			 * override their own) and the full OIDC/OAuth completeness checks must keep
 			 * behaving exactly as before */
-			status = oidc_config_ensure_crypto_passphrase(sp, cfg, FALSE);
+			status = oidc_config_ensure_crypto_passphrase(sp, cfg, FALSE, kdf_cache);
 		}
 		sp = sp->next;
 	}
@@ -1847,8 +1858,9 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, se
 	 *    All merged configs need to be checked.
 	 */
 	if (!oidc_config_merged_vhost_configs_exist(s)) {
-		/* nothing merged, only check the base vhost */
-		return oidc_config_check_vhost_config(pool, s);
+		/* nothing merged, only check the base vhost -- a single server_rec, so there is
+		 * nothing for a kdf_cache to deduplicate */
+		return oidc_config_check_vhost_config(pool, s, NULL);
 	}
 	return oidc_config_check_merged_vhost_configs(pool, s);
 }

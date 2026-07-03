@@ -1,4 +1,11 @@
 07/03/2026
+- cfg/mod_auth_openidc: memoize the PBKDF2-HMAC-SHA256 crypto-passphrase key
+  derivation (oidc_crypto_passphrase_derive_keys_cached()) by secret text across
+  every server_rec checked in a single post_config pass, so a server with
+  hundreds of <VirtualHost>s that all inherit/set the same OIDCCryptoPassphrase
+  only pays for the ~210,000-iteration KDF once per distinct secret instead of
+  once per vhost -- avoiding a startup/graceful-restart delay that otherwise
+  scaled with vhost count
 - http: fix a -Wformat-overflow warning in oidc_http_form_encoded_data(): the
   "no params" branch logged a provably-NULL "data" variable via "%s"; log the
   literal "(null)" there instead, matching the "(null)" convention used
