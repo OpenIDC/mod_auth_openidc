@@ -1,4 +1,10 @@
 07/03/2026
+- cfg/handle: add OIDCDiscoverIssuersAllowed, an OIDCRedirectURLsAllowed-style
+  list of regular expressions that bounds which issuer values dynamic OpenID
+  Connect Discovery (webfinger/URL-based, account-based, or direct issuer
+  selection via OIDCMetadataDir) is allowed to resolve to and make outbound
+  requests against; unset (default) preserves the previous, unrestricted
+  behavior
 - handle/discovery: bump the Discovery CSRF token from 8 to 16 random bytes
   (64 to 128 bits of entropy)
 - doc: recommend prefixing OIDCCookie with "__Host-" so the browser enforces

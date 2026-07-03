@@ -684,6 +684,7 @@ OIDC_CFG_MEMBER_FUNCS_INT(provider_metadata_refresh_interval, OIDC_PROVIDER_META
 OIDC_CFG_MEMBER_FUNCS_HASHTABLE(white_listed_claims)
 OIDC_CFG_MEMBER_FUNCS_HASHTABLE(black_listed_claims)
 OIDC_CFG_MEMBER_FUNCS_HASHTABLE(redirect_urls_allowed)
+OIDC_CFG_MEMBER_FUNCS_HASHTABLE(discover_issuers_allowed)
 
 #define OIDC_CFG_MEMBER_FUNCS_ABS_OR_REL_URI(member)                                                                   \
 	const char *oidc_cmd_##member##_set(cmd_parms *cmd, void *ptr, const char *arg) {                              \
@@ -818,6 +819,7 @@ void *oidc_cfg_server_create(apr_pool_t *pool, server_rec *svr) {
 
 	c->state_input_headers = OIDC_CONFIG_POS_INT_UNSET;
 	c->redirect_urls_allowed = NULL;
+	c->discover_issuers_allowed = NULL;
 	c->ca_bundle_path = NULL;
 	c->logout_x_frame_options = NULL;
 	c->x_forwarded_headers = OIDC_CONFIG_POS_INT_UNSET;
@@ -966,6 +968,8 @@ void *oidc_cfg_server_merge(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->state_input_headers = _oidc_cfg_merge_pos_int(add->state_input_headers, base->state_input_headers);
 
 	c->redirect_urls_allowed = _oidc_cfg_merge_ptr(add->redirect_urls_allowed, base->redirect_urls_allowed);
+	c->discover_issuers_allowed =
+	    _oidc_cfg_merge_ptr(add->discover_issuers_allowed, base->discover_issuers_allowed);
 
 	c->ca_bundle_path = _oidc_cfg_merge_ptr(add->ca_bundle_path, base->ca_bundle_path);
 

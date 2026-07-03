@@ -231,6 +231,11 @@ const command_rec oidc_cfg_cmds[] = {
 		redirect_urls_allowed,
 		"Specify one or more regular expressions that define URLs allowed for post logout and other redirects."),
 	OIDC_CFG_CMD(
+		AP_INIT_ITERATE,
+		OIDCDiscoverIssuersAllowed,
+		discover_issuers_allowed,
+		"Specify one or more regular expressions that define issuers allowed to be used for dynamic OpenID Connect Discovery/registration; when unset, any issuer is allowed."),
+	OIDC_CFG_CMD(
 		AP_INIT_TAKE1,
 		OIDCCABundlePath,
 		ca_bundle_path,
