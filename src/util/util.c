@@ -412,6 +412,23 @@ char *oidc_util_hex_encode(apr_pool_t *pool, const unsigned char *bytes, unsigne
 	return s;
 }
 
+#define OIDC_UTIL_MASK_VALUE_PREFIX_LEN 4
+
+/*
+ * redact a secret/token value for logging purposes, keeping a short prefix and the
+ * length so log lines can still be correlated across requests without exposing the
+ * value itself
+ */
+const char *oidc_util_mask_value(apr_pool_t *pool, const char *value) {
+	apr_size_t len = 0;
+	if (value == NULL)
+		return "(null)";
+	len = _oidc_strlen(value);
+	if (len <= OIDC_UTIL_MASK_VALUE_PREFIX_LEN)
+		return "***";
+	return apr_psprintf(pool, "%.*s...(%" APR_SIZE_T_FMT " chars)", OIDC_UTIL_MASK_VALUE_PREFIX_LEN, value, len);
+}
+
 /*
  * openssl hash and base64 encode
  */

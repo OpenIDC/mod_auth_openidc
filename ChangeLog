@@ -1,3 +1,10 @@
+07/03/2026
+- http/oauth/refresh/userinfo/proto: stop writing access tokens, refresh tokens,
+  client secrets/assertions, authorization codes, PKCE code_verifiers and nonces
+  in full to the debug log; introduce oidc_util_mask_value() (keeps a short
+  prefix plus the length for log correlation) and redact well-known sensitive
+  parameters out of logged request bodies/URLs and the state-cookie debug dump
+
 07/02/2026
 - proto: no longer send an empty "request_uri" (or "request") parameter on the
   authorization request when creating the request object fails

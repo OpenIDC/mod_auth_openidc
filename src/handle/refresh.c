@@ -98,8 +98,9 @@ static void oidc_refresh_token_cache_set(request_rec *r, const char *refresh_tok
 
 	/* stringify the JSON object and store it in the cache */
 	s_json = oidc_json_encode(r->pool, json, OIDC_JSON_COMPACT);
-	oidc_debug(r, "caching refresh_token (%s) grant results for %d seconds: %s", refresh_token,
-		   OIDC_REFRESH_CACHE_TTL, s_json);
+	oidc_debug(r, "caching refresh_token (%s) grant results for %d seconds: %s",
+		   oidc_util_mask_value(r->pool, refresh_token), OIDC_REFRESH_CACHE_TTL,
+		   oidc_util_mask_value(r->pool, s_json));
 
 	oidc_cache_set_refresh_token(r, refresh_token, s_json,
 				     apr_time_now() + apr_time_from_sec(OIDC_REFRESH_CACHE_TTL));
@@ -166,7 +167,8 @@ static oidc_refresh_token_cache_result_t oidc_refresh_token_cache_get(request_re
 	if (oidc_json_decode_object(r, s_json, &json) == FALSE)
 		goto no_cache_found;
 
-	oidc_debug(r, "using cached refresh_token (%s) grant results: %s", refresh_token, s_json);
+	oidc_debug(r, "using cached refresh_token (%s) grant results: %s", oidc_util_mask_value(r->pool, refresh_token),
+		   oidc_util_mask_value(r->pool, s_json));
 
 	/* parse the results from the cache into the output parameters */
 	if ((v = oidc_json_object_get(json, OIDC_PROTO_ACCESS_TOKEN)))
@@ -199,7 +201,7 @@ static oidc_refresh_token_cache_result_t oidc_refresh_token_cache_get(request_re
 
 no_cache_found:
 
-	oidc_debug(r, "locking cache and refreshing %s...", refresh_token);
+	oidc_debug(r, "locking cache and refreshing %s...", oidc_util_mask_value(r->pool, refresh_token));
 
 	/*
 	 * best-effort distributed locking during our upcoming refresh grant execution
@@ -241,7 +243,7 @@ static apr_byte_t oidc_refresh_token_grant_obtain_tokens(request_rec *r, oidc_cf
 		/* a prior refresh of the access token failed and we won't try the same again */
 		return FALSE;
 
-	oidc_debug(r, "refreshing refresh_token: %s", refresh_token);
+	oidc_debug(r, "refreshing refresh_token: %s", oidc_util_mask_value(r->pool, refresh_token));
 
 	OIDC_METRICS_TIMING_START(r, c);
 
@@ -361,7 +363,8 @@ apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg_t *c, oidc_session_
 	if (s_id_token != NULL)
 		oidc_refresh_token_grant_apply_id_token(r, c, session, provider, s_id_token, new_id_token);
 
-	oidc_debug(r, "replaced refresh_token: %s with %s", refresh_token, s_refresh_token);
+	oidc_debug(r, "replaced refresh_token: %s with %s", oidc_util_mask_value(r->pool, refresh_token),
+		   oidc_util_mask_value(r->pool, s_refresh_token));
 
 	return TRUE;
 }
