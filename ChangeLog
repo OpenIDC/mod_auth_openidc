@@ -1,45 +1,27 @@
 07/03/2026
-- handle/discovery: enforce OIDCDiscoverIssuersAllowed *before* the webfinger
-  discovery HTTP call for URL-based and account-based Discovery, not only against
-  the issuer it resolves to: previously a disallowed host could still be probed
-  with an outbound webfinger request even though the response would ultimately be
-  rejected, narrowing but not closing the SSRF surface the directive was meant to
-  bound
 - http: fix a -Wformat-overflow warning in oidc_http_form_encoded_data(): the
   "no params" branch logged a provably-NULL "data" variable via "%s"; log the
   literal "(null)" there instead, matching the "(null)" convention used
   elsewhere in this file
-- mod_auth_openidc: fix oidc_config_check_merged_vhost_configs() to also derive the
-  base server's own PBKDF2 key material when it has an explicitly-configured
-  OIDCCryptoPassphrase: the base server's config is never flagged "merged" (it is
-  never the target of a merge), so whenever at least one vhost had a merged config
-  of its own, the base server's config was skipped entirely, and a request served
-  directly by the base server (e.g. as the fallback vhost) would fail to
-  encrypt/decrypt cache entries with "no derived key material available". A base
-  server left without its own OIDCCryptoPassphrase (relying on vhosts to set their
-  own) is untouched: no key is auto-generated or derived for it, exactly as before
-- cfg: fix _oidc_cfg_merge_crypto_passphrase() to also carry over the precomputed
-  PBKDF2 derived_key{1,2}/derived_key{1,2}_set fields alongside secret1/secret2,
-  consistent with its own "add wins as a whole" merge semantics; latent today (the
-  merge target is always freshly allocated and derive_keys() only ever runs after
-  merging), but this closes the gap so a future change to that ordering cannot
-  silently pair a stale derived key with the wrong secret
 - cfg/util/cache: stretch OIDCCryptoPassphrase into the AES key used for the internal
   "dir"/A256GCM JWE (state cookie, session cookie, cache value encryption) with
   PBKDF2-HMAC-SHA256 (210,000 iterations, a fixed application-specific salt) instead
   of a single SHA-256 pass, so an offline attacker who obtains an encrypted
   cookie/cache value cannot brute-force a weak passphrase at raw-SHA256 speed; the
-  stretching happens once, at post_config time (oidc_cfg_crypto_passphrase_derive_keys()),
-  so the per-request encrypt/decrypt path pays no extra cost. This changes the
-  effective key for a given passphrase, so all sessions/state cookies/cache entries
-  created before an upgrade fail to decrypt afterwards (same as changing
-  OIDCCryptoPassphrase itself): plan for users to be logged out once
+  stretching happens once per server config (the base server and every merged
+  vhost, each carrying its own copy of the passphrase), so the per-request
+  encrypt/decrypt path pays no extra cost. This changes the effective key for a
+  given passphrase, so all sessions/state cookies/cache entries created before an
+  upgrade fail to decrypt afterwards (same as changing OIDCCryptoPassphrase
+  itself): plan for users to be logged out once
 - cfg/handle: add OIDCDiscoverIssuersAllowed, an OIDCRedirectURLsAllowed-style
   list of regular expressions that bounds which issuer values dynamic OpenID
   Connect Discovery (webfinger/URL-based, account-based, or direct issuer
-  selection via OIDCMetadataDir) is allowed to resolve to and make outbound
-  requests against; unset (default) preserves the previous, unrestricted
-  behavior
+  selection via OIDCMetadataDir) is allowed to resolve to; checked against the
+  candidate host before any outbound webfinger/URL-based or account-based
+  discovery HTTP call is made, not only against the final resolved issuer, so a
+  disallowed host is never probed. Unset (default) preserves the previous,
+  unrestricted behavior
 - handle/discovery: bump the Discovery CSRF token from 8 to 16 random bytes
   (64 to 128 bits of entropy)
 - doc: recommend prefixing OIDCCookie with "__Host-" so the browser enforces
