@@ -43,9 +43,9 @@
 
 #include "check_util.h"
 #include "mod_auth_openidc.h"
-#include <jansson.h> /* this test builds JSON fixtures with the backend API directly (no longer pulled in via jose.h) */
 #include "util.h"
 #include "util/util.h"
+#include <jansson.h> /* this test builds JSON fixtures with the backend API directly (no longer pulled in via jose.h) */
 
 // base64
 
@@ -113,20 +113,20 @@ START_TEST(test_util_appinfo_set) {
 	request_rec *r = oidc_test_request_get();
 
 	rc = oidc_json_decode_object(r,
-					  "{"
-					  "\"simple\":\"hans\","
-					  "\"name\": \"GÜnther\","
-					  "\"dagger\": \"D†gÿger\","
-					  "\"anarr\" : [ false, \"hans\", \"piet\", true, {} ],"
-					  "\"names\" : [ \"hans\", \"piet\" ],"
-					  "\"abool\": true,"
-					  "\"anint\": 5,"
-					  "\"lint\": 1111111111,"
-					  "\"areal\": 1.5,"
-					  "\"anobj\" : { \"hans\": \"piet\", \"abool\": false },"
-					  "\"anull\": null"
-					  "}",
-					  &claims);
+				     "{"
+				     "\"simple\":\"hans\","
+				     "\"name\": \"GÜnther\","
+				     "\"dagger\": \"D†gÿger\","
+				     "\"anarr\" : [ false, \"hans\", \"piet\", true, {} ],"
+				     "\"names\" : [ \"hans\", \"piet\" ],"
+				     "\"abool\": true,"
+				     "\"anint\": 5,"
+				     "\"lint\": 1111111111,"
+				     "\"areal\": 1.5,"
+				     "\"anobj\" : { \"hans\": \"piet\", \"abool\": false },"
+				     "\"anull\": null"
+				     "}",
+				     &claims);
 	ck_assert_int_eq(rc, TRUE);
 
 	oidc_util_appinfo_set_all(r, NULL, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
@@ -418,11 +418,10 @@ START_TEST(test_util_json) {
 	apr_array_header_t *arr = NULL;
 	int v = 0;
 
-	ck_assert_msg(oidc_json_decode_and_check_error(r, NULL, &json) == FALSE,
-		      "result for NULL is not FALSE: %d", rv);
-	oidc_json_decref(json);
-	ck_assert_msg(oidc_json_decode_and_check_error(r, "{}", &json) == TRUE, "result for {} is not FALSE: %d",
+	ck_assert_msg(oidc_json_decode_and_check_error(r, NULL, &json) == FALSE, "result for NULL is not FALSE: %d",
 		      rv);
+	oidc_json_decref(json);
+	ck_assert_msg(oidc_json_decode_and_check_error(r, "{}", &json) == TRUE, "result for {} is not FALSE: %d", rv);
 	oidc_json_decref(json);
 	ck_assert_msg(oidc_json_decode_and_check_error(r, "[ 1, 2 ]", &json) == FALSE,
 		      "result for array object is not TRUE: %d", rv);
@@ -439,11 +438,9 @@ START_TEST(test_util_json) {
 
 	json = json_loads("{ \"myarr\": [ \"hi\", \"ho\" ] }", 0, &json_error);
 	ck_assert_ptr_nonnull(json);
-	ck_assert_msg(oidc_json_object_get_string_array(pool, json, "my", &arr, NULL) == TRUE,
-		      "result is not TRUE");
+	ck_assert_msg(oidc_json_object_get_string_array(pool, json, "my", &arr, NULL) == TRUE, "result is not TRUE");
 	ck_assert_ptr_null(arr);
-	ck_assert_msg(oidc_json_object_get_string_array(pool, json, "myarr", &arr, NULL) == TRUE,
-		      "result is not TRUE");
+	ck_assert_msg(oidc_json_object_get_string_array(pool, json, "myarr", &arr, NULL) == TRUE, "result is not TRUE");
 	ck_assert_ptr_nonnull(arr);
 	ck_assert_msg(arr->nelts == 2, "array size is not 2");
 	oidc_json_decref(json);
@@ -482,6 +479,8 @@ START_TEST(test_util_jwt) {
 	const char *str = "{ \"key\": \"value\" }";
 	char *cser = NULL;
 	char *payload = NULL;
+
+	ck_assert_msg(oidc_crypto_passphrase_derive_keys(&passphrase) == TRUE, "result is not TRUE");
 
 	//	const char *empty = "{}";
 	//	ck_assert_msg(oidc_util_jwt_create(r, &passphrase, empty, &cser) == TRUE, "result is not TRUE");

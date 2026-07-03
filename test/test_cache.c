@@ -224,6 +224,7 @@ START_TEST(test_cache_second_passphrase_retry) {
 	/* set initial secret and ensure encryption is enabled */
 	cfg->crypto_passphrase.secret1 = "oldsecret012345678901234567890"; // 30+ chars
 	cfg->crypto_passphrase.secret2 = NULL;
+	oidc_test_crypto_passphrase_rederive(cfg);
 	cfg->cache.encrypt = 1;
 
 	/* disable internal compression for this test */
@@ -235,6 +236,7 @@ START_TEST(test_cache_second_passphrase_retry) {
 	/* rotate secrets: new secret becomes secret1, old one moved to secret2 */
 	cfg->crypto_passphrase.secret1 = "newsecret01234567890123456789012"; // different
 	cfg->crypto_passphrase.secret2 = "oldsecret012345678901234567890";
+	oidc_test_crypto_passphrase_rederive(cfg);
 
 	/* attempt to retrieve: oidc_cache_get should first try with secret1 (no match) then with secret2 and succeed */
 	value = NULL;
@@ -245,6 +247,7 @@ START_TEST(test_cache_second_passphrase_retry) {
 	/* cleanup: restore cfg values */
 	cfg->crypto_passphrase.secret1 = (char *)old_s1;
 	cfg->crypto_passphrase.secret2 = (char *)old_s2;
+	oidc_test_crypto_passphrase_rederive(cfg);
 	cfg->cache.encrypt = old_encrypt;
 	apr_table_unset(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS");
 }
@@ -295,6 +298,7 @@ START_TEST(test_cache_secret1_empty_secret2_fallback) {
 	/* set initial secret and ensure encryption is enabled */
 	cfg->crypto_passphrase.secret1 = "origsecret012345678901234567890";
 	cfg->crypto_passphrase.secret2 = NULL;
+	oidc_test_crypto_passphrase_rederive(cfg);
 	cfg->cache.encrypt = 1;
 
 	/* disable compression for deterministic behavior */
@@ -306,6 +310,7 @@ START_TEST(test_cache_secret1_empty_secret2_fallback) {
 	/* now simulate secret1 being empty string and secret2 having the original secret */
 	cfg->crypto_passphrase.secret1 = ""; /* empty (non-NULL) */
 	cfg->crypto_passphrase.secret2 = "origsecret012345678901234567890";
+	oidc_test_crypto_passphrase_rederive(cfg);
 
 	/* retrieval should succeed via fallback to secret2 */
 	value = NULL;
@@ -316,6 +321,7 @@ START_TEST(test_cache_secret1_empty_secret2_fallback) {
 	/* cleanup */
 	cfg->crypto_passphrase.secret1 = (char *)old_s1;
 	cfg->crypto_passphrase.secret2 = (char *)old_s2;
+	oidc_test_crypto_passphrase_rederive(cfg);
 	cfg->cache.encrypt = old_encrypt;
 	apr_table_unset(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS");
 }
@@ -354,12 +360,9 @@ START_TEST(test_cache_compression_enabled_set_get) {
 
 	/* verify encryption+compression works by trying to create a JWT with the current cfg secret */
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
-	oidc_crypto_passphrase_t passphrase;
-	passphrase.secret1 = oidc_cfg_crypto_passphrase_secret1_get(cfg);
-	passphrase.secret2 = oidc_cfg_crypto_passphrase_secret2_get(cfg);
 	char *encoded = NULL;
 	apr_byte_t forced_no_compress = FALSE;
-	if (!oidc_util_jwt_create(r, &passphrase, "probe", &encoded)) {
+	if (!oidc_util_jwt_create(r, oidc_cfg_crypto_passphrase_get(cfg), "probe", &encoded)) {
 		/* compression or encryption not available; fall back to non-compressed path for this test */
 		apr_table_set(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS", "true");
 		forced_no_compress = TRUE;
@@ -393,17 +396,16 @@ START_TEST(test_cache_compression_enabled_second_passphrase) {
 	/* set initial secret and ensure encryption is enabled */
 	cfg->crypto_passphrase.secret1 = "cmp_oldsecret012345678901234567";
 	cfg->crypto_passphrase.secret2 = NULL;
+	oidc_test_crypto_passphrase_rederive(cfg);
 	cfg->cache.encrypt = 1;
 
 	/* verify encryption+compression works for this cfg; fall back to no-compress if not */
-	oidc_crypto_passphrase_t passphrase;
-	passphrase.secret1 = oidc_cfg_crypto_passphrase_secret1_get(cfg);
-	passphrase.secret2 = oidc_cfg_crypto_passphrase_secret2_get(cfg);
 	char *encoded = NULL;
 	apr_byte_t forced_no_compress = FALSE;
-	if (!oidc_util_jwt_create(r, &passphrase, "probe", &encoded)) {
+	if (!oidc_util_jwt_create(r, oidc_cfg_crypto_passphrase_get(cfg), "probe", &encoded)) {
 		cfg->crypto_passphrase.secret1 = (char *)old_s1;
 		cfg->crypto_passphrase.secret2 = (char *)old_s2;
+		oidc_test_crypto_passphrase_rederive(cfg);
 		cfg->cache.encrypt = old_encrypt;
 		apr_table_set(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS", "true");
 		forced_no_compress = TRUE;
@@ -411,6 +413,7 @@ START_TEST(test_cache_compression_enabled_second_passphrase) {
 		cfg = oidc_test_cfg_get();
 		cfg->crypto_passphrase.secret1 = "cmp_oldsecret012345678901234567";
 		cfg->crypto_passphrase.secret2 = NULL;
+		oidc_test_crypto_passphrase_rederive(cfg);
 		cfg->cache.encrypt = 1;
 	}
 
@@ -420,6 +423,7 @@ START_TEST(test_cache_compression_enabled_second_passphrase) {
 	/* rotate secrets */
 	cfg->crypto_passphrase.secret1 = "cmp_newsecret0123456789012345678";
 	cfg->crypto_passphrase.secret2 = "cmp_oldsecret012345678901234567";
+	oidc_test_crypto_passphrase_rederive(cfg);
 
 	/* retrieve should succeed via secret2 fallback */
 	value = NULL;
@@ -430,6 +434,7 @@ START_TEST(test_cache_compression_enabled_second_passphrase) {
 	/* restore */
 	cfg->crypto_passphrase.secret1 = (char *)old_s1;
 	cfg->crypto_passphrase.secret2 = (char *)old_s2;
+	oidc_test_crypto_passphrase_rederive(cfg);
 	cfg->cache.encrypt = old_encrypt;
 	if (forced_no_compress)
 		apr_table_unset(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS");
@@ -452,23 +457,23 @@ START_TEST(test_cache_compression_enabled_empty_secret2_fallback) {
 
 	cfg->crypto_passphrase.secret1 = "cmp_origsecret012345678901234567";
 	cfg->crypto_passphrase.secret2 = NULL;
+	oidc_test_crypto_passphrase_rederive(cfg);
 	cfg->cache.encrypt = 1;
 
 	/* verify encryption+compression works; fall back to no-compress if not */
-	oidc_crypto_passphrase_t passphrase2;
-	passphrase2.secret1 = oidc_cfg_crypto_passphrase_secret1_get(cfg);
-	passphrase2.secret2 = oidc_cfg_crypto_passphrase_secret2_get(cfg);
 	char *encoded2 = NULL;
 	apr_byte_t forced_no_compress = FALSE;
-	if (!oidc_util_jwt_create(r, &passphrase2, "probe", &encoded2)) {
+	if (!oidc_util_jwt_create(r, oidc_cfg_crypto_passphrase_get(cfg), "probe", &encoded2)) {
 		cfg->crypto_passphrase.secret1 = (char *)old_s1;
 		cfg->crypto_passphrase.secret2 = (char *)old_s2;
+		oidc_test_crypto_passphrase_rederive(cfg);
 		cfg->cache.encrypt = old_encrypt;
 		apr_table_set(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS", "true");
 		forced_no_compress = TRUE;
 		cfg = oidc_test_cfg_get();
 		cfg->crypto_passphrase.secret1 = "cmp_origsecret012345678901234567";
 		cfg->crypto_passphrase.secret2 = NULL;
+		oidc_test_crypto_passphrase_rederive(cfg);
 		cfg->cache.encrypt = 1;
 	}
 
@@ -478,6 +483,7 @@ START_TEST(test_cache_compression_enabled_empty_secret2_fallback) {
 	/* simulate secret1 empty and secret2 containing original */
 	cfg->crypto_passphrase.secret1 = "";
 	cfg->crypto_passphrase.secret2 = "cmp_origsecret012345678901234567";
+	oidc_test_crypto_passphrase_rederive(cfg);
 
 	value = NULL;
 	ck_assert_int_eq(oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, "c_emptyrot", &value), TRUE);
@@ -487,6 +493,7 @@ START_TEST(test_cache_compression_enabled_empty_secret2_fallback) {
 	/* restore */
 	cfg->crypto_passphrase.secret1 = (char *)old_s1;
 	cfg->crypto_passphrase.secret2 = (char *)old_s2;
+	oidc_test_crypto_passphrase_rederive(cfg);
 	cfg->cache.encrypt = old_encrypt;
 	if (forced_no_compress)
 		apr_table_unset(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS");

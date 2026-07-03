@@ -302,13 +302,24 @@ static inline apr_byte_t oidc_cache_crypto_encrypt(request_rec *r, const char *p
 }
 
 /*
- * AES GCM decrypt using the crypto passphrase as symmetric key
+ * AES GCM decrypt using the crypto passphrase (or, when retrying a cache-key lookup after
+ * passphrase rollover, the previous passphrase) as symmetric key; reuses the precomputed
+ * derived key material from cfg_passphrase (see oidc_cfg_crypto_passphrase_derive_keys())
+ * for whichever slot was used, rather than re-deriving it from the raw secret string
  */
-static inline apr_byte_t oidc_cache_crypto_decrypt(request_rec *r, const char *cache_value, const char *secret,
-						   char **plaintext) {
+static inline apr_byte_t oidc_cache_crypto_decrypt(request_rec *r, const char *cache_value,
+						   const oidc_crypto_passphrase_t *cfg_passphrase,
+						   apr_byte_t use_secondary, char **plaintext) {
 	oidc_crypto_passphrase_t passphrase;
-	passphrase.secret1 = secret;
+	passphrase.secret1 = use_secondary ? cfg_passphrase->secret2 : cfg_passphrase->secret1;
+	passphrase.derived_key1_set =
+	    use_secondary ? cfg_passphrase->derived_key2_set : cfg_passphrase->derived_key1_set;
+	if (passphrase.derived_key1_set)
+		_oidc_memcpy(passphrase.derived_key1,
+			     use_secondary ? cfg_passphrase->derived_key2 : cfg_passphrase->derived_key1,
+			     OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN);
 	passphrase.secret2 = NULL;
+	passphrase.derived_key2_set = FALSE;
 	return oidc_util_jwt_verify(r, &passphrase, cache_value, plaintext);
 }
 
@@ -366,6 +377,7 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, 
 	const char *s_key = NULL;
 	char *cache_value = NULL;
 	const char *s_secret = NULL;
+	apr_byte_t use_secondary = FALSE;
 	const char *s_section = oidc_cache_section_get(r, section);
 
 	oidc_debug(r, "enter: %s (section=%s, decrypt=%d, type=%s)", key, s_section, encrypted, cfg->cache.impl->name);
@@ -384,6 +396,7 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, 
 	if ((cache_value == NULL) && (encrypted == 1) && (oidc_cfg_crypto_passphrase_secret2_get(cfg) != NULL)) {
 		oidc_debug(r, "2nd try with previous passphrase");
 		s_secret = oidc_cfg_crypto_passphrase_secret2_get(cfg);
+		use_secondary = TRUE;
 		if (oidc_cache_get_key(r, key, s_secret, encrypted, &s_key) == FALSE)
 			goto end;
 		if (cfg->cache.impl->get(r, s_section, s_key, &cache_value) == FALSE)
@@ -403,7 +416,7 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, 
 		goto end;
 	}
 
-	rc = oidc_cache_crypto_decrypt(r, cache_value, s_secret, value);
+	rc = oidc_cache_crypto_decrypt(r, cache_value, oidc_cfg_crypto_passphrase_get(cfg), use_secondary, value);
 
 end:
 

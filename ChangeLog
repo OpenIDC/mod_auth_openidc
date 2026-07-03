@@ -1,4 +1,14 @@
 07/03/2026
+- cfg/util/cache: stretch OIDCCryptoPassphrase into the AES key used for the internal
+  "dir"/A256GCM JWE (state cookie, session cookie, cache value encryption) with
+  PBKDF2-HMAC-SHA256 (210,000 iterations, a fixed application-specific salt) instead
+  of a single SHA-256 pass, so an offline attacker who obtains an encrypted
+  cookie/cache value cannot brute-force a weak passphrase at raw-SHA256 speed; the
+  stretching happens once, at post_config time (oidc_cfg_crypto_passphrase_derive_keys()),
+  so the per-request encrypt/decrypt path pays no extra cost. This changes the
+  effective key for a given passphrase, so all sessions/state cookies/cache entries
+  created before an upgrade fail to decrypt afterwards (same as changing
+  OIDCCryptoPassphrase itself): plan for users to be logged out once
 - cfg/handle: add OIDCDiscoverIssuersAllowed, an OIDCRedirectURLsAllowed-style
   list of regular expressions that bounds which issuer values dynamic OpenID
   Connect Discovery (webfinger/URL-based, account-based, or direct issuer

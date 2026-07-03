@@ -101,6 +101,7 @@ apr_hash_t *oidc_util_key_sets_merge(apr_pool_t *pool, apr_hash_t *k1, const apr
 apr_hash_t *oidc_util_key_sets_hash_merge(apr_pool_t *pool, apr_hash_t *k1, apr_hash_t *k2);
 apr_hash_t *oidc_util_key_symmetric_merge(apr_pool_t *pool, const apr_array_header_t *keys, const oidc_jwk_t *jwk);
 oidc_jwk_t *oidc_util_key_list_first(const apr_array_header_t *key_list, int kty, const char *use);
+apr_byte_t oidc_util_key_derive_passphrase_key(const char *passphrase, unsigned char *out, apr_size_t out_len);
 
 // random.c
 unsigned int oidc_util_rand_int(unsigned int mod);

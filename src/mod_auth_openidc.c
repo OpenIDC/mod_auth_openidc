@@ -1602,6 +1602,12 @@ static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s) {
 	if (oidc_cfg_crypto_passphrase_secret1_get(cfg) == NULL)
 		oidc_cfg_crypto_passphrase_secret1_set(cfg, oidc_util_rand_hex_str(NULL, s->process->pool, 32));
 
+	/* stretch the now-finalized passphrase(s) into key material once, rather than on every request */
+	if (oidc_cfg_crypto_passphrase_derive_keys(cfg) == FALSE) {
+		oidc_serror(s, "oidc_cfg_crypto_passphrase_derive_keys failed");
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
 	if (((oidc_cfg_metadata_dir_get(cfg) != NULL) ||
 	     (oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(cfg)) != NULL) ||
 	     (oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(cfg)) != NULL)) &&
