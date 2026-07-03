@@ -1592,6 +1592,35 @@ static int oidc_check_config_oauth(apr_pool_t *pool, server_rec *s, const oidc_c
 }
 
 /*
+ * derive this server's PBKDF2 key material for its crypto passphrase, once finalized; unlike
+ * the OIDC/OAuth completeness checks below, this must happen for every server config that
+ * could end up handling a live request -- including the base server even when other vhosts
+ * have merged configs of their own -- since the base server can still directly serve requests
+ * (e.g. as the fallback vhost) and each oidc_cfg_t carries its own copy of the passphrase and
+ * (once derived) its key material.
+ *
+ * when auto_generate is TRUE, an unset passphrase is first auto-generated -- the original
+ * behavior for a server config that is the only one in play (no vhosts override it). When
+ * FALSE, an unset passphrase is left alone: the base server may deliberately be left without
+ * its own crypto passphrase when vhosts each set/override their own OIDCCryptoPassphrase, and
+ * must keep starting up that way rather than silently gaining a freshly-manufactured one.
+ */
+static int oidc_config_ensure_crypto_passphrase(server_rec *s, oidc_cfg_t *cfg, apr_byte_t auto_generate) {
+	if (oidc_cfg_crypto_passphrase_secret1_get(cfg) == NULL) {
+		if (!auto_generate)
+			return OK;
+		oidc_cfg_crypto_passphrase_secret1_set(cfg, oidc_util_rand_hex_str(NULL, s->process->pool, 32));
+	}
+
+	if (oidc_cfg_crypto_passphrase_derive_keys(cfg) == FALSE) {
+		oidc_serror(s, "oidc_cfg_crypto_passphrase_derive_keys failed");
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	return OK;
+}
+
+/*
  * check the config of a vhost
  */
 static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s) {
@@ -1599,14 +1628,8 @@ static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s) {
 
 	oidc_sdebug(s, "enter");
 
-	if (oidc_cfg_crypto_passphrase_secret1_get(cfg) == NULL)
-		oidc_cfg_crypto_passphrase_secret1_set(cfg, oidc_util_rand_hex_str(NULL, s->process->pool, 32));
-
-	/* stretch the now-finalized passphrase(s) into key material once, rather than on every request */
-	if (oidc_cfg_crypto_passphrase_derive_keys(cfg) == FALSE) {
-		oidc_serror(s, "oidc_cfg_crypto_passphrase_derive_keys failed");
+	if (oidc_config_ensure_crypto_passphrase(s, cfg, TRUE) != OK)
 		return HTTP_INTERNAL_SERVER_ERROR;
-	}
 
 	if (((oidc_cfg_metadata_dir_get(cfg) != NULL) ||
 	     (oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(cfg)) != NULL) ||
@@ -1633,9 +1656,18 @@ static int oidc_config_check_merged_vhost_configs(apr_pool_t *pool, server_rec *
 	int status = OK;
 	server_rec *sp = s;
 	while ((sp != NULL) && (status == OK)) {
-		const oidc_cfg_t *cfg = ap_get_module_config(sp->module_config, &auth_openidc_module);
+		oidc_cfg_t *cfg = ap_get_module_config(sp->module_config, &auth_openidc_module);
 		if (oidc_cfg_merged_get(cfg)) {
+			/* a merged vhost config is checked in full, exactly as before */
 			status = oidc_config_check_vhost_config(pool, sp);
+		} else {
+			/* the base server "s" itself is never flagged as merged (its config comes
+			 * straight from create_server_config, not merge_server_config). Derive keys for
+			 * it only if it already has its own explicitly-configured passphrase (do not
+			 * auto-generate one): both leaving the base without a passphrase (vhosts set/
+			 * override their own) and the full OIDC/OAuth completeness checks must keep
+			 * behaving exactly as before */
+			status = oidc_config_ensure_crypto_passphrase(sp, cfg, FALSE);
 		}
 		sp = sp->next;
 	}

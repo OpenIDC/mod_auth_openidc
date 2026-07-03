@@ -1,4 +1,13 @@
 07/03/2026
+- mod_auth_openidc: fix oidc_config_check_merged_vhost_configs() to also derive the
+  base server's own PBKDF2 key material when it has an explicitly-configured
+  OIDCCryptoPassphrase: the base server's config is never flagged "merged" (it is
+  never the target of a merge), so whenever at least one vhost had a merged config
+  of its own, the base server's config was skipped entirely, and a request served
+  directly by the base server (e.g. as the fallback vhost) would fail to
+  encrypt/decrypt cache entries with "no derived key material available". A base
+  server left without its own OIDCCryptoPassphrase (relying on vhosts to set their
+  own) is untouched: no key is auto-generated or derived for it, exactly as before
 - cfg: fix _oidc_cfg_merge_crypto_passphrase() to also carry over the precomputed
   PBKDF2 derived_key{1,2}/derived_key{1,2}_set fields alongside secret1/secret2,
   consistent with its own "add wins as a whole" merge semantics; latent today (the
