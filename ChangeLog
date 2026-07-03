@@ -1,4 +1,10 @@
 07/03/2026
+- cfg: fix _oidc_cfg_merge_crypto_passphrase() to also carry over the precomputed
+  PBKDF2 derived_key{1,2}/derived_key{1,2}_set fields alongside secret1/secret2,
+  consistent with its own "add wins as a whole" merge semantics; latent today (the
+  merge target is always freshly allocated and derive_keys() only ever runs after
+  merging), but this closes the gap so a future change to that ordering cannot
+  silently pair a stale derived key with the wrong secret
 - cfg/util/cache: stretch OIDCCryptoPassphrase into the AES key used for the internal
   "dir"/A256GCM JWE (state cookie, session cookie, cache value encryption) with
   PBKDF2-HMAC-SHA256 (210,000 iterations, a fixed application-specific salt) instead

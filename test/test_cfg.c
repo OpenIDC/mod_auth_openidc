@@ -1286,6 +1286,39 @@ START_TEST(test_cfg_server_merge_and_merged_get) {
 }
 END_TEST
 
+/*
+ * _oidc_cfg_merge_crypto_passphrase() must carry over the precomputed PBKDF2 key material
+ * alongside the secret it belongs to; otherwise a merged config could end up with
+ * derived_key{1,2}_set == TRUE paired with a secret it was never derived from
+ */
+START_TEST(test_cfg_server_merge_crypto_passphrase_derived_keys) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	server_rec *s = oidc_test_request_get()->server;
+
+	oidc_cfg_t *base = oidc_cfg_server_create(pool, s);
+	oidc_cfg_t *add = oidc_cfg_server_create(pool, s);
+
+	base->crypto_passphrase.secret1 = "base-secret-01234567890123456789";
+	memset(base->crypto_passphrase.derived_key1, 0xAA, OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN);
+	base->crypto_passphrase.derived_key1_set = TRUE;
+
+	/* add has no secret1 of its own: base must win "as a whole", including its derived key */
+	oidc_cfg_t *merged = (oidc_cfg_t *)oidc_cfg_server_merge(pool, base, add);
+	ck_assert_str_eq(oidc_cfg_crypto_passphrase_secret1_get(merged), "base-secret-01234567890123456789");
+	ck_assert_int_eq(merged->crypto_passphrase.derived_key1_set, TRUE);
+	ck_assert_int_eq(memcmp(merged->crypto_passphrase.derived_key1, base->crypto_passphrase.derived_key1,
+				OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN),
+			 0);
+
+	/* now add configures its own secret1: add must win "as a whole", including its (unset) derived key,
+	 * not leak base's stale derived_key1_set/derived_key1 paired with add's different secret */
+	add->crypto_passphrase.secret1 = "add-secret-012345678901234567890";
+	oidc_cfg_t *merged2 = (oidc_cfg_t *)oidc_cfg_server_merge(pool, base, add);
+	ck_assert_str_eq(oidc_cfg_crypto_passphrase_secret1_get(merged2), "add-secret-012345678901234567890");
+	ck_assert_int_eq(merged2->crypto_passphrase.derived_key1_set, FALSE);
+}
+END_TEST
+
 START_TEST(test_cfg_child_init) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
@@ -1979,6 +2012,7 @@ int main(void) {
 	tcase_add_test(core, test_cmd_redirect_and_slo_urls);
 	tcase_add_test(core, test_cmd_http_timeout_long_short);
 	tcase_add_test(core, test_cfg_server_merge_and_merged_get);
+	tcase_add_test(core, test_cfg_server_merge_crypto_passphrase_derived_keys);
 	tcase_add_test(core, test_cfg_child_init);
 
 	TCase *dir = tcase_create("dir");

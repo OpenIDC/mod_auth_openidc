@@ -923,6 +923,18 @@ static void _oidc_cfg_merge_crypto_passphrase(oidc_crypto_passphrase_t *c, const
 	const oidc_crypto_passphrase_t *src = add->secret1 != NULL ? add : base;
 	c->secret1 = src->secret1;
 	c->secret2 = src->secret2;
+	/* carry over any already-derived PBKDF2 key material for src's secret(s), consistent with
+	 * "add wins as a whole": today oidc_cfg_crypto_passphrase_derive_keys() only ever runs on
+	 * the final merged config (after all merging is done), so src->derived_key{1,2}_set is
+	 * currently always FALSE here -- but the merge should not silently depend on that call
+	 * ordering, since a stale derived_key paired with a different secret would be used to
+	 * encrypt/decrypt with the wrong key */
+	c->derived_key1_set = src->derived_key1_set;
+	if (src->derived_key1_set)
+		_oidc_memcpy(c->derived_key1, src->derived_key1, OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN);
+	c->derived_key2_set = src->derived_key2_set;
+	if (src->derived_key2_set)
+		_oidc_memcpy(c->derived_key2, src->derived_key2, OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN);
 }
 
 /*
