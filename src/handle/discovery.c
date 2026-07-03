@@ -313,7 +313,7 @@ static apr_byte_t oidc_discovery_response_csrf_check(request_rec *r, const oidc_
 
 	/* compare CSRF cookie value with query parameter value */
 	oidc_util_url_parameter_get(r, OIDC_CSRF_NAME, &csrf_query);
-	if ((csrf_query == NULL) || _oidc_strcmp(csrf_query, csrf_cookie) != 0) {
+	if (oidc_util_strcmp_const_time(csrf_query, csrf_cookie) == FALSE) {
 		oidc_warn(r, "CSRF protection failed, no Discovery and dynamic client registration will be allowed");
 		return FALSE;
 	}

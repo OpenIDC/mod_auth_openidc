@@ -48,6 +48,7 @@
 
 #include <http_protocol.h>
 
+#include <openssl/crypto.h>   /* CRYPTO_memcmp() in oidc_util_strcmp_const_time() */
 #include <openssl/opensslv.h> /* OPENSSL_VERSION_STR / OPENSSL_VERSION_TEXT in oidc_util_openssl_version() */
 
 /*
@@ -427,6 +428,28 @@ const char *oidc_util_mask_value(apr_pool_t *pool, const char *value) {
 	if (len <= OIDC_UTIL_MASK_VALUE_PREFIX_LEN)
 		return "***";
 	return apr_psprintf(pool, "%.*s...(%" APR_SIZE_T_FMT " chars)", OIDC_UTIL_MASK_VALUE_PREFIX_LEN, value, len);
+}
+
+/*
+ * compare two strings in constant time with respect to their content, so a failing
+ * comparison against a request-supplied value (state, XSRF token, CSRF token, ...)
+ * cannot be used to learn how many leading bytes matched; NULL is only considered
+ * equal to NULL
+ */
+apr_byte_t oidc_util_strcmp_const_time(const char *a, const char *b) {
+	apr_size_t len_a = 0;
+	apr_size_t len_b = 0;
+
+	if ((a == NULL) || (b == NULL))
+		return (a == b) ? TRUE : FALSE;
+
+	len_a = _oidc_strlen(a);
+	len_b = _oidc_strlen(b);
+
+	if (len_a != len_b)
+		return FALSE;
+
+	return (CRYPTO_memcmp(a, b, len_a) == 0) ? TRUE : FALSE;
 }
 
 /*

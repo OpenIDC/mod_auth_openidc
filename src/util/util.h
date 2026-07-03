@@ -121,6 +121,7 @@ apr_byte_t oidc_util_url_parameter_get(request_rec *r, char *name, char **value)
 // util.c
 char *oidc_util_hex_encode(apr_pool_t *pool, const unsigned char *bytes, unsigned int len);
 const char *oidc_util_mask_value(apr_pool_t *pool, const char *value);
+apr_byte_t oidc_util_strcmp_const_time(const char *a, const char *b);
 apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char *openssl_hash_algo, const char *input,
 						      char **output);
 int oidc_util_strnenvcmp(const char *a, const char *b, int len);

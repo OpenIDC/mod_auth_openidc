@@ -1,4 +1,9 @@
 07/03/2026
+- handle/util: compare request-supplied secrets (the state-vs-browser-fingerprint
+  check, the refresh-token XSRF access_token check, and the Discovery CSRF cookie
+  check) using a new constant-time oidc_util_strcmp_const_time() instead of a
+  plain string compare, so a failing check cannot leak timing information about
+  how many leading bytes matched
 - http/oauth/refresh/userinfo/proto: stop writing access tokens, refresh tokens,
   client secrets/assertions, authorization codes, PKCE code_verifiers and nonces
   in full to the debug log; introduce oidc_util_mask_value() (keeps a short

@@ -412,7 +412,7 @@ int oidc_refresh_token_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *se
 	}
 
 	/* compare the access_token parameter used for XSRF protection */
-	if (_oidc_strcmp(s_access_token, r_access_token) != 0) {
+	if (oidc_util_strcmp_const_time(s_access_token, r_access_token) == FALSE) {
 		oidc_error(r, "access_token passed in refresh request does not match the one stored in the session");
 		error_code = "no_access_token_match";
 		goto end;
