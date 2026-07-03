@@ -1,4 +1,7 @@
 07/03/2026
+- util/cache: create metadata files (which can hold a dynamically registered
+  client_secret) and file-cache entries with owner-only (0600) permissions
+  instead of relying on the process umask via APR_OS_DEFAULT
 - handle/util: compare request-supplied secrets (the state-vs-browser-fingerprint
   check, the refresh-token XSRF access_token check, and the Discovery CSRF cookie
   check) using a new constant-time oidc_util_strcmp_const_time() instead of a
