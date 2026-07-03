@@ -1,4 +1,10 @@
 07/03/2026
+- handle/discovery: enforce OIDCDiscoverIssuersAllowed *before* the webfinger
+  discovery HTTP call for URL-based and account-based Discovery, not only against
+  the issuer it resolves to: previously a disallowed host could still be probed
+  with an outbound webfinger request even though the response would ultimately be
+  rejected, narrowing but not closing the SSRF surface the directive was meant to
+  bound
 - http: fix a -Wformat-overflow warning in oidc_http_form_encoded_data(): the
   "no params" branch logged a provably-NULL "data" variable via "%s"; log the
   literal "(null)" there instead, matching the "(null)" convention used

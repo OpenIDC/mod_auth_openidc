@@ -384,52 +384,6 @@ static int oidc_discovery_response_static(request_rec *r, oidc_cfg_t *c, const c
 }
 
 /*
- * resolve the issuer for user-identifier or account-name based discovery;
- * on failure sets *rv to the HTTP status the caller should return
- */
-static apr_byte_t oidc_discovery_response_resolve_issuer(request_rec *r, oidc_cfg_t *c, char *user, char **issuer,
-							 char **login_hint, int *rv) {
-
-	if (user != NULL) {
-
-		if (*login_hint == NULL)
-			*login_hint = apr_pstrdup(r->pool, user);
-
-		/* normalize the user identifier */
-		if (_oidc_strstr(user, "https://") != user)
-			user = apr_psprintf(r->pool, "https://%s", user);
-
-		/* got a user identifier as input, perform OP discovery with that */
-		if (oidc_proto_discovery_url_based(r, c, user, issuer) == FALSE) {
-			*rv = oidc_util_html_send_error(r, "Invalid Request",
-							"Could not resolve the provided user identifier to an OpenID "
-							"Connect provider; check your syntax.",
-							HTTP_NOT_FOUND);
-			return FALSE;
-		}
-
-		return TRUE;
-	}
-
-	if (_oidc_strstr(*issuer, OIDC_STR_AT) != NULL) {
-
-		if (*login_hint == NULL)
-			*login_hint = apr_pstrdup(r->pool, *issuer);
-
-		/* got an account name as input, perform OP discovery with that */
-		if (oidc_proto_discovery_account_based(r, c, *issuer, issuer) == FALSE) {
-			*rv = oidc_util_html_send_error(r, "Invalid Request",
-							"Could not resolve the provided account name to an OpenID "
-							"Connect provider; check your syntax.",
-							HTTP_NOT_FOUND);
-			return FALSE;
-		}
-	}
-
-	return TRUE;
-}
-
-/*
  * verify the issuer matches one of the OIDCDiscoverIssuersAllowed regexes, when configured;
  * this bounds the set of hosts that a client-driven Discovery request (webfinger/URL-based,
  * account-based, or direct issuer selection) can cause the server to make outbound requests to
@@ -450,6 +404,78 @@ static apr_byte_t oidc_discovery_issuer_allowed(request_rec *r, const oidc_cfg_t
 
 	oidc_warn(r, "issuer (%s) does not match the list of allowed Discovery issuers", issuer);
 	return FALSE;
+}
+
+/*
+ * resolve the issuer for user-identifier or account-name based discovery;
+ * on failure sets *rv to the HTTP status the caller should return
+ */
+static apr_byte_t oidc_discovery_response_resolve_issuer(request_rec *r, oidc_cfg_t *c, char *user, char **issuer,
+							 char **login_hint, int *rv) {
+
+	if (user != NULL) {
+
+		if (*login_hint == NULL)
+			*login_hint = apr_pstrdup(r->pool, user);
+
+		/* normalize the user identifier */
+		if (_oidc_strstr(user, "https://") != user)
+			user = apr_psprintf(r->pool, "https://%s", user);
+
+		/* enforce the issuer allow-list *before* the webfinger discovery HTTP call itself
+		 * (rather than only against the issuer it resolves to): otherwise a disallowed host
+		 * could still be probed with an outbound request even though the response would
+		 * ultimately be rejected */
+		if (oidc_discovery_issuer_allowed(r, c, user) == FALSE) {
+			*rv = oidc_util_html_send_error(
+			    r, "Invalid Request",
+			    "The provided user identifier is not in the list of allowed issuers; contact the "
+			    "administrator",
+			    HTTP_UNAUTHORIZED);
+			return FALSE;
+		}
+
+		/* got a user identifier as input, perform OP discovery with that */
+		if (oidc_proto_discovery_url_based(r, c, user, issuer) == FALSE) {
+			*rv = oidc_util_html_send_error(r, "Invalid Request",
+							"Could not resolve the provided user identifier to an OpenID "
+							"Connect provider; check your syntax.",
+							HTTP_NOT_FOUND);
+			return FALSE;
+		}
+
+		return TRUE;
+	}
+
+	if (_oidc_strstr(*issuer, OIDC_STR_AT) != NULL) {
+
+		if (*login_hint == NULL)
+			*login_hint = apr_pstrdup(r->pool, *issuer);
+
+		/* same reasoning as above: gate the domain that account-based (webfinger) discovery
+		 * would otherwise probe, before the outbound HTTP call is made */
+		const char *domain = strrchr(*issuer, OIDC_CHAR_AT);
+		const char *domain_issuer = apr_psprintf(r->pool, "https://%s", domain ? domain + 1 : *issuer);
+		if (oidc_discovery_issuer_allowed(r, c, domain_issuer) == FALSE) {
+			*rv = oidc_util_html_send_error(
+			    r, "Invalid Request",
+			    "The provided account name is not in the list of allowed issuers; contact the "
+			    "administrator",
+			    HTTP_UNAUTHORIZED);
+			return FALSE;
+		}
+
+		/* got an account name as input, perform OP discovery with that */
+		if (oidc_proto_discovery_account_based(r, c, *issuer, issuer) == FALSE) {
+			*rv = oidc_util_html_send_error(r, "Invalid Request",
+							"Could not resolve the provided account name to an OpenID "
+							"Connect provider; check your syntax.",
+							HTTP_NOT_FOUND);
+			return FALSE;
+		}
+	}
+
+	return TRUE;
 }
 
 /*

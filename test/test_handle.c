@@ -1032,6 +1032,42 @@ START_TEST(test_handle_discovery_response_account_discovery_fails) {
 }
 END_TEST
 
+/*
+ * OIDCDiscoverIssuersAllowed must reject a disallowed host *before* the webfinger
+ * discovery HTTP call is attempted, not just against the issuer it would resolve to:
+ * with the allow-list configured, 127.0.0.1 (which would otherwise fail with a
+ * connection-refused 404, as in the tests above) must instead be rejected outright.
+ */
+START_TEST(test_handle_discovery_response_url_based_issuer_not_allowed) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	e2e_discovery_set_empty_metadata_dir(r);
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCDiscoverIssuersAllowed);
+	ck_assert_ptr_null(oidc_cmd_discover_issuers_allowed_set(cmd, NULL, "^https://other\\.example\\.com$"));
+
+	r->args = "disc_user=127.0.0.1%3A1"
+		  "&target_link_uri=https%3A%2F%2Fwww.example.com%2Fprotected%2F";
+	int rc = oidc_discovery_response(r, c);
+	ck_assert_int_eq(rc, HTTP_UNAUTHORIZED);
+}
+END_TEST
+
+START_TEST(test_handle_discovery_response_account_based_issuer_not_allowed) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	e2e_discovery_set_empty_metadata_dir(r);
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCDiscoverIssuersAllowed);
+	ck_assert_ptr_null(oidc_cmd_discover_issuers_allowed_set(cmd, NULL, "^https://other\\.example\\.com$"));
+
+	r->args = "iss=jane%40127.0.0.1%3A1"
+		  "&target_link_uri=https%3A%2F%2Fwww.example.com%2Fprotected%2F";
+	int rc = oidc_discovery_response(r, c);
+	ck_assert_int_eq(rc, HTTP_UNAUTHORIZED);
+}
+END_TEST
+
 START_TEST(test_handle_discovery_request_with_metadata_dir) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -3706,6 +3742,8 @@ int main(void) {
 	tcase_add_test(discovery, test_handle_discovery_response_target_link_uri_open_redirect);
 	tcase_add_test(discovery, test_handle_discovery_response_user_discovery_fails);
 	tcase_add_test(discovery, test_handle_discovery_response_account_discovery_fails);
+	tcase_add_test(discovery, test_handle_discovery_response_url_based_issuer_not_allowed);
+	tcase_add_test(discovery, test_handle_discovery_response_account_based_issuer_not_allowed);
 	tcase_add_test(discovery, test_handle_discovery_request_with_metadata_dir);
 	tcase_add_test(discovery, test_handle_discovery_response_test_config_short_circuit);
 	tcase_add_test(discovery, test_handle_discovery_response_issuer_not_allowed);
