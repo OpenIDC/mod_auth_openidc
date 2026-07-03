@@ -110,9 +110,18 @@ typedef struct oidc_apr_expr_t {
 	char *str;
 } oidc_apr_expr_t;
 
+#define OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN 32
+
 typedef struct oidc_crypto_passphrase_t {
 	const char *secret1;
 	const char *secret2;
+	/* PBKDF2-stretched key material derived from secret{1,2}, computed once at post_config
+	 * time (see oidc_cfg_crypto_passphrase_post_config); *_set indicates the corresponding
+	 * secret was non-NULL and the derived key is valid to use */
+	unsigned char derived_key1[OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN];
+	apr_byte_t derived_key1_set;
+	unsigned char derived_key2[OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN];
+	apr_byte_t derived_key2_set;
 } oidc_crypto_passphrase_t;
 
 typedef struct oidc_remote_user_claim_t {
@@ -163,6 +172,8 @@ const char *oidc_cfg_string_list_add(apr_pool_t *pool, apr_array_header_t **list
 const char *oidc_cfg_endpoint_auth_set(apr_pool_t *pool, const oidc_cfg_t *cfg, const char *arg, char **auth,
 				       char **alg);
 void oidc_cfg_crypto_passphrase_secret1_set(oidc_cfg_t *cfg, const char *secret);
+apr_byte_t oidc_crypto_passphrase_derive_keys(oidc_crypto_passphrase_t *cp);
+apr_byte_t oidc_cfg_crypto_passphrase_derive_keys(oidc_cfg_t *cfg);
 
 /*
  * Generators for the per-server (oidc_cfg_t) directive accessors.
@@ -226,6 +237,7 @@ OIDC_CFG_MEMBER_FUNCS_DECL(black_listed_claims, apr_hash_t *)
 OIDC_CFG_MEMBER_FUNCS_DECL(white_listed_claims, apr_hash_t *)
 OIDC_CFG_MEMBER_FUNCS_DECL(state_input_headers, oidc_state_input_hdrs_t)
 OIDC_CFG_MEMBER_FUNCS_DECL(redirect_urls_allowed, apr_hash_t *)
+OIDC_CFG_MEMBER_FUNCS_DECL(discover_issuers_allowed, apr_hash_t *)
 OIDC_CFG_MEMBER_FUNCS_DECL(ca_bundle_path, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(logout_x_frame_options, const char *)
 OIDC_CFG_MEMBER_FUNCS_DECL(x_forwarded_headers, oidc_hdr_x_forwarded_t)

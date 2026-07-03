@@ -42,6 +42,32 @@
 
 #include "util/util.h"
 
+#include <openssl/evp.h>
+
+/* iteration count for PBKDF2-HMAC-SHA256, per current OWASP guidance; this only runs once per
+ * (re)start, in the single-threaded post_config phase -- see oidc_cfg_crypto_passphrase_post_config */
+#define OIDC_UTIL_KEY_DERIVE_ITERATIONS 210000
+/* fixed, non-secret, application-specific salt: it exists for domain separation (so a
+ * precomputed table built against some other use of PBKDF2-HMAC-SHA256 does not apply here),
+ * not to protect against an attacker who has the source code */
+#define OIDC_UTIL_KEY_DERIVE_SALT "mod_auth_openidc-crypto-passphrase-v1"
+
+/*
+ * stretch an operator-supplied OIDCCryptoPassphrase value into "out_len" bytes of key material
+ * using PBKDF2-HMAC-SHA256, so that a low-entropy passphrase cannot be brute-forced offline at
+ * the speed of a single SHA-256 evaluation
+ */
+apr_byte_t oidc_util_key_derive_passphrase_key(const char *passphrase, unsigned char *out, apr_size_t out_len) {
+	if ((passphrase == NULL) || (_oidc_strlen(passphrase) == 0))
+		return FALSE;
+	return (PKCS5_PBKDF2_HMAC(passphrase, (int)_oidc_strlen(passphrase),
+				  (const unsigned char *)OIDC_UTIL_KEY_DERIVE_SALT,
+				  (int)(sizeof(OIDC_UTIL_KEY_DERIVE_SALT) - 1), OIDC_UTIL_KEY_DERIVE_ITERATIONS,
+				  EVP_sha256(), (int)out_len, out) == 1)
+		   ? TRUE
+		   : FALSE;
+}
+
 /*
  * create a symmetric key from a client_secret
  */

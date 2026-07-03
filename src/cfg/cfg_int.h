@@ -184,6 +184,7 @@ struct oidc_cfg_t {
 
 	apr_hash_t *info_hook_data;
 	apr_hash_t *redirect_urls_allowed;
+	apr_hash_t *discover_issuers_allowed;
 	char *ca_bundle_path;
 	char *logout_x_frame_options;
 	int x_forwarded_headers;

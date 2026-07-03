@@ -90,6 +90,27 @@ static apr_byte_t oidc_util_jwt_internal_strip_header(const request_rec *r) {
 }
 
 /*
+ * wrap the precomputed PBKDF2-derived key material for a crypto passphrase into a JWK; the
+ * expensive stretching itself happens once, at post_config time (see
+ * oidc_cfg_crypto_passphrase_derive_keys()), not on every request
+ */
+static apr_byte_t oidc_util_jwt_key_from_derived(request_rec *r, const unsigned char *derived_key,
+						 apr_byte_t derived_key_set, oidc_jwk_t **jwk) {
+	oidc_jose_error_t err;
+	if (derived_key_set == FALSE) {
+		oidc_error(r, "no derived key material available for the configured passphrase");
+		return FALSE;
+	}
+	*jwk = oidc_jwk_create_symmetric_key(r->pool, NULL, derived_key, OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN, FALSE,
+					     &err);
+	if (*jwk == NULL) {
+		oidc_error(r, "oidc_jwk_create_symmetric_key failed: %s", oidc_jose_e2s(r->pool, err));
+		return FALSE;
+	}
+	return TRUE;
+}
+
+/*
  * create an encrypted JWT for internal purposes (i.e. state cookie, session cookie, or encrypted cache value)
  */
 apr_byte_t oidc_util_jwt_create(request_rec *r, const oidc_crypto_passphrase_t *passphrase, const char *s_payload,
@@ -108,7 +129,7 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const oidc_crypto_passphrase_t *
 		goto end;
 	}
 
-	if (oidc_util_key_symmetric_create(r, passphrase->secret1, 0, OIDC_JOSE_ALG_SHA256, FALSE, &jwk) == FALSE)
+	if (oidc_util_jwt_key_from_derived(r, passphrase->derived_key1, passphrase->derived_key1_set, &jwk) == FALSE)
 		goto end;
 
 	if (oidc_util_jwt_internal_compress(r)) {
@@ -183,11 +204,11 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *
 	keys = apr_hash_make(r->pool);
 
 	if ((passphrase->secret2 != NULL) && (kid == NULL)) {
-		if (oidc_util_key_symmetric_create(r, passphrase->secret2, 0, OIDC_JOSE_ALG_SHA256, FALSE, &jwk) ==
+		if (oidc_util_jwt_key_from_derived(r, passphrase->derived_key2, passphrase->derived_key2_set, &jwk) ==
 		    FALSE)
 			goto end;
 	} else {
-		if (oidc_util_key_symmetric_create(r, passphrase->secret1, 0, OIDC_JOSE_ALG_SHA256, FALSE, &jwk) ==
+		if (oidc_util_jwt_key_from_derived(r, passphrase->derived_key1, passphrase->derived_key1_set, &jwk) ==
 		    FALSE)
 			goto end;
 	}

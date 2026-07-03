@@ -121,6 +121,10 @@ static request_rec *oidc_test_request_init(apr_pool_t *pool) {
 	cfg->private_keys = apr_array_make(request->server->process->pconf, 1, sizeof(const char *));
 
 	cfg->crypto_passphrase.secret1 = "12345678901234567890123456789012";
+	if (oidc_cfg_crypto_passphrase_derive_keys(cfg) == FALSE) {
+		fprintf(stderr, "oidc_cfg_crypto_passphrase_derive_keys failed!\n");
+		exit(-1);
+	}
 	cfg->cache.impl = &oidc_cache_shm;
 	cfg->cache.cfg = NULL;
 	cfg->cache.shm_size_max = 500;
@@ -188,4 +192,20 @@ cmd_parms *oidc_test_cmd_get(const char *primitive) {
 	cmd->directive = apr_pcalloc(cmd->pool, sizeof(ap_directive_t));
 	cmd->directive->directive = primitive;
 	return cmd;
+}
+
+/*
+ * tests that poke cfg->crypto_passphrase.secret{1,2} directly at runtime (to simulate a
+ * passphrase rotation without spinning up a new config) must call this afterwards so the
+ * cached PBKDF2-derived key material (see oidc_cfg_crypto_passphrase_derive_keys()) is
+ * recomputed for the new raw secret(s); in production this only ever happens once, at
+ * post_config time, after a config reload
+ */
+void oidc_test_crypto_passphrase_rederive(oidc_cfg_t *cfg) {
+	cfg->crypto_passphrase.derived_key1_set = FALSE;
+	cfg->crypto_passphrase.derived_key2_set = FALSE;
+	if (oidc_cfg_crypto_passphrase_derive_keys(cfg) == FALSE) {
+		fprintf(stderr, "oidc_cfg_crypto_passphrase_derive_keys failed!\n");
+		exit(-1);
+	}
 }

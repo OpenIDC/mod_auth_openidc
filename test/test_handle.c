@@ -3566,6 +3566,78 @@ START_TEST(test_handle_discovery_response_test_config_short_circuit) {
 }
 END_TEST
 
+/*
+ * OIDCDiscoverIssuersAllowed bounds which issuers a Discovery response may
+ * resolve to; verify it rejects a non-matching issuer and still allows a
+ * matching one, using the same metadata-dir/test-config setup as above.
+ */
+static void oidc_test_discovery_write_metadata_dir(request_rec *r, const char *tmpl) {
+	const char *provider_json = "{\"issuer\":\"https://idp.example.com\","
+				    "\"authorization_endpoint\":\"https://idp.example.com/authorize\","
+				    "\"token_endpoint\":\"https://idp.example.com/token\","
+				    "\"jwks_uri\":\"https://idp.example.com/jwks\","
+				    "\"response_types_supported\":[\"code\"],"
+				    "\"token_endpoint_auth_methods_supported\":[\"client_secret_basic\"]}";
+	apr_file_t *f = NULL;
+	ck_assert_int_eq(apr_file_open(&f, apr_psprintf(r->pool, "%s/idp.example.com.provider", tmpl),
+				       APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE,
+				       APR_FPROT_UREAD | APR_FPROT_UWRITE, r->pool),
+			 APR_SUCCESS);
+	apr_size_t len = (apr_size_t)_oidc_strlen(provider_json);
+	apr_file_write(f, provider_json, &len);
+	apr_file_close(f);
+	const char *client_json = "{\"client_id\":\"rp-test\",\"client_secret\":\"sekret\"}";
+	ck_assert_int_eq(apr_file_open(&f, apr_psprintf(r->pool, "%s/idp.example.com.client", tmpl),
+				       APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE,
+				       APR_FPROT_UREAD | APR_FPROT_UWRITE, r->pool),
+			 APR_SUCCESS);
+	len = (apr_size_t)_oidc_strlen(client_json);
+	apr_file_write(f, client_json, &len);
+	apr_file_close(f);
+}
+
+START_TEST(test_handle_discovery_response_issuer_not_allowed) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	char *tmpl = apr_pstrdup(r->pool, "/tmp/oidc-test-disco.XXXXXX");
+	ck_assert_msg(mkdtemp(tmpl) != NULL, "could not create temp metadata dir at %s", tmpl);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCMetadataDir);
+	ck_assert_ptr_null(oidc_cmd_metadata_dir_set(cmd, NULL, tmpl));
+	oidc_test_discovery_write_metadata_dir(r, tmpl);
+
+	cmd = oidc_test_cmd_get(OIDCDiscoverIssuersAllowed);
+	ck_assert_ptr_null(oidc_cmd_discover_issuers_allowed_set(cmd, NULL, "^https://other\\.example\\.com$"));
+
+	r->args = "iss=https%3A%2F%2Fidp.example.com"
+		  "&target_link_uri=https%3A%2F%2Fwww.example.com%2Fprotected%2F"
+		  "&test-config=1";
+	int rc = oidc_discovery_response(r, c);
+	ck_assert_int_eq(rc, HTTP_UNAUTHORIZED);
+}
+END_TEST
+
+START_TEST(test_handle_discovery_response_issuer_allowed) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	char *tmpl = apr_pstrdup(r->pool, "/tmp/oidc-test-disco.XXXXXX");
+	ck_assert_msg(mkdtemp(tmpl) != NULL, "could not create temp metadata dir at %s", tmpl);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCMetadataDir);
+	ck_assert_ptr_null(oidc_cmd_metadata_dir_set(cmd, NULL, tmpl));
+	oidc_test_discovery_write_metadata_dir(r, tmpl);
+
+	cmd = oidc_test_cmd_get(OIDCDiscoverIssuersAllowed);
+	ck_assert_ptr_null(oidc_cmd_discover_issuers_allowed_set(cmd, NULL, "^https://idp\\.example\\.com$"));
+
+	r->args = "iss=https%3A%2F%2Fidp.example.com"
+		  "&target_link_uri=https%3A%2F%2Fwww.example.com%2Fprotected%2F"
+		  "&test-config=1";
+	int rc = oidc_discovery_response(r, c);
+	ck_assert_int_eq(rc, OK);
+}
+END_TEST
+
 int main(void) {
 	TCase *userinfo = tcase_create("userinfo");
 	tcase_add_checked_fixture(userinfo, oidc_test_setup, oidc_test_teardown);
@@ -3636,6 +3708,8 @@ int main(void) {
 	tcase_add_test(discovery, test_handle_discovery_response_account_discovery_fails);
 	tcase_add_test(discovery, test_handle_discovery_request_with_metadata_dir);
 	tcase_add_test(discovery, test_handle_discovery_response_test_config_short_circuit);
+	tcase_add_test(discovery, test_handle_discovery_response_issuer_not_allowed);
+	tcase_add_test(discovery, test_handle_discovery_response_issuer_allowed);
 
 	TCase *info = tcase_create("info");
 	tcase_add_checked_fixture(info, oidc_test_setup, oidc_test_teardown);

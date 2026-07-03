@@ -108,9 +108,9 @@ int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg) {
 	const char *current_url = oidc_util_url_cur(r, oidc_cfg_x_forwarded_headers_get(cfg));
 	const char *method = oidc_original_request_method(r, cfg, FALSE);
 
-	/* generate CSRF token */
+	/* generate CSRF token; 16 bytes (128 bits) of entropy */
 	char *csrf = NULL;
-	if (oidc_util_rand_str(r, &csrf, 8) == FALSE)
+	if (oidc_util_rand_str(r, &csrf, 16) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
 	const char *path_scopes = oidc_cfg_dir_path_scope_get(r);
@@ -313,7 +313,7 @@ static apr_byte_t oidc_discovery_response_csrf_check(request_rec *r, const oidc_
 
 	/* compare CSRF cookie value with query parameter value */
 	oidc_util_url_parameter_get(r, OIDC_CSRF_NAME, &csrf_query);
-	if ((csrf_query == NULL) || _oidc_strcmp(csrf_query, csrf_cookie) != 0) {
+	if (oidc_util_strcmp_const_time(csrf_query, csrf_cookie) == FALSE) {
 		oidc_warn(r, "CSRF protection failed, no Discovery and dynamic client registration will be allowed");
 		return FALSE;
 	}
@@ -430,6 +430,29 @@ static apr_byte_t oidc_discovery_response_resolve_issuer(request_rec *r, oidc_cf
 }
 
 /*
+ * verify the issuer matches one of the OIDCDiscoverIssuersAllowed regexes, when configured;
+ * this bounds the set of hosts that a client-driven Discovery request (webfinger/URL-based,
+ * account-based, or direct issuer selection) can cause the server to make outbound requests to
+ */
+static apr_byte_t oidc_discovery_issuer_allowed(request_rec *r, const oidc_cfg_t *c, const char *issuer) {
+	apr_hash_t *allowed = oidc_cfg_discover_issuers_allowed_get(c);
+	const char *pattern = NULL;
+	char *error_str = NULL;
+
+	if (allowed == NULL)
+		return TRUE;
+
+	for (apr_hash_index_t *hi = apr_hash_first(NULL, allowed); hi; hi = apr_hash_next(hi)) {
+		apr_hash_this(hi, (const void **)&pattern, NULL, NULL);
+		if (oidc_util_regexp_first_match(r->pool, issuer, pattern, NULL, &error_str) == TRUE)
+			return TRUE;
+	}
+
+	oidc_warn(r, "issuer (%s) does not match the list of allowed Discovery issuers", issuer);
+	return FALSE;
+}
+
+/*
  * post-discovery: handle the test-config / test-jwks-uri short-circuits or
  * trigger authentication with the resolved provider
  */
@@ -442,6 +465,13 @@ static int oidc_discovery_response_authenticate(request_rec *r, oidc_cfg_t *c, c
 	int n = (int)_oidc_strlen(issuer);
 	if ((n > 0) && (issuer[n - 1] == OIDC_CHAR_FORWARD_SLASH))
 		issuer[n - 1] = '\0';
+
+	if (oidc_discovery_issuer_allowed(r, c, issuer) == FALSE)
+		return oidc_util_html_send_error(
+		    r, "Invalid Request",
+		    "The selected OpenID Connect provider issuer is not in the list of allowed issuers; "
+		    "contact the administrator",
+		    HTTP_UNAUTHORIZED);
 
 	if (oidc_util_url_has_parameter(r, "test-config")) {
 		oidc_json_t *j_provider = NULL;

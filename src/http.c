@@ -537,17 +537,82 @@ typedef struct oidc_http_encode_t {
 } oidc_http_encode_t;
 
 /*
+ * names of protocol parameters that carry secrets or tokens and must be redacted
+ * before a request URL/body is written to the debug log
+ */
+static apr_byte_t oidc_http_param_is_sensitive(const char *key) {
+	static const char *sensitive[] = {OIDC_PROTO_CLIENT_SECRET,
+					  OIDC_PROTO_CLIENT_ASSERTION,
+					  OIDC_PROTO_CODE,
+					  OIDC_PROTO_CODE_VERIFIER,
+					  OIDC_PROTO_REFRESH_TOKEN,
+					  OIDC_PROTO_ACCESS_TOKEN,
+					  NULL};
+	for (int i = 0; sensitive[i] != NULL; i++)
+		if (_oidc_strcmp(key, sensitive[i]) == 0)
+			return TRUE;
+	return FALSE;
+}
+
+/*
+ * best-effort redaction of well-known sensitive parameters (client_secret, client_assertion,
+ * code, code_verifier, refresh_token, access_token) inside a URL-form-encoded request body,
+ * for debug-log purposes; JSON request bodies do not carry these parameters in this codebase
+ * and are therefore left untouched
+ */
+static const char *oidc_http_redact_body_for_log(apr_pool_t *pool, const char *data) {
+	static const char *sensitive[] = {OIDC_PROTO_CLIENT_SECRET,
+					  OIDC_PROTO_CLIENT_ASSERTION,
+					  OIDC_PROTO_CODE,
+					  OIDC_PROTO_CODE_VERIFIER,
+					  OIDC_PROTO_REFRESH_TOKEN,
+					  OIDC_PROTO_ACCESS_TOKEN,
+					  NULL};
+	char *result = NULL;
+
+	if (data == NULL)
+		return NULL;
+
+	result = apr_pstrdup(pool, data);
+
+	for (int i = 0; sensitive[i] != NULL; i++) {
+		char *needle = apr_pstrcat(pool, sensitive[i], "=", NULL);
+		/* bounded: a well-formed body carries each parameter name at most once */
+		for (int iter = 0; iter < 4; iter++) {
+			const char *pos = _oidc_strstr(result, needle);
+			if (pos == NULL)
+				break;
+			const char *value_start = pos + _oidc_strlen(needle);
+			const char *value_end = strchr(value_start, OIDC_CHAR_AMP);
+			apr_size_t prefix_len = value_start - result;
+			result = apr_psprintf(pool, "%.*s***%s", (int)prefix_len, result, value_end ? value_end : "");
+		}
+	}
+
+	return result;
+}
+
+/*
  * add a url-form-encoded name/value pair
  */
 static int oidc_http_add_form_url_encoded_param(void *rec, const char *key, const char *value) {
 	oidc_http_encode_t *ctx = (oidc_http_encode_t *)rec;
-	oidc_debug(ctx->r, "processing: %s=%s", key,
-		   (_oidc_strncmp(key, OIDC_PROTO_CLIENT_SECRET, _oidc_strlen(OIDC_PROTO_CLIENT_SECRET)) == 0)
-		       ? "***"
-		       : (value ? value : ""));
 	const char *sep = ctx->encoded_params ? OIDC_STR_AMP : "";
 	ctx->encoded_params = apr_psprintf(ctx->r->pool, "%s%s%s=%s", ctx->encoded_params ? ctx->encoded_params : "",
 					   sep, oidc_http_url_encode(ctx->r, key), oidc_http_url_encode(ctx->r, value));
+	return 1;
+}
+
+/*
+ * add a name/value pair to a form-encoded string used only for debug logging, redacting
+ * the value when the parameter name is a known secret/token
+ */
+static int oidc_http_add_form_encoded_param_for_log(void *rec, const char *key, const char *value) {
+	oidc_http_encode_t *ctx = (oidc_http_encode_t *)rec;
+	const char *sep = ctx->encoded_params ? OIDC_STR_AMP : "";
+	const char *v = oidc_http_param_is_sensitive(key) ? "***" : (value ? value : "");
+	ctx->encoded_params =
+	    apr_psprintf(ctx->r->pool, "%s%s%s=%s", ctx->encoded_params ? ctx->encoded_params : "", sep, key, v);
 	return 1;
 }
 
@@ -568,10 +633,15 @@ char *oidc_http_query_encoded_url(request_rec *r, const char *url, const apr_tab
 			sep = strchr(url, OIDC_CHAR_QUERY) != NULL ? OIDC_STR_AMP : OIDC_STR_QUERY;
 		result = apr_psprintf(r->pool, "%s%s%s", url, sep ? sep : "",
 				      data.encoded_params ? data.encoded_params : "");
+
+		oidc_http_encode_t log_data = {r, NULL};
+		apr_table_do(oidc_http_add_form_encoded_param_for_log, &log_data, params, NULL);
+		oidc_debug(r, "url=%s%s%s", url, sep ? sep : "",
+			   log_data.encoded_params ? log_data.encoded_params : "");
 	} else {
 		result = apr_pstrdup(r->pool, url);
+		oidc_debug(r, "url=%s", result);
 	}
-	oidc_debug(r, "url=%s", result);
 	return result;
 }
 
@@ -584,8 +654,13 @@ char *oidc_http_form_encoded_data(request_rec *r, const apr_table_t *params) {
 		oidc_http_encode_t encode_data = {r, NULL};
 		apr_table_do(oidc_http_add_form_url_encoded_param, &encode_data, params, NULL);
 		data = encode_data.encoded_params;
+
+		oidc_http_encode_t log_data = {r, NULL};
+		apr_table_do(oidc_http_add_form_encoded_param_for_log, &log_data, params, NULL);
+		oidc_debug(r, "data=%s", log_data.encoded_params);
+	} else {
+		oidc_debug(r, "data=%s", data);
 	}
-	oidc_debug(r, "data=%s", data);
 	return data;
 }
 
@@ -841,7 +916,8 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 		   "url=%s, data=%s, content_type=%s, basic_auth=%s, access_token=%s, dpop=%s, ssl_validate_server=%d, "
 		   "request_timeout=%d, connect_timeout=%d, retries=%d, retry_interval=%d, outgoing_proxy=%s:%s:%d, "
 		   "pass_cookies=%pp, ssl_cert=%s, ssl_key=%s, ssl_key_pwd=%s",
-		   url, data, content_type, basic_auth ? "****" : "null", access_token, dpop, ssl_validate_server,
+		   url, oidc_http_redact_body_for_log(r->pool, data), content_type, basic_auth ? "****" : "null",
+		   oidc_util_mask_value(r->pool, access_token), dpop, ssl_validate_server,
 		   http_timeout->request_timeout, http_timeout->connect_timeout, http_timeout->retries,
 		   http_timeout->retry_interval, outgoing_proxy->host_port,
 		   outgoing_proxy->username_password ? "****" : "(null)", (int)outgoing_proxy->auth_type, pass_cookies,

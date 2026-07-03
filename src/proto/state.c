@@ -84,10 +84,23 @@ void oidc_proto_state_destroy(oidc_proto_state_t *proto_state) {
 }
 
 /*
- * serialize a state object to a string (for logging/debugging purposes)
+ * serialize a state object to a string (for logging/debugging purposes); the nonce and
+ * PKCE code_verifier are redacted since they are security-sensitive values that should
+ * not end up in full in a log file
  */
 char *oidc_proto_state_to_string(request_rec *r, const oidc_proto_state_t *proto_state) {
-	return oidc_json_encode(r->pool, proto_state, OIDC_JSON_COMPACT);
+	oidc_proto_state_t *copy = oidc_json_deep_copy(proto_state);
+	char *result = NULL;
+
+	if (oidc_json_object_get(copy, OIDC_PROTO_STATE_NONCE) != NULL)
+		oidc_proto_state_set_string_value(copy, OIDC_PROTO_STATE_NONCE, "***");
+	if (oidc_json_object_get(copy, OIDC_PROTO_STATE_PKCE_STATE) != NULL)
+		oidc_proto_state_set_string_value(copy, OIDC_PROTO_STATE_PKCE_STATE, "***");
+
+	result = oidc_json_encode(r->pool, copy, OIDC_JSON_COMPACT);
+	oidc_json_decref(copy);
+
+	return result;
 }
 
 /*

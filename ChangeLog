@@ -1,4 +1,42 @@
 07/03/2026
+- cfg/util/cache: stretch OIDCCryptoPassphrase into the AES key used for the internal
+  "dir"/A256GCM JWE (state cookie, session cookie, cache value encryption) with
+  PBKDF2-HMAC-SHA256 (210,000 iterations, a fixed application-specific salt) instead
+  of a single SHA-256 pass, so an offline attacker who obtains an encrypted
+  cookie/cache value cannot brute-force a weak passphrase at raw-SHA256 speed; the
+  stretching happens once, at post_config time (oidc_cfg_crypto_passphrase_derive_keys()),
+  so the per-request encrypt/decrypt path pays no extra cost. This changes the
+  effective key for a given passphrase, so all sessions/state cookies/cache entries
+  created before an upgrade fail to decrypt afterwards (same as changing
+  OIDCCryptoPassphrase itself): plan for users to be logged out once
+- cfg/handle: add OIDCDiscoverIssuersAllowed, an OIDCRedirectURLsAllowed-style
+  list of regular expressions that bounds which issuer values dynamic OpenID
+  Connect Discovery (webfinger/URL-based, account-based, or direct issuer
+  selection via OIDCMetadataDir) is allowed to resolve to and make outbound
+  requests against; unset (default) preserves the previous, unrestricted
+  behavior
+- handle/discovery: bump the Discovery CSRF token from 8 to 16 random bytes
+  (64 to 128 bits of entropy)
+- doc: recommend prefixing OIDCCookie with "__Host-" so the browser enforces
+  Secure/no-Domain/Path=/ on the session cookie
+- state: use SHA-256 instead of SHA-1 to compute the browser-fingerprint hash
+  bound into the "state" value (X-Forwarded-For/User-Agent headers plus the
+  per-request nonce); in-flight authentication redirects started just before
+  an upgrade will fail state validation on return and require the user to
+  restart the login, same as any other state-timeout
+- util/cache: create metadata files (which can hold a dynamically registered
+  client_secret) and file-cache entries with owner-only (0600) permissions
+  instead of relying on the process umask via APR_OS_DEFAULT
+- handle/util: compare request-supplied secrets (the state-vs-browser-fingerprint
+  check, the refresh-token XSRF access_token check, and the Discovery CSRF cookie
+  check) using a new constant-time oidc_util_strcmp_const_time() instead of a
+  plain string compare, so a failing check cannot leak timing information about
+  how many leading bytes matched
+- http/oauth/refresh/userinfo/proto: stop writing access tokens, refresh tokens,
+  client secrets/assertions, authorization codes, PKCE code_verifiers and nonces
+  in full to the debug log; introduce oidc_util_mask_value() (keeps a short
+  prefix plus the length for log correlation) and redact well-known sensitive
+  parameters out of logged request bodies/URLs and the state-cookie debug dump
 - bump to 2.4.20dev
 
 07/02/2026

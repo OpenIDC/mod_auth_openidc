@@ -41,12 +41,10 @@
  */
 
 #include "state.h"
+#include "jose.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "util/util.h"
-#include <apr_sha1.h>
-
-#define OIDC_STATE_SHA1_LEN 20
 
 /*
  * return the name for the state cookie
@@ -60,24 +58,23 @@ char *oidc_state_cookie_name(request_rec *r, const char *state) {
  */
 char *oidc_state_browser_fingerprint(request_rec *r, const oidc_cfg_t *c, const char *nonce) {
 
-	unsigned char hash[OIDC_STATE_SHA1_LEN];
-	/* helper to hold to header values */
+	/* helper to hold header values */
 	const char *value = NULL;
-	/* the hash context */
-	apr_sha1_ctx_t sha1;
+	/* concatenated hash input */
+	char *input = "";
+	unsigned char *hash = NULL;
+	unsigned int hash_len = 0;
+	oidc_jose_error_t err;
 	char *result = NULL;
 
 	oidc_debug(r, "enter");
-
-	/* Initialize the hash context */
-	apr_sha1_init(&sha1);
 
 	if (oidc_cfg_state_input_headers_get(c) & OIDC_STATE_INPUT_HEADERS_X_FORWARDED_FOR) {
 		/* get the X-FORWARDED-FOR header value  */
 		value = oidc_http_hdr_in_x_forwarded_for_get(r);
 		/* if we have a value for this header, concat it to the hash input */
 		if (value != NULL)
-			apr_sha1_update(&sha1, value, (unsigned int)_oidc_strlen(value));
+			input = apr_pstrcat(r->pool, input, value, NULL);
 	}
 
 	if (oidc_cfg_state_input_headers_get(c) & OIDC_STATE_INPUT_HEADERS_USER_AGENT) {
@@ -85,19 +82,23 @@ char *oidc_state_browser_fingerprint(request_rec *r, const oidc_cfg_t *c, const 
 		value = oidc_http_hdr_in_user_agent_get(r);
 		/* if we have a value for this header, concat it to the hash input */
 		if (value != NULL)
-			apr_sha1_update(&sha1, value, (unsigned int)_oidc_strlen(value));
+			input = apr_pstrcat(r->pool, input, value, NULL);
 	}
 
 	/* get the remote client IP address or host name */
 
 	/* concat the nonce parameter to the hash input */
-	apr_sha1_update(&sha1, nonce, (unsigned int)_oidc_strlen(nonce));
+	input = apr_pstrcat(r->pool, input, nonce, NULL);
 
-	/* finalize the hash input and calculate the resulting hash output */
-	apr_sha1_final(hash, &sha1);
+	/* calculate the hash output */
+	if (oidc_jose_hash_bytes(r->pool, OIDC_JOSE_ALG_SHA256, (const unsigned char *)input,
+				 (unsigned int)_oidc_strlen(input), &hash, &hash_len, &err) == FALSE) {
+		oidc_error(r, "oidc_jose_hash_bytes failed: %s", oidc_jose_e2s(r->pool, err));
+		return NULL;
+	}
 
 	/* base64url-encode the resulting hash and return it */
-	oidc_util_base64url_encode(r, &result, (const char *)hash, OIDC_STATE_SHA1_LEN, TRUE);
+	oidc_util_base64url_encode(r, &result, (const char *)hash, hash_len, TRUE);
 
 	return result;
 }

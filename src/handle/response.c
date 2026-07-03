@@ -371,7 +371,7 @@ static apr_byte_t oidc_response_proto_state_restore(request_rec *r, const oidc_c
 	/* calculate the hash of the browser fingerprint concatenated with the nonce */
 	char *calc = oidc_state_browser_fingerprint(r, c, nonce);
 	/* compare the calculated hash with the value provided in the authorization response */
-	if (_oidc_strcmp(calc, state) != 0) {
+	if (oidc_util_strcmp_const_time(calc, state) == FALSE) {
 		oidc_error(
 		    r,
 		    "calculated state from cookie does not match state parameter passed back in URL: \"%s\" != \"%s\"",

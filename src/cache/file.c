@@ -249,8 +249,8 @@ static apr_byte_t oidc_cache_file_clean_due(request_rec *r, const oidc_cfg_t *cf
 
 	/* no metadata file yet: create it and proceed with a first cleaning cycle */
 	if (apr_stat(&fi, metadata_path, APR_FINFO_MTIME, r->pool) != APR_SUCCESS) {
-		if ((*rc = apr_file_open(&fd, metadata_path, (APR_FOPEN_WRITE | APR_FOPEN_CREATE), APR_OS_DEFAULT,
-					 r->pool)) != APR_SUCCESS) {
+		if ((*rc = apr_file_open(&fd, metadata_path, (APR_FOPEN_WRITE | APR_FOPEN_CREATE),
+					 (APR_FPROT_UREAD | APR_FPROT_UWRITE), r->pool)) != APR_SUCCESS) {
 			oidc_error(r, "error creating cache timestamp file '%s' (%s)", metadata_path,
 				   apr_strerror(*rc, s_err, sizeof(s_err)));
 			return FALSE;
@@ -396,9 +396,10 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section, const
 		return TRUE;
 	}
 
-	/* try to open the cache file for writing, creating it if it does not exist */
-	if ((rc = apr_file_open(&fd, path, (APR_FOPEN_WRITE | APR_FOPEN_CREATE), APR_OS_DEFAULT, r->pool)) !=
-	    APR_SUCCESS) {
+	/* try to open the cache file for writing, creating it if it does not exist; cache entries can
+	 * hold session/state secrets, so restrict permissions to the owner only */
+	if ((rc = apr_file_open(&fd, path, (APR_FOPEN_WRITE | APR_FOPEN_CREATE), (APR_FPROT_UREAD | APR_FPROT_UWRITE),
+				r->pool)) != APR_SUCCESS) {
 		oidc_error(r, "cache file \"%s\" could not be opened (%s)", path,
 			   apr_strerror(rc, s_err, sizeof(s_err)));
 		return FALSE;

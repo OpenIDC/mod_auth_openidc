@@ -58,5 +58,6 @@ request_rec *oidc_test_request_get(void);
 oidc_cfg_t *oidc_test_cfg_get(void);
 cmd_parms *oidc_test_cmd_get(const char *primitive);
 void oidc_test_set_auth_type(const char *auth_type);
+void oidc_test_crypto_passphrase_rederive(oidc_cfg_t *cfg);
 
 #endif // _MOD_AUTH_OPENIDC_TEST_UTIL_H_

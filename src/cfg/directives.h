@@ -87,6 +87,7 @@
 #define OIDCBlackListedClaims "OIDCBlackListedClaims"
 #define OIDCStateInputHeaders "OIDCStateInputHeaders"
 #define OIDCRedirectURLsAllowed "OIDCRedirectURLsAllowed"
+#define OIDCDiscoverIssuersAllowed "OIDCDiscoverIssuersAllowed"
 #define OIDCCABundlePath "OIDCCABundlePath"
 #define OIDCLogoutXFrameOptions "OIDCLogoutXFrameOptions"
 #define OIDCXForwardedHeaders "OIDCXForwardedHeaders"

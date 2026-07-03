@@ -124,9 +124,11 @@ apr_byte_t oidc_util_file_write(request_rec *r, const char *path, const char *da
 	apr_size_t bytes_written = 0;
 	char s_err[128];
 
-	/* try to open the metadata file for writing, creating it if it does not exist */
-	if ((rc = apr_file_open(&fd, path, (APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE), APR_OS_DEFAULT,
-				r->pool)) != APR_SUCCESS) {
+	/* try to open the metadata file for writing, creating it if it does not exist; some of
+	 * these files hold secrets (e.g. a dynamically registered client_secret), so restrict
+	 * the permissions to the owner only rather than falling back to the process umask */
+	if ((rc = apr_file_open(&fd, path, (APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE),
+				(APR_FPROT_UREAD | APR_FPROT_UWRITE), r->pool)) != APR_SUCCESS) {
 		oidc_error(r, "file \"%s\" could not be opened (%s)", path, apr_strerror(rc, s_err, sizeof(s_err)));
 		return FALSE;
 	}

@@ -101,6 +101,7 @@ apr_hash_t *oidc_util_key_sets_merge(apr_pool_t *pool, apr_hash_t *k1, const apr
 apr_hash_t *oidc_util_key_sets_hash_merge(apr_pool_t *pool, apr_hash_t *k1, apr_hash_t *k2);
 apr_hash_t *oidc_util_key_symmetric_merge(apr_pool_t *pool, const apr_array_header_t *keys, const oidc_jwk_t *jwk);
 oidc_jwk_t *oidc_util_key_list_first(const apr_array_header_t *key_list, int kty, const char *use);
+apr_byte_t oidc_util_key_derive_passphrase_key(const char *passphrase, unsigned char *out, apr_size_t out_len);
 
 // random.c
 unsigned int oidc_util_rand_int(unsigned int mod);
@@ -120,6 +121,8 @@ apr_byte_t oidc_util_url_parameter_get(request_rec *r, char *name, char **value)
 
 // util.c
 char *oidc_util_hex_encode(apr_pool_t *pool, const unsigned char *bytes, unsigned int len);
+const char *oidc_util_mask_value(apr_pool_t *pool, const char *value);
+apr_byte_t oidc_util_strcmp_const_time(const char *a, const char *b);
 apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char *openssl_hash_algo, const char *input,
 						      char **output);
 int oidc_util_strnenvcmp(const char *a, const char *b, int len);

@@ -136,6 +136,43 @@ const char *oidc_cfg_crypto_passphrase_secret2_get(const oidc_cfg_t *cfg) {
 	return cfg->crypto_passphrase.secret2;
 }
 
+/*
+ * stretch the (by now finalized: user-configured or auto-generated) crypto passphrase(s) into
+ * PBKDF2-derived key material, once, so the per-request JWE encrypt/decrypt path (see
+ * oidc_util_jwt_create/oidc_util_jwt_verify) does not have to pay for the KDF on every request;
+ * must be called after the passphrase has been finalized (see oidc_config_check_vhost_config)
+ * and before any request is handled; operates directly on an oidc_crypto_passphrase_t so it can
+ * also be used for the ad-hoc structs built for a single cache-decrypt attempt (see
+ * oidc_cache_crypto_decrypt) or in unit tests, not just the one embedded in oidc_cfg_t
+ */
+apr_byte_t oidc_crypto_passphrase_derive_keys(oidc_crypto_passphrase_t *cp) {
+	/* an empty (non-NULL) secret is treated as "not configured", matching
+	 * oidc_util_key_symmetric_create()'s existing behavior for a client_secret */
+	if ((cp->secret1 != NULL) && (_oidc_strlen(cp->secret1) > 0) && (cp->derived_key1_set == FALSE)) {
+		if (oidc_util_key_derive_passphrase_key(cp->secret1, cp->derived_key1,
+							OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN) == FALSE)
+			return FALSE;
+		cp->derived_key1_set = TRUE;
+	}
+
+	if ((cp->secret2 != NULL) && (_oidc_strlen(cp->secret2) > 0) && (cp->derived_key2_set == FALSE)) {
+		if (oidc_util_key_derive_passphrase_key(cp->secret2, cp->derived_key2,
+							OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN) == FALSE)
+			return FALSE;
+		cp->derived_key2_set = TRUE;
+	}
+
+	return TRUE;
+}
+
+/*
+ * thin wrapper around oidc_crypto_passphrase_derive_keys() for the passphrase embedded in a
+ * server config; see that function for details
+ */
+apr_byte_t oidc_cfg_crypto_passphrase_derive_keys(oidc_cfg_t *cfg) {
+	return oidc_crypto_passphrase_derive_keys(&cfg->crypto_passphrase);
+}
+
 const char *oidc_cmd_outgoing_proxy_set(cmd_parms *cmd, void *ptr, const char *arg1, const char *arg2,
 					const char *arg3) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
@@ -684,6 +721,7 @@ OIDC_CFG_MEMBER_FUNCS_INT(provider_metadata_refresh_interval, OIDC_PROVIDER_META
 OIDC_CFG_MEMBER_FUNCS_HASHTABLE(white_listed_claims)
 OIDC_CFG_MEMBER_FUNCS_HASHTABLE(black_listed_claims)
 OIDC_CFG_MEMBER_FUNCS_HASHTABLE(redirect_urls_allowed)
+OIDC_CFG_MEMBER_FUNCS_HASHTABLE(discover_issuers_allowed)
 
 #define OIDC_CFG_MEMBER_FUNCS_ABS_OR_REL_URI(member)                                                                   \
 	const char *oidc_cmd_##member##_set(cmd_parms *cmd, void *ptr, const char *arg) {                              \
@@ -800,6 +838,8 @@ void *oidc_cfg_server_create(apr_pool_t *pool, server_rec *svr) {
 
 	c->crypto_passphrase.secret1 = NULL;
 	c->crypto_passphrase.secret2 = NULL;
+	c->crypto_passphrase.derived_key1_set = FALSE;
+	c->crypto_passphrase.derived_key2_set = FALSE;
 
 	c->post_preserve_template = NULL;
 	c->post_restore_template = NULL;
@@ -818,6 +858,7 @@ void *oidc_cfg_server_create(apr_pool_t *pool, server_rec *svr) {
 
 	c->state_input_headers = OIDC_CONFIG_POS_INT_UNSET;
 	c->redirect_urls_allowed = NULL;
+	c->discover_issuers_allowed = NULL;
 	c->ca_bundle_path = NULL;
 	c->logout_x_frame_options = NULL;
 	c->x_forwarded_headers = OIDC_CONFIG_POS_INT_UNSET;
@@ -966,6 +1007,8 @@ void *oidc_cfg_server_merge(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->state_input_headers = _oidc_cfg_merge_pos_int(add->state_input_headers, base->state_input_headers);
 
 	c->redirect_urls_allowed = _oidc_cfg_merge_ptr(add->redirect_urls_allowed, base->redirect_urls_allowed);
+	c->discover_issuers_allowed =
+	    _oidc_cfg_merge_ptr(add->discover_issuers_allowed, base->discover_issuers_allowed);
 
 	c->ca_bundle_path = _oidc_cfg_merge_ptr(add->ca_bundle_path, base->ca_bundle_path);
 

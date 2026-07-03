@@ -329,9 +329,11 @@ START_TEST(test_proto_state_getters_setters_and_string) {
 
 	char *s = oidc_proto_state_to_string(r, ps);
 	ck_assert_ptr_nonnull(s);
-	/* basic sanity: string contains issuer and nonce */
+	/* basic sanity: string contains the (non-secret) issuer */
 	ck_assert_ptr_nonnull(_oidc_strstr(s, "https://example.org"));
-	ck_assert_ptr_nonnull(_oidc_strstr(s, "mynonce"));
+	/* the nonce and PKCE code_verifier are security-sensitive and must be redacted */
+	ck_assert_ptr_null(_oidc_strstr(s, "mynonce"));
+	ck_assert_ptr_null(_oidc_strstr(s, "pkce123"));
 
 	oidc_proto_state_destroy(ps);
 }

@@ -291,7 +291,7 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 	}
 
 	/* log some stuff */
-	oidc_debug(r, "bearer token: %s", *access_token);
+	oidc_debug(r, "bearer token: %s", oidc_util_mask_value(r->pool, *access_token));
 	return TRUE;
 }
 
