@@ -108,9 +108,9 @@ int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg) {
 	const char *current_url = oidc_util_url_cur(r, oidc_cfg_x_forwarded_headers_get(cfg));
 	const char *method = oidc_original_request_method(r, cfg, FALSE);
 
-	/* generate CSRF token */
+	/* generate CSRF token; 16 bytes (128 bits) of entropy */
 	char *csrf = NULL;
-	if (oidc_util_rand_str(r, &csrf, 8) == FALSE)
+	if (oidc_util_rand_str(r, &csrf, 16) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
 	const char *path_scopes = oidc_cfg_dir_path_scope_get(r);

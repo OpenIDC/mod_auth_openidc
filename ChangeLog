@@ -1,4 +1,8 @@
 07/03/2026
+- handle/discovery: bump the Discovery CSRF token from 8 to 16 random bytes
+  (64 to 128 bits of entropy)
+- doc: recommend prefixing OIDCCookie with "__Host-" so the browser enforces
+  Secure/no-Domain/Path=/ on the session cookie
 - state: use SHA-256 instead of SHA-1 to compute the browser-fingerprint hash
   bound into the "state" value (X-Forwarded-For/User-Agent headers plus the
   per-request nonce); in-flight authentication redirects started just before
