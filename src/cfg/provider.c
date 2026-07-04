@@ -412,6 +412,14 @@ OIDC_PROVIDER_MEMBER_FUNCS_PARSE_STR(response_mode, oidc_cfg_parse_is_valid_resp
 #define OIDC_DEFAULT_RESPONSE_TYPE OIDC_PROTO_CODE
 OIDC_PROVIDER_MEMBER_FUNCS_PARSE_STR(response_type, oidc_cfg_parse_is_valid_response_type, OIDC_DEFAULT_RESPONSE_TYPE)
 
+/*
+ * whether response_type was explicitly configured, since the getter substitutes
+ * OIDC_DEFAULT_RESPONSE_TYPE and thus cannot distinguish "set" from "default"
+ */
+apr_byte_t oidc_cfg_provider_response_type_is_set(const oidc_provider_t *provider) {
+	return provider->response_type != NULL;
+}
+
 OIDC_PROVIDER_MEMBER_FUNCS_PARSE_STR(id_token_signed_response_alg, oidc_cfg_parse_is_valid_signed_response_alg, NULL)
 OIDC_PROVIDER_MEMBER_FUNCS_PARSE_STR(id_token_encrypted_response_alg, oidc_cfg_parse_is_valid_encrypted_response_alg,
 				     NULL)

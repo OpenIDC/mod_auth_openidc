@@ -646,13 +646,6 @@ START_TEST(test_metadata_disk_dyn_registration_post_logout_redirect_uris) {
 }
 END_TEST
 
-/* NB: pins CURRENT behavior — the "response_types" fallback logic in
- * oidc_metadata_client_parse_response_type is unreachable because
- * oidc_cfg_provider_response_type_get never returns NULL (it substitutes the
- * "code" default), so its early-return always fires and the response_type
- * stays at the configured/global default even when the client metadata does
- * not advertise it. If that check is ever fixed to inspect the raw member,
- * this test should start asserting the "id_token" fallback instead. */
 START_TEST(test_metadata_client_parse_response_type_not_advertised) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -660,6 +653,27 @@ START_TEST(test_metadata_client_parse_response_type_not_advertised) {
 
 	oidc_json_t *j = NULL;
 	/* the global default response_type ("code") is not in the client's list */
+	ck_assert_int_eq(oidc_json_decode_object(r,
+						 "{\"client_id\":\"rp-test\",\"client_secret\":\"sekret\","
+						 "\"response_types\":[\"id_token\",\"id_token token\"]}",
+						 &j),
+			 TRUE);
+	ck_assert_int_eq(oidc_metadata_client_parse(r, c, j, provider), TRUE);
+	/* not explicitly configured: fall back to the first advertised entry */
+	ck_assert_str_eq(oidc_cfg_provider_response_type_get(provider), "id_token");
+	oidc_json_decref(j);
+}
+END_TEST
+
+START_TEST(test_metadata_client_parse_response_type_explicitly_set) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+
+	ck_assert_ptr_eq((void *)oidc_cfg_provider_response_type_set(r->pool, provider, "code"), NULL);
+
+	oidc_json_t *j = NULL;
+	/* an explicitly configured response_type survives even when the client metadata does not advertise it */
 	ck_assert_int_eq(oidc_json_decode_object(r,
 						 "{\"client_id\":\"rp-test\",\"client_secret\":\"sekret\","
 						 "\"response_types\":[\"id_token\",\"id_token token\"]}",
@@ -1148,6 +1162,7 @@ int main(void) {
 	tcase_add_test(disk, test_metadata_disk_get_full);
 	tcase_add_test(disk, test_metadata_disk_dyn_registration_post_logout_redirect_uris);
 	tcase_add_test(disk, test_metadata_client_parse_response_type_not_advertised);
+	tcase_add_test(disk, test_metadata_client_parse_response_type_explicitly_set);
 	tcase_add_test(disk, test_metadata_disk_client_secret_expired);
 	tcase_add_test(disk, test_metadata_disk_client_secret_never_expires);
 	tcase_add_test(disk, test_metadata_disk_provider_get_live_discovery);

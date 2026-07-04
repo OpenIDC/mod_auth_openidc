@@ -1,3 +1,13 @@
+07/04/2026
+- metadata/cfg: fix the client-metadata "response_types" fallback in
+  oidc_metadata_client_parse_response_type(): it was unreachable because the
+  response_type getter substitutes the "code" default and so never returns
+  NULL; add oidc_cfg_provider_response_type_is_set() to detect an explicitly
+  configured value instead. When no response_type is configured and the client
+  metadata advertises a "response_types" array that does not include the
+  global/default value, the first advertised entry is now actually used, as
+  documented
+
 07/03/2026
 - cfg/mod_auth_openidc: memoize the PBKDF2-HMAC-SHA256 crypto-passphrase key
   derivation (oidc_crypto_passphrase_derive_keys_cached()) by secret text across

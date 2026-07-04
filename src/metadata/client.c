@@ -301,7 +301,7 @@ static void oidc_metadata_client_parse_response_type(request_rec *r, oidc_cfg_t 
 	const char *rv = NULL;
 	const char *value = NULL;
 
-	if (oidc_cfg_provider_response_type_get(provider) != NULL)
+	if (oidc_cfg_provider_response_type_is_set(provider))
 		return;
 
 	oidc_cfg_provider_response_type_set(r->pool, provider,
