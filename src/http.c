@@ -576,7 +576,7 @@ static const char *oidc_http_redact_body_for_log(apr_pool_t *pool, const char *d
 	result = apr_pstrdup(pool, data);
 
 	for (int i = 0; sensitive[i] != NULL; i++) {
-		char *needle = apr_pstrcat(pool, sensitive[i], "=", NULL);
+		const char *needle = apr_pstrcat(pool, sensitive[i], "=", NULL);
 		/* bounded: a well-formed body carries each parameter name at most once */
 		for (int iter = 0; iter < 4; iter++) {
 			const char *pos = _oidc_strstr(result, needle);
@@ -610,7 +610,8 @@ static int oidc_http_add_form_url_encoded_param(void *rec, const char *key, cons
 static int oidc_http_add_form_encoded_param_for_log(void *rec, const char *key, const char *value) {
 	oidc_http_encode_t *ctx = (oidc_http_encode_t *)rec;
 	const char *sep = ctx->encoded_params ? OIDC_STR_AMP : "";
-	const char *v = oidc_http_param_is_sensitive(key) ? "***" : (value ? value : "");
+	const char *safe_value = value ? value : "";
+	const char *v = oidc_http_param_is_sensitive(key) ? "***" : safe_value;
 	ctx->encoded_params =
 	    apr_psprintf(ctx->r->pool, "%s%s%s=%s", ctx->encoded_params ? ctx->encoded_params : "", sep, key, v);
 	return 1;

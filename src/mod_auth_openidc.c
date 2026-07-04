@@ -607,8 +607,8 @@ apr_byte_t oidc_get_provider_from_session(request_rec *r, oidc_cfg_t *c, const o
  */
 static void oidc_copy_tokens_to_request_state(request_rec *r, const oidc_session_t *session) {
 
-	oidc_json_t *id_token = oidc_session_get_idtoken_claims(r, session);
-	oidc_json_t *claims = oidc_session_get_userinfo_claims(r, session);
+	const oidc_json_t *id_token = oidc_session_get_idtoken_claims(r, session);
+	const oidc_json_t *claims = oidc_session_get_userinfo_claims(r, session);
 	const char *scope = oidc_session_get_scope(r, session);
 
 	if (id_token != NULL)

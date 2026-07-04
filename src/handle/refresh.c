@@ -80,7 +80,7 @@
 static void oidc_refresh_token_cache_set(request_rec *r, const char *refresh_token, const char *s_access_token,
 					 const char *s_token_type, int expires_in, const char *s_id_token,
 					 const char *s_refresh_token, apr_time_t *ts) {
-	char *s_json = NULL;
+	const char *s_json = NULL;
 
 	/* create the JSON representation of the refresh grant results + timestamp */
 	oidc_json_t *json = oidc_json_object();
