@@ -97,7 +97,10 @@ libauth_openidc_la_SOURCES = \
 	metadata/conf.c \
 	metadata/client.c \
 	json.c \
-	jose.c
+	jose.c \
+	jose/jwk.c \
+	jose/jws.c \
+	jose/jwe.c
 
 if HAVE_LIBHIREDIS
 libauth_openidc_la_SOURCES += \
@@ -131,6 +134,7 @@ noinst_HEADERS = \
 	session.h \
 	json.h \
 	jose.h \
+	jose/internal.h \
 	http.h \
 	http_int.h \
 	metrics.h \

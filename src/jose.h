@@ -57,7 +57,8 @@
 
 /*
  * opaque forward declarations of the backend JOSE library's key and signature types, so this public header
- * does not need to include <cjose/cjose.h>; jose.c includes the real header to operate on them
+ * does not need to include <cjose/cjose.h>; jose.c and the jose/ subdirectory include the real header
+ * to operate on them
  */
 typedef struct _cjose_jwk_int cjose_jwk_t;
 typedef struct _cjose_jws_int cjose_jws_t;
@@ -100,8 +101,9 @@ typedef struct bio_st BIO;
 
 /*
  * JOSE header parameter names, algorithm/encryption values and key types, kept independent of the backend
- * JOSE library so that nothing outside jose.c/key.c needs to reference cjose; the key-type values are kept
- * identical to the cjose enum (asserted at compile time in jose.c) so no boundary translation is needed
+ * JOSE library so that nothing outside jose.c, the jose/ subdirectory and util/key.c needs to reference cjose;
+ * the key-type values are kept identical to the cjose enum (asserted at compile time in jose/internal.h) so no
+ * boundary translation is needed
  */
 #define OIDC_JOSE_HDR_ALG "alg"
 #define OIDC_JOSE_HDR_ENC "enc"

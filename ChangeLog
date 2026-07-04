@@ -1,4 +1,11 @@
 07/04/2026
+- jose: split the JWK, JWS/JWT and JWE implementations out of the 2000+ line
+  jose.c into a new jose/ source subdirectory (jose/jwk.c, jose/jws.c,
+  jose/jwe.c plus the internal-only jose/internal.h carrying the shared
+  cjose error/kty helpers), leaving jose.c with the backend-independent
+  common core (error reporting, hashing, compression, supported-algorithm
+  lists, version reporting); a pure code move with no functional changes,
+  mirroring the source-tree subdirectory convention
 - metadata/cfg: fix the client-metadata "response_types" fallback in
   oidc_metadata_client_parse_response_type(): it was unreachable because the
   response_type getter substitutes the "code" default and so never returns
