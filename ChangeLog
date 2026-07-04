@@ -1,4 +1,10 @@
 07/04/2026
+- mod_auth_openidc: rewrite oidc_handle_redirect_uri_request()'s long if/else
+  chain into a declarative dispatch table: each redirect_uri sub-feature is one
+  table entry carrying its matcher (protocol predicate or query-parameter
+  name), authentication requirement, handler, metrics counter and timing flag,
+  so adding a sub-feature becomes a one-line table addition; no functional
+  changes
 - jose: split the JWK, JWS/JWT and JWE implementations out of the 2000+ line
   jose.c into a new jose/ source subdirectory (jose/jwk.c, jose/jws.c,
   jose/jwe.c plus the internal-only jose/internal.h carrying the shared

@@ -1046,163 +1046,163 @@ static int oidc_javascript_implicit(request_rec *r, oidc_cfg_t *c) {
 }
 
 /*
- * handle all requests to the redirect_uri
+ * handle an authorization response from the OP using the Basic Client profile or a Hybrid flow
  */
-int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
+static int oidc_redirect_uri_handle_response_redirect(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
+	return oidc_response_authorization_redirect(r, c, session);
+}
 
+/*
+ * handle an authorization response using the fragment(+POST) response_mode with the Implicit Client profile
+ */
+static apr_byte_t oidc_redirect_uri_match_response_post(request_rec *r, oidc_cfg_t *c) {
+	return oidc_proto_response_is_post(r, c);
+}
+
+/*
+ * handle a response from the OP discovery page
+ */
+static int oidc_redirect_uri_handle_discovery_response(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
+	return oidc_discovery_response(r, c);
+}
+
+/*
+ * pass the request on to the content handler; avoid:
+ * "No authentication done but request not allowed without authentication"
+ * by setting r->user
+ */
+static int oidc_redirect_uri_handle_in_content_handler(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
+	r->user = "";
+	return OK;
+}
+
+/*
+ * handle a request object by reference request
+ */
+static int oidc_redirect_uri_handle_request_uri(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
+	return oidc_request_uri(r, c);
+}
+
+/*
+ * handle a request to invalidate the access token cache
+ */
+static int oidc_redirect_uri_handle_remove_at_cache(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
+	return oidc_revoke_at_cache_remove(r, c);
+}
+
+/*
+ * handle a request to revoke a user session
+ */
+static int oidc_redirect_uri_handle_revoke_session(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
+	return oidc_revoke_session(r, c);
+}
+
+/*
+ * handle a request to the info hook
+ */
+static int oidc_redirect_uri_handle_info(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 	apr_byte_t needs_save = FALSE;
 	char *s_extend_session = NULL;
 	int rc = OK;
 
+	oidc_util_url_parameter_get(r, OIDC_INFO_PARAM_EXTEND_SESSION, &s_extend_session);
+
+	// need to establish user/claims for authorization purposes
+	rc = oidc_handle_existing_session(
+	    r, c, session, (s_extend_session == NULL) || (_oidc_strcmp(s_extend_session, "false") != 0), &needs_save);
+
+	// retain this session across the authentication and content handler phases
+	// by storing it in the request state
+	apr_pool_userdata_set(session, OIDC_USERDATA_SESSION, NULL, r->pool);
+
+	// record whether the session was modified and needs to be saved in the cache
+	if (needs_save)
+		oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_SAVE, "");
+
+	return rc;
+}
+
+/*
+ * match a "bare" request to the redirect URI, indicating implicit flow using the fragment response_mode
+ */
+static apr_byte_t oidc_redirect_uri_match_bare(request_rec *r, oidc_cfg_t *c) {
+	return (r->args == NULL) || (_oidc_strcmp(r->args, "") == 0);
+}
+
+static int oidc_redirect_uri_handle_implicit(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
+	return oidc_javascript_implicit(r, c);
+}
+
+/* dispatch-table entry for one redirect_uri sub-feature */
+typedef struct oidc_redirect_uri_dispatch_t {
+	/* matches the request to this sub-feature; when NULL the request matches on the query parameter below */
+	apr_byte_t (*match)(request_rec *r, oidc_cfg_t *c);
+	/* query parameter that selects this sub-feature when match is NULL */
+	const char *parameter;
+	/* require an authenticated session, returning HTTP_UNAUTHORIZED (before counting) when there is none */
+	apr_byte_t requires_auth;
+	/* handles the matched request */
+	int (*handle)(request_rec *r, oidc_cfg_t *c, oidc_session_t *session);
+	/* metrics counter identifying this sub-feature */
+	oidc_metrics_counter_type_t metric;
+	/* add the authentication-response timing metric after handling */
+	apr_byte_t timing;
+} oidc_redirect_uri_dispatch_t;
+
+/*
+ * redirect_uri sub-feature dispatch table, tried in order
+ *
+ * Note that logout is checked *before* a POST authorization response to handle backchannel POST-based
+ * logout: any POST to the Redirect URI that does not have a logout query parameter will be handled as
+ * an authorization response; alternatively we could assume that a POST response has no parameters
+ */
+// clang-format off
+static const oidc_redirect_uri_dispatch_t _oidc_redirect_uri_dispatch[] = {
+    {oidc_proto_response_is_redirect, NULL, FALSE, oidc_redirect_uri_handle_response_redirect, OM_REDIRECT_URI_AUTHN_RESPONSE_REDIRECT, TRUE},
+    {NULL, OIDC_REDIRECT_URI_REQUEST_LOGOUT, FALSE, oidc_logout, OM_REDIRECT_URI_REQUEST_LOGOUT, FALSE},
+    {oidc_redirect_uri_match_response_post, NULL, FALSE, oidc_response_authorization_post, OM_REDIRECT_URI_AUTHN_RESPONSE_POST, TRUE},
+    {oidc_is_discovery_response, NULL, FALSE, oidc_redirect_uri_handle_discovery_response, OM_REDIRECT_URI_DISCOVERY_RESPONSE, FALSE},
+    {NULL, OIDC_REDIRECT_URI_REQUEST_JWKS, FALSE, oidc_redirect_uri_handle_in_content_handler, OM_REDIRECT_URI_REQUEST_JWKS, FALSE},
+    {NULL, OIDC_REDIRECT_URI_REQUEST_SESSION, FALSE, oidc_session_management, OM_REDIRECT_URI_REQUEST_SESSION, FALSE},
+    {NULL, OIDC_REDIRECT_URI_REQUEST_REFRESH, FALSE, oidc_refresh_token_request, OM_REDIRECT_URI_REQUEST_REFRESH, FALSE},
+    {NULL, OIDC_REDIRECT_URI_REQUEST_REQUEST_URI, FALSE, oidc_redirect_uri_handle_request_uri, OM_REDIRECT_URI_REQUEST_REQUEST_URI, FALSE},
+    {NULL, OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE, FALSE, oidc_redirect_uri_handle_remove_at_cache, OM_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE, FALSE},
+    {NULL, OIDC_REDIRECT_URI_REQUEST_REVOKE_SESSION, FALSE, oidc_redirect_uri_handle_revoke_session, OM_REDIRECT_URI_REQUEST_REVOKE_SESSION, FALSE},
+    {NULL, OIDC_REDIRECT_URI_REQUEST_DPOP, FALSE, oidc_redirect_uri_handle_in_content_handler, OM_REDIRECT_URI_REQUEST_DPOP, FALSE},
+    {NULL, OIDC_REDIRECT_URI_REQUEST_INFO, TRUE, oidc_redirect_uri_handle_info, OM_REDIRECT_URI_REQUEST_INFO, FALSE},
+    {oidc_redirect_uri_match_bare, NULL, FALSE, oidc_redirect_uri_handle_implicit, OM_REDIRECT_URI_AUTHN_RESPONSE_IMPLICIT, FALSE},
+};
+// clang-format on
+
+/*
+ * handle all requests to the redirect_uri
+ */
+int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
+
+	const oidc_redirect_uri_dispatch_t *entry = NULL;
+	int rc = OK;
+	int i = 0;
+
 	OIDC_METRICS_TIMING_START(r, c);
 
-	if (oidc_proto_response_is_redirect(r, c)) {
+	for (i = 0; i < (int)(sizeof(_oidc_redirect_uri_dispatch) / sizeof(oidc_redirect_uri_dispatch_t)); i++) {
 
-		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_AUTHN_RESPONSE_REDIRECT);
+		entry = &_oidc_redirect_uri_dispatch[i];
 
-		/* this is an authorization response from the OP using the Basic Client profile or a Hybrid flow*/
-		rc = oidc_response_authorization_redirect(r, c, session);
+		if (entry->match ? (entry->match(r, c) == FALSE)
+				 : (oidc_util_url_has_parameter(r, entry->parameter) == FALSE))
+			continue;
 
-		OIDC_METRICS_TIMING_ADD(r, c, OM_AUTHN_RESPONSE);
-
-		return rc;
-
-		/*
-		 *
-		 * Note that we are checking for logout *before* checking for a POST authorization response
-		 * to handle backchannel POST-based logout
-		 *
-		 * so any POST to the Redirect URI that does not have a logout query parameter will be handled
-		 * as an authorization response; alternatively we could assume that a POST response has no
-		 * parameters
-		 */
-	} else if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_LOGOUT)) {
-
-		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_LOGOUT);
-
-		/* handle logout */
-		rc = oidc_logout(r, c, session);
-
-		return rc;
-
-	} else if (oidc_proto_response_is_post(r, c)) {
-
-		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_AUTHN_RESPONSE_POST);
-
-		/* this is an authorization response using the fragment(+POST) response_mode with the Implicit Client
-		 * profile */
-		rc = oidc_response_authorization_post(r, c, session);
-
-		OIDC_METRICS_TIMING_ADD(r, c, OM_AUTHN_RESPONSE);
-
-		return rc;
-
-	} else if (oidc_is_discovery_response(r, c)) {
-
-		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_DISCOVERY_RESPONSE);
-
-		/* this is response from the OP discovery page */
-		rc = oidc_discovery_response(r, c);
-
-		return rc;
-
-	} else if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
-
-		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_JWKS);
-
-		/*
-		 * Will be handled in the content handler; avoid:
-		 * No authentication done but request not allowed without authentication
-		 * by setting r->user
-		 */
-		r->user = "";
-
-		return OK;
-
-	} else if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_SESSION)) {
-
-		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_SESSION);
-
-		/* handle session management request */
-		rc = oidc_session_management(r, c, session);
-
-		return rc;
-
-	} else if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REFRESH)) {
-
-		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_REFRESH);
-
-		/* handle refresh token request */
-		rc = oidc_refresh_token_request(r, c, session);
-
-		return rc;
-
-	} else if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REQUEST_URI)) {
-
-		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_REQUEST_URI);
-
-		/* handle request object by reference request */
-		rc = oidc_request_uri(r, c);
-
-		return rc;
-
-	} else if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE)) {
-
-		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE);
-
-		/* handle request to invalidate access token cache */
-		rc = oidc_revoke_at_cache_remove(r, c);
-
-		return rc;
-
-	} else if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_REVOKE_SESSION)) {
-
-		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_REVOKE_SESSION);
-
-		/* handle request to revoke a user session */
-		rc = oidc_revoke_session(r, c);
-
-		return rc;
-
-	} else if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_DPOP)) {
-
-		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_DPOP);
-
-		r->user = "";
-
-		return OK;
-
-	} else if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO)) {
-
-		if (session->remote_user == NULL)
+		if ((entry->requires_auth) && (session->remote_user == NULL))
 			return HTTP_UNAUTHORIZED;
 
-		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_INFO);
+		OIDC_METRICS_COUNTER_INC(r, c, entry->metric);
 
-		oidc_util_url_parameter_get(r, OIDC_INFO_PARAM_EXTEND_SESSION, &s_extend_session);
+		rc = entry->handle(r, c, session);
 
-		// need to establish user/claims for authorization purposes
-		rc = oidc_handle_existing_session(
-		    r, c, session, (s_extend_session == NULL) || (_oidc_strcmp(s_extend_session, "false") != 0),
-		    &needs_save);
-
-		// retain this session across the authentication and content handler phases
-		// by storing it in the request state
-		apr_pool_userdata_set(session, OIDC_USERDATA_SESSION, NULL, r->pool);
-
-		// record whether the session was modified and needs to be saved in the cache
-		if (needs_save)
-			oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_SAVE, "");
-
-		return rc;
-
-	} else if ((r->args == NULL) || (_oidc_strcmp(r->args, "") == 0)) {
-
-		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_AUTHN_RESPONSE_IMPLICIT);
-
-		/* this is a "bare" request to the redirect URI, indicating implicit flow using the fragment
-		 * response_mode */
-		rc = oidc_javascript_implicit(r, c);
+		if (entry->timing) {
+			OIDC_METRICS_TIMING_ADD(r, c, OM_AUTHN_RESPONSE);
+		}
 
 		return rc;
 	}
