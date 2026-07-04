@@ -323,3 +323,31 @@ jobs:
         sed -i 's/-flto=auto//g; s/-ffat-lto-objects//g' src/Makefile test/Makefile
     - name: Make (clang, type checks promoted to errors)
       run: make
+
+  clang-tidy:
+    # narrow, warning-free lint baseline: the check set and the
+    # conventions-based exclusions live in .clang-tidy, which sets
+    # WarningsAsErrors so any new finding fails the build close to the
+    # change instead of surfacing post-hoc in SonarCloud
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v5
+    - name: Dependencies
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y apache2-dev libcjose-dev libssl-dev check pkg-config
+        sudo apt-get install -y libjansson-dev libcurl4-openssl-dev libhiredis-dev libpcre2-dev libjq-dev check
+        sudo apt-get install -y clang-tidy bear
+    - name: Configure
+      run: |
+        ./autogen.sh
+        ./configure --with-jq
+    - name: Compilation database
+      run: |
+        bear -- make -C src
+        # the apxs-derived CFLAGS carry gcc-only LTO flags (-flto=auto /
+        # -ffat-lto-objects); strip them from the compilation database so
+        # the clang-tidy driver does not trip over them
+        sed -i 's/-flto=auto//g; s/-ffat-lto-objects//g' compile_commands.json
+    - name: clang-tidy
+      run: run-clang-tidy -quiet -p . "src/.*\.c$"

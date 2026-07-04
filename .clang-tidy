@@ -1,0 +1,36 @@
+# clang-tidy configuration: a deliberately narrow, warning-free baseline so CI can run
+# with warnings-as-errors; broaden incrementally rather than suppressing findings in code.
+#
+# Checks disabled because they conflict with deliberate project conventions:
+# - bugprone-easily-swappable-parameters: a protocol RP/RS library passes many same-typed
+#   OIDC/OAuth/HTTP inputs per call by design (see the accepted SonarCloud S107 findings)
+# - bugprone-macro-parentheses: the token-pasting config accessor-macro framework in
+#   cfg/ (OIDC_*_MEMBER_FUNCS*) cannot parenthesize its arguments
+# - bugprone-reserved-identifier: the NULL-safe _oidc_* wrapper naming convention
+# - bugprone-assignment-in-if-condition: the pervasive "if ((x = f()) == NULL)" idiom
+# - bugprone-branch-clone: explicit enum cases and parallel condition branches are
+#   spelled out for readability
+# - bugprone-narrowing-conversions, bugprone-implicit-widening-of-multiplication-result:
+#   type-conversion pedantry; surfaced via compiler flags when needed instead
+# - bugprone-integer-division: apr_time_sec() truncation in log output is intended
+# - bugprone-multi-level-implicit-pointer-conversion: the APR void* container idiom
+#   (apr_array_pop, apr_hash_get) would need casts on every use
+#
+# misc-const-correctness is not listed: it does not analyze C code; pointer-const
+# hygiene (SonarCloud S5350) remains covered by SonarCloud.
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-macro-parentheses,
+  -bugprone-reserved-identifier,
+  -bugprone-assignment-in-if-condition,
+  -bugprone-branch-clone,
+  -bugprone-narrowing-conversions,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -bugprone-integer-division,
+  -bugprone-multi-level-implicit-pointer-conversion,
+  readability-avoid-nested-conditional-operator
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*/src/.*\.h$'
+FormatStyle: file

@@ -1,4 +1,10 @@
 07/04/2026
+- build: add a .clang-tidy configuration with a deliberately narrow,
+  warning-free check set (bugprone-* minus the checks that conflict with
+  documented project conventions, plus the nested-conditional guard) and a
+  clang-tidy CI job that runs it with warnings-as-errors over a
+  bear-generated compilation database, so new findings fail the build close
+  to the change instead of surfacing post-hoc in SonarCloud
 - mod_auth_openidc: rewrite oidc_handle_redirect_uri_request()'s long if/else
   chain into a declarative dispatch table: each redirect_uri sub-feature is one
   table entry carrying its matcher (protocol predicate or query-parameter
