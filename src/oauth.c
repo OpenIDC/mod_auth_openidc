@@ -568,9 +568,10 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg_t *c,
 /*
  * validate a JWT access token (locally)
  *
- * TODO: document that we're reusing the following settings from the OIDC config section:
- *       - JWKs URI refresh interval
- *       - decryption key material (OIDCPrivateKeyFiles)
+ * NB: reuses the following settings from the OIDC (RP) configuration section, as documented
+ *     in auth_openidc.conf:
+ *     - the JWKs cache refresh interval (OIDCJWKSRefreshInterval)
+ *     - decryption key material (OIDCPrivateKeyFiles)
  *
  * OIDCOAuthRemoteUserClaim client_id
  * # 32x 61 hex
@@ -617,9 +618,10 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 	    oidc_cfg_oauth_verify_shared_keys_get(c) ? apr_hash_count(oidc_cfg_oauth_verify_shared_keys_get(c)) : 0,
 	    oidc_cfg_oauth_verify_jwks_uri_get(c));
 
-	// TODO: we're re-using the OIDC provider JWKs refresh interval here...
+	/* the JWKs cache refresh interval is shared with the OIDC provider one (OIDCJWKSRefreshInterval),
+	 * as documented in auth_openidc.conf */
 	oidc_jwks_uri_t jwks_uri = {oidc_cfg_oauth_verify_jwks_uri_get(c),
-				    oidc_cfg_provider_userinfo_refresh_interval_get(oidc_cfg_provider_get(c)), NULL,
+				    oidc_cfg_provider_jwks_uri_refresh_interval_get(oidc_cfg_provider_get(c)), NULL,
 				    NULL};
 	if (oidc_proto_jwt_verify(r, c, jwt, &jwks_uri, oidc_cfg_oauth_ssl_validate_server_get(c),
 				  oidc_util_key_sets_merge(r->pool, oidc_cfg_oauth_verify_shared_keys_get(c),

@@ -1,4 +1,11 @@
 07/16/2026
+- oauth: use the JWKs refresh interval (OIDCJWKSRefreshInterval) as the cache
+  TTL for keys retrieved from OIDCOAuthVerifyJwksUri, as was documented and
+  intended, instead of accidentally using OIDCUserInfoRefreshInterval (whose
+  -1 default happened to resolve to the correct 3600s, but any explicitly
+  configured userinfo refresh interval - including 0, i.e. refetch on every
+  bearer-token request - silently became the OAuth JWKs cache TTL); configs
+  that relied on that coupling should set OIDCJWKSRefreshInterval
 - build: add a minimum-line-coverage gate (lcov --fail-under-lines 85) to the
   coverage CI job so coverage slippage fails the pull request instead of only
   being reported in the job summary; as a side effect the job now also fails
