@@ -47,6 +47,8 @@
 #include "proto/proto.h"
 #include "util/util.h"
 
+#include <apr_lib.h>
+
 /* parameter name of the callback URL in the discovery response */
 #define OIDC_DISC_CB_PARAM "oidc_callback"
 /* parameter name of the OP provider selection in the discovery response */
@@ -565,6 +567,22 @@ static int oidc_discovery_response_authenticate(request_rec *r, oidc_cfg_t *c, c
 }
 
 /*
+ * strip leading/trailing whitespace from a user-typed discovery input value, to be
+ * tolerant of stray whitespace in copy-pasted issuer/account values
+ */
+static char *oidc_discovery_response_input_trim(char *value) {
+	char *p = NULL;
+	if (value == NULL)
+		return NULL;
+	while (apr_isspace(*value))
+		value++;
+	p = value + _oidc_strlen(value);
+	while ((p > value) && (apr_isspace(*(p - 1))))
+		*(--p) = '\0';
+	return value;
+}
+
+/*
  * handle a response from an IDP discovery page and/or handle 3rd-party initiated SSO
  */
 int oidc_discovery_response(request_rec *r, oidc_cfg_t *c) {
@@ -587,7 +605,9 @@ int oidc_discovery_response(request_rec *r, oidc_cfg_t *c) {
 	/* do CSRF protection if not 3rd party initiated SSO */
 	apr_byte_t csrf_valid = oidc_discovery_response_csrf_check(r, c);
 
-	// TODO: trim issuer/accountname/domain input and do more input validation
+	/* the issuer/account-name values may have been typed/pasted by the user on the discovery page */
+	issuer = oidc_discovery_response_input_trim(issuer);
+	user = oidc_discovery_response_input_trim(user);
 
 	oidc_debug(r, "issuer=\"%s\", target_link_uri=\"%s\", login_hint=\"%s\", user=\"%s\"", issuer, target_link_uri,
 		   login_hint, user);

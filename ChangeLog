@@ -1,4 +1,8 @@
 07/16/2026
+- discovery: strip leading/trailing whitespace from the user-typed
+  issuer/account-name input submitted from the OP-selection discovery page,
+  so copy-pasted values with stray whitespace no longer fail issuer matching
+  or account-based (webfinger) discovery
 - oauth: add the OIDCOAuthDecryptSharedKeys directive to configure dedicated
   symmetric key(s) - using the same key specification syntax as
   OIDCOAuthVerifySharedKeys - for decrypting encrypted JWT access tokens

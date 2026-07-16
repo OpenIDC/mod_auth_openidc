@@ -969,6 +969,24 @@ START_TEST(test_handle_discovery_response_static_provider_redirects) {
 }
 END_TEST
 
+START_TEST(test_handle_discovery_response_issuer_input_trimmed) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* stray whitespace around the user-typed iss value is trimmed before the issuer
+	 * match, so the padded value still selects the static provider (it would return
+	 * HTTP_INTERNAL_SERVER_ERROR on an issuer mismatch without the trim) */
+	r->args = "iss=%20%09https%3A%2F%2Fidp.example.com%20"
+		  "&target_link_uri=https%3A%2F%2Fwww.example.com%2Fprotected%2Fwhatever";
+	int rc = oidc_discovery_response(r, c);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_msg(_oidc_strstr(loc, "https://idp.example.com/authorize") != NULL,
+		      "redirect must hit the static authorization_endpoint");
+}
+END_TEST
+
 START_TEST(test_handle_discovery_response_static_provider_iss_mismatch) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -3738,6 +3756,7 @@ int main(void) {
 	tcase_add_test(discovery, test_handle_discovery_request_external_url);
 	tcase_add_test(discovery, test_handle_discovery_response_no_target_link_uri_no_sso_url);
 	tcase_add_test(discovery, test_handle_discovery_response_static_provider_redirects);
+	tcase_add_test(discovery, test_handle_discovery_response_issuer_input_trimmed);
 	tcase_add_test(discovery, test_handle_discovery_response_static_provider_iss_mismatch);
 	tcase_add_test(discovery, test_handle_discovery_response_target_link_uri_open_redirect);
 	tcase_add_test(discovery, test_handle_discovery_response_user_discovery_fails);
