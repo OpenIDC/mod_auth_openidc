@@ -55,14 +55,6 @@
 
 #include "json.h"
 
-/*
- * opaque forward declarations of the backend JOSE library's key and signature types, so this public header
- * does not need to include <cjose/cjose.h>; jose.c and the jose/ subdirectory include the real header
- * to operate on them
- */
-typedef struct _cjose_jwk_int cjose_jwk_t;
-typedef struct _cjose_jws_int cjose_jws_t;
-
 /* opaque forward declaration of the OpenSSL BIO type used in the oidc_jwk_pem_bio_to_jwk() prototype below */
 typedef struct bio_st BIO;
 
@@ -201,8 +193,10 @@ typedef struct oidc_jwk_t {
 	char *x5t;
 	/* X.509 Certificate SHA-256 Thumbprint */
 	char *x5t_S256;
-	/* cjose JWK structure */
-	cjose_jwk_t *cjose_jwk;
+	/* backend-private handle to the JOSE library's key object (currently a cjose_jwk_t); typed as
+	 * void* so this public header needs no backend types: only jose.c and the jose/ subdirectory,
+	 * which include the real backend header, may dereference or operate on it */
+	void *cjose_jwk;
 } oidc_jwk_t;
 
 /* decrypt a JWT */
@@ -285,8 +279,10 @@ typedef struct oidc_jwt_t {
 	oidc_jwt_hdr_t header;
 	/* parsed JWT payload */
 	oidc_jwt_payload_t payload;
-	/* cjose JWS structure */
-	cjose_jws_t *cjose_jws;
+	/* backend-private handle to the JOSE library's signature object (currently a cjose_jws_t); typed
+	 * as void* so this public header needs no backend types: only jose.c and the jose/ subdirectory,
+	 * which include the real backend header, may dereference or operate on it */
+	void *cjose_jws;
 } oidc_jwt_t;
 
 /* parse a string into a JSON Web Token struct and (optionally) decrypt it */

@@ -1,3 +1,10 @@
+07/16/2026
+- jose: complete step 2 of the cjose encapsulation: turn the cjose_jwk/cjose_jws
+  members of the public oidc_jwk_t/oidc_jwt_t structs into backend-private void
+  pointers and drop the cjose type forward-declarations from jose.h, so the
+  public header exposes no JOSE-backend types and a future JOSE-backend
+  migration stays contained to jose.c and the jose/ subdirectory
+
 07/04/2026
 - build: add a .clang-tidy configuration with a deliberately narrow,
   warning-free check set (bugprone-* minus the checks that conflict with
