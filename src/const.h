@@ -92,9 +92,18 @@ static inline size_t _oidc_strlen(const char *s) {
  * pair could silently slip past the check. Do not "fix" this to return 0
  * for two NULL inputs without auditing every caller; the "<rejected when
  * either side is missing>" semantics are load-bearing.
+ *
+ * _oidc_strcmp deliberately uses byte-exact strcmp() rather than
+ * apr_strnatcmp() "natural ordering": natcmp skips over whitespace and
+ * compares digit runs numerically, so two different byte strings can
+ * compare equal ("ab cd" == "abcd") - surprising equality semantics for
+ * the protocol values (nonce, state, issuer, client_id) these wrappers
+ * guard. Callers only test the result against 0; nothing relies on the
+ * natural sort order. NB: comparisons against secret-derived values use
+ * the constant-time oidc_util_strcmp_const_time() instead.
  */
 static inline int _oidc_strcmp(const char *a, const char *b) {
-	return ((a && b) ? apr_strnatcmp(a, b) : -1);
+	return ((a && b) ? strcmp(a, b) : -1);
 }
 static inline int _oidc_strnatcasecmp(const char *a, const char *b) {
 	return ((a && b) ? apr_strnatcasecmp(a, b) : -1);

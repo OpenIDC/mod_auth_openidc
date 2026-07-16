@@ -1,4 +1,10 @@
 07/16/2026
+- const: make the NULL-safe _oidc_strcmp() wrapper a byte-exact strcmp()
+  instead of apr_strnatcmp() "natural ordering", which skips whitespace and
+  compares digit runs numerically so two different byte strings could compare
+  equal - surprising equality semantics for the protocol values (nonce, state,
+  issuer, client_id) it guards; no caller relies on the natural sort order and
+  the NULL-rejection semantics are unchanged
 - jose: complete step 2 of the cjose encapsulation: turn the cjose_jwk/cjose_jws
   members of the public oidc_jwk_t/oidc_jwt_t structs into backend-private void
   pointers and drop the cjose type forward-declarations from jose.h, so the
