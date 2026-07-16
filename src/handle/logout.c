@@ -461,7 +461,6 @@ static int oidc_logout_backchannel(request_rec *r, oidc_cfg_t *cfg) {
 	if (rc != OK)
 		goto out;
 
-	// TODO: destroy the JWK used for decryption
 	if (oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, TRUE, &jwk) ==
 	    FALSE) {
 		rc = HTTP_BAD_REQUEST;
