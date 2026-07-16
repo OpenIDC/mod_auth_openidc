@@ -213,7 +213,9 @@ static void oidc_metadata_conf_parse_session(request_rec *r, oidc_cfg_t *cfg, co
 static void oidc_metadata_conf_parse_request_params(request_rec *r, oidc_cfg_t *cfg, const oidc_json_t *j_conf,
 						    oidc_provider_t *provider) {
 	// TODO: use the provider "scopes_supported" to mix-and-match with what we've configured for the client
-	// TODO: check that "openid" is always included in the configured scopes, right?
+	/* NB: a missing "openid" value in the configured scopes is warned about at authentication-request
+	 * time in oidc_proto_request_auth_scope_set(), which covers this .conf path, the OIDCScope
+	 * directive and the per-path scopes alike */
 	OIDC_METADATA_CONF_STR(j_conf, OIDC_METADATA_SCOPE, scope);
 	OIDC_METADATA_CONF_STR(j_conf, OIDC_METADATA_AUTH_REQUEST_PARAMS, auth_request_params);
 	OIDC_METADATA_CONF_STR(j_conf, OIDC_METADATA_LOGOUT_REQUEST_PARAMS, logout_request_params);
