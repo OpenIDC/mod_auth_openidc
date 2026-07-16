@@ -693,6 +693,11 @@ const command_rec oidc_cfg_cmds[] = {
 		verify_shared_keys,
 		"Shared secret(s) that is/are used to verify signed JWT access tokens locally."),
 	OIDC_CFG_CMD_OAUTH(
+		AP_INIT_ITERATE,
+		OIDCOAuthDecryptSharedKeys,
+		decrypt_shared_keys,
+		"Shared secret(s) that is/are used to decrypt encrypted JWT access tokens locally; when not defined the client secret configured for the OpenID Connect provider is used."),
+	OIDC_CFG_CMD_OAUTH(
 		AP_INIT_TAKE1,
 		OIDCOAuthVerifyJwksUri,
 		verify_jwks_uri,

@@ -53,6 +53,7 @@ struct oidc_oauth_t {
 	char *verify_jwks_uri;
 
 	apr_hash_t *verify_shared_keys;
+	apr_hash_t *decrypt_shared_keys;
 	apr_array_header_t *verify_public_keys;
 
 	char *client_id;
@@ -168,6 +169,7 @@ OIDC_OAUTH_MEMBER_FUNC_GET(introspection_token_expiry_claim_format,
 OIDC_OAUTH_MEMBER_FUNC_GET(introspection_token_expiry_claim_required,
 			   oidc_oauth_introspection_token_expiry_claim_required_t)
 OIDC_OAUTH_MEMBER_FUNC_GET(verify_shared_keys, apr_hash_t *)
+OIDC_OAUTH_MEMBER_FUNC_GET(decrypt_shared_keys, apr_hash_t *)
 
 #define OIDC_DEFAULT_OAUTH_SSL_VALIDATE_SERVER 1
 OIDC_OAUTH_MEMBER_FUNCS_BOOL(ssl_validate_server, OIDC_DEFAULT_OAUTH_SSL_VALIDATE_SERVER)
@@ -327,6 +329,38 @@ const char *oidc_cmd_oauth_verify_shared_keys_set(cmd_parms *cmd, void *struct_p
 	return NULL;
 }
 
+/*
+ * add a shared key to the list of JWKs used to decrypt encrypted JWT access tokens
+ */
+const char *oidc_cmd_oauth_decrypt_shared_keys_set(cmd_parms *cmd, void *struct_ptr, const char *arg) {
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	char *use = NULL;
+
+	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
+
+	char *kid = NULL;
+	char *secret = NULL;
+	int key_len = 0;
+	const char *rv = oidc_cfg_parse_key_record(cmd->pool, arg, &kid, &secret, &key_len, &use, TRUE);
+	if (rv != NULL)
+		return rv;
+
+	jwk = oidc_jwk_create_symmetric_key(cmd->pool, kid, (const unsigned char *)secret, key_len, TRUE, &err);
+	if (jwk == NULL) {
+		return apr_psprintf(cmd->pool, "oidc_jwk_create_symmetric_key failed for (kid=%s) \"%s\": %s", kid,
+				    secret, oidc_jose_e2s(cmd->pool, err));
+	}
+
+	if (cfg->oauth->decrypt_shared_keys == NULL)
+		cfg->oauth->decrypt_shared_keys = apr_hash_make(cmd->pool);
+	if (use)
+		jwk->use = apr_pstrdup(cmd->pool, use);
+	apr_hash_set(cfg->oauth->decrypt_shared_keys, jwk->kid, APR_HASH_KEY_STRING, jwk);
+
+	return NULL;
+}
+
 /* default OAuth 2.0 non-spec compliant introspection expiry claim format */
 #define OIDC_DEFAULT_OAUTH_EXPIRY_CLAIM_FORMAT OIDC_CLAIM_FORMAT_RELATIVE_STR
 /* default OAuth 2.0 non-spec compliant introspection expiry claim required */
@@ -356,6 +390,7 @@ oidc_oauth_t *oidc_cfg_oauth_create(apr_pool_t *pool) {
 	o->verify_jwks_uri = NULL;
 	o->verify_public_keys = NULL;
 	o->verify_shared_keys = NULL;
+	o->decrypt_shared_keys = NULL;
 	return o;
 }
 
@@ -417,6 +452,8 @@ void oidc_cfg_oauth_merge(apr_pool_t *pool, oidc_oauth_t *dst, const oidc_oauth_
 	dst->verify_public_keys = oidc_jwk_list_copy(pool, add->verify_public_keys != NULL ? add->verify_public_keys
 											   : base->verify_public_keys);
 	dst->verify_shared_keys = add->verify_shared_keys != NULL ? add->verify_shared_keys : base->verify_shared_keys;
+	dst->decrypt_shared_keys =
+	    add->decrypt_shared_keys != NULL ? add->decrypt_shared_keys : base->decrypt_shared_keys;
 }
 
 void oidc_cfg_oauth_destroy(oidc_oauth_t *o) {
@@ -426,4 +463,6 @@ void oidc_cfg_oauth_destroy(oidc_oauth_t *o) {
 	o->verify_public_keys = NULL;
 	oidc_jwk_list_destroy_hash(o->verify_shared_keys);
 	o->verify_shared_keys = NULL;
+	oidc_jwk_list_destroy_hash(o->decrypt_shared_keys);
+	o->decrypt_shared_keys = NULL;
 }

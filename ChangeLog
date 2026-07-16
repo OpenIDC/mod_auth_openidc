@@ -1,4 +1,11 @@
 07/16/2026
+- oauth: add the OIDCOAuthDecryptSharedKeys directive to configure dedicated
+  symmetric key(s) - using the same key specification syntax as
+  OIDCOAuthVerifySharedKeys - for decrypting encrypted JWT access tokens
+  locally, instead of reusing the client secret configured for the OpenID
+  Connect provider; when not configured the client-secret fallback keeps
+  working for backwards compatibility, and OIDCPrivateKeyFiles key material
+  is used alongside in both cases
 - oauth: use the JWKs refresh interval (OIDCJWKSRefreshInterval) as the cache
   TTL for keys retrieved from OIDCOAuthVerifyJwksUri, as was documented and
   intended, instead of accidentally using OIDCUserInfoRefreshInterval (whose

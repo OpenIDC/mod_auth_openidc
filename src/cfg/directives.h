@@ -178,6 +178,7 @@
 #define OIDCOAuthSSLValidateServer "OIDCOAuthSSLValidateServer"
 #define OIDCOAuthVerifyCertFiles "OIDCOAuthVerifyCertFiles"
 #define OIDCOAuthVerifySharedKeys "OIDCOAuthVerifySharedKeys"
+#define OIDCOAuthDecryptSharedKeys "OIDCOAuthDecryptSharedKeys"
 #define OIDCOAuthVerifyJwksUri "OIDCOAuthVerifyJwksUri"
 
 /*

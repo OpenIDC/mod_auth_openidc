@@ -434,6 +434,44 @@ START_TEST(test_oauth_check_userid_jwt_bad_signature) {
 }
 END_TEST
 
+/* an encrypted (JWE) JWT access token is decrypted with the dedicated
+ * OIDCOAuthDecryptSharedKeys key - not the client_secret fallback: the JWE key
+ * deliberately differs from the client_secret set by e2e_setup_jwt_validation,
+ * so decryption can only succeed through the configured shared decryption key -
+ * and the inner HS256 signature is verified against OIDCOAuthVerifySharedKeys */
+START_TEST(test_oauth_check_userid_jwt_encrypted_decrypt_shared_keys) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	char *access_token = NULL;
+
+	const char *secret = e2e_setup_jwt_validation(r, c);
+	const char *enc_secret = "fedcba9876543210fedcba9876543210";
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCOAuthDecryptSharedKeys);
+	ck_assert_ptr_null(oidc_cmd_oauth_decrypt_shared_keys_set(cmd, NULL, enc_secret));
+
+	/* wrap the signed JWT in a dir/A256GCM JWE encrypted with the dedicated decryption key */
+	char *signed_jwt = e2e_sign_jwt_access_token_hs256(r, secret, 300);
+	ck_assert_int_eq(oidc_util_key_symmetric_create(r, enc_secret, 0, NULL, FALSE, &jwk), TRUE);
+	oidc_jwt_t *jwe = oidc_jwt_new(r->pool, TRUE, FALSE);
+	jwe->header.alg = apr_pstrdup(r->pool, OIDC_JOSE_HDR_ALG_DIR);
+	jwe->header.enc = apr_pstrdup(r->pool, OIDC_JOSE_HDR_ENC_A256GCM);
+	ck_assert_int_eq(
+	    oidc_jwt_encrypt(r->pool, jwe, jwk, signed_jwt, (int)_oidc_strlen(signed_jwt), &access_token, &err), TRUE);
+	ck_assert_ptr_nonnull(access_token);
+	oidc_jwk_destroy(jwk);
+	oidc_jwt_destroy(jwe);
+
+	int rc = oidc_oauth_check_userid(r, c, access_token);
+	ck_assert_int_eq(rc, OK);
+	ck_assert_ptr_nonnull(r->user);
+	ck_assert_str_eq(r->user, "alice");
+
+	oidc_jwk_list_destroy_hash(oidc_cfg_oauth_decrypt_shared_keys_get(c));
+}
+END_TEST
+
 /* OIDCOAuthServerMetadataURL: the AS configuration is retrieved from the
  * metadata document (first call, populating the cache) and re-read from the
  * cache on the next request */
@@ -609,6 +647,7 @@ int main(void) {
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_valid_hs256);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_expired);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_bad_signature);
+	tcase_add_test(jwt, test_oauth_check_userid_jwt_encrypted_decrypt_shared_keys);
 
 	TCase *metadata = tcase_create("metadata");
 	tcase_add_checked_fixture(metadata, oidc_test_setup, oidc_test_teardown);

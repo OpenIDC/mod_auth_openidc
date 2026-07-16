@@ -585,16 +585,23 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
+	apr_hash_t *decrypt_keys = NULL;
 
-	// TODO: replace this OIDC client secret with OIDCOAuthDecryptSharedKeys
-	if (oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(oidc_cfg_provider_get(c)), 0, NULL,
-					   TRUE, &jwk) == FALSE)
-		return FALSE;
+	if (oidc_cfg_oauth_decrypt_shared_keys_get(c) != NULL) {
+		/* symmetric decryption keys configured with OIDCOAuthDecryptSharedKeys */
+		decrypt_keys = oidc_util_key_sets_merge(r->pool, oidc_cfg_oauth_decrypt_shared_keys_get(c),
+							oidc_cfg_private_keys_get(c));
+	} else {
+		/* fall back to a symmetric key derived from the client secret configured for the
+		 * OpenID Connect provider, alongside the OIDCPrivateKeyFiles key material */
+		if (oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(oidc_cfg_provider_get(c)), 0,
+						   NULL, TRUE, &jwk) == FALSE)
+			return FALSE;
+		decrypt_keys = oidc_util_key_symmetric_merge(r->pool, oidc_cfg_private_keys_get(c), jwk);
+	}
 
 	oidc_jwt_t *jwt = NULL;
-	if (oidc_jwt_parse(r->pool, access_token, &jwt,
-			   oidc_util_key_symmetric_merge(r->pool, oidc_cfg_private_keys_get(c), jwk), FALSE,
-			   &err) == FALSE) {
+	if (oidc_jwt_parse(r->pool, access_token, &jwt, decrypt_keys, FALSE, &err) == FALSE) {
 		oidc_error(r, "could not parse JWT from access_token: %s", oidc_jose_e2s(r->pool, err));
 		oidc_jwk_destroy(jwk);
 		return FALSE;

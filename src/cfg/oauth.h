@@ -99,6 +99,7 @@ OIDC_CFG_OAUTH_MEMBER_FUNCS_DECL(client_id, const char *)
 OIDC_CFG_OAUTH_MEMBER_FUNCS_DECL(client_secret, const char *)
 OIDC_CFG_OAUTH_MEMBER_FUNCS_DECL(verify_jwks_uri, const char *)
 OIDC_CFG_OAUTH_MEMBER_FUNCS_DECL(verify_shared_keys, apr_hash_t *)
+OIDC_CFG_OAUTH_MEMBER_FUNCS_DECL(decrypt_shared_keys, apr_hash_t *)
 OIDC_CFG_OAUTH_MEMBER_FUNCS_DECL(verify_public_keys, const apr_array_header_t *)
 OIDC_CFG_OAUTH_MEMBER_FUNCS_DECL(introspection_client_auth_bearer_token, const char *)
 
