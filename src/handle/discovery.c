@@ -98,70 +98,53 @@ static const char *oidc_discovery_csrf_cookie_samesite(const request_rec *r, con
 #define OIDC_CSRF_NAME "x_csrf"
 
 /*
- * present the user with an OP selection screen
+ * redirect the user to an external discovery page, passing the required parameters
  */
-int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg) {
-
-	oidc_debug(r, "enter");
-
-	/* obtain the URL we're currently accessing, to be stored in the state/session */
-	const char *current_url = oidc_util_url_cur(r, oidc_cfg_x_forwarded_headers_get(cfg));
-	const char *method = oidc_original_request_method(r, cfg, FALSE);
-
-	/* generate CSRF token; 16 bytes (128 bits) of entropy */
-	char *csrf = NULL;
-	if (oidc_util_rand_str(r, &csrf, 16) == FALSE)
-		return HTTP_INTERNAL_SERVER_ERROR;
+static int oidc_discovery_request_external(request_rec *r, oidc_cfg_t *cfg, const char *discover_url,
+					   const char *current_url, const char *method, const char *csrf) {
 
 	const char *path_scopes = oidc_cfg_dir_path_scope_get(r);
 	const char *path_auth_request_params = oidc_cfg_dir_path_auth_request_params_get(r);
 
-	const char *discover_url = oidc_cfg_dir_discover_url_get(r);
-	/* see if there's an external discovery page configured */
-	if (discover_url != NULL) {
-
-		/* yes, assemble the parameters for external discovery */
-		char *url =
-		    apr_psprintf(r->pool, "%s%s%s=%s&%s=%s&%s=%s&%s=%s", discover_url,
+	/* assemble the parameters for external discovery */
+	char *url = apr_psprintf(r->pool, "%s%s%s=%s&%s=%s&%s=%s&%s=%s", discover_url,
 				 strchr(discover_url, OIDC_CHAR_QUERY) != NULL ? OIDC_STR_AMP : OIDC_STR_QUERY,
 				 OIDC_DISC_RT_PARAM, oidc_http_url_encode(r, current_url), OIDC_DISC_RM_PARAM, method,
 				 OIDC_DISC_CB_PARAM, oidc_http_url_encode(r, oidc_util_url_redirect_uri(r, cfg)),
 				 OIDC_CSRF_NAME, oidc_http_url_encode(r, csrf));
 
-		if (path_scopes != NULL)
-			url = apr_psprintf(r->pool, "%s&%s=%s", url, OIDC_DISC_SC_PARAM,
-					   oidc_http_url_encode(r, path_scopes));
-		if (path_auth_request_params != NULL)
-			url = apr_psprintf(r->pool, "%s&%s=%s", url, OIDC_DISC_AR_PARAM,
-					   oidc_http_url_encode(r, path_auth_request_params));
+	if (path_scopes != NULL)
+		url = apr_psprintf(r->pool, "%s&%s=%s", url, OIDC_DISC_SC_PARAM, oidc_http_url_encode(r, path_scopes));
+	if (path_auth_request_params != NULL)
+		url = apr_psprintf(r->pool, "%s&%s=%s", url, OIDC_DISC_AR_PARAM,
+				   oidc_http_url_encode(r, path_auth_request_params));
 
-		/* log what we're about to do */
-		oidc_debug(r, "redirecting to external discovery page: %s", url);
+	/* log what we're about to do */
+	oidc_debug(r, "redirecting to external discovery page: %s", url);
 
-		/* set CSRF cookie */
-		oidc_http_set_cookie(r, OIDC_CSRF_NAME, csrf, -1, oidc_discovery_csrf_cookie_samesite(r, cfg));
+	/* set CSRF cookie */
+	oidc_http_set_cookie(r, OIDC_CSRF_NAME, csrf, -1, oidc_discovery_csrf_cookie_samesite(r, cfg));
 
-		/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
-		if (oidc_response_post_preserve_javascript(r, url, NULL, NULL) == TRUE)
-			return OK;
+	/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
+	if (oidc_response_post_preserve_javascript(r, url, NULL, NULL) == TRUE)
+		return OK;
 
-		/* do the actual redirect to an external discovery page */
-		oidc_http_hdr_out_location_set(r, url);
+	/* do the actual redirect to an external discovery page */
+	oidc_http_hdr_out_location_set(r, url);
 
-		return HTTP_MOVED_TEMPORARILY;
-	}
+	return HTTP_MOVED_TEMPORARILY;
+}
 
-	/* get a list of all providers configured in the metadata directory */
-	apr_array_header_t *arr = NULL;
-	if (oidc_metadata_list(r, cfg, &arr) == FALSE)
-		return oidc_util_html_send_error(r, "Configuration Error",
-						 "No configured providers found, contact your administrator",
-						 HTTP_UNAUTHORIZED);
+/*
+ * append the list of statically configured providers as selection links to the discovery page
+ */
+static const char *oidc_discovery_page_providers(request_rec *r, oidc_cfg_t *cfg, const apr_array_header_t *arr,
+						 const char *current_url, const char *method, const char *csrf,
+						 const char *s) {
 
-	/* assemble a where-are-you-from IDP discovery HTML page */
-	const char *s = "\t\t\t<h3>Select your OpenID Connect Identity Provider</h3>\n";
+	const char *path_scopes = oidc_cfg_dir_path_scope_get(r);
+	const char *path_auth_request_params = oidc_cfg_dir_path_auth_request_params_get(r);
 
-	/* list all configured providers in there */
 	for (int i = 0; i < arr->nelts; i++) {
 
 		const char *issuer = APR_ARRAY_IDX(arr, i, const char *);
@@ -189,7 +172,18 @@ int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg) {
 				 oidc_util_html_escape(r->pool, display));
 	}
 
-	/* add an option to enter an account or issuer name for dynamic OP discovery */
+	return s;
+}
+
+/*
+ * append the form to enter an account or issuer name for dynamic OP discovery to the discovery page
+ */
+static const char *oidc_discovery_page_form(request_rec *r, oidc_cfg_t *cfg, const char *current_url,
+					    const char *method, const char *csrf, const char *s) {
+
+	const char *path_scopes = oidc_cfg_dir_path_scope_get(r);
+	const char *path_auth_request_params = oidc_cfg_dir_path_auth_request_params_get(r);
+
 	s = apr_psprintf(r->pool, "%s<form method=\"get\" action=\"%s\">\n", s, oidc_util_url_redirect_uri(r, cfg));
 	s = apr_psprintf(r->pool, "%s<p><input type=\"hidden\" name=\"%s\" value=\"%s\"><p>\n", s, OIDC_DISC_RT_PARAM,
 			 oidc_util_html_escape(r->pool, current_url));
@@ -213,6 +207,46 @@ int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg) {
 			 "");
 	s = apr_psprintf(r->pool, "%s<p><input type=\"submit\" value=\"Submit\"></p>\n", s);
 	s = apr_psprintf(r->pool, "%s</form>\n", s);
+
+	return s;
+}
+
+/*
+ * present the user with an OP selection screen
+ */
+int oidc_discovery_request(request_rec *r, oidc_cfg_t *cfg) {
+
+	oidc_debug(r, "enter");
+
+	/* obtain the URL we're currently accessing, to be stored in the state/session */
+	const char *current_url = oidc_util_url_cur(r, oidc_cfg_x_forwarded_headers_get(cfg));
+	const char *method = oidc_original_request_method(r, cfg, FALSE);
+
+	/* generate CSRF token; 16 bytes (128 bits) of entropy */
+	char *csrf = NULL;
+	if (oidc_util_rand_str(r, &csrf, 16) == FALSE)
+		return HTTP_INTERNAL_SERVER_ERROR;
+
+	/* see if there's an external discovery page configured */
+	const char *discover_url = oidc_cfg_dir_discover_url_get(r);
+	if (discover_url != NULL)
+		return oidc_discovery_request_external(r, cfg, discover_url, current_url, method, csrf);
+
+	/* get a list of all providers configured in the metadata directory */
+	apr_array_header_t *arr = NULL;
+	if (oidc_metadata_list(r, cfg, &arr) == FALSE)
+		return oidc_util_html_send_error(r, "Configuration Error",
+						 "No configured providers found, contact your administrator",
+						 HTTP_UNAUTHORIZED);
+
+	/* assemble a where-are-you-from IDP discovery HTML page */
+	const char *s = "\t\t\t<h3>Select your OpenID Connect Identity Provider</h3>\n";
+
+	/* list all configured providers in there */
+	s = oidc_discovery_page_providers(r, cfg, arr, current_url, method, csrf, s);
+
+	/* add an option to enter an account or issuer name for dynamic OP discovery */
+	s = oidc_discovery_page_form(r, cfg, current_url, method, csrf, s);
 
 	oidc_http_set_cookie(r, OIDC_CSRF_NAME, csrf, -1, oidc_discovery_csrf_cookie_samesite(r, cfg));
 

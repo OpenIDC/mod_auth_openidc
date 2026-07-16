@@ -1,4 +1,11 @@
 07/16/2026
+- handle: split the two remaining 100+ line request handlers into focused
+  static helpers: oidc_content_handler() delegates redirect-URI content and
+  session-info requests to oidc_content_handle_redirect_uri_request()/
+  oidc_content_handle_info_request(), and oidc_discovery_request() delegates
+  the external-discovery redirect and the two discovery-page HTML fragments to
+  oidc_discovery_request_external()/oidc_discovery_page_providers()/
+  oidc_discovery_page_form(); no functional changes
 - doc: document the OIDC_ERROR/OIDC_ERROR_DESC error-reporting environment
   variables (and their REDIRECT_-prefixed ErrorDocument forms) in
   auth_openidc.conf and on oidc_util_html_send_error(), including the caveat

@@ -46,14 +46,90 @@
 #include "util/util.h"
 
 /*
+ * handle a request for session info on the redirect URI
+ */
+static int oidc_content_handle_info_request(request_rec *r, oidc_cfg_t *c) {
+	int rc = OK;
+	/* track if the session needs to be updated/saved into the cache */
+	apr_byte_t needs_save = FALSE;
+	oidc_session_t *session = NULL;
+
+	/* see if a session was retained in the request state */
+	apr_pool_userdata_get((void **)&session, OIDC_USERDATA_SESSION, r->pool);
+
+	/* if no retained session was found, load it from the cache or create a new one*/
+	if (session == NULL)
+		oidc_session_load(r, &session);
+
+	/*
+	 * see if the request state indicates that the (retained)
+	 * session was modified and needs to be updated in the cache
+	 */
+	needs_save = (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_SAVE) != NULL);
+
+	/* handle request for session info */
+	rc = oidc_info_request(r, c, session, needs_save);
+
+	/* free resources allocated for the session */
+	oidc_session_free(r, session);
+
+	return rc;
+}
+
+/*
+ * handle content generating requests to the redirect URI
+ */
+static int oidc_content_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c) {
+	/* requests to the redirect URI are handled and finished here */
+	int rc = OK;
+
+	/* NB: check HTTP/HTML request before info (and others) so Logout HTML is processed if there's no
+	 * session (anymore) */
+	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTTP) != NULL) {
+
+		/* HTTP response has been generated and stored in the request state */
+		rc = oidc_util_http_content_send(r);
+
+	} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTML) != NULL) {
+
+		/* HTML body has been generated and stored in the request state */
+		rc = oidc_util_html_content_send(r);
+
+	} else if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO)) {
+
+		OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_INFO);
+
+		/* handle request for session info */
+		rc = oidc_content_handle_info_request(r, c);
+
+	} else if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_DPOP)) {
+
+		OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_DPOP);
+
+		/* handle request to create a DPoP proof */
+		rc = oidc_dpop_request(r, c);
+
+	} else if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
+
+		OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_JWKS);
+
+		/* handle JWKs request */
+		rc = oidc_jwks_request(r, c);
+
+	} else {
+
+		OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_UNKNOWN);
+	}
+
+	return rc;
+}
+
+/*
  * handle content generating requests
  */
 int oidc_content_handler(request_rec *r) {
 	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	int rc = DECLINED;
-	/* track if the session needs to be updated/saved into the cache */
-	apr_byte_t needs_save = FALSE;
-	oidc_session_t *session = NULL;
 
 	if ((r->parsed_uri.path != NULL) && (oidc_cfg_metrics_path_get(c) != NULL) &&
 	    (_oidc_strcmp(r->parsed_uri.path, oidc_cfg_metrics_path_get(c)) == 0))
@@ -66,62 +142,7 @@ int oidc_content_handler(request_rec *r) {
 
 	if (oidc_util_url_matches_redirect_uri(r, c) == TRUE) {
 
-		/* requests to the redirect URI are handled and finished here */
-		rc = OK;
-
-		/* NB: check HTTP/HTML request before info (and others) so Logout HTML is processed if there's no
-		 * session (anymore) */
-		if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTTP) != NULL) {
-
-			/* HTTP response has been generated and stored in the request state */
-			rc = oidc_util_http_content_send(r);
-
-		} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTML) != NULL) {
-
-			/* HTML body has been generated and stored in the request state */
-			rc = oidc_util_html_content_send(r);
-
-		} else if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_INFO)) {
-
-			OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_INFO);
-
-			/* see if a session was retained in the request state */
-			apr_pool_userdata_get((void **)&session, OIDC_USERDATA_SESSION, r->pool);
-
-			/* if no retained session was found, load it from the cache or create a new one*/
-			if (session == NULL)
-				oidc_session_load(r, &session);
-
-			/*
-			 * see if the request state indicates that the (retained)
-			 * session was modified and needs to be updated in the cache
-			 */
-			needs_save = (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_SAVE) != NULL);
-
-			/* handle request for session info */
-			rc = oidc_info_request(r, c, session, needs_save);
-
-			/* free resources allocated for the session */
-			oidc_session_free(r, session);
-
-		} else if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_DPOP)) {
-
-			OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_DPOP);
-
-			/* handle request to create a DPoP proof */
-			rc = oidc_dpop_request(r, c);
-
-		} else if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
-
-			OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_JWKS);
-
-			/* handle JWKs request */
-			rc = oidc_jwks_request(r, c);
-
-		} else {
-
-			OIDC_METRICS_COUNTER_INC(r, c, OM_CONTENT_REQUEST_UNKNOWN);
-		}
+		rc = oidc_content_handle_redirect_uri_request(r, c);
 
 	} else if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY) != NULL) {
 
