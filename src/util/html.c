@@ -310,7 +310,14 @@ int oidc_util_html_send_in_template(request_rec *r, const char *filename, char *
 }
 
 /*
- * send a user-facing error to the browser
+ * report a user-facing error by setting the OIDC_ERROR/OIDC_ERROR_DESC environment variables and
+ * returning the HTTP status code, so a custom error page configured with Apache's ErrorDocument
+ * directive can present the details (they surface as REDIRECT_OIDC_ERROR/REDIRECT_OIDC_ERROR_DESC
+ * after Apache's internal ErrorDocument redirect).
+ *
+ * NB: the values are set unescaped and may (partly) derive from request input; an ErrorDocument
+ * page or template that renders them into HTML MUST HTML-escape them, or it introduces a
+ * cross-site-scripting vector into the error page (see also the note in auth_openidc.conf).
  */
 int oidc_util_html_send_error(request_rec *r, const char *error, const char *description, int status_code) {
 

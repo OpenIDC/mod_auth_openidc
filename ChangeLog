@@ -1,4 +1,9 @@
 07/16/2026
+- doc: document the OIDC_ERROR/OIDC_ERROR_DESC error-reporting environment
+  variables (and their REDIRECT_-prefixed ErrorDocument forms) in
+  auth_openidc.conf and on oidc_util_html_send_error(), including the caveat
+  that they are set unescaped so custom error pages rendering them into HTML
+  must apply HTML-escaping to avoid cross-site scripting
 - util: check the apr_generate_random_bytes() return value when generating a
   trace-id in oidc_util_set_trace_parent() and skip setting the traceparent
   header (with a warning) on failure, instead of hashing uninitialized stack
