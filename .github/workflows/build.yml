@@ -132,6 +132,12 @@ jobs:
           CODE_COVERAGE_OUTPUT_FILE=coverage.info \
           CODE_COVERAGE_OUTPUT_DIRECTORY=coverage-report \
           2>&1 | tee coverage.log || { cat test/test-suite.log; exit 1; }
+    # minimum-line-coverage gate: last measured 85.5% (2026-07-02); the floor sits at 85 to
+    # absorb run-to-run wobble from the live redis/memcache tcases. Bump it in the same PR
+    # that raises coverage meaningfully. NB: this also indirectly fails the job on test
+    # failures, which the AX_CODE_COVERAGE "-make -k check" recipe otherwise swallows.
+    - name: Enforce minimum line coverage
+      run: lcov --summary test/coverage.info --fail-under-lines 85
     - name: Summary
       if: always()
       run: |

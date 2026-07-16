@@ -1,4 +1,9 @@
 07/16/2026
+- build: add a minimum-line-coverage gate (lcov --fail-under-lines 85) to the
+  coverage CI job so coverage slippage fails the pull request instead of only
+  being reported in the job summary; as a side effect the job now also fails
+  on test failures, which the AX_CODE_COVERAGE "-make -k check" recipe
+  otherwise swallows
 - handle: split the two remaining 100+ line request handlers into focused
   static helpers: oidc_content_handler() delegates redirect-URI content and
   session-info requests to oidc_content_handle_redirect_uri_request()/
