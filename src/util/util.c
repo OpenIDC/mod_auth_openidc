@@ -558,7 +558,11 @@ void oidc_util_set_trace_parent(request_rec *r, const oidc_cfg_t *c, const char 
 		s_parent_id = apr_psprintf(r->pool, "%s%02x", s_parent_id, parent_id[i]);
 
 	if (v == NULL) {
-		apr_generate_random_bytes(trace_id, OIDC_TP_TRACE_ID_LEN);
+		if (apr_generate_random_bytes(trace_id, OIDC_TP_TRACE_ID_LEN) != APR_SUCCESS) {
+			oidc_warn(r, "apr_generate_random_bytes failed: no \"%s\" header will be set",
+				  OIDC_HTTP_HDR_TRACE_PARENT);
+			return;
+		}
 		for (i = 0; i < OIDC_TP_TRACE_ID_LEN; i++)
 			s_trace_id = apr_psprintf(r->pool, "%s%02x", s_trace_id, trace_id[i]);
 		oidc_request_state_set(r, OIDC_REQUEST_STATE_TRACE_ID, s_trace_id);

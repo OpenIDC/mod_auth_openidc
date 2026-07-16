@@ -1,4 +1,8 @@
 07/16/2026
+- util: check the apr_generate_random_bytes() return value when generating a
+  trace-id in oidc_util_set_trace_parent() and skip setting the traceparent
+  header (with a warning) on failure, instead of hashing uninitialized stack
+  bytes into the header
 - const: make the NULL-safe _oidc_strcmp() wrapper a byte-exact strcmp()
   instead of apr_strnatcmp() "natural ordering", which skips whitespace and
   compares digit runs numerically so two different byte strings could compare
