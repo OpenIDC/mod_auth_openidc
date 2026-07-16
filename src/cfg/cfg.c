@@ -827,12 +827,18 @@ static oidc_cfg_t *oidc_cfg_server_alloc(apr_pool_t *pool, server_rec *s) {
 	oidc_cfg_t *c = apr_pcalloc(pool, sizeof(oidc_cfg_t));
 	oidc_cfg_cleanup_ctx_t *ctx = apr_pcalloc(pool, sizeof(oidc_cfg_cleanup_ctx_t));
 	ctx->cfg = c;
-	// pconf  pool used at destruction time
+	// pconf pool used at destruction time
 	ctx->pool = pool;
 	ctx->svr = s;
-	// need to register a cleanup handler to the config pool to handle graceful restarts without memory increasing
-	// memory consumption
-	apr_pool_cleanup_register(pool, ctx, oidc_cfg_server_cleanup, apr_pool_cleanup_null);
+	// register a cleanup handler on the config pool to handle graceful restarts without increasing
+	// memory consumption; this MUST be a *pre*-cleanup: libapr registers its own regular cleanups
+	// for the cache global mutex's POSIX semaphore and the shm segment on this same pool when they
+	// are created at post_config time, and regular cleanups run in reverse order of registration,
+	// so a regular registration here (which happens much earlier, at config-parse time) would run
+	// only AFTER libapr has already closed/unmapped those objects, making the mutex unlock/destroy
+	// in oidc_cache_shm_destroy() dereference an unmapped semaphore and segfault the parent process
+	// on a graceful restart; pre-cleanups are guaranteed to run before all regular cleanups
+	apr_pool_pre_cleanup_register(pool, ctx, oidc_cfg_server_cleanup);
 	return c;
 }
 

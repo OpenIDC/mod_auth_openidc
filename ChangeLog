@@ -1,4 +1,11 @@
 07/16/2026
+- cache: allocate the cache mutex on the provided (per-config-generation)
+  pool again and register the server-config cleanup as a pool *pre*-cleanup,
+  so it runs before libapr closes the underlying POSIX semaphore; this fixes
+  a parent-process segfault (sem_post on an unmapped semaphore during
+  oidc_cache_shm_destroy) on graceful restarts that previously had to be
+  worked around by keeping the mutex on the never-cleared process pool, and
+  removes the accompanying long TODO/valgrind-trace comment block
 - discovery: strip leading/trailing whitespace from the user-typed
   issuer/account-name input submitted from the OP-selection discovery page,
   so copy-pasted values with stray whitespace no longer fail issuer matching
