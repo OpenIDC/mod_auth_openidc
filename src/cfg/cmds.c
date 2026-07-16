@@ -76,7 +76,7 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_ITERATE,
 		OIDCPrivateKeyFiles,
 		private_keys,
-		"The	AP_INIT_TAKE1,qualified names of the files that contain the RSA/EC private keys that can be used to decrypt content sent to us by the OP."),
+		"The fully qualified names of the files that contain the RSA/EC private keys that can be used to decrypt content sent to us by the OP."),
 	OIDC_CFG_CMD(
 		AP_INIT_TAKE1,
 		OIDCRedirectURI,
