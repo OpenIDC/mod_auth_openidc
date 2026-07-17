@@ -1,4 +1,10 @@
 07/17/2026
+- proto: when verifying a JWT signature, give dynamically obtained JWKS keys
+  precedence over statically configured keys that carry the same "kid",
+  instead of the other way around; the provider's currently published JWKS
+  is authoritative for its signing keys, so a stale locally configured key
+  with a colliding kid no longer permanently shadows a rotated JWKS key
+  (a warning is logged when such a collision is detected)
 - refresh: when our own refresh token grant fails (typically because another
   cluster node or worker already spent and rotated the exact same refresh
   token in a rolling-refresh setup), do a final best-effort re-read of the

@@ -595,6 +595,42 @@ START_TEST(test_util_key) {
 }
 END_TEST
 
+START_TEST(test_util_key_sets_hash_merge_precedence) {
+	request_rec *r = oidc_test_request_get();
+	apr_pool_t *pool = oidc_test_pool_get();
+	apr_hash_t *k1 = apr_hash_make(pool);
+	apr_hash_t *k2 = apr_hash_make(pool);
+	apr_hash_t *merged = NULL;
+	oidc_jwk_t *jwk1 = NULL;
+	oidc_jwk_t *jwk2 = NULL;
+
+	ck_assert(oidc_util_key_symmetric_create(r, "secret-one", 0, "SHA256", TRUE, &jwk1) == TRUE);
+	ck_assert(oidc_util_key_symmetric_create(r, "secret-two", 0, "SHA256", TRUE, &jwk2) == TRUE);
+	ck_assert_ptr_nonnull(jwk1);
+	ck_assert_ptr_nonnull(jwk2);
+
+	/* register both keys under the *same* kid to force a collision between the two sets */
+	apr_hash_set(k1, "shared-kid", APR_HASH_KEY_STRING, jwk1);
+	apr_hash_set(k2, "shared-kid", APR_HASH_KEY_STRING, jwk2);
+
+	/*
+	 * on a "kid" collision the first argument wins; this is the precedence oidc_proto_jwt_verify relies on
+	 * to let dynamically obtained JWKS keys (passed first) override statically configured keys with the
+	 * same kid
+	 */
+	merged = oidc_util_key_sets_hash_merge(pool, k1, k2);
+	ck_assert_int_eq(apr_hash_count(merged), 1);
+	ck_assert_ptr_eq(apr_hash_get(merged, "shared-kid", APR_HASH_KEY_STRING), jwk1);
+
+	merged = oidc_util_key_sets_hash_merge(pool, k2, k1);
+	ck_assert_int_eq(apr_hash_count(merged), 1);
+	ck_assert_ptr_eq(apr_hash_get(merged, "shared-kid", APR_HASH_KEY_STRING), jwk2);
+
+	oidc_jwk_destroy(jwk1);
+	oidc_jwk_destroy(jwk2);
+}
+END_TEST
+
 START_TEST(test_util_random) {
 	request_rec *r = oidc_test_request_get();
 	unsigned int v;
@@ -1177,6 +1213,7 @@ int main(void) {
 	c = tcase_create("key");
 	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(c, test_util_key);
+	tcase_add_test(c, test_util_key_sets_hash_merge_precedence);
 	suite_add_tcase(s, c);
 
 	c = tcase_create("random");

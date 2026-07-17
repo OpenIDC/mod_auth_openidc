@@ -145,6 +145,28 @@ apr_byte_t oidc_proto_jwt_validate(request_rec *r, oidc_jwt_t *jwt, const char *
 }
 
 /*
+ * merge the statically configured and dynamically obtained (JWKS) verification keys, giving precedence to the
+ * dynamically obtained keys when the same "kid" appears in both sets: the provider's currently published JWKS
+ * is authoritative for its signing keys, so a locally configured key with a colliding "kid" is treated as
+ * stale and must not shadow it
+ */
+static apr_hash_t *oidc_proto_jwt_verify_keys_merge(request_rec *r, apr_hash_t *static_keys, apr_hash_t *dynamic_keys) {
+	if ((static_keys != NULL) && (dynamic_keys != NULL)) {
+		for (apr_hash_index_t *hi = apr_hash_first(r->pool, static_keys); hi != NULL; hi = apr_hash_next(hi)) {
+			const void *kid = NULL;
+			apr_hash_this(hi, &kid, NULL, NULL);
+			if ((kid != NULL) && (apr_hash_get(dynamic_keys, kid, APR_HASH_KEY_STRING) != NULL))
+				oidc_warn(r,
+					  "a statically configured verification key with kid \"%s\" is shadowed by a "
+					  "key with the same kid obtained from the provider's JWKS; using the JWKS key",
+					  (const char *)kid);
+		}
+	}
+	/* dynamic keys (first argument) take precedence over static keys on a "kid" collision */
+	return oidc_util_key_sets_hash_merge(r->pool, dynamic_keys, static_keys);
+}
+
+/*
  * verify the signature on a JWT using the dynamically obtained and statically configured keys
  */
 apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri,
@@ -192,8 +214,7 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t *jw
 	}
 
 	/* do the actual JWS verification with the locally and remotely provided key material */
-	// TODO: now static keys "win" if the same `kid` was used in both local and remote key sets
-	rv = oidc_jwt_verify(r->pool, jwt, oidc_util_key_sets_hash_merge(r->pool, static_keys, dynamic_keys), &err);
+	rv = oidc_jwt_verify(r->pool, jwt, oidc_proto_jwt_verify_keys_merge(r, static_keys, dynamic_keys), &err);
 
 	/* if no kid was provided we may have used stale keys from the cache, so we'll refresh it */
 	if ((rv == FALSE) && (jwt->header.kid == NULL)) {
@@ -204,8 +225,8 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t *jw
 		/* destroy the list to avoid memory leaks when keys with the same kid are retrieved */
 		oidc_jwk_list_destroy_hash(dynamic_keys);
 		oidc_proto_jwks_uri_keys(r, cfg, jwt, jwks_uri, ssl_validate_server, dynamic_keys, &force_refresh);
-		rv = oidc_jwt_verify(r->pool, jwt, oidc_util_key_sets_hash_merge(r->pool, static_keys, dynamic_keys),
-				     &err);
+		rv =
+		    oidc_jwt_verify(r->pool, jwt, oidc_proto_jwt_verify_keys_merge(r, static_keys, dynamic_keys), &err);
 	}
 
 	if (rv == FALSE) {
