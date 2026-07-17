@@ -1,4 +1,14 @@
 07/17/2026
+- session management: persist the per-path authentication request parameters
+  (OIDCPathAuthRequestParams) and scope (OIDCPathScope) used at initial
+  authentication in the session, and reuse them for the silent "check"
+  re-authentication triggered by the RP iframe; previously that re-check ran
+  at the redirect URI and therefore picked up the redirect URI's own per-path
+  configuration (usually empty), silently dropping the values that applied to
+  the originally protected path; the values are only stored when session
+  management is enabled (a check_session_iframe is configured), so there is no
+  session-size impact otherwise, and sessions predating this fall back to the
+  old behaviour
 - metadata: inherit the token endpoint authentication algorithm from the
   global configuration in per-client .conf files; when a .conf does not set
   "token_endpoint_auth" the globally configured method was inherited but its

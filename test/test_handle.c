@@ -2446,6 +2446,33 @@ START_TEST(test_handle_session_management_iframe_rp_configured) {
 }
 END_TEST
 
+START_TEST(test_handle_session_management_check_uses_session_path_params) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* a session created for an originally protected path that had per-path scope and auth request params */
+	oidc_session_set_path_scope(r, session, "custom_path_scope");
+	oidc_session_set_path_auth_request_params(r, session, "custom_param=xyz");
+
+	/* the silent session-management "check" re-authentication runs at the redirect URI (whose own per-path
+	 * config is empty here), so it must reuse the values persisted in the session rather than dropping them */
+	r->args = "session=check";
+	int rc = oidc_session_management(r, c, session);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_msg(_oidc_strstr(loc, "custom_path_scope") != NULL,
+		      "check re-auth must carry the session-stored per-path scope, got: %s", loc);
+	ck_assert_msg(_oidc_strstr(loc, "custom_param=xyz") != NULL,
+		      "check re-auth must carry the session-stored per-path auth request params, got: %s", loc);
+	ck_assert_msg(_oidc_strstr(loc, "prompt=none") != NULL, "check re-auth uses prompt=none");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
 /*
  * Tests for mod_auth_openidc.c oidc_check_user_id — the main Apache
  * authentication hook.
@@ -3988,6 +4015,7 @@ int main(void) {
 	tcase_add_test(session_mgmt, test_handle_session_management_iframe_op_unconfigured);
 	tcase_add_test(session_mgmt, test_handle_session_management_iframe_op_configured);
 	tcase_add_test(session_mgmt, test_handle_session_management_iframe_rp_configured);
+	tcase_add_test(session_mgmt, test_handle_session_management_check_uses_session_path_params);
 
 	TCase *request_uri = tcase_create("request_uri");
 	tcase_add_checked_fixture(request_uri, oidc_test_setup, oidc_test_teardown);

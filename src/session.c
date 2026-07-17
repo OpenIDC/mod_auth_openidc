@@ -523,6 +523,10 @@ apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z) {
 /* key for storing the scope in the session context */
 #define OIDC_SESSION_KEY_SCOPE "scp"
 
+#define OIDC_SESSION_KEY_PATH_AUTH_REQUEST_PARAMS "parp"
+
+#define OIDC_SESSION_KEY_PATH_SCOPE "psc"
+
 /*
  * helper functions
  */
@@ -878,4 +882,20 @@ void oidc_session_set_scope(request_rec *r, oidc_session_t *z, const char *scope
 
 const char *oidc_session_get_scope(request_rec *r, const oidc_session_t *z) {
 	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_SCOPE);
+}
+
+void oidc_session_set_path_auth_request_params(request_rec *r, oidc_session_t *z, const char *auth_request_params) {
+	oidc_session_set(r, z, OIDC_SESSION_KEY_PATH_AUTH_REQUEST_PARAMS, auth_request_params);
+}
+
+const char *oidc_session_get_path_auth_request_params(request_rec *r, const oidc_session_t *z) {
+	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_PATH_AUTH_REQUEST_PARAMS);
+}
+
+void oidc_session_set_path_scope(request_rec *r, oidc_session_t *z, const char *path_scope) {
+	oidc_session_set(r, z, OIDC_SESSION_KEY_PATH_SCOPE, path_scope);
+}
+
+const char *oidc_session_get_path_scope(request_rec *r, const oidc_session_t *z) {
+	return oidc_session_get_key2string(r, z, OIDC_SESSION_KEY_PATH_SCOPE);
 }

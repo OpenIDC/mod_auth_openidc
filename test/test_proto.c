@@ -314,6 +314,8 @@ START_TEST(test_proto_state_getters_setters_and_string) {
 	oidc_proto_state_set_state(ps, "12345");
 	oidc_proto_state_set_prompt(ps, "none");
 	oidc_proto_state_set_pkce_state(ps, "pkce123");
+	oidc_proto_state_set_auth_request_params(ps, "prompt=consent&foo=bar");
+	oidc_proto_state_set_path_scope(ps, "openid profile email");
 	oidc_proto_state_set_timestamp_now(ps);
 
 	ck_assert_str_eq(oidc_proto_state_get_issuer(ps), "https://example.org");
@@ -325,6 +327,8 @@ START_TEST(test_proto_state_getters_setters_and_string) {
 	ck_assert_str_eq(oidc_proto_state_get_state(ps), "12345");
 	ck_assert_str_eq(oidc_proto_state_get_prompt(ps), "none");
 	ck_assert_str_eq(oidc_proto_state_get_pkce_state(ps), "pkce123");
+	ck_assert_str_eq(oidc_proto_state_get_auth_request_params(ps), "prompt=consent&foo=bar");
+	ck_assert_str_eq(oidc_proto_state_get_path_scope(ps), "openid profile email");
 	ck_assert(oidc_proto_state_get_timestamp(ps) > 0);
 
 	char *s = oidc_proto_state_to_string(r, ps);

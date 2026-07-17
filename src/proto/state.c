@@ -53,6 +53,8 @@
 #define OIDC_PROTO_STATE_PROMPT "pr"
 #define OIDC_PROTO_STATE_PKCE_STATE "ps"
 #define OIDC_PROTO_STATE_STATE "s"
+#define OIDC_PROTO_STATE_AUTH_REQUEST_PARAMS "arp"
+#define OIDC_PROTO_STATE_PATH_SCOPE "psc"
 
 /*
  * retrieve a string from the state object
@@ -175,6 +177,20 @@ const char *oidc_proto_state_get_pkce_state(const oidc_proto_state_t *proto_stat
 }
 
 /*
+ * retrieve the per-path authentication request parameters from the state object
+ */
+const char *oidc_proto_state_get_auth_request_params(const oidc_proto_state_t *proto_state) {
+	return oidc_proto_state_get_string_value(proto_state, OIDC_PROTO_STATE_AUTH_REQUEST_PARAMS);
+}
+
+/*
+ * retrieve the per-path scope from the state object
+ */
+const char *oidc_proto_state_get_path_scope(const oidc_proto_state_t *proto_state) {
+	return oidc_proto_state_get_string_value(proto_state, OIDC_PROTO_STATE_PATH_SCOPE);
+}
+
+/*
  * set the state (URL parameter) value in the state object
  */
 void oidc_proto_state_set_state(oidc_proto_state_t *proto_state, const char *state) {
@@ -235,6 +251,20 @@ void oidc_proto_state_set_prompt(oidc_proto_state_t *proto_state, const char *pr
  */
 void oidc_proto_state_set_pkce_state(oidc_proto_state_t *proto_state, const char *pkce_state) {
 	oidc_proto_state_set_string_value(proto_state, OIDC_PROTO_STATE_PKCE_STATE, pkce_state);
+}
+
+/*
+ * set the per-path authentication request parameters in the state object
+ */
+void oidc_proto_state_set_auth_request_params(oidc_proto_state_t *proto_state, const char *auth_request_params) {
+	oidc_proto_state_set_string_value(proto_state, OIDC_PROTO_STATE_AUTH_REQUEST_PARAMS, auth_request_params);
+}
+
+/*
+ * set the per-path scope in the state object
+ */
+void oidc_proto_state_set_path_scope(oidc_proto_state_t *proto_state, const char *path_scope) {
+	oidc_proto_state_set_string_value(proto_state, OIDC_PROTO_STATE_PATH_SCOPE, path_scope);
 }
 
 /*

@@ -168,6 +168,8 @@ START_TEST(test_session_getter_setter_roundtrip) {
 	oidc_session_set_scope(r, z, "openid profile");
 	oidc_session_set_session_state(r, z, "sstate");
 	oidc_session_set_original_url(r, z, "https://www.example.com/protected/");
+	oidc_session_set_path_auth_request_params(r, z, "prompt=consent");
+	oidc_session_set_path_scope(r, z, "openid profile email");
 
 	ck_assert_str_eq(oidc_session_get_issuer(r, z), "https://op.example.org");
 	ck_assert_str_eq(oidc_session_get_access_token(r, z), "AT");
@@ -176,6 +178,11 @@ START_TEST(test_session_getter_setter_roundtrip) {
 	ck_assert_str_eq(oidc_session_get_scope(r, z), "openid profile");
 	ck_assert_str_eq(oidc_session_get_session_state(r, z), "sstate");
 	ck_assert_str_eq(oidc_session_get_original_url(r, z), "https://www.example.com/protected/");
+	ck_assert_str_eq(oidc_session_get_path_auth_request_params(r, z), "prompt=consent");
+	ck_assert_str_eq(oidc_session_get_path_scope(r, z), "openid profile email");
+	/* an unset value reads back as NULL (drives the fallback in the session-management "check" handler) */
+	oidc_session_set_path_scope(r, z, NULL);
+	ck_assert_ptr_null(oidc_session_get_path_scope(r, z));
 
 	oidc_session_free(r, z);
 }

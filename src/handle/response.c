@@ -680,6 +680,18 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 		goto end;
 	}
 
+	/*
+	 * only when session management is enabled (a check_session_iframe is configured) can a silent "check"
+	 * re-authentication be issued from the redirect URI; only then persist the per-path auth_request_params
+	 * and scope used for this authentication, so that re-authentication can reuse them instead of the
+	 * redirect URI's own (empty) per-path configuration - avoiding needless session storage otherwise
+	 */
+	if (oidc_cfg_provider_check_session_iframe_get(provider) != NULL) {
+		oidc_session_set_path_auth_request_params(r, session,
+							  oidc_proto_state_get_auth_request_params(proto_state));
+		oidc_session_set_path_scope(r, session, oidc_proto_state_get_path_scope(proto_state));
+	}
+
 	/* store resolved information in the session */
 	if (oidc_response_save_in_session(
 		r, c, session, provider, r->user, apr_table_get(params, OIDC_PROTO_ID_TOKEN), id_token,

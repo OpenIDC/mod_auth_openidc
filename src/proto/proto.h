@@ -190,6 +190,10 @@ extern oidc_proto_pkce_t oidc_pkce_none;
 
 const char *oidc_proto_state_get_pkce_state(const oidc_proto_state_t *proto_state);
 void oidc_proto_state_set_pkce_state(oidc_proto_state_t *proto_state, const char *pkce_state);
+const char *oidc_proto_state_get_auth_request_params(const oidc_proto_state_t *proto_state);
+void oidc_proto_state_set_auth_request_params(oidc_proto_state_t *proto_state, const char *auth_request_params);
+const char *oidc_proto_state_get_path_scope(const oidc_proto_state_t *proto_state);
+void oidc_proto_state_set_path_scope(oidc_proto_state_t *proto_state, const char *path_scope);
 
 // proto.c
 apr_byte_t oidc_proto_nonce_gen(request_rec *r, char **nonce);

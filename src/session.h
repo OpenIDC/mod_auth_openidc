@@ -107,5 +107,9 @@ void oidc_session_set_session_new(request_rec *r, oidc_session_t *z, const int i
 int oidc_session_get_session_new(request_rec *r, const oidc_session_t *z);
 const char *oidc_session_get_scope(request_rec *r, const oidc_session_t *z);
 void oidc_session_set_scope(request_rec *r, oidc_session_t *z, const char *scope);
+void oidc_session_set_path_auth_request_params(request_rec *r, oidc_session_t *z, const char *auth_request_params);
+const char *oidc_session_get_path_auth_request_params(request_rec *r, const oidc_session_t *z);
+void oidc_session_set_path_scope(request_rec *r, oidc_session_t *z, const char *path_scope);
+const char *oidc_session_get_path_scope(request_rec *r, const oidc_session_t *z);
 
 #endif /* _MOD_AUTH_OPENIDC_SESSION_H_ */
