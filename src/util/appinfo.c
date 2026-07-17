@@ -114,10 +114,42 @@ void oidc_util_appinfo_set(request_rec *r, const char *s_key, const char *s_valu
 #define OIDC_JSON_MAX_INT_STR_LEN 64
 
 /*
- * concatenate the (string/boolean) elements of a JSON array into a single delimiter-separated string;
- * non-string/non-boolean elements are skipped with a debug message
+ * escape the escape character and the delimiter within a single array element value, so that a delimiter
+ * occurring inside a value cannot be mistaken for an element separator by the application; the escaping is
+ * reversible: "\\" decodes back to a literal "\" and "\<delimiter>" to a literal "<delimiter>"
  */
-// TODO: escape the delimiter in the values (maybe reuse/extract url-formatted code from oidc_session_identity_encode)
+static const char *oidc_util_appinfo_escape(request_rec *r, const char *claim_delimiter, const char *s_value) {
+	size_t dlen = _oidc_strlen(claim_delimiter);
+
+	if ((s_value == NULL) || (dlen == 0))
+		return s_value;
+
+	/* worst case every input character is doubled (a value consisting solely of backslashes) */
+	char *dst = apr_pcalloc(r->pool, 2 * _oidc_strlen(s_value) + 1);
+	char *d = dst;
+	for (const char *p = s_value; *p != '\0';) {
+		if (*p == '\\') {
+			*d++ = '\\';
+			*d++ = *p++;
+		} else if (_oidc_strncmp(p, claim_delimiter, dlen) == 0) {
+			*d++ = '\\';
+			for (size_t k = 0; k < dlen; k++)
+				*d++ = *p++;
+		} else {
+			*d++ = *p++;
+		}
+	}
+	*d = '\0';
+
+	return dst;
+}
+
+/*
+ * concatenate the (string/boolean) elements of a JSON array into a single delimiter-separated string;
+ * non-string/non-boolean elements are skipped with a debug message; a delimiter (or the backslash escape
+ * character) occurring inside an element value is escaped by oidc_util_appinfo_escape so it cannot be
+ * mistaken for an element separator
+ */
 static const char *oidc_util_appinfo_array_concat(request_rec *r, const oidc_json_t *j_array,
 						  const char *claim_delimiter, const char *s_key) {
 
@@ -140,6 +172,8 @@ static const char *oidc_util_appinfo_array_concat(request_rec *r, const oidc_jso
 				   oidc_json_typeof(elem), s_key);
 			continue;
 		}
+
+		s_elem = oidc_util_appinfo_escape(r, claim_delimiter, s_elem);
 
 		if (_oidc_strcmp(s_concat, "") != 0)
 			s_concat = apr_psprintf(r->pool, "%s%s%s", s_concat, claim_delimiter, s_elem);

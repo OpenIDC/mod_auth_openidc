@@ -1,4 +1,12 @@
 07/17/2026
+- appinfo: when concatenating a multi-valued (array) claim into a single
+  delimiter-separated application header/environment variable, backslash-escape
+  any delimiter (and the backslash escape character itself) occurring inside an
+  element value, so a value that contains the delimiter can no longer be
+  mistaken for - or used to inject - additional elements by the application
+  (e.g. a group DN "CN=Admins,OU=Groups" no longer splits on its commas when
+  the delimiter is ","); the escaping is reversible and only affects values
+  that actually contain the delimiter or a backslash
 - userinfo: only refresh the access token and retry the userinfo request when
   the endpoint responded with a 401 (invalid/expired token); other HTTP
   errors (e.g. 403 or 5xx) are no longer "resolved" by pointlessly presenting

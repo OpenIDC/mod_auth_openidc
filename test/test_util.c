@@ -173,6 +173,34 @@ START_TEST(test_util_appinfo_set) {
 }
 END_TEST
 
+START_TEST(test_util_appinfo_array_delimiter_escape) {
+	apr_byte_t rc = FALSE;
+	oidc_json_t *claims = NULL;
+	request_rec *r = oidc_test_request_get();
+
+	rc = oidc_json_decode_object(r,
+				     "{"
+				     "\"roles\" : [ \"a,b\", \"c\\\\d\", \"e\" ],"
+				     "\"dns\" : [ \"CN=Admins,OU=Groups\", \"plain\" ]"
+				     "}",
+				     &claims);
+	ck_assert_int_eq(rc, TRUE);
+
+	/* a delimiter (or the backslash escape char) inside an element value is escaped so it cannot be
+	 * mistaken for an element separator: "a,b" -> "a\,b", "c\d" -> "c\\d" */
+	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
+	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_roles", "a\\,b,c\\\\d,e");
+	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_dns", "CN=Admins\\,OU=Groups,plain");
+
+	/* a multi-character delimiter is matched and escaped as a unit (no delimiter present => unchanged) */
+	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", "::", OIDC_APPINFO_PASS_HEADERS,
+				  OIDC_APPINFO_ENCODING_NONE);
+	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_dns", "CN=Admins,OU=Groups::plain");
+
+	oidc_json_decref(claims);
+}
+END_TEST
+
 START_TEST(test_util_expr_substitute) {
 	apr_byte_t rc = FALSE;
 	apr_pool_t *pool = oidc_test_pool_get();
@@ -1172,6 +1200,7 @@ int main(void) {
 	c = tcase_create("appinfo");
 	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(c, test_util_appinfo_set);
+	tcase_add_test(c, test_util_appinfo_array_delimiter_escape);
 	suite_add_tcase(s, c);
 
 	c = tcase_create("expr");
