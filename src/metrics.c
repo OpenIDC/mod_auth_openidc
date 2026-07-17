@@ -315,7 +315,8 @@ apr_byte_t oidc_metrics_is_valid_classname(apr_pool_t *pool, const char *name, c
 	}
 	n = sizeof(_oidc_metrics_counters_info) / sizeof(oidc_metrics_counter_info_t);
 	for (i = 0; i < n; i++) {
-		// TODO: instead of using hardcoded single "claim" name/value option, make this a static list
+		// NB: "claim" is the only counter class with a name/value option and is special-cased here (rather
+		// than driven from a static list)
 		if (_oidc_strcmp(_oidc_metrics_counters_info[i].class_name, "claim") != 0)
 			apr_table_set(names, _oidc_metrics_counters_info[i].class_name,
 				      _oidc_metrics_counters_info[i].class_name);
@@ -1060,7 +1061,6 @@ static inline void _oidc_metrics_timing_buckets_inc(oidc_metrics_timing_t *timin
 void oidc_metrics_timing_add(request_rec *r, oidc_metrics_timing_type_t type, apr_time_t elapsed) {
 	oidc_metrics_timing_t *timing = NULL;
 
-	/* TODO: how can this happen? */
 	if (elapsed < 0) {
 		oidc_warn(r, "discarding metrics timing [%s.%s]: elapsed (%" APR_TIME_T_FMT ") < 0",
 			  _oidc_metrics_timings_info[type].class_name, _oidc_metrics_timings_info[type].metric_name,

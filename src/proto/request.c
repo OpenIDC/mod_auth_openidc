@@ -319,7 +319,7 @@ static apr_byte_t oidc_request_uri_encryption_jwk_by_type(request_rec *r, oidc_c
 	oidc_jwk_t *key = NULL;
 	char *jwk_json = NULL;
 
-	/* TODO: forcefully refresh now; we may want to relax that */
+	/* NB: force a fresh JWKS fetch here rather than relying on the cache */
 	oidc_metadata_jwks_get(r, cfg, oidc_cfg_provider_jwks_uri_get(provider),
 			       oidc_cfg_provider_ssl_validate_server_get(provider), &j_jwks, &force_refresh);
 

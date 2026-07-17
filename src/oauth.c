@@ -72,7 +72,6 @@ apr_byte_t oidc_oauth_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg
 	}
 
 	/* check to see if it is valid metadata */
-	// TODO:
 
 	/* all OK */
 	return TRUE;

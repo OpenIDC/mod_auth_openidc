@@ -137,8 +137,6 @@ static apr_byte_t oidc_proto_webfinger_discovery(request_rec *r, oidc_cfg_t *cfg
  */
 apr_byte_t oidc_proto_discovery_account_based(request_rec *r, oidc_cfg_t *cfg, const char *acct, char **issuer) {
 
-	// TODO: maybe show intermediate/progress screen "discovering..."
-
 	oidc_debug(r, "enter, acct=%s", acct);
 
 	const char *resource = apr_psprintf(r->pool, "acct:%s", acct);

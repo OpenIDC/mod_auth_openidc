@@ -513,8 +513,6 @@ size_t oidc_http_response_header(const char *buffer, size_t size, size_t nitems,
 			value[i--] = '\0';
 	}
 
-	// TODO: would be faster to use all lowercase keys
-
 	/* check if the caller is interested in the value of the current response header */
 	for (apr_hash_index_t *hi = apr_hash_first(NULL, ctx->hdrs); hi; hi = apr_hash_next(hi)) {
 		apr_hash_this(hi, (const void **)&h_name, &h_len, NULL);

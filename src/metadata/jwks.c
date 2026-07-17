@@ -108,7 +108,6 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r, oidc_cfg
 			return FALSE;
 		}
 
-		// TODO: add issuer?
 		if (oidc_proto_jwt_validate(r, jwt, NULL, FALSE, FALSE, -1) == FALSE)
 			return FALSE;
 

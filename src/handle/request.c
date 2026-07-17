@@ -163,8 +163,8 @@ int oidc_request_authenticate_user(request_rec *r, oidc_cfg_t *c, oidc_provider_
 
 	if (provider == NULL) {
 
-		// TODO: should we use an explicit redirect to the discovery endpoint (maybe a "discovery" param to the
-		// redirect_uri)?
+		// NB: discovery is deferred to the content handler below rather than via an explicit redirect to a
+		// discovery endpoint
 		if (oidc_cfg_metadata_dir_get(c) != NULL) {
 			/*
 			 * No authentication done but request not allowed without authentication
@@ -260,7 +260,6 @@ int oidc_request_authenticate_user(request_rec *r, oidc_cfg_t *c, oidc_provider_
 	}
 
 	/* send off to the OpenID Connect Provider */
-	// TODO: maybe show intermediate/progress screen "redirecting to"
 	rc = oidc_proto_request_auth(r, provider, login_hint, oidc_util_url_redirect_uri(r, c), state, proto_state,
 				     id_token_hint, code_challenge, auth_request_params, path_scope);
 

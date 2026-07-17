@@ -231,7 +231,7 @@ error_close:
 	return FALSE;
 }
 
-// TODO: make these configurable?
+// NB: the file-cache housekeeping parameters are compile-time constants (not configurable)
 #define OIDC_CACHE_FILE_LAST_CLEANED "last-cleaned"
 
 /*

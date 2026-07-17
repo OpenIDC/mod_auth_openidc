@@ -66,7 +66,6 @@ int oidc_jwks_request(request_rec *r, const oidc_cfg_t *c) {
 		}
 	}
 
-	// TODO: send stuff if first == FALSE?
 	jwks = apr_psprintf(r->pool, "%s ] }", jwks);
 
 	return oidc_util_http_send(r, jwks, _oidc_strlen(jwks), OIDC_HTTP_CONTENT_TYPE_JSON, OK);

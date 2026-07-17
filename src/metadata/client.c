@@ -190,7 +190,7 @@ apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg, const 
 	    oidc_json_string(apr_psprintf(r->pool, "%s?%s=%s", oidc_util_url_redirect_uri(r, cfg),
 					  OIDC_REDIRECT_URI_REQUEST_LOGOUT, OIDC_GET_STYLE_LOGOUT_PARAM_VALUE)));
 
-	// TODO: may want to add backchannel_logout_session_required
+	// NB: "backchannel_logout_session_required" is not advertised in the registration
 	oidc_json_object_set_new(data, OIDC_METADATA_BACKCHANNEL_LOGOUT_URI,
 				 oidc_json_string(apr_psprintf(r->pool, "%s?%s=%s", oidc_util_url_redirect_uri(r, cfg),
 							       OIDC_REDIRECT_URI_REQUEST_LOGOUT,
@@ -351,7 +351,7 @@ apr_byte_t oidc_metadata_client_parse(request_rec *r, oidc_cfg_t *cfg, const oid
 				    oidc_cfg_provider_id_token_signed_response_alg_get(oidc_cfg_provider_get(cfg)));
 	OIDC_METADATA_PROVIDER_SET(id_token_signed_response_alg, value, rv)
 
-	// TODO: id_token_encrypted_response_alg etc.?
+	// NB: id_token_encrypted_response_alg and the other encryption-related client metadata are not parsed here
 
 	return TRUE;
 }

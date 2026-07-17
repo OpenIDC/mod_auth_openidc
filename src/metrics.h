@@ -200,7 +200,7 @@ extern const oidc_metrics_counter_info_t _oidc_metrics_counters_info[];
 
 void oidc_metrics_counter_inc(request_rec *r, oidc_metrics_counter_type_t type, const char *name, const char *value);
 
-// TODO: name is a bit overloaded here, since when not NULL, it will also result in including the metric_name
+// NB: "name" is overloaded here: when not NULL it also causes the metric_name to be included
 static inline const char *_oidc_metrics_type_name2s(apr_pool_t *pool, unsigned int type, const char *name) {
 	return apr_psprintf(pool, "%s%s%s%s%s", _oidc_metrics_counters_info[type].class_name, name ? "." : "",
 			    name ? _oidc_metrics_counters_info[type].metric_name : "", name ? "." : "",

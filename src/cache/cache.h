@@ -108,8 +108,8 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key, 
 #define OIDC_CACHE_SECTION_USERINFO_SJWT "u"
 #define OIDC_CACHE_SECTION_JQ_FILTER "q"
 
-// TODO: now every section occupies the same space; we may want to differentiate
-//       according to section-based size, at least for the shm backend
+// NB: every cache section occupies the same space; sizing is not differentiated per section
+//     (would be relevant mainly for the shm backend)
 
 #define oidc_cache_get_session(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, key, value)
 #define oidc_cache_get_nonce(r, key, value) oidc_cache_get(r, OIDC_CACHE_SECTION_NONCE, key, value)
