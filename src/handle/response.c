@@ -318,6 +318,7 @@ apr_byte_t oidc_response_save_in_session(request_rec *r, const oidc_cfg_t *c, oi
 					   : oidc_util_url_cur_host(r, oidc_cfg_x_forwarded_headers_get(c)));
 
 	char *sid = NULL;
+	char *sub = id_token_jwt->payload.sub;
 	oidc_debug(r, "provider->backchannel_logout_supported=%d",
 		   oidc_cfg_provider_backchannel_logout_supported_get(provider));
 	/*
@@ -329,8 +330,18 @@ apr_byte_t oidc_response_save_in_session(request_rec *r, const oidc_cfg_t *c, oi
 	 */
 	oidc_jose_get_string(r->pool, id_token_jwt->payload.value.json, OIDC_CLAIM_SID, FALSE, &sid, NULL);
 	if (sid == NULL)
-		sid = id_token_jwt->payload.sub;
+		sid = sub;
 	session->sid = oidc_response_make_sid_iss_unique(r, sid, oidc_cfg_provider_issuer_get(provider));
+
+	/*
+	 * when the OP supports back-channel logout and issued a distinct "sid", additionally index this session
+	 * by "sub" so a logout token that carries only "sub" (allowed per OpenID Connect Back-Channel Logout 1.0
+	 * section 2.6) can still locate it; only done when back-channel logout is enabled to avoid the extra
+	 * cache index otherwise
+	 */
+	if ((oidc_cfg_provider_backchannel_logout_supported_get(provider)) && (sub != NULL) &&
+	    (_oidc_strcmp(sid, sub) != 0))
+		session->sub = oidc_response_make_sid_iss_unique(r, sub, oidc_cfg_provider_issuer_get(provider));
 
 	/* indicate that this is a newly created session */
 	oidc_session_set_session_new(r, session, 1);

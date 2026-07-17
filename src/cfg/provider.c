@@ -391,7 +391,8 @@ OIDC_PROVIDER_MEMBER_FUNCS_STR(scope, OIDC_DEFAULT_SCOPE)
 #define OIDC_DEFAULT_CLIENT_NAME "OpenID Connect Apache Module (mod_auth_openidc)"
 OIDC_PROVIDER_MEMBER_FUNCS_STR(client_name, OIDC_DEFAULT_CLIENT_NAME)
 
-// TODO: no longer used as sid is also stored for frontchannel logout flows
+/* whether the OP supports OpenID Connect Back-Channel Logout; when enabled, sessions are additionally
+ * indexed by "sub" so a logout token that carries only "sub" can locate a session created with a "sid" */
 OIDC_PROVIDER_MEMBER_FUNCS_FLAG(backchannel_logout_supported, 0)
 
 #define OIDC_DEFAULT_SSL_VALIDATE_SERVER 1

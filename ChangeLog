@@ -1,4 +1,13 @@
 07/17/2026
+- logout: support back-channel logout tokens that carry only "sub" (allowed by
+  OpenID Connect Back-Channel Logout 1.0 section 2.6) for sessions that were
+  created with a distinct "sid"; when the OP supports back-channel logout, a
+  session is now additionally indexed by "sub" so such a logout token can
+  locate it, and a logout cleans up all of the session's index entries. The
+  secondary index is only maintained when back-channel logout is enabled on
+  the provider (OIDCProviderBackChannelLogoutSupported or the OP's discovery
+  metadata), so there is no extra cache usage otherwise. Also fixes a latent
+  session-state leak on the logout cleanup path
 - session management: persist the per-path authentication request parameters
   (OIDCPathAuthRequestParams) and scope (OIDCPathScope) used at initial
   authentication in the session, and reuse them for the silent "check"

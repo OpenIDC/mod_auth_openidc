@@ -274,6 +274,12 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, apr
 			oidc_session_set(r, z, OIDC_SESSION_SID_KEY, z->sid);
 		}
 
+		/* secondary "sub"-based logout index (shares the sid cache namespace, distinct key) */
+		if (z->sub != NULL) {
+			oidc_cache_set_sid(r, z->sub, z->uuid, z->expiry);
+			oidc_session_set(r, z, OIDC_SESSION_SUB_KEY, z->sub);
+		}
+
 		/* store the string-encoded session in the cache; encryption depends on cache backend settings */
 		char *s_value = NULL;
 		if (oidc_session_encode(r, c, z, &s_value, FALSE) == FALSE)
@@ -290,6 +296,8 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, apr
 
 		if (z->sid != NULL)
 			oidc_cache_set_sid(r, z->sid, NULL, 0);
+		if (z->sub != NULL)
+			oidc_cache_set_sid(r, z->sub, NULL, 0);
 
 		/* clear the cookie */
 		oidc_http_set_cookie(r, oidc_cfg_dir_cookie_get(r), "", 0, OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r));
@@ -379,6 +387,7 @@ apr_byte_t oidc_session_extract(request_rec *r, oidc_session_t *z) {
 
 	oidc_session_get(r, z, OIDC_SESSION_REMOTE_USER_KEY, &z->remote_user);
 	oidc_session_get(r, z, OIDC_SESSION_SID_KEY, &z->sid);
+	oidc_session_get(r, z, OIDC_SESSION_SUB_KEY, &z->sub);
 	oidc_session_get(r, z, OIDC_SESSION_SESSION_ID, &z->uuid);
 
 	rc = TRUE;
@@ -401,6 +410,7 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 	oidc_session_clear(r, z);
 	oidc_session_id_new(r, z);
 	z->sid = NULL;
+	z->sub = NULL;
 
 	if (oidc_cfg_session_type_get(c) == OIDC_SESSION_TYPE_SERVER_CACHE)
 		/* load the session from the cache */

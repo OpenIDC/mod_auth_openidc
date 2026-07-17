@@ -132,15 +132,17 @@ static apr_byte_t oidc_logout_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg
 
 	char *uuid = NULL;
 	oidc_session_t session;
+	apr_byte_t loaded = FALSE;
 
 	oidc_debug(r, "enter (sid=%s,iss=%s)", sid, oidc_cfg_provider_issuer_get(provider));
 
-	// TODO: when dealing with sub instead of a true sid, we'll be killing all sessions for
-	//	   a specific user, across hosts that share the *same* cache backend
-	//	   if those hosts haven't been configured with a different OIDCCryptoPassphrase
-	//	   - perhaps that's even acceptable since non-memory caching is encrypted by default
-	//	     and memory-based caching doesn't suffer from this (different shm segments)?
-	//	   - it will result in 400 errors returned from backchannel logout calls to the other hosts...
+	/*
+	 * NB: when a logout token carries "sub" rather than a true "sid" (either because the OP does not use
+	 * "sid", or per OpenID Connect Back-Channel Logout 1.0 section 2.6), the session is located via the
+	 * "sub"-based index. When multiple hosts share the *same* cache backend and OIDCCryptoPassphrase that
+	 * index is shared, so a "sub"-based logout will also invalidate the corresponding session on those hosts
+	 * (non-memory caching is encrypted by default and shm caching uses per-host segments, which limits this).
+	 */
 
 	sid = oidc_response_make_sid_iss_unique(r, sid, oidc_cfg_provider_issuer_get(provider));
 	oidc_cache_get_sid(r, sid, &uuid);
@@ -154,14 +156,24 @@ static apr_byte_t oidc_logout_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg
 		return TRUE;
 	}
 
+	// load the session so we can (optionally) revoke its tokens and clean up all of its cache index entries
+	if (oidc_cfg_session_type_get(cfg) != OIDC_SESSION_TYPE_CLIENT_COOKIE)
+		loaded = (oidc_session_load_cache_by_uuid(r, cfg, uuid, &session) != FALSE) &&
+			 (oidc_session_extract(r, &session) != FALSE);
+
 	// revoke tokens if we can get a handle on those
-	if ((oidc_cfg_session_type_get(cfg) != OIDC_SESSION_TYPE_CLIENT_COOKIE) &&
-	    (oidc_session_load_cache_by_uuid(r, cfg, uuid, &session) != FALSE) && (revoke_tokens == TRUE) &&
-	    (oidc_session_extract(r, &session) != FALSE))
+	if ((loaded == TRUE) && (revoke_tokens == TRUE))
 		oidc_logout_revoke_tokens(r, cfg, &session);
 
-	// clear the session cache
+	// clear the session and both its sid/sub cache index entries (it may have been located via either)
 	oidc_cache_set_sid(r, sid, NULL, 0);
+	if (loaded == TRUE) {
+		if (session.sid != NULL)
+			oidc_cache_set_sid(r, session.sid, NULL, 0);
+		if (session.sub != NULL)
+			oidc_cache_set_sid(r, session.sub, NULL, 0);
+		oidc_session_free(r, &session);
+	}
 	oidc_cache_set_session(r, uuid, NULL, 0);
 
 	r->user = "";
@@ -437,14 +449,11 @@ static int oidc_logout_backchannel_validate_claims(request_rec *r, const oidc_pr
 	if (rc != OK)
 		return rc;
 
-	// TODO: by-spec we should cater for the fact that "sid" has been provided
-	//       in the id_token returned in the authentication request, but "sub"
-	//       is used in the logout token but that requires a 2nd entry in the
-	//       cache and a separate session "sub" member, ugh; we'll just assume
-	//       that is "sid" is specified in the id_token, the OP will actually use
-	//       this for logout
-	//       (and probably call us multiple times or the same sub if needed)
-
+	/*
+	 * a logout token may carry "sub" even when the id_token returned a "sid" (OpenID Connect Back-Channel
+	 * Logout 1.0 section 2.6); when the OP supports back-channel logout the session is additionally indexed
+	 * by "sub" at creation time (see oidc_response_save_in_session), so cleanup below resolves it either way
+	 */
 	oidc_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_SID, sid, NULL);
 	if (*sid == NULL)
 		*sid = jwt->payload.sub;

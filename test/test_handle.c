@@ -455,6 +455,50 @@ START_TEST(test_handle_response_save_in_session_with_userinfo) {
 }
 END_TEST
 
+START_TEST(test_handle_response_save_in_session_sub_index) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *iss = oidc_cfg_provider_issuer_get(provider);
+
+	/* an id_token carrying a distinct "sid" and "sub" */
+	oidc_jwt_t *jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->payload.sub = apr_pstrdup(r->pool, "alice");
+	jwt->payload.exp = apr_time_sec(apr_time_now()) + 3600;
+	oidc_json_object_set_new(jwt->payload.value.json, "sid", oidc_json_string("real-sid"));
+
+	/* back-channel logout NOT enabled (default): no secondary "sub" index is created */
+	oidc_session_t *s1 = NULL;
+	oidc_session_load(r, &s1);
+	ck_assert_int_eq(oidc_cfg_provider_backchannel_logout_supported_get(provider), 0);
+	ck_assert_int_eq(oidc_response_save_in_session(r, c, s1, provider, "alice", "idt", jwt, NULL, NULL, "AT",
+						       "Bearer", 600, NULL, "openid", NULL, "st",
+						       "https://www.example.com/protected/", NULL),
+			 TRUE);
+	ck_assert_msg(_oidc_strstr(s1->sid, "real-sid@") != NULL, "sid is derived from the sid claim");
+	ck_assert_ptr_null(s1->sub);
+	oidc_session_free(r, s1);
+
+	/* back-channel logout enabled: the session is additionally indexed by "sub" */
+	ck_assert_ptr_null(oidc_cfg_provider_backchannel_logout_supported_set(r->pool, provider, 1));
+	oidc_session_t *s2 = NULL;
+	oidc_session_load(r, &s2);
+	ck_assert_int_eq(oidc_response_save_in_session(r, c, s2, provider, "alice", "idt", jwt, NULL, NULL, "AT",
+						       "Bearer", 600, NULL, "openid", NULL, "st",
+						       "https://www.example.com/protected/", NULL),
+			 TRUE);
+	ck_assert_ptr_nonnull(s2->sub);
+	ck_assert_msg(_oidc_strstr(s2->sub, "alice@") != NULL, "sub index is derived from the sub claim");
+	/* and the secondary index resolves to the session uuid in the cache */
+	char *by_sub = NULL;
+	oidc_cache_get_sid(r, oidc_response_make_sid_iss_unique(r, "alice", iss), &by_sub);
+	ck_assert_str_eq(by_sub, s2->uuid);
+	oidc_session_free(r, s2);
+
+	oidc_jwt_destroy(jwt);
+}
+END_TEST
+
 START_TEST(test_handle_response_authorization_redirect_state_mismatch) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -3018,6 +3062,53 @@ START_TEST(test_handle_logout_backchannel_encrypted) {
 }
 END_TEST
 
+START_TEST(test_handle_logout_backchannel_by_sub) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *iss = oidc_cfg_provider_issuer_get(provider);
+
+	const char *secret = "backchannel-logout-shared-secret-XYZ";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	/* create and persist a session indexed by a real "sid" AND (back-channel logout enabled) by "sub" */
+	const char *uuid = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	session->uuid = apr_pstrdup(r->pool, uuid);
+	session->remote_user = apr_pstrdup(r->pool, "alice");
+	session->expiry = apr_time_now() + apr_time_from_sec(3600);
+	oidc_session_set_issuer(r, session, iss);
+	oidc_session_set_session_expires(r, session, session->expiry);
+	session->sid = oidc_response_make_sid_iss_unique(r, "real-sid", iss);
+	session->sub = oidc_response_make_sid_iss_unique(r, "alice-sub", iss);
+	ck_assert_int_eq(oidc_session_save(r, session, TRUE), TRUE);
+
+	/* a back-channel logout token carrying only "sub" must locate the session via the secondary index */
+	char *logout_jwt =
+	    e2e_sign_backchannel_logout_jwt(r, iss, "client_id", "alice-sub", "jti-by-sub", TRUE, FALSE, secret);
+	char *body = apr_psprintf(r->pool, "logout_token=%s", oidc_http_url_encode(r, logout_jwt));
+	e2e_post_body(r, body);
+	apr_table_set(r->subprocess_env, "OIDC_REDIRECT_URI_REQUEST", "backchannel");
+	r->args = apr_pstrcat(r->pool, "logout=backchannel&", body, NULL);
+	r->remaining = (apr_size_t)_oidc_strlen(r->args);
+
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, OK);
+
+	/* the session and BOTH of its cache index entries are now gone */
+	char *v = NULL;
+	oidc_cache_get_session(r, uuid, &v);
+	ck_assert_ptr_null(v);
+	oidc_cache_get_sid(r, oidc_response_make_sid_iss_unique(r, "real-sid", iss), &v);
+	ck_assert_ptr_null(v);
+	oidc_cache_get_sid(r, oidc_response_make_sid_iss_unique(r, "alice-sub", iss), &v);
+	ck_assert_ptr_null(v);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
 START_TEST(test_handle_logout_backchannel_missing_events_claim) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -3853,6 +3944,7 @@ int main(void) {
 	tcase_add_test(response, test_handle_response_post_preserve_disabled_by_default);
 	tcase_add_test(response, test_handle_response_save_in_session_minimal);
 	tcase_add_test(response, test_handle_response_save_in_session_with_userinfo);
+	tcase_add_test(response, test_handle_response_save_in_session_sub_index);
 	tcase_add_test(response, test_handle_response_authorization_redirect_state_mismatch);
 	tcase_add_test(response, test_handle_response_authorization_redirect_state_mismatch_with_sso_url);
 	tcase_add_test(response, test_handle_response_authorization_post_non_post_method);
@@ -3948,6 +4040,7 @@ int main(void) {
 	tcase_add_test(logout, test_handle_logout_backchannel_no_token);
 	tcase_add_test(logout, test_handle_logout_backchannel_happy_path);
 	tcase_add_test(logout, test_handle_logout_backchannel_encrypted);
+	tcase_add_test(logout, test_handle_logout_backchannel_by_sub);
 	tcase_add_test(logout, test_handle_logout_backchannel_missing_events_claim);
 	tcase_add_test(logout, test_handle_logout_backchannel_nonce_claim_rejected);
 	tcase_add_test(logout, test_handle_logout_op_request_with_id_token_hint);
