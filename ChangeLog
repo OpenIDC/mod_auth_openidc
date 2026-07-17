@@ -1,4 +1,11 @@
 07/17/2026
+- metadata: inherit the token endpoint authentication algorithm from the
+  global configuration in per-client .conf files; when a .conf does not set
+  "token_endpoint_auth" the globally configured method was inherited but its
+  ":<alg>" suffix (e.g. private_key_jwt:RS256) was dropped, so multi-provider
+  setups silently signed client-authentication JWTs with the default
+  algorithm; the fallback now re-appends the global algorithm (an explicit
+  "token_endpoint_auth" in the .conf still overrides both)
 - logout: support decrypting a symmetrically encrypted back-channel logout
   token by adding a symmetric key derived from the configured provider's
   client secret to the decryption key set (alongside the RP's private keys);

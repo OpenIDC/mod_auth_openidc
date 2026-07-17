@@ -916,6 +916,39 @@ START_TEST(test_metadata_conf_parse_string_fields) {
 }
 END_TEST
 
+START_TEST(test_metadata_conf_parse_token_endpoint_auth_alg_inherited) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* the fixture cfg has a (non-NULL) private_keys array, so private_key_jwt with an algorithm validates;
+	 * configure the global (primary) provider with a method + algorithm */
+	ck_assert_ptr_null(
+	    oidc_cfg_provider_token_endpoint_auth_set(r->pool, c, oidc_cfg_provider_get(c), "private_key_jwt:RS256"));
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_auth_get(oidc_cfg_provider_get(c)), "private_key_jwt");
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_auth_alg_get(oidc_cfg_provider_get(c)), "RS256");
+
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+
+	/* a .conf that does NOT set token_endpoint_auth must inherit BOTH the method and its algorithm from the
+	 * global config, not just the method */
+	oidc_json_t *j = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(r, "{\"issuer\":\"https://op.example.com\"}", &j), TRUE);
+	ck_assert_int_eq(oidc_metadata_conf_parse(r, c, j, provider), TRUE);
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_auth_get(provider), "private_key_jwt");
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_auth_alg_get(provider), "RS256");
+	oidc_json_decref(j);
+
+	/* an explicit token_endpoint_auth in the .conf overrides and does NOT inherit the global algorithm */
+	oidc_provider_t *provider2 = oidc_cfg_provider_create(r->pool);
+	oidc_json_t *j2 = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(r, "{\"token_endpoint_auth\":\"client_secret_basic\"}", &j2), TRUE);
+	ck_assert_int_eq(oidc_metadata_conf_parse(r, c, j2, provider2), TRUE);
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_auth_get(provider2), "client_secret_basic");
+	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_auth_alg_get(provider2));
+	oidc_json_decref(j2);
+}
+END_TEST
+
 START_TEST(test_metadata_conf_parse_int_fields) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -1149,6 +1182,7 @@ int main(void) {
 	TCase *conf = tcase_create("conf");
 	tcase_add_checked_fixture(conf, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(conf, test_metadata_conf_parse_string_fields);
+	tcase_add_test(conf, test_metadata_conf_parse_token_endpoint_auth_alg_inherited);
 	tcase_add_test(conf, test_metadata_conf_parse_int_fields);
 	tcase_add_test(conf, test_metadata_conf_parse_id_token_aud_values);
 	tcase_add_test(conf, test_metadata_conf_parse_dpop_and_auth_request_method);

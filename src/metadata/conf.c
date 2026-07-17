@@ -264,10 +264,22 @@ static void oidc_metadata_conf_parse_endpoint_auth(request_rec *r, oidc_cfg_t *c
 						   oidc_provider_t *provider) {
 	const char *rv = NULL;
 	char *value = NULL;
+	const oidc_provider_t *primary = oidc_cfg_provider_get(cfg);
+	const char *global_auth = oidc_cfg_provider_token_endpoint_auth_get(primary);
+	const char *global_alg = oidc_cfg_provider_token_endpoint_auth_alg_get(primary);
 
-	// TODO: token_endpoint_auth_alg inheritance from global setting does not work now
-	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_TOKEN_ENDPOINT_AUTH, &value,
-				    oidc_cfg_provider_token_endpoint_auth_get(oidc_cfg_provider_get(cfg)));
+	/*
+	 * fall back to the globally configured method; the method and its algorithm are stored separately but
+	 * oidc_cfg_provider_token_endpoint_auth_set() re-parses the combined "method:alg" form, so re-append
+	 * the ":<alg>" suffix (if any) to the fallback value to inherit token_endpoint_auth_alg too rather
+	 * than dropping it (a token_endpoint_auth explicitly set in the .conf overrides both and does not
+	 * inherit the global algorithm)
+	 */
+	const char *fallback = global_auth;
+	if ((global_auth != NULL) && (global_alg != NULL))
+		fallback = apr_psprintf(r->pool, "%s:%s", global_auth, global_alg);
+
+	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_TOKEN_ENDPOINT_AUTH, &value, fallback);
 	if (value != NULL) {
 		rv = oidc_cfg_provider_token_endpoint_auth_set(r->pool, cfg, provider, value);
 		if (rv != NULL)
