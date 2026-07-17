@@ -1,4 +1,9 @@
 07/17/2026
+- userinfo: only refresh the access token and retry the userinfo request when
+  the endpoint responded with a 401 (invalid/expired token); other HTTP
+  errors (e.g. 403 or 5xx) are no longer "resolved" by pointlessly presenting
+  a freshly refreshed token, which also avoids needlessly spending a refresh
+  token on a transient server-side error
 - proto: when verifying a JWT signature, give dynamically obtained JWKS keys
   precedence over statically configured keys that carry the same "kid",
   instead of the other way around; the provider's currently published JWKS

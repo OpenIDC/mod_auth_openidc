@@ -123,9 +123,10 @@ const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg_t *c, const o
 		}
 	}
 
-	// TODO: return code should indicate whether the token expired or some other error occurred
-	// TODO: long-term: session storage should be JSON (with explicit types and less conversion, using standard
-	// routines)
+	/*
+	 * NB: userinfo results are ultimately stored in the session in their stringified form; a future
+	 * improvement would be to keep session storage as typed JSON to avoid the string<->JSON conversions
+	 */
 
 	/* try to get claims from the userinfo endpoint using the provided access token */
 	if (oidc_proto_userinfo_request(r, c, provider, id_token_sub, access_token, access_token_type, &result,
@@ -140,10 +141,21 @@ const char *oidc_userinfo_retrieve_claims(request_rec *r, oidc_cfg_t *c, const o
 		goto end;
 	}
 
-	// a connectivity error rather than a HTTP error; may want to check for anything != 401
+	// a connectivity error rather than a HTTP error: refreshing the access token won't help
 	if (response_code == 0) {
 		oidc_error(r, "resolving user info claims failed with a connectivity error, no attempt will be made to "
 			      "refresh the access token and try again");
+		result = NULL;
+		goto end;
+	}
+
+	/* only an "invalid_token" response (401) indicates the access token may have expired and is worth
+	 * refreshing; any other HTTP error (e.g. 403, 5xx) will not be resolved by presenting a fresh token */
+	if (response_code != HTTP_UNAUTHORIZED) {
+		oidc_error(r,
+			   "resolving user info claims failed with HTTP status %ld; since this is not a 401 the access "
+			   "token will not be refreshed",
+			   response_code);
 		result = NULL;
 		goto end;
 	}

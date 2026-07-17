@@ -144,6 +144,47 @@ START_TEST(test_handle_userinfo_retrieve_failure_no_session) {
 }
 END_TEST
 
+START_TEST(test_handle_userinfo_retrieve_non_401_no_refresh) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	oidc_session_set_refresh_token(r, session, "RT-NO-REFRESH");
+
+	/* userinfo endpoint returns a non-401 error (500): the access token is not "expired/invalid",
+	 * so the refresh grant must NOT be attempted */
+	oidc_test_http_response_t resp = {
+	    .status_code = 500, .content_type = "application/json", .body = "{\"error\":\"server_error\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	/* point the token endpoint at a dead port: had a refresh been (wrongly) attempted it would have failed
+	 * there and left a FAILED marker in the refresh-token cache under the refresh token, which we assert is
+	 * absent to prove the refresh grant was never entered */
+	int free_port = oidc_test_http_free_port(r->pool);
+	ck_assert_int_ne(free_port, 0);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider,
+						 apr_psprintf(r->pool, "http://127.0.0.1:%d/token", free_port));
+
+	oidc_json_t *claims = NULL;
+	char *userinfo_jwt = NULL;
+	const char *result =
+	    oidc_userinfo_retrieve_claims(r, c, provider, "AT", "Bearer", session, NULL, &claims, &userinfo_jwt);
+	ck_assert_ptr_null(result);
+
+	char *cached = NULL;
+	oidc_cache_get_refresh_token(r, "RT-NO-REFRESH", &cached);
+	ck_assert_ptr_null(cached);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_session_free(r, session);
+}
+END_TEST
+
 START_TEST(test_handle_userinfo_store_and_clear_claims) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -3700,6 +3741,7 @@ int main(void) {
 	tcase_add_test(userinfo, test_handle_userinfo_retrieve_no_access_token);
 	tcase_add_test(userinfo, test_handle_userinfo_retrieve_success_no_session);
 	tcase_add_test(userinfo, test_handle_userinfo_retrieve_failure_no_session);
+	tcase_add_test(userinfo, test_handle_userinfo_retrieve_non_401_no_refresh);
 	tcase_add_test(userinfo, test_handle_userinfo_store_and_clear_claims);
 	tcase_add_test(userinfo, test_handle_userinfo_refresh_no_interval);
 	tcase_add_test(userinfo, test_handle_userinfo_refresh_with_interval);
