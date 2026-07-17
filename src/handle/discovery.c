@@ -102,7 +102,7 @@ static const char *oidc_discovery_csrf_cookie_samesite(const request_rec *r, con
 /*
  * redirect the user to an external discovery page, passing the required parameters
  */
-static int oidc_discovery_request_external(request_rec *r, oidc_cfg_t *cfg, const char *discover_url,
+static int oidc_discovery_request_external(request_rec *r, const oidc_cfg_t *cfg, const char *discover_url,
 					   const char *current_url, const char *method, const char *csrf) {
 
 	const char *path_scopes = oidc_cfg_dir_path_scope_get(r);
@@ -140,7 +140,7 @@ static int oidc_discovery_request_external(request_rec *r, oidc_cfg_t *cfg, cons
 /*
  * append the list of statically configured providers as selection links to the discovery page
  */
-static const char *oidc_discovery_page_providers(request_rec *r, oidc_cfg_t *cfg, const apr_array_header_t *arr,
+static const char *oidc_discovery_page_providers(request_rec *r, const oidc_cfg_t *cfg, const apr_array_header_t *arr,
 						 const char *current_url, const char *method, const char *csrf,
 						 const char *s) {
 
@@ -180,7 +180,7 @@ static const char *oidc_discovery_page_providers(request_rec *r, oidc_cfg_t *cfg
 /*
  * append the form to enter an account or issuer name for dynamic OP discovery to the discovery page
  */
-static const char *oidc_discovery_page_form(request_rec *r, oidc_cfg_t *cfg, const char *current_url,
+static const char *oidc_discovery_page_form(request_rec *r, const oidc_cfg_t *cfg, const char *current_url,
 					    const char *method, const char *csrf, const char *s) {
 
 	const char *path_scopes = oidc_cfg_dir_path_scope_get(r);

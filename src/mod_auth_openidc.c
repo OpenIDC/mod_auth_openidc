@@ -1181,11 +1181,10 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session
 
 	const oidc_redirect_uri_dispatch_t *entry = NULL;
 	int rc = OK;
-	int i = 0;
 
 	OIDC_METRICS_TIMING_START(r, c);
 
-	for (i = 0; i < (int)(sizeof(_oidc_redirect_uri_dispatch) / sizeof(oidc_redirect_uri_dispatch_t)); i++) {
+	for (int i = 0; i < (int)(sizeof(_oidc_redirect_uri_dispatch) / sizeof(oidc_redirect_uri_dispatch_t)); i++) {
 
 		entry = &_oidc_redirect_uri_dispatch[i];
 
