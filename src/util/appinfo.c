@@ -124,19 +124,21 @@ static const char *oidc_util_appinfo_escape(request_rec *r, const char *claim_de
 	if ((s_value == NULL) || (dlen == 0))
 		return s_value;
 
+	size_t slen = _oidc_strlen(s_value);
 	/* worst case every input character is doubled (a value consisting solely of backslashes) */
-	char *dst = apr_pcalloc(r->pool, 2 * _oidc_strlen(s_value) + 1);
+	char *dst = apr_pcalloc(r->pool, 2 * slen + 1);
 	char *d = dst;
-	for (const char *p = s_value; *p != '\0';) {
-		if (*p == '\\') {
+	for (size_t i = 0; i < slen;) {
+		if (s_value[i] == '\\') {
 			*d++ = '\\';
-			*d++ = *p++;
-		} else if (_oidc_strncmp(p, claim_delimiter, dlen) == 0) {
+			*d++ = s_value[i++];
+		} else if ((i + dlen <= slen) && (_oidc_strncmp(s_value + i, claim_delimiter, dlen) == 0)) {
+			/* the (i + dlen <= slen) bound makes the delimiter-length copy provably in-range */
 			*d++ = '\\';
 			for (size_t k = 0; k < dlen; k++)
-				*d++ = *p++;
+				*d++ = s_value[i++];
 		} else {
-			*d++ = *p++;
+			*d++ = s_value[i++];
 		}
 	}
 	*d = '\0';
