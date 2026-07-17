@@ -1,3 +1,11 @@
+07/17/2026
+- refresh: when our own refresh token grant fails (typically because another
+  cluster node or worker already spent and rotated the exact same refresh
+  token in a rolling-refresh setup), do a final best-effort re-read of the
+  refresh token cache before locking the token out, and re-use the results
+  another caller populated in the meantime instead of needlessly failing the
+  refresh and killing the session
+
 07/16/2026
 - cache: allocate the cache mutex on the provided (per-config-generation)
   pool again and register the server-config cleanup as a pool *pre*-cleanup,
