@@ -312,17 +312,33 @@ static int oidc_logout_backchannel_read_token(request_rec *r, const char **logou
 	return OK;
 }
 
-static int oidc_logout_backchannel_parse_jwt(request_rec *r, const oidc_cfg_t *cfg, const char *logout_token,
+static int oidc_logout_backchannel_parse_jwt(request_rec *r, oidc_cfg_t *cfg, const char *logout_token,
 					     oidc_jwt_t **jwt) {
 	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	char *alg = NULL;
 
-	// TODO: jwk symmetric key based on provider
+	/*
+	 * a back-channel logout token is unsolicited, so the issuer - and thus the specific provider - is not
+	 * known until the token has been parsed; when the token is symmetrically encrypted it will have been
+	 * encrypted with a key derived from the configured provider's client secret, so peek the (unencrypted)
+	 * JOSE header to size that key correctly and add it to the decryption key set alongside the RP's private
+	 * keys (cjose selects a compatible key for the actual decryption)
+	 */
+	oidc_proto_jwt_header_peek(r, logout_token, &alg, NULL, NULL);
+	oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(oidc_cfg_provider_get(cfg)),
+				       oidc_alg2keysize(alg), OIDC_JOSE_ALG_SHA256, TRUE, &jwk);
+
 	if (oidc_jwt_parse(r->pool, logout_token, jwt,
-			   oidc_util_key_symmetric_merge(r->pool, oidc_cfg_private_keys_get(cfg), NULL), FALSE,
+			   oidc_util_key_symmetric_merge(r->pool, oidc_cfg_private_keys_get(cfg), jwk), FALSE,
 			   &err) == FALSE) {
 		oidc_error(r, "oidc_jwt_parse failed: %s", oidc_jose_e2s(r->pool, err));
+		oidc_jwk_destroy(jwk);
 		return HTTP_BAD_REQUEST;
 	}
+
+	oidc_jwk_destroy(jwk);
+
 	if (((*jwt)->header.alg == NULL) || (_oidc_strcmp((*jwt)->header.alg, "none") == 0)) {
 		oidc_error(r, "logout token is not signed");
 		return HTTP_BAD_REQUEST;

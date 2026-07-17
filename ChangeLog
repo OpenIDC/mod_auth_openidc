@@ -1,4 +1,9 @@
 07/17/2026
+- logout: support decrypting a symmetrically encrypted back-channel logout
+  token by adding a symmetric key derived from the configured provider's
+  client secret to the decryption key set (alongside the RP's private keys);
+  the JOSE header is peeked to size that key correctly, since the issuer -
+  and thus the provider - is only known after the token has been parsed
 - appinfo: when concatenating a multi-valued (array) claim into a single
   delimiter-separated application header/environment variable, backslash-escape
   any delimiter (and the backslash escape character itself) occurring inside an

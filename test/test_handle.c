@@ -2904,6 +2904,28 @@ static char *e2e_sign_backchannel_logout_jwt(request_rec *r, const char *iss, co
 	return cser;
 }
 
+/* wrap a compact JWT string in a symmetric JWE (A256KW/A256GCM) using a key derived from the secret the
+ * same way the module derives its decryption key, so it round-trips through oidc_logout_backchannel_parse_jwt */
+static char *e2e_encrypt_symmetric(request_rec *r, const char *plaintext, const char *secret) {
+	apr_pool_t *pool = r->pool;
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	ck_assert_int_eq(
+	    oidc_util_key_symmetric_create(r, secret, oidc_alg2keysize("A256KW"), OIDC_JOSE_ALG_SHA256, TRUE, &jwk),
+	    TRUE);
+	ck_assert_ptr_nonnull(jwk);
+
+	oidc_jwt_t *jwe = oidc_jwt_new(pool, TRUE, TRUE);
+	jwe->header.alg = apr_pstrdup(pool, "A256KW");
+	jwe->header.enc = apr_pstrdup(pool, "A256GCM");
+	char *cser = NULL;
+	ck_assert_int_eq(oidc_jwt_encrypt(pool, jwe, jwk, plaintext, (int)_oidc_strlen(plaintext), &cser, &err), TRUE);
+	ck_assert_ptr_nonnull(cser);
+	oidc_jwk_destroy(jwk);
+	oidc_jwt_destroy(jwe);
+	return cser;
+}
+
 /* prepare a POST body the way oidc_util_read_post_params expects it */
 static void e2e_post_body(request_rec *r, const char *body) {
 	r->method_number = M_POST;
@@ -2935,6 +2957,35 @@ START_TEST(test_handle_logout_backchannel_happy_path) {
 	/* the recommended caching headers should have been emitted */
 	const char *cc = apr_table_get(r->err_headers_out, "Cache-Control");
 	ck_assert_ptr_nonnull(cc);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_logout_backchannel_encrypted) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "backchannel-logout-shared-secret-XYZ";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	/* an HS256-signed logout token, symmetrically encrypted with a key derived from the client secret:
+	 * the module must decrypt it using that same client-secret-derived key (the provider is only known
+	 * after decryption, so this exercises the client-secret decryption key added at parse time) */
+	char *logout_jwt = e2e_sign_backchannel_logout_jwt(r, "https://idp.example.com", "client_id", "alice",
+							   "jti-enc", TRUE, FALSE, secret);
+	char *logout_jwe = e2e_encrypt_symmetric(r, logout_jwt, secret);
+	char *body = apr_psprintf(r->pool, "logout_token=%s", oidc_http_url_encode(r, logout_jwe));
+	e2e_post_body(r, body);
+	apr_table_set(r->subprocess_env, "OIDC_REDIRECT_URI_REQUEST", "backchannel");
+	r->args = apr_pstrcat(r->pool, "logout=backchannel&", body, NULL);
+	r->remaining = (apr_size_t)_oidc_strlen(r->args);
+
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, OK);
 
 	oidc_session_free(r, session);
 }
@@ -3869,6 +3920,7 @@ int main(void) {
 	tcase_add_test(logout, test_handle_logout_request_frontchannel_img);
 	tcase_add_test(logout, test_handle_logout_backchannel_no_token);
 	tcase_add_test(logout, test_handle_logout_backchannel_happy_path);
+	tcase_add_test(logout, test_handle_logout_backchannel_encrypted);
 	tcase_add_test(logout, test_handle_logout_backchannel_missing_events_claim);
 	tcase_add_test(logout, test_handle_logout_backchannel_nonce_claim_rejected);
 	tcase_add_test(logout, test_handle_logout_op_request_with_id_token_hint);
