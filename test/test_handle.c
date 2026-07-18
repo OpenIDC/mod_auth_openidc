@@ -3841,6 +3841,105 @@ START_TEST(test_handle_authz_24_oauth20_denied) {
 }
 END_TEST
 
+START_TEST(test_handle_authz_24_oauth20_sets_bearer_scope_error) {
+	request_rec *r = oidc_test_request_get();
+	r->user = apr_pstrdup(r->pool, "alice");
+	/* oidc_test_set_auth_type actually drives ap_auth_type(r), unlike r->ap_auth_type
+	 * in this fixture, so this reaches the OAuth20-specific denial branch in
+	 * oidc_authz_24_unauthorized_user rather than the OIDCUnAutzAction switch */
+	oidc_test_set_auth_type(OIDC_AUTH_TYPE_OPENID_OAUTH20);
+
+	authz_status rc = oidc_authz_24_checker_claim(r, "claim sub:bob", NULL);
+	ck_assert_int_eq(rc, AUTHZ_DENIED);
+	ck_assert_table_str(r->subprocess_env, "OIDC_OAUTH_BEARER_SCOPE_ERROR",
+			    "Bearer error=\"insufficient_scope\", error_description=\"Different scope(s) or other "
+			    "claims required\"");
+
+	oidc_test_set_auth_type(NULL);
+}
+END_TEST
+
+START_TEST(test_handle_authz_24_unautz_authenticate_redirects) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	r->user = apr_pstrdup(r->pool, "alice");
+	r->ap_auth_type = apr_pstrdup(r->pool, OIDC_AUTH_TYPE_OPENID_CONNECT);
+
+	/* OIDCUnAutzAction must be explicitly set to "auth" - the default is 403, which never
+	 * reaches the OIDC_UNAUTZ_AUTHENTICATE case at all */
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCUnAutzAction);
+	ck_assert_ptr_null(oidc_cmd_dir_unautz_action_set(cmd, dir_cfg, "auth", NULL));
+
+	/* the fixture sets no Accept header by default (oidc_is_auth_capable_request would
+	 * otherwise deny outright); an HTML-accepting browser-like request is auth-capable, and
+	 * with no unauth_expression configured the AUTHENTICATE case falls straight through to
+	 * oidc_request_authenticate_user - no metadata_dir means it uses the static provider and
+	 * redirects there, landing in the "Stepup Authentication" HTML-refresh branch */
+	apr_table_set(r->headers_in, "Accept", "text/html");
+	authz_status rc = oidc_authz_24_checker_claim(r, "claim sub:bob", NULL);
+	ck_assert_int_eq(rc, AUTHZ_DENIED);
+	ck_assert_int_eq(r->header_only, 1);
+	/* the real authorization redirect was captured into the HTML refresh meta tag, not
+	 * left on the outgoing Location header (that was cleared) */
+	ck_assert_ptr_null(apr_table_get(r->headers_out, "Location"));
+	/* oidc_util_html_send writes straight to the response body via ap_pass_brigade; the
+	 * test stub captures that under the "sent_body" request state key */
+	const char *body = oidc_request_state_get(r, "sent_body");
+	ck_assert_ptr_nonnull(body);
+	ck_assert_msg(_oidc_strstr(body, "https://idp.example.com/authorize") != NULL,
+		      "stepup body carries the authorization redirect");
+}
+END_TEST
+
+START_TEST(test_handle_authz_24_unautz_authenticate_xhr_denied_401) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	r->user = apr_pstrdup(r->pool, "alice");
+	r->ap_auth_type = apr_pstrdup(r->pool, OIDC_AUTH_TYPE_OPENID_CONNECT);
+
+	/* OIDCUnAutzAction must be explicitly set to "auth" to reach the AUTHENTICATE case */
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCUnAutzAction);
+	ck_assert_ptr_null(oidc_cmd_dir_unautz_action_set(cmd, dir_cfg, "auth", NULL));
+
+	/* no unauth_expression configured, and an XHR-shaped request is not auth-capable,
+	 * so the exception check denies with a plain 401 instead of redirecting */
+	apr_table_set(r->headers_in, "X-Requested-With", "XMLHttpRequest");
+
+	authz_status rc = oidc_authz_24_checker_claim(r, "claim sub:bob", NULL);
+	ck_assert_int_eq(rc, AUTHZ_DENIED);
+	ck_assert_ptr_null(apr_table_get(r->headers_out, "Location"));
+	ck_assert_ptr_null(oidc_request_state_get(r, "sent_body"));
+}
+END_TEST
+
+START_TEST(test_handle_authz_24_unautz_authenticate_expr_bypasses_xhr_check) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	r->user = apr_pstrdup(r->pool, "alice");
+	r->ap_auth_type = apr_pstrdup(r->pool, OIDC_AUTH_TYPE_OPENID_CONNECT);
+
+	/* OIDCUnAutzAction must be explicitly set to "auth" to reach the AUTHENTICATE case */
+	ck_assert_ptr_null(oidc_cmd_dir_unautz_action_set(oidc_test_cmd_get(OIDCUnAutzAction), dir_cfg, "auth", NULL));
+
+	/* with an OIDCUnAuthAction expression configured, the expression replaces the built-in
+	 * XHR-capability heuristic entirely: even an XHR-shaped request proceeds to the
+	 * authenticate fall-through when the effective action is "auth". NB: the stubbed
+	 * boolean ap_expr_exec always reports an evaluation error, so unauth_action_get falls
+	 * back to its default (authenticate) here - the expr-denies arm needs a real evaluator */
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCUnAuthAction);
+	ck_assert_ptr_null(oidc_cmd_dir_unauth_action_set(cmd, dir_cfg, "401", "req('X-Requested-With')"));
+	apr_table_set(r->headers_in, "X-Requested-With", "XMLHttpRequest");
+
+	authz_status rc = oidc_authz_24_checker_claim(r, "claim sub:bob", NULL);
+	ck_assert_int_eq(rc, AUTHZ_DENIED);
+	/* the XHR header did NOT stop the redirect: the stepup HTML-refresh page was sent */
+	const char *body = oidc_request_state_get(r, "sent_body");
+	ck_assert_ptr_nonnull(body);
+	ck_assert_msg(_oidc_strstr(body, "https://idp.example.com/authorize") != NULL,
+		      "stepup body carries the authorization redirect despite the XHR header");
+}
+END_TEST
+
 START_TEST(test_handle_authz_24_oidc_unautz_return_401) {
 	request_rec *r = oidc_test_request_get();
 	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
@@ -4458,8 +4557,12 @@ int main(void) {
 	tcase_add_test(authz_24, test_handle_authz_24_anonymous_skip_via_discovery_state);
 	tcase_add_test(authz_24, test_handle_authz_24_anonymous_options_method);
 	tcase_add_test(authz_24, test_handle_authz_24_oauth20_denied);
+	tcase_add_test(authz_24, test_handle_authz_24_oauth20_sets_bearer_scope_error);
 	tcase_add_test(authz_24, test_handle_authz_24_oidc_unautz_return_401);
 	tcase_add_test(authz_24, test_handle_authz_24_oidc_unautz_return_302);
+	tcase_add_test(authz_24, test_handle_authz_24_unautz_authenticate_redirects);
+	tcase_add_test(authz_24, test_handle_authz_24_unautz_authenticate_xhr_denied_401);
+	tcase_add_test(authz_24, test_handle_authz_24_unautz_authenticate_expr_bypasses_xhr_check);
 
 	TCase *checkuid = tcase_create("check_user_id");
 	tcase_add_checked_fixture(checkuid, oidc_test_setup, oidc_test_teardown);
