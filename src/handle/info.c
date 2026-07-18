@@ -258,8 +258,7 @@ int oidc_info_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, ap
 	oidc_info_build_json(r, c, session, json);
 
 	/* pass the tokens to the application and save the session, possibly updating the expiry */
-	if (oidc_session_pass_tokens(r, c, session, b_extend_session, &needs_save) == FALSE)
-		oidc_warn(r, "error passing tokens");
+	oidc_session_pass_tokens(r, c, session, b_extend_session, &needs_save);
 
 	/* check if something was updated in the session and we need to save it again */
 	if (b_extend_session && needs_save && (oidc_session_save(r, session, FALSE) == FALSE)) {

@@ -624,8 +624,8 @@ static void oidc_copy_tokens_to_request_state(request_rec *r, const oidc_session
 /*
  * pass refresh_token, access_token and access_token_expires as headers/environment variables to the application
  */
-apr_byte_t oidc_session_pass_tokens(request_rec *r, const oidc_cfg_t *cfg, oidc_session_t *session,
-				    apr_byte_t extend_session, apr_byte_t *needs_save) {
+void oidc_session_pass_tokens(request_rec *r, const oidc_cfg_t *cfg, oidc_session_t *session, apr_byte_t extend_session,
+			      apr_byte_t *needs_save) {
 
 	oidc_appinfo_pass_in_t pass_in = oidc_cfg_dir_pass_info_in_get(r);
 	oidc_appinfo_encoding_t encoding = oidc_cfg_dir_pass_info_encoding_get(r);
@@ -702,8 +702,6 @@ apr_byte_t oidc_session_pass_tokens(request_rec *r, const oidc_cfg_t *cfg, oidc_
 
 	/* log message about session expiry */
 	oidc_log_session_expires(r, "session inactivity timeout", session->expiry);
-
-	return TRUE;
 }
 
 static void oidc_idtoken_pass_as(request_rec *r, const oidc_cfg_t *cfg, const oidc_session_t *session,
@@ -823,8 +821,7 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg_t *cfg, oidc_se
 	oidc_copy_tokens_to_request_state(r, session);
 
 	/* pass the at, rt and at expiry to the application, possibly update the session expiry */
-	if (oidc_session_pass_tokens(r, cfg, session, extend_session, needs_save) == FALSE)
-		return HTTP_INTERNAL_SERVER_ERROR;
+	oidc_session_pass_tokens(r, cfg, session, extend_session, needs_save);
 
 	/* pass ID token and claims */
 	oidc_idtoken_pass_as(r, cfg, session, pass_in, encoding);

@@ -2548,7 +2548,7 @@ START_TEST(test_handle_mod_session_pass_tokens_full) {
 	session->expiry = apr_time_now() + apr_time_from_sec(3600 * 24);
 
 	apr_byte_t needs_save = FALSE;
-	ck_assert_int_eq(oidc_session_pass_tokens(r, c, session, TRUE, &needs_save), TRUE);
+	oidc_session_pass_tokens(r, c, session, TRUE, &needs_save);
 	ck_assert_int_eq(needs_save, TRUE);
 
 	/* the new-session bit must have been cleared as a side effect */
