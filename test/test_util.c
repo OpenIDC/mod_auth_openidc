@@ -434,6 +434,12 @@ START_TEST(test_util_jq) {
 	ck_assert_str_eq(oidc_util_jq_filter(r, json, ".bogus"), "null");
 	ck_assert_str_eq(oidc_util_jq_filter(r, json, "bogus"), "{\"jan\":\"jan\",\"piet\":\"piet\"}");
 	ck_assert_str_eq(oidc_util_jq_filter(r, json, ".jan"), "\"jan\"");
+	/* an identical input+filter repeat is served from the jq result cache */
+	ck_assert_str_eq(oidc_util_jq_filter(r, json, ".jan"), "\"jan\"");
+	/* a TTL of 0 (via the env var) disables the cache in both directions */
+	apr_table_set(r->subprocess_env, "OIDC_JQ_FILTER_CACHE_TTL", "0");
+	ck_assert_str_eq(oidc_util_jq_filter(r, json, ".piet"), "\"piet\"");
+	apr_table_unset(r->subprocess_env, "OIDC_JQ_FILTER_CACHE_TTL");
 #else
 	ck_assert_str_eq(oidc_util_jq_filter(r, json, ".jan"), "{\"jan\":\"jan\",\"piet\":\"piet\"}");
 #endif

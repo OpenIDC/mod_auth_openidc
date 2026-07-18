@@ -80,6 +80,21 @@ START_TEST(test_cmd_provider_token_endpoint_auth_set) {
 }
 END_TEST
 
+START_TEST(test_cmd_provider_token_endpoint_auth_no_private_keys) {
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCProviderTokenEndpointAuth);
+	const char *rv = NULL;
+
+	/* without OIDCPrivateKeyFiles configured, the private-key-based endpoint auth
+	 * methods must be rejected while the shared-secret ones remain valid */
+	cfg->private_keys = NULL;
+	rv = oidc_cmd_provider_token_endpoint_auth_set(cmd, NULL, "private_key_jwt");
+	ck_assert_msg(rv != NULL, "private_key_jwt must be invalid without private keys");
+	rv = oidc_cmd_provider_token_endpoint_auth_set(cmd, NULL, "client_secret_basic");
+	ck_assert_msg(rv == NULL, "client_secret_basic failed: %s", rv);
+}
+END_TEST
+
 #ifdef USE_MEMCACHE
 
 START_TEST(test_cfg_cache_connections_ttl) {
@@ -2090,6 +2105,7 @@ int main(void) {
 	tcase_add_checked_fixture(core, oidc_test_setup, oidc_test_teardown);
 
 	tcase_add_test(core, test_cmd_provider_token_endpoint_auth_set);
+	tcase_add_test(core, test_cmd_provider_token_endpoint_auth_no_private_keys);
 #ifdef USE_MEMCACHE
 	tcase_add_test(core, test_cfg_cache_connections_ttl);
 #endif

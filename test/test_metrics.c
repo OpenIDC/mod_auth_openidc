@@ -36,6 +36,16 @@
  * static class-name table; no subsystem init required.
  */
 
+START_TEST(test_metrics_type_name2s) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	/* without a name the OIDCMetricsData lookup key is just the counter's class */
+	ck_assert_str_eq(_oidc_metrics_type_name2s(pool, OM_AUTHTYPE_MOD_AUTH_OPENIDC, NULL), "authtype");
+	/* with a name (the claim-counter case) it is class.metric.name */
+	ck_assert_str_eq(_oidc_metrics_type_name2s(pool, OM_AUTHTYPE_MOD_AUTH_OPENIDC, "sub"),
+			 "authtype.mod_auth_openidc.sub");
+}
+END_TEST
+
 START_TEST(test_metrics_is_valid_classname_known) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	char *valid_names = NULL;
@@ -416,6 +426,7 @@ END_TEST
 int main(void) {
 	TCase *classname = tcase_create("classname");
 	tcase_add_checked_fixture(classname, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(classname, test_metrics_type_name2s);
 	tcase_add_test(classname, test_metrics_is_valid_classname_known);
 	tcase_add_test(classname, test_metrics_is_valid_classname_claim_wildcard);
 	tcase_add_test(classname, test_metrics_is_valid_classname_unknown);
