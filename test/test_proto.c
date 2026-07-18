@@ -776,6 +776,188 @@ START_TEST(test_proto_jwt_validate_edge_cases) {
 	jwt->payload.exp = now + 60;
 	ck_assert_int_eq(oidc_proto_jwt_validate(r, jwt, "https://idp.example.com", TRUE, TRUE, -1), TRUE);
 	oidc_jwt_destroy(jwt);
+
+	/* iat older than the slack window (with a still-valid exp) must fail */
+	jwt = oidc_jwt_new(pool, TRUE, TRUE);
+	jwt->payload.iss = apr_pstrdup(pool, "https://idp.example.com");
+	jwt->payload.iat = now - 7200;
+	jwt->payload.exp = now + 3600;
+	ck_assert_int_eq(oidc_proto_jwt_validate(r, jwt, "https://idp.example.com", TRUE, TRUE, 10), FALSE);
+	oidc_jwt_destroy(jwt);
+}
+END_TEST
+
+/* build an HS256-signed id_token for the fixture provider (issuer https://idp.example.com,
+ * client_id "client_id"); sub and nonce may be NULL to omit those claims for the error paths */
+static char *proto_sign_idtoken_hs256(request_rec *r, const char *sub, const char *nonce, const char *secret) {
+	apr_pool_t *pool = r->pool;
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	ck_assert_int_eq(oidc_util_key_symmetric_create(r, secret, 0, NULL, TRUE, &jwk), TRUE);
+	ck_assert_ptr_nonnull(jwk);
+
+	oidc_jwt_t *jwt = oidc_jwt_new(pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(pool, "HS256");
+	apr_time_t now = apr_time_sec(apr_time_now());
+	oidc_json_object_set_new(jwt->payload.value.json, "iss", oidc_json_string("https://idp.example.com"));
+	oidc_json_object_set_new(jwt->payload.value.json, "aud", oidc_json_string("client_id"));
+	if (sub != NULL)
+		oidc_json_object_set_new(jwt->payload.value.json, "sub", oidc_json_string(sub));
+	if (nonce != NULL)
+		oidc_json_object_set_new(jwt->payload.value.json, "nonce", oidc_json_string(nonce));
+	oidc_json_object_set_new(jwt->payload.value.json, "iat", oidc_json_integer(now));
+	oidc_json_object_set_new(jwt->payload.value.json, "exp", oidc_json_integer(now + 600));
+	jwt->payload.iss = apr_pstrdup(pool, "https://idp.example.com");
+	jwt->payload.iat = now;
+	jwt->payload.exp = now + 600;
+
+	ck_assert_int_eq(oidc_jwt_sign(pool, jwt, jwk, FALSE, &err), TRUE);
+	char *cser = oidc_jose_jwt_serialize(pool, jwt, &err);
+	ck_assert_ptr_nonnull(cser);
+	oidc_jwk_destroy(jwk);
+	oidc_jwt_destroy(jwt);
+	return cser;
+}
+
+START_TEST(test_proto_idtoken_parse_error_paths) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_jwt_t *jwt = NULL;
+	const char *secret = "idtoken-parse-secret-long-enough-1";
+
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	/* garbage compact serialization fails the JWT parse */
+	ck_assert_int_eq(oidc_proto_idtoken_parse(r, c, provider, "aaa.bbb.ccc", NULL, &jwt, TRUE), FALSE);
+	ck_assert_ptr_null(jwt);
+
+	/* a token signed with a different secret fails signature validation */
+	char *s = proto_sign_idtoken_hs256(r, "alice", NULL, "not-the-configured-secret-xxxxxx");
+	ck_assert_int_eq(oidc_proto_idtoken_parse(r, c, provider, s, NULL, &jwt, TRUE), FALSE);
+	ck_assert_ptr_null(jwt);
+
+	/* correctly signed but missing the required-by-spec "sub" claim */
+	s = proto_sign_idtoken_hs256(r, NULL, NULL, secret);
+	ck_assert_int_eq(oidc_proto_idtoken_parse(r, c, provider, s, NULL, &jwt, TRUE), FALSE);
+	ck_assert_ptr_null(jwt);
+
+	/* the nonce in the token does not match the one from the browser state */
+	s = proto_sign_idtoken_hs256(r, "alice", "other-nonce", secret);
+	ck_assert_int_eq(oidc_proto_idtoken_parse(r, c, provider, s, "expected-nonce", &jwt, TRUE), FALSE);
+	ck_assert_ptr_null(jwt);
+
+	/* no nonce claim at all while one is expected */
+	s = proto_sign_idtoken_hs256(r, "alice", NULL, secret);
+	ck_assert_int_eq(oidc_proto_idtoken_parse(r, c, provider, s, "expected-nonce-2", &jwt, TRUE), FALSE);
+	ck_assert_ptr_null(jwt);
+
+	/* a fully valid token parses and validates */
+	s = proto_sign_idtoken_hs256(r, "alice", "good-nonce", secret);
+	ck_assert_int_eq(oidc_proto_idtoken_parse(r, c, provider, s, "good-nonce", &jwt, TRUE), TRUE);
+	ck_assert_ptr_nonnull(jwt);
+	ck_assert_str_eq(jwt->payload.sub, "alice");
+	oidc_jwt_destroy(jwt);
+}
+END_TEST
+
+START_TEST(test_proto_jwt_verify_paths) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_jose_error_t err;
+	oidc_jwt_t *jwt = NULL;
+	oidc_jwks_uri_t jwks_uri;
+	_oidc_memset(&jwks_uri, 0, sizeof(jwks_uri));
+
+	/* an explicitly configured algorithm must match the JWT header algorithm */
+	jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(r->pool, "HS256");
+	ck_assert_int_eq(oidc_proto_jwt_verify(r, c, jwt, &jwks_uri, 1, NULL, "RS256"), FALSE);
+
+	/* without a configured algorithm an unset/none JWT algorithm is refused outright */
+	jwt->header.alg = NULL;
+	ck_assert_int_eq(oidc_proto_jwt_verify(r, c, jwt, &jwks_uri, 1, NULL, NULL), FALSE);
+	oidc_jwt_destroy(jwt);
+
+	/* a JWKs URI that cannot be retrieved fails the verification of an asymmetric signature */
+	jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(r->pool, "RS256");
+	jwks_uri.uri = "http://127.0.0.1:1/jwks";
+	ck_assert_int_eq(oidc_proto_jwt_verify(r, c, jwt, &jwks_uri, 1, NULL, NULL), FALSE);
+	oidc_jwt_destroy(jwt);
+
+	/* verify a real HS256 signature against the merged symmetric key, without any JWKs URI
+	 * (static keys only) and with a JWKs URI set (skipped for a symmetric signature) */
+	const char *secret = "jwt-verify-secret-long-enough-123";
+	oidc_jwk_t *jwk = NULL;
+	ck_assert_int_eq(oidc_util_key_symmetric_create(r, secret, 0, NULL, TRUE, &jwk), TRUE);
+	char *s = proto_sign_idtoken_hs256(r, "alice", NULL, secret);
+	ck_assert_jwt_parses(r->pool, s, jwt, NULL, err);
+	_oidc_memset(&jwks_uri, 0, sizeof(jwks_uri));
+	ck_assert_int_eq(
+	    oidc_proto_jwt_verify(r, c, jwt, &jwks_uri, 1, oidc_util_key_symmetric_merge(r->pool, NULL, jwk), NULL),
+	    TRUE);
+	jwks_uri.uri = "https://idp.example.com/jwks";
+	ck_assert_int_eq(
+	    oidc_proto_jwt_verify(r, c, jwt, &jwks_uri, 1, oidc_util_key_symmetric_merge(r->pool, NULL, jwk), NULL),
+	    TRUE);
+	oidc_jwt_destroy(jwt);
+	oidc_jwk_destroy(jwk);
+
+	/* the first-segment of the compact serialization must be valid base64url */
+	ck_assert_ptr_null(oidc_proto_jwt_header_peek(r, "!!!.x.y", NULL, NULL, NULL));
+
+	/* signing with a key that does not match the algorithm fails sign-and-serialize */
+	jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(r->pool, "RS256");
+	jwk = NULL;
+	ck_assert_int_eq(oidc_util_key_symmetric_create(r, secret, 0, NULL, TRUE, &jwk), TRUE);
+	char *cser = NULL;
+	ck_assert_int_eq(oidc_proto_jwt_sign_and_serialize(r, jwk, jwt, &cser), FALSE);
+	oidc_jwt_destroy(jwt);
+	oidc_jwk_destroy(jwk);
+}
+END_TEST
+
+START_TEST(test_proto_validate_hash_error_paths) {
+	request_rec *r = oidc_test_request_get();
+	oidc_jwt_t *jwt = NULL;
+
+	/* an at_hash that does not match the access token hash must fail; "YWJjZA" decodes
+	 * to 4 bytes which cannot equal the SHA-256 half-length of 16 */
+	jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(r->pool, "RS256");
+	oidc_json_object_set_new(jwt->payload.value.json, "at_hash", oidc_json_string("YWJjZA"));
+	ck_assert_int_eq(oidc_proto_idtoken_validate_access_token(r, NULL, jwt, "id_token token", "an-access-token"),
+			 FALSE);
+	oidc_jwt_destroy(jwt);
+
+	/* an at_hash that is not valid base64url must fail */
+	jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(r->pool, "RS256");
+	oidc_json_object_set_new(jwt->payload.value.json, "at_hash", oidc_json_string("!!!"));
+	ck_assert_int_eq(oidc_proto_idtoken_validate_access_token(r, NULL, jwt, "id_token token", "an-access-token"),
+			 FALSE);
+	oidc_jwt_destroy(jwt);
+
+	/* a hash-string failure surfaces when the JWT algorithm is unknown */
+	jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(r->pool, "XX999");
+	oidc_json_object_set_new(jwt->payload.value.json, "at_hash", oidc_json_string("YWJjZA"));
+	ck_assert_int_eq(oidc_proto_idtoken_validate_access_token(r, NULL, jwt, "id_token token", "an-access-token"),
+			 FALSE);
+	oidc_jwt_destroy(jwt);
+
+	/* a missing at_hash fails for flows that require it but passes for the code flow */
+	jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(r->pool, "RS256");
+	ck_assert_int_eq(oidc_proto_idtoken_validate_access_token(r, NULL, jwt, "id_token token", "an-access-token"),
+			 FALSE);
+	ck_assert_int_eq(oidc_proto_idtoken_validate_access_token(r, NULL, jwt, "code", "an-access-token"), TRUE);
+
+	/* a missing c_hash fails for flows that require it */
+	ck_assert_int_eq(oidc_proto_idtoken_validate_code(r, NULL, jwt, "code id_token", "a-code"), FALSE);
+	oidc_jwt_destroy(jwt);
 }
 END_TEST
 
@@ -2893,6 +3075,9 @@ int main(void) {
 	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_with_rsa_key);
 	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_explicit_alg);
 	tcase_add_test(core, test_proto_jwt_validate_edge_cases);
+	tcase_add_test(core, test_proto_idtoken_parse_error_paths);
+	tcase_add_test(core, test_proto_jwt_verify_paths);
+	tcase_add_test(core, test_proto_validate_hash_error_paths);
 	tcase_add_test(core, test_proto_state_timestamp_and_bad_cookie);
 	tcase_add_test(core, test_proto_nonce_uniqueness);
 	tcase_add_test(core, test_proto_flow_unsupported);
