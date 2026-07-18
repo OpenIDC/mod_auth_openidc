@@ -1,4 +1,10 @@
 07/18/2026
+- refresh: bound the back-off loop that waits for a sibling caller's
+  in-progress refresh grant to the refresh-lock TTL, so a cache backend that
+  does not expire the lock entry promptly can no longer stall the request
+  indefinitely; this also makes the "timeout waiting for refresh token cache
+  to unlock" recovery branch reachable again - it had become dead code since
+  the wait loop could only ever exit once the lock value was gone
 - jose: size the zlib deflate output buffer with deflateBound(); the fixed
   input_len * 2 allocation was smaller than zlib's constant header/trailer
   overhead for values of just a few bytes, so compressing such values failed

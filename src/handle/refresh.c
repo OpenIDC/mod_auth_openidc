@@ -175,8 +175,13 @@ static oidc_refresh_token_cache_result_t oidc_refresh_token_cache_get(request_re
 	if (s_json == NULL)
 		goto no_cache_found;
 
-	/* wait for the "other" caller to populate the refresh token response cache results */
-	while ((s_json != NULL) && (_oidc_strcmp(s_json, OIDC_REFRESH_LOCK_VALUE) == 0)) {
+	/*
+	 * wait for the "other" caller to populate the refresh token response cache results; bound the
+	 * wait to the lock TTL - by which time the lock entry will have expired anyway - so a cache
+	 * backend that does not expire entries promptly cannot stall the request indefinitely
+	 */
+	int retries = OIDC_REFRESH_LOCK_TTL * 2;
+	while ((retries-- > 0) && (s_json != NULL) && (_oidc_strcmp(s_json, OIDC_REFRESH_LOCK_VALUE) == 0)) {
 		oidc_warn(r, "existing refresh in progress, back off for 0.5s before re-trying the cache");
 		apr_sleep(apr_time_from_msec(500));
 		s_json = NULL;

@@ -715,6 +715,15 @@ START_TEST(test_handle_refresh_grant_cache_locks) {
 				     apr_time_now() + apr_time_from_msec(600));
 	ck_assert_int_eq(oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, NULL), FALSE);
 
+	/* a lock marker that outlives the bounded back-off (its expiry exceeds the lock TTL the
+	 * wait is bounded to) exhausts the retries: the timeout branch gives up waiting and
+	 * attempts its own refresh, which fails against the dead endpoint. NB: this scenario
+	 * spends the full bounded wait (~OIDC_REFRESH_LOCK_TTL seconds) sleeping */
+	oidc_session_set_refresh_token(r, session, "RT-LOCKSTUCK");
+	oidc_cache_set_refresh_token(r, "RT-LOCKSTUCK", TEST_REFRESH_LOCK_VALUE,
+				     apr_time_now() + apr_time_from_sec(30));
+	ck_assert_int_eq(oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, NULL), FALSE);
+
 	oidc_session_free(r, session);
 }
 END_TEST
