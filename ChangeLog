@@ -1,3 +1,10 @@
+07/18/2026
+- jose: size the zlib deflate output buffer with deflateBound(); the fixed
+  input_len * 2 allocation was smaller than zlib's constant header/trailer
+  overhead for values of just a few bytes, so compressing such values failed
+  and any cache write of a tiny value (e.g. a cached jq expression result of
+  "null") was silently dropped with a "could NOT store" warning
+
 07/17/2026
 - logout: support back-channel logout tokens that carry only "sub" (allowed by
   OpenID Connect Back-Channel Logout 1.0 section 2.6) for sessions that were
