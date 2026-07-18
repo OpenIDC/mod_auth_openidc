@@ -44,8 +44,14 @@
 #include "check_util.h"
 #include "mod_auth_openidc.h"
 #include "util.h"
+#include "util/pcre_subst.h"
 #include "util/util.h"
 #include <jansson.h> /* this test builds JSON fixtures with the backend API directly (no longer pulled in via jose.h) */
+
+#ifdef HAVE_LIBPCRE2
+#define PCRE2_CODE_UNIT_WIDTH 8
+#include <pcre2.h>
+#endif
 
 // base64
 
@@ -914,6 +920,47 @@ START_TEST(test_util_mask_value) {
 }
 END_TEST
 
+#ifdef HAVE_LIBPCRE2
+
+START_TEST(test_util_pcre_get_substring_error_arms) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	char *err = NULL;
+	char *sub = NULL;
+
+	/* a pattern without a capture group matches, but group 1 can never be extracted;
+	 * the reported reason is mapped from the match rc the caller passes in - drive
+	 * each arm of that mapping */
+	struct oidc_pcre *pcre = oidc_pcre_compile(pool, "[a-z]+", &err);
+	ck_assert_ptr_nonnull(pcre);
+	ck_assert_int_gt(oidc_pcre_exec(pool, pcre, "abc", 3, &err), 0);
+
+	const struct {
+		int rc;
+		const char *reason;
+	} arms[] = {
+	    {PCRE2_ERROR_NOSUBSTRING, "no groups of that number"},
+	    {PCRE2_ERROR_UNAVAILABLE, "ovector was too small"},
+	    {PCRE2_ERROR_UNSET, "did not participate"},
+	    {PCRE2_ERROR_NOMEMORY, "memory could not be obtained"},
+	    {12345, "pcre2_substring_get_bynumber failed"},
+	};
+	for (unsigned int i = 0; i < sizeof(arms) / sizeof(arms[0]); i++) {
+		err = NULL;
+		sub = NULL;
+		ck_assert_int_lt(oidc_pcre_get_substring(pool, pcre, "abc", arms[i].rc, &sub, &err), 1);
+		ck_assert_ptr_null(sub);
+		ck_assert_ptr_nonnull(err);
+		ck_assert_msg(_oidc_strstr(err, arms[i].reason) != NULL, "expected \"%s\" in error, got: %s",
+			      arms[i].reason, err);
+	}
+
+	oidc_pcre_free_match(pcre);
+	oidc_pcre_free(pcre);
+}
+END_TEST
+
+#endif /* HAVE_LIBPCRE2 */
+
 START_TEST(test_util_read_form_encoded_params) {
 	request_rec *r = oidc_test_request_get();
 	apr_table_t *t = apr_table_make(r->pool, 4);
@@ -1291,6 +1338,9 @@ int main(void) {
 	tcase_add_test(c, test_util_set_trace_parent_flags);
 	tcase_add_test(c, test_util_table_and_hash_clear_and_openssl);
 	tcase_add_test(c, test_util_mask_value);
+#ifdef HAVE_LIBPCRE2
+	tcase_add_test(c, test_util_pcre_get_substring_error_arms);
+#endif
 	suite_add_tcase(s, c);
 
 	c = tcase_create("url-params");
