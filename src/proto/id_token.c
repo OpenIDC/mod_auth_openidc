@@ -407,6 +407,7 @@ apr_byte_t oidc_proto_idtoken_parse(request_rec *r, oidc_cfg_t *cfg, const oidc_
 		oidc_error(r, "oidc_jwt_parse failed: %s", oidc_jose_e2s(r->pool, err));
 		oidc_jwt_destroy(*jwt);
 		*jwt = NULL;
+		oidc_jwk_destroy(jwk);
 		return FALSE;
 	}
 

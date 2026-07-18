@@ -214,6 +214,7 @@ int oidc_request_authenticate_user(request_rec *r, oidc_cfg_t *c, oidc_provider_
 		oidc_error(
 		    r, "could not store the current URL in the state: most probably you need to ensure that it does "
 		       "not contain unencoded Unicode characters e.g. by forcing IE 11 to encode all URL characters");
+		oidc_proto_state_destroy(proto_state);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 

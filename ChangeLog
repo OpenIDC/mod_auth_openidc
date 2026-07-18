@@ -1,4 +1,11 @@
 07/18/2026
+- id_token: fix a memory leak on the id_token parse failure path: the
+  symmetric decryption key derived from the client secret was only freed
+  after a successful JWT parse, so every authorization response carrying an
+  unparseable id_token leaked the (process-lifetime allocated) key material
+- request: fix a memory leak on the authentication request error path: when
+  the original URL could not be stored in the state the freshly created
+  proto state object was not destroyed before returning the error
 - cfg: fix the token endpoint authentication method validation so that
   private_key_jwt is consistently rejected for configurations without private
   signing keys: the candidate-method list was a static array that got the
