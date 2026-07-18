@@ -980,6 +980,9 @@ START_TEST(test_cache_redis_live_roundtrip) {
 	cfg->cache.impl = &oidc_cache_redis;
 	ck_assert_int_eq(oidc_cache_redis.post_config(r->server->process->pconf, r->server), OK);
 
+	/* the per-child initialization sets up the child's view of the global mutex */
+	ck_assert_int_eq(oidc_cache_redis_child_init(r->server->process->pconf, r->server), APR_SUCCESS);
+
 	/* a key unique to this run so repeated CI runs against a persistent server don't collide */
 	char *key = apr_psprintf(r->pool, "live-%" APR_TIME_T_FMT, apr_time_now());
 	apr_time_t expiry = apr_time_now() + apr_time_from_sec(60);
@@ -1013,6 +1016,47 @@ START_TEST(test_cache_redis_live_roundtrip) {
 	cfg->cache.impl = prev_impl;
 	cfg->cache.cfg = prev_cfg;
 	cfg->cache.redis_server = prev_server;
+}
+END_TEST
+
+/* drive the raw connection helpers (connect/keepalive/AUTH/SELECT) against the live
+ * server; these are wired into the (re)connect path but their error and option arms
+ * never fire in the plain round-trip above */
+START_TEST(test_cache_redis_live_connection_helpers) {
+	request_rec *r = oidc_test_request_get();
+	char *server = apr_pstrdup(r->pool, getenv("OIDC_TEST_REDIS_SERVER"));
+	char *host = server;
+	int port = 6379;
+	char *p = strrchr(server, ':');
+	if (p != NULL) {
+		*p = '\0';
+		port = atoi(p + 1);
+	}
+	struct timeval tv = {.tv_sec = 5, .tv_usec = 0};
+
+	/* a connect to a dead port fails and returns NULL */
+	ck_assert_ptr_null(oidc_cache_redis_connect_with_timeout(r, "127.0.0.1", 1, tv, tv, "dead"));
+
+	/* connect to the live server */
+	redisContext *rctx = oidc_cache_redis_connect_with_timeout(r, host, port, tv, tv, "live");
+	ck_assert_ptr_nonnull(rctx);
+
+	/* keepalive: both the default-interval and explicit-interval arms */
+	ck_assert_int_eq(oidc_cache_redis_set_keepalive(r, rctx, -1), TRUE);
+	ck_assert_int_eq(oidc_cache_redis_set_keepalive(r, rctx, 30), TRUE);
+
+	/* AUTH against a server without authentication configured errors out, with and
+	 * without a username; a NULL password skips authentication altogether */
+	ck_assert_int_eq(oidc_cache_redis_set_auth(r, rctx, NULL, NULL), TRUE);
+	ck_assert_int_eq(oidc_cache_redis_set_auth(r, rctx, NULL, "not-the-password"), FALSE);
+	ck_assert_int_eq(oidc_cache_redis_set_auth(r, rctx, "someuser", "not-the-password"), FALSE);
+
+	/* SELECT: the explicit-database arm, the unset (-1) skip and an out-of-range error */
+	ck_assert_int_eq(oidc_cache_redis_set_database(r, rctx, -1), TRUE);
+	ck_assert_int_eq(oidc_cache_redis_set_database(r, rctx, 2), TRUE);
+	ck_assert_int_eq(oidc_cache_redis_set_database(r, rctx, 999999), FALSE);
+
+	redisFree(rctx);
 }
 END_TEST
 
@@ -1504,6 +1548,7 @@ int main(void) {
 		TCase *redis_live = tcase_create("redis-live");
 		tcase_add_checked_fixture(redis_live, oidc_test_setup, oidc_test_teardown);
 		tcase_add_test(redis_live, test_cache_redis_live_roundtrip);
+		tcase_add_test(redis_live, test_cache_redis_live_connection_helpers);
 		suite_add_tcase(s, redis_live);
 	}
 #endif
