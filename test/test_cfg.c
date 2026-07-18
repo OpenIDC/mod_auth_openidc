@@ -1353,6 +1353,79 @@ START_TEST(test_cfg_server_merge_crypto_passphrase_derived_keys) {
 }
 END_TEST
 
+/*
+ * the memoized KDF variant must derive on a cache miss, copy on a cache hit (instead of paying
+ * for the ~210,000-iteration PBKDF2 again), key the cache on the secret text so distinct
+ * secrets do not collide, and fall back to plain derivation when no cache is passed
+ */
+START_TEST(test_cfg_crypto_passphrase_derive_keys_cached) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	apr_hash_t *kdf_cache = apr_hash_make(pool);
+	oidc_crypto_passphrase_t cp_ref, cp_miss, cp_hit, cp_other;
+
+	/* reference: the uncached derivation for secret "s1" */
+	_oidc_memset(&cp_ref, 0, sizeof(cp_ref));
+	cp_ref.secret1 = "kdf-cache-secret-1";
+	ck_assert_int_eq(oidc_crypto_passphrase_derive_keys(&cp_ref), TRUE);
+	ck_assert_int_eq(cp_ref.derived_key1_set, TRUE);
+
+	/* an empty (non-NULL) secret is "not configured": nothing derived, still successful */
+	_oidc_memset(&cp_miss, 0, sizeof(cp_miss));
+	cp_miss.secret1 = "";
+	ck_assert_int_eq(oidc_crypto_passphrase_derive_keys_cached(pool, kdf_cache, &cp_miss), TRUE);
+	ck_assert_int_eq(cp_miss.derived_key1_set, FALSE);
+	ck_assert_int_eq(apr_hash_count(kdf_cache), 0);
+
+	/* cache miss: derives the same key material as the uncached path and populates the cache */
+	_oidc_memset(&cp_miss, 0, sizeof(cp_miss));
+	cp_miss.secret1 = "kdf-cache-secret-1";
+	ck_assert_int_eq(oidc_crypto_passphrase_derive_keys_cached(pool, kdf_cache, &cp_miss), TRUE);
+	ck_assert_int_eq(cp_miss.derived_key1_set, TRUE);
+	ck_assert_int_eq(memcmp(cp_miss.derived_key1, cp_ref.derived_key1, OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN), 0);
+	ck_assert_int_eq(apr_hash_count(kdf_cache), 1);
+
+	/* cache hit: poison the cached entry to prove the hit path copies from the cache
+	 * rather than re-deriving; secret2 goes through the same (shared) cache */
+	unsigned char *entry = apr_hash_get(kdf_cache, "kdf-cache-secret-1", APR_HASH_KEY_STRING);
+	ck_assert_ptr_nonnull(entry);
+	_oidc_memset(entry, 0xA5, OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN);
+	_oidc_memset(&cp_hit, 0, sizeof(cp_hit));
+	cp_hit.secret1 = "kdf-cache-secret-1";
+	cp_hit.secret2 = "kdf-cache-secret-1";
+	ck_assert_int_eq(oidc_crypto_passphrase_derive_keys_cached(pool, kdf_cache, &cp_hit), TRUE);
+	ck_assert_int_eq(cp_hit.derived_key1_set, TRUE);
+	ck_assert_int_eq(cp_hit.derived_key2_set, TRUE);
+	ck_assert_int_eq(cp_hit.derived_key1[0], 0xA5);
+	ck_assert_int_eq(memcmp(cp_hit.derived_key2, entry, OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN), 0);
+	ck_assert_int_eq(apr_hash_count(kdf_cache), 1);
+
+	/* a distinct secret gets its own entry and different key material */
+	_oidc_memset(&cp_other, 0, sizeof(cp_other));
+	cp_other.secret1 = "kdf-cache-secret-2";
+	ck_assert_int_eq(oidc_crypto_passphrase_derive_keys_cached(pool, kdf_cache, &cp_other), TRUE);
+	ck_assert_int_eq(apr_hash_count(kdf_cache), 2);
+	ck_assert_int_ne(memcmp(cp_other.derived_key1, cp_ref.derived_key1, OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN), 0);
+
+	/* kdf_cache == NULL falls back to plain derivation */
+	_oidc_memset(&cp_other, 0, sizeof(cp_other));
+	cp_other.secret1 = "kdf-cache-secret-1";
+	ck_assert_int_eq(oidc_crypto_passphrase_derive_keys_cached(pool, NULL, &cp_other), TRUE);
+	ck_assert_int_eq(memcmp(cp_other.derived_key1, cp_ref.derived_key1, OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN), 0);
+
+	/* the cfg-embedded wrappers cover the same paths for a server config; the fixture cfg
+	 * is post-config'd so its keys are already derived - reset before re-deriving */
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_cfg_crypto_passphrase_secret1_set(cfg, "kdf-cache-secret-1");
+	cfg->crypto_passphrase.derived_key1_set = FALSE;
+	ck_assert_int_eq(oidc_cfg_crypto_passphrase_derive_keys_cached(pool, kdf_cache, cfg), TRUE);
+	ck_assert_int_eq(cfg->crypto_passphrase.derived_key1[0], 0xA5);
+	oidc_cfg_crypto_passphrase_secret1_set(cfg, "kdf-cache-secret-2");
+	cfg->crypto_passphrase.derived_key1_set = FALSE;
+	ck_assert_int_eq(oidc_cfg_crypto_passphrase_derive_keys(cfg), TRUE);
+	ck_assert_int_eq(cfg->crypto_passphrase.derived_key1_set, TRUE);
+}
+END_TEST
+
 START_TEST(test_cfg_child_init) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
@@ -2048,6 +2121,7 @@ int main(void) {
 	tcase_add_test(core, test_cmd_http_timeout_long_short);
 	tcase_add_test(core, test_cfg_server_merge_and_merged_get);
 	tcase_add_test(core, test_cfg_server_merge_crypto_passphrase_derived_keys);
+	tcase_add_test(core, test_cfg_crypto_passphrase_derive_keys_cached);
 	tcase_add_test(core, test_cfg_child_init);
 
 	TCase *dir = tcase_create("dir");
