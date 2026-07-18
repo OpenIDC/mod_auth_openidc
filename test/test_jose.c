@@ -182,6 +182,31 @@ START_TEST(test_jose_compress_uncompress) {
 }
 END_TEST
 
+/* regression: deflate's fixed header/trailer overhead exceeds input_len * 2 for inputs of a
+ * few bytes, so compression of tiny values (e.g. cached jq results such as "null") failed
+ * before the output buffer was sized with deflateBound() */
+START_TEST(test_jose_compress_uncompress_tiny) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err;
+	const char *inputs[] = {"", "x", "null", "true"};
+
+	for (unsigned int i = 0; i < sizeof(inputs) / sizeof(inputs[0]); i++) {
+		char *out = NULL;
+		int out_len = 0;
+		int input_len = (int)_oidc_strlen(inputs[i]);
+		ck_assert_msg(oidc_jose_compress(pool, inputs[i], input_len, &out, &out_len, &err) == TRUE,
+			      "compress failed for input \"%s\": %s", inputs[i], oidc_jose_e2s(pool, err));
+
+		char *un = NULL;
+		int un_len = 0;
+		ck_assert_msg(oidc_jose_uncompress(pool, out, out_len, &un, &un_len, &err) == TRUE,
+			      "uncompress failed for input \"%s\": %s", inputs[i], oidc_jose_e2s(pool, err));
+		ck_assert_int_eq(un_len, input_len);
+		ck_assert_msg(memcmp(un, inputs[i], input_len) == 0, "round-trip differs for input \"%s\"", inputs[i]);
+	}
+}
+END_TEST
+
 START_TEST(test_jose_jwk_and_json_and_copy_lists) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	oidc_jose_error_t err;
@@ -1162,6 +1187,7 @@ int main(void) {
 	tcase_add_test(core, test_jose_hash_and_base64_and_length);
 	tcase_add_test(core, test_jose_get_string_and_timestamps);
 	tcase_add_test(core, test_jose_compress_uncompress);
+	tcase_add_test(core, test_jose_compress_uncompress_tiny);
 	tcase_add_test(core, test_jose_jwk_and_json_and_copy_lists);
 	tcase_add_test(core, test_jose_jwe_decrypt_plaintext);
 	tcase_add_test(core, test_jwt_sign_verify_and_encrypt_decrypt);

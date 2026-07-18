@@ -295,15 +295,19 @@ static apr_byte_t oidc_jose_zlib_compress(apr_pool_t *pool, const char *input, i
 	zlib.next_in = (Bytef *)input;
 	zlib.avail_in = input_len;
 
-	*output = apr_pcalloc(pool, input_len * 2);
-	zlib.next_out = (Bytef *)(*output);
-	zlib.avail_out = input_len * 2;
-
 	status = deflateInit(&zlib, Z_BEST_COMPRESSION);
 	if (status != Z_OK) {
 		oidc_jose_error(err, "deflateInit() failed: %d", status);
 		goto end;
 	}
+
+	/* deflateBound accounts for the zlib header/trailer overhead that dominates for
+	 * short inputs; a fixed input_len * 2 buffer made deflate fail on values of a
+	 * few bytes, silently preventing such values from being cached */
+	uLong output_max = deflateBound(&zlib, input_len);
+	*output = apr_pcalloc(pool, output_max);
+	zlib.next_out = (Bytef *)(*output);
+	zlib.avail_out = output_max;
 
 	status = deflate(&zlib, Z_FINISH);
 	if (status != Z_STREAM_END) {
