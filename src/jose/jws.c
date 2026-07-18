@@ -97,9 +97,7 @@ apr_byte_t oidc_jwt_hdr_set_json(oidc_jwt_t *jwt, const char *key, const char *r
 	return TRUE;
 }
 
-/*
- * {"alg":"none"}
- */
+/* base64url-encoded {"alg":"none"} JOSE header */
 #define OIDC_JOSE_HDR_ALG_NONE "eyJhbGciOiJub25lIn0"
 
 /*
