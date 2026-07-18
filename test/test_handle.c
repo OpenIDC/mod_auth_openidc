@@ -642,6 +642,163 @@ static char *e2e_sign_idtoken_hs256(request_rec *r, const char *issuer, const ch
 	return cser;
 }
 
+/* mirror the (deliberately file-local) refresh-cache lock markers from handle/refresh.c */
+#define TEST_REFRESH_LOCK_VALUE "needstobelargerthanafewcharacters"
+#define TEST_REFRESH_FAILED_LOCK_VALUE "alsoneedstobelargerthanafewcharactersbutdifferent"
+
+START_TEST(test_handle_refresh_grant_cached_results_clamps_and_id_token) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* a cached grant result with an out-of-int-range expires_in must be clamped, and with
+	 * session_max_duration == 0 a valid cached id_token updates the session expiry */
+	oidc_cfg_provider_session_max_duration_set(r->pool, provider, 0);
+	char *id_token = e2e_sign_idtoken_hs256(r, "https://idp.example.com", "client_id", "alice", "nonce-cr1",
+						"cached-idtoken-secret-long-enough");
+	char *s_json = apr_psprintf(r->pool,
+				    "{\"access_token\":\"AT-CACHED\",\"token_type\":\"Bearer\","
+				    "\"expires_in\":9999999999999,\"id_token\":\"%s\","
+				    "\"refresh_token\":\"RT-CACHED-1b\",\"ts\":%" APR_TIME_T_FMT "}",
+				    id_token, apr_time_sec(apr_time_now()));
+	oidc_session_set_refresh_token(r, session, "RT-CACHED-1");
+	oidc_cache_set_refresh_token(r, "RT-CACHED-1", s_json, apr_time_now() + apr_time_from_sec(30));
+
+	char *new_at = NULL;
+	ck_assert_int_eq(oidc_refresh_token_grant(r, c, session, provider, &new_at, NULL, NULL), TRUE);
+	ck_assert_str_eq(new_at, "AT-CACHED");
+	ck_assert_str_eq(oidc_session_get_refresh_token(r, session), "RT-CACHED-1b");
+	/* the session expiry was aligned with the id_token exp (now + 600) */
+	ck_assert_int_gt(oidc_session_get_session_expires(r, session), apr_time_now());
+
+	/* a cached result with a garbage id_token and an expires_in below INT_MIN still applies
+	 * the access token; the id_token parse failure is only logged */
+	s_json = "{\"access_token\":\"AT-CACHED-2\",\"token_type\":\"Bearer\","
+		 "\"expires_in\":-9999999999999,\"id_token\":\"not-a-jwt\"}";
+	oidc_session_set_refresh_token(r, session, "RT-CACHED-2");
+	oidc_cache_set_refresh_token(r, "RT-CACHED-2", s_json, apr_time_now() + apr_time_from_sec(30));
+	new_at = NULL;
+	ck_assert_int_eq(oidc_refresh_token_grant(r, c, session, provider, &new_at, NULL, NULL), TRUE);
+	ck_assert_str_eq(new_at, "AT-CACHED-2");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_refresh_grant_cache_locks) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* a prior failed refresh (failed-lock marker) aborts without contacting the OP */
+	oidc_session_set_refresh_token(r, session, "RT-ABORT");
+	oidc_cache_set_refresh_token(r, "RT-ABORT", TEST_REFRESH_FAILED_LOCK_VALUE,
+				     apr_time_now() + apr_time_from_sec(30));
+	ck_assert_int_eq(oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, NULL), FALSE);
+
+	/* an unparseable cached value falls through to a refresh attempt of our own; with an
+	 * unreachable token endpoint that attempt fails */
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, "http://127.0.0.1:1/token");
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+	oidc_session_set_refresh_token(r, session, "RT-BADJSON");
+	oidc_cache_set_refresh_token(r, "RT-BADJSON", "{not-valid-json", apr_time_now() + apr_time_from_sec(30));
+	ck_assert_int_eq(oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, NULL), FALSE);
+
+	/* an in-progress lock marker makes us back off; when it expires (without results having
+	 * been populated) we attempt our own refresh, which fails against the dead endpoint */
+	oidc_session_set_refresh_token(r, session, "RT-LOCKWAIT");
+	oidc_cache_set_refresh_token(r, "RT-LOCKWAIT", TEST_REFRESH_LOCK_VALUE,
+				     apr_time_now() + apr_time_from_msec(600));
+	ck_assert_int_eq(oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, NULL), FALSE);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_refresh_before_expiry_due_paths) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	apr_byte_t needs_save = FALSE;
+
+	/* the session must carry an issuer for the provider lookup */
+	oidc_session_set_issuer(r, session, "https://idp.example.com");
+
+	/* expiry is far enough out: no refresh needed */
+	oidc_session_set_refresh_token(r, session, "RT-NOTDUE");
+	oidc_session_set_access_token_expires(r, session, 3600);
+	ck_assert_int_eq(oidc_refresh_access_token_before_expiry(r, c, session, 60, &needs_save), TRUE);
+	ck_assert_int_eq(needs_save, FALSE);
+
+	/* within the TTL window and the refresh fails against a dead endpoint */
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, "http://127.0.0.1:1/token");
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+	oidc_session_set_refresh_token(r, session, "RT-DUE-FAIL");
+	oidc_session_set_access_token_expires(r, session, 30);
+	needs_save = TRUE;
+	ck_assert_int_eq(oidc_refresh_access_token_before_expiry(r, c, session, 60, &needs_save), FALSE);
+	ck_assert_int_eq(needs_save, FALSE);
+
+	/* within the TTL window and the refresh succeeds; a scope returned from the token
+	 * endpoint is stored in the session */
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/json",
+					  .body = "{\"access_token\":\"AT-DUE\",\"token_type\":\"Bearer\","
+						  "\"expires_in\":3600,\"refresh_token\":\"RT-DUE-OK2\","
+						  "\"scope\":\"openid profile\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_scope_set(r->pool, provider, "openid");
+	oidc_session_set_refresh_token(r, session, "RT-DUE-OK");
+	oidc_session_set_access_token_expires(r, session, 30);
+	needs_save = FALSE;
+	ck_assert_int_eq(oidc_refresh_access_token_before_expiry(r, c, session, 60, &needs_save), TRUE);
+	ck_assert_int_eq(needs_save, TRUE);
+	ck_assert_str_eq(oidc_session_get_access_token(r, session), "AT-DUE");
+	ck_assert_str_eq(oidc_session_get_scope(r, session), "openid profile");
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_refresh_request_error_arms) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* a return_to URL that fails redirect validation is a hard error */
+	r->args = "refresh=https%3A%2F%2Fevil.example.com%2F&access_token=AT-X";
+	ck_assert_int_eq(oidc_refresh_token_request(r, c, session), HTTP_INTERNAL_SERVER_ERROR);
+
+	/* matching access_token but no issuer in the session: the provider lookup fails */
+	oidc_session_set_access_token(r, session, "AT-1");
+	r->args = "refresh=https%3A%2F%2Fwww.example.com%2Fprotected%2F&access_token=AT-1";
+	ck_assert_int_eq(oidc_refresh_token_request(r, c, session), HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_msg(_oidc_strstr(loc, "error_code=session_corruption") != NULL, "session_corruption error reported");
+
+	/* with an issuer but no refresh_token in the session: the grant itself fails */
+	oidc_session_set_issuer(r, session, "https://idp.example.com");
+	ck_assert_int_eq(oidc_refresh_token_request(r, c, session), HTTP_MOVED_TEMPORARILY);
+	loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_msg(_oidc_strstr(loc, "error_code=refresh_failed") != NULL, "refresh_failed error reported");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
 START_TEST(test_handle_response_authorization_redirect_code_flow_happy_path) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -3937,6 +4094,10 @@ int main(void) {
 	tcase_add_test(refresh, test_handle_refresh_request_happy_path);
 	tcase_add_test(refresh, test_handle_refresh_grant_cache_hit);
 	tcase_add_test(refresh, test_handle_refresh_grant_with_id_token);
+	tcase_add_test(refresh, test_handle_refresh_grant_cached_results_clamps_and_id_token);
+	tcase_add_test(refresh, test_handle_refresh_grant_cache_locks);
+	tcase_add_test(refresh, test_handle_refresh_before_expiry_due_paths);
+	tcase_add_test(refresh, test_handle_refresh_request_error_arms);
 
 	TCase *response = tcase_create("response");
 	tcase_add_checked_fixture(response, oidc_test_setup, oidc_test_teardown);
