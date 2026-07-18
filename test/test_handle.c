@@ -3521,6 +3521,113 @@ START_TEST(test_handle_dispatch_logout_takes_precedence_over_post_authn) {
 }
 END_TEST
 
+/* (re-)populate the session fields that oidc_handle_existing_session consumes; the
+ * logout/authenticate error actions kill the session so each sub-scenario re-seeds it */
+static void existing_session_seed(request_rec *r, oidc_session_t *session, apr_byte_t with_issuer) {
+	session->remote_user = apr_pstrdup(r->pool, "alice");
+	if (with_issuer)
+		oidc_session_set_issuer(r, session, "https://idp.example.com");
+	/* must match the current host so oidc_check_cookie_domain passes */
+	oidc_session_set_cookie_domain(r, session, "www.example.com");
+	/* keep the session within its maximum duration */
+	oidc_session_set_session_expires(r, session, apr_time_now() + apr_time_from_sec(3600));
+}
+
+START_TEST(test_handle_existing_session_cookie_domain_mismatch) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* an authenticated session whose stored cookie domain does not match the
+	 * current host must be rejected */
+	session->remote_user = apr_pstrdup(r->pool, "alice");
+	oidc_session_set_cookie_domain(r, session, "other.example.com");
+	r->args = "info=json";
+	r->method_number = M_GET;
+	ck_assert_int_eq(oidc_handle_redirect_uri_request(r, c, session), HTTP_UNAUTHORIZED);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_existing_session_refresh_error_actions) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCRefreshAccessTokenBeforeExpiry);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	r->args = "info=json";
+	r->method_number = M_GET;
+
+	/* pin the configured cookie domain to the value the session seed stores */
+	ck_assert_ptr_null(oidc_cmd_cookie_domain_set(oidc_test_cmd_get(OIDCCookieDomain), NULL, "www.example.com"));
+
+	/* make the access token due for refresh while no refresh token is available,
+	 * so oidc_refresh_access_token_before_expiry fails */
+	ck_assert_ptr_null(oidc_cmd_dir_refresh_access_token_before_expiry_set(cmd, dir_cfg, "60", NULL));
+
+	/* default action: 502 */
+	existing_session_seed(r, session, TRUE);
+	oidc_session_set_access_token_expires(r, session, 30);
+	ck_assert_int_eq(oidc_handle_redirect_uri_request(r, c, session), HTTP_BAD_GATEWAY);
+
+	/* logout action: the session is killed and the logged-out page is prepped */
+	ck_assert_ptr_null(oidc_cmd_dir_refresh_access_token_before_expiry_set(cmd, dir_cfg, "60", "logout_on_error"));
+	existing_session_seed(r, session, TRUE);
+	oidc_session_set_access_token_expires(r, session, 30);
+	ck_assert_int_eq(oidc_handle_redirect_uri_request(r, c, session), OK);
+
+	/* authenticate action: the session is killed and re-authentication starts; the fixture
+	 * request is not auth-capable (no HTML-accepting user agent) so this lands on a 401 */
+	ck_assert_ptr_null(
+	    oidc_cmd_dir_refresh_access_token_before_expiry_set(cmd, dir_cfg, "60", "authenticate_on_error"));
+	existing_session_seed(r, session, TRUE);
+	oidc_session_set_access_token_expires(r, session, 30);
+	ck_assert_int_eq(oidc_handle_redirect_uri_request(r, c, session), HTTP_UNAUTHORIZED);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_existing_session_userinfo_error_actions) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCUserInfoRefreshInterval);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	r->args = "info=json";
+	r->method_number = M_GET;
+
+	/* pin the configured cookie domain to the value the session seed stores */
+	ck_assert_ptr_null(oidc_cmd_cookie_domain_set(oidc_test_cmd_get(OIDCCookieDomain), NULL, "www.example.com"));
+
+	/* default action (502), via the provider-lookup failure: the session carries a
+	 * userinfo refresh interval that is due but no issuer to resolve a provider with */
+	existing_session_seed(r, session, FALSE);
+	oidc_session_set_userinfo_refresh_interval(r, session, 1);
+	ck_assert_int_eq(oidc_handle_redirect_uri_request(r, c, session), HTTP_BAD_GATEWAY);
+
+	/* logout action, via an unreachable userinfo endpoint */
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, "http://127.0.0.1:1/userinfo");
+	ck_assert_ptr_null(oidc_cmd_provider_userinfo_refresh_interval_set(cmd, NULL, "1", "logout_on_error"));
+	existing_session_seed(r, session, TRUE);
+	oidc_session_set_userinfo_refresh_interval(r, session, 1);
+	ck_assert_int_eq(oidc_handle_redirect_uri_request(r, c, session), OK);
+
+	/* authenticate action: kills the session and starts re-authentication; the fixture
+	 * request is not auth-capable (no HTML-accepting user agent) so this lands on a 401 */
+	ck_assert_ptr_null(oidc_cmd_provider_userinfo_refresh_interval_set(cmd, NULL, "1", "authenticate_on_error"));
+	existing_session_seed(r, session, TRUE);
+	oidc_session_set_userinfo_refresh_interval(r, session, 1);
+	ck_assert_int_eq(oidc_handle_redirect_uri_request(r, c, session), HTTP_UNAUTHORIZED);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
 /*
  * Tests for handle/authz.c — drive oidc_authz_24_checker_claim through the
  * anonymous shortcuts, the OAuth20 vs OpenID-Connect denial branches and
@@ -4285,6 +4392,9 @@ int main(void) {
 	tcase_add_test(dispatch, test_handle_dispatch_unknown_args_returns_500);
 	tcase_add_test(dispatch, test_handle_dispatch_empty_args_routes_to_implicit_flow);
 	tcase_add_test(dispatch, test_handle_dispatch_logout_takes_precedence_over_post_authn);
+	tcase_add_test(dispatch, test_handle_existing_session_cookie_domain_mismatch);
+	tcase_add_test(dispatch, test_handle_existing_session_refresh_error_actions);
+	tcase_add_test(dispatch, test_handle_existing_session_userinfo_error_actions);
 
 	Suite *s = suite_create("handle");
 	suite_add_tcase(s, userinfo);
