@@ -3969,6 +3969,123 @@ START_TEST(test_handle_authz_24_oidc_unautz_return_302) {
 END_TEST
 
 /*
+ * Tests for handle/request.c — the cookie-domain sanity checks and the
+ * oidc_request_authenticate_user branches the authz/response suites miss.
+ */
+
+START_TEST(test_handle_request_check_cookie_domain) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* a same-host original URL shares cookies with the redirect URI */
+	ck_assert_int_eq(oidc_request_check_cookie_domain(r, c, "https://www.example.com/protected/x"), TRUE);
+
+	/* an http:// original URL cannot share cookies with an https:// redirect URI */
+	ck_assert_int_eq(oidc_request_check_cookie_domain(r, c, "http://www.example.com/protected/x"), FALSE);
+
+	/* a different hostname (no OIDCCookieDomain configured) cannot share cookies */
+	ck_assert_int_eq(oidc_request_check_cookie_domain(r, c, "https://other.example.org/protected/x"), FALSE);
+
+	/* with OIDCCookieDomain configured, a host outside that domain cannot share cookies */
+	ck_assert_ptr_null(oidc_cmd_cookie_domain_set(oidc_test_cmd_get(OIDCCookieDomain), NULL, "www.example.com"));
+	ck_assert_int_eq(oidc_request_check_cookie_domain(r, c, "https://elsewhere.example.org/x"), FALSE);
+	ck_assert_int_eq(oidc_request_check_cookie_domain(r, c, "https://www.example.com/protected/x"), TRUE);
+}
+END_TEST
+
+START_TEST(test_handle_request_authenticate_user_branches) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	/* a NULL original URL cannot be stored in the state */
+	ck_assert_int_eq(oidc_request_authenticate_user(r, c, provider, NULL, NULL, NULL, NULL, NULL, NULL),
+			 HTTP_INTERNAL_SERVER_ERROR);
+
+	/* an original URL on a different host fails the cookie-domain sanity check */
+	ck_assert_int_eq(
+	    oidc_request_authenticate_user(r, c, provider, "https://other.example.org/x", NULL, NULL, NULL, NULL, NULL),
+	    HTTP_INTERNAL_SERVER_ERROR);
+
+	/* happy path with a configured response_mode, a check_session_iframe (so the per-path
+	 * params/scope are persisted in the state) and SameSite=None state cookies */
+	c->cookie_same_site_state = OIDC_SAMESITE_COOKIE_NONE;
+	ck_assert_ptr_null(oidc_cfg_provider_response_mode_set(r->pool, provider, "query"));
+	ck_assert_ptr_null(
+	    oidc_cfg_provider_check_session_iframe_set(r->pool, provider, "https://idp.example.com/check"));
+	ck_assert_int_eq(oidc_request_authenticate_user(r, c, provider, "https://www.example.com/protected/x", NULL,
+							NULL, NULL, "acr_values=urn:level:1", "extra_scope"),
+			 HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_msg(_oidc_strstr(loc, "https://idp.example.com/authorize") != NULL,
+		      "redirects to the authorization endpoint");
+	ck_assert_msg(_oidc_strstr(loc, "response_mode=query") != NULL, "carries the configured response_mode");
+}
+END_TEST
+
+START_TEST(test_handle_request_authenticate_user_too_many_state_cookies) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	/* an existing valid state cookie + OIDCStateMaxNumberOfCookies 1 (without deleting
+	 * the oldest) means no additional state cookie may be set: 503 */
+	oidc_proto_state_t *ps = oidc_proto_state_new();
+	oidc_proto_state_set_nonce(ps, "n");
+	oidc_proto_state_set_issuer(ps, "https://idp.example.com");
+	oidc_proto_state_set_original_url(ps, "https://www.example.com/protected/");
+	oidc_proto_state_set_original_method(ps, OIDC_METHOD_GET);
+	oidc_proto_state_set_response_type(ps, OIDC_PROTO_RESPONSE_TYPE_CODE);
+	oidc_proto_state_set_timestamp_now(ps);
+	char *cv = oidc_proto_state_to_cookie(r, c, ps);
+	oidc_proto_state_destroy(ps);
+	ck_assert_ptr_nonnull(cv);
+	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "mod_auth_openidc_state_existing=%s", cv));
+
+	ck_assert_ptr_null(oidc_cmd_max_number_of_state_cookies_set(oidc_test_cmd_get(OIDCStateMaxNumberOfCookies),
+								    NULL, "1", "false"));
+
+	ck_assert_int_eq(oidc_request_authenticate_user(r, c, provider, "https://www.example.com/protected/x", NULL,
+							NULL, NULL, NULL, NULL),
+			 HTTP_SERVICE_UNAVAILABLE);
+}
+END_TEST
+
+START_TEST(test_handle_request_authenticate_user_discovery_and_static_metadata) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* provider == NULL with an OIDCMetadataDir configured: discovery is deferred to the
+	 * content handler by stamping the discovery request state and r->user="" */
+	char *tmpl = apr_pstrdup(r->pool, "/tmp/mod_auth_openidc_test_XXXXXX");
+	ck_assert_ptr_nonnull(mkdtemp(tmpl));
+	ck_assert_ptr_null(oidc_cmd_metadata_dir_set(oidc_test_cmd_get(OIDCMetadataDir), NULL, tmpl));
+	ck_assert_int_eq(oidc_request_authenticate_user(r, c, NULL, "https://www.example.com/protected/x", NULL, NULL,
+							NULL, NULL, NULL),
+			 OK);
+	ck_assert_ptr_nonnull(r->user);
+	ck_assert_str_eq(r->user, "");
+	ck_assert_ptr_nonnull(oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY));
+	rmdir(tmpl);
+}
+END_TEST
+
+START_TEST(test_handle_request_authenticate_user_static_config_fails) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	/* provider == NULL, no metadata dir, but an OIDCProviderMetadataURL that cannot be
+	 * retrieved: oidc_provider_static_config fails and the request errors out */
+	ck_assert_ptr_null(oidc_cfg_provider_metadata_url_set(r->pool, provider, "http://127.0.0.1:1/metadata"));
+	ck_assert_int_eq(oidc_request_authenticate_user(r, c, NULL, "https://www.example.com/protected/x", NULL, NULL,
+							NULL, NULL, NULL),
+			 HTTP_INTERNAL_SERVER_ERROR);
+}
+END_TEST
+
+/*
  * Additional tests for handle/content.c — exercise the request-state
  * branches in oidc_content_handler that the existing tests don't reach.
  */
@@ -4626,6 +4743,16 @@ int main(void) {
 	suite_add_tcase(s, logout);
 	suite_add_tcase(s, content);
 	suite_add_tcase(s, authz_24);
+
+	TCase *auth_request = tcase_create("auth_request");
+	tcase_add_checked_fixture(auth_request, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(auth_request, test_handle_request_check_cookie_domain);
+	tcase_add_test(auth_request, test_handle_request_authenticate_user_branches);
+	tcase_add_test(auth_request, test_handle_request_authenticate_user_too_many_state_cookies);
+	tcase_add_test(auth_request, test_handle_request_authenticate_user_discovery_and_static_metadata);
+	tcase_add_test(auth_request, test_handle_request_authenticate_user_static_config_fails);
+	suite_add_tcase(s, auth_request);
+
 	suite_add_tcase(s, checkuid);
 	suite_add_tcase(s, revoke);
 	suite_add_tcase(s, session_mgmt);
