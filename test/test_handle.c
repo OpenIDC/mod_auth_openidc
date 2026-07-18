@@ -1456,6 +1456,95 @@ START_TEST(test_handle_info_json_happy_path) {
 }
 END_TEST
 
+START_TEST(test_handle_info_refresh_access_token_and_full_output) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* enable all the info hook output sections that need session data */
+	const char *keys[] = {
+	    OIDC_HOOK_INFO_ID_TOKEN,	    OIDC_HOOK_INFO_USER_INFO,	  OIDC_HOOK_INFO_SESSION_EXP,
+	    OIDC_HOOK_INFO_SESSION_TIMEOUT, OIDC_HOOK_INFO_SESSION,	  OIDC_HOOK_INFO_REFRESH_TOKEN,
+	    OIDC_HOOK_INFO_ACCES_TOKEN_EXP, OIDC_HOOK_INFO_ID_TOKEN_HINT, NULL};
+	for (int i = 0; keys[i] != NULL; i++)
+		ck_assert_ptr_null(oidc_cmd_info_hook_data_set(oidc_test_cmd_get(OIDCInfoHook), NULL, keys[i]));
+
+	session->remote_user = apr_pstrdup(r->pool, "alice");
+	oidc_session_set_issuer(r, session, "https://idp.example.com");
+	oidc_session_set_refresh_token(r, session, "RT-INFO");
+	oidc_session_set_access_token(r, session, "AT-OLD");
+	oidc_session_set_access_token_expires(r, session, 3600);
+	oidc_session_set_idtoken(r, session, "SERIALIZED-ID-TOKEN");
+	oidc_json_t *claims = oidc_json_object();
+	oidc_json_object_set_new(claims, "sub", oidc_json_string("alice"));
+	oidc_session_set_idtoken_claims(r, session, claims);
+	oidc_session_set_userinfo_claims(r, session, claims);
+	oidc_json_decref(claims);
+
+	/* an unparseable refresh interval is ignored; the HTML format response renders */
+	r->args = "info=html&access_token_refresh_interval=notanumber&extend_session=false";
+	ck_assert_int_eq(oidc_info_request(r, c, session, FALSE), OK);
+
+	/* a recent refresh within the interval: nothing to do, JSON response renders */
+	oidc_session_set_access_token_last_refresh(r, session, apr_time_now());
+	r->args = "info=json&access_token_refresh_interval=3600&extend_session=false";
+	ck_assert_int_eq(oidc_info_request(r, c, session, FALSE), OK);
+
+	/* refresh due but the token endpoint is unreachable */
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, "http://127.0.0.1:1/token");
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+	oidc_session_set_access_token_last_refresh(r, session, apr_time_from_sec(1));
+	r->args = "info=json&access_token_refresh_interval=1&extend_session=false";
+	ck_assert_int_eq(oidc_info_request(r, c, session, FALSE), HTTP_INTERNAL_SERVER_ERROR);
+
+	/* refresh due and the token endpoint delivers: the session is updated. Use a fresh
+	 * refresh_token - the prior failed attempt above locked "RT-INFO" out of further
+	 * refresh attempts for OIDC_REFRESH_CACHE_TTL seconds (see handle/refresh.c) */
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/json",
+					  .body = "{\"access_token\":\"AT-INFO\",\"token_type\":\"Bearer\","
+						  "\"expires_in\":3600,\"refresh_token\":\"RT-INFO-2\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_scope_set(r->pool, provider, "openid");
+	oidc_session_set_refresh_token(r, session, "RT-INFO-FRESH");
+	oidc_session_set_access_token_last_refresh(r, session, apr_time_from_sec(1));
+	ck_assert_int_eq(oidc_info_request(r, c, session, FALSE), OK);
+	ck_assert_str_eq(oidc_session_get_access_token(r, session), "AT-INFO");
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_info_refresh_failures_without_issuer) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	ck_assert_ptr_null(
+	    oidc_cmd_info_hook_data_set(oidc_test_cmd_get(OIDCInfoHook), NULL, OIDC_HOOK_INFO_TIMESTAMP));
+	session->remote_user = apr_pstrdup(r->pool, "alice");
+	oidc_session_set_refresh_token(r, session, "RT-NOISS");
+
+	/* an access-token refresh that is due cannot resolve a provider without an issuer */
+	r->args = "info=json&access_token_refresh_interval=1";
+	ck_assert_int_eq(oidc_info_request(r, c, session, FALSE), HTTP_INTERNAL_SERVER_ERROR);
+
+	/* same for the userinfo claims refresh on the extend-session path */
+	oidc_session_set_userinfo_refresh_interval(r, session, 1);
+	r->args = "info=json";
+	ck_assert_int_eq(oidc_info_request(r, c, session, FALSE), HTTP_INTERNAL_SERVER_ERROR);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
 /*
  * Tests for handle/dpop.c — cover the disabled path, the missing-parameter
  * paths and the case where DPoP creation fails because no private keys are
@@ -3533,6 +3622,29 @@ static void existing_session_seed(request_rec *r, oidc_session_t *session, apr_b
 	oidc_session_set_session_expires(r, session, apr_time_now() + apr_time_from_sec(3600));
 }
 
+START_TEST(test_handle_dispatch_info_happy_sets_authn_header) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* a healthy session passing through the existing-session handler must set both
+	 * r->user and the configured OIDCAuthNHeader request header */
+	ck_assert_ptr_null(oidc_cmd_cookie_domain_set(oidc_test_cmd_get(OIDCCookieDomain), NULL, "www.example.com"));
+	ck_assert_ptr_null(oidc_cmd_dir_authn_header_set(oidc_test_cmd_get(OIDCAuthNHeader), dir_cfg, "X-Remote-User"));
+	existing_session_seed(r, session, TRUE);
+	r->args = "info=json";
+	r->method_number = M_GET;
+	ck_assert_int_eq(oidc_handle_redirect_uri_request(r, c, session), OK);
+	ck_assert_ptr_nonnull(r->user);
+	ck_assert_str_eq(r->user, "alice");
+	ck_assert_table_str(r->headers_in, "X-Remote-User", "alice");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
 START_TEST(test_handle_existing_session_cookie_domain_mismatch) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -4255,6 +4367,8 @@ int main(void) {
 	tcase_add_test(info, test_handle_info_no_hook_data_configured);
 	tcase_add_test(info, test_handle_info_json_happy_path);
 	tcase_add_test(info, test_handle_info_json_full_hook_data);
+	tcase_add_test(info, test_handle_info_refresh_access_token_and_full_output);
+	tcase_add_test(info, test_handle_info_refresh_failures_without_issuer);
 
 	TCase *dpop = tcase_create("dpop");
 	tcase_add_checked_fixture(dpop, oidc_test_setup, oidc_test_teardown);
@@ -4392,6 +4506,7 @@ int main(void) {
 	tcase_add_test(dispatch, test_handle_dispatch_unknown_args_returns_500);
 	tcase_add_test(dispatch, test_handle_dispatch_empty_args_routes_to_implicit_flow);
 	tcase_add_test(dispatch, test_handle_dispatch_logout_takes_precedence_over_post_authn);
+	tcase_add_test(dispatch, test_handle_dispatch_info_happy_sets_authn_header);
 	tcase_add_test(dispatch, test_handle_existing_session_cookie_domain_mismatch);
 	tcase_add_test(dispatch, test_handle_existing_session_refresh_error_actions);
 	tcase_add_test(dispatch, test_handle_existing_session_userinfo_error_actions);
