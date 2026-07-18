@@ -1,4 +1,10 @@
 07/18/2026
+- cfg: fix the token endpoint authentication method validation so that
+  private_key_jwt is consistently rejected for configurations without private
+  signing keys: the candidate-method list was a static array that got the
+  private_key_jwt entry added in place when a private-key-carrying config
+  validated first (e.g. another virtual host) and never removed, so later
+  no-private-key validations wrongly accepted it too
 - refresh: bound the back-off loop that waits for a sibling caller's
   in-progress refresh grant to the refresh-lock TTL, so a cache backend that
   does not expire the lock entry promptly can no longer stall the request

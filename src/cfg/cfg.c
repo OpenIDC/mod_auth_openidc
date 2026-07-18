@@ -328,16 +328,17 @@ OIDC_CFG_MEMBER_FUNC_TYPE_GET(persistent_session_cookie, int, OIDC_DEFAULT_PERSI
 OIDC_CFG_MEMBER_FUNC_TYPE_GET(store_id_token, int, OIDC_DEFAULT_STORE_ID_TOKEN)
 
 static const char *oidc_valid_endpoint_auth_method_impl(apr_pool_t *pool, const char *arg, apr_byte_t has_private_key) {
-	static const char *options[] = {OIDC_ENDPOINT_AUTH_CLIENT_SECRET_POST,
-					OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC,
-					OIDC_ENDPOINT_AUTH_CLIENT_SECRET_JWT,
-					OIDC_ENDPOINT_AUTH_NONE,
-					OIDC_ENDPOINT_AUTH_BEARER_ACCESS_TOKEN,
-					NULL,
-					NULL};
-	if (has_private_key)
-		options[5] = OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT;
-
+	/* NB: build the candidate list per call: the previous static list was mutated in place
+	 * for the private-key case and never reset, so once any private-key-carrying config had
+	 * validated, a later no-private-key validation (e.g. another vhost) would wrongly accept
+	 * private_key_jwt as well */
+	const char *options[] = {OIDC_ENDPOINT_AUTH_CLIENT_SECRET_POST,
+				 OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC,
+				 OIDC_ENDPOINT_AUTH_CLIENT_SECRET_JWT,
+				 OIDC_ENDPOINT_AUTH_NONE,
+				 OIDC_ENDPOINT_AUTH_BEARER_ACCESS_TOKEN,
+				 has_private_key ? OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT : NULL,
+				 NULL};
 	return oidc_cfg_parse_is_valid_option(pool, arg, options);
 }
 
