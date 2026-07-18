@@ -304,10 +304,12 @@ static apr_byte_t oidc_jose_zlib_compress(apr_pool_t *pool, const char *input, i
 	/* deflateBound accounts for the zlib header/trailer overhead that dominates for
 	 * short inputs; a fixed input_len * 2 buffer made deflate fail on values of a
 	 * few bytes, silently preventing such values from being cached */
+	/* the (uInt) narrowing is safe: input_len is an int so deflateBound's small
+	 * relative overhead keeps the result well within uInt range */
 	uLong output_max = deflateBound(&zlib, input_len);
 	*output = apr_pcalloc(pool, output_max);
 	zlib.next_out = (Bytef *)(*output);
-	zlib.avail_out = output_max;
+	zlib.avail_out = (uInt)output_max;
 
 	status = deflate(&zlib, Z_FINISH);
 	if (status != Z_STREAM_END) {
