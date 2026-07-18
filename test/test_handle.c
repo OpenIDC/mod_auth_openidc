@@ -2771,6 +2771,39 @@ END_TEST
  * oidc_enabled is TRUE and the dispatcher routes to the OIDC branch.
  */
 
+START_TEST(test_handle_check_user_id_subrequest_recycles_user) {
+	request_rec *r = oidc_test_request_get();
+
+	/* a sub-request (r->main set) recycles the authenticated user from the main request;
+	 * ap_is_initial_req in the stub keys off main/prev being NULL */
+	r->user = apr_pstrdup(r->pool, "alice");
+	request_rec subr = *r;
+	subr.main = r;
+	subr.prev = NULL;
+	subr.user = NULL;
+	ck_assert_int_eq(oidc_check_user_id(&subr), OK);
+	ck_assert_ptr_nonnull(subr.user);
+	ck_assert_str_eq(subr.user, "alice");
+
+	/* an internally-redirected request (r->prev set) recycles from the previous request */
+	request_rec subr2 = *r;
+	subr2.main = NULL;
+	subr2.prev = r;
+	subr2.user = NULL;
+	ck_assert_int_eq(oidc_check_user_id(&subr2), OK);
+	ck_assert_ptr_nonnull(subr2.user);
+	ck_assert_str_eq(subr2.user, "alice");
+
+	/* a sub-request whose main request carries no user cannot recycle and falls through
+	 * to the regular unauthenticated handling (not auth-capable => 401) */
+	r->user = NULL;
+	request_rec subr3 = *r;
+	subr3.main = r;
+	subr3.prev = NULL;
+	ck_assert_int_eq(oidc_check_user_id(&subr3), HTTP_UNAUTHORIZED);
+}
+END_TEST
+
 START_TEST(test_handle_check_user_id_unauthenticated_redirects_to_op) {
 	request_rec *r = oidc_test_request_get();
 
@@ -4683,6 +4716,7 @@ int main(void) {
 
 	TCase *checkuid = tcase_create("check_user_id");
 	tcase_add_checked_fixture(checkuid, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(checkuid, test_handle_check_user_id_subrequest_recycles_user);
 	tcase_add_test(checkuid, test_handle_check_user_id_unauthenticated_redirects_to_op);
 	tcase_add_test(checkuid, test_handle_check_user_id_unauthenticated_not_auth_capable);
 	tcase_add_test(checkuid, test_handle_check_user_id_existing_session);
