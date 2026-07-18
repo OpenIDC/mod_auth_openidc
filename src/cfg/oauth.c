@@ -298,18 +298,17 @@ const char *oidc_cmd_oauth_token_expiry_claim_set(cmd_parms *cmd, void *dummy, c
 }
 
 /*
- * add a shared key to a list of JWKs with shared keys
+ * parse a shared-key record from a directive value and add the resulting symmetric JWK to the given
+ * (lazily created) hash of shared keys
  */
-const char *oidc_cmd_oauth_verify_shared_keys_set(cmd_parms *cmd, void *struct_ptr, const char *arg) {
+static const char *oidc_cmd_oauth_shared_keys_add(cmd_parms *cmd, const char *arg, apr_hash_t **keys) {
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
 	char *use = NULL;
-
-	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
-
 	char *kid = NULL;
 	char *secret = NULL;
 	int key_len = 0;
+
 	const char *rv = oidc_cfg_parse_key_record(cmd->pool, arg, &kid, &secret, &key_len, &use, TRUE);
 	if (rv != NULL)
 		return rv;
@@ -320,45 +319,29 @@ const char *oidc_cmd_oauth_verify_shared_keys_set(cmd_parms *cmd, void *struct_p
 				    secret, oidc_jose_e2s(cmd->pool, err));
 	}
 
-	if (cfg->oauth->verify_shared_keys == NULL)
-		cfg->oauth->verify_shared_keys = apr_hash_make(cmd->pool);
+	if (*keys == NULL)
+		*keys = apr_hash_make(cmd->pool);
 	if (use)
 		jwk->use = apr_pstrdup(cmd->pool, use);
-	apr_hash_set(cfg->oauth->verify_shared_keys, jwk->kid, APR_HASH_KEY_STRING, jwk);
+	apr_hash_set(*keys, jwk->kid, APR_HASH_KEY_STRING, jwk);
 
 	return NULL;
+}
+
+/*
+ * add a shared key to a list of JWKs with shared keys
+ */
+const char *oidc_cmd_oauth_verify_shared_keys_set(cmd_parms *cmd, void *struct_ptr, const char *arg) {
+	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
+	return oidc_cmd_oauth_shared_keys_add(cmd, arg, &cfg->oauth->verify_shared_keys);
 }
 
 /*
  * add a shared key to the list of JWKs used to decrypt encrypted JWT access tokens
  */
 const char *oidc_cmd_oauth_decrypt_shared_keys_set(cmd_parms *cmd, void *struct_ptr, const char *arg) {
-	oidc_jose_error_t err;
-	oidc_jwk_t *jwk = NULL;
-	char *use = NULL;
-
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
-
-	char *kid = NULL;
-	char *secret = NULL;
-	int key_len = 0;
-	const char *rv = oidc_cfg_parse_key_record(cmd->pool, arg, &kid, &secret, &key_len, &use, TRUE);
-	if (rv != NULL)
-		return rv;
-
-	jwk = oidc_jwk_create_symmetric_key(cmd->pool, kid, (const unsigned char *)secret, key_len, TRUE, &err);
-	if (jwk == NULL) {
-		return apr_psprintf(cmd->pool, "oidc_jwk_create_symmetric_key failed for (kid=%s) \"%s\": %s", kid,
-				    secret, oidc_jose_e2s(cmd->pool, err));
-	}
-
-	if (cfg->oauth->decrypt_shared_keys == NULL)
-		cfg->oauth->decrypt_shared_keys = apr_hash_make(cmd->pool);
-	if (use)
-		jwk->use = apr_pstrdup(cmd->pool, use);
-	apr_hash_set(cfg->oauth->decrypt_shared_keys, jwk->kid, APR_HASH_KEY_STRING, jwk);
-
-	return NULL;
+	return oidc_cmd_oauth_shared_keys_add(cmd, arg, &cfg->oauth->decrypt_shared_keys);
 }
 
 /* default OAuth 2.0 non-spec compliant introspection expiry claim format */
