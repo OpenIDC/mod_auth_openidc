@@ -897,6 +897,23 @@ START_TEST(test_util_table_and_hash_clear_and_openssl) {
 }
 END_TEST
 
+START_TEST(test_util_mask_value) {
+	apr_pool_t *pool = oidc_test_pool_get();
+
+	// NULL values are represented as "(null)"
+	ck_assert_str_eq(oidc_util_mask_value(pool, NULL), "(null)");
+
+	// values up to the prefix length are masked entirely so nothing of a short secret leaks
+	ck_assert_str_eq(oidc_util_mask_value(pool, ""), "***");
+	ck_assert_str_eq(oidc_util_mask_value(pool, "abc"), "***");
+	ck_assert_str_eq(oidc_util_mask_value(pool, "abcd"), "***");
+
+	// longer values keep a 4-char prefix plus the length, for log correlation without disclosure
+	ck_assert_str_eq(oidc_util_mask_value(pool, "abcde"), "abcd...(5 chars)");
+	ck_assert_str_eq(oidc_util_mask_value(pool, "eyJhbGciOiJSUzI1NiJ9"), "eyJh...(20 chars)");
+}
+END_TEST
+
 START_TEST(test_util_read_form_encoded_params) {
 	request_rec *r = oidc_test_request_get();
 	apr_table_t *t = apr_table_make(r->pool, 4);
@@ -1273,6 +1290,7 @@ int main(void) {
 	tcase_add_test(c, test_util_issuer_match_empty_and_null);
 	tcase_add_test(c, test_util_set_trace_parent_flags);
 	tcase_add_test(c, test_util_table_and_hash_clear_and_openssl);
+	tcase_add_test(c, test_util_mask_value);
 	suite_add_tcase(s, c);
 
 	c = tcase_create("url-params");

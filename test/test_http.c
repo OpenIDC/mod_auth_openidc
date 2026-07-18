@@ -122,6 +122,34 @@ START_TEST(test_url_encode_decode) {
 }
 END_TEST
 
+START_TEST(test_redact_body_for_log) {
+	request_rec *r = oidc_test_request_get();
+
+	// NULL body passes through as NULL
+	ck_assert_ptr_null(oidc_http_redact_body_for_log(r->pool, NULL));
+
+	// a body without sensitive parameters is left untouched
+	const char *plain = "grant_type=client_credentials&scope=openid";
+	ck_assert_str_eq(oidc_http_redact_body_for_log(r->pool, plain), plain);
+
+	// each well-known sensitive parameter value is masked; the "code=" needle must not
+	// match inside "authorization_code" or "code_verifier"
+	ck_assert_str_eq(
+	    oidc_http_redact_body_for_log(r->pool, "grant_type=authorization_code&code=abc123&client_secret=verysecret&"
+						   "code_verifier=xyz789&redirect_uri=https%3A%2F%2Fexample.org"),
+	    "grant_type=authorization_code&code=***&client_secret=***&"
+	    "code_verifier=***&redirect_uri=https%3A%2F%2Fexample.org");
+
+	// a sensitive value at the end of the body (no trailing separator) is masked too
+	ck_assert_str_eq(oidc_http_redact_body_for_log(r->pool, "refresh_token=rt-1&access_token=at-1"),
+			 "refresh_token=***&access_token=***");
+
+	// client_assertion values (private_key_jwt) are masked
+	ck_assert_str_eq(oidc_http_redact_body_for_log(r->pool, "client_assertion=eyJhbGciOi.abc.def&scope=openid"),
+			 "client_assertion=***&scope=openid");
+}
+END_TEST
+
 START_TEST(test_hdr_getters_and_forwarded) {
 	request_rec *r = oidc_test_request_get();
 	apr_table_set(r->headers_in, "User-Agent", "MyAgent/1.0");
@@ -841,6 +869,7 @@ int main(void) {
 
 	tcase_add_test(accept, test_http_accept);
 	tcase_add_test(accept, test_url_encode_decode);
+	tcase_add_test(accept, test_redact_body_for_log);
 	tcase_add_test(accept, test_hdr_getters_and_forwarded);
 	tcase_add_test(accept, test_hdr_normalize_query_form);
 	tcase_add_test(accept, test_cookies_and_chunking);

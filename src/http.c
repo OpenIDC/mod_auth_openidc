@@ -558,7 +558,7 @@ static apr_byte_t oidc_http_param_is_sensitive(const char *key) {
  * for debug-log purposes; JSON request bodies do not carry these parameters in this codebase
  * and are therefore left untouched
  */
-static const char *oidc_http_redact_body_for_log(apr_pool_t *pool, const char *data) {
+const char *oidc_http_redact_body_for_log(apr_pool_t *pool, const char *data) {
 	static const char *sensitive[] = {OIDC_PROTO_CLIENT_SECRET,
 					  OIDC_PROTO_CLIENT_ASSERTION,
 					  OIDC_PROTO_CODE,
