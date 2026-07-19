@@ -327,18 +327,26 @@ OIDC_CFG_MEMBER_FUNC_TYPE_GET(persistent_session_cookie, int, OIDC_DEFAULT_PERSI
 #define OIDC_DEFAULT_STORE_ID_TOKEN 1
 OIDC_CFG_MEMBER_FUNC_TYPE_GET(store_id_token, int, OIDC_DEFAULT_STORE_ID_TOKEN)
 
-static const char *oidc_valid_endpoint_auth_method_impl(apr_pool_t *pool, const char *arg, apr_byte_t has_private_key) {
+static const char *oidc_valid_endpoint_auth_method_impl(apr_pool_t *pool, const char *arg, apr_byte_t has_private_key,
+							apr_byte_t allow_mtls) {
 	/* NB: build the candidate list per call: the previous static list was mutated in place
 	 * for the private-key case and never reset, so once any private-key-carrying config had
 	 * validated, a later no-private-key validation (e.g. another vhost) would wrongly accept
 	 * private_key_jwt as well */
-	const char *options[] = {OIDC_ENDPOINT_AUTH_CLIENT_SECRET_POST,
-				 OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC,
-				 OIDC_ENDPOINT_AUTH_CLIENT_SECRET_JWT,
-				 OIDC_ENDPOINT_AUTH_NONE,
-				 OIDC_ENDPOINT_AUTH_BEARER_ACCESS_TOKEN,
-				 has_private_key ? OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT : NULL,
-				 NULL};
+	const char *options[9];
+	int i = 0;
+	options[i++] = OIDC_ENDPOINT_AUTH_CLIENT_SECRET_POST;
+	options[i++] = OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC;
+	options[i++] = OIDC_ENDPOINT_AUTH_CLIENT_SECRET_JWT;
+	options[i++] = OIDC_ENDPOINT_AUTH_NONE;
+	options[i++] = OIDC_ENDPOINT_AUTH_BEARER_ACCESS_TOKEN;
+	if (has_private_key)
+		options[i++] = OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT;
+	if (allow_mtls) {
+		options[i++] = OIDC_ENDPOINT_AUTH_TLS_CLIENT_AUTH;
+		options[i++] = OIDC_ENDPOINT_AUTH_SELF_SIGNED_TLS_CLIENT_AUTH;
+	}
+	options[i] = NULL;
 	return oidc_cfg_parse_is_valid_option(pool, arg, options);
 }
 
@@ -364,7 +372,7 @@ static void oidc_cfg_endpoint_auth_parse(apr_pool_t *pool, const char *arg1, cha
 	*method = apr_pstrdup(pool, arg);
 }
 
-static const char *oidc_cfg_valid_endpoint_auth_method_with_private_key(apr_pool_t *pool, const char *arg1) {
+static const char *oidc_cfg_valid_endpoint_auth_method_alg(apr_pool_t *pool, const char *arg1, apr_byte_t allow_mtls) {
 	const char *rv = NULL;
 	char *method = NULL;
 	char *alg = NULL;
@@ -374,25 +382,50 @@ static const char *oidc_cfg_valid_endpoint_auth_method_with_private_key(apr_pool
 		if (rv != NULL)
 			return rv;
 	}
-	return oidc_valid_endpoint_auth_method_impl(pool, method, TRUE);
+	return oidc_valid_endpoint_auth_method_impl(pool, method, TRUE, allow_mtls);
+}
+
+static const char *oidc_cfg_valid_endpoint_auth_method_with_private_key(apr_pool_t *pool, const char *arg1) {
+	return oidc_cfg_valid_endpoint_auth_method_alg(pool, arg1, TRUE);
 }
 
 static const char *oidc_cfg_valid_endpoint_auth_method_no_private_key(apr_pool_t *pool, const char *arg) {
-	return oidc_valid_endpoint_auth_method_impl(pool, arg, FALSE);
+	return oidc_valid_endpoint_auth_method_impl(pool, arg, FALSE, TRUE);
+}
+
+static const char *oidc_cfg_valid_endpoint_auth_method_no_mtls_with_private_key(apr_pool_t *pool, const char *arg1) {
+	return oidc_cfg_valid_endpoint_auth_method_alg(pool, arg1, FALSE);
+}
+
+static const char *oidc_cfg_valid_endpoint_auth_method_no_mtls_no_private_key(apr_pool_t *pool, const char *arg) {
+	return oidc_valid_endpoint_auth_method_impl(pool, arg, FALSE, FALSE);
 }
 
 const char *oidc_cfg_endpoint_auth_set(apr_pool_t *pool, const oidc_cfg_t *cfg, const char *arg1, char **auth,
 				       char **alg) {
-	const char *rv = oidc_cfg_get_valid_endpoint_auth_function(cfg)(pool, arg1);
+	const char *rv = oidc_cfg_get_valid_endpoint_auth_function(cfg, TRUE)(pool, arg1);
 	if (rv == NULL)
 		oidc_cfg_endpoint_auth_parse(pool, arg1, auth, alg);
 	return rv;
 }
 
 /*
- * return the right token endpoint authentication method validation function, based on whether private keys are set
+ * check if the endpoint authentication method is one of the RFC 8705 mutual-TLS methods
  */
-oidc_valid_function_t oidc_cfg_get_valid_endpoint_auth_function(const oidc_cfg_t *cfg) {
+apr_byte_t oidc_cfg_endpoint_auth_is_mtls(const char *method) {
+	return (_oidc_strcmp(method, OIDC_ENDPOINT_AUTH_TLS_CLIENT_AUTH) == 0) ||
+	       (_oidc_strcmp(method, OIDC_ENDPOINT_AUTH_SELF_SIGNED_TLS_CLIENT_AUTH) == 0);
+}
+
+/*
+ * return the right token endpoint authentication method validation function, based on whether private keys are
+ * set and whether the RFC 8705 mutual-TLS methods are acceptable: auto-selection from provider metadata passes
+ * allow_mtls only when a TLS client certificate has been configured, explicit configuration always allows them
+ */
+oidc_valid_function_t oidc_cfg_get_valid_endpoint_auth_function(const oidc_cfg_t *cfg, apr_byte_t allow_mtls) {
+	if (allow_mtls == FALSE)
+		return (cfg->private_keys != NULL) ? &oidc_cfg_valid_endpoint_auth_method_no_mtls_with_private_key
+						   : &oidc_cfg_valid_endpoint_auth_method_no_mtls_no_private_key;
 	return (cfg->private_keys != NULL) ? &oidc_cfg_valid_endpoint_auth_method_with_private_key
 					   : &oidc_cfg_valid_endpoint_auth_method_no_private_key;
 }

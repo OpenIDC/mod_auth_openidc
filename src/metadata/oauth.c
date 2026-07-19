@@ -67,10 +67,12 @@ apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, con
 			oidc_error(r, "oidc_oauth_verify_jwks_uri_set error: %s", rv);
 	}
 
-	if (oidc_metadata_valid_string_in_array(r->pool, j_provider,
-						OIDC_METADATA_INTROSPECTON_ENDPOINT_AUTH_METHODS_SUPPORTED,
-						oidc_cfg_get_valid_endpoint_auth_function(c), &value, TRUE,
-						OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC) != NULL) {
+	/* auto-select and prefer an RFC 8705 mutual-TLS method only when a TLS client certificate is configured */
+	apr_byte_t b_mtls = (oidc_cfg_oauth_introspection_endpoint_tls_client_cert_get(c) != NULL);
+	if (oidc_metadata_valid_string_in_array(
+		r->pool, j_provider, OIDC_METADATA_INTROSPECTON_ENDPOINT_AUTH_METHODS_SUPPORTED,
+		oidc_cfg_get_valid_endpoint_auth_function(c, b_mtls), &value, TRUE,
+		b_mtls ? OIDC_ENDPOINT_AUTH_TLS_CLIENT_AUTH : OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC) != NULL) {
 		oidc_error(r,
 			   "could not find a supported token endpoint authentication method in provider metadata (%s) "
 			   "for entry \"" OIDC_METADATA_INTROSPECTON_ENDPOINT_AUTH_METHODS_SUPPORTED "\"",
@@ -80,6 +82,20 @@ apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, con
 		rv = oidc_cfg_oauth_introspection_endpoint_auth_set(r->pool, c, value);
 		if (rv != NULL)
 			oidc_error(r, "oidc_oauth_introspection_endpoint_auth_set error: %s", rv);
+	}
+
+	/* RFC 8705 section 5: when using mutual-TLS, prefer the "mtls_endpoint_aliases" introspection endpoint */
+	if (oidc_cfg_endpoint_auth_is_mtls(oidc_cfg_oauth_introspection_endpoint_auth_get(c))) {
+		value = NULL;
+		const oidc_json_t *j_aliases = oidc_json_object_get(j_provider, OIDC_METADATA_MTLS_ENDPOINT_ALIASES);
+		if (oidc_json_is_object(j_aliases) != 0)
+			oidc_json_object_get_string(r->pool, j_aliases, OIDC_METADATA_INTROSPECTION_ENDPOINT, &value,
+						    NULL);
+		if (value != NULL) {
+			rv = oidc_cfg_oauth_introspection_endpoint_url_set(r->pool, c, value);
+			if (rv != NULL)
+				oidc_error(r, "oidc_oauth_introspection_endpoint_url_set error: %s", rv);
+		}
 	}
 
 	return TRUE;

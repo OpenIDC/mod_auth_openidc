@@ -1,3 +1,28 @@
+07/19/2026
+- add support for RFC 8705 OAuth 2.0 Mutual-TLS Client Authentication:
+  "tls_client_auth" and "self_signed_tls_client_auth" can now be configured
+  as the authentication method in OIDCProviderTokenEndpointAuth and
+  OIDCOAuthIntrospectionEndpointAuth (and the per-provider
+  token_endpoint_auth .conf key), using the TLS client certificate configured
+  with OIDCClientTokenEndpointCert/Key resp.
+  OIDCOAuthIntrospectionEndpointCert/Key; an mTLS method is auto-selected
+  from token_endpoint_auth_methods_supported resp.
+  introspection_endpoint_auth_methods_supported (only) when such a
+  certificate is configured
+- metadata: apply the RFC 8705 section 5 "mtls_endpoint_aliases" from the
+  provider metadata to the token, userinfo, revocation and pushed
+  authorization request endpoints, and from the AS metadata to the
+  introspection endpoint, when a mutual-TLS authentication method is in
+  effect
+- http: also present the configured TLS client certificate at the userinfo,
+  revocation, pushed authorization request and aggregated/distributed-claims
+  endpoints (previously only at the token and introspection endpoints) so
+  RFC 8705 section 3 certificate-bound access tokens can be used against
+  those endpoints
+- registration: request "tls_client_certificate_bound_access_tokens" during
+  dynamic client registration when a mutual-TLS authentication method is
+  configured
+
 07/18/2026
 - id_token: fix a memory leak on the id_token parse failure path: the
   symmetric decryption key derived from the client secret was only freed

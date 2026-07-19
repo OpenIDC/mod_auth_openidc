@@ -113,7 +113,10 @@ static int oidc_proto_request_auth_push(request_rec *r, const struct oidc_provid
 	if (oidc_http_post_form(r, endpoint_url, params, basic_auth, bearer_auth, NULL,
 				oidc_cfg_provider_ssl_validate_server_get(provider), &response, NULL, NULL,
 				oidc_cfg_http_timeout_long_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
-				oidc_cfg_dir_pass_cookies_get(r), NULL, NULL, NULL) == FALSE)
+				oidc_cfg_dir_pass_cookies_get(r),
+				oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider),
+				oidc_cfg_provider_token_endpoint_tls_client_key_get(provider),
+				oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider)) == FALSE)
 		goto out;
 
 	/* check for errors, the response itself will have been logged already */

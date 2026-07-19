@@ -77,6 +77,15 @@ START_TEST(test_cmd_provider_token_endpoint_auth_set) {
 	arg = "private_key_jwt:RA256";
 	rv = oidc_cmd_provider_token_endpoint_auth_set(cmd, ptr, arg);
 	ck_assert_msg(rv != NULL, "should have failed");
+
+	/* the RFC 8705 mutual-TLS methods are always accepted when configured explicitly */
+	arg = "tls_client_auth";
+	rv = oidc_cmd_provider_token_endpoint_auth_set(cmd, ptr, arg);
+	ck_assert_msg(rv == NULL, "failed: %s", rv);
+
+	arg = "self_signed_tls_client_auth";
+	rv = oidc_cmd_provider_token_endpoint_auth_set(cmd, ptr, arg);
+	ck_assert_msg(rv == NULL, "failed: %s", rv);
 }
 END_TEST
 
@@ -92,6 +101,8 @@ START_TEST(test_cmd_provider_token_endpoint_auth_no_private_keys) {
 	ck_assert_msg(rv != NULL, "private_key_jwt must be invalid without private keys");
 	rv = oidc_cmd_provider_token_endpoint_auth_set(cmd, NULL, "client_secret_basic");
 	ck_assert_msg(rv == NULL, "client_secret_basic failed: %s", rv);
+	rv = oidc_cmd_provider_token_endpoint_auth_set(cmd, NULL, "tls_client_auth");
+	ck_assert_msg(rv == NULL, "tls_client_auth failed: %s", rv);
 }
 END_TEST
 

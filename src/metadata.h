@@ -50,7 +50,7 @@ apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg_t *cfg, const cha
 				      apr_byte_t allow_discovery);
 apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg, const char *issuer, const char *url,
 					   oidc_json_t **j_metadata, char **response);
-apr_byte_t oidc_metadata_provider_parse(request_rec *r, const oidc_cfg_t *cfg, const oidc_json_t *j_provider,
+apr_byte_t oidc_metadata_provider_parse(request_rec *r, oidc_cfg_t *cfg, const oidc_json_t *j_provider,
 					oidc_provider_t *provider);
 apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, const oidc_cfg_t *cfg, const oidc_json_t *j_provider,
 					   const char *issuer);

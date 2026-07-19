@@ -117,7 +117,7 @@ apr_byte_t oidc_metadata_provider_is_valid(request_rec *r, const oidc_cfg_t *cfg
 	/* find out what type of authentication the token endpoint supports */
 	if (oidc_metadata_valid_string_in_array(
 		r->pool, j_provider, OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED,
-		oidc_cfg_get_valid_endpoint_auth_function(cfg), NULL, TRUE, NULL) != NULL) {
+		oidc_cfg_get_valid_endpoint_auth_function(cfg, TRUE), NULL, TRUE, NULL) != NULL) {
 		oidc_error(r,
 			   "could not find a supported token endpoint authentication method in provider metadata (%s) "
 			   "for entry \"" OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED "\"",
@@ -253,9 +253,50 @@ apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg_t *cfg, const cha
 	}
 
 /*
+ * RFC 8705 section 5: when mutual-TLS client authentication is in effect, prefer the endpoint
+ * URLs advertised in the "mtls_endpoint_aliases" provider metadata over the conventional ones
+ */
+static void oidc_metadata_provider_parse_mtls_endpoint_aliases(request_rec *r, oidc_cfg_t *cfg,
+							       const oidc_json_t *j_provider,
+							       oidc_provider_t *provider) {
+	const char *rv = NULL;
+	char *value = NULL;
+	const oidc_json_t *j_aliases = NULL;
+	const char *auth = oidc_cfg_provider_token_endpoint_auth_get(provider);
+	const char *global_auth = oidc_cfg_provider_token_endpoint_auth_get(oidc_cfg_provider_get(cfg));
+
+	/* a globally configured method will override the metadata-selected one in oidc_metadata_conf_parse */
+	if (global_auth != NULL)
+		auth = global_auth;
+
+	if (oidc_cfg_endpoint_auth_is_mtls(auth) == FALSE)
+		return;
+
+	j_aliases = oidc_json_object_get(j_provider, OIDC_METADATA_MTLS_ENDPOINT_ALIASES);
+	if (oidc_json_is_object(j_aliases) == 0)
+		return;
+
+	oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER, oidc_cfg_provider_issuer_get(provider), j_aliases,
+				OIDC_METADATA_TOKEN_ENDPOINT, &value, NULL);
+	OIDC_METADATA_PROVIDER_SET(token_endpoint_url, value, rv)
+
+	oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER, oidc_cfg_provider_issuer_get(provider), j_aliases,
+				OIDC_METADATA_USERINFO_ENDPOINT, &value, NULL);
+	OIDC_METADATA_PROVIDER_SET(userinfo_endpoint_url, value, rv)
+
+	oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER, oidc_cfg_provider_issuer_get(provider), j_aliases,
+				OIDC_METADATA_REVOCATION_ENDPOINT, &value, NULL);
+	OIDC_METADATA_PROVIDER_SET(revocation_endpoint_url, value, rv)
+
+	oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER, oidc_cfg_provider_issuer_get(provider), j_aliases,
+				OIDC_METADATA_PAR_ENDPOINT, &value, NULL);
+	OIDC_METADATA_PROVIDER_SET(pushed_authorization_request_endpoint_url, value, rv)
+}
+
+/*
  * parse the JSON provider metadata in to a oidc_provider_t struct but do not override values already set
  */
-apr_byte_t oidc_metadata_provider_parse(request_rec *r, const oidc_cfg_t *cfg, const oidc_json_t *j_provider,
+apr_byte_t oidc_metadata_provider_parse(request_rec *r, oidc_cfg_t *cfg, const oidc_json_t *j_provider,
 					oidc_provider_t *provider) {
 
 	const char *rv = NULL;
@@ -303,10 +344,15 @@ apr_byte_t oidc_metadata_provider_parse(request_rec *r, const oidc_cfg_t *cfg, c
 	OIDC_METADATA_PROVIDER_SET_INT(provider, backchannel_logout_supported, ivalue, rv)
 
 	if (oidc_cfg_provider_token_endpoint_auth_get(provider) == NULL) {
-		if (oidc_metadata_valid_string_in_array(r->pool, j_provider,
-							OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED,
-							oidc_cfg_get_valid_endpoint_auth_function(cfg), &value, TRUE,
-							OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC) != NULL) {
+		/* auto-select and prefer an RFC 8705 mutual-TLS method only when a TLS client certificate
+		 * has been configured (either on this provider or globally) */
+		apr_byte_t b_mtls =
+		    (oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider) != NULL) ||
+		    (oidc_cfg_provider_token_endpoint_tls_client_cert_get(oidc_cfg_provider_get(cfg)) != NULL);
+		if (oidc_metadata_valid_string_in_array(
+			r->pool, j_provider, OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED,
+			oidc_cfg_get_valid_endpoint_auth_function(cfg, b_mtls), &value, TRUE,
+			b_mtls ? OIDC_ENDPOINT_AUTH_TLS_CLIENT_AUTH : OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC) != NULL) {
 			oidc_error(r,
 				   "could not find a supported token endpoint authentication method in provider"
 				   "metadata (%s) for entry \"" OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED
@@ -318,6 +364,8 @@ apr_byte_t oidc_metadata_provider_parse(request_rec *r, const oidc_cfg_t *cfg, c
 		if (rv != NULL)
 			oidc_error(r, "oidc_provider_token_endpoint_auth_set: %s", rv);
 	}
+
+	oidc_metadata_provider_parse_mtls_endpoint_aliases(r, cfg, j_provider, provider);
 
 	return TRUE;
 }

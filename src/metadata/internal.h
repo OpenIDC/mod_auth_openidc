@@ -59,6 +59,7 @@
 #define OIDC_METADATA_CHECK_SESSION_IFRAME "check_session_iframe"
 #define OIDC_METADATA_BACKCHANNEL_LOGOUT_SUPPORTED "backchannel_logout_supported"
 #define OIDC_METADATA_END_SESSION_ENDPOINT "end_session_endpoint"
+#define OIDC_METADATA_MTLS_ENDPOINT_ALIASES "mtls_endpoint_aliases"
 
 /* client metadata keys */
 #define OIDC_METADATA_CLIENT_ID "client_id"
@@ -69,6 +70,7 @@
 #define OIDC_METADATA_RESPONSE_TYPES "response_types"
 #define OIDC_METADATA_GRANT_TYPES "grant_types"
 #define OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHOD "token_endpoint_auth_method"
+#define OIDC_METADATA_TLS_CLIENT_CERTIFICATE_BOUND_ACCESS_TOKENS "tls_client_certificate_bound_access_tokens"
 #define OIDC_METADATA_CONTACTS "contacts"
 #define OIDC_METADATA_INITIATE_LOGIN_URI "initiate_login_uri"
 #define OIDC_METADATA_FRONTCHANNEL_LOGOUT_URI "frontchannel_logout_uri"

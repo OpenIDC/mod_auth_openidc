@@ -159,10 +159,12 @@ static const char *oidc_proto_userinfo_composite_source_payload(request_rec *r, 
 		return NULL;
 
 	char *s_json = NULL;
-	oidc_http_get(r, endpoint, NULL, NULL, access_token, NULL,
-		      oidc_cfg_provider_ssl_validate_server_get(oidc_cfg_provider_get(cfg)), &s_json, NULL, NULL,
-		      oidc_cfg_http_timeout_long_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
-		      oidc_cfg_dir_pass_cookies_get(r), NULL, NULL, NULL);
+	const oidc_provider_t *provider = oidc_cfg_provider_get(cfg);
+	oidc_http_get(r, endpoint, NULL, NULL, access_token, NULL, oidc_cfg_provider_ssl_validate_server_get(provider),
+		      &s_json, NULL, NULL, oidc_cfg_http_timeout_long_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
+		      oidc_cfg_dir_pass_cookies_get(r), oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider),
+		      oidc_cfg_provider_token_endpoint_tls_client_key_get(provider),
+		      oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider));
 	return s_json;
 }
 
@@ -276,7 +278,10 @@ static apr_byte_t oidc_proto_userinfo_endpoint_call(request_rec *r, oidc_cfg_t *
 		if (oidc_http_get(r, oidc_cfg_provider_userinfo_endpoint_url_get(provider), NULL, NULL, access_token,
 				  dpop, oidc_cfg_provider_ssl_validate_server_get(provider), response, response_code,
 				  response_hdrs, oidc_cfg_http_timeout_long_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
-				  oidc_cfg_dir_pass_cookies_get(r), NULL, NULL, NULL) == FALSE) {
+				  oidc_cfg_dir_pass_cookies_get(r),
+				  oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider),
+				  oidc_cfg_provider_token_endpoint_tls_client_key_get(provider),
+				  oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider)) == FALSE) {
 			OIDC_METRICS_COUNTER_INC(r, cfg, OM_PROVIDER_USERINFO_ERROR);
 			return FALSE;
 		}
@@ -286,8 +291,10 @@ static apr_byte_t oidc_proto_userinfo_endpoint_call(request_rec *r, oidc_cfg_t *
 		if (oidc_http_post_form(r, oidc_cfg_provider_userinfo_endpoint_url_get(provider), params, NULL, NULL,
 					dpop, oidc_cfg_provider_ssl_validate_server_get(provider), response,
 					response_code, response_hdrs, oidc_cfg_http_timeout_long_get(cfg),
-					oidc_cfg_outgoing_proxy_get(cfg), oidc_cfg_dir_pass_cookies_get(r), NULL, NULL,
-					NULL) == FALSE) {
+					oidc_cfg_outgoing_proxy_get(cfg), oidc_cfg_dir_pass_cookies_get(r),
+					oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider),
+					oidc_cfg_provider_token_endpoint_tls_client_key_get(provider),
+					oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider)) == FALSE) {
 			OIDC_METRICS_COUNTER_INC(r, cfg, OM_PROVIDER_USERINFO_ERROR);
 			return FALSE;
 		}

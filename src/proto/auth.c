@@ -284,6 +284,15 @@ apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg_t *cfg, const
 		return oidc_proto_endpoint_auth_none(client_id, params);
 	}
 
+	// RFC 8705: the client authenticates at the TLS layer with its mutual-TLS client
+	// certificate; only the client_id is passed in the request body
+	if (oidc_cfg_endpoint_auth_is_mtls(token_endpoint_auth)) {
+		oidc_debug(r,
+			   "\"%s\": authentication occurs at the TLS layer, adding only the client_id to the request",
+			   token_endpoint_auth);
+		return oidc_proto_endpoint_auth_none(client_id, params);
+	}
+
 	// if no client_secret is set and we don't authenticate using private_key_jwt,
 	// we can only be a public client since the other methods require a client_secret
 	if ((client_secret == NULL) && (_oidc_strcmp(token_endpoint_auth, OIDC_PROTO_PRIVATE_KEY_JWT) != 0)) {

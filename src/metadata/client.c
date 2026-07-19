@@ -120,6 +120,10 @@ apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg, const 
 	if (oidc_cfg_provider_token_endpoint_auth_get(provider) != NULL) {
 		oidc_json_object_set_new(data, OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHOD,
 					 oidc_json_string(oidc_cfg_provider_token_endpoint_auth_get(provider)));
+		/* RFC 8705 section 6.1: request certificate-bound access tokens when using mutual-TLS client auth */
+		if (oidc_cfg_endpoint_auth_is_mtls(oidc_cfg_provider_token_endpoint_auth_get(provider)))
+			oidc_json_object_set_new(data, OIDC_METADATA_TLS_CLIENT_CERTIFICATE_BOUND_ACCESS_TOKENS,
+						 oidc_json_boolean(1));
 	}
 
 	if (oidc_cfg_provider_client_contact_get(provider) != NULL) {

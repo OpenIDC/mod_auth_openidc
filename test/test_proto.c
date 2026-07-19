@@ -583,6 +583,34 @@ START_TEST(test_proto_token_endpoint_auth_bearer) {
 }
 END_TEST
 
+START_TEST(test_proto_token_endpoint_auth_mtls) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	apr_table_t *params = NULL;
+	char *basic = NULL;
+	char *bearer = NULL;
+
+	/* RFC 8705: authentication occurs at the TLS layer: only the client_id goes into the body */
+	params = apr_table_make(r->pool, 1);
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, "tls_client_auth", NULL, "myclient", NULL, NULL, NULL,
+							params, NULL, &basic, &bearer),
+			 TRUE);
+	ck_assert_table_str(params, OIDC_PROTO_CLIENT_ID, "myclient");
+	ck_assert_table_unset(params, OIDC_PROTO_CLIENT_SECRET);
+	ck_assert_ptr_null(basic);
+	ck_assert_ptr_null(bearer);
+
+	/* a configured client_secret must not leak into the request */
+	params = apr_table_make(r->pool, 1);
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, "self_signed_tls_client_auth", NULL, "myclient",
+							"mysecret", NULL, NULL, params, NULL, &basic, &bearer),
+			 TRUE);
+	ck_assert_table_str(params, OIDC_PROTO_CLIENT_ID, "myclient");
+	ck_assert_table_unset(params, OIDC_PROTO_CLIENT_SECRET);
+	ck_assert_ptr_null(basic);
+}
+END_TEST
+
 START_TEST(test_proto_token_endpoint_auth_unknown_method) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -3069,6 +3097,7 @@ int main(void) {
 	tcase_add_test(core, test_proto_token_endpoint_auth_no_client_id);
 	tcase_add_test(core, test_proto_token_endpoint_auth_basic_and_post);
 	tcase_add_test(core, test_proto_token_endpoint_auth_bearer);
+	tcase_add_test(core, test_proto_token_endpoint_auth_mtls);
 	tcase_add_test(core, test_proto_token_endpoint_auth_unknown_method);
 	tcase_add_test(core, test_proto_token_endpoint_auth_client_secret_jwt);
 	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_no_keys);

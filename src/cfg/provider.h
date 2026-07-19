@@ -66,6 +66,9 @@ typedef struct oidc_proto_pkce_t {
 #define OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT "private_key_jwt"
 #define OIDC_ENDPOINT_AUTH_BEARER_ACCESS_TOKEN "bearer_access_token"
 #define OIDC_ENDPOINT_AUTH_NONE "none"
+/* RFC 8705 mutual-TLS client authentication methods */
+#define OIDC_ENDPOINT_AUTH_TLS_CLIENT_AUTH "tls_client_auth"
+#define OIDC_ENDPOINT_AUTH_SELF_SIGNED_TLS_CLIENT_AUTH "self_signed_tls_client_auth"
 
 /* HTTP methods to send authentication requests */
 typedef enum {

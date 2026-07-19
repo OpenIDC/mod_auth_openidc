@@ -147,6 +147,54 @@ START_TEST(test_metadata_parse_preserves_existing_values) {
 END_TEST
 
 /*
+ * RFC 8705: an mTLS method is only auto-selected from token_endpoint_auth_methods_supported
+ * when a TLS client certificate is configured; in that case the mtls_endpoint_aliases
+ * override the conventional endpoint URLs.
+ */
+START_TEST(test_metadata_parse_mtls_endpoint_aliases) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+
+	const char *metadata =
+	    "{"
+	    "\"issuer\":\"https://idp.example.com\","
+	    "\"authorization_endpoint\":\"https://idp.example.com/authorize\","
+	    "\"token_endpoint\":\"https://idp.example.com/token\","
+	    "\"userinfo_endpoint\":\"https://idp.example.com/userinfo\","
+	    "\"token_endpoint_auth_methods_supported\":[\"client_secret_basic\",\"tls_client_auth\"],"
+	    "\"mtls_endpoint_aliases\":{"
+	    "\"token_endpoint\":\"https://mtls.idp.example.com/token\","
+	    "\"userinfo_endpoint\":\"https://mtls.idp.example.com/userinfo\""
+	    "}"
+	    "}";
+
+	oidc_json_t *j = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(r, metadata, &j), TRUE);
+
+	/* without a TLS client certificate configured: no mTLS auto-selection, aliases not applied */
+	ck_assert_int_eq(oidc_metadata_provider_parse(r, c, j, provider), TRUE);
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_auth_get(provider), "client_secret_basic");
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_url_get(provider), "https://idp.example.com/token");
+	ck_assert_str_eq(oidc_cfg_provider_userinfo_endpoint_url_get(provider), "https://idp.example.com/userinfo");
+
+	/* with a (globally configured) TLS client certificate: tls_client_auth is preferred over the
+	 * client_secret_basic default and the mtls_endpoint_aliases are applied */
+	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_tls_client_cert_set(
+	    r->pool, oidc_cfg_provider_get(c), apr_psprintf(r->pool, "%s/certificate.pem", dir)));
+	provider = oidc_cfg_provider_create(r->pool);
+	ck_assert_int_eq(oidc_metadata_provider_parse(r, c, j, provider), TRUE);
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_auth_get(provider), "tls_client_auth");
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_url_get(provider), "https://mtls.idp.example.com/token");
+	ck_assert_str_eq(oidc_cfg_provider_userinfo_endpoint_url_get(provider),
+			 "https://mtls.idp.example.com/userinfo");
+
+	oidc_json_decref(j);
+}
+END_TEST
+
+/*
  * Tests for oidc_metadata_provider_retrieve — drive the HTTP fetch +
  * JSON-decode + is_valid pipeline against the loopback server.
  */
@@ -505,6 +553,35 @@ START_TEST(test_metadata_oauth_provider_parse) {
 
 	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_url_get(c), "https://as.example.com/introspect");
 	ck_assert_str_eq(oidc_cfg_oauth_verify_jwks_uri_get(c), "https://as.example.com/jwks");
+
+	oidc_json_decref(j);
+}
+END_TEST
+
+START_TEST(test_metadata_oauth_provider_parse_mtls) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+
+	oidc_json_t *j =
+	    json_pack("{s:s,s:s,s:[s,s],s:{s:s}}", "issuer", "https://as.example.com", "introspection_endpoint",
+		      "https://as.example.com/introspect", "introspection_endpoint_auth_methods_supported",
+		      "client_secret_basic", "tls_client_auth", "mtls_endpoint_aliases", "introspection_endpoint",
+		      "https://mtls.as.example.com/introspect");
+
+	/* without an introspection TLS client certificate: the client_secret_basic preference wins
+	 * and the conventional introspection endpoint is used */
+	ck_assert_int_eq(oidc_oauth_metadata_provider_parse(r, c, j), TRUE);
+	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_auth_get(c), "client_secret_basic");
+	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_url_get(c), "https://as.example.com/introspect");
+
+	/* with a certificate: tls_client_auth is selected and the mTLS alias endpoint applied */
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCOAuthIntrospectionEndpointCert);
+	ck_assert_ptr_null(oidc_cmd_oauth_introspection_endpoint_tls_client_cert_set(
+	    cmd, NULL, apr_psprintf(r->pool, "%s/certificate.pem", dir)));
+	ck_assert_int_eq(oidc_oauth_metadata_provider_parse(r, c, j), TRUE);
+	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_auth_get(c), "tls_client_auth");
+	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_url_get(c), "https://mtls.as.example.com/introspect");
 
 	oidc_json_decref(j);
 }
@@ -1162,7 +1239,9 @@ int main(void) {
 	tcase_add_checked_fixture(parse, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(parse, test_metadata_parse_populates_empty_provider);
 	tcase_add_test(parse, test_metadata_parse_preserves_existing_values);
+	tcase_add_test(parse, test_metadata_parse_mtls_endpoint_aliases);
 	tcase_add_test(parse, test_metadata_oauth_provider_parse);
+	tcase_add_test(parse, test_metadata_oauth_provider_parse_mtls);
 
 	TCase *retrieve = tcase_create("retrieve");
 	tcase_add_checked_fixture(retrieve, oidc_test_setup, oidc_test_teardown);
