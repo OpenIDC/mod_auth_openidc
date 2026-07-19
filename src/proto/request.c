@@ -514,7 +514,10 @@ static char *oidc_request_uri_request_object_encrypt(request_rec *r, oidc_cfg_t 
 	if (ejwk->kid != NULL)
 		jwe->header.kid = ejwk->kid;
 
-	if (oidc_jwt_encrypt(r->pool, jwe, ejwk, cser, (int)_oidc_strlen(cser) + 1, &serialized, &err) == FALSE) {
+	/* NB: encrypt exactly the serialized bytes, without the trailing NUL: a JWE
+	 * plaintext that is a Nested JWT must be the bare compact JWS, or the OP's
+	 * base64url decode of the inner signature segment trips over the stray byte */
+	if (oidc_jwt_encrypt(r->pool, jwe, ejwk, cser, (int)_oidc_strlen(cser), &serialized, &err) == FALSE) {
 		oidc_error(r, "encrypting JWT failed: %s", oidc_jose_e2s(r->pool, err));
 		serialized = NULL;
 	}
@@ -573,10 +576,16 @@ static char *oidc_request_uri_request_object(request_rec *r, const struct oidc_p
 	char *cser = oidc_jose_jwt_serialize(r->pool, request_object, &err);
 
 	/* see if we need to encrypt the request object */
-	if (jwe->header.alg != NULL)
+	if (jwe->header.alg != NULL) {
+		/* the encrypted payload is itself a JWT (the signed - or "none" - request
+		 * object), so mark the JWE as a Nested JWT per RFC 7519 section 5.2:
+		 * "cty":"JWT" tells the OP to re-parse the decrypted plaintext as a JWS
+		 * rather than as a bare JSON claims set (e.g. Keycloak otherwise rejects
+		 * it with "Failed to deserialize JWT") */
+		jwe->header.cty = apr_pstrdup(r->pool, "JWT");
 		serialized_request_object =
 		    oidc_request_uri_request_object_encrypt(r, cfg, provider, jwe, cser, request_object->header.alg);
-	else
+	} else
 		/* should be sign only or "none" */
 		serialized_request_object = cser;
 

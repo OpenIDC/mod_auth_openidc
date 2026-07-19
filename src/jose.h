@@ -255,6 +255,8 @@ typedef struct oidc_jwt_hdr_t {
 	char *kid;
 	/* JWT "enc" claim value; encryption algorithm */
 	char *enc;
+	/* JWT "cty" claim value; content type (e.g. "JWT" for a Nested JWT) */
+	char *cty;
 	/* JWT "x5t" thumbprint */
 	char *x5t;
 } oidc_jwt_hdr_t;

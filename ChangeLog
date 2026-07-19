@@ -1,4 +1,11 @@
 07/19/2026
+- request: emit "cty":"JWT" on an encrypted request object and stop appending a
+  trailing NUL byte to the JWE plaintext, so that OPs which strictly follow
+  RFC 7519 section 5.2 (e.g. Keycloak) can decrypt and parse a signed-then-
+  encrypted request object; previously such a request was rejected with
+  "invalid_request"/"Failed to deserialize JWT" because the decrypted Nested JWT
+  was neither flagged with a content type nor cleanly base64url-decodable; adds a
+  "cty" field to the JOSE header struct
 - add support for RFC 8705 OAuth 2.0 Mutual-TLS Client Authentication:
   "tls_client_auth" and "self_signed_tls_client_auth" can now be configured
   as the authentication method in OIDCProviderTokenEndpointAuth and

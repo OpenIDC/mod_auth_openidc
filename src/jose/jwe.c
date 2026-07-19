@@ -188,6 +188,8 @@ apr_byte_t oidc_jwt_encrypt(apr_pool_t *pool, oidc_jwt_t *jwe, const oidc_jwk_t 
 		oidc_jwt_hdr_set(jwe, CJOSE_HDR_KID, jwe->header.kid);
 	if (jwe->header.enc)
 		oidc_jwt_hdr_set(jwe, CJOSE_HDR_ENC, jwe->header.enc);
+	if (jwe->header.cty)
+		oidc_jwt_hdr_set(jwe, CJOSE_HDR_CTY, jwe->header.cty);
 
 	cjose_err cjose_err;
 	cjose_jwe_t *cjose_jwe =
