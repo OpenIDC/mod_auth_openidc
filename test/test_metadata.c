@@ -179,8 +179,8 @@ START_TEST(test_metadata_parse_mtls_endpoint_aliases) {
 	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_url_get(provider), "https://idp.example.com/token");
 	ck_assert_str_eq(oidc_cfg_provider_userinfo_endpoint_url_get(provider), "https://idp.example.com/userinfo");
 
-	/* with a (globally configured) TLS client certificate: tls_client_auth is preferred over the
-	 * client_secret_basic default and the mtls_endpoint_aliases are applied */
+	/* with a (globally configured) TLS client certificate and no client secret: tls_client_auth is
+	 * preferred over the client_secret_basic default and the mtls_endpoint_aliases are applied */
 	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_tls_client_cert_set(
 	    r->pool, oidc_cfg_provider_get(c), apr_psprintf(r->pool, "%s/certificate.pem", dir)));
 	provider = oidc_cfg_provider_create(r->pool);
@@ -189,6 +189,16 @@ START_TEST(test_metadata_parse_mtls_endpoint_aliases) {
 	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_url_get(provider), "https://mtls.idp.example.com/token");
 	ck_assert_str_eq(oidc_cfg_provider_userinfo_endpoint_url_get(provider),
 			 "https://mtls.idp.example.com/userinfo");
+
+	/* with both a TLS client certificate *and* a client secret configured: the certificate is only
+	 * for RFC 8705 section 3 token binding, so client_secret_basic remains preferred (backwards
+	 * compatible) and the conventional endpoint URLs are kept */
+	oidc_cfg_provider_client_secret_set(r->pool, oidc_cfg_provider_get(c), "secret");
+	provider = oidc_cfg_provider_create(r->pool);
+	ck_assert_int_eq(oidc_metadata_provider_parse(r, c, j, provider), TRUE);
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_auth_get(provider), "client_secret_basic");
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_url_get(provider), "https://idp.example.com/token");
+	ck_assert_str_eq(oidc_cfg_provider_userinfo_endpoint_url_get(provider), "https://idp.example.com/userinfo");
 
 	oidc_json_decref(j);
 }
@@ -575,13 +585,23 @@ START_TEST(test_metadata_oauth_provider_parse_mtls) {
 	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_auth_get(c), "client_secret_basic");
 	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_url_get(c), "https://as.example.com/introspect");
 
-	/* with a certificate: tls_client_auth is selected and the mTLS alias endpoint applied */
+	/* with a certificate and no client secret: tls_client_auth is selected and the mTLS alias endpoint
+	 * applied */
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCOAuthIntrospectionEndpointCert);
 	ck_assert_ptr_null(oidc_cmd_oauth_introspection_endpoint_tls_client_cert_set(
 	    cmd, NULL, apr_psprintf(r->pool, "%s/certificate.pem", dir)));
 	ck_assert_int_eq(oidc_oauth_metadata_provider_parse(r, c, j), TRUE);
 	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_auth_get(c), "tls_client_auth");
 	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_url_get(c), "https://mtls.as.example.com/introspect");
+
+	/* with both a certificate *and* a client secret: the certificate is only for RFC 8705 section 3
+	 * token binding, so client_secret_basic remains preferred (backwards compatible) and the
+	 * conventional introspection endpoint is kept */
+	cmd = oidc_test_cmd_get(OIDCOAuthClientSecret);
+	ck_assert_ptr_null(oidc_cmd_oauth_client_secret_set(cmd, NULL, "secret"));
+	ck_assert_int_eq(oidc_oauth_metadata_provider_parse(r, c, j), TRUE);
+	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_auth_get(c), "client_secret_basic");
+	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_url_get(c), "https://as.example.com/introspect");
 
 	oidc_json_decref(j);
 }

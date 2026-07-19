@@ -67,8 +67,11 @@ apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, con
 			oidc_error(r, "oidc_oauth_verify_jwks_uri_set error: %s", rv);
 	}
 
-	/* auto-select and prefer an RFC 8705 mutual-TLS method only when a TLS client certificate is configured */
-	apr_byte_t b_mtls = (oidc_cfg_oauth_introspection_endpoint_tls_client_cert_get(c) != NULL);
+	/* auto-select and prefer an RFC 8705 mutual-TLS method only when a TLS client certificate is
+	 * configured and no client secret is set: a configured secret signals client_secret_* auth with
+	 * the certificate presented only for RFC 8705 section 3 certificate-bound access tokens */
+	apr_byte_t b_mtls = (oidc_cfg_oauth_client_secret_get(c) == NULL) &&
+			    (oidc_cfg_oauth_introspection_endpoint_tls_client_cert_get(c) != NULL);
 	if (oidc_metadata_valid_string_in_array(
 		r->pool, j_provider, OIDC_METADATA_INTROSPECTON_ENDPOINT_AUTH_METHODS_SUPPORTED,
 		oidc_cfg_get_valid_endpoint_auth_function(c, b_mtls), &value, TRUE,

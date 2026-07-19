@@ -345,10 +345,16 @@ apr_byte_t oidc_metadata_provider_parse(request_rec *r, oidc_cfg_t *cfg, const o
 
 	if (oidc_cfg_provider_token_endpoint_auth_get(provider) == NULL) {
 		/* auto-select and prefer an RFC 8705 mutual-TLS method only when a TLS client certificate
-		 * has been configured (either on this provider or globally) */
+		 * has been configured (either on this provider or globally) *and* no client secret is set:
+		 * a configured secret signals client_secret_* authentication with the certificate merely
+		 * presented for RFC 8705 section 3 certificate-bound access tokens, so it must not be
+		 * silently upgraded to tls_client_auth */
+		apr_byte_t b_secret = (oidc_cfg_provider_client_secret_get(provider) != NULL) ||
+				      (oidc_cfg_provider_client_secret_get(oidc_cfg_provider_get(cfg)) != NULL);
 		apr_byte_t b_mtls =
-		    (oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider) != NULL) ||
-		    (oidc_cfg_provider_token_endpoint_tls_client_cert_get(oidc_cfg_provider_get(cfg)) != NULL);
+		    (b_secret == FALSE) &&
+		    ((oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider) != NULL) ||
+		     (oidc_cfg_provider_token_endpoint_tls_client_cert_get(oidc_cfg_provider_get(cfg)) != NULL));
 		if (oidc_metadata_valid_string_in_array(
 			r->pool, j_provider, OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED,
 			oidc_cfg_get_valid_endpoint_auth_function(cfg, b_mtls), &value, TRUE,

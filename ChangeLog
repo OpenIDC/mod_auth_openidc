@@ -14,8 +14,11 @@
   with OIDCClientTokenEndpointCert/Key resp.
   OIDCOAuthIntrospectionEndpointCert/Key; an mTLS method is auto-selected
   from token_endpoint_auth_methods_supported resp.
-  introspection_endpoint_auth_methods_supported (only) when such a
-  certificate is configured
+  introspection_endpoint_auth_methods_supported only when such a
+  certificate is configured and no client secret is set (with a client
+  secret configured, client_secret_basic remains preferred and the
+  certificate is used solely for RFC 8705 section 3 certificate-bound
+  access tokens)
 - metadata: apply the RFC 8705 section 5 "mtls_endpoint_aliases" from the
   provider metadata to the token, userinfo, revocation and pushed
   authorization request endpoints, and from the AS metadata to the
