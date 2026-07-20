@@ -306,18 +306,25 @@ OIDC_PROVIDER_MEMBER_FUNCS_STR_LIST(id_token_aud_values)
 #define OIDC_DEFAULT_PROVIDER_PKCE &oidc_pkce_s256
 
 const char *oidc_cfg_provider_pkce_set(apr_pool_t *pool, oidc_provider_t *provider, const char *arg) {
-	static const char *options[] = {OIDC_PKCE_METHOD_PLAIN, OIDC_PKCE_METHOD_S256, OIDC_PKCE_METHOD_NONE, NULL};
-	if (_oidc_strcmp(arg, OIDC_PKCE_METHOD_PLAIN) == 0) {
-		provider->pkce = &oidc_pkce_plain;
-		return NULL;
-	} else if (_oidc_strcmp(arg, OIDC_PKCE_METHOD_S256) == 0) {
-		provider->pkce = &oidc_pkce_s256;
-		return NULL;
-	} else if (_oidc_strcmp(arg, OIDC_PKCE_METHOD_NONE) == 0) {
-		provider->pkce = &oidc_pkce_none;
-		return NULL;
+	/* single source for both the valid values and the selected method */
+	static const struct {
+		const char *str;
+		oidc_proto_pkce_t *method;
+	} options[] = {{OIDC_PKCE_METHOD_PLAIN, &oidc_pkce_plain},
+		       {OIDC_PKCE_METHOD_S256, &oidc_pkce_s256},
+		       {OIDC_PKCE_METHOD_NONE, &oidc_pkce_none},
+		       {NULL, NULL}};
+	const char *strs[sizeof(options) / sizeof(options[0])];
+	int i = 0;
+	for (i = 0; options[i].str != NULL; i++) {
+		if (_oidc_strcmp(arg, options[i].str) == 0) {
+			provider->pkce = options[i].method;
+			return NULL;
+		}
+		strs[i] = options[i].str;
 	}
-	return oidc_cfg_parse_is_valid_option(pool, arg, options);
+	strs[i] = NULL;
+	return oidc_cfg_parse_is_valid_option(pool, arg, strs);
 }
 
 OIDC_PROVIDER_MEMBER_FUNCS_TYPE_DEF(pkce, const oidc_proto_pkce_t *, OIDC_DEFAULT_PROVIDER_PKCE)

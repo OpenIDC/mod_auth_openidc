@@ -301,18 +301,20 @@ const char *oidc_cmd_session_type_set(cmd_parms *cmd, void *ptr, const char *arg
 		cfg->store_id_token = 0;
 	}
 
-	if (p) {
-		if (_oidc_strcmp(p, OIDC_SESSION_TYPE_PERSISTENT) == 0) {
-			cfg->persistent_session_cookie = 1;
-		} else if (_oidc_strcmp(p, OIDC_SESSION_TYPE_STORE_ID_TOKEN) == 0) {
-			// only for client-cookie
-			cfg->store_id_token = 1;
-		} else if (_oidc_strcmp(p, OIDC_SESSION_TYPE_PERSISTENT OIDC_SESSION_TYPE_SEPARATOR
-					       OIDC_SESSION_TYPE_STORE_ID_TOKEN) == 0) {
-			// only for client-cookie
-			cfg->persistent_session_cookie = 1;
-			cfg->store_id_token = 1;
+	/* the combination was validated against options[] above, so each remaining
+	 * separator-delimited modifier can be applied on its own */
+	while (p) {
+		char *next = _oidc_strstr(p, OIDC_SESSION_TYPE_SEPARATOR);
+		if (next) {
+			*next = '\0';
+			next++;
 		}
+		if (_oidc_strcmp(p, OIDC_SESSION_TYPE_PERSISTENT) == 0)
+			cfg->persistent_session_cookie = 1;
+		else if (_oidc_strcmp(p, OIDC_SESSION_TYPE_STORE_ID_TOKEN) == 0)
+			// only for client-cookie
+			cfg->store_id_token = 1;
+		p = next;
 	}
 
 	return NULL;
