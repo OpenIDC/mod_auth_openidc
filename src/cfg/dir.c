@@ -345,7 +345,7 @@ const char *oidc_cmd_dir_unauth_action_set(cmd_parms *cmd, void *m, const char *
 	    oidc_cfg_parse_option(cmd->pool, unauth_action_options, OIDC_CFG_OPTIONS_SIZE(unauth_action_options), arg1,
 				  &dir_cfg->unauth_action);
 	if (rv == NULL)
-		rv = oidc_util_apr_expr_parse(cmd, arg2, &dir_cfg->unauth_expression, FALSE);
+		rv = oidc_util_apr_expr_parse(cmd, arg2, &dir_cfg->unauth_expression, OIDC_APR_EXPR_RESULT_BOOLEAN);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -379,7 +379,8 @@ const char *oidc_cmd_dir_unautz_action_set(cmd_parms *cmd, void *m, const char *
 
 const char *oidc_cmd_dir_userinfo_claims_expr_set(cmd_parms *cmd, void *m, const char *arg) {
 	oidc_dir_cfg_t *dir_cfg = (oidc_dir_cfg_t *)m;
-	const char *rv = oidc_util_apr_expr_parse(cmd, arg, &dir_cfg->userinfo_claims_expr, TRUE);
+	const char *rv =
+	    oidc_util_apr_expr_parse(cmd, arg, &dir_cfg->userinfo_claims_expr, OIDC_APR_EXPR_RESULT_STRING);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -388,14 +389,14 @@ const char *oidc_cmd_dir_userinfo_claims_expr_set(cmd_parms *cmd, void *m, const
 const char *oidc_cmd_dir_path_auth_request_params_set(cmd_parms *cmd, void *m, const char *arg) {
 	oidc_dir_cfg_t *dir_cfg = (oidc_dir_cfg_t *)m;
 	const char *rv = NULL;
-	rv = oidc_util_apr_expr_parse(cmd, arg, &dir_cfg->path_auth_request_expr, TRUE);
+	rv = oidc_util_apr_expr_parse(cmd, arg, &dir_cfg->path_auth_request_expr, OIDC_APR_EXPR_RESULT_STRING);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
 const char *oidc_cmd_dir_path_scope_set(cmd_parms *cmd, void *m, const char *arg) {
 	oidc_dir_cfg_t *dir_cfg = (oidc_dir_cfg_t *)m;
 	const char *rv = NULL;
-	rv = oidc_util_apr_expr_parse(cmd, arg, &dir_cfg->path_scope_expr, TRUE);
+	rv = oidc_util_apr_expr_parse(cmd, arg, &dir_cfg->path_scope_expr, OIDC_APR_EXPR_RESULT_STRING);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
@@ -541,7 +542,7 @@ oidc_unauth_action_t oidc_cfg_dir_unauth_action_get(request_rec *r) {
 		goto end;
 	}
 
-	s = oidc_util_apr_expr_exec(r, dir_cfg->unauth_expression, FALSE);
+	s = oidc_util_apr_expr_exec(r, dir_cfg->unauth_expression, OIDC_APR_EXPR_RESULT_BOOLEAN);
 
 	action = (s != NULL) ? dir_cfg->unauth_action : OIDC_DEFAULT_UNAUTH_ACTION;
 
@@ -569,7 +570,7 @@ const char *oidc_cfg_dir_unauthz_arg_get(request_rec *r) {
 
 const char *oidc_cfg_dir_path_auth_request_params_get(request_rec *r) {
 	const oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
-	return oidc_util_apr_expr_exec(r, dir_cfg->path_auth_request_expr, TRUE);
+	return oidc_util_apr_expr_exec(r, dir_cfg->path_auth_request_expr, OIDC_APR_EXPR_RESULT_STRING);
 }
 
 /* default pass user info as */
@@ -605,13 +606,13 @@ OIDC_CFG_DIR_MEMBER_FUNC_INT_GET(pass_idtoken_as, oidc_pass_idtoken_as_t, OIDC_D
 #ifdef USE_LIBJQ
 const char *oidc_cfg_dir_userinfo_claims_expr_get(request_rec *r) {
 	const oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
-	return oidc_util_apr_expr_exec(r, dir_cfg->userinfo_claims_expr, TRUE);
+	return oidc_util_apr_expr_exec(r, dir_cfg->userinfo_claims_expr, OIDC_APR_EXPR_RESULT_STRING);
 }
 #endif
 
 const char *oidc_cfg_dir_path_scope_get(request_rec *r) {
 	const oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
-	return oidc_util_apr_expr_exec(r, dir_cfg->path_scope_expr, TRUE);
+	return oidc_util_apr_expr_exec(r, dir_cfg->path_scope_expr, OIDC_APR_EXPR_RESULT_STRING);
 }
 
 /*

@@ -389,7 +389,8 @@ static apr_byte_t oidc_discovery_response_target_link_uri_validate(request_rec *
 	}
 
 	/* do input validation on the target_link_uri parameter value, step 2 */
-	if (oidc_validate_redirect_url(r, c, *target_link_uri, TRUE, &error_str, &error_description) == FALSE) {
+	if (oidc_validate_redirect_url(r, c, *target_link_uri, OIDC_REDIRECT_URL_SAME_HOST, &error_str,
+				       &error_description) == FALSE) {
 		*rv = oidc_util_html_send_error(r, error_str, error_description, HTTP_UNAUTHORIZED);
 		return FALSE;
 	}

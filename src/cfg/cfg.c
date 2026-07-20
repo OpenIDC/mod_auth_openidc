@@ -479,7 +479,7 @@ const char *oidc_cfg_remote_user_claim_name_get(const oidc_cfg_t *cfg) {
 
 const char *oidc_cmd_filter_claims_expr_set(cmd_parms *cmd, void *m, const char *arg) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
-	const char *rv = oidc_util_apr_expr_parse(cmd, arg, &cfg->filter_claims_expr, TRUE);
+	const char *rv = oidc_util_apr_expr_parse(cmd, arg, &cfg->filter_claims_expr, OIDC_APR_EXPR_RESULT_STRING);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 

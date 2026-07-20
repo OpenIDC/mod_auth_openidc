@@ -983,7 +983,7 @@ static apr_byte_t oidc_validate_redirect_url_chars(request_rec *r, const char *u
  * avoid cross site request forgery on the redirect_to_url
  */
 apr_byte_t oidc_validate_redirect_url(request_rec *r, const oidc_cfg_t *c, const char *redirect_to_url,
-				      apr_byte_t restrict_to_host, char **err_str, char **err_desc) {
+				      oidc_redirect_url_scope_t scope, char **err_str, char **err_desc) {
 	apr_uri_t uri;
 	if (redirect_to_url == NULL)
 		return oidc_validate_redirect_url_fail(r, err_str, err_desc, "Invalid URL", "URL value is NULL");
@@ -1006,7 +1006,7 @@ apr_byte_t oidc_validate_redirect_url(request_rec *r, const oidc_cfg_t *c, const
 		if (oidc_validate_redirect_url_allowed(r, oidc_cfg_redirect_urls_allowed_get(c), url, err_str,
 						       err_desc) == FALSE)
 			return FALSE;
-	} else if ((uri.hostname != NULL) && (restrict_to_host == TRUE) &&
+	} else if ((uri.hostname != NULL) && (scope == OIDC_REDIRECT_URL_SAME_HOST) &&
 		   (oidc_validate_redirect_url_host(r, c, &uri, err_str, err_desc) == FALSE)) {
 		return FALSE;
 	}
@@ -1302,7 +1302,7 @@ static int oidc_check_userid_openidc_redirect_uri(request_rec *r, oidc_cfg_t *c,
 static int oidc_check_userid_openidc_existing_session(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
 	apr_byte_t needs_save = FALSE;
 	int rc = oidc_handle_existing_session(r, c, session, TRUE, &needs_save);
-	if ((rc == OK) && needs_save && (oidc_session_save(r, session, FALSE) == FALSE)) {
+	if ((rc == OK) && needs_save && (oidc_session_save(r, session, OIDC_SESSION_SAVE_UPDATE) == FALSE)) {
 		oidc_warn(r, "error saving session");
 		rc = HTTP_INTERNAL_SERVER_ERROR;
 	}

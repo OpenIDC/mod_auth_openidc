@@ -89,7 +89,7 @@ START_TEST(test_session_cache_roundtrip) {
 	z->expiry = apr_time_now() + apr_time_from_sec(3600);
 	oidc_session_set_issuer(r, z, "https://idp.example.com");
 	oidc_session_set_access_token(r, z, "AT-cache");
-	ck_assert_int_eq(oidc_session_save(r, z, TRUE), TRUE);
+	ck_assert_int_eq(oidc_session_save(r, z, OIDC_SESSION_SAVE_NEW), TRUE);
 
 	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "%s=%s", oidc_cfg_dir_cookie_get(r), uuid));
 
@@ -119,7 +119,7 @@ START_TEST(test_session_cookie_roundtrip) {
 	z->expiry = apr_time_now() + apr_time_from_sec(3600);
 	oidc_session_set_issuer(r, z, "https://idp.example.com");
 	oidc_session_set_access_token(r, z, "AT-cookie");
-	ck_assert_int_eq(oidc_session_save(r, z, TRUE), TRUE);
+	ck_assert_int_eq(oidc_session_save(r, z, OIDC_SESSION_SAVE_NEW), TRUE);
 
 	replay_set_cookies(r);
 

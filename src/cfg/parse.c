@@ -490,12 +490,12 @@ static const char *oidc_cfg_parse_key_alg_prefix(apr_pool_t *pool, const char *t
 }
 
 /*
- * parse a [<use>:][<alg>[+<alg>...]@][<key-identifier>#]<key> tuple (or, when triplet is TRUE, a
+ * parse a [<use>:][<alg>[+<alg>...]@][<key-identifier>#]<key> tuple (or, when format is TRUE, a
  * [<use>:]<encoding>#<key-identifier>#<key> tuple); the optional "<alg>[+<alg>...]@" list is only
  * recognized when a non-NULL alg out-parameter is passed
  */
 const char *oidc_cfg_parse_key_record(apr_pool_t *pool, const char *tuple, char **kid, char **key, int *key_len,
-				      char **use, char **alg, apr_byte_t triplet) {
+				      char **use, char **alg, oidc_key_record_format_t format) {
 	const char *rv = NULL;
 	char *s = NULL;
 	char *p = NULL;
@@ -521,7 +521,7 @@ const char *oidc_cfg_parse_key_record(apr_pool_t *pool, const char *tuple, char 
 
 	s = apr_pstrdup(pool, tuple);
 	p = _oidc_strstr(s, OIDC_KEY_TUPLE_SEPARATOR);
-	if (p && triplet)
+	if (p && format)
 		q = _oidc_strstr(p + 1, OIDC_KEY_TUPLE_SEPARATOR);
 
 	if (p) {
@@ -626,7 +626,8 @@ static const char *oidc_cfg_parse_key_files(apr_pool_t *pool, const char *arg, a
 	int fname_len;
 	char *last = NULL;
 
-	const char *rv = oidc_cfg_parse_key_record(pool, arg, &kid, &name, &fname_len, &use, &alg, FALSE);
+	const char *rv =
+	    oidc_cfg_parse_key_record(pool, arg, &kid, &name, &fname_len, &use, &alg, OIDC_KEY_RECORD_PAIR);
 	if (rv != NULL)
 		return rv;
 
@@ -701,7 +702,7 @@ const char *oidc_cfg_parse_private_key_files(apr_pool_t *pool, const char *arg, 
 }
 
 /*
- * parse a triplet of 3 provided config values into a remote_user_claim struct
+ * parse a format of 3 provided config values into a remote_user_claim struct
  */
 const char *oidc_parse_remote_user_claim(apr_pool_t *pool, const char *v1, const char *v2, const char *v3,
 					 oidc_remote_user_claim_t *remote_user_claim) {
@@ -714,7 +715,7 @@ const char *oidc_parse_remote_user_claim(apr_pool_t *pool, const char *v1, const
 }
 
 /*
- * parse a triplet of 3 provided config values into a http_timeout struct
+ * parse a format of 3 provided config values into a http_timeout struct
  */
 const char *oidc_cfg_parse_http_timeout(apr_pool_t *pool, const char *arg1, const char *arg2, const char *arg3,
 					oidc_http_timeout_t *http_timeout) {

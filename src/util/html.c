@@ -263,7 +263,8 @@ static apr_byte_t oidc_util_template_format_valid(const char *tpl, int expected_
  * fill and send a HTML template
  */
 int oidc_util_html_send_in_template(request_rec *r, const char *filename, char **static_template_content,
-				    const char *arg1, int arg1_esc, const char *arg2, int arg2_esc) {
+				    const char *arg1, oidc_post_preserve_escape_t arg1_esc, const char *arg2,
+				    oidc_post_preserve_escape_t arg2_esc) {
 	const char *html = NULL;
 	int rc = OK;
 	// NB: templates go into the server process pool

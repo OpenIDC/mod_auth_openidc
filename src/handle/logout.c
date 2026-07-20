@@ -542,7 +542,8 @@ static apr_byte_t oidc_logout_validate_url(request_rec *r, const oidc_cfg_t *c, 
 	}
 
 	/* do input validation on the logout parameter value */
-	if (oidc_validate_redirect_url(r, c, *url, TRUE, &error_str, &error_description) == FALSE) {
+	if (oidc_validate_redirect_url(r, c, *url, OIDC_REDIRECT_URL_SAME_HOST, &error_str, &error_description) ==
+	    FALSE) {
 		*rv = oidc_util_html_send_error(r, error_str, error_description, HTTP_BAD_REQUEST);
 		return FALSE;
 	}

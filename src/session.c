@@ -262,7 +262,7 @@ static const char *oidc_session_cookie_samesite(const request_rec *r, const stru
 /*
  * save the session to the cache using a cookie for the index
  */
-static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, apr_byte_t first_time) {
+static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, oidc_session_save_t first_time) {
 	const oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
 	apr_byte_t rc = TRUE;
@@ -323,7 +323,7 @@ static apr_byte_t oidc_session_load_cookie(request_rec *r, const oidc_cfg_t *c, 
 /*
  * store the session in a self-contained client-side-only cookie storage
  */
-static apr_byte_t oidc_session_save_cookie(request_rec *r, const oidc_session_t *z, apr_byte_t first_time) {
+static apr_byte_t oidc_session_save_cookie(request_rec *r, const oidc_session_t *z, oidc_session_save_t first_time) {
 	const oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	char *cookieValue = "";
 	if ((z->state != NULL) && (oidc_session_encode(r, c, z, &cookieValue, TRUE) == FALSE))
@@ -450,7 +450,7 @@ static void oidc_session_set_timestamp(request_rec *r, oidc_session_t *z, const 
 /*
  * save a session to cache/cookie
  */
-apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z, apr_byte_t first_time) {
+apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z, oidc_session_save_t first_time) {
 	const oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
 	apr_byte_t rc = FALSE;
@@ -491,7 +491,7 @@ apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z) {
 		oidc_json_decref(z->state);
 		z->state = NULL;
 	}
-	oidc_session_save(r, z, FALSE);
+	oidc_session_save(r, z, OIDC_SESSION_SAVE_UPDATE);
 	return oidc_session_free(r, z);
 }
 
@@ -622,7 +622,7 @@ static void oidc_session_filtered_claim_record(request_rec *r, const oidc_cfg_t 
 static void oidc_session_jq_filter_apply(request_rec *r, const oidc_cfg_t *c, const char *session_key,
 					 oidc_json_t **dst) {
 	const oidc_apr_expr_t *filter = oidc_cfg_filter_claims_expr_get(c);
-	const char *s_filter = oidc_util_apr_expr_exec(r, filter, TRUE);
+	const char *s_filter = oidc_util_apr_expr_exec(r, filter, OIDC_APR_EXPR_RESULT_STRING);
 
 	if (filter == NULL)
 		return;

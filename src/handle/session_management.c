@@ -132,8 +132,8 @@ static int oidc_session_management_iframe_rp(request_rec *r, const oidc_cfg_t *c
 	char *error_str = NULL;
 	char *error_description = NULL;
 	oidc_util_url_parameter_get(r, "login_uri", &login_uri);
-	if ((login_uri != NULL) &&
-	    (oidc_validate_redirect_url(r, c, login_uri, TRUE, &error_str, &error_description) == FALSE)) {
+	if ((login_uri != NULL) && (oidc_validate_redirect_url(r, c, login_uri, OIDC_REDIRECT_URL_SAME_HOST, &error_str,
+							       &error_description) == FALSE)) {
 		return HTTP_BAD_REQUEST;
 	}
 

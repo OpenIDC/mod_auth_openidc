@@ -2101,10 +2101,12 @@ START_TEST(test_handle_legacy_open_redirect) {
 	char *err_str = NULL, *err_desc = NULL;
 
 	/* a same-host URL is allowed; a different-host URL is not */
-	ck_assert_int_eq(
-	    oidc_validate_redirect_url(r, c, "https://www.example.com/somewhere", TRUE, &err_str, &err_desc), TRUE);
-	ck_assert_int_eq(
-	    oidc_validate_redirect_url(r, c, "https://evil.example.com/somewhere", TRUE, &err_str, &err_desc), FALSE);
+	ck_assert_int_eq(oidc_validate_redirect_url(r, c, "https://www.example.com/somewhere",
+						    OIDC_REDIRECT_URL_SAME_HOST, &err_str, &err_desc),
+			 TRUE);
+	ck_assert_int_eq(oidc_validate_redirect_url(r, c, "https://evil.example.com/somewhere",
+						    OIDC_REDIRECT_URL_SAME_HOST, &err_str, &err_desc),
+			 FALSE);
 
 	/* now walk the open-redirect payload list — every entry must be REJECTED */
 	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
@@ -2120,7 +2122,8 @@ START_TEST(test_handle_legacy_open_redirect) {
 			line_buf[line_s - 1] = '\0';
 		err_str = NULL;
 		err_desc = NULL;
-		ck_assert_msg(oidc_validate_redirect_url(r, c, line_buf, TRUE, &err_str, &err_desc) == FALSE,
+		ck_assert_msg(oidc_validate_redirect_url(r, c, line_buf, OIDC_REDIRECT_URL_SAME_HOST, &err_str,
+							 &err_desc) == FALSE,
 			      "open-redirect payload was accepted: %s", line_buf);
 	}
 	apr_file_close(f);
@@ -2426,7 +2429,8 @@ START_TEST(test_handle_mod_validate_redirect_url_backslash_relative) {
 	/* a hostname-less URL whose only path is the empty string can't be
 	 * relative-validated: the "starts with /" check fails and we get
 	 * "Malformed URL" */
-	ck_assert_int_eq(oidc_validate_redirect_url(r, c, "evil", TRUE, &err_str, &err_desc), FALSE);
+	ck_assert_int_eq(oidc_validate_redirect_url(r, c, "evil", OIDC_REDIRECT_URL_SAME_HOST, &err_str, &err_desc),
+			 FALSE);
 	ck_assert_ptr_nonnull(err_str);
 	ck_assert_str_eq(err_str, "Malformed URL");
 }
@@ -2440,13 +2444,15 @@ START_TEST(test_handle_mod_validate_redirect_url_allowed) {
 
 	char *err_str = NULL, *err_desc = NULL;
 	/* matching the configured regex bypasses the same-host check */
-	ck_assert_int_eq(
-	    oidc_validate_redirect_url(r, c, "https://other.example.com/return", TRUE, &err_str, &err_desc), TRUE);
+	ck_assert_int_eq(oidc_validate_redirect_url(r, c, "https://other.example.com/return",
+						    OIDC_REDIRECT_URL_SAME_HOST, &err_str, &err_desc),
+			 TRUE);
 
 	/* a URL that does not match the regex is rejected with "URL not allowed" */
 	err_str = NULL;
 	err_desc = NULL;
-	ck_assert_int_eq(oidc_validate_redirect_url(r, c, "https://evil.test/return", TRUE, &err_str, &err_desc),
+	ck_assert_int_eq(oidc_validate_redirect_url(r, c, "https://evil.test/return", OIDC_REDIRECT_URL_SAME_HOST,
+						    &err_str, &err_desc),
 			 FALSE);
 	ck_assert_ptr_nonnull(err_str);
 	ck_assert_str_eq(err_str, "URL not allowed");
@@ -2487,7 +2493,8 @@ START_TEST(test_handle_mod_validate_redirect_url_edge_cases) {
 	char *err_str = NULL, *err_desc = NULL;
 
 	/* a NULL URL is rejected up front */
-	ck_assert_int_eq(oidc_validate_redirect_url(r, c, NULL, TRUE, &err_str, &err_desc), FALSE);
+	ck_assert_int_eq(oidc_validate_redirect_url(r, c, NULL, OIDC_REDIRECT_URL_SAME_HOST, &err_str, &err_desc),
+			 FALSE);
 	ck_assert_ptr_nonnull(err_str);
 	ck_assert_str_eq(err_str, "Invalid URL");
 
@@ -2498,14 +2505,17 @@ START_TEST(test_handle_mod_validate_redirect_url_edge_cases) {
 	too_long[0] = '/';
 	err_str = NULL;
 	err_desc = NULL;
-	ck_assert_int_eq(oidc_validate_redirect_url(r, c, too_long, TRUE, &err_str, &err_desc), FALSE);
+	ck_assert_int_eq(oidc_validate_redirect_url(r, c, too_long, OIDC_REDIRECT_URL_SAME_HOST, &err_str, &err_desc),
+			 FALSE);
 	ck_assert_ptr_nonnull(err_str);
 	ck_assert_str_eq(err_str, "URL too long");
 
 	/* a relative URL carrying a CR/LF header-splitting character is rejected */
 	err_str = NULL;
 	err_desc = NULL;
-	ck_assert_int_eq(oidc_validate_redirect_url(r, c, "/path\ninjected", TRUE, &err_str, &err_desc), FALSE);
+	ck_assert_int_eq(
+	    oidc_validate_redirect_url(r, c, "/path\ninjected", OIDC_REDIRECT_URL_SAME_HOST, &err_str, &err_desc),
+	    FALSE);
 	ck_assert_ptr_nonnull(err_str);
 }
 END_TEST
@@ -2859,7 +2869,7 @@ START_TEST(test_handle_check_user_id_existing_session) {
 	oidc_session_set_issuer(r, session, oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(c)));
 	oidc_session_set_session_expires(r, session, apr_time_now() + apr_time_from_sec(3600));
 	oidc_session_set_cookie_domain(r, session, "www.example.com");
-	ck_assert_int_eq(oidc_session_save(r, session, TRUE), TRUE);
+	ck_assert_int_eq(oidc_session_save(r, session, OIDC_SESSION_SAVE_NEW), TRUE);
 
 	/* inject the matching cookie into the next-call's input headers */
 	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "%s=%s", oidc_cfg_dir_cookie_get(r), uuid));
@@ -2891,7 +2901,7 @@ START_TEST(test_handle_check_user_id_existing_session_expired) {
 	oidc_session_set_issuer(r, session, oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(c)));
 	oidc_session_set_session_expires(r, session, apr_time_now() - apr_time_from_sec(60));
 	oidc_session_set_cookie_domain(r, session, "www.example.com");
-	ck_assert_int_eq(oidc_session_save(r, session, TRUE), TRUE);
+	ck_assert_int_eq(oidc_session_save(r, session, OIDC_SESSION_SAVE_NEW), TRUE);
 
 	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "%s=%s", oidc_cfg_dir_cookie_get(r), uuid));
 	apr_table_set(r->headers_in, "Accept", "*/*");
@@ -3370,7 +3380,7 @@ START_TEST(test_handle_logout_backchannel_by_sub) {
 	oidc_session_set_session_expires(r, session, session->expiry);
 	session->sid = oidc_response_make_sid_iss_unique(r, "real-sid", iss);
 	session->sub = oidc_response_make_sid_iss_unique(r, "alice-sub", iss);
-	ck_assert_int_eq(oidc_session_save(r, session, TRUE), TRUE);
+	ck_assert_int_eq(oidc_session_save(r, session, OIDC_SESSION_SAVE_NEW), TRUE);
 
 	/* a back-channel logout token carrying only "sub" must locate the session via the secondary index */
 	char *logout_jwt =

@@ -126,7 +126,8 @@ out:
 /*
  * parse an Apache expression
  */
-char *oidc_util_apr_expr_parse(cmd_parms *cmd, const char *str, oidc_apr_expr_t **expr, apr_byte_t result_is_str) {
+char *oidc_util_apr_expr_parse(cmd_parms *cmd, const char *str, oidc_apr_expr_t **expr,
+			       oidc_apr_expr_result_t result_type) {
 	char *rv = NULL;
 	if ((str == NULL) || (expr == NULL))
 		return NULL;
@@ -137,7 +138,7 @@ char *oidc_util_apr_expr_parse(cmd_parms *cmd, const char *str, oidc_apr_expr_t 
 	 * AP_EXPR_FLAG_DONT_VARY) so the expression was parsed unrestricted even though these directives
 	 * are valid in .htaccess (OR_AUTHCFG) */
 	unsigned int flags = AP_EXPR_FLAG_DONT_VARY | AP_EXPR_FLAG_RESTRICTED;
-	if (result_is_str)
+	if (result_type)
 		flags |= AP_EXPR_FLAG_STRING_RESULT;
 	(*expr)->expr = ap_expr_parse_cmd(cmd, str, flags, &expr_err, NULL);
 	if (expr_err != NULL) {
@@ -150,12 +151,12 @@ char *oidc_util_apr_expr_parse(cmd_parms *cmd, const char *str, oidc_apr_expr_t 
 /*
  * execute an Apache expression
  */
-const char *oidc_util_apr_expr_exec(request_rec *r, const oidc_apr_expr_t *expr, apr_byte_t result_is_str) {
+const char *oidc_util_apr_expr_exec(request_rec *r, const oidc_apr_expr_t *expr, oidc_apr_expr_result_t result_type) {
 	const char *expr_result = NULL;
 	if (expr == NULL)
 		return NULL;
 	const char *expr_err = NULL;
-	if (result_is_str) {
+	if (result_type) {
 		expr_result = ap_expr_str_exec(r, expr->expr, &expr_err);
 	} else {
 		expr_result = ap_expr_exec(r, expr->expr, &expr_err) ? "" : NULL;

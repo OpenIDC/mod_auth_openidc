@@ -75,9 +75,10 @@
 #define OIDC_USERDATA_SESSION "mod_auth_openidc_session"
 #define OIDC_USERDATA_POST_PARAMS_KEY "oidc_userdata_post_params"
 
-#define OIDC_POST_PRESERVE_ESCAPE_NONE 0
-#define OIDC_POST_PRESERVE_ESCAPE_HTML 1
-#define OIDC_POST_PRESERVE_ESCAPE_JAVASCRIPT 2
+typedef enum {
+	OIDC_REDIRECT_URL_ANY_HOST = 0,	 /* allow redirects to other hosts */
+	OIDC_REDIRECT_URL_SAME_HOST = 1, /* restrict redirects to the current host */
+} oidc_redirect_url_scope_t;
 
 /* defines for how long provider metadata will be cached */
 #define OIDC_CACHE_PROVIDER_METADATA_EXPIRY_DEFAULT 86400
@@ -165,7 +166,7 @@ oidc_provider_t *oidc_get_provider_for_issuer(request_rec *r, oidc_cfg_t *c, con
 int oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg_t *c, const char *currentCookieName, int delete_oldest);
 apr_byte_t oidc_is_auth_capable_request(const request_rec *r);
 apr_byte_t oidc_validate_redirect_url(request_rec *r, const oidc_cfg_t *c, const char *redirect_to_url,
-				      apr_byte_t restrict_to_host, char **err_str, char **err_desc);
+				      oidc_redirect_url_scope_t scope, char **err_str, char **err_desc);
 apr_byte_t oidc_set_app_claims(request_rec *r, const oidc_cfg_t *cfg, oidc_json_t *claims);
 
 #endif /* _MOD_AUTH_OPENIDC_H_ */

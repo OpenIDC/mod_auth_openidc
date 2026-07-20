@@ -65,8 +65,14 @@ apr_byte_t oidc_util_regexp_substitute(apr_pool_t *pool, const char *input, cons
 				       char **output, char **error_str);
 apr_byte_t oidc_util_regexp_first_match(apr_pool_t *pool, const char *input, const char *regexp, char **output,
 					char **error_str);
-char *oidc_util_apr_expr_parse(cmd_parms *cmd, const char *str, oidc_apr_expr_t **expr, apr_byte_t result_is_str);
-const char *oidc_util_apr_expr_exec(request_rec *r, const oidc_apr_expr_t *expr, apr_byte_t result_is_str);
+typedef enum {
+	OIDC_APR_EXPR_RESULT_BOOLEAN = 0, /* the expression evaluates to true/false */
+	OIDC_APR_EXPR_RESULT_STRING = 1,  /* the expression produces a string value */
+} oidc_apr_expr_result_t;
+
+char *oidc_util_apr_expr_parse(cmd_parms *cmd, const char *str, oidc_apr_expr_t **expr,
+			       oidc_apr_expr_result_t result_type);
+const char *oidc_util_apr_expr_exec(request_rec *r, const oidc_apr_expr_t *expr, oidc_apr_expr_result_t result_type);
 
 // file.c
 apr_byte_t oidc_util_file_read(request_rec *r, const char *path, apr_pool_t *pool, char **result);
@@ -81,8 +87,15 @@ int oidc_util_html_content_send(request_rec *r);
 int oidc_util_html_send_error(request_rec *r, const char *error, const char *description, int status_code);
 char *oidc_util_html_escape(apr_pool_t *pool, const char *input);
 char *oidc_util_html_javascript_escape(apr_pool_t *pool, const char *input);
+typedef enum {
+	OIDC_POST_PRESERVE_ESCAPE_NONE = 0,
+	OIDC_POST_PRESERVE_ESCAPE_HTML = 1,
+	OIDC_POST_PRESERVE_ESCAPE_JAVASCRIPT = 2,
+} oidc_post_preserve_escape_t;
+
 int oidc_util_html_send_in_template(request_rec *r, const char *filename, char **static_template_content,
-				    const char *arg1, int arg1_esc, const char *arg2, int arg2_esc);
+				    const char *arg1, oidc_post_preserve_escape_t arg1_esc, const char *arg2,
+				    oidc_post_preserve_escape_t arg2_esc);
 
 // jq.c
 const char *oidc_util_jq_filter(request_rec *r, const oidc_json_t *json, const char *filter);

@@ -1003,40 +1003,42 @@ START_TEST(test_cfg_parse_key_record_encodings) {
 
 	/* base64: 16 bytes */
 	ck_assert_ptr_null(oidc_cfg_parse_key_record(r->pool, "b64#k1#AAECAwQFBgcICQoLDA0ODw==", &kid, &key, &key_len,
-						     &use, NULL, TRUE));
+						     &use, NULL, OIDC_KEY_RECORD_TRIPLET));
 	ck_assert_str_eq(kid, "k1");
 	ck_assert_int_eq(key_len, 16);
 
 	/* base64url: 16 bytes, no padding */
 	ck_assert_ptr_null(oidc_cfg_parse_key_record(r->pool, "b64url#k2#AAECAwQFBgcICQoLDA0ODw", &kid, &key, &key_len,
-						     &use, NULL, TRUE));
+						     &use, NULL, OIDC_KEY_RECORD_TRIPLET));
 	ck_assert_str_eq(kid, "k2");
 	ck_assert_int_eq(key_len, 16);
 
 	/* hex: 16 bytes */
 	ck_assert_ptr_null(oidc_cfg_parse_key_record(r->pool, "hex#k3#000102030405060708090a0b0c0d0e0f", &kid, &key,
-						     &key_len, &use, NULL, TRUE));
+						     &key_len, &use, NULL, OIDC_KEY_RECORD_TRIPLET));
 	ck_assert_int_eq(key_len, 16);
 	ck_assert_int_eq((unsigned char)key[15], 0x0f);
 
 	/* plain */
-	ck_assert_ptr_null(
-	    oidc_cfg_parse_key_record(r->pool, "plain#k4#mysecret", &kid, &key, &key_len, &use, NULL, TRUE));
+	ck_assert_ptr_null(oidc_cfg_parse_key_record(r->pool, "plain#k4#mysecret", &kid, &key, &key_len, &use, NULL,
+						     OIDC_KEY_RECORD_TRIPLET));
 	ck_assert_int_eq(key_len, 8);
 
 	/* use prefix */
-	ck_assert_ptr_null(
-	    oidc_cfg_parse_key_record(r->pool, "sig:plain#k5#mysecret", &kid, &key, &key_len, &use, NULL, TRUE));
+	ck_assert_ptr_null(oidc_cfg_parse_key_record(r->pool, "sig:plain#k5#mysecret", &kid, &key, &key_len, &use, NULL,
+						     OIDC_KEY_RECORD_TRIPLET));
 	ck_assert_ptr_nonnull(use);
 	ck_assert_str_eq(use, "sig");
 
 	/* error branches: invalid base64url, odd-length hex, non-hex input, unknown encoding */
+	ck_assert_ptr_nonnull(oidc_cfg_parse_key_record(r->pool, "b64url#k#!!!!", &kid, &key, &key_len, &use, NULL,
+							OIDC_KEY_RECORD_TRIPLET));
 	ck_assert_ptr_nonnull(
-	    oidc_cfg_parse_key_record(r->pool, "b64url#k#!!!!", &kid, &key, &key_len, &use, NULL, TRUE));
-	ck_assert_ptr_nonnull(oidc_cfg_parse_key_record(r->pool, "hex#k#abc", &kid, &key, &key_len, &use, NULL, TRUE));
-	ck_assert_ptr_nonnull(oidc_cfg_parse_key_record(r->pool, "hex#k#zzzz", &kid, &key, &key_len, &use, NULL, TRUE));
-	ck_assert_ptr_nonnull(
-	    oidc_cfg_parse_key_record(r->pool, "bogus#k#value", &kid, &key, &key_len, &use, NULL, TRUE));
+	    oidc_cfg_parse_key_record(r->pool, "hex#k#abc", &kid, &key, &key_len, &use, NULL, OIDC_KEY_RECORD_TRIPLET));
+	ck_assert_ptr_nonnull(oidc_cfg_parse_key_record(r->pool, "hex#k#zzzz", &kid, &key, &key_len, &use, NULL,
+							OIDC_KEY_RECORD_TRIPLET));
+	ck_assert_ptr_nonnull(oidc_cfg_parse_key_record(r->pool, "bogus#k#value", &kid, &key, &key_len, &use, NULL,
+							OIDC_KEY_RECORD_TRIPLET));
 }
 END_TEST
 

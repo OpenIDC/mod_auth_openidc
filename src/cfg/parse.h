@@ -45,6 +45,11 @@
 
 #include "cfg/cfg.h"
 
+typedef enum {
+	OIDC_KEY_RECORD_PAIR = 0,    /* [<use>#][<kid>#]<key> */
+	OIDC_KEY_RECORD_TRIPLET = 1, /* [<use>#][[<alg>[+<alg>]]#][<kid>#]<key> */
+} oidc_key_record_format_t;
+
 typedef struct oidc_cfg_option_t {
 	int val;
 	const char *str;
@@ -74,7 +79,7 @@ const char *oidc_cfg_parse_dirname(apr_pool_t *pool, const char *arg, char **val
 const char *oidc_cfg_parse_filename(apr_pool_t *pool, const char *arg, char **value);
 const char *oidc_cfg_parse_relative_or_absolute_url(apr_pool_t *pool, const char *arg, char **value);
 const char *oidc_cfg_parse_key_record(apr_pool_t *pool, const char *tuple, char **kid, char **key, int *key_len,
-				      char **use, char **alg, apr_byte_t triplet);
+				      char **use, char **alg, oidc_key_record_format_t format);
 const char *oidc_cfg_parse_action_on_error_refresh_as(apr_pool_t *pool, const char *arg,
 						      oidc_on_error_action_t *action);
 const char *oidc_cfg_parse_passphrase(apr_pool_t *pool, const char *arg, char **passphrase);

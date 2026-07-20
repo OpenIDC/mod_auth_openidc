@@ -430,7 +430,8 @@ int oidc_refresh_token_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *se
 	}
 
 	/* do input validation on the return to parameter value */
-	if (oidc_validate_redirect_url(r, c, return_to, TRUE, &error_str, &error_description) == FALSE) {
+	if (oidc_validate_redirect_url(r, c, return_to, OIDC_REDIRECT_URL_SAME_HOST, &error_str, &error_description) ==
+	    FALSE) {
 		oidc_error(r, "return_to URL validation failed: %s: %s", error_str, error_description);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
@@ -471,7 +472,7 @@ int oidc_refresh_token_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *se
 	/* pass the tokens to the application, possibly updating the expiry */
 	oidc_session_pass_tokens(r, c, session, TRUE, &needs_save);
 
-	if (oidc_session_save(r, session, FALSE) == FALSE) {
+	if (oidc_session_save(r, session, OIDC_SESSION_SAVE_UPDATE) == FALSE) {
 		error_code = "error saving session";
 		goto end;
 	}

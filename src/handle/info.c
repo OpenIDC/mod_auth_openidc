@@ -260,7 +260,7 @@ int oidc_info_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, ap
 	oidc_session_pass_tokens(r, c, session, b_extend_session, &needs_save);
 
 	/* check if something was updated in the session and we need to save it again */
-	if (b_extend_session && needs_save && (oidc_session_save(r, session, FALSE) == FALSE)) {
+	if (b_extend_session && needs_save && (oidc_session_save(r, session, OIDC_SESSION_SAVE_UPDATE) == FALSE)) {
 		oidc_warn(r, "error saving session");
 		rc = HTTP_INTERNAL_SERVER_ERROR;
 		goto end;

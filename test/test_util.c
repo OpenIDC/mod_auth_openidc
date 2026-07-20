@@ -282,7 +282,7 @@ START_TEST(test_util_expr_parse) {
 	// NB: stub only
 
 	expr = NULL;
-	rv = oidc_util_apr_expr_parse(cmd, NULL, &expr, FALSE);
+	rv = oidc_util_apr_expr_parse(cmd, NULL, &expr, OIDC_APR_EXPR_RESULT_BOOLEAN);
 	ck_assert_ptr_null(rv);
 	ck_assert_ptr_null(expr);
 
@@ -292,7 +292,7 @@ START_TEST(test_util_expr_parse) {
 	//	ck_assert_ptr_null(expr);
 
 	expr = NULL;
-	rv = oidc_util_apr_expr_parse(cmd, "", &expr, TRUE);
+	rv = oidc_util_apr_expr_parse(cmd, "", &expr, OIDC_APR_EXPR_RESULT_STRING);
 	ck_assert_ptr_null(rv);
 	ck_assert_ptr_nonnull(expr);
 }
@@ -307,21 +307,21 @@ START_TEST(test_util_expr_exec) {
 
 	// NB: stub only
 	expr = NULL;
-	rv = oidc_util_apr_expr_parse(cmd, "true", &expr, FALSE);
+	rv = oidc_util_apr_expr_parse(cmd, "true", &expr, OIDC_APR_EXPR_RESULT_BOOLEAN);
 	ck_assert_ptr_null(rv);
 	ck_assert_ptr_nonnull(expr);
 
 	// NB: stub only
-	result = oidc_util_apr_expr_exec(r, expr, TRUE);
+	result = oidc_util_apr_expr_exec(r, expr, OIDC_APR_EXPR_RESULT_STRING);
 	ck_assert_ptr_nonnull(result);
 	ck_assert_str_eq(result, "stub.c");
 	// NB: stub only
-	result = oidc_util_apr_expr_exec(r, expr, FALSE);
+	result = oidc_util_apr_expr_exec(r, expr, OIDC_APR_EXPR_RESULT_BOOLEAN);
 	ck_assert_ptr_null(result);
 
 	// NB: stub only
 	expr = NULL;
-	rv = oidc_util_apr_expr_parse(cmd, "#", &expr, FALSE);
+	rv = oidc_util_apr_expr_parse(cmd, "#", &expr, OIDC_APR_EXPR_RESULT_BOOLEAN);
 	ck_assert_ptr_nonnull(rv);
 	ck_assert_ptr_null(expr);
 }

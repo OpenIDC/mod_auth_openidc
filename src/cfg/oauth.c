@@ -309,7 +309,8 @@ static const char *oidc_cmd_oauth_shared_keys_add(cmd_parms *cmd, const char *ar
 	char *secret = NULL;
 	int key_len = 0;
 
-	const char *rv = oidc_cfg_parse_key_record(cmd->pool, arg, &kid, &secret, &key_len, &use, NULL, TRUE);
+	const char *rv =
+	    oidc_cfg_parse_key_record(cmd->pool, arg, &kid, &secret, &key_len, &use, NULL, OIDC_KEY_RECORD_TRIPLET);
 	if (rv != NULL)
 		return rv;
 

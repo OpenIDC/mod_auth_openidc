@@ -347,7 +347,7 @@ apr_byte_t oidc_response_save_in_session(request_rec *r, const oidc_cfg_t *c, oi
 	oidc_session_set_session_new(r, session, 1);
 
 	/* store the session */
-	return oidc_session_save(r, session, TRUE);
+	return oidc_session_save(r, session, OIDC_SESSION_SAVE_NEW);
 }
 
 /*

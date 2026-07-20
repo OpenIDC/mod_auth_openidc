@@ -61,7 +61,12 @@ typedef struct {
 #define OIDC_SESSION_TYPE_CLIENT_COOKIE 1
 
 apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **z);
-apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z, apr_byte_t first_time);
+typedef enum {
+	OIDC_SESSION_SAVE_UPDATE = 0, /* update an existing session */
+	OIDC_SESSION_SAVE_NEW = 1,    /* save a newly created session for the first time */
+} oidc_session_save_t;
+
+apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z, oidc_session_save_t first_time);
 apr_byte_t oidc_session_kill(request_rec *r, oidc_session_t *z);
 apr_byte_t oidc_session_free(request_rec *r, oidc_session_t *z);
 apr_byte_t oidc_session_extract(request_rec *r, oidc_session_t *z);
