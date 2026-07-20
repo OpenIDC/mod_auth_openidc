@@ -69,6 +69,7 @@ libauth_openidc_la_SOURCES = \
 	proto/profile.c \
 	proto/proto.c \
 	proto/request.c \
+	proto/request_object.c \
 	proto/response.c \
 	proto/state.c \
 	proto/token.c \
