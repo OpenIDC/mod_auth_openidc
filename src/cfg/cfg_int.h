@@ -71,6 +71,59 @@ static inline apr_interval_time_t _oidc_cfg_merge_timeout(apr_interval_time_t ad
 	return add != OIDC_CONFIG_POS_TIMEOUT_UNSET ? add : base;
 }
 
+/*
+ * single source of truth for the simple members of oidc_cfg_cache_t: the struct declaration and
+ * the create/merge functions in cfg/cache.c are generated from these lists (see the same pattern
+ * in cfg/oauth.c). Preprocessor conditionals cannot appear inside a macro body, so each
+ * conditionally-compiled backend contributes its members through its own guarded sub-macro -
+ * which is also how a derived branch adds backend members of its own.
+ */
+#ifdef USE_MEMCACHE
+#define OIDC_CACHE_CFG_MEMCACHE_MEMBERS(PTR, INT, TIMEOUT)                                                             \
+	/* cache_type= memcache: list of memcache host/port servers to use */                                          \
+	PTR(char *, memcache_servers)                                                                                  \
+	/* cache_type= memcache: minimum number of connections to each memcache server per process*/                   \
+	INT(int, memcache_min)                                                                                         \
+	/* cache_type= memcache: soft maximum number of connections to each memcache server per process */             \
+	INT(int, memcache_smax)                                                                                        \
+	/* cache_type= memcache: hard maximum number of connections to each memcache server per process */             \
+	INT(int, memcache_hmax)                                                                                        \
+	/* cache_type= memcache: maximum time in microseconds a connection to a memcache server can be idle before     \
+	 * being closed */                                                                                                             \
+	TIMEOUT(memcache_ttl)
+#else
+#define OIDC_CACHE_CFG_MEMCACHE_MEMBERS(PTR, INT, TIMEOUT)
+#endif
+
+#ifdef USE_LIBHIREDIS
+#define OIDC_CACHE_CFG_REDIS_MEMBERS(PTR, INT, TIMEOUT)                                                                \
+	/* cache_type= redis: Redis host/port server to use */                                                         \
+	PTR(char *, redis_server)                                                                                      \
+	PTR(char *, redis_username)                                                                                    \
+	PTR(char *, redis_password)                                                                                    \
+	INT(int, redis_database)                                                                                       \
+	INT(int, redis_connect_timeout)                                                                                \
+	INT(int, redis_keepalive)                                                                                      \
+	INT(int, redis_timeout)
+#else
+#define OIDC_CACHE_CFG_REDIS_MEMBERS(PTR, INT, TIMEOUT)
+#endif
+
+#define OIDC_CACHE_CFG_SIMPLE_MEMBERS(PTR, INT, TIMEOUT)                                                               \
+	/* encrypt the stored values */                                                                                \
+	INT(int, encrypt)                                                                                              \
+	/* shm: size of the segment (max number of cached entries) and max size in bytes of one entry */               \
+	INT(int, shm_size_max)                                                                                         \
+	INT(int, shm_entry_size_max)                                                                                   \
+	/* file: directory holding the cache files (OS default like "/tmp" if unset) + clean interval */               \
+	PTR(char *, file_dir)                                                                                          \
+	INT(int, file_clean_interval)                                                                                  \
+	OIDC_CACHE_CFG_MEMCACHE_MEMBERS(PTR, INT, TIMEOUT)                                                             \
+	OIDC_CACHE_CFG_REDIS_MEMBERS(PTR, INT, TIMEOUT)
+
+#define OIDC_CACHE_M_DECL(type, name) type name;
+#define OIDC_CACHE_M_DECL_TIMEOUT(name) apr_interval_time_t name;
+
 struct oidc_cfg_cache_t {
 
 	/* pointer to cache functions */
@@ -79,80 +132,69 @@ struct oidc_cfg_cache_t {
 	/* implementation specific config context */
 	void *cfg;
 
-	/* encrypt the stored values */
-	int encrypt;
-
-	/*
-	 * file
-	 */
-
-	/* cache_type = shm: size of the shared memory segment (cq. max number of cached entries) */
-	int shm_size_max;
-	/* cache_type = shm: maximum size in bytes of a cache entry */
-	int shm_entry_size_max;
-
-	/*
-	 * shm
-	 */
-
-	/* cache_type = file: directory that holds the cache files (if not set, we'll try and use an OS defined one like
-	 * "/tmp" */
-	char *file_dir;
-	/* cache_type = file: clean interval */
-	int file_clean_interval;
-
-	/*
-	 * memcache
-	 */
-
-#ifdef USE_MEMCACHE
-	/* cache_type= memcache: list of memcache host/port servers to use */
-	char *memcache_servers;
-	/* cache_type= memcache: minimum number of connections to each memcache server per process*/
-	int memcache_min;
-	/* cache_type= memcache: soft maximum number of connections to each memcache server per process */
-	int memcache_smax;
-	/* cache_type= memcache: hard maximum number of connections to each memcache server per process */
-	int memcache_hmax;
-	/* cache_type= memcache: maximum time in microseconds a connection to a memcache server can be idle before being
-	 * closed */
-	apr_interval_time_t memcache_ttl;
-#endif
-
-	/*
-	 * redis
-	 */
-
-#ifdef USE_LIBHIREDIS
-	/* cache_type= redis: Redis host/port server to use */
-	char *redis_server;
-	char *redis_username;
-	char *redis_password;
-	int redis_database;
-	int redis_connect_timeout;
-	int redis_keepalive;
-	int redis_timeout;
-#endif
+	OIDC_CACHE_CFG_SIMPLE_MEMBERS(OIDC_CACHE_M_DECL, OIDC_CACHE_M_DECL, OIDC_CACHE_M_DECL_TIMEOUT)
 };
+
+/*
+ * single source of truth for the simple pointer-merged and int-merged members of oidc_cfg_t: the
+ * struct declaration below and oidc_cfg_server_create/oidc_cfg_server_merge in cfg/cfg.c are
+ * generated from this list (see the same pattern in cfg/oauth.c); members with special create or
+ * merge semantics remain hand-written in all three places
+ */
+#define OIDC_SVR_CFG_SIMPLE_MEMBERS(PTR, INT)                                                                          \
+	/* the redirect URI as configured with the OpenID Connect OP's that we talk to */                              \
+	PTR(char *, redirect_uri)                                                                                      \
+	/* (optional) default URL for 3rd-party initiated SSO */                                                       \
+	PTR(char *, default_sso_url)                                                                                   \
+	/* (optional) default URL to go to after logout */                                                             \
+	PTR(char *, default_slo_url)                                                                                   \
+	/* Javascript template to preserve POST data */                                                                \
+	PTR(char *, post_preserve_template)                                                                            \
+	/* Javascript template to restore POST data */                                                                 \
+	PTR(char *, post_restore_template)                                                                             \
+	/* type of session management/storage */                                                                       \
+	INT(session_type)                                                                                              \
+	INT(session_cache_fallback_to_cookie)                                                                          \
+	/* session cookie or persistent cookie */                                                                      \
+	INT(persistent_session_cookie)                                                                                 \
+	/* store the id_token in the session */                                                                        \
+	INT(store_id_token)                                                                                            \
+	/* session cookie chunk size */                                                                                \
+	INT(session_cookie_chunk_size)                                                                                 \
+	PTR(char *, cookie_domain)                                                                                     \
+	INT(cookie_http_only)                                                                                          \
+	/* samesite cookie settings */                                                                                 \
+	INT(cookie_same_site_session)                                                                                  \
+	INT(cookie_same_site_state)                                                                                    \
+	INT(cookie_same_site_discovery_csrf)                                                                           \
+	INT(state_timeout)                                                                                             \
+	INT(max_number_of_state_cookies)                                                                               \
+	INT(delete_oldest_state_cookies)                                                                               \
+	INT(state_input_headers)                                                                                       \
+	INT(session_inactivity_timeout)                                                                                \
+	INT(provider_metadata_refresh_interval)                                                                        \
+	PTR(char *, claim_delimiter)                                                                                   \
+	PTR(char *, claim_prefix)                                                                                      \
+	PTR(char *, ca_bundle_path)                                                                                    \
+	PTR(char *, logout_x_frame_options)                                                                            \
+	INT(x_forwarded_headers)                                                                                       \
+	INT(action_on_userinfo_error)                                                                                  \
+	INT(trace_parent)                                                                                              \
+	PTR(char *, metrics_path)                                                                                      \
+	INT(dpop_api_enabled)                                                                                          \
+	/* directory that holds the provider & client metadata files */                                                \
+	PTR(char *, metadata_dir)
+
+#define OIDC_SVR_M_DECL_PTR(type, name) type name;
+#define OIDC_SVR_M_DECL_INT(name) int name;
 
 struct oidc_cfg_t {
 
 	server_rec *svr;
 
-	/* the redirect URI as configured with the OpenID Connect OP's that we talk to */
-	char *redirect_uri;
+	OIDC_SVR_CFG_SIMPLE_MEMBERS(OIDC_SVR_M_DECL_PTR, OIDC_SVR_M_DECL_INT)
 	/* secret key(s) used for encryption */
 	oidc_crypto_passphrase_t crypto_passphrase;
-
-	/* (optional) default URL for 3rd-party initiated SSO */
-	char *default_sso_url;
-	/* (optional) default URL to go to after logout */
-	char *default_slo_url;
-
-	/* Javascript template to preserve POST data */
-	char *post_preserve_template;
-	/* Javascript template to restore POST data */
-	char *post_restore_template;
 
 	/* pointer to the cache implementation */
 	struct oidc_cfg_cache_t cache;
@@ -162,37 +204,10 @@ struct oidc_cfg_t {
 	/* a pointer to the oauth server settings */
 	oidc_oauth_t *oauth;
 
-	/* type of session management/storage */
-	int session_type;
-	int session_cache_fallback_to_cookie;
-
-	/* session cookie or persistent cookie */
-	int persistent_session_cookie;
-	/* store the id_token in the session */
-	int store_id_token;
-	/* session cookie chunk size */
-	int session_cookie_chunk_size;
-	char *cookie_domain;
-	int cookie_http_only;
-	/* samesite cookie settings */
-	int cookie_same_site_session;
-	int cookie_same_site_state;
-	int cookie_same_site_discovery_csrf;
-
-	int state_timeout;
-	int max_number_of_state_cookies;
-	int delete_oldest_state_cookies;
-	int state_input_headers;
-
-	int session_inactivity_timeout;
-	int provider_metadata_refresh_interval;
-
 	oidc_http_timeout_t http_timeout_long;
 	oidc_http_timeout_t http_timeout_short;
 	oidc_http_outgoing_proxy_t outgoing_proxy;
 
-	char *claim_delimiter;
-	char *claim_prefix;
 	oidc_remote_user_claim_t remote_user_claim;
 
 	/* public keys in JWK format, used by parters for encrypting JWTs sent to us */
@@ -207,18 +222,8 @@ struct oidc_cfg_t {
 	apr_hash_t *info_hook_data;
 	apr_hash_t *redirect_urls_allowed;
 	apr_hash_t *discover_issuers_allowed;
-	char *ca_bundle_path;
-	char *logout_x_frame_options;
-	int x_forwarded_headers;
-	int action_on_userinfo_error;
-	int trace_parent;
 
 	apr_hash_t *metrics_hook_data;
-	char *metrics_path;
-	int dpop_api_enabled;
-
-	/* directory that holds the provider & client metadata files */
-	char *metadata_dir;
 
 	/* indicates whether this is a derived config, merged from a base one */
 	unsigned int merged;

@@ -45,60 +45,77 @@
 #include "cfg/parse.h"
 #include "proto/proto.h"
 
-struct oidc_provider_t {
-	char *metadata_url;
-	char *issuer;
-	char *authorization_endpoint_url;
-	char *token_endpoint_url;
-	char *token_endpoint_auth;
-	char *token_endpoint_auth_alg;
-	char *token_endpoint_params;
-	char *userinfo_endpoint_url;
-	char *revocation_endpoint_url;
-	char *registration_endpoint_url;
-	char *pushed_authorization_request_endpoint_url;
-	char *check_session_iframe;
-	char *end_session_endpoint;
-	oidc_jwks_uri_t jwks_uri;
-	apr_array_header_t *verify_public_keys;
-	char *client_id;
-	char *client_secret;
-	char *token_endpoint_tls_client_key;
-	char *token_endpoint_tls_client_key_pwd;
-	char *token_endpoint_tls_client_cert;
-	int backchannel_logout_supported;
+/*
+ * single source of truth for the simple pointer-merged and int-merged members of oidc_provider_t:
+ * the struct declaration, oidc_cfg_provider_init and oidc_cfg_provider_merge are generated from
+ * this list (see the same pattern in cfg/oauth.c); INT() carries the member type since several are
+ * enums that initialize to OIDC_CONFIG_POS_INT_UNSET and merge on that sentinel. Members with
+ * grouped or deep-copy semantics are listed separately below and handled by hand in all three
+ * places.
+ */
+#define OIDC_PROVIDER_CFG_SIMPLE_MEMBERS(PTR, INT)                                                                     \
+	PTR(char *, metadata_url)                                                                                      \
+	PTR(char *, issuer)                                                                                            \
+	PTR(char *, authorization_endpoint_url)                                                                        \
+	PTR(char *, token_endpoint_url)                                                                                \
+	PTR(char *, token_endpoint_auth)                                                                               \
+	PTR(char *, token_endpoint_auth_alg)                                                                           \
+	PTR(char *, token_endpoint_params)                                                                             \
+	PTR(char *, userinfo_endpoint_url)                                                                             \
+	PTR(char *, revocation_endpoint_url)                                                                           \
+	PTR(char *, registration_endpoint_url)                                                                         \
+	PTR(char *, pushed_authorization_request_endpoint_url)                                                         \
+	PTR(char *, check_session_iframe)                                                                              \
+	PTR(char *, end_session_endpoint)                                                                              \
+	PTR(char *, client_id)                                                                                         \
+	PTR(char *, client_secret)                                                                                     \
+	PTR(char *, token_endpoint_tls_client_key)                                                                     \
+	PTR(char *, token_endpoint_tls_client_key_pwd)                                                                 \
+	PTR(char *, token_endpoint_tls_client_cert)                                                                    \
+	PTR(char *, client_name)                                                                                       \
+	PTR(char *, client_contact)                                                                                    \
+	PTR(char *, registration_token)                                                                                \
+	PTR(char *, registration_endpoint_json)                                                                        \
+	PTR(char *, scope)                                                                                             \
+	PTR(char *, response_type)                                                                                     \
+	PTR(char *, response_mode)                                                                                     \
+	PTR(char *, auth_request_params)                                                                               \
+	PTR(char *, logout_request_params)                                                                             \
+	PTR(char *, client_jwks_uri)                                                                                   \
+	PTR(char *, id_token_signed_response_alg)                                                                      \
+	PTR(char *, id_token_encrypted_response_alg)                                                                   \
+	PTR(char *, id_token_encrypted_response_enc)                                                                   \
+	PTR(char *, userinfo_signed_response_alg)                                                                      \
+	PTR(char *, userinfo_encrypted_response_alg)                                                                   \
+	PTR(char *, userinfo_encrypted_response_enc)                                                                   \
+	PTR(char *, request_object)                                                                                    \
+	PTR(oidc_proto_pkce_t *, pkce)                                                                                 \
+	PTR(apr_array_header_t *, id_token_aud_values)                                                                 \
+	INT(int, backchannel_logout_supported)                                                                         \
+	INT(int, ssl_validate_server)                                                                                  \
+	INT(int, validate_issuer)                                                                                      \
+	INT(int, idtoken_iat_slack)                                                                                    \
+	INT(int, session_max_duration)                                                                                 \
+	INT(oidc_dpop_mode_t, dpop_mode)                                                                               \
+	INT(int, userinfo_refresh_interval)                                                                            \
+	INT(oidc_userinfo_token_method_t, userinfo_token_method)                                                       \
+	INT(oidc_auth_request_method_t, auth_request_method)                                                           \
+	INT(oidc_profile_t, profile)                                                                                   \
+	INT(int, response_require_iss)
 
-	// the next ones function as global default settings too
-	int ssl_validate_server;
-	int validate_issuer;
-	char *client_name;
-	char *client_contact;
-	char *registration_token;
-	char *registration_endpoint_json;
-	char *scope;
-	char *response_type;
-	char *response_mode;
-	int idtoken_iat_slack;
-	char *auth_request_params;
-	char *logout_request_params;
-	int session_max_duration;
-	oidc_proto_pkce_t *pkce;
-	oidc_dpop_mode_t dpop_mode;
-	int userinfo_refresh_interval;
+#define OIDC_PROVIDER_M_DECL(type, name) type name;
+#define OIDC_PROVIDER_M_INIT_PTR(type, name) provider->name = NULL;
+#define OIDC_PROVIDER_M_INIT_INT(type, name) provider->name = OIDC_CONFIG_POS_INT_UNSET;
+#define OIDC_PROVIDER_M_MERGE_PTR(type, name) dst->name = _oidc_cfg_merge_ptr(add->name, base->name);
+#define OIDC_PROVIDER_M_MERGE_INT(type, name) dst->name = _oidc_cfg_merge_pos_int(add->name, base->name);
+
+struct oidc_provider_t {
+	OIDC_PROVIDER_CFG_SIMPLE_MEMBERS(OIDC_PROVIDER_M_DECL, OIDC_PROVIDER_M_DECL)
+	/* grouped: uri/signed_uri/refresh_interval merge individually, jwk_list is deep-copied */
+	oidc_jwks_uri_t jwks_uri;
+	/* deep-copied on merge */
+	apr_array_header_t *verify_public_keys;
 	apr_array_header_t *client_keys;
-	char *client_jwks_uri;
-	char *id_token_signed_response_alg;
-	char *id_token_encrypted_response_alg;
-	char *id_token_encrypted_response_enc;
-	apr_array_header_t *id_token_aud_values;
-	char *userinfo_signed_response_alg;
-	char *userinfo_encrypted_response_alg;
-	char *userinfo_encrypted_response_enc;
-	oidc_userinfo_token_method_t userinfo_token_method;
-	char *request_object;
-	oidc_auth_request_method_t auth_request_method;
-	oidc_profile_t profile;
-	int response_require_iss;
 };
 
 /*
@@ -722,80 +739,18 @@ OIDC_PROVIDER_MEMBER_FUNCS_STR_INT(profile, oidc_cfg_provider_parse_profile, oid
  */
 
 static void oidc_cfg_provider_init(oidc_provider_t *provider) {
-	provider->metadata_url = NULL;
-	provider->issuer = NULL;
-	provider->authorization_endpoint_url = NULL;
-	provider->token_endpoint_url = NULL;
-	provider->token_endpoint_auth = NULL;
-	provider->token_endpoint_auth_alg = NULL;
-	provider->token_endpoint_params = NULL;
-	provider->userinfo_endpoint_url = NULL;
-	provider->revocation_endpoint_url = NULL;
-	provider->client_id = NULL;
-	provider->client_secret = NULL;
-	provider->token_endpoint_tls_client_cert = NULL;
-	provider->token_endpoint_tls_client_key = NULL;
-	provider->token_endpoint_tls_client_key_pwd = NULL;
-	provider->registration_endpoint_url = NULL;
-	provider->registration_endpoint_json = NULL;
-	provider->pushed_authorization_request_endpoint_url = NULL;
-	provider->check_session_iframe = NULL;
-	provider->end_session_endpoint = NULL;
+	OIDC_PROVIDER_CFG_SIMPLE_MEMBERS(OIDC_PROVIDER_M_INIT_PTR, OIDC_PROVIDER_M_INIT_INT)
 	provider->jwks_uri.uri = NULL;
 	provider->jwks_uri.refresh_interval = OIDC_CONFIG_POS_INT_UNSET;
 	provider->jwks_uri.signed_uri = NULL;
 	provider->jwks_uri.jwk_list = NULL;
 	provider->verify_public_keys = NULL;
-	provider->backchannel_logout_supported = OIDC_CONFIG_POS_INT_UNSET;
-
-	provider->ssl_validate_server = OIDC_CONFIG_POS_INT_UNSET;
-	provider->validate_issuer = OIDC_CONFIG_POS_INT_UNSET;
-	provider->client_name = NULL;
-	provider->client_contact = NULL;
-	provider->registration_token = NULL;
-	provider->scope = NULL;
-	provider->response_type = NULL;
-	provider->response_mode = NULL;
-	provider->idtoken_iat_slack = OIDC_CONFIG_POS_INT_UNSET;
-	provider->session_max_duration = OIDC_CONFIG_POS_INT_UNSET;
-	provider->auth_request_params = NULL;
-	provider->logout_request_params = NULL;
-	provider->pkce = NULL;
-	provider->dpop_mode = OIDC_CONFIG_POS_INT_UNSET;
-
-	provider->client_jwks_uri = NULL;
 	provider->client_keys = NULL;
-
-	provider->id_token_signed_response_alg = NULL;
-	provider->id_token_encrypted_response_alg = NULL;
-	provider->id_token_encrypted_response_enc = NULL;
-	provider->userinfo_signed_response_alg = NULL;
-	provider->userinfo_encrypted_response_alg = NULL;
-	provider->userinfo_encrypted_response_enc = NULL;
-	provider->userinfo_token_method = OIDC_CONFIG_POS_INT_UNSET;
-	provider->auth_request_method = OIDC_CONFIG_POS_INT_UNSET;
-
-	provider->userinfo_refresh_interval = OIDC_CONFIG_POS_INT_UNSET;
-	provider->request_object = NULL;
-
-	provider->response_require_iss = OIDC_CONFIG_POS_INT_UNSET;
-
-	provider->id_token_aud_values = NULL;
-	provider->profile = OIDC_CONFIG_POS_INT_UNSET;
 }
 
 void oidc_cfg_provider_merge(apr_pool_t *pool, oidc_provider_t *dst, const oidc_provider_t *base,
 			     const oidc_provider_t *add) {
-	dst->metadata_url = _oidc_cfg_merge_ptr(add->metadata_url, base->metadata_url);
-	dst->issuer = _oidc_cfg_merge_ptr(add->issuer, base->issuer);
-	dst->authorization_endpoint_url =
-	    _oidc_cfg_merge_ptr(add->authorization_endpoint_url, base->authorization_endpoint_url);
-	dst->token_endpoint_url = _oidc_cfg_merge_ptr(add->token_endpoint_url, base->token_endpoint_url);
-	dst->token_endpoint_auth = _oidc_cfg_merge_ptr(add->token_endpoint_auth, base->token_endpoint_auth);
-	dst->token_endpoint_auth_alg = _oidc_cfg_merge_ptr(add->token_endpoint_auth_alg, base->token_endpoint_auth_alg);
-	dst->token_endpoint_params = _oidc_cfg_merge_ptr(add->token_endpoint_params, base->token_endpoint_params);
-	dst->userinfo_endpoint_url = _oidc_cfg_merge_ptr(add->userinfo_endpoint_url, base->userinfo_endpoint_url);
-	dst->revocation_endpoint_url = _oidc_cfg_merge_ptr(add->revocation_endpoint_url, base->revocation_endpoint_url);
+	OIDC_PROVIDER_CFG_SIMPLE_MEMBERS(OIDC_PROVIDER_M_MERGE_PTR, OIDC_PROVIDER_M_MERGE_INT)
 	dst->jwks_uri.uri = _oidc_cfg_merge_ptr(add->jwks_uri.uri, base->jwks_uri.uri);
 	dst->jwks_uri.refresh_interval =
 	    _oidc_cfg_merge_pos_int(add->jwks_uri.refresh_interval, base->jwks_uri.refresh_interval);
@@ -804,69 +759,7 @@ void oidc_cfg_provider_merge(apr_pool_t *pool, oidc_provider_t *dst, const oidc_
 	    oidc_jwk_list_copy(pool, _oidc_cfg_merge_ptr(add->jwks_uri.jwk_list, base->jwks_uri.jwk_list));
 	dst->verify_public_keys =
 	    oidc_jwk_list_copy(pool, _oidc_cfg_merge_ptr(add->verify_public_keys, base->verify_public_keys));
-	dst->client_id = _oidc_cfg_merge_ptr(add->client_id, base->client_id);
-	dst->client_secret = _oidc_cfg_merge_ptr(add->client_secret, base->client_secret);
-
-	dst->token_endpoint_tls_client_key =
-	    _oidc_cfg_merge_ptr(add->token_endpoint_tls_client_key, base->token_endpoint_tls_client_key);
-	dst->token_endpoint_tls_client_key_pwd =
-	    _oidc_cfg_merge_ptr(add->token_endpoint_tls_client_key_pwd, base->token_endpoint_tls_client_key_pwd);
-	dst->token_endpoint_tls_client_cert =
-	    _oidc_cfg_merge_ptr(add->token_endpoint_tls_client_cert, base->token_endpoint_tls_client_cert);
-
-	dst->registration_endpoint_url =
-	    _oidc_cfg_merge_ptr(add->registration_endpoint_url, base->registration_endpoint_url);
-	dst->registration_endpoint_json =
-	    _oidc_cfg_merge_ptr(add->registration_endpoint_json, base->registration_endpoint_json);
-	dst->pushed_authorization_request_endpoint_url = _oidc_cfg_merge_ptr(
-	    add->pushed_authorization_request_endpoint_url, base->pushed_authorization_request_endpoint_url);
-
-	dst->check_session_iframe = _oidc_cfg_merge_ptr(add->check_session_iframe, base->check_session_iframe);
-	dst->end_session_endpoint = _oidc_cfg_merge_ptr(add->end_session_endpoint, base->end_session_endpoint);
-	dst->backchannel_logout_supported =
-	    _oidc_cfg_merge_pos_int(add->backchannel_logout_supported, base->backchannel_logout_supported);
-
-	dst->ssl_validate_server = _oidc_cfg_merge_pos_int(add->ssl_validate_server, base->ssl_validate_server);
-	dst->validate_issuer = _oidc_cfg_merge_pos_int(add->validate_issuer, base->validate_issuer);
-	dst->client_name = _oidc_cfg_merge_ptr(add->client_name, base->client_name);
-	dst->client_contact = _oidc_cfg_merge_ptr(add->client_contact, base->client_contact);
-	dst->registration_token = _oidc_cfg_merge_ptr(add->registration_token, base->registration_token);
-	dst->scope = _oidc_cfg_merge_ptr(add->scope, base->scope);
-	dst->response_type = _oidc_cfg_merge_ptr(add->response_type, base->response_type);
-	dst->response_mode = _oidc_cfg_merge_ptr(add->response_mode, base->response_mode);
-	dst->idtoken_iat_slack = _oidc_cfg_merge_pos_int(add->idtoken_iat_slack, base->idtoken_iat_slack);
-	dst->session_max_duration = _oidc_cfg_merge_pos_int(add->session_max_duration, base->session_max_duration);
-	dst->auth_request_params = _oidc_cfg_merge_ptr(add->auth_request_params, base->auth_request_params);
-	dst->logout_request_params = _oidc_cfg_merge_ptr(add->logout_request_params, base->logout_request_params);
-	dst->pkce = _oidc_cfg_merge_ptr(add->pkce, base->pkce);
-	dst->dpop_mode = _oidc_cfg_merge_pos_int(add->dpop_mode, base->dpop_mode);
-
-	dst->client_jwks_uri = _oidc_cfg_merge_ptr(add->client_jwks_uri, base->client_jwks_uri);
 	dst->client_keys = oidc_jwk_list_copy(pool, _oidc_cfg_merge_ptr(add->client_keys, base->client_keys));
-
-	dst->id_token_signed_response_alg =
-	    _oidc_cfg_merge_ptr(add->id_token_signed_response_alg, base->id_token_signed_response_alg);
-	dst->id_token_encrypted_response_alg =
-	    _oidc_cfg_merge_ptr(add->id_token_encrypted_response_alg, base->id_token_encrypted_response_alg);
-	dst->id_token_encrypted_response_enc =
-	    _oidc_cfg_merge_ptr(add->id_token_encrypted_response_enc, base->id_token_encrypted_response_enc);
-	dst->userinfo_signed_response_alg =
-	    _oidc_cfg_merge_ptr(add->userinfo_signed_response_alg, base->userinfo_signed_response_alg);
-	dst->userinfo_encrypted_response_alg =
-	    _oidc_cfg_merge_ptr(add->userinfo_encrypted_response_alg, base->userinfo_encrypted_response_alg);
-	dst->userinfo_encrypted_response_enc =
-	    _oidc_cfg_merge_ptr(add->userinfo_encrypted_response_enc, base->userinfo_encrypted_response_enc);
-	dst->userinfo_token_method = _oidc_cfg_merge_pos_int(add->userinfo_token_method, base->userinfo_token_method);
-	dst->auth_request_method = _oidc_cfg_merge_pos_int(add->auth_request_method, base->auth_request_method);
-
-	dst->userinfo_refresh_interval =
-	    _oidc_cfg_merge_pos_int(add->userinfo_refresh_interval, base->userinfo_refresh_interval);
-	dst->request_object = _oidc_cfg_merge_ptr(add->request_object, base->request_object);
-
-	dst->response_require_iss = _oidc_cfg_merge_pos_int(add->response_require_iss, base->response_require_iss);
-
-	dst->id_token_aud_values = _oidc_cfg_merge_ptr(add->id_token_aud_values, base->id_token_aud_values);
-	dst->profile = _oidc_cfg_merge_pos_int(add->profile, base->profile);
 }
 
 oidc_provider_t *oidc_cfg_provider_create(apr_pool_t *pool) {

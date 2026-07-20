@@ -54,33 +54,51 @@
 /*
  * directory related configuration
  */
+/*
+ * single source of truth for the simple pointer-merged and int-merged members of oidc_dir_cfg_t:
+ * the struct declaration, oidc_cfg_dir_config_create and oidc_cfg_dir_config_merge are generated
+ * from this list (see the same pattern in cfg/oauth.c); members with special semantics are listed
+ * separately below the macro expansion and handled by hand in all three places
+ */
+#define OIDC_DIR_CFG_SIMPLE_MEMBERS(PTR, INT)                                                                          \
+	PTR(char *, discover_url)                                                                                      \
+	PTR(char *, cookie_path)                                                                                       \
+	PTR(char *, cookie)                                                                                            \
+	PTR(char *, authn_header)                                                                                      \
+	PTR(char *, unauthz_arg)                                                                                       \
+	PTR(apr_array_header_t *, pass_cookies)                                                                        \
+	PTR(apr_array_header_t *, strip_cookies)                                                                       \
+	PTR(oidc_apr_expr_t *, path_auth_request_expr)                                                                 \
+	PTR(oidc_apr_expr_t *, path_scope_expr)                                                                        \
+	PTR(oidc_apr_expr_t *, unauth_expression)                                                                      \
+	PTR(oidc_apr_expr_t *, userinfo_claims_expr)                                                                   \
+	PTR(char *, state_cookie_prefix)                                                                               \
+	PTR(apr_array_header_t *, pass_userinfo_as)                                                                    \
+	INT(unauth_action)                                                                                             \
+	INT(unautz_action)                                                                                             \
+	INT(pass_info_in)                                                                                              \
+	INT(pass_info_encoding)                                                                                        \
+	INT(oauth_accept_token_in)                                                                                     \
+	INT(preserve_post)                                                                                             \
+	INT(pass_access_token)                                                                                         \
+	INT(pass_refresh_token)                                                                                        \
+	INT(refresh_access_token_before_expiry)                                                                        \
+	INT(action_on_error_refresh)                                                                                   \
+	INT(pass_idtoken_as)
+
+#define OIDC_DIR_M_DECL_PTR(type, name) type name;
+#define OIDC_DIR_M_DECL_INT(name) int name;
+#define OIDC_DIR_M_CREATE_PTR(type, name) c->name = NULL;
+#define OIDC_DIR_M_CREATE_INT(name) c->name = OIDC_CONFIG_POS_INT_UNSET;
+#define OIDC_DIR_M_MERGE_PTR(type, name) c->name = _oidc_cfg_merge_ptr(add->name, base->name);
+#define OIDC_DIR_M_MERGE_INT(name) c->name = _oidc_cfg_merge_pos_int(add->name, base->name);
+
 struct oidc_dir_cfg_t {
-	char *discover_url;
-	char *cookie_path;
-	char *cookie;
-	char *authn_header;
-	int unauth_action;
-	int unautz_action;
-	char *unauthz_arg;
-	apr_array_header_t *pass_cookies;
-	apr_array_header_t *strip_cookies;
-	int pass_info_in;
-	int pass_info_encoding;
-	int oauth_accept_token_in;
+	OIDC_DIR_CFG_SIMPLE_MEMBERS(OIDC_DIR_M_DECL_PTR, OIDC_DIR_M_DECL_INT)
+	/* special: created as an (empty) hash, merged on entry count */
 	apr_hash_t *oauth_accept_token_options;
+	/* special: -1 is a valid value so this uses its own OIDC_INTROSPECT_INTERVAL_UNSET sentinel */
 	int oauth_token_introspect_interval;
-	int preserve_post;
-	int pass_access_token;
-	int pass_refresh_token;
-	oidc_apr_expr_t *path_auth_request_expr;
-	oidc_apr_expr_t *path_scope_expr;
-	oidc_apr_expr_t *unauth_expression;
-	oidc_apr_expr_t *userinfo_claims_expr;
-	int refresh_access_token_before_expiry;
-	int action_on_error_refresh;
-	char *state_cookie_prefix;
-	apr_array_header_t *pass_userinfo_as;
-	int pass_idtoken_as;
 };
 
 #define OIDC_PASS_ID_TOKEN_AS_CLAIMS_STR "claims"
@@ -625,32 +643,9 @@ const char *oidc_cfg_dir_path_scope_get(request_rec *r) {
  */
 void *oidc_cfg_dir_config_create(apr_pool_t *pool, char *path) {
 	oidc_dir_cfg_t *c = apr_pcalloc(pool, sizeof(oidc_dir_cfg_t));
-	c->discover_url = NULL;
-	c->cookie = NULL;
-	c->cookie_path = NULL;
-	c->authn_header = NULL;
-	c->unauth_action = OIDC_CONFIG_POS_INT_UNSET;
-	c->unauth_expression = NULL;
-	c->unautz_action = OIDC_CONFIG_POS_INT_UNSET;
-	c->unauthz_arg = NULL;
-	c->pass_cookies = NULL;
-	c->strip_cookies = NULL;
-	c->pass_info_in = OIDC_CONFIG_POS_INT_UNSET;
-	c->pass_info_encoding = OIDC_CONFIG_POS_INT_UNSET;
-	c->oauth_accept_token_in = OIDC_CONFIG_POS_INT_UNSET;
+	OIDC_DIR_CFG_SIMPLE_MEMBERS(OIDC_DIR_M_CREATE_PTR, OIDC_DIR_M_CREATE_INT)
 	c->oauth_accept_token_options = apr_hash_make(pool);
 	c->oauth_token_introspect_interval = OIDC_INTROSPECT_INTERVAL_UNSET;
-	c->preserve_post = OIDC_CONFIG_POS_INT_UNSET;
-	c->pass_access_token = OIDC_CONFIG_POS_INT_UNSET;
-	c->pass_refresh_token = OIDC_CONFIG_POS_INT_UNSET;
-	c->path_auth_request_expr = NULL;
-	c->path_scope_expr = NULL;
-	c->userinfo_claims_expr = NULL;
-	c->refresh_access_token_before_expiry = OIDC_CONFIG_POS_INT_UNSET;
-	c->action_on_error_refresh = OIDC_CONFIG_POS_INT_UNSET;
-	c->state_cookie_prefix = NULL;
-	c->pass_userinfo_as = NULL;
-	c->pass_idtoken_as = OIDC_CONFIG_POS_INT_UNSET;
 	return c;
 }
 
@@ -674,44 +669,12 @@ static int _oidc_cfg_dir_merge_introspect_interval(int add, int base) {
  */
 void *oidc_cfg_dir_config_merge(apr_pool_t *pool, void *BASE, void *ADD) {
 	oidc_dir_cfg_t *c = apr_pcalloc(pool, sizeof(oidc_dir_cfg_t));
-	oidc_dir_cfg_t *base = BASE;
-	oidc_dir_cfg_t *add = ADD;
-	c->discover_url = _oidc_cfg_merge_ptr(add->discover_url, base->discover_url);
-	c->cookie = _oidc_cfg_merge_ptr(add->cookie, base->cookie);
-	c->cookie_path = _oidc_cfg_merge_ptr(add->cookie_path, base->cookie_path);
-	c->authn_header = _oidc_cfg_merge_ptr(add->authn_header, base->authn_header);
-	c->unauth_action = _oidc_cfg_merge_pos_int(add->unauth_action, base->unauth_action);
-	c->unauth_expression = _oidc_cfg_merge_ptr(add->unauth_expression, base->unauth_expression);
-	c->unautz_action = _oidc_cfg_merge_pos_int(add->unautz_action, base->unautz_action);
-	c->unauthz_arg = _oidc_cfg_merge_ptr(add->unauthz_arg, base->unauthz_arg);
-
-	c->pass_cookies = _oidc_cfg_merge_ptr(add->pass_cookies, base->pass_cookies);
-	c->strip_cookies = _oidc_cfg_merge_ptr(add->strip_cookies, base->strip_cookies);
-
-	c->pass_info_in = _oidc_cfg_merge_pos_int(add->pass_info_in, base->pass_info_in);
-	c->pass_info_encoding = _oidc_cfg_merge_pos_int(add->pass_info_encoding, base->pass_info_encoding);
-	c->oauth_accept_token_in = _oidc_cfg_merge_pos_int(add->oauth_accept_token_in, base->oauth_accept_token_in);
+	const oidc_dir_cfg_t *base = BASE;
+	const oidc_dir_cfg_t *add = ADD;
+	OIDC_DIR_CFG_SIMPLE_MEMBERS(OIDC_DIR_M_MERGE_PTR, OIDC_DIR_M_MERGE_INT)
 	c->oauth_accept_token_options =
 	    _oidc_cfg_dir_merge_hash(add->oauth_accept_token_options, base->oauth_accept_token_options);
 	c->oauth_token_introspect_interval = _oidc_cfg_dir_merge_introspect_interval(
 	    add->oauth_token_introspect_interval, base->oauth_token_introspect_interval);
-	c->preserve_post = _oidc_cfg_merge_pos_int(add->preserve_post, base->preserve_post);
-	c->pass_access_token = _oidc_cfg_merge_pos_int(add->pass_access_token, base->pass_access_token);
-	c->pass_refresh_token = _oidc_cfg_merge_pos_int(add->pass_refresh_token, base->pass_refresh_token);
-	c->path_auth_request_expr = _oidc_cfg_merge_ptr(add->path_auth_request_expr, base->path_auth_request_expr);
-	c->path_scope_expr = _oidc_cfg_merge_ptr(add->path_scope_expr, base->path_scope_expr);
-	c->userinfo_claims_expr = _oidc_cfg_merge_ptr(add->userinfo_claims_expr, base->userinfo_claims_expr);
-
-	c->pass_userinfo_as = _oidc_cfg_merge_ptr(add->pass_userinfo_as, base->pass_userinfo_as);
-	c->pass_idtoken_as = _oidc_cfg_merge_pos_int(add->pass_idtoken_as, base->pass_idtoken_as);
-
-	c->refresh_access_token_before_expiry =
-	    _oidc_cfg_merge_pos_int(add->refresh_access_token_before_expiry, base->refresh_access_token_before_expiry);
-
-	c->action_on_error_refresh =
-	    _oidc_cfg_merge_pos_int(add->action_on_error_refresh, base->action_on_error_refresh);
-
-	c->state_cookie_prefix = _oidc_cfg_merge_ptr(add->state_cookie_prefix, base->state_cookie_prefix);
-
 	return c;
 }
