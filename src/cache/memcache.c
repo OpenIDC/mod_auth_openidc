@@ -225,7 +225,7 @@ int oidc_cache_memcache_add_servers(apr_pool_t *pool, server_rec *s, const oidc_
 	return OK;
 }
 
-/* default data-path operations, wired in oidc_cache_memcache_post_config_impl */
+/* default data-path operations, wired in the post_config hook below */
 static apr_status_t oidc_cache_memcache_getp_impl(oidc_cache_cfg_memcache_t *context, apr_pool_t *p, const char *key,
 						  char **baton, apr_size_t *len);
 static apr_status_t oidc_cache_memcache_set_impl(oidc_cache_cfg_memcache_t *context, const char *key, char *baton,
@@ -236,7 +236,7 @@ static apr_byte_t oidc_cache_memcache_status_impl(const oidc_cache_cfg_memcache_
 /*
  * initialize the memcache struct to a number of memcache servers
  */
-static int oidc_cache_memcache_post_config_impl(apr_pool_t *pool, server_rec *s) {
+static int oidc_cache_memcache_post_config_hook(apr_pool_t *pool, server_rec *s) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(s->module_config, &auth_openidc_module);
 
 	if (cfg->cache.cfg != NULL)
@@ -413,7 +413,7 @@ apr_byte_t oidc_cache_memcache_set(request_rec *r, const char *section, const ch
 oidc_cache_t oidc_cache_memcache = {
     "memcache",
 	1,
-	oidc_cache_memcache_post_config_impl,
+	oidc_cache_memcache_post_config_hook,
 	NULL,
 	oidc_cache_memcache_get,
 	oidc_cache_memcache_set,

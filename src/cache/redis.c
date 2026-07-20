@@ -74,7 +74,7 @@ int oidc_cache_redis_post_config(apr_pool_t *pool, server_rec *s, oidc_cfg_t *cf
 	oidc_cache_cfg_redis_t *context = oidc_cache_redis_cfg_create(pool);
 	cfg->cache.cfg = context;
 
-	/* parse the host:post tuple from the configuration */
+	/* check that a Redis server has been configured */
 	if (cfg->cache.redis_server == NULL) {
 		oidc_serror(s,
 			    "cache type is set to \"redis\", but no valid " OIDCRedisCacheServer " setting was found");
@@ -120,9 +120,11 @@ apr_status_t oidc_cache_redis_disconnect(oidc_cache_cfg_redis_t *context) {
 }
 
 /*
- * initialize the Redis struct the specified Redis server
+ * the oidc_cache_t post_config hook: initialize the offline config through
+ * oidc_cache_redis_post_config (which validates that a server is configured),
+ * then parse the server address and wire the connecting Redis operations
  */
-static int oidc_cache_redis_post_config_impl(apr_pool_t *pool, server_rec *s) {
+static int oidc_cache_redis_post_config_hook(apr_pool_t *pool, server_rec *s) {
 	apr_status_t rv = APR_SUCCESS;
 	oidc_cache_cfg_redis_t *context = NULL;
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(s->module_config, &auth_openidc_module);
@@ -135,13 +137,7 @@ static int oidc_cache_redis_post_config_impl(apr_pool_t *pool, server_rec *s) {
 
 	context = (oidc_cache_cfg_redis_t *)cfg->cache.cfg;
 
-	/* parse the host:post tuple from the configuration */
-	if (cfg->cache.redis_server == NULL) {
-		oidc_serror(s,
-			    "cache type is set to \"redis\", but no valid " OIDCRedisCacheServer " setting was found");
-		return HTTP_INTERNAL_SERVER_ERROR;
-	}
-
+	/* parse the host:port tuple from the configuration */
 	char *scope_id;
 	rv = apr_parse_addr_port(&context->host_str, &scope_id, &context->port, cfg->cache.redis_server, pool);
 	if (rv != APR_SUCCESS) {
@@ -545,7 +541,7 @@ static int oidc_cache_redis_destroy_impl(apr_pool_t *pool, server_rec *s) {
 oidc_cache_t oidc_cache_redis = {
 	"redis",
 	1,
-	oidc_cache_redis_post_config_impl,
+	oidc_cache_redis_post_config_hook,
 	oidc_cache_redis_child_init,
 	oidc_cache_redis_get,
 	oidc_cache_redis_set,
