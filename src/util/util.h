@@ -57,7 +57,13 @@ void oidc_util_appinfo_set_all(request_rec *r, oidc_json_t *j_attrs, const char 
 
 // base64.c
 char *oidc_util_base64_decode(apr_pool_t *pool, const char *input, char **output, int *output_len);
-int oidc_util_base64url_encode(request_rec *r, char **dst, const char *src, int src_len, int remove_padding);
+typedef enum {
+	OIDC_BASE64URL_PADDING_KEEP = 0,  /* keep the trailing "=" padding */
+	OIDC_BASE64URL_PADDING_STRIP = 1, /* strip the padding, per RFC 7515 base64url */
+} oidc_base64url_padding_t;
+
+int oidc_util_base64url_encode(request_rec *r, char **dst, const char *src, int src_len,
+			       oidc_base64url_padding_t padding);
 int oidc_util_base64url_decode(apr_pool_t *pool, char **dst, const char *src);
 
 // expr.c

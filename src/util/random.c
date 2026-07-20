@@ -146,7 +146,7 @@ apr_byte_t oidc_util_rand_str(request_rec *r, char **str, int len) {
 		oidc_error(r, "_oidc_util_rand_bytes returned an error");
 		return FALSE;
 	}
-	if (oidc_util_base64url_encode(r, str, (const char *)bytes, len, TRUE) <= 0) {
+	if (oidc_util_base64url_encode(r, str, (const char *)bytes, len, OIDC_BASE64URL_PADDING_STRIP) <= 0) {
 		oidc_error(r, "oidc_base64url_encode returned an error");
 		return FALSE;
 	}

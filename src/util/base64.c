@@ -46,7 +46,8 @@
 /*
  * base64url encode a string
  */
-int oidc_util_base64url_encode(request_rec *r, char **dst, const char *src, int src_len, int remove_padding) {
+int oidc_util_base64url_encode(request_rec *r, char **dst, const char *src, int src_len,
+			       oidc_base64url_padding_t padding) {
 	if ((src == NULL) || (src_len <= 0)) {
 		oidc_error(r, "not encoding anything; src=NULL and/or src_len<1");
 		return -1;
@@ -64,7 +65,7 @@ int oidc_util_base64url_encode(request_rec *r, char **dst, const char *src, int 
 			enc[i] = ',';
 		i++;
 	}
-	if (remove_padding) {
+	if (padding == OIDC_BASE64URL_PADDING_STRIP) {
 		/* remove /0 and padding */
 		if (enc_len > 0)
 			enc_len--;

@@ -238,10 +238,12 @@ START_TEST(test_proto_validate_jwt) {
 	s_jwt_payload = apr_psprintf(r->pool, s_jwt_payload, now, s_issuer, now + 600);
 
 	char *s_jwt_header_encoded = NULL;
-	oidc_util_base64url_encode(r, &s_jwt_header_encoded, s_jwt_header, _oidc_strlen(s_jwt_header), 1);
+	oidc_util_base64url_encode(r, &s_jwt_header_encoded, s_jwt_header, _oidc_strlen(s_jwt_header),
+				   OIDC_BASE64URL_PADDING_STRIP);
 
 	char *s_jwt_payload_encoded = NULL;
-	oidc_util_base64url_encode(r, &s_jwt_payload_encoded, s_jwt_payload, _oidc_strlen(s_jwt_payload), 1);
+	oidc_util_base64url_encode(r, &s_jwt_payload_encoded, s_jwt_payload, _oidc_strlen(s_jwt_payload),
+				   OIDC_BASE64URL_PADDING_STRIP);
 
 	char *s_jwt_message = apr_psprintf(r->pool, "%s.%s", s_jwt_header_encoded, s_jwt_payload_encoded);
 
@@ -253,7 +255,7 @@ START_TEST(test_proto_validate_jwt) {
 				   (const unsigned char *)s_jwt_message, _oidc_strlen(s_jwt_message), md, &md_len));
 
 	char *s_jwt_signature_encoded = NULL;
-	oidc_util_base64url_encode(r, &s_jwt_signature_encoded, (const char *)md, md_len, 1);
+	oidc_util_base64url_encode(r, &s_jwt_signature_encoded, (const char *)md, md_len, OIDC_BASE64URL_PADDING_STRIP);
 
 	char *s_jwt =
 	    apr_psprintf(r->pool, "%s.%s.%s", s_jwt_header_encoded, s_jwt_payload_encoded, s_jwt_signature_encoded);
@@ -1691,7 +1693,9 @@ static const char *e2e_half_hash_b64url(request_rec *r, const char *value) {
 	unsigned int calc_len = 0;
 	char *out = NULL;
 	ck_assert_int_eq(oidc_jose_hash_string(r->pool, "HS256", value, &calc, &calc_len, &err), TRUE);
-	ck_assert_int_gt(oidc_util_base64url_encode(r, &out, calc, oidc_jose_hash_length("HS256") / 2, TRUE), 0);
+	ck_assert_int_gt(
+	    oidc_util_base64url_encode(r, &out, calc, oidc_jose_hash_length("HS256") / 2, OIDC_BASE64URL_PADDING_STRIP),
+	    0);
 	return out;
 }
 

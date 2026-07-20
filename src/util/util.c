@@ -466,7 +466,8 @@ apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char
 		return FALSE;
 	}
 
-	if (oidc_util_base64url_encode(r, output, (const char *)hashed, hashed_len, TRUE) <= 0) {
+	if (oidc_util_base64url_encode(r, output, (const char *)hashed, hashed_len, OIDC_BASE64URL_PADDING_STRIP) <=
+	    0) {
 		oidc_error(r, "oidc_base64url_encode returned an error");
 		return FALSE;
 	}

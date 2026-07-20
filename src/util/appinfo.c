@@ -92,7 +92,8 @@ void oidc_util_appinfo_set(request_rec *r, const char *s_key, const char *s_valu
 
 	if (s_value != NULL) {
 		if (encoding == OIDC_APPINFO_ENCODING_BASE64URL) {
-			oidc_util_base64url_encode(r, &d_value, s_value, (int)_oidc_strlen(s_value), TRUE);
+			oidc_util_base64url_encode(r, &d_value, s_value, (int)_oidc_strlen(s_value),
+						   OIDC_BASE64URL_PADDING_STRIP);
 		} else if (encoding == OIDC_APPINFO_ENCODING_LATIN1) {
 			d_value = _oidc_util_appinfo_utf8_to_latin1(r, s_value);
 		}

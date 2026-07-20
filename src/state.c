@@ -98,7 +98,7 @@ char *oidc_state_browser_fingerprint(request_rec *r, const oidc_cfg_t *c, const 
 	}
 
 	/* base64url-encode the resulting hash and return it */
-	oidc_util_base64url_encode(r, &result, (const char *)hash, hash_len, TRUE);
+	oidc_util_base64url_encode(r, &result, (const char *)hash, hash_len, OIDC_BASE64URL_PADDING_STRIP);
 
 	return result;
 }
