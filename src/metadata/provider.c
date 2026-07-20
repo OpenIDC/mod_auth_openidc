@@ -246,11 +246,15 @@ apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg_t *cfg, const cha
 }
 
 #define OIDC_METADATA_PROVIDER_PARSE_URL(j_provider, key, member)                                                      \
-	if (oidc_cfg_provider_##member##_get(provider) == NULL) {                                                      \
-		oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER, oidc_cfg_provider_issuer_get(provider),      \
-					j_provider, key, &value, NULL);                                                \
-		OIDC_METADATA_PROVIDER_SET(member, value, rv)                                                          \
-	}
+	;                                                                                                              \
+	do {                                                                                                           \
+		if (oidc_cfg_provider_##member##_get(provider) == NULL) {                                              \
+			char *_u_ = NULL;                                                                              \
+			oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER,                                      \
+						oidc_cfg_provider_issuer_get(provider), j_provider, key, &_u_, NULL);  \
+			OIDC_METADATA_PROVIDER_SET(member, _u_);                                                       \
+		}                                                                                                      \
+	} while (0)
 
 /*
  * RFC 8705 section 5: when mutual-TLS client authentication is in effect, prefer the endpoint
@@ -259,7 +263,6 @@ apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg_t *cfg, const cha
 static void oidc_metadata_provider_parse_mtls_endpoint_aliases(request_rec *r, oidc_cfg_t *cfg,
 							       const oidc_json_t *j_provider,
 							       oidc_provider_t *provider) {
-	const char *rv = NULL;
 	char *value = NULL;
 	const oidc_json_t *j_aliases = NULL;
 	const char *auth = oidc_cfg_provider_token_endpoint_auth_get(provider);
@@ -278,19 +281,19 @@ static void oidc_metadata_provider_parse_mtls_endpoint_aliases(request_rec *r, o
 
 	oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER, oidc_cfg_provider_issuer_get(provider), j_aliases,
 				OIDC_METADATA_TOKEN_ENDPOINT, &value, NULL);
-	OIDC_METADATA_PROVIDER_SET(token_endpoint_url, value, rv)
+	OIDC_METADATA_PROVIDER_SET(token_endpoint_url, value);
 
 	oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER, oidc_cfg_provider_issuer_get(provider), j_aliases,
 				OIDC_METADATA_USERINFO_ENDPOINT, &value, NULL);
-	OIDC_METADATA_PROVIDER_SET(userinfo_endpoint_url, value, rv)
+	OIDC_METADATA_PROVIDER_SET(userinfo_endpoint_url, value);
 
 	oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER, oidc_cfg_provider_issuer_get(provider), j_aliases,
 				OIDC_METADATA_REVOCATION_ENDPOINT, &value, NULL);
-	OIDC_METADATA_PROVIDER_SET(revocation_endpoint_url, value, rv)
+	OIDC_METADATA_PROVIDER_SET(revocation_endpoint_url, value);
 
 	oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER, oidc_cfg_provider_issuer_get(provider), j_aliases,
 				OIDC_METADATA_PAR_ENDPOINT, &value, NULL);
-	OIDC_METADATA_PROVIDER_SET(pushed_authorization_request_endpoint_url, value, rv)
+	OIDC_METADATA_PROVIDER_SET(pushed_authorization_request_endpoint_url, value);
 }
 
 /*
@@ -306,21 +309,21 @@ apr_byte_t oidc_metadata_provider_parse(request_rec *r, oidc_cfg_t *cfg, const o
 	if (oidc_cfg_provider_issuer_get(provider) == NULL) {
 		/* get the "issuer" from the provider metadata */
 		oidc_json_object_get_string(r->pool, j_provider, OIDC_METADATA_ISSUER, &value, NULL);
-		OIDC_METADATA_PROVIDER_SET(issuer, value, rv);
+		OIDC_METADATA_PROVIDER_SET(issuer, value);
 	}
 
-	OIDC_METADATA_PROVIDER_PARSE_URL(j_provider, OIDC_METADATA_AUTHORIZATION_ENDPOINT, authorization_endpoint_url)
-	OIDC_METADATA_PROVIDER_PARSE_URL(j_provider, OIDC_METADATA_TOKEN_ENDPOINT, token_endpoint_url)
-	OIDC_METADATA_PROVIDER_PARSE_URL(j_provider, OIDC_METADATA_USERINFO_ENDPOINT, userinfo_endpoint_url)
-	OIDC_METADATA_PROVIDER_PARSE_URL(j_provider, OIDC_METADATA_REVOCATION_ENDPOINT, revocation_endpoint_url)
+	OIDC_METADATA_PROVIDER_PARSE_URL(j_provider, OIDC_METADATA_AUTHORIZATION_ENDPOINT, authorization_endpoint_url);
+	OIDC_METADATA_PROVIDER_PARSE_URL(j_provider, OIDC_METADATA_TOKEN_ENDPOINT, token_endpoint_url);
+	OIDC_METADATA_PROVIDER_PARSE_URL(j_provider, OIDC_METADATA_USERINFO_ENDPOINT, userinfo_endpoint_url);
+	OIDC_METADATA_PROVIDER_PARSE_URL(j_provider, OIDC_METADATA_REVOCATION_ENDPOINT, revocation_endpoint_url);
 	OIDC_METADATA_PROVIDER_PARSE_URL(j_provider, OIDC_METADATA_PAR_ENDPOINT,
-					 pushed_authorization_request_endpoint_url)
+					 pushed_authorization_request_endpoint_url);
 
 	/* jwks_uri is a struct; its URI string is reached via a separate accessor */
 	if (oidc_cfg_provider_jwks_uri_uri_get(provider) == NULL) {
 		oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER, oidc_cfg_provider_issuer_get(provider),
 					j_provider, OIDC_METADATA_JWKS_URI, &value, NULL);
-		OIDC_METADATA_PROVIDER_SET(jwks_uri, value, rv)
+		OIDC_METADATA_PROVIDER_SET(jwks_uri, value);
 	}
 
 	if (oidc_cfg_provider_signed_jwks_uri_get(provider) == NULL) {
@@ -333,15 +336,15 @@ apr_byte_t oidc_metadata_provider_parse(request_rec *r, oidc_cfg_t *cfg, const o
 		}
 	}
 
-	OIDC_METADATA_PROVIDER_PARSE_URL(j_provider, OIDC_METADATA_REGISTRATION_ENDPOINT, registration_endpoint_url)
-	OIDC_METADATA_PROVIDER_PARSE_URL(j_provider, OIDC_METADATA_CHECK_SESSION_IFRAME, check_session_iframe)
-	OIDC_METADATA_PROVIDER_PARSE_URL(j_provider, OIDC_METADATA_END_SESSION_ENDPOINT, end_session_endpoint)
+	OIDC_METADATA_PROVIDER_PARSE_URL(j_provider, OIDC_METADATA_REGISTRATION_ENDPOINT, registration_endpoint_url);
+	OIDC_METADATA_PROVIDER_PARSE_URL(j_provider, OIDC_METADATA_CHECK_SESSION_IFRAME, check_session_iframe);
+	OIDC_METADATA_PROVIDER_PARSE_URL(j_provider, OIDC_METADATA_END_SESSION_ENDPOINT, end_session_endpoint);
 
 	// NB: here we don't actually override with the global setting/default, merely apply it when no value is
 	// provided
 	oidc_metadata_parse_boolean(r, j_provider, OIDC_METADATA_BACKCHANNEL_LOGOUT_SUPPORTED, &ivalue,
 				    oidc_cfg_provider_backchannel_logout_supported_get(provider));
-	OIDC_METADATA_PROVIDER_SET_INT(provider, backchannel_logout_supported, ivalue, rv)
+	OIDC_METADATA_PROVIDER_SET_INT(backchannel_logout_supported, ivalue);
 
 	if (oidc_cfg_provider_token_endpoint_auth_get(provider) == NULL) {
 		/* the secret/certificate interplay that decides on RFC 8705 mutual-TLS is

@@ -117,21 +117,26 @@
 #define OIDC_METADATA_RESPONSE_REQUIRE_ISS "response_require_iss"
 
 /*
- * conditional setter macros — assume `r`, `provider`, `rv` are in scope
+ * conditional setter macros; hygienic like the OIDC_METADATA_CONF_* family below — assume `r` and `provider` are in
+ * scope
  */
-#define OIDC_METADATA_PROVIDER_SET(member, value, rv)                                                                  \
-	if (value != NULL) {                                                                                           \
-		rv = oidc_cfg_provider_##member##_set(r->pool, provider, value);                                       \
-		if (rv != NULL)                                                                                        \
-			oidc_error(r, "oidc_cfg_provider_%s_set: %s", TOSTRING(member), rv);                           \
-	}
+#define OIDC_METADATA_PROVIDER_SET(member, value)                                                                      \
+	do {                                                                                                           \
+		if ((value) != NULL) {                                                                                 \
+			const char *_rv_ = oidc_cfg_provider_##member##_set(r->pool, provider, value);                 \
+			if (_rv_ != NULL)                                                                              \
+				oidc_error(r, "oidc_cfg_provider_%s_set: %s", #member, _rv_);                          \
+		}                                                                                                      \
+	} while (0)
 
-#define OIDC_METADATA_PROVIDER_SET_INT(provider, member, ivalue, rv)                                                   \
-	if (ivalue != OIDC_CONFIG_POS_INT_UNSET) {                                                                     \
-		rv = oidc_cfg_provider_##member##_set(r->pool, provider, ivalue);                                      \
-		if (rv != NULL)                                                                                        \
-			oidc_error(r, "oidc_cfg_provider_%s_set: %s", TOSTRING(member), rv);                           \
-	}
+#define OIDC_METADATA_PROVIDER_SET_INT(member, ivalue)                                                                 \
+	do {                                                                                                           \
+		if ((ivalue) != OIDC_CONFIG_POS_INT_UNSET) {                                                           \
+			const char *_rv_ = oidc_cfg_provider_##member##_set(r->pool, provider, ivalue);                \
+			if (_rv_ != NULL)                                                                              \
+				oidc_error(r, "oidc_cfg_provider_%s_set: %s", #member, _rv_);                          \
+		}                                                                                                      \
+	} while (0)
 
 /*
  * conf-parse helpers — read a single key from `j_conf`, default to the global

@@ -229,7 +229,6 @@ static void oidc_metadata_conf_parse_request_params(request_rec *r, oidc_cfg_t *
  */
 static void oidc_metadata_conf_parse_response(request_rec *r, oidc_cfg_t *cfg, const oidc_json_t *j_conf,
 					      oidc_provider_t *provider) {
-	const char *rv = NULL;
 	char *value = NULL;
 	int ivalue = OIDC_CONFIG_POS_INT_UNSET;
 
@@ -238,13 +237,13 @@ static void oidc_metadata_conf_parse_response(request_rec *r, oidc_cfg_t *cfg, c
 	/* pkce default uses the proto-profile default, not the global config */
 	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_PKCE_METHOD, &value,
 				    oidc_proto_profile_pkce_get(provider)->method);
-	OIDC_METADATA_PROVIDER_SET(pkce, value, rv)
+	OIDC_METADATA_PROVIDER_SET(pkce, value);
 
 	OIDC_METADATA_CONF_STR(j_conf, OIDC_METADATA_RESPONSE_TYPE, response_type);
 
 	oidc_metadata_parse_boolean(r, j_conf, OIDC_METADATA_RESPONSE_REQUIRE_ISS, &ivalue,
 				    oidc_proto_profile_response_require_iss_get(provider));
-	OIDC_METADATA_PROVIDER_SET_INT(provider, response_require_iss, ivalue, rv)
+	OIDC_METADATA_PROVIDER_SET_INT(response_require_iss, ivalue);
 }
 
 /*

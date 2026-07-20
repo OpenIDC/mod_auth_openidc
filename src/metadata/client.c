@@ -303,7 +303,6 @@ static void oidc_metadata_client_parse_token_endpoint_auth(request_rec *r, const
 static void oidc_metadata_client_parse_response_type(request_rec *r, oidc_cfg_t *cfg, const oidc_json_t *j_client,
 						     oidc_provider_t *provider) {
 
-	const char *rv = NULL;
 	const char *value = NULL;
 
 	if (oidc_cfg_provider_response_type_is_set(provider))
@@ -325,7 +324,7 @@ static void oidc_metadata_client_parse_response_type(request_rec *r, oidc_cfg_t 
 	const oidc_json_t *j_response_type = oidc_json_array_get(j_response_types, 0);
 	if (oidc_json_is_string(j_response_type)) {
 		value = apr_pstrdup(r->pool, oidc_json_string_value(j_response_type));
-		OIDC_METADATA_PROVIDER_SET(response_type, value, rv)
+		OIDC_METADATA_PROVIDER_SET(response_type, value);
 	}
 }
 
@@ -335,16 +334,15 @@ static void oidc_metadata_client_parse_response_type(request_rec *r, oidc_cfg_t 
 apr_byte_t oidc_metadata_client_parse(request_rec *r, oidc_cfg_t *cfg, const oidc_json_t *j_client,
 				      oidc_provider_t *provider) {
 
-	const char *rv = NULL;
 	char *value = NULL;
 
 	/* get a handle to the client_id we need to use for this provider */
 	oidc_json_object_get_string(r->pool, j_client, OIDC_METADATA_CLIENT_ID, &value, NULL);
-	OIDC_METADATA_PROVIDER_SET(client_id, value, rv)
+	OIDC_METADATA_PROVIDER_SET(client_id, value);
 
 	/* get a handle to the client_secret we need to use for this provider */
 	oidc_json_object_get_string(r->pool, j_client, OIDC_METADATA_CLIENT_SECRET, &value, NULL);
-	OIDC_METADATA_PROVIDER_SET(client_secret, value, rv)
+	OIDC_METADATA_PROVIDER_SET(client_secret, value);
 
 	/* see if the token endpoint auth method defined in the client metadata overrides the provider one */
 	oidc_metadata_client_parse_token_endpoint_auth(r, cfg, j_client, provider);
@@ -354,7 +352,7 @@ apr_byte_t oidc_metadata_client_parse(request_rec *r, oidc_cfg_t *cfg, const oid
 
 	oidc_json_object_get_string(r->pool, j_client, OIDC_METADATA_ID_TOKEN_SIGNED_RESPONSE_ALG, &value,
 				    oidc_cfg_provider_id_token_signed_response_alg_get(oidc_cfg_provider_get(cfg)));
-	OIDC_METADATA_PROVIDER_SET(id_token_signed_response_alg, value, rv)
+	OIDC_METADATA_PROVIDER_SET(id_token_signed_response_alg, value);
 
 	// NB: id_token_encrypted_response_alg and the other encryption-related client metadata are not parsed here
 
