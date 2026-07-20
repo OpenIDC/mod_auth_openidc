@@ -1910,6 +1910,22 @@ START_TEST(test_cfg_cache_merge_server_config) {
 	ck_assert_ptr_nonnull(merged);
 	ck_assert_int_eq(merged->cache.shm_size_max, 5000);
 	ck_assert_int_eq(merged->cache.encrypt, 1);
+
+	/* a vhost that leaves the size unset inherits the base value through the merge */
+	base = oidc_cfg_server_create(pool, s);
+	add = oidc_cfg_server_create(pool, s);
+	base->cache.shm_size_max = 999;
+	merged = (oidc_cfg_t *)oidc_cfg_server_merge(pool, base, add);
+	ck_assert_int_eq(oidc_cfg_cache_shm_size_max_get(merged), 999);
+
+	/* a vhost that explicitly configures the default value (10000) must win over a differing
+	 * base value; this used to be dropped when the default doubled as the "unset" sentinel */
+	base = oidc_cfg_server_create(pool, s);
+	add = oidc_cfg_server_create(pool, s);
+	base->cache.shm_size_max = 999;
+	add->cache.shm_size_max = 10000;
+	merged = (oidc_cfg_t *)oidc_cfg_server_merge(pool, base, add);
+	ck_assert_int_eq(oidc_cfg_cache_shm_size_max_get(merged), 10000);
 }
 END_TEST
 

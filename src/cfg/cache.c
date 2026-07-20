@@ -171,14 +171,16 @@ OIDC_CFG_MEMBER_FUNC_CACHE_TYPE_GET(shm_entry_size_max, int, OIDC_DEFAULT_CACHE_
 				    OIDC_CONFIG_POS_INT_UNSET)
 
 static void oidc_cfg_cache_shm_create_server_config(oidc_cfg_t *c) {
-	c->cache.shm_size_max = OIDC_DEFAULT_CACHE_SHM_SIZE;
-	c->cache.shm_entry_size_max = OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX;
+	/* keep "unset" distinguishable from an explicitly configured default: the getters substitute
+	 * the OIDC_DEFAULT_CACHE_SHM_* values when the member is still unset */
+	c->cache.shm_size_max = OIDC_CONFIG_POS_INT_UNSET;
+	c->cache.shm_entry_size_max = OIDC_CONFIG_POS_INT_UNSET;
 }
 
 static void oidc_cfg_cache_shm_merge_server_config(oidc_cfg_t *c, const oidc_cfg_t *base, const oidc_cfg_t *add) {
 	c->cache.shm_size_max =
-	    add->cache.shm_size_max != OIDC_DEFAULT_CACHE_SHM_SIZE ? add->cache.shm_size_max : base->cache.shm_size_max;
-	c->cache.shm_entry_size_max = add->cache.shm_entry_size_max != OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX
+	    add->cache.shm_size_max != OIDC_CONFIG_POS_INT_UNSET ? add->cache.shm_size_max : base->cache.shm_size_max;
+	c->cache.shm_entry_size_max = add->cache.shm_entry_size_max != OIDC_CONFIG_POS_INT_UNSET
 					  ? add->cache.shm_entry_size_max
 					  : base->cache.shm_entry_size_max;
 }
