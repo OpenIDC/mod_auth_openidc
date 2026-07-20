@@ -118,22 +118,15 @@ static oidc_authz_json_handler_t _oidc_authz_json_handlers[] = {
 static apr_byte_t oidc_authz_match_json_array_elem(request_rec *r, const char *spec, oidc_json_t *e, const char *key) {
 	const oidc_authz_json_handler_t *h = NULL;
 
-	// loop over the JSON object type handlers
-	for (h = _oidc_authz_json_handlers; h->handler; h++) {
-		if (h->type != oidc_json_typeof(e))
-			continue;
-		// avoid recursing into a nested array; matching need to be done with the "." syntax
-		// we want h->handler to end up as NULL to printout a warning at the end
-		if (oidc_json_typeof(e) == OIDC_JSON_TYPE_ARRAY)
-			continue;
-		// break out of the loop because we found a handler, and possibly a match
-		if (h->handler(r, spec, e, key) == TRUE)
-			return TRUE;
-		break;
-	}
-	if (h->handler == NULL)
-		oidc_warn(r, "unhandled in-array JSON object type [%d] for key \"%s\"", oidc_json_typeof(e), key);
-	// else: just no match
+	// avoid recursing into a nested array; matching needs to be done with the "." syntax
+	if (oidc_json_typeof(e) != OIDC_JSON_TYPE_ARRAY)
+		// loop over the JSON object type handlers
+		for (h = _oidc_authz_json_handlers; h->handler; h++)
+			if (h->type == oidc_json_typeof(e))
+				// found the handler for this type: its result decides the match
+				return h->handler(r, spec, e, key);
+
+	oidc_warn(r, "unhandled in-array JSON object type [%d] for key \"%s\"", oidc_json_typeof(e), key);
 	return FALSE;
 }
 
@@ -199,11 +192,10 @@ static apr_byte_t oidc_authz_match_pcre_array(request_rec *r, const char *spec, 
 					      struct oidc_pcre *);
 
 // clang-format off
-#define OIDC_AUTHZ_PCRE_HANDLERS_NUMBER 2
-
 static oidc_authz_pcre_handler_t _oidc_authz_pcre_handlers[] = {
 	{ OIDC_JSON_TYPE_ARRAY, oidc_authz_match_pcre_array },
-	{ OIDC_JSON_TYPE_STRING, oidc_authz_match_pcre_string }
+	{ OIDC_JSON_TYPE_STRING, oidc_authz_match_pcre_string },
+	{ 0, NULL }
 };
 // clang-format on
 
@@ -241,7 +233,7 @@ static apr_byte_t oidc_authz_match_pcre(request_rec *r, const char *spec, oidc_j
 	apr_byte_t rc = FALSE;
 	struct oidc_pcre *preg = NULL;
 	char *s_err = NULL;
-	int i = 0;
+	const oidc_authz_pcre_handler_t *h = NULL;
 
 	if ((spec == NULL) || (val == NULL) || (key == NULL))
 		return FALSE;
@@ -253,17 +245,16 @@ static apr_byte_t oidc_authz_match_pcre(request_rec *r, const char *spec, oidc_j
 	}
 
 	// loop over the JSON object PCRE handlers
-	for (i = 0; i < OIDC_AUTHZ_PCRE_HANDLERS_NUMBER; i++) {
-		if (_oidc_authz_pcre_handlers[i].type == oidc_json_typeof(val)) {
-			// break out of the loop because we found a handler, and possibly a match
-			if (_oidc_authz_pcre_handlers[i].handler(r, spec, val, key, preg) == TRUE)
-				rc = TRUE;
-			break;
-		}
+	for (h = _oidc_authz_pcre_handlers; h->handler; h++) {
+		if (h->type != oidc_json_typeof(val))
+			continue;
+		// we found a handler, and possibly a match
+		rc = h->handler(r, spec, val, key, preg);
+		break;
 	}
 
 	// see if we have found an object handler
-	if (i == OIDC_AUTHZ_PCRE_HANDLERS_NUMBER)
+	if (h->handler == NULL)
 		oidc_warn(r, "unhandled JSON object type [%d] for key \"%s\"", oidc_json_typeof(val), key);
 
 	oidc_pcre_free(preg);
@@ -286,28 +277,29 @@ static apr_byte_t oidc_authz_separator_dot(request_rec *r, const char *spec, oid
 }
 
 // clang-format off
-
-#define OIDC_AUTHZ_SEPARATOR_HANDLERS_NUMBER 3
-
 static oidc_authz_json_handler_t _oidc_authz_separator_handlers[] = {
 		// there's some overloading going on here, applying a char as an int index
 	{ OIDC_CHAR_COLON, oidc_authz_match_value },
 	{ OIDC_CHAR_TILDE, oidc_authz_match_pcre },
-	{ OIDC_CHAR_DOT, oidc_authz_separator_dot }
+	{ OIDC_CHAR_DOT, oidc_authz_separator_dot },
+	{ 0, NULL }
 };
 // clang-format on
 
 static apr_byte_t oidc_auth_handle_separator(request_rec *r, const char *key, oidc_json_t *val, const char *spec) {
+	const oidc_authz_json_handler_t *h = NULL;
 	if ((spec == NULL) || (val == NULL) || (key == NULL))
 		return FALSE;
-	for (int i = 0; i < OIDC_AUTHZ_SEPARATOR_HANDLERS_NUMBER; i++) {
-		// there's some overloading going on here, applying a char as an int index
-		if (_oidc_authz_separator_handlers[i].type == (*spec)) {
-			// skip the separator
-			spec++;
-			if (_oidc_authz_separator_handlers[i].handler(r, spec, val, key) == TRUE)
-				return TRUE;
-		}
+	for (h = _oidc_authz_separator_handlers; h->handler; h++) {
+		// there's some overloading going on here, applying a char as an int index;
+		// NB: spec advances past each matched separator, so after a non-matching handler the
+		// remaining handlers are compared against the following character (preserved behavior)
+		if (h->type != (*spec))
+			continue;
+		// skip the separator
+		spec++;
+		if (h->handler(r, spec, val, key) == TRUE)
+			return TRUE;
 	}
 	return FALSE;
 }
