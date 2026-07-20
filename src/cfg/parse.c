@@ -473,6 +473,23 @@ static const char *oidc_cfg_parse_key_value(apr_pool_t *pool, const char *enc, c
 #define OIDC_KEY_ALG_LIST_SEPARATOR "+"
 
 /*
+ * detect and strip a leading "<alg>[+<alg>...]@" list from a key tuple: on a match, duplicate the algorithm
+ * list into *alg (from pool) and return the tuple advanced past the "@"; otherwise return the tuple unchanged.
+ * guard against a filename that itself contains '@' by requiring the candidate segment to hold no kid ('#')
+ * or path ('/') character.
+ */
+static const char *oidc_cfg_parse_key_alg_prefix(apr_pool_t *pool, const char *tuple, char **alg) {
+	const char *at = _oidc_strstr(tuple, OIDC_KEY_ALG_SEPARATOR);
+	if ((at == NULL) || (at == tuple))
+		return tuple;
+	for (const char *c = tuple; c < at; c++)
+		if ((*c == OIDC_KEY_TUPLE_SEPARATOR[0]) || (*c == OIDC_CHAR_FORWARD_SLASH))
+			return tuple;
+	*alg = apr_pstrndup(pool, tuple, at - tuple);
+	return at + _oidc_strlen(OIDC_KEY_ALG_SEPARATOR);
+}
+
+/*
  * parse a [<use>:][<alg>[+<alg>...]@][<key-identifier>#]<key> tuple (or, when triplet is TRUE, a
  * [<use>:]<encoding>#<key-identifier>#<key> tuple); the optional "<alg>[+<alg>...]@" list is only
  * recognized when a non-NULL alg out-parameter is passed
@@ -498,21 +515,9 @@ const char *oidc_cfg_parse_key_record(apr_pool_t *pool, const char *tuple, char 
 		}
 	}
 
-	/* optional "<alg>[+<alg>...]@" list preceding the "[<kid>#]<key>" record; guard against a filename
-	 * that itself contains '@' by requiring the candidate segment to hold no kid ('#') or path ('/') char */
-	if (alg) {
-		const char *at = _oidc_strstr(tuple, OIDC_KEY_ALG_SEPARATOR);
-		if ((at != NULL) && (at > tuple)) {
-			apr_byte_t is_alg_list = TRUE;
-			for (const char *c = tuple; (is_alg_list == TRUE) && (c < at); c++)
-				if ((*c == OIDC_KEY_TUPLE_SEPARATOR[0]) || (*c == OIDC_CHAR_FORWARD_SLASH))
-					is_alg_list = FALSE;
-			if (is_alg_list == TRUE) {
-				*alg = apr_pstrndup(pool, tuple, at - tuple);
-				tuple = at + _oidc_strlen(OIDC_KEY_ALG_SEPARATOR);
-			}
-		}
-	}
+	/* optional "<alg>[+<alg>...]@" list preceding the "[<kid>#]<key>" record */
+	if (alg)
+		tuple = oidc_cfg_parse_key_alg_prefix(pool, tuple, alg);
 
 	s = apr_pstrdup(pool, tuple);
 	p = _oidc_strstr(s, OIDC_KEY_TUPLE_SEPARATOR);
@@ -619,7 +624,6 @@ static const char *oidc_cfg_parse_key_files(apr_pool_t *pool, const char *arg, a
 	char *name = NULL;
 	char *fname = NULL;
 	int fname_len;
-	char *tok = NULL;
 	char *last = NULL;
 
 	const char *rv = oidc_cfg_parse_key_record(pool, arg, &kid, &name, &fname_len, &use, &alg, FALSE);
@@ -632,7 +636,7 @@ static const char *oidc_cfg_parse_key_files(apr_pool_t *pool, const char *arg, a
 
 	/* split the optional "+"-separated algorithm list; an empty list yields a single pass with alg == NULL */
 	apr_array_header_t *algs = apr_array_make(pool, 2, sizeof(char *));
-	for (tok = alg ? apr_strtok(alg, OIDC_KEY_ALG_LIST_SEPARATOR, &last) : NULL; tok != NULL;
+	for (char *tok = alg ? apr_strtok(alg, OIDC_KEY_ALG_LIST_SEPARATOR, &last) : NULL; tok != NULL;
 	     tok = apr_strtok(NULL, OIDC_KEY_ALG_LIST_SEPARATOR, &last))
 		APR_ARRAY_PUSH(algs, char *) = tok;
 	if (algs->nelts == 0)
