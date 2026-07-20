@@ -681,15 +681,9 @@ static apr_byte_t oidc_oauth_set_request_user(request_rec *r, const oidc_cfg_t *
  * returns OK if handled, DECLINED to continue the main flow
  */
 static int oidc_oauth_check_userid_subrequest(request_rec *r) {
-	if (r->main != NULL)
-		r->user = r->main->user;
-	else if (r->prev != NULL)
-		r->user = r->prev->user;
-
-	if (r->user == NULL)
+	if (oidc_subrequest_recycle_user(r) == FALSE)
 		return DECLINED;
 
-	oidc_debug(r, "recycling user '%s' from initial request for sub-request", r->user);
 	oidc_strip_cookies(r);
 	return OK;
 }

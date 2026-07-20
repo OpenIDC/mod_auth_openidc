@@ -1246,7 +1246,11 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session
  * on a sub-request, try to recycle the authenticated user from the main/prev request;
  * returns TRUE if the user could be recycled and the caller should return OK
  */
-static apr_byte_t oidc_check_userid_openidc_subreq(request_rec *r) {
+/*
+ * recycle r->user from the main (or previous, on internal redirect) request into a sub-request;
+ * returns FALSE when there is no user to recycle
+ */
+apr_byte_t oidc_subrequest_recycle_user(request_rec *r) {
 	if (r->main != NULL)
 		r->user = r->main->user;
 	else if (r->prev != NULL)
@@ -1255,8 +1259,15 @@ static apr_byte_t oidc_check_userid_openidc_subreq(request_rec *r) {
 	if (r->user == NULL)
 		return FALSE;
 
-	/* this is a sub-request and we have a session (headers will have been scrubbed and set already) */
 	oidc_debug(r, "recycling user '%s' from initial request for sub-request", r->user);
+
+	return TRUE;
+}
+
+static apr_byte_t oidc_check_userid_openidc_subreq(request_rec *r) {
+	/* this is a sub-request and we may have a session (headers will have been scrubbed and set already) */
+	if (oidc_subrequest_recycle_user(r) == FALSE)
+		return FALSE;
 
 	/* apparently request state can get lost in sub-requests, so see if id_token/claims need to be restored */
 	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_IDTOKEN) == NULL) {
