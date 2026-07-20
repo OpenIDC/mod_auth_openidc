@@ -274,7 +274,7 @@ static void oidc_cache_memcache_log_status_error(request_rec *r, const char *s, 
  */
 static char *oidc_cache_memcache_get_key(request_rec *r, const char *section, const char *key) {
 	char *hashed = NULL;
-	const char *section_key = apr_psprintf(r->pool, "%s:%s", section, key);
+	const char *section_key = oidc_cache_section_key(r->pool, section, key);
 	/* hash the key so it always satisfies memcached's key constraints (<= 250 bytes, no whitespace or
 	 * control characters), independent of the (possibly attacker-supplied) key contents and of whether
 	 * OIDCCacheEncrypt is enabled */

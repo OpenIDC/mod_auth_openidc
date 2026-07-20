@@ -145,7 +145,7 @@ static int oidc_cache_shm_child_init(apr_pool_t *p, server_rec *s) {
  */
 static char *oidc_cache_shm_get_key(request_rec *r, const char *section, const char *key) {
 
-	char *section_key = apr_psprintf(r->pool, "%s:%s", section, key);
+	char *section_key = oidc_cache_section_key(r->pool, section, key);
 
 	/* check that the passed in key is valid */
 	if (_oidc_strlen(section_key) >= OIDC_CACHE_SHM_KEY_MAX) {

@@ -297,6 +297,14 @@ static inline apr_byte_t oidc_cache_crypto_decrypt(request_rec *r, const char *c
 }
 
 /*
+ * assemble the "<section>:<key>" string that all backends use as the cache key,
+ * so the section/key contract lives in one place
+ */
+char *oidc_cache_section_key(apr_pool_t *pool, const char *section, const char *key) {
+	return apr_psprintf(pool, "%s:%s", section, key);
+}
+
+/*
  * hash a cache key, useful for large keys e.g. JWT access/refresh tokens
  */
 static inline char *oidc_cache_get_hashed_key(request_rec *r, const char *key) {
@@ -319,7 +327,7 @@ static inline apr_byte_t oidc_cache_get_key(request_rec *r, const char *s_key, c
 			oidc_error(r, "could not decrypt cache entry because " OIDCCryptoPassphrase " is not set");
 			return FALSE;
 		}
-		*r_key = oidc_cache_get_hashed_key(r, apr_psprintf(r->pool, "%s:%s", s_secret, s_key));
+		*r_key = oidc_cache_get_hashed_key(r, oidc_cache_section_key(r->pool, s_secret, s_key));
 	} else if (_oidc_strlen(s_key) >= OIDC_CACHE_KEY_SIZE_MAX) {
 		*r_key = oidc_cache_get_hashed_key(r, s_key);
 	} else {

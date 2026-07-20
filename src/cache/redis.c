@@ -177,10 +177,6 @@ int oidc_cache_redis_child_init(apr_pool_t *p, server_rec *s) {
 /*
  * assemble single key name based on section/key input
  */
-static char *oidc_cache_redis_get_key(apr_pool_t *pool, const char *section, const char *key) {
-	return apr_psprintf(pool, "%s:%s", section, key);
-}
-
 /*
  * free and nullify a reply object
  */
@@ -433,7 +429,7 @@ apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section, const char 
 		return FALSE;
 
 	/* get */
-	reply = oidc_cache_redis_exec(r, context, "GET %s", oidc_cache_redis_get_key(r->pool, section, key));
+	reply = oidc_cache_redis_exec(r, context, "GET %s", oidc_cache_section_key(r->pool, section, key));
 
 	if (reply == NULL)
 		goto end;
@@ -495,7 +491,7 @@ apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section, const char 
 	if (value == NULL) {
 
 		/* delete it */
-		reply = oidc_cache_redis_exec(r, context, "DEL %s", oidc_cache_redis_get_key(r->pool, section, key));
+		reply = oidc_cache_redis_exec(r, context, "DEL %s", oidc_cache_section_key(r->pool, section, key));
 
 	} else {
 
@@ -504,7 +500,7 @@ apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section, const char 
 
 		/* store it */
 		reply = oidc_cache_redis_exec(r, context, "SET %s %s EX %d",
-					      oidc_cache_redis_get_key(r->pool, section, key), value, timeout);
+					      oidc_cache_section_key(r->pool, section, key), value, timeout);
 	}
 
 	rv = (reply != NULL) && (reply->type != REDIS_REPLY_ERROR);
